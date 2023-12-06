@@ -3,7 +3,6 @@ package api
 import (
 	browserapi "unstable.build/go-tui/api/browser"
 	workspaceapi "unstable.build/go-tui/api/workspace"
-	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/term"
 )
 
@@ -38,16 +37,12 @@ const (
 
 // Editor is the interface that wraps an API to manage a text editor.
 type Editor interface {
-	// Edit opens a file and returns an editor.Handler to edit it or an error
-	// if there was an error opening it.
-	Edit(file workspaceapi.URI, buf *cell.Buffer) (Handler, error)
-
 	// SubscribeEvents subscribes EventHandler to events of type EventType.
 	SubscribeEvents([]EventType, EventHandler) error
 
-	// Editor returns the editor.Handler with name or returns
-	// an error if no editor with name is open via Edit.
-	Editor(file workspaceapi.URI) (Handler, error)
+	// Editor returns the editor.Handler that manages the given resource,
+	// if there is a resource currently open with the given URI.
+	Editor(resource workspaceapi.URI) (Handler, error)
 
 	// SubscribeCommand registers command to be dispatched to CommandHandler.
 	SubscribeCommand(CommandManual, CommandHandler) error

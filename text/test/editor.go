@@ -1,6 +1,8 @@
 package test
 
 import (
+	"errors"
+
 	textapi "unstable.build/go-tui/api/text"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	cell "unstable.build/go-tui/cell"
@@ -21,11 +23,7 @@ func (e EditorFromAPIEditor) CellEditor(h text.Handler) text.CellEditor {
 	return e.Ed.CellEditor(h)
 }
 func (e EditorFromAPIEditor) Edit(file workspaceapi.URI, buf *cell.Buffer) (text.Handler, error) {
-	ed, err := e.Ed.Edit(file, buf)
-	if err != nil {
-		return nil, err
-	}
-	return HandlerFromAPIHandler{ed}, nil
+	return nil, errors.New("Edit is unimplemented on textapi.Editor")
 }
 
 func (e EditorFromAPIEditor) SubscribeEvents(t []textapi.EventType, h text.EventHandler) error {

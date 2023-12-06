@@ -10,7 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 	textapi "unstable.build/go-tui/api/text"
 	workspaceapi "unstable.build/go-tui/api/workspace"
-	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/term"
@@ -71,14 +70,6 @@ func TestIntegrationRace(t *testing.T) {
 		expect         func(*texttest.MockEditorMockRecorder) *gomock.Call
 		method         func(ifc interface{}) error
 	}{
-		{extension.PermissionEditor, func(token extension.Grant, broker proto.MuxBroker) (interface{}, error) {
-			return Editor(token, broker)
-		}, func(ed *texttest.MockEditorMockRecorder) *gomock.Call {
-			return ed.Edit(gomock.Any(), gomock.Any()).Return(nil, nil)
-		}, func(ifc interface{}) error {
-			_, err := ifc.(textapi.Editor).Edit(uri, cell.NewBuffer())
-			return err
-		}},
 		{extension.PermissionEditor, func(token extension.Grant, broker proto.MuxBroker) (interface{}, error) {
 			return Editor(token, broker)
 		}, func(ed *texttest.MockEditorMockRecorder) *gomock.Call {

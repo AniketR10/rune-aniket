@@ -42,6 +42,7 @@ type Component struct {
 	focus          handler.Window
 	edSubscribers  map[textapi.EventType][]EventHandler
 	cmdSubscribers map[string]commandAll
+	editors        map[string]Handler
 }
 
 // NewComponent allocates storage for a new Component and initializes it.
@@ -137,6 +138,7 @@ func (c *Component) Init(ed Editor, w workspace.Loader, config Config) error {
 	c.workspace = w
 	c.edSubscribers = make(map[textapi.EventType][]EventHandler)
 	c.cmdSubscribers = make(map[string]commandAll)
+	c.editors = make(map[string]Handler)
 
 	var first browserapi.Handler
 
@@ -362,14 +364,21 @@ func (c *Component) Open(file workspaceapi.URI) (browserapi.Handler, error) {
 }
 
 // Editor satisfies Editor interface.
-func (c *Component) Editor(file workspaceapi.URI) (Handler, error) {
+func (c *Component) Editor(resource workspaceapi.URI) (Handler, error) {
 	for _, tab := range c.comp.Tabs() {
-		if tab.URI().String() == file.String() {
+		if tab.URI().String() == resource.String() {
 			h, ok := tab.Handler().(Handler)
 			if !ok {
 				continue
 			}
 			return h, nil
+		}
+	}
+	// ensure that non-tab handlers returned by Handler
+	// can also be returned with Editor.
+	for _, ed := range c.editors {
+		if ed.Resource().String() == resource.String() {
+			return ed, nil
 		}
 	}
 	return nil, errors.New("handler not found")
@@ -543,15 +552,17 @@ func (c *Component) SetFocus(win browser.Window) (browser.Window, error) {
 	return c.comp.SetFocus(win), nil
 }
 
-// Edit edits the resource with name and buffer with the underlying Editor
-// in a new browser buffer.
+// Edit DEPRECATED USE OpenFileTab edits the resource with name and buffer
+// with the underlying Editor in a new browser buffer.
+//
+// NOTE: Returned Handler has no EventTypeFocus support.
 func (c *Component) Edit(file workspaceapi.URI, buf *cell.Buffer) (Handler, error) {
 	editor, err := c.ed.Edit(file, buf)
 	if err != nil {
 		return nil, err
 	}
-
-	c.newTab(file, file.Name(), editor, nil)
+	editor = wrapEditor{parent: c, Handler: editor}
+	c.editors[file.String()] = editor
 	return editor, nil
 }
 
@@ -559,26 +570,41 @@ func (c *Component) Edit(file workspaceapi.URI, buf *cell.Buffer) (Handler, erro
 func (c *Component) SetLocationList(
 	h Handler, pri textapi.LocationPriority, ID string, loc LocationList,
 ) error {
+	if ed, ok := h.(wrapEditor); ok {
+		h = ed.Handler
+	}
 	return c.ed.SetLocationList(h, pri, ID, loc)
 }
 
 // MoveToNextLocation satisfies text.Editor.
 func (c *Component) MoveToNextLocation(h Handler, ID string) error {
+	if ed, ok := h.(wrapEditor); ok {
+		h = ed.Handler
+	}
 	return c.ed.MoveToNextLocation(h, ID)
 }
 
 // MoveToPrevLocation satisfies text.Editor.
 func (c *Component) MoveToPrevLocation(h Handler, ID string) error {
+	if ed, ok := h.(wrapEditor); ok {
+		h = ed.Handler
+	}
 	return c.ed.MoveToPrevLocation(h, ID)
 }
 
 // CellView satisfies text.Editor.
 func (c *Component) CellView(h Handler) CellView {
+	if ed, ok := h.(wrapEditor); ok {
+		h = ed.Handler
+	}
 	return c.ed.CellView(h)
 }
 
 // CellEditor satisfies text.Editor.
 func (c *Component) CellEditor(h Handler) CellEditor {
+	if ed, ok := h.(wrapEditor); ok {
+		h = ed.Handler
+	}
 	return c.ed.CellEditor(h)
 }
 
@@ -800,11 +826,17 @@ func (c *Component) WindowManagerSize() (width, height int) {
 
 // SetCursor satisfies text.Editor
 func (c *Component) SetCursor(h Handler, pos term.Coordinates) error {
+	if ed, ok := h.(wrapEditor); ok {
+		h = ed.Handler
+	}
 	return c.ed.SetCursor(h, pos)
 }
 
 // Cursor satisfies text.Editor
 func (c *Component) Cursor(h Handler) (term.Coordinates, error) {
+	if ed, ok := h.(wrapEditor); ok {
+		h = ed.Handler
+	}
 	return c.ed.Cursor(h)
 }
 
@@ -848,6 +880,9 @@ func (c *Component) Window(id uint64) (browser.Window, bool) {
 
 // SetDefaultAttributes satisfies text.Editor.
 func (c *Component) SetDefaultAttributes(h Handler, attr term.Attributes) error {
+	if ed, ok := h.(wrapEditor); ok {
+		h = ed.Handler
+	}
 	return c.ed.SetDefaultAttributes(h, attr)
 }
 
@@ -920,4 +955,24 @@ func (e *editorFlusherCloser) Close() error {
 type commandAll struct {
 	handler CommandHandler
 	man     textapi.CommandManual
+}
+
+// wraps Editor returned in calls to Edit
+// to auto-delete in calls to Close or Handle(exit=true)
+type wrapEditor struct {
+	parent *Component
+	Handler
+}
+
+func (w wrapEditor) Close() error {
+	delete(w.parent.editors, w.Resource().String())
+	return w.Handler.Close()
+}
+
+func (w wrapEditor) Handle(ev term.Event) (exit, handled bool) {
+	exit, handled = w.Handler.Handle(ev)
+	if exit {
+		delete(w.parent.editors, w.Resource().String())
+	}
+	return
 }

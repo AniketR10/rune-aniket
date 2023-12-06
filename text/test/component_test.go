@@ -650,7 +650,7 @@ func TestEventTypeFocusIntegration(t *testing.T) {
 		expectFocusEvents(t, mock, uri2, uri1, expectedWidth, expectedHeight)
 		require.NoError(t, w2.Close())
 	})
-	
+
 	t.SkipNow()
 
 	t.Run("do not dispatch focus/unfocus events upon NextTab on window not in focus",
@@ -868,6 +868,34 @@ func TestComponentEditor(t *testing.T) {
 		h2, err := c.Editor(uri)
 		assert.NoError(t, err)
 		assert.Equal(t, h1.(*browser.Tab).Handler(), h2)
+	})
+
+	t.Run("returns editor returned in call to Edit", func(t *testing.T) {
+		myName, err := workspaceapi.ParseURI("file:///tmp/Ennio_Morricone.go")
+		require.NoError(t, err)
+		c, _ := newTestComponent(t, NopEditor())
+
+		h1, err := c.Edit(myName, cell.NewBuffer())
+		assert.NoError(t, err)
+
+		actualH1, err := c.Editor(myName)
+		assert.NoError(t, err)
+		assert.Equal(t, h1, actualH1)
+	})
+
+	t.Run("returns error if Handler returned in call to Edit is closed", func(t *testing.T) {
+		myName, err := workspaceapi.ParseURI("file:///tmp/Ennio_Morricone.go")
+		require.NoError(t, err)
+		c, _ := newTestComponent(t, NopEditor())
+
+		h1, err := c.Edit(myName, cell.NewBuffer())
+		assert.NoError(t, err)
+
+		require.NoError(t, h1.Close())
+
+		actualH1, err := c.Editor(myName)
+		assert.Error(t, err)
+		assert.Nil(t, actualH1)
 	})
 
 	t.Run("returns error if no handler is found with name", func(t *testing.T) {
