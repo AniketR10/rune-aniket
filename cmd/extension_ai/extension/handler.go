@@ -11,6 +11,7 @@ import (
 
 	"github.com/ernestrc/blue/document"
 	"github.com/ernestrc/blue/iterator"
+	"github.com/ernestrc/blue/logging"
 	log "github.com/sirupsen/logrus"
 	browserapi "unstable.build/go-tui/api/browser"
 	browserextension "unstable.build/go-tui/api/browser/extension"
@@ -20,12 +21,11 @@ import (
 	textapi "unstable.build/go-tui/api/text"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cmd/extension_ai/backend"
-	"unstable.build/go-tui/cmd/extension_ai/backend/openai"
 	aiDialogue "unstable.build/go-tui/cmd/extension_ai/dialogue"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/extension"
-	plugutil "unstable.build/go-tui/extension/util"
+	extutil "unstable.build/go-tui/extension/util"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/dialogue"
 	"unstable.build/go-tui/handler/input"
@@ -45,25 +45,27 @@ const (
 )
 
 var (
-	AIHandlerCommands = []textapi.CommandManual{
-		{
-			Name: commandQuery,
-			Summary: fmt.Sprintf("Send a message to your AI assistant. "+
-				"The default model used is configured via extension configuration. "+
-				"Available models: %s", availableModelsString()),
-			Synopsis: "[message]",
-		},
-		{
-			Name: commandChat,
-			Summary: fmt.Sprintf("Open a new conversation tab with your AI assistant. "+
-				"If no dialogue ID is provided, a new conversation is started. "+
-				"If not passed, the default model used is configured via extension configuration. "+
-				"Available models: %s", availableModelsString()),
-			Synopsis: "[dialogue_id [model]]",
-		},
-		{Name: commandResetChat, Summary: "Clear all current chat's history."},
+	AIHandlerCommands = func(availableModels map[string]struct{}) []textapi.CommandManual {
+		return []textapi.CommandManual{
+			{
+				Name: commandQuery,
+				Summary: fmt.Sprintf("Send a message to your AI assistant. "+
+					"The default model used is configured via extension configuration. "+
+					"Available models: %s", availableModelsString(availableModels)),
+				Synopsis: "[message]",
+			},
+			{
+				Name: commandChat,
+				Summary: fmt.Sprintf("Open a new conversation tab with your AI assistant. "+
+					"If no dialogue ID is provided, a new conversation is started. "+
+					"If not passed, the default model used is configured via extension configuration. "+
+					"Available models: %s", availableModelsString(availableModels)),
+				Synopsis: "[dialogue_id [model]]",
+			},
+			{Name: commandResetChat, Summary: "Clear all current chat's history."},
+		}
 	}
-	AIHandlerEvents      = []textapi.EventType{}
+	AIHandlerEvents      = extutil.ResourceTrackerEventsFlushOnly()
 	AIHandlerPermissions = []extension.Permission{
 		extension.PermissionBrowserWindowManager,
 		extension.PermissionBrowserResourceOpener,
@@ -109,6 +111,14 @@ var (
 			ContentAlignment: component.SpanAlignmentLeft,
 		},
 	}
+	defaultOpts = []aiDialogue.Option{
+		aiDialogue.WithInitialContext([]backend.ChatCompletionMessage{
+			{
+				Role:    backend.RoleSystem,
+				Content: "You are a helpful coding assistant, a coding co-pilot. ",
+			},
+		}),
+	}
 )
 
 // CommandEventHandler returns a plugutil.CommandEventHandler that manages
@@ -117,22 +127,24 @@ func CommandEventHandler(
 	ed textapi.Editor, grants []extension.Grant,
 	broker proto.MuxBroker, pconfig configapi.Config,
 	svcFn func(c configapi.Config, model string) (backend.Service, error),
-) (hret plugutil.CommandEventHandler, err error) {
+	availableModels map[string]struct{},
+	defaultModel string,
+) (hret extutil.CommandEventHandler, err error) {
 	ret := new(aiEditorHandler)
 	ret.ctx, ret.cancelCtx = context.WithCancel(context.Background())
 	ret.ed = ed
 	ret.svcFn = svcFn
 	ret.config = pconfig
+	ret.availableModels = availableModels
 	ret.defaultModel, err = pconfig.GetString("model")
 	if err != nil {
 		if err != configapi.ErrNotFound {
-			err = fmt.Errorf("failed to get 'model' from config: %w", err)
-			log.Warn(err)
+			ret.log(log.WarnLevel, "get 'model' from config: %v", err)
 		}
-		ret.defaultModel = openai.GPT3Dot5Turbo
+		ret.defaultModel = defaultModel
 	}
 
-	if err := isAvailableModel(ret.defaultModel); err != nil {
+	if err := isAvailableModel(ret.availableModels, ret.defaultModel); err != nil {
 		return nil, err
 	}
 
@@ -146,8 +158,7 @@ func CommandEventHandler(
 	backgroundAttr, err := configapi.GetAttributes(pconfig, "background_attr")
 	if err != nil {
 		if err != configapi.ErrNotFound {
-			err = fmt.Errorf("Error getting 'background_attr' from extension config: %v", err)
-			log.Warn(err)
+			ret.log(log.WarnLevel, "get 'background_attr' from extension config: %v", err)
 		}
 	}
 	ret.cfg.InputConfig.PlaceholderConfig.BackgroundAttributes = backgroundAttr
@@ -163,8 +174,7 @@ func CommandEventHandler(
 	sendMsgAttr, err := configapi.GetAttributes(pconfig, "user_msg_attr")
 	if err != nil {
 		if err != configapi.ErrNotFound {
-			err = fmt.Errorf("Error getting 'user_msg_attr' from extension config: %v", err)
-			log.Warn(err)
+			ret.log(log.WarnLevel, "get 'user_msg_attr' from extension config: %v", err)
 		}
 	} else {
 		ret.cfg.SendMessageStringConfig.Attributes = sendMsgAttr
@@ -172,8 +182,7 @@ func CommandEventHandler(
 	recvMsgAttr, err := configapi.GetAttributes(pconfig, "assistant_msg_attr")
 	if err != nil {
 		if err != configapi.ErrNotFound {
-			err = fmt.Errorf("Error getting 'assistant_msg_attr' from extension config: %v", err)
-			log.Warn(err)
+			ret.log(log.WarnLevel, "get 'assistant_msg_attr' from extension config: %v", err)
 		}
 	} else {
 		ret.cfg.ReceiveMessageStringConfig.Attributes = recvMsgAttr
@@ -182,8 +191,7 @@ func CommandEventHandler(
 	inputBoxAttr, err := configapi.GetAttributes(pconfig, "input_box_attr")
 	if err != nil {
 		if err != configapi.ErrNotFound {
-			err = fmt.Errorf("Error getting 'input_box_attr' from extension config: %v", err)
-			log.Warn(err)
+			ret.log(log.WarnLevel, "get 'input_box_attr' from extension config: %v", err)
 		}
 	} else {
 		ret.cfg.InputConfig.ContentConfig = inputBoxAttr
@@ -191,9 +199,8 @@ func CommandEventHandler(
 	inputBoxPlaceholderAttr, err := configapi.GetAttributes(pconfig, "input_box_placeholder_attr")
 	if err != nil {
 		if err != configapi.ErrNotFound {
-			err = fmt.Errorf("Error getting 'input_box_placeholder_attr'"+
+			ret.log(log.WarnLevel, "Error getting 'input_box_placeholder_attr'"+
 				" from extension config: %v", err)
-			log.Warn(err)
 		}
 	} else {
 		ret.cfg.InputConfig.PlaceholderConfig.Attributes = inputBoxPlaceholderAttr
@@ -202,8 +209,7 @@ func CommandEventHandler(
 	inputBoxFrameAttr, err := configapi.GetAttributes(pconfig, "input_box_frame_attr")
 	if err != nil {
 		if err != configapi.ErrNotFound {
-			err = fmt.Errorf("Error getting 'input_box_frame_attr' from extension config: %v", err)
-			log.Warn(err)
+			ret.log(log.WarnLevel, "Error getting 'input_box_frame_attr' from extension config: %v", err)
 		}
 	} else {
 		ret.cfg.InputConfig.DefaultFrameAttr = inputBoxFrameAttr
@@ -211,7 +217,7 @@ func CommandEventHandler(
 
 	ret.clip, err = sysclip.NewRegister()
 	if err != nil {
-		log.Warnf("system clipboard unsupported: %v", err)
+		ret.log(log.WarnLevel, "system clipboard unsupported: %v", err)
 		ret.clip = clipboard.NewInMemory()
 	}
 
@@ -232,13 +238,24 @@ func CommandEventHandler(
 			if err != nil {
 				return nil, err
 			}
-			ret.editor, err = plugutil.Editor(ret.clip, config)
+			ret.editor, err = extutil.Editor(ret.clip, config)
 			if err != nil {
 				ret.editor = text.DefaultSimpleEditor(ret.clip)
-				log.Warnf("Could not get editor.mode from config: "+
+				ret.log(log.WarnLevel, "Could not get editor.mode from config: "+
 					"%s.. Using 'modeless' editor.", err)
 			}
 			ret.cfg.InputEditor = ret.editor
+			tabspaces, err := extutil.Tabspaces(config)
+			if err != nil {
+				return nil, fmt.Errorf("get configured tabspaces: %v", err)
+			}
+			wrap, err := extutil.Wrap(config)
+			if err != nil {
+				return nil, fmt.Errorf("get configured wrap mode: %v", err)
+			}
+			ret.tracker.Init(tabspaces, wrap)
+			ret.log(log.DebugLevel, "initialized content tracker with tabspaces: %d and wrap mode: %v",
+				tabspaces, wrap)
 		}
 		if err != nil {
 			return nil, err
@@ -250,12 +267,14 @@ func CommandEventHandler(
 }
 
 type aiEditorHandler struct {
-	defaultModel   string
-	rpcTimeout     time.Duration
-	editor         text.Editor
-	cfg            dialogue.ComponentConfig
-	backgroundAttr term.Attributes
-	dialogueStore  aiDialogue.Store
+	availableModels map[string]struct{}
+	defaultModel    string
+	rpcTimeout      time.Duration
+	editor          text.Editor
+	cfg             dialogue.ComponentConfig
+	backgroundAttr  term.Attributes
+	dialogueStore   aiDialogue.Store
+	tracker         extutil.ResourceTracker
 
 	clip   clipboard.Register
 	svcFn  func(configapi.Config, string) (backend.Service, error)
@@ -277,7 +296,7 @@ func (h *aiEditorHandler) Handle(ctx context.Context, ev textapi.Event) (exit bo
 	if exit {
 		return
 	}
-	return
+	return h.tracker.Handle(ctx, ev)
 }
 
 func (h *aiEditorHandler) HandleCommand(
@@ -313,7 +332,7 @@ func (h *aiEditorHandler) newDialogueComponent() *dialogue.Component {
 
 func (h *aiEditorHandler) handleChat(cmd textapi.Command) (bool, error) {
 	if len(cmd.Args) > 0 {
-		if err := isAvailableModel(cmd.Args[0]); err == nil {
+		if err := isAvailableModel(h.availableModels, cmd.Args[0]); err == nil {
 			return false, errors.New("Model must be passed as a second argument to a dialogue ID. " +
 				"Check command manual for more details.")
 		}
@@ -321,7 +340,7 @@ func (h *aiEditorHandler) handleChat(cmd textapi.Command) (bool, error) {
 	model := h.defaultModel
 	if len(cmd.Args) > 1 {
 		model = cmd.Args[1]
-		if err := isAvailableModel(model); err != nil {
+		if err := isAvailableModel(h.availableModels, model); err != nil {
 			return false, err
 		}
 	}
@@ -331,7 +350,8 @@ func (h *aiEditorHandler) handleChat(cmd textapi.Command) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("new backend: %v", err)
 	}
-	dialogueManager := aiDialogue.NewManager(backendService, h.dialogueStore)
+	opts := defaultOpts
+	dialogueManager := aiDialogue.NewManager(backendService, h.dialogueStore, opts...)
 	dhandler, tx, rx := dialogue.Handler(comp, h.p, h.clip)
 
 	ctx, cancel := context.WithCancel(h.ctx)
@@ -378,14 +398,15 @@ func (h *aiEditorHandler) handleQuery(cmd textapi.Command) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("new backend: %v", err)
 	}
-	dialogueManager := aiDialogue.NewManager(backendService, h.dialogueStore)
+	opts := defaultOpts
+	dialogueManager := aiDialogue.NewManager(backendService, h.dialogueStore, opts...)
 	dhandler, tx, rx := dialogue.Handler(comp, h.p, h.clip)
 
 	id := strconv.Itoa(rand.Int())
 	ctx, cancel := context.WithCancel(h.ctx)
 
 	query := strings.Join(cmd.Args, " ")
-	msg := backend.ChatCompletionMessage{Content: query, Role: openai.RoleUser}
+	msg := backend.ChatCompletionMessage{Content: query, Role: backend.RoleUser}
 	addMessage(comp, msg)
 
 	go func() {
@@ -397,7 +418,7 @@ func (h *aiEditorHandler) handleQuery(cmd textapi.Command) (bool, error) {
 				err := h.n.Notify(notifications.LevelError,
 					"create chat completion: %v", err)
 				if err != nil {
-					log.Errorf("notify: %v", err)
+					h.log(log.ErrorLevel, "notify: %v", err)
 				}
 			}
 			return
@@ -459,6 +480,12 @@ func (h *aiEditorHandler) handleResetChat(cmd textapi.Command) (bool, error) {
 	return false, nil
 }
 
+func (h *aiEditorHandler) log(level log.Level, msg string, args ...any) {
+	log.WithFields(log.Fields{
+		logging.KeyClass: "extension.aiEditorHandler",
+	}).Logf(level, msg, args...)
+}
+
 func drawMessage(
 	ctx context.Context,
 	it iterator.Iterator[string], tx chan<- string,
@@ -497,22 +524,22 @@ func getDialogueID(cmd textapi.Command) string {
 }
 
 func addMessage(c *dialogue.Component, msg backend.ChatCompletionMessage) {
-	switch openai.Role(msg.Role) {
-	case openai.RoleAssistant:
+	switch msg.Role {
+	case backend.RoleAssistant:
 		c.AddReceiveMessageChunk(msg.Content)
 		c.AddReceiveMessageBreak()
-	case openai.RoleUser:
+	case backend.RoleUser:
 		c.AddSendMessage(msg.Content)
-	// case openai.RoleSystem, openai.RoleTool:
+	// case backend.RoleSystem, backend.RoleTool:
 	default:
 		/* do not render */
 	}
 }
 
-func availableModelsString() string {
+func availableModelsString(availableModels map[string]struct{}) string {
 	var availableStr strings.Builder
 	var i int
-	for k := range openai.AvailableModels() {
+	for k := range availableModels {
 		if i != 0 {
 			availableStr.WriteString(", ")
 		}
@@ -522,10 +549,9 @@ func availableModelsString() string {
 	return availableStr.String()
 }
 
-func isAvailableModel(model string) error {
-	available := openai.AvailableModels()
+func isAvailableModel(available map[string]struct{}, model string) error {
 	if _, ok := available[model]; !ok {
-		availableStr := availableModelsString()
+		availableStr := availableModelsString(available)
 		return fmt.Errorf("Model '%s' is not supported. Available models: %s",
 			model, availableStr)
 	}
@@ -535,7 +561,7 @@ func isAvailableModel(model string) error {
 func createCompletions(
 	ctx context.Context, cancel func(),
 	tx chan<- string, rx <-chan string,
-	dialogueManager aiDialogue.Manager,
+	dialogueManager *aiDialogue.Manager,
 	id string,
 ) {
 	defer close(tx)

@@ -12,29 +12,37 @@ import (
 	"github.com/ernestrc/blue/logging"
 	"github.com/ernestrc/blue/logging/trace"
 	"unstable.build/go-tui/cmd/extension_ai/backend"
-	"unstable.build/go-tui/cmd/extension_ai/backend/openai"
 )
 
 // Manager implements chat completion via a backend.Service.
 // It uses Store to persist context window across sessions.
 type Manager struct {
+	config
 	store Store
 	svc   backend.Service
 }
 
-// NewManager initializes a Manager with the given auth token
-// model and Store.
-func NewManager(svc backend.Service, store Store) Manager {
-	return Manager{
-		store: store,
-		svc:   svc,
+// NewManager allocates storage for a new Manager and initializes it.
+func NewManager(svc backend.Service, store Store, opts ...Option) *Manager {
+	ret := new(Manager)
+	ret.Init(svc, store, opts...)
+	return ret
+}
+
+// Init initializes this Manager with the given backend service, store and options.
+func (m *Manager) Init(svc backend.Service, store Store, opts ...Option) {
+	m.store = store
+	m.svc = svc
+
+	for _, o := range opts {
+		o(&m.config)
 	}
 }
 
 // CreateCompletion uses the context stored for the given
-// dialogue ID to query openai for a new chat completion
+// dialogue ID to query a backend for a new chat completion
 // and returns the model's response.
-func (m Manager) CreateCompletion(
+func (m *Manager) CreateCompletion(
 	ctx context.Context, dialogueID string, messages []string,
 ) (ret iterator.Iterator[string], err error) {
 	traceID, ctx := trace.FromContextOrNew(ctx)
@@ -53,7 +61,11 @@ func (m Manager) CreateCompletion(
 	return ret, err
 }
 
-func (m Manager) doCreateCompletion(
+type config struct {
+	initialContext []backend.ChatCompletionMessage
+}
+
+func (m *Manager) doCreateCompletion(
 	ctx context.Context, dialogueID string, input []string,
 ) (ret iterator.Iterator[string], n int, err error) {
 	if len(input) == 0 {
@@ -66,12 +78,16 @@ func (m Manager) doCreateCompletion(
 			err = fmt.Errorf("get stored dialogue: %w", err)
 			return
 		}
+		dialogue.Messages = make([]backend.ChatCompletionMessage, len(m.config.initialContext))
+		for i, msg := range m.config.initialContext {
+			dialogue.Messages[i] = msg
+		}
 	}
 
 	var prompt []backend.ChatCompletionMessage
 	for _, msg := range input {
 		prompt = append(prompt,
-			backend.ChatCompletionMessage{Role: "user", Content: msg})
+			backend.ChatCompletionMessage{Role: backend.RoleUser, Content: msg})
 	}
 
 	// append new message to chat context, but keep msgs
@@ -155,7 +171,7 @@ func (s *completionStreamIterator) Next() (string, bool) {
 		return "", false
 	}
 	response := backend.ChatCompletionMessage{
-		Role:    string(openai.RoleAssistant),
+		Role:    backend.RoleAssistant,
 		Content: s.response.String(),
 		// Metadata: ignore function calls for now
 		// Name: not usually defined for an assistant

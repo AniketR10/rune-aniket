@@ -13,15 +13,18 @@ import (
 // backend.Service constructor as the backend servicing the LLM.
 func GranteeWithService(
 	svcFunc func(config configapi.Config, model string) (backend.Service, error),
+	availableModels map[string]struct{},
+	defaultModel string,
 ) (extension.Grantee, []extension.Permission) {
 	commandEventHandler := func(
 		ed textapi.Editor, grants []extension.Grant,
 		broker proto.MuxBroker, pconfig configapi.Config,
 	) (hret extutil.CommandEventHandler, err error) {
-		return CommandEventHandler(ed, grants, broker, pconfig, svcFunc)
+		return CommandEventHandler(ed, grants, broker, pconfig,
+			svcFunc, availableModels, defaultModel)
 	}
-	grantee, perms := extutil.NewEditorEventHandler(AIHandlerCommands,
-		commandEventHandler, AIHandlerEvents,
+	grantee, perms := extutil.NewEditorEventHandler(
+		AIHandlerCommands(availableModels), commandEventHandler, AIHandlerEvents,
 		AIHandlerPermissions...)
 	return grantee, perms
 }

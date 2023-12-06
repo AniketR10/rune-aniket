@@ -37,7 +37,7 @@ func TestCreateChatCompletion(t *testing.T) {
 		})
 		ctx := context.Background()
 		req := backend.ChatCompletionRequest{Messages: []backend.ChatCompletionMessage{
-			{Role: "user", Content: "hello sir!"},
+			{Role: backend.RoleUser, Content: "hello sir!"},
 		}}
 		it, err := client.CreateChatCompletion(ctx, req)
 		require.NoError(t, err)
@@ -51,7 +51,7 @@ func TestCreateChatCompletion(t *testing.T) {
 			}
 			assert.NotZero(t, resp.ID)
 			assert.WithinDuration(t, time.Now(), resp.Created, 1*time.Minute)
-			assert.Equal(t, "assistant", resp.Message.Role)
+			assert.Equal(t, backend.RoleAssistant, resp.Message.Role)
 			assert.Len(t, resp.Message.Metadata.(Metadata).ToolCalls, 0)
 			builder.WriteString(resp.Message.Content)
 			finishReason = resp.FinishReason
@@ -69,7 +69,7 @@ func TestCreateChatCompletion(t *testing.T) {
 		})
 		ctx := context.Background()
 		req := backend.ChatCompletionRequest{Messages: []backend.ChatCompletionMessage{
-			{Role: "user", Content: "hello sir!"},
+			{Role: backend.RoleUser, Content: "hello sir!"},
 		}}
 		_, err := client.CreateChatCompletion(ctx, req)
 		require.Error(t, err)
@@ -82,7 +82,7 @@ func TestCreateChatCompletion(t *testing.T) {
 		})
 		ctx := context.Background()
 		req := backend.ChatCompletionRequest{Messages: []backend.ChatCompletionMessage{
-			{Role: "user", Content: "hello sir!"},
+			{Role: backend.RoleUser, Content: "hello sir!"},
 		}}
 		_, err := client.CreateChatCompletion(ctx, req)
 		require.Error(t, err)
@@ -95,7 +95,7 @@ func TestCreateChatCompletion(t *testing.T) {
 		})
 		ctx := context.Background()
 		req := backend.ChatCompletionRequest{Messages: []backend.ChatCompletionMessage{
-			{Role: "user", Content: "hello sir!"},
+			{Role: backend.RoleUser, Content: "hello sir!"},
 		}}
 		_, err := client.CreateChatCompletion(ctx, req)
 		require.Error(t, err)
@@ -109,7 +109,7 @@ func TestCreateChatCompletion(t *testing.T) {
 		ctx := context.Background()
 		req := backend.ChatCompletionRequest{Messages: []backend.ChatCompletionMessage{
 			{Role: "system", Content: "We are roleplaying and you are an evil AI agent."},
-			{Role: "user", Content: "what is your purpouse?"},
+			{Role: backend.RoleUser, Content: "what is your purpouse?"},
 		}}
 		it, err := client.CreateChatCompletion(ctx, req)
 		require.NoError(t, err)
@@ -123,7 +123,7 @@ func TestCreateChatCompletion(t *testing.T) {
 			}
 			assert.NotZero(t, resp.ID)
 			assert.WithinDuration(t, time.Now(), resp.Created, 1*time.Minute)
-			assert.Equal(t, "assistant", resp.Message.Role)
+			assert.Equal(t, backend.RoleAssistant, resp.Message.Role)
 			assert.Len(t, resp.Message.Metadata.(Metadata).ToolCalls, 0)
 			builder.WriteString(resp.Message.Content)
 			finishReason = resp.FinishReason
@@ -160,7 +160,7 @@ func TestCreateChatCompletion(t *testing.T) {
 		})
 		ctx := context.Background()
 		req := backend.ChatCompletionRequest{Messages: []backend.ChatCompletionMessage{
-			{Role: "user", Content: "what's the weather like in San Francisco right now?"},
+			{Role: backend.RoleUser, Content: "what's the weather like in San Francisco right now?"},
 		}}
 		it, err := client.CreateChatCompletion(ctx, req)
 		require.NoError(t, err)
@@ -173,11 +173,11 @@ func TestCreateChatCompletion(t *testing.T) {
 			}
 			assert.NotZero(t, resp.ID)
 			assert.WithinDuration(t, time.Now(), resp.Created, 1*time.Minute)
-			assert.Equal(t, "assistant", resp.Message.Role)
+			assert.Equal(t, backend.RoleAssistant, resp.Message.Role)
 
 			// first message
 			if i == 0 {
-				require.Len(t, resp.Message.Metadata.(Metadata).ToolCalls, 1)
+				require.Len(t, resp.Message.Metadata.(Metadata).ToolCalls, 1, "%+v", resp)
 				calls := resp.Message.Metadata.(Metadata).ToolCalls
 				assert.NotZero(t, calls[0].ID)
 				assert.Equal(t, ToolTypeFunction, calls[0].Type)
@@ -249,7 +249,9 @@ func TestCountTokens(t *testing.T) {
 func makeMessageTokens(c client, greaterThan int) []backend.ChatCompletionMessage {
 	var msgs []backend.ChatCompletionMessage
 	for i := 0; c.countTokens(msgs) < greaterThan; i++ {
-		msgs = append(msgs, backend.ChatCompletionMessage{Content: strconv.Itoa(i), Role: "user"})
+		msgs = append(msgs, backend.ChatCompletionMessage{
+			Content: strconv.Itoa(i), Role: backend.RoleUser,
+		})
 	}
 	return msgs
 }

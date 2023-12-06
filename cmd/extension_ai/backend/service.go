@@ -38,7 +38,7 @@ type ChatCompletionRequest struct {
 // ChatCompletionMessage is a message in a chat with an assistant backend.
 type ChatCompletionMessage struct {
 	// The role of the author of this message.
-	Role string
+	Role Role
 	// The contents of the message.
 	Content string
 	// Metadata contains service-specific data.
@@ -65,6 +65,16 @@ type ChatCompletionResponse struct {
 	// called a tool, or function_call (deprecated) if the model called a function.
 	FinishReason FinishReason
 }
+
+// Role is the role of the message author in a message stream.
+type Role string
+
+const (
+	RoleAssistant Role = "assistant"
+	RoleUser           = "user"
+	RoleSystem         = "system"
+	RoleTool           = "tool"
+)
 
 // FinishReason is the reason why the message choice was returned.
 type FinishReason string

@@ -101,10 +101,10 @@ func TestManager(t *testing.T) {
 		for i, msg := range dialogue.Messages {
 			if i%2 == 0 {
 				assert.Equal(t, backend.ChatCompletionMessage{
-					Role: "user", Content: fmt.Sprintf("hello:%d", i/2)}, msg)
+					Role: backend.RoleUser, Content: fmt.Sprintf("hello:%d", i/2)}, msg)
 			} else {
 				assert.Equal(t, backend.ChatCompletionMessage{
-					Role: "assistant", Content: "012"}, msg)
+					Role: backend.RoleAssistant, Content: "012"}, msg)
 			}
 		}
 	})

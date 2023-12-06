@@ -27,6 +27,7 @@ func main() {
 			Model: model,
 		}), nil
 	}
-	grantee, perms := extension.GranteeWithService(openaiSvc)
+	grantee, perms := extension.GranteeWithService(openaiSvc,
+		openai.AvailableModels(), openai.GPT3Dot5Turbo)
 	process.Serve(grantee, perms...)
 }

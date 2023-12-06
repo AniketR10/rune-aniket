@@ -151,7 +151,11 @@ func (a client) CreateChatCompletion(
 ) (iterator.Iterator[backend.ChatCompletionResponse], error) {
 	messages := make([]openai.ChatCompletionMessage, len(request.Messages))
 	for i, msg := range request.Messages {
-		messages[i] = openAIMessageFromModel(msg)
+		var err error
+		messages[i], err = openAIMessageFromModel(msg)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	if exceeds, _ := a.ExceedsContextWindow(request.Messages); exceeds {
@@ -231,7 +235,7 @@ func (a client) countTokens(messages []backend.ChatCompletionMessage) (ret int) 
 	for _, message := range messages {
 		ret += a.tokensPerMessage
 		ret += len(a.counter.Encode(message.Content, nil, nil))
-		ret += len(a.counter.Encode(message.Role, nil, nil))
+		ret += len(a.counter.Encode(string(message.Role), nil, nil))
 		ret += len(a.counter.Encode(message.Name, nil, nil))
 		if message.Name != "" {
 			ret += a.tokensPerName
@@ -243,7 +247,7 @@ func (a client) countTokens(messages []backend.ChatCompletionMessage) (ret int) 
 
 // wraps an openai.ChatCompletionStream to satisfy iterator.Iterator
 type completionStreamIterator struct {
-	role   string
+	role   backend.Role
 	stream *openai.ChatCompletionStream
 	err    error
 }
@@ -260,7 +264,20 @@ func (s *completionStreamIterator) Next() (ret backend.ChatCompletionResponse, o
 	// NOTE: see above N parameter config
 	choice := resp.Choices[0]
 	if s.role == "" {
-		s.role = choice.Delta.Role
+		switch choice.Delta.Role {
+		case openai.ChatMessageRoleSystem:
+			s.role = backend.RoleSystem
+		case openai.ChatMessageRoleUser:
+			s.role = backend.RoleUser
+		case openai.ChatMessageRoleAssistant:
+			s.role = backend.RoleAssistant
+		case openai.ChatMessageRoleFunction:
+			s.role = "function"
+		case openai.ChatMessageRoleTool:
+			s.role = backend.RoleTool
+		default:
+			s.err = fmt.Errorf("role %q is unrecognized by backend API", choice.Delta.Role)
+		}
 	}
 	ok = true
 	ret = backend.ChatCompletionResponse{
