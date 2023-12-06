@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/ernestrc/blue/logging"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
 	browserapi "unstable.build/go-tui/api/browser"
@@ -64,9 +65,7 @@ var (
 )
 
 type fileInfo struct {
-	cells  [][]term.Cell
-	offset term.Coordinates
-	dirty  bool
+	dirty bool
 }
 
 type fileBarEditorHandler struct {
@@ -80,7 +79,7 @@ type fileBarEditorHandler struct {
 	filenameDirtyAttributes term.Attributes
 	backgroundAttributes    term.Attributes
 	showDirty               bool
-	tabspaces               int
+	tracker                 extutil.ResourceTracker
 
 	bar struct {
 		sync.Mutex
@@ -88,7 +87,6 @@ type fileBarEditorHandler struct {
 		filename component.Scroll
 		coords   component.Scroll
 	}
-	files map[string]*fileInfo
 }
 
 func newFileBarEditorHandler(
@@ -97,7 +95,6 @@ func newFileBarEditorHandler(
 
 ) (extutil.CommandEventHandler, error) {
 	ret := new(fileBarEditorHandler)
-	ret.files = make(map[string]*fileInfo)
 	ret.ch = make(chan textapi.Event)
 
 	var err error
@@ -172,13 +169,15 @@ func newFileBarEditorHandler(
 			if err != nil {
 				return nil, err
 			}
-			ret.tabspaces, err = extutil.Tabspaces(config)
+			tabspaces, err := extutil.Tabspaces(config)
 			if err != nil {
-				ret.tabspaces = cell.DefaultTabspaces
-				log.Warnf("Could not get tabspaces from config: %s.. Using default of %d",
-					err, ret.tabspaces)
+				return nil, fmt.Errorf("could not get tabspaces from config: %v", err)
 			}
-
+			wrap, err := extutil.Wrap(config)
+			if err != nil {
+				return nil, fmt.Errorf("could not get wrap mode from config: %v", err)
+			}
+			ret.tracker.Init(tabspaces, wrap)
 		}
 	}
 
@@ -194,141 +193,6 @@ func (h *fileBarEditorHandler) HandleCommand(ctx context.Context, cmd textapi.Co
 	exit bool, err error,
 ) {
 	return
-}
-
-func (h *fileBarEditorHandler) prettyFileName(resource workspaceapi.URI) string {
-	return workspaceapi.RelPath(h.cwd, resource)
-}
-
-func (h *fileBarEditorHandler) resetBarContent() {
-	h.bar.Lock()
-	defer h.bar.Unlock()
-
-	h.bar.filename.Buffer().Reset()
-	h.bar.filename.Init(h.bar.filename.Buffer())
-	h.bar.coords.Buffer().Reset()
-	h.bar.coords.Init(h.bar.coords.Buffer())
-}
-
-func (h *fileBarEditorHandler) refreshBarContent(resource workspaceapi.URI) {
-	h.resetBarContent()
-
-	h.bar.Lock()
-	defer h.bar.Unlock()
-
-	file, ok := h.files[resource.String()]
-	if !ok || file == nil {
-		log.Debugf("could not find file info for file %q", resource.String())
-		return
-	}
-
-	name := h.prettyFileName(resource)
-	rows := len(file.cells)
-	var cols int
-	if file.offset.Y < len(file.cells) {
-		cols = len(file.cells[file.offset.Y])
-	}
-	coords := fmt.Sprintf("%d/%d %d/%d", file.offset.X+1, cols, file.offset.Y+1, rows)
-
-	h.bar.filename.Buffer().WriteString(name)
-	h.bar.coords.Buffer().WriteString(coords)
-
-	if h.showDirty && file.dirty {
-		h.bar.filename.Attributes = h.filenameDirtyAttributes
-		h.bar.filename.Buffer().WriteString("[+]")
-	} else {
-		h.bar.filename.Attributes = h.filenameAttributes
-	}
-
-	fileSpanCfg := component.SpanConfig{
-		ContentAlignment: component.SpanAlignmentLeft,
-		PadHorizontal:    -h.bar.filename.Buffer().Columns(0),
-	}
-	coordsSpanCfg := component.SpanConfig{
-		ContentAlignment: component.SpanAlignmentRight,
-		PadHorizontal:    -len(coords),
-	}
-	fileSpan := component.NewSpan(&h.bar.filename, fileSpanCfg)
-	coordsSpan := component.NewSpan(&h.bar.coords, coordsSpanCfg)
-	h.bar.comp.Init(component.WithBackground(
-		component.Grid([][]tui.Component{{fileSpan, coordsSpan}}),
-		term.Cell{Bg: h.backgroundAttributes.Bg, Fg: h.backgroundAttributes.Fg},
-	))
-}
-
-func (h *fileBarEditorHandler) getFileInfo(resource workspaceapi.URI) *fileInfo {
-	id := resource.String()
-	f, ok := h.files[id]
-	if ok {
-		return f
-	}
-	ret := new(fileInfo)
-	h.files[id] = ret
-	return ret
-}
-
-func (h *fileBarEditorHandler) setScrollMaxContent(resource workspaceapi.URI, ev textapi.Event) {
-	cells := cell.StringToCells(ev.Content, h.tabspaces)
-	h.getFileInfo(resource).cells = cells
-	log.Debugf("setScrollMaxContent(%s): %d", resource, len(cells))
-}
-
-func (h *fileBarEditorHandler) setCursorOffset(resource workspaceapi.URI, pos term.Coordinates) {
-	h.getFileInfo(resource).offset = pos
-	log.Tracef("setScrollOffset(%s): %#v OK", resource, pos)
-}
-
-func (h *fileBarEditorHandler) setFileDirty(resource workspaceapi.URI, dirty bool) {
-	h.getFileInfo(resource).dirty = dirty
-	log.Tracef("setFileDirty(%s): %#v OK", resource, dirty)
-}
-
-func (h *fileBarEditorHandler) handleEvents() {
-	for ev := range h.ch {
-		if ev.URI == (workspaceapi.URI{}) {
-			continue
-		}
-
-		var start time.Time
-		if log.IsLevelEnabled(log.TraceLevel) {
-			start = time.Now()
-			log.Tracef("Handle(%#v)", ev.Type)
-		}
-
-		resourceName := ev.URI
-		var err error
-		switch ev.Type {
-		case textapi.EventTypeEdit:
-			h.setFileDirty(resourceName, true)
-			h.refreshBarContent(resourceName)
-			err = h.p.Interrupt()
-		case textapi.EventTypeOpen:
-			h.setCursorOffset(resourceName, term.Coordinates{})
-			h.setScrollMaxContent(resourceName, ev)
-			h.refreshBarContent(resourceName)
-			err = h.p.Interrupt()
-		case textapi.EventTypeFlush:
-			h.setFileDirty(resourceName, false)
-			h.setScrollMaxContent(resourceName, ev)
-			fallthrough
-		case textapi.EventTypeFocus:
-			h.refreshBarContent(resourceName)
-			err = h.p.Interrupt()
-		case textapi.EventTypeUnfocus:
-			h.refreshBarContent(workspaceapi.URI{})
-			err = h.p.Interrupt()
-		case textapi.EventTypeCursor:
-			h.setCursorOffset(resourceName, ev.From)
-			h.refreshBarContent(resourceName)
-			err = h.p.Interrupt()
-		}
-		if err != nil {
-			log.Errorf("Handle(%#v): %v", ev.Type, err)
-		}
-		if log.IsLevelEnabled(log.TraceLevel) {
-			log.Tracef("Handle(%#v) in %s", ev.Type, time.Since(start))
-		}
-	}
 }
 
 func (h *fileBarEditorHandler) Handle(
@@ -351,4 +215,140 @@ func (h *fileBarEditorHandler) Close() error {
 	}
 	close(h.ch)
 	return nil
+}
+
+func (h *fileBarEditorHandler) prettyFileName(resource workspaceapi.URI) string {
+	return workspaceapi.RelPath(h.cwd, resource)
+}
+
+func (h *fileBarEditorHandler) resetBarContent() {
+	h.bar.Lock()
+	defer h.bar.Unlock()
+
+	h.bar.filename.Buffer().Reset()
+	h.bar.filename.Init(h.bar.filename.Buffer())
+	h.bar.coords.Buffer().Reset()
+	h.bar.coords.Init(h.bar.coords.Buffer())
+}
+
+func (h *fileBarEditorHandler) refreshBarContent(ev textapi.Event) {
+	h.resetBarContent()
+
+	h.bar.Lock()
+	defer h.bar.Unlock()
+
+	res, ok := h.getResource(ev)
+	if !ok {
+		return
+	}
+
+	name := h.prettyFileName(res.URI())
+	totalRows := res.Buffer().Rows()
+	totalCols := 0
+	cursor := res.Cursor()
+	if cursor.Y < totalRows {
+		totalCols = res.Buffer().Columns(cursor.Y)
+	}
+	coords := fmt.Sprintf("%d/%d %d/%d", cursor.X+1, totalCols, cursor.Y+1, totalRows)
+
+	h.bar.filename.Buffer().WriteString(name)
+	h.bar.coords.Buffer().WriteString(coords)
+
+	if h.showDirty && res.Metadata.(*fileInfo).dirty {
+		h.bar.filename.Attributes = h.filenameDirtyAttributes
+		h.bar.filename.Buffer().WriteString("[+]")
+	} else {
+		h.bar.filename.Attributes = h.filenameAttributes
+	}
+
+	fileSpanCfg := component.SpanConfig{
+		ContentAlignment: component.SpanAlignmentLeft,
+		PadHorizontal:    -h.bar.filename.Buffer().Columns(0),
+	}
+	coordsSpanCfg := component.SpanConfig{
+		ContentAlignment: component.SpanAlignmentRight,
+		PadHorizontal:    -len(coords),
+	}
+	fileSpan := component.NewSpan(&h.bar.filename, fileSpanCfg)
+	coordsSpan := component.NewSpan(&h.bar.coords, coordsSpanCfg)
+	h.bar.comp.Init(component.WithBackground(
+		component.Grid([][]tui.Component{{fileSpan, coordsSpan}}),
+		term.Cell{Bg: h.backgroundAttributes.Bg, Fg: h.backgroundAttributes.Fg},
+	))
+}
+
+func (h *fileBarEditorHandler) setFileDirty(ev textapi.Event, dirty bool) {
+	res, ok := h.getResource(ev)
+	if !ok {
+		return
+	}
+	res.Metadata.(*fileInfo).dirty = dirty
+	log.Tracef("set file dirty (%s): %#v", ev.URI.Path(), dirty)
+}
+
+func (h *fileBarEditorHandler) handleEvents() {
+	ctx := context.Background()
+	for ev := range h.ch {
+		if ev.URI == (workspaceapi.URI{}) {
+			continue
+		}
+
+		var start time.Time
+		if log.IsLevelEnabled(log.TraceLevel) {
+			start = time.Now()
+			h.log(log.TraceLevel, "handle %v", ev.Type)
+		}
+
+		h.tracker.Handle(ctx, ev)
+
+		switch ev.Type {
+		case textapi.EventTypeEdit:
+			h.setFileDirty(ev, true)
+			h.refreshBarContent(ev)
+			h.interrupt()
+		case textapi.EventTypeOpen:
+			res, _ := h.getResource(ev)
+			res.Metadata = new(fileInfo)
+			h.refreshBarContent(ev)
+			h.interrupt()
+		case textapi.EventTypeFlush:
+			h.setFileDirty(ev, false)
+			fallthrough
+		case textapi.EventTypeFocus:
+			h.refreshBarContent(ev)
+			h.interrupt()
+		case textapi.EventTypeUnfocus:
+			h.resetBarContent()
+			h.interrupt()
+		case textapi.EventTypeCursor:
+			h.refreshBarContent(ev)
+			h.interrupt()
+		}
+		if log.IsLevelEnabled(log.TraceLevel) {
+			h.log(log.TraceLevel, "handle %v in %s", ev.Type, time.Since(start))
+		}
+	}
+}
+
+func (h *fileBarEditorHandler) log(level log.Level, msg string, args ...any) {
+	log.WithFields(log.Fields{
+		logging.KeyClass: "extension.fileBarEditorHandler",
+	}).Logf(level, msg, args...)
+}
+
+func (h *fileBarEditorHandler) interrupt() {
+	if err := h.p.Interrupt(); err != nil {
+		h.log(log.ErrorLevel, "interrupt: %v", err)
+	}
+}
+
+func (h *fileBarEditorHandler) getResource(ev textapi.Event) (
+	*extutil.TrackedResource, bool,
+) {
+	res, ok := h.tracker.Resource(ev.URI)
+	if !ok {
+		h.log(log.ErrorLevel, "resource with uri %q not found in tracker",
+			ev.URI.String())
+	}
+	return res, ok
 }
