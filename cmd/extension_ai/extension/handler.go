@@ -7,12 +7,15 @@ import (
 	"math/rand"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/ernestrc/blue/document"
 	"github.com/ernestrc/blue/iterator"
 	"github.com/ernestrc/blue/logging"
 	log "github.com/sirupsen/logrus"
+	"unstable.build/go-tui"
 	browserapi "unstable.build/go-tui/api/browser"
 	browserextension "unstable.build/go-tui/api/browser/extension"
 	configapi "unstable.build/go-tui/api/config"
@@ -129,6 +132,7 @@ func CommandEventHandler(
 	svcFn func(c configapi.Config, model string) (backend.Service, error),
 	availableModels map[string]struct{},
 	defaultModel string,
+	queryOptions ...aiDialogue.Option,
 ) (hret extutil.CommandEventHandler, err error) {
 	ret := new(aiEditorHandler)
 	ret.ctx, ret.cancelCtx = context.WithCancel(context.Background())
@@ -267,12 +271,15 @@ func CommandEventHandler(
 		return nil, fmt.Errorf("new backend for query dialogues: %v", err)
 	}
 	opts := defaultOpts
+	opts = append(opts, queryOptions...)
+	opts = append(opts, aiDialogue.WithCompleter((*aiEditorHandlerCompleter)(ret)))
 	ret.queryDialogueManager = aiDialogue.NewManager(queryService, ret.dialogueStore, opts...)
 
 	return ret, nil
 }
 
 type aiEditorHandler struct {
+	exit                 atomic.Uint32
 	availableModels      map[string]struct{}
 	defaultModel         string
 	rpcTimeout           time.Duration
@@ -295,11 +302,11 @@ type aiEditorHandler struct {
 
 	ctx       context.Context
 	cancelCtx func()
-	exit      bool
 }
 
 func (h *aiEditorHandler) Handle(ctx context.Context, ev textapi.Event) (exit bool) {
-	exit = h.exit
+	uexit := h.exit.Load()
+	exit = uexit != 0
 	if exit {
 		return
 	}
@@ -355,7 +362,10 @@ func (h *aiEditorHandler) Complete(ctx context.Context, args []string) (
 }
 
 func (h *aiEditorHandler) Close() error {
-	h.exit = true
+	closing := h.exit.CompareAndSwap(0, 1)
+	if !closing {
+		return nil
+	}
 	h.cancelCtx()
 	return nil
 }
@@ -384,9 +394,13 @@ func (h *aiEditorHandler) handleChat(cmd textapi.Command) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("new backend: %v", err)
 	}
+
+	mu := new(sync.Mutex)
+
+	// do not append queryOptions, the default ones suffice
 	opts := defaultOpts
 	dialogueManager := aiDialogue.NewManager(backendService, h.dialogueStore, opts...)
-	dhandler, tx, rx := dialogue.Handler(comp, h.p, h.clip)
+	dhandler, tx, rx := dialogue.Handler(mu, comp, h.p, h.clip)
 
 	ctx, cancel := context.WithCancel(h.ctx)
 	d, err := h.getDialogue(ctx, h.dialogueStore, cmd)
@@ -402,11 +416,16 @@ func (h *aiEditorHandler) handleChat(cmd textapi.Command) (bool, error) {
 
 	go createCompletions(ctx, cancel, tx, rx, dialogueManager, d.ID)
 
-	background := component.WithBackground(comp, term.Cell{
+	var background tui.Component
+	background = component.WithBackground(comp, term.Cell{
 		Bg: h.backgroundAttr.Bg,
 		Fg: h.backgroundAttr.Fg,
 	})
-	bhandler := browserapi.FuncHandler(handler.WithComponent(dhandler, background),
+	// dialogue.Handler's synchronized Draw/Resize is bypassed
+	// by handler.WithComponent below
+	background = component.Sync(mu, background)
+	handler := handler.WithComponent(dhandler, background)
+	bhandler := browserapi.FuncHandler(handler,
 		func() error {
 			cancel()
 			return nil
@@ -427,8 +446,9 @@ func (h *aiEditorHandler) handleChat(cmd textapi.Command) (bool, error) {
 }
 
 func (h *aiEditorHandler) handleQuery(cmd textapi.Command) (bool, error) {
+	mu := new(sync.Mutex)
 	comp := h.newDialogueComponent()
-	dhandler, tx, rx := dialogue.Handler(comp, h.p, h.clip)
+	dhandler, tx, rx := dialogue.Handler(mu, comp, h.p, h.clip)
 
 	queryID := strconv.Itoa(rand.Int())
 	ctx, cancel := context.WithCancel(h.ctx)
@@ -461,11 +481,16 @@ func (h *aiEditorHandler) handleQuery(cmd textapi.Command) (bool, error) {
 	}()
 
 	var win browserapi.Window
-	background := component.WithBackground(comp, term.Cell{
+	var background tui.Component
+	background = component.WithBackground(comp, term.Cell{
 		Bg: h.backgroundAttr.Bg,
 		Fg: h.backgroundAttr.Fg,
 	})
-	bhandler := browserapi.FuncHandler(handler.WithComponent(dhandler, background),
+	// dialogue.Handler's synchronized Draw/Resize is bypassed
+	// by handler.WithComponent below
+	background = component.Sync(mu, background)
+	handler := handler.WithComponent(dhandler, background)
+	bhandler := browserapi.FuncHandler(handler,
 		func() error {
 			cancel()
 			if win != nil {
@@ -514,6 +539,19 @@ func (h *aiEditorHandler) log(level log.Level, msg string, args ...any) {
 	log.WithFields(log.Fields{
 		logging.KeyClass: "extension.aiEditorHandler",
 	}).Logf(level, msg, args...)
+}
+
+// type alias avoids colliding Complete
+type aiEditorHandlerCompleter aiEditorHandler
+
+func (h *aiEditorHandlerCompleter) Complete(
+	ctx context.Context, dialogueID, completionID string,
+	reason backend.FinishReason, msg backend.ChatCompletionMessage,
+) {
+	handler := (*aiEditorHandler)(h)
+	handler.log(log.DebugLevel,
+		"dialogue %q completion %q, finish reason %s, msg: %+v",
+		dialogueID, completionID, reason, msg)
 }
 
 func drawMessage(

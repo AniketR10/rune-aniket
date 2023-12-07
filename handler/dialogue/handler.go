@@ -23,9 +23,12 @@ const EOM = "\n\n\n"
 //
 // EOM must be used by clients of Handler on the returned tx
 // to signal the end of a message and the start of the next one.
-func Handler(c *Component, interrupter term.Interrupter, clip clipboard.Register) (
-	h tui.Handler, tx chan<- string, rx <-chan string,
-) {
+//
+// locker is used to synchronize access to c.
+func Handler(
+	locker sync.Locker, c *Component,
+	interrupter term.Interrupter, clip clipboard.Register,
+) (h tui.Handler, tx chan<- string, rx <-chan string) {
 	ch1 := make(chan string)
 	ch2 := make(chan string)
 
@@ -36,6 +39,7 @@ func Handler(c *Component, interrupter term.Interrupter, clip clipboard.Register
 		comp:        c,
 		rx:          ch2,
 		tx:          ch1,
+		mu:          locker,
 	}
 	go sh.consumeIncoming()
 
@@ -48,7 +52,7 @@ type dialogueHandler struct {
 	mouse       *text.Mouse
 	tx          chan string // user messages
 	rx          chan string // assistant messages
-	mu          sync.Mutex
+	mu          sync.Locker
 }
 
 func (h *dialogueHandler) publishInterrupt() {

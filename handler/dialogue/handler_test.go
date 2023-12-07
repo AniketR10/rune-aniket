@@ -1,6 +1,7 @@
 package dialogue
 
 import (
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -12,10 +13,11 @@ import (
 func TestHandlerIntegration(t *testing.T) {
 	clip := clipboard.NewInMemory()
 	interrupt := make(chan struct{})
-	h, tx, rx := Handler(NewComponent(ComponentConfig{}), term.FuncInterrupter(func() error {
-		interrupt <- struct{}{}
-		return nil
-	}), clip)
+	h, tx, rx := Handler(new(sync.Mutex),
+		NewComponent(ComponentConfig{}), term.FuncInterrupter(func() error {
+			interrupt <- struct{}{}
+			return nil
+		}), clip)
 	defer close(tx)
 	h.Resize(20, 9)
 

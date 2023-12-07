@@ -2,10 +2,10 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"net/http"
 	_ "net/http/pprof"
 
+	log "github.com/sirupsen/logrus"
 	configapi "unstable.build/go-tui/api/config"
 	"unstable.build/go-tui/cmd/extension_ai/backend"
 	"unstable.build/go-tui/cmd/extension_ai/backend/openai"

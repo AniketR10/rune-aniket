@@ -4,6 +4,7 @@ import (
 	configapi "unstable.build/go-tui/api/config"
 	textapi "unstable.build/go-tui/api/text"
 	"unstable.build/go-tui/cmd/extension_ai/backend"
+	"unstable.build/go-tui/cmd/extension_ai/dialogue"
 	"unstable.build/go-tui/extension"
 	extutil "unstable.build/go-tui/extension/util"
 	"unstable.build/go-tui/proto"
@@ -15,13 +16,14 @@ func GranteeWithService(
 	svcFunc func(config configapi.Config, model string) (backend.Service, error),
 	availableModels map[string]struct{},
 	defaultModel string,
+	options ...dialogue.Option,
 ) (extension.Grantee, []extension.Permission) {
 	commandEventHandler := func(
 		ed textapi.Editor, grants []extension.Grant,
 		broker proto.MuxBroker, pconfig configapi.Config,
 	) (hret extutil.CommandEventHandler, err error) {
 		return CommandEventHandler(ed, grants, broker, pconfig,
-			svcFunc, availableModels, defaultModel)
+			svcFunc, availableModels, defaultModel, options...)
 	}
 	grantee, perms := extutil.NewEditorEventHandler(
 		AIHandlerCommands(availableModels), commandEventHandler, AIHandlerEvents,
