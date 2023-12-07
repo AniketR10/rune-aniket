@@ -6,20 +6,26 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/ernestrc/blue/document"
 	"github.com/ernestrc/blue/iterator"
 	"github.com/ernestrc/blue/logging"
 	"github.com/ernestrc/blue/logging/trace"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cmd/extension_ai/backend"
 )
 
 // Manager implements chat completion via a backend.Service.
 // It uses Store to persist context window across sessions.
+//
+// Manager implements an interface that is goroutine-safe
+// if and only if the given Store is also goroutine-safe.
 type Manager struct {
 	config
-	store Store
-	svc   backend.Service
+	store     Store
+	svc       backend.Service
+	resources sync.Map
 }
 
 // NewManager allocates storage for a new Manager and initializes it.
@@ -37,6 +43,28 @@ func (m *Manager) Init(svc backend.Service, store Store, opts ...Option) {
 	for _, o := range opts {
 		o(&m.config)
 	}
+}
+
+// AddContextResource adds a resource that is passed as context
+// on every completion request or if resource has already previously
+// been set, it updates it.
+func (m *Manager) AddContextResource(
+	ctx context.Context, uri workspaceapi.URI, data string,
+) (err error) {
+	m.resources.Store(uri, data)
+	return nil
+}
+
+// RemoveContextResource removes a resource previously created
+// via AddContextResource or returns an error if no such resource exists.
+func (m *Manager) RemoveContextResource(
+	ctx context.Context, uri workspaceapi.URI,
+) (err error) {
+	_, loaded := m.resources.LoadAndDelete(uri)
+	if !loaded {
+		err = fmt.Errorf("resource with URI %q not found", uri.String())
+	}
+	return
 }
 
 // CreateCompletion uses the context stored for the given
@@ -85,6 +113,16 @@ func (m *Manager) doCreateCompletion(
 	}
 
 	var prompt []backend.ChatCompletionMessage
+
+	m.resources.Range(func(k, v any) bool {
+		prompt = append(prompt, backend.ChatCompletionMessage{
+			Role: backend.RoleSystem,
+			Content: fmt.Sprintf("The file with URI %s is "+
+				"in the user's context:\n```\n%s\n```", k, v),
+		})
+		return true
+	})
+
 	for _, msg := range input {
 		prompt = append(prompt,
 			backend.ChatCompletionMessage{Role: backend.RoleUser, Content: msg})

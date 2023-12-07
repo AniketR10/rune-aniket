@@ -65,7 +65,7 @@ var (
 			{Name: commandResetChat, Summary: "Clear all current chat's history."},
 		}
 	}
-	AIHandlerEvents      = extutil.ResourceTrackerEventsFlushOnly()
+	AIHandlerEvents      = append(extutil.ResourceTrackerEventsComplete(), textapi.EventTypeUnfocus)
 	AIHandlerPermissions = []extension.Permission{
 		extension.PermissionBrowserWindowManager,
 		extension.PermissionBrowserResourceOpener,
@@ -262,19 +262,26 @@ func CommandEventHandler(
 		}
 	}
 	ret.dialogueStore = aiDialogue.NewStore(ret.db)
+	queryService, err := ret.svcFn(ret.config, ret.defaultModel)
+	if err != nil {
+		return nil, fmt.Errorf("new backend for query dialogues: %v", err)
+	}
+	opts := defaultOpts
+	ret.queryDialogueManager = aiDialogue.NewManager(queryService, ret.dialogueStore, opts...)
 
 	return ret, nil
 }
 
 type aiEditorHandler struct {
-	availableModels map[string]struct{}
-	defaultModel    string
-	rpcTimeout      time.Duration
-	editor          text.Editor
-	cfg             dialogue.ComponentConfig
-	backgroundAttr  term.Attributes
-	dialogueStore   aiDialogue.Store
-	tracker         extutil.ResourceTracker
+	availableModels      map[string]struct{}
+	defaultModel         string
+	rpcTimeout           time.Duration
+	editor               text.Editor
+	cfg                  dialogue.ComponentConfig
+	backgroundAttr       term.Attributes
+	dialogueStore        aiDialogue.Store
+	tracker              extutil.ResourceTracker
+	queryDialogueManager *aiDialogue.Manager
 
 	clip   clipboard.Register
 	svcFn  func(configapi.Config, string) (backend.Service, error)
@@ -296,7 +303,34 @@ func (h *aiEditorHandler) Handle(ctx context.Context, ev textapi.Event) (exit bo
 	if exit {
 		return
 	}
-	return h.tracker.Handle(ctx, ev)
+	if ev.URI == (workspaceapi.URI{}) {
+		return
+	}
+
+	h.tracker.Handle(ctx, ev)
+
+	var err error
+	switch ev.Type {
+	case textapi.EventTypeEdit, textapi.EventTypeFlush:
+		focus, ok := h.tracker.Focus()
+		if ok && ev.URI == focus.URI() {
+			err = h.queryDialogueManager.AddContextResource(ctx, ev.URI, focus.Buffer().String())
+		}
+	case textapi.EventTypeFocus:
+		res, ok := h.tracker.Resource(ev.URI)
+		if !ok {
+			h.log(log.WarnLevel, "could not find resource on focus event: %s", ev.URI)
+			return
+		}
+		err = h.queryDialogueManager.AddContextResource(ctx, ev.URI, res.Buffer().String())
+	case textapi.EventTypeUnfocus:
+		err = h.queryDialogueManager.RemoveContextResource(ctx, ev.URI)
+	}
+
+	if err != nil {
+		h.log(log.ErrorLevel, "dialogue manager: %s", ev.URI)
+	}
+	return
 }
 
 func (h *aiEditorHandler) HandleCommand(
@@ -394,15 +428,9 @@ func (h *aiEditorHandler) handleChat(cmd textapi.Command) (bool, error) {
 
 func (h *aiEditorHandler) handleQuery(cmd textapi.Command) (bool, error) {
 	comp := h.newDialogueComponent()
-	backendService, err := h.svcFn(h.config, h.defaultModel)
-	if err != nil {
-		return false, fmt.Errorf("new backend: %v", err)
-	}
-	opts := defaultOpts
-	dialogueManager := aiDialogue.NewManager(backendService, h.dialogueStore, opts...)
 	dhandler, tx, rx := dialogue.Handler(comp, h.p, h.clip)
 
-	id := strconv.Itoa(rand.Int())
+	queryID := strconv.Itoa(rand.Int())
 	ctx, cancel := context.WithCancel(h.ctx)
 
 	query := strings.Join(cmd.Args, " ")
@@ -410,8 +438,11 @@ func (h *aiEditorHandler) handleQuery(cmd textapi.Command) (bool, error) {
 	addMessage(comp, msg)
 
 	go func() {
+		// do not store queries in store after user is done
+		defer h.dialogueStore.Delete(context.Background(), queryID)
+
 		// manually add input and returned completion
-		it, err := dialogueManager.CreateCompletion(ctx, id, []string{query})
+		it, err := h.queryDialogueManager.CreateCompletion(ctx, queryID, []string{query})
 		if err != nil {
 			cancel()
 			if !errors.Is(err, context.Canceled) {
@@ -426,7 +457,7 @@ func (h *aiEditorHandler) handleQuery(cmd textapi.Command) (bool, error) {
 		drawMessage(ctx, it, tx)
 
 		// resume creating completions upon further user input
-		createCompletions(ctx, cancel, tx, rx, dialogueManager, id)
+		createCompletions(ctx, cancel, tx, rx, h.queryDialogueManager, queryID)
 	}()
 
 	var win browserapi.Window
@@ -449,7 +480,7 @@ func (h *aiEditorHandler) handleQuery(cmd textapi.Command) (bool, error) {
 	floatingConfig := component.FloatingConfig{
 		Alignment: component.SpanAlignmentCentered,
 	}
-	win, err = h.wm.Floating(floating, floatingConfig)
+	win, err := h.wm.Floating(floating, floatingConfig)
 	if err != nil {
 		return false, fmt.Errorf("floating window: %v", err)
 	}
@@ -471,9 +502,8 @@ func (h *aiEditorHandler) getDialogue(
 }
 
 func (h *aiEditorHandler) handleResetChat(cmd textapi.Command) (bool, error) {
-	dialogueStore := aiDialogue.NewStore(h.db)
 	dialogueID := getDialogueID(cmd)
-	err := dialogueStore.Delete(h.ctx, dialogueID)
+	err := h.dialogueStore.Delete(h.ctx, dialogueID)
 	if err != nil {
 		return false, fmt.Errorf("remove dialogue store: %w", err)
 	}

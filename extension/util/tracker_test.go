@@ -77,6 +77,13 @@ func TestResourceTrackerIntegration(t *testing.T) {
 		assert.Equal(t, 4, res.Scroll.SizeHeight())
 	})
 
+	t.Run("Focus returns last resource in focus", func(t *testing.T) {
+		res, ok := tracker.Focus()
+		require.True(t, ok)
+
+		assert.Equal(t, res1, res.URI())
+	})
+
 	t.Run("updates to buffer are replicated to resource", func(t *testing.T) {
 		res, ok := tracker.Resource(res1)
 		require.True(t, ok)

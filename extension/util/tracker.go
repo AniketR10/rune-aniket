@@ -24,6 +24,7 @@ type ResourceTracker struct {
 	resources map[string]*TrackedResource
 	wrap      bool
 	tabspaces int
+	focus     *TrackedResource
 }
 
 var _ textapi.EventHandler = (*ResourceTracker)(nil)
@@ -96,6 +97,14 @@ func (t *ResourceTracker) Resource(uri workspaceapi.URI) (*TrackedResource, bool
 	return ret, ok
 }
 
+// Focus returns the tracked resource currently in focus, or false
+// if there is no tracked resource currently in focus. Clients
+// must subscribe this ResourceTracker to EventTypeFocus events.
+func (t *ResourceTracker) Focus() (*TrackedResource, bool) {
+	ok := t.focus != nil
+	return t.focus, ok
+}
+
 // Handle satisfies textapi.EventHandler.
 func (h *ResourceTracker) Handle(_ context.Context, ev textapi.Event) (exit bool) {
 	if ev.URI == (workspaceapi.URI{}) {
@@ -154,6 +163,7 @@ func (h *ResourceTracker) handleResourceFocus(ev textapi.Event) bool {
 	if res.Scroll.Wrap {
 		res.Scroll.RecalculateWraps()
 	}
+	h.focus = res
 	return true
 }
 
