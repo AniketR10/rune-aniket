@@ -165,41 +165,37 @@ func TestCreateChatCompletion(t *testing.T) {
 		it, err := client.CreateChatCompletion(ctx, req)
 		require.NoError(t, err)
 
-		var builder strings.Builder
+		var last backend.ChatCompletionResponse
 		for i := 0; ; i++ {
+			var ok bool
 			resp, ok := it.Next()
 			if !ok {
 				break
 			}
+			last = resp
 			assert.NotZero(t, resp.ID)
 			assert.WithinDuration(t, time.Now(), resp.Created, 1*time.Minute)
 			assert.Equal(t, backend.RoleAssistant, resp.Message.Role)
 
 			// first message
-			if i == 0 {
-				require.Len(t, resp.Message.Metadata.(Metadata).ToolCalls, 1, "%+v", resp)
-				calls := resp.Message.Metadata.(Metadata).ToolCalls
-				assert.NotZero(t, calls[0].ID)
-				assert.Equal(t, ToolTypeFunction, calls[0].Type)
-				assert.Equal(t, "getCurrentWeather", calls[0].Function.Name)
-				continue
-			}
-
-			// last message
-			if resp.Message.Metadata == nil || len(resp.Message.Metadata.(Metadata).ToolCalls) == 0 {
-				assert.Equal(t, backend.FinishReasonToolCall, resp.FinishReason)
-				continue
-			}
-
-			// rest of messages
-			require.Len(t, resp.Message.Metadata.(Metadata).ToolCalls, 1, i)
-			builder.WriteString(resp.Message.Metadata.(Metadata).ToolCalls[0].Function.Arguments)
+			require.NotNil(t, resp.Message.Metadata, i)
+			require.Len(t, resp.Message.Metadata.(Metadata).ToolCalls, 1, "%+v", resp)
+			calls := resp.Message.Metadata.(Metadata).ToolCalls
+			assert.NotZero(t, calls[0].ID)
+			assert.Equal(t, ToolTypeFunction, calls[0].Type)
+			assert.Equal(t, "getCurrentWeather", calls[0].Function.Name)
 		}
 
+		// last response should contain the reason
+		assert.Equal(t, backend.FinishReasonToolCall, last.FinishReason)
+
 		require.NoError(t, it.Err())
+		actualArgs := last.Message.Metadata.(Metadata).ToolCalls[0].Function.Arguments
 		assert.Equal(t, `{
   "location": "San Francisco, CA"
-}`, builder.String())
+}`, actualArgs)
+		actualFunction := last.Message.Metadata.(Metadata).ToolCalls[0].Function.Name
+		assert.Equal(t, "getCurrentWeather", actualFunction)
 	})
 }
 

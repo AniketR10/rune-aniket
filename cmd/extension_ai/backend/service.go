@@ -44,6 +44,10 @@ type ChatCompletionMessage struct {
 	// Metadata contains service-specific data.
 	// Check the documentation of a service implementation
 	// to know what type this Metadata will be.
+	//
+	// Only the last Metadata field in a ChatCompletionMessage stream
+	// should be used. Implementations must ensure that the last
+	// ChatCompletionMessage's metadata is complete.
 	Metadata any
 
 	// An optional name for the participant.

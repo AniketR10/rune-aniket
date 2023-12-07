@@ -223,7 +223,7 @@ func (a client) CreateChatCompletion(
 	if err != nil {
 		return nil, err
 	}
-	return &completionStreamIterator{stream: stream}, nil
+	return &completionStreamIterator{client: a, stream: stream}, nil
 }
 
 func (a client) ExceedsContextWindow(messages []backend.ChatCompletionMessage) (bool, error) {
@@ -247,9 +247,11 @@ func (a client) countTokens(messages []backend.ChatCompletionMessage) (ret int) 
 
 // wraps an openai.ChatCompletionStream to satisfy iterator.Iterator
 type completionStreamIterator struct {
+	client
 	role   backend.Role
 	stream *openai.ChatCompletionStream
 	err    error
+	meta   any
 }
 
 func (s *completionStreamIterator) Next() (ret backend.ChatCompletionResponse, ok bool) {
@@ -263,6 +265,9 @@ func (s *completionStreamIterator) Next() (ret backend.ChatCompletionResponse, o
 	}
 	// NOTE: see above N parameter config
 	choice := resp.Choices[0]
+
+	s.client.log(log.TraceLevel, "received backend response: %+v", choice)
+
 	if s.role == "" {
 		switch choice.Delta.Role {
 		case openai.ChatMessageRoleSystem:
@@ -280,20 +285,31 @@ func (s *completionStreamIterator) Next() (ret backend.ChatCompletionResponse, o
 		}
 	}
 	ok = true
+
+	// only set Metadata if ToolCalls is not 0
+	// this way clients agnostic to openai's backend
+	// can simply check if Metadata is nil to perform
+	// something different, like calling a metadata handler
+	// (that knows about openai).
+	if len(choice.Delta.ToolCalls) != 0 {
+		// ensure that the last message's Metadata contains
+		// all the streamed arguments.
+		s.appendToolCallsArguments(choice.Delta.ToolCalls)
+	}
+
 	ret = backend.ChatCompletionResponse{
 		ID:      resp.ID,
 		Created: time.Unix(resp.Created, 0),
 		Message: backend.ChatCompletionMessage{
-			Role:    s.role,
-			Content: choice.Delta.Content,
-			Metadata: Metadata{
-				ToolCalls: modelToolCallsFromOpenAI(choice.Delta.ToolCalls),
-			},
+			Role:     s.role,
+			Content:  choice.Delta.Content,
+			Metadata: s.meta,
 			// Name: assistant's name is never defined;
 			// at least the unofficial openai client doesn't defined
 		},
 		FinishReason: backend.FinishReason(choice.FinishReason),
 	}
+	s.client.log(log.TraceLevel, "streaming response %+v", ret)
 	return
 }
 
@@ -301,4 +317,23 @@ func (s *completionStreamIterator) Next() (ret backend.ChatCompletionResponse, o
 // encountered by the Iterator.
 func (s *completionStreamIterator) Err() error {
 	return s.err
+}
+
+func (s *completionStreamIterator) appendToolCallsArguments(newToolCallsArgs []openai.ToolCall) {
+	if s.meta == nil {
+		s.meta = Metadata{
+			ToolCalls: modelToolCallsFromOpenAI(newToolCallsArgs),
+		}
+		return
+	}
+	toolCalls := s.meta.(Metadata).ToolCalls
+	if len(newToolCallsArgs) != len(toolCalls) {
+		s.client.log(log.ErrorLevel, "inconsistent number of tool calls "+
+			"within a stream of chat completion messages")
+		return
+	}
+	for i, tool := range newToolCallsArgs {
+		toolCalls[i].Function.Arguments = toolCalls[i].Function.Arguments + tool.Function.Arguments
+	}
+	s.meta = Metadata{ToolCalls: toolCalls}
 }
