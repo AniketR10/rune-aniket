@@ -91,6 +91,7 @@ func (m *Manager) CreateCompletion(
 
 type config struct {
 	initialContext []backend.ChatCompletionMessage
+	completer      Completer
 }
 
 func (m *Manager) doCreateCompletion(
@@ -179,6 +180,7 @@ func (m *Manager) doCreateCompletion(
 		store:                m.store,
 		it:                   it,
 		ctx:                  ctx,
+		completer:            m.config.completer,
 	}
 	return
 }
@@ -193,14 +195,23 @@ type completionStreamIterator struct {
 	exceedsContextWindow bool
 	store                Store
 	it                   iterator.Iterator[backend.ChatCompletionResponse]
+	completer            Completer
 
-	response strings.Builder
-	err      error
+	finishReason backend.FinishReason
+	completionID string
+	metadata     any
+	response     strings.Builder
+	err          error
 }
 
 func (s *completionStreamIterator) Next() (string, bool) {
 	resp, ok := s.it.Next()
 	if ok {
+		s.completionID = resp.ID
+		// last ok responsive should contain the finish reason
+		// and complete Metadata.
+		s.finishReason = resp.FinishReason
+		s.metadata = resp.Message.Metadata
 		s.response.WriteString(resp.Message.Content)
 		return resp.Message.Content, true
 	}
@@ -209,10 +220,30 @@ func (s *completionStreamIterator) Next() (string, bool) {
 		return "", false
 	}
 	response := backend.ChatCompletionMessage{
-		Role:    backend.RoleAssistant,
-		Content: s.response.String(),
-		// Metadata: ignore function calls for now
-		// Name: not usually defined for an assistant
+		Role:     backend.RoleAssistant,
+		Content:  s.response.String(),
+		Metadata: s.metadata,
+	}
+	if s.completer != nil {
+		// we want to dispatch it for all finish reasons, but only after we have
+		// finished appending new messages to the dialogue store
+		defer s.completer.Complete(s.ctx, s.dialogueID,
+			s.completionID, s.finishReason, response)
+	}
+	switch s.finishReason {
+	case backend.FinishReasonStop, backend.FinishReasonToolCall:
+		/* ok */
+	case backend.FinishReasonContentFilter:
+		s.err = errors.New("omitted content due to a flag from the backend's content filters")
+	case backend.FinishReasonNull:
+		s.err = errors.New("unexpected end of stream")
+	case backend.FinishReasonLength:
+		s.err = errors.New("incomplete model output due to configuration parameter or token limit")
+	default:
+		s.err = errors.New("unknown stream finish reason")
+	}
+	if s.err != nil {
+		return "", false
 	}
 	newMsgs := append(s.userPrompt, response)
 	err := s.store.Create(s.ctx, s.dialogueID, newMsgs)

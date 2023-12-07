@@ -12,3 +12,10 @@ func WithInitialContext(msgs []backend.ChatCompletionMessage) Option {
 		cfg.initialContext = msgs
 	}
 }
+
+// WithCompleter returns an option that sets a Manager's Completer.
+func WithCompleter(completer Completer) Option {
+	return func(cfg *config) {
+		cfg.completer = completer
+	}
+}

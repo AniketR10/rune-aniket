@@ -53,7 +53,8 @@ func TestManager(t *testing.T) {
 		client := testClient{streamRes: []backend.ChatCompletionResponse{
 			{Message: backend.ChatCompletionMessage{Content: "0"}},
 			{Message: backend.ChatCompletionMessage{Content: "1"}},
-			{Message: backend.ChatCompletionMessage{Content: "2"}},
+			{Message: backend.ChatCompletionMessage{Content: "2"},
+				FinishReason: backend.FinishReasonStop},
 		}}
 		manager := newTestManager(client, store)
 		it, err := manager.CreateCompletion(ctx, "myId", []string{"hello"})
@@ -73,12 +74,100 @@ func TestManager(t *testing.T) {
 		assert.True(t, it.(*completionStreamIterator).it.(*testStream).closed)
 	})
 
+	t.Run("dispatches Completer.Complete when configured to do so", func(t *testing.T) {
+		store := newTestStore(t)
+		myMetadata := "myMeta"
+		client := testClient{streamRes: []backend.ChatCompletionResponse{
+			{Message: backend.ChatCompletionMessage{Content: "0"}},
+			{Message: backend.ChatCompletionMessage{Content: "1"}},
+			{
+				Message: backend.ChatCompletionMessage{
+					Content:  "2",
+					Metadata: myMetadata,
+				},
+				FinishReason: backend.FinishReasonToolCall,
+			},
+		}}
+		manager := newTestManager(client, store)
+		it, err := manager.CreateCompletion(ctx, "myId", []string{"hello"})
+		require.NoError(t, err)
+		for i := 0; i < 3; i++ {
+			next, ok := it.Next()
+			require.True(t, ok)
+			assert.Equal(t, strconv.Itoa(i), next)
+		}
+
+		_, ok := it.Next()
+		require.False(t, ok)
+
+		err = it.Err()
+		require.NoError(t, err)
+
+		assert.True(t, it.(*completionStreamIterator).it.(*testStream).closed)
+	})
+
+	t.Run("returns error for non-ok finish reasons", func(t *testing.T) {
+		finishReasons := []backend.FinishReason{
+			backend.FinishReasonLength,
+			backend.FinishReasonContentFilter,
+			backend.FinishReasonNull,
+			backend.FinishReason(""),
+			backend.FinishReason("somethingElse"),
+		}
+		for _, finishReason := range finishReasons {
+			t.Run(string(finishReason), func(t *testing.T) {
+				store := newTestStore(t)
+				client := testClient{streamRes: []backend.ChatCompletionResponse{
+					{
+						ID:      "inconsistent IDs, should use last",
+						Message: backend.ChatCompletionMessage{Content: "X"},
+					},
+					{
+						ID:           "1234",
+						Message:      backend.ChatCompletionMessage{Content: "0"},
+						FinishReason: finishReason,
+					},
+				}}
+				var called bool
+				completer := func(ctx context.Context, dialogueID, completionID string,
+					reason backend.FinishReason, msg backend.ChatCompletionMessage) {
+					expectedMsg := backend.ChatCompletionMessage{
+						Content: "X0",
+						Role:    backend.RoleAssistant,
+					}
+					assert.Equal(t, expectedMsg, msg)
+					assert.Equal(t, finishReason, reason)
+					assert.Equal(t, "1234", completionID)
+					assert.Equal(t, "myId", dialogueID)
+					called = true
+				}
+				manager := newTestManager(client, store, WithCompleter(FuncCompleter(completer)))
+				it, err := manager.CreateCompletion(ctx, "myId", []string{"hello"})
+				require.NoError(t, err)
+
+				for i := 0; i < 2; i++ {
+					_, ok := it.Next()
+					require.True(t, ok)
+				}
+
+				_, ok := it.Next()
+				require.False(t, ok)
+
+				err = it.Err()
+				require.Error(t, err)
+
+				assert.True(t, called)
+			})
+		}
+	})
+
 	t.Run("stores messages in store", func(t *testing.T) {
 		store := newTestStore(t)
 		messages := []backend.ChatCompletionResponse{
 			{Message: backend.ChatCompletionMessage{Content: "0"}},
 			{Message: backend.ChatCompletionMessage{Content: "1"}},
-			{Message: backend.ChatCompletionMessage{Content: "2"}},
+			{Message: backend.ChatCompletionMessage{Content: "2"},
+				FinishReason: backend.FinishReasonStop},
 		}
 		client := testClient{streamRes: messages}
 		manager := newTestManager(client, store)
@@ -117,7 +206,8 @@ func TestManager(t *testing.T) {
 			streamRes: []backend.ChatCompletionResponse{
 				{Message: backend.ChatCompletionMessage{Content: "0"}},
 				{Message: backend.ChatCompletionMessage{Content: "1"}},
-				{Message: backend.ChatCompletionMessage{Content: "2"}},
+				{Message: backend.ChatCompletionMessage{Content: "2"},
+					FinishReason: backend.FinishReasonStop},
 			},
 		}
 		input, _ := makeContentTokens(contextWindow)
@@ -151,7 +241,8 @@ func TestManager(t *testing.T) {
 			streamRes: []backend.ChatCompletionResponse{
 				{Message: backend.ChatCompletionMessage{Content: "0"}},
 				{Message: backend.ChatCompletionMessage{Content: "1"}},
-				{Message: backend.ChatCompletionMessage{Content: "2"}},
+				{Message: backend.ChatCompletionMessage{Content: "2"},
+					FinishReason: backend.FinishReasonStop},
 			},
 		}
 		manager := newTestManager(client, store)
@@ -245,11 +336,8 @@ func newTestStore(t *testing.T) Store {
 	return store
 }
 
-func newTestManager(client backend.Service, store Store) Manager {
-	return Manager{
-		store: store,
-		svc:   client,
-	}
+func newTestManager(client backend.Service, store Store, options ...Option) *Manager {
+	return NewManager(client, store, options...)
 }
 
 func makeContentTokens(greaterThan int) ([]string, []backend.ChatCompletionMessage) {
