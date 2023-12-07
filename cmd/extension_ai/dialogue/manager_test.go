@@ -81,6 +81,7 @@ func TestManager(t *testing.T) {
 			{Message: backend.ChatCompletionMessage{Content: "0"}},
 			{Message: backend.ChatCompletionMessage{Content: "1"}},
 			{
+				ID: "1234",
 				Message: backend.ChatCompletionMessage{
 					Content:  "2",
 					Metadata: myMetadata,
@@ -88,7 +89,22 @@ func TestManager(t *testing.T) {
 				FinishReason: backend.FinishReasonToolCall,
 			},
 		}}
-		manager := newTestManager(client, store)
+		var called int
+		completer := FuncCompleter(func(ctx context.Context, dialogueID, completionID string,
+			reason backend.FinishReason, msg backend.ChatCompletionMessage) {
+			expectedMsg := backend.ChatCompletionMessage{
+				Content:  "012",
+				Role:     backend.RoleAssistant,
+				Metadata: myMetadata,
+			}
+			assert.Equal(t, expectedMsg, msg)
+			assert.Equal(t, backend.FinishReasonToolCall, reason)
+			assert.Equal(t, "1234", completionID)
+			assert.Equal(t, "myId", dialogueID)
+			called++
+		})
+		manager := newTestManager(client, store,
+			WithCompleter(completer), WithCompleter(completer))
 		it, err := manager.CreateCompletion(ctx, "myId", []string{"hello"})
 		require.NoError(t, err)
 		for i := 0; i < 3; i++ {
@@ -104,6 +120,7 @@ func TestManager(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.True(t, it.(*completionStreamIterator).it.(*testStream).closed)
+		assert.Equal(t, 2, called)
 	})
 
 	t.Run("returns error for non-ok finish reasons", func(t *testing.T) {

@@ -1,6 +1,10 @@
 package dialogue
 
-import "unstable.build/go-tui/cmd/extension_ai/backend"
+import (
+	"context"
+
+	"unstable.build/go-tui/cmd/extension_ai/backend"
+)
 
 // Option is an optional configuration passed when initialigin a Manager.
 type Option func(*config)
@@ -16,6 +20,16 @@ func WithInitialContext(msgs []backend.ChatCompletionMessage) Option {
 // WithCompleter returns an option that sets a Manager's Completer.
 func WithCompleter(completer Completer) Option {
 	return func(cfg *config) {
-		cfg.completer = completer
+		// aggregate completers
+		if cfg.completer != nil {
+			prev := cfg.completer
+			cfg.completer = FuncCompleter(func(ctx context.Context, dialogueID, completionID string,
+				reason backend.FinishReason, msg backend.ChatCompletionMessage) {
+				prev.Complete(ctx, dialogueID, completionID, reason, msg)
+				completer.Complete(ctx, dialogueID, completionID, reason, msg)
+			})
+		} else {
+			cfg.completer = completer
+		}
 	}
 }
