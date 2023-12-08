@@ -91,8 +91,6 @@ extensions:
       model: gpt-4
       # OpenAI API key
       # api_key: ""
-      # timeout to run completion queries.
-      rpc_timeout: 10s
       # Colors
       background_attr:
         bg: default

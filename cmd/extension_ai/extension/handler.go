@@ -153,12 +153,6 @@ func CommandEventHandler(
 		return nil, err
 	}
 
-	ret.rpcTimeout, err = configapi.GetDuration(pconfig,
-		"rpc_timeout", defaultRPCTimeout)
-	if err != nil {
-		return nil, err
-	}
-
 	ret.cfg = defaultComponentCfg
 	backgroundAttr, err := configapi.GetAttributes(pconfig, "background_attr")
 	if err != nil {
