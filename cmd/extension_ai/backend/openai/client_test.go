@@ -200,12 +200,15 @@ func TestCreateChatCompletion(t *testing.T) {
 }
 
 func TestContextWindows(t *testing.T) {
+	models := AvailableModels()
+	models[GPT4] = 50
+
 	t.Run("CreateCompletionRequest errors with ErrContextWindowExceeded", func(t *testing.T) {
 		client := NewClient("", Config{
 			Model: GPT4,
-		}, AvailableModels()).(client)
+		}, models).(client)
 		ctx := context.Background()
-		msgs := makeMessageTokens(client, 8193)
+		msgs := makeMessageTokens(client, 51)
 
 		// sut
 		req := backend.ChatCompletionRequest{Messages: msgs}
@@ -216,8 +219,8 @@ func TestContextWindows(t *testing.T) {
 	t.Run("ExceedsContextWindow", func(t *testing.T) {
 		client := NewClient("", Config{
 			Model: GPT4,
-		}, AvailableModels()).(client)
-		msgs := makeMessageTokens(client, 8193)
+		}, models).(client)
+		msgs := makeMessageTokens(client, 51)
 
 		// sut
 		ok, err := client.ExceedsContextWindow(msgs)
