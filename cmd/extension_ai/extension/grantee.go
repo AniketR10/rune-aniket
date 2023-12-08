@@ -14,7 +14,7 @@ import (
 // backend.Service constructor as the backend servicing the LLM.
 func GranteeWithService(
 	svcFunc func(config configapi.Config, model string) (backend.Service, error),
-	availableModels map[string]struct{},
+	availableModels map[string]int,
 	defaultModel string,
 	options ...dialogue.Option,
 ) (extension.Grantee, []extension.Permission) {

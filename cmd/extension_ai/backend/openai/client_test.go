@@ -26,7 +26,7 @@ func TestCreateChatCompletion(t *testing.T) {
 
 	t.Run("NewClient with empty model panics", func(t *testing.T) {
 		assert.Panics(t, func() {
-			NewClient(token, Config{})
+			NewClient(token, Config{}, AvailableModels())
 		})
 	})
 
@@ -34,7 +34,7 @@ func TestCreateChatCompletion(t *testing.T) {
 		client := NewClient(token, Config{
 			Model:       GPT3Dot5Turbo,
 			Temperature: 0.1,
-		})
+		}, AvailableModels())
 		ctx := context.Background()
 		req := backend.ChatCompletionRequest{Messages: []backend.ChatCompletionMessage{
 			{Role: backend.RoleUser, Content: "hello sir!"},
@@ -66,7 +66,7 @@ func TestCreateChatCompletion(t *testing.T) {
 		client := NewClient(token, Config{
 			MaxTokens: 10000, // force error, so we know that it is set
 			Model:     GPT3Dot5Turbo,
-		})
+		}, AvailableModels())
 		ctx := context.Background()
 		req := backend.ChatCompletionRequest{Messages: []backend.ChatCompletionMessage{
 			{Role: backend.RoleUser, Content: "hello sir!"},
@@ -79,7 +79,7 @@ func TestCreateChatCompletion(t *testing.T) {
 		client := NewClient(token, Config{
 			PresencePenalty: -100, // force error, so we know that it is set
 			Model:           GPT3Dot5Turbo,
-		})
+		}, AvailableModels())
 		ctx := context.Background()
 		req := backend.ChatCompletionRequest{Messages: []backend.ChatCompletionMessage{
 			{Role: backend.RoleUser, Content: "hello sir!"},
@@ -92,7 +92,7 @@ func TestCreateChatCompletion(t *testing.T) {
 		client := NewClient(token, Config{
 			Temperature: -100, // force error, so we know that it is set
 			Model:       GPT3Dot5Turbo,
-		})
+		}, AvailableModels())
 		ctx := context.Background()
 		req := backend.ChatCompletionRequest{Messages: []backend.ChatCompletionMessage{
 			{Role: backend.RoleUser, Content: "hello sir!"},
@@ -105,7 +105,7 @@ func TestCreateChatCompletion(t *testing.T) {
 		client := NewClient(token, Config{
 			Model:       GPT3Dot5Turbo,
 			Temperature: 0.1,
-		})
+		}, AvailableModels())
 		ctx := context.Background()
 		req := backend.ChatCompletionRequest{Messages: []backend.ChatCompletionMessage{
 			{Role: "system", Content: "We are roleplaying and you are an evil AI agent."},
@@ -157,7 +157,7 @@ func TestCreateChatCompletion(t *testing.T) {
 				}},
 			},
 			Model: GPT3Dot5Turbo,
-		})
+		}, AvailableModels())
 		ctx := context.Background()
 		req := backend.ChatCompletionRequest{Messages: []backend.ChatCompletionMessage{
 			{Role: backend.RoleUser, Content: "what's the weather like in San Francisco right now?"},
@@ -203,7 +203,7 @@ func TestContextWindows(t *testing.T) {
 	t.Run("CreateCompletionRequest errors with ErrContextWindowExceeded", func(t *testing.T) {
 		client := NewClient("", Config{
 			Model: GPT4,
-		}).(client)
+		}, AvailableModels()).(client)
 		ctx := context.Background()
 		msgs := makeMessageTokens(client, 8193)
 
@@ -216,7 +216,7 @@ func TestContextWindows(t *testing.T) {
 	t.Run("ExceedsContextWindow", func(t *testing.T) {
 		client := NewClient("", Config{
 			Model: GPT4,
-		}).(client)
+		}, AvailableModels()).(client)
 		msgs := makeMessageTokens(client, 8193)
 
 		// sut
@@ -231,11 +231,11 @@ func TestContextWindows(t *testing.T) {
 }
 
 func TestCountTokens(t *testing.T) {
-	for model := range modelContextWindow {
+	for model := range AvailableModels() {
 		t.Run(model, func(t *testing.T) {
 			client := NewClient("", Config{
 				Model: model,
-			}).(client)
+			}, AvailableModels()).(client)
 			text := "¡Hola mundo!"
 			assert.Equal(t, 10, client.countTokens([]backend.ChatCompletionMessage{{Content: text}}))
 		})

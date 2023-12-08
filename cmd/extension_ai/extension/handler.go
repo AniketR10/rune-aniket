@@ -48,7 +48,7 @@ const (
 )
 
 var (
-	AIHandlerCommands = func(availableModels map[string]struct{}) []textapi.CommandManual {
+	AIHandlerCommands = func(availableModels map[string]int) []textapi.CommandManual {
 		return []textapi.CommandManual{
 			{
 				Name: commandQuery,
@@ -130,7 +130,7 @@ func CommandEventHandler(
 	ed textapi.Editor, grants []extension.Grant,
 	broker proto.MuxBroker, pconfig configapi.Config,
 	svcFn func(c configapi.Config, model string) (backend.Service, error),
-	availableModels map[string]struct{},
+	availableModels map[string]int,
 	defaultModel string,
 	queryOptions ...aiDialogue.Option,
 ) (hret extutil.CommandEventHandler, err error) {
@@ -280,7 +280,7 @@ func CommandEventHandler(
 
 type aiEditorHandler struct {
 	exit                 atomic.Uint32
-	availableModels      map[string]struct{}
+	availableModels      map[string]int
 	defaultModel         string
 	rpcTimeout           time.Duration
 	editor               text.Editor
@@ -604,7 +604,7 @@ func addMessage(c *dialogue.Component, msg backend.ChatCompletionMessage) {
 	}
 }
 
-func availableModelsString(availableModels map[string]struct{}) string {
+func availableModelsString(availableModels map[string]int) string {
 	var availableStr strings.Builder
 	var i int
 	for k := range availableModels {
@@ -617,7 +617,7 @@ func availableModelsString(availableModels map[string]struct{}) string {
 	return availableStr.String()
 }
 
-func isAvailableModel(available map[string]struct{}, model string) error {
+func isAvailableModel(available map[string]int, model string) error {
 	if _, ok := available[model]; !ok {
 		availableStr := availableModelsString(available)
 		return fmt.Errorf("Model '%s' is not supported. Available models: %s",

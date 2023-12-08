@@ -24,10 +24,16 @@ func main() {
 			return nil, err
 		}
 		return openai.NewClient(apiKey, openai.Config{
-			Model: model,
-		}), nil
+			Model:   model,
+		}, availableModels()), nil
 	}
 	grantee, perms := extension.GranteeWithService(openaiSvc,
-		openai.AvailableModels(), openai.GPT3Dot5Turbo)
+		availableModels(), defaultModel)
 	process.Serve(grantee, perms...)
+}
+
+var defaultModel = openai.GPT3Dot5Turbo
+
+func availableModels() map[string]int {
+	return openai.AvailableModels()
 }

@@ -62,16 +62,26 @@ type Config struct {
 	// A list of tools the model may call. Currently, only functions are supported
 	// as a tool. Use this to provide a list of functions the model may generate JSON inputs for.
 	Tools []Tool
+	// BaseURL for of the http service.
+	BaseURL string
 }
 
 // NewClient returns a backedn.Service backed by openai's text completion API.
 //
 // The iterator returned by CreateChatCompletion sets ChatCompletionResponse's
 // Metadata to a type openai.Metadata struct.
-func NewClient(token string, config Config) backend.Service {
+func NewClient(
+	token string, config Config,
+	availableModels map[string]int,
+) backend.Service {
 	if config.Model == "" {
 		panic("Config.Model cannot be empty")
 	}
+
+	if _, ok := availableModels[config.Model]; !ok {
+		panic("model not in available models")
+	}
+
 	var tools []openai.Tool
 	for _, tool := range config.Tools {
 		tools = append(tools, openai.Tool{
@@ -84,13 +94,15 @@ func NewClient(token string, config Config) backend.Service {
 		})
 	}
 
-	if _, ok := modelContextWindow[config.Model]; !ok {
-		panic("model has no context mapping")
-	}
-
 	tkm, err := tiktoken.EncodingForModel(config.Model)
 	if err != nil {
-		panic(fmt.Errorf("encoding for model: %v", err))
+		(client{}).log(log.WarnLevel, "token counting might be off: encoding for model %s: %v",
+			config.Model, err)
+		tkm, err = tiktoken.EncodingForModel(GPT4)
+		if err != nil {
+			panic(fmt.Errorf("fallback encoding for model "+
+				"from %s to %s failed: %v", config.Model, GPT4, err))
+		}
 	}
 
 	var tokensPerMessage, tokensPerName int
@@ -103,13 +115,20 @@ func NewClient(token string, config Config) backend.Service {
 		tokensPerName = 1
 	}
 
+	openaiConfig := openai.DefaultConfig(token)
+	if config.BaseURL != "" {
+		openaiConfig.BaseURL = config.BaseURL
+	}
+	c := openai.NewClientWithConfig(openaiConfig)
+
 	return client{
-		tools:            tools,
-		config:           config,
-		client:           openai.NewClient(token),
-		counter:          tkm,
-		tokensPerMessage: tokensPerMessage,
-		tokensPerName:    tokensPerName,
+		tools:              tools,
+		config:             config,
+		client:             c,
+		counter:            tkm,
+		tokensPerMessage:   tokensPerMessage,
+		tokensPerName:      tokensPerName,
+		modelContextWindow: availableModels,
 	}
 }
 
@@ -131,12 +150,13 @@ var (
 )
 
 type client struct {
-	tools            []openai.Tool
-	config           Config
-	client           *openai.Client
-	counter          *tiktoken.Tiktoken
-	tokensPerMessage int
-	tokensPerName    int
+	tools              []openai.Tool
+	config             Config
+	client             *openai.Client
+	counter            *tiktoken.Tiktoken
+	tokensPerMessage   int
+	tokensPerName      int
+	modelContextWindow map[string]int
 }
 
 func (a client) log(level log.Level, msg string, args ...any) {
@@ -227,7 +247,7 @@ func (a client) CreateChatCompletion(
 }
 
 func (a client) ExceedsContextWindow(messages []backend.ChatCompletionMessage) (bool, error) {
-	return a.countTokens(messages) > modelContextWindow[a.config.Model], nil
+	return a.countTokens(messages) > a.modelContextWindow[a.config.Model], nil
 }
 
 // OpenAI Cookbook: https://github.com/openai/openai-cookbook/blob/main/examples/How_to_count_tokens_with_tiktoken.ipynb
