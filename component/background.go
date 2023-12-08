@@ -2,6 +2,7 @@ package component
 
 import (
 	"unstable.build/go-tui"
+	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/term"
 )
 
@@ -10,6 +11,7 @@ type Background struct {
 	root          tui.Component
 	width, height int
 	cell          term.Cell
+	buffer        *cell.BufferWriter
 }
 
 var _ Floating = (*Background)(nil)
@@ -25,9 +27,10 @@ func WithBackground(comp tui.Component, cell term.Cell) *Background {
 }
 
 // Init initializes this Background with comp and cell.
-func (b *Background) Init(comp tui.Component, cell term.Cell) {
+func (b *Background) Init(comp tui.Component, c term.Cell) {
 	b.root = comp
-	b.cell = cell
+	b.cell = c
+	b.buffer = cell.NewBufferWriter(0, 0)
 }
 
 // Resize : tui.Component
@@ -39,12 +42,50 @@ func (b *Background) Resize(width, height int) {
 
 // Draw : tui.Component
 func (b *Background) Draw(w term.Writer) {
+	b.buffer.Init(b.width, b.height)
+	b.root.Draw(b.buffer)
+	cells := b.buffer.RawCells()
+
+	if b.cell.Ch == 0 {
+		b.setCellsFast(w, cells)
+		return
+	}
+
+	b.setCells(w, cells)
+}
+
+func (b *Background) setCells(w term.Writer, cells [][]term.Cell) {
 	for y := 0; y < b.height; y++ {
 		for x := 0; x < b.width; x++ {
-			w.SetCell(term.Coordinates{X: x, Y: y}, b.cell)
+			cell := b.cell
+			if y < len(cells) && x < len(cells[y]) {
+				ocell := cells[y][x]
+				if ocell.Ch != 0 {
+					cell.Ch = ocell.Ch
+				}
+				if ocell.Fg != 0 {
+					cell.Fg = ocell.Fg
+				}
+				// but no background
+			}
+			w.SetCell(term.Coordinates{X: x, Y: y}, cell)
 		}
 	}
-	b.root.Draw(w)
+}
+
+func (b *Background) setCellsFast(w term.Writer, cells [][]term.Cell) {
+	for y := 0; y < b.height; y++ {
+		for x := 0; x < b.width; x++ {
+			cell := b.cell
+			if y < len(cells) && x < len(cells[y]) {
+				ocell := cells[y][x]
+				cell.Ch = ocell.Ch
+				cell.Fg = ocell.Fg
+				// but no background
+			}
+			w.SetCell(term.Coordinates{X: x, Y: y}, cell)
+		}
+	}
 }
 
 // Content returns the inner component.
