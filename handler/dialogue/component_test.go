@@ -115,6 +115,22 @@ This is rather bore
  └──────────────┘    
                      `,
 				},
+				{
+					Action: func() {
+						comp.Reset()
+					},
+					Expected: `                     
+                     
+                     
+                     
+                     
+                     
+                     
+ ┌──────────────┐    
+ │              │    
+ └──────────────┘    
+                     `,
+				},
 			}
 			testutil.TestComponent(t, comp, w, tests)
 		})

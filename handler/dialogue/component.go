@@ -203,6 +203,11 @@ func (c *Component) Height(width int) (height int) {
 	return
 }
 
+// Reset resets the dialogue on this Component.
+func (c *Component) Reset() {
+	c.messages.Reset()
+}
+
 func (c *Component) boxWidth(width int) int {
 	return int(float64(width) * float64(c.cfg.InputRowColumns) / float64(component.MaxCols))
 }
