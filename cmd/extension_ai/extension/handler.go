@@ -52,8 +52,9 @@ var (
 		return []textapi.CommandManual{
 			{
 				Name: commandQuery,
-				Summary: fmt.Sprintf("Send a message to your AI assistant. "+
-					"The default model used is configured via extension configuration. "+
+				Summary: fmt.Sprintf("Send a coding question to your AI assistant. "+
+					"The current active file is loaded and available in the model's context. "+
+					"The default coding model used is configured via extension configuration. "+
 					"Available models: %s", availableModelsString(availableModels)),
 				Synopsis: "[message]",
 			},
@@ -300,6 +301,7 @@ type aiEditorHandler struct {
 	db     document.Service
 	config configapi.Config
 
+	openChats sync.Map
 	ctx       context.Context
 	cancelCtx func()
 }
@@ -409,6 +411,8 @@ func (h *aiEditorHandler) handleChat(cmd textapi.Command) (bool, error) {
 		return false, err
 	}
 
+	h.openChats.Store(d.ID, syncComponent{mu: mu, comp: comp})
+
 	// dialogue history
 	for _, msg := range d.Messages {
 		addMessage(comp, msg)
@@ -428,6 +432,7 @@ func (h *aiEditorHandler) handleChat(cmd textapi.Command) (bool, error) {
 	bhandler := browserapi.FuncHandler(handler,
 		func() error {
 			cancel()
+			h.openChats.Delete(d.ID)
 			return nil
 		})
 	uri, err := workspaceapi.ParseURI(fmt.Sprintf("assistant://%s/%s", model, d.ID))
@@ -532,6 +537,14 @@ func (h *aiEditorHandler) handleResetChat(cmd textapi.Command) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("remove dialogue store: %w", err)
 	}
+	comp, ok := h.openChats.Load(dialogueID)
+	if !ok {
+		return false, fmt.Errorf("dialogue does not exist")
+	}
+	syncComp := comp.(syncComponent)
+	syncComp.mu.Lock()
+	syncComp.comp.Reset()
+	syncComp.mu.Unlock()
 	return false, nil
 }
 
@@ -651,4 +664,9 @@ func createCompletions(
 		}
 		drawMessage(ctx, it, tx)
 	}
+}
+
+type syncComponent struct {
+	mu   *sync.Mutex
+	comp *dialogue.Component
 }
