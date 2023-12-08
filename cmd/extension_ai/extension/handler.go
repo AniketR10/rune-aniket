@@ -734,14 +734,12 @@ type syncComponent struct {
 }
 
 func (s syncComponent) addWaitingAnimation() func() {
-	frames := []string{"◠", "◡", "◎",
-		"◉", "◐", "◑", "◒", "◓", "◈", "△", "▲", "▣", "░", "▒",
-		"▙", "▛", "▟", "▜", "▚","▞", "▗",  "▝", "▘", "▖"}
+	frames := []string{".  ", ".. ", "...", " ..", "  .", "   "}
 	seq := make([]int, len(frames))
 	for i := range seq {
 		seq[i] = i
 	}
-	animation := component.NewAnimation(s.h.p, frames, seq, 10)
+	animation := component.NewAnimation(s.h.p, frames, seq, 8)
 	comp := component.WithBackground(animation, term.Cell{
 		Bg: s.h.backgroundAttr.Bg,
 		Fg: s.h.backgroundAttr.Fg,
@@ -750,7 +748,7 @@ func (s syncComponent) addWaitingAnimation() func() {
 	defer s.mu.Unlock()
 
 	s.comp.AddReceiveMessageHint(comp, component.SpanConfig{
-		PadHorizontal:    -1,
+		PadHorizontal:    -3,
 		ContentAlignment: component.SpanAlignmentLeft,
 	})
 
