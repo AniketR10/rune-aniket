@@ -145,6 +145,7 @@ func (c *Component) InputSubmit() (string, bool) {
 
 // AddSendMessage adds the following msg as a sent message.
 func (c *Component) AddSendMessage(msg string) {
+	c.RemoveReceiveMessageHint()
 	strComp := component.StringResponsive(msg,
 		component.StringResponsiveConfig{
 			NoSplitWords: true,

@@ -224,6 +224,43 @@ $
  └──────────────┘    
                      `,
 				},
+				{
+					Action: func() {
+						frames, seq := []string{"$"}, []int{0}
+						animation := component.NewAnimation(term.NopInterrupter(), frames, seq, 1)
+						comp.AddReceiveMessageHint(animation, component.SpanConfig{
+							PadHorizontal:    -1,
+							ContentAlignment: component.SpanAlignmentLeft,
+						})
+					},
+					Expected: `$                    
+                     
+                     
+                     
+                     
+                     
+                     
+ ┌──────────────┐    
+ │              │    
+ └──────────────┘    
+                     `,
+				},
+				{
+					Action: func() {
+						comp.AddSendMessage("1234")
+					},
+					Expected: `1234                 
+                     
+                     
+                     
+                     
+                     
+                     
+ ┌──────────────┐    
+ │              │    
+ └──────────────┘    
+                     `,
+				},
 			}
 			testutil.TestComponent(t, comp, w, tests)
 		})
