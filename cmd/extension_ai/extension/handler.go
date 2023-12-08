@@ -740,7 +740,13 @@ type syncComponent struct {
 }
 
 func (s syncComponent) addWaitingAnimation() func() {
-	frames, seq := component.ProgressAnimationFrames()
+	frames := []string{"◠", "◡", "◎",
+		"◉", "◐", "◑", "◒", "◓", "◈", "△", "▲", "▣", "░", "▒",
+		"▙", "▛", "▟", "▜", "▚","▞", "▗",  "▝", "▘", "▖"}
+	seq := make([]int, len(frames))
+	for i := range seq {
+		seq[i] = i
+	}
 	animation := component.NewAnimation(s.h.p, frames, seq, 10)
 	comp := component.WithBackground(animation, term.Cell{
 		Bg: s.h.backgroundAttr.Bg,
