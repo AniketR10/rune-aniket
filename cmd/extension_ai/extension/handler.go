@@ -411,30 +411,22 @@ func (h *aiEditorHandler) handleChat(cmd textapi.Command) (bool, error) {
 		return false, err
 	}
 
-	h.openChats.Store(d.ID, syncComponent{mu: mu, comp: comp})
+	syncComp := syncComponent{mu: mu, comp: comp, h: h}
+	h.openChats.Store(d.ID, syncComp)
 
 	// dialogue history
 	for _, msg := range d.Messages {
 		addMessage(comp, msg)
 	}
 
-	go createCompletions(ctx, cancel, tx, rx, dialogueManager, d.ID)
+	handler, msgRx := h.wrapDialogueHandler(ctx, syncComp, dhandler, rx)
+	go createCompletions(ctx, cancel, tx, msgRx, dialogueManager, d.ID, syncComp, h.n)
 
-	var background tui.Component
-	background = component.WithBackground(comp, term.Cell{
-		Bg: h.backgroundAttr.Bg,
-		Fg: h.backgroundAttr.Fg,
+	bhandler := browserapi.FuncHandler(handler, func() error {
+		cancel()
+		h.openChats.Delete(d.ID)
+		return nil
 	})
-	// dialogue.Handler's synchronized Draw/Resize is bypassed
-	// by handler.WithComponent below
-	background = component.Sync(mu, background)
-	handler := handler.WithComponent(dhandler, background)
-	bhandler := browserapi.FuncHandler(handler,
-		func() error {
-			cancel()
-			h.openChats.Delete(d.ID)
-			return nil
-		})
 	uri, err := workspaceapi.ParseURI(fmt.Sprintf("assistant://%s/%s", model, d.ID))
 	if err != nil {
 		panic(err)
@@ -462,14 +454,20 @@ func (h *aiEditorHandler) handleQuery(cmd textapi.Command) (bool, error) {
 	msg := backend.ChatCompletionMessage{Content: query, Role: backend.RoleUser}
 	addMessage(comp, msg)
 
+	syncComp := syncComponent{mu: mu, comp: comp, h: h}
+	handler, msgRx := h.wrapDialogueHandler(ctx, syncComp, dhandler, rx)
+
 	go func() {
 		// do not store queries in store after user is done
 		defer h.dialogueStore.Delete(context.Background(), queryID)
+		defer cancel()
+
+		cancelAnimation := syncComp.addWaitingAnimation()
 
 		// manually add input and returned completion
 		it, err := h.queryDialogueManager.CreateCompletion(ctx, queryID, []string{query})
 		if err != nil {
-			cancel()
+			cancelAnimation()
 			if !errors.Is(err, context.Canceled) {
 				err := h.n.Notify(notifications.LevelError,
 					"create chat completion: %v", err)
@@ -479,30 +477,22 @@ func (h *aiEditorHandler) handleQuery(cmd textapi.Command) (bool, error) {
 			}
 			return
 		}
-		drawMessage(ctx, it, tx)
+		drawMessage(ctx, it, tx, h.n)
+		cancelAnimation()
 
 		// resume creating completions upon further user input
-		createCompletions(ctx, cancel, tx, rx, h.queryDialogueManager, queryID)
+		createCompletions(ctx, cancel, tx, msgRx,
+			h.queryDialogueManager, queryID, syncComp, h.n)
 	}()
 
 	var win browserapi.Window
-	var background tui.Component
-	background = component.WithBackground(comp, term.Cell{
-		Bg: h.backgroundAttr.Bg,
-		Fg: h.backgroundAttr.Fg,
+	bhandler := browserapi.FuncHandler(handler, func() error {
+		cancel()
+		if win != nil {
+			return win.Close()
+		}
+		return nil
 	})
-	// dialogue.Handler's synchronized Draw/Resize is bypassed
-	// by handler.WithComponent below
-	background = component.Sync(mu, background)
-	handler := handler.WithComponent(dhandler, background)
-	bhandler := browserapi.FuncHandler(handler,
-		func() error {
-			cancel()
-			if win != nil {
-				return win.Close()
-			}
-			return nil
-		})
 	floating := browserapi.FuncFloating(bhandler, func() (int, int) {
 		const width = 100
 		return width, comp.Height(width)
@@ -554,6 +544,60 @@ func (h *aiEditorHandler) log(level log.Level, msg string, args ...any) {
 	}).Logf(level, msg, args...)
 }
 
+func (h *aiEditorHandler) wrapDialogueHandler(
+	ctx context.Context, comp syncComponent,
+	dhandler tui.Handler, rx <-chan string,
+) (tui.Handler, <-chan completionRequest) {
+	// use background as component of the final browserapi.Handler
+	// ensuring its access is synchronized via component.Sync
+	background := component.WithBackground(comp.comp, term.Cell{
+		Bg: h.backgroundAttr.Bg,
+		Fg: h.backgroundAttr.Fg,
+	})
+	synced := component.Sync(comp.mu, background)
+	withComp := handler.WithComponent(dhandler, synced)
+
+	ret := make(chan completionRequest)
+
+	// wrap dialogue.Handler's rx chan to add adhoc
+	// cancelation of completion requests
+	cancel := func() {}
+	var mu sync.Mutex
+
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case msg := <-rx:
+				reqCtx, cancelFn := context.WithCancel(ctx)
+				mu.Lock()
+				cancel = cancelFn
+				mu.Unlock()
+				select {
+				case ret <- completionRequest{msg, reqCtx}:
+				case <-ctx.Done():
+					return
+				}
+			}
+		}
+	}()
+
+	// wrap it for ctrl-c cancelation of context
+	return handler.Wrap(withComp, func(ev term.Event) (exit bool, handled bool) {
+		if ev.Key == term.KeyCtrlC {
+			handled = true
+			comp.h.n.Notify(notifications.LevelInfo, "canceled completion")
+			mu.Lock()
+			cancelFn := cancel
+			mu.Unlock()
+			cancelFn()
+			return
+		}
+		return withComp.Handle(ev)
+	}), ret
+}
+
 // type alias avoids colliding Complete
 type aiEditorHandlerCompleter aiEditorHandler
 
@@ -570,11 +614,15 @@ func (h *aiEditorHandlerCompleter) Complete(
 func drawMessage(
 	ctx context.Context,
 	it iterator.Iterator[string], tx chan<- string,
+	noti browserapi.Notifications,
 ) {
 	for {
 		response, ok := it.Next()
 		if !ok {
 			break
+		}
+		if response == "" {
+			continue
 		}
 		select {
 		case tx <- response:
@@ -584,7 +632,10 @@ func drawMessage(
 	}
 	if it.Err() != nil {
 		if !errors.Is(it.Err(), context.Canceled) {
-			log.Errorf("stream completion: %v", it.Err())
+			err := noti.Notify(notifications.LevelError, "stream completion: %v", it.Err())
+			if err != nil {
+				log.Errorf("notify: %v", err)
+			}
 		}
 	}
 
@@ -639,34 +690,76 @@ func isAvailableModel(available map[string]int, model string) error {
 	return nil
 }
 
+type completionRequest struct {
+	msg string
+	ctx context.Context
+}
+
 func createCompletions(
 	ctx context.Context, cancel func(),
-	tx chan<- string, rx <-chan string,
+	tx chan<- string, rx <-chan completionRequest,
 	dialogueManager *aiDialogue.Manager,
-	id string,
+	id string, syncComp syncComponent,
+	noti browserapi.Notifications,
 ) {
 	defer close(tx)
 	defer cancel()
 	for {
-		var msg string
+		var req completionRequest
 		select {
 		case <-ctx.Done():
 			return
-		case msg = <-rx:
+		case req = <-rx:
 		}
+		cancelAnimation := syncComp.addWaitingAnimation()
 
-		it, err := dialogueManager.CreateCompletion(ctx, id, []string{msg})
+		it, err := dialogueManager.CreateCompletion(req.ctx, id, []string{req.msg})
 		if err != nil {
-			if !errors.Is(err, context.Canceled) {
-				log.Errorf("dialogue manager create completion: %v", err)
+			if errors.Is(err, context.Canceled) {
+				// if global ctx has been cancel, rather than req.ctx
+				// then the next iteration will handle it
+				continue
 			}
+			err := noti.Notify(notifications.LevelError,
+				"dialogue manager create completion: %v", err)
+			if err != nil {
+				log.Errorf("notify: %v", err)
+			}
+			cancelAnimation()
 			return
 		}
-		drawMessage(ctx, it, tx)
+		drawMessage(ctx, it, tx, noti)
+		cancelAnimation()
 	}
 }
 
 type syncComponent struct {
 	mu   *sync.Mutex
 	comp *dialogue.Component
+	h    *aiEditorHandler
+}
+
+func (s syncComponent) addWaitingAnimation() func() {
+	frames, seq := component.ProgressAnimationFrames()
+	animation := component.NewAnimation(s.h.p, frames, seq, 10)
+	comp := component.WithBackground(animation, term.Cell{
+		Bg: s.h.backgroundAttr.Bg,
+		Fg: s.h.backgroundAttr.Fg,
+	})
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.comp.AddReceiveMessageHint(comp, component.SpanConfig{
+		PadHorizontal:    -1,
+		ContentAlignment: component.SpanAlignmentLeft,
+	})
+
+	return func() {
+		animation.Close()
+
+		s.mu.Lock()
+		defer s.mu.Unlock()
+
+		s.comp.RemoveReceiveMessageHint()
+	}
 }
