@@ -117,6 +117,99 @@ This is rather bore
 				},
 				{
 					Action: func() {
+						comp.AddReceiveMessageChunk("1234")
+						comp.Reset()
+						comp.AddReceiveMessageChunk("1234")
+					},
+					Expected: `1234                 
+                     
+                     
+                     
+                     
+                     
+                     
+ ┌──────────────┐    
+ │              │    
+ └──────────────┘    
+                     `,
+				},
+				{
+					Action: func() {
+						frames, seq := []string{"$"}, []int{0}
+						animation := component.NewAnimation(term.NopInterrupter(), frames, seq, 1)
+						comp.AddReceiveMessageHint(animation, component.SpanConfig{
+							PadHorizontal:    -1,
+							ContentAlignment: component.SpanAlignmentLeft,
+						})
+					},
+					Expected: `1234                 
+$                    
+                     
+                     
+                     
+                     
+                     
+ ┌──────────────┐    
+ │              │    
+ └──────────────┘    
+                     `,
+				},
+				{
+					Action: func() {
+						// should reset  receive hint
+						comp.AddReceiveMessageChunk("1234")
+					},
+					Expected: `12341234             
+                     
+                     
+                     
+                     
+                     
+                     
+ ┌──────────────┐    
+ │              │    
+ └──────────────┘    
+                     `,
+				},
+				{
+					Action: func() {
+						frames, seq := []string{"$"}, []int{0}
+						animation := component.NewAnimation(term.NopInterrupter(), frames, seq, 1)
+						comp.AddReceiveMessageHint(animation, component.SpanConfig{
+							PadHorizontal:    -1,
+							ContentAlignment: component.SpanAlignmentLeft,
+						})
+					},
+					Expected: `12341234             
+$                    
+                     
+                     
+                     
+                     
+                     
+ ┌──────────────┐    
+ │              │    
+ └──────────────┘    
+                     `,
+				},
+				{
+					Action: func() {
+						comp.AddReceiveMessageChunk("1234")
+					},
+					Expected: `123412341234         
+                     
+                     
+                     
+                     
+                     
+                     
+ ┌──────────────┐    
+ │              │    
+ └──────────────┘    
+                     `,
+				},
+				{
+					Action: func() {
 						comp.Reset()
 					},
 					Expected: `                     
@@ -153,4 +246,16 @@ func TestComponentMessagesPosition(t *testing.T) {
 	comp.Resize(20, 10)
 
 	assert.Equal(t, term.Coordinates{Y: 1, X: 1}, comp.MessagesPosition())
+}
+
+func TestComponentResetWhileStreaming(t *testing.T) {
+	comp := NewComponent(ComponentConfig{MessagesRowConfig: component.SpanConfig{
+		ContentAlignment: component.SpanAlignmentCentered,
+	}})
+	comp.Resize(20, 10)
+	assert.NotPanics(t, func() {
+		comp.AddReceiveMessageChunk("1234")
+		comp.Reset()
+		comp.AddReceiveMessageChunk("1234")
+	})
 }

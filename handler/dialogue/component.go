@@ -5,6 +5,7 @@ import (
 	"math"
 	"strings"
 
+	"unstable.build/go-tui"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/handler/input"
@@ -50,10 +51,13 @@ type Component struct {
 	inputRow     *component.Row
 	inputCol     *component.Virtual
 	height       int
+	width        int
 
-	// stream back model results
+	// streamed receives
 	msg  strings.Builder
 	tail *component.ListNode
+	// receive hint
+	hint *component.ListNode
 }
 
 // NewComponent allocates storage for a new Component and initializes it.
@@ -101,6 +105,8 @@ func (c *Component) Draw(w term.Writer) {
 func (c *Component) Resize(width, height int) {
 	// store height for Container's call to responsive list's Height
 	c.height = height
+	// store for calculating hint size upon AddReceiveMessageHint
+	c.width = width
 	c.container.Resize(width, height)
 }
 
@@ -174,6 +180,7 @@ func (c *Component) AddReceiveMessageChunk(chunk string) {
 	} else {
 		c.tail = new(component.ListNode)
 	}
+	c.RemoveReceiveMessageHint()
 	strComp := component.StringResponsive(c.msg.String(),
 		component.StringResponsiveConfig{
 			NoSplitWords: true,
@@ -194,6 +201,34 @@ func (c *Component) SeekUp() bool {
 	return c.messages.SeekUp()
 }
 
+// AddReceiveMessageHint adds a hint in the UI that
+// a message is about to be received.
+// A hint is removed automatically on the next call to
+// AddReceiveMessageChunk, or manually with RemoveReceiveMessageHint.
+func (c *Component) AddReceiveMessageHint(
+	hint tui.Component, config component.SpanConfig,
+) {
+	if c.hint != nil {
+		c.RemoveReceiveMessageHint()
+	}
+	c.hint = new(component.ListNode)
+	hintSpan := component.NewSpan(hint, config)
+	resp := component.FuncResponsive(hintSpan, func(width int) int {
+		return 1
+	})
+	*c.hint = c.messages.PushBack(resp)
+}
+
+// RemoveReceiveMessageHint idempotently removes a hint
+// from the UI previously added via AddReceiveMessageHint.
+func (c *Component) RemoveReceiveMessageHint() {
+	if c.hint == nil {
+		return
+	}
+	c.messages.Remove(*c.hint)
+	c.hint = nil
+}
+
 // Dimensions satisfies component.Responsive.
 func (c *Component) Height(width int) (height int) {
 	// do not use container.Height, as first row (messages) is designed
@@ -203,8 +238,13 @@ func (c *Component) Height(width int) (height int) {
 	return
 }
 
-// Reset resets the dialogue on this Component.
+// Reset resets the messages of this Component.
+// This does not reset the InputBox, this
+// can be performed, if desired, via Component.Input().Reset().
 func (c *Component) Reset() {
+	c.RemoveReceiveMessageHint()
+	c.msg.Reset()
+	c.tail = nil
 	c.messages.Reset()
 }
 
