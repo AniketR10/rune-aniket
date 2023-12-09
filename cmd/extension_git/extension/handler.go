@@ -158,13 +158,19 @@ func newGitHandler(
 			if err != nil {
 				return nil, fmt.Errorf("get configured tabspaces: %v", err)
 			}
-			ret.scroll.scroll.Wrap, err = extutil.Wrap(config)
+			wrap, err := extutil.Wrap(config)
 			if err != nil {
 				return nil, fmt.Errorf("get configured wrap mode: %v", err)
 			}
-			ret.tracker.Init(tabspaces, ret.scroll.scroll.Wrap)
+			ret.tracker.Init(tabspaces, wrap)
 			ret.log(log.DebugLevel, "initialized content tracker with tabspaces: %d and wrap mode: %v",
 				tabspaces, ret.scroll.scroll.Wrap)
+
+			// could have been already initialized as a bar,
+			// depending on order of permissions
+			ret.scroll.Lock()
+			ret.scroll.scroll.Wrap = wrap
+			ret.scroll.Unlock()
 		}
 	}
 
