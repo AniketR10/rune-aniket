@@ -116,12 +116,12 @@ var (
 		},
 	}
 	defaultOpts = []aiDialogue.Option{
-		aiDialogue.WithInitialContext([]backend.ChatCompletionMessage{
+		/*aiDialogue.WithInitialContext([]backend.ChatCompletionMessage{
 			{
 				Role:    backend.RoleSystem,
 				Content: "You are a helpful coding assistant, a coding co-pilot. ",
 			},
-		}),
+		}),*/
 	}
 )
 
@@ -523,7 +523,7 @@ func (h *aiEditorHandler) handleResetChat(cmd textapi.Command) (bool, error) {
 	}
 	comp, ok := h.openChats.Load(dialogueID)
 	if !ok {
-		return false, fmt.Errorf("dialogue does not exist")
+		return false, fmt.Errorf("dialogue %q does not exist", dialogueID)
 	}
 	syncComp := comp.(syncComponent)
 	syncComp.mu.Lock()
