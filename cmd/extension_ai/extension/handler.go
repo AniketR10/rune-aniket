@@ -555,7 +555,7 @@ func (h *aiEditorHandler) wrapDialogueHandler(
 
 	// wrap dialogue.Handler's rx chan to add adhoc
 	// cancelation of completion requests
-	cancel := func() {}
+	var cancel func()
 	var mu sync.Mutex
 
 	go func() {
@@ -580,12 +580,15 @@ func (h *aiEditorHandler) wrapDialogueHandler(
 	// wrap it for ctrl-c cancelation of context
 	return handler.Wrap(withComp, func(ev term.Event) (exit bool, handled bool) {
 		if ev.Key == term.KeyCtrlC {
-			handled = true
-			comp.h.n.Notify(notifications.LevelInfo, "canceled completion")
 			mu.Lock()
 			cancelFn := cancel
+			cancel = nil
 			mu.Unlock()
-			cancelFn()
+			if cancelFn != nil {
+				cancelFn()
+				comp.h.n.Notify(notifications.LevelInfo, "canceled completion request")
+			}
+			handled = true
 			return
 		}
 		return withComp.Handle(ev)
