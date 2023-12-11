@@ -303,7 +303,29 @@ diff_buf_adjust(win_
 			`  if (wp == NULL]   
   if (wp == NULL]   
   {                 
- ▐  if (i != DB_COUN
+▐   if (i != DB_COUN
+    {               
+    curtab->tp_diffb
+    curtab->tp_diff_
+    diff_redraw(TRUE
+    }               
+:             NORMAL`},
+		{"h",
+			`  if (wp == NULL]   
+  if (wp == NULL]   
+  {                 
+▐   if (i != DB_COUN
+    {               
+    curtab->tp_diffb
+    curtab->tp_diff_
+    diff_redraw(TRUE
+    }               
+:             NORMAL`},
+		{"h",
+			`  if (wp == NULL]   
+  if (wp == NULL]   
+  {                 
+▐   if (i != DB_COUN
     {               
     curtab->tp_diffb
     curtab->tp_diff_

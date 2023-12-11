@@ -21,9 +21,15 @@ func TestConvertCoordinates(t *testing.T) {
 		{[][]term.Cell{{{Ch: 'a'}}}, 0, 0, term.Coordinates{}, true},
 		{[][]term.Cell{{{Ch: 0}, {Ch: 0}, {Ch: 0}, {Ch: '\t'}, {Ch: 'a'}}}, 0, 1, term.Coordinates{X: 4}, true},
 		{[][]term.Cell{{}, {{Ch: 0}, {Ch: 0}, {Ch: 0}, {Ch: '\t'}, {Ch: 'a'}, {Ch: 0}}}, 1, 1, term.Coordinates{Y: 1, X: 4}, true},
+		{[][]term.Cell{{}, {{Ch: 0}, {Ch: 0}, {Ch: 0}, {Ch: '\t'}, {Ch: 'a'}, {Ch: 0}}}, 1, 0, term.Coordinates{Y: 1, X: 3}, true},
+		{[][]term.Cell{{}, {{Ch: 0}, {Ch: 0}, {Ch: 0}, {Ch: '\t'}, {Ch: 'a'}, {Ch: 0}}}, 1, 2, term.Coordinates{Y: 1, X: 5}, true},
 		{
 			[][]term.Cell{{{Ch: '💥'}, {Ch: 0}, {Ch: 'a'}}},
 			0, 1, term.Coordinates{Y: 0, X: 2}, true,
+		},
+		{
+			[][]term.Cell{{{Ch: '💥'}, {Ch: 0}, {Ch: 'a'}}},
+			0, 0, term.Coordinates{Y: 0, X: 0}, true,
 		},
 	}
 

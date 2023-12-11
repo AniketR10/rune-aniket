@@ -29,7 +29,7 @@ func testSearch(t *testing.T, constructor func(*Buffer) Searcher) {
 
 		res, ok := s.NextResult()
 		require.True(t, ok)
-		assert.Equal(t, term.Coordinates{X: 1, Y: 2}, res)
+		assert.Equal(t, term.Coordinates{X: 2, Y: 2}, res)
 	})
 
 	t.Run("searches for occurrences with multiple words", func(t *testing.T) {

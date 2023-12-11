@@ -135,6 +135,12 @@ type CursorMark struct {
 	internal term.Coordinates
 }
 
+// Before returns true if other is before CursorMark.
+func (c CursorMark) Before(other term.Coordinates) bool {
+	res := cell.CoordinatesDiff(c.internal, other)
+	return res.Y < 0 || res.Y == 0 && res.X < 0
+}
+
 // Mark returns the current cursor position as a CursorMark
 // to later be used in calls to MoveToMark.
 func (c *Cursor) Mark() CursorMark {
@@ -1150,10 +1156,40 @@ func (c *Cursor) MoveToNextNonNull() {
 			if !c.MoveLeft() {
 				break
 			}
-			continue
+			// if line ends in null, stop here
+			// otherwise this continues until the end of time.
+			cell, ok := c.Cell()
+			if !ok || cell.Ch != '\x00' {
+				continue
+			}
+			break
 		}
 		if cell.Ch == '\x00' {
 			if !c.MoveRight() {
+				break
+			}
+			continue
+		}
+		break
+	}
+}
+
+// MoveToPrevNonNull will move the cursor to the left until it finds
+// a cell with a non-null character. If the current cell is already a cell with
+// a non-null character, then this method does nothing.
+func (c *Cursor) MoveToPrevNonNull() {
+	enable := c.disablePublishing()
+	defer enable()
+
+	for cell, ok := c.Cell(); ; cell, ok = c.Cell() {
+		if !ok {
+			if !c.MoveLeft() {
+				break
+			}
+			continue
+		}
+		if cell.Ch == '\x00' {
+			if !c.MoveLeft() {
 				break
 			}
 			continue

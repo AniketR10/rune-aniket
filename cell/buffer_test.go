@@ -141,7 +141,7 @@ func TestBufferDeleteCell(t *testing.T) {
 		{"handle ending null with no tab (by silently cleaning up nulls)",
 			"a\x00\x00", term.Coordinates{X: 1}, false, 0, term.Coordinates{}},
 		{"delete next character if starting null not part of tab expansion (and nulls)",
-			"\x00\x00a", term.Coordinates{X: 1}, true, 'a', term.Coordinates{}},
+			"\x00\x00a", term.Coordinates{X: 1}, false, 0, term.Coordinates{}},
 		{"delete start and end of the line tab at tab",
 			"\t", term.Coordinates{X: 3}, true, '\t', term.Coordinates{X: 0}},
 		{"delete start and end of the line tab at null 0",
@@ -150,6 +150,10 @@ func TestBufferDeleteCell(t *testing.T) {
 			"\t", term.Coordinates{X: 1}, true, '\t', term.Coordinates{X: 0}},
 		{"delete start and end of the line tab at null 2",
 			"\t", term.Coordinates{X: 2}, true, '\t', term.Coordinates{X: 0}},
+		{"delete >1 width character before >1 width character",
+			"💥💥", term.Coordinates{X: 0}, true, '💥', term.Coordinates{}},
+		{"delete >1 width character after >1 width character",
+			"💥💥", term.Coordinates{X: 2}, true, '💥', term.Coordinates{X: 2}},
 	}
 
 	for _, tcase := range tsuite {
@@ -575,6 +579,25 @@ d
 
 func TestBufferShiftRowTabs(t *testing.T) {
 	stringNoTab := "the_3T_ring_idea_is_fucking_cool\n:D"
+	origString := "\t" + stringNoTab
+	buf := NewBuffer()
+	buf.ReadFrom(strings.NewReader(origString))
+
+	shifted := buf.ShiftRowLeft(0)
+	assert.Equal(t, 4, shifted)
+	assert.Equal(t, stringNoTab, buf.String())
+
+	shifted = buf.ShiftRowLeft(0)
+	assert.Equal(t, 0, shifted)
+	assert.Equal(t, stringNoTab, buf.String())
+
+	shifted = buf.ShiftRowRight(0)
+	assert.Equal(t, 4, shifted)
+	assert.Equal(t, origString, buf.String())
+}
+
+func TestBufferShiftRowTabsWithMultiWidthChar(t *testing.T) {
+	stringNoTab := "💥the_3T_ring_idea_is_fucking_cool\n:D"
 	origString := "\t" + stringNoTab
 	buf := NewBuffer()
 	buf.ReadFrom(strings.NewReader(origString))

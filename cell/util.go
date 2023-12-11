@@ -137,9 +137,17 @@ func ConvertRuneCoordinates(cells [][]term.Cell, y, x int) (
 
 	line := cells[ret.Y]
 
+	// lines ending in null, could derail assumptions below
+	// better to just abort conversion of nulls
+	lastSane := term.Coordinates{}
 	for xi, c := range line {
 		if c.Ch == 0 {
 			ret.X++
+			if xi == len(line)-1 {
+				ret = lastSane
+			}
+		} else {
+			lastSane = ret
 		}
 		if xi == ret.X {
 			break

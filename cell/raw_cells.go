@@ -6,6 +6,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/mattn/go-runewidth"
 	"unstable.build/go-tui/term"
 )
 
@@ -84,6 +85,11 @@ func (c *rawCells) insertAt(pos term.Coordinates, r rune) (next term.Coordinates
 		fallthrough
 	default:
 		c.doInsertAt(pos, r)
+		width := runewidth.RuneWidth(r)
+		for i := 1; i < width; i++ {
+			pos.X++
+			c.doInsertAt(pos, 0)
+		}
 		next = term.Coordinates{X: pos.X + 1, Y: pos.Y}
 	}
 
@@ -209,9 +215,7 @@ func (c *rawCells) deleteRowRange(
 func (c *rawCells) skipPadding(start, end term.Coordinates) (
 	from term.Coordinates, to term.Coordinates,
 ) {
-
 	from, to = start, end
-	tokens := c.tabspaces - 1
 	// to is right exclusive
 	if to.X > 0 {
 		// to.Y == len(c.cells) should never occur here since the only
@@ -219,9 +223,22 @@ func (c *rawCells) skipPadding(start, end term.Coordinates) (
 		// which we are checking above
 		endLastIdx := len(c.cells[to.Y])
 		to.X--
-		for tokens > 0 && to.X < endLastIdx && c.cells[to.Y][to.X].Ch == 0 {
-			to.X++
-			tokens--
+		if to.X < endLastIdx {
+			if width := runewidth.RuneWidth(c.cells[to.Y][to.X].Ch); width > 1 {
+				to.X += width - 1
+			} else {
+				// do not skip if this is a width right-padding
+				// only if it's a tabspace left-padding.
+				tokens := c.tabspaces - 1
+				revertTo := to
+				for tokens > 0 && to.X < endLastIdx && c.cells[to.Y][to.X].Ch == 0 {
+					to.X++
+					tokens--
+				}
+				if to.X < endLastIdx && c.cells[to.Y][to.X].Ch != '\t' {
+					to = revertTo
+				}
+			}
 		}
 		to.X++
 		// handle unexpected nulls at the end of line
@@ -236,17 +253,23 @@ func (c *rawCells) skipPadding(start, end term.Coordinates) (
 		from.X--
 	}
 
-	tokens = c.tabspaces - 1
-	for tokens > 0 && from.X > 0 &&
-		from.X <= startLastIdx && c.cells[from.Y][from.X].Ch == 0 {
+	var done bool
+	for from.X > 0 && from.X <= startLastIdx && c.cells[from.Y][from.X].Ch == 0 {
 		from.X--
-		tokens--
+		done = true
 	}
 
 	// we need the last pad's position, but on the left there's no \t delimiter,
 	// so we need to rollback one cell
-	if tokens != c.tabspaces-1 && c.cells[from.Y][from.X].Ch != 0 {
-		from.X++
+	if done && c.cells[from.Y][from.X].Ch != 0 {
+		// except if width > 1, in which case, the pad is a width pad
+		// in that case, skip to right
+		width := runewidth.RuneWidth(c.cells[from.Y][from.X].Ch)
+		if width > 1 {
+			from.X += width
+		} else {
+			from.X++
+		}
 	}
 	return from, to
 }
@@ -366,6 +389,10 @@ func (c *rawCells) ReadFrom(r io.Reader) (int64, error) {
 				fallthrough
 			default:
 				c.cells[rowY] = append(c.cells[rowY], term.Cell{Ch: rune(r)})
+				width := runewidth.RuneWidth(r)
+				for i := 1; i < width; i++ {
+					c.cells[rowY] = append(c.cells[rowY], term.Cell{})
+				}
 			}
 		}
 		n += int64(len(str))

@@ -17,6 +17,7 @@ var (
 Love isn't love 'til you give it away.
 		-- Oscar Hammerstein 中国`
 	emptyString = ""
+	widthString = "💥"
 )
 
 func TestRawCellsInsertMiddlePadding(t *testing.T) {
@@ -278,6 +279,30 @@ Love isn't love 'til you give it away.
 			expectedTo:           term.Coordinates{Y: 2},
 			expectedRawCells:     "\n\n",
 		},
+		{
+			overrideBaseRawCells: &emptyString,
+			inputAt:              term.Coordinates{X: 0},
+			inputStr:             "💥",
+			expectedFrom:         term.Coordinates{X: 0},
+			expectedTo:           term.Coordinates{X: 2},
+			expectedRawCells:     "💥",
+		},
+		{
+			overrideBaseRawCells: &widthString,
+			inputAt:              term.Coordinates{X: 1},
+			inputStr:             "123",
+			expectedFrom:         term.Coordinates{X: 2},
+			expectedTo:           term.Coordinates{X: 5},
+			expectedRawCells:     "💥123",
+		},
+		{
+			overrideBaseRawCells: &widthString,
+			inputAt:              term.Coordinates{X: 0},
+			inputStr:             "🤘",
+			expectedFrom:         term.Coordinates{X: 0},
+			expectedTo:           term.Coordinates{X: 2},
+			expectedRawCells:     "🤘💥",
+		},
 	}
 
 	for i, tcase := range tsuite {
@@ -302,7 +327,7 @@ Love isn't love 'til you give it away.
 			assert.Zero(t, actualOld)
 
 			from, to, old := c.Edit(actualFrom, actualTo, actualOld)
-			assert.Equal(t, input, c.String())
+			assert.Equal(t, input, c.String(), "string ret: %+v %+v", actualFrom, actualTo)
 
 			from, to, old = c.Edit(from, to, old)
 			assert.Equal(t, tcase.expectedRawCells, c.String())
@@ -598,6 +623,46 @@ Love isn't love 'til you give it away.
 			expectedRawCells:     "\n",
 			inputFrom:            term.Coordinates{},
 			inputTo:              term.Coordinates{Y: 1, X: 0},
+		},
+		{
+			// mult-width cells, delete end falls on padding
+			overrideBaseRawCells: "💥",
+			expectedStr:          "💥",
+			expectedRawCells:     "",
+			inputFrom:            term.Coordinates{},
+			inputTo:              term.Coordinates{X: 1},
+		},
+		{
+			// mult-width
+			overrideBaseRawCells: "💥 hello world",
+			expectedStr:          "💥",
+			expectedRawCells:     " hello world",
+			inputFrom:            term.Coordinates{},
+			inputTo:              term.Coordinates{X: 2},
+		},
+		{
+			// mult-width cells, delete falls on padding, >1 string
+			overrideBaseRawCells: "💥 hello world",
+			expectedStr:          "💥",
+			expectedRawCells:     " hello world",
+			inputFrom:            term.Coordinates{},
+			inputTo:              term.Coordinates{X: 1},
+		},
+		{
+			// mult-width cells 3
+			overrideBaseRawCells: "💥 hello world",
+			expectedStr:          "💥 hello ",
+			expectedRawCells:     "world",
+			inputFrom:            term.Coordinates{},
+			inputTo:              term.Coordinates{X: 9},
+		},
+		{
+			// two >1 width runes
+			overrideBaseRawCells: "💥🚀",
+			expectedStr:          "💥",
+			expectedRawCells:     "🚀",
+			inputFrom:            term.Coordinates{},
+			inputTo:              term.Coordinates{X: 2},
 		},
 	}
 

@@ -695,6 +695,9 @@ func (vi *viHandlerImpl) handleGo(ev term.Event) (quit, handled bool) {
 
 // Handle : tui.Handler
 func (vi *viHandlerImpl) Handle(ev term.Event) (quit, handled bool) {
+	moveToBounds := vi.prepareHandle()
+	defer moveToBounds()
+
 	switch vi.mode() {
 	case searchMode:
 		quit, handled = vi.handleSearch(ev)
@@ -720,13 +723,25 @@ func (vi *viHandlerImpl) Handle(ev term.Event) (quit, handled bool) {
 		panic(fmt.Sprintf("unknown mode: %d", vi.currMode))
 	}
 
-	vi.moveToBounds()
 	return
 }
 
+func (vi *viHandlerImpl) prepareHandle() func() {
+	prev := vi.cursor.Mark()
+	return func() {
+		vi.doMoveToBounds(prev)
+	}
+}
+
 func (vi *viHandlerImpl) moveToBounds() {
+	vi.doMoveToBounds(vi.free)
+}
+
+func (vi *viHandlerImpl) doMoveToBounds(prev text.CursorMark) {
 	// copy the cursor to maintain original cursor for next vertcial move
 	// except when moving the cursor beyond last line
+	after := !prev.Before(vi.cursor.Coordinates())
+
 	if vi.cursor.CursorAtScroll().Y < vi.less.Buffer().Rows() {
 		vi.free = vi.cursor.Mark()
 	}
@@ -735,7 +750,11 @@ func (vi *viHandlerImpl) moveToBounds() {
 	case normalMode, yankMode, searchMode, gMode, deleteMode:
 		if !vi.config.debug {
 			vi.cursor.MoveToBounds(0)
-			vi.cursor.MoveToNextNonNull()
+			if after {
+				vi.cursor.MoveToPrevNonNull()
+			} else {
+				vi.cursor.MoveToNextNonNull()
+			}
 		}
 	case insertMode, replaceMode, replaceOneMode,
 		visualMode, visualLineMode, visualBlockMode:

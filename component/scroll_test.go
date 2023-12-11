@@ -153,7 +153,9 @@ func TestScrollDraw(t *testing.T) {
 		{func() { scroll.Buffer().DeleteCell(term.Coordinates{X: 14, Y: 0}) }, "ove in your hert was"},
 		{func() { assert.True(t, scroll.SeekDown()) }, "Love isn't love 'til"},
 		{func() { scroll.Buffer().DeleteCell(term.Coordinates{X: 16, Y: 1}) }, "Love isn't love til "},
-		{func() { scroll.Buffer().Insert(term.Coordinates{X: 16, Y: 1}, '中') }, "Love isn't love 中til"},
+    // note that there's a "space" after 中 that's because scroll skips drawing the second cell
+    // in the double cell rune.
+		{func() { scroll.Buffer().Insert(term.Coordinates{X: 16, Y: 1}, '中') }, "Love isn't love 中 ti"},
 		{func() {
 			buf := cell.NewBuffer()
 			buf.WriteString("aa\nbb\ncc")

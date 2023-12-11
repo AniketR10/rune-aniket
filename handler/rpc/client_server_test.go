@@ -109,7 +109,7 @@ BBBB`},
 		stubClient := &Client{
 			client: &mockHandlerClient{
 				remote: handler.Nop(component.NewStringWithConfig(`┏━━━━━┓
-┃  中  ┃
+┃  中 ┃
 ┃     ┃
 ┗━━━━━┛`, component.StringConfig{Alignment: component.SpanAlignmentCentered})),
 			},

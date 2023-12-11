@@ -1617,6 +1617,13 @@ func TestCursorSkipNulls(t *testing.T) {
 		e.cursor = term.Coordinates{X: -1}
 		e.MoveToNextNonNull()
 	})
+	t.Run("does not infinite loop if at end of line and on multi codepoint utf8", func(t *testing.T) {
+		e := setupCursorContent(t, 100, 100, "abcd💥", true)
+		for i := 0; i < 10; i++ {
+			e.cursor = term.Coordinates{X: i}
+			e.MoveToNextNonNull()
+		}
+	})
 }
 
 func TestCursorCell(t *testing.T) {
