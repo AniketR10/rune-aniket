@@ -21,18 +21,26 @@ func TestConvertCoordinates(t *testing.T) {
 		{[][]term.Cell{{{Ch: 'a'}}}, 0, 0, term.Coordinates{}, true},
 		{[][]term.Cell{{{Ch: 0}, {Ch: 0}, {Ch: 0}, {Ch: '\t'}, {Ch: 'a'}}}, 0, 1, term.Coordinates{X: 4}, true},
 		{[][]term.Cell{{}, {{Ch: 0}, {Ch: 0}, {Ch: 0}, {Ch: '\t'}, {Ch: 'a'}, {Ch: 0}}}, 1, 1, term.Coordinates{Y: 1, X: 4}, true},
+		{
+			[][]term.Cell{{{Ch: '💥'}, {Ch: 0}, {Ch: 'a'}}},
+			0, 1, term.Coordinates{Y: 0, X: 2}, true,
+		},
 	}
 
 	for i, tcase := range tsuite {
-		out, ok := ConvertRuneCoordinates(tcase.cells, tcase.y, tcase.x)
-		require.Equal(t, tcase.ok, ok, i)
-		assert.Equal(t, tcase.out, out, i)
+		t.Run("ConvertRuneCoordinates", func(t *testing.T) {
+			out, ok := ConvertRuneCoordinates(tcase.cells, tcase.y, tcase.x)
+			require.Equal(t, tcase.ok, ok, i)
+			assert.Equal(t, tcase.out, out, i)
+		})
 	}
 	for i, tcase := range tsuite {
-		y, x, ok := ConvertTermCoordinates(tcase.cells, tcase.out)
-		require.Equal(t, tcase.ok, ok, i)
-		assert.Equal(t, tcase.x, x, i)
-		assert.Equal(t, tcase.y, y, i)
+		t.Run("ConvertTermCoordinates", func(t *testing.T) {
+			y, x, ok := ConvertTermCoordinates(tcase.cells, tcase.out)
+			require.Equal(t, tcase.ok, ok, i)
+			assert.Equal(t, tcase.x, x, i)
+			assert.Equal(t, tcase.y, y, i)
+		})
 	}
 }
 func TestCellsToBufferZero(t *testing.T) {

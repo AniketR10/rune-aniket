@@ -138,11 +138,11 @@ func ConvertRuneCoordinates(cells [][]term.Cell, y, x int) (
 	line := cells[ret.Y]
 
 	for xi, c := range line {
-		if xi == ret.X {
-			break
-		}
 		if c.Ch == 0 {
 			ret.X++
+		}
+		if xi == ret.X {
+			break
 		}
 	}
 

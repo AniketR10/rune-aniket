@@ -288,10 +288,24 @@ func TestLspHandlerHandleInsertDelete(t *testing.T) {
 	returnData := []uint32{2, 5, 3, 0, 3, 0, 5, 4, 1, 0, 3, 2, 7, 2, 0, 0, 8, 10, 2, 0}
 	expectSemanticTokens(t, server, returnData)
 
-	newLocations := append(expectedLocations1, textapi.Location{
-		From: term.Coordinates{Y: 5, X: 13},
-		To:   term.Coordinates{Y: 5, X: 23},
-	})
+	newLocations := []textapi.Location{
+		{
+			From: term.Coordinates{Y: 2, X: 5},
+			To:   term.Coordinates{Y: 2, X: 8},
+		},
+		{
+			From: term.Coordinates{Y: 2, X: 10},
+			To:   term.Coordinates{Y: 2, X: 14},
+		},
+		{
+			From: term.Coordinates{Y: 5, X: 2},
+			To:   term.Coordinates{Y: 5, X: 12},
+		},
+		{
+			From: term.Coordinates{Y: 5, X: 13},
+			To:   term.Coordinates{Y: 5, X: 23},
+		},
+	}
 	expectLocationList(t, ed, defaultSemanticTokensListID, newLocations, &wg)
 
 	wg.Add(1)
@@ -306,6 +320,7 @@ func TestLspHandlerHandleInsertDelete(t *testing.T) {
 		},
 		Text: "",
 	}}
+
 	expectDidChange(t, server, filename1, 3, expectedEvents)
 	expectSemanticTokens(t, server, tokenData1)
 	expectLocationList(t, ed, defaultSemanticTokensListID, expectedLocations1, &wg)
@@ -321,6 +336,7 @@ func TestLspHandlerHandleInsertDelete(t *testing.T) {
 		},
 		Text: "",
 	}}
+
 	expectDidChange(t, server, filename1, 4, expectedEvents)
 	expectSemanticTokens(t, server, tokenData1)
 	expectLocationList(t, ed, defaultSemanticTokensListID, expectedLocations1, &wg)
@@ -336,6 +352,7 @@ func TestLspHandlerHandleInsertDelete(t *testing.T) {
 		},
 		Text: "",
 	}}
+
 	expectDidChange(t, server, filename1, 5, expectedEvents)
 	expectSemanticTokens(t, server, tokenData1)
 	expectAnyLocationList(t, ed, defaultSemanticTokensListID, &wg)
