@@ -115,14 +115,7 @@ var (
 			ContentAlignment: component.SpanAlignmentLeft,
 		},
 	}
-	defaultOpts = []aiDialogue.Option{
-		/*aiDialogue.WithInitialContext([]backend.ChatCompletionMessage{
-			{
-				Role:    backend.RoleSystem,
-				Content: "You are a helpful coding assistant, a coding co-pilot. ",
-			},
-		}),*/
-	}
+	defaultOpts = []aiDialogue.Option{}
 )
 
 // CommandEventHandler returns a plugutil.CommandEventHandler that manages
@@ -449,35 +442,37 @@ func (h *aiEditorHandler) handleQuery(cmd textapi.Command) (bool, error) {
 	addMessage(comp, msg)
 
 	syncComp := syncComponent{mu: mu, comp: comp, h: h}
-	handler, msgRx := h.wrapDialogueHandler(ctx, syncComp, dhandler, rx)
 
+	qrx := make(chan string)
+	handler, msgRx := h.wrapDialogueHandler(ctx, syncComp, dhandler, qrx)
+
+	// wrap rx to enable sending query and so get
+	// context cancelation for free
 	go func() {
 		// do not store queries in store after user is done
-		defer h.dialogueStore.Delete(context.Background(), queryID)
-		defer cancel()
+		defer h.dialogueStore.Delete(ctx, queryID)
 
-		cancelAnimation := syncComp.addWaitingAnimation()
-
-		// manually add input and returned completion
-		it, err := h.queryDialogueManager.CreateCompletion(ctx, queryID, []string{query})
-		if err != nil {
-			cancelAnimation()
-			if !errors.Is(err, context.Canceled) {
-				err := h.n.Notify(notifications.LevelError,
-					"create chat completion: %v", err)
-				if err != nil {
-					h.log(log.ErrorLevel, "notify: %v", err)
-				}
-			}
+		select {
+		case qrx <- query:
+		case <-ctx.Done():
 			return
 		}
-		drawMessage(ctx, it, tx, h.n)
-		cancelAnimation()
-
-		// resume creating completions upon further user input
-		createCompletions(ctx, cancel, tx, msgRx,
-			h.queryDialogueManager, queryID, syncComp, h.n)
+		for {
+			select {
+			case msg := <-rx:
+				select {
+				case qrx <- msg:
+				case <-ctx.Done():
+					return
+				}
+			case <-ctx.Done():
+				return
+			}
+		}
 	}()
+
+	go createCompletions(ctx, cancel, tx, msgRx,
+		h.queryDialogueManager, queryID, syncComp, h.n)
 
 	var win browserapi.Window
 	bhandler := browserapi.FuncHandler(handler, func() error {
