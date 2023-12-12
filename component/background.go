@@ -102,6 +102,8 @@ func (s *Background) Dimensions() (width, height int) {
 // SetAttr satisfies WithAttributes if underlying tui.Component
 // satisfies WithAttributes, or panics if it doesn't.
 func (s *Background) SetAttr(attr term.Attributes) term.Attributes {
+	s.cell.Bg = attr.Bg
+	s.cell.Fg = attr.Fg
 	return s.root.(WithAttributes).SetAttr(attr)
 }
 
