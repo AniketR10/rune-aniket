@@ -31,13 +31,20 @@ type StringResponsiveConfig struct {
 
 // StringResponsive returns a Responsive implementation of
 // a string tui.Component.
+//
+// Deprecated: use NewResponsiveString.
 func StringResponsive(str string, cfg StringResponsiveConfig) Responsive {
-	return Cells(cell.StringToCells(str, cfg.Tabspaces), cfg)
+	return NewResponsiveString(str, cfg)
 }
 
-// Cells returns a Responsive implementation for a matrix of cells.
-func Cells(cells [][]term.Cell, cfg StringResponsiveConfig) Responsive {
-	return &respStr{
+// NewResponsiveString allocates storage for a new ResponsiveString based on str and cfg.
+func NewResponsiveString(str string, cfg StringResponsiveConfig) *ResponsiveString {
+	return StringResponiveFromCells(cell.StringToCells(str, cfg.Tabspaces), cfg)
+}
+
+// StringResponiveFromCells returns a Responsive implementation for a matrix of cells.
+func StringResponiveFromCells(cells [][]term.Cell, cfg StringResponsiveConfig) *ResponsiveString {
+	return &ResponsiveString{
 		cfg: cfg,
 		in:  cells,
 	}
@@ -47,7 +54,7 @@ func Cells(cells [][]term.Cell, cfg StringResponsiveConfig) Responsive {
 // Responsive. Note that this is not the most efficient implementation of tui.Component
 // for a cell.Buffer. See component.Scroll for more details.
 func Buffer(buf *cell.Buffer, cfg StringResponsiveConfig) Responsive {
-	return &respBuf{buf: buf, respStr: respStr{cfg: cfg}}
+	return &respBuf{buf: buf, ResponsiveString: ResponsiveString{cfg: cfg}}
 }
 
 // NopResponsive returns a Responsive tui.Component that draws nothing.
@@ -78,7 +85,8 @@ func (f respFn) Height(width int) int {
 	return f.heightFn(width)
 }
 
-type respStr struct {
+// ResponsiveString is a String component that also satisfies Responsive.
+type ResponsiveString struct {
 	cfg    StringResponsiveConfig
 	in     [][]term.Cell
 	out    floatingWithAttributes
@@ -86,18 +94,23 @@ type respStr struct {
 	height int
 }
 
-var _ fmt.Stringer = (*respStr)(nil)
+var _ WithAttributes = (*ResponsiveString)(nil)
+var _ Responsive = (*ResponsiveString)(nil)
+var _ fmt.Stringer = (*ResponsiveString)(nil)
+
+var _ WithAttributes = (*respBuf)(nil)
+var _ Responsive = (*respBuf)(nil)
 var _ fmt.Stringer = (*respBuf)(nil)
 
 type respBuf struct {
+	ResponsiveString
 	buf           *cell.Buffer
 	width, height int
-	respStr
 }
 
 func (b *respBuf) Height(width int) int {
-	b.respStr.in = b.buf.RawCells()
-	return b.respStr.Height(width)
+	b.ResponsiveString.in = b.buf.RawCells()
+	return b.ResponsiveString.Height(width)
 }
 
 func (b *respBuf) Resize(width, height int) {
@@ -105,13 +118,13 @@ func (b *respBuf) Resize(width, height int) {
 }
 
 func (b *respBuf) Draw(w term.Writer) {
-	b.respStr.in = b.buf.RawCells()
-	b.respStr.Resize(b.width, b.height)
-	b.respStr.Draw(w)
+	b.ResponsiveString.in = b.buf.RawCells()
+	b.ResponsiveString.Resize(b.width, b.height)
+	b.ResponsiveString.Draw(w)
 }
 
 // Height satisfies Responsive.
-func (s *respStr) Height(width int) int {
+func (s *ResponsiveString) Height(width int) int {
 	if width <= 0 {
 		return 0
 	}
@@ -124,7 +137,7 @@ func (s *respStr) Height(width int) int {
 }
 
 // Resize satisfies tui.Component.
-func (s *respStr) Resize(width, height int) {
+func (s *ResponsiveString) Resize(width, height int) {
 	s.width = width
 	s.height = height
 	outRaw := s.massageInput(width)
@@ -135,11 +148,21 @@ func (s *respStr) Resize(width, height int) {
 }
 
 // Draw satisfies tui.Component.
-func (s *respStr) Draw(w term.Writer) {
+func (s *ResponsiveString) Draw(w term.Writer) {
 	s.out.Draw(w)
 }
 
-func (s *respStr) massageInput(width int) [][]term.Cell {
+func (s *ResponsiveString) SetAttr(attr term.Attributes) term.Attributes {
+	prev := s.cfg.Attributes
+	s.cfg.Attributes = attr
+	s.cfg.BackgroundAttributes = attr
+	if s.out == nil {
+		return prev
+	}
+	return s.out.SetAttr(attr)
+}
+
+func (s *ResponsiveString) massageInput(width int) [][]term.Cell {
 	effectiveWidth := width
 	if effectiveWidth > 2 && s.cfg.FrameCharSet != (FrameCharSet{}) {
 		effectiveWidth -= 2
@@ -174,6 +197,6 @@ func (s *respStr) massageInput(width int) [][]term.Cell {
 	return outRaw
 }
 
-func (s *respStr) String() string {
+func (s *ResponsiveString) String() string {
 	return s.out.String()
 }
