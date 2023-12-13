@@ -482,6 +482,7 @@ C────────D└────────┘`,
 			exit, handled := wm.Handle(term.Event{})
 			assert.False(t, exit)
 			assert.True(t, handled)
+			assert.True(t, w2.Closed())
 		}, `
 A──────────────────B
 │AAAAAAAAAAAAAAAAAA│
@@ -500,6 +501,7 @@ C──────────────────D
 			exit, handled := wm.Handle(term.Event{})
 			assert.False(t, exit)
 			assert.True(t, handled)
+			assert.True(t, w1.Closed())
 		}, `
 ┌──────────────────┐
 │CCCCCCCCCCCCCCCCCC│
@@ -525,6 +527,7 @@ C──────────────────D
 			exit, handled := wm.Handle(term.Event{})
 			assert.False(t, exit)
 			assert.True(t, handled)
+			assert.False(t, w3.Closed())
 		}, `
 ┌──────────────────┐
 │CCCCCCCCCCCCCCCCCC│

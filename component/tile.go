@@ -285,12 +285,15 @@ func (t *TileNode) Close() {
 		panic("unsupported: trying to close last node")
 	}
 
-	if len(t.parent.children) != 0 {
-		removeChild(t.parent, t)
+	parent := t.parent
+	t.parent = nil
+
+	if len(parent.children) != 0 {
+		removeChild(parent, t)
 		return
 	}
 
-	t.parent.Close()
+	parent.Close()
 }
 
 // SplitVertical splits the given node to incorporate new content. If direction of the
@@ -543,4 +546,9 @@ func (t *TileNode) iterate(op func(*TileNode)) {
 // Iterate applies op to the content of all nodes of this tree.
 func (t *TileTree) Iterate(op func(*TileNode)) {
 	t.root.iterate(op)
+}
+
+// Closed returns if this Window has been closed.
+func (t *TileNode) Closed() bool {
+	return t.parent == nil
 }

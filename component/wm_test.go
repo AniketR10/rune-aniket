@@ -92,7 +92,9 @@ func TestComponentWindowSplit(t *testing.T) {
 │BBBBBBBB││CCCCCCCC│
 └────────┘└────────┘`,
 		}, {func() {
+			assert.False(t, w2.Closed())
 			assert.NoError(t, w2.Close())
+			assert.True(t, w2.Closed())
 		}, `
 ┌──────────────────┐
 │AAAAAAAAAAAAAAAAAA│
@@ -103,7 +105,9 @@ func TestComponentWindowSplit(t *testing.T) {
 │CCCCCCCCCCCCCCCCCC│
 └──────────────────┘`,
 		}, {func() {
+			assert.False(t, w1.Closed())
 			assert.NoError(t, w1.Close())
+			assert.True(t, w1.Closed())
 		}, `
 ┌──────────────────┐
 │CCCCCCCCCCCCCCCCCC│
@@ -115,6 +119,7 @@ func TestComponentWindowSplit(t *testing.T) {
 └──────────────────┘`,
 		}, {func() {
 			assert.Error(t, w1.Close())
+			assert.True(t, w1.Closed())
 			floating := StaticFloating(&h2, 2, 2)
 			w2 = wm.FloatingWindow(floating,
 				FloatingConfig{
@@ -134,6 +139,7 @@ func TestComponentWindowSplit(t *testing.T) {
 		}, {func() {
 			floating := StaticFloating(&h2, 2, 2)
 			w2.Close()
+			assert.True(t, w2.Closed())
 			w2 = wm.FloatingWindow(floating,
 				FloatingConfig{
 					Alignment: SpanAlignmentRight | SpanAlignmentTop,
@@ -151,7 +157,9 @@ func TestComponentWindowSplit(t *testing.T) {
 └──────────────────┘`,
 		}, {func() {
 			floating := StaticFloating(&h2, 2, 2)
+			assert.False(t, w2.Closed())
 			w2.Close()
+			assert.True(t, w2.Closed())
 			w2 = wm.FloatingWindow(floating,
 				FloatingConfig{
 					Alignment: SpanAlignmentRight | SpanAlignmentBottom,
@@ -170,6 +178,7 @@ func TestComponentWindowSplit(t *testing.T) {
 		}, {func() {
 			floating := StaticFloating(&h2, 2, 2)
 			w2.Close()
+			assert.True(t, w2.Closed())
 			w2 = wm.FloatingWindow(floating,
 				FloatingConfig{
 					Alignment: SpanAlignmentLeft | SpanAlignmentBottom,
@@ -188,6 +197,7 @@ func TestComponentWindowSplit(t *testing.T) {
 		}, {func() {
 			floating := StaticFloating(&h2, 2, 2)
 			w2.Close()
+			assert.True(t, w2.Closed())
 			w2 = wm.FloatingWindow(floating,
 				FloatingConfig{
 					Alignment: SpanAlignmentHorizontallyCentered,
@@ -206,6 +216,7 @@ func TestComponentWindowSplit(t *testing.T) {
 		}, {func() {
 			floating := StaticFloating(&h2, 2, 2)
 			w2.Close()
+			assert.True(t, w2.Closed())
 			w2 = wm.FloatingWindow(floating,
 				FloatingConfig{
 					Alignment: SpanAlignmentVerticallyCentered,
@@ -224,6 +235,7 @@ func TestComponentWindowSplit(t *testing.T) {
 		}, {func() {
 			floating := StaticFloating(&h2, 2, 2)
 			w2.Close()
+			assert.True(t, w2.Closed())
 			w2 = wm.FloatingWindow(floating,
 				FloatingConfig{
 					Alignment: SpanAlignmentCentered,
@@ -242,6 +254,7 @@ func TestComponentWindowSplit(t *testing.T) {
 		}, {func() {
 			floating := StaticFloating(&h2, 2, 2)
 			w2.Close()
+			assert.True(t, w2.Closed())
 			w2 = wm.FloatingWindow(floating,
 				FloatingConfig{
 					Alignment: SpanAlignmentBottom,
@@ -260,6 +273,7 @@ func TestComponentWindowSplit(t *testing.T) {
 		}, {func() {
 			floating := StaticFloating(&h2, 2, 2)
 			w2.Close()
+			assert.True(t, w2.Closed())
 			w2 = wm.FloatingWindow(floating,
 				FloatingConfig{
 					Alignment: SpanAlignmentTop,
@@ -278,6 +292,7 @@ func TestComponentWindowSplit(t *testing.T) {
 		}, {func() {
 			floating := StaticFloating(&h2, 2, 2)
 			w2.Close()
+			assert.True(t, w2.Closed())
 			w2 = wm.FloatingWindow(floating,
 				FloatingConfig{
 					Alignment: SpanAlignmentLeft,
@@ -296,6 +311,7 @@ func TestComponentWindowSplit(t *testing.T) {
 		}, {func() {
 			floating := StaticFloating(&h2, 2, 2)
 			w2.Close()
+			assert.True(t, w2.Closed())
 			w2 = wm.FloatingWindow(floating,
 				FloatingConfig{
 					Alignment: SpanAlignmentRight,
@@ -314,6 +330,7 @@ func TestComponentWindowSplit(t *testing.T) {
 		}, {func() {
 			floating := StaticFloating(&h2, 2, 2)
 			w2.Close()
+			assert.True(t, w2.Closed())
 			w2 = wm.FloatingWindow(floating,
 				FloatingConfig{},
 			)

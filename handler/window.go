@@ -153,3 +153,8 @@ func (w Window) Close() error {
 
 	return nil
 }
+
+// Closed returns if this Window has been closed.
+func (w Window) Closed() bool {
+	return w.wm == nil || w.Window.Closed()
+}

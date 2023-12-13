@@ -190,6 +190,10 @@ func (w *floatingNode) SetMaxSize(width, height int) {
 	w.resize()
 }
 
+func (t *floatingNode) Closed() bool {
+	return t.wm == nil
+}
+
 // Floating used to indicate that it should be unwrapped in calls to Content
 // or as a return of SetContentResize
 type prevNodeFloating struct {

@@ -17,6 +17,7 @@ type windowNode interface {
 	SetContentResize(tui.Component, bool) tui.Component
 	Size() int
 	Close()
+	Closed() bool
 	Position() term.Coordinates
 }
 
@@ -285,4 +286,9 @@ func (w Window) Close() error {
 
 	w.node.Close()
 	return nil
+}
+
+// Closed returns if this Window has been closed.
+func (w Window) Closed() bool {
+	return w.wm == nil || w.node.Closed()
 }

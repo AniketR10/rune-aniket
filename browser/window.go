@@ -21,7 +21,7 @@ func (w *browserWindow) ID() uint64 {
 }
 
 func (w *browserWindow) Closed() bool {
-	return w.parent == nil
+	return w.parent == nil || w.win.Closed()
 }
 
 func (w *browserWindow) Content() (browserapi.Handler, error) {
