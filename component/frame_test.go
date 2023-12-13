@@ -109,3 +109,15 @@ func TestFrameResponsive(t *testing.T) {
 		assert.Equal(t, 3, f.Height(10))
 	})
 }
+
+func TestFrameWithAttributes(t *testing.T) {
+	f := NewFrame(WithAttrSetter(&TestComponent{Ch: 'a'}))
+	f.SetAttr(term.Attributes{Fg: term.ColorRed, Bg: term.ColorGreen})
+
+	assert.Equal(t, term.ColorGreen, f.Attributes.Bg)
+	assert.Equal(t, term.ColorRed, f.Attributes.Fg)
+
+	prev := f.Content().(WithAttributes).SetAttr(term.Attributes{})
+	assert.Equal(t, term.ColorGreen, prev.Bg)
+	assert.Equal(t, term.ColorRed, prev.Fg)
+}

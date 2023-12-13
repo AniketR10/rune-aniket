@@ -240,11 +240,11 @@ func (f *Frame) SetContent(content tui.Component) {
 	f.Resize(f.width, f.height)
 }
 
-// SetAttr satisfies WithAttributes.
+// SetAttr satisfies WithAttributes. This method panics if
+// the content of this Frame does not satisfy WithAttributes.
 func (f *Frame) SetAttr(attr term.Attributes) (ret term.Attributes) {
-	ret = f.Attributes
 	f.Attributes = attr
-	return
+	return f.content.C.(WithAttributes).SetAttr(attr)
 }
 
 // Resize updates this frame with a new width and height. If width or height
