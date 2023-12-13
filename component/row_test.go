@@ -24,3 +24,22 @@ func TestRowHeight(t *testing.T) {
 		assert.Equal(t, 3, row.Height(9))
 	})
 }
+
+func TestRowDimensions(t *testing.T) {
+	row := NewRow()
+	row.AddComponent(testResponsiveWidth('a', 4, 10), MaxCols/2)
+	row.AddComponent(testResponsiveWidth('b', 8, 8), MaxCols/2)
+	actualWidth, actualHeight := row.Dimensions()
+	assert.Equal(t, 12, actualWidth)
+	assert.Equal(t, 10, actualHeight)
+}
+
+func testResponsiveWidth(ch rune, wantWidth, wantHeight int) Responsive {
+	return &TestResponsive{
+		WantWidth:  wantWidth,
+		WantHeight: wantHeight,
+		TestComponent: TestComponent{
+			Ch: ch,
+		},
+	}
+}

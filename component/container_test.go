@@ -3,10 +3,27 @@ package component
 import (
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"unstable.build/go-tui/term"
 	testutil "unstable.build/go-tui/util/test"
 )
+
+func TestContainerDimensions(t *testing.T) {
+	l := NewContainer()
+	l.Resize(4, 4)
+
+	row1 := l.AddRow()
+	row1.AddComponent(testResponsive('a', 2), MaxCols)
+
+	row2 := l.AddRow()
+	row2.AddComponent(testResponsive('a', 3), MaxCols/2)
+	row2.AddComponent(testResponsive('a', 3), MaxCols/2)
+
+	width, height := l.Dimensions()
+	assert.Equal(t, 6, width)
+	assert.Equal(t, 5, height)
+}
 
 func TestContainerDraw(t *testing.T) {
 	t.Run("zero value", func(t *testing.T) {
@@ -253,6 +270,7 @@ bbbb
 
 func testResponsive(ch rune, wantHeight int) Responsive {
 	return &TestResponsive{
+		WantWidth:  wantHeight,
 		WantHeight: wantHeight,
 		TestComponent: TestComponent{
 			Ch: ch,

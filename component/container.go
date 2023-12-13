@@ -95,6 +95,19 @@ func (c *Container) Height(width int) (height int) {
 	return
 }
 
+// Dimensions satisfies component.Floating. If underlying
+// components do not satisfy component.Floating, then this method panics.
+func (r *Container) Dimensions() (retWidth int, retHeight int) {
+	for _, row := range r.rows {
+		width, height := row.Dimensions()
+		if width > retWidth {
+			retWidth = width
+		}
+		retHeight += height
+	}
+	return
+}
+
 func (c *Container) maxOffset() (ret int) {
 	for _, row := range c.rows {
 		rowHeight := row.Height(c.width)

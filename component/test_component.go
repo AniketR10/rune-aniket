@@ -27,6 +27,9 @@ func (t *TestComponent) Draw(w term.Writer) {
 	}
 }
 
+var _ Responsive = (*TestResponsive)(nil)
+var _ Floating = (*TestResponsive)(nil)
+
 // SetAttr satisfies WithAttributes
 func (t *TestComponent) SetAttr(attr term.Attributes) (ret term.Attributes) {
 	ret = t.Attributes
@@ -38,9 +41,14 @@ type TestResponsive struct {
 	TestComponent
 	PassedWidth int
 	WantHeight  int
+	WantWidth   int
 }
 
 func (t *TestResponsive) Height(width int) int {
 	t.PassedWidth = width
 	return t.WantHeight
+}
+
+func (t *TestResponsive) Dimensions() (width, height int) {
+	return t.WantWidth, t.WantHeight
 }

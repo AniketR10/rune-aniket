@@ -98,6 +98,19 @@ func (r *Row) Height(width int) (ret int) {
 	return
 }
 
+// Dimensions satisfies component.Floating. If underlying
+// components do not satisfy component.Floating, then this method panics.
+func (r *Row) Dimensions() (retWidth int, retHeight int) {
+	for _, content := range r.content {
+		width, height := content.Virtual.C.(Floating).Dimensions()
+		if height > retHeight {
+			retHeight = height
+		}
+		retWidth += width
+	}
+	return
+}
+
 func rowColWidth(width int) float64 {
 	return float64(width) / float64(MaxCols)
 }
