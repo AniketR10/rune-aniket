@@ -11,6 +11,11 @@ import (
 )
 
 func TestResponsiveStringDraw(t *testing.T) {
+	t.Run("should not panic if not resized yet", func(t *testing.T) {
+		assert.NotPanics(t, func() {
+			NewResponsiveString("", StringResponsiveConfig{}).Draw(term.NewStringWriter(10, 10))
+		})
+	})
 	t.Run("should behave like String with single line strings and enough space", func(t *testing.T) {
 		tcases := []struct {
 			in  string

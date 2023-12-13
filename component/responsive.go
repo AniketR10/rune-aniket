@@ -39,15 +39,16 @@ func StringResponsive(str string, cfg StringResponsiveConfig) Responsive {
 
 // NewResponsiveString allocates storage for a new ResponsiveString based on str and cfg.
 func NewResponsiveString(str string, cfg StringResponsiveConfig) *ResponsiveString {
-	return StringResponiveFromCells(cell.StringToCells(str, cfg.Tabspaces), cfg)
+	return NewResponsiveStringFromCells(cell.StringToCells(str, cfg.Tabspaces), cfg)
 }
 
-// StringResponiveFromCells returns a Responsive implementation for a matrix of cells.
-func StringResponiveFromCells(cells [][]term.Cell, cfg StringResponsiveConfig) *ResponsiveString {
-	return &ResponsiveString{
-		cfg: cfg,
-		in:  cells,
-	}
+// NewResponsiveStringFromCells returns a Responsive implementation for a matrix of cells.
+func NewResponsiveStringFromCells(cells [][]term.Cell, cfg StringResponsiveConfig) *ResponsiveString {
+	ret := new(ResponsiveString)
+	ret.cfg = cfg
+	ret.in = cells
+	ret.Resize(0, 0) // initialize ret.out
+	return ret
 }
 
 // Buffer wraps a cell.Buffer and returns a tui.Component which satisfies
@@ -152,13 +153,10 @@ func (s *ResponsiveString) Draw(w term.Writer) {
 	s.out.Draw(w)
 }
 
+// SetAttr satisfies WithAttributes.
 func (s *ResponsiveString) SetAttr(attr term.Attributes) term.Attributes {
-	prev := s.cfg.Attributes
 	s.cfg.Attributes = attr
 	s.cfg.BackgroundAttributes = attr
-	if s.out == nil {
-		return prev
-	}
 	return s.out.SetAttr(attr)
 }
 
@@ -197,6 +195,7 @@ func (s *ResponsiveString) massageInput(width int) [][]term.Cell {
 	return outRaw
 }
 
+// String satisfies fmt.Stringer.
 func (s *ResponsiveString) String() string {
 	return s.out.String()
 }
