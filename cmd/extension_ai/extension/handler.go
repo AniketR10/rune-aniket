@@ -600,10 +600,6 @@ func (h *aiEditorHandlerCompleter) Complete(
 	ctx context.Context, dialogueID, completionID string,
 	reason backend.FinishReason, msg backend.ChatCompletionMessage,
 ) {
-	handler := (*aiEditorHandler)(h)
-	handler.log(log.DebugLevel,
-		"dialogue %q completion %q, finish reason %s, msg: %+v",
-		dialogueID, completionID, reason, msg)
 }
 
 func drawMessage(
@@ -744,6 +740,7 @@ func (s syncComponent) addWaitingAnimation() func() {
 	comp := component.WithBackground(animation, term.Cell{
 		Bg: s.h.backgroundAttr.Bg,
 		Fg: s.h.backgroundAttr.Fg,
+		Ch: ' ', // override animation attributes
 	})
 	s.mu.Lock()
 	defer s.mu.Unlock()
