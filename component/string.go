@@ -246,6 +246,9 @@ func newStringComp(
 	if shouldFrame {
 		// if inner pad is provided, center text
 		if shouldPad {
+			// background of inner padding looks better if it's the same attr
+			// as the text.
+			background := term.Cell{Ch: c, Fg: attr.Fg, Bg: attr.Bg}
 			comp = withBackgroundWrapper(comp, height, width, background, false, false, alg)
 		}
 		width += 2 + padWidth

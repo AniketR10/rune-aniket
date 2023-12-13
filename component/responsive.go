@@ -156,7 +156,8 @@ func (s *ResponsiveString) Draw(w term.Writer) {
 // SetAttr satisfies WithAttributes.
 func (s *ResponsiveString) SetAttr(attr term.Attributes) term.Attributes {
 	s.cfg.Attributes = attr
-	s.cfg.BackgroundAttributes = attr
+	// do not set s.cfg.BackgroundAttributes
+	// as this is not what the user most likely intends.
 	return s.out.SetAttr(attr)
 }
 
