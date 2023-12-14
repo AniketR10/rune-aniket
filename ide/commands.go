@@ -61,7 +61,7 @@ var (
 				Summary: "Write the current file to disk and exits if and only if " +
 					"there are no files with changes pending to be written to disk.",
 			},
-			handler: (*ex).flushCloseIgnoreNonFlushed,
+			handler: (*ex).flushClose,
 		},
 		"writeForceQuit!": {
 			man: textapi.CommandManual{
@@ -71,6 +71,16 @@ var (
 			handler: (*ex).flushCloseIgnoreNonFlushed,
 		},
 		"write": {
+			man: textapi.CommandManual{
+				Summary: "Write the current file to disk with any pending changes along with it. " +
+					"This is the standard way to save changes to a file. It fails if file was " +
+					"open read-only or when there is another reason why the file can't be written.",
+			},
+			handler: (*ex).forceFlush,
+		},
+		// same behaviour as write but users used to w! trigger writeForceQuit!
+		// exit when using that shorthand
+		"forceWrite!": {
 			man: textapi.CommandManual{
 				Summary: "Write the current file to disk with any pending changes along with it. " +
 					"This is the standard way to save changes to a file. It fails if file was " +
@@ -89,7 +99,7 @@ var (
 				Summary: "Exit if and only if there are no files with changes pending to be " +
 					"written to disk.",
 			},
-			handler: (*ex).forceQuit,
+			handler: (*ex).quit,
 		},
 		"reloadFile": {
 			man: textapi.CommandManual{

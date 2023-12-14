@@ -83,7 +83,8 @@ type ex struct {
 	cmdV       handler.Virtual
 	cmdWin     browser.Window
 	fullscreen browserapi.Handler
-	quit       bool
+	exit       bool
+	forceExit  bool
 	height     int
 	width      int
 
@@ -354,7 +355,14 @@ func (e *ex) closeFocusWindow(args ...string) error {
 }
 
 func (e *ex) flushCloseIgnoreNonFlushed(args ...string) error {
-	e.quit = true
+	e.forceExit = true
+	e.exit = true
+	return e.comp.Flush(e.invokeWindow())
+}
+
+func (e *ex) flushClose(args ...string) error {
+	e.forceExit = false
+	e.exit = true
 	return e.comp.Flush(e.invokeWindow())
 }
 
@@ -363,7 +371,13 @@ func (e *ex) forceFlush(args ...string) error {
 }
 
 func (e *ex) forceQuit(args ...string) error {
-	e.quit = true
+	e.forceExit = true
+	e.exit = true
+	return nil
+}
+func (e *ex) quit(args ...string) error {
+	e.forceExit = false
+	e.exit = true
 	return nil
 }
 
@@ -720,10 +734,10 @@ func (e *ex) runCommand(cmd string, args []string) (quit bool, err error) {
 			err = e.moveFocusCursor(line - 1)
 			return
 		}
-		return e.quit, e.dispatchCommand(cmd)
+		return e.exit, e.dispatchCommand(cmd)
 	}
 
-	return e.quit, e.dispatchCommand(cmd, args...)
+	return e.exit, e.dispatchCommand(cmd, args...)
 }
 
 func (e *ex) setError(err error) {
@@ -918,7 +932,7 @@ func (e *ex) Handle(ev term.Event) (exit, handled bool) {
 	} else {
 		_, handled = e.handleEvent(ev)
 	}
-	return e.quit, handled
+	return e.exit, handled
 }
 
 // Cursor satisfies tui.Handler.

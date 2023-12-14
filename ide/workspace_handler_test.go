@@ -2,6 +2,7 @@ package ide
 
 import (
 	"context"
+	"fmt"
 	"io/ioutil"
 	"sync"
 	"testing"
@@ -382,6 +383,132 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 └──────────────────┘`},
 	}
 	testutil.TestHandlerIsolated(t, fn, 20, 10, cases)
+}
+
+func TestWorkspaceManagerClosePromptIntegration(t *testing.T) {
+	t.Run("prompts on quit if files are dirty, user continues", func(t *testing.T) {
+		dir, err := ioutil.TempDir("", "")
+		require.NoError(t, err)
+		filenames := []string{"1234", "4567"}
+		m := newTestWorkspaceManagerHandlerWithDir(t, defaultCfg(), filenames, dir)
+
+		cases := []testutil.HandlerSequenceTestCase{
+			{"ihola <",
+				`┌──────────────────┐
+│1234*  4567       │
+├──────────────────┤
+│hola▐             │
+│                  │
+│                  │
+│                  │
+│                  │
+│:           NORMAL│
+└──────────────────┘`},
+			{":quit>",
+				`┌──────────────────┐
+│1234*  4567       │
+├──────────────────┤
+│  There are       │
+│  open files      │
+│  with changes    │
+│  pending to be   │
+│  written. Are    │
+│  you sure you    │
+└──────────────────┘`},
+		}
+		testutil.TestHandlerSequence(t, m, 20, 10, cases)
+
+		exit, handled := m.Handle(term.Event{Type: term.EventKey, Ch: 'y'})
+		assert.True(t, exit)
+		assert.True(t, handled)
+
+		require.NoError(t, m.Close())
+	})
+
+	t.Run("prompts on quit if files are dirty, user backs down", func(t *testing.T) {
+		dir, err := ioutil.TempDir("", "")
+		require.NoError(t, err)
+		filenames := []string{"1234", "4567"}
+		m := newTestWorkspaceManagerHandlerWithDir(t, defaultCfg(), filenames, dir)
+
+		cases := []testutil.HandlerSequenceTestCase{
+			{"ihola <",
+				`┌──────────────────┐
+│1234*  4567       │
+├──────────────────┤
+│hola▐             │
+│                  │
+│                  │
+│                  │
+│                  │
+│:           NORMAL│
+└──────────────────┘`},
+			{":quit>",
+				`┌──────────────────┐
+│1234*  4567       │
+├──────────────────┤
+│  There are       │
+│  open files      │
+│  with changes    │
+│  pending to be   │
+│  written. Are    │
+│  you sure you    │
+└──────────────────┘`},
+		}
+		testutil.TestHandlerSequence(t, m, 20, 10, cases)
+
+		exit, handled := m.Handle(term.Event{Type: term.EventKey, Ch: 'n'})
+		assert.False(t, exit)
+		assert.True(t, handled)
+
+		exit, handled = m.Handle(term.Event{Type: term.EventNone})
+		assert.False(t, exit)
+		assert.True(t, handled)
+
+		require.NoError(t, m.Close())
+	})
+
+	for _, cmd := range []string{"forceQuit!", "writeQuit", "writeForceQuit!"} {
+		t.Run(fmt.Sprintf("does not prompt on %s", cmd), func(t *testing.T) {
+			dir, err := ioutil.TempDir("", "")
+			require.NoError(t, err)
+			filenames := []string{"1234", "4567"}
+			m := newTestWorkspaceManagerHandlerWithDir(t, defaultCfg(), filenames, dir)
+
+			cases := []testutil.HandlerSequenceTestCase{
+				{"ihola <",
+					`┌──────────────────┐
+│1234*  4567       │
+├──────────────────┤
+│hola▐             │
+│                  │
+│                  │
+│                  │
+│                  │
+│:           NORMAL│
+└──────────────────┘`},
+			}
+
+			testutil.TestHandlerSequence(t, m, 20, 10, cases)
+
+			exit, handled := m.Handle(term.Event{Key: testCommandKey.Key, Type: term.EventKey})
+			assert.False(t, exit)
+			assert.True(t, handled)
+
+			for i, ch := range fmt.Sprintf("%s", cmd) {
+				exit, handled := m.Handle(term.Event{Type: term.EventKey, Ch: ch})
+				assert.False(t, exit)
+				assert.True(t, handled, i)
+			}
+
+			// sut
+			exit, handled = m.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+			assert.True(t, exit)
+			assert.True(t, handled)
+
+			require.NoError(t, m.Close())
+		})
+	}
 }
 
 func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {

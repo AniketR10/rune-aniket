@@ -18,11 +18,10 @@ import (
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
-	browserapi "unstable.build/go-tui/api/browser"
 	"unstable.build/go-tui/api/config"
 	textapi "unstable.build/go-tui/api/text"
 	workspaceapi "unstable.build/go-tui/api/workspace"
-	"unstable.build/go-tui/component/notifications"
+	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/storage"
@@ -45,7 +44,7 @@ var (
 
 type workspaceManagerHandler struct {
 	mu                sync.Locker
-	exit              bool
+	promptForceExit   bool
 	cfg               ideConfig
 	ctxWithLocker     context.Context
 	storage           document.Service
@@ -221,57 +220,6 @@ func (h *workspaceManagerHandler) init(
 	return nil
 }
 
-func (h *workspaceManagerHandler) initWithRestorePrompt(
-	ex *ex,
-	workspaceURI workspaceapi.URI,
-	cache []file,
-) error {
-	const (
-		restoreCwd = "Yes"
-		noRestore  = "No"
-	)
-
-	// use the window before prompt was open
-	invokeWindow := ex.invokeWindow()
-
-	var promptWindow browserapi.Window
-	promptWindow = ex.comp.Prompt(
-		"Do you want to restore the previous session?",
-		[]string{restoreCwd, noRestore},
-		[]term.KeyComb{{Ch: 'y'}, {Ch: 'n'}},
-		func(i int, option string) {
-			// close so if invokeWindow is Closed (called from another prompt)
-			// Focus() does not return the Prompt window
-			if promptWindow != nil {
-				_ = promptWindow.Close()
-			}
-			var err error
-
-			switch option {
-			case restoreCwd:
-				for _, file := range cache {
-					uri, uerr := workspaceapi.ParseURI(file.URIString)
-					if uerr != nil {
-						err = multierror.Append(err, uerr)
-						continue
-					}
-					ferr := ex.editFileURI(uri, invokeWindow)
-					if ferr != nil {
-						err = multierror.Append(err, ferr)
-					} else {
-					}
-				}
-			case noRestore:
-				h.history.resetWorkspaceCache(workspaceURI)
-			}
-			if err != nil {
-				h.empty.Browser().Notify(notifications.LevelError, err.Error())
-			}
-		},
-	)
-	return nil
-}
-
 func (h *workspaceManagerHandler) subscribeActiveWorkspaceCommands(ex *ex) (ret error) {
 	workspaceActiveCommands := map[string]commandAllWorkspace{
 		cmdAddWorkspace: {
@@ -429,11 +377,32 @@ func (h *workspaceManagerHandler) switchToWorkspace(i int) {
 
 func (h *workspaceManagerHandler) Handle(ev term.Event) (exit, handled bool) {
 	if ev.Type == term.EventMouse && h.drawBar() && ev.MouseY >= h.height-h.barSize() {
-		exit, handled = h.union.Handle(ev)
-	} else {
-		exit, handled = h.focusHandler().Handle(ev)
+		_, handled = h.union.Handle(ev)
 	}
-	return exit || h.exit, handled
+	focus := h.focusHandler()
+	exit, handled = focus.Handle(ev)
+	if !exit {
+		return h.promptForceExit, handled || h.promptForceExit
+	}
+
+	var exHandler *ex
+	if ex, ok := focus.(*ex); ok {
+		exHandler = ex
+	} else if wh, ok := focus.(*workspaceHandler); ok {
+		exHandler = wh.ex
+	} else {
+		panic("unknown focus handler")
+	}
+
+	if exHandler.forceExit || h.promptForceExit || !h.history.dirtyFilesOpen() {
+		return true, true
+	}
+
+	exHandler.forceExit = false
+	exHandler.exit = false
+
+	h.openExitPrompt(exHandler)
+	return false, true
 }
 
 func (h *workspaceManagerHandler) Cursor() (pos term.Coordinates, show bool) {
@@ -638,22 +607,29 @@ func (h *workspaceManagerHandler) addWorkspace(
 	}
 
 	if shouldPromptRestore {
-		h.initWithRestorePrompt(ex, uri, prevSessionFiles)
+		h.openRestorePrompt(ex, uri, prevSessionFiles)
 		return nil
 	}
 
-	for _, f := range prevSessionFiles {
+	return h.openPrevSessionFiles(ex, prevSessionFiles, ex.invokeWindow())
+}
+
+func (h *workspaceManagerHandler) openPrevSessionFiles(
+	ex *ex, files []file, invokeWindow browser.Window,
+) (err error) {
+	for _, f := range files {
 		uri, uerr := workspaceapi.ParseURI(f.URIString)
+		// do not hard error, otherwise changes to storage representation
+		// could prevent user from opening editor at all
 		if uerr != nil {
-			err = multierror.Append(err, uerr)
+			log.Warnf("parse uri from previous session file: %v", uerr)
 			continue
 		}
-		ferr := ex.editFileURI(uri, ex.invokeWindow())
+		ferr := ex.editFileURI(uri, invokeWindow)
 		if ferr != nil {
 			err = multierror.Append(err, ferr)
 		}
 	}
-
 	return err
 }
 
@@ -764,11 +740,6 @@ func (h *workspaceManagerHandler) commandCloseWorkspace(args ...string) error {
 	return err
 }
 
-func (h *workspaceManagerHandler) commandQuit(args ...string) error {
-	h.exit = true
-	return nil
-}
-
 func (h *workspaceManagerHandler) commandSwitchToWorkspace(args ...string) error {
 	if len(args) == 0 {
 		return errors.New("invalid arguments. " +
@@ -788,10 +759,6 @@ func (h *workspaceManagerHandler) commandSwitchToWorkspace(args ...string) error
 }
 
 func (h *workspaceManagerHandler) Close() (ret error) {
-	// TODO
-	//if h.history.dirtyFilesOpen() {
-	//}
-
 	for _, hm := range h.workspaces {
 		if hm == nil {
 			continue
