@@ -385,15 +385,17 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 }
 
 func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
-	filenames := []string{"1234", "4567"}
 	// re-use storage
 	dir, err := ioutil.TempDir("", "")
 	require.NoError(t, err)
-	m := newTestWorkspaceManagerHandlerWithDir(t, defaultCfg(), filenames, dir)
 
-	cases := []testutil.HandlerSequenceTestCase{
-		{"",
-			`┌──────────────────┐
+	t.Run("initial files from arguments", func(t *testing.T) {
+		filenames := []string{"1234", "4567"}
+		m := newTestWorkspaceManagerHandlerWithDir(t, defaultCfg(), filenames, dir)
+
+		cases := []testutil.HandlerSequenceTestCase{
+			{"",
+				`┌──────────────────┐
 │1234  4567        │
 ├──────────────────┤
 │▐                 │
@@ -403,15 +405,18 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 │                  │
 │:           NORMAL│
 └──────────────────┘`},
-	}
-	testutil.TestHandlerSequence(t, m, 20, 10, cases)
+		}
+		testutil.TestHandlerSequence(t, m, 20, 10, cases)
 
-	require.NoError(t, m.Close())
-	m = newTestWorkspaceManagerHandlerWithDir(t, defaultCfg(), nil /* no filenames this time */, dir)
+		require.NoError(t, m.Close())
+	})
 
-	cases = []testutil.HandlerSequenceTestCase{
-		{"",
-			`┌──────────────────┐
+	t.Run("initial files from restore previous session prompt", func(t *testing.T) {
+		m := newTestWorkspaceManagerHandlerWithDir(t, defaultCfg(), nil, dir)
+
+		cases := []testutil.HandlerSequenceTestCase{
+			{"",
+				`┌──────────────────┐
 │                  │
 ├──────────────────┤
 │                  │
@@ -421,8 +426,8 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 │  session?        │
 │                  │
 └──────────────────┘`},
-		{"y",
-			`┌──────────────────┐
+			{"y",
+				`┌──────────────────┐
 │1234  4567        │
 ├──────────────────┤
 │▐                 │
@@ -432,9 +437,32 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 │                  │
 │:           NORMAL│
 └──────────────────┘`},
-	}
-	testutil.TestHandlerSequence(t, m, 20, 10, cases)
-	require.NoError(t, m.Close())
+		}
+		testutil.TestHandlerSequence(t, m, 20, 10, cases)
+		require.NoError(t, m.Close())
+	})
+
+	t.Run("initial files from auto restore", func(t *testing.T) {
+		cfg := defaultCfg()
+		cfg.cfg["workspace"].(map[string]interface{})["auto_restore"] = true
+		m := newTestWorkspaceManagerHandlerWithDir(t, cfg, nil, dir)
+
+		cases := []testutil.HandlerSequenceTestCase{
+			{"",
+				`┌──────────────────┐
+│1234  4567        │
+├──────────────────┤
+│▐                 │
+│                  │
+│                  │
+│                  │
+│                  │
+│:           NORMAL│
+└──────────────────┘`},
+		}
+		testutil.TestHandlerSequence(t, m, 20, 10, cases)
+		require.NoError(t, m.Close())
+	})
 }
 
 func newTestWorkspaceManagerHandlerWithManager(
@@ -527,7 +555,8 @@ func defaultCfg() ideConfig {
 			},
 		},
 		"workspace": map[string]interface{}{
-			"wallpaper": "workspaceWallpaper",
+			"wallpaper":    "workspaceWallpaper",
+			"auto_restore": false,
 		},
 		"notifications": map[string]interface{}{
 			"progress_bar": false,

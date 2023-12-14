@@ -938,6 +938,23 @@ func (c ideConfig) wallpaper() (text string) {
 	return
 }
 
+func (c ideConfig) autoRestore() (ret bool) {
+	ret = true
+	if c.cfg == nil {
+		return
+	}
+	cfg := c.workspace()
+	cfgBool, err := cfg.GetBool("auto_restore")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["workspace.auto_restore"] = err
+		}
+		return
+	}
+	ret = cfgBool
+	return
+}
+
 func (c ideConfig) logOutputPath() string {
 	if c.cfg == nil {
 		return ""

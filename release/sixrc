@@ -453,6 +453,11 @@ workspace:
     # and '%p' if custom ports are needed. If this option is set, private_keys,
     # insecure, and timeout are ignored.
     # command: ssh -q %h
+
+  # Whether to automatically restore the previous session's files.
+  # If set to false, the user is asked via a prompt.
+  auto_restore: true
+
   ## Workspace wallpaper. Override default six wallpaper with your ASCII art.
   #wallpaper: myAsciiArt
   wallpaper_attr:

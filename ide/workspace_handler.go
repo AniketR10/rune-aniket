@@ -211,8 +211,7 @@ func (h *workspaceManagerHandler) init(
 	}
 
 	shouldRestore := len(uris) == 0
-	// TODO err = h.addWorkspace(cwd, recfilename, uris, shouldRestore, h.cfg.autoRestore())
-	err = h.addWorkspace(cwd, recfilename, uris, shouldRestore, shouldRestore)
+	err = h.addWorkspace(cwd, recfilename, uris, shouldRestore, !h.cfg.autoRestore())
 	if err != nil {
 		return err
 	}

@@ -143,6 +143,7 @@ browser:
         fg: white
 
 workspace:
+    auto_restore: false
     wallpaper: abc
     wallpaper_attr:
         fg: yellow
@@ -194,6 +195,7 @@ func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
 	assert.Equal(t, term.Attributes{}, cfg.modelessAttr())
 	assert.Equal(t, term.Attributes{}, cfg.modalAttr())
 	assert.False(t, cfg.modelessWrap())
+	assert.True(t, cfg.autoRestore())
 
 	assert.Equal(t, "modal", cfg.editorMode())
 	os.Setenv("SHELL", "fish")
@@ -339,4 +341,5 @@ func TestConfigSetting(t *testing.T) {
 		}: {"openDoors", "large"},
 	}
 	assert.Equal(t, wantMappings, cfg.commandKeyMappings())
+	assert.False(t, cfg.autoRestore())
 }
