@@ -152,15 +152,18 @@ func (h *workspaceHistory) Handle(ctx context.Context, ev textapi.Event) bool {
 	switch ev.Type {
 	case textapi.EventTypeOpen:
 		workspaceCache.Files[evUriStr] = makeFile(evUriStr, false)
+		h.persistUpdateCache(h.uri, workspaceCache)
 	case textapi.EventTypeClose:
 		delete(workspaceCache.Files, evUriStr)
+		h.persistUpdateCache(h.uri, workspaceCache)
 	case textapi.EventTypeFlush:
 		workspaceCache.Files[evUriStr] = makeFile(evUriStr, false)
+		h.persistUpdateCache(h.uri, workspaceCache)
 	case textapi.EventTypeEdit:
 		workspaceCache.Files[evUriStr] = makeFile(evUriStr, true)
+		// do not store on edit, as it could significantly impact performance
 	}
 
-	h.persistUpdateCache(h.uri, workspaceCache)
 	return false
 }
 
