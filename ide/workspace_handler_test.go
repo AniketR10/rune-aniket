@@ -28,6 +28,9 @@ func TestWorkspaceConfig(t *testing.T) {
 			"two": "2",
 		},
 	}
+	uri, err := workspaceapi.ParseURI("memory:///tmp")
+	require.NoError(t, err)
+
 	t.Run("passes default scheme config to SchemeFunc", func(t *testing.T) {
 		cfg := defaultCfg()
 		manager := workspace.NewManager(cfg.workspace())
@@ -45,13 +48,42 @@ func TestWorkspaceConfig(t *testing.T) {
 				return workspace.NewMemoryScheme(ctx, cfg, uri)
 			})
 
-		uri, err := workspaceapi.ParseURI("memory:///tmp")
-		require.NoError(t, err)
-
 		m := newTestWorkspaceManagerHandlerWithManager(t, manager, uri, cfg, nil)
 		defer m.Close()
 
 		assert.EqualValues(t, mockConfig, passed)
+	})
+
+	t.Run("does not reload workspace config", func(t *testing.T) {
+		cfg := defaultCfg()
+		manager := workspace.NewManager(cfg.workspace())
+		workspaceConfig := cfg.cfg["workspace"].(map[string]interface{})
+		workspaceConfig[workspace.MemoryScheme] = mockConfig
+
+		passed := make(map[string]interface{})
+		manager.RegisterScheme(workspace.MemoryScheme,
+			func(ctx context.Context, cfg config.Config, uri workspaceapi.URI) (
+				schemeapi.Scheme, error,
+			) {
+				cfg.Iterate(func(k string, v interface{}) {
+					passed[k] = v
+				})
+				return workspace.NewMemoryScheme(ctx, cfg, uri)
+			})
+
+		m := newTestWorkspaceManagerHandlerWithManager(t, manager, uri, cfg, nil)
+		assert.EqualValues(t, mockConfig, passed)
+
+		m.reloadConfig = func() (ideConfig, error) {
+			cfg := defaultCfg()
+			cfg.cfg["workspace"].(map[string]interface{})["1"] = "!!!!"
+			return cfg, nil
+		}
+
+		require.NoError(t, m.commandReloadWorkspace())
+		assert.EqualValues(t, mockConfig, passed)
+
+		require.NoError(t, m.Close())
 	})
 }
 
@@ -614,7 +646,8 @@ func newTestWorkspaceManagerHandlerWithManagerAndExtensions(
 	err := m.workspaceManagerHandler.init(uri, manager, cfg, "", files,
 		dir, func(term.Event) bool {
 			return true
-		}, runner, new(sync.Mutex), extensions, ".sixrc")
+		}, runner, new(sync.Mutex), extensions,
+		func() (ideConfig, error) { return cfg, nil }, ".sixrc")
 	require.NoError(t, err)
 	return m
 }

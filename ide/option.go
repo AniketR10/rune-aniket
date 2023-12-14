@@ -64,10 +64,11 @@ func WithExtension(p Extension) Option {
 	}
 }
 
-// WithConfigFilename defines the base filename of the IDE configuration.
+// WithConfigFilename defines the base filename of the IDE configuration
+// to be expected in a workspace's directory.
 func WithConfigFilename(filename string) Option {
 	return func(opts *options) {
-		opts.configFilename = filename
+		opts.workspaceConfig = filename
 	}
 }
 
@@ -84,7 +85,7 @@ type options struct {
 	extensionRunner  ExtensionsRunner
 	locker           sync.Locker
 	extensions       map[string]Extension
-	configFilename   string
+	workspaceConfig  string
 	defaultWallpaper string
 }
 
@@ -94,7 +95,7 @@ func defaultOptions() options {
 		extensionRunner:  nopExtensions{},
 		locker:           nopLocker{},
 		extensions:       make(map[string]Extension),
-		configFilename:   ".iderc",
+		workspaceConfig:  ".iderc",
 		defaultWallpaper: legacyDefaultWallpaper,
 	}
 }

@@ -39,16 +39,20 @@ frame_attr_theme: &frame_attr
 focus_frame_attr_theme: &focus_frame_attr
   fg: *color1
 
+# file to log to. This property is not reloaded on reloadWorkspace.
+log_path: ~/.six/debug.log
+# log level. This property is not reloaded on reloadWorkspace.
+log_level: info # error, debug, trace
+# input mode list. Options are 'esc', 'mouse' and 'alt'.
+# Reference termbox input modes for more details.
+input_mode:
+  - esc
+  - mouse
+
 # clipboard defines whether to use the system clipboard
 # or not ('system' vs 'memory'). If system is used, then
 # copy and paste functions are shared with the host system.
 clipboard: "system"
-
-log_path: ~/.six/debug.log
-log_level: info # error, debug, trace
-input_mode:
-  - esc
-  - mouse
 
 editor:
   # mode determines what kind of editor to use. Options are
@@ -430,7 +434,7 @@ browser:
       fg: default
       bg: default
 
-# Workspaces configuration.
+# Workspaces configuration. This configuration is never reloaded.
 workspace:
   # Configuration for upspin client to connect to workspaces.
   upspin:

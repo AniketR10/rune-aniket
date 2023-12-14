@@ -1168,16 +1168,9 @@ func decodeConfig(r io.Reader) (cfg map[string]interface{}, err error) {
 	return
 }
 
-func cloneConfig(cfg ideConfig) ideConfig {
-	ret := make(map[string]interface{})
-	config.Clone(config.MapConfig(cfg.cfg)).Iterate(func(k string, v interface{}) {
-		ret[k] = v
-	})
-	return ideConfig{
-		defaultWallpaper: cfg.defaultWallpaper,
-		cfg:              ret,
-		errors:           make(map[string]error),
-	}
+func reloadConfig(configFilePath string, defaultWallpaper string) (ret ideConfig, err error) {
+	_, err = loadConfig(&ret, configFilePath, defaultWallpaper)
+	return
 }
 
 func loadWorkspaceConfig(filename string, cwd workspace.Workspace, uri workspaceapi.URI, c *ideConfig) (

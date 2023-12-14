@@ -45,7 +45,6 @@ var (
 type workspaceManagerHandler struct {
 	mu                sync.Locker
 	promptForceExit   bool
-	cfg               ideConfig
 	ctxWithLocker     context.Context
 	storage           document.Service
 	workspace         workspace.WorkspaceManager
@@ -53,10 +52,15 @@ type workspaceManagerHandler struct {
 	extensionRunner   ExtensionsRunner
 	sixDir            string
 	builtinExtensions map[string]Extension
-	configFilename    string
-	addWorkspacePath  bool
-	userHome          string
-	history           *history
+	// this is the name of of the file to be expected in workspace folders
+	workspaceConfigFilename string
+	addWorkspacePath        bool
+	userHome                string
+	history                 *history
+	// NOTE: if user changes frame config, then mouse calculations
+	// for resize might be off.
+	frame        bool
+	reloadConfig func() (ideConfig, error)
 
 	union          handler.FrameUnion
 	bar            handler.Tabs
@@ -73,14 +77,15 @@ func newWorkspaceManagerHandler(
 	cfg ideConfig, recfilename string, filenames []string,
 	sixDir string, publishEvent func(term.Event) bool,
 	extensionRunner ExtensionsRunner, locker sync.Locker,
-	builtinExtensions map[string]Extension, configFilename string,
+	builtinExtensions map[string]Extension,
+	reloadConfig func() (ideConfig, error), workspaceConfigFilename string,
 ) (*workspaceManagerHandler, error) {
 	ret := new(workspaceManagerHandler)
 
 	err := ret.init(initial, manager,
 		cfg, recfilename, filenames, sixDir,
 		publishEvent, extensionRunner, locker, builtinExtensions,
-		configFilename)
+		reloadConfig, workspaceConfigFilename)
 	if err != nil {
 		return nil, err
 	}
@@ -88,7 +93,7 @@ func newWorkspaceManagerHandler(
 }
 
 func (h *workspaceManagerHandler) newEditor(cfg ideConfig) (text.Editor, error) {
-	switch h.cfg.editorMode() {
+	switch cfg.editorMode() {
 	case editorModeModal:
 		return h.newBuiltinModalEditor(cfg), nil
 	case editorModeModeless:
@@ -121,12 +126,14 @@ func (h *workspaceManagerHandler) init(
 	cfg ideConfig, recfilename string, filenames []string,
 	sixDir string, publishEvent func(term.Event) bool,
 	extensionRunner ExtensionsRunner, locker sync.Locker,
-	builtinExtensions map[string]Extension, configFilename string,
+	builtinExtensions map[string]Extension,
+	reloadConfig func() (ideConfig, error), workspaceConfigFilename string,
 ) error {
 	h.mu = locker
 	h.workspaces = make([]*workspaceHandler, 10)
-	h.cfg = cfg
-	h.configFilename = configFilename
+	h.frame = cfg.frame()
+	h.reloadConfig = reloadConfig
+	h.workspaceConfigFilename = workspaceConfigFilename
 	h.publishEvent = publishEvent
 	h.workspace = manager
 	h.sixDir = sixDir
@@ -140,8 +147,8 @@ func (h *workspaceManagerHandler) init(
 	}
 	h.storage = storage
 
-	globalOpts := h.textOpts(h.cfg)
-	ed, err := h.newEditor(h.cfg)
+	globalOpts := h.textOpts(cfg)
+	ed, err := h.newEditor(cfg)
 	if err != nil {
 		return fmt.Errorf("new editor: %v", err)
 	}
@@ -210,7 +217,7 @@ func (h *workspaceManagerHandler) init(
 	}
 
 	shouldRestore := len(uris) == 0
-	err = h.addWorkspace(cwd, recfilename, uris, shouldRestore, !h.cfg.autoRestore())
+	err = h.addWorkspace(cwd, recfilename, uris, shouldRestore, !cfg.autoRestore())
 	if err != nil {
 		return err
 	}
@@ -306,9 +313,8 @@ func (h *workspaceManagerHandler) drawBar() bool {
 }
 
 func (h *workspaceManagerHandler) barSize() int {
-	frame := h.cfg.frame()
 	ret := 1
-	if frame {
+	if h.frame {
 		ret += 2
 	}
 	return ret
@@ -525,10 +531,13 @@ func (h *workspaceManagerHandler) addWorkspace(
 		return fmt.Errorf("Failed to create new workspace for %q: %s", uri, err)
 	}
 
-	cfg := cloneConfig(h.cfg)
+	cfg, err := h.reloadConfig()
+	if err != nil {
+		return fmt.Errorf("reload config: %v", err)
+	}
 
-	isConfigErr, configErr := loadWorkspaceConfig(h.configFilename, cwd, uri, &cfg)
-	if configErr != nil && !isConfigErr {
+	_, configErr := loadWorkspaceConfig(h.workspaceConfigFilename, cwd, uri, &cfg)
+	if configErr != nil {
 		return configErr
 	}
 

@@ -128,7 +128,9 @@ func (i *IDE) init(
 	root, err := newWorkspaceManagerHandler(cwdURI,
 		workspaceManager, i.ideConfig, recfilename, filenames,
 		sixDir, i.publishEvent, op.extensionRunner, i.locker, op.extensions,
-		op.configFilename)
+		func() (ideConfig, error) {
+			return reloadConfig(cfgfilename, op.defaultWallpaper)
+		}, op.workspaceConfig)
 	if err != nil {
 		return err
 	}
