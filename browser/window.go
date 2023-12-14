@@ -24,6 +24,10 @@ func (w *browserWindow) Closed() bool {
 	return w.parent == nil || w.win.Closed()
 }
 
+func (w *browserWindow) IsFloating() bool {
+	return w.win.IsFloating()
+}
+
 func (w *browserWindow) Content() (browserapi.Handler, error) {
 	h := w.win.Content().(browserapi.Handler)
 	t, ok := h.(*Tab)

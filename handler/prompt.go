@@ -6,6 +6,7 @@ import (
 	"unstable.build/go-tui/term"
 )
 
+// PromptConfig holds configuration for a Prompt.
 type PromptConfig struct {
 	component.PromptConfig
 
@@ -15,6 +16,7 @@ type PromptConfig struct {
 	OptionAttr     term.Attributes
 }
 
+// Prompt wraps a component.Prompt to satisfy tui.Handler.
 type Prompt struct {
 	component.Prompt
 

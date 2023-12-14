@@ -180,7 +180,7 @@ ZZZZZYYYYYYYYYYXXXXX
 				func() {
 					// changing height requirements without container
 					// or row "knowing" about it
-					a.(*TestResponsive).WantHeight = 2
+					a.WantHeight = 2
 				}, `
 aaaaaaaaaabbbbbbbbbb
 aaaaaaaaaabbbbbbbbbb
@@ -193,7 +193,7 @@ ZZZZZYYYYYYYYYYXXXXX
                     `,
 			}, {
 				func() {
-					a.(*TestResponsive).WantHeight = 4
+					a.WantHeight = 4
 				}, `
 aaaaaaaaaabbbbbbbbbb
 aaaaaaaaaabbbbbbbbbb
@@ -268,7 +268,7 @@ bbbb
 
 }
 
-func testResponsive(ch rune, wantHeight int) Responsive {
+func testResponsive(ch rune, wantHeight int) *TestResponsive {
 	return &TestResponsive{
 		WantWidth:  wantHeight,
 		WantHeight: wantHeight,

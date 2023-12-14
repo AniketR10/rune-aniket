@@ -13,6 +13,7 @@ func (w noopWindow) Close() error                          { return nil }
 func (w noopWindow) ID() uint64                            { return 0 }
 func (w noopWindow) Focus() (bool, error)                  { return false, nil }
 func (w noopWindow) Closed() bool                          { return false }
+func (w noopWindow) IsFloating() bool                      { return false }
 
 // NopWindow returns a window that does nothing.
 func NopWindow() browser.Window {

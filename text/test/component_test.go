@@ -218,6 +218,183 @@ func TestComponentOpen(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, h1, h2)
 	})
+
+	t.Run("opens recovery prompt if err == workspaceapi.ErrFileAlreadyOpen", func(t *testing.T) {
+		c, loader, _, _ := newTestComponentWithFile(t, "file:///tmp/wasup")
+		c.Resize(30, 20)
+
+		tests := []testutil.ComponentTestCase{
+			{nil, `
+┌────────────────────────────┐
+│wasup                       │
+├────────────────────────────┤
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+└────────────────────────────┘`,
+			},
+			{func() {
+				uri, err := workspaceapi.ParseURI("file:///tmp/busy")
+				require.NoError(t, err)
+
+				loader.expectError = workspaceapi.ErrFileAlreadyOpen
+				_, err = c.Open(uri)
+				require.Equal(t, workspaceapi.ErrFileAlreadyOpen, err)
+			}, `
+┌────────────────────────────┐
+│wasup                       │
+├────────────────────────────┤
+│                            │
+┌────────────────────────────┐
+│                            │
+│                            │
+│   File file:///tmp/busy    │
+│   is already open by       │
+│   another process or an    │
+│   edit session for this    │
+│   file crashed.            │
+│                            │
+│                            │
+│  Rec    Ope    for    Ski  │
+│  ove    n      ce     p    │
+└────────────────────────────┘
+│                            │
+│                            │
+└────────────────────────────┘`,
+			},
+			{func() {
+				loader.expectError = nil
+				_, handled := c.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+				assert.True(t, handled)
+			}, `
+┌────────────────────────────┐
+│wasup  busy                 │
+├────────────────────────────┤
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+└────────────────────────────┘`,
+			},
+			{func() { // test double prompt, switches focuses correctly
+				loader.expectError = workspaceapi.ErrFileAlreadyOpen
+
+				uri1, err := workspaceapi.ParseURI("file:///tmp/moar")
+				require.NoError(t, err)
+
+				_, err = c.Open(uri1)
+				require.Equal(t, workspaceapi.ErrFileAlreadyOpen, err)
+
+				uri2, err := workspaceapi.ParseURI("file:///tmp/more")
+				require.NoError(t, err)
+
+				_, err = c.Open(uri2)
+				require.Equal(t, workspaceapi.ErrFileAlreadyOpen, err)
+			}, `
+┌────────────────────────────┐
+│wasup  busy                 │
+├────────────────────────────┤
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+┌────────────────────────────┐
+│                            │
+│                            │
+│   File file:///tmp/more    │
+│   is already open by       │
+│   another process or an    │
+│   edit session for this    │
+│   file crashed.            │
+│                            │
+│                            │
+│  Rec    Ope    for    Ski  │
+│  ove    n      ce     p    │
+└────────────────────────────┘
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+└────────────────────────────┘`,
+			},
+			{func() {
+				loader.expectError = nil
+				_, handled := c.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+				assert.True(t, handled)
+			}, `
+┌────────────────────────────┐
+│wasup  busy  more           │
+├────────────────────────────┤
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+┌────────────────────────────┐
+│                            │
+│                            │
+│   File file:///tmp/moar    │
+│   is already open by       │
+│   another process or an    │
+│   edit session for this    │
+│   file crashed.            │
+│                            │
+│                            │
+│  Rec    Ope    for    Ski  │
+│  ove    n      ce     p    │
+└────────────────────────────┘
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+└────────────────────────────┘`,
+			},
+			{func() {
+				loader.expectError = nil
+				_, handled := c.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+				assert.True(t, handled)
+			}, `
+┌────────────────────────────┐
+│wasup  busy  more  moar     │
+├────────────────────────────┤
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+└────────────────────────────┘`,
+			},
+		}
+
+		w := term.NewStringWriter(30, 20)
+		testutil.TestComponent(t, c, w, tests)
+
+	})
 }
 
 func TestComponentEditorSubscriber(t *testing.T) {

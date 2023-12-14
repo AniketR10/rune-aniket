@@ -27,15 +27,14 @@ func TestDrawPrompt(t *testing.T) {
 		testDrawPrompt(t, PromptConfig{
 			Message: "Do you?",
 			Options: []string{"Yay", "Nay"},
-		}, `
-                     
+		}, `                     
                      
       Do you?        
                      
                      
-                     
-                     
    Yay       Nay     
+                     
+                     
                      
                      
                      `,
@@ -47,16 +46,16 @@ func TestDrawPrompt(t *testing.T) {
 			Message: "Do you?",
 			Options: []string{"Yay", "Nay"},
 			Frame:   FrameCharSetDefault(),
-		}, `┌──────────────────┐ 
-│                  │ 
-│     Do you?      │ 
-│                  │ 
-│                  │ 
-│ ┌─────┐  ┌─────┐ │ 
-│ │ Yay │  │ Nay │ │ 
-│ └─────┘  └─────┘ │ 
-│                  │ 
-└──────────────────┘ 
+		}, `                     
+                     
+      Do you?        
+                     
+                     
+ ┌─────┐   ┌─────┐   
+ │ Yay │   │ Nay │   
+ └─────┘   └─────┘   
+                     
+                     
                      `,
 		)
 	})
@@ -66,16 +65,16 @@ func TestDrawPrompt(t *testing.T) {
 			Message: "Why soooooo serious?",
 			Options: []string{"Yay", "Nay", "Say", "Wey"},
 			Frame:   FrameCharSetDefault(),
-		}, `┌──────────────────┐ 
-│                  │ 
-│Why soooooo seriou│ 
-│                  │ 
-│                  │ 
-│┌──┐┌──┐┌───┐┌───┐│ 
-││Ya││Na││Say││Wey││ 
-│└──┘└──┘└───┘└───┘│ 
-│                  │ 
-└──────────────────┘ 
+		}, `                     
+                     
+    Why soooooo      
+    serious?         
+                     
+                     
+┌───┐┌───┐┌───┐┌───┐ 
+│ Y ││ N ││ S ││ W │ 
+│ a ││ a ││ a ││ e │ 
+└───┘└───┘└───┘└───┘ 
                      `,
 		)
 	})
@@ -86,14 +85,14 @@ func TestDrawPrompt(t *testing.T) {
 			Options: []string{"Yay", "Nay", "Say", "Wey", "They", "May"},
 		}, `                     
                      
-Why soooooo serious? 
+    Why soooooo      
+    serious?         
                      
                      
-                     
-                     
-YayNaySayWeyTheyMay  
-                     
-                     
+ Y  N  S  W  T  M    
+ a  a  a  e  h  a    
+ y  y  y  y  e  y    
+             y       
                      `,
 		)
 	})
@@ -139,9 +138,9 @@ func TestPromptDefaults(t *testing.T) {
 
 func TestPromptInitReset(t *testing.T) {
 	var p Prompt
-	opts := make(map[string]*TestComponent)
-	makeTestOption := func(opt string, cfg PromptConfig) WithAttributes {
-		t := &TestComponent{Ch: ([]rune)(opt)[0]}
+	opts := make(map[string]*TestResponsive)
+	makeTestOption := func(opt string, cfg PromptConfig) responsiveWithAttributes {
+		t := testResponsive(([]rune)(opt)[0], 10)
 		opts[opt] = t
 		return t
 	}

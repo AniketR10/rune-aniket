@@ -18,10 +18,10 @@ func DefaultConfig() Config {
 		FrameUnionCharSet:   component.DefaultFrameUnionCharSet(),
 		WindowManagerConfig: handler.DefaultWindowManagerConfig(),
 		PromptConfig: PromptConfig{
-			Width:         50,
-			Height:        14,
-			TextAttr:      term.Attributes{},
-			HighlightAttr: term.Attributes{Bg: term.ColorRed, Fg: term.ColorWhite},
+			TextAttr:       term.Attributes{},
+			HighlightAttr:  term.Attributes{Bg: term.ColorRed, Fg: term.ColorWhite},
+			BackgroundAttr: term.Attributes{},
+			MinWidth:       60,
 		},
 		Notifications: notifications.Config{
 			AutoClose:            5 * time.Second,
@@ -37,9 +37,10 @@ func DefaultConfig() Config {
 
 // PromptConfig holds configuration for the browser's Prompt component.
 type PromptConfig struct {
-	Width, Height int
-	TextAttr      term.Attributes
-	HighlightAttr term.Attributes
+	TextAttr       term.Attributes
+	HighlightAttr  term.Attributes
+	BackgroundAttr term.Attributes
+	MinWidth       int
 }
 
 // Config holds configuration for an browser.Component.

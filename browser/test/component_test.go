@@ -547,24 +547,42 @@ func TestComponentNotify(t *testing.T) {
 }
 
 func TestComponentPrompt(t *testing.T) {
-	w := term.NewStringWriter(24, 8)
+	t.Run("panics if options are zero in length", func(t *testing.T) {
+		c := browser.NewComponent(browser.DefaultConfig())
+		assert.Panics(t, func() {
+			c.Prompt("bla", []string{}, nil, nil)
+		})
 
-	cfg := browser.DefaultConfig()
-	cfg.PromptConfig.Width = 18
-	cfg.PromptConfig.Height = 7
-	c := browser.NewComponent(cfg)
-	c.Resize(20, 8)
-	uri, err := workspaceapi.ParseURI("file:///Music")
-	require.NoError(t, err)
+	})
+	t.Run("panics if bindings and options are different lengths", func(t *testing.T) {
+		c := browser.NewComponent(browser.DefaultConfig())
+		assert.Panics(t, func() {
+			c.Prompt("bla", []string{"a", "b"}, []term.KeyComb{{}}, nil)
+		})
+	})
+	t.Run("panics if message is empty", func(t *testing.T) {
+		c := browser.NewComponent(browser.DefaultConfig())
+		assert.Panics(t, func() {
+			c.Prompt("", []string{"a", "b"}, []term.KeyComb{{}, {}}, nil)
+		})
+	})
+	t.Run("Draw", func(t *testing.T) {
+		w := term.NewStringWriter(24, 12)
 
-	h := NewTestHandler()
-	h.Ch = '8'
-	tab := c.NewTab(uri, "music", h, nil)
-	c.Focus().SetContent(tab)
+		cfg := browser.DefaultConfig()
+		c := browser.NewComponent(cfg)
+		c.Resize(20, 12)
+		uri, err := workspaceapi.ParseURI("file:///Music")
+		require.NoError(t, err)
 
-	tests := []testutil.ComponentTestCase{
-		{
-			nil, `
+		h := NewTestHandler()
+		h.Ch = '8'
+		tab := c.NewTab(uri, "music", h, nil)
+		c.Focus().SetContent(tab)
+
+		tests := []testutil.ComponentTestCase{
+			{
+				nil, `
 ┌──────────────────┐    
 │music             │    
 ├──────────────────┤    
@@ -572,21 +590,29 @@ func TestComponentPrompt(t *testing.T) {
 │888888888888888888│    
 │888888888888888888│    
 │888888888888888888│    
+│888888888888888888│    
+│888888888888888888│    
+│888888888888888888│    
+│888888888888888888│    
 └──────────────────┘    `,
-		}, {func() {
-			c.Prompt("Virgen Maria?", []string{"Boh", "Meh"}, nil, func(int, string) {})
-		}, `
-┌┌────────────────┐┐    
-││ Virgen Maria?  ││    
-├│                │┤    
-││┌─────┐ ┌─────┐ ││    
-│││ Boh │ │ Meh │ ││    
-││└─────┘ └─────┘ ││    
-│└────────────────┘│    
+			}, {func() {
+				c.Prompt("Virgen Maria?", []string{"Boh", "Meh"}, nil, func(int, string) {})
+			}, `
+┌──────────────────┐    
+│music             │    
+├──────────────────┤    
+│                  │    
+│                  │    
+│  Virgen Maria?   │    
+│                  │    
+│                  │    
+│ ┌─────┐  ┌─────┐ │    
+│ │ Boh │  │ Meh │ │    
+│ └─────┘  └─────┘ │    
 └──────────────────┘    `,
-		}, {func() {
-			c.Handle(term.Event{Key: term.KeyEnter})
-		}, `
+			}, {func() {
+				c.Handle(term.Event{Key: term.KeyEnter})
+			}, `
 ┌──────────────────┐    
 │music             │    
 ├──────────────────┤    
@@ -594,79 +620,107 @@ func TestComponentPrompt(t *testing.T) {
 │888888888888888888│    
 │888888888888888888│    
 │888888888888888888│    
+│888888888888888888│    
+│888888888888888888│    
+│888888888888888888│    
+│888888888888888888│    
 └──────────────────┘    `,
-		}, {func() {
-			c.Prompt("Tokischa?", []string{"Yay", "Nay"}, nil, func(int, string) {
-				c.Prompt("Robert Love", []string{"YAS!"}, nil, func(int, string) {})
-			})
-			c.Prompt("Rosalia?", []string{"Yay", "Nay"}, nil, func(int, string) {})
-		}, `
-┌┌────────────────┐┐    
-││    Rosalia?    ││    
-├│                │┤    
-││┌─────┐ ┌─────┐ ││    
-│││ Yay │ │ Nay │ ││    
-││└─────┘ └─────┘ ││    
-│└────────────────┘│    
+			}, {func() {
+				c.Prompt("Tokischa?", []string{"Yay", "Nay"}, nil, func(int, string) {
+					c.Prompt("Robert Love", []string{"YAS!"}, nil, func(int, string) {})
+				})
+				c.Prompt("Rosalia?", []string{"Yay", "Nay"}, nil, func(int, string) {})
+			}, `
+┌──────────────────┐    
+│music             │    
+├──────────────────┤    
+│                  │    
+│                  │    
+│     Rosalia?     │    
+│                  │    
+│                  │    
+│ ┌─────┐  ┌─────┐ │    
+│ │ Yay │  │ Nay │ │    
+│ └─────┘  └─────┘ │    
 └──────────────────┘    `,
-		}, {func() {
-			c.Resize(10, 6)
-		}, `
+			}, {func() {
+				c.Resize(10, 6)
+			}, `
 ┌────────┐              
-│Rosalia?│              
-│        │              
-│Yay Nay │              
-│        │              
+│music   │              
+├────────┤              
+│  Rosa  │              
+│  lia?  │              
 └────────┘              
                         
+                        
+                        
+                        
+                        
                         `,
-		}, {func() {
-			c.Resize(24, 8)
-		}, `
-┌──┌────────────────┐──┐
-│mu│    Rosalia?    │  │
-├──│                │──┤
-│88│┌─────┐ ┌─────┐ │88│
-│88││ Yay │ │ Nay │ │88│
-│88│└─────┘ └─────┘ │88│
-│88└────────────────┘88│
-└──────────────────────┘`,
-		}, {func() {
-			c.Resize(20, 8)
-		}, `
-┌┌────────────────┐┐    
-││    Rosalia?    ││    
-├│                │┤    
-││┌─────┐ ┌─────┐ ││    
-│││ Yay │ │ Nay │ ││    
-││└─────┘ └─────┘ ││    
-│└────────────────┘│    
+			}, {func() {
+				c.Resize(24, 8)
+			}, `
+┌──────────────────────┐
+│music                 │
+├──────────────────────┤
+│                      │
+│       Rosalia?       │
+│                      │
+│                      │
+└──────────────────────┘
+                        
+                        
+                        
+                        `,
+			}, {func() {
+				c.Resize(20, 12)
+			}, `
+┌──────────────────┐    
+│music             │    
+├──────────────────┤    
+│                  │    
+│                  │    
+│     Rosalia?     │    
+│                  │    
+│                  │    
+│ ┌─────┐  ┌─────┐ │    
+│ │ Yay │  │ Nay │ │    
+│ └─────┘  └─────┘ │    
 └──────────────────┘    `,
-		}, {func() {
-			c.Handle(term.Event{Key: term.KeyEsc})
-		}, `
-┌┌────────────────┐┐    
-││   Tokischa?    ││    
-├│                │┤    
-││┌─────┐ ┌─────┐ ││    
-│││ Yay │ │ Nay │ ││    
-││└─────┘ └─────┘ ││    
-│└────────────────┘│    
+			}, {func() {
+				c.Handle(term.Event{Key: term.KeyEsc})
+			}, `
+┌──────────────────┐    
+│music             │    
+├──────────────────┤    
+│                  │    
+│                  │    
+│    Tokischa?     │    
+│                  │    
+│                  │    
+│ ┌─────┐  ┌─────┐ │    
+│ │ Yay │  │ Nay │ │    
+│ └─────┘  └─────┘ │    
 └──────────────────┘    `,
-		}, {func() {
-			c.Handle(term.Event{Key: term.KeyEnter})
-		}, `
-┌┌────────────────┐┐    
-││  Robert Love   ││    
-├│                │┤    
-││    ┌──────┐    ││    
-││    │ YAS! │    ││    
-││    └──────┘    ││    
-│└────────────────┘│    
+			}, {func() {
+				c.Handle(term.Event{Key: term.KeyEnter})
+			}, `
+┌──────────────────┐    
+│music             │    
+├──────────────────┤    
+│                  │    
+│                  │    
+│   Robert Love    │    
+│                  │    
+│                  │    
+│     ┌──────┐     │    
+│     │ YAS! │     │    
+│     └──────┘     │    
 └──────────────────┘    `,
-		}, {func() {
-			c.Handle(term.Event{Key: term.KeyEnter})
-		}, `
+			}, {func() {
+				c.Handle(term.Event{Key: term.KeyEnter})
+			}, `
 ┌──────────────────┐    
 │music             │    
 ├──────────────────┤    
@@ -674,11 +728,16 @@ func TestComponentPrompt(t *testing.T) {
 │888888888888888888│    
 │888888888888888888│    
 │888888888888888888│    
+│888888888888888888│    
+│888888888888888888│    
+│888888888888888888│    
+│888888888888888888│    
 └──────────────────┘    `,
-		},
-	}
+			},
+		}
 
-	testutil.TestComponent(t, c, w, tests)
+		testutil.TestComponent(t, c, w, tests)
+	})
 }
 
 func TestComponentSetFocus(t *testing.T) {

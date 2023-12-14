@@ -39,6 +39,10 @@ type Window interface {
 
 	// Closed returns true if this window has already been closed.
 	Closed() bool
+
+	// IsFloating returns true if window is a floating window,
+	// or false if window is a tiled window.
+	IsFloating() bool
 }
 
 // WindowManager is the interface that groups tile

@@ -419,9 +419,6 @@ browser:
   # Prompt configuration. This prompted is used by the editor
   # to ask questions to the user.
   prompt:
-    # Dimensions
-    height: 14
-    width: 50
     # Colors
     text_attr:
       fg: default
@@ -429,6 +426,9 @@ browser:
     highlight_attr:
       fg: white
       bg: *color1
+    background_attr:
+      fg: default
+      bg: default
 
 # Workspaces configuration.
 workspace:

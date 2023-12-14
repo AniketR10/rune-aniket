@@ -10,7 +10,9 @@ import (
 type Prompt struct {
 	optComp      []WithAttributes
 	effective    tui.Component
-	makeOptionFn func(msg string, cfg PromptConfig) WithAttributes
+	messageRow   *Row
+	cfg          PromptConfig
+	makeOptionFn func(msg string, cfg PromptConfig) responsiveWithAttributes
 }
 
 // PromptConfig holds configuration for initializing a Prompt.
@@ -18,57 +20,33 @@ type PromptConfig struct {
 	Message string
 	Options []string
 	Frame   FrameCharSet
+	// AspectRatio of the floating prompt. By default DefaultAspectRatio is used.
+	AspectRatio          float64
+	BackgroundAttributes term.Attributes
+	MinWidth             int
 }
 
-func (p *Prompt) initOptions(cfg PromptConfig, wm *WindowManager, win Window) {
-	if len(cfg.Options) == 0 {
-		panic("Options should be greater than zero")
-	}
-	// allow for Init to be used as reset
-	p.optComp = make([]WithAttributes, 0)
-	comp0 := p.makeOptionFn(cfg.Options[0], cfg)
-	win, _ = wm.SplitHorizontal(win, comp0)
-	p.optComp = append(p.optComp, comp0)
-
-	for _, opt := range cfg.Options[1:] {
-		compi := p.makeOptionFn(opt, cfg)
-		p.optComp = append(p.optComp, compi)
-		win, _ = wm.SplitVertical(win, compi)
-	}
-}
-
-func (p *Prompt) init(
-	makeOptionFn func(string, PromptConfig) WithAttributes,
-	cfg PromptConfig,
-) {
-	if cfg.Message == "" {
-		panic("Message cannot be empty")
-	}
-	message := NewStringWithConfig(cfg.Message, StringConfig{
-		Alignment: SpanAlignmentCentered,
-	})
-
-	wm, win := NewWindowManager(message, WindowManagerConfig{})
-	p.makeOptionFn = makeOptionFn
-	p.initOptions(cfg, wm, win)
-
-	if cfg.Frame != (FrameCharSet{}) {
-		frame := NewFrame(wm)
-		frame.FrameCharSet = cfg.Frame
-		p.effective = frame
-	} else {
-		p.effective = wm
-	}
+type responsiveWithAttributes interface {
+	Responsive
+	WithAttributes
 }
 
 // Init initializes this prompt with cfg. Note that PromptConfig.Options must
 // always contain at least one option and PromptConfig.Message must not be empty.
 // If one of these two rules is violated this method panics.
 func (p *Prompt) Init(cfg PromptConfig) {
-	p.init(func(msg string, cfg PromptConfig) WithAttributes {
-		cells := cell.StringToCells(msg, cell.DefaultTabspaces)
-		return newStringComp(cells, term.Attributes{},
-			0, term.Attributes{}, cfg.Frame, 2, 0, SpanAlignmentCentered, 0)
+	p.init(func(msg string, cfg PromptConfig) responsiveWithAttributes {
+		return NewResponsiveString(msg, StringResponsiveConfig{
+			NoSplitWords: true,
+			StringConfig: StringConfig{
+				Tabspaces:            cell.DefaultTabspaces,
+				Alignment:            SpanAlignmentCentered,
+				FrameCharSet:         cfg.Frame,
+				BackgroundAttributes: p.cfg.BackgroundAttributes,
+				Attributes:           term.Attributes{Bg: p.cfg.BackgroundAttributes.Bg},
+				PaddingHorizontal:    2,
+			},
+		})
 	}, cfg)
 }
 
@@ -93,4 +71,89 @@ func (p *Prompt) Resize(width, height int) {
 // Draw satisfies tui.Component
 func (p *Prompt) Draw(w term.Writer) {
 	p.effective.Draw(w)
+}
+
+// Dimensions satisfies Floating.
+func (p *Prompt) Dimensions() (int, int) {
+	width, height := p.effective.(Floating).Dimensions()
+	if width < p.cfg.MinWidth {
+		width = p.cfg.MinWidth
+	}
+	return width, height
+}
+
+func (p *Prompt) initOptions(cfg PromptConfig, row *Row) {
+	if len(cfg.Options) == 0 {
+		panic("Options should be greater than zero")
+	}
+
+	// we want to divide the space evently between options
+	// but longer options should take more space, so paddings
+	// are not off
+	var totalLength, totalColumns int
+	for _, opt := range cfg.Options {
+		totalLength += len(opt)
+	}
+
+	columns := make([]int, len(cfg.Options))
+	for i := range cfg.Options {
+		columns[i] = int(float64(MaxCols) / float64(len(cfg.Options)))
+		totalColumns += columns[i]
+	}
+
+	// allow for Init to be used as reset
+	p.optComp = make([]WithAttributes, 0, len(cfg.Options))
+
+	remainder := MaxCols - totalColumns
+	for i, opt := range cfg.Options {
+		compi := p.makeOptionFn(opt, cfg)
+		p.optComp = append(p.optComp, compi)
+		effectiveCols := columns[i]
+		if remainder > 0 {
+			effectiveCols++
+			remainder--
+		}
+		row.AddComponent(NewFloatingResponsive(compi, cfg.AspectRatio), effectiveCols)
+	}
+}
+
+func (p *Prompt) init(
+	makeOptionFn func(msg string, cfg PromptConfig) responsiveWithAttributes,
+	cfg PromptConfig,
+) {
+	if cfg.Message == "" {
+		panic("Message cannot be empty")
+	}
+	if cfg.AspectRatio == 0 {
+		cfg.AspectRatio = DefaultAspectRatio
+	}
+	p.cfg = cfg
+	p.makeOptionFn = makeOptionFn
+
+	container := NewContainer()
+
+	messageResponsive := NewResponsiveString(cfg.Message, StringResponsiveConfig{
+		NoSplitWords: true,
+		StringConfig: StringConfig{
+			PaddingVertical:      4,
+			PaddingHorizontal:    4,
+			Alignment:            SpanAlignmentCentered,
+			BackgroundAttributes: p.cfg.BackgroundAttributes,
+			Attributes:           term.Attributes{Bg: p.cfg.BackgroundAttributes.Bg},
+		}})
+
+	p.messageRow = container.AddRow()
+	p.messageRow.AddComponent(
+		NewFloatingResponsive(messageResponsive, cfg.AspectRatio), MaxCols)
+
+	optionsRow := container.AddRow()
+
+	p.initOptions(cfg, optionsRow)
+
+	p.effective = container
+
+	p.effective = NewBackground(container, term.Cell{
+		Fg: p.cfg.BackgroundAttributes.Fg,
+		Bg: p.cfg.BackgroundAttributes.Bg,
+	})
 }

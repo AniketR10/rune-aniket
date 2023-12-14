@@ -55,18 +55,36 @@ and lose all the new updates?`, file)
 func (c *Component) openRecoveryPrompt(file workspaceapi.URI) {
 	const (
 		recoverOpt  = "Recover"
-		readOnlyOpt = "Open Read-Only"
-		editOpt     = "Force Edit"
+		readOnlyOpt = "Open rdonly"
+		editOpt     = "force Edit"
 		skipOpt     = "Skip"
 	)
 
-	msg := fmt.Sprintf(`File %s is already
-open by another process or
-an edit session for this file crashed.`, file)
+	msg := fmt.Sprintf("File %s is already open by another process "+
+		"or an edit session for this file crashed.", file)
 
-	c.comp.Prompt(msg, []string{recoverOpt, readOnlyOpt, editOpt, skipOpt},
+	invokeWindow := c.comp.Focus()
+	if invokeWindow.IsFloating() {
+		// NOTE: opened recovery prompt from another prompt or floating window.
+		// User probably wants to set the content of a tiled window,
+		// not a floating window
+		nextWindow, ok := c.comp.Shiftable()
+		// this should always be true, since the last tile can never be closed
+		// and Shiftable/ShiftFocus only return tiled windows.
+		if ok {
+			invokeWindow = nextWindow
+		}
+	}
+
+	var promptWindow browserapi.Window
+	promptWindow = c.comp.Prompt(msg, []string{recoverOpt, readOnlyOpt, editOpt, skipOpt},
 		[]term.KeyComb{{Ch: 'R'}, {Ch: 'O'}, {Ch: 'E'}, {Ch: 'S'}},
 		func(i int, opt string) {
+			// close so if invokeWindow is Closed (called from another prompt)
+			// Focus() does not return the Prompt window
+			if promptWindow != nil {
+				_ = promptWindow.Close()
+			}
 
 			var h browserapi.Handler
 			var err error
@@ -102,7 +120,10 @@ an edit session for this file crashed.`, file)
 			case skipOpt:
 			}
 			if h != nil {
-				err = c.comp.Focus().SetContent(h)
+				if invokeWindow.Closed() {
+					invokeWindow = c.comp.Focus()
+				}
+				err = invokeWindow.SetContent(h)
 			}
 			if err != nil {
 				c.log(log.ErrorLevel, "recovery prompt: %v", err)

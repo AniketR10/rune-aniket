@@ -21,6 +21,7 @@ import (
 	"unstable.build/go-tui/api/config"
 	textapi "unstable.build/go-tui/api/text"
 	workspaceapi "unstable.build/go-tui/api/workspace"
+	browserapi "unstable.build/go-tui/api/browser"
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/handler"
@@ -231,11 +232,20 @@ func (h *workspaceManagerHandler) initWithRestorePrompt(
 		noRestore  = "No"
 	)
 
-	ex.comp.Prompt(
+	// use the window before prompt was open
+	invokeWindow := ex.invokeWindow()
+
+	var promptWindow browserapi.Window
+	promptWindow = ex.comp.Prompt(
 		"Do you want to restore the previous session?",
 		[]string{restoreCwd, noRestore},
 		[]term.KeyComb{{Ch: 'y'}, {Ch: 'n'}},
 		func(i int, option string) {
+			// close so if invokeWindow is Closed (called from another prompt)
+			// Focus() does not return the Prompt window
+			if promptWindow != nil {
+				_ = promptWindow.Close()
+			}
 			var err error
 
 			switch option {
@@ -246,9 +256,10 @@ func (h *workspaceManagerHandler) initWithRestorePrompt(
 						err = multierror.Append(err, uerr)
 						continue
 					}
-					ferr := ex.editFileURI(uri)
+					ferr := ex.editFileURI(uri, invokeWindow)
 					if ferr != nil {
 						err = multierror.Append(err, ferr)
+					} else {
 					}
 				}
 			case noRestore:
@@ -638,7 +649,7 @@ func (h *workspaceManagerHandler) addWorkspace(
 			err = multierror.Append(err, uerr)
 			continue
 		}
-		ferr := ex.editFileURI(uri)
+		ferr := ex.editFileURI(uri, ex.invokeWindow())
 		if ferr != nil {
 			err = multierror.Append(err, ferr)
 		}

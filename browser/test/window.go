@@ -63,3 +63,7 @@ func (a WindowFromAPIWindow) Close() error {
 func (w WindowFromAPIWindow) Closed() bool {
 	return w.Win.(interface{ Closed() bool }).Closed()
 }
+
+func (w WindowFromAPIWindow) IsFloating() bool {
+	return w.Win.(interface{ IsFloating() bool }).IsFloating()
+}

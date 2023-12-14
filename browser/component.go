@@ -30,7 +30,6 @@ type Component struct {
 	tabs      handler.Tabs
 	wm        handler.WindowManager
 	union     handler.FrameUnion
-	prompts   []tui.Handler
 	width     int
 	height    int
 	nextSplit browserapi.Orientation
@@ -653,9 +652,6 @@ func (c *Component) Notify(level notifications.Level, msg string, args ...interf
 func (c *Component) Resize(width, height int) {
 	c.width, c.height = width, height
 	c.container.Resize(width, height)
-	for _, prompt := range c.prompts {
-		prompt.Resize(width, height)
-	}
 }
 
 func (c *Component) overwriteFocusWindowUnion(w term.Writer) {
@@ -706,9 +702,6 @@ func (c *Component) Draw(w term.Writer) {
 	}
 
 	c.container.Draw(w)
-	if len(c.prompts) != 0 {
-		c.prompts[0].Draw(w)
-	}
 
 	// set correct attributes for focus window union charset
 	c.overwriteFocusWindowUnion(w)
@@ -768,6 +761,8 @@ func (c *Component) focus() *browserWindow {
 }
 
 // Shiftable calls the underlying WindowManager.Shiftable.
+// It returns the Window that would become in focus if ShiftFocus
+// is called.
 func (c *Component) Shiftable() (Window, bool) {
 	win, ok := c.wm.Shiftable()
 	if !ok {
@@ -817,24 +812,6 @@ func (c *Component) SetFocus(win Window) Window {
 
 // Handle proxies events to either the underlying Tabs or WindowManager.
 func (c *Component) Handle(ev term.Event) (exit, handled bool) {
-	if len(c.prompts) != 0 {
-		// the position of the current prompt handler can change
-		// if one the actions is to open another prompt,
-		// so we wouldn't be able to remove it if it has exited.
-		promptHandler := c.prompts[0]
-		c.prompts = c.prompts[1:]
-		exit, handled = promptHandler.Handle(ev)
-		if !exit {
-			// re-add focus prompt if it's still active
-			c.prompts = append(c.prompts, nil)
-			copy(c.prompts[1:], c.prompts[:])
-			c.prompts[0] = promptHandler
-		}
-		exit = false
-		if handled {
-			return
-		}
-	}
 	// container Handles only mouse events so it's not a full tui.Handler.
 	// try to handle first and if it doesn't fallback handling to union.
 	_, handled = c.container.Handle(ev)
@@ -851,17 +828,25 @@ func (c *Component) Cursor() (pos term.Coordinates, show bool) {
 
 // Prompt creates a new prompt to be drawn as an overlay on the next call to Draw
 // and it also takes over event control until user either exits prompt or selects
-// an option.
+// an option. The passed options and bindings must be equal in length, or bindings
+// must be zero in length, meaning no key bindings are provided to user.
+// Callers must ensure that there's coherence between options and bindings, otherwise
+// this method panics.
 func (c *Component) Prompt(
 	message string, options []string,
 	bindings []term.KeyComb,
 	cb func(int, string),
-) {
+) Window {
+	if len(options) == 0 || (len(bindings) != 0 && len(options) != len(bindings)) {
+		panic("Prompt given invalid options and/or bindings")
+	}
 	promptConfig := handler.PromptConfig{
 		PromptConfig: component.PromptConfig{
-			Message: message,
-			Options: options,
-			Frame:   c.config.FrameCharSet,
+			Message:              message,
+			Options:              options,
+			Frame:                c.config.FrameCharSet,
+			BackgroundAttributes: c.config.PromptConfig.BackgroundAttr,
+			MinWidth:             c.config.PromptConfig.MinWidth,
 		},
 		OptionBindings: bindings,
 		OptionCallback: cb,
@@ -872,14 +857,11 @@ func (c *Component) Prompt(
 		promptConfig.Frame = component.FrameCharSetDefault()
 	}
 
-	prompt := handler.FloatingPrompt(promptConfig,
-		component.SpanConfig{
-			PadVertical:      -c.config.PromptConfig.Height,
-			PadHorizontal:    -c.config.PromptConfig.Width,
-			ContentAlignment: component.SpanAlignmentCentered,
-		})
-	prompt.Resize(c.width, c.height)
-	c.prompts = append([]tui.Handler{prompt}, c.prompts...)
+	floatingConfig := component.FloatingConfig{
+		Alignment: component.SpanAlignmentCentered,
+	}
+
+	return c.Floating(NopFloatingHandler(handler.NewPrompt(promptConfig)), floatingConfig)
 }
 
 // Subscribe subscribes sub to window focus events.

@@ -807,6 +807,11 @@ func (c *Component) Draw(w term.Writer) {
 	c.comp.Draw(w)
 }
 
+// Handle delegates events to the underlying browser.Component.
+func (c *Component) Handle(ev term.Event) (exit, handled bool) {
+	return c.comp.Handle(ev)
+}
+
 // SetDim sets whether next call to draw should use
 // non-focus window diming feature.
 func (c *Component) SetDim(to bool) bool {
@@ -898,8 +903,8 @@ func (c *Component) Prompt(
 	message string, options []string,
 	bindings []term.KeyComb,
 	cb func(int, string),
-) {
-	c.comp.Prompt(message, options, bindings, cb)
+) browser.Window {
+	return c.comp.Prompt(message, options, bindings, cb)
 }
 
 // Close closes all resources associated with this Component.

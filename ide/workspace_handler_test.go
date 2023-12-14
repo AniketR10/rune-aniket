@@ -227,12 +227,12 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 		{":cwo>:aw /tmp>:edit 12345aZZ>:w>:cwo>:aw  /tmp>", // prompt
 			`┌──────────────────┐
 │                  │
-│Do you want to res│
+├──────────────────┤
 │                  │
-│                  │
-│ ┌─────┐  ┌────┐  │
-│ │ Yes │  │ No │  │
-│ └─────┘  └────┘  │
+│  Do you want     │
+│  to restore      │
+│  the previous    │
+│  session?        │
 │                  │
 └──────────────────┘`},
 		// prompt resets cache (use file scheme to avoid needing
@@ -413,12 +413,12 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 		{"",
 			`┌──────────────────┐
 │                  │
-│Do you want to res│
+├──────────────────┤
 │                  │
-│                  │
-│ ┌─────┐  ┌────┐  │
-│ │ Yes │  │ No │  │
-│ └─────┘  └────┘  │
+│  Do you want     │
+│  to restore      │
+│  the previous    │
+│  session?        │
 │                  │
 └──────────────────┘`},
 		{"y",

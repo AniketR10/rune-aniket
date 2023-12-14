@@ -292,10 +292,9 @@ func TestConfigSetting(t *testing.T) {
 	assert.Equal(t, expectedEmulatorConfig, cfg.terminalConfig())
 
 	expectedPrompt := browser.PromptConfig{
-		Width:         20,
-		Height:        10,
 		TextAttr:      term.Attributes{Fg: term.ColorCyan},
 		HighlightAttr: term.Attributes{Fg: 219, Bg: term.ColorRed},
+		MinWidth:      browser.DefaultConfig().MinWidth,
 	}
 	assert.Equal(t, expectedPrompt, cfg.promptConfig())
 

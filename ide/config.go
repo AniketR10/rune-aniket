@@ -212,40 +212,6 @@ func (c ideConfig) prompt() (config.Config, bool) {
 	return c.getConfig(b, "prompt")
 }
 
-func (c ideConfig) promptWidth() (ret int) {
-	ret = browser.DefaultConfig().PromptConfig.Width
-	cfg, ok := c.prompt()
-	if !ok {
-		return
-	}
-	width, err := cfg.GetInt("width")
-	if err != nil {
-		if err != config.ErrNotFound {
-			c.errors["prompt.width"] = err
-		}
-		return
-	}
-	ret = width
-	return
-}
-
-func (c ideConfig) promptHeight() (ret int) {
-	ret = browser.DefaultConfig().PromptConfig.Height
-	cfg, ok := c.prompt()
-	if !ok {
-		return
-	}
-	height, err := cfg.GetInt("height")
-	if err != nil {
-		if err != config.ErrNotFound {
-			c.errors["prompt.height"] = err
-		}
-		return
-	}
-	ret = height
-	return
-}
-
 func (c ideConfig) getCfgAttr(
 	key string, def term.Attributes,
 	cfgKey string,
@@ -282,6 +248,13 @@ func (c ideConfig) promptTextAttr() term.Attributes {
 func (c ideConfig) promptHighlightAttr() term.Attributes {
 	return c.getCfgAttr(
 		"highlight_attr", browser.DefaultConfig().HighlightAttr,
+		"prompt", c.prompt,
+	)
+}
+
+func (c ideConfig) promptBackgroundAttr() term.Attributes {
+	return c.getCfgAttr(
+		"background_attr", browser.DefaultConfig().BackgroundAttr,
 		"prompt", c.prompt,
 	)
 }
@@ -370,12 +343,11 @@ func (c ideConfig) commandOverlayConfig() text.CommandOverlayConfig {
 }
 
 func (c ideConfig) promptConfig() browser.PromptConfig {
-	return browser.PromptConfig{
-		Width:         c.promptWidth(),
-		Height:        c.promptHeight(),
-		TextAttr:      c.promptTextAttr(),
-		HighlightAttr: c.promptHighlightAttr(),
-	}
+	ret := browser.DefaultConfig().PromptConfig
+	ret.TextAttr = c.promptTextAttr()
+	ret.HighlightAttr = c.promptHighlightAttr()
+	ret.BackgroundAttr = c.promptBackgroundAttr()
+	return ret
 }
 
 func (c ideConfig) getConfig(cfg config.Config, key string) (config.Config, bool) {
