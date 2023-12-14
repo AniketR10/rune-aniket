@@ -5,6 +5,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/ernestrc/blue/logging"
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
@@ -97,7 +98,7 @@ func (e *Handler) Init(
 	e.windowManipulator.SetTitle(e.terminal.Pty().Slave.Name())
 	clip, err := sysclip.NewRegister()
 	if err != nil {
-		log.Warnf("system clipboard unsupported: %v", err)
+		e.log(log.WarnLevel, "system clipboard unsupported: %v", err)
 		clip = clipboard.NewInMemory()
 	}
 	e.mouseDriver = &mouseDriver{t: e.terminal, clipboard: clip}
@@ -112,10 +113,10 @@ func (e *Handler) Init(
 			logErr = multierr.Append(logErr, err)
 		}
 		if logErr != nil {
-			log.Errorf("terminal run: %v", logErr)
+			e.log(log.ErrorLevel, "terminal run: %v", logErr)
 			e.notifications.Notify(notifications.LevelError, "terminal run: %v", logErr)
 		} else {
-			log.Debugf("terminal run: ok")
+			e.log(log.DebugLevel, "terminal run: ok")
 		}
 	}()
 
@@ -131,12 +132,18 @@ func (e *Handler) Init(
 			}
 			err = e.publisher.Interrupt()
 			if err != nil {
-				log.Errorf("Interrupt: %s", err)
+				e.log(log.ErrorLevel, "interrupt: %s", err)
 			}
 		}
 	}()
 
 	return nil
+}
+
+func (e *Handler) log(level log.Level, msg string, args ...any) {
+	log.WithFields(log.Fields{
+		logging.KeyClass: "emulator.Handler",
+	}).Logf(level, msg, args...)
 }
 
 // Resize satisfies tui.Component.
@@ -153,7 +160,7 @@ func (e *Handler) Resize(width, height int) {
 	e.windowManipulator.ResizeInChars(height, width)
 	err := e.terminal.SetSize(uint16(height), uint16(width))
 	if err != nil {
-		log.Errorf("(%p).terminal.SetSize: %s", e, err)
+		e.log(log.ErrorLevel, "terminal set size: %s", err)
 		// do not notify if already closed
 		if !e.closed {
 			e.notifications.Notify(notifications.LevelError, "terminal set size: %v", err)
@@ -169,8 +176,9 @@ func (e *Handler) Draw(w term.Writer) {
 	e.drawSelection(w)
 }
 
-// Handle satisfies tui.Handler.
 func (e *Handler) Handle(ev term.Event) (exit, handled bool) {
+	e.log(log.TraceLevel, "handle: %+v", ev)
+
 	exit, handled, raw := e.handleInput(ev)
 	if exit || handled || len(raw) == 0 {
 		return
@@ -188,7 +196,7 @@ func (e *Handler) Handle(ev term.Event) (exit, handled bool) {
 
 	err := e.terminal.WriteToPty(raw)
 	if err != nil {
-		log.Errorf("(%p).emulator.Handle: %s", e, err)
+		e.log(log.ErrorLevel, "write to pty: %s", err)
 		e.notifications.Notify(notifications.LevelError, "write to pty: %v", err)
 		return
 	}
@@ -332,7 +340,7 @@ func (e *Handler) ScrollBottom() bool {
 // Close closes this terminal emulator and all the resources
 // associated with it.
 func (e *Handler) Close() error {
-	log.Tracef("(%p).emulator.Close", e)
+	e.log(log.TraceLevel, "close called")
 
 	e.terminal.Lock()
 	defer e.terminal.Unlock()
@@ -349,7 +357,7 @@ func (e *Handler) Close() error {
 	var ret error
 	if err := e.terminal.Close(); err != nil {
 		ret = multierr.Append(ret, err)
-		log.Errorf("(%p).emulator.Close(Pty): %s", e, err)
+		e.log(log.ErrorLevel, "terminal close: %s", err)
 	}
 	// we can't remove /dev/pts files so leave it up to the system
 	return ret
@@ -421,7 +429,7 @@ func (e *Handler) handleInput(ev term.Event) (exit, handled bool, raw []byte) {
 
 	exit = e.closed
 	if exit {
-		log.Debugf("(%p).emulator.Handle: closed", e)
+		e.log(log.DebugLevel, "handle: exit")
 		return
 	}
 
