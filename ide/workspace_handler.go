@@ -18,10 +18,10 @@ import (
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
+	browserapi "unstable.build/go-tui/api/browser"
 	"unstable.build/go-tui/api/config"
 	textapi "unstable.build/go-tui/api/text"
 	workspaceapi "unstable.build/go-tui/api/workspace"
-	browserapi "unstable.build/go-tui/api/browser"
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/handler"
@@ -225,7 +225,7 @@ func (h *workspaceManagerHandler) init(
 func (h *workspaceManagerHandler) initWithRestorePrompt(
 	ex *ex,
 	workspaceURI workspaceapi.URI,
-	cache map[string]file,
+	cache []file,
 ) error {
 	const (
 		restoreCwd = "Yes"
@@ -250,8 +250,8 @@ func (h *workspaceManagerHandler) initWithRestorePrompt(
 
 			switch option {
 			case restoreCwd:
-				for uriStr := range cache {
-					uri, uerr := workspaceapi.ParseURI(uriStr)
+				for _, file := range cache {
+					uri, uerr := workspaceapi.ParseURI(file.URIString)
 					if uerr != nil {
 						err = multierror.Append(err, uerr)
 						continue
@@ -643,8 +643,8 @@ func (h *workspaceManagerHandler) addWorkspace(
 		return nil
 	}
 
-	for uri := range prevSessionFiles {
-		uri, uerr := workspaceapi.ParseURI(uri)
+	for _, f := range prevSessionFiles {
+		uri, uerr := workspaceapi.ParseURI(f.URIString)
 		if uerr != nil {
 			err = multierror.Append(err, uerr)
 			continue

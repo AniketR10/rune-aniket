@@ -2,6 +2,7 @@ package ide
 
 import (
 	"context"
+	"sort"
 	"time"
 
 	"github.com/ernestrc/blue/document"
@@ -22,7 +23,9 @@ var (
 )
 
 type file struct {
-	Dirty bool
+	Dirty     bool
+	UpdatedAt time.Time
+	URIString string
 }
 
 type cache struct {
@@ -72,7 +75,7 @@ func (h *history) loadWorkspaceData(uri workspaceapi.URI, restore bool) {
 
 func (h *history) recordAddWorkspace(
 	uri workspaceapi.URI, ed text.Editor, restore bool,
-) map[string]file {
+) (ret []file) {
 	h.loadWorkspaceData(uri, restore)
 
 	uriStr := uri.String()
@@ -81,8 +84,15 @@ func (h *history) recordAddWorkspace(
 	if err != nil {
 		h.log(log.ErrorLevel, "could not subscribe to file events: %v", err)
 	}
-	ret := h.cache[uriStr].Files
+	mapFiles := h.cache[uriStr].Files
+	ret = make([]file, 0, len(h.cache))
+	for _, f := range mapFiles {
+		ret = append(ret, f)
+	}
 	h.log(log.TraceLevel, "record add workspace: %v", ret)
+	sort.Slice(ret, func(i, j int) bool {
+		return ret[i].UpdatedAt.Before(ret[j].UpdatedAt)
+	})
 	return ret
 }
 
@@ -141,17 +151,21 @@ func (h *workspaceHistory) Handle(ctx context.Context, ev textapi.Event) bool {
 
 	switch ev.Type {
 	case textapi.EventTypeOpen:
-		workspaceCache.Files[evUriStr] = file{}
+		workspaceCache.Files[evUriStr] = makeFile(evUriStr, false)
 	case textapi.EventTypeClose:
 		delete(workspaceCache.Files, evUriStr)
 	case textapi.EventTypeFlush:
-		workspaceCache.Files[evUriStr] = file{}
+		workspaceCache.Files[evUriStr] = makeFile(evUriStr, false)
 	case textapi.EventTypeEdit:
-		workspaceCache.Files[evUriStr] = file{Dirty: true}
+		workspaceCache.Files[evUriStr] = makeFile(evUriStr, true)
 	}
 
 	h.persistUpdateCache(h.uri, workspaceCache)
 	return false
+}
+
+func makeFile(uri string, dirty bool) file {
+	return file{Dirty: dirty, URIString: uri, UpdatedAt: time.Now()}
 }
 
 func (h *workspaceHistory) persistUpdateCache(uri string, cache cache) {
