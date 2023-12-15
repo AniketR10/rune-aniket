@@ -749,6 +749,7 @@ func TestCursorInsertLine(t *testing.T) {
 			e.cursor.Y = 2
 			e.cursor.X = 9
 
+			assert.Equal(t, term.Coordinates{Y: 2, X: 9}, e.Coordinates())
 			e.InsertLineAbove()
 			assert.Equal(t, 0, len(e.scroll.Buffer().RawCells()[2]))
 			assert.Equal(t, 34, e.scroll.Buffer().Rows())
@@ -1176,6 +1177,16 @@ func testCursorSelect(t *testing.T, width, height int) {
 		data, err := c.Paste(clipboard.DefaultRegisterID)
 		require.NoError(t, err)
 		assert.Equal(t, e.scroll.Buffer().String(), data.Text)
+	})
+
+	t.Run("Select/CopySelection doesn't panic if width is 0", func(t *testing.T) {
+		e := makeSelect(t)
+		e.scroll.Wrap = true
+		e.scroll.Resize(0, 0)
+		c := clipboard.NewInMemory()
+		assert.NotPanics(t, func() {
+			e.CopySelection(clipboard.DefaultRegisterID, c)
+		})
 	})
 
 	t.Run("SelectLine/CopySelection copies from start line to end line", func(t *testing.T) {
@@ -2326,7 +2337,7 @@ func benchmarkCursorMoveMatchingRune(b *testing.B, width, height int, wrap bool)
 	s := newBenchmarkScroll(width, height, 1)
 	s.Wrap = wrap
 	cursor := NewCursor(s)
-	cursor.MoveToMark(CursorMark{term.Coordinates{Y: 7}})
+	cursor.MoveToMark(CursorMark{term.Coordinates{Y: 7}, term.Coordinates{}})
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -2362,7 +2373,7 @@ func benchmarkCursorMoveToRune(b *testing.B, width, height int, wrap bool) {
 	s := newBenchmarkScroll(width, height, 100)
 	s.Wrap = wrap
 	cursor := NewCursor(s)
-	cursor.MoveToMark(CursorMark{term.Coordinates{Y: 7}})
+	cursor.MoveToMark(CursorMark{term.Coordinates{Y: 7}, term.Coordinates{}})
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {

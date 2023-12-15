@@ -133,6 +133,7 @@ func (c *Cursor) buffer() *cell.Buffer {
 type CursorMark struct {
 	// this allows to keep cursor position semantics hidden from clients
 	internal term.Coordinates
+	offset   term.Coordinates
 }
 
 // Before returns true if other is before CursorMark.
@@ -144,13 +145,14 @@ func (c CursorMark) Before(other term.Coordinates) bool {
 // Mark returns the current cursor position as a CursorMark
 // to later be used in calls to MoveToMark.
 func (c *Cursor) Mark() CursorMark {
-	return CursorMark{internal: c.cursor}
+	return CursorMark{internal: c.cursor, offset: c.scroll.Offset()}
 }
 
 // MoveToMark moves the cursor to the position represented by mark.
 func (c *Cursor) MoveToMark(mark CursorMark) CursorMark {
 	ret := c.cursor
-	c.setCursor(mark.internal, true)
+	c.setCursor(mark.internal, false)
+	c.scroll.SetOffset(mark.offset)
 	return CursorMark{internal: ret}
 }
 
@@ -197,10 +199,14 @@ func (c *Cursor) MoveToScroll(pos term.Coordinates) (
 // the bounds of the current view, then underlying scroll is used
 // to seek to pos.
 func (c *Cursor) moveToScroll(pos term.Coordinates) {
+	var windowPos term.Coordinates
 	if c.scroll.Width() == 0 && c.scroll.Wrap {
-		return
+		// best effort, assume no wrap when width is 0
+		windowPos = cell.CoordinatesDiff(pos, c.scroll.Offset())
+	} else {
+		windowPos = ScrollToWindowCoordinates(c.scroll, pos)
 	}
-	c.setCursor(ScrollToWindowCoordinates(c.scroll, pos), true)
+	c.setCursor(windowPos, true)
 }
 
 func (c *Cursor) seekToScrollCoordinates() {
@@ -333,7 +339,7 @@ func (c *Cursor) MoveLastLine() (ok bool) {
 // the content if required. It returns false and does nothing when the end
 // of the content is reached.
 func (c *Cursor) MoveDown() (ok bool) {
-	pos := c.Coordinates() // use actual render coordinates, wraps included
+	pos := c.cursor
 	if pos.Y+1 >= c.scroll.SizeHeight() {
 		ok = c.scroll.SeekDown()
 		if ok {
@@ -508,10 +514,7 @@ func (c *Cursor) moveAfterRune(skip, special map[rune]struct{}, move func() bool
 	)
 
 	initialScrollPos := c.cursorAtScroll()
-	initialPos := c.cursor
-	initialOffset := c.scroll.Offset()
-	lastSanePos := initialPos
-	lastSaneOffset := initialOffset
+	mark := c.Mark()
 	state := init
 
 	cell, cOk := c.cellAtCursor()
@@ -529,8 +532,7 @@ func (c *Cursor) moveAfterRune(skip, special map[rune]struct{}, move func() bool
 			continue
 		}
 		ok = true
-		lastSanePos = c.cursor
-		lastSaneOffset = c.scroll.Offset()
+		mark = c.Mark()
 
 		if initialScrollPos.Y != c.cursorAtScroll().Y {
 			state = foundRune
@@ -552,13 +554,8 @@ func (c *Cursor) moveAfterRune(skip, special map[rune]struct{}, move func() bool
 		}
 	}
 
-	c.revertTo(lastSanePos, lastSaneOffset)
+	c.MoveToMark(mark)
 	return
-}
-
-func (c *Cursor) revertTo(pos, offset term.Coordinates) {
-	c.setCursor(pos, true)
-	c.scroll.SetOffset(offset)
 }
 
 func (c *Cursor) moveBeforeRune(skip, all map[rune]struct{}, move func() bool) (ok bool) {
@@ -573,10 +570,7 @@ func (c *Cursor) moveBeforeRune(skip, all map[rune]struct{}, move func() bool) (
 
 	state := skipRune
 	initialScrollPos := c.cursorAtScroll()
-	initial := c.cursor
-	initialOffset := c.scroll.Offset()
-	prev := initial
-	prevOffset := initialOffset
+	mark := c.Mark()
 
 	for move() {
 		cell, cOk := c.cellAtCursor()
@@ -591,8 +585,7 @@ func (c *Cursor) moveBeforeRune(skip, all map[rune]struct{}, move func() bool) (
 			}
 			if isOneOf(cell, all) {
 				state = done
-				prev = c.cursor
-				prevOffset = c.scroll.Offset()
+				mark = c.Mark()
 			} else {
 				state = findRune
 			}
@@ -607,13 +600,12 @@ func (c *Cursor) moveBeforeRune(skip, all map[rune]struct{}, move func() bool) (
 		if state == done {
 			break
 		}
-		prev = c.cursor
-		prevOffset = c.scroll.Offset()
+		mark = c.Mark()
 	}
 
 	if state == done {
 		ok = true
-		c.revertTo(prev, prevOffset)
+		c.MoveToMark(mark)
 	}
 	return
 }
@@ -1113,10 +1105,13 @@ func (c *Cursor) CopySelection(registerID string, clip clipboard.Register) (ok b
 		return
 	}
 
+	enable := c.disablePublishing()
+	defer enable()
+
 	selection := c.Selection()
 	mode := c.selection.mode
 	c.Unselect()
-	c.setCursor(ScrollToWindowCoordinates(c.scroll, c.selection.scrollFrom), true)
+	c.moveToScroll(c.selection.scrollFrom)
 
 	ok = true
 	clip.Copy(registerID, clipboard.Data{Text: selection, Metadata: mode})
@@ -1201,13 +1196,16 @@ func (c *Cursor) MoveToPrevNonNull() {
 func (c *Cursor) moveToChar(
 	ch rune, findResult func(int, cell.Searcher) (term.Coordinates, bool),
 ) bool {
+	enable := c.disablePublishing()
+	defer enable()
+
 	cursor := c.cursorAtScroll()
 	lastPos := c.view().Columns(cursor.Y)
 	start := term.Coordinates{Y: cursor.Y}
 	end := term.Coordinates{Y: cursor.Y, X: lastPos}
 
 	cells, ok := c.buffer().Select(start, end)
-	if !ok || len(cells) == 0 || (c.scroll.Width() == 0 && c.scroll.Wrap) {
+	if !ok || len(cells) == 0 {
 		return false
 	}
 
@@ -1224,10 +1222,7 @@ func (c *Cursor) moveToChar(
 		return false
 	}
 
-	resultAtScroll := term.Coordinates{Y: cursor.Y, X: result.X}
-
-	resultAtWindow := ScrollToWindowCoordinates(c.scroll, resultAtScroll)
-	c.setCursor(resultAtWindow, true)
+	c.moveToScroll(term.Coordinates{Y: cursor.Y, X: result.X})
 
 	return true
 }
@@ -1567,7 +1562,8 @@ func (c *Cursor) ScrollCoordinates(pos term.Coordinates) term.Coordinates {
 // WindowCoordinates translates scroll coordinates to the window coordinates system.
 func (c *Cursor) WindowCoordinates(pos term.Coordinates) term.Coordinates {
 	if c.scroll.Width() == 0 && c.scroll.Wrap {
-		return pos // avoid division by zero
+		// best effort conversion, if scroll width is 0 assume no wrap
+		return cell.CoordinatesDiff(pos, c.scroll.Offset())
 	}
 	return ScrollToWindowCoordinates(c.scroll, pos)
 }
@@ -1652,6 +1648,7 @@ func (c *Cursor) moveMatchRuneBackward(target, match rune) bool {
 
 func (c *Cursor) setCursorAfterUpdate(atScroll term.Coordinates) {
 	if c.scroll.Width() == 0 && c.scroll.Wrap {
+		// nothing should be updating if width of the scroll is 0!
 		return
 	}
 	c.scroll.RecalculateWraps()
