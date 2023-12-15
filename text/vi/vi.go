@@ -7,7 +7,6 @@ import (
 	textapi "unstable.build/go-tui/api/text"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
-	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
@@ -279,11 +278,6 @@ func (vi *Vi) SetCursorAtScroll(pos term.Coordinates) bool {
 // CursorAtScroll sets the cursor of this Vi handler at content pos.
 func (vi *Vi) CursorAtScroll() term.Coordinates {
 	return vi.handler.cursorAtScroll()
-}
-
-// SubscribeScroll subscribe sub to scroll events.
-func (vi *Vi) SubscribeScroll(sub component.ScrollSubscriber) {
-	vi.handler.subscribeScroll(sub)
 }
 
 // CellView returns the underlying cell.View.

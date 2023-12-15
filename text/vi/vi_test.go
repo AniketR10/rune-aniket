@@ -9,7 +9,6 @@ import (
 	textapi "unstable.build/go-tui/api/text"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
-	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/text/clipboard"
@@ -71,8 +70,6 @@ func (h *mockHandler) setCursorAtScroll(pos term.Coordinates) bool {
 }
 func (h *mockHandler) cursorAtScroll() term.Coordinates {
 	return term.Coordinates{}
-}
-func (h *mockHandler) subscribeScroll(sub component.ScrollSubscriber) {
 }
 
 func TestViHandle100(t *testing.T) {

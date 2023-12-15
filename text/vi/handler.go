@@ -8,7 +8,6 @@ import (
 	"unstable.build/go-tui"
 	textapi "unstable.build/go-tui/api/text"
 	"unstable.build/go-tui/cell"
-	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
@@ -49,7 +48,6 @@ type viHandler interface {
 	setLocationList(pri textapi.LocationPriority, ID string, l text.LocationList)
 	setCursorAtScroll(pos term.Coordinates) bool
 	cursorAtScroll() term.Coordinates
-	subscribeScroll(sub component.ScrollSubscriber)
 	moveToBounds()
 }
 
@@ -797,10 +795,6 @@ func (vi *viHandlerImpl) setCursorAtScroll(pos term.Coordinates) bool {
 // CursorAtScroll sets the cursor of this viHandlerImpl handler at content pos.
 func (vi *viHandlerImpl) cursorAtScroll() term.Coordinates {
 	return vi.cursor.CursorAtScroll()
-}
-
-func (vi *viHandlerImpl) subscribeScroll(sub component.ScrollSubscriber) {
-	vi.cursor.SubscribeScroll(sub)
 }
 
 func (vi *viHandlerImpl) mode() viMode {
