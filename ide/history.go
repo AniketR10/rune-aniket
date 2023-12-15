@@ -10,6 +10,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	textapi "unstable.build/go-tui/api/text"
 	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
 )
 
@@ -19,12 +20,14 @@ var (
 		textapi.EventTypeClose,
 		textapi.EventTypeFlush,
 		textapi.EventTypeEdit,
+		textapi.EventTypeCursor,
 	}
 )
 
 type file struct {
 	Dirty     bool
-	UpdatedAt time.Time
+	OpenAt    time.Time
+	Cursor    term.Coordinates
 	URIString string
 }
 
@@ -91,12 +94,15 @@ func (h *history) recordAddWorkspace(
 	}
 	h.log(log.TraceLevel, "record add workspace: %v", ret)
 	sort.Slice(ret, func(i, j int) bool {
-		return ret[i].UpdatedAt.Before(ret[j].UpdatedAt)
+		return ret[i].OpenAt.Before(ret[j].OpenAt)
 	})
 	return ret
 }
 
 func (h *history) recordCloseWorkspace(uri workspaceapi.URI) {
+	for uri, cache := range h.cache {
+		persistUpdateCache(h.svc, uri, cache)
+	}
 	// no need to unsubscibe as everything will be garbage collected
 	// and workspaceHistory has protection against receiving events
 	// once already deleted.
@@ -148,40 +154,53 @@ func (h *workspaceHistory) Handle(ctx context.Context, ev textapi.Event) bool {
 	}
 
 	evUriStr := ev.URI.String()
+	prev, _ := workspaceCache.Files[evUriStr]
 
 	switch ev.Type {
 	case textapi.EventTypeOpen:
-		workspaceCache.Files[evUriStr] = makeFile(evUriStr, false)
-		h.persistUpdateCache(h.uri, workspaceCache)
+		workspaceCache.Files[evUriStr] = makeFile(
+			evUriStr, prev.Cursor, false, time.Now())
+		persistUpdateCache(h.svc, h.uri, workspaceCache)
 	case textapi.EventTypeClose:
 		delete(workspaceCache.Files, evUriStr)
-		h.persistUpdateCache(h.uri, workspaceCache)
+		persistUpdateCache(h.svc, h.uri, workspaceCache)
 	case textapi.EventTypeFlush:
-		workspaceCache.Files[evUriStr] = makeFile(evUriStr, false)
-		h.persistUpdateCache(h.uri, workspaceCache)
+		workspaceCache.Files[evUriStr] = makeFile(
+			evUriStr, prev.Cursor, false, prev.OpenAt)
+		persistUpdateCache(h.svc, h.uri, workspaceCache)
+	case textapi.EventTypeCursor:
+		workspaceCache.Files[evUriStr] = makeFile(
+			evUriStr, ev.From, prev.Dirty, prev.OpenAt)
+		// do not store on cursor, as it could significantly impact performance
 	case textapi.EventTypeEdit:
-		workspaceCache.Files[evUriStr] = makeFile(evUriStr, true)
+		workspaceCache.Files[evUriStr] = makeFile(
+			evUriStr, prev.Cursor, true, prev.OpenAt)
 		// do not store on edit, as it could significantly impact performance
 	}
 
 	return false
 }
 
-func makeFile(uri string, dirty bool) file {
-	return file{Dirty: dirty, URIString: uri, UpdatedAt: time.Now()}
+func makeFile(uri string, cursor term.Coordinates, dirty bool, updated time.Time) file {
+	return file{
+		Dirty:     dirty,
+		URIString: uri,
+		Cursor:    cursor,
+		OpenAt:    updated,
+	}
 }
 
-func (h *workspaceHistory) persistUpdateCache(uri string, cache cache) {
+func persistUpdateCache(svc document.Service, uri string, cache cache) {
 	const cacheSetTimeout = 1 * time.Second
 	ctx, cancel := context.WithTimeout(context.Background(), cacheSetTimeout)
 	defer cancel()
 
-	err := h.svc.Set(ctx, uri, cache)
+	err := svc.Set(ctx, uri, cache)
 	if err != nil {
 		log.WithFields(log.Fields{logging.KeyClass: "ide.history"}).
 			Warnf("could not persist updated cache to durable storage: %v", err)
 		return
 	}
 	log.WithFields(log.Fields{logging.KeyClass: "ide.history"}).
-		Tracef("persisted updated cache for workspace %s", h.uri)
+		Tracef("persisted updated cache for workspace %s", uri)
 }

@@ -415,12 +415,12 @@ func (e *ex) dispatchCommand(cmd string, args ...string) (err error) {
 	return
 }
 
-func (e *ex) editFileURI(uri workspaceapi.URI, win browser.Window) error {
+func (e *ex) editFileURI(uri workspaceapi.URI, win browser.Window) (*browser.Tab, error) {
 	e.log(log.DebugLevel, "edit: %s", uri.String())
 
 	h, err := e.comp.Open(uri)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if win.Closed() {
 		win, _ = e.comp.Focus()
@@ -429,7 +429,7 @@ func (e *ex) editFileURI(uri workspaceapi.URI, win browser.Window) error {
 	if err == browserapi.ErrTabNotFree {
 		err = nil
 	}
-	return err
+	return h.(*browser.Tab), err
 }
 
 func (e *ex) parseURIOrWorkspaceURI(path string) (workspaceapi.URI, error) {
@@ -453,7 +453,7 @@ func (e *ex) editFiles(args ...string) error {
 		if err != nil {
 			return err
 		}
-		err = e.editFileURI(uri, e.invokeWindow())
+		_, err = e.editFileURI(uri, e.invokeWindow())
 		if err != nil {
 			return err
 		}
@@ -470,7 +470,8 @@ func (e *ex) reloadFile(args ...string) error {
 		return errors.New("not a file")
 	}
 	b.RemoveWindowContent(focus)
-	return e.editFileURI(uri, e.invokeWindow())
+	_, err := e.editFileURI(uri, e.invokeWindow())
+	return err
 }
 
 func (e *ex) splitDirectionChange(args ...string) error {

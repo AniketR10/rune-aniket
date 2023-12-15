@@ -153,6 +153,22 @@ func TestBrowserHandlerDraw(t *testing.T) {
 	})
 }
 
+func TestComponentOpenEditorIntegration(t *testing.T) {
+	b := newExForTesting(t, texttest.NopEditor(),
+		text.WithCommandKey(testCommandKey),
+		text.WithCommandOverlayConfig(testCommandOverlayConfig()),
+	)
+	uri, err := workspaceapi.ParseURI("file:///bugz")
+	require.NoError(t, err)
+
+	tab, err := b.editFileURI(uri, b.invokeWindow())
+	require.NoError(t, err)
+	assert.NotPanics(t, func() {
+		_ = tab.Handler().(text.Handler)
+	})
+	assert.NoError(t, b.Close())
+}
+
 func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 	cases := []testutil.HandlerSequenceTestCase{
 		{"a",

@@ -634,9 +634,15 @@ func (h *workspaceManagerHandler) openPrevSessionFiles(
 			log.Warnf("parse uri from previous session file: %v", uerr)
 			continue
 		}
-		ferr := ex.editFileURI(uri, invokeWindow)
+		t, ferr := ex.editFileURI(uri, invokeWindow)
 		if ferr != nil {
 			err = multierror.Append(err, ferr)
+			continue
+		}
+		ed := t.Handler().(text.Handler)
+		if serr := ex.Editor().SetCursor(ed, f.Cursor); serr != nil {
+			log.Warnf("set cursor %v: %v", f.Cursor, serr)
+			continue
 		}
 	}
 	return err
