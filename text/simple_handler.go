@@ -11,13 +11,14 @@ import (
 )
 
 type simpleEditorHandler struct {
-	buf       *cell.Buffer
-	less      handler.Less
-	resource  workspaceapi.URI
-	cursor    Cursor
-	height    int
-	mouse     *Mouse
-	clipboard clipboard.Register
+	buf              *cell.Buffer
+	less             handler.Less
+	resource         workspaceapi.URI
+	cursor           Cursor
+	height           int
+	mouse            *Mouse
+	clipboard        clipboard.Register
+	pendingSetCursor *term.Coordinates
 }
 
 // NewSimpleHandler returns a modeless, simple-to-use text.Handler.
@@ -56,6 +57,9 @@ func (h *simpleEditorHandler) Init(
 func (h *simpleEditorHandler) Resize(width, height int) {
 	h.height = height
 	h.less.Resize(width, height)
+	if h.pendingSetCursor != nil {
+		h.setCursor(*h.pendingSetCursor)
+	}
 }
 
 // Draw satisfies tui.Component
@@ -69,6 +73,9 @@ func (h *simpleEditorHandler) Draw(w term.Writer) {
 }
 
 func (h *simpleEditorHandler) Handle(ev term.Event) (exit, handled bool) {
+	// only a user event clears a pending set cursor
+	h.pendingSetCursor = nil
+
 	if ev.Type == term.EventMouse {
 		return h.mouse.Handle(ev)
 	}
@@ -164,4 +171,14 @@ func (h *simpleEditorHandler) SetWrap(wrap bool) {
 }
 func (t *simpleEditorHandler) ShowCommandBar(show bool) {
 	t.less.ShowCommandBar(show)
+}
+
+func (h *simpleEditorHandler) setCursor(pos term.Coordinates) bool {
+	// setCursor should be robust against resizes, etc.
+	// only the first client interaction should clear this position
+	h.pendingSetCursor = new(term.Coordinates)
+	*h.pendingSetCursor = pos
+
+	_, ok := h.cursor.MoveToScroll(pos)
+	return ok
 }

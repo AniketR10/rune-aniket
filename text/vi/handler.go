@@ -68,6 +68,7 @@ type viHandlerImpl struct {
 		From term.Coordinates
 		To   term.Coordinates
 	}
+	pendingSetCursor *term.Coordinates
 }
 
 // DefaultviHandlerImplConfig is a sane configuration defaults for viHandlerImpl.
@@ -105,6 +106,10 @@ func (vi *viHandlerImpl) init(buf *cell.Buffer, opts ...Option) {
 // Resize : tui.Component
 func (vi *viHandlerImpl) Resize(width, height int) {
 	vi.less.Resize(width, height)
+	if vi.pendingSetCursor != nil {
+		pos := *vi.pendingSetCursor
+		vi.setCursorAtScroll(pos)
+	}
 }
 
 func (vi *viHandlerImpl) setActiveLocationListMessage(locs map[string]textapi.Location) {
@@ -693,6 +698,9 @@ func (vi *viHandlerImpl) handleGo(ev term.Event) (quit, handled bool) {
 
 // Handle : tui.Handler
 func (vi *viHandlerImpl) Handle(ev term.Event) (quit, handled bool) {
+	// only a user event clears a pending set cursor
+	vi.pendingSetCursor = nil
+
 	moveToBounds := vi.prepareHandle()
 	defer moveToBounds()
 
@@ -787,6 +795,11 @@ func (vi *viHandlerImpl) setLocationList(
 
 // SetCursorAtScroll sets the cursor of this viHandlerImpl handler at content pos.
 func (vi *viHandlerImpl) setCursorAtScroll(pos term.Coordinates) bool {
+	// setCursorAtScroll should be robust against resizes, etc.
+	// only the first client interaction should clear this position
+	vi.pendingSetCursor = new(term.Coordinates)
+	*vi.pendingSetCursor = pos
+
 	_, ok := vi.cursor.MoveToScroll(pos)
 	vi.free = vi.cursor.Mark()
 	return ok

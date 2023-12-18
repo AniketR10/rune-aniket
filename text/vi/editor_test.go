@@ -174,6 +174,7 @@ func TestEditorSetCursor(t *testing.T) {
 				err = ed.SetCursor(h, term.Coordinates{})
 				require.NoError(t, err)
 			})
+
 		t.Run(fmt.Sprintf("wrap: %v, sets cursor at position", wrap),
 			func(t *testing.T) {
 				buf := cell.NewBuffer()
@@ -195,6 +196,49 @@ func TestEditorSetCursor(t *testing.T) {
 				} else {
 					assert.Equal(t, term.Coordinates{X: 1}, pos)
 				}
+			})
+
+		t.Run(fmt.Sprintf("wrap: %v, should be robust against Resize", wrap),
+			func(t *testing.T) {
+				buf := cell.NewBuffer()
+				buf.WriteString("aaaaaaaaaaaaaaaa\nbb\nc\nd\ne")
+				ed := Editor(WithWrap(wrap))
+				h, err := ed.Edit(uri, buf)
+				require.NoError(t, err)
+				cursor := h.(interface{ CursorReference() *text.Cursor }).CursorReference()
+
+				err = ed.SetCursor(h, term.Coordinates{Y: 3})
+				require.NoError(t, err)
+
+				pos, err := ed.Cursor(h)
+				require.NoError(t, err)
+				assert.Equal(t, term.Coordinates{Y: 3}, pos)
+				assert.Equal(t, term.Coordinates{}, cursor.Coordinates())
+				assert.Equal(t, term.Coordinates{Y: 3}, cursor.CursorAtScroll())
+
+				h.Resize(1, 1)
+				pos, err = ed.Cursor(h)
+				require.NoError(t, err)
+				assert.Equal(t, term.Coordinates{Y: 3}, pos)
+				assert.Equal(t, term.Coordinates{}, cursor.Coordinates())
+				assert.Equal(t, term.Coordinates{Y: 3}, cursor.CursorAtScroll())
+
+				err = ed.SetCursor(h, term.Coordinates{Y: 4})
+				require.NoError(t, err)
+
+				h.Resize(10, 10)
+				pos, err = ed.Cursor(h)
+				require.NoError(t, err)
+				assert.Equal(t, term.Coordinates{Y: 4}, pos)
+				assert.Equal(t, term.Coordinates{}, cursor.Coordinates())
+				assert.Equal(t, term.Coordinates{Y: 4}, cursor.CursorAtScroll())
+
+				h.Resize(2, 2)
+				pos, err = ed.Cursor(h)
+				require.NoError(t, err)
+				assert.Equal(t, term.Coordinates{Y: 4}, pos)
+				assert.Equal(t, term.Coordinates{}, cursor.Coordinates())
+				assert.Equal(t, term.Coordinates{Y: 4}, cursor.CursorAtScroll())
 			})
 	}
 }

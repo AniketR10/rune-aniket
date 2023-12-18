@@ -170,3 +170,8 @@ func (p *cursorPublisher) Handle(ev term.Event) (bool, bool) {
 
 	return p.Handler.Handle(ev)
 }
+
+// helper for internal tests
+func (p *cursorPublisher) CursorReference() *Cursor {
+	return p.cursor
+}
