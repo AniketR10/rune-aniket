@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
+	_ "net/http/pprof"
 	"sync"
 	"testing"
 
@@ -176,17 +177,9 @@ func TestWorkspaceExtensions(t *testing.T) {
 }
 
 func TestWorkspaceManagerHandlerDraw(t *testing.T) {
-	var closeFns []func() error
-
-	defer func() {
-		for _, close := range closeFns {
-			close()
-		}
-	}()
-
 	fn := func(t *testing.T) tui.Handler {
 		m := newTestWorkspaceManagerHandler(t, defaultCfg(), nil)
-		closeFns = append(closeFns, m.Close)
+		t.Cleanup(func() { m.Close() })
 		return m
 	}
 
@@ -228,8 +221,8 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 			`┌──────────────────┐
 │12345aZZ          │
 ├──────────────────┤
-│▐                 │
 │                  │
+│▐                 │
 │                  │
 │                  │
 │                  │
@@ -239,25 +232,25 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 			`┌──────────────────┐
 │12345aZZ          │
 ├──────────────────┤
-│▐ello             │
 │hello             │
+│▐ello             │
 │                  │
 │                  │
 │                  │
 │:           NORMAL│
 └──────────────────┘`},
-		{":edit memory:///12345aZZ>ihello<yyp:w>:reloadWorkspace>", // full uri
+		{":edit memory\\:///12345aZZ>ihello<yyp:w>:reloadWorkspace>", // full uri
 			`┌──────────────────┐
 │12345aZZ          │
 ├──────────────────┤
-│▐ello             │
 │hello             │
+│▐ello             │
 │                  │
 │                  │
 │                  │
 │:           NORMAL│
 └──────────────────┘`},
-		{":cwo>:aw /tmp>:edit 12345aZZ>:w>:cwo>:aw  /tmp>", // prompt
+		{":cwo>:aw memory\\:///tmp2>:edit 12345aZZ>:w>:cwo>:aw  memory\\:///tmp2>", // prompt
 			`┌──────────────────┐
 │                  │
 ├──────────────────┤
@@ -270,7 +263,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 └──────────────────┘`},
 		// prompt resets cache (use file scheme to avoid needing
 		// to use ':' to indicate memory scheme)
-		{":cwo>:aw /tmp>:edit 12345aZZ>:w>:cwo>:aw  /tmp>y",
+		{":cwo>:aw memory\\:///tmp2>:edit 12345aZZ>:w>:cwo>:aw  memory\\:///tmp2>y",
 			`┌──────────────────┐
 │12345aZZ          │
 ├──────────────────┤
@@ -281,7 +274,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 │                  │
 │:           NORMAL│
 └──────────────────┘`},
-		{":cwo>:aw /tmp>edit 12345aZZ>:w>:cwo>:aw  /tmp>n:cwo>:aw  /tmp>", // prompt no: resets cache
+		{":cwo>:aw memory\\:///tmp2>edit 12345aZZ>:w>:cwo>:aw  memory\\:///tmp2>n:cwo>:aw  memory\\:///tmp2>", // prompt no: resets cache
 			`┌──────────────────┐
 │                  │
 ├──────────────────┤
@@ -402,7 +395,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 ├──────────────────┤
 │1  3              │
 └──────────────────┘`},
-		{":sw 4>:addWorkspace />", // can give path as arg to addWorkspace
+		{":sw 4>:addWorkspace memory\\:///>", // can give path as arg to addWorkspace
 			`┌──────────────────┐
 │                  │
 ├──────────────────┤
@@ -631,9 +624,9 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 				dir, err := ioutil.TempDir("", "")
 				require.NoError(t, err)
 				manager := workspace.NewManager(config.NopConfig())
-				require.NoError(t, manager.RegisterScheme(workspace.FileScheme,
-					workspace.NewFileScheme))
-				uri, err := workspaceapi.ParseURI(fmt.Sprintf("file:///%s", dir))
+				require.NoError(t, manager.RegisterScheme(workspace.MemoryScheme,
+					workspace.NewMemoryScheme))
+				uri, err := workspaceapi.ParseURI(fmt.Sprintf("memory:///%s", dir))
 				require.NoError(t, err)
 				cfg := defaultConfigWithWrap(wrap)
 				cfg.cfg["workspace"].(map[string]interface{})["auto_restore"] = true
@@ -781,11 +774,14 @@ func newTestWorkspaceManagerHandlerWithManagerAndExtensions(
 	uri workspaceapi.URI, cfg ideConfig, runner ExtensionsRunner,
 	extensions map[string]Extension, files []string, dir string,
 ) *testWorkspaceManagerHandler {
+	homeURI, err := workspaceapi.ParseURI("memory:///home")
+	require.NoError(t, err)
+
 	m := new(testWorkspaceManagerHandler)
 	m.workspaceManagerHandler = new(workspaceManagerHandler)
 	// ensure that command manual is never shown
 	cfg.cfg["command"] = defaultCfg().cfg["command"]
-	err := m.workspaceManagerHandler.init(uri, manager, cfg, "", files,
+	err = m.workspaceManagerHandler.init(uri, homeURI, manager, cfg, "", files,
 		dir, func(term.Event) bool {
 			return true
 		}, runner, new(sync.Mutex), extensions,
@@ -800,10 +796,8 @@ func newTestWorkspaceManagerHandlerWithDir(
 	manager := workspace.NewManager(config.NopConfig())
 	require.NoError(t, manager.RegisterScheme(workspace.MemoryScheme,
 		workspace.NewMemoryScheme))
-	require.NoError(t, manager.RegisterScheme(workspace.FileScheme,
-		workspace.NewFileScheme))
 
-	uri, err := workspaceapi.ParseURI("memory:///tmp")
+	uri, err := workspaceapi.ParseURI(fmt.Sprintf("memory://%s", dir))
 	require.NoError(t, err)
 	runner := FuncExtensionsRunner(testRunnerFn)
 	return newTestWorkspaceManagerHandlerWithManagerAndExtensions(t, manager,

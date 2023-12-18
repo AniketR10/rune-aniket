@@ -125,7 +125,17 @@ func (i *IDE) init(
 		return err
 	}
 
-	root, err := newWorkspaceManagerHandler(cwdURI,
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("user home dir: %v", err)
+	}
+
+	homeDirURI, err := workspaceapi.CurrentUserHostURI(homeDir)
+	if err != nil {
+		return fmt.Errorf("home dir uri: %v", err)
+	}
+
+	root, err := newWorkspaceManagerHandler(cwdURI, homeDirURI,
 		workspaceManager, i.ideConfig, recfilename, filenames,
 		sixDir, i.publishEvent, op.extensionRunner, i.locker, op.extensions,
 		func() (ideConfig, error) {

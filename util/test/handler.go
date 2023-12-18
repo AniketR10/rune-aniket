@@ -35,7 +35,13 @@ func handleTestCase(
 	require.NoError(t, err)
 
 	var shouldSleep time.Duration
+	var escapeNext bool
 	for _, r := range tcase.InputSequence {
+		if escapeNext {
+			escapeNext = false
+			h.Handle(term.Event{Ch: r, Type: term.EventKey})
+			continue
+		}
 		switch r {
 		case ':':
 			h.Handle(term.Event{Key: term.KeyCtrlBackslash, Type: term.EventKey})
@@ -61,6 +67,8 @@ func handleTestCase(
 			h.Handle(term.Event{Key: term.KeyArrowDown, Type: term.EventKey})
 		case '⬆':
 			h.Handle(term.Event{Key: term.KeyArrowUp, Type: term.EventKey})
+		case '\\':
+			escapeNext = true
 		default:
 			h.Handle(term.Event{Ch: r, Type: term.EventKey})
 		}

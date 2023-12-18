@@ -62,18 +62,22 @@ type workspaceManagerHandler struct {
 	frame        bool
 	reloadConfig func() (ideConfig, error)
 
-	union          handler.FrameUnion
-	bar            handler.Tabs
-	focusProxy     handler.Proxy
-	width, height  int
-	workspaces     []*workspaceHandler
-	workspaceCount int
-	focus          int
-	empty          *ex
+	union            handler.FrameUnion
+	bar              handler.Tabs
+	focusProxy       handler.Proxy
+	width, height    int
+	workspaces       []*workspaceHandler
+	workspaceCount   int
+	focus            int
+	homeWorkspace    workspace.Workspace
+	empty            *ex
+	openPrevFiles    []file
+	openPrevFilesEx  *ex
+	openPrevFilesWin browser.Window
 }
 
 func newWorkspaceManagerHandler(
-	initial workspaceapi.URI, manager workspace.WorkspaceManager,
+	initial, homeDirUri workspaceapi.URI, manager workspace.WorkspaceManager,
 	cfg ideConfig, recfilename string, filenames []string,
 	sixDir string, publishEvent func(term.Event) bool,
 	extensionRunner ExtensionsRunner, locker sync.Locker,
@@ -82,7 +86,7 @@ func newWorkspaceManagerHandler(
 ) (*workspaceManagerHandler, error) {
 	ret := new(workspaceManagerHandler)
 
-	err := ret.init(initial, manager,
+	err := ret.init(initial, homeDirUri, manager,
 		cfg, recfilename, filenames, sixDir,
 		publishEvent, extensionRunner, locker, builtinExtensions,
 		reloadConfig, workspaceConfigFilename)
@@ -122,7 +126,7 @@ func (h *workspaceManagerHandler) newBuiltinModelessEditor(cfg ideConfig) text.E
 }
 
 func (h *workspaceManagerHandler) init(
-	cwd workspaceapi.URI, manager workspace.WorkspaceManager,
+	cwd, homeDirUri workspaceapi.URI, manager workspace.WorkspaceManager,
 	cfg ideConfig, recfilename string, filenames []string,
 	sixDir string, publishEvent func(term.Event) bool,
 	extensionRunner ExtensionsRunner, locker sync.Locker,
@@ -153,15 +157,11 @@ func (h *workspaceManagerHandler) init(
 		return fmt.Errorf("new editor: %v", err)
 	}
 
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return fmt.Errorf("user home dir: %v", err)
-	}
-	homeDirUri, err := workspaceapi.CurrentUserHostURI(homeDir)
-	if err != nil {
-		return fmt.Errorf("home dir uri: %v", err)
-	}
 	homeWorkspace, err := h.workspace.AddWorkspace(h.ctxWithLocker, homeDirUri)
+	if err != nil {
+		return fmt.Errorf("add home workspace: %v", err)
+	}
+	h.homeWorkspace = homeWorkspace
 	h.empty, _ = newEx(ed, homeWorkspace, h.storage,
 		cfg.terminalConfig(), h.publishEvent, globalOpts...)
 	err = h.empty.subscribeCommands()
@@ -345,10 +345,12 @@ func (h *workspaceManagerHandler) Resize(width, height int) {
 	var barFocusIdx int
 	for i, w := range h.workspaces {
 		if w != nil {
-			w.Resize(width, height)
 			idx := h.bar.Add(h.makeWorkspaceTabName(i, w))
 			if i == h.focus {
 				barFocusIdx = idx
+				if !drawBar {
+					w.Resize(width, height)
+				}
 			}
 		} else if i == h.focus {
 			idx := h.bar.Add(h.makeWorkspaceTabName(i, w))
@@ -362,6 +364,17 @@ func (h *workspaceManagerHandler) Resize(width, height int) {
 	if drawBar {
 		h.union.Resize(h.width, h.height)
 	}
+	if h.openPrevFiles != nil && h.width != 0 && h.height != 0 {
+		err := h.openPrevSessionFiles(h.openPrevFilesEx, h.openPrevFiles, h.openPrevFilesWin)
+		if err != nil {
+			// do not notify during a call to Resize
+			log.Errorf("restore prev session: %v", err)
+		}
+		h.openPrevFiles = nil
+		h.openPrevFilesEx = nil
+		h.openPrevFilesWin = nil
+	}
+
 }
 
 func (h *workspaceManagerHandler) Draw(w term.Writer) {
@@ -620,6 +633,15 @@ func (h *workspaceManagerHandler) addWorkspace(
 		return nil
 	}
 
+	if h.width == 0 || h.height == 0 {
+		// if restoreSession is called on an size 0,0 handler
+		// then cursor is not properly set.
+		h.openPrevFiles = prevSessionFiles
+		h.openPrevFilesWin = ex.invokeWindow()
+		h.openPrevFilesEx = ex
+		return nil
+	}
+
 	return h.openPrevSessionFiles(ex, prevSessionFiles, ex.invokeWindow())
 }
 
@@ -690,7 +712,12 @@ func (h *workspaceManagerHandler) commandReloadWorkspace(args ...string) error {
 
 func (h *workspaceManagerHandler) commandAddWorkspace(args ...string) error {
 	if len(args) == 0 {
-		args = append(args, os.TempDir())
+		tempDir := os.TempDir()
+		uri, err := h.homeWorkspace.URI(tempDir)
+		if err != nil {
+			return fmt.Errorf("make uri %s: %v", tempDir, err)
+		}
+		args = append(args, uri.String())
 	}
 	path := args[0]
 
