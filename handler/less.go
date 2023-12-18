@@ -184,37 +184,57 @@ func (l *Less) normalHandleEvent(ev term.Event) (exit, handled bool) {
 	return
 }
 
-func (l *Less) setMessage(msg string) {
-	l.msg = component.StringResponsive(msg, component.StringResponsiveConfig{
+func (l *Less) setMessage(msg string) bool {
+	newMsg := component.StringResponsive(msg, component.StringResponsiveConfig{
 		StringConfig: component.StringConfig{
 			Alignment: component.SpanAlignmentRight,
 		},
 	})
+	shouldResize := l.msg == nil || l.msg.Height(l.width) != newMsg.Height(l.width)
+
+	l.msg = newMsg
 	l.msgVirt.C = l.msg
+	return shouldResize
 }
 
-func (l *Less) setMessageAlt(msg string) {
+func (l *Less) setMessageAlt(msg string) bool {
 	b := cell.CellsToBuffer(nil, 4)
 	b.WriteString(msg)
-	l.msgAlt = component.Buffer(b, component.StringResponsiveConfig{
+	newAlt := component.Buffer(b, component.StringResponsiveConfig{
 		StringConfig: component.StringConfig{
 			Alignment: component.SpanAlignmentLeft,
 		},
 	})
+
+	shouldResize := l.msgAlt == nil || l.msgAlt.Height(l.width) != newAlt.Height(l.width)
+
+	l.msgAlt = newAlt
 	l.msgAltVirt.C = l.msgAlt
 	l.msgAltWidth = b.MaxColumns()
+
+	return shouldResize
 }
 
 // Notify sets a message to be displayed on the bottom right corner.
 func (l *Less) Notify(text string, args ...interface{}) {
-	l.setMessage(fmt.Sprintf(text, args...))
-	l.resize()
+	if l.setMessage(fmt.Sprintf(text, args...)) {
+		l.resize()
+	} else {
+		cmdBarHeight := l.cmdBarHeight()
+		contentHeight := l.height - cmdBarHeight
+		l.initMsg(cmdBarHeight, contentHeight)
+	}
 }
 
 // NotifyAlt sets a message to be displayed on the bottom left corner.
 func (l *Less) NotifyAlt(text string, args ...interface{}) {
-	l.setMessageAlt(fmt.Sprintf(text, args...))
-	l.resize()
+	if l.setMessageAlt(fmt.Sprintf(text, args...)) {
+		l.resize()
+	} else {
+		cmdBarHeight := l.cmdBarHeight()
+		contentHeight := l.height - cmdBarHeight
+		l.initMsg(cmdBarHeight, contentHeight)
+	}
 }
 
 // Mode returns the current LessMode.
@@ -253,7 +273,7 @@ func (l *Less) ShowCommandBar(show bool) {
 	l.config.NoBar = !show
 }
 
-func (l *Less) resize() {
+func (l *Less) cmdBarHeight() int {
 	var cmdBarHeight int
 	if !l.config.NoBar {
 		cmdBarHeight = int(math.Max(float64(l.msg.Height(l.width)),
@@ -262,19 +282,33 @@ func (l *Less) resize() {
 			cmdBarHeight = 1
 		}
 	}
+	return cmdBarHeight
+}
+
+func (l *Less) resize() {
+	cmdBarHeight := l.cmdBarHeight()
 	contentHeight := l.height - cmdBarHeight
 	l.scroll.Resize(l.width, contentHeight)
 
 	l.searchScroll.Move(term.Coordinates{X: 0, Y: contentHeight})
 	l.searchScroll.Resize(l.width, cmdBarHeight)
 
+	l.initMsg(cmdBarHeight, contentHeight)
+}
+
+func (l *Less) initMsgAlt() int {
+	cmdBarHeight := l.cmdBarHeight()
+	contentHeight := l.height - cmdBarHeight
 	msgAltWidth := int(math.Min(
 		math.Min(float64(l.width), float64(l.msgAltWidth)),
 		float64(l.width/2),
 	))
 	l.msgAltVirt.Move(term.Coordinates{X: 0, Y: contentHeight})
 	l.msgAltVirt.Resize(msgAltWidth, cmdBarHeight)
-
+	return msgAltWidth
+}
+func (l *Less) initMsg(cmdBarHeight int, contentHeight int) {
+	msgAltWidth := l.initMsgAlt()
 	l.msgVirt.Move(term.Coordinates{X: msgAltWidth, Y: contentHeight})
 	l.msgVirt.Resize(l.width-msgAltWidth, cmdBarHeight)
 }
