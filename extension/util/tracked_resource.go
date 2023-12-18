@@ -2,6 +2,7 @@ package util
 
 import (
 	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
@@ -10,7 +11,7 @@ import (
 // TrackedResource holds the state of a resource, replicated
 // via ResourceTracker.
 type TrackedResource struct {
-	cursor text.Cursor
+	cursor *text.Cursor
 	uri    workspaceapi.URI
 
 	// Scroll is a mirror of the monitored resource's scroll.
@@ -32,6 +33,9 @@ func (t *TrackedResource) URI() workspaceapi.URI {
 // Using this requires ResourceTracker to be subscribed
 // to EventTypeCursor events.
 func (t *TrackedResource) Cursor() term.Coordinates {
+	if t.cursor == nil {
+		return term.Coordinates{}
+	}
 	return t.cursor.CursorAtScroll()
 }
 
@@ -41,7 +45,10 @@ func (t *TrackedResource) Cursor() term.Coordinates {
 // Using this requires ResourceTracker to be subscribed
 // to EventTypeCursor, EventTypeScroll and EventTypeFocus events.
 func (t *TrackedResource) WindowCoordinates(pos term.Coordinates) term.Coordinates {
-	return t.cursor.WindowCoordinates(pos)
+	if t.Scroll.Width() == 0 && t.Scroll.Wrap {
+		return cell.CoordinatesDiff(pos, t.Scroll.Offset())
+	}
+	return text.ScrollToWindowCoordinates(&t.Scroll, pos)
 }
 
 // ContentCoordinates translates the given window coordinates
@@ -50,5 +57,5 @@ func (t *TrackedResource) WindowCoordinates(pos term.Coordinates) term.Coordinat
 // Using this requires ResourceTracker to be subscribed
 // to EventTypeCursor, EventTypeScroll and EventTypeFocus events.
 func (t *TrackedResource) ContentCoordinates(pos term.Coordinates) term.Coordinates {
-	return t.cursor.ScrollCoordinates(pos)
+	return text.WindowToScrollCoordinates(&t.Scroll, pos)
 }

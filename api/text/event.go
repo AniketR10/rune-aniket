@@ -29,7 +29,8 @@ const (
 	EventTypeEdit
 
 	// EventTypeScroll is dispatched when content is scroll to a new offset.
-	// Start represents the scroll offset.
+	// Start represents the new scroll offset, whereas From represents the
+	// last offset position.
 	EventTypeScroll
 
 	// EventTypeFocus is dispatched when an editor handler is on browser.Focus.

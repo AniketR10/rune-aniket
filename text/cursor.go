@@ -246,7 +246,7 @@ func (c *Cursor) setCursor(pos term.Coordinates, seek bool) {
 
 	// this is an optimization to disable expensive calculations
 	// during composite moves that call setCursor multiple times
-	if seek && c.scroll.PublishingEnabled() {
+	if seek {
 		c.seekToScrollCoordinates()
 	}
 
@@ -1593,10 +1593,10 @@ func (c *Cursor) disablePublishing() func() {
 	if !c.scroll.PublishingEnabled() {
 		return func() {}
 	}
-	c.scroll.DisablePublishing()
+	enable := c.scroll.DisablePublishing()
 	return func() {
 		c.seekToScrollCoordinates()
-		c.scroll.EnablePublishing()
+		enable()
 	}
 }
 

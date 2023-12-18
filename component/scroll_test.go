@@ -115,10 +115,10 @@ func TestScrollDraw(t *testing.T) {
 
 	var dispatchedSubscribe int
 	var prevAt term.Coordinates
-	scroll.Subscribe(FuncScrollSubscriber(func(at term.Coordinates) {
+	scroll.Subscribe(FuncScrollSubscriber(func(from, to term.Coordinates) {
 		dispatchedSubscribe++
-		require.NotEqual(t, prevAt, at, scroll.Buffer().String())
-		prevAt = at
+		require.Equal(t, prevAt, from, scroll.Buffer().String())
+		prevAt = to
 	}))
 
 	w := term.NewStringWriter(width, height)
@@ -153,8 +153,8 @@ func TestScrollDraw(t *testing.T) {
 		{func() { scroll.Buffer().DeleteCell(term.Coordinates{X: 14, Y: 0}) }, "ove in your hert was"},
 		{func() { assert.True(t, scroll.SeekDown()) }, "Love isn't love 'til"},
 		{func() { scroll.Buffer().DeleteCell(term.Coordinates{X: 16, Y: 1}) }, "Love isn't love til "},
-    // note that there's a "space" after 中 that's because scroll skips drawing the second cell
-    // in the double cell rune.
+		// note that there's a "space" after 中 that's because scroll skips drawing the second cell
+		// in the double cell rune.
 		{func() { scroll.Buffer().Insert(term.Coordinates{X: 16, Y: 1}, '中') }, "Love isn't love 中 ti"},
 		{func() {
 			buf := cell.NewBuffer()
@@ -191,7 +191,7 @@ func TestScrollDraw(t *testing.T) {
 		assert.Equal(t, tcase.Expected, w.String(), "test case %d", i)
 	}
 
-	assert.Equal(t, 16, dispatchedSubscribe)
+	assert.Equal(t, 18, dispatchedSubscribe)
 }
 
 func TestScrollDrawWrap(t *testing.T) {
@@ -389,12 +389,64 @@ func TestScrollHeightWrap(t *testing.T) {
 }
 
 func TestScrollSeekTo(t *testing.T) {
-	scroll := newScroll(4, false, 20, 1)
-	_, err := scroll.Buffer().ReadFrom(strings.NewReader(fortune))
-	require.NoError(t, err)
-	assert.True(t, scroll.SeekTo(term.Coordinates{Y: 100}))
-	assert.Equal(t, term.Coordinates{Y: scroll.Buffer().Rows() - 1}, scroll.Offset())
-	assert.False(t, scroll.SeekTo(term.Coordinates{Y: 100}))
+	t.Run("no subscribers", func(t *testing.T) {
+		scroll := newScroll(4, false, 20, 1)
+		_, err := scroll.Buffer().ReadFrom(strings.NewReader(fortune))
+		require.NoError(t, err)
+		assert.True(t, scroll.SeekTo(term.Coordinates{Y: 100}))
+		assert.Equal(t, term.Coordinates{Y: scroll.Buffer().Rows() - 1}, scroll.Offset())
+		assert.False(t, scroll.SeekTo(term.Coordinates{Y: 100}))
+	})
+
+	t.Run("dispatches OnWillSeek, OnDidSeek on Y changes", func(t *testing.T) {
+		for _, wrap := range []bool{true, false} {
+			t.Run(fmt.Sprintf("wrap: %v", wrap), func(t *testing.T) {
+				scroll := newScroll(4, wrap, 10, 1)
+				_, err := scroll.Buffer().ReadFrom(strings.NewReader(fortune))
+				require.NoError(t, err)
+
+				var calledWill, calledDid int
+				subs := subscriber{
+					expectWillSeek: func(from term.Coordinates) {
+						calledWill++
+						assert.Equal(t, term.Coordinates{}, from)
+					},
+					expectDidSeek: func(from, to term.Coordinates) {
+						calledDid++
+						assert.Equal(t, term.Coordinates{}, from)
+						assert.Equal(t, term.Coordinates{Y: 2}, to)
+					},
+				}
+				scroll.Subscribe(subs)
+				assert.True(t, scroll.SeekTo(term.Coordinates{Y: 100}))
+				assert.Equal(t, 1, calledWill)
+				assert.Equal(t, 1, calledDid)
+			})
+		}
+	})
+
+	t.Run("dispatches OnWillSeek, OnDidSeek on X changes", func(t *testing.T) {
+		scroll := newScroll(4, false, 20, 1)
+		_, err := scroll.Buffer().ReadFrom(strings.NewReader(fortune))
+		require.NoError(t, err)
+
+		var calledWill, calledDid int
+		subs := subscriber{
+			expectWillSeek: func(from term.Coordinates) {
+				calledWill++
+				assert.Equal(t, term.Coordinates{}, from)
+			},
+			expectDidSeek: func(from, to term.Coordinates) {
+				calledDid++
+				assert.Equal(t, term.Coordinates{}, from)
+				assert.Equal(t, term.Coordinates{X: 6}, to)
+			},
+		}
+		scroll.Subscribe(subs)
+		assert.True(t, scroll.SeekTo(term.Coordinates{X: 100}))
+		assert.Equal(t, 1, calledWill)
+		assert.Equal(t, 1, calledDid)
+	})
 }
 
 func TestScrollSetOffset(t *testing.T) {
@@ -646,4 +698,16 @@ func BenchmarkScrollDraw100MB(b *testing.B) {
 }
 func BenchmarkScrollWrapDraw100MB(b *testing.B) {
 	benchmarkScrollDraw(b, 1000000, 0)
+}
+
+type subscriber struct {
+	expectWillSeek func(term.Coordinates)
+	expectDidSeek  func(from, to term.Coordinates)
+}
+
+func (s subscriber) OnWillSeek(from term.Coordinates) {
+	s.expectWillSeek(from)
+}
+func (s subscriber) OnDidSeek(from, to term.Coordinates) {
+	s.expectDidSeek(from, to)
 }

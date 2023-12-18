@@ -91,8 +91,9 @@ func (s *Scroll) CanSeekRight() bool {
 // SeekUp shifts the contents of this scroll one row up.
 func (s *Scroll) SeekUp() (ok bool) {
 	if ok = s.CanSeekUp(); ok {
+		dispatch := s.dispatchSubscribers()
+		defer dispatch()
 		s.offset.Y--
-		s.dispatchSubscribers()
 	}
 	return ok
 }
@@ -100,8 +101,9 @@ func (s *Scroll) SeekUp() (ok bool) {
 // SeekDown shifts the contents of this scroll one row down.
 func (s *Scroll) SeekDown() (ok bool) {
 	if ok = s.CanSeekDown(); ok {
+		dispatch := s.dispatchSubscribers()
+		defer dispatch()
 		s.offset.Y++
-		s.dispatchSubscribers()
 	}
 	return
 }
@@ -109,8 +111,9 @@ func (s *Scroll) SeekDown() (ok bool) {
 // SeekLeft shifts the contents of this scroll one column left.
 func (s *Scroll) SeekLeft() (ok bool) {
 	if ok = s.CanSeekLeft(); ok {
+		dispatch := s.dispatchSubscribers()
+		defer dispatch()
 		s.offset.X--
-		s.dispatchSubscribers()
 	}
 	return
 }
@@ -118,8 +121,9 @@ func (s *Scroll) SeekLeft() (ok bool) {
 // SeekRight shifts the contents of this scroll one column right.
 func (s *Scroll) SeekRight() (ok bool) {
 	if ok = s.CanSeekRight(); ok {
+		dispatch := s.dispatchSubscribers()
+		defer dispatch()
 		s.offset.X++
-		s.dispatchSubscribers()
 	}
 	return
 }
@@ -127,42 +131,40 @@ func (s *Scroll) SeekRight() (ok bool) {
 // SeekVertical shifts the contents of this scroll such that
 // the vertical offset is y.
 func (s *Scroll) SeekVertical(y int) (ok bool) {
-	return s.seekVertical(y, true)
+	return s.seekVertical(y)
 }
 
-func (s *Scroll) seekVertical(y int, dispatch bool) (ok bool) {
+func (s *Scroll) seekVertical(y int) (ok bool) {
 	if y < 0 {
 		y = 0
 	}
 
 	ok = s.offset.Y != y
-	s.offset.Y = y
-
-	if dispatch && ok {
-		s.dispatchSubscribers()
+	if ok {
+		dispatch := s.dispatchSubscribers()
+		defer dispatch()
+		s.offset.Y = y
 	}
-
 	return
 }
 
 // SeekHorizontal shifts the contents of this scroll such that
 // the horizontal offset is x.
 func (s *Scroll) SeekHorizontal(x int) (ok bool) {
-	return s.seekHorizontal(x, true)
+	return s.seekHorizontal(x)
 }
 
-func (s *Scroll) seekHorizontal(x int, dispatch bool) (ok bool) {
+func (s *Scroll) seekHorizontal(x int) (ok bool) {
 	if x < 0 {
 		x = 0
 	}
 
 	ok = s.offset.X != x
-	s.offset.X = x
-
-	if dispatch && ok {
-		s.dispatchSubscribers()
+	if ok {
+		dispatch := s.dispatchSubscribers()
+		defer dispatch()
+		s.offset.X = x
 	}
-
 	return
 }
 
@@ -199,23 +201,20 @@ func (s *Scroll) seekTo(pos term.Coordinates, xpadding, ypadding int) bool {
 	// setting the exact position to pos.Y, rather than ensuring that pos.Y
 	// is within view.
 	if ypadding == -1 {
-		yok = s.seekVertical(pos.Y, false)
+		yok = s.seekVertical(pos.Y)
 	} else if pos.Y >= s.offset.Y+s.height-ypadding {
-		yok = s.seekVertical(pos.Y-s.height+ypadding, false)
+		yok = s.seekVertical(pos.Y - s.height + ypadding)
 	} else if pos.Y < s.offset.Y-ypadding {
-		yok = s.seekVertical(pos.Y-ypadding, false)
+		yok = s.seekVertical(pos.Y - ypadding)
 	}
 
 	if pos.X >= s.offset.X+s.width-xpadding {
-		xok = s.seekHorizontal(pos.X-s.width+xpadding, false)
+		xok = s.seekHorizontal(pos.X - s.width + xpadding)
 	} else if pos.X < s.offset.X-xpadding {
-		xok = s.seekHorizontal(pos.X-xpadding, false)
+		xok = s.seekHorizontal(pos.X - xpadding)
 	}
 
 	ok := yok || xok
-	if ok {
-		s.dispatchSubscribers()
-	}
 	return ok
 }
 
@@ -245,8 +244,9 @@ func (s *Scroll) SetOffset(pos term.Coordinates) bool {
 	}
 	ok := pos != s.offset
 	if ok {
+		dispatch := s.dispatchSubscribers()
+		defer dispatch()
 		s.offset = pos
-		s.dispatchSubscribers()
 	}
 	return ok
 }
@@ -277,8 +277,9 @@ func (s *Scroll) SeekPrevResult() bool {
 func (s *Scroll) Resize(width, height int) {
 	s.width = width
 	s.height = height
-	// do not adjusts max/offsets dynamically here as there
-	// might be clients relying on the offset not implicitly changing
+	// do not re-calculate offsets here as it should trigger
+	// dispatching subscribers OnWillSeek/OnDidSeek, but we
+	// shouldn't do that on calls to Resize.
 }
 
 func (s *Scroll) getMaxXOffset() (x int) {
@@ -661,22 +662,43 @@ func (s *Scroll) ReadFrom(r io.Reader) (n int64, err error) {
 
 // ScrollSubscriber is a subscriber of seek operations in a scroll.
 type ScrollSubscriber interface {
-	OnSeek(offset term.Coordinates)
+	// OnWillSeek is dispatched before a scroll is about to change its offset.
+	OnWillSeek(from term.Coordinates)
+	// OnDidSeek is dispatched after a scroll has changed its offset.
+	OnDidSeek(from, to term.Coordinates)
 }
 
-type fnSubscriber func(term.Coordinates)
+type fnSubscriber func(term.Coordinates, term.Coordinates)
 
-func (s fnSubscriber) OnSeek(offset term.Coordinates) {
-	s(offset)
+func (s fnSubscriber) OnWillSeek(from term.Coordinates) {
+	/* no-op */
 }
 
-func (s *Scroll) dispatchSubscribers() {
+func (s fnSubscriber) OnDidSeek(from, to term.Coordinates) {
+	s(from, to)
+}
+
+func (s *Scroll) dispatchSubscribers() func() {
 	if s.disablePublishing {
-		return
+		return func() {}
 	}
-	s.lastPublishedOffset = s.offset
+	from := s.offset
 	for _, sub := range s.subs {
-		sub.OnSeek(s.offset)
+		sub.OnWillSeek(from)
+	}
+	return func() {
+		if s.disablePublishing {
+			return
+		}
+
+		enable := s.DisablePublishing()
+		defer enable()
+
+		to := s.offset
+		for _, sub := range s.subs {
+			sub.OnDidSeek(from, to)
+		}
+		s.lastPublishedOffset = to
 	}
 }
 
@@ -685,20 +707,39 @@ func (s *Scroll) Subscribe(sub ScrollSubscriber) {
 	s.subs = append(s.subs, sub)
 }
 
-// DisablePublishing disables dispatching OnSeek calls to subscribers.
+// DisablePublishing disables dispatching OnDidSeek/OnWillSeek calls to subscribers.
 // This is useful when clients of Scroll perform composite moves that
 // would otherwise dispatch multiple calls rather than one.
-func (s *Scroll) DisablePublishing() {
+// The returned function can be called to re-enable publishing.
+//
+// This method can be called multiple times and only the first time
+// will disable, and only the first returned enable will re-enable
+// publishing.
+//
+// The returned function, dispatches an OnWillSeek/OnDidSeek call pair to
+// each subscriber if the offset has changed since last time publishing was disabled.
+// Note that OnWillSeek in this case will be dispatched after the offset is changed
+// so callers must ensure that any state that needs capturing is captured
+// before using DisablePublishing/EnablePublishing.
+func (s *Scroll) DisablePublishing() (enable func()) {
+	if s.disablePublishing {
+		return func() {}
+	}
 	s.disablePublishing = true
+	return s.enablePublishing
 }
 
-// EnablePublishing enables dispatching OnSeek calls after a call to DisablePublishing.
-// It dispatches an OnSeek call to each subscriber if the offset has changed since
-// last time publishing was disabled.
-func (s *Scroll) EnablePublishing() {
+// enablePublishing enables dispatching OnWillSeek/OnDidSeek calls
+// after a call to DisablePublishing. It dispatches an OnWillSeek/OnDidSeek call pair to
+// each subscriber if the offset has changed since last time publishing was disabled.
+// Note that OnWillSeek in this case will be dispatched after the offset is changed
+// so callers must ensure that any state that needs capturing is captured
+// before using DisablePublishing/EnablePublishing.
+func (s *Scroll) enablePublishing() {
 	s.disablePublishing = false
 	if s.lastPublishedOffset != s.Offset() {
-		s.dispatchSubscribers()
+		dispatch := s.dispatchSubscribers()
+		dispatch()
 	}
 }
 
@@ -710,6 +751,6 @@ func (s *Scroll) PublishingEnabled() bool {
 }
 
 // FuncScrollSubscriber wraps fn to satisfy ScrollSubscriber.
-func FuncScrollSubscriber(fn func(term.Coordinates)) ScrollSubscriber {
+func FuncScrollSubscriber(fn func(from, to term.Coordinates)) ScrollSubscriber {
 	return fnSubscriber(fn)
 }

@@ -404,8 +404,9 @@ func (h *gitEditorHandler) handleEvents(cwd workspaceapi.URI) {
 			h.resetBar()
 			h.interrupt()
 		case textapi.EventTypeScroll:
-			h.setBarOffset(ev)
-			h.interrupt()
+			if h.setBarOffset(ev) {
+				h.interrupt()
+			}
 		}
 		if log.IsLevelEnabled(log.TraceLevel) {
 			h.log(log.TraceLevel, "handle(%#v) in %s", ev.Type, time.Since(start))
@@ -413,13 +414,13 @@ func (h *gitEditorHandler) handleEvents(cwd workspaceapi.URI) {
 	}
 }
 
-func (h *gitEditorHandler) setBarOffset(ev textapi.Event) {
+func (h *gitEditorHandler) setBarOffset(ev textapi.Event) bool {
 	h.scroll.Lock()
 	defer h.scroll.Unlock()
 
 	res, ok := h.getResource(ev)
 	if !ok {
-		return
+		return false
 	}
 
 	pos := res.Offset()
@@ -428,16 +429,18 @@ func (h *gitEditorHandler) setBarOffset(ev textapi.Event) {
 	if h.scroll.scroll.Offset().Y == pos.Y {
 		h.log(log.TraceLevel, "set bar offset: %s: %+v: already set to offset",
 			ev.URI, pos)
-		return
+		return false
 	}
 
-	if ok := h.scroll.scroll.SetOffset(pos); !ok {
+	ok = h.scroll.scroll.SetOffset(pos)
+	if !ok {
 		h.log(log.WarnLevel, "set bar offset: %s: %+v: not ok",
 			ev.URI, pos)
 	} else {
 		h.log(log.DebugLevel, "set bar offset: %s: %+v: ok",
 			ev.URI, pos)
 	}
+	return ok
 }
 
 func (h *gitEditorHandler) interrupt() {

@@ -8,6 +8,7 @@ import (
 	textapi "unstable.build/go-tui/api/text"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/text"
 )
 
 // ResourceTracker implements a remote text editor tracker,
@@ -148,7 +149,6 @@ func (h *ResourceTracker) handleResourceOpen(ev textapi.Event) {
 	trackedResource.uri = ev.URI
 	trackedResource.Scroll.Init(buf)
 	trackedResource.Scroll.Wrap = h.wrap
-	trackedResource.cursor.Init(&trackedResource.Scroll)
 
 	h.resources[ev.URI.String()] = trackedResource
 }
@@ -211,6 +211,13 @@ func (h *ResourceTracker) handleResourceCursor(ev textapi.Event) bool {
 	res, ok := h.resources[ev.URI.String()]
 	if !ok {
 		return false
+	}
+
+	// only initialize cursor if we are monitoring cursor
+	// keeps it obvious for the rest of impl that cursor might
+	// not be useful.
+	if res.cursor == nil {
+		res.cursor = text.NewCursor(&res.Scroll)
 	}
 	_, ok = res.cursor.MoveToScroll(ev.From)
 	return ok

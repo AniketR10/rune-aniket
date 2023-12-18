@@ -50,12 +50,17 @@ type scrollSubscriber struct {
 	eh  EventHandler
 }
 
-func (s scrollSubscriber) OnSeek(at term.Coordinates) {
+func (s scrollSubscriber) OnWillSeek(from term.Coordinates) {
+	/* no-op */
+}
+
+func (s scrollSubscriber) OnDidSeek(from, to term.Coordinates) {
 	s.eh.Handle(context.Background(), textapi.Event{
 		Type:     textapi.EventTypeScroll,
 		Resource: s.h,
 		URI:      s.uri,
-		Start:    at,
+		Start:    to,
+		From:     from,
 	})
 }
 
