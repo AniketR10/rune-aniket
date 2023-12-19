@@ -104,7 +104,7 @@ func (e *Handler) Init(
 	e.mouseDriver = &mouseDriver{t: e.terminal, clipboard: clip}
 	e.mouse = text.NewMouse(e.mouseDriver)
 
-	e.updateCh = make(chan struct{}, 1)
+	e.updateCh = make(chan struct{})
 	e.sema = make(chan struct{})
 	go func() {
 		logErr := e.terminal.Run(e.updateCh)
@@ -177,8 +177,6 @@ func (e *Handler) Draw(w term.Writer) {
 }
 
 func (e *Handler) Handle(ev term.Event) (exit, handled bool) {
-	e.log(log.TraceLevel, "handle: %+v", ev)
-
 	exit, handled, raw := e.handleInput(ev)
 	if exit || handled || len(raw) == 0 {
 		return
@@ -190,6 +188,7 @@ func (e *Handler) Handle(ev term.Event) (exit, handled bool) {
 		if !ok {
 			exit = true
 		}
+		e.log(log.TraceLevel, "handle: closed update chan")
 		return
 	}
 	defer func() { <-e.sema }()
@@ -429,7 +428,7 @@ func (e *Handler) handleInput(ev term.Event) (exit, handled bool, raw []byte) {
 
 	exit = e.closed
 	if exit {
-		e.log(log.DebugLevel, "handle: exit")
+		e.log(log.TraceLevel, "input: exit")
 		return
 	}
 
@@ -442,6 +441,8 @@ func (e *Handler) handleInput(ev term.Event) (exit, handled bool, raw []byte) {
 		if len(raw) != 0 {
 			handled = false
 		}
+		e.log(log.TraceLevel, "input: mouse: exit=%t, handled=%t, raw=%q",
+			exit, handled, raw)
 		return
 	}
 
