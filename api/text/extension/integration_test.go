@@ -39,7 +39,7 @@ func TestIntegrationRace(t *testing.T) {
 	require.NoError(t, err)
 
 	th := textpb.Token{URI: uri}
-	broker := proto.NewUnixGRPCBroker("")
+	broker := proto.NewUnixGRPCBroker("", "", "")
 	defer broker.Close()
 
 	edMock := texttest.NewMockEditor(ctrl)

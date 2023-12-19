@@ -262,7 +262,7 @@ func setupIntTest(
 	require.NoError(t, err)
 
 	grpcServer := grpc.NewServer()
-	server := newGranteeServer(grpcServer, proto.NewUnixGRPCBroker(""),
+	server := newGranteeServer(grpcServer, proto.NewUnixGRPCBroker("", "", ""),
 		granteeMock, perms, time.Duration(0))
 	extensionpb.RegisterGranteeServer(grpcServer, server)
 

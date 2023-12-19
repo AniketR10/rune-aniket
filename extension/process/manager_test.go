@@ -84,7 +84,7 @@ func newTestManager(grantor extension.Grantor, opts ...Option) (*Manager, *testG
 		return newGranteeClient(m.broker, mockpb), nil
 	}
 	m.Init(grantor, opts...)
-	m.broker = proto.NewUnixGRPCBroker("")
+	m.broker = proto.NewUnixGRPCBroker("", "", "")
 
 	return m, mockpb, m.broker
 }

@@ -15,15 +15,14 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/ernestrc/blue/debug"
 	"github.com/ernestrc/blue/logging"
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
-	"gopkg.in/yaml.v3"
 	"unstable.build/go-tui/api/config"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser"
+	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/extension/process"
 	"unstable.build/go-tui/ide"
@@ -181,25 +180,16 @@ func startWorkspaceServer() int {
 
 func main() {
 	var code int
-	ok, report := debug.CapturePanic(log.StandardLogger(), "six", Tag, func() {
+	ok, path, err := debug.CapturePanicReportDir(".", "six", Tag, func() {
 		code = run()
 	})
 	if ok {
 		os.Exit(code)
 	}
-	data, err := yaml.Marshal(report)
 	if err != nil {
 		log.Fatal(err)
 	}
-	f, err := ioutil.TempFile(".", "six_crash_report_")
-	if err != nil {
-		log.Fatal(err)
-	}
-	_, err = f.Write(data)
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Printf("Saved crash report %q\n", f.Name())
+	fmt.Printf("Saved crash report %q\n", path)
 	os.Exit(4)
 }
 
@@ -215,6 +205,8 @@ func extensionRunner(
 		process.WithLocker(locker),
 		process.WithWorkspace(uri),
 		process.WithDataDir(dataDir),
+		process.WithPackageName("six"),
+		process.WithPackageVersion(Tag),
 		process.WithNotifications(notifications),
 	}
 	return process.NewManager(extension.GrantAll(res), extensionOpts...)

@@ -100,7 +100,7 @@ func Serve(grantee extension.Grantee, request ...extension.Permission) {
 			requested: request,
 			grantee:   grantee,
 			keepAlive: defaultHealthCheckTicker,
-			broker:    initClientBroker(&extensionLogger, getDataDirEnv()),
+			broker:    initClientBroker(&extensionLogger, getDataDirEnv(), os.Args[0], ""),
 		},
 	}
 

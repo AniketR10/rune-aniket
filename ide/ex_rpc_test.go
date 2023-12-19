@@ -99,7 +99,7 @@ func newTestRPCBrowser(t *testing.T,
 		lis, err := net.Listen("tcp", ":0")
 		require.NoError(t, err)
 
-		broker := proto.NewUnixGRPCBroker("")
+		broker := proto.NewUnixGRPCBroker("", "", "")
 
 		var serverMutex sync.Mutex
 		grpcServer := grpc.NewServer()

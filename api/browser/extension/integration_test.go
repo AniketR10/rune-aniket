@@ -38,7 +38,7 @@ func TestIntegrationRace(t *testing.T) {
 
 	mockWin := browserapitest.NopWindow()
 	h := browsertest.NewTestHandler()
-	broker := proto.NewUnixGRPCBroker("")
+	broker := proto.NewUnixGRPCBroker("", "", "")
 	defer broker.Close()
 	mock := browserapitest.NewMockBrowser(ctrl)
 	resources := extension.BrowserResources(browsertest.BrowserFromAPIBrowser(mock))

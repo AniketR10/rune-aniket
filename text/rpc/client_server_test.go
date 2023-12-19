@@ -82,7 +82,7 @@ func TestClientServerIntegration(t *testing.T) {
 	t.Run("client through server calls underlying editor Edit", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
-		b := proto.NewUnixGRPCBroker("")
+		b := proto.NewUnixGRPCBroker("", "", "")
 		ed := texttest.NewMockEditor(ctrl)
 		s := NewServer(b, ed, nopLocker{})
 
@@ -100,7 +100,7 @@ func TestClientServerIntegration(t *testing.T) {
 	t.Run("client through server calls underlying Editor", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
-		b := proto.NewUnixGRPCBroker("")
+		b := proto.NewUnixGRPCBroker("", "", "")
 		ed := texttest.NewMockEditor(ctrl)
 		s := NewServer(b, ed, nopLocker{})
 
@@ -119,7 +119,7 @@ func TestClientServerIntegration(t *testing.T) {
 	t.Run("underlying editor Edito errors bubble up to client", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
-		b := proto.NewUnixGRPCBroker("")
+		b := proto.NewUnixGRPCBroker("", "", "")
 		ed := texttest.NewMockEditor(ctrl)
 		s := NewServer(b, ed, nopLocker{})
 
@@ -185,7 +185,7 @@ func TestClientServerIntegration(t *testing.T) {
 			t.Run(tcase.name, func(t *testing.T) {
 				var wg sync.WaitGroup
 				var mu sync.Mutex
-				b := proto.NewUnixGRPCBroker("")
+				b := proto.NewUnixGRPCBroker("", "", "")
 				ed := texttest.NopEditorWithCallback(wg.Done)
 				s := NewServer(b, ed, &mu)
 
@@ -233,7 +233,7 @@ func TestClientServerIntegration(t *testing.T) {
 		var wg sync.WaitGroup
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
-		b := proto.NewUnixGRPCBroker("")
+		b := proto.NewUnixGRPCBroker("", "", "")
 		ed := texttest.NewMockEditor(ctrl)
 		s := NewServer(b, ed, new(sync.Mutex))
 
@@ -268,7 +268,7 @@ func TestClientServerIntegration(t *testing.T) {
 		var wg sync.WaitGroup
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
-		b := proto.NewUnixGRPCBroker("")
+		b := proto.NewUnixGRPCBroker("", "", "")
 		ed := texttest.NewMockEditor(ctrl)
 		s := NewServer(b, ed, new(sync.Mutex))
 
@@ -302,7 +302,7 @@ func TestClientServerIntegration(t *testing.T) {
 	t.Run("Writer returns a Writer that is able to modify underlying buffer", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
-		b := proto.NewUnixGRPCBroker("")
+		b := proto.NewUnixGRPCBroker("", "", "")
 		ed := texttest.NewMockEditor(ctrl)
 		s := NewServer(b, ed, nopLocker{})
 
@@ -340,7 +340,7 @@ func TestClientServerIntegration(t *testing.T) {
 	t.Run("Reader returns a Reader that is able to read underlying buffer", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
-		b := proto.NewUnixGRPCBroker("")
+		b := proto.NewUnixGRPCBroker("", "", "")
 		ed := texttest.NewMockEditor(ctrl)
 		s := NewServer(b, ed, nopLocker{})
 
@@ -377,7 +377,7 @@ func TestRPCTab(t *testing.T) {
 			return nil, nil, err
 		}
 
-		b := proto.NewUnixGRPCBroker("")
+		b := proto.NewUnixGRPCBroker("", "", "")
 		s := browserpb.NewServer(b, c, mu)
 
 		client, closeFn := setupWmIntTest(t, b, s)
@@ -404,7 +404,7 @@ func TestRPCRegister(t *testing.T) {
 			return nil, nil, err
 		}
 
-		b := proto.NewUnixGRPCBroker("")
+		b := proto.NewUnixGRPCBroker("", "", "")
 		s := NewServer(b, c, mu)
 
 		client, closeFn := setupIntTest(t, b, s)

@@ -17,14 +17,18 @@ import (
 // implements MuxBroker
 type grpcBroker struct {
 	dataDir     string
+	pkg         string
+	version     string
 	unixSockets sync.Map
 }
 
 // NewUnixGRPCBroker provides brokerage by using unix socket listeners
 // and grpc connections.
-func NewUnixGRPCBroker(dataDir string) MuxBroker {
+func NewUnixGRPCBroker(dataDir, pkg, version string) MuxBroker {
 	ret := new(grpcBroker)
 	ret.dataDir = dataDir
+	ret.pkg = pkg
+	ret.version = version
 	return ret
 }
 
@@ -34,14 +38,17 @@ func (t *grpcBroker) NewChannel(tags ...string) (MuxServer, error) {
 		return nil, fmt.Errorf("temp unix listener")
 	}
 	t.unixSockets.Store(ret.Addr().String(), struct{}{})
-	return GRPCServer(ret,
-		grpc.ChainUnaryInterceptor(
-			UnaryLoggingRecoveryInterceptor(tags...),
-		),
-		grpc.ChainStreamInterceptor(
-			StreamLoggingRecoveryInterceptor(tags...),
-		),
-	), nil
+
+	var opts []grpc.ServerOption
+	if t.dataDir != "" {
+		opts = append(opts, grpc.ChainUnaryInterceptor(
+			UnaryReportRecoveryInterceptor(t.dataDir, t.pkg, t.version),
+		))
+		opts = append(opts, grpc.ChainStreamInterceptor(
+			StreamReportRecoveryInterceptor(t.dataDir, t.pkg, t.version),
+		))
+	}
+	return GRPCServer(ret, opts...), nil
 }
 
 func (t *grpcBroker) DialChannel(address string, tags ...string) (

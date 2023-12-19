@@ -195,7 +195,9 @@ func (s *granteeServer) doShutdown(reason string) (ret error) {
 	case <-done:
 	}
 	// wait for all resources to close
-	cancelCtx()
+	if cancelCtx != nil {
+		cancelCtx()
+	}
 	s.closeWg.Wait()
 
 	// complete rpc without blocking

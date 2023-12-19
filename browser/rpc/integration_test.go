@@ -25,7 +25,7 @@ func newClientServerIntegration(
 ) (*Client, func()) {
 	lis, err := net.Listen("tcp", ":0")
 	require.NoError(t, err)
-	broker := proto.NewUnixGRPCBroker("")
+	broker := proto.NewUnixGRPCBroker("", "", "")
 	mutex := new(sync.Mutex)
 
 	grpcServer := grpc.NewServer()

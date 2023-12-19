@@ -65,6 +65,8 @@ type managerConfig struct {
 	locker            sync.Locker
 	workspace         workspaceapi.URI
 	dataDir           string
+	pkg               string
+	version           string
 	notifications     browser.Notifications
 }
 
@@ -121,7 +123,7 @@ func (m *Manager) Init(grantor extension.Grantor, opts ...Option) (err error) {
 	}
 	m.rmu = m.config.locker
 
-	m.broker, err = initHostBroker(m.config, m.config.dataDir)
+	m.broker, err = initHostBroker(m.config, m.config.dataDir, m.config.pkg, m.config.version)
 	m.ctx, m.cancelCtx = context.WithCancel(context.Background())
 	return
 }

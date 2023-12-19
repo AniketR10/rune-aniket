@@ -60,6 +60,22 @@ func WithDataDir(dataDir string) Option {
 	}
 }
 
+// WithPackageName returns an option that configures the
+// package name used for creating panic reports.
+func WithPackageName(pkg string) Option {
+	return func(cfg *managerConfig) {
+		cfg.pkg = pkg
+	}
+}
+
+// WithPackageVersion returns an option that configures the
+// package version used for creating panic reports.
+func WithPackageVersion(version string) Option {
+	return func(cfg *managerConfig) {
+		cfg.version = version
+	}
+}
+
 // WithNotifications returns an option that configures
 // a extension.Manager's notifications.
 func WithNotifications(n browser.Notifications) Option {

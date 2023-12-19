@@ -34,7 +34,7 @@ func TestIntegrationRace(t *testing.T) {
 
 	term.DisableInterruptForTesting()
 
-	broker := proto.NewUnixGRPCBroker("")
+	broker := proto.NewUnixGRPCBroker("", "", "")
 	defer broker.Close()
 	mockFile := workspaceapitest.NewMockFile(ctrl)
 	mockFile.EXPECT().Fd().AnyTimes()

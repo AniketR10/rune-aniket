@@ -56,7 +56,7 @@ func setupProxyTest(t *testing.T, mockScheme schemeapi.Scheme) (
 	require.NoError(t, err)
 	cfg := config.NopConfig()
 	manager := workspace.NewManager(cfg)
-	broker := proto.NewUnixGRPCBroker("")
+	broker := proto.NewUnixGRPCBroker("", "", "")
 
 	// host-side
 	srv := NewSchemeManagerServer(broker, manager, new(sync.Mutex))
@@ -110,7 +110,7 @@ func TestSchemeManagerClientServerSchemeSuiteIntegration(t *testing.T) {
 		require.NoError(t, err)
 		cfg := config.NopConfig()
 		manager := workspace.NewManager(cfg)
-		broker := proto.NewUnixGRPCBroker("")
+		broker := proto.NewUnixGRPCBroker("", "", "")
 
 		srv := NewSchemeManagerServer(broker, manager, new(sync.Mutex))
 		conn, closeFn := doSetupSchemeManagerClientServerTest(t, srv)
