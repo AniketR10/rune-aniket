@@ -17,7 +17,6 @@ func redraw(
 	root Handler, lock sync.Locker, termw term.Writer,
 	prevCursor term.CursorStyle,
 ) (term.CursorStyle, error) {
-	// TODO Attr should be removed and Clear should no take any parameters
 	if err := termw.Clear(term.Attr()); err != nil {
 		return 0, err
 	}
