@@ -23,14 +23,14 @@ require (
 	github.com/sirupsen/logrus v1.6.0
 	github.com/smacker/go-tree-sitter v0.0.0-20230501083651-a7d92773b3aa
 	github.com/sourcegraph/go-diff v0.6.1
-	github.com/stretchr/testify v1.8.3
+	github.com/stretchr/testify v1.8.4
 	go.uber.org/config v1.4.0
 	go.uber.org/goleak v1.2.0
-	golang.org/x/crypto v0.9.0
+	golang.org/x/crypto v0.12.0
 	golang.org/x/image v0.7.0
 	golang.org/x/term v0.15.0
 	google.golang.org/grpc v1.54.0
-	google.golang.org/protobuf v1.30.0
+	google.golang.org/protobuf v1.31.0
 	gopkg.in/yaml.v3 v3.0.1
 	upspin.io v0.0.0-20220526012102-c626106d18af
 )
@@ -51,7 +51,7 @@ require (
 	github.com/rivo/uniseg v0.4.4 // indirect
 	golang.org/x/lint v0.0.0-20210508222113-6edffad5e616 // indirect
 	golang.org/x/mod v0.10.0 // indirect
-	golang.org/x/net v0.10.0 // indirect
+	golang.org/x/net v0.14.0 // indirect
 	golang.org/x/sync v0.1.0 // indirect
 	golang.org/x/sys v0.15.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
@@ -61,6 +61,7 @@ require (
 )
 
 require (
+	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.0.1
 	github.com/pkoukk/tiktoken-go v0.1.6
 	github.com/pkoukk/tiktoken-go-loader v0.0.1
 	github.com/sashabaranov/go-openai v1.17.9

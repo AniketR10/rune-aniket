@@ -34,7 +34,14 @@ func (t *grpcBroker) NewChannel(tags ...string) (MuxServer, error) {
 		return nil, fmt.Errorf("temp unix listener")
 	}
 	t.unixSockets.Store(ret.Addr().String(), struct{}{})
-	return GRPCServer(ret), nil
+	return GRPCServer(ret,
+		grpc.ChainUnaryInterceptor(
+			UnaryLoggingRecoveryInterceptor(tags...),
+		),
+		grpc.ChainStreamInterceptor(
+			StreamLoggingRecoveryInterceptor(tags...),
+		),
+	), nil
 }
 
 func (t *grpcBroker) DialChannel(address string, tags ...string) (

@@ -119,7 +119,14 @@ func startWorkspaceServer() int {
 	// log unhandled signals for debugging
 	ch := make(chan os.Signal, 1)
 	quitch := make(chan struct{})
-	grpcServer := grpc.NewServer()
+	grpcServer := grpc.NewServer(
+		grpc.ChainUnaryInterceptor(
+			proto.UnaryLoggingRecoveryInterceptor(),
+		),
+		grpc.ChainStreamInterceptor(
+			proto.StreamLoggingRecoveryInterceptor(),
+		),
+	)
 	signal.Notify(ch)
 
 	defer close(quitch)
