@@ -406,6 +406,17 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 ├──────────────────┤
 │1  4              │
 └──────────────────┘`},
+		{":sw 4>:addWorkspace memory\\:///tmp2>:edit memory\\:///tmp2/12>:reloadWorkspace>", // reloads non-primary workspace
+			`┌──────────────────┐
+│12                │
+├──────────────────┤
+│▐                 │
+│                  │
+│                  │
+│:           NORMAL│
+├──────────────────┤
+│1  4              │
+└──────────────────┘`},
 	}
 	testutil.TestHandlerIsolated(t, fn, 20, 10, cases)
 }

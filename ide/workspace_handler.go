@@ -217,7 +217,7 @@ func (h *workspaceManagerHandler) init(
 	}
 
 	shouldRestore := len(uris) == 0
-	err = h.addWorkspace(cwd, recfilename, uris, shouldRestore, !cfg.autoRestore())
+	err = h.addWorkspace(cwd, recfilename, uris, shouldRestore, !cfg.autoRestore(), -1)
 	if err != nil {
 		return err
 	}
@@ -528,7 +528,7 @@ func cleanedExtensionConfig(cfg map[string]interface{}) map[string]interface{} {
 
 func (h *workspaceManagerHandler) addWorkspace(
 	uri workspaceapi.URI, recfilename string, filenames []workspaceapi.URI,
-	shouldRestore, shouldPromptRestore bool,
+	shouldRestore, promptRecommended bool, i int,
 ) error {
 	for i, w := range h.workspaces {
 		if w == nil {
@@ -608,9 +608,12 @@ func (h *workspaceManagerHandler) addWorkspace(
 
 	h.initExtensions(runner, cfg)
 
-	i, ok := h.nextAvailableWorkspace()
-	if !ok {
-		return fmt.Errorf("no available workspaces")
+	if i == -1 {
+		var ok bool
+		i, ok = h.nextAvailableWorkspace()
+		if !ok {
+			return fmt.Errorf("no available workspaces")
+		}
 	}
 
 	h.workspaces[i] = &workspaceHandler{
@@ -628,7 +631,7 @@ func (h *workspaceManagerHandler) addWorkspace(
 		return nil
 	}
 
-	if shouldPromptRestore {
+	if promptRecommended && !cfg.autoRestore() {
 		h.openRestorePrompt(ex, uri, prevSessionFiles)
 		return nil
 	}
@@ -703,11 +706,12 @@ func logNonFatalErrs(
 }
 
 func (h *workspaceManagerHandler) commandReloadWorkspace(args ...string) error {
+	i := h.focus
 	workspaceURI, _, err := h.closeWorkspace()
 	if err != nil {
 		return err
 	}
-	return h.addWorkspace(workspaceURI, "", nil, true, false)
+	return h.addWorkspace(workspaceURI, "", nil, true, false, i)
 }
 
 func (h *workspaceManagerHandler) commandAddWorkspace(args ...string) error {
@@ -724,7 +728,7 @@ func (h *workspaceManagerHandler) commandAddWorkspace(args ...string) error {
 	// try to use literal URI
 	uri, parseErr := workspaceapi.ParseURI(path)
 	if parseErr == nil {
-		return h.addWorkspace(uri, "", nil, true, true)
+		return h.addWorkspace(uri, "", nil, true, true, -1)
 	}
 
 	uri, pathErr := workspaceapi.CurrentUserHostURI(path)
@@ -732,7 +736,7 @@ func (h *workspaceManagerHandler) commandAddWorkspace(args ...string) error {
 		err := multierr.Append(pathErr, parseErr)
 		return err
 	}
-	return h.addWorkspace(uri, "", nil, true, true)
+	return h.addWorkspace(uri, "", nil, true, true, -1)
 }
 
 func (h *workspaceManagerHandler) closeWorkspace() (workspaceapi.URI, []workspaceapi.URI, error) {
@@ -740,7 +744,8 @@ func (h *workspaceManagerHandler) closeWorkspace() (workspaceapi.URI, []workspac
 		return workspaceapi.URI{}, nil, errors.New("workspace tab is empty")
 	}
 
-	hm := h.workspaces[h.focus]
+	focus := h.focus
+	hm := h.workspaces[focus]
 	uri := hm.uri
 	tabs := hm.ex.comp.Tabs()
 	var files []workspaceapi.URI
@@ -761,13 +766,13 @@ func (h *workspaceManagerHandler) closeWorkspace() (workspaceapi.URI, []workspac
 		log.Debugf("Closed all workspace resources successfully")
 	}
 
-	h.workspaces[h.focus] = nil
+	h.workspaces[focus] = nil
 	h.workspaceCount--
 
 	for i := h.focus; i >= 0; i-- {
 		if h.workspaces[i] != nil {
 			h.switchToWorkspace(i)
-			return workspaceapi.URI{}, nil, err
+			return uri, files, nil
 		}
 	}
 
