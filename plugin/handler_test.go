@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"context"
+	"errors"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -108,14 +109,13 @@ type nopPublisher struct {
 	interrupt term.Interrupter
 }
 
-func (n nopPublisher) Interrupt() error {
+func (n nopPublisher) PublishEvent(ev term.Event) error {
+	if ev.Type != term.EventInterrupt {
+		return errors.New("unexpected event type")
+	}
 	if n.interrupt != nil {
 		n.interrupt.Interrupt()
 	}
-	return nil
-}
-
-func (n nopPublisher) PublishEventNone() error {
 	return nil
 }
 

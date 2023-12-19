@@ -1,12 +1,15 @@
 package test
 
 import (
+	"fmt"
+
 	"unstable.build/go-tui"
 	browserapi "unstable.build/go-tui/api/browser"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component"
 	notifications "unstable.build/go-tui/component/notifications"
+	term "unstable.build/go-tui/term"
 )
 
 // BrowserFromAPIBrowser wraps a browserapi.Browser and returns
@@ -91,12 +94,13 @@ func (b toBrowser) Resource(u workspaceapi.URI) (browserapi.Handler, bool) {
 	return NewTestHandler(), true
 }
 
-func (b toBrowser) Interrupt() error {
-	return b.b.Interrupt()
-}
-
-func (b toBrowser) PublishEventNone() error {
-	return b.b.PublishEventNone()
+func (b toBrowser) PublishEvent(ev term.Event) error {
+	if ev.Type == term.EventInterrupt {
+		return b.b.Interrupt()
+	} else if ev.Type == term.EventNone {
+		return b.b.PublishEventNone()
+	}
+	return fmt.Errorf("cannot publish event type: %v", ev.Type)
 }
 
 func (b toBrowser) Close() error {

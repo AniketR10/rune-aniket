@@ -35,6 +35,7 @@ func Handler(
 		cmdAndArgs = "sh"
 	}
 
+	interrupter := browser.EventPublisherInterrupter(publisher)
 	interactiveWidth := int(float64(maxWidth) * 0.8)
 	interactiveHeight := interactiveWidth * 9 / 16
 	nonInteractiveMinWidth := int(math.Max(float64(maxWidth)*0.2, float64(len(cmdAndArgs)+4)*2))
@@ -68,7 +69,7 @@ func Handler(
 	topBar.leftMsgSuccess = component.NewStringWithConfig(" 🤘🏼 "+cmdAndArgs, leftStrCfg)
 	topBar.frameAttr = frameAttr
 	frames, seq := component.ProgressAnimationFrames()
-	topBar.animation = component.NewAnimation(publisher, frames, seq, 10)
+	topBar.animation = component.NewAnimation(interrupter, frames, seq, 10)
 	unionMain := h
 	union := handler.NewFrameUnion(unionMain)
 	union.Frame = false
@@ -91,7 +92,7 @@ func Handler(
 		cancelCtx:               cancel,
 		bar:                     topBar,
 	}
-	go term.InterruptAt(ctx, publisher, 1)
+	go term.InterruptAt(ctx, interrupter, 1)
 	go func() {
 		defer cancel()
 		select {

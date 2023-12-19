@@ -33,8 +33,7 @@ type Config struct {
 	SequencerTimeout        time.Duration
 	DirtyTabAttr            term.Attributes
 
-	Interrupter   term.Interrupter
-	SendEventNone func()
+	EventPublisher func(term.Event) bool
 
 	CommandOverlay CommandOverlayConfig
 	browser.Config
@@ -65,8 +64,7 @@ func DefaultConfig() Config {
 		CommandAliases:          make(map[string][]string),
 		SequencerTimeout:        400 * time.Millisecond,
 		CommandOverlay:          DefaultCommandOverlayConfig(),
-		Interrupter:             term.NopInterrupter(),
-		SendEventNone:           func() {},
+		EventPublisher:          func(term.Event) bool { return false },
 	}
 	return cfg
 }
@@ -243,17 +241,9 @@ func WithPromptConfig(c browser.PromptConfig) Option {
 	}
 }
 
-// WithInterrupter sets the Component's term.Interrupter.
-func WithInterrupter(i term.Interrupter) Option {
+// WithEventPublisher sets the Component's event publisher
+func WithEventPublisher(f func(term.Event) bool) Option {
 	return func(cfg *Config) {
-		cfg.Interrupter = i
-	}
-}
-
-// WithSendNone sets the Component's send EventNone function.
-// By default this is set to term.SendNoneEvent.
-func WithSendNone(fn func()) Option {
-	return func(cfg *Config) {
-		cfg.SendEventNone = fn
+		cfg.EventPublisher = f
 	}
 }

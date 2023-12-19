@@ -496,10 +496,7 @@ func (h *workspaceManagerHandler) textOpts(cfg ideConfig) []text.Option {
 		text.WithCommandOverlayConfig(cfg.commandOverlayConfig()),
 		text.WithCommandAliases(cfg.commandAliases()),
 		text.WithPromptConfig(cfg.promptConfig()),
-		text.WithInterrupter(interrupter),
-		text.WithSendNone(func() {
-			h.publishEvent(term.Event{Type: term.EventNone})
-		}),
+		text.WithEventPublisher(h.publishEvent),
 	}
 
 	for seq, cmd := range cfg.commandKeyMappings() {

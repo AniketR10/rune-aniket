@@ -584,11 +584,12 @@ func assertHandled(
 func TestBrowserHandlerInterrupts(t *testing.T) {
 	t.Run("Interrupt calls interrupt handle", func(t *testing.T) {
 		var wg sync.WaitGroup
-		opts := []text.Option{text.WithInterrupter(
-			term.FuncInterrupter(func() error {
+		opts := []text.Option{text.WithEventPublisher(
+			func(ev term.Event) bool {
+				assert.Equal(t, term.EventInterrupt, ev.Type)
 				wg.Done()
-				return nil
-			}),
+				return true
+			},
 		),
 			text.WithCommandOverlayConfig(testCommandOverlayConfig()),
 		}
@@ -596,20 +597,24 @@ func TestBrowserHandlerInterrupts(t *testing.T) {
 		defer browser.Close()
 
 		wg.Add(1)
-		browser.Browser().Interrupt()
+		browser.Browser().PublishEvent(term.Event{Type: term.EventInterrupt})
 
 		wg.Wait()
 	})
 	t.Run("SendEventNone calls interrupt handle", func(t *testing.T) {
 		var wg sync.WaitGroup
-		opts := []text.Option{text.WithSendNone(wg.Done),
+		opts := []text.Option{text.WithEventPublisher(func(ev term.Event) bool {
+			assert.Equal(t, term.EventNone, ev.Type)
+			wg.Done()
+			return true
+		}),
 			text.WithCommandOverlayConfig(testCommandOverlayConfig()),
 		}
 		browser := newExForTesting(t, texttest.NopEditor(), opts...)
 		defer browser.Close()
 
 		wg.Add(1)
-		browser.Browser().PublishEventNone()
+		browser.Browser().PublishEvent(term.Event{Type: term.EventNone})
 
 		wg.Wait()
 	})
@@ -1183,6 +1188,7 @@ func TestEphemeralTerminal(t *testing.T) {
 	opts := []text.Option{
 		text.WithCommandKey(testCommandKey),
 		text.WithCommandOverlayConfig(testCommandOverlayConfig()),
+		text.WithEventPublisher(nopPublishEvent),
 	}
 
 	tempDir, err := ioutil.TempDir("", "")

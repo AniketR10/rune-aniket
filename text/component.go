@@ -529,15 +529,13 @@ func (c *Component) Bar(o browserapi.Orientation, h tui.Handler) error {
 	return nil
 }
 
-// Interrupt interrupts the main event loop to redraw the terminal.
-func (c *Component) Interrupt() error {
-	return c.config.Interrupter.Interrupt()
-}
-
-// PublishEventNone sends an EventNone to the main event loop which
+// PublishEvent sends an EventNone to the main event loop which
 // forces Handle to be called on the tui.Handler in focus.
-func (c *Component) PublishEventNone() error {
-	c.config.SendEventNone()
+func (c *Component) PublishEvent(ev term.Event) error {
+	ok := c.config.EventPublisher(ev)
+	if !ok {
+		return errors.New("event stream not ready")
+	}
 	return nil
 }
 

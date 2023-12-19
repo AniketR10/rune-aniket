@@ -91,18 +91,9 @@ type ResourceOpener interface {
 	Resource(workspaceapi.URI) (browserapi.Handler, bool)
 }
 
-// EventPublisher is the interface that wraps the method Interrupt.
+// EventPublisher is the interface that wraps the method PublishEvent.
 type EventPublisher interface {
-	// Interrupt will publish an interrupt event, which will force
-	// redrawing all components in the terminal.
-	Interrupt() error
-
-	// PublishEventNone will publish an EventNone event, which will force
-	// calling Handle on the component currently in focus.
-	//
-	// There's no guarantee that caller will be the tui.Handler that will
-	// receive this event.
-	PublishEventNone() error
+	PublishEvent(term.Event) error
 }
 
 // Browser is an interface that groups methods to manipulate

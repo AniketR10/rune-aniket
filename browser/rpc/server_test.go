@@ -17,6 +17,7 @@ import (
 	"unstable.build/go-tui/component/notifications"
 	handlerpb "unstable.build/go-tui/handler/rpc"
 	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/term"
 	termpb "unstable.build/go-tui/term/rpc"
 )
 
@@ -145,7 +146,7 @@ func TestServerPublish(t *testing.T) {
 		s, mock, _ := newTestServer(ctrl, &mu)
 		req := PublishRequest{Ev: &termpb.Event{Type: termpb.Event_TypeInterrupt}}
 
-		mock.EXPECT().Interrupt().Times(1)
+		mock.EXPECT().PublishEvent(gomock.Eq(term.Event{Type: term.EventInterrupt})).Times(1)
 
 		res, err := s.Publish(ctx, &req)
 		require.NoError(t, err)
@@ -159,23 +160,11 @@ func TestServerPublish(t *testing.T) {
 		s, mock, _ := newTestServer(ctrl, &mu)
 		req := PublishRequest{Ev: &termpb.Event{Type: termpb.Event_TypeNone}}
 
-		mock.EXPECT().PublishEventNone().Times(1)
+		mock.EXPECT().PublishEvent(gomock.Eq(term.Event{Type: term.EventNone})).Times(1)
 
 		res, err := s.Publish(ctx, &req)
 		require.NoError(t, err)
 		assert.NotNil(t, res)
-	})
-
-	t.Run("rejects any event other than an interrupt event", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		defer ctrl.Finish()
-		var mu sync.Mutex
-		s, _, _ := newTestServer(ctrl, &mu)
-		req := PublishRequest{Ev: &termpb.Event{Type: termpb.Event_TypeKey}}
-
-		res, err := s.Publish(ctx, &req)
-		require.Error(t, err)
-		assert.Nil(t, res)
 	})
 
 	t.Run("handles interrupt handler error", func(t *testing.T) {
@@ -185,7 +174,7 @@ func TestServerPublish(t *testing.T) {
 		s, mock, _ := newTestServer(ctrl, &mu)
 		req := PublishRequest{Ev: &termpb.Event{Type: termpb.Event_TypeInterrupt}}
 
-		mock.EXPECT().Interrupt().Return(errors.New("uRock"))
+		mock.EXPECT().PublishEvent(gomock.Any()).Return(errors.New("uRock"))
 
 		res, err := s.Publish(ctx, &req)
 		require.Error(t, err)
@@ -199,7 +188,7 @@ func TestServerPublish(t *testing.T) {
 		s, mock, _ := newTestServer(ctrl, &mu)
 		req := PublishRequest{Ev: &termpb.Event{Type: termpb.Event_TypeNone}}
 
-		mock.EXPECT().PublishEventNone().Return(errors.New("uRock"))
+		mock.EXPECT().PublishEvent(gomock.Any()).Return(errors.New("uRock"))
 
 		res, err := s.Publish(ctx, &req)
 		require.Error(t, err)

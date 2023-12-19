@@ -108,7 +108,7 @@ func (e *Handler) Init(
 	e.sema = make(chan struct{})
 	go func() {
 		logErr := e.terminal.Run(e.updateCh)
-		if err := e.publisher.PublishEventNone(); err != nil {
+		if err := e.publisher.PublishEvent(term.Event{Type: term.EventNone}); err != nil {
 			err = fmt.Errorf("publish event: %s", err)
 			logErr = multierr.Append(logErr, err)
 		}
@@ -130,7 +130,7 @@ func (e *Handler) Init(
 					return
 				}
 			}
-			err = e.publisher.Interrupt()
+			err = e.publisher.PublishEvent(term.Event{Type: term.EventInterrupt})
 			if err != nil {
 				e.log(log.ErrorLevel, "interrupt: %s", err)
 			}
