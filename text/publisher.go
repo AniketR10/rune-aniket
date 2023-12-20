@@ -128,6 +128,8 @@ func (p *Publisher) dispatchEvent(ctx context.Context, ev textapi.Event) {
 
 	remain := make([]EventHandler, 0, len(subs))
 	for _, sub := range subs {
+		p.log(log.TraceLevel, "dispatching to subscriber sub=%p, "+
+			"event type %d", sub, ev.Type)
 		exit := sub.Handle(ctx, ev)
 		if !exit {
 			remain = append(remain, sub)
