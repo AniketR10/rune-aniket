@@ -1995,7 +1995,7 @@ func (h *lspEditorHandler) handleEvents(ch chan textapi.Event) {
 		var start time.Time
 		if log.IsLevelEnabled(log.TraceLevel) {
 			start = time.Now()
-			log.Tracef("lspEditorHandler.Handle(%#v)", ev)
+			log.Tracef("lspEditorHandler.Handle(%v)", ev.Type)
 		}
 
 		var err error
@@ -2011,10 +2011,10 @@ func (h *lspEditorHandler) handleEvents(ch chan textapi.Event) {
 		}
 
 		if log.IsLevelEnabled(log.TraceLevel) {
-			log.Tracef("lspEditorHandler.Handle(%#v) in %s: %s", ev, time.Since(start), err)
+			log.Tracef("lspEditorHandler.Handle(%v) in %s: %s", ev.Type, time.Since(start), err)
 		}
 		if err != nil && err != errNoServer {
-			log.Errorf("failed to process file event %+v: %v", ev, err)
+			log.Errorf("failed to process file event %v: %v", ev.Type, err)
 		}
 	}
 }
