@@ -125,6 +125,8 @@ func (s *Server) Editor(ctx context.Context, in *EditorRequest) (
 
 // Subscribe satisfies EditorServer
 func (s *Server) Subscribe(stream Editor_SubscribeServer) error {
+	defer s.log(log.TraceLevel, "stream event completed: stream=%p", stream)
+
 	req, err := stream.Recv()
 	s.log(log.TraceLevel, "Subscribe: received request: %v: %v", req.GetType(), err)
 	if err != nil {
@@ -151,7 +153,7 @@ func (s *Server) Subscribe(stream Editor_SubscribeServer) error {
 	s.eventSub = append(s.eventSub, handler)
 	s.editor.Unlock()
 
-	s.log(log.TraceLevel, "waiting for unsubscribe")
+	s.log(log.TraceLevel, "waiting for unsubscribe: stream=%p", stream)
 	return handler.waitForUnsubscribe()
 }
 

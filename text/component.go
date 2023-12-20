@@ -688,6 +688,7 @@ func (c *Component) dispatchFocusUponSubscribe(h EventHandler) bool {
 // If ev is of type EventTypeOpen, an event will be dispatched for
 // every Tab currently open.
 func (c *Component) SubscribeEvents(evs []textapi.EventType, h EventHandler) error {
+	c.log(log.TraceLevel, "subscribe sub=%p", h)
 	// iterate to dispatch immediate events
 	for _, ev := range evs {
 		switch ev {
@@ -728,9 +729,10 @@ func (c *Component) SubscribeEvents(evs []textapi.EventType, h EventHandler) err
 }
 
 // UnsubscribeEvents unsubscribes sub from all events.
-func (p *Component) UnsubscribeEvents(sub EventHandler) (ret bool, err error) {
+func (c *Component) UnsubscribeEvents(sub EventHandler) (ret bool, err error) {
+	c.log(log.TraceLevel, "unsubscribe sub=%p", sub)
 	final := make(map[textapi.EventType][]EventHandler)
-	for ev, subs := range p.edSubscribers {
+	for ev, subs := range c.edSubscribers {
 		final[ev] = make([]EventHandler, 0, len(subs))
 		for _, s := range subs {
 			if s != sub {
@@ -740,8 +742,8 @@ func (p *Component) UnsubscribeEvents(sub EventHandler) (ret bool, err error) {
 			}
 		}
 	}
-	p.edSubscribers = final
-	return
+	c.edSubscribers = final
+	return c.ed.UnsubscribeEvents(sub)
 }
 
 // Commands returns a list of commands registered via SubscribeCommand

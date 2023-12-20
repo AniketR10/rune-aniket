@@ -99,6 +99,7 @@ func (s eventStreamServer) log(level log.Level, msg string, args ...interface{})
 }
 
 func (s eventStreamServer) receiveEvents(c *Client) {
+	defer s.log(log.TraceLevel, "done receiving events")
 	for {
 		protoEv, err := s.stream.Recv()
 		if err != nil {
@@ -134,7 +135,6 @@ func (s eventStreamServer) receiveEvents(c *Client) {
 	if err != nil {
 		s.log(log.ErrorLevel, "send unsubscribe: %v", err)
 	}
-	s.log(log.TraceLevel, "done receiving events")
 	if err := s.stream.CloseSend(); err != nil {
 		s.log(log.ErrorLevel, "stream close send: %v", err)
 	}
