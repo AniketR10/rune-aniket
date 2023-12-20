@@ -3,6 +3,8 @@ package text
 import (
 	"context"
 
+	"github.com/ernestrc/blue/logging"
+	log "github.com/sirupsen/logrus"
 	textapi "unstable.build/go-tui/api/text"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
@@ -99,6 +101,8 @@ func (p *Publisher) SubscribeEvents(evs []textapi.EventType, sub EventHandler) {
 
 // UnsubscribeEvents unsubscribes sub from all events.
 func (p *Publisher) UnsubscribeEvents(sub EventHandler) (ret bool) {
+	p.log(log.TraceLevel, "unsubscribing subscriber sub=%p: "+
+		"unsubscribed called. Current=%+v", sub, p.subs)
 	final := make(map[textapi.EventType][]EventHandler)
 	for ev, subs := range p.subs {
 		final[ev] = make([]EventHandler, 0, len(subs))
@@ -111,6 +115,8 @@ func (p *Publisher) UnsubscribeEvents(sub EventHandler) (ret bool) {
 		}
 	}
 	p.subs = final
+	p.log(log.TraceLevel, "unsubscribing subscriber sub=%p: "+
+		"unsubscribed called. Remaining=%+v", sub, p.subs)
 	return
 }
 
@@ -125,6 +131,9 @@ func (p *Publisher) dispatchEvent(ctx context.Context, ev textapi.Event) {
 		exit := sub.Handle(ctx, ev)
 		if !exit {
 			remain = append(remain, sub)
+		} else {
+			p.log(log.DebugLevel, "unsubscribing subscriber sub=%p, "+
+				"exit=true on event type %d", sub, ev.Type)
 		}
 	}
 	p.subs[ev.Type] = remain
@@ -174,4 +183,10 @@ func (p *cursorPublisher) Handle(ev term.Event) (bool, bool) {
 // helper for internal tests
 func (p *cursorPublisher) CursorReference() *Cursor {
 	return p.cursor
+}
+
+func (p *Publisher) log(level log.Level, msg string, args ...any) {
+	log.WithFields(log.Fields{
+		logging.KeyClass: "text.Publisher",
+	}).Logf(level, msg, args...)
 }

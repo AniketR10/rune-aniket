@@ -688,7 +688,7 @@ func (c *Component) dispatchFocusUponSubscribe(h EventHandler) bool {
 // If ev is of type EventTypeOpen, an event will be dispatched for
 // every Tab currently open.
 func (c *Component) SubscribeEvents(evs []textapi.EventType, h EventHandler) error {
-	c.log(log.TraceLevel, "subscribe sub=%p", h)
+	c.log(log.TraceLevel, "subscribe sub=%p: evs=%v", h, evs)
 	// iterate to dispatch immediate events
 	for _, ev := range evs {
 		switch ev {
@@ -698,11 +698,13 @@ func (c *Component) SubscribeEvents(evs []textapi.EventType, h EventHandler) err
 				return err
 			}
 			if exit {
+				c.log(log.DebugLevel, "not subscribe sub=%p: open: exit=true", h)
 				return nil
 			}
 		case textapi.EventTypeFocus:
 			exit := c.dispatchFocusUponSubscribe(h)
 			if exit {
+				c.log(log.DebugLevel, "not subscribe sub=%p: focus: exit=true", h)
 				return nil
 			}
 		}
