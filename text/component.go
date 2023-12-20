@@ -472,22 +472,27 @@ func (c *Component) dispatchFlush(file workspaceapi.URI, h Handler) (string, err
 // dispatchEvent either flush or close events
 func (c *Component) dispatchEvent(ev textapi.Event) (handled bool) {
 	subs, ok := c.edSubscribers[ev.Type]
-	if !ok {
+	if !ok || len(subs) == 0 {
 		return
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
 	defer cancel()
 
-	remain := make([]EventHandler, 0, len(subs))
-	for _, h := range subs {
-		exit := h.Handle(ctx, ev)
-		if !exit {
-			remain = append(remain, h)
-		}
-		handled = true
+	// call Handle in batch, as it might be an rpc, and removing from
+	// edSubsribers after each call could introduce race conditions.
+	exits := make([]bool, len(subs))
+	for i, h := range subs {
+		exits[i] = h.Handle(ctx, ev)
 	}
-	c.edSubscribers[ev.Type] = remain
+
+	c.edSubscribers[ev.Type] = make([]EventHandler, 0, len(subs))
+	for i, sub := range subs {
+		if !exits[i] {
+			c.edSubscribers[ev.Type] = append(c.edSubscribers[ev.Type], sub)
+		}
+	}
+	handled = true
 	return
 }
 

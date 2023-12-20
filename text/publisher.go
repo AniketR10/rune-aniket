@@ -98,7 +98,7 @@ func (p *Publisher) SubscribeEvents(evs []textapi.EventType, sub EventHandler) {
 		}
 	}
 	p.log(log.TraceLevel, "subscribe subscriber sub=%p to evs %+v: "+
-		"unsubscribed called. Current=%+v", sub, evs, p.subs)
+		"subscribers=%+v", sub, evs, p.subs)
 }
 
 // UnsubscribeEvents unsubscribes sub from all events.
@@ -116,7 +116,7 @@ func (p *Publisher) UnsubscribeEvents(sub EventHandler) (ret bool) {
 	}
 	p.subs = final
 	p.log(log.TraceLevel, "unsubscribing subscriber sub=%p: "+
-		"unsubscribed called. Remaining=%+v", sub, p.subs)
+		"unsubscribed called. subscribers=%+v", sub, p.subs)
 	return
 }
 
@@ -126,19 +126,21 @@ func (p *Publisher) dispatchEvent(ctx context.Context, ev textapi.Event) {
 		return
 	}
 
-	remain := make([]EventHandler, 0, len(subs))
-	for _, sub := range subs {
-		p.log(log.TraceLevel, "dispatching to subscriber sub=%p, "+
-			"event type %d", sub, ev.Type)
-		exit := sub.Handle(ctx, ev)
-		if !exit {
-			remain = append(remain, sub)
-		} else {
-			p.log(log.DebugLevel, "unsubscribing subscriber sub=%p, "+
-				"exit=true on event type %d", sub, ev.Type)
+	// call Handle in batch, as it might be an rpc, and removing from
+	// edSubsribers after each call could introduce race conditions.
+	exits := make([]bool, len(subs))
+	for i, h := range subs {
+		exits[i] = h.Handle(ctx, ev)
+		p.log(log.TraceLevel, "dispatched to subscriber sub=%p, "+
+			"event type %d: exit=%t", h, ev.Type, exits[i])
+	}
+
+	p.subs[ev.Type] = make([]EventHandler, 0, len(subs))
+	for i, sub := range subs {
+		if !exits[i] {
+			p.subs[ev.Type] = append(p.subs[ev.Type], sub)
 		}
 	}
-	p.subs[ev.Type] = remain
 }
 
 // Handle handles ev by dispatching to subscribers.
