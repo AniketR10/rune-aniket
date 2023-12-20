@@ -2,8 +2,11 @@ package term
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 )
+
+var _ Writer = (*StringWriter)(nil)
 
 // StringWriter satisfies Writer by rendering the cells into a plain string.
 type StringWriter struct {
@@ -11,6 +14,7 @@ type StringWriter struct {
 	buffer        bytes.Buffer
 	width, height int
 	CursorCh      rune
+	SetContext    context.Context
 }
 
 // NewStringWriter allocates storage for a new StringWriter and
@@ -19,7 +23,13 @@ func NewStringWriter(width, height int) (t *StringWriter) {
 	t = new(StringWriter)
 	t.Resize(width, height)
 	t.CursorCh = '▐'
+	t.SetContext = context.Background()
 	return
+}
+
+// Context returns context.Background
+func (w *StringWriter) Context() context.Context {
+	return w.SetContext
 }
 
 // Resize satisfies Writer.

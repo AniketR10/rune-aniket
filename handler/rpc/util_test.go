@@ -1,6 +1,7 @@
 package rpc
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -60,7 +61,7 @@ func TestNewDrawResponse(t *testing.T) {
 		comp := component.NewStringWithConfig(tcase.in,
 			component.StringConfig{Alignment: component.SpanAlignmentCentered})
 		comp.Resize(5, 5)
-		res := NewDrawResponse(comp, 5, 5)
+		res := NewDrawResponse(context.Background(), comp, 5, 5)
 		assert.Equal(t, tcase.out, res)
 	}
 }
@@ -76,7 +77,7 @@ func benchmarkDrawResponse(b *testing.B, width, height int) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = NewDrawResponse(comp, width, height)
+		_ = NewDrawResponse(context.Background(), comp, width, height)
 	}
 }
 

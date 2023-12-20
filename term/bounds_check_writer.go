@@ -1,5 +1,7 @@
 package term
 
+import "context"
+
 type boundsCheckWriter struct {
 	height int
 	width  int
@@ -33,6 +35,10 @@ func (p boundsCheckWriter) SetCursor(pos Coordinates) {
 		return
 	}
 	p.w.SetCursor(pos)
+}
+
+func (p boundsCheckWriter) Context() context.Context {
+	return p.w.Context()
 }
 
 func (p boundsCheckWriter) outOfBounds(pos Coordinates) bool {

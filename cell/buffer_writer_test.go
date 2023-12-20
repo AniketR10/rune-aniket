@@ -1,6 +1,7 @@
 package cell
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -10,7 +11,7 @@ import (
 
 func TestWriteFlush(t *testing.T) {
 	width, height := 5, 6
-	writer := NewBufferWriter(width, height)
+	writer := NewBufferWriter(context.Background(), width, height)
 
 	c := 'E'
 	for i := width - 1; i >= 0; i-- {
@@ -34,7 +35,7 @@ func TestWriteFlush(t *testing.T) {
 func benchBufferWriter(b *testing.B, n int) {
 	width, height := n, n
 	for i := 0; i < b.N; i++ {
-		writer := NewBufferWriter(width, height)
+		writer := NewBufferWriter(context.Background(), width, height)
 		c := 'E'
 		for i := width - 1; i >= 0; i-- {
 			for j := height - 1; j >= 0; j-- {

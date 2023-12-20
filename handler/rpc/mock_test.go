@@ -33,7 +33,7 @@ func (c *mockHandlerClient) Handle(
 	width, height := int(in.GetDraw().GetWidth()), int(in.GetDraw().GetHeight())
 	c.remote.Resize(width, height)
 	pos, style, show := c.remote.Cursor()
-	resp.Draw = NewDrawResponse(c.remote, width, height)
+	resp.Draw = NewDrawResponse(context.Background(), c.remote, width, height)
 	resp.Draw.Cursor = &DrawResponse_Cursor{
 		Position: &termpb.Coordinates{
 			X: int32(pos.X),

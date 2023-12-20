@@ -1,26 +1,32 @@
 package cell
 
 import (
+	"context"
+
 	"unstable.build/go-tui/term"
 )
+
+var _ term.Writer = (*BufferWriter)(nil)
 
 // BufferWriter satisfies term.Writer with a Buffer.
 type BufferWriter struct {
 	width, height int
 	Cursor        term.Coordinates
 	cells         [][]term.Cell
+	ctx           context.Context
 }
 
 // NewBufferWriter allocates storage for a new BufferWriter and initializes it.
-func NewBufferWriter(width, height int) *BufferWriter {
+func NewBufferWriter(ctx context.Context, width, height int) *BufferWriter {
 	ret := new(BufferWriter)
-	ret.Init(width, height)
+	ret.Init(ctx, width, height)
 	return ret
 }
 
 // Init initializes a BufferWriter's internal structures.
-func (w *BufferWriter) Init(width, height int) {
+func (w *BufferWriter) Init(ctx context.Context, width, height int) {
 	w.width, w.height = width, height
+	w.ctx = ctx
 	w.Clear(term.Attributes{})
 }
 
@@ -65,4 +71,9 @@ func (w *BufferWriter) ToBuffer(b *Buffer) {
 // RawCells returns the raw cells written so far to this BufferWritter.
 func (w *BufferWriter) RawCells() [][]term.Cell {
 	return w.cells
+}
+
+// Context returns the context passed to BufferWriterr's constructors.
+func (w *BufferWriter) Context() context.Context {
+	return w.ctx
 }

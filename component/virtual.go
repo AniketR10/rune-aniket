@@ -1,6 +1,8 @@
 package component
 
 import (
+	"context"
+
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/term"
 )
@@ -13,32 +15,6 @@ type Virtual struct {
 	C             tui.Component
 	pos           term.Coordinates
 	height, width int
-}
-
-type virtualWriter struct {
-	writer        term.Writer
-	offset        term.Coordinates
-	height, width int
-}
-
-func (w *virtualWriter) SetCell(pos term.Coordinates, c term.Cell) {
-	if pos.X >= w.width || pos.Y >= w.height || pos.Y < 0 || pos.X < 0 {
-		return
-	}
-	pos = term.Coordinates{X: w.offset.X + pos.X, Y: w.offset.Y + pos.Y}
-	w.writer.SetCell(pos, c)
-}
-
-func (w *virtualWriter) Flush() error {
-	return w.writer.Flush()
-}
-
-func (w *virtualWriter) Clear(attr term.Attributes) error {
-	return w.writer.Clear(attr)
-}
-
-func (w *virtualWriter) SetCursor(pos term.Coordinates) {
-	w.writer.SetCursor(pos)
 }
 
 // Resize resizes the underlying component and stores size
@@ -89,4 +65,34 @@ func VirtualWriter(
 		height: height,
 		width:  width,
 	}
+}
+
+type virtualWriter struct {
+	writer        term.Writer
+	offset        term.Coordinates
+	height, width int
+}
+
+func (w *virtualWriter) SetCell(pos term.Coordinates, c term.Cell) {
+	if pos.X >= w.width || pos.Y >= w.height || pos.Y < 0 || pos.X < 0 {
+		return
+	}
+	pos = term.Coordinates{X: w.offset.X + pos.X, Y: w.offset.Y + pos.Y}
+	w.writer.SetCell(pos, c)
+}
+
+func (w *virtualWriter) Flush() error {
+	return w.writer.Flush()
+}
+
+func (w *virtualWriter) Clear(attr term.Attributes) error {
+	return w.writer.Clear(attr)
+}
+
+func (w *virtualWriter) SetCursor(pos term.Coordinates) {
+	w.writer.SetCursor(pos)
+}
+
+func (w *virtualWriter) Context() context.Context {
+	return w.writer.Context()
 }

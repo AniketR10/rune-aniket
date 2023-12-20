@@ -1,6 +1,8 @@
 package rpc
 
 import (
+	"context"
+
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/term"
@@ -49,7 +51,7 @@ func rowsToBuffer(in []*termpb.CellRow) *cell.Buffer {
 	}
 
 	var w cell.BufferWriter
-	w.Init(maxWidth, len(in))
+	w.Init(context.Background(), maxWidth, len(in))
 
 	for y, rows := range in {
 		for x, cell := range rows.Cells {

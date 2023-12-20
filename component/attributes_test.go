@@ -1,6 +1,7 @@
 package component
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -45,7 +46,7 @@ func TestAttrSetter(t *testing.T) {
 	})
 
 	t.Run("happy path", func(t *testing.T) {
-		w := cell.NewBufferWriter(4, 4)
+		w := cell.NewBufferWriter(context.Background(), 4, 4)
 		s := WithAttrSetter(&TestComponent{Ch: 'a'})
 		s.SetAttr(term.Attributes{Fg: term.ColorBlue, Bg: term.ColorCyan})
 		s.SetAttrAt(term.Coordinates{X: 3, Y: 3},

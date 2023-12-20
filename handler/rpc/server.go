@@ -70,7 +70,7 @@ func (s *Server) draw(ctx context.Context, in *DrawRequest) (
 	}
 	s.dimensions.Store(dimensions{width: int(in.Width), height: int(in.Height)})
 	cursor, style, show := s.handler.Cursor()
-	res := NewDrawResponse(s.handler, int(in.Width), int(in.Height))
+	res := NewDrawResponse(ctx, s.handler, int(in.Width), int(in.Height))
 	res.Cursor.Position.X = int32(cursor.X)
 	res.Cursor.Position.Y = int32(cursor.Y)
 	res.Cursor.Show = show

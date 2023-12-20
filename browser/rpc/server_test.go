@@ -111,7 +111,7 @@ func insertDrawResponse(t *testing.T, quit bool) func(ctx context.Context, metho
 		res, ok := reply.(*handlerpb.HandleResponse)
 		require.True(t, ok)
 
-		res.Draw = handlerpb.NewDrawResponse(component.NewString(""), 0, 0)
+		res.Draw = handlerpb.NewDrawResponse(context.Background(), component.NewString(""), 0, 0)
 		res.Quit = quit
 		res.Handled = true
 		return nil

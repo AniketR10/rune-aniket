@@ -1,6 +1,8 @@
 package component
 
 import (
+	"context"
+
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/term"
@@ -39,7 +41,7 @@ func NewBackground(comp tui.Component, cell term.Cell) *Background {
 func (b *Background) Init(comp tui.Component, c term.Cell) {
 	b.root = comp
 	b.cell = c
-	b.buffer = cell.NewBufferWriter(0, 0)
+	b.buffer = cell.NewBufferWriter(context.Background(), 0, 0)
 }
 
 // Resize satisfies tui.Component
@@ -61,7 +63,7 @@ func (b *Background) Draw(w term.Writer) {
 		return
 	}
 
-	b.buffer.Init(b.width, b.height)
+	b.buffer.Init(w.Context(), b.width, b.height)
 	b.root.Draw(b.buffer)
 	cells := b.buffer.RawCells()
 

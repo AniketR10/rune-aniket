@@ -113,7 +113,7 @@ func (a *clientBreaker) sendHandle(ctx context.Context, req *HandleRequest) {
 			component.StringConfig{Alignment: component.SpanAlignmentCentered})
 		width, height := int(req.GetDraw().GetWidth()), int(req.GetDraw().GetHeight())
 		comp.Resize(width, height)
-		draw := NewDrawResponse(comp, width, height)
+		draw := NewDrawResponse(ctx, comp, width, height)
 		if a.logger != nil {
 			a.logger.Errorf("error returned on Draw request: %v", err)
 		}
@@ -146,7 +146,7 @@ func (a *clientBreaker) readyCopy() *DrawResponse {
 }
 
 func (a *clientBreaker) loadingContent(
-	in *DrawRequest,
+	ctx context.Context, in *DrawRequest,
 ) *DrawResponse {
 	if a.draw.ready.GetCursor() != nil &&
 		a.draw.ready.GetWidth() == in.Width &&
@@ -157,7 +157,7 @@ func (a *clientBreaker) loadingContent(
 	loading := component.NewStringWithConfig(loadingCopy,
 		component.StringConfig{Alignment: component.SpanAlignmentCentered})
 	loading.Resize(int(in.Width), int(in.Height))
-	return NewDrawResponse(loading, int(in.Width), int(in.Height))
+	return NewDrawResponse(ctx, loading, int(in.Width), int(in.Height))
 }
 
 func (a *clientBreaker) transitionToPending(
@@ -184,7 +184,7 @@ func (a *clientBreaker) processDraw(
 
 	switch a.draw.state {
 	case initial, pending:
-		resp := a.loadingContent(in)
+		resp := a.loadingContent(ctx, in)
 		a.transitionToPending(ctx, in)
 		return resp, nil
 
@@ -196,7 +196,7 @@ func (a *clientBreaker) processDraw(
 		}
 
 		a.transitionToPending(ctx, in)
-		resp := a.loadingContent(in)
+		resp := a.loadingContent(ctx, in)
 		return resp, nil
 
 	case closed:
@@ -226,7 +226,7 @@ func (a *clientBreaker) Handle(
 
 	if quitNext {
 		res.Quit = quitNext
-		res.Draw = NewDrawResponse(component.Nop(), 0, 0)
+		res.Draw = NewDrawResponse(ctx, component.Nop(), 0, 0)
 		return res, nil
 	}
 

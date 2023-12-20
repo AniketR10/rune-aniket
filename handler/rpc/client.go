@@ -87,9 +87,9 @@ func (c *Client) doDraw(w term.Writer, resp *DrawResponse) {
 	}
 }
 
-func (c *Client) setNewHandleResponse(comp tui.Component) {
+func (c *Client) setNewHandleResponse(ctx context.Context, comp tui.Component) {
 	comp.Resize(c.width, c.height)
-	draw := NewDrawResponse(comp, c.width, c.height)
+	draw := NewDrawResponse(ctx, comp, c.width, c.height)
 	c.resp.HandleResponse = &HandleResponse{Draw: draw}
 	c.resp.width = c.width
 	c.resp.height = c.height
@@ -115,8 +115,9 @@ func (c *Client) Draw(w term.Writer) {
 func (c *Client) Handle(ev term.Event) (exit, handled bool) {
 	exit, handled, err := c.handle(ev)
 	if err != nil {
-		c.setNewHandleResponse(component.NewStringWithConfig(smtgWrongCopy,
-			component.StringConfig{Alignment: component.SpanAlignmentCentered}))
+		c.setNewHandleResponse(context.Background(),
+			component.NewStringWithConfig(smtgWrongCopy,
+				component.StringConfig{Alignment: component.SpanAlignmentCentered}))
 	}
 	return
 }

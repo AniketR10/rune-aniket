@@ -1,5 +1,7 @@
 package term
 
+import "context"
+
 type dimWriter struct {
 	w Writer
 }
@@ -120,4 +122,8 @@ func (w *dimWriter) Clear(attr Attributes) error {
 
 func (w *dimWriter) SetCursor(pos Coordinates) {
 	w.w.SetCursor(pos)
+}
+
+func (w *dimWriter) Context() context.Context {
+	return w.w.Context()
 }

@@ -1,6 +1,7 @@
 package rpc
 
 import (
+	"context"
 	"strings"
 
 	"unstable.build/go-tui"
@@ -11,13 +12,13 @@ import (
 var zeroCell = termpb.Cell{}
 
 // NewDrawResponse converts a tui.Component into a DrawResponse.
-func NewDrawResponse(comp tui.Component, width, height int) *DrawResponse {
+func NewDrawResponse(ctx context.Context, comp tui.Component, width, height int) *DrawResponse {
 	resp := &DrawResponse{
 		Cursor: &DrawResponse_Cursor{
 			Position: &termpb.Coordinates{},
 		},
 	}
-	w := newDrawResponseWriter(width, height, resp)
+	w := newDrawResponseWriter(ctx, width, height, resp)
 	comp.Draw(w)
 	return resp
 }
@@ -47,9 +48,12 @@ func DrawResponseToTermString(r *DrawResponse) (str string, width, height int) {
 	return
 }
 
+var _ term.Writer = drawResponseWriter{}
+
 type drawResponseWriter struct {
 	width, height int
 	res           *DrawResponse
+	ctx           context.Context
 }
 
 // SetCell satisfies term.Writer
@@ -85,7 +89,11 @@ func (r drawResponseWriter) Clear(term.Attributes) error {
 func (r drawResponseWriter) SetCursor(term.Coordinates) {
 }
 
-func newDrawResponseWriter(width, height int, r *DrawResponse) drawResponseWriter {
+func (r drawResponseWriter) Context() context.Context {
+	return r.ctx
+}
+
+func newDrawResponseWriter(ctx context.Context, width, height int, r *DrawResponse) drawResponseWriter {
 	cellRowSlab := make([]termpb.CellRow, height)
 	cellRowWidthSlab := make([]*termpb.Cell, height*width)
 	r.Rows = make([]*termpb.CellRow, height)
@@ -99,6 +107,7 @@ func newDrawResponseWriter(width, height int, r *DrawResponse) drawResponseWrite
 		}
 	}
 	return drawResponseWriter{
+		ctx:    ctx,
 		width:  width,
 		height: height,
 		res:    r,

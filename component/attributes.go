@@ -89,7 +89,7 @@ func (s *AttrSetter) Draw(w term.Writer) {
 	}
 
 	var bw cell.BufferWriter
-	bw.Init(s.width, s.height)
+	bw.Init(w.Context(), s.width, s.height)
 	s.comp.Resize(s.width, s.height)
 	s.comp.Draw(&bw)
 	cells := bw.RawCells()

@@ -13,7 +13,7 @@ var (
 	defaultAttr = Attributes{Fg: ColorDefault, Bg: ColorDefault}
 
 	// DefaultWriter returns the global terminal Writer.
-	DefaultWriter = new(termboxWriter)
+	DefaultWriter ContextWriter = newTermboxWriter()
 
 	publishEvent atomic.Value
 )

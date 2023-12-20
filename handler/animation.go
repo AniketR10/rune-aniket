@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"context"
+
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
@@ -42,14 +44,14 @@ func (p *player) Draw(w term.Writer) {
 		return
 	}
 
-	p.cachePausedFrame()
+	p.cachePausedFrame(w.Context())
 	p.pausedFrame.Draw(w)
 }
 
-func (p *player) cachePausedFrame() {
+func (p *player) cachePausedFrame(ctx context.Context) {
 	var bw cell.BufferWriter
 	var buf cell.Buffer
-	bw.Init(p.width, p.height)
+	bw.Init(ctx, p.width, p.height)
 	p.a.Draw(&bw)
 	bw.ToBuffer(&buf)
 
@@ -70,7 +72,7 @@ func (p *player) Handle(ev term.Event) (exit, handled bool) {
 			p.pausedFrame = nil
 		}
 	case term.KeyEsc:
-		p.cachePausedFrame()
+		p.cachePausedFrame(context.Background())
 		p.pause = true
 		exit = true
 		_ = p.a.Close()

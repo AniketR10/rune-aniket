@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"os"
 	"os/signal"
 	"sync"
@@ -60,7 +61,7 @@ var interruptPending atomic.Bool
 
 // PublishEvent publishes the given event to the event loop.
 func PublishEvent(ev term.Event) bool {
-	if ev.Type == term.EventInterrupt &&
+	if ev.Type == term.EventInterrupt && ev.Raw == nil &&
 		!interruptPending.CompareAndSwap(false, true) {
 		return true
 	}
@@ -75,7 +76,8 @@ func handleInterruptSignal(
 	*lastSignalAt = now
 }
 
-func run(root Handler, lock sync.Locker, termw term.Writer) (err error) {
+func run(root Handler, lock sync.Locker, termw term.ContextWriter) (err error) {
+	ctx := context.Background()
 	width, height := term.Size()
 
 	lock.Lock()
@@ -97,6 +99,7 @@ func run(root Handler, lock sync.Locker, termw term.Writer) (err error) {
 			return
 		}
 
+		termw.SetContext(ctx)
 		for {
 			select {
 			case <-sigs:
@@ -106,6 +109,9 @@ func run(root Handler, lock sync.Locker, termw term.Writer) (err error) {
 				ev := term.FromTcellEvent(tev)
 				switch ev.Type {
 				case term.EventInterrupt:
+					if ev.Raw != nil {
+						termw.SetContext(term.ContextWithPayload(ctx, ev.Raw))
+					}
 				case term.EventError:
 					err = ev.Err
 				case term.EventResize:

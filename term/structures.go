@@ -1,6 +1,9 @@
 package term
 
-import "fmt"
+import (
+	"context"
+	"fmt"
+)
 
 type (
 	InputMode  int
@@ -68,6 +71,7 @@ func (e Event) KeyComb() KeyComb {
 // Writer abstracts termbox write functionality to decouple components from
 // termbox, so they're easier to test.
 type Writer interface {
+	Context() context.Context
 	SetCell(Coordinates, Cell)
 	Flush() error
 	Clear(Attributes) error
