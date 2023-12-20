@@ -97,12 +97,12 @@ func (p *Publisher) SubscribeEvents(evs []textapi.EventType, sub EventHandler) {
 			p.subs[ev] = append(p.subs[ev], sub)
 		}
 	}
+	p.log(log.TraceLevel, "subscribe subscriber sub=%p to evs %+v: "+
+		"unsubscribed called. Current=%+v", sub, evs, p.subs)
 }
 
 // UnsubscribeEvents unsubscribes sub from all events.
 func (p *Publisher) UnsubscribeEvents(sub EventHandler) (ret bool) {
-	p.log(log.TraceLevel, "unsubscribing subscriber sub=%p: "+
-		"unsubscribed called. Current=%+v", sub, p.subs)
 	final := make(map[textapi.EventType][]EventHandler)
 	for ev, subs := range p.subs {
 		final[ev] = make([]EventHandler, 0, len(subs))
