@@ -1107,8 +1107,8 @@ func (h *lspEditorHandler) sendIncrementalEdit(
 	evts := []protocol.TextDocumentContentChangeEvent{{Text: content, Range: &rng}}
 
 	log.Tracef("sending incremental file update: file=%v, length=%v, version=%v,"+
-		" rangeStart: %#v, rangeEnd: %#v, from=%#v, to=%#v: content='%s'",
-		f.uri, len(content), version, rng.Start, rng.End, from, to, content)
+		" rangeStart: %#v, rangeEnd: %#v, from=%#v, to=%#v",
+		f.uri, len(content), version, rng.Start, rng.End, from, to)
 
 	err := h.callServerDidChange(ctx, srv, f, evts)
 	if err != nil {
