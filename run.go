@@ -61,6 +61,7 @@ var interruptPending atomic.Bool
 
 // PublishEvent publishes the given event to the event loop.
 func PublishEvent(ev term.Event) bool {
+	// only conflate interrupts that have no payload
 	if ev.Type == term.EventInterrupt && ev.Raw == nil &&
 		!interruptPending.CompareAndSwap(false, true) {
 		return true
@@ -92,6 +93,10 @@ func run(root Handler, lock sync.Locker, termw term.ContextWriter) (err error) {
 	var handled, exit bool
 	var lastSignalAt time.Time
 	var prevCursor term.CursorStyle
+	var i int64
+	termw.SetContext(ContextWithIteration(ctx, i))
+
+loop:
 	for !exit && err == nil {
 		// reset interrupts so we don't stay forever in pending mode
 		interruptPending.Store(false)
@@ -99,7 +104,6 @@ func run(root Handler, lock sync.Locker, termw term.ContextWriter) (err error) {
 			return
 		}
 
-		termw.SetContext(ctx)
 		for {
 			select {
 			case <-sigs:
@@ -110,8 +114,20 @@ func run(root Handler, lock sync.Locker, termw term.ContextWriter) (err error) {
 				switch ev.Type {
 				case term.EventInterrupt:
 					if ev.Raw != nil {
-						termw.SetContext(term.ContextWithPayload(ctx, ev.Raw))
+						if id, ok := parsePayload(ev.Raw); ok {
+							termw.SetContext(ContextWithIteration(ctx, id))
+						} else {
+							termw.SetContext(term.ContextWithPayload(ctx, ev.Raw))
+						}
+					} else {
+						// do not set a new iteration id, instead reset to nil
+						// so clients can differentiate between an interrupt
+						// and a regular iteration loop.
+						termw.SetContext(ctx)
 					}
+					// ensure that i is not incremented
+					// and context is not overwritten
+					continue loop
 				case term.EventError:
 					err = ev.Err
 				case term.EventResize:
@@ -130,6 +146,8 @@ func run(root Handler, lock sync.Locker, termw term.ContextWriter) (err error) {
 				}
 			}
 			if exit || len(evs) == 0 {
+				i++
+				termw.SetContext(ContextWithIteration(ctx, i))
 				break
 			}
 		}
