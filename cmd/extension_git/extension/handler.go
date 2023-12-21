@@ -144,7 +144,7 @@ func newGitHandler(
 			if err != nil {
 				return nil, err
 			}
-			syncComp := component.Sync(&ret.scroll, &ret.scroll.scroll)
+			syncComp := component.Sync(&ret.scroll, component.WithLogging(&ret.scroll.scroll, log.Tracef))
 			err = ret.wm.Bar(browserapi.OrientationLeft, handler.Nop(syncComp))
 			if err != nil {
 				return nil, err
