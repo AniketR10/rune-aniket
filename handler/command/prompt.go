@@ -877,6 +877,7 @@ func (h *Prompt) startManualTimer() {
 		h.config.ShowManualAfter)
 
 	go func() {
+		ctx := context.Background()
 		defer timer.Stop()
 		for {
 			select {
@@ -892,7 +893,7 @@ func (h *Prompt) startManualTimer() {
 				h.manualComponent = h.buildManualComponent(h.inputString.Load().(string))
 				h.showManual = true
 				h.mu.Unlock()
-				h.interrupter.Interrupt()
+				h.interrupter.Interrupt(ctx)
 				return
 			case <-h.ctx.Done():
 				return

@@ -5,6 +5,7 @@
 package test
 
 import (
+	context "context"
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
@@ -525,17 +526,17 @@ func (m *MockEventPublisher) EXPECT() *MockEventPublisherMockRecorder {
 }
 
 // Interrupt mocks base method.
-func (m *MockEventPublisher) Interrupt() error {
+func (m *MockEventPublisher) Interrupt(arg0 context.Context) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Interrupt")
+	ret := m.ctrl.Call(m, "Interrupt", arg0)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Interrupt indicates an expected call of Interrupt.
-func (mr *MockEventPublisherMockRecorder) Interrupt() *gomock.Call {
+func (mr *MockEventPublisherMockRecorder) Interrupt(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Interrupt", reflect.TypeOf((*MockEventPublisher)(nil).Interrupt))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Interrupt", reflect.TypeOf((*MockEventPublisher)(nil).Interrupt), arg0)
 }
 
 // PublishEventNone mocks base method.
@@ -634,17 +635,17 @@ func (mr *MockBrowserMockRecorder) Focus() *gomock.Call {
 }
 
 // Interrupt mocks base method.
-func (m *MockBrowser) Interrupt() error {
+func (m *MockBrowser) Interrupt(arg0 context.Context) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Interrupt")
+	ret := m.ctrl.Call(m, "Interrupt", arg0)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Interrupt indicates an expected call of Interrupt.
-func (mr *MockBrowserMockRecorder) Interrupt() *gomock.Call {
+func (mr *MockBrowserMockRecorder) Interrupt(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Interrupt", reflect.TypeOf((*MockBrowser)(nil).Interrupt))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Interrupt", reflect.TypeOf((*MockBrowser)(nil).Interrupt), arg0)
 }
 
 // Notify mocks base method.

@@ -1,6 +1,7 @@
 package dialogue
 
 import (
+	"context"
 	"sync"
 	"testing"
 
@@ -14,7 +15,7 @@ func TestHandlerIntegration(t *testing.T) {
 	clip := clipboard.NewInMemory()
 	interrupt := make(chan struct{})
 	h, tx, rx := Handler(new(sync.Mutex),
-		NewComponent(ComponentConfig{}), term.FuncInterrupter(func() error {
+		NewComponent(ComponentConfig{}), term.FuncInterrupter(func(context.Context) error {
 			interrupt <- struct{}{}
 			return nil
 		}), clip)

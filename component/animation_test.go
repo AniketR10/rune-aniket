@@ -1,6 +1,7 @@
 package component
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -11,7 +12,7 @@ import (
 
 func newTestInterrupter() (term.Interrupter, chan struct{}) {
 	ch := make(chan struct{})
-	interrupter := term.FuncInterrupter(func() error {
+	interrupter := term.FuncInterrupter(func(context.Context) error {
 		ch <- struct{}{}
 		return nil
 	})

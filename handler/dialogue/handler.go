@@ -1,6 +1,7 @@
 package dialogue
 
 import (
+	"context"
 	"sync"
 
 	"github.com/ernestrc/blue/logging"
@@ -56,8 +57,8 @@ type dialogueHandler struct {
 	mu          sync.Locker
 }
 
-func (h *dialogueHandler) publishInterrupt() {
-	err := h.interrupter.Interrupt()
+func (h *dialogueHandler) publishInterrupt(ctx context.Context) {
+	err := h.interrupter.Interrupt(ctx)
 	if err != nil {
 		log.WithFields(log.Fields{
 			logging.KeyClass: "dialogue.handler",
@@ -163,6 +164,7 @@ func (s *dialogueHandler) Man() tui.Manual {
 }
 
 func (s *dialogueHandler) consumeIncoming() {
+	ctx := context.Background()
 	for msg := range s.rx {
 		s.mu.Lock()
 		if msg == EOM {
@@ -171,6 +173,6 @@ func (s *dialogueHandler) consumeIncoming() {
 			s.comp.AddReceiveMessageChunk(msg)
 		}
 		s.mu.Unlock()
-		s.publishInterrupt()
+		s.publishInterrupt(ctx)
 	}
 }

@@ -1,6 +1,7 @@
 package capture
 
 import (
+	"context"
 	"image"
 	"image/color"
 	"testing"
@@ -17,7 +18,7 @@ func TestComponent(t *testing.T) {
 
 	trackID, streamID := "1", "s:1"
 	fps := 1
-	interrupter := term.FuncInterrupter(func() error {
+	interrupter := term.FuncInterrupter(func(context.Context) error {
 		ch <- struct{}{}
 		return nil
 	})

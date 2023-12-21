@@ -9,27 +9,27 @@ import (
 // sends an interrupt event to the main loop, forcing a redraw
 // of all compontents.
 type Interrupter interface {
-	Interrupt() error
+	Interrupt(context.Context) error
 }
 
 // NopInterrupter is an interrupter that does nothing when Interrupt
 // is called.
 func NopInterrupter() Interrupter {
-	return FuncInterrupter(func() error { return nil })
+	return FuncInterrupter(func(context.Context) error { return nil })
 }
 
 // FuncInterrupter returns an Interrupter that calls fn
 // every time Interrupt is called.
-func FuncInterrupter(fn func() error) Interrupter {
+func FuncInterrupter(fn func(context.Context) error) Interrupter {
 	return fnInterrupter{fn: fn}
 }
 
 type fnInterrupter struct {
-	fn func() error
+	fn func(context.Context) error
 }
 
-func (i fnInterrupter) Interrupt() error {
-	return i.fn()
+func (i fnInterrupter) Interrupt(ctx context.Context) error {
+	return i.fn(ctx)
 }
 
 // InterruptAt interrupts the main event loop at the given fps, using the
@@ -42,7 +42,7 @@ func InterruptAt(ctx context.Context, interrupter Interrupter, fps int) {
 	for {
 		select {
 		case <-ticker.C:
-			_ = interrupter.Interrupt()
+			_ = interrupter.Interrupt(ctx)
 		case <-ctx.Done():
 			return
 		}

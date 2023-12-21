@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"io"
 
 	"unstable.build/go-tui"
@@ -90,7 +91,7 @@ type ResourceOpener interface {
 type EventPublisher interface {
 	// Interrupt will publish an interrupt event, which will force
 	// redrawing all components in the terminal.
-	Interrupt() error
+	Interrupt(context.Context) error
 
 	// PublishEventNone will publish an EventNone event, which will force
 	// calling Handle on the component currently in focus.

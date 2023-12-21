@@ -197,12 +197,13 @@ func (a *Animation) Close() error {
 }
 
 func (a *Animation) interrupt() {
+	ctx := context.Background()
 	defer close(a.waitInterrupt)
-	for a.interruptFullSequence() {
+	for a.interruptFullSequence(ctx) {
 	}
 }
 
-func (a *Animation) interruptFullSequence() bool {
+func (a *Animation) interruptFullSequence(ctx context.Context) bool {
 	cadence := time.Duration(int(time.Second) / a.fps)
 	ticker := time.NewTicker(cadence)
 	defer ticker.Stop()
@@ -214,7 +215,7 @@ func (a *Animation) interruptFullSequence() bool {
 	for i := 0; i < len(a.sequence); i++ {
 		select {
 		case <-ticker.C:
-			_ = a.interrupter.Interrupt()
+			_ = a.interrupter.Interrupt(ctx)
 		case <-a.ctx.Done():
 			return false
 		}

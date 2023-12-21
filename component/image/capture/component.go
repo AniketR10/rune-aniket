@@ -123,7 +123,7 @@ func (c *Component) consumeVideoSource(cadence time.Duration) {
 			if err != nil {
 				continue
 			}
-			if err := c.interrupter.Interrupt(); err != nil {
+			if err := c.interrupter.Interrupt(c.ctx); err != nil {
 				c.log(log.WarnLevel, "interrupt error: %s", err)
 				continue
 			}

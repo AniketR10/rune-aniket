@@ -287,7 +287,7 @@ func (h *gitEditorHandler) parseDiff(
 	return locs
 }
 
-func (h *gitEditorHandler) runDiff(ev textapi.Event) {
+func (h *gitEditorHandler) runDiff(ctx context.Context, ev textapi.Event) {
 	res, ok := h.getResource(ev)
 	if !ok {
 		return
@@ -320,7 +320,7 @@ func (h *gitEditorHandler) runDiff(ev textapi.Event) {
 			// make sure that an interrupt is called
 			// so the new scroll bar is updated, when
 			// focus switched to a file with no changes.
-			h.interrupt()
+			h.interrupt(ctx)
 			err = nil
 		} else {
 			err = fmt.Errorf("failed to read from stdout: %w", err)
@@ -383,7 +383,7 @@ func (h *gitEditorHandler) handleEvents(cwd workspaceapi.URI) {
 		if cwd != (workspaceapi.URI{}) && !workspaceapi.HasPrefix(ev.URI, cwd) {
 			h.log(log.DebugLevel, "ignoring file that's not in active workspace %s", ev.URI)
 			h.resetBar()
-			h.interrupt()
+			h.interrupt(ctx)
 			continue
 		}
 
@@ -397,15 +397,15 @@ func (h *gitEditorHandler) handleEvents(cwd workspaceapi.URI) {
 			res.Metadata = new(metadata)
 			h.setBarOffset(ev)
 		case textapi.EventTypeFlush:
-			h.runDiff(ev)
+			h.runDiff(ctx, ev)
 		case textapi.EventTypeFocus:
-			h.runDiff(ev)
+			h.runDiff(ctx, ev)
 		case textapi.EventTypeUnfocus:
 			h.resetBar()
-			h.interrupt()
+			h.interrupt(ctx)
 		case textapi.EventTypeScroll:
 			if h.setBarOffset(ev) {
-				h.interrupt()
+				h.interrupt(ctx)
 			}
 		}
 		if log.IsLevelEnabled(log.TraceLevel) {
@@ -443,8 +443,8 @@ func (h *gitEditorHandler) setBarOffset(ev textapi.Event) bool {
 	return ok
 }
 
-func (h *gitEditorHandler) interrupt() {
-	if err := h.p.Interrupt(); err != nil {
+func (h *gitEditorHandler) interrupt(ctx context.Context) {
+	if err := h.p.Interrupt(ctx); err != nil {
 		h.log(log.ErrorLevel, "interrupt: %v", err)
 	}
 }

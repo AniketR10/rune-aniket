@@ -287,10 +287,10 @@ func (c *Client) PublishEventNone() error {
 }
 
 // Interrupt satisfies Browser.
-func (c *Client) Interrupt() error {
-	ctx := context.Background()
+func (c *Client) Interrupt(ctx context.Context) error {
+	payload, _ := term.PayloadFromContext(ctx)
 	protoEv := new(termpb.Event)
-	err := protoEv.FromModel(term.Event{Type: term.EventInterrupt})
+	err := protoEv.FromModel(term.Event{Type: term.EventInterrupt, Raw: payload})
 	if err != nil {
 		c.log(log.WarnLevel, "debug interrupt: called interrupt: event from model: %v", err)
 		return err

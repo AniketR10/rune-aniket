@@ -153,9 +153,9 @@ func TestIntegrationRace(t *testing.T) {
 		}, func(
 			mock *browserapitest.MockBrowserMockRecorder,
 		) *gomock.Call {
-			return mock.Interrupt().Return(nil)
+			return mock.Interrupt(gomock.Any()).Return(nil)
 		}, func(ifc interface{}) error {
-			return ifc.(browserapi.EventPublisher).Interrupt()
+			return ifc.(browserapi.EventPublisher).Interrupt(context.Background())
 		}},
 		{extension.PermissionBrowserEventPublisher, func(token extension.Grant, broker proto.MuxBroker) (interface{}, error) {
 			return EventPublisher(context.Background(), token, broker)

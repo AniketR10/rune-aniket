@@ -1,6 +1,7 @@
 package test
 
 import (
+	"context"
 	"fmt"
 
 	"unstable.build/go-tui"
@@ -96,7 +97,7 @@ func (b toBrowser) Resource(u workspaceapi.URI) (browserapi.Handler, bool) {
 
 func (b toBrowser) PublishEvent(ev term.Event) error {
 	if ev.Type == term.EventInterrupt {
-		return b.b.Interrupt()
+		return b.b.Interrupt(context.Background())
 	} else if ev.Type == term.EventNone {
 		return b.b.PublishEventNone()
 	}

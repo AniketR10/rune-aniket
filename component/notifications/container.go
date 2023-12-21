@@ -282,7 +282,7 @@ func (n *Container) startAutoClose(
 		n.mu.Unlock()
 
 		if n.cfg.Interrupter != nil {
-			_ = n.cfg.Interrupter.Interrupt()
+			_ = n.cfg.Interrupter.Interrupt(ctx)
 		}
 	}()
 

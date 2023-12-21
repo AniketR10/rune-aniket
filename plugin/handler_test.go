@@ -80,7 +80,7 @@ sh-3.2$
 			require.NoError(t, err)
 
 			ch := make(chan struct{})
-			waitInterrupt := term.FuncInterrupter(func() error {
+			waitInterrupt := term.FuncInterrupter(func(context.Context) error {
 				select {
 				case ch <- struct{}{}:
 				default:
@@ -114,7 +114,7 @@ func (n nopPublisher) PublishEvent(ev term.Event) error {
 		return errors.New("unexpected event type")
 	}
 	if n.interrupt != nil {
-		n.interrupt.Interrupt()
+		n.interrupt.Interrupt(context.Background())
 	}
 	return nil
 }

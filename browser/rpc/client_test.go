@@ -154,8 +154,13 @@ func TestClientPublish(t *testing.T) {
 		fn  func(*Client) error
 		ev  *termpb.Event
 	}{
-		{"Interrupt", (*Client).Interrupt, &termpb.Event{Type: termpb.Event_TypeInterrupt}},
 		{"PublishEventNone", (*Client).PublishEventNone, &termpb.Event{Type: termpb.Event_TypeNone}},
+		{"Interrupt", func(c *Client) error {
+			return c.Interrupt(context.Background())
+		}, &termpb.Event{Type: termpb.Event_TypeInterrupt}},
+		{"Interrupt with context payload", func(c *Client) error {
+			return c.Interrupt(term.ContextWithPayload(context.Background(), []byte("1234")))
+		}, &termpb.Event{Type: termpb.Event_TypeInterrupt, Raw: []byte("1234")}},
 	}
 	for _, tcase := range tsuite {
 		t.Run(fmt.Sprintf("%s bubbles up rpc error and so stops event handler resources", tcase.rpc),

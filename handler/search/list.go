@@ -282,7 +282,7 @@ func (l *List) consumeAsyncElements(ctx context.Context, datachan chan []byte, q
 		}
 		interrupter := l.cfg.interrupter
 		l.mu.Unlock()
-		interrupter.Interrupt()
+		interrupter.Interrupt(ctx)
 	}()
 
 	var dirty bool
@@ -304,7 +304,7 @@ func (l *List) consumeAsyncElements(ctx context.Context, datachan chan []byte, q
 				}
 				dirty = false
 				l.mu.Unlock()
-				interrupter.Interrupt()
+				interrupter.Interrupt(ctx)
 			case <-ctx.Done():
 				return
 			case <-quitChan:
@@ -366,7 +366,7 @@ func (l *List) handleSearch(
 	cancelFn()
 	interrupter := l.cfg.interrupter
 	l.mu.Unlock()
-	interrupter.Interrupt()
+	interrupter.Interrupt(ctx)
 }
 
 // Push returns a channel that can be used to push data to this list asynchronously.
@@ -394,7 +394,7 @@ func (l *List) Pause() {
 	l.sortMatchesList()
 	interrupter := l.cfg.interrupter
 	l.mu.Unlock()
-	interrupter.Interrupt()
+	interrupter.Interrupt(context.Background())
 }
 
 // PushSync pushes one element to this list and searches for a match on it.

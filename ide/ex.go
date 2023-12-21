@@ -215,8 +215,9 @@ func (e *ex) completeCommand(
 	}
 }
 
-func (e *ex) Interrupt() error {
-	if !e.publishEvent(term.Event{Type: term.EventInterrupt}) {
+func (e *ex) Interrupt(ctx context.Context) error {
+	payload, _ := term.PayloadFromContext(ctx)
+	if !e.publishEvent(term.Event{Type: term.EventInterrupt, Raw: payload}) {
 		return errEventStreamNotReady
 	}
 	return nil

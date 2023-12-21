@@ -39,7 +39,7 @@ type listIfc interface {
 }
 
 func wgInterrupter(wg *sync.WaitGroup) term.Interrupter {
-	return term.FuncInterrupter(func() error {
+	return term.FuncInterrupter(func(context.Context) error {
 		wg.Done()
 		return nil
 	})

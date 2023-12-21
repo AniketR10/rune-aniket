@@ -304,24 +304,24 @@ func (h *fileBarEditorHandler) handleEvents() {
 		case textapi.EventTypeEdit:
 			h.setFileDirty(ev, true)
 			h.refreshBarContent(ev)
-			h.interrupt()
+			h.interrupt(ctx)
 		case textapi.EventTypeOpen:
 			res, _ := h.getResource(ev)
 			res.Metadata = new(fileInfo)
 			h.refreshBarContent(ev)
-			h.interrupt()
+			h.interrupt(ctx)
 		case textapi.EventTypeFlush:
 			h.setFileDirty(ev, false)
 			fallthrough
 		case textapi.EventTypeFocus:
 			h.refreshBarContent(ev)
-			h.interrupt()
+			h.interrupt(ctx)
 		case textapi.EventTypeUnfocus:
 			h.resetBarContent()
-			h.interrupt()
+			h.interrupt(ctx)
 		case textapi.EventTypeCursor:
 			h.refreshBarContent(ev)
-			h.interrupt()
+			h.interrupt(ctx)
 		}
 		if log.IsLevelEnabled(log.TraceLevel) {
 			h.log(log.TraceLevel, "handle %v in %s", ev.Type, time.Since(start))
@@ -335,8 +335,8 @@ func (h *fileBarEditorHandler) log(level log.Level, msg string, args ...any) {
 	}).Logf(level, msg, args...)
 }
 
-func (h *fileBarEditorHandler) interrupt() {
-	if err := h.p.Interrupt(); err != nil {
+func (h *fileBarEditorHandler) interrupt(ctx context.Context) {
+	if err := h.p.Interrupt(ctx); err != nil {
 		h.log(log.ErrorLevel, "interrupt: %v", err)
 	}
 }

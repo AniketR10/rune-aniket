@@ -472,8 +472,9 @@ func (h *workspaceManagerHandler) initExtensions(manager extension.Runner, cfg i
 
 func (h *workspaceManagerHandler) textOpts(cfg ideConfig) []text.Option {
 	notificationsCfg := cfg.notificationsConfig()
-	interrupter := term.FuncInterrupter(func() error {
-		if !h.publishEvent(term.Event{Type: term.EventInterrupt}) {
+	interrupter := term.FuncInterrupter(func(ctx context.Context) error {
+		payload, _ := term.PayloadFromContext(ctx)
+		if !h.publishEvent(term.Event{Type: term.EventInterrupt, Raw: payload}) {
 			return errEventStreamNotReady
 		}
 		return nil
