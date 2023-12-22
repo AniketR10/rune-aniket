@@ -21,7 +21,7 @@ EXECS=$(patsubst cmd/%/,$(BIN)/%,$(EXECDIRS))
 GOMOCKS=$(wildcard **/**/*_gomock.go) $(wildcard **/*_gomock.go)
 RELEASE_FILES=$(wildcard release/*)
 
-.PHONY: debug clean test coverage example_wasm generate sixdev
+.PHONY: debug clean test coverage example_wasm generate sixdev format
 
 default: CGO_ENABLED=CGO_ENABLED=1
 default: $(EXAMPLES) $(EXECS)
@@ -57,6 +57,9 @@ generate:
 	@ mv handler/unstable.build/go-tui/handler/rpc/* handler/rpc
 	@ mv api/config/unstable.build/go-tui/api/config/rpc/* api/config/rpc
 	@ rm -rf **/unstable.build **/github.com
+
+format:
+	@ go fmt ./.../...
 
 install:
 	@ go install ./...
