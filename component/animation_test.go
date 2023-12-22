@@ -48,7 +48,7 @@ func TestAnimation(t *testing.T) {
 					})}
 				}
 				a := new(Animation)
-				a.InitWithComponents(interrupter, components, sequence, fps)
+				a.InitWithComponents(context.Background(), interrupter, components, sequence, fps)
 				defer a.Close()
 
 				raw := EncodeAnimation(a, 8, 4)

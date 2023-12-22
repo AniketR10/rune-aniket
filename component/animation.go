@@ -150,13 +150,14 @@ func (a *Animation) Init(
 			Alignment: SpanAlignmentCentered,
 		})
 	}
-	a.InitWithComponents(interrupter, components, sequence, fps)
+	a.InitWithComponents(context.Background(), interrupter, components, sequence, fps)
 }
 
 // InitWithComponents initializes this animation with the given interrupter,
-// frames as tui.Components, and fps. See Init for more details.
+// frames as tui.Components, and fps. The given context is passed in calls to
+// interrupter.Interrupt. See Init for more details.
 func (a *Animation) InitWithComponents(
-	interrupter term.Interrupter,
+	ctx context.Context, interrupter term.Interrupter,
 	frames []tui.Component, sequence []int, fps int,
 ) {
 	// assert frames and sequence are consistent with each other
@@ -176,9 +177,9 @@ func (a *Animation) InitWithComponents(
 	a.sequence = sequence
 	a.frames = frames
 
+	// do not use the given context for lifecycle monitoring
 	a.ctx, a.cancelCtx = context.WithCancel(context.Background())
-
-	go a.interrupt()
+	go a.interrupt(ctx)
 }
 
 // Resize satisfies tui.Component.
@@ -206,8 +207,7 @@ func (a *Animation) Close() error {
 	return nil
 }
 
-func (a *Animation) interrupt() {
-	ctx := context.Background()
+func (a *Animation) interrupt(ctx context.Context) {
 	defer close(a.waitInterrupt)
 	for a.interruptFullSequence(ctx) {
 	}
@@ -227,6 +227,8 @@ func (a *Animation) interruptFullSequence(ctx context.Context) bool {
 		case <-ticker.C:
 			_ = a.interrupter.Interrupt(ctx)
 		case <-a.ctx.Done():
+			return false
+		case <-ctx.Done():
 			return false
 		}
 	}
