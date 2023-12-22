@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	goplugin "github.com/hashicorp/go-plugin"
@@ -95,19 +96,21 @@ func Serve(grantee extension.Grantee, request ...extension.Permission) {
 
 	proto.DisableGRPCLogging()
 
+	extensionExecutable := filepath.Base(os.Args[0])
+
 	pluginMap := map[string]goplugin.Plugin{
 		typeGranteeExtension: &granteeExtension{
 			requested: request,
 			grantee:   grantee,
 			keepAlive: defaultHealthCheckTicker,
-			broker:    initClientBroker(&extensionLogger, getDataDirEnv(), os.Args[0], ""),
+			broker:    initClientBroker(&extensionLogger, getDataDirEnv(), extensionExecutable, ""),
 		},
 	}
 
 	goplugin.Serve(&goplugin.ServeConfig{
 		HandshakeConfig: handshakeConfig,
 		Plugins:         pluginMap,
-		Logger:          newHCLogLogrus(os.Args[0], &extensionLogger),
+		Logger:          newHCLogLogrus(extensionExecutable, &extensionLogger),
 		GRPCServer:      goplugin.DefaultGRPCServer,
 	})
 }
