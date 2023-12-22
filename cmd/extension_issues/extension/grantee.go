@@ -245,25 +245,25 @@ func (e *grantee) PermissionGranted(ctx context.Context, grants []extension.Gran
 	for _, g := range grants {
 		switch g.Permission {
 		case extension.Permission(extension.PermissionBrowserWindowManager):
-			wm, err := browserextension.WindowManager(g, e.broker)
+			wm, err := browserextension.WindowManager(ctx, g, e.broker)
 			if err != nil {
 				return fmt.Errorf("acquire browser window manager: %w ", err)
 			}
 			e.wm = wm
 		case extension.Permission(extension.PermissionBrowserResourceOpener):
-			o, err := browserextension.ResourceOpener(g, e.broker)
+			o, err := browserextension.ResourceOpener(ctx, g, e.broker)
 			if err != nil {
 				return fmt.Errorf("acquire browser resource opener: %w ", err)
 			}
 			e.o = o
 		case extension.Permission(extension.PermissionBrowserNotifications):
-			m, err := browserextension.Notifications(g, e.broker)
+			m, err := browserextension.Notifications(ctx, g, e.broker)
 			if err != nil {
 				return fmt.Errorf("acquire browser notifications: %w ", err)
 			}
 			e.m = m
 		case extension.Permission(extension.PermissionEditor):
-			ed, err := textextension.Editor(g, e.broker)
+			ed, err := textextension.Editor(ctx, g, e.broker)
 			if err != nil {
 				return fmt.Errorf("acquire editor: %w ", err)
 			}
@@ -285,13 +285,13 @@ func (e *grantee) PermissionGranted(ctx context.Context, grants []extension.Gran
 				e.log(log.DebugLevel, "Subscribed to create issue command %q", cmd)
 			}
 		case extension.PermissionSchemeManager:
-			m, err := schemeextension.SchemeManager(g, e.broker)
+			m, err := schemeextension.SchemeManager(ctx, g, e.broker)
 			if err != nil {
 				return fmt.Errorf("acquire scheme manager: %w", err)
 			}
 			e.sm = m
 		case extension.PermissionStorage:
-			s, err := storageextension.Storage(g, e.broker)
+			s, err := storageextension.Storage(ctx, g, e.broker)
 			if err != nil {
 				return fmt.Errorf("acquire storage: %w", err)
 			}

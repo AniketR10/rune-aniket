@@ -1,6 +1,7 @@
 package extension
 
 import (
+	"context"
 	"os"
 
 	browserapi "unstable.build/go-tui/api/browser"
@@ -9,10 +10,10 @@ import (
 	"unstable.build/go-tui/proto"
 )
 
-func dialBrowser(grant extension.Grant, broker proto.MuxBroker) (
+func dialBrowser(ctx context.Context, grant extension.Grant, broker proto.MuxBroker) (
 	browserapi.Browser, error,
 ) {
-	conn, err := broker.DialChannel(grant.Token,
+	conn, err := broker.DialChannel(ctx, grant.Token,
 		os.Args[0], "browser", string(grant.Permission))
 	if err != nil {
 		return nil, err
@@ -23,32 +24,32 @@ func dialBrowser(grant extension.Grant, broker proto.MuxBroker) (
 
 // WindowManager acquires the browser's WindowManager
 // resource with the given token.
-func WindowManager(grant extension.Grant, broker proto.MuxBroker) (
+func WindowManager(ctx context.Context, grant extension.Grant, broker proto.MuxBroker) (
 	browserapi.WindowManager, error,
 ) {
-	return dialBrowser(grant, broker)
+	return dialBrowser(ctx, grant, broker)
 }
 
 // ResourceOpener acquires the browser's ResourceOpener
 // resource with the given token.
-func ResourceOpener(grant extension.Grant, broker proto.MuxBroker) (
+func ResourceOpener(ctx context.Context, grant extension.Grant, broker proto.MuxBroker) (
 	browserapi.ResourceOpener, error,
 ) {
-	return dialBrowser(grant, broker)
+	return dialBrowser(ctx, grant, broker)
 }
 
 // Notifications acquires the browser's Notifications
 // resource with the given token.
-func Notifications(grant extension.Grant, broker proto.MuxBroker) (
+func Notifications(ctx context.Context, grant extension.Grant, broker proto.MuxBroker) (
 	browserapi.Notifications, error,
 ) {
-	return dialBrowser(grant, broker)
+	return dialBrowser(ctx, grant, broker)
 }
 
 // EventPublisher acquires the browser's EventPublisher
 // resource with the given token.
-func EventPublisher(grant extension.Grant, broker proto.MuxBroker) (
+func EventPublisher(ctx context.Context, grant extension.Grant, broker proto.MuxBroker) (
 	browserapi.EventPublisher, error,
 ) {
-	return dialBrowser(grant, broker)
+	return dialBrowser(ctx, grant, broker)
 }

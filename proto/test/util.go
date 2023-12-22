@@ -83,8 +83,8 @@ func ExpectBrokerDial(
 ) *proto.MockMuxConn {
 	ret := proto.NewMockMuxConn(ctrl)
 
-	mockBroker.EXPECT().DialChannel(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(brokerId string, tags ...string) (proto.MuxConn, error) {
+	mockBroker.EXPECT().DialChannel(gomock.Any(), gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, brokerId string, tags ...string) (proto.MuxConn, error) {
 			assert.Equal(t, expectedBrokerID, brokerId)
 			return ret, nil
 		}).
@@ -97,7 +97,7 @@ func ExpectBrokerDialError(
 	t *testing.T, ctrl *gomock.Controller,
 	mockBroker *proto.MockMuxBroker, expectedBrokerID string,
 ) {
-	mockBroker.EXPECT().DialChannel(gomock.Any(), gomock.Any()).
+	mockBroker.EXPECT().DialChannel(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil, errors.New("whoopsie")).
 		Times(1)
 }
@@ -118,8 +118,8 @@ func ExpectBrokerDialChannel(
 ) *proto.MockMuxConn {
 	ret := proto.NewMockMuxConn(ctrl)
 
-	mockBroker.EXPECT().DialChannel(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(channelID string, tags ...string) (proto.MuxConn, error) {
+	mockBroker.EXPECT().DialChannel(gomock.Any(), gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, channelID string, tags ...string) (proto.MuxConn, error) {
 			assert.Equal(t, expectedChannelID, channelID)
 			return ret, nil
 		}).
@@ -132,7 +132,7 @@ func ExpectBrokerDialChannelError(
 	t *testing.T, ctrl *gomock.Controller,
 	mockBroker *proto.MockMuxBroker, expectedBrokerID string,
 ) {
-	mockBroker.EXPECT().DialChannel(gomock.Any(), gomock.Any()).
+	mockBroker.EXPECT().DialChannel(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil, errors.New("whoopsie")).
 		Times(1)
 }

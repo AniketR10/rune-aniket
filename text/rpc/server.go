@@ -58,10 +58,12 @@ func (s *Server) log(level log.Level, msg string, args ...interface{}) {
 	log.WithField(logging.KeyClass, "text.Server").Logf(level, msg, args...)
 }
 
-func (s *Server) dialCommandHandler(channelID string) (text.CommandHandler, error) {
+func (s *Server) dialCommandHandler(
+	ctx context.Context, channelID string,
+) (text.CommandHandler, error) {
 	s.log(log.TraceLevel,
 		"(%p editor.Server): dialing command handler with id: %s", s, channelID)
-	handlerConn, err := s.broker.DialChannel(channelID, os.Args[0], "textpb.Server")
+	handlerConn, err := s.broker.DialChannel(ctx, channelID, os.Args[0], "textpb.Server")
 	if err != nil {
 		return nil, err
 	}
@@ -162,7 +164,7 @@ func (s *Server) Register(ctx context.Context, in *RegisterCommandRequest) (
 	*RegisterCommandResponse, error,
 ) {
 	channelID := in.GetChannelId()
-	commander, err := s.dialCommandHandler(channelID)
+	commander, err := s.dialCommandHandler(ctx, channelID)
 	if err != nil {
 		return nil, err
 	}

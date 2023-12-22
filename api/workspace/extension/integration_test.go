@@ -78,7 +78,7 @@ func TestIntegrationRace(t *testing.T) {
 		method func(ifc interface{}) error
 	}{
 		{extension.PermissionExecute, func(grant extension.Grant, broker proto.MuxBroker) (interface{}, error) {
-			return Executor(grant, broker)
+			return Executor(context.Background(), grant, broker)
 		}, func(
 			fs *workspaceapitest.MockFileSystemMockRecorder,
 			t *workspaceapitest.MockTerminalMockRecorder,
@@ -92,7 +92,7 @@ func TestIntegrationRace(t *testing.T) {
 			return err
 		}},
 		{extension.PermissionFileSystem, func(token extension.Grant, broker proto.MuxBroker) (interface{}, error) {
-			return FileSystem(token, broker)
+			return FileSystem(context.Background(), token, broker)
 		}, func(
 			fs *workspaceapitest.MockFileSystemMockRecorder,
 			t *workspaceapitest.MockTerminalMockRecorder,
@@ -107,7 +107,7 @@ func TestIntegrationRace(t *testing.T) {
 			return err.ToError()
 		}},
 		{extension.PermissionTerminal, func(token extension.Grant, broker proto.MuxBroker) (interface{}, error) {
-			return Terminal(token, broker)
+			return Terminal(context.Background(), token, broker)
 		}, func(
 			fs *workspaceapitest.MockFileSystemMockRecorder,
 			t *workspaceapitest.MockTerminalMockRecorder,

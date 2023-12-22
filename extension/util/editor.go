@@ -24,7 +24,7 @@ type CommandEventHandler interface {
 }
 
 // CommandEventHandlerFacility abstracts the ability to create new CommandEventHandler.
-type CommandEventHandlerFacility func(textapi.Editor, []extension.Grant,
+type CommandEventHandlerFacility func(context.Context, textapi.Editor, []extension.Grant,
 	proto.MuxBroker, config.Config) (CommandEventHandler, error)
 
 // NewEditorEventHandler returns a extension.Grantee that simply responds to commands.
@@ -52,12 +52,11 @@ type editorGrantee struct {
 	broker     proto.MuxBroker
 	ed         textapi.Editor
 	handler    CommandEventHandler
-	newHandler func(textapi.Editor, []extension.Grant,
-		proto.MuxBroker, config.Config) (CommandEventHandler, error)
-	cmds    []textapi.CommandManual
-	pconfig config.Config
-	err     error
-	evs     []textapi.EventType
+	newHandler CommandEventHandlerFacility
+	cmds       []textapi.CommandManual
+	pconfig    config.Config
+	err        error
+	evs        []textapi.EventType
 }
 
 func (t *editorGrantee) Connected(
@@ -72,10 +71,12 @@ func (t *editorGrantee) Connected(
 	return nil
 }
 
-func (t *editorGrantee) setNewHandler(grants []extension.Grant) (CommandEventHandler, error) {
+func (t *editorGrantee) setNewHandler(
+	ctx context.Context, grants []extension.Grant,
+) (CommandEventHandler, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	h, err := t.newHandler(t.ed, grants, t.broker, t.pconfig)
+	h, err := t.newHandler(ctx, t.ed, grants, t.broker, t.pconfig)
 	if err != nil {
 		return nil, err
 	}
@@ -83,8 +84,8 @@ func (t *editorGrantee) setNewHandler(grants []extension.Grant) (CommandEventHan
 	return h, nil
 }
 
-func (t *editorGrantee) subscribeToEvents(grants []extension.Grant) error {
-	h, err := t.setNewHandler(grants)
+func (t *editorGrantee) subscribeToEvents(ctx context.Context, grants []extension.Grant) error {
+	h, err := t.setNewHandler(ctx, grants)
 	if err != nil {
 		return err
 	}
@@ -111,9 +112,9 @@ func (t *editorGrantee) PermissionGranted(ctx context.Context, grants []extensio
 		var err error
 		switch grant.Permission {
 		case extension.PermissionEditor:
-			t.ed, err = textextension.Editor(grant, t.broker)
+			t.ed, err = textextension.Editor(ctx, grant, t.broker)
 			if err == nil {
-				err = t.subscribeToEvents(grants)
+				err = t.subscribeToEvents(ctx, grants)
 			}
 		}
 		if err != nil {

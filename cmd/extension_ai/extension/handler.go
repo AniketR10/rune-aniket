@@ -117,7 +117,7 @@ var (
 // CommandEventHandler returns a plugutil.CommandEventHandler that manages
 // this extension's logic.
 func CommandEventHandler(
-	ed textapi.Editor, grants []extension.Grant,
+	ctx context.Context, ed textapi.Editor, grants []extension.Grant,
 	broker proto.MuxBroker, pconfig configapi.Config,
 	svcFn func(configapi.Config, map[string]int, string) (backend.Service, error),
 	defaultAvailableModels map[string]int,
@@ -219,17 +219,17 @@ func CommandEventHandler(
 	for _, g := range grants {
 		switch g.Permission {
 		case extension.PermissionStorage:
-			ret.db, err = storageextension.Storage(g, broker)
+			ret.db, err = storageextension.Storage(ctx, g, broker)
 		case extension.PermissionBrowserEventPublisher:
-			ret.p, err = browserextension.EventPublisher(g, broker)
+			ret.p, err = browserextension.EventPublisher(ctx, g, broker)
 		case extension.PermissionBrowserResourceOpener:
-			ret.o, err = browserextension.ResourceOpener(g, broker)
+			ret.o, err = browserextension.ResourceOpener(ctx, g, broker)
 		case extension.PermissionBrowserWindowManager:
-			ret.wm, err = browserextension.WindowManager(g, broker)
+			ret.wm, err = browserextension.WindowManager(ctx, g, broker)
 		case extension.PermissionBrowserNotifications:
-			ret.n, err = browserextension.Notifications(g, broker)
+			ret.n, err = browserextension.Notifications(ctx, g, broker)
 		case extension.PermissionConfig:
-			config, err := configextension.FetchConfig(g, broker)
+			config, err := configextension.FetchConfig(ctx, g, broker)
 			if err != nil {
 				return nil, err
 			}

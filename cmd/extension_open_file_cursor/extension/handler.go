@@ -61,9 +61,8 @@ type gfEditorHandler struct {
 }
 
 func newGFHandler(
-	ed textapi.Editor, grants []extension.Grant,
+	ctx context.Context, ed textapi.Editor, grants []extension.Grant,
 	broker proto.MuxBroker, pconfig config.Config,
-
 ) (extutil.CommandEventHandler, error) {
 	ret := new(gfEditorHandler)
 	ret.ed = ed
@@ -72,13 +71,13 @@ func newGFHandler(
 	for _, grant := range grants {
 		switch grant.Permission {
 		case extension.PermissionFileSystem:
-			ret.fs, err = workspaceextension.FileSystem(grant, broker)
+			ret.fs, err = workspaceextension.FileSystem(ctx, grant, broker)
 		case extension.PermissionBrowserWindowManager:
-			ret.wm, err = browserextension.WindowManager(grant, broker)
+			ret.wm, err = browserextension.WindowManager(ctx, grant, broker)
 		case extension.PermissionBrowserResourceOpener:
-			ret.o, err = browserextension.ResourceOpener(grant, broker)
+			ret.o, err = browserextension.ResourceOpener(ctx, grant, broker)
 		case extension.PermissionConfig:
-			cfg, err := configextension.FetchConfig(grant, broker)
+			cfg, err := configextension.FetchConfig(ctx, grant, broker)
 			if err != nil {
 				return nil, fmt.Errorf("fetch config: %v", err)
 			}

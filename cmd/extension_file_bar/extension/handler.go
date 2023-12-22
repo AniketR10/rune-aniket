@@ -90,9 +90,8 @@ type fileBarEditorHandler struct {
 }
 
 func newFileBarEditorHandler(
-	ed textapi.Editor, grants []extension.Grant,
+	ctx context.Context, ed textapi.Editor, grants []extension.Grant,
 	broker proto.MuxBroker, pconfig config.Config,
-
 ) (extutil.CommandEventHandler, error) {
 	ret := new(fileBarEditorHandler)
 	ret.ch = make(chan textapi.Event)
@@ -141,12 +140,12 @@ func newFileBarEditorHandler(
 	for _, grant := range grants {
 		switch grant.Permission {
 		case extension.Permission(extension.PermissionBrowserEventPublisher):
-			ret.p, err = browserextension.EventPublisher(grant, broker)
+			ret.p, err = browserextension.EventPublisher(ctx, grant, broker)
 			if err != nil {
 				return nil, err
 			}
 		case extension.Permission(extension.PermissionBrowserWindowManager):
-			ret.wm, err = browserextension.WindowManager(grant, broker)
+			ret.wm, err = browserextension.WindowManager(ctx, grant, broker)
 			if err != nil {
 				return nil, err
 			}
@@ -156,7 +155,7 @@ func newFileBarEditorHandler(
 				return nil, err
 			}
 		case extension.Permission(extension.PermissionFileSystem):
-			w, err := workspaceextension.FileSystem(grant, broker)
+			w, err := workspaceextension.FileSystem(ctx, grant, broker)
 			if err != nil {
 				return nil, err
 			}
@@ -165,7 +164,7 @@ func newFileBarEditorHandler(
 				return nil, err
 			}
 		case extension.PermissionConfig:
-			config, err := configextension.FetchConfig(grant, broker)
+			config, err := configextension.FetchConfig(ctx, grant, broker)
 			if err != nil {
 				return nil, err
 			}

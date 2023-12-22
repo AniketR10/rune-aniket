@@ -133,11 +133,11 @@ func (s *proxySchemeServerImpl) Close() (ret error) {
 /* host-side */
 
 func initializeSchemeThroughProxy(
-	cfg config.Config, uri workspaceapi.URI,
+	ctx context.Context, cfg config.Config, uri workspaceapi.URI,
 	broker proto.MuxBroker, proxyID string,
 ) (schemeapi.Scheme, error) {
 	// once uri, and config is sent disconnect proxy client
-	proxyConn, err := broker.DialChannel(proxyID, os.Args[0], "proxyScheme")
+	proxyConn, err := broker.DialChannel(ctx, proxyID, os.Args[0], "proxyScheme")
 	if err != nil {
 		return nil, err
 	}
@@ -157,7 +157,7 @@ func initializeSchemeThroughProxy(
 		return nil, fmt.Errorf("could not initialize proxy: %s", err)
 	}
 
-	conn, err := broker.DialChannel(resp.GetTokenId(), os.Args[0], "proxyScheme")
+	conn, err := broker.DialChannel(ctx, resp.GetTokenId(), os.Args[0], "proxyScheme")
 	if err != nil {
 		return nil, err
 	}

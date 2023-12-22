@@ -91,11 +91,11 @@ func (s *Server) consumeErrors(
 	}
 }
 
-func (s *Server) dialHandler(channelID string, tags ...string) (
+func (s *Server) dialHandler(ctx context.Context, channelID string, tags ...string) (
 	browserapi.Handler, error,
 ) {
 	s.log(log.DebugLevel, "dialing handler at %q", channelID)
-	handlerConn, err := s.broker.DialChannel(channelID, tags...)
+	handlerConn, err := s.broker.DialChannel(ctx, channelID, tags...)
 	if err != nil {
 		return nil, err
 	}
@@ -119,17 +119,19 @@ func (s *Server) dialHandler(channelID string, tags ...string) (
 	return cc, nil
 }
 
-func (s *Server) getContentHandler(channelID string, tags ...string) (browserapi.Handler, error) {
+func (s *Server) getContentHandler(
+	ctx context.Context, channelID string, tags ...string,
+) (browserapi.Handler, error) {
 	// if it's not a URI, then it must be a remote handler
 	uri, err := workspaceapi.ParseURI(channelID)
 	if err != nil {
-		return s.dialHandler(channelID, tags...)
+		return s.dialHandler(ctx, channelID, tags...)
 	}
 	s.browser.Lock()
 	h, ok := s.browser.Resource(uri)
 	s.browser.Unlock()
 	if !ok {
-		return s.dialHandler(channelID, tags...)
+		return s.dialHandler(ctx, channelID, tags...)
 	}
 
 	s.log(log.DebugLevel, "(%p browser.Server): using return of Open/Content handler for channelID: %s",
@@ -142,7 +144,7 @@ func (s *Server) newRemoteResource(
 	action func(browser.WindowManager, browserapi.Handler) (browser.Window, error),
 	tags ...string,
 ) (uint64, error) {
-	handler, err := s.getContentHandler(channelID, tags...)
+	handler, err := s.getContentHandler(ctx, channelID, tags...)
 	if err != nil {
 		return 0, err
 	}
@@ -204,7 +206,7 @@ func (s *Server) Bar(
 	ctx context.Context, req *BarRequest,
 ) (*BarResponse, error) {
 	handlerID := req.GetChannelId()
-	handler, err := s.getContentHandler(handlerID, "browserpb.Server", "bar")
+	handler, err := s.getContentHandler(ctx, handlerID, "browserpb.Server", "bar")
 	if err != nil {
 		return nil, err
 	}
@@ -363,7 +365,7 @@ func (s *Server) Tab(ctx context.Context, req *TabRequest,
 		return nil, err
 	}
 
-	handler, err := s.getContentHandler(req.GetChannelId(),
+	handler, err := s.getContentHandler(ctx, req.GetChannelId(),
 		"browserpb.Server", "tab")
 	if err != nil {
 		return nil, err
@@ -379,7 +381,7 @@ func (s *Server) Tab(ctx context.Context, req *TabRequest,
 func (s *Server) SetContent(
 	ctx context.Context, req *WindowSetContentRequest,
 ) (*WindowSetContentResponse, error) {
-	client, err := s.getContentHandler(req.GetChannelId(),
+	client, err := s.getContentHandler(ctx, req.GetChannelId(),
 		"browserpb.Server", "setContent")
 	if err != nil {
 		return nil, fmt.Errorf("failed to dial to remote handler: %v", err)

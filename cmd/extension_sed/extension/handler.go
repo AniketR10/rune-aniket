@@ -66,7 +66,7 @@ type sedEditorHandler struct {
 }
 
 func newSedHandler(
-	ed textapi.Editor, grants []extension.Grant,
+	ctx context.Context, ed textapi.Editor, grants []extension.Grant,
 	broker proto.MuxBroker, pconfig config.Config,
 ) (extutil.CommandEventHandler, error) {
 	ret := new(sedEditorHandler)
@@ -76,9 +76,9 @@ func newSedHandler(
 	for _, grant := range grants {
 		switch grant.Permission {
 		case extension.Permission(extension.PermissionExecute):
-			ret.exec, err = workspaceextension.Executor(grant, broker)
+			ret.exec, err = workspaceextension.Executor(ctx, grant, broker)
 		case extension.Permission(extension.PermissionBrowserNotifications):
-			ret.m, err = browserextension.Notifications(grant, broker)
+			ret.m, err = browserextension.Notifications(ctx, grant, broker)
 		}
 		if err != nil {
 			return nil, err

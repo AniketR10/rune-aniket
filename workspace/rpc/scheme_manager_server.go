@@ -61,10 +61,10 @@ func (c *SchemeManagerServer) log(level log.Level, msg string, args ...interface
 		WithField(logging.KeyClass, "SchemeManagerServer").Logf(level, msg, args...)
 }
 
-func (s *SchemeManagerServer) dialScheme(proxyID string, cfg config.Config, uri workspaceapi.URI) (
-	schemeapi.Scheme, error,
-) {
-	client, err := initializeSchemeThroughProxy(cfg, uri, s.broker, proxyID)
+func (s *SchemeManagerServer) dialScheme(
+	ctx context.Context, proxyID string, cfg config.Config, uri workspaceapi.URI,
+) (schemeapi.Scheme, error) {
+	client, err := initializeSchemeThroughProxy(ctx, cfg, uri, s.broker, proxyID)
 	if err != nil {
 		return nil, err
 	}
@@ -84,10 +84,10 @@ func (s *SchemeManagerServer) RegisterScheme(ctx context.Context, req *RegisterS
 
 	proxyID := req.GetProxyId()
 	err = s.manager.RegisterScheme(req.GetScheme(),
-		func(_ context.Context, cfg config.Config, uri workspaceapi.URI) (
+		func(ctx context.Context, cfg config.Config, uri workspaceapi.URI) (
 			schemeapi.Scheme, error,
 		) {
-			return s.dialScheme(proxyID, cfg, uri)
+			return s.dialScheme(ctx, proxyID, cfg, uri)
 		})
 	if err != nil {
 		return

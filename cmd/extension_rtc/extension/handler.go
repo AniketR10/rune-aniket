@@ -1,6 +1,7 @@
 package extension
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"image"
@@ -29,13 +30,15 @@ const defaultFPS = 30
 func Grantee() (extension.Grantee, []extension.Permission) {
 	webcamGrantee, perms := extutil.NewCommandSplitHandler(extutil.CommandSplitHandlerConfig{
 		SplitOrientation: browserapi.OrientationRight,
-		Handler: func(cmd textapi.Command, grants []extension.Grant, broker proto.MuxBroker,
-			invokeWindow browserapi.Window, pconfig config.Config) (browserapi.Handler, error) {
+		Handler: func(ctx context.Context, cmd textapi.Command,
+			grants []extension.Grant, broker proto.MuxBroker,
+			invokeWindow browserapi.Window, pconfig config.Config,
+		) (browserapi.Handler, error) {
 			var publisher term.Interrupter
 			for _, grant := range grants {
 				if grant.Permission == extension.PermissionBrowserEventPublisher {
 					var err error
-					publisher, err = browserextension.EventPublisher(grant, broker)
+					publisher, err = browserextension.EventPublisher(ctx, grant, broker)
 					if err != nil {
 						return nil, fmt.Errorf("browser extension event publisher: %v", err)
 					}
@@ -84,7 +87,8 @@ func Grantee() (extension.Grantee, []extension.Permission) {
 	})
 	convertImageGrantee, _ := extutil.NewCommandSplitHandler(extutil.CommandSplitHandlerConfig{
 		SplitOrientation: browserapi.OrientationRight,
-		Handler: func(cmd textapi.Command, grants []extension.Grant, broker proto.MuxBroker,
+		Handler: func(ctx context.Context, cmd textapi.Command,
+			grants []extension.Grant, broker proto.MuxBroker,
 			invokeWindow browserapi.Window, config config.Config) (browserapi.Handler, error) {
 			if len(cmd.Args) < 1 {
 				return nil, errors.New("expected first argument to be a JPEG image URI")

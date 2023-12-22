@@ -39,7 +39,7 @@ func expectInitialization(
 ) *proto.MockMuxBroker {
 	broker := proto.NewMockMuxBroker(ctrl)
 	h.Connected(context.Background(), broker, emptyConfig)
-	h.Health(context.Background(), )
+	h.Health(context.Background())
 	return broker
 }
 
@@ -171,7 +171,7 @@ func testSplitWindow(
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	cfg.Handler = func(_ textapi.Command, grants []extension.Grant, broker proto.MuxBroker,
+	cfg.Handler = func(_ context.Context, _ textapi.Command, grants []extension.Grant, broker proto.MuxBroker,
 		focus browserapi.Window, c config.Config) (browserapi.Handler, error) {
 		return browsertest.NewTestHandler(), nil
 	}

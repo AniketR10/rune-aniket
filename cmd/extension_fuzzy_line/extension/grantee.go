@@ -75,8 +75,11 @@ func parseLine(workspace workspaceapi.FileSystem, data string) (
 	return uri, term.Coordinates{Y: y - 1}
 }
 
-func newHandler(cmd textapi.Command, grants []extension.Grant, broker proto.MuxBroker,
-	invokeWindow browserapi.Window, c config.Config) (browserapi.Handler, error) {
+func newHandler(
+	ctx context.Context, cmd textapi.Command,
+	grants []extension.Grant, broker proto.MuxBroker,
+	invokeWindow browserapi.Window, c config.Config,
+) (browserapi.Handler, error) {
 	cmdStr, err := c.GetString("command")
 	if err != nil {
 		if err != config.ErrNotFound {
@@ -90,6 +93,6 @@ func newHandler(cmd textapi.Command, grants []extension.Grant, broker proto.MuxB
 		}
 		historyKey = defaultHistoryKey
 	}
-	return finder.New(context.Background(), grants, broker, invokeWindow,
+	return finder.New(ctx, grants, broker, invokeWindow,
 		c, historyKey, defaultHistoryDocumentID, cmdStr, readFiles, parseLine)
 }

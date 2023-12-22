@@ -76,7 +76,7 @@ func TestIntegrationRace(t *testing.T) {
 		method func(ifc interface{}) error
 	}{
 		{extension.PermissionBrowserWindowManager, func(token extension.Grant, broker proto.MuxBroker) (interface{}, error) {
-			return WindowManager(token, broker)
+			return WindowManager(context.Background(), token, broker)
 		}, func(
 			mock *browserapitest.MockBrowserMockRecorder,
 		) *gomock.Call {
@@ -86,7 +86,7 @@ func TestIntegrationRace(t *testing.T) {
 			return err
 		}},
 		{extension.PermissionBrowserWindowManager, func(token extension.Grant, broker proto.MuxBroker) (interface{}, error) {
-			return WindowManager(token, broker)
+			return WindowManager(context.Background(), token, broker)
 		}, func(
 			mock *browserapitest.MockBrowserMockRecorder,
 		) *gomock.Call {
@@ -101,7 +101,7 @@ func TestIntegrationRace(t *testing.T) {
 			return err
 		}},
 		{extension.PermissionBrowserWindowManager, func(token extension.Grant, broker proto.MuxBroker) (interface{}, error) {
-			return WindowManager(token, broker)
+			return WindowManager(context.Background(), token, broker)
 		}, func(
 			mock *browserapitest.MockBrowserMockRecorder,
 		) *gomock.Call {
@@ -110,7 +110,7 @@ func TestIntegrationRace(t *testing.T) {
 			return ifc.(browserapi.WindowManager).Bar(browserapi.OrientationBottom, h)
 		}},
 		{extension.PermissionBrowserWindowManager, func(token extension.Grant, broker proto.MuxBroker) (interface{}, error) {
-			return WindowManager(token, broker)
+			return WindowManager(context.Background(), token, broker)
 		}, func(
 			mock *browserapitest.MockBrowserMockRecorder,
 		) *gomock.Call {
@@ -120,7 +120,7 @@ func TestIntegrationRace(t *testing.T) {
 			return err
 		}},
 		{extension.PermissionBrowserWindowManager, func(token extension.Grant, broker proto.MuxBroker) (interface{}, error) {
-			return WindowManager(token, broker)
+			return WindowManager(context.Background(), token, broker)
 		}, func(
 			mock *browserapitest.MockBrowserMockRecorder,
 		) *gomock.Call {
@@ -130,7 +130,7 @@ func TestIntegrationRace(t *testing.T) {
 			return err
 		}},
 		{extension.PermissionBrowserResourceOpener, func(token extension.Grant, broker proto.MuxBroker) (interface{}, error) {
-			return ResourceOpener(token, broker)
+			return ResourceOpener(context.Background(), token, broker)
 		}, func(
 			mock *browserapitest.MockBrowserMockRecorder,
 		) *gomock.Call {
@@ -140,7 +140,7 @@ func TestIntegrationRace(t *testing.T) {
 			return err
 		}},
 		{extension.PermissionBrowserNotifications, func(token extension.Grant, broker proto.MuxBroker) (interface{}, error) {
-			return Notifications(token, broker)
+			return Notifications(context.Background(), token, broker)
 		}, func(
 			mock *browserapitest.MockBrowserMockRecorder,
 		) *gomock.Call {
@@ -149,7 +149,7 @@ func TestIntegrationRace(t *testing.T) {
 			return ifc.(browserapi.Notifications).Notify(notifications.LevelSuccess, "")
 		}},
 		{extension.PermissionBrowserEventPublisher, func(token extension.Grant, broker proto.MuxBroker) (interface{}, error) {
-			return EventPublisher(token, broker)
+			return EventPublisher(context.Background(), token, broker)
 		}, func(
 			mock *browserapitest.MockBrowserMockRecorder,
 		) *gomock.Call {
@@ -158,7 +158,7 @@ func TestIntegrationRace(t *testing.T) {
 			return ifc.(browserapi.EventPublisher).Interrupt()
 		}},
 		{extension.PermissionBrowserEventPublisher, func(token extension.Grant, broker proto.MuxBroker) (interface{}, error) {
-			return EventPublisher(token, broker)
+			return EventPublisher(context.Background(), token, broker)
 		}, func(
 			mock *browserapitest.MockBrowserMockRecorder,
 		) *gomock.Call {

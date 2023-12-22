@@ -1,6 +1,8 @@
 package extension
 
 import (
+	"context"
+
 	"unstable.build/go-tui"
 	browserapi "unstable.build/go-tui/api/browser"
 	"unstable.build/go-tui/api/config"
@@ -16,7 +18,8 @@ import (
 func Grantee() (extension.Grantee, []extension.Permission) {
 	return extutil.NewCommandSplitHandler(extutil.CommandSplitHandlerConfig{
 		SplitOrientation: browserapi.OrientationRight,
-		Handler: func(cmd textapi.Command, grants []extension.Grant, broker proto.MuxBroker,
+		Handler: func(ctx context.Context, cmd textapi.Command,
+			grants []extension.Grant, broker proto.MuxBroker,
 			invokeWindow browserapi.Window, config config.Config) (browserapi.Handler, error) {
 			return new(panicHandler), nil
 		},

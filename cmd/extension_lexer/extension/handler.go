@@ -114,7 +114,7 @@ type syntaxHandler struct {
 }
 
 func newSyntaxHandler(
-	ed textapi.Editor, grants []extension.Grant,
+	ctx context.Context, ed textapi.Editor, grants []extension.Grant,
 	broker proto.MuxBroker, pconfig config.Config,
 
 ) (extutil.CommandEventHandler, error) {
@@ -194,27 +194,27 @@ func newSyntaxHandler(
 	for _, g := range grants {
 		switch g.Permission {
 		case extension.PermissionBrowserEventPublisher:
-			ret.p, err = browserextension.EventPublisher(g, broker)
+			ret.p, err = browserextension.EventPublisher(ctx, g, broker)
 			if err != nil {
 				return nil, err
 			}
 		case extension.PermissionBrowserResourceOpener:
-			ret.o, err = browserextension.ResourceOpener(g, broker)
+			ret.o, err = browserextension.ResourceOpener(ctx, g, broker)
 			if err != nil {
 				return nil, err
 			}
 		case extension.PermissionBrowserWindowManager:
-			ret.wm, err = browserextension.WindowManager(g, broker)
+			ret.wm, err = browserextension.WindowManager(ctx, g, broker)
 			if err != nil {
 				return nil, err
 			}
 		case extension.PermissionBrowserNotifications:
-			ret.m, err = browserextension.Notifications(g, broker)
+			ret.m, err = browserextension.Notifications(ctx, g, broker)
 			if err != nil {
 				return nil, err
 			}
 		case extension.PermissionFileSystem:
-			ret.fs, err = workspaceextension.FileSystem(g, broker)
+			ret.fs, err = workspaceextension.FileSystem(ctx, g, broker)
 			if err != nil {
 				return nil, err
 			}
@@ -224,7 +224,7 @@ func newSyntaxHandler(
 			}
 			ret.cwd = cwdURI.Path()
 		case extension.PermissionConfig:
-			config, err := configextension.FetchConfig(g, broker)
+			config, err := configextension.FetchConfig(ctx, g, broker)
 			if err != nil {
 				return nil, err
 			}

@@ -1,6 +1,8 @@
 package proto
 
 import (
+	context "context"
+
 	log "github.com/sirupsen/logrus"
 )
 
@@ -20,8 +22,8 @@ func (b loggingBroker) NewChannel(tags ...string) (srv MuxServer, err error) {
 	return
 }
 
-func (b loggingBroker) DialChannel(addr string, tags ...string) (conn MuxConn, err error) {
-	conn, err = b.root.DialChannel(addr, tags...)
+func (b loggingBroker) DialChannel(ctx context.Context, addr string, tags ...string) (conn MuxConn, err error) {
+	conn, err = b.root.DialChannel(ctx, addr, tags...)
 	b.logger.Tracef("loggingBroker: DialChannel(%s, %v): %v %v",
 		addr, tags, conn, err)
 	return

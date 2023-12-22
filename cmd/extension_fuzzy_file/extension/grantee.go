@@ -69,8 +69,11 @@ func getResource(workspace workspaceapi.FileSystem, file string) (
 	return uri, term.Coordinates{}
 }
 
-func newHandler(cmd textapi.Command, grants []extension.Grant, broker proto.MuxBroker,
-	invokeWindow browserapi.Window, c config.Config) (browserapi.Handler, error) {
+func newHandler(
+	ctx context.Context, cmd textapi.Command,
+	grants []extension.Grant, broker proto.MuxBroker,
+	invokeWindow browserapi.Window, c config.Config,
+) (browserapi.Handler, error) {
 	cmdStr, err := c.GetString("command")
 	if err != nil {
 		if err != config.ErrNotFound {

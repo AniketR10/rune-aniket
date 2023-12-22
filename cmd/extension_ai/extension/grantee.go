@@ -26,10 +26,10 @@ func GranteeWithService(
 	options ...dialogue.Option,
 ) (extension.Grantee, []extension.Permission) {
 	commandEventHandler := func(
-		ed textapi.Editor, grants []extension.Grant,
+		ctx context.Context, ed textapi.Editor, grants []extension.Grant,
 		broker proto.MuxBroker, pconfig configapi.Config,
 	) (hret extutil.CommandEventHandler, err error) {
-		return CommandEventHandler(ed, grants, broker, pconfig,
+		return CommandEventHandler(ctx, ed, grants, broker, pconfig,
 			svcFunc, defaultAvailableModels, defaultModel, options...)
 	}
 	grantee, perms := extutil.NewEditorEventHandler(

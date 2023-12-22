@@ -1,6 +1,7 @@
 package extension
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 
@@ -25,7 +26,8 @@ var colorPaletteCmd = textapi.CommandManual{
 func Grantee() (extension.Grantee, []extension.Permission) {
 	return extutil.NewCommandSplitHandler(extutil.CommandSplitHandlerConfig{
 		SplitOrientation: browserapi.OrientationRight,
-		Handler: func(_ textapi.Command, grants []extension.Grant, broker proto.MuxBroker,
+		Handler: func(ctx context.Context, _ textapi.Command,
+			grants []extension.Grant, broker proto.MuxBroker,
 			invokeWindow browserapi.Window, config config.Config) (browserapi.Handler, error) {
 			return new(colorPaletteHandler), nil
 		},

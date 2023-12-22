@@ -51,12 +51,13 @@ func (t *grpcBroker) NewChannel(tags ...string) (MuxServer, error) {
 	return GRPCServer(ret, opts...), nil
 }
 
-func (t *grpcBroker) DialChannel(address string, tags ...string) (
+func (t *grpcBroker) DialChannel(ctx context.Context, address string, tags ...string) (
 	conn MuxConn, err error,
 ) {
 	opts := []grpc.DialOption{
 		grpc.WithStatsHandler(nil),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithBlock(),
 		grpc.WithContextDialer(
 			func(ctx context.Context, _ string) (net.Conn, error) {
 				addr, err := net.ResolveUnixAddr("unix", address)
@@ -64,10 +65,10 @@ func (t *grpcBroker) DialChannel(address string, tags ...string) (
 					return nil, err
 				}
 				var d net.Dialer
-				return d.Dial(addr.Network(), addr.String())
+				return d.DialContext(ctx, addr.Network(), addr.String())
 			},
 		)}
-	conn, err = grpc.Dial("", opts...)
+	conn, err = grpc.DialContext(ctx, "", opts...)
 	if err != nil {
 		return
 	}

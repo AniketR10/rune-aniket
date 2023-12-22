@@ -595,7 +595,7 @@ func convertRange(
 }
 
 func newLspHandler(
-	ed textapi.Editor, grants []extension.Grant,
+	ctx context.Context, ed textapi.Editor, grants []extension.Grant,
 	broker proto.MuxBroker, pconfig config.Config,
 ) (extutil.CommandEventHandler, error) {
 	ret := new(lspEditorHandler)
@@ -698,8 +698,8 @@ func newLspHandler(
 
 	for _, g := range grants {
 		switch g.Permission {
-		case extension.Permission(extension.PermissionFileSystem):
-			ret.fs, err = workspaceextension.FileSystem(g, broker)
+		case extension.PermissionFileSystem:
+			ret.fs, err = workspaceextension.FileSystem(ctx, g, broker)
 			if err != nil {
 				return nil, err
 			}
@@ -708,33 +708,33 @@ func newLspHandler(
 				return nil, err
 			}
 			ret.cwd = cwdURI.Path()
-		case extension.Permission(extension.PermissionExecute):
-			ret.exec, err = workspaceextension.Executor(g, broker)
+		case extension.PermissionExecute:
+			ret.exec, err = workspaceextension.Executor(ctx, g, broker)
 			if err != nil {
 				return nil, err
 			}
-		case extension.Permission(extension.PermissionBrowserEventPublisher):
-			ret.p, err = browserextension.EventPublisher(g, broker)
+		case extension.PermissionBrowserEventPublisher:
+			ret.p, err = browserextension.EventPublisher(ctx, g, broker)
 			if err != nil {
 				return nil, err
 			}
-		case extension.Permission(extension.PermissionBrowserResourceOpener):
-			ret.o, err = browserextension.ResourceOpener(g, broker)
+		case extension.PermissionBrowserResourceOpener:
+			ret.o, err = browserextension.ResourceOpener(ctx, g, broker)
 			if err != nil {
 				return nil, err
 			}
-		case extension.Permission(extension.PermissionBrowserWindowManager):
-			ret.wm, err = browserextension.WindowManager(g, broker)
+		case extension.PermissionBrowserWindowManager:
+			ret.wm, err = browserextension.WindowManager(ctx, g, broker)
 			if err != nil {
 				return nil, err
 			}
-		case extension.Permission(extension.PermissionBrowserNotifications):
-			ret.m, err = browserextension.Notifications(g, broker)
+		case extension.PermissionBrowserNotifications:
+			ret.m, err = browserextension.Notifications(ctx, g, broker)
 			if err != nil {
 				return nil, err
 			}
 		case extension.PermissionConfig:
-			config, err := configextension.FetchConfig(g, broker)
+			config, err := configextension.FetchConfig(ctx, g, broker)
 			if err != nil {
 				return nil, err
 			}

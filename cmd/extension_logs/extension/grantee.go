@@ -168,14 +168,14 @@ func (e *grantee) PermissionGranted(ctx context.Context, grants []extension.Gran
 	for _, g := range grants {
 		switch g.Permission {
 		case extension.Permission(extension.PermissionBrowserEventPublisher):
-			e.cfg.Interrupter, err = browserextension.EventPublisher(g, e.broker)
+			e.cfg.Interrupter, err = browserextension.EventPublisher(ctx, g, e.broker)
 		case extension.Permission(extension.PermissionBrowserWindowManager):
-			e.wm, err = browserextension.WindowManager(g, e.broker)
+			e.wm, err = browserextension.WindowManager(ctx, g, e.broker)
 		case extension.PermissionConfig:
-			e.c, err = configextension.FetchConfig(g, e.broker)
+			e.c, err = configextension.FetchConfig(ctx, g, e.broker)
 		case extension.Permission(extension.PermissionEditor):
 			var ed textapi.Editor
-			ed, err = textextension.Editor(g, e.broker)
+			ed, err = textextension.Editor(ctx, g, e.broker)
 			if err == nil {
 				for _, cmd := range commands {
 					subsErr := ed.SubscribeCommand(cmd, e)

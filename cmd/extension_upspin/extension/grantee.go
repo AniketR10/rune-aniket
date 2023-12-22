@@ -50,7 +50,7 @@ func (e *upspinGrantee) PermissionGranted(
 	for _, g := range grants {
 		switch g.Permission {
 		case extension.PermissionSchemeManager:
-			m, err := schemeextension.SchemeManager(g, e.broker)
+			m, err := schemeextension.SchemeManager(ctx, g, e.broker)
 			if err != nil {
 				return fmt.Errorf("acquire scheme manager: %w", err)
 			}

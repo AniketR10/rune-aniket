@@ -136,16 +136,16 @@ func parseLine(workspace workspaceapi.FileSystem, data string) (
 }
 
 func newHandler(
-	cmd textapi.Command, grants []extension.Grant, broker proto.MuxBroker,
+	ctx context.Context, cmd textapi.Command,
+	grants []extension.Grant, broker proto.MuxBroker,
 	invokeWindow browserapi.Window, c config.Config,
 ) (browserapi.Handler, error) {
 	noHistoryKey := term.KeyComb{}
-	ctx := context.Background()
 
 	tabspaces := -1
 	for _, grant := range grants {
 		if grant.Permission == extension.PermissionConfig {
-			config, err := configextension.FetchConfig(grant, broker)
+			config, err := configextension.FetchConfig(ctx, grant, broker)
 			if err != nil {
 				return nil, err
 			}

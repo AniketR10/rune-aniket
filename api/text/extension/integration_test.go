@@ -71,7 +71,7 @@ func TestIntegrationRace(t *testing.T) {
 		method         func(ifc interface{}) error
 	}{
 		{extension.PermissionEditor, func(token extension.Grant, broker proto.MuxBroker) (interface{}, error) {
-			return Editor(token, broker)
+			return Editor(context.Background(), token, broker)
 		}, func(ed *texttest.MockEditorMockRecorder) *gomock.Call {
 			return ed.SubscribeEvents(gomock.Any(), gomock.Any()).Return(nil)
 		}, func(ifc interface{}) error {
@@ -80,7 +80,7 @@ func TestIntegrationRace(t *testing.T) {
 			return ifc.(textapi.Editor).SubscribeEvents(ev, h)
 		}},
 		{extension.PermissionEditor, func(token extension.Grant, broker proto.MuxBroker) (interface{}, error) {
-			return Editor(token, broker)
+			return Editor(context.Background(), token, broker)
 		}, func(ed *texttest.MockEditorMockRecorder) *gomock.Call {
 			ed.Editor(gomock.Any()).Return(th, nil).AnyTimes()
 			return ed.SetCursor(gomock.Any(), gomock.Any()).Return(nil)
@@ -88,7 +88,7 @@ func TestIntegrationRace(t *testing.T) {
 			return ifc.(textapi.Editor).SetCursor(th, term.Coordinates{})
 		}},
 		{extension.PermissionEditor, func(token extension.Grant, broker proto.MuxBroker) (interface{}, error) {
-			return Editor(token, broker)
+			return Editor(context.Background(), token, broker)
 		}, func(ed *texttest.MockEditorMockRecorder) *gomock.Call {
 			ed.Editor(gomock.Any()).Return(th, nil).AnyTimes()
 			return ed.Cursor(gomock.Any()).Return(term.Coordinates{}, nil)

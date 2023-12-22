@@ -245,10 +245,10 @@ func (mr *MockMuxBrokerMockRecorder) Close() *gomock.Call {
 }
 
 // DialChannel mocks base method.
-func (m *MockMuxBroker) DialChannel(arg0 string, arg1 ...string) (MuxConn, error) {
+func (m *MockMuxBroker) DialChannel(arg0 context.Context, arg1 string, arg2 ...string) (MuxConn, error) {
 	m.ctrl.T.Helper()
-	varargs := []interface{}{arg0}
-	for _, a := range arg1 {
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "DialChannel", varargs...)
@@ -258,9 +258,9 @@ func (m *MockMuxBroker) DialChannel(arg0 string, arg1 ...string) (MuxConn, error
 }
 
 // DialChannel indicates an expected call of DialChannel.
-func (mr *MockMuxBrokerMockRecorder) DialChannel(arg0 interface{}, arg1 ...interface{}) *gomock.Call {
+func (mr *MockMuxBrokerMockRecorder) DialChannel(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]interface{}{arg0}, arg1...)
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DialChannel", reflect.TypeOf((*MockMuxBroker)(nil).DialChannel), varargs...)
 }
 

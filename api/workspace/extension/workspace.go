@@ -1,6 +1,7 @@
 package extension
 
 import (
+	"context"
 	"os"
 
 	workspaceapi "unstable.build/go-tui/api/workspace"
@@ -9,10 +10,10 @@ import (
 	workspacepb "unstable.build/go-tui/workspace/rpc"
 )
 
-func dial(grant extension.Grant, broker proto.MuxBroker) (
+func dial(ctx context.Context, grant extension.Grant, broker proto.MuxBroker) (
 	*workspacepb.Client, error,
 ) {
-	conn, err := broker.DialChannel(grant.Token,
+	conn, err := broker.DialChannel(ctx, grant.Token,
 		os.Args[0], "workspace", string(grant.Permission))
 	if err != nil {
 		return nil, err
@@ -22,22 +23,22 @@ func dial(grant extension.Grant, broker proto.MuxBroker) (
 }
 
 // FileSystem acquires the workspace's file-system with the given token.
-func FileSystem(grant extension.Grant, broker proto.MuxBroker) (
+func FileSystem(ctx context.Context, grant extension.Grant, broker proto.MuxBroker) (
 	workspaceapi.FileSystem, error,
 ) {
-	return dial(grant, broker)
+	return dial(ctx, grant, broker)
 }
 
 // Executor acquires the workspace's processes executor with the given token.
-func Executor(grant extension.Grant, broker proto.MuxBroker) (
+func Executor(ctx context.Context, grant extension.Grant, broker proto.MuxBroker) (
 	workspaceapi.Executor, error,
 ) {
-	return dial(grant, broker)
+	return dial(ctx, grant, broker)
 }
 
 // Terminal acquires the workspace's pseudo-terminal with the given token.
-func Terminal(grant extension.Grant, broker proto.MuxBroker) (
+func Terminal(ctx context.Context, grant extension.Grant, broker proto.MuxBroker) (
 	workspaceapi.Terminal, error,
 ) {
-	return dial(grant, broker)
+	return dial(ctx, grant, broker)
 }

@@ -350,25 +350,25 @@ func (h *fuzzyFinderHandler) scanData() {
 }
 
 func (h *fuzzyFinderHandler) initGrants(
-	broker proto.MuxBroker, grants []extension.Grant,
+	ctx context.Context, broker proto.MuxBroker, grants []extension.Grant,
 	historyDocumentID string, maxHistory int,
 ) (err error) {
 	for _, grant := range grants {
 		switch grant.Permission {
 		case extension.Permission(extension.PermissionFileSystem):
-			h.fs, err = workspaceextension.FileSystem(grant, broker)
+			h.fs, err = workspaceextension.FileSystem(ctx, grant, broker)
 		case extension.Permission(extension.PermissionExecute):
-			h.executor, err = workspaceextension.Executor(grant, broker)
+			h.executor, err = workspaceextension.Executor(ctx, grant, broker)
 		case extension.Permission(extension.PermissionEditor):
-			h.ed, err = textextension.Editor(grant, broker)
+			h.ed, err = textextension.Editor(ctx, grant, broker)
 		case extension.Permission(extension.PermissionBrowserNotifications):
-			h.m, err = browserextension.Notifications(grant, broker)
+			h.m, err = browserextension.Notifications(ctx, grant, broker)
 		case extension.Permission(extension.PermissionBrowserEventPublisher):
-			h.p, err = browserextension.EventPublisher(grant, broker)
+			h.p, err = browserextension.EventPublisher(ctx, grant, broker)
 		case extension.Permission(extension.PermissionBrowserResourceOpener):
-			h.f, err = browserextension.ResourceOpener(grant, broker)
+			h.f, err = browserextension.ResourceOpener(ctx, grant, broker)
 		case extension.PermissionStorage:
-			h.s, err = storageextension.Storage(grant, broker)
+			h.s, err = storageextension.Storage(ctx, grant, broker)
 			if err == nil {
 				h.history.Init(h.s, historyDocumentID, maxHistory)
 				err = h.history.Load()
@@ -406,7 +406,7 @@ func New(
 	} else {
 		log.Tracef("loaded 'history' from config: %v", maxHistory)
 	}
-	err = h.initGrants(broker, grants, historyDocumentID, maxHistory)
+	err = h.initGrants(ctx, broker, grants, historyDocumentID, maxHistory)
 	if err != nil {
 		return nil, err
 	}

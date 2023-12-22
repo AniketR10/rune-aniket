@@ -33,8 +33,8 @@ type CommandSplitHandlerConfig struct {
 	// the window in focus when cmd event was fired.
 	// If returned Handler satisfies io.Closer, then Close will be called
 	// when split window is closed.
-	Handler func(textapi.Command, []extension.Grant, proto.MuxBroker, browserapi.Window,
-		config.Config) (browserapi.Handler, error)
+	Handler func(context.Context, textapi.Command, []extension.Grant,
+		proto.MuxBroker, browserapi.Window, config.Config) (browserapi.Handler, error)
 
 	// Permissions to be requested for Handler.
 	Permissions []extension.Permission
@@ -136,7 +136,7 @@ func (t *cmdSplitHandler) exitClean() error {
 	return nil
 }
 
-func (t *cmdSplitHandler) openSplitWindow(cmd textapi.Command) error {
+func (t *cmdSplitHandler) openSplitWindow(ctx context.Context, cmd textapi.Command) error {
 	focusWin := cmd.Window
 	t.mu.Lock()
 	win := t.win
@@ -148,7 +148,7 @@ func (t *cmdSplitHandler) openSplitWindow(cmd textapi.Command) error {
 		return nil
 	}
 
-	h, err := t.config.Handler(cmd, t.grants, t.broker, focusWin, t.pconfig)
+	h, err := t.config.Handler(ctx, cmd, t.grants, t.broker, focusWin, t.pconfig)
 	if err != nil {
 		err = fmt.Errorf("config.Handler: %w", err)
 		return err
@@ -170,7 +170,7 @@ func (t *cmdSplitHandler) openSplitWindow(cmd textapi.Command) error {
 
 func (t *cmdSplitHandler) HandleCommand(ctx context.Context, cmd textapi.Command) (exit bool, err error) {
 	if cmd.Name == t.config.Command.Name {
-		return false, t.openSplitWindow(cmd)
+		return false, t.openSplitWindow(ctx, cmd)
 	}
 	return false, nil
 }
@@ -185,9 +185,9 @@ func (t *cmdSplitHandler) PermissionGranted(ctx context.Context, grants []extens
 	for _, g := range grants {
 		switch g.Permission {
 		case extension.PermissionBrowserWindowManager:
-			t.wm, err = browserextension.WindowManager(g, t.broker)
+			t.wm, err = browserextension.WindowManager(ctx, g, t.broker)
 		case extension.PermissionEditor:
-			t.ed, err = textextension.Editor(g, t.broker)
+			t.ed, err = textextension.Editor(ctx, g, t.broker)
 			if err == nil {
 				err = t.ed.SubscribeCommand(t.config.Command, t)
 			}

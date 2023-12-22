@@ -1,6 +1,7 @@
 package extension
 
 import (
+	"context"
 	"os"
 
 	"github.com/ernestrc/blue/document"
@@ -13,10 +14,10 @@ import (
 // NOTE: this is exposing blue/document types which we might not
 // want to do directly. If we ever open-source that library
 // then remove this comment.
-func dialStorage(grant extension.Grant, broker proto.MuxBroker) (
+func dialStorage(ctx context.Context, grant extension.Grant, broker proto.MuxBroker) (
 	document.Service, error,
 ) {
-	conn, err := broker.DialChannel(grant.Token,
+	conn, err := broker.DialChannel(ctx, grant.Token,
 		os.Args[0], "storage", string(grant.Permission))
 	if err != nil {
 		return nil, err
@@ -32,8 +33,8 @@ func dialStorage(grant extension.Grant, broker proto.MuxBroker) (
 
 // Storage acquires a client to persistent storage with
 // the given token.
-func Storage(grant extension.Grant, broker proto.MuxBroker) (
+func Storage(ctx context.Context, grant extension.Grant, broker proto.MuxBroker) (
 	document.Service, error,
 ) {
-	return dialStorage(grant, broker)
+	return dialStorage(ctx, grant, broker)
 }
