@@ -2,6 +2,7 @@ package extension
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"unstable.build/go-tui"
@@ -22,9 +23,33 @@ func Grantee() (extension.Grantee, []extension.Permission) {
 		Handler: func(ctx context.Context, cmd textapi.Command,
 			grants []extension.Grant, broker proto.MuxBroker,
 			invokeWindow browserapi.Window, config config.Config) (browserapi.Handler, error) {
+			comp := component.NewStringWithConfig(copy, component.StringConfig{
+				Alignment: component.SpanAlignmentCentered,
+			})
 
+			sleepDuration := 1 * time.Second
 			panic := len(cmd.Args) == 0 || cmd.Args[0] == "panic"
-			comp := component.NewStringWithConfig(`
+
+			if len(cmd.Args) > 1 && cmd.Args[0] == "slow" {
+				dur, err := time.ParseDuration(cmd.Args[1])
+				if err != nil {
+					return nil, fmt.Errorf("parse duration: %v", err)
+				}
+				sleepDuration = dur
+			}
+
+			return &chaosHandler{sleepTime: sleepDuration, panic: panic, comp: comp}, nil
+		},
+		Command: textapi.CommandManual{
+			Name: "chaosExtension",
+			Summary: "This is extension is internal and for debugging purposes only. " +
+				"If no argument is passed then 'panic' is assumed.",
+			Synopsis: "[(panic|slow [duration])]",
+		},
+	})
+}
+
+const copy = `
               . . .                         
               \|/                          
             '--+--'                        
@@ -48,38 +73,24 @@ func Grantee() (extension.Grantee, []extension.Permission) {
    '.#####################,'               
      '._###############_,'                 
         '--..#####..--'
-`, component.StringConfig{
-				Alignment: component.SpanAlignmentCentered,
-			})
-
-			return &chaosHandler{panic: panic, comp: comp}, nil
-		},
-		Command: textapi.CommandManual{
-			Name: "chaosExtension",
-			Summary: "This is extension is internal and for debugging purposes only. " +
-				"If no argument is passed then 'panic' is assumed.",
-			Synopsis: "[(panic|slow)]",
-		},
-	})
-}
+`
 
 type chaosHandler struct {
-	comp  tui.Component
-	panic bool
+	comp      tui.Component
+	panic     bool
+	sleepTime time.Duration
 }
-
-const sleepTime = 1 * time.Second
 
 func (h *chaosHandler) Resize(width, height int) {
 	if !h.panic {
-		time.Sleep(sleepTime)
+		time.Sleep(h.sleepTime)
 	}
 	h.comp.Resize(width, height)
 }
 
 func (h *chaosHandler) Draw(w term.Writer) {
 	if !h.panic {
-		time.Sleep(sleepTime)
+		time.Sleep(h.sleepTime)
 	}
 	h.comp.Draw(w)
 }
@@ -88,7 +99,7 @@ func (h *chaosHandler) Handle(ev term.Event) (exit, handled bool) {
 	if h.panic {
 		panic("kaboom")
 	}
-	time.Sleep(sleepTime)
+	time.Sleep(h.sleepTime)
 	handled = true
 	return
 }
@@ -97,21 +108,21 @@ func (h *chaosHandler) Cursor() (
 	pos term.Coordinates, style term.CursorStyle, show bool,
 ) {
 	if !h.panic {
-		time.Sleep(sleepTime)
+		time.Sleep(h.sleepTime)
 	}
 	return
 }
 
 func (h *chaosHandler) Man() tui.Manual {
 	if !h.panic {
-		time.Sleep(sleepTime)
+		time.Sleep(h.sleepTime)
 	}
 	return tui.Manual{}
 }
 
 func (h *chaosHandler) Close() error {
 	if !h.panic {
-		time.Sleep(sleepTime)
+		time.Sleep(h.sleepTime)
 	}
 	return nil
 }
