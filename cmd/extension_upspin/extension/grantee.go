@@ -1,6 +1,8 @@
 package extension
 
 import (
+	"context"
+	"fmt"
 	"sync"
 
 	log "github.com/sirupsen/logrus"
@@ -28,15 +30,21 @@ type upspinGrantee struct {
 	m      schemeapi.SchemeManager
 }
 
-func (e *upspinGrantee) Connected(broker proto.MuxBroker, pconfig config.Config) {
+func (e *upspinGrantee) Connected(
+	ctx context.Context, broker proto.MuxBroker, pconfig config.Config,
+) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
 	log.Debugf("extension connected; config: %#v", pconfig)
 	e.broker = broker
+
+	return nil
 }
 
-func (e *upspinGrantee) PermissionGranted(grants []extension.Grant) {
+func (e *upspinGrantee) PermissionGranted(
+	ctx context.Context, grants []extension.Grant,
+) error {
 	log.Debugf("permissions granted: %v", grants)
 
 	for _, g := range grants {
@@ -44,31 +52,31 @@ func (e *upspinGrantee) PermissionGranted(grants []extension.Grant) {
 		case extension.PermissionSchemeManager:
 			m, err := schemeextension.SchemeManager(g, e.broker)
 			if err != nil {
-				log.Errorf("PermissionGranted: %+v: %s", g.Permission, err)
-				continue
+				return fmt.Errorf("acquire scheme manager: %w", err)
 			}
 			err = m.RegisterScheme(upspinScheme, newScheme)
 			if err != nil {
-				log.Errorf("Could not register scheme:  %s", err)
-				continue
+				return fmt.Errorf("register scheme: %w", err)
 			}
 			// store so finalizer doesn't kill the scheme RPC pipeline
 			e.m = m
 		}
 	}
-
+	return nil
 }
 
-func (e *upspinGrantee) PermissionDenied(perms []extension.Permission) {
-	log.Warningf("missing critical permissions: "+
+func (e *upspinGrantee) PermissionDenied(
+	ctx context.Context, perms []extension.Permission,
+) error {
+	return fmt.Errorf("missing critical permissions: "+
 		"denied: %v; required: %v", perms, requiredPermissions)
 }
 
-func (e *upspinGrantee) Shutdown(reason string) error {
+func (e *upspinGrantee) Shutdown(ctx context.Context, reason string) error {
 	log.Debugf("extension being shutdown: %s", reason)
 	return nil
 }
 
-func (e *upspinGrantee) Health() error {
+func (e *upspinGrantee) Health(context.Context) error {
 	return nil
 }

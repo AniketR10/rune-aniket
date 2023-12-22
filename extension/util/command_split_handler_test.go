@@ -38,8 +38,8 @@ func expectInitialization(
 	t *testing.T, ctrl *gomock.Controller, h *cmdSplitHandler,
 ) *proto.MockMuxBroker {
 	broker := proto.NewMockMuxBroker(ctrl)
-	h.Connected(broker, emptyConfig)
-	h.Health()
+	h.Connected(context.Background(), broker, emptyConfig)
+	h.Health(context.Background(), )
 	return broker
 }
 
@@ -127,7 +127,7 @@ func TestCommandSplitHandlerEmpty(t *testing.T) {
 				Context:    ctx,
 			},
 		}
-		h.PermissionGranted(grants)
+		h.PermissionGranted(context.Background(), grants)
 	})
 
 	t.Run("does nothing if shutdown is called when window not active", func(t *testing.T) {
@@ -136,7 +136,7 @@ func TestCommandSplitHandlerEmpty(t *testing.T) {
 		config := CommandSplitHandlerConfig{Command: testCommand("blah")}
 		h := &cmdSplitHandler{config: config}
 		expectInitialization(t, ctrl, h)
-		h.Shutdown("you are being naughty")
+		h.Shutdown(context.Background(), "you are being naughty")
 	})
 }
 

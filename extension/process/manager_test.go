@@ -185,7 +185,7 @@ func TestManagerRun(t *testing.T) {
 		require.NoError(t, err)
 
 		reason := assertShutdown(t, pbClient)
-		assert.Contains(t, reason, "woopsie")
+		assert.Contains(t, reason, "handshake error")
 	})
 
 	t.Run("should shutdown extension if fails to respond to handshake in time", func(t *testing.T) {
@@ -201,7 +201,7 @@ func TestManagerRun(t *testing.T) {
 		require.NoError(t, err)
 
 		reason := assertShutdown(t, pbClient)
-		assert.Contains(t, reason, "deadline exceeded")
+		assert.Contains(t, reason, "handshake error")
 	})
 
 	t.Run("should shutdown extension if fails to respond to first health requests in time", func(t *testing.T) {

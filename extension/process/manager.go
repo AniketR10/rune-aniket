@@ -198,7 +198,7 @@ func (m *Manager) doGrant(
 ) error {
 	srv, err := m.broker.NewChannel(extensionID)
 	if err != nil {
-		return fmt.Errorf("accept: %v", err)
+		return fmt.Errorf("new channel: %w", err)
 	}
 	if log.IsLevelEnabled(log.TraceLevel) {
 		srv = proto.LoggingGRPCServer(srv)
@@ -225,7 +225,8 @@ func (m *Manager) doGrant(
 		resource, err := registrar.Register(extensionID, m.grantor,
 			srv.Registrar(), m.broker, m.rmu)
 		if err != nil {
-			log.Errorf("Could not register %s extension %q: %v", permissionID, extensionID, err)
+			m.log(log.ErrorLevel, "could not register %s for extension '%s': %v",
+				permissionID, extensionID, err)
 			denied = append(denied, p) // at least communicate to extension
 			continue
 		}
@@ -252,7 +253,7 @@ func (m *Manager) doGrant(
 	go func() {
 		defer m.ctxWg.Done()
 		<-ctx.Done()
-		log.Debugf("serve context is done: stopping mux server %v", srv.Addr())
+		m.log(log.DebugLevel, "serve context is done: stopping mux server %v", srv.Addr())
 		srv.Stop()
 	}()
 
@@ -294,7 +295,7 @@ func (m *Manager) doCloseClient(reason string, client *granteeClientWrap) (
 	// so unfortunately we cannot parallelize it amongst different clients
 	m.mu.Unlock()
 
-	m.log(log.WarnLevel, "Stopping extension '%s' due to %s. Reload workspace to restart it.",
+	m.log(log.WarnLevel, "stopping extension '%s' due to %s. Reload workspace to restart it.",
 		extensionID, reason)
 
 	if clientErr != nil {
@@ -343,7 +344,7 @@ func (m *Manager) monitor(client *granteeClientWrap) {
 			err := m.checkHealth(ctx, client)
 			if err != nil {
 				triesLeft--
-				m.addClientErr(client.id, fmt.Errorf("health check: %v", err))
+				m.addClientErr(client.id, fmt.Errorf("health check: %w", err))
 			} else {
 				triesLeft = 1 + m.config.healthRetries
 			}
@@ -362,7 +363,7 @@ func (m *Manager) monitor(client *granteeClientWrap) {
 			}
 		case wg := <-client.doneCh:
 			defer wg.Done()
-			m.doCloseClient("Stop/Close was called on extension Manager", client)
+			m.doCloseClient("extension manager is closing", client)
 			return
 		}
 	}
@@ -429,9 +430,9 @@ func (m *Manager) handshake(
 	}
 
 	if err != nil {
-		err = fmt.Errorf("handshake: %v", err)
+		err = fmt.Errorf("handshake: %w", err)
 		m.addClientErr(extensionID, err)
-		m.doCloseClient(err.Error(), client)
+		m.doCloseClient("handshake error", client)
 		return
 	}
 

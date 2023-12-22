@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ernestrc/blue/logging"
 	"github.com/ernestrc/blue/retry"
 	multierr "github.com/ernestrc/go-multierror"
 	"github.com/fsnotify/fsnotify"
@@ -60,10 +61,10 @@ var (
 
 // Grantee returns this extension's grantee and the permissions required to run it.
 func Grantee() (extension.Grantee, []extension.Permission) {
-	return &logsGrantee{quitCh: make(chan struct{})}, requiredPermissions
+	return &grantee{quitCh: make(chan struct{})}, requiredPermissions
 }
 
-type logsGrantee struct {
+type grantee struct {
 	mu     sync.Mutex
 	broker proto.MuxBroker
 	quitCh chan struct{}
@@ -77,17 +78,19 @@ type logsGrantee struct {
 	discardedLogs bool
 }
 
-func (e *logsGrantee) Connected(broker proto.MuxBroker, pconfig config.Config) {
+func (e *grantee) Connected(
+	ctx context.Context, broker proto.MuxBroker, pconfig config.Config,
+) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	log.Debugf("extension connected; config: %#v", pconfig)
+	e.log(log.DebugLevel, "extension connected; config: %#v", pconfig)
 	e.broker = broker
 
 	caseSensitive, err := pconfig.GetBool("case_sensitive")
 	if err != nil {
 		if err != config.ErrNotFound {
-			log.Errorf("failed to load 'case_sensitive' from config: %v", err)
+			return fmt.Errorf("failed to load 'case_sensitive' from config: %w", err)
 		}
 		caseSensitive = true
 	}
@@ -95,10 +98,10 @@ func (e *logsGrantee) Connected(broker proto.MuxBroker, pconfig config.Config) {
 	debug, err := pconfig.GetBool("debug")
 	if err != nil {
 		if err != config.ErrNotFound {
-			log.Errorf("failed to load 'debug' from config: %v", err)
+			return fmt.Errorf("failed to load 'debug' from config: %w", err)
 		}
 	} else {
-		log.Debugf("set debug to %v", debug)
+		e.log(log.DebugLevel, "set debug to %v", debug)
 	}
 
 	// set to true to avoid discarding all logs
@@ -106,7 +109,7 @@ func (e *logsGrantee) Connected(broker proto.MuxBroker, pconfig config.Config) {
 
 	algoStr, err := pconfig.GetString("algo")
 	if err != nil && err != config.ErrNotFound {
-		log.Errorf("failed to load 'algo' from config: %v", err)
+		return fmt.Errorf("failed to load 'algo' from config: %w", err)
 	}
 	algo := search.FuzzyMatch
 	if algoStr == "equal" {
@@ -123,42 +126,43 @@ func (e *logsGrantee) Connected(broker proto.MuxBroker, pconfig config.Config) {
 
 	matchedTextAttr, err := config.GetAttributes(pconfig, "matched_text_attr")
 	if err != nil && err != config.ErrNotFound {
-		log.Errorf("failed to load 'matched_text_attr' from config: %v", err)
+		return fmt.Errorf("failed to load 'matched_text_attr' from config: %w", err)
 	} else if err == nil {
-		log.Tracef("loaded 'matched_text_attr' from config: %v", matchedTextAttr)
+		e.log(log.TraceLevel, "loaded 'matched_text_attr' from config: %v", matchedTextAttr)
 		e.cfg.MatchedTextAttr = &matchedTextAttr
 	}
 
 	countAttr, err := config.GetAttributes(pconfig, "count_attr")
 	if err != nil && err != config.ErrNotFound {
-		log.Errorf("failed to load 'count_attr' from config: %v", err)
+		return fmt.Errorf("failed to load 'count_attr' from config: %w", err)
 	} else if err == nil {
-		log.Tracef("loaded 'count_attr' from config: %v", countAttr)
+		e.log(log.TraceLevel, "loaded 'count_attr' from config: %v", countAttr)
 		e.cfg.CountAttr = &countAttr
 	}
 
 	textAttr, err := config.GetAttributes(pconfig, "element_attr")
 	if err != nil && err != config.ErrNotFound {
-		log.Errorf("failed to load 'element_attr' from config: %v", err)
+		return fmt.Errorf("failed to load 'element_attr' from config: %w", err)
 	} else if err == nil {
-		log.Tracef("loaded 'element_attr' from config: %v", textAttr)
+		e.log(log.TraceLevel, "loaded 'element_attr' from config: %v", textAttr)
 		e.cfg.ElementAttr = &textAttr
 	}
 
 	focusAttr, err := config.GetAttributes(pconfig, "focus_element_attr")
 	if err != nil && err != config.ErrNotFound {
-		log.Errorf("failed to load 'focus_element_attr' from config: %v", err)
+		return fmt.Errorf("failed to load 'focus_element_attr' from config: %w", err)
 	} else if err == nil {
-		log.Tracef("loaded 'focus_element_attr' from config: %v", focusAttr)
+		e.log(log.TraceLevel, "loaded 'focus_element_attr' from config: %v", focusAttr)
 		e.cfg.FocusElementAttr = &focusAttr
 	} else if err == config.ErrNotFound {
 		e.cfg.FocusElementAttr = &defaultPinAttr
 	}
 
+	return nil
 }
 
-func (e *logsGrantee) PermissionGranted(grants []extension.Grant) {
-	log.Debugf("permissions granted: %v", grants)
+func (e *grantee) PermissionGranted(ctx context.Context, grants []extension.Grant) error {
+	e.log(log.DebugLevel, "permissions granted: %v", grants)
 
 	var err error
 	for _, g := range grants {
@@ -182,31 +186,32 @@ func (e *logsGrantee) PermissionGranted(grants []extension.Grant) {
 			}
 		}
 		if err != nil {
-			log.Errorf("permission granted: %+v: %s", g.Permission, err)
-			return
+			return fmt.Errorf("acquire resource: %v: %w", g.Permission, err)
 		}
 	}
 
 	if e.c != nil {
 		e.logFile, err = e.c.GetString("log_path")
 		if err != nil {
-			log.Errorf("Could not get 'log_path' from config: %s", err)
+			return fmt.Errorf("get 'log_path' from config: %w", err)
 		}
 	}
+
+	return nil
 }
 
-func (e *logsGrantee) PermissionDenied(perms []extension.Permission) {
-	log.Warningf("extension is missing critical permissions: "+
+func (e *grantee) PermissionDenied(ctx context.Context, perms []extension.Permission) error {
+	return fmt.Errorf("extension is missing critical permissions: "+
 		"denied: %v; required: %v", perms, requiredPermissions)
 }
 
-func (e *logsGrantee) Shutdown(reason string) error {
-	log.Debugf("extension being shutdown: %s", reason)
+func (e *grantee) Shutdown(ctx context.Context, reason string) error {
+	e.log(log.DebugLevel, "extension being shutdown: %s", reason)
 	close(e.quitCh)
 	return nil
 }
 
-func (e *logsGrantee) Health() error {
+func (e *grantee) Health(ctx context.Context) error {
 	return nil
 }
 
@@ -228,8 +233,7 @@ func consumeAvailableData(
 			return nil
 		}
 		if err != nil {
-			log.Warnf("read error: %s", err)
-			return err
+			return fmt.Errorf("read: %w", err)
 		}
 	}
 }
@@ -237,6 +241,7 @@ func consumeAvailableData(
 func consumeData(
 	ctx context.Context, file workspaceapi.File, l *search.List,
 	quit chan struct{}, watcher *fsnotify.Watcher,
+	logger func(log.Level, string, ...any),
 ) {
 	reader := bufio.NewReader(file)
 
@@ -244,7 +249,7 @@ func consumeData(
 	defer close(ch)
 
 	if err := consumeAvailableData(reader, l, ch, quit); err != nil {
-		log.Warnf("error reading initial data on log file: %s", err)
+		logger(log.WarnLevel, "error reading initial data on log file: %w", err)
 	}
 
 	for {
@@ -255,7 +260,7 @@ func consumeData(
 				switch ev.Op {
 				case fsnotify.Write:
 					if err := consumeAvailableData(reader, l, ch, quit); err != nil {
-						return true, fmt.Errorf("read error: %s", err)
+						return true, err
 					}
 				}
 				return false, nil
@@ -263,7 +268,7 @@ func consumeData(
 				if !ok {
 					return false, nil
 				}
-				return true, fmt.Errorf("notify error: %s", err)
+				return true, fmt.Errorf("notify error: %w", err)
 			case <-quit:
 				return false, nil
 			}
@@ -276,19 +281,19 @@ func consumeData(
 			return
 		default:
 			if err != nil {
-				log.Warn(err)
+				logger(log.WarnLevel, "%v", err)
 			}
 		}
 	}
 }
 
-func (e *logsGrantee) showLogs(win browserapi.Window, args []string) (bool, error) {
+func (e *grantee) showLogs(win browserapi.Window, args []string) (bool, error) {
 	if log.IsLevelEnabled(log.TraceLevel) && len(args) == 0 {
-		return false, errors.New("Cannot show own logs in Trace level to avoid " +
+		return false, errors.New("cannot show own logs in Trace level to avoid " +
 			"an infinite loop. Check Manually.")
 	}
 	if e.logFile == "" && len(args) == 0 {
-		return false, errors.New("Cannot show logs if 'log_path' in config is empty " +
+		return false, errors.New("cannot show logs if 'log_path' in config is empty " +
 			"and no arguments were supplied to 'logs' command.")
 	}
 
@@ -301,7 +306,7 @@ func (e *logsGrantee) showLogs(win browserapi.Window, args []string) (bool, erro
 		logFile = args[0]
 	}
 
-	log.Debugf("Opening log file %q", logFile)
+	e.log(log.DebugLevel, "opening log file %q", logFile)
 
 	uri, err := workspaceapi.CurrentUserHostURI(logFile)
 	if err != nil {
@@ -312,20 +317,20 @@ func (e *logsGrantee) showLogs(win browserapi.Window, args []string) (bool, erro
 	// we containerize extensions, it's safe to call os.Open
 	file, err := workspace.OpenFile(logFile, os.O_RDONLY, 0)
 	if err != nil {
-		return false, fmt.Errorf("could not open logs file: %s", err)
+		return false, fmt.Errorf("could not open logs file: %w", err)
 	}
 
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		_ = file.Close()
-		return false, fmt.Errorf("notify: %s", err)
+		return false, fmt.Errorf("new watcher: %w", err)
 	}
 
 	err = watcher.Add(file.Name())
 	if err != nil {
 		_ = watcher.Close()
 		_ = file.Close()
-		return false, fmt.Errorf("notify.Add: %s", err)
+		return false, fmt.Errorf("watcher.Add: %w", err)
 	}
 
 	ctx := context.Background()
@@ -350,15 +355,15 @@ func (e *logsGrantee) showLogs(win browserapi.Window, args []string) (bool, erro
 		e.cfg.MatchedTextAttr, e.cfg.FocusElementAttr))
 	h := browserapi.FuncHandler(logsHandler, cleanup)
 
-	go consumeData(ctx, file, l, e.quitCh, watcher)
+	go consumeData(ctx, file, l, e.quitCh, watcher, e.log)
 
 	t, err := e.wm.Tab(uri, "logs:"+uri.Name(), h)
 	if err != nil {
 		_ = cleanup()
-		return false, fmt.Errorf("Tab: %s", err)
+		return false, fmt.Errorf("tab: %w", err)
 	}
 
-	log.Tracef("HandleCommand: created new logs handler: %p", h)
+	e.log(log.TraceLevel, "HandleCommand: created new logs handler: %p", h)
 
 	err = win.SetContent(t)
 	if err != nil {
@@ -370,7 +375,7 @@ func (e *logsGrantee) showLogs(win browserapi.Window, args []string) (bool, erro
 	return false, nil
 }
 
-func (e *logsGrantee) HandleCommand(
+func (e *grantee) HandleCommand(
 	ctx context.Context, cmd textapi.Command,
 ) (bool, error) {
 	if cmd.Name != cmdLogs {
@@ -387,4 +392,10 @@ func (e *logsGrantee) HandleCommand(
 	}
 
 	return e.showLogs(cmd.Window, cmd.Args)
+}
+
+func (t *grantee) log(level log.Level, msg string, args ...any) {
+	log.WithFields(log.Fields{
+		logging.KeyClass: "logsextension.grantee",
+	}).Logf(level, msg, args...)
 }

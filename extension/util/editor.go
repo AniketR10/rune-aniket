@@ -1,9 +1,13 @@
 package util
 
 import (
+	"context"
+	"errors"
 	"io"
 	"sync"
 
+	"github.com/ernestrc/blue/logging"
+	"github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui/api/config"
 	textapi "unstable.build/go-tui/api/text"
@@ -48,20 +52,24 @@ type editorGrantee struct {
 	broker     proto.MuxBroker
 	ed         textapi.Editor
 	handler    CommandEventHandler
-	newHandler func(textapi.Editor, []extension.Grant, proto.MuxBroker, config.Config) (CommandEventHandler, error)
-	cmds       []textapi.CommandManual
-	pconfig    config.Config
-	err        error
-	evs        []textapi.EventType
+	newHandler func(textapi.Editor, []extension.Grant,
+		proto.MuxBroker, config.Config) (CommandEventHandler, error)
+	cmds    []textapi.CommandManual
+	pconfig config.Config
+	err     error
+	evs     []textapi.EventType
 }
 
-func (t *editorGrantee) Connected(broker proto.MuxBroker, config config.Config) {
+func (t *editorGrantee) Connected(
+	ctx context.Context, broker proto.MuxBroker, config config.Config,
+) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	log.Debugf("extension connected; config: %#v", config)
+	t.log(log.DebugLevel, "extension connected")
 	t.broker = broker
 	t.pconfig = config
+	return nil
 }
 
 func (t *editorGrantee) setNewHandler(grants []extension.Grant) (CommandEventHandler, error) {
@@ -91,12 +99,13 @@ func (t *editorGrantee) subscribeToEvents(grants []extension.Grant) error {
 			return err
 		}
 	}
-	log.Debugf("subscribed to events %+v", t.evs)
+
+	t.log(log.DebugLevel, "subscribed to events %v", t.evs)
 	return nil
 }
 
-func (t *editorGrantee) PermissionGranted(grants []extension.Grant) {
-	log.Debugf("permissions granted: %v", grants)
+func (t *editorGrantee) PermissionGranted(ctx context.Context, grants []extension.Grant) (ret error) {
+	t.log(log.DebugLevel, "permissions granted: %v", grants)
 
 	for _, grant := range grants {
 		var err error
@@ -108,17 +117,26 @@ func (t *editorGrantee) PermissionGranted(grants []extension.Grant) {
 			}
 		}
 		if err != nil {
-			log.Errorf("PermissionGranted: %+v: %s", grants, err)
+			ret = multierror.Append(ret, err)
 		}
 	}
+	return ret
 }
 
-func (t *editorGrantee) PermissionDenied(perms []extension.Permission) {
-	log.Warningf("missing permissions: permissions denied: %v", perms)
+func (t *editorGrantee) PermissionDenied(ctx context.Context, perms []extension.Permission) error {
+	t.log(log.DebugLevel, "permissions denied: %v", perms)
+
+	for _, perm := range perms {
+		switch perm {
+		case extension.PermissionEditor:
+			return errors.New("permission editor must be granted for this extension to work")
+		}
+	}
+	return nil
 }
 
-func (t *editorGrantee) Shutdown(reason string) error {
-	log.Debugf("extension being shutdown: reason: %s", reason)
+func (t *editorGrantee) Shutdown(ctx context.Context, reason string) error {
+	t.log(log.DebugLevel, "extension being shutdown: reason: %s", reason)
 
 	t.mu.Lock()
 	handler := t.handler
@@ -130,6 +148,12 @@ func (t *editorGrantee) Shutdown(reason string) error {
 	return nil
 }
 
-func (t *editorGrantee) Health() error {
+func (t *editorGrantee) Health(context.Context) error {
 	return nil
+}
+
+func (t *editorGrantee) log(level log.Level, msg string, args ...any) {
+	log.WithFields(log.Fields{
+		logging.KeyClass: "extutil.editorGrantee",
+	}).Logf(level, msg, args...)
 }

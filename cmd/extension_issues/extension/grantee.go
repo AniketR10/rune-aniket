@@ -12,10 +12,11 @@ import (
 	"time"
 
 	"github.com/ernestrc/blue/document"
-	"github.com/ernestrc/blue/document/logging"
+	doclogging "github.com/ernestrc/blue/document/logging"
 	"github.com/ernestrc/blue/encoding"
 	"github.com/ernestrc/blue/encoding/yaml"
 	"github.com/ernestrc/blue/issue"
+	"github.com/ernestrc/blue/logging"
 	log "github.com/sirupsen/logrus"
 	browserapi "unstable.build/go-tui/api/browser"
 	browserextension "unstable.build/go-tui/api/browser/extension"
@@ -58,14 +59,14 @@ var (
 					"create issue. Closing the file before saving it cancels the creation " +
 					"of a new issue.",
 			},
-			handler: (*issuesGrantee).openEmptyIssueTemplate,
+			handler: (*grantee).openEmptyIssueTemplate,
 		},
 		issueRefreshCmd: {
 			man: textapi.CommandManual{
 				Summary: "Refreshes the local issues cache. This is useful when user " +
 					"knows that out-of-band changes have been made to the issue tracker.",
 			},
-			handler: (*issuesGrantee).issueRefresh,
+			handler: (*grantee).issueRefresh,
 		},
 	}
 	editorEvents = []textapi.EventType{textapi.EventTypeFlush, textapi.EventTypeClose}
@@ -84,7 +85,7 @@ func GranteeWithService(
 	if err != nil {
 		panic(fmt.Errorf("marshal default issue template: %v", err))
 	}
-	s := &issuesGrantee{
+	s := &grantee{
 		cmds:        defaultCommands,
 		marshaler:   m,
 		defTemplate: data,
@@ -96,21 +97,20 @@ func GranteeWithService(
 	return s, requiredPermissions
 }
 
-type issuesGrantee struct {
-	config       config.Config
-	broker       proto.MuxBroker
-	svc          *cache.Service[issue.ReportDocument]
-	tracker      issue.Tracker
-	trackerError error
-	marshaler    encoding.Marshaler
-	m            browserapi.Notifications
-	o            browserapi.ResourceOpener
-	wm           browserapi.WindowManager
-	sm           schemeapi.SchemeManager
-	s            document.Service
-	versionTag   string
-	svcFn        func(config.Config) (document.Service, error)
-	scheme       string
+type grantee struct {
+	config     config.Config
+	broker     proto.MuxBroker
+	svc        *cache.Service[issue.ReportDocument]
+	tracker    issue.Tracker
+	marshaler  encoding.Marshaler
+	m          browserapi.Notifications
+	o          browserapi.ResourceOpener
+	wm         browserapi.WindowManager
+	sm         schemeapi.SchemeManager
+	s          document.Service
+	versionTag string
+	svcFn      func(config.Config) (document.Service, error)
+	scheme     string
 
 	cmds          map[string]commandAll
 	maxSubjectLen int
@@ -120,24 +120,25 @@ type issuesGrantee struct {
 	pendingIssueURI atomic.Value // workspaceapi.URI, accessed by Handle and HandleCommand
 }
 
-func (e *issuesGrantee) Connected(broker proto.MuxBroker, pconfig config.Config) {
+func (e *grantee) Connected(
+	ctx context.Context, broker proto.MuxBroker, pconfig config.Config,
+) error {
 	e.config = pconfig
 	e.broker = broker
-	var err error
 
 	disableDefaultCommands, err := pconfig.GetBool("disable_default_commands")
 	if err != nil {
 		if err != config.ErrNotFound {
-			log.Warnf("could not read property "+
-				"'disable_default_commands': %v", err)
+			return fmt.Errorf("could not read property "+
+				"'disable_default_commands': %w", err)
 		}
 	}
 
 	e.maxSubjectLen, err = pconfig.GetInt("max_list_files_subject_len")
 	if err != nil {
 		if err != config.ErrNotFound {
-			log.Warnf("could not read property "+
-				"'max_list_files_subject_len': %v", err)
+			return fmt.Errorf("could not read property "+
+				"'max_list_files_subject_len': %w", err)
 		}
 		e.maxSubjectLen = defaultMaxSubjectLen
 	}
@@ -145,23 +146,22 @@ func (e *issuesGrantee) Connected(broker proto.MuxBroker, pconfig config.Config)
 	templatesMap, err := pconfig.GetMap("templates")
 	if err != nil {
 		if err != config.ErrNotFound {
-			log.Warnf("could not read property 'templates': %v", err)
+			return fmt.Errorf("could not read property 'templates': %w", err)
 		}
-		return
+		return nil
 	}
+
 	cmdToTemplates := make(map[string][]byte, len(templatesMap))
 	for cmd, templateIfc := range templatesMap {
 		template, ok := templateIfc.(map[string]interface{})
 		if !ok {
-			log.Warnf("'templates' keys must be a string and values must be a map "+
+			return fmt.Errorf("'templates' keys must be a string and values must be a map "+
 				"representing the issue template: key %q found %v", cmd, templateIfc)
-			continue
 		}
 		data, err := e.marshaler.Marshal(template)
 		if err != nil {
-			log.Warnf("'templates' keys must be a string and values must be a map "+
-				"representing the issue template: could not marshal template for %q: %v", cmd, err)
-			continue
+			return fmt.Errorf("'templates' keys must be a string and values must be a map "+
+				"representing the issue template: could not marshal template for %q: %w", cmd, err)
 		}
 
 		// sort order of marshalled keys in template to
@@ -169,8 +169,7 @@ func (e *issuesGrantee) Connected(broker proto.MuxBroker, pconfig config.Config)
 		var temp issue.Report
 		err = e.marshaler.Unmarshal(data, &temp)
 		if err != nil {
-			log.Error(err)
-			continue
+			return fmt.Errorf("unmarshal template '%s': %w", cmd, err)
 		}
 		// add default version via compile-time variable
 		if temp.Version == "" {
@@ -178,10 +177,11 @@ func (e *issuesGrantee) Connected(broker proto.MuxBroker, pconfig config.Config)
 		}
 		data, err = e.marshaler.Marshal(temp)
 		if err != nil {
-			log.Error(err)
-			continue
+			return fmt.Errorf("marshal template '%s' with version: %w", cmd, err)
 		}
-		log.Debugf("marshaled template %q into %s", cmd, string(data))
+
+		e.log(log.TraceLevel, "marshaled template %q into %s", cmd, string(data))
+
 		cmdToTemplates[cmd] = data
 	}
 
@@ -200,10 +200,13 @@ func (e *issuesGrantee) Connected(broker proto.MuxBroker, pconfig config.Config)
 		}
 	}
 
-	log.Debugf("extension connected and loaded config without any critical issues")
+	e.log(log.DebugLevel, "extension connected and loaded %d templates without any issues",
+		len(cmdToTemplates))
+
+	return nil
 }
 
-func (e *issuesGrantee) initScheme(m schemeapi.SchemeManager) error {
+func (e *grantee) initScheme(m schemeapi.SchemeManager) error {
 	marshaler := yaml.Marshaler()
 	rootURI, err := workspaceapi.ParseURI(fmt.Sprintf("%s:///", e.scheme))
 	if err != nil {
@@ -218,14 +221,14 @@ func (e *issuesGrantee) initScheme(m schemeapi.SchemeManager) error {
 	return err
 }
 
-func (e *issuesGrantee) Handle(ctx context.Context, ev textapi.Event) bool {
+func (e *grantee) Handle(ctx context.Context, ev textapi.Event) bool {
 	pendingIssueURI := e.pendingIssueURI.Load().(workspaceapi.URI)
 	if !ev.URI.Equal(pendingIssueURI) {
-		log.Tracef("ignoring event for file with URI %q: not an issue URI", ev.URI)
+		e.log(log.TraceLevel, "ignoring event for file with URI %q: not an issue URI", ev.URI)
 		return false
 	}
 
-	log.Debugf("handling event %v for issue with URI %q", ev.Type, ev.URI)
+	e.log(log.TraceLevel, "handling event %v for issue with URI %q", ev.Type, ev.URI)
 
 	switch ev.Type {
 	case textapi.EventTypeFlush:
@@ -236,47 +239,37 @@ func (e *issuesGrantee) Handle(ctx context.Context, ev textapi.Event) bool {
 	return false
 }
 
-func (e *issuesGrantee) PermissionGranted(grants []extension.Grant) {
-	log.Debugf("permissions granted: %v", grants)
+func (e *grantee) PermissionGranted(ctx context.Context, grants []extension.Grant) error {
+	e.log(log.DebugLevel, "permissions granted: %v", grants)
 
 	for _, g := range grants {
 		switch g.Permission {
 		case extension.Permission(extension.PermissionBrowserWindowManager):
 			wm, err := browserextension.WindowManager(g, e.broker)
 			if err != nil {
-				log.Warnf("Could not acquire browser window manager: %v. "+
-					"Will not be able to create reports.", err)
-				continue
+				return fmt.Errorf("acquire browser window manager: %w ", err)
 			}
 			e.wm = wm
 		case extension.Permission(extension.PermissionBrowserResourceOpener):
 			o, err := browserextension.ResourceOpener(g, e.broker)
 			if err != nil {
-				log.Warnf("Could not acquire browser resource opener: %v. "+
-					"Will not be able to create reports.", err)
-				continue
+				return fmt.Errorf("acquire browser resource opener: %w ", err)
 			}
 			e.o = o
 		case extension.Permission(extension.PermissionBrowserNotifications):
 			m, err := browserextension.Notifications(g, e.broker)
 			if err != nil {
-				log.Warnf("Could not acquire browser messenger: %v. "+
-					"Will not be able to report errors to user.", err)
-				continue
+				return fmt.Errorf("acquire browser notifications: %w ", err)
 			}
 			e.m = m
 		case extension.Permission(extension.PermissionEditor):
 			ed, err := textextension.Editor(g, e.broker)
 			if err != nil {
-				log.Warnf("Could not acquire editor to subscribe command: %v."+
-					" Will not be able to create reports", err)
-				continue
+				return fmt.Errorf("acquire editor: %w ", err)
 			}
 			err = ed.SubscribeEvents(editorEvents, e)
 			if err != nil {
-				log.Warnf("Could not subscribe to editor events: %v. "+
-					"Will not be able to create reports", err)
-				continue
+				return fmt.Errorf("subscribe editor events: %w ", err)
 			}
 			for cmd, man := range e.cmds {
 				cmd := cmd
@@ -287,42 +280,30 @@ func (e *issuesGrantee) PermissionGranted(grants []extension.Grant) {
 						return man.handler(e, ctx, cmd)
 					}))
 				if err != nil {
-					log.Warnf("Could not subscribe command %q: %v", cmd, err)
-					continue
+					return fmt.Errorf("subscribe command %q: %w", cmd, err)
 				}
-				log.Debugf("Subscribed to create issue command %q", cmd)
+				e.log(log.DebugLevel, "Subscribed to create issue command %q", cmd)
 			}
 		case extension.PermissionSchemeManager:
 			m, err := schemeextension.SchemeManager(g, e.broker)
 			if err != nil {
-				log.Warnf("Could not acquire scheme manager: %v. "+
-					"Will not be able to create or see reports", err)
-				continue
+				return fmt.Errorf("acquire scheme manager: %w", err)
 			}
 			e.sm = m
 		case extension.PermissionStorage:
 			s, err := storageextension.Storage(g, e.broker)
 			if err != nil {
-				log.Warnf("Could not acquire storage: %v. "+
-					"Will not be able to create or see reports", err)
-				continue
+				return fmt.Errorf("acquire storage: %w", err)
 			}
 			e.s = s
 		}
 	}
 
-	if e.sm == nil || e.s == nil {
-		log.Errorf("missing critical resources, cannot continue.")
-		return
-	}
-
 	svc, err := e.svcFn(e.config)
 	if err != nil {
-		log.Warn(err)
-		e.trackerError = err
-		return
+		return fmt.Errorf("create issues service: %w", err)
 	}
-	svc = logging.WithLogging(svc, "IssuesStorage")
+	svc = doclogging.WithLogging(svc, "IssuesStorage")
 
 	// avoid too many reads to service (i.e. firestore), which is pretty slow.
 	// As long as there aren't many oob (outside of six) requests this should be
@@ -333,8 +314,7 @@ func (e *issuesGrantee) PermissionGranted(grants []extension.Grant) {
 
 	err = e.initScheme(e.sm)
 	if err != nil {
-		log.Warnf("Could not initialize scheme: %v. "+
-			"Will not be able to list reports", err)
+		return fmt.Errorf("initialize scheme: %w", err)
 	}
 
 	// this is just massaging the cache so evict async
@@ -346,60 +326,53 @@ func (e *issuesGrantee) PermissionGranted(grants []extension.Grant) {
 
 		err = e.svc.EvictAll(ctx)
 		if err != nil {
-			log.Warnf("Could not initialize issue cache: %v", err)
+			e.log(log.WarnLevel, "could not initialize issue cache: %v", err)
 			return
 		}
-		log.Debugf("initialized extension_issues successfully")
+		e.log(log.DebugLevel, "initialized successfully")
 	}()
-}
 
-func (e *issuesGrantee) PermissionDenied(perms []extension.Permission) {
-	log.Warningf("missing critical permissions: denied: %v; required: %v", perms, requiredPermissions)
-}
-
-func (e *issuesGrantee) Health() error {
 	return nil
 }
 
-func (e *issuesGrantee) Shutdown(reason string) error {
-	log.Debugf("extension being shutdown: %s", reason)
+func (e *grantee) PermissionDenied(ctx context.Context, perms []extension.Permission) error {
+	return fmt.Errorf("missing critical permissions: denied: %v; required: %v",
+		perms, requiredPermissions)
+}
+
+func (e *grantee) Health(context.Context) error {
 	return nil
 }
 
-func (e *issuesGrantee) notify(level notifications.Level, msg string, args ...any) {
-	if e.m == nil {
-		return
-	}
+func (e *grantee) Shutdown(ctx context.Context, reason string) error {
+	e.log(log.DebugLevel, "shutdown: %s", reason)
+	return nil
+}
+
+func (e *grantee) notify(level notifications.Level, msg string, args ...any) {
 	err := e.m.Notify(level, msg, args...)
 	if err != nil {
-		err = fmt.Errorf("set message: %v", err)
-		log.Error(err)
+		e.log(log.ErrorLevel, "notify: %v", err)
 	}
 }
 
-func (e *issuesGrantee) issueRefresh(ctx context.Context, cmd textapi.Command) (bool, error) {
-	if e.trackerError != nil {
-		return false, fmt.Errorf("initialize issue tracker: %v", e.trackerError)
-	}
-	if e.svc == nil {
-		return false, errors.New("cannot refresh issues if permissions were not granted")
-	}
+func (e *grantee) issueRefresh(ctx context.Context, cmd textapi.Command) (bool, error) {
 	return false, e.svc.EvictAll(ctx)
 }
 
-func (e *issuesGrantee) openEmptyIssueTemplate(ctx context.Context, cmd textapi.Command) (bool, error) {
+func (e *grantee) openEmptyIssueTemplate(ctx context.Context, cmd textapi.Command) (bool, error) {
 	return e.openIssueTemplate(ctx, cmd.Window, e.defTemplate, "issue-")
 }
 
-func (e *issuesGrantee) openCustomIssueTemplate(
+func (e *grantee) openCustomIssueTemplate(
 	template []byte, templateName string,
-) func(*issuesGrantee, context.Context, textapi.Command) (bool, error) {
-	return func(e *issuesGrantee, ctx context.Context, cmd textapi.Command) (bool, error) {
+) func(*grantee, context.Context, textapi.Command) (bool, error) {
+	return func(e *grantee, ctx context.Context, cmd textapi.Command) (bool, error) {
 		return e.openIssueTemplate(ctx, cmd.Window, template, templateName)
 	}
 }
 
-func (e *issuesGrantee) freeIssue(ctx context.Context, ev textapi.Event, uri workspaceapi.URI) bool {
+func (e *grantee) freeIssue(ctx context.Context, ev textapi.Event, uri workspaceapi.URI) bool {
 	if e.pendingIssueID == "" {
 		e.notify(notifications.LevelInfo, "canceled creation of new issue")
 	}
@@ -409,47 +382,41 @@ func (e *issuesGrantee) freeIssue(ctx context.Context, ev textapi.Event, uri wor
 	return false
 }
 
-func (e *issuesGrantee) createReport(ctx context.Context, temp issue.Report) string {
+func (e *grantee) createReport(ctx context.Context, temp issue.Report) string {
 	id, err := e.tracker.CreateReport(ctx, temp)
 	if err != nil {
-		err = fmt.Errorf("create report: %v", err)
+		err = fmt.Errorf("create report: %w", err)
 		e.notify(notifications.LevelError, err.Error())
-		log.Error(err)
+		e.log(log.ErrorLevel, err.Error())
 		return ""
 	}
 	msg := fmt.Sprintf("created issue report %s", id)
 	e.notify(notifications.LevelSuccess, msg)
-	log.Info(msg)
+	e.log(log.InfoLevel, msg)
 	return id
 }
 
-func (e *issuesGrantee) updateReport(ctx context.Context, id string, temp issue.Report) {
+func (e *grantee) updateReport(ctx context.Context, id string, temp issue.Report) {
 	err := e.tracker.UpdateReport(ctx, id, temp)
 	if err != nil {
 		err = fmt.Errorf("update report: %v", err)
 		e.notify(notifications.LevelError, err.Error())
-		log.Error(err)
+		e.log(log.ErrorLevel, err.Error())
 		return
 	}
 
 	msg := fmt.Sprintf("updated issue report %s", id)
 	e.notify(notifications.LevelSuccess, msg)
-	log.Info(msg)
+	e.log(log.InfoLevel, msg)
 }
 
-func (e *issuesGrantee) createOrUpdateIssue(ctx context.Context, ev textapi.Event) bool {
-	if e.tracker == nil {
-		msg := "Cannot create or update issue if permissions were denied " +
-			"or there was an error initializing issue tracker client."
-		log.Error(msg)
-		return false
-	}
+func (e *grantee) createOrUpdateIssue(ctx context.Context, ev textapi.Event) bool {
 	var temp issue.Report
 	err := e.marshaler.Unmarshal([]byte(ev.Content), &temp)
 	if err != nil {
 		err = fmt.Errorf("unmarshal: %v", err)
 		e.notify(notifications.LevelError, err.Error())
-		log.Warn(err)
+		e.log(log.WarnLevel, err.Error())
 		return false
 	}
 	if e.pendingIssueID != "" {
@@ -462,14 +429,11 @@ func (e *issuesGrantee) createOrUpdateIssue(ctx context.Context, ev textapi.Even
 	return false
 }
 
-func (e *issuesGrantee) openIssueTemplate(
+func (e *grantee) openIssueTemplate(
 	ctx context.Context, win browserapi.Window, template []byte, templateName string,
 ) (bool, error) {
 	if e.o == nil || e.wm == nil {
 		return false, errors.New("browser permissions necessary to create an issue were not granted")
-	}
-	if e.trackerError != nil {
-		return false, fmt.Errorf("initialize issue tracker: %v", e.trackerError)
 	}
 	oldURI := e.pendingIssueURI.Load().(workspaceapi.URI)
 	if !oldURI.Equal(workspaceapi.URI{}) {
@@ -511,6 +475,12 @@ func (e *issuesGrantee) openIssueTemplate(
 	return false, nil
 }
 
+func (t *grantee) log(level log.Level, msg string, args ...any) {
+	log.WithFields(log.Fields{
+		logging.KeyClass: "issuesextension.grantee",
+	}).Logf(level, msg, args...)
+}
+
 func getDefaultAuthor() string {
 	u, err := user.Current()
 	if err != nil {
@@ -525,5 +495,5 @@ func getDefaultAuthor() string {
 
 type commandAll struct {
 	man     textapi.CommandManual
-	handler func(*issuesGrantee, context.Context, textapi.Command) (bool, error)
+	handler func(*grantee, context.Context, textapi.Command) (bool, error)
 }

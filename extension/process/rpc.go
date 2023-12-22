@@ -76,7 +76,9 @@ func (s *granteeServer) monitorKeepAlive() {
 	for {
 		select {
 		case <-t.C:
-			s.doShutdown("lost connectivity to host: failed to send a health check in time")
+			ctx, cancel := context.WithTimeout(s.ctx, s.keepAliveTimeout)
+			defer cancel()
+			s.doShutdown(ctx, "lost connectivity to host: failed to send a health check in time")
 		case <-ch:
 			forceStopTimer(t)
 			t.Reset(s.keepAliveTimeout)
@@ -110,7 +112,9 @@ func (s *granteeServer) Permissions(ctx context.Context, req *extensionpb.PermRe
 	s.mu.Unlock()
 
 	if !connected {
-		s.grantee.Connected(s.broker, cfg)
+		if err := s.grantee.Connected(ctx, s.broker, cfg); err != nil {
+			return nil, fmt.Errorf("grantee connected: %w", err)
+		}
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		s.connected = true
@@ -151,16 +155,20 @@ func (s *granteeServer) OnGrant(ctx context.Context, req *extensionpb.OnPermGran
 	}
 
 	if len(granted) != 0 {
-		s.grantee.PermissionGranted(granted)
+		if err := s.grantee.PermissionGranted(ctx, granted); err != nil {
+			return nil, fmt.Errorf("grantee permissions granted: %w", err)
+		}
 	}
 	if len(denied) != 0 {
-		s.grantee.PermissionDenied(denied)
+		if err := s.grantee.PermissionDenied(ctx, denied); err != nil {
+			return nil, fmt.Errorf("grantee permissions denied: %w", err)
+		}
 	}
 
 	return new(extensionpb.OnPermGrantResponse), nil
 }
 
-func (s *granteeServer) doShutdown(reason string) (ret error) {
+func (s *granteeServer) doShutdown(ctx context.Context, reason string) (ret error) {
 	s.mu.Lock()
 	keepAlive := s.keepAlive
 	s.keepAlive = nil
@@ -184,7 +192,7 @@ func (s *granteeServer) doShutdown(reason string) (ret error) {
 	t := time.After(defDurationGracefulShutClient / 3)
 	done := make(chan struct{})
 	go func() {
-		if err := s.grantee.Shutdown(reason); err != nil {
+		if err := s.grantee.Shutdown(ctx, reason); err != nil {
 			ret = multierr.Append(ret, err)
 		}
 		done <- struct{}{}
@@ -209,17 +217,17 @@ func (s *granteeServer) doShutdown(reason string) (ret error) {
 func (s *granteeServer) Shutdown(ctx context.Context, in *extensionpb.ShutdownRequest) (
 	*extensionpb.ShutdownResponse, error,
 ) {
-	err := s.doShutdown(in.GetReason())
+	err := s.doShutdown(ctx, in.GetReason())
 	if err != nil {
 		return nil, err
 	}
 	return new(extensionpb.ShutdownResponse), nil
 }
 
-func (s *granteeServer) Health(context.Context, *extensionpb.HealthRequest) (
+func (s *granteeServer) Health(ctx context.Context, req *extensionpb.HealthRequest) (
 	*extensionpb.HealthResponse, error,
 ) {
-	if err := s.grantee.Health(); err != nil {
+	if err := s.grantee.Health(ctx); err != nil {
 		return nil, err
 	}
 

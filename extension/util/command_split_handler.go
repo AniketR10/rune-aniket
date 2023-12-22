@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/ernestrc/blue/logging"
+	"github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	browserapi "unstable.build/go-tui/api/browser"
 	browserextension "unstable.build/go-tui/api/browser/extension"
@@ -68,10 +70,13 @@ type cmdSplitHandler struct {
 	win     browserapi.Window
 }
 
-func (t *cmdSplitHandler) Connected(broker proto.MuxBroker, config config.Config) {
-	log.Debugf("extension connected; config: %v", config)
+func (t *cmdSplitHandler) Connected(
+	ctx context.Context, broker proto.MuxBroker, config config.Config,
+) error {
+	t.log(log.DebugLevel, "extension connected")
 	t.broker = broker
 	t.pconfig = config
+	return nil
 }
 
 func (t *cmdSplitHandler) closeHandler() bool {
@@ -86,7 +91,7 @@ func (t *cmdSplitHandler) closeHandler() bool {
 
 	err := h.Close()
 	if err != nil {
-		log.Errorf("command split handler close: %v", err)
+		t.log(log.ErrorLevel, "command split handler close: %v", err)
 	}
 
 	return true
@@ -115,17 +120,18 @@ func (t *cmdSplitHandler) cleanWindow() bool {
 func (t *cmdSplitHandler) closeWindow() {
 	err := t.win.Close()
 	if err != nil {
-		log.Errorf("closing extension window: %s", err)
+		t.log(log.ErrorLevel, "closing extension window: %v", err)
 	}
 }
 
 func (t *cmdSplitHandler) exitClean() error {
-	log.Info("received exit signal; cleaning resources...")
+	t.log(log.DebugLevel, "received exit signal; cleaning resources...")
+
 	if t.cleanWindow() {
-		log.Debug("cleaned window")
+		t.log(log.DebugLevel, "cleaned window")
 	}
 	if t.closeHandler() {
-		log.Debug("closed handler")
+		t.log(log.DebugLevel, "closed handler")
 	}
 	return nil
 }
@@ -138,22 +144,19 @@ func (t *cmdSplitHandler) openSplitWindow(cmd textapi.Command) error {
 	t.mu.Unlock()
 
 	if win != nil {
-		log.Debug("received cmd event but win is already open")
+		t.log(log.DebugLevel, "received cmd event but win is already open")
 		return nil
-	}
-	if wm == nil {
-		return errors.New("insufficient permissions: WindowManager permission was denied")
 	}
 
 	h, err := t.config.Handler(cmd, t.grants, t.broker, focusWin, t.pconfig)
 	if err != nil {
-		err = fmt.Errorf("config.Handler: %v", err)
+		err = fmt.Errorf("config.Handler: %w", err)
 		return err
 	}
 
-	win, err = t.wm.Split(t.config.SplitOrientation, focusWin, browserapi.FuncHandler(h, t.exitClean))
+	win, err = wm.Split(t.config.SplitOrientation, focusWin, browserapi.FuncHandler(h, t.exitClean))
 	if err != nil {
-		err = fmt.Errorf("wm.Split: %s", err)
+		err = fmt.Errorf("wm.Split: %w", err)
 		return err
 	}
 
@@ -167,22 +170,18 @@ func (t *cmdSplitHandler) openSplitWindow(cmd textapi.Command) error {
 
 func (t *cmdSplitHandler) HandleCommand(ctx context.Context, cmd textapi.Command) (exit bool, err error) {
 	if cmd.Name == t.config.Command.Name {
-		err = t.openSplitWindow(cmd)
-		if err != nil {
-			log.Error(err)
-		}
-		return false, err
+		return false, t.openSplitWindow(cmd)
 	}
 	return false, nil
 }
 
-func (t *cmdSplitHandler) PermissionGranted(grants []extension.Grant) {
+func (t *cmdSplitHandler) PermissionGranted(ctx context.Context, grants []extension.Grant) (ret error) {
+	t.log(log.DebugLevel, "permissions granted: %+v", grants)
+
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
 	var err error
-	log.Debugf("permissions granted: %+v", grants)
-
 	for _, g := range grants {
 		switch g.Permission {
 		case extension.PermissionBrowserWindowManager:
@@ -194,24 +193,40 @@ func (t *cmdSplitHandler) PermissionGranted(grants []extension.Grant) {
 			}
 		}
 		if err != nil {
-			log.Errorf("PermissionGranted: %+v: %s", g.Permission, err)
+			ret = multierror.Append(ret, err)
 		}
 	}
 
 	t.grants = grants
+	return ret
 }
 
-func (t *cmdSplitHandler) PermissionDenied(perms []extension.Permission) {
-	log.Warnf("permission denied: %v", perms)
+func (t *cmdSplitHandler) PermissionDenied(ctx context.Context, perms []extension.Permission) error {
+	t.log(log.DebugLevel, "permission denied: %v", perms)
+
+	for _, perm := range perms {
+		switch perm {
+		case extension.PermissionBrowserWindowManager, extension.PermissionEditor:
+			return errors.New("permission window manager and permission " +
+				"editor must be granted for this extension to work")
+		}
+	}
+	return nil
 }
 
-func (t *cmdSplitHandler) Shutdown(reason string) error {
-	log.Debugf("extension being shutdown: %s", reason)
+func (t *cmdSplitHandler) Shutdown(ctx context.Context, reason string) error {
+	t.log(log.DebugLevel, "extension being shutdown: %s", reason)
 	t.closeHandler()
 	t.cleanWindow()
 	return nil
 }
 
-func (t *cmdSplitHandler) Health() error {
+func (t *cmdSplitHandler) Health(ctx context.Context) error {
 	return nil
+}
+
+func (t *cmdSplitHandler) log(level log.Level, msg string, args ...any) {
+	log.WithFields(log.Fields{
+		logging.KeyClass: "extutil.cmdSplitHandler",
+	}).Logf(level, msg, args...)
 }

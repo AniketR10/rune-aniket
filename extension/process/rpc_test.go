@@ -222,19 +222,22 @@ type granteeMock struct {
 	onShutdownFn         func()
 }
 
-func (g *granteeMock) Connected(b proto.MuxBroker, cfg config.Config) {
+func (g *granteeMock) Connected(ctx context.Context, b proto.MuxBroker, cfg config.Config) error {
 	g.cfgs = append(g.cfgs, cfg)
 	g.onConnected++
+	return nil
 }
-func (g *granteeMock) PermissionGranted(grants []extension.Grant) {
+func (g *granteeMock) PermissionGranted(ctx context.Context, grants []extension.Grant) error {
 	for _, grant := range grants {
 		g.onGrant = append(g.onGrant, grant.Permission)
 	}
+	return nil
 }
-func (g *granteeMock) PermissionDenied(perms []extension.Permission) {
+func (g *granteeMock) PermissionDenied(ctx context.Context, perms []extension.Permission) error {
 	g.onDenied = append(g.onDenied, perms...)
+	return nil
 }
-func (g *granteeMock) Shutdown(reason string) error {
+func (g *granteeMock) Shutdown(ctx context.Context, reason string) error {
 	if g.err != nil {
 		return g.err
 	}
@@ -247,7 +250,7 @@ func (g *granteeMock) Shutdown(reason string) error {
 	}
 	return nil
 }
-func (g *granteeMock) Health() error {
+func (g *granteeMock) Health(ctx context.Context) error {
 	if g.err != nil {
 		return g.err
 	}

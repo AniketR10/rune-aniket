@@ -1,6 +1,8 @@
 package util
 
 import (
+	"context"
+
 	"github.com/ernestrc/go-multierror"
 	"unstable.build/go-tui/api/config"
 	"unstable.build/go-tui/extension"
@@ -20,36 +22,39 @@ type multiGrantee struct {
 	children []extension.Grantee
 }
 
-func (m multiGrantee) Connected(b proto.MuxBroker, cfg config.Config) {
+func (m multiGrantee) Connected(ctx context.Context, b proto.MuxBroker, cfg config.Config) error {
 	for _, child := range m.children {
-		child.Connected(b, cfg)
+		child.Connected(ctx, b, cfg)
 	}
+	return nil
 }
 
-func (m multiGrantee) PermissionGranted(grants []extension.Grant) {
+func (m multiGrantee) PermissionGranted(ctx context.Context, grants []extension.Grant) error {
 	for _, child := range m.children {
-		child.PermissionGranted(grants)
+		child.PermissionGranted(ctx, grants)
 	}
+	return nil
 }
 
-func (m multiGrantee) PermissionDenied(perms []extension.Permission) {
+func (m multiGrantee) PermissionDenied(ctx context.Context, perms []extension.Permission) error {
 	for _, child := range m.children {
-		child.PermissionDenied(perms)
+		child.PermissionDenied(ctx, perms)
 	}
+	return nil
 }
 
-func (m multiGrantee) Shutdown(reason string) (ret error) {
+func (m multiGrantee) Shutdown(ctx context.Context, reason string) (ret error) {
 	for _, child := range m.children {
-		if err := child.Shutdown(reason); err != nil {
+		if err := child.Shutdown(ctx, reason); err != nil {
 			ret = multierror.Append(ret, err)
 		}
 	}
 	return
 }
 
-func (m multiGrantee) Health() (ret error) {
+func (m multiGrantee) Health(ctx context.Context) (ret error) {
 	for _, child := range m.children {
-		if err := child.Health(); err != nil {
+		if err := child.Health(ctx); err != nil {
 			ret = multierror.Append(ret, err)
 		}
 	}
