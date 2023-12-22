@@ -166,9 +166,9 @@ extensions:
       styles:
         .go: disabled
         .rb: tango
-  # This extension is for simulating a extension panic for debugging.
-  panic:
-    path: /usr/local/bin/extension_panic
+  # This extension is for simulating a extension panic or other type of debugging.
+  chaos:
+    path: /usr/local/bin/extension_chaos
   # This extension adds a new scheme "upspin" which implements
   # e2e encrypted workspaces. If you're interested in this feature
   # please follow instructions here: https://upspin.io/doc/signup.md.
