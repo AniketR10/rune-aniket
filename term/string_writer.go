@@ -21,9 +21,14 @@ type StringWriter struct {
 // itnializes it.
 func NewStringWriter(width, height int) (t *StringWriter) {
 	t = new(StringWriter)
-	t.Resize(width, height)
-	t.CursorCh = '▐'
-	t.SetContext = context.Background()
+	t.Init(width, height)
+	return
+}
+
+func (w *StringWriter) Init(width, height int) {
+	w.Resize(width, height)
+	w.CursorCh = '▐'
+	w.SetContext = context.Background()
 	return
 }
 

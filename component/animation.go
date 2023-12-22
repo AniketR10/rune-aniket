@@ -4,10 +4,10 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"unstable.build/go-tui"
-	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/term"
 )
 
@@ -67,16 +67,24 @@ func DecodeAnimation(
 }
 
 // EncodeAnimation encodes the given Animation as a compressed slice of bytes
-// that can be stored or transferred.
-func EncodeAnimation(a *Animation) []byte {
+// that can be stored or transferred. If the underlying Animation's frames
+// are dynamic components, then this is lost and encoded as a static string component,
+// encoded with the given width and height.
+func EncodeAnimation(a *Animation, width, height int) []byte {
 	padding := [lenPrefix]byte{0, 0, 0, 0, 0, 0, 0, 0}
 
 	raw := make([]string, len(a.frames))
 	for i, frame := range a.frames {
-		cells := frame.floatingWithAttributes.(backgroundStrWrapper).
-			Background.root.(*Span).
-			content.C.(*stringComp).cells
-		raw[i] = cell.CellsToString(cells)
+		if stringer, ok := frame.(fmt.Stringer); ok {
+			raw[i] = stringer.String()
+		} else {
+			var writer term.StringWriter
+			writer.Init(width, height)
+			frame.Resize(width, height)
+			frame.Draw(&writer)
+			writer.Flush()
+			raw[i] = writer.String()
+		}
 	}
 
 	var ret bytes.Buffer
@@ -106,7 +114,7 @@ func EncodeAnimation(a *Animation) []byte {
 // of frames on loop at the specified fps.
 type Animation struct {
 	interrupter   term.Interrupter
-	frames        []String
+	frames        []tui.Component
 	sequence      []int
 	fps           int
 	i             int
@@ -136,6 +144,21 @@ func (a *Animation) Init(
 	interrupter term.Interrupter,
 	frames []string, sequence []int, fps int,
 ) {
+	components := make([]tui.Component, len(frames))
+	for i, frame := range frames {
+		components[i] = NewStringWithConfig(frame, StringConfig{
+			Alignment: SpanAlignmentCentered,
+		})
+	}
+	a.InitWithComponents(interrupter, components, sequence, fps)
+}
+
+// InitWithComponents initializes this animation with the given interrupter,
+// frames as tui.Components, and fps. See Init for more details.
+func (a *Animation) InitWithComponents(
+	interrupter term.Interrupter,
+	frames []tui.Component, sequence []int, fps int,
+) {
 	// assert frames and sequence are consistent with each other
 	// so we panic on Init to indicate programmer error
 	// and not halfway through the animation.
@@ -151,20 +174,7 @@ func (a *Animation) Init(
 	a.interrupter = interrupter
 	a.fps = fps
 	a.sequence = sequence
-
-	a.frames = make([]String, len(frames))
-	for i, frame := range frames {
-		// NOTE: changing underlying String implementation here
-		// requires refactor of encode routine!
-		a.frames[i] = NewStringWithConfig(frame, StringConfig{
-			Alignment: SpanAlignmentCentered,
-			// term.Attributes
-			// FrameCharSet
-			// BackgroundAttributes term.Attributes
-			// BackgroundRune       rune
-			// Tabspaces            int
-		})
-	}
+	a.frames = frames
 
 	a.ctx, a.cancelCtx = context.WithCancel(context.Background())
 

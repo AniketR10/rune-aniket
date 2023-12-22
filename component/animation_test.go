@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
+	"unstable.build/go-tui"
 	"unstable.build/go-tui/term"
 )
 
@@ -33,7 +34,24 @@ func TestAnimation(t *testing.T) {
 				a := NewAnimation(interrupter, frames, sequence, fps)
 				defer a.Close()
 
-				raw := EncodeAnimation(a)
+				raw := EncodeAnimation(a, 8, 4)
+				ret, err := DecodeAnimation(raw, fps, interrupter)
+				require.NoError(t, err)
+				return ret
+			}},
+		{"non stringer encoded and decoded animation",
+			func(t *testing.T, interrupter term.Interrupter, frames []string, sequence []int, fps int) *Animation {
+				components := make([]tui.Component, len(frames))
+				for i, frame := range frames {
+					components[i] = noStringerString{NewStringWithConfig(frame, StringConfig{
+						Alignment: SpanAlignmentCentered,
+					})}
+				}
+				a := new(Animation)
+				a.InitWithComponents(interrupter, components, sequence, fps)
+				defer a.Close()
+
+				raw := EncodeAnimation(a, 8, 4)
 				ret, err := DecodeAnimation(raw, fps, interrupter)
 				require.NoError(t, err)
 				return ret
@@ -131,4 +149,15 @@ func TestAnimation(t *testing.T) {
 			})
 		})
 	}
+}
+
+type noStringerString struct {
+	str String
+}
+
+func (n noStringerString) Draw(w term.Writer) {
+	n.str.Draw(w)
+}
+func (n noStringerString) Resize(width, height int) {
+	n.str.Resize(width, height)
 }
