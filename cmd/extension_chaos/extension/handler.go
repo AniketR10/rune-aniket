@@ -13,7 +13,6 @@ import (
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/extension"
 	extutil "unstable.build/go-tui/extension/util"
-	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/term"
 )
@@ -40,7 +39,7 @@ func Grantee() (extension.Grantee, []extension.Permission) {
 				sleepDuration = dur
 			}
 			h := &chaosHandler{sleepTime: sleepDuration, panic: panic, comp: comp}
-			return browserapi.FuncHandler(handler.Sync(new(sync.Mutex), h), h.Close), nil
+			return browserapi.SyncHandler(new(sync.Mutex), h), nil
 		},
 		Command: textapi.CommandManual{
 			Name: "chaosExtension",

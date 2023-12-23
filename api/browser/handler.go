@@ -1,6 +1,8 @@
 package api
 
 import (
+	"sync"
+
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/term"
@@ -16,6 +18,11 @@ func FuncHandler(h tui.Handler, doClose func() error) Handler {
 // with an nop Close callback.
 func NopHandler(h tui.Handler) Handler {
 	return &closeHandler{Handler: h, doClose: func() error { return nil }}
+}
+
+// SyncHandler wraps the given handler and adds synchronized access.
+func SyncHandler(locker sync.Locker, h Handler) Handler {
+	return &syncHandler{handler: h, locker: locker}
 }
 
 // StaticFloating wraps a Handler and returns a Floating that always
@@ -92,4 +99,45 @@ type nopFloating struct {
 func (n nopFloating) Close() error {
 	return nil
 
+}
+
+type syncHandler struct {
+	locker  sync.Locker
+	handler Handler
+}
+
+func (s syncHandler) Resize(width, height int) {
+	s.locker.Lock()
+	defer s.locker.Unlock()
+	s.handler.Resize(width, height)
+}
+
+func (s syncHandler) Draw(w term.Writer) {
+	s.locker.Lock()
+	defer s.locker.Unlock()
+	s.handler.Draw(w)
+}
+
+func (s syncHandler) Handle(ev term.Event) (exit, handled bool) {
+	s.locker.Lock()
+	defer s.locker.Unlock()
+	return s.handler.Handle(ev)
+}
+
+func (s syncHandler) Cursor() (c term.Coordinates, style term.CursorStyle, show bool) {
+	s.locker.Lock()
+	defer s.locker.Unlock()
+	return s.handler.Cursor()
+}
+
+func (s syncHandler) Man() tui.Manual {
+	s.locker.Lock()
+	defer s.locker.Unlock()
+	return s.handler.Man()
+}
+
+func (s syncHandler) Close() error {
+	s.locker.Lock()
+	defer s.locker.Unlock()
+	return s.handler.Close()
 }
