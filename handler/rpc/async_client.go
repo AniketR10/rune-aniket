@@ -163,9 +163,10 @@ func (c *AsyncClient) Draw(w term.Writer) {
 // Handle satisfies tui.Handle.
 func (c *AsyncClient) Handle(ev term.Event) (bool, bool) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
+	circuitBreak := c.circuitBreak
+	c.mu.Unlock()
 
-	if c.circuitBreak {
+	if circuitBreak {
 		return false, false
 	}
 	return c.Client.Handle(ev)
@@ -174,9 +175,10 @@ func (c *AsyncClient) Handle(ev term.Event) (bool, bool) {
 // Handle satisfies tui.Handle.
 func (c *AsyncClient) Man() tui.Manual {
 	c.mu.Lock()
-	defer c.mu.Unlock()
+	circuitBreak := c.circuitBreak
+	c.mu.Unlock()
 
-	if c.circuitBreak {
+	if circuitBreak {
 		return tui.Manual{}
 	}
 	return c.Client.Man()
@@ -185,9 +187,10 @@ func (c *AsyncClient) Man() tui.Manual {
 // Cursor satisfies tui.Handler
 func (c *AsyncClient) Cursor() (pos term.Coordinates, style term.CursorStyle, show bool) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
+	circuitBreak := c.circuitBreak
+	c.mu.Unlock()
 
-	if c.circuitBreak {
+	if circuitBreak {
 		return
 	}
 
