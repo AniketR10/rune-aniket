@@ -17,7 +17,7 @@ import (
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/notifications"
 
-	handlerpb "unstable.build/go-tui/handler/rpc"
+	handlerrpc "unstable.build/go-tui/handler/rpc"
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/util"
 )
@@ -37,7 +37,8 @@ type Server struct {
 	UnimplementedResourceOpenerServer
 	UnimplementedWindowManagerServer
 
-	broker proto.MuxBroker
+	broker   proto.MuxBroker
+	syncMode bool
 
 	browser struct {
 		browser.Browser
@@ -67,9 +68,14 @@ func (s *Server) Init(
 	s.serverCtx, s.serverCancelCtx = context.WithCancel(context.Background())
 }
 
+// SetSyncMode ensures that all future handler clients are fully synchronous.
+// This should be used only for testing.
+func (s *Server) SetSyncMode() {
+	s.syncMode = true
+}
+
 func (s *Server) log(level log.Level, msg string, args ...interface{}) {
-	log.
-		WithField(logging.KeyClass, "browser.Server").Logf(level, msg, args...)
+	log.WithField(logging.KeyClass, "browser.Server").Logf(level, msg, args...)
 }
 
 func (s *Server) consumeErrors(
@@ -100,12 +106,21 @@ func (s *Server) dialHandler(ctx context.Context, channelID string, tags ...stri
 		return nil, err
 	}
 
-	pbClient := handlerpb.NewHandlerClient(handlerConn)
-	fClient := NewFloatingClient(handlerConn)
+	interrupter := browser.EventPublisherInterrupter(s.browser.Browser)
+	pbClient := handlerrpc.NewHandlerClient(handlerConn)
 	pbClient = newIOWaitUnlockHandlerClient(pbClient, s.browser.Locker)
-	handlercc := handlerpb.NewClient(pbClient)
+	var handlercc interface {
+		browserapi.Handler
+		Errors() <-chan error
+	}
+	if s.syncMode {
+		handlercc = handlerrpc.NewClient(pbClient)
+	} else {
+		handlercc = handlerrpc.NewAsyncClient(interrupter, pbClient)
+	}
 
 	ctx, cancelFn := context.WithCancel(s.serverCtx)
+	fClient := NewFloatingClient(handlerConn)
 	cc := newFloatingClient(handlercc, fClient, cancelFn, handlerConn)
 
 	go s.consumeErrors(ctx, channelID, handlercc.Errors())

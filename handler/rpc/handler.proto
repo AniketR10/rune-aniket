@@ -24,15 +24,11 @@ message DrawResponse {
 
 message HandleRequest {
 	term.Event event = 1;
-
-	DrawRequest draw = 2;
 }
 
 message HandleResponse {
 	bool handled = 1;
 	bool quit = 2;
-
-	DrawResponse draw = 3;
 }
 
 message ManRequest {}
@@ -47,6 +43,7 @@ message CloseRequest {
 message CloseResponse {}
 
 service Handler {
+	rpc Draw(DrawRequest) returns (DrawResponse);
 	rpc Handle(HandleRequest) returns (HandleResponse);
 	rpc Man(ManRequest) returns (ManResponse);
 	rpc Close(CloseRequest) returns (CloseResponse);

@@ -370,7 +370,6 @@ func TestClientServerIntegration(t *testing.T) {
 }
 
 func TestRPCTab(t *testing.T) {
-	var closeFns []func()
 	testTabIntegration(t, func(ed text.Editor, mu *sync.Mutex) (*text.Component, browserapi.WindowManager, error) {
 		c, err := newTestComponentErr(ed)
 		if err != nil {
@@ -379,9 +378,10 @@ func TestRPCTab(t *testing.T) {
 
 		b := proto.NewUnixGRPCBroker("", "", "")
 		s := browserpb.NewServer(b, c, mu)
+		s.SetSyncMode()
 
 		client, closeFn := setupWmIntTest(t, b, s)
-		closeFns = append(closeFns, func() {
+		t.Cleanup(func() {
 			mu.Lock()
 			s.Stop()
 			mu.Unlock()
@@ -390,14 +390,9 @@ func TestRPCTab(t *testing.T) {
 
 		return c, client, err
 	})
-	for _, closeFn := range closeFns {
-		closeFn()
-	}
 }
 
 func TestRPCRegister(t *testing.T) {
-	var closeFns []func()
-
 	testRegister(t, func(ed text.Editor, mu *sync.Mutex, res workspaceapi.URI) (*text.Component, text.Editor, error) {
 		c, err := newTestComponentErr(ed)
 		if err != nil {
@@ -408,7 +403,7 @@ func TestRPCRegister(t *testing.T) {
 		s := NewServer(b, c, mu)
 
 		client, closeFn := setupIntTest(t, b, s)
-		closeFns = append(closeFns, func() {
+		t.Cleanup(func() {
 			mu.Lock()
 			s.Close()
 			mu.Unlock()
@@ -417,10 +412,6 @@ func TestRPCRegister(t *testing.T) {
 
 		return c, texttest.EditorFromAPIEditor{Ed: client}, err
 	})
-
-	for _, closeFn := range closeFns {
-		closeFn()
-	}
 }
 
 func assertLocation(t *testing.T, l text.LocationList, idx int, loca textapi.Location) {

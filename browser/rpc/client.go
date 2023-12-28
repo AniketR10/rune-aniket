@@ -112,6 +112,9 @@ func (c *Client) Init(
 func serveHandler(
 	ctx context.Context, broker proto.MuxBroker, h browserapi.Handler,
 ) (channelID string, srv proto.MuxServer, err error) {
+	if h == nil {
+		panic("passed nil Handler to browser client")
+	}
 	tokenHandler, ok := h.(browser.Token)
 	if ok {
 		channelID = tokenHandler.ID
@@ -210,7 +213,9 @@ func (c *Client) split(
 }
 
 // Split satisfies Browser.
-func (c *Client) Split(o browserapi.Orientation, win browserapi.Window, h browserapi.Handler) (browserapi.Window, error) {
+func (c *Client) Split(
+	o browserapi.Orientation, win browserapi.Window, h browserapi.Handler,
+) (browserapi.Window, error) {
 	win, err := c.split((WindowManagerClient).Split, o, win, h)
 	runtime.KeepAlive(c)
 	return win, err

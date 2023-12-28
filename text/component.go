@@ -534,7 +534,7 @@ func (c *Component) Bar(o browserapi.Orientation, h tui.Handler) error {
 	return nil
 }
 
-// PublishEvent sends an EventNone to the main event loop which
+// PublishEvent sends an event to the main event loop which
 // forces Handle to be called on the tui.Handler in focus.
 func (c *Component) PublishEvent(ev term.Event) error {
 	ok := c.config.EventPublisher(ev)

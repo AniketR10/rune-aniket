@@ -10,12 +10,9 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	browsertest "unstable.build/go-tui/browser/test"
-	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/notifications"
-	handlerpb "unstable.build/go-tui/handler/rpc"
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/term"
 	termpb "unstable.build/go-tui/term/rpc"
@@ -28,6 +25,7 @@ func newServerWithNoBroker(ctrl *gomock.Controller) (
 ) {
 	mock := browsertest.NewMockBrowser(ctrl)
 	s := NewServer(nil, mock, new(sync.Mutex))
+	s.SetSyncMode()
 	return s, mock
 }
 
@@ -37,6 +35,7 @@ func newTestServer(ctrl *gomock.Controller, mu *sync.Mutex) (
 	mockBrowser := browsertest.NewMockBrowser(ctrl)
 	mockBroker := proto.NewMockMuxBroker(ctrl)
 	s := NewServer(mockBroker, mockBrowser, mu)
+	s.SetSyncMode()
 
 	return s, mockBrowser, mockBroker
 }
@@ -101,39 +100,6 @@ func TestServerOpen(t *testing.T) {
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "oopsie")
 	})
-}
-
-func insertDrawResponse(t *testing.T, quit bool) func(ctx context.Context, method string, args interface{}, reply interface{}, opts ...grpc.CallOption) error {
-	return func(ctx context.Context,
-		method string, args interface{},
-		reply interface{}, opts ...grpc.CallOption) error {
-		// validate mappings with finer grained control
-		res, ok := reply.(*handlerpb.HandleResponse)
-		require.True(t, ok)
-
-		res.Draw = handlerpb.NewDrawResponse(context.Background(), component.NewString(""), 0, 0)
-		res.Quit = quit
-		res.Handled = true
-		return nil
-	}
-}
-
-func expectHandlerInvoke(t *testing.T, handlerConn *proto.MockMuxConn, protoEv *termpb.Event) {
-	handlerConn.EXPECT().
-		Invoke(gomock.Any(), gomock.Eq("/handler.Handler/Handle"),
-			gomock.Eq(&handlerpb.HandleRequest{Event: protoEv, Draw: &handlerpb.DrawRequest{}}),
-			gomock.Any()).
-		Times(1).
-		DoAndReturn(insertDrawResponse(t, false))
-}
-
-func expectHandlerInvokeExit(t *testing.T, handlerConn *proto.MockMuxConn) {
-	handlerConn.EXPECT().
-		Invoke(gomock.Any(), gomock.Eq("/handler.Handler/Handle"),
-			gomock.Any(),
-			gomock.Any()).
-		DoAndReturn(insertDrawResponse(t, true)).
-		Times(1)
 }
 
 func TestServerPublish(t *testing.T) {

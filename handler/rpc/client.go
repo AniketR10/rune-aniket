@@ -5,33 +5,40 @@ import (
 	"errors"
 	"fmt"
 	"runtime"
+	"time"
 
 	"github.com/ernestrc/blue/logging"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
-	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/term"
-	termpb "unstable.build/go-tui/term/rpc"
+	termrpc "unstable.build/go-tui/term/rpc"
 )
 
-// Client satisfies Handler by talking to a remote handler over GRPC.
+const defaultRPCTimeout = 1 * time.Second
+
+var _ tui.Handler = (*Client)(nil)
+
+// Client satisfies tui.Handler by talking to a remote handler over GRPC.
+// All calls are synchronous.
 //
 // Note that Draw,Resize and Cursor are conflated into one RPC. This
 // Client relies on the fact that runtime first Resizes, then calls Draw,
 // and then gets the Cursor.
+//
+// Errors produced by the different underlying RPCs can be consumed via
+// the chan error returned by Errors.
 type Client struct {
+	ctx    context.Context
+	cancel func()
+	client HandlerClient
+	errors chan error
+
 	width, height int
-	cursor        struct {
+
+	cursor struct {
 		term.Coordinates
 		show  bool
 		style term.CursorStyle
-	}
-
-	errors chan error
-	client HandlerClient
-	resp   struct {
-		*HandleResponse
-		height, width int
 	}
 }
 
@@ -42,15 +49,15 @@ func NewClient(pbClient HandlerClient) *Client {
 	return ret
 }
 
-// Init initialies this Client with pbClient and the given interrupt func.
+// Init initializes this Client with the given underlying GPRC HandlerClient.
 func (c *Client) Init(pbClient HandlerClient) {
 	c.client = pbClient
-	// NOTE client breaker is a great concept but interruptDraw is global
-	// so if there are multiple client breakers, it's hard to figure out when
-	// to re-issue redraw request to avoid endless loop. works
-	// c.client = withClientBreaker(c.client, interruptDraw, interruptHandle, c.Logger)
-
+	c.ctx, c.cancel = context.WithCancel(context.Background())
 	c.errors = make(chan error)
+	runtime.SetFinalizer(c, func(c *Client) {
+		// do not make an RPC on a runtime finalizer
+		c.cancel()
+	})
 }
 
 // Errors returns a channel which receives RPC errors.
@@ -60,116 +67,57 @@ func (c *Client) Errors() <-chan error {
 	return c.errors
 }
 
-func (c *Client) collectError(call string, err error) {
-	select {
-	case c.errors <- err:
-	default:
-		c.log(log.ErrorLevel, "handler.Client error: %s: %s", call, err)
-	}
-}
-
-func (c *Client) log(level log.Level, msg string, args ...interface{}) {
-	log.
-		WithField(logging.KeyClass, "handler.Client").Logf(level, msg, args...)
-}
-
-// Resize satisfies tui.Handler
+// Resize satisfies tui.Handler.
 func (c *Client) Resize(width, height int) {
 	c.width, c.height = width, height
 }
 
-func (c *Client) doDraw(w term.Writer, resp *DrawResponse) {
-	for y, row := range resp.GetRows() {
-		for x, c := range row.Cells {
-			cell := c.ToModel()
-			w.SetCell(term.Coordinates{X: x, Y: y}, cell)
-		}
-	}
-}
-
-func (c *Client) setNewHandleResponse(ctx context.Context, comp tui.Component) {
-	comp.Resize(c.width, c.height)
-	draw := NewDrawResponse(ctx, comp, c.width, c.height)
-	c.resp.HandleResponse = &HandleResponse{Draw: draw}
-	c.resp.width = c.width
-	c.resp.height = c.height
-	c.cursor.show = false
-}
-
 // Draw satisfies tui.Handler
 func (c *Client) Draw(w term.Writer) {
-	// NOTE conflating Draw+Handle at the proto level
-	// is pointless if we call Handle on every Draw, but
-	// this is leftovers from having a client circuit breaker
-	// which we will be able to re-introduce once interrupts
-	// with context are implemented.
-	// This effectively fixes Interrupts handled in bundle
-	// with other events not triggering a second call to Draw
-	// which is what would wind up calling the server's Handle/Draw
-	// method.
-	c.Handle(term.Event{Type: term.EventInterrupt})
-	c.doDraw(w, c.resp.HandleResponse.GetDraw())
-}
-
-// Handle satisfies tui.Handler
-func (c *Client) Handle(ev term.Event) (exit, handled bool) {
-	exit, handled, err := c.handle(ev)
-	if err != nil {
-		c.setNewHandleResponse(context.Background(),
-			component.NewStringWithConfig(smtgWrongCopy,
-				component.StringConfig{Alignment: component.SpanAlignmentCentered}))
-	}
-	return
-}
-
-func (c *Client) handle(ev term.Event) (exit, handled bool, err error) {
-	ctx, cancel := context.WithTimeout(context.Background(), defaultRPCTimeout)
+	ctx, cancel := context.WithTimeout(c.ctx, defaultRPCTimeout)
 	defer cancel()
 
-	protoEv := termpb.Event{}
-	err = protoEv.FromModel(ev)
-	if err != nil {
-		c.collectError("Handle", err)
-		// remote handler is sending bad events so eagerly close
-		exit = true
-		return
-	}
-
-	drawReq := DrawRequest{Width: int32(c.width), Height: int32(c.height)}
-
-	req := HandleRequest{Event: &protoEv, Draw: &drawReq}
-	resp, err := c.client.Handle(ctx, &req)
+	req := DrawRequest{Height: int32(c.height), Width: int32(c.width)}
+	resp, err := c.client.Draw(ctx, &req)
 	runtime.KeepAlive(c)
 	if err != nil {
-		c.collectError("Handle", err)
-		return c.resp.GetQuit(), false, err
-	}
-
-	exit = resp.GetQuit()
-	handled = resp.GetHandled()
-
-	if resp.GetDraw() == nil ||
-		resp.GetDraw().GetCursor() == nil ||
-		resp.GetDraw().GetCursor().GetPosition() == nil {
-		err = errors.New("invalid Cursor from server's Draw response")
 		c.collectError("Draw", err)
 		return
 	}
 
-	c.cursor.Coordinates.X = int(resp.Draw.Cursor.Position.X)
-	c.cursor.Coordinates.Y = int(resp.Draw.Cursor.Position.Y)
-	c.cursor.show = resp.Draw.Cursor.Show
-	c.cursor.style = term.CursorStyle(resp.Draw.Cursor.Style)
-	c.resp.HandleResponse = resp
-	c.resp.width = int(drawReq.Width)
-	c.resp.height = int(drawReq.Height)
+	cursor := resp.GetCursor()
+	c.cursor.show = cursor.GetShow()
+	c.cursor.style = term.CursorStyle(cursor.GetStyle())
+	c.cursor.Coordinates.X = int(cursor.GetPosition().GetX())
+	c.cursor.Coordinates.Y = int(cursor.GetPosition().GetY())
 
-	return
+	doDraw(w, resp)
 }
 
 // Cursor satisfies tui.Handler
 func (c *Client) Cursor() (pos term.Coordinates, style term.CursorStyle, show bool) {
 	return c.cursor.Coordinates, c.cursor.style, c.cursor.show
+}
+
+// Handle satisfies tui.Handler
+func (c *Client) Handle(ev term.Event) (bool, bool) {
+	ctx, cancel := context.WithTimeout(c.ctx, defaultRPCTimeout)
+	defer cancel()
+
+	req := HandleRequest{Event: new(termrpc.Event)}
+	err := req.Event.FromModel(ev)
+	if err != nil {
+		c.collectError("Handle", fmt.Errorf("convert ev to proto ev: %w", err))
+		return false, false
+	}
+
+	resp, err := c.client.Handle(ctx, &req)
+	runtime.KeepAlive(c)
+	if err != nil {
+		c.collectError("Handle", err)
+		return false, false
+	}
+	return resp.GetQuit(), resp.GetHandled()
 }
 
 // Man satisfies tui.Handler
@@ -204,14 +152,44 @@ func (c *Client) Man() tui.Manual {
 // Close satisfies browser.Handler
 // Close closes this client and all associated resources.
 func (c *Client) Close() error {
-	ctx, cancel := context.WithTimeout(context.Background(), defaultRPCTimeout)
+	// cancel all other activity
+	c.cancel()
+
+	// use a new context for the last close req
+	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(ctx, defaultRPCTimeout)
 	defer cancel()
 
 	req := CloseRequest{}
 	_, err := c.client.Close(ctx, &req)
 	runtime.KeepAlive(c)
 	if err != nil {
-		return fmt.Errorf("proto.HandlerClient.Close: %w", err)
+		return fmt.Errorf("close rpc: %w", err)
 	}
 	return nil
+}
+
+func (c *Client) collectError(call string, err error) {
+	err = fmt.Errorf("%s: %w", call, err)
+	select {
+	case c.errors <- err:
+	default:
+		c.log(log.ErrorLevel, "%v", err)
+	}
+}
+
+func (c *Client) log(level log.Level, msg string, args ...interface{}) {
+	log.WithFields(log.Fields{
+		logging.KeyClass: "handler.Client",
+		"ptr":            fmt.Sprintf("%p", c),
+	}).Logf(level, msg, args...)
+}
+
+func doDraw(w term.Writer, resp *DrawResponse) {
+	for y, row := range resp.GetRows() {
+		for x, c := range row.Cells {
+			cell := c.ToModel()
+			w.SetCell(term.Coordinates{X: x, Y: y}, cell)
+		}
+	}
 }

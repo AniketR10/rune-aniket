@@ -30,6 +30,7 @@ func newClientServerIntegration(
 
 	grpcServer := grpc.NewServer()
 	rpcServer := NewServer(broker, h, mutex)
+	rpcServer.SetSyncMode()
 	RegisterWindowManagerServer(grpcServer, rpcServer)
 	RegisterResourceOpenerServer(grpcServer, rpcServer)
 	RegisterNotificationsServer(grpcServer, rpcServer)
@@ -77,8 +78,12 @@ func TestIntegrationSetFocus(t *testing.T) {
 	resWin1, err := client.Focus()
 	require.NoError(t, err)
 
-	mock.EXPECT().Split(gomock.Any(), gomock.Any(), gomock.Any()).Return(win2, nil)
-	resWin2, err := client.Split(browserapi.OrientationDefault, resWin1, nil)
+	mock.EXPECT().Split(gomock.Any(), gomock.Any(), gomock.Any()).
+		DoAndReturn(func(o browserapi.Orientation,
+			win browser.Window, h browserapi.Handler) (browser.Window, error) {
+			return win2, win2.SetContent(h)
+		})
+	resWin2, err := client.Split(browserapi.OrientationDefault, resWin1, browsertest.NewTestHandler())
 	require.NoError(t, err)
 
 	mock.EXPECT().SetFocus(gomock.Any()).Return(win2, nil)
@@ -90,6 +95,8 @@ func TestIntegrationSetFocus(t *testing.T) {
 	resPrev, err = client.SetFocus(resWin2)
 	require.NoError(t, err)
 	assert.Equal(t, resWin1.(interface{ ID() uint64 }).ID(), resPrev.(interface{ ID() uint64 }).ID())
+	require.NoError(t, resWin1.Close())
+	require.NoError(t, resWin2.Close())
 }
 
 func TestIntegrationFloating(t *testing.T) {
@@ -131,7 +138,7 @@ func TestIntegrationFloating(t *testing.T) {
 					assert.Equal(t, 2, actualHeight)
 					assert.Equal(t, tcase.Offset, cfg.Offset)
 					assert.Equal(t, tcase.Alignment, cfg.Alignment)
-					return win1, nil
+					return win1, win1.SetContent(h)
 				})
 			resWin1, err := client.Floating(browsertest.NewTestFloating(2, 2), tcase)
 			require.NoError(t, err)

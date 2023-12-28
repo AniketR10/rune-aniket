@@ -8,8 +8,6 @@ import (
 	handlerpb "unstable.build/go-tui/handler/rpc"
 )
 
-// wraps a handlerpb.HandlerClient to provide unlocking a resource mutex while waiting
-// for a I/O based Handler to respond.
 type ioUnlockHandler struct {
 	lock sync.Locker
 	h    handlerpb.HandlerClient
@@ -26,6 +24,13 @@ func newIOWaitUnlockHandlerClient(
 func (h *ioUnlockHandler) init(hc handlerpb.HandlerClient, lock sync.Locker) {
 	h.h = hc
 	h.lock = lock
+}
+
+func (h *ioUnlockHandler) Draw(
+	ctx context.Context, in *handlerpb.DrawRequest, opts ...grpc.CallOption,
+) (*handlerpb.DrawResponse, error) {
+	// do not unlock for Draw, as impls should simply draw, not call other APIs.
+	return h.h.Draw(ctx, in, opts...)
 }
 
 func (h *ioUnlockHandler) Handle(

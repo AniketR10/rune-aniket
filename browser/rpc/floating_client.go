@@ -5,8 +5,8 @@ import (
 	"runtime"
 
 	"unstable.build/go-tui"
+	browserapi "unstable.build/go-tui/api/browser"
 	"unstable.build/go-tui/browser"
-	handlerpb "unstable.build/go-tui/handler/rpc"
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/term"
 )
@@ -16,14 +16,14 @@ var _ browser.Floating = (*floatingClientImpl)(nil)
 type floatingClientImpl struct {
 	conn          proto.MuxConn
 	cancelFn      func()
-	client        *handlerpb.Client
+	client        browserapi.Handler
 	fc            FloatingClient
 	errorCh       chan error
 	width, height int
 }
 
 func newFloatingClient(
-	handler *handlerpb.Client, fc FloatingClient,
+	handler browserapi.Handler, fc FloatingClient,
 	cancelFn func(), conn proto.MuxConn,
 ) *floatingClientImpl {
 	ret := &floatingClientImpl{

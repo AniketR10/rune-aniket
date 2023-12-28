@@ -17,6 +17,28 @@ type mockHandlerClient struct {
 	remote    tui.Handler
 }
 
+func (c *mockHandlerClient) Draw(
+	ctx context.Context, in *DrawRequest, opts ...grpc.CallOption,
+) (*DrawResponse, error) {
+	if c.rpcError != nil {
+		return nil, c.rpcError
+	}
+	width, height := int(in.GetWidth()), int(in.GetHeight())
+	c.remote.Resize(width, height)
+	pos, style, show := c.remote.Cursor()
+
+	resp := NewDrawResponse(context.Background(), c.remote, width, height)
+	resp.Cursor = &DrawResponse_Cursor{
+		Position: &termpb.Coordinates{
+			X: int32(pos.X),
+			Y: int32(pos.Y),
+		},
+		Show:  show,
+		Style: int32(style),
+	}
+	return resp, nil
+}
+
 func (c *mockHandlerClient) Handle(
 	ctx context.Context, in *HandleRequest, opts ...grpc.CallOption,
 ) (*HandleResponse, error) {
@@ -28,19 +50,6 @@ func (c *mockHandlerClient) Handle(
 	ev, err := in.GetEvent().ToModel()
 	if err != nil {
 		return nil, err
-	}
-
-	width, height := int(in.GetDraw().GetWidth()), int(in.GetDraw().GetHeight())
-	c.remote.Resize(width, height)
-	pos, style, show := c.remote.Cursor()
-	resp.Draw = NewDrawResponse(context.Background(), c.remote, width, height)
-	resp.Draw.Cursor = &DrawResponse_Cursor{
-		Position: &termpb.Coordinates{
-			X: int32(pos.X),
-			Y: int32(pos.Y),
-		},
-		Show:  show,
-		Style: int32(style),
 	}
 
 	// mimic server

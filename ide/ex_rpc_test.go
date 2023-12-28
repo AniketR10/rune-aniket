@@ -104,6 +104,7 @@ func newTestRPCBrowser(t *testing.T,
 		var serverMutex sync.Mutex
 		grpcServer := grpc.NewServer()
 		server := browserpb.NewServer(broker, ex.Browser(), &serverMutex)
+		server.SetSyncMode()
 		browserpb.RegisterWindowManagerServer(grpcServer, server)
 		browserpb.RegisterNotificationsServer(grpcServer, server)
 		browserpb.RegisterResourceOpenerServer(grpcServer, server)

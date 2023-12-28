@@ -38,11 +38,9 @@ func testHandler() tui.Handler {
 }
 
 func newStubClient(t *testing.T) *Client {
-	return &Client{
-		client: &mockHandlerClient{
-			remote: testHandler(),
-		},
-	}
+	return NewClient(&mockHandlerClient{
+		remote: testHandler(),
+	})
 }
 
 func assertTestManual(t *testing.T, man tui.Manual, msg ...interface{}) {
@@ -53,11 +51,14 @@ func assertTestManual(t *testing.T, man tui.Manual, msg ...interface{}) {
 	assert.Equal(t, expected, man)
 }
 
-func testRPCHandlerManual(t *testing.T, rpcHandler *Client) {
-	assertTestManual(t, rpcHandler.Man(), rpcHandler.errors)
+func testRPCHandlerManual(t *testing.T, rpcHandler interface {
+	tui.Handler
+	Errors() <-chan error
+}) {
+	assertTestManual(t, rpcHandler.Man(), rpcHandler.Errors())
 }
 
-func testRPCHandlerCursor(t *testing.T, rpcHandler *Client) {
+func testRPCHandlerCursor(t *testing.T, rpcHandler tui.Handler) {
 	// force call to underlying Cursor on the server side
 	rpcHandler.Draw(term.NewStringWriter(0, 0))
 
@@ -106,14 +107,14 @@ BBBB`},
 	})
 
 	t.Run("draw multi codepoint utf-8", func(t *testing.T) {
-		stubClient := &Client{
-			client: &mockHandlerClient{
+		stubClient := NewClient(
+			&mockHandlerClient{
 				remote: handler.Nop(component.NewStringWithConfig(`┏━━━━━┓
 ┃  中 ┃
 ┃     ┃
 ┗━━━━━┛`, component.StringConfig{Alignment: component.SpanAlignmentCentered})),
 			},
-		}
+		)
 		cases := []testutil.HandlerSequenceTestCase{
 			{"",
 				`┏━━━━━┓
@@ -165,7 +166,7 @@ func TestClientHandleErrors(t *testing.T) {
 		_ = stubClient.Man()
 	}()
 
-	assert.Equal(t, myErr, <-errChan)
+	assert.True(t, errors.Is(<-errChan, myErr))
 }
 
 func newServerClient(t *testing.T, testHandler tui.Handler) (*Client, func()) {

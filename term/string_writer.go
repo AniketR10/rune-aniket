@@ -43,6 +43,12 @@ func (w *StringWriter) Resize(width, height int) {
 	w.cellbuf = make([]Cell, width*height)
 }
 
+// Reset resets this writer.
+func (w *StringWriter) Reset() {
+	w.Init(w.width, w.height)
+	w.buffer.Reset()
+}
+
 func outOfBounds(height, width int, pos Coordinates) bool {
 	return pos.X >= width || pos.Y >= height || pos.X < 0 || pos.Y < 0
 }

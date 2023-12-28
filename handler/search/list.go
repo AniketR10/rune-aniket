@@ -282,7 +282,7 @@ func (l *List) consumeAsyncElements(ctx context.Context, datachan chan []byte, q
 		}
 		interrupter := l.cfg.interrupter
 		l.mu.Unlock()
-		interrupter.Interrupt(ctx)
+		interrupter.Interrupt(context.Background())
 	}()
 
 	var dirty bool
@@ -304,7 +304,7 @@ func (l *List) consumeAsyncElements(ctx context.Context, datachan chan []byte, q
 				}
 				dirty = false
 				l.mu.Unlock()
-				interrupter.Interrupt(ctx)
+				interrupter.Interrupt(context.Background())
 			case <-ctx.Done():
 				return
 			case <-quitChan:
@@ -366,7 +366,7 @@ func (l *List) handleSearch(
 	cancelFn()
 	interrupter := l.cfg.interrupter
 	l.mu.Unlock()
-	interrupter.Interrupt(ctx)
+	interrupter.Interrupt(context.Background())
 }
 
 // Push returns a channel that can be used to push data to this list asynchronously.

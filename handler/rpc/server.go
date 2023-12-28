@@ -6,34 +6,12 @@ import (
 	"fmt"
 	"io"
 	"sync/atomic"
-	"time"
 
 	"github.com/ernestrc/blue/logging"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
 
-	"unstable.build/go-tui/term"
 	termpb "unstable.build/go-tui/term/rpc"
-)
-
-const (
-	defaultRPCTimeout = 1000 * time.Millisecond
-	smtgWrongCopy     = `
-
-          ___
-         /___/\_               
-        _\   \/_/\__           
-      __\       \/_/\          
-      \   __    __ \ \         
-     __\  \_\   \_\ \ \   __   
-    /_/\\   __   __  \ \_/_/\  
-    \_\/_\__\/\__\/\__\/_\_\/  
-       \_\/_/\       /_\_\/    
-          \_\/       \_\/      
-    
-
-Uh, Houston, we've had a problem
-`
 )
 
 type dimensions struct {
@@ -44,6 +22,11 @@ type dimensions struct {
 // Server serves a tui.Handler implementation over GRPC.
 type Server struct {
 	UnimplementedHandlerServer
+	// NOTE: do not synchronize access to handle
+	// explicitly, and instead rely on clients to do it.
+	// This is necessary because calls to Handle can call APIs
+	// which might then trigger another method to be called, i.e. Close, which
+	// creates a deadlock.
 	handler    tui.Handler
 	dimensions atomic.Value
 }
@@ -61,7 +44,9 @@ func (s *Server) Init(handler tui.Handler) {
 	s.dimensions.Store(dimensions{})
 }
 
-func (s *Server) draw(ctx context.Context, in *DrawRequest) (
+// Draw is an RPC that handles request to an underlying Handler's
+// Draw over RPC.
+func (s *Server) Draw(ctx context.Context, in *DrawRequest) (
 	*DrawResponse, error,
 ) {
 	dim := s.dimensions.Load().(dimensions)
@@ -79,8 +64,7 @@ func (s *Server) draw(ctx context.Context, in *DrawRequest) (
 }
 
 func (s *Server) log(level log.Level, msg string, args ...interface{}) {
-	log.
-		WithField(logging.KeyClass, "handler.Server").Logf(level, msg, args...)
+	log.WithField(logging.KeyClass, "handler.Server").Logf(level, msg, args...)
 }
 
 // Handle is an RPC that handles request to an underlying Handler's
@@ -100,19 +84,11 @@ func (s *Server) Handle(ctx context.Context, req *HandleRequest) (
 	s.log(log.TraceLevel, "handler.Server.Handle(%v)", ev)
 
 	var exit, handled bool
-	if ev.Type != term.EventInterrupt {
-		exit, handled = s.handler.Handle(ev)
-	}
-
-	resp, err := s.draw(ctx, req.GetDraw())
-	if err != nil {
-		return nil, err
-	}
+	exit, handled = s.handler.Handle(ev)
 
 	return &HandleResponse{
 		Quit:    exit,
 		Handled: handled,
-		Draw:    resp,
 	}, nil
 }
 

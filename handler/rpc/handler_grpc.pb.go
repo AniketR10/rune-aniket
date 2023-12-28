@@ -22,6 +22,7 @@ const _ = grpc.SupportPackageIsVersion7
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type HandlerClient interface {
+	Draw(ctx context.Context, in *DrawRequest, opts ...grpc.CallOption) (*DrawResponse, error)
 	Handle(ctx context.Context, in *HandleRequest, opts ...grpc.CallOption) (*HandleResponse, error)
 	Man(ctx context.Context, in *ManRequest, opts ...grpc.CallOption) (*ManResponse, error)
 	Close(ctx context.Context, in *CloseRequest, opts ...grpc.CallOption) (*CloseResponse, error)
@@ -33,6 +34,15 @@ type handlerClient struct {
 
 func NewHandlerClient(cc grpc.ClientConnInterface) HandlerClient {
 	return &handlerClient{cc}
+}
+
+func (c *handlerClient) Draw(ctx context.Context, in *DrawRequest, opts ...grpc.CallOption) (*DrawResponse, error) {
+	out := new(DrawResponse)
+	err := c.cc.Invoke(ctx, "/handler.Handler/Draw", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func (c *handlerClient) Handle(ctx context.Context, in *HandleRequest, opts ...grpc.CallOption) (*HandleResponse, error) {
@@ -66,6 +76,7 @@ func (c *handlerClient) Close(ctx context.Context, in *CloseRequest, opts ...grp
 // All implementations must embed UnimplementedHandlerServer
 // for forward compatibility
 type HandlerServer interface {
+	Draw(context.Context, *DrawRequest) (*DrawResponse, error)
 	Handle(context.Context, *HandleRequest) (*HandleResponse, error)
 	Man(context.Context, *ManRequest) (*ManResponse, error)
 	Close(context.Context, *CloseRequest) (*CloseResponse, error)
@@ -76,6 +87,9 @@ type HandlerServer interface {
 type UnimplementedHandlerServer struct {
 }
 
+func (UnimplementedHandlerServer) Draw(context.Context, *DrawRequest) (*DrawResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Draw not implemented")
+}
 func (UnimplementedHandlerServer) Handle(context.Context, *HandleRequest) (*HandleResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Handle not implemented")
 }
@@ -96,6 +110,24 @@ type UnsafeHandlerServer interface {
 
 func RegisterHandlerServer(s grpc.ServiceRegistrar, srv HandlerServer) {
 	s.RegisterService(&Handler_ServiceDesc, srv)
+}
+
+func _Handler_Draw_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DrawRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HandlerServer).Draw(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/handler.Handler/Draw",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HandlerServer).Draw(ctx, req.(*DrawRequest))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
 func _Handler_Handle_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -159,6 +191,10 @@ var Handler_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "handler.Handler",
 	HandlerType: (*HandlerServer)(nil),
 	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "Draw",
+			Handler:    _Handler_Draw_Handler,
+		},
 		{
 			MethodName: "Handle",
 			Handler:    _Handler_Handle_Handler,
