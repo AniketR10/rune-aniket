@@ -418,7 +418,7 @@ func New(
 	h.useWorkspaceFallback = command == ""
 	h.workspaceFallback = fallback
 
-	h.ctx, h.cancelCtx = context.WithCancel(ctx)
+	h.ctx, h.cancelCtx = context.WithCancel(context.Background())
 	h.waitChan = make(chan error)
 
 	listConfig := h.getListConfig(cfg)
