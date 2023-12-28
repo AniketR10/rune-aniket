@@ -187,10 +187,10 @@ func (c *AsyncClient) Man() tui.Manual {
 // Cursor satisfies tui.Handler
 func (c *AsyncClient) Cursor() (pos term.Coordinates, style term.CursorStyle, show bool) {
 	c.mu.Lock()
-	circuitBreak := c.circuitBreak
-	c.mu.Unlock()
+	// synchronize access to cached cursor
+	defer c.mu.Unlock()
 
-	if circuitBreak {
+	if c.circuitBreak {
 		return
 	}
 
