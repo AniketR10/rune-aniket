@@ -122,7 +122,7 @@ func (c *Client) Handle(ev term.Event) (bool, bool) {
 
 // Man satisfies tui.Handler
 func (c *Client) Man() tui.Manual {
-	ctx, cancel := context.WithTimeout(context.Background(), defaultRPCTimeout)
+	ctx, cancel := context.WithTimeout(c.ctx, defaultRPCTimeout)
 	defer cancel()
 
 	req := ManRequest{}
