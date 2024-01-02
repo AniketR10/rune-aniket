@@ -328,6 +328,9 @@ func (c *AsyncClient) sendDrawReq(r request) error {
 		return err
 	}
 
+	// call Interrupt after we have unlocked mu
+	defer c.interrupter.Interrupt(r.ctx)
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -348,8 +351,6 @@ func (c *AsyncClient) sendDrawReq(r request) error {
 	c.cursor.Coordinates.Y = int(cursor.GetPosition().GetY())
 	c.state = stateAsyncIdle // reset error timeout after a successful response
 	c.timeout = startingErrorTimeout
-
-	c.interrupter.Interrupt(r.ctx)
 
 	return nil
 }
