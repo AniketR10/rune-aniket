@@ -9,6 +9,8 @@ import (
 
 	"github.com/ernestrc/blue/logging"
 	log "github.com/sirupsen/logrus"
+	codes "google.golang.org/grpc/codes"
+	status "google.golang.org/grpc/status"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/term"
 	termrpc "unstable.build/go-tui/term/rpc"
@@ -171,10 +173,17 @@ func (c *Client) Close() error {
 
 func (c *Client) collectError(call string, err error) {
 	err = fmt.Errorf("%s: %w", call, err)
-	select {
-	case c.errors <- err:
-	default:
-		c.log(log.ErrorLevel, "%v", err)
+	// canceled usually indicates that response is no longer necessary
+	// so it's an expected error.
+	if !errors.Is(err, context.Canceled) && status.Code(err) != codes.Canceled {
+		select {
+		case c.errors <- err:
+			return
+		default:
+			c.log(log.ErrorLevel, "%v", err)
+		}
+	} else {
+		c.log(log.DebugLevel, "canceled rpc: %v", err)
 	}
 }
 
