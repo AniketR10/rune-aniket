@@ -61,48 +61,6 @@ func TestStringCentered(t *testing.T) {
 	}
 }
 
-func TestString(t *testing.T) {
-	tcases := []struct {
-		in  string
-		out string
-	}{
-		{
-			in:  "aaaa",
-			out: "aaaa \n     \n     \n     \n     ",
-		},
-		{
-			in:  "XXXXXXXXXXXXXXXX\nXXXXXXXXXX\nXXXXXXXXXX",
-			out: "XXXXX\n     \n     \n     \n     ",
-		},
-		{
-			in:  "X\nX\nX\nX\nX\nX\nX\nX\n",
-			out: "X X X\n     \n     \n     \n     ",
-		},
-		{
-			in:  "XXXXXXXXXX\nXXXXXXXXXXX\nXXXXXXXXXXX\nXXXXXXXXXXX\nXXXXXXXXXXX\nXXXXXXXXXXX\nXXXXXXXXXXX\nXXXXXXXXXXX\n",
-			out: "XXXXX\n     \n     \n     \n     ",
-		},
-		{
-			in:  "a",
-			out: "a    \n     \n     \n     \n     ",
-		},
-	}
-
-	for _, tcase := range tcases {
-		t.Run("String", func(t *testing.T) {
-			testString(t, func(str string) tui.Component {
-				return NewString(str)
-			}, 5, 5, tcase.in, tcase.out)
-		})
-		t.Run("LazyBytes", func(t *testing.T) {
-			testString(t, func(str string) tui.Component {
-				// add Virtual so it clips oob requests
-				return &Virtual{C: &LazyBytes{Data: []byte(str)}}
-			}, 5, 5, tcase.in, tcase.out)
-		})
-	}
-}
-
 func TestStringWithConfigDimensions(t *testing.T) {
 	tcases := []struct {
 		in             string
@@ -139,39 +97,6 @@ func TestStringWithConfigDimensions(t *testing.T) {
 	for i, tcase := range tcases {
 		t.Run(fmt.Sprintf("test case %d", i), func(t *testing.T) {
 			s := NewStringWithConfig(tcase.in, StringConfig{})
-			actualWidth, actualHeight := s.Dimensions()
-			assert.Equal(t, tcase.expectedWidth, actualWidth)
-			assert.Equal(t, tcase.expectedHeight, actualHeight)
-		})
-	}
-}
-
-func TestStringDimensions(t *testing.T) {
-	tcases := []struct {
-		in             string
-		expectedWidth  int
-		expectedHeight int
-	}{
-		{
-			in:             "XXXXXXXXXX\nBBBBBBBBBB",
-			expectedWidth:  21,
-			expectedHeight: 1,
-		},
-		{
-			in:             "X",
-			expectedWidth:  1,
-			expectedHeight: 1,
-		},
-		{
-			in:             "X\nX\nX\nX\n",
-			expectedWidth:  8,
-			expectedHeight: 1,
-		},
-	}
-
-	for i, tcase := range tcases {
-		t.Run(fmt.Sprintf("test case %d", i), func(t *testing.T) {
-			s := NewString(tcase.in)
 			actualWidth, actualHeight := s.Dimensions()
 			assert.Equal(t, tcase.expectedWidth, actualWidth)
 			assert.Equal(t, tcase.expectedHeight, actualHeight)

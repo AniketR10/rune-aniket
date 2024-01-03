@@ -44,15 +44,13 @@ func NewStringWithConfig(str string, cfg StringConfig) String {
 		cfg.PaddingHorizontal, cfg.PaddingVertical, cfg.Alignment, cfg.MinWidth)}
 }
 
-// NewString converts a string into a very efficient top left centered one line tui.Component
+// NewString converts a string into top left centered one line tui.Component
 // which draws the given string. If the string needs to be centered dynamically,
 // or drawn multi-line use StringWithConfig instead.
 func NewString(str string) String {
-	row := make([]term.Cell, len(str))
-	for i, r := range str {
-		row[i] = term.Cell{Ch: r}
-	}
-	return String{&stringComp{cells: [][]term.Cell{row}}}
+	return NewStringWithConfig(str, StringConfig{
+		Alignment: SpanAlignmentLeft,
+	})
 }
 
 // LazyBytes is an immutable String component that is allocation free
@@ -71,6 +69,8 @@ func NewString(str string) String {
 // It is useful for collections, where not all strings need to
 // be drawn and there's a clear performance requirement
 // that offsets its limitations.
+//
+// Note that grapheme clusters are not supported by this component.
 type LazyBytes struct {
 	Data            []byte
 	Tokens          []int
@@ -156,7 +156,11 @@ func (s *stringComp) Draw(w term.Writer) {
 				continue
 			}
 			w.SetCell(term.Coordinates{X: x, Y: y},
-				term.Cell{Bg: s.attr.Bg, Fg: s.attr.Fg, Ch: c.Ch})
+				term.Cell{
+					Bg:        s.attr.Bg,
+					Fg:        s.attr.Fg,
+					Ch:        c.Ch,
+				})
 		}
 	}
 }
