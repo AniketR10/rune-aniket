@@ -19,7 +19,6 @@ import (
 var _ textapi.EventHandler = (*eventStreamClient)(nil)
 
 type eventStreamClient struct {
-	locker sync.Locker
 	stream Editor_SubscribeServer
 	quit   atomic.Bool
 }
@@ -27,7 +26,7 @@ type eventStreamClient struct {
 func newEventStreamClient(
 	stream Editor_SubscribeServer, locker sync.Locker,
 ) *eventStreamClient {
-	ret := &eventStreamClient{stream: stream, locker: locker}
+	ret := &eventStreamClient{stream: stream}
 	return ret
 }
 
@@ -39,9 +38,9 @@ func (e *eventStreamClient) Handle(ctx context.Context, ev textapi.Event) bool {
 	}
 	protoEv := toProto(ev)
 
-	// do not hold mutex while waiting on I/O
-	e.locker.Unlock()
-	defer e.locker.Lock()
+	// do not unlock I/O mutex here, as it might introduce
+	// race conditions and violate invariants that are quite hard
+	// to debug.
 
 	err := e.stream.Send(&protoEv)
 	if err != nil {

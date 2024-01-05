@@ -108,6 +108,9 @@ func TestIntegrationRace(t *testing.T) {
 		res2, err := tcase.createResource(brokerID, broker)
 		require.NoError(t, err)
 
+
+		edMock.EXPECT().UnsubscribeEvents(gomock.Any()).AnyTimes()
+
 		n := 5
 		if tcase.expect != nil {
 			tcase.expect(edMock.EXPECT()).Times(n * 2)

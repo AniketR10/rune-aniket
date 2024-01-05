@@ -156,7 +156,25 @@ func (s *Server) Subscribe(stream Editor_SubscribeServer) error {
 	s.editor.Unlock()
 
 	s.log(log.TraceLevel, "waiting for unsubscribe: stream=%p", stream)
-	return handler.waitForUnsubscribe()
+	defer s.log(log.TraceLevel, "unsubscribed subscriber: stream=%p", stream)
+
+	err = handler.waitForUnsubscribe()
+	s.unsubscribeClient(handler)
+	return err
+}
+
+func (s *Server) unsubscribeClient(handler *eventStreamClient) {
+	s.editor.Lock()
+	defer s.editor.Unlock()
+
+	s.editor.UnsubscribeEvents(handler)
+	for i, hi := range s.eventSub {
+		if hi == handler {
+			s.eventSub[i] = s.eventSub[len(s.eventSub)-1]
+			s.eventSub = s.eventSub[:len(s.eventSub)-1]
+			break
+		}
+	}
 }
 
 // Register satisfies EditorServer

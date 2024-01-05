@@ -184,10 +184,9 @@ func TestClientServerIntegration(t *testing.T) {
 			tcase := _tcase
 			t.Run(tcase.name, func(t *testing.T) {
 				var wg sync.WaitGroup
-				var mu sync.Mutex
 				b := proto.NewUnixGRPCBroker("", "", "")
 				ed := texttest.NopEditorWithCallback(wg.Done)
-				s := NewServer(b, ed, &mu)
+				s := NewServer(b, ed, new(sync.Mutex))
 
 				client, closeFn := setupIntTest(t, b, s)
 				defer closeFn()
@@ -216,17 +215,42 @@ func TestClientServerIntegration(t *testing.T) {
 				wg.Add(1)
 
 				buf := cell.NewBuffer()
-				// simulate runtime mutex
-				mu.Lock()
 				tcase.trigger(t, strconv.Itoa(i), ed, buf)
-				mu.Unlock()
 				wg.Wait()
 
-				mu.Lock()
 				assert.NoError(t, s.Close())
-				mu.Unlock()
 			})
 		}
+	})
+
+	t.Run("calls unsubscribe if event stream completes", func(t *testing.T) {
+		var wg sync.WaitGroup
+		b := proto.NewUnixGRPCBroker("", "", "")
+		ed := texttest.NopEditorWithCallback(wg.Done)
+		s := NewServer(b, ed, new(sync.Mutex))
+
+		client, closeFn := setupIntTest(t, b, s)
+		defer closeFn()
+
+		wg.Add(1)
+		err := client.SubscribeEvents([]textapi.EventType{textapi.EventTypeOpen},
+			text.FuncEventHandler(func(ctx context.Context, ev textapi.Event) bool {
+				defer wg.Done()
+				return true
+			}))
+		require.NoError(t, err)
+
+		// wait for subscribe callback
+		wg.Wait()
+
+		// proceed to trigger
+		ed.Edit(uri, cell.NewBuffer())
+
+		// wg panics if Done called but not added
+		wg.Wait()
+
+		// close
+		assert.NoError(t, s.Close())
 	})
 
 	t.Run("SetLocationList sets the location list of the remote editor", func(t *testing.T) {
