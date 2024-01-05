@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/ernestrc/blue/logging"
@@ -56,8 +57,8 @@ type chaosCommandHandler struct {
 	cancelCtx      func()
 	ed             textapi.Editor
 	wm             browserapi.WindowManager
-	eventLatency   time.Duration
-	commandLatency time.Duration
+	eventLatency   atomic.Value
+	commandLatency atomic.Value
 }
 
 func newChaosCommandHandler(
@@ -67,6 +68,8 @@ func newChaosCommandHandler(
 	ret := new(chaosCommandHandler)
 	ret.ed = ed
 	ret.ctx, ret.cancelCtx = context.WithCancel(context.Background())
+	ret.eventLatency.Store(time.Duration(0))
+	ret.commandLatency.Store(time.Duration(0))
 
 	var err error
 	for _, grant := range grants {
@@ -84,7 +87,7 @@ func newChaosCommandHandler(
 
 func (h *chaosCommandHandler) Handle(ctx context.Context, ev textapi.Event) bool {
 	h.log(log.TraceLevel, "handle event start")
-	timer := time.NewTimer(h.eventLatency)
+	timer := time.NewTimer(h.eventLatency.Load().(time.Duration))
 	select {
 	case <-h.ctx.Done():
 	case <-timer.C:
@@ -104,7 +107,7 @@ func (h *chaosCommandHandler) HandleCommand(ctx context.Context, cmd textapi.Com
 	h.log(log.TraceLevel, "handle command start")
 	defer h.log(log.TraceLevel, "handle command end")
 
-	timer := time.NewTimer(h.commandLatency)
+	timer := time.NewTimer(h.commandLatency.Load().(time.Duration))
 	select {
 	case <-h.ctx.Done():
 		err = h.ctx.Err()
@@ -142,7 +145,7 @@ func (h *chaosCommandHandler) handleUpdateCommandLatency(
 
 func (h *chaosCommandHandler) handleUpdateDuration(
 	ctx context.Context, cmd textapi.Command,
-	duration *time.Duration,
+	duration *atomic.Value,
 ) error {
 	var nextDuration time.Duration
 	if len(cmd.Args) > 0 {
@@ -153,7 +156,7 @@ func (h *chaosCommandHandler) handleUpdateDuration(
 		nextDuration = dur
 	}
 
-	*duration = nextDuration
+	duration.Store(nextDuration)
 	return nil
 }
 
