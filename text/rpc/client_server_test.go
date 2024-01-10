@@ -9,6 +9,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/ernestrc/blue/iterator"
 	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -218,6 +219,9 @@ func TestClientServerIntegration(t *testing.T) {
 				tcase.trigger(t, strconv.Itoa(i), ed, buf)
 				wg.Wait()
 
+				s.editor.Lock()
+				defer s.editor.Unlock()
+
 				assert.NoError(t, s.Close())
 			})
 		}
@@ -250,6 +254,9 @@ func TestClientServerIntegration(t *testing.T) {
 		wg.Wait()
 
 		// close
+		s.editor.Lock()
+		defer s.editor.Unlock()
+
 		assert.NoError(t, s.Close())
 	})
 
@@ -438,6 +445,9 @@ func TestRPCRegister(t *testing.T) {
 	})
 }
 
+func TestRPCComplete(t *testing.T) {
+}
+
 func assertLocation(t *testing.T, l text.LocationList, idx int, loca textapi.Location) {
 	resetLocationList(l)
 	var i int
@@ -611,7 +621,7 @@ func testRegister(t *testing.T,
 				assert.NotNil(t, cmd.Window)
 				called++
 				return true, nil
-			}))
+			}, nil))
 
 		wg.Add(1)
 		mu.Lock()
@@ -638,5 +648,37 @@ func testRegister(t *testing.T,
 		}
 
 		assert.Equal(t, 1, called)
+	})
+
+	t.Run("Complete is called", func(t *testing.T) {
+		var mu sync.Mutex
+		resource1, err := workspaceapi.ParseURI("file:///HERS")
+		require.NoError(t, err)
+		myCmd := textapi.CommandManual{
+			Name: "HODL",
+		}
+		c, sut, err := constructor(texttest.NopEditor(), &mu, resource1)
+		require.NoError(t, err)
+
+		sut.SubscribeCommand(myCmd,
+			text.FuncCommandHandler(func(ctx context.Context, cmd textapi.Command) (bool, error) {
+				return false, nil
+			}, func(ctx context.Context, cmd string, args []string) (iterator.Iterator[string], string, error) {
+				assert.Equal(t, []string{"1", "2"}, args)
+				return iterator.FromSlice([]string{"4EVER"}), "sub", nil
+			}))
+
+		mu.Lock()
+		defer mu.Unlock()
+
+		it, str, err := c.CompleteCommand(context.Background(), "HODL", []string{"1", "2"}...)
+		require.NoError(t, err)
+
+		sl, err := iterator.ToSlice(it)
+		require.NoError(t, err)
+
+		assert.Equal(t, []string{"4EVER"}, sl)
+		clientsShouldNeverBeAllowedSubstitution := ""
+		assert.Equal(t, clientsShouldNeverBeAllowedSubstitution, str)
 	})
 }

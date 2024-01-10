@@ -546,6 +546,7 @@ var Editor_ServiceDesc = grpc.ServiceDesc{
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type CommandHandlerClient interface {
 	HandleCommand(ctx context.Context, in *HandleCommandRequest, opts ...grpc.CallOption) (*HandleCommandResponse, error)
+	Complete(ctx context.Context, in *CompleteRequest, opts ...grpc.CallOption) (CommandHandler_CompleteClient, error)
 }
 
 type commandHandlerClient struct {
@@ -565,11 +566,44 @@ func (c *commandHandlerClient) HandleCommand(ctx context.Context, in *HandleComm
 	return out, nil
 }
 
+func (c *commandHandlerClient) Complete(ctx context.Context, in *CompleteRequest, opts ...grpc.CallOption) (CommandHandler_CompleteClient, error) {
+	stream, err := c.cc.NewStream(ctx, &CommandHandler_ServiceDesc.Streams[0], "/text.CommandHandler/Complete", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &commandHandlerCompleteClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type CommandHandler_CompleteClient interface {
+	Recv() (*CompleteResponse, error)
+	grpc.ClientStream
+}
+
+type commandHandlerCompleteClient struct {
+	grpc.ClientStream
+}
+
+func (x *commandHandlerCompleteClient) Recv() (*CompleteResponse, error) {
+	m := new(CompleteResponse)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 // CommandHandlerServer is the server API for CommandHandler service.
 // All implementations must embed UnimplementedCommandHandlerServer
 // for forward compatibility
 type CommandHandlerServer interface {
 	HandleCommand(context.Context, *HandleCommandRequest) (*HandleCommandResponse, error)
+	Complete(*CompleteRequest, CommandHandler_CompleteServer) error
 	mustEmbedUnimplementedCommandHandlerServer()
 }
 
@@ -579,6 +613,9 @@ type UnimplementedCommandHandlerServer struct {
 
 func (UnimplementedCommandHandlerServer) HandleCommand(context.Context, *HandleCommandRequest) (*HandleCommandResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method HandleCommand not implemented")
+}
+func (UnimplementedCommandHandlerServer) Complete(*CompleteRequest, CommandHandler_CompleteServer) error {
+	return status.Errorf(codes.Unimplemented, "method Complete not implemented")
 }
 func (UnimplementedCommandHandlerServer) mustEmbedUnimplementedCommandHandlerServer() {}
 
@@ -611,6 +648,27 @@ func _CommandHandler_HandleCommand_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
+func _CommandHandler_Complete_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(CompleteRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(CommandHandlerServer).Complete(m, &commandHandlerCompleteServer{stream})
+}
+
+type CommandHandler_CompleteServer interface {
+	Send(*CompleteResponse) error
+	grpc.ServerStream
+}
+
+type commandHandlerCompleteServer struct {
+	grpc.ServerStream
+}
+
+func (x *commandHandlerCompleteServer) Send(m *CompleteResponse) error {
+	return x.ServerStream.SendMsg(m)
+}
+
 // CommandHandler_ServiceDesc is the grpc.ServiceDesc for CommandHandler service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -623,6 +681,12 @@ var CommandHandler_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _CommandHandler_HandleCommand_Handler,
 		},
 	},
-	Streams:  []grpc.StreamDesc{},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "Complete",
+			Handler:       _CommandHandler_Complete_Handler,
+			ServerStreams: true,
+		},
+	},
 	Metadata: "rpc/editor.proto",
 }

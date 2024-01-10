@@ -271,12 +271,12 @@ func (h *workspaceManagerHandler) subscribeCommands(
 		cmd := cmd
 		man.man.Name = cmd
 		err := ex.comp.SubscribeCommand(man.man,
-			text.FuncCommandCompleter(func(ctx context.Context, cmd textapi.Command) (bool, error) {
+			text.FuncCommandHandler(func(ctx context.Context, cmd textapi.Command) (bool, error) {
 				return false, man.handler(h, cmd.Args...)
-			}, func(ctx context.Context, args []string) (
+			}, func(ctx context.Context, name string, args []string) (
 				iterator.Iterator[string], string, error,
 			) {
-				return h.completeCommand(ctx, cmd, args)
+				return h.completeCommand(ctx, name, args)
 			}))
 		if err != nil {
 			ret = multierr.Append(ret, err)

@@ -82,6 +82,14 @@ func TestIntegrationRace(t *testing.T) {
 		{extension.PermissionEditor, func(token extension.Grant, broker proto.MuxBroker) (interface{}, error) {
 			return Editor(context.Background(), token, broker)
 		}, func(ed *texttest.MockEditorMockRecorder) *gomock.Call {
+			return ed.SubscribeCommand(gomock.Any(), gomock.Any()).Return(nil)
+		}, func(ifc interface{}) error {
+			h := textapi.FuncCommandHandler(nil, nil)
+			return ifc.(textapi.Editor).SubscribeCommand(textapi.CommandManual{}, h)
+		}},
+		{extension.PermissionEditor, func(token extension.Grant, broker proto.MuxBroker) (interface{}, error) {
+			return Editor(context.Background(), token, broker)
+		}, func(ed *texttest.MockEditorMockRecorder) *gomock.Call {
 			ed.Editor(gomock.Any()).Return(th, nil).AnyTimes()
 			return ed.SetCursor(gomock.Any(), gomock.Any()).Return(nil)
 		}, func(ifc interface{}) error {
@@ -107,7 +115,6 @@ func TestIntegrationRace(t *testing.T) {
 
 		res2, err := tcase.createResource(brokerID, broker)
 		require.NoError(t, err)
-
 
 		edMock.EXPECT().UnsubscribeEvents(gomock.Any()).AnyTimes()
 

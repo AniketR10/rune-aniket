@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ernestrc/blue/iterator"
 	multierr "github.com/ernestrc/go-multierror"
 	"github.com/ernestrc/golang-internal-tools/fakenet"
 	"github.com/ernestrc/golang-internal-tools/jsonrpc2"
@@ -1951,6 +1952,12 @@ func (h *lspEditorHandler) handleFormat(ed textapi.Handler, uri workspaceapi.URI
 		err = h.format(ctx, f, srv, &b)
 	}
 	return err
+}
+
+func (h *lspEditorHandler) Complete(ctx context.Context, name string, args []string) (
+	iterator.Iterator[string], error,
+) {
+	return iterator.FromSlice[string](nil), nil
 }
 
 func (h *lspEditorHandler) HandleCommand(

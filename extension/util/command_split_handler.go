@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/ernestrc/blue/iterator"
 	"github.com/ernestrc/blue/logging"
 	"github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
@@ -166,6 +167,12 @@ func (t *cmdSplitHandler) openSplitWindow(ctx context.Context, cmd textapi.Comma
 	t.h = h
 	t.win = win
 	return nil
+}
+
+func (t *cmdSplitHandler) Complete(ctx context.Context, name string, args []string) (
+	iterator.Iterator[string], error,
+) {
+	return iterator.FromSlice[string](nil), nil
 }
 
 func (t *cmdSplitHandler) HandleCommand(ctx context.Context, cmd textapi.Command) (exit bool, err error) {

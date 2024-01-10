@@ -63,7 +63,10 @@ var (
 				"If not passed, the default model used is configured via extension configuration. ",
 			Synopsis: "[dialogue_id [model]]",
 		},
-		{Name: commandResetChat, Summary: "Clear all current chat's history."},
+		{
+			Name: commandResetChat, Summary: "Clear all current chat's history.",
+			Synopsis: "[dialogue_id]",
+		},
 	}
 	AIHandlerEvents      = append(extutil.ResourceTrackerEventsComplete(), textapi.EventTypeUnfocus)
 	AIHandlerPermissions = []extension.Permission{
@@ -347,10 +350,29 @@ func (h *aiEditorHandler) HandleCommand(
 	return false, nil
 }
 
-func (h *aiEditorHandler) Complete(ctx context.Context, args []string) (
-	iterator.Iterator[string], string, error,
+func (h *aiEditorHandler) Complete(ctx context.Context, name string, args []string) (
+	iterator.Iterator[string], error,
 ) {
-	return iterator.FromSlice[string](nil), "", nil
+	h.log(log.TraceLevel, "complete %q with %#v", name, args)
+
+	switch name {
+	case commandChat:
+		switch len(args) {
+		case 0, 1:
+			return h.completeWithDialoguesIterator(ctx)
+		case 2, 3:
+			return h.completeWithModelsIterator(ctx)
+		default:
+			return iterator.FromSlice[string](nil), nil
+		}
+	case commandResetChat:
+		if len(args) == 0 {
+			return h.completeWithDialoguesIterator(ctx)
+		}
+		return iterator.FromSlice[string](nil), nil
+	default:
+		return iterator.FromSlice[string](nil), nil
+	}
 }
 
 func (h *aiEditorHandler) Close() error {
@@ -534,6 +556,28 @@ func (h *aiEditorHandler) log(level log.Level, msg string, args ...any) {
 	log.WithFields(log.Fields{
 		logging.KeyClass: "extension.aiEditorHandler",
 	}).Logf(level, msg, args...)
+}
+
+func (h *aiEditorHandler) completeWithDialoguesIterator(ctx context.Context) (
+	iterator.Iterator[string], error,
+) {
+	it, err := h.dialogueStore.List(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("dialoge store list: %w", err)
+	}
+	return iterator.Map(it, func(v aiDialogue.Dialogue) string {
+		return v.ID
+	}), nil
+}
+
+func (h *aiEditorHandler) completeWithModelsIterator(ctx context.Context) (
+	iterator.Iterator[string], error,
+) {
+	models := make([]string, 0, len(h.availableModels))
+	for name := range h.availableModels {
+		models = append(models, name)
+	}
+	return iterator.FromSlice(models), nil
 }
 
 func (h *aiEditorHandler) wrapDialogueHandler(

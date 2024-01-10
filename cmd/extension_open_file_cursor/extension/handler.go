@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/ernestrc/blue/iterator"
 	"github.com/ernestrc/blue/logging"
 	log "github.com/sirupsen/logrus"
 	browserapi "unstable.build/go-tui/api/browser"
@@ -100,6 +101,12 @@ func newGFHandler(
 	}
 
 	return ret, nil
+}
+
+func (h *gfEditorHandler) Complete(ctx context.Context, name string, args []string) (
+	iterator.Iterator[string], error,
+) {
+	return iterator.FromSlice[string](nil), nil
 }
 
 func (h *gfEditorHandler) HandleCommand(ctx context.Context, cmd textapi.Command) (

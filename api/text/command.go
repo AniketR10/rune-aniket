@@ -29,6 +29,13 @@ type Command struct {
 type CommandHandler interface {
 	// Handle is called when user issued a command previously registered via SubscribeCommand.
 	HandleCommand(context.Context, Command) (exit bool, err error)
+
+	// Complete takes command args and returns a list of expanded options for them.
+	// It also returns a expanded version of the last arg, or an empty string
+	// if the last arg could/should not be automatically expanded.
+	Complete(ctx context.Context, cmd string, args []string) (
+		iterator.Iterator[string], error,
+	)
 }
 
 // CommandManual represents a command's manual and documentation.
@@ -52,25 +59,40 @@ type CommandManual struct {
 
 type fnCommandHandler struct {
 	cb         func(context.Context, Command) (bool, error)
-	completeFn func(context.Context, []string) (iterator.Iterator[string], error)
+	completeFn func(context.Context, string, []string) (iterator.Iterator[string], error)
 }
 
 func (f fnCommandHandler) HandleCommand(ctx context.Context, c Command) (bool, error) {
 	return f.cb(ctx, c)
 }
 
-func (f fnCommandHandler) Complete(ctx context.Context, args []string) (
+func (f fnCommandHandler) Complete(ctx context.Context, cmd string, args []string) (
 	iterator.Iterator[string], error,
 ) {
 	if f.completeFn != nil {
-		return f.completeFn(ctx, args)
+		return f.completeFn(ctx, cmd, args)
 	}
 	return iterator.FromSlice[string](nil), nil
 }
 
 // FuncCommandHandler returns an CommandHandler that calls fn
-// every time HandleCommand is invoked.
-func FuncCommandHandler(fn func(context.Context, Command) (bool, error)) CommandHandler {
+// every time HandleCommand is invoked and completer when
+// Complete is invoked.
+func FuncCommandHandler(
+	fn func(context.Context, Command) (bool, error),
+	completer func(context.Context, string, []string) (iterator.Iterator[string], error),
+) CommandHandler {
+	return fnCommandHandler{
+		cb:         fn,
+		completeFn: completer,
+	}
+}
+
+// NopCommandCompleter returns an CommandHandler that calls fn
+// every time HandleCommand is invoked, but does not have a completion function.
+func NopCommandCompleter(
+	fn func(context.Context, Command) (bool, error),
+) CommandHandler {
 	return fnCommandHandler{
 		cb: fn,
 	}

@@ -1,8 +1,10 @@
 package test
 
 import (
+	context "context"
 	"errors"
 
+	"github.com/ernestrc/blue/iterator"
 	textapi "unstable.build/go-tui/api/text"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	cell "unstable.build/go-tui/cell"
@@ -45,7 +47,7 @@ func (e EditorFromAPIEditor) Editor(file workspaceapi.URI) (text.Handler, error)
 }
 
 func (e EditorFromAPIEditor) SubscribeCommand(cmd textapi.CommandManual, h text.CommandHandler) error {
-	return e.Ed.SubscribeCommand(cmd, h)
+	return e.Ed.SubscribeCommand(cmd, APICommandHandlerFromCommandHandler{h})
 }
 
 func (e EditorFromAPIEditor) UnsubscribeCommand(cmd string) error {
@@ -87,4 +89,15 @@ func (w HandlerFromAPIHandler) SetWrap(wrap bool) {
 }
 
 func (w HandlerFromAPIHandler) ShowCommandBar(show bool) {
+}
+
+type APICommandHandlerFromCommandHandler struct {
+	text.CommandHandler
+}
+
+func (c APICommandHandlerFromCommandHandler) Complete(ctx context.Context, name string, args []string) (
+	iterator.Iterator[string], error,
+) {
+	it, _, err := c.CommandHandler.Complete(ctx, name, args)
+	return it, err
 }

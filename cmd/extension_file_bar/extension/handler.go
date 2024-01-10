@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/ernestrc/blue/iterator"
 	"github.com/ernestrc/blue/logging"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
@@ -186,6 +187,12 @@ func newFileBarEditorHandler(
 	go ret.handleEvents()
 
 	return ret, nil
+}
+
+func (t *fileBarEditorHandler) Complete(ctx context.Context, name string, args []string) (
+	iterator.Iterator[string], error,
+) {
+	return iterator.FromSlice[string](nil), nil
 }
 
 func (h *fileBarEditorHandler) HandleCommand(ctx context.Context, cmd textapi.Command) (

@@ -24,7 +24,6 @@ message EditorEvent {
 	TypeClose = 1;
 	TypeFlush = 2;
 	TypeEdit = 3;
-	TypeCommand = 4;
 	TypeScroll = 5;
 	TypeFocus = 6;
 	TypeUnfocus = 7;
@@ -173,6 +172,18 @@ message HandleCommandResponse {
 	bool exit = 1;
 }
 
+message CompleteRequest {
+	string name = 1;
+	repeated string args = 2;
+}
+
+message CompleteResponse {
+	string value = 1;
+	string error = 2;
+	bool done = 3;
+}
+
 service CommandHandler {
 	rpc HandleCommand(HandleCommandRequest) returns (HandleCommandResponse);
+	rpc Complete(CompleteRequest) returns (stream CompleteResponse);
 }

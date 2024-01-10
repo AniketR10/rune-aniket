@@ -5,7 +5,6 @@ import (
 
 	textapi "unstable.build/go-tui/api/text"
 	termpb "unstable.build/go-tui/term/rpc"
-	"unstable.build/go-tui/text"
 )
 
 func protoTypeToModel(protoType EditorEvent_Type) (ev textapi.EventType, err error) {
@@ -26,8 +25,6 @@ func protoTypeToModel(protoType EditorEvent_Type) (ev textapi.EventType, err err
 		ev = textapi.EventTypeFocus
 	case EditorEvent_TypeUnfocus:
 		ev = textapi.EventTypeUnfocus
-	case EditorEvent_TypeCommand:
-		ev = text.EventTypeCommand
 	default:
 		err = fmt.Errorf("failed to convert proto editor event: invalid type: %v",
 			protoType)
@@ -82,8 +79,6 @@ func protoType(e textapi.Event) EditorEvent_Type {
 		return EditorEvent_TypeFocus
 	case textapi.EventTypeUnfocus:
 		return EditorEvent_TypeUnfocus
-	case text.EventTypeCommand:
-		return EditorEvent_TypeCommand
 	default:
 		panic(fmt.Sprintf("failed to convert editor event to proto: invalid type: %v", e.Type))
 	}

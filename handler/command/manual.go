@@ -89,10 +89,12 @@ func getSubcommandManual(cmd text.CommandManual, input []string) (
 
 func toTextManual(api textapi.CommandManual) text.CommandManual {
 	return text.CommandManual{
-		Name:     api.Name,
-		Synopsis: api.Synopsis,
-		Summary:  api.Summary,
-		Commands: api.Commands,
+		CommandManual: textapi.CommandManual{
+			Name:     api.Name,
+			Synopsis: api.Synopsis,
+			Summary:  api.Summary,
+			Commands: api.Commands,
+		},
 	}
 }
 

@@ -13,6 +13,7 @@ import (
 	"github.com/alecthomas/chroma"
 	"github.com/alecthomas/chroma/lexers"
 	"github.com/alecthomas/chroma/styles"
+	"github.com/ernestrc/blue/iterator"
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	sitter "github.com/smacker/go-tree-sitter"
@@ -58,8 +59,10 @@ var (
 	// interested in registering.
 	SyntaxHandlerCommands = []textapi.CommandManual{
 		{
-			Name:     cmdSyntaxQuery,
-			Summary:  "Fuzzy search custom symbols in the workspace's AST, using the given query. Check tree-sitter's manual for more details https://tree-sitter.github.io/tree-sitter/using-parsers#query-syntax.",
+			Name: cmdSyntaxQuery,
+			Summary: "Fuzzy search custom symbols in the workspace's AST, using the given query. " +
+				"Check tree-sitter's manual for more details " +
+				"https://tree-sitter.github.io/tree-sitter/using-parsers#query-syntax.",
 			Synopsis: "query",
 		},
 	}
@@ -275,6 +278,12 @@ func (h *syntaxHandler) Handle(
 		log.Tracef("Handle(%#v) in %s", ev.Type, time.Since(start))
 	}
 	return
+}
+
+func (h *syntaxHandler) Complete(ctx context.Context, name string, args []string) (
+	iterator.Iterator[string], error,
+) {
+	return iterator.FromSlice[string](nil), nil
 }
 
 func (h *syntaxHandler) HandleCommand(ctx context.Context, cmd textapi.Command) (

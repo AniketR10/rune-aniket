@@ -31,7 +31,6 @@ import (
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/storage/cache"
-	"unstable.build/go-tui/text"
 	workspacedoc "unstable.build/go-tui/workspace/document"
 )
 
@@ -275,7 +274,7 @@ func (e *grantee) PermissionGranted(ctx context.Context, grants []extension.Gran
 				cmd := cmd
 				man := man
 				man.man.Name = cmd
-				err = ed.SubscribeCommand(man.man, text.FuncCommandHandler(
+				err = ed.SubscribeCommand(man.man, textapi.NopCommandCompleter(
 					func(ctx context.Context, cmd textapi.Command) (bool, error) {
 						return man.handler(e, ctx, cmd)
 					}))

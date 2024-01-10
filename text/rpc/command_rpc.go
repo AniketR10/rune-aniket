@@ -2,6 +2,8 @@ package rpc
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"runtime"
 	"time"
 
@@ -36,11 +38,35 @@ func newCommandClient(conn proto.MuxConn, s *Server) *commandClient {
 	return ret
 }
 
-// for now we don't support remote completion.
-func (c *commandClient) Complete(ctx context.Context, args []string) (
+func (c *commandClient) Complete(ctx context.Context, name string, args []string) (
 	iterator.Iterator[string], string, error,
 ) {
-	return iterator.FromSlice[string](nil), "", nil
+	c.log(log.TraceLevel, "complete command: %s", name)
+
+	ctx, cancelFn := context.WithTimeout(ctx, defaultClientTimeout)
+
+	req := CompleteRequest{
+		Name: name,
+		Args: args,
+	}
+
+	// do not block waiting for I/O
+	c.s.editor.Unlock()
+	defer c.s.editor.Lock()
+
+	client, err := c.pb.Complete(ctx, &req)
+	runtime.KeepAlive(c)
+	if err != nil {
+		c.log(log.TraceLevel, "complete command %s error: %v", name, err)
+		return nil, "", fmt.Errorf("complete command rpc: %w", err)
+	}
+
+	const neverReplaceArgs = ""
+	return &completeClientIterator{
+		cancelFn: cancelFn,
+		parent:   c,
+		client:   client,
+	}, neverReplaceArgs, nil
 }
 
 func (c *commandClient) HandleCommand(ctx context.Context, cmd textapi.Command) (
@@ -131,9 +157,52 @@ func (s *commandServer) commandFromProto(
 	return err
 }
 
+func (s *commandServer) Complete(
+	req *CompleteRequest, srv CommandHandler_CompleteServer,
+) error {
+	if req.Name == "" {
+		return errors.New("invalid request: missing command name")
+	}
+
+	s.log(log.TraceLevel, "streaming completer's iterator for %s %v",
+		req.Name, req.Args)
+
+	defer s.log(log.TraceLevel, "done streaming completer's iterator for %s %v",
+		req.Name, req.Args)
+
+	completer, err := s.h.Complete(srv.Context(), req.Name, req.Args)
+	if err != nil {
+		return err
+	}
+
+	for {
+		next, ok := completer.Next()
+		if !ok {
+			break
+		}
+		resp := CompleteResponse{Value: next}
+		if err := srv.Send(&resp); err != nil {
+			return fmt.Errorf("send completion msg: %w", err)
+		}
+	}
+
+	resp := CompleteResponse{Done: true}
+	if err := completer.Err(); err != nil {
+		resp.Error = err.Error()
+	}
+
+	if err := srv.Send(&resp); err != nil {
+		return fmt.Errorf("send last completion msg: %w", err)
+	}
+
+	return nil
+}
+
 func (s *commandServer) HandleCommand(
 	ctx context.Context, req *HandleCommandRequest,
 ) (*HandleCommandResponse, error) {
+	s.log(log.TraceLevel, "handle command %+v", req)
+
 	var cmd textapi.Command
 	err := s.commandFromProto(&cmd, req)
 	if err != nil {
@@ -147,4 +216,33 @@ func (s *commandServer) HandleCommand(
 	res := new(HandleCommandResponse)
 	res.Exit = exit
 	return res, nil
+}
+
+func (c *commandServer) log(level log.Level, msg string, args ...interface{}) {
+	log.WithFields(log.Fields{logging.KeyClass: "textpb.commandServer"}).
+		Logf(level, msg, args...)
+}
+
+type completeClientIterator struct {
+	parent   *commandClient
+	client   CommandHandler_CompleteClient
+	err      error
+	cancelFn func()
+}
+
+func (c *completeClientIterator) Next() (string, bool) {
+	res, err := c.client.Recv()
+	if err != nil {
+		c.err = err
+		c.cancelFn()
+		return "", false
+	}
+	if res.Done {
+		c.cancelFn()
+	}
+	return res.Value, !res.Done
+}
+
+func (c *completeClientIterator) Err() error {
+	return c.err
 }

@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/ernestrc/blue/iterator"
 	log "github.com/sirupsen/logrus"
 	browserapi "unstable.build/go-tui/api/browser"
 	browserextension "unstable.build/go-tui/api/browser/extension"
@@ -133,6 +134,12 @@ func (h *sedEditorHandler) writeHandlerContent(
 		return fmt.Errorf("CellEditor.Delete: %v", err)
 	}
 	return nil
+}
+
+func (h *sedEditorHandler) Complete(ctx context.Context, name string, args []string) (
+	iterator.Iterator[string], error,
+) {
+	return iterator.FromSlice[string](nil), nil
 }
 
 func (h *sedEditorHandler) HandleCommand(

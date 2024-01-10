@@ -887,7 +887,7 @@ func TestDispatchCommand(t *testing.T) {
 				assert.Equal(t, cmd.Name, "newWindow")
 				assert.Equal(t, cmd.Args, []string{})
 				return false, nil
-			}))
+			}, nil))
 
 		c.SubscribeCommand(testCommand("edit", "", ""),
 			text.FuncCommandHandler(func(ctx context.Context, cmd textapi.Command) (bool, error) {
@@ -895,7 +895,7 @@ func TestDispatchCommand(t *testing.T) {
 				assert.Equal(t, cmd.Name, "edit")
 				assert.Equal(t, cmd.Args, []string{"/tmp/todo.md"})
 				return false, nil
-			}))
+			}, nil))
 
 		cmd := textapi.Command{
 			Resource: NewTestHandler(),
@@ -916,7 +916,7 @@ func TestDispatchCommand(t *testing.T) {
 		c.SubscribeCommand(testCommand("bla", "", ""),
 			text.FuncCommandHandler(func(ctx context.Context, cmd textapi.Command) (bool, error) {
 				return false, errors.New("boom")
-			}))
+			}, nil))
 
 		cmd := textapi.Command{
 			Resource: NewTestHandler(),
@@ -1008,9 +1008,9 @@ func TestCompleteCommand(t *testing.T) {
 		c, _ := newTestComponent(t, NopEditor())
 
 		c.SubscribeCommand(testCommand("edit", "", ""),
-			text.FuncCommandCompleter(func(ctx context.Context, cmd textapi.Command) (bool, error) {
+			text.FuncCommandHandler(func(ctx context.Context, cmd textapi.Command) (bool, error) {
 				return false, nil
-			}, func(ctx context.Context, args []string) (iterator.Iterator[string], string, error) {
+			}, func(ctx context.Context, name string, args []string) (iterator.Iterator[string], string, error) {
 				assert.Equal(t, []string{"letter", "number"}, args)
 				return iterator.FromSlice([]string{"one", "two"}), "2", nil
 			}))
@@ -1095,10 +1095,10 @@ func TestComponentCommands(t *testing.T) {
 		c.SubscribeCommand(testCommand("myCmd", "mySummary", "mySynopsis"),
 			text.FuncCommandHandler(func(context.Context, textapi.Command) (bool, error) {
 				return true, nil
-			}))
+			}, nil))
 		cmds := c.Commands()
 		require.Len(t, cmds, 1)
-		expectedMan := text.CommandManual{Name: "myCmd", Summary: "mySummary", Synopsis: "mySynopsis"}
+		expectedMan := text.CommandManual{CommandManual: textapi.CommandManual{Name: "myCmd", Summary: "mySummary", Synopsis: "mySynopsis"}}
 		assert.Equal(t, expectedMan, cmds[0])
 	})
 	t.Run("returns configured aliases", func(t *testing.T) {
@@ -1110,7 +1110,7 @@ func TestComponentCommands(t *testing.T) {
 		require.NoError(t, err)
 		cmds := c.Commands()
 		require.Len(t, cmds, 1)
-		expectedMan := text.CommandManual{Name: "blah", AliasOf: []string{"myCmd"}}
+		expectedMan := text.CommandManual{CommandManual: textapi.CommandManual{Name: "blah"}, AliasOf: []string{"myCmd"}}
 		assert.Equal(t, expectedMan, cmds[0])
 	})
 }
@@ -1141,7 +1141,7 @@ func testRegister(t *testing.T,
 				assert.Equal(t, myArgs, cmd.Args)
 				called++
 				return true, nil
-			}))
+			}, nil))
 
 		wg.Add(1)
 		mu.Lock()
@@ -1187,7 +1187,7 @@ func TestUnregisterCommand(t *testing.T) {
 		text.FuncCommandHandler(func(ctx context.Context, cmd textapi.Command) (bool, error) {
 			called++
 			return false, nil
-		}))
+		}, nil))
 
 	cmd := textapi.Command{
 		Resource: h1,

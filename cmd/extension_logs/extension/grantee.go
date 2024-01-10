@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ernestrc/blue/iterator"
 	"github.com/ernestrc/blue/logging"
 	"github.com/ernestrc/blue/retry"
 	multierr "github.com/ernestrc/go-multierror"
@@ -373,6 +374,12 @@ func (e *grantee) showLogs(win browserapi.Window, args []string) (bool, error) {
 	}
 
 	return false, nil
+}
+
+func (h *grantee) Complete(ctx context.Context, name string, args []string) (
+	iterator.Iterator[string], error,
+) {
+	return iterator.FromSlice[string](nil), nil
 }
 
 func (e *grantee) HandleCommand(

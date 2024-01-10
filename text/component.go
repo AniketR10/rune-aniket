@@ -410,7 +410,7 @@ func (c *Component) CompleteCommand(ctx context.Context, cmd string, args ...str
 		return iterator.FromSlice[string](nil), "", nil
 	}
 
-	return man.handler.Complete(ctx, args)
+	return man.handler.Complete(ctx, cmd, args)
 }
 
 // DispatchCommand dispatches a EventTypeCommand with cmd to subscribers
@@ -760,16 +760,20 @@ func (c *Component) Commands() (ret []CommandManual) {
 	var i int
 	for _, cmd := range c.cmdSubscribers {
 		ret[i] = CommandManual{
-			Name:     cmd.man.Name,
-			Synopsis: cmd.man.Synopsis,
-			Summary:  cmd.man.Summary,
-			Commands: cmd.man.Commands,
+			CommandManual: textapi.CommandManual{
+				Name:     cmd.man.Name,
+				Synopsis: cmd.man.Synopsis,
+				Summary:  cmd.man.Summary,
+				Commands: cmd.man.Commands,
+			},
 		}
 		i++
 	}
 	for alias, aliasOf := range c.config.CommandAliases {
 		ret = append(ret, CommandManual{
-			Name:    alias,
+			CommandManual: textapi.CommandManual{
+				Name: alias,
+			},
 			AliasOf: aliasOf,
 		})
 	}

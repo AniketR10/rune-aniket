@@ -11,6 +11,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	textapi "unstable.build/go-tui/api/text"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
@@ -842,7 +843,7 @@ func expectDispatch(expectedCmd string, expectedArgs ...string) func() (func(str
 
 func testNoManualCommands(cmds []string) (ret []text.CommandManual) {
 	for _, cmd := range cmds {
-		ret = append(ret, text.CommandManual{Name: cmd})
+		ret = append(ret, text.CommandManual{CommandManual: textapi.CommandManual{Name: cmd}})
 	}
 	return
 }

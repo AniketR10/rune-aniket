@@ -135,13 +135,13 @@ func (e *ex) subscribeCommands() error {
 		man := man
 		// Name is only defined as a key to exCommands
 		man.man.Name = name
-		err := e.comp.SubscribeCommand(man.man, text.FuncCommandCompleter(
+		err := e.comp.SubscribeCommand(man.man, text.FuncCommandHandler(
 			func(ctx context.Context, cmd textapi.Command) (bool, error) {
 				return false, man.handler(e, cmd.Args...)
-			}, func(ctx context.Context, args []string) (
+			}, func(ctx context.Context, cmd string, args []string) (
 				iterator.Iterator[string], string, error,
 			) {
-				return e.completeCommand(ctx, name, args)
+				return e.completeCommand(ctx, cmd, args)
 			}))
 		if err != nil {
 			ret = multierr.Append(ret, err)

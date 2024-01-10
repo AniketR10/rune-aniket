@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/ernestrc/blue/iterator"
 	"github.com/ernestrc/blue/logging"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
@@ -99,6 +100,16 @@ func (h *chaosCommandHandler) Handle(ctx context.Context, ev textapi.Event) bool
 func (s *chaosCommandHandler) log(level log.Level, msg string, args ...interface{}) {
 	log.WithField(logging.KeyClass, "extchaos.chaosCommandHandler").
 		Logf(level, msg, args...)
+}
+
+func (t *chaosCommandHandler) Complete(
+	ctx context.Context, name string, args []string,
+) (iterator.Iterator[string], error) {
+	if name != commandChaosHandler {
+		return iterator.FromSlice[string](nil), nil
+	}
+
+	return iterator.FromSlice[string]([]string{"panic", "slow"}), nil
 }
 
 func (h *chaosCommandHandler) HandleCommand(ctx context.Context, cmd textapi.Command) (
