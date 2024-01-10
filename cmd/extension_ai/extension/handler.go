@@ -360,13 +360,13 @@ func (h *aiEditorHandler) Complete(ctx context.Context, name string, args []stri
 		switch len(args) {
 		case 0, 1:
 			return h.completeWithDialoguesIterator(ctx)
-		case 2, 3:
+		case 2:
 			return h.completeWithModelsIterator(ctx)
 		default:
 			return iterator.FromSlice[string](nil), nil
 		}
 	case commandResetChat:
-		if len(args) == 0 {
+		if len(args) <= 1 {
 			return h.completeWithDialoguesIterator(ctx)
 		}
 		return iterator.FromSlice[string](nil), nil

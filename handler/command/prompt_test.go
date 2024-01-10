@@ -193,11 +193,11 @@ func TestCommandHandlerDispatch(t *testing.T) {
 			"lo   ^^/tmp/a>", []string{"lane", "lorelai", "rori"},
 			nopComplete, expectDispatch("lorelai", "/tmp/a")},
 		{"dispatches command with multiple args and completer gets called for every character",
-			"ro my# oro#>", []string{"lane", "lorelai", "rori"},
+			"ro my#oro#>", []string{"lane", "lorelai", "rori"},
 			expectCompleteWith(
 				[][]string{
-					{}, {"m"}, {"my"}, {"myArg"}, {"myArg"},
-					{"myArg", "o"}, {"myArg", "or"}, {"myArg", "oro"}, {"myArg", "oregano"},
+					{""}, {"m"}, {"my"}, {"myArg", ""},
+					{"myArg", "o"}, {"myArg", "or"}, {"myArg", "oro"}, {"myArg", "oregano", ""},
 				},
 				[][]string{
 					{"myArg"}, {"myArg"}, {"myArg"}, {"oregano", "oregani"}, {"oregano", "oregani"},
@@ -616,7 +616,7 @@ lorelai /tmp/a▐
 			"ro my✌ oro", []string{"lane", "lorelai", "rori"},
 			expectCompleteWith(
 				[][]string{
-					{}, {"m"}, {"my"}, {"myArg"}, {"myArg"},
+					{""}, {"m"}, {"my"}, {"myArg", ""}, {"myArg", ""},
 					{"myArg", "o"}, {"myArg", "or"}, {"myArg", "oro"},
 				},
 				[][]string{
@@ -638,8 +638,8 @@ oregano
 			"ro myArg>ro my✌", []string{"lane", "lorelai", "rori"},
 			expectCompleteWith(
 				[][]string{
-					{}, {"m"}, {"my"}, {"myA"}, {"myAr"}, {"myArg"},
-					{}, {"m"}, {"my"}, {"myArg"},
+					{""}, {"m"}, {"my"}, {"myA"}, {"myAr"}, {"myArg"},
+					{""}, {"m"}, {"my"}, {"myArg", ""},
 				},
 				[][]string{}),
 			expectDispatch("rori", "myArg"), `
@@ -657,8 +657,8 @@ rori myArg ▐
 			"ro myArg oro>ro myArg or", []string{"lane", "lorelai", "rori"},
 			expectCompleteWith(
 				[][]string{
-					{}, {"m"}, {"my"}, {"myA"}, {"myAr"}, {"myArg"}, {"myArg"}, {"myArg", "o"}, {"myArg", "or"}, {"myArg", "oro"},
-					{}, {"m"}, {"my"}, {"myA"}, {"myAr"}, {"myArg"}, {"myArg"}, {"myArg", "o"}, {"myArg", "or"},
+					{""}, {"m"}, {"my"}, {"myA"}, {"myAr"}, {"myArg"}, {"myArg", ""}, {"myArg", "o"}, {"myArg", "or"}, {"myArg", "oro"},
+					{""}, {"m"}, {"my"}, {"myA"}, {"myAr"}, {"myArg"}, {"myArg", ""}, {"myArg", "o"}, {"myArg", "or"},
 				},
 				[][]string{}),
 			expectDispatch("rori", "myArg", "oro"), `
@@ -676,8 +676,8 @@ oro
 			"ro myArg oro>ro myArg o✌", []string{"lane", "lorelai", "rori"},
 			expectCompleteWith(
 				[][]string{
-					{}, {"m"}, {"my"}, {"myA"}, {"myAr"}, {"myArg"}, {"myArg"}, {"myArg", "o"}, {"myArg", "or"}, {"myArg", "oro"},
-					{}, {"m"}, {"my"}, {"myA"}, {"myAr"}, {"myArg"}, {"myArg"}, {"myArg", "o"}, {"myArg", "oro"},
+					{""}, {"m"}, {"my"}, {"myA"}, {"myAr"}, {"myArg"}, {"myArg", ""}, {"myArg", "o"}, {"myArg", "or"}, {"myArg", "oro"},
+					{""}, {"m"}, {"my"}, {"myA"}, {"myAr"}, {"myArg"}, {"myArg", ""}, {"myArg", "o"}, {"myArg", "oro", ""},
 				},
 				[][]string{}),
 			expectDispatch("rori", "myArg", "oro"), `
@@ -695,8 +695,8 @@ rori myArg oro ▐
 			"ro myArg oro>ro mo✌", []string{"lane", "lorelai", "rori"},
 			expectCompleteWith(
 				[][]string{
-					{}, {"m"}, {"my"}, {"myA"}, {"myAr"}, {"myArg"}, {"myArg"}, {"myArg", "o"}, {"myArg", "or"}, {"myArg", "oro"},
-					{}, {"m"}, {"mo"}, {"myArg", "oro"},
+					{""}, {"m"}, {"my"}, {"myA"}, {"myAr"}, {"myArg"}, {"myArg", ""}, {"myArg", "o"}, {"myArg", "or"}, {"myArg", "oro"},
+					{""}, {"m"}, {"mo"}, {"myArg", "oro", ""},
 				},
 				[][]string{}),
 			expectDispatch("rori", "myArg", "oro"), `
@@ -778,10 +778,10 @@ func completeWith(data ...string) func() (func(context.Context, string, ...strin
 func completeRespectively(data []string) func() (func(context.Context, string, ...string) (iterator.Iterator[string], string), func(*testing.T)) {
 	return func() (func(context.Context, string, ...string) (iterator.Iterator[string], string), func(*testing.T)) {
 		return func(ctx context.Context, command string, args ...string) (iterator.Iterator[string], string) {
-			if len(args) >= len(data) {
+			if len(args) > len(data) {
 				return iterator.FromSlice[string](nil), ""
 			}
-			completing := []string{data[len(args)]}
+			completing := []string{data[len(args)-1]}
 			return iterator.FromSlice(completing), ""
 		}, func(*testing.T) {}
 	}

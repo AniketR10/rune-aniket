@@ -511,6 +511,10 @@ func (h *Prompt) incArgsCompleteMode(complete bool, sync bool) {
 	if !complete || !h.completeTopList() {
 		h.commandAndArgs = append(h.commandAndArgs, h.list.Buffer().String())
 	}
+
+	h.log(log.TraceLevel, "increment args complete mode (complete=%v, sync=%v): %+v",
+		complete, sync, h.commandAndArgs)
+
 	// mode needs to be at least the number of command and arguments that have
 	// been completed as per user request
 	h.mu.Lock()
@@ -533,6 +537,10 @@ func (h *Prompt) decArgsCompleteMode(sync bool) bool {
 	last := h.commandAndArgs[lastIdx]
 	h.commandAndArgs = h.commandAndArgs[:lastIdx]
 	h.list.Buffer().Replace(last)
+
+	h.log(log.TraceLevel, "decrement args complete mode (sync=%v): %+v",
+		sync, h.commandAndArgs)
+
 	h.setCompletionList(true, sync, h.commandAndArgs[0], h.commandAndArgs[1:]...)
 	return true
 }
@@ -563,11 +571,31 @@ func (h *Prompt) setCompletionList(
 	h.completionCtx = ctx
 	h.setUserScrolling(false)
 
-	// if user added any extra spaces, do not pass to completer
+	// if user added any extra spaces, do not pass to internal completer
 	cmdAndArgs := h.trimmedCommandAndArgs(cmd, args...)
 
+	// BUT always add the empty last argument for external completers
+	// to simplify logic and avoid having to share anything else like the internal state.
+	bufStrArgs := h.buf.String()
+	var externalCmdAndArgs []string
+	// only add one extra argument at the end, if there are multiple spaces
+	if strings.HasSuffix(bufStrArgs, " ") {
+		externalCmdAndArgs = strings.Split(strings.TrimSpace(bufStrArgs), " ")
+		externalCmdAndArgs = append(externalCmdAndArgs, "")
+	} else {
+		externalCmdAndArgs = strings.Split(bufStrArgs, " ")
+	}
+
+	// also do not add intermediate spaces
+	finalExternalCmdAndArgs := make([]string, 0, len(externalCmdAndArgs))
+	for i, cmd := range externalCmdAndArgs {
+		if cmd != "" || i == len(externalCmdAndArgs)-1 {
+			finalExternalCmdAndArgs = append(finalExternalCmdAndArgs, cmd)
+		}
+	}
+
 	h.list.DataReset()
-	it, newLastArg := h.completer.Complete(ctx, cmdAndArgs[0], cmdAndArgs[1:]...)
+	it, newLastArg := h.completer.Complete(ctx, finalExternalCmdAndArgs[0], finalExternalCmdAndArgs[1:]...)
 	if newLastArg != "" {
 		newCmdAndArgs := make([]string, len(cmdAndArgs))
 		copy(newCmdAndArgs, cmdAndArgs)

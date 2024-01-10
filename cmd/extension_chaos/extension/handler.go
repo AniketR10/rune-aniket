@@ -105,7 +105,7 @@ func (s *chaosCommandHandler) log(level log.Level, msg string, args ...interface
 func (t *chaosCommandHandler) Complete(
 	ctx context.Context, name string, args []string,
 ) (iterator.Iterator[string], error) {
-	if name != commandChaosHandler {
+	if name != commandChaosHandler || len(args) > 1 {
 		return iterator.FromSlice[string](nil), nil
 	}
 

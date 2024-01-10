@@ -207,8 +207,14 @@ func (e *ex) completeCommand(
 	case cmdEdit:
 		return e.completeEdit(ctx, args)
 	case cmdSplitWindow, cmdNewWindow, cmdSplitWindowTerminal:
+		if len(args) > 1 {
+			return iterator.FromSlice[string](nil), "", nil
+		}
 		return iterator.FromSlice([]string{"right", "left", "top", "bottom"}), "", nil
 	case cmdChangeSplitOrientation:
+		if len(args) > 1 {
+			return iterator.FromSlice[string](nil), "", nil
+		}
 		return iterator.FromSlice([]string{"horizontal", "vertical"}), "", nil
 	default:
 		return iterator.FromSlice[string](nil), "", nil
