@@ -437,6 +437,9 @@ func (c *rawCells) ReadFrom(r io.Reader) (int64, error) {
 		var boundaries int
 		n += int64(len([]byte(str)))
 		for len(str) > 0 {
+			// NOTE: this is significantly slower than, just ignoring grapheme clusters
+			// but it should be ok as it's done once per file, and because calculating the width 
+			// is front loaded, it should amortize over long interactions on a particular file.
 			cluster, str, boundaries, state = uniseg.StepString(str, state)
 			width := boundaries >> uniseg.ShiftWidth
 			r := []rune(cluster)
