@@ -13,6 +13,8 @@ message Cell {
 	uint32 Character = 1;
 	uint32 Foreground = 2;
 	uint32 Background = 3;
+	repeated uint32 Combining = 4;
+	uint32 Width = 5;
 }
 
 message CellRow {

@@ -435,7 +435,13 @@ func (e *Handler) drawSelection(w term.Writer) {
 			}
 			ch := cell.Ch
 			pos := term.Coordinates{X: x, Y: int(y)}
-			w.SetCell(pos, term.Cell{Ch: ch, Fg: fg, Bg: bg})
+			w.SetCell(pos, term.Cell{
+				Ch:        ch,
+				Fg:        fg,
+				Bg:        bg,
+				Width:     cell.Width,
+				Combining: cell.Combining,
+			})
 		}
 	}
 }

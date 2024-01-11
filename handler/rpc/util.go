@@ -39,6 +39,9 @@ func DrawResponseToTermString(r *DrawResponse) (str string, width, height int) {
 				ch = ' '
 			}
 			_, _ = builder.WriteRune(rune(ch))
+			for _, comb := range c.GetCombining() {
+				_, _ = builder.WriteRune(rune(comb))
+			}
 		}
 		if y+1 != len(r.GetRows()) {
 			_, _ = builder.WriteRune('\n')
@@ -71,6 +74,10 @@ func (r drawResponseWriter) SetCell(pos term.Coordinates, c term.Cell) {
 	cell.Character = uint32(c.Ch)
 	cell.Foreground = uint32(c.Fg)
 	cell.Background = uint32(c.Bg)
+	cell.Width = uint32(c.Width)
+	for _, c := range c.Combining {
+		cell.Combining = append(cell.Combining, uint32(c))
+	}
 
 	r.res.Rows[pos.Y].Cells[pos.X] = cell
 }

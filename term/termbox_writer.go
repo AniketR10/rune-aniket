@@ -8,12 +8,6 @@ import (
 	"github.com/ernestrc/tcell/v2/termbox"
 )
 
-// ContextWriter adds SetContext to a Writer.
-type ContextWriter interface {
-	Writer
-	SetContext(context.Context)
-}
-
 type termboxWriter struct {
 	ctx context.Context
 }
@@ -25,8 +19,8 @@ func newTermboxWriter() *termboxWriter {
 }
 
 func (w *termboxWriter) SetCell(pos Coordinates, c Cell) {
-	termbox.SetCell(pos.X, pos.Y,
-		c.Ch, termbox.Attribute(c.Fg), termbox.Attribute(c.Bg))
+	style := termbox.AttributeToStyle(termbox.Attribute(c.Fg), termbox.Attribute(c.Bg))
+	termbox.Screen().SetContent(pos.X, pos.Y, c.Ch, c.Combining, c.Width, style)
 	return
 }
 

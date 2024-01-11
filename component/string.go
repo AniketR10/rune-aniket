@@ -101,9 +101,10 @@ func (l *LazyBytes) build() {
 	l.cells = make([]term.Cell, len(l.Data))
 	for i, r := range l.Data {
 		l.cells[i] = term.Cell{
-			Ch: rune(r),
-			Fg: l.Attributes.Fg,
-			Bg: l.Attributes.Bg,
+			Ch:    rune(r),
+			Fg:    l.Attributes.Fg,
+			Bg:    l.Attributes.Bg,
+			Width: 1, // only support width=1 graphemes
 		}
 	}
 	for _, t := range l.Tokens {
@@ -160,6 +161,8 @@ func (s *stringComp) Draw(w term.Writer) {
 					Bg:        s.attr.Bg,
 					Fg:        s.attr.Fg,
 					Ch:        c.Ch,
+					Combining: c.Combining,
+					Width:     c.Width,
 				})
 		}
 	}

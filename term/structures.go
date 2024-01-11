@@ -26,10 +26,14 @@ type Coordinates struct {
 
 // Cell represents a location with content on a terminal screen.
 // 'Ch' is a unicode character, 'Fg' and 'Bg' are foreground
-// and background attributes respectively.
+// and background attributes respectively. Unicode graphene clusters
+// should be processed accordingly and stored into Ch and Combining fields.
 type Cell struct {
-	Ch     rune
-	Bg, Fg Attribute
+	Ch        rune
+	Bg, Fg    Attribute
+	Combining []rune
+	// Width is the monospace width
+	Width int
 }
 
 // Attributes returns this cell's Bg and Fg Attribute as Attributes.
@@ -76,6 +80,12 @@ type Writer interface {
 	Flush() error
 	Clear(Attributes) error
 	SetCursor(Coordinates)
+}
+
+// ContextWriter adds SetContext to a Writer.
+type ContextWriter interface {
+	Writer
+	SetContext(context.Context)
 }
 
 func (e EventType) String() string {

@@ -1,7 +1,5 @@
 package termutil
 
-import "github.com/mattn/go-runewidth"
-
 func (buffer *Buffer) ClearSelection() {
 	buffer.selectionMu.Lock()
 	defer buffer.selectionMu.Unlock()
@@ -227,8 +225,9 @@ func (buffer *Buffer) GetSelection() (string, *Selection) {
 			if x >= len(line.cells) {
 				break
 			}
-			r := line.cells[x].Ch
-			width := runewidth.RuneWidth(r)
+			cell := line.cells[x]
+			r := cell.Ch
+			width := cell.Width
 			if width == 0 {
 				continue
 			}

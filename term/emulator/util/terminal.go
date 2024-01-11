@@ -181,7 +181,7 @@ func (t *Terminal) Run(updateChan chan struct{}) error {
 	t.mu.Unlock()
 
 	for {
-		r, size, err := t.reader.ReadRune()
+		r, _, err := t.reader.ReadRune()
 		if err != nil && err != io.EOF {
 			t.mu.Lock()
 			closed := t.closed
@@ -191,7 +191,9 @@ func (t *Terminal) Run(updateChan chan struct{}) error {
 			}
 			return err
 		}
-		render, exit := t.processSequence(MeasuredRune{Rune: r, Width: size})
+
+		width := 1 // terminal doesn't support wide characters yet
+		render, exit := t.processSequence(MeasuredRune{Rune: r, Width: width})
 		if exit || err == io.EOF {
 			return nil
 		}

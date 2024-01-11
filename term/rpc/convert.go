@@ -420,10 +420,20 @@ func (c *Cell) ToModel() term.Cell {
 	if c == nil {
 		return term.Cell{}
 	}
+	var combining []rune
+	// prefer nil combining rather than a slice of length 0
+	if c.Combining != nil {
+		combining = make([]rune, len(c.Combining))
+		for i, cell := range c.Combining {
+			combining[i] = rune(cell)
+		}
+	}
 	return term.Cell{
-		Bg: term.Attribute(c.Background),
-		Fg: term.Attribute(c.Foreground),
-		Ch: rune(c.Character),
+		Bg:        term.Attribute(c.Background),
+		Fg:        term.Attribute(c.Foreground),
+		Ch:        rune(c.Character),
+		Combining: combining,
+		Width:     int(c.Width),
 	}
 }
 
@@ -446,4 +456,13 @@ func (c *Cell) FromModel(cc term.Cell) {
 	c.Background = uint32(cc.Bg)
 	c.Foreground = uint32(cc.Fg)
 	c.Character = uint32(cc.Ch)
+	c.Width = uint32(c.Width)
+	var combining []uint32
+	if cc.Combining != nil {
+		combining = make([]uint32, len(cc.Combining))
+		for i, cell := range cc.Combining {
+			combining[i] = uint32(cell)
+		}
+	}
+	c.Combining = combining
 }

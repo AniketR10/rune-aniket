@@ -1816,9 +1816,9 @@ func TestCursorSetLocationListAttr(t *testing.T) {
 
 		expected := [][]term.Cell{
 			{},
-			{{Ch: 'a', Bg: abcAttr.Bg, Fg: abcAttr.Fg}},
-			{{Ch: 'b', Bg: abcAttr.Bg, Fg: abcAttr.Fg}},
-			{{Ch: 'c', Bg: abcAttr.Bg, Fg: abcAttr.Fg}},
+			{{Ch: 'a', Bg: abcAttr.Bg, Fg: abcAttr.Fg, Width: 1}},
+			{{Ch: 'b', Bg: abcAttr.Bg, Fg: abcAttr.Fg, Width: 1}},
+			{{Ch: 'c', Bg: abcAttr.Bg, Fg: abcAttr.Fg, Width: 1}},
 			{},
 		}
 
@@ -1840,10 +1840,10 @@ func TestCursorSetLocationListAttr(t *testing.T) {
 
 		expected = [][]term.Cell{
 			{},
-			{{Ch: 'a'}},
-			{{Ch: 'b',
+			{{Ch: 'a', Width: 1}},
+			{{Ch: 'b', Width: 1,
 				Fg: term.AttrBold, Bg: term.AttrUnderline | term.ColorRed}},
-			{{Ch: 'c'}},
+			{{Ch: 'c', Width: 1}},
 			{},
 		}
 		oldLocList := c.SetLocationList(textapi.LocationPriorityInfo, locID, &testLocationList{locations: newLocations})
@@ -1862,9 +1862,9 @@ func TestCursorSetLocationListAttr(t *testing.T) {
 			},
 		}
 		expected = [][]term.Cell{
-			{{Ch: 'a', Bg: term.ColorRed}},
-			{{Ch: 'b', Fg: term.AttrBold, Bg: term.AttrUnderline}},
-			{{Ch: 'c', Bg: term.ColorRed}},
+			{{Ch: 'a', Bg: term.ColorRed, Width: 1}},
+			{{Ch: 'b', Fg: term.AttrBold, Bg: term.AttrUnderline, Width: 1}},
+			{{Ch: 'c', Bg: term.ColorRed, Width: 1}},
 			{},
 		}
 		newL := c.SetLocationList(textapi.LocationPriorityInfo, locID, &testLocationList{locations: newLocations})
@@ -1874,9 +1874,9 @@ func TestCursorSetLocationListAttr(t *testing.T) {
 		// clear location list
 		c.SetLocationList(textapi.LocationPriorityInfo, locID, nil)
 		expected = [][]term.Cell{
-			{{Ch: 'a', Bg: term.ColorRed}},
-			{{Ch: 'b', Fg: term.AttrBold, Bg: term.AttrUnderline}},
-			{{Ch: 'c'}},
+			{{Ch: 'a', Bg: term.ColorRed, Width: 1}},
+			{{Ch: 'b', Fg: term.AttrBold, Bg: term.AttrUnderline, Width: 1}},
+			{{Ch: 'c', Width: 1}},
 			{},
 		}
 		assert.Equal(t, expected, buf.RawCells())
@@ -1922,9 +1922,9 @@ func TestCursorSetLocationListAttr(t *testing.T) {
 
 		expected := [][]term.Cell{
 			{},
-			{{Ch: 'a', Fg: term.ColorRed | term.AttrUnderline, Bg: term.ColorBlack}},
-			{{Ch: 'b', Fg: term.ColorRed | term.AttrUnderline, Bg: term.ColorBlack}},
-			{{Ch: 'c', Fg: term.ColorRed | term.AttrUnderline, Bg: term.ColorBlack}},
+			{{Ch: 'a', Fg: term.ColorRed | term.AttrUnderline, Bg: term.ColorBlack, Width: 1}},
+			{{Ch: 'b', Fg: term.ColorRed | term.AttrUnderline, Bg: term.ColorBlack, Width: 1}},
+			{{Ch: 'c', Fg: term.ColorRed | term.AttrUnderline, Bg: term.ColorBlack, Width: 1}},
 			{},
 		}
 

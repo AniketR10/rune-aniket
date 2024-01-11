@@ -23,7 +23,7 @@ func TestNewDrawResponse(t *testing.T) {
 					{Cells: []*termpb.Cell{
 						&zeroCell,
 						&zeroCell,
-						{Character: 'a'},
+						{Character: 'a', Width: 1},
 						&zeroCell,
 						&zeroCell,
 					}},
@@ -39,17 +39,40 @@ func TestNewDrawResponse(t *testing.T) {
 				Rows: []*termpb.CellRow{
 					{Cells: []*termpb.Cell{&zeroCell, &zeroCell, &zeroCell, &zeroCell, &zeroCell}},
 					{Cells: []*termpb.Cell{
-						{Character: 'a'}, {Character: 'a'}, {Character: 'a'},
-						{Character: 'a'}, {Character: 'a'},
+						{Character: 'a', Width: 1}, {Character: 'a', Width: 1}, {Character: 'a', Width: 1},
+						{Character: 'a', Width: 1}, {Character: 'a', Width: 1},
 					}},
 					{Cells: []*termpb.Cell{
-						{Character: 'a'}, {Character: 'a'}, {Character: 'a'},
-						{Character: 'a'}, {Character: 'a'},
+						{Character: 'a', Width: 1}, {Character: 'a', Width: 1}, {Character: 'a', Width: 1},
+						{Character: 'a', Width: 1}, {Character: 'a', Width: 1},
 					}},
 					{Cells: []*termpb.Cell{
-						{Character: 'a'}, {Character: 'a'}, {Character: 'a'},
-						{Character: 'a'}, {Character: 'a'},
+						{Character: 'a', Width: 1}, {Character: 'a', Width: 1}, {Character: 'a', Width: 1},
+						{Character: 'a', Width: 1}, {Character: 'a', Width: 1},
 					}},
+					{Cells: []*termpb.Cell{&zeroCell, &zeroCell, &zeroCell, &zeroCell, &zeroCell}},
+				},
+				Cursor: &DrawResponse_Cursor{Position: &termpb.Coordinates{}},
+			},
+		},
+		{
+			in: "👨‍👧‍👦",
+			out: &DrawResponse{
+				Rows: []*termpb.CellRow{
+					{Cells: []*termpb.Cell{&zeroCell, &zeroCell, &zeroCell, &zeroCell, &zeroCell}},
+					{Cells: []*termpb.Cell{&zeroCell, &zeroCell, &zeroCell, &zeroCell, &zeroCell}},
+					{Cells: []*termpb.Cell{
+						&zeroCell,
+						{
+							Character: '👨',
+							Combining: []uint32{uint32('‍'), uint32('👧'), uint32('‍'), uint32('👦')},
+							Width:     2,
+						},
+						&zeroCell,
+						&zeroCell,
+						&zeroCell,
+					}},
+					{Cells: []*termpb.Cell{&zeroCell, &zeroCell, &zeroCell, &zeroCell, &zeroCell}},
 					{Cells: []*termpb.Cell{&zeroCell, &zeroCell, &zeroCell, &zeroCell, &zeroCell}},
 				},
 				Cursor: &DrawResponse_Cursor{Position: &termpb.Coordinates{}},

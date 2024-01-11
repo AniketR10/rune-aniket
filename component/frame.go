@@ -288,29 +288,29 @@ func (f *Frame) Draw(w term.Writer) {
 
 	for i := 0; i < limitX; i++ {
 		w.SetCell(term.Coordinates{X: i, Y: 0},
-			term.Cell{Ch: f.HorizontalTop, Bg: f.Bg, Fg: f.Fg})
+			term.Cell{Width: 1, Ch: f.HorizontalTop, Bg: f.Bg, Fg: f.Fg})
 		w.SetCell(term.Coordinates{X: i, Y: limitY},
-			term.Cell{Ch: f.HorizontalBottom, Bg: f.Bg, Fg: f.Fg})
+			term.Cell{Width: 1, Ch: f.HorizontalBottom, Bg: f.Bg, Fg: f.Fg})
 	}
 
 	for i := 0; i < limitY; i++ {
 		w.SetCell(term.Coordinates{X: 0, Y: i},
-			term.Cell{Ch: f.VerticalLeft, Bg: f.Bg, Fg: f.Fg})
+			term.Cell{Width: 1, Ch: f.VerticalLeft, Bg: f.Bg, Fg: f.Fg})
 		w.SetCell(term.Coordinates{X: limitX, Y: i},
-			term.Cell{Ch: f.VerticalRight, Bg: f.Bg, Fg: f.Fg})
+			term.Cell{Width: 1, Ch: f.VerticalRight, Bg: f.Bg, Fg: f.Fg})
 	}
 
 	w.SetCell(term.Coordinates{X: 0, Y: 0},
-		term.Cell{Ch: f.TopLeft, Bg: f.Bg, Fg: f.Fg})
+		term.Cell{Width: 1, Ch: f.TopLeft, Bg: f.Bg, Fg: f.Fg})
 
 	w.SetCell(term.Coordinates{X: limitX, Y: 0},
-		term.Cell{Ch: f.TopRight, Bg: f.Bg, Fg: f.Fg})
+		term.Cell{Width: 1, Ch: f.TopRight, Bg: f.Bg, Fg: f.Fg})
 
 	w.SetCell(term.Coordinates{X: 0, Y: limitY},
-		term.Cell{Ch: f.BottomLeft, Bg: f.Bg, Fg: f.Fg})
+		term.Cell{Width: 1, Ch: f.BottomLeft, Bg: f.Bg, Fg: f.Fg})
 
 	w.SetCell(term.Coordinates{X: limitX, Y: limitY},
-		term.Cell{Ch: f.BottomRight, Bg: f.Bg, Fg: f.Fg})
+		term.Cell{Width: 1, Ch: f.BottomRight, Bg: f.Bg, Fg: f.Fg})
 
 	f.content.Draw(w)
 }

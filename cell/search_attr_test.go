@@ -37,14 +37,14 @@ func TestAttrSearcher(t *testing.T) {
 		require.Equal(t, 1, s.Search("wasup"))
 		expected := [][]term.Cell{
 			{
-				{Ch: 'y'},
-				{Ch: 'o'},
-				{Ch: ' '},
-				{Ch: 'w', Bg: term.ColorRed, Fg: term.ColorCyan},
-				{Ch: 'a', Bg: term.ColorRed, Fg: term.ColorCyan},
-				{Ch: 's', Bg: term.ColorRed, Fg: term.ColorCyan},
-				{Ch: 'u', Bg: term.ColorRed, Fg: term.ColorCyan},
-				{Ch: 'p', Bg: term.ColorRed, Fg: term.ColorCyan},
+				{Ch: 'y', Width: 1},
+				{Ch: 'o', Width: 1},
+				{Ch: ' ', Width: 1},
+				{Ch: 'w', Bg: term.ColorRed, Fg: term.ColorCyan, Width: 1},
+				{Ch: 'a', Bg: term.ColorRed, Fg: term.ColorCyan, Width: 1},
+				{Ch: 's', Bg: term.ColorRed, Fg: term.ColorCyan, Width: 1},
+				{Ch: 'u', Bg: term.ColorRed, Fg: term.ColorCyan, Width: 1},
+				{Ch: 'p', Bg: term.ColorRed, Fg: term.ColorCyan, Width: 1},
 			},
 		}
 		assert.Equal(t, expected, buf.RawCells())
@@ -52,9 +52,9 @@ func TestAttrSearcher(t *testing.T) {
 		require.Equal(t, 0, s.Search(""))
 		expected = [][]term.Cell{
 			{
-				{Ch: 'y'}, {Ch: 'o'}, {Ch: ' '},
-				{Ch: 'w'}, {Ch: 'a'}, {Ch: 's'},
-				{Ch: 'u'}, {Ch: 'p'},
+				{Ch: 'y', Width: 1}, {Ch: 'o', Width: 1}, {Ch: ' ', Width: 1},
+				{Ch: 'w', Width: 1}, {Ch: 'a', Width: 1}, {Ch: 's', Width: 1},
+				{Ch: 'u', Width: 1}, {Ch: 'p', Width: 1},
 			},
 		}
 		assert.Equal(t, expected, buf.RawCells())
@@ -69,9 +69,9 @@ func TestAttrSearcher(t *testing.T) {
 
 		expected := [][]term.Cell{
 			{
-				{Ch: 'y'}, {Ch: 'o'}, {Ch: ' '},
-				{Ch: 'w'}, {Ch: 'a'}, {Ch: 's'},
-				{Ch: 'u'},
+				{Ch: 'y', Width: 1}, {Ch: 'o', Width: 1}, {Ch: ' ', Width: 1},
+				{Ch: 'w', Width: 1}, {Ch: 'a', Width: 1}, {Ch: 's', Width: 1},
+				{Ch: 'u', Width: 1},
 			},
 		}
 		assert.Equal(t, expected, buf.RawCells())
@@ -86,12 +86,12 @@ func TestAttrSearcher(t *testing.T) {
 
 		expected := [][]term.Cell{
 			{
-				{Ch: 'o'}, {Ch: ' '},
-				{Ch: 'y', Bg: term.ColorRed, Fg: term.ColorCyan},
-				{Ch: 'o', Bg: term.ColorRed, Fg: term.ColorCyan},
-				{Ch: ' '},
-				{Ch: 'w'}, {Ch: 'a'}, {Ch: 's'},
-				{Ch: 'u'}, {Ch: 'p'},
+				{Ch: 'o', Width: 1}, {Ch: ' ', Width: 1},
+				{Ch: 'y', Bg: term.ColorRed, Fg: term.ColorCyan, Width: 1},
+				{Ch: 'o', Bg: term.ColorRed, Fg: term.ColorCyan, Width: 1},
+				{Ch: ' ', Width: 1},
+				{Ch: 'w', Width: 1}, {Ch: 'a', Width: 1}, {Ch: 's', Width: 1},
+				{Ch: 'u', Width: 1}, {Ch: 'p', Width: 1},
 			},
 		}
 		assert.Equal(t, expected, buf.RawCells())
@@ -106,13 +106,13 @@ func TestAttrSearcher(t *testing.T) {
 
 		expected := [][]term.Cell{
 			{
-				{Ch: 'y'}, {Ch: 'j'},
-				{Ch: 'o'}, {Ch: ' '},
-				{Ch: 'y', Bg: term.ColorRed, Fg: term.ColorCyan},
-				{Ch: 'o', Bg: term.ColorRed, Fg: term.ColorCyan},
-				{Ch: ' '},
-				{Ch: 'w'}, {Ch: 'a'}, {Ch: 's'},
-				{Ch: 'u'}, {Ch: 'p'},
+				{Ch: 'y', Width: 1}, {Ch: 'j', Width: 1},
+				{Ch: 'o', Width: 1}, {Ch: ' ', Width: 1},
+				{Ch: 'y', Bg: term.ColorRed, Fg: term.ColorCyan, Width: 1},
+				{Ch: 'o', Bg: term.ColorRed, Fg: term.ColorCyan, Width: 1},
+				{Ch: ' ', Width: 1},
+				{Ch: 'w', Width: 1}, {Ch: 'a', Width: 1}, {Ch: 's', Width: 1},
+				{Ch: 'u', Width: 1}, {Ch: 'p', Width: 1},
 			},
 		}
 		assert.Equal(t, expected, buf.RawCells())
@@ -128,15 +128,15 @@ func TestAttrSearcher(t *testing.T) {
 
 		expected := [][]term.Cell{
 			{
-				{Ch: 'y'},
-				{Ch: 'o'},
-				{Ch: ' '},
-				{Ch: 'w', Bg: term.ColorRed, Fg: term.ColorCyan},
-				{Ch: 'a', Bg: term.ColorRed, Fg: term.ColorCyan},
-				{Ch: 's', Bg: term.ColorRed, Fg: term.ColorCyan},
-				{Ch: 'u', Bg: term.ColorRed, Fg: term.ColorCyan},
-				{Ch: 'p', Bg: term.ColorRed, Fg: term.ColorCyan},
-				{Ch: 'p', Bg: term.ColorRed, Fg: term.ColorCyan},
+				{Ch: 'y', Width: 1},
+				{Ch: 'o', Width: 1},
+				{Ch: ' ', Width: 1},
+				{Ch: 'w', Bg: term.ColorRed, Fg: term.ColorCyan, Width: 1},
+				{Ch: 'a', Bg: term.ColorRed, Fg: term.ColorCyan, Width: 1},
+				{Ch: 's', Bg: term.ColorRed, Fg: term.ColorCyan, Width: 1},
+				{Ch: 'u', Bg: term.ColorRed, Fg: term.ColorCyan, Width: 1},
+				{Ch: 'p', Bg: term.ColorRed, Fg: term.ColorCyan, Width: 1},
+				{Ch: 'p', Bg: term.ColorRed, Fg: term.ColorCyan, Width: 1},
 			},
 		}
 		assert.Equal(t, expected, buf.RawCells())
@@ -152,15 +152,15 @@ func TestAttrSearcher(t *testing.T) {
 
 		expected := [][]term.Cell{
 			{
-				{Ch: 'y'},
-				{Ch: 'o'},
-				{Ch: ' '},
-				{Ch: 'w'},
-				{Ch: 'a'},
-				{Ch: 'p'},
-				{Ch: 's'},
-				{Ch: 'u'},
-				{Ch: 'p'},
+				{Ch: 'y', Width: 1},
+				{Ch: 'o', Width: 1},
+				{Ch: ' ', Width: 1},
+				{Ch: 'w', Width: 1},
+				{Ch: 'a', Width: 1},
+				{Ch: 'p', Width: 1},
+				{Ch: 's', Width: 1},
+				{Ch: 'u', Width: 1},
+				{Ch: 'p', Width: 1},
 			},
 		}
 		assert.Equal(t, expected, buf.RawCells())
@@ -176,13 +176,13 @@ func TestAttrSearcher(t *testing.T) {
 
 		expected := [][]term.Cell{
 			{
-				{Ch: 'y'},
-				{Ch: 'o'},
-				{Ch: ' '},
-				{Ch: 'w'},
-				{Ch: 'a'},
-				{Ch: 'u'},
-				{Ch: 'p'},
+				{Ch: 'y', Width: 1},
+				{Ch: 'o', Width: 1},
+				{Ch: ' ', Width: 1},
+				{Ch: 'w', Width: 1},
+				{Ch: 'a', Width: 1},
+				{Ch: 'u', Width: 1},
+				{Ch: 'p', Width: 1},
 			},
 		}
 		assert.Equal(t, expected, buf.RawCells())

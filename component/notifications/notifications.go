@@ -57,6 +57,8 @@ func newNotification(
 		panic("unknown level")
 	}
 
+	progressCell.Width = 1
+
 	start := time.Now()
 	end := start.Add(duration)
 	return &notificationComp{

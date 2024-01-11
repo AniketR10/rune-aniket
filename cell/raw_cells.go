@@ -6,7 +6,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/mattn/go-runewidth"
+	"github.com/rivo/uniseg"
 	"unstable.build/go-tui/term"
 )
 
@@ -16,10 +16,17 @@ const (
 	defRowCap        int = 64
 )
 
+var (
+	nullCluster = [1]rune{'\x00'}
+	tabCluster  = [1]rune{'\t'}
+)
+
 // rawCells is a matrix of term.Cell. The zero value for rawCells is ready to use.
 type rawCells struct {
 	cells     [][]term.Cell
 	tabspaces int
+	zwj       bool
+	zwjPos    term.Coordinates
 }
 
 // init initializes this rawCells with the given tabspaces config and resets its contents.
@@ -31,6 +38,8 @@ func (c *rawCells) init(tabspaces int) {
 func (c *rawCells) reset() {
 	c.cells = make([][]term.Cell, 1, defRowCap)
 	c.cells[0] = makeNewRow(0, defColumnCap)
+	c.zwj = false
+	c.zwjPos = term.Coordinates{}
 }
 
 func assertValidCoords(pos term.Coordinates) {
@@ -64,15 +73,42 @@ func (c *rawCells) insertNewRow(pos term.Coordinates) {
 	}
 }
 
-func (c *rawCells) doInsertAt(pos term.Coordinates, r rune) {
+func (c *rawCells) doInsertAt(pos term.Coordinates, r []rune, width int) {
 	// make sure we have enough capacity
 	c.cells[pos.Y] = append(c.cells[pos.Y], term.Cell{})
 	copy(c.cells[pos.Y][pos.X+1:], c.cells[pos.Y][pos.X:])
-	c.cells[pos.Y][pos.X] = term.Cell{Ch: r}
+	var combining []rune
+	if len(r) > 1 {
+		combining = r[1:]
+	}
+	cell := term.Cell{Ch: r[0], Combining: combining, Width: width}
+	c.cells[pos.Y][pos.X] = cell
 }
 
-func (c *rawCells) insertAt(pos term.Coordinates, r rune) (next term.Coordinates) {
-	switch r {
+func (c *rawCells) insertAt(pos term.Coordinates, r []rune, width int) (
+	next term.Coordinates,
+) {
+	switch r[0] {
+	// zero-width joiner, at position 0, indicates that previous cell is not complete
+	// This mechanism is needed because input event processes one rune at a time
+	// This assumes that a zwj and the runes of the grapheme cluster it belongs to
+	// are inserted sequentially
+	case '\u200d':
+		next = term.Coordinates{X: pos.X + 1, Y: pos.Y}
+		// remove any previous null cells added to ensure that ith cell matches
+		// ith user visual cell, for wide characters
+		for pos.Y < len(c.cells) && pos.X > 0 &&
+			pos.X-1 < len(c.cells[pos.Y]) &&
+			c.cells[pos.Y][pos.X-1].Ch == '\x00' {
+			pos.X--
+			next.X--
+			var nop strings.Builder
+			c.deleteRowRange(&nop, pos.Y, pos.X, next.X)
+		}
+		c.zwj = true
+		c.doInsertAt(pos, r, width)
+		c.zwjPos = next
+		return
 	case '\n':
 		c.insertNewRow(pos)
 		next = term.Coordinates{X: 0, Y: pos.Y + 1}
@@ -84,13 +120,24 @@ func (c *rawCells) insertAt(pos term.Coordinates, r rune) (next term.Coordinates
 		}
 		fallthrough
 	default:
-		c.doInsertAt(pos, r)
-		width := runewidth.RuneWidth(r)
+		pos := pos // need unmodified pos below
+		c.doInsertAt(pos, r, width)
 		for i := 1; i < width; i++ {
 			pos.X++
-			c.doInsertAt(pos, 0)
+			c.doInsertAt(pos, nullCluster[:], 0)
 		}
 		next = term.Coordinates{X: pos.X + 1, Y: pos.Y}
+	}
+
+	if c.zwj {
+		if c.zwjPos == pos {
+			str := c.String()
+			c.reset()
+			c.ReadFrom(strings.NewReader(str))
+			next = term.Coordinates{X: pos.X, Y: pos.Y}
+		}
+		c.zwj = false
+		c.zwjPos = term.Coordinates{}
 	}
 
 	return
@@ -99,9 +146,9 @@ func (c *rawCells) insertAt(pos term.Coordinates, r rune) (next term.Coordinates
 func (c *rawCells) insertTabSpaces(pos term.Coordinates) {
 	n := term.Coordinates{X: pos.X, Y: pos.Y}
 	for i := 1; i < c.tabspaces; i++ {
-		n = c.insertAt(n, '\x00')
+		n = c.insertAt(n, nullCluster[:], 0)
 	}
-	c.doInsertAt(n, '\t')
+	c.doInsertAt(n, tabCluster[:], 0)
 }
 
 func (c *rawCells) fillInRows(y int) (n int) {
@@ -161,9 +208,14 @@ func (c *rawCells) insert(at term.Coordinates, str string) (
 		to = from
 	}
 	next := to
-	for _, r := range str {
+	state := -1
+	var cluster string
+	var boundaries int
+	for len(str) > 0 {
+		cluster, str, boundaries, state = uniseg.StepString(str, state)
 		to = next
-		next = c.insertAt(next, r)
+		width := boundaries >> uniseg.ShiftWidth
+		next = c.insertAt(next, []rune(cluster), width)
 		if padding := next.X - to.X - 1; padding > 0 {
 			to.X += padding
 		}
@@ -185,6 +237,9 @@ func copyRowToBuilder(builder *strings.Builder, cells []term.Cell) {
 	for _, c := range cells {
 		if c.Ch != '\x00' {
 			builder.WriteRune(c.Ch)
+			for _, comb := range c.Combining {
+				builder.WriteRune(comb)
+			}
 		}
 	}
 }
@@ -224,7 +279,7 @@ func (c *rawCells) skipPadding(start, end term.Coordinates) (
 		endLastIdx := len(c.cells[to.Y])
 		to.X--
 		if to.X < endLastIdx {
-			if width := runewidth.RuneWidth(c.cells[to.Y][to.X].Ch); width > 1 {
+			if width := c.cells[to.Y][to.X].Width; width > 1 {
 				to.X += width - 1
 			} else {
 				// do not skip if this is a width right-padding
@@ -264,8 +319,7 @@ func (c *rawCells) skipPadding(start, end term.Coordinates) (
 	if done && c.cells[from.Y][from.X].Ch != 0 {
 		// except if width > 1, in which case, the pad is a width pad
 		// in that case, skip to right
-		width := runewidth.RuneWidth(c.cells[from.Y][from.X].Ch)
-		if width > 1 {
+		if width := c.cells[from.Y][from.X].Width; width > 1 {
 			from.X += width
 		} else {
 			from.X++
@@ -378,24 +432,34 @@ func (c *rawCells) ReadFrom(r io.Reader) (int64, error) {
 	n := int64(0)
 	for {
 		str, err := reader.ReadString('\n')
-		for _, r := range str {
-			switch r {
+		state := -1
+		var cluster string
+		var boundaries int
+		n += int64(len([]byte(str)))
+		for len(str) > 0 {
+			cluster, str, boundaries, state = uniseg.StepString(str, state)
+			width := boundaries >> uniseg.ShiftWidth
+			r := []rune(cluster)
+			switch r[0] {
 			case '\n':
 				c.cells = append(c.cells, makeNewRow(0, defColumnCap))
 			case '\t':
-				for i := 1; r == '\t' && i < c.tabspaces; i++ {
+				for i := 1; r[0] == '\t' && i < c.tabspaces; i++ {
 					c.cells[rowY] = append(c.cells[rowY], term.Cell{})
 				}
 				fallthrough
 			default:
-				c.cells[rowY] = append(c.cells[rowY], term.Cell{Ch: rune(r)})
-				width := runewidth.RuneWidth(r)
+				var combining []rune
+				if len(r) > 1 {
+					combining = r[1:]
+				}
+				cell := term.Cell{Ch: r[0], Width: width, Combining: combining}
+				c.cells[rowY] = append(c.cells[rowY], cell)
 				for i := 1; i < width; i++ {
 					c.cells[rowY] = append(c.cells[rowY], term.Cell{})
 				}
 			}
 		}
-		n += int64(len(str))
 		if err != nil {
 			if err == io.EOF {
 				err = nil

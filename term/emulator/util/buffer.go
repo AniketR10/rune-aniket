@@ -435,9 +435,12 @@ func (buffer *Buffer) write(runes ...MeasuredRune) {
 			for int(buffer.CursorColumn()) >= len(line.cells) {
 				line.append(buffer.defaultCell(int(buffer.CursorColumn()) == len(line.cells)))
 			}
-			line.cells[buffer.cursorPosition.Col].Bg = buffer.cursorAttr.Bg
-			line.cells[buffer.cursorPosition.Col].Fg = buffer.cursorAttr.Fg
-			line.cells[buffer.cursorPosition.Col].Ch = r.Rune
+			line.cells[buffer.cursorPosition.Col] = term.Cell{
+				Bg:    buffer.cursorAttr.Bg,
+				Fg:    buffer.cursorAttr.Fg,
+				Ch:    r.Rune,
+				Width: r.Width,
+			}
 			buffer.incrementCursorPosition()
 			continue
 		}
@@ -454,6 +457,7 @@ func (buffer *Buffer) write(runes ...MeasuredRune) {
 				}
 				cell := &newLine.cells[0]
 				cell.Ch = r.Rune
+				cell.Width = r.Width
 				cell.Fg = buffer.cursorAttr.Fg
 				cell.Bg = buffer.cursorAttr.Bg
 
@@ -470,6 +474,7 @@ func (buffer *Buffer) write(runes ...MeasuredRune) {
 
 			cell := &line.cells[buffer.CursorColumn()]
 			cell.Ch = r.Rune
+			cell.Width = r.Width
 			cell.Fg = buffer.cursorAttr.Fg
 			cell.Bg = buffer.cursorAttr.Bg
 		}
@@ -699,9 +704,7 @@ func (buffer *Buffer) eraseLineToCursor() {
 	line := buffer.getCurrentLine()
 	for i := 0; i <= int(buffer.cursorPosition.Col); i++ {
 		if i < len(line.cells) {
-			line.cells[i].Ch = 0
-			line.cells[i].Fg = 0
-			line.cells[i].Bg = buffer.cursorAttr.Bg
+			line.cells[i] = term.Cell{Bg: buffer.cursorAttr.Bg}
 		}
 	}
 }
@@ -751,9 +754,7 @@ func (buffer *Buffer) eraseCharacters(n int) {
 	}
 
 	for i := int(buffer.cursorPosition.Col); i < max; i++ {
-		line.cells[i].Ch = 0
-		line.cells[i].Fg = 0
-		line.cells[i].Bg = buffer.cursorAttr.Bg
+		line.cells[i] = term.Cell{Bg: buffer.cursorAttr.Bg}
 	}
 }
 
@@ -779,9 +780,7 @@ func (buffer *Buffer) eraseDisplayToCursor() {
 		if i >= len(line.cells) {
 			break
 		}
-		line.cells[i].Ch = 0
-		line.cells[i].Fg = 0
-		line.cells[i].Bg = buffer.cursorAttr.Bg
+		line.cells[i] = term.Cell{Bg: buffer.cursorAttr.Bg}
 	}
 
 	cursorVY := buffer.convertRawLineToViewLine(buffer.cursorPosition.Line)

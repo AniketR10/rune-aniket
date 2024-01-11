@@ -216,7 +216,7 @@ var (
 					"ephemeral terminal emulator. The stdout and stderr of the execution " +
 					"are printed on a floating window along with stats and a progress sign until " +
 					"user closes the window or hits the ESC key. " +
-					"If not executable is passed, a companion terminal emulator is opened. " +
+					"If not executable is passed, the companion terminal emulator is opened. " +
 					"This emulator is different " +
 					"than a terminal emulator created by newTerminal in that it preserves " +
 					"the session output accross invocations. The floating window created as a " +

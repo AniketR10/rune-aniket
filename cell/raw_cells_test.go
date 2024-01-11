@@ -16,8 +16,9 @@ var (
 	rawCellsFortune = `Love in your heart wasn't put there to stay.
 Love isn't love 'til you give it away.
 		-- Oscar Hammerstein 中国`
-	emptyString = ""
-	widthString = "💥"
+	emptyString     = ""
+	widthString     = "💥"
+	graphemeCluster = "👨‍👧‍👦"
 )
 
 func TestRawCellsInsertMiddlePadding(t *testing.T) {
@@ -27,10 +28,10 @@ func TestRawCellsInsertMiddlePadding(t *testing.T) {
 }
 `
 	fixtureCells := [][]term.Cell{
-		{{Ch: '{'}},
-		{{}, {}, {}, {Ch: '\t'}, {Ch: 'b'}},
-		{{}, {}, {}, {Ch: '\t'}, {Ch: 'c'}},
-		{{Ch: '}'}},
+		{{Ch: '{', Width: 1}},
+		{{}, {}, {}, {Ch: '\t'}, {Ch: 'b', Width: 1}},
+		{{}, {}, {}, {Ch: '\t'}, {Ch: 'c', Width: 1}},
+		{{Ch: '}', Width: 1}},
 		{},
 	}
 	var c rawCells
@@ -157,11 +158,20 @@ func TestRawCellsStringReadFrom(t *testing.T) {
 		{"\n", [][]term.Cell{{}, {}}},
 		{"\t\n", [][]term.Cell{{{}, {}, {}, {Ch: '\t'}}, {}}},
 		{"\t", [][]term.Cell{{{}, {}, {}, {Ch: '\t'}}}},
-		{"a", [][]term.Cell{{{Ch: 'a'}}}},
-		{"\nb", [][]term.Cell{{}, {{Ch: 'b'}}}},
-		{"c\n", [][]term.Cell{{{Ch: 'c'}}, {}}},
+		{"a", [][]term.Cell{{{Ch: 'a', Width: 1}}}},
+		{"\nb", [][]term.Cell{{}, {{Ch: 'b', Width: 1}}}},
+		{"c\n", [][]term.Cell{{{Ch: 'c', Width: 1}}, {}}},
 		{"\n\n\n", [][]term.Cell{{}, {}, {}, {}}},
-		{"\n\n\na", [][]term.Cell{{}, {}, {}, {{Ch: 'a'}}}},
+		{"\n\n\na", [][]term.Cell{{}, {}, {}, {{Ch: 'a', Width: 1}}}},
+		// a null cell is placed after 2 width rune, to make sure next rune
+		// is drawn with enough space.
+		{"💥", [][]term.Cell{{{Ch: '💥', Width: 2}, {}}}},
+		{"👨‍👧‍👦", [][]term.Cell{{{Ch: '👨', Combining: []rune{
+			rune(8205),
+			rune(128103),
+			rune(8205),
+			rune(128102),
+		}, Width: 2}, {}}}},
 	}
 
 	for i, _tcase := range tsuite {
@@ -171,7 +181,7 @@ func TestRawCellsStringReadFrom(t *testing.T) {
 			c.init(DefaultTabspaces)
 			n, err := c.ReadFrom(strings.NewReader(tcase.in))
 			assert.NoError(t, err)
-			assert.Equal(t, int64(len(tcase.in)), n)
+			assert.Equal(t, int64(len([]byte(tcase.in))), n)
 			assert.Equal(t, tcase.in, c.String())
 			assert.Equal(t, tcase.want, c.RawCells())
 		})
@@ -303,6 +313,30 @@ Love isn't love 'til you give it away.
 			expectedTo:           term.Coordinates{X: 2},
 			expectedRawCells:     "🤘💥",
 		},
+		{
+			overrideBaseRawCells: &emptyString,
+			inputAt:              term.Coordinates{X: 0},
+			inputStr:             "👨‍👧‍👦",
+			expectedFrom:         term.Coordinates{X: 0},
+			expectedTo:           term.Coordinates{X: 2},
+			expectedRawCells:     "👨‍👧‍👦",
+		},
+		{
+			overrideBaseRawCells: &widthString,
+			inputAt:              term.Coordinates{X: 0},
+			inputStr:             "👨‍👧‍👦",
+			expectedFrom:         term.Coordinates{X: 0},
+			expectedTo:           term.Coordinates{X: 2},
+			expectedRawCells:     "👨‍👧‍👦💥",
+		},
+		{
+			overrideBaseRawCells: &graphemeCluster,
+			inputAt:              term.Coordinates{X: 0},
+			inputStr:             "💥",
+			expectedFrom:         term.Coordinates{X: 0},
+			expectedTo:           term.Coordinates{X: 2},
+			expectedRawCells:     "💥👨‍👧‍👦",
+		},
 	}
 
 	for i, tcase := range tsuite {
@@ -336,6 +370,25 @@ Love isn't love 'til you give it away.
 			assert.Equal(t, input, c.String())
 		})
 	}
+}
+
+func TestRawCellsInsertGraphemeCluster(t *testing.T) {
+	var c rawCells
+	c.init(DefaultTabspaces)
+	_, next := c.insert(term.Coordinates{}, "👨")
+	_, next = c.insert(next, "\u200d")
+	_, next = c.insert(next, "👧")
+	_, next = c.insert(next, "\u200d")
+	_, next = c.insert(next, "👦")
+
+	assert.Equal(t, [][]term.Cell{
+		{{Ch: '👨', Combining: []rune{
+			rune(8205),
+			rune(128103),
+			rune(8205),
+			rune(128102),
+		}, Width: 2}, {}},
+	}, c.RawCells())
 }
 
 func TestRawCellsDelete(t *testing.T) {
@@ -735,11 +788,11 @@ func TestRawCellsCell(t *testing.T) {
 
 	cell, ok = c.Cell(term.Coordinates{Y: 1, X: 16})
 	assert.True(t, ok)
-	assert.Equal(t, term.Cell{Ch: 'L'}, cell)
+	assert.Equal(t, term.Cell{Ch: 'L', Width: 1}, cell)
 
 	cell, ok = c.Cell(term.Coordinates{Y: 3, X: 37})
 	assert.True(t, ok)
-	assert.Equal(t, term.Cell{Ch: '中'}, cell)
+	assert.Equal(t, term.Cell{Ch: '中', Width: 2}, cell)
 
 	cell, ok = c.Cell(term.Coordinates{Y: 666})
 	assert.False(t, ok)
