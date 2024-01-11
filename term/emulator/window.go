@@ -42,19 +42,20 @@ func (w *windowManipulator) Position() (int, int) {
 }
 
 func (w *windowManipulator) SizeInPixels() (int, int) {
-	panic("cannot determine size in pixels")
+	return w.height, w.width
 }
 
 func (w *windowManipulator) CellSizeInPixels() (int, int) {
-	panic("cannot determine size in pixels")
+	return 1, 1
 }
 
 func (w *windowManipulator) SizeInChars() (int, int) {
 	return w.height, w.width
 }
 
-func (w *windowManipulator) ResizeInPixels(int, int) {
-	panic("cannot resize")
+func (w *windowManipulator) ResizeInPixels(height int, width int) {
+	w.width = width
+	w.height = height
 }
 
 func (w *windowManipulator) ResizeInChars(height, width int) {
@@ -63,15 +64,14 @@ func (w *windowManipulator) ResizeInChars(height, width int) {
 }
 
 func (w *windowManipulator) ScreenSizeInPixels() (int, int) {
-	panic("cannot determine size in pixels")
+	return w.height, w.width
 }
 
 func (w *windowManipulator) ScreenSizeInChars() (int, int) {
-	panic("cannot determine size in pixels")
+	return w.height, w.width
 }
 
 func (w *windowManipulator) Move(x, y int) {
-	panic("cannot move window")
 }
 
 func (w *windowManipulator) IsFullscreen() bool {
