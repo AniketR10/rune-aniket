@@ -28,6 +28,7 @@ message EditorEvent {
 	TypeFocus = 6;
 	TypeUnfocus = 7;
 	TypeCursor = 8;
+	TypeSelection = 9;
   }
 
   Type type = 1;

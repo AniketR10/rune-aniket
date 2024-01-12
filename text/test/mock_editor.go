@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 
-	"github.com/sirupsen/logrus"
 	textapi "unstable.build/go-tui/api/text"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	browsertest "unstable.build/go-tui/browser/test"
@@ -39,7 +38,6 @@ func (e *testEditor) Handle(ctx context.Context, ev textapi.Event) bool {
 }
 
 func (e *testEditor) dispatchEvent(ctx context.Context, ev textapi.Event) {
-	logrus.Infof("dispathing event %#v: subs=%v", ev, e.subs)
 	if len(e.subs) == 0 {
 		return
 	}
@@ -110,6 +108,13 @@ func (e *TestEditorHandler) Handle(ev term.Event) (bool, bool) {
 		URI:      e.uri,
 		Resource: e,
 	})
+	if ev.Ch == 'v' {
+		e.parent.dispatchEvent(context.Background(), textapi.Event{
+			Type:     textapi.EventTypeSelection,
+			URI:      e.uri,
+			Resource: e,
+		})
+	}
 	return e.TestHandler.Handle(ev)
 }
 

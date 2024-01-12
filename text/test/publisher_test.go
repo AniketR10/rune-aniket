@@ -101,9 +101,10 @@ func TestPublisher(t *testing.T) {
 
 		pub := text.NewPublisher()
 		mock := newMock(ctrl)
-		buf, _, cursor := newEdit("\n\n")
+		buf, scroll, cursor := newEdit("a\nb\n\nc")
 
 		h := pub.PublishEdit(uri, buf, mock, cursor)
+		scroll.Resize(2, 2)
 		h.Resize(2, 2)
 
 		var called bool
@@ -112,8 +113,8 @@ func TestPublisher(t *testing.T) {
 				require.Equal(t, textapi.EventTypeCursor, ev.Type)
 				assert.Equal(t, uri, ev.URI)
 				assert.Equal(t, h, ev.Resource)
-				assert.Equal(t, term.Coordinates{Y: 2}, ev.Start)
-				assert.Equal(t, term.Coordinates{}, ev.From)
+				assert.Equal(t, term.Coordinates{Y: 1}, ev.Start)
+				assert.Equal(t, term.Coordinates{Y: 2}, ev.From)
 				called = true
 				return false
 			}))
@@ -121,23 +122,113 @@ func TestPublisher(t *testing.T) {
 		mock.EXPECT().Handle(gomock.Any()).
 			DoAndReturn(func(ev term.Event) (bool, bool) {
 				require.Equal(t, term.Event{Type: term.EventInterrupt}, ev)
+				require.True(t, cursor.MoveDown())
+				require.True(t, cursor.MoveDown())
 				return false, true
 			}).Times(1)
-
-		var times int
-		mock.EXPECT().Cursor().
-			DoAndReturn(func() (term.Coordinates, term.CursorStyle, bool) {
-				if times == 0 {
-					times++
-					return term.Coordinates{Y: 1}, 0, true
-				}
-				return term.Coordinates{Y: 2}, 0, true
-			}).Times(2)
 
 		exit, handled := h.Handle(term.Event{Type: term.EventInterrupt})
 		assert.False(t, exit)
 		assert.True(t, handled)
 		assert.True(t, called)
+	})
+
+	t.Run("dispatches EventTypeSelection when cursor changes and selection is on", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		pub := text.NewPublisher()
+		mock := newMock(ctrl)
+		buf, scroll, cursor := newEdit("aa\nbb\n")
+
+		h := pub.PublishEdit(uri, buf, mock, cursor)
+		scroll.Resize(2, 2)
+		h.Resize(2, 2)
+
+		var called bool
+		pub.SubscribeEvents([]textapi.EventType{textapi.EventTypeSelection},
+			text.FuncEventHandler(func(ctx context.Context, ev textapi.Event) bool {
+				require.Equal(t, textapi.EventTypeSelection, ev.Type)
+				assert.Equal(t, uri, ev.URI)
+				assert.Equal(t, h, ev.Resource)
+				assert.Equal(t, term.Coordinates{Y: 0}, ev.Start)
+				assert.Equal(t, term.Coordinates{Y: 1}, ev.End)
+				assert.Equal(t, "aa\nb", ev.Content)
+				called = true
+				return false
+			}))
+
+		mock.EXPECT().Handle(gomock.Any()).
+			DoAndReturn(func(ev term.Event) (bool, bool) {
+				require.Equal(t, term.Event{Type: term.EventInterrupt}, ev)
+				require.True(t, cursor.MoveDown())
+				return false, true
+			}).Times(1)
+
+		require.True(t, cursor.Select())
+
+		exit, handled := h.Handle(term.Event{Type: term.EventInterrupt})
+		assert.False(t, exit)
+		assert.True(t, handled)
+		assert.True(t, called)
+	})
+
+	t.Run("dispatches EventTypeSelection when selection goes from on to off", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		pub := text.NewPublisher()
+		mock := newMock(ctrl)
+		buf, scroll, cursor := newEdit("aa\nbb\n")
+
+		h := pub.PublishEdit(uri, buf, mock, cursor)
+		scroll.Resize(2, 2)
+		h.Resize(2, 2)
+
+		var called int
+		pub.SubscribeEvents([]textapi.EventType{textapi.EventTypeSelection},
+			text.FuncEventHandler(func(ctx context.Context, ev textapi.Event) bool {
+				require.Equal(t, textapi.EventTypeSelection, ev.Type)
+				assert.Equal(t, uri, ev.URI)
+				assert.Equal(t, h, ev.Resource)
+				if called == 0 {
+					assert.Equal(t, term.Coordinates{Y: 0}, ev.Start)
+					assert.Equal(t, term.Coordinates{Y: 1}, ev.End)
+					assert.Equal(t, "aa\nb", ev.Content)
+				} else {
+					assert.Equal(t, term.Coordinates{Y: 0}, ev.Start)
+					assert.Equal(t, term.Coordinates{Y: 1}, ev.End)
+					assert.Equal(t, "", ev.Content)
+				}
+				called++
+				return false
+			}))
+
+		var times int
+		mock.EXPECT().Handle(gomock.Any()).
+			DoAndReturn(func(ev term.Event) (bool, bool) {
+				require.Equal(t, term.Event{Type: term.EventInterrupt}, ev)
+				if times == 0 {
+					require.True(t, cursor.MoveDown())
+				}
+				if times == 1 {
+					require.True(t, cursor.Unselect())
+				}
+				times++
+				return false, true
+			}).Times(2)
+
+		require.True(t, cursor.Select())
+
+		exit, handled := h.Handle(term.Event{Type: term.EventInterrupt})
+		assert.False(t, exit)
+		assert.True(t, handled)
+
+		exit, handled = h.Handle(term.Event{Type: term.EventInterrupt})
+		assert.False(t, exit)
+		assert.True(t, handled)
+
+		assert.Equal(t, 2, called)
 	})
 
 	t.Run("dispatches EventTypeScroll when scroll seeks", func(t *testing.T) {

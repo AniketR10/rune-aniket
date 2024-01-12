@@ -585,6 +585,18 @@ func TestComponentEditorSubscriber(t *testing.T) {
 			},
 			nil,
 		},
+		{
+			"Handle>EventTypeSelection",
+			textapi.EventTypeSelection,
+			func(t *testing.T, c *text.Component, resource workspaceapi.URI) {
+				buf := cell.NewBuffer()
+				buf.WriteString(content)
+				h, err := c.Edit(resource, buf)
+				assert.NoError(t, err)
+				h.Handle(term.Event{Ch: 'v'})
+			},
+			nil,
+		},
 	}
 
 	for _, _tcase := range tsuite {

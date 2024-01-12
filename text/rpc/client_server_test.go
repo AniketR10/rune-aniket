@@ -179,6 +179,16 @@ func TestClientServerIntegration(t *testing.T) {
 					h.Handle(term.Event{Ch: 'l'})
 				}, &term.Coordinates{}, &term.Coordinates{}, nil,
 			},
+			{
+				"Handle->EventTypeSelection",
+				textapi.EventTypeSelection,
+				func(t *testing.T, resourceName string, ed text.Editor, buf *cell.Buffer) {
+					buf.WriteString(str1)
+					h, err := ed.Edit(uri, buf)
+					assert.NoError(t, err)
+					h.Handle(term.Event{Ch: 'v'})
+				}, &term.Coordinates{}, &term.Coordinates{}, nil,
+			},
 		}
 
 		for i, _tcase := range tsuite {

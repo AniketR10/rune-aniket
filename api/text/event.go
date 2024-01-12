@@ -47,6 +47,11 @@ const (
 	// content position. Event.Start will be set to the cursor's window position,
 	// and Event.From will be set to the cursor's scroll position.
 	EventTypeCursor
+
+	// EventTypeSelection is dispatched when the user selects a chunk of text.
+	// Start, End represent the selection coordinates and Content contains
+	// the content selected as a result.
+	EventTypeSelection
 )
 
 // Event encapsulates eventual information about a particular editor resource.

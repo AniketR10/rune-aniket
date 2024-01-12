@@ -51,8 +51,7 @@ func (p *Publisher) PublishEdit(
 		Handler: root,
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := context.Background()
 
 	p.dispatchEvent(ctx, textapi.Event{
 		Type:     textapi.EventTypeOpen,
@@ -154,17 +153,17 @@ func (p *Publisher) Handle(ctx context.Context, ev textapi.Event) bool {
 // then an EventTypeCursor is dispatched to subscribers.
 func (p *Publisher) RecordCursorChange(h Handler) (dispatchEvent func()) {
 	handler := h.(*cursorPublisher)
-	cursor0, _, _ := handler.Handler.Cursor()
+	cursor0 := handler.cursor.Coordinates()
 	cursorAtScroll0 := handler.cursor.CursorAtScroll()
+	selection0 := handler.cursor.Selection()
 
 	return func() {
-		cursor1, _, _ := handler.Handler.Cursor()
+		cursor1 := handler.cursor.Coordinates()
 		cursorAtScroll1 := handler.cursor.CursorAtScroll()
+		selection1 := handler.cursor.Selection()
 
 		if cursor0 != cursor1 || cursorAtScroll0 != cursorAtScroll1 {
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
-			p.dispatchEvent(ctx, textapi.Event{
+			p.dispatchEvent(context.Background(), textapi.Event{
 				Type:     textapi.EventTypeCursor,
 				URI:      handler.uri,
 				Resource: h,
@@ -172,6 +171,24 @@ func (p *Publisher) RecordCursorChange(h Handler) (dispatchEvent func()) {
 				From:     cursorAtScroll1,
 			})
 		}
+
+		selectionFrom, _ := handler.cursor.SelectionFrom()
+		if selection0 != selection1 {
+			p.dispatchEvent(context.Background(), textapi.Event{
+				Type:     textapi.EventTypeSelection,
+				URI:      handler.uri,
+				Resource: h,
+				Start:    selectionFrom,
+				End:      cursorAtScroll1,
+				Content:  selection1,
+			})
+		}
+
+		p.log(log.TraceLevel, "record cursor change for %p: cursor before: %+v, "+
+			"cursor after: %+v, cursorAtScroll before: %+v, cursorAtScroll after: %+v, "+
+			"selection before: %s, selection after: %s",
+			h, cursor0, cursor1, cursorAtScroll0, cursorAtScroll1,
+			selection0, selection1)
 	}
 }
 
