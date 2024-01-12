@@ -8,6 +8,8 @@ import (
 	"github.com/ernestrc/blue/logging"
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
+	codes "google.golang.org/grpc/codes"
+	status "google.golang.org/grpc/status"
 	"unstable.build/go-tui/api/config"
 	schemeapi "unstable.build/go-tui/api/scheme"
 	workspaceapi "unstable.build/go-tui/api/workspace"
@@ -90,6 +92,9 @@ func (s *SchemeManagerServer) RegisterScheme(ctx context.Context, req *RegisterS
 			return s.dialScheme(ctx, proxyID, cfg, uri)
 		})
 	if err != nil {
+		if err == schemeapi.ErrSchemeAlreadyRegistered {
+			err = status.Error(codes.AlreadyExists, "scheme already registered")
+		}
 		return
 	}
 	s.schemes = append(s.schemes, req.GetScheme())

@@ -23,6 +23,15 @@ func parseURI(t *testing.T, uriStr string) workspaceapi.URI {
 func TestManager(t *testing.T) {
 	ctx := context.Background()
 
+	t.Run("returns ErrSchemeAlreadyRegistered when same scheme is registered twice", func(t *testing.T) {
+		m := workspace.NewManager(config.NopConfig())
+		err := m.RegisterScheme("test", NewNopScheme("test"))
+		require.NoError(t, err)
+
+		require.Equal(t, schemeapi.ErrSchemeAlreadyRegistered,
+			m.RegisterScheme("test", NewNopScheme("test")))
+	})
+
 	t.Run("registers scheme to be used by AddWorkspace", func(*testing.T) {
 		m := workspace.NewManager(config.NopConfig())
 		err := m.RegisterScheme("test", NewNopScheme("test"))

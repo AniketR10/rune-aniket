@@ -59,12 +59,12 @@ func (m *Manager) Init(cfg config.Config) {
 }
 
 // RegisterScheme registers a new scheme for the given scheme and uses fn
-// to allocate it for new workspaces. It returns an error if there's already
-// a scheme registered for the given scheme.
+// to allocate it for new workspaces. It returns ErrSchemeAlreadyRegistered if there's
+// already a scheme registered for the given scheme.
 func (m *Manager) RegisterScheme(scheme string, fn schemeapi.SchemeFunc) error {
 	_, ok := m.schemes[scheme]
 	if ok {
-		return fmt.Errorf("scheme %q already registered", scheme)
+		return schemeapi.ErrSchemeAlreadyRegistered
 	}
 	m.log(log.DebugLevel, "RegisterScheme %q", scheme)
 	if log.IsLevelEnabled(log.TraceLevel) {

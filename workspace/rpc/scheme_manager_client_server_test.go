@@ -105,6 +105,33 @@ func TestSchemeManagerClientServerSchemeSuiteIntegration(t *testing.T) {
 		return client
 	})
 
+	t.Run("surfaces schemeapi.ErrSchemeAlreadyRegistered", func(t *testing.T) {
+		uri, err := workspaceapi.ParseURI("test:///tmp")
+		require.NoError(t, err)
+		cfg := config.NopConfig()
+		manager := workspace.NewManager(cfg)
+		broker := proto.NewUnixGRPCBroker("", "", "")
+
+		srv := NewSchemeManagerServer(broker, manager, new(sync.Mutex))
+		conn, closeFn := doSetupSchemeManagerClientServerTest(t, srv)
+		defer closeFn()
+
+		managerClient := NewSchemeManager(context.Background(), broker, conn)
+		require.NoError(t, managerClient.RegisterScheme("test",
+			func(ctx context.Context, cfg config.Config, _uri workspaceapi.URI) (
+				schemeapi.Scheme, error,
+			) {
+				return workspace.NewMemoryScheme(ctx, cfg, uri)
+			}))
+
+		require.Equal(t, schemeapi.ErrSchemeAlreadyRegistered, managerClient.RegisterScheme("test",
+			func(ctx context.Context, cfg config.Config, _uri workspaceapi.URI) (
+				schemeapi.Scheme, error,
+			) {
+				return workspace.NewMemoryScheme(ctx, cfg, uri)
+			}))
+	})
+
 	t.Run("unregisters created schemes upon Close", func(t *testing.T) {
 		uri, err := workspaceapi.ParseURI("test:///tmp")
 		require.NoError(t, err)

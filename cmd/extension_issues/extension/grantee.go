@@ -217,6 +217,11 @@ func (e *grantee) initScheme(m schemeapi.SchemeManager) error {
 			issue.ReportMetadataIDField))
 	schemeFn = issueMapperScheme(schemeFn, marshaler, e.maxSubjectLen)
 	err = m.RegisterScheme(e.scheme, schemeFn)
+	if err == schemeapi.ErrSchemeAlreadyRegistered {
+		// the first workspace to run this plugin registers the scheme successfully
+		err = nil
+		e.log(log.DebugLevel, "ignore register error: another issues extension registered the scheme first")
+	}
 	return err
 }
 

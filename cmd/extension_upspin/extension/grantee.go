@@ -55,7 +55,7 @@ func (e *upspinGrantee) PermissionGranted(
 				return fmt.Errorf("acquire scheme manager: %w", err)
 			}
 			err = m.RegisterScheme(upspinScheme, newScheme)
-			if err != nil {
+			if err != nil && err != schemeapi.ErrSchemeAlreadyRegistered {
 				return fmt.Errorf("register scheme: %w", err)
 			}
 			// store so finalizer doesn't kill the scheme RPC pipeline

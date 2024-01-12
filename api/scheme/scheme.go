@@ -2,12 +2,19 @@ package scheme
 
 import (
 	"context"
+	"errors"
 	"io"
 	"os"
 	"syscall"
 
 	"unstable.build/go-tui/api/config"
 	workspaceapi "unstable.build/go-tui/api/workspace"
+)
+
+var (
+	// ErrSchemeAlreadyRegistered is retured by RegisterScheme when a scheme for the given
+	// uri has already been registered.
+	ErrSchemeAlreadyRegistered = errors.New("scheme already registered")
 )
 
 // Scheme abstracts internal workspace scheme implementations.

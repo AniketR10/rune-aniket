@@ -10,6 +10,8 @@ import (
 	"github.com/ernestrc/blue/logging"
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
+	codes "google.golang.org/grpc/codes"
+	status "google.golang.org/grpc/status"
 
 	schemeapi "unstable.build/go-tui/api/scheme"
 	"unstable.build/go-tui/proto"
@@ -102,6 +104,9 @@ func (c *SchemeManagerClient) RegisterScheme(
 	_, err = c.client.RegisterScheme(ctx, &req)
 	runtime.KeepAlive(c)
 	if err != nil {
+		if status.Code(err) == codes.AlreadyExists {
+			err = schemeapi.ErrSchemeAlreadyRegistered
+		}
 		_ = server.Close()
 		return
 	}
