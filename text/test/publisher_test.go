@@ -152,7 +152,7 @@ func TestPublisher(t *testing.T) {
 				assert.Equal(t, uri, ev.URI)
 				assert.Equal(t, h, ev.Resource)
 				assert.Equal(t, term.Coordinates{Y: 0}, ev.Start)
-				assert.Equal(t, term.Coordinates{Y: 1}, ev.End)
+				assert.Equal(t, term.Coordinates{Y: 1, X: 1}, ev.End)
 				assert.Equal(t, "aa\nb", ev.Content)
 				called = true
 				return false
@@ -193,11 +193,11 @@ func TestPublisher(t *testing.T) {
 				assert.Equal(t, h, ev.Resource)
 				if called == 0 {
 					assert.Equal(t, term.Coordinates{Y: 0}, ev.Start)
-					assert.Equal(t, term.Coordinates{Y: 1}, ev.End)
+					assert.Equal(t, term.Coordinates{Y: 1, X: 1}, ev.End)
 					assert.Equal(t, "aa\nb", ev.Content)
 				} else {
 					assert.Equal(t, term.Coordinates{Y: 0}, ev.Start)
-					assert.Equal(t, term.Coordinates{Y: 1}, ev.End)
+					assert.Equal(t, term.Coordinates{Y: 1, X: 1}, ev.End)
 					assert.Equal(t, "", ev.Content)
 				}
 				called++

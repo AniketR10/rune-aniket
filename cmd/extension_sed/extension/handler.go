@@ -179,7 +179,6 @@ func (h *sedEditorHandler) HandleCommand(
 		content = h.selection
 		from = h.selectionStart
 		to = h.selectionEnd
-		to.X++ // edit/replace is right exclusive
 	} else {
 		var err error
 		from, to, content, err = h.readHandlerContent(cmd.Resource)

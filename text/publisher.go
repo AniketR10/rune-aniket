@@ -174,6 +174,8 @@ func (p *Publisher) RecordCursorChange(h Handler) (dispatchEvent func()) {
 
 		selectionFrom, _ := handler.cursor.SelectionFrom()
 		if selection0 != selection1 {
+			// select coordinates are right exclusive, but cursor is not
+			cursorAtScroll1.X++
 			p.dispatchEvent(context.Background(), textapi.Event{
 				Type:     textapi.EventTypeSelection,
 				URI:      handler.uri,
