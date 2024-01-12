@@ -41,11 +41,11 @@ var (
 			Synopsis: "command",
 		},
 	}
-	sedHandlerEvents      = []textapi.EventType{}
+	sedHandlerEvents      = []textapi.EventType{textapi.EventTypeSelection}
 	sedHandlerPermissions = []extension.Permission{
-		extension.Permission(extension.PermissionEditor),
-		extension.Permission(extension.PermissionBrowserNotifications),
-		extension.Permission(extension.PermissionExecute),
+		extension.PermissionEditor,
+		extension.PermissionBrowserNotifications,
+		extension.PermissionExecute,
 	}
 )
 
@@ -63,6 +63,11 @@ type sedEditorHandler struct {
 	resource     textapi.Handler
 	resourceName string
 
+	selectionStart term.Coordinates
+	selectionEnd   term.Coordinates
+	selectionURI   workspaceapi.URI
+	selection      string
+
 	exit uint32
 }
 
@@ -76,9 +81,9 @@ func newSedHandler(
 	var err error
 	for _, grant := range grants {
 		switch grant.Permission {
-		case extension.Permission(extension.PermissionExecute):
+		case extension.PermissionExecute:
 			ret.exec, err = workspaceextension.Executor(ctx, grant, broker)
-		case extension.Permission(extension.PermissionBrowserNotifications):
+		case extension.PermissionBrowserNotifications:
 			ret.m, err = browserextension.Notifications(ctx, grant, broker)
 		}
 		if err != nil {
@@ -116,22 +121,28 @@ func (h *sedEditorHandler) execSed(
 	return
 }
 
-func (h *sedEditorHandler) readHandlerContent(hed textapi.Handler) (int, string, error) {
+func (h *sedEditorHandler) readHandlerContent(hed textapi.Handler) (
+	from, to term.Coordinates, content string, err error,
+) {
 	view := h.ed.CellView(hed)
 	cells, err := view.RawCells()
 	if err != nil {
-		return 0, "", fmt.Errorf("CellView.RawCells: %v", err)
+		err = fmt.Errorf("get raw cells: %v", err)
+		return
 	}
-	return len(cells), cell.CellsToString(cells), nil
+	from = term.Coordinates{}
+	to = term.Coordinates{Y: len(cells)}
+	content = cell.CellsToString(cells)
+	return
 }
 
 func (h *sedEditorHandler) writeHandlerContent(
-	hed textapi.Handler, rows int, content string,
+	hed textapi.Handler, from, to term.Coordinates, content string,
 ) error {
 	editor := h.ed.CellEditor(hed)
-	_, _, _, err := editor.Edit(term.Coordinates{}, term.Coordinates{Y: rows}, content)
+	_, _, _, err := editor.Edit(from, to, content)
 	if err != nil {
-		return fmt.Errorf("CellEditor.Delete: %v", err)
+		return fmt.Errorf("delete: %v", err)
 	}
 	return nil
 }
@@ -145,33 +156,45 @@ func (h *sedEditorHandler) Complete(ctx context.Context, name string, args []str
 func (h *sedEditorHandler) HandleCommand(
 	ctx context.Context, cmd textapi.Command,
 ) (bool, error) {
+	if cmd.Name != commandSed {
+		return false, errors.New("unknown command")
+	}
+
 	var start time.Time
 	if log.IsLevelEnabled(log.TraceLevel) {
 		start = time.Now()
 		log.Tracef("HandleCommand(%#v)", cmd)
 	}
-	switch cmd.Name {
-	case commandSed:
-		if len(cmd.Args) != 1 {
-			err := errors.New("Usage: sed <command>")
-			return false, err
-		}
-		if cmd.Resource == nil {
-			return false, errors.New("cannot run sed here")
-		}
-		rows, content, err := h.readHandlerContent(cmd.Resource)
-		if err != nil {
-			return false, err
-		}
-		result, err := h.execSed(cmd.Args[0], content)
-		if err != nil {
-			return false, err
-		}
 
-		err = h.writeHandlerContent(cmd.Resource, rows, result)
+	if len(cmd.Args) != 1 {
+		err := errors.New("Usage: sed <command>")
+		return false, err
+	}
+	if cmd.Resource == nil {
+		return false, errors.New("cannot run sed here")
+	}
+	var content string
+	var from, to term.Coordinates
+	if h.selection != "" && cmd.URI == h.selectionURI {
+		content = h.selection
+		from = h.selectionStart
+		to = h.selectionEnd
+		to.X++ // edit/replace is right exclusive
+	} else {
+		var err error
+		from, to, content, err = h.readHandlerContent(cmd.Resource)
 		if err != nil {
 			return false, err
 		}
+	}
+	result, err := h.execSed(cmd.Args[0], content)
+	if err != nil {
+		return false, err
+	}
+
+	err = h.writeHandlerContent(cmd.Resource, from, to, result)
+	if err != nil {
+		return false, err
 	}
 	if log.IsLevelEnabled(log.TraceLevel) {
 		log.Tracef("HandleCommand(%#v) in %s", cmd, time.Since(start))
@@ -185,6 +208,16 @@ func (h *sedEditorHandler) Handle(
 ) (exit bool) {
 	uexit := atomic.LoadUint32(&h.exit)
 	exit = uexit != 0
+	if exit || ev.Type != textapi.EventTypeSelection {
+		return
+	}
+
+	log.Tracef("handle selection URI: %s start %+v, end %+v", ev.URI, ev.Start, ev.End)
+
+	h.selectionStart = ev.Start
+	h.selectionEnd = ev.End
+	h.selection = ev.Content
+	h.selectionURI = ev.URI
 	return
 }
 
