@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/ernestrc/blue/logging"
 	log "github.com/sirupsen/logrus"
@@ -17,6 +18,8 @@ import (
 )
 
 var _ textapi.EventHandler = (*eventStreamClient)(nil)
+
+const handleReceiveMessageTimeout = 1 * time.Second
 
 type eventStreamClient struct {
 	stream Editor_SubscribeServer
@@ -114,8 +117,14 @@ func (s eventStreamServer) receiveEvents(c *Client) {
 			continue
 		}
 
+		// set a timeout to prevent a deadlock via client stream buffer exhaustion
+		ctx, cancel := context.WithTimeout(s.parentCtx, handleReceiveMessageTimeout)
 		s.log(log.TraceLevel, "handle %v", ev.Type)
-		exit := s.handler.Handle(s.parentCtx, ev)
+		exit := s.handler.Handle(ctx, ev)
+		cancel()
+		if err := ctx.Err(); err != nil {
+			s.log(log.ErrorLevel, "could not dispatch event %v in time: %v", ev.Type, err)
+		}
 		if exit {
 			break
 		}
