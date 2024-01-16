@@ -121,7 +121,7 @@ func (s *logsHandler) newPinnedResponsive(match search.Match) {
 
 func (s *logsHandler) withBackground(comp tui.Component) tui.Component {
 	return component.WithBackground(comp,
-		term.Cell{Ch: ' ', Fg: s.textAttr.Fg, Bg: s.textAttr.Bg})
+		term.Cell{Width: 1, Ch: ' ', Fg: s.textAttr.Fg, Bg: s.textAttr.Bg})
 }
 
 func (s *logsHandler) setPinned(matches []search.Match) {

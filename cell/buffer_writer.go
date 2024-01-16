@@ -39,6 +39,8 @@ func (w *BufferWriter) SetCell(pos term.Coordinates, c term.Cell) {
 	w.cells[pos.Y][pos.X].Ch = c.Ch
 	w.cells[pos.Y][pos.X].Fg = c.Fg
 	w.cells[pos.Y][pos.X].Bg = c.Bg
+	w.cells[pos.Y][pos.X].Width = c.Width
+	w.cells[pos.Y][pos.X].Combining = c.Combining
 }
 
 // Flush satisfies term.Writer

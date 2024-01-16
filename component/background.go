@@ -103,6 +103,8 @@ func (b *Background) setCells(w term.Writer, cells [][]term.Cell) {
 				ocell := cells[y][x]
 				if ocell.Ch != 0 {
 					cell.Ch = ocell.Ch
+					cell.Combining= ocell.Combining
+					cell.Width = ocell.Width
 				}
 				if ocell.Fg != 0 {
 					cell.Fg = ocell.Fg
