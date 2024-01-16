@@ -1,6 +1,8 @@
 module unstable.build/go-tui
 
-go 1.19
+go 1.21
+
+toolchain go1.21.5
 
 require (
 	github.com/alecthomas/chroma v0.10.0
@@ -11,7 +13,7 @@ require (
 	github.com/ernestrc/go-multierror v1.1.2
 	github.com/ernestrc/golang-internal-tools v0.0.0-20220317145801-f8b5a950857b
 	github.com/ernestrc/sensible v0.3.1
-	github.com/ernestrc/tcell/v3 v3.0.7
+	github.com/ernestrc/tcell/v3 v3.1.0
 	github.com/fsnotify/fsnotify v1.5.4
 	github.com/golang/mock v1.6.0
 	github.com/hashicorp/go-hclog v0.14.1
