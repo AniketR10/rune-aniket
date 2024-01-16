@@ -57,7 +57,7 @@ func (c *FileClient) Read(p []byte) (n int, err error) {
 	req := ReadRequest{N: int64(len(p)), Fd: uint32(c.fd), Filename: c.filename}
 	resp, err := c.client.Read(ctx, &req)
 	c.log(log.TraceLevel, "file client read: req:%#v, respN:%d, err=%v",
-		req, resp.N, err)
+		req, resp.GetN(), err)
 	runtime.KeepAlive(c)
 	if err != nil {
 		return 0, err
