@@ -11,7 +11,7 @@ require (
 	github.com/ernestrc/go-multierror v1.1.2
 	github.com/ernestrc/golang-internal-tools v0.0.0-20220317145801-f8b5a950857b
 	github.com/ernestrc/sensible v0.3.1
-	github.com/ernestrc/tcell/v3 v3.0.2
+	github.com/ernestrc/tcell/v3 v3.0.3
 	github.com/fsnotify/fsnotify v1.5.4
 	github.com/golang/mock v1.6.0
 	github.com/hashicorp/go-hclog v0.14.1
@@ -38,7 +38,6 @@ require (
 require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/ernestrc/logd-go v0.0.0-20180509171507-65871c1d5504 // indirect
-	github.com/gdamore/encoding v1.0.0 // indirect
 	github.com/google/uuid v1.3.0
 	github.com/hashicorp/errwrap v1.0.0 // indirect
 	github.com/hashicorp/yamux v0.0.0-20180604194846-3520598351bb // indirect
