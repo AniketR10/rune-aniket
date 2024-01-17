@@ -122,7 +122,7 @@ func TestViIntegrationSequence(t *testing.T) {
 diff_buf_adjust(win_
 {                   
   win_T  *wp;       
-:             NORMAL`},
+              NORMAL`},
 		{"jjjj",
 			`                    
 /*                  
@@ -133,7 +133,7 @@ diff_buf_adjust(win_
 diff_buf_adjust(win_
 {                   
   win_T  *wp;       
-:             NORMAL`},
+              NORMAL`},
 		{"/NULL>jjjjjjjjkkkkkkkk",
 			`  if (wp == ▐ULL)   
   {                 
@@ -144,7 +144,7 @@ diff_buf_adjust(win_
     curtab->tp_diff_
     diff_redraw(TRUE
     }               
-:             NORMAL`},
+              NORMAL`},
 		{"Ahello",
 			`f (wp == NULL)hello▐
                     
@@ -155,7 +155,7 @@ diff_buf_adjust(win_
  curtab->tp_diff_inv
  diff_redraw(TRUE); 
  }                  
-:             INSERT`},
+              INSERT`},
 		{"<hhhhC<",
 			`f (wp == NULL▐      
                     
@@ -166,7 +166,7 @@ diff_buf_adjust(win_
  curtab->tp_diff_inv
  diff_redraw(TRUE); 
  }                  
-:             NORMAL`},
+              NORMAL`},
 		{"p",
 			`f (wp == NULL)▐ello 
                     
@@ -177,7 +177,7 @@ diff_buf_adjust(win_
  curtab->tp_diff_inv
  diff_redraw(TRUE); 
  }                  
-:             NORMAL`},
+              NORMAL`},
 		{"F(",
 			`f ▐wp == NULL)hello 
                     
@@ -188,7 +188,7 @@ diff_buf_adjust(win_
  curtab->tp_diff_inv
  diff_redraw(TRUE); 
  }                  
-:             NORMAL`},
+              NORMAL`},
 		{"f)",
 			`f (wp == NULL▐hello 
                     
@@ -199,7 +199,7 @@ diff_buf_adjust(win_
  curtab->tp_diff_inv
  diff_redraw(TRUE); 
  }                  
-:             NORMAL`},
+              NORMAL`},
 		{"F=",
 			`f (wp =▐ NULL)hello 
                     
@@ -210,7 +210,7 @@ diff_buf_adjust(win_
  curtab->tp_diff_inv
  diff_redraw(TRUE); 
  }                  
-:             NORMAL`},
+              NORMAL`},
 		{",",
 			`f (wp ▐= NULL)hello 
                     
@@ -221,7 +221,7 @@ diff_buf_adjust(win_
  curtab->tp_diff_inv
  diff_redraw(TRUE); 
  }                  
-:             NORMAL`},
+              NORMAL`},
 		{";",
 			`f (wp =▐ NULL)hello 
                     
@@ -232,7 +232,7 @@ diff_buf_adjust(win_
  curtab->tp_diff_inv
  diff_redraw(TRUE); 
  }                  
-:             NORMAL`},
+              NORMAL`},
 		{"D",
 			`f (wp ▐             
                     
@@ -243,7 +243,7 @@ diff_buf_adjust(win_
  curtab->tp_diff_inv
  diff_redraw(TRUE); 
  }                  
-:             NORMAL`},
+              NORMAL`},
 		{"sbrillo",
 			`f (wp brillo▐       
                     
@@ -254,7 +254,7 @@ diff_buf_adjust(win_
  curtab->tp_diff_inv
  diff_redraw(TRUE); 
  }                  
-:             INSERT`},
+              INSERT`},
 		{"<hhhhhhR == NULL)",
 			`f (wp == NULL)▐     
                     
@@ -265,7 +265,7 @@ diff_buf_adjust(win_
  curtab->tp_diff_inv
  diff_redraw(TRUE); 
  }                  
-:            REPLACE`},
+             REPLACE`},
 		{"<r]h",
 			`f (wp == NUL▐]      
                     
@@ -276,7 +276,7 @@ diff_buf_adjust(win_
  curtab->tp_diff_inv
  diff_redraw(TRUE); 
  }                  
-:             NORMAL`},
+              NORMAL`},
 		{"Vyp",
 			`  if (wp == NULL]   
  ▐if (wp == NULL]   
@@ -287,7 +287,7 @@ diff_buf_adjust(win_
     curtab->tp_diffb
     curtab->tp_diff_
     diff_redraw(TRUE
-:             NORMAL`},
+              NORMAL`},
 		{"/i =>",
 			`  if (wp == NULL]   
   if (wp == NULL]   
@@ -298,7 +298,7 @@ diff_buf_adjust(win_
     curtab->tp_diffb
     curtab->tp_diff_
     diff_redraw(TRUE
-:             NORMAL`},
+              NORMAL`},
 		{"dd",
 			`  if (wp == NULL]   
   if (wp == NULL]   
@@ -309,7 +309,7 @@ diff_buf_adjust(win_
     curtab->tp_diff_
     diff_redraw(TRUE
     }               
-:             NORMAL`},
+              NORMAL`},
 		{"h",
 			`  if (wp == NULL]   
   if (wp == NULL]   
@@ -320,7 +320,7 @@ diff_buf_adjust(win_
     curtab->tp_diff_
     diff_redraw(TRUE
     }               
-:             NORMAL`},
+              NORMAL`},
 		{"h",
 			`  if (wp == NULL]   
   if (wp == NULL]   
@@ -331,7 +331,7 @@ diff_buf_adjust(win_
     curtab->tp_diff_
     diff_redraw(TRUE
     }               
-:             NORMAL`},
+              NORMAL`},
 		{"df=",
 			`  if (wp == NULL]   
   if (wp == NULL]   
@@ -342,7 +342,7 @@ diff_buf_adjust(win_
     curtab->tp_diff_
     diff_redraw(TRUE
     }               
-:             NORMAL`},
+              NORMAL`},
 		{"/i>kkFDcndi<ldw",
 			`  if (wp == NULL]   
   if (wp == NULL]   
@@ -353,7 +353,7 @@ di▐urtab->tp_diff_in
   }                 
   }                 
   else              
-:             NORMAL`},
+              NORMAL`},
 		{"gg",
 			`▐                   
 /*                  
@@ -364,7 +364,7 @@ di▐urtab->tp_diff_in
 diff_buf_adjust(win_
 {                   
   win_T  *wp;       
-:             NORMAL`},
+              NORMAL`},
 		{"jjyyp",
 			`                    
 /*                  
@@ -375,7 +375,7 @@ diff_buf_adjust(win_
   void              
 diff_buf_adjust(win_
 {                   
-:             NORMAL`},
+              NORMAL`},
 		{"lllcc *",
 			`                    
 /*                  
@@ -386,7 +386,7 @@ diff_buf_adjust(win_
   void              
 diff_buf_adjust(win_
 {                   
-:             INSERT`},
+              INSERT`},
 	}
 
 	vi := setupViIntegration(t, snippet, 2)
@@ -405,7 +405,7 @@ func TestVidfd(t *testing.T) {
 diff_buf_adjust(win_
 {                   
   win_T  *wp;       
-:             NORMAL`},
+              NORMAL`},
 		{"jjcfc",
 			`                    
 /*                  
@@ -416,7 +416,7 @@ diff_buf_adjust(win_
 diff_buf_adjust(win_
 {                   
   win_T  *wp;       
-:             INSERT`},
+              INSERT`},
 	}
 
 	newVi := func(t *testing.T) tui.Handler {
@@ -437,7 +437,7 @@ func TestViDeleteAWord(t *testing.T) {
 diff_buf_adjust(win_
 {                   
   win_T  *wp;       
-:             NORMAL`},
+              NORMAL`},
 		{"jjjjjwcw",
 			`                    
 /*                  
@@ -448,7 +448,7 @@ diff_buf_adjust(win_
 diff_buf_adjust(win_
 {                   
   win_T  *wp;       
-:             INSERT`},
+              INSERT`},
 		{"jjjjjwce",
 			`                    
 /*                  
@@ -459,7 +459,7 @@ diff_buf_adjust(win_
 diff_buf_adjust(win_
 {                   
   win_T  *wp;       
-:             INSERT`},
+              INSERT`},
 		{"jjjjjwecb",
 			`                    
 /*                  
@@ -470,7 +470,7 @@ diff_buf_adjust(win_
 diff_buf_adjust(win_
 {                   
   win_T  *wp;       
-:             INSERT`},
+              INSERT`},
 		{"jjjwwcw",
 			`                    
 /*                  
@@ -481,7 +481,7 @@ diff_buf_adjust(win_
 diff_buf_adjust(win_
 {                   
   win_T  *wp;       
-:             INSERT`},
+              INSERT`},
 		{"jjjwwce",
 			`                    
 /*                  
@@ -492,7 +492,7 @@ diff_buf_adjust(win_
 diff_buf_adjust(win_
 {                   
   win_T  *wp;       
-:             INSERT`},
+              INSERT`},
 	}
 
 	newVi := func(t *testing.T) tui.Handler {
@@ -513,7 +513,7 @@ func TestViCursorIsolated(t *testing.T) {
 diff_buf_adjust(win_
 {                   
   win_T  *wp;       
-:             NORMAL`},
+              NORMAL`},
 		// insert block one rune (for now until repeater captures all insert)
 		{"`jjjIh<",
 			`h                   
@@ -525,7 +525,7 @@ h▐* diff buffers.
 diff_buf_adjust(win_
 {                   
   win_T  *wp;       
-:             NORMAL`},
+              NORMAL`},
 		// TODO check yank paste after last line
 		// the only thing from integration tests is that there's no
 		// unix View that trims last EOL, this must in turn translatre in
@@ -540,7 +540,7 @@ diff_buf_adjust(win_
 		  diff_buf_add(win->
 		}
 		▐
-		:             NORMAL`}, */
+		              NORMAL`}, */
 	}
 
 	newVi := func(t *testing.T) tui.Handler {

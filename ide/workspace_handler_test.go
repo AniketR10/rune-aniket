@@ -215,7 +215,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 │                  │
 │                  │
 │                  │
-│:           NORMAL│
+│            NORMAL│
 └──────────────────┘`},
 		{":edit /tmp/12345aZZ>ihello<yyp:reloadWorkspace>", // un-saved
 			`┌──────────────────┐
@@ -226,7 +226,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 │                  │
 │                  │
 │                  │
-│:           NORMAL│
+│            NORMAL│
 └──────────────────┘`},
 		{":edit /tmp/12345aZZ>ihello<yyp:w>:reloadWorkspace>", // saved
 			`┌──────────────────┐
@@ -237,7 +237,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 │                  │
 │                  │
 │                  │
-│:           NORMAL│
+│            NORMAL│
 └──────────────────┘`},
 		{":edit memory\\:///12345aZZ>ihello<yyp:w>:reloadWorkspace>", // full uri
 			`┌──────────────────┐
@@ -248,7 +248,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 │                  │
 │                  │
 │                  │
-│:           NORMAL│
+│            NORMAL│
 └──────────────────┘`},
 		{":cwo>:aw memory\\:///tmp2>:edit 12345aZZ>:w>:cwo>:aw  memory\\:///tmp2>", // prompt
 			`┌──────────────────┐
@@ -272,7 +272,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 │                  │
 │                  │
 │                  │
-│:           NORMAL│
+│            NORMAL│
 └──────────────────┘`},
 		{":cwo>:aw memory\\:///tmp2>edit 12345aZZ>:w>:cwo>:aw  memory\\:///tmp2>n:cwo>:aw  memory\\:///tmp2>", // prompt no: resets cache
 			`┌──────────────────┐
@@ -413,7 +413,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 │▐                 │
 │                  │
 │                  │
-│:           NORMAL│
+│            NORMAL│
 ├──────────────────┤
 │1  4              │
 └──────────────────┘`},
@@ -438,7 +438,7 @@ func TestWorkspaceManagerClosePromptIntegration(t *testing.T) {
 │                  │
 │                  │
 │                  │
-│:           NORMAL│
+│            NORMAL│
 └──────────────────┘`},
 			{":quit>",
 				`┌──────────────────┐
@@ -477,7 +477,7 @@ func TestWorkspaceManagerClosePromptIntegration(t *testing.T) {
 │                  │
 │                  │
 │                  │
-│:           NORMAL│
+│            NORMAL│
 └──────────────────┘`},
 			{":quit>",
 				`┌──────────────────┐
@@ -521,7 +521,7 @@ func TestWorkspaceManagerClosePromptIntegration(t *testing.T) {
 │                  │
 │                  │
 │                  │
-│:           NORMAL│
+│            NORMAL│
 └──────────────────┘`},
 			}
 
@@ -570,7 +570,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 │                  │
 │                  │
 │                  │
-│:           NORMAL│
+│            NORMAL│
 └──────────────────┘`},
 				}
 				testutil.TestHandlerSequence(t, m, 20, 10, cases)
@@ -602,7 +602,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 │                  │
 │                  │
 │                  │
-│:           NORMAL│
+│            NORMAL│
 └──────────────────┘`},
 				}
 				testutil.TestHandlerSequence(t, m, 20, 10, cases)
@@ -624,7 +624,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 │                  │
 │                  │
 │                  │
-│:           NORMAL│
+│            NORMAL│
 └──────────────────┘`},
 				}
 				testutil.TestHandlerSequence(t, m, 20, 10, cases)
@@ -656,7 +656,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 │                  │
 │                  │
 │                  │
-│:           NORMAL│
+│            NORMAL│
 └──────────────────┘`},
 				}
 				testutil.TestHandlerSequence(t, m1, 20, 10, cases)
@@ -675,7 +675,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 │                  │
 │                  │
 │                  │
-│:           NORMAL│
+│            NORMAL│
 └──────────────────┘`},
 					{"i\na\nb\nc\nd\ne\nf<:write>",
 						`┌──────────────────┐
@@ -686,7 +686,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 │d                 │
 │e                 │
 │▐                 │
-│:           NORMAL│
+│            NORMAL│
 └──────────────────┘`},
 				}
 				testutil.TestHandlerSequence(t, m2, 20, 10, cases)
@@ -705,7 +705,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 │d                 │
 │e                 │
 │▐                 │
-│:           NORMAL│
+│            NORMAL│
 └──────────────────┘`},
 				}
 				testutil.TestHandlerSequence(t, m3, 20, 10, cases)
@@ -727,7 +727,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 │                  │
 │                  │
 │                  │
-│:           NORMAL│
+│            NORMAL│
 └──────────────────┘`},
 					{":reloadWorkspace>",
 						`┌──────────────────┐
@@ -738,7 +738,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 │                  │
 │                  │
 │                  │
-│:           NORMAL│
+│            NORMAL│
 └──────────────────┘`},
 					{"i\na\nb\nc\nd\ne\nf<:write>",
 						`┌──────────────────┐
@@ -749,7 +749,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 │d                 │
 │e                 │
 │▐                 │
-│:           NORMAL│
+│            NORMAL│
 └──────────────────┘`},
 					{":reloadWorkspace>",
 						`┌──────────────────┐
@@ -760,7 +760,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 │d                 │
 │e                 │
 │▐                 │
-│:           NORMAL│
+│            NORMAL│
 └──────────────────┘`},
 				}
 				testutil.TestHandlerSequence(t, m, 20, 10, cases)

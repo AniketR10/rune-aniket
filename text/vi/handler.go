@@ -184,7 +184,6 @@ func (vi *viHandlerImpl) setMode(mode viMode) {
 	default:
 		panic(fmt.Sprintf("unknown mode: %v", mode))
 	}
-	vi.less.SetMessageAlt(":")
 	vi.less.SetMessage(text)
 	vi.currMode = mode
 }
