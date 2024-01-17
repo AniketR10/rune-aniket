@@ -161,15 +161,6 @@ func PublishEvent(ev Event) bool {
 	return publishEvent.Load().(func(termbox.Event) bool)(tev)
 }
 
-// HasPendingEvent returns true if PollEvent would return an event
-// without blocking.  If the screen is stopped and PollEvent would
-// return nil, then the return value from this function is unspecified.
-// The purpose of this function is to allow multiple events to be collected
-// at once, to minimize screen redraws.
-func HasPendingEvent() bool {
-	return termbox.HasPendingEvent()
-}
-
 // Poll gives access to the underlying tcell.Event channel.
 func Poll() <-chan tcell.Event {
 	return termbox.Screen().Poll()
