@@ -50,9 +50,9 @@ func writeMemProfile() {
 func handleLessEvent(ev handler.LessEvent) {
 	switch ev.Type {
 	case handler.EOF:
-		less.Notify("EOF")
+		less.SetMessage("EOF")
 	case handler.Search:
-		less.Notify("search pattern: %s..", ev.Data)
+		less.SetMessage("search pattern: %s..", ev.Data)
 	}
 }
 

@@ -215,9 +215,9 @@ func (l *Less) setMessageAlt(msg string) bool {
 	return shouldResize
 }
 
-// Notify sets a message to be displayed on the bottom right corner.
-func (l *Less) Notify(text string, args ...interface{}) {
-	if l.setMessage(fmt.Sprintf(text, args...)) {
+// SetMessage sets a message to be displayed on the bottom right corner.
+func (l *Less) SetMessage(text string, args ...interface{}) {
+	if (len(args) == 0 && l.setMessage(text)) || l.setMessage(fmt.Sprintf(text, args...)) {
 		l.resize()
 	} else {
 		cmdBarHeight := l.cmdBarHeight()
@@ -226,9 +226,9 @@ func (l *Less) Notify(text string, args ...interface{}) {
 	}
 }
 
-// NotifyAlt sets a message to be displayed on the bottom left corner.
-func (l *Less) NotifyAlt(text string, args ...interface{}) {
-	if l.setMessageAlt(fmt.Sprintf(text, args...)) {
+// SetMessageAlt sets a message to be displayed on the bottom left corner.
+func (l *Less) SetMessageAlt(text string, args ...interface{}) {
+	if (len(args) == 0 && l.setMessageAlt(text)) || l.setMessageAlt(fmt.Sprintf(text, args...)) {
 		l.resize()
 	} else {
 		cmdBarHeight := l.cmdBarHeight()
