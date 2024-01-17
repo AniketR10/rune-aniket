@@ -144,7 +144,7 @@ diff_buf_adjust(win_
     curtab->tp_diff_
     diff_redraw(TRUE
     }               
-              NORMAL`},
+    searching 'NULL'`},
 		{"Ahello",
 			`f (wp == NULL)hello▐
                     
@@ -298,7 +298,7 @@ diff_buf_adjust(win_
     curtab->tp_diffb
     curtab->tp_diff_
     diff_redraw(TRUE
-              NORMAL`},
+     searching 'i ='`},
 		{"dd",
 			`  if (wp == NULL]   
   if (wp == NULL]   
