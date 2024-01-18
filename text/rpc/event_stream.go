@@ -121,10 +121,16 @@ func (s eventStreamServer) receiveEvents(c *Client) {
 		ctx, cancel := context.WithTimeout(s.parentCtx, handleReceiveMessageTimeout)
 		s.log(log.TraceLevel, "handle %v", ev.Type)
 		exit := s.handler.Handle(ctx, ev)
-		cancel()
 		if err := ctx.Err(); err != nil {
 			s.log(log.ErrorLevel, "could not dispatch event %v in time: %v", ev.Type, err)
+			select {
+			case <-s.parentCtx.Done():
+				cancel()
+				return
+			default:
+			}
 		}
+		cancel()
 		if exit {
 			break
 		}
