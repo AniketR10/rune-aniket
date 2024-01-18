@@ -219,8 +219,10 @@ func (h *ResourceTracker) handleResourceCursor(ev textapi.Event) bool {
 	if res.cursor == nil {
 		res.cursor = text.NewCursor(&res.Scroll)
 	}
-	_, ok = res.cursor.MoveToScroll(ev.From)
-	return ok
+	_, _ = res.cursor.MoveToScroll(ev.From)
+	// do not use the return of MoveToScroll, as SetOffset might have
+	// changed the resource's cursor position as well.
+	return true
 }
 
 func (h *ResourceTracker) log(level log.Level, msg string, args ...any) {
