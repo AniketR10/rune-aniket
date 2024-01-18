@@ -526,6 +526,17 @@ diff_buf_adjust(win_
 {                   
   win_T  *wp;       
               NORMAL`},
+		{"/C>/>",
+			`                    
+/*                  
+ * ▐heck if the curr
+ * diff buffers.    
+ */                 
+  void              
+diff_buf_adjust(win_
+{                   
+  win_T  *wp;       
+              NORMAL`},
 		// TODO check yank paste after last line
 		// the only thing from integration tests is that there's no
 		// unix View that trims last EOL, this must in turn translatre in

@@ -259,7 +259,11 @@ func (vi *viHandlerImpl) handleSearch(ev term.Event) (bool, bool) {
 		text := vi.less.SearchText()
 		vi.less.SetNormalMode()
 		vi.searchMode = moveToNext
-		vi.less.SetMessage("searching '%s'", text)
+		if text == "" {
+			vi.setMode(normalMode) // force set message
+		} else {
+			vi.less.SetMessage("searching '%s'", text)
+		}
 		vi.search(text)
 		return false, true
 	default:
