@@ -35,6 +35,7 @@ type Tabs struct {
 	backgroundAttr term.Attributes
 	frameAttr      term.Attributes
 	frameBorders   FrameCharSet
+	dirty          bool
 }
 
 func newListFrame(
@@ -76,6 +77,7 @@ func (t *Tabs) Init() {
 	t.fileListFrame = newListFrame(
 		defaultScrollAttr, defaultFrameAttr, t.fileListBuf,
 		t.border, t.frameBorders)
+	t.dirty = true
 }
 
 // SetAttr sets the attributes of the text in focus, text not in focus, the tabs
@@ -88,6 +90,7 @@ func (t *Tabs) SetAttr(focusTab, tab, frame, background term.Attributes) {
 	t.fileListFrame = newListFrame(t.backgroundAttr,
 		t.frameAttr, t.fileListBuf, t.border, t.frameBorders)
 	t.fileListFrame.Resize(t.width, t.height)
+	t.dirty = true
 }
 
 // SetBorder defines whether this Tabs draws a border around or not.
@@ -97,6 +100,7 @@ func (t *Tabs) SetBorder(border bool) {
 	t.fileListFrame = newListFrame(
 		t.backgroundAttr, t.frameAttr, t.fileListBuf, t.border, t.frameBorders)
 	t.fileListFrame.Resize(t.width, t.height)
+	t.dirty = true
 }
 
 // SetFrameCharSet defines the characters used to draw a frame border.
@@ -106,16 +110,115 @@ func (t *Tabs) SetFrameCharSet(fb FrameCharSet) {
 	t.fileListFrame = newListFrame(
 		t.backgroundAttr, t.frameAttr, t.fileListBuf, t.border, t.frameBorders)
 	t.fileListFrame.Resize(t.width, t.height)
+	t.dirty = true
 }
 
 // Resize : tui.Component
 func (t *Tabs) Resize(width, height int) {
 	t.width, t.height = width, height
+	t.dirty = true
 	t.fileListFrame.Resize(width, height)
 }
 
 // Draw : tui.Component
 func (t *Tabs) Draw(w term.Writer) {
+	if t.dirty {
+		t.prepareFileList()
+		t.dirty = false
+	}
+
+	t.fileListFrame.Draw(w)
+}
+
+// ResetFocus resets the focus of all the tabs to false.
+func (t *Tabs) ResetFocus() {
+	for _, tab := range t.tabs {
+		tab.focus = false
+	}
+	t.dirty = true
+}
+
+// SetFocus sets the focus to tab with ID. If tab with ID does not exist,
+// this method will panic.
+func (t *Tabs) SetFocus(idx int) {
+	t.tabs[idx].focus = true
+	t.dirty = true
+}
+
+// SetTabAttr sets the attributes of tab with ID. If tab with ID does not exist,
+// this method will panic.
+func (t *Tabs) SetTabAttr(idx int, attr term.Attributes) {
+	t.tabs[idx].attr = attr
+	t.dirty = true
+}
+
+// SetTabName sets the name of tab with ID. If tab with ID does not exist,
+// this method will panic.
+func (t *Tabs) SetTabName(idx int, name string) {
+	t.tabs[idx].name = name
+	t.dirty = true
+}
+
+// Add adds a tab with ID.
+func (t *Tabs) Add(name string) int {
+	t.dirty = true
+	if t.tabs == nil {
+		t.tabs = make([]*tab, 1)
+		t.tabs[0] = &tab{name: name, focus: true}
+		return 0
+	}
+	idx := len(t.tabs)
+	t.tabs = append(t.tabs, &tab{name: name})
+	return idx
+}
+
+// Remove removes the tab with ID.
+func (t *Tabs) Remove(idx int) bool {
+	t.tabs = append(t.tabs[:idx], t.tabs[idx+1:]...)
+	t.dirty = true
+	return true
+}
+
+// RemoveAll removes all tabs.
+func (t *Tabs) RemoveAll() bool {
+	ret := t.Size() != 0
+	t.tabs = t.tabs[:0]
+	t.dirty = true
+	return ret
+}
+
+// TabAt returns the ID of the tab at pos, or panics if pos is
+// out of bounds.
+func (t *Tabs) TabAt(pos term.Coordinates) (int, bool) {
+	x := 0
+	idx := -1
+
+	for i, t := range t.tabs[t.offsetIdx:] {
+		x += len(defaultSeparator)
+		x += len(t.name)
+		if x >= pos.X {
+			idx = i
+			break
+		}
+	}
+
+	return t.offsetIdx + idx, idx != -1
+}
+
+// Tab returns the name of the tab at idx.
+func (t *Tabs) Tab(idx int) (string, bool) {
+	if idx >= len(t.tabs) {
+		return "", false
+	}
+	return t.tabs[idx].name, true
+}
+
+// Size returns the number of tabs.
+func (t *Tabs) Size() int {
+	return len(t.tabs)
+}
+
+func (t *Tabs) prepareFileList() {
 	t.fileListBuf.Reset()
 
 	if t.width == 0 || t.height == 0 {
@@ -172,87 +275,4 @@ func (t *Tabs) Draw(w term.Writer) {
 		t.fileListBuf.TruncateRowFrom(from)
 		t.fileListBuf.InsertStringWithAttr(from, "..", t.nonFocusAttr)
 	}
-
-	t.fileListFrame.Draw(w)
-}
-
-// ResetFocus resets the focus of all the tabs to false.
-func (t *Tabs) ResetFocus() {
-	for _, tab := range t.tabs {
-		tab.focus = false
-	}
-}
-
-// SetFocus sets the focus to tab with ID. If tab with ID does not exist,
-// this method will panic.
-func (t *Tabs) SetFocus(idx int) {
-	t.tabs[idx].focus = true
-}
-
-// SetTabAttr sets the attributes of tab with ID. If tab with ID does not exist,
-// this method will panic.
-func (t *Tabs) SetTabAttr(idx int, attr term.Attributes) {
-	t.tabs[idx].attr = attr
-}
-
-// SetTabName sets the name of tab with ID. If tab with ID does not exist,
-// this method will panic.
-func (t *Tabs) SetTabName(idx int, name string) {
-	t.tabs[idx].name = name
-}
-
-// Add adds a tab with ID.
-func (t *Tabs) Add(name string) int {
-	if t.tabs == nil {
-		t.tabs = make([]*tab, 1)
-		t.tabs[0] = &tab{name: name, focus: true}
-		return 0
-	}
-	idx := len(t.tabs)
-	t.tabs = append(t.tabs, &tab{name: name})
-	return idx
-}
-
-// Remove removes the tab with ID.
-func (t *Tabs) Remove(idx int) bool {
-	t.tabs = append(t.tabs[:idx], t.tabs[idx+1:]...)
-	return true
-}
-
-// RemoveAll removes all tabs.
-func (t *Tabs) RemoveAll() bool {
-	ret := t.Size() != 0
-	t.tabs = t.tabs[:0]
-	return ret
-}
-
-// TabAt returns the ID of the tab at pos, or panics if pos is
-// out of bounds.
-func (t *Tabs) TabAt(pos term.Coordinates) (int, bool) {
-	x := 0
-	idx := -1
-
-	for i, t := range t.tabs[t.offsetIdx:] {
-		x += len(defaultSeparator)
-		x += len(t.name)
-		if x >= pos.X {
-			idx = i
-			break
-		}
-	}
-
-	return t.offsetIdx + idx, idx != -1
-}
-
-// Tab returns the name of the tab at idx.
-func (t *Tabs) Tab(idx int) (string, bool) {
-	if idx >= len(t.tabs) {
-		return "", false
-	}
-	return t.tabs[idx].name, true
-}
-
-// Size returns the number of tabs.
-func (t *Tabs) Size() int {
-	return len(t.tabs)
 }
