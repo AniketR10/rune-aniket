@@ -446,6 +446,7 @@ func (c *rawCells) ReadFrom(r io.Reader) (int64, error) {
 			switch r[0] {
 			case '\n':
 				c.cells = append(c.cells, makeNewRow(0, defColumnCap))
+				rowY++
 			case '\t':
 				for i := 1; r[0] == '\t' && i < c.tabspaces; i++ {
 					c.cells[rowY] = append(c.cells[rowY], term.Cell{})
@@ -469,6 +470,5 @@ func (c *rawCells) ReadFrom(r io.Reader) (int64, error) {
 			}
 			return n, err
 		}
-		rowY++
 	}
 }

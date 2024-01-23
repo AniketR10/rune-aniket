@@ -821,6 +821,22 @@ Love isn't love 'til you give it away.
 	assert.Equal(t, longStr, b.String())
 }
 
+func TestRawCellsFillBufferNoLine(t *testing.T) {
+	const N = 4096 * 256
+	var builder strings.Builder
+	for i := 0; i < N; i++ {
+		builder.WriteByte(byte(i))
+	}
+	str := builder.String()
+
+	var cells rawCells
+	cells.init(DefaultTabspaces)
+
+	n, err := cells.ReadFrom(strings.NewReader(str))
+	require.NoError(t, err)
+	assert.Equal(t, int64(N), n)
+}
+
 func newBenchmarkRawCells(fortunes int) (*rawCells, string) {
 	cells := new(rawCells)
 	cells.init(DefaultTabspaces)
