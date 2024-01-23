@@ -12,7 +12,7 @@ import (
 	"unstable.build/go-tui/text"
 )
 
-type testEditor struct {
+type TestEditor struct {
 	uri  workspaceapi.URI
 	buf  *cell.Buffer
 	subs map[textapi.EventType][]text.EventHandler
@@ -22,22 +22,22 @@ type testEditor struct {
 // NopEditor returns a editor suitable for testing.
 // It doesn't return real tui.Handler upon Edit but mimics
 // editor.Simple's subscription logic.
-func NopEditor() text.Editor {
-	return &testEditor{}
+func NopEditor() *TestEditor {
+	return &TestEditor{}
 }
 
 // NopEditorWithCallback returns a text.Editor that calls cb when
 // SubscribeEvents is called.
-func NopEditorWithCallback(cb func()) text.Editor {
-	return &testEditor{cb: cb}
+func NopEditorWithCallback(cb func()) *TestEditor {
+	return &TestEditor{cb: cb}
 }
 
-func (e *testEditor) Handle(ctx context.Context, ev textapi.Event) bool {
+func (e *TestEditor) Handle(ctx context.Context, ev textapi.Event) bool {
 	e.dispatchEvent(ctx, ev)
 	return false
 }
 
-func (e *testEditor) dispatchEvent(ctx context.Context, ev textapi.Event) {
+func (e *TestEditor) dispatchEvent(ctx context.Context, ev textapi.Event) {
 	if len(e.subs) == 0 {
 		return
 	}
@@ -59,7 +59,7 @@ func (e *testEditor) dispatchEvent(ctx context.Context, ev textapi.Event) {
 type TestEditorHandler struct {
 	browsertest.TestHandler
 	LocationList  text.LocationList
-	parent        *testEditor
+	parent        *TestEditor
 	uri           workspaceapi.URI
 	Width, Height int
 }
@@ -74,7 +74,7 @@ func (e *TestEditorHandler) SetWrap(wrap bool) {
 func (t *TestEditorHandler) ShowCommandBar(show bool) {
 }
 
-func (e *testEditor) Edit(resource workspaceapi.URI, buf *cell.Buffer) (text.Handler, error) {
+func (e *TestEditor) Edit(resource workspaceapi.URI, buf *cell.Buffer) (text.Handler, error) {
 	e.uri = resource
 	e.buf = buf
 
@@ -95,7 +95,7 @@ func (e *testEditor) Edit(resource workspaceapi.URI, buf *cell.Buffer) (text.Han
 	return h, nil
 }
 
-func (e *testEditor) SetLocationList(
+func (e *TestEditor) SetLocationList(
 	h text.Handler, pri textapi.LocationPriority, id string, loc text.LocationList,
 ) error {
 	h.(*TestEditorHandler).LocationList = loc
@@ -123,46 +123,46 @@ func (e *TestEditorHandler) Resize(width, height int) {
 	e.TestHandler.Resize(width, height)
 }
 
-func (e *testEditor) MoveToNextLocation(h text.Handler, ID string) error {
+func (e *TestEditor) MoveToNextLocation(h text.Handler, ID string) error {
 	return nil
 }
 
-func (e *testEditor) MoveToPrevLocation(h text.Handler, ID string) error {
+func (e *TestEditor) MoveToPrevLocation(h text.Handler, ID string) error {
 	return nil
 }
 
-func (e *testEditor) SetCursor(h text.Handler, pos term.Coordinates) error {
+func (e *TestEditor) SetCursor(h text.Handler, pos term.Coordinates) error {
 	h.(*TestEditorHandler).CursorPos = pos
 	return nil
 }
 
-func (e *testEditor) Cursor(h text.Handler) (term.Coordinates, error) {
+func (e *TestEditor) Cursor(h text.Handler) (term.Coordinates, error) {
 	return h.(*TestEditorHandler).CursorPos, nil
 }
 
-func (e *testEditor) CellEditor(h text.Handler) text.CellEditor {
+func (e *TestEditor) CellEditor(h text.Handler) text.CellEditor {
 	return text.NewCellEditor(e.buf.Editor())
 }
 
-func (e *testEditor) CellView(h text.Handler) text.CellView {
+func (e *TestEditor) CellView(h text.Handler) text.CellView {
 	return text.NewCellView(e.buf.View())
 }
 
-func (e *testEditor) SubscribeCommand(cmd textapi.CommandManual, h text.CommandHandler) error {
+func (e *TestEditor) SubscribeCommand(cmd textapi.CommandManual, h text.CommandHandler) error {
 	return nil
 }
 
-func (e *testEditor) UnsubscribeCommand(cmd string) error {
+func (e *TestEditor) UnsubscribeCommand(cmd string) error {
 	return nil
 }
 
-func (e *testEditor) SetDefaultAttributes(h text.Handler, attr term.Attributes) error {
+func (e *TestEditor) SetDefaultAttributes(h text.Handler, attr term.Attributes) error {
 	h.(*TestEditorHandler).Attributes.Fg = attr.Fg
 	h.(*TestEditorHandler).Attributes.Bg = attr.Bg
 	return nil
 }
 
-func (e *testEditor) UnsubscribeEvents(
+func (e *TestEditor) UnsubscribeEvents(
 	sub text.EventHandler,
 ) (ret bool, err error) {
 	final := make(map[textapi.EventType][]text.EventHandler)
@@ -180,7 +180,7 @@ func (e *testEditor) UnsubscribeEvents(
 	return
 }
 
-func (e *testEditor) SubscribeEvents(
+func (e *TestEditor) SubscribeEvents(
 	evs []textapi.EventType, sub text.EventHandler,
 ) error {
 	for _, ev := range evs {
@@ -199,6 +199,10 @@ func (e *testEditor) SubscribeEvents(
 	return nil
 }
 
-func (e *testEditor) Editor(file workspaceapi.URI) (text.Handler, error) {
+func (e *TestEditor) Subscribers() map[textapi.EventType][]text.EventHandler {
+	return e.subs
+}
+
+func (e *TestEditor) Editor(file workspaceapi.URI) (text.Handler, error) {
 	return nil, errors.New("nope")
 }

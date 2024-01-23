@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/ernestrc/blue/iterator"
 	gomock "github.com/golang/mock/gomock"
@@ -264,6 +265,65 @@ func TestClientServerIntegration(t *testing.T) {
 		wg.Wait()
 
 		// close
+		s.editor.Lock()
+		defer s.editor.Unlock()
+
+		assert.NoError(t, s.Close())
+	})
+
+	t.Run("event handler drops messages if event handler server is not processing events", func(t *testing.T) {
+		var wg sync.WaitGroup
+		b := proto.NewUnixGRPCBroker("", "", "")
+		ed := texttest.NopEditorWithCallback(wg.Done)
+		s := NewServer(b, ed, new(sync.Mutex))
+
+		client, closeFn := setupIntTest(t, b, s)
+		defer closeFn()
+
+		var mu sync.Mutex
+		evs := make(map[textapi.EventType]textapi.Event)
+
+		wg.Add(1)
+		err := client.SubscribeEvents([]textapi.EventType{
+			textapi.EventTypeOpen,
+			textapi.EventTypeClose,
+			textapi.EventTypeFlush,
+			textapi.EventTypeEdit,
+			textapi.EventTypeScroll,
+			textapi.EventTypeFocus,
+			textapi.EventTypeUnfocus,
+			textapi.EventTypeCursor,
+			textapi.EventTypeSelection,
+		}, text.FuncEventHandler(func(ctx context.Context, ev textapi.Event) bool {
+			mu.Lock()
+			defer mu.Unlock()
+			evs[ev.Type] = ev
+			return false
+		}))
+		require.NoError(t, err)
+
+		// wait for subscribe callback, which also uses wg
+		wg.Wait()
+
+		subs := ed.Subscribers()
+		require.Len(t, subs, 9)
+		require.Len(t, subs[textapi.EventTypeOpen], 1)
+		handler := subs[textapi.EventTypeOpen][0]
+
+		// proceed to trigger, should not deadlock
+		mu.Lock() // try to deadlock
+		for i := 0; i < 10000; i++ {
+			tpe := textapi.EventType(i % 9)
+			handler.Handle(context.Background(), textapi.Event{URI: uri, Type: tpe})
+		}
+
+		mu.Unlock()
+		// there's no deterministic way to know how many msgs will
+		// be buffered by the underlying transport, so this is the only way
+		time.Sleep(5 * time.Second)
+		mu.Lock()
+
+		require.Len(t, evs, 9)
 		s.editor.Lock()
 		defer s.editor.Unlock()
 

@@ -24,7 +24,9 @@ var (
 type Server struct {
 	UnimplementedEditorServer
 
-	broker proto.MuxBroker
+	broker    proto.MuxBroker
+	ctx       context.Context
+	cancelCtx func()
 
 	editor struct {
 		text.Editor
@@ -52,6 +54,7 @@ func (s *Server) Init(
 	s.broker = broker
 	s.editor.Editor = editor
 	s.editor.Locker = lock
+	s.ctx, s.cancelCtx = context.WithCancel(context.Background())
 }
 
 func (s *Server) log(level log.Level, msg string, args ...interface{}) {
@@ -144,7 +147,8 @@ func (s *Server) Subscribe(stream Editor_SubscribeServer) error {
 		evTypes = append(evTypes, evType)
 	}
 
-	handler := newEventStreamClient(stream, s.editor)
+	handler := newEventStreamClient(s.ctx, stream, s.editor)
+	defer handler.Close()
 
 	s.editor.Lock()
 	err = s.editor.SubscribeEvents(evTypes, handler)
@@ -401,6 +405,7 @@ func (s *Server) RawCells(ctx context.Context, in *RawCellsRequest) (
 
 // Close closes all resources associated with this server.
 func (s *Server) Close() (err error) {
+	s.cancelCtx()
 	// ensure that we unsubscribe all subscribers created
 	// by this server. Some of these might already been unsubscribed,
 	// so this completes the cleanup for the ones that haven't.

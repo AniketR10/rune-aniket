@@ -7,7 +7,6 @@ import (
 	"io"
 	"runtime"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/ernestrc/blue/logging"
@@ -19,43 +18,74 @@ import (
 
 var _ textapi.EventHandler = (*eventStreamClient)(nil)
 
-const handleReceiveMessageTimeout = 1 * time.Second
+const (
+	handleReceiveMessageTimeout = 1 * time.Second
+	eventChanBuffer             = 100
+)
 
 type eventStreamClient struct {
-	stream Editor_SubscribeServer
-	quit   atomic.Bool
+	ctx       context.Context
+	cancelCtx func()
+	stream    Editor_SubscribeServer
+	ch        chan *EditorEvent
 }
 
 func newEventStreamClient(
-	stream Editor_SubscribeServer, locker sync.Locker,
+	ctx context.Context, stream Editor_SubscribeServer, locker sync.Locker,
 ) *eventStreamClient {
-	ret := &eventStreamClient{stream: stream}
+	ctx, cancel := context.WithCancel(ctx)
+	ch := make(chan *EditorEvent, eventChanBuffer)
+	ret := &eventStreamClient{
+		stream:    stream,
+		ctx:       ctx,
+		cancelCtx: cancel,
+		ch:        ch,
+	}
+	go ret.sendMessages(ctx)
 	return ret
+}
+
+func (e *eventStreamClient) sendMessages(ctx context.Context) {
+	for {
+		select {
+		case ev := <-e.ch:
+			err := e.stream.Send(ev)
+			if err != nil {
+				e.log(log.ErrorLevel, "stop sending messages: stream send: %v", err)
+				return
+			}
+		case <-ctx.Done():
+			e.log(log.TraceLevel, "stop sending messages: %v", ctx.Err())
+			return
+		}
+	}
 }
 
 func (e *eventStreamClient) Handle(ctx context.Context, ev textapi.Event) bool {
 	e.log(log.TraceLevel, "handle %v", ev.Type)
-	if e.quit.Load() {
-		e.log(log.TraceLevel, "unsubscribing")
-		return true
-	}
 	protoEv := toProto(ev)
 
 	// do not unlock I/O mutex here, as it might introduce
 	// race conditions and violate invariants that are quite hard
 	// to debug.
 
-	err := e.stream.Send(&protoEv)
-	if err != nil {
-		e.log(log.ErrorLevel, "stream send: %v", err)
+	select {
+	case e.ch <- &protoEv:
+	case <-e.ctx.Done():
+		e.log(log.TraceLevel, "unsubscribing")
 		return true
+	default:
+		e.log(log.ErrorLevel, "event stream is lagging behind: dropping messages")
 	}
 	return false
 }
 
-func (e *eventStreamClient) waitForUnsubscribe() error {
-	defer e.quit.Store(true)
+func (e *eventStreamClient) Close() error {
+	e.cancelCtx()
+	return nil
+}
 
+func (e *eventStreamClient) waitForUnsubscribe() error {
 	// do not unlock here, Server should already have unlocked
 	req, err := e.stream.Recv()
 	if err != nil {
