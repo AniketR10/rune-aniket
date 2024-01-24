@@ -760,7 +760,7 @@ func TestComponentEditorSubscriber(t *testing.T) {
 
 func TestEventTypeFocusIntegration(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	c, _ := newTestComponent(t, &testEditor{})
+	c, _ := newTestComponent(t, &TestEditor{})
 	c.Resize(100, 100)
 
 	uri1, err := workspaceapi.ParseURI("file:///Elon.txt")
