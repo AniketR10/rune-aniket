@@ -89,6 +89,21 @@ func TestWindowClosedOnClose(t *testing.T) {
 	require.NoError(t, win.Close())
 }
 
+func TestWindowFloatingAutoClose(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.AutoCloseFloating = true
+	b := NewComponent(cfg)
+	h := newTestHandler()
+	win := b.Floating(FuncFloatingHandler(h, func() error {
+		return nil
+	}), component.FloatingConfig{})
+	assert.Equal(t, win, b.Focus())
+
+	b.ShiftFocus()
+	assert.True(t, win.Closed())
+	assert.NotEqual(t, win, b.Focus())
+}
+
 type nopHandler struct {
 	handler.TestHandler
 }

@@ -251,6 +251,8 @@ func (e *ex) doInit(
 		o(&e.config)
 	}
 
+	e.config.Config.AutoCloseFloating = true
+
 	seqInterests := make([]handler.Sequence, 0,
 		len(e.config.CommandSequenceBindings))
 	for seq := range e.config.CommandSequenceBindings {
@@ -260,7 +262,10 @@ func (e *ex) doInit(
 
 	e.ed = ed
 	e.cleanPartialReissueState()
-	e.cmdBrowser.Init(e.config.Config)
+
+	cmdBrowserCfg := e.config.Config
+	cmdBrowserCfg.AutoCloseFloating = false
+	e.cmdBrowser.Init(cmdBrowserCfg)
 	e.cmdV.C = &e.cmdBrowser
 	return
 }
