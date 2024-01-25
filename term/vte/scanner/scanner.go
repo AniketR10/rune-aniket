@@ -1,0 +1,236 @@
+package scanner
+
+import (
+	"math"
+
+	"unstable.build/go-tui/term/vte/utf8parser"
+
+	"github.com/ernestrc/blue/logging"
+	log "github.com/sirupsen/logrus"
+)
+
+// Scanner represents the VT100 scanner.
+type Scanner struct {
+	utf8            utf8parser.Parser
+	driver          Driver
+	state           State
+	intermediates   []byte
+	intermediateIdx uint8
+	params          params
+	param           uint16
+	oscRaw          []byte
+	oscParams       [MaxOSCParams][2]uint16
+	oscNumParams    int
+	ignoring        bool
+}
+
+// NewScanner creates a new Scanner.
+func NewScanner(driver Driver) *Scanner {
+	ret := new(Scanner)
+	ret.Init(driver)
+	return ret
+}
+
+func (p *Scanner) Init(driver Driver) {
+	p.utf8.Init(utf8Receiver{p, driver})
+	p.driver = driver
+	p.state = Ground
+	p.intermediates = make([]byte, MaxIntermediates)
+	p.oscRaw = make([]byte, 0, MaxOSCRaw)
+}
+
+// Advance advances the scanner's state.
+func (p *Scanner) Advance(ch byte) {
+	if p.state == Utf8 {
+		p.processUtf8(ch)
+		return
+	}
+
+	change := tableStateChanges[uint8(Anywhere)][uint8(ch)]
+	if change == 0 {
+		change = tableStateChanges[uint8(p.state)][uint8(ch)]
+	}
+
+	state, action := unpack(change)
+	p.performStateChange(State(state), Action(action), ch)
+}
+
+type utf8Receiver struct {
+	*Scanner
+	Driver
+}
+
+func (u utf8Receiver) Codepoint(c rune) {
+	u.Driver.Print(c)
+	u.Scanner.state = Ground
+}
+
+func (u utf8Receiver) InvalidSequence() {
+	u.Driver.Print('�')
+	u.Scanner.state = Ground
+}
+
+// ProcessUtf8 processes UTF-8 characters.
+func (p *Scanner) processUtf8(ch byte) {
+	p.log(log.TraceLevel, "process utf8: byte: %c", ch)
+	p.utf8.Advance(ch)
+}
+
+// DriverStateChange performs the state change.
+func (p *Scanner) performStateChange(state State, action Action, ch byte) {
+	p.log(log.TraceLevel, "state change: %v to %v, action: %v, ch: %c", p.state, state, action, ch)
+	if state == Anywhere {
+		p.performAction(action, ch)
+		return
+	}
+
+	switch p.state {
+	case DcsPassthrough:
+		p.performAction(Unhook, ch)
+	case OSCString:
+		p.performAction(OSCEnd, ch)
+	}
+
+	if action != None {
+		p.performAction(action, ch)
+	}
+
+	switch state {
+	case CsiEntry, DcsEntry, Escape:
+		p.performAction(Clear, ch)
+	case DcsPassthrough:
+		p.performAction(Hook, ch)
+	case OSCString:
+		p.performAction(OSCStart, ch)
+	}
+
+	p.state = state
+
+}
+
+// DriverAction performs the specified action.
+func (p *Scanner) performAction(action Action, ch byte) {
+	switch action {
+	case Print:
+		p.driver.Print(rune(ch))
+	case Execute:
+		p.driver.Execute(ch)
+	case Hook:
+		if p.params.isFull() {
+			p.ignoring = true
+		} else {
+			p.params.push(p.param)
+		}
+		intermediates := p.intermediates[:p.intermediateIdx]
+		p.driver.Hook(p.params.slice(), intermediates, p.ignoring, rune(ch))
+	case Put:
+		p.driver.Put(ch)
+	case OSCStart:
+		p.oscRaw = p.oscRaw[:0]
+		p.oscNumParams = 0
+	case OSCPut:
+		if ch != ';' {
+			p.oscRaw = append(p.oscRaw, ch)
+			return
+		}
+		idx := len(p.oscRaw)
+		paramIdx := p.oscNumParams
+		switch paramIdx {
+		case MaxOSCParams:
+			return
+		case 0:
+			// first param is special
+			p.oscParams[0] = [2]uint16{0, uint16(idx)}
+		default:
+			// the rest depend on previous indexing
+			prev := p.oscParams[paramIdx-1]
+			p.oscParams[paramIdx] = [2]uint16{prev[1], uint16(idx)}
+		}
+		p.oscNumParams++
+	case OSCEnd:
+		paramIdx := p.oscNumParams
+		idx := len(p.oscRaw)
+		switch paramIdx {
+		case MaxOSCParams:
+		case 0:
+			p.oscParams[0] = [2]uint16{0, uint16(idx)}
+			p.oscNumParams++
+		default:
+			prev := p.oscParams[paramIdx-1]
+			p.oscParams[paramIdx] = [2]uint16{prev[1], uint16(idx)}
+			p.oscNumParams++
+		}
+		p.oscDispatch(ch)
+	case Unhook:
+		p.driver.Unhook()
+	case CSIDispatch:
+		if p.params.isFull() {
+			p.ignoring = true
+		} else {
+			p.params.push(p.param)
+		}
+		intermediates := p.intermediates[:p.intermediateIdx]
+		p.driver.CSIDispatch(p.params.slice(), intermediates,
+			p.ignoring, rune(ch))
+	case ESCDispatch:
+		intermediates := p.intermediates[:p.intermediateIdx]
+		p.driver.ESCDispatch(intermediates, p.ignoring, ch)
+	case Collect:
+		if p.intermediateIdx == MaxIntermediates {
+			p.ignoring = true
+			return
+		}
+		p.intermediates[p.intermediateIdx] = ch
+		p.intermediateIdx++
+	case Param:
+		if p.params.isFull() {
+			p.ignoring = true
+			return
+		}
+		switch ch {
+		case ':':
+			p.params.extend(p.param)
+			p.param = 0
+		case ';':
+			p.params.push(p.param)
+			p.param = 0
+		default:
+			if int(p.param)*10 > math.MaxUint16 {
+				p.param = math.MaxUint16
+			} else {
+				p.param *= 10
+			}
+			add := uint16(ch - '0')
+			if int(p.param)+int(add) > math.MaxUint16 {
+				p.param = math.MaxUint16
+			} else {
+				p.param += add
+			}
+		}
+	case Clear:
+		p.intermediateIdx = 0
+		p.ignoring = false
+		p.param = 0
+		p.params.reset()
+	case BeginUtf8:
+		p.processUtf8(ch)
+	case Ignore: /* do nothing */
+	default:
+		panic("unknown action")
+	}
+}
+
+func (p *Scanner) oscDispatch(ch byte) {
+	var slices [MaxOSCParams][]byte
+
+	for i, indices := range p.oscParams[:p.oscNumParams] {
+		slices[i] = p.oscRaw[indices[0]:indices[1]]
+	}
+
+	p.driver.OSCDispatch(slices[:p.oscNumParams], ch == 0x07)
+}
+
+func (p *Scanner) log(level log.Level, msg string, args ...any) {
+	log.WithField(logging.KeyClass, "scanner.Scanner").
+		Logf(level, msg, args...)
+}
