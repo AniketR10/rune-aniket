@@ -169,6 +169,8 @@ func CommandEventHandler(
 	ret.cfg.SendMessageStringConfig.Attributes.Bg = backgroundAttr.Bg
 	ret.backgroundAttr = backgroundAttr
 
+	opts := defaultOpts
+
 	sendMsgAttr, err := configapi.GetAttributes(pconfig, "user_msg_attr")
 	if err != nil {
 		if err != configapi.ErrNotFound {
@@ -211,6 +213,20 @@ func CommandEventHandler(
 		}
 	} else {
 		ret.cfg.InputConfig.DefaultFrameAttr = inputBoxFrameAttr
+	}
+
+	initialContext, err := pconfig.GetString("initial_context")
+	if err != nil {
+		if err != configapi.ErrNotFound {
+			ret.log(log.WarnLevel, "Error getting 'initial_context' from extension config: %v", err)
+		}
+	} else {
+		opts = append(opts, aiDialogue.WithInitialContext([]backend.ChatCompletionMessage{
+			{
+				Role:    backend.RoleSystem,
+				Content: initialContext,
+			},
+		}))
 	}
 
 	ret.clip, err = sysclip.NewRegister()
@@ -264,7 +280,6 @@ func CommandEventHandler(
 	if err != nil {
 		return nil, fmt.Errorf("new backend for query dialogues: %v", err)
 	}
-	opts := defaultOpts
 	opts = append(opts, queryOptions...)
 	opts = append(opts, aiDialogue.WithCompleter((*aiEditorHandlerCompleter)(ret)))
 	ret.queryDialogueManager = aiDialogue.NewManager(queryService, ret.dialogueStore, opts...)
@@ -598,7 +613,7 @@ func (h *aiEditorHandler) wrapDialogueHandler(
 	// wrap dialogue.Handler's rx chan to add adhoc
 	// cancelation of completion requests
 	var cancel func()
-	var mu sync.Mutex
+	mu := new(sync.Mutex)
 
 	go func() {
 		for {

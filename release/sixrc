@@ -125,6 +125,7 @@ extensions:
        # max_tokens: 120
        # temperature: 0.9
        # top_p: 1
+       # initial_context: You are a helpful coding assistant.
 
   # This extension is used for navigating the editor's issue
   # tracker and creating new issues.

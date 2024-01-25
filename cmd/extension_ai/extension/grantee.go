@@ -106,13 +106,6 @@ func DefaultOpenAIGrantee() (extension.Grantee, []extension.Permission) {
 	return GranteeWithService(openaiSvc,
 		openai.AvailableModels(), defaultDefaultModel,
 		dialogue.WithCompleter(dialogue.FuncCompleter(logCompletion)),
-		dialogue.WithInitialContext([]backend.ChatCompletionMessage{
-			{
-				Role: backend.RoleSystem,
-				Content: "You are a helpful coding assistant. Any code changes must be " +
-					" answered in diff format.",
-			},
-		}),
 	)
 }
 
