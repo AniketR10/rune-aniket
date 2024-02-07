@@ -178,8 +178,10 @@ func (a client) CreateChatCompletion(
 		}
 	}
 
-	if exceeds, _ := a.ExceedsContextWindow(request.Messages); exceeds {
-		return nil, backend.ErrContextWindowExceeded
+	count := a.countTokens(request.Messages)
+	max := a.modelContextWindow[a.config.Model]
+	if count > max {
+		return nil, &backend.ErrContextWindowExceeded{Count: count, Max: max}
 	}
 
 	req := openai.ChatCompletionRequest{

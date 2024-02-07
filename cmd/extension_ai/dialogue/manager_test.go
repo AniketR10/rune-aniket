@@ -309,7 +309,7 @@ func (t testClient) CreateChatCompletion(
 	request backend.ChatCompletionRequest,
 ) (iterator.Iterator[backend.ChatCompletionResponse], error) {
 	if exceeds, _ := t.ExceedsContextWindow(request.Messages); exceeds {
-		return nil, backend.ErrContextWindowExceeded
+		return nil, &backend.ErrContextWindowExceeded{}
 	}
 	return &testStream{res: t.streamRes, err: t.streamErr}, t.err
 }

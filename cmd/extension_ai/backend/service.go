@@ -2,7 +2,7 @@ package backend
 
 import (
 	"context"
-	"errors"
+	"fmt"
 	"time"
 
 	"github.com/ernestrc/blue/iterator"
@@ -11,7 +11,25 @@ import (
 // ErrContextWindowExceeded is returned when the number of tokens in a request
 // exceeds the context window of a model. Users are encouraged to retry
 // with a reduced number of messages.
-var ErrContextWindowExceeded = errors.New("model context window exceeded")
+type ErrContextWindowExceeded struct {
+	Count, Max int
+}
+
+func (e *ErrContextWindowExceeded) Error() string {
+	return fmt.Sprintf("model context window exceeded (%d, max is %d)", e.Count, e.Max)
+}
+
+func (e *ErrContextWindowExceeded) Unwrap() error {
+	return nil
+}
+
+func (e *ErrContextWindowExceeded) Is(target error) bool {
+	_, ok := target.(*ErrContextWindowExceeded)
+	if !ok {
+		return false
+	}
+	return true
+}
 
 // Service encapsulates communications with an AI-capabilities provider.
 type Service interface {

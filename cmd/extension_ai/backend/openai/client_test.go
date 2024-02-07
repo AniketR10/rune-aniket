@@ -2,6 +2,7 @@ package openai
 
 import (
 	"context"
+	"errors"
 	"os"
 	"strconv"
 	"strings"
@@ -213,7 +214,7 @@ func TestContextWindows(t *testing.T) {
 		// sut
 		req := backend.ChatCompletionRequest{Messages: msgs}
 		_, err := client.CreateChatCompletion(ctx, req)
-		require.Equal(t, backend.ErrContextWindowExceeded, err)
+		require.True(t, errors.Is(err, &backend.ErrContextWindowExceeded{}), err.Error())
 	})
 
 	t.Run("ExceedsContextWindow", func(t *testing.T) {
