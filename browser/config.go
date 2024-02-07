@@ -48,7 +48,6 @@ type Config struct {
 	Wallpaper               string
 	WallpaperAttr           term.Attributes
 	WallpaperBackgroundAttr term.Attributes
-	AutoCloseFloating       bool
 
 	FocusTabAttr    term.Attributes
 	NonFocusTabAttr term.Attributes

@@ -149,9 +149,6 @@ type wmSubscriber Component
 func (s *wmSubscriber) OnFocus(prev, focus handler.Window) {
 	c := (*Component)(s)
 	c.focusWindow = focus
-	if c.config.AutoCloseFloating && prev.IsFloating() {
-		_ = prev.Close()
-	}
 }
 
 // Init initializes this Component with config.
