@@ -130,6 +130,7 @@ func (b *Buffer) InsertWithAttr(
 	cells := b.RawCells()
 	cells[pos.Y][pos.X].Bg = attr.Bg
 	cells[pos.Y][pos.X].Fg = attr.Fg
+	cells[pos.Y][pos.X].Attrs = attr.Attrs
 
 	return
 }
@@ -145,6 +146,7 @@ func (b *Buffer) InsertStringWithAttr(
 		for x := range row {
 			cells[y][x].Bg = attr.Bg
 			cells[y][x].Fg = attr.Fg
+			cells[y][x].Attrs = attr.Attrs
 		}
 	}
 	return

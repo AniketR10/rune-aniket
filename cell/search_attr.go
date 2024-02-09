@@ -41,6 +41,7 @@ func (s *attrSearcher) setResultsAttr(attr term.Attributes) {
 		for x := range match {
 			s.matches[i][x].Bg = attr.Bg
 			s.matches[i][x].Fg = attr.Fg
+			s.matches[i][x].Attrs = attr.Attrs
 		}
 	}
 }

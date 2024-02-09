@@ -661,7 +661,7 @@ func TestBufferSubscribe(t *testing.T) {
 
 func TestBufferInsertWithAttr(t *testing.T) {
 	buf := NewBuffer()
-	attr := term.Attributes{Fg: tcell.ColorRed, Bg: tcell.ColorYellow}
+	attr := term.Attributes{Fg: tcell.ColorRed, Bg: tcell.ColorYellow, Attrs: tcell.AttrBold}
 
 	buf.InsertWithAttr(term.Coordinates{}, 'A', attr)
 	cell := buf.RawCells()[0][0]
@@ -675,7 +675,7 @@ func TestBufferInsertWithAttr(t *testing.T) {
 }
 
 func TestBufferInsertStringWithAttr(t *testing.T) {
-	attr := term.Attributes{Fg: tcell.ColorRed, Bg: tcell.ColorYellow}
+	attr := term.Attributes{Fg: tcell.ColorRed, Bg: tcell.ColorYellow, Attrs: tcell.AttrItalic}
 	t.Run("insert single line string", func(t *testing.T) {
 		buf := NewBuffer()
 		buf.InsertStringWithAttr(term.Coordinates{}, "Atza", attr)
