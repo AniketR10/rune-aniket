@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/ernestrc/blue/iterator"
+	"github.com/ernestrc/tcell/v3"
 	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -381,8 +382,9 @@ func TestClientServerIntegration(t *testing.T) {
 		require.NoError(t, err)
 
 		expectedAttrs := term.Attributes{
-			Fg: term.ColorWhite | term.AttrUnderline,
-			Bg: term.ColorCyan | term.AttrBold,
+			Attrs: tcell.AttrUnderline | tcell.AttrBold,
+			Fg:    tcell.ColorWhite,
+			Bg:    tcell.ColorNavy,
 		}
 
 		expectEditor(t, ed, uri)

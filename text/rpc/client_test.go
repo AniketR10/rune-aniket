@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/ernestrc/tcell/v3"
 	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -21,11 +22,11 @@ import (
 var (
 	loc1 = textapi.Location{
 		To:   term.Coordinates{X: 1, Y: 3},
-		Attr: term.Attributes{Fg: term.AttrBold},
+		Attr: term.Attributes{Attrs: tcell.AttrBold},
 	}
 	loc2 = textapi.Location{
 		From:    term.Coordinates{X: 1, Y: 3},
-		Attr:    term.Attributes{Fg: term.ColorBlack, Bg: term.ColorGreen},
+		Attr:    term.Attributes{Fg: tcell.ColorBlack, Bg: tcell.ColorGreen},
 		Message: "wsb: hold BBBY",
 	}
 	loc3 = textapi.Location{}
@@ -143,14 +144,14 @@ func TestSetLocationListRequest(t *testing.T) {
 				{
 					From: &termpb.Coordinates{},
 					To:   &termpb.Coordinates{X: 1, Y: 3},
-					Attr: &termpb.Attributes{Foreground: uint32(term.AttrBold)},
+					Attr: &termpb.Attributes{Attrs: int64(tcell.AttrBold)},
 				},
 				{
 					To:   &termpb.Coordinates{},
 					From: &termpb.Coordinates{X: 1, Y: 3},
 					Attr: &termpb.Attributes{
-						Foreground: uint32(term.ColorBlack),
-						Background: uint32(term.ColorGreen),
+						Foreground: uint64(tcell.ColorBlack),
+						Background: uint64(tcell.ColorGreen),
 					},
 					Msg: "wsb: hold BBBY",
 				},
@@ -169,7 +170,7 @@ func TestSetLocationListRequest(t *testing.T) {
 		l := text.LocationSlice([]textapi.Location{
 			{
 				To:      term.Coordinates{X: 1, Y: 3},
-				Attr:    term.Attributes{Fg: term.AttrBold},
+				Attr:    term.Attributes{Attrs: tcell.AttrBold},
 				Message: myMsg,
 			},
 		})
@@ -181,7 +182,7 @@ func TestSetLocationListRequest(t *testing.T) {
 				{
 					From: &termpb.Coordinates{},
 					To:   &termpb.Coordinates{X: 1, Y: 3},
-					Attr: &termpb.Attributes{Foreground: uint32(term.AttrBold)},
+					Attr: &termpb.Attributes{Attrs: int64(tcell.AttrBold)},
 					Msg:  myMsg,
 				},
 			},
@@ -197,7 +198,7 @@ func benchmarkSetLocationListRequest(b *testing.B, n int) {
 		l[i] = textapi.Location{
 			From: term.Coordinates{X: i, Y: n},
 			To:   term.Coordinates{X: n, Y: n},
-			Attr: term.Attributes{Fg: term.AttrBold},
+			Attr: term.Attributes{Attrs: tcell.AttrBold},
 		}
 	}
 

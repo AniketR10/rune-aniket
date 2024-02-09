@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"time"
 
+	"github.com/ernestrc/tcell/v3"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/term"
 )
@@ -25,7 +27,8 @@ type Config interface {
 	GetBool(string) (bool, error)
 	GetConfig(string) (Config, error)
 	GetMap(string) (map[string]interface{}, error)
-	GetAttribute(string) (term.Attribute, error)
+	GetAttribute(string) (tcell.AttrMask, error)
+	GetColor(string) (tcell.Color, error)
 	GetRune(string) (rune, error)
 	GetSlice(string) ([]interface{}, error)
 	Iterate(fn func(k string, value interface{}))
@@ -110,8 +113,29 @@ func GetAttributes(c Config, key string) (term.Attributes, error) {
 	}
 
 	var attr term.Attributes
-	attr.Fg, _ = cfg.GetAttribute("fg")
-	attr.Bg, _ = cfg.GetAttribute("bg")
+	attr.Attrs, err = cfg.GetAttribute("flag")
+	if err != nil && err != ErrNotFound {
+		return term.Attributes{}, fmt.Errorf("get 'flag': %w", err)
+	} else if err == ErrNotFound {
+		// try with 'flags' too
+		attr.Attrs, err = cfg.GetAttribute("flags")
+		if err != nil && err != ErrNotFound {
+			return term.Attributes{}, fmt.Errorf("get 'flags': %w", err)
+		}
+	}
+
+	if fg, err := cfg.GetColor("fg"); err == nil {
+		attr.Fg = fg
+	} else if err != ErrNotFound && err != nil {
+		return term.Attributes{}, fmt.Errorf("get 'fg' color: %w", err)
+	}
+
+	if bg, err := cfg.GetColor("bg"); err == nil {
+		attr.Bg = bg
+	} else if err != ErrNotFound && err != nil {
+		return term.Attributes{}, fmt.Errorf("get 'bg' color: %w", err)
+	}
+
 	return attr, nil
 }
 
@@ -123,7 +147,7 @@ func GetDuration(
 	durStr, err := pconfig.GetString(key)
 	if err != nil {
 		if err != ErrNotFound {
-			err = fmt.Errorf("Error getting '%s' from config: %v", key, err)
+			err = fmt.Errorf("Error getting '%s' from config: %w", key, err)
 			return 0, err
 		}
 		return def, nil
@@ -131,7 +155,7 @@ func GetDuration(
 
 	duration, err := time.ParseDuration(durStr)
 	if err != nil {
-		err = fmt.Errorf("Error parsing duration '%s' from config: %v", key, err)
+		err = fmt.Errorf("Error parsing duration '%s' from config: %w", key, err)
 		return 0, err
 	}
 
@@ -152,7 +176,7 @@ func GetMapInt(pconfig Config, key string) (map[string]int, error) {
 	for k := range mapOfIfc {
 		ret[k], err = cfg.GetInt(k)
 		if err != nil { // ErrNotFound is not possible
-			return nil, fmt.Errorf("expected %s to be map of string to integer: %v", key, err)
+			return nil, fmt.Errorf("expected %s to be map of string to integer: %w", key, err)
 		}
 	}
 	return ret, nil
@@ -337,39 +361,33 @@ func (c mapConfig) GetSlice(key string) ([]interface{}, error) {
 	return vt, nil
 }
 
-func strToAttr(str string) (attr term.Attribute, err error) {
+func strToAttr(str string) (attr tcell.AttrMask, err error) {
 	switch str {
 	case "bold":
-		attr = term.AttrBold
+		attr = tcell.AttrBold
 	case "underline":
-		attr = term.AttrUnderline
+		attr = tcell.AttrUnderline
 	case "reverse":
-		attr = term.AttrReverse
+		attr = tcell.AttrReverse
 	case "default":
-		attr = term.ColorDefault
-	case "black":
-		attr = term.ColorBlack
-	case "red":
-		attr = term.ColorRed
-	case "green":
-		attr = term.ColorGreen
-	case "yellow":
-		attr = term.ColorYellow
-	case "blue":
-		attr = term.ColorBlue
-	case "magenta":
-		attr = term.ColorMagenta
-	case "cyan":
-		attr = term.ColorCyan
-	case "white":
-		attr = term.ColorWhite
+		attr = tcell.AttrNone
+	case "none":
+		attr = tcell.AttrNone
+	case "blink":
+		attr = tcell.AttrBlink
+	case "dim":
+		attr = tcell.AttrDim
+	case "italic":
+		attr = tcell.AttrItalic
+	case "strikethrough":
+		attr = tcell.AttrStrikeThrough
 	default:
 		err = ErrInvalidAttributeValue
 	}
 	return
 }
 
-func (c mapConfig) GetAttribute(key string) (term.Attribute, error) {
+func (c mapConfig) GetAttribute(key string) (tcell.AttrMask, error) {
 	v, ok := c[key]
 	if !ok {
 		return 0, ErrNotFound
@@ -380,7 +398,7 @@ func (c mapConfig) GetAttribute(key string) (term.Attribute, error) {
 	}
 	i, err := c.GetInt(key)
 	if err == nil {
-		return term.Attribute(i), nil
+		return tcell.AttrMask(i), nil
 	}
 
 	avt, ok := v.([]interface{})
@@ -388,7 +406,7 @@ func (c mapConfig) GetAttribute(key string) (term.Attribute, error) {
 		return 0, ErrInvalidType
 	}
 
-	var attr term.Attribute
+	var attr tcell.AttrMask
 	for _, vtv := range avt {
 		if vtvs, ok := vtv.(string); ok {
 			vtvattr, err := strToAttr(vtvs)
@@ -400,6 +418,28 @@ func (c mapConfig) GetAttribute(key string) (term.Attribute, error) {
 	}
 
 	return attr, nil
+}
+
+func (c mapConfig) GetColor(key string) (tcell.Color, error) {
+	v, ok := c[key]
+	if !ok {
+		return 0, ErrNotFound
+	}
+	vs, ok := v.(string)
+	if ok {
+		if vs == "default" {
+			return tcell.ColorDefault, nil
+		}
+		return tcell.GetColor(vs), nil
+	}
+	i, err := c.GetInt(key)
+	if err != nil {
+		return 0, err
+	}
+	if i > math.MaxInt32 {
+		return 0, ErrInvalidType
+	}
+	return tcell.NewHexColor(int32(i)), nil
 }
 
 func (c mapConfig) GetRune(key string) (rune, error) {

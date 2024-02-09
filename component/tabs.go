@@ -1,16 +1,17 @@
 package component
 
 import (
+	"github.com/ernestrc/tcell/v3"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/term"
 )
 
 var (
-	defaultFocusAttr    = term.Attributes{Fg: term.ColorRed}
-	defaultNonFocusAttr = term.Attributes{Fg: term.ColorDefault}
-	defaultScrollAttr   = term.Attributes{Fg: term.ColorWhite}
-	defaultFrameAttr    = term.Attributes{Fg: term.ColorRed}
+	defaultFocusAttr    = term.Attributes{Fg: tcell.ColorRed}
+	defaultNonFocusAttr = term.Attributes{Fg: tcell.ColorDefault}
+	defaultScrollAttr   = term.Attributes{Fg: tcell.ColorWhite}
+	defaultFrameAttr    = term.Attributes{Fg: tcell.ColorRed}
 	defaultSeparator    = "  "
 )
 
@@ -44,7 +45,7 @@ func newListFrame(
 ) (content tui.Component) {
 	scroll := NewScroll(buf)
 	scroll.Attributes = scrollAttr
-	background := term.Cell{Bg: scroll.Attributes.Bg, Fg: scroll.Attributes.Fg}
+	background := term.Cell{Attributes: scroll.Attributes}
 	spanCfg := SpanConfig{
 		ContentAlignment: SpanAlignmentCentered,
 		PadVertical:      -1,

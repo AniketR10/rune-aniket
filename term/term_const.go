@@ -2,34 +2,8 @@
 
 package term
 
-import "github.com/ernestrc/tcell/v3/termbox"
-
-// Cell colors, you can combine a color with multiple attributes using bitwise
-// OR ('|').
-const (
-	ColorDefault Attribute = Attribute(termbox.ColorDefault)
-	ColorBlack             = Attribute(termbox.ColorBlack)
-	ColorRed               = Attribute(termbox.ColorRed)
-	ColorGreen             = Attribute(termbox.ColorGreen)
-	ColorYellow            = Attribute(termbox.ColorYellow)
-	ColorBlue              = Attribute(termbox.ColorBlue)
-	ColorMagenta           = Attribute(termbox.ColorMagenta)
-	ColorCyan              = Attribute(termbox.ColorCyan)
-	ColorWhite             = Attribute(termbox.ColorWhite)
-)
-
-// Cell attributes, it is possible to use multiple attributes by combining them
-// using bitwise OR ('|'). Although, colors cannot be combined. But you can
-// combine attributes and a single color.
-//
-// It's worth mentioning that some platforms don't support certain attributes.
-// For example windows console doesn't support AttrUnderline. And on some
-// terminals applying AttrBold to background may result in blinking text. Use
-// them with caution and test your code on various terminals.
-const (
-	AttrBold      Attribute = Attribute(termbox.AttrBold)
-	AttrUnderline           = Attribute(termbox.AttrUnderline)
-	AttrReverse             = Attribute(termbox.AttrReverse)
+import (
+	"github.com/ernestrc/tcell/v3/termbox"
 )
 
 // Event type. See Event.Type field.
@@ -126,15 +100,6 @@ const (
 	InputAlt               = InputMode(termbox.InputAlt)
 	InputMouse             = InputMode(termbox.InputMouse)
 	InputCurrent           = InputMode(termbox.InputCurrent)
-)
-
-// Output mode. See SetOutputMode function.
-const (
-	OutputCurrent   OutputMode = OutputMode(termbox.OutputCurrent)
-	OutputNormal               = OutputMode(termbox.OutputNormal)
-	Output256                  = OutputMode(termbox.Output256)
-	Output216                  = OutputMode(termbox.Output216)
-	OutputGrayscale            = OutputMode(termbox.OutputGrayscale)
 )
 
 // Alt modifier constant, see Event.Mod field and SetInputMode function.

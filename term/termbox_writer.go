@@ -5,6 +5,7 @@ package term
 import (
 	"context"
 
+	"github.com/ernestrc/tcell/v3"
 	"github.com/ernestrc/tcell/v3/termbox"
 )
 
@@ -19,8 +20,10 @@ func newTermboxWriter() *termboxWriter {
 }
 
 func (w *termboxWriter) SetCell(pos Coordinates, c Cell) {
-	style := termbox.AttributeToStyle(termbox.Attribute(c.Fg), termbox.Attribute(c.Bg))
-	termbox.Screen().SetContent(pos.X, pos.Y, c.Ch, c.Combining, c.Width, style)
+	termbox.Screen().SetContent(
+		pos.X, pos.Y, c.Ch, c.Combining,
+		c.Width, tcell.Style(c.Attributes),
+	)
 	return
 }
 
@@ -29,7 +32,7 @@ func (w *termboxWriter) Flush() error {
 }
 
 func (w *termboxWriter) Clear(attr Attributes) (err error) {
-	termbox.Clear(termbox.Attribute(attr.Fg), termbox.Attribute(attr.Bg))
+	termbox.Screen().Fill(' ', tcell.Style(attr))
 	return
 }
 

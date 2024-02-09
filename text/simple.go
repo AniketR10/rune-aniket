@@ -3,6 +3,7 @@ package text
 import (
 	"errors"
 
+	"github.com/ernestrc/tcell/v3"
 	textapi "unstable.build/go-tui/api/text"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
@@ -12,7 +13,7 @@ import (
 
 // DefaultSimpleEditor returns a simple to use Editor implementation.
 func DefaultSimpleEditor(clipboard clipboard.Register) Editor {
-	searchAttr := term.Attributes{Fg: term.AttrReverse}
+	searchAttr := term.Attributes{Attrs: tcell.AttrReverse}
 	defaultAttr := term.Attributes{}
 	return NewSimpleEditor(clipboard, false, true,
 		defaultAttr, searchAttr)

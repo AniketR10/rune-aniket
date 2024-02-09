@@ -127,15 +127,6 @@ const (
 	InputCurrent InputMode = 0
 )
 
-// Output mode. See SetOutputMode function.
-const (
-	OutputCurrent OutputMode = iota
-	OutputNormal
-	Output256
-	Output216
-	OutputGrayscale
-)
-
 // Event type. See Event.Type field.
 const (
 	EventKey EventType = iota

@@ -3,6 +3,7 @@ package extension
 import (
 	"strconv"
 
+	"github.com/ernestrc/tcell/v3"
 	"unstable.build/go-tui"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
@@ -22,8 +23,8 @@ const (
 
 var (
 	defaultTextAttr        = term.Attributes{}
-	defaultPinAttr         = term.Attributes{Fg: term.AttrBold}
-	defaultMatchedTextAttr = term.Attributes{Fg: term.ColorRed}
+	defaultPinAttr         = term.Attributes{Attrs: tcell.AttrBold}
+	defaultMatchedTextAttr = term.Attributes{Fg: tcell.ColorRed}
 )
 
 type logsHandler struct {
@@ -121,7 +122,7 @@ func (s *logsHandler) newPinnedResponsive(match search.Match) {
 
 func (s *logsHandler) withBackground(comp tui.Component) tui.Component {
 	return component.WithBackground(comp,
-		term.Cell{Width: 1, Ch: ' ', Fg: s.textAttr.Fg, Bg: s.textAttr.Bg})
+		term.Cell{Width: 1, Ch: ' ', Attributes: s.textAttr})
 }
 
 func (s *logsHandler) setPinned(matches []search.Match) {

@@ -3,12 +3,12 @@ package text
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
-	os "os"
+	"os"
 	"strconv"
 	"strings"
 	"testing"
 
+	"github.com/ernestrc/tcell/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"unstable.build/go-tui/api/config"
@@ -1111,7 +1111,7 @@ func testCursorSelect(t *testing.T, width, height int) {
 			e.MoveLastLine()
 			e.MoveEndLine()
 			insert(e)
-			assertBufferAttributes(t, e.buffer(), term.Attributes{Fg: term.AttrReverse, Bg: term.AttrReverse})
+			assertBufferAttributes(t, e.buffer(), term.Attributes{Attrs: tcell.AttrReverse})
 			assert.True(t, e.Unselect())
 			assertBufferAttributes(t, e.buffer(), term.Attributes{})
 		}
@@ -1682,7 +1682,7 @@ func TestCursorShiftSelection(t *testing.T) {
 }
 
 var (
-	abcAttr      = term.Attributes{Fg: term.AttrUnderline, Bg: term.ColorBlack}
+	abcAttr      = term.Attributes{Attrs: tcell.AttrUnderline, Bg: tcell.ColorBlack}
 	abcLocations = []textapi.Location{
 		{
 			From:    term.Coordinates{Y: 1},
@@ -1816,9 +1816,9 @@ func TestCursorSetLocationListAttr(t *testing.T) {
 
 		expected := [][]term.Cell{
 			{},
-			{{Ch: 'a', Bg: abcAttr.Bg, Fg: abcAttr.Fg, Width: 1}},
-			{{Ch: 'b', Bg: abcAttr.Bg, Fg: abcAttr.Fg, Width: 1}},
-			{{Ch: 'c', Bg: abcAttr.Bg, Fg: abcAttr.Fg, Width: 1}},
+			{{Ch: 'a', Attributes: abcAttr, Width: 1}},
+			{{Ch: 'b', Attributes: abcAttr, Width: 1}},
+			{{Ch: 'c', Attributes: abcAttr, Width: 1}},
 			{},
 		}
 
@@ -1827,14 +1827,15 @@ func TestCursorSetLocationListAttr(t *testing.T) {
 		assert.Nil(t, c.SetLocationList(textapi.LocationPriorityInfo, locID, abcList))
 		assert.Equal(t, expected, buf.RawCells())
 
-		buf.RawCells()[2][0].Bg = term.AttrUnderline
-		buf.RawCells()[2][0].Fg = term.AttrBold
+		buf.RawCells()[2][0].Attrs = tcell.AttrUnderline | tcell.AttrBold
+		buf.RawCells()[2][0].Bg = 0
+		buf.RawCells()[2][0].Fg = 0
 
 		newLocations := []textapi.Location{
 			{
 				From: term.Coordinates{Y: 2},
 				To:   term.Coordinates{Y: 2, X: 1},
-				Attr: term.Attributes{Bg: term.ColorRed},
+				Attr: term.Attributes{Bg: tcell.ColorRed},
 			},
 		}
 
@@ -1842,40 +1843,42 @@ func TestCursorSetLocationListAttr(t *testing.T) {
 			{},
 			{{Ch: 'a', Width: 1}},
 			{{Ch: 'b', Width: 1,
-				Fg: term.AttrBold, Bg: term.AttrUnderline | term.ColorRed}},
+				Attributes: term.Attributes{
+					Attrs: tcell.AttrBold, Bg: tcell.ColorRed,
+				}}},
 			{{Ch: 'c', Width: 1}},
 			{},
 		}
 		oldLocList := c.SetLocationList(textapi.LocationPriorityInfo, locID, &testLocationList{locations: newLocations})
 		assert.Equal(t, abcList, oldLocList)
-		assert.Equal(t, expected, buf.RawCells())
+		require.Equal(t, expected, buf.RawCells())
 
 		require.True(t, buf.DeleteRow(0))
 
 		// make sure it doesn't remove the wrong one
-		buf.RawCells()[0][0].Bg = term.ColorRed
+		buf.RawCells()[0][0].Bg = tcell.ColorTeal
 		newLocations = []textapi.Location{
 			{
 				From: term.Coordinates{Y: 2},
 				To:   term.Coordinates{Y: 2, X: 1},
-				Attr: term.Attributes{Bg: term.ColorRed},
+				Attr: term.Attributes{Bg: tcell.ColorRed, Attrs: tcell.AttrUnderline},
 			},
 		}
 		expected = [][]term.Cell{
-			{{Ch: 'a', Bg: term.ColorRed, Width: 1}},
-			{{Ch: 'b', Fg: term.AttrBold, Bg: term.AttrUnderline, Width: 1}},
-			{{Ch: 'c', Bg: term.ColorRed, Width: 1}},
+			{{Ch: 'a', Attributes: term.Attributes{Bg: tcell.ColorTeal}, Width: 1}},
+			{{Ch: 'b', Attributes: term.Attributes{Attrs: tcell.AttrBold}, Width: 1}},
+			{{Ch: 'c', Attributes: term.Attributes{Bg: tcell.ColorRed, Attrs: tcell.AttrUnderline}, Width: 1}},
 			{},
 		}
 		newL := c.SetLocationList(textapi.LocationPriorityInfo, locID, &testLocationList{locations: newLocations})
-		assert.Equal(t, expected, buf.RawCells())
+		require.Equal(t, expected, buf.RawCells())
 		assert.Nil(t, newL)
 
 		// clear location list
 		c.SetLocationList(textapi.LocationPriorityInfo, locID, nil)
 		expected = [][]term.Cell{
-			{{Ch: 'a', Bg: term.ColorRed, Width: 1}},
-			{{Ch: 'b', Fg: term.AttrBold, Bg: term.AttrUnderline, Width: 1}},
+			{{Ch: 'a', Attributes: term.Attributes{Bg: tcell.ColorTeal}, Width: 1}},
+			{{Ch: 'b', Attributes: term.Attributes{Attrs: tcell.AttrBold}, Width: 1}},
 			{{Ch: 'c', Width: 1}},
 			{},
 		}
@@ -1887,34 +1890,34 @@ func TestCursorSetLocationListAttr(t *testing.T) {
 			{
 				From: term.Coordinates{Y: 1},
 				To:   term.Coordinates{Y: 1, X: 1},
-				Attr: term.Attributes{Fg: term.ColorRed, Bg: term.ColorGreen},
+				Attr: term.Attributes{Fg: tcell.ColorRed, Bg: tcell.ColorGreen},
 			},
 			{
 				From: term.Coordinates{Y: 2},
 				To:   term.Coordinates{Y: 2, X: 1},
-				Attr: term.Attributes{Fg: term.ColorRed, Bg: term.ColorGreen},
+				Attr: term.Attributes{Fg: tcell.ColorRed, Bg: tcell.ColorGreen},
 			},
 			{
 				From: term.Coordinates{Y: 3},
 				To:   term.Coordinates{Y: 3, X: 1},
-				Attr: term.Attributes{Fg: term.ColorRed, Bg: term.ColorGreen},
+				Attr: term.Attributes{Fg: tcell.ColorRed, Bg: tcell.ColorGreen},
 			},
 		}
 		criticalLocations := []textapi.Location{
 			{
 				From: term.Coordinates{Y: 1},
 				To:   term.Coordinates{Y: 1, X: 1},
-				Attr: term.Attributes{Fg: term.AttrUnderline, Bg: term.ColorBlack},
+				Attr: term.Attributes{Attrs: tcell.AttrUnderline, Bg: tcell.ColorBlack},
 			},
 			{
 				From: term.Coordinates{Y: 2},
 				To:   term.Coordinates{Y: 2, X: 1},
-				Attr: term.Attributes{Fg: term.AttrUnderline, Bg: term.ColorBlack},
+				Attr: term.Attributes{Attrs: tcell.AttrUnderline, Bg: tcell.ColorBlack},
 			},
 			{
 				From: term.Coordinates{Y: 3},
 				To:   term.Coordinates{Y: 3, X: 1},
-				Attr: term.Attributes{Fg: term.AttrUnderline, Bg: term.ColorBlack},
+				Attr: term.Attributes{Attrs: tcell.AttrUnderline, Bg: tcell.ColorBlack},
 			},
 		}
 		c := setupCursorContent(t, 10, 10, "\na\nb\nc\n", false)
@@ -1922,9 +1925,9 @@ func TestCursorSetLocationListAttr(t *testing.T) {
 
 		expected := [][]term.Cell{
 			{},
-			{{Ch: 'a', Fg: term.ColorRed | term.AttrUnderline, Bg: term.ColorBlack, Width: 1}},
-			{{Ch: 'b', Fg: term.ColorRed | term.AttrUnderline, Bg: term.ColorBlack, Width: 1}},
-			{{Ch: 'c', Fg: term.ColorRed | term.AttrUnderline, Bg: term.ColorBlack, Width: 1}},
+			{{Ch: 'a', Attributes: term.Attributes{Fg: tcell.ColorRed, Attrs: tcell.AttrUnderline, Bg: tcell.ColorBlack}, Width: 1}},
+			{{Ch: 'b', Attributes: term.Attributes{Fg: tcell.ColorRed, Attrs: tcell.AttrUnderline, Bg: tcell.ColorBlack}, Width: 1}},
+			{{Ch: 'c', Attributes: term.Attributes{Fg: tcell.ColorRed, Attrs: tcell.AttrUnderline, Bg: tcell.ColorBlack}, Width: 1}},
 			{},
 		}
 
@@ -2167,7 +2170,7 @@ func TestFileCursorIntegration(t *testing.T) {
 	for _, tcase := range tsuite {
 		t.Run(tcase.description, func(t *testing.T) {
 			b := cell.NewBuffer()
-			file, err := ioutil.TempFile("", "frctl_file_test")
+			file, err := os.CreateTemp("", "frctl_file_test")
 			require.NoError(t, err)
 
 			_, err = file.Write([]byte(sampleSnippet))

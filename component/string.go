@@ -101,10 +101,9 @@ func (l *LazyBytes) build() {
 	l.cells = make([]term.Cell, len(l.Data))
 	for i, r := range l.Data {
 		l.cells[i] = term.Cell{
-			Ch:    rune(r),
-			Fg:    l.Attributes.Fg,
-			Bg:    l.Attributes.Bg,
-			Width: 1, // only support width=1 graphemes
+			Ch:         rune(r),
+			Attributes: l.Attributes,
+			Width:      1, // only support width=1 graphemes
 		}
 	}
 	for _, t := range l.Tokens {
@@ -158,11 +157,10 @@ func (s *stringComp) Draw(w term.Writer) {
 			}
 			w.SetCell(term.Coordinates{X: x, Y: y},
 				term.Cell{
-					Bg:        s.attr.Bg,
-					Fg:        s.attr.Fg,
-					Ch:        c.Ch,
-					Combining: c.Combining,
-					Width:     c.Width,
+					Attributes: s.attr,
+					Ch:         c.Ch,
+					Combining:  c.Combining,
+					Width:      c.Width,
 				})
 		}
 	}
@@ -246,7 +244,7 @@ func newStringComp(
 		}
 	}
 
-	background := term.Cell{Ch: c, Fg: battr.Fg, Bg: battr.Bg}
+	background := term.Cell{Ch: c, Attributes: battr}
 	height = len(cells)
 	shouldPad := padWidth != 0 || padHeight != 0
 
@@ -255,7 +253,7 @@ func newStringComp(
 		if shouldPad {
 			// background of inner padding looks better if it's the same attr
 			// as the text.
-			background := term.Cell{Ch: c, Fg: attr.Fg, Bg: attr.Bg}
+			background := term.Cell{Ch: c, Attributes: attr}
 			comp = withBackgroundWrapper(comp, height, width, background, false, false, alg)
 		}
 		width += 2 + padWidth

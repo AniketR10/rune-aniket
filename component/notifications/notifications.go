@@ -3,6 +3,7 @@ package notifications
 import (
 	"time"
 
+	"github.com/ernestrc/tcell/v3"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/term"
 )
@@ -34,7 +35,7 @@ func newString(cfg Config, msg string) component.Responsive {
 			MinWidth:             cfg.Width,
 		},
 	}
-	return component.StringResponsive(msg, strConfig)
+	return component.NewResponsiveString(msg, strConfig)
 }
 
 func newNotification(
@@ -46,13 +47,13 @@ func newNotification(
 
 	switch level {
 	case LevelInfo:
-		progressCell = term.Cell{Ch: '═', Fg: term.ColorDefault}
+		progressCell = term.Cell{Ch: '═', Attributes: term.Attributes{Fg: tcell.ColorDefault}}
 	case LevelWarn:
-		progressCell = term.Cell{Ch: '━', Fg: term.ColorYellow}
+		progressCell = term.Cell{Ch: '━', Attributes: term.Attributes{Fg: tcell.ColorYellow}}
 	case LevelError:
-		progressCell = term.Cell{Ch: '━', Fg: term.ColorRed}
+		progressCell = term.Cell{Ch: '━', Attributes: term.Attributes{Fg: tcell.ColorRed}}
 	case LevelSuccess:
-		progressCell = term.Cell{Ch: '━', Fg: term.ColorGreen}
+		progressCell = term.Cell{Ch: '━', Attributes: term.Attributes{Fg: tcell.ColorGreen}}
 	default:
 		panic("unknown level")
 	}

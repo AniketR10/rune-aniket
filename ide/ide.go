@@ -188,7 +188,6 @@ func (i *IDE) Run() error {
 	}
 	atomic.StoreInt32(&i.running, 1)
 
-	term.SetOutputMode(i.ideConfig.outputMode())
 	term.SetInputMode(i.ideConfig.inputMode())
 
 	err = tui.RunWithLocker(i.root, i.locker)

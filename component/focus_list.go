@@ -1,6 +1,7 @@
 package component
 
 import (
+	"github.com/ernestrc/tcell/v3"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/term"
 )
@@ -8,13 +9,9 @@ import (
 const defaultElementHeight = 1
 
 var (
-	defaultTextAttr = term.Attributes{
-		Bg: term.ColorDefault,
-		Fg: term.ColorDefault,
-	}
+	defaultTextAttr   = term.Attributes{}
 	highlightTextAttr = term.Attributes{
-		Bg: term.ColorDefault,
-		Fg: term.ColorDefault | term.AttrBold,
+		Attrs: tcell.AttrBold,
 	}
 )
 

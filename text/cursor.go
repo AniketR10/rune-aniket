@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"strings"
 
+	"github.com/ernestrc/tcell/v3"
 	textapi "unstable.build/go-tui/api/text"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
@@ -872,13 +873,10 @@ func invertAttr(cells [][]term.Cell) {
 	for i := 0; i < len(cells); i++ {
 		for j := 0; j < len(cells[i]); j++ {
 			c := cells[i][j]
-			if c.Bg&term.AttrReverse == term.AttrReverse ||
-				c.Fg&term.AttrReverse == term.AttrReverse {
-				cells[i][j].Fg &^= term.AttrReverse
-				cells[i][j].Bg &^= term.AttrReverse
+			if c.Attrs&tcell.AttrReverse == tcell.AttrReverse {
+				cells[i][j].Attrs &^= tcell.AttrReverse
 			} else {
-				cells[i][j].Fg |= term.AttrReverse
-				cells[i][j].Bg |= term.AttrReverse
+				cells[i][j].Attrs |= tcell.AttrReverse
 			}
 		}
 	}
@@ -1337,17 +1335,15 @@ func (c *Cursor) setLocListAttr(l LocationList, reverse bool) {
 		if ok && reverse {
 			for y, row := range selection {
 				for x := range row {
-					attrs := term.AttributesDifference(selection[y][x].Attributes(), loc.Attr)
-					selection[y][x].Fg = attrs.Fg
-					selection[y][x].Bg = attrs.Bg
+					attrs := term.AttributesDifference(selection[y][x].Attributes, loc.Attr)
+					selection[y][x].Attributes = attrs
 				}
 			}
 		} else if ok {
 			for y, row := range selection {
 				for x := range row {
-					attrs := term.AttributesUnion(selection[y][x].Attributes(), loc.Attr)
-					selection[y][x].Fg = attrs.Fg
-					selection[y][x].Bg = attrs.Bg
+					attrs := term.AttributesUnion(selection[y][x].Attributes, loc.Attr)
+					selection[y][x].Attributes = attrs
 				}
 			}
 		}

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"github.com/ernestrc/tcell/v3"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/term"
@@ -52,8 +53,9 @@ func (f *Prompt) Init(cfg PromptConfig) {
 
 	if cfg.HighlightAttr == (term.Attributes{}) {
 		cfg.HighlightAttr = term.Attributes{
-			Bg: cfg.OptionAttr.Bg | term.AttrReverse,
-			Fg: cfg.OptionAttr.Fg | term.AttrReverse,
+			Bg:    cfg.OptionAttr.Bg,
+			Fg:    cfg.OptionAttr.Fg,
+			Attrs: cfg.OptionAttr.Attrs | tcell.AttrReverse,
 		}
 	}
 

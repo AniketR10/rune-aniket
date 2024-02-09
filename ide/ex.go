@@ -14,6 +14,7 @@ import (
 	"github.com/ernestrc/blue/iterator"
 	"github.com/ernestrc/blue/logging"
 	multierr "github.com/ernestrc/go-multierror"
+	"github.com/ernestrc/tcell/v3"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
 	browserapi "unstable.build/go-tui/api/browser"
@@ -44,7 +45,7 @@ const (
 )
 
 var (
-	commandBarAttr      = term.Attributes{Bg: term.ColorWhite, Fg: term.ColorBlack}
+	commandBarAttr      = term.Attributes{Bg: tcell.ColorWhite, Fg: tcell.ColorBlack}
 	errInvalidSetCursor = errors.New("Cannot set cursor on this buffer")
 	// TODO remove all default bindings
 	exDefaultBindings = map[term.KeyComb]string{
@@ -918,7 +919,12 @@ func (e *ex) openCommandPrompt() {
 		browser.FuncHandler(
 			handler.WithComponent(cmd,
 				component.WithBackground(
-					cmd, term.Cell{Bg: e.config.CommandOverlay.ElementAttr.Bg},
+					cmd, term.Cell{
+						Attributes: term.Attributes{
+							Bg:    e.config.CommandOverlay.ElementAttr.Bg,
+							Attrs: e.config.CommandOverlay.ElementAttr.Attrs,
+						},
+					},
 				),
 			), e.onCloseCommandPrompt),
 		cmd.Dimensions,

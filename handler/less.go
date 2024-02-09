@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/ernestrc/tcell/v3"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
@@ -24,8 +25,7 @@ func DefaultLessConfig() LessConfig {
 	return LessConfig{
 		Wrap: false,
 		ResAttr: term.Attributes{
-			Fg: term.AttrReverse,
-			Bg: term.ColorDefault,
+			Attrs: tcell.AttrReverse,
 		},
 		NoBar: false,
 	}
@@ -185,7 +185,7 @@ func (l *Less) normalHandleEvent(ev term.Event) (exit, handled bool) {
 }
 
 func (l *Less) setMessage(msg string) bool {
-	newMsg := component.StringResponsive(msg, component.StringResponsiveConfig{
+	newMsg := component.NewResponsiveString(msg, component.StringResponsiveConfig{
 		StringConfig: component.StringConfig{
 			Alignment: component.SpanAlignmentRight,
 		},

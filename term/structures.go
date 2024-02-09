@@ -3,21 +3,19 @@ package term
 import (
 	"context"
 	"fmt"
+
+	"github.com/ernestrc/tcell/v3"
 )
 
 type (
 	InputMode  int
-	OutputMode int
 	EventType  uint8
 	Modifier   uint8
 	Key        uint16
-	Attribute  uint16
 )
 
 // Attributes represents a cell background and foreground attributes.
-type Attributes struct {
-	Bg, Fg Attribute
-}
+type Attributes tcell.Style
 
 // Coordinates represent a point in a 2-D space.
 type Coordinates struct {
@@ -29,16 +27,11 @@ type Coordinates struct {
 // and background attributes respectively. Unicode graphene clusters
 // should be processed accordingly and stored into Ch and Combining fields.
 type Cell struct {
-	Ch        rune
-	Bg, Fg    Attribute
+	Ch rune
+	Attributes
 	Combining []rune
 	// Width is the monospace width
 	Width int
-}
-
-// Attributes returns this cell's Bg and Fg Attribute as Attributes.
-func (c Cell) Attributes() Attributes {
-	return Attributes{Bg: c.Bg, Fg: c.Fg}
 }
 
 // KeyComb represents is a key combination. See event for more details.

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	multierr "github.com/ernestrc/go-multierror"
+	"github.com/ernestrc/tcell/v3"
 	log "github.com/sirupsen/logrus"
 	yaml "gopkg.in/yaml.v3"
 	"unstable.build/go-tui/api/config"
@@ -26,10 +27,6 @@ import (
 )
 
 const (
-	outputNormal           = "normal"
-	output256              = "color_256"
-	output216              = "color_216"
-	outputGrayscale        = "grayscale"
 	inputEsc               = "esc"
 	inputAlt               = "alt"
 	inputMouse             = "mouse"
@@ -736,7 +733,7 @@ func (c ideConfig) virtualEditorAttr() (ret term.Attributes) {
 }
 
 func (c ideConfig) virtualEditorSelectionAttr() (ret term.Attributes) {
-	ret = term.Attributes{Bg: term.AttrReverse, Fg: term.AttrReverse}
+	ret = term.Attributes{Attrs: tcell.AttrReverse}
 	cfg, ok := c.virtual()
 	if !ok {
 		return
@@ -795,7 +792,7 @@ func (c ideConfig) virtualEditorEditor() (ret string) {
 }
 
 func (c ideConfig) modalResultAttr() (attr term.Attributes) {
-	attr = term.Attributes{Bg: term.ColorYellow, Fg: term.ColorBlack}
+	attr = term.Attributes{Bg: tcell.ColorYellow, Fg: tcell.ColorBlack}
 	cfg, ok := c.modal()
 	if !ok {
 		return
@@ -858,7 +855,7 @@ func (c ideConfig) modalBool(name string) (ret bool) {
 }
 
 func (c ideConfig) modelessResultAttr() (attr term.Attributes) {
-	attr = term.Attributes{Bg: term.ColorYellow, Fg: term.ColorBlack}
+	attr = term.Attributes{Bg: tcell.ColorYellow, Fg: tcell.ColorBlack}
 	cfg, ok := c.modeless()
 	if !ok {
 		return
@@ -991,36 +988,6 @@ func (c ideConfig) logLevel() log.Level {
 	return level
 }
 
-func (c ideConfig) outputMode() (out term.OutputMode) {
-	out = term.Output256
-
-	outputModeIfc, ok := c.cfg["output_mode"]
-	if !ok {
-		return
-	}
-
-	outputModeStr, ok := outputModeIfc.(string)
-	if !ok {
-		c.errors["output_mode"] = errors.New("invalid type")
-		return
-	}
-
-	switch outputModeStr {
-	case outputNormal:
-		out = term.OutputNormal
-	case output256:
-		out = term.Output256
-	case output216:
-		out = term.Output216
-	case outputGrayscale:
-		out = term.OutputGrayscale
-	default:
-		c.errors["output_mode"] = fmt.Errorf("unknown output mode: %s", outputModeStr)
-	}
-
-	return
-}
-
 func (c ideConfig) inputMode() term.InputMode {
 	inputModeIfc, ok := c.cfg["input_mode"]
 	if !ok {
@@ -1132,7 +1099,7 @@ func (c ideConfig) terminalDefaultAttr() term.Attributes {
 
 func (c ideConfig) terminalSelectionAttr() term.Attributes {
 	return c.getConfigAttr("terminal", "selection_attr",
-		term.Attributes{Bg: term.AttrReverse, Fg: term.AttrReverse})
+		term.Attributes{Attrs: tcell.AttrReverse})
 }
 
 func (c ideConfig) terminalShell() (ret string) {

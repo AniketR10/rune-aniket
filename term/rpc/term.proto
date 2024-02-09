@@ -5,16 +5,18 @@ option go_package = "unstable.build/go-tui/term/rpc";
 package term;
 
 message Attributes {
-	uint32 Foreground = 2;
-	uint32 Background = 3;
+	uint64 Foreground = 2;
+	uint64 Background = 3;
+	int64  Attrs = 4;
 }
 
 message Cell {
 	uint32 Character = 1;
-	uint32 Foreground = 2;
-	uint32 Background = 3;
+	uint64 Foreground = 2;
+	uint64 Background = 3;
 	repeated uint32 Combining = 4;
 	uint32 Width = 5;
+	int64  Attrs = 6;
 }
 
 message CellRow {

@@ -3,6 +3,7 @@ package component
 import (
 	"testing"
 
+	"github.com/ernestrc/tcell/v3"
 	"github.com/stretchr/testify/assert"
 	"unstable.build/go-tui/term"
 	testutil "unstable.build/go-tui/util/test"
@@ -112,12 +113,12 @@ func TestFrameResponsive(t *testing.T) {
 
 func TestFrameWithAttributes(t *testing.T) {
 	f := NewFrame(WithAttrSetter(&TestComponent{Ch: 'a'}))
-	f.SetAttr(term.Attributes{Fg: term.ColorRed, Bg: term.ColorGreen})
+	f.SetAttr(term.Attributes{Fg: tcell.ColorRed, Bg: tcell.ColorGreen})
 
-	assert.Equal(t, term.ColorGreen, f.Attributes.Bg)
-	assert.Equal(t, term.ColorRed, f.Attributes.Fg)
+	assert.Equal(t, tcell.ColorGreen, f.Attributes.Bg)
+	assert.Equal(t, tcell.ColorRed, f.Attributes.Fg)
 
 	prev := f.Content().(WithAttributes).SetAttr(term.Attributes{})
-	assert.Equal(t, term.ColorGreen, prev.Bg)
-	assert.Equal(t, term.ColorRed, prev.Fg)
+	assert.Equal(t, tcell.ColorGreen, prev.Bg)
+	assert.Equal(t, tcell.ColorRed, prev.Fg)
 }

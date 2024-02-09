@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ernestrc/tcell/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"unstable.build/go-tui/term"
@@ -21,7 +22,7 @@ func TestAttrSearcherSearch(t *testing.T) {
 func newAttrSearcher(t *testing.T, content string) (*Buffer, SubscriberSearcher) {
 	buf := NewBuffer()
 	searcher := NewSimpleSearcher(buf)
-	s := AttrSearcher(searcher, buf, term.Attributes{Bg: term.ColorRed, Fg: term.ColorCyan})
+	s := AttrSearcher(searcher, buf, term.Attributes{Bg: tcell.ColorRed, Fg: tcell.ColorNavy})
 	_, err := buf.ReadFrom(strings.NewReader(content))
 	require.NoError(t, err)
 	buf.Subscribe(s)
@@ -40,11 +41,11 @@ func TestAttrSearcher(t *testing.T) {
 				{Ch: 'y', Width: 1},
 				{Ch: 'o', Width: 1},
 				{Ch: ' ', Width: 1},
-				{Ch: 'w', Bg: term.ColorRed, Fg: term.ColorCyan, Width: 1},
-				{Ch: 'a', Bg: term.ColorRed, Fg: term.ColorCyan, Width: 1},
-				{Ch: 's', Bg: term.ColorRed, Fg: term.ColorCyan, Width: 1},
-				{Ch: 'u', Bg: term.ColorRed, Fg: term.ColorCyan, Width: 1},
-				{Ch: 'p', Bg: term.ColorRed, Fg: term.ColorCyan, Width: 1},
+				{Ch: 'w', Attributes: term.Attributes{Bg: tcell.ColorRed, Fg: tcell.ColorNavy}, Width: 1},
+				{Ch: 'a', Attributes: term.Attributes{Bg: tcell.ColorRed, Fg: tcell.ColorNavy}, Width: 1},
+				{Ch: 's', Attributes: term.Attributes{Bg: tcell.ColorRed, Fg: tcell.ColorNavy}, Width: 1},
+				{Ch: 'u', Attributes: term.Attributes{Bg: tcell.ColorRed, Fg: tcell.ColorNavy}, Width: 1},
+				{Ch: 'p', Attributes: term.Attributes{Bg: tcell.ColorRed, Fg: tcell.ColorNavy}, Width: 1},
 			},
 		}
 		assert.Equal(t, expected, buf.RawCells())
@@ -87,8 +88,8 @@ func TestAttrSearcher(t *testing.T) {
 		expected := [][]term.Cell{
 			{
 				{Ch: 'o', Width: 1}, {Ch: ' ', Width: 1},
-				{Ch: 'y', Bg: term.ColorRed, Fg: term.ColorCyan, Width: 1},
-				{Ch: 'o', Bg: term.ColorRed, Fg: term.ColorCyan, Width: 1},
+				{Ch: 'y', Attributes: term.Attributes{Bg: tcell.ColorRed, Fg: tcell.ColorNavy}, Width: 1},
+				{Ch: 'o', Attributes: term.Attributes{Bg: tcell.ColorRed, Fg: tcell.ColorNavy}, Width: 1},
 				{Ch: ' ', Width: 1},
 				{Ch: 'w', Width: 1}, {Ch: 'a', Width: 1}, {Ch: 's', Width: 1},
 				{Ch: 'u', Width: 1}, {Ch: 'p', Width: 1},
@@ -108,8 +109,8 @@ func TestAttrSearcher(t *testing.T) {
 			{
 				{Ch: 'y', Width: 1}, {Ch: 'j', Width: 1},
 				{Ch: 'o', Width: 1}, {Ch: ' ', Width: 1},
-				{Ch: 'y', Bg: term.ColorRed, Fg: term.ColorCyan, Width: 1},
-				{Ch: 'o', Bg: term.ColorRed, Fg: term.ColorCyan, Width: 1},
+				{Ch: 'y', Attributes: term.Attributes{Bg: tcell.ColorRed, Fg: tcell.ColorNavy}, Width: 1},
+				{Ch: 'o', Attributes: term.Attributes{Bg: tcell.ColorRed, Fg: tcell.ColorNavy}, Width: 1},
 				{Ch: ' ', Width: 1},
 				{Ch: 'w', Width: 1}, {Ch: 'a', Width: 1}, {Ch: 's', Width: 1},
 				{Ch: 'u', Width: 1}, {Ch: 'p', Width: 1},
@@ -131,12 +132,12 @@ func TestAttrSearcher(t *testing.T) {
 				{Ch: 'y', Width: 1},
 				{Ch: 'o', Width: 1},
 				{Ch: ' ', Width: 1},
-				{Ch: 'w', Bg: term.ColorRed, Fg: term.ColorCyan, Width: 1},
-				{Ch: 'a', Bg: term.ColorRed, Fg: term.ColorCyan, Width: 1},
-				{Ch: 's', Bg: term.ColorRed, Fg: term.ColorCyan, Width: 1},
-				{Ch: 'u', Bg: term.ColorRed, Fg: term.ColorCyan, Width: 1},
-				{Ch: 'p', Bg: term.ColorRed, Fg: term.ColorCyan, Width: 1},
-				{Ch: 'p', Bg: term.ColorRed, Fg: term.ColorCyan, Width: 1},
+				{Ch: 'w', Attributes: term.Attributes{Bg: tcell.ColorRed, Fg: tcell.ColorNavy}, Width: 1},
+				{Ch: 'a', Attributes: term.Attributes{Bg: tcell.ColorRed, Fg: tcell.ColorNavy}, Width: 1},
+				{Ch: 's', Attributes: term.Attributes{Bg: tcell.ColorRed, Fg: tcell.ColorNavy}, Width: 1},
+				{Ch: 'u', Attributes: term.Attributes{Bg: tcell.ColorRed, Fg: tcell.ColorNavy}, Width: 1},
+				{Ch: 'p', Attributes: term.Attributes{Bg: tcell.ColorRed, Fg: tcell.ColorNavy}, Width: 1},
+				{Ch: 'p', Attributes: term.Attributes{Bg: tcell.ColorRed, Fg: tcell.ColorNavy}, Width: 1},
 			},
 		}
 		assert.Equal(t, expected, buf.RawCells())

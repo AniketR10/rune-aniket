@@ -4,6 +4,7 @@ import (
 	"image"
 	"sync"
 
+	"github.com/ernestrc/tcell/v3"
 	"unstable.build/go-tui/term"
 )
 
@@ -436,10 +437,9 @@ func (buffer *Buffer) write(runes ...MeasuredRune) {
 				line.append(buffer.defaultCell(int(buffer.CursorColumn()) == len(line.cells)))
 			}
 			line.cells[buffer.cursorPosition.Col] = term.Cell{
-				Bg:    buffer.cursorAttr.Bg,
-				Fg:    buffer.cursorAttr.Fg,
-				Ch:    r.Rune,
-				Width: r.Width,
+				Attributes: buffer.cursorAttr,
+				Ch:         r.Rune,
+				Width:      r.Width,
 			}
 			buffer.incrementCursorPosition()
 			continue
@@ -704,7 +704,7 @@ func (buffer *Buffer) eraseLineToCursor() {
 	line := buffer.getCurrentLine()
 	for i := 0; i <= int(buffer.cursorPosition.Col); i++ {
 		if i < len(line.cells) {
-			line.cells[i] = term.Cell{Bg: buffer.cursorAttr.Bg}
+			line.cells[i] = term.Cell{Attributes: buffer.cursorAttr}
 		}
 	}
 }
@@ -754,7 +754,7 @@ func (buffer *Buffer) eraseCharacters(n int) {
 	}
 
 	for i := int(buffer.cursorPosition.Col); i < max; i++ {
-		line.cells[i] = term.Cell{Bg: buffer.cursorAttr.Bg}
+		line.cells[i] = term.Cell{Attributes: buffer.cursorAttr}
 	}
 }
 
@@ -780,7 +780,7 @@ func (buffer *Buffer) eraseDisplayToCursor() {
 		if i >= len(line.cells) {
 			break
 		}
-		line.cells[i] = term.Cell{Bg: buffer.cursorAttr.Bg}
+		line.cells[i] = term.Cell{Attributes: buffer.cursorAttr}
 	}
 
 	cursorVY := buffer.convertRawLineToViewLine(buffer.cursorPosition.Line)
@@ -815,14 +815,11 @@ func (buffer *Buffer) resetVerticalMargins(height uint) {
 func (buffer *Buffer) defaultCell(applyEffects bool) term.Cell {
 	attr := buffer.cursorAttr
 	if !applyEffects {
-		attr.Bg &= ^term.AttrBold
-		attr.Fg &= ^term.AttrBold
-		attr.Bg &= ^term.AttrUnderline
-		attr.Fg &= ^term.AttrUnderline
-		attr.Bg &= ^term.AttrReverse
-		attr.Fg &= ^term.AttrReverse
+		attr.Attrs &= ^tcell.AttrBold
+		attr.Attrs &= ^tcell.AttrUnderline
+		attr.Attrs &= ^tcell.AttrReverse
 	}
-	return term.Cell{Fg: attr.Fg, Bg: attr.Bg}
+	return term.Cell{Attributes: attr}
 }
 
 func (buffer *Buffer) IsNewLineMode() bool {

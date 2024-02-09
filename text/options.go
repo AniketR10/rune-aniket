@@ -3,6 +3,7 @@ package text
 import (
 	"time"
 
+	"github.com/ernestrc/tcell/v3"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component"
@@ -42,8 +43,8 @@ type Config struct {
 // DefaultCommandOverlayConfig returns the default Config's CommandOverlayConfig.
 func DefaultCommandOverlayConfig() (cfg CommandOverlayConfig) {
 	// NOTE: cannot use handler/command config: dependency cycle
-	cfg.MatchedTextAttr = term.Attributes{Fg: term.ColorRed}
-	cfg.FocusElementAttr = term.Attributes{Fg: term.AttrBold | term.AttrUnderline | term.ColorRed}
+	cfg.MatchedTextAttr = term.Attributes{Fg: tcell.ColorRed}
+	cfg.FocusElementAttr = term.Attributes{Fg: tcell.ColorRed, Attrs: tcell.AttrBold | tcell.AttrUnderline}
 	cfg.ElementAttr = term.Attributes{}
 	cfg.ShowManualAfter = 1 * time.Second
 	return
@@ -58,7 +59,7 @@ func DefaultConfig() Config {
 		CommandEvent:            term.KeyComb{Ch: ':'},
 		CommandMaxHistory:       2000,
 		Config:                  browser.DefaultConfig(),
-		DirtyTabAttr:            term.Attributes{Fg: term.AttrBold},
+		DirtyTabAttr:            term.Attributes{Attrs: tcell.AttrBold},
 		CommandKeyBindings:      make(map[term.KeyComb][]string),
 		CommandSequenceBindings: make(map[handler.Sequence][]string),
 		CommandAliases:          make(map[string][]string),

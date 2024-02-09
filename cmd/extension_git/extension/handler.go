@@ -13,6 +13,7 @@ import (
 
 	"github.com/ernestrc/blue/iterator"
 	"github.com/ernestrc/blue/logging"
+	"github.com/ernestrc/tcell/v3"
 	log "github.com/sirupsen/logrus"
 	"github.com/sourcegraph/go-diff/diff"
 	browserapi "unstable.build/go-tui/api/browser"
@@ -77,9 +78,9 @@ var (
 		extension.PermissionConfig,
 	}
 
-	defaultScrollAttr = term.Attributes{Fg: term.ColorBlack}
-	defaultAddAttr    = term.Attributes{Bg: term.ColorGreen}
-	defaultDelAttr    = term.Attributes{Bg: term.ColorRed}
+	defaultScrollAttr = term.Attributes{Fg: tcell.ColorBlack}
+	defaultAddAttr    = term.Attributes{Bg: tcell.ColorGreen}
+	defaultDelAttr    = term.Attributes{Bg: tcell.ColorRed}
 )
 
 type gitEditorHandler struct {

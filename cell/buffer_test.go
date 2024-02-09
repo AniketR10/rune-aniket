@@ -7,6 +7,7 @@ import (
 
 	"unstable.build/go-tui/term"
 
+	"github.com/ernestrc/tcell/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -660,58 +661,51 @@ func TestBufferSubscribe(t *testing.T) {
 
 func TestBufferInsertWithAttr(t *testing.T) {
 	buf := NewBuffer()
-	fg := term.ColorRed
-	bg := term.ColorYellow
+	attr := term.Attributes{Fg: tcell.ColorRed, Bg: tcell.ColorYellow}
 
-	buf.InsertWithAttr(term.Coordinates{}, 'A',
-		term.Attributes{Fg: fg, Bg: bg})
+	buf.InsertWithAttr(term.Coordinates{}, 'A', attr)
 	cell := buf.RawCells()[0][0]
-	assert.Equal(t, term.Cell{Ch: 'A', Fg: fg, Bg: bg, Width: 1}, cell)
+	assert.Equal(t, term.Cell{Ch: 'A', Attributes: attr, Width: 1}, cell)
 
-	buf.InsertWithAttr(term.Coordinates{X: 1}, '\n',
-		term.Attributes{Fg: fg, Bg: bg})
+	buf.InsertWithAttr(term.Coordinates{X: 1}, '\n', attr)
 
-	buf.InsertWithAttr(term.Coordinates{Y: 1}, 'E',
-		term.Attributes{Fg: fg, Bg: bg})
+	buf.InsertWithAttr(term.Coordinates{Y: 1}, 'E', attr)
 	cell = buf.RawCells()[1][0]
-	assert.Equal(t, term.Cell{Ch: 'E', Fg: fg, Bg: bg, Width: 1}, cell)
+	assert.Equal(t, term.Cell{Ch: 'E', Attributes: attr, Width: 1}, cell)
 }
 
 func TestBufferInsertStringWithAttr(t *testing.T) {
-	fg := term.ColorRed
-	bg := term.ColorYellow
+	attr := term.Attributes{Fg: tcell.ColorRed, Bg: tcell.ColorYellow}
 	t.Run("insert single line string", func(t *testing.T) {
 		buf := NewBuffer()
-		buf.InsertStringWithAttr(term.Coordinates{}, "Atza",
-			term.Attributes{Fg: fg, Bg: bg})
+		buf.InsertStringWithAttr(term.Coordinates{}, "Atza", attr)
 		row := buf.RawCells()[0]
 		assert.Equal(t, []term.Cell{
-			{Ch: 'A', Fg: fg, Bg: bg, Width: 1},
-			{Ch: 't', Fg: fg, Bg: bg, Width: 1},
-			{Ch: 'z', Fg: fg, Bg: bg, Width: 1},
-			{Ch: 'a', Fg: fg, Bg: bg, Width: 1},
+			{Ch: 'A', Attributes: attr, Width: 1},
+			{Ch: 't', Attributes: attr, Width: 1},
+			{Ch: 'z', Attributes: attr, Width: 1},
+			{Ch: 'a', Attributes: attr, Width: 1},
 		}, row)
 	})
 	t.Run("insert multi line string", func(t *testing.T) {
 		buf := NewBuffer()
-		buf.InsertStringWithAttr(term.Coordinates{}, "Lola\nGranola",
-			term.Attributes{Fg: fg, Bg: bg})
+		buf.InsertStringWithAttr(term.Coordinates{}, "Lola\nGranola", attr)
 		cells := buf.RawCells()
 		assert.Equal(t, [][]term.Cell{
 			{
-				{Ch: 'L', Fg: fg, Bg: bg, Width: 1},
-				{Ch: 'o', Fg: fg, Bg: bg, Width: 1},
-				{Ch: 'l', Fg: fg, Bg: bg, Width: 1},
-				{Ch: 'a', Fg: fg, Bg: bg, Width: 1},
+				{Ch: 'L', Attributes: attr, Width: 1},
+				{Ch: 'o', Attributes: attr, Width: 1},
+				{Ch: 'l', Attributes: attr, Width: 1},
+				{Ch: 'a', Attributes: attr, Width: 1},
 			},
 			{
-				{Ch: 'G', Fg: fg, Bg: bg, Width: 1},
-				{Ch: 'r', Fg: fg, Bg: bg, Width: 1},
-				{Ch: 'a', Fg: fg, Bg: bg, Width: 1},
-				{Ch: 'n', Fg: fg, Bg: bg, Width: 1},
-				{Ch: 'o', Fg: fg, Bg: bg, Width: 1},
-				{Ch: 'l', Fg: fg, Bg: bg, Width: 1},
-				{Ch: 'a', Fg: fg, Bg: bg, Width: 1},
+				{Ch: 'G', Attributes: attr, Width: 1},
+				{Ch: 'r', Attributes: attr, Width: 1},
+				{Ch: 'a', Attributes: attr, Width: 1},
+				{Ch: 'n', Attributes: attr, Width: 1},
+				{Ch: 'o', Attributes: attr, Width: 1},
+				{Ch: 'l', Attributes: attr, Width: 1},
+				{Ch: 'a', Attributes: attr, Width: 1},
 			},
 		}, cells)
 	})

@@ -3,6 +3,7 @@ package handler
 import (
 	"testing"
 
+	"github.com/ernestrc/tcell/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"unstable.build/go-tui"
@@ -223,8 +224,8 @@ func TestWindowManagerInit(t *testing.T) {
 
 func TestWindowManagerSetAttr(t *testing.T) {
 	wm := NewWindowManager(NewTestHandler(), DefaultWindowManagerConfig())
-	cyan := term.ColorCyan
-	red := term.ColorRed
+	cyan := tcell.ColorNavy
+	red := tcell.ColorRed
 
 	wm.SplitHorizontal(wm.Focus(), NewTestHandler())
 	wm.SetAttr(term.Attributes{Bg: cyan, Fg: red}, term.Attributes{Bg: red, Fg: cyan})

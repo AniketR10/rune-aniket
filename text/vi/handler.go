@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/ernestrc/blue/logging"
+	"github.com/ernestrc/tcell/v3"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
 	textapi "unstable.build/go-tui/api/text"
@@ -75,8 +76,7 @@ type viHandlerImpl struct {
 // DefaultviHandlerImplConfig is a sane configuration defaults for viHandlerImpl.
 var defaultviHandlerImplConfig = viConfig{
 	resAttr: term.Attributes{
-		Fg: term.AttrReverse,
-		Bg: term.ColorDefault,
+		Attrs: tcell.AttrReverse,
 	},
 	clipboard:       clipboard.NewInMemory(),
 	defaultRegister: clipboard.DefaultRegisterID,

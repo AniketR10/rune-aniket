@@ -15,6 +15,7 @@ import (
 	"github.com/alecthomas/chroma/styles"
 	"github.com/ernestrc/blue/iterator"
 	multierr "github.com/ernestrc/go-multierror"
+	"github.com/ernestrc/tcell/v3"
 	log "github.com/sirupsen/logrus"
 	sitter "github.com/smacker/go-tree-sitter"
 	browserapi "unstable.build/go-tui/api/browser"
@@ -34,7 +35,6 @@ import (
 	"unstable.build/go-tui/handler/search"
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/term"
-	"unstable.build/go-tui/term/color"
 	"unstable.build/go-tui/text/vi"
 )
 
@@ -455,7 +455,7 @@ func (h *syntaxHandler) browseNodes(
 			return
 		}
 
-		attrs := term.Attributes{Bg: term.AttrReverse, Fg: term.AttrReverse}
+		attrs := term.Attributes{Attrs: tcell.AttrReverse}
 		loc := textapi.Location{From: from, To: to, Attr: attrs}
 		ed.SetLocationList(edh, textapi.LocationPriorityInfo,
 			locID, textapi.LocationSlice([]textapi.Location{loc}))
@@ -672,8 +672,8 @@ func (h *syntaxHandler) setBackground(file workspaceapi.URI, ed textapi.Handler)
 		return
 	}
 
-	attr := color.RGBToAttribute(bg.Background.Red(), bg.Background.Green(), bg.Background.Blue())
-	err := h.ed.SetDefaultAttributes(ed, term.Attributes{Fg: term.ColorDefault, Bg: attr})
+	color := tcell.NewRGBColor(int32(bg.Background.Red()), int32(bg.Background.Green()), int32(bg.Background.Blue()))
+	err := h.ed.SetDefaultAttributes(ed, term.Attributes{Bg: color})
 	if err != nil {
 		log.Errorf("SetDefaultAttributes: %v", err)
 	}

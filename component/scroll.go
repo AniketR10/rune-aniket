@@ -4,6 +4,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/ernestrc/tcell/v3"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/term"
 )
@@ -56,7 +57,7 @@ func (s *Scroll) initBuffer(buf *cell.Buffer) {
 // Init initializes this scroll with buf.
 func (s *Scroll) Init(buf *cell.Buffer) {
 	if s.ResultsAttr == (term.Attributes{}) {
-		s.ResultsAttr.Fg, s.ResultsAttr.Bg = term.AttrReverse, term.AttrReverse
+		s.ResultsAttr.Attrs = tcell.AttrReverse
 	}
 
 	// Searcher that actually performs the text search
@@ -512,8 +513,7 @@ func (s *Scroll) Draw(writer term.Writer) {
 	for y := 0; y < s.height; y++ {
 		for x := 0; x < s.width; x++ {
 			writer.SetCell(term.Coordinates{X: x, Y: y}, term.Cell{
-				Fg: s.Attributes.Fg,
-				Bg: s.Attributes.Bg,
+				Attributes: s.Attributes,
 			})
 		}
 	}

@@ -286,10 +286,10 @@ func (u *FrameUnion) setVerticalUnionFrameCells(w term.Writer, v *frameVirtual, 
 		return
 	}
 	w.SetCell(term.Coordinates{Y: y},
-		term.Cell{Width: 1, Ch: u.Left, Bg: u.Attributes.Bg, Fg: u.Attributes.Fg})
+		term.Cell{Width: 1, Ch: u.Left, Attributes: u.Attributes})
 	if u.width > 0 {
 		w.SetCell(term.Coordinates{X: u.width - 1, Y: y},
-			term.Cell{Width: 1, Ch: u.Right, Bg: u.Attributes.Bg, Fg: u.Attributes.Fg})
+			term.Cell{Width: 1, Ch: u.Right, Attributes: u.Attributes})
 	}
 }
 
@@ -298,10 +298,10 @@ func (u *FrameUnion) setHorizontalUnionFrameCells(w term.Writer, v *frameVirtual
 		return
 	}
 	w.SetCell(term.Coordinates{X: x, Y: y},
-		term.Cell{Width: 1, Ch: u.Top, Bg: u.Attributes.Bg, Fg: u.Attributes.Fg})
+		term.Cell{Width: 1, Ch: u.Top, Attributes: u.Attributes})
 	if height > 0 {
 		w.SetCell(term.Coordinates{X: x, Y: y + height - 1},
-			term.Cell{Width: 1, Ch: u.Bottom, Bg: u.Attributes.Bg, Fg: u.Attributes.Fg})
+			term.Cell{Width: 1, Ch: u.Bottom, Attributes: u.Attributes})
 	}
 }
 

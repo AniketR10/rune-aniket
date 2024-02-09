@@ -666,27 +666,27 @@ func (c *Component) overwriteFocusWindowUnion(w term.Writer) {
 	cs := c.config.WindowManagerConfig.FocusFrameCharSet
 
 	if topleft == (term.Coordinates{}) {
-		cell := term.Cell{Width: 1, Ch: cs.TopLeft, Bg: attr.Bg, Fg: attr.Fg}
+		cell := term.Cell{Width: 1, Ch: cs.TopLeft, Attributes: attr}
 		w.SetCell(mainPos, cell)
 	}
 
 	topright := term.Coordinates{X: topleft.X + c.focusWindow.Width(), Y: topleft.Y}
 	if topright == (term.Coordinates{X: mainWidth, Y: 0}) {
-		cell := term.Cell{Width: 1, Ch: cs.TopRight, Bg: attr.Bg, Fg: attr.Fg}
+		cell := term.Cell{Width: 1, Ch: cs.TopRight, Attributes: attr}
 		pos := term.Coordinates{X: mainPos.X + mainWidth - 1, Y: mainPos.Y}
 		w.SetCell(pos, cell)
 	}
 
 	bottomleft := term.Coordinates{X: topleft.X, Y: topleft.Y + c.focusWindow.Height()}
 	if bottomleft == (term.Coordinates{Y: mainHeight, X: 0}) {
-		cell := term.Cell{Width: 1, Ch: cs.BottomLeft, Bg: attr.Bg, Fg: attr.Fg}
+		cell := term.Cell{Width: 1, Ch: cs.BottomLeft, Attributes: attr}
 		pos := term.Coordinates{X: mainPos.X, Y: mainPos.Y + mainHeight - 1}
 		w.SetCell(pos, cell)
 	}
 
 	bottomright := term.Coordinates{X: topleft.X + c.focusWindow.Width(), Y: topleft.Y + c.focusWindow.Height()}
 	if bottomright == (term.Coordinates{Y: mainHeight, X: mainWidth}) {
-		cell := term.Cell{Width: 1, Ch: cs.BottomRight, Bg: attr.Bg, Fg: attr.Fg}
+		cell := term.Cell{Width: 1, Ch: cs.BottomRight, Attributes: attr}
 		pos := term.Coordinates{X: mainPos.X + mainWidth - 1, Y: mainPos.Y + mainHeight - 1}
 		w.SetCell(pos, cell)
 	}

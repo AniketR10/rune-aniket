@@ -8,9 +8,9 @@ import (
 	"golang.org/x/image/draw"
 
 	"github.com/disintegration/imaging"
+	"github.com/ernestrc/tcell/v3"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/term"
-	tcolor "unstable.build/go-tui/term/color"
 )
 
 // DefaultDensityCharacters are the default characters used by Encode and EncodeScaler
@@ -80,7 +80,7 @@ func Encode(
 			character := density[idx]
 			var attr term.Attributes
 			if config.Color {
-				fg := tcolor.RGBToAttribute(r, g, b)
+				fg := tcell.NewRGBColor(int32(r), int32(g), int32(b))
 				attr = term.Attributes{Fg: fg}
 			}
 			output.InsertWithAttr(term.Coordinates{X: x, Y: y}, character, attr)

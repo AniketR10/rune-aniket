@@ -4,6 +4,7 @@ import (
 	"math"
 	"testing"
 
+	"github.com/ernestrc/tcell/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -96,7 +97,7 @@ func newTestDomWriter(widthInPixels, heightInPixels int) (
 
 func TestDomWriterSetAttr(t *testing.T) {
 	w, _, _, _ := newTestDomWriter(1, 1)
-	attr := Attributes{Bg: ColorBlack, Fg: ColorWhite | AttrBold}
+	attr := Attributes{Bg: tcell.ColorBlack, Fg: tcell.ColorWhite, Attrs: tcell.AttrBold}
 	w.SetAttr(attr)
 	assert.Equal(t, attr, w.Attr())
 }

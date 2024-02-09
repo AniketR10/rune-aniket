@@ -4,21 +4,11 @@ import (
 	"bytes"
 	"fmt"
 	"strings"
+
+	"github.com/ernestrc/tcell/v3"
 )
 
 const (
-	hexBlack   = "#000000"
-	hexWhite   = "#FFFFFF"
-	hexRed     = "#FF0000"
-	hexGreen   = "#00FF00"
-	hexYellow  = "#FFFF00"
-	hexBlue    = "#0000FF"
-	hexMagenta = "#FF00FF"
-	hexCyan    = "#00FFFF"
-
-	defaultBg = hexBlack
-	defaultFg = hexWhite
-
 	defaultCursorStyle = "background: red;"
 )
 
@@ -35,7 +25,7 @@ type HTMLWriter struct {
 // NewHTMLWriter allocates storage for a new HTMLWriter and initializes it.
 func NewHTMLWriter(width, height int) (t *HTMLWriter) {
 	t = new(HTMLWriter)
-	t.defaultAttr = Attributes{Bg: ColorBlack, Fg: ColorWhite}
+	t.defaultAttr = Attributes{Bg: tcell.ColorBlack, Fg: tcell.ColorWhite}
 	t.Resize(width, height)
 	t.cursorStyle = defaultCursorStyle
 	return
@@ -61,74 +51,31 @@ func (w *HTMLWriter) SetCell(pos Coordinates, cell Cell) {
 	w.cellbuf[idx] = cell
 }
 
-func (w *HTMLWriter) getHexColor(attr, def Attribute) (hex string, ok bool) {
-	// NOTE: assumes SetOutputMode(OutputNormal) behaviour
-	color := attr & 0x0F
-	ok = true
-	switch color {
-	case ColorBlack:
-		hex = hexBlack
-	case ColorRed:
-		hex = hexRed
-	case ColorGreen:
-		hex = hexGreen
-	case ColorYellow:
-		hex = hexYellow
-	case ColorBlue:
-		hex = hexBlue
-	case ColorMagenta:
-		hex = hexMagenta
-	case ColorCyan:
-		hex = hexCyan
-	case ColorWhite:
-		hex = hexWhite
-	/* case ColorDefault: */
-	default:
-		ok = false
-	}
-
-	if attr == def {
-		ok = false
-	}
-
-	return
-}
-
 func (w *HTMLWriter) convertToCSS(attr Attributes, ignoreDefault bool) (
 	css string, needsFg, needsBg bool,
 ) {
 	var builder strings.Builder
 
-	if attr.Fg&AttrBold != 0 {
-		attr.Fg &^= AttrBold
+	if attr.Attrs&tcell.AttrBold != 0 {
+		attr.Attrs &^= tcell.AttrBold
 		needsFg = true
 		builder.WriteString("font-weight:bold;")
 	}
 
-	if attr.Fg&AttrUnderline != 0 {
-		attr.Fg &^= AttrUnderline
+	if attr.Attrs&tcell.AttrUnderline != 0 {
+		attr.Attrs &^= tcell.AttrUnderline
 		needsFg = true
 		builder.WriteString("text-decoration:underline;")
 	}
 
-	if attr.Bg&AttrUnderline != 0 {
-		/* ignore */
-		attr.Bg &^= AttrUnderline
-	}
-
-	if attr.Bg&AttrBold != 0 {
-		/* ignore */
-		attr.Bg &^= AttrBold
-	}
-
-	fgReverse := attr.Fg&AttrReverse != 0
-	bgReverse := attr.Bg&AttrReverse != 0
+	fgReverse := attr.Attrs&tcell.AttrReverse != 0
+	bgReverse := attr.Attrs&tcell.AttrReverse != 0
 	if fgReverse || bgReverse {
 		if fgReverse {
-			attr.Fg &^= AttrReverse
+			attr.Attrs &^= tcell.AttrReverse
 		}
 		if bgReverse {
-			attr.Bg &^= AttrReverse
+			attr.Attrs &^= tcell.AttrReverse
 		}
 
 		// at this point all attributes should be removed
@@ -143,14 +90,16 @@ func (w *HTMLWriter) convertToCSS(attr Attributes, ignoreDefault bool) (
 		attr.Fg = tempBg
 	}
 
-	bgHex, needsBg := w.getHexColor(attr.Bg, w.defaultAttr.Bg)
+	bgHex := attr.Bg.CSS()
+	needsBg = attr.Bg != tcell.ColorDefault
 	if !ignoreDefault || needsBg {
 		builder.WriteString("background:")
 		builder.WriteString(bgHex)
 		builder.WriteString(";")
 	}
 
-	fgHex, needsColorFg := w.getHexColor(attr.Fg, w.defaultAttr.Fg)
+	fgHex := attr.Fg.CSS()
+	needsColorFg := attr.Fg != tcell.ColorDefault
 	if !ignoreDefault || needsColorFg {
 		builder.WriteString("color:")
 		builder.WriteString(fgHex)

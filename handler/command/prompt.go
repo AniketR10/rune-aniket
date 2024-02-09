@@ -1043,5 +1043,5 @@ func (h *Prompt) getSeparatorHeight() int {
 
 func newNopAnimation(cfg Config) tui.Component {
 	return component.WithBackground(component.Nop(),
-		term.Cell{Bg: cfg.ElementAttr.Bg, Fg: cfg.ElementAttr.Fg})
+		term.Cell{Attributes: cfg.ElementAttr})
 }

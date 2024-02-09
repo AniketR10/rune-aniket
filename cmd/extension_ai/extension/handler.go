@@ -602,8 +602,7 @@ func (h *aiEditorHandler) wrapDialogueHandler(
 	// use background as component of the final browserapi.Handler
 	// ensuring its access is synchronized via component.Sync
 	background := component.WithBackground(comp.comp, term.Cell{
-		Bg: h.backgroundAttr.Bg,
-		Fg: h.backgroundAttr.Fg,
+		Attributes: h.backgroundAttr,
 	})
 	synced := component.Sync(comp.mu, background)
 	withComp := handler.WithComponent(dhandler, synced)
@@ -797,10 +796,9 @@ func (s syncComponent) addWaitingAnimation() func() {
 	}
 	animation := component.NewAnimation(s.h.p, frames, seq, 8)
 	comp := component.WithBackground(animation, term.Cell{
-		Bg:    s.h.backgroundAttr.Bg,
-		Fg:    s.h.backgroundAttr.Fg,
-		Ch:    ' ', // override animation attributes
-		Width: 1,
+		Attributes: s.h.backgroundAttr,
+		Ch:         ' ', // override animation attributes
+		Width:      1,
 	})
 	s.mu.Lock()
 	defer s.mu.Unlock()

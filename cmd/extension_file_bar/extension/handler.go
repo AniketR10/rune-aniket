@@ -9,6 +9,7 @@ import (
 
 	"github.com/ernestrc/blue/iterator"
 	"github.com/ernestrc/blue/logging"
+	"github.com/ernestrc/tcell/v3"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
 	browserapi "unstable.build/go-tui/api/browser"
@@ -60,9 +61,9 @@ var (
 		extension.Permission(extension.PermissionFileSystem),
 	}
 
-	defaultScrollAttr     = term.Attributes{Fg: term.ColorDefault}
-	defaultBackgroundAttr = term.Attributes{Fg: term.ColorDefault}
-	defaultDirtyAttr      = term.Attributes{Fg: term.ColorYellow}
+	defaultScrollAttr     = term.Attributes{Fg: tcell.ColorDefault}
+	defaultBackgroundAttr = term.Attributes{Fg: tcell.ColorDefault}
+	defaultDirtyAttr      = term.Attributes{Fg: tcell.ColorYellow}
 )
 
 type fileInfo struct {
@@ -279,7 +280,7 @@ func (h *fileBarEditorHandler) refreshBarContent(ev textapi.Event) {
 	coordsSpan := component.NewSpan(&h.bar.coords, coordsSpanCfg)
 	h.bar.comp.Init(component.WithBackground(
 		component.Grid([][]tui.Component{{fileSpan, coordsSpan}}),
-		term.Cell{Bg: h.backgroundAttributes.Bg, Fg: h.backgroundAttributes.Fg},
+		term.Cell{Attributes: h.backgroundAttributes},
 	))
 }
 

@@ -4,10 +4,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ernestrc/tcell/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"unstable.build/go-tui/component"
-	"unstable.build/go-tui/term"
 )
 
 func TestConfigOk(t *testing.T) {
@@ -62,8 +62,9 @@ func TestConfigTypes(t *testing.T) {
 		"23":     float32(2.1),
 		"true":   true,
 		"false":  false,
-		"attr_1": map[string]interface{}{"fg": "blue", "bg": 7},
-		"attr_2": map[string]interface{}{"fg": []interface{}{"red", "bold"}},
+		"attr_1": map[string]interface{}{"fg": "blue", "bg": "#f0f0f0"},
+		"attr_2": map[string]interface{}{"fg": "red", "flags": []interface{}{"bold", "italic"}},
+		"attr_3": map[string]interface{}{"fg": "red", "flag": []interface{}{"bold", "italic"}},
 		"charset_1": map[string]interface{}{"topleft": "a",
 			"topright": "b", "bottomleft": "c",
 			"bottomright": "d", "horizontalbottom": "e", "verticalleft": "f"},
@@ -150,14 +151,16 @@ func TestConfigTypes(t *testing.T) {
 
 					attrs, err := GetAttributes(c, "attr_1")
 					require.NoError(t, err)
-					assert.True(t, attrs.Fg&term.ColorBlue != 0)
-					assert.True(t, attrs.Bg&term.ColorCyan != 0)
+					assert.Equal(t, tcell.ColorBlue, attrs.Fg)
+					assert.Equal(t, tcell.GetColor("#f0f0f0").String(), attrs.Bg.String())
 
-					attrs, err = GetAttributes(c, "attr_2")
-					require.NoError(t, err)
-					assert.True(t, attrs.Fg&term.ColorRed != 0)
-					assert.True(t, attrs.Fg&term.AttrBold != 0)
-					assert.Equal(t, term.ColorDefault, attrs.Bg)
+					for _, key := range []string{"attr_2", "attr_3"} {
+						attrs, err = GetAttributes(c, key)
+						require.NoError(t, err)
+						assert.Equal(t, tcell.ColorRed, attrs.Fg)
+						assert.True(t, attrs.Attrs&tcell.AttrBold != 0)
+						assert.Equal(t, tcell.ColorDefault, attrs.Bg)
+					}
 
 					charset, err := GetFrameCharset(c, "charset_1", component.FrameCharSetDefault())
 					require.NoError(t, err)

@@ -1,14 +1,13 @@
 # These are variables referenced thorought this file.
-# Colors can be changed and range from 1 to 256.
+# Colors can be either a W3C color name, a hex string value (i.e. #ffffff),
+# or the string "default", which indicates that the default terminal
+# text color should be used.
+#
 # To see the full list of colors and its values, use
 # the colorPalette command, provided by the 'colors'
 # extension below, extension_color_palette.
-color_theme_1: &color1 29
-color_theme_2: &color2 95
-
-# Alternative theme, gray tones.
-#color_theme_1: &color1 246
-#color_theme_2: &color2 239
+color_theme_1: &color1 red
+color_theme_2: &color2 default
 
 frame_theme: &frame true
 focus_frame_charset_theme: &focus_frame_charset
@@ -101,6 +100,18 @@ extensions:
       # Overrides openai's default base URL
       # base_url: ""
 
+      # Available models is map of model name to max context window
+      # which limits which models are allowed dynamically or via
+      # default_model
+      available_models:
+        gpt-4: 8192
+        gpt-3.5-turbo: 8192
+        gpt-4-1106-preview: 8192
+        gpt-3.5-turbo-1106: 8192
+        llama-2-7b-chat.Q4_K_M: 4096
+        llama-2-7b-32k-instruct.Q5_K_M: 32000
+        mixtral-8x7b-instruct-v0.1.Q4_K_M: 4096
+
       # Colors
       background_attr:
         bg: default
@@ -109,13 +120,13 @@ extensions:
         fg: default
       assistant_msg_attr:
         bg: default
-        fg: 250
+        fg: "#b9b0b0"
       input_box_attr:
         bg: default
         fg: default
       input_placeholder_attr:
         bg: default
-        fg: 239
+        fg: "#5d5555"
       input_box_frame_attr:
         bg: default
         fg: default
@@ -143,6 +154,9 @@ extensions:
     path: /usr/local/bin/extension_issues
     config:
       bluectl_config: ~/.bluectl/config
+      # Disables default commands 'issueCreate' and 'issueRefresh'
+      # disable_default_commands: false
+      # max_list_files_subject_len: 50
       templates:
         # you can add more templates here. The key of the object
         # i.e. reportBug, is the name of the command to invoke this
@@ -279,12 +293,12 @@ extensions:
       matched_text_attr:
         fg: *color1
       count_attr:
-        fg:
-          - *color1
+        fg: *color1
+        flags:
           - bold
       focus_element_attr:
-        fg:
-          - *color1
+        fg: *color1
+        flags:
           - bold
   # This extension adds LSP functionality (Language Server Protocol).
   # This adds formatting, go to definition, search references, get
@@ -393,8 +407,8 @@ command:
     fg: *color1
     bg: default
   focus_element_attr:
-    fg:
-      - *color2
+    fg: *color2
+    flags:
       - bold
 
 browser:
@@ -412,8 +426,8 @@ browser:
     fg: *color1
     bg: default
   focus_tab_attr:
-    fg:
-      - default
+    fg: default
+    flags:
       - bold
   dirty_tab_attr:
     fg:
@@ -474,7 +488,7 @@ notifications:
   auto_close: 5s
   progress_bar: true
   attr:
-    fg: *color1
+    fg: default
     bg: default
   background_attr:
     fg: default
@@ -489,5 +503,4 @@ terminal:
     bg: default
     fg: default
   selection_attr:
-    bg: reverse
-    fg: reverse
+    flags: reverse

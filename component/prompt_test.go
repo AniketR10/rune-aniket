@@ -3,6 +3,7 @@ package component
 import (
 	"testing"
 
+	"github.com/ernestrc/tcell/v3"
 	"github.com/stretchr/testify/assert"
 	"unstable.build/go-tui/term"
 	testutil "unstable.build/go-tui/util/test"
@@ -176,7 +177,7 @@ yyyyyyyyyynnnnnnnnnn
 	})
 
 	t.Run("SetAttr", func(t *testing.T) {
-		attr := term.Attributes{Fg: term.AttrBold}
+		attr := term.Attributes{Fg: tcell.ColorRed, Attrs: tcell.AttrBold}
 		p.SetOptionAttr(0, attr)
 		assert.Equal(t, attr, opts["y"].Attributes)
 	})

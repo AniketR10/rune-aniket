@@ -3,6 +3,7 @@ package handler
 import (
 	"fmt"
 
+	"github.com/ernestrc/tcell/v3"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
@@ -383,8 +384,8 @@ func DefaultWindowManagerConfig() WindowManagerConfig {
 		WindowManagerConfig: component.DefaultWindowManagerConfig(),
 		FocusFrameCharSet:   component.FrameCharSetDefault(),
 		FocusFrameAttr: term.Attributes{
-			Fg: term.ColorRed,
-			Bg: term.ColorDefault,
+			Fg: tcell.ColorRed,
+			Bg: tcell.ColorDefault,
 		},
 	}
 }

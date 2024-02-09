@@ -100,11 +100,6 @@ func SetInputMode(mode InputMode) InputMode {
 	return InputCurrent
 }
 
-// SetOutputMode does nothing.
-func SetOutputMode(mode OutputMode) OutputMode {
-	return OutputCurrent
-}
-
 // Size returns the size of the terminal window.
 func Size() (width int, height int) {
 	return DefaultWriter.Size()

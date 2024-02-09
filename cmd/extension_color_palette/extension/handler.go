@@ -3,8 +3,8 @@ package extension
 import (
 	"context"
 	"fmt"
-	"strconv"
 
+	"github.com/ernestrc/tcell/v3"
 	"unstable.build/go-tui"
 	browserapi "unstable.build/go-tui/api/browser"
 	"unstable.build/go-tui/api/config"
@@ -56,41 +56,20 @@ func makeColorGrid(dim bool) tui.Component {
 	for y := 0; y < 16; y++ {
 		ret[y] = make([]tui.Component, 16)
 		for x := 0; x < 16; x++ {
-			nameNum++
-			attr := term.Attribute(nameNum)
-			var name string
-			switch attr {
-			case term.ColorDefault:
-				name = "ColorDefault"
-			case term.ColorBlack:
-				name = "ColorBlack"
-			case term.ColorRed:
-				name = "ColorRed"
-			case term.ColorGreen:
-				name = "ColorGreen"
-			case term.ColorYellow:
-				name = "ColorYellow"
-			case term.ColorBlue:
-				name = "ColorBlue"
-			case term.ColorMagenta:
-				name = "ColorMagenta"
-			case term.ColorCyan:
-				name = "ColorCyan"
-			case term.ColorWhite:
-				name = "ColorWhite"
-			default:
-				name = strconv.Itoa(nameNum)
-			}
+			var attrs tcell.AttrMask
+			color := tcell.PaletteColor(nameNum)
+			name := color.Name(true)
 			if dim {
-				attr = term.DimAttr(attr)
+				attrs = tcell.AttrDim
 				name = fmt.Sprintf("D%s", name)
 			}
 			ret[y][x] = component.NewStringWithConfig(name,
 				component.StringConfig{
-					Attributes:           term.Attributes{Bg: attr},
-					BackgroundAttributes: term.Attributes{Bg: attr},
+					Attributes:           term.Attributes{Bg: color, Attrs: attrs},
+					BackgroundAttributes: term.Attributes{Bg: color, Attrs: attrs},
 				},
 			)
+			nameNum++
 		}
 	}
 	return component.Grid(ret)

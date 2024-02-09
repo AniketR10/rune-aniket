@@ -153,7 +153,6 @@ func (p *Prompt) init(
 	p.effective = container
 
 	p.effective = NewBackground(container, term.Cell{
-		Fg: p.cfg.BackgroundAttributes.Fg,
-		Bg: p.cfg.BackgroundAttributes.Bg,
+		Attributes: p.cfg.BackgroundAttributes,
 	})
 }

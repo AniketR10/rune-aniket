@@ -3,6 +3,7 @@ package rpc
 import (
 	"fmt"
 
+	"github.com/ernestrc/tcell/v3"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/term"
 )
@@ -429,8 +430,11 @@ func (c *Cell) ToModel() term.Cell {
 		}
 	}
 	return term.Cell{
-		Bg:        term.Attribute(c.Background),
-		Fg:        term.Attribute(c.Foreground),
+		Attributes: term.Attributes{
+			Bg:    tcell.Color(c.Background),
+			Fg:    tcell.Color(c.Foreground),
+			Attrs: tcell.AttrMask(c.Attrs),
+		},
 		Ch:        rune(c.Character),
 		Combining: combining,
 		Width:     int(c.Width),
@@ -440,21 +444,24 @@ func (c *Cell) ToModel() term.Cell {
 // ToModel maps this Attributes into the corresponding term.Attributes.
 func (a *Attributes) ToModel() term.Attributes {
 	return term.Attributes{
-		Bg: term.Attribute(a.Background),
-		Fg: term.Attribute(a.Foreground),
+		Bg:    tcell.Color(a.Background),
+		Fg:    tcell.Color(a.Foreground),
+		Attrs: tcell.AttrMask(a.Attrs),
 	}
 }
 
 // FromModel sets this Attributes from attr term.Attributes.
 func (a *Attributes) FromModel(attr term.Attributes) {
-	a.Background = uint32(attr.Bg)
-	a.Foreground = uint32(attr.Fg)
+	a.Background = uint64(attr.Bg)
+	a.Foreground = uint64(attr.Fg)
+	a.Attrs = int64(attr.Attrs)
 }
 
 // FromModel takes cc and maps it into this Cell.
 func (c *Cell) FromModel(cc term.Cell) {
-	c.Background = uint32(cc.Bg)
-	c.Foreground = uint32(cc.Fg)
+	c.Background = uint64(cc.Bg)
+	c.Foreground = uint64(cc.Fg)
+	c.Attrs = int64(cc.Attrs)
 	c.Character = uint32(cc.Ch)
 	c.Width = uint32(c.Width)
 	var combining []uint32

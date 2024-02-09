@@ -229,11 +229,8 @@ func (wm *WindowManager) closeFloatingWindow(w *floatingNode) {
 // DefaultWindowManagerConfig returns a sane WindowManagerConfig.
 func DefaultWindowManagerConfig() WindowManagerConfig {
 	return WindowManagerConfig{
-		Frame: true,
-		FrameAttr: term.Attributes{
-			Fg: term.ColorDefault,
-			Bg: term.ColorDefault,
-		},
+		Frame:        true,
+		FrameAttr:    term.Attributes{},
 		FrameCharSet: FrameCharSetDefault(),
 	}
 }

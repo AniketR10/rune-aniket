@@ -7,6 +7,7 @@ import (
 
 	"github.com/ernestrc/blue/logging"
 	multierr "github.com/ernestrc/go-multierror"
+	"github.com/ernestrc/tcell/v3"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
 	schemeapi "unstable.build/go-tui/api/scheme"
@@ -389,16 +390,16 @@ func (e *Handler) drawRow(
 		cell := termbuf.GetCell(viewX, uint16(viewY))
 		pos := term.Coordinates{X: int(viewX), Y: viewY}
 		if cell == nil || cell.Ch == 0 {
-			w.SetCell(pos, term.Cell{Bg: defattr.Bg, Fg: defattr.Fg})
+			w.SetCell(pos, term.Cell{Attributes: defattr})
 		} else {
-			tcell := *cell
-			if tcell.Fg == term.ColorDefault {
-				tcell.Fg = defattr.Fg
+			ccell := *cell
+			if ccell.Fg == tcell.ColorDefault {
+				ccell.Fg = defattr.Fg
 			}
-			if tcell.Bg == term.ColorDefault {
-				tcell.Bg = defattr.Bg
+			if ccell.Bg == tcell.ColorDefault {
+				ccell.Bg = defattr.Bg
 			}
-			w.SetCell(pos, tcell)
+			w.SetCell(pos, ccell)
 		}
 	}
 }
@@ -418,8 +419,6 @@ func (e *Handler) drawSelection(w term.Writer) {
 		return
 	}
 
-	bg, fg := e.selectAttr.Bg, e.selectAttr.Fg
-
 	for y := selection.Start.Line; y <= selection.End.Line; y++ {
 		xStart, xEnd := 0, int(termbuf.ViewWidth())
 		if y == selection.Start.Line {
@@ -436,11 +435,10 @@ func (e *Handler) drawSelection(w term.Writer) {
 			ch := cell.Ch
 			pos := term.Coordinates{X: x, Y: int(y)}
 			w.SetCell(pos, term.Cell{
-				Ch:        ch,
-				Fg:        fg,
-				Bg:        bg,
-				Width:     cell.Width,
-				Combining: cell.Combining,
+				Ch:         ch,
+				Attributes: e.selectAttr,
+				Width:      cell.Width,
+				Combining:  cell.Combining,
 			})
 		}
 	}

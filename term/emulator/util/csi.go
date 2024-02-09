@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/ernestrc/tcell/v3"
 	log "github.com/sirupsen/logrus"
-	"unstable.build/go-tui/term"
 )
 
 func parseCSI(readChan *bufio.Reader) (final rune, params []string, intermediate []rune, raw []rune, exit bool) {
@@ -903,12 +903,12 @@ func (t *Terminal) csiEraseInLineHandler(params []string) (renderRequired bool) 
 	return true
 }
 
-func (t *Terminal) setCursorBgColor(color term.Attribute) {
+func (t *Terminal) setCursorBgColor(color tcell.Color) {
 	flags := (t.GetActiveBuffer().getCursorAttr().Bg >> 9) << 9
 	t.GetActiveBuffer().getCursorAttr().Bg = color | flags
 }
 
-func (t *Terminal) setCursorFgColor(color term.Attribute) {
+func (t *Terminal) setCursorFgColor(color tcell.Color) {
 	flags := (t.GetActiveBuffer().getCursorAttr().Fg >> 9) << 9
 	t.GetActiveBuffer().getCursorAttr().Fg = color | flags
 }
@@ -931,28 +931,28 @@ func (t *Terminal) sgrSequenceHandler(params []string) bool {
 			t.GetActiveBuffer().getCursorAttr().Bg = 0
 			t.GetActiveBuffer().getCursorAttr().Fg = 0
 		case "1", "01":
-			t.GetActiveBuffer().getCursorAttr().Fg |= term.AttrBold
+			t.GetActiveBuffer().getCursorAttr().Attrs |= tcell.AttrBold
 		case "2", "02":
-			t.GetActiveBuffer().getCursorAttr().Fg &= ^term.AttrBold
+			t.GetActiveBuffer().getCursorAttr().Attrs &= ^tcell.AttrBold
 		case "3", "03":
-			t.GetActiveBuffer().getCursorAttr().Fg |= term.AttrReverse
+			t.GetActiveBuffer().getCursorAttr().Attrs |= tcell.AttrReverse
 		case "4", "04":
-			t.GetActiveBuffer().getCursorAttr().Fg |= term.AttrUnderline
+			t.GetActiveBuffer().getCursorAttr().Attrs |= tcell.AttrUnderline
 		case "5", "05", "6", "06":
-			t.GetActiveBuffer().getCursorAttr().Bg |= term.AttrUnderline
+			t.GetActiveBuffer().getCursorAttr().Attrs |= tcell.AttrUnderline
 		case "7", "07":
-			t.GetActiveBuffer().getCursorAttr().Fg |= term.AttrReverse
-			t.GetActiveBuffer().getCursorAttr().Bg |= term.AttrReverse
+			t.GetActiveBuffer().getCursorAttr().Attrs |= tcell.AttrReverse
+			t.GetActiveBuffer().getCursorAttr().Attrs |= tcell.AttrReverse
 		case "21", "22":
-			t.GetActiveBuffer().getCursorAttr().Fg &= ^term.AttrBold
-			t.GetActiveBuffer().getCursorAttr().Fg &= ^term.AttrBold
+			t.GetActiveBuffer().getCursorAttr().Attrs &= ^tcell.AttrBold
+			t.GetActiveBuffer().getCursorAttr().Attrs &= ^tcell.AttrBold
 		case "24":
-			t.GetActiveBuffer().getCursorAttr().Fg &= ^term.AttrUnderline
+			t.GetActiveBuffer().getCursorAttr().Attrs &= ^tcell.AttrUnderline
 		case "25":
-			t.GetActiveBuffer().getCursorAttr().Bg &= ^term.AttrUnderline
+			t.GetActiveBuffer().getCursorAttr().Attrs &= ^tcell.AttrUnderline
 		case "27":
-			t.GetActiveBuffer().getCursorAttr().Fg &= ^term.AttrReverse
-			t.GetActiveBuffer().getCursorAttr().Bg &= ^term.AttrReverse
+			t.GetActiveBuffer().getCursorAttr().Attrs &= ^tcell.AttrReverse
+			t.GetActiveBuffer().getCursorAttr().Attrs &= ^tcell.AttrReverse
 		case "38":
 			color, _ := t.theme.ColourFromAnsi(params[i+1:], false)
 			t.setCursorFgColor(color)

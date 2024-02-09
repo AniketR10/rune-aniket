@@ -4,6 +4,7 @@ import (
 	"math"
 	"testing"
 
+	"github.com/ernestrc/tcell/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"unstable.build/go-tui"
@@ -260,8 +261,8 @@ func TestSetFocus(t *testing.T) {
 
 func TestFocusAddAttr(t *testing.T) {
 	var (
-		redAttr   = term.Attributes{Fg: term.ColorRed}
-		greenAttr = term.Attributes{Fg: term.ColorGreen}
+		redAttr   = term.Attributes{Fg: tcell.ColorRed}
+		greenAttr = term.Attributes{Fg: tcell.ColorGreen}
 	)
 
 	t.Run("first PushBack adds focus attr", func(t *testing.T) {

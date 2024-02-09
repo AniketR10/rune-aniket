@@ -3,6 +3,7 @@ package search
 import (
 	"time"
 
+	"github.com/ernestrc/tcell/v3"
 	fzf "github.com/junegunn/fzf/src/algo"
 	"unstable.build/go-tui/term"
 )
@@ -58,14 +59,16 @@ type ListConfig struct {
 
 func (c ListConfig) toInternal() listConfig {
 	matchCountAttr := term.Attributes{
-		Fg: term.ColorRed | term.AttrBold,
+		Fg:    tcell.ColorRed,
+		Attrs: tcell.AttrBold,
 	}
 	matchedTextAttr := term.Attributes{
-		Fg: term.ColorRed,
+		Fg: tcell.ColorRed,
 	}
 	searchBaseAttr := term.Attributes{}
 	focusAttr := term.Attributes{
-		Fg: term.AttrBold | term.ColorRed,
+		Fg:    tcell.ColorRed,
+		Attrs: tcell.AttrBold,
 	}
 	textAttr := term.Attributes{}
 	if c.MatchedTextAttr != nil {

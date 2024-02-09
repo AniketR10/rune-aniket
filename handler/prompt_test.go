@@ -3,6 +3,7 @@ package handler
 import (
 	"testing"
 
+	"github.com/ernestrc/tcell/v3"
 	"github.com/stretchr/testify/assert"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/term"
@@ -23,7 +24,7 @@ func TestPromptDefaults(t *testing.T) {
 			PromptConfig: component.PromptConfig{
 				Message: "blah", Options: []string{"a"},
 			}})
-		attr := term.Attributes{Fg: term.AttrReverse, Bg: term.AttrReverse}
+		attr := term.Attributes{Attrs: tcell.AttrReverse}
 		assert.Equal(t, attr, p.cfg.HighlightAttr)
 	})
 }

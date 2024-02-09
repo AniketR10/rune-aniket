@@ -2,8 +2,8 @@ package extension
 
 import (
 	"github.com/alecthomas/chroma"
+	"github.com/ernestrc/tcell/v3"
 	"unstable.build/go-tui/term"
-	"unstable.build/go-tui/term/color"
 )
 
 // emulates extension_lsp semantic tokens style
@@ -44,9 +44,13 @@ func styleToAttrMap(
 ) map[chroma.TokenType]term.Attributes {
 	converted := make(map[chroma.TokenType]term.Attributes)
 	bg := style.Get(chroma.Background)
-	var bgAttr term.Attribute
+	var bgColor tcell.Color
 	if !bg.IsZero() {
-		bgAttr = color.RGBToAttribute(bg.Background.Red(), bg.Background.Green(), bg.Background.Blue())
+		bgColor = tcell.NewRGBColor(
+			int32(bg.Background.Red()),
+			int32(bg.Background.Green()),
+			int32(bg.Background.Blue()),
+		)
 	}
 	for t := range chroma.StandardTypes {
 		entry := style.Get(t)
@@ -56,27 +60,33 @@ func styleToAttrMap(
 		if entry.IsZero() {
 			continue
 		}
-		converted[t] = styleEntryToAttr(setBackgroundAttr, bgAttr, entry)
+		converted[t] = styleEntryToAttr(setBackgroundAttr, bgColor, entry)
 	}
 	return converted
 }
 
-func styleEntryToAttr(setBackgroundAttr bool, bgAttr term.Attribute, e chroma.StyleEntry) term.Attributes {
-	fg := color.RGBToAttribute(e.Colour.Red(), e.Colour.Green(), e.Colour.Blue())
-	var bg term.Attribute
+func styleEntryToAttr(setBackgroundAttr bool, bgColor tcell.Color, e chroma.StyleEntry) (
+	ret term.Attributes,
+) {
+	ret.Fg = tcell.NewRGBColor(
+		int32(e.Colour.Red()),
+		int32(e.Colour.Green()),
+		int32(e.Colour.Blue()),
+	)
+
 	if setBackgroundAttr {
-		bg = bgAttr
+		ret.Bg = bgColor
 	}
 	if e.Bold == chroma.Yes {
-		fg |= term.AttrBold
+		ret.Attrs |= tcell.AttrBold
 	}
 	if e.Underline == chroma.Yes {
-		fg |= term.AttrUnderline
+		ret.Attrs |= tcell.AttrUnderline
 	}
-	return term.Attributes{
-		Fg: fg,
-		Bg: bg,
+	if e.Italic == chroma.Yes {
+		ret.Attrs |= tcell.AttrItalic
 	}
+	return ret
 }
 
 func attrForToken(

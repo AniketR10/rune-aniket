@@ -3,6 +3,7 @@ package command
 import (
 	"time"
 
+	"github.com/ernestrc/tcell/v3"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/term"
 )
@@ -33,8 +34,8 @@ func DefaultConfig() Config {
 	return Config{
 		MaxHistory:       100,
 		HistoryKey:       term.KeyComb{Ch: ':'},
-		MatchedTextAttr:  term.Attributes{Fg: term.ColorRed},
-		FocusElementAttr: term.Attributes{Fg: term.AttrBold | term.AttrUnderline | term.ColorRed},
+		MatchedTextAttr:  term.Attributes{Fg: tcell.ColorRed},
+		FocusElementAttr: term.Attributes{Attrs: tcell.AttrBold | tcell.AttrUnderline, Fg: tcell.ColorRed},
 		ElementAttr:      term.Attributes{},
 		DocumentID:       "command-history",
 		ShowManualAfter:  1 * time.Second,

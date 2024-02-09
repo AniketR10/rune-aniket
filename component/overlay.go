@@ -25,7 +25,7 @@ func (o *Overlay) Init(
 	background, cover tui.Component, backAttr term.Attributes, config SpanConfig,
 ) {
 	// clean cells before drawing on top
-	cover = WithBackground(cover, term.Cell{Fg: backAttr.Fg, Bg: backAttr.Bg})
+	cover = WithBackground(cover, term.Cell{Attributes: backAttr})
 
 	o.Span.Init(cover, config)
 	o.background = background

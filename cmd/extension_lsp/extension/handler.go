@@ -23,6 +23,7 @@ import (
 	"github.com/ernestrc/golang-internal-tools/lsp/protocol"
 	"github.com/ernestrc/golang-internal-tools/lsp/source"
 	"github.com/ernestrc/golang-internal-tools/span"
+	"github.com/ernestrc/tcell/v3"
 	log "github.com/sirupsen/logrus"
 	browserapi "unstable.build/go-tui/api/browser"
 	browserextension "unstable.build/go-tui/api/browser/extension"
@@ -141,35 +142,35 @@ var (
 	}
 
 	defaultDiagnosticAttr = map[protocol.DiagnosticSeverity]term.Attributes{
-		protocol.SeverityError:       {Bg: term.ColorRed, Fg: term.ColorWhite},
-		protocol.SeverityWarning:     {Bg: term.ColorYellow, Fg: term.ColorBlack},
-		protocol.SeverityInformation: {Bg: term.ColorBlue, Fg: term.ColorWhite},
-		protocol.SeverityHint:        {Bg: term.ColorGreen, Fg: term.ColorWhite},
+		protocol.SeverityError:       {Bg: tcell.ColorRed, Fg: tcell.ColorWhite},
+		protocol.SeverityWarning:     {Bg: tcell.ColorYellow, Fg: tcell.ColorBlack},
+		protocol.SeverityInformation: {Bg: tcell.ColorBlue, Fg: tcell.ColorWhite},
+		protocol.SeverityHint:        {Bg: tcell.ColorGreen, Fg: tcell.ColorWhite},
 	}
-	defaultSemanticTypeAttr = map[string]term.Attributes{
-		"namespace":     {},
-		"type":          {},
-		"class":         {},
-		"enum":          {},
-		"interface":     {Fg: term.ColorYellow},
-		"struct":        {},
-		"typeParameter": {},
-		"parameter":     {},
-		"variable":      {},
-		"property":      {},
-		"enumMember":    {},
-		"event":         {},
-		"method":        {},
-		"function":      {},
-		"member":        {},
-		"macro":         {},
-		"keyword":       {Fg: term.ColorYellow},
-		"modifier":      {Fg: term.ColorYellow},
-		"comment":       {Fg: term.ColorBlue},
-		"string":        {Fg: term.ColorMagenta},
-		"number":        {Fg: term.ColorRed},
-		"regexp":        {},
-		"operator":      {},
+	defaultSemanticTypeAttr = map[string]tcell.Color{
+		"namespace":     0,
+		"type":          0,
+		"class":         0,
+		"enum":          0,
+		"interface":     tcell.ColorYellow,
+		"struct":        0,
+		"typeParameter": 0,
+		"parameter":     0,
+		"variable":      0,
+		"property":      0,
+		"enumMember":    0,
+		"event":         0,
+		"method":        0,
+		"function":      0,
+		"member":        0,
+		"macro":         0,
+		"keyword":       tcell.ColorYellow,
+		"modifier":      tcell.ColorYellow,
+		"comment":       tcell.ColorBlue,
+		"string":        tcell.ColorPurple,
+		"number":        tcell.ColorRed,
+		"regexp":        0,
+		"operator":      0,
 	}
 
 	matcherString = map[source.SymbolMatcher]string{
@@ -178,7 +179,7 @@ var (
 		source.SymbolCaseInsensitive: "caseInsensitive",
 	}
 	errNoServer                 = errors.New("no LSP server found for language file language")
-	defaultReferencesWindowAttr = term.Attributes{Bg: term.ColorBlack}
+	defaultReferencesWindowAttr = term.Attributes{Bg: tcell.ColorBlack}
 )
 
 type file struct {
@@ -215,7 +216,7 @@ type lspEditorHandler struct {
 
 	tabspaces                  int
 	frame                      bool
-	semanticTypesAttr          map[string]term.Attributes
+	semanticTypesAttr          map[string]tcell.Color
 	diagnosticAttr             map[protocol.DiagnosticSeverity]term.Attributes
 	enableSemanticTokens       map[string]bool
 	semanticTokensListID       string
@@ -474,8 +475,8 @@ func (h *lspEditorHandler) initLanguageServers(pconfig config.Config) error {
 	return nil
 }
 
-func getSemanticTypesAttr(pconfig config.Config) (map[string]term.Attributes, error) {
-	ret := make(map[string]term.Attributes, len(defaultSemanticTypeAttr))
+func getSemanticTypesAttr(pconfig config.Config) (map[string]tcell.Color, error) {
+	ret := make(map[string]tcell.Color, len(defaultSemanticTypeAttr))
 	for k, v := range defaultSemanticTypeAttr {
 		ret[k] = v
 	}
@@ -490,7 +491,7 @@ func getSemanticTypesAttr(pconfig config.Config) (map[string]term.Attributes, er
 	}
 
 	for semanticType := range defaultSemanticTypeAttr {
-		attr, err := config.GetAttributes(colors, semanticType)
+		attr, err := colors.GetColor(semanticType)
 		if err != nil {
 			if err != config.ErrNotFound {
 				err = fmt.Errorf("Error getting 'syntax_highlighting.%s' "+
@@ -909,7 +910,7 @@ func (h *lspEditorHandler) getFile(uri workspaceapi.URI) (*file, bool) {
 
 func parseLocationData(
 	uri span.URI, cells [][]term.Cell, content []byte, d []uint32,
-	semanticTypes map[string]term.Attributes,
+	semanticTypes map[string]tcell.Color,
 ) (ret []textapi.Location) {
 	tc := span.NewContentConverter(uri.Filename(), content)
 	colmap := protocol.ColumnMapper{
@@ -956,7 +957,7 @@ func parseLocationData(
 			continue
 		}
 
-		loc := textapi.Location{From: from, To: to, Attr: attr}
+		loc := textapi.Location{From: from, To: to, Attr: term.Attributes{Fg: attr}}
 		ret = append(ret, loc)
 	}
 	return ret
@@ -1745,7 +1746,7 @@ func (h *lspEditorHandler) browseLocations(
 			return
 		}
 
-		attrs := term.Attributes{Bg: term.AttrReverse, Fg: term.AttrReverse}
+		attrs := term.Attributes{Attrs: tcell.AttrReverse}
 		loc := textapi.Location{From: from, To: to, Attr: attrs}
 		ed.SetLocationList(edh, textapi.LocationPriorityInfo,
 			locID, textapi.LocationSlice([]textapi.Location{loc}))

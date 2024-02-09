@@ -3,6 +3,7 @@ package browser
 import (
 	"time"
 
+	"github.com/ernestrc/tcell/v3"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/handler"
@@ -12,14 +13,14 @@ import (
 // DefaultConfig returns the default Config.
 func DefaultConfig() Config {
 	return Config{
-		FocusTabAttr:        term.Attributes{Fg: term.ColorWhite},
-		NonFocusTabAttr:     term.Attributes{Fg: term.ColorRed},
-		WallpaperAttr:       term.Attributes{Fg: term.ColorRed | term.AttrBold},
+		FocusTabAttr:        term.Attributes{Fg: tcell.ColorWhite},
+		NonFocusTabAttr:     term.Attributes{Fg: tcell.ColorRed},
+		WallpaperAttr:       term.Attributes{Fg: tcell.ColorRed, Attrs: tcell.AttrBold},
 		FrameUnionCharSet:   component.DefaultFrameUnionCharSet(),
 		WindowManagerConfig: handler.DefaultWindowManagerConfig(),
 		PromptConfig: PromptConfig{
 			TextAttr:       term.Attributes{},
-			HighlightAttr:  term.Attributes{Bg: term.ColorRed, Fg: term.ColorWhite},
+			HighlightAttr:  term.Attributes{Bg: tcell.ColorRed, Fg: tcell.ColorWhite},
 			BackgroundAttr: term.Attributes{},
 			MinWidth:       60,
 		},

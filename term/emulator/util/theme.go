@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/ernestrc/tcell/v3"
 	"unstable.build/go-tui/term"
-	"unstable.build/go-tui/term/color"
 )
 
 type Theme struct {
@@ -13,60 +13,60 @@ type Theme struct {
 }
 
 var (
-	map4Bit = map[uint8]term.Attribute{
-		30:  term.ColorBlack,
-		31:  term.ColorRed,
-		32:  term.ColorGreen,
-		33:  term.ColorYellow,
-		34:  term.ColorBlue,
-		35:  term.ColorMagenta,
-		36:  term.ColorCyan,
-		37:  term.ColorWhite,
-		90:  term.ColorBlack | term.AttrBold,
-		91:  term.ColorRed | term.AttrBold,
-		92:  term.ColorGreen | term.AttrBold,
-		93:  term.ColorYellow | term.AttrBold,
-		94:  term.ColorBlue | term.AttrBold,
-		95:  term.ColorMagenta | term.AttrBold,
-		96:  term.ColorCyan | term.AttrBold,
-		97:  term.ColorWhite | term.AttrBold,
-		40:  term.ColorBlack,
-		41:  term.ColorRed,
-		42:  term.ColorGreen,
-		43:  term.ColorYellow,
-		44:  term.ColorBlue,
-		45:  term.ColorMagenta,
-		46:  term.ColorCyan,
-		47:  term.ColorWhite,
-		100: term.ColorBlack | term.AttrBold,
-		101: term.ColorRed | term.AttrBold,
-		102: term.ColorGreen | term.AttrBold,
-		103: term.ColorYellow | term.AttrBold,
-		104: term.ColorBlue | term.AttrBold,
-		105: term.ColorMagenta | term.AttrBold,
-		106: term.ColorCyan | term.AttrBold,
-		107: term.ColorWhite | term.AttrBold,
+	map4Bit = map[uint8]tcell.Color{
+		30:  tcell.ColorBlack,
+		31:  tcell.ColorRed,
+		32:  tcell.ColorGreen,
+		33:  tcell.ColorYellow,
+		34:  tcell.ColorBlue,
+		35:  tcell.ColorPurple,
+		36:  tcell.ColorNavy,
+		37:  tcell.ColorWhite,
+		90:  tcell.ColorBlack,
+		91:  tcell.ColorRed,
+		92:  tcell.ColorGreen,
+		93:  tcell.ColorYellow,
+		94:  tcell.ColorBlue,
+		95:  tcell.ColorPurple,
+		96:  tcell.ColorNavy,
+		97:  tcell.ColorWhite,
+		40:  tcell.ColorBlack,
+		41:  tcell.ColorRed,
+		42:  tcell.ColorGreen,
+		43:  tcell.ColorYellow,
+		44:  tcell.ColorBlue,
+		45:  tcell.ColorPurple,
+		46:  tcell.ColorNavy,
+		47:  tcell.ColorWhite,
+		100: tcell.ColorBlack,
+		101: tcell.ColorRed,
+		102: tcell.ColorGreen,
+		103: tcell.ColorYellow,
+		104: tcell.ColorBlue,
+		105: tcell.ColorPurple,
+		106: tcell.ColorNavy,
+		107: tcell.ColorWhite,
 	}
 )
 
-func (t *Theme) ColourFrom4Bit(code uint8) term.Attribute {
+func (t *Theme) ColourFrom4Bit(code uint8) tcell.Color {
 	colour, ok := map4Bit[code]
 	if !ok {
-		return term.ColorDefault
+		return tcell.ColorDefault
 	}
 	return colour
 }
 
-func (t *Theme) ColourFrom8Bit(n string) (term.Attribute, error) {
+func (t *Theme) ColourFrom8Bit(n string) (tcell.Color, error) {
 	index, err := strconv.Atoi(n)
 	if err != nil {
 		return 0, err
 	}
 
-	return term.Attribute(index), nil
+	return tcell.PaletteColor(index), nil
 }
 
-func (t *Theme) ColourFrom24Bit(r, g, b string) (term.Attribute, error) {
+func (t *Theme) ColourFrom24Bit(r, g, b string) (tcell.Color, error) {
 	ri, err := strconv.Atoi(r)
 	if err != nil {
 		return 0, err
@@ -80,10 +80,10 @@ func (t *Theme) ColourFrom24Bit(r, g, b string) (term.Attribute, error) {
 		return 0, err
 	}
 
-	return color.RGBToAttribute(uint8(ri), uint8(gi), uint8(bi)), nil
+	return tcell.NewRGBColor(int32(ri), int32(gi), int32(bi)), nil
 }
 
-func (t *Theme) ColourFromAnsi(ansi []string, bg bool) (term.Attribute, error) {
+func (t *Theme) ColourFromAnsi(ansi []string, bg bool) (tcell.Color, error) {
 	if len(ansi) == 0 {
 		return 0, fmt.Errorf("invalid ansi colour code")
 	}

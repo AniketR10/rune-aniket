@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"math"
 	"strconv"
+
+	"github.com/ernestrc/tcell/v3"
 )
 
 const (
@@ -56,7 +58,7 @@ func newDomWriter(
 ) *domWriter {
 	w := new(domWriter)
 	w.ch = make(chan Event)
-	w.attr = Attributes{Fg: ColorWhite, Bg: ColorBlack}
+	w.attr = Attributes{Fg: tcell.ColorWhite, Bg: tcell.ColorBlack}
 	w.emitter = emitter
 	w.body = body
 	w.term = term

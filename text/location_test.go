@@ -3,6 +3,7 @@ package text
 import (
 	"testing"
 
+	"github.com/ernestrc/tcell/v3"
 	"github.com/stretchr/testify/assert"
 	textapi "unstable.build/go-tui/api/text"
 	"unstable.build/go-tui/term"
@@ -11,11 +12,11 @@ import (
 var (
 	loc1 = textapi.Location{
 		To:   term.Coordinates{X: 1, Y: 3},
-		Attr: term.Attributes{Fg: term.AttrBold},
+		Attr: term.Attributes{Attrs: tcell.AttrBold},
 	}
 	loc2 = textapi.Location{
 		From:    term.Coordinates{X: 1, Y: 3},
-		Attr:    term.Attributes{Fg: term.ColorBlack, Bg: term.ColorGreen},
+		Attr:    term.Attributes{Fg: tcell.ColorBlack, Bg: tcell.ColorGreen},
 		Message: "wsb: hold BBBY",
 	}
 	loc3 = textapi.Location{}

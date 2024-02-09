@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/ernestrc/blue/logging"
+	"github.com/ernestrc/tcell/v3"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/term"
@@ -52,7 +53,7 @@ func (d *mouseDelegate) SetSelectionEnd(pos term.Coordinates) {
 		d.ClearSelection()
 	}
 	content := node.Value().(*component.Span).Content().(*component.AttrSetter)
-	d.selectionAttr = content.SetAttr(term.Attributes{Fg: term.AttrReverse})
+	d.selectionAttr = content.SetAttr(term.Attributes{Attrs: tcell.AttrReverse})
 	d.selection = content
 
 	err := d.clipboard.Copy(clipboard.DefaultRegisterID,

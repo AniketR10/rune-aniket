@@ -1,12 +1,12 @@
 package ide
 
 import (
-	"io/ioutil"
 	"os"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/ernestrc/tcell/v3"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -34,35 +34,33 @@ editor:
     modal:
         attr:
             bg: yellow
-            fg: 259
+            fg: "#f2f2f2"
         search_attr:
             bg: red
-            fg: 219
+            fg: "#f0f0f0"
         debug: true
         wrap: true
     modeless:
         attr:
             bg: green
-            fg: 239
+            fg: "#f9f9f9"
         search_attr:
             bg: red
-            fg: 229
+            fg: "#f1f1f1"
         wrap: false
     virtual:
         shell: bash
         editor: vim
         attr:
             bg: red
-            fg: 219
+            fg: "#f0f0f0"
         selection_attr:
             bg: green
-            fg: 218
+            fg: "#f3f3f3"
 
 input_mode:
   - mouse
   - esc
-
-output_mode: color_256
 
 command:
   show_manual_after: 2s
@@ -92,10 +90,10 @@ notifications:
     progress_bar: false
     attr:
         bg: red
-        fg: 219
+        fg: "#f0f0f0"
     background_attr:
         bg: red
-        fg: 219
+        fg: "#f0f0f0"
     frame_charset:
         horizontalbottom: '━'
         horizontaltop: '━'
@@ -111,10 +109,10 @@ browser:
         width: 20
         height: 10
         text_attr:
-            fg: cyan
+            fg: teal
         highlight_attr:
             bg: red
-            fg: 219
+            fg: "#f0f0f0"
     window_manager:
         frame: true
         dim: false
@@ -136,9 +134,9 @@ browser:
         bottom: '┫'
     message_bar_attr:
         fg: white
-        bg: cyan
+        bg: teal
     focus_tab_attr:
-        fg: 219
+        fg: "#f0f0f0"
     non_focus_tab_attr:
         fg: white
 
@@ -158,7 +156,7 @@ terminal:
         bg: yellow
     selection_attr:
         fg: green
-        bg: cyan
+        bg: teal
 `
 
 func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
@@ -171,7 +169,6 @@ func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
 	assert.Equal(t, defWmConfig, cfg.windowManagerConfig())
 	assert.Equal(t, "", cfg.logOutputPath())
 	assert.Equal(t, logrus.ErrorLevel, cfg.logLevel())
-	assert.Equal(t, term.Output256, cfg.outputMode())
 	assert.Equal(t, term.InputCurrent, cfg.inputMode())
 	assert.Equal(t, component.DefaultFrameUnionCharSet(), cfg.frameUnionCharset())
 
@@ -186,11 +183,11 @@ func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
 	assert.Equal(t, browser.DefaultConfig().NonFocusTabAttr, cfg.nonFocusTabAttr())
 	assert.Equal(t, browser.DefaultConfig().WallpaperAttr, cfg.workspaceWallpaperAttr())
 	assert.Equal(t, browser.DefaultConfig().WallpaperBackgroundAttr, cfg.workspaceWallpaperBackgroundAttr())
-	selectAttr := term.Attributes{Bg: term.AttrReverse, Fg: term.AttrReverse}
+	selectAttr := term.Attributes{Attrs: tcell.AttrReverse}
 	assert.Equal(t, emulator.Config{SelectionAttributes: selectAttr}, cfg.terminalConfig())
 	assert.Equal(t, command.DefaultConfig().ShowManualAfter, cfg.commandOverlayShowManualAfter())
 
-	assert.Equal(t, term.Attributes{Fg: term.ColorBlack, Bg: term.ColorYellow},
+	assert.Equal(t, term.Attributes{Fg: tcell.ColorBlack, Bg: tcell.ColorYellow},
 		cfg.modelessResultAttr())
 	assert.Equal(t, term.Attributes{}, cfg.modelessAttr())
 	assert.Equal(t, term.Attributes{}, cfg.modalAttr())
@@ -202,7 +199,7 @@ func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
 	assert.Equal(t, "", cfg.virtualEditorEditor())
 	assert.Equal(t, "fish", cfg.virtualEditorShell())
 	assert.Equal(t, term.Attributes{}, cfg.virtualEditorAttr())
-	assert.Equal(t, term.Attributes{Fg: term.AttrReverse, Bg: term.AttrReverse},
+	assert.Equal(t, term.Attributes{Attrs: tcell.AttrReverse},
 		cfg.virtualEditorSelectionAttr())
 }
 
@@ -213,7 +210,7 @@ func TestConfigDefault(t *testing.T) {
 }
 
 func TestConfigDecodeError(t *testing.T) {
-	f, err := ioutil.TempFile("", "")
+	f, err := os.CreateTemp("", "")
 	require.NoError(t, err)
 	_, err = f.WriteString("||\\n\x00{'BABY':'$$'}")
 	require.NoError(t, err)
@@ -235,14 +232,13 @@ func TestConfigSetting(t *testing.T) {
 	assert.Equal(t, "abc", cfg.wallpaper())
 	assert.Equal(t, "/tmp/debug.log", cfg.logOutputPath())
 	assert.Equal(t, logrus.TraceLevel, cfg.logLevel())
-	assert.Equal(t, term.Output256, cfg.outputMode())
 	assert.True(t, term.InputMouse&cfg.inputMode() != 0)
 	assert.True(t, term.InputEsc&cfg.inputMode() != 0)
 
 	expectedConfig := handler.WindowManagerConfig{
 		WindowManagerConfig: component.WindowManagerConfig{
 			Frame:        true,
-			FrameAttr:    term.Attributes{Fg: term.ColorRed},
+			FrameAttr:    term.Attributes{Fg: tcell.ColorRed},
 			FrameCharSet: component.FrameCharSetHighlight(),
 		},
 		Dim:               false,
@@ -277,51 +273,52 @@ func TestConfigSetting(t *testing.T) {
 	assert.False(t, notifications.ProgressBar)
 	assert.Equal(t, 1*time.Second, notifications.AutoClose)
 	assert.Equal(t, component.FrameCharSetHighlight(), notifications.FrameCharSet)
-	assert.Equal(t, term.Attributes{Fg: term.Attribute(219), Bg: term.ColorRed},
+	assert.Equal(t, term.Attributes{Fg: tcell.GetColor("#f0f0f0"), Bg: tcell.ColorRed},
 		notifications.Attributes)
-	assert.Equal(t, term.Attributes{Fg: term.Attribute(219), Bg: term.ColorRed},
+	assert.Equal(t, term.Attributes{Fg: tcell.GetColor("#f0f0f0"), Bg: tcell.ColorRed},
 		notifications.BackgroundAttributes)
 
-	assert.Equal(t, term.Attributes{Fg: term.Attribute(219)}, cfg.focusTabAttr())
-	assert.Equal(t, term.Attributes{Fg: term.ColorWhite}, cfg.nonFocusTabAttr())
-	assert.Equal(t, term.Attributes{Fg: term.ColorYellow, Bg: term.ColorWhite}, cfg.workspaceWallpaperAttr())
-	assert.Equal(t, term.Attributes{Bg: term.ColorWhite}, cfg.workspaceWallpaperBackgroundAttr())
+	assert.Equal(t, term.Attributes{Fg: tcell.GetColor("#f0f0f0")}, cfg.focusTabAttr())
+	assert.Equal(t, term.Attributes{Fg: tcell.ColorWhite}, cfg.nonFocusTabAttr())
+	assert.Equal(t, term.Attributes{Fg: tcell.ColorYellow, Bg: tcell.ColorWhite}, cfg.workspaceWallpaperAttr())
+	assert.Equal(t, term.Attributes{Bg: tcell.ColorWhite}, cfg.workspaceWallpaperBackgroundAttr())
 	expectedEmulatorConfig := emulator.Config{
 		Shell:               "sh",
-		Attributes:          term.Attributes{Fg: term.ColorWhite, Bg: term.ColorYellow},
-		SelectionAttributes: term.Attributes{Fg: term.ColorGreen, Bg: term.ColorCyan},
+		Attributes:          term.Attributes{Fg: tcell.ColorWhite, Bg: tcell.ColorYellow},
+		SelectionAttributes: term.Attributes{Fg: tcell.ColorGreen, Bg: tcell.ColorTeal},
 	}
 	assert.Equal(t, expectedEmulatorConfig, cfg.terminalConfig())
 
 	expectedPrompt := browser.PromptConfig{
-		TextAttr:      term.Attributes{Fg: term.ColorCyan},
-		HighlightAttr: term.Attributes{Fg: 219, Bg: term.ColorRed},
+		TextAttr:      term.Attributes{Fg: tcell.ColorTeal},
+		HighlightAttr: term.Attributes{Fg: tcell.GetColor("#f0f0f0"), Bg: tcell.ColorRed},
 		MinWidth:      browser.DefaultConfig().MinWidth,
 	}
 	assert.Equal(t, expectedPrompt, cfg.promptConfig())
 
-	assert.Equal(t, term.Attributes{Bg: term.ColorRed,
-		Fg: term.Attribute(219)}, cfg.modalResultAttr())
+	assert.Equal(t, term.Attributes{Bg: tcell.ColorRed,
+		Fg: tcell.GetColor("#f0f0f0")}, cfg.modalResultAttr())
 	assert.True(t, cfg.modalDebug())
 	assert.True(t, cfg.modalWrap())
 
-	assert.Equal(t, term.Attributes{Bg: term.ColorRed,
-		Fg: term.Attribute(229)}, cfg.modelessResultAttr())
+	assert.Equal(t, term.Attributes{Bg: tcell.ColorRed,
+		Fg: tcell.GetColor("#f1f1f1")}, cfg.modelessResultAttr())
 	assert.False(t, cfg.modelessWrap())
 
-	assert.Equal(t, term.Attributes{Bg: term.ColorGreen,
-		Fg: term.Attribute(239)}, cfg.modelessAttr())
-	assert.Equal(t, term.Attributes{Bg: term.ColorYellow,
-		Fg: term.Attribute(259)}, cfg.modalAttr())
+	assert.Equal(t, term.Attributes{Bg: tcell.ColorGreen,
+		Fg: tcell.GetColor("#f9f9f9")}, cfg.modelessAttr())
+	assert.Equal(t, term.Attributes{Bg: tcell.ColorYellow,
+		Fg: tcell.GetColor("#f2f2f2")}, cfg.modalAttr())
 
 	assert.Equal(t, "modal", cfg.editorMode())
 	os.Setenv("SHELL", "")
 	assert.Equal(t, "vim", cfg.virtualEditorEditor())
 	assert.Equal(t, "bash", cfg.virtualEditorShell())
-	assert.Equal(t, term.Attributes{Fg: term.Attribute(219), Bg: term.ColorRed},
+	assert.Equal(t, term.Attributes{Fg: tcell.GetColor("#f0f0f0"), Bg: tcell.ColorRed},
 		cfg.virtualEditorAttr())
-	assert.Equal(t, term.Attributes{Fg: term.Attribute(218), Bg: term.ColorGreen},
-		cfg.virtualEditorSelectionAttr())
+	virtualEditorSelectionAttr := cfg.virtualEditorSelectionAttr()
+	assert.Equal(t, tcell.GetColor("#f3f3f3"), virtualEditorSelectionAttr.Fg)
+	assert.Equal(t, tcell.ColorGreen, virtualEditorSelectionAttr.Bg)
 
 	wantMappings := map[handler.Sequence][]string{
 		{First: term.KeyComb{Ch: 'f'}}:            {"searchFile"},

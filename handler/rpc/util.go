@@ -72,8 +72,9 @@ func (r drawResponseWriter) SetCell(pos term.Coordinates, c term.Cell) {
 		cell = r.res.Rows[pos.Y].Cells[pos.X]
 	}
 	cell.Character = uint32(c.Ch)
-	cell.Foreground = uint32(c.Fg)
-	cell.Background = uint32(c.Bg)
+	cell.Foreground = uint64(c.Fg)
+	cell.Background = uint64(c.Bg)
+	cell.Attrs = int64(c.Attrs)
 	cell.Width = uint32(c.Width)
 	for _, c := range c.Combining {
 		cell.Combining = append(cell.Combining, uint32(c))

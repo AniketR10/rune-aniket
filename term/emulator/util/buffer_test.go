@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ernestrc/tcell/v3"
 	"github.com/stretchr/testify/require"
 	"unstable.build/go-tui/term"
 
@@ -614,7 +615,7 @@ goodbyegoodbye`
 }
 
 func TestBufferMaxLines(t *testing.T) {
-	b := NewBuffer(80, 2, 2, term.Attributes{Fg: term.ColorWhite, Bg: term.ColorBlack})
+	b := NewBuffer(80, 2, 2, term.Attributes{Fg: tcell.ColorWhite, Bg: tcell.ColorBlack})
 	b.modes.LineFeedMode = false
 
 	writeRaw(b, []rune("hello")...)
@@ -688,5 +689,5 @@ func TestShrinkingThenRestoring(t *testing.T) {
 }
 
 func makeBufferForTesting(cols, rows uint16) *Buffer {
-	return NewBuffer(cols, rows, 100, term.Attributes{Fg: term.ColorWhite, Bg: term.ColorBlack})
+	return NewBuffer(cols, rows, 100, term.Attributes{Fg: tcell.ColorWhite, Bg: tcell.ColorBlack})
 }
