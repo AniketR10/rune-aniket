@@ -80,7 +80,7 @@ func Encode(
 			character := density[idx]
 			var attr term.Attributes
 			if config.Color {
-				fg := tcell.NewRGBColor(int32(r), int32(g), int32(b))
+				fg := tcell.NewColor(int32(r), int32(g), int32(b))
 				attr = term.Attributes{Fg: fg}
 			}
 			output.InsertWithAttr(term.Coordinates{X: x, Y: y}, character, attr)

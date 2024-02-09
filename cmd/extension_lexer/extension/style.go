@@ -10,25 +10,25 @@ import (
 func newDefaultStyle() *chroma.Style {
 	builder := chroma.NewStyleBuilder("six")
 	builder.AddEntry(chroma.Keyword, chroma.StyleEntry{
-		Colour: chroma.NewColour(255, 255, 0),
+		Colour: chroma.NewColour(0xff, 0xff, 0),
 	})
 	builder.AddEntry(chroma.NameBuiltin, chroma.StyleEntry{
-		Colour: chroma.NewColour(255, 255, 0),
+		Colour: chroma.NewColour(0xff, 0xff, 0),
 	})
 	builder.AddEntry(chroma.NameKeyword, chroma.StyleEntry{
-		Colour: chroma.NewColour(255, 255, 0),
+		Colour: chroma.NewColour(0xff, 0xff, 0),
 	})
 	builder.AddEntry(chroma.LiteralString, chroma.StyleEntry{
-		Colour: chroma.NewColour(255, 0, 255),
+		Colour: chroma.NewColour(0xff, 0, 0xff),
 	})
 	builder.AddEntry(chroma.LiteralNumber, chroma.StyleEntry{
-		Colour: chroma.NewColour(255, 0, 0),
+		Colour: chroma.NewColour(0xff, 0, 0),
 	})
 	builder.AddEntry(chroma.Comment, chroma.StyleEntry{
-		Colour: chroma.NewColour(0, 0, 255),
+		Colour: chroma.NewColour(0, 0, 0xff),
 	})
 	builder.AddEntry(chroma.CommentPreproc, chroma.StyleEntry{
-		Colour: chroma.NewColour(0, 0, 255),
+		Colour: chroma.NewColour(0, 0, 0xff),
 	})
 
 	ret, err := builder.Build()
@@ -46,7 +46,7 @@ func styleToAttrMap(
 	bg := style.Get(chroma.Background)
 	var bgColor tcell.Color
 	if !bg.IsZero() {
-		bgColor = tcell.NewRGBColor(
+		bgColor = tcell.NewColor(
 			int32(bg.Background.Red()),
 			int32(bg.Background.Green()),
 			int32(bg.Background.Blue()),
@@ -68,7 +68,7 @@ func styleToAttrMap(
 func styleEntryToAttr(setBackgroundAttr bool, bgColor tcell.Color, e chroma.StyleEntry) (
 	ret term.Attributes,
 ) {
-	ret.Fg = tcell.NewRGBColor(
+	ret.Fg = tcell.NewColor(
 		int32(e.Colour.Red()),
 		int32(e.Colour.Green()),
 		int32(e.Colour.Blue()),

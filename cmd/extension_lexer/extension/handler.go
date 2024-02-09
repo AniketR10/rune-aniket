@@ -672,7 +672,7 @@ func (h *syntaxHandler) setBackground(file workspaceapi.URI, ed textapi.Handler)
 		return
 	}
 
-	color := tcell.NewRGBColor(int32(bg.Background.Red()), int32(bg.Background.Green()), int32(bg.Background.Blue()))
+	color := tcell.NewColor(int32(bg.Background.Red()), int32(bg.Background.Green()), int32(bg.Background.Blue()))
 	err := h.ed.SetDefaultAttributes(ed, term.Attributes{Bg: color})
 	if err != nil {
 		log.Errorf("SetDefaultAttributes: %v", err)

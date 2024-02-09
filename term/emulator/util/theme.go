@@ -80,7 +80,7 @@ func (t *Theme) ColourFrom24Bit(r, g, b string) (tcell.Color, error) {
 		return 0, err
 	}
 
-	return tcell.NewRGBColor(int32(ri), int32(gi), int32(bi)), nil
+	return tcell.NewColor(int32(ri), int32(gi), int32(bi)), nil
 }
 
 func (t *Theme) ColourFromAnsi(ansi []string, bg bool) (tcell.Color, error) {
