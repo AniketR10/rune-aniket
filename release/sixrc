@@ -179,8 +179,8 @@ extensions:
       # override default style by file extension. 'disabled' disables
       # this extension for a file extension.
       styles:
-        .go: disabled
-        .rb: tango
+        # .go: solarized-dark
+        .rb: disabled # falls back to using LSP syntax highlighting, if enabled.
   # This extension is for simulating a extension panic or other type of debugging.
   chaos:
     path: /usr/local/bin/extension_chaos
@@ -338,8 +338,9 @@ extensions:
         string: magenta
         number: red
       # Enable/disable syntax highlighting by file extension.
+      # By default all extensions are disabled.
       enable_semantic_tokens:
-        .go: true
+        .rb: true
       # Enable a LSP server for a file extension. The format is
       # <.extension>: <path to lsp executable> <args>
       exec:
