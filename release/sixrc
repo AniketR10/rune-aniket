@@ -7,7 +7,7 @@
 # the colorPalette command, provided by the 'colors'
 # extension below, extension_color_palette.
 color_theme_1: &color1 red
-color_theme_2: &color2 default
+color_theme_2: &color2 grey
 
 frame_theme: &frame true
 focus_frame_charset_theme: &focus_frame_charset
@@ -34,7 +34,7 @@ frameunion_charset_theme: &frameunion_charset
   top: '┬'
   bottom: '┴'
 frame_attr_theme: &frame_attr
-  fg: *color2
+  fg: default
 focus_frame_attr_theme: &focus_frame_attr
   fg: *color1
 
@@ -259,17 +259,21 @@ extensions:
       # Key binding used to cycle through history.
       history_key: <c-p>
       # Max history stored
-      history: 2000
+      history: 50000
       # Colors
       element_attr:
         fg: default
         bg: default
       matched_text_attr:
-        fg: *color2
+        fg: *color1
+        flags:
+          - bold
       count_attr:
         fg: *color1
       focus_element_attr:
         fg: *color1
+        flags:
+          - bold
   # This extension adds a fuzzy file line search component to the editor. Open
   # via searchText command.
   fuzzy_line:
@@ -292,6 +296,8 @@ extensions:
         bg: default
       matched_text_attr:
         fg: *color1
+        flags:
+          - bold
       count_attr:
         fg: *color1
         flags:
@@ -431,9 +437,10 @@ browser:
     flags:
       - bold
   dirty_tab_attr:
-    fg:
-      - *color1
+    fg: *color1
     bg: default
+    flags:
+      - italic
   non_focus_tab_attr:
     fg: *color2
   # Prompt configuration. This prompted is used by the editor
@@ -481,7 +488,7 @@ workspace:
   ## Workspace wallpaper. Override default six wallpaper with your ASCII art.
   #wallpaper: myAsciiArt
   wallpaper_attr:
-    fg: *color2
+    fg: *color1
   #wallpaper_background_attr:
     #bg: default
 
