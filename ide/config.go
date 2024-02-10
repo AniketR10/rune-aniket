@@ -271,6 +271,11 @@ func (c ideConfig) commandOverlayElementAttr() (ret term.Attributes) {
 	return c.getCommandAttr("element_attr", def)
 }
 
+func (c ideConfig) commandOverlayManualAttr() (ret term.Attributes) {
+	def := text.DefaultCommandOverlayConfig().ManualAttr
+	return c.getCommandAttr("manual_attr", def)
+}
+
 func (c ideConfig) commandOverlayShowManualAfter() (ret time.Duration) {
 	ret = text.DefaultCommandOverlayConfig().ShowManualAfter
 	cfg, ok := c.command()
@@ -334,6 +339,7 @@ func (c ideConfig) commandOverlayConfig() text.CommandOverlayConfig {
 		MatchedTextAttr:  c.commandOverlayMatchedTextAttr(),
 		FocusElementAttr: c.commandOverlayFocusElementAttr(),
 		ElementAttr:      c.commandOverlayElementAttr(),
+		ManualAttr:       c.commandOverlayManualAttr(),
 		ShowManualAfter:  c.commandOverlayShowManualAfter(),
 	}
 	return cfg

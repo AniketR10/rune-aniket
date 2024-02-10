@@ -16,6 +16,7 @@ type LessConfig struct {
 	Debug   bool
 	Wrap    bool
 	ResAttr term.Attributes
+	term.Attributes
 	Handler func(LessEvent)
 	NoBar   bool
 }
@@ -187,7 +188,9 @@ func (l *Less) normalHandleEvent(ev term.Event) (exit, handled bool) {
 func (l *Less) setMessage(msg string) bool {
 	newMsg := component.NewResponsiveString(msg, component.StringResponsiveConfig{
 		StringConfig: component.StringConfig{
-			Alignment: component.SpanAlignmentRight,
+			Alignment:            component.SpanAlignmentRight,
+			Attributes:           l.config.Attributes,
+			BackgroundAttributes: l.config.Attributes,
 		},
 	})
 	shouldResize := l.msg == nil || l.msg.Height(l.width) != newMsg.Height(l.width)
@@ -333,6 +336,7 @@ func (l *Less) setupScroll(w *component.Scroll) {
 	w.ResultsAttr = l.config.ResAttr
 	w.Wrap = l.config.Wrap
 	w.Debug = l.config.Debug
+	w.Attributes = l.config.Attributes
 }
 
 // Buffer returns the internal scroll's Buffer.

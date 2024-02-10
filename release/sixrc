@@ -314,10 +314,30 @@ extensions:
   lsp:
     path: /usr/local/bin/extension_lsp
     config:
-      # References searching window colors
-      references_window_attr:
+      # Hover window colors
+      hover_window_attr:
         fg: default
-        Tg: black
+        bg: black
+      # Search references window colors
+      references:
+        window_attr:
+          fg: default
+          bg: default
+        element_attr:
+          fg: default
+          bg: default
+        matched_text_attr:
+          fg: *color1
+          flags:
+            - bold
+        count_attr:
+          fg: *color1
+          flags:
+            - bold
+        focus_element_attr:
+          fg: *color1
+          flags:
+            - bold
       # timeout to connect to LSP server.
       connect_timeout: 10s
       # Timeout to run individual RPCs against LSP server.
@@ -408,6 +428,9 @@ command:
     <c-x>10: switchToWorkspace 10
   # Colors
   element_attr:
+    fg: default
+    bg: default
+  manual_attr:
     fg: default
     bg: default
   matched_text_attr:

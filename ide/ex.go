@@ -908,6 +908,7 @@ func (e *ex) openCommandPrompt() {
 	commandCfg.MatchedTextAttr = e.config.CommandOverlay.MatchedTextAttr
 	commandCfg.FocusElementAttr = e.config.CommandOverlay.FocusElementAttr
 	commandCfg.ElementAttr = e.config.CommandOverlay.ElementAttr
+	commandCfg.ManualAttr = e.config.CommandOverlay.ManualAttr
 	commandCfg.DocumentID = commandHistoryDocumentID
 	commandCfg.FrameCharSet = e.config.FrameCharSet
 	commandCfg.FrameAttr = e.config.FrameAttr

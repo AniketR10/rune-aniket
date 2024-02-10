@@ -89,9 +89,10 @@ func (vi *viHandlerImpl) init(buf *cell.Buffer, opts ...Option) {
 	}
 
 	vi.less.InitWithBuffer(buf, handler.LessConfig{
-		Wrap:    vi.config.wrap,
-		Debug:   vi.config.debug,
-		ResAttr: vi.config.resAttr,
+		Wrap:       vi.config.wrap,
+		Debug:      vi.config.debug,
+		ResAttr:    vi.config.resAttr,
+		Attributes: vi.config.attr,
 	})
 	scroll := vi.less.Scroll()
 	scroll.Attributes = vi.config.attr

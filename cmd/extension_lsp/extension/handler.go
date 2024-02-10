@@ -178,8 +178,9 @@ var (
 		source.SymbolCaseSensitive:   "caseSensitive",
 		source.SymbolCaseInsensitive: "caseInsensitive",
 	}
-	errNoServer                 = errors.New("no LSP server found for language file language")
-	defaultReferencesWindowAttr = term.Attributes{Bg: tcell.ColorBlack}
+	errNoServer            = errors.New("no LSP server found for language file language")
+	defaultHoverWindowAttr = term.Attributes{}
+	defaultRefWindowAttr   = term.Attributes{}
 )
 
 type file struct {
@@ -214,17 +215,22 @@ type lspEditorHandler struct {
 	fs   workspaceapi.FileSystem
 	p    browserapi.EventPublisher
 
-	tabspaces                  int
-	frame                      bool
-	semanticTypesAttr          map[string]tcell.Color
-	diagnosticAttr             map[protocol.DiagnosticSeverity]term.Attributes
-	enableSemanticTokens       map[string]bool
-	semanticTokensListID       string
-	diagnosticListID           string
-	rpcTimeout                 time.Duration
-	connectTimeout             time.Duration
-	disconnectTimeout          time.Duration
-	referencesWindowAttributes term.Attributes
+	tabspaces            int
+	frame                bool
+	semanticTypesAttr    map[string]tcell.Color
+	diagnosticAttr       map[protocol.DiagnosticSeverity]term.Attributes
+	enableSemanticTokens map[string]bool
+	semanticTokensListID string
+	diagnosticListID     string
+	rpcTimeout           time.Duration
+	connectTimeout       time.Duration
+	disconnectTimeout    time.Duration
+	hoverWindowAttr      term.Attributes
+	refWindowAttr        term.Attributes
+	refElementAttr       *term.Attributes
+	refCountAttr         *term.Attributes
+	refMatchedAttr       *term.Attributes
+	refFocusElementAttr  *term.Attributes
 
 	cwd               string
 	exit              bool
@@ -675,13 +681,67 @@ func newLspHandler(
 			configErr = multierr.Append(configErr, err)
 		}
 	}
-	ret.referencesWindowAttributes, err = config.GetAttributes(pconfig, "references_window_attr")
+	ret.hoverWindowAttr, err = config.GetAttributes(pconfig, "hover_window_attr")
 	if err != nil {
 		if err != config.ErrNotFound {
 			configErr = multierr.Append(configErr, err)
 		}
-		ret.referencesWindowAttributes = defaultReferencesWindowAttr
+		ret.hoverWindowAttr = defaultHoverWindowAttr
 	}
+
+	references, err := pconfig.GetMap("references")
+	if err != nil {
+		if err != config.ErrNotFound {
+			configErr = multierr.Append(configErr, err)
+		}
+	} else {
+		cfg := config.MapConfig(references)
+		refWindowAttr, err := config.GetAttributes(cfg, "window_attr")
+		if err != nil {
+			if err != config.ErrNotFound {
+				configErr = multierr.Append(configErr, err)
+			}
+			ret.refWindowAttr = defaultRefWindowAttr
+		} else {
+			ret.refWindowAttr = refWindowAttr
+		}
+
+		refElementAttr, err := config.GetAttributes(cfg, "element_attr")
+		if err != nil {
+			if err != config.ErrNotFound {
+				configErr = multierr.Append(configErr, err)
+			}
+			// default allocated for search list background
+			ret.refElementAttr = new(term.Attributes)
+		} else {
+			ret.refElementAttr = &refElementAttr
+		}
+		refMatchedAttr, err := config.GetAttributes(cfg, "matched_text_attr")
+		if err != nil {
+			if err != config.ErrNotFound {
+				configErr = multierr.Append(configErr, err)
+			}
+		} else {
+			ret.refMatchedAttr = &refMatchedAttr
+		}
+		refCountAttr, err := config.GetAttributes(cfg, "count_attr")
+		if err != nil {
+			if err != config.ErrNotFound {
+				configErr = multierr.Append(configErr, err)
+			}
+		} else {
+			ret.refCountAttr = &refCountAttr
+		}
+		refFocusElementAttr, err := config.GetAttributes(cfg, "focus_element_attr")
+		if err != nil {
+			if err != config.ErrNotFound {
+				configErr = multierr.Append(configErr, err)
+			}
+		} else {
+			ret.refFocusElementAttr = &refFocusElementAttr
+		}
+	}
+
 	ret.rpcTimeout, err = config.GetDuration(pconfig,
 		"rpc_timeout", defaultRpcTimeout)
 	if err != nil {
@@ -1583,15 +1643,15 @@ func (h *lspEditorHandler) handleHover(
 	}
 
 	log.Tracef("lspEditorHandler.Server.Hover(%s, %s): %#v", f.uri, f.languageID, hover)
-
-	less := handler.NewLess(handler.DefaultLessConfig())
+	cfg := handler.DefaultLessConfig()
+	cfg.Attributes = h.hoverWindowAttr
+	less := handler.NewLess(cfg)
 	less.Buffer().WriteString(hover.Contents.Value)
 	padx, pady := 1, 1
 	if h.frame {
 		pady += 2
 		padx += 2
 	}
-	less.Scroll().Attributes = h.referencesWindowAttributes
 	bh := browserapi.NopFloatingHandler(handler.PaddedFloating(
 		handler.FloatingBuffer(less, less.Buffer()), padx, pady))
 
@@ -1675,14 +1735,18 @@ func (h *lspEditorHandler) browseLocations(
 		done            bool
 	)
 	cfg := search.ListConfig{
-		Algo:          search.FuzzyMatch,
-		Interrupter:   h.p,
-		CaseSensitive: false,
+		Algo:             search.FuzzyMatch,
+		Interrupter:      h.p,
+		CaseSensitive:    false,
+		MatchedTextAttr:  h.refMatchedAttr,
+		ElementAttr:      h.refElementAttr,
+		CountAttr:        h.refCountAttr,
+		FocusElementAttr: h.refFocusElementAttr,
 	}
 	list := search.NewList(cfg)
 	textToLocation := make(map[string]protocol.Location)
 	buf := cell.NewBuffer()
-	ed := vi.Editor()
+	ed := vi.Editor(vi.WithAttr(h.refWindowAttr))
 	edh, err := ed.Edit(workspaceapi.RandomURI("lsp"), buf)
 	if err != nil {
 		err = fmt.Errorf("ed.Edit: %s", err)
@@ -1806,7 +1870,9 @@ func (h *lspEditorHandler) browseLocations(
 		return err
 	}
 
-	bhbottom := browserapi.FuncHandler(bh, closeWin(top))
+	bhbottom := browserapi.FuncHandler(handler.WithComponent(bh,
+		component.WithBackground(bh, term.Cell{Ch: ' ', Attributes: *h.refElementAttr}),
+	), closeWin(top))
 	bottom, err = h.wm.Split(browserapi.OrientationBottom, top, bhbottom)
 	if err != nil {
 		err = fmt.Errorf("wm.Split: %v", err)

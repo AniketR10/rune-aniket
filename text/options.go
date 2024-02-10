@@ -18,6 +18,7 @@ type CommandOverlayConfig struct {
 	MatchedTextAttr  term.Attributes
 	FocusElementAttr term.Attributes
 	ElementAttr      term.Attributes
+	ManualAttr       term.Attributes
 	ShowManualAfter  time.Duration
 }
 
@@ -46,6 +47,7 @@ func DefaultCommandOverlayConfig() (cfg CommandOverlayConfig) {
 	cfg.MatchedTextAttr = term.Attributes{Fg: tcell.ColorRed}
 	cfg.FocusElementAttr = term.Attributes{Fg: tcell.ColorRed, Attrs: tcell.AttrBold | tcell.AttrUnderline}
 	cfg.ElementAttr = term.Attributes{}
+	cfg.ManualAttr = term.Attributes{}
 	cfg.ShowManualAfter = 1 * time.Second
 	return
 }

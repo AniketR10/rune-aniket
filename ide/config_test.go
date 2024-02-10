@@ -70,6 +70,10 @@ command:
       - e file:///tmp/todo.md
       - jenesaisquoi
     error: 1
+  manual_attr:
+    fg: black
+    bg: yellow
+    flags: bold
   key_bindings:
     f: searchFile
     l: searchText
@@ -186,6 +190,7 @@ func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
 	selectAttr := term.Attributes{Attrs: tcell.AttrReverse}
 	assert.Equal(t, emulator.Config{SelectionAttributes: selectAttr}, cfg.terminalConfig())
 	assert.Equal(t, command.DefaultConfig().ShowManualAfter, cfg.commandOverlayShowManualAfter())
+	assert.Equal(t, command.DefaultConfig().ManualAttr, cfg.commandOverlayManualAttr())
 
 	assert.Equal(t, term.Attributes{Fg: tcell.ColorBlack, Bg: tcell.ColorYellow},
 		cfg.modelessResultAttr())
@@ -265,6 +270,8 @@ func TestConfigSetting(t *testing.T) {
 	}
 	assert.Equal(t, expectedCommandAliases, cfg.commandAliases())
 	assert.Equal(t, 2*time.Second, cfg.commandOverlayShowManualAfter())
+	assert.Equal(t, term.Attributes{Fg: tcell.ColorBlack, Bg: tcell.ColorYellow, Attrs: tcell.AttrBold},
+		cfg.commandOverlayManualAttr())
 
 	expectedFUCs := component.FrameUnionCharSet{Left: '┣', Right: '┫', Top: '┫', Bottom: '┫'}
 	assert.Equal(t, expectedFUCs, cfg.frameUnionCharset())

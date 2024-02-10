@@ -47,14 +47,15 @@ func makeManualComponent(
 	}
 
 	str := builder.String()
-	ret := component.StringResponsive(str, component.StringResponsiveConfig{
+	ret := component.NewResponsiveString(str, component.StringResponsiveConfig{
 		NoSplitWords: true,
 		StringConfig: component.StringConfig{
-			Alignment:         component.SpanAlignmentCentered,
-			Attributes:        attr,
-			PaddingVertical:   2,
-			PaddingHorizontal: 2,
-			MinWidth:          minWidth,
+			Alignment:            component.SpanAlignmentCentered,
+			Attributes:           attr,
+			BackgroundAttributes: attr,
+			PaddingVertical:      2,
+			PaddingHorizontal:    2,
+			MinWidth:             minWidth,
 		},
 	})
 	return ret

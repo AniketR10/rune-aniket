@@ -23,6 +23,9 @@ type Config struct {
 	// command manual is displayed.
 	ShowManualAfter time.Duration
 
+	// ManualAttr is used to configure the style of the alternate manual window.
+	ManualAttr term.Attributes
+
 	// FrameCharSet is used to determine if a frame is to be used to separate manual from search list.
 	FrameCharSet component.FrameCharSet
 	// FrameAttr if a frame is to be used to separate manual from search list.
