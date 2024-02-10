@@ -8,7 +8,7 @@ BLUE_CONFIG=${HOME}/.bluectl/config
 GOOGLE_CONFIG=${HOME}/.bluectl/adc.json
 
 config:
-	@ cp sixrc $(CONFIG)
+	@ cp ../ide/sixrc $(CONFIG)
 	@ mkdir -p ${HOME}/.bluectl && cp bluerc $(BLUE_CONFIG)
 	@ cp adc.json ${HOME}/.bluectl/adc.json
 	@ echo "copied config to $(CONFIG) and $(BLUE_CONFIG)"

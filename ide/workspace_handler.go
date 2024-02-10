@@ -22,6 +22,7 @@ import (
 	textapi "unstable.build/go-tui/api/text"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser"
+	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/storage"
@@ -614,15 +615,16 @@ func (h *workspaceManagerHandler) addWorkspace(
 		}
 	}
 
-	h.workspaces[i] = &workspaceHandler{
+	wh := &workspaceHandler{
 		uri:        uri,
 		ex:         ex,
 		Extensions: runner,
 	}
+	h.workspaces[i] = wh
 	h.workspaceCount++
 	h.switchToWorkspace(i)
 
-	logNonFatalErrs(configErr, cfg.errors)
+	h.logNonFatalErrs(wh, configErr, cfg.errors)
 
 	prevSessionFiles := h.history.recordAddWorkspace(uri, ex.Editor(), shouldRestore)
 	if !shouldRestore || len(prevSessionFiles) == 0 {
@@ -689,7 +691,8 @@ func (h *workspaceManagerHandler) nextAvailableWorkspace() (idx int, ok bool) {
 	return
 }
 
-func logNonFatalErrs(
+func (h *workspaceManagerHandler) logNonFatalErrs(
+	wh *workspaceHandler,
 	configErr error,
 	configErrs map[string]error,
 ) {
@@ -700,6 +703,8 @@ func logNonFatalErrs(
 	}
 	if all != nil {
 		log.Warn(all)
+		wh.Browser().
+			Notify(notifications.LevelError, "Config decode error: %v", all)
 	}
 }
 

@@ -73,12 +73,7 @@ func (i *IDE) init(
 	for _, o := range opts {
 		o(&op)
 	}
-	isConfigErr, configErr := loadConfig(&i.ideConfig, cfgfilename, op.defaultWallpaper)
-	// return errors that are not decoding errors but
-	// let decoding errors be just logged
-	if configErr != nil && !isConfigErr {
-		return configErr
-	}
+	configErr := loadConfig(&i.ideConfig, cfgfilename, op.defaultWallpaper)
 
 	cwdURI, parseErr := workspaceapi.ParseURI(cwd)
 	if parseErr != nil {
@@ -146,14 +141,8 @@ func (i *IDE) init(
 	}
 	i.workspaceManager = workspaceManager
 	i.root = root
-	logNonFatalErrs(configErr, i.ideConfig.errors)
-
-	// we probably couldn't load log path
-	// so report to user via stdout
-	if configErr != nil {
-		// this is best effort. log to stdout is a bulletproof fallback
-		fmt.Printf("Config Decode error: %s\n", configErr)
-	}
+	wh := i.root.focusHandler().(*workspaceHandler)
+	i.root.logNonFatalErrs(wh, configErr, i.ideConfig.errors)
 
 	return nil
 }

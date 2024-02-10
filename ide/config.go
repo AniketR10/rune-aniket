@@ -1,6 +1,7 @@
 package ide
 
 import (
+	_ "embed"
 	"errors"
 	"fmt"
 	"io"
@@ -47,6 +48,9 @@ const (
 	editorModeModal    = "modal"
 	editorModeModeless = "modeless"
 )
+
+//go:embed sixrc
+var defaultConfig string
 
 var (
 	defaultWindowManagerConfig = handler.DefaultWindowManagerConfig()
@@ -1142,7 +1146,7 @@ func decodeConfig(r io.Reader) (cfg map[string]interface{}, err error) {
 }
 
 func reloadConfig(configFilePath string, defaultWallpaper string) (ret ideConfig, err error) {
-	_, err = loadConfig(&ret, configFilePath, defaultWallpaper)
+	err = loadConfig(&ret, configFilePath, defaultWallpaper)
 	return
 }
 
@@ -1170,24 +1174,35 @@ func loadWorkspaceConfig(filename string, cwd workspace.Workspace, uri workspace
 	return false, nil
 }
 
-func loadConfig(c *ideConfig, configpath, defaultWallpaper string) (isConfigErr bool, err error) {
+func loadConfig(c *ideConfig, configpath, defaultWallpaper string) (err error) {
+	initDefaultConfig(c, defaultWallpaper)
+
+	cfg, err := decodeConfig(strings.NewReader(defaultConfig))
+	if err != nil {
+		panic(err)
+	}
+
+	initConfig(c, cfg, defaultWallpaper)
+
+	return loadFileConfig(c, configpath)
+}
+
+func loadFileConfig(c *ideConfig, configpath string) (err error) {
 	f, err := workspace.OpenFile(configpath, os.O_RDONLY, 0)
 	if err != nil {
-		initDefaultConfig(c, defaultWallpaper)
 		if os.IsNotExist(err) {
-			return false, nil
+			return nil
 		}
-		return false, err
+		return err
 	}
 	defer f.Close()
 
 	cfg, err := decodeConfig(f)
 	if err != nil {
-		initDefaultConfig(c, defaultWallpaper)
-		return true, err
+		return err
 	}
 
-	initConfig(c, cfg, defaultWallpaper)
+	overrideConfig(c.cfg, cfg)
 
-	return false, nil
+	return nil
 }

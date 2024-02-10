@@ -221,7 +221,13 @@ func TestConfigDecodeError(t *testing.T) {
 	require.NoError(t, err)
 
 	var ret ideConfig
-	_, err = loadConfig(&ret, f.Name(), "myWallpaper")
+	// for assertDefaultConfig
+	ret.cfg = map[string]any{
+		"workspace": map[string]any{
+			"wallpaper": "notEmpty",
+		},
+	}
+	err = loadFileConfig(&ret, f.Name())
 	assert.Error(t, err)
 	assertDefaultConfig(t, &ret)
 }
@@ -346,4 +352,10 @@ func TestConfigSetting(t *testing.T) {
 	}
 	assert.Equal(t, wantMappings, cfg.commandKeyMappings())
 	assert.False(t, cfg.autoRestore())
+}
+
+func TestLoadEmbededConfig(t *testing.T) {
+	var cfg ideConfig
+	err := loadConfig(&cfg, "nonExistent", "notEmpty")
+	require.NoError(t, err)
 }
