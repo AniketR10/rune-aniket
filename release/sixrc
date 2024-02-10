@@ -429,9 +429,6 @@ browser:
     frame_charset: *frame_charset
     focus_frame_charset: *focus_frame_charset
     frameunion_charset: *frameunion_charset
-  message_bar_attr:
-    fg: *color1
-    bg: default
   focus_tab_attr:
     fg: default
     flags:
