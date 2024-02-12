@@ -1645,6 +1645,7 @@ func (h *lspEditorHandler) handleHover(
 	log.Tracef("lspEditorHandler.Server.Hover(%s, %s): %#v", f.uri, f.languageID, hover)
 	cfg := handler.DefaultLessConfig()
 	cfg.Attributes = h.hoverWindowAttr
+	cfg.BarAttr = h.hoverWindowAttr
 	less := handler.NewLess(cfg)
 	less.Buffer().WriteString(hover.Contents.Value)
 	padx, pady := 1, 1

@@ -816,6 +816,21 @@ func (c ideConfig) modalResultAttr() (attr term.Attributes) {
 	return attr
 }
 
+func (c ideConfig) modalBarAttr() (attr term.Attributes) {
+	attr = term.Attributes{}
+	cfg, ok := c.modal()
+	if !ok {
+		return
+	}
+	attr, err := config.GetAttributes(cfg, "bar_attr")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["editor.modal.bar_attr"] = err
+		}
+	}
+	return attr
+}
+
 func (c ideConfig) modalAttr() (attr term.Attributes) {
 	cfg, ok := c.modal()
 	if !ok {
@@ -874,6 +889,21 @@ func (c ideConfig) modelessResultAttr() (attr term.Attributes) {
 	if err != nil {
 		if err != config.ErrNotFound {
 			c.errors["editor.modeless.search_attr"] = err
+		}
+	}
+	return attr
+}
+
+func (c ideConfig) modelessBarAttr() (attr term.Attributes) {
+	attr = term.Attributes{}
+	cfg, ok := c.modeless()
+	if !ok {
+		return
+	}
+	attr, err := config.GetAttributes(cfg, "bar_attr")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["editor.modeless.bar_attr"] = err
 		}
 	}
 	return attr

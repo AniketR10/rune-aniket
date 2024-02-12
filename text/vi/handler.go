@@ -92,6 +92,7 @@ func (vi *viHandlerImpl) init(buf *cell.Buffer, opts ...Option) {
 		Wrap:       vi.config.wrap,
 		Debug:      vi.config.debug,
 		ResAttr:    vi.config.resAttr,
+		BarAttr:    vi.config.barAttr,
 		Attributes: vi.config.attr,
 	})
 	scroll := vi.less.Scroll()

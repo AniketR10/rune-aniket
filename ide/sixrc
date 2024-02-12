@@ -82,6 +82,10 @@ editor:
     attr:
       fg: *default
       bg: *background2
+    # search and message bar attributes
+    bar_attr:
+      fg: *default
+      bg: *background2
     # search results attributes
     search_attr:
       fg: *default
@@ -91,6 +95,10 @@ editor:
     wrap: false # true for wrapping lines
     # default text attributes
     attr:
+      fg: *default
+      bg: *background2
+    # search and message bar attributes
+    bar_attr:
       fg: *default
       bg: *background2
     # search results attributes

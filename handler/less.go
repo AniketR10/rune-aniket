@@ -13,12 +13,13 @@ import (
 
 // LessConfig holds configuration values for a Less instance.
 type LessConfig struct {
-	Debug   bool
-	Wrap    bool
-	ResAttr term.Attributes
-	term.Attributes
-	Handler func(LessEvent)
-	NoBar   bool
+	Debug      bool
+	Wrap       bool
+	ResAttr    term.Attributes
+	BarAttr    term.Attributes
+	Attributes term.Attributes
+	Handler    func(LessEvent)
+	NoBar      bool
 }
 
 // DefaultLessConfig is a sane configuration defaults for Less.
@@ -187,8 +188,8 @@ func (l *Less) setMessage(msg string) bool {
 	newMsg := component.NewResponsiveString(msg, component.StringResponsiveConfig{
 		StringConfig: component.StringConfig{
 			Alignment:            component.SpanAlignmentRight,
-			Attributes:           l.config.Attributes,
-			BackgroundAttributes: l.config.Attributes,
+			Attributes:           l.config.BarAttr,
+			BackgroundAttributes: l.config.BarAttr,
 		},
 	})
 	shouldResize := l.msg == nil || l.msg.Height(l.width) != newMsg.Height(l.width)
@@ -292,11 +293,11 @@ func (l *Less) Handle(ev term.Event) (exit bool, handled bool) {
 	return
 }
 
-func (l *Less) setupScroll(w *component.Scroll) {
+func (l *Less) setupScroll(w *component.Scroll, attr term.Attributes) {
 	w.ResultsAttr = l.config.ResAttr
 	w.Wrap = l.config.Wrap
 	w.Debug = l.config.Debug
-	w.Attributes = l.config.Attributes
+	w.Attributes = attr
 }
 
 // Buffer returns the internal scroll's Buffer.
@@ -394,8 +395,8 @@ func (l *Less) InitWithBuffer(buf *cell.Buffer, cfg LessConfig) {
 	// initialize message comps
 	l.setMessage("")
 
-	l.setupScroll(&l.searchScroll)
-	l.setupScroll(&l.scroll)
+	l.setupScroll(&l.searchScroll, l.config.BarAttr)
+	l.setupScroll(&l.scroll, l.config.Attributes)
 
 	l.SetNormalMode()
 

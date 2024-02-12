@@ -26,10 +26,10 @@ func NewSimpleHandler(
 	clipboard clipboard.Register,
 	buf *cell.Buffer, resource workspaceapi.URI,
 	wrap, commandBar bool,
-	attr, resAttr term.Attributes,
+	attr, resAttr, barAttr term.Attributes,
 ) Handler {
 	ret := new(simpleEditorHandler)
-	ret.Init(clipboard, buf, resource, wrap, commandBar, attr, resAttr)
+	ret.Init(clipboard, buf, resource, wrap, commandBar, attr, resAttr, barAttr)
 	return ret
 }
 
@@ -37,17 +37,17 @@ func (h *simpleEditorHandler) Init(
 	clipboard clipboard.Register,
 	buf *cell.Buffer, resource workspaceapi.URI,
 	wrap, commandBar bool,
-	attr, resAttr term.Attributes,
+	attr, resAttr, barAttr term.Attributes,
 ) {
 	h.buf = buf
 	h.resource = resource
 	h.less.InitWithBuffer(buf, handler.LessConfig{
-		Wrap:  wrap,
-		NoBar: !commandBar,
+		Wrap:       wrap,
+		NoBar:      !commandBar,
+		BarAttr:    barAttr,
+		ResAttr:    resAttr,
+		Attributes: attr,
 	})
-	scroll := h.less.Scroll()
-	scroll.Attributes = attr
-	scroll.ResultsAttr = resAttr
 	h.cursor.Init(h.less.Scroll())
 	h.mouse = NewMouse(CursorMouseDelegate(&h.cursor))
 	h.clipboard = clipboard

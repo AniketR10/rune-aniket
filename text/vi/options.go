@@ -9,6 +9,7 @@ import (
 type viConfig struct {
 	attr            term.Attributes
 	resAttr         term.Attributes
+	barAttr         term.Attributes
 	clipboard       clipboard.Register
 	defaultRegister string
 	debug           bool
@@ -22,6 +23,13 @@ type Option func(*viConfig)
 func WithResAttr(attr term.Attributes) Option {
 	return func(cfg *viConfig) {
 		cfg.resAttr = attr
+	}
+}
+
+// WithBarAttr sets the command bar cell attributes to be rendered.
+func WithBarAttr(attr term.Attributes) Option {
+	return func(cfg *viConfig) {
+		cfg.barAttr = attr
 	}
 }
 
