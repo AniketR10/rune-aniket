@@ -3,9 +3,10 @@
 # or the string "default", which indicates that the default terminal
 # text color should be used.
 
-# To see the full list of colors and its values, use
-# the colorPalette command, provided by the 'colors'
-# extension below, extension_color_palette.
+# If your terminal doesn't support RGB colors, you can
+# see the full list of traditional colors and its values
+# by invoking the colorPalette command, provided by the 'colors'
+# extension below (extension_color_palette).
 color_theme_1: &default default
 color_theme_2: &highlight '#ef85d7'
 color_theme_3: &background '#231b2e'
