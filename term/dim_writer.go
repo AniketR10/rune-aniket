@@ -16,6 +16,7 @@ func DimWriter(w Writer) Writer {
 
 func (w *dimWriter) SetCell(pos Coordinates, c Cell) {
 	c.Attributes.Attrs |= tcell.AttrDim
+	c.Attributes.Attrs &^= tcell.AttrBold
 	w.w.SetCell(pos, c)
 }
 
@@ -25,6 +26,7 @@ func (w *dimWriter) Flush() error {
 
 func (w *dimWriter) Clear(attr Attributes) error {
 	attr.Attrs |= tcell.AttrDim
+	attr.Attrs &^= tcell.AttrBold
 	return w.w.Clear(attr)
 }
 
