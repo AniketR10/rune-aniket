@@ -2,7 +2,6 @@ package handler
 
 import (
 	"fmt"
-	"math"
 
 	"github.com/ernestrc/tcell/v3"
 	"unstable.build/go-tui"
@@ -37,9 +36,6 @@ func DefaultLessConfig() LessConfig {
 type Less struct {
 	scroll       component.Scroll
 	searchScroll component.Virtual
-	msgAlt       component.Responsive
-	msgAltVirt   component.Virtual
-	msgAltWidth  int
 	msg          component.Responsive
 	msgVirt      component.Virtual
 	mode         LessMode
@@ -200,38 +196,9 @@ func (l *Less) setMessage(msg string) bool {
 	return shouldResize
 }
 
-func (l *Less) setMessageAlt(msg string) bool {
-	b := cell.CellsToBuffer(nil, 4)
-	b.WriteString(msg)
-	newAlt := component.Buffer(b, component.StringResponsiveConfig{
-		StringConfig: component.StringConfig{
-			Alignment: component.SpanAlignmentLeft,
-		},
-	})
-
-	shouldResize := l.msgAlt == nil || l.msgAlt.Height(l.width) != newAlt.Height(l.width)
-
-	l.msgAlt = newAlt
-	l.msgAltVirt.C = l.msgAlt
-	l.msgAltWidth = b.MaxColumns()
-
-	return shouldResize
-}
-
 // SetMessage sets a message to be displayed on the bottom right corner.
 func (l *Less) SetMessage(text string, args ...interface{}) {
 	if (len(args) == 0 && l.setMessage(text)) || l.setMessage(fmt.Sprintf(text, args...)) {
-		l.resize()
-	} else {
-		cmdBarHeight := l.cmdBarHeight()
-		contentHeight := l.height - cmdBarHeight
-		l.initMsg(cmdBarHeight, contentHeight)
-	}
-}
-
-// SetMessageAlt sets a message to be displayed on the bottom left corner.
-func (l *Less) SetMessageAlt(text string, args ...interface{}) {
-	if (len(args) == 0 && l.setMessageAlt(text)) || l.setMessageAlt(fmt.Sprintf(text, args...)) {
 		l.resize()
 	} else {
 		cmdBarHeight := l.cmdBarHeight()
@@ -260,7 +227,6 @@ func (l *Less) Draw(w term.Writer) {
 		l.sendEvent(LessEvent{Type: EOF})
 	}
 
-	l.msgAltVirt.Draw(w)
 	l.msgVirt.Draw(w)
 	l.searchScroll.Draw(w)
 }
@@ -280,8 +246,7 @@ func (l *Less) ShowCommandBar(show bool) {
 func (l *Less) cmdBarHeight() int {
 	var cmdBarHeight int
 	if !l.config.NoBar {
-		cmdBarHeight = int(math.Max(float64(l.msg.Height(l.width)),
-			float64(l.msgAlt.Height(l.width))))
+		cmdBarHeight = l.msg.Height(l.width)
 		if l.height <= cmdBarHeight {
 			cmdBarHeight = 1
 		}
@@ -300,21 +265,9 @@ func (l *Less) resize() {
 	l.initMsg(cmdBarHeight, contentHeight)
 }
 
-func (l *Less) initMsgAlt() int {
-	cmdBarHeight := l.cmdBarHeight()
-	contentHeight := l.height - cmdBarHeight
-	msgAltWidth := int(math.Min(
-		math.Min(float64(l.width), float64(l.msgAltWidth)),
-		float64(l.width/2),
-	))
-	l.msgAltVirt.Move(term.Coordinates{X: 0, Y: contentHeight})
-	l.msgAltVirt.Resize(msgAltWidth, cmdBarHeight)
-	return msgAltWidth
-}
 func (l *Less) initMsg(cmdBarHeight int, contentHeight int) {
-	msgAltWidth := l.initMsgAlt()
-	l.msgVirt.Move(term.Coordinates{X: msgAltWidth, Y: contentHeight})
-	l.msgVirt.Resize(l.width-msgAltWidth, cmdBarHeight)
+	l.msgVirt.Move(term.Coordinates{X: 0, Y: contentHeight})
+	l.msgVirt.Resize(l.width, cmdBarHeight)
 }
 
 // Handle : Handler
@@ -432,7 +385,6 @@ func (l *Less) InitWithBuffer(buf *cell.Buffer, cfg LessConfig) {
 
 	// initialize message comps
 	l.setMessage("")
-	l.setMessageAlt("")
 
 	l.setupScroll(l.searchScroll.C.(*component.Scroll))
 	l.setupScroll(&l.scroll)
