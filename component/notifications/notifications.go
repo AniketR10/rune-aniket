@@ -44,16 +44,21 @@ func newNotification(
 ) *notificationComp {
 
 	var progressCell term.Cell
+	progressCell.Attributes = cfg.BackgroundAttributes
 
 	switch level {
 	case LevelInfo:
-		progressCell = term.Cell{Ch: '═', Attributes: term.Attributes{Fg: tcell.ColorDefault}}
+		progressCell.Ch = '═'
+		progressCell.Fg = tcell.ColorDefault
 	case LevelWarn:
-		progressCell = term.Cell{Ch: '━', Attributes: term.Attributes{Fg: tcell.ColorYellow}}
+		progressCell.Ch = '━'
+		progressCell.Fg = tcell.ColorYellow
 	case LevelError:
-		progressCell = term.Cell{Ch: '━', Attributes: term.Attributes{Fg: tcell.ColorRed}}
+		progressCell.Ch = '━'
+		progressCell.Fg = tcell.ColorRed
 	case LevelSuccess:
-		progressCell = term.Cell{Ch: '━', Attributes: term.Attributes{Fg: tcell.ColorGreen}}
+		progressCell.Ch = '━'
+		progressCell.Fg = tcell.ColorGreen
 	default:
 		panic("unknown level")
 	}
