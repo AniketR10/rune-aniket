@@ -2,6 +2,7 @@ package handler
 
 import (
 	"fmt"
+	"math"
 
 	"github.com/ernestrc/tcell/v3"
 	"unstable.build/go-tui"
@@ -34,17 +35,18 @@ func DefaultLessConfig() LessConfig {
 // Less is a clone of Unix' less program which implements
 // the Handler and Component interfaces.
 type Less struct {
-	scroll       component.Scroll
-	searchScroll component.Virtual
-	msg          component.Responsive
-	msgVirt      component.Virtual
-	mode         LessMode
-	delEOF       bool
-	cursorOffset int
-	height       int
-	width        int
-	search       string
-	config       LessConfig
+	scroll           component.Scroll
+	searchScroll     component.Scroll
+	searchScrollVirt component.Virtual
+	msg              component.Responsive
+	msgVirt          component.Virtual
+	mode             LessMode
+	delEOF           bool
+	cursorOffset     int
+	height           int
+	width            int
+	search           string
+	config           LessConfig
 }
 
 // LessEventType represents a less event
@@ -80,27 +82,25 @@ func (l *Less) sendEvent(ev LessEvent) {
 	}
 }
 
-func getBuffer(virtualScroll component.Virtual) *cell.Buffer {
-	return virtualScroll.C.(*component.Scroll).Buffer()
-}
-
 // SetNormalMode sets the mode to normal.
 func (l *Less) SetNormalMode() {
 	l.cursorOffset = 1
-	getBuffer(l.searchScroll).Reset()
+	l.searchScroll.Buffer().Reset()
 	l.mode = LessNormalMode
 }
 
 // SetSearchMode sets the mode to search mode.
 func (l *Less) SetSearchMode() {
-	getBuffer(l.searchScroll).Reset()
-	getBuffer(l.searchScroll).WriteString("/")
+	buf := l.searchScroll.Buffer()
+	buf.Reset()
+	buf.WriteString("/")
 	l.mode = LessSearchMode
+	l.resizeSearchScroll(l.cmdBarHeight())
 }
 
 // SearchText returns the contents of the search buffer.
 func (l *Less) SearchText() string {
-	str := getBuffer(l.searchScroll).String()
+	str := l.searchScroll.Buffer().String()
 	bytes := []byte(str)[1:]
 	return string(bytes)
 }
@@ -112,8 +112,9 @@ func (l *Less) searchHandleEvent(ev term.Event) (bool, bool) {
 	case term.KeyBackspace2:
 		if l.cursorOffset > 1 {
 			l.cursorOffset--
-			l.searchScroll.C.(*component.Scroll).Buffer().
+			l.searchScroll.Buffer().
 				DeleteCell(term.Coordinates{X: l.cursorOffset, Y: 0})
+			l.resizeSearchScroll(l.cmdBarHeight())
 		}
 	case term.KeyEnter:
 		l.search = l.SearchText()
@@ -131,7 +132,8 @@ func (l *Less) searchHandleEvent(ev term.Event) (bool, bool) {
 
 	default:
 		l.cursorOffset++
-		getBuffer(l.searchScroll).WriteString(string(ev.Ch))
+		l.searchScroll.Buffer().WriteString(string(ev.Ch))
+		l.resizeSearchScroll(l.cmdBarHeight())
 	}
 
 	return false, true
@@ -228,7 +230,7 @@ func (l *Less) Draw(w term.Writer) {
 	}
 
 	l.msgVirt.Draw(w)
-	l.searchScroll.Draw(w)
+	l.searchScrollVirt.Draw(w)
 }
 
 // Resize : Component
@@ -254,13 +256,18 @@ func (l *Less) cmdBarHeight() int {
 	return cmdBarHeight
 }
 
+func (l *Less) resizeSearchScroll(cmdBarHeight int) {
+	width := int(math.Min(float64(l.searchScroll.Buffer().MaxColumns()), float64(l.width)))
+	l.searchScrollVirt.Resize(width, cmdBarHeight)
+}
+
 func (l *Less) resize() {
 	cmdBarHeight := l.cmdBarHeight()
 	contentHeight := l.height - cmdBarHeight
 	l.scroll.Resize(l.width, contentHeight)
 
-	l.searchScroll.Move(term.Coordinates{X: 0, Y: contentHeight})
-	l.searchScroll.Resize(l.width, cmdBarHeight)
+	l.searchScrollVirt.Move(term.Coordinates{X: 0, Y: contentHeight})
+	l.resizeSearchScroll(cmdBarHeight)
 
 	l.initMsg(cmdBarHeight, contentHeight)
 }
@@ -381,12 +388,13 @@ func (l *Less) InitWithBuffer(buf *cell.Buffer, cfg LessConfig) {
 	}
 
 	l.config = cfg
-	l.searchScroll.C = component.NewScroll(cell.NewBuffer())
+	l.searchScroll.Init(cell.NewBuffer())
+	l.searchScrollVirt.C = &l.searchScroll
 
 	// initialize message comps
 	l.setMessage("")
 
-	l.setupScroll(l.searchScroll.C.(*component.Scroll))
+	l.setupScroll(&l.searchScroll)
 	l.setupScroll(&l.scroll)
 
 	l.SetNormalMode()
