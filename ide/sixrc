@@ -2,12 +2,15 @@
 # Colors can be either a W3C color name, a hex string value (i.e. #ffffff),
 # or the string "default", which indicates that the default terminal
 # text color should be used.
-#
+
 # To see the full list of colors and its values, use
 # the colorPalette command, provided by the 'colors'
 # extension below, extension_color_palette.
-color_theme_1: &color1 red
-color_theme_2: &color2 grey
+color_theme_1: &default default
+color_theme_2: &highlight '#ef85d7'
+color_theme_3: &background '#231b2e'
+color_theme_4: &warning '#7bf5f4'
+color_theme_5: &framecolor '#541862'
 
 frame_theme: &frame true
 focus_frame_charset_theme: &focus_frame_charset
@@ -34,9 +37,12 @@ frameunion_charset_theme: &frameunion_charset
   top: '┬'
   bottom: '┴'
 frame_attr_theme: &frame_attr
-  fg: default
+  fg: *framecolor
+  bg: *background
 focus_frame_attr_theme: &focus_frame_attr
-  fg: *color1
+  fg: *highlight
+  bg: *background
+  flags: dim
 
 # file to log to. This property is not reloaded on reloadWorkspace.
 log_path: ~/.six/debug.log
@@ -62,22 +68,24 @@ editor:
     wrap: false # true for wrapping lines
     # default text attributes
     attr:
-      bg: default
-      fg: default
+      fg: *default
+      bg: *background
     # search results attributes
     search_attr:
-      bg: yellow
-      fg: black
+      fg: *default
+      bg: *background
+      flags: reverse
   modeless:
     wrap: false # true for wrapping lines
     # default text attributes
     attr:
-      bg: default
-      fg: default
+      fg: *default
+      bg: *background
     # search results attributes
     search_attr:
-      bg: yellow
-      fg: black
+      fg: *default
+      bg: *background
+      flags: reverse
 
 # the keys in 'extensions' are arbitrary and for
 # identification purposes only. They contain the
@@ -91,45 +99,48 @@ extensions:
     path: /usr/local/bin/extension_ai
     config:
       # default LLM model used by all commands. The assistantChat command
-      # allows for overriding it.
-      default_model: gpt-4
+      # allows overriding this setting. Check its manual for more details.
+      default_model: gpt-4-0125-preview
+      # default_model: "llama-2-7b-32k-instruct.Q5_K_M"
 
-      # OpenAI API key
+      # Provider (i.e. OpenAI) API key
       # api_key: ""
 
-      # Overrides openai's default base URL
-      # base_url: ""
+      # Overrides provider's base URL. Default is set to openai's.
+      # base_url: http://localhost:8080/v1
 
       # Available models is map of model name to max context window
       # which limits which models are allowed dynamically or via
       # default_model
       available_models:
+        gpt-4-0125-preview: 128000
+        gpt-4-turbo-preview: 128000
+        gpt-4-1106-preview: 128000
         gpt-4: 8192
         gpt-3.5-turbo: 8192
-        gpt-4-1106-preview: 8192
         gpt-3.5-turbo-1106: 8192
-        llama-2-7b-chat.Q4_K_M: 4096
-        llama-2-7b-32k-instruct.Q5_K_M: 32000
-        mixtral-8x7b-instruct-v0.1.Q4_K_M: 4096
+        # llama-2-7b-chat.Q4_K_M: 4096
 
       # Colors
       background_attr:
-        bg: default
+        bg: *background
       user_msg_attr:
-        bg: default
-        fg: default
+        fg: *default
+        bg: *background
+        flags: dim
       assistant_msg_attr:
-        bg: default
-        fg: "#b9b0b0"
+        fg: *default
+        bg: *background
+        flags: italic
       input_box_attr:
-        bg: default
-        fg: default
+        fg: *default
+        bg: *background
       input_placeholder_attr:
-        bg: default
-        fg: "#5d5555"
+        fg: *highlight
+        bg: *background
       input_box_frame_attr:
-        bg: default
-        fg: default
+        fg: *default
+        bg: *background
 
        # frequency_penalty: 0
        # presence_penalty: 0
@@ -149,7 +160,7 @@ extensions:
       fps: 30
       # Ranges from -100 to 100, it indicates whether
       # contrast should be increased to provide clearer frames.
-      contrast: 0
+      contrast: 30
   issues:
     path: /usr/local/bin/extension_issues
     config:
@@ -162,7 +173,7 @@ extensions:
         # i.e. reportBug, is the name of the command to invoke this
         # issue create template.
         reportBug:
-          package: six # should always be 'six'
+          package: six
           author: user@template
           metadata:
             bug: ""
@@ -179,8 +190,8 @@ extensions:
       # override default style by file extension. 'disabled' disables
       # this extension for a file extension.
       styles:
-        # .go: solarized-dark
-        .rb: disabled # falls back to using LSP syntax highlighting, if enabled.
+        # .go: tango
+        .rb: disabled
   # This extension is for simulating a extension panic or other type of debugging.
   chaos:
     path: /usr/local/bin/extension_chaos
@@ -212,27 +223,30 @@ extensions:
       show_dirty: true
       # Colors
       filename_attr:
-        fg: default
-        bg: default
+        fg: *default
+        bg: *background
       background_attr:
-        bg: default
-        fg: default
+        fg: *default
+        bg: *background
       filename_dirty_attr:
-        fg: *color1
+        fg: *warning
+        bg: *background
       coordinates_attr:
-        bg: default
-        fg: default
+        fg: *default
+        bg: *background
   # This extension adds a git changes bar to the left of the open file.
   git:
     path: /usr/local/bin/extension_git
     config:
       # Colors
       bar_attr:
-        fg: black
-        bg: default
+        fg: *default
+        bg: *background
       add_attr:
+        fg: *default
         bg: green
       del_attr:
+        fg: *default
         bg: red
   # This extension adds a fuzzy AST search component to the editor.
   # It adds searchSyntaxFunctions, searchSyntaxTypes and searchSyntaxTypes
@@ -262,16 +276,19 @@ extensions:
       history: 50000
       # Colors
       element_attr:
-        fg: default
-        bg: default
+        fg: *default
+        bg: *background
       matched_text_attr:
-        fg: *color1
+        fg: *warning
+        bg: *background
         flags:
           - bold
       count_attr:
-        fg: *color1
+        fg: *default
+        bg: *background
       focus_element_attr:
-        fg: *color1
+        fg: *highlight
+        bg: *background
         flags:
           - bold
   # This extension adds a fuzzy file line search component to the editor. Open
@@ -292,18 +309,20 @@ extensions:
       history: 2000
       # Colors
       element_attr:
-        fg: default
-        bg: default
+        fg: *default
+        bg: *background
       matched_text_attr:
-        fg: *color1
+        fg: *warning
+        bg: *background
         flags:
           - bold
+          - italic
       count_attr:
-        fg: *color1
-        flags:
-          - bold
+        fg: *default
+        bg: *background
       focus_element_attr:
-        fg: *color1
+        fg: *highlight
+        bg: *background
         flags:
           - bold
   # This extension adds LSP functionality (Language Server Protocol).
@@ -316,26 +335,28 @@ extensions:
     config:
       # Hover window colors
       hover_window_attr:
-        fg: default
-        bg: black
+        fg: *default
+        bg: *background
       # Search references window colors
       references:
         window_attr:
-          fg: default
-          bg: default
+          fg: *default
+          bg: *background
         element_attr:
-          fg: default
-          bg: default
+          fg: *default
+          bg: *background
         matched_text_attr:
-          fg: *color1
+          fg: *warning
+          bg: *background
           flags:
             - bold
+            - italic
         count_attr:
-          fg: *color1
-          flags:
-            - bold
+          fg: *default
+          bg: *background
         focus_element_attr:
-          fg: *color1
+          fg: *highlight
+          bg: *background
           flags:
             - bold
       # timeout to connect to LSP server.
@@ -364,21 +385,31 @@ extensions:
         string: magenta
         number: red
       # Enable/disable syntax highlighting by file extension.
-      # By default all extensions are disabled.
+      # By default it's disabled.
       enable_semantic_tokens:
+        # .go: false
         .rb: true
       # Enable a LSP server for a file extension. The format is
       # <.extension>: <path to lsp executable> <args>
       exec:
         .go: gopls -mode stdio
         .c: clangd
+        .lua: lua-lsp
+        .h: clangd
+        .cpp: clangd
+        .hpp: clangd
+        .ts: typescript-language-server --stdio
+        .tsx: typescript-language-server --stdio
+        .json: typescript-language-server --stdio
+        .swift: sourcekit-lsp
+        .rs: /Users/ernestrc/.cargo/bin/rust-analyzer
 
 # Configuration for the command prompt.
 command:
   # Key to open the command prompt.
   key: ":"
   # Max number of commands stored in history.
-  max_history: 2000
+  max_history: 20000
   # Configure arbitrary command alises.
   aliases:
     # aliases can be used to disambiguate commands from others,
@@ -426,16 +457,20 @@ command:
     <c-x>9: switchToWorkspace 9
   # Colors
   element_attr:
-    fg: default
-    bg: default
+    fg: *default
+    bg: *background
   manual_attr:
-    fg: default
-    bg: default
+    fg: *default
+    bg: *background
   matched_text_attr:
-    fg: *color1
-    bg: default
+    fg: *warning
+    bg: *background
+    flags:
+      - bold
+      - italic
   focus_element_attr:
-    fg: *color2
+    fg: *highlight
+    bg: *background
     flags:
       - bold
 
@@ -451,29 +486,32 @@ browser:
     focus_frame_charset: *focus_frame_charset
     frameunion_charset: *frameunion_charset
   focus_tab_attr:
-    fg: default
+    fg: *highlight
+    bg: *background
     flags:
       - bold
   dirty_tab_attr:
-    fg: *color1
-    bg: default
+    fg: *warning
+    bg: *background
     flags:
       - italic
   non_focus_tab_attr:
-    fg: *color2
+    fg: *default
+    bg: *background
   # Prompt configuration. This prompted is used by the editor
   # to ask questions to the user.
   prompt:
     # Colors
     text_attr:
-      fg: default
-      bg: default
+      fg: *default
+      bg: *background
     highlight_attr:
-      fg: white
-      bg: *color1
+      fg: *highlight
+      bg: *default
+      flag: reverse
     background_attr:
-      fg: default
-      bg: default
+      fg: *default
+      bg: *background
 
 # Workspaces configuration. This configuration is never reloaded.
 workspace:
@@ -506,19 +544,21 @@ workspace:
   ## Workspace wallpaper. Override default six wallpaper with your ASCII art.
   #wallpaper: myAsciiArt
   wallpaper_attr:
-    fg: *color1
-  #wallpaper_background_attr:
-    #bg: default
+    fg: *highlight
+    bg: *background
+  wallpaper_background_attr:
+    fg: *default
+    bg: *background
 
 notifications:
   auto_close: 5s
   progress_bar: true
   attr:
-    fg: default
-    bg: default
+    fg: *default
+    bg: *background
   background_attr:
-    fg: default
-    bg: default
+    fg: *default
+    bg: *background
   frame_charset: *frame_charset
 
 terminal:
@@ -526,7 +566,7 @@ terminal:
   #shell: bash
   # Colors
   attr:
-    bg: default
-    fg: default
+    fg: *default
+    bg: *background
   selection_attr:
     flags: reverse
