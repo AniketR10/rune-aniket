@@ -1174,6 +1174,8 @@ func loadWorkspaceConfig(filename string, cwd workspace.Workspace, uri workspace
 	return false, nil
 }
 
+// NOTE: it's imperative that this function populates c with sane defaults even in the event
+// of an error.
 func loadConfig(c *ideConfig, configpath, defaultWallpaper string) (err error) {
 	initDefaultConfig(c, defaultWallpaper)
 

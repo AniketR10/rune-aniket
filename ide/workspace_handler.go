@@ -543,14 +543,10 @@ func (h *workspaceManagerHandler) addWorkspace(
 		return fmt.Errorf("Failed to create new workspace for %q: %s", uri, err)
 	}
 
-	cfg, err := h.reloadConfig()
-	if err != nil {
-		return fmt.Errorf("reload config: %v", err)
-	}
-
-	_, configErr := loadWorkspaceConfig(h.workspaceConfigFilename, cwd, uri, &cfg)
-	if configErr != nil {
-		return configErr
+	cfg, configErr := h.reloadConfig()
+	_, wConfigErr := loadWorkspaceConfig(h.workspaceConfigFilename, cwd, uri, &cfg)
+	if wConfigErr != nil {
+		configErr = multierror.Append(configErr, fmt.Errorf("workspace config: %w", wConfigErr))
 	}
 
 	textOpts := h.textOpts(cfg)

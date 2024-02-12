@@ -2,6 +2,7 @@ package ide
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	_ "net/http/pprof"
@@ -53,6 +54,59 @@ func TestWorkspaceConfig(t *testing.T) {
 		defer m.Close()
 
 		assert.EqualValues(t, mockConfig, passed)
+	})
+
+	t.Run("notifies user if config decode fails but does not hard error", func(t *testing.T) {
+		cfg := defaultCfg()
+		manager := workspace.NewManager(cfg.workspace())
+		workspaceConfig := cfg.cfg["workspace"].(map[string]interface{})
+		workspaceConfig[workspace.MemoryScheme] = mockConfig
+
+		passed := make(map[string]interface{})
+		manager.RegisterScheme(workspace.MemoryScheme,
+			func(ctx context.Context, cfg config.Config, uri workspaceapi.URI) (
+				schemeapi.Scheme, error,
+			) {
+				cfg.Iterate(func(k string, v interface{}) {
+					passed[k] = v
+				})
+				return workspace.NewMemoryScheme(ctx, cfg, uri)
+			})
+
+		homeURI, err := workspaceapi.ParseURI("memory:///home")
+		require.NoError(t, err)
+
+		dir, err := ioutil.TempDir("", "")
+		require.NoError(t, err)
+
+		runner := FuncExtensionsRunner(testRunnerFn)
+
+		m := new(testWorkspaceManagerHandler)
+		m.workspaceManagerHandler = new(workspaceManagerHandler)
+		err = m.workspaceManagerHandler.init(uri, homeURI, manager, cfg, "", nil,
+			dir, func(term.Event) bool {
+				return true
+			}, runner, new(sync.Mutex), nil,
+			func() (ideConfig, error) { return cfg, errors.New("boom") }, ".sixrc")
+		require.NoError(t, err)
+		defer m.Close()
+
+		assert.EqualValues(t, mockConfig, passed)
+
+		cases := []testutil.HandlerSequenceTestCase{
+			{"",
+				`┌──────────────────┐
+│Config decode     │
+│error: boom       │
+└──────────────────┘
+│                  │
+│workspaceWallpaper│
+│                  │
+│                  │
+│                  │
+└──────────────────┘`},
+		}
+		testutil.TestHandlerSequence(t, m, 20, 10, cases)
 	})
 
 	t.Run("does not reload workspace config", func(t *testing.T) {
