@@ -211,6 +211,15 @@ var (
 			},
 			handler: (*ex).executePlugin,
 		},
+		cmdSetDefaultColors: {
+			man: textapi.CommandManual{
+				Summary: "Changes the default background and optionally foreground colors of" +
+					"the window in focus. The color can be a named color or an RGB value " +
+					"in hexadecimal notation (i.e. #FFFFFF).",
+				Synopsis: "background [foreground]",
+			},
+			handler: (*ex).setDefaultColors,
+		},
 	}
 
 	manSplitWindow = commandAll{

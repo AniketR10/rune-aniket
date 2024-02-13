@@ -41,6 +41,7 @@ const (
 	cmdTerminalTab            = "newTerminal"
 	cmdSplitWindow            = "splitWindow"
 	cmdNewWindow              = "newWindow"
+	cmdSetDefaultColors       = "setDefaultColors"
 )
 
 var (
@@ -198,6 +199,12 @@ func (e *ex) completeCommand(
 ) (iterator.Iterator[string], string, error) {
 	e.log(log.DebugLevel, "complete command: %s %v", cmd, args)
 	switch cmd {
+	case cmdSetDefaultColors:
+		var colorNames []string
+		for name := range tcell.ColorNames {
+			colorNames = append(colorNames, name)
+		}
+		return iterator.FromSlice(colorNames), "", nil
 	case cmdEdit:
 		return e.completeEdit(ctx, args)
 	case cmdSplitWindow, cmdNewWindow:
@@ -473,7 +480,7 @@ func (e *ex) reloadFile(args ...string) error {
 
 func (e *ex) splitDirectionChange(args ...string) error {
 	if len(args) == 0 {
-		return errors.New("expecting argument 'horizontal', 'h', 'vertical', 'v'")
+		return errors.New("command expects argument 'horizontal', 'h', 'vertical', 'v'")
 	}
 
 	b := e.comp.Browser()
@@ -553,6 +560,36 @@ func (e *ex) pauseNotifications(args ...string) error {
 func (e *ex) resumeNotifications(args ...string) error {
 	e.comp.ResumeNotifications()
 	return nil
+}
+
+func (e *ex) setDefaultColors(args ...string) error {
+	if len(args) == 0 {
+		return errors.New("command expects at least one argument 'background'")
+	}
+
+	var attrs term.Attributes
+	attrs.Bg = tcell.GetColor(args[0])
+
+	if len(args) == 2 {
+		attrs.Fg = tcell.GetColor(args[1])
+	}
+
+	content, _ := e.invokeWindow().Content()
+	t, ok := content.(*browser.Tab)
+	if !ok {
+		return errors.New("Cannot change colors of this window")
+	}
+	th, ok := t.Handler().(text.Handler)
+	if ok {
+		e.comp.SetDefaultAttributes(th, attrs)
+		return nil
+	}
+	emh, ok := t.Handler().(*emulator.Handler)
+	if ok {
+		emh.SetDefaultAttributes(attrs)
+		return nil
+	}
+	return errors.New("Cannot change colors of this window")
 }
 
 func (e *ex) executePlugin(args ...string) error {

@@ -355,6 +355,15 @@ func (e *Handler) ScrollBottom() bool {
 	return offset != buffer.GetScrollOffset()
 }
 
+// SetDefaultAttributes sets the default attributes for the next
+// call to Draw.
+func (e *Handler) SetDefaultAttributes(attrs term.Attributes) {
+	e.terminal.Lock()
+	defer e.terminal.Unlock()
+
+	e.defAttr = attrs
+}
+
 // Close closes this terminal emulator and all the resources
 // associated with it.
 func (e *Handler) Close() error {
