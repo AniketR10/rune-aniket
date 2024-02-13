@@ -997,6 +997,9 @@ func newExForTestingWithWorkspace(
 	ex := new(ex)
 	// ensure show manual is never triggered
 	opts = append(opts, text.WithCommandOverlayConfig(testCommandOverlayConfig()))
+	opts = append(opts, text.WithCommandKeyBinding(term.KeyComb{Key: term.KeyCtrlW}, []string{"tabClose"}))
+	opts = append(opts, text.WithCommandKeyBinding(term.KeyComb{Key: term.KeyCtrlL}, []string{"tabNext"}))
+	opts = append(opts, text.WithCommandKeyBinding(term.KeyComb{Key: term.KeyCtrlH}, []string{"tabPrev"}))
 	require.NoError(t, ex.init(ed, workspace, document.NewInMemoryService(),
 		emulatorCfg, publishEvent, opts...))
 	ex.subscribeCommands()

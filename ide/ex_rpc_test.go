@@ -89,6 +89,9 @@ func newTestRPCBrowser(t *testing.T,
 		tui.Handler, browser.Browser, error,
 	) {
 		opts = append(opts, text.WithCommandOverlayConfig(testCommandOverlayConfig()))
+		opts = append(opts, text.WithCommandKeyBinding(term.KeyComb{Key: term.KeyCtrlW}, []string{"tabClose"}))
+		opts = append(opts, text.WithCommandKeyBinding(term.KeyComb{Key: term.KeyCtrlL}, []string{"tabNext"}))
+		opts = append(opts, text.WithCommandKeyBinding(term.KeyComb{Key: term.KeyCtrlH}, []string{"tabPrev"}))
 		ex := new(ex)
 		err := ex.init(ed, &testLoader{}, document.NewInMemoryService(),
 			emulator.Config{}, nopPublishEvent, opts...)

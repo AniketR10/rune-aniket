@@ -45,14 +45,8 @@ const (
 )
 
 var (
-	commandBarAttr      = term.Attributes{Bg: tcell.ColorWhite, Fg: tcell.ColorBlack}
-	errInvalidSetCursor = errors.New("Cannot set cursor on this buffer")
-	// TODO remove all default bindings
-	exDefaultBindings = map[term.KeyComb]string{
-		{Key: term.KeyCtrlW}: "tabClose",
-		{Key: term.KeyCtrlL}: "tabNext",
-		{Key: term.KeyCtrlH}: "tabPrev",
-	}
+	commandBarAttr         = term.Attributes{Bg: tcell.ColorWhite, Fg: tcell.ColorBlack}
+	errInvalidSetCursor    = errors.New("Cannot set cursor on this buffer")
 	errEventStreamNotReady = errors.New("event stream not ready to publish")
 )
 
@@ -243,10 +237,6 @@ func (e *ex) doInit(
 	e.emulatorConfig = emulatorConfig
 
 	e.config = text.DefaultConfig()
-
-	for ev, cmd := range exDefaultBindings {
-		opts = append(opts, text.WithCommandKeyBinding(ev, []string{cmd}))
-	}
 
 	for _, o := range opts {
 		o(&e.config)
