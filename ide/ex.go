@@ -38,7 +38,6 @@ const (
 	reissuePadding            = 10 * time.Millisecond
 	cmdEdit                   = "edit"
 	cmdChangeSplitOrientation = "changeSplitOrientation"
-	cmdSplitWindowTerminal    = "splitWindowTerminal"
 	cmdTerminalTab            = "newTerminal"
 	cmdSplitWindow            = "splitWindow"
 	cmdNewWindow              = "newWindow"
@@ -201,7 +200,7 @@ func (e *ex) completeCommand(
 	switch cmd {
 	case cmdEdit:
 		return e.completeEdit(ctx, args)
-	case cmdSplitWindow, cmdNewWindow, cmdSplitWindowTerminal:
+	case cmdSplitWindow, cmdNewWindow:
 		if len(args) > 1 {
 			return iterator.FromSlice[string](nil), "", nil
 		}
@@ -659,34 +658,6 @@ func (e *ex) newEmulatorTab(initialCmd string) (*browser.Tab, error) {
 	}
 
 	return t.(*browser.Tab), nil
-}
-
-func (e *ex) splitWindowTerminal(args ...string) error {
-	orientation := browserapi.OrientationDefault
-	if len(args) != 0 {
-		switch args[0] {
-		case "right":
-			orientation = browserapi.OrientationRight
-		case "bottom":
-			orientation = browserapi.OrientationBottom
-		case "left":
-			orientation = browserapi.OrientationLeft
-		case "top":
-			orientation = browserapi.OrientationTop
-		default:
-			return fmt.Errorf("invalid orientation argument %q", args[0])
-		}
-	}
-	t, err := e.newEmulatorTab("")
-	if err != nil {
-		return err
-	}
-	win := e.invokeWindow()
-	if _, err := e.comp.Split(orientation, win, t); err != nil {
-		_ = t.Close()
-		return err
-	}
-	return nil
 }
 
 func (e *ex) newTerminalTab(args ...string) error {

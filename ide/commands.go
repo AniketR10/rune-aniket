@@ -16,7 +16,6 @@ var (
 		"focusAboveWindow":       {},
 		"focusBelowWindow":       {},
 		"toggleFullscreen":       {},
-		cmdSplitWindowTerminal:   {},
 		cmdTerminalTab:           {},
 		cmdSwitchToWorkspace:     {}, // workspace_handler
 	}
@@ -172,19 +171,6 @@ var (
 				Summary: "Causes the editor to panic. This is internal and for debugging purposes only.",
 			},
 			handler: (*ex).panic,
-		},
-		cmdSplitWindowTerminal: {
-			man: textapi.CommandManual{
-				Summary: "Splits the current active window vertically or horizontally in two, " +
-					"opening a terminal emulator and changing the window focus to it." +
-					"If no orientation is passed, the default split orientation is used. " +
-					fmt.Sprintf("Check %s for more details on how changing the "+
-						"default orientation works. ", cmdChangeSplitOrientation) +
-					fmt.Sprintf("Check %s for more details on how to configure the shell "+
-						"and emulator.", cmdTerminalTab),
-				Synopsis: "[right|left|top|bottom]",
-			},
-			handler: (*ex).splitWindowTerminal,
 		},
 		cmdTerminalTab: {
 			man: textapi.CommandManual{

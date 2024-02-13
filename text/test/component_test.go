@@ -982,7 +982,7 @@ func TestDispatchCommand(t *testing.T) {
 		require.NoError(t, err)
 	})
 
-	t.Run("NewComponent returns error if aliases is recursive", func(t *testing.T) {
+	t.Run("NewComponent returns error if aliases create an infinite loop of command calls", func(t *testing.T) {
 		cfg := text.DefaultConfig()
 		cfg.CommandAliases = map[string][]string{
 			"blah": {"bleh"},
@@ -990,6 +990,40 @@ func TestDispatchCommand(t *testing.T) {
 		}
 		_, err := text.NewComponent(NopEditor(), &testLoader{}, cfg)
 		require.Error(t, err)
+		assert.Contains(t, err.Error(), "cycle detected")
+	})
+
+	t.Run("NewComponent does not return error if aliases simply embeds another alias", func(t *testing.T) {
+		cfg := text.DefaultConfig()
+		cfg.CommandAliases = map[string][]string{
+			"blah": {"bleh"},
+			"bleh": {"bloh"},
+		}
+		_, err := text.NewComponent(NopEditor(), &testLoader{}, cfg)
+		require.NoError(t, err)
+	})
+
+	t.Run("NewComponent returns error if aliases create an infinite loop of nested command calls", func(t *testing.T) {
+		cfg := text.DefaultConfig()
+		cfg.CommandAliases = map[string][]string{
+			"blah": {"bleh"},
+			"bleh": {"bloh"},
+			"bloh": {"bluh", "blah"},
+		}
+		_, err := text.NewComponent(NopEditor(), &testLoader{}, cfg)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "cycle detected")
+	})
+
+	t.Run("NewComponent does not return error if aliases simply embeds another nested alias", func(t *testing.T) {
+		cfg := text.DefaultConfig()
+		cfg.CommandAliases = map[string][]string{
+			"blah": {"bleh"},
+			"bleh": {"bloh"},
+			"bloh": {"bluh", "otherThing"},
+		}
+		_, err := text.NewComponent(NopEditor(), &testLoader{}, cfg)
+		require.NoError(t, err)
 	})
 }
 func TestCompleteCommand(t *testing.T) {

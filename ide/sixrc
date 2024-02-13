@@ -439,6 +439,9 @@ command:
     config: edit ~/.sixrc
     # You can also add combinations of commands to be run
     # as a single command.
+    splitWindowTerminal:
+      - splitWindow
+      - newTerminal
     layout:
       - splitWindowTerminal
       - focusPrevWindow
@@ -463,7 +466,7 @@ command:
     <c-b>: lspFormat
     <c-p>: searchFile
     <c-\>: searchText
-    # <c-x><enter>: newWindow
+    # Aliases can also be mapped to key combinations
     <c-x><enter>: splitWindowTerminal
     gf: openFileUnderCursor
     <c-x>1: switchToWorkspace 1

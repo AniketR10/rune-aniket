@@ -359,3 +359,26 @@ func TestLoadEmbededConfig(t *testing.T) {
 	err := loadConfig(&cfg, "nonExistent", "notEmpty")
 	require.NoError(t, err)
 }
+
+func TestInvalidAliases(t *testing.T) {
+	f, err := os.CreateTemp("", "")
+	require.NoError(t, err)
+	defer os.Remove(f.Name())
+
+	_, err = f.WriteString(`
+command:
+  aliases:
+    meh:
+      - yay
+    yay:
+      - nay
+    nay: meh
+`)
+	require.NoError(t, err)
+
+	var cfg ideConfig
+	err = loadConfig(&cfg, f.Name(), "notEmpty")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "Alias cycle detected")
+	assert.Empty(t, cfg.commandAliases())
+}

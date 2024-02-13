@@ -1,6 +1,7 @@
 package text
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/ernestrc/tcell/v3"
@@ -249,4 +250,35 @@ func WithEventPublisher(f func(term.Event) bool) Option {
 	return func(cfg *Config) {
 		cfg.EventPublisher = f
 	}
+}
+
+// ValidateCommandAliases validates that the given command aliases configuration
+// doesn't contain any self-referencing aliases.
+func ValidateCommandAliases(aliases map[string][]string) error {
+	for alias := range aliases {
+		if isErr := exploreAlias(aliases, alias, make(map[string]struct{})); isErr {
+			return fmt.Errorf("Alias cycle detected: '%s'", alias)
+		}
+	}
+	return nil
+}
+
+func exploreAlias(aliases map[string][]string, exploringAlias string, origins map[string]struct{}) bool {
+	origins[exploringAlias] = struct{}{}
+	for _, target := range aliases[exploringAlias] {
+		if _, seenInPath := origins[target]; seenInPath {
+			return true
+		}
+		if _, isAlias := aliases[target]; !isAlias {
+			continue
+		}
+		copyOrigins := make(map[string]struct{}, len(origins)+1)
+		for k, v := range origins {
+			copyOrigins[k] = v
+		}
+		if isErr := exploreAlias(aliases, target, copyOrigins); isErr {
+			return true
+		}
+	}
+	return false
 }

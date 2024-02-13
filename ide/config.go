@@ -47,6 +47,7 @@ const (
 
 	editorModeModal    = "modal"
 	editorModeModeless = "modeless"
+	keyCommandAliases  = "aliases"
 )
 
 //go:embed sixrc
@@ -299,17 +300,16 @@ func (c ideConfig) commandOverlayShowManualAfter() (ret time.Duration) {
 }
 
 func (c ideConfig) commandAliases() (ret map[string][]string) {
-	key := "aliases"
 	ret = make(map[string][]string)
 	cfg, ok := c.command()
 	if !ok {
 		return
 	}
 
-	cfgsAliases, err := cfg.GetMap(key)
+	cfgsAliases, err := cfg.GetMap(keyCommandAliases)
 	if err != nil {
 		if err != config.ErrNotFound {
-			c.errors[fmt.Sprintf("command.%s", key)] = err
+			c.errors[fmt.Sprintf("command.%s", keyCommandAliases)] = err
 		}
 		return
 	}
@@ -327,13 +327,13 @@ func (c ideConfig) commandAliases() (ret map[string][]string) {
 					ret[k] = append(ret[k], v.(string))
 				default:
 					err = multierr.Append(err,
-						fmt.Errorf("invalid value type for command.%s.%s", key, k))
+						fmt.Errorf("invalid value type for command.%s.%s", keyCommandAliases, k))
 				}
 			}
 		}
 	}
 	if err != nil {
-		c.errors[fmt.Sprintf("command.%s", key)] = err
+		c.errors[fmt.Sprintf("command.%s", keyCommandAliases)] = err
 	}
 	return
 }
@@ -1216,7 +1216,23 @@ func loadConfig(c *ideConfig, configpath, defaultWallpaper string) (err error) {
 
 	initConfig(c, cfg, defaultWallpaper)
 
-	return loadFileConfig(c, configpath)
+	if err := loadFileConfig(c, configpath); err != nil {
+		return err
+	}
+
+	err = text.ValidateCommandAliases(c.commandAliases())
+	if err != nil {
+		// void aliases but keep the rest of config intact.
+		// this ensures that text.NewComponent doesn't hard error,
+		// preventing user from editing using this same IDE.
+		_, ok := c.cfg["command"]
+		if !ok {
+			panic("empty command config but detected invalid aliases")
+		}
+		cfg["command"].(map[string]interface{})[keyCommandAliases] = map[string]interface{}{}
+		err = fmt.Errorf("'command.%s' is invalid: %w", keyCommandAliases, err)
+	}
+	return err
 }
 
 func loadFileConfig(c *ideConfig, configpath string) (err error) {

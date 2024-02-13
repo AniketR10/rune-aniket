@@ -173,19 +173,7 @@ func (c *Component) Init(ed Editor, w workspace.Loader, config Config) error {
 	}
 
 	// validate that config aliases are not recursive
-	seenAliased := map[string]struct{}{}
-	for k := range c.config.CommandAliases {
-		seenAliased[k] = struct{}{}
-	}
-	for _, v := range c.config.CommandAliases {
-		for _, v := range v {
-			if _, ok := seenAliased[v]; ok {
-				return fmt.Errorf("a command alias cannot reference other command aliases")
-			}
-		}
-	}
-
-	return nil
+	return ValidateCommandAliases(c.config.CommandAliases)
 }
 
 func (c *Component) OnFocus(old, focus handler.Window) {
