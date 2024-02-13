@@ -139,6 +139,8 @@ func newFileBarEditorHandler(
 		ret.bar.coords.Attributes = defaultScrollAttr
 	}
 
+	ret.initBar(component.Nop())
+
 	for _, grant := range grants {
 		switch grant.Permission {
 		case extension.Permission(extension.PermissionBrowserEventPublisher):
@@ -278,9 +280,12 @@ func (h *fileBarEditorHandler) refreshBarContent(ev textapi.Event) {
 	}
 	fileSpan := component.NewSpan(&h.bar.filename, fileSpanCfg)
 	coordsSpan := component.NewSpan(&h.bar.coords, coordsSpanCfg)
+	h.initBar(component.Grid([][]tui.Component{{fileSpan, coordsSpan}}))
+}
+
+func (h *fileBarEditorHandler) initBar(c tui.Component) {
 	h.bar.comp.Init(component.WithBackground(
-		component.Grid([][]tui.Component{{fileSpan, coordsSpan}}),
-		term.Cell{Attributes: h.backgroundAttributes},
+		c, term.Cell{Attributes: h.backgroundAttributes},
 	))
 }
 
