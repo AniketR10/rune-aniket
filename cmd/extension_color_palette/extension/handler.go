@@ -72,6 +72,32 @@ func makeColorGrid(dim bool) tui.Component {
 			nameNum++
 		}
 	}
+	nextGridOf := 12
+	nextGrid := make([][]tui.Component, 0, nextGridOf)
+	var i, x int
+	y := -1
+	for name := range tcell.ColorNames {
+		if i%nextGridOf == 0 {
+			y++
+			x = 0
+			nextGrid = append(nextGrid, make([]tui.Component, nextGridOf))
+		}
+		var attrs tcell.AttrMask
+		color := tcell.GetColor(name)
+		if dim {
+			attrs = tcell.AttrDim
+			name = fmt.Sprintf("D%s", name)
+		}
+		nextGrid[y][x] = component.NewStringWithConfig(name,
+			component.StringConfig{
+				Attributes:           term.Attributes{Bg: color, Attrs: attrs},
+				BackgroundAttributes: term.Attributes{Bg: color, Attrs: attrs},
+			},
+		)
+		i++
+		x++
+	}
+	ret = append(ret, nextGrid...)
 	return component.Grid(ret)
 }
 

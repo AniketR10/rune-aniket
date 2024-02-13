@@ -38,11 +38,13 @@ func (g *grid) Draw(w term.Writer) {
 		}
 		widthPerComp := g.width / len(row)
 		for x, comp := range row {
+			if comp == nil {
+				continue
+			}
 			xComp := x * widthPerComp
 			if xComp+widthPerComp > g.width {
 				break
 			}
-
 			v.C = comp
 			v.Resize(widthPerComp, heightPerComp)
 			v.Move(term.Coordinates{X: xComp, Y: yComp})
