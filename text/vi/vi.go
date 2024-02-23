@@ -34,6 +34,7 @@ type Vi struct {
 	less      *handler.Less
 	clipboard clipboard.Register
 
+	repeating    int
 	currEdited   bool
 	evEdited     bool
 	oob          bool // out-of-band edits (i.e. via CellEditor)
@@ -175,22 +176,24 @@ func (vi *Vi) Handle(ev term.Event) (quit, handled bool) {
 		vi.oobEdited = false
 	}
 
-	switch mode {
-	case normalMode:
-		switch ev.Type {
-		case term.EventKey:
-			switch ev.Ch {
-			case '.':
-				handled = vi.repeat()
-				return
-			case 'u':
-				handled = vi.undo()
-				return
-			}
-			switch ev.Key {
-			case term.KeyCtrlR:
-				handled = vi.redo()
-				return
+	if vi.repeating == 0 {
+		switch mode {
+		case normalMode:
+			switch ev.Type {
+			case term.EventKey:
+				switch ev.Ch {
+				case '.':
+					handled = vi.repeat()
+					return
+				case 'u':
+					handled = vi.undo()
+					return
+				}
+				switch ev.Key {
+				case term.KeyCtrlR:
+					handled = vi.redo()
+					return
+				}
 			}
 		}
 	}
@@ -317,6 +320,7 @@ func (vi *Vi) Close() error {
 }
 
 func (vi *Vi) repeat() (handled bool) {
+	vi.repeating++
 	for _, ev := range vi.repeatEdits {
 		handled = true
 		vi.Handle(ev)
@@ -324,6 +328,7 @@ func (vi *Vi) repeat() (handled bool) {
 	if handled {
 		vi.handler.moveToBounds()
 	}
+	vi.repeating--
 	return
 }
 

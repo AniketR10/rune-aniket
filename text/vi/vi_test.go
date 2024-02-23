@@ -170,6 +170,11 @@ func testViHandleSize(t *testing.T, width, height int) {
 			in:   ">jjvlllll#..ihell#.",
 			want: ">jjvlllll#>>ihell#ihell#",
 		},
+		{
+			desc: "has infinite loop repeat protection",
+			in:   "jjjjjjjjjjjjjjdf.u+udf.uu++.+",
+			want: "jjjjjjjjjjjjjjdf.df.f.",
+		},
 	}
 
 	testHandle := func(t *testing.T, in, want string) {
@@ -180,7 +185,13 @@ func testViHandleSize(t *testing.T, width, height int) {
 		vi.handler = mock
 		vi.Resize(width, height)
 		for _, ch := range in {
-			vi.Handle(term.Event{Type: term.EventKey, Ch: ch})
+			var ev term.Event
+			if ch == '+' {
+				ev = term.Event{Type: term.EventKey, Key: term.KeyCtrlR}
+			} else {
+				ev = term.Event{Type: term.EventKey, Ch: ch}
+			}
+			vi.Handle(ev)
 		}
 		var received strings.Builder
 		for _, ev := range mock.received {

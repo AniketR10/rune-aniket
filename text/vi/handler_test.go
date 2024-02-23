@@ -27,7 +27,7 @@ diff_buf_adjust(win_T *win)
 	if (!win->w_p_diff)
 	{
 	/* When there is no window showing a diff for this buffer, remove
-	 * it from the diffs. */
+	 * it from the diffs... */
 	FOR_ALL_WINDOWS(wp)
 		if (wp->w_buffer == win->w_buffer && wp->w_p_diff)
 		break;
