@@ -10,7 +10,8 @@ var (
 )
 
 // Register is the interface that wraps the basic Copy, Paste short-term data storage
-// methods for editors to use multiple storage registers.
+// methods for editors to use multiple storage registers. Implementations must be
+// gourountine-safe.
 type Register interface {
 	Paste(registerID string) (Data, error)
 	Copy(registerID string, data Data) error
