@@ -29,7 +29,7 @@ const (
 // over builtin features so if it returns true, Mouse won't call
 // any other callbacks.
 type MouseDelegate interface {
-	OnAction(pos term.Coordinates, action MouseAction) bool
+	OnAction(ev term.Event, pos term.Coordinates, action MouseAction) bool
 	ScrollUp(n int) bool
 	ScrollDown(n int) bool
 	SetSelectionEnd(pos term.Coordinates)
@@ -114,7 +114,7 @@ func (h *Mouse) Handle(ev term.Event) (exit, handled bool) {
 	// because it could confuse clients to think that we
 	// are able to dispatch simply on mouse moves.
 	if action != mouseNone {
-		handled = h.delegate.OnAction(pos, action)
+		handled = h.delegate.OnAction(ev, pos, action)
 		if handled {
 			return
 		}

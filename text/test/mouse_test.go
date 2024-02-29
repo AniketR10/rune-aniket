@@ -77,14 +77,14 @@ func expectSelectLine(t *testing.T, y int) expect {
 
 func expectIgnoreMouseAction() expect {
 	return func(m *MockMouseDelegate) {
-		m.EXPECT().OnAction(gomock.Any(), gomock.Any()).Return(false)
+		m.EXPECT().OnAction(gomock.Any(), gomock.Any(), gomock.Any()).Return(false)
 	}
 }
 
 func expectMouseAction(t *testing.T, x, y int, action text.MouseAction, handled, moved bool) expect {
 	return func(m *MockMouseDelegate) {
-		m.EXPECT().OnAction(gomock.Any(), gomock.Any()).
-			DoAndReturn(func(pos term.Coordinates, _action text.MouseAction) bool {
+		m.EXPECT().OnAction(gomock.Any(), gomock.Any(), gomock.Any()).
+			DoAndReturn(func(ev term.Event, pos term.Coordinates, _action text.MouseAction) bool {
 				assert.Equal(t, term.Coordinates{X: x, Y: y}, pos)
 				assert.Equal(t, action, _action)
 				return handled

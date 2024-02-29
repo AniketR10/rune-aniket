@@ -15,7 +15,7 @@ type mouseDelegate struct {
 	cursor *Cursor
 }
 
-func (d mouseDelegate) OnAction(pos term.Coordinates, action MouseAction) bool {
+func (d mouseDelegate) OnAction(ev term.Event, pos term.Coordinates, action MouseAction) bool {
 	return false
 }
 

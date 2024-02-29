@@ -305,6 +305,10 @@ func (t *Terminal) GetActiveBuffer() *Buffer {
 	return t.activeBuffer
 }
 
+func (t *Terminal) IsAltBuffer() bool {
+	return t.activeBuffer == t.buffers[AltBuffer]
+}
+
 // Height returns the height of the underlying terminal buffer in lines.
 func (t *Terminal) Height() int {
 	return t.GetActiveBuffer().Height()

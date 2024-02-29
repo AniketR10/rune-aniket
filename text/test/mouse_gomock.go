@@ -62,17 +62,17 @@ func (mr *MockMouseDelegateMockRecorder) Height() *gomock.Call {
 }
 
 // OnAction mocks base method.
-func (m *MockMouseDelegate) OnAction(pos term.Coordinates, action text.MouseAction) bool {
+func (m *MockMouseDelegate) OnAction(ev term.Event, pos term.Coordinates, action text.MouseAction) bool {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "OnAction", pos, action)
+	ret := m.ctrl.Call(m, "OnAction", ev, pos, action)
 	ret0, _ := ret[0].(bool)
 	return ret0
 }
 
 // OnAction indicates an expected call of OnAction.
-func (mr *MockMouseDelegateMockRecorder) OnAction(pos, action interface{}) *gomock.Call {
+func (mr *MockMouseDelegateMockRecorder) OnAction(ev, pos, action interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnAction", reflect.TypeOf((*MockMouseDelegate)(nil).OnAction), pos, action)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnAction", reflect.TypeOf((*MockMouseDelegate)(nil).OnAction), ev, pos, action)
 }
 
 // ScrollDown mocks base method.

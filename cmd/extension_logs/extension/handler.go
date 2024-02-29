@@ -470,7 +470,7 @@ func (s *logsHandler) Height() int {
 	return s.height
 }
 
-func (s *logsHandler) OnAction(pos term.Coordinates, action text.MouseAction) bool {
+func (s *logsHandler) OnAction(ev term.Event, pos term.Coordinates, action text.MouseAction) bool {
 	return false
 }
 

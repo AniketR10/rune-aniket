@@ -15,7 +15,7 @@ type mouseDriver struct {
 	clipboard    clipboard.Register
 }
 
-func (e *mouseDriver) OnAction(pos term.Coordinates, action text.MouseAction) bool {
+func (e *mouseDriver) OnAction(ev term.Event, pos term.Coordinates, action text.MouseAction) bool {
 	tx, ty := pos.X, pos.Y
 	mode := e.t.GetMouseMode()
 
@@ -71,10 +71,25 @@ func (e *mouseDriver) OnAction(pos term.Coordinates, action text.MouseAction) bo
 	case termutil.MouseModeNone:
 		fallthrough
 	default:
-		if action == text.MouseMiddleClick {
+		switch action {
+		case text.MouseMiddleClick:
 			paste, _ := e.clipboard.Paste(clipboard.DefaultRegisterID)
 			e.hookRawBytes = []byte(paste.Text)
 			return true
+		case text.MouseWheelUp:
+			if e.t.IsAltBuffer() {
+				// delegate to underlying program if terminal could not handle scroll (i.e. alternate buffer)
+				e.hookRawBytes = ev.Raw
+			} else {
+				e.t.GetActiveBuffer().ScrollUp(1)
+			}
+		case text.MouseWheelDown:
+			if e.t.IsAltBuffer() {
+				// delegate to underlying program if terminal could not handle scroll (i.e. alternate buffer)
+				e.hookRawBytes = ev.Raw
+			} else {
+				e.t.GetActiveBuffer().ScrollDown(1)
+			}
 		}
 		return false
 	}
@@ -109,18 +124,10 @@ func wordMatcher(r rune) bool {
 }
 
 func (e *mouseDriver) ScrollUp(n int) (ok bool) {
-	if e.t.GetMouseMode() == termutil.MouseModeNone {
-		e.t.GetActiveBuffer().ScrollUp(uint(n))
-		ok = true
-	}
 	return
 }
 
 func (e *mouseDriver) ScrollDown(n int) (ok bool) {
-	if e.t.GetMouseMode() == termutil.MouseModeNone {
-		e.t.GetActiveBuffer().ScrollDown(uint(n))
-		ok = true
-	}
 	return
 }
 

@@ -26,7 +26,7 @@ type mouseDelegate struct {
 	clipboard     clipboard.Register
 }
 
-func (d *mouseDelegate) OnAction(pos term.Coordinates, action text.MouseAction) bool {
+func (d *mouseDelegate) OnAction(ev term.Event, pos term.Coordinates, action text.MouseAction) bool {
 	return false
 }
 
