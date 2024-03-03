@@ -3,6 +3,7 @@ package component
 import (
 	"io"
 	"strings"
+	"unicode"
 
 	"github.com/ernestrc/tcell/v3"
 	"unstable.build/go-tui/cell"
@@ -536,11 +537,7 @@ func (s *Scroll) Draw(writer term.Writer) {
 func (s *Scroll) WordAt(pos term.Coordinates) (
 	term.Coordinates, term.Coordinates, string,
 ) {
-	return s.TokenAt(pos, func(c rune) bool {
-		return (c >= 'A' && c <= 'Z') ||
-			(c >= 'a' && c <= 'z') || c == '_' ||
-			(c >= '0' && c <= '9')
-	})
+	return s.TokenAt(pos, wordMatcher)
 }
 
 // TokenAt returns the token that satisfies the isAllowed function
@@ -753,4 +750,8 @@ func (s *Scroll) PublishingEnabled() bool {
 // FuncScrollSubscriber wraps fn to satisfy ScrollSubscriber.
 func FuncScrollSubscriber(fn func(from, to term.Coordinates)) ScrollSubscriber {
 	return fnSubscriber(fn)
+}
+
+func wordMatcher(r rune) bool {
+	return unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_'
 }

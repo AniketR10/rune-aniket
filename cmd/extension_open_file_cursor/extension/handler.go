@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"time"
+	"unicode"
 
 	"github.com/ernestrc/blue/iterator"
 	"github.com/ernestrc/blue/logging"
@@ -151,13 +152,22 @@ type resource interface {
 }
 
 func uriAtCursor(res resource) string {
-	_, _, uri := res.TokenAt(res.Cursor(), func(r rune) bool {
-		return (r >= 'A' && r <= 'Z') ||
-			(r >= 'a' && r <= 'z') || r == '_' ||
-			(r >= '0' && r <= '9') || r == ':' || r == '@' ||
-			r == '+' || r == '/' || r == '.' || r == '-' || r == '~'
-	})
+	_, _, uri := res.TokenAt(res.Cursor(), isAllowedURI)
 	return uri
+}
+
+func isAllowedURI(r rune) bool {
+	if unicode.IsLetter(r) || unicode.IsNumber(r) {
+		return true
+	}
+
+	switch r {
+	case '-', '.', '_', '~', ':', '/', '?', '#', '[', ']', '@',
+		'!', '$', '&', '\'', '(', ')', '*', '+', ',', ';', '=', '%':
+		return true
+	default:
+		return false
+	}
 }
 
 func (h *gfEditorHandler) openFileUnderCursor(win browserapi.Window, uri workspaceapi.URI) error {
