@@ -1342,13 +1342,11 @@ func TestFlush(t *testing.T) {
 	})
 
 	t.Run("returns ErrInvalidSave if called on tab with nil closer handle", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		mock := NewMockHandler(ctrl)
+		mock := browsertest.NewTestHandler()
 		c, _ := newTestComponent(t, nil)
 		win, err := c.Focus()
 		require.NoError(t, err)
 
-		mock.EXPECT().Resize(gomock.Any(), gomock.Any()).Times(1)
 		h, err := c.Tab(resource1, "Rupi Kaur", mock)
 		require.NoError(t, win.SetContent(h))
 
