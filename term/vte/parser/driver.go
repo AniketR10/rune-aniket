@@ -71,7 +71,7 @@ func (p *driver) Print(r rune) {
 func (p *driver) Execute(ch byte) {
 	switch ch {
 	case c0HT:
-		p.handler.PutTab(1)
+		p.handler.PutTab()
 	case c0BS:
 		p.handler.Backspace()
 	case c0CR:
@@ -123,7 +123,7 @@ func (p *driver) OSCDispatch(params [][]byte, bellTerminated bool) {
 				title.WriteByte(';')
 			}
 			titleStr := strings.TrimSpace(title.String())
-			p.handler.SetTitle(&titleStr)
+			p.handler.SetTitle(titleStr)
 			return
 		}
 		p.logUnhandledOSC(params)

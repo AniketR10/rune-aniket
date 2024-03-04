@@ -7,7 +7,7 @@ func NopHandler() Handler {
 
 type nopHandler struct{}
 
-func (h nopHandler) SetTitle(title *string) {
+func (h nopHandler) SetTitle(title string) {
 
 }
 
@@ -71,7 +71,7 @@ func (h nopHandler) MoveUpAndCR(row int) {
 
 }
 
-func (h nopHandler) PutTab(count int) {
+func (h nopHandler) PutTab() {
 
 }
 

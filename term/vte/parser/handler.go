@@ -7,7 +7,7 @@ import (
 // Handler abstracts a terminal TUI implementation.
 type Handler interface {
 	// SetTitle sets the terminal's window title.
-	SetTitle(title *string)
+	SetTitle(title string)
 
 	// SetCursorStyle Set the cell cursor style.
 	SetCursorStyle(style CursorStyle)
@@ -55,7 +55,7 @@ type Handler interface {
 	MoveUpAndCR(rows int)
 
 	// PutTab sets the current cell cursor's position to be `count` number of tabs.
-	PutTab(count int)
+	PutTab()
 
 	// Backspace deletes backward one character.
 	Backspace()
@@ -71,9 +71,6 @@ type Handler interface {
 
 	// Substitute subsitutes the char under the cell cursor.
 	Substitute()
-
-	// Newline performs a new line.
-	Newline()
 
 	// SetHorizontalTabstop sets current position as a tabstop.
 	SetHorizontalTabstop()
@@ -283,7 +280,8 @@ type Mode int
 
 const (
 	ModeInsert Mode = 4
-	LineFeed   Mode = 20
+	// https://vt100.net/docs/vt510-rm/LNM.html
+	ModeLineFeedNewLine Mode = 20
 )
 
 // NewMode maps a param to a Mode.
@@ -406,6 +404,7 @@ type PrivateMode int16
 const (
 	PrivateModeCursorKeys                    PrivateMode = 1
 	PrivateModeColumnMode                    PrivateMode = 3
+	PrivateModeScreen                        PrivateMode = 5
 	PrivateModeOrigin                        PrivateMode = 6
 	PrivateModeLineWrap                      PrivateMode = 7
 	PrivateModeBlinkingCursor                PrivateMode = 12
@@ -431,7 +430,6 @@ const (
 	ModifyOtherKeysEnableExceptWellDefined
 	ModifyOtherKeysEnableAll
 )
-
 
 // CharsetIndex represents the index identifider of a StandardCharset.
 type CharsetIndex int
