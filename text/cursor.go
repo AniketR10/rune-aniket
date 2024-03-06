@@ -16,7 +16,8 @@ import (
 type SelectMode uint8
 
 const (
-	noSelection SelectMode = iota
+	// NoSelection represents the mode where there's no selection.
+	NoSelection SelectMode = iota
 	// StandardSelection represents a select mode. See Select for more details.
 	StandardSelection
 	// LineSelection represents a select mode. See SelectLine for more details.
@@ -29,7 +30,7 @@ const (
 
 func (s SelectMode) String() string {
 	switch s {
-	case noSelection:
+	case NoSelection:
 		return "nop"
 	case StandardSelection:
 		return "standard"
@@ -87,7 +88,7 @@ func NewCursor(scroll *component.Scroll) *Cursor {
 func (c *Cursor) Init(scroll *component.Scroll) {
 	c.cursor = term.Coordinates{}
 	c.scroll = scroll
-	c.selection.mode = noSelection
+	c.selection.mode = NoSelection
 	c.subscriber.c = c
 	c.locs = make(map[string]*priorityLocationList)
 	c.messages = make(map[term.Coordinates][]message)
@@ -170,7 +171,7 @@ func (c *Cursor) CursorAtScroll() term.Coordinates {
 // SelectionFrom returns the position of the current selection,
 // if cursor is in select mode.
 func (c *Cursor) SelectionFrom() (pos term.Coordinates, ok bool) {
-	if c.selection.mode == noSelection {
+	if c.selection.mode == NoSelection {
 		return
 	}
 	ok = true
@@ -237,7 +238,7 @@ func (c *Cursor) seekToScrollCoordinates() {
 func (c *Cursor) setCursor(pos term.Coordinates, seek bool) {
 	if c.cursor == pos {
 		// even if pos is the same, content could have scrolled
-		if c.selection.mode != noSelection {
+		if c.selection.mode != NoSelection {
 			c.setSelection()
 		}
 		return
@@ -251,7 +252,7 @@ func (c *Cursor) setCursor(pos term.Coordinates, seek bool) {
 		c.seekToScrollCoordinates()
 	}
 
-	if c.selection.mode != noSelection {
+	if c.selection.mode != NoSelection {
 		c.setSelection()
 	}
 }
@@ -689,7 +690,7 @@ func (c *Cursor) MoveToMatchingRune() bool {
 // InsertLineAbove inserts a row above the current row and moves the cursor up.
 func (c *Cursor) InsertLineAbove() {
 	mode := c.selection.mode
-	c.selection.mode = noSelection
+	c.selection.mode = NoSelection
 	c.setSelection()
 
 	cursorAtScroll := c.cursorAtScroll()
@@ -703,7 +704,7 @@ func (c *Cursor) InsertLineAbove() {
 // InsertLineBelow inserts a row below the current row and moves the cursor down.
 func (c *Cursor) InsertLineBelow() {
 	mode := c.selection.mode
-	c.selection.mode = noSelection
+	c.selection.mode = NoSelection
 	c.setSelection()
 
 	pos := c.cursorAtScroll()
@@ -719,7 +720,7 @@ func (c *Cursor) InsertLineBelow() {
 // Insert inserts rune at the current cursor's position.
 func (c *Cursor) Insert(r rune) {
 	mode := c.selection.mode
-	c.selection.mode = noSelection
+	c.selection.mode = NoSelection
 	c.setSelection()
 
 	insertAt := c.cursorAtScroll()
@@ -729,10 +730,24 @@ func (c *Cursor) Insert(r rune) {
 	c.setCursorAfterUpdate(pos)
 }
 
+// InsertWithAttr inserts the given rune with the given attributes,
+// at the current cursor's position .
+func (c *Cursor) InsertWithAttr(r rune, attr term.Attributes) {
+	mode := c.selection.mode
+	c.selection.mode = NoSelection
+	c.setSelection()
+
+	insertAt := c.cursorAtScroll()
+	pos := c.buffer().InsertWithAttr(insertAt, r, attr)
+	c.selection.mode = mode
+	c.setSelection()
+	c.setCursorAfterUpdate(pos)
+}
+
 // InsertString inserts str at the current cursor's position.
 func (c *Cursor) InsertString(str string) {
 	mode := c.selection.mode
-	c.selection.mode = noSelection
+	c.selection.mode = NoSelection
 	c.setSelection()
 
 	_, until := c.buffer().InsertString(c.cursorAtScroll(), str)
@@ -765,7 +780,7 @@ func (c *Cursor) InsertBlock(str string) {
 // Paste pastes the given string on the underlying scroll at the current
 // cursor position.
 func (c *Cursor) Paste(str string, mode SelectMode, after bool) {
-	if mode == noSelection {
+	if mode == NoSelection {
 		// this is how vim behaves when using a system clipboard
 		if strings.HasSuffix(str, "\n") {
 			mode = LineSelection
@@ -897,7 +912,7 @@ func (c *Cursor) setSelection() (ok bool) {
 		c.selection.cells, ok = c.buffer().SelectLine(from, to)
 	case BlockSelection:
 		c.selection.cells, ok = c.buffer().SelectBlock(from, to)
-	case noSelection:
+	case NoSelection:
 		c.selection.cells = nil
 		ok = true
 	}
@@ -934,7 +949,7 @@ func (c *Cursor) cursorAtScrollBounds() (pos term.Coordinates, ok bool) {
 // SelectionMode returns the current SelectMode if any.
 func (c *Cursor) SelectionMode() (mode SelectMode, ok bool) {
 	mode = c.selection.mode
-	ok = mode != noSelection
+	ok = mode != NoSelection
 	return
 }
 
@@ -945,7 +960,7 @@ func (c *Cursor) SelectionMode() (mode SelectMode, ok bool) {
 func (c *Cursor) Select() (ok bool) {
 	mode := c.selection.mode
 	c.selection.mode = StandardSelection
-	if mode != noSelection {
+	if mode != NoSelection {
 		ok = c.setSelection()
 		return
 	}
@@ -964,7 +979,7 @@ func (c *Cursor) Select() (ok bool) {
 func (c *Cursor) SelectLine() (ok bool) {
 	mode := c.selection.mode
 	c.selection.mode = LineSelection
-	if mode != noSelection {
+	if mode != NoSelection {
 		ok = c.setSelection()
 		return
 	}
@@ -983,7 +998,7 @@ func (c *Cursor) SelectLine() (ok bool) {
 func (c *Cursor) SelectBlock() (ok bool) {
 	mode := c.selection.mode
 	c.selection.mode = BlockSelection
-	if mode != noSelection {
+	if mode != NoSelection {
 		ok = c.setSelection()
 		return
 	}
@@ -997,10 +1012,10 @@ func (c *Cursor) SelectBlock() (ok bool) {
 
 // Unselect resets the current selection anchor.
 func (c *Cursor) Unselect() bool {
-	if c.selection.mode == noSelection {
+	if c.selection.mode == NoSelection {
 		return false
 	}
-	c.selection.mode = noSelection
+	c.selection.mode = NoSelection
 	invertAttr(c.selection.cells)
 	c.selection.cells = nil
 	return true
@@ -1056,7 +1071,7 @@ func (c *Cursor) Cell() (term.Cell, bool) {
 // DeleteSelection deletes the current text under selection and returns true
 // or does nothing and returns false.
 func (c *Cursor) DeleteSelection() (ok bool) {
-	if c.selection.mode == noSelection {
+	if c.selection.mode == NoSelection {
 		return
 	}
 
@@ -1089,7 +1104,7 @@ func (c *Cursor) DeleteSelection() (ok bool) {
 	case BlockSelection:
 		start, str = c.buffer().DeleteBlock(from, to)
 	}
-	c.selection.mode = noSelection
+	c.selection.mode = NoSelection
 	c.setCursorAfterUpdate(start)
 	ok = str != ""
 	return
@@ -1098,7 +1113,7 @@ func (c *Cursor) DeleteSelection() (ok bool) {
 // CopySelection copies the current text under selection and returns true
 // or does nothing and returns false.
 func (c *Cursor) CopySelection(registerID string, clip clipboard.Register) (ok bool, err error) {
-	if c.selection.mode == noSelection ||
+	if c.selection.mode == NoSelection ||
 		(c.scroll.Width() == 0 && c.scroll.Wrap) {
 		return
 	}

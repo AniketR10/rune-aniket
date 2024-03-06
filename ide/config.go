@@ -21,7 +21,7 @@ import (
 	extutil "unstable.build/go-tui/extension/util"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/term"
-	"unstable.build/go-tui/term/emulator"
+	"unstable.build/go-tui/term/vte"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/text/clipboard"
 	"unstable.build/go-tui/workspace"
@@ -1159,12 +1159,13 @@ func (c ideConfig) terminalShell() (ret string) {
 	return ret
 }
 
-func (c ideConfig) terminalConfig() emulator.Config {
-	return emulator.Config{
-		Attributes:          c.terminalDefaultAttr(),
-		SelectionAttributes: c.terminalSelectionAttr(),
-		Shell:               c.terminalShell(),
-	}
+func (c ideConfig) terminalConfig() vte.Config {
+	ret := vte.DefaultConfig()
+	ret.Attributes = c.terminalDefaultAttr()
+	ret.SelectionAttributes = c.terminalSelectionAttr()
+	ret.Shell = c.terminalShell()
+	ret.Clipboard = c.clipboard()
+	return ret
 }
 
 func decodeConfig(r io.Reader) (cfg map[string]interface{}, err error) {

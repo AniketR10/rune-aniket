@@ -6,7 +6,22 @@ import (
 	textapi "unstable.build/go-tui/api/text"
 )
 
+const (
+	cmdEdit                   = "edit"
+	cmdChangeSplitOrientation = "changeSplitOrientation"
+	cmdSplitWindow            = "splitWindow"
+	cmdNewWindow              = "newWindow"
+	cmdSetDefaultColors       = "setDefaultColors"
+)
+
+type commandAll struct {
+	man     textapi.CommandManual
+	handler func(*ex, ...string) error
+}
+
 var (
+	// these commands are treated specially in that
+	// they're not delegated first to handler in focus
 	windowControlCommands = map[string]struct{}{
 		"changeSplitOrientation": {},
 		cmdSplitWindow:           {},
@@ -16,8 +31,12 @@ var (
 		"focusAboveWindow":       {},
 		"focusBelowWindow":       {},
 		"toggleFullscreen":       {},
-		cmdTerminalTab:           {},
+		"newTerminal":            {},
 		cmdSwitchToWorkspace:     {}, // workspace_handler
+		"tabClose":               {},
+		"closeWindow":            {},
+		"tabPrev":                {},
+		"tabNext":                {},
 	}
 	exCommands = map[string]commandAll{
 		"tabPrev": {
@@ -172,7 +191,7 @@ var (
 			},
 			handler: (*ex).panic,
 		},
-		cmdTerminalTab: {
+		"newTerminal": {
 			man: textapi.CommandManual{
 				Summary: "Opens a new terminal emulator and starts a shell on the current " +
 					"active window, replacing its contents. If 'shell' is not set in " +

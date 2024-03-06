@@ -15,7 +15,9 @@ import (
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/command"
 	"unstable.build/go-tui/term"
-	"unstable.build/go-tui/term/emulator"
+	"unstable.build/go-tui/term/vte"
+	"unstable.build/go-tui/text/clipboard"
+	sysclip "unstable.build/go-tui/text/clipboard/system"
 )
 
 var sampleConfig = `
@@ -188,7 +190,12 @@ func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
 	assert.Equal(t, browser.DefaultConfig().WallpaperAttr, cfg.workspaceWallpaperAttr())
 	assert.Equal(t, browser.DefaultConfig().WallpaperBackgroundAttr, cfg.workspaceWallpaperBackgroundAttr())
 	selectAttr := term.Attributes{Attrs: tcell.AttrReverse}
-	assert.Equal(t, emulator.Config{SelectionAttributes: selectAttr}, cfg.terminalConfig())
+	reg, err := sysclip.NewRegister()
+	require.NoError(t, err)
+	assert.Equal(t, vte.Config{
+		Clipboard:           reg,
+		SelectionAttributes: selectAttr,
+	}, cfg.terminalConfig())
 	assert.Equal(t, command.DefaultConfig().ShowManualAfter, cfg.commandOverlayShowManualAfter())
 	assert.Equal(t, command.DefaultConfig().ManualAttr, cfg.commandOverlayManualAttr())
 
@@ -295,9 +302,10 @@ func TestConfigSetting(t *testing.T) {
 	assert.Equal(t, term.Attributes{Fg: tcell.ColorWhite}, cfg.nonFocusTabAttr())
 	assert.Equal(t, term.Attributes{Fg: tcell.ColorYellow, Bg: tcell.ColorWhite}, cfg.workspaceWallpaperAttr())
 	assert.Equal(t, term.Attributes{Bg: tcell.ColorWhite}, cfg.workspaceWallpaperBackgroundAttr())
-	expectedEmulatorConfig := emulator.Config{
+	expectedEmulatorConfig := vte.Config{
 		Shell:               "sh",
 		Attributes:          term.Attributes{Fg: tcell.ColorWhite, Bg: tcell.ColorYellow},
+		Clipboard:           clipboard.NewInMemory(),
 		SelectionAttributes: term.Attributes{Fg: tcell.ColorGreen, Bg: tcell.ColorTeal},
 	}
 	assert.Equal(t, expectedEmulatorConfig, cfg.terminalConfig())

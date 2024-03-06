@@ -9,7 +9,8 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// Scanner represents the VT100 scanner.
+// Scanner represents the VT100 scanner. based on  Paul Williams' ANSI
+// parser state machine. See https://vt100.net/emu/dec_ansi_parser for more details.
 type Scanner struct {
 	utf8            utf8parser.Parser
 	driver          Driver

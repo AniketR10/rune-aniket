@@ -2,12 +2,14 @@ package ide
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 	"testing"
@@ -28,7 +30,7 @@ import (
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/term"
-	"unstable.build/go-tui/term/emulator"
+	"unstable.build/go-tui/term/vte"
 	"unstable.build/go-tui/text"
 	texttest "unstable.build/go-tui/text/test"
 	testutil "unstable.build/go-tui/util/test"
@@ -230,6 +232,17 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 			`┌──────────────────┐
 │cabin.go  other.go│
 ├──────────────────┤
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+└──────────────────┘`},
+		{"$", // simulates ctrl-l
+			`┌──────────────────┐
+│cabin.go  other.go│
+├──────────────────┤
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
@@ -241,56 +254,45 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 			`┌──────────────────┐
 │cabin.go  other.go│
 ├──────────────────┤
-│CCCCCCCCCCCCCCCCCC│
-│CCCCCCCCCCCCCCCCCC│
-│CCCCCCCCCCCCCCCCCC│
-│CCCCCCCCCCCCCCCCCC│
-│CCCCCCCCCCCCCCCCCC│
-│CCCCCCCCCCCCCCCCCC│
-└──────────────────┘`},
-		{"$", // simulates ctrl-l
-			`┌──────────────────┐
-│cabin.go  other.go│
-├──────────────────┤
-│CCCCCCCCCCCCCCCCCC│
-│CCCCCCCCCCCCCCCCCC│
-│CCCCCCCCCCCCCCCCCC│
-│CCCCCCCCCCCCCCCCCC│
-│CCCCCCCCCCCCCCCCCC│
-│CCCCCCCCCCCCCCCCCC│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
 └──────────────────┘`},
 		{":bclose>",
 			`┌──────────────────┐
 │cabin.go          │
 ├──────────────────┤
-│DDDDDDDDDDDDDDDDDD│
-│DDDDDDDDDDDDDDDDDD│
-│DDDDDDDDDDDDDDDDDD│
-│DDDDDDDDDDDDDDDDDD│
-│DDDDDDDDDDDDDDDDDD│
-│DDDDDDDDDDDDDDDDDD│
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
 └──────────────────┘`},
 		{":wq!^^^^^",
 			`┌──────────────────┐
 │cabin.go          │
 ├──────────────────┤
-│EEEEEEEEEEEEEEEEEE│
-│EEEEEEEEEEEEEEEEEE│
-│EEEEEEEEEEEEEEEEEE│
-│EEEEEEEEEEEEEEEEEE│
-│EEEEEEEEEEEEEEEEEE│
-│EEEEEEEEEEEEEEEEEE│
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
 └──────────────────┘`},
 		{":<",
 			`┌──────────────────┐
 │cabin.go          │
 ├──────────────────┤
-│EEEEEEEEEEEEEEEEEE│
-│EEEEEEEEEEEEEEEEEE│
-│EEEEEEEEEEEEEEEEEE│
-│EEEEEEEEEEEEEEEEEE│
-│EEEEEEEEEEEEEEEEEE│
-│EEEEEEEEEEEEEEEEEE│
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
 └──────────────────┘`},
 		{":e other.go>1111",
 			`┌──────────────────┐
@@ -307,12 +309,12 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 			`┌──────────────────┐
 │cabin.go  other.go│
 ├──────────────────┤
-│GGGGGGGGGGGGGGGGGG│
-│GGGGGGGGGGGGGGGGGG│
-│GGGGGGGGGGGGGGGGGG│
-│GGGGGGGGGGGGGGGGGG│
-│GGGGGGGGGGGGGGGGGG│
-│GGGGGGGGGGGGGGGGGG│
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
 └──────────────────┘`},
 	}
 	bh, b, err := constructor(texttest.NopEditor(),
@@ -343,23 +345,23 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 			`┌──────────────────┐
 │cabin.go  other.go│
 ├────────┐┌────────┤
-│AAAAAAAA││GGGGGGGG│
-│AAAAAAAA││GGGGGGGG│
-└────────┘│GGGGGGGG│
-┌────────┐│GGGGGGGG│
-│ZZZZZZZZ││GGGGGGGG│
-│ZZZZZZZZ││GGGGGGGG│
+│AAAAAAAA││EEEEEEEE│
+│AAAAAAAA││EEEEEEEE│
+└────────┘│EEEEEEEE│
+┌────────┐│EEEEEEEE│
+│ZZZZZZZZ││EEEEEEEE│
+│ZZZZZZZZ││EEEEEEEE│
 └────────┘└────────┘`},
 		{":<111111111",
 			`┌──────────────────┐
 │cabin.go  other.go│
 ├────────┐┌────────┤
-│AAAAAAAA││GGGGGGGG│
-│AAAAAAAA││GGGGGGGG│
-└────────┘│GGGGGGGG│
-┌────────┐│GGGGGGGG│
-│cccccccc││GGGGGGGG│
-│cccccccc││GGGGGGGG│
+│AAAAAAAA││EEEEEEEE│
+│AAAAAAAA││EEEEEEEE│
+└────────┘│EEEEEEEE│
+┌────────┐│EEEEEEEE│
+│cccccccc││EEEEEEEE│
+│cccccccc││EEEEEEEE│
 └────────┘└────────┘`},
 	}
 
@@ -376,12 +378,12 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 			`┌──────────────────┐
 │cabin.go  other.go│
 ├────────┐┌────────┤
-│$$$$$$$$││GGGGGGGG│
-│$$$$$$$$││GGGGGGGG│
-└────────┘│GGGGGGGG│
-┌────────┐│GGGGGGGG│
-│cccccccc││GGGGGGGG│
-│cccccccc││GGGGGGGG│
+│$$$$$$$$││EEEEEEEE│
+│$$$$$$$$││EEEEEEEE│
+└────────┘│EEEEEEEE│
+┌────────┐│EEEEEEEE│
+│cccccccc││EEEEEEEE│
+│cccccccc││EEEEEEEE│
 └────────┘└────────┘`},
 	}
 
@@ -396,23 +398,23 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 			`┌──────────────────┐
 │cabin.go  other.go│
 ├──────────────────┤
-│HHHHHHHHHHHHHHHHHH│
-│HHHHHHHHHHHHHHHHHH│
-│HHHHHHHHHHHHHHHHHH│
-│HHHHHHHHHHHHHHHHHH│
-│HHHHHHHHHHHHHHHHHH│
-│HHHHHHHHHHHHHHHHHH│
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
 └──────────────────┘`},
 		{":bcloseAll>:e other.go>bcde####",
 			`┌──────────────────┐
 │other.go          │
 ├──────────────────┤
-│IIIIIIIIIIIIIIIIII│
-│IIIIIIIIIIIIIIIIII│
-│IIIIIIIIIIIIIIIIII│
-│IIIIIIIIIIIIIIIIII│
-│IIIIIIIIIIIIIIIIII│
-│IIIIIIIIIIIIIIIIII│
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
 └──────────────────┘`},
 	}
 	testutil.TestHandlerSequence(t, bh, 20, 10, cases)
@@ -420,8 +422,8 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 	cases = []testutil.HandlerSequenceTestCase{
 		{"", `┌──┐
 │..│
-├II┤
-IIII`},
+├EE┤
+EEEE`},
 	}
 	testutil.TestHandlerSequence(t, bh, 4, 4, cases)
 
@@ -431,12 +433,12 @@ IIII`},
 			`┌────┌─────────────┐
 │othe│ wasup: Z    │
 ├────└─────────────┘
-│IIIIIIIIIIIIIIIIII│
-│IIIIIIIIIIIIIIIIII│
-│IIIIIIIIIIIIIIIIII│
-│IIIIIIIIIIIIIIIIII│
-│IIIIIIIIIIIIIIIIII│
-│IIIIIIIIIIIIIIIIII│
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
 └──────────────────┘`},
 	}
 	testutil.TestHandlerSequence(t, bh, 20, 10, cases)
@@ -681,7 +683,7 @@ func TestMultipleFilesStartup(t *testing.T) {
 	mockBuf := testFileBuffer{}
 	workspace := testLoader{buf: &mockBuf}
 	b := newExForTestingWithWorkspace(t, &workspace, texttest.NopEditor(),
-		emulator.Config{}, nopPublishEvent, opts...)
+		vte.Config{}, nopPublishEvent, opts...)
 	defer b.Close()
 
 	testutil.TestHandlerSequence(t, b, 20, 10, cases)
@@ -829,7 +831,7 @@ func TestExKeySequence(t *testing.T) {
 		}
 		ex := new(ex)
 		require.NoError(t, ex.init(texttest.NopEditor(), &testLoader{}, document.NewInMemoryService(),
-			emulator.Config{}, func(ev term.Event) bool {
+			vte.Config{}, func(ev term.Event) bool {
 				// do not confuse interrupt from list with sequence re-issue commands
 				if ev.Type == term.EventInterrupt {
 					return true
@@ -987,10 +989,10 @@ func (t testEx) Handle(ev term.Event) (bool, bool) {
 	return quit, handle
 }
 
-func newExForTestingWithWorkspace(
+func newExForTestingTerminal(
 	t *testing.T, workspace workspaceLoader,
 	ed text.Editor,
-	emulatorCfg emulator.Config,
+	emulatorCfg vte.Config,
 	publishEvent func(term.Event) bool,
 	opts ...text.Option,
 ) testEx {
@@ -1006,8 +1008,33 @@ func newExForTestingWithWorkspace(
 	return testEx{ex}
 }
 
+func newExForTestingWithWorkspace(
+	t *testing.T, workspace workspaceLoader,
+	ed text.Editor,
+	emulatorCfg vte.Config,
+	publishEvent func(term.Event) bool,
+	opts ...text.Option,
+) testEx {
+	ex := new(ex)
+	// ensure show manual is never triggered
+	opts = append(opts, text.WithCommandOverlayConfig(testCommandOverlayConfig()))
+	opts = append(opts, text.WithCommandKeyBinding(term.KeyComb{Key: term.KeyCtrlW}, []string{"tabClose"}))
+	opts = append(opts, text.WithCommandKeyBinding(term.KeyComb{Key: term.KeyCtrlL}, []string{"tabNext"}))
+	opts = append(opts, text.WithCommandKeyBinding(term.KeyComb{Key: term.KeyCtrlH}, []string{"tabPrev"}))
+	require.NoError(t, ex.init(ed, workspace, document.NewInMemoryService(),
+		emulatorCfg, publishEvent, opts...))
+	ex.subscribeCommands()
+	ex.newEmulatorHandler = func(initialCmd string, cfg vte.Config) (vteHandler, error) {
+		return newTestVteWithConfig(initialCmd, cfg), nil
+	}
+	ex.newPluginHandler = func(args ...string) (pluginHandler, error) {
+		return newTestVteWithConfig(strings.Join(args, " "), emulatorCfg), nil
+	}
+	return testEx{ex}
+}
+
 func newExForTesting(t *testing.T, ed text.Editor, opts ...text.Option) testEx {
-	return newExForTestingWithWorkspace(t, &testLoader{}, ed, emulator.Config{},
+	return newExForTestingWithWorkspace(t, &testLoader{}, ed, vte.Config{},
 		nopPublishEvent, opts...)
 }
 
@@ -1136,7 +1163,7 @@ func TestCommandAliases(t *testing.T) {
 	testutil.TestHandlerSequence(t, b, 20, 10, cases)
 }
 
-func TestEphemeralTerminal(t *testing.T) {
+func TestIntegrationEphemeralTerminal(t *testing.T) {
 	cases := []testutil.HandlerSequenceTestCase{
 		{":! sleep 20>",
 			`┌──────────────────┐
@@ -1204,14 +1231,14 @@ func TestEphemeralTerminal(t *testing.T) {
 	defer fileScheme.Close()
 
 	workspace := workspace.NewSchemeWorkspace(uri, fileScheme)
-	b := newExForTestingWithWorkspace(t, workspace,
-		texttest.NopEditor(), emulator.Config{}, nopPublishEvent, opts...)
+	b := newExForTestingTerminal(t, workspace,
+		texttest.NopEditor(), vte.Config{}, nopPublishEvent, opts...)
 	defer b.Close()
 
 	testutil.TestHandlerSequence(t, b, 20, 10, cases)
 }
 
-func TestCompanionTerminal(t *testing.T) {
+func TestIntegrationCompanionTerminal(t *testing.T) {
 
 	cases := []testutil.HandlerSequenceTestCase{
 		{":!>_______",
@@ -1294,9 +1321,9 @@ func TestCompanionTerminal(t *testing.T) {
 	defer fileScheme.Close()
 
 	// do not depend on host shell, which can vary across hosts
-	cfg := emulator.Config{Shell: "sh"}
+	cfg := vte.Config{Shell: "sh"}
 	workspace := workspace.NewSchemeWorkspace(uri, fileScheme)
-	b := newExForTestingWithWorkspace(t, workspace,
+	b := newExForTestingTerminal(t, workspace,
 		texttest.NopEditor(), cfg, nopPublishEvent, opts...)
 	defer b.Close()
 
@@ -1347,7 +1374,7 @@ AAAAAAAAAAAAAAAAAAAA`,
 
 	workspace := workspace.NewSchemeWorkspace(uri, fileScheme)
 	b := newExForTestingWithWorkspace(t, workspace,
-		texttest.NopEditor(), emulator.Config{}, nopPublishEvent, opts...)
+		texttest.NopEditor(), vte.Config{}, nopPublishEvent, opts...)
 	defer b.Close()
 
 	testutil.TestHandlerSequence(t, b, 20, 10, cases)
@@ -1499,12 +1526,140 @@ reloadFile
 		touchTestFile(t, scheme, "daworg")
 		touchTestFile(t, scheme, "retalls")
 		b := newExForTestingWithWorkspace(t, workspace.NewSchemeWorkspace(uri, scheme),
-			texttest.NopEditor(), emulator.Config{}, nopPublishEvent, opts...)
+			texttest.NopEditor(), vte.Config{}, nopPublishEvent, opts...)
 		t.Cleanup(func() { _ = b.Close() })
 		return b
 	}
 
 	testutil.TestHandlerIsolated(t, fn, 20, 10, cases)
+}
+
+func TestTerminalOnFocus(t *testing.T) {
+	t.Run("new terminal tab", func(t *testing.T) {
+		uri, err := workspaceapi.ParseURI("memory:///")
+		require.NoError(t, err)
+		scheme, _ := workspace.NewMemoryScheme(context.Background(), config.NopConfig(), uri)
+		testConfig := vte.Config{}
+		ex := newExForTestingWithWorkspace(t, workspace.NewSchemeWorkspace(uri, scheme),
+			texttest.NopEditor(), testConfig, nopPublishEvent)
+		tvte := newTestVte()
+		ex.newEmulatorHandler = func(initialCmd string, cfg vte.Config) (vteHandler, error) {
+			assert.Equal(t, "echo bla", initialCmd)
+			assert.Equal(t, testConfig, cfg)
+			return tvte, nil
+		}
+		t.Cleanup(func() { _ = ex.Close() })
+
+		ex.newTerminalTab("echo bla")
+
+		require.Len(t, tvte.onFocusChange, 2)
+		assert.False(t, tvte.onFocusChange[0])
+		assert.True(t, tvte.onFocusChange[1])
+
+		// switch to some other tab, same window
+		ex.editFiles("a")
+		require.Len(t, tvte.onFocusChange, 3)
+		assert.False(t, tvte.onFocusChange[2])
+
+		// switch back to terminal tab, same window
+		ex.previousBuffer()
+		require.Len(t, tvte.onFocusChange, 4)
+		assert.True(t, tvte.onFocusChange[3])
+
+		// new window, tab still in screen but not focused
+		ex.newWindow()
+		require.Len(t, tvte.onFocusChange, 5)
+		assert.False(t, tvte.onFocusChange[4])
+
+		// focus back to tab window
+		ex.focusPrevWindow()
+		require.Len(t, tvte.onFocusChange, 6)
+		assert.True(t, tvte.onFocusChange[5])
+
+		ex.closeBuffer()
+		require.Len(t, tvte.onFocusChange, 7)
+		assert.False(t, tvte.onFocusChange[6])
+	})
+
+	t.Run("companion terminal", func(t *testing.T) {
+		uri, err := workspaceapi.ParseURI("memory:///")
+		require.NoError(t, err)
+		scheme, _ := workspace.NewMemoryScheme(context.Background(), config.NopConfig(), uri)
+		testConfig := vte.Config{}
+		ex := newExForTestingWithWorkspace(t, workspace.NewSchemeWorkspace(uri, scheme),
+			texttest.NopEditor(), testConfig, nopPublishEvent)
+		tvte := newTestVte()
+		ex.newEmulatorHandler = func(initialCmd string, cfg vte.Config) (vteHandler, error) {
+			testConfig := testConfig
+			testConfig.WidthHint = 80
+			testConfig.HeightHint = 80
+			assert.Equal(t, testConfig, cfg)
+			return tvte, nil
+		}
+		t.Cleanup(func() { _ = ex.Close() })
+		ex.Resize(100, 100)
+
+		ex.executePlugin()
+
+		require.Len(t, tvte.onFocusChange, 2)
+		assert.False(t, tvte.onFocusChange[0])
+		assert.True(t, tvte.onFocusChange[1])
+
+		// switching from floating to other window should trigger on focus change
+		ex.focusPrevWindow()
+		require.Len(t, tvte.onFocusChange, 3)
+		assert.False(t, tvte.onFocusChange[2])
+
+		// switching back to floating should trigger again
+		ex.Handle(term.Event{Type: term.EventMouse, MouseX: 50, MouseY: 50, Key: term.MouseLeft})
+		require.Len(t, tvte.onFocusChange, 4)
+		assert.True(t, tvte.onFocusChange[3])
+
+		// indirectly toggle terminal companion
+		ex.editFiles("a")
+		require.Len(t, tvte.onFocusChange, 5)
+		assert.False(t, tvte.onFocusChange[4])
+	})
+
+	t.Run("ephemeral terminal", func(t *testing.T) {
+		uri, err := workspaceapi.ParseURI("memory:///")
+		require.NoError(t, err)
+		scheme, _ := workspace.NewMemoryScheme(context.Background(), config.NopConfig(), uri)
+		testConfig := vte.Config{}
+		ex := newExForTestingWithWorkspace(t, workspace.NewSchemeWorkspace(uri, scheme),
+			texttest.NopEditor(), testConfig, nopPublishEvent)
+		tvte := newTestVte()
+		ex.newPluginHandler = func(args ...string) (pluginHandler, error) {
+			require.Len(t, args, 2)
+			assert.Equal(t, "echo", args[0])
+			assert.Equal(t, "bla", args[1])
+			return tvte, nil
+		}
+		t.Cleanup(func() { _ = ex.Close() })
+		ex.Resize(100, 100)
+		ex.editFiles("a", "b") // have tabs available for later
+
+		ex.executePlugin("echo", "bla")
+
+		require.Len(t, tvte.onFocusChange, 2)
+		assert.False(t, tvte.onFocusChange[0])
+		assert.True(t, tvte.onFocusChange[1])
+
+		// switching from floating to other window should trigger on focus change
+		ex.focusPrevWindow()
+		require.Len(t, tvte.onFocusChange, 3)
+		assert.False(t, tvte.onFocusChange[2])
+
+		// switching back to floating should trigger again
+		ex.Handle(term.Event{Type: term.EventMouse, MouseX: 50, MouseY: 50, Key: term.MouseLeft})
+		require.Len(t, tvte.onFocusChange, 4)
+		assert.True(t, tvte.onFocusChange[3])
+
+		// ephemeral close should trigger another focus event
+		ex.nextBuffer()
+		require.Len(t, tvte.onFocusChange, 5)
+		assert.False(t, tvte.onFocusChange[4])
+	})
 }
 
 func notificationsConfig() notifications.Config {
@@ -1524,4 +1679,76 @@ func testCommandOverlayConfig() text.CommandOverlayConfig {
 	return text.CommandOverlayConfig{
 		ShowManualAfter: 1 * time.Hour,
 	}
+}
+
+type testVte struct {
+	component.String
+	initialCmd string
+	cfg        vte.Config
+
+	calledClose   bool
+	defAttr       term.Attributes
+	onFocusChange []bool
+
+	isComplete bool
+	uri        workspaceapi.URI
+	title      string
+}
+
+func newTestVte() *testVte {
+	return newTestVteWithConfig("", vte.Config{})
+}
+
+func newTestVteWithConfig(initialCmd string, cfg vte.Config) *testVte {
+	ret := new(testVte)
+	ret.initialCmd = initialCmd
+	ret.cfg = cfg
+	ret.String = component.NewString(initialCmd)
+	return ret
+}
+
+func (t *testVte) Handle(ev term.Event) (bool, bool) {
+	return false, false
+}
+
+func (t *testVte) Cursor() (ret term.Coordinates, style term.CursorStyle, show bool) {
+	show = true
+	ret = term.Coordinates{X: len(t.initialCmd)}
+	return
+}
+
+func (t *testVte) Man() tui.Manual {
+	return tui.Manual{}
+}
+
+func (t *testVte) Dimensions() (int, int) {
+	return 10, 10
+}
+
+func (v *testVte) Close() error {
+	if v.calledClose {
+		return errors.New("called close twice")
+	}
+	v.calledClose = true
+	return nil
+}
+
+func (v *testVte) OnFocusChange(inFocus bool) {
+	v.onFocusChange = append(v.onFocusChange, inFocus)
+}
+
+func (v *testVte) SetDefaultAttributes(attr term.Attributes) {
+	v.defAttr = attr
+}
+
+func (v *testVte) IsComplete() bool {
+	return v.isComplete
+}
+
+func (v *testVte) URI() workspaceapi.URI {
+	return v.uri
+}
+
+func (v *testVte) Title() string {
+	return v.title
 }

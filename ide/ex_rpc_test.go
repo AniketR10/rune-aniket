@@ -21,7 +21,7 @@ import (
 	browsertest "unstable.build/go-tui/browser/test"
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/term"
-	"unstable.build/go-tui/term/emulator"
+	"unstable.build/go-tui/term/vte"
 	"unstable.build/go-tui/text"
 	texttest "unstable.build/go-tui/text/test"
 )
@@ -94,7 +94,7 @@ func newTestRPCBrowser(t *testing.T,
 		opts = append(opts, text.WithCommandKeyBinding(term.KeyComb{Key: term.KeyCtrlH}, []string{"tabPrev"}))
 		ex := new(ex)
 		err := ex.init(ed, &testLoader{}, document.NewInMemoryService(),
-			emulator.Config{}, nopPublishEvent, opts...)
+			vte.Config{}, nopPublishEvent, opts...)
 		if err != nil {
 			return nil, nil, err
 		}

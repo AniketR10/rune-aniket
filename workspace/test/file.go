@@ -8,40 +8,50 @@ import (
 
 // File satisfies workspaceapi.File
 type File struct {
+	Reads  [][]byte
+	Writes [][]byte
 }
 
-func (t File) Name() string {
+func (t *File) Name() string {
 	return ""
 }
 
-func (t File) Fd() uintptr {
+func (t *File) Fd() uintptr {
 	return 0
 }
 
-func (t File) Stat() (os.FileInfo, error) {
+func (t *File) Stat() (os.FileInfo, error) {
 	return FileInfo{}, nil
 }
 
-func (t File) Sync() error {
+func (t *File) Sync() error {
 	return nil
 }
-func (t File) Truncate(size int64) error {
+func (t *File) Truncate(size int64) error {
 	return nil
 }
 
-func (t File) Seek(x int64, y int) (int64, error) {
+func (t *File) Seek(x int64, y int) (int64, error) {
 	return 0, nil
 }
 
-func (t File) Read(b []byte) (int, error) {
-	return 0, io.EOF
+func (t *File) Read(b []byte) (int, error) {
+	if len(t.Reads) == 0 {
+		return 0, io.EOF
+	}
+	copy(b, t.Reads[len(t.Reads)-1])
+	t.Reads = t.Reads[:len(t.Reads)-1]
+	return len(b), nil
 }
 
-func (t File) Write(b []byte) (int, error) {
+func (t *File) Write(b []byte) (int, error) {
+	n := make([]byte, len(b))
+	copy(n, b)
+	t.Writes = append(t.Writes, n)
 	return 0, nil
 }
 
-func (t File) Close() error {
+func (t *File) Close() error {
 	return nil
 }
 

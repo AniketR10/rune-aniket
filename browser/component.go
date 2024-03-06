@@ -54,6 +54,11 @@ func (c *browserContent) Dimensions() (int, int) {
 	return c.Handler.(Floating).Dimensions()
 }
 
+// allow for advanced use of content
+func (c *browserContent) Content() browserapi.Handler {
+	return c.Handler
+}
+
 func (c *browserContent) Handle(ev term.Event) (exit, handled bool) {
 	prev := c.c.focusWindow.Content()
 	win := c.c.focusWindow

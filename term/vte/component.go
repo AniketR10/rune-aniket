@@ -1,0 +1,571 @@
+package vte
+
+import (
+	"bufio"
+	"context"
+	"fmt"
+	"io"
+	"os"
+	"strings"
+	"sync"
+	"syscall"
+
+	"github.com/ernestrc/blue/logging"
+	log "github.com/sirupsen/logrus"
+	"go.uber.org/multierr"
+	schemeapi "unstable.build/go-tui/api/scheme"
+	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/term"
+	"unstable.build/go-tui/term/vte/parser"
+	"unstable.build/go-tui/text/clipboard"
+)
+
+// Component implements a vte terminal emulator tui.Component.
+type Component struct {
+	mu         sync.Mutex
+	terminal   schemeapi.Terminal
+	executor   schemeapi.Executor
+	clipboard  clipboard.Register
+	pty        workspaceapi.Pty
+	shell      string
+	watcher    workspaceapi.Watcher
+	updateChan chan struct{}
+	ctx        context.Context
+	cancelCtx  func()
+	uri        workspaceapi.URI
+
+	width, height int
+	parserHandler parserHandler
+	parser        parser.Parser
+	closed        bool
+	complete      bool
+	selectionAttr term.Attributes
+	defAttr       term.Attributes
+}
+
+// NOTE: this is an integrator implementation, it shouldn't really do much other
+// than creating a pty and initializing the vte parser and the parser handler.
+
+// NewComponent allocates storage for a new Component and initializes it.
+func NewComponent(t schemeapi.Terminal, e schemeapi.Executor, cfg Config) (*Component, error) {
+	ret := new(Component)
+	err := ret.Init(t, e, cfg)
+	return ret, err
+}
+
+// Init initializes it with the given dependencies and options.
+func (t *Component) Init(
+	term schemeapi.Terminal, e schemeapi.Executor, cfg Config,
+) error {
+	t.clipboard = cfg.Clipboard
+	t.shell = cfg.Shell
+	t.watcher = cfg.Watcher
+	t.defAttr = cfg.Attributes
+	t.selectionAttr = cfg.SelectionAttributes
+	t.terminal = term
+	t.executor = e
+
+	t.ctx, t.cancelCtx = context.WithCancel(context.Background())
+	err := t.createPty(cfg)
+	if err != nil {
+		return err
+	}
+
+	t.parserHandler.init(&t.mu, t.pty, t.clipboard)
+	t.parserHandler.SetTitle(t.pty.Slave.Name())
+	var h parser.Handler = &t.parserHandler
+	if log.IsLevelEnabled(log.TraceLevel) {
+		h = parser.HandlerWithLogging("vte.parserHandler", h)
+	}
+	t.parser.Init(h, new(parser.StdTimeout))
+	t.SetDefaultAttributes(t.defAttr)
+	return err
+}
+
+// Run must be called in a separate goroutine to start processing incoming
+// data from the pty master.
+func (t *Component) Run(updateChan chan struct{}) error {
+	defer func() {
+		t.mu.Lock()
+		defer t.mu.Unlock()
+		close(updateChan)
+		t.complete = true
+	}()
+
+	t.mu.Lock()
+	reader := bufio.NewReaderSize(t.pty.Master, 1024*1024)
+	t.updateChan = updateChan
+	t.mu.Unlock()
+
+	for {
+		b, err := reader.ReadByte()
+		if err != nil && err != io.EOF {
+			t.mu.Lock()
+			closed := t.closed
+			t.mu.Unlock()
+			if closed {
+				return nil
+			}
+			return err
+		}
+		t.log(log.TraceLevel, "ReadByte: %x", b)
+
+		t.parser.Advance(b)
+		// TODO improve, it's expensive to call Select on every byte read!
+		t.requestRender()
+	}
+}
+
+// Title returns the Title of this Component.
+func (t *Component) Title() string {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	return t.parserHandler.title
+}
+
+// URI returns the raw URI of this terminal emulator.
+func (t *Component) URI() workspaceapi.URI {
+	return t.uri
+}
+
+// WriteToPty writes the given data to the underlying pty master.
+func (t *Component) WriteToPty(data []byte) error {
+	t.log(log.TraceLevel, "WriteToPty: %s", string(data))
+	_, err := t.pty.Master.Write(data)
+	return err
+}
+
+// Resize resizes this component and returns an error if
+// the call to resize the underlying pty failed.
+func (t *Component) Resize(width, height int) error {
+	if t.pty.Master == nil {
+		return fmt.Errorf("terminal is not running")
+	}
+
+	err := t.terminal.SetPtySize(t.pty, width, height)
+	if err != nil {
+		return err
+	}
+
+	t.width = width
+	t.height = height
+
+	t.parserHandler.Resize(width, height)
+
+	return nil
+}
+
+// MouseModeReportMouseClicks returns whether PrivateMode 1000 (MouseModeVT200) is set.
+func (t *Component) MouseModeReportMouseClicks() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.parserHandler.modeReportMouseClicks
+}
+
+// MouseModeReportCellMouseMotion returns whether PrivateMode 1002 (MouseModeButtonEvent) is set.
+func (t *Component) MouseModeReportCellMouseMotion() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.parserHandler.modeReportCellMouseMotion
+}
+
+// MouseModeReportAllMouseMotion returns whether PrivateMode 1003 (MouseModeAnyEvent) is set.
+func (t *Component) MouseModeReportAllMouseMotion() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.parserHandler.modeReportAllMouseMotion
+}
+
+// MouseModeUtf8Mouse returns whether PrivateMode 1005 (MouseExtUTF) is set.
+func (t *Component) MouseModeUtf8Mouse() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.parserHandler.modeUtf8Mouse
+}
+
+// MouseModeSgrMouse returns whether PrivateMode 1006 (MouseExtSGR) is set.
+func (t *Component) MouseModeSgrMouse() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.parserHandler.modeSgrMouse
+}
+
+// CursorVisible returns whether the cursor should be rendered or not.
+func (t *Component) CursorVisible() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	return !t.parserHandler.cursorHidden &&
+		t.parserHandler.modeShowCursor &&
+		t.parserHandler.sync.buf.CursorAtScreen().Y < t.height
+}
+
+// CursorCoordinates returns the current coordinates of the cursor.
+func (t *Component) CursorCoordinates() term.Coordinates {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	return t.parserHandler.sync.buf.CursorAtScreen()
+}
+
+// CursorStyle returns the term.CursorStyle that should be rendered
+// with this Component, if IsCursorVisible returns true.
+func (t *Component) CursorStyle() term.CursorStyle {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	if !t.parserHandler.modeBlinkingCursor {
+		return t.parserHandler.cursorStyle
+	}
+
+	switch t.parserHandler.cursorStyle {
+	case term.CursorStyleSteadyUnderline:
+		return term.CursorStyleBlinkingUnderline
+	case term.CursorStyleSteadyBar:
+		return term.CursorStyleBlinkingBar
+	default:
+		return term.CursorStyleBlinkingBlock
+	}
+}
+
+// Height returns the height of the underlying terminal buffer in lines.
+func (t *Component) Height() int {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	return t.parserHandler.sync.buf.Rows()
+}
+
+// MaxWidth returns the maximum width of the underlying terminal buffer in columns.
+func (t *Component) MaxWidth() int {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	if t.parserHandler.useAlt {
+		return t.parserHandler.sync.altBuf.MaxColumns()
+	}
+	return t.parserHandler.sync.primBuf.MaxColumns()
+}
+
+// ScrollDown scrolls down content of this terminal emulator.
+func (t *Component) ScrollDown(count int) (ok bool) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.parserHandler.useAlt {
+		return
+	}
+	// vte scroll up/down has inverse semantics
+	return t.parserHandler.scrollUp(count, true)
+}
+
+// ScrollUp scrolls up the content of this terminal emulator.
+func (t *Component) ScrollUp(count int) (ok bool) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.parserHandler.useAlt {
+		return
+	}
+	// vte scroll up/down has inverse semantics
+	return t.parserHandler.scrollDown(count, true)
+}
+
+// ScrollTop scrolls up the content of this terminal emulator to the top.
+func (t *Component) ScrollTop() (ok bool) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.parserHandler.useAlt {
+		return
+	}
+
+	// vte scroll up/down has inverse semantics
+	buffer := t.parserHandler.sync.primBuf
+	offset := buffer.Offset()
+	return t.parserHandler.scrollDown(offset.Y, true)
+}
+
+// ScrollBottom scrolls down the content of this terminal emulator to the bottom.
+func (t *Component) ScrollBottom() (ok bool) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.parserHandler.useAlt {
+		return
+	}
+
+	// vte scroll up/down has inverse semantics
+	buffer := t.parserHandler.sync.primBuf
+	offset := buffer.Offset()
+	max := buffer.MaxOffset()
+	return t.parserHandler.scrollUp(max-offset.Y, true)
+}
+
+// SetDefaultAttributes updates the default attributes of this terminal emulator.
+func (t *Component) SetDefaultAttributes(attrs term.Attributes) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	t.parserHandler.sync.primBuf.SetDefaultAttributes(attrs)
+	t.parserHandler.sync.altBuf.SetDefaultAttributes(attrs)
+}
+
+// IsApplicationCursorKeysMode returns whether cursor keys mode is enabled.
+// https://vt100.net/docs/vt510-rm/chapter2.html#S2.8.11
+func (t *Component) IsApplicationCursorKeysMode() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	return t.parserHandler.modeCursorKeys
+}
+
+// IsAltBuffer returns true if underlying buffer utilizes is the alternate buffer.
+func (t *Component) IsAltBuffer() bool {
+	return t.parserHandler.useAlt
+}
+
+// IsNewLineMode returns whether new line mode is enabled.
+// https://vt100.net/docs/vt510-rm/chapter2.html#S2.5.13
+func (t *Component) IsNewLineMode() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	return t.parserHandler.modeLineFeedNewLine
+}
+
+// IsReportFocusMode returns whether underlying terminal emulator is interested
+// in changes in window focus.
+func (t *Component) IsReportFocusMode() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	return t.parserHandler.modeReportFocusInOut
+}
+
+// Draw satisfies tui.Component.
+func (t *Component) Draw(w term.Writer) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	if t.parserHandler.useAlt {
+		t.parserHandler.sync.altBuf.Draw(w)
+	} else {
+		t.parserHandler.sync.primBuf.Draw(w)
+	}
+
+	t.drawSelection(w)
+}
+
+// IsComplete returnes whether this terminal has stopped processing
+// data from the pty file.
+func (t *Component) IsComplete() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	return t.complete
+}
+
+// Unselect clears this Component's selection.
+func (t *Component) Unselect() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	if t.parserHandler.useAlt {
+		t.parserHandler.sync.altBuf.Unselect()
+	} else {
+		t.parserHandler.sync.primBuf.Unselect()
+	}
+}
+
+// Select anchors the current cursor position as the start and end of a text selection.
+func (t *Component) Select(pos term.Coordinates) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	if t.parserHandler.useAlt {
+		t.parserHandler.sync.altBuf.Select(pos)
+	} else {
+		t.parserHandler.sync.primBuf.Select(pos)
+	}
+}
+
+// Select anchors the current cursor position as the end of a text selection.
+func (t *Component) SelectEnd(pos term.Coordinates) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	if t.parserHandler.useAlt {
+		t.parserHandler.sync.altBuf.SelectEnd(pos)
+	} else {
+		t.parserHandler.sync.primBuf.SelectEnd(pos)
+	}
+}
+
+// Select select the word under the current cursor position.
+func (t *Component) SelectWordAt(pos term.Coordinates) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	if t.parserHandler.useAlt {
+		t.parserHandler.sync.altBuf.SelectWordAt(pos)
+	} else {
+		t.parserHandler.sync.primBuf.SelectWordAt(pos)
+	}
+}
+
+// SelectLine anchors the current cursor position as the start and end line of
+// the text selection.
+func (t *Component) SelectLine(pos term.Coordinates) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	if t.parserHandler.useAlt {
+		t.parserHandler.sync.altBuf.SelectLine(pos)
+	} else {
+		t.parserHandler.sync.primBuf.SelectLine(pos)
+	}
+}
+
+// Selection returns the current selection or false if no
+// text is currently selected.
+func (t *Component) Selection() (data string, ok bool) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	var cells [][]term.Cell
+	cells, ok = t.selection()
+	if !ok {
+		return
+	}
+	return cell.CellsToString(cells), ok
+}
+
+// Close assumes lock has been acquired by caller
+func (t *Component) Close() (ret error) {
+	defer t.cancelCtx()
+
+	t.mu.Lock()
+	closed := t.closed
+	t.closed = true
+	t.mu.Unlock()
+	if closed {
+		return nil
+	}
+
+	if err := t.pty.Slave.Close(); err != nil {
+		ret = multierr.Append(ret, err)
+	}
+	if err := t.pty.Master.Close(); err != nil {
+		ret = multierr.Append(ret, err)
+	}
+	return ret
+}
+
+func (t *Component) log(level log.Level, line string, params ...interface{}) {
+	log.WithField(logging.KeyClass, "vte.Component").
+		Logf(level, line, params...)
+}
+
+func (t *Component) requestRender() {
+	select {
+	case t.updateChan <- struct{}{}:
+	default:
+	}
+}
+
+func (t *Component) createPty(cfg Config) error {
+	pty, err := t.terminal.NewPty(t.ctx)
+	if err != nil {
+		return fmt.Errorf("new pty: %v", err)
+	}
+	shell := t.shell
+	if shell == "" {
+		shell = os.Getenv("SHELL")
+	}
+	if shell == "" {
+		shell = "sh"
+	}
+
+	t.uri, err = workspaceapi.CurrentUserHostURI(pty.Slave.Name())
+	if err != nil {
+		return fmt.Errorf("pty URI: %v", err)
+	}
+
+	cmdAndArgs := strings.Split(shell, " ")
+	cmd := workspaceapi.Cmd{
+		Path: cmdAndArgs[0],
+		Args: cmdAndArgs[1:],
+		SysProcAttr: &syscall.SysProcAttr{
+			Setsid:  true,
+			Setctty: true,
+		},
+		Watcher: t.watcher,
+	}
+
+	cmd.Stdout = pty.Slave
+	cmd.Stderr = pty.Slave
+	cmd.Stdin = pty.Slave
+
+	_, retErr := t.executor.StartCommand(t.ctx, cmd)
+	if retErr != nil {
+		retErr = fmt.Errorf("start command: %v", retErr)
+		if err := pty.Master.Close(); err != nil {
+			err = fmt.Errorf("close pty: %v", err)
+			retErr = multierr.Append(retErr, err)
+		}
+	}
+	if retErr != nil {
+		return retErr
+	}
+	t.pty = pty
+	return nil
+}
+
+func (t *Component) selection() (cells [][]term.Cell, ok bool) {
+	if t.parserHandler.useAlt {
+		cells, ok = t.parserHandler.sync.altBuf.Selection()
+	} else {
+		cells, ok = t.parserHandler.sync.primBuf.Selection()
+	}
+	return
+}
+
+func (t *Component) drawSelection(w term.Writer) {
+	var from, to, offset term.Coordinates
+	var ok bool
+	if t.parserHandler.useAlt {
+		from, to, ok = t.parserHandler.sync.altBuf.SelectionCoordinatesAtScroll()
+	} else {
+		from, to, ok = t.parserHandler.sync.primBuf.SelectionCoordinatesAtScroll()
+		offset = t.parserHandler.sync.primBuf.Offset()
+	}
+	if !ok {
+		return
+	}
+	for y := from.Y; y <= to.Y; y++ {
+		xStart, xEnd := 0, t.parserHandler.sync.buf.Columns(y)
+		if y == from.Y {
+			xStart = from.X
+		}
+		if y == to.Y {
+			xEnd = to.X
+		}
+		for x := xStart; x < xEnd; x++ {
+			pos := term.Coordinates{X: x, Y: y}
+			c := t.parserHandler.sync.buf.CellAt(pos)
+			if c == nil {
+				continue
+			}
+			posAtScreen := cell.CoordinatesDiff(pos, offset)
+			if posAtScreen.Y < 0 || posAtScreen.Y >= t.height ||
+				posAtScreen.X < 0 || posAtScreen.X >= t.width {
+				continue
+			}
+			w.SetCell(posAtScreen, term.Cell{
+				Ch:         c.Ch,
+				Attributes: t.selectionAttr,
+				Width:      c.Width,
+				Combining:  c.Combining,
+			})
+		}
+	}
+}

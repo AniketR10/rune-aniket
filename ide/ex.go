@@ -28,20 +28,14 @@ import (
 	"unstable.build/go-tui/handler/command"
 	"unstable.build/go-tui/plugin"
 	"unstable.build/go-tui/term"
-	"unstable.build/go-tui/term/emulator"
+	"unstable.build/go-tui/term/vte"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/workspace"
 )
 
 const (
-	commandHistoryDocumentID  = "ex-command-history"
-	reissuePadding            = 10 * time.Millisecond
-	cmdEdit                   = "edit"
-	cmdChangeSplitOrientation = "changeSplitOrientation"
-	cmdTerminalTab            = "newTerminal"
-	cmdSplitWindow            = "splitWindow"
-	cmdNewWindow              = "newWindow"
-	cmdSetDefaultColors       = "setDefaultColors"
+	commandHistoryDocumentID = "ex-command-history"
+	reissuePadding           = 10 * time.Millisecond
 )
 
 var (
@@ -57,6 +51,20 @@ type workspaceLoader interface {
 	schemeapi.Executor
 }
 
+type vteHandler interface {
+	browserapi.Handler
+	OnFocusChange(bool)
+	SetDefaultAttributes(term.Attributes)
+	IsComplete() bool
+	URI() workspaceapi.URI
+	Title() string
+}
+
+type pluginHandler interface {
+	browserapi.Floating
+	OnFocusChange(bool)
+}
+
 // ex implements a tui.Handler by wrapping an editor.Component and
 // providing an ex editor type of interface.
 type ex struct {
@@ -64,7 +72,9 @@ type ex struct {
 	comp                 text.Component
 	ed                   text.Editor
 	storage              document.Service
-	emulatorConfig       emulator.Config
+	emulatorConfig       vte.Config
+	newEmulatorHandler   func(string, vte.Config) (vteHandler, error)
+	newPluginHandler     func(...string) (pluginHandler, error)
 	workspace            workspaceLoader
 	sequencer            handler.Sequencer
 	publishEvent         func(term.Event) bool
@@ -83,14 +93,14 @@ type ex struct {
 	height     int
 	width      int
 
-	companionTerminal    *emulator.Handler
+	companionTerminal    vteHandler
 	companionTerminalWin browser.Window
 }
 
 func newEx(
 	ed text.Editor, m workspaceLoader,
 	storage document.Service,
-	emulatorConfig emulator.Config,
+	emulatorConfig vte.Config,
 	publishEvent func(term.Event) bool,
 	opts ...text.Option,
 ) (e *ex, err error) {
@@ -108,7 +118,7 @@ func newEx(
 func (e *ex) init(
 	ed text.Editor, m workspaceLoader,
 	storage document.Service,
-	emulatorConfig emulator.Config,
+	emulatorConfig vte.Config,
 	publishEvent func(term.Event) bool,
 	opts ...text.Option,
 ) (err error) {
@@ -119,6 +129,20 @@ func (e *ex) init(
 	err = e.comp.Init(ed, m, e.config)
 	if err != nil {
 		return
+	}
+	e.comp.SubscribeWindow((*windowSubscriber)(e))
+	e.newEmulatorHandler = func(initialCmd string, cfg vte.Config) (vteHandler, error) {
+		v, err := vte.NewHandler(e.Browser(), e.Browser(),
+			e.workspace, e.workspace, cfg, initialCmd)
+		if err != nil {
+			return nil, err
+		}
+		return vteAdapter{v}, nil
+	}
+	e.newPluginHandler = func(args ...string) (pluginHandler, error) {
+		return plugin.New(e.Browser(), e.Browser(), e.workspace, e.workspace,
+			e.emulatorConfig, strings.Join(args, " "), e.width,
+			e.config.Frame, e.config.FocusFrameCharSet, e.config.FocusFrameAttr)
 	}
 	return
 }
@@ -233,7 +257,7 @@ func (e *ex) Interrupt(ctx context.Context) error {
 func (e *ex) doInit(
 	ed text.Editor, m workspaceLoader,
 	storage document.Service,
-	emulatorConfig emulator.Config,
+	emulatorConfig vte.Config,
 	publishEvent func(term.Event) bool,
 	opts ...text.Option,
 ) (err error) {
@@ -340,12 +364,14 @@ func (e *ex) closeBuffer(args ...string) error {
 	if win == e.companionTerminalWin {
 		return e.toggleCompanionTerminal()
 	}
+	// on focus dispatch to vte.Handler via Close
 	b.RemoveWindowContent(win)
 	return nil
 }
 
 func (e *ex) closeAllBuffers(args ...string) error {
 	b := e.comp.Browser()
+	// on focus dispatch to vte.Handler via Close
 	b.RemoveAllTabs()
 	return nil
 }
@@ -355,6 +381,7 @@ func (e *ex) closeFocusWindow(args ...string) error {
 	if win == e.companionTerminalWin {
 		return e.toggleCompanionTerminal()
 	}
+	// on focus dispatch to vte.Handler via Close
 	return win.Close()
 }
 
@@ -449,6 +476,10 @@ func (e *ex) parseURIOrWorkspaceURI(path string) (workspaceapi.URI, error) {
 func (e *ex) editFiles(args ...string) error {
 	if len(args) == 0 {
 		return errors.New("expected at least one file name")
+	}
+
+	if e.invokeWindow() == e.companionTerminalWin {
+		e.toggleCompanionTerminal()
 	}
 
 	for _, arg := range args {
@@ -584,7 +615,7 @@ func (e *ex) setDefaultColors(args ...string) error {
 		e.comp.SetDefaultAttributes(th, attrs)
 		return nil
 	}
-	emh, ok := t.Handler().(*emulator.Handler)
+	emh, ok := t.Handler().(vteHandler)
 	if ok {
 		emh.SetDefaultAttributes(attrs)
 		return nil
@@ -596,9 +627,7 @@ func (e *ex) executePlugin(args ...string) error {
 	if len(args) == 0 {
 		return e.toggleCompanionTerminal()
 	}
-	h, err := plugin.Handler(e.Browser(), e.Browser(), e.workspace, e.workspace,
-		e.emulatorConfig, strings.Join(args, " "), e.width,
-		e.config.Frame, e.config.FocusFrameCharSet, e.config.FocusFrameAttr)
+	h, err := e.newPluginHandler(args...)
 	if err != nil {
 		return err
 	}
@@ -609,17 +638,15 @@ func (e *ex) executePlugin(args ...string) error {
 	// so instead of matching windows on tabClose,
 	// we set a handler that closes the window if the handler
 	// is closed.
-	var win browser.Window
-	win, err = e.comp.Floating(browser.FuncFloatingHandler(h, func() error {
-		if !win.Closed() {
-			_ = win.Close()
-		}
-		return h.Close()
-	}), cfg)
+	ph := &pluginAdapter{pluginHandler: h}
+	// mimic same behavior as tab
+	ph.OnFocusChange(false)
+	win, err := e.comp.Floating(ph, cfg)
 	if err != nil {
 		_ = h.Close()
 		return err
 	}
+	ph.win = win
 	return nil
 }
 
@@ -647,18 +674,20 @@ func (e *ex) toggleCompanionTerminal() error {
 		cfg := e.emulatorConfig
 		cfg.WidthHint = width
 		cfg.HeightHint = width
-		e.companionTerminal, err = e.newEmulator("", cfg)
+		e.companionTerminal, err = e.newEmulatorHandler("", cfg)
 		if err != nil {
 			return err
 		}
+		e.companionTerminal.OnFocusChange(false)
 	}
 	cfg := component.FloatingConfig{
 		Alignment: component.SpanAlignmentCentered,
 	}
-	// do not call Close on terminal when window is closed: session should remain
-	// open as long as this workspace is not closed.
-	floating := browser.StaticFloating(browser.NopHandler(e.companionTerminal), width, height)
-	win, err := e.comp.Floating(floating, cfg)
+	cth := companionTerminalHandler{
+		vth:      e.companionTerminal,
+		Floating: browser.StaticFloating(e.companionTerminal, width, height),
+	}
+	win, err := e.comp.Floating(cth, cfg)
 	if err != nil {
 		return err
 	}
@@ -666,24 +695,14 @@ func (e *ex) toggleCompanionTerminal() error {
 	return nil
 }
 
-func (e *ex) newEmulator(initialCmd string, cfg emulator.Config) (*emulator.Handler, error) {
-	h, err := emulator.New(e.Browser(), e.Browser(),
-		e.workspace, e.workspace, cfg, initialCmd)
-	if err != nil {
-		err = fmt.Errorf("new emulator: %s", err)
-		return nil, err
-	}
-	return h, nil
-}
-
 func (e *ex) newEmulatorTab(initialCmd string) (*browser.Tab, error) {
 	cfg := e.emulatorConfig
-	h, err := e.newEmulator(initialCmd, cfg)
+	h, err := e.newEmulatorHandler(initialCmd, cfg)
 	if err != nil {
 		return nil, err
 	}
 
-	uri, err := h.URI()
+	uri := h.URI()
 	if err != nil {
 		_ = h.Close()
 		return nil, err
@@ -694,11 +713,17 @@ func (e *ex) newEmulatorTab(initialCmd string) (*browser.Tab, error) {
 		return nil, fmt.Errorf("wm.Tab: %s", err)
 	}
 
-	return t.(*browser.Tab), nil
+	tab := t.(*browser.Tab)
+	tab.Subscribe((*tabSubscriber)(e))
+	return tab, nil
 }
 
 func (e *ex) newTerminalTab(args ...string) error {
-	t, err := e.newEmulatorTab("")
+	var initialCmd string
+	if len(args) > 0 {
+		initialCmd = args[0]
+	}
+	t, err := e.newEmulatorTab(initialCmd)
 	if err != nil {
 		return err
 	}
@@ -1056,7 +1081,102 @@ func (e *ex) Close() (ret error) {
 	return
 }
 
-type commandAll struct {
-	man     textapi.CommandManual
-	handler func(*ex, ...string) error
+type pluginAdapter struct {
+	pluginHandler
+	win browser.Window
+}
+
+func (h *pluginAdapter) Close() error {
+	if !h.win.Closed() {
+		_ = h.win.Close()
+	}
+
+	// ephemeral handlers are closed when focus changes
+	// in component. So adding the following line here
+	// should handle all cases
+	defer h.pluginHandler.OnFocusChange(false)
+
+	return h.pluginHandler.Close()
+}
+
+type tabSubscriber ex
+
+func (e *tabSubscriber) OnFocus(t *browser.Tab) {
+	onFocusChangeTab(t, true)
+}
+
+func (e *tabSubscriber) OnFree(t *browser.Tab) {
+	onFocusChangeTab(t, false)
+}
+
+type windowSubscriber ex
+
+func (e *windowSubscriber) OnFocus(prev, curr handler.Window) {
+	onFocusChange(prev, false)
+	onFocusChange(curr, true)
+}
+
+func onFocusChange(win handler.Window, isInFocus bool) {
+	if win == (handler.Window{}) {
+		return
+	}
+	if t, ok := win.Content().(*browser.Tab); ok {
+		onFocusChangeTab(t, isInFocus)
+		return
+	}
+	// if it's not a tab, it must be an internal browser type
+	internal, ok := win.Content().(interface{ Content() browserapi.Handler })
+	if !ok {
+		return
+	}
+	if t, ok := internal.Content().(*pluginAdapter); ok {
+		t.pluginHandler.OnFocusChange(isInFocus)
+		return
+	}
+	if t, ok := internal.Content().(companionTerminalHandler); ok {
+		t.vth.OnFocusChange(isInFocus)
+		return
+	}
+}
+
+func onFocusChangeTab(t *browser.Tab, isInFocus bool) {
+	emulator, ok := t.Handler().(vteHandler)
+	if !ok {
+		return
+	}
+	emulator.OnFocusChange(isInFocus)
+}
+
+// adapts vte.Handler to vteHandler
+type vteAdapter struct {
+	*vte.Handler
+}
+
+func (v vteAdapter) SetDefaultAttributes(attr term.Attributes) {
+	v.Component().SetDefaultAttributes(attr)
+}
+
+func (v vteAdapter) IsComplete() bool {
+	return v.Component().IsComplete()
+}
+
+func (v vteAdapter) URI() workspaceapi.URI {
+	return v.Component().URI()
+}
+
+func (v vteAdapter) Title() string {
+	return v.Component().Title()
+}
+
+// Aids in ensure that Close is not called when window is closed:
+// session should remain open as long as this workspace is not closed.
+// Also ensures that we can identify companionTerminal on window focus
+// change to deliver on focus calls to underlying vte.Handler
+type companionTerminalHandler struct {
+	browser.Floating
+	vth vteHandler
+}
+
+func (c companionTerminalHandler) Close() error {
+	return nil
 }

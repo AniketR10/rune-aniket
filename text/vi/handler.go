@@ -136,6 +136,9 @@ func (vi *viHandlerImpl) Draw(w term.Writer) {
 		vi.setLocations = false
 	}
 	vi.less.Draw(w)
+	// TODO draw location lists attrs
+	// TODO draw selection attrs
+	// (rather than mutating everything as its selected)
 }
 
 // Man : tui.Handler

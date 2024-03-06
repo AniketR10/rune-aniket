@@ -864,6 +864,13 @@ func (c *Component) newTab(
 func (c *Component) Tab(resource workspaceapi.URI, name string, h browserapi.Handler) (
 	browserapi.Handler, error,
 ) {
+	if _, ok := h.(Handler); ok {
+		panic("handler must not be a text.Handler. " +
+			// Otherwise events might be inconsistently delivered: i.e. EventTypeFocus/Unfocus events
+			// will be delievered for text.Handler that have not had EventTypeOpen delivered.
+			"Use OpenFileTab if attempting to create a tab with the return value of Edit")
+	}
+
 	t, ok := c.comp.Tab(resource)
 	if ok {
 		t, err := c.setFocusToTab(t)
@@ -905,6 +912,11 @@ func (c *Component) Prompt(
 	cb func(int, string),
 ) browser.Window {
 	return c.comp.Prompt(message, options, bindings, cb)
+}
+
+// SubscribeWindow subscribes sub to changes in focus due to changing the window in focus.
+func (c *Component) SubscribeWindow(sub handler.WindowSubscriber) {
+	c.comp.Subscribe(sub)
 }
 
 // Close closes all resources associated with this Component.

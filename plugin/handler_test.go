@@ -14,7 +14,7 @@ import (
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/term"
-	"unstable.build/go-tui/term/emulator"
+	"unstable.build/go-tui/term/vte"
 	testutil "unstable.build/go-tui/util/test"
 	"unstable.build/go-tui/workspace"
 )
@@ -41,21 +41,21 @@ sh-3.2$
               `,
 		},
 		{
-			description: "max width 0 doesn't panic",
-			cmdAndArgs:  "sh",
-			maxWidth:    0,
+			description: "command with arg",
+			cmdAndArgs:  "sleep 2",
+			maxWidth:    4,
 			drawnComponent: `
- ⠃ sh       0s
-sh-3.2$       
+ ⠃ slee     0s
+              
               
               
               
               `,
 		},
 		{
-			description: "command with arg",
+			description: "max width 0 doesn't panic",
 			cmdAndArgs:  "sleep 2",
-			maxWidth:    4,
+			maxWidth:    0,
 			drawnComponent: `
  ⠃ slee     0s
               
@@ -87,8 +87,8 @@ sh-3.2$
 				}
 				return nil
 			})
-			h, err := Handler(nopPublisher{interrupt: waitInterrupt}, nopPublisher{}, fileScheme,
-				fileScheme, emulator.Config{}, test.cmdAndArgs, test.maxWidth,
+			h, err := New(nopPublisher{interrupt: waitInterrupt}, nopPublisher{}, fileScheme,
+				fileScheme, vte.Config{}, test.cmdAndArgs, test.maxWidth,
 				test.frame, component.FrameCharSetDefault(), term.Attributes{})
 			require.Equal(t, test.expectConstructorErr, err)
 			h.Resize(14, 6)

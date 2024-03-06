@@ -20,7 +20,7 @@ func NewNopScheme(scheme string) schemeapi.SchemeFunc {
 		scheme.openFunc = func(name string, flag int, perm os.FileMode) (
 			workspaceapi.File, *workspaceapi.Error,
 		) {
-			return File{}, nil
+			return &File{}, nil
 		}
 		scheme.removeFunc = func(name string) error {
 			return nil

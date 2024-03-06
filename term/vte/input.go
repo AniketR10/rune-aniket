@@ -1,10 +1,9 @@
-package emulator
+package vte
 
 import (
 	"fmt"
 
 	"unstable.build/go-tui/term"
-	termutil "unstable.build/go-tui/term/emulator/util"
 )
 
 func getModifierStr(ev term.Event) string {
@@ -18,38 +17,37 @@ func getModifierStr(ev term.Event) string {
 
 // return an escape sequence for what requires state terminal, otherwise
 // the raw bytes coming from the event are already correct
-func mapKeyToEscapeSequence(buffer *termutil.Buffer, ev term.Event) ([]byte, bool) {
+func mapKeyToEscapeSequence(comp *Component, ev term.Event) ([]byte, bool) {
 	switch ev.Key {
 	case term.KeyArrowUp:
-		if buffer.IsApplicationCursorKeysModeEnabled() {
+		if comp.IsApplicationCursorKeysMode() {
 			return []byte{0x1b, 'O', 'A'}, true
 		}
 		return []byte(fmt.Sprintf("\x1b[%sA", getModifierStr(ev))), true
 	case term.KeyArrowDown:
-		if buffer.IsApplicationCursorKeysModeEnabled() {
+		if comp.IsApplicationCursorKeysMode() {
 			return []byte{0x1b, 'O', 'B'}, true
 		}
 		return []byte(fmt.Sprintf("\x1b[%sB", getModifierStr(ev))), true
 	case term.KeyArrowRight:
-		if buffer.IsApplicationCursorKeysModeEnabled() {
+		if comp.IsApplicationCursorKeysMode() {
 			return []byte{0x1b, 'O', 'C'}, true
 		}
 		return []byte(fmt.Sprintf("\x1b[%sC", getModifierStr(ev))), true
 	case term.KeyArrowLeft:
-		if buffer.IsApplicationCursorKeysModeEnabled() {
+		if comp.IsApplicationCursorKeysMode() {
 			return []byte{0x1b, 'O', 'D'}, true
 		}
 		return []byte(fmt.Sprintf("\x1b[%sD", getModifierStr(ev))), true
 	case term.KeyEnter:
-		if buffer.IsNewLineMode() {
+		if comp.IsNewLineMode() {
 			return []byte{0x0d, 0x0a}, true
 		}
 		return []byte{0x0d}, true
 	case term.KeyTab:
 		return []byte{0x09}, true
 	case term.KeyEsc:
-		buffer.ClearSelection()
-		buffer.ClearHighlight()
+		comp.Unselect()
 		return []byte{0x1b}, true
 	case term.KeyBackspace, term.KeyBackspace2:
 		if ev.Mod == term.ModAlt {
@@ -86,7 +84,7 @@ func mapKeyToEscapeSequence(buffer *termutil.Buffer, ev term.Event) ([]byte, boo
 	case term.KeyDelete:
 		return []byte("\x1b[3~"), true
 	case term.KeyHome:
-		if buffer.IsApplicationCursorKeysModeEnabled() {
+		if comp.IsApplicationCursorKeysMode() {
 			return []byte(fmt.Sprintf("\x1b[1%s~", getModifierStr(ev))), true
 		}
 		return []byte("\x1b[H"), true

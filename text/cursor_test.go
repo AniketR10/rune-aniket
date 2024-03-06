@@ -1423,7 +1423,7 @@ func testCursorDeleteSelection(t *testing.T, width, height int, typeSelect Selec
 				tcase.initialPos(c)
 			}
 			switch typeSelect {
-			case noSelection:
+			case NoSelection:
 				panic("hmm...")
 			case BlockSelection:
 				require.Equal(t, tcase.selected, c.SelectBlock())
@@ -2231,15 +2231,15 @@ func TestCursorPaste(t *testing.T) {
 		expectedBuffer      string
 	}{
 		{term.Coordinates{}, term.Coordinates{},
-			"z", noSelection, false, "za\nb\nc\nd"},
+			"z", NoSelection, false, "za\nb\nc\nd"},
 		{term.Coordinates{}, term.Coordinates{},
-			"z\n", noSelection, false, "z\na\nb\nc\nd"},
+			"z\n", NoSelection, false, "z\na\nb\nc\nd"},
 		{term.Coordinates{}, term.Coordinates{Y: 1},
-			"z\n", noSelection, true, "a\nz\nb\nc\nd"},
+			"z\n", NoSelection, true, "a\nz\nb\nc\nd"},
 		{term.Coordinates{X: 1, Y: 3}, term.Coordinates{Y: 3},
-			"z\n", noSelection, false, "a\nb\nc\nz\nd"},
+			"z\n", NoSelection, false, "a\nb\nc\nz\nd"},
 		{term.Coordinates{X: 1, Y: 3}, term.Coordinates{Y: 4},
-			"z\n", noSelection, true, "a\nb\nc\nd\nz\n"},
+			"z\n", NoSelection, true, "a\nb\nc\nd\nz\n"},
 		{term.Coordinates{}, term.Coordinates{},
 			"z", StandardSelection, false, "za\nb\nc\nd"},
 		{term.Coordinates{}, term.Coordinates{X: 1},
