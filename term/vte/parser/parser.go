@@ -46,7 +46,7 @@ type parserState struct {
 // Parser wraps a Parser to ultimately call methods on a Handler.
 type Parser struct {
 	state   parserState
-	parser  *scanner.Scanner
+	scanner *scanner.Scanner
 	handler Handler
 }
 
@@ -71,7 +71,7 @@ func (p *Parser) Init(handler Handler, timeout Timeout) {
 	if log.IsLevelEnabled(log.TraceLevel) {
 		driver = scanner.WithLoggingDriver(driver)
 	}
-	p.parser = scanner.NewScanner(driver)
+	p.scanner = scanner.NewScanner(driver)
 }
 
 // SyncTimeout returns the synchronized update timeout.
@@ -84,7 +84,7 @@ func (p *Parser) Advance(ch byte) {
 	if p.state.syncState.timeout.PendingTimeout() {
 		p.advanceSync(ch)
 	} else {
-		p.parser.Advance(ch)
+		p.scanner.Advance(ch)
 	}
 }
 
@@ -92,7 +92,7 @@ func (p *Parser) Advance(ch byte) {
 func (p *Parser) StopSync() {
 	// Process all synchronized bytes.
 	for _, ch := range p.state.syncState.buffer {
-		p.parser.Advance(ch)
+		p.scanner.Advance(ch)
 	}
 
 	// Report that update ended, since we could end due to timeout.

@@ -23,6 +23,8 @@ var (
 
 // rawCells is a matrix of term.Cell. The zero value for rawCells is ready to use.
 type rawCells struct {
+	columnCap int
+	rowCap    int
 	cells     [][]term.Cell
 	tabspaces int
 	zwj       bool
@@ -35,9 +37,20 @@ func (c *rawCells) init(tabspaces int) {
 	c.reset()
 }
 
+func (c *rawCells) initWithCap(tabspaces, rowCap, columnCap int) {
+	c.tabspaces = tabspaces
+	c.resetWithCap(rowCap, columnCap)
+}
+
 func (c *rawCells) reset() {
-	c.cells = make([][]term.Cell, 1, defRowCap)
-	c.cells[0] = makeNewRow(0, defColumnCap)
+	c.resetWithCap(defRowCap, defColumnCap)
+}
+
+func (c *rawCells) resetWithCap(rowCap, columnCap int) {
+	c.columnCap = columnCap
+	c.rowCap = rowCap
+	c.cells = make([][]term.Cell, 1, rowCap)
+	c.cells[0] = makeNewRow(0, columnCap)
 	c.zwj = false
 	c.zwjPos = term.Coordinates{}
 }
@@ -66,10 +79,10 @@ func (c *rawCells) insertNewRow(pos term.Coordinates) {
 	if pos.X < len(sourceRow) {
 		c.cells[pos.Y] = c.cells[pos.Y][:pos.X]
 		length := len(sourceRow[pos.X:])
-		c.cells[targetY] = makeNewRow(length, length)
+		c.cells[targetY] = makeNewRow(length, c.columnCap)
 		copy(c.cells[targetY], sourceRow[pos.X:])
 	} else {
-		c.cells[targetY] = makeNewRow(0, defColumnCap)
+		c.cells[targetY] = makeNewRow(0, c.columnCap)
 	}
 }
 
@@ -154,7 +167,7 @@ func (c *rawCells) insertTabSpaces(pos term.Coordinates) {
 func (c *rawCells) fillInRows(y int) (n int) {
 	for y >= len(c.cells) {
 		n++
-		row := makeNewRow(0, defColumnCap)
+		row := makeNewRow(0, c.columnCap)
 		c.cells = append(c.cells, row)
 	}
 	return
@@ -438,14 +451,14 @@ func (c *rawCells) ReadFrom(r io.Reader) (int64, error) {
 		n += int64(len([]byte(str)))
 		for len(str) > 0 {
 			// NOTE: this is significantly slower than, just ignoring grapheme clusters
-			// but it should be ok as it's done once per file, and because calculating the width 
+			// but it should be ok as it's done once per file, and because calculating the width
 			// is front loaded, it should amortize over long interactions on a particular file.
 			cluster, str, boundaries, state = uniseg.StepString(str, state)
 			width := boundaries >> uniseg.ShiftWidth
 			r := []rune(cluster)
 			switch r[0] {
 			case '\n':
-				c.cells = append(c.cells, makeNewRow(0, defColumnCap))
+				c.cells = append(c.cells, makeNewRow(0, c.columnCap))
 				rowY++
 			case '\t':
 				for i := 1; r[0] == '\t' && i < c.tabspaces; i++ {

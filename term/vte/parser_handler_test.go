@@ -160,7 +160,9 @@ func TestIntegrationParserHandler(t *testing.T) {
 				p.ScrollUp(2)
 				assertEqualBuf(t, p, "c    \nd    \ne    \nf    \n     ")
 				p.ScrollUp(100)
-				assertEqualBuf(t, p, "f    \n     \n     \n     \n     ")
+				assertEqualBuf(t, p, "     \n     \n     \n     \n     ")
+				p.ScrollDown(1)
+				assertEqualBuf(t, p, "     \n     \n     \n     \n     ")
 			},
 		},
 		{
@@ -537,6 +539,54 @@ func TestIntegrationParserHandler(t *testing.T) {
 				assertEqualBuf(t, p, "sh-3.2$ ls                                      \n"+
 					"LICENSE         cpu.out         plugin          ")
 
+			},
+		},
+		{
+			desc:      "Input + Linefeed + CarriageReturn hit max scrollback history",
+			altBuffer: false,
+			sut: func(t *testing.T, p *parserHandler, pty *workspacetest.File) {
+				p.Resize(5, 5)
+				p.maxScrollLength = 6
+				p.Input('a')
+				p.Linefeed()
+				p.CarriageReturn()
+				p.Input('b')
+				p.Linefeed()
+				p.CarriageReturn()
+				p.Input('c')
+				p.Linefeed()
+				p.CarriageReturn()
+				p.Input('d')
+				p.Linefeed()
+				p.CarriageReturn()
+				p.Input('e')
+				assertEqualBuf(t, p, "a    \nb    \nc    \nd    \ne    ")
+
+				p.Linefeed()
+				p.CarriageReturn()
+				p.Input('f')
+				assertEqualBuf(t, p, "b    \nc    \nd    \ne    \nf    ")
+
+				p.CarriageReturn()
+				p.Linefeed()
+				p.Input('g')
+				assertEqualBuf(t, p, "c    \nd    \ne    \nf    \ng    ")
+
+
+				// simulate user scrolling
+				assert.True(t, p.scrollDown(1, true))
+				assertEqualBuf(t, p, "b    \nc    \nd    \ne    \nf    ")
+
+				assert.False(t, p.scrollDown(100, true))
+				assertEqualBuf(t, p, "b    \nc    \nd    \ne    \nf    ")
+
+				assert.True(t, p.scrollUp(100, true))
+				assertEqualBuf(t, p, "c    \nd    \ne    \nf    \ng    ")
+
+				assert.False(t, p.scrollUp(100, true))
+				assertEqualBuf(t, p, "c    \nd    \ne    \nf    \ng    ")
+
+				assert.Equal(t, p.maxScrollLength, p.sync.buf.Rows())
 			},
 		},
 	}

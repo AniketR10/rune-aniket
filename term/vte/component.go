@@ -1,14 +1,13 @@
 package vte
 
 import (
-	"bufio"
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/ernestrc/blue/logging"
 	log "github.com/sirupsen/logrus"
@@ -23,22 +22,20 @@ import (
 
 // Component implements a vte terminal emulator tui.Component.
 type Component struct {
-	mu         sync.Mutex
-	terminal   schemeapi.Terminal
-	executor   schemeapi.Executor
-	clipboard  clipboard.Register
-	pty        workspaceapi.Pty
-	shell      string
-	watcher    workspaceapi.Watcher
-	updateChan chan struct{}
-	ctx        context.Context
-	cancelCtx  func()
-	uri        workspaceapi.URI
+	mu        sync.Mutex
+	terminal  schemeapi.Terminal
+	executor  schemeapi.Executor
+	clipboard clipboard.Register
+	pty       workspaceapi.Pty
+	shell     string
+	watcher   workspaceapi.Watcher
+	ctx       context.Context
+	cancelCtx func()
+	uri       workspaceapi.URI
 
 	width, height int
 	parserHandler parserHandler
 	parser        parser.Parser
-	closed        bool
 	complete      bool
 	selectionAttr term.Attributes
 	defAttr       term.Attributes
@@ -86,34 +83,69 @@ func (t *Component) Init(
 // Run must be called in a separate goroutine to start processing incoming
 // data from the pty master.
 func (t *Component) Run(updateChan chan struct{}) error {
+	t.mu.Lock()
+	complete := t.complete
+	t.mu.Unlock()
+	if complete {
+		panic("called Run twice on vte.Component")
+	}
+
 	defer func() {
 		t.mu.Lock()
-		defer t.mu.Unlock()
-		close(updateChan)
 		t.complete = true
+		t.mu.Unlock()
 	}()
 
-	t.mu.Lock()
-	reader := bufio.NewReaderSize(t.pty.Master, 1024*1024)
-	t.updateChan = updateChan
-	t.mu.Unlock()
-
-	for {
-		b, err := reader.ReadByte()
-		if err != nil && err != io.EOF {
-			t.mu.Lock()
-			closed := t.closed
-			t.mu.Unlock()
-			if closed {
-				return nil
+	// interrupt at most at a reasonable fps. This improves
+	// performance when program is dumping Kbs of content
+	// into the terminal scroll.
+	// buffer to 1, so we publish one last interrupt after
+	// maxInterruptPerSecond since last interrupt
+	ch := make(chan struct{}, 1)
+	go func() {
+		maxInterruptPerSecond := time.Duration(int(time.Second) / 30)
+		timer := time.NewTimer(maxInterruptPerSecond)
+		defer timer.Stop()
+		defer close(updateChan)
+		for {
+			select {
+			case <-ch:
+			case <-t.ctx.Done():
+				return
 			}
+			select {
+			case updateChan <- struct{}{}:
+			case <-t.ctx.Done():
+				return
+			}
+			timer.Reset(maxInterruptPerSecond)
+			select {
+			case <-timer.C:
+			case <-t.ctx.Done():
+				return
+			}
+		}
+	}()
+
+	buf := make([]byte, os.Getpagesize())
+	for {
+		n, err := t.pty.Master.Read(buf[:])
+		if err != nil {
 			return err
 		}
-		t.log(log.TraceLevel, "ReadByte: %x", b)
-
-		t.parser.Advance(b)
-		// TODO improve, it's expensive to call Select on every byte read!
-		t.requestRender()
+		for i := 0; i < n; i++ {
+			t.parser.Advance(buf[i])
+		}
+		select {
+		// Close was called, just return error
+		case <-t.ctx.Done():
+			return t.ctx.Err()
+		// no interrupts in the last maxInterruptPeriod
+		case ch <- struct{}{}:
+		// an interrupt was requested in the last maxInterruptPeriod
+		// don't request any further interrupts for now
+		default:
+		}
 	}
 }
 
@@ -132,7 +164,7 @@ func (t *Component) URI() workspaceapi.URI {
 
 // WriteToPty writes the given data to the underlying pty master.
 func (t *Component) WriteToPty(data []byte) error {
-	t.log(log.TraceLevel, "WriteToPty: %s", string(data))
+	// t.log(log.TraceLevel, "WriteToPty: %s", string(data))
 	_, err := t.pty.Master.Write(data)
 	return err
 }
@@ -443,14 +475,6 @@ func (t *Component) Selection() (data string, ok bool) {
 func (t *Component) Close() (ret error) {
 	defer t.cancelCtx()
 
-	t.mu.Lock()
-	closed := t.closed
-	t.closed = true
-	t.mu.Unlock()
-	if closed {
-		return nil
-	}
-
 	if err := t.pty.Slave.Close(); err != nil {
 		ret = multierr.Append(ret, err)
 	}
@@ -463,13 +487,6 @@ func (t *Component) Close() (ret error) {
 func (t *Component) log(level log.Level, line string, params ...interface{}) {
 	log.WithField(logging.KeyClass, "vte.Component").
 		Logf(level, line, params...)
-}
-
-func (t *Component) requestRender() {
-	select {
-	case t.updateChan <- struct{}{}:
-	default:
-	}
 }
 
 func (t *Component) createPty(cfg Config) error {

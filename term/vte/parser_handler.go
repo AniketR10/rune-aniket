@@ -22,8 +22,9 @@ import (
 var _ parser.Handler = (*parserHandler)(nil)
 
 const (
-	pkgVersion          = 1
-	selectionRegisterID = "srid"
+	pkgVersion             = 1
+	selectionRegisterID    = "srid"
+	defaultMaxScrollLength = 10_000
 )
 
 type parserHandler struct {
@@ -35,7 +36,8 @@ type parserHandler struct {
 		primBuf *screen.PrimaryBuffer
 		altBuf  *screen.AltBuffer
 	}
-	tabs tabstops
+	tabs            tabstops
+	maxScrollLength int
 
 	width, height             int
 	cursorStyle               term.CursorStyle
@@ -106,6 +108,7 @@ func (t *parserHandler) init(
 	t.sync.mu = mu
 	t.pty = pty
 	t.clipboard = clipboard
+	t.maxScrollLength = defaultMaxScrollLength
 
 	t.modeAlternateScroll = true
 	t.modeUrgencyHints = true
@@ -394,7 +397,15 @@ func (t *parserHandler) Linefeed() {
 	t.sync.mu.Lock()
 	defer t.sync.mu.Unlock()
 
-	t.linefeed()
+	buf := t.sync.buf
+	pos := buf.CursorAtScreen()
+	pos.Y++
+
+	if pos.Y >= buf.BottomScrollableRegion() {
+		t.scrollUp(1, false)
+	} else if pos.Y < t.height {
+		t.setCursorAtScreen(pos, t.modeOrigin)
+	}
 }
 
 // Ring the bell.
@@ -1195,7 +1206,7 @@ func (t *parserHandler) scrollDown(rows int, capPrimary bool) bool {
 }
 
 func (t *parserHandler) scrollUp(rows int, capPrimary bool) bool {
-	t.log(log.TraceLevel, "attempt scroll up %d", rows)
+	// t.log(log.TraceLevel, "attempt scroll up %d", rows)
 	if t.useAlt {
 		return t.scrollUpAltRelative(t.sync.buf.TopScrollableRegion(), rows)
 	}
@@ -1213,8 +1224,20 @@ func (t *parserHandler) scrollUp(rows int, capPrimary bool) bool {
 		return false
 	}
 
-	offset.Y += rows
-	buf.SetOffset(offset)
+	cursorAtScroll := buf.CursorAtScroll()
+	if cursorAtScroll.Y+rows >= t.maxScrollLength {
+		buf.AltBuffer.ScrollUp(0, buf.Rows(), rows)
+	} else if cursorAtScroll.Y >= buf.Rows() {
+		offset.Y += rows
+		buf.SetOffset(offset)
+		// optimization for long streams of output so all columns are pre-allocated
+		// by using the underlying buffer's configured column capacity, thus
+		// reducing the number of allocations.
+		buf.ResetCells(0, t.width)
+	} else {
+		offset.Y += rows
+		buf.SetOffset(offset)
+	}
 	return true
 }
 
@@ -1328,18 +1351,6 @@ func (t *parserHandler) wrapLine() {
 
 	t.setCursorAtScreen(pos, false)
 	t.shouldWrap = false
-}
-
-func (t *parserHandler) linefeed() {
-	buf := t.sync.buf
-	pos := buf.CursorAtScreen()
-	pos.Y++
-
-	if pos.Y >= buf.BottomScrollableRegion() {
-		t.scrollUp(1, false)
-	} else if pos.Y < t.height {
-		t.setCursorAtScreen(pos, t.modeOrigin)
-	}
 }
 
 func (t *parserHandler) setCursorAtScreen(pos term.Coordinates, relative bool) {

@@ -29,6 +29,7 @@ func (b *PrimaryBuffer) Resize(width, height int) {
 	b.AltBuffer.width = width
 	b.AltBuffer.height = height
 	b.scroll.Resize(width, height)
+	b.Cells.ResetCapacity(width)
 	b.ResetOffset()
 }
 

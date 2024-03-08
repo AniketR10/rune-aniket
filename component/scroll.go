@@ -61,13 +61,24 @@ func (s *Scroll) Init(buf *cell.Buffer) {
 		s.ResultsAttr.Attrs = tcell.AttrReverse
 	}
 
-	// Searcher that actually performs the text search
 	s.initBuffer(buf)
 
 	s.wraps = make([]int, 0)
 	s.searchText = nil
 	s.offset = term.Coordinates{}
 	s.searcher.Reset()
+}
+
+// InitPerformance initializes this scroll without search functionality.
+// Thus Search, NextResult, PrevResult, Result, SeekNextResult, SeekPrevResult,
+// should not be called as they'll cause the calling goroutine to panic.
+//
+// Note that this initialization method should be used instead of Init
+// if the given cell.Buffer has been also initialized with InitPerformance.
+func (s *Scroll) InitPerformance(buf *cell.Buffer) {
+	s.buf = buf
+	s.wraps = make([]int, 0)
+	s.offset = term.Coordinates{}
 }
 
 // CanSeekUp returns true if SeekUp would seek one row up.

@@ -28,6 +28,7 @@ type AltBuffer struct {
 		to   term.Coordinates
 	}
 
+	tempScroll  [1][]term.Cell
 	savedCursor CursorState
 	cursor      CursorState
 }
@@ -56,9 +57,9 @@ func (b *AltBuffer) Init() {
 	b.cursor = CursorState{
 		Charsets: make(map[parser.CharsetIndex]parser.StandardCharset),
 	}
-	b.Cells.Init()
+	b.Cells.InitPerformance(cell.DefaultTabspaces, 120, 80)
 	b.resetLinesTrim(0, b.height, true, ' ')
-	b.scroll.Init(&b.Cells)
+	b.scroll.InitPerformance(&b.Cells)
 }
 
 // Resize resizes this AltBuffer and resets the vertical margins.
@@ -167,32 +168,51 @@ func (b *AltBuffer) SetCursorAtScroll(c term.Coordinates, relative bool) {
 	b.SetCursorAtScreen(c, relative)
 }
 
-// ScrollDown scrolls down the scrollable region set by SetScrollableRegion by count of lines
-func (b *AltBuffer) ScrollDown(start, end, count int) {
-	if end-start <= count {
-		b.ResetLines(start, end)
-		return
-	}
-
-	for y := end - 1; y >= start+count; y-- {
-		b.swapLine(y, y-count)
-	}
-
-	b.ResetLines(start, start+count)
-}
-
 // ScrollUp scrolls up the scrollable region set by SetScrollableRegion by count of lines
 func (b *AltBuffer) ScrollUp(start, end, count int) {
 	if end-start <= count {
-		b.ResetLines(start, end)
+		b.ResetLinesWith(start, end, ' ')
+		return
+	}
+	var temp [][]term.Cell
+	if count == 1 {
+		// optimization for long output streams on primary buffer that
+		// cause Linefeed to scroll up exactly 1 when max scrollable history
+		// is reached.
+		temp = b.tempScroll[:]
+	} else {
+		temp = make([][]term.Cell, count)
+	}
+
+	cells := b.Cells.RawCells()
+	copy(temp, cells[start:start+count])
+	copy(cells[start:end-count], cells[start+count:end])
+	copy(cells[end-count:end], temp)
+
+	b.ResetLinesWith(end-count, end, ' ')
+}
+
+// ScrollDown scrolls down the scrollable region set by SetScrollableRegion by count of lines
+func (b *AltBuffer) ScrollDown(start, end, count int) {
+	if end-start <= count {
+		b.ResetLinesWith(start, end, ' ')
 		return
 	}
 
-	for y := start; y < end-count; y++ {
-		b.swapLine(y, y+count)
+	var temp [][]term.Cell
+	if count == 1 {
+		temp = b.tempScroll[:]
+	} else {
+		temp = make([][]term.Cell, count)
 	}
 
-	b.ResetLines(end-count, end)
+	cells := b.Cells.RawCells()
+	copy(temp, cells[end-count:end])
+	copy(cells[start+count:end], cells[start:end-count])
+	copy(cells[start:start+count], temp)
+
+
+	b.ResetLinesWith(start, start+count, ' ')
 }
 
 // SetScrollableRegion sets the start and end of the scrollable area.
@@ -469,11 +489,4 @@ func (b *AltBuffer) resetLinesTrim(start, end int, trim bool, with rune) {
 		}
 		b.resetCellsAt(y, 0, b.width, with)
 	}
-}
-
-func (b *AltBuffer) swapLine(i, j int) {
-	cells := b.Cells.RawCells()
-	temp := cells[i]
-	cells[i] = cells[j]
-	cells[j] = temp
 }

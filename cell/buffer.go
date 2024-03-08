@@ -91,11 +91,28 @@ func (b *Buffer) setView(view View) {
 	b.selector.view = b.view
 }
 
-// InitWithTabspaces initializes this Buffer with
+// InitWithTabspaces initializes this Buffer with the given tabspaces.
 func (b *Buffer) InitWithTabspaces(tabspaces int) {
 	cells := new(rawCells)
 	cells.init(tabspaces)
 	b.initWithCells(cells)
+}
+
+// InitPerformance initializes this Buffer without Undo, Redo,
+// SubscribeUsage, UnsubscribeUsage, Subscribe or Unsubscribe functionality.
+// Calling any of these methods will cause the calling goroutine to panic.
+func (b *Buffer) InitPerformance(tabspaces int, rowCapacity, columnCapacity int) {
+	cells := new(rawCells)
+	cells.initWithCap(tabspaces, rowCapacity, columnCapacity)
+	b.cells = cells
+	b.editor = b.cells
+	b.safew.editor = b.editor
+	b.setView(b.cells)
+}
+
+// ResetCapacity resets the capacity given to new rows.
+func (b *Buffer) ResetCapacity(capacity int) {
+	b.cells.columnCap = capacity
 }
 
 // Init initializes this Buffer with the default configuration.
@@ -358,7 +375,9 @@ func (b *Buffer) DeleteBlock(from, to term.Coordinates) (
 func (b *Buffer) Reset() {
 	// make sure that reset is propagated to subscribers.
 	b.TruncateFrom(term.Coordinates{})
-	b.undoer.reset()
+	if b.undoer != nil {
+		b.undoer.reset()
+	}
 }
 
 func (b *Buffer) Version() int {

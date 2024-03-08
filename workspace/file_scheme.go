@@ -340,7 +340,7 @@ func (p *fileScheme) NewPty(ctx context.Context) (workspaceapi.Pty, error) {
 	master := &fileSchemeFile{File: pty, p: p, fd: pty.Fd()}
 	p.files.Store(pty.Fd(), master)
 
-	slave := &fileSchemeFile{File: tty, p: p, fd: pty.Fd()}
+	slave := &fileSchemeFile{File: tty, p: p, fd: tty.Fd()}
 	p.files.Store(tty.Fd(), slave)
 
 	return workspaceapi.Pty{

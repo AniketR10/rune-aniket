@@ -1,7 +1,10 @@
 package vte
 
 import (
+	"context"
+	"errors"
 	"fmt"
+	"io"
 	"time"
 
 	"github.com/ernestrc/blue/logging"
@@ -76,15 +79,12 @@ func (e *Handler) Init(
 	e.mouseDriver = &mouseDriver{t: e.comp, clipboard: config.Clipboard}
 	e.mouse = text.NewMouse(e.mouseDriver)
 
-	e.updateCh = make(chan struct{})
+	e.updateCh = make(chan struct{}, 1)
 	e.sema = make(chan struct{})
 	go func() {
 		logErr := e.comp.Run(e.updateCh)
-		if err := e.publisher.PublishEvent(term.Event{Type: term.EventNone}); err != nil {
-			err = fmt.Errorf("publish event: %s", err)
-			logErr = multierr.Append(logErr, err)
-		}
-		if logErr != nil {
+		_ = e.publisher.PublishEvent(term.Event{Type: term.EventNone})
+		if logErr != nil && !errors.Is(logErr, io.EOF) && !errors.Is(logErr, context.Canceled) {
 			e.log(log.ErrorLevel, "terminal run: %v", logErr)
 			e.notifications.Notify(notifications.LevelError, "terminal run: %v", logErr)
 		} else {

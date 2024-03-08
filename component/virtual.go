@@ -28,8 +28,9 @@ func (c *Virtual) Resize(width, height int) {
 // Draw uses a virtual writer to perform bound checking and
 // if successful draw the inner component in the virtual coordinate space.
 func (c *Virtual) Draw(writer term.Writer) {
-	writer = VirtualWriter(writer, c.pos, c.height, c.width)
-	c.C.Draw(writer)
+	var w virtualWriter // avoid extra allocations
+	w = virtualWriter{writer: writer, offset: c.pos, height: c.height, width: c.width}
+	c.C.Draw(&w)
 }
 
 // Move changes the position of this virtual component

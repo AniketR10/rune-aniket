@@ -73,13 +73,13 @@ func (u utf8Receiver) InvalidSequence() {
 
 // ProcessUtf8 processes UTF-8 characters.
 func (p *Scanner) processUtf8(ch byte) {
-	p.log(log.TraceLevel, "process utf8: byte: %c", ch)
+	// p.log(log.TraceLevel, "process utf8: byte: %c", ch)
 	p.utf8.Advance(ch)
 }
 
 // DriverStateChange performs the state change.
 func (p *Scanner) performStateChange(state State, action Action, ch byte) {
-	p.log(log.TraceLevel, "state change: %v to %v, action: %v, ch: %c", p.state, state, action, ch)
+	// p.log(log.TraceLevel, "state change: %v to %v, action: %v, ch: %c", p.state, state, action, ch)
 	if state == Anywhere {
 		p.performAction(action, ch)
 		return
