@@ -1181,7 +1181,6 @@ func (t *parserHandler) carriageReturn() {
 }
 
 func (t *parserHandler) scrollDown(rows int, capPrimary bool) bool {
-	t.log(log.TraceLevel, "attempt scroll down %d", rows)
 	if t.useAlt {
 		return t.scrollDownAltRelative(t.sync.buf.TopScrollableRegion(), rows)
 	}
@@ -1200,13 +1199,18 @@ func (t *parserHandler) scrollDown(rows int, capPrimary bool) bool {
 	}
 
 	offset.Y -= rows
-	offset.Y = int(math.Max(0, float64(offset.Y)))
+	if offset.Y < 0 {
+		scrollDown := -offset.Y
+		offset.Y = 0
+		buf.SetOffset(offset)
+		buf.AltBuffer.ScrollDown(0, buf.Rows(), scrollDown)
+		return true
+	}
 	buf.SetOffset(offset)
 	return true
 }
 
 func (t *parserHandler) scrollUp(rows int, capPrimary bool) bool {
-	// t.log(log.TraceLevel, "attempt scroll up %d", rows)
 	if t.useAlt {
 		return t.scrollUpAltRelative(t.sync.buf.TopScrollableRegion(), rows)
 	}

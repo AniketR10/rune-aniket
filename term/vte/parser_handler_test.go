@@ -145,7 +145,7 @@ func TestIntegrationParserHandler(t *testing.T) {
 				resetBuffer(t, p, "a    \nb    \nc    \nd    \ne    \nf    ")
 				assertEqualBuf(t, p, "b    \nc    \nd    \ne    \nf    ")
 				p.ScrollDown(100)
-				assertEqualBuf(t, p, "a    \nb    \nc    \nd    \ne    ")
+				assertEqualBuf(t, p, "     \n     \n     \n     \n     ")
 			},
 		},
 		{
@@ -156,9 +156,9 @@ func TestIntegrationParserHandler(t *testing.T) {
 				resetBuffer(t, p, "a    \nb    \nc    \nd    \ne    \nf    ")
 				assertEqualBuf(t, p, "b    \nc    \nd    \ne    \nf    ")
 				p.ScrollDown(100)
-				assertEqualBuf(t, p, "a    \nb    \nc    \nd    \ne    ")
+				assertEqualBuf(t, p, "     \n     \n     \n     \n     ")
 				p.ScrollUp(2)
-				assertEqualBuf(t, p, "c    \nd    \ne    \nf    \n     ")
+				assertEqualBuf(t, p, "     \n     \n     \n     \n     ")
 				p.ScrollUp(100)
 				assertEqualBuf(t, p, "     \n     \n     \n     \n     ")
 				p.ScrollDown(1)
@@ -587,6 +587,27 @@ func TestIntegrationParserHandler(t *testing.T) {
 				assertEqualBuf(t, p, "c    \nd    \ne    \nf    \ng    ")
 
 				assert.Equal(t, p.maxScrollLength, p.sync.buf.Rows())
+			},
+		},
+		{
+			desc:      "reverse index usage of git log on primary buffer",
+			altBuffer: false,
+			sut: func(t *testing.T, p *parserHandler, pty *workspacetest.File) {
+				p.Resize(5, 5)
+				resetBuffer(t, p, "a    \nb    \nc    \nd    \n:    ")
+				p.CarriageReturn()
+				p.ClearLine(0)
+				p.Goto(0, 0)
+				p.ReverseIndex()
+				p.Input('X')
+				p.CarriageReturn()
+				p.Linefeed()
+				p.Goto(4, 0)
+				p.CarriageReturn()
+				p.ClearLine(0)
+				p.Input(':')
+				p.ClearLine(0)
+				assertEqualBuf(t, p, "X    \na    \nb    \nc    \n:    ")
 			},
 		},
 	}
