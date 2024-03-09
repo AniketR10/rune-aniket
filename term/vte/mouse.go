@@ -9,9 +9,10 @@ import (
 )
 
 type mouseDriver struct {
-	t            *Component
-	hookRawBytes []byte
-	clipboard    clipboard.Register
+	t              *Component
+	selectionStart term.Coordinates
+	hookRawBytes   []byte
+	clipboard      clipboard.Register
 }
 
 func (e *mouseDriver) OnAction(
@@ -90,10 +91,11 @@ func (e *mouseDriver) ClearSelection() {
 }
 
 func (e *mouseDriver) SetSelectionStart(pos term.Coordinates) {
-	e.t.Select(pos)
+	e.selectionStart = pos
 }
 
 func (e *mouseDriver) SetSelectionEnd(pos term.Coordinates) {
+	e.t.Select(e.selectionStart)
 	e.t.SelectEnd(pos)
 	e.copySelectionToClipboard()
 }
