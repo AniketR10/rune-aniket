@@ -124,6 +124,28 @@ func (r *readFromTestCase) Read(p []byte) (n int, err error) {
 	return
 }
 
+func TestRawCellsReset(t *testing.T) {
+	t.Run("zero capacity reset does not panic", func(t *testing.T) {
+		var c rawCells
+		assert.NotPanics(t, func() {
+			c.resetWithCap(1, 0)
+		})
+		assert.NotPanics(t, func() {
+			c.resetWithCap(0, 1)
+		})
+	})
+
+	t.Run("length as capactiy is used if default capacity is smaller", func(t *testing.T) {
+		var c rawCells
+		c.resetWithCap(1, 1)
+		c.Edit(term.Coordinates{}, term.Coordinates{},
+			"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+		// forces copying half of first row with length
+		// into another row, with length and capacity
+		c.Edit(term.Coordinates{X: 2}, term.Coordinates{X: 2}, "\n")
+	})
+}
+
 func TestRawCellsReadFrom(t *testing.T) {
 	myError := errors.New("oopsie daisy")
 
