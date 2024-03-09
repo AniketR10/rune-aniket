@@ -640,7 +640,7 @@ func (t *parserHandler) ReverseIndex() {
 	t.sync.mu.Lock()
 	defer t.sync.mu.Unlock()
 
-	pos := t.sync.buf.CursorAtScroll()
+	pos := t.sync.buf.CursorAtScreen()
 	if pos.Y <= t.sync.buf.TopScrollableRegion() {
 		t.scrollDown(1, false)
 	} else {
@@ -1197,6 +1197,10 @@ func (t *parserHandler) scrollDown(rows int, capPrimary bool) bool {
 		}
 		return false
 	}
+
+	// satisfy alternate buffer semantics
+	// if it's a programmatic scroll down
+	defer buf.ResetLines(0, rows)
 
 	offset.Y -= rows
 	if offset.Y < 0 {

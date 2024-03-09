@@ -610,6 +610,28 @@ func TestIntegrationParserHandler(t *testing.T) {
 				assertEqualBuf(t, p, "X    \na    \nb    \nc    \n:    ")
 			},
 		},
+		{
+			desc:      "reverse index usage of git log on primary buffer with history",
+			altBuffer: false,
+			sut: func(t *testing.T, p *parserHandler, pty *workspacetest.File) {
+				p.Resize(5, 5)
+				resetBuffer(t, p, "log  \na    \nb    \nc    \nd    \n:    ")
+				assertEqualBuf(t, p, "a    \nb    \nc    \nd    \n:    ")
+				p.CarriageReturn()
+				p.ClearLine(0)
+				p.Goto(0, 0)
+				p.ReverseIndex()
+				p.Input('X')
+				p.CarriageReturn()
+				p.Linefeed()
+				p.Goto(4, 0)
+				p.CarriageReturn()
+				p.ClearLine(0)
+				p.Input(':')
+				p.ClearLine(0)
+				assertEqualBuf(t, p, "X    \na    \nb    \nc    \n:    ")
+			},
+		},
 	}
 
 	for _, test := range suite {
