@@ -20,11 +20,16 @@ import (
 
 var _ tui.Handler = (*Handler)(nil)
 
+const handleTimeout = 50 * time.Millisecond
+
 // Handler is a terminal emulator that satisfies tui.Handler.
 type Handler struct {
 	comp          *Component
 	publisher     browser.EventPublisher
 	notifications browser.Notifications
+	handleTimer   *time.Timer
+	ctx           context.Context
+	cancelCtx     func()
 
 	mouse       *text.Mouse
 	mouseDriver *mouseDriver
@@ -57,6 +62,11 @@ func (e *Handler) Init(
 ) error {
 	e.publisher = publisher
 	e.notifications = n
+	e.handleTimer = time.NewTimer(handleTimeout)
+	// leave in idle state so we can call Reset directly in handle
+	if !e.handleTimer.Stop() {
+		<-e.handleTimer.C
+	}
 
 	comp, err := NewComponent(termapi, executor, config)
 	if err != nil {
@@ -78,6 +88,7 @@ func (e *Handler) Init(
 	}
 	e.mouseDriver = &mouseDriver{t: e.comp, clipboard: config.Clipboard}
 	e.mouse = text.NewMouse(e.mouseDriver)
+	e.ctx, e.cancelCtx = context.WithCancel(context.Background())
 
 	e.updateCh = make(chan struct{}, 1)
 	e.sema = make(chan struct{})
@@ -97,10 +108,9 @@ func (e *Handler) Init(
 			select {
 			case <-e.sema:
 				e.sema <- struct{}{}
-			case _, ok := <-e.updateCh:
-				if !ok {
-					return
-				}
+			case <-e.ctx.Done():
+				return
+			case <-e.updateCh:
 			}
 			err = e.publisher.PublishEvent(term.Event{Type: term.EventInterrupt})
 			if err != nil {
@@ -149,11 +159,8 @@ func (e *Handler) Handle(ev term.Event) (exit, handled bool) {
 
 	select {
 	case e.sema <- struct{}{}:
-	case _, ok := <-e.updateCh:
-		if !ok {
-			exit = true
-		}
-		e.log(log.TraceLevel, "handle: closed update chan")
+	case <-e.ctx.Done():
+		exit = true
 		return
 	}
 	defer func() { <-e.sema }()
@@ -165,16 +172,17 @@ func (e *Handler) Handle(ev term.Event) (exit, handled bool) {
 		return
 	}
 
-	timer := time.NewTimer(50 * time.Millisecond)
-	defer timer.Stop()
-
+	e.handleTimer.Reset(handleTimeout)
 	select {
-	case <-timer.C:
-	case _, ok := <-e.updateCh:
-		if !ok {
-			exit = true
-		}
+	case <-e.handleTimer.C:
+		e.handleTimer.Stop()
+	case <-e.ctx.Done():
+		exit = true
+	case <-e.updateCh:
 		handled = true
+		if !e.handleTimer.Stop() {
+			<-e.handleTimer.C
+		}
 	}
 	// TODO set title via browser.Component if it has changed
 	// if e.terminal.Title() != e.currTitle {
@@ -230,6 +238,9 @@ func (e *Handler) Close() error {
 	e.mouseDriver.clipboard = nil
 	e.mouseDriver = nil
 	e.closed = true
+
+	e.cancelCtx()
+	e.handleTimer.Stop()
 
 	var ret error
 	if err := e.comp.Close(); err != nil {
