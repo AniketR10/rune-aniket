@@ -440,12 +440,28 @@ func TestDelete(t *testing.T) {
 		assertEqualBuf(t, b, "  \nbb\n  \n  \n  \n  \n  \n  \n  \n  ")
 	})
 
+	t.Run("count + pos.X oob", func(t *testing.T) {
+		b := makeAltBufferForTesting(2, 10)
+		resetAltBuffer(t, b, "aa\nbb\n  \n  \n  \n  \n  \n  \n  \n  ")
+		b.SetCursorAtScreen(term.Coordinates{X:1}, false)
+		b.Delete(2)
+		assertEqualBuf(t, b, "a \nbb\n  \n  \n  \n  \n  \n  \n  \n  ")
+	})
+
 	t.Run("zero count does nothing", func(t *testing.T) {
 		b := makeAltBufferForTesting(2, 10)
 		resetAltBuffer(t, b, "aa\nbb\n  \n  \n  \n  \n  \n  \n  \n  ")
 		b.SetCursorAtScreen(term.Coordinates{}, false)
 		b.Delete(0)
 		assertEqualBuf(t, b, "aa\nbb\n  \n  \n  \n  \n  \n  \n  \n  ")
+	})
+
+	t.Run("deletes first few characters in long line", func(t *testing.T) {
+		b := makeAltBufferForTesting(10, 2)
+		resetAltBuffer(t, b, "0123456789\nabcdefghij")
+		b.SetCursorAtScreen(term.Coordinates{X:2}, false)
+		b.Delete(3)
+		assertEqualBuf(t, b, "0156789   \nabcdefghij")
 	})
 }
 

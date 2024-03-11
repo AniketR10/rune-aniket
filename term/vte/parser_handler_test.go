@@ -632,6 +632,46 @@ func TestIntegrationParserHandler(t *testing.T) {
 				assertEqualBuf(t, p, "X    \na    \nb    \nc    \n:    ")
 			},
 		},
+		{
+			desc:      "zsh delete a character in vi mode",
+			altBuffer: false,
+			sut: func(t *testing.T, p *parserHandler, pty *workspacetest.File) {
+				p.Resize(5, 5)
+				resetBuffer(t, p, "log  \na    \nb    \nc    \nd    \n$ xaa")
+				assertEqualBuf(t, p, "a    \nb    \nc    \nd    \n$ xaa")
+				p.Backspace()
+				p.Backspace()
+				p.DeleteChars(1)
+				p.MoveForward(2)
+				p.Input(' ')
+				p.MoveBackward(2)
+				assertEqualBuf(t, p, "a    \nb    \nc    \nd    \n$ aa ")
+				p.Input('X')
+				assertEqualBuf(t, p, "a    \nb    \nc    \nd    \n$ Xa ")
+			},
+		},
+		{
+			desc:      "zsh delete a character in vi mode with wrap around line",
+			altBuffer: false,
+			sut: func(t *testing.T, p *parserHandler, pty *workspacetest.File) {
+				p.Resize(5, 5)
+				resetBuffer(t, p, "log  \na    \nb    \nc    \nd    \n$ xaa")
+				assertEqualBuf(t, p, "a    \nb    \nc    \nd    \n$ xaa")
+				p.Backspace()
+				p.Backspace()
+				p.DeleteChars(1)
+				p.MoveForward(2)
+				p.ClearLine(0)
+				p.MoveDown(1)
+				p.CarriageReturn()
+				p.ClearLine(0)
+				p.MoveUp(1)
+				p.MoveForward(2)
+				assertEqualBuf(t, p, "a    \nb    \nc    \nd    \n$ aa ")
+				p.Input('X')
+				assertEqualBuf(t, p, "a    \nb    \nc    \nd    \n$ Xa ")
+			},
+		},
 	}
 
 	for _, test := range suite {

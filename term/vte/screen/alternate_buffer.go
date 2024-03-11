@@ -138,12 +138,12 @@ func (b *AltBuffer) Delete(count int) {
 	columns := b.Cells.Columns(pos.Y)
 	count = int(math.Min(
 		float64(count),
-		float64(columns),
+		float64(columns-pos.X),
 	))
 
 	cells := b.Cells.RawCells()
 	copy(cells[pos.Y][pos.X:], cells[pos.Y][pos.X+count:])
-	cells[pos.Y] = cells[pos.Y][:count]
+	cells[pos.Y] = cells[pos.Y][:columns-count]
 
 	// reset cells that were deleted
 	b.ResetCells(columns-count, columns)
