@@ -177,6 +177,13 @@ func (t *Component) Resize(width, height int) error {
 		return fmt.Errorf("terminal is not running")
 	}
 
+	if t.width == width && t.height == height {
+		// some programs will not re-print if width and height
+		// are the same, but resizing buffers does clear all the content
+		// so we would be left with an empty screen buffer.
+		return nil
+	}
+
 	err := t.terminal.SetPtySize(t.pty, width, height)
 	if err != nil {
 		return err
