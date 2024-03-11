@@ -615,7 +615,7 @@ func TestIntegrationParserHandler(t *testing.T) {
 			altBuffer: false,
 			sut: func(t *testing.T, p *parserHandler, pty *workspacetest.File) {
 				p.Resize(5, 5)
-				resetBuffer(t, p, "log  \na    \nb    \nc    \nd    \n:    ")
+				resetBuffer(t, p, "com  \nlog  \na    \nb    \nc    \nd    \n:    ")
 				assertEqualBuf(t, p, "a    \nb    \nc    \nd    \n:    ")
 				p.CarriageReturn()
 				p.ClearLine(0)

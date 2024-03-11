@@ -184,10 +184,6 @@ func (e *Handler) Handle(ev term.Event) (exit, handled bool) {
 			<-e.handleTimer.C
 		}
 	}
-	// TODO set title via browser.Component if it has changed
-	// if e.terminal.Title() != e.currTitle {
-	// 	e.browser.SetTitle()
-	// }
 	return
 }
 
