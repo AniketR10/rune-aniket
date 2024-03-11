@@ -395,6 +395,67 @@ func TestComponentOpen(t *testing.T) {
 		testutil.TestComponent(t, c, w, tests)
 
 	})
+
+	t.Run("sets a tab name", func(t *testing.T) {
+		c, _, _, _ := newTestComponentWithFile(t, "file:///tmp/wasup")
+		c.Resize(30, 20)
+
+		tests := []testutil.ComponentTestCase{
+			{nil, `
+┌────────────────────────────┐
+│wasup                       │
+├────────────────────────────┤
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+└────────────────────────────┘`,
+			},
+			{func() {
+				uri, err := workspaceapi.ParseURI("file:///tmp/wasup")
+				require.NoError(t, err)
+
+				require.NoError(t, c.SetTabName(uri, "whatevs"))
+			}, `
+┌────────────────────────────┐
+│whatevs                     │
+├────────────────────────────┤
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+└────────────────────────────┘`,
+			},
+		}
+
+		w := term.NewStringWriter(30, 20)
+		testutil.TestComponent(t, c, w, tests)
+
+	})
 }
 
 func TestComponentEditorSubscriber(t *testing.T) {

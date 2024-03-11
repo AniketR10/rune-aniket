@@ -45,6 +45,10 @@ func (b toBrowser) SetFocus(win browser.Window) (browser.Window, error) {
 	return WindowFromAPIWindow{Win: retWin}, nil
 }
 
+func (b toBrowser) SetTabName(uri workspaceapi.URI, name string) error {
+	return nil
+}
+
 func (b toBrowser) Split(
 	o browserapi.Orientation, win browser.Window, h browserapi.Handler,
 ) (browser.Window, error) {

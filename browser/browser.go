@@ -77,6 +77,10 @@ type WindowManager interface {
 	// Window returns a window with the given window ID or returns false
 	// if now window with that ID exists.
 	Window(uint64) (Window, bool)
+
+	// SetTabName sets the title of the given tab. If the given browserapi.Handler
+	// is not a tabl, then this method returns an error.
+	SetTabName(workspaceapi.URI, string) error
 }
 
 // Notifications is the interface that wraps methods to display

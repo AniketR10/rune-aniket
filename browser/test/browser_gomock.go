@@ -343,6 +343,20 @@ func (mr *MockWindowManagerMockRecorder) SetFocus(win interface{}) *gomock.Call 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetFocus", reflect.TypeOf((*MockWindowManager)(nil).SetFocus), win)
 }
 
+// SetTabName mocks base method.
+func (m *MockWindowManager) SetTabName(arg0 api0.URI, arg1 string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SetTabName", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SetTabName indicates an expected call of SetTabName.
+func (mr *MockWindowManagerMockRecorder) SetTabName(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetTabName", reflect.TypeOf((*MockWindowManager)(nil).SetTabName), arg0, arg1)
+}
+
 // Split mocks base method.
 func (m *MockWindowManager) Split(arg0 api.Orientation, arg1 browser.Window, arg2 api.Handler) (browser.Window, error) {
 	m.ctrl.T.Helper()
@@ -677,6 +691,20 @@ func (m *MockBrowser) SetFocus(win browser.Window) (browser.Window, error) {
 func (mr *MockBrowserMockRecorder) SetFocus(win interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetFocus", reflect.TypeOf((*MockBrowser)(nil).SetFocus), win)
+}
+
+// SetTabName mocks base method.
+func (m *MockBrowser) SetTabName(arg0 api0.URI, arg1 string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SetTabName", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SetTabName indicates an expected call of SetTabName.
+func (mr *MockBrowserMockRecorder) SetTabName(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetTabName", reflect.TypeOf((*MockBrowser)(nil).SetTabName), arg0, arg1)
 }
 
 // Split mocks base method.

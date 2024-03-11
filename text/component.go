@@ -903,6 +903,16 @@ func (c *Component) Tabs() []*browser.Tab {
 	return c.comp.Tabs()
 }
 
+// SetTabName sets the title of the given tab. If the given browserapi.Handler
+// is not a tab, then this method returns an error.
+func (c *Component) SetTabName(uri workspaceapi.URI, title string) error {
+	ok := c.comp.SetTabName(uri, title)
+	if !ok {
+		return errors.New("set title called on unknown tab")
+	}
+	return nil
+}
+
 // Prompt creates a new prompt to be drawn as an overlay on the next call to Draw
 // and it also takes over event control until user either exits prompt or selects
 // an option.
