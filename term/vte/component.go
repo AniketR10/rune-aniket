@@ -17,6 +17,7 @@ import (
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/term/vte/parser"
+	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/text/clipboard"
 )
 
@@ -548,11 +549,12 @@ func (t *Component) selection() (cells [][]term.Cell, ok bool) {
 
 func (t *Component) drawSelection(w term.Writer) {
 	var from, to, offset term.Coordinates
+	var mode text.SelectMode
 	var ok bool
 	if t.parserHandler.useAlt {
-		from, to, ok = t.parserHandler.sync.altBuf.SelectionCoordinatesAtScroll()
+		mode, from, to, ok = t.parserHandler.sync.altBuf.SelectionCoordinatesAtScroll()
 	} else {
-		from, to, ok = t.parserHandler.sync.primBuf.SelectionCoordinatesAtScroll()
+		mode, from, to, ok = t.parserHandler.sync.primBuf.SelectionCoordinatesAtScroll()
 		offset = t.parserHandler.sync.primBuf.Offset()
 	}
 	if !ok {
@@ -560,10 +562,10 @@ func (t *Component) drawSelection(w term.Writer) {
 	}
 	for y := from.Y; y <= to.Y; y++ {
 		xStart, xEnd := 0, t.parserHandler.sync.buf.Columns(y)
-		if y == from.Y {
+		if y == from.Y && mode == text.StandardSelection {
 			xStart = from.X
 		}
-		if y == to.Y {
+		if y == to.Y && mode == text.StandardSelection {
 			xEnd = to.X
 		}
 		for x := xStart; x < xEnd; x++ {

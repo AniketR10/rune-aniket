@@ -211,7 +211,6 @@ func (b *AltBuffer) ScrollDown(start, end, count int) {
 	copy(cells[start+count:end], cells[start:end-count])
 	copy(cells[start:start+count], temp)
 
-
 	b.ResetLinesWith(start, start+count, ' ')
 }
 
@@ -406,28 +405,16 @@ func (b *AltBuffer) SelectLine(pos term.Coordinates) {
 	b.selection.mode = text.LineSelection
 }
 
-// SelectBlock anchors the current screen position as the start and end of
-// text block selection.
-func (b *AltBuffer) SelectBlock(pos term.Coordinates) {
-	pos = cell.CoordinatesSum(pos, b.scroll.Offset())
-	b.selection.from = pos
-	pos.X++
-	b.selection.to = pos
-	b.selection.mode = text.BlockSelection
-}
-
 // Selection returns the current selection or false if no
 // text is currently selected.
 func (b *AltBuffer) Selection() (cells [][]term.Cell, ok bool) {
-	from, to, _ := b.SelectionCoordinatesAtScroll()
-	switch b.selection.mode {
+	mode, from, to, _ := b.SelectionCoordinatesAtScroll()
+	switch mode {
 	case text.StandardSelection:
 		cells, ok = b.Cells.Select(from, to)
 	case text.LineSelection:
 		cells, ok = b.Cells.SelectLine(from, to)
-	case text.BlockSelection:
-		cells, ok = b.Cells.SelectBlock(from, to)
-	case text.NoSelection:
+	default:
 	}
 
 	return
@@ -435,16 +422,21 @@ func (b *AltBuffer) Selection() (cells [][]term.Cell, ok bool) {
 
 // SelectionCoordinatesAtScroll returns the content/scroll coordinates of the selected text.
 // The returned coordinates are left inclusive, right exclusive.
-func (b *AltBuffer) SelectionCoordinatesAtScroll() (from, to term.Coordinates, ok bool) {
+func (b *AltBuffer) SelectionCoordinatesAtScroll() (
+	mode text.SelectMode, from, to term.Coordinates, ok bool,
+) {
 	from, to = cell.SortFromTo(b.selection.from, b.selection.to)
+	mode = b.selection.mode
 	ok = b.selection.mode != text.NoSelection
 	return
 }
 
 // SelectionCoordinatesAtScreen returns the screen coordinates of the selected text.
 // The returned coordinates are left inclusive, right exclusive.
-func (b *AltBuffer) SelectionCoordinatesAtScreen() (from, to term.Coordinates, ok bool) {
-	from, to, ok = b.SelectionCoordinatesAtScroll()
+func (b *AltBuffer) SelectionCoordinatesAtScreen() (
+	mode text.SelectMode, from, to term.Coordinates, ok bool,
+) {
+	mode, from, to, ok = b.SelectionCoordinatesAtScroll()
 	from = cell.CoordinatesDiff(from, b.scroll.Offset())
 	to = cell.CoordinatesDiff(to, b.scroll.Offset())
 	return

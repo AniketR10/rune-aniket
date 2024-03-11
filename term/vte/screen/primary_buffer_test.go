@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/term"
+	"unstable.build/go-tui/text"
 )
 
 func TestPrimaryCoordinates(t *testing.T) {
@@ -74,24 +75,25 @@ func TestPrimarySelection(t *testing.T) {
 		b.Select(term.Coordinates{Y: 6})
 		b.SelectEnd(term.Coordinates{Y: 7})
 
-		from, to, ok := b.SelectionCoordinatesAtScreen()
+		mode, from, to, ok := b.SelectionCoordinatesAtScreen()
 		require.True(t, ok)
+		assert.Equal(t, mode, text.StandardSelection)
 		assert.Equal(t, term.Coordinates{Y: 6}, from)
 		assert.Equal(t, term.Coordinates{Y: 7, X: 1}, to)
 
-		from, to, ok = b.SelectionCoordinatesAtScroll()
+		_, from, to, ok = b.SelectionCoordinatesAtScroll()
 		require.True(t, ok)
 		assert.Equal(t, term.Coordinates{Y: 6}, from)
 		assert.Equal(t, term.Coordinates{Y: 7, X: 1}, to)
 
 		b.SetOffset(term.Coordinates{Y: 5})
 
-		from, to, ok = b.SelectionCoordinatesAtScreen()
+		_, from, to, ok = b.SelectionCoordinatesAtScreen()
 		require.True(t, ok)
 		assert.Equal(t, term.Coordinates{Y: 1}, from)
 		assert.Equal(t, term.Coordinates{Y: 2, X: 1}, to)
 
-		from, to, ok = b.SelectionCoordinatesAtScroll()
+		_, from, to, ok = b.SelectionCoordinatesAtScroll()
 		require.True(t, ok)
 		assert.Equal(t, term.Coordinates{Y: 6}, from)
 		assert.Equal(t, term.Coordinates{Y: 7, X: 1}, to)
