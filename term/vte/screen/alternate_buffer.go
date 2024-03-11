@@ -363,8 +363,9 @@ func (b *AltBuffer) SetDefaultAttributes(attr term.Attributes) {
 	b.scroll.Attributes = attr
 }
 
-// Select select the word under the current cursor position.
+// Select select the word at the given screen position.
 func (b *AltBuffer) SelectWordAt(pos term.Coordinates) {
+	pos = cell.CoordinatesSum(pos, b.scroll.Offset())
 	b.selection.from, b.selection.to, _ = b.scroll.WordAt(pos)
 	b.selection.mode = text.StandardSelection
 }
@@ -374,7 +375,8 @@ func (b *AltBuffer) Unselect() {
 	b.selection.mode = text.NoSelection
 }
 
-// Select anchors the current cursor position as the start and end of a text selection.
+// Select anchors the given screen position as the start
+// and end of a text selection.
 func (b *AltBuffer) Select(pos term.Coordinates) {
 	pos = cell.CoordinatesSum(pos, b.scroll.Offset())
 	b.selection.from = pos
@@ -383,7 +385,7 @@ func (b *AltBuffer) Select(pos term.Coordinates) {
 	b.selection.mode = text.StandardSelection
 }
 
-// Select anchors the current cursor position as the end of a text selection.
+// Select anchors the current screen position as the end of a text selection.
 func (b *AltBuffer) SelectEnd(pos term.Coordinates) {
 	if b.selection.mode == text.NoSelection {
 		return
@@ -394,7 +396,7 @@ func (b *AltBuffer) SelectEnd(pos term.Coordinates) {
 	b.selection.to = pos
 }
 
-// SelectLine anchors the current cursor position as the start and end line of
+// SelectLine anchors the current screen position as the start and end line of
 // the text selection.
 func (b *AltBuffer) SelectLine(pos term.Coordinates) {
 	pos = cell.CoordinatesSum(pos, b.scroll.Offset())
@@ -404,7 +406,7 @@ func (b *AltBuffer) SelectLine(pos term.Coordinates) {
 	b.selection.mode = text.LineSelection
 }
 
-// SelectBlock anchors the current cursor position as the start and end of
+// SelectBlock anchors the current screen position as the start and end of
 // text block selection.
 func (b *AltBuffer) SelectBlock(pos term.Coordinates) {
 	pos = cell.CoordinatesSum(pos, b.scroll.Offset())

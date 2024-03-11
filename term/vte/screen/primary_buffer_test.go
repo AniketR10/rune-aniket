@@ -56,6 +56,16 @@ func TestPrimarySelection(t *testing.T) {
 		require.True(t, ok)
 		assert.Equal(t, [][]term.Cell{{{Ch: '6', Width: 1}}, {{Ch: '7', Width: 1}}}, cells)
 	})
+	t.Run("word selection with scrollback history", func(t *testing.T) {
+		b := makePrimaryBufferForTesting(2, 10)
+		resetPrimaryBuffer(t, b, "00\n11\n22\n33\n44\n55\n66\n77\n88\n99")
+
+		b.SetOffset(term.Coordinates{Y: 2})
+		b.SelectWordAt(term.Coordinates{})
+		cells, ok := b.Selection()
+		require.True(t, ok)
+		assert.Equal(t, [][]term.Cell{{{Ch: '2', Width: 1}, {Ch: '2', Width: 1}}}, cells)
+	})
 
 	t.Run("coordinates with scroll", func(t *testing.T) {
 		b := makePrimaryBufferForTesting(1, 5)
