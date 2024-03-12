@@ -344,17 +344,17 @@ func (mr *MockWindowManagerMockRecorder) SetFocus(win interface{}) *gomock.Call 
 }
 
 // SetTabName mocks base method.
-func (m *MockWindowManager) SetTabName(arg0 api0.URI, arg1 string) error {
+func (m *MockWindowManager) SetTabName(arg0 api0.URI, arg1 string, arg2 term.Attributes) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SetTabName", arg0, arg1)
+	ret := m.ctrl.Call(m, "SetTabName", arg0, arg1, arg2)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // SetTabName indicates an expected call of SetTabName.
-func (mr *MockWindowManagerMockRecorder) SetTabName(arg0, arg1 interface{}) *gomock.Call {
+func (mr *MockWindowManagerMockRecorder) SetTabName(arg0, arg1, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetTabName", reflect.TypeOf((*MockWindowManager)(nil).SetTabName), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetTabName", reflect.TypeOf((*MockWindowManager)(nil).SetTabName), arg0, arg1, arg2)
 }
 
 // Split mocks base method.
@@ -400,6 +400,58 @@ func (m *MockWindowManager) Window(arg0 uint64) (browser.Window, bool) {
 func (mr *MockWindowManagerMockRecorder) Window(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Window", reflect.TypeOf((*MockWindowManager)(nil).Window), arg0)
+}
+
+// MockTabManager is a mock of TabManager interface.
+type MockTabManager struct {
+	ctrl     *gomock.Controller
+	recorder *MockTabManagerMockRecorder
+}
+
+// MockTabManagerMockRecorder is the mock recorder for MockTabManager.
+type MockTabManagerMockRecorder struct {
+	mock *MockTabManager
+}
+
+// NewMockTabManager creates a new mock instance.
+func NewMockTabManager(ctrl *gomock.Controller) *MockTabManager {
+	mock := &MockTabManager{ctrl: ctrl}
+	mock.recorder = &MockTabManagerMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockTabManager) EXPECT() *MockTabManagerMockRecorder {
+	return m.recorder
+}
+
+// SetTabName mocks base method.
+func (m *MockTabManager) SetTabName(arg0 api0.URI, arg1 string, arg2 term.Attributes) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SetTabName", arg0, arg1, arg2)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SetTabName indicates an expected call of SetTabName.
+func (mr *MockTabManagerMockRecorder) SetTabName(arg0, arg1, arg2 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetTabName", reflect.TypeOf((*MockTabManager)(nil).SetTabName), arg0, arg1, arg2)
+}
+
+// Tab mocks base method.
+func (m *MockTabManager) Tab(uri api0.URI, name string, h api.Handler) (api.Handler, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Tab", uri, name, h)
+	ret0, _ := ret[0].(api.Handler)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Tab indicates an expected call of Tab.
+func (mr *MockTabManagerMockRecorder) Tab(uri, name, h interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Tab", reflect.TypeOf((*MockTabManager)(nil).Tab), uri, name, h)
 }
 
 // MockNotifications is a mock of Notifications interface.
@@ -694,17 +746,17 @@ func (mr *MockBrowserMockRecorder) SetFocus(win interface{}) *gomock.Call {
 }
 
 // SetTabName mocks base method.
-func (m *MockBrowser) SetTabName(arg0 api0.URI, arg1 string) error {
+func (m *MockBrowser) SetTabName(arg0 api0.URI, arg1 string, arg2 term.Attributes) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SetTabName", arg0, arg1)
+	ret := m.ctrl.Call(m, "SetTabName", arg0, arg1, arg2)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // SetTabName indicates an expected call of SetTabName.
-func (mr *MockBrowserMockRecorder) SetTabName(arg0, arg1 interface{}) *gomock.Call {
+func (mr *MockBrowserMockRecorder) SetTabName(arg0, arg1, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetTabName", reflect.TypeOf((*MockBrowser)(nil).SetTabName), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetTabName", reflect.TypeOf((*MockBrowser)(nil).SetTabName), arg0, arg1, arg2)
 }
 
 // Split mocks base method.

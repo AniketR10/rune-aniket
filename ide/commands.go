@@ -41,8 +41,8 @@ var (
 	exCommands = map[string]commandAll{
 		"renameTab": {
 			man: textapi.CommandManual{
-				Summary:  "Rename the current tab in focus.",
-				Synopsis: "name",
+				Summary:  "Rename the current tab in focus. Optionally set the colors of the tab title.",
+				Synopsis: "name [foreground [background]]",
 			},
 			handler: (*ex).renameTab,
 		},

@@ -16,9 +16,11 @@ var (
 )
 
 type tab struct {
-	name  string
-	focus bool
-	attr  term.Attributes
+	name    string
+	defName string
+	focus   bool
+	defAttr term.Attributes
+	attr    term.Attributes
 }
 
 // Tabs is a simple component that draws a list of component
@@ -139,41 +141,91 @@ func (t *Tabs) ResetFocus() {
 	t.dirty = true
 }
 
-// SetFocus sets the focus to tab with ID. If tab with ID does not exist,
+// SetFocus sets the focus to tab with idx. If tab with idx does not exist,
 // this method will panic.
 func (t *Tabs) SetFocus(idx int) {
 	t.tabs[idx].focus = true
 	t.dirty = true
 }
 
-// SetTabAttr sets the attributes of tab with ID. If tab with ID does not exist,
+// SetTabAttr sets the attributes of tab with idx. If tab with idx does not exist,
 // this method will panic.
 func (t *Tabs) SetTabAttr(idx int, attr term.Attributes) {
 	t.tabs[idx].attr = attr
 	t.dirty = true
 }
 
-// SetTabName sets the name of tab with ID. If tab with ID does not exist,
+// SetTabDefaultAttr sets the default attributes of tab with idx. Calls to ResetTabAttr
+// will reset the tab attributes to the given attributes.
+// If tab with idx does not exist, this method will panic.
+func (t *Tabs) SetTabDefaultAttr(idx int, attr term.Attributes) {
+	t.tabs[idx].defAttr = attr
+	t.dirty = true
+}
+
+// ResetTabAttr resets the attributes of tab with idx. If tab with idx does not exist,
+// this method will panic.
+func (t *Tabs) ResetTabAttr(idx int) {
+	t.tabs[idx].attr = t.tabs[idx].defAttr
+	t.dirty = true
+}
+
+// SetTabName sets the name of tab with idx. If tab with idx does not exist,
 // this method will panic.
 func (t *Tabs) SetTabName(idx int, name string) {
 	t.tabs[idx].name = name
 	t.dirty = true
 }
 
-// Add adds a tab with ID.
+// SetTabDefaultName sets the default name of tab with idx. Calls to ResetTabName
+// will reset the tab name to the given name. If tab with idx does not exist,
+// this method will panic.
+func (t *Tabs) SetTabDefaultName(idx int, name string) {
+	t.tabs[idx].defName = name
+	t.dirty = true
+}
+
+// ResetTabName resets the name of tab with idx to either the initial name
+// given to this tab or the last name set via SetDefaultTabName.
+// If tab with idx does not exist, this method will panic.
+func (t *Tabs) ResetTabName(idx int) {
+	t.tabs[idx].name = t.tabs[idx].defName
+	t.dirty = true
+}
+
+// TabName returns the name of the tab with idx.
+// If tab with idx does not exist, this method will panic.
+func (t *Tabs) TabName(idx int) string {
+	return t.tabs[idx].name
+}
+
+// DefaultTabName returns the default name of the tab with idx.
+// If tab with idx does not exist, this method will panic.
+func (t *Tabs) DefaultTabName(idx int) string {
+	return t.tabs[idx].defName
+}
+
+// Add adds a tab with the given name.
 func (t *Tabs) Add(name string) int {
 	t.dirty = true
+	tt := &tab{
+		defAttr: term.Attributes{},
+		attr:    term.Attributes{},
+		defName: name,
+		name:    name,
+	}
 	if t.tabs == nil {
 		t.tabs = make([]*tab, 1)
-		t.tabs[0] = &tab{name: name, focus: true}
+		tt.focus = true
+		t.tabs[0] = tt
 		return 0
 	}
 	idx := len(t.tabs)
-	t.tabs = append(t.tabs, &tab{name: name})
+	t.tabs = append(t.tabs, tt)
 	return idx
 }
 
-// Remove removes the tab with ID.
+// Remove removes the tab with idx.
 func (t *Tabs) Remove(idx int) bool {
 	t.tabs = append(t.tabs[:idx], t.tabs[idx+1:]...)
 	t.dirty = true
@@ -188,7 +240,7 @@ func (t *Tabs) RemoveAll() bool {
 	return ret
 }
 
-// TabAt returns the ID of the tab at pos, or panics if pos is
+// TabAt returns the idx of the tab at pos, or panics if pos is
 // out of bounds.
 func (t *Tabs) TabAt(pos term.Coordinates) (int, bool) {
 	x := 0
@@ -233,9 +285,9 @@ func (t *Tabs) prepareFileList() {
 		if tab.focus {
 			focusPos = next
 			focusLen = len(tab.name)
-			attr = term.AttributesUnion(attr, t.focusAttr)
+			attr = term.AttributesUnion(t.focusAttr, attr)
 		} else {
-			attr = term.AttributesUnion(attr, t.nonFocusAttr)
+			attr = term.AttributesUnion(t.nonFocusAttr, attr)
 		}
 
 		_, next = t.fileListBuf.InsertStringWithAttr(

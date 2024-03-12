@@ -45,9 +45,10 @@ type Window interface {
 	IsFloating() bool
 }
 
-// WindowManager is the interface that groups tile
-// window management methods.
+// WindowManager is the interface that groups window and tab management methods.
 type WindowManager interface {
+	TabManager
+
 	// Focus returns the current Window in focus.
 	Focus() (Window, error)
 
@@ -68,19 +69,22 @@ type WindowManager interface {
 	// be in focus and can only receive mouse events.
 	Bar(browserapi.Orientation, tui.Handler) error
 
+	// Window returns a window with the given window ID or returns false
+	// if now window with that ID exists.
+	Window(uint64) (Window, bool)
+}
+
+// TabManager is the interface that groups tab management methods.
+type TabManager interface {
 	// Tab creates a new tab with h and returns a handle that can be
 	// used with the rest of methods that take a browser.Handler.
 	// URI is used to uniquely identify a tab and name is used as a label
 	// to display it in the tab bar.
 	Tab(uri workspaceapi.URI, name string, h browserapi.Handler) (browserapi.Handler, error)
 
-	// Window returns a window with the given window ID or returns false
-	// if now window with that ID exists.
-	Window(uint64) (Window, bool)
-
-	// SetTabName sets the title of the given tab. If the given browserapi.Handler
-	// is not a tabl, then this method returns an error.
-	SetTabName(workspaceapi.URI, string) error
+	// SetTabName sets the title and attributes of the title of the given tab.
+	// If the given browserapi.Handler is not a tab, then this method returns an error.
+	SetTabName(workspaceapi.URI, string, term.Attributes) error
 }
 
 // Notifications is the interface that wraps methods to display

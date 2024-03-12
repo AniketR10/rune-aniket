@@ -341,8 +341,8 @@ func (e *ex) moveFocusCursor(line int) error {
 }
 
 func (e *ex) renameTab(args ...string) error {
-	if len(args) != 1 {
-		return errors.New("expected new tab name as argument")
+	if len(args) == 0 {
+		return errors.New("expected at least one argument with new tab name")
 	}
 
 	win := e.invokeWindow()
@@ -354,7 +354,14 @@ func (e *ex) renameTab(args ...string) error {
 	if !ok {
 		return errors.New("cannot rename non tab")
 	}
-	return e.Browser().SetTabName(t.URI(), args[0])
+	var attrs term.Attributes
+	if len(args) > 1 {
+		attrs.Fg = tcell.GetColor(args[1])
+		if len(args) > 2 {
+			attrs.Bg = tcell.GetColor(args[2])
+		}
+	}
+	return e.Browser().SetTabName(t.URI(), args[0], attrs)
 }
 
 func (e *ex) previousTab(args ...string) error {

@@ -219,11 +219,23 @@ func (c *Component) Tab(uri workspaceapi.URI) (*Tab, bool) {
 	return nil, false
 }
 
-// SetTabAttr sets the attributes of the tab with ID id. It returns false
-// if there's no tab with id.
-func (c *Component) SetTabAttr(uri workspaceapi.URI, attr term.Attributes) bool {
+// TabName returns the name and default name of the tab with the given uri or false
+// if there's no tab with the given uri.
+func (c *Component) TabName(uri workspaceapi.URI) (string, string, bool) {
 	for i, t := range c.buffers {
 		if t.uri.String() == uri.String() {
+			return c.tabs.TabName(i), c.tabs.DefaultTabName(i), true
+		}
+	}
+	return "", "", false
+}
+
+// SetTabNameAndAttrs overrides the name and attributes of the tab with the given uri.
+// It returns false if there's no tab with id.
+func (c *Component) SetTabNameAndAttrs(uri workspaceapi.URI, name string, attr term.Attributes) bool {
+	for i, t := range c.buffers {
+		if t.uri.String() == uri.String() {
+			c.tabs.SetTabName(i, name)
 			c.tabs.SetTabAttr(i, attr)
 			return true
 		}
@@ -231,12 +243,27 @@ func (c *Component) SetTabAttr(uri workspaceapi.URI, attr term.Attributes) bool 
 	return false
 }
 
-// SetTabName sets the tab name of the tab with ID id. It returns false
-// if there's no tab with id.
-func (c *Component) SetTabName(uri workspaceapi.URI, name string) bool {
+// ResetTabNameAndAttrs resets the name and attributes of the tab with the given uri.
+// Moving forward, the name and attributes and name set via
+// SetTabDefaultNameAndAttrs will be used. It returns false if there's no tab with id.
+func (c *Component) ResetTabNameAndAttrs(uri workspaceapi.URI) bool {
 	for i, t := range c.buffers {
 		if t.uri.String() == uri.String() {
-			c.tabs.SetTabName(i, name)
+			c.tabs.ResetTabName(i)
+			c.tabs.ResetTabAttr(i)
+			return true
+		}
+	}
+	return false
+}
+
+// SetTabDefaultNameAndAttrs resets the attributes and name of the tab with the given uri.
+// It returns false if there's no tab with id.
+func (c *Component) SetTabDefaultNameAndAttrs(uri workspaceapi.URI, name string, attr term.Attributes) bool {
+	for i, t := range c.buffers {
+		if t.uri.String() == uri.String() {
+			c.tabs.SetTabDefaultAttr(i, attr)
+			c.tabs.SetTabDefaultName(i, name)
 			return true
 		}
 	}

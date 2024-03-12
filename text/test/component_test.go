@@ -427,7 +427,7 @@ func TestComponentOpen(t *testing.T) {
 				uri, err := workspaceapi.ParseURI("file:///tmp/wasup")
 				require.NoError(t, err)
 
-				require.NoError(t, c.SetTabName(uri, "whatevs"))
+				require.NoError(t, c.SetTabName(uri, "whatevs", term.Attributes{}))
 			}, `
 ┌────────────────────────────┐
 │whatevs                     │

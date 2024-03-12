@@ -69,22 +69,22 @@ func (c *Component) newCellBuffer() *cell.Buffer {
 }
 
 func (c *Component) resetTabProperties(file workspaceapi.URI) {
-	c.comp.SetTabAttr(file, term.Attributes{})
-	c.comp.SetTabName(file, file.Name())
+	c.comp.ResetTabNameAndAttrs(file)
 }
 
 // TODO this is a very inefficient way of checking if a file was changed.
 // We should instead collect edits and check for undos by comparing arguments
 // and return values.
-func (c *Component) setTabAttr(file workspaceapi.URI, buf *cell.Buffer, lastFlush string) {
+func (c *Component) setDirtyFileAttr(file workspaceapi.URI, buf *cell.Buffer, lastFlush string) {
 	content := buf.String()
 	if content == lastFlush {
 		c.resetTabProperties(file)
 		return
 	}
-	c.comp.SetTabAttr(file, c.config.DirtyTabAttr)
-	tabname := fmt.Sprintf("%s*", file.Name())
-	c.comp.SetTabName(file, tabname)
+	if _, defName, ok := c.comp.TabName(file); ok {
+		tabname := fmt.Sprintf("%s*", defName)
+		c.comp.SetTabNameAndAttrs(file, tabname, c.config.DirtyTabAttr)
+	}
 }
 
 func (c *Component) getSwapDir(file workspaceapi.URI) (workspaceapi.URI, error) {
@@ -903,13 +903,14 @@ func (c *Component) Tabs() []*browser.Tab {
 	return c.comp.Tabs()
 }
 
-// SetTabName sets the title of the given tab. If the given browserapi.Handler
-// is not a tab, then this method returns an error.
-func (c *Component) SetTabName(uri workspaceapi.URI, title string) error {
-	ok := c.comp.SetTabName(uri, title)
+// SetTabName sets the title and attributes of the title of the given tab.
+// If the given browserapi.Handler is not a tab, then this method returns an error.
+func (c *Component) SetTabName(uri workspaceapi.URI, title string, attr term.Attributes) error {
+	ok := c.comp.SetTabDefaultNameAndAttrs(uri, title, attr)
 	if !ok {
 		return errors.New("set title called on unknown tab")
 	}
+	_ = c.comp.SetTabNameAndAttrs(uri, title, attr)
 	return nil
 }
 
@@ -957,7 +958,7 @@ func (c editorFlusherCloser) OnWillEdit(start, end term.Coordinates, str string)
 }
 
 func (c editorFlusherCloser) OnDidEdit(from, to term.Coordinates, old string) {
-	c.parent.setTabAttr(c.uri, c.buf, c.lastFlush)
+	c.parent.setDirtyFileAttr(c.uri, c.buf, c.lastFlush)
 }
 
 func (e *editorFlusherCloser) Flush() error {
