@@ -157,10 +157,7 @@ func (h *Handler) Init(
 
 // Dimensions satisfies browser.Floating.
 func (p *Handler) Dimensions() (int, int) {
-	// if we always draw interactive (commands that do not complete very fast)
-	// then stick to it, otherwise user wanders around the screen creating a bit
-	// of confusion.
-	if p.emulator.Component().IsComplete() && p.drawn == 0 {
+	if p.emulator.Component().IsComplete() {
 		height := int(math.Max(float64(p.emulator.Component().Height()),
 			float64(p.nonInteractiveMinHeight)))
 		width := int(math.Max(float64(p.emulator.Component().MaxWidth()),
