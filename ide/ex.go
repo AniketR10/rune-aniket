@@ -591,10 +591,7 @@ func (e *ex) toggleFullscreen(args ...string) error {
 		e.comp.Resize(e.width, e.height)
 		return nil
 	}
-	content, err := e.invokeWindow().Content()
-	if err != nil {
-		return fmt.Errorf("window get content: %v", err)
-	}
+	content, _ := e.invokeWindow().Content()
 	e.fullscreen = content
 	e.fullscreen.Resize(e.width, e.height)
 	return nil
@@ -816,6 +813,14 @@ func (e *ex) handleEvent(ev term.Event) (
 		} else {
 			_, handled = e.comp.Browser().Handle(ev)
 		}
+		return
+	}
+
+	if inFocus := ev.Type == term.EventFocus; inFocus || ev.Type == term.EventUnfocus {
+		e.log(log.DebugLevel, "focus event: inFocus: %t", inFocus)
+		handler, _ := e.invokeWindow().Content()
+		onFocusChangeHandler(handler, inFocus)
+		handled = true
 		return
 	}
 
@@ -1137,22 +1142,35 @@ func onFocusChange(win handler.Window, isInFocus bool) {
 	if win == (handler.Window{}) {
 		return
 	}
-	if t, ok := win.Content().(*browser.Tab); ok {
+
+	onFocusChangeHandler(win.Content(), isInFocus)
+}
+
+func onFocusChangeHandler(handler tui.Handler, isInFocus bool) {
+	if t, ok := handler.(*browser.Tab); ok {
 		onFocusChangeTab(t, isInFocus)
 		return
 	}
-	// if it's not a tab, it must be an internal browser type
-	internal, ok := win.Content().(interface{ Content() browserapi.Handler })
-	if !ok {
-		return
+
+	// if it's not a tab, it can be either an internal browser type
+	// (through handler.Window, which doesn't unwrap) or directly through browser
+	// which doesn unwrap the internal browser handler.
+	attempts := make([]tui.Handler, 1, 2)
+	attempts[0] = handler
+
+	internal, ok := handler.(interface{ Content() browserapi.Handler })
+	if ok {
+		attempts = append(attempts, internal.Content())
 	}
-	if t, ok := internal.Content().(*pluginAdapter); ok {
-		t.pluginHandler.OnFocusChange(isInFocus)
-		return
-	}
-	if t, ok := internal.Content().(companionTerminalHandler); ok {
-		t.vth.OnFocusChange(isInFocus)
-		return
+	for _, content := range attempts {
+		if t, ok := content.(*pluginAdapter); ok {
+			t.pluginHandler.OnFocusChange(isInFocus)
+			return
+		}
+		if t, ok := content.(companionTerminalHandler); ok {
+			t.vth.OnFocusChange(isInFocus)
+			return
+		}
 	}
 }
 

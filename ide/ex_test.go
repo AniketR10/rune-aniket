@@ -1600,9 +1600,19 @@ func TestTerminalOnFocus(t *testing.T) {
 		require.Len(t, tvte.onFocusChange, 6)
 		assert.True(t, tvte.onFocusChange[5])
 
-		ex.closeTab()
+		_, handled := ex.Handle(term.Event{Type: term.EventUnfocus})
+		require.True(t, handled)
 		require.Len(t, tvte.onFocusChange, 7)
 		assert.False(t, tvte.onFocusChange[6])
+
+		_, handled = ex.Handle(term.Event{Type: term.EventFocus})
+		require.True(t, handled)
+		require.Len(t, tvte.onFocusChange, 8)
+		assert.True(t, tvte.onFocusChange[7])
+
+		ex.closeTab()
+		require.Len(t, tvte.onFocusChange, 9)
+		assert.False(t, tvte.onFocusChange[8])
 	})
 
 	t.Run("companion terminal", func(t *testing.T) {
@@ -1639,10 +1649,20 @@ func TestTerminalOnFocus(t *testing.T) {
 		require.Len(t, tvte.onFocusChange, 4)
 		assert.True(t, tvte.onFocusChange[3])
 
-		// indirectly toggle terminal companion
-		ex.editFiles("a")
+		_, handled := ex.Handle(term.Event{Type: term.EventUnfocus})
+		require.True(t, handled)
 		require.Len(t, tvte.onFocusChange, 5)
 		assert.False(t, tvte.onFocusChange[4])
+
+		_, handled = ex.Handle(term.Event{Type: term.EventFocus})
+		require.True(t, handled)
+		require.Len(t, tvte.onFocusChange, 6)
+		assert.True(t, tvte.onFocusChange[5])
+
+		// indirectly toggle terminal companion
+		ex.editFiles("a")
+		require.Len(t, tvte.onFocusChange, 7)
+		assert.False(t, tvte.onFocusChange[6])
 	})
 
 	t.Run("ephemeral terminal", func(t *testing.T) {
@@ -1679,10 +1699,20 @@ func TestTerminalOnFocus(t *testing.T) {
 		require.Len(t, tvte.onFocusChange, 4)
 		assert.True(t, tvte.onFocusChange[3])
 
-		// ephemeral close should trigger another focus event
-		ex.nextTab()
+		_, handled := ex.Handle(term.Event{Type: term.EventUnfocus})
+		require.True(t, handled)
 		require.Len(t, tvte.onFocusChange, 5)
 		assert.False(t, tvte.onFocusChange[4])
+
+		_, handled = ex.Handle(term.Event{Type: term.EventFocus})
+		require.True(t, handled)
+		require.Len(t, tvte.onFocusChange, 6)
+		assert.True(t, tvte.onFocusChange[5])
+
+		// ephemeral close should trigger another focus event
+		ex.nextTab()
+		require.Len(t, tvte.onFocusChange, 7)
+		assert.False(t, tvte.onFocusChange[6])
 	})
 }
 
