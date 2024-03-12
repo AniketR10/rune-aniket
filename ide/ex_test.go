@@ -1169,7 +1169,7 @@ func TestIntegrationEphemeralTerminal(t *testing.T) {
 			`┌──────────────────┐
 │                  │
 ├┌────────────────┐┤
-││ ⠃ sleep      0s││
+││ ◦   sleep 20 0s││
 ││────────────────││
 ││                ││
 ││                ││
@@ -1193,7 +1193,7 @@ func TestIntegrationEphemeralTerminal(t *testing.T) {
 			`┌──────────────────┐
 │                  │
 ├┌────────────────┐┤
-││ ⠃ sleep      0s││
+││ ◦   sleep 20 0s││
 ││────────────────││
 ││                ││
 ││                ││

@@ -26,6 +26,13 @@ func ProgressAnimationFrames() ([]string, []int) {
 			36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56}
 }
 
+// SpinningAnimationFrames returns the frames and sequence numbers of the default
+// progress animation. It only needs 2 term.Cells in terms of width and 1 cell in height.
+func SpinningAnimationFrames() ([]string, []int) {
+	return []string{"◦", "◯", "◴", "◵", "◶", "◷", "◌", "◎"},
+		[]int{0, 1, 2, 3, 4, 5, 6, 7}
+}
+
 // CursorAnimationFrames returns the frames and sequence numbers of the default
 // cursor animation. It only needs 1 term.Cells in terms of width and 1 cell in height.
 func CursorAnimationFrames() ([]string, []int) {

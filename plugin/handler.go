@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ernestrc/tcell/v3"
 	"unstable.build/go-tui"
 	schemeapi "unstable.build/go-tui/api/scheme"
 	workspaceapi "unstable.build/go-tui/api/workspace"
@@ -93,17 +94,28 @@ func (h *Handler) Init(
 		return fmt.Errorf("new emulator: %v", err)
 	}
 
-	leftStrCfg := component.StringConfig{
+	templateCfg := component.StringConfig{
 		Alignment:  component.SpanAlignmentLeft,
 		Attributes: frameAttr,
 	}
+
+	errStrCfg := templateCfg
+	errStrCfg.Attributes.Fg = tcell.ColorRed
+
+	successStrCfg := templateCfg
+	successStrCfg.Attributes.Fg = tcell.ColorGreen
+
+	centerStrCfg := templateCfg
+	centerStrCfg.Alignment = component.SpanAlignmentHorizontallyCentered
+
 	topBar := new(pluginHandlerBar)
 	topBar.startTime = time.Now()
-	topBar.leftMsgRunning = component.NewStringWithConfig(" "+cmdAndArgs, leftStrCfg)
-	topBar.leftMsgError = component.NewStringWithConfig(" 💥  "+cmdAndArgs, leftStrCfg)
-	topBar.leftMsgSuccess = component.NewStringWithConfig(" 🤘🏼 "+cmdAndArgs, leftStrCfg)
+	topBar.leftMsgRunning = component.NewStringWithConfig(" ", templateCfg)
+	topBar.leftMsgError = component.NewStringWithConfig(" ◎ ", errStrCfg)
+	topBar.leftMsgSuccess = component.NewStringWithConfig(" ◎ ", successStrCfg)
+	topBar.centerMsg = component.NewStringWithConfig(cmdAndArgs, centerStrCfg)
 	topBar.frameAttr = frameAttr
-	frames, seq := component.ProgressAnimationFrames()
+	frames, seq := component.SpinningAnimationFrames()
 	topBar.animation = component.NewAnimation(interrupter, frames, seq, 10)
 	unionMain := vteh
 	union := handler.NewFrameUnion(unionMain)
@@ -236,6 +248,7 @@ type pluginHandlerBar struct {
 	frameAttr term.Attributes
 
 	animation      *component.Animation
+	centerMsg      tui.Component
 	leftMsgError   tui.Component
 	leftMsgSuccess tui.Component
 	leftMsgRunning tui.Component
@@ -249,7 +262,7 @@ func (e *pluginHandlerBar) Draw(w term.Writer) {
 	startTime := e.startTime
 	e.mu.Unlock()
 
-	leftWidgetWidth := int(float64(e.width) / 2)
+	leftWidgetWidth := 3
 	const barHeight = 1
 
 	var left tui.Component
@@ -263,6 +276,7 @@ func (e *pluginHandlerBar) Draw(w term.Writer) {
 			left = e.leftMsgSuccess
 		}
 	} else {
+		leftWidgetWidth++
 		rightMsg = fmt.Sprintf("%s", time.Now().Sub(startTime).Truncate(time.Second))
 		leftMsg := e.leftMsgRunning
 		var union component.FrameUnion
@@ -272,15 +286,16 @@ func (e *pluginHandlerBar) Draw(w term.Writer) {
 		left = &union
 	}
 
-	main := component.NewStringWithConfig(rightMsg, component.StringConfig{
+	right := component.NewStringWithConfig(rightMsg, component.StringConfig{
 		Alignment:  component.SpanAlignmentRight,
 		Attributes: e.frameAttr,
 	})
 	var union component.FrameUnion
-	union.Init(main)
+	union.Init(e.centerMsg)
 	union.Frame = false
 
 	union.UnionLeft(left, leftWidgetWidth)
+	union.UnionRight(right, len(rightMsg))
 
 	union.Resize(e.width, barHeight)
 	union.Draw(w)

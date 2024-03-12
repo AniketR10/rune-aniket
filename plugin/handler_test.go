@@ -33,7 +33,7 @@ func TestPluginHandler(t *testing.T) {
 			cmdAndArgs:  "",
 			maxWidth:    4,
 			drawnComponent: `
- ⠃ sh       0s
+ ◦     sh   0s
 sh-3.2$       
               
               
@@ -45,7 +45,7 @@ sh-3.2$
 			cmdAndArgs:  "sleep 2",
 			maxWidth:    4,
 			drawnComponent: `
- ⠃ slee     0s
+ ◦  sleep 2 0s
               
               
               
@@ -57,7 +57,7 @@ sh-3.2$
 			cmdAndArgs:  "sleep 2",
 			maxWidth:    0,
 			drawnComponent: `
- ⠃ slee     0s
+ ◦  sleep 2 0s
               
               
               
