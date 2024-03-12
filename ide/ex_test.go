@@ -261,7 +261,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 │AAAAAAAAAAAAAAAAAA│
 │AAAAAAAAAAAAAAAAAA│
 └──────────────────┘`},
-		{":bclose>",
+		{":cTab>",
 			`┌──────────────────┐
 │cabin.go          │
 ├──────────────────┤
@@ -405,7 +405,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
 └──────────────────┘`},
-		{":bcloseAll>:e other.go>bcde####",
+		{":closeAllT>:e other.go>bcde####",
 			`┌──────────────────┐
 │other.go          │
 ├──────────────────┤
@@ -821,11 +821,11 @@ func TestExKeySequence(t *testing.T) {
 			text.WithCommandSequenceBinding(handler.Sequence{
 				First: term.KeyComb{Ch: 'g'},
 				Last:  term.KeyComb{Ch: 'l'},
-			}, []string{"tabNext"}),
+			}, []string{"nextTab"}),
 			text.WithCommandSequenceBinding(handler.Sequence{
 				First: term.KeyComb{Ch: 'g'},
 				Last:  term.KeyComb{Ch: 'g'},
-			}, []string{"tabCloseAll"}),
+			}, []string{"closeAllTabs"}),
 			text.WithSequencerTimeout(1 * time.Second),
 			text.WithCommandOverlayConfig(testCommandOverlayConfig()),
 		}
@@ -869,7 +869,7 @@ func TestExTabIntegration(t *testing.T) {
 │AAAAAAAAAAAAAAAAAA│
 │AAAAAAAAAAAAAAAAAA│
 └──────────────────┘`},
-		{":tabCloseAll>",
+		{":closeAllTabs>",
 			`┌──────────────────┐
 │                  │
 ├──────────────────┤
@@ -999,9 +999,9 @@ func newExForTestingTerminal(
 	ex := new(ex)
 	// ensure show manual is never triggered
 	opts = append(opts, text.WithCommandOverlayConfig(testCommandOverlayConfig()))
-	opts = append(opts, text.WithCommandKeyBinding(term.KeyComb{Key: term.KeyCtrlW}, []string{"tabClose"}))
-	opts = append(opts, text.WithCommandKeyBinding(term.KeyComb{Key: term.KeyCtrlL}, []string{"tabNext"}))
-	opts = append(opts, text.WithCommandKeyBinding(term.KeyComb{Key: term.KeyCtrlH}, []string{"tabPrev"}))
+	opts = append(opts, text.WithCommandKeyBinding(term.KeyComb{Key: term.KeyCtrlW}, []string{"closeTab"}))
+	opts = append(opts, text.WithCommandKeyBinding(term.KeyComb{Key: term.KeyCtrlL}, []string{"nextTab"}))
+	opts = append(opts, text.WithCommandKeyBinding(term.KeyComb{Key: term.KeyCtrlH}, []string{"previousTab"}))
 	require.NoError(t, ex.init(ed, workspace, document.NewInMemoryService(),
 		emulatorCfg, publishEvent, opts...))
 	ex.subscribeCommands()
@@ -1018,9 +1018,9 @@ func newExForTestingWithWorkspace(
 	ex := new(ex)
 	// ensure show manual is never triggered
 	opts = append(opts, text.WithCommandOverlayConfig(testCommandOverlayConfig()))
-	opts = append(opts, text.WithCommandKeyBinding(term.KeyComb{Key: term.KeyCtrlW}, []string{"tabClose"}))
-	opts = append(opts, text.WithCommandKeyBinding(term.KeyComb{Key: term.KeyCtrlL}, []string{"tabNext"}))
-	opts = append(opts, text.WithCommandKeyBinding(term.KeyComb{Key: term.KeyCtrlH}, []string{"tabPrev"}))
+	opts = append(opts, text.WithCommandKeyBinding(term.KeyComb{Key: term.KeyCtrlW}, []string{"closeTab"}))
+	opts = append(opts, text.WithCommandKeyBinding(term.KeyComb{Key: term.KeyCtrlL}, []string{"nextTab"}))
+	opts = append(opts, text.WithCommandKeyBinding(term.KeyComb{Key: term.KeyCtrlH}, []string{"previousTab"}))
 	require.NoError(t, ex.init(ed, workspace, document.NewInMemoryService(),
 		emulatorCfg, publishEvent, opts...))
 	ex.subscribeCommands()
@@ -1051,7 +1051,7 @@ func TestNewWindow(t *testing.T) {
 │        ││        │
 │        ││        │
 └────────┘└────────┘`},
-		{":close>:close>aaaaaaa",
+		{":closeW>:closeW>aaaaaaa",
 			`┌──────────────────┐
 │ changed split    │
 │ direction to     │
@@ -1154,7 +1154,7 @@ func TestCommandAliases(t *testing.T) {
 		text.WithCommandKey(testCommandKey),
 		text.WithCommandAliases(map[string][]string{
 			"todo": {"edit hello.go", "edit wi.go"},
-			"bp":   {"tabNext"},
+			"bp":   {"nextTab"},
 		}),
 	}
 	b := newExForTesting(t, texttest.NopEditor(), opts...)
@@ -1177,7 +1177,7 @@ func TestIntegrationEphemeralTerminal(t *testing.T) {
 ││                ││
 └└────────────────┘┘`,
 		},
-		{":tabClose>",
+		{":closeTab>",
 			`┌──────────────────┐
 │                  │
 ├──────────────────┤
@@ -1306,8 +1306,8 @@ func TestIntegrationCompanionTerminal(t *testing.T) {
 	opts := []text.Option{
 		text.WithCommandKey(testCommandKey),
 		text.WithCommandKeyBinding(term.KeyComb{Key: term.KeyCtrlH}, []string{"closeWindow"}),
-		text.WithCommandKeyBinding(term.KeyComb{Key: term.KeyCtrlL}, []string{"tabNext"}),
-		text.WithCommandKeyBinding(term.KeyComb{Key: term.KeyCtrlV}, []string{"tabClose"}),
+		text.WithCommandKeyBinding(term.KeyComb{Key: term.KeyCtrlL}, []string{"nextTab"}),
+		text.WithCommandKeyBinding(term.KeyComb{Key: term.KeyCtrlV}, []string{"closeTab"}),
 		text.WithCommandOverlayConfig(testCommandOverlayConfig()),
 	}
 

@@ -652,7 +652,7 @@ func (e *ex) executePlugin(args ...string) error {
 		Alignment: component.SpanAlignmentCentered,
 	}
 	// there can be multiple floating windows open
-	// so instead of matching windows on tabClose,
+	// so instead of matching windows on closeTab,
 	// we set a handler that closes the window if the handler
 	// is closed.
 	ph := &pluginAdapter{pluginHandler: h}

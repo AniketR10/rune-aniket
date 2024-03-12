@@ -33,10 +33,10 @@ var (
 		"toggleFullscreen":       {},
 		"newTerminal":            {},
 		cmdSwitchToWorkspace:     {}, // workspace_handler
-		"tabClose":               {},
+		"closeTab":               {},
 		"closeWindow":            {},
-		"tabPrev":                {},
-		"tabNext":                {},
+		"previousTab":            {},
+		"nextTab":                {},
 	}
 	exCommands = map[string]commandAll{
 		"renameTab": {
@@ -46,28 +46,28 @@ var (
 			},
 			handler: (*ex).renameTab,
 		},
-		"tabPrev": {
+		"previousTab": {
 			man: textapi.CommandManual{
 				Summary: "Set the content of the current active window to the previous tab in the tabs list. " +
 					"Wraps around the start of the tabs list.",
 			},
 			handler: (*ex).previousTab,
 		},
-		"tabNext": {
+		"nextTab": {
 			man: textapi.CommandManual{
 				Summary: "Set the content of the current active window to the next tab in the tabs list. " +
 					"Wraps around the end of the tabs list.",
 			},
 			handler: (*ex).nextTab,
 		},
-		"tabClose": {
+		"closeTab": {
 			man: textapi.CommandManual{
 				Summary: "Close the current active window's tab. It automatically replaces it " +
 					"with the next available tab in the tabs list.",
 			},
 			handler: (*ex).closeTab,
 		},
-		"tabCloseAll": {
+		"closeAllTabs": {
 			man: textapi.CommandManual{
 				Summary: "Closes all tabs in the tabs list.",
 			},
