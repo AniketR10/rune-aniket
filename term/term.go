@@ -58,6 +58,8 @@ func Init() error {
 	if err != nil {
 		return err
 	}
+	termbox.Screen().EnablePaste()
+	termbox.Screen().EnableFocus()
 	publishEvent.Store(termbox.PublishEvent)
 	return nil
 }

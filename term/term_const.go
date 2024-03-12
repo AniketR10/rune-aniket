@@ -8,13 +8,17 @@ import (
 
 // Event type. See Event.Type field.
 const (
-	EventKey       EventType = EventType(termbox.EventKey)
-	EventResize              = EventType(termbox.EventResize)
-	EventMouse               = EventType(termbox.EventMouse)
-	EventError               = EventType(termbox.EventError)
-	EventInterrupt           = EventType(termbox.EventInterrupt)
-	EventRaw                 = EventType(termbox.EventRaw)
-	EventNone                = EventType(termbox.EventNone)
+	EventKey        EventType = EventType(termbox.EventKey)
+	EventResize               = EventType(termbox.EventResize)
+	EventMouse                = EventType(termbox.EventMouse)
+	EventError                = EventType(termbox.EventError)
+	EventInterrupt            = EventType(termbox.EventInterrupt)
+	EventRaw                  = EventType(termbox.EventRaw)
+	EventNone                 = EventType(termbox.EventNone)
+	EventPasteStart           = EventType(termbox.EventPasteStart)
+	EventPasteEnd             = EventType(termbox.EventPasteEnd)
+	EventFocus                = EventType(termbox.EventFocus)
+	EventUnfocus              = EventType(termbox.EventUnfocus)
 )
 
 const (
