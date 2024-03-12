@@ -70,7 +70,12 @@ func (t *Component) Init(
 		return err
 	}
 
-	t.parserHandler.init(&t.mu, t.pty, t.clipboard)
+	bell := cfg.Bell
+	if bell == nil {
+		bell = func() {}
+	}
+
+	t.parserHandler.init(&t.mu, t.pty, t.clipboard, bell)
 	t.parserHandler.SetTitle(t.pty.Slave.Name())
 	var h parser.Handler = &t.parserHandler
 	if log.IsLevelEnabled(log.TraceLevel) {

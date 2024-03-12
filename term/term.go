@@ -58,8 +58,9 @@ func Init() error {
 	if err != nil {
 		return err
 	}
-	termbox.Screen().EnablePaste()
-	termbox.Screen().EnableFocus()
+	screen := termbox.Screen()
+	screen.EnablePaste()
+	screen.EnableFocus()
 	publishEvent.Store(termbox.PublishEvent)
 	return nil
 }
@@ -120,6 +121,11 @@ func PublishEvent(ev Event) bool {
 	tev.MouseY = ev.MouseY
 	tev.Raw = ev.Raw
 	return publishEvent.Load().(func(termbox.Event) bool)(tev)
+}
+
+// Bell makes an audible noise.
+func Bell() {
+	termbox.Screen().Bell()
 }
 
 // Poll gives access to the underlying tcell.Event channel.

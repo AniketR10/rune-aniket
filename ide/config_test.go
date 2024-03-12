@@ -192,10 +192,14 @@ func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
 	selectAttr := term.Attributes{Attrs: tcell.AttrReverse}
 	reg, err := sysclip.NewRegister()
 	require.NoError(t, err)
+
+	vteConfig := cfg.terminalConfig()
+	assert.NotNil(t, vteConfig.Bell)
+	vteConfig.Bell = nil
 	assert.Equal(t, vte.Config{
 		Clipboard:           reg,
 		SelectionAttributes: selectAttr,
-	}, cfg.terminalConfig())
+	}, vteConfig)
 	assert.Equal(t, command.DefaultConfig().ShowManualAfter, cfg.commandOverlayShowManualAfter())
 	assert.Equal(t, command.DefaultConfig().ManualAttr, cfg.commandOverlayManualAttr())
 
@@ -302,13 +306,17 @@ func TestConfigSetting(t *testing.T) {
 	assert.Equal(t, term.Attributes{Fg: tcell.ColorWhite}, cfg.nonFocusTabAttr())
 	assert.Equal(t, term.Attributes{Fg: tcell.ColorYellow, Bg: tcell.ColorWhite}, cfg.workspaceWallpaperAttr())
 	assert.Equal(t, term.Attributes{Bg: tcell.ColorWhite}, cfg.workspaceWallpaperBackgroundAttr())
+
+	vteConfig := cfg.terminalConfig()
+	assert.NotNil(t, vteConfig.Bell)
+	vteConfig.Bell = nil
 	expectedEmulatorConfig := vte.Config{
 		Shell:               "sh",
 		Attributes:          term.Attributes{Fg: tcell.ColorWhite, Bg: tcell.ColorYellow},
 		Clipboard:           clipboard.NewInMemory(),
 		SelectionAttributes: term.Attributes{Fg: tcell.ColorGreen, Bg: tcell.ColorTeal},
 	}
-	assert.Equal(t, expectedEmulatorConfig, cfg.terminalConfig())
+	assert.Equal(t, expectedEmulatorConfig, vteConfig)
 
 	expectedPrompt := browser.PromptConfig{
 		TextAttr:      term.Attributes{Fg: tcell.ColorTeal},

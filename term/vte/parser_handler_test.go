@@ -572,7 +572,6 @@ func TestIntegrationParserHandler(t *testing.T) {
 				p.Input('g')
 				assertEqualBuf(t, p, "c    \nd    \ne    \nf    \ng    ")
 
-
 				// simulate user scrolling
 				assert.True(t, p.scrollDown(1, true))
 				assertEqualBuf(t, p, "b    \nc    \nd    \ne    \nf    ")
@@ -678,7 +677,7 @@ func TestIntegrationParserHandler(t *testing.T) {
 		t.Run(test.desc, func(t *testing.T) {
 			mockPtyFile := workspacetest.File{}
 			pty := workspaceapi.Pty{Master: &mockPtyFile, Slave: &mockPtyFile}
-			ph := newParserHandler(new(sync.Mutex), pty, clipboard.NewInMemory())
+			ph := newParserHandler(new(sync.Mutex), pty, clipboard.NewInMemory(), func() {})
 
 			if test.altBuffer {
 				ph.SetPrivateMode(parser.PrivateModeSwapScreenAndSetRestoreCursor)

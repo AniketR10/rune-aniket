@@ -30,6 +30,7 @@ const (
 type parserHandler struct {
 	pty       workspaceapi.Pty
 	clipboard clipboard.Register
+	bell      func()
 	sync      struct {
 		mu      sync.Locker
 		buf     screenBuffer
@@ -92,15 +93,17 @@ type screenBuffer interface {
 func newParserHandler(
 	mu sync.Locker, pty workspaceapi.Pty,
 	clipboard clipboard.Register,
+	bell func(),
 ) *parserHandler {
 	ret := new(parserHandler)
-	ret.init(mu, pty, clipboard)
+	ret.init(mu, pty, clipboard, bell)
 	return ret
 }
 
 func (t *parserHandler) init(
 	mu sync.Locker, pty workspaceapi.Pty,
 	clipboard clipboard.Register,
+	bell func(),
 ) {
 	t.sync.altBuf = screen.NewAltBuffer()
 	t.sync.primBuf = screen.NewPrimaryBuffer()
@@ -109,6 +112,7 @@ func (t *parserHandler) init(
 	t.pty = pty
 	t.clipboard = clipboard
 	t.maxScrollLength = defaultMaxScrollLength
+	t.bell = bell
 
 	t.modeAlternateScroll = true
 	t.modeUrgencyHints = true
@@ -410,7 +414,7 @@ func (t *parserHandler) Linefeed() {
 
 // Ring the bell.
 func (t *parserHandler) Bell() {
-	// TODO do something with the draw output, maybe an animation?
+	t.bell()
 }
 
 // Substitute char under the cursor.
@@ -625,9 +629,10 @@ func (t *parserHandler) ResetState() {
 
 	pty := t.pty
 	clipboard := t.clipboard
+	bell := t.bell
 	mu := t.sync.mu
 	*t = parserHandler{}
-	t.init(mu, pty, clipboard)
+	t.init(mu, pty, clipboard, bell)
 }
 
 // Reverse Index.

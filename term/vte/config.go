@@ -10,6 +10,7 @@ import (
 func DefaultConfig() Config {
 	return Config{
 		Clipboard: clipboard.NewInMemory(),
+		Bell:      func() {},
 	}
 }
 
@@ -19,6 +20,7 @@ type Config struct {
 	// on the $SHELL environment variable is used.
 	Shell     string
 	Clipboard clipboard.Register
+	Bell      func()
 	Watcher   workspaceapi.Watcher
 
 	Attributes          term.Attributes

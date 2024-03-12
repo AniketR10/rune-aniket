@@ -1165,6 +1165,7 @@ func (c ideConfig) terminalConfig() vte.Config {
 	ret.SelectionAttributes = c.terminalSelectionAttr()
 	ret.Shell = c.terminalShell()
 	ret.Clipboard = c.clipboard()
+	ret.Bell = term.Bell
 	return ret
 }
 
