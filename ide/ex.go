@@ -340,7 +340,24 @@ func (e *ex) moveFocusCursor(line int) error {
 	return e.comp.SetCursor(h, term.Coordinates{Y: line})
 }
 
-func (e *ex) previousBuffer(args ...string) error {
+func (e *ex) renameTab(args ...string) error {
+	if len(args) != 1 {
+		return errors.New("expected new tab name as argument")
+	}
+
+	win := e.invokeWindow()
+	if win == e.companionTerminalWin {
+		return errors.New("cannot rename companion terminal")
+	}
+	content, _ := win.Content()
+	t, ok := content.(*browser.Tab)
+	if !ok {
+		return errors.New("cannot rename non tab")
+	}
+	return e.Browser().SetTabName(t.URI(), args[0])
+}
+
+func (e *ex) previousTab(args ...string) error {
 	b := e.comp.Browser()
 	if e.invokeWindow() == e.companionTerminalWin {
 		return e.toggleCompanionTerminal()
@@ -349,7 +366,7 @@ func (e *ex) previousBuffer(args ...string) error {
 	return nil
 }
 
-func (e *ex) nextBuffer(args ...string) error {
+func (e *ex) nextTab(args ...string) error {
 	b := e.comp.Browser()
 	if e.invokeWindow() == e.companionTerminalWin {
 		return e.toggleCompanionTerminal()
@@ -358,7 +375,7 @@ func (e *ex) nextBuffer(args ...string) error {
 	return nil
 }
 
-func (e *ex) closeBuffer(args ...string) error {
+func (e *ex) closeTab(args ...string) error {
 	b := e.comp.Browser()
 	win := e.invokeWindow()
 	if win == e.companionTerminalWin {
@@ -369,7 +386,7 @@ func (e *ex) closeBuffer(args ...string) error {
 	return nil
 }
 
-func (e *ex) closeAllBuffers(args ...string) error {
+func (e *ex) closeAllTabs(args ...string) error {
 	b := e.comp.Browser()
 	// on focus dispatch to vte.Handler via Close
 	b.RemoveAllTabs()

@@ -1534,6 +1534,30 @@ reloadFile
 	testutil.TestHandlerIsolated(t, fn, 20, 10, cases)
 }
 
+func TestRenameTab(t *testing.T) {
+	cases := []testutil.HandlerSequenceTestCase{
+		{":e hello.go>:renameTab 8berSucks>",
+			`┌──────────────────┐
+│8berSucks         │
+├──────────────────┤
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+└──────────────────┘`},
+	}
+
+	opts := []text.Option{
+		text.WithCommandKey(testCommandKey),
+	}
+	b := newExForTesting(t, texttest.NopEditor(), opts...)
+	defer b.Close()
+
+	testutil.TestHandlerSequence(t, b, 20, 10, cases)
+}
+
 func TestTerminalOnFocus(t *testing.T) {
 	t.Run("new terminal tab", func(t *testing.T) {
 		uri, err := workspaceapi.ParseURI("memory:///")
@@ -1562,7 +1586,7 @@ func TestTerminalOnFocus(t *testing.T) {
 		assert.False(t, tvte.onFocusChange[2])
 
 		// switch back to terminal tab, same window
-		ex.previousBuffer()
+		ex.previousTab()
 		require.Len(t, tvte.onFocusChange, 4)
 		assert.True(t, tvte.onFocusChange[3])
 
@@ -1576,7 +1600,7 @@ func TestTerminalOnFocus(t *testing.T) {
 		require.Len(t, tvte.onFocusChange, 6)
 		assert.True(t, tvte.onFocusChange[5])
 
-		ex.closeBuffer()
+		ex.closeTab()
 		require.Len(t, tvte.onFocusChange, 7)
 		assert.False(t, tvte.onFocusChange[6])
 	})
@@ -1656,7 +1680,7 @@ func TestTerminalOnFocus(t *testing.T) {
 		assert.True(t, tvte.onFocusChange[3])
 
 		// ephemeral close should trigger another focus event
-		ex.nextBuffer()
+		ex.nextTab()
 		require.Len(t, tvte.onFocusChange, 5)
 		assert.False(t, tvte.onFocusChange[4])
 	})

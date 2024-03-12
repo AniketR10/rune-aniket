@@ -39,32 +39,39 @@ var (
 		"tabNext":                {},
 	}
 	exCommands = map[string]commandAll{
+		"renameTab": {
+			man: textapi.CommandManual{
+				Summary:  "Rename the current tab in focus.",
+				Synopsis: "name",
+			},
+			handler: (*ex).renameTab,
+		},
 		"tabPrev": {
 			man: textapi.CommandManual{
 				Summary: "Set the content of the current active window to the previous tab in the tabs list. " +
 					"Wraps around the start of the tabs list.",
 			},
-			handler: (*ex).previousBuffer,
+			handler: (*ex).previousTab,
 		},
 		"tabNext": {
 			man: textapi.CommandManual{
 				Summary: "Set the content of the current active window to the next tab in the tabs list. " +
 					"Wraps around the end of the tabs list.",
 			},
-			handler: (*ex).nextBuffer,
+			handler: (*ex).nextTab,
 		},
 		"tabClose": {
 			man: textapi.CommandManual{
 				Summary: "Close the current active window's tab. It automatically replaces it " +
 					"with the next available tab in the tabs list.",
 			},
-			handler: (*ex).closeBuffer,
+			handler: (*ex).closeTab,
 		},
 		"tabCloseAll": {
 			man: textapi.CommandManual{
 				Summary: "Closes all tabs in the tabs list.",
 			},
-			handler: (*ex).closeAllBuffers,
+			handler: (*ex).closeAllTabs,
 		},
 		"closeWindow": {
 			man: textapi.CommandManual{
