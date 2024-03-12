@@ -43,20 +43,20 @@ type Handler struct {
 // New allocates storage for a new plugin.Handler and initializes it.
 func New(
 	publisher browser.EventPublisher, notifications browser.Notifications,
-	e schemeapi.Executor, t schemeapi.Terminal,
+	e schemeapi.Executor, t schemeapi.Terminal, tm browser.TabManager,
 	cfg vte.Config, cmdAndArgs string, maxWidth int,
 	frame bool, frameCharSet component.FrameCharSet,
 	frameAttr term.Attributes,
 ) (*Handler, error) {
 	ret := new(Handler)
-	return ret, ret.Init(publisher, notifications, e, t, cfg, cmdAndArgs, maxWidth, frame,
+	return ret, ret.Init(publisher, notifications, e, t, tm, cfg, cmdAndArgs, maxWidth, frame,
 		frameCharSet, frameAttr)
 }
 
 // Init initializes this Handler.
 func (h *Handler) Init(
 	publisher browser.EventPublisher, notifications browser.Notifications,
-	e schemeapi.Executor, t schemeapi.Terminal,
+	e schemeapi.Executor, t schemeapi.Terminal, tm browser.TabManager,
 	cfg vte.Config, cmdAndArgs string, maxWidth int,
 	frame bool, frameCharSet component.FrameCharSet,
 	frameAttr term.Attributes,
@@ -88,7 +88,7 @@ func (h *Handler) Init(
 	cfg.WidthHint = interactiveWidth
 	cfg.HeightHint = interactiveHeight
 	cfg.Watcher = workspaceapi.ChanWatcher(ch)
-	vteh, err := vte.NewHandler(publisher, notifications, t, e, cfg, initialCmd)
+	vteh, err := vte.NewHandler(publisher, notifications, t, e, tm, cfg, initialCmd)
 	if err != nil {
 		cancel()
 		return fmt.Errorf("new emulator: %v", err)

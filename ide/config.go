@@ -1142,6 +1142,11 @@ func (c ideConfig) terminalSelectionAttr() term.Attributes {
 		term.Attributes{Attrs: tcell.AttrReverse})
 }
 
+func (c ideConfig) terminalNeedsAttentionAttr() term.Attributes {
+	return c.getConfigAttr("terminal", "needs_attention_attr",
+		term.Attributes{Attrs: tcell.AttrBlink})
+}
+
 func (c ideConfig) terminalShell() (ret string) {
 	if c.cfg == nil {
 		return
@@ -1163,6 +1168,7 @@ func (c ideConfig) terminalConfig() vte.Config {
 	ret := vte.DefaultConfig()
 	ret.Attributes = c.terminalDefaultAttr()
 	ret.SelectionAttributes = c.terminalSelectionAttr()
+	ret.NeedsAttentionAttributes = c.terminalNeedsAttentionAttr()
 	ret.Shell = c.terminalShell()
 	ret.Clipboard = c.clipboard()
 	ret.Bell = term.Bell

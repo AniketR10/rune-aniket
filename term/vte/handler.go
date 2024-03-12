@@ -45,10 +45,10 @@ type Handler struct {
 func NewHandler(
 	publisher browser.EventPublisher, n browser.Notifications,
 	terminal schemeapi.Terminal, executor schemeapi.Executor,
-	config Config, initialCmd string,
+	tm browser.TabManager, config Config, initialCmd string,
 ) (*Handler, error) {
 	ret := new(Handler)
-	err := ret.Init(publisher, n, terminal, executor, config, initialCmd)
+	err := ret.Init(publisher, n, terminal, executor, tm, config, initialCmd)
 	if err != nil {
 		return nil, err
 	}
@@ -59,7 +59,7 @@ func NewHandler(
 func (e *Handler) Init(
 	publisher browser.EventPublisher, n browser.Notifications,
 	termapi schemeapi.Terminal, executor schemeapi.Executor,
-	config Config, initialCmd string,
+	tm browser.TabManager, config Config, initialCmd string,
 ) error {
 	e.publisher = publisher
 	e.notifications = n
@@ -69,7 +69,7 @@ func (e *Handler) Init(
 		<-e.handleTimer.C
 	}
 
-	comp, err := NewComponent(termapi, executor, config)
+	comp, err := NewComponent(termapi, executor, tm, config)
 	if err != nil {
 		return err
 	}
@@ -196,21 +196,9 @@ func (e *Handler) Handle(ev term.Event) (exit, handled bool) {
 
 // OnFocusChange allows clients to report whether this vte.Handler is on focus or not.
 func (e *Handler) OnFocusChange(inFocus bool) {
-	reportFocusMode := e.comp.IsReportFocusMode()
-	e.log(log.TraceLevel, "OnFocusChange(inFocus=%t, reportFocusMode=%t)",
-		inFocus, reportFocusMode)
-	if !reportFocusMode {
-		return
-	}
-	var cmd string
-	if inFocus {
-		cmd = "I"
-	} else {
-		cmd = "O"
-	}
-	err := e.comp.WriteToPty([]byte(fmt.Sprintf("\x1b[%s", cmd)))
+	err := e.comp.OnFocusChange(inFocus)
 	if err != nil {
-		e.notifications.Notify(notifications.LevelError, "failed to report focus change to pty: %v", err)
+		e.notifications.Notify(notifications.LevelError, "failed to report focus changed: %v", err)
 	}
 }
 

@@ -7,8 +7,10 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/ernestrc/tcell/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	browserapi "unstable.build/go-tui/api/browser"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/term"
@@ -19,15 +21,18 @@ import (
 )
 
 func TestIntegrationParserHandler(t *testing.T) {
+	testURI, err := workspaceapi.ParseURI("memory:///radical")
+	require.NoError(t, err)
+
 	suite := []struct {
 		desc      string
 		altBuffer bool
-		sut       func(*testing.T, *parserHandler, *workspacetest.File)
+		sut       func(*testing.T, *parserHandler, *mockTabManager, *workspacetest.File)
 	}{
 		{
 			desc:      "primary input after carriage return and line feed",
 			altBuffer: false,
-			sut: func(t *testing.T, p *parserHandler, pty *workspacetest.File) {
+			sut: func(t *testing.T, p *parserHandler, tm *mockTabManager, pty *workspacetest.File) {
 				p.Resize(5, 5)
 				p.Input('a')
 				p.CarriageReturn()
@@ -39,7 +44,7 @@ func TestIntegrationParserHandler(t *testing.T) {
 		{
 			desc:      "alt input after carriage return and line feed",
 			altBuffer: true,
-			sut: func(t *testing.T, p *parserHandler, pty *workspacetest.File) {
+			sut: func(t *testing.T, p *parserHandler, tm *mockTabManager, pty *workspacetest.File) {
 				p.Resize(5, 5)
 				p.Input('a')
 				p.CarriageReturn()
@@ -51,7 +56,7 @@ func TestIntegrationParserHandler(t *testing.T) {
 		{
 			desc:      "primary input after clear right of line and goto",
 			altBuffer: false,
-			sut: func(t *testing.T, p *parserHandler, pty *workspacetest.File) {
+			sut: func(t *testing.T, p *parserHandler, tm *mockTabManager, pty *workspacetest.File) {
 				p.Resize(5, 5)
 				p.Input('a')
 				p.Goto(0, 1)
@@ -64,7 +69,7 @@ func TestIntegrationParserHandler(t *testing.T) {
 		{
 			desc:      "alt input after clear right of line and goto",
 			altBuffer: true,
-			sut: func(t *testing.T, p *parserHandler, pty *workspacetest.File) {
+			sut: func(t *testing.T, p *parserHandler, tm *mockTabManager, pty *workspacetest.File) {
 				p.Resize(5, 5)
 				p.Input('a')
 				p.Goto(0, 1)
@@ -77,7 +82,7 @@ func TestIntegrationParserHandler(t *testing.T) {
 		{
 			desc:      "scrolling region change + linefeed scrolls up on margin",
 			altBuffer: true,
-			sut: func(t *testing.T, p *parserHandler, pty *workspacetest.File) {
+			sut: func(t *testing.T, p *parserHandler, tm *mockTabManager, pty *workspacetest.File) {
 				p.Resize(5, 5)
 				resetBuffer(t, p, "a    \nb    \n     \n     \n     ")
 
@@ -92,7 +97,7 @@ func TestIntegrationParserHandler(t *testing.T) {
 		{
 			desc:      "vi delete a line 'dd'",
 			altBuffer: true,
-			sut: func(t *testing.T, p *parserHandler, pty *workspacetest.File) {
+			sut: func(t *testing.T, p *parserHandler, tm *mockTabManager, pty *workspacetest.File) {
 				p.Resize(5, 5)
 				resetBuffer(t, p, "a    \nb    \n     \n     \n     ")
 
@@ -116,7 +121,7 @@ func TestIntegrationParserHandler(t *testing.T) {
 		{
 			desc:      "vi visual delete multiple lines'",
 			altBuffer: true,
-			sut: func(t *testing.T, p *parserHandler, pty *workspacetest.File) {
+			sut: func(t *testing.T, p *parserHandler, tm *mockTabManager, pty *workspacetest.File) {
 				p.Resize(5, 6)
 				resetBuffer(t, p, "a    \nb    \nc    \nd    \ne    \n     ")
 
@@ -140,7 +145,7 @@ func TestIntegrationParserHandler(t *testing.T) {
 		{
 			desc:      "primary scroll down non-capped",
 			altBuffer: false,
-			sut: func(t *testing.T, p *parserHandler, pty *workspacetest.File) {
+			sut: func(t *testing.T, p *parserHandler, tm *mockTabManager, pty *workspacetest.File) {
 				p.Resize(5, 5)
 				resetBuffer(t, p, "a    \nb    \nc    \nd    \ne    \nf    ")
 				assertEqualBuf(t, p, "b    \nc    \nd    \ne    \nf    ")
@@ -151,7 +156,7 @@ func TestIntegrationParserHandler(t *testing.T) {
 		{
 			desc:      "primary scroll up non-capped",
 			altBuffer: false,
-			sut: func(t *testing.T, p *parserHandler, pty *workspacetest.File) {
+			sut: func(t *testing.T, p *parserHandler, tm *mockTabManager, pty *workspacetest.File) {
 				p.Resize(5, 5)
 				resetBuffer(t, p, "a    \nb    \nc    \nd    \ne    \nf    ")
 				assertEqualBuf(t, p, "b    \nc    \nd    \ne    \nf    ")
@@ -168,7 +173,7 @@ func TestIntegrationParserHandler(t *testing.T) {
 		{
 			desc:      "primary scroll down 0 rows does nothing",
 			altBuffer: false,
-			sut: func(t *testing.T, p *parserHandler, pty *workspacetest.File) {
+			sut: func(t *testing.T, p *parserHandler, tm *mockTabManager, pty *workspacetest.File) {
 				p.Resize(5, 5)
 				resetBuffer(t, p, "a    \nb    \nc    \nd    \ne    ")
 				p.ScrollDown(0)
@@ -180,7 +185,7 @@ func TestIntegrationParserHandler(t *testing.T) {
 		{
 			desc:      "alternate scroll down 0 rows does nothing",
 			altBuffer: true,
-			sut: func(t *testing.T, p *parserHandler, pty *workspacetest.File) {
+			sut: func(t *testing.T, p *parserHandler, tm *mockTabManager, pty *workspacetest.File) {
 				p.Resize(5, 5)
 				resetBuffer(t, p, "a    \nb    \nc    \nd    \ne    ")
 				p.ScrollDown(0)
@@ -190,7 +195,7 @@ func TestIntegrationParserHandler(t *testing.T) {
 		{
 			desc:      "primary scroll up 0 rows does nothing",
 			altBuffer: false,
-			sut: func(t *testing.T, p *parserHandler, pty *workspacetest.File) {
+			sut: func(t *testing.T, p *parserHandler, tm *mockTabManager, pty *workspacetest.File) {
 				p.Resize(5, 5)
 				resetBuffer(t, p, "a    \nb    \nc    \nd    \ne    ")
 				p.ScrollUp(0)
@@ -202,7 +207,7 @@ func TestIntegrationParserHandler(t *testing.T) {
 		{
 			desc:      "alternate scroll up 0 rows does nothing",
 			altBuffer: true,
-			sut: func(t *testing.T, p *parserHandler, pty *workspacetest.File) {
+			sut: func(t *testing.T, p *parserHandler, tm *mockTabManager, pty *workspacetest.File) {
 				p.Resize(5, 5)
 				resetBuffer(t, p, "a    \nb    \nc    \nd    \ne    ")
 				p.ScrollUp(0)
@@ -212,7 +217,7 @@ func TestIntegrationParserHandler(t *testing.T) {
 		{
 			desc:      "primary scroll up/down with cap",
 			altBuffer: false,
-			sut: func(t *testing.T, p *parserHandler, pty *workspacetest.File) {
+			sut: func(t *testing.T, p *parserHandler, tm *mockTabManager, pty *workspacetest.File) {
 				p.Resize(5, 5)
 				resetBuffer(t, p, "a    \nb    \nc    \nd    \ne    \nf    \ng    ")
 				assertEqualBuf(t, p, "c    \nd    \ne    \nf    \ng    ")
@@ -242,7 +247,7 @@ func TestIntegrationParserHandler(t *testing.T) {
 		{
 			desc:      "shell scroll back, then write next command",
 			altBuffer: false,
-			sut: func(t *testing.T, p *parserHandler, pty *workspacetest.File) {
+			sut: func(t *testing.T, p *parserHandler, tm *mockTabManager, pty *workspacetest.File) {
 				p.Resize(5, 5)
 				resetBuffer(t, p, "a    \nb    \nc    \nd    \ne    \n$ .  ")
 				assertEqualBuf(t, p, "b    \nc    \nd    \ne    \n$ .  ")
@@ -266,7 +271,7 @@ func TestIntegrationParserHandler(t *testing.T) {
 		{
 			desc:      "shell resize + move up does not oob",
 			altBuffer: false,
-			sut: func(t *testing.T, p *parserHandler, pty *workspacetest.File) {
+			sut: func(t *testing.T, p *parserHandler, tm *mockTabManager, pty *workspacetest.File) {
 				p.Resize(5, 5)
 				resetBuffer(t, p, "a    \nb    \nc    \nd    \ne    \n$ .  ")
 				assertEqualBuf(t, p, "b    \nc    \nd    \ne    \n$ .  ")
@@ -281,7 +286,7 @@ func TestIntegrationParserHandler(t *testing.T) {
 		{
 			desc:      "shell cltr-l exactly all screen",
 			altBuffer: false,
-			sut: func(t *testing.T, p *parserHandler, pty *workspacetest.File) {
+			sut: func(t *testing.T, p *parserHandler, tm *mockTabManager, pty *workspacetest.File) {
 				p.Resize(5, 5)
 				resetBuffer(t, p, "a    \nb    \nc    \nd    \ne    \n$ .  ")
 				p.Goto(0, 0)
@@ -295,7 +300,7 @@ func TestIntegrationParserHandler(t *testing.T) {
 		{
 			desc:      "shell cltr-l with scrollback history",
 			altBuffer: false,
-			sut: func(t *testing.T, p *parserHandler, pty *workspacetest.File) {
+			sut: func(t *testing.T, p *parserHandler, tm *mockTabManager, pty *workspacetest.File) {
 				p.Resize(5, 5)
 				resetBuffer(t, p, "a    \nb    \nc    \nd    \ne    \n$ .  \nout  \n$    ")
 				assertEqualBuf(t, p, "d    \ne    \n$ .  \nout  \n$    ")
@@ -326,7 +331,7 @@ func TestIntegrationParserHandler(t *testing.T) {
 		{
 			desc:      "shell input wrap around and scroll down",
 			altBuffer: false,
-			sut: func(t *testing.T, p *parserHandler, pty *workspacetest.File) {
+			sut: func(t *testing.T, p *parserHandler, tm *mockTabManager, pty *workspacetest.File) {
 				p.Resize(5, 5)
 				resetBuffer(t, p, "a    \nb    \nc    \nd    \ne    \n$ .  \nout  \n$    ")
 				assertEqualBuf(t, p, "d    \ne    \n$ .  \nout  \n$    ")
@@ -339,7 +344,7 @@ func TestIntegrationParserHandler(t *testing.T) {
 		{
 			desc:      "primary resize maintains cursor position at content",
 			altBuffer: false,
-			sut: func(t *testing.T, p *parserHandler, pty *workspacetest.File) {
+			sut: func(t *testing.T, p *parserHandler, tm *mockTabManager, pty *workspacetest.File) {
 				p.Resize(5, 5)
 				resetBuffer(t, p, "a    \nb    \nc    \nd    \ne    \n$ .  \nout  \n$    ")
 				assert.Equal(t, term.Coordinates{Y: 7, X: 4}, p.sync.buf.CursorAtScroll())
@@ -365,7 +370,7 @@ func TestIntegrationParserHandler(t *testing.T) {
 		{
 			desc:      "alternate resize maintains cursor position at content",
 			altBuffer: true,
-			sut: func(t *testing.T, p *parserHandler, pty *workspacetest.File) {
+			sut: func(t *testing.T, p *parserHandler, tm *mockTabManager, pty *workspacetest.File) {
 				p.Resize(5, 5)
 				resetBuffer(t, p, "a    \nb    \nc    \nd    \ne    ")
 				assert.Equal(t, term.Coordinates{Y: 4, X: 4}, p.sync.buf.CursorAtScroll())
@@ -391,21 +396,21 @@ func TestIntegrationParserHandler(t *testing.T) {
 		{
 			desc:      "primary resize negative does not panic",
 			altBuffer: false,
-			sut: func(t *testing.T, p *parserHandler, pty *workspacetest.File) {
+			sut: func(t *testing.T, p *parserHandler, tm *mockTabManager, pty *workspacetest.File) {
 				p.Resize(-1, -1)
 			},
 		},
 		{
 			desc:      "alternate resize negative does not panic",
 			altBuffer: true,
-			sut: func(t *testing.T, p *parserHandler, pty *workspacetest.File) {
+			sut: func(t *testing.T, p *parserHandler, tm *mockTabManager, pty *workspacetest.File) {
 				p.Resize(-1, -1)
 			},
 		},
 		{
 			desc:      "primary clear mode above",
 			altBuffer: false,
-			sut: func(t *testing.T, p *parserHandler, pty *workspacetest.File) {
+			sut: func(t *testing.T, p *parserHandler, tm *mockTabManager, pty *workspacetest.File) {
 				p.Resize(5, 5)
 				resetBuffer(t, p, "a    \nb    \nc    \nd    \ne    \n$ .  \nout  \n$    ")
 				assertEqualBuf(t, p, "d    \ne    \n$ .  \nout  \n$    ")
@@ -417,7 +422,7 @@ func TestIntegrationParserHandler(t *testing.T) {
 		{
 			desc:      "primary clear mode saved",
 			altBuffer: false,
-			sut: func(t *testing.T, p *parserHandler, pty *workspacetest.File) {
+			sut: func(t *testing.T, p *parserHandler, tm *mockTabManager, pty *workspacetest.File) {
 				p.Resize(5, 5)
 				resetBuffer(t, p, "a    \nb    \nc    \nd    \ne    \n$ .  \nout  \n$    ")
 				assertEqualBuf(t, p, "d    \ne    \n$ .  \nout  \n$    ")
@@ -435,7 +440,7 @@ func TestIntegrationParserHandler(t *testing.T) {
 		{
 			desc:      "primary clear mode saved with no history does nothing",
 			altBuffer: false,
-			sut: func(t *testing.T, p *parserHandler, pty *workspacetest.File) {
+			sut: func(t *testing.T, p *parserHandler, tm *mockTabManager, pty *workspacetest.File) {
 				p.Resize(5, 5)
 				resetBuffer(t, p, "a    \nb    \nc    \nd    \ne    ")
 
@@ -446,7 +451,7 @@ func TestIntegrationParserHandler(t *testing.T) {
 		{
 			desc:      "secondary clear mode saved, does nothing, because there's no history",
 			altBuffer: true,
-			sut: func(t *testing.T, p *parserHandler, pty *workspacetest.File) {
+			sut: func(t *testing.T, p *parserHandler, tm *mockTabManager, pty *workspacetest.File) {
 				p.Resize(5, 5)
 				resetBuffer(t, p, "a    \nb    \nc    \nd    \ne    ")
 				assertEqualBuf(t, p, "a    \nb    \nc    \nd    \ne    ")
@@ -467,7 +472,7 @@ func TestIntegrationParserHandler(t *testing.T) {
 		{
 			desc:      "primary clear mode saved with scroll offset oob",
 			altBuffer: false,
-			sut: func(t *testing.T, p *parserHandler, pty *workspacetest.File) {
+			sut: func(t *testing.T, p *parserHandler, tm *mockTabManager, pty *workspacetest.File) {
 				p.Resize(5, 5)
 				resetBuffer(t, p, "a    \nb    \nc    \nd    \ne    \n$ .  \nout  \n$    ")
 				assertEqualBuf(t, p, "d    \ne    \n$ .  \nout  \n$    ")
@@ -486,7 +491,7 @@ func TestIntegrationParserHandler(t *testing.T) {
 		{
 			desc:      "unknown clipboard does nothing",
 			altBuffer: false,
-			sut: func(t *testing.T, p *parserHandler, pty *workspacetest.File) {
+			sut: func(t *testing.T, p *parserHandler, tm *mockTabManager, pty *workspacetest.File) {
 				p.Resize(5, 5)
 
 				data := base64Data(t, "1234\n5678@hello")
@@ -499,7 +504,7 @@ func TestIntegrationParserHandler(t *testing.T) {
 		{
 			desc:      "clipboard load/store",
 			altBuffer: false,
-			sut: func(t *testing.T, p *parserHandler, pty *workspacetest.File) {
+			sut: func(t *testing.T, p *parserHandler, tm *mockTabManager, pty *workspacetest.File) {
 				p.Resize(5, 5)
 
 				data := base64Data(t, "1234\n5678@hello")
@@ -516,7 +521,7 @@ func TestIntegrationParserHandler(t *testing.T) {
 		{
 			desc:      "sh ls usage of put tab",
 			altBuffer: false,
-			sut: func(t *testing.T, p *parserHandler, pty *workspacetest.File) {
+			sut: func(t *testing.T, p *parserHandler, tm *mockTabManager, pty *workspacetest.File) {
 				p.Resize(48, 2)
 				resetBuffer(t, p, "sh-3.2$ ls                                      ")
 
@@ -544,7 +549,7 @@ func TestIntegrationParserHandler(t *testing.T) {
 		{
 			desc:      "Input + Linefeed + CarriageReturn hit max scrollback history",
 			altBuffer: false,
-			sut: func(t *testing.T, p *parserHandler, pty *workspacetest.File) {
+			sut: func(t *testing.T, p *parserHandler, tm *mockTabManager, pty *workspacetest.File) {
 				p.Resize(5, 5)
 				p.maxScrollLength = 6
 				p.Input('a')
@@ -591,7 +596,7 @@ func TestIntegrationParserHandler(t *testing.T) {
 		{
 			desc:      "reverse index usage of git log on primary buffer",
 			altBuffer: false,
-			sut: func(t *testing.T, p *parserHandler, pty *workspacetest.File) {
+			sut: func(t *testing.T, p *parserHandler, tm *mockTabManager, pty *workspacetest.File) {
 				p.Resize(5, 5)
 				resetBuffer(t, p, "a    \nb    \nc    \nd    \n:    ")
 				p.CarriageReturn()
@@ -612,7 +617,7 @@ func TestIntegrationParserHandler(t *testing.T) {
 		{
 			desc:      "reverse index usage of git log on primary buffer with history",
 			altBuffer: false,
-			sut: func(t *testing.T, p *parserHandler, pty *workspacetest.File) {
+			sut: func(t *testing.T, p *parserHandler, tm *mockTabManager, pty *workspacetest.File) {
 				p.Resize(5, 5)
 				resetBuffer(t, p, "com  \nlog  \na    \nb    \nc    \nd    \n:    ")
 				assertEqualBuf(t, p, "a    \nb    \nc    \nd    \n:    ")
@@ -634,7 +639,7 @@ func TestIntegrationParserHandler(t *testing.T) {
 		{
 			desc:      "zsh delete a character in vi mode",
 			altBuffer: false,
-			sut: func(t *testing.T, p *parserHandler, pty *workspacetest.File) {
+			sut: func(t *testing.T, p *parserHandler, tm *mockTabManager, pty *workspacetest.File) {
 				p.Resize(5, 5)
 				resetBuffer(t, p, "log  \na    \nb    \nc    \nd    \n$ xaa")
 				assertEqualBuf(t, p, "a    \nb    \nc    \nd    \n$ xaa")
@@ -652,7 +657,7 @@ func TestIntegrationParserHandler(t *testing.T) {
 		{
 			desc:      "zsh delete a character in vi mode with wrap around line",
 			altBuffer: false,
-			sut: func(t *testing.T, p *parserHandler, pty *workspacetest.File) {
+			sut: func(t *testing.T, p *parserHandler, tm *mockTabManager, pty *workspacetest.File) {
 				p.Resize(5, 5)
 				resetBuffer(t, p, "log  \na    \nb    \nc    \nd    \n$ xaa")
 				assertEqualBuf(t, p, "a    \nb    \nc    \nd    \n$ xaa")
@@ -671,13 +676,95 @@ func TestIntegrationParserHandler(t *testing.T) {
 				assertEqualBuf(t, p, "a    \nb    \nc    \nd    \n$ Xa ")
 			},
 		},
+		{
+			desc:      "bell is called if idle (first created)",
+			altBuffer: false,
+			sut: func(t *testing.T, p *parserHandler, tm *mockTabManager, pty *workspacetest.File) {
+				assert.False(t, tm.belled)
+				p.Bell()
+				assert.True(t, tm.belled)
+				assert.Zero(t, tm.setName)
+				assert.Zero(t, tm.toUri)
+				assert.Zero(t, tm.setAttr)
+			},
+		},
+		{
+			desc:      "bell is called if in focus",
+			altBuffer: false,
+			sut: func(t *testing.T, p *parserHandler, tm *mockTabManager, pty *workspacetest.File) {
+				assert.False(t, tm.belled)
+				p.onFocusChange(false)
+				p.onFocusChange(true)
+				p.Bell()
+				assert.True(t, tm.belled)
+				assert.Zero(t, tm.setName)
+				assert.Zero(t, tm.toUri)
+				assert.Zero(t, tm.setAttr)
+			},
+		},
+		{
+			desc:      "bell is not called if not in focus, but needs attention attrs are set if mode urgency hints is set",
+			altBuffer: false,
+			sut: func(t *testing.T, p *parserHandler, tm *mockTabManager, pty *workspacetest.File) {
+				assert.False(t, tm.belled)
+				p.onFocusChange(false)
+				p.Bell()
+				assert.False(t, tm.belled)
+				assert.Equal(t, testURI, tm.toUri)
+				assert.Equal(t, "radical", tm.setName)
+				assert.Equal(t, term.Attributes{Attrs: tcell.AttrBlink}, tm.setAttr)
+			},
+		},
+		{
+			desc:      "bell is not called if not in focus, and needs attention attrs are not set if mode urgency hints is disabled",
+			altBuffer: false,
+			sut: func(t *testing.T, p *parserHandler, tm *mockTabManager, pty *workspacetest.File) {
+				assert.False(t, tm.belled)
+				p.onFocusChange(false)
+				p.UnsetPrivateMode(parser.PrivateModeUrgencyHints)
+				p.Bell()
+				assert.False(t, tm.belled)
+				assert.Zero(t, tm.setName)
+				assert.Zero(t, tm.toUri)
+				assert.Zero(t, tm.setAttr)
+			},
+		},
+		{
+			desc:      "bell is called whether mode urgency hints is disabled or not",
+			altBuffer: false,
+			sut: func(t *testing.T, p *parserHandler, tm *mockTabManager, pty *workspacetest.File) {
+				assert.False(t, tm.belled)
+				p.onFocusChange(true)
+				p.UnsetPrivateMode(parser.PrivateModeUrgencyHints)
+				p.Bell()
+				assert.True(t, tm.belled)
+				assert.Zero(t, tm.setName)
+				assert.Zero(t, tm.toUri)
+				assert.Zero(t, tm.setAttr)
+			},
+		},
+		{
+			desc:      "needs attention attrs are cleared if on focus true is triggered",
+			altBuffer: false,
+			sut: func(t *testing.T, p *parserHandler, tm *mockTabManager, pty *workspacetest.File) {
+				assert.False(t, tm.belled)
+				p.onFocusChange(false)
+				p.Bell()
+				p.onFocusChange(true)
+				assert.Equal(t, testURI, tm.toUri)
+				assert.Equal(t, "radical", tm.setName)
+				assert.Equal(t, term.Attributes{}, tm.setAttr)
+			},
+		},
 	}
 
 	for _, test := range suite {
 		t.Run(test.desc, func(t *testing.T) {
 			mockPtyFile := workspacetest.File{}
+			tm := mockTabManager{}
+			attrs := DefaultConfig().NeedsAttentionAttributes
 			pty := workspaceapi.Pty{Master: &mockPtyFile, Slave: &mockPtyFile}
-			ph := newParserHandler(new(sync.Mutex), pty, clipboard.NewInMemory(), func() {})
+			ph := newParserHandler(new(sync.Mutex), pty, &tm, clipboard.NewInMemory(), tm.bell, testURI, attrs)
 
 			if test.altBuffer {
 				ph.SetPrivateMode(parser.PrivateModeSwapScreenAndSetRestoreCursor)
@@ -685,7 +772,7 @@ func TestIntegrationParserHandler(t *testing.T) {
 				ph.UnsetPrivateMode(parser.PrivateModeSwapScreenAndSetRestoreCursor)
 			}
 
-			test.sut(t, ph, &mockPtyFile)
+			test.sut(t, ph, &tm, &mockPtyFile)
 		})
 	}
 }
@@ -738,4 +825,28 @@ func base64Data(t *testing.T, data string) []byte {
 	require.NoError(t, err)
 	require.NoError(t, e.Close())
 	return buf.Bytes()
+}
+
+type mockTabManager struct {
+	belled  bool
+	toUri   workspaceapi.URI
+	setName string
+	setAttr term.Attributes
+}
+
+func (tm *mockTabManager) Tab(uri workspaceapi.URI, name string, h browserapi.Handler) (
+	browserapi.Handler, error,
+) {
+	panic("not in use")
+}
+
+func (tm *mockTabManager) SetTabName(uri workspaceapi.URI, name string, attr term.Attributes) error {
+	tm.toUri = uri
+	tm.setName = name
+	tm.setAttr = attr
+	return nil
+}
+
+func (tm *mockTabManager) bell() {
+	tm.belled = true
 }

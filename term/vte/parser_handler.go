@@ -13,6 +13,7 @@ import (
 	"github.com/rivo/uniseg"
 	log "github.com/sirupsen/logrus"
 	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/term/vte/parser"
 	"unstable.build/go-tui/term/vte/screen"
@@ -30,6 +31,7 @@ const (
 type parserHandler struct {
 	pty       workspaceapi.Pty
 	clipboard clipboard.Register
+	tm        browser.TabManager
 	bell      func()
 	sync      struct {
 		mu      sync.Locker
@@ -40,7 +42,11 @@ type parserHandler struct {
 	tabs            tabstops
 	maxScrollLength int
 
+	needsAttentionAttr        term.Attributes
+	needsAttention            bool
+	uri                       workspaceapi.URI
 	width, height             int
+	inFocus                   bool
 	cursorStyle               term.CursorStyle
 	cursorHidden              bool
 	title                     string
@@ -92,18 +98,24 @@ type screenBuffer interface {
 
 func newParserHandler(
 	mu sync.Locker, pty workspaceapi.Pty,
+	tm browser.TabManager,
 	clipboard clipboard.Register,
 	bell func(),
+	uri workspaceapi.URI,
+	needsAttentionAttr term.Attributes,
 ) *parserHandler {
 	ret := new(parserHandler)
-	ret.init(mu, pty, clipboard, bell)
+	ret.init(mu, pty, tm, clipboard, bell, uri, needsAttentionAttr)
 	return ret
 }
 
 func (t *parserHandler) init(
 	mu sync.Locker, pty workspaceapi.Pty,
+	tm browser.TabManager,
 	clipboard clipboard.Register,
 	bell func(),
+	uri workspaceapi.URI,
+	needsAttentionAttr term.Attributes,
 ) {
 	t.sync.altBuf = screen.NewAltBuffer()
 	t.sync.primBuf = screen.NewPrimaryBuffer()
@@ -111,9 +123,14 @@ func (t *parserHandler) init(
 	t.sync.mu = mu
 	t.pty = pty
 	t.clipboard = clipboard
+	t.tm = tm
+	t.uri = uri
 	t.maxScrollLength = defaultMaxScrollLength
 	t.bell = bell
+	t.needsAttentionAttr = needsAttentionAttr
 
+	// assume we are in focus when initialized
+	t.inFocus = true
 	t.modeAlternateScroll = true
 	t.modeUrgencyHints = true
 	t.modeShowCursor = true
@@ -140,6 +157,11 @@ func (t *parserHandler) SetTitle(title string) {
 	t.sync.mu.Lock()
 	defer t.sync.mu.Unlock()
 
+	// NOTE: currently setting titles dynamically is disabled
+	// The reason behind it is that most of the titles set by
+	// the shell or underlying programs are not very useful:
+	//    1. Often they contain the folder, which is redundant with workspaces
+	//    2. They're tipically too long for most applications and too detailed.
 	t.title = title
 }
 
@@ -414,7 +436,11 @@ func (t *parserHandler) Linefeed() {
 
 // Ring the bell.
 func (t *parserHandler) Bell() {
-	t.bell()
+	if !t.inFocus && t.modeUrgencyHints {
+		t.setNeedsAttention()
+	} else if t.inFocus {
+		t.bell()
+	}
 }
 
 // Substitute char under the cursor.
@@ -629,10 +655,13 @@ func (t *parserHandler) ResetState() {
 
 	pty := t.pty
 	clipboard := t.clipboard
+	tm := t.tm
+	uri := t.uri
+	needsAttentionAttr := t.needsAttentionAttr
 	bell := t.bell
 	mu := t.sync.mu
 	*t = parserHandler{}
-	t.init(mu, pty, clipboard, bell)
+	t.init(mu, pty, tm, clipboard, bell, uri, needsAttentionAttr)
 }
 
 // Reverse Index.
@@ -1400,4 +1429,35 @@ func (t *parserHandler) endOfLine(y int) int {
 
 func (t *parserHandler) maxRows() int {
 	return int(math.Max(float64(t.height), float64(t.sync.buf.Rows())))
+}
+
+func (t *parserHandler) clearNeedsAttention() {
+	t.needsAttention = false
+	t.tm.SetTabName(t.uri, t.uri.Name(), term.Attributes{})
+}
+
+func (t *parserHandler) setNeedsAttention() {
+	t.needsAttention = true
+	t.tm.SetTabName(t.uri, t.uri.Name(), t.needsAttentionAttr)
+}
+
+func (t *parserHandler) onFocusChange(inFocus bool) (cmd string, ok bool) {
+	if inFocus && t.needsAttention {
+		t.clearNeedsAttention()
+	}
+	t.inFocus = inFocus
+
+	t.log(log.TraceLevel, "OnFocusChange(inFocus=%t, reportFocusMode=%t)",
+		inFocus, t.modeReportFocusInOut)
+	if !t.modeReportFocusInOut {
+		return
+	}
+
+	if inFocus {
+		cmd = "I"
+	} else {
+		cmd = "O"
+	}
+	ok = true
+	return
 }

@@ -593,3 +593,8 @@ terminal:
     bg: *background
   selection_attr:
     flags: reverse
+  # Defines the tab name attributes when a bell is received and
+  # window is not in focus.
+  needs_attention_attr:
+    fg: red
+    flags: blink

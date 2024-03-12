@@ -163,6 +163,10 @@ terminal:
     selection_attr:
         fg: green
         bg: teal
+    needs_attention_attr:
+        fg: red
+        flags:
+          - blink
 `
 
 func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
@@ -197,8 +201,9 @@ func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
 	assert.NotNil(t, vteConfig.Bell)
 	vteConfig.Bell = nil
 	assert.Equal(t, vte.Config{
-		Clipboard:           reg,
-		SelectionAttributes: selectAttr,
+		Clipboard:                reg,
+		SelectionAttributes:      selectAttr,
+		NeedsAttentionAttributes: term.Attributes{Attrs: tcell.AttrBlink},
 	}, vteConfig)
 	assert.Equal(t, command.DefaultConfig().ShowManualAfter, cfg.commandOverlayShowManualAfter())
 	assert.Equal(t, command.DefaultConfig().ManualAttr, cfg.commandOverlayManualAttr())
@@ -311,10 +316,11 @@ func TestConfigSetting(t *testing.T) {
 	assert.NotNil(t, vteConfig.Bell)
 	vteConfig.Bell = nil
 	expectedEmulatorConfig := vte.Config{
-		Shell:               "sh",
-		Attributes:          term.Attributes{Fg: tcell.ColorWhite, Bg: tcell.ColorYellow},
-		Clipboard:           clipboard.NewInMemory(),
-		SelectionAttributes: term.Attributes{Fg: tcell.ColorGreen, Bg: tcell.ColorTeal},
+		Shell:                    "sh",
+		Attributes:               term.Attributes{Fg: tcell.ColorWhite, Bg: tcell.ColorYellow},
+		Clipboard:                clipboard.NewInMemory(),
+		SelectionAttributes:      term.Attributes{Fg: tcell.ColorGreen, Bg: tcell.ColorTeal},
+		NeedsAttentionAttributes: term.Attributes{Attrs: tcell.AttrBlink, Fg: tcell.ColorRed},
 	}
 	assert.Equal(t, expectedEmulatorConfig, vteConfig)
 

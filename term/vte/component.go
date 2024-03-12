@@ -14,6 +14,7 @@ import (
 	"go.uber.org/multierr"
 	schemeapi "unstable.build/go-tui/api/scheme"
 	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/term/vte/parser"
@@ -46,15 +47,19 @@ type Component struct {
 // than creating a pty and initializing the vte parser and the parser handler.
 
 // NewComponent allocates storage for a new Component and initializes it.
-func NewComponent(t schemeapi.Terminal, e schemeapi.Executor, cfg Config) (*Component, error) {
+func NewComponent(
+	t schemeapi.Terminal, e schemeapi.Executor,
+	tm browser.TabManager, cfg Config,
+) (*Component, error) {
 	ret := new(Component)
-	err := ret.Init(t, e, cfg)
+	err := ret.Init(t, e, tm, cfg)
 	return ret, err
 }
 
 // Init initializes it with the given dependencies and options.
 func (t *Component) Init(
-	term schemeapi.Terminal, e schemeapi.Executor, cfg Config,
+	term schemeapi.Terminal, e schemeapi.Executor,
+	tm browser.TabManager, cfg Config,
 ) error {
 	t.clipboard = cfg.Clipboard
 	t.shell = cfg.Shell
@@ -75,8 +80,10 @@ func (t *Component) Init(
 		bell = func() {}
 	}
 
-	t.parserHandler.init(&t.mu, t.pty, t.clipboard, bell)
-	t.parserHandler.SetTitle(t.pty.Slave.Name())
+	t.parserHandler.init(&t.mu, t.pty, tm, t.clipboard,
+		bell, t.uri, cfg.NeedsAttentionAttributes)
+	// start with pty slave file name as title
+	t.parserHandler.SetTitle(t.uri.Name())
 	var h parser.Handler = &t.parserHandler
 	if log.IsLevelEnabled(log.TraceLevel) {
 		h = parser.HandlerWithLogging("vte.parserHandler", h)
@@ -384,15 +391,6 @@ func (t *Component) IsNewLineMode() bool {
 	return t.parserHandler.modeLineFeedNewLine
 }
 
-// IsReportFocusMode returns whether underlying terminal emulator is interested
-// in changes in window focus.
-func (t *Component) IsReportFocusMode() bool {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-
-	return t.parserHandler.modeReportFocusInOut
-}
-
 // Draw satisfies tui.Component.
 func (t *Component) Draw(w term.Writer) {
 	t.mu.Lock()
@@ -489,6 +487,21 @@ func (t *Component) Selection() (data string, ok bool) {
 		return
 	}
 	return cell.CellsToString(cells), ok
+}
+
+// OnFocusChange allows clients to report whether this vte.Component is on focus or not.
+func (t *Component) OnFocusChange(inFocus bool) error {
+	t.mu.Lock()
+	cmd, ok := t.parserHandler.onFocusChange(inFocus)
+	t.mu.Unlock()
+	if !ok {
+		return nil
+	}
+	err := t.WriteToPty([]byte(fmt.Sprintf("\x1b[%s", cmd)))
+	if err != nil {
+		return fmt.Errorf("write to pty: %w", err)
+	}
+	return nil
 }
 
 // Close assumes lock has been acquired by caller

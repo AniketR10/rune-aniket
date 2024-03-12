@@ -1,6 +1,7 @@
 package vte
 
 import (
+	"github.com/ernestrc/tcell/v3"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text/clipboard"
@@ -9,8 +10,10 @@ import (
 // DefaultConfig returns a sane default Config.
 func DefaultConfig() Config {
 	return Config{
-		Clipboard: clipboard.NewInMemory(),
-		Bell:      func() {},
+		Clipboard:                clipboard.NewInMemory(),
+		Bell:                     func() {},
+		SelectionAttributes:      term.Attributes{Attrs: tcell.AttrReverse},
+		NeedsAttentionAttributes: term.Attributes{Attrs: tcell.AttrBlink},
 	}
 }
 
@@ -23,8 +26,9 @@ type Config struct {
 	Bell      func()
 	Watcher   workspaceapi.Watcher
 
-	Attributes          term.Attributes
-	SelectionAttributes term.Attributes
+	Attributes               term.Attributes
+	SelectionAttributes      term.Attributes
+	NeedsAttentionAttributes term.Attributes
 
 	// WidthHint and HeightHint hint allows emulator.Handler to better configure the
 	// initial buffer size.

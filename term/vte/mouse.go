@@ -38,6 +38,7 @@ func (e *mouseDriver) reportAction(
 	var button rune
 	switch action {
 	case text.MouseWheelUp:
+		// TODO use alternate scroll mode
 		// manage it here so we can delegate to
 		// underlying program if terminal
 		// could not handle scroll (i.e. alternate buffer)

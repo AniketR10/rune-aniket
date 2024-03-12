@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	browserapi "unstable.build/go-tui/api/browser"
 	"unstable.build/go-tui/api/config"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/component"
@@ -87,8 +88,8 @@ sh-3.2$
 				}
 				return nil
 			})
-			h, err := New(nopPublisher{interrupt: waitInterrupt}, nopPublisher{}, fileScheme,
-				fileScheme, vte.Config{}, test.cmdAndArgs, test.maxWidth,
+			h, err := New(nopBrowser{interrupt: waitInterrupt}, nopBrowser{}, fileScheme,
+				fileScheme, nopBrowser{}, vte.Config{}, test.cmdAndArgs, test.maxWidth,
 				test.frame, component.FrameCharSetDefault(), term.Attributes{})
 			require.Equal(t, test.expectConstructorErr, err)
 			h.Resize(14, 6)
@@ -105,11 +106,11 @@ sh-3.2$
 	}
 }
 
-type nopPublisher struct {
+type nopBrowser struct {
 	interrupt term.Interrupter
 }
 
-func (n nopPublisher) PublishEvent(ev term.Event) error {
+func (n nopBrowser) PublishEvent(ev term.Event) error {
 	if ev.Type != term.EventInterrupt {
 		return errors.New("unexpected event type")
 	}
@@ -119,6 +120,16 @@ func (n nopPublisher) PublishEvent(ev term.Event) error {
 	return nil
 }
 
-func (n nopPublisher) Notify(notifications.Level, string, ...interface{}) error {
+func (n nopBrowser) Notify(notifications.Level, string, ...interface{}) error {
 	return nil
+}
+
+func (n nopBrowser) Tab(uri workspaceapi.URI, name string, h browserapi.Handler) (
+	browserapi.Handler, error,
+) {
+	panic("should not be called")
+}
+
+func (n nopBrowser) SetTabName(workspaceapi.URI, string, term.Attributes) error {
+	panic("should not be called")
 }

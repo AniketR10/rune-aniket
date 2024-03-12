@@ -133,7 +133,7 @@ func (e *ex) init(
 	e.comp.SubscribeWindow((*windowSubscriber)(e))
 	e.newEmulatorHandler = func(initialCmd string, cfg vte.Config) (vteHandler, error) {
 		v, err := vte.NewHandler(e.Browser(), e.Browser(),
-			e.workspace, e.workspace, cfg, initialCmd)
+			e.workspace, e.workspace, e.Browser(), cfg, initialCmd)
 		if err != nil {
 			return nil, err
 		}
@@ -141,7 +141,7 @@ func (e *ex) init(
 	}
 	e.newPluginHandler = func(args ...string) (pluginHandler, error) {
 		return plugin.New(e.Browser(), e.Browser(), e.workspace, e.workspace,
-			e.emulatorConfig, strings.Join(args, " "), e.width,
+			e.Browser(), e.emulatorConfig, strings.Join(args, " "), e.width,
 			e.config.Frame, e.config.FocusFrameCharSet, e.config.FocusFrameAttr)
 	}
 	return
