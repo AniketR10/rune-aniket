@@ -34,10 +34,11 @@ type Handler struct {
 	mouse       *text.Mouse
 	mouseDriver *mouseDriver
 
-	closed        bool
-	width, height int
-	updateCh      chan struct{}
-	sema          chan struct{}
+	bracketedPaste bool
+	closed         bool
+	width, height  int
+	updateCh       chan struct{}
+	sema           chan struct{}
 }
 
 // NewHandler allocates storage for a new Handler and initializes it.
@@ -157,13 +158,15 @@ func (e *Handler) Handle(ev term.Event) (exit, handled bool) {
 		return
 	}
 
-	select {
-	case e.sema <- struct{}{}:
-	case <-e.ctx.Done():
-		exit = true
-		return
+	if !e.bracketedPaste {
+		select {
+		case e.sema <- struct{}{}:
+		case <-e.ctx.Done():
+			exit = true
+			return
+		}
+		defer func() { <-e.sema }()
 	}
-	defer func() { <-e.sema }()
 
 	err := e.comp.WriteToPty(raw)
 	if err != nil {
@@ -172,17 +175,21 @@ func (e *Handler) Handle(ev term.Event) (exit, handled bool) {
 		return
 	}
 
-	e.handleTimer.Reset(handleTimeout)
-	select {
-	case <-e.handleTimer.C:
-		e.handleTimer.Stop()
-	case <-e.ctx.Done():
-		exit = true
-	case <-e.updateCh:
-		handled = true
-		if !e.handleTimer.Stop() {
-			<-e.handleTimer.C
+	if !e.bracketedPaste {
+		e.handleTimer.Reset(handleTimeout)
+		select {
+		case <-e.handleTimer.C:
+			e.handleTimer.Stop()
+		case <-e.ctx.Done():
+			exit = true
+		case <-e.updateCh:
+			handled = true
+			if !e.handleTimer.Stop() {
+				<-e.handleTimer.C
+			}
 		}
+	} else {
+		handled = true
 	}
 	return
 }
@@ -251,6 +258,22 @@ func (e *Handler) handleInput(ev term.Event) (exit, handled bool, raw []byte) {
 	exit = e.closed
 	if exit {
 		e.log(log.TraceLevel, "input: exit")
+		return
+	}
+
+	if isStart := ev.Type == term.EventPasteStart; isStart || ev.Type == term.EventPasteEnd {
+		e.bracketedPaste = isStart
+		programBracketedMode := e.comp.ModeBracketedPate()
+		e.log(log.DebugLevel, "handled bracketed paste start=%t,"+
+			" programBracketedMode : %v", isStart, programBracketedMode)
+		// if bracketed paste mode is not set, then we are done
+		// otherwise, write bracket start via ev.Raw
+		if programBracketedMode {
+			raw = ev.Raw
+		} else {
+			// nothing else to do
+			handled = true
+		}
 		return
 	}
 

@@ -197,6 +197,13 @@ func (t *Component) Resize(width, height int) error {
 	return nil
 }
 
+// ModeBracketedPaste returns whether bracketed paste mode is set.
+func (t *Component) ModeBracketedPate() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.parserHandler.modeBracketedPaste
+}
+
 // MouseModeReportMouseClicks returns whether PrivateMode 1000 (MouseModeVT200) is set.
 func (t *Component) MouseModeReportMouseClicks() bool {
 	t.mu.Lock()
