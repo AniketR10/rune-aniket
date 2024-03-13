@@ -101,9 +101,11 @@ func (h *Handler) Init(
 
 	errStrCfg := templateCfg
 	errStrCfg.Attributes.Fg = tcell.ColorRed
+	errStrCfg.Attributes.Attrs = tcell.AttrBold
 
 	successStrCfg := templateCfg
 	successStrCfg.Attributes.Fg = tcell.ColorGreen
+	successStrCfg.Attributes.Attrs = tcell.AttrBold
 
 	centerStrCfg := templateCfg
 	centerStrCfg.Alignment = component.SpanAlignmentHorizontallyCentered
