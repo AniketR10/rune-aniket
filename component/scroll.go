@@ -763,6 +763,52 @@ func FuncScrollSubscriber(fn func(from, to term.Coordinates)) ScrollSubscriber {
 	return fnSubscriber(fn)
 }
 
+// ScrollToWindowCoordinates translates scroll content Coordinates to window Coordinates,
+// taking into consideration scroll offsets and wrapped lines.
+func (s *Scroll) ScrollToWindowCoordinates(pos term.Coordinates) term.Coordinates {
+	offset := s.Offset()
+	ret := cell.CoordinatesDiff(pos, offset)
+	if !s.Wrap {
+		return ret
+	}
+	wraps := s.Wraps()
+	for y, count := range wraps {
+		if y >= pos.Y {
+			break
+		}
+		ret.Y += count
+	}
+	diff := pos.X / s.Width()
+	ret.X = pos.X%s.Width() - offset.X
+	ret.Y += diff
+	return ret
+}
+
+// WindowToScrollCoordinates translates window Coordinates to scroll content Coordinates,
+// taking into consideration scroll offsets and wrapped lines.
+func (s *Scroll) WindowToScrollCoordinates(pos term.Coordinates) term.Coordinates {
+	offset := s.Offset()
+	ret := cell.CoordinatesSum(pos, offset)
+	if !s.Wrap {
+		return ret
+	}
+	wraps := s.Wraps()
+	var sum, count int
+	for _, count = range wraps {
+		if pos.Y+offset.Y >= sum+count+1 {
+			ret.Y -= count
+			sum += count + 1
+			continue
+		}
+		diff := pos.Y + offset.Y - sum
+		ret.X = pos.X + diff*s.Width() + offset.X
+		ret.Y -= diff
+		break
+	}
+	return ret
+}
+
+
 func wordMatcher(r rune) bool {
 	return unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_'
 }
