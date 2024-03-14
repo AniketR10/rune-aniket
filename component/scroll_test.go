@@ -623,6 +623,21 @@ ness. Let's test its
  scrolling. Let's ma
 ke it overflow below
  and wrap,which migh`,
+		}, {
+			func() {
+				assert.Equal(t, 4, b.Search("test"))
+				// shift all lines lower, coud cause a panic if not careful
+				b.Buffer().Insert(term.Coordinates{Y: 0}, '\n')
+			}, `
+                    
+hello world. Let's t
+est its responsivene
+ss. Let's test its r
+esponsiveness. Let's
+ test its responsive
+ness. Let's test its
+ scrolling. Let's ma
+ke it overflow below`,
 		},
 	}
 	testutil.TestComponent(t, b, w, tests)
@@ -745,6 +760,96 @@ func TestWindowCoordinatesToScrollCoordinatesWrapLastLine(t *testing.T) {
 	}
 }
 
+func TestScrollDrawSearchResults(t *testing.T) {
+	width, height := 51, 17
+	scroll, w := newScrollWrapTestCase(t, width, height)
+
+	scroll.RecalculateWraps()
+
+	tests := []testutil.ComponentTestCase{
+		{func() {
+			assert.Equal(t, 9, scroll.Search("github"))
+		}, `       github                                      
+                                                   
+                                                   
+                                                   
+                                                   
+                                                   
+                                                   
+    github                                         
+    github                                         
+                                                   
+    github                                         
+                                                   
+    github                                         
+                                                   
+    github                                         
+    github                                         
+    github                                         `,
+		},
+		{func() {
+			assert.True(t, scroll.SeekDown())
+		}, `                                                   
+                                                   
+                                                   
+                                                   
+                                                   
+                                                   
+    github                                         
+    github                                         
+                                                   
+    github                                         
+                                                   
+    github                                         
+                                                   
+    github                                         
+    github                                         
+    github                                         
+    github                                         `,
+		},
+		{func() {
+			assert.Equal(t, 2, scroll.Search("indirect"))
+		}, `                                                   
+                                                   
+                                                   
+                                                   
+                                   indirect        
+                                                   
+                                                   
+                                                ind
+irect                                              
+                                                   
+                                                   
+                                                   
+                                                   
+                                                   
+                                                   
+                                                   
+                                                   `},
+		{func() {
+			scroll.Buffer().InsertString(scroll.Offset(), "indirect\n")
+		}, `indirect                                           
+                                                   
+                                                   
+                                                   
+                                                   
+                                   indirect        
+                                                   
+                                                   
+                                                ind
+irect                                              
+                                                   
+                                                   
+                                                   
+                                                   
+                                                   
+                                                   
+                                                   `},
+	}
+
+	testutil.TestComponent(t, resultDrawer{scroll}, w, tests)
+}
+
 func TestWindowCoordinatesPanicDeleteRow(t *testing.T) {
 	scroll := makeScroll(true, 10, 3, 0, 0)(t)
 	scroll.Buffer().DeleteRow(0)
@@ -865,4 +970,14 @@ func (s subscriber) OnWillSeek(from term.Coordinates) {
 }
 func (s subscriber) OnDidSeek(from, to term.Coordinates) {
 	s.expectDidSeek(from, to)
+}
+
+type resultDrawer struct {
+	*Scroll
+}
+
+func (r resultDrawer) Draw(w term.Writer) {
+	// simulate scroll draw
+	r.RecalculateWraps()
+	r.drawSearchResults(w)
 }

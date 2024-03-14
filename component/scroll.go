@@ -14,11 +14,13 @@ import (
 // scrolling, searching and wrap-around capabilities.
 type Scroll struct {
 	buf           *cell.Buffer
-	searcher      cell.SubscriberSearcher
+	searcher      cell.Searcher
+	matches       []term.Coordinates
 	wrapsLen      int
 	wraps         []int
 	width, height int
 	searchText    []rune
+	searchTextStr string
 	offset        term.Coordinates
 	subs          []ScrollSubscriber
 
@@ -47,38 +49,29 @@ func NewScroll(buf *cell.Buffer) (s *Scroll) {
 
 func (s *Scroll) initBuffer(buf *cell.Buffer) {
 	s.buf = buf
-
-	searcher := cell.NewSimpleSearcher(s.buf)
-	attrSearcher := cell.AttrSearcher(searcher, s.buf, s.ResultsAttr)
-
-	s.searcher = attrSearcher
-	s.buf.Subscribe(s.searcher)
+	s.searcher = cell.NewSimpleSearcher(s.buf)
+	s.searcher.Reset()
 }
 
 // Init initializes this scroll with buf.
 func (s *Scroll) Init(buf *cell.Buffer) {
-	if s.ResultsAttr == (term.Attributes{}) {
-		s.ResultsAttr.Attrs = tcell.AttrReverse
-	}
-
-	s.initBuffer(buf)
-
-	s.wraps = make([]int, 0)
-	s.searchText = nil
-	s.offset = term.Coordinates{}
-	s.searcher.Reset()
+	s.InitPerformance(buf)
+	s.buf.Subscribe((*scrollSubscriber)(s))
 }
 
-// InitPerformance initializes this scroll without search functionality.
-// Thus Search, NextResult, PrevResult, Result, SeekNextResult, SeekPrevResult,
-// should not be called as they'll cause the calling goroutine to panic.
+// InitPerformance initializes this scroll with limited search functionality:
+// Updates to buffer do not update search results. Clearing of search results
+// should be done manually by clients by calling Search again after updates,
+// if desired.
 //
 // Note that this initialization method should be used instead of Init
 // if the given cell.Buffer has been also initialized with InitPerformance.
 func (s *Scroll) InitPerformance(buf *cell.Buffer) {
-	s.buf = buf
+	if s.ResultsAttr == (term.Attributes{}) {
+		s.ResultsAttr.Attrs = tcell.AttrReverse
+	}
+	s.initBuffer(buf)
 	s.wraps = make([]int, 0)
-	s.offset = term.Coordinates{}
 }
 
 // CanSeekUp returns true if SeekUp would seek one row up.
@@ -506,6 +499,9 @@ func (s *Scroll) Draw(writer term.Writer) {
 	if s.width <= 0 || s.height <= 0 {
 		return
 	}
+
+	defer s.drawSearchResults(writer)
+
 	if s.Attributes == (term.Attributes{}) {
 		if s.Wrap {
 			s.wrapdrawNoAttr(writer)
@@ -598,7 +594,8 @@ func (s *Scroll) TokenAt(pos term.Coordinates, isAllowed func(rune) bool) (
 // the matching terms as defined by ResultsAttr.
 func (s *Scroll) Search(text string) (n int) {
 	s.searchText = []rune(text)
-	return s.searcher.Search(text)
+	s.searchTextStr = text
+	return s.search()
 }
 
 // PrevResult returns the coordinates of the previous result in the Search list.
@@ -808,7 +805,67 @@ func (s *Scroll) WindowToScrollCoordinates(pos term.Coordinates) term.Coordinate
 	return ret
 }
 
-
 func wordMatcher(r rune) bool {
 	return unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_'
+}
+
+func (s *Scroll) drawSearchResults(w term.Writer) {
+	slen := len(s.searchText)
+	for _, posAtScroll := range s.matches {
+		posAtScreen := s.ScrollToWindowCoordinates(posAtScroll)
+		if posAtScreen.Y >= s.height || posAtScreen.Y < 0 {
+			continue
+		}
+
+		toX := posAtScroll.X + slen
+		for x := posAtScroll.X; x < toX; x++ {
+			posAtScroll := term.Coordinates{Y: posAtScroll.Y, X: x}
+			c, ok := s.buf.Cell(posAtScroll)
+			if !ok {
+				continue
+			}
+			c.Attrs = s.ResultsAttr.Attrs
+			c.Fg = s.ResultsAttr.Fg
+			c.Bg = s.ResultsAttr.Bg
+
+			posAtScreen := s.ScrollToWindowCoordinates(posAtScroll)
+			if posAtScreen.X >= s.width || posAtScreen.X < 0 {
+				continue
+			}
+			w.SetCell(posAtScreen, c)
+		}
+	}
+}
+
+func (s *Scroll) search() (n int) {
+	s.matches = s.matches[:0]
+
+	n = s.searcher.Search(s.searchTextStr)
+	for i := 0; i < n; i++ {
+		pos, ok := s.searcher.NextResult()
+		if !ok {
+			panic("searcher return n results but no enough results available")
+		}
+		s.matches = append(s.matches, pos)
+	}
+	return
+}
+
+type scrollSubscriber Scroll
+
+func (s *scrollSubscriber) OnWillEdit(from, to term.Coordinates, str string) {
+}
+
+func (s *scrollSubscriber) OnDidEdit(start, end term.Coordinates, str string) {
+	// if any match doesn't match, then re-issue search
+	for _, match := range s.matches {
+		for i := 0; i < len(s.searchText); i++ {
+			cc, ok := s.buf.Cell(match)
+			if !ok || cc.Ch != s.searchText[i] {
+				(*Scroll)(s).search()
+				return
+			}
+			match.X++
+		}
+	}
 }
