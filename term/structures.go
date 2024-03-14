@@ -2,7 +2,6 @@ package term
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/ernestrc/tcell/v3"
 )
@@ -79,25 +78,4 @@ type Writer interface {
 type ContextWriter interface {
 	Writer
 	SetContext(context.Context)
-}
-
-func (e EventType) String() string {
-	switch e {
-	case EventKey:
-		return "Key"
-	case EventResize:
-		return "Resize"
-	case EventMouse:
-		return "Mouse"
-	case EventError:
-		return "Error"
-	case EventInterrupt:
-		return "Interrupt"
-	case EventRaw:
-		return "Raw"
-	case EventNone:
-		return "None"
-	default:
-		panic(fmt.Sprintf("Not a valid EventType: %d", e))
-	}
 }

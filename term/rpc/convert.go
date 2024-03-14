@@ -19,6 +19,20 @@ func (e *Event) ToModel() (ev term.Event, err error) {
 		ev.Type = term.EventNone
 	case Event_TypeInterrupt:
 		ev.Type = term.EventInterrupt
+	case Event_TypePasteStart:
+		ev.Type = term.EventPasteStart
+	case Event_TypePasteEnd:
+		ev.Type = term.EventPasteEnd
+	case Event_TypeFocus:
+		ev.Type = term.EventFocus
+	case Event_TypeUnfocus:
+		ev.Type = term.EventUnfocus
+	case Event_TypeRaw:
+		ev.Type = term.EventRaw
+	case Event_TypeResize:
+		ev.Type = term.EventResize
+	case Event_TypeError:
+		ev.Type = term.EventError
 	default:
 		return term.Event{},
 			fmt.Errorf("serialization error: unknown event type: %s", e.Type)
@@ -252,8 +266,22 @@ func (e *Event) FromModel(ev term.Event) error {
 		e.Type = Event_TypeNone
 	case term.EventInterrupt:
 		e.Type = Event_TypeInterrupt
+	case term.EventPasteStart:
+		e.Type = Event_TypePasteStart
+	case term.EventPasteEnd:
+		e.Type = Event_TypePasteEnd
+	case term.EventFocus:
+		e.Type = Event_TypeFocus
+	case term.EventUnfocus:
+		e.Type = Event_TypeUnfocus
+	case term.EventError:
+		e.Type = Event_TypeError
+	case term.EventResize:
+		e.Type = Event_TypeResize
+	case term.EventRaw:
+		e.Type = Event_TypeRaw
 	default:
-		return fmt.Errorf("serialization error: unknown event type: %+v", ev.Type)
+		return fmt.Errorf("serialization error: unknown event type: %d", ev.Type)
 	}
 
 	switch ev.Mod {

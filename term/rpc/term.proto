@@ -29,9 +29,13 @@ message Event {
 	TypeNone = 1;
 	TypeMouse = 2;
 	TypeInterrupt = 3;
-	// EventResize
-	// EventError
-	// EventRaw
+	TypePasteStart = 4;
+	TypePasteEnd = 5;
+	TypeFocus = 6;
+	TypeUnfocus = 7;
+	TypeResize = 8;
+	TypeError = 9;
+	TypeRaw = 10;
   }
 
   enum Mod {
