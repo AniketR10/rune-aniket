@@ -82,6 +82,14 @@ func (w *virtualWriter) SetCell(pos term.Coordinates, c term.Cell) {
 	w.writer.SetCell(pos, c)
 }
 
+func (w *virtualWriter) UnionAttributes(pos term.Coordinates, attr term.Attributes) {
+	if pos.X >= w.width || pos.Y >= w.height || pos.Y < 0 || pos.X < 0 {
+		return
+	}
+	pos = term.Coordinates{X: w.offset.X + pos.X, Y: w.offset.Y + pos.Y}
+	w.writer.UnionAttributes(pos, attr)
+}
+
 func (w *virtualWriter) Flush() error {
 	return w.writer.Flush()
 }

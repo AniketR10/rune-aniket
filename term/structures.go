@@ -7,10 +7,10 @@ import (
 )
 
 type (
-	InputMode  int
-	EventType  uint8
-	Modifier   uint8
-	Key        uint16
+	InputMode int
+	EventType uint8
+	Modifier  uint8
+	Key       uint16
 )
 
 // Attributes represents a cell background and foreground attributes.
@@ -69,6 +69,7 @@ func (e Event) KeyComb() KeyComb {
 type Writer interface {
 	Context() context.Context
 	SetCell(Coordinates, Cell)
+	UnionAttributes(Coordinates, Attributes)
 	Flush() error
 	Clear(Attributes) error
 	SetCursor(Coordinates)

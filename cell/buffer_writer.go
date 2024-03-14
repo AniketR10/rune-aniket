@@ -44,6 +44,15 @@ func (w *BufferWriter) SetCell(pos term.Coordinates, c term.Cell) {
 	w.cells[pos.Y][pos.X].Combining = c.Combining
 }
 
+// UnionAttributes satisfies term.Writer
+func (w *BufferWriter) UnionAttributes(pos term.Coordinates, attr term.Attributes) {
+	if pos.X >= w.width || pos.Y >= w.height || pos.X < 0 || pos.Y < 0 {
+		return
+	}
+	w.cells[pos.Y][pos.X].Attributes = term.AttributesUnion(
+		w.cells[pos.Y][pos.X].Attributes, attr)
+}
+
 // Flush satisfies term.Writer
 func (w *BufferWriter) Flush() error {
 	return nil

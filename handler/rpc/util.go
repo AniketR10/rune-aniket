@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/ernestrc/tcell/v3"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/term"
 	termpb "unstable.build/go-tui/term/rpc"
@@ -79,6 +80,31 @@ func (r drawResponseWriter) SetCell(pos term.Coordinates, c term.Cell) {
 	for _, c := range c.Combining {
 		cell.Combining = append(cell.Combining, uint32(c))
 	}
+
+	r.res.Rows[pos.Y].Cells[pos.X] = cell
+}
+
+func (r drawResponseWriter) UnionAttributes(pos term.Coordinates, attr term.Attributes) {
+	if pos.Y >= r.height || pos.X >= r.width || pos.X < 0 || pos.Y < 0 {
+		return
+	}
+
+	var cell *termpb.Cell
+	if r.res.Rows[pos.Y].Cells[pos.X] == &zeroCell {
+		cell = new(termpb.Cell)
+	} else {
+		cell = r.res.Rows[pos.Y].Cells[pos.X]
+	}
+
+	uattr := term.AttributesUnion(term.Attributes{
+		Fg:    tcell.Color(cell.Foreground),
+		Bg:    tcell.Color(cell.Background),
+		Attrs: tcell.AttrMask(cell.Attrs),
+	}, attr)
+
+	cell.Foreground = uint64(uattr.Fg)
+	cell.Background = uint64(uattr.Bg)
+	cell.Attrs = int64(uattr.Attrs)
 
 	r.res.Rows[pos.Y].Cells[pos.X] = cell
 }

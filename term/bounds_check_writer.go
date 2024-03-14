@@ -22,6 +22,13 @@ func (p boundsCheckWriter) SetCell(pos Coordinates, c Cell) {
 	p.w.SetCell(pos, c)
 }
 
+func (p boundsCheckWriter) UnionAttributes(pos Coordinates, attr Attributes) {
+	if p.outOfBounds(pos) {
+		return
+	}
+	p.w.UnionAttributes(pos, attr)
+}
+
 func (p boundsCheckWriter) Flush() error {
 	return p.w.Flush()
 }

@@ -27,6 +27,13 @@ func (w *termboxWriter) SetCell(pos Coordinates, c Cell) {
 	return
 }
 
+func (w *termboxWriter) UnionAttributes(pos Coordinates, attr Attributes) {
+	termbox.Screen().UnionStyle(
+		pos.X, pos.Y, tcell.Style(attr),
+	)
+	return
+}
+
 func (w *termboxWriter) Flush() error {
 	return termbox.Flush()
 }

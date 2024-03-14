@@ -51,6 +51,15 @@ func (w *HTMLWriter) SetCell(pos Coordinates, cell Cell) {
 	w.cellbuf[idx] = cell
 }
 
+// UnionAttributes satisfies Writer.
+func (w *HTMLWriter) UnionAttributes(pos Coordinates, attr Attributes) {
+	if outOfBounds(w.height, w.width, pos) {
+		return
+	}
+	idx := pos.Y*w.width + pos.X
+	w.cellbuf[idx].Attributes = AttributesUnion(w.cellbuf[idx].Attributes, attr)
+}
+
 func (w *HTMLWriter) convertToCSS(attr Attributes, ignoreDefault bool) (
 	css string, needsFg, needsBg bool,
 ) {

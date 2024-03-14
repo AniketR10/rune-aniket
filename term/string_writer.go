@@ -63,6 +63,15 @@ func (w *StringWriter) SetCell(pos Coordinates, cell Cell) {
 	w.cellbuf[idx] = cell
 }
 
+func (w *StringWriter) UnionAttributes(pos Coordinates, attr Attributes) {
+	if outOfBounds(w.height, w.width, pos) {
+		panic(fmt.Sprintf("SetCell(x=%d;y=%d): out of bounds: width=%d;height=%d",
+			pos.X, pos.Y, w.width, w.height))
+	}
+	idx := pos.Y*w.width + pos.X
+	w.cellbuf[idx].Attributes = AttributesUnion(w.cellbuf[idx].Attributes, attr)
+}
+
 // Flush satisfies Writer.
 func (w *StringWriter) Flush() (err error) {
 	for i, c := range w.cellbuf {

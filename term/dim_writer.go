@@ -10,6 +10,8 @@ type dimWriter struct {
 	w Writer
 }
 
+// DimWriter returns a Writer that sets tcell.AttrDim
+// and removes tcell.AttrBold to all cells by default.
 func DimWriter(w Writer) Writer {
 	return &dimWriter{w: w}
 }
@@ -18,6 +20,12 @@ func (w *dimWriter) SetCell(pos Coordinates, c Cell) {
 	c.Attributes.Attrs |= tcell.AttrDim
 	c.Attributes.Attrs &^= tcell.AttrBold
 	w.w.SetCell(pos, c)
+}
+
+func (w *dimWriter) UnionAttributes(pos Coordinates, attr Attributes) {
+	attr.Attrs |= tcell.AttrDim
+	attr.Attrs &^= tcell.AttrBold
+	w.w.UnionAttributes(pos, attr)
 }
 
 func (w *dimWriter) Flush() error {

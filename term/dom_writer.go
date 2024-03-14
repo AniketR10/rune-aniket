@@ -291,6 +291,11 @@ func (w *domWriter) SetCell(pos Coordinates, c Cell) {
 	return
 }
 
+func (w *domWriter) UnionAttributes(pos Coordinates, attr Attributes) {
+	w.w.UnionAttributes(pos, attr)
+	return
+}
+
 func (w *domWriter) Flush() error {
 	err := w.w.Flush()
 	if err != nil {
