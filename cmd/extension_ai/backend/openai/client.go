@@ -86,7 +86,7 @@ func NewClient(
 	for _, tool := range config.Tools {
 		tools = append(tools, openai.Tool{
 			Type: openai.ToolType(tool.Type),
-			Function: openai.FunctionDefinition{
+			Function: &openai.FunctionDefinition{
 				Name:        tool.Function.Name,
 				Description: tool.Function.Description,
 				Parameters:  tool.Function.Parameters,
@@ -227,13 +227,15 @@ func (a client) CreateChatCompletion(
 			// If this impl proves to be insufficient for prod,
 			// we should use the max of reset requests and reset tokens time
 			// to dynamically provide a retry strategy.
-			headers := stream.GetRateLimitHeaders()
-			fields["headerLimitRequests"] = headers.LimitRequests
-			fields["headerLimitTokens"] = headers.LimitTokens
-			fields["headerRemainingRequests"] = headers.RemainingRequests
-			fields["headerRemainingTokens"] = headers.RemainingTokens
-			fields["headerResetRequests"] = headers.ResetRequests
-			fields["headerResetTokens"] = headers.ResetTokens
+			if stream != nil {
+				headers := stream.GetRateLimitHeaders()
+				fields["headerLimitRequests"] = headers.LimitRequests
+				fields["headerLimitTokens"] = headers.LimitTokens
+				fields["headerRemainingRequests"] = headers.RemainingRequests
+				fields["headerRemainingTokens"] = headers.RemainingTokens
+				fields["headerResetRequests"] = headers.ResetRequests
+				fields["headerResetTokens"] = headers.ResetTokens
+			}
 			fallthrough
 		case 500, 503:
 			log.WithFields(fields).Warn(apiErr.Message)
