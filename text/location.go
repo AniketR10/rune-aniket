@@ -2,7 +2,6 @@ package text
 
 import (
 	textapi "unstable.build/go-tui/api/text"
-	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/term"
 )
@@ -57,32 +56,51 @@ func LocationSlice(in []textapi.Location) LocationList {
 // DrawLocations draws the given locations using the given writer.
 // This is intended to be used alongside Scroll's Draw method.
 func DrawLocations(locations []textapi.Location, scroll *component.Scroll, w term.Writer) {
+	offset := scroll.Offset()
+	height := scroll.SizeHeight()
+
+	var wraps int
+	for _, count := range scroll.Wraps() {
+		wraps += count
+	}
+	// this might add some extra calls to UnionAttributes that are noop but
+	// it's way more efficient that calculating screen coordinates on every
+	// location.
+	minY := offset.Y - wraps
+	maxY := offset.Y + height
 	for _, loc := range locations {
 		fromAtScroll := loc.From
 		toAtScroll := loc.To
-		fromAtScroll, toAtScroll = cell.SortFromTo(fromAtScroll, toAtScroll)
-		fromAtScreen := scroll.ScrollToWindowCoordinates(fromAtScroll)
-		if fromAtScreen.Y >= scroll.SizeHeight() || fromAtScreen.Y < 0 {
+		if fromAtScroll.Y >= maxY || fromAtScroll.Y < minY {
 			continue
 		}
 
 		fromAtScrollX := fromAtScroll.X
-		for y := fromAtScroll.Y; y <= toAtScroll.Y; y++ {
-			var toX int
-			if y == toAtScroll.Y {
-				toX = toAtScroll.X
-			} else {
-				toX = scroll.Buffer().Columns(y)
-			}
+		for y := fromAtScroll.Y; y < toAtScroll.Y; y++ {
+			toX := scroll.Buffer().Columns(y)
 			for x := fromAtScrollX; x < toX; x++ {
-				posAtScroll := term.Coordinates{Y: y, X: x}
-				posAtScreen := scroll.ScrollToWindowCoordinates(posAtScroll)
-				if posAtScreen.X >= scroll.Width() || posAtScreen.X < 0 {
+				posAtScreen := scroll.ScrollToWindowCoordinates(term.Coordinates{Y: y, X: x})
+				if posAtScreen.X >= scroll.Width() {
+					break
+				}
+				if posAtScreen.X < 0 {
 					continue
 				}
 				w.UnionAttributes(posAtScreen, loc.Attr)
 			}
 			fromAtScrollX = 0
+		}
+
+		toX := toAtScroll.X
+		for x := fromAtScrollX; x < toX; x++ {
+			posAtScreen := scroll.ScrollToWindowCoordinates(term.Coordinates{Y: toAtScroll.Y, X: x})
+			if posAtScreen.X >= scroll.Width() {
+				break
+			}
+			if posAtScreen.X < 0 {
+				continue
+			}
+			w.UnionAttributes(posAtScreen, loc.Attr)
 		}
 	}
 }
