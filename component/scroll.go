@@ -819,20 +819,11 @@ func (s *Scroll) drawSearchResults(w term.Writer) {
 
 		toX := posAtScroll.X + slen
 		for x := posAtScroll.X; x < toX; x++ {
-			posAtScroll := term.Coordinates{Y: posAtScroll.Y, X: x}
-			c, ok := s.buf.Cell(posAtScroll)
-			if !ok {
-				continue
-			}
-			c.Attrs = s.ResultsAttr.Attrs
-			c.Fg = s.ResultsAttr.Fg
-			c.Bg = s.ResultsAttr.Bg
-
-			posAtScreen := s.ScrollToWindowCoordinates(posAtScroll)
+			posAtScreen := s.ScrollToWindowCoordinates(term.Coordinates{Y: posAtScroll.Y, X: x})
 			if posAtScreen.X >= s.width || posAtScreen.X < 0 {
 				continue
 			}
-			w.SetCell(posAtScreen, c)
+			w.UnionAttributes(posAtScreen, s.ResultsAttr)
 		}
 	}
 }

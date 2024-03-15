@@ -762,7 +762,9 @@ func TestWindowCoordinatesToScrollCoordinatesWrapLastLine(t *testing.T) {
 
 func TestScrollDrawSearchResults(t *testing.T) {
 	width, height := 51, 17
-	scroll, w := newScrollWrapTestCase(t, width, height)
+	scroll, sw := newScrollWrapTestCase(t, width, height)
+
+	w := searchResultsWriter{StringWriter: sw, scroll: scroll}
 
 	scroll.RecalculateWraps()
 
@@ -980,4 +982,18 @@ func (r resultDrawer) Draw(w term.Writer) {
 	// simulate scroll draw
 	r.RecalculateWraps()
 	r.drawSearchResults(w)
+}
+
+type searchResultsWriter struct {
+	*term.StringWriter
+	scroll *Scroll
+}
+
+func (s searchResultsWriter) UnionAttributes(pos term.Coordinates, attr term.Attributes) {
+	c, ok := s.scroll.Buffer().Cell(s.scroll.WindowToScrollCoordinates(pos))
+	if !ok {
+		panic("hmm")
+	}
+
+	s.StringWriter.SetCell(pos, c)
 }

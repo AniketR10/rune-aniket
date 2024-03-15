@@ -1,6 +1,7 @@
 package test
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -16,10 +17,16 @@ type ComponentTestCase struct {
 	Expected string
 }
 
+// StringerWriter is a term.Writer that also is able to produce a string screen output.
+type StringerWriter interface {
+	term.Writer
+	fmt.Stringer
+}
+
 // TestComponent tests a given component against a set of ComponentTestCase.
 func TestComponent(
 	t *testing.T, m tui.Component,
-	w *term.StringWriter, cases []ComponentTestCase,
+	w StringerWriter, cases []ComponentTestCase,
 ) {
 	var err error
 
