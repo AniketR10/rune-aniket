@@ -106,7 +106,7 @@ func (vi *viHandlerImpl) init(buf *cell.Buffer, opts ...Option) {
 	vi.setMode(normalMode)
 }
 
-// Resize : tui.Component
+// Resize satisfies tui.Component
 func (vi *viHandlerImpl) Resize(width, height int) {
 	vi.less.Resize(width, height)
 	if vi.pendingSetCursor != nil {
@@ -125,9 +125,9 @@ func (vi *viHandlerImpl) setActiveLocationListMessage(locs map[string]textapi.Lo
 	}
 }
 
-// Draw : tui.Component
+// Draw satisfies tui.Component
 func (vi *viHandlerImpl) Draw(w term.Writer) {
-	locs, ok := vi.cursor.Locations()
+	locs, ok := vi.cursor.LocationsAtCursor()
 	if ok {
 		vi.setActiveLocationListMessage(locs)
 		vi.setLocations = true
@@ -136,17 +136,16 @@ func (vi *viHandlerImpl) Draw(w term.Writer) {
 		vi.setLocations = false
 	}
 	vi.less.Draw(w)
-	// TODO draw location lists attrs
-	// TODO draw selection attrs
-	// (rather than mutating everything as its selected)
+	locations := vi.cursor.SortedLocations()
+	text.DrawLocations(locations, vi.less.Scroll(), w)
 }
 
-// Man : tui.Handler
+// Man satisfies tui.Handler
 func (vi *viHandlerImpl) Man() tui.Manual {
 	panic("TODO")
 }
 
-// Cursor : tui.Handler
+// Cursor satisfies tui.Handler
 func (vi *viHandlerImpl) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 	var style term.CursorStyle
 	switch vi.mode() {
@@ -716,7 +715,7 @@ func (vi *viHandlerImpl) handleGo(ev term.Event) (quit, handled bool) {
 	return
 }
 
-// Handle : tui.Handler
+// Handle satisfies tui.Handler
 func (vi *viHandlerImpl) Handle(ev term.Event) (quit, handled bool) {
 	// only a user event clears a pending set cursor
 	vi.pendingSetCursor = nil

@@ -2,6 +2,7 @@ package text
 
 import (
 	"bufio"
+	"sort"
 	"strings"
 
 	"github.com/ernestrc/tcell/v3"
@@ -24,8 +25,6 @@ const (
 	LineSelection
 	// BlockSelection represents a select mode. See SelectBlock for more details.
 	BlockSelection
-
-	searchLocationListID = "search"
 )
 
 func (s SelectMode) String() string {
@@ -42,6 +41,12 @@ func (s SelectMode) String() string {
 	panic("unknown selection mode")
 }
 
+const (
+	searchLocationListID         = "search"
+	selectionLocationListID      = "selection"
+	internalLocationListPriority = textapi.LocationPriorityCritical
+)
+
 // used to subscribe to buffer updates
 type curSubscriber struct {
 	c *Cursor
@@ -54,11 +59,16 @@ type message struct {
 
 // Cursor is a helper structure which manages a cursor over a Scroll.
 type Cursor struct {
-	scroll    *component.Scroll
-	search    string
-	cursor    term.Coordinates
-	locs      map[string]*priorityLocationList
-	messages  map[term.Coordinates][]message
+	scroll *component.Scroll
+	search string
+	cursor term.Coordinates
+
+	locs          map[string]LocationList          // used by cursor moves
+	drawLocations map[string]*priorityLocationList // used to draw
+	locsSliceTemp []*priorityLocationList
+	locsSlice     []textapi.Location
+	messages      map[term.Coordinates][]message
+
 	selection struct {
 		mode       SelectMode
 		scrollFrom term.Coordinates
@@ -68,8 +78,9 @@ type Cursor struct {
 }
 
 type priorityLocationList struct {
-	LocationList
-	priority textapi.LocationPriority
+	locations []textapi.Location
+	ID        string
+	priority  textapi.LocationPriority
 }
 
 // NewCursor allocates storage for a new cursor,
@@ -90,27 +101,14 @@ func (c *Cursor) Init(scroll *component.Scroll) {
 	c.scroll = scroll
 	c.selection.mode = NoSelection
 	c.subscriber.c = c
-	c.locs = make(map[string]*priorityLocationList)
+	c.locs = make(map[string]LocationList)
+	c.drawLocations = make(map[string]*priorityLocationList)
 	c.messages = make(map[term.Coordinates][]message)
 
 	c.scroll.Buffer().Subscribe(&c.subscriber)
 }
 
-func (c *curSubscriber) clearAllLocations() {
-	for _, list := range c.c.locs {
-		c.c.setLocListAttr(list, true)
-	}
-	// this is optimized by the compiler starting at go 1.11
-	for k := range c.c.locs {
-		delete(c.c.locs, k)
-	}
-	for k := range c.c.messages {
-		delete(c.c.messages, k)
-	}
-}
-
 func (c *curSubscriber) OnWillEdit(start, end term.Coordinates, str string) {
-	c.clearAllLocations()
 }
 
 func (c *curSubscriber) OnDidEdit(from, to term.Coordinates, old string) {
@@ -269,11 +267,12 @@ func (c *Cursor) setSearchLocationList(text string) int {
 		}
 		searchLoc[i] = textapi.Location{
 			From: res,
-			// To: is not necessary for MoveToNextLocation
+			To:   term.Coordinates{Y: res.Y, X: res.X + len(text) - 1},
+			Attr: c.scroll.ResultsAttr,
 		}
 	}
 
-	c.SetLocationList(textapi.LocationPriorityInfo, searchLocationListID, LocationSlice(searchLoc))
+	c.SetLocationList(internalLocationListPriority, searchLocationListID, LocationSlice(searchLoc))
 	return n
 }
 
@@ -884,40 +883,37 @@ func (c *Cursor) Conflate() (ok bool) {
 	return
 }
 
-func invertAttr(cells [][]term.Cell) {
-	for i := 0; i < len(cells); i++ {
-		for j := 0; j < len(cells[i]); j++ {
-			c := cells[i][j]
-			if c.Attrs&tcell.AttrReverse == tcell.AttrReverse {
-				cells[i][j].Attrs &^= tcell.AttrReverse
-			} else {
-				cells[i][j].Attrs |= tcell.AttrReverse
-			}
-		}
-	}
-}
-
 func (c *Cursor) setSelection() (ok bool) {
-	invertAttr(c.selection.cells)
-
 	from := c.selection.scrollFrom
 	to := c.cursorAtScroll()
 
 	from, to = cell.SortFromTo(from, to)
 	to.X++
+
+	var sels []cell.Selection
 	switch c.selection.mode {
 	case StandardSelection:
-		c.selection.cells, _, ok = c.buffer().Select(from, to)
+		c.selection.cells, sels, ok = c.buffer().Select(from, to)
 	case LineSelection:
-		c.selection.cells, _, ok = c.buffer().SelectLine(from, to)
+		c.selection.cells, sels, ok = c.buffer().SelectLine(from, to)
 	case BlockSelection:
-		c.selection.cells, _, ok = c.buffer().SelectBlock(from, to)
+		c.selection.cells, sels, ok = c.buffer().SelectBlock(from, to)
 	case NoSelection:
 		c.selection.cells = nil
 		ok = true
 	}
 
-	invertAttr(c.selection.cells)
+	var locs []textapi.Location
+	for _, sel := range sels {
+		locs = append(locs, textapi.Location{
+			From: sel.From,
+			To:   sel.To,
+			Attr: term.Attributes{Attrs: tcell.AttrReverse},
+		})
+	}
+
+	c.SetLocationList(internalLocationListPriority, selectionLocationListID, LocationSlice(locs))
+
 	return
 }
 
@@ -1016,8 +1012,8 @@ func (c *Cursor) Unselect() bool {
 		return false
 	}
 	c.selection.mode = NoSelection
-	invertAttr(c.selection.cells)
 	c.selection.cells = nil
+	c.SetLocationList(internalLocationListPriority, selectionLocationListID, nil)
 	return true
 }
 
@@ -1337,42 +1333,10 @@ func scrollStartList(l LocationList) {
 	}
 }
 
-func (c *Cursor) setLocListAttr(l LocationList, reverse bool) {
-	scrollStartList(l)
-
-	loc, ok := l.Current()
-	if !ok {
-		return
-	}
-
-	for {
-		selection, _, ok := c.buffer().Select(loc.From, loc.To)
-		if ok && reverse {
-			for y, row := range selection {
-				for x := range row {
-					attrs := term.AttributesDifference(selection[y][x].Attributes, loc.Attr)
-					selection[y][x].Attributes = attrs
-				}
-			}
-		} else if ok {
-			for y, row := range selection {
-				for x := range row {
-					attrs := term.AttributesUnion(selection[y][x].Attributes, loc.Attr)
-					selection[y][x].Attributes = attrs
-				}
-			}
-		}
-
-		loc, ok = l.Next()
-		if !ok {
-			break
-		}
-	}
-}
-
-func (c *Cursor) setMessages(ID string, l LocationList) {
+func (c *Cursor) processList(ID string, l LocationList) {
 	scrollStartList(l)
 	for n, ok := l.Current(); ok; n, ok = l.Next() {
+		c.drawLocations[ID].locations = append(c.drawLocations[ID].locations, n)
 		if n.Message == "" {
 			continue
 		}
@@ -1414,9 +1378,9 @@ func (c *Cursor) clearMessages(ID string) {
 	}
 }
 
-// Locations returns the set of locations by location list ID set by SetLocationList,
+// LocationsAtCursor returns the set of locations by location list ID set by SetLocationList,
 // at the current cursor position, if there's any.
-func (c *Cursor) Locations() (map[string]textapi.Location, bool) {
+func (c *Cursor) LocationsAtCursor() (map[string]textapi.Location, bool) {
 	msgs, ok := c.messages[c.cursorAtScroll()]
 	if !ok {
 		return nil, false
@@ -1431,6 +1395,32 @@ func (c *Cursor) Locations() (map[string]textapi.Location, bool) {
 	return ret, true
 }
 
+// SortedLocations returns all the locations sorted by priority level. If two
+// location lists have the same priority level, then the location list ID is used
+// to disambiguate order.
+func (c *Cursor) SortedLocations() []textapi.Location {
+	// re-use previous allocation
+	c.locsSlice = c.locsSlice[:0]
+	c.locsSliceTemp = c.locsSliceTemp[:0]
+	for _, list := range c.drawLocations {
+		c.locsSliceTemp = append(c.locsSliceTemp, list)
+	}
+
+	sort.Slice(c.locsSliceTemp, func(i, j int) bool {
+		return c.locsSliceTemp[i].priority <
+			c.locsSliceTemp[j].priority ||
+			(c.locsSliceTemp[i].priority == c.locsSliceTemp[j].priority &&
+				c.locsSliceTemp[i].ID < c.locsSliceTemp[j].ID)
+	})
+
+	for _, list := range c.locsSliceTemp {
+		for _, loc := range list.locations {
+			c.locsSlice = append(c.locsSlice, loc)
+		}
+	}
+	return c.locsSlice
+}
+
 // SetLocationList sets a location list on this cursor. It substitutes and returns
 // the previous location list with the same ID, if there was any.
 // Any calls to Insert on the underlying Writer will reset all location lists.
@@ -1439,40 +1429,21 @@ func (c *Cursor) SetLocationList(
 ) LocationList {
 	prev, ok := c.locs[ID]
 	if ok {
-		c.setLocListAttr(prev, true)
 		c.clearMessages(ID)
+		c.drawLocations[ID].locations = c.drawLocations[ID].locations[:0]
+		c.drawLocations[ID].priority = pri
+	} else {
+		c.drawLocations[ID] = &priorityLocationList{ID: ID, priority: pri}
 	}
 
 	if l == nil {
 		delete(c.locs, ID)
 	} else {
-		c.locs[ID] = &priorityLocationList{LocationList: l, priority: pri}
+		c.locs[ID] = l
+		c.processList(ID, l)
 	}
 
-	// reverse attrs of any higher priority lists
-	var higher []LocationList
-	for _, l := range c.locs {
-		if l.priority > pri {
-			c.setLocListAttr(l, true)
-			higher = append(higher, l)
-		}
-	}
-
-	if l != nil {
-		c.setLocListAttr(l, false)
-		c.setMessages(ID, l)
-	}
-
-	// reapply attrs higher priority lists
-	for _, l := range higher {
-		c.setLocListAttr(l, false)
-	}
-
-	if prev == nil {
-		return nil
-	}
-
-	return prev.LocationList
+	return prev
 }
 
 func (c *Cursor) endOfLocationList(

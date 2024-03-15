@@ -62,7 +62,6 @@ func setupCursorContent(t *testing.T, width, height int, cont string, wrap bool)
 	scroll.Buffer().ReadFrom(strings.NewReader(cont))
 	scroll.Resize(width, height)
 	require.Equal(t, e.scroll.Buffer(), scroll.Buffer())
-	require.Equal(t, e.subscriber.c, e)
 	if wrap {
 		// needed for wraps to be accounted for
 		e.scroll.RecalculateWraps()
@@ -1717,14 +1716,14 @@ func TestCursorMoveLocationList(t *testing.T) {
 	t.Run("MoveToPrevLocation should return false and do nothing if already at start of location list", func(t *testing.T) {
 		c := setupCursorContent(t, 10, 10, "", false)
 		locations := []textapi.Location{{}}
-		assert.Nil(t, c.SetLocationList(textapi.LocationPriorityInfo, locID, &testLocationList{locations: locations}))
+		assert.Nil(t, c.SetLocationList(textapi.LocationPriorityInfo, locID, LocationSlice(locations)))
 		assert.False(t, c.MoveToPrevLocation(locID))
 	})
 
 	t.Run("MoveToNextLocation should return false and do nothing if already at end of location list", func(t *testing.T) {
 		c := setupCursorContent(t, 10, 10, "", false)
 		locations := []textapi.Location{{}}
-		assert.Nil(t, c.SetLocationList(textapi.LocationPriorityInfo, locID, &testLocationList{locations: locations}))
+		assert.Nil(t, c.SetLocationList(textapi.LocationPriorityInfo, locID, LocationSlice(locations)))
 		assert.False(t, c.MoveToNextLocation(locID))
 	})
 
@@ -1733,7 +1732,7 @@ func TestCursorMoveLocationList(t *testing.T) {
 		require.True(t, c.MoveRight())
 
 		locations := []textapi.Location{{}}
-		assert.Nil(t, c.SetLocationList(textapi.LocationPriorityInfo, locID, &testLocationList{locations: locations}))
+		assert.Nil(t, c.SetLocationList(textapi.LocationPriorityInfo, locID, LocationSlice(locations)))
 		assert.True(t, c.MoveToNextLocation(locID))
 
 		pos := c.Coordinates()
@@ -1744,7 +1743,7 @@ func TestCursorMoveLocationList(t *testing.T) {
 		c := setupCursorContent(t, 10, 10, "\na\nb\nc \n", false)
 		require.True(t, c.MoveLastLine())
 
-		assert.Nil(t, c.SetLocationList(textapi.LocationPriorityInfo, locID, &testLocationList{locations: abcLocations}))
+		assert.Nil(t, c.SetLocationList(textapi.LocationPriorityInfo, locID, LocationSlice(abcLocations)))
 		assert.True(t, c.MoveToNextLocation(locID))
 
 		pos := c.Coordinates()
@@ -1754,7 +1753,7 @@ func TestCursorMoveLocationList(t *testing.T) {
 	t.Run("MoveToPrevLocation should wrap around to last location", func(t *testing.T) {
 		c := setupCursorContent(t, 10, 10, "\na\nb\nc\n", false)
 
-		assert.Nil(t, c.SetLocationList(textapi.LocationPriorityInfo, locID, &testLocationList{locations: abcLocations}))
+		assert.Nil(t, c.SetLocationList(textapi.LocationPriorityInfo, locID, LocationSlice(abcLocations)))
 		assert.True(t, c.MoveToPrevLocation(locID))
 
 		pos := c.Coordinates()
@@ -1766,7 +1765,7 @@ func TestCursorMoveLocationList(t *testing.T) {
 		require.True(t, c.MoveRight())
 
 		locations := []textapi.Location{{}, {From: term.Coordinates{X: 1}}}
-		assert.Nil(t, c.SetLocationList(textapi.LocationPriorityInfo, locID, &testLocationList{locations: locations}))
+		assert.Nil(t, c.SetLocationList(textapi.LocationPriorityInfo, locID, LocationSlice(locations)))
 		assert.True(t, c.MoveToNextLocation(locID))
 
 		pos := c.Coordinates()
@@ -1777,7 +1776,7 @@ func TestCursorMoveLocationList(t *testing.T) {
 		c := setupCursorContent(t, 10, 10, " X", false)
 
 		locations := []textapi.Location{{}, {From: term.Coordinates{X: 1}}}
-		assert.Nil(t, c.SetLocationList(textapi.LocationPriorityInfo, locID, &testLocationList{locations: locations}))
+		assert.Nil(t, c.SetLocationList(textapi.LocationPriorityInfo, locID, LocationSlice(locations)))
 		assert.True(t, c.MoveToPrevLocation(locID))
 
 		pos := c.Coordinates()
@@ -1789,7 +1788,7 @@ func TestCursorMoveLocationList(t *testing.T) {
 		require.True(t, c.MoveDown())
 		require.True(t, c.MoveDown())
 
-		assert.Nil(t, c.SetLocationList(textapi.LocationPriorityInfo, locID, &testLocationList{locations: abcLocations}))
+		assert.Nil(t, c.SetLocationList(textapi.LocationPriorityInfo, locID, LocationSlice(abcLocations)))
 		assert.True(t, c.MoveToNextLocation(locID))
 
 		pos := c.Coordinates()
@@ -1801,7 +1800,7 @@ func TestCursorMoveLocationList(t *testing.T) {
 		require.True(t, c.MoveDown())
 		require.True(t, c.MoveDown())
 
-		assert.Nil(t, c.SetLocationList(textapi.LocationPriorityInfo, locID, &testLocationList{locations: abcLocations}))
+		assert.Nil(t, c.SetLocationList(textapi.LocationPriorityInfo, locID, LocationSlice(abcLocations)))
 		assert.True(t, c.MoveToPrevLocation(locID))
 
 		pos := c.Coordinates()
@@ -1809,80 +1808,167 @@ func TestCursorMoveLocationList(t *testing.T) {
 	})
 }
 
-func TestCursorSetLocationListAttr(t *testing.T) {
-	t.Run("sets and clears location list attrs", func(t *testing.T) {
+func TestCursorSortedLocations(t *testing.T) {
+	t.Run("sorts by level", func(t *testing.T) {
 		c := setupCursorContent(t, 10, 10, "\na\nb\nc\n", false)
-		buf := c.scroll.Buffer()
+
+		infoList := LocationSlice([]textapi.Location{
+			{
+				From:    term.Coordinates{Y: 1},
+				To:      term.Coordinates{Y: 1, X: 1},
+				Attr:    abcAttr,
+				Message: "info",
+			},
+			{
+				From:    term.Coordinates{Y: 11},
+				To:      term.Coordinates{Y: 11, X: 11},
+				Attr:    abcAttr,
+				Message: "info2",
+			},
+		})
+		errList := LocationSlice([]textapi.Location{
+			{
+				From:    term.Coordinates{Y: 2},
+				To:      term.Coordinates{Y: 2, X: 2},
+				Attr:    abcAttr,
+				Message: "err",
+			},
+		})
+		criticalList := LocationSlice([]textapi.Location{
+			{
+				From:    term.Coordinates{Y: 3},
+				To:      term.Coordinates{Y: 3, X: 3},
+				Attr:    abcAttr,
+				Message: "critical",
+			},
+		})
+		warnList := LocationSlice([]textapi.Location{
+			{
+				From:    term.Coordinates{Y: 4},
+				To:      term.Coordinates{Y: 4, X: 4},
+				Attr:    abcAttr,
+				Message: "warn",
+			},
+		})
+		assert.Nil(t, c.SetLocationList(textapi.LocationPriorityError, "errList", errList))
+		assert.Nil(t, c.SetLocationList(textapi.LocationPriorityInfo, "infoList", infoList))
+		assert.Nil(t, c.SetLocationList(textapi.LocationPriorityCritical, "criticalList", criticalList))
+		assert.Nil(t, c.SetLocationList(textapi.LocationPriorityWarning, "warnList", warnList))
+
+		locations := c.SortedLocations()
+		require.Len(t, locations, 5)
+
+		assert.Equal(t, term.Coordinates{Y: 1}, locations[0].From)
+		assert.Equal(t, term.Coordinates{Y: 1, X: 1}, locations[0].To)
+		assert.Equal(t, "info", locations[0].Message)
+
+		assert.Equal(t, "info2", locations[1].Message)
+		assert.Equal(t, "warn", locations[2].Message)
+		assert.Equal(t, "err", locations[3].Message)
+		assert.Equal(t, "critical", locations[4].Message)
+	})
+
+	t.Run("sorts by id if level is the same", func(t *testing.T) {
+		c := setupCursorContent(t, 10, 10, "\na\nb\nc\n", false)
+		infoList := LocationSlice([]textapi.Location{
+			{
+				From:    term.Coordinates{Y: 1},
+				To:      term.Coordinates{Y: 1, X: 1},
+				Attr:    abcAttr,
+				Message: "info",
+			},
+			{
+				From:    term.Coordinates{Y: 11},
+				To:      term.Coordinates{Y: 11, X: 11},
+				Attr:    abcAttr,
+				Message: "info1",
+			},
+		})
+		infoList2 := LocationSlice([]textapi.Location{
+			{
+				From:    term.Coordinates{Y: 2},
+				To:      term.Coordinates{Y: 2, X: 2},
+				Attr:    abcAttr,
+				Message: "info2",
+			},
+		})
+		assert.Nil(t, c.SetLocationList(textapi.LocationPriorityInfo, "infoList2", infoList2))
+		assert.Nil(t, c.SetLocationList(textapi.LocationPriorityInfo, "infoList", infoList))
+
+		locations := c.SortedLocations()
+		require.Len(t, locations, 3)
+
+		assert.Equal(t, term.Coordinates{Y: 1}, locations[0].From)
+		assert.Equal(t, term.Coordinates{Y: 1, X: 1}, locations[0].To)
+		assert.Equal(t, "info", locations[0].Message)
+		assert.Equal(t, "info1", locations[1].Message)
+		assert.Equal(t, "info2", locations[2].Message)
+	})
+
+	t.Run("idempotency", func(t *testing.T) {
+		c := setupCursorContent(t, 10, 10, "\na\nb\nc\n", false)
+		infoList := LocationSlice([]textapi.Location{
+			{
+				From:    term.Coordinates{Y: 1},
+				To:      term.Coordinates{Y: 1, X: 1},
+				Attr:    abcAttr,
+				Message: "info",
+			},
+			{
+				From:    term.Coordinates{Y: 11},
+				To:      term.Coordinates{Y: 11, X: 11},
+				Attr:    abcAttr,
+				Message: "info1",
+			},
+		})
+		assert.Nil(t, c.SetLocationList(textapi.LocationPriorityInfo, "infoList", infoList))
+
+		require.Len(t, c.SortedLocations(), 2)
+		require.Len(t, c.SortedLocations(), 2)
+		require.Len(t, c.SortedLocations(), 2)
+		require.Len(t, c.SortedLocations(), 2)
+	})
+}
+
+func TestCursorDrawLocationLists(t *testing.T) {
+	t.Run("sets location list attrs", func(t *testing.T) {
+		c := setupCursorContent(t, 1, 5, "\na\nb\nc\n", false)
 
 		expected := [][]term.Cell{
-			{},
-			{{Ch: 'a', Attributes: abcAttr, Width: 1}},
-			{{Ch: 'b', Attributes: abcAttr, Width: 1}},
-			{{Ch: 'c', Attributes: abcAttr, Width: 1}},
-			{},
+			{{}},
+			{{Attributes: abcAttr}},
+			{{Attributes: abcAttr}},
+			{{Attributes: abcAttr}},
+			{{}},
 		}
 
-		abcList := &testLocationList{locations: abcLocations}
+		abcList := LocationSlice(abcLocations)
 
 		assert.Nil(t, c.SetLocationList(textapi.LocationPriorityInfo, locID, abcList))
-		assert.Equal(t, expected, buf.RawCells())
 
-		buf.RawCells()[2][0].Attrs = tcell.AttrUnderline | tcell.AttrBold
-		buf.RawCells()[2][0].Bg = 0
-		buf.RawCells()[2][0].Fg = 0
+		w := cell.NewBufferWriter(context.Background(), 1, 5)
+		DrawLocations(c.SortedLocations(), c.scroll, w)
+		assert.Equal(t, expected, w.RawCells())
+	})
 
-		newLocations := []textapi.Location{
-			{
-				From: term.Coordinates{Y: 2},
-				To:   term.Coordinates{Y: 2, X: 1},
-				Attr: term.Attributes{Bg: tcell.ColorRed},
-			},
+	t.Run("clears location lists", func(t *testing.T) {
+		c := setupCursorContent(t, 1, 5, "\na\nb\nc\n", false)
+		abcList := LocationSlice(abcLocations)
+
+		assert.Nil(t, c.SetLocationList(textapi.LocationPriorityInfo, locID, abcList))
+		assert.NotNil(t, c.SetLocationList(textapi.LocationPriorityInfo, locID, nil))
+
+		expected := [][]term.Cell{
+			{{}},
+			{{}},
+			{{}},
+			{{}},
+			{{}},
 		}
 
-		expected = [][]term.Cell{
-			{},
-			{{Ch: 'a', Width: 1}},
-			{{Ch: 'b', Width: 1,
-				Attributes: term.Attributes{
-					Attrs: tcell.AttrBold, Bg: tcell.ColorRed,
-				}}},
-			{{Ch: 'c', Width: 1}},
-			{},
-		}
-		oldLocList := c.SetLocationList(textapi.LocationPriorityInfo, locID, &testLocationList{locations: newLocations})
-		assert.Equal(t, abcList, oldLocList)
-		require.Equal(t, expected, buf.RawCells())
-
-		require.True(t, buf.DeleteRow(0))
-
-		// make sure it doesn't remove the wrong one
-		buf.RawCells()[0][0].Bg = tcell.ColorTeal
-		newLocations = []textapi.Location{
-			{
-				From: term.Coordinates{Y: 2},
-				To:   term.Coordinates{Y: 2, X: 1},
-				Attr: term.Attributes{Bg: tcell.ColorRed, Attrs: tcell.AttrUnderline},
-			},
-		}
-		expected = [][]term.Cell{
-			{{Ch: 'a', Attributes: term.Attributes{Bg: tcell.ColorTeal}, Width: 1}},
-			{{Ch: 'b', Attributes: term.Attributes{Attrs: tcell.AttrBold}, Width: 1}},
-			{{Ch: 'c', Attributes: term.Attributes{Bg: tcell.ColorRed, Attrs: tcell.AttrUnderline}, Width: 1}},
-			{},
-		}
-		newL := c.SetLocationList(textapi.LocationPriorityInfo, locID, &testLocationList{locations: newLocations})
-		require.Equal(t, expected, buf.RawCells())
-		assert.Nil(t, newL)
-
-		// clear location list
-		c.SetLocationList(textapi.LocationPriorityInfo, locID, nil)
-		expected = [][]term.Cell{
-			{{Ch: 'a', Attributes: term.Attributes{Bg: tcell.ColorTeal}, Width: 1}},
-			{{Ch: 'b', Attributes: term.Attributes{Attrs: tcell.AttrBold}, Width: 1}},
-			{{Ch: 'c', Width: 1}},
-			{},
-		}
-		assert.Equal(t, expected, buf.RawCells())
+		w := cell.NewBufferWriter(context.Background(), 1, 5)
+		DrawLocations(c.SortedLocations(), c.scroll, w)
+		assert.Equal(t, expected, w.RawCells())
 	})
 
 	t.Run("lower priority lists do not override higher priority list attrs", func(t *testing.T) {
@@ -1920,22 +2006,24 @@ func TestCursorSetLocationListAttr(t *testing.T) {
 				Attr: term.Attributes{Attrs: tcell.AttrUnderline, Bg: tcell.ColorBlack},
 			},
 		}
-		c := setupCursorContent(t, 10, 10, "\na\nb\nc\n", false)
-		buf := c.scroll.Buffer()
+		c := setupCursorContent(t, 1, 5, "\na\nb\nc\n", false)
 
 		expected := [][]term.Cell{
-			{},
-			{{Ch: 'a', Attributes: term.Attributes{Fg: tcell.ColorRed, Attrs: tcell.AttrUnderline, Bg: tcell.ColorBlack}, Width: 1}},
-			{{Ch: 'b', Attributes: term.Attributes{Fg: tcell.ColorRed, Attrs: tcell.AttrUnderline, Bg: tcell.ColorBlack}, Width: 1}},
-			{{Ch: 'c', Attributes: term.Attributes{Fg: tcell.ColorRed, Attrs: tcell.AttrUnderline, Bg: tcell.ColorBlack}, Width: 1}},
-			{},
+			{{}},
+			{{Attributes: term.Attributes{Fg: tcell.ColorRed, Attrs: tcell.AttrUnderline, Bg: tcell.ColorBlack}}},
+			{{Attributes: term.Attributes{Fg: tcell.ColorRed, Attrs: tcell.AttrUnderline, Bg: tcell.ColorBlack}}},
+			{{Attributes: term.Attributes{Fg: tcell.ColorRed, Attrs: tcell.AttrUnderline, Bg: tcell.ColorBlack}}},
+			{{}},
 		}
 
-		criticalList := &testLocationList{locations: criticalLocations}
-		infoList := &testLocationList{locations: infoLocations}
+		criticalList := LocationSlice(criticalLocations)
+		infoList := LocationSlice(infoLocations)
 		assert.Nil(t, c.SetLocationList(textapi.LocationPriorityCritical, "list1", criticalList))
 		assert.Nil(t, c.SetLocationList(textapi.LocationPriorityInfo, "list2", infoList))
-		assert.Equal(t, expected, buf.RawCells())
+
+		w := cell.NewBufferWriter(context.Background(), 1, 5)
+		DrawLocations(c.SortedLocations(), c.scroll, w)
+		assert.Equal(t, expected, w.RawCells())
 	})
 }
 
@@ -1964,7 +2052,7 @@ func TestCursorSetLocationListMessages(t *testing.T) {
 
 	assertMessages := func(t *testing.T, c *Cursor) {
 		for i := 0; i < 3; i++ {
-			locsByID, ok := c.Locations()
+			locsByID, ok := c.LocationsAtCursor()
 			require.True(t, ok, c.messages)
 			require.Len(t, locsByID, 1)
 			assert.Equal(t, locsByID[locID].Message, strconv.Itoa(i+1))
@@ -1974,16 +2062,16 @@ func TestCursorSetLocationListMessages(t *testing.T) {
 
 	t.Run("returns nil/false if cursor is not in from, to or in between", func(t *testing.T) {
 		c := setupCursorContent(t, 10, 2, content, false)
-		abcList := &testLocationList{locations: messageLocations}
+		abcList := LocationSlice(messageLocations)
 		assert.Nil(t, c.SetLocationList(textapi.LocationPriorityInfo, locID, abcList))
 
-		_, ok := c.Locations()
+		_, ok := c.LocationsAtCursor()
 		assert.False(t, ok)
 	})
 
 	t.Run("return messages if cursor is at From", func(t *testing.T) {
 		c := setupCursorContent(t, 10, 2, content, false)
-		abcList := &testLocationList{locations: messageLocations}
+		abcList := LocationSlice(messageLocations)
 		assert.Nil(t, c.SetLocationList(textapi.LocationPriorityInfo, locID, abcList))
 		require.True(t, c.MoveDown())
 
@@ -1993,7 +2081,7 @@ func TestCursorSetLocationListMessages(t *testing.T) {
 	t.Run("return messages if cursor between From/To", func(t *testing.T) {
 		c := setupCursorContent(t, 10, 2, content, false)
 
-		abcList := &testLocationList{locations: messageLocations}
+		abcList := LocationSlice(messageLocations)
 
 		assert.Nil(t, c.SetLocationList(textapi.LocationPriorityInfo, locID, abcList))
 		require.True(t, c.MoveDown())
@@ -2005,7 +2093,7 @@ func TestCursorSetLocationListMessages(t *testing.T) {
 	t.Run("return messages if cursor is at To", func(t *testing.T) {
 		c := setupCursorContent(t, 10, 2, content, false)
 
-		abcList := &testLocationList{locations: messageLocations}
+		abcList := LocationSlice(messageLocations)
 
 		assert.Nil(t, c.SetLocationList(textapi.LocationPriorityInfo, locID, abcList))
 		require.True(t, c.MoveDown())
