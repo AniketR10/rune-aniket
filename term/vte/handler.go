@@ -176,6 +176,7 @@ func (e *Handler) Handle(ev term.Event) (exit, handled bool) {
 	}
 
 	if !e.bracketedPaste {
+		e.comp.ScrollBottom()
 		e.handleTimer.Reset(handleTimeout)
 		select {
 		case <-e.handleTimer.C:
