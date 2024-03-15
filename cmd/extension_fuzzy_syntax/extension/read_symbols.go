@@ -239,7 +239,7 @@ func makeSymbolItem(filename string, buf *cell.Buffer, n *sitter.Node) (string, 
 	}
 	to.Y = from.Y
 	to.X = buf.Columns(from.Y)
-	cells, _ := buf.Select(from, to)
+	cells, _, _ := buf.Select(from, to)
 	textToDisplay := cell.CellsToString(cells)
 	return fmt.Sprintf("%s:%d: %s", filename, from.Y+1, textToDisplay), nil
 }

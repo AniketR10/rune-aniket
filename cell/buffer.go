@@ -159,7 +159,7 @@ func (b *Buffer) InsertStringWithAttr(
 	at term.Coordinates, str string, attr term.Attributes,
 ) (from, until term.Coordinates) {
 	from, until = b.InsertString(at, str)
-	cells, _ := b.Select(from, until)
+	cells, _, _ := b.Select(from, until)
 	for y, row := range cells {
 		for x := range row {
 			cells[y][x].Bg = attr.Bg
@@ -426,37 +426,40 @@ func (b *Buffer) Redo() (bool, term.Coordinates) {
 // Select returns the cells inside the given coordinates or nil if coordinates
 // are out of bounds.
 func (b *Buffer) Select(from term.Coordinates, to term.Coordinates) (
-	[][]term.Cell, bool,
+	[][]term.Cell, []Selection, bool,
 ) {
 	from, to, ok := fromToInBounds(b.view, from, to)
 	if !ok {
-		return nil, false
+		return nil, nil, false
 	}
-	return b.selector.selectCells(from, to), true
+	cell, sels := b.selector.selectCells(from, to)
+	return cell, sels, true
 }
 
 // SelectLine returns the lines inside the given coordinates or nil if
 // coordinates are out of bounds.
 func (b *Buffer) SelectLine(from term.Coordinates, to term.Coordinates) (
-	[][]term.Cell, bool,
+	[][]term.Cell, []Selection, bool,
 ) {
 	from, to, ok := fromToInBounds(b.view, from, to)
 	if !ok {
-		return nil, false
+		return nil, nil, false
 	}
-	return b.selector.selectLine(from, to), true
+	cell, sels := b.selector.selectLine(from, to)
+	return cell, sels, true
 }
 
 // SelectBlock returns the block of cells inside the given coordinates or nil if
 // coordinates are out of bounds.
 func (b *Buffer) SelectBlock(from term.Coordinates, to term.Coordinates) (
-	[][]term.Cell, bool,
+	[][]term.Cell, []Selection, bool,
 ) {
 	from, to, ok := fromToInBounds(b.view, from, to)
 	if !ok {
-		return nil, false
+		return nil, nil, false
 	}
-	return b.selector.selectBlock(from, to), true
+	cell, sels := b.selector.selectBlock(from, to)
+	return cell, sels, true
 }
 
 func (b *Buffer) String() string {

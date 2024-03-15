@@ -402,7 +402,7 @@ func (h *syntaxHandler) browseNodes(
 		// along coordinates
 		to.Y = from.Y
 		to.X = buf.Columns(from.Y)
-		cells, ok := buf.Select(from, to)
+		cells, _, ok := buf.Select(from, to)
 
 		// best effort
 		var textToDisplay string

@@ -2,10 +2,10 @@ package cell
 
 import (
 	"fmt"
-	"reflect"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"unstable.build/go-tui/term"
 )
 
@@ -121,18 +121,18 @@ itsme`
 	}
 
 	for i, tcase := range testCases {
-		selector := selector{view: buf.view}
-		selection := selector.selectCells(tcase.from, tcase.to)
-		// we do not care about width; makes defining tests easier
-		for y, row := range selection {
-			for x := range row {
-				selection[y][x].Width = 0
+		t.Run(fmt.Sprintf("test case %d", i), func(t *testing.T) {
+			selector := selector{view: buf.view}
+			selection, coords := selector.selectCells(tcase.from, tcase.to)
+			// we do not care about width; makes defining tests easier
+			for y, row := range selection {
+				for x := range row {
+					selection[y][x].Width = 0
+				}
 			}
-		}
-		if !reflect.DeepEqual(selection, tcase.expected) {
-			t.Errorf("tcase %d: expected %q found %q", i,
-				CellsToString(tcase.expected), CellsToString(selection))
-		}
+			require.Equal(t, CellsToString(tcase.expected), CellsToString(selection))
+			assertReturnedCoordinatesSelectSame(t, selector, coords, tcase.expected, false)
+		})
 	}
 }
 
@@ -226,14 +226,15 @@ func TestSelectLine(t *testing.T) {
 	for i, tcase := range testCases {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
 			selector := selector{view: buf.view}
-			selection := selector.selectLine(tcase.from, tcase.to)
+			selection, coords := selector.selectLine(tcase.from, tcase.to)
 			// we do not care about width; makes defining tests easier
 			for y, row := range selection {
 				for x := range row {
 					selection[y][x].Width = 0
 				}
 			}
-			assert.Equal(t, CellsToString(tcase.expected), CellsToString(selection))
+			require.Equal(t, CellsToString(tcase.expected), CellsToString(selection))
+			assertReturnedCoordinatesSelectSame(t, selector, coords, tcase.expected, true)
 		})
 	}
 }
@@ -293,15 +294,37 @@ func TestSelectBlock(t *testing.T) {
 
 	for _, tcase := range testCases {
 		selector := selector{view: buf.view}
-		selection := selector.selectBlock(tcase.from, tcase.to)
+		selection, coords := selector.selectBlock(tcase.from, tcase.to)
 		// we do not care about width; makes defining tests easier
 		for y, row := range selection {
 			for x := range row {
 				selection[y][x].Width = 0
 			}
 		}
-		if !reflect.DeepEqual(selection, tcase.expected) {
-			t.Errorf("expected %q found %q", CellsToString(tcase.expected), CellsToString(selection))
-		}
+		require.Equal(t, CellsToString(tcase.expected), CellsToString(selection))
+		assertReturnedCoordinatesSelectSame(t, selector, coords, tcase.expected, false)
 	}
+}
+
+func assertReturnedCoordinatesSelectSame(
+	t *testing.T, selector selector,
+	coords []Selection, expected [][]term.Cell,
+	isLine bool,
+) {
+	var selectedSelection [][]term.Cell
+	for _, coords := range coords {
+		cells, actualCoords := selector.selectCells(coords.From, coords.To)
+		// it shouldn't break apart further
+		require.Len(t, actualCoords, 1)
+		assert.Equal(t, coords, actualCoords[0])
+		selectedSelection = append(selectedSelection, cells...)
+	}
+	expect := CellsToString(expected)
+	// line selection always appends a newline at the end
+	// it should be the line paste that adds it, rather than the selection
+	// but for now this is needed for this assertion
+	if isLine {
+		expect = string(expect[:len(expect)-1])
+	}
+	assert.Equal(t, expect, CellsToString(selectedSelection))
 }

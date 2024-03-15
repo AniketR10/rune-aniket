@@ -907,11 +907,11 @@ func (c *Cursor) setSelection() (ok bool) {
 	to.X++
 	switch c.selection.mode {
 	case StandardSelection:
-		c.selection.cells, ok = c.buffer().Select(from, to)
+		c.selection.cells, _, ok = c.buffer().Select(from, to)
 	case LineSelection:
-		c.selection.cells, ok = c.buffer().SelectLine(from, to)
+		c.selection.cells, _, ok = c.buffer().SelectLine(from, to)
 	case BlockSelection:
-		c.selection.cells, ok = c.buffer().SelectBlock(from, to)
+		c.selection.cells, _, ok = c.buffer().SelectBlock(from, to)
 	case NoSelection:
 		c.selection.cells = nil
 		ok = true
@@ -1217,7 +1217,7 @@ func (c *Cursor) moveToChar(
 	start := term.Coordinates{Y: cursor.Y}
 	end := term.Coordinates{Y: cursor.Y, X: lastPos}
 
-	cells, ok := c.buffer().Select(start, end)
+	cells, _, ok := c.buffer().Select(start, end)
 	if !ok || len(cells) == 0 {
 		return false
 	}
@@ -1346,7 +1346,7 @@ func (c *Cursor) setLocListAttr(l LocationList, reverse bool) {
 	}
 
 	for {
-		selection, ok := c.buffer().Select(loc.From, loc.To)
+		selection, _, ok := c.buffer().Select(loc.From, loc.To)
 		if ok && reverse {
 			for y, row := range selection {
 				for x := range row {

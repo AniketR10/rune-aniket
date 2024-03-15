@@ -99,7 +99,7 @@ Love isn't love 'til you give it_away.
 		// start, end used in a select statement should return
 		// return string
 		if out != "" {
-			cells, ok := scroll.Buffer().Select(start, end)
+			cells, _, ok := scroll.Buffer().Select(start, end)
 			require.True(t, ok)
 			assert.Equal(t, tcase.wantOut, cell.CellsToString(cells))
 		}

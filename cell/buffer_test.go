@@ -727,11 +727,11 @@ func TestBufferMaxColumns(t *testing.T) {
 	assert.Equal(t, buf.MaxColumns(), 9)
 }
 
-func testBufferSelect(t *testing.T, fn func(b *Buffer, from, to term.Coordinates) ([][]term.Cell, bool)) {
+func testBufferSelect(t *testing.T, fn func(b *Buffer, from, to term.Coordinates) ([][]term.Cell, []Selection, bool)) {
 	t.Run("does not panic if oob", func(t *testing.T) {
 		b := NewBuffer()
 		b.WriteString("a")
-		_, ok := fn(b, term.Coordinates{X: 2}, term.Coordinates{Y: 1})
+		_, _, ok := fn(b, term.Coordinates{X: 2}, term.Coordinates{Y: 1})
 		assert.False(t, ok)
 	})
 }

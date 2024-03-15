@@ -413,9 +413,9 @@ func (b *AltBuffer) Selection() (cells [][]term.Cell, ok bool) {
 	mode, from, to, _ := b.SelectionCoordinatesAtScroll()
 	switch mode {
 	case text.StandardSelection:
-		cells, ok = b.Cells.Select(from, to)
+		cells, _, ok = b.Cells.Select(from, to)
 	case text.LineSelection:
-		cells, ok = b.Cells.SelectLine(from, to)
+		cells, _, ok = b.Cells.SelectLine(from, to)
 	default:
 	}
 
