@@ -70,11 +70,15 @@ func PublishEvent(ev term.Event) bool {
 }
 
 func handleInterruptSignal(
-	lastSignalAt *time.Time, exit *bool,
+	lastSignalAt *time.Time, exit *bool, evs <-chan tcell.Event,
 ) {
 	now := time.Now()
-	*exit = now.Sub(*lastSignalAt) < exitSignalDuration
+	shouldExit := now.Sub(*lastSignalAt) < exitSignalDuration
+	*exit = shouldExit
 	*lastSignalAt = now
+	if shouldExit {
+		drain(evs)
+	}
 }
 
 func run(root Handler, lock sync.Locker, termw term.ContextWriter) (err error) {
@@ -98,8 +102,6 @@ func run(root Handler, lock sync.Locker, termw term.ContextWriter) (err error) {
 
 loop:
 	for !exit && err == nil {
-		// reset interrupts so we don't stay forever in pending mode
-		interruptPending.Store(false)
 		if prevCursor, err = redraw(root, lock, termw, prevCursor); err != nil {
 			return
 		}
@@ -107,12 +109,12 @@ loop:
 		for {
 			select {
 			case <-sigs:
-				drain(evs)
-				handleInterruptSignal(&lastSignalAt, &exit)
+				handleInterruptSignal(&lastSignalAt, &exit, evs)
 			case tev := <-evs:
 				ev := term.FromTcellEvent(tev)
 				switch ev.Type {
 				case term.EventInterrupt:
+					interruptPending.Store(false)
 					if ev.Raw != nil {
 						if id, ok := parsePayload(ev.Raw); ok {
 							termw.SetContext(ContextWithIteration(ctx, id))
@@ -140,8 +142,7 @@ loop:
 					exit, handled = root.Handle(ev)
 					lock.Unlock()
 					if ev.Key == term.KeyCtrlC && !handled {
-						drain(evs) // avoid deadlocks with tcell's screen
-						handleInterruptSignal(&lastSignalAt, &exit)
+						handleInterruptSignal(&lastSignalAt, &exit, evs)
 					}
 				}
 			}
