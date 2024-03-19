@@ -1930,7 +1930,7 @@ func TestCursorSortedLocations(t *testing.T) {
 	})
 }
 
-func TestCursorDrawLocationLists(t *testing.T) {
+func TestCursorDrawLocationListsIntegration(t *testing.T) {
 	t.Run("sets location list attrs", func(t *testing.T) {
 		c := setupCursorContent(t, 1, 5, "\na\nb\nc\n", false)
 
@@ -2020,6 +2020,61 @@ func TestCursorDrawLocationLists(t *testing.T) {
 		infoList := LocationSlice(infoLocations)
 		assert.Nil(t, c.SetLocationList(textapi.LocationPriorityCritical, "list1", criticalList))
 		assert.Nil(t, c.SetLocationList(textapi.LocationPriorityInfo, "list2", infoList))
+
+		w := cell.NewBufferWriter(context.Background(), 1, 5)
+		DrawLocations(c.SortedLocations(), c.scroll, w)
+		assert.Equal(t, expected, w.RawCells())
+	})
+
+	t.Run("trims to fit location To line if From is in bounds", func(t *testing.T) {
+		c := setupCursorContent(t, 1, 5, "\na\nb\nc\n", false)
+
+		expected := [][]term.Cell{
+			{{}},
+			{{}},
+			{{Attributes: abcAttr}},
+			{{Attributes: abcAttr}},
+			{{Attributes: abcAttr}},
+		}
+		locations := []textapi.Location{
+			{
+				From: term.Coordinates{Y: 2},
+				To:   term.Coordinates{Y: 6, X: 1},
+				Attr: abcAttr,
+			},
+		}
+
+		abcList := LocationSlice(locations)
+
+		assert.Nil(t, c.SetLocationList(textapi.LocationPriorityInfo, locID, abcList))
+
+		w := cell.NewBufferWriter(context.Background(), 1, 5)
+		DrawLocations(c.SortedLocations(), c.scroll, w)
+		assert.Equal(t, expected, w.RawCells())
+	})
+
+	t.Run("does not panic if width == 0 in wrap mode", func(t *testing.T) {
+		c := setupCursorContent(t, 0, 5, "\na\nb\nc\n", false)
+		c.scroll.Wrap = true
+
+		expected := [][]term.Cell{
+			{{}},
+			{{}},
+			{{}},
+			{{}},
+			{{}},
+		}
+		locations := []textapi.Location{
+			{
+				From: term.Coordinates{Y: 0},
+				To:   term.Coordinates{Y: 1, X: 1},
+				Attr: abcAttr,
+			},
+		}
+
+		abcList := LocationSlice(locations)
+
+		assert.Nil(t, c.SetLocationList(textapi.LocationPriorityInfo, locID, abcList))
 
 		w := cell.NewBufferWriter(context.Background(), 1, 5)
 		DrawLocations(c.SortedLocations(), c.scroll, w)

@@ -1,6 +1,8 @@
 package text
 
 import (
+	"math"
+
 	textapi "unstable.build/go-tui/api/text"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/term"
@@ -56,8 +58,13 @@ func LocationSlice(in []textapi.Location) LocationList {
 // DrawLocations draws the given locations using the given writer.
 // This is intended to be used alongside Scroll's Draw method.
 func DrawLocations(locations []textapi.Location, scroll *component.Scroll, w term.Writer) {
+	if scroll.Width() == 0 {
+		return // avoid division by 0 in ScrollToWindowCoordinates
+	}
+
 	offset := scroll.Offset()
 	height := scroll.SizeHeight()
+	buffer := scroll.Buffer()
 
 	var wraps int
 	for _, count := range scroll.Wraps() {
@@ -76,8 +83,9 @@ func DrawLocations(locations []textapi.Location, scroll *component.Scroll, w ter
 		}
 
 		fromAtScrollX := fromAtScroll.X
+		toAtScroll.Y = int(math.Min(float64(buffer.Rows()-1), float64(toAtScroll.Y)))
 		for y := fromAtScroll.Y; y < toAtScroll.Y; y++ {
-			toX := scroll.Buffer().Columns(y)
+			toX := buffer.Columns(y)
 			for x := fromAtScrollX; x < toX; x++ {
 				posAtScreen := scroll.ScrollToWindowCoordinates(term.Coordinates{Y: y, X: x})
 				if posAtScreen.X >= scroll.Width() {
