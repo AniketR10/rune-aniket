@@ -1171,7 +1171,7 @@ func (c ideConfig) terminalConfig() vte.Config {
 	ret.NeedsAttentionAttributes = c.terminalNeedsAttentionAttr()
 	ret.Shell = c.terminalShell()
 	ret.Clipboard = c.clipboard()
-	ret.Bell = term.Bell
+	ret.Bell = term.PublishBell
 	return ret
 }
 

@@ -11,11 +11,14 @@ import (
 
 var (
 	defaultAttr = Attributes{Fg: tcell.ColorDefault, Bg: tcell.ColorDefault}
+	publishEvent atomic.Value
 
 	// DefaultWriter returns the global terminal Writer.
 	DefaultWriter ContextWriter = newTermboxWriter()
 
-	publishEvent atomic.Value
+	// EventRawBell is used by PublishBell to signal that there was
+	// a request to call RingBell.
+	EventRawBell = []byte("__bell")
 )
 
 func init() {
@@ -123,9 +126,15 @@ func PublishEvent(ev Event) bool {
 	return publishEvent.Load().(func(termbox.Event) bool)(tev)
 }
 
-// Bell makes an audible noise.
-func Bell() {
+// RingBell makes an audible noise. This must be synchronized
+// against other accesses to the term.Writer's screen buffer.
+func RingBell() {
 	termbox.Screen().Bell()
+}
+
+// PublishBell schedules a call to RingBell.
+func PublishBell() {
+	PublishEvent(Event{Type: EventInterrupt, Raw: EventRawBell})
 }
 
 // Poll gives access to the underlying tcell.Event channel.

@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"os/signal"
@@ -114,10 +115,12 @@ loop:
 				ev := term.FromTcellEvent(tev)
 				switch ev.Type {
 				case term.EventInterrupt:
-					interruptPending.Store(false)
 					if ev.Raw != nil {
 						if id, ok := parsePayload(ev.Raw); ok {
 							termw.SetContext(ContextWithIteration(ctx, id))
+						} else if bytes.Equal(ev.Raw, term.EventRawBell) {
+							term.RingBell()
+							continue // don't redraw for a bell interrupt
 						} else {
 							termw.SetContext(term.ContextWithPayload(ctx, ev.Raw))
 						}
@@ -127,6 +130,7 @@ loop:
 						// and a regular iteration loop.
 						termw.SetContext(ctx)
 					}
+					interruptPending.Store(false)
 					// ensure that i is not incremented
 					// and context is not overwritten
 					continue loop
