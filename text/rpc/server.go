@@ -366,7 +366,7 @@ func (s *Server) EditCell(ctx context.Context, in *EditCellRequest) (
 		return nil, errHandlerNotFound
 	}
 
-	from, to, old, err := s.editor.CellEditor(h).Edit(start, end, str)
+	from, to, old, err := s.editor.CellEditor(h).Edit(ctx, start, end, str)
 	if err != nil {
 		return nil, err
 	}

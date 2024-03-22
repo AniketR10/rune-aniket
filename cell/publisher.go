@@ -1,6 +1,8 @@
 package cell
 
 import (
+	"context"
+
 	"unstable.build/go-tui/term"
 )
 
@@ -17,15 +19,15 @@ func newPublisher(w Editor) *syncPublisher {
 	return p
 }
 
-func (p *syncPublisher) Edit(start, end term.Coordinates, str string) (
+func (p *syncPublisher) Edit(ctx context.Context, start, end term.Coordinates, str string) (
 	from, to term.Coordinates, old string,
 ) {
 	for _, sub := range p.subscribers {
-		sub.OnWillEdit(start, end, str)
+		sub.OnWillEdit(ctx, start, end, str)
 	}
-	from, to, old = p.w.Edit(start, end, str)
+	from, to, old = p.w.Edit(ctx, start, end, str)
 	for _, sub := range p.subscribers {
-		sub.OnDidEdit(from, to, old)
+		sub.OnDidEdit(ctx, from, to, old)
 	}
 	return
 }

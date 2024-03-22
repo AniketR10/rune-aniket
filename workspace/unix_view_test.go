@@ -1,6 +1,7 @@
 package workspace
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -96,7 +97,8 @@ func TestUnixFile(t *testing.T) {
 			c := cell.NewBuffer()
 			bytes, err := ioutil.ReadAll(tcase.input)
 			require.NoError(t, err)
-			c.Edit(term.Coordinates{}, term.Coordinates{}, string(bytes))
+			c.Edit(context.Background(), term.Coordinates{},
+				term.Coordinates{}, string(bytes))
 
 			reader := newUnixFileReader(c)
 

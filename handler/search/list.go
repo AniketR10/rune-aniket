@@ -123,7 +123,7 @@ func (l *List) ToggleCaseSensitivity() bool {
 	defer l.mu.Unlock()
 	ret := l.cfg.caseSensitive
 	l.cfg.caseSensitive = !l.cfg.caseSensitive
-	l.asyncSearch()
+	l.asyncSearch(context.Background())
 	return ret
 }
 
@@ -138,15 +138,19 @@ type syncBuffer struct {
 	buf    *cell.Buffer
 }
 
-func (s syncBuffer) OnWillEdit(start, end term.Coordinates, str string) {
+func (s syncBuffer) OnWillEdit(
+	ctx context.Context, start, end term.Coordinates, str string,
+) {
 	s.parent.mu.Lock()
 	defer s.parent.mu.Unlock()
-	s.buf.Edit(start, end, str)
+	s.buf.Edit(ctx, start, end, str)
 	s.parent.searchBar.dirty = true
-	s.parent.asyncSearch()
+	s.parent.asyncSearch(ctx)
 }
 
-func (s syncBuffer) OnDidEdit(from, to term.Coordinates, old string) {
+func (s syncBuffer) OnDidEdit(
+	ctx context.Context, from, to term.Coordinates, old string,
+) {
 }
 
 func addMatch(
@@ -468,12 +472,11 @@ func (l *List) IterateVisible(fn func(Match)) {
 	})
 }
 
-func (l *List) asyncSearch() {
+func (l *List) asyncSearch(ctx context.Context) {
 	if l.cancelSearch != nil {
 		l.cancelSearch()
 	}
 
-	ctx := context.Background()
 	l.searchCtx, l.cancelSearch = context.WithCancel(ctx)
 
 	input := make([][]byte, len(l.input))

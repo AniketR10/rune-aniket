@@ -1,6 +1,7 @@
 package vi
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"testing"
@@ -303,7 +304,7 @@ Love isn't love 'til you give it away.
 		vi := New(buf, uri)
 		vi.Resize(width, height)
 
-		buf.Edit(term.Coordinates{}, term.Coordinates{}, "abc")
+		buf.Edit(context.Background(), term.Coordinates{}, term.Coordinates{}, "abc")
 		assert.Equal(t, "abc"+undoFortune, buf.String())
 
 		quit, handled := vi.Handle(term.Event{Type: term.EventKey, Ch: 'u'})
@@ -328,7 +329,7 @@ Love isn't love 'til you give it away.
 		vi := New(buf, uri)
 		vi.Resize(width, height)
 
-		buf.Edit(term.Coordinates{}, term.Coordinates{}, "abc")
+		buf.Edit(context.Background(), term.Coordinates{}, term.Coordinates{}, "abc")
 		assert.Equal(t, "abc"+undoFortune, buf.String())
 		for _, ch := range "iasdfgh#" {
 			if ch == '#' {

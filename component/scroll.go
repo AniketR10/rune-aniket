@@ -1,6 +1,7 @@
 package component
 
 import (
+	"context"
 	"io"
 	"strings"
 	"unicode"
@@ -844,10 +845,14 @@ func (s *Scroll) search() (n int) {
 
 type scrollSubscriber Scroll
 
-func (s *scrollSubscriber) OnWillEdit(from, to term.Coordinates, str string) {
+func (s *scrollSubscriber) OnWillEdit(
+	ctx context.Context, from, to term.Coordinates, str string,
+) {
 }
 
-func (s *scrollSubscriber) OnDidEdit(start, end term.Coordinates, str string) {
+func (s *scrollSubscriber) OnDidEdit(
+	ctx context.Context, start, end term.Coordinates, str string,
+) {
 	// if any match doesn't match, then re-issue search
 	for _, match := range s.matches {
 		for i := 0; i < len(s.searchText); i++ {

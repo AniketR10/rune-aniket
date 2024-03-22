@@ -140,7 +140,7 @@ func writeToBuffer(buf *cell.Buffer, data []byte) (int, error) {
 	}
 
 	end := term.Coordinates{Y: buf.Rows(), X: buf.Columns(buf.Rows()-1) + 1}
-	buf.Edit(term.Coordinates{}, end, string(data))
+	buf.Edit(context.Background(), term.Coordinates{}, end, string(data))
 	return len(data), nil
 }
 

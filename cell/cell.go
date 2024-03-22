@@ -1,6 +1,7 @@
 package cell
 
 import (
+	"context"
 	"fmt"
 
 	"unstable.build/go-tui/term"
@@ -24,7 +25,9 @@ type Editor interface {
 	// to Edit by calling it again with the last return values.
 	//
 	// This method should panic if delete range between start, end is out of bounds.
-	Edit(start, end term.Coordinates, new string) (from, to term.Coordinates, old string)
+	Edit(ctx context.Context, start, end term.Coordinates, new string) (
+		from, to term.Coordinates, old string,
+	)
 }
 
 // NewView returns a new Reader which reads from cells and uses tabspaces.

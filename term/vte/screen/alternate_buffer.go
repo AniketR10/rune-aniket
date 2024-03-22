@@ -1,6 +1,7 @@
 package screen
 
 import (
+	"context"
 	"math"
 
 	"unstable.build/go-tui/cell"
@@ -32,6 +33,7 @@ type AltBuffer struct {
 	tempScroll  [1][]term.Cell
 	savedCursor CursorState
 	cursor      CursorState
+	ctx         context.Context
 }
 
 // CursorState holds the state of the cursor.
@@ -62,6 +64,7 @@ func (b *AltBuffer) Init() {
 	b.Cells.InitPerformance(cell.DefaultTabspaces, 120, 80)
 	b.resetLinesTrim(0, b.height, true, b.defaultChar)
 	b.scroll.InitPerformance(&b.Cells)
+	b.ctx = screenContext(context.Background())
 }
 
 // Resize resizes this AltBuffer and resets the vertical margins.
@@ -78,13 +81,13 @@ func (b *AltBuffer) Resize(width, height int) {
 // in the buffer, as it should always be capped at exactly b.Width(), set by
 // the previous call to Resize.
 func (b *AltBuffer) Insert(c rune, width int, charset parser.CharsetIndex) {
-	b.Cells.Insert(b.cursor.position, b.defaultChar)
+	b.Cells.InsertContext(b.ctx, b.cursor.position, b.defaultChar)
 	b.Write(c, width, charset)
 	columns := b.Cells.Columns(b.cursor.position.Y)
 	if columns > b.width {
 		from := term.Coordinates{Y: b.cursor.position.Y, X: b.width}
 		to := term.Coordinates{Y: b.cursor.position.Y, X: columns}
-		b.Cells.Delete(from, to)
+		b.Cells.DeleteContext(b.ctx, from, to)
 	}
 }
 
@@ -450,7 +453,7 @@ func (b *AltBuffer) resetCellsAt(y int, start, end int, with rune) {
 	// ensure there are enough columns
 	if y >= b.Cells.Rows() || end > b.Cells.Columns(y) {
 		endInsert := int(math.Max(float64(end), float64(b.width)))
-		b.Cells.Insert(term.Coordinates{Y: y, X: endInsert - 1}, with)
+		b.Cells.InsertContext(b.ctx, term.Coordinates{Y: y, X: endInsert - 1}, with)
 	}
 
 	cells := b.Cells.RawCells()
@@ -471,9 +474,9 @@ func (b *AltBuffer) resetLinesTrim(start, end int, trim bool, with rune) {
 	}
 	// ensure there are enough rows
 	if end > b.Cells.Rows() {
-		b.Cells.Insert(term.Coordinates{Y: end - 1}, with)
+		b.Cells.InsertContext(b.ctx, term.Coordinates{Y: end - 1}, with)
 	} else if end < b.Cells.Rows() && trim {
-		b.Cells.TruncateFrom(term.Coordinates{Y: end - 1})
+		b.Cells.TruncateFromContext(b.ctx, term.Coordinates{Y: end - 1})
 	}
 
 	for y := start; y < end; y++ {
@@ -481,7 +484,7 @@ func (b *AltBuffer) resetLinesTrim(start, end int, trim bool, with rune) {
 		if columns > b.width {
 			from := term.Coordinates{Y: y, X: b.width}
 			to := term.Coordinates{Y: y, X: columns}
-			b.Cells.Delete(from, to)
+			b.Cells.DeleteContext(b.ctx, from, to)
 		}
 		b.resetCellsAt(y, 0, b.width, with)
 	}

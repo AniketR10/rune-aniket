@@ -1,6 +1,8 @@
 package cell
 
 import (
+	"context"
+
 	"unstable.build/go-tui/term"
 )
 
@@ -15,10 +17,10 @@ import (
 type Subscriber interface {
 	// OnWillEdit start, end and str correspond the input values
 	// to an imminent call to Edit.
-	OnWillEdit(start, end term.Coordinates, str string)
+	OnWillEdit(ctx context.Context, start, end term.Coordinates, str string)
 	// OnDidEdit from, to and old correspond to the return values
 	// of a call to Edit. See cell.Editor.Edit for more details.
-	OnDidEdit(from, to term.Coordinates, old string)
+	OnDidEdit(ctx context.Context, from, to term.Coordinates, old string)
 }
 
 // Publisher is the interface that wraps the Subscribe method.

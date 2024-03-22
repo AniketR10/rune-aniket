@@ -176,7 +176,7 @@ func (h *ResourceTracker) handleResourceEdit(ev textapi.Event) bool {
 	if !ok {
 		return false
 	}
-	res.Scroll.Buffer().Edit(ev.Start, ev.End, ev.Content)
+	res.Scroll.Buffer().Edit(context.Background(), ev.Start, ev.End, ev.Content)
 	if res.Scroll.Wrap {
 		res.Scroll.RecalculateWraps()
 	}

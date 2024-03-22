@@ -2,6 +2,7 @@ package text
 
 import (
 	"bufio"
+	"context"
 	"sort"
 	"strings"
 
@@ -108,10 +109,14 @@ func (c *Cursor) Init(scroll *component.Scroll) {
 	c.scroll.Buffer().Subscribe(&c.subscriber)
 }
 
-func (c *curSubscriber) OnWillEdit(start, end term.Coordinates, str string) {
+func (c *curSubscriber) OnWillEdit(
+	ctx context.Context, start, end term.Coordinates, str string,
+) {
 }
 
-func (c *curSubscriber) OnDidEdit(from, to term.Coordinates, old string) {
+func (c *curSubscriber) OnDidEdit(
+	ctx context.Context, from, to term.Coordinates, old string,
+) {
 	c.c.setSearchLocationList(c.c.search)
 }
 

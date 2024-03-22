@@ -1,6 +1,8 @@
 package text
 
 import (
+	"context"
+
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/term"
 )
@@ -61,7 +63,9 @@ func (r *Repeater) Repeat() (ok bool) {
 }
 
 // OnWillEdit satisfies cell.Subscriber.
-func (r *Repeater) OnWillEdit(start, end term.Coordinates, str string) {
+func (r *Repeater) OnWillEdit(
+	ctx context.Context, start, end term.Coordinates, str string,
+) {
 	if r.repeating {
 		return
 	}
@@ -73,5 +77,7 @@ func (r *Repeater) OnWillEdit(start, end term.Coordinates, str string) {
 }
 
 // OnDidEdit satisfies cell.Subscriber.
-func (r *Repeater) OnDidEdit(from, to term.Coordinates, old string) {
+func (r *Repeater) OnDidEdit(
+	ctx context.Context, from, to term.Coordinates, old string,
+) {
 }

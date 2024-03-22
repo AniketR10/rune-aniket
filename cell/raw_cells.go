@@ -2,6 +2,7 @@ package cell
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"io"
 	"math"
@@ -395,7 +396,7 @@ func (c *rawCells) delete(from, to term.Coordinates) (
 	return
 }
 
-func (c *rawCells) Edit(start, end term.Coordinates, str string) (
+func (c *rawCells) Edit(_ context.Context ,start, end term.Coordinates, str string) (
 	from, to term.Coordinates, old string,
 ) {
 	from = start

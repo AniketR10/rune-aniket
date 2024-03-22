@@ -422,7 +422,7 @@ func TestClientServerIntegration(t *testing.T) {
 
 		expectEditor(t, ed, uri)
 		ed.EXPECT().CellEditor(gomock.Any()).Return(text.NewCellEditor(buf.Editor())).Times(1)
-		from, to, _, err := w.Edit(at, at, "el\nAridio")
+		from, to, _, err := w.Edit(context.Background(), at, at, "el\nAridio")
 
 		require.NoError(t, err)
 		require.Equal(t, term.Coordinates{}, from)
@@ -431,7 +431,8 @@ func TestClientServerIntegration(t *testing.T) {
 
 		expectEditor(t, ed, uri)
 		ed.EXPECT().CellEditor(gomock.Any()).Return(text.NewCellEditor(buf.Editor())).Times(1)
-		start, end, str, err := w.Edit(term.Coordinates{}, term.Coordinates{Y: 1}, "")
+		start, end, str, err := w.Edit(
+			context.Background(), term.Coordinates{}, term.Coordinates{Y: 1}, "")
 
 		require.NoError(t, err)
 		assert.Equal(t, term.Coordinates{}, start)

@@ -1,6 +1,7 @@
 package vi
 
 import (
+	"context"
 	"fmt"
 
 	"unstable.build/go-tui"
@@ -130,7 +131,9 @@ func (vi *Vi) pushNewSnapshot() {
 	vi.pushUndo(vi.currSnapshot)
 }
 
-func (vi *viSubscriber) OnWillEdit(from, to term.Coordinates, str string) {
+func (vi *viSubscriber) OnWillEdit(
+	ctx context.Context, from, to term.Coordinates, str string,
+) {
 	if (!vi.oob && vi.oobEdited) || (!vi.currEdited && !vi.resetting) {
 		pubVi := (*Vi)(vi)
 		pubVi.currSnapshot.cursor = from
@@ -139,7 +142,9 @@ func (vi *viSubscriber) OnWillEdit(from, to term.Coordinates, str string) {
 	}
 }
 
-func (vi *viSubscriber) OnDidEdit(start, end term.Coordinates, old string) {
+func (vi *viSubscriber) OnDidEdit(
+	ctx context.Context, start, end term.Coordinates, old string,
+) {
 	if !vi.resetting {
 		vi.evEdited = true
 		vi.currEdited = true
@@ -372,7 +377,7 @@ func (vi *Vi) undo() bool {
 func (vi *Vi) resetToSnapshot(s snapshot) {
 	from, to := term.Coordinates{}, term.Coordinates{Y: vi.buf.Rows()}
 	vi.resetting = true
-	vi.buf.Edit(from, to, s.content)
+	vi.buf.Edit(context.Background(), from, to, s.content)
 	vi.handler.setCursorAtScroll(s.cursor)
 	vi.currSnapshot = s
 	vi.resetting = false

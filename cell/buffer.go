@@ -1,6 +1,7 @@
 package cell
 
 import (
+	"context"
 	"io"
 	"math"
 	"strings"
@@ -49,7 +50,7 @@ func fromToInBounds(cells View, from, to term.Coordinates) (
 	return from, to, true
 }
 
-func (s safeEditor) Edit(start, end term.Coordinates, str string) (
+func (s safeEditor) Edit(ctx context.Context, start, end term.Coordinates, str string) (
 	from, to term.Coordinates, old string,
 ) {
 	// only check in case of delete range
@@ -57,10 +58,12 @@ func (s safeEditor) Edit(start, end term.Coordinates, str string) (
 		var ok bool
 		start, end, ok = fromToInBounds(s.view, start, end)
 		if !ok {
+			from = start
+			to = start
 			return
 		}
 	}
-	return s.editor.Edit(start, end, str)
+	return s.editor.Edit(ctx, start, end, str)
 }
 
 // NewBuffer allocates storage for a new Buffer and initializes it.
@@ -121,17 +124,28 @@ func (b *Buffer) Init() {
 	b.InitWithTabspaces(DefaultTabspaces)
 }
 
-// InsertRowAt inserts a new row at given position. If pos is out of bounds,
-// this method does not panic; instead, it will fill in the necessary
-// rows such that the new row is the last row in the buffer.
+// InsertRowAt is equivalent to calling InsertRowAtContext
+// with context.Background.
 func (b *Buffer) InsertRowAt(y int) {
-	at := term.Coordinates{Y: y}
-	b.editor.Edit(at, at, "\n")
+	b.InsertRowAtContext(context.Background(), y)
 }
 
-// Insert inserts a rune in the given position and shift the cells to the right
+// InsertRowAtContext inserts a new row at given position. If pos is out of bounds,
+// this method does not panic; instead, it will fill in the necessary
+// rows such that the new row is the last row in the buffer.
+func (b *Buffer) InsertRowAtContext(ctx context.Context, y int) {
+	at := term.Coordinates{Y: y}
+	b.editor.Edit(ctx, at, at, "\n")
+}
+
+// Insert is equivalent to calling InsertContext with context.Background.
 func (b *Buffer) Insert(pos term.Coordinates, r rune) (next term.Coordinates) {
-	_, next, _ = b.editor.Edit(pos, pos, string(r))
+	return b.InsertContext(context.Background(), pos, r)
+}
+
+// InsertContext inserts a rune in the given position and shift the cells to the right
+func (b *Buffer) InsertContext(ctx context.Context, pos term.Coordinates, r rune) (next term.Coordinates) {
+	_, next, _ = b.editor.Edit(ctx, pos, pos, string(r))
 	return
 }
 
@@ -170,8 +184,14 @@ func (b *Buffer) InsertStringWithAttr(
 	return
 }
 
-// DeleteRow deletes the row at term.Coordinates.Y
+// DeleteRow is equivalent to calling DeleteRowContext
+// with context.Background.
 func (b *Buffer) DeleteRow(y int) (ok bool) {
+	return b.DeleteRowContext(context.Background(), y)
+}
+
+// DeleteRowContext deletes the row at term.Coordinates.Y
+func (b *Buffer) DeleteRowContext(ctx context.Context, y int) (ok bool) {
 	if ok = y < b.view.Rows(); !ok {
 		return
 	}
@@ -183,14 +203,22 @@ func (b *Buffer) DeleteRow(y int) (ok bool) {
 		from = term.Coordinates{Y: y - 1, X: b.view.Columns(y - 1)}
 		to = term.Coordinates{Y: y, X: b.view.Columns(y)}
 	}
-	_, _, old := b.editor.Edit(from, to, "")
+	_, _, old := b.editor.Edit(ctx, from, to, "")
 	ok = old != ""
 	return
 }
 
-// TruncateRowFrom truncates the row at term.Coordinates.Y starting
-// from term.Coordinates.X
+// TruncateRowFrom is equivalent to calling TruncateRowFromContext
+// with context.Background.
 func (b *Buffer) TruncateRowFrom(from term.Coordinates) (ok bool) {
+	return b.TruncateRowFromContext(context.Background(), from)
+}
+
+// TruncateRowFromContext truncates the row at term.Coordinates.Y starting
+// from term.Coordinates.X
+func (b *Buffer) TruncateRowFromContext(
+	ctx context.Context, from term.Coordinates,
+) (ok bool) {
 	to := term.Coordinates{Y: from.Y}
 	from, to, ok = fromToInBounds(b.view, from, to)
 	if !ok {
@@ -202,30 +230,52 @@ func (b *Buffer) TruncateRowFrom(from term.Coordinates) (ok bool) {
 		return
 	}
 	to.X = cols
-	b.editor.Edit(from, to, "")
+	b.editor.Edit(ctx, from, to, "")
 	return
 }
 
-// TruncateFrom truncates from the given position to the end of the buffer.
+// TruncateFrom is equivalent to calling TruncateFromContext with
+// context.Background.
 func (b *Buffer) TruncateFrom(from term.Coordinates) (ok bool) {
+	return b.TruncateFromContext(context.Background(), from)
+}
+
+// TruncateFromContext truncates from the given position to the end of the buffer.
+func (b *Buffer) TruncateFromContext(
+	ctx context.Context, from term.Coordinates,
+) (ok bool) {
 	to := term.Coordinates{Y: b.view.Rows()}
 	from, to, ok = fromToInBounds(b.view, from, to)
 	if !ok {
 		return
 	}
-	b.editor.Edit(from, to, "")
+	b.editor.Edit(ctx, from, to, "")
 	return
 }
 
-// Replace replaces the content of the buffer with str.
+// Replace is equivalent to calling ReplaceContext with
+// context.Background.
 func (b *Buffer) Replace(str string) {
-	from := term.Coordinates{}
-	to := term.Coordinates{Y: b.view.Rows()}
-	b.editor.Edit(from, to, str)
+	b.ReplaceContext(context.Background(), str)
 }
 
-// ConflateRow will conflate row at index i with the next row
+// ReplaceContext replaces the content of the buffer with str.
+func (b *Buffer) ReplaceContext(ctx context.Context, str string) {
+	from := term.Coordinates{}
+	to := term.Coordinates{Y: b.view.Rows()}
+	b.editor.Edit(ctx, from, to, str)
+}
+
+// ConflateRow is equivalent to calling ConflateRowContext
+// with context.Background.
 func (b *Buffer) ConflateRow(y int) (ok bool) {
+	return b.ConflateRowContext(context.Background(), y)
+}
+
+// ConflateRowContext will conflate row at index i with the next row
+func (b *Buffer) ConflateRowContext(
+	ctx context.Context, y int,
+) (ok bool) {
 	from := term.Coordinates{Y: y}
 	to := term.Coordinates{Y: y + 1}
 	from, to, ok = fromToInBounds(b.view, from, to)
@@ -233,14 +283,22 @@ func (b *Buffer) ConflateRow(y int) (ok bool) {
 		return
 	}
 	from.X = b.view.Columns(from.Y)
-	b.editor.Edit(from, to, "")
+	b.editor.Edit(ctx, from, to, "")
 	return
 }
 
-// DeleteCell removes the cell at the given position.
+// DeleteCell is equivalent to calling DeleteCellContext
+// with context.Background.
+func (b *Buffer) DeleteCell(pos term.Coordinates) (term.Coordinates, rune, bool) {
+	return b.DeleteCellContext(context.Background(), pos)
+}
+
+// DeleteCellContext removes the cell at the given position.
 // It returns the position at which the current cell (width padding) started,
 // if the width was > 1.
-func (b *Buffer) DeleteCell(pos term.Coordinates) (term.Coordinates, rune, bool) {
+func (b *Buffer) DeleteCellContext(
+	ctx context.Context, pos term.Coordinates,
+) (term.Coordinates, rune, bool) {
 	from := pos
 	to := term.Coordinates{X: from.X + 1, Y: from.Y}
 	from, to, ok := fromToInBounds(b.view, from, to)
@@ -248,7 +306,7 @@ func (b *Buffer) DeleteCell(pos term.Coordinates) (term.Coordinates, rune, bool)
 		return term.Coordinates{}, 0, false
 	}
 
-	start, _, str := b.editor.Edit(from, to, "")
+	start, _, str := b.editor.Edit(ctx, from, to, "")
 	if str == "" {
 		return term.Coordinates{}, 0, false
 	}
@@ -287,23 +345,39 @@ func (b *Buffer) RawCells() [][]term.Cell {
 	return b.view.RawCells()
 }
 
-// InsertString inserts string in the given position and shifts the remaining cells.
+// InsertString is equivalent to calling InsertStringContext
+// with context.Background.
+func (b *Buffer) InsertString(at term.Coordinates, str string) (
+	from, until term.Coordinates,
+) {
+	return b.InsertStringContext(context.Background(), at, str)
+}
+
+// InsertStringContext inserts string in the given position and shifts the remaining cells.
 // insert never fails: if at is out-of-bounds, this method fills in the rows
 // and/or columns of cells with blank spaces.
 // It returns the start of the insert 'from', including the filled-in blank spaces
 // and where the next logical Insert should go 'until'.
-func (b *Buffer) InsertString(at term.Coordinates, str string) (
-	from, until term.Coordinates,
-) {
-	from, until, _ = b.editor.Edit(at, at, str)
+func (b *Buffer) InsertStringContext(
+	ctx context.Context, at term.Coordinates, str string,
+) (from, until term.Coordinates) {
+	from, until, _ = b.editor.Edit(ctx, at, at, str)
 	return
 }
 
-// Delete removes cells in left-inclusive right-exclusive range
+// Delete is equivalent to calling DeleteContext with
+// context.Background.
+func (b *Buffer) Delete(from, to term.Coordinates) (start term.Coordinates, str string) {
+	return b.DeleteContext(context.Background(), from, to)
+}
+
+// DeleteContext removes cells in left-inclusive right-exclusive range
 // and returns the corresponding string representation of the cells removed,
 // along with the true start of the range, which accounts for padding.
-func (b *Buffer) Delete(from, to term.Coordinates) (start term.Coordinates, str string) {
-	start, _, str = b.safew.Edit(from, to, "")
+func (b *Buffer) DeleteContext(ctx context.Context, from, to term.Coordinates) (
+	start term.Coordinates, str string,
+) {
+	start, _, str = b.safew.Edit(ctx, from, to, "")
 	return
 }
 
@@ -315,17 +389,25 @@ func (b *Buffer) Delete(from, to term.Coordinates) (start term.Coordinates, str 
 // As opposed to cell.Editor.Edit, this method does not panic if range
 // is out of bounds. Instead, it trims the coordinates to be in-bounds or
 // simply does nothing and returned str is empty.
-func (b *Buffer) Edit(start, end term.Coordinates, s string) (
+func (b *Buffer) Edit(ctx context.Context, start, end term.Coordinates, s string) (
 	from, to term.Coordinates, old string,
 ) {
-	return b.safew.Edit(start, end, s)
+	return b.safew.Edit(ctx, start, end, s)
 }
 
-// DeleteLine deletes the lines starting at from, between from, to and including end.
-// See Delete for more information about the return values.
+// DeleteLine is equivalent to calling DeleteLineContext
+// with context.Background.
 func (b *Buffer) DeleteLine(from, to term.Coordinates) (
 	start term.Coordinates, str string,
 ) {
+	return b.DeleteLineContext(context.Background(), from, to)
+}
+
+// DeleteLineContext deletes the lines starting at from, between from, to and including end.
+// See Delete for more information about the return values.
+func (b *Buffer) DeleteLineContext(
+	ctx context.Context, from, to term.Coordinates,
+) (start term.Coordinates, str string) {
 	from, to = SortFromTo(from, to)
 	from, to, ok := fromToInBounds(b.view, from, to)
 	if !ok {
@@ -333,16 +415,24 @@ func (b *Buffer) DeleteLine(from, to term.Coordinates) (
 	}
 	from.X, to.X = 0, 0
 	to.Y++
-	start, _, str = b.editor.Edit(from, to, "")
+	start, _, str = b.editor.Edit(ctx, from, to, "")
 	return
 }
 
-// DeleteBlock deletes the blocks of cells between from, to. See SelectBlock for more
-// information about how DeleteBlock selects the cells to delete.
-// See Delete for more information about the return values.
+// DeleteBlock is equivalent to calling DeleteBlockContext
+// with context.Background.
 func (b *Buffer) DeleteBlock(from, to term.Coordinates) (
 	start term.Coordinates, str string,
 ) {
+	return b.DeleteBlockContext(context.Background(), from, to)
+}
+
+// DeleteBlockContext deletes the blocks of cells between from, to. See SelectBlock for more
+// information about how DeleteBlock selects the cells to delete.
+// See Delete for more information about the return values.
+func (b *Buffer) DeleteBlockContext(
+	ctx context.Context, from, to term.Coordinates,
+) (start term.Coordinates, str string) {
 	var builder strings.Builder
 	b.selector.iterateBlocks(from, to,
 		func(i int, from, to term.Coordinates, cells []term.Cell) {
@@ -360,7 +450,7 @@ func (b *Buffer) DeleteBlock(from, to term.Coordinates) (
 			if to.X > columns {
 				to.X = columns
 			}
-			blockStart, _, str := b.safew.Edit(from, to, "")
+			blockStart, _, str := b.safew.Edit(ctx, from, to, "")
 
 			if i == 0 {
 				start = blockStart
@@ -395,14 +485,19 @@ func (b *Buffer) ReadFrom(r io.Reader) (int64, error) {
 // io.Editor
 func (b *Buffer) Write(p []byte) (int, error) {
 	nextWrite := nextWrite(b.view)
-	b.editor.Edit(nextWrite, nextWrite, string(p))
+	b.editor.Edit(context.Background(), nextWrite, nextWrite, string(p))
 	return len(p), nil
 }
 
-// WriteString writes the given string at the end of the buffer
+// WriteString is equivalent to WriteStringContext with context.Background.
 func (b *Buffer) WriteString(p string) {
+	b.WriteStringContext(context.Background(), p)
+}
+
+// WriteStringContext writes the given string at the end of the buffer
+func (b *Buffer) WriteStringContext(ctx context.Context, p string) {
 	nextWrite := nextWrite(b.view)
-	b.editor.Edit(nextWrite, nextWrite, p)
+	b.editor.Edit(ctx, nextWrite, nextWrite, p)
 }
 
 // WriteStringWithAttr inserts str with the given attr as the background

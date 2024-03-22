@@ -15,10 +15,8 @@ type clientWriter struct {
 }
 
 func (w clientWriter) Edit(
-	start, end term.Coordinates, str string,
+	ctx context.Context, start, end term.Coordinates, str string,
 ) (from, to term.Coordinates, old string, err error) {
-	ctx := context.Background()
-
 	var protoStart, protoEnd termpb.Coordinates
 	protoStart.FromModel(start)
 	protoEnd.FromModel(end)

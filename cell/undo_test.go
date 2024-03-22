@@ -1,6 +1,7 @@
 package cell
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"testing"
@@ -33,8 +34,10 @@ func TestUndoRawEdit(t *testing.T) {
 	undoer, buf := initUndoTestBuffer(t)
 	prev := buf.String()
 
-	buf.Edit(term.Coordinates{Y: 2, X: 1}, term.Coordinates{Y: 2, X: 5}, "")
-	noTabs := "Love in your heart wasn't put there to stay.\nLove isn't love 'til you give it away.\n-- Oscar Hammerstein 中国"
+	buf.Edit(context.Background(), term.Coordinates{Y: 2, X: 1},
+		term.Coordinates{Y: 2, X: 5}, "")
+	noTabs := "Love in your heart wasn't put there to stay.\nLove isn't " +
+		"love 'til you give it away.\n-- Oscar Hammerstein 中国"
 	assert.Equal(t, noTabs, buf.String())
 	ok, _ := undoer.undo()
 
@@ -70,10 +73,12 @@ func TestUndo(t *testing.T) {
 			b.DeleteRow(0)
 		}},
 		{"Edit which effectively replaces", func(b *Buffer) {
-			b.Edit(term.Coordinates{Y: 2, X: 1}, term.Coordinates{Y: 2, X: 5}, "a\tb\t")
+			b.Edit(context.Background(), term.Coordinates{Y: 2, X: 1},
+				term.Coordinates{Y: 2, X: 5}, "a\tb\t")
 		}},
 		{"multiline Edit which effectively replaces", func(b *Buffer) {
-			b.Edit(term.Coordinates{Y: 0, X: 1}, term.Coordinates{Y: 2}, "a\tb\n\t")
+			b.Edit(context.Background(), term.Coordinates{Y: 0, X: 1},
+				term.Coordinates{Y: 2}, "a\tb\n\t")
 		}},
 	}
 
@@ -148,11 +153,12 @@ public class Rotor {
 		astr0 := abuf.String()
 		arcells0 := abuf.RawCells()
 
-		afrom, ato, _ := abuf.editor.Edit(insertAt, insertAt, insertStr)
+		afrom, ato, _ := abuf.editor.Edit(context.Background(), insertAt,
+			insertAt, insertStr)
 		astr1 := abuf.String()
 		arcells1 := abuf.RawCells()
 
-		abuf.editor.Edit(afrom, ato, "")
+		abuf.editor.Edit(context.Background(), afrom, ato, "")
 		astr2 := abuf.String()
 		arcells2 := abuf.RawCells()
 		assert.Equal(t, astr0, astr2)

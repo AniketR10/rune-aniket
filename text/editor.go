@@ -1,6 +1,7 @@
 package text
 
 import (
+	"context"
 	"fmt"
 
 	browserapi "unstable.build/go-tui/api/browser"
@@ -30,7 +31,9 @@ type Handler interface {
 
 // CellEditor is a cell.Editor that can fail.
 type CellEditor interface {
-	Edit(start, end term.Coordinates, str string) (from, to term.Coordinates, old string, err error)
+	Edit(ctx context.Context, start, end term.Coordinates, str string) (
+		from, to term.Coordinates, old string, err error,
+	)
 }
 
 // CellView wraps a subset of cell.View behaviour with an API that can fail.
@@ -105,13 +108,13 @@ type cellView struct {
 }
 
 func (w cellEditor) Edit(
-	start, end term.Coordinates, str string,
+	ctx context.Context, start, end term.Coordinates, str string,
 ) (from, to term.Coordinates, old string, err error) {
 	if start.Y < 0 || end.Y < 0 || start.X < 0 || end.X < 0 {
 		err = fmt.Errorf("invalid coordinates: start=%v; end=%v", start, end)
 		return
 	}
-	from, to, old = w.c.Edit(start, end, str)
+	from, to, old = w.c.Edit(ctx, start, end, str)
 	return
 }
 

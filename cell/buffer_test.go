@@ -1,6 +1,7 @@
 package cell
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"testing"
@@ -348,11 +349,15 @@ type testSubscriber struct {
 	onDidEdit, onWillEdit int
 }
 
-func (t *testSubscriber) OnWillEdit(from, to term.Coordinates, str string) {
+func (t *testSubscriber) OnWillEdit(
+	_ context.Context, from, to term.Coordinates, str string,
+) {
 	t.onWillEdit++
 }
 
-func (t *testSubscriber) OnDidEdit(start, end term.Coordinates, old string) {
+func (t *testSubscriber) OnDidEdit(
+	_ context.Context, start, end term.Coordinates, old string,
+) {
 	t.onDidEdit++
 }
 

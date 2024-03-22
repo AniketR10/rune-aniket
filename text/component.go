@@ -954,10 +954,14 @@ type editorFlusherCloser struct {
 	lastFlush string
 }
 
-func (c editorFlusherCloser) OnWillEdit(start, end term.Coordinates, str string) {
+func (c editorFlusherCloser) OnWillEdit(
+	ctx context.Context, start, end term.Coordinates, str string,
+) {
 }
 
-func (c editorFlusherCloser) OnDidEdit(from, to term.Coordinates, old string) {
+func (c editorFlusherCloser) OnDidEdit(
+	ctx context.Context, from, to term.Coordinates, old string,
+) {
 	c.parent.setDirtyFileAttr(c.uri, c.buf, c.lastFlush)
 }
 

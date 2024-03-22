@@ -1,6 +1,7 @@
 package cell
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -40,24 +41,24 @@ func TestRawCellsInsertMiddlePadding(t *testing.T) {
 
 	from := term.Coordinates{X: 0, Y: 1}
 	to := term.Coordinates{Y: 2}
-	start, end, str := c.Edit(from, to, "")
+	start, end, str := c.Edit(context.Background(), from, to, "")
 	assert.Equal(t, from, start)
 	assert.Equal(t, from, end)
 	assert.Equal(t, "\tb\n", str)
 	require.Equal(t, "{\n\tc\n}\n", c.String())
 
 	at := term.Coordinates{X: 1, Y: 1}
-	from, to, _ = c.Edit(at, at, "\tb\n")
+	from, to, _ = c.Edit(context.Background(), at, at, "\tb\n")
 	assert.Equal(t, term.Coordinates{X: 0, Y: 1}, from)
 	assert.Equal(t, term.Coordinates{X: 0, Y: 2}, to)
 
-	start, end, str = c.Edit(from, to, "")
+	start, end, str = c.Edit(context.Background(), from, to, "")
 	assert.Equal(t, term.Coordinates{X: 0, Y: 1}, start)
 	assert.Equal(t, term.Coordinates{Y: 1, X: 0}, end)
 	assert.Equal(t, "\tb\n", str)
 
 	at = term.Coordinates{X: 0, Y: 1}
-	from, to, _ = c.Edit(at, at, "\tb\n")
+	from, to, _ = c.Edit(context.Background(), at, at, "\tb\n")
 	assert.Equal(t, term.Coordinates{X: 0, Y: 1}, from)
 	assert.Equal(t, term.Coordinates{Y: 2}, to)
 	assert.Equal(t, fixtureCells, c.RawCells())
@@ -81,17 +82,17 @@ func TestRawCellsPanicsNegativeCoordinates(t *testing.T) {
 
 		t.Run("insert()", func(t *testing.T) {
 			assert.Panics(t, func() {
-				c.Edit(pos, pos, "r")
+				c.Edit(context.Background(), pos, pos, "r")
 			})
 		})
 		t.Run("delete(from)", func(t *testing.T) {
 			assert.Panics(t, func() {
-				c.Edit(pos, term.Coordinates{X: 0, Y: 2}, "")
+				c.Edit(context.Background(), pos, term.Coordinates{X: 0, Y: 2}, "")
 			})
 		})
 		t.Run("delete(until)", func(t *testing.T) {
 			assert.Panics(t, func() {
-				c.Edit(term.Coordinates{X: 0, Y: 2}, pos, "")
+				c.Edit(context.Background(), term.Coordinates{X: 0, Y: 2}, pos, "")
 			})
 		})
 	}
@@ -138,11 +139,11 @@ func TestRawCellsReset(t *testing.T) {
 	t.Run("length as capactiy is used if default capacity is smaller", func(t *testing.T) {
 		var c rawCells
 		c.resetWithCap(1, 1)
-		c.Edit(term.Coordinates{}, term.Coordinates{},
+		c.Edit(context.Background(), term.Coordinates{}, term.Coordinates{},
 			"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
 		// forces copying half of first row with length
 		// into another row, with length and capacity
-		c.Edit(term.Coordinates{X: 2}, term.Coordinates{X: 2}, "\n")
+		c.Edit(context.Background(), term.Coordinates{X: 2}, term.Coordinates{X: 2}, "\n")
 	})
 }
 
@@ -376,19 +377,19 @@ Love isn't love 'til you give it away.
 				require.NoError(t, err)
 			}
 
-			actualFrom, actualTo, actualOld := c.Edit(tcase.inputAt, tcase.inputAt, tcase.inputStr)
+			actualFrom, actualTo, actualOld := c.Edit(context.Background(), tcase.inputAt, tcase.inputAt, tcase.inputStr)
 			assert.Equal(t, tcase.expectedFrom, actualFrom, "test case %d", i)
 			assert.Equal(t, tcase.expectedTo, actualTo, "test case %d", i)
 			assert.Equal(t, tcase.expectedRawCells, c.String())
 			assert.Zero(t, actualOld)
 
-			from, to, old := c.Edit(actualFrom, actualTo, actualOld)
+			from, to, old := c.Edit(context.Background(), actualFrom, actualTo, actualOld)
 			assert.Equal(t, input, c.String(), "string ret: %+v %+v", actualFrom, actualTo)
 
-			from, to, old = c.Edit(from, to, old)
+			from, to, old = c.Edit(context.Background(), from, to, old)
 			assert.Equal(t, tcase.expectedRawCells, c.String())
 
-			_, _, old = c.Edit(from, to, old)
+			_, _, old = c.Edit(context.Background(), from, to, old)
 			assert.Equal(t, input, c.String())
 		})
 	}
@@ -753,7 +754,7 @@ Love isn't love 'til you give it away.
 			_, err := c.ReadFrom(strings.NewReader(base))
 			require.NoError(t, err)
 
-			actualStart, actualEnd, actualStr := c.Edit(tcase.inputFrom, tcase.inputTo, "")
+			actualStart, actualEnd, actualStr := c.Edit(context.Background(), tcase.inputFrom, tcase.inputTo, "")
 			assert.Equal(t, tcase.expectedStr, actualStr,
 				"expected return string")
 			assert.Equal(t, tcase.expectedRawCells, c.String(),
@@ -768,16 +769,16 @@ Love isn't love 'til you give it away.
 			assert.Equal(t, *tcase.expectedStart, actualStart)
 			assert.Equal(t, *tcase.expectedEnd, actualEnd)
 
-			from, to, old := c.Edit(actualStart, actualEnd, actualStr)
+			from, to, old := c.Edit(context.Background(), actualStart, actualEnd, actualStr)
 			assert.Equal(t, base, c.String())
 
-			from, to, old = c.Edit(from, to, old)
+			from, to, old = c.Edit(context.Background(), from, to, old)
 			assert.Equal(t, tcase.expectedRawCells, c.String())
 			if tcase.expectedRawCellsRawCells != nil {
 				assert.Equal(t, tcase.expectedRawCellsRawCells, c.RawCells())
 			}
 
-			_, _, old = c.Edit(from, to, old)
+			_, _, old = c.Edit(context.Background(), from, to, old)
 			assert.Equal(t, base, c.String())
 		})
 	}
@@ -826,7 +827,7 @@ func TestRawCellsEditSymmetryBug(t *testing.T) {
 	to := term.Coordinates{X: from.X + 1, Y: from.Y}
 	from, to, ok := fromToInBounds(b.cells, from, to)
 	require.True(t, ok)
-	start, end, str := b.editor.Edit(from, to, "")
+	start, end, str := b.editor.Edit(context.Background(), from, to, "")
 	require.NotZero(t, str)
 	assert.Equal(t, term.Coordinates{X: 4, Y: 2}, start)
 	assert.Equal(t, term.Coordinates{X: 4, Y: 2}, end)
@@ -836,7 +837,7 @@ Love isn't love 'til you give it away.
 	-- Oscar Hammerstein 中国`
 	assert.Equal(t, expectedStr, b.String())
 
-	from, to, old := b.editor.Edit(start, start, str)
+	from, to, old := b.editor.Edit(context.Background(), start, start, str)
 	assert.Zero(t, old)
 	assert.Equal(t, term.Coordinates{X: 4, Y: 2}, start)
 	assert.Equal(t, term.Coordinates{X: 4, Y: 2}, end)

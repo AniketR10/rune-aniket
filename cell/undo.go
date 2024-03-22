@@ -1,6 +1,8 @@
 package cell
 
 import (
+	"context"
+
 	"unstable.build/go-tui/term"
 )
 
@@ -78,16 +80,16 @@ func (u *undoer) resetRedoTimeline() {
 }
 
 // update captures underlying writer update so it can be undone. See cell.writer.Edit
-func (u *undoer) Edit(start, end term.Coordinates, str string) (
+func (u *undoer) Edit(ctx context.Context, start, end term.Coordinates, str string) (
 	from, to term.Coordinates, old string,
 ) {
 	op := op{
 		at: start,
 		do: func() {
-			from, to, old = u.w.Edit(start, end, str)
+			from, to, old = u.w.Edit(ctx, start, end, str)
 		},
 		undo: func() {
-			u.w.Edit(from, to, old)
+			u.w.Edit(ctx, from, to, old)
 		},
 	}
 

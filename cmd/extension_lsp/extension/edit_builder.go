@@ -1,6 +1,7 @@
 package extension
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"sort"
@@ -34,10 +35,10 @@ func (b *editBuilder) applyEdit(ed protocol.TextEdit) error {
 	if !ok {
 		return errors.New("could not convert rage")
 	}
-
+	ctx := context.Background()
 	// update remote and local buffer
-	_, _, _, err := b.w.Edit(start, end, ed.NewText)
-	_, _, _ = b.buf.Edit(start, end, ed.NewText)
+	_, _, _, err := b.w.Edit(ctx, start, end, ed.NewText)
+	_, _, _ = b.buf.Edit(ctx, start, end, ed.NewText)
 	return err
 }
 

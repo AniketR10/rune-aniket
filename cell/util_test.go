@@ -1,6 +1,7 @@
 package cell
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -80,7 +81,7 @@ public class Rotor {
 	brcells0 := bbuf.RawCells()
 	require.Equal(t, arcells0, brcells0)
 
-	afrom, ato, _ := abuf.editor.Edit(insertAt, insertAt, insertStr)
+	afrom, ato, _ := abuf.editor.Edit(context.Background(), insertAt, insertAt, insertStr)
 	astr1 := abuf.String()
 	arcells1 := abuf.RawCells()
 
@@ -88,7 +89,7 @@ public class Rotor {
 	astr2 := abuf.String()
 	arcells2 := abuf.RawCells()
 
-	bfrom, bto, _ := bbuf.editor.Edit(insertAt, insertAt, insertStr)
+	bfrom, bto, _ := bbuf.editor.Edit(context.Background(), insertAt, insertAt, insertStr)
 	bstr1 := bbuf.String()
 	brcells1 := bbuf.RawCells()
 

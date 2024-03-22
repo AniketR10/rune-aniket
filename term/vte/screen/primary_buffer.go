@@ -90,7 +90,7 @@ func (b *PrimaryBuffer) BottomScrollableRegion() int {
 // InsertLines inserts blank lines on the cursor's position.
 func (b *PrimaryBuffer) InsertLines(count int) {
 	for i := 0; i < count; i++ {
-		b.Cells.InsertRowAt(b.cursor.position.Y)
+		b.Cells.InsertRowAtContext(b.ctx, b.cursor.position.Y)
 	}
 }
 
@@ -99,7 +99,7 @@ func (b *PrimaryBuffer) DeleteLines(count int) {
 	from := b.cursor.position
 	to := from
 	to.Y += count
-	b.Cells.DeleteLine(from, to)
+	b.Cells.DeleteLineContext(b.ctx, from, to)
 }
 
 // SetCursorAtScroll sets the cursor at the content/scroll position c.

@@ -684,7 +684,7 @@ func (h *syntaxHandler) editFile(ev textapi.Event) error {
 	if !ok {
 		return fmt.Errorf("could not find buffer for file %s", ev.URI.String())
 	}
-	f.Edit(ev.Start, ev.End, ev.Content)
+	f.Edit(context.Background(), ev.Start, ev.End, ev.Content)
 	if f.parser != nil {
 		// TODO edit tree rather than re-parsing everything every time
 		f.tree = f.parser.Parse(nil /*f.tree*/, []byte(f.Buffer.String()))

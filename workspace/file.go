@@ -1,6 +1,7 @@
 package workspace
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -389,11 +390,11 @@ func (f *file) copyFlushSwapFile(str string) (ok bool) {
 	return
 }
 
-func (f *file) OnWillEdit(start, end term.Coordinates, str string) {
+func (f *file) OnWillEdit(ctx context.Context, start, end term.Coordinates, str string) {
 	f.wg.Add(1)
 }
 
-func (f *file) OnDidEdit(from, to term.Coordinates, old string) {
+func (f *file) OnDidEdit(ctx context.Context, from, to term.Coordinates, old string) {
 	// store the latest version of the buffer so the last
 	// copyFlushSwap to run uses the up-to-date version.
 	f.mu.Lock()

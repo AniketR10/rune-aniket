@@ -102,7 +102,7 @@ func TestResourceTrackerIntegration(t *testing.T) {
 					require.True(t, ok)
 
 					ed.CellEditor(edh).
-						Edit(term.Coordinates{}, term.Coordinates{},
+						Edit(context.Background(), term.Coordinates{}, term.Coordinates{},
 							"abcdefghi\n1234\nXXXX\nX\nX\nX\nX\nX\nX")
 
 					assert.Equal(t, "abcdefghi\n1234\nXXXX\nX\nX\nX\nX\nX\nX",

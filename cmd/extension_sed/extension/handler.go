@@ -137,10 +137,10 @@ func (h *sedEditorHandler) readHandlerContent(hed textapi.Handler) (
 }
 
 func (h *sedEditorHandler) writeHandlerContent(
-	hed textapi.Handler, from, to term.Coordinates, content string,
+	ctx context.Context, hed textapi.Handler, from, to term.Coordinates, content string,
 ) error {
 	editor := h.ed.CellEditor(hed)
-	_, _, _, err := editor.Edit(from, to, content)
+	_, _, _, err := editor.Edit(ctx, from, to, content)
 	if err != nil {
 		return fmt.Errorf("delete: %v", err)
 	}
@@ -191,7 +191,7 @@ func (h *sedEditorHandler) HandleCommand(
 		return false, err
 	}
 
-	err = h.writeHandlerContent(cmd.Resource, from, to, result)
+	err = h.writeHandlerContent(ctx, cmd.Resource, from, to, result)
 	if err != nil {
 		return false, err
 	}

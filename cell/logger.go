@@ -1,6 +1,7 @@
 package cell
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 
@@ -44,7 +45,7 @@ func (l *logger) wFields(method string) log.Fields {
 	}
 }
 
-func (l *logger) Edit(start, end term.Coordinates, str string) (
+func (l *logger) Edit(ctx context.Context, start, end term.Coordinates, str string) (
 	from, to term.Coordinates, old string,
 ) {
 	fields := l.wFields("update")
@@ -53,7 +54,7 @@ func (l *logger) Edit(start, end term.Coordinates, str string) (
 	fields["string"] = fmt.Sprintf("%s", str)
 	fields["length"] = len(str)
 
-	from, to, old = l.w.Edit(start, end, str)
+	from, to, old = l.w.Edit(ctx, start, end, str)
 
 	fields["from"] = from
 	fields["to"] = to

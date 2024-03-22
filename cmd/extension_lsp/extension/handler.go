@@ -1257,7 +1257,7 @@ func (h *lspEditorHandler) handleFileEdit(ev textapi.Event) error {
 
 	oldCells := h.getCells(f)
 	buf := cell.CellsToBuffer(oldCells, h.tabspaces)
-	buf.Edit(ev.Start, ev.End, ev.Content)
+	buf.Edit(ctx, ev.Start, ev.End, ev.Content)
 	newCells := buf.RawCells()
 	if _, err := h.sendIncrementalEdit(ctx, srv, f, newCells, oldCells,
 		ev.Content, ev.Start, ev.End); err != nil {

@@ -20,14 +20,18 @@ type cellSubscriber struct {
 	onWillEditEnd   term.Coordinates
 }
 
-func (s *cellSubscriber) OnWillEdit(start, end term.Coordinates, str string) {
+func (s *cellSubscriber) OnWillEdit(
+	ctx context.Context, start, end term.Coordinates, str string,
+) {
 	s.onWillEditStr = str
 	s.onWillEditStart = start
 	s.onWillEditEnd = end
 }
 
-func (s *cellSubscriber) OnDidEdit(from, to term.Coordinates, old string) {
-	s.eh.Handle(context.Background(), textapi.Event{
+func (s *cellSubscriber) OnDidEdit(
+	ctx context.Context, from, to term.Coordinates, old string,
+) {
+	s.eh.Handle(ctx, textapi.Event{
 		Type:     textapi.EventTypeEdit,
 		Resource: s.h,
 		URI:      s.uri,

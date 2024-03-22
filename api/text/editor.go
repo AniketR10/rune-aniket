@@ -1,6 +1,8 @@
 package api
 
 import (
+	"context"
+
 	browserapi "unstable.build/go-tui/api/browser"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/term"
@@ -18,7 +20,9 @@ type Handler interface {
 
 // CellEditor is a cell.Editor that can fail.
 type CellEditor interface {
-	Edit(start, end term.Coordinates, str string) (from, to term.Coordinates, old string, err error)
+	Edit(ctx context.Context, start, end term.Coordinates, str string) (
+		from, to term.Coordinates, old string, err error,
+	)
 }
 
 // CellView wraps a subset of cell.View behaviour with an API that can fail.

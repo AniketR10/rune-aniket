@@ -149,7 +149,7 @@ func main() {
 		text.FuncEventHandler(func(ctx context.Context, ev textapi.Event) bool {
 			switch ev.Type {
 			case textapi.EventTypeEdit:
-				out.Edit(ev.Start, ev.End, ev.Content)
+				out.Edit(ctx, ev.Start, ev.End, ev.Content)
 			}
 			return false
 		})))

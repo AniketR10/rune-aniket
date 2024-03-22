@@ -5,6 +5,7 @@
 package test
 
 import (
+	context "context"
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
@@ -158,9 +159,9 @@ func (m *MockCellEditor) EXPECT() *MockCellEditorMockRecorder {
 }
 
 // Edit mocks base method.
-func (m *MockCellEditor) Edit(start, end term.Coordinates, str string) (term.Coordinates, term.Coordinates, string, error) {
+func (m *MockCellEditor) Edit(ctx context.Context, start, end term.Coordinates, str string) (term.Coordinates, term.Coordinates, string, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Edit", start, end, str)
+	ret := m.ctrl.Call(m, "Edit", ctx, start, end, str)
 	ret0, _ := ret[0].(term.Coordinates)
 	ret1, _ := ret[1].(term.Coordinates)
 	ret2, _ := ret[2].(string)
@@ -169,9 +170,9 @@ func (m *MockCellEditor) Edit(start, end term.Coordinates, str string) (term.Coo
 }
 
 // Edit indicates an expected call of Edit.
-func (mr *MockCellEditorMockRecorder) Edit(start, end, str interface{}) *gomock.Call {
+func (mr *MockCellEditorMockRecorder) Edit(ctx, start, end, str interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Edit", reflect.TypeOf((*MockCellEditor)(nil).Edit), start, end, str)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Edit", reflect.TypeOf((*MockCellEditor)(nil).Edit), ctx, start, end, str)
 }
 
 // MockCellView is a mock of CellView interface.

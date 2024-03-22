@@ -1,6 +1,8 @@
 package text
 
 import (
+	"context"
+
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text/clipboard"
@@ -28,7 +30,9 @@ func WithCopyDelete(
 	buf.SubscribeUsage(c)
 }
 
-func (c *delClip) OnWillEdit(start, end term.Coordinates, str string) {
+func (c *delClip) OnWillEdit(
+	ctx context.Context, start, end term.Coordinates, str string,
+) {
 	if start == end {
 		return
 	}
@@ -40,7 +44,9 @@ func (c *delClip) OnWillEdit(start, end term.Coordinates, str string) {
 	}
 }
 
-func (c *delClip) OnDidEdit(from, to term.Coordinates, old string) {
+func (c *delClip) OnDidEdit(
+	ctx context.Context, from, to term.Coordinates, old string,
+) {
 	if old != "" {
 		c.clipboard.Copy(c.registerID, clipboard.Data{Text: old, Metadata: c.mode})
 	}
