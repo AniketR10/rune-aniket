@@ -10,15 +10,11 @@ import (
 )
 
 var (
-	defaultAttr = Attributes{Fg: tcell.ColorDefault, Bg: tcell.ColorDefault}
+	defaultAttr  = Attributes{Fg: tcell.ColorDefault, Bg: tcell.ColorDefault}
 	publishEvent atomic.Value
 
 	// DefaultWriter returns the global terminal Writer.
 	DefaultWriter ContextWriter = newTermboxWriter()
-
-	// EventRawBell is used by PublishBell to signal that there was
-	// a request to call RingBell.
-	EventRawBell = []byte("__bell")
 )
 
 func init() {
@@ -84,6 +80,9 @@ func makeEvent(tev termbox.Event) (ev Event) {
 	ev.MouseX = tev.MouseX
 	ev.MouseY = tev.MouseY
 	ev.Raw = tev.Raw
+	if tev.Metadata != nil {
+		ev.UserFunc = tev.Metadata.(func())
+	}
 	return
 }
 
@@ -123,6 +122,7 @@ func PublishEvent(ev Event) bool {
 	tev.MouseX = ev.MouseX
 	tev.MouseY = ev.MouseY
 	tev.Raw = ev.Raw
+	tev.Metadata = ev.UserFunc
 	return publishEvent.Load().(func(termbox.Event) bool)(tev)
 }
 
@@ -132,9 +132,14 @@ func RingBell() {
 	termbox.Screen().Bell()
 }
 
-// PublishBell schedules a call to RingBell.
+// PublishBell It's a shorthand for `ScheduleNextTick(RingBell)`.
 func PublishBell() {
-	PublishEvent(Event{Type: EventInterrupt, Raw: EventRawBell})
+	ScheduleNextTick(RingBell)
+}
+
+// ScheduleNextTick schedules running fn on the next event-loop iteration.
+func ScheduleNextTick(fn func()) {
+	PublishEvent(Event{Type: EventInterrupt, UserFunc: fn})
 }
 
 // Poll gives access to the underlying tcell.Event channel.

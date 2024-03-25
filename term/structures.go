@@ -44,16 +44,17 @@ type KeyComb struct {
 // valid if 'Type' is EventKey. The 'Width' and 'Height' fields are valid if
 // 'Type' is EventResize. The 'Err' field is valid if 'Type' is EventError.
 type Event struct {
-	Type   EventType // one of Event* constants
-	Mod    Modifier  // one of Mod* constants or 0
-	Key    Key       // one of Key* constants, invalid if 'Ch' is not 0
-	Ch     rune      // a unicode character
-	Width  int       // width of the screen
-	Height int       // height of the screen
-	Err    error     // error in case if input failed
-	MouseX int       // x coord of mouse
-	MouseY int       // y coord of mouse
-	Raw    []byte
+	Type     EventType // one of Event* constants
+	Mod      Modifier  // one of Mod* constants or 0
+	Key      Key       // one of Key* constants, invalid if 'Ch' is not 0
+	Ch       rune      // a unicode character
+	Width    int       // width of the screen
+	Height   int       // height of the screen
+	Err      error     // error in case if input failed
+	MouseX   int       // x coord of mouse
+	MouseY   int       // y coord of mouse
+	Raw      []byte
+	UserFunc func()
 }
 
 func (e Event) KeyComb() KeyComb {

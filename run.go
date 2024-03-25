@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"bytes"
 	"context"
 	"os"
 	"os/signal"
@@ -118,9 +117,6 @@ loop:
 					if ev.Raw != nil {
 						if id, ok := parsePayload(ev.Raw); ok {
 							termw.SetContext(ContextWithIteration(ctx, id))
-						} else if bytes.Equal(ev.Raw, term.EventRawBell) {
-							term.RingBell()
-							continue // don't redraw for a bell interrupt
 						} else {
 							termw.SetContext(term.ContextWithPayload(ctx, ev.Raw))
 						}
@@ -129,6 +125,9 @@ loop:
 						// so clients can differentiate between an interrupt
 						// and a regular iteration loop.
 						termw.SetContext(ctx)
+					}
+					if ev.UserFunc != nil {
+						ev.UserFunc()
 					}
 					interruptPending.Store(false)
 					// ensure that i is not incremented
