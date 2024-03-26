@@ -440,7 +440,7 @@ func TestScrollSeekTo(t *testing.T) {
 			expectDidSeek: func(from, to term.Coordinates) {
 				calledDid++
 				assert.Equal(t, term.Coordinates{}, from)
-				assert.Equal(t, term.Coordinates{X: 6}, to)
+				assert.Equal(t, term.Coordinates{X: 5}, to)
 			},
 		}
 		scroll.Subscribe(subs)

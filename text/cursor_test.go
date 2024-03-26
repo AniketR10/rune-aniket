@@ -504,7 +504,8 @@ func TestCursorMove(t *testing.T) {
 					e.MoveRight()
 				}
 			},
-			term.Coordinates{X: 77, Y: 2},
+			// line is 77 characters long so cursor should be a t x=76
+			term.Coordinates{X: 76, Y: 2},
 		},
 		{
 			"MoveRightStartWord should move to the start of the next word",

@@ -32,9 +32,9 @@ func TestRepeater(t *testing.T) {
 	cursor.DeleteSelection()
 	assert.True(t, repeater.Repeat())
 	assert.Equal(t, "loworldhelloworldX", buf.String())
-	cursor.MoveEndLine()
-	cursor.MoveRight()
-	assert.False(t, repeater.Repeat())
+	assert.True(t, cursor.MoveEndLine())
+	cursor.cursor.X++
+	require.False(t, repeater.Repeat())
 	// nop because end is out of bounds
 	assert.Equal(t, "loworldhelloworldX", buf.String())
 

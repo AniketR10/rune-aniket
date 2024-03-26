@@ -236,9 +236,9 @@ GGGGHHHH
 		},
 		{
 			events[5], `
-CCDDDDD 
-EEFFFFF 
-GGHHHHH 
+CCCDDDDD
+EEEFFFFF
+GGGHHHHH
         `,
 		},
 		{

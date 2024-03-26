@@ -296,7 +296,7 @@ func (s *Scroll) getMaxXOffset() (x int) {
 
 	columns := s.buf.MaxColumns()
 	if columns >= s.width {
-		x = columns - s.width + 1
+		x = columns - s.width
 	}
 	return
 }
