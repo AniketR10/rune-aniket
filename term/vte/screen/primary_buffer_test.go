@@ -40,7 +40,6 @@ func TestPrimaryCoordinates(t *testing.T) {
 	assert.Equal(t, term.Coordinates{Y: 5, X: 5}, b.CursorAtScroll())
 	assert.Equal(t, term.Coordinates{Y: 5, X: 5}, b.CursorAtScreen())
 }
-
 func TestPrimarySelection(t *testing.T) {
 	t.Run("select with scroll", func(t *testing.T) {
 		b := makePrimaryBufferForTesting(1, 5)
@@ -97,6 +96,137 @@ func TestPrimarySelection(t *testing.T) {
 		require.True(t, ok)
 		assert.Equal(t, term.Coordinates{Y: 6}, from)
 		assert.Equal(t, term.Coordinates{Y: 7, X: 1}, to)
+	})
+}
+
+func TestPrimaryResize(t *testing.T) {
+	t.Run("maintains number of rows if resize is equal height", func(t *testing.T) {
+
+		t.Run("buffer with more lines than height", func(t *testing.T) {
+			b := makePrimaryBufferForTesting(1, 5)
+			resetPrimaryBuffer(t, b, "0\n1\n2\n3\n4\n5\n6\n7\n8\n9")
+			cells := b.Cells.RawCells()
+			require.Len(t, cells, 10)
+			assert.Equal(t, '9', cells[9][0].Ch)
+
+			b.Resize(2, 5)
+			cells = b.Cells.RawCells()
+			require.Len(t, cells, 10)
+			assert.Equal(t, '9', cells[9][0].Ch)
+		})
+
+		t.Run("buffer with less lines than height", func(t *testing.T) {
+			b := makePrimaryBufferForTesting(1, 5)
+			resetPrimaryBuffer(t, b, "0\n1\n2\n \n ")
+			cells := b.Cells.RawCells()
+			require.Len(t, cells, 5)
+			assert.Equal(t, '2', cells[2][0].Ch)
+
+			b.Resize(2, 5)
+			cells = b.Cells.RawCells()
+			require.Len(t, cells, 5)
+			assert.Equal(t, '2', cells[2][0].Ch)
+		})
+
+		t.Run("buffer with exactly height lines", func(t *testing.T) {
+			b := makePrimaryBufferForTesting(1, 5)
+			resetPrimaryBuffer(t, b, "0\n1\n2\n3\n4")
+			cells := b.Cells.RawCells()
+			require.Len(t, cells, 5)
+			assert.Equal(t, '4', cells[4][0].Ch)
+
+			b.Resize(2, 5)
+			cells = b.Cells.RawCells()
+			require.Len(t, cells, 5)
+			assert.Equal(t, '4', cells[4][0].Ch)
+		})
+	})
+
+	t.Run("potentially trims number of rows if height is decreased", func(t *testing.T) {
+
+		t.Run("buffer with more lines than height", func(t *testing.T) {
+			b := makePrimaryBufferForTesting(1, 5)
+			resetPrimaryBuffer(t, b, "0\n1\n2\n3\n4\n5\n6\n7\n8\n9")
+			cells := b.Cells.RawCells()
+			require.Len(t, cells, 10)
+			assert.Equal(t, '9', cells[9][0].Ch)
+
+			b.Resize(2, 4)
+			cells = b.Cells.RawCells()
+			require.Len(t, cells, 10)
+			assert.Equal(t, '9', cells[9][0].Ch)
+		})
+
+		t.Run("buffer with less lines than height", func(t *testing.T) {
+			b := makePrimaryBufferForTesting(1, 5)
+			resetPrimaryBuffer(t, b, "0\n1\n2\n \n ")
+			cells := b.Cells.RawCells()
+			require.Len(t, cells, 5)
+			assert.Equal(t, '2', cells[2][0].Ch)
+
+			b.Resize(2, 4)
+			cells = b.Cells.RawCells()
+			require.Len(t, cells, 4)
+			assert.Equal(t, '2', cells[2][0].Ch)
+		})
+
+		t.Run("buffer with exactly height lines", func(t *testing.T) {
+			b := makePrimaryBufferForTesting(1, 5)
+			resetPrimaryBuffer(t, b, "0\n1\n2\n3\n4")
+			cells := b.Cells.RawCells()
+			require.Len(t, cells, 5)
+			assert.Equal(t, '4', cells[4][0].Ch)
+
+			b.Resize(2, 4)
+			cells = b.Cells.RawCells()
+			require.Len(t, cells, 5)
+			assert.Equal(t, '4', cells[4][0].Ch)
+		})
+	})
+
+	t.Run("extends rows if height is increased", func(t *testing.T) {
+
+		t.Run("buffer with more lines than height", func(t *testing.T) {
+			b := makePrimaryBufferForTesting(1, 5)
+			resetPrimaryBuffer(t, b, "0\n1\n2\n3\n4\n5\n6\n7\n8\n9")
+			cells := b.Cells.RawCells()
+			require.Len(t, cells, 10)
+			assert.Equal(t, '9', cells[9][0].Ch)
+
+			b.Resize(2, 11)
+			cells = b.Cells.RawCells()
+			require.Len(t, cells, 11)
+			assert.Equal(t, '9', cells[9][0].Ch)
+			assert.Equal(t, ' ', cells[10][0].Ch)
+		})
+
+		t.Run("buffer with less lines than height", func(t *testing.T) {
+			b := makePrimaryBufferForTesting(1, 5)
+			resetPrimaryBuffer(t, b, "0\n1\n2\n \n ")
+			cells := b.Cells.RawCells()
+			require.Len(t, cells, 5)
+			assert.Equal(t, '2', cells[2][0].Ch)
+
+			b.Resize(2, 11)
+			cells = b.Cells.RawCells()
+			require.Len(t, cells, 11)
+			assert.Equal(t, '2', cells[2][0].Ch)
+			assert.Equal(t, ' ', cells[10][0].Ch)
+		})
+
+		t.Run("buffer with exactly height lines", func(t *testing.T) {
+			b := makePrimaryBufferForTesting(1, 5)
+			resetPrimaryBuffer(t, b, "0\n1\n2\n3\n4")
+			cells := b.Cells.RawCells()
+			require.Len(t, cells, 5)
+			assert.Equal(t, '4', cells[4][0].Ch)
+
+			b.Resize(2, 11)
+			cells = b.Cells.RawCells()
+			require.Len(t, cells, 11)
+			assert.Equal(t, '4', cells[4][0].Ch)
+			assert.Equal(t, ' ', cells[10][0].Ch)
+		})
 	})
 }
 

@@ -29,8 +29,34 @@ func (b *PrimaryBuffer) Resize(width, height int) {
 	b.AltBuffer.width = width
 	b.AltBuffer.height = height
 	b.scroll.Resize(width, height)
+
+	b.truncateBottomEmptyLines()
+	b.extendRowsToHeight()
 	b.Cells.ResetCapacity(width)
 	b.ResetOffset()
+}
+
+func (b *PrimaryBuffer) truncateBottomEmptyLines() {
+	cells := b.Cells.RawCells()
+lines:
+	for y := b.Cells.Rows() - 1; y > 0 && y >= b.AltBuffer.height-1; y-- {
+		for x := 0; x < b.Cells.Columns(y); x++ {
+			cell := cells[y][x]
+			if cell.Ch != 0 && cell.Ch != ' ' {
+				continue lines
+			}
+		}
+		from := term.Coordinates{Y: y}
+		to := term.Coordinates{Y: y}
+		b.Cells.DeleteLine(from, to)
+	}
+}
+
+func (b *PrimaryBuffer) extendRowsToHeight() {
+	if b.AltBuffer.width > 0 && b.AltBuffer.height > 0 && b.Cells.Rows() < b.AltBuffer.height {
+		pos := term.Coordinates{Y: b.AltBuffer.height - 1, X: b.AltBuffer.width - 1}
+		b.Cells.Insert(pos, b.AltBuffer.defaultChar)
+	}
 }
 
 // Dimensions returns the dimensions of this buffer.

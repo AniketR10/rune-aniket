@@ -523,9 +523,8 @@ func TestIntegrationParserHandler(t *testing.T) {
 			altBuffer: false,
 			sut: func(t *testing.T, p *parserHandler, tm *mockTabManager, pty *workspacetest.File) {
 				p.Resize(48, 2)
-				resetBuffer(t, p, "sh-3.2$ ls                                      ")
+				resetBuffer(t, p, "sh-3.2$ ls                                      \n                                                ")
 
-				p.Linefeed()
 				p.CarriageReturn()
 
 				for _, ch := range "LICENSE" {
