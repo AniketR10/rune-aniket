@@ -517,6 +517,6 @@ func contentCoordinatesWithWraps(
 	at = res.WindowCoordinates(at)
 	// add offset and we should have conent coordinates
 	// with wraps.
-	at = cell.CoordinatesSum(at, res.Offset())
+	at = term.CoordinatesSum(at, res.Offset())
 	return at
 }

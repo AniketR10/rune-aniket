@@ -143,7 +143,7 @@ type CursorMark struct {
 
 // Before returns true if other is before CursorMark.
 func (c CursorMark) Before(other term.Coordinates) bool {
-	res := cell.CoordinatesDiff(c.internal, other)
+	res := term.CoordinatesDiff(c.internal, other)
 	return res.Y < 0 || res.Y == 0 && res.X < 0
 }
 
@@ -207,7 +207,7 @@ func (c *Cursor) moveToScroll(pos term.Coordinates) {
 	var windowPos term.Coordinates
 	if c.scroll.Width() == 0 && c.scroll.Wrap {
 		// best effort, assume no wrap when width is 0
-		windowPos = cell.CoordinatesDiff(pos, c.scroll.Offset())
+		windowPos = term.CoordinatesDiff(pos, c.scroll.Offset())
 	} else {
 		windowPos = ScrollToWindowCoordinates(c.scroll, pos)
 	}
@@ -892,7 +892,7 @@ func (c *Cursor) setSelection() (ok bool) {
 	from := c.selection.scrollFrom
 	to := c.cursorAtScroll()
 
-	from, to = cell.SortFromTo(from, to)
+	from, to = term.CoordinatesSort(from, to)
 	to.X++
 
 	var sels []cell.Selection
@@ -1092,7 +1092,7 @@ func (c *Cursor) DeleteSelection() (ok bool) {
 	}
 
 	// buffer delete uses right exclusive semantics
-	from, to = cell.SortFromTo(from, to)
+	from, to = term.CoordinatesSort(from, to)
 	to.X++
 
 	var start term.Coordinates
@@ -1299,9 +1299,9 @@ func (c *Cursor) getShiftSelection() (from, to term.Coordinates) {
 	from, to = c.selection.scrollFrom, c.cursorAtScroll()
 	switch c.selection.mode {
 	case BlockSelection:
-		from, to = cell.SortFromToBlock(from, to)
+		from, to = term.CoordinatesBlockSort(from, to)
 	default:
-		from, to = cell.SortFromTo(from, to)
+		from, to = term.CoordinatesSort(from, to)
 	}
 	return
 }
@@ -1345,7 +1345,7 @@ func (c *Cursor) processList(ID string, l LocationList) {
 		if n.Message == "" {
 			continue
 		}
-		from, to := cell.SortFromTo(n.From, n.To)
+		from, to := term.CoordinatesSort(n.From, n.To)
 		for {
 			msgs, ok := c.messages[from]
 			if !ok {
@@ -1550,7 +1550,7 @@ func (c *Cursor) ScrollCoordinates(pos term.Coordinates) term.Coordinates {
 func (c *Cursor) WindowCoordinates(pos term.Coordinates) term.Coordinates {
 	if c.scroll.Width() == 0 && c.scroll.Wrap {
 		// best effort conversion, if scroll width is 0 assume no wrap
-		return cell.CoordinatesDiff(pos, c.scroll.Offset())
+		return term.CoordinatesDiff(pos, c.scroll.Offset())
 	}
 	return ScrollToWindowCoordinates(c.scroll, pos)
 }

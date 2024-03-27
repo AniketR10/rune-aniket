@@ -408,7 +408,7 @@ func (b *Buffer) DeleteLine(from, to term.Coordinates) (
 func (b *Buffer) DeleteLineContext(
 	ctx context.Context, from, to term.Coordinates,
 ) (start term.Coordinates, str string) {
-	from, to = SortFromTo(from, to)
+	from, to = term.CoordinatesSort(from, to)
 	from, to, ok := fromToInBounds(b.view, from, to)
 	if !ok {
 		return

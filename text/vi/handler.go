@@ -489,7 +489,7 @@ func (vi *viHandlerImpl) copySelection() {
 }
 
 func (vi *viHandlerImpl) repeatInsertStart() {
-	from, to := cell.SortFromTo(vi.blockRepeat.From, vi.blockRepeat.To)
+	from, to := term.CoordinatesSort(vi.blockRepeat.From, vi.blockRepeat.To)
 	n := to.Y - from.Y
 	for i := 0; i < n; i++ {
 		vi.blockRepeat.From.Y++

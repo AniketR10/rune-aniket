@@ -45,11 +45,11 @@ func (r *Repeater) Repeat() (ok bool) {
 	}
 	if r.d {
 		cursor := r.cursor.CursorAtScroll()
-		from, to := cell.SortFromTo(r.deleteFrom, r.deleteTo)
-		diff := cell.CoordinatesDiff(to, from)
+		from, to := term.CoordinatesSort(r.deleteFrom, r.deleteTo)
+		diff := term.CoordinatesDiff(to, from)
 
 		from = cursor
-		to = cell.CoordinatesSum(from, diff)
+		to = term.CoordinatesSum(from, diff)
 
 		// avoid OnWillEdit loop
 		r.repeating = true

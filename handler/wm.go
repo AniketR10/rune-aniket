@@ -5,7 +5,6 @@ import (
 
 	"github.com/ernestrc/tcell/v3"
 	"unstable.build/go-tui"
-	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/term"
 )
@@ -282,7 +281,7 @@ func (wm *WindowManager) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 		offset.X++
 	}
 	cursor, style, show := content.Cursor()
-	return cell.CoordinatesSum(cursor, offset), style, show
+	return term.CoordinatesSum(cursor, offset), style, show
 }
 
 // Man : Handler

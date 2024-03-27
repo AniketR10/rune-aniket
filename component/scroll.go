@@ -765,7 +765,7 @@ func FuncScrollSubscriber(fn func(from, to term.Coordinates)) ScrollSubscriber {
 // taking into consideration scroll offsets and wrapped lines.
 func (s *Scroll) ScrollToWindowCoordinates(pos term.Coordinates) term.Coordinates {
 	offset := s.Offset()
-	ret := cell.CoordinatesDiff(pos, offset)
+	ret := term.CoordinatesDiff(pos, offset)
 	if !s.Wrap {
 		return ret
 	}
@@ -786,7 +786,7 @@ func (s *Scroll) ScrollToWindowCoordinates(pos term.Coordinates) term.Coordinate
 // taking into consideration scroll offsets and wrapped lines.
 func (s *Scroll) WindowToScrollCoordinates(pos term.Coordinates) term.Coordinates {
 	offset := s.Offset()
-	ret := cell.CoordinatesSum(pos, offset)
+	ret := term.CoordinatesSum(pos, offset)
 	if !s.Wrap {
 		return ret
 	}

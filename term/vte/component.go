@@ -606,7 +606,7 @@ func (t *Component) drawSelection(w term.Writer) {
 			if c == nil {
 				continue
 			}
-			posAtScreen := cell.CoordinatesDiff(pos, offset)
+			posAtScreen := term.CoordinatesDiff(pos, offset)
 			if posAtScreen.Y < 0 || posAtScreen.Y >= t.height ||
 				posAtScreen.X < 0 || posAtScreen.X >= t.width {
 				continue

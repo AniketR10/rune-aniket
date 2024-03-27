@@ -16,11 +16,6 @@ type (
 // Attributes represents a cell background and foreground attributes.
 type Attributes tcell.Style
 
-// Coordinates represent a point in a 2-D space.
-type Coordinates struct {
-	X, Y int
-}
-
 // Cell represents a location with content on a terminal screen.
 // 'Ch' is a unicode character, 'Fg' and 'Bg' are foreground
 // and background attributes respectively. Unicode graphene clusters

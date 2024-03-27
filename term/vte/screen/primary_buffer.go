@@ -3,7 +3,6 @@ package screen
 import (
 	"math"
 
-	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/term"
 )
 
@@ -138,7 +137,7 @@ func (b *PrimaryBuffer) SetCursorAtScroll(c term.Coordinates, relative bool) {
 // SetCursorAtScroll sets the cursor at the screen position c.
 // The relative argument is ignored for PrimaryBuffer.
 func (b *PrimaryBuffer) SetCursorAtScreen(c term.Coordinates, relative bool) {
-	b.SetCursorAtScroll(cell.CoordinatesSum(c, b.scroll.Offset()), false)
+	b.SetCursorAtScroll(term.CoordinatesSum(c, b.scroll.Offset()), false)
 }
 
 // CursorAtScroll returns the cursor position in relation to the underlying
@@ -150,7 +149,7 @@ func (b *PrimaryBuffer) CursorAtScroll() term.Coordinates {
 // CursorAtScreen returns the current cursor position in relation to the
 // screen coordinates.
 func (b *PrimaryBuffer) CursorAtScreen() term.Coordinates {
-	return cell.CoordinatesDiff(b.cursor.position, b.scroll.Offset())
+	return term.CoordinatesDiff(b.cursor.position, b.scroll.Offset())
 }
 
 // ResetOffset resets the offset to MaxOffset.

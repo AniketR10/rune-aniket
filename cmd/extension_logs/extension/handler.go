@@ -6,7 +6,6 @@ import (
 	"github.com/ernestrc/tcell/v3"
 	"unstable.build/go-tui"
 	workspaceapi "unstable.build/go-tui/api/workspace"
-	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/handler/search"
 	"unstable.build/go-tui/term"
@@ -414,7 +413,7 @@ func (s *logsHandler) ScrollDown(n int) bool {
 func (s *logsHandler) setSelection(to term.Coordinates) {
 	s.pinned = s.pinned[:0]
 
-	from, to := cell.SortFromTo(s.selectionStart, to)
+	from, to := term.CoordinatesSort(s.selectionStart, to)
 
 	var first component.ListNode
 	var matches []search.Match

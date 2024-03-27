@@ -2,7 +2,6 @@ package util
 
 import (
 	workspaceapi "unstable.build/go-tui/api/workspace"
-	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
@@ -46,7 +45,7 @@ func (t *TrackedResource) Cursor() term.Coordinates {
 // to EventTypeCursor, EventTypeScroll and EventTypeFocus events.
 func (t *TrackedResource) WindowCoordinates(pos term.Coordinates) term.Coordinates {
 	if t.Scroll.Width() == 0 && t.Scroll.Wrap {
-		return cell.CoordinatesDiff(pos, t.Scroll.Offset())
+		return term.CoordinatesDiff(pos, t.Scroll.Offset())
 	}
 	return text.ScrollToWindowCoordinates(&t.Scroll, pos)
 }

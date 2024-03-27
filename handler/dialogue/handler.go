@@ -7,7 +7,6 @@ import (
 	"github.com/ernestrc/blue/logging"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
-	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/text/clipboard"
@@ -155,7 +154,7 @@ func (s *dialogueHandler) Cursor() (
 	if !ok {
 		return
 	}
-	cursor = cell.CoordinatesSum(cursor, s.comp.InputPosition())
+	cursor = term.CoordinatesSum(cursor, s.comp.InputPosition())
 	return
 }
 

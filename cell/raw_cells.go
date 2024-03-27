@@ -349,7 +349,7 @@ func (c *rawCells) delete(from, to term.Coordinates) (
 ) {
 	assertValidCoords(from)
 	assertValidCoords(to)
-	start, end = SortFromTo(from, to)
+	start, end = term.CoordinatesSort(from, to)
 	start, end = c.skipPadding(start, end)
 
 	builder := strings.Builder{}
