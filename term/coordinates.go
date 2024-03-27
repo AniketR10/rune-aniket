@@ -7,14 +7,12 @@ type Coordinates struct {
 
 // CoordinatesBlockSort sorts a pair of coordinates (from/to) such that:
 //
-//					cases
-//
 //		┌──────┐┌──────┐┌──────┐┌──────┐┌──────┐┌──────┐
 //		│ f    ││ t    ││    f ││    t ││ t  f ││ f  t │
 //		│    t ││    f ││ t    ││ f    ││      ││      │
 //		└──────┘└──────┘└──────┘└──────┘└──────┘└──────┘
-//	       |       |        |       |       |       |
-//	       v       v        v       v       v       v
+//	      |       |        |       |       |       |
+//	      v       v        v       v       v       v
 //		┌──────┐┌──────┐┌──────┐┌──────┐┌──────┐┌──────┐
 //		│ f    ││ f    ││ f    ││ f    ││ f  t ││ f  t │
 //		│    t ││    t ││    t ││    t ││      ││      │
@@ -37,14 +35,12 @@ func CoordinatesBlockSort(from Coordinates, to Coordinates) (
 
 // CoordinatesSort sorts a pair of coordinates (from/to) such that:
 //
-//					cases
-//
 //		┌──────┐┌──────┐┌──────┐┌──────┐┌──────┐┌──────┐
 //		│ f    ││ t    ││    f ││    t ││ t  f ││ f  t │
 //		│    t ││    f ││ t    ││ f    ││      ││      │
 //		└──────┘└──────┘└──────┘└──────┘└──────┘└──────┘
-//	       |       |        |       |       |       |
-//	       v       v        v       v       v       v
+//	      |       |        |       |       |       |
+//	      v       v        v       v       v       v
 //		┌──────┐┌──────┐┌──────┐┌──────┐┌──────┐┌──────┐
 //		│ f    ││ f    ││    f ││    f ││ f  t ││ f  t │
 //		│    t ││    t ││ t    ││ t    ││      ││      │
@@ -82,4 +78,51 @@ func CoordinatesSum(a, b Coordinates) Coordinates {
 		Y: a.Y + b.Y,
 		X: a.X + b.X,
 	}
+}
+
+// CoordinatesIntersection calculates the intersection a ∩ b in a 2D space,
+// defined as the set of all those cells which are common to both
+// a and b. Both a and b are expected to be right-exclusive ranges.
+//
+//	┌──────┐     ┌──────┐     ┌──────┐
+//	│ AA   │  ∩  │      │  =  │      │
+//	│      │     │   BB │     │      │
+//	└──────┘     └──────┘     └──────┘
+//	┌──────┐     ┌──────┐     ┌──────┐
+//	│ AAAAA│  ∩  │      │  =  │      │
+//	│AAA   │     │BBBBB │     │CCC   │
+//	└──────┘     └──────┘     └──────┘
+//	┌──────┐     ┌──────┐     ┌──────┐
+//	│  BBBB│  ∩  │      │  =  │      │
+//	│BBB   │     │AAAAA │     │CCC   │
+//	└──────┘     └──────┘     └──────┘
+//	┌──────┐     ┌──────┐     ┌──────┐
+//	│     A│  ∩  │      │  =  │      │
+//	│AAAAAA│     │BBB   │     │CCC   │
+//	└──────┘     └──────┘     └──────┘
+func CoordinatesIntersection(
+	startA, endA, startB, endB Coordinates,
+) (intersectionStart Coordinates, intersectionEnd Coordinates, ok bool) {
+	startA, endA = CoordinatesSort(startA, endA)
+	startB, endB = CoordinatesSort(startB, endB)
+
+	// conflate non-sorted cases into sorted
+	actualStartA, actualStartB := CoordinatesSort(startA, startB)
+	if actualStartA != startA {
+		temp := endB
+		endB = endA
+		endA = temp
+		startA = actualStartA
+		startB = actualStartB
+	}
+
+	if startB.Y > endA.Y || (startB.Y == endA.Y && startB.X >= endA.X) ||
+		startA == endA || startB == endB {
+		return
+	}
+
+	intersectionStart = startB
+	intersectionEnd, _ = CoordinatesSort(endA, endB)
+	ok = true
+	return
 }
