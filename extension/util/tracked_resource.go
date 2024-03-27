@@ -47,7 +47,7 @@ func (t *TrackedResource) WindowCoordinates(pos term.Coordinates) term.Coordinat
 	if t.Scroll.Width() == 0 && t.Scroll.Wrap {
 		return term.CoordinatesDiff(pos, t.Scroll.Offset())
 	}
-	return text.ScrollToWindowCoordinates(&t.Scroll, pos)
+	return t.Scroll.ScrollToWindowCoordinates(pos)
 }
 
 // ContentCoordinates translates the given window coordinates
@@ -56,5 +56,5 @@ func (t *TrackedResource) WindowCoordinates(pos term.Coordinates) term.Coordinat
 // Using this requires ResourceTracker to be subscribed
 // to EventTypeCursor, EventTypeScroll and EventTypeFocus events.
 func (t *TrackedResource) ContentCoordinates(pos term.Coordinates) term.Coordinates {
-	return text.WindowToScrollCoordinates(&t.Scroll, pos)
+	return t.Scroll.WindowToScrollCoordinates(pos)
 }

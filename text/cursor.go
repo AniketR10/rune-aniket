@@ -209,7 +209,7 @@ func (c *Cursor) moveToScroll(pos term.Coordinates) {
 		// best effort, assume no wrap when width is 0
 		windowPos = term.CoordinatesDiff(pos, c.scroll.Offset())
 	} else {
-		windowPos = ScrollToWindowCoordinates(c.scroll, pos)
+		windowPos = c.scroll.ScrollToWindowCoordinates(pos)
 	}
 	c.setCursor(windowPos, true)
 }
@@ -484,7 +484,7 @@ func (c *Cursor) MoveRightWrap() bool {
 }
 
 func (c *Cursor) cursorAtScroll() term.Coordinates {
-	return WindowToScrollCoordinates(c.scroll, c.cursor)
+	return c.scroll.WindowToScrollCoordinates(c.cursor)
 }
 
 func (c *Cursor) cellAtCursor() (cell term.Cell, ok bool) {
@@ -1543,7 +1543,7 @@ func (c *Cursor) SubscribeScroll(subs component.ScrollSubscriber) {
 
 // ScrollCoordinates translates window coordinates to the scroll coordinates system.
 func (c *Cursor) ScrollCoordinates(pos term.Coordinates) term.Coordinates {
-	return WindowToScrollCoordinates(c.scroll, pos)
+	return c.scroll.WindowToScrollCoordinates(pos)
 }
 
 // WindowCoordinates translates scroll coordinates to the window coordinates system.
@@ -1552,7 +1552,7 @@ func (c *Cursor) WindowCoordinates(pos term.Coordinates) term.Coordinates {
 		// best effort conversion, if scroll width is 0 assume no wrap
 		return term.CoordinatesDiff(pos, c.scroll.Offset())
 	}
-	return ScrollToWindowCoordinates(c.scroll, pos)
+	return c.scroll.ScrollToWindowCoordinates(pos)
 }
 
 // MoveLineDown is equivalent to MoveDown in non wrap mode. In wrap mode,
@@ -1648,7 +1648,7 @@ func (c *Cursor) setCursorAfterUpdate(atScroll term.Coordinates) {
 		atScroll.X--
 		done = true
 	}
-	res := ScrollToWindowCoordinates(c.scroll, atScroll)
+	res := c.scroll.ScrollToWindowCoordinates(atScroll)
 	if done {
 		res.X++
 	}
