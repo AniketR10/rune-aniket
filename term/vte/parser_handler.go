@@ -380,7 +380,7 @@ func (t *parserHandler) PutTab() {
 
 	// overwrite cell at current position, if it's an empty cell
 	cell := t.sync.buf.CellAt(pos)
-	if cell != nil && (cell.Ch == ' ' || cell.Ch == 0) {
+	if cell != nil && cell.Ch == screen.DefaultChar {
 		cell.Ch = c
 	}
 
@@ -1412,7 +1412,7 @@ func (t *parserHandler) scrollUpPrimaryView() {
 	for y := buf.Rows() - 1; y >= 0; y-- {
 		for x := 0; x < buf.Columns(y); x++ {
 			c := cells[y][x]
-			if c.Ch != ' ' && c.Ch != 0 {
+			if c.Ch != screen.DefaultChar {
 				newOffset := term.Coordinates{Y: y + 1}
 				t.log(log.TraceLevel, "new offset after clear view %+v", newOffset)
 				buf.SetOffset(newOffset)

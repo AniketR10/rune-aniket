@@ -25,7 +25,7 @@ func TestNewAltBuffer(t *testing.T) {
 	assert.NotNil(t, b.Cursor().Charsets)
 
 	assert.Equal(t, [][]term.Cell{
-		{{Ch: ' ', Width: 1}},
+		{{Ch: DefaultChar, Width: 1}},
 	}, b.Cells.RawCells())
 }
 
@@ -635,6 +635,7 @@ func TestAltSelection(t *testing.T) {
 
 func makeAltBufferForTesting(width, height int) *AltBuffer {
 	ret := NewAltBuffer()
+	ret.defaultChar = ' '
 	ret.Resize(width, height)
 	return ret
 }

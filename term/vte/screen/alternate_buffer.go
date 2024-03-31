@@ -11,6 +11,8 @@ import (
 	"unstable.build/go-tui/text"
 )
 
+const DefaultChar = '\x00'
+
 // AltBuffer implements a vte terminal screen buffer by wrapping a cell.Buffer
 // and implementing vte screen buffer semantics. This buffer does not offer
 // support for scroll-back or 'history', which keeps the implementation
@@ -53,7 +55,7 @@ func NewAltBuffer() *AltBuffer {
 
 // Init initializes this buffer.
 func (b *AltBuffer) Init() {
-	b.defaultChar = ' '
+	b.defaultChar = DefaultChar
 	b.width = 1
 	b.height = 1
 	b.topScrollableRegion = 0
@@ -423,6 +425,12 @@ func (b *AltBuffer) Selection() (cells [][]term.Cell, ok bool) {
 	}
 
 	return
+}
+
+// SetDefaultChar sets the default character to use for filling cells
+// up to width and heighgt. This should be used for testing only.
+func (b *AltBuffer) SetDefaultChar(ch rune) {
+	b.defaultChar = ch
 }
 
 // SelectionCoordinatesAtScroll returns the content/scroll coordinates of the selected text.

@@ -764,6 +764,8 @@ func TestIntegrationParserHandler(t *testing.T) {
 			attrs := DefaultConfig().NeedsAttentionAttributes
 			pty := workspaceapi.Pty{Master: &mockPtyFile, Slave: &mockPtyFile}
 			ph := newParserHandler(new(sync.Mutex), pty, &tm, clipboard.NewInMemory(), tm.bell, testURI, attrs)
+			ph.sync.primBuf.SetDefaultChar(' ')
+			ph.sync.altBuf.SetDefaultChar(' ')
 
 			if test.altBuffer {
 				ph.SetPrivateMode(parser.PrivateModeSwapScreenAndSetRestoreCursor)

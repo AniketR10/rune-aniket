@@ -232,6 +232,7 @@ func TestPrimaryResize(t *testing.T) {
 
 func makePrimaryBufferForTesting(width, height int) *PrimaryBuffer {
 	ret := NewPrimaryBuffer()
+	ret.defaultChar = ' '
 	ret.Resize(width, height)
 	return ret
 }
