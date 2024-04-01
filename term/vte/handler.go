@@ -176,7 +176,11 @@ func (e *Handler) Handle(ev term.Event) (exit, handled bool) {
 	}
 
 	if !e.bracketedPaste {
-		e.comp.ScrollBottom()
+		// do not scroll to bottom in all cases or it could
+		// interfere with interactive program that uses primary buffer
+		if ev.Type == term.EventKey && ev.Key == term.KeyCtrlC {
+			e.comp.ScrollBottom()
+		}
 		e.handleTimer.Reset(handleTimeout)
 		select {
 		case <-e.handleTimer.C:
