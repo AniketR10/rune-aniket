@@ -379,6 +379,9 @@ func (t *Component) IsApplicationCursorKeysMode() bool {
 
 // IsAltBuffer returns true if underlying buffer utilizes is the alternate buffer.
 func (t *Component) IsAltBuffer() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
 	return t.parserHandler.useAlt
 }
 
