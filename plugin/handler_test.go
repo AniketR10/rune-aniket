@@ -35,7 +35,7 @@ func TestPluginHandler(t *testing.T) {
 			maxWidth:    4,
 			drawnComponent: `
  ◦     sh   0s
-sh-3.2$       
+$             
               
               
               
@@ -68,7 +68,13 @@ sh-3.2$
 	}
 
 	// important so test correctness doesn't depend on host
+	shell := os.Getenv("SHELL")
+	defer os.Setenv("SHELL", shell)
 	os.Setenv("SHELL", "sh")
+
+	ps1 := os.Getenv("PS1")
+	os.Setenv("PS1", "$ ")
+	defer os.Setenv("PS1", ps1)
 
 	for _, test := range suite {
 		t.Run(test.description, func(t *testing.T) {

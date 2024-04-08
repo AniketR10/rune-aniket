@@ -1245,7 +1245,7 @@ func TestIntegrationCompanionTerminal(t *testing.T) {
 			`┌──────────────────┐
 │                  │
 ├┌────────────────┐┤
-││sh-3.2$ ▐       ││
+││sh ▐            ││
 ││                ││
 ││                ││
 ││                ││
@@ -1269,7 +1269,7 @@ func TestIntegrationCompanionTerminal(t *testing.T) {
 			`┌──────────────────┐
 │                  │
 ├┌────────────────┐┤
-││sh-3.2$ ▐       ││
+││sh ▐            ││
 ││                ││
 ││                ││
 ││                ││
@@ -1321,7 +1321,15 @@ func TestIntegrationCompanionTerminal(t *testing.T) {
 	defer fileScheme.Close()
 
 	// do not depend on host shell, which can vary across hosts
-	cfg := vte.Config{Shell: "sh"}
+	cfg := vte.DefaultConfig()
+	cfg.Shell = "sh"
+
+	// do not depend on default shell prompt, as it can change
+	// and it does change accross versions
+	ps1 := os.Getenv("PS1")
+	os.Setenv("PS1", "sh ")
+	defer os.Setenv("PS1", ps1)
+
 	workspace := workspace.NewSchemeWorkspace(uri, fileScheme)
 	b := newExForTestingTerminal(t, workspace,
 		texttest.NopEditor(), cfg, nopPublishEvent, opts...)
