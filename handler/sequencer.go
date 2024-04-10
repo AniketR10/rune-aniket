@@ -154,3 +154,10 @@ func ParseSequence(str string) (Sequence, error) {
 		return ret, nil
 	}
 }
+
+func (s Sequence) String() string {
+	var ret strings.Builder
+	ret.WriteString(s.First.String())
+	ret.WriteString(s.Last.String())
+	return ret.String()
+}

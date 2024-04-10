@@ -146,6 +146,19 @@ func TestParseSequence(t *testing.T) {
 				require.NoError(t, actualErr)
 			}
 			assert.Equal(t, tcase.wantSeq, actualSeq)
+			if tcase.wantErr {
+				return
+			}
+
+			// test that it's able to parse Sequence.String again
+			// into the original sequence
+			actualSeq, actualErr = ParseSequence(actualSeq.String())
+			if tcase.wantErr {
+				require.Error(t, actualErr)
+			} else {
+				require.NoError(t, actualErr, actualSeq.String())
+			}
+			assert.Equal(t, tcase.wantSeq, actualSeq)
 		})
 	}
 }
