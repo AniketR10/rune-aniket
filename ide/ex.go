@@ -805,12 +805,6 @@ func (e *ex) handleCommandEvent(ev term.Event) bool {
 	return false
 }
 
-func isWindowControlCommand(cmdAndArgs []string) bool {
-	cmd := cmdAndArgs[0]
-	_, ok := windowControlCommands[cmd]
-	return ok
-}
-
 func (e *ex) handleEvent(ev term.Event) (
 	exit, handled bool,
 ) {
@@ -841,13 +835,15 @@ func (e *ex) handleEvent(ev term.Event) (
 		}
 	}
 
+	keyComb := ev.KeyComb()
+
 	var seq handler.Sequence
 	var match handler.SequenceMatchResult
 	// err nil indicates that match is still valid as timer hasn't expired
 	// and it was not canceled yet or simply it hasn't even started and
 	// this is first event in sequence.
 	if e.ctxPartialReissue.Err() == nil {
-		seq, match = e.sequencer.Sequence(ev.KeyComb())
+		seq, match = e.sequencer.Sequence(keyComb)
 	}
 
 	var cmdAndArgs []string
@@ -893,20 +889,7 @@ func (e *ex) handleEvent(ev term.Event) (
 				_, _ = e.comp.Browser().Handle(e.reissueEvent)
 			}
 		}
-		cmdAndArgs, _ = e.comp.KeyMapping(ev.KeyComb())
-	}
-
-	// first dispatch window control commands
-	if len(cmdAndArgs) != 0 && isWindowControlCommand(cmdAndArgs) {
-		// make sure that the command is applied to the right window
-		// and it needs to be set here to differentiate between
-		// runCommand being called from command prompt
-		// or from a key mapping event
-		quit, err := e.runCommand(cmdAndArgs[0], cmdAndArgs[1:])
-		if err != nil {
-			e.setError(err)
-		}
-		return quit, true
+		cmdAndArgs, _ = e.comp.KeyMapping(keyComb)
 	}
 
 	if match != handler.SequenceMatch {
@@ -914,6 +897,13 @@ func (e *ex) handleEvent(ev term.Event) (
 		b := e.comp.Browser()
 		_, handled = b.Handle(ev)
 		if handled {
+			if len(cmdAndArgs) != 0 {
+				// notify user of ambiguous sequence
+				e.comp.Browser().Notify(notifications.LevelWarn, "Command sequence %q is mapped to %q, "+
+					"but could not get triggered because active window also handles it. "+
+					"Consider changing the command sequence mapping to something else.",
+					keyComb, cmdAndArgs)
+			}
 			return
 		}
 	}

@@ -701,7 +701,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 					uri, cfg, runner, nil, nil, dir)
 
 				cases := []testutil.HandlerSequenceTestCase{
-					{":edit 1234>ih3ll0\nw1rld <:write>:edit 4567>ihello\nworld <:write>",
+					{":edit 1234>ih3ll0\nw1rld <:write>:edit 4567>ihello\nworld <:write>:notificationsCloseAll>",
 						`┌──────────────────┐
 │1234  4567        │
 ├──────────────────┤
@@ -772,7 +772,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 				m := newTestWorkspaceManagerHandlerWithDir(t, defaultConfigWithWrap(wrap), nil, dir)
 
 				cases := []testutil.HandlerSequenceTestCase{
-					{":edit A>ih3ll0\nw1rld <:write>:edit B>ihello\nworld <:write>",
+					{":edit A>ih3ll0\nw1rld <:write>:edit B>ihello\nworld <:write>:notificationsCloseAll>",
 						`┌──────────────────┐
 │A  B              │
 ├──────────────────┤

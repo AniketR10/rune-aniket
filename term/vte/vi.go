@@ -42,6 +42,14 @@ type viHandler struct {
 		editor   cell.Editor
 		selector *cell.Buffer
 	}
+
+	// keeep a copy of vi and all the contents
+	// so it can be accessed synchronously and provide
+	// correct returned handled in Handle.
+	copy struct {
+		mu sync.Mutex
+		vi *vi.Vi
+	}
 }
 
 // for dependency injection purposes
@@ -73,6 +81,13 @@ func (v *viHandler) doInit(comp parentComponent, config Config) {
 		vi.WithClipboard(config.Clipboard),
 		vi.WithAutoSkipNullCells(false),
 	}
+	copyBuffer := new(cell.Buffer)
+	copyBuffer.InitPerformance(cell.DefaultTabspaces, 120, 80, screen.DefaultChar)
+	copyScroll := new(component.Scroll)
+	copyScroll.InitPerformance(copyBuffer)
+	v.copy.vi = new(vi.Vi)
+	v.copy.vi.InitWithScroll(copyScroll, comp.URI(), opts...)
+
 	vi := new(vi.Vi)
 	vi.InitWithScroll(scroll, comp.URI(), opts...)
 	v.sync.vi = vi
@@ -103,6 +118,10 @@ func (v *viHandler) Handle(ev term.Event) (exit, handled bool) {
 }
 
 func (v *viHandler) Resize(width, height int) {
+	v.copy.mu.Lock()
+	v.copy.vi.Resize(width, height)
+	v.copy.mu.Unlock()
+
 	v.sync.mu.Lock()
 	defer v.sync.mu.Unlock()
 
@@ -162,6 +181,7 @@ func (v *viHandler) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 func (v *viHandler) Edit(ctx context.Context, start, end term.Coordinates, str string) (
 	from, to term.Coordinates, old string,
 ) {
+	v.editCopy(ctx, start, end, str)
 	if screenContext := screen.IsScreenContext(ctx); screenContext {
 		v.sync.vi.OnWillEdit(ctx, start, end, str)
 		from, to, old = v.sync.editor.Edit(ctx, start, end, str)
@@ -193,8 +213,8 @@ func (v *viHandler) Edit(ctx context.Context, start, end term.Coordinates, str s
 	}
 
 	/*v.log(log.TraceLevel, "edit: "+
-		"start: %+v, end: %+v, str: %q, last line: [%+v, %+v), intersection: [%+v, %+v)",
-		start, end, str, lastLineStart, lastLineEnd, intersectionStart, intersectionEnd) */
+	"start: %+v, end: %+v, str: %q, last line: [%+v, %+v), intersection: [%+v, %+v)",
+	start, end, str, lastLineStart, lastLineEnd, intersectionStart, intersectionEnd) */
 
 	oldStart := start
 	if insert {
@@ -375,10 +395,6 @@ func (v *viHandler) handle(ev term.Event) (exit, handled bool) {
 		v.remoteFlush()
 		v.scheduleAfterBell(v.moveViToLastLineCharacter)
 		return
-	case term.KeyCtrlL:
-		v.remote.formFeed()
-		v.remoteFlush()
-		return
 	case term.KeyCtrlC:
 		exit = true
 		return
@@ -403,13 +419,17 @@ func (v *viHandler) handle(ev term.Event) (exit, handled bool) {
 			v.scheduleAfterBell(v.moveViToBounds)
 		}
 	})
-	handled = true
+	// use a copy of vi to know if event would be handled
+	// this copy gets its contents refreshed on every call to Edit above
+	v.copy.mu.Lock()
+	defer v.copy.mu.Unlock()
+	_, handled = v.copy.vi.Handle(ev)
 	return
 }
 
 func (v *viHandler) enterViMode(pos term.Coordinates) {
 	pos.X = int(math.Max(float64(pos.X-1), float64(0)))
-	v.sync.vi.SetCursorAtScroll(pos)
+	v.viSetCursorAtScroll(pos)
 	v.scheduleAfterBell(v.moveViToBounds)
 }
 
@@ -492,7 +512,7 @@ func (v *viHandler) trimToLastValidColumn(pos term.Coordinates) term.Coordinates
 func (v *viHandler) moveViToLineLastColumnOffset(offset int) {
 	_, lastLineEnd := v.lastPromptLine()
 	lastLineEnd.X += offset
-	v.sync.vi.SetCursorAtScroll(lastLineEnd)
+	v.viSetCursorAtScroll(lastLineEnd)
 }
 
 func (v *viHandler) remoteMoveTo(target term.Coordinates) (actual int) {
@@ -545,7 +565,8 @@ func (v *viHandler) moveViToBounds() {
 	// correct past last line + 1 to be at most x = 0
 	if pos.Y == lastNonNullCharacter.Y+1 && pos.X != 0 {
 		pos = term.Coordinates{Y: lastNonNullCharacter.Y + 1, X: 0}
-		v.sync.vi.SetCursorAtScroll(pos)
+		v.viSetCursorAtScroll(pos)
+		return
 	}
 
 	// correct past last column, at last line, only if not in edit mode
@@ -553,7 +574,7 @@ func (v *viHandler) moveViToBounds() {
 		lastValidCol := int(math.Max(float64(lastNonNullCharacter.X), float64(promptStart.X)))
 		if pos.Y == lastNonNullCharacter.Y && pos.X > lastValidCol {
 			pos = term.Coordinates{Y: lastNonNullCharacter.Y, X: lastValidCol}
-			v.sync.vi.SetCursorAtScroll(pos)
+			v.viSetCursorAtScroll(pos)
 			return
 		}
 	}
@@ -561,14 +582,14 @@ func (v *viHandler) moveViToBounds() {
 	// correct prior to prompt start
 	if pos.Y == promptStart.Y && pos.X < promptStart.X {
 		pos = term.Coordinates{Y: lastNonNullCharacter.Y, X: promptStart.X}
-		v.sync.vi.SetCursorAtScroll(pos)
+		v.viSetCursorAtScroll(pos)
 		return
 	}
 }
 
 func (v *viHandler) moveViToLastLineCharacter() {
 	pos := v.lastContentColumn()
-	v.sync.vi.SetCursorAtScroll(pos)
+	v.viSetCursorAtScroll(pos)
 }
 
 // finds the last line column that's not a default
@@ -593,7 +614,7 @@ func (v *viHandler) remoteMoveToEndOfLine() {
 	promptStart := v.comp.cursorAtScroll()
 	pos := v.lastValidLineColumn(v.sync.vi.CursorAtScroll().Y)
 	pos.X = int(math.Max(float64(promptStart.X), float64(pos.X)))
-	v.sync.vi.SetCursorAtScroll(pos)
+	v.viSetCursorAtScroll(pos)
 }
 
 func (v *viHandler) lastValidLineColumn(y int) term.Coordinates {
@@ -610,4 +631,18 @@ func (v *viHandler) lastValidLineColumn(y int) term.Coordinates {
 	}
 
 	return term.Coordinates{Y: y}
+}
+
+func (v *viHandler) editCopy(ctx context.Context, start, end term.Coordinates, str string) {
+	v.copy.mu.Lock()
+	defer v.copy.mu.Unlock()
+
+	v.copy.vi.CellEditor().Edit(ctx, start, end, str)
+}
+
+func (v *viHandler) viSetCursorAtScroll(pos term.Coordinates) {
+	v.sync.vi.SetCursorAtScroll(pos)
+	v.copy.mu.Lock()
+	defer v.copy.mu.Unlock()
+	v.copy.vi.SetCursorAtScroll(v.sync.vi.CursorAtScroll())
 }

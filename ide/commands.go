@@ -20,24 +20,6 @@ type commandAll struct {
 }
 
 var (
-	// these commands are treated specially in that
-	// they're not delegated first to handler in focus
-	windowControlCommands = map[string]struct{}{
-		"changeSplitOrientation": {},
-		cmdSplitWindow:           {},
-		cmdNewWindow:             {},
-		"focusNextWindow":        {},
-		"focusPrevWindow":        {},
-		"focusAboveWindow":       {},
-		"focusBelowWindow":       {},
-		"toggleFullscreen":       {},
-		"newTerminal":            {},
-		cmdSwitchToWorkspace:     {}, // workspace_handler
-		"closeTab":               {},
-		"closeWindow":            {},
-		"previousTab":            {},
-		"nextTab":                {},
-	}
 	exCommands = map[string]commandAll{
 		"renameTab": {
 			man: textapi.CommandManual{

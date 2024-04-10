@@ -232,17 +232,6 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 			`┌──────────────────┐
 │cabin.go  other.go│
 ├──────────────────┤
-│AAAAAAAAAAAAAAAAAA│
-│AAAAAAAAAAAAAAAAAA│
-│AAAAAAAAAAAAAAAAAA│
-│AAAAAAAAAAAAAAAAAA│
-│AAAAAAAAAAAAAAAAAA│
-│AAAAAAAAAAAAAAAAAA│
-└──────────────────┘`},
-		{"$", // simulates ctrl-l
-			`┌──────────────────┐
-│cabin.go  other.go│
-├──────────────────┤
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
@@ -254,45 +243,56 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 			`┌──────────────────┐
 │cabin.go  other.go│
 ├──────────────────┤
-│AAAAAAAAAAAAAAAAAA│
-│AAAAAAAAAAAAAAAAAA│
-│AAAAAAAAAAAAAAAAAA│
-│AAAAAAAAAAAAAAAAAA│
-│AAAAAAAAAAAAAAAAAA│
-│AAAAAAAAAAAAAAAAAA│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+└──────────────────┘`},
+		{"$", // simulates ctrl-l
+			`┌──────────────────┐
+│cabin.go  other.go│
+├──────────────────┤
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
 └──────────────────┘`},
 		{":cTab>",
 			`┌──────────────────┐
 │cabin.go          │
 ├──────────────────┤
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
+│DDDDDDDDDDDDDDDDDD│
+│DDDDDDDDDDDDDDDDDD│
+│DDDDDDDDDDDDDDDDDD│
+│DDDDDDDDDDDDDDDDDD│
+│DDDDDDDDDDDDDDDDDD│
+│DDDDDDDDDDDDDDDDDD│
 └──────────────────┘`},
 		{":wq!^^^^^",
 			`┌──────────────────┐
 │cabin.go          │
 ├──────────────────┤
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
 └──────────────────┘`},
 		{":<",
 			`┌──────────────────┐
 │cabin.go          │
 ├──────────────────┤
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
 └──────────────────┘`},
 		{":e other.go>1111",
 			`┌──────────────────┐
@@ -309,12 +309,12 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 			`┌──────────────────┐
 │cabin.go  other.go│
 ├──────────────────┤
-│EEEEEEEEEEEEEEEEEE│
-│EEEEEEEEEEEEEEEEEE│
-│EEEEEEEEEEEEEEEEEE│
-│EEEEEEEEEEEEEEEEEE│
-│EEEEEEEEEEEEEEEEEE│
-│EEEEEEEEEEEEEEEEEE│
+│GGGGGGGGGGGGGGGGGG│
+│GGGGGGGGGGGGGGGGGG│
+│GGGGGGGGGGGGGGGGGG│
+│GGGGGGGGGGGGGGGGGG│
+│GGGGGGGGGGGGGGGGGG│
+│GGGGGGGGGGGGGGGGGG│
 └──────────────────┘`},
 	}
 	bh, b, err := constructor(texttest.NopEditor(),
@@ -345,23 +345,23 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 			`┌──────────────────┐
 │cabin.go  other.go│
 ├────────┐┌────────┤
-│AAAAAAAA││EEEEEEEE│
-│AAAAAAAA││EEEEEEEE│
-└────────┘│EEEEEEEE│
-┌────────┐│EEEEEEEE│
-│ZZZZZZZZ││EEEEEEEE│
-│ZZZZZZZZ││EEEEEEEE│
+│AAAAAAAA││GGGGGGGG│
+│AAAAAAAA││GGGGGGGG│
+└────────┘│GGGGGGGG│
+┌────────┐│GGGGGGGG│
+│ZZZZZZZZ││GGGGGGGG│
+│ZZZZZZZZ││GGGGGGGG│
 └────────┘└────────┘`},
 		{":<111111111",
 			`┌──────────────────┐
 │cabin.go  other.go│
 ├────────┐┌────────┤
-│AAAAAAAA││EEEEEEEE│
-│AAAAAAAA││EEEEEEEE│
-└────────┘│EEEEEEEE│
-┌────────┐│EEEEEEEE│
-│cccccccc││EEEEEEEE│
-│cccccccc││EEEEEEEE│
+│AAAAAAAA││GGGGGGGG│
+│AAAAAAAA││GGGGGGGG│
+└────────┘│GGGGGGGG│
+┌────────┐│GGGGGGGG│
+│cccccccc││GGGGGGGG│
+│cccccccc││GGGGGGGG│
 └────────┘└────────┘`},
 	}
 
@@ -378,12 +378,12 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 			`┌──────────────────┐
 │cabin.go  other.go│
 ├────────┐┌────────┤
-│$$$$$$$$││EEEEEEEE│
-│$$$$$$$$││EEEEEEEE│
-└────────┘│EEEEEEEE│
-┌────────┐│EEEEEEEE│
-│cccccccc││EEEEEEEE│
-│cccccccc││EEEEEEEE│
+│$$$$$$$$││GGGGGGGG│
+│$$$$$$$$││GGGGGGGG│
+└────────┘│GGGGGGGG│
+┌────────┐│GGGGGGGG│
+│cccccccc││GGGGGGGG│
+│cccccccc││GGGGGGGG│
 └────────┘└────────┘`},
 	}
 
@@ -398,23 +398,23 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 			`┌──────────────────┐
 │cabin.go  other.go│
 ├──────────────────┤
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
+│HHHHHHHHHHHHHHHHHH│
+│HHHHHHHHHHHHHHHHHH│
+│HHHHHHHHHHHHHHHHHH│
+│HHHHHHHHHHHHHHHHHH│
+│HHHHHHHHHHHHHHHHHH│
+│HHHHHHHHHHHHHHHHHH│
 └──────────────────┘`},
 		{":closeAllT>:e other.go>bcde####",
 			`┌──────────────────┐
 │other.go          │
 ├──────────────────┤
-│EEEEEEEEEEEEEEEEEE│
-│EEEEEEEEEEEEEEEEEE│
-│EEEEEEEEEEEEEEEEEE│
-│EEEEEEEEEEEEEEEEEE│
-│EEEEEEEEEEEEEEEEEE│
-│EEEEEEEEEEEEEEEEEE│
+│IIIIIIIIIIIIIIIIII│
+│IIIIIIIIIIIIIIIIII│
+│IIIIIIIIIIIIIIIIII│
+│IIIIIIIIIIIIIIIIII│
+│IIIIIIIIIIIIIIIIII│
+│IIIIIIIIIIIIIIIIII│
 └──────────────────┘`},
 	}
 	testutil.TestHandlerSequence(t, bh, 20, 10, cases)
@@ -422,8 +422,8 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 	cases = []testutil.HandlerSequenceTestCase{
 		{"", `┌──┐
 │..│
-├EE┤
-EEEE`},
+├II┤
+IIII`},
 	}
 	testutil.TestHandlerSequence(t, bh, 4, 4, cases)
 
@@ -433,12 +433,12 @@ EEEE`},
 			`┌────┌─────────────┐
 │othe│ wasup: Z    │
 ├────└─────────────┘
-│EEEEEEEEEEEEEEEEEE│
-│EEEEEEEEEEEEEEEEEE│
-│EEEEEEEEEEEEEEEEEE│
-│EEEEEEEEEEEEEEEEEE│
-│EEEEEEEEEEEEEEEEEE│
-│EEEEEEEEEEEEEEEEEE│
+│IIIIIIIIIIIIIIIIII│
+│IIIIIIIIIIIIIIIIII│
+│IIIIIIIIIIIIIIIIII│
+│IIIIIIIIIIIIIIIIII│
+│IIIIIIIIIIIIIIIIII│
+│IIIIIIIIIIIIIIIIII│
 └──────────────────┘`},
 	}
 	testutil.TestHandlerSequence(t, bh, 20, 10, cases)
@@ -1253,7 +1253,7 @@ func TestIntegrationCompanionTerminal(t *testing.T) {
 ││                ││
 └└────────────────┘┘`,
 		},
-		{"$",
+		{"<$:notificationsCloseAll>",
 			`┌──────────────────┐
 │                  │
 ├──────────────────┤
@@ -1277,7 +1277,7 @@ func TestIntegrationCompanionTerminal(t *testing.T) {
 ││                ││
 └└────────────────┘┘`,
 		},
-		{"#",
+		{"#:notificationsCloseAll>",
 			`┌──────────────────┐
 │                  │
 ├──────────────────┤
