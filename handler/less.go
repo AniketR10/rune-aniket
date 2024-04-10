@@ -13,13 +13,19 @@ import (
 
 // LessConfig holds configuration values for a Less instance.
 type LessConfig struct {
-	Debug      bool
-	Wrap       bool
-	ResAttr    term.Attributes
-	BarAttr    term.Attributes
-	Attributes term.Attributes
-	Handler    func(LessEvent)
-	NoBar      bool
+	Debug bool
+	Wrap  bool
+	// SuperimposeMessage changes the behaviour to instead of drawing
+	// a bottom bar permanently on which messages are written,
+	// messages are superimposed on the last row of the scroll content.
+	SuperimposeMessage bool
+	ResAttr            term.Attributes
+	BarAttr            term.Attributes
+	Attributes         term.Attributes
+	Handler            func(LessEvent)
+	// NoBar disables SetMessage and search functionality.
+	// It takes prevalence over SuperimposeMessage.
+	NoBar bool
 }
 
 // DefaultLessConfig is a sane configuration defaults for Less.
@@ -36,18 +42,21 @@ func DefaultLessConfig() LessConfig {
 // Less is a clone of Unix' less program which implements
 // the Handler and Component interfaces.
 type Less struct {
-	scroll           component.Scroll
-	searchScroll     component.Scroll
-	searchScrollVirt component.Virtual
-	msg              component.Responsive
-	msgVirt          component.Virtual
-	mode             LessMode
-	delEOF           bool
-	cursorOffset     int
-	height           int
-	width            int
-	search           string
-	config           LessConfig
+	scroll            *component.Scroll
+	searchScroll      component.Scroll
+	searchScrollVirt  component.Virtual
+	msgStr            string
+	msg               component.Responsive
+	msgVirt           component.Virtual
+	mode              LessMode
+	usedMsgBarAttr    term.Attributes
+	usedSearchBarAttr term.Attributes
+	delEOF            bool
+	cursorOffset      int
+	height            int
+	width             int
+	search            string
+	config            LessConfig
 }
 
 // LessEventType represents a less event
@@ -77,10 +86,30 @@ type LessEvent struct {
 	Err  error
 }
 
-func (l *Less) sendEvent(ev LessEvent) {
-	if l.config.Handler != nil {
-		l.config.Handler(ev)
-	}
+// NewLess allocates storage and returns a new instance of Less.
+func NewLess(cfg LessConfig) *Less {
+	l := new(Less)
+	l.Init(cfg)
+	return l
+}
+
+// Init initializes this instance or resets it if already initialized.
+func (l *Less) Init(cfg LessConfig) {
+	l.InitWithBuffer(cell.NewBuffer(), cfg)
+}
+
+// InitWithBuffer initialzes this instance with the given Buffer and configuration.
+// If config is nil, the default one is used.
+func (l *Less) InitWithBuffer(buf *cell.Buffer, cfg LessConfig) {
+	l.scroll = component.NewScroll(buf)
+	l.initWithBuffer(buf, cfg)
+}
+
+// InitWithScroll initialzes this instance with the given main Scroll and configuration.
+// If config is nil, the default one is used.
+func (l *Less) InitWithScroll(scroll *component.Scroll, cfg LessConfig) {
+	l.scroll = scroll
+	l.initWithBuffer(scroll.Buffer(), cfg)
 }
 
 // SetNormalMode sets the mode to normal.
@@ -96,7 +125,11 @@ func (l *Less) SetSearchMode() {
 	buf.Reset()
 	buf.WriteString("/")
 	l.mode = LessSearchMode
-	l.resizeSearchScroll(l.cmdBarHeight())
+	if l.config.SuperimposeMessage && l.scroll.Attributes != l.usedSearchBarAttr {
+		l.updateSearchBarAttr()
+	}
+	_, cmdBarHeight := l.cmdBarHeight()
+	l.resizeSearchScroll(cmdBarHeight)
 }
 
 // SearchText returns the contents of the search buffer.
@@ -106,107 +139,13 @@ func (l *Less) SearchText() string {
 	return string(bytes)
 }
 
-func (l *Less) searchHandleEvent(ev term.Event) (bool, bool) {
-	switch ev.Key {
-	case term.KeyBackspace:
-		fallthrough
-	case term.KeyBackspace2:
-		if l.cursorOffset > 1 {
-			l.cursorOffset--
-			l.searchScroll.Buffer().
-				DeleteCell(term.Coordinates{X: l.cursorOffset, Y: 0})
-			l.resizeSearchScroll(l.cmdBarHeight())
-		}
-	case term.KeyEnter:
-		l.search = l.SearchText()
-		l.scroll.Search(l.search)
-		l.SetNormalMode()
-		l.scroll.SeekNextResult()
-		l.sendEvent(LessEvent{Type: Search, Data: []byte(l.search)})
-
-	case term.KeyEsc:
-		l.SetNormalMode()
-
-	case term.KeySpace:
-		ev.Ch = ' '
-		fallthrough
-
-	default:
-		l.cursorOffset++
-		l.searchScroll.Buffer().WriteString(string(ev.Ch))
-		l.resizeSearchScroll(l.cmdBarHeight())
-	}
-
-	return false, true
-}
-
-func (l *Less) normalHandleEvent(ev term.Event) (exit, handled bool) {
-	switch ev.Type {
-	case term.EventKey:
-		switch ev.Ch {
-		case 'q':
-			exit = true
-			handled = true
-		case 'N':
-			handled = l.scroll.SeekPrevResult()
-		case 'n':
-			handled = l.scroll.SeekNextResult()
-		case '0':
-			handled = l.scroll.SeekStartLine()
-		case '$':
-			handled = l.scroll.SeekEndLine()
-		case 'g':
-			handled = l.scroll.SeekStartFile()
-		case 'G':
-			handled = l.scroll.SeekEndFile()
-		case 'j':
-			handled = l.scroll.SeekDown()
-		case 'k':
-			handled = l.scroll.SeekUp()
-		case 'h':
-			handled = l.scroll.SeekLeft()
-		case 'l':
-			handled = l.scroll.SeekRight()
-		case '/':
-			l.SetSearchMode()
-			handled = true
-		default:
-			switch ev.Key {
-			case term.KeyEsc:
-				exit = true
-				handled = true
-			default:
-				handled = false
-			}
-		}
-	}
-
-	return
-}
-
-func (l *Less) setMessage(msg string) bool {
-	newMsg := component.NewResponsiveString(msg, component.StringResponsiveConfig{
-		StringConfig: component.StringConfig{
-			Alignment:            component.SpanAlignmentRight,
-			Attributes:           l.config.BarAttr,
-			BackgroundAttributes: l.config.BarAttr,
-		},
-	})
-	shouldResize := l.msg == nil || l.msg.Height(l.width) != newMsg.Height(l.width)
-
-	l.msg = newMsg
-	l.msgVirt.C = l.msg
-	return shouldResize
-}
-
 // SetMessage sets a message to be displayed on the bottom right corner.
 func (l *Less) SetMessage(text string, args ...interface{}) {
 	if (len(args) == 0 && l.setMessage(text)) || l.setMessage(fmt.Sprintf(text, args...)) {
 		l.resize()
 	} else {
-		cmdBarHeight := l.cmdBarHeight()
-		contentHeight := l.height - cmdBarHeight
-		l.initMsg(cmdBarHeight, contentHeight)
+		cmdBarWidth, cmdBarHeight := l.cmdBarHeight()
+		l.resizeMoveMessage(cmdBarWidth, cmdBarHeight)
 	}
 }
 
@@ -215,13 +154,13 @@ func (l *Less) Mode() LessMode {
 	return l.mode
 }
 
-// Cursor : Handler
+// Cursor satisfies tui.Handler
 func (l *Less) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 	ret := term.Coordinates{X: l.cursorOffset, Y: l.height - 1}
 	return ret, term.CursorStyleDefault, true
 }
 
-// Draw : Component
+// Draw satisfies tui.Component
 func (l *Less) Draw(w term.Writer) {
 	l.scroll.Draw(w)
 
@@ -230,55 +169,25 @@ func (l *Less) Draw(w term.Writer) {
 		l.sendEvent(LessEvent{Type: EOF})
 	}
 
+	// if attrs were changed dynamically, ensure attributes of superimposed message
+	// match those of the Scroll.
+	if l.config.SuperimposeMessage && l.usedMsgBarAttr != l.scroll.Attributes {
+		l.setMessage(l.msgStr)
+		cmdBarWidth, cmdBarHeight := l.cmdBarHeight()
+		l.resizeMoveMessage(cmdBarWidth, cmdBarHeight)
+	}
+
 	l.msgVirt.Draw(w)
 	l.searchScrollVirt.Draw(w)
 }
 
-// Resize : Component
+// Resize satisfies tui.Component.
 func (l *Less) Resize(width, height int) {
 	l.width, l.height = width, height
 	l.resize()
 }
 
-// ShowCommandBar determines whether the command bar should be
-// displayed or not.
-func (l *Less) ShowCommandBar(show bool) {
-	l.config.NoBar = !show
-}
-
-func (l *Less) cmdBarHeight() int {
-	var cmdBarHeight int
-	if !l.config.NoBar {
-		cmdBarHeight = l.msg.Height(l.width)
-		if l.height <= cmdBarHeight {
-			cmdBarHeight = 1
-		}
-	}
-	return cmdBarHeight
-}
-
-func (l *Less) resizeSearchScroll(cmdBarHeight int) {
-	width := int(math.Min(float64(l.searchScroll.Buffer().MaxColumns()), float64(l.width)))
-	l.searchScrollVirt.Resize(width, cmdBarHeight)
-}
-
-func (l *Less) resize() {
-	cmdBarHeight := l.cmdBarHeight()
-	contentHeight := l.height - cmdBarHeight
-	l.scroll.Resize(l.width, contentHeight)
-
-	l.searchScrollVirt.Move(term.Coordinates{X: 0, Y: contentHeight})
-	l.resizeSearchScroll(cmdBarHeight)
-
-	l.initMsg(cmdBarHeight, contentHeight)
-}
-
-func (l *Less) initMsg(cmdBarHeight int, contentHeight int) {
-	l.msgVirt.Move(term.Coordinates{X: 0, Y: contentHeight})
-	l.msgVirt.Resize(l.width, cmdBarHeight)
-}
-
-// Handle : Handler
+// Handle satisfies tui.Handler.
 func (l *Less) Handle(ev term.Event) (exit bool, handled bool) {
 	switch ev.Type {
 	case term.EventKey:
@@ -293,13 +202,6 @@ func (l *Less) Handle(ev term.Event) (exit bool, handled bool) {
 	return
 }
 
-func (l *Less) setupScroll(w *component.Scroll, attr term.Attributes) {
-	w.ResultsAttr = l.config.ResAttr
-	w.Wrap = l.config.Wrap
-	w.Debug = l.config.Debug
-	w.Attributes = attr
-}
-
 // Buffer returns the internal scroll's Buffer.
 func (l *Less) Buffer() *cell.Buffer {
 	return l.scroll.Buffer()
@@ -308,10 +210,10 @@ func (l *Less) Buffer() *cell.Buffer {
 // Scroll returns the internal scroll. Scroll's public properties
 // should not be updated. Use LessConfig instead.
 func (l *Less) Scroll() *component.Scroll {
-	return &l.scroll
+	return l.scroll
 }
 
-// Man : Handler
+// Man satisfies tui.Handler.
 func (l *Less) Man() tui.Manual {
 	return tui.Manual{
 		Summary: "Less is a handler similar to Unix' less program, but simplified. It allows basic navigation with vi-style key bindings and text search.",
@@ -374,16 +276,174 @@ func (l *Less) Man() tui.Manual {
 	}
 }
 
-// Init initializes this instance or resets it if already initialized.
-func (l *Less) Init(cfg LessConfig) {
-	l.InitWithBuffer(cell.NewBuffer(), cfg)
+// ShowCommandBar determines whether the command bar should be
+// displayed or not.
+func (l *Less) ShowCommandBar(show bool) {
+	l.config.NoBar = !show
 }
 
-// InitWithBuffer initialzes this instance with the given Buffer and configuration.
-// If config is nil, the default one is used.
-func (l *Less) InitWithBuffer(buf *cell.Buffer, cfg LessConfig) {
+func (l *Less) searchHandleEvent(ev term.Event) (bool, bool) {
+	switch ev.Key {
+	case term.KeyBackspace:
+		fallthrough
+	case term.KeyBackspace2:
+		if l.cursorOffset > 1 {
+			l.cursorOffset--
+			l.searchScroll.Buffer().
+				DeleteCell(term.Coordinates{X: l.cursorOffset, Y: 0})
+			_, cmdBarHeight := l.cmdBarHeight()
+			l.resizeSearchScroll(cmdBarHeight)
+		}
+	case term.KeyEnter:
+		l.search = l.SearchText()
+		l.scroll.Search(l.search)
+		l.SetNormalMode()
+		l.scroll.SeekNextResult()
+		l.sendEvent(LessEvent{Type: Search, Data: []byte(l.search)})
+
+	case term.KeyEsc:
+		l.SetNormalMode()
+
+	case term.KeySpace:
+		ev.Ch = ' '
+		fallthrough
+
+	default:
+		l.cursorOffset++
+		l.searchScroll.Buffer().WriteString(string(ev.Ch))
+		_, cmdBarHeight := l.cmdBarHeight()
+		l.resizeSearchScroll(cmdBarHeight)
+	}
+
+	if l.config.SuperimposeMessage && l.scroll.Attributes != l.usedSearchBarAttr {
+		l.updateSearchBarAttr()
+	}
+	return false, true
+}
+
+func (l *Less) updateSearchBarAttr() {
+	l.usedSearchBarAttr = l.scroll.Attributes
+	l.searchScroll.Attributes = l.usedSearchBarAttr
+}
+
+func (l *Less) normalHandleEvent(ev term.Event) (exit, handled bool) {
+	switch ev.Type {
+	case term.EventKey:
+		switch ev.Ch {
+		case 'q':
+			exit = true
+			handled = true
+		case 'N':
+			handled = l.scroll.SeekPrevResult()
+		case 'n':
+			handled = l.scroll.SeekNextResult()
+		case '0':
+			handled = l.scroll.SeekStartLine()
+		case '$':
+			handled = l.scroll.SeekEndLine()
+		case 'g':
+			handled = l.scroll.SeekStartFile()
+		case 'G':
+			handled = l.scroll.SeekEndFile()
+		case 'j':
+			handled = l.scroll.SeekDown()
+		case 'k':
+			handled = l.scroll.SeekUp()
+		case 'h':
+			handled = l.scroll.SeekLeft()
+		case 'l':
+			handled = l.scroll.SeekRight()
+		case '/':
+			l.SetSearchMode()
+			handled = true
+		default:
+			switch ev.Key {
+			case term.KeyEsc:
+				exit = true
+				handled = true
+			default:
+				handled = false
+			}
+		}
+	}
+
+	return
+}
+
+func (l *Less) setMessage(msg string) bool {
+	// if bar is going to be limited to its strict width
+	// ensure the backgrounds blend. Use scroll Attributes
+	// so dynamically changed background attributes are captured.
+	attr := l.config.BarAttr
+	if l.config.SuperimposeMessage {
+		attr.Bg = l.scroll.Attributes.Bg
+	}
+	newMsg := component.NewResponsiveString(msg, component.StringResponsiveConfig{
+		StringConfig: component.StringConfig{
+			Alignment:            component.SpanAlignmentRight,
+			Attributes:           attr,
+			BackgroundAttributes: attr,
+		},
+	})
+	shouldResize := l.msg == nil || l.msg.Height(l.width) != newMsg.Height(l.width) || l.usedMsgBarAttr != attr
+
+	l.usedMsgBarAttr = attr
+	l.msg = newMsg
+	l.msgVirt.C = l.msg
+	l.msgStr = msg
+	return shouldResize
+}
+
+func (l *Less) cmdBarHeight() (cmdBarWidth, cmdBarHeight int) {
+	if !l.config.NoBar {
+		cmdBarWidth = l.width
+		if l.config.SuperimposeMessage {
+			cmdBarWidth = int(math.Min(float64(l.width), float64(len(l.msgStr))))
+		}
+		cmdBarHeight = l.msg.Height(cmdBarWidth)
+		if l.height <= cmdBarHeight {
+			cmdBarHeight = 1
+		}
+	}
+	return
+}
+
+func (l *Less) resizeSearchScroll(cmdBarHeight int) {
+	width := int(math.Min(float64(l.searchScroll.Buffer().MaxColumns()), float64(l.width)))
+	l.searchScrollVirt.Resize(width, cmdBarHeight)
+}
+
+func (l *Less) resize() {
+	cmdBarWidth, cmdBarHeight := l.cmdBarHeight()
+	contentHeight := l.height - cmdBarHeight
+
+	// allow content to be superimposed on bar
+	if cmdBarWidth != l.width {
+		contentHeight = l.height
+	}
+	l.scroll.Resize(l.width, contentHeight)
+
+	l.searchScrollVirt.Move(term.Coordinates{X: 0, Y: l.height - cmdBarHeight})
+	l.resizeSearchScroll(cmdBarHeight)
+
+	l.resizeMoveMessage(cmdBarWidth, cmdBarHeight)
+}
+
+func (l *Less) resizeMoveMessage(cmdBarWidth, cmdBarHeight int) {
+	// don't occlude other content if bar background is empty
+	l.msgVirt.Move(term.Coordinates{X: l.width - cmdBarWidth, Y: l.height - cmdBarHeight})
+	l.msgVirt.Resize(cmdBarWidth, cmdBarHeight)
+}
+
+func (l *Less) setupScroll(w *component.Scroll, attr term.Attributes) {
+	w.ResultsAttr = l.config.ResAttr
+	w.Wrap = l.config.Wrap
+	w.Debug = l.config.Debug
+	w.Attributes = attr
+}
+
+func (l *Less) initWithBuffer(buf *cell.Buffer, cfg LessConfig) {
 	l.delEOF = false
-	l.scroll.Init(buf)
 	if cfg.ResAttr == (term.Attributes{}) {
 		cfg.ResAttr = DefaultLessConfig().ResAttr
 	}
@@ -395,17 +455,18 @@ func (l *Less) InitWithBuffer(buf *cell.Buffer, cfg LessConfig) {
 	// initialize message comps
 	l.setMessage("")
 
-	l.setupScroll(&l.searchScroll, l.config.BarAttr)
-	l.setupScroll(&l.scroll, l.config.Attributes)
+	searchBarAttr := l.config.BarAttr
+	l.setupScroll(&l.searchScroll, searchBarAttr)
+	l.setupScroll(l.scroll, l.config.Attributes)
+	if l.config.SuperimposeMessage {
+		l.updateSearchBarAttr()
+	}
 
 	l.SetNormalMode()
-
-	return
 }
 
-// NewLess allocates storage and returns a new instance of Less.
-func NewLess(cfg LessConfig) *Less {
-	l := new(Less)
-	l.Init(cfg)
-	return l
+func (l *Less) sendEvent(ev LessEvent) {
+	if l.config.Handler != nil {
+		l.config.Handler(ev)
+	}
 }

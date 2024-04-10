@@ -63,7 +63,7 @@ func (b *AltBuffer) Init() {
 	b.cursor = CursorState{
 		Charsets: make(map[parser.CharsetIndex]parser.StandardCharset),
 	}
-	b.Cells.InitPerformance(cell.DefaultTabspaces, 120, 80)
+	b.Cells.InitPerformance(cell.DefaultTabspaces, 120, 80, b.defaultChar)
 	b.resetLinesTrim(0, b.height, true, b.defaultChar)
 	b.scroll.InitPerformance(&b.Cells)
 	b.ctx = NewContext(context.Background())
@@ -453,6 +453,11 @@ func (b *AltBuffer) SelectionCoordinatesAtScreen() (
 	from = term.CoordinatesDiff(from, b.scroll.Offset())
 	to = term.CoordinatesDiff(to, b.scroll.Offset())
 	return
+}
+
+// Scroll returns this buffer's underlying component.Scroll.
+func (b *AltBuffer) Scroll() *component.Scroll {
+	return &b.scroll
 }
 
 // resetCellsAt erases all the cells from start to end, at the given line,

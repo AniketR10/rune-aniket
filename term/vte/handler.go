@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sync/atomic"
 	"time"
 
 	"github.com/ernestrc/blue/logging"
@@ -28,14 +29,17 @@ type Handler struct {
 	publisher     browser.EventPublisher
 	notifications browser.Notifications
 	handleTimer   *time.Timer
+	vi            viHandler
 	ctx           context.Context
 	cancelCtx     func()
 
-	mouse       *text.Mouse
-	mouseDriver *mouseDriver
+	modalEnabled bool
+	viMode       bool
+	mouse        *text.Mouse
+	mouseDriver  *mouseDriver
 
 	bracketedPaste bool
-	closed         bool
+	closed         atomic.Bool
 	width, height  int
 	updateCh       chan struct{}
 	sema           chan struct{}
@@ -74,6 +78,8 @@ func (e *Handler) Init(
 		return err
 	}
 	e.comp = comp
+	e.modalEnabled = config.Modal
+	e.vi.init(e.comp, config)
 
 	// set size hint before running firsrt program so output is correctly captured
 	if config.WidthHint != 0 || config.HeightHint != 0 {
@@ -96,11 +102,13 @@ func (e *Handler) Init(
 	go func() {
 		logErr := e.comp.Run(e.updateCh)
 		_ = e.publisher.PublishEvent(term.Event{Type: term.EventNone})
+		if e.closed.Load() {
+			e.log(log.DebugLevel, "terminal run: ok")
+			return
+		}
 		if logErr != nil && !errors.Is(logErr, io.EOF) && !errors.Is(logErr, context.Canceled) {
 			e.log(log.ErrorLevel, "terminal run: %v", logErr)
 			e.notifications.Notify(notifications.LevelError, "terminal run: %v", logErr)
-		} else {
-			e.log(log.DebugLevel, "terminal run: ok")
 		}
 	}()
 
@@ -136,23 +144,44 @@ func (e *Handler) Resize(width, height int) {
 	}
 	e.width, e.height = width, height
 
+	e.vi.Resize(width, height)
+
 	err := e.comp.Resize(width, height)
 	if err != nil {
 		e.log(log.ErrorLevel, "terminal set size: %s", err)
 		// do not notify if already closed
-		if !e.closed {
+		if !e.closed.Load() {
 			e.notifications.Notify(notifications.LevelError, "terminal set size: %v", err)
 		}
 	}
+
+	e.comp.ScrollBottom()
 }
 
 // Draw satisfies tui.Component.
 func (e *Handler) Draw(w term.Writer) {
+	if e.viMode {
+		e.vi.Draw(w)
+		return
+	}
 	e.comp.Draw(w)
 }
 
 // Handle satisfies tui.Handler.
 func (e *Handler) Handle(ev term.Event) (exit, handled bool) {
+	if e.viMode {
+		exit, handled := e.vi.Handle(ev)
+		if exit {
+			e.exitViMode()
+		}
+		return false, handled
+	}
+
+	if !e.comp.IsAltBuffer() && ev.Key == term.KeyEsc && e.modalEnabled {
+		e.enterViMode()
+		handled = true
+		return
+	}
 	exit, handled, raw := e.handleInput(ev)
 	if exit || handled || len(raw) == 0 {
 		return
@@ -209,15 +238,26 @@ func (e *Handler) OnFocusChange(inFocus bool) {
 
 // Cursor satisfies tui.Handler.
 func (e *Handler) Cursor() (term.Coordinates, term.CursorStyle, bool) {
+	if e.viMode {
+		return e.vi.Cursor()
+	}
 	if !e.comp.CursorVisible() {
 		return term.Coordinates{}, 0, false
 	}
 
-	return e.comp.CursorCoordinates(), e.comp.CursorStyle(), true
+	style := e.comp.CursorStyle()
+	if !e.comp.IsAltBuffer() && style == term.CursorStyleDefault {
+		style = term.CursorStyleSteadyBar
+	}
+
+	return e.comp.CursorAtScreen(), style, true
 }
 
 // Man satisfies tui.Handler.
 func (e *Handler) Man() tui.Manual {
+	if e.viMode {
+		return e.vi.Man()
+	}
 	panic("TODO")
 }
 
@@ -226,14 +266,13 @@ func (e *Handler) Man() tui.Manual {
 func (e *Handler) Close() error {
 	e.log(log.TraceLevel, "close called")
 
-	if e.closed {
+	if !e.closed.CompareAndSwap(false, true) {
 		return nil
 	}
 
 	// undo circular dependency
 	e.mouseDriver.clipboard = nil
 	e.mouseDriver = nil
-	e.closed = true
 
 	e.cancelCtx()
 	e.handleTimer.Stop()
@@ -248,7 +287,7 @@ func (e *Handler) Close() error {
 }
 
 func (e *Handler) handleInput(ev term.Event) (exit, handled bool, raw []byte) {
-	exit = e.closed
+	exit = e.closed.Load()
 	if exit {
 		e.log(log.TraceLevel, "input: exit")
 		return
@@ -302,6 +341,16 @@ func (e *Handler) handleInput(ev term.Event) (exit, handled bool, raw []byte) {
 
 func (e *Handler) log(level log.Level, msg string, args ...any) {
 	log.WithFields(log.Fields{
-		logging.KeyClass: "emulator.Handler",
+		logging.KeyClass: "vte.Handler",
 	}).Logf(level, msg, args...)
+}
+
+func (e *Handler) enterViMode() {
+	e.viMode = true
+	e.comp.Unselect()
+	e.vi.enterViMode(e.comp.CursorAtScroll())
+}
+
+func (e *Handler) exitViMode() {
+	e.viMode = false
 }

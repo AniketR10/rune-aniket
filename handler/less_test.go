@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ernestrc/tcell/v3"
 	"github.com/stretchr/testify/require"
 	"unstable.build/go-tui/term"
 	testutil "unstable.build/go-tui/util/test"
@@ -20,19 +21,78 @@ KKKKXXLLLL
 3333333333
 11111111XX`
 
-func setup(t *testing.T, less *Less, width, height int) (*Less, *term.StringWriter) {
-	if less == nil {
-		less = NewLess(DefaultLessConfig())
-	} else {
-		less.Init(DefaultLessConfig())
+func TestLessDrawSuperimposedBar(t *testing.T) {
+	b := NewLess(LessConfig{Wrap: true, SuperimposeMessage: true})
+	b.Resize(20, 4)
+
+	w := term.NewStringWriter(20, 9)
+
+	tests := []testutil.ComponentTestCase{
+		{
+			nil, `
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    `,
+		}, {
+			func() { b.Resize(20, 1) }, `
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    `,
+		}, {
+			func() { b.Resize(20, 9); b.SetMessage("P1Nav") }, `
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+               P1Nav`,
+		}, {
+			func() {
+				b.Buffer().WriteString("hello world")
+				b.Resize(20, 1)
+			}, `
+hello world    P1Nav
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    `,
+		}, {
+			func() {
+				b.Resize(20, 9)
+				b.Buffer().WriteString(". Let's test its responsiveness")
+				b.Resize(20, 6)
+			}, `
+hello world. Let's t
+est its responsivene
+ss                  
+                    
+                    
+               P1Nav
+                    
+                    
+                    `,
+		},
 	}
-
-	_, err := less.Buffer().ReadFrom(strings.NewReader(content))
-	require.NoError(t, err)
-
-	less.Resize(width, height)
-
-	return less, term.NewStringWriter(width, height)
+	testutil.TestComponent(t, b, w, tests)
 }
 
 func TestLessDrawNoBarWrap(t *testing.T) {
@@ -342,4 +402,21 @@ func testLessHandle(t *testing.T, cases []testutil.HandlerTestCase) {
 
 	// test cases with stack less
 	testutil.TestHandler(t, less1, cases, writer3)
+}
+
+func setup(t *testing.T, less *Less, width, height int) (*Less, *term.StringWriter) {
+	cfg := DefaultLessConfig()
+	cfg.BarAttr = term.Attributes{Bg: tcell.ColorBlack}
+	if less == nil {
+		less = NewLess(cfg)
+	} else {
+		less.Init(cfg)
+	}
+
+	_, err := less.Buffer().ReadFrom(strings.NewReader(content))
+	require.NoError(t, err)
+
+	less.Resize(width, height)
+
+	return less, term.NewStringWriter(width, height)
 }

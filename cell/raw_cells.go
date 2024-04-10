@@ -25,22 +25,25 @@ var (
 
 // rawCells is a matrix of term.Cell.
 type rawCells struct {
-	columnCap int
-	rowCap    int
-	cells     [][]term.Cell
-	tabspaces int
-	zwj       bool
-	zwjPos    term.Coordinates
+	columnCap  int
+	rowCap     int
+	cells      [][]term.Cell
+	tabspaces  int
+	fillInChar rune
+	zwj        bool
+	zwjPos     term.Coordinates
 }
 
 // init initializes this rawCells with the given tabspaces config and resets its contents.
 func (c *rawCells) init(tabspaces int) {
 	c.tabspaces = tabspaces
+	c.fillInChar = ' '
 	c.reset()
 }
 
-func (c *rawCells) initWithCap(tabspaces, rowCap, columnCap int) {
+func (c *rawCells) initWithCap(tabspaces, rowCap, columnCap int, fillInChar rune) {
 	c.tabspaces = tabspaces
+	c.fillInChar = fillInChar
 	c.resetWithCap(rowCap, columnCap)
 }
 
@@ -178,7 +181,7 @@ func (c *rawCells) fillInRows(y int) (n int) {
 
 func (c *rawCells) fillInColumns(pos term.Coordinates) (n int) {
 	for pos.X > len(c.cells[pos.Y]) {
-		c.cells[pos.Y] = append(c.cells[pos.Y], term.Cell{Ch: ' '})
+		c.cells[pos.Y] = append(c.cells[pos.Y], term.Cell{Ch: c.fillInChar})
 		n++
 	}
 	return
@@ -396,7 +399,7 @@ func (c *rawCells) delete(from, to term.Coordinates) (
 	return
 }
 
-func (c *rawCells) Edit(_ context.Context ,start, end term.Coordinates, str string) (
+func (c *rawCells) Edit(_ context.Context, start, end term.Coordinates, str string) (
 	from, to term.Coordinates, old string,
 ) {
 	from = start

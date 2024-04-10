@@ -233,6 +233,8 @@ func TestPrimaryResize(t *testing.T) {
 func makePrimaryBufferForTesting(width, height int) *PrimaryBuffer {
 	ret := NewPrimaryBuffer()
 	ret.defaultChar = ' '
+	// re-init cells with default char set to space
+	ret.Cells.InitPerformance(cell.DefaultTabspaces, 120, 80, ret.defaultChar)
 	ret.Resize(width, height)
 	return ret
 }

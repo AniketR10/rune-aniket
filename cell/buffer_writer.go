@@ -77,6 +77,7 @@ func (w *BufferWriter) ToBuffer(b *Buffer) {
 	cells := new(rawCells)
 	cells.cells = w.cells
 	cells.tabspaces = 1
+	cells.fillInChar = ' '
 	cells.columnCap = defColumnCap
 	cells.rowCap = defRowCap
 	b.initWithCells(cells)

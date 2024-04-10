@@ -26,7 +26,7 @@ type Case struct {
 func TestSequence(
 	t *testing.T, handler tui.Handler, width, height int,
 	drawTimeout time.Duration, interruptChan chan struct{},
-	cases []Case,
+	cases []Case, nextTick func(int),
 ) {
 	writer := term.NewStringWriter(width, height)
 	handler.Resize(width, height)
@@ -37,14 +37,15 @@ func TestSequence(
 
 	for i, tcase := range cases {
 		handleTestCase(t, i, writer, handler, tcase,
-			width, height, drawTimeout, interruptChan)
+			width, height, drawTimeout, interruptChan, nextTick)
 	}
 }
 
 func handleTestCase(
 	t *testing.T, i int, w *term.StringWriter,
 	h tui.Handler, tcase Case, width, height int,
-	drawTimeout time.Duration, interruptChan chan struct{},
+	drawTimeout time.Duration,
+	interruptChan chan struct{}, nextTick func(int),
 ) {
 	err := w.Clear(term.Attributes{})
 	require.NoError(t, err)
@@ -80,7 +81,7 @@ func handleTestCase(
 	}
 
 	var escapeNext bool
-	for _, r := range tcase.InputSequence {
+	for i, r := range tcase.InputSequence {
 		if escapeNext {
 			escapeNext = false
 			callHandle(term.Event{Ch: r, Type: term.EventKey})
@@ -90,7 +91,7 @@ func handleTestCase(
 		case '^':
 			callHandle(term.Event{Key: term.KeyBackspace, Type: term.EventKey})
 		case '#':
-			callHandle(term.Event{Key: term.KeyCtrlH, Type: term.EventKey})
+			callHandle(term.Event{Key: term.KeyCtrlC, Type: term.EventKey})
 		case '$':
 			callHandle(term.Event{Key: term.KeyCtrlL, Type: term.EventKey})
 		case '>':
@@ -108,20 +109,21 @@ func handleTestCase(
 		default:
 			callHandle(term.Event{Ch: r, Type: term.EventKey})
 		}
-	}
 
-	timer := time.NewTimer(drawTimeout)
-loop:
-	for {
-		select {
-		case <-timer.C:
-			break loop
-		case <-interruptChan:
-			if !timer.Stop() {
-				<-timer.C
+		timer := time.NewTimer(drawTimeout)
+	loop:
+		for {
+			select {
+			case <-timer.C:
+				break loop
+			case <-interruptChan:
+				if !timer.Stop() {
+					<-timer.C
+				}
+				timer.Reset(drawTimeout)
 			}
-			timer.Reset(drawTimeout)
 		}
+		nextTick(i)
 	}
 
 	h.Draw(w)

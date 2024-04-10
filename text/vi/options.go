@@ -7,13 +7,16 @@ import (
 
 // viConfig holds configuration for Vi.
 type viConfig struct {
-	attr            term.Attributes
-	resAttr         term.Attributes
-	barAttr         term.Attributes
-	clipboard       clipboard.Register
-	defaultRegister string
-	debug           bool
-	wrap            bool
+	attr                 term.Attributes
+	resAttr              term.Attributes
+	barAttr              term.Attributes
+	clipboard            clipboard.Register
+	defaultRegister      string
+	superimposedMessages bool
+	debug                bool
+	wrap                 bool
+	barHidden            bool
+	skipNulls            bool
 }
 
 // Option represents a Vi handler configuration option.
@@ -30,6 +33,24 @@ func WithResAttr(attr term.Attributes) Option {
 func WithBarAttr(attr term.Attributes) Option {
 	return func(cfg *viConfig) {
 		cfg.barAttr = attr
+	}
+}
+
+// WithBarHidden sets the command bar to be hidden.
+func WithBarHidden(hide bool) Option {
+	return func(cfg *viConfig) {
+		cfg.barHidden = hide
+	}
+}
+
+// WithSuperimposedMessages changes the behaviour to instead of drawing
+// a bottom bar permanently on which messages are written,
+// messages are superimposed on the last row of the scroll content.
+//
+// The default value is false, so a full bar is drawn.
+func WithSuperimposedMessages(value bool) Option {
+	return func(cfg *viConfig) {
+		cfg.superimposedMessages = value
 	}
 }
 
@@ -58,5 +79,16 @@ func WithDebug(debug bool) Option {
 func WithWrap(wrap bool) Option {
 	return func(cfg *viConfig) {
 		cfg.wrap = wrap
+	}
+}
+
+// WithAutoSkipNullCells determines whether vi should automatically
+// shift the cursor on top a null cell (no content) in
+// normal, yank, search, g and delete modes. Default is on.
+//
+// This behaviour is overriden to off if WithDebug Option is used.
+func WithAutoSkipNullCells(skip bool) Option {
+	return func(cfg *viConfig) {
+		cfg.skipNulls = skip
 	}
 }

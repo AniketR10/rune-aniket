@@ -1169,9 +1169,22 @@ func (c ideConfig) terminalConfig() vte.Config {
 	ret.Attributes = c.terminalDefaultAttr()
 	ret.SelectionAttributes = c.terminalSelectionAttr()
 	ret.NeedsAttentionAttributes = c.terminalNeedsAttentionAttr()
+	ret.Modal = c.editorMode() == editorModeModal
 	ret.Shell = c.terminalShell()
 	ret.Clipboard = c.clipboard()
-	ret.Bell = term.PublishBell
+	if log.IsLevelEnabled(log.TraceLevel) {
+		ret.ScheduleNextTick = func(cb func()) bool {
+			log.Trace("schedule callback on next tick")
+			return term.ScheduleNextTick(cb)
+		}
+		ret.RingBell = func() {
+			log.Trace("ring bell")
+			term.RingBell()
+		}
+	} else {
+		ret.ScheduleNextTick = term.ScheduleNextTick
+		ret.RingBell = term.RingBell
+	}
 	return ret
 }
 

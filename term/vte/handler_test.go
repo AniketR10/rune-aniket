@@ -74,6 +74,11 @@ $ ▐
                     `},
 	}
 
+	cfg := DefaultConfig()
+	testSequence(t, cfg, 150*time.Millisecond, cases)
+}
+
+func testSequence(t *testing.T, cfg Config, timeout time.Duration, cases []vtetest.Case) {
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(context.Background())
 	temp := os.TempDir()
@@ -88,12 +93,17 @@ $ ▐
 	os.Setenv("PS1", "$ ")
 
 	ch := make(chan struct{}, 50 /* big enough for the max length sequence of events */)
-	cfg := DefaultConfig()
 	cfg.WidthHint = 20
 	cfg.HeightHint = 10
 	cfg.Shell = "sh" // all systems were this runs should have sh
 	handler, err := NewHandler(chanEventPublisher{ch}, nopNotifications{}, scheme, scheme, nopTabManager{}, cfg, "")
 	require.NoError(t, err)
+
+	var cbs []func()
+	cfg.ScheduleNextTick = func(cb func()) bool {
+		cbs = append(cbs, cb)
+		return true
+	}
 
 	t.Cleanup(func() {
 		handler.Close()
@@ -102,7 +112,13 @@ $ ▐
 		os.Setenv("PS1", ps1)
 	})
 
-	vtetest.TestSequence(t, handler, cfg.WidthHint, cfg.HeightHint, 100*time.Millisecond, ch, cases)
+	vtetest.TestSequence(t, handler, cfg.WidthHint, cfg.HeightHint,
+		timeout, ch, cases, func(int) {
+			for _, cb := range cbs {
+				cb()
+			}
+			cbs = cbs[:0]
+		})
 }
 
 type chanEventPublisher struct {
