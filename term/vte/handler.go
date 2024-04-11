@@ -78,8 +78,11 @@ func (e *Handler) Init(
 		return err
 	}
 	e.comp = comp
-	e.modalEnabled = config.Modal
-	e.vi.init(e.comp, config)
+
+	if config.Modal {
+		e.modalEnabled = true
+		e.vi.init(e.comp, config)
+	}
 
 	// set size hint before running firsrt program so output is correctly captured
 	if config.WidthHint != 0 || config.HeightHint != 0 {
@@ -144,7 +147,9 @@ func (e *Handler) Resize(width, height int) {
 	}
 	e.width, e.height = width, height
 
-	e.vi.Resize(width, height)
+	if e.modalEnabled {
+		e.vi.Resize(width, height)
+	}
 
 	err := e.comp.Resize(width, height)
 	if err != nil {
@@ -177,7 +182,7 @@ func (e *Handler) Handle(ev term.Event) (exit, handled bool) {
 		return false, handled
 	}
 
-	if !e.comp.IsAltBuffer() && ev.Key == term.KeyEsc && e.modalEnabled {
+	if e.modalEnabled && !e.comp.IsAltBuffer() && ev.Key == term.KeyEsc {
 		e.enterViMode()
 		handled = true
 		return
