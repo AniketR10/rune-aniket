@@ -126,7 +126,7 @@ func (e *ex) init(
 	if err != nil {
 		return
 	}
-	err = e.comp.Init(ed, m, e.config)
+	err = e.comp.Init(ed, storage, m, e.config)
 	if err != nil {
 		return
 	}
@@ -899,7 +899,7 @@ func (e *ex) handleEvent(ev term.Event) (
 		if handled {
 			if len(cmdAndArgs) != 0 {
 				// notify user of ambiguous sequence
-				e.comp.Browser().Notify(notifications.LevelWarn, "Command sequence %q is mapped to %q, "+
+				e.comp.NotifyOnce(notifications.LevelWarn, "Command sequence %q is mapped to %q, "+
 					"but could not get triggered because active window also handles it. "+
 					"Consider changing the command sequence mapping to something else.",
 					keyComb, cmdAndArgs)

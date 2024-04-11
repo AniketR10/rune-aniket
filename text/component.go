@@ -4,10 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"io"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/ernestrc/blue/document"
 	"github.com/ernestrc/blue/iterator"
 	"github.com/ernestrc/blue/logging"
 	multierr "github.com/ernestrc/go-multierror"
@@ -36,6 +39,8 @@ var _ Editor = (*Component)(nil)
 // It also satisfies tui.Component, and text.Editor.
 type Component struct {
 	comp           browser.Component
+	notifier       notifier
+	storage        document.Service
 	workspace      workspace.Loader
 	ed             Editor
 	config         Config
@@ -46,11 +51,11 @@ type Component struct {
 }
 
 // NewComponent allocates storage for a new Component and initializes it.
-func NewComponent(ed Editor, w workspace.Loader, config Config) (
+func NewComponent(ed Editor, storage document.Service, w workspace.Loader, config Config) (
 	c *Component, err error,
 ) {
 	c = new(Component)
-	err = c.Init(ed, w, config)
+	err = c.Init(ed, storage, w, config)
 	if err != nil {
 		return
 	}
@@ -128,10 +133,12 @@ func (c *Component) newFileBuffer(
 // Init initializes this Component with the given editor and Options.
 // It returns an error if an initial filepath was given through WithFilePath option
 // and the file failed to be opened.
-func (c *Component) Init(ed Editor, w workspace.Loader, config Config) error {
+func (c *Component) Init(ed Editor, storage document.Service, w workspace.Loader, config Config) error {
 	c.config = config
 
 	c.comp.Init(c.config.Config)
+	c.notifier = &c.comp
+	c.storage = storage
 	c.comp.Subscribe(c)
 
 	c.ed = ed
@@ -486,7 +493,24 @@ func (c *Component) dispatchEvent(ev textapi.Event) (handled bool) {
 
 // Notify formats the given msg and args and displays it on next Draw.
 func (c *Component) Notify(level notifications.Level, msg string, args ...interface{}) error {
-	c.comp.Notify(level, msg, args...)
+	c.notifier.Notify(level, msg, args...)
+	return nil
+}
+
+// NotifyOnce behaves like Notify, but only sends this notification once.
+func (c *Component) NotifyOnce(level notifications.Level, msg string, args ...interface{}) error {
+	ctx := context.Background()
+	id := nonCryptoHashString(fmt.Sprintf("__notify_once_%q", fmt.Sprintf(msg, args...)))
+	var value storedNotification
+	value.ID = id
+	err := c.storage.Create(ctx, id, value)
+	if err == document.ErrAlreadyExists {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("storage create: %v", err)
+	}
+	c.notifier.Notify(level, msg, args...)
 	return nil
 }
 
@@ -1007,4 +1031,19 @@ func (w wrapEditor) Handle(ev term.Event) (exit, handled bool) {
 		delete(w.parent.editors, w.Resource().String())
 	}
 	return
+}
+
+type notifier interface {
+	Notify(level notifications.Level, msg string, args ...interface{})
+}
+
+func nonCryptoHashString(s string) string {
+	h := fnv.New64a()
+	h.Write([]byte(s))
+	return strconv.FormatUint(h.Sum64(), 10)
+}
+
+// stand-in type for NotifyOnce
+type storedNotification struct {
+	ID string
 }

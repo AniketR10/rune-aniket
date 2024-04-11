@@ -8,6 +8,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/ernestrc/blue/document"
 	"github.com/ernestrc/blue/iterator"
 	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
@@ -87,7 +88,7 @@ func (t *testLoader) URI(path string) (workspaceapi.URI, error) {
 
 func newTestComponentErr(ed text.Editor, cfg text.Config) (*text.Component, *testLoader, error) {
 	loader := &testLoader{}
-	c, err := text.NewComponent(ed, loader, cfg)
+	c, err := text.NewComponent(ed, document.NewInMemoryService(), loader, cfg)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -108,7 +109,7 @@ func newTestComponentConfig(t *testing.T, ed text.Editor, cfg text.Config) (
 
 func TestComponentInterfaces(t *testing.T) {
 	// this test is just a compile-time test
-	c, err := text.NewComponent(NopEditor(), &testLoader{}, text.DefaultConfig())
+	c, err := text.NewComponent(NopEditor(), document.NewInMemoryService(), &testLoader{}, text.DefaultConfig())
 	require.NoError(t, err)
 
 	var ed text.Editor
@@ -1049,7 +1050,7 @@ func TestDispatchCommand(t *testing.T) {
 			"blah": {"bleh"},
 			"bleh": {"blah"},
 		}
-		_, err := text.NewComponent(NopEditor(), &testLoader{}, cfg)
+		_, err := text.NewComponent(NopEditor(), document.NewInMemoryService(), &testLoader{}, cfg)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "cycle detected")
 	})
@@ -1060,7 +1061,7 @@ func TestDispatchCommand(t *testing.T) {
 			"blah": {"bleh"},
 			"bleh": {"bloh"},
 		}
-		_, err := text.NewComponent(NopEditor(), &testLoader{}, cfg)
+		_, err := text.NewComponent(NopEditor(), document.NewInMemoryService(), &testLoader{}, cfg)
 		require.NoError(t, err)
 	})
 
@@ -1071,7 +1072,7 @@ func TestDispatchCommand(t *testing.T) {
 			"bleh": {"bloh"},
 			"bloh": {"bluh", "blah"},
 		}
-		_, err := text.NewComponent(NopEditor(), &testLoader{}, cfg)
+		_, err := text.NewComponent(NopEditor(), document.NewInMemoryService(), &testLoader{}, cfg)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "cycle detected")
 	})
@@ -1083,7 +1084,7 @@ func TestDispatchCommand(t *testing.T) {
 			"bleh": {"bloh"},
 			"bloh": {"bluh", "otherThing"},
 		}
-		_, err := text.NewComponent(NopEditor(), &testLoader{}, cfg)
+		_, err := text.NewComponent(NopEditor(), document.NewInMemoryService(), &testLoader{}, cfg)
 		require.NoError(t, err)
 	})
 }
@@ -1213,7 +1214,7 @@ func TestComponentCommands(t *testing.T) {
 		cfg.CommandAliases = map[string][]string{
 			"blah": {"myCmd"},
 		}
-		c, err := text.NewComponent(NopEditor(), &testLoader{}, cfg)
+		c, err := text.NewComponent(NopEditor(), document.NewInMemoryService(), &testLoader{}, cfg)
 		require.NoError(t, err)
 		cmds := c.Commands()
 		require.Len(t, cmds, 1)
@@ -1282,7 +1283,7 @@ func TestUnregisterCommand(t *testing.T) {
 	require.NoError(t, err)
 	myArgs := []string{"a", "bbbbbbbbbbbbbbbbbbbbb"}
 	myCmd := "BUY"
-	c, err := text.NewComponent(NopEditor(), &testLoader{}, text.DefaultConfig())
+	c, err := text.NewComponent(NopEditor(), document.NewInMemoryService(), &testLoader{}, text.DefaultConfig())
 	require.NoError(t, err)
 
 	win, _ := c.Focus()
@@ -1382,7 +1383,7 @@ func TestFlush(t *testing.T) {
 		mockWorkspace := workspacetest.NewMockLoader(ctrl)
 		mockFlusherCloser := workspacetest.NewMockFlusherCloser(ctrl)
 
-		c, err := text.NewComponent(mockEditor, mockWorkspace, text.DefaultConfig())
+		c, err := text.NewComponent(mockEditor, document.NewInMemoryService(), mockWorkspace, text.DefaultConfig())
 		require.NoError(t, err)
 
 		win, err := c.Focus()

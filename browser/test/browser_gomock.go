@@ -496,6 +496,25 @@ func (mr *MockNotificationsMockRecorder) Notify(level, msg interface{}, args ...
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Notify", reflect.TypeOf((*MockNotifications)(nil).Notify), varargs...)
 }
 
+// NotifyOnce mocks base method.
+func (m *MockNotifications) NotifyOnce(level notifications.Level, msg string, args ...interface{}) error {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{level, msg}
+	for _, a := range args {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "NotifyOnce", varargs...)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// NotifyOnce indicates an expected call of NotifyOnce.
+func (mr *MockNotificationsMockRecorder) NotifyOnce(level, msg interface{}, args ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{level, msg}, args...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyOnce", reflect.TypeOf((*MockNotifications)(nil).NotifyOnce), varargs...)
+}
+
 // MockResourceOpener is a mock of ResourceOpener interface.
 type MockResourceOpener struct {
 	ctrl     *gomock.Controller
@@ -684,6 +703,25 @@ func (mr *MockBrowserMockRecorder) Notify(level, msg interface{}, args ...interf
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{level, msg}, args...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Notify", reflect.TypeOf((*MockBrowser)(nil).Notify), varargs...)
+}
+
+// NotifyOnce mocks base method.
+func (m *MockBrowser) NotifyOnce(level notifications.Level, msg string, args ...interface{}) error {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{level, msg}
+	for _, a := range args {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "NotifyOnce", varargs...)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// NotifyOnce indicates an expected call of NotifyOnce.
+func (mr *MockBrowserMockRecorder) NotifyOnce(level, msg interface{}, args ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{level, msg}, args...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyOnce", reflect.TypeOf((*MockBrowser)(nil).NotifyOnce), varargs...)
 }
 
 // Open mocks base method.

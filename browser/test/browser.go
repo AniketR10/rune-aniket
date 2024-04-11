@@ -91,6 +91,10 @@ func (b toBrowser) Notify(level notifications.Level, msg string, args ...interfa
 	return b.b.Notify(level, msg, args...)
 }
 
+func (b toBrowser) NotifyOnce(level notifications.Level, msg string, args ...interface{}) error {
+	return b.b.NotifyOnce(level, msg, args...)
+}
+
 func (b toBrowser) Open(resource workspaceapi.URI) (browserapi.Handler, error) {
 	return b.b.Open(resource)
 }

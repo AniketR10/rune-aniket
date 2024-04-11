@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ernestrc/blue/document"
 	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -243,7 +244,7 @@ func TestServerSetLocationList(t *testing.T) {
 
 		broker := proto.NewMockMuxBroker(ctrl)
 		ed := texttest.NopEditor()
-		c, err := text.NewComponent(ed, &testLoader{}, text.Config{
+		c, err := text.NewComponent(ed, document.NewInMemoryService(), &testLoader{}, text.Config{
 			Config: browser.Config{
 				Notifications: notifications.Config{
 					Width:     10,

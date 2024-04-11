@@ -1419,8 +1419,12 @@ var file_rpc_browser_proto_rawDesc = []byte{
 	0x65, 0x6e, 0x52, 0x65, 0x73, 0x6f, 0x75, 0x72, 0x63, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73,
 	0x74, 0x1a, 0x1d, 0x2e, 0x62, 0x72, 0x6f, 0x77, 0x73, 0x65, 0x72, 0x2e, 0x4f, 0x70, 0x65, 0x6e,
 	0x52, 0x65, 0x73, 0x6f, 0x75, 0x72, 0x63, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65,
-	0x32, 0x4a, 0x0a, 0x0d, 0x4e, 0x6f, 0x74, 0x69, 0x66, 0x69, 0x63, 0x61, 0x74, 0x69, 0x6f, 0x6e,
-	0x73, 0x12, 0x39, 0x0a, 0x06, 0x4e, 0x6f, 0x74, 0x69, 0x66, 0x79, 0x12, 0x16, 0x2e, 0x62, 0x72,
+	0x32, 0x89, 0x01, 0x0a, 0x0d, 0x4e, 0x6f, 0x74, 0x69, 0x66, 0x69, 0x63, 0x61, 0x74, 0x69, 0x6f,
+	0x6e, 0x73, 0x12, 0x39, 0x0a, 0x06, 0x4e, 0x6f, 0x74, 0x69, 0x66, 0x79, 0x12, 0x16, 0x2e, 0x62,
+	0x72, 0x6f, 0x77, 0x73, 0x65, 0x72, 0x2e, 0x4e, 0x6f, 0x74, 0x69, 0x66, 0x79, 0x52, 0x65, 0x71,
+	0x75, 0x65, 0x73, 0x74, 0x1a, 0x17, 0x2e, 0x62, 0x72, 0x6f, 0x77, 0x73, 0x65, 0x72, 0x2e, 0x4e,
+	0x6f, 0x74, 0x69, 0x66, 0x79, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x3d, 0x0a,
+	0x0a, 0x4e, 0x6f, 0x74, 0x69, 0x66, 0x79, 0x4f, 0x6e, 0x63, 0x65, 0x12, 0x16, 0x2e, 0x62, 0x72,
 	0x6f, 0x77, 0x73, 0x65, 0x72, 0x2e, 0x4e, 0x6f, 0x74, 0x69, 0x66, 0x79, 0x52, 0x65, 0x71, 0x75,
 	0x65, 0x73, 0x74, 0x1a, 0x17, 0x2e, 0x62, 0x72, 0x6f, 0x77, 0x73, 0x65, 0x72, 0x2e, 0x4e, 0x6f,
 	0x74, 0x69, 0x66, 0x79, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x32, 0x4e, 0x0a, 0x0e,
@@ -1530,32 +1534,34 @@ var file_rpc_browser_proto_depIdxs = []int32{
 	27, // 5: browser.PublishRequest.ev:type_name -> term.Event
 	1,  // 6: browser.ResourceOpener.Open:input_type -> browser.OpenResourceRequest
 	3,  // 7: browser.Notifications.Notify:input_type -> browser.NotifyRequest
-	17, // 8: browser.EventPublisher.Publish:input_type -> browser.PublishRequest
-	14, // 9: browser.WindowManager.Focus:input_type -> browser.FocusRequest
-	15, // 10: browser.WindowManager.SetFocus:input_type -> browser.SetFocusRequest
-	6,  // 11: browser.WindowManager.Split:input_type -> browser.SplitRequest
-	8,  // 12: browser.WindowManager.Bar:input_type -> browser.BarRequest
-	10, // 13: browser.WindowManager.Floating:input_type -> browser.FloatingWindowRequest
-	12, // 14: browser.WindowManager.Tab:input_type -> browser.TabRequest
-	21, // 15: browser.WindowManager.SetContent:input_type -> browser.WindowSetContentRequest
-	23, // 16: browser.WindowManager.Content:input_type -> browser.WindowContentRequest
-	19, // 17: browser.WindowManager.Close:input_type -> browser.WindowCloseRequest
-	25, // 18: browser.Floating.Dimensions:input_type -> browser.DimensionsRequest
-	2,  // 19: browser.ResourceOpener.Open:output_type -> browser.OpenResourceResponse
-	4,  // 20: browser.Notifications.Notify:output_type -> browser.NotifyResponse
-	18, // 21: browser.EventPublisher.Publish:output_type -> browser.PublishResponse
-	16, // 22: browser.WindowManager.Focus:output_type -> browser.FocusResponse
-	16, // 23: browser.WindowManager.SetFocus:output_type -> browser.FocusResponse
-	7,  // 24: browser.WindowManager.Split:output_type -> browser.SplitResponse
-	9,  // 25: browser.WindowManager.Bar:output_type -> browser.BarResponse
-	11, // 26: browser.WindowManager.Floating:output_type -> browser.FloatingWindowResponse
-	13, // 27: browser.WindowManager.Tab:output_type -> browser.TabResponse
-	22, // 28: browser.WindowManager.SetContent:output_type -> browser.WindowSetContentResponse
-	24, // 29: browser.WindowManager.Content:output_type -> browser.WindowContentResponse
-	20, // 30: browser.WindowManager.Close:output_type -> browser.WindowCloseResponse
-	26, // 31: browser.Floating.Dimensions:output_type -> browser.DimensionsResponse
-	19, // [19:32] is the sub-list for method output_type
-	6,  // [6:19] is the sub-list for method input_type
+	3,  // 8: browser.Notifications.NotifyOnce:input_type -> browser.NotifyRequest
+	17, // 9: browser.EventPublisher.Publish:input_type -> browser.PublishRequest
+	14, // 10: browser.WindowManager.Focus:input_type -> browser.FocusRequest
+	15, // 11: browser.WindowManager.SetFocus:input_type -> browser.SetFocusRequest
+	6,  // 12: browser.WindowManager.Split:input_type -> browser.SplitRequest
+	8,  // 13: browser.WindowManager.Bar:input_type -> browser.BarRequest
+	10, // 14: browser.WindowManager.Floating:input_type -> browser.FloatingWindowRequest
+	12, // 15: browser.WindowManager.Tab:input_type -> browser.TabRequest
+	21, // 16: browser.WindowManager.SetContent:input_type -> browser.WindowSetContentRequest
+	23, // 17: browser.WindowManager.Content:input_type -> browser.WindowContentRequest
+	19, // 18: browser.WindowManager.Close:input_type -> browser.WindowCloseRequest
+	25, // 19: browser.Floating.Dimensions:input_type -> browser.DimensionsRequest
+	2,  // 20: browser.ResourceOpener.Open:output_type -> browser.OpenResourceResponse
+	4,  // 21: browser.Notifications.Notify:output_type -> browser.NotifyResponse
+	4,  // 22: browser.Notifications.NotifyOnce:output_type -> browser.NotifyResponse
+	18, // 23: browser.EventPublisher.Publish:output_type -> browser.PublishResponse
+	16, // 24: browser.WindowManager.Focus:output_type -> browser.FocusResponse
+	16, // 25: browser.WindowManager.SetFocus:output_type -> browser.FocusResponse
+	7,  // 26: browser.WindowManager.Split:output_type -> browser.SplitResponse
+	9,  // 27: browser.WindowManager.Bar:output_type -> browser.BarResponse
+	11, // 28: browser.WindowManager.Floating:output_type -> browser.FloatingWindowResponse
+	13, // 29: browser.WindowManager.Tab:output_type -> browser.TabResponse
+	22, // 30: browser.WindowManager.SetContent:output_type -> browser.WindowSetContentResponse
+	24, // 31: browser.WindowManager.Content:output_type -> browser.WindowContentResponse
+	20, // 32: browser.WindowManager.Close:output_type -> browser.WindowCloseResponse
+	26, // 33: browser.Floating.Dimensions:output_type -> browser.DimensionsResponse
+	20, // [20:34] is the sub-list for method output_type
+	6,  // [6:20] is the sub-list for method input_type
 	6,  // [6:6] is the sub-list for extension type_name
 	6,  // [6:6] is the sub-list for extension extendee
 	0,  // [0:6] is the sub-list for field type_name

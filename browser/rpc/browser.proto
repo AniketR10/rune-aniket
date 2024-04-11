@@ -95,6 +95,7 @@ service ResourceOpener {
 
 service Notifications {
 	rpc Notify(NotifyRequest) returns (NotifyResponse);
+	rpc NotifyOnce(NotifyRequest) returns (NotifyResponse);
 }
 
 service EventPublisher {

@@ -21,3 +21,11 @@ func (n *protectedNotifications) Notify(
 	defer n.locker.Unlock()
 	return n.notifications.Notify(level, msg, args...)
 }
+
+func (n *protectedNotifications) NotifyOnce(
+	level notifications.Level, msg string, args ...interface{},
+) error {
+	n.locker.Lock()
+	defer n.locker.Unlock()
+	return n.notifications.NotifyOnce(level, msg, args...)
+}

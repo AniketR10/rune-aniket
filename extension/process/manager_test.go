@@ -333,3 +333,7 @@ func (n *testNotifications) Notify(level notifications.Level, msg string, args .
 	n.msg = append(n.msg, fmt.Sprintf(msg, args...))
 	return nil
 }
+
+func (n *testNotifications) NotifyOnce(level notifications.Level, msg string, args ...interface{}) error {
+	return n.Notify(level, msg, args...)
+}

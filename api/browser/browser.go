@@ -79,7 +79,12 @@ type WindowManager interface {
 // Notifications is the interface that wraps methods to display
 // messages to the user.
 type Notifications interface {
+	// Notify delivers the given message to the user, as a notification.
 	Notify(level notifications.Level, msg string, args ...interface{}) error
+
+	// NotifyOnce delivers the given notification once, and never again. A notification
+	// is identified as the hash of the final message (with arguments).
+	NotifyOnce(level notifications.Level, msg string, args ...interface{}) error
 }
 
 // ResourceOpener is the interface that wraps the method Open.

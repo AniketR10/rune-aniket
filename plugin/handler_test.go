@@ -130,6 +130,10 @@ func (n nopBrowser) Notify(notifications.Level, string, ...interface{}) error {
 	return nil
 }
 
+func (n nopBrowser) NotifyOnce(notifications.Level, string, ...interface{}) error {
+	return nil
+}
+
 func (n nopBrowser) Tab(uri workspaceapi.URI, name string, h browserapi.Handler) (
 	browserapi.Handler, error,
 ) {

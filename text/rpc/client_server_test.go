@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ernestrc/blue/document"
 	"github.com/ernestrc/blue/iterator"
 	"github.com/ernestrc/tcell/v3"
 	gomock "github.com/golang/mock/gomock"
@@ -650,7 +651,7 @@ func (t *testLoader) URI(path string) (workspaceapi.URI, error) {
 
 func newTestComponentErr(ed text.Editor) (*text.Component, error) {
 	cfg := text.DefaultConfig()
-	c, err := text.NewComponent(ed, &testLoader{}, cfg)
+	c, err := text.NewComponent(ed, document.NewInMemoryService(), &testLoader{}, cfg)
 	if err != nil {
 		return nil, err
 	}

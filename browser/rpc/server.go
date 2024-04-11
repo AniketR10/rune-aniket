@@ -88,7 +88,7 @@ func (s *Server) consumeErrors(
 		case err := <-ch:
 			err = fmt.Errorf("handler.Client %s error: %v", channelID, err)
 			s.log(log.WarnLevel, "%v", err)
-			msgErr := s.setBrowserMessage(notifications.LevelError, err.Error())
+			msgErr := s.setBrowserMessage(notifications.LevelError, err.Error(), false)
 			if msgErr != nil {
 				s.log(log.WarnLevel, "error calling browser.Notify upon handler.Client"+
 					" error: %v: %v", msgErr, err)
@@ -235,32 +235,18 @@ func (s *Server) Bar(
 	return new(BarResponse), nil
 }
 
-func (s *Server) setBrowserMessage(level notifications.Level, msg string) error {
-	s.browser.Lock()
-	defer s.browser.Unlock()
-
-	return s.browser.Notify(level, msg)
-}
-
 // Notify satisfies BrowserServer
 func (s *Server) Notify(
 	ctx context.Context, req *NotifyRequest,
 ) (*NotifyResponse, error) {
-	msg := util.SanitizeLine(req.GetMsg())
-	level := notifications.Level(req.GetLevel())
-	switch level {
-	case notifications.LevelInfo,
-		notifications.LevelSuccess,
-		notifications.LevelWarn,
-		notifications.LevelError:
-	default:
-		return nil, status.Error(codes.InvalidArgument, "invalid level")
-	}
-	err := s.setBrowserMessage(level, msg)
-	if err != nil {
-		return nil, err
-	}
-	return new(NotifyResponse), nil
+	return s.notify(ctx, req, false)
+}
+
+// NotifyOnce satisfies BrowserServer
+func (s *Server) NotifyOnce(
+	ctx context.Context, req *NotifyRequest,
+) (*NotifyResponse, error) {
+	return s.notify(ctx, req, true)
 }
 
 // Open satisfies BrowserServer
@@ -447,4 +433,36 @@ func (s *Server) Stop() (err error) {
 		s.serverCancelCtx = nil
 	}
 	return nil
+}
+
+func (s *Server) setBrowserMessage(
+	level notifications.Level, msg string, once bool,
+) error {
+	s.browser.Lock()
+	defer s.browser.Unlock()
+
+	if !once {
+		return s.browser.Notify(level, msg)
+	}
+	return s.browser.NotifyOnce(level, msg)
+}
+
+func (s *Server) notify(
+	ctx context.Context, req *NotifyRequest, once bool,
+) (*NotifyResponse, error) {
+	msg := util.SanitizeLine(req.GetMsg())
+	level := notifications.Level(req.GetLevel())
+	switch level {
+	case notifications.LevelInfo,
+		notifications.LevelSuccess,
+		notifications.LevelWarn,
+		notifications.LevelError:
+	default:
+		return nil, status.Error(codes.InvalidArgument, "invalid level")
+	}
+	err := s.setBrowserMessage(level, msg, once)
+	if err != nil {
+		return nil, err
+	}
+	return new(NotifyResponse), nil
 }

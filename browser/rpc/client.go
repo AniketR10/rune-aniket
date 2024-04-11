@@ -262,6 +262,18 @@ func (c *Client) Notify(level notifications.Level, msg string, args ...interface
 	return err
 }
 
+// NotifyOnce satisfies Browser.
+func (c *Client) NotifyOnce(level notifications.Level, msg string, args ...interface{}) error {
+	msg = fmt.Sprintf(msg, args...)
+
+	ctx := context.Background()
+	req := NotifyRequest{Level: uint32(level), Msg: msg}
+
+	_, err := c.msg.NotifyOnce(ctx, &req)
+	runtime.KeepAlive(c)
+	return err
+}
+
 // Open satisfies Browser.
 func (c *Client) Open(resource workspaceapi.URI) (browserapi.Handler, error) {
 	ctx := context.Background()

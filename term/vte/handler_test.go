@@ -136,3 +136,7 @@ type nopNotifications struct {
 func (nopNotifications) Notify(level notifications.Level, msg string, args ...any) error {
 	return nil
 }
+
+func (nopNotifications) NotifyOnce(level notifications.Level, msg string, args ...any) error {
+	return nil
+}
