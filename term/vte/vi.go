@@ -580,7 +580,9 @@ func (v *viHandler) moveViToBounds() {
 }
 
 func (v *viHandler) moveViToLastLineCharacter() {
+	promptStart := v.comp.cursorAtScroll()
 	pos := v.lastContentColumn()
+	pos.X = int(math.Max(float64(promptStart.X), float64(pos.X)))
 	v.viSetCursorAtScroll(pos)
 }
 

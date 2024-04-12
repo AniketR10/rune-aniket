@@ -292,7 +292,7 @@ $ ▐ZX
                     
                     
               NORMAL`},
-			{"⬆⬆", // position after scroll through history
+			{"⬆⬆", // position after scroll up through history
 				`$ echo bla          
 bla                 
 $ echo "$ echo bla  
@@ -336,17 +336,28 @@ $ ▐
                     
                     
               NORMAL`},
-			{"iecho '.i\\$'", // is able to use special characters in shell mode
+			{"iecho '.i\\$'>", // is able to use special characters in shell mode
 				`$ echo bla          
 bla                 
 $ echo "$ echo bla  
 > bla"              
 $ echo bla          
 bla                 
-$ echo '.i$'▐       
-                    
-                    
+$ echo '.i$'        
+.i$                 
+$ ▐                 
                     `},
+			{"<⬇⬇⬇⬇", // position after scroll down through history to the start
+				`$ echo bla          
+bla                 
+$ echo "$ echo bla  
+> bla"              
+$ echo bla          
+bla                 
+$ echo '.i$'        
+.i$                 
+$ ▐                 
+              NORMAL`},
 		}
 
 		cfg := DefaultConfig()
