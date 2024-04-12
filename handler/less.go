@@ -178,7 +178,9 @@ func (l *Less) Draw(w term.Writer) {
 	}
 
 	l.msgVirt.Draw(w)
-	l.searchScrollVirt.Draw(w)
+	if l.mode == LessSearchMode {
+		l.searchScrollVirt.Draw(w)
+	}
 }
 
 // Resize satisfies tui.Component.
@@ -385,7 +387,9 @@ func (l *Less) setMessage(msg string) bool {
 			BackgroundAttributes: attr,
 		},
 	})
-	shouldResize := l.msg == nil || l.msg.Height(l.width) != newMsg.Height(l.width) || l.usedMsgBarAttr != attr
+	shouldResize := l.msg == nil ||
+		l.msg.Height(l.width) != newMsg.Height(l.width) ||
+		l.usedMsgBarAttr != attr
 
 	l.usedMsgBarAttr = attr
 	l.msg = newMsg
@@ -409,8 +413,7 @@ func (l *Less) cmdBarHeight() (cmdBarWidth, cmdBarHeight int) {
 }
 
 func (l *Less) resizeSearchScroll(cmdBarHeight int) {
-	width := int(math.Min(float64(l.searchScroll.Buffer().MaxColumns()), float64(l.width)))
-	l.searchScrollVirt.Resize(width, cmdBarHeight)
+	l.searchScrollVirt.Resize(l.width-len(l.msgStr), cmdBarHeight)
 }
 
 func (l *Less) resize() {
