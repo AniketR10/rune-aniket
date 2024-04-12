@@ -2,11 +2,18 @@ package vte
 
 import (
 	"bytes"
+	"context"
 	"errors"
-	"sync"
+	"time"
 
 	"github.com/ernestrc/blue/logging"
+	"github.com/ernestrc/blue/retry"
 	log "github.com/sirupsen/logrus"
+)
+
+var triggerBellRetryStrategy = retry.CombinedStrategy(
+	retry.LimitStrategy(2),
+	retry.ExponentialStrategy(10*time.Millisecond, 100*time.Millisecond),
 )
 
 type remote interface {
@@ -20,6 +27,7 @@ type remote interface {
 	moveLeft()
 	moveRight()
 	flush() error
+	triggerBell() error
 
 	// used just for briding tests with text.Cursor
 	conflate()
@@ -30,7 +38,6 @@ type remote interface {
 var _ remote = (*ptyWriter)(nil)
 
 type ptyWriter struct {
-	mu               sync.Mutex
 	buf              *bytes.Buffer
 	comp             *Component
 	scheduleCallback func(func()) bool
@@ -45,10 +52,8 @@ func ptyWriterRemote(comp *Component, scheduleCallback func(func()) bool) *ptyWr
 }
 
 func (p *ptyWriter) flush() (err error) {
-	p.mu.Lock()
 	data := p.buf.String()
 	p.buf.Reset()
-	p.mu.Unlock()
 	scheduled := p.scheduleCallback(func() {
 		_ = p.comp.WriteToPty([]byte(data))
 	})
@@ -59,9 +64,7 @@ func (p *ptyWriter) flush() (err error) {
 }
 
 func (p *ptyWriter) writeToPty(data []byte) {
-	p.mu.Lock()
 	p.buf.Write(data)
-	p.mu.Unlock()
 }
 
 func (p *ptyWriter) moveLeft() {
@@ -140,6 +143,37 @@ func (p *ptyWriter) keyArrowUp() {
 		seq = []byte{0x1b, '[', 'A'}
 	}
 	p.writeToPty(seq)
+}
+
+func (p *ptyWriter) triggerBell() error {
+	// the following sequence forces a bell from the underlying shell
+	// tested with bash, sh and zsh. It is necessary to work around
+	// shell prompt prefixes so comp.CursorAtScroll is correct,
+	// or when we need to synchronize after the processing delay of a
+	// remote sequence.
+	//
+	// Retry this otherwise we might end up not processing any events
+	// as wait parser handler scheduler might overflow.
+	return retry.Retry(context.Background(), triggerBellRetryStrategy,
+		func(ctx context.Context) (bool, error) {
+			// NOTE: this is ALSO scheduled as a user callback
+			// on the next event loop tick, so if event loop channel
+			// gets filled up, the performance degrades substantially
+			// but eventually it should catch up.
+			var data []byte
+			if p.comp.parserHandler.modeCursorKeys {
+				data = []byte{0x01, 0x1b, 'O', 'D'}
+			} else {
+				data = []byte{0x01, 0x1b, '[', 'D'}
+			}
+			scheduled := p.scheduleCallback(func() {
+				_ = p.comp.WriteToPty(data)
+			})
+			if !scheduled {
+				return true, errors.New("could not schedule pty write: too much data")
+			}
+			return true, nil
+		})
 }
 
 func (p *ptyWriter) conflate() {
@@ -237,6 +271,10 @@ func (p loggingRemote) wrapLine() {
 func (p loggingRemote) cursorCRLF() {
 	p.log("cursorCRLF")
 	p.r.cursorCRLF()
+}
+func (p loggingRemote) triggerBell() error {
+	p.log("triggerBell")
+	return p.r.triggerBell()
 }
 
 func (t loggingRemote) log(line string, params ...interface{}) {

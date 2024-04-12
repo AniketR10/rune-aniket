@@ -96,14 +96,9 @@ func testSequence(t *testing.T, cfg Config, timeout time.Duration, cases []vtete
 	cfg.WidthHint = 20
 	cfg.HeightHint = 10
 	cfg.Shell = "sh" // all systems were this runs should have sh
-	handler, err := NewHandler(chanEventPublisher{ch}, nopNotifications{}, scheme, scheme, nopTabManager{}, cfg, "")
+	handler, err := NewHandler(chanEventPublisher{ch}, nopNotifications{},
+		scheme, scheme, nopTabManager{}, cfg, "")
 	require.NoError(t, err)
-
-	var cbs []func()
-	cfg.ScheduleNextTick = func(cb func()) bool {
-		cbs = append(cbs, cb)
-		return true
-	}
 
 	t.Cleanup(func() {
 		handler.Close()
@@ -113,12 +108,7 @@ func testSequence(t *testing.T, cfg Config, timeout time.Duration, cases []vtete
 	})
 
 	vtetest.TestSequence(t, handler, cfg.WidthHint, cfg.HeightHint,
-		timeout, ch, cases, func(int) {
-			for _, cb := range cbs {
-				cb()
-			}
-			cbs = cbs[:0]
-		})
+		timeout, ch, cases)
 }
 
 type chanEventPublisher struct {

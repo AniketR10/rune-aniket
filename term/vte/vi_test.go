@@ -1030,6 +1030,10 @@ func (r *testRemote) flush() error {
 	return nil
 }
 
+func (r *testRemote) triggerBell() error {
+	return nil
+}
+
 type nopTabManager struct {
 }
 

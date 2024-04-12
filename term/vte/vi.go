@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/ernestrc/blue/logging"
-	"github.com/ernestrc/blue/retry"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
 	workspaceapi "unstable.build/go-tui/api/workspace"
@@ -21,10 +20,6 @@ import (
 )
 
 var _ tui.Handler = (*viHandler)(nil)
-var triggerBellRetryStrategy = retry.CombinedStrategy(
-	retry.LimitStrategy(2),
-	retry.ExponentialStrategy(10*time.Millisecond, 100*time.Millisecond),
-)
 
 const waitBellAtMostDuration = 200 * time.Millisecond
 
@@ -99,18 +94,19 @@ func (v *viHandler) doInit(comp parentComponent, config Config) {
 }
 
 func (v *viHandler) Handle(ev term.Event) (exit, handled bool) {
+	v.sync.mu.Lock()
+	defer v.sync.mu.Unlock()
+
 	exit, handled = v.handle(ev)
 	if exit {
-		v.scheduleAfterBell(func() {
-			if ev.Key != term.KeyEnter {
+		if ev.Key != term.KeyEnter {
+			v.scheduleAfterBell(func() {
 				pos := v.trimToLastValidColumn(v.sync.vi.CursorAtScroll())
 				v.log(log.TraceLevel, "call scheduled cleanup of vi position to comp: %+v", pos)
 				v.remoteMoveTo(pos)
 				v.remoteFlush()
-			}
-		})
-		// no need to synchronize here as vi is not reading/writing
-		// the underlying buffer for the following 2 calls
+			})
+		}
 		v.sync.vi.Unselect()
 		v.sync.vi.SetNormalMode()
 	}
@@ -380,19 +376,25 @@ func (v *viHandler) handle(ev term.Event) (exit, handled bool) {
 	switch ev.Key {
 	case term.KeyEnter:
 		if !v.sync.vi.IsSearchMode() {
-			v.remote.linefeed()
-			v.remoteFlush()
+			v.scheduleAfterBell(func() {
+				v.remote.linefeed()
+				v.remoteFlush()
+			})
 			exit = true
 			return
 		}
 	case term.KeyCtrlK, term.KeyArrowUp:
-		v.remote.keyArrowUp()
-		v.remoteFlush()
+		v.scheduleAfterBell(func() {
+			v.remote.keyArrowUp()
+			v.remoteFlush()
+		})
 		v.scheduleAfterBell(v.moveViToLastLineCharacter)
 		return
 	case term.KeyCtrlJ, term.KeyArrowDown:
-		v.remote.keyArrowDown()
-		v.remoteFlush()
+		v.scheduleAfterBell(func() {
+			v.remote.keyArrowDown()
+			v.remoteFlush()
+		})
 		v.scheduleAfterBell(v.moveViToLastLineCharacter)
 		return
 	case term.KeyCtrlC:
@@ -408,17 +410,18 @@ func (v *viHandler) handle(ev term.Event) (exit, handled bool) {
 	// goroutine. This cannot be performed during a call to Edit, because
 	// the cursor logic heavily depends on the correct return values of Edit.
 	v.scheduleAfterBell(func() {
-		exit, _ := v.sync.vi.Handle(ev)
-		// correct mouse coordinates beyond last line so
-		// when moving through graphical windows doesn't
-		// leave cursor in an non-useful coordinate.
-		if !exit {
-			// after edits, content might have changed
-			// use bell to synchronize to the last state change
-			// and then move cursor to bounds
-			v.scheduleAfterBell(v.moveViToBounds)
-		}
+		v.sync.vi.Handle(ev)
 	})
+
+	// correct mouse coordinates beyond last line so
+	// when moving through graphical windows doesn't
+	// leave cursor in an non-useful coordinate.
+	//
+	// After edits, content might have changed
+	// use bell to synchronize to the last state change
+	// and then move cursor to bounds.
+	v.scheduleAfterBell(v.moveViToBounds)
+
 	// use a copy of vi to know if event would be handled
 	// this copy gets its contents refreshed on every call to Edit above
 	v.copy.mu.Lock()
@@ -429,7 +432,11 @@ func (v *viHandler) handle(ev term.Event) (exit, handled bool) {
 
 func (v *viHandler) enterViMode(pos term.Coordinates) {
 	pos.X = int(math.Max(float64(pos.X-1), float64(0)))
+
+	v.sync.mu.Lock()
 	v.viSetCursorAtScroll(pos)
+	v.sync.mu.Unlock()
+
 	v.scheduleAfterBell(v.moveViToBounds)
 }
 
@@ -458,43 +465,26 @@ func (v *viHandler) lastValidColumn(y int) int {
 }
 
 func (v *viHandler) scheduleAfterBell(cb func()) {
-	ok := v.comp.
-		scheduleBellCallback(waitBellAtMostDuration, func() {
-			// bell handler does not lock because bell
-			// is usually implemented as synchronous I/O
-			v.sync.mu.Lock()
-			defer v.sync.mu.Unlock()
+	ok := v.comp.scheduleBellCallback(waitBellAtMostDuration, func() {
+		// bell handler does not lock because bell
+		// is usually implemented as synchronous I/O
+		v.sync.mu.Lock()
+		defer v.sync.mu.Unlock()
 
-			// NOTE: this is scheduled as a user callback on the
-			// next event loop tick.
-			cb()
-		})
+		// NOTE: this is scheduled as a user callback on the
+		// next event loop tick.
+		cb()
+	})
 	if !ok {
 		v.log(log.WarnLevel, "could not schedule sync trigger: too many events")
 	}
 }
 
 func (v *viHandler) triggerBell() {
-	// the following sequence forces a bell from the underlying shell
-	// tested with bash, sh and zsh. It is necessary to work around
-	// shell prompt prefixes so comp.CursorAtScroll is correct,
-	// or when we need to synchronize after the processing delay of a
-	// remote sequence.
-	//
-	// Retry this otherwise we might end up not processing any events
-	// as wait parser handler scheduler might overflow.
-	retry.Retry(context.Background(), triggerBellRetryStrategy,
-		func(ctx context.Context) (bool, error) {
-			// NOTE: this is ALSO scheduled as a user callback
-			// on the next event loop tick, so if event loop channel
-			// gets filled up, the performance degrades substantially
-			// but eventually it should catch up.
-
-			v.remote.moveStartOfLine()
-			v.remote.moveLeft()
-
-			return true, v.remote.flush()
-		})
+	err := v.remote.triggerBell()
+	if err != nil {
+		v.log(log.WarnLevel, "trigger bell: %v", err)
+	}
 }
 
 func (v *viHandler) trimToLastValidColumn(pos term.Coordinates) term.Coordinates {

@@ -26,7 +26,7 @@ type Case struct {
 func TestSequence(
 	t *testing.T, handler tui.Handler, width, height int,
 	drawTimeout time.Duration, interruptChan chan struct{},
-	cases []Case, nextTick func(int),
+	cases []Case,
 ) {
 	writer := term.NewStringWriter(width, height)
 	handler.Resize(width, height)
@@ -37,7 +37,7 @@ func TestSequence(
 
 	for i, tcase := range cases {
 		handleTestCase(t, i, writer, handler, tcase,
-			width, height, drawTimeout, interruptChan, nextTick)
+			width, height, drawTimeout, interruptChan)
 	}
 }
 
@@ -45,7 +45,7 @@ func handleTestCase(
 	t *testing.T, i int, w *term.StringWriter,
 	h tui.Handler, tcase Case, width, height int,
 	drawTimeout time.Duration,
-	interruptChan chan struct{}, nextTick func(int),
+	interruptChan chan struct{},
 ) {
 	err := w.Clear(term.Attributes{})
 	require.NoError(t, err)
@@ -81,7 +81,7 @@ func handleTestCase(
 	}
 
 	var escapeNext bool
-	for i, r := range tcase.InputSequence {
+	for _, r := range tcase.InputSequence {
 		if escapeNext {
 			escapeNext = false
 			callHandle(term.Event{Ch: r, Type: term.EventKey})
@@ -123,7 +123,6 @@ func handleTestCase(
 				timer.Reset(drawTimeout)
 			}
 		}
-		nextTick(i)
 	}
 
 	h.Draw(w)
