@@ -53,6 +53,28 @@ $
                     
                     
      searching 'bla'`},
+			{"/.bla>",
+				`$ echo bla          
+▐la                 
+$                   
+                    
+                    
+                    
+                    
+                    
+                    
+    searching '.bla'`},
+			{"/ibla>",
+				`$ echo bla          
+▐la                 
+$                   
+                    
+                    
+                    
+                    
+                    
+                    
+    searching 'ibla'`},
 		}
 		cfg := DefaultConfig()
 		cfg.Modal = true
@@ -314,6 +336,17 @@ $ ▐
                     
                     
               NORMAL`},
+			{"iecho '.i\\$'", // is able to use special characters in shell mode
+				`$ echo bla          
+bla                 
+$ echo "$ echo bla  
+> bla"              
+$ echo bla          
+bla                 
+$ echo '.i$'▐       
+                    
+                    
+                    `},
 		}
 
 		cfg := DefaultConfig()

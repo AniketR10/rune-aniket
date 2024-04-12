@@ -353,7 +353,7 @@ func (v *viHandler) handle(ev term.Event) (exit, handled bool) {
 
 	switch ev.Ch {
 	case '$':
-		if !v.sync.vi.IsEditMode() {
+		if !v.sync.vi.IsEditMode() && v.sync.vi.IsSearchMode() {
 			// manage manually to avoid confusing shell blank cells
 			// with end of line.
 			v.scheduleAfterBell(v.remoteMoveToEndOfLine)
@@ -361,7 +361,7 @@ func (v *viHandler) handle(ev term.Event) (exit, handled bool) {
 			return
 		}
 	case 'i':
-		if !v.sync.vi.IsEditMode() {
+		if !v.sync.vi.IsEditMode() && !v.sync.vi.IsSearchMode() {
 			exit = true
 			handled = true
 			return
@@ -370,7 +370,9 @@ func (v *viHandler) handle(ev term.Event) (exit, handled bool) {
 	// buffer was not initialized with subscribe functionality,
 	// which repeat is dependent upon
 	case '.':
-		return
+		if !v.sync.vi.IsEditMode() && !v.sync.vi.IsSearchMode() {
+			return
+		}
 	}
 	handled = true
 	switch ev.Key {
