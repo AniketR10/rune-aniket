@@ -3,7 +3,6 @@ package text
 import (
 	"bufio"
 	"context"
-	"sort"
 	"strings"
 
 	"github.com/ernestrc/tcell/v3"
@@ -64,11 +63,7 @@ type Cursor struct {
 	search string
 	cursor term.Coordinates
 
-	locs          map[string]LocationList          // used by cursor moves
-	drawLocations map[string]*priorityLocationList // used to draw
-	locsSliceTemp []*priorityLocationList
-	locsSlice     []textapi.Location
-	messages      map[term.Coordinates][]message
+	locationStore LocationStore
 
 	selection struct {
 		mode       SelectMode
@@ -76,12 +71,6 @@ type Cursor struct {
 		cells      [][]term.Cell
 	}
 	subscriber curSubscriber
-}
-
-type priorityLocationList struct {
-	locations []textapi.Location
-	ID        string
-	priority  textapi.LocationPriority
 }
 
 // NewCursor allocates storage for a new cursor,
@@ -109,9 +98,7 @@ func (c *Cursor) InitPerformance(scroll *component.Scroll) {
 	c.scroll = scroll
 	c.selection.mode = NoSelection
 	c.subscriber.c = c
-	c.locs = make(map[string]LocationList)
-	c.drawLocations = make(map[string]*priorityLocationList)
-	c.messages = make(map[term.Coordinates][]message)
+	c.locationStore.Init()
 }
 
 func (c *curSubscriber) OnWillEdit(
@@ -1376,97 +1363,17 @@ func (c *Cursor) ShiftSelectionLeft() (ok bool) {
 	return
 }
 
-func scrollStartList(l LocationList) {
-	for ok := true; ok; _, ok = l.Prev() {
-	}
-}
-
-func (c *Cursor) processList(ID string, l LocationList) {
-	scrollStartList(l)
-	for n, ok := l.Current(); ok; n, ok = l.Next() {
-		c.drawLocations[ID].locations = append(c.drawLocations[ID].locations, n)
-		if n.Message == "" {
-			continue
-		}
-		from, to := term.CoordinatesSort(n.From, n.To)
-		for {
-			msgs, ok := c.messages[from]
-			if !ok {
-				msgs = make([]message, 0, 1)
-				c.messages[from] = msgs
-			}
-			c.messages[from] = append(msgs, message{
-				listID:   ID,
-				location: n,
-			})
-			if from.Y == to.Y && from.X == to.X {
-				break
-			}
-			if from.Y == to.Y {
-				from.X++
-				continue
-			}
-
-			from.Y++
-			from.X = 0
-		}
-	}
-}
-
-func (c *Cursor) clearMessages(ID string) {
-	for from, msgs := range c.messages {
-		var stay []message
-		for _, msg := range msgs {
-			if msg.listID == ID {
-				continue
-			}
-			stay = append(stay, msg)
-		}
-		c.messages[from] = stay
-	}
-}
-
 // LocationsAtCursor returns the set of locations by location list ID set by SetLocationList,
 // at the current cursor position, if there's any.
 func (c *Cursor) LocationsAtCursor() (map[string]textapi.Location, bool) {
-	msgs, ok := c.messages[c.cursorAtScroll()]
-	if !ok {
-		return nil, false
-	}
-	if len(msgs) == 0 {
-		return nil, false
-	}
-	ret := make(map[string]textapi.Location, len(msgs))
-	for _, msg := range msgs {
-		ret[msg.listID] = msg.location
-	}
-	return ret, true
+	return c.locationStore.LocationsAtCoordinates(c.cursorAtScroll())
 }
 
 // SortedLocations returns all the locations sorted by priority level. If two
 // location lists have the same priority level, then the location list ID is used
 // to disambiguate order.
 func (c *Cursor) SortedLocations() []textapi.Location {
-	// re-use previous allocation
-	c.locsSlice = c.locsSlice[:0]
-	c.locsSliceTemp = c.locsSliceTemp[:0]
-	for _, list := range c.drawLocations {
-		c.locsSliceTemp = append(c.locsSliceTemp, list)
-	}
-
-	sort.Slice(c.locsSliceTemp, func(i, j int) bool {
-		return c.locsSliceTemp[i].priority <
-			c.locsSliceTemp[j].priority ||
-			(c.locsSliceTemp[i].priority == c.locsSliceTemp[j].priority &&
-				c.locsSliceTemp[i].ID < c.locsSliceTemp[j].ID)
-	})
-
-	for _, list := range c.locsSliceTemp {
-		for _, loc := range list.locations {
-			c.locsSlice = append(c.locsSlice, loc)
-		}
-	}
-	return c.locsSlice
+	return c.locationStore.SortedLocations()
 }
 
 // SetLocationList sets a location list on this cursor. It substitutes and returns
@@ -1475,23 +1382,7 @@ func (c *Cursor) SortedLocations() []textapi.Location {
 func (c *Cursor) SetLocationList(
 	pri textapi.LocationPriority, ID string, l LocationList,
 ) LocationList {
-	prev, ok := c.locs[ID]
-	if ok {
-		c.clearMessages(ID)
-		c.drawLocations[ID].locations = c.drawLocations[ID].locations[:0]
-		c.drawLocations[ID].priority = pri
-	} else {
-		c.drawLocations[ID] = &priorityLocationList{ID: ID, priority: pri}
-	}
-
-	if l == nil {
-		delete(c.locs, ID)
-	} else {
-		c.locs[ID] = l
-		c.processList(ID, l)
-	}
-
-	return prev
+	return c.locationStore.SetLocationList(pri, ID, l)
 }
 
 func (c *Cursor) endOfLocationList(
@@ -1547,7 +1438,7 @@ func (c *Cursor) movePastCursor(
 // list set by SetLocationList. If there isn't a location list set, this method returns
 // false.
 func (c *Cursor) MoveToNextLocation(ID string) bool {
-	l, ok := c.locs[ID]
+	l, ok := c.locationStore.LocationList(ID)
 	if !ok {
 		return false
 	}
@@ -1560,7 +1451,7 @@ func (c *Cursor) MoveToNextLocation(ID string) bool {
 // location list set by SetLocationList. If there isn't a location list set,
 // this method returns false.
 func (c *Cursor) MoveToPrevLocation(ID string) bool {
-	l, ok := c.locs[ID]
+	l, ok := c.locationStore.LocationList(ID)
 	if !ok {
 		return false
 	}
