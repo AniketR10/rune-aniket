@@ -86,10 +86,6 @@ func (d *testDispatcher) ESCDispatch(intermediates []byte, ignore bool, ch byte)
 	d.dispatched = append(d.dispatched, dispatchedEsc{intermediates, ignore, ch})
 }
 
-func (d *testDispatcher) UnknownAction(action Action) {
-	panic(fmt.Sprintf("unknown action: %v", action))
-}
-
 func TestScanner(t *testing.T) {
 	t.Run("parse osc", func(t *testing.T) {
 		var d testDispatcher

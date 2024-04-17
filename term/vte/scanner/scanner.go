@@ -217,7 +217,7 @@ func (p *Scanner) performAction(action Action, ch byte) {
 		p.processUtf8(ch)
 	case Ignore: /* do nothing */
 	default:
-		p.driver.UnknownAction(action)
+		panic("unknown action")
 	}
 }
 

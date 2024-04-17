@@ -38,7 +38,4 @@ type Driver interface {
 	// The ignore flag indicates that more than two intermediates arrived and
 	// subsequent characters were ignored.
 	ESCDispatch(intermediates []byte, ignore bool, ch byte)
-
-	// UnknownAction is dispatched when an unknown action was scanned by the scanner.
-	UnknownAction(action Action)
 }
