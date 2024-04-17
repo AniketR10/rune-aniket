@@ -215,9 +215,9 @@ func (p *Scanner) performAction(action Action, ch byte) {
 		p.params.reset()
 	case BeginUtf8:
 		p.processUtf8(ch)
-	case Ignore: /* do nothing */
+	case Ignore, None: /* do nothing */
 	default:
-		panic("unknown action")
+		p.log(log.WarnLevel, "unknown action: %v", action)
 	}
 }
 
