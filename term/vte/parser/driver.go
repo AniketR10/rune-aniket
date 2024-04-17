@@ -87,21 +87,21 @@ func (p *driver) Execute(ch byte) {
 	case c0SO:
 		p.handler.SetActiveCharset(CharsetIndexG1)
 	default:
-		p.log(log.WarnLevel, "unhandled execute byte=%02x", ch)
+		p.log(log.DebugLevel, "unhandled execute byte=%02x", ch)
 	}
 }
 
 func (p *driver) Hook(params [][]uint16, intermediates []byte, ignore bool, action rune) {
-	p.log(log.WarnLevel, "unhandled hook params=%v, ints: %v, ignore: %v, action: %v",
+	p.log(log.DebugLevel, "unhandled hook params=%v, ints: %v, ignore: %v, action: %v",
 		params, intermediates, ignore, action)
 }
 
 func (p *driver) Put(ch byte) {
-	p.log(log.WarnLevel, "unhandled put byte=%v", ch)
+	p.log(log.DebugLevel, "unhandled put byte=%v", ch)
 }
 
 func (p *driver) Unhook() {
-	p.log(log.WarnLevel, "unhandled unhook")
+	p.log(log.DebugLevel, "unhandled unhook")
 }
 
 func (p *driver) OSCDispatch(params [][]byte, bellTerminated bool) {
@@ -556,7 +556,7 @@ func (p *driver) attrsFromSgrParameters(params [][]uint16) []Attr {
 	for i := 0; i < len(params); i++ {
 		param := params[i]
 		if len(param) == 0 || len(param) > 2 {
-			p.log(log.WarnLevel,
+			p.log(log.DebugLevel,
 				"unhandled sgr parameter in CSI dispatch: params=%v", params)
 			continue
 		}
@@ -729,7 +729,7 @@ func (p *driver) log(level log.Level, msg string, args ...any) {
 func (p *driver) logUnhandledCSI(
 	params [][]uint16, intermediates []byte, action rune,
 ) {
-	p.log(log.WarnLevel, "Unhandled CSI action=%q, params=%v, intermediates=%v",
+	p.log(log.DebugLevel, "Unhandled CSI action=%q, params=%v, intermediates=%v",
 		action, params, intermediates)
 }
 
@@ -743,7 +743,7 @@ func (p *driver) logUnexpectedParamsLength(
 func (p *driver) logUnhandledESC(
 	intermediates []byte, b byte,
 ) {
-	p.log(log.WarnLevel, "Unhandled ESC ints=%v, byte=%c", intermediates, b)
+	p.log(log.DebugLevel, "Unhandled ESC ints=%v, byte=%c", intermediates, b)
 }
 
 func (p *driver) logUnhandledOSC(params [][]byte) {
@@ -755,11 +755,11 @@ func (p *driver) logUnhandledOSC(params [][]byte) {
 		}
 		buf.WriteString("],")
 	}
-	p.log(log.WarnLevel, "unhandled osc_dispatch: [%s]", buf.String())
+	p.log(log.DebugLevel, "unhandled osc_dispatch: [%s]", buf.String())
 }
 
 func (p *driver) logUnhandledAttribute(params [][]uint16) {
-	p.log(log.TraceLevel, "Unhandled Attribute in CSI dispatch: params=%v", params)
+	p.log(log.DebugLevel, "Unhandled Attribute in CSI dispatch: params=%v", params)
 }
 
 // handleColonRGB handles colon separated RGB color escape sequence.
