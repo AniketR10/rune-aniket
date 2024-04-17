@@ -8,6 +8,7 @@ import (
 	"github.com/ernestrc/blue/logging"
 	"github.com/ernestrc/tcell/v3"
 	log "github.com/sirupsen/logrus"
+	"unstable.build/go-tui/term/vte/scanner"
 )
 
 // C0 set of 7-bit control characters (from ANSI X3.4-1977).
@@ -548,6 +549,11 @@ func (p *driver) ESCDispatch(intermediates []byte, ignore bool, b byte) {
 	default:
 		p.logUnhandledESC(intermediates, b)
 	}
+}
+
+func (p *driver) UnknownAction(action scanner.Action) {
+	p.log(log.WarnLevel,
+		"scanned unknown action: %+v", action)
 }
 
 func (p *driver) attrsFromSgrParameters(params [][]uint16) []Attr {

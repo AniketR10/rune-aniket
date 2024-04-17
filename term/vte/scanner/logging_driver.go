@@ -5,23 +5,23 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-type loggingDriverer struct {
+type logginDriver struct {
 	driver Driver
 }
 
 func WithLoggingDriver(p Driver) Driver {
-	return loggingDriverer{driver: p}
+	return logginDriver{driver: p}
 }
 
-func (p loggingDriverer) Print(r rune) {
+func (p logginDriver) Print(r rune) {
 	p.log(log.TraceLevel, "print %c", r)
 	p.driver.Print(r)
 }
-func (p loggingDriverer) Execute(ch byte) {
+func (p logginDriver) Execute(ch byte) {
 	p.log(log.TraceLevel, "execute %c", ch)
 	p.driver.Execute(ch)
 }
-func (p loggingDriverer) Hook(
+func (p logginDriver) Hook(
 	params [][]uint16, intermediates []byte,
 	ignore bool, action rune,
 ) {
@@ -31,19 +31,19 @@ func (p loggingDriverer) Hook(
 	p.driver.Hook(params, intermediates, ignore, action)
 }
 
-func (p loggingDriverer) Put(ch byte) {
+func (p logginDriver) Put(ch byte) {
 	p.log(log.TraceLevel, "put %c", ch)
 	p.driver.Put(ch)
 }
-func (p loggingDriverer) Unhook() {
+func (p logginDriver) Unhook() {
 	p.log(log.TraceLevel, "unhook")
 	p.driver.Unhook()
 }
-func (p loggingDriverer) OSCDispatch(params [][]byte, bellTerminated bool) {
+func (p logginDriver) OSCDispatch(params [][]byte, bellTerminated bool) {
 	p.log(log.TraceLevel, "OSCDispatch params=%v, bell=%t", params, bellTerminated)
 	p.driver.OSCDispatch(params, bellTerminated)
 }
-func (p loggingDriverer) CSIDispatch(
+func (p logginDriver) CSIDispatch(
 	params [][]uint16, intermediates []byte,
 	ignore bool, action rune,
 ) {
@@ -52,7 +52,7 @@ func (p loggingDriverer) CSIDispatch(
 		params, len(intermediates), ignore, action)
 	p.driver.CSIDispatch(params, intermediates, ignore, action)
 }
-func (p loggingDriverer) ESCDispatch(
+func (p logginDriver) ESCDispatch(
 	intermediates []byte, ignore bool, ch byte,
 ) {
 	p.log(log.TraceLevel, "ESCDispatch len(intermediates)=%d, "+
@@ -61,7 +61,14 @@ func (p loggingDriverer) ESCDispatch(
 	p.driver.ESCDispatch(intermediates, ignore, ch)
 }
 
-func (p loggingDriverer) log(level log.Level, msg string, args ...any) {
+func (p logginDriver) UnknownAction(
+	action Action,
+) {
+	p.log(log.TraceLevel, "UnknownAction: %v", action)
+	p.driver.UnknownAction(action)
+}
+
+func (p logginDriver) log(level log.Level, msg string, args ...any) {
 	log.WithField(logging.KeyClass, "scanner.Driver").
 		Logf(level, msg, args...)
 }
