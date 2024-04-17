@@ -2141,6 +2141,95 @@ func TestCursorReplace(t *testing.T) {
 	})
 }
 
+func TestCursorMoveRightWrap(t *testing.T) {
+	t.Run("no seek horizontal", func(t *testing.T) {
+		const initialContent = "1\n2"
+		c := setupCursorContent(t, 3, 3, initialContent, false)
+
+		cell, ok := c.Cell()
+		require.True(t, ok)
+		assert.Equal(t, '1', cell.Ch)
+
+		assert.True(t, c.MoveRightWrap())
+		assert.Equal(t, term.Coordinates{X: 1}, c.CursorAtScroll())
+		assert.True(t, c.MoveRightWrap())
+		assert.Equal(t, term.Coordinates{X: 2}, c.CursorAtScroll())
+		assert.True(t, c.MoveRightWrap())
+		assert.Equal(t, term.Coordinates{Y: 1, X: 0}, c.CursorAtScroll())
+		assert.True(t, c.MoveRightWrap())
+		assert.Equal(t, term.Coordinates{Y: 1, X: 1}, c.CursorAtScroll())
+		assert.True(t, c.MoveRightWrap())
+		assert.Equal(t, term.Coordinates{Y: 1, X: 2}, c.CursorAtScroll())
+		assert.True(t, c.MoveRightWrap())
+		assert.Equal(t, term.Coordinates{Y: 2, X: 0}, c.CursorAtScroll())
+		assert.True(t, c.MoveRightWrap())
+		assert.Equal(t, term.Coordinates{Y: 2, X: 1}, c.CursorAtScroll())
+		assert.True(t, c.MoveRightWrap())
+		assert.Equal(t, term.Coordinates{Y: 2, X: 2}, c.CursorAtScroll())
+
+		assert.False(t, c.MoveRightWrap())
+	})
+
+	t.Run("with seek horizontal", func(t *testing.T) {
+		const initialContent = "11\n22"
+		c := setupCursorContent(t, 1, 1, initialContent, false)
+
+		cell, ok := c.Cell()
+		require.True(t, ok)
+		assert.Equal(t, '1', cell.Ch)
+
+		assert.True(t, c.MoveRightWrap())
+		assert.Equal(t, term.Coordinates{X: 1}, c.CursorAtScroll())
+		assert.True(t, c.MoveRightWrap())
+		assert.Equal(t, term.Coordinates{Y: 1, X: 0}, c.CursorAtScroll())
+		assert.True(t, c.MoveRightWrap())
+		assert.Equal(t, term.Coordinates{Y: 1, X: 1}, c.CursorAtScroll())
+		assert.False(t, c.MoveRightWrap())
+	})
+}
+
+func TestCursorMoveLeftWrap(t *testing.T) {
+	t.Run("no seek horizontal", func(t *testing.T) {
+		const initialContent = "1\n2"
+		c := setupCursorContent(t, 3, 3, initialContent, false)
+
+		c.MoveToScroll(term.Coordinates{Y: 2, X: 2})
+
+		assert.True(t, c.MoveLeftWrap())
+		assert.Equal(t, term.Coordinates{Y: 2, X: 1}, c.CursorAtScroll())
+		assert.True(t, c.MoveLeftWrap())
+		assert.Equal(t, term.Coordinates{Y: 2, X: 0}, c.CursorAtScroll())
+		assert.True(t, c.MoveLeftWrap())
+		assert.Equal(t, term.Coordinates{Y: 1, X: 0}, c.CursorAtScroll())
+		assert.True(t, c.MoveLeftWrap())
+		assert.Equal(t, term.Coordinates{}, c.CursorAtScroll())
+
+		assert.False(t, c.MoveLeftWrap())
+	})
+
+	t.Run("with seek horizontal", func(t *testing.T) {
+		const initialContent = "11\n22"
+		c := setupCursorContent(t, 1, 1, initialContent, false)
+
+		c.MoveToScroll(term.Coordinates{Y: 2, X: 2})
+
+		assert.True(t, c.MoveLeftWrap())
+		assert.Equal(t, term.Coordinates{Y: 2, X: 1}, c.CursorAtScroll())
+		assert.True(t, c.MoveLeftWrap())
+		assert.Equal(t, term.Coordinates{Y: 2, X: 0}, c.CursorAtScroll())
+		assert.True(t, c.MoveLeftWrap())
+		assert.Equal(t, term.Coordinates{Y: 1, X: 1}, c.CursorAtScroll())
+		assert.True(t, c.MoveLeftWrap())
+		assert.Equal(t, term.Coordinates{Y: 1, X: 0}, c.CursorAtScroll())
+		assert.True(t, c.MoveLeftWrap())
+		assert.Equal(t, term.Coordinates{X: 1}, c.CursorAtScroll())
+		assert.True(t, c.MoveLeftWrap())
+		assert.Equal(t, term.Coordinates{}, c.CursorAtScroll())
+
+		assert.False(t, c.MoveLeftWrap())
+	})
+}
+
 func newBenchmarkScroll(width, height int, fortunes int) (scroll *component.Scroll) {
 	scroll = component.NewScroll(cell.NewBuffer())
 	for i := 0; i < fortunes; i++ {
