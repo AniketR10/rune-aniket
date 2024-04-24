@@ -364,6 +364,88 @@ $ ▐
 		cfg.Modal = true
 		testSequence(t, cfg, 20*time.Millisecond, cases)
 	})
+
+	t.Run("dollar key with multiline prompt line", func(t *testing.T) {
+		cases := []vtetest.Case{
+			{"echo blaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+				`$ echo blaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaa▐   
+                    
+                    
+                    
+                    
+                    
+                    
+                    `},
+			{"<0",
+				`$ echo blaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaa
+▐aaaaaaaaaaaaaaa    
+                    
+                    
+                    
+                    
+                    
+                    
+              NORMAL`},
+			{"\\$\\$",
+				`$ echo blaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaa▐    
+                    
+                    
+                    
+                    
+                    
+                    
+              NORMAL`},
+		}
+		cfg := DefaultConfig()
+		cfg.Modal = true
+		testSequence(t, cfg, 20*time.Millisecond, cases)
+	})
+
+	t.Run("multiline go up before prompt start", func(t *testing.T) {
+		cases := []vtetest.Case{
+			{"echo blaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+				`$ echo blaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaa▐   
+                    
+                    
+                    
+                    
+                    
+                    
+                    `},
+			{"<0kk",
+				`$ ▐cho blaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaa    
+                    
+                    
+                    
+                    
+                    
+                    
+              NORMAL`},
+			{"\\$\\$0",
+				`$ ▐cho blaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaa    
+                    
+                    
+                    
+                    
+                    
+                    
+              NORMAL`},
+		}
+		cfg := DefaultConfig()
+		cfg.Modal = true
+		testSequence(t, cfg, 20*time.Millisecond, cases)
+	})
 }
 
 func TestViEditUnit(t *testing.T) {

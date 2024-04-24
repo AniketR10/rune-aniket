@@ -353,7 +353,7 @@ func (v *viHandler) handle(ev term.Event) (exit, handled bool) {
 
 	switch ev.Ch {
 	case '$':
-		if !v.sync.vi.IsEditMode() && v.sync.vi.IsSearchMode() {
+		if !v.sync.vi.IsEditMode() && !v.sync.vi.IsSearchMode() {
 			// manage manually to avoid confusing shell blank cells
 			// with end of line.
 			v.scheduleAfterBell(v.remoteMoveToEndOfLine)
@@ -415,7 +415,7 @@ func (v *viHandler) handle(ev term.Event) (exit, handled bool) {
 		v.sync.vi.Handle(ev)
 	})
 
-	// correct mouse coordinates beyond last line so
+	// correct cursor coordinates beyond last line so
 	// when moving through graphical windows doesn't
 	// leave cursor in an non-useful coordinate.
 	//
@@ -501,12 +501,6 @@ func (v *viHandler) trimToLastValidColumn(pos term.Coordinates) term.Coordinates
 	return pos
 }
 
-func (v *viHandler) moveViToLineLastColumnOffset(offset int) {
-	_, lastLineEnd := v.lastPromptLine()
-	lastLineEnd.X += offset
-	v.viSetCursorAtScroll(lastLineEnd)
-}
-
 func (v *viHandler) remoteMoveTo(target term.Coordinates) (actual int) {
 	// it's assumed that prompt is at valid start of row
 	start := v.comp.cursorAtScroll()
@@ -546,26 +540,30 @@ func (v *viHandler) moveViToBounds() {
 	promptStart := v.comp.cursorAtScroll()
 	pos := v.sync.vi.CursorAtScroll()
 
-	_, lastNonNullCharacter := v.lastPromptLine()
-
+	_, endOfPromptLine := v.lastPromptLine()
 	// correct past last line + 1
-	if pos.Y > lastNonNullCharacter.Y+1 {
-		v.moveViToLineLastColumnOffset(1)
+	if pos.Y > endOfPromptLine.Y+1 {
+		_, lastLineEnd := v.lastPromptLine()
+		lastLineEnd.X++
+		v.viSetCursorAtScroll(lastLineEnd)
 		return
 	}
 
 	// correct past last line + 1 to be at most x = 0
-	if pos.Y == lastNonNullCharacter.Y+1 && pos.X != 0 {
-		pos = term.Coordinates{Y: lastNonNullCharacter.Y + 1, X: 0}
+	if pos.Y == endOfPromptLine.Y+1 && pos.X != 0 {
+		pos = term.Coordinates{Y: endOfPromptLine.Y + 1, X: 0}
 		v.viSetCursorAtScroll(pos)
 		return
 	}
 
 	// correct past last column, at last line, only if not in edit mode
 	if !v.sync.vi.IsEditMode() {
-		lastValidCol := int(math.Max(float64(lastNonNullCharacter.X), float64(promptStart.X)))
-		if pos.Y == lastNonNullCharacter.Y && pos.X > lastValidCol {
-			pos = term.Coordinates{Y: lastNonNullCharacter.Y, X: lastValidCol}
+		lastValidCol := endOfPromptLine.X
+		if promptStart.Y == pos.Y {
+			lastValidCol = int(math.Max(float64(lastValidCol), float64(promptStart.X)))
+		}
+		if pos.Y == endOfPromptLine.Y && pos.X > lastValidCol {
+			pos = term.Coordinates{Y: pos.Y, X: lastValidCol}
 			v.viSetCursorAtScroll(pos)
 			return
 		}
@@ -573,7 +571,7 @@ func (v *viHandler) moveViToBounds() {
 
 	// correct prior to prompt start
 	if pos.Y == promptStart.Y && pos.X < promptStart.X {
-		pos = term.Coordinates{Y: lastNonNullCharacter.Y, X: promptStart.X}
+		pos = term.Coordinates{Y: pos.Y, X: promptStart.X}
 		v.viSetCursorAtScroll(pos)
 		return
 	}
@@ -581,33 +579,31 @@ func (v *viHandler) moveViToBounds() {
 
 func (v *viHandler) moveViToLastLineCharacter() {
 	promptStart := v.comp.cursorAtScroll()
-	pos := v.lastContentColumn()
-	pos.X = int(math.Max(float64(promptStart.X), float64(pos.X)))
-	v.viSetCursorAtScroll(pos)
-}
-
-// finds the last line column that's not a default
-// character or a space.
-func (v *viHandler) lastContentColumn() term.Coordinates {
 	// consider spaces = true because shell fills deleted columns
 	// with a space, so last content column should not consider tail spaces
 	// as content.
-	_, end := lastPromptLine(v.sync.vi.CellView(), v.width, true)
+	_, pos := lastPromptLine(v.sync.vi.CellView(), v.width, true)
 	// end coordinates are right exclusive
-	if end.X > 0 {
-		end.X--
+	if pos.X > 0 {
+		pos.X--
 	}
-	return end
+	if pos.Y == promptStart.Y {
+		pos.X = int(math.Max(float64(promptStart.X), float64(pos.X)))
+	}
+	v.viSetCursorAtScroll(pos)
 }
 
 func (v *viHandler) lastPromptLine() (term.Coordinates, term.Coordinates) {
-	return lastPromptLine(v.sync.vi.CellView(), v.width, false /* do not consider spaces */)
+	return lastPromptLine(v.sync.vi.CellView(), v.width,
+		false /* include at most one space with prompt line */)
 }
 
 func (v *viHandler) remoteMoveToEndOfLine() {
 	promptStart := v.comp.cursorAtScroll()
 	pos := v.lastValidLineColumn(v.sync.vi.CursorAtScroll().Y)
-	pos.X = int(math.Max(float64(promptStart.X), float64(pos.X)))
+	if promptStart.Y == pos.Y {
+		pos.X = int(math.Max(float64(promptStart.X), float64(pos.X)))
+	}
 	v.viSetCursorAtScroll(pos)
 }
 
