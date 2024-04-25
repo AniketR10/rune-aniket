@@ -79,6 +79,11 @@ $ ▐
 }
 
 func testSequence(t *testing.T, cfg Config, timeout time.Duration, cases []vtetest.Case) {
+	shell := "sh" // all systems were this runs should have sh
+	testSequenceShell(t, cfg, timeout, shell, cases)
+}
+
+func testSequenceShell(t *testing.T, cfg Config, timeout time.Duration, shell string, cases []vtetest.Case) {
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(context.Background())
 	temp := os.TempDir()
@@ -95,7 +100,7 @@ func testSequence(t *testing.T, cfg Config, timeout time.Duration, cases []vtete
 	ch := make(chan struct{}, 50 /* big enough for the max length sequence of events */)
 	cfg.WidthHint = 20
 	cfg.HeightHint = 10
-	cfg.Shell = "sh" // all systems were this runs should have sh
+	cfg.Shell = shell
 	handler, err := NewHandler(chanEventPublisher{ch}, nopNotifications{},
 		scheme, scheme, nopTabManager{}, cfg, "")
 	require.NoError(t, err)

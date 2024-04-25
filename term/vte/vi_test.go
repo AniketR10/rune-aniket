@@ -2,11 +2,15 @@ package vte
 
 import (
 	"context"
+	"os"
+	"path"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/ernestrc/sensible/find"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	browserapi "unstable.build/go-tui/api/browser"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
@@ -445,6 +449,53 @@ aaaaaaaaaaaaaaaa
 		cfg := DefaultConfig()
 		cfg.Modal = true
 		testSequence(t, cfg, 20*time.Millisecond, cases)
+	})
+
+}
+
+func TestZshEdgeCases(t *testing.T) {
+	// only run this if zsh is present in system running test harness
+	zshPath, err := find.Executable("zsh")
+	if err != nil {
+		t.SkipNow()
+	}
+
+	tempDir, err := os.MkdirTemp("", "")
+	require.NoError(t, err)
+
+	f, err := os.Create(path.Join(tempDir, ".zshrc"))
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_ = f.Close()
+		_ = os.Remove(f.Name())
+	})
+
+	_, err = f.Write([]byte(`
+bindkey '^a' beginning-of-line
+setopt COMBINING_CHARS
+PS1='$ '
+`))
+	require.NoError(t, err)
+
+	os.Setenv("ZDOTDIR", tempDir)
+
+	t.Run("insert mode edit wrap-around", func(t *testing.T) {
+		cases := []vtetest.Case{
+			{"echo blaaaaaa<0Cecho blaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+				`$ echo blaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaa▐   
+                    
+                    
+                    
+                    
+                    
+                    
+              INSERT`},
+		}
+		cfg := DefaultConfig()
+		cfg.Modal = true
+		testSequenceShell(t, cfg, 20*time.Millisecond, zshPath, cases)
 	})
 }
 

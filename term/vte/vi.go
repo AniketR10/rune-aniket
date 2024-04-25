@@ -195,6 +195,9 @@ func (v *viHandler) Edit(ctx context.Context, start, end term.Coordinates, str s
 		endForIntersection.X = 0
 		endForIntersection.Y++
 		lastLineEnd.X++
+		if lastLineEnd.X >= v.width {
+			lastLineEnd.Y++
+		}
 	}
 	intersectionStart, intersectionEnd, ok := term.CoordinatesIntersection(
 		start, endForIntersection, lastLineStart, lastLineEnd)
