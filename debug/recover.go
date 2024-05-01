@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"io/ioutil"
 
-	"github.com/ernestrc/blue/debug"
+	"github.com/unstablebuild/blue/debug"
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v3"
 )

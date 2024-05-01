@@ -8,8 +8,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/ernestrc/blue/encoding"
-	"github.com/ernestrc/blue/issue"
+	"github.com/unstablebuild/blue/encoding"
+	"github.com/unstablebuild/blue/issue"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui/api/config"
 	schemeapi "unstable.build/go-tui/api/scheme"

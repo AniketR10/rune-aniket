@@ -9,9 +9,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/ernestrc/blue/document"
-	"github.com/ernestrc/blue/iterator"
-	"github.com/ernestrc/blue/logging"
+	"github.com/unstablebuild/blue/document"
+	"github.com/unstablebuild/blue/iterator"
+	"github.com/unstablebuild/blue/logging"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/cell"

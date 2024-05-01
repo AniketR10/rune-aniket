@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/ernestrc/blue/iterator"
+	"github.com/unstablebuild/blue/iterator"
 )
 
 // ErrContextWindowExceeded is returned when the number of tokens in a request

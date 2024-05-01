@@ -5,8 +5,8 @@ import (
 	"os"
 	"path"
 
-	"github.com/ernestrc/blue/document"
-	"github.com/ernestrc/blue/document/firestore"
+	"github.com/unstablebuild/blue/document"
+	"github.com/unstablebuild/blue/document/firestore"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui/api/config"
 	issuesExtension "unstable.build/go-tui/cmd/extension_issues/extension"

@@ -1,7 +1,7 @@
 package vte
 
 import (
-	"github.com/ernestrc/tcell/v3"
+	"github.com/unstablebuild/tcell/v3"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text/clipboard"

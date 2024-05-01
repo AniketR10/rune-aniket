@@ -4,7 +4,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/ernestrc/blue/config"
+	"github.com/unstablebuild/blue/config"
 	uconfig "go.uber.org/config"
 	"unstable.build/go-tui/workspace"
 )

@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ernestrc/blue/document"
-	"github.com/ernestrc/blue/document/firstmover"
-	"github.com/ernestrc/blue/document/test"
-	"github.com/ernestrc/blue/encoding/toml"
+	"github.com/unstablebuild/blue/document"
+	"github.com/unstablebuild/blue/document/firstmover"
+	"github.com/unstablebuild/blue/document/test"
+	"github.com/unstablebuild/blue/encoding/toml"
 	"github.com/stretchr/testify/require"
 )
 

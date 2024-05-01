@@ -53,7 +53,7 @@ func TestDefaultSwapFile(t *testing.T) {
 		{"ssh:///a.go", "ssh://my_host/tmp", "", true},
 		{"ssh://my_host/a.go", "ssh:///tmp", "", true},
 		{"ssh://my_host/a.go", "ssh://creepy_host/tmp", "", true},
-		{"ssh://ernestrc@my_host/a.go", "ssh://jj.furman@my_host/tmp", "", true},
+		{"ssh://unstablebuild@my_host/a.go", "ssh://jj.furman@my_host/tmp", "", true},
 		{"ssh://user@my_host/a.go", "ssh://user@my_host/tmp", "ssh://user@my_host/tmp/.a.go.swp", false},
 		{"ssh://my_host/a.go", "ssh://my_host/tmp", "ssh://my_host/tmp/.a.go.swp", false},
 		{"ssh://my_host/./a.go", "ssh://my_host/./tmp", "ssh://my_host/tmp/.a.go.swp", false},

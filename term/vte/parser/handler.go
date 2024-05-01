@@ -1,7 +1,7 @@
 package parser
 
 import (
-	"github.com/ernestrc/tcell/v3"
+	"github.com/unstablebuild/tcell/v3"
 )
 
 // Handler abstracts a terminal TUI implementation.

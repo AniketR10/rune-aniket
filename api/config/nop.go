@@ -1,6 +1,6 @@
 package config
 
-import "github.com/ernestrc/tcell/v3"
+import "github.com/unstablebuild/tcell/v3"
 
 type nopConfig struct{}
 

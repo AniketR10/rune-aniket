@@ -10,7 +10,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/ernestrc/blue/logging"
+	"github.com/unstablebuild/blue/logging"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	schemeapi "unstable.build/go-tui/api/scheme"

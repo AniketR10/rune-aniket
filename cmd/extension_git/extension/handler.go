@@ -11,9 +11,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/ernestrc/blue/iterator"
-	"github.com/ernestrc/blue/logging"
-	"github.com/ernestrc/tcell/v3"
+	"github.com/unstablebuild/blue/iterator"
+	"github.com/unstablebuild/blue/logging"
+	"github.com/unstablebuild/tcell/v3"
 	log "github.com/sirupsen/logrus"
 	"github.com/sourcegraph/go-diff/diff"
 	browserapi "unstable.build/go-tui/api/browser"

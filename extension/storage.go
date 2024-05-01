@@ -7,11 +7,11 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/ernestrc/blue/document"
-	doclog "github.com/ernestrc/blue/document/logging"
-	docrpc "github.com/ernestrc/blue/document/rpc"
-	bproto "github.com/ernestrc/blue/document/rpc/proto"
-	"github.com/ernestrc/blue/encoding/toml"
+	"github.com/unstablebuild/blue/document"
+	doclog "github.com/unstablebuild/blue/document/logging"
+	docrpc "github.com/unstablebuild/blue/document/rpc"
+	bproto "github.com/unstablebuild/blue/document/rpc/proto"
+	"github.com/unstablebuild/blue/encoding/toml"
 	log "github.com/sirupsen/logrus"
 
 	"unstable.build/go-tui/proto"

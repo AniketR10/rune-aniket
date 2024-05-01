@@ -3,7 +3,7 @@ package extension
 import (
 	"context"
 
-	"github.com/ernestrc/golang-internal-tools/lsp/protocol"
+	"github.com/unstablebuild/golang-internal-tools/lsp/protocol"
 	log "github.com/sirupsen/logrus"
 )
 

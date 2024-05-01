@@ -5,7 +5,7 @@ import (
 	"os"
 	"syscall"
 
-	"github.com/ernestrc/blue/logging"
+	"github.com/unstablebuild/blue/logging"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui/api/config"
 	schemeapi "unstable.build/go-tui/api/scheme"

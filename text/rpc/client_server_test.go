@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ernestrc/blue/document"
-	"github.com/ernestrc/blue/iterator"
-	"github.com/ernestrc/tcell/v3"
+	"github.com/unstablebuild/blue/document"
+	"github.com/unstablebuild/blue/iterator"
+	"github.com/unstablebuild/tcell/v3"
 	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

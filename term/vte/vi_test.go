@@ -451,6 +451,36 @@ aaaaaaaaaaaaaaaa
 		testSequence(t, cfg, 20*time.Millisecond, cases)
 	})
 
+	t.Run("multiline paste", func(t *testing.T) {
+		cases := []vtetest.Case{
+			{"echo blaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa>",
+				`$ echo blaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaa    
+blaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaa
+aaaaaaaaa           
+$ ▐                 
+                    
+                    
+                    `},
+			{"<kkkVjjyjjj0p",
+				`$ echo blaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaa    
+blaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaa
+aaaaaaaaa           
+$  ▐aaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaa          
+              NORMAL`},
+		}
+		cfg := DefaultConfig()
+		cfg.Modal = true
+		testSequence(t, cfg, 20*time.Millisecond, cases)
+	})
+
 }
 
 func TestZshEdgeCases(t *testing.T) {

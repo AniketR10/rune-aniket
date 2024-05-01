@@ -3,7 +3,7 @@ package command
 import (
 	"context"
 
-	"github.com/ernestrc/blue/iterator"
+	"github.com/unstablebuild/blue/iterator"
 )
 
 // Completer abstracts the ability to complete command arguments.

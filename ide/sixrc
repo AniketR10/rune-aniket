@@ -405,7 +405,7 @@ extensions:
         .tsx: typescript-language-server --stdio
         .json: typescript-language-server --stdio
         .swift: sourcekit-lsp
-        .rs: /Users/ernestrc/.cargo/bin/rust-analyzer
+        .rs: /Users/unstablebuild/.cargo/bin/rust-analyzer
 
 # Configuration for the command prompt.
 command:

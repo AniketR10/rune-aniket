@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/ernestrc/golang-internal-tools/lsp/protocol"
+	"github.com/unstablebuild/golang-internal-tools/lsp/protocol"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"unstable.build/go-tui/cell"

@@ -7,7 +7,7 @@ import (
 	"runtime"
 	"sync"
 
-	"github.com/ernestrc/blue/logging"
+	"github.com/unstablebuild/blue/logging"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"unstable.build/go-tui"

@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ernestrc/blue/retry"
+	"github.com/unstablebuild/blue/retry"
 	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

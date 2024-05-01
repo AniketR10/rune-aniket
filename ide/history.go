@@ -5,8 +5,8 @@ import (
 	"sort"
 	"time"
 
-	"github.com/ernestrc/blue/document"
-	"github.com/ernestrc/blue/logging"
+	"github.com/unstablebuild/blue/document"
+	"github.com/unstablebuild/blue/logging"
 	log "github.com/sirupsen/logrus"
 	textapi "unstable.build/go-tui/api/text"
 	workspaceapi "unstable.build/go-tui/api/workspace"

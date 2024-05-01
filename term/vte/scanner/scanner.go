@@ -5,7 +5,7 @@ import (
 
 	"unstable.build/go-tui/term/vte/utf8parser"
 
-	"github.com/ernestrc/blue/logging"
+	"github.com/unstablebuild/blue/logging"
 	log "github.com/sirupsen/logrus"
 )
 

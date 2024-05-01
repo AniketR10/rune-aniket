@@ -7,9 +7,9 @@ import (
 	"io"
 	"time"
 
-	"github.com/ernestrc/blue/iterator"
-	"github.com/ernestrc/blue/logging"
-	"github.com/ernestrc/blue/retry"
+	"github.com/unstablebuild/blue/iterator"
+	"github.com/unstablebuild/blue/logging"
+	"github.com/unstablebuild/blue/retry"
 	"github.com/pkoukk/tiktoken-go"
 	tiktokenLoader "github.com/pkoukk/tiktoken-go-loader"
 	"github.com/sashabaranov/go-openai"

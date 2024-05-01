@@ -6,8 +6,8 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/ernestrc/blue/iterator"
-	"github.com/ernestrc/blue/logging"
+	"github.com/unstablebuild/blue/iterator"
+	"github.com/unstablebuild/blue/logging"
 	log "github.com/sirupsen/logrus"
 	browserapi "unstable.build/go-tui/api/browser"
 	browserextension "unstable.build/go-tui/api/browser/extension"

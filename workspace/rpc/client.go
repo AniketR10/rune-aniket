@@ -8,8 +8,8 @@ import (
 	"syscall"
 	"time"
 
-	bluectx "github.com/ernestrc/blue/context"
-	"github.com/ernestrc/blue/logging"
+	bluectx "github.com/unstablebuild/blue/context"
+	"github.com/unstablebuild/blue/logging"
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/types/known/timestamppb"

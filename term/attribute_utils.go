@@ -1,7 +1,7 @@
 package term
 
 import (
-	"github.com/ernestrc/tcell/v3"
+	"github.com/unstablebuild/tcell/v3"
 )
 
 // AttributesDifference computes the set difference between a and b,

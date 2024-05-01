@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ernestrc/blue/retry"
-	blupspin "github.com/ernestrc/blue/upspin"
+	"github.com/unstablebuild/blue/retry"
+	blupspin "github.com/unstablebuild/blue/upspin"
 	"upspin.io/errors"
 	"upspin.io/upspin"
 )

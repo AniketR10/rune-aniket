@@ -3,7 +3,7 @@ package command
 import (
 	"testing"
 
-	"github.com/ernestrc/blue/document"
+	"github.com/unstablebuild/blue/document"
 	log "github.com/sirupsen/logrus"
 	textapi "unstable.build/go-tui/api/text"
 	"unstable.build/go-tui/component"

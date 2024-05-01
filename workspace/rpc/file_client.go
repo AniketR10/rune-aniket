@@ -7,7 +7,7 @@ import (
 	"os"
 	"runtime"
 
-	"github.com/ernestrc/blue/logging"
+	"github.com/unstablebuild/blue/logging"
 	log "github.com/sirupsen/logrus"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/proto"

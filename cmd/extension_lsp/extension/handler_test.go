@@ -5,8 +5,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/ernestrc/golang-internal-tools/lsp/protocol"
-	"github.com/ernestrc/golang-internal-tools/span"
+	"github.com/unstablebuild/golang-internal-tools/lsp/protocol"
+	"github.com/unstablebuild/golang-internal-tools/span"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"unstable.build/go-tui/api/config"

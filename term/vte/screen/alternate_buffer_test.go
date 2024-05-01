@@ -3,7 +3,7 @@ package screen
 import (
 	"testing"
 
-	"github.com/ernestrc/tcell/v3"
+	"github.com/unstablebuild/tcell/v3"
 	"github.com/rivo/uniseg"
 	"github.com/stretchr/testify/require"
 	"unstable.build/go-tui/cell"

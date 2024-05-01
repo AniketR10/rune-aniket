@@ -12,7 +12,7 @@ import (
 	"runtime"
 	"sync"
 
-	"github.com/ernestrc/blue/iterator"
+	"github.com/unstablebuild/blue/iterator"
 	"github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	sitter "github.com/smacker/go-tree-sitter"

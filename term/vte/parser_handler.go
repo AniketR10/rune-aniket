@@ -8,8 +8,8 @@ import (
 	"math"
 	"sync"
 
-	"github.com/ernestrc/blue/logging"
-	"github.com/ernestrc/tcell/v3"
+	"github.com/unstablebuild/blue/logging"
+	"github.com/unstablebuild/tcell/v3"
 	"github.com/rivo/uniseg"
 	log "github.com/sirupsen/logrus"
 	workspaceapi "unstable.build/go-tui/api/workspace"

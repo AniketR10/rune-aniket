@@ -11,9 +11,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/ernestrc/blue/document"
-	"github.com/ernestrc/blue/encoding/toml"
-	"github.com/ernestrc/blue/iterator"
+	"github.com/unstablebuild/blue/document"
+	"github.com/unstablebuild/blue/encoding/toml"
+	"github.com/unstablebuild/blue/iterator"
 	"github.com/ernestrc/go-multierror"
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"

@@ -7,8 +7,8 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/ernestrc/blue/iterator"
-	"github.com/ernestrc/blue/logging"
+	"github.com/unstablebuild/blue/iterator"
+	"github.com/unstablebuild/blue/logging"
 	log "github.com/sirupsen/logrus"
 	textapi "unstable.build/go-tui/api/text"
 	workspaceapi "unstable.build/go-tui/api/workspace"

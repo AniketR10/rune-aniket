@@ -10,7 +10,7 @@ import (
 	"os"
 	"syscall"
 
-	blupspin "github.com/ernestrc/blue/upspin"
+	blupspin "github.com/unstablebuild/blue/upspin"
 	multierr "github.com/ernestrc/go-multierror"
 	"unstable.build/go-tui/api/config"
 	schemeapi "unstable.build/go-tui/api/scheme"

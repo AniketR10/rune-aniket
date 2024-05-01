@@ -10,7 +10,7 @@ import (
 	"time"
 
 	multierr "github.com/ernestrc/go-multierror"
-	"github.com/ernestrc/tcell/v3"
+	"github.com/unstablebuild/tcell/v3"
 	log "github.com/sirupsen/logrus"
 	yaml "gopkg.in/yaml.v3"
 	"unstable.build/go-tui/api/config"

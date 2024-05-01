@@ -3,7 +3,7 @@ package search
 import (
 	"time"
 
-	"github.com/ernestrc/tcell/v3"
+	"github.com/unstablebuild/tcell/v3"
 	fzf "github.com/junegunn/fzf/src/algo"
 	"unstable.build/go-tui/term"
 )

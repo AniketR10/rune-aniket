@@ -4,9 +4,9 @@ import (
 	"context"
 	"os"
 
-	"github.com/ernestrc/blue/document"
-	docrpc "github.com/ernestrc/blue/document/rpc"
-	"github.com/ernestrc/blue/encoding/toml"
+	"github.com/unstablebuild/blue/document"
+	docrpc "github.com/unstablebuild/blue/document/rpc"
+	"github.com/unstablebuild/blue/encoding/toml"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/proto"
 )

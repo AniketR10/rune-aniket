@@ -5,8 +5,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/ernestrc/blue/document/firestore"
-	"github.com/ernestrc/blue/encoding/json"
+	"github.com/unstablebuild/blue/document/firestore"
+	"github.com/unstablebuild/blue/encoding/json"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"unstable.build/go-tui/api/config"

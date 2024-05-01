@@ -10,9 +10,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/ernestrc/blue/document"
-	"github.com/ernestrc/blue/encoding"
-	"github.com/ernestrc/blue/retry"
+	"github.com/unstablebuild/blue/document"
+	"github.com/unstablebuild/blue/encoding"
+	"github.com/unstablebuild/blue/retry"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/storage"
 	"unstable.build/go-tui/workspace"

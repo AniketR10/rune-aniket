@@ -3,7 +3,7 @@
 package term
 
 import (
-	"github.com/ernestrc/tcell/v3/termbox"
+	"github.com/unstablebuild/tcell/v3/termbox"
 )
 
 // Event type. See Event.Type field.

@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/ernestrc/blue/logging"
+	"github.com/unstablebuild/blue/logging"
 	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/recovery"
 	log "github.com/sirupsen/logrus"
 	grpc "google.golang.org/grpc"

@@ -7,7 +7,7 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/ernestrc/blue/logging"
+	"github.com/unstablebuild/blue/logging"
 	log "github.com/sirupsen/logrus"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"

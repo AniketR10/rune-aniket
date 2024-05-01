@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/ernestrc/blue/encoding/json"
+	"github.com/unstablebuild/blue/encoding/json"
 	"github.com/stretchr/testify/require"
 	"unstable.build/go-tui/api/config"
 	schemeapi "unstable.build/go-tui/api/scheme"

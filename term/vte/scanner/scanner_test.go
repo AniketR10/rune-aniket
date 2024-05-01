@@ -90,7 +90,7 @@ func TestScanner(t *testing.T) {
 	t.Run("parse osc", func(t *testing.T) {
 		var d testDispatcher
 		scanner := NewScanner(&d)
-		oscBytes := []byte("\x1b]2;ernestrc@ernests-mbp.lan: ~/src/go-tui\x07")
+		oscBytes := []byte("\x1b]2;unstablebuild@ernests-mbp.lan: ~/src/go-tui\x07")
 
 		for _, ch := range oscBytes {
 			scanner.Advance(ch)

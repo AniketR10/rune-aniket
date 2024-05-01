@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/ernestrc/blue/logging"
-	"github.com/ernestrc/blue/retry"
+	"github.com/unstablebuild/blue/logging"
+	"github.com/unstablebuild/blue/retry"
 	log "github.com/sirupsen/logrus"
 )
 

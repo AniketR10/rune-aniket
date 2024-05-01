@@ -8,12 +8,9 @@ require (
 	github.com/alecthomas/chroma v0.10.0
 	github.com/atotto/clipboard v0.1.2
 	github.com/disintegration/imaging v1.6.2
-	github.com/ernestrc/blue v1.43.2
 	github.com/ernestrc/dom v0.2.5-0.20201125033726-789c946aa938
 	github.com/ernestrc/go-multierror v1.1.2
-	github.com/ernestrc/golang-internal-tools v0.0.0-20220317145801-f8b5a950857b
 	github.com/ernestrc/sensible v0.3.1
-	github.com/ernestrc/tcell/v3 v3.3.7
 	github.com/fsnotify/fsnotify v1.5.4
 	github.com/golang/mock v1.6.0
 	github.com/hashicorp/go-hclog v0.14.1
@@ -26,6 +23,9 @@ require (
 	github.com/smacker/go-tree-sitter v0.0.0-20230501083651-a7d92773b3aa
 	github.com/sourcegraph/go-diff v0.6.1
 	github.com/stretchr/testify v1.9.0
+	github.com/unstablebuild/blue v1.44.0
+	github.com/unstablebuild/golang-internal-tools v0.0.2
+	github.com/unstablebuild/tcell/v3 v3.4.0
 	go.uber.org/config v1.4.0
 	go.uber.org/goleak v1.2.0
 	golang.org/x/crypto v0.22.0

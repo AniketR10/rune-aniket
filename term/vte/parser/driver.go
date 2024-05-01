@@ -5,8 +5,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ernestrc/blue/logging"
-	"github.com/ernestrc/tcell/v3"
+	"github.com/unstablebuild/blue/logging"
+	"github.com/unstablebuild/tcell/v3"
 	log "github.com/sirupsen/logrus"
 )
 

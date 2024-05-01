@@ -1,7 +1,7 @@
 package parser
 
 import (
-	"github.com/ernestrc/blue/logging"
+	"github.com/unstablebuild/blue/logging"
 	"github.com/rivo/uniseg"
 	log "github.com/sirupsen/logrus"
 )

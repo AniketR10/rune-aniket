@@ -8,7 +8,7 @@ import (
 	context "context"
 	reflect "reflect"
 
-	protocol "github.com/ernestrc/golang-internal-tools/lsp/protocol"
+	protocol "github.com/unstablebuild/golang-internal-tools/lsp/protocol"
 	gomock "github.com/golang/mock/gomock"
 )
 

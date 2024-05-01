@@ -7,7 +7,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/ernestrc/blue/logging"
+	"github.com/unstablebuild/blue/logging"
 	"github.com/hashicorp/go-hclog"
 	"github.com/sirupsen/logrus"
 )

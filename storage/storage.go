@@ -6,9 +6,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/ernestrc/blue/document"
-	"github.com/ernestrc/blue/document/firstmover"
-	"github.com/ernestrc/blue/encoding"
+	"github.com/unstablebuild/blue/document"
+	"github.com/unstablebuild/blue/document/firstmover"
+	"github.com/unstablebuild/blue/encoding"
 	"unstable.build/go-tui/api/config"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	workdoc "unstable.build/go-tui/storage/workspace"

@@ -14,8 +14,8 @@ import (
 	"syscall"
 	"time"
 
-	bluectx "github.com/ernestrc/blue/context"
-	"github.com/ernestrc/blue/logging"
+	bluectx "github.com/unstablebuild/blue/context"
+	"github.com/unstablebuild/blue/logging"
 	"github.com/ernestrc/sensible/find"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui/api/config"

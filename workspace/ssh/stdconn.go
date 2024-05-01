@@ -7,8 +7,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/ernestrc/blue/logging"
-	bluenet "github.com/ernestrc/blue/net"
+	"github.com/unstablebuild/blue/logging"
+	bluenet "github.com/unstablebuild/blue/net"
 	log "github.com/sirupsen/logrus"
 )
 

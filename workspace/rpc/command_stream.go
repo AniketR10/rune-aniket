@@ -10,8 +10,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/ernestrc/blue/logging"
-	bluenet "github.com/ernestrc/blue/net"
+	"github.com/unstablebuild/blue/logging"
+	bluenet "github.com/unstablebuild/blue/net"
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	schemeapi "unstable.build/go-tui/api/scheme"

@@ -8,7 +8,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/ernestrc/tcell/v3"
+	"github.com/unstablebuild/tcell/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	browserapi "unstable.build/go-tui/api/browser"

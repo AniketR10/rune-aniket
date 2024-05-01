@@ -11,7 +11,7 @@ import (
 	"syscall"
 	"time"
 
-	bluectx "github.com/ernestrc/blue/context"
+	bluectx "github.com/unstablebuild/blue/context"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/knownhosts"
 	"golang.org/x/term"

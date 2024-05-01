@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	bluectx "github.com/ernestrc/blue/context"
+	bluectx "github.com/unstablebuild/blue/context"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/workspace"

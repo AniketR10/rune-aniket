@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/ernestrc/blue/document"
-	"github.com/ernestrc/blue/retry"
+	"github.com/unstablebuild/blue/document"
+	"github.com/unstablebuild/blue/retry"
 )
 
 var retryStrategy = retry.SequentialStrategy(30 * time.Millisecond)

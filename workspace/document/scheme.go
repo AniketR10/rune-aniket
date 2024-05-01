@@ -9,9 +9,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ernestrc/blue/document"
-	"github.com/ernestrc/blue/encoding"
-	"github.com/ernestrc/blue/retry"
+	"github.com/unstablebuild/blue/document"
+	"github.com/unstablebuild/blue/encoding"
+	"github.com/unstablebuild/blue/retry"
 	"unstable.build/go-tui/api/config"
 	schemeapi "unstable.build/go-tui/api/scheme"
 	workspaceapi "unstable.build/go-tui/api/workspace"

@@ -17,7 +17,7 @@ const (
 	fortune = `Love in your heart wasn't put there to stay.
 Love isn't love 'til you give it away.
 		-- Oscar Hammerstein ⌘⌘`
-	wrapCopy = `module github.com/ernestrc/blue
+	wrapCopy = `module github.com/unstablebuild/blue
 
 go 1.14
 
@@ -251,7 +251,7 @@ func TestScrollDraw3(t *testing.T) {
 	scroll, w := newScrollWrapTestCase(t, width, height)
 
 	tests := []testutil.ComponentTestCase{
-		{nil, `module github.com/ernestrc/blue                    
+		{nil, `module github.com/unstablebuild/blue               
                                                    
 go 1.14                                            
                                                    

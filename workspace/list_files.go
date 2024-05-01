@@ -10,7 +10,7 @@ import (
 	"runtime"
 	"sync"
 
-	"github.com/ernestrc/blue/iterator"
+	"github.com/unstablebuild/blue/iterator"
 	multierr "github.com/ernestrc/go-multierror"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 )

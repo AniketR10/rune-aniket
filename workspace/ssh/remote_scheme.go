@@ -11,9 +11,9 @@ import (
 	"syscall"
 	"time"
 
-	bluectx "github.com/ernestrc/blue/context"
-	"github.com/ernestrc/blue/logging"
-	"github.com/ernestrc/blue/retry"
+	bluectx "github.com/unstablebuild/blue/context"
+	"github.com/unstablebuild/blue/logging"
+	"github.com/unstablebuild/blue/retry"
 	log "github.com/sirupsen/logrus"
 	schemeapi "unstable.build/go-tui/api/scheme"
 	workspaceapi "unstable.build/go-tui/api/workspace"

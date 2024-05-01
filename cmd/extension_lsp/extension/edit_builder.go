@@ -7,7 +7,7 @@ import (
 	"sort"
 
 	multierr "github.com/ernestrc/go-multierror"
-	"github.com/ernestrc/golang-internal-tools/lsp/protocol"
+	"github.com/unstablebuild/golang-internal-tools/lsp/protocol"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"

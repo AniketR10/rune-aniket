@@ -3,8 +3,8 @@ package extension
 import (
 	"testing"
 
-	"github.com/ernestrc/golang-internal-tools/lsp/protocol"
-	"github.com/ernestrc/golang-internal-tools/span"
+	"github.com/unstablebuild/golang-internal-tools/lsp/protocol"
+	"github.com/unstablebuild/golang-internal-tools/span"
 	"github.com/stretchr/testify/assert"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"

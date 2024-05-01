@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ernestrc/blue/document"
+	"github.com/unstablebuild/blue/document"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"

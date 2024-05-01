@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/ernestrc/blue/document"
-	"github.com/ernestrc/blue/iterator"
-	"github.com/ernestrc/blue/logging"
-	"github.com/ernestrc/blue/logging/trace"
-	"github.com/ernestrc/blue/retry"
+	"github.com/unstablebuild/blue/document"
+	"github.com/unstablebuild/blue/iterator"
+	"github.com/unstablebuild/blue/logging"
+	"github.com/unstablebuild/blue/logging/trace"
+	"github.com/unstablebuild/blue/retry"
 	"unstable.build/go-tui/cmd/extension_ai/backend"
 )
 

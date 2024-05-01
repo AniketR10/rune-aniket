@@ -9,9 +9,9 @@ import (
 	"os"
 	"reflect"
 
-	"github.com/ernestrc/blue/document"
-	"github.com/ernestrc/blue/encoding"
-	"github.com/ernestrc/blue/iterator"
+	"github.com/unstablebuild/blue/document"
+	"github.com/unstablebuild/blue/encoding"
+	"github.com/unstablebuild/blue/iterator"
 	multierr "github.com/ernestrc/go-multierror"
 	schemeapi "unstable.build/go-tui/api/scheme"
 	workspaceapi "unstable.build/go-tui/api/workspace"

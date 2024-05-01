@@ -7,7 +7,7 @@ import (
 	"strings"
 	"syscall"
 
-	bluectx "github.com/ernestrc/blue/context"
+	bluectx "github.com/unstablebuild/blue/context"
 	"github.com/ernestrc/go-multierror"
 	"unstable.build/go-tui/api/config"
 	schemeapi "unstable.build/go-tui/api/scheme"
