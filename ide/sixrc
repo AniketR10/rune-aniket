@@ -571,6 +571,8 @@ terminal:
   # Default shell to use rather than what's provided by the OS via $SHELL.
   #shell: bash
   # Colors
+  # Whether to use the terminal's modal mode.
+  #modal: false
   attr:
     fg: *default
     bg: *background

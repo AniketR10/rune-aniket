@@ -1147,11 +1147,16 @@ func (c ideConfig) terminalNeedsAttentionAttr() term.Attributes {
 		term.Attributes{Attrs: tcell.AttrBlink})
 }
 
-func (c ideConfig) terminalShell() (ret string) {
+func (c ideConfig) terminal() (config.Config, bool) {
 	if c.cfg == nil {
-		return
+		return nil, false
 	}
 	cfg, ok := c.getConfig(config.MapConfig(c.cfg), "terminal")
+	return cfg, ok
+}
+
+func (c ideConfig) terminalShell() (ret string) {
+	cfg, ok := c.terminal()
 	if !ok {
 		return
 	}
@@ -1164,12 +1169,26 @@ func (c ideConfig) terminalShell() (ret string) {
 	return ret
 }
 
+func (c ideConfig) terminalModal() (ret bool) {
+	cfg, ok := c.terminal()
+	if !ok {
+		return
+	}
+	ret, err := cfg.GetBool("modal")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["terminal.modal"] = err
+		}
+	}
+	return ret
+}
+
 func (c ideConfig) terminalConfig() vte.Config {
 	ret := vte.DefaultConfig()
 	ret.Attributes = c.terminalDefaultAttr()
 	ret.SelectionAttributes = c.terminalSelectionAttr()
 	ret.NeedsAttentionAttributes = c.terminalNeedsAttentionAttr()
-	ret.Modal = c.editorMode() == editorModeModal
+	ret.Modal = c.terminalModal()
 	ret.Shell = c.terminalShell()
 	ret.Clipboard = c.clipboard()
 	if log.IsLevelEnabled(log.TraceLevel) {

@@ -157,6 +157,7 @@ workspace:
 
 terminal:
     shell: sh
+    modal: true
     attr:
         fg: white
         bg: yellow
@@ -206,7 +207,7 @@ func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
 		Clipboard:                reg,
 		SelectionAttributes:      selectAttr,
 		NeedsAttentionAttributes: term.Attributes{Attrs: tcell.AttrBlink},
-		Modal:                    true,
+		Modal:                    false,
 		ClipboardRegister:        clipboard.DefaultRegisterID,
 	}, vteConfig)
 	assert.Equal(t, command.DefaultConfig().ShowManualAfter, cfg.commandOverlayShowManualAfter())
