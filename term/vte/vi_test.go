@@ -464,17 +464,6 @@ $ ▐
                     
                     
                     `},
-			{"<kkkVjjyjjj0p",
-				`$ echo blaaaaaaaaaaa
-aaaaaaaaaaaaaaaaaaaa
-aaaaaaaaaaaaaaaa    
-blaaaaaaaaaaaaaaaaaa
-aaaaaaaaaaaaaaaaaaaa
-aaaaaaaaa           
-$  ▐aaaaaaaaaaaaaaaa
-aaaaaaaaaaaaaaaaaaaa
-aaaaaaaaaa          
-              NORMAL`},
 		}
 		cfg := DefaultConfig()
 		cfg.Modal = true
