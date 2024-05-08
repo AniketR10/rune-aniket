@@ -11,6 +11,13 @@ steps:
   - git status --porcelain | grep '^[^ ?]' &> /dev/null && echo "make generate changes not staged for commit" && exit 1
   - make
   - make test
+- name: slack
+  image: plugins/slack
+  settings:
+    webhook:
+      from_secret: slack_webhook_url
+    channel: dev
+    icon_url: https://raw.githubusercontent.com/drone/brand/master/logos/png/dark/drone-logo-png-dark-256.png
 
 trigger:
   ref:
