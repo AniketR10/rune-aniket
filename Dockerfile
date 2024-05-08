@@ -15,6 +15,7 @@ RUN mkdir -p ~/.ssh && \
 RUN ssh-keyscan -t rsa git.unstable.build >> ~/.ssh/known_hosts
 RUN ssh-keyscan -t rsa github.com >> ~/.ssh/known_hosts
 RUN go env -w GOPRIVATE="github.com/unstablebuild,unstable.build/*"
+RUN go env -w GOCACHE="/go/cache"
 
 # forces to download and compile all dependencies
 RUN make && go test -c -o /dev/null $(go list -f '{{if .TestGoFiles}}{{.ImportPath}}{{end}}' ./...)

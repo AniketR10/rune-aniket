@@ -4,10 +4,11 @@ name: default
 
 steps:
 - name: test
-  image: us-central1-docker.pkg.dev/unstable-build-blue-dev/docker/go-tui-ci:v0.1.96
+  image: us-central1-docker.pkg.dev/unstable-build-blue-dev/docker/go-tui-ci:v0.1.96b
   environment:
     GIT_SSH_KEY:
       from_secret: git_ssh_key
+    GOCACHE: /go/cache
   commands:
   - apk add --update --no-cache make git openssh gcc g++ musl-dev linux-headers
   - mkdir -p ~/.ssh
