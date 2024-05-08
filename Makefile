@@ -48,6 +48,7 @@ coverage: $(BIN)
 	@ go test ./.../... -coverprofile $(BIN)/coverage
 	@ go tool cover -html=$(BIN)/coverage
 
+generate: GOPRIVATE=github.com/unstablebuild,unstable.build/*
 generate:
 	@ rm -rf **/rpc/*.pb.go
 	@ go generate ./...
