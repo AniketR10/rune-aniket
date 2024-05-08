@@ -9,6 +9,7 @@ steps:
     GIT_SSH_KEY:
       from_secret: git_ssh_key
   commands:
+  - apk add --update --no-cache make git openssh gcc g++ musl-dev linux-headers
   - mkdir -p ~/.ssh
   - echo "$GIT_SSH_KEY" > ~/.ssh/id_rsa
   - chmod 600 ~/.ssh/id_rsa
@@ -18,6 +19,7 @@ steps:
   - git config --global url.ssh://git@github.com/.insteadOf https://github.com/
   - make
   - make test
+
 - name: slack
   image: plugins/slack
   when:
