@@ -4,7 +4,7 @@ name: default
 
 steps:
 - name: test
-  image: alpine
+  image: golang:alpine
   commands:
   - apk add --update --no-cache make git
   - make generate
