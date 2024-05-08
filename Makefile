@@ -24,10 +24,12 @@ RELEASE_FILES=$(wildcard release/*)
 .PHONY: debug clean test coverage example_wasm generate sixdev format
 
 default: CGO_ENABLED=CGO_ENABLED=1
+default: GOPRIVATE=github.com/unstablebuild,unstable.build/*
 default: $(EXAMPLES) $(EXECS)
 
 debug: GOFLAGS=-race
 debug: CGO_ENABLED=CGO_ENABLED=1
+debug: GOPRIVATE=github.com/unstablebuild,unstable.build/*
 debug: $(EXAMPLES) $(EXECS)
 
 sixdev: GOFLAGS=-race
