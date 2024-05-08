@@ -1,0 +1,25 @@
+# This image is used to run builds with pre-downloaded dependencies
+# syntax=docker/dockerfile:1
+FROM --platform=linux/amd64 golang:alpine as build
+
+RUN apk add --no-cache make git openssh gcc g++ musl-dev linux-headers
+ARG GIT_SSH_KEY
+WORKDIR /src
+COPY . .
+
+RUN git config --global url.ssh://git@github.com/.insteadOf https://github.com/
+RUN mkdir -p ~/.ssh && \
+	echo "$GIT_SSH_KEY" > ~/.ssh/id_rsa && \
+	chmod 600 ~/.ssh/id_rsa && \
+	chmod 700 ~/.ssh
+RUN ssh-keyscan -t rsa git.unstable.build >> ~/.ssh/known_hosts
+RUN ssh-keyscan -t rsa github.com >> ~/.ssh/known_hosts
+RUN go env -w GOPRIVATE="github.com/unstablebuild,unstable.build/*"
+
+# forces to download and compile all dependencies
+RUN make && make test
+
+# use clean image with no source code! 
+FROM --platform=linux/amd64 golang:alpine
+COPY --from=build /go /go
+RUN rm -rf /go/pkg/mod/unstable.build

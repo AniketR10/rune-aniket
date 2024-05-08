@@ -3,6 +3,7 @@ GOTESTFLAGS=-race -timeout 120s
 GOTESTFLAGSNORACE=-timeout 120s
 GOFLAGS="-ldflags=-X main.Tag=$$(git describe --tags) -X main.Commit=$$(git rev-parse --short HEAD)"
 UNAME := $(shell uname)
+VERSION="$$(git describe --tags)"
 
 BIN=bin
 TARGET=target
@@ -21,7 +22,7 @@ EXECS=$(patsubst cmd/%/,$(BIN)/%,$(EXECDIRS))
 GOMOCKS=$(wildcard **/**/*_gomock.go) $(wildcard **/*_gomock.go)
 RELEASE_FILES=$(wildcard release/*)
 
-.PHONY: debug clean test coverage example_wasm generate sixdev format
+.PHONY: debug clean test coverage example_wasm generate sixdev format docker-build-gcp docker-push-gcp
 
 default: CGO_ENABLED=CGO_ENABLED=1
 default: GOPRIVATE=github.com/unstablebuild,unstable.build/*
@@ -114,3 +115,9 @@ dist: release
 
 lint:
 	@ .githooks/pre-commit
+
+docker-build-ci-gcp:
+	@ docker buildx build -f Dockerfile --platform linux/amd64 -t us-central1-docker.pkg.dev/unstable-build-blue-dev/docker/go-tui-ci:$(VERSION) --build-arg GIT_SSH_KEY="$$GIT_SSH_KEY" .
+
+docker-push-ci-gcp:
+	@ docker push us-central1-docker.pkg.dev/unstable-build-blue-dev/docker/go-tui-ci:$(VERSION)
