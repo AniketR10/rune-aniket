@@ -17,7 +17,7 @@ RUN ssh-keyscan -t rsa github.com >> ~/.ssh/known_hosts
 RUN go env -w GOPRIVATE="github.com/unstablebuild,unstable.build/*"
 
 # forces to download and compile all dependencies
-RUN make && make test
+RUN make && go test -c -o /dev/null $(go list -f '{{if .TestGoFiles}}{{.ImportPath}}{{end}}' ./...)
 
 # use clean image with no source code! 
 FROM --platform=linux/amd64 golang:alpine
