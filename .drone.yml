@@ -4,7 +4,7 @@ name: default
 
 steps:
 - name: test
-  image: us-central1-docker.pkg.dev/unstable-build-blue-dev/docker/go-tui-ci:v0.1.97
+  image: us-central1-docker.pkg.dev/unstable-build-blue-dev/docker/go-tui-ci:latest
   environment:
     GIT_SSH_KEY:
       from_secret: git_ssh_key

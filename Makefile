@@ -4,7 +4,6 @@ GOTESTFLAGS ?= -race -timeout 120s
 GOTESTFLAGSNORACE = -timeout 120s
 GOFLAGS="-ldflags=-X main.Tag=$$(git describe --tags) -X main.Commit=$$(git rev-parse --short HEAD)"
 UNAME := $(shell uname)
-VERSION="$$(git describe --tags)"
 
 BIN=bin
 TARGET=target
@@ -120,7 +119,7 @@ lint:
 	@ .githooks/pre-commit
 
 docker-build-ci-gcp:
-	@ docker buildx build -f Dockerfile --platform linux/amd64 -t us-central1-docker.pkg.dev/unstable-build-blue-dev/docker/go-tui-ci:$(VERSION) --build-arg GIT_SSH_KEY="$$GIT_SSH_KEY" .
+	@ docker buildx build -f Dockerfile --platform linux/amd64 -t us-central1-docker.pkg.dev/unstable-build-blue-dev/docker/go-tui-ci:latest --build-arg GIT_SSH_KEY="$$GIT_SSH_KEY" .
 
 docker-push-ci-gcp:
-	@ docker push us-central1-docker.pkg.dev/unstable-build-blue-dev/docker/go-tui-ci:$(VERSION)
+	@ docker push us-central1-docker.pkg.dev/unstable-build-blue-dev/docker/go-tui-ci:latest
