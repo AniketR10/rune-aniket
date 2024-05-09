@@ -1,7 +1,6 @@
 package ide
 
 import (
-	"io/ioutil"
 	"os"
 	"sync"
 	"testing"
@@ -18,17 +17,17 @@ import (
 func TestIDEInitializationIntegration(t *testing.T) {
 	t.Run("does not panic with sample config", func(t *testing.T) {
 		configFile, file1 := makeTestFiles(t)
-		file2, err := ioutil.TempFile("", "six_ide_test")
+		file2, err := os.CreateTemp("", "six_ide_test")
 		require.NoError(t, err)
 		require.NoError(t, file2.Close())
 
-		err = ioutil.WriteFile(configFile.Name(), []byte(sampleConfig), 0666)
+		err = os.WriteFile(configFile.Name(), []byte(sampleConfig), 0666)
 		require.NoError(t, err)
 
 		cwdURI, err := workspaceapi.CurrentUserHostURI(".")
 		require.NoError(t, err)
 
-		dir, err := ioutil.TempDir("", "")
+		dir, err := os.MkdirTemp("", "")
 		require.NoError(t, err)
 
 		i := new(IDE)
@@ -48,13 +47,13 @@ func TestIDEInitializationIntegration(t *testing.T) {
 	t.Run("does not panic with empty config", func(t *testing.T) {
 		configFile, file1 := makeTestFiles(t)
 
-		err := ioutil.WriteFile(configFile.Name(), []byte("{}"), 0666)
+		err := os.WriteFile(configFile.Name(), []byte("{}"), 0666)
 		require.NoError(t, err)
 
 		cwdURI, err := workspaceapi.CurrentUserHostURI(".")
 		require.NoError(t, err)
 
-		dir, err := ioutil.TempDir("", "")
+		dir, err := os.MkdirTemp("", "")
 		require.NoError(t, err)
 
 		i := new(IDE)
@@ -74,10 +73,10 @@ func TestIDEInitializationIntegration(t *testing.T) {
 	t.Run("takes a non-URI as a workspace", func(t *testing.T) {
 		configFile, file1 := makeTestFiles(t)
 
-		err := ioutil.WriteFile(configFile.Name(), []byte("{}"), 0666)
+		err := os.WriteFile(configFile.Name(), []byte("{}"), 0666)
 		require.NoError(t, err)
 
-		dir, err := ioutil.TempDir("", "")
+		dir, err := os.MkdirTemp("", "")
 		require.NoError(t, err)
 
 		i := new(IDE)
@@ -96,17 +95,17 @@ func TestIDEInitializationIntegration(t *testing.T) {
 
 	t.Run("does not publish an event before run is called", func(t *testing.T) {
 		configFile, file1 := makeTestFiles(t)
-		file2, err := ioutil.TempFile("", "six_ide_test")
+		file2, err := os.CreateTemp("", "six_ide_test")
 		require.NoError(t, err)
 		require.NoError(t, file2.Close())
 
-		err = ioutil.WriteFile(configFile.Name(), []byte(sampleConfig), 0666)
+		err = os.WriteFile(configFile.Name(), []byte(sampleConfig), 0666)
 		require.NoError(t, err)
 
 		cwdURI, err := workspaceapi.CurrentUserHostURI(".")
 		require.NoError(t, err)
 
-		dir, err := ioutil.TempDir("", "")
+		dir, err := os.MkdirTemp("", "")
 		require.NoError(t, err)
 
 		var published bool
@@ -129,11 +128,11 @@ func TestIDEInitializationIntegration(t *testing.T) {
 }
 
 func makeTestFiles(t *testing.T) (*os.File, *os.File) {
-	configFile, err := ioutil.TempFile("", "six_ide_test")
+	configFile, err := os.CreateTemp("", "six_ide_test")
 	require.NoError(t, err)
 	require.NoError(t, configFile.Close())
 
-	file, err := ioutil.TempFile("", "six_ide_test")
+	file, err := os.CreateTemp("", "six_ide_test")
 	require.NoError(t, err)
 	require.NoError(t, file.Close())
 

@@ -91,7 +91,7 @@ func (u URI) Equal(other URI) bool {
 func ParseURI(s string) (URI, error) {
 	u, err := url.Parse(s)
 	if err != nil {
-		return URI{}, fmt.Errorf("failed to parse URI: %s", err)
+		return URI{}, fmt.Errorf("url parse: %s", err)
 	}
 	return uriFromURL(u)
 }

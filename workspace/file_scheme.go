@@ -225,7 +225,7 @@ func (p *fileScheme) URI(path string) (workspaceapi.URI, error) {
 		return p.workspace.Path(), nil
 	})
 	if err != nil {
-		return workspaceapi.URI{}, err
+		return workspaceapi.URI{}, fmt.Errorf("expand path: %w", err)
 	}
 	return makeLocalURI(absPath)
 }

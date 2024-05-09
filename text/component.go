@@ -168,7 +168,7 @@ func (c *Component) Init(ed Editor, storage document.Service, w workspace.Loader
 			err = nil
 		}
 		if err != nil {
-			return err
+			return fmt.Errorf("open %q: %w", filename, err)
 		}
 		if first == nil {
 			first = h

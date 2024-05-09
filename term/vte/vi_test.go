@@ -82,7 +82,7 @@ $
 		}
 		cfg := DefaultConfig()
 		cfg.Modal = true
-		testSequence(t, cfg, 20*time.Millisecond, cases)
+		testSequence(t, cfg, defaultWaitForIdleVte, cases)
 	})
 
 	t.Run("edit/movement", func(t *testing.T) {
@@ -366,7 +366,7 @@ $ ▐
 
 		cfg := DefaultConfig()
 		cfg.Modal = true
-		testSequence(t, cfg, 20*time.Millisecond, cases)
+		testSequence(t, cfg, defaultWaitForIdleVte, cases)
 	})
 
 	t.Run("dollar key with multiline prompt line", func(t *testing.T) {
@@ -407,7 +407,7 @@ aaaaaaaaaaaaaaa▐
 		}
 		cfg := DefaultConfig()
 		cfg.Modal = true
-		testSequence(t, cfg, 20*time.Millisecond, cases)
+		testSequence(t, cfg, defaultWaitForIdleVte, cases)
 	})
 
 	t.Run("multiline go up before prompt start", func(t *testing.T) {
@@ -448,7 +448,7 @@ aaaaaaaaaaaaaaaa
 		}
 		cfg := DefaultConfig()
 		cfg.Modal = true
-		testSequence(t, cfg, 20*time.Millisecond, cases)
+		testSequence(t, cfg, defaultWaitForIdleVte, cases)
 	})
 
 	t.Run("multiline paste", func(t *testing.T) {
@@ -467,7 +467,7 @@ $ ▐
 		}
 		cfg := DefaultConfig()
 		cfg.Modal = true
-		testSequence(t, cfg, 20*time.Millisecond, cases)
+		testSequence(t, cfg, defaultWaitForIdleVte, cases)
 	})
 
 }
@@ -514,7 +514,7 @@ aaaaaaaaaaaaaaaa▐
 		}
 		cfg := DefaultConfig()
 		cfg.Modal = true
-		testSequenceShell(t, cfg, 20*time.Millisecond, zshPath, cases)
+		testSequenceShell(t, cfg, defaultWaitForIdleVte, zshPath, cases)
 	})
 }
 

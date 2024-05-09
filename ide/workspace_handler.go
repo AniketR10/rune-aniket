@@ -168,11 +168,11 @@ func (h *workspaceManagerHandler) init(
 		cfg.terminalConfig(), h.publishEvent, globalOpts...)
 	err = h.empty.subscribeCommands()
 	if err != nil {
-		return err
+		return fmt.Errorf("new ex: %w", err)
 	}
 	err = h.subscribeActiveWorkspaceCommands(h.empty)
 	if err != nil {
-		return err
+		return fmt.Errorf("subscribe active workspace commands: %w", err)
 	}
 
 	h.bar.Init()
@@ -213,7 +213,7 @@ func (h *workspaceManagerHandler) init(
 	for _, filename := range filenames {
 		uri, err := tempcwd.URI(filename)
 		if err != nil {
-			return err
+			return fmt.Errorf("make file %q uri: %w", filename, err)
 		}
 		uris = append(uris, uri)
 	}
@@ -221,7 +221,7 @@ func (h *workspaceManagerHandler) init(
 	shouldRestore := len(uris) == 0
 	err = h.addWorkspace(cwd, recfilename, uris, shouldRestore, !cfg.autoRestore(), -1)
 	if err != nil {
-		return err
+		return fmt.Errorf("add default workspace: %w", err)
 	}
 	h.focusProxy.Target = h.focusHandler()
 	h.union.UnionBottom(&h.bar, h.barSize())
@@ -541,7 +541,7 @@ func (h *workspaceManagerHandler) addWorkspace(
 	}
 	cwd, err := h.workspace.AddWorkspace(h.ctxWithLocker, uri)
 	if err != nil {
-		return fmt.Errorf("Failed to create new workspace for %q: %s", uri, err)
+		return fmt.Errorf("create new workspace for %q: %w", uri, err)
 	}
 
 	cfg, configErr := h.reloadConfig()
@@ -554,7 +554,7 @@ func (h *workspaceManagerHandler) addWorkspace(
 	if recfilename != "" {
 		recFile, err := cwd.URI(recfilename)
 		if err != nil {
-			return err
+			return fmt.Errorf("cwd make uri for recovery file: %w",  err)
 		}
 		textOpts = append(textOpts, text.WithRecoveryFile(recFile))
 	}
@@ -565,7 +565,7 @@ func (h *workspaceManagerHandler) addWorkspace(
 
 	ed, err := h.newEditor(cfg)
 	if err != nil {
-		return err
+		return fmt.Errorf("new editor: %w",  err)
 	}
 
 	// workspace capable of opening URIs other than the workspaceapi.URI
@@ -573,15 +573,15 @@ func (h *workspaceManagerHandler) addWorkspace(
 	ex, err := newEx(ed, multicwd, h.storage, cfg.terminalConfig(),
 		h.publishEvent, textOpts...)
 	if err != nil {
-		return err
+		return fmt.Errorf("new multi workspace: %w", err)
 	}
 	err = ex.subscribeCommands()
 	if err != nil {
-		return err
+		return fmt.Errorf("ex subscribe commands: %w", err)
 	}
 	err = h.subscribeActiveWorkspaceCommands(ex)
 	if err != nil {
-		return err
+		return fmt.Errorf("subscribe active workspace commands: %w", err)
 	}
 
 	res := extension.BrowserResources(ex.Browser())

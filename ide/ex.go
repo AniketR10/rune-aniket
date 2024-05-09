@@ -163,7 +163,7 @@ func (e *ex) subscribeCommands() error {
 				return e.completeCommand(ctx, cmd, args)
 			}))
 		if err != nil {
-			ret = multierr.Append(ret, err)
+			ret = multierr.Append(ret, fmt.Errorf("subscribe command: %w", err))
 		}
 	}
 	return ret

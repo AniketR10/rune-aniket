@@ -9,10 +9,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/unstablebuild/blue/logging"
-	"github.com/unstablebuild/blue/retry"
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
+	"github.com/unstablebuild/blue/logging"
+	"github.com/unstablebuild/blue/retry"
 	"unstable.build/go-tui"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/term"
@@ -77,10 +77,12 @@ func (i *IDE) init(
 
 	cwdURI, parseErr := workspaceapi.ParseURI(cwd)
 	if parseErr != nil {
+		parseErr = fmt.Errorf("could not parse workspace uri: %w", parseErr)
 		var pathErr error
 		cwdURI, pathErr = workspaceapi.CurrentUserHostURI(cwd)
 		if pathErr != nil {
-			return multierr.Append(pathErr, parseErr)
+			return multierr.Append(
+				parseErr, fmt.Errorf("make current host URI: %w", pathErr))
 		}
 	}
 
@@ -108,15 +110,15 @@ func (i *IDE) init(
 	workspaceManager := workspace.NewManager(i.ideConfig.workspace())
 	err := workspaceManager.RegisterScheme(ssh.Scheme, ssh.New)
 	if err != nil {
-		return err
+		return fmt.Errorf("register ssh scheme: %w", err)
 	}
 	err = workspaceManager.RegisterScheme(workspace.FileScheme, workspace.NewFileScheme)
 	if err != nil {
-		return err
+		return fmt.Errorf("register file scheme: %w", err)
 	}
 	err = workspaceManager.RegisterScheme(workspace.MemoryScheme, workspace.NewMemoryScheme)
 	if err != nil {
-		return err
+		return fmt.Errorf("register memory scheme: %w", err)
 	}
 
 	homeDir, err := os.UserHomeDir()
@@ -126,7 +128,7 @@ func (i *IDE) init(
 
 	homeDirURI, err := workspaceapi.CurrentUserHostURI(homeDir)
 	if err != nil {
-		return fmt.Errorf("home dir uri: %v", err)
+		return fmt.Errorf("make home dir uri: %v", err)
 	}
 
 	root, err := newWorkspaceManagerHandler(cwdURI, homeDirURI,
@@ -136,7 +138,7 @@ func (i *IDE) init(
 			return reloadConfig(cfgfilename, op.defaultWallpaper)
 		}, op.workspaceConfig)
 	if err != nil {
-		return err
+		return fmt.Errorf("new workspace manager: %w", err)
 	}
 	i.workspaceManager = workspaceManager
 	i.root = root

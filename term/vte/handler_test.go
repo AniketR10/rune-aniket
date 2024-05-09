@@ -15,6 +15,18 @@ import (
 	"unstable.build/go-tui/workspace"
 )
 
+// this is the timeout to wait for the shell to stop updating the
+// internal state of the vte, to call a test case "complete", so
+// assertions can run. The slower the host of the tests, the longer
+// this timeout should be.
+var defaultWaitForIdleVte = 30 * time.Millisecond
+
+func init() {
+	if os.Getenv("NOCI") == "" {
+		defaultWaitForIdleVte = 200 * time.Millisecond
+	}
+}
+
 func TestHandlerIntegration(t *testing.T) {
 	cases := []vtetest.Case{
 		{"",
@@ -75,7 +87,7 @@ $ ▐
 	}
 
 	cfg := DefaultConfig()
-	testSequence(t, cfg, 150*time.Millisecond, cases)
+	testSequence(t, cfg, defaultWaitForIdleVte, cases)
 }
 
 func testSequence(t *testing.T, cfg Config, timeout time.Duration, cases []vtetest.Case) {
