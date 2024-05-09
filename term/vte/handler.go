@@ -145,9 +145,13 @@ func (e *Handler) Resize(width, height int) {
 	if width == 0 || height == 0 {
 		return
 	}
-	e.width, e.height = width, height
 
+	e.width, e.height = width, height
+	// primary buffer resets the offset to max offset after every resize
+	// so we need to, reset the cursor position
+	var modalCursorPos term.Coordinates
 	if e.modalEnabled {
+		modalCursorPos = e.vi.cursorAtScroll()
 		e.vi.Resize(width, height)
 	}
 
@@ -158,9 +162,12 @@ func (e *Handler) Resize(width, height int) {
 		if !e.closed.Load() {
 			e.notifications.Notify(notifications.LevelError, "terminal set size: %v", err)
 		}
+		return
 	}
 
-	e.comp.ScrollBottom()
+	if e.modalEnabled {
+		e.vi.setCursorAtScroll(modalCursorPos)
+	}
 }
 
 // Draw satisfies tui.Component.

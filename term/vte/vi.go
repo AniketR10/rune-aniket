@@ -125,6 +125,18 @@ func (v *viHandler) Resize(width, height int) {
 	v.sync.vi.Resize(width, height)
 }
 
+func (v *viHandler) cursorAtScroll() term.Coordinates {
+	v.sync.mu.Lock()
+	defer v.sync.mu.Unlock()
+	return v.sync.vi.CursorAtScroll()
+}
+
+func (v *viHandler) setCursorAtScroll(pos term.Coordinates) {
+	v.sync.mu.Lock()
+	defer v.sync.mu.Unlock()
+	v.viSetCursorAtScroll(pos)
+}
+
 func (v *viHandler) Draw(w term.Writer) {
 	v.sync.mu.Lock()
 	defer v.sync.mu.Unlock()

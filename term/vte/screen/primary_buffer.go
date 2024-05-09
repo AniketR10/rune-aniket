@@ -29,7 +29,11 @@ func (b *PrimaryBuffer) Resize(width, height int) {
 	b.AltBuffer.height = height
 	b.scroll.Resize(width, height)
 
+	// prevents empty rows that were filled up by previous extendRowsToHeight
+	// in the event of height < previous height.
 	b.truncateBottomEmptyLines()
+	// ensures that we don't break alternate buffer
+	// invariant of having at least n=height rows
 	b.extendRowsToHeight()
 	b.Cells.ResetCapacity(width)
 	b.ResetOffset()
@@ -41,8 +45,8 @@ lines:
 	for y := b.Cells.Rows() - 1; y > 0 && y >= b.AltBuffer.height-1; y-- {
 		for x := 0; x < b.Cells.Columns(y); x++ {
 			cell := cells[y][x]
-			if cell.Ch != 0 && cell.Ch != ' ' {
-				continue lines
+			if cell.Ch != DefaultChar && cell.Ch != ' ' {
+				break lines
 			}
 		}
 		from := term.Coordinates{Y: y}

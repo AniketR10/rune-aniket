@@ -9,8 +9,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/unstablebuild/blue/logging"
 	log "github.com/sirupsen/logrus"
+	"github.com/unstablebuild/blue/logging"
 	"go.uber.org/multierr"
 	schemeapi "unstable.build/go-tui/api/scheme"
 	workspaceapi "unstable.build/go-tui/api/workspace"
@@ -369,10 +369,13 @@ func (t *Component) ScrollBottom() (ok bool) {
 		return
 	}
 
-	// vte scroll up/down has inverse semantics
 	buffer := t.parserHandler.sync.primBuf
 	offset := buffer.Offset()
 	max := buffer.MaxOffset()
+	// vte scroll up/down has inverse semantics
+	if offset.Y > max {
+		return t.parserHandler.scrollDown(offset.Y-max, true)
+	}
 	return t.parserHandler.scrollUp(max-offset.Y, true)
 }
 
