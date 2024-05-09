@@ -503,7 +503,7 @@ PS1='$ '
 			{"echo blaaaaaa<0Cecho blaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 				`$ echo blaaaaaaaaaaa
 aaaaaaaaaaaaaaaaaaaa
-aaaaaaaaaaaaaaaa▐   
+aaaaaaaaaaaaaaa▐    
                     
                     
                     

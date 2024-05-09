@@ -20,7 +20,7 @@ func newWaitParserHandler(h parser.Handler) *waitParserHandler {
 		// event-loop channel size so we stop processing callbacks
 		// before event loop callbacks get backed up and bell
 		// cannot be triggered anymore.
-		ch:      make(chan func(), 10),
+		ch:      make(chan func(), 50),
 		Handler: h,
 	}
 	return ret

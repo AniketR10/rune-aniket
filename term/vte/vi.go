@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/unstablebuild/blue/logging"
 	log "github.com/sirupsen/logrus"
+	"github.com/unstablebuild/blue/logging"
 	"unstable.build/go-tui"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
@@ -428,16 +428,15 @@ func (v *viHandler) handle(ev term.Event) (exit, handled bool) {
 	// the cursor logic heavily depends on the correct return values of Edit.
 	v.scheduleAfterBell(func() {
 		v.sync.vi.Handle(ev)
+		// correct cursor coordinates beyond last line so
+		// when moving through graphical windows doesn't
+		// leave cursor in an non-useful coordinate.
+		//
+		// After edits, content might have changed
+		// use bell to synchronize to the last state change
+		// and then move cursor to bounds.
+		v.moveViToBounds()
 	})
-
-	// correct cursor coordinates beyond last line so
-	// when moving through graphical windows doesn't
-	// leave cursor in an non-useful coordinate.
-	//
-	// After edits, content might have changed
-	// use bell to synchronize to the last state change
-	// and then move cursor to bounds.
-	v.scheduleAfterBell(v.moveViToBounds)
 
 	// use a copy of vi to know if event would be handled
 	// this copy gets its contents refreshed on every call to Edit above
