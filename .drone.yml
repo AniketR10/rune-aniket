@@ -19,7 +19,7 @@ steps:
   - ssh-keyscan -t rsa github.com >> ~/.ssh/known_hosts
   - git config --global url.ssh://git@github.com/.insteadOf https://github.com/
   - make
-  - make test
+  - make test NOCI="" GOTESTFLAGS="-race -timeout 300s"
 
 - name: slack
   image: plugins/slack

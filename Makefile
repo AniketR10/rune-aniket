@@ -1,6 +1,7 @@
 GO=go
-GOTESTFLAGS=-race -timeout 120s
-GOTESTFLAGSNORACE=-timeout 120s
+NOCI ?= true
+GOTESTFLAGS ?= -race -timeout 120s
+GOTESTFLAGSNORACE = -timeout 120s
 GOFLAGS="-ldflags=-X main.Tag=$$(git describe --tags) -X main.Commit=$$(git rev-parse --short HEAD)"
 UNAME := $(shell uname)
 VERSION="$$(git describe --tags)"
@@ -39,11 +40,11 @@ sixdev: $(EXAMPLES) bin/six
 
 example_wasm: $(EXAMPLE_WASM_BLOB)
 
-test: NOCI=true
+test: NOCI=$(NOCI)
 test:
 	@ go test ./.../... $(GOTESTFLAGS)
 
-test: NOCI=true
+test: NOCI=$(NOCI)
 test-no-race:
 	@ go test ./.../... $(GOTESTFLAGSNORACE)
 
