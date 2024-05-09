@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
+	"os"
 	"os/exec"
 	"strings"
 	"sync"
@@ -19,8 +20,11 @@ import (
 )
 
 // NOTE if this is failing or you are iterating on functionality
-// used by SSH, remember to build_docker.sh before running these tests again.
+// used by SSH, remember to call make run build_docker.sh before running these tests again.
 func TestIntegrationScheme(t *testing.T) {
+	if os.Getenv("NOCI") == "" {
+		t.SkipNow()
+	}
 	hostname, teardown := runDockerOrSkip(t)
 	t.Cleanup(func() { teardown() })
 

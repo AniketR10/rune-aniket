@@ -70,10 +70,6 @@ func TestReaderWriterListener(t *testing.T) {
 	})
 
 	t.Run("close of stdio returns", func(t *testing.T) {
-		// TODO for some reason when upgrading to mock 1.6.0
-		// and testify v1.8.1 this started failing.
-		t.Skip()
-
 		grpcServer := grpc.NewServer()
 		inRead, inWrite, err := os.Pipe()
 		require.NoError(t, err)

@@ -39,9 +39,11 @@ sixdev: $(EXAMPLES) bin/six
 
 example_wasm: $(EXAMPLE_WASM_BLOB)
 
+test: NOCI=true
 test:
 	@ go test ./.../... $(GOTESTFLAGS)
 
+test: NOCI=true
 test-no-race:
 	@ go test ./.../... $(GOTESTFLAGSNORACE)
 
