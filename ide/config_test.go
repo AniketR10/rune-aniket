@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/unstablebuild/tcell/v3"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/handler"
@@ -17,7 +17,6 @@ import (
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/term/vte"
 	"unstable.build/go-tui/text/clipboard"
-	sysclip "unstable.build/go-tui/text/clipboard/system"
 )
 
 var sampleConfig = `
@@ -195,8 +194,6 @@ func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
 	assert.Equal(t, browser.DefaultConfig().WallpaperAttr, cfg.workspaceWallpaperAttr())
 	assert.Equal(t, browser.DefaultConfig().WallpaperBackgroundAttr, cfg.workspaceWallpaperBackgroundAttr())
 	selectAttr := term.Attributes{Attrs: tcell.AttrReverse}
-	reg, err := sysclip.NewRegister()
-	require.NoError(t, err)
 
 	vteConfig := cfg.terminalConfig()
 	assert.NotNil(t, vteConfig.RingBell)
@@ -204,7 +201,7 @@ func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
 	vteConfig.ScheduleNextTick = nil
 	vteConfig.RingBell = nil
 	assert.Equal(t, vte.Config{
-		Clipboard:                reg,
+		Clipboard:                clipboard.NewInMemory(),
 		SelectionAttributes:      selectAttr,
 		NeedsAttentionAttributes: term.Attributes{Attrs: tcell.AttrBlink},
 		Modal:                    false,

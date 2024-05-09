@@ -75,7 +75,7 @@ func Clipboard(cfg config.Config) (clipboard.Register, error) {
 	}
 
 	if err == config.ErrNotFound {
-		sys = "system"
+		sys = "memory"
 	}
 
 	switch sys {
