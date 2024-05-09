@@ -22,7 +22,7 @@ import (
 // NOTE if this is failing or you are iterating on functionality
 // used by SSH, remember to call make run build_docker.sh before running these tests again.
 func TestIntegrationScheme(t *testing.T) {
-	if os.Getenv("NOCI") == "" {
+	if os.Getenv("NOCI") != "true" {
 		t.SkipNow()
 	}
 	hostname, teardown := runDockerOrSkip(t)

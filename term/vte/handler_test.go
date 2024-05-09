@@ -19,11 +19,11 @@ import (
 // internal state of the vte, to call a test case "complete", so
 // assertions can run. The slower the host of the tests, the longer
 // this timeout should be.
-var defaultWaitForIdleVte = 30 * time.Millisecond
+var defaultWaitForIdleVte = 20 * time.Millisecond
 
 func init() {
-	if os.Getenv("NOCI") == "" {
-		defaultWaitForIdleVte = 200 * time.Millisecond
+	if os.Getenv("NOCI") != "true" {
+		defaultWaitForIdleVte = 100 * time.Millisecond
 	}
 }
 
