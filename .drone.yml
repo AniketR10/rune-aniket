@@ -18,7 +18,7 @@ steps:
   - ssh-keyscan -t rsa git.unstable.build >> ~/.ssh/known_hosts
   - ssh-keyscan -t rsa github.com >> ~/.ssh/known_hosts
   - git config --global url.ssh://git@github.com/.insteadOf https://github.com/
-  - make
+  - make debug
   - make test NOCI="" GOTESTFLAGS="-race -timeout 300s"
 
 - name: slack

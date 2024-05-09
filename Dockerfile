@@ -18,7 +18,7 @@ RUN go env -w GOPRIVATE="github.com/unstablebuild,unstable.build/*"
 RUN go env -w GOCACHE="/go/cache"
 
 # forces to download and compile all dependencies
-RUN make && go test -c -o /dev/null $(go list -f '{{if .TestGoFiles}}{{.ImportPath}}{{end}}' ./...)
+RUN make debug && go test -c -o /dev/null $(go list -f '{{if .TestGoFiles}}{{.ImportPath}}{{end}}' ./...)
 
 # use clean image with no source code! 
 FROM --platform=linux/amd64 golang:alpine
