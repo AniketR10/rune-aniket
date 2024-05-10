@@ -3,23 +3,28 @@ type: docker
 name: default
 
 steps:
-- name: test
+- name: prepare
   image: us-central1-docker.pkg.dev/unstable-build-blue-dev/docker/go-tui-ci:latest
   environment:
     GIT_SSH_KEY:
       from_secret: git_ssh_key
+  commands:
+  - source ci_prepare.sh
+  volumes:
+    - name: home
+      path: /root
+
+- name: test
+  image: us-central1-docker.pkg.dev/unstable-build-blue-dev/docker/go-tui-ci:latest
+  pull: always
+  environment:
     GOCACHE: /go/cache
   commands:
-  - apk add --update --no-cache make git openssh gcc g++ musl-dev linux-headers
-  - mkdir -p ~/.ssh
-  - echo "$GIT_SSH_KEY" > ~/.ssh/id_rsa
-  - chmod 600 ~/.ssh/id_rsa
-  - chmod 700 ~/.ssh
-  - ssh-keyscan -t rsa git.unstable.build >> ~/.ssh/known_hosts
-  - ssh-keyscan -t rsa github.com >> ~/.ssh/known_hosts
-  - git config --global url.ssh://git@github.com/.insteadOf https://github.com/
   - make debug
   - make test CI="true" GOTESTFLAGS="-race -timeout 400s"
+  volumes:
+    - name: home
+      path: /root
 
 - name: slack
   image: plugins/slack
@@ -27,6 +32,8 @@ steps:
     status:
     - failure
     - success
+    ref:
+    - refs/heads/main
   settings:
     webhook:
       from_secret: slack_webhook_url
@@ -34,6 +41,9 @@ steps:
     icon_url: https://raw.githubusercontent.com/drone/brand/master/logos/png/dark/drone-logo-png-dark-256.png
 
 trigger:
+  event:
+  - push
+  - pull_request
   ref:
     include:
     - refs/heads/main
@@ -42,3 +52,32 @@ trigger:
 
 image_pull_secrets:
 - dockerconfig
+
+volumes:
+  - name: home
+    temp: {}
+
+
+---
+kind: pipeline
+name: build-ci-image
+type: docker
+
+steps:
+- name: push-to-gar
+  image: plugins/docker
+  environment:
+    GIT_SSH_KEY:
+      from_secret: git_ssh_key
+  settings:
+    config:
+      from_secret: dockerconfig
+    tags:
+      - latest
+    repo: us-central1-docker.pkg.dev/unstable-build-blue-dev/docker/go-tui-ci
+    dockerfile: Dockerfile.build
+    build_args_from_env: [ GIT_SSH_KEY ]
+
+trigger:
+  event:
+  - cron
