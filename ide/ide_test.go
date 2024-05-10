@@ -1,6 +1,7 @@
 package ide
 
 import (
+	"fmt"
 	"os"
 	"sync"
 	"testing"
@@ -30,6 +31,10 @@ func TestIDEInitializationIntegration(t *testing.T) {
 		dir, err := os.MkdirTemp("", "")
 		require.NoError(t, err)
 
+		t.Cleanup(func() {
+			_ = os.RemoveAll(dir)
+		})
+
 		i := new(IDE)
 		err = i.init(cwdURI.String(), configFile.Name(), "",
 			dir, []string{file1.Name(), file2.Name()},
@@ -56,6 +61,10 @@ func TestIDEInitializationIntegration(t *testing.T) {
 		dir, err := os.MkdirTemp("", "")
 		require.NoError(t, err)
 
+		t.Cleanup(func() {
+			_ = os.RemoveAll(dir)
+		})
+
 		i := new(IDE)
 		err = i.init(cwdURI.String(), configFile.Name(), "",
 			dir, []string{file1.Name()},
@@ -78,6 +87,10 @@ func TestIDEInitializationIntegration(t *testing.T) {
 
 		dir, err := os.MkdirTemp("", "")
 		require.NoError(t, err)
+
+		t.Cleanup(func() {
+			_ = os.RemoveAll(dir)
+		})
 
 		i := new(IDE)
 		err = i.init(".", configFile.Name(), "",
@@ -108,6 +121,10 @@ func TestIDEInitializationIntegration(t *testing.T) {
 		dir, err := os.MkdirTemp("", "")
 		require.NoError(t, err)
 
+		t.Cleanup(func() {
+			_ = os.RemoveAll(dir)
+		})
+
 		var published bool
 		i := new(IDE)
 		err = i.init(cwdURI.String(), configFile.Name(), "",
@@ -125,6 +142,34 @@ func TestIDEInitializationIntegration(t *testing.T) {
 
 		assert.NoError(t, i.closeResources())
 	})
+
+	t.Run("creates non-existing directories for log file", func(t *testing.T) {
+		configFile, file1 := makeTestFiles(t)
+
+		dir, err := os.MkdirTemp("", "")
+		require.NoError(t, err)
+
+		t.Cleanup(func() {
+			_ = os.RemoveAll(dir)
+		})
+
+		configData := fmt.Sprintf("log_path: %s/bla/bla/bla/debug.log", dir)
+		err = os.WriteFile(configFile.Name(), []byte(configData), 0666)
+		require.NoError(t, err)
+
+		i := new(IDE)
+		err = i.init(".", configFile.Name(), "",
+			dir, []string{file1.Name()},
+			WithPublishEvent(nopPublishEvent),
+			WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
+			WithLocker(new(sync.Mutex)))
+		require.NoError(t, err)
+
+		require.NotNil(t, i.workspace)
+		require.NotNil(t, i.clipboard)
+
+		assert.NoError(t, i.closeResources())
+	})
 }
 
 func makeTestFiles(t *testing.T) (*os.File, *os.File) {
@@ -135,6 +180,11 @@ func makeTestFiles(t *testing.T) (*os.File, *os.File) {
 	file, err := os.CreateTemp("", "six_ide_test")
 	require.NoError(t, err)
 	require.NoError(t, file.Close())
+
+	t.Cleanup(func() {
+		_ = os.Remove(configFile.Name())
+		_ = os.Remove(file.Name())
+	})
 
 	return configFile, file
 }

@@ -3,8 +3,9 @@ package ide
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"os"
+	"path"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -86,11 +87,30 @@ func (i *IDE) init(
 		}
 	}
 
-	if i.ideConfig.logOutputPath() != "" {
-		f, err := workspace.OpenFile(i.ideConfig.logOutputPath(),
+	if logPath := i.ideConfig.logOutputPath(); logPath != "" {
+		f, err := workspace.OpenFile(logPath,
 			os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 		if err != nil {
-			return err
+			expanded, expandErr := workspaceapi.CurrentUserHostURI(logPath)
+			if expandErr != nil {
+				return multierr.Append(
+					fmt.Errorf("open log file %q: %w", logPath, err),
+					fmt.Errorf("make uri %q: %w", logPath, expandErr),
+				)
+			}
+			logDir := path.Dir(expanded.Path())
+			dirErr := os.MkdirAll(logDir, 0755)
+			if dirErr != nil {
+				return multierr.Append(
+					fmt.Errorf("open log file %q: %w", logPath, err),
+					fmt.Errorf("make dir %q: %w", logDir, dirErr),
+				)
+			}
+			f, err = workspace.OpenFile(logPath,
+				os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+			if err != nil {
+				return fmt.Errorf("open log file %q: %w", logPath, err)
+			}
 		}
 
 		level := i.ideConfig.logLevel()
@@ -99,7 +119,7 @@ func (i *IDE) init(
 		log.SetLevel(level)
 		log.SetFormatter(logging.LogrusLogdFormatter{})
 	} else {
-		log.SetOutput(ioutil.Discard)
+		log.SetOutput(io.Discard)
 		log.SetLevel(log.PanicLevel)
 	}
 
@@ -174,7 +194,7 @@ func (i *IDE) publishEvent(ev term.Event) bool {
 func (i *IDE) Run() error {
 	err := tui.Init()
 	if err != nil {
-		return err
+		return fmt.Errorf("tui init: %w", err)
 	}
 	atomic.StoreInt32(&i.running, 1)
 
@@ -182,7 +202,7 @@ func (i *IDE) Run() error {
 
 	err = tui.RunWithLocker(i.root, i.locker)
 	if err != nil {
-		return err
+		return fmt.Errorf("tui run: %w", err)
 	}
 
 	return nil
