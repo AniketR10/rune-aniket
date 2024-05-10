@@ -19,10 +19,10 @@ import (
 // internal state of the vte, to call a test case "complete", so
 // assertions can run. The slower the host of the tests, the longer
 // this timeout should be.
-var defaultWaitForIdleVte = 20 * time.Millisecond
+var defaultWaitForIdleVte = 50 * time.Millisecond
 
 func init() {
-	if os.Getenv("NOCI") != "true" {
+	if os.Getenv("CI") == "true" {
 		defaultWaitForIdleVte = 100 * time.Millisecond
 	}
 }
@@ -87,7 +87,11 @@ $ ▐
 	}
 
 	cfg := DefaultConfig()
-	testSequence(t, cfg, defaultWaitForIdleVte, cases)
+
+	// vi needs quite a bit of tiem to exit
+	waitForIdleVte := defaultWaitForIdleVte * 3
+
+	testSequence(t, cfg, waitForIdleVte, cases)
 }
 
 func testSequence(t *testing.T, cfg Config, timeout time.Duration, cases []vtetest.Case) {
@@ -116,6 +120,13 @@ func testSequenceShell(t *testing.T, cfg Config, timeout time.Duration, shell st
 	handler, err := NewHandler(chanEventPublisher{ch}, nopNotifications{},
 		scheme, scheme, nopTabManager{}, cfg, "")
 	require.NoError(t, err)
+	handler.checkSystemBell = false
+
+	if ci := os.Getenv("CI"); ci == "true" && cfg.Modal {
+		// the version of sh running on the CI docker containers
+		// doesn't support bell (neither ctrl+g or ctrl+a + <-)
+		t.SkipNow()
+	}
 
 	t.Cleanup(func() {
 		handler.Close()

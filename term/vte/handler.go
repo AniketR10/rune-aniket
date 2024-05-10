@@ -8,9 +8,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/unstablebuild/blue/logging"
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
+	"github.com/unstablebuild/blue/logging"
 	"unstable.build/go-tui"
 	schemeapi "unstable.build/go-tui/api/scheme"
 	"unstable.build/go-tui/browser"
@@ -33,10 +33,11 @@ type Handler struct {
 	ctx           context.Context
 	cancelCtx     func()
 
-	modalEnabled bool
-	viMode       bool
-	mouse        *text.Mouse
-	mouseDriver  *mouseDriver
+	checkSystemBell bool
+	modalEnabled    bool
+	viMode          bool
+	mouse           *text.Mouse
+	mouseDriver     *mouseDriver
 
 	bracketedPaste bool
 	closed         atomic.Bool
@@ -68,6 +69,9 @@ func (e *Handler) Init(
 	e.publisher = publisher
 	e.notifications = n
 	e.handleTimer = time.NewTimer(handleTimeout)
+	// by default we want to check if system bell works
+	// when modal mode is enabled
+	e.checkSystemBell = true
 	// leave in idle state so we can call Reset directly in handle
 	if !e.handleTimer.Stop() {
 		<-e.handleTimer.C
@@ -190,8 +194,22 @@ func (e *Handler) Handle(ev term.Event) (exit, handled bool) {
 	}
 
 	if e.modalEnabled && !e.comp.IsAltBuffer() && ev.Key == term.KeyEsc {
-		e.enterViMode()
 		handled = true
+		e.enterViMode()
+
+		if !e.checkSystemBell {
+			return
+		}
+		e.checkSystemBell = false
+		e.vi.systemCanDispatchBell(func(err error) {
+			if err != nil {
+				e.notifications.Notify(notifications.LevelWarn,
+					"VTE modal (vi) mode enabled but system has no audible bell configured. "+
+						"You need to enable your system's audible bell for this feature to work correctly.")
+				e.log(log.WarnLevel, "vte modal could not be enabled: bell dispatch: %v", err)
+				e.exitViMode()
+			}
+		})
 		return
 	}
 	exit, handled, raw := e.handleInput(ev)

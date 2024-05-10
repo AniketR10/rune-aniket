@@ -3,7 +3,7 @@ package test
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
@@ -22,7 +22,7 @@ import (
 // NOTE if this is failing or you are iterating on functionality
 // used by SSH, remember to call make run build_docker.sh before running these tests again.
 func TestIntegrationScheme(t *testing.T) {
-	if os.Getenv("NOCI") != "true" {
+	if os.Getenv("CI") == "true" {
 		t.SkipNow()
 	}
 	hostname, teardown := runDockerOrSkip(t)
@@ -86,8 +86,8 @@ func runContainer() (string, func() error, error) {
 		return "", nil, err
 	}
 
-	data, err := ioutil.ReadAll(pipe)
-	errdata, _ := ioutil.ReadAll(errPipe)
+	data, err := io.ReadAll(pipe)
+	errdata, _ := io.ReadAll(errPipe)
 	if err != nil {
 		_ = cmd.Wait()
 		err = fmt.Errorf("%v: %s", err, string(errdata))

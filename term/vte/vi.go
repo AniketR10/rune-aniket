@@ -2,9 +2,11 @@ package vte
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -111,6 +113,28 @@ func (v *viHandler) Handle(ev term.Event) (exit, handled bool) {
 		v.sync.vi.SetNormalMode()
 	}
 	return
+}
+
+func (v *viHandler) systemCanDispatchBell(callback func(error)) {
+	const systemCanDispatchBellTimeout = 1 * time.Second
+	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(ctx, systemCanDispatchBellTimeout)
+
+	var called atomic.Bool
+	v.scheduleAfterBell(func() {
+		if called.CompareAndSwap(false, true) {
+			cancel()
+			callback(nil)
+		}
+	})
+
+	go func() {
+		defer cancel()
+		<-ctx.Done()
+		if called.CompareAndSwap(false, true) {
+			callback(fmt.Errorf("timeout waiting for bell: %w", ctx.Err()))
+		}
+	}()
 }
 
 func (v *viHandler) Resize(width, height int) {
