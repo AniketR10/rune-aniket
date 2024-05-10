@@ -204,9 +204,15 @@ func (e *Handler) Handle(ev term.Event) (exit, handled bool) {
 		e.vi.systemCanDispatchBell(func(err error) {
 			if err != nil {
 				e.notifications.Notify(notifications.LevelWarn,
-					"VTE modal (vi) mode enabled but system has no audible bell configured. "+
-						"You need to enable your system's audible bell for this feature to work correctly.")
-				e.log(log.WarnLevel, "vte modal could not be enabled: bell dispatch: %v", err)
+					"VTE modal (vi) mode enabled but system "+
+						"has no audible bell configured. "+
+						"You need to enable your system's "+
+						"audible bell for this feature to work correctly.")
+
+				e.log(log.WarnLevel, "vte modal could not be "+
+					"enabled: bell dispatch: %v", err)
+
+				e.modalEnabled = false
 				e.exitViMode()
 			}
 		})
