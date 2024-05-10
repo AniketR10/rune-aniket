@@ -25,12 +25,12 @@ require (
 	github.com/stretchr/testify v1.9.0
 	github.com/unstablebuild/blue v1.45.0
 	github.com/unstablebuild/golang-internal-tools v0.0.2
-	github.com/unstablebuild/tcell/v3 v3.4.0
+	github.com/unstablebuild/tcell/v3 v3.5.0
 	go.uber.org/config v1.4.0
 	go.uber.org/goleak v1.2.0
 	golang.org/x/crypto v0.22.0
 	golang.org/x/image v0.15.0
-	golang.org/x/term v0.19.0
+	golang.org/x/term v0.20.0
 	google.golang.org/grpc v1.54.0
 	google.golang.org/protobuf v1.31.0
 	gopkg.in/yaml.v3 v3.0.1
@@ -54,8 +54,8 @@ require (
 	golang.org/x/mod v0.10.0 // indirect
 	golang.org/x/net v0.24.0 // indirect
 	golang.org/x/sync v0.1.0 // indirect
-	golang.org/x/sys v0.19.0 // indirect
-	golang.org/x/text v0.14.0 // indirect
+	golang.org/x/sys v0.20.0 // indirect
+	golang.org/x/text v0.15.0 // indirect
 	golang.org/x/tools v0.8.0 // indirect
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2 // indirect
 	gopkg.in/mgo.v2 v2.0.0-20190816093944-a6b53ec6cb22 // indirect
@@ -66,7 +66,7 @@ require (
 	github.com/pkoukk/tiktoken-go v0.1.6
 	github.com/pkoukk/tiktoken-go-loader v0.0.1
 	github.com/sashabaranov/go-openai v1.20.3
-	github.com/unstablebuild/pty v1.3.0
+	github.com/unstablebuild/pty v1.3.1
 	go.uber.org/multierr v1.4.0
 )
 
