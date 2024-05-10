@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/unstablebuild/tcell/v3"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/term"
 	testutil "unstable.build/go-tui/util/test"
 )

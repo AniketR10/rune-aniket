@@ -108,7 +108,10 @@ func (h *simpleEditorHandler) Handle(ev term.Event) (exit, handled bool) {
 		h.cursor.Insert('\t')
 		handled = true
 	case term.KeyCtrlC:
-		h.cursor.CopySelection(clipboard.DefaultRegisterID, h.clipboard)
+		_, err := h.cursor.CopySelection(clipboard.DefaultRegisterID, h.clipboard)
+		if err != nil {
+			log.Errorf("cursor copy selection: %v", err)
+		}
 		handled = true
 	case term.KeyCtrlV:
 		paste, err := h.clipboard.Paste(clipboard.DefaultRegisterID)

@@ -182,11 +182,11 @@ func (i *IDE) publishEvent(ev term.Event) bool {
 		retry.ExponentialStrategy(5*time.Millisecond, 100*time.Millisecond),
 		retry.LimitStrategy(10),
 	)
-	retry.Retry(ctx, forcePublishRetry, func(context.Context) (bool, error) {
+	err := retry.Retry(ctx, forcePublishRetry, func(context.Context) (bool, error) {
 		ok := i.publishEventFn(ev)
 		return !ok, errEventStreamNotReady
 	})
-	return true
+	return err == nil
 }
 
 // Run initialzes the underlying terminal environment and runs

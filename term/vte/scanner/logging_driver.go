@@ -1,8 +1,8 @@
 package scanner
 
 import (
-	"github.com/unstablebuild/blue/logging"
 	log "github.com/sirupsen/logrus"
+	"github.com/unstablebuild/blue/logging"
 )
 
 type loggingDriverer struct {

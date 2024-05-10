@@ -3,9 +3,9 @@ package vi
 import (
 	"fmt"
 
+	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/logging"
 	"github.com/unstablebuild/tcell/v3"
-	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
 	textapi "unstable.build/go-tui/api/text"
 	"unstable.build/go-tui/cell"
@@ -514,7 +514,10 @@ func (vi *viHandlerImpl) handleInsert(ev term.Event) (quit, handled bool) {
 }
 
 func (vi *viHandlerImpl) copySelection() {
-	vi.cursor.CopySelection(vi.config.defaultRegister, vi.config.clipboard)
+	_, err := vi.cursor.CopySelection(vi.config.defaultRegister, vi.config.clipboard)
+	if err != nil {
+		vi.logError(err)
+	}
 }
 
 func (vi *viHandlerImpl) repeatInsertStart() {

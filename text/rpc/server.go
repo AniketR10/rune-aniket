@@ -7,8 +7,8 @@ import (
 	"os"
 	"sync"
 
-	"github.com/unstablebuild/blue/logging"
 	log "github.com/sirupsen/logrus"
+	"github.com/unstablebuild/blue/logging"
 	textapi "unstable.build/go-tui/api/text"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/proto"
@@ -171,13 +171,17 @@ func (s *Server) unsubscribeClient(handler *eventStreamClient) {
 	s.editor.Lock()
 	defer s.editor.Unlock()
 
-	s.editor.UnsubscribeEvents(handler)
+	_, err := s.editor.UnsubscribeEvents(handler)
 	for i, hi := range s.eventSub {
 		if hi == handler {
 			s.eventSub[i] = s.eventSub[len(s.eventSub)-1]
 			s.eventSub = s.eventSub[:len(s.eventSub)-1]
 			break
 		}
+	}
+
+	if err != nil {
+		s.log(log.ErrorLevel, "unsubscribe client from all events: %v", err)
 	}
 }
 

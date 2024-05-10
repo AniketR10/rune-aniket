@@ -5,9 +5,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/unstablebuild/blue/logging"
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
+	"github.com/unstablebuild/blue/logging"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
 	"unstable.build/go-tui/api/config"

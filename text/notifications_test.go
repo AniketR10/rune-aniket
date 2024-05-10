@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/unstablebuild/blue/document"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/blue/document"
 	"unstable.build/go-tui/component/notifications"
 )
 

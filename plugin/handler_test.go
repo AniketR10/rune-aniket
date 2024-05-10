@@ -3,7 +3,7 @@ package plugin
 import (
 	"context"
 	"errors"
-	"io/ioutil"
+
 	"os"
 	"path/filepath"
 	"testing"
@@ -79,7 +79,7 @@ $
 	for _, test := range suite {
 		t.Run(test.description, func(t *testing.T) {
 			ctx := context.Background()
-			tempDir, err := ioutil.TempDir("", "")
+			tempDir, err := os.MkdirTemp("", "")
 			require.NoError(t, err)
 			uri, err := workspaceapi.ParseURI(filepath.Join("file://", tempDir))
 			require.NoError(t, err)

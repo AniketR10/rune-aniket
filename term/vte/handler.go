@@ -115,7 +115,7 @@ func (e *Handler) Init(
 		}
 		if logErr != nil && !errors.Is(logErr, io.EOF) && !errors.Is(logErr, context.Canceled) {
 			e.log(log.ErrorLevel, "terminal run: %v", logErr)
-			e.notifications.Notify(notifications.LevelError, "terminal run: %v", logErr)
+			_ = e.notifications.Notify(notifications.LevelError, "terminal run: %v", logErr)
 		}
 	}()
 
@@ -164,7 +164,7 @@ func (e *Handler) Resize(width, height int) {
 		e.log(log.ErrorLevel, "terminal set size: %s", err)
 		// do not notify if already closed
 		if !e.closed.Load() {
-			e.notifications.Notify(notifications.LevelError, "terminal set size: %v", err)
+			_ = e.notifications.Notify(notifications.LevelError, "terminal set size: %v", err)
 		}
 		return
 	}
@@ -203,7 +203,7 @@ func (e *Handler) Handle(ev term.Event) (exit, handled bool) {
 		e.checkSystemBell = false
 		e.vi.systemCanDispatchBell(func(err error) {
 			if err != nil {
-				e.notifications.Notify(notifications.LevelWarn,
+				e.notify(notifications.LevelWarn,
 					"VTE modal (vi) mode enabled but system "+
 						"has no audible bell configured. "+
 						"You need to enable your system's "+
@@ -236,7 +236,7 @@ func (e *Handler) Handle(ev term.Event) (exit, handled bool) {
 	err := e.comp.WriteToPty(raw)
 	if err != nil {
 		e.log(log.ErrorLevel, "write to pty: %s", err)
-		e.notifications.Notify(notifications.LevelError, "write to pty: %v", err)
+		e.notify(notifications.LevelError, "write to pty: %v", err)
 		return
 	}
 
@@ -268,7 +268,7 @@ func (e *Handler) Handle(ev term.Event) (exit, handled bool) {
 func (e *Handler) OnFocusChange(inFocus bool) {
 	err := e.comp.OnFocusChange(inFocus)
 	if err != nil {
-		e.notifications.Notify(notifications.LevelError, "failed to report focus changed: %v", err)
+		e.notify(notifications.LevelError, "failed to report focus changed: %v", err)
 	}
 }
 
@@ -379,6 +379,12 @@ func (e *Handler) log(level log.Level, msg string, args ...any) {
 	log.WithFields(log.Fields{
 		logging.KeyClass: "vte.Handler",
 	}).Logf(level, msg, args...)
+}
+
+func (e *Handler) notify(level notifications.Level, msg string, args ...any) {
+	if err := e.notifications.Notify(level, msg, args...); err != nil {
+		e.log(log.ErrorLevel, "notify: %v", err)
+	}
 }
 
 func (e *Handler) enterViMode() {

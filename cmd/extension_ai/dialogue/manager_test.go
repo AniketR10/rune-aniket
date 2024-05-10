@@ -8,10 +8,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/unstablebuild/blue/document"
-	"github.com/unstablebuild/blue/iterator"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/blue/document"
+	"github.com/unstablebuild/blue/iterator"
 	"unstable.build/go-tui/cmd/extension_ai/backend"
 )
 

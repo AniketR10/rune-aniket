@@ -11,10 +11,10 @@ import (
 	"sync/atomic"
 	"time"
 
+	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/logging"
-	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
 	browserapi "unstable.build/go-tui/api/browser"
 	browserextension "unstable.build/go-tui/api/browser/extension"
@@ -291,7 +291,6 @@ type aiEditorHandler struct {
 	exit                 atomic.Uint32
 	availableModels      map[string]int
 	defaultModel         string
-	rpcTimeout           time.Duration
 	editor               text.Editor
 	cfg                  dialogue.ComponentConfig
 	backgroundAttr       term.Attributes
@@ -490,7 +489,7 @@ func (h *aiEditorHandler) handleQuery(cmd textapi.Command) (bool, error) {
 	// context cancelation for free
 	go func() {
 		// do not store queries in store after user is done
-		defer h.dialogueStore.Delete(ctx, queryID)
+		defer h.dialogueStore.Delete(ctx, queryID) //nolint:errcheck
 
 		select {
 		case qrx <- query:
@@ -642,7 +641,7 @@ func (h *aiEditorHandler) wrapDialogueHandler(
 			mu.Unlock()
 			if cancelFn != nil {
 				cancelFn()
-				comp.h.n.Notify(notifications.LevelInfo, "canceled completion request")
+				_ = comp.h.n.Notify(notifications.LevelInfo, "canceled completion request")
 			}
 			handled = true
 			return

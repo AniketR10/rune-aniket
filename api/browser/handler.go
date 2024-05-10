@@ -76,13 +76,6 @@ func (h *closeHandler) Close() error {
 	return h.doClose()
 }
 
-type fnEventHandler func(term.Event) bool
-
-// Handle satisfies EventHandler
-func (h fnEventHandler) Handle(ev term.Event) bool {
-	return h(ev)
-}
-
 type staticFloating struct {
 	Handler
 	width, height int

@@ -7,13 +7,13 @@ import (
 	"io"
 	"time"
 
-	"github.com/unstablebuild/blue/iterator"
-	"github.com/unstablebuild/blue/logging"
-	"github.com/unstablebuild/blue/retry"
 	"github.com/pkoukk/tiktoken-go"
 	tiktokenLoader "github.com/pkoukk/tiktoken-go-loader"
 	"github.com/sashabaranov/go-openai"
 	log "github.com/sirupsen/logrus"
+	"github.com/unstablebuild/blue/iterator"
+	"github.com/unstablebuild/blue/logging"
+	"github.com/unstablebuild/blue/retry"
 	"unstable.build/go-tui/cmd/extension_ai/backend"
 )
 

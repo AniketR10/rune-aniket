@@ -7,16 +7,12 @@ import (
 	"strings"
 	"syscall"
 
-	bluectx "github.com/unstablebuild/blue/context"
 	"github.com/ernestrc/go-multierror"
+	bluectx "github.com/unstablebuild/blue/context"
 	"unstable.build/go-tui/api/config"
 	schemeapi "unstable.build/go-tui/api/scheme"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/workspace"
-)
-
-var (
-	errInvalidPID = errors.New("invalid PID")
 )
 
 type procRemote struct {
@@ -41,9 +37,7 @@ func newProcRemote(ctx context.Context, cfg sshConfig, uri workspaceapi.URI) (
 ) {
 	port := uri.Port()
 	cmd := cfg.command
-	if port == "" {
-		port = "22"
-	} else {
+	if port != "" {
 		if !strings.Contains(cfg.command, "%p") {
 			return nil, fmt.Errorf("unable to set custom port: 'command' value is missing %%p")
 		}

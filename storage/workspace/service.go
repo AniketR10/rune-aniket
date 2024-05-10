@@ -4,15 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/url"
 	"os"
 	"reflect"
 
+	multierr "github.com/ernestrc/go-multierror"
 	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/encoding"
 	"github.com/unstablebuild/blue/iterator"
-	multierr "github.com/ernestrc/go-multierror"
 	schemeapi "unstable.build/go-tui/api/scheme"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 )
@@ -188,7 +188,7 @@ func (s *service) Close() (ret error) {
 }
 
 func (s *service) read(f workspaceapi.File, doc interface{}) error {
-	data, err := ioutil.ReadAll(f)
+	data, err := io.ReadAll(f)
 	if err != nil {
 		return fmt.Errorf("Scheme.Read: %v", err)
 	}

@@ -6,7 +6,6 @@ import (
 	"os"
 	"sync"
 
-	multierr "github.com/ernestrc/go-multierror"
 	"unstable.build/go-tui/api/config"
 	schemeapi "unstable.build/go-tui/api/scheme"
 	workspaceapi "unstable.build/go-tui/api/workspace"
@@ -27,21 +26,6 @@ type proxySchemeServerImpl struct {
 
 	ctx       context.Context
 	cancelCtx func()
-}
-
-type proxySchemeResource struct {
-	server *Server
-	scheme schemeapi.Scheme
-}
-
-func (c proxySchemeResource) Close() (ret error) {
-	if err := c.server.Stop(); err != nil {
-		ret = multierr.Append(ret, err)
-	}
-	if err := c.scheme.Close(); err != nil {
-		ret = multierr.Append(ret, err)
-	}
-	return ret
 }
 
 func newProxySchemeServerImpl(

@@ -3,8 +3,8 @@ package command
 import (
 	"testing"
 
-	"github.com/unstablebuild/blue/document"
 	log "github.com/sirupsen/logrus"
+	"github.com/unstablebuild/blue/document"
 	textapi "unstable.build/go-tui/api/text"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/term"

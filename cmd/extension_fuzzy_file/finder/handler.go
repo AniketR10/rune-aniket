@@ -6,15 +6,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"sync"
 	"syscall"
 	"time"
 
+	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/iterator"
-	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
 	browserapi "unstable.build/go-tui/api/browser"
 	browserextension "unstable.build/go-tui/api/browser/extension"
@@ -323,7 +322,7 @@ func (h *fuzzyFinderHandler) scanData() {
 
 	go h.readCommand(ctx, datachan, stdout, cancelScan)
 	go func() {
-		data, err := ioutil.ReadAll(stderr)
+		data, err := io.ReadAll(stderr)
 		if err != nil {
 			log.Errorf("failed to read from stderr: %v", err)
 		}

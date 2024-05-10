@@ -4,8 +4,8 @@ import (
 	context "context"
 	"fmt"
 
-	"github.com/unstablebuild/blue/logging"
 	log "github.com/sirupsen/logrus"
+	"github.com/unstablebuild/blue/logging"
 	grpc "google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
 )

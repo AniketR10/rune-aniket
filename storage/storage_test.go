@@ -3,17 +3,16 @@ package storage
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/document/firstmover"
 	"github.com/unstablebuild/blue/document/test"
 	"github.com/unstablebuild/blue/encoding/toml"
-	"github.com/stretchr/testify/require"
 )
 
 func TestStorageConcurrentInstances(t *testing.T) {
@@ -24,7 +23,7 @@ func TestStorageConcurrentInstances(t *testing.T) {
 	// to changes in leader; certaintly not to such an aggressive test.
 	test.TestDocumentServiceNoList(t, func(t *testing.T) document.Service {
 		const n = 100
-		name, err := ioutil.TempDir("", "workspace_document_service_test")
+		name, err := os.MkdirTemp("", "workspace_document_service_test")
 		require.NoError(t, err)
 		if _, ok := dirs[name]; ok {
 			require.NoError(t, fmt.Errorf("created a duplicate temp dir: %s", name))

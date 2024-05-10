@@ -292,8 +292,11 @@ func (v *viHandler) Edit(ctx context.Context, start, end term.Coordinates, str s
 			// wraps lines automatically, we must remove newlines.
 			old = strings.ReplaceAll(old, "\n", "")
 			// copy user deletes to clipboard
-			v.config.Clipboard.Copy(v.config.ClipboardRegister,
+			err := v.config.Clipboard.Copy(v.config.ClipboardRegister,
 				clipboard.Data{Text: old})
+			if err != nil {
+				v.log(log.ErrorLevel, "copy data to clipboard: %v", err)
+			}
 		}
 		// v.log(log.TraceLevel, "edit: delete effective old %q", old)
 	}
@@ -483,25 +486,6 @@ func (v *viHandler) enterViMode(pos term.Coordinates) {
 func (v *viHandler) log(level log.Level, line string, params ...interface{}) {
 	log.WithField(logging.KeyClass, "vte.viHandler").
 		Logf(level, line, params...)
-}
-
-func (v *viHandler) lastValidColumn(y int) int {
-	view := v.sync.vi.CellView()
-	cells := view.RawCells()
-	if y >= len(cells) {
-		// this is a guard against deleting last line
-		// which calls Edit with y==len(rows).
-		// Editor.Edit handles that but not
-		// View.Columns below.
-		return 0
-	}
-	for x := view.Columns(y) - 1; x > 0; x-- {
-		c := cells[y][x]
-		if c.Ch != screen.DefaultChar {
-			return x
-		}
-	}
-	return 0
 }
 
 func (v *viHandler) scheduleAfterBell(cb func()) {

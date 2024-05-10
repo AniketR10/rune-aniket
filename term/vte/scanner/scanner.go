@@ -5,8 +5,8 @@ import (
 
 	"unstable.build/go-tui/term/vte/utf8parser"
 
-	"github.com/unstablebuild/blue/logging"
 	log "github.com/sirupsen/logrus"
+	"github.com/unstablebuild/blue/logging"
 )
 
 // Scanner represents the VT100 scanner. based on  Paul Williams' ANSI

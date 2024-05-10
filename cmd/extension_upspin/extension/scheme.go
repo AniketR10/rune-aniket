@@ -10,8 +10,8 @@ import (
 	"os"
 	"syscall"
 
-	blupspin "github.com/unstablebuild/blue/upspin"
 	multierr "github.com/ernestrc/go-multierror"
+	blupspin "github.com/unstablebuild/blue/upspin"
 	"unstable.build/go-tui/api/config"
 	schemeapi "unstable.build/go-tui/api/scheme"
 	workspaceapi "unstable.build/go-tui/api/workspace"
@@ -129,8 +129,7 @@ func (s *scheme) URI(path string) (workspaceapi.URI, error) {
 
 // NewFile simply calls Open under the hood as upspin files are generally not cached in memory.
 func (s *scheme) NewFile(fd uintptr, path string) workspaceapi.File {
-	f, _ := s.files[fd]
-	return f
+	return s.files[fd]
 }
 
 func (s *scheme) Open(path string, flag int, mode os.FileMode) (workspaceapi.File, *workspaceapi.Error) {

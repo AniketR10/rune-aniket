@@ -10,10 +10,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/unstablebuild/blue/logging"
-	bluenet "github.com/unstablebuild/blue/net"
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
+	"github.com/unstablebuild/blue/logging"
+	bluenet "github.com/unstablebuild/blue/net"
 	schemeapi "unstable.build/go-tui/api/scheme"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 )
@@ -352,7 +352,7 @@ func (s *clientCommandStreamer) waitForPid() (workspaceapi.Pid, error) {
 }
 
 func (s *clientCommandStreamer) streamStdin() {
-	defer s.stream.CloseSend()
+	defer s.stream.CloseSend() // nolint:errcheck
 
 	if s.cmd.Stdin == nil {
 		s.log(log.TraceLevel, "no stdin set in cmd, skipping streaming stdin")
@@ -445,7 +445,7 @@ func (s *clientCommandStreamer) streamCommandData(client interface{}, cancelFn f
 					s.log(log.WarnLevel, "stdout type without stdout data")
 					continue
 				}
-				n, err = s.cmd.Stdout.Write(msg.GetIo().GetData())
+				_, err = s.cmd.Stdout.Write(msg.GetIo().GetData())
 				s.log(log.TraceLevel, "wrote to stdout, err=%v, data=%d", err, len(msg.GetIo().GetData()))
 				if err != nil {
 					err = fmt.Errorf("stdout io.Writer write: %v", err)

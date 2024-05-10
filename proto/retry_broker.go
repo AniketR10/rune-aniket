@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"strconv"
 
+	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/logging"
 	"github.com/unstablebuild/blue/retry"
-	log "github.com/sirupsen/logrus"
 )
 
 type retryBroker struct {
@@ -32,7 +32,7 @@ func (b retryBroker) log(method string, attempt int, err error) {
 func (b retryBroker) NewChannel(tags ...string) (srv MuxServer, err error) {
 	ctx := context.Background()
 	var attempt int
-	retry.Retry(ctx, b.s, func(ctx context.Context) (bool, error) {
+	err = retry.Retry(ctx, b.s, func(ctx context.Context) (bool, error) {
 		attempt++
 		srv, err = b.b.NewChannel(tags...)
 		b.log("NewChannel", attempt, err)
@@ -45,7 +45,7 @@ func (b retryBroker) DialChannel(ctx context.Context, addr string, tags ...strin
 	conn MuxConn, err error,
 ) {
 	var attempt int
-	retry.Retry(ctx, b.s, func(ctx context.Context) (bool, error) {
+	err = retry.Retry(ctx, b.s, func(ctx context.Context) (bool, error) {
 		attempt++
 		conn, err = b.b.DialChannel(ctx, addr, tags...)
 		b.log("DialChannel", attempt, err)

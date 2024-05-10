@@ -3,6 +3,8 @@ package vte
 import (
 	"fmt"
 
+	log "github.com/sirupsen/logrus"
+	"github.com/unstablebuild/blue/logging"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/text/clipboard"
@@ -123,5 +125,13 @@ func (e *mouseDriver) Height() int {
 func (e *mouseDriver) copySelectionToClipboard() {
 	data, _ := e.t.Selection()
 	clipdata := clipboard.Data{Text: data}
-	e.clipboard.Copy(clipboard.DefaultRegisterID, clipdata)
+	err := e.clipboard.Copy(clipboard.DefaultRegisterID, clipdata)
+	if err != nil {
+		e.log(log.ErrorLevel, "copy clipboard data to register: %v", err)
+	}
+}
+
+func (e *mouseDriver) log(level log.Level, msg string, args ...any) {
+	log.WithField(logging.KeyClass, "vte.mouseDriver").
+		Logf(level, msg, args...)
 }

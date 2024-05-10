@@ -389,7 +389,7 @@ Love isn't love 'til you give it away.
 			from, to, old = c.Edit(context.Background(), from, to, old)
 			assert.Equal(t, tcase.expectedRawCells, c.String())
 
-			_, _, old = c.Edit(context.Background(), from, to, old)
+			_, _, _ = c.Edit(context.Background(), from, to, old)
 			assert.Equal(t, input, c.String())
 		})
 	}

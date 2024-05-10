@@ -3,7 +3,8 @@ package workspace
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
+
 	"os"
 	"os/user"
 	"path/filepath"
@@ -136,7 +137,7 @@ func TestFileSchemeURI(t *testing.T) {
 func setupTestDirectory(
 	t testing.TB, totalFiles, nestEvery, emptyDirsPerFile int,
 ) (workspaceapi.URI, func()) {
-	dir, err := ioutil.TempDir("", "list_files_test")
+	dir, err := os.MkdirTemp("", "list_files_test")
 	require.NoError(t, err)
 
 	workspaceURI, err := workspaceapi.ParseURI("file://" + dir)
@@ -145,7 +146,7 @@ func setupTestDirectory(
 	var closeFns []func()
 	// write test files
 	for i := 0; i < totalFiles; i++ {
-		f, err := ioutil.TempFile(dir, strconv.Itoa(i))
+		f, err := os.CreateTemp(dir, strconv.Itoa(i))
 		require.NoError(t, err)
 
 		_, err = f.WriteString(strconv.Itoa(i))
@@ -156,12 +157,12 @@ func setupTestDirectory(
 
 		for i := 0; i < emptyDirsPerFile; i++ {
 			// create more dirs than workers
-			_, err = ioutil.TempDir(dir, "emptydir")
+			_, err = os.MkdirTemp(dir, "emptydir")
 			require.NoError(t, err)
 		}
 		if i%nestEvery == 0 {
 			// nest next temp file created
-			dir, err = ioutil.TempDir(dir, "nested")
+			dir, err = os.MkdirTemp(dir, "nested")
 			require.NoError(t, err)
 		}
 		closeFns = append(closeFns, func() { os.Remove(f.Name()) })
@@ -260,7 +261,7 @@ func BenchmarkListFilesLotsEmptyDir(b *testing.B) {
 
 func TestFileAssumptions(t *testing.T) {
 	t.Run("Write overwrites data", func(t *testing.T) {
-		f, err := ioutil.TempFile("", "")
+		f, err := os.CreateTemp("", "")
 		name := f.Name()
 		n, err := f.Write([]byte("12345"))
 		require.NoError(t, err)
@@ -276,13 +277,13 @@ func TestFileAssumptions(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, int64(0), nn)
 
-		data, err := ioutil.ReadAll(f)
+		data, err := io.ReadAll(f)
 		require.NoError(t, err)
 		assert.Equal(t, "ZZ345", string(data))
 	})
 
 	t.Run("Read uses write offset", func(t *testing.T) {
-		f, err := ioutil.TempFile("", "")
+		f, err := os.CreateTemp("", "")
 		name := f.Name()
 		n, err := f.Write([]byte("12345"))
 		require.NoError(t, err)
@@ -295,7 +296,7 @@ func TestFileAssumptions(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, 2, n)
 
-		data, err := ioutil.ReadAll(f)
+		data, err := io.ReadAll(f)
 		require.NoError(t, err)
 		assert.Equal(t, "345", string(data))
 	})

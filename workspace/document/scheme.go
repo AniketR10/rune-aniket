@@ -102,7 +102,7 @@ func (s *scheme[T]) docIDFromPath(path string) (string, string, error) {
 	// document must not start with absolute path as that has implications
 	// for some document stores
 	path = filepath.Clean(path)
-	if filepath.HasPrefix(path, "/") {
+	if filepath.IsAbs(path) {
 		relPath, err := filepath.Rel("/", path)
 		if err != nil {
 			return "", "", err
@@ -154,7 +154,7 @@ func (s *scheme[T]) Open(path string, flag int, perm os.FileMode) (
 func (s *scheme[T]) open(
 	ctx context.Context, path string, flag int, perm os.FileMode,
 ) (workspaceapi.File, *workspaceapi.Error) {
-	docID, path, err := s.docIDFromPath(path)
+	docID, _, err := s.docIDFromPath(path)
 	if err != nil {
 		return nil, workspaceapi.NopError(err)
 	}
@@ -235,13 +235,13 @@ func (s *scheme[T]) open(
 
 func (s *scheme[T]) NewFile(fd uintptr, path string) workspaceapi.File {
 	s.mu.Lock()
-	f, _ := s.files[fd]
+	f := s.files[fd]
 	s.mu.Unlock()
 	return f
 }
 
 func (s *scheme[T]) Remove(path string) error {
-	docID, path, err := s.docIDFromPath(path)
+	docID, _, err := s.docIDFromPath(path)
 	if err != nil {
 		return err
 	}
@@ -273,7 +273,7 @@ func (s *scheme[T]) Remove(path string) error {
 }
 
 func (s *scheme[T]) Rename(old, new string) error {
-	newDocID, new, err := s.docIDFromPath(new)
+	newDocID, _, err := s.docIDFromPath(new)
 	if err != nil {
 		return err
 	}
@@ -365,8 +365,6 @@ func (s *scheme[T]) ReadDir(name string) (
 	if !info.IsDir() {
 		return nil, errors.New("not a directory")
 	}
-
-	name = info.Name()
 
 	s.svc.transaction.Lock()
 	defer s.svc.transaction.Unlock()

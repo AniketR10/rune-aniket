@@ -5,7 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
@@ -15,9 +15,9 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/unstablebuild/blue/logging"
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
+	"github.com/unstablebuild/blue/logging"
 	"google.golang.org/grpc"
 	"unstable.build/go-tui/api/config"
 	workspaceapi "unstable.build/go-tui/api/workspace"
@@ -102,13 +102,15 @@ func startWorkspaceServer() int {
 		log.SetFormatter(logging.LogrusLogdFormatter{})
 		proto.EnableGRPCLogging(f, f, f)
 
+		//nolint:errcheck
 		defer f.Close()
+		//nolint:errcheck
 		defer f.Sync()
 
 		newScheme = workspace.LoggingScheme("file", newScheme)
 
 	} else {
-		log.SetOutput(ioutil.Discard)
+		log.SetOutput(io.Discard)
 		log.SetLevel(log.PanicLevel)
 		proto.DisableGRPCLogging()
 	}
@@ -167,6 +169,7 @@ func startWorkspaceServer() int {
 	defer scheme.Close()
 
 	server := workspacepb.NewServer(scheme, new(sync.Mutex))
+	//nolint:errcheck
 	defer server.Stop()
 
 	err = ssh.StartSchemeServer(log.StandardLogger(), server, grpcServer)
@@ -223,9 +226,7 @@ func run() int {
 		return 0
 	}
 
-	for _, file := range flag.Args() {
-		filenames = append(filenames, file)
-	}
+	filenames = append(filenames, flag.Args()...)
 
 	if *flagPprof {
 		runtime.SetBlockProfileRate(1)

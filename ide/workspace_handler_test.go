@@ -4,7 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"os"
+
 	_ "net/http/pprof"
 	"sync"
 	"testing"
@@ -76,7 +77,7 @@ func TestWorkspaceConfig(t *testing.T) {
 		homeURI, err := workspaceapi.ParseURI("memory:///home")
 		require.NoError(t, err)
 
-		dir, err := ioutil.TempDir("", "")
+		dir, err := os.MkdirTemp("", "")
 		require.NoError(t, err)
 
 		runner := FuncExtensionsRunner(testRunnerFn)
@@ -179,7 +180,7 @@ func TestWorkspaceExtensions(t *testing.T) {
 				},
 				}, nil
 			})
-		dir, err := ioutil.TempDir("", "")
+		dir, err := os.MkdirTemp("", "")
 		require.NoError(t, err)
 		m := newTestWorkspaceManagerHandlerWithManagerAndExtensions(t, manager,
 			uri, cfg, runner, nil, nil, dir)
@@ -189,7 +190,7 @@ func TestWorkspaceExtensions(t *testing.T) {
 	})
 
 	t.Run("calls extension runner with built-in extensions", func(t *testing.T) {
-		dir, err := ioutil.TempDir("", "")
+		dir, err := os.MkdirTemp("", "")
 		require.NoError(t, err)
 		cfg := ideConfig{cfg: map[string]interface{}{}}
 		manager := workspace.NewManager(cfg.workspace())
@@ -477,7 +478,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 
 func TestWorkspaceManagerClosePromptIntegration(t *testing.T) {
 	t.Run("prompts on quit if files are dirty, user continues", func(t *testing.T) {
-		dir, err := ioutil.TempDir("", "")
+		dir, err := os.MkdirTemp("", "")
 		require.NoError(t, err)
 		filenames := []string{"1234", "4567"}
 		m := newTestWorkspaceManagerHandlerWithDir(t, defaultCfg(), filenames, dir)
@@ -516,7 +517,7 @@ func TestWorkspaceManagerClosePromptIntegration(t *testing.T) {
 	})
 
 	t.Run("prompts on quit if files are dirty, user backs down", func(t *testing.T) {
-		dir, err := ioutil.TempDir("", "")
+		dir, err := os.MkdirTemp("", "")
 		require.NoError(t, err)
 		filenames := []string{"1234", "4567"}
 		m := newTestWorkspaceManagerHandlerWithDir(t, defaultCfg(), filenames, dir)
@@ -560,7 +561,7 @@ func TestWorkspaceManagerClosePromptIntegration(t *testing.T) {
 
 	for _, cmd := range []string{"forceQuit!", "writeQuit", "writeForceQuit!"} {
 		t.Run(fmt.Sprintf("does not prompt on %s", cmd), func(t *testing.T) {
-			dir, err := ioutil.TempDir("", "")
+			dir, err := os.MkdirTemp("", "")
 			require.NoError(t, err)
 			filenames := []string{"1234", "4567"}
 			m := newTestWorkspaceManagerHandlerWithDir(t, defaultCfg(), filenames, dir)
@@ -585,7 +586,7 @@ func TestWorkspaceManagerClosePromptIntegration(t *testing.T) {
 			assert.False(t, exit)
 			assert.True(t, handled)
 
-			for i, ch := range fmt.Sprintf("%s", cmd) {
+			for i, ch := range cmd {
 				exit, handled := m.Handle(term.Event{Type: term.EventKey, Ch: ch})
 				assert.False(t, exit)
 				assert.True(t, handled, i)
@@ -603,7 +604,7 @@ func TestWorkspaceManagerClosePromptIntegration(t *testing.T) {
 
 func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 	// re-use storage
-	dir, err := ioutil.TempDir("", "")
+	dir, err := os.MkdirTemp("", "")
 	require.NoError(t, err)
 
 	for _, wrap := range []bool{false, true} {
@@ -686,7 +687,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 			})
 
 			t.Run("position is restored on close and open again", func(t *testing.T) {
-				dir, err := ioutil.TempDir("", "")
+				dir, err := os.MkdirTemp("", "")
 				require.NoError(t, err)
 				manager := workspace.NewManager(config.NopConfig())
 				require.NoError(t, manager.RegisterScheme(workspace.MemoryScheme,
@@ -767,7 +768,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 			})
 
 			t.Run("position is restored on reloadWorkspace", func(t *testing.T) {
-				dir, err := ioutil.TempDir("", "")
+				dir, err := os.MkdirTemp("", "")
 				require.NoError(t, err)
 				m := newTestWorkspaceManagerHandlerWithDir(t, defaultConfigWithWrap(wrap), nil, dir)
 
@@ -828,7 +829,7 @@ func newTestWorkspaceManagerHandlerWithManager(
 	t *testing.T, manager *workspace.Manager,
 	uri workspaceapi.URI, cfg ideConfig, filenames []string,
 ) *testWorkspaceManagerHandler {
-	dir, err := ioutil.TempDir("", "")
+	dir, err := os.MkdirTemp("", "")
 	require.NoError(t, err)
 	return newTestWorkspaceManagerHandlerWithManagerAndExtensions(t, manager,
 		uri, cfg, FuncExtensionsRunner(testRunnerFn), nil, filenames, dir)
@@ -872,7 +873,7 @@ func newTestWorkspaceManagerHandlerWithDir(
 func newTestWorkspaceManagerHandler(
 	t *testing.T, cc ideConfig, filenames []string,
 ) *testWorkspaceManagerHandler {
-	dir, err := ioutil.TempDir("", "")
+	dir, err := os.MkdirTemp("", "")
 	require.NoError(t, err)
 	return newTestWorkspaceManagerHandlerWithDir(t, cc, filenames, dir)
 }

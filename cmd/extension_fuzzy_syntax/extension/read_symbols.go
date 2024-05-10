@@ -12,10 +12,10 @@ import (
 	"runtime"
 	"sync"
 
-	"github.com/unstablebuild/blue/iterator"
 	"github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	sitter "github.com/smacker/go-tree-sitter"
+	"github.com/unstablebuild/blue/iterator"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/workspace"
@@ -154,7 +154,7 @@ func readFileSymbols(
 
 	buf := new(cell.Buffer)
 	buf.InitWithTabspaces(tabspaces)
-	buf.Write(data)
+	_, _ = buf.Write(data)
 
 	tree, err := parser.ParseCtx(ctx, nil, data)
 	if err != nil {

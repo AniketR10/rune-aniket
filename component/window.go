@@ -60,9 +60,9 @@ func (w Window) Content() (c tui.Component) {
 	}
 
 	if w.wm.config.Frame {
-		c = w.node.Content().(*Frame).Content().(tui.Component)
+		c = w.node.Content().(*Frame).Content()
 	} else {
-		c = w.node.Content().(tui.Component)
+		c = w.node.Content()
 	}
 
 	return
@@ -199,7 +199,7 @@ func (w Window) TileDown() (ret Window, ok bool) {
 
 // TileLeft returns the window left-adjacent to t or false if t is the
 // left-most window in the WindowManager.
-func (w Window) TileLeft() (ret Window, op bool) {
+func (w Window) TileLeft() (ret Window, ok bool) {
 	if w.wm == nil {
 		panic(errCalledZeroValuedWin)
 	}

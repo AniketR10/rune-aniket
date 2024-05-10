@@ -22,23 +22,29 @@ type multiGrantee struct {
 	children []extension.Grantee
 }
 
-func (m multiGrantee) Connected(ctx context.Context, b proto.MuxBroker, cfg config.Config) error {
+func (m multiGrantee) Connected(ctx context.Context, b proto.MuxBroker, cfg config.Config) (ret error) {
 	for _, child := range m.children {
-		child.Connected(ctx, b, cfg)
+		if err := child.Connected(ctx, b, cfg); err != nil {
+			ret = multierror.Append(ret, err)
+		}
 	}
 	return nil
 }
 
-func (m multiGrantee) PermissionGranted(ctx context.Context, grants []extension.Grant) error {
+func (m multiGrantee) PermissionGranted(ctx context.Context, grants []extension.Grant) (ret error) {
 	for _, child := range m.children {
-		child.PermissionGranted(ctx, grants)
+		if err := child.PermissionGranted(ctx, grants); err != nil {
+			ret = multierror.Append(ret, err)
+		}
 	}
 	return nil
 }
 
-func (m multiGrantee) PermissionDenied(ctx context.Context, perms []extension.Permission) error {
+func (m multiGrantee) PermissionDenied(ctx context.Context, perms []extension.Permission) (ret error) {
 	for _, child := range m.children {
-		child.PermissionDenied(ctx, perms)
+		if err := child.PermissionDenied(ctx, perms); err != nil {
+			ret = multierror.Append(ret, err)
+		}
 	}
 	return nil
 }

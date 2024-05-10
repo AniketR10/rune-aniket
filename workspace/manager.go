@@ -5,9 +5,9 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/unstablebuild/blue/logging"
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
+	"github.com/unstablebuild/blue/logging"
 	"unstable.build/go-tui/api/config"
 	schemeapi "unstable.build/go-tui/api/scheme"
 	workspaceapi "unstable.build/go-tui/api/workspace"
@@ -15,7 +15,6 @@ import (
 
 var (
 	errProcNotFound   = errors.New("process not found")
-	errProcNotRunning = errors.New("process not running")
 )
 
 var _ SchemeManager = (*Manager)(nil)

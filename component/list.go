@@ -223,8 +223,6 @@ func (l *List) Draw(w term.Writer) {
 	for i, el := l.offset.value, l.offset.head.el; i < lastVisible && el != nil; i, el = i+1, el.Next() {
 		el.Value.(*Virtual).Draw(w)
 	}
-
-	return
 }
 
 // Back returns the last node of list l or false if the list is empty.

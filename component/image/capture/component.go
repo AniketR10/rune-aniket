@@ -89,7 +89,7 @@ func (c *Component) Resize(width, height int) {
 
 	select {
 	case c.resize <- resize{width, height}:
-	case _, _ = <-c.consumeVideoActive:
+	case <-c.consumeVideoActive:
 		// do not block main event loop if consumeVideoSource dies
 		return
 	}

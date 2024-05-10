@@ -857,8 +857,6 @@ func (c *Cursor) ReplaceContext(ctx context.Context, r rune) {
 	c.selection.mode = mode
 	c.setSelection()
 	c.setCursorAfterUpdate(next)
-
-	return
 }
 
 // Delete is equivalent to DeleteContext with context.Background.
@@ -1160,7 +1158,7 @@ func (c *Cursor) CopySelection(registerID string, clip clipboard.Register) (ok b
 	c.moveToScroll(c.selection.scrollFrom)
 
 	ok = true
-	clip.Copy(registerID, clipboard.Data{Text: selection, Metadata: mode})
+	err = clip.Copy(registerID, clipboard.Data{Text: selection, Metadata: mode})
 	return
 }
 

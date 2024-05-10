@@ -59,9 +59,7 @@ func (c *LocationStore) SortedLocations() []textapi.Location {
 	})
 
 	for _, list := range c.locsSliceTemp {
-		for _, loc := range list.locations {
-			c.locsSlice = append(c.locsSlice, loc)
-		}
+		c.locsSlice = append(c.locsSlice, list.locations...)
 	}
 	return c.locsSlice
 }

@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/unstablebuild/blue/document"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/blue/document"
 )
 
 func TestCacheService(t *testing.T) {

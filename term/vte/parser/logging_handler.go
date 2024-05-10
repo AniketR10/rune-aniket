@@ -1,9 +1,9 @@
 package parser
 
 import (
-	"github.com/unstablebuild/blue/logging"
 	"github.com/rivo/uniseg"
 	log "github.com/sirupsen/logrus"
+	"github.com/unstablebuild/blue/logging"
 )
 
 // HandlerWithLogging wraps a Handler and adds trace logging.

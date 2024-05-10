@@ -17,7 +17,7 @@ func CellsToString(cells [][]term.Cell) string {
 func StringToCells(str string, tabspaces int) (cells [][]term.Cell) {
 	var builder rawCells
 	builder.init(tabspaces)
-	builder.ReadFrom(strings.NewReader(str))
+	_, _ = builder.ReadFrom(strings.NewReader(str))
 	return builder.RawCells()
 }
 

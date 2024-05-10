@@ -7,12 +7,12 @@ import (
 	"path/filepath"
 	"sync"
 
+	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/document"
 	doclog "github.com/unstablebuild/blue/document/logging"
 	docrpc "github.com/unstablebuild/blue/document/rpc"
 	bproto "github.com/unstablebuild/blue/document/rpc/proto"
 	"github.com/unstablebuild/blue/encoding/toml"
-	log "github.com/sirupsen/logrus"
 
 	"unstable.build/go-tui/proto"
 	"unstable.build/go-tui/storage"

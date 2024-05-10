@@ -7,10 +7,6 @@ type params struct {
 	len              uint16
 }
 
-func (p *params) length() uint16 {
-	return p.len
-}
-
 func (p *params) isFull() bool {
 	return p.len == MaxParams
 }

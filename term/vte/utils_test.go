@@ -138,9 +138,9 @@ $ aaaaaaa `,
 blablabla
 $ echo bla
 $ aaaaaaaa`,
-			width:         10,
-			expectedStart: term.Coordinates{Y: 2},
-			expectedEnd:   term.Coordinates{Y: 3, X: 10},
+			width:          10,
+			expectedStart:  term.Coordinates{Y: 2},
+			expectedEnd:    term.Coordinates{Y: 3, X: 10},
 			considerSpaces: true,
 		},
 		{
@@ -149,9 +149,9 @@ $ aaaaaaaa`,
 				"$ echo\n" +
 				"$ aaaaa  \x00\x00\n" +
 				"\x00\x00\x00",
-			width:         10,
-			expectedStart: term.Coordinates{Y: 2},
-			expectedEnd:   term.Coordinates{Y: 2, X: 7},
+			width:          10,
+			expectedStart:  term.Coordinates{Y: 2},
+			expectedEnd:    term.Coordinates{Y: 2, X: 7},
 			considerSpaces: true,
 		},
 		{
@@ -160,9 +160,9 @@ $ aaaaaaaa`,
 				"$ echo aaa\n" +
 				"aaaaaaa  \x00\x00\n" +
 				"\x00\x00\x00",
-			width:         10,
-			expectedStart: term.Coordinates{Y: 1},
-			expectedEnd:   term.Coordinates{Y: 2, X: 7},
+			width:          10,
+			expectedStart:  term.Coordinates{Y: 1},
+			expectedEnd:    term.Coordinates{Y: 2, X: 7},
 			considerSpaces: true,
 		},
 	}

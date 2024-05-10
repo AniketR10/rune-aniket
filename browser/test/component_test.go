@@ -578,7 +578,7 @@ func TestComponentPrompt(t *testing.T) {
 		h := NewTestHandler()
 		h.Ch = '8'
 		tab := c.NewTab(uri, "music", h, nil)
-		c.Focus().SetContent(tab)
+		require.NoError(t, c.Focus().SetContent(tab))
 
 		tests := []testutil.ComponentTestCase{
 			{
@@ -883,7 +883,7 @@ type contentSwapper struct {
 }
 
 func (c *contentSwapper) Handle(ev term.Event) (bool, bool) {
-	c.c.Focus().SetContent(c.tab)
+	_ = c.c.Focus().SetContent(c.tab)
 	return true, true
 }
 

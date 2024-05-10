@@ -7,24 +7,22 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/unstablebuild/blue/iterator"
 	multierr "github.com/ernestrc/go-multierror"
+	log "github.com/sirupsen/logrus"
+	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/golang-internal-tools/fakenet"
 	"github.com/unstablebuild/golang-internal-tools/jsonrpc2"
 	"github.com/unstablebuild/golang-internal-tools/lsp"
-	"github.com/unstablebuild/golang-internal-tools/lsp/lsprpc"
 	"github.com/unstablebuild/golang-internal-tools/lsp/protocol"
 	"github.com/unstablebuild/golang-internal-tools/lsp/source"
 	"github.com/unstablebuild/golang-internal-tools/span"
 	"github.com/unstablebuild/tcell/v3"
-	log "github.com/sirupsen/logrus"
 	browserapi "unstable.build/go-tui/api/browser"
 	browserextension "unstable.build/go-tui/api/browser/extension"
 	"unstable.build/go-tui/api/config"
@@ -301,17 +299,6 @@ func sendInitializeRequest(
 	}
 
 	return res, nil
-}
-
-// parseAddr parses listen into a network, and address.
-func parseAddr(listen string) (network string, address string) {
-	if listen == lsprpc.AutoNetwork {
-		return lsprpc.AutoNetwork, ""
-	}
-	if parts := strings.SplitN(listen, ";", 2); len(parts) == 2 {
-		return parts[0], parts[1]
-	}
-	return "tcp", listen
 }
 
 func streamRPC(cc jsonrpc2.Conn, h *lspEditorHandler) {
@@ -1792,7 +1779,7 @@ func (h *lspEditorHandler) browseLocations(
 			return
 		}
 		defer f.Close()
-		data, err := ioutil.ReadAll(f)
+		data, err := io.ReadAll(f)
 		if err != nil {
 			log.Errorf("could not render preview file: Read: %v", err)
 			return
@@ -1813,9 +1800,15 @@ func (h *lspEditorHandler) browseLocations(
 
 		attrs := term.Attributes{Attrs: tcell.AttrReverse}
 		loc := textapi.Location{From: from, To: to, Attr: attrs}
-		ed.SetLocationList(edh, textapi.LocationPriorityInfo,
-			locID, textapi.LocationSlice([]textapi.Location{loc}))
-		ed.MoveToPrevLocation(edh, locID)
+		if err := ed.SetLocationList(edh, textapi.LocationPriorityInfo,
+			locID, textapi.LocationSlice([]textapi.Location{loc})); err != nil {
+			log.Errorf("editor set location list: %v", err)
+			return
+		}
+		if err := ed.MoveToPrevLocation(edh, locID); err != nil {
+			log.Errorf("editor move to prev location: %v", err)
+			return
+		}
 	}
 
 	sh := search.Handler(list, func(text string) {
@@ -1824,12 +1817,12 @@ func (h *lspEditorHandler) browseLocations(
 		h.mu.Unlock()
 
 		// liberate all tabs
-		closeWin(top)()
-		closeWin(bottom)()
+		_ = closeWin(top)()
+		_ = closeWin(bottom)()
 
 		err := h.goToLocation(win, textToLocation[text])
 		if err != nil {
-			h.m.Notify(notifications.LevelError, "go to location: %s", err)
+			_ = h.m.Notify(notifications.LevelError, "go to location: %s", err)
 		}
 	})
 

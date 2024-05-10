@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
+
 	"os"
 	"path/filepath"
 	"strconv"
@@ -15,9 +15,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/unstablebuild/blue/document"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/blue/document"
 	"unstable.build/go-tui"
 	browserapi "unstable.build/go-tui/api/browser"
 	"unstable.build/go-tui/api/config"
@@ -1221,7 +1221,7 @@ func TestIntegrationEphemeralTerminal(t *testing.T) {
 		text.WithEventPublisher(nopPublishEvent),
 	}
 
-	tempDir, err := ioutil.TempDir("", "")
+	tempDir, err := os.MkdirTemp("", "")
 	require.NoError(t, err)
 	uri, err := workspaceapi.ParseURI(filepath.Join("file://", tempDir))
 	require.NoError(t, err)
@@ -1311,7 +1311,7 @@ func TestIntegrationCompanionTerminal(t *testing.T) {
 		text.WithCommandOverlayConfig(testCommandOverlayConfig()),
 	}
 
-	tempDir, err := ioutil.TempDir("", "")
+	tempDir, err := os.MkdirTemp("", "")
 	require.NoError(t, err)
 	uri, err := workspaceapi.ParseURI(filepath.Join("file://", tempDir))
 	require.NoError(t, err)
@@ -1371,7 +1371,7 @@ AAAAAAAAAAAAAAAAAAAA`,
 		text.WithCommandOverlayConfig(testCommandOverlayConfig()),
 	}
 
-	tempDir, err := ioutil.TempDir("", "")
+	tempDir, err := os.MkdirTemp("", "")
 	require.NoError(t, err)
 	uri, err := workspaceapi.ParseURI(filepath.Join("file://", tempDir))
 	require.NoError(t, err)

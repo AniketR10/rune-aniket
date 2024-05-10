@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/unstablebuild/blue/retry"
 	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/blue/retry"
 	"google.golang.org/grpc"
 	"unstable.build/go-tui/api/config"
 	schemeapi "unstable.build/go-tui/api/scheme"

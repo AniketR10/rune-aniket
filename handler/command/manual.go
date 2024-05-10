@@ -39,14 +39,19 @@ func makeManualComponent(
 	attr term.Attributes,
 ) component.Responsive {
 	var builder strings.Builder
-	writeTemplate(&builder, man)
+	var str string
+	err := writeTemplate(&builder, man)
+	if err != nil {
+		str = fmt.Sprintf("ERROR: build manual: %v", err)
+	} else {
+		str = builder.String()
+	}
 
 	minWidth := minWidthManualComponent
 	if frameCharSet != (component.FrameCharSet{}) {
 		minWidth -= 2
 	}
 
-	str := builder.String()
 	ret := component.NewResponsiveString(str, component.StringResponsiveConfig{
 		NoSplitWords: true,
 		StringConfig: component.StringConfig{

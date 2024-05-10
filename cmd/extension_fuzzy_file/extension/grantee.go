@@ -52,12 +52,6 @@ func Grantee() (extension.Grantee, []extension.Permission) {
 	})
 }
 
-type stringerStr string
-
-func (s stringerStr) String() string {
-	return string(s)
-}
-
 func workspaceListFiles(cwd workspaceapi.FileSystem, ctx context.Context) (
 	iterator.Iterator[string], error,
 ) {

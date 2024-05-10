@@ -218,7 +218,7 @@ aaaaaaaaaaaaaaaaaaaa
 aaaaaaa             
 $                   
 $                   
-$ ▐           NORMAL`}, 
+$ ▐           NORMAL`},
 			{"iclear>",
 				`$ ▐                 
                     

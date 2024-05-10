@@ -3,8 +3,8 @@ package extension
 import (
 	"context"
 
-	"github.com/unstablebuild/golang-internal-tools/lsp/protocol"
 	log "github.com/sirupsen/logrus"
+	"github.com/unstablebuild/golang-internal-tools/lsp/protocol"
 )
 
 type lspClientHandler struct {

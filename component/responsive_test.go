@@ -39,7 +39,7 @@ func TestResponsiveStringDraw(t *testing.T) {
 		for _, tcase := range tcases {
 			t.Run("StringResponsive", func(t *testing.T) {
 				testString(t, func(in string) tui.Component {
-					return StringResponsive(in, tcase.cfg)
+					return NewResponsiveString(in, tcase.cfg)
 				}, 5, 5, tcase.in, tcase.out)
 			})
 
@@ -178,7 +178,7 @@ func TestResponsiveStringDraw(t *testing.T) {
 					height = tcase.height
 				}
 				testString(t, func(in string) tui.Component {
-					return StringResponsive(in, tcase.cfg)
+					return NewResponsiveString(in, tcase.cfg)
 				}, 5, height, tcase.in, tcase.out)
 			})
 
@@ -212,7 +212,7 @@ func TestResponsiveStringDraw(t *testing.T) {
 		for _, tcase := range tcases {
 			t.Run("StringResponsive", func(t *testing.T) {
 				testString(t, func(in string) tui.Component {
-					return StringResponsive(in, tcase.cfg)
+					return NewResponsiveString(in, tcase.cfg)
 				}, 5, 5, tcase.in, tcase.out)
 			})
 
@@ -305,7 +305,7 @@ func TestResponsiveHeight(t *testing.T) {
 
 	for _, tcase := range tcases {
 		t.Run("StringResponsive", func(t *testing.T) {
-			s := StringResponsive(tcase.in, tcase.cfg)
+			s := NewResponsiveString(tcase.in, tcase.cfg)
 			out := s.Height(tcase.width)
 			assert.Equal(t, tcase.out, out)
 		})

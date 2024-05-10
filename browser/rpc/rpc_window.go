@@ -17,7 +17,6 @@ var _ browserapi.Window = (*windowClientImpl)(nil)
 type windowClientImpl struct {
 	windowID  uint64
 	pbClient  WindowManagerClient
-	doClose   func()
 	broker    proto.MuxBroker
 	clientCtx context.Context
 }

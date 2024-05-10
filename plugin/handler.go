@@ -268,15 +268,15 @@ func (e *pluginHandlerBar) Draw(w term.Writer) {
 	var rightMsg string
 	if done {
 		if doneErr != nil {
-			rightMsg = fmt.Sprintf("%s", doneTime.Sub(startTime).Truncate(time.Millisecond))
+			rightMsg = doneTime.Sub(startTime).Truncate(time.Millisecond).String()
 			left = e.leftMsgError
 		} else {
-			rightMsg = fmt.Sprintf("%s", doneTime.Sub(startTime).Truncate(time.Millisecond))
+			rightMsg = doneTime.Sub(startTime).Truncate(time.Millisecond).String()
 			left = e.leftMsgSuccess
 		}
 	} else {
 		leftWidgetWidth++
-		rightMsg = fmt.Sprintf("%s", time.Now().Sub(startTime).Truncate(time.Second))
+		rightMsg = time.Since(startTime).Truncate(time.Second).String()
 		leftMsg := e.leftMsgRunning
 		var union component.FrameUnion
 		union.Init(leftMsg)
@@ -298,7 +298,6 @@ func (e *pluginHandlerBar) Draw(w term.Writer) {
 
 	union.Resize(e.width, barHeight)
 	union.Draw(w)
-	return
 }
 
 func (e *pluginHandlerBar) Resize(width, height int) {

@@ -3,7 +3,7 @@ package main
 import (
 	"flag"
 	"io"
-	"io/ioutil"
+	
 	"log"
 	"net/http"
 	_ "net/http/pprof"
@@ -22,7 +22,7 @@ var (
 var wrap = flag.Bool("w", false, "wrap text")
 
 func startCPUProfile() func() {
-	f, err := ioutil.TempFile("", "less_cpuprofile")
+	f, err := os.CreateTemp("", "less_cpuprofile")
 	if err != nil {
 		log.Fatal("could not create CPU profile: ", err)
 	}
@@ -36,7 +36,7 @@ func startCPUProfile() func() {
 }
 
 func writeMemProfile() {
-	f, err := ioutil.TempFile("", "less_memprofile")
+	f, err := os.CreateTemp("", "less_memprofile")
 	if err != nil {
 		log.Fatal("could not create memory profile: ", err)
 	}

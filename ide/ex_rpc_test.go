@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/unstablebuild/blue/document"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/blue/document"
 	"go.uber.org/goleak"
 	"google.golang.org/grpc"
 	"unstable.build/go-tui"

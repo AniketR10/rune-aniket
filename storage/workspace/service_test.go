@@ -3,11 +3,13 @@ package workspace
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
+
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/blue/document"
 	test "github.com/unstablebuild/blue/document/test"
 	"github.com/unstablebuild/blue/encoding"
@@ -15,8 +17,6 @@ import (
 	"github.com/unstablebuild/blue/encoding/json"
 	"github.com/unstablebuild/blue/encoding/toml"
 	"github.com/unstablebuild/blue/encoding/yaml"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"unstable.build/go-tui/api/config"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/workspace"
@@ -37,7 +37,7 @@ func testMemoryWorkspaceServiceWithMarshaler(t *testing.T, m encoding.Marshaler)
 func testFileWorkspaceServiceWithMarshaler(t *testing.T, m encoding.Marshaler) {
 	dirs := make(map[string]document.Service)
 	test.TestDocumentService(t, func(t *testing.T) document.Service {
-		name, err := ioutil.TempDir("", "workspace_document_service_test")
+		name, err := os.MkdirTemp("", "workspace_document_service_test")
 		require.NoError(t, err)
 		if _, ok := dirs[name]; ok {
 			panic(fmt.Sprintf("created a duplicate temp dir: %s", name))
@@ -103,7 +103,7 @@ func TestSetOverrideIssue(t *testing.T) {
 		Content []string
 	}
 
-	name, err := ioutil.TempDir("", "workspace_document_service_test")
+	name, err := os.MkdirTemp("", "workspace_document_service_test")
 	require.NoError(t, err)
 	uri, err := workspaceapi.ParseURI("file://" + name)
 	require.NoError(t, err)
@@ -128,7 +128,7 @@ func TestEscapeBoundaries(t *testing.T) {
 		Content []string
 	}
 
-	name, err := ioutil.TempDir("", "workspace_document_service_test")
+	name, err := os.MkdirTemp("", "workspace_document_service_test")
 	require.NoError(t, err)
 
 	aDir := filepath.Join(name, "a")

@@ -146,7 +146,8 @@ func (c *Component) InputSubmit() (string, bool) {
 // AddSendMessage adds the following msg as a sent message.
 func (c *Component) AddSendMessage(msg string) {
 	c.RemoveReceiveMessageHint()
-	strComp := component.StringResponsive(msg,
+	var strComp component.Responsive
+	strComp = component.NewResponsiveString(msg,
 		component.StringResponsiveConfig{
 			NoSplitWords: true,
 			StringConfig: c.cfg.SendMessageStringConfig,
@@ -168,7 +169,6 @@ func (c *Component) AddReceiveMessage(msg string) {
 func (c *Component) AddReceiveMessageBreak() {
 	c.tail = nil
 	c.msg.Reset()
-	return
 }
 
 // AddReceiveMessage adds the following message chunk
@@ -182,7 +182,8 @@ func (c *Component) AddReceiveMessageChunk(chunk string) {
 		c.tail = new(component.ListNode)
 	}
 	c.RemoveReceiveMessageHint()
-	strComp := component.StringResponsive(c.msg.String(),
+	var strComp component.Responsive
+	strComp = component.NewResponsiveString(c.msg.String(),
 		component.StringResponsiveConfig{
 			NoSplitWords: true,
 			StringConfig: c.cfg.ReceiveMessageStringConfig,

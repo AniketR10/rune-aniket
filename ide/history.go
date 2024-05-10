@@ -5,9 +5,9 @@ import (
 	"sort"
 	"time"
 
+	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/logging"
-	log "github.com/sirupsen/logrus"
 	textapi "unstable.build/go-tui/api/text"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/term"
@@ -154,7 +154,7 @@ func (h *workspaceHistory) Handle(ctx context.Context, ev textapi.Event) bool {
 	}
 
 	evUriStr := ev.URI.String()
-	prev, _ := workspaceCache.Files[evUriStr]
+	prev := workspaceCache.Files[evUriStr]
 
 	switch ev.Type {
 	case textapi.EventTypeOpen:

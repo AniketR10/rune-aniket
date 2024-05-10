@@ -3,9 +3,9 @@ package dialogue
 import (
 	"fmt"
 
+	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/logging"
 	"github.com/unstablebuild/tcell/v3"
-	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"

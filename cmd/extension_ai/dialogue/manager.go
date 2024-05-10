@@ -108,9 +108,7 @@ func (m *Manager) doCreateCompletion(
 			return
 		}
 		dialogue.Messages = make([]backend.ChatCompletionMessage, len(m.config.initialContext))
-		for i, msg := range m.config.initialContext {
-			dialogue.Messages[i] = msg
-		}
+		copy(dialogue.Messages, m.config.initialContext)
 	}
 
 	var prompt []backend.ChatCompletionMessage

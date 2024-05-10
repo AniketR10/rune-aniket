@@ -8,8 +8,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/unstablebuild/blue/logging"
+	"github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
+	"github.com/unstablebuild/blue/logging"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
 	"unstable.build/go-tui"
@@ -324,11 +325,14 @@ func (c *AsyncClient) sendDrawReq(r request) error {
 			defer c.mu.Unlock()
 			c.circuitBreak = false
 		}(c.timeout)
-		c.interrupter.Interrupt(r.ctx)
+		if ierr := c.interrupter.Interrupt(r.ctx); ierr != nil {
+			err = multierror.Append(err, ierr)
+		}
 		return err
 	}
 
 	// call Interrupt after we have unlocked mu
+    // nolint:errcheck
 	defer c.interrupter.Interrupt(r.ctx)
 
 	c.mu.Lock()

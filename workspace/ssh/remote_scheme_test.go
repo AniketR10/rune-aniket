@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/unstablebuild/blue/retry"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/blue/retry"
 	schemeapi "unstable.build/go-tui/api/scheme"
 	schemetest "unstable.build/go-tui/api/scheme/test"
 	workspaceapi "unstable.build/go-tui/api/workspace"

@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"os"
 	"path"
 	"path/filepath"
@@ -92,7 +92,7 @@ func (f *file) initSwap(orig workspaceapi.File, origPerms os.FileMode) (workspac
 		return swap, nil
 	}
 
-	content, err := ioutil.ReadAll(orig)
+	content, err := io.ReadAll(orig)
 	if err != nil {
 		_ = f.scheme.Remove(f.swapFileName)
 		return nil, err
@@ -229,7 +229,9 @@ func (f *file) initBuffer(buf *cell.Buffer, file workspaceapi.File) (err error) 
 			return
 		}
 
-		defer file.Seek(0, 0)
+		defer func() {
+			_, err = file.Seek(0, 0)
+		}()
 	}
 
 	if !view.endsWithEOL() {
@@ -241,7 +243,7 @@ func (f *file) initBuffer(buf *cell.Buffer, file workspaceapi.File) (err error) 
 
 	f.buf = buf
 
-	return nil
+	return
 }
 
 func (f *file) initRecover(filePath, swapFilePath string, buf *cell.Buffer, force bool) error {

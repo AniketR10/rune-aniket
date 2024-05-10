@@ -4,7 +4,7 @@ import (
 	context "context"
 	fmt "fmt"
 	"io"
-	"io/ioutil"
+
 	"os"
 	"path/filepath"
 	"time"
@@ -72,7 +72,11 @@ func AcceptAndServeChannel(
 
 	register(channelID, srv)
 
-	go srv.Serve(ctx)
+	go func() {
+		if err := srv.Serve(ctx); err != nil {
+			log.Errorf("serve channel(%v): %v", tags, err)
+		}
+	}()
 
 	return channelID, nil
 }
@@ -81,7 +85,7 @@ func AcceptAndServeChannel(
 func DisableGRPCLogging() {
 	os.Setenv("GRPC_GO_LOG_SEVERITY_LEVEL", "FATAL")
 	os.Setenv("GRPC_GO_LOG_VERBOSITY_LEVEL", "0")
-	discard := grpclog.NewLoggerV2WithVerbosity(ioutil.Discard, ioutil.Discard, ioutil.Discard, 0)
+	discard := grpclog.NewLoggerV2WithVerbosity(io.Discard, io.Discard, io.Discard, 0)
 	grpclog.SetLoggerV2(discard)
 }
 

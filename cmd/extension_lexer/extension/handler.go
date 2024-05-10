@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,11 +13,11 @@ import (
 	"github.com/alecthomas/chroma"
 	"github.com/alecthomas/chroma/lexers"
 	"github.com/alecthomas/chroma/styles"
-	"github.com/unstablebuild/blue/iterator"
 	multierr "github.com/ernestrc/go-multierror"
-	"github.com/unstablebuild/tcell/v3"
 	log "github.com/sirupsen/logrus"
 	sitter "github.com/smacker/go-tree-sitter"
+	"github.com/unstablebuild/blue/iterator"
+	"github.com/unstablebuild/tcell/v3"
 	browserapi "unstable.build/go-tui/api/browser"
 	browserextension "unstable.build/go-tui/api/browser/extension"
 	"unstable.build/go-tui/api/config"
@@ -267,9 +267,9 @@ func (h *syntaxHandler) Handle(
 	case textapi.EventTypeClose:
 		delete(h.files, ev.URI.String())
 	case textapi.EventTypeOpen:
-		err = h.handleOpen(ev)
+		err = h.handleOpen(ctx, ev)
 	case textapi.EventTypeEdit:
-		err = h.handleEdit(ev)
+		err = h.handleEdit(ctx, ev)
 	}
 	if err != nil {
 		log.Error(err)
@@ -438,7 +438,7 @@ func (h *syntaxHandler) browseNodes(
 			return
 		}
 		defer f.Close()
-		data, err := ioutil.ReadAll(f)
+		data, err := io.ReadAll(f)
 		if err != nil {
 			log.Errorf("could not render preview file: Read: %v", err)
 			return
@@ -451,27 +451,33 @@ func (h *syntaxHandler) browseNodes(
 
 		from, to, err := h.convertStartEndPoints(n, viewBuffer)
 		if err != nil {
-			log.Error(err)
+			log.Errorf("convert start end points: %v", err)
 			return
 		}
 
 		attrs := term.Attributes{Attrs: tcell.AttrReverse}
 		loc := textapi.Location{From: from, To: to, Attr: attrs}
-		ed.SetLocationList(edh, textapi.LocationPriorityInfo,
-			locID, textapi.LocationSlice([]textapi.Location{loc}))
-		ed.MoveToPrevLocation(edh, locID)
+		if err := ed.SetLocationList(edh, textapi.LocationPriorityInfo,
+			locID, textapi.LocationSlice([]textapi.Location{loc})); err != nil {
+			log.Errorf("editor set location list: %v", err)
+			return
+		}
+		if err := ed.MoveToPrevLocation(edh, locID); err != nil {
+			log.Errorf("editor move to prev location: %v", err)
+			return
+		}
 	}
 
 	sh := search.Handler(list, func(text string) {
 		done = true
 
 		// liberate all tabs
-		closeWin(top)()
-		closeWin(bottom)()
+		_ = closeWin(top)()
+		_ = closeWin(bottom)()
 
 		err := h.goToLocation(win, uri, textToLocation[text])
 		if err != nil {
-			h.m.Notify(notifications.LevelError, "go to location: %v", err)
+			_ = h.m.Notify(notifications.LevelError, "go to location: %v", err)
 		}
 	})
 
@@ -563,10 +569,10 @@ func (h *syntaxHandler) handleQuerySyntax(ctx context.Context, cmd textapi.Comma
 	return false, h.browseNodes(cmd.URI, cmd.Window, f.language, nodes, &f.Buffer)
 }
 
-func (h *syntaxHandler) handleOpen(ev textapi.Event) error {
+func (h *syntaxHandler) handleOpen(ctx context.Context, ev textapi.Event) error {
 	filename := ev.URI.String()
 	ext := filepath.Ext(filename)
-	h.files[filename] = h.newFile(ev)
+	h.files[filename] = h.newFile(ctx, ev)
 	if _, ok := h.lexers[ext]; !ok {
 		lexer := lexers.Match(filename)
 		if lexer == nil {
@@ -581,8 +587,8 @@ func (h *syntaxHandler) handleOpen(ev textapi.Event) error {
 	return h.checkSyntaxWithLexer(ev)
 }
 
-func (h *syntaxHandler) handleEdit(ev textapi.Event) error {
-	err := h.editFile(ev)
+func (h *syntaxHandler) handleEdit(ctx context.Context, ev textapi.Event) error {
+	err := h.editFile(ctx, ev)
 	if err != nil {
 		return err
 	}
@@ -679,20 +685,21 @@ func (h *syntaxHandler) setBackground(file workspaceapi.URI, ed textapi.Handler)
 	}
 }
 
-func (h *syntaxHandler) editFile(ev textapi.Event) error {
+func (h *syntaxHandler) editFile(ctx context.Context, ev textapi.Event) (err error) {
 	f, ok := h.files[ev.URI.String()]
 	if !ok {
-		return fmt.Errorf("could not find buffer for file %s", ev.URI.String())
+		err = fmt.Errorf("could not find buffer for file %s", ev.URI.String())
+		return
 	}
-	f.Edit(context.Background(), ev.Start, ev.End, ev.Content)
+	f.Edit(ctx, ev.Start, ev.End, ev.Content)
 	if f.parser != nil {
 		// TODO edit tree rather than re-parsing everything every time
-		f.tree = f.parser.Parse(nil /*f.tree*/, []byte(f.Buffer.String()))
+		f.tree, err = f.parser.ParseCtx(ctx, nil /*f.tree*/, []byte(f.Buffer.String()))
 	}
-	return nil
+	return
 }
 
-func (h *syntaxHandler) newFile(ev textapi.Event) *file {
+func (h *syntaxHandler) newFile(ctx context.Context, ev textapi.Event) *file {
 	f := new(file)
 	f.Buffer.InitWithTabspaces(h.tabspaces)
 	f.Scroll.Init(&f.Buffer)
@@ -705,7 +712,11 @@ func (h *syntaxHandler) newFile(ev textapi.Event) *file {
 	if ok {
 		f.language = language
 		f.parser = parser
-		f.tree = f.parser.Parse(nil, []byte(ev.Content))
+		var err error
+		f.tree, err = f.parser.ParseCtx(ctx, nil, []byte(ev.Content))
+		if err != nil {
+			log.Errorf("parser parse %q: %v", filename, err)
+		}
 	}
 	log.Debugf("found parser for file '%s': %v", filename, ok)
 

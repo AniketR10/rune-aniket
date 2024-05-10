@@ -5,9 +5,9 @@ import (
 	"strconv"
 	"strings"
 
+	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/logging"
 	"github.com/unstablebuild/tcell/v3"
-	log "github.com/sirupsen/logrus"
 )
 
 // C0 set of 7-bit control characters (from ANSI X3.4-1977).
@@ -164,7 +164,7 @@ func (p *driver) OSCDispatch(params [][]byte, bellTerminated bool) {
 	case "50":
 		if len(params) >= 2 && len(params[1]) >= 13 &&
 			bytes.HasPrefix(params[1], []byte("CursorShape=")) {
-			shape := CursorShapeBlock
+			var shape CursorShape
 			switch params[1][12] {
 			case '0':
 				shape = CursorShapeBlock

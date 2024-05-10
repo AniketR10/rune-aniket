@@ -37,13 +37,13 @@ func newProvider(overridesConfigPath, fallbackConfigLiteral string) (
 ) {
 	configDef := strings.NewReader(fallbackConfigLiteral)
 	if overridesConfigPath == "" {
-		return uconfig.NewYAMLProviderFromReader(configDef)
+		return uconfig.NewYAML(uconfig.Source(configDef))
 	}
 	configFile, err := workspace.OpenFile(overridesConfigPath, os.O_RDONLY, 0)
 	if err != nil {
 		return nil, err
 	}
-	return uconfig.NewYAMLProviderFromReader(configDef, configFile)
+	return uconfig.NewYAML(uconfig.Source(configDef), uconfig.Source(configFile))
 }
 
 func sourceConfig(overridesConfigPath string) (

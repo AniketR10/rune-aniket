@@ -10,12 +10,12 @@ import (
 	"strings"
 	"time"
 
+	multierr "github.com/ernestrc/go-multierror"
+	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/logging"
-	multierr "github.com/ernestrc/go-multierror"
 	"github.com/unstablebuild/tcell/v3"
-	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
 	browserapi "unstable.build/go-tui/api/browser"
 	schemeapi "unstable.build/go-tui/api/scheme"
@@ -39,7 +39,6 @@ const (
 )
 
 var (
-	commandBarAttr         = term.Attributes{Bg: tcell.ColorWhite, Fg: tcell.ColorBlack}
 	errInvalidSetCursor    = errors.New("Cannot set cursor on this buffer")
 	errEventStreamNotReady = errors.New("event stream not ready to publish")
 )
@@ -503,7 +502,9 @@ func (e *ex) editFiles(args ...string) error {
 	}
 
 	if e.invokeWindow() == e.companionTerminalWin {
-		e.toggleCompanionTerminal()
+		if err := e.toggleCompanionTerminal(); err != nil {
+			return fmt.Errorf("toggle companion terminal: %v", err)
+		}
 	}
 
 	for _, arg := range args {
@@ -633,8 +634,7 @@ func (e *ex) setDefaultColors(args ...string) error {
 	}
 	th, ok := t.Handler().(text.Handler)
 	if ok {
-		e.comp.SetDefaultAttributes(th, attrs)
-		return nil
+		return e.comp.SetDefaultAttributes(th, attrs)
 	}
 	emh, ok := t.Handler().(vteHandler)
 	if ok {
@@ -899,7 +899,7 @@ func (e *ex) handleEvent(ev term.Event) (
 		if handled {
 			if len(cmdAndArgs) != 0 {
 				// notify user of ambiguous sequence
-				e.comp.NotifyOnce(notifications.LevelWarn, "Command sequence %q is mapped to %q, "+
+				_ = e.comp.NotifyOnce(notifications.LevelWarn, "Command sequence %q is mapped to %q, "+
 					"but could not get triggered because active window also handles it. "+
 					"Consider changing the command sequence mapping to something else.",
 					keyComb, cmdAndArgs)
@@ -934,9 +934,7 @@ func (e *ex) resetCommandList(cmd *command.Prompt) {
 	// commands can be registered dynamicall via Editor.Register:
 	// compile a new list every time we switch to command mode
 	var commands []text.CommandManual
-	for _, cmd := range e.comp.Commands() {
-		commands = append(commands, cmd)
-	}
+	commands = append(commands, e.comp.Commands()...)
 	sort.Slice(commands, func(i, j int) bool {
 		return commands[i].Name < commands[j].Name
 	})
@@ -957,8 +955,7 @@ func (e *ex) openCommandPrompt() {
 	commandCfg.ShowManualAfter = e.config.CommandOverlay.ShowManualAfter
 	cmd := command.NewPrompt(e.storage, e, e, e, []text.CommandManual{}, commandCfg)
 
-	var commandHandler browser.Floating = cmd
-	commandHandler = browser.FuncFloating(
+	commandHandler := browser.FuncFloating(
 		browser.FuncHandler(
 			handler.WithComponent(cmd,
 				component.WithBackground(

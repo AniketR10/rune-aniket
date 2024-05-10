@@ -11,7 +11,7 @@ func (h *workspaceManagerHandler) openRestorePrompt(
 	ex *ex,
 	workspaceURI workspaceapi.URI,
 	cache []file,
-) error {
+) {
 	const (
 		restoreCwd = "Yes"
 		noRestore  = "No"
@@ -40,14 +40,13 @@ func (h *workspaceManagerHandler) openRestorePrompt(
 				h.history.resetWorkspaceCache(workspaceURI)
 			}
 			if err != nil {
-				h.empty.Browser().Notify(notifications.LevelError, err.Error())
+				_ = h.empty.Browser().Notify(notifications.LevelError, err.Error())
 			}
 		},
 	)
-	return nil
 }
 
-func (h *workspaceManagerHandler) openExitPrompt(ex *ex) error {
+func (h *workspaceManagerHandler) openExitPrompt(ex *ex) {
 	const (
 		yes = "Yes"
 		no  = "No"
@@ -71,5 +70,4 @@ func (h *workspaceManagerHandler) openExitPrompt(ex *ex) error {
 			}
 		},
 	)
-	return nil
 }

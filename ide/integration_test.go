@@ -3,7 +3,7 @@ package ide
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
+
 	"os"
 	"testing"
 
@@ -21,7 +21,7 @@ import (
 func newIntegrationTestCase(t *testing.T, content string) (
 	*cell.Buffer, workspace.FlusherCloser, workspaceapi.URI, func(),
 ) {
-	tempDir, err := ioutil.TempDir("", "")
+	tempDir, err := os.MkdirTemp("", "")
 	require.NoError(t, err)
 
 	workspaceURI, err := workspaceapi.CurrentUserHostURI(tempDir)
@@ -32,7 +32,7 @@ func newIntegrationTestCase(t *testing.T, content string) (
 	w, err := manager.AddWorkspace(context.Background(), workspaceURI)
 	require.NoError(t, err)
 
-	file, err := ioutil.TempFile(tempDir, "workspace_int_test")
+	file, err := os.CreateTemp(tempDir, "workspace_int_test")
 	require.NoError(t, err)
 
 	_, err = file.Write([]byte(content))

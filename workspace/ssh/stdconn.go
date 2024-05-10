@@ -1,18 +1,15 @@
 package ssh
 
 import (
-	"errors"
 	"fmt"
 	"net"
 	"os"
 	"time"
 
+	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/logging"
 	bluenet "github.com/unstablebuild/blue/net"
-	log "github.com/sirupsen/logrus"
 )
-
-var errStreamClosed = errors.New("stream closed")
 
 var _ net.Conn = (*stdConn)(nil)
 

@@ -5,10 +5,10 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/unstablebuild/golang-internal-tools/lsp/protocol"
-	"github.com/unstablebuild/golang-internal-tools/span"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
+	"github.com/unstablebuild/golang-internal-tools/lsp/protocol"
+	"github.com/unstablebuild/golang-internal-tools/span"
 	"unstable.build/go-tui/api/config"
 	textapi "unstable.build/go-tui/api/text"
 	textapitest "unstable.build/go-tui/api/text/test"

@@ -2,15 +2,15 @@ package workspace
 
 import (
 	"context"
-	"io/ioutil"
+
 	"os"
 	"path/filepath"
 	"sort"
 	"testing"
 
-	"github.com/unstablebuild/blue/iterator"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/blue/iterator"
 	"unstable.build/go-tui/api/config"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 )
@@ -35,7 +35,7 @@ func assertIteratorEqual(
 
 func TestListFiles(t *testing.T) {
 	t.Run("lists all files under workspace as relative", func(t *testing.T) {
-		dir, err := ioutil.TempDir("", "")
+		dir, err := os.MkdirTemp("", "")
 		require.NoError(t, err)
 		for _, path := range []string{".", dir} {
 			t.Run(path, func(t *testing.T) {
@@ -58,10 +58,10 @@ func TestListFiles(t *testing.T) {
 	})
 
 	t.Run("lists all files under non-workspace dir as absolute", func(t *testing.T) {
-		workspaceDir, err := ioutil.TempDir("", "")
+		workspaceDir, err := os.MkdirTemp("", "")
 		require.NoError(t, err)
 
-		dir, err := ioutil.TempDir("", "")
+		dir, err := os.MkdirTemp("", "")
 		require.NoError(t, err)
 
 		uri, err := workspaceapi.CurrentUserHostURI(workspaceDir)

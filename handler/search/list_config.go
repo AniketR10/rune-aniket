@@ -3,8 +3,8 @@ package search
 import (
 	"time"
 
-	"github.com/unstablebuild/tcell/v3"
 	fzf "github.com/junegunn/fzf/src/algo"
+	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/term"
 )
 
@@ -95,8 +95,6 @@ func (c ListConfig) toInternal() listConfig {
 		algo = fzf.EqualMatch
 	case ContainsMatch:
 		algo = containsMatch
-	default:
-		algo = fzf.FuzzyMatchV2
 	}
 
 	if c.interruptEvery == 0 {

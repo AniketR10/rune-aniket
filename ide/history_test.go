@@ -5,9 +5,9 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/unstablebuild/blue/document"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/blue/document"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
 	texttest "unstable.build/go-tui/text/test"

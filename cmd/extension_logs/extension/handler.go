@@ -106,7 +106,7 @@ func (s *logsHandler) setTokenAttr(
 func (s *logsHandler) newPinnedResponsive(match search.Match) {
 	cfg := s.defaultStringConfig()
 
-	str := component.StringResponsive(string(match.Data()), cfg)
+	str := component.NewResponsiveString(string(match.Data()), cfg)
 	attrSetter := component.WithAttrSetter(str)
 	s.setTokenAttr(match, 0, attrSetter, s.matchedTextAttr)
 	comp := s.withBackground(attrSetter)
@@ -129,7 +129,7 @@ func (s *logsHandler) setPinned(matches []search.Match) {
 	s.pinned = s.pinned[:0]
 
 	for _, match := range matches {
-		str := component.StringResponsive(string(match.Data()[s.hScroll:]), cfg)
+		str := component.NewResponsiveString(string(match.Data()[s.hScroll:]), cfg)
 		attrSetter := component.WithAttrSetter(str)
 		s.setTokenAttr(match, s.hScroll, attrSetter, s.matchedTextAttr)
 		comp := s.withBackground(attrSetter)

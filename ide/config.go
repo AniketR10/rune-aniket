@@ -10,8 +10,8 @@ import (
 	"time"
 
 	multierr "github.com/ernestrc/go-multierror"
-	"github.com/unstablebuild/tcell/v3"
 	log "github.com/sirupsen/logrus"
+	"github.com/unstablebuild/tcell/v3"
 	yaml "gopkg.in/yaml.v3"
 	"unstable.build/go-tui/api/config"
 	workspaceapi "unstable.build/go-tui/api/workspace"
@@ -315,16 +315,16 @@ func (c ideConfig) commandAliases() (ret map[string][]string) {
 	}
 
 	for k, v := range cfgsAliases {
-		switch v.(type) {
+		switch tp := v.(type) {
 		case string:
 			ret[k] = make([]string, 1)
-			ret[k][0] = v.(string)
+			ret[k][0] = tp
 		case []interface{}:
 			ret[k] = make([]string, 0)
-			for _, v := range v.([]interface{}) {
-				switch v.(type) {
+			for _, v := range tp {
+				switch vtp := v.(type) {
 				case string:
-					ret[k] = append(ret[k], v.(string))
+					ret[k] = append(ret[k], vtp)
 				default:
 					err = multierr.Append(err,
 						fmt.Errorf("invalid value type for command.%s.%s", keyCommandAliases, k))

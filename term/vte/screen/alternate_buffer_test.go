@@ -3,9 +3,9 @@ package screen
 import (
 	"testing"
 
-	"github.com/unstablebuild/tcell/v3"
 	"github.com/rivo/uniseg"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/term/vte/parser"
@@ -445,7 +445,7 @@ func TestDelete(t *testing.T) {
 	t.Run("count + pos.X oob", func(t *testing.T) {
 		b := makeAltBufferForTesting(2, 10)
 		resetAltBuffer(t, b, "aa\nbb\n  \n  \n  \n  \n  \n  \n  \n  ")
-		b.SetCursorAtScreen(term.Coordinates{X:1}, false)
+		b.SetCursorAtScreen(term.Coordinates{X: 1}, false)
 		b.Delete(2)
 		assertEqualBuf(t, b, "a \nbb\n  \n  \n  \n  \n  \n  \n  \n  ")
 	})
@@ -461,7 +461,7 @@ func TestDelete(t *testing.T) {
 	t.Run("deletes first few characters in long line", func(t *testing.T) {
 		b := makeAltBufferForTesting(10, 2)
 		resetAltBuffer(t, b, "0123456789\nabcdefghij")
-		b.SetCursorAtScreen(term.Coordinates{X:2}, false)
+		b.SetCursorAtScreen(term.Coordinates{X: 2}, false)
 		b.Delete(3)
 		assertEqualBuf(t, b, "0156789   \nabcdefghij")
 	})

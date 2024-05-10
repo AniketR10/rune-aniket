@@ -39,5 +39,5 @@ func (n wrapHandler) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 }
 
 func (n wrapHandler) Man() tui.Manual {
-	return n.Man()
+	return n.h.Man()
 }

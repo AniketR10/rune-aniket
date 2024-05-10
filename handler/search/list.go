@@ -286,7 +286,7 @@ func (l *List) consumeAsyncElements(ctx context.Context, datachan chan []byte, q
 		}
 		interrupter := l.cfg.interrupter
 		l.mu.Unlock()
-		interrupter.Interrupt(context.Background())
+		_ = interrupter.Interrupt(context.Background())
 	}()
 
 	var dirty bool
@@ -308,7 +308,7 @@ func (l *List) consumeAsyncElements(ctx context.Context, datachan chan []byte, q
 				}
 				dirty = false
 				l.mu.Unlock()
-				interrupter.Interrupt(context.Background())
+				_ = interrupter.Interrupt(context.Background())
 			case <-ctx.Done():
 				return
 			case <-quitChan:
@@ -370,7 +370,7 @@ func (l *List) handleSearch(
 	cancelFn()
 	interrupter := l.cfg.interrupter
 	l.mu.Unlock()
-	interrupter.Interrupt(context.Background())
+	_ = interrupter.Interrupt(context.Background())
 }
 
 // Push returns a channel that can be used to push data to this list asynchronously.
@@ -398,7 +398,7 @@ func (l *List) Pause() {
 	l.sortMatchesList()
 	interrupter := l.cfg.interrupter
 	l.mu.Unlock()
-	interrupter.Interrupt(context.Background())
+	_ = interrupter.Interrupt(context.Background())
 }
 
 // PushSync pushes one element to this list and searches for a match on it.
@@ -597,10 +597,6 @@ func (l *List) resize(width, height int) {
 
 func getMatchCountBarWidth(matchCountBar *matchCounter) int {
 	return matchCountBar.Buffer.Columns(0)
-}
-
-func (l *List) searchBarWidth() int {
-	return l.searchBar.internalRead.Columns(0)
 }
 
 func resizeMatchCountBar(matchCountBar *matchCounter, y, lenFilesCounter, width int) {

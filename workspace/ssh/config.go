@@ -59,7 +59,7 @@ func getTimeout(cfg config.Config) (ret time.Duration, err error) {
 
 	sshTimeout, err := config.GetDuration(cfg, "timeout", defSSHTimeout)
 	if err != nil {
-		return 0, err
+		return
 	}
 
 	ret = sshTimeout

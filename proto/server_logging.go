@@ -9,19 +9,22 @@ import (
 )
 
 type loggingServer struct {
-	srv      MuxServer
-	quitChan chan struct{}
+	srv    MuxServer
+	ctx    context.Context
+	cancel func()
 }
 
 // LoggingGRPCServer wraps a grpc.Server to provide trace-level logging.
 func LoggingGRPCServer(srv MuxServer) MuxServer {
 	// ch := make(chan struct{})
-	s := &loggingServer{srv: srv /*, quitChan: ch*/}
+	s := &loggingServer{srv: srv}
+	s.ctx, s.cancel = context.WithCancel(context.Background())
 	// NOTE: uncomment to debug leaks
 	// go s.monitorLifecycle()
 	return s
 }
 
+// nolint:unused
 func (s *loggingServer) monitorLifecycle() {
 	log.Tracef("LoggingGRPCServer: Create: %p", s.srv)
 
@@ -29,7 +32,7 @@ func (s *loggingServer) monitorLifecycle() {
 
 	for {
 		select {
-		case <-s.quitChan:
+		case <-s.ctx.Done():
 			log.Tracef("LoggingGRPCServer: Monitor(quit): %p", s.srv)
 			return
 		case <-t.C:
@@ -48,15 +51,13 @@ func (s *loggingServer) Serve(ctx context.Context) error {
 func (s *loggingServer) Stop() {
 	s.srv.Stop()
 	log.Tracef("LoggingGRPCServer: (%p) Stop() ", s.srv)
-	// NOTE: we should protect against double closing before enabling
-	// close(s.quitChan)
+	s.cancel()
 }
 
 func (s *loggingServer) GracefulStop() {
 	s.srv.GracefulStop()
 	log.Tracef("LoggingGRPCServer: (%p) GracefulStop() ", s.srv)
-	// NOTE: we should protect against double closing before enabling
-	// close(s.quitChan)
+	s.cancel()
 }
 
 func (s *loggingServer) Registrar() ServiceRegistrar {

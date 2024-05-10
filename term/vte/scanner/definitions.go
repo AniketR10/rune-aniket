@@ -58,6 +58,7 @@ func unpack(delta uint8) (State, Action) {
 	return State(delta & 0x0f), Action(delta >> 4)
 }
 
+// nolint:unused
 // pack packs a State and Action into a uint8.
 func pack(state State, action Action) uint8 {
 	return uint8(action)<<4 | uint8(state)

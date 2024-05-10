@@ -216,7 +216,7 @@ func (n *Container) Handle(ev term.Event) (exit, handled bool) {
 		n.pauseNotification(el)
 	}
 
-	ok = true
+	handled = true
 	return
 }
 

@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/unstablebuild/blue/logging"
 	log "github.com/sirupsen/logrus"
+	"github.com/unstablebuild/blue/logging"
 	textapi "unstable.build/go-tui/api/text"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser"
@@ -217,7 +217,7 @@ func makeLocationListRequest(
 			Msg:  loc.Message,
 		})
 	}
-	return req
+	return req // nolint:govet
 }
 
 // SetLocationList requests the editor server to set l as the new location list for h.
@@ -355,5 +355,5 @@ func makeProtoManual(man textapi.CommandManual) CommandManual {
 		Synopsis: man.Synopsis,
 		Commands: cmds,
 	}
-	return ret
+	return ret // nolint:govet
 }

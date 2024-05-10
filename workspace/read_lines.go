@@ -7,8 +7,8 @@ import (
 	"os"
 	"sync"
 
-	"github.com/unstablebuild/blue/iterator"
 	multierr "github.com/ernestrc/go-multierror"
+	"github.com/unstablebuild/blue/iterator"
 )
 
 // ReadLines takes an iterator of file paths, i.e. return of ListFiles

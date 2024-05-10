@@ -59,8 +59,7 @@ func (e *viEditor) UnsubscribeEvents(sub text.EventHandler) (bool, error) {
 }
 
 func (e *viEditor) SetDefaultAttributes(h text.Handler, attrs term.Attributes) error {
-	e.Publisher.Handler(h).(*Vi).SetDefaultAttributes(attrs)
-	return nil
+	return e.Publisher.Handler(h).(*Vi).SetDefaultAttributes(attrs)
 }
 
 func (e viEditor) SetLocationList(

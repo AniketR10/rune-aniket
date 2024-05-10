@@ -29,7 +29,6 @@ func (w *StringWriter) Init(width, height int) {
 	w.Resize(width, height)
 	w.CursorCh = '▐'
 	w.SetContext = context.Background()
-	return
 }
 
 // Context returns context.Background

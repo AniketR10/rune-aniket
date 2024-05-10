@@ -152,7 +152,7 @@ func (c *rawCells) insertAt(pos term.Coordinates, r []rune, width int) (
 		if c.zwjPos == pos {
 			str := c.String()
 			c.reset()
-			c.ReadFrom(strings.NewReader(str))
+			_, _ = c.ReadFrom(strings.NewReader(str))
 			next = term.Coordinates{X: pos.X, Y: pos.Y}
 		}
 		c.zwj = false

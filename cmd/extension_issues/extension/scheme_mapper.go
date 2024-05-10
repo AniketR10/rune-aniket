@@ -3,14 +3,14 @@ package extension
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"os"
 	"sort"
 	"strings"
 
+	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/encoding"
 	"github.com/unstablebuild/blue/issue"
-	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui/api/config"
 	schemeapi "unstable.build/go-tui/api/scheme"
 	workspaceapi "unstable.build/go-tui/api/workspace"
@@ -99,7 +99,7 @@ func (m mapper) ReadDir(name string) (
 		if werr != nil {
 			return nil, werr.ToError()
 		}
-		data, err := ioutil.ReadAll(f)
+		data, err := io.ReadAll(f)
 		if err != nil {
 			return nil, err
 		}

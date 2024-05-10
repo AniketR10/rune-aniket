@@ -8,10 +8,10 @@ import (
 	"syscall"
 	"time"
 
-	bluectx "github.com/unstablebuild/blue/context"
-	"github.com/unstablebuild/blue/logging"
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
+	bluectx "github.com/unstablebuild/blue/context"
+	"github.com/unstablebuild/blue/logging"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	schemeapi "unstable.build/go-tui/api/scheme"
 	workspaceapi "unstable.build/go-tui/api/workspace"
@@ -118,7 +118,7 @@ func (c *Client) Stat(name string) (os.FileInfo, error) {
 	if werr, ok := isTypedError(resp); ok {
 		return nil, werr.ToError()
 	}
-	return fileClientInfo{StatResponse: *resp}, nil
+	return &fileClientInfo{StatResponse: *resp}, nil // nolint:govet
 }
 
 // ReadDir reads the named directory, returning all its directory entries.
@@ -197,7 +197,7 @@ func (c *Client) Lstat(name string) (os.FileInfo, error) {
 	if werr, ok := isTypedError(resp); ok {
 		return nil, werr.ToError()
 	}
-	return fileClientInfo{StatResponse: *resp}, nil
+	return &fileClientInfo{StatResponse: *resp}, nil // nolint:govet
 }
 
 // ReadLink satisfies workspaceapi.Workspace.
@@ -399,27 +399,27 @@ type fileClientInfo struct {
 	StatResponse
 }
 
-func (f fileClientInfo) Name() string {
+func (f *fileClientInfo) Name() string {
 	return f.StatResponse.GetName()
 }
 
-func (f fileClientInfo) Size() int64 {
+func (f *fileClientInfo) Size() int64 {
 	return f.StatResponse.GetSize()
 }
 
-func (f fileClientInfo) Mode() os.FileMode {
+func (f *fileClientInfo) Mode() os.FileMode {
 	return os.FileMode(f.StatResponse.GetMode())
 }
 
-func (f fileClientInfo) ModTime() time.Time {
+func (f *fileClientInfo) ModTime() time.Time {
 	return protoTimeToStd(f.StatResponse.GetModTime())
 }
 
-func (f fileClientInfo) IsDir() bool {
+func (f *fileClientInfo) IsDir() bool {
 	return f.StatResponse.GetIsDir()
 }
 
-func (f fileClientInfo) Sys() interface{} {
+func (f *fileClientInfo) Sys() interface{} {
 	return nil
 }
 

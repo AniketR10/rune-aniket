@@ -107,5 +107,5 @@ func toProto(e textapi.Event) EditorEvent {
 	ret.From = &from
 	ret.To = &to
 
-	return ret
+	return ret //nolint:govet
 }

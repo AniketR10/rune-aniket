@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/unstablebuild/blue/document"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/blue/document"
 	browserapi "unstable.build/go-tui/api/browser"
 	"unstable.build/go-tui/api/config"
 	textapi "unstable.build/go-tui/api/text"

@@ -3,20 +3,20 @@ package process
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
+
 	"log"
 	"time"
 
-	"github.com/unstablebuild/blue/logging"
 	"github.com/hashicorp/go-hclog"
 	"github.com/sirupsen/logrus"
+	"github.com/unstablebuild/blue/logging"
 )
 
 var extensionLogger logrus.Logger
 
 func initExtensionLogger() {
 	extensionLogger = *logrus.New()
-	SetLoggingOutput(ioutil.Discard)
+	SetLoggingOutput(io.Discard)
 	SetLoggingLevel(logrus.InfoLevel)
 	SetLoggingFormatter(&logrus.TextFormatter{
 		DisableColors:   true,

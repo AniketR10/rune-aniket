@@ -48,7 +48,6 @@ func (c *delClip) OnDidEdit(
 	ctx context.Context, from, to term.Coordinates, old string,
 ) {
 	if old != "" {
-		c.clipboard.Copy(c.registerID, clipboard.Data{Text: old, Metadata: c.mode})
+		_ = c.clipboard.Copy(c.registerID, clipboard.Data{Text: old, Metadata: c.mode})
 	}
-	return
 }

@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
+
 	"os"
 	"strings"
 	"testing"
@@ -21,7 +21,7 @@ var fileWithNoEOL string
 var fileWithEOL string
 
 func init() {
-	f, err := ioutil.TempFile("", "test_raw_cells_1_")
+	f, err := os.CreateTemp("", "test_raw_cells_1_")
 	if err != nil {
 		return
 	}
@@ -37,7 +37,7 @@ func init() {
 	fileWithNoEOL = f.Name()
 	f.Close()
 
-	f, err = ioutil.TempFile("", "test_raw_cells_2_")
+	f, err = os.CreateTemp("", "test_raw_cells_2_")
 	if err != nil {
 		return
 	}
@@ -95,7 +95,7 @@ func TestUnixFile(t *testing.T) {
 
 		{
 			c := cell.NewBuffer()
-			bytes, err := ioutil.ReadAll(tcase.input)
+			bytes, err := io.ReadAll(tcase.input)
 			require.NoError(t, err)
 			c.Edit(context.Background(), term.Coordinates{},
 				term.Coordinates{}, string(bytes))

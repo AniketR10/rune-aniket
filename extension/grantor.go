@@ -5,7 +5,6 @@ import (
 	"io"
 	"sync"
 
-	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui/proto"
 )
 
@@ -15,18 +14,6 @@ type ResourceRegistrar interface {
 		extensionID string, grantor Grantor,
 		registar proto.ServiceRegistrar, broker proto.MuxBroker,
 		locker sync.Locker) (io.Closer, error)
-}
-
-// enables functions matching signature of Serve to
-// satisfy ResourceRegistrar
-type resourceServerFn func(string, uint32,
-	proto.MuxBroker, *log.Logger, sync.Locker)
-
-func (fn resourceServerFn) Serve(
-	extensionID string, grantID uint32,
-	broker proto.MuxBroker, l *log.Logger, mu sync.Locker,
-) {
-	fn(extensionID, grantID, broker, l, mu)
 }
 
 // MergeResourceMap merges m1 with mn.

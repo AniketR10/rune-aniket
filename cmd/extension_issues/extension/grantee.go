@@ -4,20 +4,19 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	_ "net/http/pprof"
 	"os"
 	"os/user"
 	"sync/atomic"
 	"time"
 
+	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/document"
 	doclogging "github.com/unstablebuild/blue/document/logging"
 	"github.com/unstablebuild/blue/encoding"
 	"github.com/unstablebuild/blue/encoding/yaml"
 	"github.com/unstablebuild/blue/issue"
 	"github.com/unstablebuild/blue/logging"
-	log "github.com/sirupsen/logrus"
 	browserapi "unstable.build/go-tui/api/browser"
 	browserextension "unstable.build/go-tui/api/browser/extension"
 	"unstable.build/go-tui/api/config"
@@ -445,7 +444,7 @@ func (e *grantee) openIssueTemplate(
 			"You should close it first before attempting to create a new one.")
 	}
 
-	f, err := ioutil.TempFile("", templateName)
+	f, err := os.CreateTemp("", templateName)
 	if err != nil {
 		return false, fmt.Errorf("temp file: %v", err)
 	}

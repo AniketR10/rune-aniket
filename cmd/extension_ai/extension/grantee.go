@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/unstablebuild/blue/logging"
 	log "github.com/sirupsen/logrus"
+	"github.com/unstablebuild/blue/logging"
 	configapi "unstable.build/go-tui/api/config"
 	textapi "unstable.build/go-tui/api/text"
 	"unstable.build/go-tui/cmd/extension_ai/backend"

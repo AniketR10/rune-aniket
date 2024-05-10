@@ -5,17 +5,17 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
+
 	"os"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/encoding/json"
 	"github.com/unstablebuild/blue/encoding/yaml"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"unstable.build/go-tui/api/config"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
@@ -62,7 +62,7 @@ func TestDocumentOpen(t *testing.T) {
 		f, werr := scheme.Open("a", os.O_CREATE|os.O_RDWR, 0)
 		require.Nil(t, werr)
 
-		data, err := ioutil.ReadAll(f)
+		data, err := io.ReadAll(f)
 		require.NoError(t, err)
 
 		assert.True(t, strings.HasPrefix(string(data), "id: a\ncontent: \"\""))
@@ -120,7 +120,7 @@ func TestDocumentOpen(t *testing.T) {
 }
 
 func readAll(r io.Reader) ([]byte, error) {
-	data, err := ioutil.ReadAll(r)
+	data, err := io.ReadAll(r)
 	if err != nil {
 		return nil, err
 	}

@@ -32,7 +32,6 @@ type granteeServer struct {
 	cancelCtx func()
 	closeWg   sync.WaitGroup
 
-	durationGracefulShut time.Duration
 	keepAliveTimeout     time.Duration
 }
 
@@ -78,7 +77,9 @@ func (s *granteeServer) monitorKeepAlive() {
 		case <-t.C:
 			ctx, cancel := context.WithTimeout(s.ctx, s.keepAliveTimeout)
 			defer cancel()
-			s.doShutdown(ctx, "lost connectivity to host: failed to send a health check in time")
+			defer forceStopTimer(t)
+			_ = s.doShutdown(ctx, "lost connectivity to host: failed to send a health check in time")
+			return
 		case <-ch:
 			forceStopTimer(t)
 			t.Reset(s.keepAliveTimeout)
@@ -235,9 +236,7 @@ func (s *granteeServer) Health(ctx context.Context, req *extensionpb.HealthReque
 	defer s.mu.Unlock()
 
 	if s.keepAlive != nil {
-		select {
-		case s.keepAlive <- struct{}{}:
-		}
+		s.keepAlive <- struct{}{}
 	}
 	return new(extensionpb.HealthResponse), nil
 }
@@ -256,10 +255,6 @@ func newGranteeClient(
 	ret.client = client
 	ret.mBroker = broker
 	return ret
-}
-
-func (c *granteeClient) broker() proto.MuxBroker {
-	return c.mBroker
 }
 
 func (c *granteeClient) permissions(ctx context.Context, cfg config.Config) (
@@ -291,9 +286,7 @@ func (c *granteeClient) sendGrants(
 ) error {
 	req := new(extensionpb.OnPermGrantRequest)
 
-	for _, dn := range denied {
-		req.Denied = append(req.Denied, dn)
-	}
+	req.Denied = append(req.Denied, denied...)
 
 	for _, gr := range granted {
 		req.Granted = append(req.Granted, gr)

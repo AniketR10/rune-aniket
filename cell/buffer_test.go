@@ -8,9 +8,9 @@ import (
 
 	"unstable.build/go-tui/term"
 
-	"github.com/unstablebuild/tcell/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/tcell/v3"
 )
 
 const longStr = `Love in your heart wasn't put there to stay.

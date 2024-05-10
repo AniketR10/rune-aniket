@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"os/user"
@@ -14,10 +13,10 @@ import (
 	"syscall"
 	"time"
 
-	bluectx "github.com/unstablebuild/blue/context"
-	"github.com/unstablebuild/blue/logging"
 	"github.com/ernestrc/sensible/find"
 	log "github.com/sirupsen/logrus"
+	bluectx "github.com/unstablebuild/blue/context"
+	"github.com/unstablebuild/blue/logging"
 	"unstable.build/go-tui/api/config"
 	schemeapi "unstable.build/go-tui/api/scheme"
 	workspaceapi "unstable.build/go-tui/api/workspace"
@@ -69,7 +68,7 @@ func ReadFile(filename string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read: %w", err)
 	}
-	return ioutil.ReadAll(f)
+	return io.ReadAll(f)
 }
 
 type fileScheme struct {

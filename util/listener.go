@@ -1,7 +1,6 @@
 package util
 
 import (
-	"io/ioutil"
 	"net"
 	"os"
 	"strings"
@@ -10,7 +9,7 @@ import (
 // TempUnixListenerTags creates a temp file with the given tags
 // and exposes it as a unix dmain socket net.Listener.
 func TempUnixListenerTags(dir string, tags ...string) (net.Listener, error) {
-	tf, err := ioutil.TempFile(dir, strings.Join(tags, "_"))
+	tf, err := os.CreateTemp(dir, strings.Join(tags, "_"))
 	if err != nil {
 		return nil, err
 	}

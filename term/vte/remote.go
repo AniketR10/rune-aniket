@@ -6,9 +6,9 @@ import (
 	"errors"
 	"time"
 
+	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/logging"
 	"github.com/unstablebuild/blue/retry"
-	log "github.com/sirupsen/logrus"
 )
 
 var triggerBellRetryStrategy = retry.CombinedStrategy(
@@ -90,16 +90,6 @@ func (p *ptyWriter) moveRight() {
 func (p *ptyWriter) moveStartOfLine() {
 	// ctrl-a
 	p.writeToPty([]byte{0x01})
-}
-
-func (p *ptyWriter) eraseToEndOfLine() {
-	// ctrl-k
-	p.writeToPty([]byte{0x0B})
-}
-
-func (p *ptyWriter) eraseToStartOfLine() {
-	// ctrl-u
-	p.writeToPty([]byte{0x15})
 }
 
 func (p *ptyWriter) linefeed() {

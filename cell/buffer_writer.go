@@ -27,7 +27,7 @@ func NewBufferWriter(ctx context.Context, width, height int) *BufferWriter {
 func (w *BufferWriter) Init(ctx context.Context, width, height int) {
 	w.width, w.height = width, height
 	w.ctx = ctx
-	w.Clear(term.Attributes{})
+	_ = w.Clear(term.Attributes{})
 }
 
 // SetCell satisfies term.Writer

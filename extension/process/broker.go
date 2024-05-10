@@ -1,8 +1,8 @@
 package process
 
 import (
-	"github.com/unstablebuild/blue/retry"
 	log "github.com/sirupsen/logrus"
+	"github.com/unstablebuild/blue/retry"
 	"unstable.build/go-tui/proto"
 )
 

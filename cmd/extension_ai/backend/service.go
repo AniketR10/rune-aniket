@@ -25,10 +25,7 @@ func (e *ErrContextWindowExceeded) Unwrap() error {
 
 func (e *ErrContextWindowExceeded) Is(target error) bool {
 	_, ok := target.(*ErrContextWindowExceeded)
-	if !ok {
-		return false
-	}
-	return true
+	return ok
 }
 
 // Service encapsulates communications with an AI-capabilities provider.
@@ -93,9 +90,9 @@ type Role string
 
 const (
 	RoleAssistant Role = "assistant"
-	RoleUser           = "user"
-	RoleSystem         = "system"
-	RoleTool           = "tool"
+	RoleUser      Role = "user"
+	RoleSystem    Role = "system"
+	RoleTool      Role = "tool"
 )
 
 // FinishReason is the reason why the message choice was returned.

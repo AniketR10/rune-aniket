@@ -5,15 +5,15 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
+
 	"os"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/encoding/json"
-	"github.com/stretchr/testify/require"
 	"unstable.build/go-tui/api/config"
 	schemeapi "unstable.build/go-tui/api/scheme"
 	workspaceapi "unstable.build/go-tui/api/workspace"
@@ -145,7 +145,7 @@ func writeToBuffer(buf *cell.Buffer, data []byte) (int, error) {
 }
 
 func readContent(r io.Reader) ([]byte, error) {
-	data, err := ioutil.ReadAll(r)
+	data, err := io.ReadAll(r)
 	if err != nil {
 		return nil, err
 	}
@@ -159,7 +159,7 @@ func readContent(r io.Reader) ([]byte, error) {
 }
 
 func writeContent(f workspaceapi.File, data []byte) (int, error) {
-	allData, err := ioutil.ReadAll(f)
+	allData, err := io.ReadAll(f)
 	if err != nil {
 		return 0, err
 	}

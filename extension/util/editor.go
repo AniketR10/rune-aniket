@@ -6,9 +6,9 @@ import (
 	"io"
 	"sync"
 
-	"github.com/unstablebuild/blue/logging"
 	"github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
+	"github.com/unstablebuild/blue/logging"
 	"unstable.build/go-tui/api/config"
 	textapi "unstable.build/go-tui/api/text"
 	textextension "unstable.build/go-tui/api/text/extension"
@@ -55,7 +55,6 @@ type editorGrantee struct {
 	newHandler CommandEventHandlerFacility
 	cmds       []textapi.CommandManual
 	pconfig    config.Config
-	err        error
 	evs        []textapi.EventType
 }
 

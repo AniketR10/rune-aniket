@@ -3,8 +3,8 @@ package handler
 import (
 	"testing"
 
-	"github.com/unstablebuild/tcell/v3"
 	"github.com/stretchr/testify/assert"
+	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/term"
 )

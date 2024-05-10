@@ -553,6 +553,7 @@ func (t *Component) Close() (ret error) {
 	return ret
 }
 
+//nolint:unused
 func (t *Component) log(level log.Level, line string, params ...interface{}) {
 	log.WithField(logging.KeyClass, "vte.Component").
 		Logf(level, line, params...)

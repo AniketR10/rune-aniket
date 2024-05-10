@@ -81,7 +81,7 @@ func (i *Box) Init(buf *cell.Buffer, ed text.Editor, cfg BoxConfig) {
 
 	// do not expose StringResponsiveConfig in BoxConfig because editor handlers are
 	// not capable of emulating NoSplitWords property.
-	placeholderStr := component.StringResponsive(cfg.Placeholder,
+	placeholderStr := component.NewResponsiveString(cfg.Placeholder,
 		component.StringResponsiveConfig{StringConfig: cfg.PlaceholderConfig})
 	placeholder := handler.NewFrame(
 		handler.Nop(placeholderStr))

@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/unstablebuild/blue/logging"
 	log "github.com/sirupsen/logrus"
+	"github.com/unstablebuild/blue/logging"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
 	browserapi "unstable.build/go-tui/api/browser"
@@ -376,7 +376,7 @@ func (s *Server) Tab(ctx context.Context, req *TabRequest,
 	defer s.browser.Unlock()
 
 	_, err = s.browser.Tab(uri, name, handler)
-	return &TabResponse{}, nil
+	return &TabResponse{}, err
 }
 
 func (s *Server) SetContent(

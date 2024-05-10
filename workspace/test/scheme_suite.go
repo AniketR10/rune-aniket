@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -186,17 +185,17 @@ func TestWorkspaceSchemeFiles(
 ) {
 	t.Run("Open", func(t *testing.T) {
 		TestWorkspaceSchemeOpen(t, schemeFn, defaultCreateTestFile,
-			ioutil.ReadAll, (workspaceapi.File).Write, true)
+			io.ReadAll, (workspaceapi.File).Write, true)
 	})
 	t.Run("NewFile", func(t *testing.T) {
 		TestWorkspaceSchemeNewFile(t, schemeFn, defaultCreateTestFile,
-			ioutil.ReadAll, (workspaceapi.File).Write)
+			io.ReadAll, (workspaceapi.File).Write)
 	})
 	t.Run("Remove", func(t *testing.T) {
 		TestWorkspaceSchemeRemove(t, schemeFn, defaultCreateTestFile)
 	})
 	t.Run("Rename", func(t *testing.T) {
-		TestWorkspaceSchemeRename(t, schemeFn, defaultCreateTestFile, ioutil.ReadAll)
+		TestWorkspaceSchemeRename(t, schemeFn, defaultCreateTestFile, io.ReadAll)
 	})
 	t.Run("Stat", func(t *testing.T) {
 		TestWorkspaceSchemeStat(t, schemeFn, defaultCreateTestFile)
@@ -220,7 +219,7 @@ func TestWorkspaceSchemeFiles(
 }
 
 func readAllExceptLastEOL(r io.Reader) (data []byte, err error) {
-	data, err = ioutil.ReadAll(r)
+	data, err = io.ReadAll(r)
 	if err != nil {
 		return
 	}
@@ -448,8 +447,8 @@ func defaultCreateTestFile(t *testing.T, s schemeapi.Scheme, filename, content s
 	_, err = file.Seek(0, 0)
 	require.NoError(t, err)
 	return file, func() {
-		file.Close()
-		s.Remove(file.Name()) // best effort
+		_ = file.Close()
+		_ = s.Remove(file.Name()) // best effort
 	}
 }
 
@@ -564,11 +563,12 @@ func TestWorkspaceSchemeNewFile(
 
 		f = scheme.NewFile(f.Fd(), f.Name())
 		n, err = f.Read(buf[:])
+		require.NoError(t, err)
 		assert.Equal(t, 2, n)
 		assert.Equal(t, "90", string(buf[:n]))
 
 		f = scheme.NewFile(f.Fd(), f.Name())
-		n, err = f.Read(buf[:])
+		_, err = f.Read(buf[:])
 		require.Equal(t, io.EOF, err)
 	})
 }

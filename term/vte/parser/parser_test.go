@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/unstablebuild/tcell/v3"
 	"github.com/stretchr/testify/assert"
+	"github.com/unstablebuild/tcell/v3"
 )
 
 func TestParserIntegration(t *testing.T) {

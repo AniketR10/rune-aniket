@@ -5,10 +5,10 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/unstablebuild/tcell/v3"
 	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/tcell/v3"
 	"google.golang.org/grpc"
 	textapi "unstable.build/go-tui/api/text"
 	workspaceapi "unstable.build/go-tui/api/workspace"

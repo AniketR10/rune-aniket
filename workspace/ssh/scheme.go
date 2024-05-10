@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"os"
 	"os/user"
@@ -171,6 +170,7 @@ func (s *scheme) runAndWait(
 	// stdlib ssh session returns io.EOF if closing after command returned
 	if err != nil && err != io.EOF {
 		err = fmt.Errorf("close session: %v", err)
+		return "", false, err
 	}
 	return "", true, nil
 }
@@ -292,7 +292,7 @@ func (s *scheme) connectScheme(
 		defer remote.Close()
 		err := <-ch
 		if err != nil {
-			stderrStr, rerr := ioutil.ReadAll(stderrRead)
+			stderrStr, rerr := io.ReadAll(stderrRead)
 			if rerr != nil {
 				err = fmt.Errorf("could not read error from stderr but there was"+
 					"an error executing remote six server over SSH: %s", err)

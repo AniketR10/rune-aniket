@@ -7,8 +7,8 @@ import (
 	"io"
 	"sync/atomic"
 
-	"github.com/unstablebuild/blue/logging"
 	log "github.com/sirupsen/logrus"
+	"github.com/unstablebuild/blue/logging"
 	"unstable.build/go-tui"
 
 	termpb "unstable.build/go-tui/term/rpc"
@@ -99,7 +99,10 @@ func (s *Server) Man(context.Context, *ManRequest) (
 ) {
 	man := s.handler.Man()
 	protoMan := new(termpb.Manual)
-	protoMan.FromModel(man)
+	err := protoMan.FromModel(man)
+	if err != nil {
+		return nil, err
+	}
 	return &ManResponse{Man: protoMan}, nil
 }
 

@@ -4,8 +4,8 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/unstablebuild/tcell/v3"
 	"github.com/stretchr/testify/assert"
+	"github.com/unstablebuild/tcell/v3"
 )
 
 func TestAttributesUnion(t *testing.T) {

@@ -5,9 +5,9 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/unstablebuild/blue/document"
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
+	"github.com/unstablebuild/blue/document"
 	"unstable.build/go-tui/storage"
 )
 

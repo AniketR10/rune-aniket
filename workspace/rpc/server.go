@@ -10,15 +10,14 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/unstablebuild/blue/logging"
 	log "github.com/sirupsen/logrus"
+	"github.com/unstablebuild/blue/logging"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	schemeapi "unstable.build/go-tui/api/scheme"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 )
 
 var (
-	errFileNotOpen = errors.New("file is not open")
 	errInvalidFd   = errors.New("invalid file descriptor")
 )
 

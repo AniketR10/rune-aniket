@@ -6,11 +6,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/unstablebuild/blue/document"
-	"github.com/unstablebuild/blue/iterator"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/blue/document"
+	"github.com/unstablebuild/blue/iterator"
 	textapi "unstable.build/go-tui/api/text"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/term"

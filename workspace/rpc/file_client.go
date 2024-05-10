@@ -7,8 +7,8 @@ import (
 	"os"
 	"runtime"
 
-	"github.com/unstablebuild/blue/logging"
 	log "github.com/sirupsen/logrus"
+	"github.com/unstablebuild/blue/logging"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/proto"
 )
@@ -57,7 +57,7 @@ func (c *FileClient) Read(p []byte) (n int, err error) {
 	req := ReadRequest{N: int64(len(p)), Fd: uint32(c.fd), Filename: c.filename}
 	resp, err := c.client.Read(ctx, &req)
 	c.log(log.TraceLevel, "file client read: req:%#v, respN:%d, err=%v",
-		req, resp.GetN(), err)
+		&req, resp.GetN(), err)
 	runtime.KeepAlive(c)
 	if err != nil {
 		return 0, err
@@ -133,7 +133,7 @@ func (c *FileClient) Stat() (os.FileInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	return fileClientInfo{StatResponse: *resp}, nil
+	return &fileClientInfo{StatResponse: *resp}, nil // nolint:govet
 }
 
 // Sync satisfies workspaceapi.File.

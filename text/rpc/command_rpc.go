@@ -7,9 +7,9 @@ import (
 	"runtime"
 	"time"
 
+	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/logging"
-	log "github.com/sirupsen/logrus"
 	textapi "unstable.build/go-tui/api/text"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser"
@@ -58,6 +58,7 @@ func (c *commandClient) Complete(ctx context.Context, name string, args []string
 	runtime.KeepAlive(c)
 	if err != nil {
 		c.log(log.TraceLevel, "complete command %s error: %v", name, err)
+		cancelFn()
 		return nil, "", fmt.Errorf("complete command rpc: %w", err)
 	}
 

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math/rand"
 	os "os"
 	"path"
@@ -62,7 +61,7 @@ func newIntegrationTestCase(t *testing.T, endsInEOL bool) (
 	*cell.Buffer, *os.File, func(),
 ) {
 	buffer := cell.NewBuffer()
-	file, err := ioutil.TempFile("", "frctl_file_test")
+	file, err := os.CreateTemp("", "frctl_file_test")
 	require.NoError(t, err)
 
 	_, err = file.Write([]byte(sampleSnippet))
@@ -121,7 +120,7 @@ func recoverFile(
 func testFileBufferIntegration(t *testing.T, endsInEOL bool) {
 	t.Run("if file does not exist, create it upon Flush", func(t *testing.T) {
 		buf := cell.NewBuffer()
-		file, err := ioutil.TempFile("", "frctl_file_test")
+		file, err := os.CreateTemp("", "frctl_file_test")
 		require.NoError(t, err)
 
 		// secure a random filename in a tmp directory
@@ -143,7 +142,7 @@ func testFileBufferIntegration(t *testing.T, endsInEOL bool) {
 
 	t.Run("if file does not exist and readOnly, error out", func(t *testing.T) {
 		buf := cell.NewBuffer()
-		file, err := ioutil.TempFile("", "frctl_file_test")
+		file, err := os.CreateTemp("", "frctl_file_test")
 		require.NoError(t, err)
 
 		// secure a random filename in a tmp directory
@@ -159,11 +158,11 @@ func testFileBufferIntegration(t *testing.T, endsInEOL bool) {
 
 	t.Run("if readOnly, error out on flush", func(t *testing.T) {
 		buf := cell.NewBuffer()
-		file, err := ioutil.TempFile("", "frctl_file_test")
+		file, err := os.CreateTemp("", "frctl_file_test")
 		require.NoError(t, err)
 
 		filename := file.Name()
-		ioutil.WriteFile(filename, []byte("blah"), 0000)
+		os.WriteFile(filename, []byte("blah"), 0000)
 		require.NoError(t, file.Close())
 
 		f, err := openFile(filename, buf, "", true)
@@ -173,20 +172,20 @@ func testFileBufferIntegration(t *testing.T, endsInEOL bool) {
 		buf.WriteString("meh")
 		assert.Error(t, f.Flush())
 
-		data, err := ioutil.ReadFile(filename)
+		data, err := os.ReadFile(filename)
 		require.NoError(t, err)
 		assert.Equal(t, "blah", string(data))
 	})
 
 	t.Run("if readOnly no swap files are initialized", func(t *testing.T) {
 		buf := cell.NewBuffer()
-		file, err := ioutil.TempFile("", "frctl_file_test")
+		file, err := os.CreateTemp("", "frctl_file_test")
 		require.NoError(t, err)
 
 		filename := file.Name()
 		require.NoError(t, file.Close())
 
-		swapDir, err := ioutil.TempDir("", "")
+		swapDir, err := os.MkdirTemp("", "")
 		require.NoError(t, err)
 
 		f, err := openFile(filename, buf, swapDir, true)
@@ -201,7 +200,7 @@ func testFileBufferIntegration(t *testing.T, endsInEOL bool) {
 
 	t.Run("if readOnly it doesn't error out if file is already open", func(t *testing.T) {
 		buf := cell.NewBuffer()
-		file, err := ioutil.TempFile("", "frctl_file_test")
+		file, err := os.CreateTemp("", "frctl_file_test")
 		require.NoError(t, err)
 
 		filename := file.Name()
@@ -218,7 +217,7 @@ func testFileBufferIntegration(t *testing.T, endsInEOL bool) {
 
 	t.Run("if swap holding buffer is closed, then NewFileBuffer should NOT error out", func(t *testing.T) {
 		buf := cell.NewBuffer()
-		file, err := ioutil.TempFile("", "frctl_file_test")
+		file, err := os.CreateTemp("", "frctl_file_test")
 		require.NoError(t, err)
 
 		filename := file.Name()
@@ -239,7 +238,7 @@ func testFileBufferIntegration(t *testing.T, endsInEOL bool) {
 
 	t.Run("respects original file mode", func(t *testing.T) {
 		buf := cell.NewBuffer()
-		file, err := ioutil.TempFile("", "frctl_file_test")
+		file, err := os.CreateTemp("", "frctl_file_test")
 		require.NoError(t, err)
 
 		filename := file.Name()
@@ -265,7 +264,7 @@ func testFileBufferIntegration(t *testing.T, endsInEOL bool) {
 
 	t.Run("respects symlinks", func(t *testing.T) {
 		buf := cell.NewBuffer()
-		orig, err := ioutil.TempFile("", "frctl_file_test")
+		orig, err := os.CreateTemp("", "frctl_file_test")
 		require.NoError(t, err)
 
 		require.NoError(t, orig.Chmod(0700))
@@ -282,7 +281,7 @@ func testFileBufferIntegration(t *testing.T, endsInEOL bool) {
 		require.NoError(t, err)
 		defer f.Close()
 		require.NoError(t, f.Flush())
-		b, err := ioutil.ReadFile(filename)
+		b, err := os.ReadFile(filename)
 		require.NoError(t, err)
 		assert.Equal(t, "", string(b))
 
@@ -294,7 +293,7 @@ func testFileBufferIntegration(t *testing.T, endsInEOL bool) {
 		require.NoError(t, err)
 		assert.True(t, fileInfo.Mode()&os.ModeSymlink == os.ModeSymlink)
 
-		b, err = ioutil.ReadFile(filename)
+		b, err = os.ReadFile(filename)
 		require.NoError(t, err)
 		assert.Equal(t, "blah\n", string(b))
 
@@ -322,7 +321,7 @@ func testFileBufferIntegration(t *testing.T, endsInEOL bool) {
 		b, file, cleanup := newIntegrationTestCase(t, endsInEOL)
 		defer cleanup()
 
-		swapDir, err := ioutil.TempDir("", "")
+		swapDir, err := os.MkdirTemp("", "")
 		require.NoError(t, err)
 
 		_, swapFileName := swapFileName(swapDir, file.Name())
@@ -351,7 +350,7 @@ func testFileBufferIntegration(t *testing.T, endsInEOL bool) {
 
 		defer f.Close()
 
-		buf, err := ioutil.ReadFile(f.swap.Name())
+		buf, err := os.ReadFile(f.swap.Name())
 		require.NoError(t, err)
 		content := sampleSnippet
 		if endsInEOL {
@@ -365,7 +364,7 @@ func testFileBufferIntegration(t *testing.T, endsInEOL bool) {
 		// wait for updates
 		f.wg.Wait()
 
-		buf, err = ioutil.ReadFile(f.swap.Name())
+		buf, err = os.ReadFile(f.swap.Name())
 		require.NoError(t, err)
 
 		assert.Equal(t, writeStr+sampleSnippet+"\n", string(buf))
@@ -383,7 +382,7 @@ func testFileBufferIntegration(t *testing.T, endsInEOL bool) {
 		b.InsertString(term.Coordinates{}, writeStr)
 		require.NoError(t, f.Flush())
 
-		buf, err := ioutil.ReadFile(file.Name())
+		buf, err := os.ReadFile(file.Name())
 		require.NoError(t, err)
 
 		assert.Equal(t, writeStr+sampleSnippet+"\n", string(buf))
@@ -393,7 +392,7 @@ func testFileBufferIntegration(t *testing.T, endsInEOL bool) {
 		b, file, cleanup := newIntegrationTestCase(t, endsInEOL)
 		defer cleanup()
 
-		swapDir, err := ioutil.TempDir("", "")
+		swapDir, err := os.MkdirTemp("", "")
 		require.NoError(t, err)
 
 		f, err := openFile(file.Name(), b, swapDir, false)
@@ -416,11 +415,11 @@ func TestFileBufferIntegrationNOEOL(t *testing.T) {
 func assertRecoverFromSwapFile(t *testing.T, filename, swapname string, b *cell.Buffer) {
 	assert.Equal(t, sampleSnippet, b.String())
 
-	buf, err := ioutil.ReadFile(filename)
+	buf, err := os.ReadFile(filename)
 	require.NoError(t, err)
 	assert.Equal(t, sampleSnippet+"\n", string(buf))
 
-	buf, err = ioutil.ReadFile(swapname)
+	buf, err = os.ReadFile(swapname)
 	require.NoError(t, err)
 	assert.Equal(t, sampleSnippet+"\n", string(buf))
 }
@@ -512,13 +511,13 @@ func TestFileBufferRecover(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, swap.Sync())
 
-		swapContent, err := ioutil.ReadFile(swapFilepath)
+		swapContent, err := os.ReadFile(swapFilepath)
 		require.NoError(t, err)
 
 		_, err = recoverFile(filepath, swapFilepath, b, false)
 		require.NoError(t, err)
 
-		fileContent, err := ioutil.ReadFile(filepath)
+		fileContent, err := os.ReadFile(filepath)
 		require.NoError(t, err)
 		assert.Equal(t, swapContent, fileContent)
 	})
@@ -1273,7 +1272,7 @@ func TestFileMissingLastCopySwap(t *testing.T) {
 
 	builder.Write([]byte("\n"))
 	want := builder.String()
-	actual, err := ioutil.ReadFile(file.Name())
+	actual, err := os.ReadFile(file.Name())
 	require.NoError(t, f.Flush())
 	assert.Equal(t, want, string(actual))
 }

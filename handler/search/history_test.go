@@ -3,9 +3,9 @@ package search
 import (
 	"testing"
 
-	"github.com/unstablebuild/blue/document"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/blue/document"
 )
 
 func TestHistory(t *testing.T) {

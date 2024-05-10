@@ -11,10 +11,10 @@ import (
 	"syscall"
 	"time"
 
+	log "github.com/sirupsen/logrus"
 	bluectx "github.com/unstablebuild/blue/context"
 	"github.com/unstablebuild/blue/logging"
 	"github.com/unstablebuild/blue/retry"
-	log "github.com/sirupsen/logrus"
 	schemeapi "unstable.build/go-tui/api/scheme"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 )
@@ -52,7 +52,7 @@ func (s *remoteScheme) maintainConnection(
 	logger := log.WithField(logging.KeyClass, "ssh")
 
 	var initSema bool
-	retry.Retry(s.ctx, retryStrategy,
+	_ = retry.Retry(s.ctx, retryStrategy,
 		func(ctx context.Context) (bool, error) {
 
 			// cancel if connection is closed for some reason
@@ -72,7 +72,6 @@ func (s *remoteScheme) maintainConnection(
 				}
 				logger.Warnf("lost connectivity to %s: %s", uri, err)
 				s.setError(logger, err)
-				return
 			})
 
 			prevState := s.currState.Swap(state{scheme: scheme,

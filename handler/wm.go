@@ -57,7 +57,6 @@ func (wm *WindowManager) Init(handler tui.Handler, cfg WindowManagerConfig) {
 	wm.config = cfg
 	wm.focus = wm.newNode(win)
 	wm.SetFocus(wm.focus)
-	return
 }
 
 // SetFrameCharSet sets the frame border cells used to draw borders around tiles.

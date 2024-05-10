@@ -29,14 +29,6 @@ type StringResponsiveConfig struct {
 	StringConfig
 }
 
-// StringResponsive returns a Responsive implementation of
-// a string tui.Component.
-//
-// Deprecated: use NewResponsiveString.
-func StringResponsive(str string, cfg StringResponsiveConfig) Responsive {
-	return NewResponsiveString(str, cfg)
-}
-
 // NewResponsiveString allocates storage for a new ResponsiveString based on str and cfg.
 func NewResponsiveString(str string, cfg StringResponsiveConfig) *ResponsiveString {
 	return NewResponsiveStringFromCells(cell.StringToCells(str, cfg.Tabspaces), cfg)

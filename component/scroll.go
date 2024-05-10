@@ -346,7 +346,6 @@ func (s *Scroll) drawNoAttr(writer term.Writer) {
 			writer.SetCell(term.Coordinates{X: xi, Y: y}, c)
 		}
 	}
-	return
 }
 
 func (s *Scroll) drawDebug(writer term.Writer) {
@@ -386,7 +385,6 @@ func (s *Scroll) drawDebug(writer term.Writer) {
 		}
 		writer.SetCell(term.Coordinates{X: x, Y: y}, term.Cell{Ch: '¬'})
 	}
-	return
 }
 
 func (s *Scroll) draw(writer term.Writer) {
@@ -413,7 +411,6 @@ func (s *Scroll) draw(writer term.Writer) {
 			writer.SetCell(term.Coordinates{X: xi, Y: y}, c)
 		}
 	}
-	return
 }
 
 func (s *Scroll) wrapdrawNoAttr(writer term.Writer) {

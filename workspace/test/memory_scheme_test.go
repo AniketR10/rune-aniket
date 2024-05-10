@@ -2,7 +2,7 @@ package test
 
 import (
 	"context"
-	"io/ioutil"
+	"io"
 	"sync"
 	"testing"
 
@@ -58,7 +58,7 @@ func TestMemoryFile(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, int64(0), nn)
 
-		data, err := ioutil.ReadAll(f)
+		data, err := io.ReadAll(f)
 		require.NoError(t, err)
 		assert.Equal(t, "ZZ345", string(data))
 	})
@@ -69,7 +69,7 @@ func TestMemoryFile(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, 2, n)
 
-		data, err := ioutil.ReadAll(f)
+		data, err := io.ReadAll(f)
 		require.NoError(t, err)
 		assert.Equal(t, "345", string(data))
 	})

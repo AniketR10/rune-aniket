@@ -4,8 +4,8 @@ import (
 	"context"
 	"sync"
 
-	"github.com/unstablebuild/blue/logging"
 	log "github.com/sirupsen/logrus"
+	"github.com/unstablebuild/blue/logging"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"

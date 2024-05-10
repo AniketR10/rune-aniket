@@ -11,12 +11,12 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/unstablebuild/blue/document"
-	"github.com/unstablebuild/blue/encoding/toml"
-	"github.com/unstablebuild/blue/iterator"
 	"github.com/ernestrc/go-multierror"
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
+	"github.com/unstablebuild/blue/document"
+	"github.com/unstablebuild/blue/encoding/toml"
+	"github.com/unstablebuild/blue/iterator"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/api/config"
 	textapi "unstable.build/go-tui/api/text"
@@ -399,6 +399,7 @@ func (h *workspaceManagerHandler) switchToWorkspace(i int) {
 func (h *workspaceManagerHandler) Handle(ev term.Event) (exit, handled bool) {
 	if ev.Type == term.EventMouse && h.drawBar() && ev.MouseY >= h.height-h.barSize() {
 		_, handled = h.union.Handle(ev)
+		return
 	}
 	focus := h.focusHandler()
 	exit, handled = focus.Handle(ev)
@@ -554,7 +555,7 @@ func (h *workspaceManagerHandler) addWorkspace(
 	if recfilename != "" {
 		recFile, err := cwd.URI(recfilename)
 		if err != nil {
-			return fmt.Errorf("cwd make uri for recovery file: %w",  err)
+			return fmt.Errorf("cwd make uri for recovery file: %w", err)
 		}
 		textOpts = append(textOpts, text.WithRecoveryFile(recFile))
 	}
@@ -565,7 +566,7 @@ func (h *workspaceManagerHandler) addWorkspace(
 
 	ed, err := h.newEditor(cfg)
 	if err != nil {
-		return fmt.Errorf("new editor: %w",  err)
+		return fmt.Errorf("new editor: %w", err)
 	}
 
 	// workspace capable of opening URIs other than the workspaceapi.URI
@@ -700,8 +701,7 @@ func (h *workspaceManagerHandler) logNonFatalErrs(
 	}
 	if all != nil {
 		log.Warn(all)
-		wh.Browser().
-			Notify(notifications.LevelError, "Config decode error: %v", all)
+		_ = wh.Browser().Notify(notifications.LevelError, "Config decode error: %v", all)
 	}
 }
 

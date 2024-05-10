@@ -5,14 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"os"
 	"sync"
 	"time"
 
-	"github.com/unstablebuild/blue/logging"
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
+	"github.com/unstablebuild/blue/logging"
 	"unstable.build/go-tui/api/config"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser"
@@ -47,7 +46,6 @@ type granteeClientWrap struct {
 	doneCh    chan *sync.WaitGroup
 	client    *granteeClient
 	resources []io.Closer
-	lis       net.Listener
 	ctx       context.Context
 	cancelCtx func()
 }
@@ -142,6 +140,7 @@ func (m *Manager) log(level log.Level, msg string, args ...interface{}) {
 		// already locked by the main mutex. Run in a separate goroutine
 		// to avoid deadlocks. This should not be too numerous so it should be ok
 		// to do this.
+		// nolint:errcheck
 		go m.config.notifications.Notify(notiLevel, msg, args...)
 	}
 	log.WithField(logging.KeyClass, "extension.Manager").Logf(level, msg, args...)
@@ -247,7 +246,11 @@ func (m *Manager) doGrant(
 	ctx = client.ctx
 	m.mu.Unlock()
 
-	go srv.Serve(ctx)
+	go func() {
+		if err := srv.Serve(ctx); err != nil {
+			log.Errorf("mux server serve: %v", err)
+		}
+	}()
 
 	m.ctxWg.Add(1)
 	go func() {

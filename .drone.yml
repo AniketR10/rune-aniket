@@ -14,6 +14,17 @@ steps:
     - name: home
       path: /root
 
+- name: lint
+  image: us-central1-docker.pkg.dev/unstable-build-blue-dev/docker/go-tui-ci:latest
+  pull: always
+  environment:
+    GOCACHE: /go/cache
+  commands:
+    - golangci-lint run --timeout=600s
+  volumes:
+    - name: home
+      path: /root
+
 - name: test
   image: us-central1-docker.pkg.dev/unstable-build-blue-dev/docker/go-tui-ci:latest
   pull: always

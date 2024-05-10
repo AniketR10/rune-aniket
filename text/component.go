@@ -10,11 +10,11 @@ import (
 	"strings"
 	"time"
 
+	multierr "github.com/ernestrc/go-multierror"
+	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/logging"
-	multierr "github.com/ernestrc/go-multierror"
-	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
 	browserapi "unstable.build/go-tui/api/browser"
 	textapi "unstable.build/go-tui/api/text"
@@ -763,7 +763,12 @@ func (c *Component) UnsubscribeEvents(sub EventHandler) (ret bool, err error) {
 		}
 	}
 	c.edSubscribers = final
-	return c.ed.UnsubscribeEvents(sub)
+	var ed bool
+	ed, err = c.ed.UnsubscribeEvents(sub)
+	if err != nil {
+		return
+	}
+	return ret || ed, nil
 }
 
 // Commands returns a list of commands registered via SubscribeCommand

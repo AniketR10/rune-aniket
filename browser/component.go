@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/unstablebuild/blue/logging"
 	"github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
+	"github.com/unstablebuild/blue/logging"
 	"unstable.build/go-tui"
 	browserapi "unstable.build/go-tui/api/browser"
 	workspaceapi "unstable.build/go-tui/api/workspace"
@@ -196,8 +196,6 @@ func (c *Component) Init(config Config) {
 	c.union.UnionTop(&c.tabs, c.barSize())
 
 	c.container.Init(&c.union, config.Notifications)
-
-	return
 }
 
 // NewTab adds a new tab to the list of tabs on this Component.
@@ -273,18 +271,15 @@ func (c *Component) SetTabDefaultNameAndAttrs(uri workspaceapi.URI, name string,
 // Tabs returns the tabs open in this browser.Component.
 func (c *Component) Tabs() (ret []*Tab) {
 	ret = make([]*Tab, len(c.buffers))
-	for i, b := range c.buffers {
-		ret[i] = b
-	}
+	copy(ret, c.buffers)
 	return
 }
 
-func (c *Component) closeTab(t *Tab) error {
+func (c *Component) closeTab(t *Tab) {
 	err := t.Close()
 	if err != nil {
 		c.log(log.WarnLevel, "tab Close error: %v", err)
 	}
-	return err
 }
 
 func (c *Component) doRemoveTab(t *Tab) {
@@ -292,7 +287,7 @@ func (c *Component) doRemoveTab(t *Tab) {
 	if !t.free {
 		panic("trying to remove tab that is still attached to a window")
 	}
-	defer c.closeTab(t)
+	c.closeTab(t)
 
 	c.buffers = append(c.buffers[:id], c.buffers[id+1:]...)
 	ok := c.tabs.Remove(id)
@@ -914,7 +909,7 @@ func (c *Component) FloatingWindows() int {
 // Close closes the resources associated with this browser.
 func (c *Component) Close() (ret error) {
 	for _, f := range c.buffers {
-		err := c.closeTab(f)
+		err := f.Close()
 		if err != nil {
 			ret = err
 		}

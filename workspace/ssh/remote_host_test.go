@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
-	"io/ioutil"
+
 	"os"
 	"sync"
 	"testing"
@@ -23,7 +23,7 @@ import (
 var logger = log.New()
 
 func init() {
-	logger.Out = ioutil.Discard
+	logger.Out = io.Discard
 }
 
 func TestReaderWriterListener(t *testing.T) {

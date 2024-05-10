@@ -8,10 +8,10 @@ import (
 	"math"
 	"sync"
 
-	"github.com/unstablebuild/blue/logging"
-	"github.com/unstablebuild/tcell/v3"
 	"github.com/rivo/uniseg"
 	log "github.com/sirupsen/logrus"
+	"github.com/unstablebuild/blue/logging"
+	"github.com/unstablebuild/tcell/v3"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/term"
@@ -295,26 +295,34 @@ func (t *parserHandler) MoveDown(rows int) {
 
 // IdentifyTerminal identifies the terminal implementatino.
 func (t *parserHandler) IdentifyTerminal(secondary bool) {
+	var err error
 	if secondary {
-		t.pty.Master.Write([]byte(fmt.Sprintf("\x1b[>0;%d;1c", pkgVersion)))
+		_, err = t.pty.Master.Write([]byte(fmt.Sprintf("\x1b[>0;%d;1c", pkgVersion)))
 	} else {
-		t.pty.Master.Write([]byte("\x1b[?6c"))
+		_, err = t.pty.Master.Write([]byte("\x1b[?6c"))
+	}
+	if err != nil {
+		t.log(log.ErrorLevel, "identify terminal: write to master: %v", err)
 	}
 }
 
 // Report device status.
 func (t *parserHandler) DeviceStatus(status int) {
+	var err error
 	switch status {
 	case 5:
-		t.pty.Master.Write([]byte("\x1b[0n"))
+		_, err = t.pty.Master.Write([]byte("\x1b[0n"))
 	case 6:
 		t.sync.mu.Lock()
 		pos := t.sync.buf.CursorAtScreen()
 		t.sync.mu.Unlock()
 		text := fmt.Sprintf("\x1b[%d;%dR", pos.Y+1, pos.X+1)
-		t.pty.Master.Write([]byte(text))
+		_, err = t.pty.Master.Write([]byte(text))
 	default:
 		t.log(log.WarnLevel, "unknown device status query: %d", status)
+	}
+	if err != nil {
+		t.log(log.ErrorLevel, "device status: write to master: %v", err)
 	}
 }
 
@@ -1004,11 +1012,14 @@ func (t *parserHandler) ClipboardStore(register int, data []byte) {
 	clipData := clipboard.Data{Text: string(decodedData)}
 	switch register {
 	case int('c'):
-		t.clipboard.Copy(clipboard.DefaultRegisterID, clipData)
+		err = t.clipboard.Copy(clipboard.DefaultRegisterID, clipData)
 	case int('p') | int('s'):
-		t.clipboard.Copy(selectionRegisterID, clipData)
+		err = t.clipboard.Copy(selectionRegisterID, clipData)
 	default:
 		t.log(log.WarnLevel, "unknown register ID upon ClipboardStore: %c", rune(register))
+	}
+	if err != nil {
+		t.log(log.ErrorLevel, "copy to clipboard: %v", err)
 	}
 }
 
@@ -1433,12 +1444,18 @@ func (t *parserHandler) maxRows() int {
 
 func (t *parserHandler) clearNeedsAttention() {
 	t.needsAttention = false
-	t.tm.SetTabName(t.uri, t.uri.Name(), term.Attributes{})
+	err := t.tm.SetTabName(t.uri, t.uri.Name(), term.Attributes{})
+	if err != nil {
+		t.log(log.ErrorLevel, "set tab name: %v", err)
+	}
 }
 
 func (t *parserHandler) setNeedsAttention() {
 	t.needsAttention = true
-	t.tm.SetTabName(t.uri, t.uri.Name(), t.needsAttentionAttr)
+	err := t.tm.SetTabName(t.uri, t.uri.Name(), t.needsAttentionAttr)
+	if err != nil {
+		t.log(log.ErrorLevel, "set tab name: %v", err)
+	}
 }
 
 func (t *parserHandler) onFocusChange(inFocus bool) (cmd string, ok bool) {

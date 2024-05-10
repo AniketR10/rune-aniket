@@ -74,7 +74,7 @@ func (t *TileNode) initNode(
 	t.tree = parent.tree
 }
 
-func (t *TileNode) resizeHorizontal(width, height int) (err error) {
+func (t *TileNode) resizeHorizontal(width, height int) {
 	length := len(t.children)
 	cheight := height / length
 	hspare := height - cheight*length
@@ -92,7 +92,6 @@ func (t *TileNode) resizeHorizontal(width, height int) (err error) {
 
 		ti.Resize(width, cheight+spareCell)
 	}
-	return
 }
 
 func (t *TileNode) resizeVertical(width, height int) {
@@ -113,7 +112,6 @@ func (t *TileNode) resizeVertical(width, height int) {
 
 		ti.Resize(cwidth+spareCell, height)
 	}
-	return
 }
 
 // Resize : Component
@@ -154,7 +152,6 @@ func (t *TileNode) Draw(w term.Writer) {
 		ti.Draw(w)
 	}
 
-	return
 }
 
 func (t *TileNode) drawTile(node *TileNode, w term.Writer) bool {

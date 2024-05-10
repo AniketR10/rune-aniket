@@ -3,7 +3,7 @@ package ssh
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
+
 	"os"
 	"os/user"
 	"path/filepath"
@@ -268,7 +268,7 @@ func TestIntegrationIsWorkspaceURI(t *testing.T) {
 }
 
 func TestIntegrationManagerIsWorkspaceFile(t *testing.T) {
-	fileWorkspacePath, err := ioutil.TempDir("", "")
+	fileWorkspacePath, err := os.MkdirTemp("", "")
 	require.NoError(t, err)
 	fileWorkspaceURI, err := workspaceapi.ParseURI(filepath.Join("file://", fileWorkspacePath))
 	require.NoError(t, err)
@@ -342,7 +342,7 @@ func TestSSHScheme(t *testing.T) {
 
 	t.Run("with file scheme remote", func(t *testing.T) {
 		test.TestWorkspaceSchemeFiles(t, func(t *testing.T) schemeapi.Scheme {
-			dir, err := ioutil.TempDir("", "ssh_scheme_suite")
+			dir, err := os.MkdirTemp("", "ssh_scheme_suite")
 			require.NoError(t, err)
 
 			fileURI, err := workspaceapi.ParseURI("file://" + dir)

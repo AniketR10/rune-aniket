@@ -4,14 +4,14 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"path"
 	"path/filepath"
 	"testing"
 
-	"github.com/unstablebuild/golang-internal-tools/lsp/protocol"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/golang-internal-tools/lsp/protocol"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/text"
 )
@@ -41,7 +41,7 @@ func TestLSPFormatting(t *testing.T) {
 			out, err := testout.Open(path.Join(baseDir, output))
 			require.NoError(t, err)
 
-			want, err := ioutil.ReadAll(out)
+			want, err := io.ReadAll(out)
 			require.NoError(t, err)
 
 			buffer := cell.NewBuffer()

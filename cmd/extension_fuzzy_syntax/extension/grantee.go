@@ -88,9 +88,9 @@ type queryType string
 
 const (
 	queryTypeCustom    queryType = ""
-	queryTypeFunctions           = "definition.function"
-	queryTypeVariables           = "definition.var"
-	queryTypeTypes               = "definition.type"
+	queryTypeFunctions queryType = "definition.function"
+	queryTypeVariables queryType = "definition.var"
+	queryTypeTypes     queryType = "definition.type"
 )
 
 func defaultQueryForFilename(filename string) (string, error) {

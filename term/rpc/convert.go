@@ -238,12 +238,15 @@ func (m *Manual) ToModel() (tui.Manual, error) {
 }
 
 // FromModel maps t into this Manual.
-func (m *Manual) FromModel(t tui.Manual) {
+func (m *Manual) FromModel(t tui.Manual) error {
 	m.Summary = t.Summary
 
 	for kk, desc := range t.Keys {
 		protoEv := new(Event)
-		protoEv.FromModel(term.Event{Key: kk.Key, Mod: kk.Mod, Ch: kk.Ch})
+		err := protoEv.FromModel(term.Event{Key: kk.Key, Mod: kk.Mod, Ch: kk.Ch})
+		if err != nil {
+			return err
+		}
 
 		m.Keys = append(m.Keys, &Key{
 			Id:          desc.ID,
@@ -253,6 +256,8 @@ func (m *Manual) FromModel(t tui.Manual) {
 			Key:         protoEv.Key,
 		})
 	}
+
+	return nil
 }
 
 // FromModel takes ev and maps it into this Event.

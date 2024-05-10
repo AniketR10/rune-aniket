@@ -9,10 +9,10 @@ import (
 	"sync/atomic"
 	"time"
 
+	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/logging"
-	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
@@ -921,7 +921,7 @@ func (h *Prompt) startManualTimer() {
 				h.manualComponent = h.buildManualComponent(h.inputString.Load().(string))
 				h.showManual = true
 				h.mu.Unlock()
-				h.interrupter.Interrupt(ctx)
+				_ = h.interrupter.Interrupt(ctx)
 				return
 			case <-h.ctx.Done():
 				return

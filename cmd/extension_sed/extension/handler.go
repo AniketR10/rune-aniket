@@ -9,8 +9,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/unstablebuild/blue/iterator"
 	log "github.com/sirupsen/logrus"
+	"github.com/unstablebuild/blue/iterator"
 	browserapi "unstable.build/go-tui/api/browser"
 	browserextension "unstable.build/go-tui/api/browser/extension"
 	"unstable.build/go-tui/api/config"
@@ -59,9 +59,6 @@ type sedEditorHandler struct {
 	ed   textapi.Editor
 	m    browserapi.Notifications
 	exec workspaceapi.Executor
-
-	resource     textapi.Handler
-	resourceName string
 
 	selectionStart term.Coordinates
 	selectionEnd   term.Coordinates

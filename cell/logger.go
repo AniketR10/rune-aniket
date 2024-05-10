@@ -1,3 +1,4 @@
+//nolint:unused
 package cell
 
 import (
@@ -51,7 +52,7 @@ func (l *logger) Edit(ctx context.Context, start, end term.Coordinates, str stri
 	fields := l.wFields("update")
 	fields["start"] = start
 	fields["end"] = end
-	fields["string"] = fmt.Sprintf("%s", str)
+	fields["string"] = str
 	fields["length"] = len(str)
 
 	from, to, old = l.w.Edit(ctx, start, end, str)

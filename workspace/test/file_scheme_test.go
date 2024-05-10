@@ -2,7 +2,7 @@ package test
 
 import (
 	"context"
-	"io/ioutil"
+
 	os "os"
 	"testing"
 
@@ -15,7 +15,7 @@ import (
 
 func TestFileScheme(t *testing.T) {
 	TestWorkspaceSchemeFiles(t, func(t *testing.T) schemeapi.Scheme {
-		dir, err := ioutil.TempDir("", "file_scheme_suite")
+		dir, err := os.MkdirTemp("", "file_scheme_suite")
 		require.NoError(t, err)
 
 		workspaceURI, err := workspaceapi.ParseURI("file://" + dir)
@@ -32,7 +32,7 @@ func TestFileScheme(t *testing.T) {
 	})
 
 	TestWorkspaceSchemeExecutor(t, func(t *testing.T) schemeapi.Scheme {
-		dir, err := ioutil.TempDir("", "file_scheme_suite")
+		dir, err := os.MkdirTemp("", "file_scheme_suite")
 		require.NoError(t, err)
 
 		workspaceURI, err := workspaceapi.ParseURI("file://" + dir)

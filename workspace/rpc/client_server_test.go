@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
-	"io/ioutil"
+
 	"net"
 	"os"
 	"strings"
@@ -216,7 +216,7 @@ func TestClientServer(t *testing.T) {
 				b[0] = []byte("a")[0]
 				return 1, io.EOF
 			})
-			b, err := ioutil.ReadAll(pty.Master)
+			b, err := io.ReadAll(pty.Master)
 			require.NoError(t, err)
 			assert.Equal(t, "a", string(b))
 			assert.Equal(t, uintptr(99), pty.Master.Fd())
@@ -355,7 +355,7 @@ func TestSchemeIntegration(t *testing.T) {
 	})
 
 	test.TestWorkspaceSchemeExecutor(t, func(t *testing.T) schemeapi.Scheme {
-		dir, err := ioutil.TempDir("", "workspacepb_suite")
+		dir, err := os.MkdirTemp("", "workspacepb_suite")
 		require.NoError(t, err)
 
 		workspaceURI, err := workspaceapi.ParseURI("file://" + dir)

@@ -2,10 +2,10 @@ package debug
 
 import (
 	"fmt"
-	"io/ioutil"
+	"os"
 
-	"github.com/unstablebuild/blue/debug"
 	log "github.com/sirupsen/logrus"
+	"github.com/unstablebuild/blue/debug"
 	"gopkg.in/yaml.v3"
 )
 
@@ -20,7 +20,7 @@ func CapturePanicReportDir(dir, pkg, version string, run func()) (bool, string, 
 	if err != nil {
 		return false, "", fmt.Errorf("%w: marshal %v", err, report)
 	}
-	f, err := ioutil.TempFile(dir, fmt.Sprintf("%s_crash_report_", pkg))
+	f, err := os.CreateTemp(dir, fmt.Sprintf("%s_crash_report_", pkg))
 	if err != nil {
 		return false, "", fmt.Errorf("%w: temp file %v", err, report)
 	}
