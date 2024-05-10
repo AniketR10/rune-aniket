@@ -66,6 +66,7 @@ require (
 	github.com/pkoukk/tiktoken-go v0.1.6
 	github.com/pkoukk/tiktoken-go-loader v0.0.1
 	github.com/sashabaranov/go-openai v1.20.3
+	github.com/unstablebuild/pty v1.3.0
 	go.uber.org/multierr v1.4.0
 )
 

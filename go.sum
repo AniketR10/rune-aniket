@@ -225,6 +225,8 @@ github.com/unstablebuild/blue v1.45.0 h1:uj0Fd9oiNMhBR4ze5P6AGHVkyBWcQi2BioDBxtX
 github.com/unstablebuild/blue v1.45.0/go.mod h1:V0GeNus4Kbp5R/Q/Xf9v6qwrtejLHk0d1Q+Sk0E1fME=
 github.com/unstablebuild/golang-internal-tools v0.0.2 h1:U7JqKgxiIWZa3oxmaxSolzQBUKfUC8bnCAeu2kqwCZQ=
 github.com/unstablebuild/golang-internal-tools v0.0.2/go.mod h1:Aad9p5ILvoHIAyskcA4cve2E0GIjQMBytCJvpotJRLE=
+github.com/unstablebuild/pty v1.3.0 h1:ce/UVLOQ1/ROQVIG3zeOHkEum3n0VwzLUlzV+f5uzWw=
+github.com/unstablebuild/pty v1.3.0/go.mod h1:BpzWw5G39oyDqoJhusXyOiTk9/bsAblSD4Js9K462Pw=
 github.com/unstablebuild/tcell/v3 v3.4.0 h1:nzs75BSLe8SZWyFfiM8KLJa8kXgtOgFmezGCFBColw4=
 github.com/unstablebuild/tcell/v3 v3.4.0/go.mod h1:kGN2Rxfd2xMZOsmzSeBAqBby3Jl80wkW7gw4fNrTNAY=
 github.com/yuin/goldmark v1.3.5/go.mod h1:mwnBkeHKe2W/ZEtQ+71ViKU8L12m81fl3OWwC1Zlc8k=

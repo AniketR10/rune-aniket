@@ -17,10 +17,10 @@ import (
 	log "github.com/sirupsen/logrus"
 	bluectx "github.com/unstablebuild/blue/context"
 	"github.com/unstablebuild/blue/logging"
+	"github.com/unstablebuild/pty"
 	"unstable.build/go-tui/api/config"
 	schemeapi "unstable.build/go-tui/api/scheme"
 	workspaceapi "unstable.build/go-tui/api/workspace"
-	"unstable.build/go-tui/term/pty"
 )
 
 const (
@@ -354,7 +354,7 @@ func (p *fileScheme) SetPtySize(pp workspaceapi.Pty, width, height int) error {
 		return fmt.Errorf("extraneous pty: %+v", pp)
 	}
 
-	err := pty.Setsize(ptyFile, &pty.Winsize{
+	err := pty.Setsize(ptyFile.Fd(), &pty.Winsize{
 		Rows: uint16(height),
 		Cols: uint16(width),
 	})
