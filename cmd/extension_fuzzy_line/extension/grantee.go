@@ -5,8 +5,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/unstablebuild/blue/iterator"
 	log "github.com/sirupsen/logrus"
+	"github.com/unstablebuild/blue/iterator"
 	browserapi "unstable.build/go-tui/api/browser"
 	"unstable.build/go-tui/api/config"
 	textapi "unstable.build/go-tui/api/text"
@@ -35,10 +35,11 @@ var (
 			"By default, a built-in implementation is used to scan for files in the workspace, but " +
 			"for very large workspaces, a program like ripgrep or the silver searcher " +
 			"can be used by adding the corresponding 'command' key in the extension's " +
-			"configuration (i.e. command: rg --color never -n --no-heading --max-columns 500 \"\"" +
+			"configuration or by passing an argument (i.e. searchText rg --color never -n --no-heading --max-columns 500 \"\"" +
 			"). To scroll back to previous searches, " +
 			`<ctrl-\> can be used by default or a 'history_key' can be set in the extension's ` +
 			"configuration. Ctrl-c can be used to cancel a scan in progress.",
+		Synopsis: "[command]",
 	}
 )
 
@@ -92,6 +93,9 @@ func newHandler(
 			log.Printf("failed to load 'command' config: %v", err)
 		}
 		historyKey = defaultHistoryKey
+	}
+	if len(cmd.Args) != 0 {
+		cmdStr = strings.Join(cmd.Args, " ")
 	}
 	return finder.New(ctx, grants, broker, invokeWindow,
 		c, historyKey, defaultHistoryDocumentID, cmdStr, readFiles, parseLine)
