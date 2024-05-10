@@ -23,4 +23,5 @@ RUN make debug && go test -c -o /dev/null $(go list -f '{{if .TestGoFiles}}{{.Im
 # use clean image with no source code! 
 FROM --platform=linux/amd64 golang:alpine
 COPY --from=build /go /go
+RUN apk add --no-cache make git openssh gcc g++ musl-dev linux-headers bash
 RUN rm -rf /go/pkg/mod/unstable.build
