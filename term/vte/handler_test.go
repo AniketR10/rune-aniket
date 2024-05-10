@@ -122,7 +122,7 @@ func testSequenceShell(t *testing.T, cfg Config, timeout time.Duration, shell st
 	require.NoError(t, err)
 	handler.checkSystemBell = false
 
-	if ci := os.Getenv("CI"); ci == "true" && cfg.Modal {
+	if ci := os.Getenv("CI"); ci == "true" {
 		// the version of sh running on the CI docker containers
 		// doesn't support bell (neither ctrl+g or ctrl+a + <-)
 		t.SkipNow()
