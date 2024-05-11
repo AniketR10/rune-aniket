@@ -31,7 +31,7 @@ default: .git/hooks/pre-commit $(EXAMPLES) $(EXECS)
 debug: GOFLAGS=-race
 debug: CGO_ENABLED=CGO_ENABLED=1
 debug: GOPRIVATE=github.com/unstablebuild,unstable.build/*
-debug: .git/hooks/pre-commit $(EXAMPLES) $(EXECS)
+debug: $(EXAMPLES) $(EXECS)
 
 sixdev: GOFLAGS=-race
 sixdev: CGO_ENABLED=CGO_ENABLED=1
