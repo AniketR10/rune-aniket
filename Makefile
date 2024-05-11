@@ -37,7 +37,7 @@ sixdev: GOFLAGS=-race
 sixdev: CGO_ENABLED=CGO_ENABLED=1
 sixdev: $(EXAMPLES) bin/six
 
-.git/hooks/pre-commit:
+.git/hooks/pre-commit: .pre-commit-config.yaml
 	@ pre-commit install
 
 example_wasm: $(EXAMPLE_WASM_BLOB)
