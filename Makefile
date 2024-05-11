@@ -22,7 +22,7 @@ EXECS=$(patsubst cmd/%/,$(BIN)/%,$(EXECDIRS))
 GOMOCKS=$(wildcard **/**/*_gomock.go) $(wildcard **/*_gomock.go)
 RELEASE_FILES=$(wildcard release/*)
 
-.PHONY: debug clean test coverage example_wasm generate sixdev format docker-build-gcp docker-push-gcp
+.PHONY: debug clean test coverage example_wasm generate sixdev format docker-build-gcp docker-push-gcp cross-compile lint
 
 default: CGO_ENABLED=CGO_ENABLED=1
 default: GOPRIVATE=github.com/unstablebuild,unstable.build/*
@@ -70,6 +70,12 @@ format:
 install:
 	@ go install ./...
 
+cross-compile:
+	@ . ./test_crosscompile.sh
+
+lint:
+	@ golangci-lint run --timeout=600s
+
 clean:
 	@rm -rf $(BIN) $(TARGET)
 
@@ -114,9 +120,6 @@ endif
 dist: release
 	@ git fetch origin --tags
 	@ ./dist.sh
-
-lint:
-	@ .githooks/pre-commit
 
 docker-build-ci-gcp:
 	@ docker buildx build -f Dockerfile.build --platform linux/amd64 -t us-central1-docker.pkg.dev/unstable-build-blue-dev/docker/go-tui-ci:latest --build-arg GIT_SSH_KEY="$$GIT_SSH_KEY" .
