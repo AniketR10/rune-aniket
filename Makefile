@@ -26,7 +26,7 @@ RELEASE_FILES=$(wildcard release/*)
 
 default: CGO_ENABLED=CGO_ENABLED=1
 default: GOPRIVATE=github.com/unstablebuild,unstable.build/*
-default: $(EXAMPLES) $(EXECS)
+default: .git/hooks/pre-commit $(EXAMPLES) $(EXECS)
 
 debug: GOFLAGS=-race
 debug: CGO_ENABLED=CGO_ENABLED=1
@@ -36,6 +36,9 @@ debug: $(EXAMPLES) $(EXECS)
 sixdev: GOFLAGS=-race
 sixdev: CGO_ENABLED=CGO_ENABLED=1
 sixdev: $(EXAMPLES) bin/six
+
+.git/hooks/pre-commit:
+	@ pre-commit install
 
 example_wasm: $(EXAMPLE_WASM_BLOB)
 
