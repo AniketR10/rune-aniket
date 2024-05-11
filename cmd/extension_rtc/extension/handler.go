@@ -98,7 +98,9 @@ func Grantee() (extension.Grantee, []extension.Permission) {
 				return nil, err
 			}
 			buf := cell.NewBuffer()
-			timage.Encode(buf, 130, 70, img, timage.DefaultConfig())
+			cfg := timage.DefaultConfig()
+			cfg.Color = true
+			timage.Encode(buf, 120, 60, img, cfg)
 			scroll := component.NewScroll(buf)
 			return browserapi.NopHandler(handler.Nop(scroll)), nil
 		},

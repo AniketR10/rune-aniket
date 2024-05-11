@@ -133,16 +133,19 @@ func NewComponent(config Config) *Component {
 }
 
 func (c *Component) wallpaper() browserapi.Handler {
-	strcfg := component.StringConfig{
-		Attributes:           c.config.WallpaperAttr,
-		BackgroundAttributes: c.config.WallpaperBackgroundAttr,
-		Alignment:            component.SpanAlignmentCentered,
+	wallpaper := c.config.Wallpaper
+	if wallpaper == nil {
+		wallpaper = NopWallpaper()
 	}
-	wallpaper := component.NewStringWithConfig(c.config.Wallpaper, strcfg)
+	instance := wallpaper()
+	floating, ok := instance.(component.Floating)
+	if !ok {
+		floating = component.StaticFloating(instance, 40, 20)
+	}
 	return &browserContent{
 		// make wallpaper satisfy Floating to avoid browserContent panic
 		// if wallpaper is being set as a default on a floating window
-		Handler: NopFloatingHandler(handler.NopFloatingHandler(wallpaper)),
+		Handler: NopFloatingHandler(handler.NopFloatingHandler(floating)),
 		c:       c,
 	}
 }

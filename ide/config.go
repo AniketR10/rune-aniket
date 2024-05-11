@@ -13,6 +13,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/tcell/v3"
 	yaml "gopkg.in/yaml.v3"
+	"unstable.build/go-tui"
 	"unstable.build/go-tui/api/config"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser"
@@ -28,23 +29,10 @@ import (
 )
 
 const (
-	inputEsc               = "esc"
-	inputAlt               = "alt"
-	inputMouse             = "mouse"
-	inputCurrent           = "current"
-	legacyDefaultWallpaper = `
-         __       
-        /\ \      
-       /  \ \     
-      / /\ \_\    
-     / / /\/_/    
-    / /_/_        
-   / /___/\       
-  / /\__ \ \      
- / / /__\ \ \     
-/ / /____\ \ \    
-\/__________\/    `
-
+	inputEsc           = "esc"
+	inputAlt           = "alt"
+	inputMouse         = "mouse"
+	inputCurrent       = "current"
 	editorModeModal    = "modal"
 	editorModeModeless = "modeless"
 	keyCommandAliases  = "aliases"
@@ -64,7 +52,7 @@ type extensionConfig struct {
 }
 
 type ideConfig struct {
-	defaultWallpaper string
+	defaultWallpaper browser.Wallpaper
 
 	cfg    map[string]interface{}
 	errors map[string]error
@@ -91,13 +79,13 @@ func overrideConfig(ideConfig, cfg map[string]interface{}) {
 	}
 }
 
-func initConfig(c *ideConfig, cfg map[string]interface{}, defaultWallpaper string) {
+func initConfig(c *ideConfig, cfg map[string]interface{}, defaultWallpaper browser.Wallpaper) {
 	c.cfg = cfg
 	c.defaultWallpaper = defaultWallpaper
 	c.errors = make(map[string]error)
 }
 
-func initDefaultConfig(c *ideConfig, defaultWallpaper string) {
+func initDefaultConfig(c *ideConfig, defaultWallpaper browser.Wallpaper) {
 	cfg := make(map[string]interface{})
 	initConfig(c, cfg, defaultWallpaper)
 }
@@ -958,8 +946,8 @@ func (c ideConfig) browserTabspaces() (tabs int) {
 	return
 }
 
-func (c ideConfig) wallpaper() (text string) {
-	text = c.defaultWallpaper
+func (c ideConfig) wallpaper() (ret browser.Wallpaper) {
+	ret = c.defaultWallpaper
 	if c.cfg == nil {
 		return
 	}
@@ -971,7 +959,14 @@ func (c ideConfig) wallpaper() (text string) {
 		}
 		return
 	}
-	text = cfgText
+	strcfg := component.StringConfig{
+		Attributes:           c.workspaceWallpaperAttr(),
+		BackgroundAttributes: c.workspaceWallpaperBackgroundAttr(),
+		Alignment:            component.SpanAlignmentCentered,
+	}
+	ret = browser.Wallpaper(func() tui.Component {
+		return component.NewStringWithConfig(cfgText, strcfg)
+	})
 	return
 }
 
@@ -1125,12 +1120,12 @@ func (c ideConfig) workspace() config.Config {
 
 func (c ideConfig) workspaceWallpaperAttr() term.Attributes {
 	return c.getConfigAttr("workspace", "wallpaper_attr",
-		browser.DefaultConfig().WallpaperAttr)
+		term.Attributes{})
 }
 
 func (c ideConfig) workspaceWallpaperBackgroundAttr() term.Attributes {
 	return c.getConfigAttr("workspace", "wallpaper_background_attr",
-		browser.DefaultConfig().WallpaperBackgroundAttr)
+		term.Attributes{})
 }
 
 func (c ideConfig) terminalDefaultAttr() term.Attributes {
@@ -1215,7 +1210,9 @@ func decodeConfig(r io.Reader) (cfg map[string]interface{}, err error) {
 	return
 }
 
-func reloadConfig(configFilePath string, defaultWallpaper string) (ret ideConfig, err error) {
+func reloadConfig(configFilePath string, defaultWallpaper browser.Wallpaper) (
+	ret ideConfig, err error,
+) {
 	err = loadConfig(&ret, configFilePath, defaultWallpaper)
 	return
 }
@@ -1246,7 +1243,9 @@ func loadWorkspaceConfig(filename string, cwd workspace.Workspace, uri workspace
 
 // NOTE: it's imperative that this function populates c with sane defaults even in the event
 // of an error.
-func loadConfig(c *ideConfig, configpath, defaultWallpaper string) (err error) {
+func loadConfig(
+	c *ideConfig, configpath string, defaultWallpaper browser.Wallpaper,
+) (err error) {
 	initDefaultConfig(c, defaultWallpaper)
 
 	cfg, err := decodeConfig(strings.NewReader(defaultConfig))

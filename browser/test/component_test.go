@@ -763,7 +763,11 @@ func TestComponentSplitNil(t *testing.T) {
 	t.Run("Split with nil sets a wallpaper", func(t *testing.T) {
 		w := term.NewStringWriter(24, 8)
 		cfg := browser.DefaultConfig()
-		cfg.Wallpaper = "BART"
+		cfg.Wallpaper = browser.Wallpaper(func() tui.Component {
+			return component.NewStringWithConfig("BART", component.StringConfig{
+				Alignment: component.SpanAlignmentCentered,
+			})
+		})
 		c := browser.NewComponent(cfg)
 		c.SetDefaultSplit(browserapi.OrientationLeft)
 		c.Resize(20, 8)

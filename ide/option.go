@@ -74,7 +74,7 @@ func WithConfigFilename(filename string) Option {
 
 // WithDefaultWallpaper sets the default wallpaper if the
 // user doesn't provide one via rc configuration.
-func WithDefaultWallpaper(wallpaper string) Option {
+func WithDefaultWallpaper(wallpaper browser.Wallpaper) Option {
 	return func(opts *options) {
 		opts.defaultWallpaper = wallpaper
 	}
@@ -86,7 +86,7 @@ type options struct {
 	locker           sync.Locker
 	extensions       map[string]Extension
 	workspaceConfig  string
-	defaultWallpaper string
+	defaultWallpaper browser.Wallpaper
 }
 
 func defaultOptions() options {
@@ -96,7 +96,7 @@ func defaultOptions() options {
 		locker:           nopLocker{},
 		extensions:       make(map[string]Extension),
 		workspaceConfig:  ".iderc",
-		defaultWallpaper: legacyDefaultWallpaper,
+		defaultWallpaper: browser.NopWallpaper(),
 	}
 }
 

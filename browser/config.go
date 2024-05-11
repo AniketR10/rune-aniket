@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/unstablebuild/tcell/v3"
+	"unstable.build/go-tui"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/handler"
@@ -13,9 +14,9 @@ import (
 // DefaultConfig returns the default Config.
 func DefaultConfig() Config {
 	return Config{
+		Wallpaper:           NopWallpaper(),
 		FocusTabAttr:        term.Attributes{Fg: tcell.ColorWhite},
 		NonFocusTabAttr:     term.Attributes{Fg: tcell.ColorRed},
-		WallpaperAttr:       term.Attributes{Fg: tcell.ColorRed, Attrs: tcell.AttrBold},
 		FrameUnionCharSet:   component.DefaultFrameUnionCharSet(),
 		WindowManagerConfig: handler.DefaultWindowManagerConfig(),
 		PromptConfig: PromptConfig{
@@ -44,11 +45,21 @@ type PromptConfig struct {
 	MinWidth       int
 }
 
+// Wallpaper is a tui.Component wallpaper factory.
+// NOTE: we might want to move it to the component package
+// and call it a Factory.
+type Wallpaper func() tui.Component
+
+// NopWallpaper is a Wallpaper of component.Nop.
+func NopWallpaper() Wallpaper {
+	return Wallpaper(func() tui.Component {
+		return component.Nop()
+	})
+}
+
 // Config holds configuration for an browser.Component.
 type Config struct {
-	Wallpaper               string
-	WallpaperAttr           term.Attributes
-	WallpaperBackgroundAttr term.Attributes
+	Wallpaper
 
 	FocusTabAttr    term.Attributes
 	NonFocusTabAttr term.Attributes

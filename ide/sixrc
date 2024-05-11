@@ -549,11 +549,12 @@ workspace:
 
   ## Workspace wallpaper. Override default six wallpaper with your ASCII art.
   #wallpaper: myAsciiArt
+  # The following attributes do not apply to the default wallpaper
   wallpaper_attr:
     fg: *highlight2
     bg: *background2
+  # The following attributes do not apply to the default wallpaper
   wallpaper_background_attr:
-    fg: *default
     bg: *background2
 
 notifications:

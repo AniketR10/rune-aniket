@@ -246,6 +246,7 @@ func TestServerSetLocationList(t *testing.T) {
 		ed := texttest.NopEditor()
 		c, err := text.NewComponent(ed, document.NewInMemoryService(), &testLoader{}, text.Config{
 			Config: browser.Config{
+				Wallpaper: browser.NopWallpaper(),
 				Notifications: notifications.Config{
 					Width:     10,
 					AutoClose: 30 * time.Minute,

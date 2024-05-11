@@ -109,9 +109,9 @@ func WithCommandKey(event term.KeyComb) Option {
 }
 
 // WithWallpaper sets the starting buffer default text wallpaper.
-func WithWallpaper(text string) Option {
+func WithWallpaper(wallpaper browser.Wallpaper) Option {
 	return func(cfg *Config) {
-		cfg.Wallpaper = text
+		cfg.Wallpaper = wallpaper
 	}
 }
 
@@ -154,22 +154,6 @@ func WithFocusTabAttr(attr term.Attributes) Option {
 func WithNonFocusTabAttr(attr term.Attributes) Option {
 	return func(cfg *Config) {
 		cfg.NonFocusTabAttr = attr
-	}
-}
-
-// WithWallpaperAttr returns an Option that configures the attributes of the
-// text passed to WithWallpaper.
-func WithWallpaperAttr(attr term.Attributes) Option {
-	return func(cfg *Config) {
-		cfg.WallpaperAttr = attr
-	}
-}
-
-// WithWallpaperBackgroundAttr returns an Option that configures the attributes of the
-// padded background around text passed to WithWallpaper.
-func WithWallpaperBackgroundAttr(attr term.Attributes) Option {
-	return func(cfg *Config) {
-		cfg.WallpaperBackgroundAttr = attr
 	}
 }
 

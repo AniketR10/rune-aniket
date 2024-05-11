@@ -493,8 +493,6 @@ func (h *workspaceManagerHandler) textOpts(cfg ideConfig) []text.Option {
 		text.WithNotificationsConfig(notificationsCfg),
 		text.WithFocusTabAttr(cfg.focusTabAttr()),
 		text.WithNonFocusTabAttr(cfg.nonFocusTabAttr()),
-		text.WithWallpaperAttr(cfg.workspaceWallpaperAttr()),
-		text.WithWallpaperBackgroundAttr(cfg.workspaceWallpaperBackgroundAttr()),
 		text.WithWallpaper(cfg.wallpaper()),
 		text.WithDirtyTabAttr(cfg.dirtyTabAttr()),
 		text.WithCommandOverlayConfig(cfg.commandOverlayConfig()),

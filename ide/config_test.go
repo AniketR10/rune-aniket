@@ -172,7 +172,7 @@ terminal:
 func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
 	assert.Len(t, cfg.extensions(), 0)
 	assert.Equal(t, 4, cfg.browserTabspaces())
-	assert.NotZero(t, cfg.wallpaper())
+	assert.NotNil(t, cfg.wallpaper())
 	defWmConfig := handler.DefaultWindowManagerConfig()
 	defWmConfig.FocusFrameAttr = defWmConfig.FrameAttr
 	defWmConfig.FocusFrameCharSet = defWmConfig.FrameCharSet
@@ -191,8 +191,8 @@ func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
 
 	assert.Equal(t, browser.DefaultConfig().FocusTabAttr, cfg.focusTabAttr())
 	assert.Equal(t, browser.DefaultConfig().NonFocusTabAttr, cfg.nonFocusTabAttr())
-	assert.Equal(t, browser.DefaultConfig().WallpaperAttr, cfg.workspaceWallpaperAttr())
-	assert.Equal(t, browser.DefaultConfig().WallpaperBackgroundAttr, cfg.workspaceWallpaperBackgroundAttr())
+	assert.Equal(t, term.Attributes{}, cfg.workspaceWallpaperAttr())
+	assert.Equal(t, term.Attributes{}, cfg.workspaceWallpaperBackgroundAttr())
 	selectAttr := term.Attributes{Attrs: tcell.AttrReverse}
 
 	vteConfig := cfg.terminalConfig()
@@ -228,7 +228,7 @@ func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
 
 func TestConfigDefault(t *testing.T) {
 	ret := new(ideConfig)
-	initDefaultConfig(ret, "myWallpaper")
+	initDefaultConfig(ret, browser.NopWallpaper())
 	assertDefaultConfig(t, ret)
 }
 
@@ -255,10 +255,11 @@ func TestConfigSetting(t *testing.T) {
 	require.NoError(t, err)
 
 	var cfg ideConfig
-	initConfig(&cfg, m, "myWallpaper")
+	initConfig(&cfg, m, browser.NopWallpaper())
 
 	assert.Equal(t, 4, cfg.browserTabspaces())
-	assert.Equal(t, "abc", cfg.wallpaper())
+	_, ok := cfg.wallpaper()().(component.String)
+	assert.True(t, ok)
 	assert.Equal(t, "/tmp/debug.log", cfg.logOutputPath())
 	assert.Equal(t, logrus.TraceLevel, cfg.logLevel())
 	assert.True(t, term.InputMouse&cfg.inputMode() != 0)
@@ -279,6 +280,10 @@ func TestConfigSetting(t *testing.T) {
 	assert.Len(t, cfg.extensions(), 1)
 	extensionCfgStruct := cfg.extensions()["fuzzy_file"]
 	assert.Equal(t, "fuzzy_file", extensionCfgStruct.id)
+	cfg.cfg["workspace"].(map[string]any)["wallpaper"] = ""
+	extensionCfgStruct.parent.cfg["workspace"].(map[string]any)["wallpaper"] = ""
+	cfg.defaultWallpaper = nil
+	extensionCfgStruct.parent.defaultWallpaper = nil
 	assert.Equal(t, &cfg, extensionCfgStruct.parent)
 
 	extensionCfg, ok := extensionCfgStruct.config()
@@ -384,7 +389,7 @@ func TestConfigSetting(t *testing.T) {
 
 func TestLoadEmbededConfig(t *testing.T) {
 	var cfg ideConfig
-	err := loadConfig(&cfg, "nonExistent", "notEmpty")
+	err := loadConfig(&cfg, "nonExistent", browser.NopWallpaper())
 	require.NoError(t, err)
 }
 
@@ -405,7 +410,7 @@ command:
 	require.NoError(t, err)
 
 	var cfg ideConfig
-	err = loadConfig(&cfg, f.Name(), "notEmpty")
+	err = loadConfig(&cfg, f.Name(), browser.NopWallpaper())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "Alias cycle detected")
 	assert.Empty(t, cfg.commandAliases())
