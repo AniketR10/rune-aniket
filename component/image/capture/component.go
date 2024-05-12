@@ -157,7 +157,7 @@ func (c *Component) consumeFrame(width, height int) (
 	// Encode having to calculate it for each frame.
 	cfg := c.cfg
 	cfg.MaintainAspectRatio = false
-	timage.Encode(&c.buf, width, height, img, c.cfg)
+	timage.Encode(&c.buf, width, height, img, cfg)
 
 	frameWidth = img.Bounds().Dx()
 	frameHeight = img.Bounds().Dy()
