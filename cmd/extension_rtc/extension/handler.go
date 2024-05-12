@@ -7,12 +7,14 @@ import (
 	"image"
 	"image/jpeg"
 	"os"
+	"sync"
 
 	log "github.com/sirupsen/logrus"
 	browserapi "unstable.build/go-tui/api/browser"
 	browserextension "unstable.build/go-tui/api/browser/extension"
 	"unstable.build/go-tui/api/config"
 	textapi "unstable.build/go-tui/api/text"
+	"unstable.build/go-tui/component"
 	timage "unstable.build/go-tui/component/image"
 	"unstable.build/go-tui/component/image/capture"
 	"unstable.build/go-tui/extension"
@@ -81,7 +83,7 @@ func Grantee() (extension.Grantee, []extension.Permission) {
 			if err != nil {
 				return nil, fmt.Errorf("new device: %v", err)
 			}
-			return browserapi.FuncHandler(handler.Nop(device), device.Close), nil
+			return browserapi.FuncHandler(handler.Nop(component.Sync(new(sync.Mutex), device)), device.Close), nil
 		},
 		Command: textapi.CommandManual{
 			Name: "rtcGetUserMedia",
@@ -105,7 +107,7 @@ func Grantee() (extension.Grantee, []extension.Permission) {
 			cfg := timage.DefaultConfig()
 			cfg.Color = true
 			cfg.MaintainAspectRatio = true
-			h := browserapi.NopHandler(handler.Nop(timage.New(img, cfg)))
+			h := browserapi.NopHandler(handler.Nop(component.Sync(new(sync.Mutex), timage.New(img, cfg))))
 			return h, nil
 		},
 		Command: textapi.CommandManual{
