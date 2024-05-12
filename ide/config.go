@@ -38,9 +38,6 @@ const (
 	keyCommandAliases  = "aliases"
 )
 
-//go:embed sixrc
-var defaultConfig string
-
 var (
 	defaultWindowManagerConfig = handler.DefaultWindowManagerConfig()
 )
@@ -1213,16 +1210,17 @@ func decodeConfig(r io.Reader) (cfg map[string]interface{}, err error) {
 	return
 }
 
-func reloadConfig(configFilePath string, defaultWallpaper browser.Wallpaper) (
-	ret ideConfig, err error,
-) {
-	err = loadConfig(&ret, configFilePath, defaultWallpaper)
+func reloadConfig(
+	configFilePath string, defaultWallpaper browser.Wallpaper,
+	defaultConfig string,
+) (ret ideConfig, err error) {
+	err = loadConfig(&ret, configFilePath, defaultWallpaper, defaultConfig)
 	return
 }
 
-func loadWorkspaceConfig(filename string, cwd workspace.Workspace, uri workspaceapi.URI, c *ideConfig) (
-	isConfigErr bool, err error,
-) {
+func loadWorkspaceConfig(
+	filename string, cwd workspace.Workspace, uri workspaceapi.URI, c *ideConfig,
+) (isConfigErr bool, err error) {
 	f, werr := cwd.Open(filename, os.O_RDONLY, 0)
 	if werr != nil {
 		if werr.IsNotExist {
@@ -1247,7 +1245,9 @@ func loadWorkspaceConfig(filename string, cwd workspace.Workspace, uri workspace
 // NOTE: it's imperative that this function populates c with sane defaults even in the event
 // of an error.
 func loadConfig(
-	c *ideConfig, configpath string, defaultWallpaper browser.Wallpaper,
+	c *ideConfig, configpath string,
+	defaultWallpaper browser.Wallpaper,
+	defaultConfig string,
 ) (err error) {
 	initDefaultConfig(c, defaultWallpaper)
 

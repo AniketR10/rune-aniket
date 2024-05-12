@@ -80,6 +80,13 @@ func WithDefaultWallpaper(wallpaper browser.Wallpaper) Option {
 	}
 }
 
+// WithDefaultConfigYAML sets the default baseline config.
+func WithDefaultConfigYAML(configYaml string) Option {
+	return func(opts *options) {
+		opts.defaultConfig = configYaml
+	}
+}
+
 type options struct {
 	publishEvent     EventPublisher
 	extensionRunner  ExtensionsRunner
@@ -87,6 +94,7 @@ type options struct {
 	extensions       map[string]Extension
 	workspaceConfig  string
 	defaultWallpaper browser.Wallpaper
+	defaultConfig    string
 }
 
 func defaultOptions() options {
@@ -97,6 +105,7 @@ func defaultOptions() options {
 		extensions:       make(map[string]Extension),
 		workspaceConfig:  ".iderc",
 		defaultWallpaper: browser.NopWallpaper(),
+		defaultConfig:    "{}",
 	}
 }
 

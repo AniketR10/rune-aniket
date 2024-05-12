@@ -282,6 +282,7 @@ func run() int {
 		ide.WithLocker(&eventLoopMutex),
 		ide.WithConfigFilename(configFilename),
 		ide.WithDefaultWallpaper(wallpaper),
+		ide.WithDefaultConfigYAML(defaultConfig),
 	}
 
 	var i *ide.IDE

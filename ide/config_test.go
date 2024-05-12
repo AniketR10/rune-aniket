@@ -389,7 +389,7 @@ func TestConfigSetting(t *testing.T) {
 
 func TestLoadEmbededConfig(t *testing.T) {
 	var cfg ideConfig
-	err := loadConfig(&cfg, "nonExistent", browser.NopWallpaper())
+	err := loadConfig(&cfg, "nonExistent", browser.NopWallpaper(), "{}")
 	require.NoError(t, err)
 }
 
@@ -410,7 +410,7 @@ command:
 	require.NoError(t, err)
 
 	var cfg ideConfig
-	err = loadConfig(&cfg, f.Name(), browser.NopWallpaper())
+	err = loadConfig(&cfg, f.Name(), browser.NopWallpaper(), "{}")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "Alias cycle detected")
 	assert.Empty(t, cfg.commandAliases())
