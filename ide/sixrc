@@ -176,7 +176,7 @@ extensions:
     config:
       # Whether to maintain the aspect ratio of the
       # captured frames.
-      maintain_aspect_ratio: false
+      #maintain_aspect_ratio: false
       # Whether to capture and send ascii images in color
       color: true
       # Frames per second for capture
@@ -184,6 +184,9 @@ extensions:
       # Ranges from -100 to 100, it indicates whether
       # contrast should be increased to provide clearer frames.
       contrast: 30
+      # Density Characters is used to encode the density of a pixel. It is
+      # assumed that it's sorted by density in ascending order.
+      #density_characters: '   `_.,-*=+:;cba!?0123456789$W#@'
   # This extension is used as a general purpose syntax highlighter.
   # It's based off https://github.com/alecthomas/chroma.
   lexer:

@@ -72,6 +72,14 @@ func Grantee() (extension.Grantee, []extension.Permission) {
 				imageConfig.MaintainAspectRatio = maintain
 			}
 
+			if chars, err := pconfig.GetString("density_characters"); err != nil {
+				if err != config.ErrNotFound {
+					log.Warningf("failed to get 'density_characters' from config: %v", err)
+				}
+			} else {
+				imageConfig.DensityCharacters = chars
+			}
+
 			fps, err := pconfig.GetInt("fps")
 			if err != nil {
 				if err != config.ErrNotFound {
