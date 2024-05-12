@@ -48,18 +48,23 @@ type PromptConfig struct {
 // Wallpaper is a tui.Component wallpaper factory.
 // NOTE: we might want to move it to the component package
 // and call it a Factory.
-type Wallpaper func() tui.Component
+type Wallpaper struct {
+	BackgroundAttr term.Attributes
+	NewComponent   func() tui.Component
+}
 
 // NopWallpaper is a Wallpaper of component.Nop.
 func NopWallpaper() Wallpaper {
-	return Wallpaper(func() tui.Component {
-		return component.Nop()
-	})
+	return Wallpaper{
+		NewComponent: func() tui.Component {
+			return component.Nop()
+		},
+	}
 }
 
 // Config holds configuration for an browser.Component.
 type Config struct {
-	Wallpaper
+	Wallpaper Wallpaper
 
 	FocusTabAttr    term.Attributes
 	NonFocusTabAttr term.Attributes

@@ -26,6 +26,7 @@ type StringConfig struct {
 // a background. It satisfies both Floating and WithAttributes.
 // See NewString and NewStringWithConfig for more details.
 type String struct {
+	cfg StringConfig
 	floatingWithAttributes
 }
 
@@ -39,9 +40,13 @@ var _ fmt.Stringer = String{}
 // slower to Draw and Resize than the component returned by String.
 func NewStringWithConfig(str string, cfg StringConfig) String {
 	cells := cell.StringToCells(str, cfg.Tabspaces)
-	return String{newStringComp(cells, cfg.Attributes, cfg.BackgroundRune,
+	comp := newStringComp(cells, cfg.Attributes, cfg.BackgroundRune,
 		cfg.BackgroundAttributes, cfg.FrameCharSet,
-		cfg.PaddingHorizontal, cfg.PaddingVertical, cfg.Alignment, cfg.MinWidth)}
+		cfg.PaddingHorizontal, cfg.PaddingVertical, cfg.Alignment, cfg.MinWidth)
+	return String{
+		cfg:                    cfg,
+		floatingWithAttributes: comp,
+	}
 }
 
 // NewString converts a string into top left centered one line tui.Component
@@ -51,6 +56,11 @@ func NewString(str string) String {
 	return NewStringWithConfig(str, StringConfig{
 		Alignment: SpanAlignmentLeft,
 	})
+}
+
+// Config returns this String's StringConfig.
+func (s String) Config() StringConfig {
+	return s.cfg
 }
 
 // LazyBytes is an immutable String component that is allocation free

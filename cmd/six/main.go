@@ -18,7 +18,6 @@ import (
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/logging"
-	"github.com/unstablebuild/tcell/v3"
 	"google.golang.org/grpc"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/api/config"
@@ -30,7 +29,6 @@ import (
 	"unstable.build/go-tui/extension/process"
 	"unstable.build/go-tui/ide"
 	"unstable.build/go-tui/proto"
-	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/workspace"
 	workspacepb "unstable.build/go-tui/workspace/rpc"
 	"unstable.build/go-tui/workspace/ssh"
@@ -269,16 +267,14 @@ func run() int {
 		}
 	}
 
-	bg := tcell.GetColor("#1e1e1e")
-	fg := tcell.GetColor("#00AFFF")
 	strcfg := component.StringConfig{
-		Attributes:           term.Attributes{Fg: fg, Bg: bg},
-		BackgroundAttributes: term.Attributes{Bg: bg},
-		Alignment:            component.SpanAlignmentCentered,
+		Alignment: component.SpanAlignmentCentered,
 	}
-	wallpaper := browser.Wallpaper(func() tui.Component {
-		return component.NewStringWithConfig(sixDefaultWallpaper, strcfg)
-	})
+	wallpaper := browser.Wallpaper{
+		NewComponent: func() tui.Component {
+			return component.NewStringWithConfig(sixDefaultWallpaper, strcfg)
+		},
+	}
 
 	var eventLoopMutex sync.Mutex
 	opts := []ide.Option{

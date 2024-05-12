@@ -134,17 +134,27 @@ func NewComponent(config Config) *Component {
 
 func (c *Component) wallpaper() browserapi.Handler {
 	wallpaper := c.config.Wallpaper
-	if wallpaper == nil {
-		wallpaper = NopWallpaper()
+	if wallpaper.NewComponent == nil {
+		wallpaper.NewComponent = component.Nop
 	}
-	instance := wallpaper()
-	floating, ok := instance.(component.Floating)
-	if !ok {
-		floating = component.StaticFloating(instance, 40, 20)
+	instance := wallpaper.NewComponent()
+	// if background attrs were passed try to re-construct string wallpaper
+	// or set a background via component.Background.
+	if wallpaper.BackgroundAttr != (term.Attributes{}) {
+		if str, ok := instance.(component.String); ok {
+			cfg := str.Config()
+			cfg.BackgroundAttributes = wallpaper.BackgroundAttr
+			cfg.Attributes.Bg = wallpaper.BackgroundAttr.Bg
+			instance = component.NewStringWithConfig(str.String(), cfg)
+		} else {
+			instance = component.NewBackground(instance,
+				term.Cell{Attributes: wallpaper.BackgroundAttr})
+		}
 	}
+	// make wallpaper satisfy Floating to avoid browserContent panic
+	// if wallpaper is being set as a default on a floating window
+	floating := component.StaticFloating(instance, 80, 40)
 	return &browserContent{
-		// make wallpaper satisfy Floating to avoid browserContent panic
-		// if wallpaper is being set as a default on a floating window
 		Handler: NopFloatingHandler(handler.NopFloatingHandler(floating)),
 		c:       c,
 	}

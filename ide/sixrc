@@ -556,7 +556,6 @@ workspace:
   wallpaper_attr:
     fg: *highlight2
     bg: *background2
-  # The following attributes do not apply to the default wallpaper
   wallpaper_background_attr:
     bg: *background2
 

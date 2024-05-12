@@ -948,9 +948,12 @@ func (c ideConfig) browserTabspaces() (tabs int) {
 
 func (c ideConfig) wallpaper() (ret browser.Wallpaper) {
 	ret = c.defaultWallpaper
+	// allow user to override the default wallpaper's background
+	ret.BackgroundAttr = c.workspaceWallpaperBackgroundAttr()
 	if c.cfg == nil {
 		return
 	}
+
 	cfg := c.workspace()
 	cfgText, err := cfg.GetString("wallpaper")
 	if err != nil {
@@ -964,9 +967,9 @@ func (c ideConfig) wallpaper() (ret browser.Wallpaper) {
 		BackgroundAttributes: c.workspaceWallpaperBackgroundAttr(),
 		Alignment:            component.SpanAlignmentCentered,
 	}
-	ret = browser.Wallpaper(func() tui.Component {
+	ret.NewComponent = func() tui.Component {
 		return component.NewStringWithConfig(cfgText, strcfg)
-	})
+	}
 	return
 }
 

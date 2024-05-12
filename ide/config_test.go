@@ -258,7 +258,7 @@ func TestConfigSetting(t *testing.T) {
 	initConfig(&cfg, m, browser.NopWallpaper())
 
 	assert.Equal(t, 4, cfg.browserTabspaces())
-	_, ok := cfg.wallpaper()().(component.String)
+	_, ok := cfg.wallpaper().NewComponent().(component.String)
 	assert.True(t, ok)
 	assert.Equal(t, "/tmp/debug.log", cfg.logOutputPath())
 	assert.Equal(t, logrus.TraceLevel, cfg.logLevel())
@@ -282,8 +282,8 @@ func TestConfigSetting(t *testing.T) {
 	assert.Equal(t, "fuzzy_file", extensionCfgStruct.id)
 	cfg.cfg["workspace"].(map[string]any)["wallpaper"] = ""
 	extensionCfgStruct.parent.cfg["workspace"].(map[string]any)["wallpaper"] = ""
-	cfg.defaultWallpaper = nil
-	extensionCfgStruct.parent.defaultWallpaper = nil
+	cfg.defaultWallpaper.NewComponent = nil
+	extensionCfgStruct.parent.defaultWallpaper.NewComponent = nil
 	assert.Equal(t, &cfg, extensionCfgStruct.parent)
 
 	extensionCfg, ok := extensionCfgStruct.config()
