@@ -43,11 +43,14 @@ func ResizeMaintainAspectRatio(srcWidth, srcHeight, dstWidth, dstHeight int) (
 	// this is a modifier to take height to width cell aspect ratio
 	// into consideration.
 	const heightToWidthCellAspectRatio = 2
-	aspectRatio := float32(srcWidth) / float32(srcHeight) * heightToWidthCellAspectRatio
-	width = int(float32(dstHeight) * aspectRatio)
+	aspectRatio := float64(srcWidth) / float64(srcHeight) * heightToWidthCellAspectRatio
 	height = dstHeight
-	for ; width > dstWidth; height-- {
-		width = int(float32(height) * aspectRatio)
+	for {
+		width = int(float64(height) * aspectRatio)
+		if width <= dstWidth {
+			break
+		}
+		height--
 	}
 	return
 }
@@ -83,12 +86,15 @@ func Encode(
 ) {
 	bounds := src.Bounds()
 
-	var dst *image.NRGBA
+	origWidth := outputWidth
+	var padX int
 	if config.MaintainAspectRatio {
 		outputWidth, outputHeight = ResizeMaintainAspectRatio(
 			bounds.Dx(), bounds.Dy(), outputWidth, outputHeight)
+		padX = (origWidth - outputWidth) / 2
 	}
 
+	var dst *image.NRGBA
 	dst = image.NewNRGBA(image.Rect(0, 0, outputWidth, outputHeight))
 	config.Scaler.Scale(dst, dst.Rect, src, bounds, draw.Over, nil)
 
@@ -98,6 +104,7 @@ func Encode(
 
 	density := []rune(config.DensityCharacters)
 	output.Reset()
+
 	for y := 0; y < outputHeight; y++ {
 		for x := 0; x < outputWidth; x++ {
 			c := dst.At(x, y)
@@ -111,7 +118,7 @@ func Encode(
 				fg := tcell.NewColor(int32(r), int32(g), int32(b))
 				attr = term.Attributes{Fg: fg}
 			}
-			output.InsertWithAttr(term.Coordinates{X: x, Y: y}, character, attr)
+			output.InsertWithAttr(term.Coordinates{X: x + padX, Y: y}, character, attr)
 		}
 	}
 

@@ -11,6 +11,36 @@ import (
 	"unstable.build/go-tui/cell"
 )
 
+func TestResizeMaintainAspectRatio(t *testing.T) {
+	suite := []struct {
+		description                              string
+		srcWidth, srcHeight, dstWidth, dstHeight int
+		expectedWidth, expectedHeight            int
+	}{
+		{"if src and dst are the same, just compensate for cell aspect ratio", 100, 100, 100, 100, 100, 50},
+		{"if src and dst are the same, just compensate for cell aspect ratio, width > height", 80, 60, 80, 60, 80, 30},
+		{"if src and dst are the same, just compensate for cell aspect ratio, height > width", 60, 80, 60, 80, 60, 40},
+		{"down scale, out same ratio, width > height", 80, 60, 40, 30, 40, 15},
+		{"down scale, out same ratio, height > width", 60, 80, 30, 40, 30, 20},
+		{"up scale, out same ratio, width > height", 40, 30, 80, 60, 80, 30},
+		{"up scale, out same ratio, height > width", 30, 40, 60, 80, 60, 40},
+		{"down scale, out inverted ratio, width > height", 80, 60, 30, 40, 29, 11},
+		{"down scale, out inverted ratio, height > width", 60, 80, 40, 30, 40, 27},
+		{"up scale, out inverted ratio, width > height", 40, 30, 60, 80, 58, 22},
+		{"up scale, out inverted ratio, height > width", 30, 40, 80, 60, 79, 53},
+	}
+
+	for _, test := range suite {
+		t.Run(test.description, func(t *testing.T) {
+			actualWidth, actualHeight := ResizeMaintainAspectRatio(test.srcWidth, test.srcHeight,
+				test.dstWidth, test.dstHeight)
+
+			assert.Equal(t, test.expectedWidth, actualWidth, "width")
+			assert.Equal(t, test.expectedHeight, actualHeight, "height")
+		})
+	}
+}
+
 func TestCodec(t *testing.T) {
 	suite := []struct {
 		description               string
@@ -117,20 +147,46 @@ func TestCodec(t *testing.T) {
 		},
 		{"encode an image and maintain aspect ratio",
 			30, 30, loadImage("testdata/image_1.png"), configMaintainAspectRatio(),
-			`                               
+			`
                               
-             .:,    =-        
-          #@@@##@@@#9b        
-         @@@     @@@          
-         *@@@   #@@#          
-          '@@@@@@#            
-         @@@4                 
-           @@@@@@@@@#         
-        _@@@      @@@         
-         #@@@@@@@@@#          
+                              
+                              
+          W@@@@@@@@@@0        
+         @@@-    @@#          
+         @@@-    @@@          
+          3@@@@@@@#           
+         $@@                  
+         @@@@@@@@##           
+         9@@#-':W@@@@         
+        *@@#      #@@         
+          #@@@@@@@#0          
                               
                               
                               `,
+		},
+		{"encode an image and maintain aspect ratio",
+			50, 20, loadImage("testdata/image_1.png"), configMaintainAspectRatio(),
+			`
+                                             
+                                             
+                                             
+                                             
+                   #@@@@@@@@@#@@@W           
+                  @@@@+   c@@@#              
+                 #@@@      ,@@@#             
+                 8@@@#     #@@@$             
+                  .@@@@@@@@@@@#              
+                  2#@@#@#@#$                 
+                 #@@@                        
+                 =@@@@@@@@@@@##'             
+                  ##@##@@#@#@@@@@            
+                6@@@3        8@@@7           
+                '@@@@#=    ?@@@@W            
+                  ,#@@@@@@@@@#-              
+                                             
+                                             
+                                             
+                                             `,
 		},
 	}
 
