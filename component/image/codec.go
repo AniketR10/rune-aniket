@@ -18,6 +18,9 @@ const (
 	// as density denotation characters. See EncodeScalerCharacters for more details.
 	DefaultDensityCharacters   = "   `'_.,-*=+:;cba!?0123456789$W#@"
 	AlternateDensityCharacters = "    .:░▒▓█"
+	// this is a modifier to take height to width cell aspect ratio
+	// into consideration.
+	heightToWidthCellAspectRatio = 2
 )
 
 // DefaultScaler is the default draw.Scaler used by EncodeScaler, EncodeColor and Encode.
@@ -40,9 +43,6 @@ func DefaultConfig() Config {
 func ResizeMaintainAspectRatio(srcWidth, srcHeight, dstWidth, dstHeight int) (
 	width, height int,
 ) {
-	// this is a modifier to take height to width cell aspect ratio
-	// into consideration.
-	const heightToWidthCellAspectRatio = 2
 	aspectRatio := float64(srcWidth) / float64(srcHeight) * heightToWidthCellAspectRatio
 	height = dstHeight
 	for {
@@ -84,26 +84,33 @@ func Encode(
 	output *cell.Buffer, outputWidth, outputHeight int,
 	src image.Image, config Config,
 ) {
+	density := []rune(config.DensityCharacters)
 	bounds := src.Bounds()
+	origWidth, origHeight := outputWidth, outputHeight
+	var padX, padY int
 
-	origWidth := outputWidth
-	var padX int
+	output.Reset()
 	if config.MaintainAspectRatio {
 		outputWidth, outputHeight = ResizeMaintainAspectRatio(
 			bounds.Dx(), bounds.Dy(), outputWidth, outputHeight)
-		padX = (origWidth - outputWidth) / 2
+		if outputWidth < origWidth {
+			padX = (origWidth - outputWidth) / 2
+		}
+		if outputHeight < origHeight {
+			padY = (origHeight - outputHeight) / 2
+		}
+		output.Insert(term.Coordinates{
+			X: outputWidth + padX + padX,
+			Y: outputHeight + padY + padY,
+		}, ' ')
 	}
 
 	var dst *image.NRGBA
 	dst = image.NewNRGBA(image.Rect(0, 0, outputWidth, outputHeight))
 	config.Scaler.Scale(dst, dst.Rect, src, bounds, draw.Over, nil)
-
 	if config.AdjustContrast != 0 {
 		dst = imaging.AdjustContrast(dst, config.AdjustContrast)
 	}
-
-	density := []rune(config.DensityCharacters)
-	output.Reset()
 
 	for y := 0; y < outputHeight; y++ {
 		for x := 0; x < outputWidth; x++ {
@@ -118,10 +125,9 @@ func Encode(
 				fg := tcell.NewColor(int32(r), int32(g), int32(b))
 				attr = term.Attributes{Fg: fg}
 			}
-			output.InsertWithAttr(term.Coordinates{X: x + padX, Y: y}, character, attr)
+			output.InsertWithAttr(term.Coordinates{X: x + padX, Y: y + padY}, character, attr)
 		}
 	}
-
 }
 
 func mapValue(value, inMin, inMax, outMin, outMax float64) float64 {

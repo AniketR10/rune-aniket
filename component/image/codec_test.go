@@ -145,9 +145,16 @@ func TestCodec(t *testing.T) {
                                         
                                         `,
 		},
-		{"encode an image and maintain aspect ratio",
+		{"encode an image and maintain aspect ratio, inverted aspect ratio",
 			30, 30, loadImage("testdata/image_1.png"), configMaintainAspectRatio(),
 			`
+
+
+
+
+
+
+
                               
                               
                               
@@ -162,9 +169,17 @@ func TestCodec(t *testing.T) {
           #@@@@@@@#0          
                               
                               
-                              `,
+                              
+
+
+
+
+
+
+
+                               `,
 		},
-		{"encode an image and maintain aspect ratio",
+		{"encode an image and maintain aspect ratio, similar aspect ratio",
 			50, 20, loadImage("testdata/image_1.png"), configMaintainAspectRatio(),
 			`
                                              
@@ -186,7 +201,8 @@ func TestCodec(t *testing.T) {
                                              
                                              
                                              
-                                             `,
+                                             
+                                                   `,
 		},
 	}
 
