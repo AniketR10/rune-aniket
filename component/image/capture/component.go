@@ -109,15 +109,22 @@ func (c *Component) consumeVideoSource(cadence time.Duration) {
 	defer ticker.Stop()
 	defer close(c.consumeVideoActive)
 
-	var width, height int
+	var width, height, frameWidth, frameHeight int
+	var err error
 	for {
 		select {
 		case resize := <-c.resize:
 			width = resize.width
 			height = resize.height
+			// pre-calculate aspect ratio to avoid
+			// Encode having to calculate it for each frame.
+			if c.cfg.MaintainAspectRatio && frameWidth != 0 && frameHeight != 0 {
+				width, height = timage.ResizeMaintainAspectRatio(
+					frameWidth, frameHeight, width, height)
+			}
 			c.log(log.TraceLevel, "resize received. width=%d height=%d", width, height)
 		case <-ticker.C:
-			err := c.consumeFrame(width, height)
+			frameWidth, frameHeight, err = c.consumeFrame(width, height)
 			c.log(log.TraceLevel, "read new frame "+
 				"width=%v, height=%v, err=%s", width, height, err)
 			if err != nil {
@@ -133,18 +140,28 @@ func (c *Component) consumeVideoSource(cadence time.Duration) {
 	}
 }
 
-func (c *Component) consumeFrame(width, height int) error {
+func (c *Component) consumeFrame(width, height int) (
+	frameWidth, frameHeight int, err error,
+) {
 	img, release, err := c.reader.Read()
 	if err != nil {
-		return fmt.Errorf("video read frame: %v", err)
+		err = fmt.Errorf("video read frame: %v", err)
+		return
 	}
 	defer release()
 
 	c.rmu.Lock()
 	defer c.rmu.Unlock()
 
+	// aspect ratio is pre-calculated on resize to avoid
+	// Encode having to calculate it for each frame.
+	cfg := c.cfg
+	cfg.MaintainAspectRatio = false
 	timage.Encode(&c.buf, width, height, img, c.cfg)
-	return nil
+
+	frameWidth = img.Bounds().Dx()
+	frameHeight = img.Bounds().Dy()
+	return
 }
 
 func (c *Component) log(level log.Level, msg string, args ...interface{}) {
