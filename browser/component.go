@@ -147,8 +147,10 @@ func (c *Component) wallpaper() browserapi.Handler {
 			cfg.Attributes.Bg = wallpaper.BackgroundAttr.Bg
 			instance = component.NewStringWithConfig(str.String(), cfg)
 		} else {
+			// activate override behaviour
+			nonZeroCh := ' '
 			instance = component.NewBackground(instance,
-				term.Cell{Attributes: wallpaper.BackgroundAttr})
+				term.Cell{Ch: nonZeroCh, Attributes: wallpaper.BackgroundAttr})
 		}
 	}
 	// make wallpaper satisfy Floating to avoid browserContent panic
