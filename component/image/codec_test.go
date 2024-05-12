@@ -115,6 +115,23 @@ func TestCodec(t *testing.T) {
                                         
                                         `,
 		},
+		{"encode an image and maintain aspect ratio",
+			30, 30, loadImage("testdata/image_1.png"), configMaintainAspectRatio(),
+			`                               
+                              
+             .:,    =-        
+          #@@@##@@@#9b        
+         @@@     @@@          
+         *@@@   #@@#          
+          '@@@@@@#            
+         @@@4                 
+           @@@@@@@@@#         
+        _@@@      @@@         
+         #@@@@@@@@@#          
+                              
+                              
+                              `,
+		},
 	}
 
 	for _, test := range suite {
@@ -156,5 +173,11 @@ func defaultConfigColor() Config {
 func defaultConfigContrast() Config {
 	ret := DefaultConfig()
 	ret.AdjustContrast = 100
+	return ret
+}
+
+func configMaintainAspectRatio() Config {
+	ret := DefaultConfig()
+	ret.MaintainAspectRatio = true
 	return ret
 }

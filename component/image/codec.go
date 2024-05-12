@@ -13,9 +13,9 @@ import (
 	"unstable.build/go-tui/term"
 )
 
-// DefaultDensityCharacters are the default characters used by Encode and EncodeScaler
-// as density denotation characters. See EncodeScalerCharacters for more details.
 const (
+	// DefaultDensityCharacters are the default characters used by Encode and EncodeScaler
+	// as density denotation characters. See EncodeScalerCharacters for more details.
 	DefaultDensityCharacters   = "   `'_.,-*=+:;cba!?0123456789$W#@"
 	AlternateDensityCharacters = "    .:░▒▓█"
 )
@@ -35,6 +35,23 @@ func DefaultConfig() Config {
 	}
 }
 
+// ResizeMaintainAspectRatio adjusts the given image height and width to
+// dstHeight and dstWidth boundaries, respecting the original aspect ratio.
+func ResizeMaintainAspectRatio(srcWidth, srcHeight, dstWidth, dstHeight int) (
+	width, height int,
+) {
+	// this is a modifier to take height to width cell aspect ratio
+	// into consideration.
+	const heightToWidthCellAspectRatio = 2
+	aspectRatio := float32(srcWidth) / float32(srcHeight) * heightToWidthCellAspectRatio
+	width = int(float32(dstHeight) * aspectRatio)
+	height = dstHeight
+	for ; width > dstWidth; height-- {
+		width = int(float32(height) * aspectRatio)
+	}
+	return
+}
+
 // Config is used to configure Encode.
 type Config struct {
 	// DensityCharacter is used to encode the density of a pixel. It is
@@ -48,6 +65,10 @@ type Config struct {
 	// It ranges from -100 (decrease contrst by 100% to
 	// 100 (increase contrast by 100%).
 	AdjustContrast float64
+
+	// If MaintainAspectRatio is true, then the original image
+	// aspect ratio will be maintained.
+	MaintainAspectRatio bool
 }
 
 // Encode takes an image.Image and encodes it in ASCII representation
@@ -60,15 +81,22 @@ func Encode(
 	output *cell.Buffer, outputWidth, outputHeight int,
 	src image.Image, config Config,
 ) {
-	density := []rune(config.DensityCharacters)
-	rect := image.Rect(0, 0, outputWidth, outputHeight)
-	dst := image.NewNRGBA(rect)
-	config.Scaler.Scale(dst, rect, src, src.Bounds(), draw.Over, nil)
+	bounds := src.Bounds()
+
+	var dst *image.NRGBA
+	if config.MaintainAspectRatio {
+		outputWidth, outputHeight = ResizeMaintainAspectRatio(
+			bounds.Dx(), bounds.Dy(), outputWidth, outputHeight)
+	}
+
+	dst = image.NewNRGBA(image.Rect(0, 0, outputWidth, outputHeight))
+	config.Scaler.Scale(dst, dst.Rect, src, bounds, draw.Over, nil)
 
 	if config.AdjustContrast != 0 {
 		dst = imaging.AdjustContrast(dst, config.AdjustContrast)
 	}
 
+	density := []rune(config.DensityCharacters)
 	output.Reset()
 	for y := 0; y < outputHeight; y++ {
 		for x := 0; x < outputWidth; x++ {
