@@ -13,8 +13,6 @@ import (
 	browserextension "unstable.build/go-tui/api/browser/extension"
 	"unstable.build/go-tui/api/config"
 	textapi "unstable.build/go-tui/api/text"
-	"unstable.build/go-tui/cell"
-	"unstable.build/go-tui/component"
 	timage "unstable.build/go-tui/component/image"
 	"unstable.build/go-tui/component/image/capture"
 	"unstable.build/go-tui/extension"
@@ -64,6 +62,13 @@ func Grantee() (extension.Grantee, []extension.Permission) {
 			} else {
 				imageConfig.AdjustContrast = float64(contrast)
 			}
+			if maintain, err := pconfig.GetBool("maintain_aspect_ratio"); err != nil {
+				if err != config.ErrNotFound {
+					log.Warningf("failed to get 'maintain_aspect_ratio' from config: %v", err)
+				}
+			} else {
+				imageConfig.MaintainAspectRatio = maintain
+			}
 
 			fps, err := pconfig.GetInt("fps")
 			if err != nil {
@@ -97,12 +102,11 @@ func Grantee() (extension.Grantee, []extension.Permission) {
 			if err != nil {
 				return nil, err
 			}
-			buf := cell.NewBuffer()
 			cfg := timage.DefaultConfig()
 			cfg.Color = true
-			timage.Encode(buf, 120, 60, img, cfg)
-			scroll := component.NewScroll(buf)
-			return browserapi.NopHandler(handler.Nop(scroll)), nil
+			cfg.MaintainAspectRatio = true
+			h := browserapi.NopHandler(handler.Nop(timage.New(img, cfg)))
+			return h, nil
 		},
 		Command: textapi.CommandManual{
 			Name: "rtcConvertImageToASCII",
