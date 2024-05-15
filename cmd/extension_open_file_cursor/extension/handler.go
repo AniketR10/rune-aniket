@@ -49,14 +49,12 @@ var (
 		extension.PermissionFileSystem,
 		extension.PermissionConfig,
 		extension.PermissionBrowserResourceOpener,
-		extension.PermissionBrowserWindowManager,
 	}
 )
 
 type gfEditorHandler struct {
 	ed textapi.Editor
 	o  browserapi.ResourceOpener
-	wm browserapi.WindowManager
 	fs workspaceapi.FileSystem
 
 	tracker extutil.ResourceTracker
@@ -74,8 +72,6 @@ func newGFHandler(
 		switch grant.Permission {
 		case extension.PermissionFileSystem:
 			ret.fs, err = workspaceextension.FileSystem(ctx, grant, broker)
-		case extension.PermissionBrowserWindowManager:
-			ret.wm, err = browserextension.WindowManager(ctx, grant, broker)
 		case extension.PermissionBrowserResourceOpener:
 			ret.o, err = browserextension.ResourceOpener(ctx, grant, broker)
 		case extension.PermissionConfig:
