@@ -16,21 +16,29 @@ func New(img image.Image, config Config) tui.Component {
 		img:    img,
 		config: config,
 		scroll: component.NewScroll(cell.NewBuffer()),
+		dirty:  true,
 	}
 }
 
 type imgComp struct {
-	img    image.Image
-	config Config
-	scroll *component.Scroll
+	img           image.Image
+	config        Config
+	scroll        *component.Scroll
+	dirty         bool
+	width, height int
 }
 
 func (c *imgComp) Draw(w term.Writer) {
+	if c.dirty {
+		c.scroll.Buffer().Reset()
+		Encode(c.scroll.Buffer(), c.width, c.height, c.img, c.config)
+	}
 	c.scroll.Draw(w)
 }
 
 func (c *imgComp) Resize(width, height int) {
-	c.scroll.Buffer().Reset()
-	Encode(c.scroll.Buffer(), width, height, c.img, c.config)
+	c.dirty = true
+	c.width = width
+	c.height = height
 	c.scroll.Resize(width, height)
 }
