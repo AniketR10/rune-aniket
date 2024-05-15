@@ -4,6 +4,8 @@ import (
 	_ "embed"
 	"errors"
 	"fmt"
+	"image"
+	"image/png"
 	"io"
 	"os"
 	"strings"
@@ -18,6 +20,7 @@ import (
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component"
+	timage "unstable.build/go-tui/component/image"
 	"unstable.build/go-tui/component/notifications"
 	extutil "unstable.build/go-tui/extension/util"
 	"unstable.build/go-tui/handler"
@@ -952,6 +955,74 @@ func (c ideConfig) wallpaper() (ret browser.Wallpaper) {
 	}
 
 	cfg := c.workspace()
+	cfgImage, err := cfg.GetString("wallpaper_image")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["workspace.wallpaper_image"] = err
+		}
+		return c.wallpaperASCII(cfg)
+	}
+
+	densityChars, err := cfg.GetString("wallpaper_density_characters")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["workspace.wallpaper_density_characters"] = err
+		}
+		densityChars = " ▓▓▓▓"
+	}
+
+	img, err := openImage(cfgImage)
+	if err != nil {
+		c.errors["workspace.wallpaper_image"] = err
+		return c.wallpaperASCII(cfg)
+	}
+
+	return makeWallpaper(img, densityChars)
+}
+
+func openImage(imagePath string) (image.Image, error) {
+	// resolve image path
+	imageURI, err := workspaceapi.CurrentUserHostURI(imagePath)
+	if err != nil {
+		return nil, fmt.Errorf("expand image %q: %w", imagePath, err)
+	}
+	f, err := os.Open(imageURI.Path())
+	if err != nil {
+		return nil, fmt.Errorf("open image %q: %w", imageURI.Path(), err)
+	}
+	defer f.Close()
+
+	img, err := png.Decode(f)
+	if err != nil {
+		return nil, fmt.Errorf("png decode: %v", err)
+	}
+	return img, nil
+}
+
+func makeWallpaper(img image.Image, densityCharacters string) browser.Wallpaper {
+	return browser.Wallpaper{
+		NewComponent: func() tui.Component {
+			cfg := timage.DefaultConfig()
+			cfg.Color = true
+			cfg.MaintainAspectRatio = true
+			cfg.DensityCharacters = densityCharacters
+			image := timage.New(img, cfg)
+			return component.NewSpan(image, component.SpanConfig{
+				PadHorizontalPerc: 0.4,
+				PadVerticalPerc:   0.2,
+				ContentAlignment:  component.SpanAlignmentCentered,
+			})
+		},
+	}
+}
+
+func (c ideConfig) wallpaperASCII(cfg config.Config) (ret browser.Wallpaper) {
+	ret = c.defaultWallpaper
+	// allow user to override the default wallpaper's background
+	ret.BackgroundAttr = c.workspaceWallpaperBackgroundAttr()
+	if c.cfg == nil {
+		return
+	}
 	cfgText, err := cfg.GetString("wallpaper")
 	if err != nil {
 		if err != config.ErrNotFound {

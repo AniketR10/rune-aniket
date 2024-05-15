@@ -553,8 +553,16 @@ workspace:
   # If set to false, the user is asked via a prompt.
   auto_restore: true
 
-  ## Workspace wallpaper. Override default six wallpaper with your ASCII art.
+  # Workspace wallpaper. Override default six wallpaper with your ASCII art.
   #wallpaper: myAsciiArt
+
+  # Override the default wallpaper with a PNG image that gets encoded into ASCII.
+  # Images with a transparent background work best.
+  #wallpaper_image: /path/to/image.png
+  # Density characters used to encode wallpaper_image. They should be sorted
+  # from less density to more density, i.e. '   `_.,-*=+:;cba!?0123456789$W#@'
+  #wallpaper_density_characters: ' ▓▓▓▓'
+
   # The following attributes do not apply to the default wallpaper
   wallpaper_attr:
     fg: *highlight2
