@@ -116,7 +116,7 @@ func (v *viHandler) Handle(ev term.Event) (exit, handled bool) {
 }
 
 func (v *viHandler) systemCanDispatchBell(callback func(error)) {
-	const systemCanDispatchBellTimeout = 1 * time.Second
+	const systemCanDispatchBellTimeout = 3 * time.Second
 	ctx := context.Background()
 	ctx, cancel := context.WithTimeout(ctx, systemCanDispatchBellTimeout)
 
