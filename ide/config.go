@@ -947,9 +947,11 @@ func (c ideConfig) browserTabspaces() (tabs int) {
 }
 
 func (c ideConfig) wallpaper() (ret browser.Wallpaper) {
+	backgroundAttr := c.workspaceWallpaperBackgroundAttr()
+
 	ret = c.defaultWallpaper
 	// allow user to override the default wallpaper's background
-	ret.BackgroundAttr = c.workspaceWallpaperBackgroundAttr()
+	ret.BackgroundAttr = backgroundAttr
 	if c.cfg == nil {
 		return
 	}
@@ -960,7 +962,7 @@ func (c ideConfig) wallpaper() (ret browser.Wallpaper) {
 		if err != config.ErrNotFound {
 			c.errors["workspace.wallpaper_image"] = err
 		}
-		return c.wallpaperASCII(cfg)
+		return c.wallpaperASCII(cfg, backgroundAttr)
 	}
 
 	densityChars, err := cfg.GetString("wallpaper_density_characters")
@@ -974,10 +976,12 @@ func (c ideConfig) wallpaper() (ret browser.Wallpaper) {
 	img, err := openImage(cfgImage)
 	if err != nil {
 		c.errors["workspace.wallpaper_image"] = err
-		return c.wallpaperASCII(cfg)
+		return c.wallpaperASCII(cfg, backgroundAttr)
 	}
 
-	return makeWallpaper(img, densityChars)
+	ret = makeWallpaper(img, densityChars)
+	ret.BackgroundAttr = backgroundAttr
+	return ret
 }
 
 func openImage(imagePath string) (image.Image, error) {
@@ -1016,10 +1020,11 @@ func makeWallpaper(img image.Image, densityCharacters string) browser.Wallpaper 
 	}
 }
 
-func (c ideConfig) wallpaperASCII(cfg config.Config) (ret browser.Wallpaper) {
+func (c ideConfig) wallpaperASCII(
+	cfg config.Config, backgroundAttr term.Attributes,
+) (ret browser.Wallpaper) {
 	ret = c.defaultWallpaper
-	// allow user to override the default wallpaper's background
-	ret.BackgroundAttr = c.workspaceWallpaperBackgroundAttr()
+	ret.BackgroundAttr = backgroundAttr
 	if c.cfg == nil {
 		return
 	}
