@@ -16,8 +16,8 @@ import (
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component/notifications"
-	"unstable.build/go-tui/proto"
-	prototest "unstable.build/go-tui/proto/test"
+	"unstable.build/go-tui/rpc"
+	prototest "unstable.build/go-tui/rpc/test"
 	"unstable.build/go-tui/term"
 	termpb "unstable.build/go-tui/term/rpc"
 	"unstable.build/go-tui/text"
@@ -32,8 +32,8 @@ type nopLocker struct{}
 func (l nopLocker) Lock()   {}
 func (l nopLocker) Unlock() {}
 
-func newTestServer(t *testing.T, ctrl *gomock.Controller) (*proto.MockMuxBroker, *texttest.MockEditor, *Server) {
-	broker := proto.NewMockMuxBroker(ctrl)
+func newTestServer(t *testing.T, ctrl *gomock.Controller) (*rpc.MockMuxBroker, *texttest.MockEditor, *Server) {
+	broker := rpc.NewMockMuxBroker(ctrl)
 	ed := texttest.NewMockEditor(ctrl)
 	s := NewServer(broker, ed, new(sync.Mutex))
 	return broker, ed, s
@@ -57,7 +57,7 @@ func expectEditor(t *testing.T, mock *texttest.MockEditor, resource workspaceapi
 }
 
 func callServerEdit(
-	t *testing.T, ctx context.Context, broker *proto.MockMuxBroker,
+	t *testing.T, ctx context.Context, broker *rpc.MockMuxBroker,
 	s *Server, uri workspaceapi.URI, content string,
 ) {
 	buf := cell.NewBuffer()
@@ -242,7 +242,7 @@ func TestServerSetLocationList(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		broker := proto.NewMockMuxBroker(ctrl)
+		broker := rpc.NewMockMuxBroker(ctrl)
 		ed := texttest.NopEditor()
 		c, err := text.NewComponent(ed, document.NewInMemoryService(), &testLoader{}, text.Config{
 			Config: browser.Config{

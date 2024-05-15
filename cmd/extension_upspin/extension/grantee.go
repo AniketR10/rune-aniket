@@ -10,7 +10,7 @@ import (
 	schemeapi "unstable.build/go-tui/api/scheme"
 	schemeextension "unstable.build/go-tui/api/scheme/extension"
 	"unstable.build/go-tui/extension"
-	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/rpc"
 )
 
 var (
@@ -26,12 +26,12 @@ func Grantee() (extension.Grantee, []extension.Permission) {
 
 type upspinGrantee struct {
 	mu     sync.Mutex
-	broker proto.MuxBroker
+	broker rpc.MuxBroker
 	m      schemeapi.SchemeManager
 }
 
 func (e *upspinGrantee) Connected(
-	ctx context.Context, broker proto.MuxBroker, pconfig config.Config,
+	ctx context.Context, broker rpc.MuxBroker, pconfig config.Config,
 ) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()

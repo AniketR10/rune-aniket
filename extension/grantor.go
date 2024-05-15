@@ -5,14 +5,14 @@ import (
 	"io"
 	"sync"
 
-	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/rpc"
 )
 
 // ResourceRegistrar wraps the basic Serve method, to serve resources over a mux broker.
 type ResourceRegistrar interface {
 	Register(
 		extensionID string, grantor Grantor,
-		registar proto.ServiceRegistrar, broker proto.MuxBroker,
+		registar rpc.ServiceRegistrar, broker rpc.MuxBroker,
 		locker sync.Locker) (io.Closer, error)
 }
 

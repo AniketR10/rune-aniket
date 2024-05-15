@@ -37,7 +37,7 @@ import (
 	extutil "unstable.build/go-tui/extension/util"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/search"
-	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text/vi"
 )
@@ -591,7 +591,7 @@ func convertRange(
 
 func newLspHandler(
 	ctx context.Context, ed textapi.Editor, grants []extension.Grant,
-	broker proto.MuxBroker, pconfig config.Config,
+	broker rpc.MuxBroker, pconfig config.Config,
 ) (extutil.CommandEventHandler, error) {
 	ret := new(lspEditorHandler)
 	ret.ed = ed

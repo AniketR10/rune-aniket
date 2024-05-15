@@ -12,7 +12,7 @@ import (
 	"google.golang.org/grpc"
 	"unstable.build/go-tui/extension"
 	extensionpb "unstable.build/go-tui/extension/rpc"
-	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/rpc"
 )
 
 // handshakeConfigs are used to just do a basic handshake between
@@ -33,7 +33,7 @@ type granteeExtension struct {
 	grantee   extension.Grantee
 	grantor   extension.Grantor
 	keepAlive time.Duration
-	broker    proto.MuxBroker
+	broker    rpc.MuxBroker
 }
 
 // GRPCServer satisfies extension.GRPCExtension
@@ -94,7 +94,7 @@ func Serve(grantee extension.Grantee, request ...extension.Permission) {
 	log.SetLevel(level)
 	log.SetFormatter(formatter)
 
-	proto.DisableGRPCLogging()
+	rpc.DisableGRPCLogging()
 
 	extensionExecutable := filepath.Base(os.Args[0])
 

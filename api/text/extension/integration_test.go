@@ -11,7 +11,7 @@ import (
 	textapi "unstable.build/go-tui/api/text"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/extension"
-	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
 	textpb "unstable.build/go-tui/text/rpc"
@@ -39,7 +39,7 @@ func TestIntegrationRace(t *testing.T) {
 	require.NoError(t, err)
 
 	th := textpb.Token{URI: uri}
-	broker := proto.NewUnixGRPCBroker("", "", "")
+	broker := rpc.NewUnixGRPCBroker("", "", "")
 	defer broker.Close()
 
 	edMock := texttest.NewMockEditor(ctrl)
@@ -47,7 +47,7 @@ func TestIntegrationRace(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	ctx = proto.ContextWithWaitGroup(ctx, new(sync.WaitGroup))
+	ctx = rpc.ContextWithWaitGroup(ctx, new(sync.WaitGroup))
 
 	grantor := extension.GrantAll(resources)
 	srv, err := broker.NewChannel()
@@ -66,11 +66,11 @@ func TestIntegrationRace(t *testing.T) {
 
 	tsuite := []struct {
 		perm           extension.Permission
-		createResource func(extension.Grant, proto.MuxBroker) (interface{}, error)
+		createResource func(extension.Grant, rpc.MuxBroker) (interface{}, error)
 		expect         func(*texttest.MockEditorMockRecorder) *gomock.Call
 		method         func(ifc interface{}) error
 	}{
-		{extension.PermissionEditor, func(token extension.Grant, broker proto.MuxBroker) (interface{}, error) {
+		{extension.PermissionEditor, func(token extension.Grant, broker rpc.MuxBroker) (interface{}, error) {
 			return Editor(context.Background(), token, broker)
 		}, func(ed *texttest.MockEditorMockRecorder) *gomock.Call {
 			return ed.SubscribeEvents(gomock.Any(), gomock.Any()).Return(nil)
@@ -79,7 +79,7 @@ func TestIntegrationRace(t *testing.T) {
 			ev := []textapi.EventType{textapi.EventTypeFlush}
 			return ifc.(textapi.Editor).SubscribeEvents(ev, h)
 		}},
-		{extension.PermissionEditor, func(token extension.Grant, broker proto.MuxBroker) (interface{}, error) {
+		{extension.PermissionEditor, func(token extension.Grant, broker rpc.MuxBroker) (interface{}, error) {
 			return Editor(context.Background(), token, broker)
 		}, func(ed *texttest.MockEditorMockRecorder) *gomock.Call {
 			return ed.SubscribeCommand(gomock.Any(), gomock.Any()).Return(nil)
@@ -87,7 +87,7 @@ func TestIntegrationRace(t *testing.T) {
 			h := textapi.FuncCommandHandler(nil, nil)
 			return ifc.(textapi.Editor).SubscribeCommand(textapi.CommandManual{}, h)
 		}},
-		{extension.PermissionEditor, func(token extension.Grant, broker proto.MuxBroker) (interface{}, error) {
+		{extension.PermissionEditor, func(token extension.Grant, broker rpc.MuxBroker) (interface{}, error) {
 			return Editor(context.Background(), token, broker)
 		}, func(ed *texttest.MockEditorMockRecorder) *gomock.Call {
 			ed.Editor(gomock.Any()).Return(th, nil).AnyTimes()
@@ -95,7 +95,7 @@ func TestIntegrationRace(t *testing.T) {
 		}, func(ifc interface{}) error {
 			return ifc.(textapi.Editor).SetCursor(th, term.Coordinates{})
 		}},
-		{extension.PermissionEditor, func(token extension.Grant, broker proto.MuxBroker) (interface{}, error) {
+		{extension.PermissionEditor, func(token extension.Grant, broker rpc.MuxBroker) (interface{}, error) {
 			return Editor(context.Background(), token, broker)
 		}, func(ed *texttest.MockEditorMockRecorder) *gomock.Call {
 			ed.Editor(gomock.Any()).Return(th, nil).AnyTimes()

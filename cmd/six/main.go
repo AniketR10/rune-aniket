@@ -28,7 +28,7 @@ import (
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/extension/process"
 	"unstable.build/go-tui/ide"
-	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/workspace"
 	workspacepb "unstable.build/go-tui/workspace/rpc"
 	"unstable.build/go-tui/workspace/ssh"
@@ -102,7 +102,7 @@ func startWorkspaceServer() int {
 		log.SetOutput(f)
 		log.SetLevel(log.TraceLevel)
 		log.SetFormatter(logging.LogrusLogdFormatter{})
-		proto.EnableGRPCLogging(f, f, f)
+		rpc.EnableGRPCLogging(f, f, f)
 
 		//nolint:errcheck
 		defer f.Close()
@@ -114,7 +114,7 @@ func startWorkspaceServer() int {
 	} else {
 		log.SetOutput(io.Discard)
 		log.SetLevel(log.PanicLevel)
-		proto.DisableGRPCLogging()
+		rpc.DisableGRPCLogging()
 	}
 
 	log.Tracef("Initialized debug logger")
@@ -124,10 +124,10 @@ func startWorkspaceServer() int {
 	quitch := make(chan struct{})
 	grpcServer := grpc.NewServer(
 		grpc.ChainUnaryInterceptor(
-			proto.UnaryLoggingRecoveryInterceptor(),
+			rpc.UnaryLoggingRecoveryInterceptor(),
 		),
 		grpc.ChainStreamInterceptor(
-			proto.StreamLoggingRecoveryInterceptor(),
+			rpc.StreamLoggingRecoveryInterceptor(),
 		),
 	)
 	signal.Notify(ch)
@@ -238,7 +238,7 @@ func run() int {
 		}()
 	}
 
-	proto.DisableGRPCLogging()
+	rpc.DisableGRPCLogging()
 
 	if *flagWorkspaceServer != "" {
 		code := startWorkspaceServer()

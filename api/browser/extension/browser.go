@@ -7,10 +7,10 @@ import (
 	browserapi "unstable.build/go-tui/api/browser"
 	browserpb "unstable.build/go-tui/browser/rpc"
 	"unstable.build/go-tui/extension"
-	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/rpc"
 )
 
-func dialBrowser(ctx context.Context, grant extension.Grant, broker proto.MuxBroker) (
+func dialBrowser(ctx context.Context, grant extension.Grant, broker rpc.MuxBroker) (
 	browserapi.Browser, error,
 ) {
 	conn, err := broker.DialChannel(ctx, grant.Token,
@@ -24,7 +24,7 @@ func dialBrowser(ctx context.Context, grant extension.Grant, broker proto.MuxBro
 
 // WindowManager acquires the browser's WindowManager
 // resource with the given token.
-func WindowManager(ctx context.Context, grant extension.Grant, broker proto.MuxBroker) (
+func WindowManager(ctx context.Context, grant extension.Grant, broker rpc.MuxBroker) (
 	browserapi.WindowManager, error,
 ) {
 	return dialBrowser(ctx, grant, broker)
@@ -32,7 +32,7 @@ func WindowManager(ctx context.Context, grant extension.Grant, broker proto.MuxB
 
 // ResourceOpener acquires the browser's ResourceOpener
 // resource with the given token.
-func ResourceOpener(ctx context.Context, grant extension.Grant, broker proto.MuxBroker) (
+func ResourceOpener(ctx context.Context, grant extension.Grant, broker rpc.MuxBroker) (
 	browserapi.ResourceOpener, error,
 ) {
 	return dialBrowser(ctx, grant, broker)
@@ -40,7 +40,7 @@ func ResourceOpener(ctx context.Context, grant extension.Grant, broker proto.Mux
 
 // Notifications acquires the browser's Notifications
 // resource with the given token.
-func Notifications(ctx context.Context, grant extension.Grant, broker proto.MuxBroker) (
+func Notifications(ctx context.Context, grant extension.Grant, broker rpc.MuxBroker) (
 	browserapi.Notifications, error,
 ) {
 	return dialBrowser(ctx, grant, broker)
@@ -48,7 +48,7 @@ func Notifications(ctx context.Context, grant extension.Grant, broker proto.MuxB
 
 // EventPublisher acquires the browser's EventPublisher
 // resource with the given token.
-func EventPublisher(ctx context.Context, grant extension.Grant, broker proto.MuxBroker) (
+func EventPublisher(ctx context.Context, grant extension.Grant, broker rpc.MuxBroker) (
 	browserapi.EventPublisher, error,
 ) {
 	return dialBrowser(ctx, grant, broker)

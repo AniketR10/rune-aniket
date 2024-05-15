@@ -16,7 +16,7 @@ import (
 	"unstable.build/go-tui/cmd/extension_fuzzy_file/finder"
 	"unstable.build/go-tui/extension"
 	extutil "unstable.build/go-tui/extension/util"
-	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/workspace"
 )
@@ -137,7 +137,7 @@ func parseLine(workspace workspaceapi.FileSystem, data string) (
 
 func newHandler(
 	ctx context.Context, cmd textapi.Command,
-	grants []extension.Grant, broker proto.MuxBroker,
+	grants []extension.Grant, broker rpc.MuxBroker,
 	invokeWindow browserapi.Window, c config.Config,
 ) (browserapi.Handler, error) {
 	noHistoryKey := term.KeyComb{}

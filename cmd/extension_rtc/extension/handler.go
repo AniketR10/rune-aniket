@@ -20,7 +20,7 @@ import (
 	"unstable.build/go-tui/extension"
 	extutil "unstable.build/go-tui/extension/util"
 	"unstable.build/go-tui/handler"
-	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term"
 )
 
@@ -31,7 +31,7 @@ func Grantee() (extension.Grantee, []extension.Permission) {
 	webcamGrantee, perms := extutil.NewCommandSplitHandler(extutil.CommandSplitHandlerConfig{
 		SplitOrientation: browserapi.OrientationRight,
 		Handler: func(ctx context.Context, cmd textapi.Command,
-			grants []extension.Grant, broker proto.MuxBroker,
+			grants []extension.Grant, broker rpc.MuxBroker,
 			invokeWindow browserapi.Window, pconfig config.Config,
 		) (browserapi.Handler, error) {
 			var publisher term.Interrupter
@@ -103,7 +103,7 @@ func Grantee() (extension.Grantee, []extension.Permission) {
 	convertImageGrantee, _ := extutil.NewCommandSplitHandler(extutil.CommandSplitHandlerConfig{
 		SplitOrientation: browserapi.OrientationRight,
 		Handler: func(ctx context.Context, cmd textapi.Command,
-			grants []extension.Grant, broker proto.MuxBroker,
+			grants []extension.Grant, broker rpc.MuxBroker,
 			invokeWindow browserapi.Window, config config.Config) (browserapi.Handler, error) {
 			if len(cmd.Args) < 1 {
 				return nil, errors.New("expected first argument to be a JPEG image URI")

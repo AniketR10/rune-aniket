@@ -9,7 +9,7 @@ import (
 	"unstable.build/go-tui/api/config"
 	schemeapi "unstable.build/go-tui/api/scheme"
 	workspaceapi "unstable.build/go-tui/api/workspace"
-	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/rpc"
 )
 
 /* extension side */
@@ -21,39 +21,39 @@ type proxySchemeServerImpl struct {
 	UnimplementedProxySchemeServer
 	scheme string
 	fn     schemeapi.SchemeFunc
-	srv    proto.MuxServer
-	broker proto.MuxBroker
+	srv    rpc.MuxServer
+	broker rpc.MuxBroker
 
 	ctx       context.Context
 	cancelCtx func()
 }
 
 func newProxySchemeServerImpl(
-	ctx context.Context, broker proto.MuxBroker,
-	srv proto.MuxServer, scheme string, fn schemeapi.SchemeFunc,
+	ctx context.Context, broker rpc.MuxBroker,
+	srv rpc.MuxServer, scheme string, fn schemeapi.SchemeFunc,
 ) *proxySchemeServerImpl {
 	ret := new(proxySchemeServerImpl)
 	ret.broker = broker
 	ret.srv = srv
 	ret.scheme = scheme
 	ret.fn = fn
-	ok := proto.IsContextWithWaitGroup(ctx)
+	ok := rpc.IsContextWithWaitGroup(ctx)
 	if !ok {
-		ctx = proto.ContextWithWaitGroup(ctx, new(sync.WaitGroup))
+		ctx = rpc.ContextWithWaitGroup(ctx, new(sync.WaitGroup))
 	}
 	ret.ctx, ret.cancelCtx = context.WithCancel(ctx)
 	return ret
 }
 
 func (s *proxySchemeServerImpl) serveScheme(scheme schemeapi.Scheme) (string, error) {
-	var srv proto.MuxServer
-	ctxWg := proto.WaitGroupFromContext(s.ctx)
+	var srv rpc.MuxServer
+	ctxWg := rpc.WaitGroupFromContext(s.ctx)
 	// NOTE: scheme are usually served once for the lifecycle of the extension.
 	// If this ever changes, we should ensure that when scheme is closed,
 	// we stop the grpc server AND manage any cyclical references such that
 	// the runtime finalizer of the client can run.
-	ret, err := proto.AcceptAndServeChannel(s.ctx, s.broker,
-		func(_ string, _srv proto.MuxServer) {
+	ret, err := rpc.AcceptAndServeChannel(s.ctx, s.broker,
+		func(_ string, _srv rpc.MuxServer) {
 			ctxWg.Add(1)
 			srv = _srv
 			// this is client-side, so no need to pass a locker
@@ -118,7 +118,7 @@ func (s *proxySchemeServerImpl) Close() (ret error) {
 
 func initializeSchemeThroughProxy(
 	ctx context.Context, cfg config.Config, uri workspaceapi.URI,
-	broker proto.MuxBroker, proxyID string,
+	broker rpc.MuxBroker, proxyID string,
 ) (schemeapi.Scheme, error) {
 	// once uri, and config is sent disconnect proxy client
 	proxyConn, err := broker.DialChannel(ctx, proxyID, os.Args[0], "proxyScheme")

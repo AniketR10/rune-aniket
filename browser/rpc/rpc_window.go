@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	browserapi "unstable.build/go-tui/api/browser"
-	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/rpc"
 )
 
 var _ browserapi.Window = (*windowClientImpl)(nil)
@@ -17,7 +17,7 @@ var _ browserapi.Window = (*windowClientImpl)(nil)
 type windowClientImpl struct {
 	windowID  uint64
 	pbClient  WindowManagerClient
-	broker    proto.MuxBroker
+	broker    rpc.MuxBroker
 	clientCtx context.Context
 }
 
@@ -25,7 +25,7 @@ func newWindowClient(
 	ctx context.Context,
 	windowID uint64,
 	pbClient WindowManagerClient,
-	broker proto.MuxBroker,
+	broker rpc.MuxBroker,
 ) *windowClientImpl {
 	ret := new(windowClientImpl)
 	ret.clientCtx = ctx

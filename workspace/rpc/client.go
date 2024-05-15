@@ -15,7 +15,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 	schemeapi "unstable.build/go-tui/api/scheme"
 	workspaceapi "unstable.build/go-tui/api/workspace"
-	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/rpc"
 )
 
 const defaultTimeout = 5 * time.Second
@@ -29,7 +29,7 @@ var _ workspaceapi.Terminal = (*Client)(nil)
 var _ schemeapi.Scheme = (*Client)(nil)
 
 type Client struct {
-	cc        proto.MuxConn
+	cc        rpc.MuxConn
 	exec      ExecutorClient
 	scheme    SchemeClient
 	files     FilesClient
@@ -41,7 +41,7 @@ type Client struct {
 // NewClient allocates storage for a new workspace.Client and
 // initializes it with cc. Client satisfies workspaceapi.Workspace
 // by connecting to a Server via the given rpc connection.
-func NewClient(cc proto.MuxConn) *Client {
+func NewClient(cc rpc.MuxConn) *Client {
 	ret := new(Client)
 	ret.Init(cc)
 	runtime.SetFinalizer(ret, func(c *Client) { c.Close() })
@@ -49,7 +49,7 @@ func NewClient(cc proto.MuxConn) *Client {
 }
 
 // Init initializes this client with cc.
-func (c *Client) Init(cc proto.MuxConn) {
+func (c *Client) Init(cc rpc.MuxConn) {
 	c.cc = cc
 	c.scheme = NewSchemeClient(cc)
 	c.files = NewFilesClient(cc)

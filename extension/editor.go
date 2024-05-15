@@ -5,7 +5,7 @@ import (
 	"sync"
 
 	"unstable.build/go-tui"
-	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
 	textpb "unstable.build/go-tui/text/rpc"
@@ -22,8 +22,8 @@ func newEditorResourceServer(b text.Editor) *editorResourceServer {
 }
 
 func (s *editorResourceServer) Register(
-	extensionID string, grantor Grantor, registrar proto.ServiceRegistrar,
-	broker proto.MuxBroker, lock sync.Locker,
+	extensionID string, grantor Grantor, registrar rpc.ServiceRegistrar,
+	broker rpc.MuxBroker, lock sync.Locker,
 ) (io.Closer, error) {
 	server := textpb.NewServer(broker, s.b, lock)
 	textpb.RegisterEditorServer(registrar,

@@ -14,7 +14,7 @@ import (
 	"unstable.build/go-tui/cmd/extension_ai/dialogue"
 	"unstable.build/go-tui/extension"
 	extutil "unstable.build/go-tui/extension/util"
-	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/rpc"
 )
 
 // GranteeWithService returns this extension's grantee, with the given
@@ -27,7 +27,7 @@ func GranteeWithService(
 ) (extension.Grantee, []extension.Permission) {
 	commandEventHandler := func(
 		ctx context.Context, ed textapi.Editor, grants []extension.Grant,
-		broker proto.MuxBroker, pconfig configapi.Config,
+		broker rpc.MuxBroker, pconfig configapi.Config,
 	) (hret extutil.CommandEventHandler, err error) {
 		return CommandEventHandler(ctx, ed, grants, broker, pconfig,
 			svcFunc, defaultAvailableModels, defaultModel, options...)

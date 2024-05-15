@@ -14,7 +14,7 @@ import (
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser"
 	browserpb "unstable.build/go-tui/browser/rpc"
-	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/rpc"
 	termpb "unstable.build/go-tui/term/rpc"
 	"unstable.build/go-tui/text"
 )
@@ -24,12 +24,12 @@ var _ text.CommandHandler = (*commandClient)(nil)
 const defaultClientTimeout = 5 * time.Second
 
 type commandClient struct {
-	conn proto.MuxConn
+	conn rpc.MuxConn
 	pb   CommandHandlerClient
 	s    *Server
 }
 
-func newCommandClient(conn proto.MuxConn, s *Server) *commandClient {
+func newCommandClient(conn rpc.MuxConn, s *Server) *commandClient {
 	ret := new(commandClient)
 	ret.conn = conn
 	ret.pb = NewCommandHandlerClient(conn)

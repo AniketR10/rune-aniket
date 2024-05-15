@@ -11,7 +11,7 @@ import (
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	workspaceapitest "unstable.build/go-tui/api/workspace/test"
 	"unstable.build/go-tui/extension"
-	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term"
 	workspacetest "unstable.build/go-tui/workspace/test"
 )
@@ -34,7 +34,7 @@ func TestIntegrationRace(t *testing.T) {
 
 	term.DisableInterruptForTesting()
 
-	broker := proto.NewUnixGRPCBroker("", "", "")
+	broker := rpc.NewUnixGRPCBroker("", "", "")
 	defer broker.Close()
 	mockFile := workspaceapitest.NewMockFile(ctrl)
 	mockFile.EXPECT().Fd().AnyTimes()
@@ -49,7 +49,7 @@ func TestIntegrationRace(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	ctx = proto.ContextWithWaitGroup(ctx, new(sync.WaitGroup))
+	ctx = rpc.ContextWithWaitGroup(ctx, new(sync.WaitGroup))
 
 	grantor := extension.GrantAll(resources)
 	srv, err := broker.NewChannel()
@@ -70,14 +70,14 @@ func TestIntegrationRace(t *testing.T) {
 
 	tsuite := []struct {
 		perm           extension.Permission
-		createResource func(extension.Grant, proto.MuxBroker) (interface{}, error)
+		createResource func(extension.Grant, rpc.MuxBroker) (interface{}, error)
 		expect         func(
 			*workspaceapitest.MockFileSystemMockRecorder,
 			*workspaceapitest.MockTerminalMockRecorder,
 			*workspaceapitest.MockExecutorMockRecorder) *gomock.Call
 		method func(ifc interface{}) error
 	}{
-		{extension.PermissionExecute, func(grant extension.Grant, broker proto.MuxBroker) (interface{}, error) {
+		{extension.PermissionExecute, func(grant extension.Grant, broker rpc.MuxBroker) (interface{}, error) {
 			return Executor(context.Background(), grant, broker)
 		}, func(
 			fs *workspaceapitest.MockFileSystemMockRecorder,
@@ -91,7 +91,7 @@ func TestIntegrationRace(t *testing.T) {
 			})
 			return err
 		}},
-		{extension.PermissionFileSystem, func(token extension.Grant, broker proto.MuxBroker) (interface{}, error) {
+		{extension.PermissionFileSystem, func(token extension.Grant, broker rpc.MuxBroker) (interface{}, error) {
 			return FileSystem(context.Background(), token, broker)
 		}, func(
 			fs *workspaceapitest.MockFileSystemMockRecorder,
@@ -106,7 +106,7 @@ func TestIntegrationRace(t *testing.T) {
 			}
 			return err.ToError()
 		}},
-		{extension.PermissionTerminal, func(token extension.Grant, broker proto.MuxBroker) (interface{}, error) {
+		{extension.PermissionTerminal, func(token extension.Grant, broker rpc.MuxBroker) (interface{}, error) {
 			return Terminal(context.Background(), token, broker)
 		}, func(
 			fs *workspaceapitest.MockFileSystemMockRecorder,

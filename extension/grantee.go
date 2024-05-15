@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"unstable.build/go-tui/api/config"
-	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/rpc"
 )
 
 // Permission represents a type of resource access.
@@ -27,7 +27,7 @@ type Grant struct {
 // Grantee needs to be implemented by extensions that want
 // to access extension host resources.
 type Grantee interface {
-	Connected(context.Context, proto.MuxBroker, config.Config) error
+	Connected(context.Context, rpc.MuxBroker, config.Config) error
 	PermissionGranted(context.Context, []Grant) error
 	PermissionDenied(context.Context, []Permission) error
 	Shutdown(ctx context.Context, reason string) error

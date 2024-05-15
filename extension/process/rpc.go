@@ -12,7 +12,7 @@ import (
 	"unstable.build/go-tui/api/config"
 	"unstable.build/go-tui/extension"
 	extensionpb "unstable.build/go-tui/extension/rpc"
-	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/rpc"
 )
 
 const (
@@ -23,7 +23,7 @@ type granteeServer struct {
 	extensionpb.UnimplementedGranteeServer
 	mu        sync.Mutex
 	req       []extension.Permission
-	broker    proto.MuxBroker
+	broker    rpc.MuxBroker
 	grantee   extension.Grantee
 	connected bool
 	keepAlive chan struct{}
@@ -36,7 +36,7 @@ type granteeServer struct {
 }
 
 func newGranteeServer(
-	s *grpc.Server, broker proto.MuxBroker,
+	s *grpc.Server, broker rpc.MuxBroker,
 	grantee extension.Grantee, req []extension.Permission,
 	keepAlive time.Duration,
 ) extensionpb.GranteeServer {
@@ -46,7 +46,7 @@ func newGranteeServer(
 	ret.req = req
 	ret.srv = s
 	ret.ctx, ret.cancelCtx = context.WithCancel(context.Background())
-	ret.ctx = proto.ContextWithWaitGroup(ret.ctx, &ret.closeWg)
+	ret.ctx = rpc.ContextWithWaitGroup(ret.ctx, &ret.closeWg)
 	if keepAlive != time.Duration(0) {
 		ret.keepAlive = make(chan struct{})
 		ret.keepAliveTimeout = keepAlive * 2
@@ -242,14 +242,14 @@ func (s *granteeServer) Health(ctx context.Context, req *extensionpb.HealthReque
 }
 
 type granteeClient struct {
-	mBroker proto.MuxBroker
+	mBroker rpc.MuxBroker
 	client  extensionpb.GranteeClient
 
 	pClient *goplugin.Client
 }
 
 func newGranteeClient(
-	broker proto.MuxBroker, client extensionpb.GranteeClient,
+	broker rpc.MuxBroker, client extensionpb.GranteeClient,
 ) *granteeClient {
 	ret := new(granteeClient)
 	ret.client = client

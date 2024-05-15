@@ -18,7 +18,7 @@ import (
 	workspaceextension "unstable.build/go-tui/api/workspace/extension"
 	"unstable.build/go-tui/extension"
 	extutil "unstable.build/go-tui/extension/util"
-	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term"
 )
 
@@ -64,7 +64,7 @@ type gfEditorHandler struct {
 
 func newGFHandler(
 	ctx context.Context, ed textapi.Editor, grants []extension.Grant,
-	broker proto.MuxBroker, pconfig config.Config,
+	broker rpc.MuxBroker, pconfig config.Config,
 ) (extutil.CommandEventHandler, error) {
 	ret := new(gfEditorHandler)
 	ret.ed = ed

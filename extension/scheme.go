@@ -4,7 +4,7 @@ import (
 	"io"
 	"sync"
 
-	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/workspace"
 	workspacepb "unstable.build/go-tui/workspace/rpc"
 )
@@ -20,8 +20,8 @@ func newSchemeManagerResourceServer(b workspace.SchemeManager) *schemeManagerRes
 }
 
 func (s *schemeManagerResourceServer) Register(
-	extensionID string, grantor Grantor, registrar proto.ServiceRegistrar,
-	broker proto.MuxBroker, lock sync.Locker,
+	extensionID string, grantor Grantor, registrar rpc.ServiceRegistrar,
+	broker rpc.MuxBroker, lock sync.Locker,
 ) (io.Closer, error) {
 	server := workspacepb.NewSchemeManagerServer(broker, s.b, lock)
 	workspacepb.RegisterManagerServer(registrar, server)

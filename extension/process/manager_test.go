@@ -16,7 +16,7 @@ import (
 	"unstable.build/go-tui/extension"
 	extensionpb "unstable.build/go-tui/extension/rpc"
 	extensiontest "unstable.build/go-tui/extension/test"
-	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/rpc"
 )
 
 type nopBroker struct {
@@ -41,12 +41,12 @@ func (b *nopBroker) Accept(ID uint32) (net.Listener, error) {
 }
 
 func (b *nopBroker) AcceptAndServe(
-	ID uint32, srv func(opts []grpc.ServerOption) proto.MuxServer,
+	ID uint32, srv func(opts []grpc.ServerOption) rpc.MuxServer,
 ) {
 }
 
 func (b *nopBroker) Dial(ID uint32) (
-	conn proto.MuxConn, err error,
+	conn rpc.MuxConn, err error,
 ) {
 	return nil, nil
 }
@@ -67,7 +67,7 @@ func (b *nopBroker) Close() error {
 	return nil
 }
 
-func newTestManager(grantor extension.Grantor, opts ...Option) (*Manager, *testGranteePbClient, proto.MuxBroker) {
+func newTestManager(grantor extension.Grantor, opts ...Option) (*Manager, *testGranteePbClient, rpc.MuxBroker) {
 	m := new(Manager)
 
 	opts = append([]Option{
@@ -84,7 +84,7 @@ func newTestManager(grantor extension.Grantor, opts ...Option) (*Manager, *testG
 		return newGranteeClient(m.broker, mockpb), nil
 	}
 	m.Init(grantor, opts...)
-	m.broker = proto.NewUnixGRPCBroker("", "", "")
+	m.broker = rpc.NewUnixGRPCBroker("", "", "")
 
 	return m, mockpb, m.broker
 }

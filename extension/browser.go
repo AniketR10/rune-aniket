@@ -7,7 +7,7 @@ import (
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/browser"
 	browserpb "unstable.build/go-tui/browser/rpc"
-	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term"
 )
 
@@ -31,8 +31,8 @@ func (s *browserResourceServer) forPermission(p Permission) ResourceRegistrar {
 }
 
 func (s browserResourcePermissionServer) Register(
-	extensionID string, grantor Grantor, registrar proto.ServiceRegistrar,
-	broker proto.MuxBroker, lock sync.Locker,
+	extensionID string, grantor Grantor, registrar rpc.ServiceRegistrar,
+	broker rpc.MuxBroker, lock sync.Locker,
 ) (io.Closer, error) {
 	server := browserpb.NewServer(broker, s.b, lock)
 	rpcServer := interruptBrowserServer(server, func() {

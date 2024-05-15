@@ -32,7 +32,7 @@ import (
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/dialogue"
 	"unstable.build/go-tui/handler/input"
-	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/text/clipboard"
@@ -121,7 +121,7 @@ var (
 // this extension's logic.
 func CommandEventHandler(
 	ctx context.Context, ed textapi.Editor, grants []extension.Grant,
-	broker proto.MuxBroker, pconfig configapi.Config,
+	broker rpc.MuxBroker, pconfig configapi.Config,
 	svcFn func(configapi.Config, map[string]int, string) (backend.Service, error),
 	defaultAvailableModels map[string]int,
 	defaultModel string,

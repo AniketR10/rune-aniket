@@ -15,7 +15,7 @@ import (
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/workspace"
 
-	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/rpc"
 )
 
 var (
@@ -28,7 +28,7 @@ type SchemeManagerServer struct {
 	UnimplementedManagerServer
 
 	failureTimeout time.Duration
-	broker         proto.MuxBroker
+	broker         rpc.MuxBroker
 
 	// manager locker
 	locker  sync.Locker
@@ -39,7 +39,7 @@ type SchemeManagerServer struct {
 // NewSchemeManagerServer allocates storage for a new SchemeManagerServer and initializes it
 // with the given SchemeManager.
 func NewSchemeManagerServer(
-	broker proto.MuxBroker, manager workspace.SchemeManager,
+	broker rpc.MuxBroker, manager workspace.SchemeManager,
 	locker sync.Locker,
 ) *SchemeManagerServer {
 	ret := new(SchemeManagerServer)
@@ -50,7 +50,7 @@ func NewSchemeManagerServer(
 
 // Init initializes this SchemeServerImpl with the given scheme.
 func (s *SchemeManagerServer) Init(
-	broker proto.MuxBroker, manager workspace.SchemeManager,
+	broker rpc.MuxBroker, manager workspace.SchemeManager,
 	locker sync.Locker,
 ) {
 	s.manager = manager

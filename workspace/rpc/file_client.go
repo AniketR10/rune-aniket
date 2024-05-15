@@ -10,7 +10,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/logging"
 	workspaceapi "unstable.build/go-tui/api/workspace"
-	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/rpc"
 )
 
 var _ workspaceapi.File = (*FileClient)(nil)
@@ -32,7 +32,7 @@ type FileClient struct {
 
 func newFileClient(
 	ctx context.Context, c *Client,
-	conn proto.MuxConn, filename string, fd uintptr,
+	conn rpc.MuxConn, filename string, fd uintptr,
 ) workspaceapi.File {
 	ret := &FileClient{
 		c:        c,

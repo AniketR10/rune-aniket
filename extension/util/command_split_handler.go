@@ -16,7 +16,7 @@ import (
 	textapi "unstable.build/go-tui/api/text"
 	textextension "unstable.build/go-tui/api/text/extension"
 	"unstable.build/go-tui/extension"
-	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/rpc"
 )
 
 // CommandSplitHandlerConfig provides the configuration required to
@@ -35,7 +35,7 @@ type CommandSplitHandlerConfig struct {
 	// If returned Handler satisfies io.Closer, then Close will be called
 	// when split window is closed.
 	Handler func(context.Context, textapi.Command, []extension.Grant,
-		proto.MuxBroker, browserapi.Window, config.Config) (browserapi.Handler, error)
+		rpc.MuxBroker, browserapi.Window, config.Config) (browserapi.Handler, error)
 
 	// Permissions to be requested for Handler.
 	Permissions []extension.Permission
@@ -62,7 +62,7 @@ type cmdSplitHandler struct {
 	mu     sync.Mutex
 	config CommandSplitHandlerConfig
 
-	broker  proto.MuxBroker
+	broker  rpc.MuxBroker
 	wm      browserapi.WindowManager
 	ed      textapi.Editor
 	pconfig config.Config
@@ -72,7 +72,7 @@ type cmdSplitHandler struct {
 }
 
 func (t *cmdSplitHandler) Connected(
-	ctx context.Context, broker proto.MuxBroker, config config.Config,
+	ctx context.Context, broker rpc.MuxBroker, config config.Config,
 ) error {
 	t.log(log.DebugLevel, "extension connected")
 	t.broker = broker

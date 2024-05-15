@@ -11,7 +11,7 @@ import (
 	"github.com/unstablebuild/blue/logging"
 	textapi "unstable.build/go-tui/api/text"
 	workspaceapi "unstable.build/go-tui/api/workspace"
-	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/rpc"
 	termpb "unstable.build/go-tui/term/rpc"
 	"unstable.build/go-tui/text"
 )
@@ -24,7 +24,7 @@ var (
 type Server struct {
 	UnimplementedEditorServer
 
-	broker    proto.MuxBroker
+	broker    rpc.MuxBroker
 	ctx       context.Context
 	cancelCtx func()
 
@@ -40,7 +40,7 @@ type Server struct {
 
 // NewServer allocates storage for a new Server and initializes it.
 func NewServer(
-	broker proto.MuxBroker, editor text.Editor, lock sync.Locker,
+	broker rpc.MuxBroker, editor text.Editor, lock sync.Locker,
 ) *Server {
 	ret := new(Server)
 	ret.Init(broker, editor, lock)
@@ -49,7 +49,7 @@ func NewServer(
 
 // Init initializes this Server with broker and browser.
 func (s *Server) Init(
-	broker proto.MuxBroker, editor text.Editor, lock sync.Locker,
+	broker rpc.MuxBroker, editor text.Editor, lock sync.Locker,
 ) {
 	s.broker = broker
 	s.editor.Editor = editor

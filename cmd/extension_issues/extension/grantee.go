@@ -28,7 +28,7 @@ import (
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/extension"
-	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/storage/cache"
 	workspacedoc "unstable.build/go-tui/workspace/document"
 )
@@ -97,7 +97,7 @@ func GranteeWithService(
 
 type grantee struct {
 	config     config.Config
-	broker     proto.MuxBroker
+	broker     rpc.MuxBroker
 	svc        *cache.Service[issue.ReportDocument]
 	tracker    issue.Tracker
 	marshaler  encoding.Marshaler
@@ -119,7 +119,7 @@ type grantee struct {
 }
 
 func (e *grantee) Connected(
-	ctx context.Context, broker proto.MuxBroker, pconfig config.Config,
+	ctx context.Context, broker rpc.MuxBroker, pconfig config.Config,
 ) error {
 	e.config = pconfig
 	e.broker = broker

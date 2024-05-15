@@ -16,7 +16,7 @@ import (
 	schemeapi "unstable.build/go-tui/api/scheme"
 	schemetest "unstable.build/go-tui/api/scheme/test"
 	workspaceapi "unstable.build/go-tui/api/workspace"
-	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/workspace"
 	"unstable.build/go-tui/workspace/test"
 )
@@ -56,7 +56,7 @@ func setupProxyTest(t *testing.T, mockScheme schemeapi.Scheme) (
 	require.NoError(t, err)
 	cfg := config.NopConfig()
 	manager := workspace.NewManager(cfg)
-	broker := proto.NewUnixGRPCBroker("", "", "")
+	broker := rpc.NewUnixGRPCBroker("", "", "")
 
 	// host-side
 	srv := NewSchemeManagerServer(broker, manager, new(sync.Mutex))
@@ -110,7 +110,7 @@ func TestSchemeManagerClientServerSchemeSuiteIntegration(t *testing.T) {
 		require.NoError(t, err)
 		cfg := config.NopConfig()
 		manager := workspace.NewManager(cfg)
-		broker := proto.NewUnixGRPCBroker("", "", "")
+		broker := rpc.NewUnixGRPCBroker("", "", "")
 
 		srv := NewSchemeManagerServer(broker, manager, new(sync.Mutex))
 		conn, closeFn := doSetupSchemeManagerClientServerTest(t, srv)
@@ -137,7 +137,7 @@ func TestSchemeManagerClientServerSchemeSuiteIntegration(t *testing.T) {
 		require.NoError(t, err)
 		cfg := config.NopConfig()
 		manager := workspace.NewManager(cfg)
-		broker := proto.NewUnixGRPCBroker("", "", "")
+		broker := rpc.NewUnixGRPCBroker("", "", "")
 
 		srv := NewSchemeManagerServer(broker, manager, new(sync.Mutex))
 		conn, closeFn := doSetupSchemeManagerClientServerTest(t, srv)

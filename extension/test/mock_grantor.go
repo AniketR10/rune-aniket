@@ -5,7 +5,7 @@ import (
 	"sync"
 
 	"unstable.build/go-tui/extension"
-	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/rpc"
 )
 
 var _ extension.ResourceRegistrar = (*MockResourceServer)(nil)
@@ -13,12 +13,12 @@ var _ extension.ResourceRegistrar = (*MockResourceServer)(nil)
 // MockResourceServer satisfies extension.ResourceRegistrar for testing.
 type MockResourceServer struct {
 	mu    sync.Mutex
-	muxes []proto.MuxBroker
+	muxes []rpc.MuxBroker
 }
 
 func (s *MockResourceServer) Register(
-	extensionID string, g extension.Grantor, grantor proto.ServiceRegistrar,
-	mux proto.MuxBroker, lock sync.Locker,
+	extensionID string, g extension.Grantor, grantor rpc.ServiceRegistrar,
+	mux rpc.MuxBroker, lock sync.Locker,
 ) (io.Closer, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -27,7 +27,7 @@ func (s *MockResourceServer) Register(
 	return nopCloser{}, nil
 }
 
-func (s *MockResourceServer) Muxes() []proto.MuxBroker {
+func (s *MockResourceServer) Muxes() []rpc.MuxBroker {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

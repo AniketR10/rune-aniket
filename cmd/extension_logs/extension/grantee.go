@@ -27,7 +27,7 @@ import (
 	"unstable.build/go-tui/extension/process"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/search"
-	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/workspace"
 )
 
@@ -67,7 +67,7 @@ func Grantee() (extension.Grantee, []extension.Permission) {
 
 type grantee struct {
 	mu     sync.Mutex
-	broker proto.MuxBroker
+	broker rpc.MuxBroker
 	quitCh chan struct{}
 
 	wm browserapi.WindowManager
@@ -80,7 +80,7 @@ type grantee struct {
 }
 
 func (e *grantee) Connected(
-	ctx context.Context, broker proto.MuxBroker, pconfig config.Config,
+	ctx context.Context, broker rpc.MuxBroker, pconfig config.Config,
 ) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()

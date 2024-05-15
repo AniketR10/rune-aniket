@@ -13,7 +13,7 @@ import (
 	textapi "unstable.build/go-tui/api/text"
 	textextension "unstable.build/go-tui/api/text/extension"
 	"unstable.build/go-tui/extension"
-	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/rpc"
 )
 
 // CommandEventHandler combines EventHandler with CommandHandler.
@@ -25,7 +25,7 @@ type CommandEventHandler interface {
 
 // CommandEventHandlerFacility abstracts the ability to create new CommandEventHandler.
 type CommandEventHandlerFacility func(context.Context, textapi.Editor, []extension.Grant,
-	proto.MuxBroker, config.Config) (CommandEventHandler, error)
+	rpc.MuxBroker, config.Config) (CommandEventHandler, error)
 
 // NewEditorEventHandler returns a extension.Grantee that simply responds to commands.
 // It calls fn to build a CommandEventHandler, subsribes it to events
@@ -49,7 +49,7 @@ func NewEditorEventHandler(
 
 type editorGrantee struct {
 	mu         sync.Mutex
-	broker     proto.MuxBroker
+	broker     rpc.MuxBroker
 	ed         textapi.Editor
 	handler    CommandEventHandler
 	newHandler CommandEventHandlerFacility
@@ -59,7 +59,7 @@ type editorGrantee struct {
 }
 
 func (t *editorGrantee) Connected(
-	ctx context.Context, broker proto.MuxBroker, config config.Config,
+	ctx context.Context, broker rpc.MuxBroker, config config.Config,
 ) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()

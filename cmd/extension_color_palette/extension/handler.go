@@ -12,7 +12,7 @@ import (
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/extension"
 	extutil "unstable.build/go-tui/extension/util"
-	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term"
 )
 
@@ -27,7 +27,7 @@ func Grantee() (extension.Grantee, []extension.Permission) {
 	return extutil.NewCommandSplitHandler(extutil.CommandSplitHandlerConfig{
 		SplitOrientation: browserapi.OrientationRight,
 		Handler: func(ctx context.Context, _ textapi.Command,
-			grants []extension.Grant, broker proto.MuxBroker,
+			grants []extension.Grant, broker rpc.MuxBroker,
 			invokeWindow browserapi.Window, config config.Config) (browserapi.Handler, error) {
 			return new(colorPaletteHandler), nil
 		},

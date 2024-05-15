@@ -6,11 +6,11 @@ import (
 
 	schemeapi "unstable.build/go-tui/api/scheme"
 	"unstable.build/go-tui/extension"
-	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/rpc"
 	workspacepb "unstable.build/go-tui/workspace/rpc"
 )
 
-func dialSchemeManager(ctx context.Context, grant extension.Grant, broker proto.MuxBroker) (
+func dialSchemeManager(ctx context.Context, grant extension.Grant, broker rpc.MuxBroker) (
 	schemeapi.SchemeManager, error,
 ) {
 	conn, err := broker.DialChannel(ctx, grant.Token,
@@ -23,7 +23,7 @@ func dialSchemeManager(ctx context.Context, grant extension.Grant, broker proto.
 }
 
 // SchemeManager acquires the workspace's URI scheme manager with the given token.
-func SchemeManager(ctx context.Context, grant extension.Grant, broker proto.MuxBroker) (
+func SchemeManager(ctx context.Context, grant extension.Grant, broker rpc.MuxBroker) (
 	schemeapi.SchemeManager, error,
 ) {
 	return dialSchemeManager(ctx, grant, broker)

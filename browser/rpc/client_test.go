@@ -12,7 +12,7 @@ import (
 	"go.uber.org/goleak"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/component/notifications"
-	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term"
 	termpb "unstable.build/go-tui/term/rpc"
 )
@@ -45,16 +45,16 @@ func assertNoLeaks(t *testing.T) {
 
 func newMockedClient(ctrl *gomock.Controller) (
 	client *Client,
-	mockCC *proto.MockClientConnInterface,
-	mockMux *proto.MockMuxBroker,
+	mockCC *rpc.MockClientConnInterface,
+	mockMux *rpc.MockMuxBroker,
 ) {
-	mockCC = proto.NewMockClientConnInterface(ctrl)
-	mockMux = proto.NewMockMuxBroker(ctrl)
+	mockCC = rpc.NewMockClientConnInterface(ctrl)
+	mockMux = rpc.NewMockMuxBroker(ctrl)
 	client = NewClient(context.Background(), mockMux, mockCC)
 	return
 }
 
-func expectInvokeRPC(mockCC *proto.MockClientConnInterface) {
+func expectInvokeRPC(mockCC *rpc.MockClientConnInterface) {
 	mockCC.EXPECT().
 		Invoke(gomock.Any(), gomock.Any(),
 			gomock.Any(), gomock.Any()).
@@ -62,7 +62,7 @@ func expectInvokeRPC(mockCC *proto.MockClientConnInterface) {
 		Return(nil)
 }
 
-func expectInvokeError(mockCC *proto.MockClientConnInterface) {
+func expectInvokeError(mockCC *rpc.MockClientConnInterface) {
 	mockCC.EXPECT().
 		Invoke(gomock.Any(), gomock.Any(),
 			gomock.Any(), gomock.Any()).
@@ -108,7 +108,7 @@ func TestClientNotify(t *testing.T) {
 	})
 }
 
-func expectResourceOpen(mockCC *proto.MockClientConnInterface, myResource workspaceapi.URI) {
+func expectResourceOpen(mockCC *rpc.MockClientConnInterface, myResource workspaceapi.URI) {
 	in := &OpenResourceRequest{Resource: myResource.String()}
 	out := new(OpenResourceResponse)
 	mockCC.EXPECT().

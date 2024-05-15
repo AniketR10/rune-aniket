@@ -8,13 +8,13 @@ import (
 	docrpc "github.com/unstablebuild/blue/document/rpc"
 	"github.com/unstablebuild/blue/encoding/toml"
 	"unstable.build/go-tui/extension"
-	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/rpc"
 )
 
 // NOTE: this is exposing blue/document types which we might not
 // want to do directly. If we ever open-source that library
 // then remove this comment.
-func dialStorage(ctx context.Context, grant extension.Grant, broker proto.MuxBroker) (
+func dialStorage(ctx context.Context, grant extension.Grant, broker rpc.MuxBroker) (
 	document.Service, error,
 ) {
 	conn, err := broker.DialChannel(ctx, grant.Token,
@@ -33,7 +33,7 @@ func dialStorage(ctx context.Context, grant extension.Grant, broker proto.MuxBro
 
 // Storage acquires a client to persistent storage with
 // the given token.
-func Storage(ctx context.Context, grant extension.Grant, broker proto.MuxBroker) (
+func Storage(ctx context.Context, grant extension.Grant, broker rpc.MuxBroker) (
 	document.Service, error,
 ) {
 	return dialStorage(ctx, grant, broker)

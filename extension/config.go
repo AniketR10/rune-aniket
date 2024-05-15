@@ -6,7 +6,7 @@ import (
 
 	"unstable.build/go-tui/api/config"
 	configpb "unstable.build/go-tui/api/config/rpc"
-	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/rpc"
 )
 
 type configResourceServer struct {
@@ -20,8 +20,8 @@ func newConfigResourceServer(cfg config.Config) *configResourceServer {
 }
 
 func (s *configResourceServer) Register(
-	extensionID string, grantor Grantor, registrar proto.ServiceRegistrar,
-	broker proto.MuxBroker, lock sync.Locker,
+	extensionID string, grantor Grantor, registrar rpc.ServiceRegistrar,
+	broker rpc.MuxBroker, lock sync.Locker,
 ) (io.Closer, error) {
 	server := configpb.NewServer(s.cfg, lock)
 	configpb.RegisterConfigServer(registrar, server)

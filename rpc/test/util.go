@@ -1,4 +1,4 @@
-package prototest
+package rpctest
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
-	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/rpc"
 )
 
 type testMuxServer struct {
@@ -27,7 +27,7 @@ func (t testMuxServer) Serve(context.Context) error {
 	return errors.New("nope")
 }
 
-func (t testMuxServer) Registrar() proto.ServiceRegistrar {
+func (t testMuxServer) Registrar() rpc.ServiceRegistrar {
 	return testRegistrar{}
 }
 
@@ -53,15 +53,15 @@ func (r testRegistrar) GetServiceInfo() map[string]grpc.ServiceInfo {
 func (r testRegistrar) RegisterService(desc *grpc.ServiceDesc, impl interface{}) {
 }
 
-func ExpectBrokerServe(t *testing.T, brokerID string, mockBroker *proto.MockMuxBroker) {
+func ExpectBrokerServe(t *testing.T, brokerID string, mockBroker *rpc.MockMuxBroker) {
 	mockBroker.EXPECT().NewChannel(gomock.Any()).
-		DoAndReturn(func() (proto.MuxServer, error) {
+		DoAndReturn(func() (rpc.MuxServer, error) {
 			return testMuxServer{addr: brokerID}, nil
 		}).
 		Times(1)
 }
 
-func ExpectMonitorConn(ret *proto.MockMuxConn) chan struct{} {
+func ExpectMonitorConn(ret *rpc.MockMuxConn) chan struct{} {
 	quitCh := make(chan struct{})
 	ret.EXPECT().GetState().Return(connectivity.Ready).Times(1)
 	ret.EXPECT().WaitForStateChange(gomock.Any(), gomock.Any()).
@@ -79,12 +79,12 @@ func ExpectMonitorConn(ret *proto.MockMuxConn) chan struct{} {
 
 func ExpectBrokerDial(
 	t *testing.T, ctrl *gomock.Controller,
-	mockBroker *proto.MockMuxBroker, expectedBrokerID string,
-) *proto.MockMuxConn {
-	ret := proto.NewMockMuxConn(ctrl)
+	mockBroker *rpc.MockMuxBroker, expectedBrokerID string,
+) *rpc.MockMuxConn {
+	ret := rpc.NewMockMuxConn(ctrl)
 
 	mockBroker.EXPECT().DialChannel(gomock.Any(), gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, brokerId string, tags ...string) (proto.MuxConn, error) {
+		DoAndReturn(func(_ context.Context, brokerId string, tags ...string) (rpc.MuxConn, error) {
 			assert.Equal(t, expectedBrokerID, brokerId)
 			return ret, nil
 		}).
@@ -95,14 +95,14 @@ func ExpectBrokerDial(
 
 func ExpectBrokerDialError(
 	t *testing.T, ctrl *gomock.Controller,
-	mockBroker *proto.MockMuxBroker, expectedBrokerID string,
+	mockBroker *rpc.MockMuxBroker, expectedBrokerID string,
 ) {
 	mockBroker.EXPECT().DialChannel(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil, errors.New("whoopsie")).
 		Times(1)
 }
 func ExpectSignalExit(
-	mockConn *proto.MockMuxConn, quitCh chan struct{},
+	mockConn *rpc.MockMuxConn, quitCh chan struct{},
 	returnErr error,
 ) func() error {
 	return func() error {
@@ -114,12 +114,12 @@ func ExpectSignalExit(
 
 func ExpectBrokerDialChannel(
 	t *testing.T, ctrl *gomock.Controller,
-	mockBroker *proto.MockMuxBroker, expectedChannelID string,
-) *proto.MockMuxConn {
-	ret := proto.NewMockMuxConn(ctrl)
+	mockBroker *rpc.MockMuxBroker, expectedChannelID string,
+) *rpc.MockMuxConn {
+	ret := rpc.NewMockMuxConn(ctrl)
 
 	mockBroker.EXPECT().DialChannel(gomock.Any(), gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, channelID string, tags ...string) (proto.MuxConn, error) {
+		DoAndReturn(func(_ context.Context, channelID string, tags ...string) (rpc.MuxConn, error) {
 			assert.Equal(t, expectedChannelID, channelID)
 			return ret, nil
 		}).
@@ -130,16 +130,16 @@ func ExpectBrokerDialChannel(
 
 func ExpectBrokerDialChannelError(
 	t *testing.T, ctrl *gomock.Controller,
-	mockBroker *proto.MockMuxBroker, expectedBrokerID string,
+	mockBroker *rpc.MockMuxBroker, expectedBrokerID string,
 ) {
 	mockBroker.EXPECT().DialChannel(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil, errors.New("whoopsie")).
 		Times(1)
 }
 
-func ExpectBrokerNewChannel(t *testing.T, channelID string, mockBroker *proto.MockMuxBroker) {
+func ExpectBrokerNewChannel(t *testing.T, channelID string, mockBroker *rpc.MockMuxBroker) {
 	mockBroker.EXPECT().NewChannel(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-		DoAndReturn(func(tags ...string) (proto.MuxServer, error) {
+		DoAndReturn(func(tags ...string) (rpc.MuxServer, error) {
 			return testMuxServer{addr: channelID}, nil
 		}).
 		Times(1)

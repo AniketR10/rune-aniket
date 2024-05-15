@@ -6,7 +6,7 @@ import (
 	"github.com/ernestrc/go-multierror"
 	"unstable.build/go-tui/api/config"
 	"unstable.build/go-tui/extension"
-	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/rpc"
 )
 
 // MultiGrantee combines together a series of extension.Grantee, which will share
@@ -22,7 +22,7 @@ type multiGrantee struct {
 	children []extension.Grantee
 }
 
-func (m multiGrantee) Connected(ctx context.Context, b proto.MuxBroker, cfg config.Config) (ret error) {
+func (m multiGrantee) Connected(ctx context.Context, b rpc.MuxBroker, cfg config.Config) (ret error) {
 	for _, child := range m.children {
 		if err := child.Connected(ctx, b, cfg); err != nil {
 			ret = multierror.Append(ret, err)

@@ -16,7 +16,7 @@ import (
 	"unstable.build/go-tui/browser"
 	browsertest "unstable.build/go-tui/browser/test"
 	"unstable.build/go-tui/component"
-	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term"
 )
 
@@ -25,7 +25,7 @@ func newClientServerIntegration(
 ) (*Client, func()) {
 	lis, err := net.Listen("tcp", ":0")
 	require.NoError(t, err)
-	broker := proto.NewUnixGRPCBroker("", "", "")
+	broker := rpc.NewUnixGRPCBroker("", "", "")
 	mutex := new(sync.Mutex)
 
 	grpcServer := grpc.NewServer()

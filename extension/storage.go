@@ -14,7 +14,7 @@ import (
 	bproto "github.com/unstablebuild/blue/document/rpc/proto"
 	"github.com/unstablebuild/blue/encoding/toml"
 
-	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/storage"
 	"unstable.build/go-tui/workspace"
 )
@@ -44,8 +44,8 @@ func (s *storageResourceServer) setupStorage(lock sync.Locker, extensionID strin
 }
 
 func (s *storageResourceServer) Register(
-	extensionID string, grantor Grantor, registrar proto.ServiceRegistrar,
-	broker proto.MuxBroker, lock sync.Locker,
+	extensionID string, grantor Grantor, registrar rpc.ServiceRegistrar,
+	broker rpc.MuxBroker, lock sync.Locker,
 ) (io.Closer, error) {
 	svc := s.setupStorage(lock, extensionID)
 	svc = doclog.WithLogging(svc, fmt.Sprintf("/ExtensionStorage/%s", extensionID))

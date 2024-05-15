@@ -1,4 +1,4 @@
-package proto
+package rpc
 
 import (
 	"context"
@@ -22,7 +22,7 @@ func WithRetryBroker(b MuxBroker, strategy retry.Strategy) MuxBroker {
 
 func (b retryBroker) log(method string, attempt int, err error) {
 	log.WithFields(log.Fields{
-		logging.KeyClass: "proto.retryBroker",
+		logging.KeyClass: "rpc.retryBroker",
 		"method":         method,
 		"attempt":        strconv.Itoa(attempt),
 		logging.KeyError: fmt.Sprintf("%v", err),

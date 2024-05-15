@@ -27,7 +27,7 @@ import (
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/handler/search"
-	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term"
 )
 
@@ -349,7 +349,7 @@ func (h *fuzzyFinderHandler) scanData() {
 }
 
 func (h *fuzzyFinderHandler) initGrants(
-	ctx context.Context, broker proto.MuxBroker, grants []extension.Grant,
+	ctx context.Context, broker rpc.MuxBroker, grants []extension.Grant,
 	historyDocumentID string, maxHistory int,
 ) (err error) {
 	for _, grant := range grants {
@@ -389,7 +389,7 @@ func (h *fuzzyFinderHandler) initGrants(
 // The given context is passed back to the fallback
 // function along with any values stored with it.
 func New(
-	ctx context.Context, grants []extension.Grant, broker proto.MuxBroker,
+	ctx context.Context, grants []extension.Grant, broker rpc.MuxBroker,
 	invokeWindow browserapi.Window, cfg config.Config,
 	historyKey term.KeyComb, historyDocumentID string, command string,
 	fallback func(workspaceapi.FileSystem, context.Context) (iterator.Iterator[string], error),

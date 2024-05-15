@@ -18,7 +18,7 @@ import (
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/handler"
 	handlerpb "unstable.build/go-tui/handler/rpc"
-	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term"
 	termpb "unstable.build/go-tui/term/rpc"
 )
@@ -43,7 +43,7 @@ Oops! This should not be here.
 
 // Client satisfies Browser by talking to a browser server over RPC.
 type Client struct {
-	broker proto.MuxBroker
+	broker rpc.MuxBroker
 	cc     grpc.ClientConnInterface
 	wm     WindowManagerClient
 	msg    NotificationsClient
@@ -56,7 +56,7 @@ type Client struct {
 
 type browserClientHandler struct {
 	browserapi.Handler
-	srv    proto.MuxServer
+	srv    rpc.MuxServer
 	cancel func()
 }
 
@@ -80,7 +80,7 @@ func (c *browserClientHandler) Dimensions() (width, height int) {
 
 // NewClient allocates storage for a new Client and initializes it.
 func NewClient(
-	ctx context.Context, broker proto.MuxBroker, cc grpc.ClientConnInterface,
+	ctx context.Context, broker rpc.MuxBroker, cc grpc.ClientConnInterface,
 ) *Client {
 	ret := new(Client)
 	ret.Init(ctx, broker, cc)
@@ -94,7 +94,7 @@ func (c *Client) log(level log.Level, msg string, args ...interface{}) {
 
 // Init initializes this Client with broker and client.
 func (c *Client) Init(
-	ctx context.Context, broker proto.MuxBroker, cc grpc.ClientConnInterface,
+	ctx context.Context, broker rpc.MuxBroker, cc grpc.ClientConnInterface,
 ) {
 	c.wm = NewWindowManagerClient(cc)
 	c.msg = NewNotificationsClient(cc)
@@ -102,16 +102,16 @@ func (c *Client) Init(
 	c.f = NewResourceOpenerClient(cc)
 	c.p = NewEventPublisherClient(cc)
 	c.broker = broker
-	ok := proto.IsContextWithWaitGroup(ctx)
+	ok := rpc.IsContextWithWaitGroup(ctx)
 	if !ok {
-		ctx = proto.ContextWithWaitGroup(ctx, new(sync.WaitGroup))
+		ctx = rpc.ContextWithWaitGroup(ctx, new(sync.WaitGroup))
 	}
 	c.clientCtx, c.clientCancelCtx = context.WithCancel(ctx)
 }
 
 func serveHandler(
-	ctx context.Context, broker proto.MuxBroker, h browserapi.Handler,
-) (channelID string, srv proto.MuxServer, err error) {
+	ctx context.Context, broker rpc.MuxBroker, h browserapi.Handler,
+) (channelID string, srv rpc.MuxServer, err error) {
 	if h == nil {
 		panic("passed nil Handler to browser client")
 	}
@@ -121,9 +121,9 @@ func serveHandler(
 	} else {
 		// cancel if close is called before client context is done
 		ctx, cancel := context.WithCancel(ctx)
-		ctxWg := proto.WaitGroupFromContext(ctx)
-		channelID, err = proto.AcceptAndServeChannel(ctx, broker,
-			func(channelID string, msrv proto.MuxServer) {
+		ctxWg := rpc.WaitGroupFromContext(ctx)
+		channelID, err = rpc.AcceptAndServeChannel(ctx, broker,
+			func(channelID string, msrv rpc.MuxServer) {
 				ctxWg.Add(1)
 				srv = msrv
 				h = &browserClientHandler{
@@ -341,7 +341,7 @@ func (c *Client) Focus() (browserapi.Window, error) {
 }
 
 func focus(
-	clientCtx context.Context, wm WindowManagerClient, broker proto.MuxBroker,
+	clientCtx context.Context, wm WindowManagerClient, broker rpc.MuxBroker,
 ) (browserapi.Window, error) {
 	req := FocusRequest{}
 	res, err := wm.Focus(clientCtx, &req)

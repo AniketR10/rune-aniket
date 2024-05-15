@@ -22,12 +22,12 @@ func EditRequestToBuffer(in *EditRequest) *cell.Buffer {
 	return rowsToBuffer(in.GetBuffer())
 }
 
-// NewURIFromProto maps proto.URI into a workspaceapi.URI.
+// NewURIFromProto maps rpc.URI into a workspaceapi.URI.
 func NewURIFromProto(u *URI) (workspaceapi.URI, error) {
 	return workspaceapi.ParseURI(u.GetUri())
 }
 
-// NewURI maps a workspaceapi.URI into a proto.URI.
+// NewURI maps a workspaceapi.URI into a rpc.URI.
 func NewURI(u workspaceapi.URI) *URI {
 	return &URI{Uri: u.String()}
 }

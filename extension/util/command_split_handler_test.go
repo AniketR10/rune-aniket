@@ -17,8 +17,8 @@ import (
 	textapi "unstable.build/go-tui/api/text"
 	browsertest "unstable.build/go-tui/browser/test"
 	"unstable.build/go-tui/extension"
-	"unstable.build/go-tui/proto"
-	prototest "unstable.build/go-tui/proto/test"
+	"unstable.build/go-tui/rpc"
+	prototest "unstable.build/go-tui/rpc/test"
 	textpb "unstable.build/go-tui/text/rpc"
 )
 
@@ -36,8 +36,8 @@ func (h *handlerCloser) Close() error {
 
 func expectInitialization(
 	t *testing.T, ctrl *gomock.Controller, h *cmdSplitHandler,
-) *proto.MockMuxBroker {
-	broker := proto.NewMockMuxBroker(ctrl)
+) *rpc.MockMuxBroker {
+	broker := rpc.NewMockMuxBroker(ctrl)
 	h.Connected(context.Background(), broker, emptyConfig)
 	h.Health(context.Background())
 	return broker
@@ -45,8 +45,8 @@ func expectInitialization(
 
 func expectSubscribe(
 	t *testing.T, ctrl *gomock.Controller,
-	broker *proto.MockMuxBroker, cmd string, token string,
-) *proto.MockMuxConn {
+	broker *rpc.MockMuxBroker, cmd string, token string,
+) *rpc.MockMuxConn {
 	conn := prototest.ExpectBrokerDial(t, ctrl, broker, token)
 	prototest.ExpectBrokerNewChannel(t, "1234", broker)
 	cmdRpc := textpb.CommandManual{Name: cmd}
@@ -115,7 +115,7 @@ func TestCommandSplitHandlerEmpty(t *testing.T) {
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
-		ctx = proto.ContextWithWaitGroup(ctx, new(sync.WaitGroup))
+		ctx = rpc.ContextWithWaitGroup(ctx, new(sync.WaitGroup))
 
 		// called async waiting for ctx to be done
 		conn.EXPECT().Close().AnyTimes()
@@ -171,7 +171,7 @@ func testSplitWindow(
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	cfg.Handler = func(_ context.Context, _ textapi.Command, grants []extension.Grant, broker proto.MuxBroker,
+	cfg.Handler = func(_ context.Context, _ textapi.Command, grants []extension.Grant, broker rpc.MuxBroker,
 		focus browserapi.Window, c config.Config) (browserapi.Handler, error) {
 		return browsertest.NewTestHandler(), nil
 	}

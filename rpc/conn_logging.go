@@ -1,4 +1,4 @@
-package proto
+package rpc
 
 import (
 	context "context"
@@ -36,7 +36,7 @@ func newLoggingConn(id string, c MuxConn, tags ...string) MuxConn {
 
 func (c loggingConn) log(extraFields log.Fields) {
 	fields := log.Fields{
-		logging.KeyClass: "proto.MuxConn",
+		logging.KeyClass: "rpc.MuxConn",
 		"ID":             fmt.Sprintf("%v", c.id),
 		"Address":        fmt.Sprintf("%p", c.MuxConn),
 		"Tags":           fmt.Sprintf("%v", c.tags),

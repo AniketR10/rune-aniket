@@ -7,10 +7,10 @@ import (
 	"unstable.build/go-tui/api/config"
 	configpb "unstable.build/go-tui/api/config/rpc"
 	"unstable.build/go-tui/extension"
-	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/rpc"
 )
 
-func dialConfig(ctx context.Context, grant extension.Grant, broker proto.MuxBroker) (
+func dialConfig(ctx context.Context, grant extension.Grant, broker rpc.MuxBroker) (
 	config.Config, error,
 ) {
 	conn, err := broker.DialChannel(ctx, grant.Token,
@@ -26,7 +26,7 @@ func dialConfig(ctx context.Context, grant extension.Grant, broker proto.MuxBrok
 }
 
 // FetchConfig acquires the loaded config with the given permission token.
-func FetchConfig(ctx context.Context, grant extension.Grant, broker proto.MuxBroker) (
+func FetchConfig(ctx context.Context, grant extension.Grant, broker rpc.MuxBroker) (
 	config.Config, error,
 ) {
 	return dialConfig(ctx, grant, broker)

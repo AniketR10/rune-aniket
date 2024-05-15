@@ -14,7 +14,7 @@ import (
 	status "google.golang.org/grpc/status"
 
 	schemeapi "unstable.build/go-tui/api/scheme"
-	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/rpc"
 )
 
 var _ schemeapi.SchemeManager = (*SchemeManagerClient)(nil)
@@ -22,7 +22,7 @@ var _ schemeapi.SchemeManager = (*SchemeManagerClient)(nil)
 // NewSchemeManager returns a schemeapi.SchemeManager RPC-based client over
 // the given connection.
 func NewSchemeManager(
-	ctx context.Context, broker proto.MuxBroker, cc proto.MuxConn,
+	ctx context.Context, broker rpc.MuxBroker, cc rpc.MuxConn,
 ) *SchemeManagerClient {
 	ret := new(SchemeManagerClient)
 	ret.init(ctx, broker, cc)
@@ -31,23 +31,23 @@ func NewSchemeManager(
 }
 
 // SchemeManagerClient satisfies schemeapi.SchemeManager by calling a
-// remote SchemeManager over a proto.MuxConn.
+// remote SchemeManager over a rpc.MuxConn.
 type SchemeManagerClient struct {
-	broker    proto.MuxBroker
+	broker    rpc.MuxBroker
 	client    ManagerClient
-	cc        proto.MuxConn
+	cc        rpc.MuxConn
 	ctx       context.Context
 	cancelCtx func()
 }
 
 func (c *SchemeManagerClient) init(
-	ctx context.Context, broker proto.MuxBroker, cc proto.MuxConn,
+	ctx context.Context, broker rpc.MuxBroker, cc rpc.MuxConn,
 ) {
 	c.broker = broker
 	c.client = NewManagerClient(cc)
-	ok := proto.IsContextWithWaitGroup(ctx)
+	ok := rpc.IsContextWithWaitGroup(ctx)
 	if !ok {
-		ctx = proto.ContextWithWaitGroup(ctx, new(sync.WaitGroup))
+		ctx = rpc.ContextWithWaitGroup(ctx, new(sync.WaitGroup))
 	}
 	c.ctx, c.cancelCtx = context.WithCancel(ctx)
 	c.cc = cc
@@ -60,11 +60,11 @@ func (c *SchemeManagerClient) log(level log.Level, msg string, args ...interface
 func (c *SchemeManagerClient) serveProxyServer(scheme string, fn schemeapi.SchemeFunc) (
 	*proxySchemeServerImpl, string, error,
 ) {
-	var srv proto.MuxServer
+	var srv rpc.MuxServer
 	var psrv *proxySchemeServerImpl
-	ctxWg := proto.WaitGroupFromContext(c.ctx)
-	ret, err := proto.AcceptAndServeChannel(c.ctx, c.broker,
-		func(_ string, _srv proto.MuxServer) {
+	ctxWg := rpc.WaitGroupFromContext(c.ctx)
+	ret, err := rpc.AcceptAndServeChannel(c.ctx, c.broker,
+		func(_ string, _srv rpc.MuxServer) {
 			ctxWg.Add(1)
 			srv = _srv
 			psrv = newProxySchemeServerImpl(c.ctx, c.broker, srv, scheme, fn)

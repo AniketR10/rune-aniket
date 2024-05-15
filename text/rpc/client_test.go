@@ -13,7 +13,7 @@ import (
 	textapi "unstable.build/go-tui/api/text"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
-	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term"
 	termpb "unstable.build/go-tui/term/rpc"
 	"unstable.build/go-tui/text"
@@ -33,10 +33,10 @@ var (
 )
 
 func newTestClient(ctrl *gomock.Controller) (
-	*proto.MockMuxBroker, *proto.MockMuxConn, *Client,
+	*rpc.MockMuxBroker, *rpc.MockMuxConn, *Client,
 ) {
-	broker := proto.NewMockMuxBroker(ctrl)
-	cc := proto.NewMockMuxConn(ctrl)
+	broker := rpc.NewMockMuxBroker(ctrl)
+	cc := rpc.NewMockMuxConn(ctrl)
 	c := NewClient(context.Background(), broker, cc)
 	// runtime finalizer calls close after test is done
 	cc.EXPECT().Close().AnyTimes()
@@ -44,7 +44,7 @@ func newTestClient(ctrl *gomock.Controller) (
 }
 
 func expectClientEdit(
-	t *testing.T, mockCC *proto.MockMuxConn,
+	t *testing.T, mockCC *rpc.MockMuxConn,
 	expectedContent string, uri workspaceapi.URI,
 ) {
 	mockCC.EXPECT().

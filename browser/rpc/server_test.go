@@ -13,7 +13,7 @@ import (
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	browsertest "unstable.build/go-tui/browser/test"
 	"unstable.build/go-tui/component/notifications"
-	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term"
 	termpb "unstable.build/go-tui/term/rpc"
 )
@@ -30,10 +30,10 @@ func newServerWithNoBroker(ctrl *gomock.Controller) (
 }
 
 func newTestServer(ctrl *gomock.Controller, mu *sync.Mutex) (
-	*Server, *browsertest.MockBrowser, *proto.MockMuxBroker,
+	*Server, *browsertest.MockBrowser, *rpc.MockMuxBroker,
 ) {
 	mockBrowser := browsertest.NewMockBrowser(ctrl)
-	mockBroker := proto.NewMockMuxBroker(ctrl)
+	mockBroker := rpc.NewMockMuxBroker(ctrl)
 	s := NewServer(mockBroker, mockBrowser, mu)
 	s.SetSyncMode()
 

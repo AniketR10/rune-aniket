@@ -18,7 +18,7 @@ import (
 	"unstable.build/go-tui/component/notifications"
 
 	handlerrpc "unstable.build/go-tui/handler/rpc"
-	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/util"
 )
 
@@ -37,7 +37,7 @@ type Server struct {
 	UnimplementedResourceOpenerServer
 	UnimplementedWindowManagerServer
 
-	broker   proto.MuxBroker
+	broker   rpc.MuxBroker
 	syncMode bool
 
 	browser struct {
@@ -51,7 +51,7 @@ type Server struct {
 
 // NewServer allocates storage for a new Server and initializes it.
 func NewServer(
-	broker proto.MuxBroker, browser browser.Browser, lock sync.Locker,
+	broker rpc.MuxBroker, browser browser.Browser, lock sync.Locker,
 ) *Server {
 	ret := new(Server)
 	ret.Init(broker, browser, lock)
@@ -60,7 +60,7 @@ func NewServer(
 
 // Init initializes this Server with broker and browser.
 func (s *Server) Init(
-	broker proto.MuxBroker, browser browser.Browser, lock sync.Locker,
+	broker rpc.MuxBroker, browser browser.Browser, lock sync.Locker,
 ) {
 	s.broker = broker
 	s.browser.Browser = browser
@@ -125,7 +125,7 @@ func (s *Server) dialHandler(ctx context.Context, channelID string, tags ...stri
 
 	go s.consumeErrors(ctx, channelID, handlercc.Errors())
 	go s.consumeErrors(ctx, channelID, cc.errorCh)
-	go proto.MonitorConnection(ctx, defaultFailureTimeout, handlerConn,
+	go rpc.MonitorConnection(ctx, defaultFailureTimeout, handlerConn,
 		func(reason string) {
 			cancelFn()
 			handlerConn.Close()

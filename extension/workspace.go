@@ -8,7 +8,7 @@ import (
 
 	bluectx "github.com/unstablebuild/blue/context"
 	workspaceapi "unstable.build/go-tui/api/workspace"
-	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/workspace"
 	workspacepb "unstable.build/go-tui/workspace/rpc"
 )
@@ -26,8 +26,8 @@ func newWorkspaceResourceServer(b workspace.Workspace, p Permission) *workspaceR
 }
 
 func (s *workspaceResourceServer) Register(
-	extensionID string, grantor Grantor, registrar proto.ServiceRegistrar,
-	broker proto.MuxBroker, lock sync.Locker,
+	extensionID string, grantor Grantor, registrar rpc.ServiceRegistrar,
+	broker rpc.MuxBroker, lock sync.Locker,
 ) (io.Closer, error) {
 	// create a closer able to close all processes created by grantee
 	// without closing workspace.Workspace, which we cannot assume about
@@ -39,12 +39,12 @@ func (s *workspaceResourceServer) Register(
 	server := workspacepb.NewServer(w, lock)
 	switch s.p {
 	case PermissionFileSystem:
-		if !proto.IsRegistered(registrar, workspacepb.Files_ServiceDesc) {
+		if !rpc.IsRegistered(registrar, workspacepb.Files_ServiceDesc) {
 			workspacepb.RegisterFilesServer(registrar, server)
 		}
 		workspacepb.RegisterSchemeServer(registrar, server)
 	case PermissionTerminal:
-		if !proto.IsRegistered(registrar, workspacepb.Files_ServiceDesc) {
+		if !rpc.IsRegistered(registrar, workspacepb.Files_ServiceDesc) {
 			workspacepb.RegisterFilesServer(registrar, server)
 		}
 		workspacepb.RegisterTerminalServer(registrar, server)

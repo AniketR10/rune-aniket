@@ -15,7 +15,7 @@ import (
 	"unstable.build/go-tui/api/config"
 	"unstable.build/go-tui/extension"
 	extensionpb "unstable.build/go-tui/extension/rpc"
-	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/rpc"
 )
 
 type testGranteePbClient struct {
@@ -222,7 +222,7 @@ type granteeMock struct {
 	onShutdownFn         func()
 }
 
-func (g *granteeMock) Connected(ctx context.Context, b proto.MuxBroker, cfg config.Config) error {
+func (g *granteeMock) Connected(ctx context.Context, b rpc.MuxBroker, cfg config.Config) error {
 	g.cfgs = append(g.cfgs, cfg)
 	g.onConnected++
 	return nil
@@ -265,7 +265,7 @@ func setupIntTest(
 	require.NoError(t, err)
 
 	grpcServer := grpc.NewServer()
-	server := newGranteeServer(grpcServer, proto.NewUnixGRPCBroker("", "", ""),
+	server := newGranteeServer(grpcServer, rpc.NewUnixGRPCBroker("", "", ""),
 		granteeMock, perms, time.Duration(0))
 	extensionpb.RegisterGranteeServer(grpcServer, server)
 

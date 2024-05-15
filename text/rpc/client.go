@@ -14,7 +14,7 @@ import (
 	"unstable.build/go-tui/browser"
 	browserpb "unstable.build/go-tui/browser/rpc"
 	"unstable.build/go-tui/cell"
-	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term"
 	termpb "unstable.build/go-tui/term/rpc"
 )
@@ -46,9 +46,9 @@ var _ textapi.Editor = (*Client)(nil)
 
 // Client satisfies text.Editor by calling a remote editor over grpc.
 type Client struct {
-	broker          proto.MuxBroker
+	broker          rpc.MuxBroker
 	browser         *browserpb.Client
-	cc              proto.MuxConn
+	cc              rpc.MuxConn
 	ed              EditorClient
 	clientCtx       context.Context
 	clientCancelCtx func()
@@ -56,7 +56,7 @@ type Client struct {
 
 // NewClient allocates storage for a new Client and initializes it.
 func NewClient(
-	ctx context.Context, broker proto.MuxBroker, cc proto.MuxConn,
+	ctx context.Context, broker rpc.MuxBroker, cc rpc.MuxConn,
 ) *Client {
 	ret := new(Client)
 	ret.Init(ctx, broker, cc)
@@ -66,14 +66,14 @@ func NewClient(
 
 // Init initializes this Client with broker and client.
 func (c *Client) Init(
-	ctx context.Context, broker proto.MuxBroker, cc proto.MuxConn,
+	ctx context.Context, broker rpc.MuxBroker, cc rpc.MuxConn,
 ) {
 	c.ed = NewEditorClient(cc)
 	c.cc = cc
 	c.broker = broker
-	ok := proto.IsContextWithWaitGroup(ctx)
+	ok := rpc.IsContextWithWaitGroup(ctx)
 	if !ok {
-		ctx = proto.ContextWithWaitGroup(ctx, new(sync.WaitGroup))
+		ctx = rpc.ContextWithWaitGroup(ctx, new(sync.WaitGroup))
 	}
 	c.browser = browserpb.NewClient(ctx, broker, cc)
 	c.clientCtx, c.clientCancelCtx = context.WithCancel(ctx)
@@ -84,17 +84,17 @@ func (c *Client) log(level log.Level, msg string, args ...interface{}) {
 }
 
 func (c *Client) serveCommandHandler(h textapi.CommandHandler) (
-	ret string, srv proto.MuxServer, err error,
+	ret string, srv rpc.MuxServer, err error,
 ) {
-	ctxWg := proto.WaitGroupFromContext(c.clientCtx)
+	ctxWg := rpc.WaitGroupFromContext(c.clientCtx)
 	// NOTE: there's no way to unregister from the public API, so extensions
 	// cannot create more than one command handler per command.
 	// If we ever add unregister to the API, we should cleanup
 	// cyclical references here so the Client's runtime finalizer can
 	// run correctly, in the case where clients use multiple
 	// clients to register and unregister new commands.
-	ret, err = proto.AcceptAndServeChannel(c.clientCtx, c.broker,
-		func(channelID string, _srv proto.MuxServer) {
+	ret, err = rpc.AcceptAndServeChannel(c.clientCtx, c.broker,
+		func(channelID string, _srv rpc.MuxServer) {
 			ctxWg.Add(1)
 			srv = _srv
 			s := newCommandServer(h, c.browser, c)

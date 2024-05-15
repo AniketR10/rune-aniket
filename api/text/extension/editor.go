@@ -6,11 +6,11 @@ import (
 
 	textapi "unstable.build/go-tui/api/text"
 	"unstable.build/go-tui/extension"
-	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/rpc"
 	textpb "unstable.build/go-tui/text/rpc"
 )
 
-func dialEditor(ctx context.Context, grant extension.Grant, broker proto.MuxBroker) (
+func dialEditor(ctx context.Context, grant extension.Grant, broker rpc.MuxBroker) (
 	textapi.Editor, error,
 ) {
 	conn, err := broker.DialChannel(ctx, grant.Token,
@@ -23,7 +23,7 @@ func dialEditor(ctx context.Context, grant extension.Grant, broker proto.MuxBrok
 }
 
 // Editor acquires the remote Editor with the given token.
-func Editor(ctx context.Context, grant extension.Grant, broker proto.MuxBroker) (
+func Editor(ctx context.Context, grant extension.Grant, broker rpc.MuxBroker) (
 	textapi.Editor, error,
 ) {
 	return dialEditor(ctx, grant, broker)

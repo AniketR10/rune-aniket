@@ -18,7 +18,7 @@ import (
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/extension"
 	extensionpb "unstable.build/go-tui/extension/rpc"
-	"unstable.build/go-tui/proto"
+	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/util"
 )
 
@@ -87,7 +87,7 @@ type Manager struct {
 	// used to abstract out go-plugin specific functionality
 	builder extensionBuilder
 
-	broker proto.MuxBroker
+	broker rpc.MuxBroker
 	config managerConfig
 
 	// srvs lifecycle ctx
@@ -200,7 +200,7 @@ func (m *Manager) doGrant(
 		return fmt.Errorf("new channel: %w", err)
 	}
 	if log.IsLevelEnabled(log.TraceLevel) {
-		srv = proto.LoggingGRPCServer(srv)
+		srv = rpc.LoggingGRPCServer(srv)
 	}
 
 	// for denied permissions we do not call ResourceRegistrar.Register so
