@@ -220,8 +220,8 @@ github.com/stretchr/testify v1.8.4/go.mod h1:sz/lmYIOXD/1dqDmKjjqLyZ2RngseejIcXl
 github.com/stretchr/testify v1.9.0 h1:HtqpIVDClZ4nwg75+f6Lvsy/wHu+3BoSGCbBAcpTsTg=
 github.com/stretchr/testify v1.9.0/go.mod h1:r2ic/lqez/lEtzL7wO/rwa5dbSLXVDPFyf8C91i36aY=
 github.com/tv42/httpunix v0.0.0-20191220191345-2ba4b9c3382c/go.mod h1:hzIxponao9Kjc7aWznkXaL4U4TWaDSs8zcsY4Ka08nM=
-github.com/unstablebuild/blue v1.47.0 h1:MWNybEIuCKMb3GPhddjbeJSVcb6qcU4U/gBpJJqXrdA=
-github.com/unstablebuild/blue v1.47.0/go.mod h1:PGoLrK7Og2uv3QMrASEOkQm9pQujhLzO8dUmQsgkN30=
+github.com/unstablebuild/blue v1.47.1 h1:vRmcqgXkuwjOxObRz71z95CQ7b/VAbCeOOhSQKEGBHM=
+github.com/unstablebuild/blue v1.47.1/go.mod h1:PGoLrK7Og2uv3QMrASEOkQm9pQujhLzO8dUmQsgkN30=
 github.com/unstablebuild/golang-internal-tools v0.0.2 h1:U7JqKgxiIWZa3oxmaxSolzQBUKfUC8bnCAeu2kqwCZQ=
 github.com/unstablebuild/golang-internal-tools v0.0.2/go.mod h1:Aad9p5ILvoHIAyskcA4cve2E0GIjQMBytCJvpotJRLE=
 github.com/unstablebuild/pty v1.3.1 h1:GQSjqGKSOkOCu+X/F5yFUSuwp7Fi08xXn28DcuXhu/k=
