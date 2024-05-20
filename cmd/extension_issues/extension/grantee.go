@@ -57,38 +57,31 @@ var (
 					"create issue. Closing the file before saving it cancels the creation " +
 					"of a new issue.",
 			},
-			handler: (*grantee).openEmptyIssueTemplate,
+			handler: (*Grantee).openEmptyIssueTemplate,
 		},
 		issueRefreshCmd: {
 			man: textapi.CommandManual{
 				Summary: "Refreshes the local issues cache. This is useful when user " +
 					"knows that out-of-band changes have been made to the issue tracker.",
 			},
-			handler: (*grantee).issueRefresh,
+			handler: (*Grantee).issueRefresh,
 		},
 	}
 	editorEvents = []textapi.EventType{textapi.EventTypeFlush, textapi.EventTypeClose}
 )
 
-// Grantee returns this extension's grantee and the permissions required to run it.
-// It uses the local bluectl configuration to load the issue tracker's credentials.
+// GranteeWithService returns this extension's Grantee and the permissions required to run it.
 func GranteeWithService(
 	versionTag, scheme string,
 	svcFn func(config.Config) (document.Service, error),
 ) (extension.Grantee, []extension.Permission) {
-	m := yaml.Marshaler()
-	s := &grantee{
-		cmds:       defaultCommands,
-		marshaler:  m,
-		versionTag: versionTag,
-		scheme:     scheme,
-		svcFn:      svcFn,
-	}
-	s.pendingIssueURI.Store(workspaceapi.URI{})
+	s := NewGrantee(versionTag, scheme, svcFn)
 	return s, requiredPermissions
 }
 
-type grantee struct {
+// Grantee returns an issues extension grantee that adds the ability to create
+// issues from templates by running commands, and optionally adds an issues scheme.
+type Grantee struct {
 	config     config.Config
 	broker     rpc.MuxBroker
 	svc        *cache.Service[issue.ReportDocument]
@@ -112,7 +105,25 @@ type grantee struct {
 	pendingIssueURI atomic.Value // workspaceapi.URI, accessed by Handle and HandleCommand
 }
 
-func (e *grantee) Connected(
+// NewGrantee allocates storage for a new Grantee and initializes it.
+func NewGrantee(
+	versionTag, scheme string,
+	svcFn func(config.Config) (document.Service, error),
+) *Grantee {
+	m := yaml.Marshaler()
+	s := &Grantee{
+		cmds:       defaultCommands,
+		marshaler:  m,
+		versionTag: versionTag,
+		scheme:     scheme,
+		svcFn:      svcFn,
+	}
+	s.pendingIssueURI.Store(workspaceapi.URI{})
+	return s
+}
+
+// Connected satisfies extension.Grantee.
+func (e *Grantee) Connected(
 	ctx context.Context, broker rpc.MuxBroker, pconfig config.Config,
 ) (err error) {
 	e.config = pconfig
@@ -222,27 +233,22 @@ func (e *grantee) Connected(
 	return nil
 }
 
-func (e *grantee) initScheme(m schemeapi.SchemeManager) error {
-	marshaler := yaml.Marshaler()
-	rootURI, err := workspaceapi.ParseURI(fmt.Sprintf("%s:///", e.scheme))
+// OpenIssueTemplate opens an issue template as a new temporary tab, and awaits
+// for the user to flush to disk to synchronize it to the issue tracker.
+// The given context can override the default author
+func (e *Grantee) OpenIssueTemplate(
+	ctx context.Context, template issue.Report, cmd textapi.Command,
+) error {
+	data, err := e.marshaler.Marshal(template)
 	if err != nil {
-		panic(err)
+		return fmt.Errorf("marshal template: %w", err)
 	}
-
-	schemeFn := workspacedoc.WorkspaceScheme[issue.ReportDocument](rootURI, e.svc,
-		marshaler, fmt.Errorf("missing %q sub-field in Metadata field",
-			issue.ReportMetadataIDField))
-	schemeFn = issueMapperScheme(schemeFn, marshaler, e.maxSubjectLen)
-	err = m.RegisterScheme(e.scheme, schemeFn)
-	if err == schemeapi.ErrSchemeAlreadyRegistered {
-		// the first workspace to run this plugin registers the scheme successfully
-		err = nil
-		e.log(log.DebugLevel, "ignore register error: another issues extension registered the scheme first")
-	}
+	_, err = e.openIssueTemplate(ctx, cmd.Window, data, "custom-create-template")
 	return err
 }
 
-func (e *grantee) Handle(ctx context.Context, ev textapi.Event) bool {
+// Handle satisfies text.EventHandler.
+func (e *Grantee) Handle(ctx context.Context, ev textapi.Event) bool {
 	pendingIssueURI := e.pendingIssueURI.Load().(workspaceapi.URI)
 	if !ev.URI.Equal(pendingIssueURI) {
 		e.log(log.TraceLevel, "ignoring event for file with URI %q: not an issue URI", ev.URI)
@@ -260,7 +266,8 @@ func (e *grantee) Handle(ctx context.Context, ev textapi.Event) bool {
 	return false
 }
 
-func (e *grantee) PermissionGranted(ctx context.Context, grants []extension.Grant) error {
+// Handle satisfies extension.Grantee.
+func (e *Grantee) PermissionGranted(ctx context.Context, grants []extension.Grant) error {
 	e.log(log.DebugLevel, "permissions granted: %v", grants)
 
 	for _, g := range grants {
@@ -360,44 +367,47 @@ func (e *grantee) PermissionGranted(ctx context.Context, grants []extension.Gran
 	return nil
 }
 
-func (e *grantee) PermissionDenied(ctx context.Context, perms []extension.Permission) error {
+// PermissionDenied satisfies extension.Grantee.
+func (e *Grantee) PermissionDenied(ctx context.Context, perms []extension.Permission) error {
 	return fmt.Errorf("missing critical permissions: denied: %v; required: %v",
 		perms, requiredPermissions)
 }
 
-func (e *grantee) Health(context.Context) error {
+// Health satisfies extension.Grantee.
+func (e *Grantee) Health(context.Context) error {
 	return nil
 }
 
-func (e *grantee) Shutdown(ctx context.Context, reason string) error {
+// Shutdown satisfies extension.Grantee.
+func (e *Grantee) Shutdown(ctx context.Context, reason string) error {
 	e.log(log.DebugLevel, "shutdown: %s", reason)
 	return nil
 }
 
-func (e *grantee) notify(level notifications.Level, msg string, args ...any) {
+func (e *Grantee) notify(level notifications.Level, msg string, args ...any) {
 	err := e.m.Notify(level, msg, args...)
 	if err != nil {
 		e.log(log.ErrorLevel, "notify: %v", err)
 	}
 }
 
-func (e *grantee) issueRefresh(ctx context.Context, cmd textapi.Command) (bool, error) {
+func (e *Grantee) issueRefresh(ctx context.Context, cmd textapi.Command) (bool, error) {
 	return false, e.svc.EvictAll(ctx)
 }
 
-func (e *grantee) openEmptyIssueTemplate(ctx context.Context, cmd textapi.Command) (bool, error) {
+func (e *Grantee) openEmptyIssueTemplate(ctx context.Context, cmd textapi.Command) (bool, error) {
 	return e.openIssueTemplate(ctx, cmd.Window, e.defTemplate, "issue-")
 }
 
-func (e *grantee) openCustomIssueTemplate(
+func (e *Grantee) openCustomIssueTemplate(
 	template []byte, templateName string,
-) func(*grantee, context.Context, textapi.Command) (bool, error) {
-	return func(e *grantee, ctx context.Context, cmd textapi.Command) (bool, error) {
+) func(*Grantee, context.Context, textapi.Command) (bool, error) {
+	return func(e *Grantee, ctx context.Context, cmd textapi.Command) (bool, error) {
 		return e.openIssueTemplate(ctx, cmd.Window, template, templateName)
 	}
 }
 
-func (e *grantee) freeIssue(ctx context.Context, ev textapi.Event, uri workspaceapi.URI) bool {
+func (e *Grantee) freeIssue(ctx context.Context, ev textapi.Event, uri workspaceapi.URI) bool {
 	if e.pendingIssueID == "" {
 		e.notify(notifications.LevelInfo, "canceled creation of new issue")
 	}
@@ -407,7 +417,7 @@ func (e *grantee) freeIssue(ctx context.Context, ev textapi.Event, uri workspace
 	return false
 }
 
-func (e *grantee) createReport(ctx context.Context, temp issue.Report) string {
+func (e *Grantee) createReport(ctx context.Context, temp issue.Report) string {
 	id, err := e.tracker.CreateReport(ctx, temp)
 	if err != nil {
 		err = fmt.Errorf("create report: %w", err)
@@ -421,7 +431,7 @@ func (e *grantee) createReport(ctx context.Context, temp issue.Report) string {
 	return id
 }
 
-func (e *grantee) updateReport(ctx context.Context, id string, temp issue.Report) {
+func (e *Grantee) updateReport(ctx context.Context, id string, temp issue.Report) {
 	err := e.tracker.UpdateReport(ctx, id, temp)
 	if err != nil {
 		err = fmt.Errorf("update report: %v", err)
@@ -435,7 +445,7 @@ func (e *grantee) updateReport(ctx context.Context, id string, temp issue.Report
 	e.log(log.InfoLevel, msg)
 }
 
-func (e *grantee) createOrUpdateIssue(ctx context.Context, ev textapi.Event) bool {
+func (e *Grantee) createOrUpdateIssue(ctx context.Context, ev textapi.Event) bool {
 	var temp issue.Report
 	err := e.marshaler.Unmarshal([]byte(ev.Content), &temp)
 	if err != nil {
@@ -454,7 +464,7 @@ func (e *grantee) createOrUpdateIssue(ctx context.Context, ev textapi.Event) boo
 	return false
 }
 
-func (e *grantee) openIssueTemplate(
+func (e *Grantee) openIssueTemplate(
 	ctx context.Context, win browserapi.Window, template []byte, templateName string,
 ) (bool, error) {
 	if e.o == nil || e.wm == nil {
@@ -500,9 +510,29 @@ func (e *grantee) openIssueTemplate(
 	return false, nil
 }
 
-func (t *grantee) log(level log.Level, msg string, args ...any) {
+func (e *Grantee) initScheme(m schemeapi.SchemeManager) error {
+	marshaler := yaml.Marshaler()
+	rootURI, err := workspaceapi.ParseURI(fmt.Sprintf("%s:///", e.scheme))
+	if err != nil {
+		panic(err)
+	}
+
+	schemeFn := workspacedoc.WorkspaceScheme[issue.ReportDocument](rootURI, e.svc,
+		marshaler, fmt.Errorf("missing %q sub-field in Metadata field",
+			issue.ReportMetadataIDField))
+	schemeFn = issueMapperScheme(schemeFn, marshaler, e.maxSubjectLen)
+	err = m.RegisterScheme(e.scheme, schemeFn)
+	if err == schemeapi.ErrSchemeAlreadyRegistered {
+		// the first workspace to run this plugin registers the scheme successfully
+		err = nil
+		e.log(log.DebugLevel, "ignore register error: another issues extension registered the scheme first")
+	}
+	return err
+}
+
+func (t *Grantee) log(level log.Level, msg string, args ...any) {
 	log.WithFields(log.Fields{
-		logging.KeyClass: "issuesextension.grantee",
+		logging.KeyClass: "issuesextension.Grantee",
 	}).Logf(level, msg, args...)
 }
 
@@ -520,5 +550,5 @@ func getDefaultAuthor() string {
 
 type commandAll struct {
 	man     textapi.CommandManual
-	handler func(*grantee, context.Context, textapi.Command) (bool, error)
+	handler func(*Grantee, context.Context, textapi.Command) (bool, error)
 }
