@@ -17,8 +17,9 @@ issue:
   collection: blue-issue
 `
 
-type collectionConfig struct {
+type issueConfig struct {
 	Collection string `yaml:"collection"`
+	Author     string `yaml:"author"`
 }
 
 type authConfig struct {
@@ -27,8 +28,8 @@ type authConfig struct {
 }
 
 type cliConfig struct {
-	Auth  authConfig       `yaml:"auth"`
-	Issue collectionConfig `yaml:"issue"`
+	Auth  authConfig  `yaml:"auth"`
+	Issue issueConfig `yaml:"issue"`
 }
 
 // rewrite config.NewProvider to use workspace.OpenFile
