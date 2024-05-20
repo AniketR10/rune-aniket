@@ -77,19 +77,12 @@ func GranteeWithService(
 	svcFn func(config.Config) (document.Service, error),
 ) (extension.Grantee, []extension.Permission) {
 	m := yaml.Marshaler()
-	defaultAuthor := getDefaultAuthor()
-	defTemplate := issue.Report{Author: defaultAuthor}
-	data, err := m.Marshal(defTemplate)
-	if err != nil {
-		panic(fmt.Errorf("marshal default issue template: %v", err))
-	}
 	s := &grantee{
-		cmds:        defaultCommands,
-		marshaler:   m,
-		defTemplate: data,
-		versionTag:  versionTag,
-		scheme:      scheme,
-		svcFn:       svcFn,
+		cmds:       defaultCommands,
+		marshaler:  m,
+		versionTag: versionTag,
+		scheme:     scheme,
+		svcFn:      svcFn,
 	}
 	s.pendingIssueURI.Store(workspaceapi.URI{})
 	return s, requiredPermissions
@@ -120,9 +113,24 @@ type grantee struct {
 
 func (e *grantee) Connected(
 	ctx context.Context, broker rpc.MuxBroker, pconfig config.Config,
-) error {
+) (err error) {
 	e.config = pconfig
 	e.broker = broker
+
+	var defTemplate issue.Report
+	defTemplate.Author, err = pconfig.GetString("author")
+	if err != nil {
+		if err != config.ErrNotFound {
+			return fmt.Errorf("could not read property "+
+				"'author': %w", err)
+		}
+		defTemplate.Author = getDefaultAuthor()
+	}
+	data, err := e.marshaler.Marshal(defTemplate)
+	if err != nil {
+		return fmt.Errorf("marshal default issue template: %w", err)
+	}
+	e.defTemplate = data
 
 	disableDefaultCommands, err := pconfig.GetBool("disable_default_commands")
 	if err != nil {
