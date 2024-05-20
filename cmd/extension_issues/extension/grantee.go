@@ -103,9 +103,10 @@ type grantee struct {
 	svcFn      func(config.Config) (document.Service, error)
 	scheme     string
 
-	cmds          map[string]commandAll
-	maxSubjectLen int
-	defTemplate   []byte
+	cmds           map[string]commandAll
+	maxSubjectLen  int
+	registerScheme bool
+	defTemplate    []byte
 
 	pendingIssueID  string       // accessed by Handle only, no need to synchronize
 	pendingIssueURI atomic.Value // workspaceapi.URI, accessed by Handle and HandleCommand
@@ -147,6 +148,15 @@ func (e *grantee) Connected(
 				"'max_list_files_subject_len': %w", err)
 		}
 		e.maxSubjectLen = defaultMaxSubjectLen
+	}
+
+	e.registerScheme, err = pconfig.GetBool("register_scheme")
+	if err != nil {
+		if err != config.ErrNotFound {
+			return fmt.Errorf("could not read property "+
+				"'register_scheme': %w", err)
+		}
+		e.registerScheme = true
 	}
 
 	templatesMap, err := pconfig.GetMap("templates")
@@ -322,6 +332,10 @@ func (e *grantee) PermissionGranted(ctx context.Context, grants []extension.Gran
 	// because it's using the host's global storage as the cache
 	e.svc = cache.New[issue.ReportDocument](svc, e.s)
 	e.tracker = issue.NewDocumentTracker(e.svc)
+
+	if !e.registerScheme {
+		return nil
+	}
 
 	err = e.initScheme(e.sm)
 	if err != nil {
