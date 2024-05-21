@@ -71,6 +71,7 @@ type parserHandler struct {
 
 	shouldWrap     bool
 	useAlt         bool
+	usedAlt        bool
 	currentCharset parser.CharsetIndex
 }
 
@@ -1194,6 +1195,7 @@ func (t *parserHandler) swapAlt() {
 
 		t.sync.buf = t.sync.altBuf
 		t.useAlt = true
+		t.usedAlt = true
 
 	} else {
 		t.sync.buf = t.sync.primBuf
@@ -1477,4 +1479,8 @@ func (t *parserHandler) onFocusChange(inFocus bool) (cmd string, ok bool) {
 	}
 	ok = true
 	return
+}
+
+func (t *parserHandler) usedAlternate() bool {
+	return t.usedAlt
 }

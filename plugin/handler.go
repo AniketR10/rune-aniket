@@ -196,7 +196,15 @@ func (e *Handler) Handle(ev term.Event) (exit, handled bool) {
 			return
 		}
 	}
-	_, handled = e.union.Handle(ev)
+	exit, handled = e.union.Handle(ev)
+	// User might want to inspect the output of a program
+	// that ran in the primary buffer. It's assumed that
+	// if the program used the alternate buffer, then it's interactive,
+	// and so when it exits, the output of the primary will be empty,
+	// and so exit should be bubbled up, and handler removed from the UI.
+	if !e.emulator.Component().UsedAlternateBuffer() {
+		exit = false
+	}
 	return
 }
 

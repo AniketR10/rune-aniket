@@ -133,42 +133,6 @@ func (t *Component) Run(updateChan chan struct{}) error {
 	return t.run(ch)
 }
 
-func (t *Component) run(updateChan chan struct{}) error {
-	t.mu.Lock()
-	complete := t.complete
-	t.mu.Unlock()
-	if complete {
-		panic("called Run twice on vte.Component")
-	}
-
-	defer func() {
-		t.mu.Lock()
-		t.complete = true
-		t.mu.Unlock()
-	}()
-
-	buf := make([]byte, os.Getpagesize())
-	for {
-		n, err := t.pty.Master.Read(buf[:])
-		if err != nil {
-			return err
-		}
-		for i := 0; i < n; i++ {
-			t.parser.Advance(buf[i])
-		}
-		select {
-		// Close was called, just return error
-		case <-t.ctx.Done():
-			return t.ctx.Err()
-		// no interrupts in the last maxInterruptPeriod
-		case updateChan <- struct{}{}:
-		// an interrupt was requested in the last maxInterruptPeriod
-		// don't request any further interrupts for now
-		default:
-		}
-	}
-}
-
 // Title returns the Title of this Component.
 func (t *Component) Title() string {
 	t.mu.Lock()
@@ -540,6 +504,14 @@ func (t *Component) Locker() sync.Locker {
 	return &t.mu
 }
 
+// UsedAlternateBuffer returns whether the alternate buffer was used
+// at some point by the underlying program driving the vte.
+func (t *Component) UsedAlternateBuffer() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.parserHandler.usedAlternate()
+}
+
 // Close assumes lock has been acquired by caller
 func (t *Component) Close() (ret error) {
 	defer t.cancelCtx()
@@ -665,4 +637,40 @@ func (t *Component) scheduleBellCallback(
 	timeout time.Duration, callback func(),
 ) (ok bool) {
 	return t.waitParserHandler.scheduleBellCallback(timeout, callback)
+}
+
+func (t *Component) run(updateChan chan struct{}) error {
+	t.mu.Lock()
+	complete := t.complete
+	t.mu.Unlock()
+	if complete {
+		panic("called Run twice on vte.Component")
+	}
+
+	defer func() {
+		t.mu.Lock()
+		t.complete = true
+		t.mu.Unlock()
+	}()
+
+	buf := make([]byte, os.Getpagesize())
+	for {
+		n, err := t.pty.Master.Read(buf[:])
+		if err != nil {
+			return err
+		}
+		for i := 0; i < n; i++ {
+			t.parser.Advance(buf[i])
+		}
+		select {
+		// Close was called, just return error
+		case <-t.ctx.Done():
+			return t.ctx.Err()
+		// no interrupts in the last maxInterruptPeriod
+		case updateChan <- struct{}{}:
+		// an interrupt was requested in the last maxInterruptPeriod
+		// don't request any further interrupts for now
+		default:
+		}
+	}
 }
