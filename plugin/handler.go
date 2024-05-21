@@ -34,11 +34,15 @@ type Handler struct {
 	drawn             int
 	interactiveHeight int
 	interactiveWidth  int
+	exitKey           int
+	lastExitKey       time.Time
 
 	cancelCtx func()
 
 	bar *pluginHandlerBar
 }
+
+const exitKeyRepeatTimeout = 400 * time.Millisecond
 
 // New allocates storage for a new plugin.Handler and initializes it.
 func New(
@@ -172,8 +176,7 @@ func (p *Handler) Dimensions() (int, int) {
 // Handle satisfies browser.Floating.
 func (e *Handler) Handle(ev term.Event) (exit, handled bool) {
 	if ev.Type == term.EventKey {
-		if ev.Key == term.KeyEsc || ev.Key == term.KeyCtrlC {
-			exit = true
+		if exit = e.shouldExit(ev); exit {
 			return
 		}
 		e.bar.mu.Lock()
@@ -243,6 +246,24 @@ func (p *Handler) Close() error {
 // vte.Handler.
 func (p *Handler) OnFocusChange(inFocus bool) {
 	p.emulator.OnFocusChange(inFocus)
+}
+
+func (e *Handler) shouldExit(ev term.Event) (exit bool) {
+	if ev.Key == term.KeyCtrlC {
+		exit = true
+		return
+	}
+	if ev.Key == term.KeyEsc {
+		e.exitKey++
+		if e.exitKey >= 2 && time.Since(e.lastExitKey) < exitKeyRepeatTimeout {
+			exit = true
+			return
+		}
+		e.lastExitKey = time.Now()
+	} else {
+		e.exitKey = 0
+	}
+	return
 }
 
 type pluginHandlerBar struct {
