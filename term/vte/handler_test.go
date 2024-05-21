@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"unstable.build/go-tui/api/config"
 	workspaceapi "unstable.build/go-tui/api/workspace"
@@ -94,12 +95,38 @@ $ ▐
 	testSequence(t, cfg, waitForIdleVte, cases)
 }
 
-func testSequence(t *testing.T, cfg Config, timeout time.Duration, cases []vtetest.Case) {
-	shell := "sh" // all systems were this runs should have sh
-	testSequenceShell(t, cfg, timeout, shell, cases)
+func TestHandlerCloseExit(t *testing.T) {
+	cases := []vtetest.Case{
+		{"exit>",
+			`$ exit              
+exit                
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    `},
+	}
+
+	cfg := DefaultConfig()
+
+	handler := testSequence(t, cfg, defaultWaitForIdleVte, cases)
+	exit, handled := handler.Handle(term.Event{})
+	require.True(t, exit)
+	assert.False(t, handled)
+
+	_, _, show := handler.Cursor()
+	assert.False(t, show)
 }
 
-func testSequenceShell(t *testing.T, cfg Config, timeout time.Duration, shell string, cases []vtetest.Case) {
+func testSequence(t *testing.T, cfg Config, timeout time.Duration, cases []vtetest.Case) *Handler {
+	shell := "sh" // all systems were this runs should have sh
+	return testSequenceShell(t, cfg, timeout, shell, cases)
+}
+
+func testSequenceShell(t *testing.T, cfg Config, timeout time.Duration, shell string, cases []vtetest.Case) *Handler {
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(context.Background())
 	temp := os.TempDir()
@@ -137,6 +164,8 @@ func testSequenceShell(t *testing.T, cfg Config, timeout time.Duration, shell st
 
 	vtetest.TestSequence(t, handler, cfg.WidthHint, cfg.HeightHint,
 		timeout, ch, cases)
+
+	return handler
 }
 
 type chanEventPublisher struct {

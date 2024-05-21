@@ -40,7 +40,8 @@ type Handler struct {
 	mouseDriver     *mouseDriver
 
 	bracketedPaste bool
-	closed         atomic.Bool
+	closed         atomic.Bool // whether Close has been called
+	exit           atomic.Bool // whether running shell/program has exited
 	width, height  int
 	updateCh       chan struct{}
 	sema           chan struct{}
@@ -108,6 +109,7 @@ func (e *Handler) Init(
 	e.sema = make(chan struct{})
 	go func() {
 		logErr := e.comp.Run(e.updateCh)
+		e.exit.Store(true)
 		_ = e.publisher.PublishEvent(term.Event{Type: term.EventNone})
 		if e.closed.Load() {
 			e.log(log.DebugLevel, "terminal run: ok")
@@ -163,7 +165,7 @@ func (e *Handler) Resize(width, height int) {
 	if err != nil {
 		e.log(log.ErrorLevel, "terminal set size: %s", err)
 		// do not notify if already closed
-		if !e.closed.Load() {
+		if !e.exit.Load() {
 			_ = e.notifications.Notify(notifications.LevelError, "terminal set size: %v", err)
 		}
 		return
@@ -185,6 +187,11 @@ func (e *Handler) Draw(w term.Writer) {
 
 // Handle satisfies tui.Handler.
 func (e *Handler) Handle(ev term.Event) (exit, handled bool) {
+	exit = e.exit.Load()
+	if exit {
+		e.log(log.DebugLevel, "Handle: exit")
+		return
+	}
 	if e.viMode {
 		exit, handled := e.vi.Handle(ev)
 		if exit {
@@ -214,7 +221,7 @@ func (e *Handler) Handle(ev term.Event) (exit, handled bool) {
 		})
 		return
 	}
-	exit, handled, raw := e.handleInput(ev)
+	handled, raw := e.handleInput(ev)
 	if exit || handled || len(raw) == 0 {
 		return
 	}
@@ -269,20 +276,25 @@ func (e *Handler) OnFocusChange(inFocus bool) {
 }
 
 // Cursor satisfies tui.Handler.
-func (e *Handler) Cursor() (term.Coordinates, term.CursorStyle, bool) {
+func (e *Handler) Cursor() (pos term.Coordinates, style term.CursorStyle, show bool) {
+	if e.exit.Load() {
+		return
+	}
 	if e.viMode {
 		return e.vi.Cursor()
 	}
 	if !e.comp.CursorVisible() {
-		return term.Coordinates{}, 0, false
+		return
 	}
 
-	style := e.comp.CursorStyle()
+	show = true
+	pos = e.comp.CursorAtScreen()
+	style = e.comp.CursorStyle()
 	if !e.comp.IsAltBuffer() && style == term.CursorStyleDefault {
 		style = term.CursorStyleSteadyBar
 	}
 
-	return e.comp.CursorAtScreen(), style, true
+	return
 }
 
 // Man satisfies tui.Handler.
@@ -318,13 +330,7 @@ func (e *Handler) Close() error {
 	return ret
 }
 
-func (e *Handler) handleInput(ev term.Event) (exit, handled bool, raw []byte) {
-	exit = e.closed.Load()
-	if exit {
-		e.log(log.TraceLevel, "input: exit")
-		return
-	}
-
+func (e *Handler) handleInput(ev term.Event) (handled bool, raw []byte) {
 	if isStart := ev.Type == term.EventPasteStart; isStart || ev.Type == term.EventPasteEnd {
 		e.bracketedPaste = isStart
 		programBracketedMode := e.comp.ModeBracketedPate()
@@ -343,15 +349,14 @@ func (e *Handler) handleInput(ev term.Event) (exit, handled bool, raw []byte) {
 
 	if ev.Type == term.EventMouse {
 		e.mouseDriver.hookRawBytes = nil
-		exit, handled = e.mouse.Handle(ev)
+		_, handled = e.mouse.Handle(ev)
 		raw = e.mouseDriver.hookRawBytes
 		// raw bytes should be sent directly only
 		// if we didn't handle mouse event
 		if len(raw) != 0 {
 			handled = false
 		}
-		e.log(log.TraceLevel, "input: mouse: exit=%t, handled=%t, raw=%q",
-			exit, handled, raw)
+		e.log(log.TraceLevel, "input: mouse: handled=%t, raw=%q", handled, raw)
 		return
 	}
 
