@@ -19,7 +19,7 @@ import (
 var _ textapi.EventHandler = (*eventStreamClient)(nil)
 
 const (
-	handleReceiveMessageTimeout = 1 * time.Second
+	handleReceiveMessageTimeout = 3 * time.Second
 	eventChanBuffer             = 100
 )
 
