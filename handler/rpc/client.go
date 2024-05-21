@@ -16,7 +16,7 @@ import (
 	termrpc "unstable.build/go-tui/term/rpc"
 )
 
-const defaultRPCTimeout = 1 * time.Second
+const defaultRPCTimeout = 4 * time.Second
 
 var _ tui.Handler = (*Client)(nil)
 

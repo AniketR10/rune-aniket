@@ -29,7 +29,7 @@ import (
 )
 
 // used for command and event handlers
-const defaultTimeout = 1 * time.Second
+const defaultTimeout = 4 * time.Second
 
 var _ tui.Component = (*Component)(nil)
 var _ browser.Browser = (*Component)(nil)

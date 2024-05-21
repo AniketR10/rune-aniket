@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	defaultTimeout = 2 * time.Second
+	defaultTimeout = 4 * time.Second
 )
 
 // Token wraps a browser.Token to satisfy editor.Handler.
