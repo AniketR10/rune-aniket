@@ -16,7 +16,7 @@ import (
 const snippet = `
 /*
  * Check if the current buffer should be added to or removed from the list of
- * diff buffers. Written by ernestrc@unstable.build.
+ * diff buffers.
  */
 	void
 diff_buf_adjust(win_T *win)
