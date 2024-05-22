@@ -8,17 +8,43 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	browserapi "unstable.build/go-tui/api/browser"
 	"unstable.build/go-tui/api/config"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/notifications"
+	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/term/vte"
 	testutil "unstable.build/go-tui/util/test"
 	"unstable.build/go-tui/workspace"
 )
+
+func TestPluginHandlerCursor(t *testing.T) {
+	makeHandler := func(mock *handler.TestHandler) *Handler {
+		h := new(Handler)
+		h.initState(nopBrowser{}, vte.DefaultConfig(),
+			"cmd", 100 /* width */, true, /* frame */
+			component.FrameCharSetDefault(), term.Attributes{})
+		h.liveHandler = mock
+		h.Resize(100, 100)
+		return h
+	}
+	t.Run("corrects coordinates past width-1 and height-1", func(t *testing.T) {
+		h := makeHandler(&handler.TestHandler{CursorPos: term.Coordinates{X: 1000, Y: 1000}})
+		pos, _, show := h.Cursor()
+		require.True(t, show)
+		assert.Equal(t, term.Coordinates{X: 99, Y: 99}, pos)
+	})
+	t.Run("corrects negative coordinates", func(t *testing.T) {
+		h := makeHandler(&handler.TestHandler{CursorPos: term.Coordinates{X: -99, Y: -99}})
+		pos, _, show := h.Cursor()
+		require.True(t, show)
+		assert.Equal(t, term.Coordinates{X: 0, Y: 0}, pos)
+	})
+}
 
 func TestPluginHandler(t *testing.T) {
 	suite := []struct {

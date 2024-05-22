@@ -60,8 +60,8 @@ func New(
 	frameAttr term.Attributes,
 ) (*Handler, error) {
 	ret := new(Handler)
-	return ret, ret.Init(publisher, notifications, e, t, tm, cfg, cmdAndArgs, maxWidth, frame,
-		frameCharSet, frameAttr)
+	return ret, ret.Init(publisher, notifications, e, t, tm, cfg,
+		cmdAndArgs, maxWidth, frame, frameCharSet, frameAttr)
 }
 
 // Init initializes this Handler.
@@ -72,91 +72,9 @@ func (h *Handler) Init(
 	frame bool, frameCharSet component.FrameCharSet,
 	frameAttr term.Attributes,
 ) error {
-	if h.cancelCtx != nil {
-		panic("tried to initialize already initialized plugin.Handler")
-	}
-	if cmdAndArgs == "" {
-		cmdAndArgs = os.Getenv("SHELL")
-	}
-	if cmdAndArgs == "" {
-		cmdAndArgs = "sh"
-	}
-
-	interrupter := browser.EventPublisherInterrupter(publisher)
-	interactiveWidth := int(float64(maxWidth) * 0.8)
-	interactiveHeight := interactiveWidth * 9 / 16
-	nonInteractiveMinWidth := int(math.Max(float64(maxWidth)*0.2, float64(len(cmdAndArgs)+4)*2))
-	nonInteractiveMinHeight := nonInteractiveMinWidth * 9 / 16
-
-	ch := make(chan error)
-	ctx, cancel := context.WithCancel(context.Background())
-
-	// we want shell to be a one-shot execution, so initialCmd must be empty
-	// and shell must execute the command. Under the hood file scheme
-	// allows for shell with command and arguments so it's fine to pass as-is.
-	initialCmd := ""
-	cfg.Shell = cmdAndArgs
-	cfg.WidthHint = interactiveWidth
-	cfg.HeightHint = interactiveHeight
-	cfg.Watcher = workspaceapi.ChanWatcher(ch)
-	vteh, err := vte.NewHandler(publisher, notifications, t, e, tm, cfg, initialCmd)
-	if err != nil {
-		cancel()
-		return fmt.Errorf("new emulator: %v", err)
-	}
-
-	templateCfg := component.StringConfig{
-		Alignment:  component.SpanAlignmentLeft,
-		Attributes: frameAttr,
-	}
-
-	errStrCfg := templateCfg
-	errStrCfg.Attributes.Fg = tcell.ColorRed
-	errStrCfg.Attributes.Attrs = tcell.AttrBold
-
-	successStrCfg := templateCfg
-	successStrCfg.Attributes.Fg = tcell.ColorGreen
-	successStrCfg.Attributes.Attrs = tcell.AttrBold
-
-	centerStrCfg := templateCfg
-	centerStrCfg.Alignment = component.SpanAlignmentHorizontallyCentered
-
-	topBar := new(pluginHandlerBar)
-	topBar.startTime = time.Now()
-	topBar.leftMsgRunning = component.NewStringWithConfig(" ", templateCfg)
-	topBar.leftMsgError = component.NewStringWithConfig(" ◎ ", errStrCfg)
-	topBar.leftMsgSuccess = component.NewStringWithConfig(" ◎ ", successStrCfg)
-	topBar.centerMsg = component.NewStringWithConfig(cmdAndArgs, centerStrCfg)
-	topBar.frameAttr = frameAttr
-	frames, seq := component.SpinningAnimationFrames()
-	topBar.animation = component.NewAnimation(interrupter, frames, seq, 10)
-	h.emulator = vteh
-	h.nonInteractiveMinWidth = nonInteractiveMinWidth
-	h.nonInteractiveMinHeight = nonInteractiveMinHeight
-	h.interactiveHeight = interactiveHeight
-	h.interactiveWidth = interactiveWidth
-	h.cancelCtx = cancel
-	h.bar = topBar
-	h.frame = frame
-	h.frameCharSet = frameCharSet
-	h.cfg = cfg
-	h.liveHandler = h.newUnion(h.emulator)
-
-	go term.InterruptAt(ctx, interrupter, 1)
-	go func() {
-		defer cancel()
-		select {
-		case err := <-ch:
-			h.bar.mu.Lock()
-			defer h.bar.mu.Unlock()
-			h.bar.done = true
-			h.bar.doneErr = err
-			h.bar.doneTime = time.Now()
-		case <-ctx.Done():
-			return
-		}
-	}()
-	return nil
+	ch, interrupter := h.initState(publisher, cfg, cmdAndArgs,
+		maxWidth, frame, frameCharSet, frameAttr)
+	return h.initEmulator(publisher, notifications, e, t, tm, interrupter, ch)
 }
 
 // Dimensions satisfies browser.Floating.
@@ -209,8 +127,14 @@ func (e *Handler) Resize(width, height int) {
 }
 
 // Cursor satisfies browser.Floating.
-func (e *Handler) Cursor() (term.Coordinates, term.CursorStyle, bool) {
-	return e.handler().Cursor()
+func (e *Handler) Cursor() (pos term.Coordinates, style term.CursorStyle, show bool) {
+	pos, style, show = e.handler().Cursor()
+	if !show {
+		return
+	}
+	pos.Y = int(math.Max(0, math.Min(float64(pos.Y), float64(e.height-1))))
+	pos.X = int(math.Max(0, math.Min(float64(pos.X), float64(e.width-1))))
+	return
 }
 
 // Man satisfies browser.Floating.
@@ -229,6 +153,110 @@ func (p *Handler) Close() error {
 // vte.Handler.
 func (p *Handler) OnFocusChange(inFocus bool) {
 	p.emulator.OnFocusChange(inFocus)
+}
+
+func (h *Handler) initState(
+	publisher browser.EventPublisher,
+	cfg vte.Config, cmdAndArgs string, maxWidth int,
+	frame bool, frameCharSet component.FrameCharSet,
+	frameAttr term.Attributes,
+) (chan error, term.Interrupter) {
+	if h.cancelCtx != nil {
+		panic("tried to initialize already initialized plugin.Handler")
+	}
+	if cmdAndArgs == "" {
+		cmdAndArgs = os.Getenv("SHELL")
+	}
+	if cmdAndArgs == "" {
+		cmdAndArgs = "sh"
+	}
+
+	interrupter := browser.EventPublisherInterrupter(publisher)
+	interactiveWidth := int(float64(maxWidth) * 0.8)
+	interactiveHeight := interactiveWidth * 9 / 16
+	nonInteractiveMinWidth := int(math.Max(float64(maxWidth)*0.2, float64(len(cmdAndArgs)+4)*2))
+	nonInteractiveMinHeight := nonInteractiveMinWidth * 9 / 16
+
+	ch := make(chan error)
+
+	// we want shell to be a one-shot execution, so initialCmd must be empty
+	// and shell must execute the command. Under the hood file scheme
+	// allows for shell with command and arguments so it's fine to pass as-is.
+	cfg.Shell = cmdAndArgs
+	cfg.WidthHint = interactiveWidth
+	cfg.HeightHint = interactiveHeight
+	cfg.Watcher = workspaceapi.ChanWatcher(ch)
+	templateCfg := component.StringConfig{
+		Alignment:  component.SpanAlignmentLeft,
+		Attributes: frameAttr,
+	}
+
+	errStrCfg := templateCfg
+	errStrCfg.Attributes.Fg = tcell.ColorRed
+	errStrCfg.Attributes.Attrs = tcell.AttrBold
+
+	successStrCfg := templateCfg
+	successStrCfg.Attributes.Fg = tcell.ColorGreen
+	successStrCfg.Attributes.Attrs = tcell.AttrBold
+
+	centerStrCfg := templateCfg
+	centerStrCfg.Alignment = component.SpanAlignmentHorizontallyCentered
+
+	topBar := new(pluginHandlerBar)
+	topBar.startTime = time.Now()
+	topBar.leftMsgRunning = component.NewStringWithConfig(" ", templateCfg)
+	topBar.leftMsgError = component.NewStringWithConfig(" ◎ ", errStrCfg)
+	topBar.leftMsgSuccess = component.NewStringWithConfig(" ◎ ", successStrCfg)
+	topBar.centerMsg = component.NewStringWithConfig(cmdAndArgs, centerStrCfg)
+	topBar.frameAttr = frameAttr
+	frames, seq := component.SpinningAnimationFrames()
+	topBar.animation = component.NewAnimation(interrupter, frames, seq, 10)
+	h.nonInteractiveMinWidth = nonInteractiveMinWidth
+	h.nonInteractiveMinHeight = nonInteractiveMinHeight
+	h.interactiveHeight = interactiveHeight
+	h.interactiveWidth = interactiveWidth
+	h.bar = topBar
+	h.frame = frame
+	h.frameCharSet = frameCharSet
+	h.cfg = cfg
+
+	return ch, interrupter
+}
+
+func (e *Handler) initEmulator(
+	publisher browser.EventPublisher, notifications browser.Notifications,
+	executor schemeapi.Executor, t schemeapi.Terminal, tm browser.TabManager,
+	interrupter term.Interrupter, ch chan error,
+) error {
+	initialCmd := ""
+
+	ctx, cancel := context.WithCancel(context.Background())
+	e.cancelCtx = cancel
+
+	vteh, err := vte.NewHandler(publisher, notifications, t, executor,
+		tm, e.cfg, initialCmd)
+	if err != nil {
+		cancel()
+		return fmt.Errorf("new vte handler: %v", err)
+	}
+	e.emulator = vteh
+	e.liveHandler = e.newUnion(e.emulator)
+
+	go term.InterruptAt(ctx, interrupter, 1)
+	go func() {
+		defer cancel()
+		select {
+		case err := <-ch:
+			e.bar.mu.Lock()
+			defer e.bar.mu.Unlock()
+			e.bar.done = true
+			e.bar.doneErr = err
+			e.bar.doneTime = time.Now()
+		case <-ctx.Done():
+			return
+		}
+	}()
+	return nil
 }
 
 func (e *Handler) shouldExit(ev term.Event) (exit bool) {
