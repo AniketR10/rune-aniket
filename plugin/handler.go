@@ -13,25 +13,32 @@ import (
 	schemeapi "unstable.build/go-tui/api/scheme"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser"
+	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/term/vte"
+	"unstable.build/go-tui/text"
+	"unstable.build/go-tui/text/vi"
 )
 
 // Handler implements a browser.Floating that runs a command in a terminal
 // emulator, as a plugin. All fields of the given vte.Config will be overriden
 // except for term.Attributes.
 type Handler struct {
-	union    tui.Handler
-	emulator *vte.Handler
+	liveHandler   tui.Handler
+	doneHandler   tui.Handler
+	emulator      *vte.Handler
+	frame         bool
+	frameCharSet  component.FrameCharSet
+	cfg           vte.Config
+	width, height int
 
 	// non-interactive mode state
 	nonInteractiveMinWidth  int
 	nonInteractiveMinHeight int
 
 	// interactive mode state
-	drawn             int
 	interactiveHeight int
 	interactiveWidth  int
 	exitKey           int
@@ -123,19 +130,6 @@ func (h *Handler) Init(
 	topBar.frameAttr = frameAttr
 	frames, seq := component.SpinningAnimationFrames()
 	topBar.animation = component.NewAnimation(interrupter, frames, seq, 10)
-	unionMain := vteh
-	union := handler.NewFrameUnion(unionMain)
-	union.Frame = false
-	union.UnionTop(handler.Nop(topBar), 1)
-	if frame {
-		separator := handler.Nop(&component.TestComponent{
-			Ch:         frameCharSet.HorizontalBottom,
-			Attributes: frameAttr,
-		})
-		union.UnionTop(separator, 1)
-	}
-
-	h.union = union
 	h.emulator = vteh
 	h.nonInteractiveMinWidth = nonInteractiveMinWidth
 	h.nonInteractiveMinHeight = nonInteractiveMinHeight
@@ -143,6 +137,10 @@ func (h *Handler) Init(
 	h.interactiveWidth = interactiveWidth
 	h.cancelCtx = cancel
 	h.bar = topBar
+	h.frame = frame
+	h.frameCharSet = frameCharSet
+	h.cfg = cfg
+	h.liveHandler = h.newUnion(h.emulator)
 
 	go term.InterruptAt(ctx, interrupter, 1)
 	go func() {
@@ -175,37 +173,18 @@ func (p *Handler) Dimensions() (int, int) {
 
 // Handle satisfies browser.Floating.
 func (e *Handler) Handle(ev term.Event) (exit, handled bool) {
-	if ev.Type == term.EventKey {
-		if exit = e.shouldExit(ev); exit {
-			return
-		}
-		e.bar.mu.Lock()
-		isDone := e.bar.done
-		e.bar.mu.Unlock()
-		if isDone && (ev.Key == term.KeyArrowDown || ev.Ch == 'j') {
-			handled = e.emulator.Component().ScrollDown(1)
-			return
-		}
-		if isDone && (ev.Key == term.KeyArrowUp || ev.Ch == 'k') {
-			handled = e.emulator.Component().ScrollUp(1)
-			return
-		}
-		if isDone && (ev.Key == term.KeyHome || ev.Ch == 'g') {
-			handled = e.emulator.Component().ScrollTop()
-			return
-		}
-		if isDone && (ev.Key == term.KeyEnd || ev.Ch == 'G') {
-			handled = e.emulator.Component().ScrollBottom()
-			return
-		}
+	if exit = e.shouldExit(ev); exit {
+		return
 	}
-	exit, handled = e.union.Handle(ev)
+	handler := e.handler()
+	exit, handled = handler.Handle(ev)
 	// User might want to inspect the output of a program
 	// that ran in the primary buffer. It's assumed that
 	// if the program used the alternate buffer, then it's interactive,
 	// and so when it exits, the output of the primary will be empty,
 	// and so exit should be bubbled up, and handler removed from the UI.
-	if !e.emulator.Component().UsedAlternateBuffer() {
+	if exit && !e.emulator.Component().UsedAlternateBuffer() &&
+		handler == e.liveHandler {
 		exit = false
 	}
 	return
@@ -213,26 +192,30 @@ func (e *Handler) Handle(ev term.Event) (exit, handled bool) {
 
 // Draw satisfies browser.Floating.
 func (e *Handler) Draw(w term.Writer) {
-	if !e.emulator.Component().IsComplete() {
-		e.drawn++
-	}
-	e.union.Draw(w)
+	e.handler().Draw(w)
 }
 
 // Resize satisfies browser.Floating.
 func (e *Handler) Resize(width, height int) {
 	e.bar.width = width
-	e.union.Resize(width, height)
+	e.width = width
+	e.height = height
+	// always resize live, so next call to Dimensions "adjusts" height of doneHandler
+	// by mirroing what the liveHandler would do.
+	e.liveHandler.Resize(width, height)
+	if e.doneHandler != nil {
+		e.doneHandler.Resize(width, height)
+	}
 }
 
 // Cursor satisfies browser.Floating.
 func (e *Handler) Cursor() (term.Coordinates, term.CursorStyle, bool) {
-	return term.Coordinates{}, term.CursorStyleDefault, false
+	return e.handler().Cursor()
 }
 
 // Man satisfies browser.Floating.
 func (e *Handler) Man() tui.Manual {
-	return e.union.Man()
+	return e.handler().Man()
 }
 
 // Close satisfies browser.Floating.
@@ -249,6 +232,9 @@ func (p *Handler) OnFocusChange(inFocus bool) {
 }
 
 func (e *Handler) shouldExit(ev term.Event) (exit bool) {
+	if ev.Type != term.EventKey {
+		return
+	}
 	if ev.Key == term.KeyCtrlC {
 		exit = true
 		return
@@ -264,6 +250,69 @@ func (e *Handler) shouldExit(ev term.Event) (exit bool) {
 		e.exitKey = 0
 	}
 	return
+}
+
+func (e *Handler) handler() tui.Handler {
+	e.bar.mu.Lock()
+	isDone := e.bar.done
+	e.bar.mu.Unlock()
+	if !isDone {
+		return e.liveHandler
+	}
+
+	if e.doneHandler == nil {
+		e.initializeDoneHandler()
+	}
+
+	return e.doneHandler
+}
+
+func (e *Handler) initializeDoneHandler() {
+	if e.emulator.Component().UsedAlternateBuffer() {
+		// ensure that doneHandler is not nil; liveHandler will return
+		// exit on the next call to Handle
+		e.doneHandler = e.liveHandler
+		return
+	}
+	orig := e.emulator.Component().PrimaryScroll().Buffer()
+	// clone buffer; vte buffer is initialized with InitPerformance
+	// which doesn't provide the facilities needed by less
+	buf := cell.CellsToBuffer(orig.RawCells(), orig.Tabspaces())
+
+	uri := e.emulator.Component().URI()
+
+	var main text.Handler
+	if e.cfg.Modal {
+		main = vi.New(buf, uri,
+			// vi.WithBarAttr(e.cfg.modalBarAttr()),
+			vi.WithResAttr(e.cfg.SelectionAttributes),
+			vi.WithAttr(e.cfg.Attributes),
+			vi.WithDebug(false),
+			vi.WithWrap(false),
+			vi.WithClipboard(e.cfg.Clipboard),
+		)
+	} else {
+		main = text.NewSimpleHandler(e.cfg.Clipboard, buf, uri, false, true,
+			e.cfg.Attributes, e.cfg.SelectionAttributes, e.cfg.Attributes)
+	}
+
+	e.doneHandler = e.newUnion(main)
+	e.doneHandler.Resize(e.width, e.height)
+	main.SetCursorAtScroll(e.emulator.Component().CursorAtScroll())
+}
+
+func (e *Handler) newUnion(unionMain tui.Handler) tui.Handler {
+	union := handler.NewFrameUnion(unionMain)
+	union.Frame = false
+	union.UnionTop(handler.Nop(e.bar), 1)
+	if e.frame {
+		separator := handler.Nop(&component.TestComponent{
+			Ch:         e.frameCharSet.HorizontalBottom,
+			Attributes: e.bar.frameAttr,
+		})
+		union.UnionTop(separator, 1)
+	}
+	return union
 }
 
 type pluginHandlerBar struct {
