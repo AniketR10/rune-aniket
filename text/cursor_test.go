@@ -23,7 +23,7 @@ import (
 const locID = "errors"
 const sampleSnippet = `
 /*
- * Check if the current buffer should be added to or removed from the list of
+ * Ch@ek if the current buffer should be added to or removed from the list of
  * diff buffers.
  */
 	void
@@ -520,6 +520,19 @@ func TestCursorMove(t *testing.T) {
 			term.Coordinates{X: 12, Y: 2},
 		},
 		{
+			"MoveRightStartWord should stop stop on special symbols such as the at-symbol @",
+			10, 10,
+			func(t *testing.T, e *Cursor) {
+				e.MoveToScroll(term.Coordinates{X: 3, Y: 2})
+
+				require.True(t, e.MoveRightStartWord())
+
+				c, _ := e.scroll.Buffer().Cell(e.cursorAtScroll())
+				assert.Equal(t, '@', c.Ch, string(c.Ch))
+			},
+			term.Coordinates{X: 5, Y: 2},
+		},
+		{
 			"MoveLeftStartWord should move to the start of the next word",
 			10, 10,
 			func(t *testing.T, e *Cursor) {
@@ -533,6 +546,21 @@ func TestCursorMove(t *testing.T) {
 				assert.Equal(t, 'i', c.Ch)
 			},
 			term.Coordinates{X: 9, Y: 2},
+		},
+		{
+			"MoveLeftStartWord should stop on special symbols such as the at-symbol @",
+			10, 10,
+			func(t *testing.T, e *Cursor) {
+				e.cursor.Y = 2
+				e.cursor.X = 7
+				e.MoveRightStartWord()
+
+				assert.True(t, e.MoveLeftStartWord())
+
+				c, _ := e.scroll.Buffer().Cell(e.cursorAtScroll())
+				assert.Equal(t, 'e', c.Ch)
+			},
+			term.Coordinates{X: 6, Y: 2},
 		},
 		{
 			"MoveRightEndWord should move to the end of the current word",
@@ -550,6 +578,20 @@ func TestCursorMove(t *testing.T) {
 				assert.Equal(t, 'f', c.Ch)
 			},
 			term.Coordinates{X: 10, Y: 2},
+		},
+		{
+			"MoveRightEndWord should stop on special symbols such as the at-symbol @",
+			10, 10,
+			func(t *testing.T, e *Cursor) {
+				e.cursor.Y = 2
+				e.cursor.X = 4
+
+				assert.True(t, e.MoveRightEndWord())
+
+				c, _ := e.scroll.Buffer().Cell(e.cursorAtScroll())
+				assert.Equal(t, '@', c.Ch)
+			},
+			term.Coordinates{X: 5, Y: 2},
 		},
 		{
 			"MoveToMatchingRune should do nothing if rune is not {,[,(,},],)",

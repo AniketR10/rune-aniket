@@ -611,7 +611,7 @@ func (c *Cursor) moveBeforeRune(budget int, skip, all map[rune]struct{}, move fu
 var allSpecialCharacters = map[rune]struct{}{
 	'.': {}, ',': {}, ':': {}, ';': {}, ' ': {}, ')': {}, '"': {},
 	'\'': {}, '(': {}, '{': {}, '}': {}, '[': {}, ']': {}, '\t': {},
-	'\x00': {}, '\\': {}, '/': {}, '+': {}, '`': {}, '_': {}}
+	'\x00': {}, '\\': {}, '/': {}, '+': {}, '`': {}, '_': {}, '@': {}}
 
 var skipCharacters = map[rune]struct{}{' ': {}, '\t': {}, '\x00': {}, '_': {}}
 
