@@ -138,10 +138,15 @@ func (e *ex) init(
 		}
 		return vteAdapter{v}, nil
 	}
+	pluginOpts := []plugin.Option{
+		plugin.WithVTEConfig(e.emulatorConfig),
+		plugin.WithFrame(e.config.Frame),
+		plugin.WithFrameCharSet(e.config.FocusFrameCharSet),
+		plugin.WithFrameAttr(e.config.FocusFrameAttr),
+	}
 	e.newPluginHandler = func(args ...string) (pluginHandler, error) {
 		return plugin.New(e.Browser(), e.Browser(), e.workspace, e.workspace,
-			e.Browser(), e.emulatorConfig, strings.Join(args, " "), e.width,
-			e.config.Frame, e.config.FocusFrameCharSet, e.config.FocusFrameAttr)
+			e.Browser(), strings.Join(args, " "), e.width, pluginOpts...)
 	}
 	return
 }

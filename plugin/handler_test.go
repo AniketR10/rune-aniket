@@ -121,8 +121,8 @@ $
 				return nil
 			})
 			h, err := New(nopBrowser{interrupt: waitInterrupt}, nopBrowser{}, fileScheme,
-				fileScheme, nopBrowser{}, vte.DefaultConfig(), test.cmdAndArgs, test.maxWidth,
-				test.frame, component.FrameCharSetDefault(), term.Attributes{})
+				fileScheme, nopBrowser{}, test.cmdAndArgs, test.maxWidth,
+				WithFrame(test.frame))
 			require.Equal(t, test.expectConstructorErr, err)
 			h.Resize(14, 6)
 

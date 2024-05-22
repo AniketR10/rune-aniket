@@ -55,25 +55,25 @@ const exitKeyRepeatTimeout = 400 * time.Millisecond
 func New(
 	publisher browser.EventPublisher, notifications browser.Notifications,
 	e schemeapi.Executor, t schemeapi.Terminal, tm browser.TabManager,
-	cfg vte.Config, cmdAndArgs string, maxWidth int,
-	frame bool, frameCharSet component.FrameCharSet,
-	frameAttr term.Attributes,
+	cmdAndArgs string, maxWidth int, opts ...Option,
 ) (*Handler, error) {
 	ret := new(Handler)
-	return ret, ret.Init(publisher, notifications, e, t, tm, cfg,
-		cmdAndArgs, maxWidth, frame, frameCharSet, frameAttr)
+	return ret, ret.Init(publisher, notifications, e, t, tm,
+		cmdAndArgs, maxWidth, opts...)
 }
 
 // Init initializes this Handler.
 func (h *Handler) Init(
 	publisher browser.EventPublisher, notifications browser.Notifications,
 	e schemeapi.Executor, t schemeapi.Terminal, tm browser.TabManager,
-	cfg vte.Config, cmdAndArgs string, maxWidth int,
-	frame bool, frameCharSet component.FrameCharSet,
-	frameAttr term.Attributes,
+	cmdAndArgs string, maxWidth int, opts ...Option,
 ) error {
-	ch, interrupter := h.initState(publisher, cfg, cmdAndArgs,
-		maxWidth, frame, frameCharSet, frameAttr)
+	config := defaultConfig()
+	for _, o := range opts {
+		o(&config)
+	}
+	ch, interrupter := h.initState(publisher, config.cfg, cmdAndArgs,
+		maxWidth, config.frame, config.frameCharSet, config.frameAttr)
 	return h.initEmulator(publisher, notifications, e, t, tm, interrupter, ch)
 }
 
