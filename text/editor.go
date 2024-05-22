@@ -27,6 +27,10 @@ type Handler interface {
 	// ShowCommandBar defines wheter editor handler should display command
 	// bar or not.
 	ShowCommandBar(show bool)
+
+	// SetCursorAtScroll sets the cursor of this handler at scroll coordinates
+	// determined by pos.
+	SetCursorAtScroll(pos term.Coordinates) bool
 }
 
 // CellEditor is a cell.Editor that can fail.

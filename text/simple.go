@@ -114,7 +114,7 @@ func (e *simpleEditor) SetCursor(h Handler, pos term.Coordinates) error {
 	dispatch := e.pub.RecordCursorChange(h)
 	defer dispatch()
 
-	ok := e.pub.Handler(h).(*simpleEditorHandler).setCursor(pos)
+	ok := e.pub.Handler(h).(*simpleEditorHandler).SetCursorAtScroll(pos)
 	if !ok {
 		return errors.New("MoveToScroll: invalid cursor position")
 	}

@@ -58,7 +58,7 @@ func (h *simpleEditorHandler) Resize(width, height int) {
 	h.height = height
 	h.less.Resize(width, height)
 	if h.pendingSetCursor != nil {
-		h.setCursor(*h.pendingSetCursor)
+		h.SetCursorAtScroll(*h.pendingSetCursor)
 	}
 }
 
@@ -179,7 +179,7 @@ func (t *simpleEditorHandler) ShowCommandBar(show bool) {
 	t.less.ShowCommandBar(show)
 }
 
-func (h *simpleEditorHandler) setCursor(pos term.Coordinates) bool {
+func (h *simpleEditorHandler) SetCursorAtScroll(pos term.Coordinates) bool {
 	// setCursor should be robust against resizes, etc.
 	// only the first client interaction should clear this position
 	h.pendingSetCursor = new(term.Coordinates)

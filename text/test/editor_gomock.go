@@ -137,6 +137,20 @@ func (mr *MockHandlerMockRecorder) Resource() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Resource", reflect.TypeOf((*MockHandler)(nil).Resource))
 }
 
+// SetCursorAtScroll mocks base method.
+func (m *MockHandler) SetCursorAtScroll(pos term.Coordinates) bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SetCursorAtScroll", pos)
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// SetCursorAtScroll indicates an expected call of SetCursorAtScroll.
+func (mr *MockHandlerMockRecorder) SetCursorAtScroll(pos interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetCursorAtScroll", reflect.TypeOf((*MockHandler)(nil).SetCursorAtScroll), pos)
+}
+
 // SetWrap mocks base method.
 func (m *MockHandler) SetWrap(wrap bool) {
 	m.ctrl.T.Helper()

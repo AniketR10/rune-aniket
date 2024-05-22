@@ -17,11 +17,14 @@ import (
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term"
 	termpb "unstable.build/go-tui/term/rpc"
+	"unstable.build/go-tui/text"
 )
 
 const (
 	defaultTimeout = 4 * time.Second
 )
+
+var _ text.Handler = Token{}
 
 // Token wraps a browser.Token to satisfy editor.Handler.
 type Token struct {
@@ -29,16 +32,21 @@ type Token struct {
 	workspaceapi.URI
 }
 
-// Resource satisfies Handler
+// Resource satisfies text.Handler
 func (t Token) Resource() workspaceapi.URI {
 	return t.URI
 }
 
-// SetWrap satisfies Handler
+// SetWrap satisfies text.Handler
 func (t Token) SetWrap(wrap bool) {
 }
 
-// ShowCommandBar satisfies editor.Handler.
+// SetWrap satisfies text.Handler
+func (t Token) SetCursorAtScroll(term.Coordinates) bool {
+	return false
+}
+
+// ShowCommandBar satisfies text.Handler.
 func (t Token) ShowCommandBar(show bool) {
 }
 

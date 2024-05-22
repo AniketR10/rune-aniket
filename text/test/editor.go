@@ -91,6 +91,10 @@ func (w HandlerFromAPIHandler) SetWrap(wrap bool) {
 func (w HandlerFromAPIHandler) ShowCommandBar(show bool) {
 }
 
+func (w HandlerFromAPIHandler) SetCursorAtScroll(pos term.Coordinates) bool {
+	return false
+}
+
 type APICommandHandlerFromCommandHandler struct {
 	text.CommandHandler
 }

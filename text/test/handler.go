@@ -3,7 +3,11 @@ package test
 import (
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/handler"
+	term "unstable.build/go-tui/term"
+	"unstable.build/go-tui/text"
 )
+
+var _ text.Handler = (*TestHandler)(nil)
 
 // TestHandler is a handler used to test composite handlers. See
 // handler.TestHandler for more details.
@@ -28,8 +32,13 @@ func (t *TestHandler) Resource() workspaceapi.URI {
 func (t *TestHandler) SetWrap(wrap bool) {
 }
 
-// ShowCommandBar satisfies editor.Handler.
+// ShowCommandBar satisfies text.Handler.
 func (t *TestHandler) ShowCommandBar(show bool) {
+}
+
+// SetCursorAtScroll satisfies text.Handler.
+func (t *TestHandler) SetCursorAtScroll(term.Coordinates) bool {
+	return false
 }
 
 func (t *TestHandler) Close() error {

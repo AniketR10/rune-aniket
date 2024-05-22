@@ -68,6 +68,10 @@ func (e *TestEditorHandler) Resource() workspaceapi.URI {
 	return e.uri
 }
 
+func (e *TestEditorHandler) SetCursorAtScroll(term.Coordinates) bool {
+	return false
+}
+
 func (e *TestEditorHandler) SetWrap(wrap bool) {
 }
 
