@@ -161,7 +161,7 @@ func ParseKey(str string) (KeyComb, error) {
 		case "<c-_>", "<ctrl-_>":
 			return KeyComb{Key: KeyCtrlUnderscore}, nil
 		case "<space>":
-			return KeyComb{Key: KeySpace}, nil
+			return KeyComb{Key: KeySpace, Ch: ' '}, nil
 		case "<backspace>":
 			return KeyComb{Key: KeyBackspace2}, nil
 		case "<c-8>", "<ctrl-8>":

@@ -39,6 +39,7 @@ const (
 	editorModeModal    = "modal"
 	editorModeModeless = "modeless"
 	keyCommandAliases  = "aliases"
+	keyCommandKey      = "key"
 )
 
 var (
@@ -154,22 +155,26 @@ func (c ideConfig) commandKeyMappings() map[handler.Sequence][]string {
 }
 
 func (c ideConfig) commandKey() (ret term.KeyComb) {
-	ret = defaultCommandKey
+	if c.editorMode() == editorModeModeless {
+		ret = defaultModelessCommandKey
+	} else {
+		ret = defaultModalCommandKey
+	}
 	cfg, ok := c.command()
 	if !ok {
 		return
 	}
-	cfgKey, err := cfg.GetString("key")
+	cfgKey, err := cfg.GetString(keyCommandKey)
 	if err != nil {
 		if err != config.ErrNotFound {
-			c.errors["command.key"] = err
+			c.errors[fmt.Sprintf("command.%s", keyCommandKey)] = err
 		}
 		return
 	}
 	key, err := term.ParseKey(cfgKey)
 	if err != nil {
 		if err != config.ErrNotFound {
-			c.errors["command.key"] = err
+			c.errors[fmt.Sprintf("command.%s", keyCommandKey)] = err
 		}
 		return
 	}
@@ -1314,6 +1319,11 @@ func loadWorkspaceConfig(
 		return true, err
 	}
 
+	err = validateConfig(cfg)
+	if err != nil {
+		return false, fmt.Errorf("validate config: %w", err)
+	}
+
 	overrideConfig(c.cfg, cfg)
 	return false, nil
 }
@@ -1338,19 +1348,11 @@ func loadConfig(
 		return err
 	}
 
-	err = text.ValidateCommandAliases(c.commandAliases())
+	err = validateConfig(c.cfg)
 	if err != nil {
-		// void aliases but keep the rest of config intact.
-		// this ensures that text.NewComponent doesn't hard error,
-		// preventing user from editing using this same IDE.
-		_, ok := c.cfg["command"]
-		if !ok {
-			panic("empty command config but detected invalid aliases")
-		}
-		cfg["command"].(map[string]interface{})[keyCommandAliases] = map[string]interface{}{}
-		err = fmt.Errorf("'command.%s' is invalid: %w", keyCommandAliases, err)
+		return fmt.Errorf("validate config: %w", err)
 	}
-	return err
+	return nil
 }
 
 func loadFileConfig(c *ideConfig, configpath string) (err error) {

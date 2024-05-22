@@ -40,7 +40,8 @@ const (
 )
 
 var (
-	defaultCommandKey = term.KeyComb{Ch: ':'}
+	defaultModalCommandKey    = term.KeyComb{Ch: ':'}
+	defaultModelessCommandKey = term.KeyComb{Key: term.KeyCtrlSpace}
 )
 
 type workspaceManagerHandler struct {
@@ -694,7 +695,7 @@ func (h *workspaceManagerHandler) logNonFatalErrs(
 ) {
 	all := configErr
 	for key, err := range configErrs {
-		err = fmt.Errorf("Failed to load %q: %v", key, err)
+		err = fmt.Errorf("load %q: %v", key, err)
 		all = multierr.Append(all, err)
 	}
 	if all != nil {
