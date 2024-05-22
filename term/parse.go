@@ -309,7 +309,7 @@ func ParseKey(str string) (KeyComb, error) {
 		case "<m-c-_>", "<c-m-_>", "<mod-ctrl-_>", "<ctrl-mod-_>":
 			return KeyComb{Key: KeyCtrlUnderscore, Mod: ModAlt}, nil
 		case "<m-space>":
-			return KeyComb{Key: KeySpace, Mod: ModAlt}, nil
+			return KeyComb{Key: KeySpace, Ch: ' ', Mod: ModAlt}, nil
 		case "<m-backspace>":
 			return KeyComb{Key: KeyBackspace2, Mod: ModAlt}, nil
 		case "<m-c-8>", "<c-m-8>", "<mod-ctrl-8>", "<ctrl-mod-8>":

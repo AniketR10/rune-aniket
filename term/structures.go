@@ -83,12 +83,12 @@ func (k KeyComb) String() string {
 		return string(k.Ch)
 	}
 
-	if k.Ch != 0 && k.Key != 0 {
+	if k.Ch != 0 && k.Key != 0 && k.Key != KeySpace {
 		// this is invalid but return Ch
 		return string(k.Ch)
 	}
 
-	if k.Ch != 0 && k.Mod == ModAlt {
+	if k.Ch != 0 && k.Mod == ModAlt && k.Key != KeySpace {
 		return fmt.Sprintf("<m-%c>", k.Ch)
 	}
 
@@ -237,7 +237,7 @@ func (k KeyComb) String() string {
 		return "<c-/>"
 	case KeyComb{Key: KeyCtrlUnderscore}:
 		return "<c-_>"
-	case KeyComb{Key: KeySpace}:
+	case KeyComb{Key: KeySpace, Ch: ' '}, KeyComb{Key: KeySpace}:
 		return "<space>"
 	case KeyComb{Key: KeyBackspace2}:
 		return "<backspace>"
@@ -385,7 +385,7 @@ func (k KeyComb) String() string {
 		return "<m-c-/>"
 	case KeyComb{Key: KeyCtrlUnderscore, Mod: ModAlt}:
 		return "<m-c-_>"
-	case KeyComb{Key: KeySpace, Mod: ModAlt}:
+	case KeyComb{Key: KeySpace, Mod: ModAlt}, KeyComb{Ch: ' ', Key: KeySpace, Mod: ModAlt}:
 		return "<m-space>"
 	case KeyComb{Key: KeyBackspace2, Mod: ModAlt}:
 		return "<m-backspace>"

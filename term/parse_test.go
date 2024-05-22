@@ -1,9 +1,11 @@
 package term
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestParse(t *testing.T) {
@@ -79,7 +81,7 @@ func TestParse(t *testing.T) {
 		{Key: KeyCtrl7},
 		{Key: KeyCtrlSlash},
 		{Key: KeyCtrlUnderscore},
-		{Key: KeySpace},
+		{Key: KeySpace, Ch: ' '},
 		{Key: KeyBackspace2},
 		{Key: KeyCtrl8},
 		{Key: KeyF1, Mod: ModAlt},
@@ -153,19 +155,19 @@ func TestParse(t *testing.T) {
 		{Key: KeyCtrl7, Mod: ModAlt},
 		{Key: KeyCtrlSlash, Mod: ModAlt},
 		{Key: KeyCtrlUnderscore, Mod: ModAlt},
-		{Key: KeySpace, Mod: ModAlt},
+		{Key: KeySpace, Mod: ModAlt, Ch: ' '},
 		{Key: KeyBackspace2, Mod: ModAlt},
 		{Key: KeyCtrl8, Mod: ModAlt},
 	}
 
-	for _, comb := range suite {
-		t.Run(comb.String(), func(t *testing.T) {
+	for i, comb := range suite {
+		t.Run(fmt.Sprintf("%d: %#v", i, comb), func(t *testing.T) {
 			c, err := ParseKey(comb.String())
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, comb, c)
 
 			c, err = ParseKey(c.String())
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, comb, c)
 		})
 	}
