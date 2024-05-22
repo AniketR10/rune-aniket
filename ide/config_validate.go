@@ -3,6 +3,7 @@ package ide
 import (
 	"fmt"
 
+	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
 )
 
@@ -43,11 +44,16 @@ func validateCommandPrompt(c *ideConfig, cfg map[string]any) (err error) {
 	case editorModeModal:
 		/* no validation needed */
 	case editorModeModeless:
-		if commandKey.Key == 0 || commandKey.Mod == 0 {
+		// unfortunately <c-space> is mapped and dispatched with Ch == ' '.
+		// Handle edge case to avoid false positive.
+		isCtrlSpace := commandKey.Ch == ' ' && commandKey.Key == term.KeyCtrlSpace
+		isIncompatible := !isCtrlSpace && commandKey.Ch != 0 && commandKey.Mod == 0
+
+		if isIncompatible {
 			cfg["command"].(map[string]any)[keyCommandKey] = "<c-space>"
 			return fmt.Errorf("Command key must use ctrl or alt modifiers in " +
 				"modeless editor mode otherwise you wouldn't be able to activate it." +
-				" Using <c-space> instead.")
+				" Falling back to <c-space>.")
 		}
 	}
 	return
