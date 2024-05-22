@@ -44,11 +44,20 @@ func WithFrameAttr(attr term.Attributes) Option {
 	}
 }
 
+// WithBarAttr returns an option that configures
+// the top bar attributes.
+func WithBarAttr(attr term.Attributes) Option {
+	return func(cfg *handlerConfig) {
+		cfg.barAttr = attr
+	}
+}
+
 type handlerConfig struct {
 	cfg          vte.Config
 	frame        bool
 	frameCharSet component.FrameCharSet
 	frameAttr    term.Attributes
+	barAttr      term.Attributes
 }
 
 func defaultConfig() handlerConfig {

@@ -13,11 +13,9 @@ import (
 	browserapi "unstable.build/go-tui/api/browser"
 	"unstable.build/go-tui/api/config"
 	workspaceapi "unstable.build/go-tui/api/workspace"
-	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/term"
-	"unstable.build/go-tui/term/vte"
 	testutil "unstable.build/go-tui/util/test"
 	"unstable.build/go-tui/workspace"
 )
@@ -25,9 +23,7 @@ import (
 func TestPluginHandlerCursor(t *testing.T) {
 	makeHandler := func(mock *handler.TestHandler) *Handler {
 		h := new(Handler)
-		h.initState(nopBrowser{}, vte.DefaultConfig(),
-			"cmd", 100 /* width */, true, /* frame */
-			component.FrameCharSetDefault(), term.Attributes{})
+		h.initState(nopBrowser{}, "cmd", 100 /* width */, defaultConfig())
 		h.liveHandler = mock
 		h.Resize(100, 100)
 		return h

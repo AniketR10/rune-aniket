@@ -72,8 +72,7 @@ func (h *Handler) Init(
 	for _, o := range opts {
 		o(&config)
 	}
-	ch, interrupter := h.initState(publisher, config.cfg, cmdAndArgs,
-		maxWidth, config.frame, config.frameCharSet, config.frameAttr)
+	ch, interrupter := h.initState(publisher, cmdAndArgs, maxWidth, config)
 	return h.initEmulator(publisher, notifications, e, t, tm, interrupter, ch)
 }
 
@@ -157,9 +156,7 @@ func (p *Handler) OnFocusChange(inFocus bool) {
 
 func (h *Handler) initState(
 	publisher browser.EventPublisher,
-	cfg vte.Config, cmdAndArgs string, maxWidth int,
-	frame bool, frameCharSet component.FrameCharSet,
-	frameAttr term.Attributes,
+	cmdAndArgs string, maxWidth int, config handlerConfig,
 ) (chan error, term.Interrupter) {
 	if h.cancelCtx != nil {
 		panic("tried to initialize already initialized plugin.Handler")
@@ -179,16 +176,10 @@ func (h *Handler) initState(
 
 	ch := make(chan error)
 
-	// we want shell to be a one-shot execution, so initialCmd must be empty
-	// and shell must execute the command. Under the hood file scheme
-	// allows for shell with command and arguments so it's fine to pass as-is.
-	cfg.Shell = cmdAndArgs
-	cfg.WidthHint = interactiveWidth
-	cfg.HeightHint = interactiveHeight
-	cfg.Watcher = workspaceapi.ChanWatcher(ch)
 	templateCfg := component.StringConfig{
-		Alignment:  component.SpanAlignmentLeft,
-		Attributes: frameAttr,
+		Alignment:            component.SpanAlignmentLeft,
+		Attributes:           config.barAttr,
+		BackgroundAttributes: config.barAttr,
 	}
 
 	errStrCfg := templateCfg
@@ -208,7 +199,8 @@ func (h *Handler) initState(
 	topBar.leftMsgError = component.NewStringWithConfig(" ◎ ", errStrCfg)
 	topBar.leftMsgSuccess = component.NewStringWithConfig(" ◎ ", successStrCfg)
 	topBar.centerMsg = component.NewStringWithConfig(cmdAndArgs, centerStrCfg)
-	topBar.frameAttr = frameAttr
+	topBar.frameAttr = config.frameAttr
+	topBar.attr = config.barAttr
 	frames, seq := component.SpinningAnimationFrames()
 	topBar.animation = component.NewAnimation(interrupter, frames, seq, 10)
 	h.nonInteractiveMinWidth = nonInteractiveMinWidth
@@ -216,9 +208,14 @@ func (h *Handler) initState(
 	h.interactiveHeight = interactiveHeight
 	h.interactiveWidth = interactiveWidth
 	h.bar = topBar
-	h.frame = frame
-	h.frameCharSet = frameCharSet
-	h.cfg = cfg
+	h.frame = config.frame
+	h.frameCharSet = config.frameCharSet
+
+	config.cfg.Shell = cmdAndArgs
+	config.cfg.WidthHint = interactiveWidth
+	config.cfg.HeightHint = interactiveHeight
+	config.cfg.Watcher = workspaceapi.ChanWatcher(ch)
+	h.cfg = config.cfg
 
 	return ch, interrupter
 }
@@ -228,6 +225,9 @@ func (e *Handler) initEmulator(
 	executor schemeapi.Executor, t schemeapi.Terminal, tm browser.TabManager,
 	interrupter term.Interrupter, ch chan error,
 ) error {
+	// we want shell to be a one-shot execution, so initialCmd must be empty
+	// and shell must execute the command. Under the hood file scheme
+	// allows for shell with command and arguments so it's fine to pass as-is.
 	initialCmd := ""
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -315,13 +315,14 @@ func (e *Handler) initializeDoneHandler() {
 			// vi.WithBarAttr(e.cfg.modalBarAttr()),
 			vi.WithResAttr(e.cfg.SelectionAttributes),
 			vi.WithAttr(e.cfg.Attributes),
+			vi.WithBarAttr(e.bar.frameAttr),
 			vi.WithDebug(false),
 			vi.WithWrap(false),
 			vi.WithClipboard(e.cfg.Clipboard),
 		)
 	} else {
 		main = text.NewSimpleHandler(e.cfg.Clipboard, buf, uri, false, true,
-			e.cfg.Attributes, e.cfg.SelectionAttributes, e.cfg.Attributes)
+			e.cfg.Attributes, e.cfg.SelectionAttributes, e.bar.frameAttr)
 	}
 
 	e.doneHandler = e.newUnion(main)
@@ -351,6 +352,7 @@ type pluginHandlerBar struct {
 	startTime time.Time
 	width     int
 	frameAttr term.Attributes
+	attr      term.Attributes
 
 	animation      *component.Animation
 	centerMsg      tui.Component
@@ -386,14 +388,16 @@ func (e *pluginHandlerBar) Draw(w term.Writer) {
 		leftMsg := e.leftMsgRunning
 		var union component.FrameUnion
 		union.Init(leftMsg)
-		union.UnionLeft(e.animation, 3)
+		animationBackground := term.Cell{Ch: ' ', Attributes: e.attr}
+		union.UnionLeft(component.WithBackground(e.animation, animationBackground), 3)
 		union.Resize(leftWidgetWidth, barHeight)
 		left = &union
 	}
 
 	right := component.NewStringWithConfig(rightMsg, component.StringConfig{
-		Alignment:  component.SpanAlignmentRight,
-		Attributes: e.frameAttr,
+		Alignment:            component.SpanAlignmentRight,
+		Attributes:           e.attr,
+		BackgroundAttributes: e.attr,
 	})
 	var union component.FrameUnion
 	union.Init(e.centerMsg)

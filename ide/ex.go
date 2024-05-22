@@ -143,6 +143,7 @@ func (e *ex) init(
 		plugin.WithFrame(e.config.Frame),
 		plugin.WithFrameCharSet(e.config.FocusFrameCharSet),
 		plugin.WithFrameAttr(e.config.FocusFrameAttr),
+		plugin.WithBarAttr(e.config.FocusFrameAttr),
 	}
 	e.newPluginHandler = func(args ...string) (pluginHandler, error) {
 		return plugin.New(e.Browser(), e.Browser(), e.workspace, e.workspace,
