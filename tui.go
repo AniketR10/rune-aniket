@@ -7,38 +7,33 @@ import (
 	"unstable.build/go-tui/term"
 )
 
-// Component represents an element that can be drawn
+// Component represents a visual element that can be drawn
 // in a text-based user interface. It wraps the basic Draw and Resize methods.
-//
-// Draw draws this component to the underlying Writer. It returns non-nil error
-// if something went wrong in the process of writing or the writer returned
-// an error.
-//
-// Resize is used by clients to indicate what's the virtual space available
-// for this component to be drawn in subsequent calls to Draw.
-// When a component is initialized, its width and height is 0 until Resize is
-// called to set the appropiate dimensions.
 type Component interface {
+	// Resize is used by clients to indicate what's the virtual space available
+	// for this component to be drawn in subsequent calls to Draw.
+	// When a component is initialized, its width and height is 0 until Resize is
+	// called to set the appropiate dimensions.
 	Resize(width, height int)
+	// Draw draws this component to the underlying Writer. It returns non-nil error
+	// if something went wrong in the process of writing or the writer returned
+	// an error.
 	Draw(term.Writer)
 }
 
 // Handler builds upon Component to add event-handling behavior.
 // It wraps the basic Handle, Cursor and Man methods.
-//
-// Handle represents the ability to handle termbox events. These events could
-// be key presses or other types of events. See termbox' documentation for more
-// information. Handle returns true if a handler is done processing events.
-//
-// Cursor returns a handler's cursor coordinates.
-// Clients can have multiple handlers in the same interface so
-// this method will be called only when handler is in focus.
-//
-// Man returns a Handler's usage manual. See Manual for more information.
 type Handler interface {
 	Component
+	// Handle abstracts the ability to handle input events. These events could
+	// be key presses or other types of events. See tcell's documentation for more
+	// information. Handle returns true if a handler is done processing events.
+	// Clients can have multiple handlers in the same interface so
+	// this method will be called only when a handler is in focus.
 	Handle(term.Event) (exit, handled bool)
+	// Cursor should return the cursor coordinates, style and whether it should be shown at all.
 	Cursor() (c term.Coordinates, s term.CursorStyle, show bool)
+	// Man returns a Handler's usage manual. See Manual for more information.
 	Man() Manual
 }
 
