@@ -21,6 +21,8 @@ type ComponentTestCase struct {
 type StringerWriter interface {
 	term.Writer
 	fmt.Stringer
+	Flush() error
+	Clear(attr term.Attributes) (err error)
 }
 
 // TestComponent tests a given component against a set of ComponentTestCase.

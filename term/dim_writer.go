@@ -28,20 +28,6 @@ func (w *dimWriter) UnionAttributes(pos Coordinates, attr Attributes) {
 	w.w.UnionAttributes(pos, attr)
 }
 
-func (w *dimWriter) Flush() error {
-	return w.w.Flush()
-}
-
-func (w *dimWriter) Clear(attr Attributes) error {
-	attr.Attrs |= tcell.AttrDim
-	attr.Attrs &^= tcell.AttrBold
-	return w.w.Clear(attr)
-}
-
-func (w *dimWriter) SetCursor(pos Coordinates) {
-	w.w.SetCursor(pos)
-}
-
 func (w *dimWriter) Context() context.Context {
 	return w.w.Context()
 }

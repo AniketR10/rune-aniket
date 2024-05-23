@@ -13,8 +13,8 @@ var (
 	defaultAttr  = Attributes{Fg: tcell.ColorDefault, Bg: tcell.ColorDefault}
 	publishEvent atomic.Value
 
-	// DefaultWriter returns the global terminal Writer.
-	DefaultWriter ContextWriter = newTermboxWriter()
+	// DefaultWriter returns the default global Writer.
+	DefaultWriter *TermboxWriter = NewTermboxWriter()
 )
 
 func init() {

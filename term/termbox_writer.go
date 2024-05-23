@@ -9,46 +9,58 @@ import (
 	"github.com/unstablebuild/tcell/v3/termbox"
 )
 
-type termboxWriter struct {
+var _ Writer = (*TermboxWriter)(nil)
+
+// TermboxWriter implements a termbox-like API using tcell/v3.
+type TermboxWriter struct {
 	ctx context.Context
 }
 
-func newTermboxWriter() *termboxWriter {
-	ret := new(termboxWriter)
+// NewTermboxWriter allocates storage for a new TermboxWriter and initializes it.
+func NewTermboxWriter() *TermboxWriter {
+	ret := new(TermboxWriter)
 	ret.ctx = context.Background()
 	return ret
 }
 
-func (w *termboxWriter) SetCell(pos Coordinates, c Cell) {
+// SetCell satisfies term.Writer.
+func (w *TermboxWriter) SetCell(pos Coordinates, c Cell) {
 	termbox.Screen().SetContent(
 		pos.X, pos.Y, c.Ch, c.Combining,
 		c.Width, tcell.Style(c.Attributes),
 	)
 }
 
-func (w *termboxWriter) UnionAttributes(pos Coordinates, attr Attributes) {
+// UnionAttributes satisfies term.Writer.
+func (w *TermboxWriter) UnionAttributes(pos Coordinates, attr Attributes) {
 	termbox.Screen().UnionStyle(
 		pos.X, pos.Y, tcell.Style(attr),
 	)
 }
 
-func (w *termboxWriter) Flush() error {
+// Flush makes all the content changes made using SetCell and
+// UnionAttributes visible on the display.
+func (w *TermboxWriter) Flush() error {
 	return termbox.Flush()
 }
 
-func (w *termboxWriter) Clear(attr Attributes) (err error) {
+// Clear fills the screen with the given attributs and empty cells.
+func (w *TermboxWriter) Clear(attr Attributes) (err error) {
 	termbox.Screen().Fill(' ', tcell.Style(attr))
 	return
 }
 
-func (w *termboxWriter) SetCursor(pos Coordinates) {
+// SetCursor displays the terminal cursor at the given location.
+func (w *TermboxWriter) SetCursor(pos Coordinates) {
 	termbox.SetCursor(pos.X, pos.Y)
 }
 
-func (w *termboxWriter) Context() context.Context {
+// Context satisfies term.Writer.
+func (w *TermboxWriter) Context() context.Context {
 	return w.ctx
 }
 
-func (w *termboxWriter) SetContext(ctx context.Context) {
+// SetContext sets the context for the next call to Context.
+func (w *TermboxWriter) SetContext(ctx context.Context) {
 	w.ctx = ctx
 }

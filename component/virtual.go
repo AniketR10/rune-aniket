@@ -89,18 +89,6 @@ func (w *virtualWriter) UnionAttributes(pos term.Coordinates, attr term.Attribut
 	w.writer.UnionAttributes(pos, attr)
 }
 
-func (w *virtualWriter) Flush() error {
-	return w.writer.Flush()
-}
-
-func (w *virtualWriter) Clear(attr term.Attributes) error {
-	return w.writer.Clear(attr)
-}
-
-func (w *virtualWriter) SetCursor(pos term.Coordinates) {
-	w.writer.SetCursor(pos)
-}
-
 func (w *virtualWriter) Context() context.Context {
 	return w.writer.Context()
 }

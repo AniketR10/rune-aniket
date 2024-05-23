@@ -15,7 +15,7 @@ import (
 const exitSignalDuration = 1 * time.Second
 
 func redraw(
-	root Handler, lock sync.Locker, termw term.Writer,
+	root Handler, lock sync.Locker, termw *term.TermboxWriter,
 	prevCursor term.CursorStyle,
 ) (term.CursorStyle, error) {
 	if err := termw.Clear(term.Attr()); err != nil {
@@ -81,7 +81,7 @@ func handleInterruptSignal(
 	}
 }
 
-func run(root Handler, lock sync.Locker, termw term.ContextWriter) (err error) {
+func run(root Handler, lock sync.Locker, termw *term.TermboxWriter) (err error) {
 	ctx := context.Background()
 	width, height := term.Size()
 

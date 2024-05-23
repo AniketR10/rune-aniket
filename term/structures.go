@@ -64,18 +64,19 @@ func (e Event) KeyComb() KeyComb {
 // Writer abstracts termbox write functionality to decouple components from
 // termbox, so they're easier to test.
 type Writer interface {
+	// Context returns the current context of the Writer.
+	// This context can be used by tui.Components in combination
+	// with term.Interrupter.Interrupt(context.Context), to connect
+	// requests to via interrupt with actual calls to Draw.
 	Context() context.Context
+	// SetCell sets the contents of the given cell location.  If
+	// the coordinates are out of range, then the operation is ignored.
 	SetCell(Coordinates, Cell)
+	// UnionAttributes computes the set union between a and b,
+	// that is overrides a set of attributes at the given coordinates
+	// that contain all the bit flags set in a, b or both, and uses the color
+	// defined in b or if not set, uses the color in a.
 	UnionAttributes(Coordinates, Attributes)
-	Flush() error
-	Clear(Attributes) error
-	SetCursor(Coordinates)
-}
-
-// ContextWriter adds SetContext to a Writer.
-type ContextWriter interface {
-	Writer
-	SetContext(context.Context)
 }
 
 func (k KeyComb) String() string {

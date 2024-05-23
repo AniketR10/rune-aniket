@@ -29,21 +29,6 @@ func (p boundsCheckWriter) UnionAttributes(pos Coordinates, attr Attributes) {
 	p.w.UnionAttributes(pos, attr)
 }
 
-func (p boundsCheckWriter) Flush() error {
-	return p.w.Flush()
-}
-
-func (p boundsCheckWriter) Clear(attr Attributes) error {
-	return p.w.Clear(attr)
-}
-
-func (p boundsCheckWriter) SetCursor(pos Coordinates) {
-	if p.outOfBounds(pos) {
-		return
-	}
-	p.w.SetCursor(pos)
-}
-
 func (p boundsCheckWriter) Context() context.Context {
 	return p.w.Context()
 }
