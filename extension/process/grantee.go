@@ -98,12 +98,13 @@ func Serve(grantee extension.Grantee, request ...extension.Permission) {
 
 	extensionExecutable := filepath.Base(os.Args[0])
 
+	dataDir := getDataDirEnv()
 	pluginMap := map[string]goplugin.Plugin{
 		typeGranteeExtension: &granteeExtension{
 			requested: request,
 			grantee:   grantee,
 			keepAlive: defaultHealthCheckTicker,
-			broker:    initClientBroker(&extensionLogger, getDataDirEnv(), extensionExecutable, ""),
+			broker:    initClientBroker(&extensionLogger, dataDir, extensionExecutable, ""),
 		},
 	}
 
@@ -111,6 +112,21 @@ func Serve(grantee extension.Grantee, request ...extension.Permission) {
 		HandshakeConfig: handshakeConfig,
 		Plugins:         pluginMap,
 		Logger:          newHCLogLogrus(extensionExecutable, &extensionLogger),
-		GRPCServer:      goplugin.DefaultGRPCServer,
+		GRPCServer: func(opts []grpc.ServerOption) *grpc.Server {
+			if dataDir != "" {
+				// do not panic, and so allow extension manager to
+				// process errors, rather than client read EOF
+				const shouldPanic = false
+				opts = append(opts, grpc.ChainUnaryInterceptor(
+					rpc.UnaryReportRecoveryInterceptor(
+						dataDir, extensionExecutable, "", shouldPanic),
+				))
+				opts = append(opts, grpc.ChainStreamInterceptor(
+					rpc.StreamReportRecoveryInterceptor(
+						dataDir, extensionExecutable, "", shouldPanic),
+				))
+			}
+			return goplugin.DefaultGRPCServer(opts)
+		},
 	})
 }

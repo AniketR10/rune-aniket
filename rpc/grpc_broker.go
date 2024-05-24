@@ -41,11 +41,12 @@ func (t *grpcBroker) NewChannel(tags ...string) (MuxServer, error) {
 
 	var opts []grpc.ServerOption
 	if t.dataDir != "" {
+		const shouldPanic = true
 		opts = append(opts, grpc.ChainUnaryInterceptor(
-			UnaryReportRecoveryInterceptor(t.dataDir, t.pkg, t.version),
+			UnaryReportRecoveryInterceptor(t.dataDir, t.pkg, t.version, shouldPanic),
 		))
 		opts = append(opts, grpc.ChainStreamInterceptor(
-			StreamReportRecoveryInterceptor(t.dataDir, t.pkg, t.version),
+			StreamReportRecoveryInterceptor(t.dataDir, t.pkg, t.version, shouldPanic),
 		))
 	}
 	return GRPCServer(ret, opts...), nil

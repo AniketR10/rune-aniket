@@ -25,7 +25,9 @@ func StreamLoggingRecoveryInterceptor(tags ...string) grpc.StreamServerIntercept
 
 // UnaryReportRecoveryHandler implements a grpc.UnaryServerInterceptor
 // that recovers and logs panics.
-func UnaryReportRecoveryInterceptor(dir, pkg, version string) grpc.UnaryServerInterceptor {
+func UnaryReportRecoveryInterceptor(
+	dir, pkg, version string, shouldPanic bool,
+) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo,
 		handler grpc.UnaryHandler) (ret any, err error) {
 		ok, reportname, captureErr := debug.CapturePanicReportDir(dir, pkg, version, func() {
@@ -37,13 +39,19 @@ func UnaryReportRecoveryInterceptor(dir, pkg, version string) grpc.UnaryServerIn
 		if captureErr != nil {
 			panic(fmt.Sprintf("capture panic report: error capturing: %v", captureErr))
 		}
-		panic(fmt.Sprintf("grpc goroutine panic: report: %s", reportname))
+		err = fmt.Errorf("grpc goroutine panic: report: %s", reportname)
+		if shouldPanic {
+			panic(err)
+		}
+		return
 	}
 }
 
 // StreamReportRecoveryHandler implements a grpc.UnaryServerInterceptor
 // that recovers and logs panics.
-func StreamReportRecoveryInterceptor(dir, pkg, version string) grpc.StreamServerInterceptor {
+func StreamReportRecoveryInterceptor(
+	dir, pkg, version string, shouldPanic bool,
+) grpc.StreamServerInterceptor {
 	return func(srv any, stream grpc.ServerStream,
 		info *grpc.StreamServerInfo, handler grpc.StreamHandler) (err error) {
 		ok, reportname, captureErr := debug.CapturePanicReportDir(dir, pkg, version, func() {
@@ -55,7 +63,11 @@ func StreamReportRecoveryInterceptor(dir, pkg, version string) grpc.StreamServer
 		if captureErr != nil {
 			panic(fmt.Sprintf("capture panic report: error capturing: %v", captureErr))
 		}
-		panic(fmt.Sprintf("grpc goroutine panic: report: %s", reportname))
+		err = fmt.Errorf("grpc goroutine panic: report: %s", reportname)
+		if shouldPanic {
+			panic(err)
+		}
+		return
 	}
 }
 
