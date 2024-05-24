@@ -10,10 +10,10 @@ import (
 // Component represents a visual element that can be drawn
 // in a text-based user interface. It wraps the basic Draw and Resize methods.
 type Component interface {
-	// Resize is used by clients to indicate what's the virtual space available
+	// Resize is used by clients to indicate the virtual space available
 	// for this component to be drawn in subsequent calls to Draw.
 	// When a component is initialized, its width and height is 0 until Resize is
-	// called to set the appropiate dimensions.
+	// called to set the appropriate dimensions.
 	Resize(width, height int)
 	// Draw draws this component to the underlying Writer. It returns non-nil error
 	// if something went wrong in the process of writing or the writer returned

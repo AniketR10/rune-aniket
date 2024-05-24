@@ -567,10 +567,12 @@ func (c *Component) SetFocus(win browser.Window) (browser.Window, error) {
 	return c.comp.SetFocus(win), nil
 }
 
-// Edit DEPRECATED USE OpenFileTab edits the resource with name and buffer
+// Edit edits the resource with name and buffer
 // with the underlying Editor in a new browser buffer.
 //
 // NOTE: Returned Handler has no EventTypeFocus support.
+//
+// Deprecated: Use OpenFileTab instead.
 func (c *Component) Edit(file workspaceapi.URI, buf *cell.Buffer) (Handler, error) {
 	editor, err := c.ed.Edit(file, buf)
 	if err != nil {
