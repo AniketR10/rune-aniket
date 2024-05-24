@@ -96,10 +96,11 @@ type Grantee struct {
 	svcFn      func(config.Config) (document.Service, error)
 	scheme     string
 
-	cmds           map[string]commandAll
-	maxSubjectLen  int
-	registerScheme bool
-	defTemplate    []byte
+	cmds            map[string]commandAll
+	maxSubjectLen   int
+	registerScheme  bool
+	defTemplate     []byte
+	disableCommands bool
 
 	pendingIssueID  string       // accessed by Handle only, no need to synchronize
 	pendingIssueURI atomic.Value // workspaceapi.URI, accessed by Handle and HandleCommand
@@ -144,7 +145,7 @@ func (e *Grantee) Connected(
 	}
 	e.defTemplate = data
 
-	disableDefaultCommands, err := pconfig.GetBool("disable_default_commands")
+	e.disableCommands, err = pconfig.GetBool("disable_commands")
 	if err != nil {
 		if err != config.ErrNotFound {
 			return fmt.Errorf("could not read property "+
@@ -212,8 +213,9 @@ func (e *Grantee) Connected(
 		cmdToTemplates[cmd] = data
 	}
 
-	if disableDefaultCommands {
+	if e.disableCommands {
 		e.cmds = make(map[string]commandAll)
+		return nil
 	}
 
 	for cmd, template := range cmdToTemplates {
@@ -298,6 +300,9 @@ func (e *Grantee) PermissionGranted(ctx context.Context, grants []extension.Gran
 			err = ed.SubscribeEvents(editorEvents, e)
 			if err != nil {
 				return fmt.Errorf("subscribe editor events: %w ", err)
+			}
+			if e.disableCommands {
+				continue
 			}
 			for cmd, man := range e.cmds {
 				cmd := cmd
