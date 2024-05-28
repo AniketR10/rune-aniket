@@ -10,4 +10,5 @@ type Document[T any] interface {
 	WithID(string) T
 	UpdatedTime() time.Time
 	WithUpdatedTime(time.Time) T
+	WithUpdatedBy(author string) T
 }

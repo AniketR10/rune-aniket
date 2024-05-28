@@ -27,6 +27,7 @@ type testStruct struct {
 	Id        string
 	Content   string
 	UpdatedAt time.Time
+	UpdatedBy string
 }
 
 func (t testStruct) ID() string {
@@ -47,6 +48,11 @@ func (t testStruct) WithUpdatedTime(now time.Time) testStruct {
 	return t
 }
 
+func (t testStruct) WithUpdatedBy(author string) testStruct {
+	t.UpdatedBy = author
+	return t
+}
+
 func TestDocumentOpen(t *testing.T) {
 	t.Run("file should have a default template after Open", func(t *testing.T) {
 		ctx := context.Background()
@@ -56,7 +62,7 @@ func TestDocumentOpen(t *testing.T) {
 		marshaler := yaml.Marshaler()
 		svc := document.NewInMemoryServiceWithMarshaler(marshaler)
 		scheme, err := WorkspaceScheme[testStruct](workspaceURI, svc,
-			marshaler, errors.New("missing id"))(ctx, config.NopConfig(), workspaceURI)
+			marshaler, errors.New("missing id"), "author")(ctx, config.NopConfig(), workspaceURI)
 		require.NoError(t, err)
 
 		f, werr := scheme.Open("a", os.O_CREATE|os.O_RDWR, 0)
@@ -78,10 +84,10 @@ func TestDocumentOpen(t *testing.T) {
 
 		// two schemes so there's no usage of the cached file in memory
 		scheme1, err := WorkspaceScheme[testStruct](workspaceURI, svc,
-			marshaler, errors.New("missing id"))(ctx, config.NopConfig(),
+			marshaler, errors.New("missing id"), "author")(ctx, config.NopConfig(),
 			workspaceURI)
 		scheme2, err := WorkspaceScheme[testStruct](workspaceURI, svc,
-			marshaler, errors.New("missing id"))(ctx, config.NopConfig(),
+			marshaler, errors.New("missing id"), "author")(ctx, config.NopConfig(),
 			workspaceURI)
 		defer scheme1.Close()
 		defer scheme2.Close()

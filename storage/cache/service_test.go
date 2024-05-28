@@ -185,6 +185,7 @@ type testStruct struct {
 	Id        string
 	Content   string
 	UpdatedAt time.Time
+	UpdatedBy string
 }
 
 func (t testStruct) ID() string {
@@ -202,6 +203,11 @@ func (t testStruct) UpdatedTime() time.Time {
 
 func (t testStruct) WithUpdatedTime(tt time.Time) testStruct {
 	t.UpdatedAt = tt
+	return t
+}
+
+func (t testStruct) WithUpdatedBy(author string) testStruct {
+	t.UpdatedBy = author
 	return t
 }
 

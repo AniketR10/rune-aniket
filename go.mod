@@ -23,12 +23,12 @@ require (
 	github.com/smacker/go-tree-sitter v0.0.0-20230501083651-a7d92773b3aa
 	github.com/sourcegraph/go-diff v0.6.1
 	github.com/stretchr/testify v1.9.0
-	github.com/unstablebuild/blue v1.47.2
+	github.com/unstablebuild/blue v1.48.2
 	github.com/unstablebuild/golang-internal-tools v0.0.2
 	github.com/unstablebuild/tcell/v3 v3.5.0
 	go.uber.org/config v1.4.0
 	go.uber.org/goleak v1.2.0
-	golang.org/x/crypto v0.22.0
+	golang.org/x/crypto v0.23.0
 	golang.org/x/image v0.15.0
 	golang.org/x/term v0.20.0
 	google.golang.org/grpc v1.54.0
@@ -52,7 +52,7 @@ require (
 	github.com/rivo/uniseg v0.4.4
 	golang.org/x/lint v0.0.0-20210508222113-6edffad5e616 // indirect
 	golang.org/x/mod v0.10.0 // indirect
-	golang.org/x/net v0.24.0 // indirect
+	golang.org/x/net v0.25.0 // indirect
 	golang.org/x/sync v0.1.0 // indirect
 	golang.org/x/sys v0.20.0 // indirect
 	golang.org/x/text v0.15.0 // indirect

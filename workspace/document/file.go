@@ -98,6 +98,7 @@ func (f *file[T]) sync(ctx context.Context) error {
 	if f.val.ID() == "" {
 		return f.errMissingID
 	}
+	f.val = f.val.WithUpdatedBy(f.s.author)
 
 	// we are holding transaction lock so we should be good to make this check:
 	// make sure that file still exists in the database before syncing.

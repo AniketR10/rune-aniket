@@ -39,6 +39,7 @@ import (
 func WorkspaceScheme[T storage.Document[T]](
 	rootURI workspaceapi.URI, svc document.Service,
 	marshaler encoding.Marshaler, errMissingID error,
+	author string,
 ) schemeapi.SchemeFunc {
 	return func(_ context.Context, cfg config.Config, uri workspaceapi.URI) (
 		schemeapi.Scheme, error,
@@ -48,7 +49,7 @@ func WorkspaceScheme[T storage.Document[T]](
 				" root does not match", uri, rootURI)
 		}
 		ret := new(scheme[T])
-		ret.init(svc, uri, marshaler)
+		ret.init(svc, uri, marshaler, author)
 		return ret, nil
 	}
 }
@@ -69,6 +70,7 @@ type scheme[T storage.Document[T]] struct {
 	unimplementedTerminal
 	unimplementedExecutor
 	workspace          workspaceapi.URI
+	author             string
 	marshaler          encoding.Marshaler
 	svc                service
 	errMissingID       error
@@ -79,9 +81,10 @@ type scheme[T storage.Document[T]] struct {
 	fd                 uintptr // next fd
 }
 
-func (s *scheme[T]) init(svc document.Service, uri workspaceapi.URI, m encoding.Marshaler) {
+func (s *scheme[T]) init(svc document.Service, uri workspaceapi.URI, m encoding.Marshaler, author string) {
 	s.svc.svc = svc
 	s.marshaler = m
+	s.author = author
 	s.workspace = uri
 	s.retryRealFailure = retry.CombinedStrategy(
 		retry.ExponentialStrategy(50*time.Microsecond, 500*time.Millisecond),

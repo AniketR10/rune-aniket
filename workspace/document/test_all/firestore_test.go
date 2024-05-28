@@ -45,7 +45,7 @@ func TestFirestoreWorkspaceScheme(t *testing.T) {
 		svc, err := firestore.New(testProjectID, collection, "")
 		require.NoError(t, err)
 		scheme, err := workdoc.WorkspaceScheme[testStruct](workspaceURI, svc,
-			json.Marshaler(), errMissingID)(ctx, config.NopConfig(), workspaceURI)
+			json.Marshaler(), errMissingID, "author")(ctx, config.NopConfig(), workspaceURI)
 		require.NoError(t, err)
 		return scheme
 	})
@@ -61,7 +61,7 @@ func TestFirestoreWorkspaceScheme(t *testing.T) {
 		svc, err := firestore.New(testProjectID, collection, "")
 		require.NoError(t, err)
 		scheme, err := workdoc.WorkspaceScheme[testStruct](workspaceURI, svc,
-			json.Marshaler(), errMissingID)(ctx, config.NopConfig(), workspaceURI)
+			json.Marshaler(), errMissingID, "author")(ctx, config.NopConfig(), workspaceURI)
 		require.NoError(t, err)
 
 		f, werr := scheme.Open("/.something.swp", os.O_CREATE, 0)

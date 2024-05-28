@@ -28,7 +28,7 @@ func TestMemoryWorkspaceSchemeBackedByWorkspaceSchemeService(t *testing.T) {
 		require.NoError(t, err)
 
 		s, err := workdoc.WorkspaceScheme[testStruct](workspaceURI, svc, json.Marshaler(),
-			errMissingID)(ctx, config.NopConfig(), workspaceURI)
+			errMissingID, "author")(ctx, config.NopConfig(), workspaceURI)
 		require.NoError(t, err)
 		return s
 	})

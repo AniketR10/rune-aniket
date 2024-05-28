@@ -32,7 +32,7 @@ func TestMemoryWorkspaceScheme(t *testing.T) {
 			require.NoError(t, err)
 			svc := document.NewInMemoryService()
 			scheme, err := workdoc.WorkspaceScheme[testStruct](workspaceURI, svc,
-				json.Marshaler(), errMissingID)(ctx, config.NopConfig(), workspaceURI)
+				json.Marshaler(), errMissingID, "author")(ctx, config.NopConfig(), workspaceURI)
 			require.NoError(t, err)
 			return scheme
 		})
@@ -43,7 +43,7 @@ func TestMemoryWorkspaceScheme(t *testing.T) {
 			require.NoError(t, err)
 			svc := document.NewInMemoryService()
 			scheme, err := workdoc.WorkspaceScheme[testStruct](workspaceURI, svc,
-				json.Marshaler(), errMissingID)(ctx, config.NopConfig(), workspaceURI)
+				json.Marshaler(), errMissingID, "author")(ctx, config.NopConfig(), workspaceURI)
 			require.NoError(t, err)
 			return scheme
 		})
@@ -57,7 +57,7 @@ func TestMemoryWorkspaceSchemeTransientFailures(t *testing.T) {
 		svc := &errService{root: document.NewInMemoryService()}
 		ctx := context.Background()
 		s, err := workdoc.WorkspaceScheme[testStruct](workspaceURI, svc, json.Marshaler(),
-			errMissingID)(ctx, config.NopConfig(), workspaceURI)
+			errMissingID, "author")(ctx, config.NopConfig(), workspaceURI)
 		require.NoError(t, err)
 		return s
 	})
@@ -189,6 +189,7 @@ var errMissingID = errors.New("missing id")
 type testStruct struct {
 	Id        string
 	UpdatedAt time.Time
+	UpdatedBy string
 	Content   string
 }
 
@@ -207,6 +208,11 @@ func (t testStruct) UpdatedTime() time.Time {
 
 func (t testStruct) WithUpdatedTime(now time.Time) testStruct {
 	t.UpdatedAt = now
+	return t
+}
+
+func (t testStruct) WithUpdatedBy(author string) testStruct {
+	t.UpdatedBy = author
 	return t
 }
 

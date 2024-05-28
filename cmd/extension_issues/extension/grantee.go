@@ -101,6 +101,7 @@ type Grantee struct {
 	registerScheme  bool
 	defTemplate     []byte
 	disableCommands bool
+	author          string
 
 	pendingIssueID  string       // accessed by Handle only, no need to synchronize
 	pendingIssueURI atomic.Value // workspaceapi.URI, accessed by Handle and HandleCommand
@@ -130,15 +131,16 @@ func (e *Grantee) Connected(
 	e.config = pconfig
 	e.broker = broker
 
-	var defTemplate issue.Report
-	defTemplate.Author, err = pconfig.GetString("author")
+	e.author, err = pconfig.GetString("author")
 	if err != nil {
 		if err != config.ErrNotFound {
 			return fmt.Errorf("could not read property "+
 				"'author': %w", err)
 		}
-		defTemplate.Author = getDefaultAuthor()
+		e.author = getDefaultAuthor()
 	}
+
+	defTemplate := issue.Report{Author: e.author}
 	data, err := e.marshaler.Marshal(defTemplate)
 	if err != nil {
 		return fmt.Errorf("marshal default issue template: %w", err)
@@ -176,7 +178,6 @@ func (e *Grantee) Connected(
 		if err != config.ErrNotFound {
 			return fmt.Errorf("could not read property 'templates': %w", err)
 		}
-		return nil
 	}
 
 	cmdToTemplates := make(map[string][]byte, len(templatesMap))
@@ -524,7 +525,7 @@ func (e *Grantee) initScheme(m schemeapi.SchemeManager) error {
 
 	schemeFn := workspacedoc.WorkspaceScheme[issue.ReportDocument](rootURI, e.svc,
 		marshaler, fmt.Errorf("missing %q sub-field in Metadata field",
-			issue.ReportMetadataIDField))
+			issue.ReportMetadataIDField), e.author)
 	schemeFn = issueMapperScheme(schemeFn, marshaler, e.maxSubjectLen)
 	err = m.RegisterScheme(e.scheme, schemeFn)
 	if err == schemeapi.ErrSchemeAlreadyRegistered {
