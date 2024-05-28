@@ -66,8 +66,8 @@ func (e Event) KeyComb() KeyComb {
 type Writer interface {
 	// Context returns the current context of the Writer.
 	// This context can be used by tui.Components in combination
-	// with term.Interrupter.Interrupt(context.Context), to connect
-	// requests to via interrupt with actual calls to Draw.
+	// with term.Interrupter.Interrupt(context.Context) to disambiguate
+	// regular calls to Draw from interrupt-driven calls to Draw.
 	Context() context.Context
 	// SetCell sets the contents of the given cell location.  If
 	// the coordinates are out of range, then the operation is ignored.
