@@ -470,6 +470,35 @@ $ ▐
 		testSequence(t, cfg, defaultWaitForIdleVte, cases)
 	})
 
+	t.Run("last line wrap around", func(t *testing.T) {
+		cases := []vtetest.Case{
+			{">>>>>>>>>>",
+				`$                   
+$                   
+$                   
+$                   
+$                   
+$                   
+$                   
+$                   
+$                   
+$ ▐                 `},
+			{"echo<0Cecho aaaaaaaaaaaaabcde",
+				`$                   
+$                   
+$                   
+$                   
+$                   
+$                   
+$                   
+$                   
+$ echo aaaaaaaaaaaaa
+bcde▐         INSERT`},
+		}
+		cfg := DefaultConfig()
+		cfg.Modal = true
+		testSequence(t, cfg, defaultWaitForIdleVte, cases)
+	})
 }
 
 func TestZshEdgeCases(t *testing.T) {

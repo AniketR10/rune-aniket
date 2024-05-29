@@ -59,9 +59,10 @@ type message struct {
 
 // Cursor is a helper structure which manages a cursor over a Scroll.
 type Cursor struct {
-	scroll *component.Scroll
-	search string
-	cursor term.Coordinates
+	scroll     *component.Scroll
+	search     string
+	cursor     term.Coordinates
+	shouldSeek bool
 
 	locationStore LocationStore
 
@@ -89,10 +90,12 @@ func NewCursor(scroll *component.Scroll) *Cursor {
 func (c *Cursor) Init(scroll *component.Scroll) {
 	c.InitPerformance(scroll)
 	c.scroll.Buffer().Subscribe(&c.subscriber)
+	c.shouldSeek = true
 }
 
 // InitPerformance initializes this Cursor with a Scroll
-// that was initialized with InitPerformance.
+// that was initialized with InitPerformance. It also
+// disables automatic scrolling of content for the client.
 func (c *Cursor) InitPerformance(scroll *component.Scroll) {
 	c.cursor = term.Coordinates{}
 	c.scroll = scroll
@@ -203,7 +206,7 @@ func (c *Cursor) moveToScroll(pos term.Coordinates) {
 	} else {
 		windowPos = c.scroll.ScrollToWindowCoordinates(pos)
 	}
-	c.setCursor(windowPos, true)
+	c.setCursor(windowPos, c.shouldSeek)
 }
 
 func (c *Cursor) seekToScrollCoordinates() {
@@ -1586,5 +1589,5 @@ func (c *Cursor) setCursorAfterUpdate(atScroll term.Coordinates) {
 	if done {
 		res.X++
 	}
-	c.setCursor(res, true)
+	c.setCursor(res, c.shouldSeek)
 }

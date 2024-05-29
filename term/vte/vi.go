@@ -36,6 +36,7 @@ type viHandler struct {
 	sync   struct {
 		mu       sync.Locker
 		vi       *vi.Vi
+		scroll   *component.Scroll
 		editor   cell.Editor
 		selector *cell.Buffer
 	}
@@ -91,6 +92,7 @@ func (v *viHandler) doInit(comp parentComponent, config Config) {
 	v.sync.vi = vi
 	v.sync.selector = scroll.Buffer()
 	v.sync.mu = comp.Locker()
+	v.sync.scroll = scroll
 	v.comp = comp
 	v.config = config
 	v.sync.editor = scroll.Buffer().WithEditor(v)
@@ -449,6 +451,8 @@ func (v *viHandler) handle(ev term.Event) (exit, handled bool) {
 		handled = false
 	}
 
+	scrollOffset := v.sync.scroll.Offset()
+
 	// schedule any potential edits after finding the start of the prompt:
 	// this avoids race conditions when serializing handle with bell callbacks
 	// and also prevents the main loop goroutine to not deadlock with the vte parser
@@ -456,22 +460,35 @@ func (v *viHandler) handle(ev term.Event) (exit, handled bool) {
 	// the cursor logic heavily depends on the correct return values of Edit.
 	v.scheduleAfterBell(func() {
 		v.sync.vi.Handle(ev)
+	})
 
-		// correct cursor coordinates beyond last line so
-		// when moving through graphical windows doesn't
-		// leave cursor in an non-useful coordinate.
-		//
-		// After edits, content might have changed
-		// use bell to synchronize to the last state change
-		// and then move cursor to bounds.
-		//
-		// It's imperative that we re-synchronize here
-		// or else moveViToBounds will use a buffer
-		// that has not been updated yet.
-		//
-		// This might put a lot of pressure on the event loop's
-		// event processing, so let's keep an eye on it for now.
-		v.scheduleAfterBell(v.moveViToBounds)
+	// correct cursor coordinates beyond last line so
+	// when moving through graphical windows doesn't
+	// leave cursor in an non-useful coordinate.
+	//
+	// After edits, content might have changed
+	// use bell to synchronize to the last state change
+	// and then move cursor to bounds.
+	//
+	// It's imperative that we serialize this with v.sync.vi.Handle
+	// or else moveViToBounds will use a buffer
+	// that has not been updated yet.
+	//
+	// This might put a lot of pressure on the event loop's
+	// event processing, so let's keep an eye on it for now.
+	v.scheduleAfterBell(func() {
+		newOffset := v.sync.scroll.Offset()
+		// adjust cursor position accordingly, which doesn't
+		// know about primary scroll offset change.
+		if newOffset != scrollOffset {
+			diff := term.CoordinatesDiff(scrollOffset, newOffset)
+			pos := v.sync.vi.CursorAtScroll()
+			// X is not applicable as lines never overflow due
+			// to the nature of how the vte is implemented.
+			pos.Y += diff.Y
+			v.viSetCursorAtScroll(pos)
+		}
+		v.moveViToBounds()
 	})
 
 	// use a copy of vi to know if event would be handled
