@@ -571,7 +571,8 @@ func (h *Prompt) setCompletionList(
 	// will do its job, and only the last pushed completer will
 	// remain.
 	if h.bracketedPaste {
-		sync = false
+		// override but only if global sync mode is not on (i.e. tests)
+		sync = h.sync
 	}
 	h.log(log.TraceLevel, "setCompletionList: %s %#v", cmd, args)
 
