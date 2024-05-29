@@ -458,7 +458,10 @@ func (h *Prompt) handleCompleteArgs(ev term.Event, sync bool) (quit, handled boo
 	switch ev.Key {
 	case term.KeyBackspace, term.KeyBackspace2:
 		handled = true
-		h.buf.DeleteCell(term.Coordinates{X: h.buf.Columns(0) - 1})
+		cols := h.buf.Columns(0)
+		if cols != 0 {
+			h.buf.DeleteCell(term.Coordinates{X: cols - 1})
+		}
 		if h.list.Buffer().Size() != 0 {
 			h.list.Buffer().DeleteCell(
 				term.Coordinates{X: h.list.Buffer().Columns(0) - 1},
