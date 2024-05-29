@@ -41,6 +41,21 @@ func TestSequence(
 	}
 }
 
+// TestCases tests the given handler with the given test cases,
+// but assumes that it's an already initialized handler,
+// so it doesn't Resize or wait for initial interrupt.
+func TestCases(
+	t *testing.T, handler tui.Handler, width, height int,
+	drawTimeout time.Duration, interruptChan chan struct{},
+	cases []Case,
+) {
+	writer := term.NewStringWriter(width, height)
+	for i, tcase := range cases {
+		handleTestCase(t, i, writer, handler, tcase,
+			width, height, drawTimeout, interruptChan)
+	}
+}
+
 func handleTestCase(
 	t *testing.T, i int, w *term.StringWriter,
 	h tui.Handler, tcase Case, width, height int,

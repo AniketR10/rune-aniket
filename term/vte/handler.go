@@ -157,7 +157,9 @@ func (e *Handler) Resize(width, height int) {
 	// so we need to, reset the cursor position
 	var modalCursorPos term.Coordinates
 	if e.modalEnabled {
-		modalCursorPos = e.vi.cursorAtScroll()
+		if e.viMode {
+			modalCursorPos = e.vi.cursorAtScroll()
+		}
 		e.vi.Resize(width, height)
 	}
 
@@ -171,7 +173,7 @@ func (e *Handler) Resize(width, height int) {
 		return
 	}
 
-	if e.modalEnabled {
+	if e.viMode {
 		e.vi.setCursorAtScroll(modalCursorPos)
 	}
 }

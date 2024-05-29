@@ -112,7 +112,7 @@ exit
 
 	cfg := DefaultConfig()
 
-	handler := testSequence(t, cfg, defaultWaitForIdleVte, cases)
+	handler, _ := testSequence(t, cfg, defaultWaitForIdleVte, cases)
 	exit, handled := handler.Handle(term.Event{})
 	require.True(t, exit)
 	assert.False(t, handled)
@@ -121,12 +121,67 @@ exit
 	assert.False(t, show)
 }
 
-func testSequence(t *testing.T, cfg Config, timeout time.Duration, cases []vtetest.Case) *Handler {
+func TestHandlerResizeViIntegration(t *testing.T) {
+	cases := []vtetest.Case{
+		{"echo 'a\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk'",
+			`> b                 
+> c                 
+> d                 
+> e                 
+> f                 
+> g                 
+> h                 
+> i                 
+> j                 
+> k'▐               `},
+		{">",
+			`c                   
+d                   
+e                   
+f                   
+g                   
+h                   
+i                   
+j                   
+k                   
+$ ▐                 `},
+	}
+
+	cfg := DefaultConfig()
+	cfg.Modal = true
+	handler, ch := testSequence(t, cfg, defaultWaitForIdleVte, cases)
+
+	// test same width/height resize, which simulates window manager
+	// calling Resize on every children after a window re-configuration.
+	handler.Resize(20, 10)
+
+	cases = []vtetest.Case{
+		{"",
+			`c                   
+d                   
+e                   
+f                   
+g                   
+h                   
+i                   
+j                   
+k                   
+$ ▐                 `},
+	}
+
+	vtetest.TestCases(t, handler, 20, 10, defaultWaitForIdleVte, ch, cases)
+}
+
+func testSequence(t *testing.T, cfg Config, timeout time.Duration, cases []vtetest.Case) (
+	*Handler, chan struct{},
+) {
 	shell := "sh" // all systems were this runs should have sh
 	return testSequenceShell(t, cfg, timeout, shell, cases)
 }
 
-func testSequenceShell(t *testing.T, cfg Config, timeout time.Duration, shell string, cases []vtetest.Case) *Handler {
+func testSequenceShell(t *testing.T, cfg Config, timeout time.Duration, shell string, cases []vtetest.Case) (
+	*Handler, chan struct{},
+) {
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(context.Background())
 	temp := os.TempDir()
@@ -165,7 +220,7 @@ func testSequenceShell(t *testing.T, cfg Config, timeout time.Duration, shell st
 	vtetest.TestSequence(t, handler, cfg.WidthHint, cfg.HeightHint,
 		timeout, ch, cases)
 
-	return handler
+	return handler, ch
 }
 
 type chanEventPublisher struct {
