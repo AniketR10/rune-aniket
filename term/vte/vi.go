@@ -75,6 +75,7 @@ func (v *viHandler) doInit(comp parentComponent, config Config) {
 		vi.WithResAttr(config.SelectionAttributes),
 		vi.WithAttr(config.Attributes),
 		vi.WithWrap(false),
+		vi.WithCursorCorrections(false),
 		vi.WithClipboard(config.Clipboard),
 		vi.WithAutoSkipNullCells(false),
 	}
@@ -455,6 +456,7 @@ func (v *viHandler) handle(ev term.Event) (exit, handled bool) {
 	// the cursor logic heavily depends on the correct return values of Edit.
 	v.scheduleAfterBell(func() {
 		v.sync.vi.Handle(ev)
+
 		// correct cursor coordinates beyond last line so
 		// when moving through graphical windows doesn't
 		// leave cursor in an non-useful coordinate.
@@ -462,7 +464,14 @@ func (v *viHandler) handle(ev term.Event) (exit, handled bool) {
 		// After edits, content might have changed
 		// use bell to synchronize to the last state change
 		// and then move cursor to bounds.
-		v.moveViToBounds()
+		//
+		// It's imperative that we re-synchronize here
+		// or else moveViToBounds will use a buffer
+		// that has not been updated yet.
+		//
+		// This might put a lot of pressure on the event loop's
+		// event processing, so let's keep an eye on it for now.
+		v.scheduleAfterBell(v.moveViToBounds)
 	})
 
 	// use a copy of vi to know if event would be handled
@@ -565,9 +574,8 @@ func (v *viHandler) moveViToBounds() {
 	_, endOfPromptLine := v.lastPromptLine()
 	// correct past last line + 1
 	if pos.Y > endOfPromptLine.Y+1 {
-		_, lastLineEnd := v.lastPromptLine()
-		lastLineEnd.X++
-		v.viSetCursorAtScroll(lastLineEnd)
+		endOfPromptLine.X++
+		v.viSetCursorAtScroll(endOfPromptLine)
 		return
 	}
 
@@ -580,7 +588,7 @@ func (v *viHandler) moveViToBounds() {
 
 	// correct past last column, at last line, only if not in edit mode
 	if !v.sync.vi.IsEditMode() {
-		lastValidCol := endOfPromptLine.X
+		lastValidCol := endOfPromptLine.X - 1
 		if promptStart.Y == pos.Y {
 			lastValidCol = int(math.Max(float64(lastValidCol), float64(promptStart.X)))
 		}

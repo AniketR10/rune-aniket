@@ -5,7 +5,6 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/logging"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui"
 	textapi "unstable.build/go-tui/api/text"
 	"unstable.build/go-tui/cell"
@@ -13,7 +12,6 @@ import (
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
-	"unstable.build/go-tui/text/clipboard"
 )
 
 type viMode uint8
@@ -76,18 +74,8 @@ type viHandlerImpl struct {
 	setLocations     bool
 }
 
-// DefaultviHandlerImplConfig is a sane configuration defaults for viHandlerImpl.
-var defaultviHandlerImplConfig = viConfig{
-	resAttr: term.Attributes{
-		Attrs: tcell.AttrReverse,
-	},
-	clipboard:       clipboard.NewInMemory(),
-	defaultRegister: clipboard.DefaultRegisterID,
-	skipNulls:       true,
-}
-
 func (vi *viHandlerImpl) init(buf *cell.Buffer, opts ...Option) {
-	vi.config = defaultviHandlerImplConfig
+	vi.config = defaultviHandlerImplConfig()
 	for _, o := range opts {
 		o(&vi.config)
 	}
@@ -113,7 +101,7 @@ func (vi *viHandlerImpl) init(buf *cell.Buffer, opts ...Option) {
 }
 
 func (vi *viHandlerImpl) initWithScroll(scroll *component.Scroll, opts ...Option) {
-	vi.config = defaultviHandlerImplConfig
+	vi.config = defaultviHandlerImplConfig()
 	for _, o := range opts {
 		o(&vi.config)
 	}
@@ -806,7 +794,7 @@ func (vi *viHandlerImpl) doMoveToBounds(prev text.CursorMark) {
 
 	switch vi.mode() {
 	case normalMode, yankMode, searchMode, gMode, deleteMode:
-		if !vi.config.debug {
+		if !vi.config.debug && vi.config.cursorCorrections {
 			vi.cursor.MoveToBounds(0)
 			if vi.config.skipNulls {
 				if after {
@@ -818,7 +806,7 @@ func (vi *viHandlerImpl) doMoveToBounds(prev text.CursorMark) {
 		}
 	case insertMode, replaceMode, replaceOneMode,
 		visualMode, visualLineMode, visualBlockMode:
-		if !vi.config.debug {
+		if !vi.config.debug && vi.config.cursorCorrections {
 			vi.cursor.MoveToBounds(1)
 		}
 	default:

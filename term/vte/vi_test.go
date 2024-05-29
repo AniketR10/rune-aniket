@@ -112,7 +112,7 @@ $ ▐
 			{"k0veyj\\$iecho <p", // copy and paste
 				`$ echo bla          
 bla                 
-$ echo▐bla          
+$ echo ▐la          
                     
                     
                     
@@ -123,7 +123,7 @@ $ echo▐bla
 			{"u", // single line undo
 				`$ echo bla          
 bla                 
-$ echo ▐            
+$ echo▐             
                     
                     
                     
@@ -131,22 +131,22 @@ $ echo ▐
                     
                     
               NORMAL`},
-			{"0Cecho blaaaaaaaaaaaaaaaaaaaaa", // delete line and insert wrap around
+			{"0Cecho bla12345678901234567890", // delete line and insert wrap around
 				`$ echo bla          
 bla                 
-$ echo blaaaaaaaaaaa
-aaaaaaaaa▐          
+$ echo bla1234567890
+1234567890▐         
                     
                     
                     
                     
                     
               INSERT`},
-			{"<hhroll", // replace
+			{"<hhhrolll", // replace
 				`$ echo bla          
 bla                 
-$ echo blaaaaaaaaaaa
-aaaaaaoaa▐          
+$ echo bla1234567890
+123456o89▐          
                     
                     
                     
@@ -156,65 +156,65 @@ aaaaaaoaa▐
 			{"u", // 2 line undo
 				`$ echo bla          
 bla                 
-$ echo blaaaaaaaaaaa
-aaaaaaaaaa▐         
+$ echo bla1234567890
+123456789▐          
                     
                     
                     
                     
                     
               NORMAL`},
-			{"iaaaaaaaaaaaaaaaaaaaaaaaa",
+			{"aaaaaaaaaaaaaaaaaaaaaaaaa",
 				`$ echo bla          
 bla                 
-$ echo blaaaaaaaaaaa
-aaaaaaaaaaaaaaaaaaaa
+$ echo bla1234567890
+1234567890aaaaaaaaaa
 aaaaaaaaaaaaaa▐     
                     
                     
                     
                     
-                    `},
-			{"<rXl",
+              INSERT`},
+			{"<rXa",
 				`$ echo bla          
 bla                 
-$ echo blaaaaaaaaaaa
-aaaaaaaaaaaaaaaaaaaa
+$ echo bla1234567890
+1234567890aaaaaaaaaa
 aaaaaaaaaaaaaX▐     
                     
                     
                     
                     
-              NORMAL`},
-			{"u", // multiline undo
+              INSERT`},
+			{"<ua", // multiline undo
 				`$ echo bla          
 bla                 
-$ echo blaaaaaaaaaaa
-aaaaaaaaaaaaaaaaaaaa
+$ echo bla1234567890
+1234567890aaaaaaaaaa
 aaaaaaaaaaaaaa▐     
                     
                     
                     
                     
-              NORMAL`},
-			{">>>", // ensure that attr bar doesn't occlude last line in shell mode
+              INSERT`},
+			{"<>>>", // ensure that attr bar doesn't occlude last line in shell mode
 				`bla                 
-$ echo blaaaaaaaaaaa
-aaaaaaaaaaaaaaaaaaaa
+$ echo bla1234567890
+1234567890aaaaaaaaaa
 aaaaaaaaaaaaaa      
-blaaaaaaaaaaaaaaaaaa
-aaaaaaaaaaaaaaaaaaaa
+bla12345678901234567
+890aaaaaaaaaaaaaaaaa
 aaaaaaa             
 $                   
 $                   
 $ ▐                 `},
 			{"<", // ensure that attr bar doesn't occlude last line in vi mode
 				`bla                 
-$ echo blaaaaaaaaaaa
-aaaaaaaaaaaaaaaaaaaa
+$ echo bla1234567890
+1234567890aaaaaaaaaa
 aaaaaaaaaaaaaa      
-blaaaaaaaaaaaaaaaaaa
-aaaaaaaaaaaaaaaaaaaa
+bla12345678901234567
+890aaaaaaaaaaaaaaaaa
 aaaaaaa             
 $                   
 $                   
@@ -503,7 +503,7 @@ PS1='$ '
 			{"echo blaaaaaa<0Cecho blaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 				`$ echo blaaaaaaaaaaa
 aaaaaaaaaaaaaaaaaaaa
-aaaaaaaaaaaaaaa▐    
+aaaaaaaaaaaaaaaa▐   
                     
                     
                     

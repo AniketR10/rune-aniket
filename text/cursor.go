@@ -1576,7 +1576,7 @@ func (c *Cursor) setCursorAfterUpdate(atScroll term.Coordinates) {
 	var done bool
 	// the next position might be beyond the width of the current row
 	// in which case ScrollToWidnowCoordiantes would wrap around it
-	if atScroll.Y < c.scroll.Buffer().Rows() &&
+	if c.scroll.Wrap && atScroll.Y < c.scroll.Buffer().Rows() &&
 		atScroll.X > 0 &&
 		atScroll.X == c.scroll.Buffer().Columns(atScroll.Y) {
 		atScroll.X--

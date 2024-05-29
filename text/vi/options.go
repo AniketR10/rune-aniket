@@ -1,6 +1,7 @@
 package vi
 
 import (
+	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text/clipboard"
 )
@@ -15,8 +16,22 @@ type viConfig struct {
 	superimposedMessages bool
 	debug                bool
 	wrap                 bool
+	cursorCorrections    bool
 	barHidden            bool
 	skipNulls            bool
+}
+
+// defaultviHandlerImplConfig is a sane configuration defaults for viHandlerImpl.
+func defaultviHandlerImplConfig() viConfig {
+	return viConfig{
+		resAttr: term.Attributes{
+			Attrs: tcell.AttrReverse,
+		},
+		clipboard:         clipboard.NewInMemory(),
+		defaultRegister:   clipboard.DefaultRegisterID,
+		skipNulls:         true,
+		cursorCorrections: true,
+	}
 }
 
 // Option represents a Vi handler configuration option.
@@ -82,11 +97,23 @@ func WithWrap(wrap bool) Option {
 	}
 }
 
+// WithCursorCorrections enables or disables cursor out of bounds corrections.
+// By default it's enabled, unless this option is passed; when disabled, clients
+// must manage it themselves.
+//
+// This behaviour is force disabled if WithDebug Option is used.
+func WithCursorCorrections(enabled bool) Option {
+	return func(cfg *viConfig) {
+		cfg.cursorCorrections = enabled
+	}
+}
+
 // WithAutoSkipNullCells determines whether vi should automatically
 // shift the cursor on top a null cell (no content) in
 // normal, yank, search, g and delete modes. Default is on.
 //
-// This behaviour is overriden to off if WithDebug Option is used.
+// This behaviour is force disabled if WithDebug Option is used,
+// or if WithCursorCorrections disables cursor corrections.
 func WithAutoSkipNullCells(skip bool) Option {
 	return func(cfg *viConfig) {
 		cfg.skipNulls = skip
