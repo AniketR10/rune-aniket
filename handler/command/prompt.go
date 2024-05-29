@@ -54,6 +54,7 @@ type Prompt struct {
 	commandAndArgs []string
 	commandsBackup []text.CommandManual
 	userScrolling  bool
+	bracketedPaste bool
 
 	// used to signal across Handle calls that user
 	// is cyclying through commands, in particular
@@ -262,9 +263,11 @@ func (h *Prompt) handleLastCommand() {
 		return
 	}
 	h.reset()
+	h.bracketedPaste = true
 	for _, ch := range cmd {
 		h.handle(term.Event{Type: term.EventKey, Ch: ch}, true)
 	}
+	h.bracketedPaste = false
 	h.mu.Lock()
 	h.manualComponent = h.buildManualComponent(h.buf.String())
 	h.mu.Unlock()
@@ -330,6 +333,12 @@ func (h *Prompt) dispatchCommand() (
 
 // Handle satisfies tui.Handler
 func (h *Prompt) Handle(ev term.Event) (quit, handled bool) {
+	if isStart := ev.Type == term.EventPasteStart; isStart || ev.Type == term.EventPasteEnd {
+		h.bracketedPaste = isStart
+		handled = true
+		return
+	}
+
 	quit, handled = h.handle(ev, h.sync)
 	if handled && !quit {
 		select {
@@ -372,7 +381,7 @@ func (h *Prompt) handleCommon(ev *term.Event, sync bool) (quit, handled bool) {
 	switch ev.Key {
 	case term.KeyEnter:
 		if h.userScrolling {
-			h.incArgsCompleteMode(true, sync)
+			h.incArgsCompleteMode(!h.bracketedPaste, sync)
 		}
 		quit, handled = h.dispatchCommand()
 		h.reset()
@@ -393,7 +402,7 @@ func (h *Prompt) handleCommon(ev *term.Event, sync bool) (quit, handled bool) {
 	case term.KeyCtrlC:
 		h.cancelCompletionPush("received ctrl-c")
 	case term.KeyTab:
-		h.incArgsCompleteMode(true, sync)
+		h.incArgsCompleteMode(!h.bracketedPaste, sync)
 	case term.KeySpace:
 		ev.Ch = ' '
 		handled = false
@@ -434,7 +443,7 @@ func (h *Prompt) handleCommand(ev term.Event, sync bool) (quit, handled bool) {
 		// wait as commands are finite and muscle memory could beat
 		// the completing logic
 		h.Wait()
-		h.incArgsCompleteMode(true, sync)
+		h.incArgsCompleteMode(!h.bracketedPaste, sync)
 		return
 	}
 	h.list.Buffer().WriteString(string(ev.Ch))
@@ -558,6 +567,12 @@ func (h *Prompt) setCommandMode() {
 func (h *Prompt) setCompletionList(
 	persistLastArgUpdates, sync bool, cmd string, args ...string,
 ) {
+	// in bracketed paste we trust the cancel completion
+	// will do its job, and only the last pushed completer will
+	// remain.
+	if h.bracketedPaste {
+		sync = false
+	}
 	h.log(log.TraceLevel, "setCompletionList: %s %#v", cmd, args)
 
 	ctx, cancel := context.WithCancel(h.ctx)
