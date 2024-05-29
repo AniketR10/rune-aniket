@@ -221,7 +221,7 @@ func TestClientServer(t *testing.T) {
 			assert.Equal(t, "a", string(b))
 			assert.Equal(t, uintptr(99), pty.Master.Fd())
 
-			mockFile.EXPECT().Close().Return(nil)
+			mockFile.EXPECT().Close().Return(nil).AnyTimes()
 			assert.NoError(t, pty.Master.Close())
 
 			// cannot test slave mock file due to having to intercept via

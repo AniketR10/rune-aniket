@@ -376,10 +376,7 @@ func (c *Client) NewFile(fd uintptr, filename string) workspaceapi.File {
 
 // Close closes all resources associated with this client.
 func (c *Client) Close() (ret error) {
-	if c.cancelCtx != nil {
-		c.cancelCtx()
-		c.cancelCtx = nil
-	}
+	c.cancelCtx()
 
 	if err := c.cc.Close(); err != nil {
 		ret = multierr.Append(ret, err)
