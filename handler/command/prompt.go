@@ -63,7 +63,6 @@ type Prompt struct {
 	prevCommandCycle bool
 
 	inputString atomic.Value
-	sync        bool
 	mu          sync.Mutex
 	animation   component.Virtual
 
@@ -339,7 +338,7 @@ func (h *Prompt) Handle(ev term.Event) (quit, handled bool) {
 		return
 	}
 
-	quit, handled = h.handle(ev, h.sync)
+	quit, handled = h.handle(ev, h.config.Sync)
 	if handled && !quit {
 		select {
 		// reset manual display timeout
@@ -575,7 +574,7 @@ func (h *Prompt) setCompletionList(
 	// remain.
 	if h.bracketedPaste {
 		// override but only if global sync mode is not on (i.e. tests)
-		sync = h.sync
+		sync = h.config.Sync
 	}
 	h.log(log.TraceLevel, "setCompletionList: %s %#v", cmd, args)
 

@@ -93,6 +93,7 @@ func newTestRPCBrowser(t *testing.T,
 		opts = append(opts, text.WithCommandKeyBinding(term.KeyComb{Key: term.KeyCtrlL}, []string{"nextTab"}))
 		opts = append(opts, text.WithCommandKeyBinding(term.KeyComb{Key: term.KeyCtrlH}, []string{"previousTab"}))
 		ex := new(ex)
+		ex.syncCommandPrompt = true
 		err := ex.init(ed, &testLoader{}, document.NewInMemoryService(),
 			vte.DefaultConfig(), nopPublishEvent, opts...)
 		if err != nil {

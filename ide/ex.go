@@ -81,6 +81,7 @@ type ex struct {
 	ctxPartialReissue    context.Context
 	reissueEvent         term.Event
 	cmd                  *command.Prompt
+	syncCommandPrompt    bool
 	// use floating windows functionality without having to work around focus commands
 	// and how to se cmd.Window correctly.
 	cmdBrowser browser.Component
@@ -959,6 +960,7 @@ func (e *ex) openCommandPrompt() {
 	commandCfg.FrameCharSet = e.config.FrameCharSet
 	commandCfg.FrameAttr = e.config.FrameAttr
 	commandCfg.ShowManualAfter = e.config.CommandOverlay.ShowManualAfter
+	commandCfg.Sync = e.syncCommandPrompt
 	cmd := command.NewPrompt(e.storage, e, e, e, []text.CommandManual{}, commandCfg)
 
 	commandHandler := browser.FuncFloating(

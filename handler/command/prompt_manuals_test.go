@@ -44,6 +44,7 @@ func TestCommandHandlerManualsDraw(t *testing.T) {
 	cfg.ShowManualAfter = 0
 	cfg.HistoryKey = term.KeyComb{Ch: '@'}
 	cfg.FrameCharSet = component.FrameCharSetDefault()
+	cfg.Sync = true
 
 	tsuite := []struct {
 		desc         string
@@ -531,7 +532,6 @@ Alias of jeep
 				storage, FuncCompleter(completeFn), FuncDispatcher(dispatchFn),
 				term.NopInterrupter(), tcase.commands, cfg,
 			)
-			b.sync = true
 			defer b.Close()
 			cases := []testutil.HandlerSequenceTestCase{
 				{InputSequence: tcase.sequence, Expected: tcase.expectedDraw[1:]},

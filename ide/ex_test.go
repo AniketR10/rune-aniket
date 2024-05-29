@@ -830,6 +830,7 @@ func TestExKeySequence(t *testing.T) {
 			text.WithCommandOverlayConfig(testCommandOverlayConfig()),
 		}
 		ex := new(ex)
+		ex.syncCommandPrompt = true
 		require.NoError(t, ex.init(texttest.NopEditor(), &testLoader{}, document.NewInMemoryService(),
 			vte.DefaultConfig(), func(ev term.Event) bool {
 				// do not confuse interrupt from list with sequence re-issue commands
@@ -997,7 +998,7 @@ func newExForTestingTerminal(
 	opts ...text.Option,
 ) testEx {
 	ex := new(ex)
-	// ensure show manual is never triggered
+	ex.syncCommandPrompt = true
 	opts = append(opts, text.WithCommandOverlayConfig(testCommandOverlayConfig()))
 	opts = append(opts, text.WithCommandKeyBinding(term.KeyComb{Key: term.KeyCtrlW}, []string{"closeTab"}))
 	opts = append(opts, text.WithCommandKeyBinding(term.KeyComb{Key: term.KeyCtrlL}, []string{"nextTab"}))
@@ -1016,7 +1017,7 @@ func newExForTestingWithWorkspace(
 	opts ...text.Option,
 ) testEx {
 	ex := new(ex)
-	// ensure show manual is never triggered
+	ex.syncCommandPrompt = true
 	opts = append(opts, text.WithCommandOverlayConfig(testCommandOverlayConfig()))
 	opts = append(opts, text.WithCommandKeyBinding(term.KeyComb{Key: term.KeyCtrlW}, []string{"closeTab"}))
 	opts = append(opts, text.WithCommandKeyBinding(term.KeyComb{Key: term.KeyCtrlL}, []string{"nextTab"}))

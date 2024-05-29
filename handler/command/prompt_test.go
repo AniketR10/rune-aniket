@@ -23,6 +23,7 @@ func TestCommandHandlerManualsDrawTooSmallForManual(t *testing.T) {
 	cfg.ShowManualAfter = 0
 	cfg.HistoryKey = term.KeyComb{Ch: '@'}
 	cfg.FrameCharSet = component.FrameCharSetDefault()
+	cfg.Sync = true
 
 	tsuite := []struct {
 		desc         string
@@ -130,7 +131,6 @@ mercedes my▐
 				storage, FuncCompleter(completeFn), FuncDispatcher(dispatchFn),
 				term.NopInterrupter(), tcase.commands, cfg,
 			)
-			b.sync = true
 			defer b.Close()
 			cases := []testutil.HandlerSequenceTestCase{
 				{InputSequence: "_" + tcase.sequence + "_", Expected: tcase.expectedDraw[1:]},
@@ -145,6 +145,7 @@ func TestCommandHandlerDispatch(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.ShowManualAfter = 1 * time.Hour
 	cfg.HistoryKey = term.KeyComb{Ch: '@'}
+	cfg.Sync = true
 
 	tsuite := []struct {
 		desc        string
@@ -245,7 +246,6 @@ func TestCommandHandlerDispatch(t *testing.T) {
 				storage, FuncCompleter(completeFn), FuncDispatcher(dispatchFn),
 				interrupter, testNoManualCommands(tcase.commands), cfg,
 			)
-			b.sync = true
 			defer b.Close()
 			for _, ch := range tcase.sequence {
 				b.Wait()
@@ -270,6 +270,7 @@ func TestCommandHandlerDraw(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.ShowManualAfter = 1 * time.Hour
 	cfg.HistoryKey = term.KeyComb{Ch: '@'}
+	cfg.Sync = true
 
 	tsuite := []struct {
 		desc         string
@@ -727,7 +728,6 @@ rori myArg oro ▐
 				storage, FuncCompleter(completeFn), FuncDispatcher(dispatchFn),
 				term.NopInterrupter(), testNoManualCommands(tcase.commands), cfg,
 			)
-			b.sync = true
 			defer b.Close()
 			cases := []testutil.HandlerSequenceTestCase{
 				{InputSequence: tcase.sequence, Expected: tcase.expectedDraw[1:]},

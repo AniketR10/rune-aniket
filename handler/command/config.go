@@ -19,6 +19,10 @@ type Config struct {
 	DocumentID string
 	MaxHistory int
 
+	// Sync makes auto-completion deterministic but very very slow.
+	// It should only be used in tests.
+	Sync bool
+
 	// ShowManualAfter configures how long to sit idle until
 	// command manual is displayed.
 	ShowManualAfter time.Duration
