@@ -70,9 +70,6 @@ generate:
 format:
 	@ go fmt ./.../...
 
-install:
-	@ go install ./...
-
 cross-compile:
 	@ . ./test_crosscompile.sh
 
