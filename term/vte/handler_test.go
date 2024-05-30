@@ -20,11 +20,11 @@ import (
 // internal state of the vte, to call a test case "complete", so
 // assertions can run. The slower the host of the tests, the longer
 // this timeout should be.
-var defaultWaitForIdleVte = 50 * time.Millisecond
+var defaultWaitForIdleVte = 100 * time.Millisecond
 
 func init() {
 	if os.Getenv("CI") == "true" {
-		defaultWaitForIdleVte = 100 * time.Millisecond
+		defaultWaitForIdleVte = 150 * time.Millisecond
 	}
 }
 
@@ -90,7 +90,7 @@ $ ▐
 	cfg := DefaultConfig()
 
 	// vi needs quite a bit of tiem to exit
-	waitForIdleVte := defaultWaitForIdleVte * 3
+	waitForIdleVte := defaultWaitForIdleVte * 4
 
 	testSequence(t, cfg, waitForIdleVte, cases)
 }
