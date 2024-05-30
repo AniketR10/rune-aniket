@@ -1,8 +1,11 @@
 package vte
 
 import (
+	"context"
 	"time"
 
+	log "github.com/sirupsen/logrus"
+	"github.com/unstablebuild/blue/logging"
 	"unstable.build/go-tui/term/vte/parser"
 )
 
@@ -14,7 +17,7 @@ type waitParserHandler struct {
 	parser.Handler
 }
 
-func newWaitParserHandler(h parser.Handler) *waitParserHandler {
+func newWaitParserHandler(ctx context.Context, h parser.Handler) *waitParserHandler {
 	ret := &waitParserHandler{
 		// NOTE: The channel size MUST BE smaller than the default
 		// event-loop channel size so we stop processing callbacks
@@ -23,10 +26,41 @@ func newWaitParserHandler(h parser.Handler) *waitParserHandler {
 		ch:      make(chan func(), 50),
 		Handler: h,
 	}
+	go ret.monitorStarvation(ctx)
 	return ret
 }
 func (w *waitParserHandler) useTrigger(trigger func()) {
 	w.trigger = trigger
+}
+
+func (w *waitParserHandler) monitorStarvation(ctx context.Context) {
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+	var prevLength int
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			currLength := len(w.ch)
+			// if no events were drained for a second,
+			// it's possible bell cannot be triggered: drain events to relieve
+			// event loop
+			if prevLength > 0 && currLength == prevLength && w.trigger != nil {
+				// drain
+				w.log(log.DebugLevel, "scheduler is not making progress: draining %d events", len(w.ch))
+				for {
+					select {
+					case <-w.ch:
+						continue
+					default:
+					}
+					break
+				}
+			}
+			prevLength = currLength
+		}
+	}
 }
 
 func (w *waitParserHandler) scheduleBellCallback(
@@ -64,4 +98,9 @@ func (w *waitParserHandler) Bell() {
 	default:
 		w.Handler.Bell()
 	}
+}
+
+func (v *waitParserHandler) log(level log.Level, line string, params ...interface{}) {
+	log.WithField(logging.KeyClass, "vte.waitParserHandler").
+		Logf(level, line, params...)
 }

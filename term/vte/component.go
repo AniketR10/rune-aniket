@@ -89,7 +89,7 @@ func (t *Component) Init(
 	if log.IsLevelEnabled(log.TraceLevel) {
 		h = parser.HandlerWithLogging("vte.parserHandler", h)
 	}
-	t.waitParserHandler = newWaitParserHandler(h)
+	t.waitParserHandler = newWaitParserHandler(t.ctx, h)
 	h = t.waitParserHandler
 	t.parser.Init(h, new(parser.StdTimeout))
 	t.SetDefaultAttributes(t.defAttr)

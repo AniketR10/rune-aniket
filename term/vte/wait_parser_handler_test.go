@@ -1,6 +1,7 @@
 package vte
 
 import (
+	"context"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -13,7 +14,9 @@ import (
 func TestWaitParserHandler(t *testing.T) {
 	t.Run("schedules a callback", func(t *testing.T) {
 		mock := newMockBellHandler()
-		ph := newWaitParserHandler(mock)
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		ph := newWaitParserHandler(ctx, mock)
 
 		var callbackCalled, triggerCalled bool
 		ph.useTrigger(func() {
@@ -30,7 +33,9 @@ func TestWaitParserHandler(t *testing.T) {
 
 	t.Run("schedules multiple callbacks, preserving order", func(t *testing.T) {
 		mock := newMockBellHandler()
-		ph := newWaitParserHandler(mock)
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		ph := newWaitParserHandler(ctx, mock)
 
 		n := 10
 		ch := make(chan struct{}, n)
@@ -66,7 +71,9 @@ func TestWaitParserHandler(t *testing.T) {
 
 	t.Run("is goroutine safe", func(t *testing.T) {
 		mock := newMockBellHandler()
-		ph := newWaitParserHandler(mock)
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		ph := newWaitParserHandler(ctx, mock)
 
 		n := 10000
 
