@@ -34,11 +34,12 @@ type viHandler struct {
 	width  int
 	height int
 	sync   struct {
-		mu       sync.Locker
-		vi       *vi.Vi
-		scroll   *component.Scroll
-		editor   cell.Editor
-		selector *cell.Buffer
+		mu        sync.Locker
+		vi        *vi.Vi
+		scroll    *component.Scroll
+		vteScroll *component.Scroll
+		editor    cell.Editor
+		selector  *cell.Buffer
 	}
 
 	edited          bool
@@ -74,7 +75,6 @@ func (v *viHandler) init(comp *Component, config Config) {
 }
 
 func (v *viHandler) doInit(comp parentComponent, config Config) {
-	scroll := comp.PrimaryScroll()
 	opts := []vi.Option{
 		// ensure bar doesn't occlude last prompt line
 		vi.WithSuperimposedMessages(true),
@@ -94,14 +94,20 @@ func (v *viHandler) doInit(comp parentComponent, config Config) {
 	v.copy.editor = copyScroll.Buffer().WithEditor(copyEditor{v: v})
 
 	vi := new(vi.Vi)
-	vi.InitWithScroll(scroll, comp.URI(), opts...)
+	// do not share scroll (we don't want vi messing around with the offsets
+	// of the vte parser, which gets complicated quickly to maintain and keep sync
+	// but share buffer, so updates are synced.
+	v.sync.scroll = new(component.Scroll)
+	v.sync.vteScroll = comp.PrimaryScroll()
+	v.sync.scroll.InitPerformance(v.sync.vteScroll.Buffer())
+	vi.InitWithScroll(v.sync.scroll, comp.URI(), opts...)
 	v.sync.vi = vi
-	v.sync.selector = scroll.Buffer()
+	v.sync.selector = v.sync.scroll.Buffer()
 	v.sync.mu = comp.Locker()
-	v.sync.scroll = scroll
+	v.sync.editor = v.sync.scroll.Buffer().WithEditor(v)
+
 	v.comp = comp
 	v.config = config
-	v.sync.editor = scroll.Buffer().WithEditor(v)
 }
 
 func (v *viHandler) Handle(ev term.Event) (exit, handled bool) {
@@ -465,8 +471,7 @@ func (v *viHandler) handle(ev term.Event) (exit, handled bool) {
 	default:
 	}
 
-	scrollOffset := v.sync.scroll.Offset()
-
+	var oldOffset term.Coordinates
 	// use a copy of vi to know if event would be handled, and if it would be an edit
 	v.edited = false
 	v.copy.mu.Lock()
@@ -480,6 +485,7 @@ func (v *viHandler) handle(ev term.Event) (exit, handled bool) {
 	// the cursor logic heavily depends on the correct return values of Edit.
 	v.scheduleAfterBell(v.edited, func() {
 		v.vteParserEdited = false
+		oldOffset = v.sync.vteScroll.Offset()
 		v.sync.vi.Handle(ev)
 	})
 
@@ -498,14 +504,14 @@ func (v *viHandler) handle(ev term.Event) (exit, handled bool) {
 	// This might put a lot of pressure on the event loop's
 	// event processing, so let's keep an eye on it for now.
 	v.scheduleAfterBell(false, func() {
-		newOffset := v.sync.scroll.Offset()
-		// vi doesn't know about offset changes driven by vte parser
-		if newOffset != scrollOffset && v.vteParserEdited {
-			diff := term.CoordinatesDiff(scrollOffset, newOffset)
+		// vi doesn't know about offset changes driven by vte parser:
+		// synchronize offsets between vte scroll and vi scroll
+		// and since we're updating offset outside of cursor
+		// reset cursor position to the same content position as before
+		newOffset := v.sync.vteScroll.Offset()
+		if oldOffset != newOffset && v.vteParserEdited {
 			pos := v.sync.vi.CursorAtScroll()
-			// X is not applicable as lines never overflow due
-			// to the nature of how the vte is implemented.
-			pos.Y += diff.Y
+			v.sync.scroll.SetOffset(newOffset)
 			v.viSetCursorAtScroll(pos)
 		}
 		v.moveViToBounds()
@@ -516,6 +522,8 @@ func (v *viHandler) handle(ev term.Event) (exit, handled bool) {
 func (v *viHandler) enterViMode(pos term.Coordinates) {
 	pos.X = int(math.Max(float64(pos.X-1), float64(0)))
 
+	v.sync.scroll.SetOffset(v.sync.vteScroll.Offset())
+	v.sync.scroll.Attributes = v.sync.vteScroll.Attributes
 	v.sync.mu.Lock()
 	v.viSetCursorAtScroll(pos)
 	v.sync.mu.Unlock()
