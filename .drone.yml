@@ -5,6 +5,7 @@ name: default
 steps:
 - name: prepare
   image: us-central1-docker.pkg.dev/unstable-build-blue-dev/docker/go-tui-ci:latest
+  privileged: true
   environment:
     GIT_SSH_KEY:
       from_secret: git_ssh_key
@@ -17,6 +18,7 @@ steps:
 - name: lint
   image: us-central1-docker.pkg.dev/unstable-build-blue-dev/docker/go-tui-ci:latest
   pull: always
+  privileged: true
   environment:
     GOCACHE: /go/cache
   commands:
@@ -28,6 +30,7 @@ steps:
 - name: test
   image: us-central1-docker.pkg.dev/unstable-build-blue-dev/docker/go-tui-ci:latest
   pull: always
+  privileged: true
   environment:
     GOCACHE: /go/cache
   commands:
@@ -40,6 +43,7 @@ steps:
 - name: crosscompile
   image: us-central1-docker.pkg.dev/unstable-build-blue-dev/docker/go-tui-ci:latest
   pull: always
+  privileged: true
   environment:
     GOCACHE: /go/cache
   commands:
