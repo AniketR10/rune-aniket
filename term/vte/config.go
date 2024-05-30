@@ -49,6 +49,8 @@ type Config struct {
 	// initial buffer size.
 	WidthHint  int
 	HeightHint int
+
+	Debug bool
 }
 
 func (c Config) scheduleBell() {

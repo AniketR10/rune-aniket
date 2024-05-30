@@ -5,7 +5,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"unstable.build/go-tui/term/vte/parser"
@@ -22,7 +21,7 @@ func TestWaitParserHandler(t *testing.T) {
 		ph.useTrigger(func() {
 			triggerCalled = true
 		})
-		ph.scheduleBellCallback(1*time.Second, func() {
+		ph.scheduleBellCallback(func() {
 			callbackCalled = true
 		})
 
@@ -50,7 +49,7 @@ func TestWaitParserHandler(t *testing.T) {
 
 		for i := 0; i < n; i++ {
 			i := i
-			ph.scheduleBellCallback(1*time.Second, func() {
+			ph.scheduleBellCallback(func() {
 				defer wg.Done()
 				assert.Equal(t, i, callbackCalled)
 				callbackCalled++
@@ -88,7 +87,7 @@ func TestWaitParserHandler(t *testing.T) {
 		go func() {
 			for i := 0; i < n; i++ {
 				i := i
-				ph.scheduleBellCallback(10*time.Millisecond, func() {
+				ph.scheduleBellCallback(func() {
 					defer wg.Done()
 					assert.Equal(t, i+1, int(callbackCalled.Add(1)))
 				})

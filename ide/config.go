@@ -1244,19 +1244,26 @@ func (c ideConfig) terminalShell() (ret string) {
 	}
 	return ret
 }
-
-func (c ideConfig) terminalModal() (ret bool) {
+func (c ideConfig) terminalBool(key string) (ret bool) {
 	cfg, ok := c.terminal()
 	if !ok {
 		return
 	}
-	ret, err := cfg.GetBool("modal")
+	ret, err := cfg.GetBool(key)
 	if err != nil {
 		if err != config.ErrNotFound {
-			c.errors["terminal.modal"] = err
+			c.errors[fmt.Sprintf("terminal.%s", key)] = err
 		}
 	}
 	return ret
+}
+
+func (c ideConfig) terminalModal() (ret bool) {
+	return c.terminalBool("modal")
+}
+
+func (c ideConfig) terminalDebug() (ret bool) {
+	return c.terminalBool("debug")
 }
 
 func (c ideConfig) terminalConfig() vte.Config {
@@ -1265,6 +1272,7 @@ func (c ideConfig) terminalConfig() vte.Config {
 	ret.SelectionAttributes = c.terminalSelectionAttr()
 	ret.NeedsAttentionAttributes = c.terminalNeedsAttentionAttr()
 	ret.Modal = c.terminalModal()
+	ret.Debug = c.terminalDebug()
 	ret.Shell = c.terminalShell()
 	ret.Clipboard = c.clipboard()
 	if log.IsLevelEnabled(log.TraceLevel) {

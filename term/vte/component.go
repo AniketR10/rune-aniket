@@ -633,10 +633,12 @@ func (t *Component) cursorAtScroll() term.Coordinates {
 	return t.parserHandler.sync.buf.CursorAtScroll()
 }
 
-func (t *Component) scheduleBellCallback(
-	timeout time.Duration, callback func(),
-) (ok bool) {
-	return t.waitParserHandler.scheduleBellCallback(timeout, callback)
+func (t *Component) scheduleBellCallback(callback func()) (ok bool) {
+	return t.waitParserHandler.scheduleBellCallback(callback)
+}
+
+func (t *Component) pendingCallbacks() int {
+	return t.waitParserHandler.pendingCallbacks()
 }
 
 func (t *Component) run(updateChan chan struct{}) error {

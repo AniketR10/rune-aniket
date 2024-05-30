@@ -11,6 +11,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/logging"
+	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
@@ -23,8 +24,6 @@ import (
 
 var _ tui.Handler = (*viHandler)(nil)
 
-const waitBellAtMostDuration = 200 * time.Millisecond
-
 // viHandler serves both as a tui.Handler entrypoint to a limited vi tui.Handler
 // implementation, and a cell.Editor, which intercepts user edits
 // and transforms them into shell escape sequences to manipulate the content.
@@ -32,7 +31,9 @@ type viHandler struct {
 	comp   parentComponent
 	remote remote
 	config Config
+	edited bool
 	width  int
+	height int
 	sync   struct {
 		mu       sync.Locker
 		vi       *vi.Vi
@@ -45,8 +46,9 @@ type viHandler struct {
 	// so it can be accessed synchronously and provide
 	// correct returned handled in Handle.
 	copy struct {
-		mu sync.Mutex
-		vi *vi.Vi
+		mu     sync.Mutex
+		vi     *vi.Vi
+		editor cell.Editor
 	}
 }
 
@@ -56,7 +58,8 @@ type parentComponent interface {
 	URI() workspaceapi.URI
 	Locker() sync.Locker
 	cursorAtScroll() term.Coordinates
-	scheduleBellCallback(timeout time.Duration, callback func()) bool
+	scheduleBellCallback(callback func()) bool
+	pendingCallbacks() int
 }
 
 func (v *viHandler) init(comp *Component, config Config) {
@@ -86,6 +89,7 @@ func (v *viHandler) doInit(comp parentComponent, config Config) {
 	copyScroll.InitPerformance(copyBuffer)
 	v.copy.vi = new(vi.Vi)
 	v.copy.vi.InitWithScroll(copyScroll, comp.URI(), opts...)
+	v.copy.editor = copyScroll.Buffer().WithEditor(copyEditor{v: v})
 
 	vi := new(vi.Vi)
 	vi.InitWithScroll(scroll, comp.URI(), opts...)
@@ -105,7 +109,7 @@ func (v *viHandler) Handle(ev term.Event) (exit, handled bool) {
 	exit, handled = v.handle(ev)
 	if exit {
 		if ev.Key != term.KeyEnter {
-			v.scheduleAfterBell(func() {
+			v.scheduleAfterBell(false, func() {
 				pos := v.trimToLastValidColumn(v.sync.vi.CursorAtScroll())
 				v.log(log.TraceLevel, "call scheduled cleanup of vi position to comp: %+v", pos)
 				v.remoteMoveTo(pos)
@@ -114,6 +118,8 @@ func (v *viHandler) Handle(ev term.Event) (exit, handled bool) {
 		}
 		v.sync.vi.Unselect()
 		v.sync.vi.SetNormalMode()
+		v.copy.vi.Unselect()
+		v.copy.vi.SetNormalMode()
 	}
 	return
 }
@@ -124,7 +130,7 @@ func (v *viHandler) systemCanDispatchBell(callback func(error)) {
 	ctx, cancel := context.WithTimeout(ctx, systemCanDispatchBellTimeout)
 
 	var called atomic.Bool
-	v.scheduleAfterBell(func() {
+	v.scheduleAfterBell(true,  func() {
 		if called.CompareAndSwap(false, true) {
 			cancel()
 			callback(nil)
@@ -149,6 +155,7 @@ func (v *viHandler) Resize(width, height int) {
 	defer v.sync.mu.Unlock()
 
 	v.width = width
+	v.height = height
 	v.sync.vi.Resize(width, height)
 }
 
@@ -169,6 +176,10 @@ func (v *viHandler) Draw(w term.Writer) {
 	defer v.sync.mu.Unlock()
 
 	v.sync.vi.Draw(w)
+
+	if v.config.Debug {
+		v.drawPromptLine(w)
+	}
 }
 
 func (v *viHandler) Man() tui.Manual {
@@ -393,6 +404,7 @@ func (v *viHandler) remoteFlush() {
 
 func (v *viHandler) handle(ev term.Event) (exit, handled bool) {
 	if ev.Type != term.EventKey {
+		_, _ = v.copy.vi.Handle(ev)
 		return v.sync.vi.Handle(ev)
 	}
 
@@ -401,7 +413,7 @@ func (v *viHandler) handle(ev term.Event) (exit, handled bool) {
 		if !v.sync.vi.IsEditMode() && !v.sync.vi.IsSearchMode() {
 			// manage manually to avoid confusing shell blank cells
 			// with end of line.
-			v.scheduleAfterBell(v.remoteMoveToEndOfLine)
+			v.scheduleAfterBell(false, v.remoteMoveToEndOfLine)
 			handled = true
 			return
 		}
@@ -423,7 +435,7 @@ func (v *viHandler) handle(ev term.Event) (exit, handled bool) {
 	switch ev.Key {
 	case term.KeyEnter:
 		if !v.sync.vi.IsSearchMode() {
-			v.scheduleAfterBell(func() {
+			v.scheduleAfterBell(false, func() {
 				v.remote.linefeed()
 				v.remoteFlush()
 			})
@@ -431,34 +443,39 @@ func (v *viHandler) handle(ev term.Event) (exit, handled bool) {
 			return
 		}
 	case term.KeyCtrlK, term.KeyArrowUp:
-		v.scheduleAfterBell(func() {
+		v.scheduleAfterBell(false, func() {
 			v.remote.keyArrowUp()
 			v.remoteFlush()
 		})
-		v.scheduleAfterBell(v.moveViToLastLineCharacter)
+		v.scheduleAfterBell(false, v.moveViToLastLineCharacter)
 		return
 	case term.KeyCtrlJ, term.KeyArrowDown:
-		v.scheduleAfterBell(func() {
+		v.scheduleAfterBell(false, func() {
 			v.remote.keyArrowDown()
 			v.remoteFlush()
 		})
-		v.scheduleAfterBell(v.moveViToLastLineCharacter)
+		v.scheduleAfterBell(false, v.moveViToLastLineCharacter)
 		return
 	case term.KeyCtrlC:
 		exit = true
 		return
 	default:
-		handled = false
 	}
 
 	scrollOffset := v.sync.scroll.Offset()
+
+	// use a copy of vi to know if event would be handled, and if it would be an edit
+	v.edited = false
+	v.copy.mu.Lock()
+	_, handled = v.copy.vi.Handle(ev)
+	v.copy.mu.Unlock()
 
 	// schedule any potential edits after finding the start of the prompt:
 	// this avoids race conditions when serializing handle with bell callbacks
 	// and also prevents the main loop goroutine to not deadlock with the vte parser
 	// goroutine. This cannot be performed during a call to Edit, because
 	// the cursor logic heavily depends on the correct return values of Edit.
-	v.scheduleAfterBell(func() {
+	v.scheduleAfterBell(v.edited, func() {
 		v.sync.vi.Handle(ev)
 	})
 
@@ -476,7 +493,7 @@ func (v *viHandler) handle(ev term.Event) (exit, handled bool) {
 	//
 	// This might put a lot of pressure on the event loop's
 	// event processing, so let's keep an eye on it for now.
-	v.scheduleAfterBell(func() {
+	v.scheduleAfterBell(false, func() {
 		newOffset := v.sync.scroll.Offset()
 		// adjust cursor position accordingly, which doesn't
 		// know about primary scroll offset change.
@@ -490,12 +507,6 @@ func (v *viHandler) handle(ev term.Event) (exit, handled bool) {
 		}
 		v.moveViToBounds()
 	})
-
-	// use a copy of vi to know if event would be handled
-	// this copy gets its contents refreshed on every call to Edit above
-	v.copy.mu.Lock()
-	defer v.copy.mu.Unlock()
-	_, handled = v.copy.vi.Handle(ev)
 	return
 }
 
@@ -506,7 +517,7 @@ func (v *viHandler) enterViMode(pos term.Coordinates) {
 	v.viSetCursorAtScroll(pos)
 	v.sync.mu.Unlock()
 
-	v.scheduleAfterBell(v.moveViToBounds)
+	v.scheduleAfterBell(false, v.moveViToBounds)
 }
 
 func (v *viHandler) log(level log.Level, line string, params ...interface{}) {
@@ -514,8 +525,17 @@ func (v *viHandler) log(level log.Level, line string, params ...interface{}) {
 		Logf(level, line, params...)
 }
 
-func (v *viHandler) scheduleAfterBell(cb func()) {
-	ok := v.comp.scheduleBellCallback(waitBellAtMostDuration, func() {
+func (v *viHandler) scheduleAfterBell(forceSchedule bool, cb func()) {
+	// if cursor is above prompt line, then we shouldn't need to synchronize via bell;
+	// the exception is if it would break callbacks execution order.
+	lastPromptLineStart, _ := v.lastPromptLine()
+	if !forceSchedule && v.sync.vi.CursorAtScroll().Y < lastPromptLineStart.Y &&
+		v.comp.pendingCallbacks() == 0 {
+		cb()
+		return
+	}
+
+	ok := v.comp.scheduleBellCallback(func() {
 		// bell handler does not lock because bell
 		// is usually implemented as synchronous I/O
 		v.sync.mu.Lock()
@@ -682,4 +702,32 @@ func (v *viHandler) viSetCursorAtScroll(pos term.Coordinates) {
 	v.copy.mu.Lock()
 	defer v.copy.mu.Unlock()
 	v.copy.vi.SetCursorAtScroll(v.sync.vi.CursorAtScroll())
+}
+
+func (v *viHandler) drawPromptLine(w term.Writer) {
+	from, to := v.lastPromptLine()
+	for y := from.Y; y <= to.Y; y++ {
+		xStart, xEnd := 0, v.sync.selector.Columns(y)
+		for x := xStart; x < xEnd; x++ {
+			pos := term.Coordinates{X: x, Y: y}
+			posAtScreen := v.sync.scroll.ScrollToWindowCoordinates(pos)
+			if posAtScreen.Y < 0 || posAtScreen.Y >= v.height ||
+				posAtScreen.X < 0 || posAtScreen.X >= v.width {
+				continue
+			}
+			w.UnionAttributes(posAtScreen, term.Attributes{Attrs: tcell.AttrUnderline})
+		}
+	}
+}
+
+// used to know before calling v.sync.vi's Handle whether change is going
+type copyEditor struct {
+	v *viHandler
+}
+
+func (v copyEditor) Edit(ctx context.Context, start, end term.Coordinates, str string) (
+	from, to term.Coordinates, old string,
+) {
+	v.v.edited = true
+	return v.v.copy.editor.Edit(ctx, start, end, str)
 }

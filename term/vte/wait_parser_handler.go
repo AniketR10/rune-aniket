@@ -63,9 +63,11 @@ func (w *waitParserHandler) monitorStarvation(ctx context.Context) {
 	}
 }
 
-func (w *waitParserHandler) scheduleBellCallback(
-	timeout time.Duration, callback func(),
-) (ok bool) {
+func (w *waitParserHandler) pendingCallbacks() int {
+	return len(w.ch)
+}
+
+func (w *waitParserHandler) scheduleBellCallback(callback func()) (ok bool) {
 	if w.trigger == nil {
 		panic("must install first a trigger via useTrigger")
 	}
@@ -89,9 +91,6 @@ func (w *waitParserHandler) Bell() {
 	select {
 	case cb := <-w.ch:
 		cb()
-		// a timeout could indicate that the trigger didn't
-		// really work temporarily, so re-triggering is a way to clean up
-		// and either force an audible bell, or continue processing tasks
 		if lenCh := len(w.ch); !isLast && lenCh > 0 {
 			w.trigger()
 		}

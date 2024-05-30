@@ -6,7 +6,6 @@ import (
 	"path"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/ernestrc/sensible/find"
 	"github.com/stretchr/testify/assert"
@@ -1150,7 +1149,11 @@ func (c *testParentComponent) cursorAtScroll() term.Coordinates {
 	return c.cursor
 }
 
-func (c *testParentComponent) scheduleBellCallback(timeout time.Duration, callback func()) bool {
+func (c *testParentComponent) pendingCallbacks() int {
+	return 0
+}
+
+func (c *testParentComponent) scheduleBellCallback(callback func()) bool {
 	callback()
 	return true
 }
