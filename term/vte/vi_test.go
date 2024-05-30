@@ -498,6 +498,47 @@ bcde▐         INSERT`},
 		cfg.Modal = true
 		testSequence(t, cfg, defaultWaitForIdleVte, cases)
 	})
+
+	t.Run("go to start of buffer, go to end of buffer", func(t *testing.T) {
+		cases := []vtetest.Case{
+			{"echo a>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>echo<",
+				`$                   
+$                   
+$                   
+$                   
+$                   
+$                   
+$                   
+$                   
+$                   
+$ ech▐        NORMAL`},
+			{"gg",
+				`▐ echo a            
+a                   
+$                   
+$                   
+$                   
+$                   
+$                   
+$                   
+$                   
+$             NORMAL`},
+			{"G",
+				`$                   
+$                   
+$                   
+$                   
+$                   
+$                   
+$                   
+$                   
+$                   
+$ ▐cho        NORMAL`},
+		}
+		cfg := DefaultConfig()
+		cfg.Modal = true
+		testSequence(t, cfg, defaultWaitForIdleVte, cases)
+	})
 }
 
 func TestZshEdgeCases(t *testing.T) {

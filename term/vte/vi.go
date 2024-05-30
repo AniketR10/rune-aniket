@@ -31,7 +31,6 @@ type viHandler struct {
 	comp   parentComponent
 	remote remote
 	config Config
-	edited bool
 	width  int
 	height int
 	sync   struct {
@@ -41,6 +40,9 @@ type viHandler struct {
 		editor   cell.Editor
 		selector *cell.Buffer
 	}
+
+	edited          bool
+	vteParserEdited bool
 
 	// keeep a copy of vi and all the contents
 	// so it can be accessed synchronously and provide
@@ -130,7 +132,7 @@ func (v *viHandler) systemCanDispatchBell(callback func(error)) {
 	ctx, cancel := context.WithTimeout(ctx, systemCanDispatchBellTimeout)
 
 	var called atomic.Bool
-	v.scheduleAfterBell(true,  func() {
+	v.scheduleAfterBell(true, func() {
 		if called.CompareAndSwap(false, true) {
 			cancel()
 			callback(nil)
@@ -229,6 +231,7 @@ func (v *viHandler) Edit(ctx context.Context, start, end term.Coordinates, str s
 ) {
 	v.editCopy(ctx, start, end, str)
 	if screenContext := screen.IsScreenContext(ctx); screenContext {
+		v.vteParserEdited = true
 		v.sync.vi.OnWillEdit(ctx, start, end, str)
 		from, to, old = v.sync.editor.Edit(ctx, start, end, str)
 		v.sync.vi.OnDidEdit(ctx, from, to, old)
@@ -476,6 +479,7 @@ func (v *viHandler) handle(ev term.Event) (exit, handled bool) {
 	// goroutine. This cannot be performed during a call to Edit, because
 	// the cursor logic heavily depends on the correct return values of Edit.
 	v.scheduleAfterBell(v.edited, func() {
+		v.vteParserEdited = false
 		v.sync.vi.Handle(ev)
 	})
 
@@ -495,9 +499,8 @@ func (v *viHandler) handle(ev term.Event) (exit, handled bool) {
 	// event processing, so let's keep an eye on it for now.
 	v.scheduleAfterBell(false, func() {
 		newOffset := v.sync.scroll.Offset()
-		// adjust cursor position accordingly, which doesn't
-		// know about primary scroll offset change.
-		if newOffset != scrollOffset {
+		// vi doesn't know about offset changes driven by vte parser
+		if newOffset != scrollOffset && v.vteParserEdited {
 			diff := term.CoordinatesDiff(scrollOffset, newOffset)
 			pos := v.sync.vi.CursorAtScroll()
 			// X is not applicable as lines never overflow due
