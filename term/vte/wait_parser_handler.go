@@ -44,18 +44,7 @@ func (w *waitParserHandler) scheduleBellCallback(
 		}
 		ok = true
 	default:
-		timer := time.NewTimer(timeout)
-		// channel might be full, schedule a bell trigger to
-		// attempt to unblock. Wait to see if unblock succeeded
-		// before giving up.
-		w.trigger()
-		select {
-		case w.ch <- callback:
-			// do not trigger here, if the channel was full
-			// then Bell should take care of continuing dispatching
-			ok = true
-		case <-timer.C:
-		}
+		// don't block
 	}
 
 	return
