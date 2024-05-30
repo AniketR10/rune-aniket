@@ -136,7 +136,7 @@ func TestRawCellsReset(t *testing.T) {
 		})
 	})
 
-	t.Run("length as capactiy is used if default capacity is smaller", func(t *testing.T) {
+	t.Run("length as capacity is used if default capacity is smaller", func(t *testing.T) {
 		var c rawCells
 		c.resetWithCap(1, 1)
 		c.Edit(context.Background(), term.Coordinates{}, term.Coordinates{},

@@ -220,6 +220,13 @@ func (e *ex) completeEdit(
 	return it, modifiedLast, nil
 }
 
+func (e *ex) completeReadFile(
+	ctx context.Context, args []string,
+) (iterator.Iterator[string], string, error) {
+	// `:readFile` auto-completion works the same as the `:edit` command.
+	return e.completeEdit(ctx, args)
+}
+
 func (e *ex) log(level log.Level, msg string, args ...interface{}) {
 	log.WithField(logging.KeyClass, "ex").Logf(level, msg, args...)
 }
@@ -237,6 +244,8 @@ func (e *ex) completeCommand(
 		return iterator.FromSlice(colorNames), "", nil
 	case cmdEdit:
 		return e.completeEdit(ctx, args)
+	case cmdReadFile:
+		return e.completeReadFile(ctx, args)
 	case cmdSplitWindow, cmdNewWindow:
 		if len(args) > 1 {
 			return iterator.FromSlice[string](nil), "", nil
@@ -649,6 +658,33 @@ func (e *ex) setDefaultColors(args ...string) error {
 		return nil
 	}
 	return errors.New("Cannot change colors of this window")
+}
+
+func (e *ex) readFile(args ...string) error {
+	if len(args) != 1 {
+		return errors.New("expected one file name")
+	}
+
+	// get desired uri to read
+	filename := args[0]
+	uri, err := e.parseURIOrWorkspaceURI(filename)
+	if err != nil {
+		return err
+	}
+
+	// get current editor handler to be used for content insertion
+	_, handler, ok := e.handlerInFocus()
+	if !ok {
+		return errors.New("read file cannot get handler in focus")
+	}
+
+	// insert the file contents into the current cursor position
+	err = e.comp.ReadFile(uri, handler)
+	if err != nil {
+		return err
+	}
+
+	return err
 }
 
 func (e *ex) executePlugin(args ...string) error {

@@ -8,6 +8,7 @@ import (
 
 const (
 	cmdEdit                   = "edit"
+	cmdReadFile               = "readFile"
 	cmdChangeSplitOrientation = "changeSplitOrientation"
 	cmdSplitWindow            = "splitWindow"
 	cmdNewWindow              = "newWindow"
@@ -227,6 +228,14 @@ var (
 				Synopsis: "background [foreground]",
 			},
 			handler: (*ex).setDefaultColors,
+		},
+		cmdReadFile: {
+			man: textapi.CommandManual{
+				Summary: "Insert the contents of the passed file name below the cursor. Takes in " +
+					"a uri with a scheme as an argument. If no scheme is passed `file://` is assumed",
+				Synopsis: "[scheme:][//[userinfo@]host][/]filepath",
+			},
+			handler: (*ex).readFile,
 		},
 	}
 

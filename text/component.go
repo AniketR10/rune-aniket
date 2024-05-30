@@ -358,6 +358,48 @@ func (c *Component) Open(file workspaceapi.URI) (browserapi.Handler, error) {
 	return h, err
 }
 
+// ReadFile injects the contents of the desired file and writes it under the cursor.
+func (c *Component) ReadFile(file workspaceapi.URI, h Handler) error {
+	if ed, ok := h.(wrapEditor); ok {
+		h = ed.Handler
+	}
+
+	var swapDir workspaceapi.URI
+
+	swapDir, err := c.getSwapDir(file)
+	if err != nil {
+		return err
+	}
+
+	// dump the file contents into a buffer we can read from
+	buf := c.newCellBuffer()
+	_, err = c.workspace.Load(file, buf, swapDir, true)
+	if err != nil {
+		return err
+	}
+
+	// get the current cursor position to insert to, which will be the line below
+	coords, err := c.ed.Cursor(h)
+	coords.X = 0
+	coords.Y += 1
+	if err != nil {
+		return err
+	}
+
+	// inject the file contents surrounded by newlines to emulate vim's behaviour
+	// we don't prefix with \n because we already moved the cursor at a point that
+	// follows a \n (coords.X = 0; coords.Y += 1).
+	cellEditor := c.ed.CellEditor(h)
+	_, _, _, err = cellEditor.Edit(
+		context.Background(), coords, coords, fmt.Sprintf("%s\n", buf),
+	)
+	if err != nil {
+		return err
+	}
+
+	return err
+}
+
 // Editor satisfies Editor interface.
 func (c *Component) Editor(resource workspaceapi.URI) (Handler, error) {
 	for _, tab := range c.comp.Tabs() {
@@ -626,7 +668,7 @@ func (c *Component) CellEditor(h Handler) CellEditor {
 }
 
 // Flush flushes the contents of the buffer at win, if this buffer
-// was created with a FlusherCloser. See browser.NewBuffer.
+// was created with a FlusherCloser. See cell.NewBuffer.
 func (c *Component) Flush(win browser.Window) error {
 	content, err := win.Content()
 	if err != nil {

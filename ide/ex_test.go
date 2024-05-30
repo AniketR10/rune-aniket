@@ -1504,8 +1504,8 @@ retalls
                     
 edi▐                
 edit                
+readFile            
 reloadFile          
-                    
                     
                     `},
 		{":edit dawo⬇✌re✌^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
