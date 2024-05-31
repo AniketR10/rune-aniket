@@ -309,7 +309,7 @@ func TestWindowManagerContent(t *testing.T) {
 	})
 }
 
-func testWindowManagerCursor(
+func testWindowManagerCursorShow(
 	t *testing.T, frame bool,
 	input, expected term.Coordinates,
 ) {
@@ -325,15 +325,57 @@ func testWindowManagerCursor(
 	assert.Equal(t, expected, pos)
 }
 
+func testWindowManagerCursorHide(
+	t *testing.T, frame bool,
+	input term.Coordinates,
+) {
+	handler := NewTestHandler()
+	handler.CursorPos = input
+	cfg := DefaultWindowManagerConfig()
+	cfg.Frame = frame
+	wm := NewWindowManager(handler, cfg)
+	wm.Resize(10, 10)
+
+	_, _, ok := wm.Cursor()
+	require.False(t, ok)
+}
+
 func TestWindowManagerCursor(t *testing.T) {
-	input := term.Coordinates{X: 1, Y: 2}
 	t.Run("Cursor with frame", func(t *testing.T) {
-		testWindowManagerCursor(t, true, input,
+		input := term.Coordinates{X: 1, Y: 2}
+		testWindowManagerCursorShow(t, true, input,
 			term.Coordinates{X: 2, Y: 3})
 	})
 
+	t.Run("Cursor with frame at bounds - 1", func(t *testing.T) {
+		testWindowManagerCursorShow(t, true, term.Coordinates{X: 7, Y: 7},
+			term.Coordinates{X: 8, Y: 8})
+	})
+
 	t.Run("Cursor without frame", func(t *testing.T) {
-		testWindowManagerCursor(t, false, input, input)
+		input := term.Coordinates{X: 1, Y: 2}
+		testWindowManagerCursorShow(t, false, input, input)
+	})
+
+	t.Run("Cursor without frame at bounds - 1", func(t *testing.T) {
+		testWindowManagerCursorShow(t, false, term.Coordinates{X: 9, Y: 9},
+			term.Coordinates{X: 9, Y: 9})
+	})
+
+	t.Run("overrides show to off if out of bounds, with frame", func(t *testing.T) {
+		testWindowManagerCursorHide(t, true, term.Coordinates{X: 8, Y: 8})
+	})
+
+	t.Run("overrides show to off if out of bounds, with frame", func(t *testing.T) {
+		testWindowManagerCursorHide(t, false, term.Coordinates{X: 10, Y: 10})
+	})
+
+	t.Run("overrides show to off if negative out of bounds, with frame", func(t *testing.T) {
+		testWindowManagerCursorHide(t, true, term.Coordinates{X: -1, Y: -1})
+	})
+
+	t.Run("overrides show to off if negative out of bounds, with frame", func(t *testing.T) {
+		testWindowManagerCursorHide(t, false, term.Coordinates{X: -1, Y: -1})
 	})
 }
 

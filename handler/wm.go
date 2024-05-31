@@ -273,13 +273,20 @@ func (wm *WindowManager) Shiftable() (w Window, ok bool) {
 
 // Cursor returns the cursor coordinates of the tile in focus.
 func (wm *WindowManager) Cursor() (term.Coordinates, term.CursorStyle, bool) {
-	offset := wm.focus.Window.Position()
+	window := wm.focus.Window
+	offset := window.Position()
 	content := wm.focus.Content()
+	bounds := term.Coordinates{X: window.Width(), Y: window.Height()}
 	if wm.config.Frame {
 		offset.Y++
 		offset.X++
+		bounds.X -= 2
+		bounds.Y -= 2
 	}
 	cursor, style, show := content.Cursor()
+	if show {
+		show = term.CoordinatesInBounds(cursor, bounds)
+	}
 	return term.CoordinatesSum(cursor, offset), style, show
 }
 

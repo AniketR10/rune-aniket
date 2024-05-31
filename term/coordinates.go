@@ -126,3 +126,9 @@ func CoordinatesIntersection(
 	ok = true
 	return
 }
+
+// CoordinatesInBounds returns true if the given position is
+// within the given right-exclusive bounds.
+func CoordinatesInBounds(pos Coordinates, bounds Coordinates) bool {
+	return pos.X >= 0 && pos.Y >= 0 && pos.X < bounds.X && pos.Y < bounds.Y
+}
