@@ -181,6 +181,7 @@ func (b *AltBuffer) ScrollUp(start, end, count int) {
 		b.ResetLinesWith(start, end, b.defaultChar)
 		return
 	}
+
 	var temp [][]term.Cell
 	if count == 1 {
 		// optimization for long output streams on primary buffer that
@@ -191,6 +192,9 @@ func (b *AltBuffer) ScrollUp(start, end, count int) {
 		temp = make([][]term.Cell, count)
 	}
 
+	// copying to temp is because we need a place to temporarily
+	// store the **rows**, so we can re-use the allocations, not the content.
+	// the content is reset below.
 	cells := b.Cells.RawCells()
 	copy(temp, cells[start:start+count])
 	copy(cells[start:end-count], cells[start+count:end])
@@ -213,6 +217,9 @@ func (b *AltBuffer) ScrollDown(start, end, count int) {
 		temp = make([][]term.Cell, count)
 	}
 
+	// copying to temp is because we need a place to temporarily
+	// store the **rows**, so we can re-use the allocations, not the content.
+	// the content is reset below.
 	cells := b.Cells.RawCells()
 	copy(temp, cells[end-count:end])
 	copy(cells[start+count:end], cells[start:end-count])

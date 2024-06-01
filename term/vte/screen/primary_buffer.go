@@ -97,6 +97,15 @@ func (b *PrimaryBuffer) SetOffset(offset term.Coordinates) {
 	orig := b.CursorAtScreen()
 	b.AltBuffer.scroll.SetOffset(offset)
 	b.SetCursorAtScreen(orig, false)
+	// do not violate all screen must be always filled invariant
+	// or else very nasty side-effects can occur, like
+	// scrollDown not using correct coordinates
+	if diff := b.Offset().Y - b.MaxOffset(); diff > 0 {
+		y := b.Rows() + diff - 1
+		x := b.Width() - 1
+		b.Cells.InsertContext(b.ctx,
+			term.Coordinates{Y: y, X: x}, b.defaultChar)
+	}
 }
 
 // Offset returns the scroll offset of this PrimaryBuffer.

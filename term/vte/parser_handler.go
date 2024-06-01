@@ -643,7 +643,7 @@ func (t *parserHandler) ClearScreen(mode parser.ClearMode) {
 		if t.useAlt {
 			t.resetBufLines(t.sync.buf)
 		} else {
-			t.scrollUpPrimaryView()
+			t.clearPrimaryView()
 		}
 
 	case parser.ClearModeSaved:
@@ -1244,23 +1244,16 @@ func (t *parserHandler) scrollDown(rows int, userScroll bool) bool {
 		return false
 	}
 
-	// satisfy alternate buffer semantics
-	// if it's a programmatic scroll down
-	defer func() {
-		offset := buf.Offset().Y
-		buf.ResetLines(offset, offset+rows)
-	}()
-
-	offset.Y -= rows
-	if offset.Y < 0 {
-		scrollDown := -offset.Y
-		offset.Y = 0
-		buf.SetOffset(offset)
-		buf.AltBuffer.ScrollDown(0, buf.Rows(), scrollDown)
+	// primary buffer includes history so we cannot simply
+	// use bottom and top of scrollable region.
+	start := buf.Rows() - t.height
+	end := buf.Rows()
+	count := int(math.Min(float64(rows), float64(end-start)))
+	if count != 0 {
+		buf.AltBuffer.ScrollDown(start, end, count)
 		return true
 	}
-	buf.SetOffset(offset)
-	return true
+	return false
 }
 
 func (t *parserHandler) scrollUp(rows int, userScroll bool) bool {
@@ -1415,7 +1408,7 @@ func (t *parserHandler) setCursorAtScreen(pos term.Coordinates, relative bool) {
 	t.shouldWrap = false
 }
 
-func (t *parserHandler) scrollUpPrimaryView() {
+func (t *parserHandler) clearPrimaryView() {
 	if t.sync.buf != t.sync.primBuf {
 		panic("called scroll up view on non primary buffer")
 	}
@@ -1429,7 +1422,6 @@ func (t *parserHandler) scrollUpPrimaryView() {
 				newOffset := term.Coordinates{Y: y + 1}
 				t.log(log.TraceLevel, "new offset after clear view %+v", newOffset)
 				buf.SetOffset(newOffset)
-				buf.SetCursorAtScreen(term.Coordinates{}, false)
 				return
 			}
 		}

@@ -276,10 +276,9 @@ func TestIntegrationParserHandler(t *testing.T) {
 				p.Resize(5, 5)
 				resetBuffer(t, p, "a    \nb    \nc    \nd    \ne    \n$ .  ")
 				assertEqualBuf(t, p, "b    \nc    \nd    \ne    \n$ .  ")
-				p.Goto(0, 0)
 				p.Resize(4, 4)
-				p.MoveUp(1)
 				p.ClearScreen(parser.ClearModeAll)
+				p.Goto(0, 0)
 				p.Input('$')
 				assertEqualBuf(t, p, "$   \n    \n    \n    ")
 			},
@@ -326,7 +325,7 @@ func TestIntegrationParserHandler(t *testing.T) {
 				assertEqualBuf(t, p, "a    \nb    \nc    \nd    \ne    ")
 
 				assert.True(t, p.scrollUp(100, true))
-				assertEqualBuf(t, p, "e    \n$ .  \nout  \n$    \n$    ")
+				assertEqualBuf(t, p, "$    \n     \n     \n     \n     ")
 			},
 		},
 		{
@@ -799,6 +798,32 @@ func TestIntegrationParserHandler(t *testing.T) {
 				assert.Equal(t, testURI, tm.toUri)
 				assert.Equal(t, "radical", tm.setName)
 				assert.Equal(t, term.Attributes{}, tm.setAttr)
+			},
+		},
+		{
+			desc:      "git show scroll up and down should not leave lines below",
+			altBuffer: false,
+			sut: func(t *testing.T, p *parserHandler, tm *mockTabManager, pty *workspacetest.File) {
+				p.Resize(5, 5)
+				resetBuffer(t, p, "a    \nb    \nc    \nd    \ne    \n$ .  \nout  \n$    ")
+				assertEqualBuf(t, p, "d    \ne    \n$ .  \nout  \n$    ")
+				p.Goto(0, 0)
+				p.ReverseIndex()
+				p.Input('1')
+				p.Goto(0, 0)
+				p.ReverseIndex()
+				p.Input('2')
+
+				assertEqualBuf(t, p, "2    \n1    \nd    \ne    \n$ .  ")
+
+				p.scrollUp(2, true)
+				assertEqualBuf(t, p, "2    \n1    \nd    \ne    \n$ .  ")
+
+				p.scrollUp(2, false)
+				assertEqualBuf(t, p, "d    \ne    \n$ .  \n     \n     ")
+
+				p.scrollDown(4, true)
+				assertEqualBuf(t, p, "b    \nc    \n2    \n1    \nd    ")
 			},
 		},
 	}
