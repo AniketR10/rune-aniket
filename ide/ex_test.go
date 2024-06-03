@@ -1567,6 +1567,52 @@ func TestRenameTab(t *testing.T) {
 	testutil.TestHandlerSequence(t, b, 20, 10, cases)
 }
 
+func TestEventNone(t *testing.T) {
+	t.Run("delegates to underlying handler", func(t *testing.T) {
+		cases := []testutil.HandlerSequenceTestCase{
+			{"🎉e hello.go>",
+				`┌──────────────────┐
+│hello.go          │
+├──────────────────┤
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+└──────────────────┘`},
+		}
+
+		// KeyCtrlSpace value is 0, so KeyComb() on an EventNone would return it
+		// if no check on ev.Type
+		testCommandKey := term.KeyComb{Key: term.KeyCtrlSpace}
+		opts := []text.Option{
+			text.WithCommandKey(testCommandKey),
+		}
+		b := newExForTesting(t, texttest.NopEditor(), opts...)
+		defer b.Close()
+
+		testutil.TestHandlerSequence(t, b, 20, 10, cases)
+
+		b.Handle(term.Event{Type: term.EventNone})
+
+		cases = []testutil.HandlerSequenceTestCase{
+			{"",
+				`┌──────────────────┐
+│hello.go          │
+├──────────────────┤
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
+└──────────────────┘`},
+		}
+		testutil.TestHandlerSequence(t, b, 20, 10, cases)
+	})
+}
+
 func TestTerminalOnFocus(t *testing.T) {
 	t.Run("new terminal tab", func(t *testing.T) {
 		uri, err := workspaceapi.ParseURI("memory:///")

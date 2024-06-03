@@ -357,6 +357,9 @@ func (h *Prompt) Handle(ev term.Event) (quit, handled bool) {
 }
 
 func (h *Prompt) handle(ev term.Event, sync bool) (quit, handled bool) {
+	if ev.Type != term.EventKey {
+		return
+	}
 	switch h.mode {
 	case modeCommandPromptCommand:
 		return h.handleCommand(ev, sync)

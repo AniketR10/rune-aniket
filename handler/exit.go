@@ -22,7 +22,7 @@ func KeyExitCallback(c tui.Component, key term.KeyComb, cb func()) tui.Handler {
 }
 
 func (e *keyExit) Handle(ev term.Event) (exit, handled bool) {
-	exit = e.key == ev.KeyComb()
+	exit = ev.Type == term.EventKey && e.key == ev.KeyComb()
 	handled = exit
 	if e.cb != nil {
 		e.cb()

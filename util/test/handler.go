@@ -51,6 +51,8 @@ func handleTestCase(
 			shouldSleep += 100
 		case ' ':
 			h.Handle(term.Event{Key: term.KeySpace, Type: term.EventKey})
+		case '🎉':
+			h.Handle(term.Event{Key: term.KeyCtrlSpace, Type: term.EventKey})
 		case '^':
 			h.Handle(term.Event{Key: term.KeyBackspace, Type: term.EventKey})
 		case '#':

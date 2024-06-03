@@ -78,6 +78,9 @@ func (f *Prompt) highlightOption() {
 
 // Handle satisfies tui.Handler.
 func (f *Prompt) Handle(ev term.Event) (exit, handled bool) {
+	if ev.Type != term.EventKey {
+		return
+	}
 	if i, ok := f.bindings[ev.KeyComb()]; ok {
 		f.cfg.OptionCallback(i, f.cfg.Options[i])
 		exit = true

@@ -228,7 +228,7 @@ func (e *ex) completeReadFile(
 }
 
 func (e *ex) log(level log.Level, msg string, args ...interface{}) {
-	log.WithField(logging.KeyClass, "ex").Logf(level, msg, args...)
+	log.WithField(logging.KeyClass, "ide.ex").Logf(level, msg, args...)
 }
 
 func (e *ex) completeCommand(
@@ -868,6 +868,11 @@ func (e *ex) handleEvent(ev term.Event) (
 		return
 	}
 
+	if ev.Type != term.EventKey {
+		e.log(log.DebugLevel, "delegating non-key event: %+v", ev)
+		return e.comp.Browser().Handle(ev)
+	}
+
 	// If ex is configured with non character
 	// command mode trigger event, then this takes
 	// precedence over any other event
@@ -929,6 +934,8 @@ func (e *ex) handleEvent(ev term.Event) (
 			if err == nil {
 				// issue previous event right before this next one
 				// since we know now it's not a match.
+				e.log(log.TraceLevel, "no sequence match: re-dispatching previous event %q",
+					e.reissueEvent.KeyComb())
 				_, _ = e.comp.Browser().Handle(e.reissueEvent)
 			}
 		}
@@ -937,8 +944,9 @@ func (e *ex) handleEvent(ev term.Event) (
 
 	if match != handler.SequenceMatch {
 		// then the focus handler takes precedence
-		b := e.comp.Browser()
-		_, handled = b.Handle(ev)
+		e.log(log.TraceLevel, "no sequence match: re-dispatching current event %q",
+			ev.KeyComb())
+		_, handled = e.comp.Browser().Handle(ev)
 		if handled {
 			if len(cmdAndArgs) != 0 {
 				// notify user of ambiguous sequence

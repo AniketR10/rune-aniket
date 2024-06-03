@@ -15,7 +15,8 @@ func TestPromptDefaults(t *testing.T) {
 			PromptConfig: component.PromptConfig{
 				Message: "blah", Options: []string{"a"},
 			}})
-		exit, handled := p.Handle(term.Event{Key: term.KeyEnter})
+		exit, handled := p.Handle(term.Event{
+			Type: term.EventKey, Key: term.KeyEnter})
 		assert.True(t, exit)
 		assert.True(t, handled)
 	})
@@ -63,7 +64,8 @@ func TestPromptHandle(t *testing.T) {
 	t.Run("enter after init calls first option", func(t *testing.T) {
 		defer resetStub()
 
-		exit, handled := h.Handle(term.Event{Key: term.KeyEnter})
+		exit, handled := h.Handle(term.Event{
+			Type: term.EventKey, Key: term.KeyEnter})
 		assert.True(t, exit)
 		assert.True(t, handled)
 
@@ -74,15 +76,18 @@ func TestPromptHandle(t *testing.T) {
 	t.Run("arrow key right allow for moving right", func(t *testing.T) {
 		defer resetStub()
 
-		exit, handled := h.Handle(term.Event{Key: term.KeyArrowRight})
+		exit, handled := h.Handle(term.Event{
+			Type: term.EventKey, Key: term.KeyArrowRight})
 		assert.False(t, exit)
 		assert.True(t, handled)
 
-		exit, handled = h.Handle(term.Event{Key: term.KeyArrowRight})
+		exit, handled = h.Handle(term.Event{
+			Type: term.EventKey, Key: term.KeyArrowRight})
 		assert.False(t, exit)
 		assert.False(t, handled)
 
-		exit, handled = h.Handle(term.Event{Key: term.KeyEnter})
+		exit, handled = h.Handle(term.Event{
+			Type: term.EventKey, Key: term.KeyEnter})
 		assert.True(t, exit)
 		assert.True(t, handled)
 
@@ -93,19 +98,23 @@ func TestPromptHandle(t *testing.T) {
 	t.Run("arrow key left allow for moving left", func(t *testing.T) {
 		defer resetStub()
 
-		exit, handled := h.Handle(term.Event{Key: term.KeyArrowRight})
+		exit, handled := h.Handle(term.Event{
+			Type: term.EventKey, Key: term.KeyArrowRight})
 		assert.False(t, exit)
 		assert.True(t, handled)
 
-		exit, handled = h.Handle(term.Event{Key: term.KeyArrowLeft})
+		exit, handled = h.Handle(term.Event{
+			Type: term.EventKey, Key: term.KeyArrowLeft})
 		assert.False(t, exit)
 		assert.True(t, handled)
 
-		exit, handled = h.Handle(term.Event{Key: term.KeyArrowLeft})
+		exit, handled = h.Handle(term.Event{
+			Type: term.EventKey, Key: term.KeyArrowLeft})
 		assert.False(t, exit)
 		assert.False(t, handled)
 
-		exit, handled = h.Handle(term.Event{Key: term.KeyEnter})
+		exit, handled = h.Handle(term.Event{
+			Type: term.EventKey, Key: term.KeyEnter})
 		assert.True(t, exit)
 		assert.True(t, handled)
 
@@ -116,7 +125,8 @@ func TestPromptHandle(t *testing.T) {
 	t.Run("valid auto key binding no conflict", func(t *testing.T) {
 		defer resetStub()
 
-		exit, handled := h.Handle(term.Event{Ch: 'Y'})
+		exit, handled := h.Handle(term.Event{
+			Type: term.EventKey, Ch: 'Y'})
 		assert.True(t, exit)
 		assert.True(t, handled)
 
@@ -127,7 +137,7 @@ func TestPromptHandle(t *testing.T) {
 	t.Run("invalid key binding", func(t *testing.T) {
 		defer resetStub()
 
-		exit, handled := h.Handle(term.Event{Ch: ' '})
+		exit, handled := h.Handle(term.Event{Type: term.EventKey, Ch: ' '})
 		assert.False(t, exit)
 		assert.False(t, handled)
 

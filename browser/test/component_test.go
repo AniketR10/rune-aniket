@@ -611,7 +611,7 @@ func TestComponentPrompt(t *testing.T) {
 │ └─────┘  └─────┘ │    
 └──────────────────┘    `,
 			}, {func() {
-				c.Handle(term.Event{Key: term.KeyEnter})
+				c.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
 			}, `
 ┌──────────────────┐    
 │music             │    
@@ -689,7 +689,7 @@ func TestComponentPrompt(t *testing.T) {
 │ └─────┘  └─────┘ │    
 └──────────────────┘    `,
 			}, {func() {
-				c.Handle(term.Event{Key: term.KeyEsc})
+				c.Handle(term.Event{Type: term.EventKey, Key: term.KeyEsc})
 			}, `
 ┌──────────────────┐    
 │music             │    
@@ -704,7 +704,7 @@ func TestComponentPrompt(t *testing.T) {
 │ └─────┘  └─────┘ │    
 └──────────────────┘    `,
 			}, {func() {
-				c.Handle(term.Event{Key: term.KeyEnter})
+				c.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
 			}, `
 ┌──────────────────┐    
 │music             │    
@@ -719,7 +719,7 @@ func TestComponentPrompt(t *testing.T) {
 │     └──────┘     │    
 └──────────────────┘    `,
 			}, {func() {
-				c.Handle(term.Event{Key: term.KeyEnter})
+				c.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
 			}, `
 ┌──────────────────┐    
 │music             │    

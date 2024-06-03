@@ -53,7 +53,12 @@ type Event struct {
 	UserFunc func()
 }
 
+// KeyComb returns the KeyComb representation of this Event. If this
+// event is not of type EventKey, then this method panics.
 func (e Event) KeyComb() KeyComb {
+	if e.Type != EventKey {
+		panic("called KeyComb on non-key event")
+	}
 	return KeyComb{
 		Key: e.Key,
 		Mod: e.Mod,
@@ -80,7 +85,7 @@ type Writer interface {
 }
 
 func (k KeyComb) String() string {
-	if k.Key == 0 && k.Mod == 0 {
+	if k.Key == 0 && k.Mod == 0 && k.Ch != 0 {
 		return string(k.Ch)
 	}
 
