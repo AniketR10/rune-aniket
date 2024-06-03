@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync/atomic"
 
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
@@ -18,8 +19,9 @@ import (
 // populate the cache otherwise all Get operations will be cache misses.
 // Any write evicts all the records in the cache.
 type Service[T storage.Document[T]] struct {
-	cache document.Service
-	svc   document.Service
+	cache  document.Service
+	svc    document.Service
+	cached atomic.Bool
 }
 
 // New allocates storage and initializes a new cache.Service. See Init for more details.
@@ -77,19 +79,16 @@ func (s *Service[T]) evictAll(
 			continue
 		}
 	}
-	if ret != nil {
-		return ret
-	}
-	return nil
+	s.cached.Store(false)
+	return ret
 }
 
 // Create satisfies document.Service.
 func (s *Service[T]) Create(ctx context.Context, ID string, doc interface{}) error {
 	err := s.svc.Create(ctx, ID, doc)
-	if err == nil {
-		err = s.EvictAll(ctx)
-		if err != nil {
-			log.Errorf("EvictAll: %v", err)
+	if err == nil && s.cached.Load() {
+		if serr := s.cache.Create(ctx, ID, doc); serr != nil {
+			log.Errorf("cache set: %v", serr)
 		}
 	}
 	return err
@@ -98,10 +97,9 @@ func (s *Service[T]) Create(ctx context.Context, ID string, doc interface{}) err
 // Set satisfies document.Service.
 func (s *Service[T]) Set(ctx context.Context, ID string, doc interface{}) error {
 	err := s.svc.Set(ctx, ID, doc)
-	if err == nil {
-		err = s.EvictAll(ctx)
-		if err != nil {
-			log.Errorf("EvictAll: %v", err)
+	if err == nil && s.cached.Load() {
+		if serr := s.cache.Set(ctx, ID, doc); serr != nil {
+			log.Errorf("cache set: %v", serr)
 		}
 	}
 	return err
@@ -111,10 +109,9 @@ func (s *Service[T]) Set(ctx context.Context, ID string, doc interface{}) error 
 func (s *Service[T]) Update(ctx context.Context, ID string,
 	updates []document.Update, precond ...document.Precondition) error {
 	err := s.svc.Update(ctx, ID, updates, precond...)
-	if err == nil {
-		err = s.EvictAll(ctx)
-		if err != nil {
-			log.Errorf("EvictAll: %v", err)
+	if err == nil && s.cached.Load() {
+		if uerr := s.cache.Update(ctx, ID, updates, precond...); uerr != nil {
+			log.Errorf("cache update: %v", uerr)
 		}
 	}
 	return err
@@ -139,10 +136,9 @@ func (s *Service[T]) Get(ctx context.Context, ID string, doc interface{}) error 
 // Delete satisfies document.Service.
 func (s *Service[T]) Delete(ctx context.Context, ID string) error {
 	err := s.svc.Delete(ctx, ID)
-	if err == nil {
-		err = s.EvictAll(ctx)
-		if err != nil {
-			log.Errorf("EvictAll: %v", err)
+	if err == nil && s.cached.Load() {
+		if derr := s.cache.Delete(ctx, ID); derr != nil {
+			log.Errorf("cache evict: %v", derr)
 		}
 	}
 	return err
@@ -152,12 +148,18 @@ func (s *Service[T]) Delete(ctx context.Context, ID string) error {
 func (s *Service[T]) List(ctx context.Context, filters []document.Filter) (
 	document.Iterator, error,
 ) {
-	it, err := s.cache.List(ctx, filters)
-	if err == nil && it.HasNext() {
-		return it, err
+	if s.cached.Load() {
+		it, err := s.cache.List(ctx, filters)
+		if err == nil {
+			return it, err
+		} else {
+			log.Errorf("list from cache: %v", err)
+		}
 	}
 
-	it, err = s.svc.List(ctx, filters)
+	s.cached.Store(false)
+
+	it, err := s.svc.List(ctx, filters)
 	if err != nil {
 		return nil, err
 	}
@@ -171,7 +173,7 @@ func (s *Service[T]) List(ctx context.Context, filters []document.Filter) (
 
 	err = s.EvictAll(ctx)
 	if err != nil {
-		err = fmt.Errorf("EvictAll: %w", err)
+		err = fmt.Errorf("cache evict all: %w", err)
 		log.Error(err)
 		return nil, err
 	}
@@ -204,6 +206,7 @@ func (s *Service[T]) List(ctx context.Context, filters []document.Filter) (
 		}
 		return nil, err
 	}
+	s.cached.Store(true)
 	return &cacheIterator[T]{docs: docs}, nil
 }
 

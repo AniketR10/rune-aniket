@@ -122,7 +122,7 @@ func TestCacheService(t *testing.T) {
 		assertListResults(t, it, n)
 	})
 
-	t.Run("writes should force next List to call the underlying service", func(t *testing.T) {
+	t.Run("writes should NOT force next List to call the underlying service", func(t *testing.T) {
 		svc := document.NewInMemoryService()
 		cache := New[testStruct](svc, document.NewInMemoryService())
 		ctx := context.Background()
@@ -135,9 +135,20 @@ func TestCacheService(t *testing.T) {
 		err = cache.Set(ctx, "otherID", &testStruct{Id: "otherID", Content: "AAAA"})
 		require.NoError(t, err)
 
+		// set a diff value on service, so we can see below if cached is used
+		err = svc.Set(ctx, "otherID", &testStruct{Id: "otherID", Content: "UIUIUI"})
+		require.NoError(t, err)
+
 		it, err = cache.List(ctx, nil)
 		require.NoError(t, err)
 		assertListResults(t, it, n+1)
+
+		var actualOut testStruct
+		err = cache.Get(ctx, "otherID", &actualOut)
+		require.NoError(t, err)
+
+		assert.Equal(t, "otherID", actualOut.Id)
+		assert.Equal(t, "AAAA", actualOut.Content)
 	})
 
 	t.Run("EvictAll should force next List to call the underlying service", func(t *testing.T) {
