@@ -150,9 +150,9 @@ func (s *Service[T]) List(ctx context.Context, filters []document.Filter) (
 ) {
 	if s.cached.Load() {
 		it, err := s.cache.List(ctx, filters)
-		if err == nil {
+		if err == nil && it.HasNext() {
 			return it, err
-		} else {
+		} else if err != nil {
 			log.Errorf("list from cache: %v", err)
 		}
 	}
