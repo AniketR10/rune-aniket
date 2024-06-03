@@ -209,10 +209,15 @@ func TestClientServer(t *testing.T) {
 			pty, err := c.NewPty(ctx)
 			require.NoError(t, err)
 
+			mockFileForRead := workspaceapitest.NewMockFile(ctrl)
+			mockFileForRead.EXPECT().Name().Return("bla").AnyTimes()
+			mockFileForRead.EXPECT().Fd().Return(uintptr(99)).AnyTimes()
+			mockFileForRead.EXPECT().Close().Return(nil).
+				AnyTimes( /* Close runs in runtime.Finalizer */ )
 			s.s.(*workspacetest.MockWorkspace).EXPECT().
 				NewFile(gomock.Any(), gomock.Any()).
-				Return(mockFile).AnyTimes()
-			mockFile.EXPECT().Read(gomock.Any()).DoAndReturn(func(b []byte) (n int, err error) {
+				Return(mockFileForRead).Times(1)
+			mockFileForRead.EXPECT().Read(gomock.Any()).DoAndReturn(func(b []byte) (n int, err error) {
 				b[0] = []byte("a")[0]
 				return 1, io.EOF
 			})
@@ -221,7 +226,10 @@ func TestClientServer(t *testing.T) {
 			assert.Equal(t, "a", string(b))
 			assert.Equal(t, uintptr(99), pty.Master.Fd())
 
-			mockFile.EXPECT().Close().Return(nil).AnyTimes()
+			s.s.(*workspacetest.MockWorkspace).EXPECT().
+				NewFile(gomock.Any(), gomock.Any()).
+				Return(mockFile).Times(1)
+			mockFile.EXPECT().Close().Return(nil).Times(1)
 			assert.NoError(t, pty.Master.Close())
 
 			// cannot test slave mock file due to having to intercept via
@@ -255,6 +263,9 @@ func TestClientServer(t *testing.T) {
 			s.s.(*workspacetest.MockWorkspace).EXPECT().
 				NewFile(gomock.Any(), gomock.Any()).
 				Return(mockFile).AnyTimes()
+
+			mockFile.EXPECT().Close().Return(nil).
+				AnyTimes( /* Close runs in runtime.Finalizer */ )
 
 			s.s.(*workspacetest.MockWorkspace).EXPECT().
 				SetPtySize(gomock.Any(), gomock.Eq(1), gomock.Eq(1)).
