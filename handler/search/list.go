@@ -499,6 +499,56 @@ func (l *List) DataReset() {
 	l.setFilesCount()
 }
 
+// RemoveFocus removes the item that is currently on focus.
+func (l *List) RemoveFocus() bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	cancel := l.cancelSearch
+	if cancel != nil {
+		cancel()
+	}
+
+	listNode, ok := l.list.Focus()
+
+	if !ok {
+		return false
+	}
+
+	match := listNode.Value().(searchResultComponent)
+	matchIdx := match.idx
+
+	nextNode, _ := listNode.Next()
+
+	// Remove the node on focus and shift focus if possible.
+	l.list.Remove(&listNode)
+
+	// Correct the rest of match results indices by shifting them, since we are
+	// removing one.
+	for nn := nextNode; ok; nn, ok = nn.Next() {
+		nv := nn.Value()
+		if nv == nil {
+			break
+		}
+		match := nv.(searchResultComponent)
+		match.idx--
+		nn.SetValue(match)
+	}
+
+	// Align the `l.list` with the `l.input`.
+	if len(l.input) == 1 {
+		l.input = [][]byte{}
+	} else {
+		l.input = append(
+			l.input[:matchIdx],
+			l.input[matchIdx+1:]...,
+		)
+	}
+
+	l.setFilesCount()
+	return true
+}
+
 // Wait waits for the current search to finish if any and returns.
 // It does not wait for any pending data being consumed asyncronously
 // via Push.

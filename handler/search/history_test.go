@@ -56,4 +56,17 @@ func TestHistory(t *testing.T) {
 	require.NoError(t, history3.Add("a"))
 	assert.Equal(t, "a", history3.Next())
 	assert.Equal(t, "a", history3.Next())
+
+	// history items can be deleted
+	require.NoError(t, history.Add("ToRemove"))
+	assert.Equal(t, "ToRemove", history.Next())
+	require.NoError(t, history.Remove("ToRemove"))
+	found := false
+	for _, v := range history.Slice() {
+		if v == "ToRemove" {
+			found = true
+			break
+		}
+	}
+	assert.False(t, found)
 }

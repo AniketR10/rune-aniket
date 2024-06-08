@@ -45,7 +45,7 @@ func (l *responsiveTestList) PushFront(c tui.Component) ListNode {
 	return l.ResponsiveList.PushFront(l.newTestResponsive(c))
 }
 
-func (l *responsiveTestList) Remove(e ListNode) tui.Component {
+func (l *responsiveTestList) Remove(e *ListNode) tui.Component {
 	return l.ResponsiveList.Remove(e).(*testListResponsive).Component
 }
 

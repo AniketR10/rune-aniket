@@ -112,6 +112,41 @@ func (h *History) Add(query string) error {
 	return nil
 }
 
+// Remove removes all entries in history that match `{baseCmd} {cmd}`, e.g. `!
+// echo 2` (baseCmd: `!`; cmd: `echo 2`).
+func (h *History) Remove(cmd string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), defaultStoreTimeout)
+	defer cancel()
+
+	// anticipate capacity, since the resulting list will be roughly of similar length
+	newQueries := make([]string, 0, len(h.doc.Queries))
+
+	err := document.ConsistentUpdate(ctx, h.store, h.docID, &h.doc, retryStrategy,
+		func() ([]document.Update, []document.Precondition) {
+			newQueries = newQueries[:0]
+
+			// this would be more efficient if the results were sorted but they are not
+			for _, q := range h.doc.Queries {
+				if q != cmd {
+					newQueries = append(newQueries, q)
+				}
+			}
+
+			h.doc.Queries = newQueries
+
+			return []document.Update{
+					{FieldPath: []string{"Queries"}, Value: h.doc.Queries},
+					{FieldPath: []string{"Version"}, Value: h.doc.Version + 1},
+				}, []document.Precondition{
+					{FieldPath: []string{"Version"}, Value: h.doc.Version},
+				}
+		})
+	if err != nil {
+		return fmt.Errorf("could not remove item from command history: %v", err)
+	}
+	return nil
+}
+
 // Next returns the next query and updates History
 // such that the next call to Next would return the query after.
 // If this method is called after the last query has been returned

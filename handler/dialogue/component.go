@@ -177,7 +177,8 @@ func (c *Component) AddReceiveMessageBreak() {
 func (c *Component) AddReceiveMessageChunk(chunk string) {
 	c.msg.WriteString(chunk)
 	if c.tail != nil {
-		c.messages.Remove(*c.tail)
+		node := c.tail
+		c.messages.Remove(node)
 	} else {
 		c.tail = new(component.ListNode)
 	}
@@ -227,7 +228,9 @@ func (c *Component) RemoveReceiveMessageHint() {
 	if c.hint == nil {
 		return
 	}
-	c.messages.Remove(*c.hint)
+
+	node := c.hint
+	c.messages.Remove(node)
 	c.hint = nil
 }
 

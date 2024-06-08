@@ -28,8 +28,8 @@ type CommandEventHandlerFacility func(context.Context, textapi.Editor, []extensi
 	rpc.MuxBroker, config.Config) (CommandEventHandler, error)
 
 // NewEditorEventHandler returns a extension.Grantee that simply responds to commands.
-// It calls fn to build a CommandEventHandler, subsribes it to events
-// editor.Event and registers it as the CommandHandler of cmds.
+// It calls fn to build a CommandEventHandler, subcsribes it to events
+// editor. Event and registers it as the CommandHandler of cmds.
 // It also requests extraPerms, in addition to extension.PermissionEditor.
 // All granted permissions are returned in the fn callback. If one of the
 // permissions is denied, the extension will exit with an error.

@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
 	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/term"
 )
 
@@ -546,6 +547,119 @@ func testListLeak(t *testing.T, constructor listConstructor) {
 	t.Run("does not leak when Init + Close", func(t *testing.T) {
 		l, _ := constructor(ListConfig{})
 		assertNoLeaks(t, l)
+	})
+}
+
+func TestListRemoveFocus(t *testing.T) {
+	t.Run("remove focus removes item, shifts the ones below up and idices are continuos", func(t *testing.T) {
+		l := NewList(ListConfig{BottomSearchBar: true})
+		l.Resize(8, 4)
+		defer l.Close()
+
+		l.PushSync([]byte("echo 0"))
+		l.PushSync([]byte("echo 1"))
+		l.PushSync([]byte("echo 2"))
+		l.PushSync([]byte("echo 3"))
+		l.PushSync([]byte("echo 4"))
+
+		l.FocusStart() // echo 0
+		l.FocusDown()  // echo 1
+		l.FocusDown()  // echo 2
+
+		match, ok := l.Focus()
+		require.True(t, ok)
+		assert.Equal(t, match.idx, 2)
+		assert.Equal(t, "echo 2", string(match.Data()))
+
+		// after removing the focus you will get the element below (greater idx) in
+		// focus, that will have shifted up to "fill the gap"
+		ok = l.RemoveFocus()
+		require.True(t, ok)
+		match, ok = l.Focus()
+		require.True(t, ok)
+		assert.Equal(t, match.idx, 2)
+		assert.Equal(t, "echo 3", string(match.Data()))
+
+		// make sure the component list and value list are aligned
+		assert.Equal(t, l.TotalCount(), len(l.input))
+		assert.Equal(t, 4, len(l.input))
+
+		// assert continuity of indices and correspondance between components list
+		// and values list (`l.input`)
+		var expectedIdx int
+		l.list.Iterate(func(c component.WithAttributes) {
+			sr := c.(searchResultComponent)
+			assert.Equal(t, expectedIdx, sr.idx)
+			assert.Equal(t, sr.Match.Data(), l.input[expectedIdx])
+			expectedIdx++
+		})
+	})
+	t.Run("remove focus from start of list focuses one item down after removal", func(t *testing.T) {
+		l := NewList(ListConfig{BottomSearchBar: true})
+		l.Resize(8, 4)
+		defer l.Close()
+
+		l.PushSync([]byte("echo 0"))
+		l.PushSync([]byte("echo 1"))
+		l.PushSync([]byte("echo 2"))
+
+		l.FocusStart() // echo 0
+		ok := l.RemoveFocus()
+		require.True(t, ok)
+		match, ok := l.Focus()
+		require.True(t, ok)
+		assert.Equal(t, "echo 1", string(match.Data()))
+		assert.Equal(t, 0, match.idx)
+	})
+
+	t.Run("remove focus from end of list focuses one item up after removal", func(t *testing.T) {
+		l := NewList(ListConfig{BottomSearchBar: true})
+		l.Resize(8, 4)
+		defer l.Close()
+
+		l.PushSync([]byte("echo 0"))
+		l.PushSync([]byte("echo 1"))
+		l.PushSync([]byte("echo 2"))
+
+		l.FocusEnd() // echo 2
+		ok := l.RemoveFocus()
+		require.True(t, ok)
+		match, ok := l.Focus()
+		require.True(t, ok)
+		assert.Equal(t, "echo 1", string(match.Data()))
+		assert.Equal(t, 1, match.idx)
+	})
+
+	t.Run("remove focus after removing all items doesn't panic and return false", func(t *testing.T) {
+		l := NewList(ListConfig{BottomSearchBar: true})
+		l.Resize(8, 4)
+		defer l.Close()
+
+		l.PushSync([]byte("echo 0"))
+		l.PushSync([]byte("echo 1"))
+		l.PushSync([]byte("echo 2"))
+
+		l.FocusStart() // echo 2
+		for i := 0; i < 3; i++ {
+			ok := l.RemoveFocus()
+			require.True(t, ok)
+		}
+
+		assert.NotPanics(t, func() {
+			ok := l.RemoveFocus()
+			assert.False(t, ok)
+		})
+	})
+
+	t.Run("remove focus on an empty list doesn't panic", func(t *testing.T) {
+		l := NewList(ListConfig{BottomSearchBar: true})
+		l.Resize(8, 4)
+		defer l.Close()
+
+		assert.NotPanics(t, func() {
+			ok := l.RemoveFocus()
+			assert.False(t, ok)
+		})
 	})
 }
 

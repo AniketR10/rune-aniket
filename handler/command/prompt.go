@@ -3,12 +3,14 @@ package command
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/iterator"
@@ -66,14 +68,15 @@ type Prompt struct {
 	mu          sync.Mutex
 	animation   component.Virtual
 
-	shownWidth         int
-	manualComponent    component.Responsive
-	showManual         bool
-	resetManualTimeout chan struct{}
-	ctx                context.Context
-	cancelCtx          func()
-	completionCtx      context.Context // children of ctx
-	completionCancel   func()
+	shownWidth            int
+	manualComponent       component.Responsive
+	showManual            bool
+	resetManualTimeout    chan struct{}
+	ctx                   context.Context
+	cancelCtx             func()
+	completionCtx         context.Context // children of ctx
+	completionCancel      func()
+	completingWithHistory bool
 }
 
 var _ component.Floating = (*Prompt)(nil)
@@ -414,6 +417,38 @@ func (h *Prompt) handleCommon(ev *term.Event, sync bool) (quit, handled bool) {
 	return
 }
 
+// deleteHistoryCompletionFocusItem will remove the entry from the history as well as
+// removing the node from the focus list.
+func (h *Prompt) deleteFocusFromHistory() (ret error) {
+	match, ok := h.list.Focus()
+	if !ok {
+		return errors.New("get item in focus")
+	}
+
+	cmd := strings.Join(
+		[]string{
+			strings.Join(h.commandAndArgs, " "),
+			string(match.Data()),
+		},
+		" ",
+	)
+
+	if ok := h.list.RemoveFocus(); !ok {
+		ret = multierror.Append(ret, errors.New("search list remove focus"))
+	}
+
+	if h.list.TotalCount() == 0 {
+		h.userScrolling = false
+	}
+
+	err := h.history.Remove(cmd)
+	if err != nil {
+		ret = multierror.Append(ret, fmt.Errorf("history remove cmd: %w", err))
+	}
+
+	return ret
+}
+
 func (h *Prompt) handleCommand(ev term.Event, sync bool) (quit, handled bool) {
 	quit, handled = h.handleCommon(&ev, sync)
 	if handled {
@@ -459,6 +494,14 @@ func (h *Prompt) handleCompleteArgs(ev term.Event, sync bool) (quit, handled boo
 	}
 	switch ev.Key {
 	case term.KeyBackspace, term.KeyBackspace2:
+		if h.userScrolling && h.completingWithHistory {
+			if err := h.deleteFocusFromHistory(); err != nil {
+				h.log(log.ErrorLevel, "delete focus from history: %v", err)
+			}
+			handled = true
+			return
+		}
+
 		handled = true
 		cols := h.buf.Columns(0)
 		if cols != 0 {
@@ -572,6 +615,7 @@ func (h *Prompt) setCommandMode() {
 func (h *Prompt) setCompletionList(
 	persistLastArgUpdates, sync bool, cmd string, args ...string,
 ) {
+	h.completingWithHistory = false
 	// in bracketed paste we trust the cancel completion
 	// will do its job, and only the last pushed completer will
 	// remain.
@@ -708,6 +752,11 @@ func (h *Prompt) commandArgsHistoryIterator(cmdAndArgs []string) (iterator.Itera
 		return false
 	})
 	it, isEmpty := iterator.IsEmpty(uniqueArgs)
+
+	if !isEmpty {
+		h.completingWithHistory = true
+	}
+
 	return it, !isEmpty
 }
 

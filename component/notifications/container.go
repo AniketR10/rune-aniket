@@ -137,7 +137,7 @@ func (n *Container) Notify(level Level, msg string) {
 	// clear out current notification, based on message equality, if it exists
 	if ticket, exists := n.notifications[msg]; exists {
 		ticket.cancelCtx()
-		n.list.Remove(ticket.el)
+		n.list.Remove(&ticket.el)
 		delete(n.notifications, msg)
 	}
 
@@ -230,7 +230,7 @@ func (n *Container) Close() error {
 
 func (n *Container) closeNotification(el component.ListNode) {
 	el.Value().(*notificationComp).cancel()
-	n.list.Remove(el)
+	n.list.Remove(&el)
 }
 
 func (n *Container) pauseNotification(el component.ListNode) {
@@ -277,7 +277,7 @@ func (n *Container) startAutoClose(
 		n.mu.Lock()
 		// no need to ensure that while we were trying to acquire a lock, no one
 		// removed it already as Remove is itempotent. See Go std's list.List.
-		n.list.Remove(el)
+		n.list.Remove(&el)
 		delete(n.notifications, msg)
 		n.mu.Unlock()
 

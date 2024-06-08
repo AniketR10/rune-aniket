@@ -2,7 +2,10 @@ package command
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -711,6 +714,75 @@ rori myArg oro ▐
                     
                     
                     `},
+		{"history items can be deleted on backspace keypress when scrolling",
+			"ro myArg 1>ro myArg 2>ro myArg 3>ro myArg 4>ro myArg 5>ro my⬇⬇^",
+			[]string{"lane", "lorelai", "rori"},
+			nopComplete,
+			expectDispatch("rori", "myArg", "5"), `
+rori my▐            
+myArg 5             
+myArg 3             
+myArg 2             
+myArg 1             
+                    
+                    
+                    
+                    
+                    `},
+
+		{"when you deleted all list elements and keep pressing backspace you delete prompt chars",
+			"ro myArg 1>ro myArg 2>ro myArg 3>ro my⬇^^^^",
+			[]string{"lane", "lorelai", "rori"},
+			nopComplete,
+			expectDispatch("rori", "myArg", "3"), `
+rori m▐             
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    `},
+		{"non historical items cannot be deleted, instead command prompt takes the backspace as a char remove",
+			"ro my✌ ore⬇^", []string{"lane", "lorelai", "rori"},
+			expectCompleteWith(
+				[][]string{
+					{""}, {"m"}, {"my"}, {"myArg", ""}, {"myArg", ""},
+					{"myArg", "o"}, {"myArg", "or"}, {"myArg", "ore"}, {"myArg", "or"},
+				},
+				[][]string{
+					{"myArg"}, {"myArg"}, {"myArg"}, {"oregano", "oregani"}, {"oregano", "oregani"},
+					{"oregano", "oregani"}, {"oregano", "oregani"}, {"oregano", "oregani"}, {"oregano", "oregani"},
+				}),
+			nopDispatch, `
+rori myArg  or▐     
+oregano             
+oregani             
+                    
+                    
+                    
+                    
+                    
+                    
+                    `},
+
+		{"backspace deletes characters instead of history elements when not scrolling",
+			"ro myArg 1>ro myArg 2>ro myArg 3>ro myArg 4>ro myArg 5>ro myAr^^^",
+			[]string{"lane", "lorelai", "rori"},
+			nopComplete,
+			expectDispatch("rori", "myArg", "5"), `
+rori m▐             
+myArg 5             
+myArg 4             
+myArg 3             
+myArg 2             
+myArg 1             
+                    
+                    
+                    
+                    `},
 	}
 
 	log.SetLevel(log.InfoLevel)
@@ -737,6 +809,184 @@ rori myArg oro ▐
 	}
 }
 
+type testFeederIterator struct {
+	feeder chan string
+	iterator.Iterator[string]
+}
+
+func (c testFeederIterator) Next() (string, bool) {
+	s, ok := <-c.feeder
+	return s, ok
+}
+
+func (c testFeederIterator) Err() error {
+	return errors.New("bang")
+}
+
+func TestCommandHandlerHistory(t *testing.T) {
+	t.Run("remove historical item (start, middle and end of list)", func(t *testing.T) {
+		dispatchFn, cleanup := nopDispatch()
+		defer cleanup(t)
+
+		completeFn, cleanupComplete := nopComplete()
+		defer cleanupComplete(t)
+
+		b := NewPrompt(
+			document.NewInMemoryService(),
+			FuncCompleter(completeFn),
+			FuncDispatcher(dispatchFn),
+			term.NopInterrupter(),
+			nil,
+			DefaultConfig(),
+		)
+		defer b.Close()
+
+		// only historical items can be removed
+		b.completingWithHistory = true
+
+		// mock an async iterator we can feed elements to using a channel
+		it := testFeederIterator{feeder: make(chan string)}
+
+		ctx, cancel := context.WithCancel(b.ctx)
+
+		// feed the iterator so it can be consumed from `pushCompletionListSync`
+		go func() {
+			defer close(it.feeder)
+			for i := 0; i < 10; i++ {
+				it.feeder <- fmt.Sprintf("! echo xyz_%d", i)
+			}
+		}()
+		b.pushCompletionListSync(ctx, cancel, []string{"! echo"}, it)
+
+		require.Equal(t, 10, b.list.TotalCount())
+
+		// focus end and check it's xyz_9
+		ok := b.list.FocusEnd()
+		require.True(t, ok)
+		match, ok := b.list.Focus()
+		require.True(t, ok)
+		require.Equal(t, "! echo xyz_9", string(match.Data()))
+
+		// remove it!
+		ok = b.list.RemoveFocus() // remove "! echo xyz_9"
+		assert.True(t, ok)
+
+		// focus should go up to xyz_8 because there was no more nodes after de
+		// removed one
+		match, ok = b.list.Focus()
+		require.True(t, ok)
+		assert.Equal(t, "! echo xyz_8", string(match.Data()))
+
+		// focus end and check it's xyz_0
+		ok = b.list.FocusStart()
+		require.True(t, ok)
+		match, ok = b.list.Focus()
+		require.True(t, ok)
+		require.Equal(t, "! echo xyz_0", string(match.Data()))
+
+		// remove it!
+		ok = b.list.RemoveFocus() // remove "! echo xyz_0"
+		assert.True(t, ok)
+
+		// focus should go up to xyz_1 because it's what comes next
+		match, ok = b.list.Focus()
+		require.True(t, ok)
+		assert.Equal(t, "! echo xyz_1", string(match.Data()))
+
+		// focus middle of list
+		ok = b.list.FocusDown() // ! echo xyz_2
+		require.True(t, ok)
+		ok = b.list.FocusDown() // ! echo xyz_3
+		require.True(t, ok)
+		match, ok = b.list.Focus()
+		require.True(t, ok)
+		require.Equal(t, "! echo xyz_3", string(match.Data()))
+
+		// remove it!
+		ok = b.list.RemoveFocus() // remove "! echo xyz_0"
+		assert.True(t, ok)
+
+		// focus should go up to xyz_4 because it's what comes next
+		match, ok = b.list.Focus()
+		require.True(t, ok)
+		assert.Equal(t, "! echo xyz_4", string(match.Data()))
+	})
+
+	t.Run("history concurrently pushing and removing doesn't "+
+		"panic nor cause data races", func(t *testing.T) {
+		dispatchFn, cleanup := nopDispatch()
+		defer cleanup(t)
+
+		completeFn, cleanupComplete := nopComplete()
+		defer cleanupComplete(t)
+
+		b := NewPrompt(
+			document.NewInMemoryService(),
+			FuncCompleter(completeFn),
+			FuncDispatcher(dispatchFn),
+			term.NopInterrupter(),
+			nil,
+			DefaultConfig(),
+		)
+		defer b.Close()
+
+		// only historical items can be removed
+		b.completingWithHistory = true
+
+		// mock an async iterator we can feed elements to using a channel
+		it := testFeederIterator{feeder: make(chan string)}
+
+		// connect the consumption of the iterator to the population of the search list
+		ctx, cancel := context.WithCancel(b.ctx)
+		ch := b.list.Push(ctx)
+		go b.pushCompletionList(ctx, ch, cancel, []string{"echo"}, it)
+
+		startingPistol := make(chan struct{})
+
+		var wg sync.WaitGroup
+		wg.Add(2)
+
+		numAdditions := 500
+		numRemovals := 300
+
+		go func() {
+			defer wg.Done()
+			<-startingPistol
+
+			defer close(it.feeder)
+			for i := 0; i < numAdditions; i++ {
+				it.feeder <- fmt.Sprintf("abc_%d", i)
+			}
+		}()
+
+		go func() {
+			defer wg.Done()
+			<-startingPistol
+
+			time.Sleep(5 * time.Millisecond)
+			b.list.FocusStart()
+
+			// copy var so we don't introduce side effects when changing a variable
+			// that's used in the for loop iteration scope
+			nr := numRemovals
+
+			for i := 0; i < numRemovals; i++ {
+				b.list.FocusDown()
+				if ok := b.list.RemoveFocus(); !ok {
+					nr--
+				}
+			}
+		}()
+
+		close(startingPistol)
+		wg.Wait()
+
+		// Assert at least 200 items to be in the list.
+		// assert.LessOrEqual(t, minExpectedItems, b.list.TotalCount())
+		assert.LessOrEqual(t, numAdditions-numRemovals, b.list.TotalCount())
+	})
+}
+
 type testCommandHandler struct {
 	*Prompt
 }
@@ -758,24 +1008,35 @@ func init() {
 	}
 }
 
-func nopComplete() (func(context.Context, string, ...string) (iterator.Iterator[string], string), func(*testing.T)) {
+func nopComplete() (
+	func(context.Context, string, ...string) (iterator.Iterator[string], string), func(*testing.T),
+) {
 	return func(ctx context.Context, command string, args ...string) (iterator.Iterator[string], string) {
 		return iterator.FromSlice[string](nil), ""
 	}, func(*testing.T) {}
 }
 
-func completeWith(data ...string) func() (func(context.Context, string, ...string) (iterator.Iterator[string], string), func(*testing.T)) {
-	return func() (func(ctx context.Context, command string, args ...string) (iterator.Iterator[string], string), func(*testing.T)) {
-		return func(ctx context.Context, command string, args ...string) (iterator.Iterator[string], string) {
-			if len(args) != 0 && args[len(args)-1] == "~" {
-				return iterator.FromSlice(data), "expanded/"
-			}
-			return iterator.FromSlice(data), ""
-		}, func(*testing.T) {}
+func completeWith(data ...string) func() (
+	func(context.Context, string, ...string) (iterator.Iterator[string], string), func(*testing.T),
+) {
+	return func() (
+		func(ctx context.Context, command string, args ...string) (iterator.Iterator[string], string), func(*testing.T),
+	) {
+		return func(ctx context.Context, command string, args ...string) (
+				iterator.Iterator[string], string,
+			) {
+				if len(args) != 0 && args[len(args)-1] == "~" {
+					return iterator.FromSlice(data), "expanded/"
+				}
+				return iterator.FromSlice(data), ""
+			},
+			func(*testing.T) {}
 	}
 }
 
-func completeRespectively(data []string) func() (func(context.Context, string, ...string) (iterator.Iterator[string], string), func(*testing.T)) {
+func completeRespectively(data []string) func() (
+	func(context.Context, string, ...string) (iterator.Iterator[string], string), func(*testing.T),
+) {
 	return func() (func(context.Context, string, ...string) (iterator.Iterator[string], string), func(*testing.T)) {
 		return func(ctx context.Context, command string, args ...string) (iterator.Iterator[string], string) {
 			if len(args) > len(data) {
@@ -787,7 +1048,9 @@ func completeRespectively(data []string) func() (func(context.Context, string, .
 	}
 }
 
-func expectCompleteWith(expectedArgs [][]string, data [][]string) func() (func(ctx context.Context, command string, args ...string) (iterator.Iterator[string], string), func(*testing.T)) {
+func expectCompleteWith(expectedArgs [][]string, data [][]string) func() (
+	func(ctx context.Context, command string, args ...string) (iterator.Iterator[string], string), func(*testing.T),
+) {
 	var actualArgsSlice [][]string
 	var called int
 	return func() (func(context.Context, string, ...string) (iterator.Iterator[string], string), func(*testing.T)) {

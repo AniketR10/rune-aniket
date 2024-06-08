@@ -55,7 +55,7 @@ type testList interface {
 	PushFrontList(other testList)
 	PushBack(c tui.Component) ListNode
 	PushFront(c tui.Component) ListNode
-	Remove(e ListNode) tui.Component
+	Remove(e *ListNode) tui.Component
 	Resize(width, height int)
 	SeekDown() bool
 	SeekEnd() (ok bool)
@@ -247,13 +247,14 @@ YYYYYYYY`,
 			func() {
 				front, ok := l.Front()
 				require.True(t, ok)
-				l.Remove(front)
+				l.Remove(&front)
 			}, `
 $$$$$$$$
 XXXXXXXX
 YYYYYYYY
 ZZZZZZZZ`,
-		}, {
+		},
+		{
 			func() {
 				require.False(t, l.SeekEnd())
 				require.Equal(t, 4, l.Len())
@@ -271,7 +272,7 @@ ZZZZZZZZ`,
 			func() {
 				z, ok := l.Back()
 				require.True(t, ok)
-				l.Remove(z)
+				l.Remove(&z)
 			}, `
 aaaaaaaa
 $$$$$$$$
@@ -287,7 +288,7 @@ YYYYYYYY`,
 				require.True(t, ok)
 				head, ok := dollas.Prev()
 				require.True(t, ok)
-				l.Remove(head)
+				l.Remove(&head)
 			}, `
 bbbbbbbb
 $$$$$$$$
@@ -305,7 +306,7 @@ YYYYYYYY`,
 				require.True(t, ok)
 				c, ok := b.Prev()
 				require.True(t, ok)
-				l.Remove(c)
+				l.Remove(&c)
 			}, `
 bbbbbbbb
 $$$$$$$$
@@ -324,7 +325,7 @@ YYYYYYYY`,
 				for i := 0; i < 4; i++ {
 					require.True(t, l.SeekUp())
 				}
-				l.Remove(b)
+				l.Remove(&b)
 			}, `
 gggggggg
 ffffffff
@@ -333,7 +334,7 @@ dddddddd`,
 		}, {
 			func() {
 				for node, ok := l.Back(); ok; node, ok = l.Front() {
-					l.Remove(node)
+					l.Remove(&node)
 				}
 				require.Equal(t, 0, l.Len())
 				l.PushBack(&TestComponent{Ch: '%'})
@@ -415,28 +416,28 @@ func TestListNode(t *testing.T) {
 }
 
 func testListRemove(t *testing.T, constructor func(int) testList) {
-	t.Run("Remvoe returns element in list", func(t *testing.T) {
+	t.Run("Remove returns element in list", func(t *testing.T) {
 		el := &TestComponent{}
 		l := constructor(1)
 		n := l.PushBack(el)
 
-		ret := l.Remove(n)
+		ret := l.Remove(&n)
 		assert.Equal(t, el, getTestComponent(ret))
 	})
 
-	t.Run("Remove is idempotent", func(t *testing.T) {
+	t.Run("Remove called twice on same node panics", func(t *testing.T) {
 		el := &TestComponent{}
 		l := constructor(1)
 		n := l.PushBack(el)
 		assert.Equal(t, 1, l.Len())
 
-		ret := l.Remove(n)
+		ret := l.Remove(&n)
 		assert.Equal(t, 0, l.Len())
 		assert.NotNil(t, ret)
 
-		ret = l.Remove(n)
-		assert.NotNil(t, ret)
-		assert.Equal(t, 0, l.Len())
+		assert.Panics(t, func() {
+			l.Remove(&n)
+		})
 	})
 }
 

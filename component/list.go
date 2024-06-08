@@ -280,6 +280,9 @@ func (l *List) PushFrontList(other *List) {
 // returns the linked node. If mark is not an element of l, the list
 // is not modified.
 func (l *List) InsertAfter(c tui.Component, mark ListNode) ListNode {
+	if mark.l != l {
+		panic("node to insert not belonging to this list")
+	}
 	v := &Virtual{C: c}
 	l.dirty = true
 	l.fixOffsetAdd(mark)
@@ -290,6 +293,9 @@ func (l *List) InsertAfter(c tui.Component, mark ListNode) ListNode {
 // and returns the linked node. If mark is not an element of l,
 // the list is not modified.
 func (l *List) InsertBefore(c tui.Component, mark ListNode) ListNode {
+	if mark.l != l {
+		panic("node to insert not belonging to this list")
+	}
 	v := &Virtual{C: c}
 	l.dirty = true
 	l.fixOffsetAdd(mark)
@@ -326,7 +332,10 @@ func (l *List) PushFront(c tui.Component) ListNode {
 
 // Remove removes e from l if e is a node of list l.
 // It returns the element value e.Value.
-func (l *List) Remove(e ListNode) tui.Component {
+func (l *List) Remove(e *ListNode) tui.Component {
+	if e.l != l {
+		panic("node to remove not belonging to this list")
+	}
 	l.dirty = true
 	nextAfterOffsetHead, _ := l.offset.head.Next()
 	ret := l.list.Remove(e.el).(*Virtual).C
@@ -334,8 +343,9 @@ func (l *List) Remove(e ListNode) tui.Component {
 		l.offset.value = 0
 		l.offset.head = ListNode{}
 	} else {
-		l.fixOffsetRemove(e, nextAfterOffsetHead)
+		l.fixOffsetRemove(*e, nextAfterOffsetHead)
 	}
+	e.l = nil
 	return ret
 }
 

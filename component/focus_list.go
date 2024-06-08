@@ -213,6 +213,24 @@ func (l *FocusList) PushFrontList(other *FocusList) {
 	}
 }
 
+// Remove removes a node.
+func (l *FocusList) Remove(n *ListNode) WithAttributes {
+	// if deleting what's under the cursor try shifting it.
+	if l.focus == *n {
+		if ok := l.FocusDown(); !ok {
+			if ok := l.FocusUp(); !ok {
+				// if we reached this point most likely we are removing the only element
+				// in the list or something strange, so let's play safe and put the focus
+				// away
+				l.focus = ListNode{}
+				l.focusIdx = 0
+			}
+		}
+	}
+	ret := l.list.Remove(n)
+	return ret.(WithAttributes)
+}
+
 // Iterate iterates over all elements in l.
 func (l *FocusList) Iterate(fn func(WithAttributes)) {
 	for node, ok := l.list.Front(); ok; node, ok = node.Next() {

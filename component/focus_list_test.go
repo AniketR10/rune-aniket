@@ -91,16 +91,8 @@ func (l *focusListTestList) PushFront(c tui.Component) ListNode {
 	return l.FocusList.PushFront(newCompWithAttr(c))
 }
 
-// Remove is not supported on a FocusList due to complexity to maintain focusIdx.
-// it's not used atm and I don't see the use case.
-func (l *focusListTestList) Remove(e ListNode) tui.Component {
-	if l.focus == e {
-		if !l.FocusDown() {
-			l.FocusUp()
-		}
-	}
-	return l.list.Remove(e).(WithAttributes)
-
+func (l *focusListTestList) Remove(e *ListNode) tui.Component {
+	return l.FocusList.Remove(e)
 }
 
 func (l *focusListTestList) Sort(less func(a, b tui.Component) bool) {
@@ -383,6 +375,169 @@ func makeFocusList(n int) *FocusList {
 	// set to a sensible size
 	ret.Resize(100, 50)
 	return ret
+}
+
+func TestFocusListRemove(t *testing.T) {
+	t.Run("remove twice the same node", func(t *testing.T) {
+		list := makeFocusList(3)
+		ok := list.FocusStart()
+		require.True(t, ok)
+
+		node, ok := list.Focus()
+		require.True(t, ok)
+
+		list.Remove(&node)
+
+		assert.Panics(t, func() {
+			list.Remove(&node)
+		})
+	})
+
+	t.Run("remove focus node that is the first node of the list", func(t *testing.T) {
+		l := NewFocusList()
+		l.PushBack(newCompWithAttr(&TestComponent{Ch: 'a'}))
+		l.PushBack(newCompWithAttr(&TestComponent{Ch: 'b'}))
+		l.PushBack(newCompWithAttr(&TestComponent{Ch: 'c'}))
+
+		ok := l.FocusStart()
+		require.True(t, ok)
+
+		node, ok := l.Focus()
+		require.True(t, ok)
+		require.Equal(t, 'a', node.Value().(*compWithAttr).Component.(*TestComponent).Ch)
+
+		l.Remove(&node)
+		require.Equal(t, 2, l.Len())
+
+		node, ok = l.Focus()
+		require.True(t, ok)
+
+		assert.Equal(t, 'b', node.Value().(*compWithAttr).Component.(*TestComponent).Ch)
+	})
+
+	t.Run("remove focus node that is the last node of the list", func(t *testing.T) {
+		l := NewFocusList()
+		l.PushBack(newCompWithAttr(&TestComponent{Ch: 'a'}))
+		l.PushBack(newCompWithAttr(&TestComponent{Ch: 'b'}))
+		l.PushBack(newCompWithAttr(&TestComponent{Ch: 'c'}))
+
+		ok := l.FocusEnd()
+		require.True(t, ok)
+
+		node, ok := l.Focus()
+		require.True(t, ok)
+		require.Equal(t, 'c', node.Value().(*compWithAttr).Component.(*TestComponent).Ch)
+
+		l.Remove(&node)
+		require.Equal(t, 2, l.Len())
+
+		node, ok = l.Focus()
+		require.True(t, ok)
+
+		require.Equal(t, 'b', node.Value().(*compWithAttr).Component.(*TestComponent).Ch)
+	})
+
+	t.Run("remove the only node in the list and call focus", func(t *testing.T) {
+		l := NewFocusList()
+		l.PushBack(newCompWithAttr(&TestComponent{Ch: 'a'}))
+
+		ok := l.FocusStart()
+		require.True(t, ok)
+
+		node, ok := l.Focus()
+		require.True(t, ok)
+		require.Equal(t, 'a', node.Value().(*compWithAttr).Component.(*TestComponent).Ch)
+
+		l.Remove(&node)
+
+		_, ok = l.Focus()
+		assert.False(t, ok)
+	})
+
+	t.Run("setting focus on a removed node panics", func(t *testing.T) {
+		l := NewFocusList()
+		l.PushBack(newCompWithAttr(&TestComponent{Ch: 'a'}))
+
+		ok := l.FocusStart()
+		require.True(t, ok)
+
+		node, ok := l.Focus()
+		require.True(t, ok)
+		require.Equal(t, 'a', node.Value().(*compWithAttr).Component.(*TestComponent).Ch)
+
+		l.Remove(&node)
+
+		assert.Panics(t, func() {
+			l.SetFocus(node)
+		})
+	})
+
+	t.Run("remove on a node in the middle of the list then set focus on a node before the node that was removed", func(t *testing.T) {
+		l := NewFocusList()
+		l.PushBack(newCompWithAttr(&TestComponent{Ch: 'a'}))
+		l.PushBack(newCompWithAttr(&TestComponent{Ch: 'b'}))
+		l.PushBack(newCompWithAttr(&TestComponent{Ch: 'c'}))
+		l.PushBack(newCompWithAttr(&TestComponent{Ch: 'd'}))
+		l.PushBack(newCompWithAttr(&TestComponent{Ch: 'e'}))
+
+		ok := l.FocusStart() // 'a'
+		require.True(t, ok)
+
+		ok = l.FocusDown() // 'b'
+		require.True(t, ok)
+		nodeB, ok := l.Focus()
+		require.True(t, ok)
+
+		ok = l.FocusDown() // 'c'
+		require.True(t, ok)
+
+		nodeC, ok := l.Focus()
+		require.True(t, ok)
+		require.Equal(t, 'c', nodeC.Value().(*compWithAttr).Component.(*TestComponent).Ch)
+
+		l.Remove(&nodeC)
+		require.Equal(t, 4, l.Len())
+
+		l.SetFocus(nodeB)
+		nodeB, ok = l.Focus()
+		require.True(t, ok)
+		assert.Equal(t, 'b', nodeB.Value().(*compWithAttr).Component.(*TestComponent).Ch)
+	})
+
+	t.Run("remove on a node in the middle of the list then set focus on a node after the node that was removed", func(t *testing.T) {
+		l := NewFocusList()
+		l.PushBack(newCompWithAttr(&TestComponent{Ch: 'a'}))
+		l.PushBack(newCompWithAttr(&TestComponent{Ch: 'b'}))
+		l.PushBack(newCompWithAttr(&TestComponent{Ch: 'c'}))
+		l.PushBack(newCompWithAttr(&TestComponent{Ch: 'd'}))
+		l.PushBack(newCompWithAttr(&TestComponent{Ch: 'e'}))
+
+		ok := l.FocusEnd() // 'e'
+		require.True(t, ok)
+		nodeD, ok := l.Focus()
+		require.True(t, ok)
+
+		ok = l.FocusStart() // 'a'
+		require.True(t, ok)
+
+		ok = l.FocusDown() // 'b'
+		require.True(t, ok)
+
+		ok = l.FocusDown() // 'c'
+		require.True(t, ok)
+		nodeC, ok := l.Focus()
+		require.True(t, ok)
+		require.Equal(t, 'c', nodeC.Value().(*compWithAttr).Component.(*TestComponent).Ch)
+
+		l.Remove(&nodeC)
+		require.Equal(t, 4, l.Len())
+
+		l.SetFocus(nodeD)
+		nodeD, ok = l.Focus()
+		require.True(t, ok)
+		assert.Equal(t, 'e', nodeD.Value().(*compWithAttr).Component.(*TestComponent).Ch)
+	})
+
 }
 
 func benchmarkSetFocus(b *testing.B, n int) {

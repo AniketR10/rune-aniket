@@ -110,7 +110,7 @@ func (l *ResponsiveList) PushFront(c Responsive) ListNode {
 
 // Remove removes e from l if e is a node of list l. It returns the element
 // value e.Value.
-func (l *ResponsiveList) Remove(e ListNode) Responsive {
+func (l *ResponsiveList) Remove(e *ListNode) Responsive {
 	defer l.calculateTotalHeight()
 	l.list.dirty = true
 	return l.list.Remove(e).(Responsive)
