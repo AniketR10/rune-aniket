@@ -387,6 +387,17 @@ diff_buf_adjust(win_
 diff_buf_adjust(win_
 {                   
               INSERT`},
+		{"<jllipotato<",
+			`                    
+/*                  
+ * Check if the curr
+ *                  
+ * potat▐diff buffer
+ */                 
+  void              
+diff_buf_adjust(win_
+{                   
+              NORMAL`},
 	}
 
 	vi := setupViIntegration(t, snippet, 2)
@@ -599,4 +610,42 @@ func TestIntegrationNewFile(t *testing.T) {
 		vi.Handle(term.Event{Type: term.EventKey, Ch: ch})
 	}
 	assert.Equal(t, "hello\nworld", vi.less.Buffer().String())
+}
+
+func TestExitInsertMode(t *testing.T) {
+	t.Run("escape and control-c exit insert mode into normal", func(t *testing.T) {
+		vi := setupVi(t, "aaaa\nbbbb\ncccc\ndddd", 2)
+		vi.Resize(4, 4)
+
+		vi.setInsertMode()
+		assert.Equal(t, vi.mode(), insertMode)
+
+		vi.Handle(term.Event{Type: term.EventKey, Key: term.KeyEsc})
+		assert.Equal(t, vi.mode(), normalMode)
+
+		vi.setInsertMode()
+		assert.Equal(t, vi.mode(), insertMode)
+
+		vi.Handle(term.Event{Type: term.EventKey, Key: term.KeyCtrlC})
+		assert.Equal(t, vi.mode(), normalMode)
+	})
+}
+
+func TestExitVisualMode(t *testing.T) {
+	t.Run("escape and control-c exit visual mode into normal", func(t *testing.T) {
+		vi := setupVi(t, "aaaa\nbbbb\ncccc\ndddd", 2)
+		vi.Resize(4, 4)
+
+		vi.setVisualMode()
+		assert.Equal(t, vi.mode(), visualMode)
+
+		vi.Handle(term.Event{Type: term.EventKey, Key: term.KeyEsc})
+		assert.Equal(t, vi.mode(), normalMode)
+
+		vi.setVisualMode()
+		assert.Equal(t, vi.mode(), visualMode)
+
+		vi.Handle(term.Event{Type: term.EventKey, Key: term.KeyCtrlC})
+		assert.Equal(t, vi.mode(), normalMode)
+	})
 }

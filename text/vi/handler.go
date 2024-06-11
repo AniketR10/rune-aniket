@@ -487,7 +487,7 @@ func (vi *viHandlerImpl) handleInsert(ev term.Event) (quit, handled bool) {
 		vi.cursor.Insert('\t')
 	case term.KeyBackspace, term.KeyBackspace2:
 		vi.cursor.Backspace()
-	case term.KeyEsc:
+	case term.KeyEsc, term.KeyCtrlC:
 		vi.cursor.MoveLeft()
 		vi.repeatInsertStart()
 		vi.setNormalMode()
@@ -526,7 +526,7 @@ func (vi *viHandlerImpl) handleVisualBlockInsertStart() {
 }
 
 func (vi *viHandlerImpl) handleVisual(ev term.Event) (quit, handled bool) {
-	if ev.Key == term.KeyEsc {
+	if ev.Key == term.KeyEsc || ev.Key == term.KeyCtrlC {
 		vi.setNormalMode()
 		vi.cursor.Unselect()
 		handled = true

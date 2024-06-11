@@ -809,6 +809,65 @@ myArg 1
 	}
 }
 
+type testNeverEndingIterator struct {
+	iterator.Iterator[string]
+}
+
+func (c testNeverEndingIterator) Next() (string, bool) {
+	time.Sleep(10 * time.Millisecond)
+	return "hola 123", true
+}
+
+func neverEndingComplete() (func(context.Context, string, ...string) (iterator.Iterator[string], string), func(*testing.T)) {
+	return func(ctx context.Context, command string, args ...string) (iterator.Iterator[string], string) {
+		it := testNeverEndingIterator{}
+		return it, "123"
+	}, func(*testing.T) {}
+}
+
+func TestCommandHandlerCancel(t *testing.T) {
+	storage := document.NewInMemoryService()
+	t.Run("ctrl-c once cancels search; twice closes window", func(t *testing.T) {
+		dispatchFn, cleanup := nopDispatch()
+		defer cleanup(t)
+
+		completeFn, cleanupComplete := neverEndingComplete()
+		defer cleanupComplete(t)
+
+		b := NewPrompt(
+			storage, FuncCompleter(completeFn), FuncDispatcher(dispatchFn),
+			term.NopInterrupter(), nil, DefaultConfig(),
+		)
+
+		// Type in the command to stimulate the `neverEndingComplete` completion iterator
+		for _, runeValue := range "hello " {
+			quit, handled := b.handle(term.Event{Type: term.EventKey, Ch: runeValue}, false)
+			require.False(t, quit)
+			require.True(t, handled)
+		}
+
+		// must not quit window, instead it must cancel the never ending completion we set up
+		quit, handled := b.handle(term.Event{Type: term.EventKey, Key: term.KeyCtrlC}, true)
+		assert.False(t, quit)
+		assert.True(t, handled)
+
+		// check the completion is canceled
+		var completionCanceled bool
+		select {
+		case <-b.completionCtx.Done():
+			completionCanceled = true
+		default:
+			completionCanceled = false
+		}
+		require.True(t, completionCanceled)
+
+		// must quit window, since the completion is already canceled by the previous Ctrl-C
+		quit, handled = b.handle(term.Event{Type: term.EventKey, Key: term.KeyCtrlC}, false)
+		assert.True(t, quit)
+		assert.True(t, handled)
+	})
+}
+
 type testFeederIterator struct {
 	feeder chan string
 	iterator.Iterator[string]

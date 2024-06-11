@@ -405,7 +405,16 @@ func (h *Prompt) handleCommon(ev *term.Event, sync bool) (quit, handled bool) {
 			h.setUserScrolling(false)
 		}
 	case term.KeyCtrlC:
-		h.cancelCompletionPush("received ctrl-c")
+		select {
+		case <-h.completionCtx.Done():
+			// completion already canceled
+			quit = true
+			h.list.Cancel()
+			h.cancelCompletionPush("received ctrl-c")
+		default:
+			// completion isn't canceled yet
+			h.cancelCompletionPush("received ctrl-c")
+		}
 	case term.KeyTab:
 		h.incArgsCompleteMode(!h.bracketedPaste, sync)
 	case term.KeySpace:
