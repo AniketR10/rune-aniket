@@ -116,7 +116,7 @@ func (v *viHandler) Handle(ev term.Event) (exit, handled bool) {
 
 	exit, handled = v.handle(ev)
 	if exit {
-		if ev.Key != term.KeyEnter {
+		if !(ev.Key == term.KeyEnter && ev.Mod == 0) {
 			v.scheduleAfterBell(false, func() {
 				pos := v.trimToLastValidColumn(v.sync.vi.CursorAtScroll())
 				v.log(log.TraceLevel, "call scheduled cleanup of vi position to comp: %+v", pos)
@@ -417,58 +417,79 @@ func (v *viHandler) handle(ev term.Event) (exit, handled bool) {
 		return v.sync.vi.Handle(ev)
 	}
 
-	switch ev.Ch {
-	case '$':
-		if !v.sync.vi.IsEditMode() && !v.sync.vi.IsSearchMode() {
-			// manage manually to avoid confusing shell blank cells
-			// with end of line.
-			v.scheduleAfterBell(false, v.remoteMoveToEndOfLine)
-			handled = true
-			return
+	switch ev.Mod {
+	case 0:
+		switch ev.Ch {
+		case '$':
+			if !v.sync.vi.IsEditMode() && !v.sync.vi.IsSearchMode() {
+				// manage manually to avoid confusing shell blank cells
+				// with end of line.
+				v.scheduleAfterBell(false, v.remoteMoveToEndOfLine)
+				handled = true
+				return
+			}
+		case 'i':
+			if !v.sync.vi.IsEditMode() && !v.sync.vi.IsSearchMode() {
+				exit = true
+				handled = true
+				return
+			}
+		// ensure that repeat is not invoked, as underlying
+		// buffer was not initialized with subscribe functionality,
+		// which repeat is dependent upon
+		case '.':
+			if !v.sync.vi.IsEditMode() && !v.sync.vi.IsSearchMode() {
+				return
+			}
 		}
-	case 'i':
-		if !v.sync.vi.IsEditMode() && !v.sync.vi.IsSearchMode() {
-			exit = true
-			handled = true
-			return
-		}
-	// ensure that repeat is not invoked, as underlying
-	// buffer was not initialized with subscribe functionality,
-	// which repeat is dependent upon
-	case '.':
-		if !v.sync.vi.IsEditMode() && !v.sync.vi.IsSearchMode() {
-			return
-		}
-	}
-	handled = true
-	switch ev.Key {
-	case term.KeyEnter:
-		if !v.sync.vi.IsSearchMode() {
+		handled = true
+		switch ev.Key {
+		case term.KeyEnter:
+			if !v.sync.vi.IsSearchMode() {
+				v.scheduleAfterBell(false, func() {
+					v.remote.linefeed()
+					v.remoteFlush()
+				})
+				exit = true
+				return
+			}
+		case term.KeyArrowUp:
 			v.scheduleAfterBell(false, func() {
-				v.remote.linefeed()
+				v.remote.keyArrowUp()
 				v.remoteFlush()
 			})
+			v.scheduleAfterBell(false, v.moveViToLastLineCharacter)
+			return
+		case term.KeyArrowDown:
+			v.scheduleAfterBell(false, func() {
+				v.remote.keyArrowDown()
+				v.remoteFlush()
+			})
+			v.scheduleAfterBell(false, v.moveViToLastLineCharacter)
+			return
+		default:
+		}
+	case term.ModCtrl:
+		handled = true
+		switch ev.Ch {
+		case 'k':
+			v.scheduleAfterBell(false, func() {
+				v.remote.keyArrowUp()
+				v.remoteFlush()
+			})
+			v.scheduleAfterBell(false, v.moveViToLastLineCharacter)
+			return
+		case 'j':
+			v.scheduleAfterBell(false, func() {
+				v.remote.keyArrowDown()
+				v.remoteFlush()
+			})
+			v.scheduleAfterBell(false, v.moveViToLastLineCharacter)
+			return
+		case 'c':
 			exit = true
 			return
 		}
-	case term.KeyCtrlK, term.KeyArrowUp:
-		v.scheduleAfterBell(false, func() {
-			v.remote.keyArrowUp()
-			v.remoteFlush()
-		})
-		v.scheduleAfterBell(false, v.moveViToLastLineCharacter)
-		return
-	case term.KeyCtrlJ, term.KeyArrowDown:
-		v.scheduleAfterBell(false, func() {
-			v.remote.keyArrowDown()
-			v.remoteFlush()
-		})
-		v.scheduleAfterBell(false, v.moveViToLastLineCharacter)
-		return
-	case term.KeyCtrlC:
-		exit = true
-		return
-	default:
 	}
 
 	var oldOffset term.Coordinates

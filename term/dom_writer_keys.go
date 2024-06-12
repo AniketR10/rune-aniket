@@ -1,3 +1,4 @@
+//go:build js
 package term
 
 type shiftableChar struct {

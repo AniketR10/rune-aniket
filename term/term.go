@@ -69,28 +69,11 @@ func Size() (width int, height int) {
 	return termbox.Size()
 }
 
-func makeEvent(tev termbox.Event) (ev Event) {
-	ev.Type = EventType(tev.Type)
-	ev.Mod = Modifier(tev.Mod)
-	ev.Key = Key(tev.Key)
-	ev.Ch = tev.Ch
-	ev.Width = tev.Width
-	ev.Height = tev.Height
-	ev.Err = tev.Err
-	ev.MouseX = tev.MouseX
-	ev.MouseY = tev.MouseY
-	ev.Raw = tev.Raw
-	if tev.Metadata != nil {
-		ev.UserFunc = tev.Metadata.(func())
-	}
-	return
-}
-
 // PollEvent waits for an event and returns it.
 // This is a blocking function call.
 func PollEvent() (ev Event) {
 	tev := termbox.PollEvent()
-	return makeEvent(tev)
+	return termboxEventToEvent(tev)
 }
 
 // Close writer; should be called after successful initialization
@@ -111,19 +94,7 @@ func DisableInterruptForTesting() {
 // If the event queue is full then this method does not
 // publish the event and returns false.
 func PublishEvent(ev Event) bool {
-	tev := termbox.Event{}
-	tev.Type = termbox.EventType(ev.Type)
-	tev.Mod = termbox.Modifier(ev.Mod)
-	tev.Key = termbox.Key(ev.Key)
-	tev.Ch = ev.Ch
-	tev.Width = ev.Width
-	tev.Height = ev.Height
-	tev.Err = ev.Err
-	tev.MouseX = ev.MouseX
-	tev.MouseY = ev.MouseY
-	tev.Raw = ev.Raw
-	tev.Metadata = ev.UserFunc
-	return publishEvent.Load().(func(termbox.Event) bool)(tev)
+	return publishEvent.Load().(func(termbox.Event) bool)(eventToTermboxEvent(ev))
 }
 
 // RingBell makes an audible noise. This must be synchronized
@@ -149,7 +120,7 @@ func Poll() <-chan tcell.Event {
 
 // FromTcellEvent converts a tcell.Event into a term.Event.
 func FromTcellEvent(tev tcell.Event) Event {
-	return makeEvent(termbox.NewEvent(tev))
+	return termboxEventToEvent(termbox.NewEvent(tev))
 }
 
 // CursorStyle represents a given cursor style, which can include the shape and

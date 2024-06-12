@@ -1,3 +1,4 @@
+//go:build js
 package term
 
 import (

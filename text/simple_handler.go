@@ -81,69 +81,75 @@ func (h *simpleEditorHandler) Handle(ev term.Event) (exit, handled bool) {
 		return h.mouse.Handle(ev)
 	}
 
-	switch ev.Key {
-	case term.KeyArrowLeft:
-		if ev.Mod == term.ModAlt {
-			handled = h.cursor.MoveLeftStartWord()
-		} else {
-			handled = h.cursor.MoveLeft()
-		}
-	case term.KeyArrowRight:
-		if ev.Mod == term.ModAlt {
-			handled = h.cursor.MoveRightStartWord()
-		} else {
-			handled = h.cursor.MoveRight()
-		}
-	case term.KeyArrowUp:
-		handled = h.cursor.MoveUp()
-	case term.KeyArrowDown:
-		handled = h.cursor.MoveDown()
-	case term.KeyEnter:
-		h.cursor.Insert('\n')
-		handled = true
-	case term.KeySpace:
-		h.cursor.Insert(' ')
-		handled = true
-	case term.KeyTab:
-		h.cursor.Insert('\t')
-		handled = true
-	case term.KeyCtrlC:
-		_, err := h.cursor.CopySelection(clipboard.DefaultRegisterID, h.clipboard)
-		if err != nil {
-			log.Errorf("cursor copy selection: %v", err)
-		}
-		handled = true
-	case term.KeyCtrlV:
-		paste, err := h.clipboard.Paste(clipboard.DefaultRegisterID)
-		if err != nil {
-			log.Errorf("clipboard paste: %v", err)
-		} else {
-			str := paste.Text
-			h.cursor.Paste(str, StandardSelection, false)
-		}
-		handled = true
-	case term.KeyBackspace, term.KeyBackspace2:
-		if h.cursor.Selection() != "" {
-			handled = h.cursor.DeleteSelection()
-		} else {
-			handled = h.cursor.Backspace()
-		}
-	case term.KeyCtrlA:
-		handled = h.cursor.MoveStartLine()
-	case term.KeyCtrlE:
-		handled = h.cursor.MoveEndLine()
-	case term.KeyCtrlZ:
-		handled = h.cursor.Undo()
-	case term.KeyCtrlR:
-		handled = h.cursor.Redo()
-	case term.KeyCtrlF:
-		ev.Key = 0
-		ev.Ch = '/'
-		_, handled = h.less.Handle(ev)
-	default:
-		if ev.Ch != 0 {
-			h.cursor.Insert(ev.Ch)
+	switch ev.Mod {
+	case 0:
+		switch ev.Key {
+		case term.KeyArrowLeft:
+			if ev.Mod == term.ModAlt {
+				handled = h.cursor.MoveLeftStartWord()
+			} else {
+				handled = h.cursor.MoveLeft()
+			}
+		case term.KeyArrowRight:
+			if ev.Mod == term.ModAlt {
+				handled = h.cursor.MoveRightStartWord()
+			} else {
+				handled = h.cursor.MoveRight()
+			}
+		case term.KeyArrowUp:
+			handled = h.cursor.MoveUp()
+		case term.KeyArrowDown:
+			handled = h.cursor.MoveDown()
+		case term.KeyEnter:
+			h.cursor.Insert('\n')
 			handled = true
+		case term.KeySpace:
+			h.cursor.Insert(' ')
+			handled = true
+		case term.KeyTab:
+			h.cursor.Insert('\t')
+			handled = true
+		case term.KeyBackspace:
+			if h.cursor.Selection() != "" {
+				handled = h.cursor.DeleteSelection()
+			} else {
+				handled = h.cursor.Backspace()
+			}
+		default:
+			if ev.Ch != 0 {
+				h.cursor.Insert(ev.Ch)
+				handled = true
+			}
+		}
+	case term.ModCtrl:
+		switch ev.Ch {
+		case 'c':
+			_, err := h.cursor.CopySelection(clipboard.DefaultRegisterID, h.clipboard)
+			if err != nil {
+				log.Errorf("cursor copy selection: %v", err)
+			}
+			handled = true
+		case 'v':
+			paste, err := h.clipboard.Paste(clipboard.DefaultRegisterID)
+			if err != nil {
+				log.Errorf("clipboard paste: %v", err)
+			} else {
+				str := paste.Text
+				h.cursor.Paste(str, StandardSelection, false)
+			}
+			handled = true
+		case 'a':
+			handled = h.cursor.MoveStartLine()
+		case 'e':
+			handled = h.cursor.MoveEndLine()
+		case 'z':
+			handled = h.cursor.Undo()
+		case 'r':
+			handled = h.cursor.Redo()
+		case 'f':
+			ev.Key = 0
+			ev.Ch = '/'
+			_, handled = h.less.Handle(ev)
 		}
 	}
 	return

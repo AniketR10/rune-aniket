@@ -18,18 +18,19 @@ import (
 )
 
 var (
-	key1 = term.Event{Type: term.EventKey, Key: term.KeyCtrlBackslash}
+	key1 = term.Event{Type: term.EventKey, Mod: term.ModCtrl, Ch: '\\'}
 	key2 = term.Event{Type: term.EventKey,
 		Mod: term.ModAlt, Key: term.KeyBackspace}
 	key3      = term.Event{Type: term.EventMouse, MouseX: 10, MouseY: 11111}
 	protoKey1 = termpb.Event{
 		Type: termpb.Event_TypeKey,
-		Key:  termpb.Event_Ctrl4,
+		Char: '4',
+		Mod:  termpb.Event_Ctrl,
 	}
 	protoKey2 = termpb.Event{
 		Type: termpb.Event_TypeKey,
-		Key:  termpb.Event_CtrlH,
-		Mod:  termpb.Event_Alt,
+		Mod:  termpb.Event_CtrlAlt,
+		Char: 'h',
 	}
 	protoKey3 = termpb.Event{
 		Type:   termpb.Event_TypeMouse,

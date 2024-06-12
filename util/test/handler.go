@@ -44,23 +44,23 @@ func handleTestCase(
 		}
 		switch r {
 		case ':':
-			h.Handle(term.Event{Key: term.KeyCtrlBackslash, Type: term.EventKey})
+			h.Handle(term.Event{Mod: term.ModCtrl, Ch: '\\', Type: term.EventKey})
 		case '`':
-			h.Handle(term.Event{Key: term.KeyCtrlV, Type: term.EventKey})
+			h.Handle(term.Event{Mod: term.ModCtrl, Ch: 'v', Type: term.EventKey})
 		case '_':
 			shouldSleep += 100
 		case ' ':
 			h.Handle(term.Event{Key: term.KeySpace, Type: term.EventKey})
 		case '🎉':
-			h.Handle(term.Event{Key: term.KeyCtrlSpace, Type: term.EventKey})
+			h.Handle(term.Event{Mod: term.ModCtrl, Key: term.KeySpace, Type: term.EventKey})
 		case '💋':
-			h.Handle(term.Event{Key: term.KeyCtrlC, Type: term.EventKey})
+			h.Handle(term.Event{Mod: term.ModCtrl, Ch: 'c', Type: term.EventKey})
 		case '^':
 			h.Handle(term.Event{Key: term.KeyBackspace, Type: term.EventKey})
 		case '#':
-			h.Handle(term.Event{Key: term.KeyCtrlH, Type: term.EventKey})
+			h.Handle(term.Event{Mod: term.ModCtrl, Ch: 'h', Type: term.EventKey})
 		case '$':
-			h.Handle(term.Event{Key: term.KeyCtrlL, Type: term.EventKey})
+			h.Handle(term.Event{Mod: term.ModCtrl, Ch: 'l', Type: term.EventKey})
 		case '>':
 			h.Handle(term.Event{Key: term.KeyEnter, Type: term.EventKey})
 		case '<':

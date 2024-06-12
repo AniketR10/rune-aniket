@@ -37,26 +37,37 @@ func (s simpleHandler) Handle(ev term.Event) (exit, handled bool) {
 		return
 	}
 
-	switch ev.Key {
-	case term.KeyEnter, term.KeyTab:
-		s.Wait()
-		item, ok := s.Focus()
-		if ok {
+	switch ev.Mod {
+	case 0:
+		switch ev.Key {
+		case term.KeyEnter, term.KeyTab:
+			s.Wait()
+			item, ok := s.Focus()
+			if ok {
+				handled = true
+				exit = true
+				s.fn(string(item.data))
+			}
+		case term.KeyEsc:
 			handled = true
 			exit = true
-			s.fn(string(item.data))
+		case term.KeyArrowDown:
+			handled = s.FocusDown()
+		case term.KeyArrowUp:
+			handled = s.FocusUp()
+		default:
+			_, handled = s.ed.Handle(ev)
 		}
-	case term.KeyCtrlC:
-		s.Cancel()
-	case term.KeyEsc:
-		handled = true
-		exit = true
-	case term.KeyCtrlJ, term.KeyArrowDown:
-		handled = s.FocusDown()
-	case term.KeyCtrlK, term.KeyArrowUp:
-		handled = s.FocusUp()
-	default:
-		_, handled = s.ed.Handle(ev)
+	case term.ModCtrl:
+		switch ev.Ch {
+		case 'c':
+			s.Cancel()
+			handled = true
+		case 'j':
+			handled = s.FocusDown()
+		case 'k':
+			handled = s.FocusUp()
+		}
 	}
 
 	return

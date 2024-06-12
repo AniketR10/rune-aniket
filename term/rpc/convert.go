@@ -41,10 +41,33 @@ func (e *Event) ToModel() (ev term.Event, err error) {
 	switch e.Mod {
 	case Event_Alt:
 		ev.Mod = term.ModAlt
-	case Event_Motion:
-		ev.Mod = term.ModMotion
+	case Event_Shift:
+		ev.Mod = term.ModShift
+	case Event_Meta:
+		ev.Mod = term.ModMeta
+	case Event_Ctrl:
+		ev.Mod = term.ModCtrl
+	case Event_CtrlShift:
+		ev.Mod = term.ModCtrlShift
+	case Event_CtrlAlt:
+		ev.Mod = term.ModCtrlAlt
+	case Event_CtrlMeta:
+		ev.Mod = term.ModCtrlMeta
+	case Event_CtrlShiftAlt:
+		ev.Mod = term.ModCtrlShiftAlt
+	case Event_CtrlShiftMeta:
+		ev.Mod = term.ModCtrlShiftMeta
+	case Event_CtrlAltMeta:
+		ev.Mod = term.ModCtrlAltMeta
+	case Event_ShiftMeta:
+		ev.Mod = term.ModShiftMeta
+	case Event_AltMeta:
+		ev.Mod = term.ModAltMeta
+	case Event_AltShiftMeta:
+		ev.Mod = term.ModAltShiftMeta
+	case Event_AltShift:
+		ev.Mod = term.ModAltShift
 	case Event_None:
-		ev.Mod = term.Modifier(0)
 	default:
 		return term.Event{},
 			fmt.Errorf("serialization error: unknown event Mod: %s", e.Mod)
@@ -107,86 +130,17 @@ func (e *Event) ToModel() (ev term.Event, err error) {
 		ev.Key = term.MouseWheelUp
 	case Event_MouseWheelDown:
 		ev.Key = term.MouseWheelDown
-	case Event_CtrlTilde:
-		ev.Key = term.KeyCtrlTilde
-	// case term.KeyCtrl2:
-	// case term.KeyCtrlSpace:
-	case Event_CtrlA:
-		ev.Key = term.KeyCtrlA
-	case Event_CtrlB:
-		ev.Key = term.KeyCtrlB
-	case Event_CtrlC:
-		ev.Key = term.KeyCtrlC
-	case Event_CtrlD:
-		ev.Key = term.KeyCtrlD
-	case Event_CtrlE:
-		ev.Key = term.KeyCtrlE
-	case Event_CtrlF:
-		ev.Key = term.KeyCtrlF
-	case Event_CtrlG:
-		ev.Key = term.KeyCtrlG
-	// case term.KeyBackspace:
-	case Event_CtrlH:
-		ev.Key = term.KeyCtrlH
+	case Event_Backspace:
+		ev.Key = term.KeyBackspace
 	case Event_Tab:
 		ev.Key = term.KeyTab
-	// case term.KeyCtrlI:
-	case Event_CtrlJ:
-		ev.Key = term.KeyCtrlJ
-	case Event_CtrlK:
-		ev.Key = term.KeyCtrlK
-	case Event_CtrlL:
-		ev.Key = term.KeyCtrlL
 	case Event_Enter:
 		ev.Key = term.KeyEnter
-	// case term.KeyCtrlM:
-	case Event_CtrlN:
-		ev.Key = term.KeyCtrlN
-	case Event_CtrlO:
-		ev.Key = term.KeyCtrlO
-	case Event_CtrlP:
-		ev.Key = term.KeyCtrlP
-	case Event_CtrlQ:
-		ev.Key = term.KeyCtrlQ
-	case Event_CtrlR:
-		ev.Key = term.KeyCtrlR
-	case Event_CtrlS:
-		ev.Key = term.KeyCtrlS
-	case Event_CtrlT:
-		ev.Key = term.KeyCtrlT
-	case Event_CtrlU:
-		ev.Key = term.KeyCtrlU
-	case Event_CtrlV:
-		ev.Key = term.KeyCtrlV
-	case Event_CtrlW:
-		ev.Key = term.KeyCtrlW
-	case Event_CtrlX:
-		ev.Key = term.KeyCtrlX
-	case Event_CtrlY:
-		ev.Key = term.KeyCtrlY
-	case Event_CtrlZ:
-		ev.Key = term.KeyCtrlZ
 	case Event_Esc:
 		ev.Key = term.KeyEsc
-	//case term.KeyCtrlLsqBracket:
-	//case term.KeyCtrl3:
-	case Event_Ctrl4:
-		ev.Key = term.KeyCtrl4
-	// case term.KeyCtrlBackslash:
-	case Event_Ctrl5:
-		ev.Key = term.KeyCtrl5
-	// case term.KeyCtrlRsqBracket:
-	case Event_Ctrl6:
-		ev.Key = term.KeyCtrl6
-	case Event_Ctrl7:
-		ev.Key = term.KeyCtrl7
-	// case term.KeyCtrlSlash:
-	// case term.KeyCtrlUnderscore:
 	case Event_Space:
 		ev.Key = term.KeySpace
-	// case term.KeyBackspace2:
-	case Event_Ctrl8:
-		ev.Key = term.KeyCtrl8
+	case Event_Null:
 	default:
 		return term.Event{},
 			fmt.Errorf("serialization error: unknown event key: %s", e.Key)
@@ -292,8 +246,32 @@ func (e *Event) FromModel(ev term.Event) error {
 	switch ev.Mod {
 	case term.ModAlt:
 		e.Mod = Event_Alt
-	case term.ModMotion:
-		e.Mod = Event_Motion
+	case term.ModShift:
+		e.Mod = Event_Shift
+	case term.ModMeta:
+		e.Mod = Event_Meta
+	case term.ModCtrl:
+		e.Mod = Event_Ctrl
+	case term.ModCtrlShift:
+		e.Mod = Event_CtrlShift
+	case term.ModCtrlAlt:
+		e.Mod = Event_CtrlAlt
+	case term.ModCtrlMeta:
+		e.Mod = Event_CtrlMeta
+	case term.ModCtrlShiftAlt:
+		e.Mod = Event_CtrlShiftAlt
+	case term.ModCtrlShiftMeta:
+		e.Mod = Event_CtrlShiftMeta
+	case term.ModCtrlAltMeta:
+		e.Mod = Event_CtrlAltMeta
+	case term.ModShiftMeta:
+		e.Mod = Event_ShiftMeta
+	case term.ModAltMeta:
+		e.Mod = Event_AltMeta
+	case term.ModAltShiftMeta:
+		e.Mod = Event_AltShiftMeta
+	case term.ModAltShift:
+		e.Mod = Event_AltShift
 	case term.Modifier(0):
 		e.Mod = Event_None
 	default:
@@ -357,86 +335,18 @@ func (e *Event) FromModel(ev term.Event) error {
 		e.Key = Event_MouseWheelUp
 	case term.MouseWheelDown:
 		e.Key = Event_MouseWheelDown
-	case term.KeyCtrlTilde:
-		e.Key = Event_CtrlTilde
-	// case term.KeyCtrl2:
-	// case term.KeyCtrlSpace:
-	case term.KeyCtrlA:
-		e.Key = Event_CtrlA
-	case term.KeyCtrlB:
-		e.Key = Event_CtrlB
-	case term.KeyCtrlC:
-		e.Key = Event_CtrlC
-	case term.KeyCtrlD:
-		e.Key = Event_CtrlD
-	case term.KeyCtrlE:
-		e.Key = Event_CtrlE
-	case term.KeyCtrlF:
-		e.Key = Event_CtrlF
-	case term.KeyCtrlG:
-		e.Key = Event_CtrlG
-	// case term.KeyBackspace:
-	case term.KeyCtrlH:
-		e.Key = Event_CtrlH
+	case term.KeyBackspace:
+		e.Key = Event_Backspace
 	case term.KeyTab:
 		e.Key = Event_Tab
-	// case term.KeyCtrlI:
-	case term.KeyCtrlJ:
-		e.Key = Event_CtrlJ
-	case term.KeyCtrlK:
-		e.Key = Event_CtrlK
-	case term.KeyCtrlL:
-		e.Key = Event_CtrlL
 	case term.KeyEnter:
 		e.Key = Event_Enter
-	// case term.KeyCtrlM:
-	case term.KeyCtrlN:
-		e.Key = Event_CtrlN
-	case term.KeyCtrlO:
-		e.Key = Event_CtrlO
-	case term.KeyCtrlP:
-		e.Key = Event_CtrlP
-	case term.KeyCtrlQ:
-		e.Key = Event_CtrlQ
-	case term.KeyCtrlR:
-		e.Key = Event_CtrlR
-	case term.KeyCtrlS:
-		e.Key = Event_CtrlS
-	case term.KeyCtrlT:
-		e.Key = Event_CtrlT
-	case term.KeyCtrlU:
-		e.Key = Event_CtrlU
-	case term.KeyCtrlV:
-		e.Key = Event_CtrlV
-	case term.KeyCtrlW:
-		e.Key = Event_CtrlW
-	case term.KeyCtrlX:
-		e.Key = Event_CtrlX
-	case term.KeyCtrlY:
-		e.Key = Event_CtrlY
-	case term.KeyCtrlZ:
-		e.Key = Event_CtrlZ
 	case term.KeyEsc:
 		e.Key = Event_Esc
-	//case term.KeyCtrlLsqBracket:
-	//case term.KeyCtrl3:
-	case term.KeyCtrl4:
-		e.Key = Event_Ctrl4
-	// case term.KeyCtrlBackslash:
-	case term.KeyCtrl5:
-		e.Key = Event_Ctrl5
-	// case term.KeyCtrlRsqBracket:
-	case term.KeyCtrl6:
-		e.Key = Event_Ctrl6
-	case term.KeyCtrl7:
-		e.Key = Event_Ctrl7
-	// case term.KeyCtrlSlash:
-	// case term.KeyCtrlUnderscore:
 	case term.KeySpace:
 		e.Key = Event_Space
-	// case term.KeyBackspace2:
-	case term.KeyCtrl8:
-		e.Key = Event_Ctrl8
+	case term.Key(0):
+		e.Key = Event_Null
 	default:
 		return fmt.Errorf("serialization error: unknown event key: %+v", ev.Key)
 	}

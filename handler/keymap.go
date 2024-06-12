@@ -32,6 +32,7 @@ func (k keyMappingHandler) Handle(ev term.Event) (bool, bool) {
 			Ch:   mapped.Ch,
 			Mod:  mapped.Mod,
 			Key:  mapped.Key,
+			Raw:  ev.Raw,
 		}
 	}
 	return k.inner.Handle(ev)

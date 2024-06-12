@@ -80,7 +80,7 @@ func (h *Mouse) Handle(ev term.Event) (exit, handled bool) {
 		h.mousePressedRight = ev.Key == term.MouseRight
 	}()
 
-	if ev.Type != term.EventMouse {
+	if ev.Type != term.EventMouse || ev.Mod != 0 {
 		return
 	}
 

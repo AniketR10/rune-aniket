@@ -202,7 +202,7 @@ func (e *Handler) Handle(ev term.Event) (exit, handled bool) {
 		return false, handled
 	}
 
-	if e.modalEnabled && !e.comp.IsAltBuffer() && ev.Key == term.KeyEsc {
+	if e.modalEnabled && !e.comp.IsAltBuffer() && ev.Key == term.KeyEsc && ev.Mod == 0 {
 		handled = true
 		e.enterViMode()
 
@@ -223,7 +223,8 @@ func (e *Handler) Handle(ev term.Event) (exit, handled bool) {
 		})
 		return
 	}
-	handled, raw := e.handleInput(ev)
+	var raw []byte
+	handled, raw = e.handleInput(ev)
 	if exit || handled || len(raw) == 0 {
 		return
 	}
@@ -248,7 +249,7 @@ func (e *Handler) Handle(ev term.Event) (exit, handled bool) {
 	if !e.bracketedPaste {
 		// do not scroll to bottom in all cases or it could
 		// interfere with interactive program that uses primary buffer
-		if ev.Type == term.EventKey && ev.Key == term.KeyCtrlC {
+		if ev.Type == term.EventKey && ev.Ch == 'c' && ev.Mod == term.ModCtrl {
 			e.comp.ScrollBottom()
 		}
 		e.handleTimer.Reset(handleTimeout)
@@ -362,9 +363,10 @@ func (e *Handler) handleInput(ev term.Event) (handled bool, raw []byte) {
 		return
 	}
 
-	switch ev.Key {
-	case term.KeyCtrlL:
+	if ev.Ch == 'l' && ev.Mod == term.ModCtrl {
 		e.mouseDriver.ClearSelection()
+	} else if ev.Mod == 0 && ev.Key == term.KeyEsc {
+		e.comp.Unselect()
 	}
 
 	// we cannot simply send raw bytes coming from termbox.

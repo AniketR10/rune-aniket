@@ -1,3 +1,4 @@
+//go:build js
 package term
 
 import (
@@ -80,7 +81,7 @@ func (w *domWriter) dispatchEvent(ev Event) {
 func (w *domWriter) handleModifier(code int, setMod Modifier) bool {
 	mod := Modifier(code)
 	switch mod {
-	case modShift, modCtrl, ModAlt:
+	case ModShift, ModCtrl, ModAlt:
 		// modShift takes precedence over ModAlt
 		// modCtrl takes precendence over any other mod
 		if setMod == 0 || mod > w.mod {
@@ -119,7 +120,7 @@ func mapEventToCharacter(code int, mod Modifier) (ch rune, ok bool) {
 
 	res := keyboardCharTable[code]
 	switch mod {
-	case modShift:
+	case ModShift:
 		ch = res.shifted
 	default:
 		ch = res.unshifted
@@ -134,8 +135,8 @@ func mapEventToCharacter(code int, mod Modifier) (ch rune, ok bool) {
 
 func makeCharEvent(ch rune, mod Modifier) Event {
 	switch mod {
-	case modCtrl:
-	case modShift:
+	case ModCtrl:
+	case ModShift:
 		return Event{Type: EventKey, Ch: ch}
 	default:
 		return Event{Type: EventKey, Ch: ch, Mod: mod}
@@ -230,8 +231,8 @@ func makeCharEvent(ch rune, mod Modifier) Event {
 
 func makeKeyEvent(key Key, mod Modifier) Event {
 	switch mod {
-	case modCtrl:
-	case modShift:
+	case ModCtrl:
+	case ModShift:
 		return Event{Type: EventKey, Key: key}
 	default:
 		return Event{Type: EventKey, Key: key, Mod: mod}

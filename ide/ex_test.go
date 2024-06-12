@@ -39,7 +39,7 @@ import (
 
 // testutil.TestHandlerSequence maps ':' characters to the following event
 // this is to work around ex's assumptions on underlying handler.
-var testCommandKey = term.KeyComb{Key: term.KeyCtrlBackslash}
+var testCommandKey = term.KeyComb{Ch: '\\', Mod: term.ModCtrl}
 
 type browserConstructor func(ed text.Editor, opts ...text.Option) (tui.Handler, browser.Browser, error)
 
@@ -1017,6 +1017,16 @@ func (t testEx) Handle(ev term.Event) (bool, bool) {
 	return quit, handle
 }
 
+func defCommandKeyBindings() (opts []text.Option) {
+	opts = append(opts, text.WithCommandKeyBinding(
+		term.KeyComb{Mod: term.ModCtrl, Ch: 'w'}, []string{"closeTab"}))
+	opts = append(opts, text.WithCommandKeyBinding(
+		term.KeyComb{Mod: term.ModCtrl, Ch: 'l'}, []string{"nextTab"}))
+	opts = append(opts, text.WithCommandKeyBinding(
+		term.KeyComb{Mod: term.ModCtrl, Ch: 'h'}, []string{"previousTab"}))
+	return
+}
+
 func newExForTestingTerminal(
 	t *testing.T, workspace workspaceLoader,
 	ed text.Editor,
@@ -1027,9 +1037,7 @@ func newExForTestingTerminal(
 	ex := new(ex)
 	ex.syncCommandPrompt = true
 	opts = append(opts, text.WithCommandOverlayConfig(testCommandOverlayConfig()))
-	opts = append(opts, text.WithCommandKeyBinding(term.KeyComb{Key: term.KeyCtrlW}, []string{"closeTab"}))
-	opts = append(opts, text.WithCommandKeyBinding(term.KeyComb{Key: term.KeyCtrlL}, []string{"nextTab"}))
-	opts = append(opts, text.WithCommandKeyBinding(term.KeyComb{Key: term.KeyCtrlH}, []string{"previousTab"}))
+	opts = append(opts, defCommandKeyBindings()...)
 	require.NoError(t, ex.init(ed, workspace, document.NewInMemoryService(),
 		emulatorCfg, publishEvent, opts...))
 	ex.subscribeCommands()
@@ -1046,9 +1054,7 @@ func newExForTestingWithWorkspace(
 	ex := new(ex)
 	ex.syncCommandPrompt = true
 	opts = append(opts, text.WithCommandOverlayConfig(testCommandOverlayConfig()))
-	opts = append(opts, text.WithCommandKeyBinding(term.KeyComb{Key: term.KeyCtrlW}, []string{"closeTab"}))
-	opts = append(opts, text.WithCommandKeyBinding(term.KeyComb{Key: term.KeyCtrlL}, []string{"nextTab"}))
-	opts = append(opts, text.WithCommandKeyBinding(term.KeyComb{Key: term.KeyCtrlH}, []string{"previousTab"}))
+	opts = append(opts, defCommandKeyBindings()...)
 	require.NoError(t, ex.init(ed, workspace, document.NewInMemoryService(),
 		emulatorCfg, publishEvent, opts...))
 	ex.subscribeCommands()
@@ -1333,9 +1339,9 @@ func TestIntegrationCompanionTerminal(t *testing.T) {
 
 	opts := []text.Option{
 		text.WithCommandKey(testCommandKey),
-		text.WithCommandKeyBinding(term.KeyComb{Key: term.KeyCtrlH}, []string{"closeWindow"}),
-		text.WithCommandKeyBinding(term.KeyComb{Key: term.KeyCtrlL}, []string{"nextTab"}),
-		text.WithCommandKeyBinding(term.KeyComb{Key: term.KeyCtrlV}, []string{"closeTab"}),
+		text.WithCommandKeyBinding(term.KeyComb{Mod: term.ModCtrl, Ch: 'h'}, []string{"closeWindow"}),
+		text.WithCommandKeyBinding(term.KeyComb{Mod: term.ModCtrl, Ch: 'l'}, []string{"nextTab"}),
+		text.WithCommandKeyBinding(term.KeyComb{Mod: term.ModCtrl, Ch: 'v'}, []string{"closeTab"}),
 		text.WithCommandOverlayConfig(testCommandOverlayConfig()),
 	}
 
@@ -1610,9 +1616,7 @@ func TestEventNone(t *testing.T) {
 └──────────────────┘`},
 		}
 
-		// KeyCtrlSpace value is 0, so KeyComb() on an EventNone would return it
-		// if no check on ev.Type
-		testCommandKey := term.KeyComb{Key: term.KeyCtrlSpace}
+		testCommandKey := term.KeyComb{Key: term.KeySpace, Mod: term.ModCtrl}
 		opts := []text.Option{
 			text.WithCommandKey(testCommandKey),
 		}

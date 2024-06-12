@@ -196,7 +196,7 @@ func testViHandleSize(t *testing.T, width, height int) {
 		for _, ch := range in {
 			var ev term.Event
 			if ch == '+' {
-				ev = term.Event{Type: term.EventKey, Key: term.KeyCtrlR}
+				ev = term.Event{Type: term.EventKey, Ch: 'r', Mod: term.ModCtrl}
 			} else {
 				ev = term.Event{Type: term.EventKey, Ch: ch}
 			}
@@ -293,7 +293,7 @@ Love isn't love 'til you give it away.
 		}
 		assert.Equal(t, undoFortune, buf.String())
 		for i := 0; i < 3; i++ {
-			quit, handled := vi.Handle(term.Event{Type: term.EventKey, Key: term.KeyCtrlR})
+			quit, handled := vi.Handle(term.Event{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'r'})
 			assert.False(t, quit, i)
 			assert.True(t, handled, i)
 		}
@@ -320,7 +320,7 @@ Love isn't love 'til you give it away.
 		assert.True(t, handled)
 		assert.Equal(t, undoFortune, buf.String())
 
-		quit, handled = vi.Handle(term.Event{Type: term.EventKey, Key: term.KeyCtrlR})
+		quit, handled = vi.Handle(term.Event{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'r'})
 		assert.False(t, quit)
 		assert.True(t, handled)
 		assert.Equal(t, "abc"+undoFortune, buf.String())
@@ -356,7 +356,7 @@ Love isn't love 'til you give it away.
 		assert.Equal(t, undoFortune, buf.String())
 
 		for i := 0; i < 2; i++ {
-			quit, handled := vi.Handle(term.Event{Type: term.EventKey, Key: term.KeyCtrlR})
+			quit, handled := vi.Handle(term.Event{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'r'})
 			assert.False(t, quit)
 			assert.True(t, handled)
 		}
@@ -398,7 +398,7 @@ Love isn't love 'til you give it away.
 		assert.Equal(t, prev, after)
 
 		for i := range suite {
-			quit, handled := vi.Handle(term.Event{Type: term.EventKey, Key: term.KeyCtrlR})
+			quit, handled := vi.Handle(term.Event{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'r'})
 			assert.False(t, quit, i)
 			assert.True(t, handled, i)
 		}
@@ -465,7 +465,7 @@ func TestCopyDelete(t *testing.T) {
 				} else if ch == '<' {
 					ev = term.Event{Type: term.EventKey, Key: term.KeyBackspace}
 				} else if ch == 'R' {
-					ev = term.Event{Type: term.EventKey, Key: term.KeyCtrlR}
+					ev = term.Event{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'r'}
 				}
 				vi.Handle(ev)
 			}

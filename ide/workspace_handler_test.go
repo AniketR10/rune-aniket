@@ -582,7 +582,11 @@ func TestWorkspaceManagerClosePromptIntegration(t *testing.T) {
 
 			testutil.TestHandlerSequence(t, m, 20, 10, cases)
 
-			exit, handled := m.Handle(term.Event{Key: testCommandKey.Key, Type: term.EventKey})
+			exit, handled := m.Handle(term.Event{
+				Ch:  testCommandKey.Ch,
+				Mod: testCommandKey.Mod,
+				Key: testCommandKey.Key, Type: term.EventKey,
+			})
 			assert.False(t, exit)
 			assert.True(t, handled)
 

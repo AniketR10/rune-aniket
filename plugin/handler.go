@@ -263,7 +263,7 @@ func (e *Handler) shouldExit(ev term.Event) (exit bool) {
 	if ev.Type != term.EventKey {
 		return
 	}
-	if ev.Key == term.KeyCtrlC {
+	if ev.Ch == 'c' && ev.Mod == term.ModCtrl {
 		exit = true
 		return
 	}

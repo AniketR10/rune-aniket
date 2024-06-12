@@ -634,7 +634,7 @@ func (h *aiEditorHandler) wrapDialogueHandler(
 
 	// wrap it for ctrl-c cancelation of context
 	return handler.Wrap(withComp, func(ev term.Event) (exit bool, handled bool) {
-		if ev.Key == term.KeyCtrlC {
+		if ev.Ch == 'c' && ev.Mod == term.ModCtrl {
 			mu.Lock()
 			cancelFn := cancel
 			cancel = nil

@@ -26,7 +26,7 @@ const (
 )
 
 var (
-	defaultHistoryKey = term.KeyComb{Key: term.KeyCtrlP}
+	defaultHistoryKey = term.KeyComb{Ch: 'p', Mod: term.ModCtrl}
 	cmdSearchFile     = textapi.CommandManual{
 		Name: "searchFile",
 		Summary: "Opens a new window to perform a fuzzy search for files in the workspace. " +

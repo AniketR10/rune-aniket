@@ -39,8 +39,8 @@ func TestKeyMappedLessHandle(t *testing.T) {
 		{Ch: '\\'}:                   {Ch: '/'},
 		{Key: term.KeyArrowRight}:    {Ch: '$'},
 		{Key: term.KeyArrowLeft}:     {Ch: '0'},
-		{Key: 'N', Mod: term.ModAlt}: {Ch: 'N'},
-		{Key: 'n', Mod: term.ModAlt}: {Ch: 'n'},
+		{Ch: 'N', Mod: term.ModAlt}: {Ch: 'N'},
+		{Ch: 'n', Mod: term.ModAlt}: {Ch: 'n'},
 	}), cases, writer3)
 }
 

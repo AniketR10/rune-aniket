@@ -114,7 +114,7 @@ func (h *colorPaletteHandler) Handle(ev term.Event) (exit, handled bool) {
 	if ev.Type != term.EventKey {
 		return
 	}
-	if ev.Key == term.KeyCtrlD {
+	if ev.Ch == 'd' && ev.Mod == term.ModCtrl {
 		h.dim = !h.dim
 		h.dirty = true
 		return

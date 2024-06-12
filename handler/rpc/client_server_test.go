@@ -24,7 +24,7 @@ var testHandlerKeys tui.KeyMap
 
 func init() {
 	testHandlerKeys = make(tui.KeyMap)
-	ev1 := term.KeyComb{Key: term.KeyCtrlSpace}
+	ev1 := term.KeyComb{Ch: ' ', Mod: term.ModCtrl, Key: term.KeySpace}
 	ev2 := term.KeyComb{Mod: term.ModAlt, Ch: '@'}
 	testHandlerKeys[ev1] = tui.EventDesc{ID: "sup", Description: "media soup"}
 	testHandlerKeys[ev2] = tui.EventDesc{ID: "hiperio", Description: "is dead; or is it?"}

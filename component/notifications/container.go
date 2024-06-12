@@ -187,7 +187,7 @@ func (n *Container) resumeAll() {
 // other than mouse events. It handles mouse events by pausing
 // notifications on hover.
 func (n *Container) Handle(ev term.Event) (exit, handled bool) {
-	if ev.Type != term.EventMouse {
+	if ev.Type != term.EventMouse || ev.Mod != 0 {
 		return
 	}
 

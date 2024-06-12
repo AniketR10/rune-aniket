@@ -285,10 +285,12 @@ func (l *Less) ShowCommandBar(show bool) {
 }
 
 func (l *Less) searchHandleEvent(ev term.Event) (bool, bool) {
+	if ev.Type != term.EventKey || ev.Mod != 0 {
+		return false, false
+	}
+
 	switch ev.Key {
 	case term.KeyBackspace:
-		fallthrough
-	case term.KeyBackspace2:
 		if l.cursorOffset > 1 {
 			l.cursorOffset--
 			l.searchScroll.Buffer().
@@ -329,43 +331,44 @@ func (l *Less) updateSearchBarAttr() {
 }
 
 func (l *Less) normalHandleEvent(ev term.Event) (exit, handled bool) {
-	switch ev.Type {
-	case term.EventKey:
-		switch ev.Ch {
-		case 'q':
+	if ev.Type != term.EventKey || ev.Mod != 0 {
+		return
+	}
+
+	switch ev.Ch {
+	case 'q':
+		exit = true
+		handled = true
+	case 'N':
+		handled = l.scroll.SeekPrevResult()
+	case 'n':
+		handled = l.scroll.SeekNextResult()
+	case '0':
+		handled = l.scroll.SeekStartLine()
+	case '$':
+		handled = l.scroll.SeekEndLine()
+	case 'g':
+		handled = l.scroll.SeekStartFile()
+	case 'G':
+		handled = l.scroll.SeekEndFile()
+	case 'j':
+		handled = l.scroll.SeekDown()
+	case 'k':
+		handled = l.scroll.SeekUp()
+	case 'h':
+		handled = l.scroll.SeekLeft()
+	case 'l':
+		handled = l.scroll.SeekRight()
+	case '/':
+		l.SetSearchMode()
+		handled = true
+	default:
+		switch ev.Key {
+		case term.KeyEsc:
 			exit = true
 			handled = true
-		case 'N':
-			handled = l.scroll.SeekPrevResult()
-		case 'n':
-			handled = l.scroll.SeekNextResult()
-		case '0':
-			handled = l.scroll.SeekStartLine()
-		case '$':
-			handled = l.scroll.SeekEndLine()
-		case 'g':
-			handled = l.scroll.SeekStartFile()
-		case 'G':
-			handled = l.scroll.SeekEndFile()
-		case 'j':
-			handled = l.scroll.SeekDown()
-		case 'k':
-			handled = l.scroll.SeekUp()
-		case 'h':
-			handled = l.scroll.SeekLeft()
-		case 'l':
-			handled = l.scroll.SeekRight()
-		case '/':
-			l.SetSearchMode()
-			handled = true
 		default:
-			switch ev.Key {
-			case term.KeyEsc:
-				exit = true
-				handled = true
-			default:
-				handled = false
-			}
+			handled = false
 		}
 	}
 

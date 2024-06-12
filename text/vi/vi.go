@@ -208,11 +208,11 @@ func (vi *Vi) Handle(ev term.Event) (quit, handled bool) {
 				case 'u':
 					handled = vi.undo()
 					return
-				}
-				switch ev.Key {
-				case term.KeyCtrlR:
-					handled = vi.redo()
-					return
+				case 'r':
+					if ev.Mod == term.ModCtrl {
+						handled = vi.redo()
+						return
+					}
 				}
 			}
 		}

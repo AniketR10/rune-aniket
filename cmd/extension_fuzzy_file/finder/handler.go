@@ -535,13 +535,14 @@ func (h *fuzzyFinderHandler) Handle(ev term.Event) (exit, handled bool) {
 		return
 	}
 
-	if ev.KeyComb() == h.historyKey {
+	comb := ev.KeyComb()
+	if comb == h.historyKey {
 		h.writeLastSearchQuery()
 		handled = true
 		return
 	}
 
-	if ev.KeyComb().Key == term.KeyCtrlC {
+	if comb.Ch == 'c' && comb.Mod == term.ModCtrl {
 		if h.cancelScan != nil {
 			h.cancelScan()
 		}

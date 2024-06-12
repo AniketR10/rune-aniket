@@ -369,17 +369,17 @@ func TestConfigSetting(t *testing.T) {
 	wantMappings := map[handler.Sequence][]string{
 		{First: term.KeyComb{Ch: 'f'}}:            {"searchFile"},
 		{First: term.KeyComb{Ch: 'l'}}:            {"searchText"},
-		{First: term.KeyComb{Key: term.KeyCtrlX}}: {"closeDoors"},
+		{First: term.KeyComb{Ch: 'x', Mod: term.ModCtrl}}: {"closeDoors"},
 		{
-			First: term.KeyComb{Key: term.KeyCtrlX},
-			Last:  term.KeyComb{Key: term.KeyCtrlP},
+			First: term.KeyComb{Ch: 'x', Mod: term.ModCtrl},
+			Last:  term.KeyComb{Ch: 'p', Mod: term.ModCtrl},
 		}: {"openAllDoors"},
 		{
 			First: term.KeyComb{Ch: 'f'},
-			Last:  term.KeyComb{Key: term.KeyCtrlP},
+			Last:  term.KeyComb{Ch: 'p', Mod: term.ModCtrl},
 		}: {"openDoors", "small"},
 		{
-			First: term.KeyComb{Key: term.KeyCtrlX},
+			First: term.KeyComb{Ch: 'x', Mod: term.ModCtrl},
 			Last:  term.KeyComb{Ch: '9'},
 		}: {"openDoors", "large"},
 	}

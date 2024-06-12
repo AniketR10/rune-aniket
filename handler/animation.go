@@ -62,7 +62,7 @@ func (p *player) cachePausedFrame(ctx context.Context) {
 }
 
 func (p *player) Handle(ev term.Event) (exit, handled bool) {
-	if ev.Type != term.EventKey {
+	if ev.Type != term.EventKey || ev.Mod != 0 {
 		return
 	}
 

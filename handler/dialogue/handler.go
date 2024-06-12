@@ -101,16 +101,19 @@ func (s *dialogueHandler) Handle(ev term.Event) (exit, handled bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	switch ev.Key {
-	case term.KeyEsc:
-		exit = true
-	case term.KeyEnter:
-		item, ok := s.comp.InputSubmit()
-		if ok {
-			handled = true
-			s.mu.Unlock()
-			s.tx <- item
-			s.mu.Lock()
+	switch ev.Mod {
+	case 0:
+		switch ev.Key {
+		case term.KeyEsc:
+			exit = true
+		case term.KeyEnter:
+			item, ok := s.comp.InputSubmit()
+			if ok {
+				handled = true
+				s.mu.Unlock()
+				s.tx <- item
+				s.mu.Lock()
+			}
 		}
 	}
 
@@ -130,17 +133,28 @@ func (s *dialogueHandler) Handle(ev term.Event) (exit, handled bool) {
 
 	// the following might or might not be handled by input
 	// so we handle if and only if input has not handled them.
-	switch ev.Key {
-	case term.KeyArrowDown, term.KeyCtrlJ:
-		handled = s.comp.SeekDown()
-		return
-	case term.KeyCtrlC:
-		handled = true
-		s.comp.Input().Reset()
-	case term.KeyArrowUp, term.KeyCtrlK:
-		handled = s.comp.SeekUp()
-		return
+	switch ev.Mod {
+	case 0:
+		switch ev.Key {
+		case term.KeyArrowDown:
+			handled = s.comp.SeekDown()
+			return
+		case term.KeyArrowUp:
+			handled = s.comp.SeekUp()
+			return
+		}
+	case term.ModCtrl:
+		switch ev.Ch {
+		case 'c':
+			handled = true
+			s.comp.Input().Reset()
+		case 'k':
+			handled = s.comp.SeekUp()
+		case 'j':
+			handled = s.comp.SeekDown()
+		}
 	}
+
 	return
 }
 

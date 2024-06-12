@@ -78,7 +78,7 @@ func (f *Prompt) highlightOption() {
 
 // Handle satisfies tui.Handler.
 func (f *Prompt) Handle(ev term.Event) (exit, handled bool) {
-	if ev.Type != term.EventKey {
+	if ev.Type != term.EventKey || ev.Mod != 0 {
 		return
 	}
 	if i, ok := f.bindings[ev.KeyComb()]; ok {

@@ -118,22 +118,22 @@ func TestParseSequence(t *testing.T) {
 		}, false},
 		{"f<c-p>", Sequence{
 			First: term.KeyComb{Ch: 'f'},
-			Last:  term.KeyComb{Key: term.KeyCtrlP},
+			Last:  term.KeyComb{Ch: 'p', Mod: term.ModCtrl},
 		}, false},
 		{"<c-p>f", Sequence{
-			First: term.KeyComb{Key: term.KeyCtrlP},
+			First: term.KeyComb{Ch: 'p', Mod: term.ModCtrl},
 			Last:  term.KeyComb{Ch: 'f'},
 		}, false},
 		{"<c-x><c-p>", Sequence{
-			First: term.KeyComb{Key: term.KeyCtrlX},
-			Last:  term.KeyComb{Key: term.KeyCtrlP},
+			First: term.KeyComb{Ch: 'x', Mod: term.ModCtrl},
+			Last:  term.KeyComb{Ch: 'p', Mod: term.ModCtrl},
 		}, false},
-		{"<m-c-]><c-p>", Sequence{
+		{"<c-m-]><c-p>", Sequence{
 			First: term.KeyComb{
-				Key: term.KeyCtrlRsqBracket,
-				Mod: term.ModAlt,
+				Ch: ']',
+				Mod: term.ModCtrlMeta,
 			},
-			Last: term.KeyComb{Key: term.KeyCtrlP},
+			Last: term.KeyComb{Ch: 'p', Mod: term.ModCtrl},
 		}, false},
 	}
 

@@ -46,7 +46,8 @@ func validateCommandPrompt(c *ideConfig, cfg map[string]any) (err error) {
 	case editorModeModeless:
 		// unfortunately <c-space> is mapped and dispatched with Ch == ' '.
 		// Handle edge case to avoid false positive.
-		isCtrlSpace := commandKey.Ch == ' ' && commandKey.Key == term.KeyCtrlSpace
+		isCtrlSpace := commandKey.Ch == ' ' &&
+			commandKey.Key == term.KeySpace && commandKey.Mod == term.ModCtrl
 		isIncompatible := !isCtrlSpace && commandKey.Ch != 0 && commandKey.Mod == 0
 
 		if isIncompatible {

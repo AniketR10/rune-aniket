@@ -382,43 +382,63 @@ func (h *Prompt) handleCommon(ev *term.Event, sync bool) (quit, handled bool) {
 	}
 
 	h.prevCommandCycle = false
-	handled = true
-	switch ev.Key {
-	case term.KeyEnter:
-		if h.userScrolling {
-			h.incArgsCompleteMode(!h.bracketedPaste, sync)
-		}
-		quit, handled = h.dispatchCommand()
-		h.reset()
-	case term.KeyEsc:
-		quit = true
-		h.Cancel()
-	case term.KeyArrowDown, term.KeyCtrlJ:
-		if h.userScrolling {
-			h.list.FocusDown()
-		} else {
-			h.setUserScrolling(true)
-		}
-	case term.KeyArrowUp, term.KeyCtrlK:
-		ok := h.list.FocusUp()
-		if !ok {
-			h.setUserScrolling(false)
-		}
-	case term.KeyCtrlC:
-		select {
-		case <-h.completionCtx.Done():
-			// completion already canceled
+	switch ev.Mod {
+	case 0:
+		handled = true
+		switch ev.Key {
+		case term.KeyEnter:
+			if h.userScrolling {
+				h.incArgsCompleteMode(!h.bracketedPaste, sync)
+			}
+			quit, handled = h.dispatchCommand()
+			h.reset()
+		case term.KeyEsc:
 			quit = true
+			h.Cancel()
+		case term.KeyArrowDown:
+			if h.userScrolling {
+				h.list.FocusDown()
+			} else {
+				h.setUserScrolling(true)
+			}
+		case term.KeyArrowUp:
+			ok := h.list.FocusUp()
+			if !ok {
+				h.setUserScrolling(false)
+			}
+		case term.KeyTab:
+			h.incArgsCompleteMode(!h.bracketedPaste, sync)
+		case term.KeySpace:
+			ev.Ch = ' '
+			handled = false
 		default:
+			handled = false
 		}
-		h.cancelCompletionPush("received ctrl-c")
-	case term.KeyTab:
-		h.incArgsCompleteMode(!h.bracketedPaste, sync)
-	case term.KeySpace:
-		ev.Ch = ' '
-		handled = false
-	default:
-		handled = false
+	case term.ModCtrl:
+		handled = true
+		switch ev.Ch {
+		case 'j':
+			if h.userScrolling {
+				h.list.FocusDown()
+			} else {
+				h.setUserScrolling(true)
+			}
+		case 'k':
+			ok := h.list.FocusUp()
+			if !ok {
+				h.setUserScrolling(false)
+			}
+		case 'c':
+			select {
+			case <-h.completionCtx.Done():
+				// completion already canceled
+				quit = true
+			default:
+			}
+			h.cancelCompletionPush("received ctrl-c")
+		default:
+			handled = false
+		}
 	}
 	return
 }
@@ -461,8 +481,12 @@ func (h *Prompt) handleCommand(ev term.Event, sync bool) (quit, handled bool) {
 		return
 	}
 
+	if ev.Mod != 0 {
+		return
+	}
+
 	switch ev.Key {
-	case term.KeyBackspace, term.KeyBackspace2:
+	case term.KeyBackspace:
 		cols := h.buf.Columns(0)
 		if cols == 0 {
 			handled = true
@@ -498,8 +522,13 @@ func (h *Prompt) handleCompleteArgs(ev term.Event, sync bool) (quit, handled boo
 	if handled {
 		return
 	}
+
+	if ev.Mod != 0 {
+		return
+	}
+
 	switch ev.Key {
-	case term.KeyBackspace, term.KeyBackspace2:
+	case term.KeyBackspace:
 		if h.userScrolling && h.completingWithHistory {
 			if err := h.deleteFocusFromHistory(); err != nil {
 				h.log(log.ErrorLevel, "delete focus from history: %v", err)

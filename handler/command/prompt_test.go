@@ -847,7 +847,7 @@ func TestCommandHandlerCancel(t *testing.T) {
 		}
 
 		// must not quit window, instead it must cancel the never ending completion we set up
-		quit, handled := b.handle(term.Event{Type: term.EventKey, Key: term.KeyCtrlC}, true)
+		quit, handled := b.handle(term.Event{Type: term.EventKey, Ch: 'c', Mod: term.ModCtrl}, true)
 		assert.False(t, quit)
 		assert.True(t, handled)
 
@@ -862,7 +862,7 @@ func TestCommandHandlerCancel(t *testing.T) {
 		require.True(t, completionCanceled)
 
 		// must quit window, since the completion is already canceled by the previous Ctrl-C
-		quit, handled = b.handle(term.Event{Type: term.EventKey, Key: term.KeyCtrlC}, false)
+		quit, handled = b.handle(term.Event{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'c'}, false)
 		assert.True(t, quit)
 		assert.True(t, handled)
 	})

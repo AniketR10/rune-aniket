@@ -67,17 +67,11 @@ func handleTestCase(
 
 	// vte needs Raw field set
 	callHandle := func(ev term.Event) {
-		ev.Raw = []byte(string(ev.Ch))
-		if len(ev.Raw) == 0 {
+		switch ev.Mod {
+		case 0:
 			switch ev.Key {
-			case term.KeyCtrlBackslash:
-				ev.Raw = []byte("\x1C")
-			case term.KeyCtrlV:
-				ev.Raw = []byte("\x16")
 			case term.KeyBackspace:
-				ev.Raw = []byte("\x08")
-			case term.KeyCtrlL:
-				ev.Raw = []byte("\x0c")
+				ev.Raw = []byte("\x7f")
 			case term.KeyEnter:
 				ev.Raw = []byte("\x0A")
 			case term.KeyEsc:
@@ -88,6 +82,45 @@ func handleTestCase(
 				ev.Raw = []byte("\x50")
 			case term.KeyArrowUp:
 				ev.Raw = []byte("\x48")
+			case term.KeyF1:
+				ev.Raw = []byte("\x1bOP")
+			case term.KeyF2:
+				ev.Raw = []byte("\x1bOQ")
+			case term.KeyF3:
+				ev.Raw = []byte("\x1bOR")
+			case term.KeyF4:
+				ev.Raw = []byte("\x1bOS")
+			case term.KeyF5:
+				ev.Raw = []byte("\x1b[15~")
+			case term.KeyF6:
+				ev.Raw = []byte("\x1b[17~")
+			case term.KeyF7:
+				ev.Raw = []byte("\x1b[18~")
+			case term.KeyF8:
+				ev.Raw = []byte("\x1b[19~")
+			case term.KeyF9:
+				ev.Raw = []byte("\x1b[20~")
+			case term.KeyF10:
+				ev.Raw = []byte("\x1b[21~")
+			case term.KeyF11:
+				ev.Raw = []byte("\x1b[22~")
+			case term.KeyF12:
+				ev.Raw = []byte("\x1b[23~")
+			case term.KeyInsert:
+				ev.Raw = []byte("\x1b[2~")
+			case term.KeyDelete:
+				ev.Raw = []byte("\x1b[3~")
+			default:
+				ev.Raw = []byte(string(ev.Ch))
+			}
+		case term.ModCtrl:
+			switch ev.Ch {
+			case '\\':
+				ev.Raw = []byte("\x1C")
+			case 'v':
+				ev.Raw = []byte("\x16")
+			case 'l':
+				ev.Raw = []byte("\x0c")
 			default:
 				t.Logf("WARNING: could not find raw vte sequence for input event: %+v", ev)
 			}
@@ -106,9 +139,9 @@ func handleTestCase(
 		case '^':
 			callHandle(term.Event{Key: term.KeyBackspace, Type: term.EventKey})
 		case '#':
-			callHandle(term.Event{Key: term.KeyCtrlC, Type: term.EventKey})
+			callHandle(term.Event{Mod: term.ModCtrl, Ch: 'c', Type: term.EventKey})
 		case '$':
-			callHandle(term.Event{Key: term.KeyCtrlL, Type: term.EventKey})
+			callHandle(term.Event{Mod: term.ModCtrl, Ch: 'l', Type: term.EventKey})
 		case '>':
 			callHandle(term.Event{Key: term.KeyEnter, Type: term.EventKey})
 		case '<':

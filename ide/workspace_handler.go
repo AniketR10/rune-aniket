@@ -41,7 +41,7 @@ const (
 
 var (
 	defaultModalCommandKey    = term.KeyComb{Ch: ':'}
-	defaultModelessCommandKey = term.KeyComb{Key: term.KeyCtrlSpace}
+	defaultModelessCommandKey = term.KeyComb{Key: term.KeySpace, Mod: term.ModCtrl}
 )
 
 type workspaceManagerHandler struct {

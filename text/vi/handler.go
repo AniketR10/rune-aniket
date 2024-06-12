@@ -275,21 +275,23 @@ func (vi *viHandlerImpl) setReplaceOneMode() {
 // perform the search once, at the same time we delegate the right logic to
 // Editor and Less.
 func (vi *viHandlerImpl) handleSearch(ev term.Event) (bool, bool) {
-	switch ev.Key {
-	case term.KeyEnter:
-		text := vi.less.SearchText()
-		vi.less.SetNormalMode()
-		vi.searchMode = moveToNext
-		if text == "" {
-			vi.setMode(normalMode) // force set message
-		} else {
-			vi.less.SetMessage("searching '%s'", text)
+	switch ev.Mod {
+	case 0:
+		switch ev.Key {
+		case term.KeyEnter:
+			text := vi.less.SearchText()
+			vi.less.SetNormalMode()
+			vi.searchMode = moveToNext
+			if text == "" {
+				vi.setMode(normalMode) // force set message
+			} else {
+				vi.less.SetMessage("searching '%s'", text)
+			}
+			vi.search(text)
+			return false, true
 		}
-		vi.search(text)
-		return false, true
-	default:
-		return vi.less.Handle(ev)
 	}
+	return vi.less.Handle(ev)
 }
 
 func (vi *viHandlerImpl) logError(err error) {
@@ -318,8 +320,14 @@ func (vi *viHandlerImpl) handleNormal(ev term.Event) (quit, handled bool) {
 		return
 	}
 
-	switch ev.Type {
-	case term.EventKey:
+	switch ev.Mod {
+	case term.ModCtrl:
+		switch ev.Ch {
+		case 'v':
+			vi.setVisualBlockMode()
+			handled = true
+		}
+	case 0:
 		handled = true
 		switch ev.Ch {
 		case 'R':
@@ -450,13 +458,10 @@ func (vi *viHandlerImpl) handleNormal(ev term.Event) (quit, handled bool) {
 			vi.searchMode = moveToNext
 			vi.search(vi.cursor.Word())
 		default:
-			switch ev.Key {
-			case term.KeyCtrlV:
-				vi.setVisualBlockMode()
-			case term.KeyEsc:
+			if ev.Key == term.KeyEsc {
 				handled = vi.setNormalMode()
 				vi.cursor.Unselect()
-			default:
+			} else {
 				handled = false
 			}
 		}
@@ -476,26 +481,42 @@ func (vi *viHandlerImpl) search(text string) {
 	}
 }
 
+func (vi *viHandlerImpl) exitInsert() {
+	vi.cursor.MoveLeft()
+	vi.repeatInsertStart()
+	vi.setNormalMode()
+}
+
 func (vi *viHandlerImpl) handleInsert(ev term.Event) (quit, handled bool) {
-	handled = true
-	switch ev.Key {
-	case term.KeyEnter:
-		vi.cursor.Insert('\n')
-	case term.KeySpace:
-		vi.cursor.Insert(' ')
-	case term.KeyTab:
-		vi.cursor.Insert('\t')
-	case term.KeyBackspace, term.KeyBackspace2:
-		vi.cursor.Backspace()
-	case term.KeyEsc, term.KeyCtrlC:
-		vi.cursor.MoveLeft()
-		vi.repeatInsertStart()
-		vi.setNormalMode()
-	default:
-		if ev.Ch != 0 {
-			vi.cursor.Insert(ev.Ch)
-		} else {
-			handled = false
+	switch ev.Mod {
+	case 0:
+		switch ev.Key {
+		case term.KeyEnter:
+			vi.cursor.Insert('\n')
+			handled = true
+		case term.KeySpace:
+			vi.cursor.Insert(' ')
+			handled = true
+		case term.KeyTab:
+			vi.cursor.Insert('\t')
+			handled = true
+		case term.KeyBackspace:
+			vi.cursor.Backspace()
+			handled = true
+		case term.KeyEsc:
+			vi.exitInsert()
+			handled = true
+		default:
+			if ev.Ch != 0 {
+				vi.cursor.Insert(ev.Ch)
+				handled = true
+			}
+		}
+	case term.ModCtrl:
+		switch ev.Ch {
+		case 'c':
+			vi.exitInsert()
+			handled = true
 		}
 	}
 	return
@@ -526,15 +547,19 @@ func (vi *viHandlerImpl) handleVisualBlockInsertStart() {
 }
 
 func (vi *viHandlerImpl) handleVisual(ev term.Event) (quit, handled bool) {
-	if ev.Key == term.KeyEsc || ev.Key == term.KeyCtrlC {
+	if ev.Type != term.EventKey {
+		return
+	}
+	if ev.Key == term.KeyEsc || (ev.Ch == 'c' && ev.Mod == term.ModCtrl) {
 		vi.setNormalMode()
 		vi.cursor.Unselect()
 		handled = true
 		return
 	}
 
-	if ev.Type == term.EventKey {
-		handled = true
+	handled = true
+	switch ev.Mod {
+	case 0:
 		switch ev.Ch {
 		case '>':
 			vi.cursor.ShiftSelectionRight()
@@ -574,27 +599,32 @@ func (vi *viHandlerImpl) handleVisual(ev term.Event) (quit, handled bool) {
 	return
 }
 
-func (vi *viHandlerImpl) handleMoveToCharacter(mode moveMode, ev term.Event) (bool, bool) {
-	switch ev.Type {
-	case term.EventKey:
-		switch mode {
-		case moveToNext:
-			vi.cursor.MoveToNextChar(ev.Ch)
-		case moveToPrev:
-			vi.cursor.MoveToPrevChar(ev.Ch)
-		case moveNone:
-			return false, false
+func (vi *viHandlerImpl) handleMoveToCharacter(mode moveMode, ev term.Event) (exit, handled bool) {
+	switch ev.Mod {
+	case 0:
+		switch ev.Type {
+		case term.EventKey:
+			switch mode {
+			case moveToNext:
+				vi.cursor.MoveToNextChar(ev.Ch)
+			case moveToPrev:
+				vi.cursor.MoveToPrevChar(ev.Ch)
+			case moveNone:
+				return
+			}
+			vi.moveChar = ev.Ch
+			vi.setNormalMode()
+			handled = true
+		default:
+			vi.setNormalMode()
+			handled = true
 		}
-		vi.moveChar = ev.Ch
-		vi.setNormalMode()
-	default:
-		vi.setNormalMode()
 	}
-	return false, true
+	return
 }
 
 func (vi *viHandlerImpl) handleReplace(ev term.Event) (quit, handled bool) {
-	if ev.Type != term.EventKey {
+	if ev.Type != term.EventKey || ev.Mod != 0 {
 		return
 	}
 
@@ -607,7 +637,7 @@ func (vi *viHandlerImpl) handleReplace(ev term.Event) (quit, handled bool) {
 		ev.Ch = ' '
 	case term.KeyTab:
 		ev.Ch = '\t'
-	case term.KeyBackspace, term.KeyBackspace2:
+	case term.KeyBackspace:
 		vi.cursor.MoveLeft()
 	case term.KeyEsc:
 		vi.cursor.MoveLeft()
@@ -648,27 +678,30 @@ func (vi *viHandlerImpl) handleMetaNormal(ev term.Event) (quit, handled, done bo
 
 	// handle <op>wWeEbB idiosyncrasies
 	after = vi.cursor.Coordinates()
-	switch ev.Ch {
-	case 'e', 'E':
-	case 'w', 'W':
-		vi.cursor.MoveLeft()
-		if before.Y < after.Y {
-			vi.cursor.MoveLeftEndWord()
-		}
-	case 'b', 'B':
-		if before.Y > after.Y {
-			vi.cursor.MoveLeftStartWord()
-		}
-	default:
-		if before.Y != after.Y {
-			vi.cursor.SelectLine()
+	switch ev.Mod {
+	case 0:
+		switch ev.Ch {
+		case 'e', 'E':
+		case 'w', 'W':
+			vi.cursor.MoveLeft()
+			if before.Y < after.Y {
+				vi.cursor.MoveLeftEndWord()
+			}
+		case 'b', 'B':
+			if before.Y > after.Y {
+				vi.cursor.MoveLeftStartWord()
+			}
+		default:
+			if before.Y != after.Y {
+				vi.cursor.SelectLine()
+			}
 		}
 	}
 	return
 }
 
 func (vi *viHandlerImpl) handleYank(ev term.Event) (quit, handled bool) {
-	if ev.Ch == 'y' {
+	if ev.Ch == 'y' && ev.Mod == 0 {
 		if vi.cursor.SelectLine() {
 			vi.copySelection()
 			handled = true
@@ -689,7 +722,7 @@ func (vi *viHandlerImpl) handleYank(ev term.Event) (quit, handled bool) {
 }
 
 func (vi *viHandlerImpl) handleDelete(ev term.Event) (quit, handled bool) {
-	if !vi.deleteInsert && vi.moveMode == moveNone && ev.Ch == 'd' {
+	if !vi.deleteInsert && vi.moveMode == moveNone && ev.Ch == 'd' && ev.Mod == 0 {
 		if vi.cursor.SelectLine() {
 			vi.cursor.DeleteSelection()
 		}
@@ -698,7 +731,7 @@ func (vi *viHandlerImpl) handleDelete(ev term.Event) (quit, handled bool) {
 		return
 	}
 
-	if vi.deleteInsert && vi.moveMode == moveNone && ev.Ch == 'c' {
+	if vi.deleteInsert && vi.moveMode == moveNone && ev.Ch == 'c' && ev.Mod == 0 {
 		vi.cursor.MoveStartLine()
 		if vi.cursor.Select() {
 			vi.cursor.MoveEndLine()
@@ -727,11 +760,14 @@ func (vi *viHandlerImpl) handleDelete(ev term.Event) (quit, handled bool) {
 func (vi *viHandlerImpl) handleGo(ev term.Event) (quit, handled bool) {
 	defer vi.setNormalMode()
 
-	switch ev.Ch {
-	case 'g':
-		vi.cursor.MoveFirstLine()
-		handled = true
-	default:
+	switch ev.Mod {
+	case 0:
+		switch ev.Ch {
+		case 'g':
+			vi.cursor.MoveFirstLine()
+			handled = true
+		default:
+		}
 	}
 	return
 }

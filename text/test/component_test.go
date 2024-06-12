@@ -127,27 +127,27 @@ func TestComponentInterfaces(t *testing.T) {
 	comp.Resize(0, 0)
 }
 
-func TestComponentKeyMapper(t *testing.T) {
-	t.Run("KeyMapping on a non-mapped event returns false", func(t *testing.T) {
+func TestComponentCommandKeyBinding(t *testing.T) {
+	t.Run("on a non-mapped event returns false", func(t *testing.T) {
 		c, _ := newTestComponent(t, NopEditor())
-		_, ok := c.KeyMapping(keya)
+		_, ok := c.CommandKeyBinding(keya)
 		assert.False(t, ok)
 	})
 
-	t.Run("KeyMapping returns mapped command", func(t *testing.T) {
+	t.Run("returns mapped command", func(t *testing.T) {
 		config := text.DefaultConfig()
 		config.CommandKeyBindings[keya] = []string{"myCmd"}
 		c, _ := newTestComponentConfig(t, NopEditor(), config)
-		cmd, ok := c.KeyMapping(keya)
+		cmd, ok := c.CommandKeyBinding(keya)
 		assert.True(t, ok)
 		assert.Equal(t, []string{"myCmd"}, cmd)
 	})
 
-	t.Run("KeyMapping returns mapped command and args", func(t *testing.T) {
+	t.Run("returns mapped command and args", func(t *testing.T) {
 		config := text.DefaultConfig()
 		config.CommandKeyBindings[keya] = []string{"myCmd", "1"}
 		c, _ := newTestComponentConfig(t, NopEditor(), config)
-		cmd, ok := c.KeyMapping(keya)
+		cmd, ok := c.CommandKeyBinding(keya)
 		assert.True(t, ok)
 		assert.Equal(t, []string{"myCmd", "1"}, cmd)
 	})

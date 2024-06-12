@@ -626,7 +626,7 @@ func TestExitInsertMode(t *testing.T) {
 		vi.setInsertMode()
 		assert.Equal(t, vi.mode(), insertMode)
 
-		vi.Handle(term.Event{Type: term.EventKey, Key: term.KeyCtrlC})
+		vi.Handle(term.Event{Type: term.EventKey, Ch: 'c', Mod: term.ModCtrl})
 		assert.Equal(t, vi.mode(), normalMode)
 	})
 }
@@ -645,7 +645,7 @@ func TestExitVisualMode(t *testing.T) {
 		vi.setVisualMode()
 		assert.Equal(t, vi.mode(), visualMode)
 
-		vi.Handle(term.Event{Type: term.EventKey, Key: term.KeyCtrlC})
+		vi.Handle(term.Event{Type: term.EventKey, Ch: 'c', Mod: term.ModCtrl})
 		assert.Equal(t, vi.mode(), normalMode)
 	})
 }

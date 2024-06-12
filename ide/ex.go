@@ -876,7 +876,7 @@ func (e *ex) handleEvent(ev term.Event) (
 	// If ex is configured with non character
 	// command mode trigger event, then this takes
 	// precedence over any other event
-	if e.config.CommandEvent.Ch == 0 {
+	if e.config.CommandEvent.Key != 0 || (ev.Ch != 0 && ev.Mod != 0) {
 		handled = e.handleCommandEvent(ev)
 		if handled {
 			return
@@ -939,7 +939,7 @@ func (e *ex) handleEvent(ev term.Event) (
 				_, _ = e.comp.Browser().Handle(e.reissueEvent)
 			}
 		}
-		cmdAndArgs, _ = e.comp.KeyMapping(keyComb)
+		cmdAndArgs, _ = e.comp.CommandKeyBinding(keyComb)
 	}
 
 	if match != handler.SequenceMatch {
