@@ -511,7 +511,7 @@ IIII`},
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
 └──────────────────┘`},
-		{":reloadFile>", // test reload non file
+		{":e!>", // test reload non file
 			`┌────┌─────────────┐
 │othe│ not a file  │
 ├────└─────────────┘
@@ -688,7 +688,34 @@ func TestMultipleFilesStartup(t *testing.T) {
 
 	testutil.TestHandlerSequence(t, b, 20, 10, cases)
 
-	assert.True(t, mockBuf.closed)
+}
+
+func TestWriteExclamationNoQuit(t *testing.T) {
+	cases := []testutil.HandlerSequenceTestCase{
+		{":w!>",
+			`┌──────────────────┐
+│Cannot save       │
+│this buffer       │
+└━━━━━━━━━━━━━━━━━━┘
+│                  │
+│                  │
+│                  │
+│                  │
+│                  │
+└──────────────────┘`},
+	}
+	opts := []text.Option{
+		text.WithCommandKey(testCommandKey),
+		text.WithCommandOverlayConfig(testCommandOverlayConfig()),
+	}
+	mockBuf := testFileBuffer{}
+	workspace := testLoader{buf: &mockBuf}
+	b := newExForTestingWithWorkspace(t, &workspace, texttest.NopEditor(),
+		vte.DefaultConfig(), nopPublishEvent, opts...)
+	defer b.Close()
+
+	testutil.TestHandlerSequence(t, b, 20, 10, cases)
+	assert.False(t, b.exit)
 }
 
 func TestExCommandResponsive(t *testing.T) {
@@ -1505,7 +1532,7 @@ retalls
 edi▐                
 edit                
 readFile            
-reloadFile          
+reloadFile!         
                     
                     `},
 		{":edit dawo⬇✌re✌^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",

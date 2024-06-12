@@ -78,17 +78,7 @@ var (
 			},
 			handler: (*ex).flushCloseIgnoreNonFlushed,
 		},
-		"write": {
-			man: textapi.CommandManual{
-				Summary: "Write the current file to disk with any pending changes along with it. " +
-					"This is the standard way to save changes to a file. It fails if file was " +
-					"open read-only or when there is another reason why the file can't be written.",
-			},
-			handler: (*ex).forceFlush,
-		},
-		// same behaviour as write but users used to w! trigger writeForceQuit!
-		// exit when using that shorthand
-		"forceWrite!": {
+		"write!": {
 			man: textapi.CommandManual{
 				Summary: "Write the current file to disk with any pending changes along with it. " +
 					"This is the standard way to save changes to a file. It fails if file was " +
@@ -109,7 +99,7 @@ var (
 			},
 			handler: (*ex).quit,
 		},
-		"reloadFile": {
+		"reloadFile!": {
 			man: textapi.CommandManual{
 				Summary: "Reloads the file in the current active window, if it is a workspace file.",
 			},
