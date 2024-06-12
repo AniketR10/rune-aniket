@@ -220,10 +220,6 @@ extensions:
   # This extension adds a sed command to run sed scripts against the current file.
   sed:
     path: /usr/local/bin/extension_sed
-  # This extension enables visualizing log files with the log command. If command
-  # is passed without any arguments, the editor's log file is opened.
-  logs:
-    path: /usr/local/bin/extension_logs
   # This extension adds a file information bar at the bottom.
   file_bar:
     path: /usr/local/bin/extension_file_bar

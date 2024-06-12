@@ -11,7 +11,6 @@ require (
 	github.com/ernestrc/dom v0.2.5-0.20201125033726-789c946aa938
 	github.com/ernestrc/go-multierror v1.1.2
 	github.com/ernestrc/sensible v0.3.1
-	github.com/fsnotify/fsnotify v1.5.4
 	github.com/golang/mock v1.6.0
 	github.com/hashicorp/go-hclog v0.14.1
 	github.com/hashicorp/go-plugin v1.0.1
