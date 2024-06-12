@@ -1040,9 +1040,10 @@ func TestCommandHandlerHistory(t *testing.T) {
 		close(startingPistol)
 		wg.Wait()
 
-		// Assert at least 200 items to be in the list.
-		// assert.LessOrEqual(t, minExpectedItems, b.list.TotalCount())
-		assert.LessOrEqual(t, numAdditions-numRemovals, b.list.TotalCount())
+		// Assert that at least the second-to-last item has been processed, because
+		// we cannot guarantee that the last item pushed by the feeder has actually
+		// been processed and pushed into the list.
+		assert.LessOrEqual(t, numAdditions-numRemovals-1, b.list.TotalCount())
 	})
 }
 
