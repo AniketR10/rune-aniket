@@ -57,7 +57,7 @@ message Event {
   }
 
   enum Key {
-	CtrlTilde = 0;
+	Null = 0;
 	F2 = 1;
 	F3 = 2;
 	F4 = 3;
