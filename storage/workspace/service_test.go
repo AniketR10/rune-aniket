@@ -2,7 +2,6 @@ package workspace
 
 import (
 	"context"
-	"fmt"
 
 	"os"
 	"path/filepath"
@@ -35,26 +34,21 @@ func testMemoryWorkspaceServiceWithMarshaler(t *testing.T, m encoding.Marshaler)
 }
 
 func testFileWorkspaceServiceWithMarshaler(t *testing.T, m encoding.Marshaler) {
-	dirs := make(map[string]document.Service)
 	test.TestDocumentService(t, func(t *testing.T) document.Service {
 		name, err := os.MkdirTemp("", "workspace_document_service_test")
 		require.NoError(t, err)
-		if _, ok := dirs[name]; ok {
-			panic(fmt.Sprintf("created a duplicate temp dir: %s", name))
-		}
 		uri, err := workspaceapi.ParseURI("file://" + name)
 		require.NoError(t, err)
 		scheme, err := workspace.NewFileScheme(context.Background(), config.NopConfig(), uri)
 		require.NoError(t, err)
 		svc, err := NewWorkspaceService(scheme, m)
 		require.NoError(t, err)
-		dirs[name] = svc
+		t.Cleanup(func() {
+			_ = svc.Close()
+			_ = os.RemoveAll(name)
+		})
 		return svc
 	})
-	for dir, svc := range dirs {
-		svc.Close()
-		_ = os.RemoveAll(dir)
-	}
 }
 
 func TestFileWorkspaceServiceJSON(t *testing.T) {
@@ -67,12 +61,43 @@ func TestFileWorkspaceServiceJSON(t *testing.T) {
 }
 
 func TestFileWorkspaceServiceBSON(t *testing.T) {
+	// test preconditions for bson only, because only bson supports
+	// time-based preconditions.
 	t.Run("backed by FileScheme", func(t *testing.T) {
 		testFileWorkspaceServiceWithMarshaler(t, bson.Marshaler())
+
+		test.TestDocumentServicePreconditions(t, func(t *testing.T) document.Service {
+			name, err := os.MkdirTemp("", "workspace_document_service_test")
+			require.NoError(t, err)
+			uri, err := workspaceapi.ParseURI("file://" + name)
+			require.NoError(t, err)
+			scheme, err := workspace.NewFileScheme(context.Background(),
+				config.NopConfig(), uri)
+			require.NoError(t, err)
+			svc, err := NewWorkspaceService(scheme, bson.Marshaler())
+			require.NoError(t, err)
+			t.Cleanup(func() {
+				_ = svc.Close()
+				_ = os.RemoveAll(name)
+			})
+			return svc
+		})
 	})
 	t.Run("backed by MemoryScheme", func(t *testing.T) {
 		testMemoryWorkspaceServiceWithMarshaler(t, bson.Marshaler())
+
+		test.TestDocumentServicePreconditions(t, func(t *testing.T) document.Service {
+			uri, err := workspaceapi.ParseURI("memory:///")
+			require.NoError(t, err)
+			scheme, err := workspace.NewMemoryScheme(context.Background(),
+				config.NopConfig(), uri)
+			require.NoError(t, err)
+			svc, err := NewWorkspaceService(scheme, bson.Marshaler())
+			require.NoError(t, err)
+			return svc
+		})
 	})
+
 }
 
 func TestFileWorkspaceServiceTOML(t *testing.T) {

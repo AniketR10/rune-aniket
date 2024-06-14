@@ -85,6 +85,10 @@ func (s *service) Update(
 		return err
 	}
 
+	// order of operations (open .swp, update proto, etc) doesn't matter
+	// because all methods are serialized via document.Sync, and
+	// there can only be one instance of this document.Service operating
+	// at a given workspace at a time.
 	err = document.UpdateProto(s.marshaler, updates, proto, preconds...)
 	if err != nil {
 		return err
