@@ -19,7 +19,7 @@ import (
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/term"
-	workdoc "unstable.build/go-tui/workspace/document"
+	"unstable.build/go-tui/workspace/docscheme"
 	"unstable.build/go-tui/workspace/test"
 )
 
@@ -31,7 +31,7 @@ func TestMemoryWorkspaceScheme(t *testing.T) {
 			workspaceURI, err := workspaceapi.ParseURI("inmemory:///tmp")
 			require.NoError(t, err)
 			svc := document.NewInMemoryService()
-			scheme, err := workdoc.WorkspaceScheme[testStruct](workspaceURI, svc,
+			scheme, err := docscheme.Scheme[testStruct](workspaceURI, svc,
 				json.Marshaler(), errMissingID, "author")(ctx, config.NopConfig(), workspaceURI)
 			require.NoError(t, err)
 			return scheme
@@ -42,7 +42,7 @@ func TestMemoryWorkspaceScheme(t *testing.T) {
 			workspaceURI, err := workspaceapi.ParseURI("inmemory:///")
 			require.NoError(t, err)
 			svc := document.NewInMemoryService()
-			scheme, err := workdoc.WorkspaceScheme[testStruct](workspaceURI, svc,
+			scheme, err := docscheme.Scheme[testStruct](workspaceURI, svc,
 				json.Marshaler(), errMissingID, "author")(ctx, config.NopConfig(), workspaceURI)
 			require.NoError(t, err)
 			return scheme
@@ -56,7 +56,7 @@ func TestMemoryWorkspaceSchemeTransientFailures(t *testing.T) {
 		require.NoError(t, err)
 		svc := &errService{root: document.NewInMemoryService()}
 		ctx := context.Background()
-		s, err := workdoc.WorkspaceScheme[testStruct](workspaceURI, svc, json.Marshaler(),
+		s, err := docscheme.Scheme[testStruct](workspaceURI, svc, json.Marshaler(),
 			errMissingID, "author")(ctx, config.NopConfig(), workspaceURI)
 		require.NoError(t, err)
 		return s

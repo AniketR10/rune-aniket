@@ -30,7 +30,7 @@ import (
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/storage/cache"
-	workspacedoc "unstable.build/go-tui/workspace/document"
+	"unstable.build/go-tui/workspace/docscheme"
 )
 
 const (
@@ -523,7 +523,7 @@ func (e *Grantee) initScheme(m schemeapi.SchemeManager) error {
 		panic(err)
 	}
 
-	schemeFn := workspacedoc.WorkspaceScheme[issue.ReportDocument](rootURI, e.svc,
+	schemeFn := docscheme.Scheme[issue.ReportDocument](rootURI, e.svc,
 		marshaler, fmt.Errorf("missing %q sub-field in Metadata field",
 			issue.ReportMetadataIDField), e.author)
 	schemeFn = issueMapperScheme(schemeFn, marshaler, e.maxSubjectLen)

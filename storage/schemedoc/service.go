@@ -1,4 +1,4 @@
-package workspace
+package schemedoc
 
 import (
 	"context"
@@ -22,10 +22,10 @@ import (
 // is currently closing.
 var ErrClosing = errors.New("Service is closing")
 
-// NewWorkspaceService returns a document.Service backed by a schemeapi.Scheme.
+// NewDocumentService returns a document.Service backed by a schemeapi.Scheme.
 // It its goroutine-safe but only one instance can be operating at a time
 // on a given workspace.
-func NewWorkspaceService(scheme schemeapi.Scheme, marshaler encoding.Marshaler) (
+func NewDocumentService(scheme schemeapi.Scheme, marshaler encoding.Marshaler) (
 	document.Service, error,
 ) {
 	svc := service{

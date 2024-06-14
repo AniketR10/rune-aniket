@@ -1,4 +1,4 @@
-package document
+package docscheme
 
 import (
 	"context"
@@ -61,7 +61,7 @@ func TestDocumentOpen(t *testing.T) {
 		require.NoError(t, err)
 		marshaler := yaml.Marshaler()
 		svc := document.NewInMemoryServiceWithMarshaler(marshaler)
-		scheme, err := WorkspaceScheme[testStruct](workspaceURI, svc,
+		scheme, err := Scheme[testStruct](workspaceURI, svc,
 			marshaler, errors.New("missing id"), "author")(ctx, config.NopConfig(), workspaceURI)
 		require.NoError(t, err)
 
@@ -83,10 +83,10 @@ func TestDocumentOpen(t *testing.T) {
 		svc := document.NewInMemoryServiceWithMarshaler(marshaler)
 
 		// two schemes so there's no usage of the cached file in memory
-		scheme1, err := WorkspaceScheme[testStruct](workspaceURI, svc,
+		scheme1, err := Scheme[testStruct](workspaceURI, svc,
 			marshaler, errors.New("missing id"), "author")(ctx, config.NopConfig(),
 			workspaceURI)
-		scheme2, err := WorkspaceScheme[testStruct](workspaceURI, svc,
+		scheme2, err := Scheme[testStruct](workspaceURI, svc,
 			marshaler, errors.New("missing id"), "author")(ctx, config.NopConfig(),
 			workspaceURI)
 		defer scheme1.Close()

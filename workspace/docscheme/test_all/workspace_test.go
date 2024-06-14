@@ -9,9 +9,9 @@ import (
 	"unstable.build/go-tui/api/config"
 	schemeapi "unstable.build/go-tui/api/scheme"
 	workspaceapi "unstable.build/go-tui/api/workspace"
-	storework "unstable.build/go-tui/storage/workspace"
+	"unstable.build/go-tui/storage/schemedoc"
 	"unstable.build/go-tui/workspace"
-	workdoc "unstable.build/go-tui/workspace/document"
+	"unstable.build/go-tui/workspace/docscheme"
 )
 
 func TestMemoryWorkspaceSchemeBackedByWorkspaceSchemeService(t *testing.T) {
@@ -24,10 +24,10 @@ func TestMemoryWorkspaceSchemeBackedByWorkspaceSchemeService(t *testing.T) {
 			ctx, config.NopConfig(), workspaceURI)
 		require.NoError(t, err)
 
-		svc, err := storework.NewWorkspaceService(scheme, json.Marshaler())
+		svc, err := schemedoc.NewDocumentService(scheme, json.Marshaler())
 		require.NoError(t, err)
 
-		s, err := workdoc.WorkspaceScheme[testStruct](workspaceURI, svc, json.Marshaler(),
+		s, err := docscheme.Scheme[testStruct](workspaceURI, svc, json.Marshaler(),
 			errMissingID, "author")(ctx, config.NopConfig(), workspaceURI)
 		require.NoError(t, err)
 		return s

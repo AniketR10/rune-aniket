@@ -1,4 +1,4 @@
-package document
+package docscheme
 
 import (
 	"context"
@@ -19,7 +19,7 @@ import (
 	"unstable.build/go-tui/workspace"
 )
 
-// WorkspaceScheme returns a schemeapi.SchemeFunc that returns schemeapi.Scheme
+// Scheme returns a schemeapi.SchemeFunc that returns schemeapi.Scheme
 // implementations backed by the given document.Service at the given root URI.
 //
 // Note that rootURI should uniquely identify svc and it will be used
@@ -36,7 +36,7 @@ import (
 // do not sync the contents of a file to permanent storage.
 // Sync must be called to send data to permanent storage. This is to allow
 // for documents to become illegal temporarily while editing.
-func WorkspaceScheme[T storage.Document[T]](
+func Scheme[T storage.Document[T]](
 	rootURI workspaceapi.URI, svc document.Service,
 	marshaler encoding.Marshaler, errMissingID error,
 	author string,

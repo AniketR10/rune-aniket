@@ -11,7 +11,7 @@ import (
 	"github.com/unstablebuild/blue/encoding"
 	"unstable.build/go-tui/api/config"
 	workspaceapi "unstable.build/go-tui/api/workspace"
-	workdoc "unstable.build/go-tui/storage/workspace"
+	"unstable.build/go-tui/storage/schemedoc"
 	"unstable.build/go-tui/workspace"
 )
 
@@ -34,7 +34,7 @@ func New(ctx context.Context, dir string, marshaler encoding.Marshaler) (
 	if err != nil {
 		return nil, err
 	}
-	storage, err := workdoc.NewWorkspaceService(scheme, marshaler)
+	storage, err := schemedoc.NewDocumentService(scheme, marshaler)
 	if err != nil {
 		return nil, err
 	}
@@ -44,7 +44,7 @@ func New(ctx context.Context, dir string, marshaler encoding.Marshaler) (
 
 	cfg := firstmover.DefaultConfig()
 	cfg.Marshaler = marshaler
-	cfg.CloseError = workdoc.ErrClosing
+	cfg.CloseError = schemedoc.ErrClosing
 	storage = firstmover.New(storage, lockPath, cfg)
 	return storage, nil
 }

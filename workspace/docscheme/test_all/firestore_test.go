@@ -12,7 +12,7 @@ import (
 	"unstable.build/go-tui/api/config"
 	schemeapi "unstable.build/go-tui/api/scheme"
 	workspaceapi "unstable.build/go-tui/api/workspace"
-	workdoc "unstable.build/go-tui/workspace/document"
+	"unstable.build/go-tui/workspace/docscheme"
 )
 
 func runFirestoreOrSkip(t *testing.T) func() {
@@ -44,7 +44,7 @@ func TestFirestoreWorkspaceScheme(t *testing.T) {
 		require.NoError(t, err)
 		svc, err := firestore.New(testProjectID, collection, "")
 		require.NoError(t, err)
-		scheme, err := workdoc.WorkspaceScheme[testStruct](workspaceURI, svc,
+		scheme, err := docscheme.Scheme[testStruct](workspaceURI, svc,
 			json.Marshaler(), errMissingID, "author")(ctx, config.NopConfig(), workspaceURI)
 		require.NoError(t, err)
 		return scheme
@@ -60,7 +60,7 @@ func TestFirestoreWorkspaceScheme(t *testing.T) {
 		require.NoError(t, err)
 		svc, err := firestore.New(testProjectID, collection, "")
 		require.NoError(t, err)
-		scheme, err := workdoc.WorkspaceScheme[testStruct](workspaceURI, svc,
+		scheme, err := docscheme.Scheme[testStruct](workspaceURI, svc,
 			json.Marshaler(), errMissingID, "author")(ctx, config.NopConfig(), workspaceURI)
 		require.NoError(t, err)
 

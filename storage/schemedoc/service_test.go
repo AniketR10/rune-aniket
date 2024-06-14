@@ -1,4 +1,4 @@
-package workspace
+package schemedoc
 
 import (
 	"context"
@@ -27,7 +27,7 @@ func testMemoryWorkspaceServiceWithMarshaler(t *testing.T, m encoding.Marshaler)
 		require.NoError(t, err)
 		scheme, err := workspace.NewMemoryScheme(context.Background(), config.NopConfig(), uri)
 		require.NoError(t, err)
-		svc, err := NewWorkspaceService(scheme, m)
+		svc, err := NewDocumentService(scheme, m)
 		require.NoError(t, err)
 		return svc
 	})
@@ -41,7 +41,7 @@ func testFileWorkspaceServiceWithMarshaler(t *testing.T, m encoding.Marshaler) {
 		require.NoError(t, err)
 		scheme, err := workspace.NewFileScheme(context.Background(), config.NopConfig(), uri)
 		require.NoError(t, err)
-		svc, err := NewWorkspaceService(scheme, m)
+		svc, err := NewDocumentService(scheme, m)
 		require.NoError(t, err)
 		t.Cleanup(func() {
 			_ = svc.Close()
@@ -74,7 +74,7 @@ func TestFileWorkspaceServiceBSON(t *testing.T) {
 			scheme, err := workspace.NewFileScheme(context.Background(),
 				config.NopConfig(), uri)
 			require.NoError(t, err)
-			svc, err := NewWorkspaceService(scheme, bson.Marshaler())
+			svc, err := NewDocumentService(scheme, bson.Marshaler())
 			require.NoError(t, err)
 			t.Cleanup(func() {
 				_ = svc.Close()
@@ -92,7 +92,7 @@ func TestFileWorkspaceServiceBSON(t *testing.T) {
 			scheme, err := workspace.NewMemoryScheme(context.Background(),
 				config.NopConfig(), uri)
 			require.NoError(t, err)
-			svc, err := NewWorkspaceService(scheme, bson.Marshaler())
+			svc, err := NewDocumentService(scheme, bson.Marshaler())
 			require.NoError(t, err)
 			return svc
 		})
@@ -134,7 +134,7 @@ func TestSetOverrideIssue(t *testing.T) {
 	require.NoError(t, err)
 	scheme, err := workspace.NewFileScheme(context.Background(), config.NopConfig(), uri)
 	require.NoError(t, err)
-	svc, err := NewWorkspaceService(scheme, toml.Marshaler())
+	svc, err := NewDocumentService(scheme, toml.Marshaler())
 	require.NoError(t, err)
 
 	require.NoError(t, svc.Set(context.Background(), "1234", &testStruct{Content: []string{
@@ -162,7 +162,7 @@ func TestEscapeBoundaries(t *testing.T) {
 	require.NoError(t, err)
 	schemeA, err := workspace.NewFileScheme(context.Background(), config.NopConfig(), uriA)
 	require.NoError(t, err)
-	svcA, err := NewWorkspaceService(schemeA, toml.Marshaler())
+	svcA, err := NewDocumentService(schemeA, toml.Marshaler())
 	require.NoError(t, err)
 	require.NoError(t, svcA.Set(context.Background(), "1234", &testStruct{Content: []string{
 		"SECRET",
@@ -174,7 +174,7 @@ func TestEscapeBoundaries(t *testing.T) {
 	require.NoError(t, err)
 	schemeB, err := workspace.NewFileScheme(context.Background(), config.NopConfig(), uriB)
 	require.NoError(t, err)
-	svcB, err := NewWorkspaceService(schemeB, toml.Marshaler())
+	svcB, err := NewDocumentService(schemeB, toml.Marshaler())
 	require.NoError(t, err)
 
 	// its not able to read
