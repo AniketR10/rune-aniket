@@ -99,6 +99,23 @@ func TestClientServer(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, workspaceapi.Pid(1), pid)
 		}},
+		{"Command Dir is passed from client to server", func(t *testing.T, mock *workspaceapitest.MockFile, c *Client, s *Server) {
+			s.s.(*workspacetest.MockWorkspace).EXPECT().
+				StartCommand(gomock.Any(), gomock.Any()).
+				DoAndReturn(func(_ context.Context, cmd workspaceapi.Cmd) (workspaceapi.Pid, error) {
+					assert.Equal(t, "six", cmd.Path)
+					assert.Equal(t, []string{"arg1"}, cmd.Args)
+					assert.Equal(t, "/tmp", cmd.Dir)
+					return workspaceapi.Pid(1), nil
+				})
+			pid, err := c.StartCommand(ctx, workspaceapi.Cmd{
+				Path: "six",
+				Args: []string{"arg1"},
+				Dir:  "/tmp",
+			})
+			require.NoError(t, err)
+			assert.Equal(t, workspaceapi.Pid(1), pid)
+		}},
 		{"Command error", func(t *testing.T, mock *workspaceapitest.MockFile, c *Client, s *Server) {
 			s.s.(*workspacetest.MockWorkspace).EXPECT().
 				StartCommand(gomock.Any(), gomock.Any()).

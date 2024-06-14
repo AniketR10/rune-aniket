@@ -1,6 +1,7 @@
 package workspace
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -299,5 +300,81 @@ func TestFileAssumptions(t *testing.T) {
 		data, err := io.ReadAll(f)
 		require.NoError(t, err)
 		assert.Equal(t, "345", string(data))
+	})
+}
+
+func TestStartCommand(t *testing.T) {
+	t.Run("Cmd.Dir makes command run on that directory", func(t *testing.T) {
+		tmpDir, err := os.MkdirTemp("", "")
+		require.NoError(t, err)
+
+		uri, err := workspaceapi.ParseURI("file://" + tmpDir)
+		require.NoError(t, err)
+
+		s, err := newTestFileScheme(uri)
+		require.NoError(t, err)
+
+		var stdout bytes.Buffer
+		var stderr bytes.Buffer
+
+		ch := make(chan error)
+		ctx := context.Background()
+
+		// If Dir is passed runs there
+		cmd := workspaceapi.Cmd{
+			Path:    "/bin/sh",
+			Args:    []string{"-c", "pwd"},
+			Dir:     "/bin",
+			Watcher: workspaceapi.ChanWatcher(ch),
+			Stdout:  &stdout,
+			Stderr:  &stderr,
+		}
+
+		_, err = s.StartCommand(ctx, cmd)
+		require.NoError(t, err)
+
+		err = <-ch
+		assert.Equal(t, err, nil)
+
+		assert.Equal(t, stderr.String(), "")
+		assert.Equal(t, stdout.String(), "/bin\n")
+
+		stderr.Reset()
+		stdout.Reset()
+
+	})
+
+	t.Run("omitting Cmd.Dir makes command run on workspace dir", func(t *testing.T) {
+		tmpDir, err := os.MkdirTemp("", "")
+		require.NoError(t, err)
+
+		uri, err := workspaceapi.ParseURI("file://" + tmpDir)
+		require.NoError(t, err)
+
+		s, err := newTestFileScheme(uri)
+		require.NoError(t, err)
+
+		var stdout bytes.Buffer
+		var stderr bytes.Buffer
+
+		ch := make(chan error)
+		ctx := context.Background()
+
+		cmd := workspaceapi.Cmd{
+			Path:    "/bin/sh",
+			Args:    []string{"-c", "pwd"},
+			Watcher: workspaceapi.ChanWatcher(ch),
+			Stdout:  &stdout,
+			Stderr:  &stderr,
+		}
+
+		_, err = s.StartCommand(ctx, cmd)
+		require.NoError(t, err)
+
+		err = <-ch
+		assert.Equal(t, err, nil)
+
+		assert.Equal(t, stderr.String(), "")
+		assert.Equal(t, stdout.String(), tmpDir+"\n")
 	})
 }

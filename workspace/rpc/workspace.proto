@@ -133,6 +133,7 @@ message ReadLinkResponse {
 
 message StartCommandRequest {
 	string name = 1;
+	string dir = 15;
 	repeated string args = 2;
 	repeated string env = 3;
 	bool stdin = 4;

@@ -31,6 +31,7 @@ type FileSystem interface {
 // more details. Stdin, Stderr and Stdout, if set, will have their corresponding
 type Cmd struct {
 	Path    string
+	Dir     string
 	Args    []string
 	Env     []string
 	Stdin   io.Reader

@@ -255,7 +255,13 @@ func (p *fileScheme) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (
 	ctx, cancelFn = context.WithCancel(ctx)
 	ctx = bluectx.First(p.ctx, ctx)
 	stdcmd := exec.CommandContext(ctx, path, cmd.Args...)
-	stdcmd.Dir = p.workspace.Path()
+
+	if cmd.Dir != "" {
+		stdcmd.Dir = cmd.Dir
+	} else {
+		stdcmd.Dir = p.workspace.Path()
+	}
+
 	stdcmd.Env = cmd.Env
 	stdcmd.SysProcAttr = cmd.SysProcAttr
 

@@ -18,7 +18,7 @@ import (
 )
 
 var (
-	errInvalidFd   = errors.New("invalid file descriptor")
+	errInvalidFd = errors.New("invalid file descriptor")
 )
 
 // Server is a workspace server implementation which processes one request at a time.
@@ -62,7 +62,7 @@ func (s *Server) StartCommand(stream Executor_StartCommandServer) error {
 	}
 	start := req.Start
 	streamer, err := newServerCommandStreamer(
-		s.ctx, stream, start.GetName(), start.GetArgs(), start.GetEnv(),
+		s.ctx, stream, start.GetName(), start.GetDir(), start.GetArgs(), start.GetEnv(),
 		start.GetStdin(), start.GetStdout(), start.GetStderr(),
 		start.GetStdinFd(), start.GetStdoutFd(), start.GetStderrFd(),
 		start.GetStdinName(), start.GetStdoutName(), start.GetStderrName(),

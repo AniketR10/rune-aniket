@@ -242,6 +242,7 @@ func (c *Client) StartCommand(
 		Type: CommandPayload_TypeStart,
 		Start: &StartCommandRequest{
 			Name:    cmd.Path,
+			Dir:     cmd.Dir,
 			Args:    cmd.Args,
 			Env:     cmd.Env,
 			Stdin:   cmd.Stdin != nil,

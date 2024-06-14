@@ -40,7 +40,7 @@ type serverCommandStreamer struct {
 func newServerCommandStreamer(
 	parentCtx context.Context,
 	stream Executor_StartCommandServer,
-	path string, args, env []string,
+	path, dir string, args, env []string,
 	stdinSet, stdoutSet, stderrSet bool,
 	stdinFd, stdoutFd, stderrFd uint32,
 	stdinName, stdoutName, stderrName string,
@@ -52,6 +52,7 @@ func newServerCommandStreamer(
 
 	cmd := workspaceapi.Cmd{
 		Path:    path,
+		Dir:     dir,
 		Args:    args,
 		Env:     env,
 		Watcher: workspaceapi.ChanWatcher(doneCh),
