@@ -73,7 +73,7 @@ func (s *service) Update(
 		if werr.IsPermission {
 			return document.ErrPermissionDenied
 		}
-		return fmt.Errorf("Scheme.Open: %v", werr.ToError())
+		return fmt.Errorf("scheme open: %v", werr.ToError())
 	}
 
 	proto := make(map[string]interface{})
@@ -100,7 +100,7 @@ func (s *service) Update(
 		if werr.IsPermission {
 			return document.ErrPermissionDenied
 		}
-		return fmt.Errorf("Scheme.Open: %v", werr.ToError())
+		return fmt.Errorf("scheme open: %v", werr.ToError())
 	}
 
 	err = s.write(target, proto)
@@ -116,7 +116,7 @@ func (s *service) Update(
 		if errors.Is(err, os.ErrPermission) {
 			return document.ErrPermissionDenied
 		}
-		return fmt.Errorf("Scheme.Rename: %v", werr.ToError())
+		return fmt.Errorf("scheme rename: %v", err)
 	}
 
 	return nil
@@ -137,7 +137,7 @@ func (s *service) Get(ctx context.Context, ID string, doc interface{}) error {
 		if werr.IsPermission {
 			return document.ErrPermissionDenied
 		}
-		return fmt.Errorf("Scheme.Open: %v", werr.ToError())
+		return fmt.Errorf("scheme open: %v", werr.ToError())
 	}
 	defer f.Close()
 
@@ -170,7 +170,7 @@ func (s *service) List(ctx context.Context, filters []document.Filter) (document
 		if errors.Is(err, os.ErrPermission) {
 			return nil, document.ErrPermissionDenied
 		}
-		return nil, fmt.Errorf("Scheme.ListFiles: %v", err)
+		return nil, fmt.Errorf("scheme list files: %v", err)
 	}
 	it := iterator.Map(iterator.FromSlice(entries), func(entry os.DirEntry) string {
 		return entry.Name()
@@ -194,12 +194,12 @@ func (s *service) Close() (ret error) {
 func (s *service) read(f workspaceapi.File, doc interface{}) error {
 	data, err := io.ReadAll(f)
 	if err != nil {
-		return fmt.Errorf("Scheme.Read: %v", err)
+		return fmt.Errorf("file read all: %v", err)
 	}
 
 	err = s.marshaler.Unmarshal(data, doc)
 	if err != nil {
-		return fmt.Errorf("Unmarshal %s: %v: %s", f.Name(), err, string(data))
+		return fmt.Errorf("unmarshal %s: %v: %s", f.Name(), err, string(data))
 	}
 	return nil
 }
@@ -227,7 +227,7 @@ func (s *service) create(ctx context.Context, ID string, doc interface{}, openFl
 		if werr.IsPermission {
 			return document.ErrPermissionDenied
 		}
-		return fmt.Errorf("Scheme.Open: %v", werr.ToError())
+		return fmt.Errorf("scheme open: %v", werr.ToError())
 	}
 
 	doc = document.UpdateCreatedAtField(s.marshaler, doc)
@@ -245,7 +245,7 @@ func (s *service) create(ctx context.Context, ID string, doc interface{}, openFl
 func (s *service) write(f workspaceapi.File, doc interface{}) error {
 	data, err := s.marshaler.Marshal(doc)
 	if err != nil {
-		return fmt.Errorf("Marshal: %v", err)
+		return fmt.Errorf("marshal: %v", err)
 	}
 	done, ok := s.wg.AddOne()
 	if !ok {
@@ -254,11 +254,11 @@ func (s *service) write(f workspaceapi.File, doc interface{}) error {
 	defer done()
 	_, err = f.Write(data)
 	if err != nil {
-		return fmt.Errorf("Write: %v", err)
+		return fmt.Errorf("file write: %v", err)
 	}
 	err = f.Sync()
 	if err != nil {
-		return fmt.Errorf("Sync: %v", err)
+		return fmt.Errorf("file sync: %v", err)
 	}
 	return nil
 }
@@ -339,7 +339,7 @@ func (d *docIter) NextTo(doc interface{}) error {
 	defer f.Close()
 	_, err := f.Seek(0, 0)
 	if err != nil {
-		return fmt.Errorf("Seek: %v", err)
+		return fmt.Errorf("file seek: %v", err)
 	}
 	return d.svc.read(f, doc)
 }
