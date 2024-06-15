@@ -22,7 +22,7 @@ EXECS=$(patsubst cmd/%/,$(BIN)/%,$(EXECDIRS))
 GOMOCKS=$(wildcard **/**/*_gomock.go) $(wildcard **/*_gomock.go)
 RELEASE_FILES=$(wildcard release/*)
 
-.PHONY: debug clean test coverage example_wasm generate sixdev format docker-build-gcp docker-push-gcp cross-compile lint
+.PHONY: debug clean test coverage example_wasm generate sixdev format docker-build-gcp docker-push-gcp cross-compile lint license
 
 default: CGO_ENABLED=CGO_ENABLED=1
 default: GOPRIVATE=github.com/unstablebuild,unstable.build/*
@@ -66,6 +66,9 @@ generate:
 	@ mv handler/unstable.build/go-tui/handler/rpc/* handler/rpc
 	@ mv api/config/unstable.build/go-tui/api/config/rpc/* api/config/rpc
 	@ rm -rf **/unstable.build **/github.com
+
+license:
+	@ pre-commit run insert-license --all-files
 
 format:
 	@ go fmt ./.../...
