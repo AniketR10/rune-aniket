@@ -42,7 +42,7 @@ func TestParse(t *testing.T) {
 		{Key: KeyTab},
 		{Key: KeyEnter},
 		{Key: KeyEsc},
-		{Key: KeySpace, Ch: ' '},
+		{Key: KeySpace},
 
 		{Key: KeyF1, Mod: ModAlt},
 		{Key: KeyF2, Mod: ModAlt},
@@ -76,7 +76,7 @@ func TestParse(t *testing.T) {
 		{Key: KeyTab, Mod: ModAlt},
 		{Key: KeyEnter, Mod: ModAlt},
 		{Key: KeyEsc, Mod: ModAlt},
-		{Key: KeySpace, Mod: ModAlt, Ch: ' '},
+		{Key: KeySpace, Mod: ModAlt},
 
 		{Key: KeyF1, Mod: ModCtrl},
 		{Key: KeyF2, Mod: ModCtrl},
@@ -110,7 +110,7 @@ func TestParse(t *testing.T) {
 		{Key: KeyTab, Mod: ModCtrl},
 		{Key: KeyEnter, Mod: ModCtrl},
 		{Key: KeyEsc, Mod: ModCtrl},
-		{Key: KeySpace, Mod: ModCtrl, Ch: ' '},
+		{Key: KeySpace, Mod: ModCtrl},
 
 		{Key: KeyF1, Mod: ModShift},
 		{Key: KeyF2, Mod: ModShift},
@@ -144,7 +144,7 @@ func TestParse(t *testing.T) {
 		{Key: KeyTab, Mod: ModShift},
 		{Key: KeyEnter, Mod: ModShift},
 		{Key: KeyEsc, Mod: ModShift},
-		{Key: KeySpace, Mod: ModShift, Ch: ' '},
+		{Key: KeySpace, Mod: ModShift},
 
 		{Key: KeyF1, Mod: ModMeta},
 		{Key: KeyF2, Mod: ModMeta},
@@ -178,7 +178,7 @@ func TestParse(t *testing.T) {
 		{Key: KeyTab, Mod: ModMeta},
 		{Key: KeyEnter, Mod: ModMeta},
 		{Key: KeyEsc, Mod: ModMeta},
-		{Key: KeySpace, Mod: ModMeta, Ch: ' '},
+		{Key: KeySpace, Mod: ModMeta},
 
 		{Key: KeyF1, Mod: ModCtrlShift},
 		{Key: KeyF2, Mod: ModCtrlShift},
@@ -212,7 +212,7 @@ func TestParse(t *testing.T) {
 		{Key: KeyTab, Mod: ModCtrlShift},
 		{Key: KeyEnter, Mod: ModCtrlShift},
 		{Key: KeyEsc, Mod: ModCtrlShift},
-		{Key: KeySpace, Mod: ModCtrlShift, Ch: ' '},
+		{Key: KeySpace, Mod: ModCtrlShift},
 
 		{Key: KeyF1, Mod: ModCtrlAlt},
 		{Key: KeyF2, Mod: ModCtrlAlt},
@@ -246,7 +246,7 @@ func TestParse(t *testing.T) {
 		{Key: KeyTab, Mod: ModCtrlAlt},
 		{Key: KeyEnter, Mod: ModCtrlAlt},
 		{Key: KeyEsc, Mod: ModCtrlAlt},
-		{Key: KeySpace, Mod: ModCtrlAlt, Ch: ' '},
+		{Key: KeySpace, Mod: ModCtrlAlt},
 
 		{Key: KeyF1, Mod: ModCtrlMeta},
 		{Key: KeyF2, Mod: ModCtrlMeta},
@@ -280,7 +280,7 @@ func TestParse(t *testing.T) {
 		{Key: KeyTab, Mod: ModCtrlMeta},
 		{Key: KeyEnter, Mod: ModCtrlMeta},
 		{Key: KeyEsc, Mod: ModCtrlMeta},
-		{Key: KeySpace, Mod: ModCtrlMeta, Ch: ' '},
+		{Key: KeySpace, Mod: ModCtrlMeta},
 
 		{Key: KeyF1, Mod: ModCtrlShiftAlt},
 		{Key: KeyF2, Mod: ModCtrlShiftAlt},
@@ -314,7 +314,7 @@ func TestParse(t *testing.T) {
 		{Key: KeyTab, Mod: ModCtrlShiftAlt},
 		{Key: KeyEnter, Mod: ModCtrlShiftAlt},
 		{Key: KeyEsc, Mod: ModCtrlShiftAlt},
-		{Key: KeySpace, Mod: ModCtrlShiftAlt, Ch: ' '},
+		{Key: KeySpace, Mod: ModCtrlShiftAlt},
 
 		{Key: KeyF1, Mod: ModCtrlShiftMeta},
 		{Key: KeyF2, Mod: ModCtrlShiftMeta},
@@ -348,7 +348,7 @@ func TestParse(t *testing.T) {
 		{Key: KeyTab, Mod: ModCtrlShiftMeta},
 		{Key: KeyEnter, Mod: ModCtrlShiftMeta},
 		{Key: KeyEsc, Mod: ModCtrlShiftMeta},
-		{Key: KeySpace, Mod: ModCtrlShiftMeta, Ch: ' '},
+		{Key: KeySpace, Mod: ModCtrlShiftMeta},
 
 		{Key: KeyF1, Mod: ModCtrlAltMeta},
 		{Key: KeyF2, Mod: ModCtrlAltMeta},
@@ -382,7 +382,7 @@ func TestParse(t *testing.T) {
 		{Key: KeyTab, Mod: ModCtrlAltMeta},
 		{Key: KeyEnter, Mod: ModCtrlAltMeta},
 		{Key: KeyEsc, Mod: ModCtrlAltMeta},
-		{Key: KeySpace, Mod: ModCtrlAltMeta, Ch: ' '},
+		{Key: KeySpace, Mod: ModCtrlAltMeta},
 
 		{Key: KeyF1, Mod: ModShiftMeta},
 		{Key: KeyF2, Mod: ModShiftMeta},
@@ -416,7 +416,7 @@ func TestParse(t *testing.T) {
 		{Key: KeyTab, Mod: ModShiftMeta},
 		{Key: KeyEnter, Mod: ModShiftMeta},
 		{Key: KeyEsc, Mod: ModShiftMeta},
-		{Key: KeySpace, Mod: ModShiftMeta, Ch: ' '},
+		{Key: KeySpace, Mod: ModShiftMeta},
 
 		{Key: KeyF1, Mod: ModAltMeta},
 		{Key: KeyF2, Mod: ModAltMeta},
@@ -450,7 +450,7 @@ func TestParse(t *testing.T) {
 		{Key: KeyTab, Mod: ModAltMeta},
 		{Key: KeyEnter, Mod: ModAltMeta},
 		{Key: KeyEsc, Mod: ModAltMeta},
-		{Key: KeySpace, Mod: ModAltMeta, Ch: ' '},
+		{Key: KeySpace, Mod: ModAltMeta},
 
 		{Key: KeyF1, Mod: ModAltShiftMeta},
 		{Key: KeyF2, Mod: ModAltShiftMeta},
@@ -484,7 +484,7 @@ func TestParse(t *testing.T) {
 		{Key: KeyTab, Mod: ModAltShiftMeta},
 		{Key: KeyEnter, Mod: ModAltShiftMeta},
 		{Key: KeyEsc, Mod: ModAltShiftMeta},
-		{Key: KeySpace, Mod: ModAltShiftMeta, Ch: ' '},
+		{Key: KeySpace, Mod: ModAltShiftMeta},
 
 		{Key: KeyF1, Mod: ModAltShift},
 		{Key: KeyF2, Mod: ModAltShift},
@@ -518,7 +518,7 @@ func TestParse(t *testing.T) {
 		{Key: KeyTab, Mod: ModAltShift},
 		{Key: KeyEnter, Mod: ModAltShift},
 		{Key: KeyEsc, Mod: ModAltShift},
-		{Key: KeySpace, Mod: ModAltShift, Ch: ' '},
+		{Key: KeySpace, Mod: ModAltShift},
 	}
 
 	for i, comb := range suite {

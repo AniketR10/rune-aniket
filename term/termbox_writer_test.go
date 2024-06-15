@@ -9,7 +9,6 @@ import (
 	"github.com/unstablebuild/tcell/v3/termbox"
 )
 
-// TODO
 func TestTermboxEventConvert(t *testing.T) {
 	t.Run("fully reversible key combinations", func(t *testing.T) {
 		suite := []struct {
@@ -25,10 +24,8 @@ func TestTermboxEventConvert(t *testing.T) {
 			{KeyComb{Ch: '>'}, termbox.Event{Ch: '>'}},
 			{KeyComb{Ch: '+'}, termbox.Event{Ch: '+'}},
 			{KeyComb{Ch: '.'}, termbox.Event{Ch: '.'}},
-			{KeyComb{Ch: ' '}, termbox.Event{Ch: ' '}},
 			{KeyComb{Ch: '`'}, termbox.Event{Ch: '`'}},
 			{KeyComb{Ch: '\t'}, termbox.Event{Ch: '\t'}},
-			{KeyComb{Ch: ' ', Key: KeySpace}, termbox.Event{Ch: ' ', Key: termbox.KeySpace}},
 			{KeyComb{Key: KeyF1}, termbox.Event{Key: termbox.KeyF1}},
 			{KeyComb{Key: KeyF2}, termbox.Event{Key: termbox.KeyF2}},
 			{KeyComb{Key: KeyF3}, termbox.Event{Key: termbox.KeyF3}},
@@ -107,24 +104,20 @@ func TestTermboxEventConvert(t *testing.T) {
 				ev := Event{Type: EventKey, Ch: test.ev.Ch, Key: test.ev.Key, Mod: test.ev.Mod}
 				actualTev := eventToTermboxEvent(ev)
 				test.tev.Type = termbox.EventKey // make test cases easier to spell out
-				require.Equal(t, test.tev, actualTev, "event to termbox event: %+v: %+v",
-					ev, actualTev)
+				require.Equal(t, test.tev, actualTev)
 
 				actualEv := termboxEventToEvent(actualTev)
-				assert.Equal(t, ev, actualEv, "termbox event to event: %+v: %+v",
-					actualTev, actualEv)
+				assert.Equal(t, ev, actualEv)
 			})
 
 			t.Run(fmt.Sprintf("termbox event to event: %d", i), func(t *testing.T) {
 				test.tev.Type = termbox.EventKey
 				actualEv := termboxEventToEvent(test.tev)
 				ev := Event{Type: EventKey, Ch: test.ev.Ch, Key: test.ev.Key, Mod: test.ev.Mod}
-				assert.Equal(t, ev, actualEv, "termbox event to event: %+v: %+v",
-					test.tev, actualEv)
+				assert.Equal(t, ev, actualEv)
 
 				actualTev := eventToTermboxEvent(actualEv)
-				require.Equal(t, test.tev, actualTev, "event to termbox event: %+v: %+v",
-					ev, actualTev)
+				require.Equal(t, test.tev, actualTev)
 			})
 		}
 	})
@@ -135,14 +128,18 @@ func TestTermboxEventConvert(t *testing.T) {
 			tev termbox.Event
 		}{
 			{KeyComb{Ch: '~'}, termbox.Event{Key: termbox.KeyTilde}},
+			{KeyComb{Key: KeySpace}, termbox.Event{Ch: ' ', Key: termbox.KeySpace}},
+			{KeyComb{Key: KeySpace, Mod: ModCtrl}, termbox.Event{Ch: ' ', Key: termbox.KeyCtrlSpace}},
+			// unfortunately Key=0 is equivalent to KeyCtrlSpace, so this is an ambiguous case
+			{KeyComb{Key: KeySpace, Mod: ModCtrl}, termbox.Event{Ch: ' '}},
+			{KeyComb{Key: KeySpace, Mod: ModCtrlAlt}, termbox.Event{Ch: ' ', Mod: termbox.ModAlt}},
 		}
 		for i, test := range suite {
 			t.Run(fmt.Sprintf("termbox event to event: %d", i), func(t *testing.T) {
 				test.tev.Type = termbox.EventKey
 				actualEv := termboxEventToEvent(test.tev)
 				ev := Event{Type: EventKey, Ch: test.ev.Ch, Key: test.ev.Key, Mod: test.ev.Mod}
-				assert.Equal(t, ev, actualEv, "termbox event to event: %+v: %+v",
-					test.tev, actualEv)
+				assert.Equal(t, ev, actualEv)
 			})
 		}
 	})

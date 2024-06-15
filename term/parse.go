@@ -81,7 +81,7 @@ func ParseKey(str string) (KeyComb, error) {
 		case "<esc>":
 			return KeyComb{Key: KeyEsc}, nil
 		case "<space>":
-			return KeyComb{Key: KeySpace, Ch: ' '}, nil
+			return KeyComb{Key: KeySpace}, nil
 		case "<backspace>":
 			return KeyComb{Key: KeyBackspace}, nil
 
@@ -145,7 +145,7 @@ func ParseKey(str string) (KeyComb, error) {
 		case "<m-enter>", "<meta-enter>":
 			return KeyComb{Key: KeyEnter, Mod: ModMeta}, nil
 		case "<m-space>", "<meta-space>":
-			return KeyComb{Mod: ModMeta, Key: KeySpace, Ch: ' '}, nil
+			return KeyComb{Mod: ModMeta, Key: KeySpace}, nil
 		case "<m-backspace>", "<meta-backspace>":
 			return KeyComb{Mod: ModMeta, Key: KeyBackspace}, nil
 		case "<m-esc>", "<meta-esc>":
@@ -297,7 +297,7 @@ func ParseKey(str string) (KeyComb, error) {
 		case "<a-enter>", "<alt-enter>":
 			return KeyComb{Key: KeyEnter, Mod: ModAlt}, nil
 		case "<a-space>", "<alt-space>":
-			return KeyComb{Mod: ModAlt, Key: KeySpace, Ch: ' '}, nil
+			return KeyComb{Mod: ModAlt, Key: KeySpace}, nil
 		case "<a-backspace>", "<alt-backspace>":
 			return KeyComb{Mod: ModAlt, Key: KeyBackspace}, nil
 		case "<a-esc>", "<alt-esc>":
@@ -449,7 +449,7 @@ func ParseKey(str string) (KeyComb, error) {
 		case "<s-enter>", "<shift-enter>":
 			return KeyComb{Key: KeyEnter, Mod: ModShift}, nil
 		case "<s-space>", "<shift-space>":
-			return KeyComb{Mod: ModShift, Key: KeySpace, Ch: ' '}, nil
+			return KeyComb{Mod: ModShift, Key: KeySpace}, nil
 		case "<s-backspace>", "<shift-backspace>":
 			return KeyComb{Mod: ModShift, Key: KeyBackspace}, nil
 		case "<s-esc>", "<shift-esc>":
@@ -601,7 +601,7 @@ func ParseKey(str string) (KeyComb, error) {
 		case "<c-enter>", "<ctrl-enter>":
 			return KeyComb{Key: KeyEnter, Mod: ModCtrl}, nil
 		case "<c-space>", "<ctrl-space>":
-			return KeyComb{Mod: ModCtrl, Key: KeySpace, Ch: ' '}, nil
+			return KeyComb{Mod: ModCtrl, Key: KeySpace}, nil
 		case "<c-backspace>", "<ctrl-backspace>":
 			return KeyComb{Mod: ModCtrl, Key: KeyBackspace}, nil
 		case "<c-esc>", "<ctrl-esc>":
@@ -753,7 +753,7 @@ func ParseKey(str string) (KeyComb, error) {
 		case "<c-s-enter>", "<ctrl-shift-enter>":
 			return KeyComb{Key: KeyEnter, Mod: ModCtrlShift}, nil
 		case "<c-s-space>", "<ctrl-shift-space>":
-			return KeyComb{Mod: ModCtrlShift, Key: KeySpace, Ch: ' '}, nil
+			return KeyComb{Mod: ModCtrlShift, Key: KeySpace}, nil
 		case "<c-s-backspace>", "<ctrl-shift-backspace>":
 			return KeyComb{Mod: ModCtrlShift, Key: KeyBackspace}, nil
 		case "<c-s-esc>", "<ctrl-shift-esc>":
@@ -905,7 +905,7 @@ func ParseKey(str string) (KeyComb, error) {
 		case "<c-a-enter>", "<ctrl-alt-enter>":
 			return KeyComb{Key: KeyEnter, Mod: ModCtrlAlt}, nil
 		case "<c-a-space>", "<ctrl-alt-space>":
-			return KeyComb{Mod: ModCtrlAlt, Key: KeySpace, Ch: ' '}, nil
+			return KeyComb{Mod: ModCtrlAlt, Key: KeySpace}, nil
 		case "<c-a-backspace>", "<ctrl-alt-backspace>":
 			return KeyComb{Mod: ModCtrlAlt, Key: KeyBackspace}, nil
 		case "<c-a-esc>", "<ctrl-alt-esc>":
@@ -1057,7 +1057,7 @@ func ParseKey(str string) (KeyComb, error) {
 		case "<c-m-enter>", "<ctrl-meta-enter>":
 			return KeyComb{Key: KeyEnter, Mod: ModCtrlMeta}, nil
 		case "<c-m-space>", "<ctrl-meta-space>":
-			return KeyComb{Mod: ModCtrlMeta, Key: KeySpace, Ch: ' '}, nil
+			return KeyComb{Mod: ModCtrlMeta, Key: KeySpace}, nil
 		case "<c-m-backspace>", "<ctrl-meta-backspace>":
 			return KeyComb{Mod: ModCtrlMeta, Key: KeyBackspace}, nil
 		case "<c-m-esc>", "<ctrl-meta-esc>":
@@ -1209,7 +1209,7 @@ func ParseKey(str string) (KeyComb, error) {
 		case "<c-s-a-enter>", "<ctrl-shift-alt-enter>":
 			return KeyComb{Key: KeyEnter, Mod: ModCtrlShiftAlt}, nil
 		case "<c-s-a-space>", "<ctrl-shift-alt-space>":
-			return KeyComb{Mod: ModCtrlShiftAlt, Key: KeySpace, Ch: ' '}, nil
+			return KeyComb{Mod: ModCtrlShiftAlt, Key: KeySpace}, nil
 		case "<c-s-a-backspace>", "<ctrl-shift-alt-backspace>":
 			return KeyComb{Mod: ModCtrlShiftAlt, Key: KeyBackspace}, nil
 		case "<c-s-a-esc>", "<ctrl-shift-alt-esc>":
@@ -1361,7 +1361,7 @@ func ParseKey(str string) (KeyComb, error) {
 		case "<c-s-m-enter>", "<ctrl-shift-meta-enter>":
 			return KeyComb{Key: KeyEnter, Mod: ModCtrlShiftMeta}, nil
 		case "<c-s-m-space>", "<ctrl-shift-meta-space>":
-			return KeyComb{Mod: ModCtrlShiftMeta, Key: KeySpace, Ch: ' '}, nil
+			return KeyComb{Mod: ModCtrlShiftMeta, Key: KeySpace}, nil
 		case "<c-s-m-backspace>", "<ctrl-shift-meta-backspace>":
 			return KeyComb{Mod: ModCtrlShiftMeta, Key: KeyBackspace}, nil
 		case "<c-s-m-esc>", "<ctrl-shift-meta-esc>":
@@ -1513,7 +1513,7 @@ func ParseKey(str string) (KeyComb, error) {
 		case "<c-a-m-enter>", "<ctrl-alt-meta-enter>":
 			return KeyComb{Key: KeyEnter, Mod: ModCtrlAltMeta}, nil
 		case "<c-a-m-space>", "<ctrl-alt-meta-space>":
-			return KeyComb{Mod: ModCtrlAltMeta, Key: KeySpace, Ch: ' '}, nil
+			return KeyComb{Mod: ModCtrlAltMeta, Key: KeySpace}, nil
 		case "<c-a-m-backspace>", "<ctrl-alt-meta-backspace>":
 			return KeyComb{Mod: ModCtrlAltMeta, Key: KeyBackspace}, nil
 		case "<c-a-m-esc>", "<ctrl-alt-meta-esc>":
@@ -1665,7 +1665,7 @@ func ParseKey(str string) (KeyComb, error) {
 		case "<s-m-enter>", "<shift-meta-enter>":
 			return KeyComb{Key: KeyEnter, Mod: ModShiftMeta}, nil
 		case "<s-m-space>", "<shift-meta-space>":
-			return KeyComb{Mod: ModShiftMeta, Key: KeySpace, Ch: ' '}, nil
+			return KeyComb{Mod: ModShiftMeta, Key: KeySpace}, nil
 		case "<s-m-backspace>", "<shift-meta-backspace>":
 			return KeyComb{Mod: ModShiftMeta, Key: KeyBackspace}, nil
 		case "<s-m-esc>", "<shift-meta-esc>":
@@ -1817,7 +1817,7 @@ func ParseKey(str string) (KeyComb, error) {
 		case "<a-m-enter>", "<alt-meta-enter>":
 			return KeyComb{Key: KeyEnter, Mod: ModAltMeta}, nil
 		case "<a-m-space>", "<alt-meta-space>":
-			return KeyComb{Mod: ModAltMeta, Key: KeySpace, Ch: ' '}, nil
+			return KeyComb{Mod: ModAltMeta, Key: KeySpace}, nil
 		case "<a-m-backspace>", "<alt-meta-backspace>":
 			return KeyComb{Mod: ModAltMeta, Key: KeyBackspace}, nil
 		case "<a-m-esc>", "<alt-meta-esc>":
@@ -1969,7 +1969,7 @@ func ParseKey(str string) (KeyComb, error) {
 		case "<a-s-m-enter>", "<alt-shift-meta-enter>":
 			return KeyComb{Key: KeyEnter, Mod: ModAltShiftMeta}, nil
 		case "<a-s-m-space>", "<alt-shift-meta-space>":
-			return KeyComb{Mod: ModAltShiftMeta, Key: KeySpace, Ch: ' '}, nil
+			return KeyComb{Mod: ModAltShiftMeta, Key: KeySpace}, nil
 		case "<a-s-m-backspace>", "<alt-shift-meta-backspace>":
 			return KeyComb{Mod: ModAltShiftMeta, Key: KeyBackspace}, nil
 		case "<a-s-m-esc>", "<alt-shift-meta-esc>":
@@ -2121,7 +2121,7 @@ func ParseKey(str string) (KeyComb, error) {
 		case "<a-s-enter>", "<alt-shift-enter>":
 			return KeyComb{Key: KeyEnter, Mod: ModAltShift}, nil
 		case "<a-s-space>", "<alt-shift-space>":
-			return KeyComb{Mod: ModAltShift, Key: KeySpace, Ch: ' '}, nil
+			return KeyComb{Mod: ModAltShift, Key: KeySpace}, nil
 		case "<a-s-backspace>", "<alt-shift-backspace>":
 			return KeyComb{Mod: ModAltShift, Key: KeyBackspace}, nil
 		case "<a-s-esc>", "<alt-shift-esc>":

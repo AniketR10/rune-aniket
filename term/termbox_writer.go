@@ -290,6 +290,9 @@ func termboxEventToEvent(tev termbox.Event) (ev Event) {
 			case termbox.KeyCtrlSpace: /* KeyCtrl2, KeyCtrTilde */
 				ev.Key = KeySpace
 				ev.Mod = ModCtrlAlt
+			case termbox.KeySpace: // special case, termbox sends .Ch = ' '
+				ev.Key = KeySpace
+				ev.Mod = ModAlt
 			default:
 				ev.Ch = tev.Ch
 				ev.Mod = ModAlt
@@ -394,11 +397,30 @@ func termboxEventToEvent(tev termbox.Event) (ev Event) {
 			case termbox.KeyCtrlSpace: /* KeyCtrl2, KeyCtrTilde */
 				ev.Key = KeySpace
 				ev.Mod = ModCtrl
+			case termbox.KeySpace: // special case, termbox sends .Ch = ' '
+				ev.Key = KeySpace
 			default:
 				ev.Ch = tev.Ch
 				ev.Key = Key(tev.Key)
 			}
 		}
+	} else if tev.Ch == ' ' {
+		// handle all space and ctrl space quirks
+		switch tev.Mod {
+		case termbox.ModAlt:
+			switch tev.Key {
+			case termbox.KeySpace:
+				ev.Mod = ModAlt
+			case termbox.KeyCtrlSpace:
+				ev.Mod = ModCtrlAlt
+			}
+		default:
+			switch tev.Key {
+			case termbox.KeyCtrlSpace:
+				ev.Mod = ModCtrl
+			}
+		}
+		ev.Key = KeySpace
 	} else {
 		ev.Ch = tev.Ch
 		ev.Key = Key(tev.Key)
