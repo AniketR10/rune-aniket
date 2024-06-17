@@ -62,10 +62,13 @@ func mapKeyToEscapeSequence(comp *Component, ev term.Event) ([]byte, bool) {
 		}
 		return []byte(fmt.Sprintf("\x1b[%sD", getModifierStr(ev))), true
 	case term.KeyEnter:
-		if comp.IsNewLineMode() {
-			return []byte{0x0d, 0x0a}, true
+		if ev.Mod == 0 {
+			if comp.IsNewLineMode() {
+				return []byte{0x0d, 0x0a}, true
+			}
+			return []byte{0x0d}, true
 		}
-		return []byte{0x0d}, true
+		return nil, false
 	case term.KeyHome:
 		if comp.IsApplicationCursorKeysMode() {
 			return []byte(fmt.Sprintf("\x1b[1%s~", getModifierStr(ev))), true
