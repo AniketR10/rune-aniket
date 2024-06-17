@@ -27,6 +27,18 @@ steps:
     - name: home
       path: /root
 
+- name: license
+  image: us-central1-docker.pkg.dev/unstable-build-blue-dev/docker/go-tui-ci:latest
+  pull: always
+  privileged: true
+  environment:
+    GOCACHE: /go/cache
+  commands:
+    - make assert_license
+  volumes:
+    - name: home
+      path: /root
+
 - name: test
   image: us-central1-docker.pkg.dev/unstable-build-blue-dev/docker/go-tui-ci:latest
   pull: always
