@@ -31,6 +31,32 @@ import (
 	"unstable.build/go-tui/term"
 )
 
+func TestWriterContext(t *testing.T) {
+	type myKey string
+
+	writer := NewBufferWriter(
+		context.WithValue(context.Background(), myKey("a"), "a"), 10, 10)
+
+	value := writer.Context().Value(myKey("a"))
+	require.NotNil(t, value)
+	str, ok := value.(string)
+	require.True(t, ok)
+	assert.Equal(t, "a", str)
+
+	writer.SetContext(
+		context.WithValue(context.Background(), myKey("b"), "b"),
+	)
+
+	value = writer.Context().Value(myKey("a"))
+	require.Nil(t, value)
+
+	value = writer.Context().Value(myKey("b"))
+	require.NotNil(t, value)
+	str, ok = value.(string)
+	require.True(t, ok)
+	assert.Equal(t, "b", str)
+}
+
 func TestWriteFlush(t *testing.T) {
 	width, height := 5, 6
 	writer := NewBufferWriter(context.Background(), width, height)

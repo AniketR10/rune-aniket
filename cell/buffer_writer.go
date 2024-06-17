@@ -110,7 +110,13 @@ func (w *BufferWriter) RawCells() [][]term.Cell {
 	return w.cells
 }
 
-// Context returns the context passed to BufferWriterr's constructors.
+// Context returns the context passed to BufferWriterr's constructors,
+// or the last context set via SetContext.
 func (w *BufferWriter) Context() context.Context {
 	return w.ctx
+}
+
+// SetContext sets the context to be returned in the next call to Context.
+func (w *BufferWriter) SetContext(ctx context.Context) {
+	w.ctx = ctx
 }
