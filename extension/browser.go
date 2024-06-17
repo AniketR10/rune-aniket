@@ -26,15 +26,33 @@ import (
 	"io"
 	"sync"
 
-	"unstable.build/go-tui"
 	"unstable.build/go-tui/browser"
 	browserpb "unstable.build/go-tui/browser/rpc"
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term"
 )
 
+// BrowserResources returns a map of Permission to a ResourceServer
+// capable of serving each of the b Browser's resources.
+func BrowserResources(
+	b browser.Browser, publishEvent func(term.Event) bool,
+) map[Permission]ResourceRegistrar {
+	s := newBrowserResourceServer(b, publishEvent)
+	return map[Permission]ResourceRegistrar{
+		PermissionBrowserWindowManager: s.forPermission(
+			PermissionBrowserWindowManager),
+		PermissionBrowserResourceOpener: s.forPermission(
+			PermissionBrowserResourceOpener),
+		PermissionBrowserNotifications: s.forPermission(
+			PermissionBrowserNotifications),
+		PermissionBrowserEventPublisher: s.forPermission(
+			PermissionBrowserEventPublisher),
+	}
+}
+
 type browserResourceServer struct {
-	b browser.Browser
+	b            browser.Browser
+	publishEvent func(term.Event) bool
 }
 
 type browserResourcePermissionServer struct {
@@ -42,9 +60,12 @@ type browserResourcePermissionServer struct {
 	*browserResourceServer
 }
 
-func newBrowserResourceServer(b browser.Browser) *browserResourceServer {
+func newBrowserResourceServer(
+	b browser.Browser, publishEvent func(term.Event) bool,
+) *browserResourceServer {
 	ret := new(browserResourceServer)
 	ret.b = b
+	ret.publishEvent = publishEvent
 	return ret
 }
 
@@ -58,7 +79,7 @@ func (s browserResourcePermissionServer) Register(
 ) (io.Closer, error) {
 	server := browserpb.NewServer(broker, s.b, lock)
 	rpcServer := interruptBrowserServer(server, func() {
-		tui.PublishEvent(term.Event{Type: term.EventInterrupt})
+		s.publishEvent(term.Event{Type: term.EventInterrupt})
 	})
 	switch s.p {
 	case PermissionBrowserWindowManager:
@@ -79,20 +100,4 @@ type browserCloser struct {
 
 func (b browserCloser) Close() error {
 	return b.server.Stop()
-}
-
-// BrowserResources returns a map of Permission to a ResourceServer
-// capable of serving each of the b Browser's resources.
-func BrowserResources(b browser.Browser) map[Permission]ResourceRegistrar {
-	s := newBrowserResourceServer(b)
-	return map[Permission]ResourceRegistrar{
-		PermissionBrowserWindowManager: s.forPermission(
-			PermissionBrowserWindowManager),
-		PermissionBrowserResourceOpener: s.forPermission(
-			PermissionBrowserResourceOpener),
-		PermissionBrowserNotifications: s.forPermission(
-			PermissionBrowserNotifications),
-		PermissionBrowserEventPublisher: s.forPermission(
-			PermissionBrowserEventPublisher),
-	}
 }

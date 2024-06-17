@@ -55,7 +55,6 @@ func assertClientMethodNoError(
 func TestIntegrationRace(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	term.DisableInterruptForTesting()
 
 	uri, err := workspaceapi.ParseURI("file:///tmp/test")
 	require.NoError(t, err)
@@ -65,7 +64,8 @@ func TestIntegrationRace(t *testing.T) {
 	defer broker.Close()
 
 	edMock := texttest.NewMockEditor(ctrl)
-	resources := extension.EditorResources(edMock)
+	resources := extension.EditorResources(edMock,
+		func(term.Event) bool { return true })
 
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)

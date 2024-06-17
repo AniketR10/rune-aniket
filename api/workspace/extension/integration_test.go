@@ -34,7 +34,6 @@ import (
 	workspaceapitest "unstable.build/go-tui/api/workspace/test"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/rpc"
-	"unstable.build/go-tui/term"
 	workspacetest "unstable.build/go-tui/workspace/test"
 )
 
@@ -53,8 +52,6 @@ func assertClientMethodNoError(
 func TestIntegrationRace(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-
-	term.DisableInterruptForTesting()
 
 	broker := rpc.NewUnixGRPCBroker("", "", "")
 	defer broker.Close()

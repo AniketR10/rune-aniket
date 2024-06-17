@@ -606,14 +606,18 @@ func (h *workspaceManagerHandler) addWorkspace(
 		return fmt.Errorf("subscribe active workspace commands: %w", err)
 	}
 
-	res := extension.BrowserResources(ex.Browser())
-	res = extension.MergeResourceMap(res, extension.EditorResources(ex.Editor()))
-	res = extension.MergeResourceMap(res, extension.WorkspaceResources(cwd))
+	res := extension.BrowserResources(ex.Browser(), h.publishEvent)
+	res = extension.MergeResourceMap(res,
+		extension.EditorResources(ex.Editor(), h.publishEvent))
+	res = extension.MergeResourceMap(res,
+		extension.WorkspaceResources(cwd))
 	// NOTE: extensions that register new schemes will fail for subsequent workspaces
-	res = extension.MergeResourceMap(res, extension.SchemeManagerResources(h.workspace))
-	res = extension.MergeResourceMap(res, extension.StorageResources(h.sixDir))
-	res = extension.MergeResourceMap(res, extension.ConfigResources(
-		config.MapConfig(cleanedExtensionConfig(cfg.cfg))))
+	res = extension.MergeResourceMap(res,
+		extension.SchemeManagerResources(h.workspace))
+	res = extension.MergeResourceMap(res,
+		extension.StorageResources(h.sixDir))
+	res = extension.MergeResourceMap(res,
+		extension.ConfigResources(config.MapConfig(cleanedExtensionConfig(cfg.cfg))))
 
 	dataDir := filepath.Join(h.sixDir, ".extension")
 	if err := os.MkdirAll(dataDir, 0777); err != nil {

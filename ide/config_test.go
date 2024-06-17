@@ -250,7 +250,7 @@ func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
 
 func TestConfigDefault(t *testing.T) {
 	ret := new(ideConfig)
-	initDefaultConfig(ret, browser.NopWallpaper())
+	initDefaultConfig(ret, browser.NopWallpaper(), term.RingBell, term.ScheduleNextTick)
 	assertDefaultConfig(t, ret)
 }
 
@@ -267,6 +267,8 @@ func TestConfigDecodeError(t *testing.T) {
 			"wallpaper": "notEmpty",
 		},
 	}
+	ret.ringBell = term.RingBell
+	ret.scheduleNextTick = term.ScheduleNextTick
 	err = loadFileConfig(&ret, f.Name())
 	assert.Error(t, err)
 	assertDefaultConfig(t, &ret)
@@ -277,7 +279,7 @@ func TestConfigSetting(t *testing.T) {
 	require.NoError(t, err)
 
 	var cfg ideConfig
-	initConfig(&cfg, m, browser.NopWallpaper())
+	initConfig(&cfg, m, browser.NopWallpaper(), term.RingBell, term.ScheduleNextTick)
 
 	assert.Equal(t, 4, cfg.browserTabspaces())
 	_, ok := cfg.wallpaper().NewComponent().(component.String)
@@ -298,22 +300,6 @@ func TestConfigSetting(t *testing.T) {
 		FocusFrameCharSet: handler.DefaultWindowManagerConfig().FrameCharSet,
 	}
 	assert.Equal(t, expectedConfig, cfg.windowManagerConfig())
-
-	assert.Len(t, cfg.extensions(), 1)
-	extensionCfgStruct := cfg.extensions()["fuzzy_file"]
-	assert.Equal(t, "fuzzy_file", extensionCfgStruct.id)
-	cfg.cfg["workspace"].(map[string]any)["wallpaper"] = ""
-	extensionCfgStruct.parent.cfg["workspace"].(map[string]any)["wallpaper"] = ""
-	cfg.defaultWallpaper.NewComponent = nil
-	extensionCfgStruct.parent.defaultWallpaper.NewComponent = nil
-	assert.Equal(t, &cfg, extensionCfgStruct.parent)
-
-	extensionCfg, ok := extensionCfgStruct.config()
-	require.True(t, ok)
-
-	cmd, err := extensionCfg.GetString("command")
-	require.NoError(t, err)
-	assert.Equal(t, "ag -g \"\"", cmd)
 
 	expectedCommandAliases := map[string][]string{
 		"todo":   {"e file:///tmp/todo.md", "jenesaisquoi"},
@@ -389,8 +375,8 @@ func TestConfigSetting(t *testing.T) {
 	assert.Equal(t, tcell.ColorGreen, virtualEditorSelectionAttr.Bg)
 
 	wantMappings := map[handler.Sequence][]string{
-		{First: term.KeyComb{Ch: 'f'}}:            {"searchFile"},
-		{First: term.KeyComb{Ch: 'l'}}:            {"searchText"},
+		{First: term.KeyComb{Ch: 'f'}}:                    {"searchFile"},
+		{First: term.KeyComb{Ch: 'l'}}:                    {"searchText"},
 		{First: term.KeyComb{Ch: 'x', Mod: term.ModCtrl}}: {"closeDoors"},
 		{
 			First: term.KeyComb{Ch: 'x', Mod: term.ModCtrl},
@@ -407,11 +393,32 @@ func TestConfigSetting(t *testing.T) {
 	}
 	assert.Equal(t, wantMappings, cfg.commandKeyMappings())
 	assert.False(t, cfg.autoRestore())
+
+	assert.Len(t, cfg.extensions(), 1)
+	extensionCfgStruct := cfg.extensions()["fuzzy_file"]
+	assert.Equal(t, "fuzzy_file", extensionCfgStruct.id)
+	cfg.cfg["workspace"].(map[string]any)["wallpaper"] = ""
+	extensionCfgStruct.parent.cfg["workspace"].(map[string]any)["wallpaper"] = ""
+	cfg.defaultWallpaper.NewComponent = nil
+	cfg.ringBell = nil
+	cfg.scheduleNextTick = nil
+	extensionCfgStruct.parent.defaultWallpaper.NewComponent = nil
+	extensionCfgStruct.parent.ringBell = nil
+	extensionCfgStruct.parent.scheduleNextTick = nil
+	assert.Equal(t, &cfg, extensionCfgStruct.parent)
+
+	extensionCfg, ok := extensionCfgStruct.config()
+	require.True(t, ok)
+
+	cmd, err := extensionCfg.GetString("command")
+	require.NoError(t, err)
+	assert.Equal(t, "ag -g \"\"", cmd)
 }
 
 func TestLoadEmbededConfig(t *testing.T) {
 	var cfg ideConfig
-	err := loadConfig(&cfg, "nonExistent", browser.NopWallpaper(), "{}")
+	err := loadConfig(&cfg, "nonExistent", browser.NopWallpaper(), "{}",
+		term.RingBell, term.ScheduleNextTick)
 	require.NoError(t, err)
 }
 
@@ -432,7 +439,8 @@ command:
 	require.NoError(t, err)
 
 	var cfg ideConfig
-	err = loadConfig(&cfg, f.Name(), browser.NopWallpaper(), "{}")
+	err = loadConfig(&cfg, f.Name(), browser.NopWallpaper(), "{}",
+		term.RingBell, term.ScheduleNextTick)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "Alias cycle detected")
 	assert.Empty(t, cfg.commandAliases())

@@ -56,14 +56,14 @@ func assertClientMethodNoError(
 func TestIntegrationRace(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	term.DisableInterruptForTesting()
 
 	mockWin := browserapitest.NopWindow()
 	h := browsertest.NewTestHandler()
 	broker := rpc.NewUnixGRPCBroker("", "", "")
 	defer broker.Close()
 	mock := browserapitest.NewMockBrowser(ctrl)
-	resources := extension.BrowserResources(browsertest.BrowserFromAPIBrowser(mock))
+	resources := extension.BrowserResources(browsertest.BrowserFromAPIBrowser(mock),
+		func(term.Event) bool { return true })
 
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)

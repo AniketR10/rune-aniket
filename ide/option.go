@@ -31,6 +31,7 @@ import (
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/extension"
+	"unstable.build/go-tui/term"
 )
 
 // Option is a configuration option for an IDE.
@@ -109,6 +110,21 @@ func WithDefaultConfigYAML(configYaml string) Option {
 	}
 }
 
+// WithBell sets the default mechanism to ring the system bell.
+func WithBell(bell func()) Option {
+	return func(opts *options) {
+		opts.bell = bell
+	}
+}
+
+// WithScheduleNextTick sets the default mechanism to schedule a user functio to run before
+// the next event loop tick.
+func WithScheduleNextTick(scheduleFn func(func()) bool) Option {
+	return func(opts *options) {
+		opts.scheduleFn = scheduleFn
+	}
+}
+
 type options struct {
 	publishEvent     EventPublisher
 	extensionRunner  ExtensionsRunner
@@ -117,6 +133,8 @@ type options struct {
 	workspaceConfig  string
 	defaultWallpaper browser.Wallpaper
 	defaultConfig    string
+	bell             func()
+	scheduleFn       func(func()) bool
 }
 
 func defaultOptions() options {
@@ -128,6 +146,8 @@ func defaultOptions() options {
 		workspaceConfig:  ".iderc",
 		defaultWallpaper: browser.NopWallpaper(),
 		defaultConfig:    "{}",
+		bell:             term.RingBell,
+		scheduleFn:       term.ScheduleNextTick,
 	}
 }
 

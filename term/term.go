@@ -104,14 +104,6 @@ func Close() {
 	termbox.Close()
 }
 
-// DisableInterruptForTesting disables interrupts. It should only be
-// used for testing purposes.
-func DisableInterruptForTesting() {
-	publishEvent.Store(func(termbox.Event) bool {
-		return false
-	})
-}
-
 // PublishEvent sends a synthetic event to the event poller.
 // If the event queue is full then this method does not
 // publish the event and returns false.

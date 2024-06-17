@@ -94,7 +94,7 @@ func (i *IDE) init(
 		o(&op)
 	}
 	configErr := loadConfig(&i.ideConfig, cfgfilename,
-		op.defaultWallpaper, op.defaultConfig)
+		op.defaultWallpaper, op.defaultConfig, op.bell, op.scheduleFn)
 
 	cwdURI, parseErr := workspaceapi.ParseURI(cwd)
 	if parseErr != nil {
@@ -175,7 +175,8 @@ func (i *IDE) init(
 		workspaceManager, i.ideConfig, recfilename, filenames,
 		sixDir, i.publishEvent, op.extensionRunner, i.locker, op.extensions,
 		func() (ideConfig, error) {
-			return reloadConfig(cfgfilename, op.defaultWallpaper, op.defaultConfig)
+			return reloadConfig(cfgfilename,
+				op.defaultWallpaper, op.defaultConfig, op.bell, op.scheduleFn)
 		}, op.workspaceConfig)
 	if err != nil {
 		return fmt.Errorf("new workspace manager: %w", err)

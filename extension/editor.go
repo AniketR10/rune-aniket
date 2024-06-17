@@ -26,20 +26,34 @@ import (
 	"io"
 	"sync"
 
-	"unstable.build/go-tui"
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
 	textpb "unstable.build/go-tui/text/rpc"
 )
 
-type editorResourceServer struct {
-	b text.Editor
+// EditorResources returns a map of Permission to a ResourceServer
+// capable of serving each of the b Editor's resources.
+func EditorResources(
+	b text.Editor, publishEvent func(term.Event) bool,
+) map[Permission]ResourceRegistrar {
+	s := newEditorResourceServer(b, publishEvent)
+	return map[Permission]ResourceRegistrar{
+		PermissionEditor: s,
+	}
 }
 
-func newEditorResourceServer(b text.Editor) *editorResourceServer {
+type editorResourceServer struct {
+	b            text.Editor
+	publishEvent func(term.Event) bool
+}
+
+func newEditorResourceServer(
+	b text.Editor, publishEvent func(term.Event) bool,
+) *editorResourceServer {
 	ret := new(editorResourceServer)
 	ret.b = b
+	ret.publishEvent = publishEvent
 	return ret
 }
 
@@ -50,16 +64,7 @@ func (s *editorResourceServer) Register(
 	server := textpb.NewServer(broker, s.b, lock)
 	textpb.RegisterEditorServer(registrar,
 		interruptEditorServer(server, func() {
-			tui.PublishEvent(term.Event{Type: term.EventInterrupt})
+			s.publishEvent(term.Event{Type: term.EventInterrupt})
 		}))
 	return server, nil
-}
-
-// EditorResources returns a map of Permission to a ResourceServer
-// capable of serving each of the b Editor's resources.
-func EditorResources(b text.Editor) map[Permission]ResourceRegistrar {
-	s := newEditorResourceServer(b)
-	return map[Permission]ResourceRegistrar{
-		PermissionEditor: s,
-	}
 }

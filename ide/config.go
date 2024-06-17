@@ -77,8 +77,10 @@ type extensionConfig struct {
 type ideConfig struct {
 	defaultWallpaper browser.Wallpaper
 
-	cfg    map[string]interface{}
-	errors map[string]error
+	cfg              map[string]interface{}
+	errors           map[string]error
+	ringBell         func()
+	scheduleNextTick func(func()) bool
 }
 
 func overrideConfig(ideConfig, cfg map[string]interface{}) {
@@ -102,15 +104,23 @@ func overrideConfig(ideConfig, cfg map[string]interface{}) {
 	}
 }
 
-func initConfig(c *ideConfig, cfg map[string]interface{}, defaultWallpaper browser.Wallpaper) {
+func initConfig(
+	c *ideConfig, cfg map[string]interface{}, defaultWallpaper browser.Wallpaper,
+	ringBell func(), scheduleNextTick func(func()) bool,
+) {
 	c.cfg = cfg
+	c.ringBell = ringBell
+	c.scheduleNextTick = scheduleNextTick
 	c.defaultWallpaper = defaultWallpaper
 	c.errors = make(map[string]error)
 }
 
-func initDefaultConfig(c *ideConfig, defaultWallpaper browser.Wallpaper) {
+func initDefaultConfig(
+	c *ideConfig, defaultWallpaper browser.Wallpaper,
+	ringBell func(), scheduleNextTick func(func()) bool,
+) {
 	cfg := make(map[string]interface{})
-	initConfig(c, cfg, defaultWallpaper)
+	initConfig(c, cfg, defaultWallpaper, ringBell, scheduleNextTick)
 }
 
 func (c ideConfig) command() (config.Config, bool) {
@@ -1297,19 +1307,8 @@ func (c ideConfig) terminalConfig() vte.Config {
 	ret.Debug = c.terminalDebug()
 	ret.Shell = c.terminalShell()
 	ret.Clipboard = c.clipboard()
-	if log.IsLevelEnabled(log.TraceLevel) {
-		ret.ScheduleNextTick = func(cb func()) bool {
-			log.Trace("schedule callback on next tick")
-			return term.ScheduleNextTick(cb)
-		}
-		ret.RingBell = func() {
-			log.Trace("ring bell")
-			term.RingBell()
-		}
-	} else {
-		ret.ScheduleNextTick = term.ScheduleNextTick
-		ret.RingBell = term.RingBell
-	}
+	ret.ScheduleNextTick = c.scheduleNextTick
+	ret.RingBell = c.ringBell
 	return ret
 }
 
@@ -1323,9 +1322,10 @@ func decodeConfig(r io.Reader) (cfg map[string]interface{}, err error) {
 
 func reloadConfig(
 	configFilePath string, defaultWallpaper browser.Wallpaper,
-	defaultConfig string,
+	defaultConfig string, ringBell func(), scheduleNextTick func(func()) bool,
 ) (ret ideConfig, err error) {
-	err = loadConfig(&ret, configFilePath, defaultWallpaper, defaultConfig)
+	err = loadConfig(&ret, configFilePath,
+		defaultWallpaper, defaultConfig, ringBell, scheduleNextTick)
 	return
 }
 
@@ -1364,15 +1364,16 @@ func loadConfig(
 	c *ideConfig, configpath string,
 	defaultWallpaper browser.Wallpaper,
 	defaultConfig string,
+	ringBell func(), scheduleNextTick func(func()) bool,
 ) (err error) {
-	initDefaultConfig(c, defaultWallpaper)
+	initDefaultConfig(c, defaultWallpaper, ringBell, scheduleNextTick)
 
 	cfg, err := decodeConfig(strings.NewReader(defaultConfig))
 	if err != nil {
 		panic(err)
 	}
 
-	initConfig(c, cfg, defaultWallpaper)
+	initConfig(c, cfg, defaultWallpaper, ringBell, scheduleNextTick)
 
 	if err := loadFileConfig(c, configpath); err != nil {
 		return err
