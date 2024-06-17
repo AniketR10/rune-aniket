@@ -40,10 +40,12 @@ func IterationFromContext(ctx context.Context) (int64, bool) {
 	if !ok {
 		return 0, false
 	}
-	return parsePayload(payload)
+	return IterationFromRawBytes(payload)
 }
 
-func parsePayload(payload []byte) (int64, bool) {
+// IterationFromRawBytes parses the given payload into an iteration number,
+// as formatted by ContextWithIteration.
+func IterationFromRawBytes(payload []byte) (int64, bool) {
 	i, err := strconv.ParseInt(string(payload), 10, 64)
 	if err != nil {
 		return 0, false

@@ -137,7 +137,7 @@ loop:
 				switch ev.Type {
 				case term.EventInterrupt:
 					if ev.Raw != nil {
-						if id, ok := parsePayload(ev.Raw); ok {
+						if id, ok := IterationFromRawBytes(ev.Raw); ok {
 							termw.SetContext(ContextWithIteration(ctx, id))
 						} else {
 							termw.SetContext(term.ContextWithPayload(ctx, ev.Raw))
