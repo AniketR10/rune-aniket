@@ -470,6 +470,19 @@ func (c ideConfig) getConfigAttr(
 	return
 }
 
+func (c ideConfig) defaultAttr() (attr term.Attributes) {
+	const key = "default_attr"
+	cfgAttr, err := config.GetAttributes(config.MapConfig(c.cfg), key)
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors[key] = err
+		}
+		return
+	}
+	attr = cfgAttr
+	return
+}
+
 func (c ideConfig) getBrowserAttr(
 	key string, def term.Attributes,
 ) (attr term.Attributes) {

@@ -210,6 +210,7 @@ func (i *IDE) Run() error {
 	}
 	atomic.StoreInt32(&i.running, 1)
 
+	term.SetAttr(i.DefaultAttributes())
 	term.SetInputMode(i.ideConfig.inputMode())
 
 	err = tui.RunWithLocker(i.root, i.locker)
@@ -218,6 +219,11 @@ func (i *IDE) Run() error {
 	}
 
 	return nil
+}
+
+// DefaultAttributes return the default attributes to be used to fill the screen.
+func (i *IDE) DefaultAttributes() term.Attributes {
+	return i.ideConfig.defaultAttr()
 }
 
 func (i *IDE) closeResources() (ret error) {

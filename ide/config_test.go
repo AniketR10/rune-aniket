@@ -51,6 +51,9 @@ extensions:
 log_path: "/tmp/debug.log"
 log_level: "trace"
 clipboard: memory
+default_attr:
+    bg: yellow
+    fg: "#f2f2f2"
 
 editor:
     mode: modal
@@ -231,6 +234,7 @@ func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
 	}, vteConfig)
 	assert.Equal(t, command.DefaultConfig().ShowManualAfter, cfg.commandOverlayShowManualAfter())
 	assert.Equal(t, command.DefaultConfig().ManualAttr, cfg.commandOverlayManualAttr())
+	assert.Zero(t, cfg.defaultAttr())
 
 	assert.Equal(t, term.Attributes{Fg: tcell.ColorBlack, Bg: tcell.ColorYellow},
 		cfg.modelessResultAttr())
@@ -413,6 +417,8 @@ func TestConfigSetting(t *testing.T) {
 	cmd, err := extensionCfg.GetString("command")
 	require.NoError(t, err)
 	assert.Equal(t, "ag -g \"\"", cmd)
+
+	assert.NotZero(t, cfg.defaultAttr())
 }
 
 func TestLoadEmbededConfig(t *testing.T) {
