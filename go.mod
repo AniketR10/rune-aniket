@@ -28,7 +28,7 @@ require (
 	go.uber.org/config v1.4.0
 	go.uber.org/goleak v1.2.0
 	golang.org/x/crypto v0.23.0
-	golang.org/x/image v0.15.0
+	golang.org/x/image v0.16.0
 	golang.org/x/term v0.20.0
 	google.golang.org/grpc v1.54.0
 	google.golang.org/protobuf v1.31.0
@@ -50,21 +50,23 @@ require (
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/rivo/uniseg v0.4.4
 	golang.org/x/lint v0.0.0-20210508222113-6edffad5e616 // indirect
-	golang.org/x/mod v0.10.0 // indirect
+	golang.org/x/mod v0.17.0 // indirect
 	golang.org/x/net v0.25.0 // indirect
-	golang.org/x/sync v0.1.0 // indirect
+	golang.org/x/sync v0.7.0 // indirect
 	golang.org/x/sys v0.20.0 // indirect
 	golang.org/x/text v0.15.0 // indirect
-	golang.org/x/tools v0.8.0 // indirect
+	golang.org/x/tools v0.21.0 // indirect
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2 // indirect
 	gopkg.in/mgo.v2 v2.0.0-20190816093944-a6b53ec6cb22 // indirect
 )
 
 require (
 	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.0.1
+	github.com/hajimehoshi/ebiten/v2 v2.7.4
 	github.com/pkoukk/tiktoken-go v0.1.6
 	github.com/pkoukk/tiktoken-go-loader v0.0.1
 	github.com/sashabaranov/go-openai v1.20.3
+	github.com/unstablebuild/fontinfo v0.2.0
 	github.com/unstablebuild/pty v1.3.1
 	go.uber.org/multierr v1.4.0
 )
@@ -78,13 +80,17 @@ require (
 	github.com/BurntSushi/toml v1.2.1 // indirect
 	github.com/blackjack/webcam v0.5.0 // indirect
 	github.com/dlclark/regexp2 v1.10.0 // indirect
+	github.com/ebitengine/gomobile v0.0.0-20240518074828-e86332849895 // indirect
+	github.com/ebitengine/hideconsole v1.0.0 // indirect
+	github.com/ebitengine/purego v0.7.0 // indirect
 	github.com/fatih/color v1.10.0 // indirect
 	github.com/gen2brain/malgo v0.11.21 // indirect
 	github.com/golang/groupcache v0.0.0-20200121045136-8c9f03a8e57e // indirect
 	github.com/golang/protobuf v1.5.3 // indirect
-	github.com/google/go-cmp v0.5.9 // indirect
+	github.com/google/go-cmp v0.6.0 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.2.3 // indirect
 	github.com/googleapis/gax-go/v2 v2.7.1 // indirect
+	github.com/jezek/xgb v1.1.1 // indirect
 	github.com/mattn/go-colorable v0.1.8 // indirect
 	github.com/pion/datachannel v1.5.6 // indirect
 	github.com/pion/dtls/v2 v2.2.10 // indirect

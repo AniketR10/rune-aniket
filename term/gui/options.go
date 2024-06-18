@@ -1,0 +1,107 @@
+// Unstable Build LLC ("COMPANY") CONFIDENTIAL
+//
+// Unpublished Copyright (c) 2017-2024 Unstable Build, All Rights Reserved.
+//
+// NOTICE: All information contained herein is, and remains the property of COMPANY.
+// The intellectual and technical concepts contained herein are proprietary to
+// COMPANY and may be covered by U.S. and Foreign Patents, patents in process,
+// and are protected by trade secret or copyright law. Dissemination of this information
+// or reproduction of this material is strictly forbidden unless prior written permission
+// is obtained from COMPANY. Access to the source code contained herein is hereby
+// forbidden to anyone except current COMPANY employees, managers or contractors who
+// have executed Confidentiality and Non-disclosure agreements explicitly covering such access.
+//
+// The copyright notice above does not evidence any actual or intended publication or
+// disclosure of this source code, which includes information that is confidential and/or
+// proprietary, and is a trade secret, of COMPANY. ANY REPRODUCTION, MODIFICATION,
+// DISTRIBUTION, PUBLIC  PERFORMANCE, OR PUBLIC DISPLAY OF OR THROUGH USE OF THIS SOURCE CODE
+// WITHOUT  THE EXPRESS WRITTEN CONSENT OF COMPANY IS STRICTLY PROHIBITED, AND IN
+// VIOLATION OF APPLICABLE LAWS AND INTERNATIONAL TREATIES. THE RECEIPT OR POSSESSION OF
+// THIS SOURCE CODE AND/OR RELATED INFORMATION DOES NOT CONVEY OR IMPLY ANY RIGHTS TO
+// REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
+// ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
+package gui
+
+import (
+	"sync"
+
+	"unstable.build/go-tui/term"
+)
+
+// Option allows configuring an instance of GUI.
+type Option func(g *GUI) error
+
+// WithFontFamily defines the opentype font family to use.
+// See font.Manager.SetFontByFamilyName for more details.
+func WithFontFamily(family string) Option {
+	return func(g *GUI) error {
+		return g.fontManager.SetFontByFamilyName(family)
+	}
+}
+
+// WithOpacity defines the default background opacity.
+func WithOpacity(opacity float32) Option {
+	return func(g *GUI) error {
+		g.opacity = opacity
+		return nil
+	}
+}
+
+// WithFontSize defines the size of the default font
+// or the font set via WithFontFamily.
+func WithFontSize(size float64) Option {
+	return func(g *GUI) error {
+		return g.fontManager.SetSize(size)
+	}
+}
+
+// WithFontDPI sets the font DPI of the default font
+// or the font set via WithFontFamily.
+func WithFontDPI(dpi float64) Option {
+	return func(g *GUI) error {
+		return g.fontManager.SetDPI(dpi)
+	}
+}
+
+// WithLigatures enables or disables font ligatures.
+func WithLigatures(enable bool) Option {
+	return func(g *GUI) error {
+		g.enableLigatures = enable
+		return nil
+	}
+}
+
+// WithCursorAttributes defines the colors of the cursor.
+func WithCursorAttributes(attr term.Attributes) Option {
+	return func(g *GUI) error {
+		g.cursorAttributes = attr
+		return nil
+	}
+}
+
+// WithPublishChannel defines the channel responsible for
+// processing input events.
+func WithPublishChannel(ch chan term.Event) Option {
+	return func(g *GUI) error {
+		g.updateChan = ch
+		return nil
+	}
+}
+
+// WithLocker defines the locker to be used to synchronize
+// access to the GUI's root tui.Handler.
+func WithLocker(mu sync.Locker) Option {
+	return func(g *GUI) error {
+		g.mu = mu
+		return nil
+	}
+}
+
+// WithDefaultAttributes defines the default background
+// and foreground attributes.
+func WithDefaultAttributes(attr term.Attributes) Option {
+	return func(g *GUI) error {
+		g.defaultAttr = attr
+		return nil
+	}
+}

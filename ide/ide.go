@@ -226,6 +226,21 @@ func (i *IDE) DefaultAttributes() term.Attributes {
 	return i.ideConfig.defaultAttr()
 }
 
+// Handler returns the root Handler of this IDE, and
+// a cleanup function when this IDE is no longer in use.
+// This can be used insteaf of Run and Close, which
+// install this IDE on a TUI system.
+func (i *IDE) Handler() (tui.Handler, func()) {
+	atomic.StoreInt32(&i.running, 1)
+	return i.root, func() {
+		running := atomic.CompareAndSwapInt32(&i.running, 1, 0)
+		if !running {
+			return
+		}
+		_ = i.closeResources()
+	}
+}
+
 func (i *IDE) closeResources() (ret error) {
 	i.root.mu.Lock()
 	defer i.root.mu.Unlock()

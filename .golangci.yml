@@ -5,6 +5,8 @@ run:
     - target
 # we should slowly fix tests too
 issues:
+  exclude:
+    - SA1019 # deprecations
   exclude-rules:
     - path: (.+)_test.go
       linters:
