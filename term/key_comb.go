@@ -1088,6 +1088,37 @@ func (k KeyComb) String() string {
 		return "<alt-shift-esc>"
 	case KeyComb{Key: KeySpace, Mod: ModAltShift}, KeyComb{Ch: ' ', Key: KeySpace, Mod: ModAltShift}:
 		return "<alt-shift-space>"
+
+	// modifiers only
+	case KeyComb{Mod: ModAlt}:
+		return "<alt>"
+	case KeyComb{Mod: ModShift}:
+		return "<shift>"
+	case KeyComb{Mod: ModMeta}:
+		return "<meta>"
+	case KeyComb{Mod: ModCtrl}:
+		return "<ctrl>"
+	case KeyComb{Mod: ModCtrlShift}:
+		return "<ctrl-shift>"
+	case KeyComb{Mod: ModCtrlAlt}:
+		return "<ctrl-alt>"
+	case KeyComb{Mod: ModCtrlMeta}:
+		return "<ctrl-meta>"
+	case KeyComb{Mod: ModCtrlShiftAlt}:
+		return "<ctrl-shift-alt>"
+	case KeyComb{Mod: ModCtrlShiftMeta}:
+		return "<ctrl-shift-meta>"
+	case KeyComb{Mod: ModCtrlAltMeta}:
+		return "<ctrl-alt-meta>"
+	case KeyComb{Mod: ModShiftMeta}:
+		return "<shift-meta>"
+	case KeyComb{Mod: ModAltMeta}:
+		return "<alt-meta>"
+	case KeyComb{Mod: ModAltShiftMeta}:
+		return "<alt-shift-meta>"
+	case KeyComb{Mod: ModAltShift}:
+		return "<alt-shift>"
+
 	default:
 		return "<INVALID>"
 	}
@@ -2151,6 +2182,36 @@ func (k KeyComb) ShortString() string {
 		return "<a-s-esc>"
 	case KeyComb{Key: KeySpace, Mod: ModAltShift}, KeyComb{Ch: ' ', Key: KeySpace, Mod: ModAltShift}:
 		return "<a-s-space>"
+
+	// modifiers only
+	case KeyComb{Mod: ModAlt}:
+		return "<alt>"
+	case KeyComb{Mod: ModShift}:
+		return "<shift>"
+	case KeyComb{Mod: ModMeta}:
+		return "<meta>"
+	case KeyComb{Mod: ModCtrl}:
+		return "<ctrl>"
+	case KeyComb{Mod: ModCtrlShift}:
+		return "<ctrl-shift>"
+	case KeyComb{Mod: ModCtrlAlt}:
+		return "<ctrl-alt>"
+	case KeyComb{Mod: ModCtrlMeta}:
+		return "<ctrl-meta>"
+	case KeyComb{Mod: ModCtrlShiftAlt}:
+		return "<ctrl-shift-alt>"
+	case KeyComb{Mod: ModCtrlShiftMeta}:
+		return "<ctrl-shift-meta>"
+	case KeyComb{Mod: ModCtrlAltMeta}:
+		return "<ctrl-alt-meta>"
+	case KeyComb{Mod: ModShiftMeta}:
+		return "<shift-meta>"
+	case KeyComb{Mod: ModAltMeta}:
+		return "<alt-meta>"
+	case KeyComb{Mod: ModAltShiftMeta}:
+		return "<alt-shift-meta>"
+	case KeyComb{Mod: ModAltShift}:
+		return "<alt-shift>"
 	default:
 		return "<INVALID>"
 	}

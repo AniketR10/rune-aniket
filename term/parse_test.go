@@ -541,6 +541,20 @@ func TestParse(t *testing.T) {
 		{Key: KeyEnter, Mod: ModAltShift},
 		{Key: KeyEsc, Mod: ModAltShift},
 		{Key: KeySpace, Mod: ModAltShift},
+		{Mod: ModAlt},
+		{Mod: ModShift},
+		{Mod: ModMeta},
+		{Mod: ModCtrl},
+		{Mod: ModCtrlShift},
+		{Mod: ModCtrlAlt},
+		{Mod: ModCtrlMeta},
+		{Mod: ModCtrlShiftAlt},
+		{Mod: ModCtrlShiftMeta},
+		{Mod: ModCtrlAltMeta},
+		{Mod: ModShiftMeta},
+		{Mod: ModAltMeta},
+		{Mod: ModAltShiftMeta},
+		{Mod: ModAltShift},
 	}
 
 	for i, comb := range suite {

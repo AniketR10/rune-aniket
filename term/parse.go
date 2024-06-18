@@ -2235,7 +2235,36 @@ func ParseKey(str string) (KeyComb, error) {
 		case "<a-s-_>", "<alt-shift-_>":
 			return KeyComb{Mod: ModAltShift, Ch: '_'}, nil
 
-	default:
+		case "<alt>":
+			return KeyComb{Mod: ModAlt}, nil
+		case "<shift>":
+			return KeyComb{Mod: ModShift}, nil
+		case "<meta>":
+			return KeyComb{Mod: ModMeta}, nil
+		case "<ctrl>":
+			return KeyComb{Mod: ModCtrl}, nil
+		case "<ctrl-shift>":
+			return KeyComb{Mod: ModCtrlShift}, nil
+		case "<ctrl-alt>":
+			return KeyComb{Mod: ModCtrlAlt}, nil
+		case "<ctrl-meta>":
+			return KeyComb{Mod: ModCtrlMeta}, nil
+		case "<ctrl-shift-alt>":
+			return KeyComb{Mod: ModCtrlShiftAlt}, nil
+		case "<ctrl-shift-meta>":
+			return KeyComb{Mod: ModCtrlShiftMeta}, nil
+		case "<ctrl-alt-meta>":
+			return KeyComb{Mod: ModCtrlAltMeta}, nil
+		case "<shift-meta>":
+			return KeyComb{Mod: ModShiftMeta}, nil
+		case "<alt-meta>":
+			return KeyComb{Mod: ModAltMeta}, nil
+		case "<alt-shift-meta>":
+			return KeyComb{Mod: ModAltShiftMeta}, nil
+		case "<alt-shift>":
+			return KeyComb{Mod: ModAltShift}, nil
+
+		default:
 			return KeyComb{}, fmt.Errorf("invalid key: '%s'", str)
 		}
 	}
