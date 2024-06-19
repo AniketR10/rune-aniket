@@ -29,6 +29,8 @@ import (
 	"os"
 
 	"github.com/ernestrc/go-multierror"
+	log "github.com/sirupsen/logrus"
+	"github.com/unstablebuild/blue/logging"
 	"github.com/unstablebuild/fontinfo"
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/opentype"
@@ -333,7 +335,7 @@ func (m *Manager) loadFontFace(path string) (err error) {
 		case "Bold Italic", "Bold Oblique":
 			m.boldItalicFace = face
 		default:
-			return fmt.Errorf("unknown subfamily: %q", subfamily)
+			m.log(log.DebugLevel, "skipping subfamily: %q", subfamily)
 		}
 	}
 	return nil
@@ -382,4 +384,10 @@ func (m *Manager) calcMetrics() error {
 	m.charSize.Y = math.Max(0, float64((bounds.Max.Sub(bounds.Min).Y+m.offset.Y)/(1<<6)))
 	m.cellOffsetY = float64(-bounds.Min.Y / (1 << 6))
 	return nil
+}
+
+func (p *Manager) log(level log.Level, msg string, args ...any) {
+	log.WithFields(log.Fields{
+		logging.KeyClass: "font.Manager",
+	}).Logf(level, msg, args...)
 }
