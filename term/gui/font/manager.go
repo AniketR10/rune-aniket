@@ -328,9 +328,9 @@ func (m *Manager) loadFontFace(path string) (err error) {
 			m.regularFace = face
 		case "Bold":
 			m.boldFace = face
-		case "Italic":
+		case "Italic", "Oblique":
 			m.italicFace = face
-		case "Bold Italic":
+		case "Bold Italic", "Bold Oblique":
 			m.boldItalicFace = face
 		default:
 			return fmt.Errorf("unknown subfamily: %q", subfamily)
