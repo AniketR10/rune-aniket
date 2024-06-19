@@ -98,9 +98,9 @@ func TestMouseEvents(t *testing.T) {
 			cursorPosition: []image.Point{{X: 100, Y: 100}, {}, {X: 100, Y: 100}},
 			wheel:          []float64{0, 0, 0},
 			expectedEvents: []term.Event{
-				{Type: term.EventMouse, MouseX: 11, MouseY: 4},
+				{Type: term.EventMouse, MouseX: 11, MouseY: 5},
 				{Type: term.EventMouse},
-				{Type: term.EventMouse, MouseX: 11, MouseY: 4},
+				{Type: term.EventMouse, MouseX: 11, MouseY: 5},
 			},
 		},
 		{
@@ -120,9 +120,9 @@ func TestMouseEvents(t *testing.T) {
 			cursorPosition: []image.Point{{X: 10000000, Y: 100000000}, {}, {X: 500000000, Y: 5000000000}},
 			wheel:          []float64{0, 0, 0},
 			expectedEvents: []term.Event{
-				{Type: term.EventMouse, MouseX: 87, MouseY: 24},
+				{Type: term.EventMouse, MouseX: 87, MouseY: 34},
 				{Type: term.EventMouse},
-				{Type: term.EventMouse, MouseX: 87, MouseY: 24},
+				{Type: term.EventMouse, MouseX: 87, MouseY: 34},
 			},
 		},
 		{
@@ -137,9 +137,9 @@ func TestMouseEvents(t *testing.T) {
 			wheel:          []float64{0, 0, 0, 0},
 			expectedEvents: []term.Event{
 				{Type: term.EventMouse, Key: term.MouseLeft},
-				{Type: term.EventMouse, Key: term.MouseLeft, MouseX: 11, MouseY: 4},
-				{Type: term.EventMouse, Key: term.MouseLeft, MouseX: 13, MouseY: 5},
-				{Type: term.EventMouse, Key: term.MouseRelease, MouseX: 13, MouseY: 5},
+				{Type: term.EventMouse, Key: term.MouseLeft, MouseX: 11, MouseY: 5},
+				{Type: term.EventMouse, Key: term.MouseLeft, MouseX: 13, MouseY: 7},
+				{Type: term.EventMouse, Key: term.MouseRelease, MouseX: 13, MouseY: 7},
 			},
 		},
 	}
@@ -176,6 +176,7 @@ func newTestMouse() (*mockMouseManager, *mouse) {
 	mock := &mockMouseManager{pressedButtons: map[ebiten.MouseButton]struct{}{}}
 	f := font.NewManager()
 	f.SetFontByFamilyName("builtin")
+	f.SetDeviceScale(1)
 	ret := newMouse(f)
 	ret.mouse = mock
 	ret.resize(f.CellsWidth(defaultWidth), f.CellsHeight(defaultHeight))

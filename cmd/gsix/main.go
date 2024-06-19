@@ -74,6 +74,8 @@ var (
 	flagFontFamily    = flag.String("F", "", "font family, default is builtin font")
 	flagFontLigatures = flag.Bool("l", true, "font ligatures")
 	flagOpacity       = flag.Float64("o", 1, "opacity")
+	flagDeviceScale   = flag.Float64("s", 0, "device scale factor of the monitor. "+
+		"The default value detected automatically")
 )
 
 func init() {
@@ -214,6 +216,7 @@ func run() int {
 	options := []gui.Option{
 		gui.WithFontDPI(*flagDPI),
 		gui.WithFontSize(*flagFontSize),
+		gui.WithDeviceScale(*flagDeviceScale),
 		gui.WithFontFamily(*flagFontFamily),
 		gui.WithOpacity(float32(*flagOpacity)),
 		gui.WithLigatures(*flagFontLigatures),

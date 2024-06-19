@@ -50,6 +50,7 @@ type Manager struct {
 	boldItalicFace font.Face
 	size           float64
 	dpi            float64
+	staticDevScale float64
 	charSize       CharSize
 	offset         fixed.Point26_6
 	cellOffsetY    float64
@@ -140,8 +141,20 @@ func (m *Manager) SetFontByFamilyName(name string) error {
 	return m.findAndLoadFont(name)
 }
 
+// SetDeviceScale forces the device scale to the given value.
+//
+// Note that after this method is called, the device scale
+// won't be adjusted dynamically. This is only meant to be run
+// on systems where the device scale detector is not working properly.
+func (m *Manager) SetDeviceScale(value float64) {
+	m.staticDevScale = value
+}
+
 // DeviceScale returns the device scale factor of the current screen.
 func (m *Manager) DeviceScale() float64 {
+	if m.staticDevScale != 0 {
+		return m.staticDevScale
+	}
 	// this cannot be cached otherwise moving window across screens with
 	// different DPIs wouldn't adjust the device scale factor.
 	return deviceScale()

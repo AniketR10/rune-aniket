@@ -63,6 +63,14 @@ func WithFontDPI(dpi float64) Option {
 	}
 }
 
+// WithDeviceScale sets the device scale factor of the monitor.
+func WithDeviceScale(scale float64) Option {
+	return func(g *GUI) error {
+		g.fontManager.SetDeviceScale(scale)
+		return nil
+	}
+}
+
 // WithLigatures enables or disables font ligatures.
 func WithLigatures(enable bool) Option {
 	return func(g *GUI) error {
