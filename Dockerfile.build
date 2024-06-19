@@ -32,5 +32,6 @@ RUN go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.58.1
 FROM --platform=linux/amd64 golang:alpine
 COPY --from=build /go /go
 RUN apk add --no-cache make git openssh gcc g++ musl-dev linux-headers bash
-RUN apk add alsa-lib-dev libx11-dev libxrandr-dev libxcursor-dev libxinerama-dev libxi-dev mesa-dev pkgconf
+RUN apk add --no-cache glfw-dev alsa-lib-dev libx11-dev libxrandr-dev \
+	libxcursor-dev libxinerama-dev libxi-dev mesa-dev pkgconf
 RUN rm -rf /go/pkg/mod/unstable.build
