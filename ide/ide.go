@@ -36,7 +36,7 @@ import (
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/api/config"
 	workspaceapi "unstable.build/go-tui/api/workspace"
-	"unstable.build/go-tui/component/notifications"
+	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/workspace"
 	"unstable.build/go-tui/workspace/ssh"
@@ -248,9 +248,9 @@ func (i *IDE) Handler() (tui.Handler, func()) {
 	}
 }
 
-// Notify sends a notification to the user.
-func (i *IDE) Notify(level notifications.Level, msg string) error {
-	return i.root.focusBrowser().Notify(level, msg)
+// Browser returns the current browser in focus.
+func (i *IDE) Browser() browser.Browser {
+	return i.root.focusBrowser()
 }
 
 func (i *IDE) closeResources() (ret error) {
