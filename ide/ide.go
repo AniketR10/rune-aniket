@@ -36,6 +36,7 @@ import (
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/api/config"
 	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/workspace"
 	"unstable.build/go-tui/workspace/ssh"
@@ -245,6 +246,12 @@ func (i *IDE) Handler() (tui.Handler, func()) {
 		}
 		_ = i.closeResources()
 	}
+}
+
+// Notify sends a notification to the user.
+func (i *IDE) Notify(level notifications.Level, msg string) error {
+	wh := i.root.focusHandler().(*workspaceHandler)
+	return wh.Browser().Notify(level, msg)
 }
 
 func (i *IDE) closeResources() (ret error) {
