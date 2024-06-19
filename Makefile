@@ -22,7 +22,8 @@ EXECS=$(patsubst cmd/%/,$(BIN)/%,$(EXECDIRS))
 GOMOCKS=$(wildcard **/**/*_gomock.go) $(wildcard **/*_gomock.go)
 RELEASE_FILES=$(wildcard release/*)
 
-.PHONY: debug clean test coverage example_wasm generate sixdev format docker-build-gcp docker-push-gcp cross-compile lint license assert_license
+.PHONY: debug clean test coverage example_wasm generate sixdev \
+	format docker-build-ci-gcp docker-push-ci-gcp cross-compile lint license assert_license
 
 default: CGO_ENABLED=CGO_ENABLED=1
 default: GOPRIVATE=github.com/unstablebuild,unstable.build/*
