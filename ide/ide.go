@@ -34,6 +34,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/logging"
 	"unstable.build/go-tui"
+	"unstable.build/go-tui/api/config"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/workspace"
@@ -224,6 +225,11 @@ func (i *IDE) Run() error {
 // DefaultAttributes return the default attributes to be used to fill the screen.
 func (i *IDE) DefaultAttributes() term.Attributes {
 	return i.ideConfig.defaultAttr()
+}
+
+// Config returns the configuration loaded by this IDE.
+func (i *IDE) Config() config.Config {
+	return config.MapConfig(i.ideConfig.cfg)
 }
 
 // Handler returns the root Handler of this IDE, and
