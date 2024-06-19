@@ -333,6 +333,13 @@ func (h *workspaceManagerHandler) focusHandler() tui.Handler {
 	return h.empty
 }
 
+func (h *workspaceManagerHandler) focusBrowser() browser.Browser {
+	if handler := h.workspaces[h.focus]; handler != nil {
+		return handler.Browser()
+	}
+	return h.empty.Browser()
+}
+
 func (h *workspaceManagerHandler) drawBar() bool {
 	return h.workspaceCount > 1 || h.focusHandler() == h.empty
 }

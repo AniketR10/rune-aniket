@@ -250,8 +250,7 @@ func (i *IDE) Handler() (tui.Handler, func()) {
 
 // Notify sends a notification to the user.
 func (i *IDE) Notify(level notifications.Level, msg string) error {
-	wh := i.root.focusHandler().(*workspaceHandler)
-	return wh.Browser().Notify(level, msg)
+	return i.root.focusBrowser().Notify(level, msg)
 }
 
 func (i *IDE) closeResources() (ret error) {
