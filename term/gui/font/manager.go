@@ -28,6 +28,7 @@ import (
 	"math"
 	"os"
 
+	"github.com/ernestrc/go-multierror"
 	"github.com/unstablebuild/fontinfo"
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/opentype"
@@ -132,27 +133,11 @@ func (m *Manager) SetFontByFamilyName(name string) error {
 	if name == "" {
 		return m.loadDefaultFonts()
 	}
-
-	fonts, err := fontinfo.Match(fontinfo.MatchFamily(name))
-	if err != nil {
-		return fmt.Errorf("find font with family '%s': %w", name, err)
-	}
-	if len(fonts) == 0 {
-		return fmt.Errorf("could not find font with family '%s'", name)
+	if name == "builtin" {
+		return m.loadFallbackFont()
 	}
 
-	for _, fontMeta := range fonts {
-		err := m.loadFontFace(fontMeta.Path)
-		if err != nil {
-			return err
-		}
-	}
-
-	if m.regularFace == nil {
-		return fmt.Errorf("could not find regular style for font family '%s'", name)
-	}
-
-	return m.calcMetrics()
+	return m.findAndLoadFont(name)
 }
 
 // DeviceScale returns the device scale factor of the current screen.
@@ -253,6 +238,16 @@ func (m *Manager) cellsHeight(height int) float64 {
 }
 
 func (m *Manager) loadDefaultFonts() error {
+	err := m.findAndLoadFont(defaultFamily())
+	if err != nil {
+		if lerr := m.loadFallbackFont(); lerr != nil {
+			return multierror.Append(err, lerr)
+		}
+	}
+	return nil
+}
+
+func (m *Manager) loadFallbackFont() error {
 	regular, err := opentype.Parse(builtinfont.MesloLGMRegularTTF)
 	if err != nil {
 		return err
@@ -329,6 +324,29 @@ func (m *Manager) loadFontFace(path string) (err error) {
 		}
 	}
 	return nil
+}
+
+func (m *Manager) findAndLoadFont(name string) error {
+	fonts, err := fontinfo.Match(fontinfo.MatchFamily(name))
+	if err != nil {
+		return fmt.Errorf("find font with family '%s': %w", name, err)
+	}
+	if len(fonts) == 0 {
+		return fmt.Errorf("could not find font with family '%s'", name)
+	}
+
+	for _, fontMeta := range fonts {
+		err := m.loadFontFace(fontMeta.Path)
+		if err != nil {
+			return err
+		}
+	}
+
+	if m.regularFace == nil {
+		return fmt.Errorf("could not find regular style for font family '%s'", name)
+	}
+
+	return m.calcMetrics()
 }
 
 func (m *Manager) createFace(f *sfnt.Font) (font.Face, error) {

@@ -548,7 +548,9 @@ func TestInputFireRepeat(t *testing.T) {
 
 func newTestInput() (*mockInputManager, *input) {
 	mock := &mockInputManager{pressedKeys: map[ebiten.Key]struct{}{}}
-	ret := newInput(font.NewManager())
+	f := font.NewManager()
+	f.SetFontByFamilyName("builtin")
+	ret := newInput(f)
 	ret.input = mock
 	return mock, ret
 }

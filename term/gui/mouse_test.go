@@ -175,6 +175,7 @@ func TestMouseEvents(t *testing.T) {
 func newTestMouse() (*mockMouseManager, *mouse) {
 	mock := &mockMouseManager{pressedButtons: map[ebiten.MouseButton]struct{}{}}
 	f := font.NewManager()
+	f.SetFontByFamilyName("builtin")
 	ret := newMouse(f)
 	ret.mouse = mock
 	ret.resize(f.CellsWidth(defaultWidth), f.CellsHeight(defaultHeight))
