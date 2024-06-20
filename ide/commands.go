@@ -35,6 +35,7 @@ const (
 	cmdSplitWindow            = "splitWindow"
 	cmdNewWindow              = "newWindow"
 	cmdSetDefaultColors       = "setDefaultColors"
+	cmdSwitchToTab            = "switchToTab"
 )
 
 type commandAll struct {
@@ -71,6 +72,14 @@ var (
 					"with the next available tab in the tabs list.",
 			},
 			handler: (*ex).closeTab,
+		},
+		cmdSwitchToTab: {
+			man: textapi.CommandManual{
+				Summary: "Set the content of the current active window to the tab at the given " +
+					"position in the tabs list.",
+				Synopsis: "number",
+			},
+			handler: (*ex).switchToTab,
 		},
 		"closeAllTabs": {
 			man: textapi.CommandManual{

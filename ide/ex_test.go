@@ -1865,6 +1865,100 @@ func TestTerminalOnFocus(t *testing.T) {
 	})
 }
 
+func TestSwitchToTab(t *testing.T) {
+	cases := []testutil.HandlerSequenceTestCase{
+		{":e hello.go>B:e world.go>",
+`┌────────────────────────────┐
+│hello.go  world.go          │
+├────────────────────────────┤
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+└────────────────────────────┘`},
+
+		{":switchToTab ",
+`┌────────────────────────────┐
+│hello.go  world.go          │
+├────────────────────────────┤
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+┌────────────────────────────┐
+│switchToTab ▐               │
+│1                           │
+│2                           │
+└────────────────────────────┘
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+└────────────────────────────┘`},
+		{"1>",
+`┌────────────────────────────┐
+│hello.go  world.go          │
+├────────────────────────────┤
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+└────────────────────────────┘`},
+		{":switchToTab 3>",
+`┌────────────────────────────┐
+│hello.go  world.go          │
+├────────────────────────────┤
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+└────────────────────────────┘`},
+		{":switchToTab 0>",
+`┌────────────────────────────┐
+│The first tab is 1          │
+└━━━━━━━━━━━━━━━━━━━━━━━━━━━━┘
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+└────────────────────────────┘`},
+	}
+
+	opts := []text.Option{
+		text.WithCommandKey(testCommandKey),
+	}
+	b := newExForTesting(t, texttest.NopEditor(), opts...)
+	defer b.Close()
+
+	testutil.TestHandlerSequence(t, b, 30, 15, cases)
+}
+
 func notificationsConfig() notifications.Config {
 	ret := browser.DefaultConfig().Notifications
 	ret.Width = 15

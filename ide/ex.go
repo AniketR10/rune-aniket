@@ -63,6 +63,7 @@ const (
 var (
 	errInvalidSetCursor    = errors.New("Cannot set cursor on this buffer")
 	errEventStreamNotReady = errors.New("event stream not ready to publish")
+	errInvalidTab          = errors.New("expected exactly one argument with the tab position")
 )
 
 type workspaceLoader interface {
@@ -258,6 +259,15 @@ func (e *ex) completeCommand(
 ) (iterator.Iterator[string], string, error) {
 	e.log(log.DebugLevel, "complete command: %s %v", cmd, args)
 	switch cmd {
+	case cmdSwitchToTab:
+		if len(args) <= 1 {
+			n := len(e.comp.Browser().Tabs())
+			var tabs []string
+			for i := 0; i < n; i++{
+				tabs = append(tabs, strconv.Itoa(i+1))
+			}
+			return iterator.FromSlice(tabs), "", nil
+		}
 	case cmdSetDefaultColors:
 		var colorNames []string
 		for name := range tcell.ColorNames {
@@ -269,18 +279,15 @@ func (e *ex) completeCommand(
 	case cmdReadFile:
 		return e.completeReadFile(ctx, args)
 	case cmdSplitWindow, cmdNewWindow:
-		if len(args) > 1 {
-			return iterator.FromSlice[string](nil), "", nil
+		if len(args) <= 1 {
+			return iterator.FromSlice([]string{"right", "left", "top", "bottom"}), "", nil
 		}
-		return iterator.FromSlice([]string{"right", "left", "top", "bottom"}), "", nil
 	case cmdChangeSplitOrientation:
-		if len(args) > 1 {
-			return iterator.FromSlice[string](nil), "", nil
+		if len(args) <= 1 {
+			return iterator.FromSlice([]string{"horizontal", "vertical"}), "", nil
 		}
-		return iterator.FromSlice([]string{"horizontal", "vertical"}), "", nil
-	default:
-		return iterator.FromSlice[string](nil), "", nil
 	}
+	return iterator.FromSlice[string](nil), "", nil
 }
 
 func (e *ex) Interrupt(ctx context.Context) error {
@@ -416,6 +423,23 @@ func (e *ex) nextTab(args ...string) error {
 		return e.toggleCompanionTerminal()
 	}
 	b.NextTab(e.invokeWindow())
+	return nil
+}
+
+func (e *ex) switchToTab(args ...string) error {
+	if len(args) != 1 {
+		return errInvalidTab
+	}
+	idxStr := args[0]
+	idx, err := strconv.Atoi(idxStr)
+	if err != nil {
+		return errInvalidTab
+	}
+	if idx == 0 {
+		return errors.New("The first tab is 1")
+	}
+	b := e.comp.Browser()
+	b.SetContentToTab(e.invokeWindow(), idx-1)
 	return nil
 }
 

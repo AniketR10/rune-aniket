@@ -421,6 +421,16 @@ func (c *Component) NextTab(win Window) bool {
 	return false
 }
 
+// SetContentToTab updates win with the tab at the given index.
+func (c *Component) SetContentToTab(win Window, tabIdx int) bool {
+	bWin := win.(*browserWindow)
+	if tabIdx < 0 {
+		panic("negative tab index")
+	}
+	return tabIdx < len(c.buffers) &&
+		bWin.parent != nil && c.updateWindowTab(bWin, tabIdx)
+}
+
 func (c *Component) log(level log.Level, msg string, args ...interface{}) {
 	log.
 		WithField(logging.KeyClass, "browser.Component").Logf(level, msg, args...)
