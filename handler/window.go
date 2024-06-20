@@ -138,7 +138,7 @@ func (w Window) Close() error {
 	}
 
 	if w.wm.SizeTiles() == 1 && !w.IsFloating() {
-		return errors.New("trying to close last window")
+		return errors.New("Cannot close last tiled window")
 	}
 
 	if w.wm.prevFocus == w {

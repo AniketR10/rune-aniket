@@ -303,7 +303,7 @@ func (w Window) Close() error {
 	}
 
 	if _, ok := w.node.(*TileNode); ok && w.wm.SizeTiles() == 1 {
-		return errors.New("trying to close last node")
+		return errors.New("Cannot close last node")
 	}
 
 	w.node.Close()

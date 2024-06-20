@@ -75,7 +75,6 @@ func (w *browserWindow) Close() error {
 
 	err := parent.closeWindow(w)
 	if err != nil {
-		parent.setError(err)
 		return err
 	}
 
