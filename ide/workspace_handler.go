@@ -324,7 +324,7 @@ func (h *workspaceManagerHandler) completeCommand(
 ) (iterator.Iterator[string], string, error) {
 	switch cmd {
 	case cmdSwitchToWorkspace:
-		if len(args) == 0 {
+		if len(args) <= 1 {
 			nums := [10]string{"1", "2", "3", "4", "5", "6", "7", "8", "9", "10"}
 			return iterator.FromSlice(nums[:]), "", nil
 		}

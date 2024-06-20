@@ -362,7 +362,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 │                  │
 │                  │
 └──────────────────┘`},
-		{":sw 3>",
+		{":swWo 3>",
 			`┌──────────────────┐
 │                  │
 ├──────────────────┤
@@ -406,7 +406,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 ├──────────────────┤
 │1                 │
 └──────────────────┘`},
-		{":sw 100>",
+		{":swWo 100>",
 			`┌──────────────────┐
 │invalid           │
 │workspace:        │
@@ -450,7 +450,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 ├──────────────────┤
 │1  2              │
 └──────────────────┘`},
-		{"2:sw>",
+		{"2:swWo>",
 			`┌──────────────────┐
 │invalid           │
 │arguments.        │
@@ -461,7 +461,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 ├──────────────────┤
 │1  2              │
 └──────────────────┘`},
-		{":sw 3>:addBlaBla>",
+		{":swWo 3>:addBlaBla>",
 			`┌──────────────────┐
 │                  │
 ├──────────────────┤
@@ -472,7 +472,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 ├──────────────────┤
 │1  3              │
 └──────────────────┘`},
-		{":sw 4>:addWorkspace memory\\:///>", // can give path as arg to addWorkspace
+		{":swWo 4>:addWorkspace memory\\:///>", // can give path as arg to addWorkspace
 			`┌──────────────────┐
 │                  │
 ├──────────────────┤
@@ -483,7 +483,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 ├──────────────────┤
 │1  4              │
 └──────────────────┘`},
-		{":sw 4>:addWorkspace memory\\:///tmp2>:edit memory\\:///tmp2/12>:reloadWorkspace>", // reloads non-primary workspace
+		{":swWo 4>:addWorkspace memory\\:///tmp2>:edit memory\\:///tmp2/12>:reloadWorkspace>", // reloads non-primary workspace
 			`┌──────────────────┐
 │12                │
 ├──────────────────┤
@@ -869,6 +869,43 @@ func TestInitializeNoCwd(t *testing.T) {
 └──────────────────┘`},
 	}
 	testutil.TestHandlerSequence(t, m, 20, 10, cases)
+
+	require.NoError(t, m.Close())
+}
+
+func TestSwitchToWorkspaceComplete(t *testing.T) {
+	dir, err := os.MkdirTemp("", "")
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		os.RemoveAll(dir)
+	})
+
+	m := newTestWorkspaceManagerHandlerWithDir(t, defaultConfigWithWrap(false), nil, dir)
+
+	cases := []testutil.HandlerSequenceTestCase{
+		{":swWo ",
+`┌──────────────────────────────────────┐
+│                                      │
+├──────────────────────────────────────┤
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+┌──────────────────────────────────────┐
+│switchToWorkspace ▐                   │
+│1                                     │
+│2                                     │
+│3                                     │
+│4                                     │
+│5                                     │
+│6                                     │
+│7                                     │
+│8                                     │
+│9                                     │
+└──────────────────────────────────────┘`},
+	}
+	testutil.TestHandlerSequence(t, m, 40, 20, cases)
 
 	require.NoError(t, m.Close())
 }
