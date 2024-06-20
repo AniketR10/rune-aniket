@@ -106,7 +106,7 @@ func TestWorkspaceConfig(t *testing.T) {
 
 		m := new(testWorkspaceManagerHandler)
 		m.workspaceManagerHandler = new(workspaceManagerHandler)
-		err = m.workspaceManagerHandler.init(uri, homeURI, manager, cfg, "", nil,
+		err = m.workspaceManagerHandler.init(&uri, homeURI, manager, cfg, "", nil,
 			dir, func(term.Event) bool {
 				return true
 			}, runner, new(sync.Mutex), nil,
@@ -205,7 +205,7 @@ func TestWorkspaceExtensions(t *testing.T) {
 		dir, err := os.MkdirTemp("", "")
 		require.NoError(t, err)
 		m := newTestWorkspaceManagerHandlerWithManagerAndExtensions(t, manager,
-			uri, cfg, runner, nil, nil, dir)
+			&uri, cfg, runner, nil, nil, dir)
 		defer m.Close()
 
 		assert.Equal(t, "git", called)
@@ -246,7 +246,7 @@ func TestWorkspaceExtensions(t *testing.T) {
 				}, nil
 			})
 		m := newTestWorkspaceManagerHandlerWithManagerAndExtensions(t, manager,
-			uri, cfg, runner, extensions, nil, dir)
+			&uri, cfg, runner, extensions, nil, dir)
 		defer m.Close()
 
 		assert.Equal(t, "myID", called)
@@ -725,7 +725,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 				runner := FuncExtensionsRunner(testRunnerFn)
 
 				m1 := newTestWorkspaceManagerHandlerWithManagerAndExtensions(t, manager,
-					uri, cfg, runner, nil, nil, dir)
+					&uri, cfg, runner, nil, nil, dir)
 
 				cases := []testutil.HandlerSequenceTestCase{
 					{":edit 1234>ih3ll0\nw1rld <:write>:edit 4567>ihello\nworld <:write>:notificationsCloseAll>",
@@ -744,7 +744,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 				require.NoError(t, m1.Close())
 
 				m2 := newTestWorkspaceManagerHandlerWithManagerAndExtensions(t, manager,
-					uri, cfg, runner, nil, nil, dir)
+					&uri, cfg, runner, nil, nil, dir)
 
 				cases = []testutil.HandlerSequenceTestCase{
 					{"",
@@ -774,7 +774,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 				require.NoError(t, m2.Close())
 
 				m3 := newTestWorkspaceManagerHandlerWithManagerAndExtensions(t, manager,
-					uri, cfg, runner, nil, nil, dir)
+					&uri, cfg, runner, nil, nil, dir)
 
 				cases = []testutil.HandlerSequenceTestCase{
 					{"",
@@ -851,6 +851,28 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 	}
 }
 
+func TestInitializeNoCwd(t *testing.T) {
+	m := newTestWorkspaceManagerHandlerWithDir(t,
+		defaultConfigWithWrap(false), []string{"ignored"}, "")
+
+	cases := []testutil.HandlerSequenceTestCase{
+		{"",
+			`┌──────────────────┐
+│                  │
+├──────────────────┤
+│                  │
+│workspaceWallpaper│
+│                  │
+│                  │
+├──────────────────┤
+│1                 │
+└──────────────────┘`},
+	}
+	testutil.TestHandlerSequence(t, m, 20, 10, cases)
+
+	require.NoError(t, m.Close())
+}
+
 func newTestWorkspaceManagerHandlerWithManager(
 	t *testing.T, manager *workspace.Manager,
 	uri workspaceapi.URI, cfg ideConfig, filenames []string,
@@ -858,12 +880,12 @@ func newTestWorkspaceManagerHandlerWithManager(
 	dir, err := os.MkdirTemp("", "")
 	require.NoError(t, err)
 	return newTestWorkspaceManagerHandlerWithManagerAndExtensions(t, manager,
-		uri, cfg, FuncExtensionsRunner(testRunnerFn), nil, filenames, dir)
+		&uri, cfg, FuncExtensionsRunner(testRunnerFn), nil, filenames, dir)
 }
 
 func newTestWorkspaceManagerHandlerWithManagerAndExtensions(
 	t *testing.T, manager *workspace.Manager,
-	uri workspaceapi.URI, cfg ideConfig, runner ExtensionsRunner,
+	uri *workspaceapi.URI, cfg ideConfig, runner ExtensionsRunner,
 	extensions map[string]Extension, files []string, dir string,
 ) *testWorkspaceManagerHandler {
 	homeURI, err := workspaceapi.ParseURI("memory:///home")
@@ -889,8 +911,13 @@ func newTestWorkspaceManagerHandlerWithDir(
 	require.NoError(t, manager.RegisterScheme(workspace.MemoryScheme,
 		workspace.NewMemoryScheme))
 
-	uri, err := workspaceapi.ParseURI(fmt.Sprintf("memory://%s", dir))
-	require.NoError(t, err)
+	var uri *workspaceapi.URI
+	if dir != "" {
+		var err error
+		uri = new(workspaceapi.URI)
+		*uri, err = workspaceapi.ParseURI(fmt.Sprintf("memory://%s", dir))
+		require.NoError(t, err)
+	}
 	runner := FuncExtensionsRunner(testRunnerFn)
 	return newTestWorkspaceManagerHandlerWithManagerAndExtensions(t, manager,
 		uri, cc, runner, nil, filenames, dir)

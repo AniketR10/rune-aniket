@@ -192,6 +192,28 @@ func TestIDEInitializationIntegration(t *testing.T) {
 
 		assert.NoError(t, i.closeResources())
 	})
+
+	t.Run("is able to initialize without a cwd", func(t *testing.T) {
+		configFile, file1 := makeTestFiles(t)
+
+		dir, err := os.MkdirTemp("", "")
+		require.NoError(t, err)
+
+		t.Cleanup(func() {
+			_ = os.RemoveAll(dir)
+		})
+
+		i := new(IDE)
+		err = i.init("", configFile.Name(), "",
+			dir, []string{file1.Name()},
+			WithPublishEvent(nopPublishEvent),
+			WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
+			WithLocker(new(sync.Mutex)))
+		require.NoError(t, err)
+
+		require.NotNil(t, i.root)
+		assert.NoError(t, i.closeResources())
+	})
 }
 
 func makeTestFiles(t *testing.T) (*os.File, *os.File) {

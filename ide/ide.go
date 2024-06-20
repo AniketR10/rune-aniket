@@ -98,17 +98,6 @@ func (i *IDE) init(
 	configErr := loadConfig(&i.ideConfig, cfgfilename,
 		op.defaultWallpaper, op.defaultConfig, op.bell, op.scheduleFn)
 
-	cwdURI, parseErr := workspaceapi.ParseURI(cwd)
-	if parseErr != nil {
-		parseErr = fmt.Errorf("could not parse workspace uri: %w", parseErr)
-		var pathErr error
-		cwdURI, pathErr = workspaceapi.CurrentUserHostURI(cwd)
-		if pathErr != nil {
-			return multierr.Append(
-				parseErr, fmt.Errorf("make current host URI: %w", pathErr))
-		}
-	}
-
 	if logPath := i.ideConfig.logOutputPath(); logPath != "" {
 		f, err := workspace.OpenFile(logPath,
 			os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
@@ -173,6 +162,21 @@ func (i *IDE) init(
 		return fmt.Errorf("make home dir uri: %v", err)
 	}
 
+	var cwdURI *workspaceapi.URI
+	if cwd != "" {
+		uri, parseErr := workspaceapi.ParseURI(cwd)
+		if parseErr != nil {
+			parseErr = fmt.Errorf("could not parse workspace uri: %w", parseErr)
+			var pathErr error
+			uri, pathErr = workspaceapi.CurrentUserHostURI(cwd)
+			if pathErr != nil {
+				return multierr.Append(
+					parseErr, fmt.Errorf("make current host URI: %w", pathErr))
+			}
+		}
+		cwdURI = &uri
+	}
+
 	root, err := newWorkspaceManagerHandler(cwdURI, homeDirURI,
 		workspaceManager, i.ideConfig, recfilename, filenames,
 		sixDir, i.publishEvent, op.extensionRunner, i.locker, op.extensions,
@@ -185,8 +189,7 @@ func (i *IDE) init(
 	}
 	i.workspaceManager = workspaceManager
 	i.root = root
-	wh := i.root.focusHandler().(*workspaceHandler)
-	i.root.logNonFatalErrs(wh, configErr, i.ideConfig.errors)
+	root.logNonFatalErrs(root.focusBrowser(), configErr, i.ideConfig.errors)
 
 	return nil
 }

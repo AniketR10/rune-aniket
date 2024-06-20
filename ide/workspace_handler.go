@@ -101,7 +101,8 @@ type workspaceManagerHandler struct {
 }
 
 func newWorkspaceManagerHandler(
-	initial, homeDirUri workspaceapi.URI, manager workspace.WorkspaceManager,
+	initial *workspaceapi.URI, homeDirUri workspaceapi.URI,
+	manager workspace.WorkspaceManager,
 	cfg ideConfig, recfilename string, filenames []string,
 	sixDir string, publishEvent func(term.Event) bool,
 	extensionRunner ExtensionsRunner, locker sync.Locker,
@@ -151,7 +152,8 @@ func (h *workspaceManagerHandler) newBuiltinModelessEditor(cfg ideConfig) text.E
 }
 
 func (h *workspaceManagerHandler) init(
-	cwd, homeDirUri workspaceapi.URI, manager workspace.WorkspaceManager,
+	cwd *workspaceapi.URI, homeDirUri workspaceapi.URI,
+	manager workspace.WorkspaceManager,
 	cfg ideConfig, recfilename string, filenames []string,
 	sixDir string, publishEvent func(term.Event) bool,
 	extensionRunner ExtensionsRunner, locker sync.Locker,
@@ -226,11 +228,17 @@ func (h *workspaceManagerHandler) init(
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
+	if cwd == nil {
+		h.focusProxy.Target = h.focusHandler()
+		h.union.UnionBottom(&h.bar, h.barSize())
+		return nil
+	}
+
 	// AddWorkspace is idempotent, so it should be fine to here and later when
 	// actually creating the workspace handler.
-	tempcwd, err := h.workspace.AddWorkspace(h.ctxWithLocker, cwd)
+	tempcwd, err := h.workspace.AddWorkspace(h.ctxWithLocker, *cwd)
 	if err != nil {
-		return fmt.Errorf("Failed to create new workspace for %q: %s", cwd, err)
+		return fmt.Errorf("Failed to create new workspace for %q: %s", *cwd, err)
 	}
 	var uris []workspaceapi.URI
 	for _, filename := range filenames {
@@ -242,10 +250,11 @@ func (h *workspaceManagerHandler) init(
 	}
 
 	shouldRestore := len(uris) == 0
-	err = h.addWorkspace(cwd, recfilename, uris, shouldRestore, !cfg.autoRestore(), -1)
+	err = h.addWorkspace(*cwd, recfilename, uris, shouldRestore, !cfg.autoRestore(), -1)
 	if err != nil {
 		return fmt.Errorf("add default workspace: %w", err)
 	}
+
 	h.focusProxy.Target = h.focusHandler()
 	h.union.UnionBottom(&h.bar, h.barSize())
 
@@ -654,7 +663,7 @@ func (h *workspaceManagerHandler) addWorkspace(
 	h.workspaceCount++
 	h.switchToWorkspace(i)
 
-	h.logNonFatalErrs(wh, configErr, cfg.errors)
+	h.logNonFatalErrs(wh.Browser(), configErr, cfg.errors)
 
 	prevSessionFiles := h.history.recordAddWorkspace(uri, ex.Editor(), shouldRestore)
 	if !shouldRestore || len(prevSessionFiles) == 0 {
@@ -722,7 +731,7 @@ func (h *workspaceManagerHandler) nextAvailableWorkspace() (idx int, ok bool) {
 }
 
 func (h *workspaceManagerHandler) logNonFatalErrs(
-	wh *workspaceHandler,
+	browser browser.Browser,
 	configErr error,
 	configErrs map[string]error,
 ) {
@@ -733,7 +742,7 @@ func (h *workspaceManagerHandler) logNonFatalErrs(
 	}
 	if all != nil {
 		log.Warn(all)
-		_ = wh.Browser().Notify(notifications.LevelError, "Config decode error: %v", all)
+		_ = browser.Notify(notifications.LevelError, "Config decode error: %v", all)
 	}
 }
 
