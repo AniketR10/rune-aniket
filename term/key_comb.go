@@ -34,38 +34,39 @@ type KeyComb struct {
 // String returns the long string representation of this KeyComb.
 func (k KeyComb) String() string {
 	if k.Ch != 0 && k.Key != KeySpace {
+		ch, mod := unShiftChar(k.Ch, k.Mod)
 		// if Ch is set, then ignore key for representing this key comb
-		switch k.Mod {
+		switch mod {
 		case ModMeta:
-			return fmt.Sprintf("<meta-%c>", k.Ch)
+			return fmt.Sprintf("<meta-%c>", ch)
 		case ModAlt:
-			return fmt.Sprintf("<alt-%c>", k.Ch)
+			return fmt.Sprintf("<alt-%c>", ch)
 		case ModShift:
-			return fmt.Sprintf("<shift-%c>", k.Ch)
+			return fmt.Sprintf("<shift-%c>", ch)
 		case ModCtrl:
-			return fmt.Sprintf("<ctrl-%c>", k.Ch)
+			return fmt.Sprintf("<ctrl-%c>", ch)
 		case ModCtrlShift:
-			return fmt.Sprintf("<ctrl-shift-%c>", k.Ch)
+			return fmt.Sprintf("<ctrl-shift-%c>", ch)
 		case ModCtrlAlt:
-			return fmt.Sprintf("<ctrl-alt-%c>", k.Ch)
+			return fmt.Sprintf("<ctrl-alt-%c>", ch)
 		case ModCtrlMeta:
-			return fmt.Sprintf("<ctrl-meta-%c>", k.Ch)
+			return fmt.Sprintf("<ctrl-meta-%c>", ch)
 		case ModCtrlShiftAlt:
-			return fmt.Sprintf("<ctrl-shift-alt-%c>", k.Ch)
+			return fmt.Sprintf("<ctrl-shift-alt-%c>", ch)
 		case ModCtrlShiftMeta:
-			return fmt.Sprintf("<ctrl-shift-meta-%c>", k.Ch)
+			return fmt.Sprintf("<ctrl-shift-meta-%c>", ch)
 		case ModCtrlAltMeta:
-			return fmt.Sprintf("<ctrl-alt-meta-%c>", k.Ch)
+			return fmt.Sprintf("<ctrl-alt-meta-%c>", ch)
 		case ModShiftMeta:
-			return fmt.Sprintf("<shift-meta-%c>", k.Ch)
+			return fmt.Sprintf("<shift-meta-%c>", ch)
 		case ModAltMeta:
-			return fmt.Sprintf("<alt-meta-%c>", k.Ch)
+			return fmt.Sprintf("<alt-meta-%c>", ch)
 		case ModAltShiftMeta:
-			return fmt.Sprintf("<alt-shift-meta-%c>", k.Ch)
+			return fmt.Sprintf("<alt-shift-meta-%c>", ch)
 		case ModAltShift:
-			return fmt.Sprintf("<alt-shift-%c>", k.Ch)
+			return fmt.Sprintf("<alt-shift-%c>", ch)
 		default:
-			return string(k.Ch)
+			return string(ch)
 		}
 	}
 
@@ -1128,38 +1129,39 @@ func (k KeyComb) String() string {
 // of this KeyComb.
 func (k KeyComb) ShortString() string {
 	if k.Ch != 0 && k.Key != KeySpace {
+		ch, mod := unShiftChar(k.Ch, k.Mod)
 		// if Ch is set, then ignore key for representing this key comb
-		switch k.Mod {
+		switch mod {
 		case ModMeta:
-			return fmt.Sprintf("<m-%c>", k.Ch)
+			return fmt.Sprintf("<m-%c>", ch)
 		case ModAlt:
-			return fmt.Sprintf("<a-%c>", k.Ch)
+			return fmt.Sprintf("<a-%c>", ch)
 		case ModShift:
-			return fmt.Sprintf("<s-%c>", k.Ch)
+			return fmt.Sprintf("<s-%c>", ch)
 		case ModCtrl:
-			return fmt.Sprintf("<c-%c>", k.Ch)
+			return fmt.Sprintf("<c-%c>", ch)
 		case ModCtrlShift:
-			return fmt.Sprintf("<c-s-%c>", k.Ch)
+			return fmt.Sprintf("<c-s-%c>", ch)
 		case ModCtrlAlt:
-			return fmt.Sprintf("<c-a-%c>", k.Ch)
+			return fmt.Sprintf("<c-a-%c>", ch)
 		case ModCtrlMeta:
-			return fmt.Sprintf("<c-m-%c>", k.Ch)
+			return fmt.Sprintf("<c-m-%c>", ch)
 		case ModCtrlShiftAlt:
-			return fmt.Sprintf("<c-s-a-%c>", k.Ch)
+			return fmt.Sprintf("<c-s-a-%c>", ch)
 		case ModCtrlShiftMeta:
-			return fmt.Sprintf("<c-s-m-%c>", k.Ch)
+			return fmt.Sprintf("<c-s-m-%c>", ch)
 		case ModCtrlAltMeta:
-			return fmt.Sprintf("<c-a-m-%c>", k.Ch)
+			return fmt.Sprintf("<c-a-m-%c>", ch)
 		case ModShiftMeta:
-			return fmt.Sprintf("<s-m-%c>", k.Ch)
+			return fmt.Sprintf("<s-m-%c>", ch)
 		case ModAltMeta:
-			return fmt.Sprintf("<a-m-%c>", k.Ch)
+			return fmt.Sprintf("<a-m-%c>", ch)
 		case ModAltShiftMeta:
-			return fmt.Sprintf("<a-s-m-%c>", k.Ch)
+			return fmt.Sprintf("<a-s-m-%c>", ch)
 		case ModAltShift:
-			return fmt.Sprintf("<a-s-%c>", k.Ch)
+			return fmt.Sprintf("<a-s-%c>", ch)
 		default:
-			return string(k.Ch)
+			return string(ch)
 		}
 	}
 
@@ -2214,5 +2216,132 @@ func (k KeyComb) ShortString() string {
 		return "<alt-shift>"
 	default:
 		return "<INVALID>"
+	}
+}
+
+func unShiftChar(ch rune, mod Modifier) (unshifCh rune, shiftedMod Modifier) {
+	switch mod {
+	case ModAlt:
+		shiftedMod = ModAltShift
+	case ModMeta:
+		shiftedMod = ModShiftMeta
+	case ModCtrl:
+		shiftedMod = ModCtrlShift
+	case ModCtrlAlt:
+		shiftedMod = ModCtrlShiftAlt
+	case ModCtrlMeta:
+		shiftedMod = ModCtrlShiftMeta
+	case ModCtrlAltMeta:
+		shiftedMod = ModCtrlShiftMeta // cannot use all the modifiers at once, drop alt
+	case ModAltMeta:
+		shiftedMod = ModAltShiftMeta
+	case ModShift, ModCtrlShift,
+		ModCtrlShiftAlt, ModCtrlShiftMeta,
+		ModShiftMeta, ModAltShiftMeta,
+		ModAltShift:
+		shiftedMod = mod
+	case 0:
+		shiftedMod = ModShift
+	default:
+		shiftedMod = mod
+	}
+
+	switch ch {
+	case 'A':
+		return 'a', shiftedMod
+	case 'B':
+		return 'b', shiftedMod
+	case 'C':
+		return 'c', shiftedMod
+	case 'D':
+		return 'd', shiftedMod
+	case 'E':
+		return 'e', shiftedMod
+	case 'F':
+		return 'f', shiftedMod
+	case 'G':
+		return 'g', shiftedMod
+	case 'H':
+		return 'h', shiftedMod
+	case 'I':
+		return 'i', shiftedMod
+	case 'J':
+		return 'j', shiftedMod
+	case 'K':
+		return 'k', shiftedMod
+	case 'L':
+		return 'l', shiftedMod
+	case 'M':
+		return 'm', shiftedMod
+	case 'N':
+		return 'n', shiftedMod
+	case 'O':
+		return 'o', shiftedMod
+	case 'P':
+		return 'p', shiftedMod
+	case 'Q':
+		return 'q', shiftedMod
+	case 'R':
+		return 'r', shiftedMod
+	case 'S':
+		return 's', shiftedMod
+	case 'T':
+		return 't', shiftedMod
+	case 'U':
+		return 'u', shiftedMod
+	case 'V':
+		return 'v', shiftedMod
+	case 'W':
+		return 'w', shiftedMod
+	case 'X':
+		return 'x', shiftedMod
+	case 'Y':
+		return 'y', shiftedMod
+	case 'Z':
+		return 'z', shiftedMod
+	case '_':
+		return '-', shiftedMod
+	case ')':
+		return '0', shiftedMod
+	case '!':
+		return '1', shiftedMod
+	case '@':
+		return '2', shiftedMod
+	case '#':
+		return '3', shiftedMod
+	case '$':
+		return '4', shiftedMod
+	case '%':
+		return '5', shiftedMod
+	case '^':
+		return '6', shiftedMod
+	case '&':
+		return '7', shiftedMod
+	case '*':
+		return '8', shiftedMod
+	case '(':
+		return '9', shiftedMod
+	case '+':
+		return '=', shiftedMod
+	case '<':
+		return ',', shiftedMod
+	case '{':
+		return '[', shiftedMod
+	case '}':
+		return ']', shiftedMod
+	case '~':
+		return '`', shiftedMod
+	case '?':
+		return '/', shiftedMod
+	case '|':
+		return '\\', shiftedMod
+	case '>':
+		return '.', shiftedMod
+	case '"':
+		return '\'', shiftedMod
+	case ':':
+		return ';', shiftedMod
+	default:
+		return ch, mod
 	}
 }

@@ -33,7 +33,7 @@ import (
 // is not case sensitive.
 func ParseKey(str string) (KeyComb, error) {
 	str = strings.TrimSpace(strings.ToLower(str))
-	switch len(str) {
+	switch len([]rune(str)) {
 	case 0:
 		return KeyComb{}, errors.New("invalid empty input")
 	case 1:
@@ -258,6 +258,18 @@ func ParseKey(str string) (KeyComb, error) {
 			return KeyComb{Mod: ModMeta, Ch: '/'}, nil
 		case "<m-_>", "<meta-_>":
 			return KeyComb{Mod: ModMeta, Ch: '_'}, nil
+		case "<m-.>", "<meta-.>":
+			return KeyComb{Mod: ModMeta, Ch: '.'}, nil
+		case "<m-,>", "<meta-,>":
+			return KeyComb{Mod: ModMeta, Ch: ','}, nil
+		case "<m-;>", "<meta-;>":
+			return KeyComb{Mod: ModMeta, Ch: ';'}, nil
+		case "<m-'>", "<meta-'>":
+			return KeyComb{Mod: ModMeta, Ch: '\''}, nil
+		case "<m-=>", "<meta-=>":
+			return KeyComb{Mod: ModMeta, Ch: '='}, nil
+		case "<m-->", "<meta-->":
+			return KeyComb{Mod: ModMeta, Ch: '-'}, nil
 
 		// alt
 		case "<a-f1>", "<alt-f1>":
@@ -410,6 +422,18 @@ func ParseKey(str string) (KeyComb, error) {
 			return KeyComb{Mod: ModAlt, Ch: '/'}, nil
 		case "<a-_>", "<alt-_>":
 			return KeyComb{Mod: ModAlt, Ch: '_'}, nil
+		case "<a-.>", "<alt-.>":
+			return KeyComb{Mod: ModAlt, Ch: '.'}, nil
+		case "<a-,>", "<alt-,>":
+			return KeyComb{Mod: ModAlt, Ch: ','}, nil
+		case "<a-;>", "<alt-;>":
+			return KeyComb{Mod: ModAlt, Ch: ';'}, nil
+		case "<a-'>", "<alt-'>":
+			return KeyComb{Mod: ModAlt, Ch: '\''}, nil
+		case "<a-=>", "<alt-=>":
+			return KeyComb{Mod: ModAlt, Ch: '='}, nil
+		case "<a-->", "<alt-->":
+			return KeyComb{Mod: ModAlt, Ch: '-'}, nil
 
 		// shift
 		case "<s-f1>", "<shift-f1>":
@@ -477,91 +501,103 @@ func ParseKey(str string) (KeyComb, error) {
 		case "<s-esc>", "<shift-esc>":
 			return KeyComb{Key: KeyEsc, Mod: ModShift}, nil
 		case "<s-1>", "<shift-1>":
-			return KeyComb{Ch: '1', Mod: ModShift}, nil
+			return KeyComb{Ch: '!'}, nil
 		case "<s-2>", "<shift-2>":
-			return KeyComb{Mod: ModShift, Ch: '2'}, nil
+			return KeyComb{Ch: '@'}, nil
 		case "<s-3>", "<shift-3>":
-			return KeyComb{Ch: '3', Mod: ModShift}, nil
+			return KeyComb{Ch: '#'}, nil
 		case "<s-4>", "<shift-4>":
-			return KeyComb{Ch: '4', Mod: ModShift}, nil
+			return KeyComb{Ch: '$'}, nil
 		case "<s-5>", "<shift-5>":
-			return KeyComb{Ch: '5', Mod: ModShift}, nil
+			return KeyComb{Ch: '%'}, nil
 		case "<s-6>", "<shift-6>":
-			return KeyComb{Ch: '6', Mod: ModShift}, nil
+			return KeyComb{Ch: '^'}, nil
 		case "<s-7>", "<shift-7>":
-			return KeyComb{Ch: '7', Mod: ModShift}, nil
+			return KeyComb{Ch: '&'}, nil
 		case "<s-8>", "<shift-8>":
-			return KeyComb{Ch: '8', Mod: ModShift}, nil
+			return KeyComb{Ch: '*'}, nil
 		case "<s-9>", "<shift-9>":
-			return KeyComb{Ch: '9', Mod: ModShift}, nil
+			return KeyComb{Ch: '('}, nil
 		case "<s-0>", "<shift-0>":
-			return KeyComb{Ch: '0', Mod: ModShift}, nil
+			return KeyComb{Ch: ')'}, nil
 		case "<s-`>", "<shift-`>":
-			return KeyComb{Mod: ModShift, Ch: '`'}, nil
+			return KeyComb{Ch: '~'}, nil
 		case "<s-a>", "<shift-a>":
-			return KeyComb{Mod: ModShift, Ch: 'a'}, nil
+			return KeyComb{Ch: 'A'}, nil
 		case "<s-b>", "<shift-b>":
-			return KeyComb{Mod: ModShift, Ch: 'b'}, nil
+			return KeyComb{Ch: 'B'}, nil
 		case "<s-c>", "<shift-c>":
-			return KeyComb{Mod: ModShift, Ch: 'c'}, nil
+			return KeyComb{Ch: 'C'}, nil
 		case "<s-d>", "<shift-d>":
-			return KeyComb{Mod: ModShift, Ch: 'd'}, nil
+			return KeyComb{Ch: 'D'}, nil
 		case "<s-e>", "<shift-e>":
-			return KeyComb{Mod: ModShift, Ch: 'e'}, nil
+			return KeyComb{Ch: 'E'}, nil
 		case "<s-f>", "<shift-f>":
-			return KeyComb{Mod: ModShift, Ch: 'f'}, nil
+			return KeyComb{Ch: 'F'}, nil
 		case "<s-g>", "<shift-g>":
-			return KeyComb{Mod: ModShift, Ch: 'g'}, nil
+			return KeyComb{Ch: 'G'}, nil
 		case "<s-h>", "<shift-h>":
-			return KeyComb{Mod: ModShift, Ch: 'h'}, nil
+			return KeyComb{Ch: 'H'}, nil
 		case "<s-tab>", "<shift-tab>":
 			return KeyComb{Mod: ModShift, Key: KeyTab}, nil
 		case "<s-i>", "<shift-i>":
-			return KeyComb{Mod: ModShift, Ch: 'i'}, nil
+			return KeyComb{Ch: 'I'}, nil
 		case "<s-j>", "<shift-j>":
-			return KeyComb{Mod: ModShift, Ch: 'j'}, nil
+			return KeyComb{Ch: 'J'}, nil
 		case "<s-k>", "<shift-k>":
-			return KeyComb{Mod: ModShift, Ch: 'k'}, nil
+			return KeyComb{Ch: 'K'}, nil
 		case "<s-l>", "<shift-l>":
-			return KeyComb{Mod: ModShift, Ch: 'l'}, nil
+			return KeyComb{Ch: 'L'}, nil
 		case "<s-m>", "<shift-m>":
-			return KeyComb{Mod: ModShift, Ch: 'm'}, nil
+			return KeyComb{Ch: 'M'}, nil
 		case "<s-n>", "<shift-n>":
-			return KeyComb{Mod: ModShift, Ch: 'n'}, nil
+			return KeyComb{Ch: 'N'}, nil
 		case "<s-o>", "<shift-o>":
-			return KeyComb{Mod: ModShift, Ch: 'o'}, nil
+			return KeyComb{Ch: 'O'}, nil
 		case "<s-p>", "<shift-p>":
-			return KeyComb{Mod: ModShift, Ch: 'p'}, nil
+			return KeyComb{Ch: 'P'}, nil
 		case "<s-q>", "<shift-q>":
-			return KeyComb{Mod: ModShift, Ch: 'q'}, nil
+			return KeyComb{Ch: 'Q'}, nil
 		case "<s-r>", "<shift-r>":
-			return KeyComb{Mod: ModShift, Ch: 'r'}, nil
+			return KeyComb{Ch: 'R'}, nil
 		case "<s-s>", "<shift-s>":
-			return KeyComb{Mod: ModShift, Ch: 's'}, nil
+			return KeyComb{Ch: 'S'}, nil
 		case "<s-t>", "<shift-t>":
-			return KeyComb{Mod: ModShift, Ch: 't'}, nil
+			return KeyComb{Ch: 'T'}, nil
 		case "<s-u>", "<shift-u>":
-			return KeyComb{Mod: ModShift, Ch: 'u'}, nil
+			return KeyComb{Ch: 'U'}, nil
 		case "<s-v>", "<shift-v>":
-			return KeyComb{Mod: ModShift, Ch: 'v'}, nil
+			return KeyComb{Ch: 'V'}, nil
 		case "<s-w>", "<shift-w>":
-			return KeyComb{Mod: ModShift, Ch: 'w'}, nil
+			return KeyComb{Ch: 'W'}, nil
 		case "<s-x>", "<shift-x>":
-			return KeyComb{Mod: ModShift, Ch: 'x'}, nil
+			return KeyComb{Ch: 'X'}, nil
 		case "<s-y>", "<shift-y>":
-			return KeyComb{Mod: ModShift, Ch: 'y'}, nil
+			return KeyComb{Ch: 'Y'}, nil
 		case "<s-z>", "<shift-z>":
-			return KeyComb{Mod: ModShift, Ch: 'z'}, nil
+			return KeyComb{Ch: 'Z'}, nil
 		case "<s-[>", "<shift-[>":
-			return KeyComb{Mod: ModShift, Ch: '['}, nil
+			return KeyComb{Ch: '{'}, nil
 		case "<s-\\>", "<shift-\\>":
-			return KeyComb{Mod: ModShift, Ch: '\\'}, nil
+			return KeyComb{Ch: '|'}, nil
 		case "<s-]>", "<shift-]>":
-			return KeyComb{Mod: ModShift, Ch: ']'}, nil
+			return KeyComb{Ch: '}'}, nil
 		case "<s-/>", "<shift-/>":
-			return KeyComb{Mod: ModShift, Ch: '/'}, nil
+			return KeyComb{Ch: '?'}, nil
 		case "<s-_>", "<shift-_>":
-			return KeyComb{Mod: ModShift, Ch: '_'}, nil
+			return KeyComb{Ch: '_'}, nil
+		case "<s-.>", "<shift-.>":
+			return KeyComb{Ch: '>'}, nil
+		case "<s-,>", "<shift-,>":
+			return KeyComb{Ch: '<'}, nil
+		case "<s-;>", "<shift-;>":
+			return KeyComb{Ch: ':'}, nil
+		case "<s-'>", "<shift-'>":
+			return KeyComb{Ch: '"'}, nil
+		case "<s-=>", "<shift-=>":
+			return KeyComb{Ch: '+'}, nil
+		case "<s-->", "<shift-->":
+			return KeyComb{Ch: '_'}, nil
 
 		// ctrl
 		case "<c-f1>", "<ctrl-f1>":
@@ -714,6 +750,18 @@ func ParseKey(str string) (KeyComb, error) {
 			return KeyComb{Mod: ModCtrl, Ch: '/'}, nil
 		case "<c-_>", "<ctrl-_>":
 			return KeyComb{Mod: ModCtrl, Ch: '_'}, nil
+		case "<c-.>", "<ctrl-.>":
+			return KeyComb{Mod: ModCtrl, Ch: '.'}, nil
+		case "<c-,>", "<ctrl-,>":
+			return KeyComb{Mod: ModCtrl, Ch: ','}, nil
+		case "<c-;>", "<ctrl-;>":
+			return KeyComb{Mod: ModCtrl, Ch: ';'}, nil
+		case "<c-'>", "<ctrl-'>":
+			return KeyComb{Mod: ModCtrl, Ch: '\''}, nil
+		case "<c-=>", "<ctrl-=>":
+			return KeyComb{Mod: ModCtrl, Ch: '='}, nil
+		case "<c-->", "<ctrl-->":
+			return KeyComb{Mod: ModCtrl, Ch: '-'}, nil
 
 		// ctrl+shift
 		case "<c-s-f1>", "<ctrl-shift-f1>":
@@ -781,91 +829,103 @@ func ParseKey(str string) (KeyComb, error) {
 		case "<c-s-esc>", "<ctrl-shift-esc>":
 			return KeyComb{Key: KeyEsc, Mod: ModCtrlShift}, nil
 		case "<c-s-1>", "<ctrl-shift-1>":
-			return KeyComb{Ch: '1', Mod: ModCtrlShift}, nil
+			return KeyComb{Ch: '!', Mod: ModCtrl}, nil
 		case "<c-s-2>", "<ctrl-shift-2>":
-			return KeyComb{Mod: ModCtrlShift, Ch: '2'}, nil
+			return KeyComb{Mod: ModCtrl, Ch: '@'}, nil
 		case "<c-s-3>", "<ctrl-shift-3>":
-			return KeyComb{Ch: '3', Mod: ModCtrlShift}, nil
+			return KeyComb{Ch: '#', Mod: ModCtrl}, nil
 		case "<c-s-4>", "<ctrl-shift-4>":
-			return KeyComb{Ch: '4', Mod: ModCtrlShift}, nil
+			return KeyComb{Ch: '$', Mod: ModCtrl}, nil
 		case "<c-s-5>", "<ctrl-shift-5>":
-			return KeyComb{Ch: '5', Mod: ModCtrlShift}, nil
+			return KeyComb{Ch: '%', Mod: ModCtrl}, nil
 		case "<c-s-6>", "<ctrl-shift-6>":
-			return KeyComb{Ch: '6', Mod: ModCtrlShift}, nil
+			return KeyComb{Ch: '^', Mod: ModCtrl}, nil
 		case "<c-s-7>", "<ctrl-shift-7>":
-			return KeyComb{Ch: '7', Mod: ModCtrlShift}, nil
+			return KeyComb{Ch: '&', Mod: ModCtrl}, nil
 		case "<c-s-8>", "<ctrl-shift-8>":
-			return KeyComb{Ch: '8', Mod: ModCtrlShift}, nil
+			return KeyComb{Ch: '*', Mod: ModCtrl}, nil
 		case "<c-s-9>", "<ctrl-shift-9>":
-			return KeyComb{Ch: '9', Mod: ModCtrlShift}, nil
+			return KeyComb{Ch: '(', Mod: ModCtrl}, nil
 		case "<c-s-0>", "<ctrl-shift-0>":
-			return KeyComb{Ch: '0', Mod: ModCtrlShift}, nil
+			return KeyComb{Ch: ')', Mod: ModCtrl}, nil
 		case "<c-s-`>", "<ctrl-shift-`>":
-			return KeyComb{Mod: ModCtrlShift, Ch: '`'}, nil
+			return KeyComb{Mod: ModCtrl, Ch: '~'}, nil
 		case "<c-s-a>", "<ctrl-shift-a>":
-			return KeyComb{Mod: ModCtrlShift, Ch: 'a'}, nil
+			return KeyComb{Mod: ModCtrl, Ch: 'A'}, nil
 		case "<c-s-b>", "<ctrl-shift-b>":
-			return KeyComb{Mod: ModCtrlShift, Ch: 'b'}, nil
+			return KeyComb{Mod: ModCtrl, Ch: 'B'}, nil
 		case "<c-s-c>", "<ctrl-shift-c>":
-			return KeyComb{Mod: ModCtrlShift, Ch: 'c'}, nil
+			return KeyComb{Mod: ModCtrl, Ch: 'C'}, nil
 		case "<c-s-d>", "<ctrl-shift-d>":
-			return KeyComb{Mod: ModCtrlShift, Ch: 'd'}, nil
+			return KeyComb{Mod: ModCtrl, Ch: 'D'}, nil
 		case "<c-s-e>", "<ctrl-shift-e>":
-			return KeyComb{Mod: ModCtrlShift, Ch: 'e'}, nil
+			return KeyComb{Mod: ModCtrl, Ch: 'E'}, nil
 		case "<c-s-f>", "<ctrl-shift-f>":
-			return KeyComb{Mod: ModCtrlShift, Ch: 'f'}, nil
+			return KeyComb{Mod: ModCtrl, Ch: 'F'}, nil
 		case "<c-s-g>", "<ctrl-shift-g>":
-			return KeyComb{Mod: ModCtrlShift, Ch: 'g'}, nil
+			return KeyComb{Mod: ModCtrl, Ch: 'G'}, nil
 		case "<c-s-h>", "<ctrl-shift-h>":
-			return KeyComb{Mod: ModCtrlShift, Ch: 'h'}, nil
+			return KeyComb{Mod: ModCtrl, Ch: 'H'}, nil
 		case "<c-s-tab>", "<ctrl-shift-tab>":
 			return KeyComb{Mod: ModCtrlShift, Key: KeyTab}, nil
 		case "<c-s-i>", "<ctrl-shift-i>":
-			return KeyComb{Mod: ModCtrlShift, Ch: 'i'}, nil
+			return KeyComb{Mod: ModCtrl, Ch: 'I'}, nil
 		case "<c-s-j>", "<ctrl-shift-j>":
-			return KeyComb{Mod: ModCtrlShift, Ch: 'j'}, nil
+			return KeyComb{Mod: ModCtrl, Ch: 'J'}, nil
 		case "<c-s-k>", "<ctrl-shift-k>":
-			return KeyComb{Mod: ModCtrlShift, Ch: 'k'}, nil
+			return KeyComb{Mod: ModCtrl, Ch: 'K'}, nil
 		case "<c-s-l>", "<ctrl-shift-l>":
-			return KeyComb{Mod: ModCtrlShift, Ch: 'l'}, nil
+			return KeyComb{Mod: ModCtrl, Ch: 'L'}, nil
 		case "<c-s-m>", "<ctrl-shift-m>":
-			return KeyComb{Mod: ModCtrlShift, Ch: 'm'}, nil
+			return KeyComb{Mod: ModCtrl, Ch: 'M'}, nil
 		case "<c-s-n>", "<ctrl-shift-n>":
-			return KeyComb{Mod: ModCtrlShift, Ch: 'n'}, nil
+			return KeyComb{Mod: ModCtrl, Ch: 'N'}, nil
 		case "<c-s-o>", "<ctrl-shift-o>":
-			return KeyComb{Mod: ModCtrlShift, Ch: 'o'}, nil
+			return KeyComb{Mod: ModCtrl, Ch: 'O'}, nil
 		case "<c-s-p>", "<ctrl-shift-p>":
-			return KeyComb{Mod: ModCtrlShift, Ch: 'p'}, nil
+			return KeyComb{Mod: ModCtrl, Ch: 'P'}, nil
 		case "<c-s-q>", "<ctrl-shift-q>":
-			return KeyComb{Mod: ModCtrlShift, Ch: 'q'}, nil
+			return KeyComb{Mod: ModCtrl, Ch: 'Q'}, nil
 		case "<c-s-r>", "<ctrl-shift-r>":
-			return KeyComb{Mod: ModCtrlShift, Ch: 'r'}, nil
+			return KeyComb{Mod: ModCtrl, Ch: 'R'}, nil
 		case "<c-s-s>", "<ctrl-shift-s>":
-			return KeyComb{Mod: ModCtrlShift, Ch: 's'}, nil
+			return KeyComb{Mod: ModCtrl, Ch: 'S'}, nil
 		case "<c-s-t>", "<ctrl-shift-t>":
-			return KeyComb{Mod: ModCtrlShift, Ch: 't'}, nil
+			return KeyComb{Mod: ModCtrl, Ch: 'T'}, nil
 		case "<c-s-u>", "<ctrl-shift-u>":
-			return KeyComb{Mod: ModCtrlShift, Ch: 'u'}, nil
+			return KeyComb{Mod: ModCtrl, Ch: 'U'}, nil
 		case "<c-s-v>", "<ctrl-shift-v>":
-			return KeyComb{Mod: ModCtrlShift, Ch: 'v'}, nil
+			return KeyComb{Mod: ModCtrl, Ch: 'V'}, nil
 		case "<c-s-w>", "<ctrl-shift-w>":
-			return KeyComb{Mod: ModCtrlShift, Ch: 'w'}, nil
+			return KeyComb{Mod: ModCtrl, Ch: 'W'}, nil
 		case "<c-s-x>", "<ctrl-shift-x>":
-			return KeyComb{Mod: ModCtrlShift, Ch: 'x'}, nil
+			return KeyComb{Mod: ModCtrl, Ch: 'X'}, nil
 		case "<c-s-y>", "<ctrl-shift-y>":
-			return KeyComb{Mod: ModCtrlShift, Ch: 'y'}, nil
+			return KeyComb{Mod: ModCtrl, Ch: 'Y'}, nil
 		case "<c-s-z>", "<ctrl-shift-z>":
-			return KeyComb{Mod: ModCtrlShift, Ch: 'z'}, nil
+			return KeyComb{Mod: ModCtrl, Ch: 'Z'}, nil
 		case "<c-s-[>", "<ctrl-shift-[>":
-			return KeyComb{Mod: ModCtrlShift, Ch: '['}, nil
+			return KeyComb{Mod: ModCtrl, Ch: '{'}, nil
 		case "<c-s-\\>", "<ctrl-shift-\\>":
-			return KeyComb{Mod: ModCtrlShift, Ch: '\\'}, nil
+			return KeyComb{Mod: ModCtrl, Ch: '|'}, nil
 		case "<c-s-]>", "<ctrl-shift-]>":
-			return KeyComb{Mod: ModCtrlShift, Ch: ']'}, nil
+			return KeyComb{Mod: ModCtrl, Ch: '}'}, nil
 		case "<c-s-/>", "<ctrl-shift-/>":
-			return KeyComb{Mod: ModCtrlShift, Ch: '/'}, nil
+			return KeyComb{Mod: ModCtrl, Ch: '?'}, nil
 		case "<c-s-_>", "<ctrl-shift-_>":
-			return KeyComb{Mod: ModCtrlShift, Ch: '_'}, nil
+			return KeyComb{Mod: ModCtrl, Ch: '_'}, nil
+		case "<c-s-.>", "<ctrl-shift-.>":
+			return KeyComb{Mod: ModCtrl, Ch: '>'}, nil
+		case "<c-s-,>", "<ctrl-shift-,>":
+			return KeyComb{Mod: ModCtrl, Ch: '<'}, nil
+		case "<c-s-;>", "<ctrl-shift-;>":
+			return KeyComb{Mod: ModCtrl, Ch: ':'}, nil
+		case "<c-s-'>", "<ctrl-shift-'>":
+			return KeyComb{Mod: ModCtrl, Ch: '"'}, nil
+		case "<c-s-=>", "<ctrl-shift-=>":
+			return KeyComb{Mod: ModCtrl, Ch: '+'}, nil
+		case "<c-s-->", "<ctrl-shift-->":
+			return KeyComb{Mod: ModCtrl, Ch: '_'}, nil
 
 		// ctrl+alt
 		case "<c-a-f1>", "<ctrl-alt-f1>":
@@ -1018,6 +1078,18 @@ func ParseKey(str string) (KeyComb, error) {
 			return KeyComb{Mod: ModCtrlAlt, Ch: '/'}, nil
 		case "<c-a-_>", "<ctrl-alt-_>":
 			return KeyComb{Mod: ModCtrlAlt, Ch: '_'}, nil
+		case "<c-a-.>", "<ctrl-alt-.>":
+			return KeyComb{Mod: ModCtrlAlt, Ch: '.'}, nil
+		case "<c-a-,>", "<ctrl-alt-,>":
+			return KeyComb{Mod: ModCtrlAlt, Ch: ','}, nil
+		case "<c-a-;>", "<ctrl-alt-;>":
+			return KeyComb{Mod: ModCtrlAlt, Ch: ';'}, nil
+		case "<c-a-'>", "<ctrl-alt-'>":
+			return KeyComb{Mod: ModCtrlAlt, Ch: '\''}, nil
+		case "<c-a-=>", "<ctrl-alt-=>":
+			return KeyComb{Mod: ModCtrlAlt, Ch: '='}, nil
+		case "<c-a-->", "<ctrl-alt-->":
+			return KeyComb{Mod: ModCtrlAlt, Ch: '-'}, nil
 
 		// ctrl+meta
 		case "<c-m-f1>", "<ctrl-meta-f1>":
@@ -1170,6 +1242,18 @@ func ParseKey(str string) (KeyComb, error) {
 			return KeyComb{Mod: ModCtrlMeta, Ch: '/'}, nil
 		case "<c-m-_>", "<ctrl-meta-_>":
 			return KeyComb{Mod: ModCtrlMeta, Ch: '_'}, nil
+		case "<c-m-.>", "<ctrl-meta-.>":
+			return KeyComb{Mod: ModCtrlMeta, Ch: '.'}, nil
+		case "<c-m-,>", "<ctrl-meta-,>":
+			return KeyComb{Mod: ModCtrlMeta, Ch: ','}, nil
+		case "<c-m-;>", "<ctrl-meta-;>":
+			return KeyComb{Mod: ModCtrlMeta, Ch: ';'}, nil
+		case "<c-m-'>", "<ctrl-meta-'>":
+			return KeyComb{Mod: ModCtrlMeta, Ch: '\''}, nil
+		case "<c-m-=>", "<ctrl-meta-=>":
+			return KeyComb{Mod: ModCtrlMeta, Ch: '='}, nil
+		case "<c-m-->", "<ctrl-meta-->":
+			return KeyComb{Mod: ModCtrlMeta, Ch: '-'}, nil
 
 		// ctrl+shift+alt
 		case "<c-s-a-f1>", "<ctrl-shift-alt-f1>":
@@ -1237,91 +1321,103 @@ func ParseKey(str string) (KeyComb, error) {
 		case "<c-s-a-esc>", "<ctrl-shift-alt-esc>":
 			return KeyComb{Key: KeyEsc, Mod: ModCtrlShiftAlt}, nil
 		case "<c-s-a-1>", "<ctrl-shift-alt-1>":
-			return KeyComb{Ch: '1', Mod: ModCtrlShiftAlt}, nil
+			return KeyComb{Ch: '!', Mod: ModCtrlAlt}, nil
 		case "<c-s-a-2>", "<ctrl-shift-alt-2>":
-			return KeyComb{Mod: ModCtrlShiftAlt, Ch: '2'}, nil
+			return KeyComb{Mod: ModCtrlAlt, Ch: '@'}, nil
 		case "<c-s-a-3>", "<ctrl-shift-alt-3>":
-			return KeyComb{Ch: '3', Mod: ModCtrlShiftAlt}, nil
+			return KeyComb{Ch: '#', Mod: ModCtrlAlt}, nil
 		case "<c-s-a-4>", "<ctrl-shift-alt-4>":
-			return KeyComb{Ch: '4', Mod: ModCtrlShiftAlt}, nil
+			return KeyComb{Ch: '$', Mod: ModCtrlAlt}, nil
 		case "<c-s-a-5>", "<ctrl-shift-alt-5>":
-			return KeyComb{Ch: '5', Mod: ModCtrlShiftAlt}, nil
+			return KeyComb{Ch: '%', Mod: ModCtrlAlt}, nil
 		case "<c-s-a-6>", "<ctrl-shift-alt-6>":
-			return KeyComb{Ch: '6', Mod: ModCtrlShiftAlt}, nil
+			return KeyComb{Ch: '^', Mod: ModCtrlAlt}, nil
 		case "<c-s-a-7>", "<ctrl-shift-alt-7>":
-			return KeyComb{Ch: '7', Mod: ModCtrlShiftAlt}, nil
+			return KeyComb{Ch: '&', Mod: ModCtrlAlt}, nil
 		case "<c-s-a-8>", "<ctrl-shift-alt-8>":
-			return KeyComb{Ch: '8', Mod: ModCtrlShiftAlt}, nil
+			return KeyComb{Ch: '*', Mod: ModCtrlAlt}, nil
 		case "<c-s-a-9>", "<ctrl-shift-alt-9>":
-			return KeyComb{Ch: '9', Mod: ModCtrlShiftAlt}, nil
+			return KeyComb{Ch: '(', Mod: ModCtrlAlt}, nil
 		case "<c-s-a-0>", "<ctrl-shift-alt-0>":
-			return KeyComb{Ch: '0', Mod: ModCtrlShiftAlt}, nil
+			return KeyComb{Ch: ')', Mod: ModCtrlAlt}, nil
 		case "<c-s-a-`>", "<ctrl-shift-alt-`>":
-			return KeyComb{Mod: ModCtrlShiftAlt, Ch: '`'}, nil
+			return KeyComb{Mod: ModCtrlAlt, Ch: '~'}, nil
 		case "<c-s-a-a>", "<ctrl-shift-alt-a>":
-			return KeyComb{Mod: ModCtrlShiftAlt, Ch: 'a'}, nil
+			return KeyComb{Mod: ModCtrlAlt, Ch: 'A'}, nil
 		case "<c-s-a-b>", "<ctrl-shift-alt-b>":
-			return KeyComb{Mod: ModCtrlShiftAlt, Ch: 'b'}, nil
+			return KeyComb{Mod: ModCtrlAlt, Ch: 'B'}, nil
 		case "<c-s-a-c>", "<ctrl-shift-alt-c>":
-			return KeyComb{Mod: ModCtrlShiftAlt, Ch: 'c'}, nil
+			return KeyComb{Mod: ModCtrlAlt, Ch: 'C'}, nil
 		case "<c-s-a-d>", "<ctrl-shift-alt-d>":
-			return KeyComb{Mod: ModCtrlShiftAlt, Ch: 'd'}, nil
+			return KeyComb{Mod: ModCtrlAlt, Ch: 'D'}, nil
 		case "<c-s-a-e>", "<ctrl-shift-alt-e>":
-			return KeyComb{Mod: ModCtrlShiftAlt, Ch: 'e'}, nil
+			return KeyComb{Mod: ModCtrlAlt, Ch: 'E'}, nil
 		case "<c-s-a-f>", "<ctrl-shift-alt-f>":
-			return KeyComb{Mod: ModCtrlShiftAlt, Ch: 'f'}, nil
+			return KeyComb{Mod: ModCtrlAlt, Ch: 'F'}, nil
 		case "<c-s-a-g>", "<ctrl-shift-alt-g>":
-			return KeyComb{Mod: ModCtrlShiftAlt, Ch: 'g'}, nil
+			return KeyComb{Mod: ModCtrlAlt, Ch: 'G'}, nil
 		case "<c-s-a-h>", "<ctrl-shift-alt-h>":
-			return KeyComb{Mod: ModCtrlShiftAlt, Ch: 'h'}, nil
+			return KeyComb{Mod: ModCtrlAlt, Ch: 'H'}, nil
 		case "<c-s-a-tab>", "<ctrl-shift-alt-tab>":
 			return KeyComb{Mod: ModCtrlShiftAlt, Key: KeyTab}, nil
 		case "<c-s-a-i>", "<ctrl-shift-alt-i>":
-			return KeyComb{Mod: ModCtrlShiftAlt, Ch: 'i'}, nil
+			return KeyComb{Mod: ModCtrlAlt, Ch: 'I'}, nil
 		case "<c-s-a-j>", "<ctrl-shift-alt-j>":
-			return KeyComb{Mod: ModCtrlShiftAlt, Ch: 'j'}, nil
+			return KeyComb{Mod: ModCtrlAlt, Ch: 'J'}, nil
 		case "<c-s-a-k>", "<ctrl-shift-alt-k>":
-			return KeyComb{Mod: ModCtrlShiftAlt, Ch: 'k'}, nil
+			return KeyComb{Mod: ModCtrlAlt, Ch: 'K'}, nil
 		case "<c-s-a-l>", "<ctrl-shift-alt-l>":
-			return KeyComb{Mod: ModCtrlShiftAlt, Ch: 'l'}, nil
+			return KeyComb{Mod: ModCtrlAlt, Ch: 'L'}, nil
 		case "<c-s-a-m>", "<ctrl-shift-alt-m>":
-			return KeyComb{Mod: ModCtrlShiftAlt, Ch: 'm'}, nil
+			return KeyComb{Mod: ModCtrlAlt, Ch: 'M'}, nil
 		case "<c-s-a-n>", "<ctrl-shift-alt-n>":
-			return KeyComb{Mod: ModCtrlShiftAlt, Ch: 'n'}, nil
+			return KeyComb{Mod: ModCtrlAlt, Ch: 'N'}, nil
 		case "<c-s-a-o>", "<ctrl-shift-alt-o>":
-			return KeyComb{Mod: ModCtrlShiftAlt, Ch: 'o'}, nil
+			return KeyComb{Mod: ModCtrlAlt, Ch: 'O'}, nil
 		case "<c-s-a-p>", "<ctrl-shift-alt-p>":
-			return KeyComb{Mod: ModCtrlShiftAlt, Ch: 'p'}, nil
+			return KeyComb{Mod: ModCtrlAlt, Ch: 'P'}, nil
 		case "<c-s-a-q>", "<ctrl-shift-alt-q>":
-			return KeyComb{Mod: ModCtrlShiftAlt, Ch: 'q'}, nil
+			return KeyComb{Mod: ModCtrlAlt, Ch: 'Q'}, nil
 		case "<c-s-a-r>", "<ctrl-shift-alt-r>":
-			return KeyComb{Mod: ModCtrlShiftAlt, Ch: 'r'}, nil
+			return KeyComb{Mod: ModCtrlAlt, Ch: 'R'}, nil
 		case "<c-s-a-s>", "<ctrl-shift-alt-s>":
-			return KeyComb{Mod: ModCtrlShiftAlt, Ch: 's'}, nil
+			return KeyComb{Mod: ModCtrlAlt, Ch: 'S'}, nil
 		case "<c-s-a-t>", "<ctrl-shift-alt-t>":
-			return KeyComb{Mod: ModCtrlShiftAlt, Ch: 't'}, nil
+			return KeyComb{Mod: ModCtrlAlt, Ch: 'T'}, nil
 		case "<c-s-a-u>", "<ctrl-shift-alt-u>":
-			return KeyComb{Mod: ModCtrlShiftAlt, Ch: 'u'}, nil
+			return KeyComb{Mod: ModCtrlAlt, Ch: 'U'}, nil
 		case "<c-s-a-v>", "<ctrl-shift-alt-v>":
-			return KeyComb{Mod: ModCtrlShiftAlt, Ch: 'v'}, nil
+			return KeyComb{Mod: ModCtrlAlt, Ch: 'V'}, nil
 		case "<c-s-a-w>", "<ctrl-shift-alt-w>":
-			return KeyComb{Mod: ModCtrlShiftAlt, Ch: 'w'}, nil
+			return KeyComb{Mod: ModCtrlAlt, Ch: 'W'}, nil
 		case "<c-s-a-x>", "<ctrl-shift-alt-x>":
-			return KeyComb{Mod: ModCtrlShiftAlt, Ch: 'x'}, nil
+			return KeyComb{Mod: ModCtrlAlt, Ch: 'X'}, nil
 		case "<c-s-a-y>", "<ctrl-shift-alt-y>":
-			return KeyComb{Mod: ModCtrlShiftAlt, Ch: 'y'}, nil
+			return KeyComb{Mod: ModCtrlAlt, Ch: 'Y'}, nil
 		case "<c-s-a-z>", "<ctrl-shift-alt-z>":
-			return KeyComb{Mod: ModCtrlShiftAlt, Ch: 'z'}, nil
+			return KeyComb{Mod: ModCtrlAlt, Ch: 'Z'}, nil
 		case "<c-s-a-[>", "<ctrl-shift-alt-[>":
-			return KeyComb{Mod: ModCtrlShiftAlt, Ch: '['}, nil
+			return KeyComb{Mod: ModCtrlAlt, Ch: '{'}, nil
 		case "<c-s-a-\\>", "<ctrl-shift-alt-\\>":
-			return KeyComb{Mod: ModCtrlShiftAlt, Ch: '\\'}, nil
+			return KeyComb{Mod: ModCtrlAlt, Ch: '|'}, nil
 		case "<c-s-a-]>", "<ctrl-shift-alt-]>":
-			return KeyComb{Mod: ModCtrlShiftAlt, Ch: ']'}, nil
+			return KeyComb{Mod: ModCtrlAlt, Ch: '}'}, nil
 		case "<c-s-a-/>", "<ctrl-shift-alt-/>":
-			return KeyComb{Mod: ModCtrlShiftAlt, Ch: '/'}, nil
+			return KeyComb{Mod: ModCtrlAlt, Ch: '?'}, nil
 		case "<c-s-a-_>", "<ctrl-shift-alt-_>":
-			return KeyComb{Mod: ModCtrlShiftAlt, Ch: '_'}, nil
+			return KeyComb{Mod: ModCtrlAlt, Ch: '_'}, nil
+		case "<c-s-a-.>", "<ctrl-shift-alt-.>":
+			return KeyComb{Mod: ModCtrlAlt, Ch: '>'}, nil
+		case "<c-s-a-,>", "<ctrl-shift-alt-,>":
+			return KeyComb{Mod: ModCtrlAlt, Ch: '<'}, nil
+		case "<c-s-a-;>", "<ctrl-shift-alt-;>":
+			return KeyComb{Mod: ModCtrlAlt, Ch: ':'}, nil
+		case "<c-s-a-'>", "<ctrl-shift-alt-'>":
+			return KeyComb{Mod: ModCtrlAlt, Ch: '"'}, nil
+		case "<c-s-a-=>", "<ctrl-shift-alt-=>":
+			return KeyComb{Mod: ModCtrlAlt, Ch: '+'}, nil
+		case "<c-s-a-->", "<ctrl-shift-alt-->":
+			return KeyComb{Mod: ModCtrlAlt, Ch: '_'}, nil
 
 		// ctrl+shift+meta
 		case "<c-s-m-f1>", "<ctrl-shift-meta-f1>":
@@ -1389,91 +1485,103 @@ func ParseKey(str string) (KeyComb, error) {
 		case "<c-s-m-esc>", "<ctrl-shift-meta-esc>":
 			return KeyComb{Key: KeyEsc, Mod: ModCtrlShiftMeta}, nil
 		case "<c-s-m-1>", "<ctrl-shift-meta-1>":
-			return KeyComb{Ch: '1', Mod: ModCtrlShiftMeta}, nil
+			return KeyComb{Ch: '!', Mod: ModCtrlMeta}, nil
 		case "<c-s-m-2>", "<ctrl-shift-meta-2>":
-			return KeyComb{Mod: ModCtrlShiftMeta, Ch: '2'}, nil
+			return KeyComb{Mod: ModCtrlMeta, Ch: '@'}, nil
 		case "<c-s-m-3>", "<ctrl-shift-meta-3>":
-			return KeyComb{Ch: '3', Mod: ModCtrlShiftMeta}, nil
+			return KeyComb{Ch: '#', Mod: ModCtrlMeta}, nil
 		case "<c-s-m-4>", "<ctrl-shift-meta-4>":
-			return KeyComb{Ch: '4', Mod: ModCtrlShiftMeta}, nil
+			return KeyComb{Ch: '$', Mod: ModCtrlMeta}, nil
 		case "<c-s-m-5>", "<ctrl-shift-meta-5>":
-			return KeyComb{Ch: '5', Mod: ModCtrlShiftMeta}, nil
+			return KeyComb{Ch: '%', Mod: ModCtrlMeta}, nil
 		case "<c-s-m-6>", "<ctrl-shift-meta-6>":
-			return KeyComb{Ch: '6', Mod: ModCtrlShiftMeta}, nil
+			return KeyComb{Ch: '^', Mod: ModCtrlMeta}, nil
 		case "<c-s-m-7>", "<ctrl-shift-meta-7>":
-			return KeyComb{Ch: '7', Mod: ModCtrlShiftMeta}, nil
+			return KeyComb{Ch: '&', Mod: ModCtrlMeta}, nil
 		case "<c-s-m-8>", "<ctrl-shift-meta-8>":
-			return KeyComb{Ch: '8', Mod: ModCtrlShiftMeta}, nil
+			return KeyComb{Ch: '*', Mod: ModCtrlMeta}, nil
 		case "<c-s-m-9>", "<ctrl-shift-meta-9>":
-			return KeyComb{Ch: '9', Mod: ModCtrlShiftMeta}, nil
+			return KeyComb{Ch: '(', Mod: ModCtrlMeta}, nil
 		case "<c-s-m-0>", "<ctrl-shift-meta-0>":
-			return KeyComb{Ch: '0', Mod: ModCtrlShiftMeta}, nil
+			return KeyComb{Ch: ')', Mod: ModCtrlMeta}, nil
 		case "<c-s-m-`>", "<ctrl-shift-meta-`>":
-			return KeyComb{Mod: ModCtrlShiftMeta, Ch: '`'}, nil
+			return KeyComb{Mod: ModCtrlMeta, Ch: '~'}, nil
 		case "<c-s-m-a>", "<ctrl-shift-meta-a>":
-			return KeyComb{Mod: ModCtrlShiftMeta, Ch: 'a'}, nil
+			return KeyComb{Mod: ModCtrlMeta, Ch: 'A'}, nil
 		case "<c-s-m-b>", "<ctrl-shift-meta-b>":
-			return KeyComb{Mod: ModCtrlShiftMeta, Ch: 'b'}, nil
+			return KeyComb{Mod: ModCtrlMeta, Ch: 'B'}, nil
 		case "<c-s-m-c>", "<ctrl-shift-meta-c>":
-			return KeyComb{Mod: ModCtrlShiftMeta, Ch: 'c'}, nil
+			return KeyComb{Mod: ModCtrlMeta, Ch: 'C'}, nil
 		case "<c-s-m-d>", "<ctrl-shift-meta-d>":
-			return KeyComb{Mod: ModCtrlShiftMeta, Ch: 'd'}, nil
+			return KeyComb{Mod: ModCtrlMeta, Ch: 'D'}, nil
 		case "<c-s-m-e>", "<ctrl-shift-meta-e>":
-			return KeyComb{Mod: ModCtrlShiftMeta, Ch: 'e'}, nil
+			return KeyComb{Mod: ModCtrlMeta, Ch: 'E'}, nil
 		case "<c-s-m-f>", "<ctrl-shift-meta-f>":
-			return KeyComb{Mod: ModCtrlShiftMeta, Ch: 'f'}, nil
+			return KeyComb{Mod: ModCtrlMeta, Ch: 'F'}, nil
 		case "<c-s-m-g>", "<ctrl-shift-meta-g>":
-			return KeyComb{Mod: ModCtrlShiftMeta, Ch: 'g'}, nil
+			return KeyComb{Mod: ModCtrlMeta, Ch: 'G'}, nil
 		case "<c-s-m-h>", "<ctrl-shift-meta-h>":
-			return KeyComb{Mod: ModCtrlShiftMeta, Ch: 'h'}, nil
+			return KeyComb{Mod: ModCtrlMeta, Ch: 'H'}, nil
 		case "<c-s-m-tab>", "<ctrl-shift-meta-tab>":
 			return KeyComb{Mod: ModCtrlShiftMeta, Key: KeyTab}, nil
 		case "<c-s-m-i>", "<ctrl-shift-meta-i>":
-			return KeyComb{Mod: ModCtrlShiftMeta, Ch: 'i'}, nil
+			return KeyComb{Mod: ModCtrlMeta, Ch: 'I'}, nil
 		case "<c-s-m-j>", "<ctrl-shift-meta-j>":
-			return KeyComb{Mod: ModCtrlShiftMeta, Ch: 'j'}, nil
+			return KeyComb{Mod: ModCtrlMeta, Ch: 'J'}, nil
 		case "<c-s-m-k>", "<ctrl-shift-meta-k>":
-			return KeyComb{Mod: ModCtrlShiftMeta, Ch: 'k'}, nil
+			return KeyComb{Mod: ModCtrlMeta, Ch: 'K'}, nil
 		case "<c-s-m-l>", "<ctrl-shift-meta-l>":
-			return KeyComb{Mod: ModCtrlShiftMeta, Ch: 'l'}, nil
+			return KeyComb{Mod: ModCtrlMeta, Ch: 'L'}, nil
 		case "<c-s-m-m>", "<ctrl-shift-meta-m>":
-			return KeyComb{Mod: ModCtrlShiftMeta, Ch: 'm'}, nil
+			return KeyComb{Mod: ModCtrlMeta, Ch: 'M'}, nil
 		case "<c-s-m-n>", "<ctrl-shift-meta-n>":
-			return KeyComb{Mod: ModCtrlShiftMeta, Ch: 'n'}, nil
+			return KeyComb{Mod: ModCtrlMeta, Ch: 'N'}, nil
 		case "<c-s-m-o>", "<ctrl-shift-meta-o>":
-			return KeyComb{Mod: ModCtrlShiftMeta, Ch: 'o'}, nil
+			return KeyComb{Mod: ModCtrlMeta, Ch: 'O'}, nil
 		case "<c-s-m-p>", "<ctrl-shift-meta-p>":
-			return KeyComb{Mod: ModCtrlShiftMeta, Ch: 'p'}, nil
+			return KeyComb{Mod: ModCtrlMeta, Ch: 'P'}, nil
 		case "<c-s-m-q>", "<ctrl-shift-meta-q>":
-			return KeyComb{Mod: ModCtrlShiftMeta, Ch: 'q'}, nil
+			return KeyComb{Mod: ModCtrlMeta, Ch: 'Q'}, nil
 		case "<c-s-m-r>", "<ctrl-shift-meta-r>":
-			return KeyComb{Mod: ModCtrlShiftMeta, Ch: 'r'}, nil
+			return KeyComb{Mod: ModCtrlMeta, Ch: 'R'}, nil
 		case "<c-s-m-s>", "<ctrl-shift-meta-s>":
-			return KeyComb{Mod: ModCtrlShiftMeta, Ch: 's'}, nil
+			return KeyComb{Mod: ModCtrlMeta, Ch: 'S'}, nil
 		case "<c-s-m-t>", "<ctrl-shift-meta-t>":
-			return KeyComb{Mod: ModCtrlShiftMeta, Ch: 't'}, nil
+			return KeyComb{Mod: ModCtrlMeta, Ch: 'T'}, nil
 		case "<c-s-m-u>", "<ctrl-shift-meta-u>":
-			return KeyComb{Mod: ModCtrlShiftMeta, Ch: 'u'}, nil
+			return KeyComb{Mod: ModCtrlMeta, Ch: 'U'}, nil
 		case "<c-s-m-v>", "<ctrl-shift-meta-v>":
-			return KeyComb{Mod: ModCtrlShiftMeta, Ch: 'v'}, nil
+			return KeyComb{Mod: ModCtrlMeta, Ch: 'V'}, nil
 		case "<c-s-m-w>", "<ctrl-shift-meta-w>":
-			return KeyComb{Mod: ModCtrlShiftMeta, Ch: 'w'}, nil
+			return KeyComb{Mod: ModCtrlMeta, Ch: 'W'}, nil
 		case "<c-s-m-x>", "<ctrl-shift-meta-x>":
-			return KeyComb{Mod: ModCtrlShiftMeta, Ch: 'x'}, nil
+			return KeyComb{Mod: ModCtrlMeta, Ch: 'X'}, nil
 		case "<c-s-m-y>", "<ctrl-shift-meta-y>":
-			return KeyComb{Mod: ModCtrlShiftMeta, Ch: 'y'}, nil
+			return KeyComb{Mod: ModCtrlMeta, Ch: 'Y'}, nil
 		case "<c-s-m-z>", "<ctrl-shift-meta-z>":
-			return KeyComb{Mod: ModCtrlShiftMeta, Ch: 'z'}, nil
+			return KeyComb{Mod: ModCtrlMeta, Ch: 'Z'}, nil
 		case "<c-s-m-[>", "<ctrl-shift-meta-[>":
-			return KeyComb{Mod: ModCtrlShiftMeta, Ch: '['}, nil
+			return KeyComb{Mod: ModCtrlMeta, Ch: '{'}, nil
 		case "<c-s-m-\\>", "<ctrl-shift-meta-\\>":
-			return KeyComb{Mod: ModCtrlShiftMeta, Ch: '\\'}, nil
+			return KeyComb{Mod: ModCtrlMeta, Ch: '|'}, nil
 		case "<c-s-m-]>", "<ctrl-shift-meta-]>":
-			return KeyComb{Mod: ModCtrlShiftMeta, Ch: ']'}, nil
+			return KeyComb{Mod: ModCtrlMeta, Ch: '}'}, nil
 		case "<c-s-m-/>", "<ctrl-shift-meta-/>":
-			return KeyComb{Mod: ModCtrlShiftMeta, Ch: '/'}, nil
+			return KeyComb{Mod: ModCtrlMeta, Ch: '?'}, nil
 		case "<c-s-m-_>", "<ctrl-shift-meta-_>":
-			return KeyComb{Mod: ModCtrlShiftMeta, Ch: '_'}, nil
+			return KeyComb{Mod: ModCtrlMeta, Ch: '_'}, nil
+		case "<c-s-m-.>", "<ctrl-shift-meta-.>":
+			return KeyComb{Mod: ModCtrlMeta, Ch: '>'}, nil
+		case "<c-s-m-,>", "<ctrl-shift-meta-,>":
+			return KeyComb{Mod: ModCtrlMeta, Ch: '<'}, nil
+		case "<c-s-m-;>", "<ctrl-shift-meta-;>":
+			return KeyComb{Mod: ModCtrlMeta, Ch: ':'}, nil
+		case "<c-s-m-'>", "<ctrl-shift-meta-'>":
+			return KeyComb{Mod: ModCtrlMeta, Ch: '"'}, nil
+		case "<c-s-m-=>", "<ctrl-shift-meta-=>":
+			return KeyComb{Mod: ModCtrlMeta, Ch: '+'}, nil
+		case "<c-s-m-->", "<ctrl-shift-meta-->":
+			return KeyComb{Mod: ModCtrlMeta, Ch: '_'}, nil
 
 		// ctrl+alt+meta
 		case "<c-a-m-f1>", "<ctrl-alt-meta-f1>":
@@ -1626,6 +1734,18 @@ func ParseKey(str string) (KeyComb, error) {
 			return KeyComb{Mod: ModCtrlAltMeta, Ch: '/'}, nil
 		case "<c-a-m-_>", "<ctrl-alt-meta-_>":
 			return KeyComb{Mod: ModCtrlAltMeta, Ch: '_'}, nil
+		case "<c-a-m-.>", "<ctrl-alt-meta-.>":
+			return KeyComb{Mod: ModCtrlAltMeta, Ch: '.'}, nil
+		case "<c-a-m-,>", "<ctrl-alt-meta-,>":
+			return KeyComb{Mod: ModCtrlAltMeta, Ch: ','}, nil
+		case "<c-a-m-;>", "<ctrl-alt-meta-;>":
+			return KeyComb{Mod: ModCtrlAltMeta, Ch: ';'}, nil
+		case "<c-a-m-'>", "<ctrl-alt-meta-'>":
+			return KeyComb{Mod: ModCtrlAltMeta, Ch: '\''}, nil
+		case "<c-a-m-=>", "<ctrl-alt-meta-=>":
+			return KeyComb{Mod: ModCtrlAltMeta, Ch: '='}, nil
+		case "<c-a-m-->", "<ctrl-alt-meta-->":
+			return KeyComb{Mod: ModCtrlAltMeta, Ch: '-'}, nil
 
 		// shift+meta
 		case "<s-m-f1>", "<shift-meta-f1>":
@@ -1693,91 +1813,103 @@ func ParseKey(str string) (KeyComb, error) {
 		case "<s-m-esc>", "<shift-meta-esc>":
 			return KeyComb{Key: KeyEsc, Mod: ModShiftMeta}, nil
 		case "<s-m-1>", "<shift-meta-1>":
-			return KeyComb{Ch: '1', Mod: ModShiftMeta}, nil
+			return KeyComb{Ch: '!', Mod: ModMeta}, nil
 		case "<s-m-2>", "<shift-meta-2>":
-			return KeyComb{Mod: ModShiftMeta, Ch: '2'}, nil
+			return KeyComb{Mod: ModMeta, Ch: '@'}, nil
 		case "<s-m-3>", "<shift-meta-3>":
-			return KeyComb{Ch: '3', Mod: ModShiftMeta}, nil
+			return KeyComb{Ch: '#', Mod: ModMeta}, nil
 		case "<s-m-4>", "<shift-meta-4>":
-			return KeyComb{Ch: '4', Mod: ModShiftMeta}, nil
+			return KeyComb{Ch: '$', Mod: ModMeta}, nil
 		case "<s-m-5>", "<shift-meta-5>":
-			return KeyComb{Ch: '5', Mod: ModShiftMeta}, nil
+			return KeyComb{Ch: '%', Mod: ModMeta}, nil
 		case "<s-m-6>", "<shift-meta-6>":
-			return KeyComb{Ch: '6', Mod: ModShiftMeta}, nil
+			return KeyComb{Ch: '^', Mod: ModMeta}, nil
 		case "<s-m-7>", "<shift-meta-7>":
-			return KeyComb{Ch: '7', Mod: ModShiftMeta}, nil
+			return KeyComb{Ch: '&', Mod: ModMeta}, nil
 		case "<s-m-8>", "<shift-meta-8>":
-			return KeyComb{Ch: '8', Mod: ModShiftMeta}, nil
+			return KeyComb{Ch: '*', Mod: ModMeta}, nil
 		case "<s-m-9>", "<shift-meta-9>":
-			return KeyComb{Ch: '9', Mod: ModShiftMeta}, nil
+			return KeyComb{Ch: '(', Mod: ModMeta}, nil
 		case "<s-m-0>", "<shift-meta-0>":
-			return KeyComb{Ch: '0', Mod: ModShiftMeta}, nil
+			return KeyComb{Ch: ')', Mod: ModMeta}, nil
 		case "<s-m-`>", "<shift-meta-`>":
-			return KeyComb{Mod: ModShiftMeta, Ch: '`'}, nil
+			return KeyComb{Mod: ModMeta, Ch: '~'}, nil
 		case "<s-m-a>", "<shift-meta-a>":
-			return KeyComb{Mod: ModShiftMeta, Ch: 'a'}, nil
+			return KeyComb{Mod: ModMeta, Ch: 'A'}, nil
 		case "<s-m-b>", "<shift-meta-b>":
-			return KeyComb{Mod: ModShiftMeta, Ch: 'b'}, nil
+			return KeyComb{Mod: ModMeta, Ch: 'B'}, nil
 		case "<s-m-c>", "<shift-meta-c>":
-			return KeyComb{Mod: ModShiftMeta, Ch: 'c'}, nil
+			return KeyComb{Mod: ModMeta, Ch: 'C'}, nil
 		case "<s-m-d>", "<shift-meta-d>":
-			return KeyComb{Mod: ModShiftMeta, Ch: 'd'}, nil
+			return KeyComb{Mod: ModMeta, Ch: 'D'}, nil
 		case "<s-m-e>", "<shift-meta-e>":
-			return KeyComb{Mod: ModShiftMeta, Ch: 'e'}, nil
+			return KeyComb{Mod: ModMeta, Ch: 'E'}, nil
 		case "<s-m-f>", "<shift-meta-f>":
-			return KeyComb{Mod: ModShiftMeta, Ch: 'f'}, nil
+			return KeyComb{Mod: ModMeta, Ch: 'F'}, nil
 		case "<s-m-g>", "<shift-meta-g>":
-			return KeyComb{Mod: ModShiftMeta, Ch: 'g'}, nil
+			return KeyComb{Mod: ModMeta, Ch: 'G'}, nil
 		case "<s-m-h>", "<shift-meta-h>":
-			return KeyComb{Mod: ModShiftMeta, Ch: 'h'}, nil
+			return KeyComb{Mod: ModMeta, Ch: 'H'}, nil
 		case "<s-m-tab>", "<shift-meta-tab>":
 			return KeyComb{Mod: ModShiftMeta, Key: KeyTab}, nil
 		case "<s-m-i>", "<shift-meta-i>":
-			return KeyComb{Mod: ModShiftMeta, Ch: 'i'}, nil
+			return KeyComb{Mod: ModMeta, Ch: 'I'}, nil
 		case "<s-m-j>", "<shift-meta-j>":
-			return KeyComb{Mod: ModShiftMeta, Ch: 'j'}, nil
+			return KeyComb{Mod: ModMeta, Ch: 'J'}, nil
 		case "<s-m-k>", "<shift-meta-k>":
-			return KeyComb{Mod: ModShiftMeta, Ch: 'k'}, nil
+			return KeyComb{Mod: ModMeta, Ch: 'K'}, nil
 		case "<s-m-l>", "<shift-meta-l>":
-			return KeyComb{Mod: ModShiftMeta, Ch: 'l'}, nil
+			return KeyComb{Mod: ModMeta, Ch: 'L'}, nil
 		case "<s-m-m>", "<shift-meta-m>":
-			return KeyComb{Mod: ModShiftMeta, Ch: 'm'}, nil
+			return KeyComb{Mod: ModMeta, Ch: 'M'}, nil
 		case "<s-m-n>", "<shift-meta-n>":
-			return KeyComb{Mod: ModShiftMeta, Ch: 'n'}, nil
+			return KeyComb{Mod: ModMeta, Ch: 'N'}, nil
 		case "<s-m-o>", "<shift-meta-o>":
-			return KeyComb{Mod: ModShiftMeta, Ch: 'o'}, nil
+			return KeyComb{Mod: ModMeta, Ch: 'O'}, nil
 		case "<s-m-p>", "<shift-meta-p>":
-			return KeyComb{Mod: ModShiftMeta, Ch: 'p'}, nil
+			return KeyComb{Mod: ModMeta, Ch: 'P'}, nil
 		case "<s-m-q>", "<shift-meta-q>":
-			return KeyComb{Mod: ModShiftMeta, Ch: 'q'}, nil
+			return KeyComb{Mod: ModMeta, Ch: 'Q'}, nil
 		case "<s-m-r>", "<shift-meta-r>":
-			return KeyComb{Mod: ModShiftMeta, Ch: 'r'}, nil
+			return KeyComb{Mod: ModMeta, Ch: 'R'}, nil
 		case "<s-m-s>", "<shift-meta-s>":
-			return KeyComb{Mod: ModShiftMeta, Ch: 's'}, nil
+			return KeyComb{Mod: ModMeta, Ch: 'S'}, nil
 		case "<s-m-t>", "<shift-meta-t>":
-			return KeyComb{Mod: ModShiftMeta, Ch: 't'}, nil
+			return KeyComb{Mod: ModMeta, Ch: 'T'}, nil
 		case "<s-m-u>", "<shift-meta-u>":
-			return KeyComb{Mod: ModShiftMeta, Ch: 'u'}, nil
+			return KeyComb{Mod: ModMeta, Ch: 'U'}, nil
 		case "<s-m-v>", "<shift-meta-v>":
-			return KeyComb{Mod: ModShiftMeta, Ch: 'v'}, nil
+			return KeyComb{Mod: ModMeta, Ch: 'V'}, nil
 		case "<s-m-w>", "<shift-meta-w>":
-			return KeyComb{Mod: ModShiftMeta, Ch: 'w'}, nil
+			return KeyComb{Mod: ModMeta, Ch: 'W'}, nil
 		case "<s-m-x>", "<shift-meta-x>":
-			return KeyComb{Mod: ModShiftMeta, Ch: 'x'}, nil
+			return KeyComb{Mod: ModMeta, Ch: 'X'}, nil
 		case "<s-m-y>", "<shift-meta-y>":
-			return KeyComb{Mod: ModShiftMeta, Ch: 'y'}, nil
+			return KeyComb{Mod: ModMeta, Ch: 'Y'}, nil
 		case "<s-m-z>", "<shift-meta-z>":
-			return KeyComb{Mod: ModShiftMeta, Ch: 'z'}, nil
+			return KeyComb{Mod: ModMeta, Ch: 'Z'}, nil
 		case "<s-m-[>", "<shift-meta-[>":
-			return KeyComb{Mod: ModShiftMeta, Ch: '['}, nil
+			return KeyComb{Mod: ModMeta, Ch: '{'}, nil
 		case "<s-m-\\>", "<shift-meta-\\>":
-			return KeyComb{Mod: ModShiftMeta, Ch: '\\'}, nil
+			return KeyComb{Mod: ModMeta, Ch: '|'}, nil
 		case "<s-m-]>", "<shift-meta-]>":
-			return KeyComb{Mod: ModShiftMeta, Ch: ']'}, nil
+			return KeyComb{Mod: ModMeta, Ch: '}'}, nil
 		case "<s-m-/>", "<shift-meta-/>":
-			return KeyComb{Mod: ModShiftMeta, Ch: '/'}, nil
+			return KeyComb{Mod: ModMeta, Ch: '?'}, nil
 		case "<s-m-_>", "<shift-meta-_>":
-			return KeyComb{Mod: ModShiftMeta, Ch: '_'}, nil
+			return KeyComb{Mod: ModMeta, Ch: '_'}, nil
+		case "<s-m-.>", "<shift-meta-.>":
+			return KeyComb{Mod: ModMeta, Ch: '>'}, nil
+		case "<s-m-,>", "<shift-meta-,>":
+			return KeyComb{Mod: ModMeta, Ch: '<'}, nil
+		case "<s-m-;>", "<shift-meta-;>":
+			return KeyComb{Mod: ModMeta, Ch: ':'}, nil
+		case "<s-m-'>", "<shift-meta-'>":
+			return KeyComb{Mod: ModMeta, Ch: '"'}, nil
+		case "<s-m-=>", "<shift-meta-=>":
+			return KeyComb{Mod: ModMeta, Ch: '+'}, nil
+		case "<s-m-->", "<shift-meta-->":
+			return KeyComb{Mod: ModMeta, Ch: '_'}, nil
 
 		// alt+meta
 		case "<a-m-f1>", "<alt-meta-f1>":
@@ -1930,6 +2062,18 @@ func ParseKey(str string) (KeyComb, error) {
 			return KeyComb{Mod: ModAltMeta, Ch: '/'}, nil
 		case "<a-m-_>", "<alt-meta-_>":
 			return KeyComb{Mod: ModAltMeta, Ch: '_'}, nil
+		case "<a-m-.>", "<alt-meta-.>":
+			return KeyComb{Mod: ModAltMeta, Ch: '.'}, nil
+		case "<a-m-,>", "<alt-meta-,>":
+			return KeyComb{Mod: ModAltMeta, Ch: ','}, nil
+		case "<a-m-;>", "<alt-meta-;>":
+			return KeyComb{Mod: ModAltMeta, Ch: ';'}, nil
+		case "<a-m-'>", "<alt-meta-'>":
+			return KeyComb{Mod: ModAltMeta, Ch: '\''}, nil
+		case "<a-m-=>", "<alt-meta-=>":
+			return KeyComb{Mod: ModAltMeta, Ch: '='}, nil
+		case "<a-m-->", "<alt-meta-->":
+			return KeyComb{Mod: ModAltMeta, Ch: '-'}, nil
 
 		// alt+shift+meta
 		case "<a-s-m-f1>", "<alt-shift-meta-f1>":
@@ -1997,91 +2141,103 @@ func ParseKey(str string) (KeyComb, error) {
 		case "<a-s-m-esc>", "<alt-shift-meta-esc>":
 			return KeyComb{Key: KeyEsc, Mod: ModAltShiftMeta}, nil
 		case "<a-s-m-1>", "<alt-shift-meta-1>":
-			return KeyComb{Ch: '1', Mod: ModAltShiftMeta}, nil
+			return KeyComb{Ch: '!', Mod: ModAltMeta}, nil
 		case "<a-s-m-2>", "<alt-shift-meta-2>":
-			return KeyComb{Mod: ModAltShiftMeta, Ch: '2'}, nil
+			return KeyComb{Mod: ModAltMeta, Ch: '@'}, nil
 		case "<a-s-m-3>", "<alt-shift-meta-3>":
-			return KeyComb{Ch: '3', Mod: ModAltShiftMeta}, nil
+			return KeyComb{Ch: '#', Mod: ModAltMeta}, nil
 		case "<a-s-m-4>", "<alt-shift-meta-4>":
-			return KeyComb{Ch: '4', Mod: ModAltShiftMeta}, nil
+			return KeyComb{Ch: '$', Mod: ModAltMeta}, nil
 		case "<a-s-m-5>", "<alt-shift-meta-5>":
-			return KeyComb{Ch: '5', Mod: ModAltShiftMeta}, nil
+			return KeyComb{Ch: '%', Mod: ModAltMeta}, nil
 		case "<a-s-m-6>", "<alt-shift-meta-6>":
-			return KeyComb{Ch: '6', Mod: ModAltShiftMeta}, nil
+			return KeyComb{Ch: '^', Mod: ModAltMeta}, nil
 		case "<a-s-m-7>", "<alt-shift-meta-7>":
-			return KeyComb{Ch: '7', Mod: ModAltShiftMeta}, nil
+			return KeyComb{Ch: '&', Mod: ModAltMeta}, nil
 		case "<a-s-m-8>", "<alt-shift-meta-8>":
-			return KeyComb{Ch: '8', Mod: ModAltShiftMeta}, nil
+			return KeyComb{Ch: '*', Mod: ModAltMeta}, nil
 		case "<a-s-m-9>", "<alt-shift-meta-9>":
-			return KeyComb{Ch: '9', Mod: ModAltShiftMeta}, nil
+			return KeyComb{Ch: '(', Mod: ModAltMeta}, nil
 		case "<a-s-m-0>", "<alt-shift-meta-0>":
-			return KeyComb{Ch: '0', Mod: ModAltShiftMeta}, nil
+			return KeyComb{Ch: ')', Mod: ModAltMeta}, nil
 		case "<a-s-m-`>", "<alt-shift-meta-`>":
-			return KeyComb{Mod: ModAltShiftMeta, Ch: '`'}, nil
+			return KeyComb{Mod: ModAltMeta, Ch: '~'}, nil
 		case "<a-s-m-a>", "<alt-shift-meta-a>":
-			return KeyComb{Mod: ModAltShiftMeta, Ch: 'a'}, nil
+			return KeyComb{Mod: ModAltMeta, Ch: 'A'}, nil
 		case "<a-s-m-b>", "<alt-shift-meta-b>":
-			return KeyComb{Mod: ModAltShiftMeta, Ch: 'b'}, nil
+			return KeyComb{Mod: ModAltMeta, Ch: 'B'}, nil
 		case "<a-s-m-c>", "<alt-shift-meta-c>":
-			return KeyComb{Mod: ModAltShiftMeta, Ch: 'c'}, nil
+			return KeyComb{Mod: ModAltMeta, Ch: 'C'}, nil
 		case "<a-s-m-d>", "<alt-shift-meta-d>":
-			return KeyComb{Mod: ModAltShiftMeta, Ch: 'd'}, nil
+			return KeyComb{Mod: ModAltMeta, Ch: 'D'}, nil
 		case "<a-s-m-e>", "<alt-shift-meta-e>":
-			return KeyComb{Mod: ModAltShiftMeta, Ch: 'e'}, nil
+			return KeyComb{Mod: ModAltMeta, Ch: 'E'}, nil
 		case "<a-s-m-f>", "<alt-shift-meta-f>":
-			return KeyComb{Mod: ModAltShiftMeta, Ch: 'f'}, nil
+			return KeyComb{Mod: ModAltMeta, Ch: 'F'}, nil
 		case "<a-s-m-g>", "<alt-shift-meta-g>":
-			return KeyComb{Mod: ModAltShiftMeta, Ch: 'g'}, nil
+			return KeyComb{Mod: ModAltMeta, Ch: 'G'}, nil
 		case "<a-s-m-h>", "<alt-shift-meta-h>":
-			return KeyComb{Mod: ModAltShiftMeta, Ch: 'h'}, nil
+			return KeyComb{Mod: ModAltMeta, Ch: 'H'}, nil
 		case "<a-s-m-tab>", "<alt-shift-meta-tab>":
 			return KeyComb{Mod: ModAltShiftMeta, Key: KeyTab}, nil
 		case "<a-s-m-i>", "<alt-shift-meta-i>":
-			return KeyComb{Mod: ModAltShiftMeta, Ch: 'i'}, nil
+			return KeyComb{Mod: ModAltMeta, Ch: 'I'}, nil
 		case "<a-s-m-j>", "<alt-shift-meta-j>":
-			return KeyComb{Mod: ModAltShiftMeta, Ch: 'j'}, nil
+			return KeyComb{Mod: ModAltMeta, Ch: 'J'}, nil
 		case "<a-s-m-k>", "<alt-shift-meta-k>":
-			return KeyComb{Mod: ModAltShiftMeta, Ch: 'k'}, nil
+			return KeyComb{Mod: ModAltMeta, Ch: 'K'}, nil
 		case "<a-s-m-l>", "<alt-shift-meta-l>":
-			return KeyComb{Mod: ModAltShiftMeta, Ch: 'l'}, nil
-		case "<a-s-m-m>", "<alt-shift-meta-s-m>":
-			return KeyComb{Mod: ModAltShiftMeta, Ch: 'm'}, nil
+			return KeyComb{Mod: ModAltMeta, Ch: 'L'}, nil
+		case "<a-s-m-m>", "<alt-shift-meta-m>":
+			return KeyComb{Mod: ModAltMeta, Ch: 'M'}, nil
 		case "<a-s-m-n>", "<alt-shift-meta-n>":
-			return KeyComb{Mod: ModAltShiftMeta, Ch: 'n'}, nil
+			return KeyComb{Mod: ModAltMeta, Ch: 'N'}, nil
 		case "<a-s-m-o>", "<alt-shift-meta-o>":
-			return KeyComb{Mod: ModAltShiftMeta, Ch: 'o'}, nil
+			return KeyComb{Mod: ModAltMeta, Ch: 'O'}, nil
 		case "<a-s-m-p>", "<alt-shift-meta-p>":
-			return KeyComb{Mod: ModAltShiftMeta, Ch: 'p'}, nil
+			return KeyComb{Mod: ModAltMeta, Ch: 'P'}, nil
 		case "<a-s-m-q>", "<alt-shift-meta-q>":
-			return KeyComb{Mod: ModAltShiftMeta, Ch: 'q'}, nil
+			return KeyComb{Mod: ModAltMeta, Ch: 'Q'}, nil
 		case "<a-s-m-r>", "<alt-shift-meta-r>":
-			return KeyComb{Mod: ModAltShiftMeta, Ch: 'r'}, nil
+			return KeyComb{Mod: ModAltMeta, Ch: 'R'}, nil
 		case "<a-s-m-s>", "<alt-shift-meta-s>":
-			return KeyComb{Mod: ModAltShiftMeta, Ch: 's'}, nil
+			return KeyComb{Mod: ModAltMeta, Ch: 'S'}, nil
 		case "<a-s-m-t>", "<alt-shift-meta-t>":
-			return KeyComb{Mod: ModAltShiftMeta, Ch: 't'}, nil
+			return KeyComb{Mod: ModAltMeta, Ch: 'T'}, nil
 		case "<a-s-m-u>", "<alt-shift-meta-u>":
-			return KeyComb{Mod: ModAltShiftMeta, Ch: 'u'}, nil
+			return KeyComb{Mod: ModAltMeta, Ch: 'U'}, nil
 		case "<a-s-m-v>", "<alt-shift-meta-v>":
-			return KeyComb{Mod: ModAltShiftMeta, Ch: 'v'}, nil
+			return KeyComb{Mod: ModAltMeta, Ch: 'V'}, nil
 		case "<a-s-m-w>", "<alt-shift-meta-w>":
-			return KeyComb{Mod: ModAltShiftMeta, Ch: 'w'}, nil
+			return KeyComb{Mod: ModAltMeta, Ch: 'W'}, nil
 		case "<a-s-m-x>", "<alt-shift-meta-x>":
-			return KeyComb{Mod: ModAltShiftMeta, Ch: 'x'}, nil
+			return KeyComb{Mod: ModAltMeta, Ch: 'X'}, nil
 		case "<a-s-m-y>", "<alt-shift-meta-y>":
-			return KeyComb{Mod: ModAltShiftMeta, Ch: 'y'}, nil
+			return KeyComb{Mod: ModAltMeta, Ch: 'Y'}, nil
 		case "<a-s-m-z>", "<alt-shift-meta-z>":
-			return KeyComb{Mod: ModAltShiftMeta, Ch: 'z'}, nil
+			return KeyComb{Mod: ModAltMeta, Ch: 'Z'}, nil
 		case "<a-s-m-[>", "<alt-shift-meta-[>":
-			return KeyComb{Mod: ModAltShiftMeta, Ch: '['}, nil
+			return KeyComb{Mod: ModAltMeta, Ch: '{'}, nil
 		case "<a-s-m-\\>", "<alt-shift-meta-\\>":
-			return KeyComb{Mod: ModAltShiftMeta, Ch: '\\'}, nil
+			return KeyComb{Mod: ModAltMeta, Ch: '|'}, nil
 		case "<a-s-m-]>", "<alt-shift-meta-]>":
-			return KeyComb{Mod: ModAltShiftMeta, Ch: ']'}, nil
+			return KeyComb{Mod: ModAltMeta, Ch: '}'}, nil
 		case "<a-s-m-/>", "<alt-shift-meta-/>":
-			return KeyComb{Mod: ModAltShiftMeta, Ch: '/'}, nil
+			return KeyComb{Mod: ModAltMeta, Ch: '?'}, nil
 		case "<a-s-m-_>", "<alt-shift-meta-_>":
-			return KeyComb{Mod: ModAltShiftMeta, Ch: '_'}, nil
+			return KeyComb{Mod: ModAltMeta, Ch: '_'}, nil
+		case "<a-s-m-.>", "<alt-shift-meta-.>":
+			return KeyComb{Mod: ModAltMeta, Ch: '>'}, nil
+		case "<a-s-m-,>", "<alt-shift-meta-,>":
+			return KeyComb{Mod: ModAltMeta, Ch: '<'}, nil
+		case "<a-s-m-;>", "<alt-shift-meta-;>":
+			return KeyComb{Mod: ModAltMeta, Ch: ':'}, nil
+		case "<a-s-m-'>", "<alt-shift-meta-'>":
+			return KeyComb{Mod: ModAltMeta, Ch: '"'}, nil
+		case "<a-s-m-=>", "<alt-shift-meta-=>":
+			return KeyComb{Mod: ModAltMeta, Ch: '+'}, nil
+		case "<a-s-m-->", "<alt-shift-meta-->":
+			return KeyComb{Mod: ModAltMeta, Ch: '_'}, nil
 
 		// alt+shift
 		case "<a-s-f1>", "<alt-shift-f1>":
@@ -2149,91 +2305,103 @@ func ParseKey(str string) (KeyComb, error) {
 		case "<a-s-esc>", "<alt-shift-esc>":
 			return KeyComb{Key: KeyEsc, Mod: ModAltShift}, nil
 		case "<a-s-1>", "<alt-shift-1>":
-			return KeyComb{Ch: '1', Mod: ModAltShift}, nil
+			return KeyComb{Ch: '!', Mod: ModAlt}, nil
 		case "<a-s-2>", "<alt-shift-2>":
-			return KeyComb{Mod: ModAltShift, Ch: '2'}, nil
+			return KeyComb{Mod: ModAlt, Ch: '@'}, nil
 		case "<a-s-3>", "<alt-shift-3>":
-			return KeyComb{Ch: '3', Mod: ModAltShift}, nil
+			return KeyComb{Ch: '#', Mod: ModAlt}, nil
 		case "<a-s-4>", "<alt-shift-4>":
-			return KeyComb{Ch: '4', Mod: ModAltShift}, nil
+			return KeyComb{Ch: '$', Mod: ModAlt}, nil
 		case "<a-s-5>", "<alt-shift-5>":
-			return KeyComb{Ch: '5', Mod: ModAltShift}, nil
+			return KeyComb{Ch: '%', Mod: ModAlt}, nil
 		case "<a-s-6>", "<alt-shift-6>":
-			return KeyComb{Ch: '6', Mod: ModAltShift}, nil
+			return KeyComb{Ch: '^', Mod: ModAlt}, nil
 		case "<a-s-7>", "<alt-shift-7>":
-			return KeyComb{Ch: '7', Mod: ModAltShift}, nil
+			return KeyComb{Ch: '&', Mod: ModAlt}, nil
 		case "<a-s-8>", "<alt-shift-8>":
-			return KeyComb{Ch: '8', Mod: ModAltShift}, nil
+			return KeyComb{Ch: '*', Mod: ModAlt}, nil
 		case "<a-s-9>", "<alt-shift-9>":
-			return KeyComb{Ch: '9', Mod: ModAltShift}, nil
+			return KeyComb{Ch: '(', Mod: ModAlt}, nil
 		case "<a-s-0>", "<alt-shift-0>":
-			return KeyComb{Ch: '0', Mod: ModAltShift}, nil
+			return KeyComb{Ch: ')', Mod: ModAlt}, nil
 		case "<a-s-`>", "<alt-shift-`>":
-			return KeyComb{Mod: ModAltShift, Ch: '`'}, nil
+			return KeyComb{Mod: ModAlt, Ch: '~'}, nil
 		case "<a-s-a>", "<alt-shift-a>":
-			return KeyComb{Mod: ModAltShift, Ch: 'a'}, nil
+			return KeyComb{Mod: ModAlt, Ch: 'A'}, nil
 		case "<a-s-b>", "<alt-shift-b>":
-			return KeyComb{Mod: ModAltShift, Ch: 'b'}, nil
+			return KeyComb{Mod: ModAlt, Ch: 'B'}, nil
 		case "<a-s-c>", "<alt-shift-c>":
-			return KeyComb{Mod: ModAltShift, Ch: 'c'}, nil
+			return KeyComb{Mod: ModAlt, Ch: 'C'}, nil
 		case "<a-s-d>", "<alt-shift-d>":
-			return KeyComb{Mod: ModAltShift, Ch: 'd'}, nil
+			return KeyComb{Mod: ModAlt, Ch: 'D'}, nil
 		case "<a-s-e>", "<alt-shift-e>":
-			return KeyComb{Mod: ModAltShift, Ch: 'e'}, nil
+			return KeyComb{Mod: ModAlt, Ch: 'E'}, nil
 		case "<a-s-f>", "<alt-shift-f>":
-			return KeyComb{Mod: ModAltShift, Ch: 'f'}, nil
+			return KeyComb{Mod: ModAlt, Ch: 'F'}, nil
 		case "<a-s-g>", "<alt-shift-g>":
-			return KeyComb{Mod: ModAltShift, Ch: 'g'}, nil
+			return KeyComb{Mod: ModAlt, Ch: 'G'}, nil
 		case "<a-s-h>", "<alt-shift-h>":
-			return KeyComb{Mod: ModAltShift, Ch: 'h'}, nil
+			return KeyComb{Mod: ModAlt, Ch: 'H'}, nil
 		case "<a-s-tab>", "<alt-shift-tab>":
 			return KeyComb{Mod: ModAltShift, Key: KeyTab}, nil
 		case "<a-s-i>", "<alt-shift-i>":
-			return KeyComb{Mod: ModAltShift, Ch: 'i'}, nil
+			return KeyComb{Mod: ModAlt, Ch: 'I'}, nil
 		case "<a-s-j>", "<alt-shift-j>":
-			return KeyComb{Mod: ModAltShift, Ch: 'j'}, nil
+			return KeyComb{Mod: ModAlt, Ch: 'J'}, nil
 		case "<a-s-k>", "<alt-shift-k>":
-			return KeyComb{Mod: ModAltShift, Ch: 'k'}, nil
+			return KeyComb{Mod: ModAlt, Ch: 'K'}, nil
 		case "<a-s-l>", "<alt-shift-l>":
-			return KeyComb{Mod: ModAltShift, Ch: 'l'}, nil
+			return KeyComb{Mod: ModAlt, Ch: 'L'}, nil
 		case "<a-s-m>", "<alt-shift-m>":
-			return KeyComb{Mod: ModAltShift, Ch: 'm'}, nil
+			return KeyComb{Mod: ModAlt, Ch: 'M'}, nil
 		case "<a-s-n>", "<alt-shift-n>":
-			return KeyComb{Mod: ModAltShift, Ch: 'n'}, nil
+			return KeyComb{Mod: ModAlt, Ch: 'N'}, nil
 		case "<a-s-o>", "<alt-shift-o>":
-			return KeyComb{Mod: ModAltShift, Ch: 'o'}, nil
+			return KeyComb{Mod: ModAlt, Ch: 'O'}, nil
 		case "<a-s-p>", "<alt-shift-p>":
-			return KeyComb{Mod: ModAltShift, Ch: 'p'}, nil
+			return KeyComb{Mod: ModAlt, Ch: 'P'}, nil
 		case "<a-s-q>", "<alt-shift-q>":
-			return KeyComb{Mod: ModAltShift, Ch: 'q'}, nil
+			return KeyComb{Mod: ModAlt, Ch: 'Q'}, nil
 		case "<a-s-r>", "<alt-shift-r>":
-			return KeyComb{Mod: ModAltShift, Ch: 'r'}, nil
+			return KeyComb{Mod: ModAlt, Ch: 'R'}, nil
 		case "<a-s-s>", "<alt-shift-s>":
-			return KeyComb{Mod: ModAltShift, Ch: 's'}, nil
+			return KeyComb{Mod: ModAlt, Ch: 'S'}, nil
 		case "<a-s-t>", "<alt-shift-t>":
-			return KeyComb{Mod: ModAltShift, Ch: 't'}, nil
+			return KeyComb{Mod: ModAlt, Ch: 'T'}, nil
 		case "<a-s-u>", "<alt-shift-u>":
-			return KeyComb{Mod: ModAltShift, Ch: 'u'}, nil
+			return KeyComb{Mod: ModAlt, Ch: 'U'}, nil
 		case "<a-s-v>", "<alt-shift-v>":
-			return KeyComb{Mod: ModAltShift, Ch: 'v'}, nil
+			return KeyComb{Mod: ModAlt, Ch: 'V'}, nil
 		case "<a-s-w>", "<alt-shift-w>":
-			return KeyComb{Mod: ModAltShift, Ch: 'w'}, nil
+			return KeyComb{Mod: ModAlt, Ch: 'W'}, nil
 		case "<a-s-x>", "<alt-shift-x>":
-			return KeyComb{Mod: ModAltShift, Ch: 'x'}, nil
+			return KeyComb{Mod: ModAlt, Ch: 'X'}, nil
 		case "<a-s-y>", "<alt-shift-y>":
-			return KeyComb{Mod: ModAltShift, Ch: 'y'}, nil
+			return KeyComb{Mod: ModAlt, Ch: 'Y'}, nil
 		case "<a-s-z>", "<alt-shift-z>":
-			return KeyComb{Mod: ModAltShift, Ch: 'z'}, nil
+			return KeyComb{Mod: ModAlt, Ch: 'Z'}, nil
 		case "<a-s-[>", "<alt-shift-[>":
-			return KeyComb{Mod: ModAltShift, Ch: '['}, nil
+			return KeyComb{Mod: ModAlt, Ch: '{'}, nil
 		case "<a-s-\\>", "<alt-shift-\\>":
-			return KeyComb{Mod: ModAltShift, Ch: '\\'}, nil
+			return KeyComb{Mod: ModAlt, Ch: '|'}, nil
 		case "<a-s-]>", "<alt-shift-]>":
-			return KeyComb{Mod: ModAltShift, Ch: ']'}, nil
+			return KeyComb{Mod: ModAlt, Ch: '}'}, nil
 		case "<a-s-/>", "<alt-shift-/>":
-			return KeyComb{Mod: ModAltShift, Ch: '/'}, nil
+			return KeyComb{Mod: ModAlt, Ch: '?'}, nil
 		case "<a-s-_>", "<alt-shift-_>":
-			return KeyComb{Mod: ModAltShift, Ch: '_'}, nil
+			return KeyComb{Mod: ModAlt, Ch: '_'}, nil
+		case "<a-s-.>", "<alt-shift-.>":
+			return KeyComb{Mod: ModAlt, Ch: '>'}, nil
+		case "<a-s-,>", "<alt-shift-,>":
+			return KeyComb{Mod: ModAlt, Ch: '<'}, nil
+		case "<a-s-;>", "<alt-shift-;>":
+			return KeyComb{Mod: ModAlt, Ch: ':'}, nil
+		case "<a-s-'>", "<alt-shift-'>":
+			return KeyComb{Mod: ModAlt, Ch: '"'}, nil
+		case "<a-s-=>", "<alt-shift-=>":
+			return KeyComb{Mod: ModAlt, Ch: '+'}, nil
+		case "<a-s-->", "<alt-shift-->":
+			return KeyComb{Mod: ModAlt, Ch: '_'}, nil
 
 		case "<alt>":
 			return KeyComb{Mod: ModAlt}, nil

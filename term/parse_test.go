@@ -30,7 +30,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestParse(t *testing.T) {
+func TestParseKeys(t *testing.T) {
 	suite := []KeyComb{
 		{Key: KeyF1},
 		{Key: KeyF2},
@@ -561,41 +561,155 @@ func TestParse(t *testing.T) {
 		t.Run(fmt.Sprintf("String, ParseKey twice: %d: %#v", i, comb), func(t *testing.T) {
 			c, err := ParseKey(comb.String())
 			require.NoError(t, err)
-			assert.Equal(t, comb, c)
+			assert.Equal(t, comb, c, comb)
 
 			c, err = ParseKey(c.String())
 			require.NoError(t, err)
-			assert.Equal(t, comb, c)
+			assert.Equal(t, comb, c, comb)
 		})
 
 		t.Run(fmt.Sprintf("ShortString, ParseKey twice: %d: %#v", i, comb), func(t *testing.T) {
 			c, err := ParseKey(comb.ShortString())
 			require.NoError(t, err)
-			assert.Equal(t, comb, c)
+			assert.Equal(t, comb, c, comb)
 
 			c, err = ParseKey(c.ShortString())
 			require.NoError(t, err)
-			assert.Equal(t, comb, c)
+			assert.Equal(t, comb, c, comb)
 		})
 
 		t.Run(fmt.Sprintf("ShortString, ParseKey, String, ParseKey: %d: %#v", i, comb), func(t *testing.T) {
 			c, err := ParseKey(comb.ShortString())
 			require.NoError(t, err)
-			assert.Equal(t, comb, c)
+			assert.Equal(t, comb, c, comb)
 
 			c, err = ParseKey(c.String())
 			require.NoError(t, err)
-			assert.Equal(t, comb, c)
+			assert.Equal(t, comb, c, comb)
 		})
 
 		t.Run(fmt.Sprintf("String, ParseKey, ShortString, ParseKey: %d: %#v", i, comb), func(t *testing.T) {
 			c, err := ParseKey(comb.String())
 			require.NoError(t, err)
-			assert.Equal(t, comb, c)
+			assert.Equal(t, comb, c, comb)
 
 			c, err = ParseKey(c.ShortString())
 			require.NoError(t, err)
-			assert.Equal(t, comb, c)
+			assert.Equal(t, comb, c, comb)
 		})
+	}
+}
+
+// test chars separately as equivalence must be tested via KeyComb.String()
+// because Mod shift with unshifted characters is not emitted by tui or gui
+// and so it's "invalid", but we should still test that it converts to the right
+// KeyComb.
+func TestParseCharKey(t *testing.T) {
+	modifiers := []Modifier{0, ModAlt, ModShift, ModMeta,
+		ModCtrl, ModCtrlShift, ModCtrlAlt, ModCtrlMeta,
+		ModCtrlShiftAlt, ModCtrlShiftMeta,
+		/* ModCtrlAltMeta skip since it cannot be fully upgraded/downgraded with shift */
+		ModShiftMeta, ModAltMeta, ModAltShiftMeta, ModAltShift}
+	charKeys := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQR" +
+		"STUVWXYZ1234567890-=`[];',./~!@#$%^&*()_+{}|\":?<>\\"
+
+	var suite []KeyComb
+	for _, ch := range []rune(charKeys) {
+		for _, mod := range modifiers {
+			suite = append(suite, KeyComb{Ch: ch, Mod: mod})
+		}
+	}
+	for i, comb := range suite {
+		t.Run(fmt.Sprintf("String, ParseKey twice: %d: %#v", i, comb), func(t *testing.T) {
+			c, err := ParseKey(comb.String())
+			require.NoError(t, err)
+			assert.Equal(t, comb.String(), c.String())
+
+			c, err = ParseKey(c.String())
+			require.NoError(t, err)
+			assert.Equal(t, comb.String(), c.String(), comb)
+		})
+
+		t.Run(fmt.Sprintf("ShortString, ParseKey twice: %d: %#v", i, comb), func(t *testing.T) {
+			c, err := ParseKey(comb.ShortString())
+			require.NoError(t, err)
+			assert.Equal(t, comb.String(), c.String(), comb)
+
+			c, err = ParseKey(c.ShortString())
+			require.NoError(t, err)
+			assert.Equal(t, comb.String(), c.String(), comb)
+		})
+
+		t.Run(fmt.Sprintf("ShortString, ParseKey, String, ParseKey: %d: %#v", i, comb), func(t *testing.T) {
+			c, err := ParseKey(comb.ShortString())
+			require.NoError(t, err)
+			assert.Equal(t, comb.String(), c.String(), comb)
+
+			c, err = ParseKey(c.String())
+			require.NoError(t, err)
+			assert.Equal(t, comb.String(), c.String(), comb)
+		})
+
+		t.Run(fmt.Sprintf("String, ParseKey, ShortString, ParseKey: %d: %#v", i, comb), func(t *testing.T) {
+			c, err := ParseKey(comb.String())
+			require.NoError(t, err)
+			assert.Equal(t, comb.String(), c.String(), comb)
+
+			c, err = ParseKey(c.ShortString())
+			require.NoError(t, err)
+			assert.Equal(t, comb.String(), c.String(), comb)
+		})
+
+	}
+}
+
+func TestParseNonKeyChar(t *testing.T) {
+	charKeys := "œ∑´®†¥¨ˆøπ“‘æ…¬˚∆˙©ƒ∂ßå≈ç√∫˜µ≤≥÷¡™£¢∞§¶•ªº–≠"
+
+	var suite []KeyComb
+	for _, ch := range []rune(charKeys) {
+		suite = append(suite, KeyComb{Ch: ch})
+	}
+	for i, comb := range suite {
+		t.Run(fmt.Sprintf("String, ParseKey twice: %d: %#v", i, comb), func(t *testing.T) {
+			c, err := ParseKey(comb.String())
+			require.NoError(t, err)
+			assert.Equal(t, comb, c)
+
+			c, err = ParseKey(c.String())
+			require.NoError(t, err)
+			assert.Equal(t, comb, c, comb)
+		})
+
+		t.Run(fmt.Sprintf("ShortString, ParseKey twice: %d: %#v", i, comb), func(t *testing.T) {
+			c, err := ParseKey(comb.ShortString())
+			require.NoError(t, err)
+			assert.Equal(t, comb, c, comb)
+
+			c, err = ParseKey(c.ShortString())
+			require.NoError(t, err)
+			assert.Equal(t, comb, c, comb)
+		})
+
+		t.Run(fmt.Sprintf("ShortString, ParseKey, String, ParseKey: %d: %#v", i, comb), func(t *testing.T) {
+			c, err := ParseKey(comb.ShortString())
+			require.NoError(t, err)
+			assert.Equal(t, comb, c, comb)
+
+			c, err = ParseKey(c.String())
+			require.NoError(t, err)
+			assert.Equal(t, comb, c, comb)
+		})
+
+		t.Run(fmt.Sprintf("String, ParseKey, ShortString, ParseKey: %d: %#v", i, comb), func(t *testing.T) {
+			c, err := ParseKey(comb.String())
+			require.NoError(t, err)
+			assert.Equal(t, comb, c, comb)
+
+			c, err = ParseKey(c.ShortString())
+			require.NoError(t, err)
+			assert.Equal(t, comb, c, comb)
+		})
+
 	}
 }
