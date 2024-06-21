@@ -309,7 +309,7 @@ extensions:
       # Search algorithm. Options are fuzzy, contains and equal.
       algo: fuzzy
       # Key binding used to cycle through history.
-      history_key: <c-\>
+      history_key: <c-\\>
       # Max history stored
       history: 2000
       # Colors
@@ -450,7 +450,7 @@ command:
     <c-g>: lspGoToDefinition
     <c-b>: lspFormat
     <c-p>: searchFile
-    <c-\>: searchText
+    <c-\\>: searchText
     # Aliases can also be mapped to key combinations
     <c-x><enter>: splitWindowTerminal
     gf: openFileUnderCursor

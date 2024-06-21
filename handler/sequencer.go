@@ -25,6 +25,7 @@ package handler
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -137,44 +138,14 @@ func (s *Sequencer) Reset() {
 // It accepts two key string representation, as they would be individually
 // parsed by term.ParseKey: i.e. <c-x><c-p>, f<c-p>, <c-x>t, gf
 func ParseSequence(str string) (Sequence, error) {
-	runestr := []rune(str)
-	switch len(runestr) {
-	case 0, 1, 3, 4, 5:
-		return Sequence{}, errors.New("invalid sequence")
-	case 2:
-		return Sequence{
-			First: term.KeyComb{Ch: runestr[0]},
-			Last:  term.KeyComb{Ch: runestr[1]},
-		}, nil
-	default:
-		idxGt := strings.IndexRune(str, '>')
-		idxLt := strings.IndexRune(str, '<')
-
-		if idxLt < 0 || idxGt < 0 || idxLt > idxGt {
-			return Sequence{}, errors.New("invalid sequence")
-		}
-
-		key, err := term.ParseKey(string(runestr[idxLt : idxGt+1]))
-		if err != nil {
-			return Sequence{}, err
-		}
-
-		ret := Sequence{}
-		switch idxLt {
-		case -1:
-			return Sequence{}, errors.New("invalid sequence")
-		case 0:
-			ret.First = key
-			ret.Last, err = term.ParseKey(string(runestr[idxGt+1:]))
-		default:
-			ret.Last = key
-			ret.First, err = term.ParseKey(string(runestr[:idxLt]))
-		}
-		if err != nil {
-			return Sequence{}, err
-		}
-		return ret, nil
+	keys, err := term.ParseKeys(str)
+	if err != nil {
+		return Sequence{}, fmt.Errorf("invalid sequence: %v", err)
 	}
+	if len(keys) != 2 {
+		return Sequence{}, errors.New("invalid sequence: expected exactly 2 keys")
+	}
+	return Sequence{First: keys[0], Last: keys[1]}, nil
 }
 
 func (s Sequence) String() string {

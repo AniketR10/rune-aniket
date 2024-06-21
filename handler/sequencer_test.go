@@ -125,18 +125,24 @@ func TestParseSequence(t *testing.T) {
 		{">c-p<f", Sequence{}, true},
 		{"f>c-p<", Sequence{}, true},
 		{"><><", Sequence{}, true},
+		{">>", Sequence{}, true},
+		{"<<", Sequence{}, true},
 		{"                                               ", Sequence{}, true},
 		{"ff", Sequence{
 			First: term.KeyComb{Ch: 'f'},
 			Last:  term.KeyComb{Ch: 'f'},
 		}, false},
-		{">>", Sequence{
+		{"\\>\\>", Sequence{
 			First: term.KeyComb{Ch: '>'},
 			Last:  term.KeyComb{Ch: '>'},
 		}, false},
-		{"<<", Sequence{
+		{"\\<\\<", Sequence{
 			First: term.KeyComb{Ch: '<'},
 			Last:  term.KeyComb{Ch: '<'},
+		}, false},
+		{"<c-x>\\\\", Sequence{
+			First: term.KeyComb{Ch: 'x', Mod: term.ModCtrl},
+			Last:  term.KeyComb{Ch: '\\'},
 		}, false},
 		{"f<c-p>", Sequence{
 			First: term.KeyComb{Ch: 'f'},
@@ -152,7 +158,7 @@ func TestParseSequence(t *testing.T) {
 		}, false},
 		{"<c-m-]><c-p>", Sequence{
 			First: term.KeyComb{
-				Ch: ']',
+				Ch:  ']',
 				Mod: term.ModCtrlMeta,
 			},
 			Last: term.KeyComb{Ch: 'p', Mod: term.ModCtrl},
@@ -176,9 +182,9 @@ func TestParseSequence(t *testing.T) {
 			// into the original sequence
 			actualSeq, actualErr = ParseSequence(actualSeq.String())
 			if tcase.wantErr {
-				require.Error(t, actualErr)
+				require.Error(t, actualErr, actualSeq.String())
 			} else {
-				require.NoError(t, actualErr, actualSeq.String())
+				require.NoError(t, actualErr)
 			}
 			assert.Equal(t, tcase.wantSeq, actualSeq)
 		})

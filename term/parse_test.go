@@ -24,6 +24,7 @@ package term
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -598,6 +599,16 @@ func TestParseKeys(t *testing.T) {
 			assert.Equal(t, comb, c, comb)
 		})
 	}
+
+	t.Run("combined sequence of keys", func(t *testing.T) {
+		var builder strings.Builder
+		for _, comb := range suite {
+			builder.WriteString(comb.String())
+		}
+		keys, err := ParseKeys(builder.String())
+		require.NoError(t, err)
+		assert.ElementsMatch(t, suite, keys)
+	})
 }
 
 // test chars separately as equivalence must be tested via KeyComb.String()
@@ -611,7 +622,7 @@ func TestParseCharKey(t *testing.T) {
 		/* ModCtrlAltMeta skip since it cannot be fully upgraded/downgraded with shift */
 		ModShiftMeta, ModAltMeta, ModAltShiftMeta, ModAltShift}
 	charKeys := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQR" +
-		"STUVWXYZ1234567890-=`[];',./~!@#$%^&*()_+{}|\":?<>\\"
+		"STUVWXYZ1234567890-=`[];',./~!@#$%^&*()_+{}\":?<>\\|"
 
 	var suite []KeyComb
 	for _, ch := range []rune(charKeys) {
@@ -661,6 +672,63 @@ func TestParseCharKey(t *testing.T) {
 		})
 
 	}
+
+	t.Run("combined sequence of characters", func(t *testing.T) {
+		var builder strings.Builder
+		for _, comb := range suite {
+			builder.WriteString(comb.String())
+		}
+		seq := builder.String()
+		keys, err := ParseKeys(seq)
+		require.NoError(t, err)
+
+		builder.Reset()
+		for _, comb := range keys {
+			builder.WriteString(comb.String())
+		}
+		assert.Equal(t, seq, builder.String())
+	})
+
+	t.Run("ParseKeyswith with mixed sequences", func(t *testing.T) {
+		suite := []struct {
+			in          string
+			expectedOut []KeyComb
+			expectedErr bool
+		}{
+			{
+				in: "<esc>:edit<space>hello<enter>",
+				expectedOut: []KeyComb{
+					{Key: KeyEsc},
+					{Ch: ':'},
+					{Ch: 'e'},
+					{Ch: 'd'},
+					{Ch: 'i'},
+					{Ch: 't'},
+					{Key: KeySpace},
+					{Ch: 'h'},
+					{Ch: 'e'},
+					{Ch: 'l'},
+					{Ch: 'l'},
+					{Ch: 'o'},
+					{Key: KeyEnter},
+				},
+			},
+			{
+				in:          "<esc<:edit<space>",
+				expectedErr: true,
+			},
+		}
+
+		for _, test := range suite {
+			actualOut, actualErr := ParseKeys(test.in)
+			if test.expectedErr {
+				require.Error(t, actualErr)
+			} else {
+				require.NoError(t, actualErr)
+				assert.Equal(t, test.expectedOut, actualOut)
+			}
+		}
+	})
 }
 
 func TestParseNonKeyChar(t *testing.T) {
@@ -712,4 +780,14 @@ func TestParseNonKeyChar(t *testing.T) {
 		})
 
 	}
+
+	t.Run("combined sequence of characters", func(t *testing.T) {
+		var builder strings.Builder
+		for _, comb := range suite {
+			builder.WriteString(comb.String())
+		}
+		keys, err := ParseKeys(builder.String())
+		require.NoError(t, err)
+		assert.ElementsMatch(t, suite, keys)
+	})
 }

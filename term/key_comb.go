@@ -34,37 +34,37 @@ type KeyComb struct {
 // String returns the long string representation of this KeyComb.
 func (k KeyComb) String() string {
 	if k.Ch != 0 && k.Key != KeySpace {
-		ch, mod := unShiftChar(k.Ch, k.Mod)
+		ch, mod := processCharacter(k.Ch, k.Mod)
 		// if Ch is set, then ignore key for representing this key comb
 		switch mod {
 		case ModMeta:
-			return fmt.Sprintf("<meta-%c>", ch)
+			return fmt.Sprintf("<meta-%s>", ch)
 		case ModAlt:
-			return fmt.Sprintf("<alt-%c>", ch)
+			return fmt.Sprintf("<alt-%s>", ch)
 		case ModShift:
-			return fmt.Sprintf("<shift-%c>", ch)
+			return fmt.Sprintf("<shift-%s>", ch)
 		case ModCtrl:
-			return fmt.Sprintf("<ctrl-%c>", ch)
+			return fmt.Sprintf("<ctrl-%s>", ch)
 		case ModCtrlShift:
-			return fmt.Sprintf("<ctrl-shift-%c>", ch)
+			return fmt.Sprintf("<ctrl-shift-%s>", ch)
 		case ModCtrlAlt:
-			return fmt.Sprintf("<ctrl-alt-%c>", ch)
+			return fmt.Sprintf("<ctrl-alt-%s>", ch)
 		case ModCtrlMeta:
-			return fmt.Sprintf("<ctrl-meta-%c>", ch)
+			return fmt.Sprintf("<ctrl-meta-%s>", ch)
 		case ModCtrlShiftAlt:
-			return fmt.Sprintf("<ctrl-shift-alt-%c>", ch)
+			return fmt.Sprintf("<ctrl-shift-alt-%s>", ch)
 		case ModCtrlShiftMeta:
-			return fmt.Sprintf("<ctrl-shift-meta-%c>", ch)
+			return fmt.Sprintf("<ctrl-shift-meta-%s>", ch)
 		case ModCtrlAltMeta:
-			return fmt.Sprintf("<ctrl-alt-meta-%c>", ch)
+			return fmt.Sprintf("<ctrl-alt-meta-%s>", ch)
 		case ModShiftMeta:
-			return fmt.Sprintf("<shift-meta-%c>", ch)
+			return fmt.Sprintf("<shift-meta-%s>", ch)
 		case ModAltMeta:
-			return fmt.Sprintf("<alt-meta-%c>", ch)
+			return fmt.Sprintf("<alt-meta-%s>", ch)
 		case ModAltShiftMeta:
-			return fmt.Sprintf("<alt-shift-meta-%c>", ch)
+			return fmt.Sprintf("<alt-shift-meta-%s>", ch)
 		case ModAltShift:
-			return fmt.Sprintf("<alt-shift-%c>", ch)
+			return fmt.Sprintf("<alt-shift-%s>", ch)
 		default:
 			return string(ch)
 		}
@@ -1129,37 +1129,37 @@ func (k KeyComb) String() string {
 // of this KeyComb.
 func (k KeyComb) ShortString() string {
 	if k.Ch != 0 && k.Key != KeySpace {
-		ch, mod := unShiftChar(k.Ch, k.Mod)
+		ch, mod := processCharacter(k.Ch, k.Mod)
 		// if Ch is set, then ignore key for representing this key comb
 		switch mod {
 		case ModMeta:
-			return fmt.Sprintf("<m-%c>", ch)
+			return fmt.Sprintf("<m-%s>", ch)
 		case ModAlt:
-			return fmt.Sprintf("<a-%c>", ch)
+			return fmt.Sprintf("<a-%s>", ch)
 		case ModShift:
-			return fmt.Sprintf("<s-%c>", ch)
+			return fmt.Sprintf("<s-%s>", ch)
 		case ModCtrl:
-			return fmt.Sprintf("<c-%c>", ch)
+			return fmt.Sprintf("<c-%s>", ch)
 		case ModCtrlShift:
-			return fmt.Sprintf("<c-s-%c>", ch)
+			return fmt.Sprintf("<c-s-%s>", ch)
 		case ModCtrlAlt:
-			return fmt.Sprintf("<c-a-%c>", ch)
+			return fmt.Sprintf("<c-a-%s>", ch)
 		case ModCtrlMeta:
-			return fmt.Sprintf("<c-m-%c>", ch)
+			return fmt.Sprintf("<c-m-%s>", ch)
 		case ModCtrlShiftAlt:
-			return fmt.Sprintf("<c-s-a-%c>", ch)
+			return fmt.Sprintf("<c-s-a-%s>", ch)
 		case ModCtrlShiftMeta:
-			return fmt.Sprintf("<c-s-m-%c>", ch)
+			return fmt.Sprintf("<c-s-m-%s>", ch)
 		case ModCtrlAltMeta:
-			return fmt.Sprintf("<c-a-m-%c>", ch)
+			return fmt.Sprintf("<c-a-m-%s>", ch)
 		case ModShiftMeta:
-			return fmt.Sprintf("<s-m-%c>", ch)
+			return fmt.Sprintf("<s-m-%s>", ch)
 		case ModAltMeta:
-			return fmt.Sprintf("<a-m-%c>", ch)
+			return fmt.Sprintf("<a-m-%s>", ch)
 		case ModAltShiftMeta:
-			return fmt.Sprintf("<a-s-m-%c>", ch)
+			return fmt.Sprintf("<a-s-m-%s>", ch)
 		case ModAltShift:
-			return fmt.Sprintf("<a-s-%c>", ch)
+			return fmt.Sprintf("<a-s-%s>", ch)
 		default:
 			return string(ch)
 		}
@@ -2219,7 +2219,7 @@ func (k KeyComb) ShortString() string {
 	}
 }
 
-func unShiftChar(ch rune, mod Modifier) (unshifCh rune, shiftedMod Modifier) {
+func processCharacter(ch rune, mod Modifier) (unshifCh string, shiftedMod Modifier) {
 	switch mod {
 	case ModAlt:
 		shiftedMod = ModAltShift
@@ -2248,100 +2248,102 @@ func unShiftChar(ch rune, mod Modifier) (unshifCh rune, shiftedMod Modifier) {
 
 	switch ch {
 	case 'A':
-		return 'a', shiftedMod
+		return "a", shiftedMod
 	case 'B':
-		return 'b', shiftedMod
+		return "b", shiftedMod
 	case 'C':
-		return 'c', shiftedMod
+		return "c", shiftedMod
 	case 'D':
-		return 'd', shiftedMod
+		return "d", shiftedMod
 	case 'E':
-		return 'e', shiftedMod
+		return "e", shiftedMod
 	case 'F':
-		return 'f', shiftedMod
+		return "f", shiftedMod
 	case 'G':
-		return 'g', shiftedMod
+		return "g", shiftedMod
 	case 'H':
-		return 'h', shiftedMod
+		return "h", shiftedMod
 	case 'I':
-		return 'i', shiftedMod
+		return "i", shiftedMod
 	case 'J':
-		return 'j', shiftedMod
+		return "j", shiftedMod
 	case 'K':
-		return 'k', shiftedMod
+		return "k", shiftedMod
 	case 'L':
-		return 'l', shiftedMod
+		return "l", shiftedMod
 	case 'M':
-		return 'm', shiftedMod
+		return "m", shiftedMod
 	case 'N':
-		return 'n', shiftedMod
+		return "n", shiftedMod
 	case 'O':
-		return 'o', shiftedMod
+		return "o", shiftedMod
 	case 'P':
-		return 'p', shiftedMod
+		return "p", shiftedMod
 	case 'Q':
-		return 'q', shiftedMod
+		return "q", shiftedMod
 	case 'R':
-		return 'r', shiftedMod
+		return "r", shiftedMod
 	case 'S':
-		return 's', shiftedMod
+		return "s", shiftedMod
 	case 'T':
-		return 't', shiftedMod
+		return "t", shiftedMod
 	case 'U':
-		return 'u', shiftedMod
+		return "u", shiftedMod
 	case 'V':
-		return 'v', shiftedMod
+		return "v", shiftedMod
 	case 'W':
-		return 'w', shiftedMod
+		return "w", shiftedMod
 	case 'X':
-		return 'x', shiftedMod
+		return "x", shiftedMod
 	case 'Y':
-		return 'y', shiftedMod
+		return "y", shiftedMod
 	case 'Z':
-		return 'z', shiftedMod
+		return "z", shiftedMod
 	case '_':
-		return '-', shiftedMod
+		return "-", shiftedMod
 	case ')':
-		return '0', shiftedMod
+		return "0", shiftedMod
 	case '!':
-		return '1', shiftedMod
+		return "1", shiftedMod
 	case '@':
-		return '2', shiftedMod
+		return "2", shiftedMod
 	case '#':
-		return '3', shiftedMod
+		return "3", shiftedMod
 	case '$':
-		return '4', shiftedMod
+		return "4", shiftedMod
 	case '%':
-		return '5', shiftedMod
+		return "5", shiftedMod
 	case '^':
-		return '6', shiftedMod
+		return "6", shiftedMod
 	case '&':
-		return '7', shiftedMod
+		return "7", shiftedMod
 	case '*':
-		return '8', shiftedMod
+		return "8", shiftedMod
 	case '(':
-		return '9', shiftedMod
+		return "9", shiftedMod
 	case '+':
-		return '=', shiftedMod
+		return "=", shiftedMod
 	case '<':
-		return ',', shiftedMod
+		return ",", shiftedMod
 	case '{':
-		return '[', shiftedMod
+		return "[", shiftedMod
 	case '}':
-		return ']', shiftedMod
+		return "]", shiftedMod
 	case '~':
-		return '`', shiftedMod
+		return "`", shiftedMod
 	case '?':
-		return '/', shiftedMod
+		return "/", shiftedMod
 	case '|':
-		return '\\', shiftedMod
+		return "\\\\", shiftedMod
 	case '>':
-		return '.', shiftedMod
+		return ".", shiftedMod
 	case '"':
-		return '\'', shiftedMod
+		return "'", shiftedMod
 	case ':':
-		return ';', shiftedMod
+		return ";", shiftedMod
+	case '\\':
+		return "\\\\", mod
 	default:
-		return ch, mod
+		return string(ch), mod
 	}
 }

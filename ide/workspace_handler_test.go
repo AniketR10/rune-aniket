@@ -989,7 +989,7 @@ func defaultCfg() ideConfig {
 		"clipboard": "memory",
 		"command": map[string]interface{}{
 			"show_manual_after": "1h",
-			"key":               "<c-\\>", // see testutil.TestHandlerIsolated
+			"key":               "<c-\\\\>", // see testutil.TestHandlerIsolated
 			"key_bindings": map[string]interface{}{
 				"1": "switchToWorkspace 1",
 				"2": "switchToWorkspace 2",

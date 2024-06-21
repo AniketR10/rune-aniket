@@ -28,18 +28,89 @@ import (
 	"strings"
 )
 
+// ParseKeys parses the given sequence of key combinations.
+func ParseKeys(sequence string) (ret []KeyComb, err error) {
+	runes := []rune(sequence)
+	for len(runes) != 0 {
+		r := runes[0]
+		switch r {
+		// escape character
+		case '\\':
+			if len(runes) == 1 {
+				err = errors.New("unterminated escape sequence: " +
+					"Either '\\', '>' or '<' must follow a start of escape sequence '\\'")
+				return
+			}
+			switch runes[1] {
+			case '>', '<', '\\':
+				ret = append(ret, KeyComb{Ch: runes[1]})
+				runes = runes[2:]
+			default:
+				err = fmt.Errorf("invalid escape sequence: " +
+					"Either '\\', '>' or '<' must follow a start of escape sequence '\\'")
+				return
+			}
+		// invalid, space should be represented as <space>
+		case ' ':
+			err = errors.New("invalid escape sequence: " +
+				"Space should be represented with '<space>' syntax")
+			return
+
+		case '>':
+			err = errors.New("invalid escape sequence: unescaped, starting '>' character")
+			return
+		// start of key
+		case '<':
+			idxGt := strings.IndexRune(string(runes), '>')
+			if idxGt < 0 {
+				err = errors.New("unterminated key: '<' found but no matching '>' found")
+				return
+			}
+			var key KeyComb
+			key, err = ParseKey(string(runes[0 : idxGt+1]))
+			if err != nil {
+				return
+			}
+			ret = append(ret, key)
+			runes = runes[idxGt+1:]
+		default:
+			var key KeyComb
+			key, err = ParseKey(string(runes[0]))
+			if err != nil {
+				return
+			}
+			ret = append(ret, key)
+			runes = runes[1:]
+		}
+	}
+	return
+}
+
 // ParseKey parses str into a KeyComb or returns
-// error if it fails to parse it. Note that this function
-// is not case sensitive.
+// error if it fails to parse it.
 func ParseKey(str string) (KeyComb, error) {
-	str = strings.TrimSpace(strings.ToLower(str))
+	str = strings.TrimSpace(str)
 	switch len([]rune(str)) {
 	case 0:
 		return KeyComb{}, errors.New("invalid empty input")
 	case 1:
-		return KeyComb{Ch: []rune(str)[0]}, nil
+		ch := []rune(str)[0]
+		switch ch {
+		case '>', '<', '\\':
+			return KeyComb{}, errors.New("characters '>', '<' and '\\' must be escaped with '\\'")
+		default:
+			// characters that would return len(str) > 1 are processed in prev statement
+			return KeyComb{Ch: ch}, nil
+		}
 	default:
+		str = strings.ToLower(str)
 		switch str {
+		case "\\>":
+			return KeyComb{Ch: '>'}, nil
+		case "\\<":
+			return KeyComb{Ch: '<'}, nil
+		case "\\\\":
+			return KeyComb{Ch: '\\'}, nil
 		case "<f1>":
 			return KeyComb{Key: KeyF1}, nil
 		case "<f2>":
@@ -250,7 +321,7 @@ func ParseKey(str string) (KeyComb, error) {
 			return KeyComb{Mod: ModMeta, Ch: 'z'}, nil
 		case "<m-[>", "<meta-[>":
 			return KeyComb{Mod: ModMeta, Ch: '['}, nil
-		case "<m-\\>", "<meta-\\>":
+		case "<m-\\\\>", "<meta-\\\\>":
 			return KeyComb{Mod: ModMeta, Ch: '\\'}, nil
 		case "<m-]>", "<meta-]>":
 			return KeyComb{Mod: ModMeta, Ch: ']'}, nil
@@ -414,7 +485,7 @@ func ParseKey(str string) (KeyComb, error) {
 			return KeyComb{Mod: ModAlt, Ch: 'z'}, nil
 		case "<a-[>", "<alt-[>":
 			return KeyComb{Mod: ModAlt, Ch: '['}, nil
-		case "<a-\\>", "<alt-\\>":
+		case "<a-\\\\>", "<alt-\\\\>":
 			return KeyComb{Mod: ModAlt, Ch: '\\'}, nil
 		case "<a-]>", "<alt-]>":
 			return KeyComb{Mod: ModAlt, Ch: ']'}, nil
@@ -578,7 +649,7 @@ func ParseKey(str string) (KeyComb, error) {
 			return KeyComb{Ch: 'Z'}, nil
 		case "<s-[>", "<shift-[>":
 			return KeyComb{Ch: '{'}, nil
-		case "<s-\\>", "<shift-\\>":
+		case "<s-\\\\>", "<shift-\\\\>":
 			return KeyComb{Ch: '|'}, nil
 		case "<s-]>", "<shift-]>":
 			return KeyComb{Ch: '}'}, nil
@@ -742,7 +813,7 @@ func ParseKey(str string) (KeyComb, error) {
 			return KeyComb{Mod: ModCtrl, Ch: 'z'}, nil
 		case "<c-[>", "<ctrl-[>":
 			return KeyComb{Mod: ModCtrl, Ch: '['}, nil
-		case "<c-\\>", "<ctrl-\\>":
+		case "<c-\\\\>", "<ctrl-\\\\>":
 			return KeyComb{Mod: ModCtrl, Ch: '\\'}, nil
 		case "<c-]>", "<ctrl-]>":
 			return KeyComb{Mod: ModCtrl, Ch: ']'}, nil
@@ -906,7 +977,7 @@ func ParseKey(str string) (KeyComb, error) {
 			return KeyComb{Mod: ModCtrl, Ch: 'Z'}, nil
 		case "<c-s-[>", "<ctrl-shift-[>":
 			return KeyComb{Mod: ModCtrl, Ch: '{'}, nil
-		case "<c-s-\\>", "<ctrl-shift-\\>":
+		case "<c-s-\\\\>", "<ctrl-shift-\\\\>":
 			return KeyComb{Mod: ModCtrl, Ch: '|'}, nil
 		case "<c-s-]>", "<ctrl-shift-]>":
 			return KeyComb{Mod: ModCtrl, Ch: '}'}, nil
@@ -1070,7 +1141,7 @@ func ParseKey(str string) (KeyComb, error) {
 			return KeyComb{Mod: ModCtrlAlt, Ch: 'z'}, nil
 		case "<c-a-[>", "<ctrl-alt-[>":
 			return KeyComb{Mod: ModCtrlAlt, Ch: '['}, nil
-		case "<c-a-\\>", "<ctrl-alt-\\>":
+		case "<c-a-\\\\>", "<ctrl-alt-\\\\>":
 			return KeyComb{Mod: ModCtrlAlt, Ch: '\\'}, nil
 		case "<c-a-]>", "<ctrl-alt-]>":
 			return KeyComb{Mod: ModCtrlAlt, Ch: ']'}, nil
@@ -1234,7 +1305,7 @@ func ParseKey(str string) (KeyComb, error) {
 			return KeyComb{Mod: ModCtrlMeta, Ch: 'z'}, nil
 		case "<c-m-[>", "<ctrl-meta-[>":
 			return KeyComb{Mod: ModCtrlMeta, Ch: '['}, nil
-		case "<c-m-\\>", "<ctrl-meta-\\>":
+		case "<c-m-\\\\>", "<ctrl-meta-\\\\>":
 			return KeyComb{Mod: ModCtrlMeta, Ch: '\\'}, nil
 		case "<c-m-]>", "<ctrl-meta-]>":
 			return KeyComb{Mod: ModCtrlMeta, Ch: ']'}, nil
@@ -1398,7 +1469,7 @@ func ParseKey(str string) (KeyComb, error) {
 			return KeyComb{Mod: ModCtrlAlt, Ch: 'Z'}, nil
 		case "<c-s-a-[>", "<ctrl-shift-alt-[>":
 			return KeyComb{Mod: ModCtrlAlt, Ch: '{'}, nil
-		case "<c-s-a-\\>", "<ctrl-shift-alt-\\>":
+		case "<c-s-a-\\\\>", "<ctrl-shift-alt-\\\\>":
 			return KeyComb{Mod: ModCtrlAlt, Ch: '|'}, nil
 		case "<c-s-a-]>", "<ctrl-shift-alt-]>":
 			return KeyComb{Mod: ModCtrlAlt, Ch: '}'}, nil
@@ -1562,7 +1633,7 @@ func ParseKey(str string) (KeyComb, error) {
 			return KeyComb{Mod: ModCtrlMeta, Ch: 'Z'}, nil
 		case "<c-s-m-[>", "<ctrl-shift-meta-[>":
 			return KeyComb{Mod: ModCtrlMeta, Ch: '{'}, nil
-		case "<c-s-m-\\>", "<ctrl-shift-meta-\\>":
+		case "<c-s-m-\\\\>", "<ctrl-shift-meta-\\\\>":
 			return KeyComb{Mod: ModCtrlMeta, Ch: '|'}, nil
 		case "<c-s-m-]>", "<ctrl-shift-meta-]>":
 			return KeyComb{Mod: ModCtrlMeta, Ch: '}'}, nil
@@ -1726,7 +1797,7 @@ func ParseKey(str string) (KeyComb, error) {
 			return KeyComb{Mod: ModCtrlAltMeta, Ch: 'z'}, nil
 		case "<c-a-m-[>", "<ctrl-alt-meta-[>":
 			return KeyComb{Mod: ModCtrlAltMeta, Ch: '['}, nil
-		case "<c-a-m-\\>", "<ctrl-alt-meta-\\>":
+		case "<c-a-m-\\\\>", "<ctrl-alt-meta-\\\\>":
 			return KeyComb{Mod: ModCtrlAltMeta, Ch: '\\'}, nil
 		case "<c-a-m-]>", "<ctrl-alt-meta-]>":
 			return KeyComb{Mod: ModCtrlAltMeta, Ch: ']'}, nil
@@ -1890,7 +1961,7 @@ func ParseKey(str string) (KeyComb, error) {
 			return KeyComb{Mod: ModMeta, Ch: 'Z'}, nil
 		case "<s-m-[>", "<shift-meta-[>":
 			return KeyComb{Mod: ModMeta, Ch: '{'}, nil
-		case "<s-m-\\>", "<shift-meta-\\>":
+		case "<s-m-\\\\>", "<shift-meta-\\\\>":
 			return KeyComb{Mod: ModMeta, Ch: '|'}, nil
 		case "<s-m-]>", "<shift-meta-]>":
 			return KeyComb{Mod: ModMeta, Ch: '}'}, nil
@@ -2054,7 +2125,7 @@ func ParseKey(str string) (KeyComb, error) {
 			return KeyComb{Mod: ModAltMeta, Ch: 'z'}, nil
 		case "<a-m-[>", "<alt-meta-[>":
 			return KeyComb{Mod: ModAltMeta, Ch: '['}, nil
-		case "<a-m-\\>", "<alt-meta-\\>":
+		case "<a-m-\\\\>", "<alt-meta-\\\\>":
 			return KeyComb{Mod: ModAltMeta, Ch: '\\'}, nil
 		case "<a-m-]>", "<alt-meta-]>":
 			return KeyComb{Mod: ModAltMeta, Ch: ']'}, nil
@@ -2218,7 +2289,7 @@ func ParseKey(str string) (KeyComb, error) {
 			return KeyComb{Mod: ModAltMeta, Ch: 'Z'}, nil
 		case "<a-s-m-[>", "<alt-shift-meta-[>":
 			return KeyComb{Mod: ModAltMeta, Ch: '{'}, nil
-		case "<a-s-m-\\>", "<alt-shift-meta-\\>":
+		case "<a-s-m-\\\\>", "<alt-shift-meta-\\\\>":
 			return KeyComb{Mod: ModAltMeta, Ch: '|'}, nil
 		case "<a-s-m-]>", "<alt-shift-meta-]>":
 			return KeyComb{Mod: ModAltMeta, Ch: '}'}, nil
@@ -2382,7 +2453,7 @@ func ParseKey(str string) (KeyComb, error) {
 			return KeyComb{Mod: ModAlt, Ch: 'Z'}, nil
 		case "<a-s-[>", "<alt-shift-[>":
 			return KeyComb{Mod: ModAlt, Ch: '{'}, nil
-		case "<a-s-\\>", "<alt-shift-\\>":
+		case "<a-s-\\\\>", "<alt-shift-\\\\>":
 			return KeyComb{Mod: ModAlt, Ch: '|'}, nil
 		case "<a-s-]>", "<alt-shift-]>":
 			return KeyComb{Mod: ModAlt, Ch: '}'}, nil
