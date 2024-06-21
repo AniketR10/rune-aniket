@@ -35,26 +35,25 @@ import (
 )
 
 const (
-	dimAlphaPerc float32 = 0.5
+	dimAlphaPerc    float32 = 0.5
+	longestLigature int     = 2
 )
 
 var ligatures = map[string]rune{
-	":=":  '≔',
-	"===": '≡',
-	"!=":  '≠',
-	"!==": '≢',
-	"<=":  '≤',
-	">=":  '≥',
-	"=>":  '⇒',
-	"->":  '→',
-	"<-":  '←',
-	"<>":  '≷',
+	":=": '≔',
+	"!=": '≠',
+	"<=": '≤',
+	">=": '≥',
+	"=>": '⇒',
+	"->": '→',
+	"<-": '←',
+	"<>": '≷',
 }
 
 type renderer struct {
 	frame            *ebiten.Image
 	fontManager      *font.Manager
-	font             Font
+	font             fontFace
 	opacity          float32
 	bgColor          color.Color
 	fgColor          color.Color
@@ -64,13 +63,24 @@ type renderer struct {
 	cursorForeground color.Color
 }
 
-type Font struct {
+type fontFace struct {
 	Regular    imagefont.Face
 	Bold       imagefont.Face
 	Italic     imagefont.Face
 	BoldItalic imagefont.Face
 	CellSize   font.CharSize
 	OffsetY    float64
+}
+
+func newFontFace(fontManager *font.Manager) fontFace {
+	return fontFace{
+		Regular:    fontManager.RegularFontFace(),
+		Bold:       fontManager.BoldFontFace(),
+		Italic:     fontManager.ItalicFontFace(),
+		BoldItalic: fontManager.BoldItalicFontFace(),
+		CellSize:   fontManager.CharSize(),
+		OffsetY:    fontManager.OffsetY(),
+	}
 }
 
 func newRenderer(
@@ -97,19 +107,12 @@ func newRenderer(
 	bgColors := ebiten.NewImage(imageWidth, imageHeight)
 	bgColors.Fill(bgColor)
 	return &renderer{
-		frame:       ebiten.NewImage(imageWidth, imageHeight),
-		fontManager: fontManager,
-		bgColor:     bgColor,
-		bgColors:    bgColors,
-		fgColor:     tcellToColor(defaultAttr.Fg, color.White, 1),
-		font: Font{
-			Regular:    fontManager.RegularFontFace(),
-			Bold:       fontManager.BoldFontFace(),
-			Italic:     fontManager.ItalicFontFace(),
-			BoldItalic: fontManager.BoldItalicFontFace(),
-			CellSize:   fontManager.CharSize(),
-			OffsetY:    fontManager.OffsetY(),
-		},
+		frame:            ebiten.NewImage(imageWidth, imageHeight),
+		fontManager:      fontManager,
+		bgColor:          bgColor,
+		bgColors:         bgColors,
+		fgColor:          tcellToColor(defaultAttr.Fg, color.White, 1),
+		font:             newFontFace(fontManager),
 		opacity:          backgroundOpacity,
 		enableLigatures:  enableLigatures,
 		cursorForeground: cursorForeground,
@@ -234,29 +237,7 @@ func (r *renderer) drawRow(
 func (r *renderer) handleLigatures(
 	cells [][]term.Cell, sx, sy int, face imagefont.Face, color color.Color,
 ) (length int) {
-	var candidate string
-	for x := sx; x <= sx+2; x++ {
-		if sy >= len(cells) || x >= len(cells[sy]) || cells[sy][x].Ch == 0 {
-			break
-		}
-		candidate += string(cells[sy][x].Ch)
-	}
-
-	for len(candidate) > 1 {
-		if ru, ok := ligatures[candidate]; ok {
-			// draw ligature
-			ligX := (float64(sx) * r.font.CellSize.X) + ((float64(len(candidate)-1) * r.font.CellSize.X) / 2)
-			ligY := float64(sy)*r.font.CellSize.Y + r.font.OffsetY
-			var opts ebiten.DrawImageOptions
-			opts.GeoM.Translate(ligX, ligY)
-			opts.ColorScale.ScaleWithColor(color)
-			text.DrawWithOptions(r.frame, string(ru), face, &opts)
-			return len(candidate)
-		}
-		candidate = candidate[:len(candidate)-1]
-	}
-
-	return 0
+	return handleLigatures(cells, sx, sy, face, color, r.font, r.frame)
 }
 
 func (r *renderer) renderCursor(
@@ -323,4 +304,35 @@ func tcellToColor(tcolor tcell.Color, def color.Color, opacity float32) color.Co
 	// TODO opacity
 	r, g, b := tcolor.TrueColor().RGB()
 	return color.RGBA{R: uint8(r), G: uint8(g), B: uint8(b), A: 255}
+}
+
+func handleLigatures(
+	cells [][]term.Cell, sx, sy int, face imagefont.Face, color color.Color,
+	font fontFace, frame *ebiten.Image,
+) (length int) {
+	var c [longestLigature]rune
+	candidate := c[:0]
+	for i := 0; i < longestLigature; i++ {
+		x := sx + i
+		if sy >= len(cells) || x >= len(cells[sy]) || cells[sy][x].Ch == 0 {
+			break
+		}
+		candidate = append(candidate, cells[sy][x].Ch)
+	}
+
+	for len(candidate) > 1 {
+		if ru, ok := ligatures[string(candidate)]; ok {
+			// draw ligature
+			ligX := (float64(sx) * font.CellSize.X) + ((float64(len(candidate)-1) * font.CellSize.X) / 2)
+			ligY := float64(sy)*font.CellSize.Y + font.OffsetY
+			var opts ebiten.DrawImageOptions
+			opts.GeoM.Translate(ligX, ligY)
+			opts.ColorScale.ScaleWithColor(color)
+			text.DrawWithOptions(frame, string(ru), face, &opts)
+			return len(candidate)
+		}
+		candidate = candidate[:len(candidate)-1]
+	}
+
+	return 0
 }
