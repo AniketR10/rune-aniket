@@ -45,11 +45,9 @@ steps:
   privileged: true
   environment:
     GOCACHE: /go/cache
-    DISPLAY: ':99.0'
   commands:
-  - Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
   - make debug
-  - make test CI="true" GOTESTFLAGS="-race -timeout 400s"
+  - xvfb-run make test CI="true" GOTESTFLAGS="-race -timeout 400s"
   volumes:
     - name: home
       path: /root
