@@ -82,8 +82,9 @@ func TestWriteFlush(t *testing.T) {
 
 func benchBufferWriter(b *testing.B, n int) {
 	width, height := n, n
+	writer := NewBufferWriter(context.Background(), width, height)
 	for i := 0; i < b.N; i++ {
-		writer := NewBufferWriter(context.Background(), width, height)
+		writer.Clear(term.Attributes{})
 		c := 'E'
 		for i := width - 1; i >= 0; i-- {
 			for j := height - 1; j >= 0; j-- {

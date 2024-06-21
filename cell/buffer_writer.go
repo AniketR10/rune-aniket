@@ -49,7 +49,10 @@ func NewBufferWriter(ctx context.Context, width, height int) *BufferWriter {
 func (w *BufferWriter) Init(ctx context.Context, width, height int) {
 	w.width, w.height = width, height
 	w.ctx = ctx
-	_ = w.Clear(term.Attributes{})
+	w.cells = make([][]term.Cell, w.height)
+	for i := 0; i < w.height; i++ {
+		w.cells[i] = make([]term.Cell, w.width)
+	}
 }
 
 // SetCell satisfies term.Writer
@@ -58,12 +61,7 @@ func (w *BufferWriter) SetCell(pos term.Coordinates, c term.Cell) {
 		return
 	}
 
-	w.cells[pos.Y][pos.X].Ch = c.Ch
-	w.cells[pos.Y][pos.X].Fg = c.Fg
-	w.cells[pos.Y][pos.X].Bg = c.Bg
-	w.cells[pos.Y][pos.X].Attrs = c.Attrs
-	w.cells[pos.Y][pos.X].Width = c.Width
-	w.cells[pos.Y][pos.X].Combining = c.Combining
+	w.cells[pos.Y][pos.X] = c
 }
 
 // UnionAttributes satisfies term.Writer
@@ -81,10 +79,11 @@ func (w *BufferWriter) Flush() error {
 }
 
 // Clear satisfies term.Writer
-func (w *BufferWriter) Clear(term.Attributes) error {
-	w.cells = make([][]term.Cell, w.height)
-	for i := 0; i < w.height; i++ {
-		w.cells[i] = make([]term.Cell, w.width)
+func (w *BufferWriter) Clear(attr term.Attributes) error {
+	for y, row := range w.cells {
+		for x := range row {
+			w.cells[y][x] = term.Cell{Attributes: attr}
+		}
 	}
 	return nil
 }
