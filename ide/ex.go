@@ -263,7 +263,7 @@ func (e *ex) completeCommand(
 		if len(args) <= 1 {
 			n := len(e.comp.Browser().Tabs())
 			var tabs []string
-			for i := 0; i < n; i++{
+			for i := 0; i < n; i++ {
 				tabs = append(tabs, strconv.Itoa(i+1))
 			}
 			return iterator.FromSlice(tabs), "", nil
@@ -866,6 +866,30 @@ func (e *ex) newWindow(args ...string) error {
 		}
 	}
 	e.newWindowHandler(nil, orientation)
+	return nil
+}
+
+func (e *ex) macro(args ...string) error {
+	sequence := strings.Join(args, " ")
+	if sequence == "" {
+		return errors.New("expected one argument with the sequence of keys")
+	}
+	keys, err := term.ParseKeys(sequence)
+	if err != nil {
+		return fmt.Errorf("invalid syntax: %v", err)
+	}
+	ok := true
+	for _, keyComb := range keys {
+		ok = ok && e.publishEvent(term.Event{
+			Type: term.EventKey,
+			Ch:   keyComb.Ch,
+			Mod:  keyComb.Mod,
+			Key:  keyComb.Key,
+		})
+	}
+	if !ok {
+		return errors.New("could not publish all events to the event loop")
+	}
 	return nil
 }
 

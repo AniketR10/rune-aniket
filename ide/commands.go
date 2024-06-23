@@ -52,6 +52,19 @@ var (
 			},
 			handler: (*ex).renameTab,
 		},
+		"macro": {
+			man: textapi.CommandManual{
+				Summary: "Replay the given sequence of keys back into Ox's event loop " +
+					"as if the user had dispatched them. This allows for building macros that " +
+					"perform tasks that couldn't be accomplished with " +
+					"combinations of commands alone. For instance `macro :edit` opens " +
+					"the command prompt with a prepopulated command. The syntax of " +
+					"non-character keys is the same used in the `key_bindings` section " +
+					"of the config.",
+				Synopsis: "sequence",
+			},
+			handler: (*ex).macro,
+		},
 		"previousTab": {
 			man: textapi.CommandManual{
 				Summary: "Set the content of the current active window to the previous tab in the tabs list. " +

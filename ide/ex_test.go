@@ -1868,7 +1868,7 @@ func TestTerminalOnFocus(t *testing.T) {
 func TestSwitchToTab(t *testing.T) {
 	cases := []testutil.HandlerSequenceTestCase{
 		{":e hello.go>B:e world.go>",
-`┌────────────────────────────┐
+			`┌────────────────────────────┐
 │hello.go  world.go          │
 ├────────────────────────────┤
 │AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
@@ -1885,7 +1885,7 @@ func TestSwitchToTab(t *testing.T) {
 └────────────────────────────┘`},
 
 		{":switchToTab ",
-`┌────────────────────────────┐
+			`┌────────────────────────────┐
 │hello.go  world.go          │
 ├────────────────────────────┤
 │AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
@@ -1901,7 +1901,7 @@ func TestSwitchToTab(t *testing.T) {
 │AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
 └────────────────────────────┘`},
 		{"1>",
-`┌────────────────────────────┐
+			`┌────────────────────────────┐
 │hello.go  world.go          │
 ├────────────────────────────┤
 │BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
@@ -1917,7 +1917,7 @@ func TestSwitchToTab(t *testing.T) {
 │BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
 └────────────────────────────┘`},
 		{":switchToTab 3>",
-`┌────────────────────────────┐
+			`┌────────────────────────────┐
 │hello.go  world.go          │
 ├────────────────────────────┤
 │BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
@@ -1933,7 +1933,7 @@ func TestSwitchToTab(t *testing.T) {
 │BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
 └────────────────────────────┘`},
 		{":switchToTab 0>",
-`┌────────────────────────────┐
+			`┌────────────────────────────┐
 │The first tab is 1          │
 └━━━━━━━━━━━━━━━━━━━━━━━━━━━━┘
 │BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
@@ -1957,6 +1957,48 @@ func TestSwitchToTab(t *testing.T) {
 	defer b.Close()
 
 	testutil.TestHandlerSequence(t, b, 30, 15, cases)
+}
+
+func TestMacro(t *testing.T) {
+	cases := []testutil.HandlerSequenceTestCase{
+		{`:e hello.go>:macro 01234>`,
+			`┌────────────────────────────┐
+│hello.go                    │
+├────────────────────────────┤
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+└────────────────────────────┘`},
+	}
+
+	opts := []text.Option{
+		text.WithCommandKey(testCommandKey),
+	}
+	var e testEx
+	var i int
+	publishEvent := func(ev term.Event) bool {
+		if ev.Type == term.EventInterrupt {
+			return true
+		}
+		assert.Equal(t, string(ev.Ch), strconv.Itoa(i))
+		i++
+		return true
+	}
+
+	e = newExForTestingWithWorkspace(t, &testLoader{},
+		texttest.NopEditor(), vte.DefaultConfig(),
+		publishEvent, opts...)
+	defer e.Close()
+
+	testutil.TestHandlerSequence(t, e, 30, 15, cases)
 }
 
 func notificationsConfig() notifications.Config {
