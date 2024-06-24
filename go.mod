@@ -62,6 +62,7 @@ require (
 
 require (
 	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.0.1
+	github.com/hajimehoshi/bitmapfont/v3 v3.1.0
 	github.com/hajimehoshi/ebiten/v2 v2.7.4
 	github.com/pkoukk/tiktoken-go v0.1.6
 	github.com/pkoukk/tiktoken-go-loader v0.0.1
@@ -82,7 +83,7 @@ require (
 	github.com/dlclark/regexp2 v1.10.0 // indirect
 	github.com/ebitengine/gomobile v0.0.0-20240518074828-e86332849895 // indirect
 	github.com/ebitengine/hideconsole v1.0.0 // indirect
-	github.com/ebitengine/purego v0.7.0 // indirect
+	github.com/ebitengine/purego v0.8.0-alpha.2 // indirect
 	github.com/fatih/color v1.10.0 // indirect
 	github.com/gen2brain/malgo v0.11.21 // indirect
 	github.com/golang/groupcache v0.0.0-20200121045136-8c9f03a8e57e // indirect
@@ -121,3 +122,5 @@ require (
 )
 
 replace github.com/hashicorp/go-plugin => github.com/ernestrc/go-plugin v1.5.4
+
+replace github.com/hajimehoshi/ebiten/v2 => github.com/unstablebuild/ebiten/v2 v2.8.0-ub.1

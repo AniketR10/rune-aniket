@@ -2,7 +2,7 @@ GO=go
 CI ?= false
 GOTESTFLAGS ?= -race -timeout 120s
 GOTESTFLAGSNORACE = -timeout 120s
-GOFLAGS="-ldflags=-X main.Tag=$$(git describe --tags) -X main.Commit=$$(git rev-parse --short HEAD)"
+GOFLAGS="-tags=ebitensinglethread -ldflags=-X main.Tag=$$(git describe --tags) -X main.Commit=$$(git rev-parse --short HEAD)"
 UNAME := $(shell uname)
 
 BIN=bin

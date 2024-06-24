@@ -26,11 +26,11 @@ import (
 	"image/color"
 
 	"github.com/hajimehoshi/ebiten/v2"
-	"github.com/hajimehoshi/ebiten/v2/text"
-	"github.com/hajimehoshi/ebiten/v2/vector"
 	"github.com/unstablebuild/tcell/v3"
 	imagefont "golang.org/x/image/font"
 	"unstable.build/go-tui/term"
+	"unstable.build/go-tui/term/gui/drawrect"
+	"unstable.build/go-tui/term/gui/drawtext"
 	"unstable.build/go-tui/term/gui/font"
 )
 
@@ -61,6 +61,10 @@ type renderer struct {
 	enableLigatures  bool
 	cursorBackground color.Color
 	cursorForeground color.Color
+
+	bufPath     drawrect.Path
+	bufVertices []ebiten.Vertex
+	bufIndices  []uint16
 }
 
 type fontFace struct {
@@ -211,7 +215,7 @@ func (r *renderer) drawRow(
 
 		if cell.Attrs&tcell.AttrUnderline != 0 {
 			underlinePixelY := pixelY + r.font.CellSize.Y/2
-			vector.StrokeLine(r.frame, float32(pixelX), float32(underlinePixelY),
+			drawrect.DrawStroke(r.frame, float32(pixelX), float32(underlinePixelY),
 				float32(pixelX+r.font.CellSize.X),
 				float32(underlinePixelY), 2, fg, false)
 		}
@@ -226,11 +230,12 @@ func (r *renderer) drawRow(
 		}
 
 		// draw background
-		vector.DrawFilledRect(r.frame, float32(pixelX), float32(pixelY),
+		r.bufVertices, r.bufIndices = drawrect.DrawRect(&r.bufPath, r.bufVertices, r.bufIndices,
+			r.frame, float32(pixelX), float32(pixelY),
 			float32(r.font.CellSize.X), float32(r.font.CellSize.Y), bg, false)
 
 		// draw text
-		text.DrawWithOptions(r.frame, string(cell.Ch), useFace, &opts)
+		drawtext.DrawWithOptions(r.frame, string(cell.Ch), useFace, &opts)
 	}
 }
 
@@ -263,9 +268,13 @@ func (r *renderer) renderCursor(
 
 	// empty rect without focus
 	if !ebiten.IsFocused() {
-		vector.DrawFilledRect(r.frame, float32(pixelX), float32(pixelY),
+		r.bufVertices, r.bufIndices = drawrect.DrawRect(
+			&r.bufPath, r.bufVertices, r.bufIndices,
+			r.frame, float32(pixelX), float32(pixelY),
 			float32(pixelW), float32(pixelH), r.cursorBackground, false)
-		vector.DrawFilledRect(r.frame, float32(pixelX+1), float32(pixelY+1),
+		r.bufVertices, r.bufIndices = drawrect.DrawRect(
+			&r.bufPath, r.bufVertices, r.bufIndices,
+			r.frame, float32(pixelX+1), float32(pixelY+1),
 			float32(pixelW-2), float32(pixelH-2), r.cursorForeground, false)
 		return
 	}
@@ -273,19 +282,25 @@ func (r *renderer) renderCursor(
 	// draw the cursor shape
 	switch style {
 	case term.CursorStyleBlinkingBar, term.CursorStyleSteadyBar:
-		vector.DrawFilledRect(r.frame, float32(pixelX), float32(pixelY), 2,
+		r.bufVertices, r.bufIndices = drawrect.DrawRect(
+			&r.bufPath, r.bufVertices, r.bufIndices,
+			r.frame, float32(pixelX), float32(pixelY), 2,
 			float32(pixelH), r.cursorBackground, false)
 	case term.CursorStyleBlinkingUnderline, term.CursorStyleSteadyUnderline:
-		vector.DrawFilledRect(r.frame, float32(pixelX), float32(pixelY+pixelH-2),
+		r.bufVertices, r.bufIndices = drawrect.DrawRect(
+			&r.bufPath, r.bufVertices, r.bufIndices,
+			r.frame, float32(pixelX), float32(pixelY+pixelH-2),
 			float32(pixelW), 2, r.cursorBackground, false)
 	default:
-		vector.DrawFilledRect(r.frame, float32(pixelX), float32(pixelY),
+		r.bufVertices, r.bufIndices = drawrect.DrawRect(
+			&r.bufPath, r.bufVertices, r.bufIndices,
+			r.frame, float32(pixelX), float32(pixelY),
 			float32(pixelW), float32(pixelH), r.cursorBackground, false)
 		if cell.Ch != 0 {
 			var opts ebiten.DrawImageOptions
 			opts.GeoM.Translate(pixelX, textPixelY)
 			opts.ColorScale.ScaleWithColor(r.cursorForeground)
-			text.DrawWithOptions(r.frame, string(cell.Ch), useFace, &opts)
+			drawtext.DrawWithOptions(r.frame, string(cell.Ch), useFace, &opts)
 		}
 	}
 }
@@ -328,7 +343,7 @@ func handleLigatures(
 			var opts ebiten.DrawImageOptions
 			opts.GeoM.Translate(ligX, ligY)
 			opts.ColorScale.ScaleWithColor(color)
-			text.DrawWithOptions(frame, string(ru), face, &opts)
+			drawtext.DrawWithOptions(frame, string(ru), face, &opts)
 			return len(candidate)
 		}
 		candidate = candidate[:len(candidate)-1]
