@@ -46,25 +46,27 @@ var (
 
 const (
 	defaultWidth, defaultHeight = 800, 600
+	// tps                         = int(1*time.Second/defaultKeyPressRepeat) + 1
+	tps = 60
 )
 
 // GUI implements a graphical TUI runtime as an alternative runtime to what
 // the tui packages provides.
 type GUI struct {
-	ctx               context.Context
-	cancelCtx         func()
-	mu                sync.Locker
-	fontManager       *font.Manager
-	updateChan        chan term.Event
-	handler           tui.Handler
-	writer            *cell.BufferWriter
-	mouse             *mouse
-	input             *input
-	opacity           float32
-	enableLigatures   bool
-	cursorAttributes  term.Attributes
-	defaultAttr       term.Attributes
-	renderer          *renderer
+	ctx              context.Context
+	cancelCtx        func()
+	mu               sync.Locker
+	fontManager      *font.Manager
+	updateChan       chan term.Event
+	handler          tui.Handler
+	writer           *cell.BufferWriter
+	mouse            *mouse
+	input            *input
+	opacity          float32
+	enableLigatures  bool
+	cursorAttributes term.Attributes
+	defaultAttr      term.Attributes
+	renderer         *renderer
 
 	cursor struct {
 		pos   term.Coordinates
@@ -74,6 +76,7 @@ type GUI struct {
 
 	pendingEvents []term.Event
 	needsDraw     bool
+	needsRender   bool
 	width         int
 	height        int
 	iteration     int64
@@ -114,11 +117,11 @@ func New(handler tui.Handler, options ...Option) (*GUI, error) {
 func (g *GUI) Run(title string) error {
 	defer g.cancelCtx()
 
-	ebiten.SetScreenClearedEveryFrame(true)
+	ebiten.SetScreenClearedEveryFrame(false)
 	ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled)
 	ebiten.SetRunnableOnUnfocused(true)
-	ebiten.SetFPSMode(ebiten.FPSModeVsyncOffMinimum)
-	// ebiten.SetScreenFilterEnabled(false)
+	ebiten.SetVsyncEnabled(true)
+	ebiten.SetTPS(tps)
 
 	go g.consumeEvents()
 
@@ -132,18 +135,23 @@ func (g *GUI) Run(title string) error {
 
 // Draw satisfies ebiten.Game. It renders the terminal GUI to the ebtien window.
 func (g *GUI) Draw(screen *ebiten.Image) {
+	if !g.needsRender {
+		return
+	}
+	screen.Clear()
 	cells := g.writer.RawCells()
 	g.renderer.Draw(screen, cells, g.cursor.show, g.cursor.pos, g.cursor.style)
+	g.needsRender = false
 }
 
 // Update satisfies ebiten.Game. It's called every time a new frame is to be scheduled.
 func (g *GUI) Update() error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
 	mouseEv, mouseOk := g.mouse.processMouse()
 	keyEv, keyOk, needsResize := g.input.processEvents()
 	needsDraw := needsResize || g.needsDraw
-
-	g.mu.Lock()
-	defer g.mu.Unlock()
 
 	if needsResize {
 		g.resize(g.width, g.height, g.fontManager.DeviceScale())
@@ -211,6 +219,7 @@ func (g *GUI) drawHandler(ctx context.Context) {
 	g.handler.Draw(g.writer)
 	g.cursor.pos, g.cursor.style, g.cursor.show = g.handler.Cursor()
 	g.needsDraw = false
+	g.needsRender = true
 }
 
 // Layout satisfies ebiten.Game. It provides the terminal gui size in pixels.
@@ -250,6 +259,5 @@ func (g *GUI) consumeEvents() {
 		g.mu.Lock()
 		g.pendingEvents = append(g.pendingEvents, ev)
 		g.mu.Unlock()
-		ebiten.ScheduleFrame()
 	}
 }

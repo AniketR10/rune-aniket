@@ -33,7 +33,7 @@ import (
 	"unstable.build/go-tui/term/gui/font"
 )
 
-var (
+const (
 	defaultKeyPressDelay  = 500 * time.Millisecond
 	defaultKeyPressRepeat = 30 * time.Millisecond
 )
