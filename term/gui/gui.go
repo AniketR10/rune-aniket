@@ -182,14 +182,6 @@ func (g *GUI) Update() error {
 				// and a regular iteration loop.
 				ctx = g.ctx
 			}
-			if ev.UserFunc != nil {
-				ev.UserFunc()
-			}
-
-			// deliver user-payload to handler, even though it might
-			// result in redundant calls to Draw if there are events
-			// after this interrupt. This attempts to emulate
-			// the same behaviour as the TUI event loop.
 			g.drawHandler(ctx)
 			needsDraw = false
 			continue
@@ -255,6 +247,15 @@ func (g *GUI) consumeEvents() {
 		ev, ok := <-g.updateChan
 		if !ok {
 			return
+		}
+		// dispatch UserFunc outside of
+		// input processing to avoid input keys
+		// taking precedence over callbacks, thus
+		// yielding in a laggy experience for
+		// functionality that depends on UserFunc.
+		if ev.UserFunc != nil {
+			ev.UserFunc()
+			continue
 		}
 		g.mu.Lock()
 		g.pendingEvents = append(g.pendingEvents, ev)
