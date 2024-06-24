@@ -441,24 +441,24 @@ command:
       - searchFile
   # Configure bindings from key combinations to commands.
   key_bindings:
-    <a-w>: closeTab
-    <a-l>: nextTab
-    <a-h>: previousTab
-    <m-h>: focusPrevWindow
-    <m-l>: focusNextWindow
-    <m-j>: focusBelowWindow
-    <m-k>: focusAboveWindow
-    <m-w>: closeWindow
+    <m-w>: closeTab
+    <m-l>: nextTab
+    <m-h>: previousTab
+    <s-m-h>: focusPrevWindow
+    <s-m-l>: focusNextWindow
+    <s-m-j>: focusBelowWindow
+    <s-m-k>: focusAboveWindow
+    <s-m-w>: closeWindow
     <c-m-h>: changeSplitOrientation h
     <c-m-v>: changeSplitOrientation v
-    <c-j>: lspNextDiagnostic
-    <c-k>: lspPrevDiagnostic
-    <c-f>: toggleFullscreen
-    <c-t>: lspHover
-    <c-g>: lspGoToDefinition
-    <c-b>: lspFormat
-    <c-p>: searchFile
-    <c-\\>: searchText
+    <m-j>: lspNextDiagnostic
+    <m-k>: lspPrevDiagnostic
+    <m-f>: toggleFullscreen
+    <a-t>: lspHover
+    <m-g>: lspGoToDefinition
+    <m-b>: lspFormat
+    <m-p>: searchFile
+    <m-\\>: searchText
     # Aliases can also be mapped to key combinations
     <m-enter>: splitWindowTerminal
     gf: openFileUnderCursor
