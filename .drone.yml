@@ -52,18 +52,6 @@ steps:
     - name: home
       path: /root
 
-- name: crosscompile
-  image: us-central1-docker.pkg.dev/unstable-build-blue-dev/docker/go-tui-ci:latest
-  pull: always
-  privileged: true
-  environment:
-    GOCACHE: /go/cache
-  commands:
-  - make cross-compile
-  volumes:
-    - name: home
-      path: /root
-
 - name: slack
   image: plugins/slack
   when:
@@ -119,3 +107,44 @@ steps:
 trigger:
   event:
   - cron
+
+---
+kind: pipeline
+name: crosscompile
+type: docker
+
+steps:
+- name: prepare
+  image: us-central1-docker.pkg.dev/unstable-build-blue-dev/docker/go-tui-ci:latest
+  privileged: true
+  environment:
+    GIT_SSH_KEY:
+      from_secret: git_ssh_key
+  commands:
+  - source ci_prepare.sh
+  volumes:
+    - name: home
+      path: /root
+
+- name: crosscompile
+  image: us-central1-docker.pkg.dev/unstable-build-blue-dev/docker/go-tui-ci:latest
+  pull: always
+  privileged: true
+  environment:
+    GOCACHE: /go/cache
+  commands:
+  - make cross-compile
+  volumes:
+    - name: home
+      path: /root
+
+trigger:
+  event:
+  - cron
+
+image_pull_secrets:
+- dockerconfig
+
+volumes:
+  - name: home
+    temp: {}
