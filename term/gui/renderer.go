@@ -193,7 +193,7 @@ func (r *renderer) drawRow(
 		if !isBold && !isItalic {
 			useFace = r.font.Regular
 		} else if isBold && isItalic {
-			useFace = r.font.Italic
+			useFace = r.font.BoldItalic
 		} else if isBold {
 			useFace = r.font.Bold
 		} else if isItalic {
