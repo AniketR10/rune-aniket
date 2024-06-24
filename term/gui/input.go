@@ -81,8 +81,10 @@ func newInput(fontManager *font.Manager) *input {
 
 func (i *input) processEvents() (ev term.Event, ok, resize bool) {
 	now := i.input.Now()
-	defer clearPressedCache[rune](i.charPresses, now)
-	defer clearPressedCache[term.Modifier](i.modPresses, now)
+	defer clearPressedCache[rune](i.charPresses, now,
+		i.keyPressDelay, i.keyPressRepeat)
+	defer clearPressedCache[term.Modifier](i.modPresses, now,
+		i.keyPressDelay, i.keyPressRepeat)
 
 	var mod term.Modifier
 	mod = i.processModifiers()
@@ -106,22 +108,27 @@ func (i *input) processEvents() (ev term.Event, ok, resize bool) {
 		}
 	}
 
-	// preserve original modifier for dispatchers modifiers only
-	origMod := mod
-	ev, mod, ok = i.handleKeys(now, mod)
-	if ok {
-		// fill the modifiers cache to prevent miss-firing
-		_, _ = i.handleModifier(now, origMod)
+	// process all first so shouldFire populates the cache in any case
+	modEv, modOk := i.handleModifier(now, mod)
+	keyEv, mod, keyOk := i.handleKeys(now, mod)
+	chEv, chOk := i.handleChars(now, mod)
+
+	if keyOk {
+		ev = keyEv
+		ok = true
 		return
 	}
 
-	ev, ok = i.handleChars(now, mod)
-	if ok {
-		// fill the modifiers cache to prevent miss-firing
-		_, _ = i.handleModifier(now, origMod)
+	if chOk {
+		ev = chEv
+		ok = true
 		return
 	}
-	ev, ok = i.handleModifier(now, origMod)
+
+	if modOk {
+		ev = modEv
+		ok = true
+	}
 	return
 }
 
@@ -409,10 +416,17 @@ func removeShiftModifier(char, shiftChar rune, mod term.Modifier) (rune, term.Mo
 	}
 }
 
-func clearPressedCache[T comparable](cache map[T]press, now time.Time) {
+func clearPressedCache[T comparable](
+	cache map[T]press, now time.Time,
+	keyDelay, keyRepeat time.Duration,
+) {
 	// clear all chars that are not pressed now
 	for k, state := range cache {
-		if state.at != now {
+		timeout := keyDelay
+		if state.repeating {
+			timeout = keyRepeat
+		}
+		if state.at.Add(timeout).Before(now) {
 			delete(cache, k)
 		}
 	}

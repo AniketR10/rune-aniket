@@ -477,7 +477,7 @@ func TestInputFireDelay(t *testing.T) {
 			expectedEvents: []term.Event{
 				{}, {}, {Ch: 'A'},
 				{Ch: 'B'}, {}, {Mod: term.ModCtrl}, {}, {Mod: term.ModCtrl, Ch: 'C'},
-				{}, {Mod: term.ModCtrl},
+				{}, {},
 			},
 		},
 	}
@@ -517,33 +517,39 @@ func TestInputFireDelay(t *testing.T) {
 	}
 }
 
-func TestInputFireRepeat(t *testing.T) {
-	mock, input := newTestInput()
-	input.keyPressDelay = 1 * time.Second
-	input.keyPressRepeat = 500 * time.Millisecond
+func TestInputFireRepeatKey(t *testing.T) {
+	for _, key := range []ebiten.Key{ebiten.KeyA, ebiten.KeyMeta} {
+		mock, input := newTestInput()
+		input.keyPressDelay = 1 * time.Second
+		input.keyPressRepeat = 500 * time.Millisecond
 
-	mock.pressedKeys[ebiten.KeyA] = struct{}{}
-	actualEvent, ok, _ := input.processEvents()
-	require.True(t, ok)
-	assert.NotZero(t, actualEvent)
+		mock.pressedKeys[key] = struct{}{}
+		actualEvent, ok, _ := input.processEvents()
+		require.True(t, ok)
+		assert.NotZero(t, actualEvent)
 
-	_, ok, _ = input.processEvents()
-	require.False(t, ok)
+		_, ok, _ = input.processEvents()
+		require.False(t, ok)
+		_, ok, _ = input.processEvents()
+		require.False(t, ok)
+		_, ok, _ = input.processEvents()
+		require.False(t, ok)
 
-	time.Sleep(time.Duration(input.keyPressDelay) + 1)
+		time.Sleep(time.Duration(input.keyPressDelay) + 1)
 
-	actualEvent, ok, _ = input.processEvents()
-	require.True(t, ok)
-	assert.NotZero(t, actualEvent)
+		actualEvent, ok, _ = input.processEvents()
+		require.True(t, ok)
+		assert.NotZero(t, actualEvent)
 
-	_, ok, _ = input.processEvents()
-	require.False(t, ok)
+		_, ok, _ = input.processEvents()
+		require.False(t, ok)
 
-	time.Sleep(time.Duration(input.keyPressRepeat) + 1)
+		time.Sleep(time.Duration(input.keyPressRepeat) + 1)
 
-	actualEvent, ok, _ = input.processEvents()
-	require.True(t, ok)
-	assert.NotZero(t, actualEvent)
+		actualEvent, ok, _ = input.processEvents()
+		require.True(t, ok)
+		assert.NotZero(t, actualEvent)
+	}
 }
 
 func newTestInput() (*mockInputManager, *input) {
