@@ -23,6 +23,7 @@
 package vi
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -670,4 +671,41 @@ func TestExitVisualMode(t *testing.T) {
 		vi.Handle(term.Event{Type: term.EventKey, Ch: 'c', Mod: term.ModCtrl})
 		assert.Equal(t, vi.mode(), normalMode)
 	})
+}
+
+func TestNoModeHandlesNonCtrlModifiers(t *testing.T) {
+	vi := setupVi(t, "a", 2)
+	vi.Resize(4, 4)
+
+	modes := []viMode{
+		normalMode,
+		insertMode,
+		deleteMode,
+		gMode,
+		yankMode,
+		visualMode,
+		visualLineMode,
+		visualBlockMode,
+		replaceMode,
+		replaceOneMode,
+		searchMode,
+	}
+	modifiers := []term.Modifier{
+		term.ModAlt, term.ModShift, term.ModMeta,
+		term.ModCtrlShift, term.ModCtrlAlt, term.ModCtrlMeta,
+		term.ModCtrlShiftAlt, term.ModCtrlShiftMeta, term.ModCtrlAltMeta,
+		term.ModShiftMeta, term.ModAltMeta, term.ModAltShiftMeta,
+		term.ModAltShift,
+	}
+
+	for _, mod := range modifiers {
+		for _, mode := range modes {
+			t.Run(fmt.Sprintf("handle %v in %v", mod, mode), func(t *testing.T) {
+				vi.currMode = mode
+				exit, handled := vi.Handle(term.Event{Type: term.EventKey, Mod: mod, Ch: 'a'})
+				assert.False(t, exit)
+				assert.False(t, handled)
+			})
+		}
+	}
 }

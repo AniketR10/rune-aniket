@@ -606,6 +606,8 @@ func (vi *viHandlerImpl) handleVisual(ev term.Event) (quit, handled bool) {
 		default:
 			handled = false
 		}
+	default:
+		handled = false
 	}
 
 	if !handled {
@@ -820,8 +822,7 @@ func (vi *viHandlerImpl) Handle(ev term.Event) (quit, handled bool) {
 	case replaceMode:
 		quit, handled = vi.handleReplace(ev)
 	case replaceOneMode:
-		quit, _ = vi.handleReplace(ev)
-		handled = true
+		quit, handled = vi.handleReplace(ev)
 		vi.setNormalMode()
 	default:
 		panic(fmt.Sprintf("unknown mode: %d", vi.currMode))
