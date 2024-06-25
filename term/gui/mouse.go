@@ -68,8 +68,13 @@ func (m *mouse) processMouse() (ev term.Event, ok bool) {
 		return
 	}
 
-	ev = term.Event{Type: term.EventMouse}
 	pos := m.calculateCoordinates()
+	if pos.X >= m.width || pos.X < 0 || pos.Y >= m.height || pos.Y < 0 {
+		ok = false
+		return
+	}
+
+	ev = term.Event{Type: term.EventMouse}
 	ev.MouseX = pos.X
 	ev.MouseY = pos.Y
 
@@ -110,20 +115,8 @@ func (m *mouse) processMouse() (ev term.Event, ok bool) {
 }
 
 func (m *mouse) calculateCoordinates() (ret term.Coordinates) {
-	ret.X = int(math.Max(
-		0,
-		math.Min(
-			float64(m.width)-1,
-			math.Floor(float64(m.state.x)/m.fontManager.CharSize().X),
-		),
-	))
-	ret.Y = int(math.Max(
-		0,
-		math.Min(
-			float64(m.height)-1,
-			math.Floor(float64(m.state.y)/m.fontManager.CharSize().Y),
-		),
-	))
+	ret.X = int(math.Floor(float64(m.state.x) / m.fontManager.CharSize().X))
+	ret.Y = int(math.Floor(float64(m.state.y) / m.fontManager.CharSize().Y))
 	return
 }
 

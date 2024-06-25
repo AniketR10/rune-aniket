@@ -49,6 +49,34 @@ func TestMouseEvents(t *testing.T) {
 			expectedEvents: []term.Event{{}, {}},
 		},
 		{
+			description:    "does not dispatch if moved but outside of window on the x axis",
+			pressedButtons: [][]ebiten.MouseButton{{}, {}},
+			cursorPosition: []image.Point{{}, {X: defaultWidth}},
+			wheel:          []float64{0, 0},
+			expectedEvents: []term.Event{{}, {}},
+		},
+		{
+			description:    "does not dispatch if moved but outside of window on the x axis (negative)",
+			pressedButtons: [][]ebiten.MouseButton{{}, {}},
+			cursorPosition: []image.Point{{}, {X: -defaultWidth}},
+			wheel:          []float64{0, 0},
+			expectedEvents: []term.Event{{}, {}},
+		},
+		{
+			description:    "does not dispatch if moved but outside of window on the y axis",
+			pressedButtons: [][]ebiten.MouseButton{{}, {}},
+			cursorPosition: []image.Point{{}, {Y: defaultHeight}},
+			wheel:          []float64{0, 0},
+			expectedEvents: []term.Event{{}, {}},
+		},
+		{
+			description:    "does not dispatch if moved but outside of window on the y axis (negative)",
+			pressedButtons: [][]ebiten.MouseButton{{}, {}},
+			cursorPosition: []image.Point{{}, {Y: -defaultHeight}},
+			wheel:          []float64{0, 0},
+			expectedEvents: []term.Event{{}, {}},
+		},
+		{
 			description:    "dispatches mouse left click and subsequent release",
 			pressedButtons: [][]ebiten.MouseButton{{ebiten.MouseButtonLeft}, {ebiten.MouseButtonLeft}, {}},
 			cursorPosition: []image.Point{{}, {}, {}},
@@ -101,28 +129,6 @@ func TestMouseEvents(t *testing.T) {
 				{Type: term.EventMouse, MouseX: 11, MouseY: 5},
 				{Type: term.EventMouse},
 				{Type: term.EventMouse, MouseX: 11, MouseY: 5},
-			},
-		},
-		{
-			description:    "dispatches negative mouse cursor position changes as 0",
-			pressedButtons: [][]ebiten.MouseButton{{}, {}, {}},
-			cursorPosition: []image.Point{{X: -100, Y: -100}, {}, {X: -100, Y: -100}},
-			wheel:          []float64{0, 0, 0},
-			expectedEvents: []term.Event{
-				{Type: term.EventMouse},
-				{Type: term.EventMouse},
-				{Type: term.EventMouse},
-			},
-		},
-		{
-			description:    "dispatches out-of-bounds mouse cursor position changes as max cols/lines",
-			pressedButtons: [][]ebiten.MouseButton{{}, {}, {}},
-			cursorPosition: []image.Point{{X: 10000000, Y: 100000000}, {}, {X: 500000000, Y: 5000000000}},
-			wheel:          []float64{0, 0, 0},
-			expectedEvents: []term.Event{
-				{Type: term.EventMouse, MouseX: 87, MouseY: 34},
-				{Type: term.EventMouse},
-				{Type: term.EventMouse, MouseX: 87, MouseY: 34},
 			},
 		},
 		{
