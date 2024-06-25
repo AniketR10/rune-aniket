@@ -36,6 +36,7 @@ import (
 	"runtime"
 	"sync"
 	"syscall"
+	"time"
 
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
@@ -46,6 +47,7 @@ import (
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/component/shader"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/extension/process"
@@ -301,6 +303,7 @@ func run() int {
 	var eventLoopMutex sync.Mutex
 	opts := []ide.Option{
 		ide.WithExtensionsRunner(ide.FuncExtensionsRunner(extensionRunner)),
+		ide.WithInitShader(shader.Fade(), 4 * time.Second),
 		ide.WithLocker(&eventLoopMutex),
 		ide.WithConfigFilename(configFilename),
 		ide.WithDefaultWallpaper(wallpaper),

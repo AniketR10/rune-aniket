@@ -24,12 +24,14 @@ package ide
 
 import (
 	"sync"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/api/config"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser"
+	"unstable.build/go-tui/component/shader"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/term"
 )
@@ -125,6 +127,17 @@ func WithScheduleNextTick(scheduleFn func(func()) bool) Option {
 	}
 }
 
+// WithInitShader configures the IDE to initialize with the
+// given Shader animation.
+func WithInitShader(
+	shader shader.Shader, duration time.Duration,
+) Option {
+	return func(opts *options) {
+		opts.shader = shader
+		opts.shaderDuration = duration
+	}
+}
+
 type options struct {
 	publishEvent     EventPublisher
 	extensionRunner  ExtensionsRunner
@@ -135,6 +148,8 @@ type options struct {
 	defaultConfig    string
 	bell             func()
 	scheduleFn       func(func()) bool
+	shader           shader.Shader
+	shaderDuration   time.Duration
 }
 
 func defaultOptions() options {

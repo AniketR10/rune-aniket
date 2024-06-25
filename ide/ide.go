@@ -23,6 +23,7 @@
 package ide
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -37,6 +38,8 @@ import (
 	"unstable.build/go-tui/api/config"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser"
+	"unstable.build/go-tui/component/shader"
+	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/workspace"
 	"unstable.build/go-tui/workspace/ssh"
@@ -45,6 +48,7 @@ import (
 // IDE encapsulates the ability to run an IDE within a TUI session.
 type IDE struct {
 	ideConfig
+	options
 	locker           sync.Locker
 	workspaceManager *workspace.Manager
 	root             *workspaceManagerHandler
@@ -95,6 +99,8 @@ func (i *IDE) init(
 	for _, o := range opts {
 		o(&op)
 	}
+	i.options = op
+
 	configErr := loadConfig(&i.ideConfig, cfgfilename,
 		op.defaultWallpaper, op.defaultConfig, op.bell, op.scheduleFn)
 
@@ -206,6 +212,15 @@ func (i *IDE) publishEvent(ev term.Event) bool {
 	return i.publishEventFn(ev)
 }
 
+// Interrupt satisfies term.Interrupter
+func (i *IDE) Interrupt(ctx context.Context) error {
+	payload, _ := term.PayloadFromContext(ctx)
+	if !i.publishEvent(term.Event{Type: term.EventInterrupt, Raw: payload}) {
+		return errEventStreamNotReady
+	}
+	return nil
+}
+
 // Run initialzes the underlying terminal environment and runs
 // it with a workspace handler
 func (i *IDE) Run() error {
@@ -218,7 +233,15 @@ func (i *IDE) Run() error {
 	term.SetAttr(i.DefaultAttributes())
 	term.SetInputMode(i.ideConfig.inputMode())
 
-	err = tui.RunWithLocker(i.root, i.locker)
+	var root tui.Handler = i.root
+	if i.options.shader != nil {
+		const defaultShaderFPS = 30
+		shader := shader.New(i.root, i.options.shader,
+			i, defaultShaderFPS, i.options.shaderDuration)
+		root = handler.WithComponent(i.root, shader)
+	}
+
+	err = tui.RunWithLocker(root, i.locker)
 	if err != nil {
 		return fmt.Errorf("tui run: %w", err)
 	}
