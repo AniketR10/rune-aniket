@@ -364,9 +364,9 @@ func TestInputFireDelay(t *testing.T) {
 		{
 			description: "dispatches once a repeated key char, via char, " +
 				"different char dispatches new event",
-			pressedKeys:    [][]ebiten.Key{{}, {}},
-			pressedChars:   [][]rune{{'a'}, {'b'}},
-			expectedEvents: []term.Event{{Ch: 'a'}, {Ch: 'b'}},
+			pressedKeys:    [][]ebiten.Key{{}, {}, {}, {}},
+			pressedChars:   [][]rune{{'a'}, {'b'}, {'a'}, {'b'}},
+			expectedEvents: []term.Event{{Ch: 'a'}, {Ch: 'b'}, {Ch: 'a'}, {Ch: 'b'}},
 		},
 		{
 			description: "dispatches once a repeated key ctrl + char",
@@ -376,6 +376,20 @@ func TestInputFireDelay(t *testing.T) {
 			},
 			pressedChars:   [][]rune{{}, {}},
 			expectedEvents: []term.Event{{Mod: term.ModCtrl, Ch: 'a'}, {}},
+		},
+		{
+			description: "alternating modifiers",
+			pressedKeys: [][]ebiten.Key{
+				{ebiten.KeyControl},
+				{ebiten.KeyMeta},
+				{ebiten.KeyControl},
+				{ebiten.KeyMeta},
+			},
+			pressedChars: [][]rune{{}, {}, {}, {}},
+			expectedEvents: []term.Event{
+				{Mod: term.ModCtrl}, {Mod: term.ModMeta},
+				{Mod: term.ModCtrl}, {Mod: term.ModMeta},
+			},
 		},
 		{
 			description: "dispatches once a repeated key ctrl + char, a " +

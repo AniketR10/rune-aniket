@@ -57,9 +57,11 @@ type input struct {
 	keyPressDelay  time.Duration
 	keyPressRepeat time.Duration
 
-	keyPresses  map[ebiten.Key]press
-	charPresses map[rune]press
-	modPresses  map[term.Modifier]press
+	keyState    map[ebiten.Key]press
+	charState   map[rune]press
+	modState    map[term.Modifier]press
+	charCurrent map[rune]struct{}
+	modCurrent  map[term.Modifier]struct{}
 }
 
 type press struct {
@@ -69,9 +71,11 @@ type press struct {
 
 func newInput(fontManager *font.Manager) *input {
 	ret := new(input)
-	ret.keyPresses = make(map[ebiten.Key]press)
-	ret.charPresses = make(map[rune]press)
-	ret.modPresses = make(map[term.Modifier]press)
+	ret.keyState = make(map[ebiten.Key]press)
+	ret.charState = make(map[rune]press)
+	ret.modState = make(map[term.Modifier]press)
+	ret.modCurrent = make(map[term.Modifier]struct{})
+	ret.charCurrent = make(map[rune]struct{})
 	ret.fontManager = fontManager
 	ret.input = ebitenInputManager{}
 	ret.keyPressDelay = defaultKeyPressDelay
@@ -81,10 +85,8 @@ func newInput(fontManager *font.Manager) *input {
 
 func (i *input) processEvents() (ev term.Event, ok, resize bool) {
 	now := i.input.Now()
-	defer clearPressedCache[rune](i.charPresses, now,
-		i.keyPressDelay, i.keyPressRepeat)
-	defer clearPressedCache[term.Modifier](i.modPresses, now,
-		i.keyPressDelay, i.keyPressRepeat)
+	defer clearPressedCache[rune](i.charState, i.charCurrent, now)
+	defer clearPressedCache[term.Modifier](i.modState, i.modCurrent, now)
 
 	var mod term.Modifier
 	mod = i.processModifiers()
@@ -109,9 +111,9 @@ func (i *input) processEvents() (ev term.Event, ok, resize bool) {
 	}
 
 	// process all first so shouldFire populates the cache in any case
-	modEv, modOk := i.handleModifier(now, mod)
+	modEv, modOk := i.handleModifier(i.modCurrent, now, mod)
 	keyEv, mod, keyOk := i.handleKeys(now, mod)
-	chEv, chOk := i.handleChars(now, mod)
+	chEv, chOk := i.handleChars(i.charCurrent, now, mod)
 
 	if keyOk {
 		ev = keyEv
@@ -322,7 +324,13 @@ func (i *input) handleKeys(now time.Time, mod term.Modifier) (
 	return
 }
 
-func (i *input) handleChars(now time.Time, mod term.Modifier) (ev term.Event, ok bool) {
+func (i *input) handleChars(curr map[rune]struct{}, now time.Time, mod term.Modifier) (
+	ev term.Event, ok bool,
+) {
+	// compiler optimizes this
+	for k := range curr {
+		delete(curr, k)
+	}
 	// key-processed chars take preference over raw chars
 	if len(i.keyChars) == 0 {
 		i.chars = i.input.AppendInputChars(i.chars[:0])
@@ -336,8 +344,9 @@ func (i *input) handleChars(now time.Time, mod term.Modifier) (ev term.Event, ok
 		i.chars = append(i.chars, i.keyChars...)
 	}
 	for _, ch := range i.chars {
+		curr[ch] = struct{}{}
 		shouldFire := shouldFireKey[rune](
-			i.charPresses, now, i.keyPressDelay, i.keyPressRepeat, ch)
+			i.charState, now, i.keyPressDelay, i.keyPressRepeat, ch)
 		if shouldFire {
 			ev = term.Event{
 				Type: term.EventKey,
@@ -369,15 +378,17 @@ func (i *input) charPressedMap(
 
 func (i *input) shouldFireKey(now time.Time, key ebiten.Key) bool {
 	if !i.input.IsKeyPressed(key) {
-		delete(i.keyPresses, key)
+		delete(i.keyState, key)
 		return false
 	}
 
-	return shouldFireKey[ebiten.Key](i.keyPresses, now,
+	return shouldFireKey[ebiten.Key](i.keyState, now,
 		i.keyPressDelay, i.keyPressRepeat, key)
 }
 
-func (i *input) handleModifier(now time.Time, mod term.Modifier) (ev term.Event, ok bool) {
+func (i *input) handleModifier(curr map[term.Modifier]struct{}, now time.Time, mod term.Modifier) (
+	ev term.Event, ok bool,
+) {
 	// we do not dispatch shift on its own due to complications with
 	// pre-processed vs non pre-processed characters leading to miss-firing of single
 	// shift modifier events
@@ -386,7 +397,13 @@ func (i *input) handleModifier(now time.Time, mod term.Modifier) (ev term.Event,
 		return
 	}
 
-	shouldFire := shouldFireKey[term.Modifier](i.modPresses, now,
+	// compiler optimizes this
+	for k := range curr {
+		delete(curr, k)
+	}
+	curr[mod] = struct{}{}
+
+	shouldFire := shouldFireKey[term.Modifier](i.modState, now,
 		i.keyPressDelay, i.keyPressRepeat, mod)
 	if shouldFire {
 		ok = true
@@ -417,16 +434,11 @@ func removeShiftModifier(char, shiftChar rune, mod term.Modifier) (rune, term.Mo
 }
 
 func clearPressedCache[T comparable](
-	cache map[T]press, now time.Time,
-	keyDelay, keyRepeat time.Duration,
+	cache map[T]press, curr map[T]struct{}, now time.Time,
 ) {
 	// clear all chars that are not pressed now
-	for k, state := range cache {
-		timeout := keyDelay
-		if state.repeating {
-			timeout = keyRepeat
-		}
-		if state.at.Add(timeout).Before(now) {
+	for k := range cache {
+		if _, ok := curr[k]; !ok {
 			delete(cache, k)
 		}
 	}
