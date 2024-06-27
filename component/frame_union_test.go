@@ -501,6 +501,234 @@ AA
 	})
 }
 
+func TestDrawFrameUnionUnionNoFrame(t *testing.T) {
+	main := &TestComponent{Ch: 'A'}
+	one := NewFrame(&TestComponent{Ch: '1'})
+	two := NewFrame(&TestComponent{Ch: '2'})
+	three := NewFrame(&TestComponent{Ch: '3'})
+	four := NewFrame(&TestComponent{Ch: '4'})
+	five := NewFrame(&TestComponent{Ch: '5'})
+	six := NewFrame(&TestComponent{Ch: '6'})
+	seven := NewFrame(&TestComponent{Ch: '7'})
+	eight := NewFrame(&TestComponent{Ch: '8'})
+
+	suite := []struct {
+		description string
+		setup       func(f *FrameUnion)
+		expected    string
+	}{
+
+		{
+			description: "only no frame unions",
+			setup: func(f *FrameUnion) {
+				f.UnionTopFrame(four, 1, false)
+				f.UnionBottomFrame(two, 1, false)
+				f.UnionLeftFrame(six, 1, false)
+				f.UnionRightFrame(eight, 1, false)
+			},
+			expected: `
+44444444444444444444
+6┌────────────────┐8
+6│AAAAAAAAAAAAAAAA│8
+6│AAAAAAAAAAAAAAAA│8
+6│AAAAAAAAAAAAAAAA│8
+6│AAAAAAAAAAAAAAAA│8
+6│AAAAAAAAAAAAAAAA│8
+6│AAAAAAAAAAAAAAAA│8
+6│AAAAAAAAAAAAAAAA│8
+6│AAAAAAAAAAAAAAAA│8
+6│AAAAAAAAAAAAAAAA│8
+6│AAAAAAAAAAAAAAAA│8
+6│AAAAAAAAAAAAAAAA│8
+6│AAAAAAAAAAAAAAAA│8
+6└────────────────┘8
+22222222222222222222
+                    
+                    
+                    
+                    `,
+		},
+		{
+			description: "mixed top bottom unions, start with no frame, no left, or right",
+			setup: func(f *FrameUnion) {
+				f.UnionTopFrame(four, 1, false)
+				f.UnionTop(three, 3)
+				f.UnionBottomFrame(two, 1, false)
+				f.UnionBottom(one, 3)
+				f.UnionLeft(five, 3)
+				f.UnionRight(seven, 3)
+			},
+			expected: `
+44444444444444444444
+┌──────────────────┐
+│333333333333333333│
+├─┬──────────────┬─┤
+│5│AAAAAAAAAAAAAA│7│
+│5│AAAAAAAAAAAAAA│7│
+│5│AAAAAAAAAAAAAA│7│
+│5│AAAAAAAAAAAAAA│7│
+│5│AAAAAAAAAAAAAA│7│
+│5│AAAAAAAAAAAAAA│7│
+│5│AAAAAAAAAAAAAA│7│
+│5│AAAAAAAAAAAAAA│7│
+├─┴──────────────┴─┤
+│111111111111111111│
+└──────────────────┘
+22222222222222222222
+                    
+                    
+                    
+                    `,
+	},
+		{
+			description: "mixed top bottom unions, start with frame, no left, or right",
+			setup: func(f *FrameUnion) {
+				f.UnionTop(three, 3)
+				f.UnionTopFrame(four, 1, false)
+				f.UnionBottom(one, 3)
+				f.UnionBottomFrame(two, 1, false)
+				f.UnionLeft(five, 3)
+				f.UnionRight(seven, 3)
+			},
+			expected: `
+┌──────────────────┐
+│333333333333333333│
+└──────────────────┘
+44444444444444444444
+┌─┬──────────────┬─┐
+│5│AAAAAAAAAAAAAA│7│
+│5│AAAAAAAAAAAAAA│7│
+│5│AAAAAAAAAAAAAA│7│
+│5│AAAAAAAAAAAAAA│7│
+│5│AAAAAAAAAAAAAA│7│
+│5│AAAAAAAAAAAAAA│7│
+└─┴──────────────┴─┘
+22222222222222222222
+┌──────────────────┐
+│111111111111111111│
+└──────────────────┘
+                    
+                    
+                    
+                    `,
+	},
+		{
+			description: "mixed left right unions, start with no frame, no top , or bottom",
+			setup: func(f *FrameUnion) {
+				f.UnionTop(three, 3)
+				f.UnionBottom(one, 3)
+				f.UnionLeftFrame(four, 1, false)
+				f.UnionLeft(five, 3)
+				f.UnionRightFrame(two, 1, false)
+				f.UnionRight(seven, 3)
+			},
+			expected: `
+┌──────────────────┐
+│333333333333333333│
+└┬─┬────────────┬─┬┘
+4│5│AAAAAAAAAAAA│7│2
+4│5│AAAAAAAAAAAA│7│2
+4│5│AAAAAAAAAAAA│7│2
+4│5│AAAAAAAAAAAA│7│2
+4│5│AAAAAAAAAAAA│7│2
+4│5│AAAAAAAAAAAA│7│2
+4│5│AAAAAAAAAAAA│7│2
+4│5│AAAAAAAAAAAA│7│2
+4│5│AAAAAAAAAAAA│7│2
+4│5│AAAAAAAAAAAA│7│2
+┌┴─┴────────────┴─┴┐
+│111111111111111111│
+└──────────────────┘
+                    
+                    
+                    
+                    `,
+	},
+		{
+			description: "mixed left right unions, start with frame, top and bottom frame",
+			setup: func(f *FrameUnion) {
+				f.UnionTop(three, 3)
+				f.UnionBottom(one, 3)
+				f.UnionLeft(five, 3)
+				f.UnionLeftFrame(four, 1, false)
+				f.UnionRight(seven, 3)
+				f.UnionRightFrame(two, 1, false)
+			},
+			expected: `
+┌──────────────────┐
+│333333333333333333│
+├─┐4┌──────────┐2┌─┤
+│5│4│AAAAAAAAAA│2│7│
+│5│4│AAAAAAAAAA│2│7│
+│5│4│AAAAAAAAAA│2│7│
+│5│4│AAAAAAAAAA│2│7│
+│5│4│AAAAAAAAAA│2│7│
+│5│4│AAAAAAAAAA│2│7│
+│5│4│AAAAAAAAAA│2│7│
+│5│4│AAAAAAAAAA│2│7│
+│5│4│AAAAAAAAAA│2│7│
+│5│4│AAAAAAAAAA│2│7│
+├─┘4└──────────┘2└─┤
+│111111111111111111│
+└──────────────────┘
+                    
+                    
+                    
+                    `,
+	},
+		{
+			description: "mixed left right unions, start with frame, last top first bottom no frame",
+			setup: func(f *FrameUnion) {
+				f.UnionTopFrame(three, 1, false)
+				f.UnionBottomFrame(one, 1, false)
+				f.UnionLeft(five, 3)
+				f.UnionLeftFrame(four, 1, false)
+				f.UnionRight(seven, 3)
+				f.UnionRightFrame(two, 1, false)
+			},
+			expected: `
+33333333333333333333
+┌─┐4┌──────────┐2┌─┐
+│5│4│AAAAAAAAAA│2│7│
+│5│4│AAAAAAAAAA│2│7│
+│5│4│AAAAAAAAAA│2│7│
+│5│4│AAAAAAAAAA│2│7│
+│5│4│AAAAAAAAAA│2│7│
+│5│4│AAAAAAAAAA│2│7│
+│5│4│AAAAAAAAAA│2│7│
+│5│4│AAAAAAAAAA│2│7│
+│5│4│AAAAAAAAAA│2│7│
+│5│4│AAAAAAAAAA│2│7│
+│5│4│AAAAAAAAAA│2│7│
+│5│4│AAAAAAAAAA│2│7│
+└─┘4└──────────┘2└─┘
+11111111111111111111
+                    
+                    
+                    
+                    `,
+	},
+	}
+
+	for _, test := range suite {
+		t.Run(test.description, func(t *testing.T) {
+			main := NewFrame(main)
+			f := NewFrameUnion(main)
+			test.setup(f)
+			f.Resize(20, 16)
+
+			w := term.NewStringWriter(20, 20)
+			tests := []testutil.ComponentTestCase{
+				{Action: nil, Expected: test.expected},
+			}
+
+			testutil.TestComponent(t, f, w, tests)
+
+		})
+	}
+
+}
+
 func TestDrawFrameUnionWithFrameBottomOnly(t *testing.T) {
 	one := NewFrame(&TestComponent{Ch: 'X'})
 	main := NewFrame(&TestComponent{Ch: 'A'})

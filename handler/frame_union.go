@@ -51,28 +51,60 @@ func (u *FrameUnion) Init(main tui.Handler) {
 	u.FrameUnion.Init(main)
 }
 
-// UnionTop stacks top on top of the main component. This
+// UnionTop stacks top on top of the main handler. This
 // method panics if top is nil.
-func (u *FrameUnion) UnionTop(top tui.Handler, height int) {
+func (u *FrameUnion) UnionTop(top tui.Component, height int) {
 	u.FrameUnion.UnionTop(top, height)
 }
 
-// UnionBottom stacks bottom under of the main component. This
+// UnionTop stacks top on top of the main handler, and if
+// u.Frame is set to true and the given frame argument too, it will
+// union the frames of the adjacent handlers with the configured
+// union charset. This method panics if top is nil.
+func (u *FrameUnion) UnionTopFrame(top tui.Component, height int, frame bool) {
+	u.FrameUnion.UnionTopFrame(top, height, frame)
+}
+
+// UnionBottom stacks bottom under of the main handler. This
 // method panics if bottom is nil.
-func (u *FrameUnion) UnionBottom(bottom tui.Handler, height int) {
+func (u *FrameUnion) UnionBottom(bottom tui.Component, height int) {
 	u.FrameUnion.UnionBottom(bottom, height)
 }
 
-// UnionLeft stacks left to the left of the main component. This
+// UnionBottom stacks bottom under of the main handler, and if
+// u.Frame is set to true and the given frame argument too, it will
+// union the frames of the adjacent handlers with the configured
+// union charset. This method panics if bottom is nil.
+func (u *FrameUnion) UnionBottomFrame(bottom tui.Component, height int, frame bool) {
+	u.FrameUnion.UnionBottomFrame(bottom, height, frame)
+}
+
+// UnionLeft stacks left to the left of the main handler. This
 // method panics if left is nil.
-func (u *FrameUnion) UnionLeft(left tui.Handler, width int) {
+func (u *FrameUnion) UnionLeft(left tui.Component, width int) {
 	u.FrameUnion.UnionLeft(left, width)
 }
 
-// UnionRight stacks right to the right of the main component. This
+// UnionLeft stacks left to the left of the main handler, and if
+// u.Frame is set to true and the given frame argument too, it will
+// union the frames of the adjacent handlers with the configured
+// union charset. This method panics if left is nil.
+func (u *FrameUnion) UnionLeftFrame(left tui.Component, width int, frame bool) {
+	u.FrameUnion.UnionLeftFrame(left, width, frame)
+}
+
+// UnionRight stacks right to the right of the main handler. This
 // method panics if right is nil.
-func (u *FrameUnion) UnionRight(right tui.Handler, width int) {
+func (u *FrameUnion) UnionRight(right tui.Component, width int) {
 	u.FrameUnion.UnionRight(right, width)
+}
+
+// UnionRight stacks right to the right of the main handler, and if
+// u.Frame is set to true and the given frame argument too, it will
+// union the frames of the adjacent handlers with the configured
+// union charset. This method panics if right is nil.
+func (u *FrameUnion) UnionRightFrame(right tui.Component, width int, frame bool) {
+	u.FrameUnion.UnionRightFrame(right, width, frame)
 }
 
 // Resize satisfies tui.Handler.

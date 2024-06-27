@@ -629,6 +629,7 @@ func (c ideConfig) dim() (dim bool) {
 
 func (c ideConfig) frameUnionCharset() (cs component.FrameUnionCharSet) {
 	cs = component.DefaultFrameUnionCharSet()
+	cs.FrameCharSet = c.windowFrameCharset()
 	cfg, ok := c.browser()
 	if !ok {
 		return

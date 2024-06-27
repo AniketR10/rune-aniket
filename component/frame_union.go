@@ -30,6 +30,7 @@ import (
 // FrameUnionCharSet configures the characters used to draw the frame union
 // between the top and bottom components.
 type FrameUnionCharSet struct {
+	FrameCharSet
 	Left   rune
 	Right  rune
 	Top    rune
@@ -38,6 +39,7 @@ type FrameUnionCharSet struct {
 
 // DefaultFrameUnionCharSet returns the default FrameUnionCharSet used.
 func DefaultFrameUnionCharSet() (ret FrameUnionCharSet) {
+	ret.FrameCharSet = FrameCharSetDefault()
 	ret.Left = '├'
 	ret.Right = '┤'
 	ret.Top = '┬'
@@ -74,6 +76,7 @@ type FrameUnion struct {
 type frameVirtual struct {
 	size int
 	Virtual
+	frame bool
 }
 
 // NewFrameUnion allocates storage for a new FrameUnion and initializes it.
@@ -93,20 +96,44 @@ func (u *FrameUnion) Init(main tui.Component) {
 // UnionTop stacks top on top of the main component. This
 // method panics if top is nil.
 func (u *FrameUnion) UnionTop(top tui.Component, height int) {
+	u.UnionTopFrame(top, height, true)
+}
+
+// UnionTop stacks top on top of the main component, and if
+// u.Frame is set to true and the given frame argument too, it will
+// union the frames of the adjacent components with the configured
+// union charset. This method panics if top is nil.
+func (u *FrameUnion) UnionTopFrame(top tui.Component, height int, frame bool) {
 	if top == nil {
 		panic("invalid componen.Virtual")
 	}
-	u.top = append(u.top, &frameVirtual{Virtual: Virtual{C: top}, size: height})
+	u.top = append(u.top, &frameVirtual{
+		Virtual: Virtual{C: top},
+		size:    height,
+		frame:   frame,
+	})
 	u.Resize(u.width, u.height)
 }
 
 // UnionBottom stacks bottom under of the main component. This
 // method panics if bottom is nil.
 func (u *FrameUnion) UnionBottom(bottom tui.Component, height int) {
+	u.UnionBottomFrame(bottom, height, true)
+}
+
+// UnionBottom stacks bottom under of the main component, and if
+// u.Frame is set to true and the given frame argument too, it will
+// union the frames of the adjacent components with the configured
+// union charset. This method panics if bottom is nil.
+func (u *FrameUnion) UnionBottomFrame(bottom tui.Component, height int, frame bool) {
 	if bottom == nil {
 		panic("invalid componen.Virtual")
 	}
-	head := []*frameVirtual{{Virtual: Virtual{C: bottom}, size: height}}
+	head := []*frameVirtual{{
+		Virtual: Virtual{C: bottom},
+		size:    height,
+		frame:   frame,
+	}}
 	u.bottom = append(head, u.bottom...)
 	u.Resize(u.width, u.height)
 }
@@ -114,20 +141,44 @@ func (u *FrameUnion) UnionBottom(bottom tui.Component, height int) {
 // UnionLeft stacks left to the left of the main component. This
 // method panics if left is nil.
 func (u *FrameUnion) UnionLeft(left tui.Component, width int) {
+	u.UnionLeftFrame(left, width, true)
+}
+
+// UnionLeft stacks left to the left of the main component, and if
+// u.Frame is set to true and the given frame argument too, it will
+// union the frames of the adjacent components with the configured
+// union charset. This method panics if left is nil.
+func (u *FrameUnion) UnionLeftFrame(left tui.Component, width int, frame bool) {
 	if left == nil {
 		panic("invalid componen.Virtual")
 	}
-	u.left = append(u.left, &frameVirtual{Virtual: Virtual{C: left}, size: width})
+	u.left = append(u.left, &frameVirtual{
+		Virtual: Virtual{C: left},
+		size:    width,
+		frame:   frame,
+	})
 	u.Resize(u.width, u.height)
 }
 
 // UnionRight stacks right to the right of the main component. This
 // method panics if right is nil.
 func (u *FrameUnion) UnionRight(right tui.Component, width int) {
+	u.UnionRightFrame(right, width, true)
+}
+
+// UnionRight stacks right to the right of the main component, and if
+// u.Frame is set to true and the given frame argument too, it will
+// union the frames of the adjacent components with the configured
+// union charset. This method panics if right is nil.
+func (u *FrameUnion) UnionRightFrame(right tui.Component, width int, frame bool) {
 	if right == nil {
 		panic("invalid componen.Virtual")
 	}
-	head := []*frameVirtual{{Virtual: Virtual{C: right}, size: width}}
+	head := []*frameVirtual{{
+		Virtual: Virtual{C: right},
+		frame:   frame,
+		size:    width,
+	}}
 	u.right = append(head, u.right...)
 	u.Resize(u.width, u.height)
 }
@@ -184,114 +235,6 @@ func (u *FrameUnion) MainHeight() int {
 	return u.main.Height()
 }
 
-func (u *FrameUnion) resizeTopBottom(width, height int) (int, int) {
-	var frameOverlap int
-	if u.Frame {
-		frameOverlap = 1
-	}
-
-	var topHeight int
-	for _, top := range u.top {
-		top.Move(term.Coordinates{Y: topHeight})
-
-		height := top.size
-		if height > 0 {
-			topHeight += height - frameOverlap
-			top.Resize(width, height)
-		} else {
-			top.Resize(0, 0)
-		}
-	}
-
-	var bottomHeight int
-	for _, bottom := range u.bottom {
-		height := bottom.size
-		if height > 0 {
-			bottomHeight += height - frameOverlap
-		}
-	}
-
-	// if there's too many union components for available height
-	// do not draw them.
-	mainHeight := u.height - topHeight - bottomHeight
-	if mainHeight < 1+frameOverlap {
-		for _, top := range u.top {
-			top.Resize(0, 0)
-		}
-		for _, bottom := range u.bottom {
-			bottom.Resize(0, 0)
-		}
-		return u.height, 0
-	}
-
-	bottomOffset := topHeight + mainHeight - frameOverlap
-	for _, bottom := range u.bottom {
-		bottom.Move(term.Coordinates{Y: bottomOffset})
-		height := bottom.size
-		if height > 0 {
-			bottom.Resize(width, height)
-			bottomOffset += height - frameOverlap
-		} else {
-			bottom.Resize(0, 0)
-		}
-	}
-
-	return mainHeight, topHeight
-}
-
-func (u *FrameUnion) resizeLeftRight(width, height, topOffset int) (int, int) {
-	var frameOverlap int
-	if u.Frame {
-		frameOverlap = 1
-	}
-
-	var leftWidth int
-	for _, left := range u.left {
-		left.Move(term.Coordinates{X: leftWidth, Y: topOffset})
-
-		width := left.size
-		if width > 0 {
-			leftWidth += width - frameOverlap
-			left.Resize(width, height)
-		} else {
-			left.Resize(0, 0)
-		}
-	}
-
-	var rightWidth int
-	for _, right := range u.right {
-		width := right.size
-		if width > 0 {
-			rightWidth += width - frameOverlap
-		}
-	}
-
-	mainWidth := u.width - leftWidth - rightWidth
-	if mainWidth < 1+frameOverlap {
-		for _, left := range u.left {
-			left.Resize(0, 0)
-		}
-		for _, right := range u.right {
-			right.Resize(0, 0)
-		}
-		return u.width, 0
-	}
-
-	rightOffset := leftWidth + mainWidth - frameOverlap
-	for _, right := range u.right {
-		right.Move(term.Coordinates{Y: topOffset, X: rightOffset})
-		width := right.size
-		if width > 0 {
-			right.Resize(width, height)
-			rightOffset += width - frameOverlap
-		} else {
-			right.Resize(0, 0)
-		}
-	}
-
-	return mainWidth, leftWidth
-}
-
 // Resize satisfies tui.Component
 func (u *FrameUnion) Resize(width, height int) {
 	u.height, u.width = height, width
@@ -301,30 +244,6 @@ func (u *FrameUnion) Resize(width, height int) {
 
 	u.main.Resize(mainWidth, mainHeight)
 	u.main.Move(term.Coordinates{Y: topOffset, X: leftOffset})
-}
-
-func (u *FrameUnion) setVerticalUnionFrameCells(w term.Writer, v *frameVirtual, y int) {
-	if v.Height() == 0 || v.Width() == 0 {
-		return
-	}
-	w.SetCell(term.Coordinates{Y: y},
-		term.Cell{Width: 1, Ch: u.Left, Attributes: u.Attributes})
-	if u.width > 0 {
-		w.SetCell(term.Coordinates{X: u.width - 1, Y: y},
-			term.Cell{Width: 1, Ch: u.Right, Attributes: u.Attributes})
-	}
-}
-
-func (u *FrameUnion) setHorizontalUnionFrameCells(w term.Writer, v *frameVirtual, height, x, y int) {
-	if v.Height() == 0 || v.Width() == 0 {
-		return
-	}
-	w.SetCell(term.Coordinates{X: x, Y: y},
-		term.Cell{Width: 1, Ch: u.Top, Attributes: u.Attributes})
-	if height > 0 {
-		w.SetCell(term.Coordinates{X: x, Y: y + height - 1},
-			term.Cell{Width: 1, Ch: u.Bottom, Attributes: u.Attributes})
-	}
 }
 
 // Draw satisfies tui.Component
@@ -348,20 +267,237 @@ func (u *FrameUnion) Draw(w term.Writer) {
 		return
 	}
 
-	for _, left := range u.left {
+	u.drawUnionCells(w)
+}
+
+func (u *FrameUnion) drawUnionCells(w term.Writer) {
+	var prevStamp bool
+	for i, left := range u.left {
+		if !left.frame || (i < len(u.left)-1 && !u.left[i+1].frame) {
+			prevStamp = false
+			continue
+		}
+		topCh := u.Top
+		bottomCh := u.Bottom
 		pos := left.Position()
-		u.setHorizontalUnionFrameCells(w, left, u.main.Height(), pos.X+left.Width()-1, pos.Y)
+
+		if !prevStamp && i != 0 {
+			u.setHorizontalUnionFrameCells(w, topCh, bottomCh, left, u.main.Height(), pos.X, pos.Y)
+		}
+		prevStamp = true
+		u.setHorizontalUnionFrameCells(w, topCh, bottomCh, left, u.main.Height(), pos.X+left.Width()-1, pos.Y)
 	}
 
-	for _, right := range u.right {
+	prevStamp = false
+	for i := len(u.right) - 1; i >= 0; i-- {
+		right := u.right[i]
+		if !right.frame || (i > 0 && !u.right[i-1].frame) {
+			prevStamp = false
+			continue
+		}
 		pos := right.Position()
-		u.setHorizontalUnionFrameCells(w, right, u.main.Height(), pos.X, pos.Y)
-	}
-	for _, top := range u.top {
-		u.setVerticalUnionFrameCells(w, top, top.Position().Y+top.Height()-1)
+		topCh := u.Top
+		bottomCh := u.Bottom
+
+		if !prevStamp && i != len(u.right)-1 {
+			u.setHorizontalUnionFrameCells(w, topCh, bottomCh, right, u.main.Height(), pos.X+right.Width()-1, pos.Y)
+		}
+		prevStamp = true
+		u.setHorizontalUnionFrameCells(w, topCh, bottomCh, right, u.main.Height(), pos.X, pos.Y)
 	}
 
-	for _, bottom := range u.bottom {
-		u.setVerticalUnionFrameCells(w, bottom, bottom.Position().Y)
+	for i, top := range u.top {
+		if !top.frame || (i < len(u.top)-1 && !u.top[i+1].frame) {
+			continue
+		}
+		leftCh := u.Left
+		rightCh := u.Right
+		if i == len(u.top)-1 && len(u.left) != 0 && !u.left[0].frame {
+			leftCh = u.BottomLeft
+		}
+		if i == len(u.top)-1 && len(u.right) != 0 && !u.right[len(u.right)-1].frame {
+			rightCh = u.BottomRight
+		}
+		u.setVerticalUnionFrameCells(w, leftCh, rightCh, top, top.Position().Y+top.Height()-1)
 	}
+
+	for i, bottom := range u.bottom {
+		if !bottom.frame || (i > 0 && !u.bottom[i-1].frame) {
+			continue
+		}
+		leftCh := u.Left
+		rightCh := u.Right
+		if i == 0 && len(u.left) != 0 && !u.left[0].frame {
+			leftCh = u.TopLeft
+		}
+		if i == 0 && len(u.right) != 0 && !u.right[len(u.right)-1].frame {
+			rightCh = u.TopRight
+		}
+		u.setVerticalUnionFrameCells(w, leftCh, rightCh, bottom, bottom.Position().Y)
+	}
+}
+
+func (u *FrameUnion) setVerticalUnionFrameCells(
+	w term.Writer, left, right rune, v *frameVirtual, y int,
+) {
+	if v.Height() == 0 || v.Width() == 0 {
+		return
+	}
+	w.SetCell(term.Coordinates{Y: y},
+		term.Cell{Width: 1, Ch: left, Attributes: u.Attributes})
+	if u.width > 0 {
+		w.SetCell(term.Coordinates{X: u.width - 1, Y: y},
+			term.Cell{Width: 1, Ch: right, Attributes: u.Attributes})
+	}
+}
+
+func (u *FrameUnion) setHorizontalUnionFrameCells(
+	w term.Writer, top, bottom rune, v *frameVirtual, height, x, y int,
+) {
+	if v.Height() == 0 || v.Width() == 0 {
+		return
+	}
+	w.SetCell(term.Coordinates{X: x, Y: y},
+		term.Cell{Width: 1, Ch: top, Attributes: u.Attributes})
+	if height > 0 {
+		w.SetCell(term.Coordinates{X: x, Y: y + height - 1},
+			term.Cell{Width: 1, Ch: bottom, Attributes: u.Attributes})
+	}
+}
+
+func (u *FrameUnion) resizeTopBottom(totalWidth, totalHeight int) (int, int) {
+	var topOffset int
+	var prevOverlap bool
+	for _, top := range u.top {
+		if u.Frame && top.frame && prevOverlap {
+			topOffset--
+		}
+		prevOverlap = top.frame
+		coords := term.Coordinates{Y: topOffset}
+		top.Move(coords)
+
+		height := top.size
+		if height > 0 {
+			topOffset += height
+			top.Resize(totalWidth, height)
+		} else {
+			top.Resize(0, 0)
+		}
+	}
+
+	if prevOverlap && u.Frame && len(u.top) != 0 {
+		topOffset--
+	}
+
+	prevOverlap = u.Frame
+	var bottomHeight int
+	for _, bottom := range u.bottom {
+		if u.Frame && bottom.frame && prevOverlap {
+			bottomHeight--
+		}
+		prevOverlap = bottom.frame
+		height := bottom.size
+		if height > 0 {
+			bottomHeight += height
+		}
+	}
+
+	// if there's too many union components for available height
+	// do not draw them.
+	mainHeight := totalHeight - topOffset - bottomHeight
+	if (u.Frame && mainHeight < 2) || mainHeight < 1 {
+		for _, top := range u.top {
+			top.Resize(0, 0)
+		}
+		for _, bottom := range u.bottom {
+			bottom.Resize(0, 0)
+		}
+		return totalHeight, 0
+	}
+
+	bottomOffset := totalHeight - bottomHeight
+	prevOverlap = u.Frame
+	for _, bottom := range u.bottom {
+		if u.Frame && bottom.frame && prevOverlap {
+			bottomOffset--
+		}
+		prevOverlap = bottom.frame
+		coords := term.Coordinates{Y: bottomOffset}
+		bottom.Move(coords)
+		height := bottom.size
+		if height > 0 {
+			bottom.Resize(totalWidth, height)
+			bottomOffset += height
+		} else {
+			bottom.Resize(0, 0)
+		}
+	}
+
+	return mainHeight, topOffset
+}
+
+func (u *FrameUnion) resizeLeftRight(totalWidth, totalHeight, topOffset int) (int, int) {
+	var leftOffset int
+	var prevOverlap bool
+	for _, left := range u.left {
+		if u.Frame && left.frame && prevOverlap {
+			leftOffset--
+		}
+		prevOverlap = left.frame
+		left.Move(term.Coordinates{X: leftOffset, Y: topOffset})
+
+		width := left.size
+		if width > 0 {
+			leftOffset += width
+			left.Resize(width, totalHeight)
+		} else {
+			left.Resize(0, 0)
+		}
+	}
+	if prevOverlap && u.Frame && len(u.left) != 0 {
+		leftOffset--
+	}
+
+	prevOverlap = u.Frame
+	var rightWidth int
+	for _, right := range u.right {
+		if u.Frame && right.frame && prevOverlap {
+			rightWidth--
+		}
+		prevOverlap = right.frame
+		width := right.size
+		if width > 0 {
+			rightWidth += width
+		}
+	}
+
+	mainWidth := totalWidth - leftOffset - rightWidth
+	if (u.Frame && mainWidth < 2) || mainWidth < 1 {
+		for _, left := range u.left {
+			left.Resize(0, 0)
+		}
+		for _, right := range u.right {
+			right.Resize(0, 0)
+		}
+		return totalWidth, 0
+	}
+
+	rightOffset := totalWidth - rightWidth
+	prevOverlap = u.Frame
+	for _, right := range u.right {
+		if u.Frame && right.frame && prevOverlap {
+			rightOffset--
+		}
+		prevOverlap = right.frame
+		right.Move(term.Coordinates{Y: topOffset, X: rightOffset})
+		width := right.size
+		if width > 0 {
+			right.Resize(width, totalHeight)
+			rightOffset += width
+		} else {
+			right.Resize(0, 0)
+		}
+	}
+
+	return mainWidth, leftOffset
 }

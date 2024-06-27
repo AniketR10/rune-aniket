@@ -314,7 +314,19 @@ func TestConfigSetting(t *testing.T) {
 	assert.Equal(t, term.Attributes{Fg: tcell.ColorBlack, Bg: tcell.ColorYellow, Attrs: tcell.AttrBold},
 		cfg.commandOverlayManualAttr())
 
-	expectedFUCs := component.FrameUnionCharSet{Left: '┣', Right: '┫', Top: '┫', Bottom: '┫'}
+	expectedFUCs := component.DefaultFrameUnionCharSet()
+	expectedFUCs.HorizontalBottom = '━'
+	expectedFUCs.HorizontalTop = '━'
+	expectedFUCs.VerticalLeft = '┃'
+	expectedFUCs.VerticalRight = '┃'
+	expectedFUCs.TopLeft = '┏'
+	expectedFUCs.TopRight = '┓'
+	expectedFUCs.BottomLeft = '┗'
+	expectedFUCs.BottomRight = '┛'
+	expectedFUCs.Left = '┣'
+	expectedFUCs.Right = '┫'
+	expectedFUCs.Top = '┫'
+	expectedFUCs.Bottom = '┫'
 	assert.Equal(t, expectedFUCs, cfg.frameUnionCharset())
 
 	notifications := cfg.notificationsConfig()
