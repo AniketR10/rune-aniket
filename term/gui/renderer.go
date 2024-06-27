@@ -175,16 +175,21 @@ func (r *renderer) drawRow(
 	// draw text content of each cell in row
 	for viewX := 0; viewX < len(row); viewX++ {
 		cell := row[viewX]
-		// we don't need to draw empty cells
+
+		bg := tcellToColor(cell.Bg, defaultBackgroundColor, r.opacity)
+		pixelX := r.font.CellSize.X * float64(viewX)
+
+		// we don't need to draw empty cells, just draw background
 		if cell.Ch == 0 || cell.Ch == '\t' {
+			r.bufVertices, r.bufIndices = drawrect.DrawRect(&r.bufPath, r.bufVertices, r.bufIndices,
+				r.frame, float32(pixelX), float32(pixelY),
+				float32(r.font.CellSize.X), float32(r.font.CellSize.Y), bg, false)
 			continue
 		}
 
 		fg := tcellToColor(cell.Fg, defaultForegroundColor, r.opacity)
-		bg := tcellToColor(cell.Bg, defaultBackgroundColor, r.opacity)
 		isBold := cell.Attrs&tcell.AttrBold != 0
 		isItalic := cell.Attrs&tcell.AttrItalic != 0
-		pixelX := r.font.CellSize.X * float64(viewX)
 
 		var opts ebiten.DrawImageOptions
 		opts.GeoM.Translate(pixelX, textPixelY)
