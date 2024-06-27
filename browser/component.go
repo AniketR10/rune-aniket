@@ -230,7 +230,7 @@ func (c *Component) Init(config Config) {
 	c.tabs.SetBorder(config.WindowManagerConfig.Frame)
 
 	// use UnionTop instead of Bar because tabs already have their own frame
-	c.union.UnionTop(&c.tabs, c.barSize())
+	c.union.UnionTop(&c.tabs, c.tabsSize())
 
 	c.container.Init(&c.union, config.Notifications)
 }
@@ -682,34 +682,34 @@ func (c *Component) Floating(
 	return win
 }
 
-func (c *Component) barSize() int {
-	if c.config.Frame {
-		return 3
-	}
-	return 1
-}
-
 // Bar adds a bar to the orientation of the main window.
-func (c *Component) Bar(o browserapi.Orientation, h tui.Handler) {
-	if c.config.Frame {
+func (c *Component) Bar(cfg browserapi.BarConfig, h tui.Handler) {
+	if cfg.Size <= 0 {
+		panic("invalid bar size")
+	}
+	frame := (cfg.Frame == browserapi.BarFrameDefault && c.config.Frame) ||
+		cfg.Frame == browserapi.BarFrameAlways
+
+	if frame {
 		f := handler.NewFrame(h)
 		f.FrameCharSet = c.config.FrameCharSet
 		f.Attributes = c.config.FrameAttr
 		h = f
+		cfg.Size += 2
 	}
-	size := c.barSize()
-	if o == browserapi.OrientationDefault {
-		o = c.nextSplit
+
+	if cfg.Orientation == browserapi.OrientationDefault {
+		cfg.Orientation = c.nextSplit
 	}
-	switch o {
+	switch cfg.Orientation {
 	case browserapi.OrientationTop:
-		c.union.UnionTop(h, size)
+		c.union.UnionTopFrame(h, cfg.Size, frame)
 	case browserapi.OrientationBottom:
-		c.union.UnionBottom(h, size)
+		c.union.UnionBottomFrame(h, cfg.Size, frame)
 	case browserapi.OrientationLeft:
-		c.union.UnionLeft(h, size)
+		c.union.UnionLeftFrame(h, cfg.Size, frame)
 	case browserapi.OrientationRight:
-		c.union.UnionRight(h, size)
+		c.union.UnionRightFrame(h, cfg.Size, frame)
 	}
 }
 
@@ -992,4 +992,11 @@ func (c *Component) PauseNotifications() {
 // ResumeNotifications resumes auto-close on all open notifications.
 func (c *Component) ResumeNotifications() {
 	c.container.ResumeAll()
+}
+
+func (c *Component) tabsSize() int {
+	if c.config.Frame {
+		return 3
+	}
+	return 1
 }

@@ -605,8 +605,11 @@ func (c *Component) Split(
 }
 
 // Bar creates a new status bar with h's component and delegates handling of mouse events to h.
-func (c *Component) Bar(o browserapi.Orientation, h tui.Handler) error {
-	c.comp.Bar(o, h)
+func (c *Component) Bar(cfg browserapi.BarConfig, h tui.Handler) error {
+	if cfg.Size <= 0 {
+		return fmt.Errorf("invalid bar size: %d", cfg.Size)
+	}
+	c.comp.Bar(cfg, h)
 	return nil
 }
 

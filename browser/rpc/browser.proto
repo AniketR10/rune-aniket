@@ -45,8 +45,15 @@ message SplitResponse {
 }
 
 message BarRequest {
+	enum Frame {
+		Default = 0;
+		Always = 1;
+		Never = 2;
+	}
 	string channel_id = 1;
 	Orientation orientation = 2;
+	uint32 size = 3;
+	Frame frame = 4;
 }
 
 message BarResponse {

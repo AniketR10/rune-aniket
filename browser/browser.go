@@ -89,7 +89,7 @@ type WindowManager interface {
 	// Bar creates a status bar with Orientation and Handler.
 	// Bars differ from Split and Floating windows in that they can't
 	// be in focus and can only receive mouse events.
-	Bar(browserapi.Orientation, tui.Handler) error
+	Bar(browserapi.BarConfig, tui.Handler) error
 
 	// Window returns a window with the given window ID or returns false
 	// if now window with that ID exists.

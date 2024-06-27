@@ -176,7 +176,12 @@ func newFileBarEditorHandler(
 				return nil, err
 			}
 			comp := component.Sync(&ret.bar, &ret.bar.comp)
-			err = ret.wm.Bar(browserapi.OrientationBottom, handler.Nop(comp))
+			cfg := browserapi.BarConfig{
+				Frame:       browserapi.BarFrameDefault,
+				Size:        1,
+				Orientation: browserapi.OrientationBottom,
+			}
+			err = ret.wm.Bar(cfg, handler.Nop(comp))
 			if err != nil {
 				return nil, err
 			}

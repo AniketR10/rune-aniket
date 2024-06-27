@@ -187,23 +187,6 @@ type clientSplit func(cc WindowManagerClient,
 	ctx context.Context, req *SplitRequest,
 	opts ...grpc.CallOption) (*SplitResponse, error)
 
-func toProtoOrientation(o browserapi.Orientation) Orientation {
-	switch o {
-	case browserapi.OrientationDefault:
-		return Orientation_Default
-	case browserapi.OrientationTop:
-		return Orientation_Top
-	case browserapi.OrientationBottom:
-		return Orientation_Bottom
-	case browserapi.OrientationLeft:
-		return Orientation_Left
-	case browserapi.OrientationRight:
-		return Orientation_Right
-	default:
-		panic("invalid orientation")
-	}
-}
-
 func (c *Client) split(
 	split clientSplit, o browserapi.Orientation, in browserapi.Window, h browserapi.Handler,
 ) (browserapi.Window, error) {
@@ -254,12 +237,17 @@ func (c *Client) Window(uint64) (browserapi.Window, bool) {
 }
 
 // Bar satisfies Browser.
-func (c *Client) Bar(o browserapi.Orientation, h tui.Handler) error {
+func (c *Client) Bar(config browserapi.BarConfig, h tui.Handler) error {
 	channelID, srv, err := serveHandler(c.clientCtx, c.broker, browser.NopHandler(h))
 	if err != nil {
 		return fmt.Errorf("serve handler: %w", err)
 	}
-	req := BarRequest{ChannelId: channelID, Orientation: toProtoOrientation(o)}
+	req := BarRequest{
+		ChannelId:   channelID,
+		Orientation: toProtoOrientation(config.Orientation),
+		Size:        uint32(config.Size),
+		Frame:       toProtoFrame(config.Frame),
+	}
 	ctx := context.Background()
 	_, err = c.wm.Bar(ctx, &req)
 	runtime.KeepAlive(c)
@@ -440,4 +428,34 @@ func (c *Client) Close() (err error) {
 	}
 	runtime.SetFinalizer(c, nil)
 	return
+}
+
+func toProtoOrientation(o browserapi.Orientation) Orientation {
+	switch o {
+	case browserapi.OrientationDefault:
+		return Orientation_Default
+	case browserapi.OrientationTop:
+		return Orientation_Top
+	case browserapi.OrientationBottom:
+		return Orientation_Bottom
+	case browserapi.OrientationLeft:
+		return Orientation_Left
+	case browserapi.OrientationRight:
+		return Orientation_Right
+	default:
+		panic("invalid orientation")
+	}
+}
+
+func toProtoFrame(o browserapi.BarFrame) BarRequest_Frame {
+	switch o {
+	case browserapi.BarFrameDefault:
+		return BarRequest_Default
+	case browserapi.BarFrameAlways:
+		return BarRequest_Always
+	case browserapi.BarFrameNever:
+		return BarRequest_Never
+	default:
+		panic("invalid orientation")
+	}
 }

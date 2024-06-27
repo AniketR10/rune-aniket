@@ -169,7 +169,12 @@ func newGitHandler(
 				return nil, err
 			}
 			syncComp := component.Sync(&ret.scroll, component.WithLogging(&ret.scroll.scroll, log.Tracef))
-			err = ret.wm.Bar(browserapi.OrientationLeft, handler.Nop(syncComp))
+			cfg := browserapi.BarConfig{
+				Frame:       browserapi.BarFrameDefault,
+				Size:        1,
+				Orientation: browserapi.OrientationLeft,
+			}
+			err = ret.wm.Bar(cfg, handler.Nop(syncComp))
 			if err != nil {
 				return nil, err
 			}

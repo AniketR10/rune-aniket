@@ -199,22 +199,6 @@ func (s *Server) newRemoteResource(
 	return win.ID(), nil
 }
 
-func protoToModelOrientation(p Orientation) (o browserapi.Orientation) {
-	switch p {
-	case Orientation_Default:
-		o = browserapi.OrientationDefault
-	case Orientation_Top:
-		o = browserapi.OrientationTop
-	case Orientation_Bottom:
-		o = browserapi.OrientationBottom
-	case Orientation_Left:
-		o = browserapi.OrientationLeft
-	case Orientation_Right:
-		o = browserapi.OrientationRight
-	}
-	return
-}
-
 // Split satisfies BrowserServer
 func (s *Server) Split(
 	ctx context.Context, req *SplitRequest,
@@ -248,9 +232,14 @@ func (s *Server) Bar(
 		return nil, err
 	}
 
+	cfg := browserapi.BarConfig{}
+	cfg.Orientation = protoToModelOrientation(req.GetOrientation())
+	cfg.Size = int(req.GetSize())
+	cfg.Frame = protoToModelBarFrame(req.GetFrame())
+
 	s.browser.Lock()
 	defer s.browser.Unlock()
-	err = s.browser.Bar(protoToModelOrientation(req.GetOrientation()), handler)
+	err = s.browser.Bar(cfg, handler)
 	if err != nil {
 		return nil, err
 	}
@@ -487,4 +476,32 @@ func (s *Server) notify(
 		return nil, err
 	}
 	return new(NotifyResponse), nil
+}
+
+func protoToModelOrientation(p Orientation) (o browserapi.Orientation) {
+	switch p {
+	case Orientation_Default:
+		o = browserapi.OrientationDefault
+	case Orientation_Top:
+		o = browserapi.OrientationTop
+	case Orientation_Bottom:
+		o = browserapi.OrientationBottom
+	case Orientation_Left:
+		o = browserapi.OrientationLeft
+	case Orientation_Right:
+		o = browserapi.OrientationRight
+	}
+	return
+}
+
+func protoToModelBarFrame(p BarRequest_Frame) (o browserapi.BarFrame) {
+	switch p {
+	case BarRequest_Default:
+		o = browserapi.BarFrameDefault
+	case BarRequest_Always:
+		o = browserapi.BarFrameAlways
+	case BarRequest_Never:
+		o = browserapi.BarFrameNever
+	}
+	return
 }

@@ -97,7 +97,7 @@ func (b toBrowser) Floating(
 	return WindowFromAPIWindow{Win: retWin}, nil
 }
 
-func (b toBrowser) Bar(o browserapi.Orientation, h tui.Handler) error {
+func (b toBrowser) Bar(o browserapi.BarConfig, h tui.Handler) error {
 	return b.b.Bar(o, h)
 }
 

@@ -61,10 +61,14 @@ func TestWindowDraw(t *testing.T) {
 			require.NoError(t, err)
 			h := newTestHandler()
 			b.NewTab(uri1, "a", h, h)
-			b.Bar(browserapi.OrientationTop, newTestHandler())
-			b.Bar(browserapi.OrientationBottom, newTestHandler())
-			b.Bar(browserapi.OrientationLeft, newTestHandler())
-			b.Bar(browserapi.OrientationRight, newTestHandler())
+			cfg := browserapi.BarConfig{Size: 1, Orientation: browserapi.OrientationTop}
+			b.Bar(cfg, newTestHandler())
+			cfg.Orientation = browserapi.OrientationBottom
+			b.Bar(cfg, newTestHandler())
+			cfg.Orientation = browserapi.OrientationLeft
+			b.Bar(cfg, newTestHandler())
+			cfg.Orientation = browserapi.OrientationRight
+			b.Bar(cfg, newTestHandler())
 			b.Floating(newTestHandler(), component.FloatingConfig{
 				Alignment: component.SpanAlignmentHorizontallyCentered,
 			})

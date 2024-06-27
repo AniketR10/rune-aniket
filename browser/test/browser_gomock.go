@@ -285,7 +285,7 @@ func (m *MockWindowManager) EXPECT() *MockWindowManagerMockRecorder {
 }
 
 // Bar mocks base method.
-func (m *MockWindowManager) Bar(arg0 api.Orientation, arg1 tui.Handler) error {
+func (m *MockWindowManager) Bar(arg0 api.BarConfig, arg1 tui.Handler) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Bar", arg0, arg1)
 	ret0, _ := ret[0].(error)
@@ -629,7 +629,7 @@ func (m *MockBrowser) EXPECT() *MockBrowserMockRecorder {
 }
 
 // Bar mocks base method.
-func (m *MockBrowser) Bar(arg0 api.Orientation, arg1 tui.Handler) error {
+func (m *MockBrowser) Bar(arg0 api.BarConfig, arg1 tui.Handler) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Bar", arg0, arg1)
 	ret0, _ := ret[0].(error)

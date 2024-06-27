@@ -129,7 +129,7 @@ func TestIntegrationRace(t *testing.T) {
 		) *gomock.Call {
 			return mock.Bar(gomock.Any(), gomock.Any()).Return(nil)
 		}, func(ifc interface{}) error {
-			return ifc.(browserapi.WindowManager).Bar(browserapi.OrientationBottom, h)
+			return ifc.(browserapi.WindowManager).Bar(browserapi.BarConfig{Size: 1, Orientation: browserapi.OrientationBottom}, h)
 		}},
 		{extension.PermissionBrowserWindowManager, func(token extension.Grant, broker rpc.MuxBroker) (interface{}, error) {
 			return WindowManager(context.Background(), token, broker)

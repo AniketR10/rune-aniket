@@ -68,6 +68,23 @@ const (
 	OrientationRight
 )
 
+// BarFrame represents the different options for creating a bar.
+type BarFrame uint8
+
+const (
+	BarFrameDefault BarFrame = iota
+	BarFrameAlways
+	BarFrameNever
+)
+
+// BarConfig defines the configuration for a Bar
+// created bia WindowManager.Bar.
+type BarConfig struct {
+	Orientation Orientation
+	Size        int
+	Frame       BarFrame
+}
+
 // WindowManager is the interface that groups tile
 // window management methods.
 type WindowManager interface {
@@ -89,7 +106,7 @@ type WindowManager interface {
 	// Bar creates a status bar with Orientation and Handler.
 	// Bars differ from Split and Floating windows in that they can't
 	// be in focus and can only receive mouse events.
-	Bar(Orientation, tui.Handler) error
+	Bar(BarConfig, tui.Handler) error
 
 	// Tab creates a new tab with h and returns a handle that can be
 	// used with the rest of methods that take a browser.Handler.
