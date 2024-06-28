@@ -491,8 +491,9 @@ command:
       - bold
 
 browser:
+  tab_name_separator: '  '
   # Whether to add the URI of the workspace to the workspace bar
-  workspace_bar_uri: false
+  workspace_bar_uri: true
   window_manager:
     dim: true
     frame: *frame

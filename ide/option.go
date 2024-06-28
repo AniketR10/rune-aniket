@@ -170,6 +170,14 @@ func WithWorkspacesBarHeight(height int) Option {
 	}
 }
 
+// WithWorkspacesBarOffset defines the x offset in cells
+// of the rendered workspaces bar.
+func WithWorkspacesBarOffset(xoffset int) Option {
+	return func(opts *options) {
+		opts.workspacesBarOffset = xoffset
+	}
+}
+
 type options struct {
 	publishEvent        EventPublisher
 	extensionRunner     ExtensionsRunner
@@ -177,6 +185,7 @@ type options struct {
 	tabBarHeight        int
 	workspacesBarFrame  bool
 	workspacesBarHeight int
+	workspacesBarOffset int
 	locker              sync.Locker
 	extensions          map[string]Extension
 	workspaceConfig     string

@@ -112,7 +112,7 @@ func newWorkspaceManagerHandler(
 	builtinExtensions map[string]Extension,
 	reloadConfig func() (ideConfig, error), workspaceConfigFilename string,
 	tabBarOffset, tabBarHeight int,
-	workspacesBarHeight int, workspacesBarFrame bool,
+	workspacesBarHeight, workspacesBarOffset int, workspacesBarFrame bool,
 ) (*workspaceManagerHandler, error) {
 	ret := new(workspaceManagerHandler)
 
@@ -121,7 +121,7 @@ func newWorkspaceManagerHandler(
 		publishEvent, extensionRunner, locker, builtinExtensions,
 		reloadConfig, workspaceConfigFilename,
 		tabBarOffset, tabBarHeight,
-		workspacesBarHeight, workspacesBarFrame)
+		workspacesBarHeight, workspacesBarOffset, workspacesBarFrame)
 	if err != nil {
 		return nil, err
 	}
@@ -167,7 +167,7 @@ func (h *workspaceManagerHandler) init(
 	builtinExtensions map[string]Extension,
 	reloadConfig func() (ideConfig, error), workspaceConfigFilename string,
 	tabBarOffset, tabBarHeight int,
-	workspacesBarHeight int, workspacesBarFrame bool,
+	workspacesBarHeight, workspacesBarOffset int, workspacesBarFrame bool,
 ) error {
 	h.mu = locker
 	h.workspaces = make([]*workspaceHandler, 10)
@@ -241,7 +241,8 @@ func (h *workspaceManagerHandler) init(
 
 	if cwd == nil {
 		h.focusProxy.Target = h.focusHandler()
-		h.initTabs(cfg, workspacesBarHeight, workspacesBarFrame)
+		h.initTabs(cfg, workspacesBarHeight,
+			workspacesBarOffset, workspacesBarFrame)
 		return nil
 	}
 
@@ -267,7 +268,8 @@ func (h *workspaceManagerHandler) init(
 	}
 
 	h.focusProxy.Target = h.focusHandler()
-	h.initTabs(cfg, workspacesBarHeight, workspacesBarFrame)
+	h.initTabs(cfg, workspacesBarHeight,
+		workspacesBarOffset, workspacesBarFrame)
 	return nil
 }
 
@@ -902,10 +904,18 @@ type commandAllWorkspace struct {
 }
 
 func (h *workspaceManagerHandler) initTabs(
-	cfg ideConfig, workspacesBarHeight int, workspacesBarFrame bool,
+	cfg ideConfig, workspacesBarHeight, workspacesBarOffset int,
+	workspacesBarFrame bool,
 ) {
 	h.workspacesBarHeight = workspacesBarHeight
 	h.bar.SetBorder(workspacesBarFrame)
 	h.bar.SetNameSeparator(cfg.tabNameSeparator())
-	h.union.UnionBottomFrame(&h.bar, h.barSize(), workspacesBarFrame)
+	var bar tui.Handler = &h.bar
+	if workspacesBarOffset != 0 {
+		v := new(handler.Virtual)
+		v.C = &h.bar
+		v.Move(term.Coordinates{X: workspacesBarOffset})
+		bar = v
+	}
+	h.union.UnionBottomFrame(bar, h.barSize(), workspacesBarFrame)
 }
