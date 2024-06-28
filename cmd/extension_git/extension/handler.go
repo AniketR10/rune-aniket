@@ -202,7 +202,7 @@ func newGitHandler(
 		}
 	}
 
-	ret.git = newCmdGitService(ret.exec)
+	ret.git = newCmdGitService(ret.exec, cwd)
 
 	ret.gitDiffListID, err = pconfig.GetString("git_diff_list_id")
 	if err != nil {
@@ -332,11 +332,14 @@ func (h *gitEditorHandler) runDiff(ctx context.Context, ev textapi.Event) {
 	h.initBar(ev)
 
 	diff, err := h.git.diff(ev.URI.Path())
-	if errors.Is(err, errDiffNoChanges) {
-		h.log(log.TraceLevel, "reset git changes bar because no diffs found")
+	if err != nil {
+		h.resetBar()
 		h.interrupt(ctx)
+	}
+	if errors.Is(err, errDiffNoChanges) {
+		h.log(log.TraceLevel, "reset git bar because no diff changes: %v", err)
 		err = nil
-	} else {
+	} else if err != nil {
 		err = fmt.Errorf("git service diff: %w", err)
 	}
 
@@ -391,13 +394,6 @@ func (h *gitEditorHandler) handleEvents(cwd workspaceapi.URI) {
 		if log.IsLevelEnabled(log.TraceLevel) {
 			start = time.Now()
 			h.log(log.TraceLevel, "handle %v", ev.Type)
-		}
-
-		if cwd != (workspaceapi.URI{}) && !workspaceapi.HasPrefix(ev.URI, cwd) {
-			h.log(log.DebugLevel, "ignoring file that's not in active workspace %s", ev.URI)
-			h.resetBar()
-			h.interrupt(ctx)
-			continue
 		}
 
 		h.tracker.Handle(ctx, ev)

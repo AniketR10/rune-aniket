@@ -26,6 +26,8 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"path"
+	"path/filepath"
 	"strings"
 
 	"github.com/sourcegraph/go-diff/diff"
@@ -41,12 +43,14 @@ type gitService interface {
 // cmdGitService implements gitService using the local Git CLI installation.
 type cmdGitService struct {
 	exec workspaceapi.Executor
+	cwd  workspaceapi.URI
 }
 
 // newCmdGitService creates and initializes a cmdGitService.
-func newCmdGitService(exec workspaceapi.Executor) gitService {
+func newCmdGitService(exec workspaceapi.Executor, cwd workspaceapi.URI) gitService {
 	c := new(cmdGitService)
 	c.exec = exec
+	c.cwd = cwd
 	return c
 }
 
@@ -63,11 +67,16 @@ func (e *gitExecError) Error() string {
 }
 
 // git executes commands on the Git CLI.
-func (c *cmdGitService) git(args []string) (string, error) {
+func (c *cmdGitService) git(workDir string, args []string) (string, error) {
+	if err := validateWorkDir(workDir); err != nil {
+		return "", err
+	}
+
 	var stdout, stderr bytes.Buffer
 	ch := make(chan error)
 	cmd := workspaceapi.Cmd{
 		Path:    "git",
+		Dir:     workDir,
 		Args:    args,
 		Watcher: workspaceapi.ChanWatcher(ch),
 		Stdout:  &stdout,
@@ -83,6 +92,16 @@ func (c *cmdGitService) git(args []string) (string, error) {
 	return strings.TrimSpace(stdout.String()), nil
 }
 
+// repoPath satisfies gitService.
+func (c *cmdGitService) repoPath(workPath string) (string, error) {
+	p, err := c.git(workPath, []string{"rev-parse", "--show-toplevel"})
+	if err != nil {
+		return "", fmt.Errorf("git cmd: %w", err)
+	}
+
+	return p, err
+}
+
 var (
 	errDiffNoChanges = errors.New("diff no changes")
 )
@@ -92,8 +111,12 @@ func (c *cmdGitService) diff(workPath string) (*diff.FileDiff, error) {
 	if workPath == "" {
 		return nil, errors.New("empty git rel file path")
 	}
+	fileRelPath, repoPath, err := c.extractRelPath(workPath)
+	if err != nil {
+		return nil, fmt.Errorf("extract file rel path: %w", err)
+	}
 
-	out, err := c.git([]string{"diff", "-U0", workPath})
+	out, err := c.git(repoPath, []string{"diff", "-U0", fileRelPath})
 	if err != nil {
 		return nil, fmt.Errorf("git cmd: %w", err)
 	}
@@ -112,4 +135,48 @@ func (c *cmdGitService) diff(workPath string) (*diff.FileDiff, error) {
 	}
 
 	return diff, nil
+}
+
+// extractGitRelPath gives the file path relative to the repository root
+func (c *cmdGitService) extractRelPath(file string) (
+	fileRelPath string, repoPath string, err error,
+) {
+	if !filepath.IsAbs(file) {
+		file = path.Join(c.cwd.Path(), file)
+	}
+
+	// process file path since usually on macOS temp folders on
+	// `/var/folders/...` are living really under `/private/var/folders/...`
+	// (the former is symlinked).
+	file = filepath.Clean(file)
+
+	// if it's a directory already, `fileDir` will be set to `filePath`.
+	fileDir := filepath.Dir(file)
+
+	repoPath, err = c.repoPath(fileDir)
+	if err != nil {
+		return fileRelPath, repoPath, fmt.Errorf("repo path: %w", err)
+	}
+
+	fileRelPath, err = filepath.Rel(repoPath, file)
+	if err != nil {
+		return fileRelPath, repoPath, fmt.Errorf("file path rel: %w", err)
+	}
+
+	if fileRelPath == "" {
+		// this would be very strange... even filepath.Rel("/a/dir", "/a/dir")
+		// would give us `"."` and not `""` but better to be safe
+		return fileRelPath, repoPath, errors.New("file path rel empty result")
+	}
+
+	return fileRelPath, repoPath, nil
+}
+
+// validateWorkDir protects from problematic work directories.
+func validateWorkDir(workDir string) error {
+	if workDir == "" {
+		return errors.New("empty workDir")
+	}
+
+	return nil
 }

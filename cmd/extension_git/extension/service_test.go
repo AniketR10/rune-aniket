@@ -33,7 +33,6 @@ import (
 	"github.com/sourcegraph/go-diff/diff"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
 	"unstable.build/go-tui/api/config"
 	schemeapi "unstable.build/go-tui/api/scheme"
 	workspaceapi "unstable.build/go-tui/api/workspace"
@@ -112,7 +111,7 @@ func setupGitService(t *testing.T, cwd workspaceapi.URI) gitService {
 	gitCliExecutor := new(gitTestExecutor)
 	gitCliExecutor.schemeExecutor = scheme
 
-	return newCmdGitService(gitCliExecutor)
+	return newCmdGitService(gitCliExecutor, cwd)
 }
 
 func TestCmdGitDiff(t *testing.T) {
@@ -122,7 +121,6 @@ func TestCmdGitDiff(t *testing.T) {
 	tsuite := []struct {
 		name           string
 		expectErr      bool
-		chDir          string
 		workspaceCwd   string
 		diffFilePath   string
 		diffAssertions func(*diff.FileDiff)
@@ -134,14 +132,12 @@ func TestCmdGitDiff(t *testing.T) {
 			// ERROR: file diff reader: read from stdout: line 8, char 333:
 			// bad hunk line (does not start with ' ', '-', '+', or '\'): diff
 			// --git a/recipes/cucumber-raita.md b/recipes/cucumber-raita.md
-			chDir:          reposPath + "/gitproj3_multi-file-diff",
 			workspaceCwd:   reposPath + "/gitproj3_multi-file-diff",
 			diffFilePath:   reposPath + "/gitproj3_multi-file-diff/recipes",
 			diffAssertions: func(res *diff.FileDiff) {},
 		},
 		{
 			name:         "diff folder path within workspace with single file changed",
-			chDir:        reposPath + "/gitproj2_one-file-diff",
 			workspaceCwd: reposPath + "/gitproj2_one-file-diff",
 			diffFilePath: reposPath + "/gitproj2_one-file-diff/recipes/baba-ganoush.md",
 			diffAssertions: func(res *diff.FileDiff) {
@@ -153,7 +149,6 @@ func TestCmdGitDiff(t *testing.T) {
 		// -- TEST git diff on files
 		{
 			name:         "diff absolute file path within workspace",
-			chDir:        reposPath + "/gitproj2_one-file-diff",
 			workspaceCwd: reposPath + "/gitproj2_one-file-diff",
 			diffFilePath: reposPath + "/gitproj2_one-file-diff/recipes/baba-ganoush.md",
 			diffAssertions: func(res *diff.FileDiff) {
@@ -169,20 +164,16 @@ func TestCmdGitDiff(t *testing.T) {
 			},
 		},
 		{
-			name:      "diff absolute file path outside workspace",
-			expectErr: true,
-			// ERROR: git cmd: process exit with non-zero status (exit status
-			// 128) fatal: <tmpDir>/repos/gitproj3_multi-file-diff/recipes:
-			// '<tmpDir>/repos/gitproj3_multi-file-diff/recipes' is outside
-			// repository at '<tmpDir>/repos/gitproj2_one-file-diff'
-			chDir:          reposPath + "/gitproj2_one-file-diff",
-			workspaceCwd:   reposPath + "/gitproj2_one-file-diff",
-			diffFilePath:   reposPath + "/gitproj3_multi-file-diff/recipes/cucumber-raita.md",
-			diffAssertions: func(res *diff.FileDiff) {},
+			name:         "diff absolute file path outside workspace",
+			workspaceCwd: reposPath + "/gitproj2_one-file-diff",
+			diffFilePath: reposPath + "/gitproj3_multi-file-diff/recipes/cucumber-raita.md",
+			diffAssertions: func(res *diff.FileDiff) {
+				assert.Equal(t, "a/recipes/cucumber-raita.md", res.OrigName)
+				assert.Len(t, res.Hunks, 2)
+			},
 		},
 		{
 			name:         "diff relative file path within workspace",
-			chDir:        reposPath + "/gitproj2_one-file-diff",
 			workspaceCwd: reposPath + "/gitproj2_one-file-diff",
 			diffFilePath: "./recipes/baba-ganoush.md",
 			diffAssertions: func(res *diff.FileDiff) {
@@ -191,24 +182,20 @@ func TestCmdGitDiff(t *testing.T) {
 			},
 		},
 		{
-			name:      "diff relative file path outside workspace",
-			expectErr: true,
-			// ERROR: git cmd: process exit with non-zero status (exit status
-			// 128) fatal: <tmpDir>/repos/gitproj3_multi-file-diff/recipes:
-			// '<tmpDir>/repos/gitproj3_multi-file-diff/recipes' is outside
-			// repository at '<tmpDir>/repos/gitproj2_one-file-diff'
-
-			chDir:          reposPath + "/gitproj2_one-file-diff",
-			workspaceCwd:   reposPath + "/gitproj2_one-file-diff",
-			diffFilePath:   "../gitproj3_multi-file-diff/recipes/cucumber-raita.md",
-			diffAssertions: func(res *diff.FileDiff) {},
+			name:         "diff relative file path outside workspace",
+			workspaceCwd: reposPath + "/gitproj2_one-file-diff",
+			diffFilePath: "../gitproj3_multi-file-diff/recipes/cucumber-raita.md",
+			diffAssertions: func(res *diff.FileDiff) {
+				assert.Equal(t, "a/recipes/cucumber-raita.md", res.OrigName)
+				assert.Len(t, res.Hunks, 2)
+			},
 		},
 		{
 			name:      "diff file path no git repo",
 			expectErr: true,
-			// ERROR: git cmd: process exit with non-zero status (exit status
-			// 129) warning: Not a git repository. [...]
-			chDir:          reposPath + "/proj4_no-git",
+			// ERROR: extract file rel path: repo path: git cmd: process exit
+			// with non-zero status (exit status 128) fatal: not a git
+			// repository (or any of the parent directories): .git
 			workspaceCwd:   reposPath + "/proj4_no-git",
 			diffFilePath:   reposPath + "/proj4_no-git/file1.sh",
 			diffAssertions: func(res *diff.FileDiff) {},
@@ -216,11 +203,9 @@ func TestCmdGitDiff(t *testing.T) {
 		{
 			name:      "git-less absolute path above cwd repo",
 			expectErr: true,
-			// ERROR: git cmd: process exit with non-zero status (exit status
-			// 128) fatal: <tmpDir>/repos/top-level-file-sibling-to-repos.txt:
-			// '<tmpDir>/repos/top-level-file-sibling-to-repos.txt' is outside
-			// repository at '/<tmpDir>/repos/gitproj2_one-file-diff'
-			chDir:          reposPath + "/gitproj2_one-file-diff",
+			// ERROR: extract file rel path: repo path: git cmd: process exit
+			// with non-zero status (exit status 128) fatal: not a git
+			// repository (or any of the parent directories): .git
 			workspaceCwd:   reposPath + "/gitproj2_one-file-diff",
 			diffFilePath:   reposPath + "/top-level-file-sibling-to-repos.txt",
 			diffAssertions: func(res *diff.FileDiff) {},
@@ -228,11 +213,9 @@ func TestCmdGitDiff(t *testing.T) {
 		{
 			name:      "git-less relative path above cwd repo",
 			expectErr: true,
-			// ERROR: git cmd: process exit with non-zero status (exit status
-			// 128) fatal: ambiguous argument
-			// '../top-level-file-sibling-to-repos.txt': unknown revision or
-			// path not in the working tree.
-			chDir:          reposPath + "/gitproj2_one-file-diff",
+			// ERROR: extract file rel path: repo path: git cmd: process exit
+			// with non-zero status (exit status 128) fatal: not a git
+			// repository (or any of the parent directories): .git
 			workspaceCwd:   reposPath + "/gitproj2_one-file-diff",
 			diffFilePath:   "../top-level-file-sibling-to-repos.txt",
 			diffAssertions: func(res *diff.FileDiff) {},
@@ -241,35 +224,24 @@ func TestCmdGitDiff(t *testing.T) {
 			name:      "diff relative file path without changes",
 			expectErr: true,
 			// ERROR (`errDiffNoChanges`): diff no changes
-			chDir:          reposPath + "/gitproj2_one-file-diff",
 			workspaceCwd:   reposPath + "/gitproj2_one-file-diff",
 			diffFilePath:   "./README.txt",
 			diffAssertions: func(res *diff.FileDiff) {},
 		},
 		{
-			name:      "non-existent file",
+			name:      "non-existent absolute file",
 			expectErr: true,
-			// ERROR: git cmd: process exit with non-zero status (exit status
-			// 128) fatal: ambiguous argument 'this-file-does-not-exist.lol':
-			// unknown revision or path not in the working tree. [...]
-			chDir:          reposPath + "/gitproj2_one-file-diff",
+			// ERROR: extract file rel path: eval symlinks: lstat
+			// <tmpDir>/repos/this-file-does-not-exist.lol: no such file or
+			// directory
 			workspaceCwd:   reposPath + "/gitproj2_one-file-diff",
-			diffFilePath:   "this-file-does-not-exist.lol",
+			diffFilePath:   reposPath + "/this-file-does-not-exist.lol",
 			diffAssertions: func(res *diff.FileDiff) {},
 		},
 	}
 
 	for _, tcase := range tsuite {
 		t.Run(tcase.name, func(t *testing.T) {
-			cwdBefore, err := os.Getwd()
-			require.NoError(t, err)
-			defer os.Chdir(cwdBefore)
-
-			if tcase.chDir != "" {
-				err := os.Chdir(tcase.chDir)
-				require.NoError(t, err)
-			}
-
 			workspaceCwdURI, err := workspaceapi.ParseURI("file://" + tcase.workspaceCwd)
 			require.NoError(t, err)
 
