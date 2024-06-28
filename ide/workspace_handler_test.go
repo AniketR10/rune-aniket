@@ -34,6 +34,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/blue/iterator"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/api/config"
 	schemeapi "unstable.build/go-tui/api/scheme"
@@ -927,45 +928,64 @@ func TestExternalCommands(t *testing.T) {
 	err = m.subscribeCommand(textapi.CommandManual{Name: "ramon"},
 		text.FuncCommandHandler(func(context.Context, textapi.Command) (bool, error) {
 			return false, nil
-		}, nil))
+		}, func(ctx context.Context, name string, args []string) (
+			iterator.Iterator[string], string, error,
+		) {
+			return iterator.FromSlice([]string{"wasup", "wasep"}), "", nil
+		}))
 	require.NoError(t, err)
 
 	cases := []testutil.HandlerSequenceTestCase{
-		{":ramo 1", // existing workspace
-			`┌──────────────────┐
-│                  │
-├──────────────────┤
-│                  │
-│                  │
-│workspaceWallpaper│
-┌──────────────────┐
-│ramon 1▐          │
-│                  │
-└──────────────────┘`},
-		{fmt.Sprintf(":addWorkspace %s>:ramo 1", dir2), // new workspace
-			`┌──────────────────┐
-│                  │
-├──────────────────┤
-│                  │
-│                  │
-│workspaceWallpaper│
-┌──────────────────┐
-│ramon 1▐          │
-│                  │
-└──────────────────┘`},
-		{":swWo 8>:ramo 1234", // empty workspace
-			`┌──────────────────┐
-│                  │
-├──────────────────┤
-│                  │
-│                  │
-│workspaceWallpaper│
-┌──────────────────┐
-│ramon 1234▐       │
-│                  │
-└──────────────────┘`},
+		{":ramo w", // existing workspace
+			`┌────────────────────────────┐
+│                            │
+├────────────────────────────┤
+│                            │
+│                            │
+│                            │
+│                            │
+┌────────────────────────────┐
+│ramon w▐                    │
+│wasup                       │
+│wasep                       │
+└────────────────────────────┘
+│                            │
+│                            │
+└────────────────────────────┘`},
+		{fmt.Sprintf(":addWorkspace %s>:ramo w", dir2), // new workspace
+			`┌────────────────────────────┐
+│                            │
+├────────────────────────────┤
+│                            │
+│                            │
+│                            │
+│                            │
+┌────────────────────────────┐
+│ramon w▐                    │
+│wasup                       │
+│wasep                       │
+└────────────────────────────┘
+│                            │
+│                            │
+└────────────────────────────┘`},
+		{":swWo 8>:ramo w", // empty workspace
+			`┌────────────────────────────┐
+│                            │
+├────────────────────────────┤
+│                            │
+│                            │
+│                            │
+│                            │
+┌────────────────────────────┐
+│ramon w▐                    │
+│wasup                       │
+│wasep                       │
+└────────────────────────────┘
+│                            │
+│                            │
+└────────────────────────────┘`},
 	}
-	testutil.TestHandlerSequence(t, m, 20, 10, cases)
+	testutil.TestHandlerSequence(t, m, 30, 15, cases)
 
 	require.NoError(t, m.Close())
 }
