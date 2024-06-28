@@ -323,8 +323,7 @@ func TestInputFireOnce(t *testing.T) {
 			}
 			mock.pressedChars = test.pressedChars
 
-			ev, ok, resize := input.processEvents()
-			require.False(t, resize)
+			ev, ok := input.processEvents()
 			if test.expectedEvent.Type == 0 {
 				require.False(t, ok)
 			} else {
@@ -527,8 +526,7 @@ func TestInputFireDelay(t *testing.T) {
 				}
 				mock.pressedChars = pressedChars
 
-				actualEvent, ok, resize := input.processEvents()
-				require.False(t, resize, i)
+				actualEvent, ok := input.processEvents()
 				if expectedEvent.Key == 0 && expectedEvent.Ch == 0 && expectedEvent.Mod == 0 {
 					assert.False(t, ok, i)
 				} else {
@@ -551,29 +549,29 @@ func TestInputFireRepeatKey(t *testing.T) {
 		input.keyPressRepeat = 500 * time.Millisecond
 
 		mock.pressedKeys[key] = struct{}{}
-		actualEvent, ok, _ := input.processEvents()
+		actualEvent, ok := input.processEvents()
 		require.True(t, ok)
 		assert.NotZero(t, actualEvent)
 
-		_, ok, _ = input.processEvents()
+		_, ok = input.processEvents()
 		require.False(t, ok)
-		_, ok, _ = input.processEvents()
+		_, ok = input.processEvents()
 		require.False(t, ok)
-		_, ok, _ = input.processEvents()
+		_, ok = input.processEvents()
 		require.False(t, ok)
 
 		time.Sleep(time.Duration(input.keyPressDelay) + 1)
 
-		actualEvent, ok, _ = input.processEvents()
+		actualEvent, ok = input.processEvents()
 		require.True(t, ok)
 		assert.NotZero(t, actualEvent)
 
-		_, ok, _ = input.processEvents()
+		_, ok = input.processEvents()
 		require.False(t, ok)
 
 		time.Sleep(time.Duration(input.keyPressRepeat) + 1)
 
-		actualEvent, ok, _ = input.processEvents()
+		actualEvent, ok = input.processEvents()
 		require.True(t, ok)
 		assert.NotZero(t, actualEvent)
 	}

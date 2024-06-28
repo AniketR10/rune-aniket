@@ -49,23 +49,6 @@ func TestUpdate(t *testing.T) {
 		require.Equal(t, 1, called)
 	})
 
-	t.Run("Update calls Draw if user user meta -/+ to resize", func(t *testing.T) {
-		var called int
-		mock := mockHandler{assertDraw: func(w term.Writer) {
-			called++
-		}}
-		gui, input := newTestGUI(t, &mock)
-
-		require.NoError(t, gui.Update())
-		require.Equal(t, 1, called)
-
-		input.pressedKeys[ebiten.KeyMeta] = struct{}{}
-		input.pressedKeys[ebiten.KeyMinus] = struct{}{}
-
-		require.NoError(t, gui.Update())
-		require.Equal(t, 2, called)
-	})
-
 	t.Run("Update DOES call Draw if ebiten calls Layout with DIFFERENT height/width", func(t *testing.T) {
 		var called int
 		mock := mockHandler{assertDraw: func(w term.Writer) {

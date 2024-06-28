@@ -155,12 +155,9 @@ func (g *GUI) Update() error {
 	defer g.mu.Unlock()
 
 	mouseEv, mouseOk := g.mouse.processMouse()
-	keyEv, keyOk, needsResize := g.input.processEvents()
-	needsDraw := needsResize || g.needsDraw
+	keyEv, keyOk := g.input.processEvents()
+	needsDraw := g.needsDraw
 
-	if needsResize {
-		g.resize(g.width, g.height, g.fontManager.DeviceScale())
-	}
 	if mouseOk {
 		g.pendingEvents = append(g.pendingEvents, mouseEv)
 	}
@@ -271,13 +268,21 @@ func (g *GUI) SetWindowSize(width, height int) {
 // IncreaseFontSize increases the size of the rendered font,
 // making the interface appear bigger.
 func (g *GUI) IncreaseFontSize() error {
-	return g.fontManager.IncreaseSize()
+	err := g.fontManager.IncreaseSize()
+	if err == nil {
+		g.resize(g.width, g.height, g.fontManager.DeviceScale())
+	}
+	return err
 }
 
 // DecreaseFontSize increases the size of the rendered font,
 // making the interface appear bigger.
 func (g *GUI) DecreaseFontSize() error {
-	return g.fontManager.DecreaseSize()
+	err := g.fontManager.DecreaseSize()
+	if err == nil {
+		g.resize(g.width, g.height, g.fontManager.DeviceScale())
+	}
+	return err
 }
 
 // SetFont sets the font collection identified by the given family name.
@@ -285,7 +290,11 @@ func (g *GUI) DecreaseFontSize() error {
 // If the family is set to 'builtin', the GUI's builtin fallback font
 // is used.
 func (g *GUI) SetFont(family string) error {
-	return g.fontManager.SetFontByFamilyName(family)
+	err := g.fontManager.SetFontByFamilyName(family)
+	if err == nil {
+		g.resize(g.width, g.height, g.fontManager.DeviceScale())
+	}
+	return err
 }
 
 // AvailableFontFamilies returns an iterator with the available

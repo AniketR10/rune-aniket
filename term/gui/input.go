@@ -27,8 +27,6 @@ import (
 	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
-	log "github.com/sirupsen/logrus"
-	"github.com/unstablebuild/blue/logging"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/term/gui/font"
 )
@@ -83,32 +81,13 @@ func newInput(fontManager *font.Manager) *input {
 	return ret
 }
 
-func (i *input) processEvents() (ev term.Event, ok, resize bool) {
+func (i *input) processEvents() (ev term.Event, ok bool) {
 	now := i.input.Now()
 	defer clearPressedCache[rune](i.charState, i.charCurrent, now)
 	defer clearPressedCache[term.Modifier](i.modState, i.modCurrent, now)
 
 	var mod term.Modifier
 	mod = i.processModifiers()
-	switch mod {
-	case term.ModMeta:
-		if i.input.IsKeyPressed(ebiten.KeyMinus) {
-			err := i.fontManager.DecreaseSize()
-			if err != nil {
-				i.log(log.ErrorLevel, "decrease font size: %v", err)
-			}
-			resize = true
-			return
-		}
-		if i.input.IsKeyPressed(ebiten.KeyEqual) {
-			err := i.fontManager.IncreaseSize()
-			if err != nil {
-				i.log(log.ErrorLevel, "increase font size: %v", err)
-			}
-			resize = true
-			return
-		}
-	}
 
 	// process all first so shouldFire populates the cache in any case
 	modEv, modOk := i.handleModifier(i.modCurrent, now, mod)
@@ -883,8 +862,4 @@ func getCharEscapeSequence(ch rune, mod term.Modifier) []byte {
 	default:
 		return nil
 	}
-}
-
-func (e *input) log(level log.Level, msg string, args ...interface{}) {
-	log.WithField(logging.KeyClass, "gui").Logf(level, msg, args...)
 }
