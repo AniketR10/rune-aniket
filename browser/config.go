@@ -88,8 +88,10 @@ func NopWallpaper() Wallpaper {
 type Config struct {
 	Wallpaper Wallpaper
 
-	FocusTabAttr    term.Attributes
-	NonFocusTabAttr term.Attributes
+	FocusTabAttr     term.Attributes
+	NonFocusTabAttr  term.Attributes
+	TabBarOffset     int
+	TabNameSeparator string
 
 	PromptConfig
 

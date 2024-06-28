@@ -75,6 +75,7 @@ type workspaceManagerHandler struct {
 	publishEvent      func(term.Event) bool
 	extensionRunner   ExtensionsRunner
 	sixDir            string
+	tabBarOffset      int
 	builtinExtensions map[string]Extension
 	// this is the name of of the file to be expected in workspace folders
 	workspaceConfigFilename string
@@ -108,13 +109,14 @@ func newWorkspaceManagerHandler(
 	extensionRunner ExtensionsRunner, locker sync.Locker,
 	builtinExtensions map[string]Extension,
 	reloadConfig func() (ideConfig, error), workspaceConfigFilename string,
+	tabBarOffset int,
 ) (*workspaceManagerHandler, error) {
 	ret := new(workspaceManagerHandler)
 
 	err := ret.init(initial, homeDirUri, manager,
 		cfg, recfilename, filenames, sixDir,
 		publishEvent, extensionRunner, locker, builtinExtensions,
-		reloadConfig, workspaceConfigFilename)
+		reloadConfig, workspaceConfigFilename, tabBarOffset)
 	if err != nil {
 		return nil, err
 	}
@@ -159,6 +161,7 @@ func (h *workspaceManagerHandler) init(
 	extensionRunner ExtensionsRunner, locker sync.Locker,
 	builtinExtensions map[string]Extension,
 	reloadConfig func() (ideConfig, error), workspaceConfigFilename string,
+	tabBarOffset int,
 ) error {
 	h.mu = locker
 	h.workspaces = make([]*workspaceHandler, 10)
@@ -178,6 +181,7 @@ func (h *workspaceManagerHandler) init(
 	}
 	h.storage = storage
 
+	h.tabBarOffset = tabBarOffset
 	globalOpts := h.textOpts(cfg)
 	ed, err := h.newEditor(cfg)
 	if err != nil {
@@ -538,6 +542,8 @@ func (h *workspaceManagerHandler) textOpts(cfg ideConfig) []text.Option {
 		text.WithCommandAliases(cfg.commandAliases()),
 		text.WithPromptConfig(cfg.promptConfig()),
 		text.WithEventPublisher(h.publishEvent),
+		text.WithTabBarOffset(h.tabBarOffset),
+		text.WithTabNameSeparator(cfg.tabNameSeparator()),
 	}
 
 	for seq, cmd := range cfg.commandKeyMappings() {

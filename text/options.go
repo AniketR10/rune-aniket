@@ -130,6 +130,22 @@ func WithCommandKey(event term.KeyComb) Option {
 	}
 }
 
+// WithTabBarOffset defines the x offset for
+// rendering the tab bar.
+func WithTabBarOffset(offset int) Option {
+	return func(cfg *Config) {
+		cfg.TabBarOffset = offset
+	}
+}
+
+// WithTabNameSeparator defines an alternate separator
+// of tab names. By default it's two spaces.
+func WithTabNameSeparator(sep string) Option {
+	return func(cfg *Config) {
+		cfg.TabNameSeparator = sep
+	}
+}
+
 // WithWallpaper sets the starting buffer default text wallpaper.
 func WithWallpaper(wallpaper browser.Wallpaper) Option {
 	return func(cfg *Config) {

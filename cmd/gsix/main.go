@@ -194,6 +194,7 @@ func run() int {
 	opts := []ide.Option{
 		ide.WithExtensionsRunner(ide.FuncExtensionsRunner(extensionRunner)),
 		ide.WithDefaultConfigYAML(defaultConfig),
+		ide.WithTabBarOffset(12),
 		ide.WithLocker(&mu),
 		ide.WithConfigFilename(configFilename),
 		ide.WithDefaultWallpaper(wallpaper),
@@ -221,6 +222,7 @@ func run() int {
 		gui.WithOpacity(float32(*flagOpacity)),
 		gui.WithLigatures(*flagFontLigatures),
 		gui.WithPublishChannel(publishChan),
+		gui.WithRenderOffset(0, 10),
 		gui.WithLocker(&mu),
 		gui.WithDefaultAttributes(i.DefaultAttributes()),
 	}

@@ -1312,6 +1312,23 @@ func (c ideConfig) terminalDebug() (ret bool) {
 	return c.terminalBool("debug")
 }
 
+func (c ideConfig) tabNameSeparator() (ret string) {
+	ret = "  "
+	cfg, ok := c.browser()
+	if !ok {
+		return
+	}
+	sep, err := cfg.GetString("tab_name_separator")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["browser.tab_name_separator"] = err
+		}
+		return
+	}
+	ret = sep
+	return
+}
+
 func (c ideConfig) terminalConfig() vte.Config {
 	ret := vte.DefaultConfig()
 	ret.Attributes = c.terminalDefaultAttr()

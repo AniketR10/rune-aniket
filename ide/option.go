@@ -138,9 +138,19 @@ func WithInitShader(
 	}
 }
 
+// WithTabBarOffset configures the IDE to render
+// with a tab bar x offset in cells to accomodate
+// perhaps another UI element.
+func WithTabBarOffset(offset int) Option {
+	return func(opts *options) {
+		opts.tabBarOffset = offset
+	}
+}
+
 type options struct {
 	publishEvent     EventPublisher
 	extensionRunner  ExtensionsRunner
+	tabBarOffset     int
 	locker           sync.Locker
 	extensions       map[string]Extension
 	workspaceConfig  string

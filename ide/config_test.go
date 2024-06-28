@@ -134,6 +134,7 @@ notifications:
         bottomleft: '┗'
         bottomright: '┛'
 browser:
+    tab_name_separator: 'XX'
     tabspaces: 4
     prompt:
         width: 20
@@ -242,6 +243,7 @@ func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
 	assert.Equal(t, term.Attributes{}, cfg.modalAttr())
 	assert.False(t, cfg.modelessWrap())
 	assert.True(t, cfg.autoRestore())
+	assert.Equal(t, "  ", cfg.tabNameSeparator())
 
 	assert.Equal(t, "modal", cfg.editorMode())
 	os.Setenv("SHELL", "fish")
@@ -292,6 +294,7 @@ func TestConfigSetting(t *testing.T) {
 	assert.Equal(t, logrus.TraceLevel, cfg.logLevel())
 	assert.True(t, term.InputMouse&cfg.inputMode() != 0)
 	assert.True(t, term.InputEsc&cfg.inputMode() != 0)
+	assert.Equal(t, "XX", cfg.tabNameSeparator())
 
 	expectedConfig := handler.WindowManagerConfig{
 		WindowManagerConfig: component.WindowManagerConfig{

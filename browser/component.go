@@ -227,10 +227,21 @@ func (c *Component) Init(config Config) {
 	c.tabs.SetAttr(config.FocusTabAttr, config.NonFocusTabAttr,
 		config.WindowManagerConfig.FrameAttr, config.WindowManagerConfig.FrameAttr)
 	c.tabs.SetFrameCharSet(config.WindowManagerConfig.FrameCharSet)
-	c.tabs.SetBorder(config.WindowManagerConfig.Frame)
 
-	// use UnionTop instead of Bar because tabs already have their own frame
-	c.union.UnionTop(&c.tabs, c.tabsSize())
+	// if tab bar offset is set, the remove frame from tabs
+	// and install via union and no frame unioning.
+	if config.TabBarOffset > 0 {
+		vtabs := &handler.Virtual{Virtual: component.Virtual{C: &c.tabs}}
+		vtabs.Move(term.Coordinates{X: config.TabBarOffset})
+		c.tabs.SetBorder(false)
+		c.union.UnionTopFrame(vtabs, c.tabsSize(), false)
+	} else {
+		c.tabs.SetBorder(config.Frame)
+		c.union.UnionTop(&c.tabs, c.tabsSize())
+	}
+	if config.TabNameSeparator != "" {
+		c.tabs.SetNameSeparator(config.TabNameSeparator)
+	}
 
 	c.container.Init(&c.union, config.Notifications)
 }

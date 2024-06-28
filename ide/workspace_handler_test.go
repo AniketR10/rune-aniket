@@ -110,7 +110,7 @@ func TestWorkspaceConfig(t *testing.T) {
 			dir, func(term.Event) bool {
 				return true
 			}, runner, new(sync.Mutex), nil,
-			func() (ideConfig, error) { return cfg, errors.New("boom") }, ".sixrc")
+			func() (ideConfig, error) { return cfg, errors.New("boom") }, ".sixrc", 0)
 		require.NoError(t, err)
 		defer m.Close()
 
@@ -936,7 +936,7 @@ func newTestWorkspaceManagerHandlerWithManagerAndExtensions(
 		dir, func(term.Event) bool {
 			return true
 		}, runner, new(sync.Mutex), extensions,
-		func() (ideConfig, error) { return cfg, nil }, ".sixrc")
+		func() (ideConfig, error) { return cfg, nil }, ".sixrc", 0)
 	require.NoError(t, err)
 	return m
 }
