@@ -36,11 +36,13 @@ import (
 	"github.com/unstablebuild/blue/logging"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/api/config"
+	textapi "unstable.build/go-tui/api/text"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component/shader"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/term"
+	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/workspace"
 	"unstable.build/go-tui/workspace/ssh"
 )
@@ -249,6 +251,18 @@ func (i *IDE) Run() error {
 	}
 
 	return nil
+}
+
+// SubscribeCommand subscribes the given handler in calls to the given cmd,
+// or returns an error if there's already a CommandHandler
+// installed for this command.
+//
+// The command will be automatically installed to all active
+// and future workspaces.
+func (c *IDE) SubscribeCommand(
+	cmd textapi.CommandManual, handler text.CommandHandler,
+) error {
+	return c.root.subscribeCommand(cmd, handler)
 }
 
 // DefaultAttributes return the default attributes to be used to fill the screen.

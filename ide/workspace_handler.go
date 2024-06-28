@@ -84,6 +84,7 @@ type workspaceManagerHandler struct {
 	userHome                string
 	history                 *history
 	workspacesBarHeight     int
+	externalCommands        map[string]externalCommand
 	// NOTE: if user changes frame config, then mouse calculations
 	// for resize might be off.
 	frame        bool
@@ -171,6 +172,7 @@ func (h *workspaceManagerHandler) init(
 ) error {
 	h.mu = locker
 	h.workspaces = make([]*workspaceHandler, 10)
+	h.externalCommands = make(map[string]externalCommand)
 	h.frame = cfg.frame()
 	h.reloadConfig = reloadConfig
 	h.workspaceConfigFilename = workspaceConfigFilename
@@ -200,15 +202,13 @@ func (h *workspaceManagerHandler) init(
 		return fmt.Errorf("add home workspace: %v", err)
 	}
 	h.homeWorkspace = homeWorkspace
-	h.empty, _ = newEx(ed, homeWorkspace, h.storage,
+	h.empty, err = newEx(ed, homeWorkspace, h.storage,
 		cfg.terminalConfig(), h.publishEvent, globalOpts...)
-	err = h.empty.subscribeCommands()
 	if err != nil {
 		return fmt.Errorf("new ex: %w", err)
 	}
-	err = h.subscribeActiveWorkspaceCommands(h.empty)
-	if err != nil {
-		return fmt.Errorf("subscribe active workspace commands: %w", err)
+	if err = h.subscribeAllCommands(h.empty); err != nil {
+		return err
 	}
 
 	h.bar.Init()
@@ -271,79 +271,6 @@ func (h *workspaceManagerHandler) init(
 	h.initTabs(cfg, workspacesBarHeight,
 		workspacesBarOffset, workspacesBarFrame)
 	return nil
-}
-
-func (h *workspaceManagerHandler) subscribeActiveWorkspaceCommands(ex *ex) (ret error) {
-	workspaceActiveCommands := map[string]commandAllWorkspace{
-		cmdAddWorkspace: {
-			handler: (*workspaceManagerHandler).commandAddWorkspace,
-			man: textapi.CommandManual{
-				Summary: "Opens a new workspace as defined by the given URI, in the current " +
-					"workspace slot if its empty, or in the next available slot if it's not. " +
-					"If no scheme is present in the URI, file:// is assumed.",
-				Synopsis: "[scheme:][//[userinfo@]host][/]workspacepath",
-			},
-		},
-		cmdCloseWorkspace: {
-			handler: (*workspaceManagerHandler).commandCloseWorkspace,
-			man: textapi.CommandManual{
-				Summary: "Closes the current active workspace and switches " +
-					"the focus to the previous workspace.",
-			},
-		},
-		cmdReloadWorkspace: {
-			handler: (*workspaceManagerHandler).commandReloadWorkspace,
-			man: textapi.CommandManual{
-				Summary: "Reloads the current active workspace, along with all the extensions.",
-			},
-		},
-		cmdSwitchToWorkspace: {
-			handler: (*workspaceManagerHandler).commandSwitchToWorkspace,
-			man: textapi.CommandManual{
-				Summary:  "Switches the current active workspace to the workspace at the given index.",
-				Synopsis: "(1|2|3|4|5|6|7|8|9)",
-			},
-		},
-	}
-	return h.subscribeCommands(ex, workspaceActiveCommands)
-}
-
-func (h *workspaceManagerHandler) subscribeCommands(
-	ex *ex,
-	commands map[string]commandAllWorkspace,
-) (ret error) {
-	for cmd, man := range commands {
-		man := man
-		cmd := cmd
-		man.man.Name = cmd
-		err := ex.comp.SubscribeCommand(man.man,
-			text.FuncCommandHandler(func(ctx context.Context, cmd textapi.Command) (bool, error) {
-				return false, man.handler(h, cmd.Args...)
-			}, func(ctx context.Context, name string, args []string) (
-				iterator.Iterator[string], string, error,
-			) {
-				return h.completeCommand(ctx, name, args)
-			}))
-		if err != nil {
-			ret = multierr.Append(ret, err)
-		}
-	}
-	return ret
-}
-
-func (h *workspaceManagerHandler) completeCommand(
-	ctx context.Context, cmd string, args []string,
-) (iterator.Iterator[string], string, error) {
-	switch cmd {
-	case cmdSwitchToWorkspace:
-		if len(args) <= 1 {
-			nums := [10]string{"1", "2", "3", "4", "5", "6", "7", "8", "9", "10"}
-			return iterator.FromSlice(nums[:]), "", nil
-		}
-		return iterator.FromSlice[string](nil), "", nil
-	default:
-		return iterator.FromSlice[string](nil), "", nil
-	}
 }
 
 func (h *workspaceManagerHandler) focusHandler() tui.Handler {
@@ -631,13 +558,8 @@ func (h *workspaceManagerHandler) addWorkspace(
 	if err != nil {
 		return fmt.Errorf("new multi workspace: %w", err)
 	}
-	err = ex.subscribeCommands()
-	if err != nil {
-		return fmt.Errorf("ex subscribe commands: %w", err)
-	}
-	err = h.subscribeActiveWorkspaceCommands(ex)
-	if err != nil {
-		return fmt.Errorf("subscribe active workspace commands: %w", err)
+	if err := h.subscribeAllCommands(ex); err != nil {
+		return err
 	}
 
 	res := extension.BrowserResources(ex.Browser(), h.publishEvent)
@@ -898,11 +820,6 @@ func (hm *workspaceHandler) Close() (ret error) {
 	return
 }
 
-type commandAllWorkspace struct {
-	man     textapi.CommandManual
-	handler func(*workspaceManagerHandler, ...string) error
-}
-
 func (h *workspaceManagerHandler) initTabs(
 	cfg ideConfig, workspacesBarHeight, workspacesBarOffset int,
 	workspacesBarFrame bool,
@@ -918,4 +835,152 @@ func (h *workspaceManagerHandler) initTabs(
 		bar = v
 	}
 	h.union.UnionBottomFrame(bar, h.barSize(), workspacesBarFrame)
+}
+
+func (h *workspaceManagerHandler) subscribeAllCommands(ex *ex) error {
+	err := ex.subscribeCommands()
+	if err != nil {
+		return fmt.Errorf("subscribe ex commands: %w", err)
+	}
+	err = h.subscribeActiveWorkspaceCommands(ex)
+	if err != nil {
+		return fmt.Errorf("subscribe workspace commands: %w", err)
+	}
+	err = h.subscribeAllExternalCommands(ex)
+	if err != nil {
+		return fmt.Errorf("subscribe external commands: %w", err)
+	}
+	return nil
+}
+
+type commandAllWorkspace struct {
+	man     textapi.CommandManual
+	handler func(*workspaceManagerHandler, ...string) error
+}
+
+func (h *workspaceManagerHandler) subscribeActiveWorkspaceCommands(ex *ex) (ret error) {
+	workspaceActiveCommands := map[string]commandAllWorkspace{
+		cmdAddWorkspace: {
+			handler: (*workspaceManagerHandler).commandAddWorkspace,
+			man: textapi.CommandManual{
+				Summary: "Opens a new workspace as defined by the given URI, in the current " +
+					"workspace slot if its empty, or in the next available slot if it's not. " +
+					"If no scheme is present in the URI, file:// is assumed.",
+				Synopsis: "[scheme:][//[userinfo@]host][/]workspacepath",
+			},
+		},
+		cmdCloseWorkspace: {
+			handler: (*workspaceManagerHandler).commandCloseWorkspace,
+			man: textapi.CommandManual{
+				Summary: "Closes the current active workspace and switches " +
+					"the focus to the previous workspace.",
+			},
+		},
+		cmdReloadWorkspace: {
+			handler: (*workspaceManagerHandler).commandReloadWorkspace,
+			man: textapi.CommandManual{
+				Summary: "Reloads the current active workspace, along with all the extensions.",
+			},
+		},
+		cmdSwitchToWorkspace: {
+			handler: (*workspaceManagerHandler).commandSwitchToWorkspace,
+			man: textapi.CommandManual{
+				Summary:  "Switches the current active workspace to the workspace at the given index.",
+				Synopsis: "(1|2|3|4|5|6|7|8|9)",
+			},
+		},
+	}
+	return h.subscribeInternalCommands(ex, workspaceActiveCommands)
+}
+
+func (h *workspaceManagerHandler) subscribeInternalCommands(
+	ex *ex,
+	commands map[string]commandAllWorkspace,
+) (ret error) {
+	for cmd, man := range commands {
+		man := man
+		cmd := cmd
+		man.man.Name = cmd
+		err := ex.comp.SubscribeCommand(man.man, text.FuncCommandHandler(
+			func(ctx context.Context, cmd textapi.Command) (bool, error) {
+				return false, man.handler(h, cmd.Args...)
+			}, func(ctx context.Context, name string, args []string) (
+				iterator.Iterator[string], string, error,
+			) {
+				return h.completeCommand(ctx, name, args)
+			}))
+		if err != nil {
+			ret = multierr.Append(ret, fmt.Errorf("subscribe command '%s': %w", cmd, err))
+		}
+	}
+	return ret
+}
+
+func (h *workspaceManagerHandler) completeCommand(
+	ctx context.Context, cmd string, args []string,
+) (iterator.Iterator[string], string, error) {
+	switch cmd {
+	case cmdSwitchToWorkspace:
+		if len(args) <= 1 {
+			nums := [10]string{"1", "2", "3", "4", "5", "6", "7", "8", "9", "10"}
+			return iterator.FromSlice(nums[:]), "", nil
+		}
+		return iterator.FromSlice[string](nil), "", nil
+	default:
+		return iterator.FromSlice[string](nil), "", nil
+	}
+}
+
+func (h *workspaceManagerHandler) subscribeAllExternalCommands(ex *ex) (ret error) {
+	var cmds []externalCommand
+	for _, cmd := range h.externalCommands {
+		cmds = append(cmds, cmd)
+	}
+	return h.subscribeExternalCommands(ex, cmds...)
+}
+
+func (h *workspaceManagerHandler) subscribeExternalCommands(
+	ex *ex, commands ...externalCommand,
+) (ret error) {
+	for _, cmd := range commands {
+		err := ex.comp.SubscribeCommand(cmd.cmd, cmd.handler)
+		if err != nil {
+			ret = multierr.Append(ret,
+				fmt.Errorf("subscribe command '%s': %v", cmd.cmd.Name, err))
+		}
+	}
+	return ret
+}
+
+type externalCommand struct {
+	cmd     textapi.CommandManual
+	handler text.CommandHandler
+}
+
+func (h *workspaceManagerHandler) subscribeCommand(
+	cmd textapi.CommandManual, handler text.CommandHandler,
+) error {
+	if _, ok := h.externalCommands[cmd.Name]; ok {
+		return fmt.Errorf("command '%s' already registered", cmd.Name)
+	}
+
+	extCmd := externalCommand{cmd: cmd, handler: handler}
+
+	// subscribe in current workspaces
+	ret := h.subscribeExternalCommands(h.empty, extCmd)
+	for _, w := range h.workspaces {
+		if w == nil {
+			continue
+		}
+		if err := h.subscribeExternalCommands(w.ex, extCmd); err != nil {
+			ret = multierr.Append(ret, err)
+		}
+	}
+	if ret != nil {
+		return ret
+	}
+
+	// store for future workspaces
+	h.externalCommands[cmd.Name] = extCmd
+	return nil
 }

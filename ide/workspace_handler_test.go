@@ -37,10 +37,12 @@ import (
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/api/config"
 	schemeapi "unstable.build/go-tui/api/scheme"
+	textapi "unstable.build/go-tui/api/text"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/term"
+	"unstable.build/go-tui/text"
 	testutil "unstable.build/go-tui/util/test"
 	"unstable.build/go-tui/workspace"
 )
@@ -907,6 +909,63 @@ func TestSwitchToWorkspaceComplete(t *testing.T) {
 └──────────────────────────────────────┘`},
 	}
 	testutil.TestHandlerSequence(t, m, 40, 20, cases)
+
+	require.NoError(t, m.Close())
+}
+
+func TestExternalCommands(t *testing.T) {
+	dir, err := os.MkdirTemp("", "")
+	require.NoError(t, err)
+	dir2, err := os.MkdirTemp("", "")
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		os.RemoveAll(dir)
+		os.RemoveAll(dir2)
+	})
+
+	m := newTestWorkspaceManagerHandlerWithDir(t, defaultConfigWithWrap(false), nil, dir)
+	err = m.subscribeCommand(textapi.CommandManual{Name: "ramon"},
+		text.FuncCommandHandler(func(context.Context, textapi.Command) (bool, error) {
+			return false, nil
+		}, nil))
+	require.NoError(t, err)
+
+	cases := []testutil.HandlerSequenceTestCase{
+		{":ramo 1", // existing workspace
+			`┌──────────────────┐
+│                  │
+├──────────────────┤
+│                  │
+│                  │
+│workspaceWallpaper│
+┌──────────────────┐
+│ramon 1▐          │
+│                  │
+└──────────────────┘`},
+		{fmt.Sprintf(":addWorkspace %s>:ramo 1", dir2), // new workspace
+			`┌──────────────────┐
+│                  │
+├──────────────────┤
+│                  │
+│                  │
+│workspaceWallpaper│
+┌──────────────────┐
+│ramon 1▐          │
+│                  │
+└──────────────────┘`},
+		{":swWo 8>:ramo 1234", // empty workspace
+			`┌──────────────────┐
+│                  │
+├──────────────────┤
+│                  │
+│                  │
+│workspaceWallpaper│
+┌──────────────────┐
+│ramon 1234▐       │
+│                  │
+└──────────────────┘`},
+	}
+	testutil.TestHandlerSequence(t, m, 20, 10, cases)
 
 	require.NoError(t, m.Close())
 }
