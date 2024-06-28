@@ -147,32 +147,42 @@ func WithTabBarOffset(offset int) Option {
 	}
 }
 
+// WithWorkspacesBarFrame defines whether the IDE renders
+// the bottom workspaces bar with frame or not.
+func WithWorkspacesBarFrame(frame bool) Option {
+	return func(opts *options) {
+		opts.workspacesBarFrame = frame
+	}
+}
+
 type options struct {
-	publishEvent     EventPublisher
-	extensionRunner  ExtensionsRunner
-	tabBarOffset     int
-	locker           sync.Locker
-	extensions       map[string]Extension
-	workspaceConfig  string
-	defaultWallpaper browser.Wallpaper
-	defaultConfig    string
-	bell             func()
-	scheduleFn       func(func()) bool
-	shader           shader.Shader
-	shaderDuration   time.Duration
+	publishEvent       EventPublisher
+	extensionRunner    ExtensionsRunner
+	tabBarOffset       int
+	workspacesBarFrame bool
+	locker             sync.Locker
+	extensions         map[string]Extension
+	workspaceConfig    string
+	defaultWallpaper   browser.Wallpaper
+	defaultConfig      string
+	bell               func()
+	scheduleFn         func(func()) bool
+	shader             shader.Shader
+	shaderDuration     time.Duration
 }
 
 func defaultOptions() options {
 	return options{
-		publishEvent:     tui.PublishEvent,
-		extensionRunner:  nopExtensions{},
-		locker:           nopLocker{},
-		extensions:       make(map[string]Extension),
-		workspaceConfig:  ".iderc",
-		defaultWallpaper: browser.NopWallpaper(),
-		defaultConfig:    "{}",
-		bell:             term.RingBell,
-		scheduleFn:       term.ScheduleNextTick,
+		publishEvent:       tui.PublishEvent,
+		extensionRunner:    nopExtensions{},
+		locker:             nopLocker{},
+		extensions:         make(map[string]Extension),
+		workspaceConfig:    ".iderc",
+		defaultWallpaper:   browser.NopWallpaper(),
+		defaultConfig:      "{}",
+		bell:               term.RingBell,
+		scheduleFn:         term.ScheduleNextTick,
+		workspacesBarFrame: true,
 	}
 }
 

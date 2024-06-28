@@ -109,14 +109,15 @@ func newWorkspaceManagerHandler(
 	extensionRunner ExtensionsRunner, locker sync.Locker,
 	builtinExtensions map[string]Extension,
 	reloadConfig func() (ideConfig, error), workspaceConfigFilename string,
-	tabBarOffset int,
+	tabBarOffset int, workspacesBarFrame bool,
 ) (*workspaceManagerHandler, error) {
 	ret := new(workspaceManagerHandler)
 
 	err := ret.init(initial, homeDirUri, manager,
 		cfg, recfilename, filenames, sixDir,
 		publishEvent, extensionRunner, locker, builtinExtensions,
-		reloadConfig, workspaceConfigFilename, tabBarOffset)
+		reloadConfig, workspaceConfigFilename,
+		tabBarOffset, workspacesBarFrame)
 	if err != nil {
 		return nil, err
 	}
@@ -161,7 +162,7 @@ func (h *workspaceManagerHandler) init(
 	extensionRunner ExtensionsRunner, locker sync.Locker,
 	builtinExtensions map[string]Extension,
 	reloadConfig func() (ideConfig, error), workspaceConfigFilename string,
-	tabBarOffset int,
+	tabBarOffset int, workspacesBarFrame bool,
 ) error {
 	h.mu = locker
 	h.workspaces = make([]*workspaceHandler, 10)
@@ -234,7 +235,7 @@ func (h *workspaceManagerHandler) init(
 
 	if cwd == nil {
 		h.focusProxy.Target = h.focusHandler()
-		h.union.UnionBottom(&h.bar, h.barSize())
+		h.initTabs(cfg, workspacesBarFrame)
 		return nil
 	}
 
@@ -260,8 +261,7 @@ func (h *workspaceManagerHandler) init(
 	}
 
 	h.focusProxy.Target = h.focusHandler()
-	h.union.UnionBottom(&h.bar, h.barSize())
-
+	h.initTabs(cfg, workspacesBarFrame)
 	return nil
 }
 
@@ -889,4 +889,10 @@ func (hm *workspaceHandler) Close() (ret error) {
 type commandAllWorkspace struct {
 	man     textapi.CommandManual
 	handler func(*workspaceManagerHandler, ...string) error
+}
+
+func (h *workspaceManagerHandler) initTabs(cfg ideConfig, workspacesBarFrame bool) {
+	h.bar.SetBorder(workspacesBarFrame)
+	h.bar.SetNameSeparator(cfg.tabNameSeparator())
+	h.union.UnionBottomFrame(&h.bar, h.barSize(), workspacesBarFrame)
 }

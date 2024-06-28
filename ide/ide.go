@@ -189,7 +189,7 @@ func (i *IDE) init(
 		func() (ideConfig, error) {
 			return reloadConfig(cfgfilename,
 				op.defaultWallpaper, op.defaultConfig, op.bell, op.scheduleFn)
-		}, op.workspaceConfig, op.tabBarOffset)
+		}, op.workspaceConfig, op.tabBarOffset, op.workspacesBarFrame)
 	if err != nil {
 		return fmt.Errorf("new workspace manager: %w", err)
 	}
