@@ -196,6 +196,7 @@ func run() int {
 		ide.WithDefaultConfigYAML(defaultConfig),
 		ide.WithTabBarOffset(12),
 		ide.WithTabBarHeight(3),
+		ide.WithWorkspacesBarHeight(1),
 		ide.WithWorkspacesBarFrame(false),
 		ide.WithLocker(&mu),
 		ide.WithConfigFilename(configFilename),

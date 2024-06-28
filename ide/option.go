@@ -162,21 +162,30 @@ func WithWorkspacesBarFrame(frame bool) Option {
 	}
 }
 
+// WithWorkspacesBarHeight defines the height of the
+// workspaces bar.
+func WithWorkspacesBarHeight(height int) Option {
+	return func(opts *options) {
+		opts.workspacesBarHeight = height
+	}
+}
+
 type options struct {
-	publishEvent       EventPublisher
-	extensionRunner    ExtensionsRunner
-	tabBarOffset       int
-	tabBarHeight       int
-	workspacesBarFrame bool
-	locker             sync.Locker
-	extensions         map[string]Extension
-	workspaceConfig    string
-	defaultWallpaper   browser.Wallpaper
-	defaultConfig      string
-	bell               func()
-	scheduleFn         func(func()) bool
-	shader             shader.Shader
-	shaderDuration     time.Duration
+	publishEvent        EventPublisher
+	extensionRunner     ExtensionsRunner
+	tabBarOffset        int
+	tabBarHeight        int
+	workspacesBarFrame  bool
+	workspacesBarHeight int
+	locker              sync.Locker
+	extensions          map[string]Extension
+	workspaceConfig     string
+	defaultWallpaper    browser.Wallpaper
+	defaultConfig       string
+	bell                func()
+	scheduleFn          func(func()) bool
+	shader              shader.Shader
+	shaderDuration      time.Duration
 }
 
 func defaultOptions() options {

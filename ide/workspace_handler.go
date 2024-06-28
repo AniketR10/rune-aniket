@@ -83,6 +83,7 @@ type workspaceManagerHandler struct {
 	addWorkspacePath        bool
 	userHome                string
 	history                 *history
+	workspacesBarHeight     int
 	// NOTE: if user changes frame config, then mouse calculations
 	// for resize might be off.
 	frame        bool
@@ -110,7 +111,8 @@ func newWorkspaceManagerHandler(
 	extensionRunner ExtensionsRunner, locker sync.Locker,
 	builtinExtensions map[string]Extension,
 	reloadConfig func() (ideConfig, error), workspaceConfigFilename string,
-	tabBarOffset, tabBarHeight int, workspacesBarFrame bool,
+	tabBarOffset, tabBarHeight int,
+	workspacesBarHeight int, workspacesBarFrame bool,
 ) (*workspaceManagerHandler, error) {
 	ret := new(workspaceManagerHandler)
 
@@ -118,7 +120,8 @@ func newWorkspaceManagerHandler(
 		cfg, recfilename, filenames, sixDir,
 		publishEvent, extensionRunner, locker, builtinExtensions,
 		reloadConfig, workspaceConfigFilename,
-		tabBarOffset, tabBarHeight, workspacesBarFrame)
+		tabBarOffset, tabBarHeight,
+		workspacesBarHeight, workspacesBarFrame)
 	if err != nil {
 		return nil, err
 	}
@@ -163,7 +166,8 @@ func (h *workspaceManagerHandler) init(
 	extensionRunner ExtensionsRunner, locker sync.Locker,
 	builtinExtensions map[string]Extension,
 	reloadConfig func() (ideConfig, error), workspaceConfigFilename string,
-	tabBarOffset, tabBarHeight int, workspacesBarFrame bool,
+	tabBarOffset, tabBarHeight int,
+	workspacesBarHeight int, workspacesBarFrame bool,
 ) error {
 	h.mu = locker
 	h.workspaces = make([]*workspaceHandler, 10)
@@ -237,7 +241,7 @@ func (h *workspaceManagerHandler) init(
 
 	if cwd == nil {
 		h.focusProxy.Target = h.focusHandler()
-		h.initTabs(cfg, workspacesBarFrame)
+		h.initTabs(cfg, workspacesBarHeight, workspacesBarFrame)
 		return nil
 	}
 
@@ -263,7 +267,7 @@ func (h *workspaceManagerHandler) init(
 	}
 
 	h.focusProxy.Target = h.focusHandler()
-	h.initTabs(cfg, workspacesBarFrame)
+	h.initTabs(cfg, workspacesBarHeight, workspacesBarFrame)
 	return nil
 }
 
@@ -360,6 +364,9 @@ func (h *workspaceManagerHandler) drawBar() bool {
 }
 
 func (h *workspaceManagerHandler) barSize() int {
+	if h.workspacesBarHeight != 0 {
+		return h.workspacesBarHeight
+	}
 	ret := 1
 	if h.frame {
 		ret += 2
@@ -894,7 +901,10 @@ type commandAllWorkspace struct {
 	handler func(*workspaceManagerHandler, ...string) error
 }
 
-func (h *workspaceManagerHandler) initTabs(cfg ideConfig, workspacesBarFrame bool) {
+func (h *workspaceManagerHandler) initTabs(
+	cfg ideConfig, workspacesBarHeight int, workspacesBarFrame bool,
+) {
+	h.workspacesBarHeight = workspacesBarHeight
 	h.bar.SetBorder(workspacesBarFrame)
 	h.bar.SetNameSeparator(cfg.tabNameSeparator())
 	h.union.UnionBottomFrame(&h.bar, h.barSize(), workspacesBarFrame)
