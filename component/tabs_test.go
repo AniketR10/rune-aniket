@@ -182,6 +182,55 @@ func TestTabsDraw(t *testing.T) {
 	testutil.TestComponent(t, l, w, tests)
 }
 
+func TestTabsDrawCustomSeparator(t *testing.T) {
+	l := NewTabs()
+	l.Resize(20, 4)
+	l.SetNameSeparator(" | ")
+
+	w := term.NewStringWriter(20, 9)
+
+	tests := []testutil.ComponentTestCase{
+		{
+			nil, `
+┌──────────────────┐
+│                  │
+│                  │
+└──────────────────┘
+                    
+                    
+                    
+                    
+                    `,
+		}, {
+			func() { l.Add("Atzari") }, `
+┌──────────────────┐
+│Atzari            │
+│                  │
+└──────────────────┘
+                    
+                    
+                    
+                    
+                    `,
+		}, {
+			func() {
+				l.Add("Saturn")
+			}, `
+┌──────────────────┐
+│Atzari | Saturn   │
+│                  │
+└──────────────────┘
+                    
+                    
+                    
+                    
+                    `,
+		},
+	}
+
+	testutil.TestComponent(t, l, w, tests)
+}
+
 func setupOneTab(width, height int) *Tabs {
 	l := NewTabs()
 	l.Resize(width, height)

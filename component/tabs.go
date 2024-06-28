@@ -60,6 +60,7 @@ type Tabs struct {
 	backgroundAttr term.Attributes
 	frameAttr      term.Attributes
 	frameBorders   FrameCharSet
+	separator      string
 	dirty          bool
 }
 
@@ -102,6 +103,7 @@ func (t *Tabs) Init() {
 	t.fileListFrame = newListFrame(
 		defaultScrollAttr, defaultFrameAttr, t.fileListBuf,
 		t.border, t.frameBorders)
+	t.separator = defaultSeparator
 	t.dirty = true
 }
 
@@ -122,6 +124,16 @@ func (t *Tabs) SetAttr(focusTab, tab, frame, background term.Attributes) {
 // The default is true.
 func (t *Tabs) SetBorder(border bool) {
 	t.border = border
+	t.fileListFrame = newListFrame(
+		t.backgroundAttr, t.frameAttr, t.fileListBuf, t.border, t.frameBorders)
+	t.fileListFrame.Resize(t.width, t.height)
+	t.dirty = true
+}
+
+// SetNameSeparator defines the separator used to separate the different tab names.
+// By default two spaces are used.
+func (t *Tabs) SetNameSeparator(separator string) {
+	t.separator = separator
 	t.fileListFrame = newListFrame(
 		t.backgroundAttr, t.frameAttr, t.fileListBuf, t.border, t.frameBorders)
 	t.fileListFrame.Resize(t.width, t.height)
@@ -268,9 +280,9 @@ func (t *Tabs) TabAt(pos term.Coordinates) (int, bool) {
 	x := 0
 	idx := -1
 
-	for i, t := range t.tabs[t.offsetIdx:] {
-		x += len(defaultSeparator)
-		x += len(t.name)
+	for i, z := range t.tabs[t.offsetIdx:] {
+		x += len(t.separator)
+		x += len(z.name)
 		if x >= pos.X {
 			idx = i
 			break
@@ -316,12 +328,12 @@ func (t *Tabs) prepareFileList() {
 			next, tab.name, attr)
 
 		if i < len(t.tabs)-1 {
-			_, next = t.fileListBuf.InsertString(next, defaultSeparator)
+			_, next = t.fileListBuf.InsertString(next, t.separator)
 		}
 	}
 
 	t.offsetIdx = 0
-	lenSeparator := len(defaultSeparator)
+	lenSeparator := len(t.separator)
 	var effectiveWidth int
 	if frame, ok := t.fileListFrame.(*Frame); ok {
 		effectiveWidth, _ = frame.ContentSize()
@@ -340,7 +352,7 @@ func (t *Tabs) prepareFileList() {
 	}
 
 	if t.offsetIdx > 0 {
-		separator := ".." + defaultSeparator
+		separator := ".." + t.separator
 		t.fileListBuf.InsertStringWithAttr(term.Coordinates{},
 			separator, t.nonFocusAttr)
 	}
