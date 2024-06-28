@@ -113,3 +113,13 @@ func WithDefaultAttributes(attr term.Attributes) Option {
 		return nil
 	}
 }
+
+// WithRenderOffset defines the render offset in pixels.
+// Default is no offset.
+func WithRenderOffset(x, y int) Option {
+	return func(g *GUI) error {
+		g.renderOffset.X = x
+		g.renderOffset.Y = y
+		return nil
+	}
+}

@@ -26,6 +26,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"image"
 	"sync"
 
 	ebiten "github.com/hajimehoshi/ebiten/v2"
@@ -64,6 +65,7 @@ type GUI struct {
 	input            *input
 	opacity          float32
 	enableLigatures  bool
+	renderOffset     image.Point
 	cursorAttributes term.Attributes
 	defaultAttr      term.Attributes
 	renderer         *renderer
@@ -140,7 +142,9 @@ func (g *GUI) Draw(screen *ebiten.Image) {
 	}
 	screen.Clear()
 	cells := g.writer.RawCells()
-	g.renderer.Draw(screen, cells, g.cursor.show, g.cursor.pos, g.cursor.style)
+	g.renderer.Draw(screen, cells, g.cursor.show,
+		g.cursor.pos, g.cursor.style, float64(g.renderOffset.X),
+		float64(g.renderOffset.Y))
 	g.needsRender = false
 }
 

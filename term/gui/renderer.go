@@ -126,7 +126,9 @@ func newRenderer(
 
 func (r *renderer) Draw(
 	screen *ebiten.Image, cells [][]term.Cell,
-	drawCursor bool, cursorPos term.Coordinates, cursorStyle term.CursorStyle,
+	drawCursor bool, cursorPos term.Coordinates,
+	cursorStyle term.CursorStyle,
+	offsetX, offsetY float64,
 ) {
 	r.frame.Clear()
 
@@ -139,6 +141,7 @@ func (r *renderer) Draw(
 	screen.DrawImage(r.bgColors, nil)
 
 	opt := ebiten.DrawImageOptions{}
+	opt.GeoM.Translate(offsetX, offsetY)
 	// this blend set allows bgColors to fill background,
 	// but disables blending color alpha
 	opt.Blend = ebiten.Blend{
