@@ -176,8 +176,16 @@ func (r *renderer) drawRow(
 	for viewX := 0; viewX < len(row); viewX++ {
 		cell := row[viewX]
 
+		fg := tcellToColor(cell.Fg, defaultForegroundColor, r.opacity)
 		bg := tcellToColor(cell.Bg, defaultBackgroundColor, r.opacity)
 		pixelX := r.font.CellSize.X * float64(viewX)
+
+		// reverse attr if AttrReverse
+		if cell.Attrs&tcell.AttrReverse != 0 {
+			temp = fg
+			fg = bg
+			bg = temp
+		}
 
 		// we don't need to draw empty cells, just draw background
 		if cell.Ch == 0 || cell.Ch == '\t' {
@@ -187,7 +195,6 @@ func (r *renderer) drawRow(
 			continue
 		}
 
-		fg := tcellToColor(cell.Fg, defaultForegroundColor, r.opacity)
 		isBold := cell.Attrs&tcell.AttrBold != 0
 		isItalic := cell.Attrs&tcell.AttrItalic != 0
 
@@ -203,13 +210,6 @@ func (r *renderer) drawRow(
 			useFace = r.font.Bold
 		} else if isItalic {
 			useFace = r.font.Italic
-		}
-
-		// reverse attr if AttrReverse
-		if cell.Attrs&tcell.AttrReverse != 0 {
-			temp = fg
-			fg = bg
-			bg = temp
 		}
 		opts.ColorScale.ScaleWithColor(fg)
 
