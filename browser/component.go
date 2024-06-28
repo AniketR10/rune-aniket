@@ -1006,6 +1006,9 @@ func (c *Component) ResumeNotifications() {
 }
 
 func (c *Component) tabsSize() int {
+	if c.config.TabBarHeight != 0 {
+		return c.config.TabBarHeight
+	}
 	if c.config.Frame {
 		return 3
 	}

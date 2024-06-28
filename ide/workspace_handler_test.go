@@ -110,7 +110,8 @@ func TestWorkspaceConfig(t *testing.T) {
 			dir, func(term.Event) bool {
 				return true
 			}, runner, new(sync.Mutex), nil,
-			func() (ideConfig, error) { return cfg, errors.New("boom") }, ".sixrc", 0, true)
+			func() (ideConfig, error) { return cfg, errors.New("boom") },
+			".sixrc", 0, 0, true)
 		require.NoError(t, err)
 		defer m.Close()
 
@@ -884,7 +885,7 @@ func TestSwitchToWorkspaceComplete(t *testing.T) {
 
 	cases := []testutil.HandlerSequenceTestCase{
 		{":swWo ",
-`┌──────────────────────────────────────┐
+			`┌──────────────────────────────────────┐
 │                                      │
 ├──────────────────────────────────────┤
 │                                      │
@@ -936,7 +937,8 @@ func newTestWorkspaceManagerHandlerWithManagerAndExtensions(
 		dir, func(term.Event) bool {
 			return true
 		}, runner, new(sync.Mutex), extensions,
-		func() (ideConfig, error) { return cfg, nil }, ".sixrc", 0, true)
+		func() (ideConfig, error) { return cfg, nil },
+		".sixrc", 0, 0, true)
 	require.NoError(t, err)
 	return m
 }

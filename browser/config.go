@@ -91,6 +91,7 @@ type Config struct {
 	FocusTabAttr     term.Attributes
 	NonFocusTabAttr  term.Attributes
 	TabBarOffset     int
+	TabBarHeight     int
 	TabNameSeparator string
 
 	PromptConfig

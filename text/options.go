@@ -138,6 +138,13 @@ func WithTabBarOffset(offset int) Option {
 	}
 }
 
+// WithTabBarHeight defines the height of the tab bar.
+func WithTabBarHeight(height int) Option {
+	return func(cfg *Config) {
+		cfg.TabBarHeight = height
+	}
+}
+
 // WithTabNameSeparator defines an alternate separator
 // of tab names. By default it's two spaces.
 func WithTabNameSeparator(sep string) Option {

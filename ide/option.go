@@ -147,6 +147,13 @@ func WithTabBarOffset(offset int) Option {
 	}
 }
 
+// WithTabBarHeight defines the height of the tab bar.
+func WithTabBarHeight(height int) Option {
+	return func(opts *options) {
+		opts.tabBarHeight = height
+	}
+}
+
 // WithWorkspacesBarFrame defines whether the IDE renders
 // the bottom workspaces bar with frame or not.
 func WithWorkspacesBarFrame(frame bool) Option {
@@ -159,6 +166,7 @@ type options struct {
 	publishEvent       EventPublisher
 	extensionRunner    ExtensionsRunner
 	tabBarOffset       int
+	tabBarHeight       int
 	workspacesBarFrame bool
 	locker             sync.Locker
 	extensions         map[string]Extension

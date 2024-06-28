@@ -76,6 +76,7 @@ type workspaceManagerHandler struct {
 	extensionRunner   ExtensionsRunner
 	sixDir            string
 	tabBarOffset      int
+	tabBarHeight      int
 	builtinExtensions map[string]Extension
 	// this is the name of of the file to be expected in workspace folders
 	workspaceConfigFilename string
@@ -109,7 +110,7 @@ func newWorkspaceManagerHandler(
 	extensionRunner ExtensionsRunner, locker sync.Locker,
 	builtinExtensions map[string]Extension,
 	reloadConfig func() (ideConfig, error), workspaceConfigFilename string,
-	tabBarOffset int, workspacesBarFrame bool,
+	tabBarOffset, tabBarHeight int, workspacesBarFrame bool,
 ) (*workspaceManagerHandler, error) {
 	ret := new(workspaceManagerHandler)
 
@@ -117,7 +118,7 @@ func newWorkspaceManagerHandler(
 		cfg, recfilename, filenames, sixDir,
 		publishEvent, extensionRunner, locker, builtinExtensions,
 		reloadConfig, workspaceConfigFilename,
-		tabBarOffset, workspacesBarFrame)
+		tabBarOffset, tabBarHeight, workspacesBarFrame)
 	if err != nil {
 		return nil, err
 	}
@@ -162,7 +163,7 @@ func (h *workspaceManagerHandler) init(
 	extensionRunner ExtensionsRunner, locker sync.Locker,
 	builtinExtensions map[string]Extension,
 	reloadConfig func() (ideConfig, error), workspaceConfigFilename string,
-	tabBarOffset int, workspacesBarFrame bool,
+	tabBarOffset, tabBarHeight int, workspacesBarFrame bool,
 ) error {
 	h.mu = locker
 	h.workspaces = make([]*workspaceHandler, 10)
@@ -183,6 +184,7 @@ func (h *workspaceManagerHandler) init(
 	h.storage = storage
 
 	h.tabBarOffset = tabBarOffset
+	h.tabBarHeight = tabBarHeight
 	globalOpts := h.textOpts(cfg)
 	ed, err := h.newEditor(cfg)
 	if err != nil {
@@ -543,6 +545,7 @@ func (h *workspaceManagerHandler) textOpts(cfg ideConfig) []text.Option {
 		text.WithPromptConfig(cfg.promptConfig()),
 		text.WithEventPublisher(h.publishEvent),
 		text.WithTabBarOffset(h.tabBarOffset),
+		text.WithTabBarHeight(h.tabBarHeight),
 		text.WithTabNameSeparator(cfg.tabNameSeparator()),
 	}
 
