@@ -470,7 +470,6 @@ func shouldFireKey[T comparable](
 func mapEbitenKey(key ebiten.Key, mod term.Modifier) (ev term.Event, ok bool) {
 	ev, ok = doMapEbitenKey(key, mod)
 	if ok {
-		ev.Mod = mod
 		ev.Type = term.EventKey
 	}
 	return
@@ -509,27 +508,40 @@ func doMapEbitenKey(key ebiten.Key, mod term.Modifier) (ev term.Event, ok bool) 
 		// unhandled
 		return
 	case ebiten.KeySpace:
-		return term.Event{
-			Key: term.KeySpace,
-			Raw: []byte{' '},
-		}, true
+		switch mod {
+		case 0, term.ModShift:
+			return term.Event{
+				Key: term.KeySpace,
+				Raw: []byte{' '},
+			}, true
+		default:
+			return term.Event{
+				Key: term.KeySpace,
+				Raw: []byte{' '},
+				Mod: mod,
+			}, true
+		}
 	case ebiten.KeyArrowDown:
 		return term.Event{
+			Mod: mod,
 			Key: term.KeyArrowDown,
 			Raw: []byte(fmt.Sprintf("\x1b[%sB", getModifierStr(mod))),
 		}, true
 	case ebiten.KeyArrowLeft:
 		return term.Event{
+			Mod: mod,
 			Key: term.KeyArrowLeft,
 			Raw: []byte(fmt.Sprintf("\x1b[%sD", getModifierStr(mod))),
 		}, true
 	case ebiten.KeyArrowRight:
 		return term.Event{
+			Mod: mod,
 			Key: term.KeyArrowRight,
 			Raw: []byte(fmt.Sprintf("\x1b[%sC", getModifierStr(mod))),
 		}, true
 	case ebiten.KeyArrowUp:
 		return term.Event{
+			Mod: mod,
 			Key: term.KeyArrowUp,
 			Raw: []byte(fmt.Sprintf("\x1b[%sA", getModifierStr(mod))),
 		}, true
@@ -542,36 +554,43 @@ func doMapEbitenKey(key ebiten.Key, mod term.Modifier) (ev term.Event, ok bool) 
 			raw = []byte{0x7f}
 		}
 		return term.Event{
+			Mod: mod,
 			Key: term.KeyBackspace,
 			Raw: raw,
 		}, true
 	case ebiten.KeyDelete:
 		return term.Event{
+			Mod: mod,
 			Key: term.KeyDelete,
 			Raw: []byte(fmt.Sprintf("\x1b[3%s~", getModifierStr2(mod))),
 		}, true
 	case ebiten.KeyEnd:
 		return term.Event{
+			Mod: mod,
 			Key: term.KeyEnd,
 			Raw: []byte(fmt.Sprintf("\x1b[%sF", getModifierStr(mod))),
 		}, true
 	case ebiten.KeyHome:
 		return term.Event{
+			Mod: mod,
 			Key: term.KeyHome,
 			Raw: []byte(fmt.Sprintf("\x1b[%sH", getModifierStr(mod))),
 		}, true
 	case ebiten.KeyInsert:
 		return term.Event{
+			Mod: mod,
 			Key: term.KeyInsert,
 			Raw: []byte(fmt.Sprintf("\x1b[2%s~", getModifierStr2(mod))),
 		}, true
 	case ebiten.KeyPageDown:
 		return term.Event{
+			Mod: mod,
 			Key: term.KeyPgdn,
 			Raw: []byte(fmt.Sprintf("\x1b[6%s~", getModifierStr2(mod))),
 		}, true
 	case ebiten.KeyPageUp:
 		return term.Event{
+			Mod: mod,
 			Key: term.KeyPgup,
 			Raw: []byte(fmt.Sprintf("\x1b[5%s~", getModifierStr2(mod))),
 		}, true
@@ -581,6 +600,7 @@ func doMapEbitenKey(key ebiten.Key, mod term.Modifier) (ev term.Event, ok bool) 
 			raw = []byte{0x0d, 0x0a}
 		}
 		return term.Event{
+			Mod: mod,
 			Key: term.KeyEnter,
 			Raw: raw,
 		}, true
@@ -590,90 +610,107 @@ func doMapEbitenKey(key ebiten.Key, mod term.Modifier) (ev term.Event, ok bool) 
 			raw = []byte{0x1b}
 		}
 		return term.Event{
+			Mod: mod,
 			Key: term.KeyEsc,
 			Raw: raw,
 		}, true
 	case ebiten.KeyF1:
 		if mod != 0 {
 			return term.Event{
+				Mod: mod,
 				Key: term.KeyF1,
 				Raw: []byte(fmt.Sprintf("\x1b[%sP", getModifierStr(mod))),
 			}, true
 		}
 		return term.Event{
+			Mod: mod,
 			Key: term.KeyF1,
 			Raw: []byte("\x1bOP"),
 		}, true
 	case ebiten.KeyF2:
 		if mod != 0 {
 			return term.Event{
+				Mod: mod,
 				Key: term.KeyF2,
 				Raw: []byte(fmt.Sprintf("\x1b[%sQ", getModifierStr(mod))),
 			}, true
 		}
 		return term.Event{
+			Mod: mod,
 			Key: term.KeyF2,
 			Raw: []byte("\x1bOQ"),
 		}, true
 	case ebiten.KeyF3:
 		if mod != 0 {
 			return term.Event{
+				Mod: mod,
 				Key: term.KeyF3,
 				Raw: []byte(fmt.Sprintf("\x1b[%sR", getModifierStr(mod))),
 			}, true
 		}
 		return term.Event{
+			Mod: mod,
 			Key: term.KeyF3,
 			Raw: []byte("\x1bOR"),
 		}, true
 	case ebiten.KeyF4:
 		if mod != 0 {
 			return term.Event{
+				Mod: mod,
 				Key: term.KeyF4,
 				Raw: []byte(fmt.Sprintf("\x1b[%sS", getModifierStr(mod))),
 			}, true
 		}
 		return term.Event{
+			Mod: mod,
 			Key: term.KeyF4,
 			Raw: []byte("\x1bOS"),
 		}, true
 	case ebiten.KeyF5:
 		return term.Event{
+			Mod: mod,
 			Key: term.KeyF5,
 			Raw: []byte(fmt.Sprintf("\x1b[15%s~", getModifierStr2(mod))),
 		}, true
 	case ebiten.KeyF6:
 		return term.Event{
+			Mod: mod,
 			Key: term.KeyF6,
 			Raw: []byte(fmt.Sprintf("\x1b[17%s~", getModifierStr2(mod))),
 		}, true
 	case ebiten.KeyF7:
 		return term.Event{
+			Mod: mod,
 			Key: term.KeyF7,
 			Raw: []byte(fmt.Sprintf("\x1b[18%s~", getModifierStr2(mod))),
 		}, true
 	case ebiten.KeyF8:
 		return term.Event{
+			Mod: mod,
 			Key: term.KeyF8,
 			Raw: []byte(fmt.Sprintf("\x1b[19%s~", getModifierStr2(mod))),
 		}, true
 	case ebiten.KeyF9:
 		return term.Event{
+			Mod: mod,
 			Key: term.KeyF9,
 			Raw: []byte(fmt.Sprintf("\x1b[20%s~", getModifierStr2(mod))),
 		}, true
 	case ebiten.KeyF10:
 		return term.Event{
+			Mod: mod,
 			Key: term.KeyF10,
 			Raw: []byte(fmt.Sprintf("\x1b[21%s~", getModifierStr2(mod))),
 		}, true
 	case ebiten.KeyF11:
 		return term.Event{
+			Mod: mod,
 			Key: term.KeyF11,
 			Raw: []byte(fmt.Sprintf("\x1b[23%s~", getModifierStr2(mod))),
 		}, true
 	case ebiten.KeyF12:
 		return term.Event{
+			Mod: mod,
 			Key: term.KeyF12,
 			Raw: []byte(fmt.Sprintf("\x1b[24%s~", getModifierStr2(mod))),
 		}, true
@@ -685,6 +722,7 @@ func doMapEbitenKey(key ebiten.Key, mod term.Modifier) (ev term.Event, ok bool) 
 			raw = []byte{0x09}
 		}
 		return term.Event{
+			Mod: mod,
 			Key: term.KeyTab,
 			Raw: raw,
 		}, true

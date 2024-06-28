@@ -65,6 +65,19 @@ func TestInputFireOnce(t *testing.T) {
 			expectedEvent: term.Event{Type: term.EventKey, Key: term.KeySpace, Raw: []byte(" ")},
 		},
 		{
+			description:   "dispatches a shift+space like a space key",
+			pressedKeys:   []ebiten.Key{ebiten.KeySpace, ebiten.KeyShift},
+			pressedChars:  []rune{' '},
+			expectedEvent: term.Event{Type: term.EventKey, Key: term.KeySpace, Raw: []byte(" ")},
+		},
+		{
+			// this tests the (rest of) modifiers
+			description:   "dispatches a meta+space as meta+space key",
+			pressedKeys:   []ebiten.Key{ebiten.KeySpace, ebiten.KeyShift},
+			pressedChars:  []rune{' '},
+			expectedEvent: term.Event{Type: term.EventKey, Key: term.KeySpace, Raw: []byte(" ")},
+		},
+		{
 			description:   "dispatches a single key ctrl + char",
 			pressedKeys:   []ebiten.Key{ebiten.KeyA, ebiten.KeyControl},
 			pressedChars:  []rune{},
