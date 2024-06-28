@@ -23,12 +23,10 @@
 package extension
 
 import (
-	"bytes"
 	"context"
+	"errors"
 	"fmt"
-	"io"
 	"math"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -117,6 +115,7 @@ type gitEditorHandler struct {
 		sync.Mutex
 		scroll component.Scroll
 	}
+	git           gitService
 	gitDiffListID string
 	delAttr       term.Attributes
 	addAttr       term.Attributes
@@ -202,6 +201,8 @@ func newGitHandler(
 			ret.scroll.Unlock()
 		}
 	}
+
+	ret.git = newCmdGitService(ret.exec)
 
 	ret.gitDiffListID, err = pconfig.GetString("git_diff_list_id")
 	if err != nil {
@@ -290,7 +291,7 @@ func (h *gitEditorHandler) parseDiff(
 
 	var locs []textapi.Location
 	for _, hunk := range diff.Hunks {
-		h.log(log.TraceLevel, "Read file diff hunk: %#v", hunk)
+		h.log(log.TraceLevel, "read file diff hunk: %#v", hunk)
 		y := int(math.Max(0, float64(hunk.NewStartLine-1)))
 		if hunk.NewLines == 0 {
 			// convert coordinates into content coordinates with wraps
@@ -327,39 +328,16 @@ func (h *gitEditorHandler) runDiff(ctx context.Context, ev textapi.Event) {
 	if !ok {
 		return
 	}
-	var out bytes.Buffer
-	ch := make(chan error)
-	cmd := workspaceapi.Cmd{
-		Path:    "git",
-		Args:    []string{"diff", "-U0", ev.URI.Path()},
-		Watcher: workspaceapi.ChanWatcher(ch),
-		Stdout:  &out,
-	}
-	if _, err := h.exec.Start(cmd); err != nil {
-		h.log(log.ErrorLevel, "failed to start process: %v", err)
-		return
-	}
 
 	h.initBar(ev)
 
-	if err := <-ch; err != nil {
-		h.log(log.ErrorLevel, "process exit with non-zero status: %v", err)
-		return
-	}
-
-	r := diff.NewFileDiffReader(&out)
-	diff, err := r.Read()
-	if err != nil {
-		// unfortunately diff lib doesn't chain errors properly
-		if strings.Contains(err.Error(), io.EOF.Error()) {
-			// make sure that an interrupt is called
-			// so the new scroll bar is updated, when
-			// focus switched to a file with no changes.
-			h.interrupt(ctx)
-			err = nil
-		} else {
-			err = fmt.Errorf("failed to read from stdout: %w", err)
-		}
+	diff, err := h.git.diff(ev.URI.Path())
+	if errors.Is(err, errDiffNoChanges) {
+		h.log(log.TraceLevel, "reset git changes bar because no diffs found")
+		h.interrupt(ctx)
+		err = nil
+	} else {
+		err = fmt.Errorf("git service diff: %w", err)
 	}
 
 	if diff == nil {
