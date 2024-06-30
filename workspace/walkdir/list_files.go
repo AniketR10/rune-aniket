@@ -20,7 +20,7 @@
 // THIS SOURCE CODE AND/OR RELATED INFORMATION DOES NOT CONVEY OR IMPLY ANY RIGHTS TO
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
-package workspace
+package walkdir
 
 import (
 	"context"
@@ -45,8 +45,8 @@ func init() {
 	defaultWorkers = int(math.Min(float64(maxProcs), float64(numCPU))) * 8
 }
 
-// Directory abstracts the ability to read directory contents.
-type Directory interface {
+// Reader abstracts the ability to read directory contents.
+type Reader interface {
 	URI(string) (workspaceapi.URI, error)
 	Open(path string, flag int, perm os.FileMode) (workspaceapi.File, *workspaceapi.Error)
 	Stat(path string) (os.FileInfo, error)
@@ -60,7 +60,7 @@ type Directory interface {
 // the contents of directories those errors will be aggregated and
 // reported by the iterator's Err method.
 func ListFiles(
-	ctx context.Context, w Directory, root string,
+	ctx context.Context, w Reader, root string,
 ) (iterator.Iterator[string], error) {
 	var wg sync.WaitGroup
 	ch := make(chan string)
@@ -115,7 +115,7 @@ func ListFiles(
 }
 
 func traverseDirWorker(
-	ctx context.Context, w Directory, wg *sync.WaitGroup,
+	ctx context.Context, w Reader, wg *sync.WaitGroup,
 	ch, workerCh chan string, cwd string, mu *sync.Mutex, err *error,
 ) {
 	for {
@@ -134,7 +134,7 @@ func traverseDirWorker(
 }
 
 func dirTraversal(
-	ctx context.Context, w Directory, cwd, dirname string,
+	ctx context.Context, w Reader, cwd, dirname string,
 	wg *sync.WaitGroup, ch, workerCh chan string,
 ) error {
 	defer wg.Done()

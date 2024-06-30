@@ -39,6 +39,7 @@ import (
 	"unstable.build/go-tui/workspace"
 	"unstable.build/go-tui/workspace/ssh"
 	"unstable.build/go-tui/workspace/test"
+	"unstable.build/go-tui/workspace/walkdir"
 )
 
 // NOTE if this is failing or you are iterating on functionality
@@ -171,7 +172,7 @@ func newSchemeIntegration(
 	t.Cleanup(func() {
 		s, err := ssh.New(ctx, cfg, workspaceURI)
 		require.NoError(t, err)
-		it, err := workspace.ListFiles(context.Background(), s, "/tmp")
+		it, err := walkdir.ListFiles(context.Background(), s, "/tmp")
 		require.NoError(t, err)
 		for {
 			f, ok := it.Next()

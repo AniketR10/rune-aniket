@@ -20,7 +20,7 @@
 // THIS SOURCE CODE AND/OR RELATED INFORMATION DOES NOT CONVEY OR IMPLY ANY RIGHTS TO
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
-package workspace
+package walkdir
 
 import (
 	"bufio"
@@ -35,7 +35,7 @@ import (
 
 // ReadLines takes an iterator of file paths, i.e. return of ListFiles
 // and returns an iterator of file lines, encoded
-func ReadLines(ctx context.Context, w Directory, paths iterator.Iterator[string]) (
+func ReadLines(ctx context.Context, w Reader, paths iterator.Iterator[string]) (
 	iterator.Iterator[string], error,
 ) {
 	files := make(chan string)
@@ -82,7 +82,7 @@ func ReadLines(ctx context.Context, w Directory, paths iterator.Iterator[string]
 	return it, nil
 }
 
-func readFile(w Directory, buffer []byte, file string, lines chan string) error {
+func readFile(w Reader, buffer []byte, file string, lines chan string) error {
 	f, werr := w.Open(file, os.O_RDONLY, 0)
 	if werr != nil {
 		return werr.ToError()
@@ -98,7 +98,7 @@ func readFile(w Directory, buffer []byte, file string, lines chan string) error 
 }
 
 func readFileWorker(
-	ctx context.Context, w Directory,
+	ctx context.Context, w Reader,
 	lines chan string, files chan string,
 	err *error,
 ) {

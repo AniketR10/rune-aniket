@@ -38,7 +38,7 @@ import (
 	extutil "unstable.build/go-tui/extension/util"
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term"
-	"unstable.build/go-tui/workspace"
+	"unstable.build/go-tui/workspace/walkdir"
 )
 
 const (
@@ -78,12 +78,12 @@ func Grantee() (extension.Grantee, []extension.Permission) {
 func readFiles(cwd workspaceapi.FileSystem, ctx context.Context) (
 	iterator.Iterator[string], error,
 ) {
-	it, err := workspace.ListFiles(ctx, cwd, ".")
+	it, err := walkdir.ListFiles(ctx, cwd, ".")
 	if err != nil {
 		return nil, err
 	}
 
-	return workspace.ReadLines(ctx, cwd, it)
+	return walkdir.ReadLines(ctx, cwd, it)
 }
 
 func parseLine(workspace workspaceapi.FileSystem, data string) (

@@ -20,7 +20,7 @@
 // THIS SOURCE CODE AND/OR RELATED INFORMATION DOES NOT CONVEY OR IMPLY ANY RIGHTS TO
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
-package workspace
+package walkdir
 
 import (
 	"context"
@@ -32,6 +32,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"unstable.build/go-tui/api/config"
 	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/workspace"
 )
 
 type readLinesTestFile struct {
@@ -71,9 +72,9 @@ func TestReadLines(t *testing.T) {
 		t.Run(tcase.desc, func(t *testing.T) {
 			uri, err := workspaceapi.ParseURI("memory:///")
 			require.NoError(t, err)
-			scheme, err := NewMemoryScheme(context.Background(), config.NopConfig(), uri)
+			scheme, err := workspace.NewMemoryScheme(context.Background(), config.NopConfig(), uri)
 			require.NoError(t, err)
-			workspace := NewSchemeWorkspace(uri, scheme)
+			workspace := workspace.NewSchemeWorkspace(uri, scheme)
 
 			for _, file := range tcase.inFiles {
 				f, werr := scheme.Open(file.fullPath, os.O_CREATE, 0)

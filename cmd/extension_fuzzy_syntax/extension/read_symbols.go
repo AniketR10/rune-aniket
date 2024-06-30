@@ -40,7 +40,7 @@ import (
 	"github.com/unstablebuild/blue/iterator"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/term"
-	"unstable.build/go-tui/workspace"
+	"unstable.build/go-tui/workspace/walkdir"
 )
 
 var (
@@ -56,7 +56,7 @@ func init() {
 }
 
 func readSymbols(
-	ctx context.Context, w workspace.Directory,
+	ctx context.Context, w walkdir.Reader,
 	paths iterator.Iterator[string], query queryType,
 	tabspaces int, queryFn func(string) (string, error),
 ) (iterator.Iterator[string], error) {
@@ -147,7 +147,7 @@ func mergeValidErrorsMap(m []map[string]*commonErrors) (
 
 func readFileSymbols(
 	ctx context.Context,
-	w workspace.Directory, queryType queryType,
+	w walkdir.Reader, queryType queryType,
 	filename string, results chan string,
 	tabspaces int,
 	queryFn func(string) (string, error),
@@ -267,7 +267,7 @@ func makeSymbolItem(filename string, buf *cell.Buffer, n *sitter.Node) (string, 
 }
 
 func readSymbolsWorker(
-	ctx context.Context, w workspace.Directory,
+	ctx context.Context, w walkdir.Reader,
 	query queryType, functions chan string, files chan string,
 	err *error, missingLanguage map[string]*commonErrors,
 	tabspaces int, queryFn func(string) (string, error),

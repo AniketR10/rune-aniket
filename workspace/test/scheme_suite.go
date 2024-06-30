@@ -41,6 +41,7 @@ import (
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/workspace"
+	"unstable.build/go-tui/workspace/walkdir"
 )
 
 func TestWorkspaceSchemeExecutor(
@@ -893,7 +894,7 @@ func TestWorkspaceSchemeListFilesIntegration(
 	t.Run("returns an empty iterator if there are no files anywhere", func(t *testing.T) {
 		scheme := schemeFn(t)
 		defer scheme.Close()
-		it, err := workspace.ListFiles(context.Background(), scheme, "")
+		it, err := walkdir.ListFiles(context.Background(), scheme, "")
 		require.NoError(t, err)
 		_, ok := it.Next()
 		require.False(t, ok)
@@ -913,7 +914,7 @@ func TestWorkspaceSchemeListFilesIntegration(
 				defer cleanup()
 			}
 
-			it, err := workspace.ListFiles(context.Background(), scheme, path)
+			it, err := walkdir.ListFiles(context.Background(), scheme, path)
 			require.NoError(t, err)
 
 			for i := 0; i < totalFiles; i++ {
@@ -945,7 +946,7 @@ func TestWorkspaceSchemeListFilesIntegration(
 			defer cleanup()
 		}
 
-		it, err := workspace.ListFiles(context.Background(), scheme, "./subfolder")
+		it, err := walkdir.ListFiles(context.Background(), scheme, "./subfolder")
 		require.NoError(t, err)
 
 		for i := 0; i < totalFiles; i++ {
@@ -976,7 +977,7 @@ func TestWorkspaceSchemeListFilesIntegration(
 			defer cleanup()
 		}
 
-		it, err := workspace.ListFiles(context.Background(), scheme, "./file1")
+		it, err := walkdir.ListFiles(context.Background(), scheme, "./file1")
 		require.NoError(t, err)
 
 		for i := 0; i < totalFiles; i++ {
@@ -1011,7 +1012,7 @@ func TestWorkspaceSchemeListFilesIntegration(
 			defer cleanup()
 		}
 
-		it, err := workspace.ListFiles(context.Background(), scheme, "fi/fi/fi/fi")
+		it, err := walkdir.ListFiles(context.Background(), scheme, "fi/fi/fi/fi")
 		require.NoError(t, err)
 
 		for i := 0; i < totalFiles; i++ {

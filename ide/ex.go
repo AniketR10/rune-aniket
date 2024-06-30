@@ -53,6 +53,7 @@ import (
 	"unstable.build/go-tui/term/vte"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/workspace"
+	"unstable.build/go-tui/workspace/walkdir"
 )
 
 const (
@@ -68,7 +69,7 @@ var (
 
 type workspaceLoader interface {
 	workspace.Loader
-	workspace.Directory
+	walkdir.Reader
 	schemeapi.Terminal
 	schemeapi.Executor
 }
@@ -202,7 +203,7 @@ func (e *ex) completeEdit(
 	ctx context.Context, args []string,
 ) (iterator.Iterator[string], string, error) {
 	if len(args) == 0 || args[len(args)-1] == "" {
-		it, err := workspace.ListFiles(ctx, e.workspace, ".")
+		it, err := walkdir.ListFiles(ctx, e.workspace, ".")
 		if err != nil {
 			return nil, "", err
 		}
@@ -236,7 +237,7 @@ func (e *ex) completeEdit(
 		return nil, "", err
 	}
 
-	it, err := workspace.ListFiles(ctx, e.workspace, uri.Path())
+	it, err := walkdir.ListFiles(ctx, e.workspace, uri.Path())
 	if err != nil {
 		return nil, "", err
 	}

@@ -38,7 +38,7 @@ import (
 	extutil "unstable.build/go-tui/extension/util"
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term"
-	"unstable.build/go-tui/workspace"
+	"unstable.build/go-tui/workspace/walkdir"
 )
 
 const (
@@ -77,7 +77,7 @@ func Grantee() (extension.Grantee, []extension.Permission) {
 func workspaceListFiles(cwd workspaceapi.FileSystem, ctx context.Context) (
 	iterator.Iterator[string], error,
 ) {
-	return workspace.ListFiles(ctx, cwd, ".")
+	return walkdir.ListFiles(ctx, cwd, ".")
 }
 
 func getResource(workspace workspaceapi.FileSystem, file string) (

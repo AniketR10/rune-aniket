@@ -40,7 +40,7 @@ import (
 	extutil "unstable.build/go-tui/extension/util"
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term"
-	"unstable.build/go-tui/workspace"
+	"unstable.build/go-tui/workspace/walkdir"
 )
 
 var (
@@ -131,7 +131,7 @@ func defaultQueryForFilename(filename string) (string, error) {
 func readSymbolsFunction(qtype queryType, tabspaces int) func(
 	workspaceapi.FileSystem, context.Context) (iterator.Iterator[string], error) {
 	return func(cwd workspaceapi.FileSystem, ctx context.Context) (iterator.Iterator[string], error) {
-		it, err := workspace.ListFiles(ctx, cwd, ".")
+		it, err := walkdir.ListFiles(ctx, cwd, ".")
 		if err != nil {
 			return nil, err
 		}
