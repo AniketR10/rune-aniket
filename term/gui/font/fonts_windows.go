@@ -28,11 +28,6 @@ import (
 	"path/filepath"
 )
 
-func defaultFont() string {
-	// use builtin
-	return ""
-}
-
 func fontDirs() (paths []string) {
 	return []string{
 		filepath.Join(os.Getenv("windir"), "Fonts"),

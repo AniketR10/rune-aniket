@@ -24,14 +24,14 @@ package builtinfont
 
 import _ "embed"
 
-//go:embed MesloLGM-Bold.ttf
-var MesloLGMBoldTTF []byte
+//go:embed JetBrainsMonoNerdFontPropo-Bold.ttf
+var BoldTTF []byte
 
-//go:embed MesloLGM-Regular.ttf
-var MesloLGMRegularTTF []byte
+//go:embed JetBrainsMonoNerdFontPropo-Regular.ttf
+var RegularTTF []byte
 
-//go:embed MesloLGM-Italic.ttf
-var MesloLGMItalicTTF []byte
+//go:embed JetBrainsMonoNerdFontPropo-Italic.ttf
+var ItalicTTF []byte
 
-//go:embed MesloLGM-BoldItalic.ttf
-var MesloLGMBoldItalicTTF []byte
+//go:embed JetBrainsMonoNerdFontPropo-BoldItalic.ttf
+var BoldItalicTTF []byte

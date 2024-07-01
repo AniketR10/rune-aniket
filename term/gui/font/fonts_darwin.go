@@ -25,10 +25,6 @@
 
 package font
 
-func defaultFont() string {
-	return "/System/Library/Fonts/Menlo.ttc"
-}
-
 func fontDirs() (paths []string) {
 	return []string{
 		expandUser("~/Library/Fonts/"),

@@ -292,9 +292,7 @@ func (g *GUI) DecreaseFontSize() error {
 }
 
 // SetFont sets the font collection identified by the given family name.
-// If family is set to an empty string, the default system font is used.
-// If the family is set to 'builtin', the GUI's builtin fallback font
-// is used.
+// If family is set to an empty string, the default builtin font is used.
 func (g *GUI) SetFont(family string) error {
 	err := g.fontManager.SetFontByFamilyName(family)
 	if err == nil {

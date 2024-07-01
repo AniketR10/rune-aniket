@@ -30,7 +30,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/logging"
@@ -91,7 +90,7 @@ func NewManager() (*Manager, error) {
 	// with a custom font.Face that provides builtin glyphs
 	// for a known whitelist of characters, and uses the underlying
 	// font's glyphs for the rest.
-	ret.offset.Y = fixed.Int26_6(float64(1.0) * (1 << 6))
+	// ret.offset.Y = fixed.Int26_6(float64(1.0) * (1 << 6))
 	// ret.offset.X = 58 // between 0.5 and 1.0
 	return ret, nil
 }
@@ -123,7 +122,7 @@ func (m *Manager) SetDPI(dpi float64) error {
 	}
 	m.dpi = dpi
 	if m.paths == nil {
-		return m.loadDefaultFonts()
+		return m.loadFallbackFont()
 	}
 	err := m.setFont(m.paths)
 	if err != nil {
@@ -138,7 +137,7 @@ func (m *Manager) SetDPI(dpi float64) error {
 func (m *Manager) SetSize(size float64) error {
 	m.size = size
 	if m.paths == nil {
-		return m.loadDefaultFonts()
+		return m.loadFallbackFont()
 	}
 	// effectively reload fonts at new size
 	if err := m.setFont(m.paths); err != nil {
@@ -150,13 +149,10 @@ func (m *Manager) SetSize(size float64) error {
 // SetFontByFamilyName finds the given font installed on the system and
 // sets it as the configured font, or returns an error if there was
 // a problem loading the given font.
+// If name is set to an empty string, the default builtin font is used.
 func (m *Manager) SetFontByFamilyName(name string) error {
 	m.resetFonts()
-
 	if name == "" {
-		return m.loadDefaultFonts()
-	}
-	if name == "builtin" {
 		return m.loadFallbackFont()
 	}
 
@@ -280,7 +276,7 @@ func (m *Manager) AvailableFontFamilies() (iterator.Iterator[string], error) {
 
 func (m *Manager) ensureFontLoaded() {
 	if m.regularFace == nil {
-		err := m.loadDefaultFonts()
+		err := m.loadFallbackFont()
 		if err != nil {
 			panic(fmt.Sprintf("could not load the default fonts: %v", err))
 		}
@@ -295,26 +291,8 @@ func (m *Manager) cellsHeight(height int) float64 {
 	return float64(height) * m.DeviceScale() / m.charSize.Y
 }
 
-func (m *Manager) loadDefaultFonts() error {
-	defaultFont := defaultFont()
-	if defaultFont == "" {
-		return m.loadFallbackFont()
-	}
-	err := m.loadFontFace(defaultFont)
-	if err != nil {
-		if lerr := m.loadFallbackFont(); lerr != nil {
-			return multierror.Append(err, lerr)
-		}
-		return nil
-	}
-	if m.regularFace == nil {
-		return errors.New("could not find regular style for default font family")
-	}
-	return m.calcMetrics()
-}
-
 func (m *Manager) loadFallbackFont() error {
-	regular, err := opentype.Parse(builtinfont.MesloLGMRegularTTF)
+	regular, err := opentype.Parse(builtinfont.RegularTTF)
 	if err != nil {
 		return err
 	}
@@ -323,7 +301,7 @@ func (m *Manager) loadFallbackFont() error {
 		return err
 	}
 
-	bold, err := opentype.Parse(builtinfont.MesloLGMBoldTTF)
+	bold, err := opentype.Parse(builtinfont.BoldTTF)
 	if err != nil {
 		return err
 	}
@@ -332,7 +310,7 @@ func (m *Manager) loadFallbackFont() error {
 		return err
 	}
 
-	italic, err := opentype.Parse(builtinfont.MesloLGMItalicTTF)
+	italic, err := opentype.Parse(builtinfont.ItalicTTF)
 	if err != nil {
 		return err
 	}
@@ -341,7 +319,7 @@ func (m *Manager) loadFallbackFont() error {
 		return err
 	}
 
-	boldItalic, err := opentype.Parse(builtinfont.MesloLGMBoldItalicTTF)
+	boldItalic, err := opentype.Parse(builtinfont.BoldItalicTTF)
 	if err != nil {
 		return err
 	}

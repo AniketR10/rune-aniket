@@ -30,11 +30,6 @@ import (
 	"path/filepath"
 )
 
-func defaultFont() string {
-	// use builtin
-	return ""
-}
-
 func fontDirs() (paths []string) {
 	directories := userFontDirs()
 	directories = append(directories, systemFontDirs()...)
