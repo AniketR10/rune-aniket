@@ -42,7 +42,7 @@ const (
 	AlternateDensityCharacters = "    .:░▒▓█"
 	// this is a modifier to take height to width cell aspect ratio
 	// into consideration.
-	heightToWidthCellAspectRatio = 2
+	heightToWidthCellAspectRatio float64 = 2.3
 )
 
 // DefaultScaler is the default draw.Scaler used by EncodeScaler, EncodeColor and Encode.

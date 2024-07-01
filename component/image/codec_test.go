@@ -39,17 +39,17 @@ func TestResizeMaintainAspectRatio(t *testing.T) {
 		srcWidth, srcHeight, dstWidth, dstHeight int
 		expectedWidth, expectedHeight            int
 	}{
-		{"if src and dst are the same, just compensate for cell aspect ratio", 100, 100, 100, 100, 100, 50},
-		{"if src and dst are the same, just compensate for cell aspect ratio, width > height", 80, 60, 80, 60, 80, 30},
-		{"if src and dst are the same, just compensate for cell aspect ratio, height > width", 60, 80, 60, 80, 60, 40},
-		{"down scale, out same ratio, width > height", 80, 60, 40, 30, 40, 15},
-		{"down scale, out same ratio, height > width", 60, 80, 30, 40, 30, 20},
-		{"up scale, out same ratio, width > height", 40, 30, 80, 60, 80, 30},
-		{"up scale, out same ratio, height > width", 30, 40, 60, 80, 60, 40},
-		{"down scale, out inverted ratio, width > height", 80, 60, 30, 40, 29, 11},
-		{"down scale, out inverted ratio, height > width", 60, 80, 40, 30, 40, 27},
-		{"up scale, out inverted ratio, width > height", 40, 30, 60, 80, 58, 22},
-		{"up scale, out inverted ratio, height > width", 30, 40, 80, 60, 79, 53},
+		{"if src and dst are the same, just compensate for cell aspect ratio", 100, 100, 100, 100, 98, 43},
+		{"if src and dst are the same, just compensate for cell aspect ratio, width > height", 80, 60, 80, 60, 79, 26},
+		{"if src and dst are the same, just compensate for cell aspect ratio, height > width", 60, 80, 60, 80, 60, 35},
+		{"down scale, out same ratio, width > height", 80, 60, 40, 30, 39, 13},
+		{"down scale, out same ratio, height > width", 60, 80, 30, 40, 29, 17},
+		{"up scale, out same ratio, width > height", 40, 30, 80, 60, 79, 26},
+		{"up scale, out same ratio, height > width", 30, 40, 60, 80, 60, 35},
+		{"down scale, out inverted ratio, width > height", 80, 60, 30, 40, 30, 10},
+		{"down scale, out inverted ratio, height > width", 60, 80, 40, 30, 39, 23},
+		{"up scale, out inverted ratio, width > height", 40, 30, 60, 80, 58, 19},
+		{"up scale, out inverted ratio, height > width", 30, 40, 80, 60, 79, 46},
 	}
 
 	for _, test := range suite {
@@ -177,21 +177,21 @@ func TestCodec(t *testing.T) {
 
 
 
+
                               
                               
-                              
-          W@@@@@@@@@@0        
-         @@@-    @@#          
-         @@@-    @@@          
-          3@@@@@@@#           
+            $@@@$  #@0        
+          @@@.  #@@:          
+         @@@     @@@          
+          @@@@@@@@@           
          $@@                  
-         @@@@@@@@##           
-         9@@#-':W@@@@         
-        *@@#      #@@         
-          #@@@@@@@#0          
+         1@@@@@@@@##          
+         @@@      #@@         
+         @@@#9+,9@@@#         
                               
                               
                               
+
 
 
 
@@ -204,26 +204,26 @@ func TestCodec(t *testing.T) {
 		{"encode an image and maintain aspect ratio, similar aspect ratio",
 			50, 20, loadImage("testdata/image_1.png"), configMaintainAspectRatio(),
 			`
-                                             
-                                             
-                                             
-                                             
-                   #@@@@@@@@@#@@@W           
-                  @@@@+   c@@@#              
-                 #@@@      ,@@@#             
-                 8@@@#     #@@@$             
-                  .@@@@@@@@@@@#              
-                  2#@@#@#@#$                 
-                 #@@@                        
-                 =@@@@@@@@@@@##'             
-                  ##@##@@#@#@@@@@            
-                6@@@3        8@@@7           
-                '@@@@#=    ?@@@@W            
-                  ,#@@@@@@@@@#-              
-                                             
-                                             
-                                             
-                                             
+                                                
+                                                
+                                                
+                                                
+                  W@@@@@@@@@@#@@@@@             
+                :@@@@#     @@@@#                
+                @@@@@       @@@@#               
+                @@@@@.     7@@@@$               
+                 .@@@@@@@@@@@@@$                
+                 2#@@@@@####,                   
+                @@@@W                           
+                $@@@@@@@@@@@@###'               
+                 ##@@##@@@##@@@@@@b             
+               @@@@#          #@@@@             
+               W@@@@@9      #@@@@#              
+                 ,##@@@@@@@@@@#.                
+                                                
+                                                
+                                                
+                                                
                                                    `,
 		},
 	}
