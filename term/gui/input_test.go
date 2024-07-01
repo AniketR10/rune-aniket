@@ -581,7 +581,7 @@ func newTestInput(t *testing.T) (*mockInputManager, *input) {
 	mock := &mockInputManager{pressedKeys: map[ebiten.Key]struct{}{}}
 	f, err := font.NewManager()
 	require.NoError(t, err)
-	f.SetFontByFamilyName("builtin")
+	f.SetFontByFamilyName("")
 	f.SetDeviceScale(1)
 	ret := newInput(f)
 	ret.input = mock

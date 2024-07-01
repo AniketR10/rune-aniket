@@ -127,9 +127,9 @@ func TestMouseEvents(t *testing.T) {
 			cursorPosition: []image.Point{{X: 100, Y: 100}, {}, {X: 100, Y: 100}},
 			wheel:          []float64{0, 0, 0},
 			expectedEvents: []term.Event{
-				{Type: term.EventMouse, MouseX: 11, MouseY: 5},
+				{Type: term.EventMouse, MouseX: 11, MouseY: 4},
 				{Type: term.EventMouse},
-				{Type: term.EventMouse, MouseX: 11, MouseY: 5},
+				{Type: term.EventMouse, MouseX: 11, MouseY: 4},
 			},
 		},
 		{
@@ -144,9 +144,9 @@ func TestMouseEvents(t *testing.T) {
 			wheel:          []float64{0, 0, 0, 0},
 			expectedEvents: []term.Event{
 				{Type: term.EventMouse, Key: term.MouseLeft},
-				{Type: term.EventMouse, Key: term.MouseLeft, MouseX: 11, MouseY: 5},
-				{Type: term.EventMouse, Key: term.MouseLeft, MouseX: 13, MouseY: 7},
-				{Type: term.EventMouse, Key: term.MouseRelease, MouseX: 13, MouseY: 7},
+				{Type: term.EventMouse, Key: term.MouseLeft, MouseX: 11, MouseY: 4},
+				{Type: term.EventMouse, Key: term.MouseLeft, MouseX: 13, MouseY: 5},
+				{Type: term.EventMouse, Key: term.MouseRelease, MouseX: 13, MouseY: 5},
 			},
 		},
 	}
@@ -183,7 +183,7 @@ func newTestMouse(t *testing.T) (*mockMouseManager, *mouse) {
 	mock := &mockMouseManager{pressedButtons: map[ebiten.MouseButton]struct{}{}}
 	f, err := font.NewManager()
 	require.NoError(t, err)
-	f.SetFontByFamilyName("builtin")
+	f.SetFontByFamilyName("")
 	f.SetDeviceScale(1)
 	ret := newMouse(f)
 	ret.mouse = mock
