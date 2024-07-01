@@ -40,9 +40,10 @@ func WithFontFamily(family string) Option {
 }
 
 // WithOpacity defines the default background opacity.
-func WithOpacity(opacity float32) Option {
+func WithOpacity(fg, bg float64) Option {
 	return func(g *GUI) error {
-		g.opacity = opacity
+		g.fgOpacity = fg
+		g.bgOpacity = bg
 		return nil
 	}
 }
@@ -75,6 +76,15 @@ func WithDeviceScale(scale float64) Option {
 func WithLigatures(enable bool) Option {
 	return func(g *GUI) error {
 		g.enableLigatures = enable
+		return nil
+	}
+}
+
+// WithTransparentWindow enables or disables the ability to
+// change the window foreground and background opacity.
+func WithTransparentWindow(enable bool) Option {
+	return func(g *GUI) error {
+		g.enableTransparent = enable
 		return nil
 	}
 }

@@ -57,21 +57,23 @@ const (
 // GUI implements a graphical TUI runtime as an alternative runtime to what
 // the tui packages provides.
 type GUI struct {
-	ctx              context.Context
-	cancelCtx        func()
-	mu               sync.Locker
-	fontManager      *font.Manager
-	updateChan       chan term.Event
-	handler          tui.Handler
-	writer           *cell.BufferWriter
-	mouse            *mouse
-	input            *input
-	opacity          float32
-	enableLigatures  bool
-	renderOffset     image.Point
-	cursorAttributes term.Attributes
-	defaultAttr      term.Attributes
-	renderer         *renderer
+	ctx               context.Context
+	cancelCtx         func()
+	mu                sync.Locker
+	fontManager       *font.Manager
+	updateChan        chan term.Event
+	handler           tui.Handler
+	writer            *cell.BufferWriter
+	mouse             *mouse
+	input             *input
+	bgOpacity         float64
+	fgOpacity         float64
+	enableTransparent bool
+	enableLigatures   bool
+	renderOffset      image.Point
+	cursorAttributes  term.Attributes
+	defaultAttr       term.Attributes
+	renderer          *renderer
 
 	cursor struct {
 		pos   term.Coordinates
@@ -100,6 +102,8 @@ func New(handler tui.Handler, options ...Option) (*GUI, error) {
 		mu:               new(sync.Mutex),
 		handler:          handler,
 		updateChan:       make(chan term.Event, 50),
+		bgOpacity:        1,
+		fgOpacity:        1,
 		fontManager:      fontManager,
 		activeHinter:     -1,
 		enableLigatures:  true,
@@ -139,6 +143,7 @@ func (g *GUI) Run(title string) error {
 
 	var gameOpts ebiten.RunGameOptions
 	gameOpts.SingleThread = true
+	gameOpts.ScreenTransparent = g.enableTransparent
 	return ebiten.RunGameWithOptions(g, &gameOpts)
 }
 
@@ -301,6 +306,13 @@ func (g *GUI) SetFont(family string) error {
 	return err
 }
 
+// SetOpacity sets the background and foreground opacity.
+func (g *GUI) SetOpacity(background, foreground float64) {
+	g.bgOpacity = background
+	g.fgOpacity = foreground
+	g.resize(g.width, g.height, g.fontManager.DeviceScale())
+}
+
 // AvailableFontFamilies returns an iterator with the available
 // font families on the system.
 func (g *GUI) AvailableFontFamilies() (iterator.Iterator[string], error) {
@@ -331,7 +343,7 @@ func (g *GUI) resize(width, height int, deviceScale float64) {
 	g.mouse.resize(cellsWidth, cellsHeight)
 	g.writer = cell.NewBufferWriter(g.ctx, cellsWidth, cellsHeight)
 	g.renderer = newRenderer(g.width, g.height, g.deviceScale,
-		g.fontManager, g.opacity, g.enableLigatures,
+		g.fontManager, g.bgOpacity, g.fgOpacity, g.enableLigatures,
 		g.cursorAttributes, g.defaultAttr)
 	g.needsDraw = true
 }

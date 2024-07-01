@@ -54,7 +54,8 @@ type renderer struct {
 	frame            *ebiten.Image
 	fontManager      *font.Manager
 	font             fontFace
-	opacity          float32
+	bgOpacity        float64
+	fgOpacity        float64
 	bgColor          color.Color
 	fgColor          color.Color
 	bgColors         *ebiten.Image
@@ -89,7 +90,7 @@ func newFontFace(fontManager *font.Manager) fontFace {
 
 func newRenderer(
 	width, height int, deviceScale float64,
-	fontManager *font.Manager, backgroundOpacity float32, enableLigatures bool,
+	fontManager *font.Manager, bgOpacity, fgOpacity float64, enableLigatures bool,
 	cursorAttributes, defaultAttr term.Attributes,
 ) *renderer {
 	imageWidth, imageHeight := fontManager.ImageWidth(width), fontManager.ImageHeight(height)
@@ -107,7 +108,7 @@ func newRenderer(
 		cursorForeground = color.Black
 	}
 
-	bgColor := tcellToColor(defaultAttr.Bg, color.Black, backgroundOpacity)
+	bgColor := tcellToColor(defaultAttr.Bg, color.Black, bgOpacity)
 	bgColors := ebiten.NewImage(imageWidth, imageHeight)
 	bgColors.Fill(bgColor)
 	return &renderer{
@@ -115,9 +116,10 @@ func newRenderer(
 		fontManager:      fontManager,
 		bgColor:          bgColor,
 		bgColors:         bgColors,
-		fgColor:          tcellToColor(defaultAttr.Fg, color.White, 1),
+		fgColor:          tcellToColor(defaultAttr.Fg, color.White, fgOpacity),
 		font:             newFontFace(fontManager),
-		opacity:          backgroundOpacity,
+		bgOpacity:        bgOpacity,
+		fgOpacity:        fgOpacity,
 		enableLigatures:  enableLigatures,
 		cursorForeground: cursorForeground,
 		cursorBackground: cursorBackground,
@@ -179,8 +181,8 @@ func (r *renderer) drawRow(
 	for viewX := 0; viewX < len(row); viewX++ {
 		cell := row[viewX]
 
-		fg := tcellToColor(cell.Fg, defaultForegroundColor, r.opacity)
-		bg := tcellToColor(cell.Bg, defaultBackgroundColor, r.opacity)
+		fg := tcellToColor(cell.Fg, defaultForegroundColor, r.fgOpacity)
+		bg := tcellToColor(cell.Bg, defaultBackgroundColor, r.bgOpacity)
 		pixelX := r.font.CellSize.X * float64(viewX)
 
 		// reverse attr if AttrReverse
@@ -320,13 +322,13 @@ func (r *renderer) getCell(cells [][]term.Cell, pos term.Coordinates) (ret term.
 	return cells[pos.Y][pos.X]
 }
 
-func tcellToColor(tcolor tcell.Color, def color.Color, opacity float32) color.Color {
+func tcellToColor(tcolor tcell.Color, def color.Color, opacity float64) color.Color {
 	if !tcolor.Valid() || tcolor == tcell.ColorDefault {
 		return def
 	}
-	// TODO opacity
 	r, g, b := tcolor.TrueColor().RGB()
-	return color.RGBA{R: uint8(r), G: uint8(g), B: uint8(b), A: 255}
+	alpha := uint8(float64(255) * opacity)
+	return color.RGBA{R: uint8(r), G: uint8(g), B: uint8(b), A: alpha}
 }
 
 func handleLigatures(
