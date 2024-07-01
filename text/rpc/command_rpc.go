@@ -27,11 +27,13 @@ import (
 	"errors"
 	"fmt"
 	"runtime"
+	"strings"
 	"time"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/logging"
+	status "google.golang.org/grpc/status"
 	textapi "unstable.build/go-tui/api/text"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser"
@@ -128,6 +130,9 @@ func (c *commandClient) HandleCommand(ctx context.Context, cmd textapi.Command) 
 	runtime.KeepAlive(c)
 	if err != nil {
 		c.log(log.TraceLevel, "handle command %s error: %v", cmd.Name, err)
+		if st, ok := status.FromError(err); ok {
+			return false, errors.New(strings.Trim(st.Message(), "\n"))
+		}
 		return false, err
 	}
 	return resp.GetExit(), nil
