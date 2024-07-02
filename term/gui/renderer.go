@@ -35,7 +35,7 @@ import (
 )
 
 const (
-	dimAlphaPerc    float32 = 0.5
+	dimAlphaPerc    float32 = 0.7
 	longestLigature int     = 2
 )
 
