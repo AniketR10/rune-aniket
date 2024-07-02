@@ -68,6 +68,7 @@ type GUI struct {
 	input             *input
 	bgOpacity         float64
 	fgOpacity         float64
+	bgBlurRadius      int
 	enableTransparent bool
 	enableLigatures   bool
 	renderOffset      image.Point
@@ -140,6 +141,10 @@ func (g *GUI) Run(title string) error {
 
 	ebiten.SetWindowTitle(title)
 	ebiten.SetWindowSize(defaultWidth, defaultHeight)
+
+	if g.bgBlurRadius != 0 {
+		ebiten.SetWindowBackgroundBlur(g.bgBlurRadius)
+	}
 
 	var gameOpts ebiten.RunGameOptions
 	gameOpts.SingleThread = true
@@ -307,9 +312,20 @@ func (g *GUI) SetFont(family string) error {
 }
 
 // SetOpacity sets the background and foreground opacity.
+// It has no effect if WithTransparentBackground has not
+// been passed as an option to this GUI.
 func (g *GUI) SetOpacity(background, foreground float64) {
 	g.bgOpacity = background
 	g.fgOpacity = foreground
+	g.resize(g.width, g.height, g.fontManager.DeviceScale())
+}
+
+// SetBackgroundBlur sets the background blur of the window.
+// It has no effect until the opacity is changed to be < 1.
+// It has no effect if WithTransparentBackground has not
+// been passed as an option to this GUI.
+func (g *GUI) SetBackgroundBlur(radius int) {
+	ebiten.SetWindowBackgroundBlur(radius)
 	g.resize(g.width, g.height, g.fontManager.DeviceScale())
 }
 

@@ -39,11 +39,21 @@ func WithFontFamily(family string) Option {
 	}
 }
 
-// WithOpacity defines the default background opacity.
+// WithOpacity sets the initial background opacity.
 func WithOpacity(fg, bg float64) Option {
 	return func(g *GUI) error {
 		g.fgOpacity = fg
 		g.bgOpacity = bg
+		return nil
+	}
+}
+
+// WithBackgroundBlur sets the initial background blur.
+// It only takes effect if WithTransparentWindow is set to true,
+// and WithOpacity has been used to set a non 1 background opacity.
+func WithBackgroundBlur(radius int) Option {
+	return func(g *GUI) error {
+		g.bgBlurRadius = radius
 		return nil
 	}
 }
