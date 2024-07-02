@@ -139,12 +139,12 @@ func (g *GUI) Run(title string) error {
 
 	go g.consumeEvents()
 
-	ebiten.SetWindowTitle(title)
 	ebiten.SetWindowSize(defaultWidth, defaultHeight)
 
-	if g.bgBlurRadius != 0 {
+	if g.bgBlurRadius != 0 && g.enableTransparent {
 		ebiten.SetWindowBackgroundBlur(g.bgBlurRadius)
 	}
+	ebiten.SetWindowDecorations(ebiten.DecorationsButtonsOnly)
 
 	var gameOpts ebiten.RunGameOptions
 	gameOpts.SingleThread = true
