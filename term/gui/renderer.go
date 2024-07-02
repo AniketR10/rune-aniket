@@ -327,8 +327,16 @@ func tcellToColor(tcolor tcell.Color, def color.Color, opacity float64) color.Co
 		return def
 	}
 	r, g, b := tcolor.TrueColor().RGB()
+	if opacity == 1 {
+		return color.RGBA{R: uint8(r), G: uint8(g), B: uint8(b), A: 255}
+	}
 	alpha := uint8(float64(255) * opacity)
-	return color.RGBA{R: uint8(r), G: uint8(g), B: uint8(b), A: alpha}
+	return color.RGBA{
+		R: uint8(float64(r) * opacity),
+		G: uint8(float64(g) * opacity),
+		B: uint8(float64(b) * opacity),
+		A: alpha,
+	}
 }
 
 func handleLigatures(
