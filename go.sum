@@ -36,8 +36,8 @@ github.com/ebitengine/gomobile v0.0.0-20240518074828-e86332849895 h1:48bCqKTuD7Z
 github.com/ebitengine/gomobile v0.0.0-20240518074828-e86332849895/go.mod h1:XZdLv05c5hOZm3fM2NlJ92FyEZjnslcMcNRrhxs8+8M=
 github.com/ebitengine/hideconsole v1.0.0 h1:5J4U0kXF+pv/DhiXt5/lTz0eO5ogJ1iXb8Yj1yReDqE=
 github.com/ebitengine/hideconsole v1.0.0/go.mod h1:hTTBTvVYWKBuxPr7peweneWdkUwEuHuB3C1R/ielR1A=
-github.com/ebitengine/purego v0.8.0-alpha.2 h1:+Kyr9n4eXAGMzhtWJxfdQ7AzGn0+6ZWihfCCxul3Dso=
-github.com/ebitengine/purego v0.8.0-alpha.2/go.mod h1:w5fARo4H5UrAgQTz0yqDfZ6bjstTQwUFmO+TN+nHlWE=
+github.com/ebitengine/purego v0.7.0 h1:HPZpl61edMGCEW6XK2nsR6+7AnJ3unUxpTZBkkIXnMc=
+github.com/ebitengine/purego v0.7.0/go.mod h1:ah1In8AOtksoNK6yk5z1HTJeUkC1Ez4Wk2idgGslMwQ=
 github.com/envoyproxy/go-control-plane v0.9.0/go.mod h1:YTl/9mNaCwkRvm6d1a2C3ymFceY/DCBVvsKhRF0iEA4=
 github.com/envoyproxy/go-control-plane v0.9.1-0.20191026205805-5f8ba28d4473/go.mod h1:YTl/9mNaCwkRvm6d1a2C3ymFceY/DCBVvsKhRF0iEA4=
 github.com/envoyproxy/go-control-plane v0.9.4/go.mod h1:6rpuAdCZL397s3pYoYcLgu1mIlRU8Am5FuJP05cCM98=
@@ -228,8 +228,8 @@ github.com/stretchr/testify v1.9.0/go.mod h1:r2ic/lqez/lEtzL7wO/rwa5dbSLXVDPFyf8
 github.com/tv42/httpunix v0.0.0-20191220191345-2ba4b9c3382c/go.mod h1:hzIxponao9Kjc7aWznkXaL4U4TWaDSs8zcsY4Ka08nM=
 github.com/unstablebuild/blue v1.50.1 h1:+j2v7waOJsNOIgmPP1S5tGE3ZcO0Y9dpuPRz0DHESf8=
 github.com/unstablebuild/blue v1.50.1/go.mod h1:luwzR8Hezpbe0qMFrDpnqhBFCw344h23VYt88HDzlsw=
-github.com/unstablebuild/ebiten/v2 v2.7.5-ub h1:SA2Wj2xPZ6RnYfXAdt10XDHo2AErmH5uBtJCxP8/nls=
-github.com/unstablebuild/ebiten/v2 v2.7.5-ub/go.mod h1:H2pHVgq29rfm5yeQ7jzWOM3VHsjo7/AyucODNLOhsVY=
+github.com/unstablebuild/ebiten/v2 v2.7.5-ub.1 h1:LItx46GpRKzFPmDpwjeq611RlkXFBbTjbVJX6NpMuZQ=
+github.com/unstablebuild/ebiten/v2 v2.7.5-ub.1/go.mod h1:H2pHVgq29rfm5yeQ7jzWOM3VHsjo7/AyucODNLOhsVY=
 github.com/unstablebuild/golang-internal-tools v0.0.2 h1:U7JqKgxiIWZa3oxmaxSolzQBUKfUC8bnCAeu2kqwCZQ=
 github.com/unstablebuild/golang-internal-tools v0.0.2/go.mod h1:Aad9p5ILvoHIAyskcA4cve2E0GIjQMBytCJvpotJRLE=
 github.com/unstablebuild/pty v1.3.1 h1:GQSjqGKSOkOCu+X/F5yFUSuwp7Fi08xXn28DcuXhu/k=
