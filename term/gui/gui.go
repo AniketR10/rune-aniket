@@ -229,6 +229,12 @@ func (g *GUI) Layout(width, height int) (int, int) {
 
 	// resize handler only if effective size has changed
 	if g.width != width || g.height != height || g.deviceScale != s {
+		if g.deviceScale != s {
+			g.log(log.DebugLevel, "reloading font due to "+
+				"device scale change: %f vs %f", g.deviceScale, s)
+			// reloading font shouldn't really fail
+			_ = g.fontManager.ReloadFont()
+		}
 		g.resize(width, height, s)
 	}
 

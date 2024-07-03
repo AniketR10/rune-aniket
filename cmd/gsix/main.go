@@ -46,7 +46,6 @@ import (
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/term/gui"
-	"unstable.build/go-tui/term/gui/font"
 )
 
 const (
@@ -66,16 +65,17 @@ var (
 	defaultDataPath   string
 	flagDataPath      *string
 
-	flagPprof         = flag.Bool("p", false, fmt.Sprintf("start pprof server at %s", pprofAddr))
-	flagVersion       = flag.Bool("v", false, "print version information")
-	flagWorkspace     = flag.String("w", cwdURI().String(), "workspaceapi.URI")
-	flagDPI           = flag.Float64("D", font.DefaultDPI(), "DPI")
+	flagPprof     = flag.Bool("p", false, fmt.Sprintf("start pprof server at %s", pprofAddr))
+	flagVersion   = flag.Bool("v", false, "print version information")
+	flagWorkspace = flag.String("w", cwdURI().String(), "workspaceapi.URI")
+	flagDPI       = flag.Float64("D", 0, "DPI. "+
+		"The default is to detect it automatically.")
 	flagFontSize      = flag.Float64("f", 13, "font size")
 	flagFontFamily    = flag.String("F", "", "font family, default is builtin font")
 	flagFontLigatures = flag.Bool("l", true, "font ligatures")
 	flagOpacity       = flag.Float64("o", 1, "opacity")
 	flagDeviceScale   = flag.Float64("s", 0, "device scale factor of the monitor. "+
-		"The default value detected automatically")
+		"The default is to detect it automatically.")
 )
 
 func init() {

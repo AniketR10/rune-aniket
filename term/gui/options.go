@@ -68,6 +68,7 @@ func WithFontSize(size float64) Option {
 
 // WithFontDPI sets the font DPI of the default font
 // or the font set via WithFontFamily.
+// If value is 0, the DPI is automatically calculated.
 func WithFontDPI(dpi float64) Option {
 	return func(g *GUI) error {
 		return g.fontManager.SetDPI(dpi)
@@ -75,6 +76,7 @@ func WithFontDPI(dpi float64) Option {
 }
 
 // WithDeviceScale sets the device scale factor of the monitor.
+// If value is 0, the device scale is automatically detected.
 func WithDeviceScale(scale float64) Option {
 	return func(g *GUI) error {
 		g.fontManager.SetDeviceScale(scale)

@@ -57,7 +57,7 @@ type Manager struct {
 	italicFace     font.Face
 	boldItalicFace font.Face
 	size           float64
-	dpi            float64
+	staticDPI      float64
 	staticDevScale float64
 	charSize       CharSize
 	offset         fixed.Point26_6
@@ -75,7 +75,6 @@ type CharSize struct {
 func NewManager() (*Manager, error) {
 	ret := &Manager{
 		size: 16,
-		dpi:  72,
 	}
 	cwdURI, _ := workspaceapi.CurrentUserHostURI(".")
 	fs, err := workspace.NewFileScheme(context.Background(), config.NopConfig(), cwdURI)
@@ -110,25 +109,29 @@ func (m *Manager) DecreaseSize() error {
 
 // DPI returns the configured DPI for the underlying font.
 func (m *Manager) DPI() float64 {
-	return m.dpi
+	return m.dpi()
+}
+
+func (m *Manager) dpi() float64 {
+	if m.staticDPI != 0 {
+		return m.staticDPI
+	}
+	return 72.0 * m.DeviceScale()
 }
 
 // SetDPI sets the DPI of the configured font. It will
 // reload the font with the new DPI and return
 // an error if there was a problem reloading font.
+//
+// Note that after this method is called, the DPI
+// won't be adjusted dynamically. This is only meant to be run
+// on systems where the device scale detector is not working properly.
 func (m *Manager) SetDPI(dpi float64) error {
-	if dpi <= 0 {
+	if dpi < 0 {
 		panic(errors.New("DPI must be >0"))
 	}
-	m.dpi = dpi
-	if m.paths == nil {
-		return m.loadFallbackFont()
-	}
-	err := m.setFont(m.paths)
-	if err != nil {
-		return fmt.Errorf("reload font: %w", err)
-	}
-	return nil
+	m.staticDPI = dpi
+	return m.ReloadFont()
 }
 
 // SetSize sets the size of the configured font.
@@ -136,11 +139,17 @@ func (m *Manager) SetDPI(dpi float64) error {
 // an error if there was a problem reloading the font.
 func (m *Manager) SetSize(size float64) error {
 	m.size = size
+	return m.ReloadFont()
+}
+
+// ReloadFont reloads the font. This can be used
+// if a change in DeviceScale is detected to re-adjust
+// calcultions and font rendering for the new device scale.
+func (m *Manager) ReloadFont() error {
 	if m.paths == nil {
 		return m.loadFallbackFont()
 	}
-	// effectively reload fonts at new size
-	if err := m.setFont(m.paths); err != nil {
+	if err := m.loadFontFromPaths(m.paths); err != nil {
 		return fmt.Errorf("reload font: %w", err)
 	}
 	return nil
@@ -392,7 +401,7 @@ func (m *Manager) resetFonts() {
 	m.boldItalicFace = nil
 }
 
-func (m *Manager) setFont(paths []string) (ret error) {
+func (m *Manager) loadFontFromPaths(paths []string) (ret error) {
 	m.resetFonts()
 	for _, path := range paths {
 		if err := m.loadFontFace(path); err != nil {
@@ -440,7 +449,7 @@ func (m *Manager) findAndLoadFont(name string) (paths []string, err error) {
 func (m *Manager) createFace(f *sfnt.Font) (font.Face, error) {
 	face, err := opentype.NewFace(f, &opentype.FaceOptions{
 		Size:    m.size,
-		DPI:     m.dpi,
+		DPI:     m.dpi(),
 		Hinting: font.HintingNone,
 	})
 	if err != nil {
