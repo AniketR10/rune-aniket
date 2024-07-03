@@ -50,7 +50,9 @@ import (
 //
 // If SetFontByFamilyName is not called, a builtin font is used.
 type Manager struct {
-	findfont findFont
+	findfont     findFont
+	brailleFont  *sfnt.Font
+	fallbackFont *sfnt.Font
 	// acts as an IR to have all fonts preloaded upon
 	// size, DPI and device scale changes.
 	preloaded      []*sfnt.Font
@@ -64,7 +66,6 @@ type Manager struct {
 	charSize       CharSize
 	offset         fixed.Point26_6
 	cellOffsetY    float64
-	brailleFont    *sfnt.Font
 }
 
 // CharSize represent a character dimensions in pixels.
@@ -86,6 +87,10 @@ func NewManager() (*Manager, error) {
 	}
 	ret.findfont = systemFindFont{reader: fs}
 	ret.brailleFont, err = opentype.Parse(builtinfont.BrailleTTF)
+	if err != nil {
+		return nil, fmt.Errorf("parse braille font: %w", err)
+	}
+	ret.fallbackFont, err = opentype.Parse(builtinfont.FallbackTTF)
 	if err != nil {
 		return nil, fmt.Errorf("parse braille font: %w", err)
 	}
@@ -478,9 +483,17 @@ func (m *Manager) createFace(f *sfnt.Font) (font.Face, error) {
 		Hinting: font.HintingNone,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("opentype new face: %w", err)
+		return nil, fmt.Errorf("opentype new braille face: %w", err)
 	}
-	face = newMultiFont(face, brailleFace)
+	fallbackFace, err := opentype.NewFace(m.fallbackFont, &opentype.FaceOptions{
+		Size:    m.size,
+		DPI:     m.dpi(),
+		Hinting: font.HintingNone,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("opentype new fallback face: %w", err)
+	}
+	face = newMultiFont(face, brailleFace, fallbackFace)
 	return face, nil
 }
 

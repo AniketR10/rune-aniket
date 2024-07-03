@@ -38,3 +38,6 @@ var BoldItalicTTF []byte
 
 //go:embed Braille.ttf
 var BrailleTTF []byte
+
+//go:embed MesloLGL-Regular.ttf
+var FallbackTTF []byte
