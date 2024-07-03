@@ -20,21 +20,87 @@
 // THIS SOURCE CODE AND/OR RELATED INFORMATION DOES NOT CONVEY OR IMPLY ANY RIGHTS TO
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
-package builtinfont
+package font
 
-import _ "embed"
+import (
+	"image"
 
-//go:embed JetBrainsMonoNerdFontPropo-Bold.ttf
-var BoldTTF []byte
+	"github.com/ernestrc/go-multierror"
+	"golang.org/x/image/font"
+	"golang.org/x/image/math/fixed"
+)
 
-//go:embed JetBrainsMonoNerdFontPropo-Regular.ttf
-var RegularTTF []byte
+var _ font.Face = (*multi)(nil)
 
-//go:embed JetBrainsMonoNerdFontPropo-Italic.ttf
-var ItalicTTF []byte
+type multi struct {
+	fonts []font.Face
+}
 
-//go:embed JetBrainsMonoNerdFontPropo-BoldItalic.ttf
-var BoldItalicTTF []byte
+func newMultiFont(fonts ...font.Face) *multi {
+	if len(fonts) == 0 {
+		panic("multi font with no fonts")
+	}
+	return &multi{fonts: fonts}
+}
 
-//go:embed Braille.ttf
-var BrailleTTF []byte
+func (m *multi) Close() (ret error) {
+	for _, font := range m.fonts {
+		if err := font.Close(); err != nil {
+			ret = multierror.Append(ret, err)
+		}
+	}
+	return
+}
+
+func (m *multi) Glyph(dot fixed.Point26_6, r rune) (
+	dr image.Rectangle, mask image.Image,
+	maskp image.Point, advance fixed.Int26_6, ok bool,
+) {
+	for _, font := range m.fonts {
+		dr, mask, maskp, advance, ok = font.Glyph(dot, r)
+		if ok {
+			return
+		}
+	}
+	return
+}
+
+func (m *multi) GlyphBounds(r rune) (
+	bounds fixed.Rectangle26_6, advance fixed.Int26_6, ok bool,
+) {
+	for _, font := range m.fonts {
+		bounds, advance, ok = font.GlyphBounds(r)
+		if ok {
+			return
+		}
+	}
+	return
+}
+
+func (m *multi) GlyphAdvance(r rune) (
+	advance fixed.Int26_6, ok bool,
+) {
+	for _, font := range m.fonts {
+		advance, ok = font.GlyphAdvance(r)
+		if ok {
+			return
+		}
+	}
+	return
+}
+
+func (m *multi) Kern(r0, r1 rune) fixed.Int26_6 {
+	for _, font := range m.fonts {
+		// find the right font first
+		_, _, ok := font.GlyphBounds(r0)
+		if ok {
+			return font.Kern(r0, r1)
+		}
+	}
+	return fixed.I(0)
+}
+
+func (m *multi) Metrics() font.Metrics {
+	// return the metrics of the leading font for overall metrics
+	return m.fonts[0].Metrics()
+}

@@ -64,6 +64,7 @@ type Manager struct {
 	charSize       CharSize
 	offset         fixed.Point26_6
 	cellOffsetY    float64
+	brailleFont    *sfnt.Font
 }
 
 // CharSize represent a character dimensions in pixels.
@@ -84,6 +85,10 @@ func NewManager() (*Manager, error) {
 		return nil, fmt.Errorf("new file scheme: %v", err)
 	}
 	ret.findfont = systemFindFont{reader: fs}
+	ret.brailleFont, err = opentype.Parse(builtinfont.BrailleTTF)
+	if err != nil {
+		return nil, fmt.Errorf("parse braille font: %w", err)
+	}
 	// TODO use builtin glyphs for special characters that
 	// need specific offsets. This is how alacritty always
 	// gets pixel perfect frame borders.
@@ -467,6 +472,15 @@ func (m *Manager) createFace(f *sfnt.Font) (font.Face, error) {
 	if err != nil {
 		return nil, fmt.Errorf("opentype new face: %w", err)
 	}
+	brailleFace, err := opentype.NewFace(m.brailleFont, &opentype.FaceOptions{
+		Size:    m.size,
+		DPI:     m.dpi(),
+		Hinting: font.HintingNone,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("opentype new face: %w", err)
+	}
+	face = newMultiFont(face, brailleFace)
 	return face, nil
 }
 
