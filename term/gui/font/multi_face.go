@@ -33,19 +33,19 @@ import (
 var _ font.Face = (*multi)(nil)
 
 type multi struct {
-	fonts []font.Face
+	faces []font.Face
 }
 
-func newMultiFont(fonts ...font.Face) *multi {
-	if len(fonts) == 0 {
-		panic("multi font with no fonts")
+func newMultiFace(faces ...font.Face) *multi {
+	if len(faces) == 0 {
+		panic("multi face with no faces")
 	}
-	return &multi{fonts: fonts}
+	return &multi{faces: faces}
 }
 
 func (m *multi) Close() (ret error) {
-	for _, font := range m.fonts {
-		if err := font.Close(); err != nil {
+	for _, face := range m.faces {
+		if err := face.Close(); err != nil {
 			ret = multierror.Append(ret, err)
 		}
 	}
@@ -56,8 +56,8 @@ func (m *multi) Glyph(dot fixed.Point26_6, r rune) (
 	dr image.Rectangle, mask image.Image,
 	maskp image.Point, advance fixed.Int26_6, ok bool,
 ) {
-	for _, font := range m.fonts {
-		dr, mask, maskp, advance, ok = font.Glyph(dot, r)
+	for _, face := range m.faces {
+		dr, mask, maskp, advance, ok = face.Glyph(dot, r)
 		if ok {
 			return
 		}
@@ -68,8 +68,8 @@ func (m *multi) Glyph(dot fixed.Point26_6, r rune) (
 func (m *multi) GlyphBounds(r rune) (
 	bounds fixed.Rectangle26_6, advance fixed.Int26_6, ok bool,
 ) {
-	for _, font := range m.fonts {
-		bounds, advance, ok = font.GlyphBounds(r)
+	for _, face := range m.faces {
+		bounds, advance, ok = face.GlyphBounds(r)
 		if ok {
 			return
 		}
@@ -80,8 +80,8 @@ func (m *multi) GlyphBounds(r rune) (
 func (m *multi) GlyphAdvance(r rune) (
 	advance fixed.Int26_6, ok bool,
 ) {
-	for _, font := range m.fonts {
-		advance, ok = font.GlyphAdvance(r)
+	for _, face := range m.faces {
+		advance, ok = face.GlyphAdvance(r)
 		if ok {
 			return
 		}
@@ -90,17 +90,17 @@ func (m *multi) GlyphAdvance(r rune) (
 }
 
 func (m *multi) Kern(r0, r1 rune) fixed.Int26_6 {
-	for _, font := range m.fonts {
-		// find the right font first
-		_, _, ok := font.GlyphBounds(r0)
+	for _, face := range m.faces {
+		// find the right face first
+		_, _, ok := face.GlyphBounds(r0)
 		if ok {
-			return font.Kern(r0, r1)
+			return face.Kern(r0, r1)
 		}
 	}
 	return fixed.I(0)
 }
 
 func (m *multi) Metrics() font.Metrics {
-	// return the metrics of the leading font for overall metrics
-	return m.fonts[0].Metrics()
+	// return the metrics of the leading face for overall metrics
+	return m.faces[0].Metrics()
 }
