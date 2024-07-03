@@ -38,7 +38,7 @@ import (
 
 // Draw draws a given text on a given destination image dst.
 func Draw(
-	dst *ebiten.Image, text string,
+	dst *ebiten.Image, ch rune, combining []rune,
 	face font.Face, x, y int, clr color.RGBA,
 ) {
 	var op ebiten.DrawImageOptions
@@ -50,32 +50,34 @@ func Draw(
 		float32(cb)/0xffff,
 		float32(ca)/0xffff,
 	)
-	DrawWithOptions(dst, text, face, &op)
+	DrawWithOptions(dst, ch, combining, face, &op)
 }
 
 // DrawWithOptions draws a given text on a given destination image dst.
 func DrawWithOptions(
-	dst *ebiten.Image, text string,
+	dst *ebiten.Image, ch rune, combining []rune,
 	face font.Face, options *ebiten.DrawImageOptions,
 ) {
 	fc := faceWithCacheFromFace(face)
 
 	var dx, dy fixed.Int26_6
-	prevR := rune(-1)
+	b, a, _ := fc.GlyphBounds(ch)
+	offset := fixed.Point26_6{
+		X: (adjustOffsetGranularity(dx) + b.Min.X) & ((1 << 6) - 1),
+		Y: b.Min.Y & ((1 << 6) - 1),
+	}
+	img := getGlyphImage(fc, ch, offset)
+	drawGlyph(dst, img, fixed.Point26_6{
+		X: dx + b.Min.X - offset.X,
+		Y: dy + b.Min.Y - offset.Y,
+	}, options)
+	dx += a
 
-	faceHeight := fc.Metrics().Height
-
-	for _, r := range text {
+	prevR := ch
+	for _, r := range combining {
 		if prevR >= 0 {
 			dx += fc.Kern(prevR, r)
 		}
-		if r == '\n' {
-			dx = 0
-			dy += faceHeight
-			prevR = rune(-1)
-			continue
-		}
-
 		// Adjust the position to the integers.
 		// The current glyph images assume that they are rendered on integer positions so far.
 		b, a, _ := fc.GlyphBounds(r)
@@ -208,7 +210,6 @@ func (f faceWithLineHeight) Metrics() font.Metrics {
 	m.Height = f.lineHeight
 	return m
 }
-
 
 func fixed26_6ToFloat64(x fixed.Int26_6) float64 {
 	return float64(x>>6) + float64(x&((1<<6)-1))/float64(1<<6)

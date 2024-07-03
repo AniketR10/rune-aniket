@@ -256,7 +256,7 @@ func (r *renderer) drawRow(
 			float32(r.font.CellSize.X), float32(r.font.CellSize.Y), bg, false)
 
 		// draw text
-		drawtext.DrawWithOptions(r.frame, string(cell.Ch), useFace, &opts)
+		drawtext.DrawWithOptions(r.frame, cell.Ch, cell.Combining, useFace, &opts)
 	}
 }
 
@@ -327,7 +327,7 @@ func (r *renderer) renderCursor(
 				float32(cb)/0xffff,
 				float32(ca)/0xffff,
 			)
-			drawtext.DrawWithOptions(r.frame, string(cell.Ch), useFace, &opts)
+			drawtext.DrawWithOptions(r.frame, cell.Ch, cell.Combining, useFace, &opts)
 		}
 	}
 }
@@ -384,7 +384,7 @@ func handleLigatures(
 				float32(cb)/0xffff,
 				float32(ca)/0xffff,
 			)
-			drawtext.DrawWithOptions(frame, string(ru), face, &opts)
+			drawtext.DrawWithOptions(frame, ru, nil, face, &opts)
 			return len(candidate)
 		}
 		candidate = candidate[:len(candidate)-1]
