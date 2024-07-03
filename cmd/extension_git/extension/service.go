@@ -34,27 +34,41 @@ import (
 	workspaceapi "unstable.build/go-tui/api/workspace"
 )
 
+var _ gitService = (*cmdGitService)(nil)
+
 // gitService is an interface that wraps methods to perform Git operations.
 type gitService interface {
 	// diff returns the file diff for the given file.
 	diff(workPath string) (*diff.FileDiff, error)
+
+	// currentCommit returns the current commit hash.
+	currentCommit(workPath string) (string, error)
+
+	// remoteURL returns the remote URL given a remote name.
+	remoteURL(workPath string, remoteName string) (string, error)
+
+	// relPath extracts the path relative to the repository.
+	relPath(workPath string) (string, error)
 }
 
-// cmdGitService implements gitService using the local Git CLI installation.
 type cmdGitService struct {
 	exec workspaceapi.Executor
 	cwd  workspaceapi.URI
+	fs   workspaceapi.FileSystem
 }
 
-// newCmdGitService creates and initializes a cmdGitService.
-func newCmdGitService(exec workspaceapi.Executor, cwd workspaceapi.URI) gitService {
+func newCmdGitService(exec workspaceapi.Executor, cwd workspaceapi.URI, fs workspaceapi.FileSystem) *cmdGitService {
 	c := new(cmdGitService)
 	c.exec = exec
 	c.cwd = cwd
+	c.fs = fs
 	return c
 }
 
-// gitExecError represents a failed git command execution.
+var (
+	errDiffNoChanges = errors.New("diff no changes")
+)
+
 type gitExecError struct {
 	exit   error
 	stderr string
@@ -66,10 +80,24 @@ func (e *gitExecError) Error() string {
 	)
 }
 
-// git executes commands on the Git CLI.
-func (c *cmdGitService) git(workDir string, args []string) (string, error) {
-	if err := validateWorkDir(workDir); err != nil {
-		return "", err
+// git executes commands using the Git CLI.
+func (c *cmdGitService) git(workPath string, args []string) (string, error) {
+	if workPath == "" {
+		return "", errors.New("call git cmd on empty path")
+	}
+
+	if !filepath.IsAbs(workPath) {
+		workPath = path.Join(c.cwd.Path(), workPath)
+	}
+
+	// ensure workDir is a directory and not a file path
+	workDir := workPath
+	isDir, err := c.isDir(workDir)
+	if err != nil {
+		return "", fmt.Errorf("check if is dir: %w", err)
+	}
+	if !isDir {
+		workDir = filepath.Dir(workDir)
 	}
 
 	var stdout, stderr bytes.Buffer
@@ -86,13 +114,17 @@ func (c *cmdGitService) git(workDir string, args []string) (string, error) {
 		return "", fmt.Errorf("start process: %v", err)
 	}
 	if err := <-ch; err != nil {
-		return "", &gitExecError{exit: err, stderr: stderr.String()}
+		// clean any new line there might be
+		return "", &gitExecError{
+			exit:   err,
+			stderr: strings.Replace(stderr.String(), "\n", " ", -1),
+		}
 	}
 
 	return strings.TrimSpace(stdout.String()), nil
 }
 
-// repoPath satisfies gitService.
+// repoPath provides the local file path of the repository.
 func (c *cmdGitService) repoPath(workPath string) (string, error) {
 	p, err := c.git(workPath, []string{"rev-parse", "--show-toplevel"})
 	if err != nil {
@@ -102,21 +134,23 @@ func (c *cmdGitService) repoPath(workPath string) (string, error) {
 	return p, err
 }
 
-var (
-	errDiffNoChanges = errors.New("diff no changes")
-)
-
 // diff satisfies gitService.
 func (c *cmdGitService) diff(workPath string) (*diff.FileDiff, error) {
-	if workPath == "" {
-		return nil, errors.New("empty git rel file path")
-	}
-	fileRelPath, repoPath, err := c.extractRelPath(workPath)
+	relFile, err := c.relPath(workPath)
 	if err != nil {
-		return nil, fmt.Errorf("extract file rel path: %w", err)
+		return nil, fmt.Errorf("rel path: %w", err)
 	}
 
-	out, err := c.git(repoPath, []string{"diff", "-U0", fileRelPath})
+	repoPath, err := c.repoPath(workPath)
+	if err != nil {
+		return nil, fmt.Errorf("repo path: %w", err)
+	}
+
+	// reminder: the `relFile` must exist relative to `repoPath` for the `git
+	// diff` to work. It could be `dir1/file1.sh` and `/a/b/c/my-repo`
+	// respectively or `/a/b/c/my-repo/dir` and `file1.sh`. At the moment we
+	// relativize around repo root path, so it's the former.
+	out, err := c.git(repoPath, []string{"diff", "-U0", relFile})
 	if err != nil {
 		return nil, fmt.Errorf("git cmd: %w", err)
 	}
@@ -137,46 +171,62 @@ func (c *cmdGitService) diff(workPath string) (*diff.FileDiff, error) {
 	return diff, nil
 }
 
-// extractGitRelPath gives the file path relative to the repository root
-func (c *cmdGitService) extractRelPath(file string) (
-	fileRelPath string, repoPath string, err error,
+// currentCommit satisfies gitService.
+func (c *cmdGitService) currentCommit(workPath string) (string, error) {
+	_, err := c.relPath(workPath)
+	if err != nil {
+		return "", fmt.Errorf("rel path: %w", err)
+	}
+	out, err := c.git(workPath, []string{"rev-parse", "HEAD"})
+	if err != nil {
+		return "", err
+	}
+	return out, err
+}
+
+// remoteURL satisfies gitService.
+func (c *cmdGitService) remoteURL(workDir string, remoteName string) (string, error) {
+	if remoteName == "" {
+		return "", errors.New("must pass remote name")
+	}
+	out, err := c.git(workDir, []string{"remote", "get-url", remoteName})
+	if err != nil {
+		return "", err
+	}
+	return out, err
+}
+
+// isDir detects if the passed file is a directory or not in the file system.
+func (c *cmdGitService) isDir(file string) (bool, error) {
+	info, err := c.fs.Stat(file)
+	if err != nil {
+		return false, err
+	}
+	return info.IsDir(), err
+}
+
+// relPath satisfies gitService
+func (c *cmdGitService) relPath(workPath string) (
+	relFile string, err error,
 ) {
-	if !filepath.IsAbs(file) {
-		file = path.Join(c.cwd.Path(), file)
+	repo, err := c.repoPath(workPath)
+	if err != nil {
+		return relFile, fmt.Errorf("repo path: %w", err)
+	}
+
+	if !filepath.IsAbs(workPath) {
+		workPath = path.Join(c.cwd.Path(), workPath)
 	}
 
 	// process file path since usually on macOS temp folders on
 	// `/var/folders/...` are living really under `/private/var/folders/...`
 	// (the former is symlinked).
-	file = filepath.Clean(file)
+	workPath = filepath.Clean(workPath)
 
-	// if it's a directory already, `fileDir` will be set to `filePath`.
-	fileDir := filepath.Dir(file)
-
-	repoPath, err = c.repoPath(fileDir)
+	relFile, err = filepath.Rel(repo, workPath)
 	if err != nil {
-		return fileRelPath, repoPath, fmt.Errorf("repo path: %w", err)
+		return relFile, fmt.Errorf("file path rel: %w", err)
 	}
 
-	fileRelPath, err = filepath.Rel(repoPath, file)
-	if err != nil {
-		return fileRelPath, repoPath, fmt.Errorf("file path rel: %w", err)
-	}
-
-	if fileRelPath == "" {
-		// this would be very strange... even filepath.Rel("/a/dir", "/a/dir")
-		// would give us `"."` and not `""` but better to be safe
-		return fileRelPath, repoPath, errors.New("file path rel empty result")
-	}
-
-	return fileRelPath, repoPath, nil
-}
-
-// validateWorkDir protects from problematic work directories.
-func validateWorkDir(workDir string) error {
-	if workDir == "" {
-		return errors.New("empty workDir")
-	}
-
-	return nil
+	return relFile, nil
 }

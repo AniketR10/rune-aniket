@@ -45,17 +45,21 @@ import (
 	workspaceextension "unstable.build/go-tui/api/workspace/extension"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/extension"
 	extutil "unstable.build/go-tui/extension/util"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term"
+	"unstable.build/go-tui/text/clipboard"
+	sysclip "unstable.build/go-tui/text/clipboard/system"
 )
 
 const (
 	defaultGitDiffListID = "git_diff"
 	commandNextChange    = "gitNextChange"
 	commandPrevChange    = "gitPrevChange"
+	commandCopyRemoteURL = "gitCopyRemoteURL"
 )
 
 // Grantee returns this extension's Grantee and the permissions required to run it.
@@ -76,6 +80,11 @@ var (
 			Name:    commandPrevChange,
 			Summary: "Moves cursor to the previous diff hunk emitted by git.",
 		},
+		{
+			Name:     commandCopyRemoteURL,
+			Summary:  "Copies to clipboard the web permalink of the remote repository at that line.",
+			Synopsis: "[remote]",
+		},
 	}
 	// GitHandlerEvents returns the events that this extension is
 	// interested in subscribing to.
@@ -91,6 +100,7 @@ var (
 	// extension to run.
 	GitHandlerPermissions = []extension.Permission{
 		extension.PermissionBrowserWindowManager,
+		extension.PermissionBrowserNotifications,
 		extension.PermissionBrowserEventPublisher,
 		extension.PermissionEditor,
 		extension.PermissionExecute,
@@ -105,6 +115,7 @@ var (
 
 type gitEditorHandler struct {
 	ed      textapi.Editor
+	m       browserapi.Notifications
 	wm      browserapi.WindowManager
 	p       browserapi.EventPublisher
 	exec    workspaceapi.Executor
@@ -115,10 +126,12 @@ type gitEditorHandler struct {
 		sync.Mutex
 		scroll component.Scroll
 	}
-	git           gitService
-	gitDiffListID string
-	delAttr       term.Attributes
-	addAttr       term.Attributes
+	git             gitService
+	gitDiffListID   string
+	delAttr         term.Attributes
+	addAttr         term.Attributes
+	clip            clipboard.Register
+	clipUnavailable bool
 }
 
 func newGitHandler(
@@ -140,10 +153,11 @@ func newGitHandler(
 	}
 
 	var cwd workspaceapi.URI
+	var fs workspaceapi.FileSystem
 	for _, grant := range grants {
 		switch grant.Permission {
 		case extension.PermissionFileSystem:
-			fs, err := workspaceextension.FileSystem(ctx, grant, broker)
+			fs, err = workspaceextension.FileSystem(ctx, grant, broker)
 			if err != nil {
 				return nil, err
 			}
@@ -162,6 +176,12 @@ func newGitHandler(
 			if err != nil {
 				return nil, err
 			}
+		case extension.PermissionBrowserNotifications:
+			m, err := browserextension.Notifications(ctx, grant, broker)
+			if err != nil {
+				return nil, fmt.Errorf("acquire browser notifications: %w ", err)
+			}
+			ret.m = m
 		case extension.PermissionBrowserWindowManager:
 			ret.wm, err = browserextension.WindowManager(ctx, grant, broker)
 			if err != nil {
@@ -202,7 +222,10 @@ func newGitHandler(
 		}
 	}
 
-	ret.git = newCmdGitService(ret.exec, cwd)
+	if fs == nil {
+		return nil, errors.New("file system not granted")
+	}
+	ret.git = newCmdGitService(ret.exec, cwd, fs)
 
 	ret.gitDiffListID, err = pconfig.GetString("git_diff_list_id")
 	if err != nil {
@@ -226,6 +249,11 @@ func newGitHandler(
 			ret.log(log.WarnLevel, "failed to get 'del_attr' from config: %v", err)
 		}
 		ret.delAttr = defaultDelAttr
+	}
+
+	ret.clip, err = sysclip.NewRegister()
+	if err != nil {
+		ret.clipUnavailable = true
 	}
 
 	go ret.handleEvents(cwd)
@@ -256,8 +284,22 @@ func (h *gitEditorHandler) HandleCommand(ctx context.Context, cmd textapi.Comman
 		if err != nil {
 			err = fmt.Errorf("move to prev location: %v", err)
 		}
-	}
+	case commandCopyRemoteURL:
+		if h.clipUnavailable {
+			err = errors.New("system clipboard unavailable")
+			return
+		}
 
+		remoteName := "origin"
+		if len(cmd.Args) > 0 {
+			remoteName = cmd.Args[0]
+		}
+
+		err = h.copyRemoteURL(cmd.URI, remoteName, cmd.Cursor.Content)
+		if err != nil {
+			err = fmt.Errorf("copy remote url: %v", err)
+		}
+	}
 	return
 }
 
@@ -354,6 +396,32 @@ func (h *gitEditorHandler) runDiff(ctx context.Context, ev textapi.Event) {
 	res.Metadata.(*metadata).locations = locs
 
 	h.setLocationList(ev, locs)
+}
+
+func (h *gitEditorHandler) copyRemoteURL(
+	uri workspaceapi.URI,
+	remoteName string,
+	cmdCursor term.Coordinates,
+) error {
+	webLink, err := remoteWebLink(h.git, remoteName, uri.Path(), cmdCursor.Y)
+	if err != nil {
+		return err
+	}
+
+	if err := h.copyToClipboard(webLink); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (h *gitEditorHandler) copyToClipboard(text string) error {
+	err := h.clip.Copy(clipboard.DefaultRegisterID, clipboard.Data{Text: text})
+	if err != nil {
+		return fmt.Errorf("copy web URL: %w", err)
+	}
+	_ = h.m.Notify(notifications.LevelSuccess, "web url copied to clipboard")
+	return nil
 }
 
 func (h *gitEditorHandler) resetBar() {
