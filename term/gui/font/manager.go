@@ -50,8 +50,10 @@ import (
 //
 // If SetFontByFamilyName is not called, a builtin font is used.
 type Manager struct {
-	findfont       findFont
-	paths          []string
+	findfont findFont
+	// acts as an IR to have all fonts preloaded upon
+	// size, DPI and device scale changes.
+	preloaded      []*sfnt.Font
 	regularFace    font.Face
 	boldFace       font.Face
 	italicFace     font.Face
@@ -146,10 +148,10 @@ func (m *Manager) SetSize(size float64) error {
 // if a change in DeviceScale is detected to re-adjust
 // calcultions and font rendering for the new device scale.
 func (m *Manager) ReloadFont() error {
-	if m.paths == nil {
+	if len(m.preloaded) == 0 {
 		return m.loadFallbackFont()
 	}
-	if err := m.loadFontFromPaths(m.paths); err != nil {
+	if err := m.setPreloaded(m.preloaded); err != nil {
 		return fmt.Errorf("reload font: %w", err)
 	}
 	return nil
@@ -165,9 +167,9 @@ func (m *Manager) SetFontByFamilyName(name string) error {
 		return m.loadFallbackFont()
 	}
 
-	paths, err := m.findAndLoadFont(name)
+	fonts, err := m.findAndLoadFont(name)
 	if err == nil {
-		m.paths = paths
+		m.preloaded = fonts
 	}
 	return err
 }
@@ -340,56 +342,65 @@ func (m *Manager) loadFallbackFont() error {
 	return m.calcMetrics()
 }
 
-func (m *Manager) loadFontFace(path string) (err error) {
+func (m *Manager) loadFontAtPath(path string) (fonts []*sfnt.Font, err error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return fmt.Errorf("open %q: %w", path, err)
+		return nil, fmt.Errorf("open %q: %w", path, err)
 	}
 
-	var fonts []*sfnt.Font
 	switch filepath.Ext(path) {
 	case ".ttc", ".otc":
 		col, err := opentype.ParseCollectionReaderAt(f)
 		if err != nil {
-			return fmt.Errorf("opentype parse collection: %w", err)
+			return nil, fmt.Errorf("opentype parse collection: %w", err)
 		}
 		for i := 0; i < col.NumFonts(); i++ {
 			font, err := col.Font(i)
 			if err != nil {
-				return fmt.Errorf("font %d: %w", i, err)
+				return nil, fmt.Errorf("font %d: %w", i, err)
 			}
 			fonts = append(fonts, font)
 		}
 	case ".ttf", ".otf":
 		font, serr := opentype.ParseReaderAt(f)
 		if serr != nil {
-			return multierr.Append(err, fmt.Errorf("opentype parse font: %w", serr))
+			return nil, multierr.Append(err, fmt.Errorf("opentype parse font: %w", serr))
 		}
 		fonts = append(fonts, font)
 	}
+	if err != nil {
+		return nil, err
+	}
 
 	var buf sfnt.Buffer
-	for i, font := range fonts {
-		face, err := m.createFace(font)
-		if err != nil {
-			return fmt.Errorf("create %d opentype face: %w", i, err)
+	for _, font := range fonts {
+		if lerr := m.setFont(&buf, font); lerr != nil {
+			return nil, multierr.Append(err, lerr)
 		}
-		subfamily, err := font.Name(&buf, sfnt.NameIDSubfamily)
-		if err != nil {
-			return fmt.Errorf("read font %d subfamily: %w", i, err)
-		}
-		switch subfamily {
-		case "Regular":
-			m.regularFace = face
-		case "Bold":
-			m.boldFace = face
-		case "Italic", "Oblique":
-			m.italicFace = face
-		case "Bold Italic", "Bold Oblique":
-			m.boldItalicFace = face
-		default:
-			m.log(log.DebugLevel, "skipping subfamily: %q", subfamily)
-		}
+	}
+	return
+}
+
+func (m *Manager) setFont(buf *sfnt.Buffer, font *sfnt.Font) error {
+	face, err := m.createFace(font)
+	if err != nil {
+		return fmt.Errorf("create opentype face: %w", err)
+	}
+	subfamily, err := font.Name(buf, sfnt.NameIDSubfamily)
+	if err != nil {
+		return fmt.Errorf("read font subfamily: %w", err)
+	}
+	switch subfamily {
+	case "Regular":
+		m.regularFace = face
+	case "Bold":
+		m.boldFace = face
+	case "Italic", "Oblique":
+		m.italicFace = face
+	case "Bold Italic", "Bold Oblique":
+		m.boldItalicFace = face
+	default:
+		m.log(log.DebugLevel, "skipping subfamily: %q", subfamily)
 	}
 	return nil
 }
@@ -401,10 +412,11 @@ func (m *Manager) resetFonts() {
 	m.boldItalicFace = nil
 }
 
-func (m *Manager) loadFontFromPaths(paths []string) (ret error) {
+func (m *Manager) setPreloaded(preloaded []*sfnt.Font) (ret error) {
 	m.resetFonts()
-	for _, path := range paths {
-		if err := m.loadFontFace(path); err != nil {
+	var buf sfnt.Buffer
+	for _, font := range preloaded {
+		if err := m.setFont(&buf, font); err != nil {
 			ret = multierr.Append(ret, err)
 		}
 	}
@@ -417,25 +429,25 @@ func (m *Manager) loadFontFromPaths(paths []string) (ret error) {
 	return
 }
 
-func (m *Manager) findAndLoadFont(name string) (paths []string, err error) {
+func (m *Manager) findAndLoadFont(name string) (ret []*sfnt.Font, err error) {
 	fonts, err := m.findfont.findByFamily(name)
 	if err != nil {
 		return nil, fmt.Errorf("find font with family '%s': %w", name, err)
 	}
 
 	for {
-		font, ok := fonts.Next()
+		meta, ok := fonts.Next()
 		if !ok {
 			if err := fonts.Err(); err != nil {
 				return nil, fmt.Errorf("fonts iterator: %v", err)
 			}
 			break
 		}
-		err = m.loadFontFace(font.path)
+		fonts, err := m.loadFontAtPath(meta.path)
 		if err != nil {
-			return
+			return nil, fmt.Errorf("load font at path '%s': %w", meta.path, err)
 		}
-		paths = append(paths, font.path)
+		ret = append(ret, fonts...)
 	}
 
 	if m.regularFace == nil {
