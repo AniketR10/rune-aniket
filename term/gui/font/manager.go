@@ -56,6 +56,7 @@ type Manager struct {
 	// acts as an IR to have all fonts preloaded upon
 	// size, DPI and device scale changes.
 	preloaded      []*sfnt.Font
+	family         string
 	regularFace    font.Face
 	boldFace       font.Face
 	italicFace     font.Face
@@ -142,6 +143,9 @@ func (m *Manager) SetDPI(dpi float64) error {
 	if dpi < 0 {
 		panic(errors.New("DPI must be >0"))
 	}
+	if m.staticDPI == dpi {
+		return nil
+	}
 	m.staticDPI = dpi
 	return m.ReloadFont()
 }
@@ -150,6 +154,9 @@ func (m *Manager) SetDPI(dpi float64) error {
 // It will reload the font with the new DPI and return
 // an error if there was a problem reloading the font.
 func (m *Manager) SetSize(size float64) error {
+	if m.size == size {
+		return nil
+	}
 	m.size = size
 	return m.ReloadFont()
 }
@@ -172,6 +179,9 @@ func (m *Manager) ReloadFont() error {
 // a problem loading the given font.
 // If name is set to an empty string, the default builtin font is used.
 func (m *Manager) SetFontByFamilyName(name string) error {
+	if name == m.family {
+		return nil
+	}
 	m.resetFonts()
 	if name == "" {
 		return m.loadFallbackFont()
@@ -180,6 +190,7 @@ func (m *Manager) SetFontByFamilyName(name string) error {
 	fonts, err := m.findAndLoadFont(name)
 	if err == nil {
 		m.preloaded = fonts
+		m.family = name
 	}
 	return err
 }
@@ -349,7 +360,7 @@ func (m *Manager) loadFallbackFont() error {
 		return err
 	}
 
-	return m.calcMetrics()
+	return m.setFaceMetrics()
 }
 
 func (m *Manager) loadFontAtPath(path string) (fonts []*sfnt.Font, err error) {
@@ -433,7 +444,7 @@ func (m *Manager) setPreloaded(preloaded []*sfnt.Font) (ret error) {
 	if ret != nil {
 		return
 	}
-	if err := m.calcMetrics(); err != nil {
+	if err := m.setFaceMetrics(); err != nil {
 		ret = multierr.Append(ret, err)
 	}
 	return
@@ -464,7 +475,7 @@ func (m *Manager) findAndLoadFont(name string) (ret []*sfnt.Font, err error) {
 		return nil, fmt.Errorf("could not find regular style for font family '%s'", name)
 	}
 
-	err = m.calcMetrics()
+	err = m.setFaceMetrics()
 	return
 }
 
@@ -493,21 +504,31 @@ func (m *Manager) createFace(f *sfnt.Font) (font.Face, error) {
 	if err != nil {
 		return nil, fmt.Errorf("opentype new fallback face: %w", err)
 	}
-	face = newMultiFace(face, brailleFace, fallbackFace)
+	face = newMultiFace(0, face, brailleFace, fallbackFace)
+	face = newCacheFace(face)
 	return face, nil
 }
 
-func (m *Manager) calcMetrics() error {
-	face := m.regularFace
-	bounds, advance, _ := face.GlyphBounds([]rune("█")[0])
+func (m *Manager) setFaceMetrics() error {
+	// use user/system face for calculating metrics, rather than
+	// auxiliary or fallback faces.
+	multi := m.regularFace.(*cacheFace).f.(*multi)
+	faceForMetrics := multi.faces[multi.preferred]
 
-	m.charSize.X = math.Max(0, float64((advance-bounds.Min.X+m.offset.X)/(1<<6)))
-	m.charSize.Y = math.Max(0, float64((bounds.Max.Sub(bounds.Min).Y+m.offset.Y)/(1<<6)))
-	m.cellOffsetY = float64(-bounds.Min.Y / (1 << 6))
-
+	m.charSize.X, m.charSize.Y, m.cellOffsetY = m.calcFaceMetrics(faceForMetrics)
 	m.log(log.DebugLevel, "calculated font char size: %+v and offset: %f",
 		m.charSize, m.cellOffsetY)
 	return nil
+}
+
+func (m *Manager) calcFaceMetrics(face font.Face) (float64, float64, float64) {
+	bounds, advance, _ := face.GlyphBounds('█')
+
+	charSizeX := math.Max(0, float64((advance-bounds.Min.X+m.offset.X)/(1<<6)))
+	charSizeY := math.Max(0, float64((bounds.Max.Sub(bounds.Min).Y+m.offset.Y)/(1<<6)))
+	cellOffsetY := float64(-bounds.Min.Y / (1 << 6))
+
+	return charSizeX, charSizeY, cellOffsetY
 }
 
 func (p *Manager) log(level log.Level, msg string, args ...any) {

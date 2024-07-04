@@ -31,6 +31,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/benchdraw"
 	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/term"
+	"unstable.build/go-tui/term/gui/drawtext"
 	"unstable.build/go-tui/term/gui/font"
 )
 
@@ -133,13 +134,14 @@ func benchmarkRenderLigatures(b *testing.B, pixelsWidth, pixelsHeight int) {
 	image := ebiten.NewImage(pixelsWidth, pixelsHeight)
 	font := newFontFace(manager)
 	colorBlack := color.RGBA{A: 255}
+	drawer := drawtext.New()
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		if i%2 == 0 {
-			handleLigatures(cells, 4, 10, font.Regular, colorBlack, font, image)
+			handleLigatures(drawer, cells, 4, 10, font.Regular, colorBlack, font, image)
 		} else {
-			handleLigatures(cells, 5, 10, font.Regular, colorBlack, font, image)
+			handleLigatures(drawer, cells, 5, 10, font.Regular, colorBlack, font, image)
 		}
 	}
 }

@@ -23,80 +23,69 @@
 package font
 
 import (
-	"image"
+	"testing"
 
-	"github.com/ernestrc/go-multierror"
-	"golang.org/x/image/font"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/image/math/fixed"
 )
 
-var _ font.Face = (*multi)(nil)
+func TestCacheFace(t *testing.T) {
+	t.Run("caches calls to Glyph", func(t *testing.T) {
+		mock := mockFace{}
+		face := newCacheFace(&mock)
 
-type multi struct {
-	faces     []font.Face
-	preferred int
-}
-
-func newMultiFace(preferred int, faces ...font.Face) *multi {
-	if len(faces) == 0 {
-		panic("multi face with no faces")
-	}
-	if preferred < 0 || preferred >= len(faces) {
-		panic("preferred must be an index with the preferred font for calculations")
-	}
-	return &multi{faces: faces, preferred: preferred}
-}
-
-func (m *multi) Close() (ret error) {
-	for _, face := range m.faces {
-		if err := face.Close(); err != nil {
-			ret = multierror.Append(ret, err)
+		for i := 0; i < 3; i++ {
+			face.Glyph(fixed.Point26_6{}, 'a')
+			assert.Equal(t, 1, mock.glyph)
 		}
-	}
-	return
-}
+	})
 
-func (m *multi) Glyph(dot fixed.Point26_6, r rune) (
-	dr image.Rectangle, mask image.Image,
-	maskp image.Point, advance fixed.Int26_6, ok bool,
-) {
-	for _, face := range m.faces {
-		dr, mask, maskp, advance, ok = face.Glyph(dot, r)
-		if ok {
-			return
+	t.Run("caches calls to GlyphBounds", func(t *testing.T) {
+		mock := mockFace{}
+		face := newCacheFace(&mock)
+
+		for i := 0; i < 3; i++ {
+			face.GlyphBounds('a')
+			assert.Equal(t, 1, mock.bounds)
 		}
-	}
-	return m.faces[m.preferred].Glyph(dot, r)
-}
+	})
 
-func (m *multi) GlyphBounds(r rune) (
-	bounds fixed.Rectangle26_6, advance fixed.Int26_6, ok bool,
-) {
-	for _, face := range m.faces {
-		bounds, advance, ok = face.GlyphBounds(r)
-		if ok {
-			return
+	t.Run("caches calls to GlyphAdvance", func(t *testing.T) {
+		mock := mockFace{}
+		face := newCacheFace(&mock)
+
+		for i := 0; i < 3; i++ {
+			face.GlyphAdvance('a')
+			assert.Equal(t, 1, mock.advance)
 		}
-	}
-	return m.faces[m.preferred].GlyphBounds(r)
-}
+	})
 
-func (m *multi) GlyphAdvance(r rune) (
-	advance fixed.Int26_6, ok bool,
-) {
-	for _, face := range m.faces {
-		advance, ok = face.GlyphAdvance(r)
-		if ok {
-			return
+	t.Run("caches calls to Metrics", func(t *testing.T) {
+		mock := mockFace{}
+		face := newCacheFace(&mock)
+
+		for i := 0; i < 3; i++ {
+			face.Metrics()
+			assert.Equal(t, 1, mock.metrics)
 		}
-	}
-	return m.faces[m.preferred].GlyphAdvance(r)
-}
+	})
 
-func (m *multi) Kern(r0, r1 rune) fixed.Int26_6 {
-	return m.faces[m.preferred].Kern(r0, r1)
-}
+	t.Run("caches calls to Kern", func(t *testing.T) {
+		mock := mockFace{}
+		face := newCacheFace(&mock)
 
-func (m *multi) Metrics() font.Metrics {
-	return m.faces[m.preferred].Metrics()
+		for i := 0; i < 3; i++ {
+			face.Kern('a', 'A')
+			assert.Equal(t, 1, mock.kern)
+		}
+	})
+
+	t.Run("Close dispatches Close to underlying face", func(t *testing.T) {
+		mock := mockFace{}
+		face := newCacheFace(&mock)
+
+		require.NoError(t, face.Close())
+		assert.Equal(t, 1, mock.close)
+	})
 }

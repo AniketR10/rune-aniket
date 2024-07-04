@@ -25,78 +25,59 @@ package font
 import (
 	"image"
 
-	"github.com/ernestrc/go-multierror"
 	"golang.org/x/image/font"
 	"golang.org/x/image/math/fixed"
 )
 
-var _ font.Face = (*multi)(nil)
+var _ font.Face = (*mockFace)(nil)
 
-type multi struct {
-	faces     []font.Face
-	preferred int
+type mockFace struct {
+	glyph   int
+	bounds  int
+	close   int
+	advance int
+	kern    int
+	metrics int
 }
 
-func newMultiFace(preferred int, faces ...font.Face) *multi {
-	if len(faces) == 0 {
-		panic("multi face with no faces")
-	}
-	if preferred < 0 || preferred >= len(faces) {
-		panic("preferred must be an index with the preferred font for calculations")
-	}
-	return &multi{faces: faces, preferred: preferred}
+func newMockFace() *mockFace {
+	return &mockFace{}
 }
 
-func (m *multi) Close() (ret error) {
-	for _, face := range m.faces {
-		if err := face.Close(); err != nil {
-			ret = multierror.Append(ret, err)
-		}
-	}
+func (m *mockFace) Close() (ret error) {
+	m.close++
 	return
 }
 
-func (m *multi) Glyph(dot fixed.Point26_6, r rune) (
+func (m *mockFace) Glyph(dot fixed.Point26_6, r rune) (
 	dr image.Rectangle, mask image.Image,
 	maskp image.Point, advance fixed.Int26_6, ok bool,
 ) {
-	for _, face := range m.faces {
-		dr, mask, maskp, advance, ok = face.Glyph(dot, r)
-		if ok {
-			return
-		}
-	}
-	return m.faces[m.preferred].Glyph(dot, r)
+	m.glyph++
+	mask = image.NewRGBA(image.Rectangle{})
+	return
 }
 
-func (m *multi) GlyphBounds(r rune) (
+func (m *mockFace) GlyphBounds(r rune) (
 	bounds fixed.Rectangle26_6, advance fixed.Int26_6, ok bool,
 ) {
-	for _, face := range m.faces {
-		bounds, advance, ok = face.GlyphBounds(r)
-		if ok {
-			return
-		}
-	}
-	return m.faces[m.preferred].GlyphBounds(r)
+	m.bounds++
+	return
 }
 
-func (m *multi) GlyphAdvance(r rune) (
+func (m *mockFace) GlyphAdvance(r rune) (
 	advance fixed.Int26_6, ok bool,
 ) {
-	for _, face := range m.faces {
-		advance, ok = face.GlyphAdvance(r)
-		if ok {
-			return
-		}
-	}
-	return m.faces[m.preferred].GlyphAdvance(r)
+	m.advance++
+	return
 }
 
-func (m *multi) Kern(r0, r1 rune) fixed.Int26_6 {
-	return m.faces[m.preferred].Kern(r0, r1)
+func (m *mockFace) Kern(r0, r1 rune) fixed.Int26_6 {
+	m.kern++
+	return fixed.I(0)
 }
 
-func (m *multi) Metrics() font.Metrics {
-	return m.faces[m.preferred].Metrics()
+func (m *mockFace) Metrics() font.Metrics {
+	m.metrics++
+	return font.Metrics{}
 }

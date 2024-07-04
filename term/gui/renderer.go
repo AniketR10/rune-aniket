@@ -58,6 +58,7 @@ var ligatures = map[string]rune{
 type renderer struct {
 	frame            *ebiten.Image
 	fontManager      *font.Manager
+	drawer           *drawtext.Drawer
 	font             fontFace
 	bgOpacity        float64
 	fgOpacity        float64
@@ -119,6 +120,7 @@ func newRenderer(
 	return &renderer{
 		frame:            ebiten.NewImage(imageWidth, imageHeight),
 		fontManager:      fontManager,
+		drawer:           drawtext.New(),
 		bgColor:          bgColor,
 		bgColors:         bgColors,
 		fgColor:          tcellToColor(defaultAttr.Fg, colorWhite, fgOpacity),
@@ -256,14 +258,14 @@ func (r *renderer) drawRow(
 			float32(r.font.CellSize.X), float32(r.font.CellSize.Y), bg, false)
 
 		// draw text
-		drawtext.DrawWithOptions(r.frame, cell.Ch, cell.Combining, useFace, &opts)
+		r.drawer.DrawWithOptions(r.frame, cell.Ch, cell.Combining, useFace, &opts)
 	}
 }
 
 func (r *renderer) handleLigatures(
 	cells [][]term.Cell, sx, sy int, face imagefont.Face, color color.RGBA,
 ) (length int) {
-	return handleLigatures(cells, sx, sy, face, color, r.font, r.frame)
+	return handleLigatures(r.drawer, cells, sx, sy, face, color, r.font, r.frame)
 }
 
 func (r *renderer) renderCursor(
@@ -327,7 +329,7 @@ func (r *renderer) renderCursor(
 				float32(cb)/0xffff,
 				float32(ca)/0xffff,
 			)
-			drawtext.DrawWithOptions(r.frame, cell.Ch, cell.Combining, useFace, &opts)
+			r.drawer.DrawWithOptions(r.frame, cell.Ch, cell.Combining, useFace, &opts)
 		}
 	}
 }
@@ -357,7 +359,7 @@ func tcellToColor(tcolor tcell.Color, def color.RGBA, opacity float64) color.RGB
 }
 
 func handleLigatures(
-	cells [][]term.Cell, sx, sy int, face imagefont.Face, color color.RGBA,
+	drawer *drawtext.Drawer, cells [][]term.Cell, sx, sy int, face imagefont.Face, color color.RGBA,
 	font fontFace, frame *ebiten.Image,
 ) (length int) {
 	var c [longestLigature]rune
@@ -384,7 +386,7 @@ func handleLigatures(
 				float32(cb)/0xffff,
 				float32(ca)/0xffff,
 			)
-			drawtext.DrawWithOptions(frame, ru, nil, face, &opts)
+			drawer.DrawWithOptions(frame, ru, nil, face, &opts)
 			return len(candidate)
 		}
 		candidate = candidate[:len(candidate)-1]
