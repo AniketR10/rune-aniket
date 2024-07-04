@@ -504,7 +504,9 @@ func (m *Manager) createFace(f *sfnt.Font) (font.Face, error) {
 	if err != nil {
 		return nil, fmt.Errorf("opentype new fallback face: %w", err)
 	}
-	face = newMultiFace(0, face, brailleFace, fallbackFace)
+	charSizeX, charSizeY, offsetY := m.calcFaceMetrics(face)
+	customFace := newCustomFace(charSizeX, charSizeY, offsetY, face)
+	face = newMultiFace(1, customFace, face, brailleFace, fallbackFace)
 	face = newCacheFace(face)
 	return face, nil
 }
