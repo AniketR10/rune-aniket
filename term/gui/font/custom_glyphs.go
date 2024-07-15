@@ -30,6 +30,13 @@ import (
 	"golang.org/x/image/math/fixed"
 )
 
+var (
+	colorFill           = color.RGBA{R: 255, G: 255, B: 255, A: 255}
+	colorFillAlphaStep1 = color.RGBA{R: 192, G: 192, B: 192, A: 192}
+	colorFillAlphaStep2 = color.RGBA{R: 128, G: 128, B: 128, A: 128}
+	colorFillAlphaStep3 = color.RGBA{R: 64, G: 64, B: 64, A: 64}
+)
+
 // Shades: '░', '▒', '▓', '█'.
 func (m *custom) shadeGlyph(dot fixed.Point26_6, c color.RGBA) (
 	dr image.Rectangle, mask image.Image,

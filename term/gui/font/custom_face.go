@@ -25,7 +25,6 @@ package font
 
 import (
 	"image"
-	"image/color"
 
 	"golang.org/x/image/font"
 	"golang.org/x/image/math/fixed"
@@ -42,13 +41,6 @@ type custom struct {
 	offsetY       fixed.Int26_6
 }
 
-var (
-	colorFill           = color.RGBA{R: 255, G: 255, B: 255, A: 255}
-	colorFillAlphaStep1 = color.RGBA{R: 192, G: 192, B: 192, A: 192}
-	colorFillAlphaStep2 = color.RGBA{R: 128, G: 128, B: 128, A: 128}
-	colorFillAlphaStep3 = color.RGBA{R: 64, G: 64, B: 64, A: 64}
-)
-
 func newCustomFace(width, height, offsetY float64, standard font.Face) *custom {
 	return &custom{
 		offsetY: float64ToFixed(offsetY),
@@ -63,16 +55,14 @@ func (m *custom) Glyph(dot fixed.Point26_6, r rune) (
 	maskp image.Point, advance fixed.Int26_6, ok bool,
 ) {
 	switch r {
-	case '\u2588':
-		dr, mask, maskp, advance, ok = m.shadeGlyph(dot, colorFill)
-	case '\u2591':
+	case '░':
 		dr, mask, maskp, advance, ok = m.shadeGlyph(dot, colorFillAlphaStep3)
-	case '\u2592':
+	case '▒':
 		dr, mask, maskp, advance, ok = m.shadeGlyph(dot, colorFillAlphaStep2)
-	case '\u2593':
+	case '▓':
 		dr, mask, maskp, advance, ok = m.shadeGlyph(dot, colorFillAlphaStep1)
-	default:
-		return
+	case '█':
+		dr, mask, maskp, advance, ok = m.shadeGlyph(dot, colorFill)
 	}
 	return
 }
@@ -81,17 +71,8 @@ func (m *custom) GlyphBounds(r rune) (
 	bounds fixed.Rectangle26_6, advance fixed.Int26_6, ok bool,
 ) {
 	var dot fixed.Point26_6
-	var boundsRect image.Rectangle
-	switch r {
-	case '\u2588':
-		boundsRect, _, _, advance, ok = m.shadeGlyph(dot, colorFill)
-	case '\u2591':
-		boundsRect, _, _, advance, ok = m.shadeGlyph(dot, colorFillAlphaStep3)
-	case '\u2592':
-		boundsRect, _, _, advance, ok = m.shadeGlyph(dot, colorFillAlphaStep2)
-	case '\u2593':
-		boundsRect, _, _, advance, ok = m.shadeGlyph(dot, colorFillAlphaStep1)
-	default:
+	boundsRect, _, _, advance, ok := m.Glyph(dot, r)
+	if !ok {
 		return
 	}
 
@@ -102,18 +83,7 @@ func (m *custom) GlyphAdvance(r rune) (
 	advance fixed.Int26_6, ok bool,
 ) {
 	var dot fixed.Point26_6
-	switch r {
-	case '\u2588':
-		_, _, _, advance, ok = m.shadeGlyph(dot, colorFill)
-	case '\u2591':
-		_, _, _, advance, ok = m.shadeGlyph(dot, colorFillAlphaStep3)
-	case '\u2592':
-		_, _, _, advance, ok = m.shadeGlyph(dot, colorFillAlphaStep2)
-	case '\u2593':
-		_, _, _, advance, ok = m.shadeGlyph(dot, colorFillAlphaStep1)
-	default:
-		return
-	}
+	_, _, _, advance, ok = m.Glyph(dot, r)
 	return
 }
 
