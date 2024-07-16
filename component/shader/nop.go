@@ -26,11 +26,13 @@ import (
 	"unstable.build/go-tui/term"
 )
 
-// Shader abstracts the ability to aplly shader-like effects
-// to other components.
-type Shader interface {
-	// Shade applies the shader's transformation
-	// to the given component turning it into an animated component,
-	// or returns false if this Shader's animation is done.
-	Shade(frame, total int, in [][]term.Cell)
+// Nop is a Shader that does nothing.
+func Nop() Shader {
+	return &nop{}
+}
+
+type nop struct {
+}
+
+func (s nop) Shade(epoch, total int, cells [][]term.Cell) {
 }
