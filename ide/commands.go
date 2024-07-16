@@ -284,4 +284,11 @@ var (
 		},
 		handler: (*ex).newWindow,
 	}
+
+	runShaderCmdManual = textapi.CommandManual{
+		Name: "runShader",
+		Summary: "Run a shader from the library of shaders. " +
+			"By default duration is 1s and fps is 30.",
+		Synopsis: "name [duration] [fps]",
+	}
 )

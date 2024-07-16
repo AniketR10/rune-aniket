@@ -39,8 +39,6 @@ import (
 	textapi "unstable.build/go-tui/api/text"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser"
-	"unstable.build/go-tui/component/shader"
-	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/workspace"
@@ -53,7 +51,8 @@ type IDE struct {
 	options
 	locker           sync.Locker
 	workspaceManager *workspace.Manager
-	root             *workspaceManagerHandler
+	workspaceHandler *workspaceManagerHandler
+	root             shaderRunner
 	running          int32
 	publishEventFn   EventPublisher
 }
@@ -185,7 +184,7 @@ func (i *IDE) init(
 		cwdURI = &uri
 	}
 
-	root, err := newWorkspaceManagerHandler(cwdURI, homeDirURI,
+	workspaceHandler, err := newWorkspaceManagerHandler(cwdURI, homeDirURI,
 		workspaceManager, i.ideConfig, recfilename, filenames,
 		sixDir, i.publishEvent, op.extensionRunner, i.locker, op.extensions,
 		func() (ideConfig, error) {
@@ -198,10 +197,12 @@ func (i *IDE) init(
 		return fmt.Errorf("new workspace manager: %w", err)
 	}
 	i.workspaceManager = workspaceManager
-	i.root = root
-	root.logNonFatalErrs(root.focusBrowser(), configErr, i.ideConfig.errors)
+	i.workspaceHandler = workspaceHandler
+	workspaceHandler.logNonFatalErrs(workspaceHandler.focusBrowser(),
+		configErr, i.ideConfig.errors)
 
-	return nil
+	i.root.init(workspaceHandler, i)
+	return i.workspaceHandler.subscribeCommand(runShaderCmdManual, &i.root)
 }
 
 func (i *IDE) publishEvent(ev term.Event) bool {
@@ -232,20 +233,12 @@ func (i *IDE) Run() error {
 	if err != nil {
 		return fmt.Errorf("tui init: %w", err)
 	}
-	atomic.StoreInt32(&i.running, 1)
 
 	term.SetAttr(i.DefaultAttributes())
 	term.SetInputMode(i.ideConfig.inputMode())
 
-	var root tui.Handler = i.root
-	if i.options.shader != nil {
-		const defaultShaderFPS = 30
-		shader := shader.New(i.root, i.options.shader,
-			i, defaultShaderFPS, i.options.shaderDuration)
-		root = handler.WithComponent(i.root, shader)
-	}
-
-	err = tui.RunWithLocker(root, i.locker)
+	i.initRunning()
+	err = tui.RunWithLocker(&i.root, i.locker)
 	if err != nil {
 		return fmt.Errorf("tui run: %w", err)
 	}
@@ -262,7 +255,7 @@ func (i *IDE) Run() error {
 func (c *IDE) SubscribeCommand(
 	cmd textapi.CommandManual, handler text.CommandHandler,
 ) error {
-	return c.root.subscribeCommand(cmd, handler)
+	return c.workspaceHandler.subscribeCommand(cmd, handler)
 }
 
 // DefaultAttributes return the default attributes to be used to fill the screen.
@@ -280,8 +273,8 @@ func (i *IDE) Config() config.Config {
 // This can be used insteaf of Run and Close, which
 // install this IDE on a TUI system.
 func (i *IDE) Handler() (tui.Handler, func()) {
-	atomic.StoreInt32(&i.running, 1)
-	return i.root, func() {
+	i.initRunning()
+	return &i.root, func() {
 		running := atomic.CompareAndSwapInt32(&i.running, 1, 0)
 		if !running {
 			return
@@ -292,18 +285,22 @@ func (i *IDE) Handler() (tui.Handler, func()) {
 
 // Browser returns the current browser in focus.
 func (i *IDE) Browser() browser.Browser {
-	return i.root.focusBrowser()
+	return i.workspaceHandler.focusBrowser()
 }
 
 func (i *IDE) closeResources() (ret error) {
-	i.root.mu.Lock()
-	defer i.root.mu.Unlock()
+	i.workspaceHandler.mu.Lock()
+	defer i.workspaceHandler.mu.Unlock()
 
-	if err := i.root.Close(); err != nil {
+	if err := i.workspaceHandler.Close(); err != nil {
 		ret = multierr.Append(ret, err)
 	}
 
 	if err := i.workspaceManager.Close(); err != nil {
+		ret = multierr.Append(ret, err)
+	}
+
+	if err := i.root.Close(); err != nil {
 		ret = multierr.Append(ret, err)
 	}
 
@@ -320,4 +317,11 @@ func (i *IDE) Close() error {
 	err := i.closeResources()
 	tui.Close()
 	return err
+}
+
+func (i *IDE) initRunning() {
+	atomic.StoreInt32(&i.running, 1)
+	if i.options.shader != nil {
+		i.root.runShader(i.options.shader, defaultShaderFPS, i.options.shaderDuration)
+	}
 }
