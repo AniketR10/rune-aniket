@@ -31,7 +31,19 @@ import (
 )
 
 var (
-	handled         = []rune{'\u2588', '\u2591', '\u2592', '\u2593'}
+	handled = []rune{
+		'░', '▒', '▓', '█',
+		'─', '━', '╴', '╶', '╸', '╺',
+		'│', '┃', '╵', '╷', '╹', '╻',
+		'┌', '┍', '┎', '┏', '┐', '┑', '┒', '┓',
+		'└', '┕', '┖', '┗', '┘', '┙', '┚', '┛',
+		'├', '┝', '┞', '┟', '┠', '┡', '┢', '┣',
+		'┤', '┥', '┦', '┧', '┨', '┩', '┪', '┫', '┬', '┭',
+		'┮', '┯', '┰', '┱', '┲', '┳', '┴', '┵', '┶', '┷',
+		'┸', '┹', '┺', '┻', '┼', '┽', '┾', '┿',
+		'╀', '╁', '╂', '╃', '╄', '╅', '╆', '╇', '╈', '╉', '╊', '╋',
+		'╼', '╽', '╾', '╿',
+	}
 	unhandled       = []rune{'a', 'b', 'A'}
 	allRunes        = append(append([]rune{}, handled...), unhandled...)
 	standardWidths  = []float64{0, 10}
@@ -55,7 +67,7 @@ func TestCustomFace(t *testing.T) {
 		for _, width := range standardWidths {
 			for _, height := range standardWidths {
 				for _, offsetY := range standardOffsets {
-					f := newCustomFace(width, height, offsetY, &mockFace{})
+					f := newCustomFace(width, height, offsetY, &mockFace{}, false)
 					for _, r := range handled {
 						assert.NotPanics(t, func() {
 							f.GlyphBounds(r)

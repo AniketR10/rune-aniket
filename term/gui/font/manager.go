@@ -329,7 +329,7 @@ func (m *Manager) loadFallbackFont() error {
 	if err != nil {
 		return err
 	}
-	m.regularFace, err = m.createFace(regular)
+	m.regularFace, err = m.createFace(regular, false)
 	if err != nil {
 		return err
 	}
@@ -338,7 +338,7 @@ func (m *Manager) loadFallbackFont() error {
 	if err != nil {
 		return err
 	}
-	m.boldFace, err = m.createFace(bold)
+	m.boldFace, err = m.createFace(bold, true)
 	if err != nil {
 		return err
 	}
@@ -347,7 +347,7 @@ func (m *Manager) loadFallbackFont() error {
 	if err != nil {
 		return err
 	}
-	m.italicFace, err = m.createFace(italic)
+	m.italicFace, err = m.createFace(italic, false)
 	if err != nil {
 		return err
 	}
@@ -356,7 +356,7 @@ func (m *Manager) loadFallbackFont() error {
 	if err != nil {
 		return err
 	}
-	m.boldItalicFace, err = m.createFace(boldItalic)
+	m.boldItalicFace, err = m.createFace(boldItalic, true)
 	if err != nil {
 		return err
 	}
@@ -404,22 +404,34 @@ func (m *Manager) loadFontAtPath(path string) (fonts []*sfnt.Font, err error) {
 }
 
 func (m *Manager) setFont(buf *sfnt.Buffer, font *sfnt.Font) error {
-	face, err := m.createFace(font)
-	if err != nil {
-		return fmt.Errorf("create opentype face: %w", err)
-	}
 	subfamily, err := font.Name(buf, sfnt.NameIDSubfamily)
 	if err != nil {
 		return fmt.Errorf("read font subfamily: %w", err)
 	}
 	switch subfamily {
 	case "Regular":
+		face, err := m.createFace(font, false)
+		if err != nil {
+			return fmt.Errorf("create opentype face: %w", err)
+		}
 		m.regularFace = face
 	case "Bold":
+		face, err := m.createFace(font, true)
+		if err != nil {
+			return fmt.Errorf("create opentype face: %w", err)
+		}
 		m.boldFace = face
 	case "Italic", "Oblique":
+		face, err := m.createFace(font, false)
+		if err != nil {
+			return fmt.Errorf("create opentype face: %w", err)
+		}
 		m.italicFace = face
 	case "Bold Italic", "Bold Oblique":
+		face, err := m.createFace(font, true)
+		if err != nil {
+			return fmt.Errorf("create opentype face: %w", err)
+		}
 		m.boldItalicFace = face
 	default:
 		m.log(log.DebugLevel, "skipping subfamily: %q", subfamily)
@@ -480,7 +492,7 @@ func (m *Manager) findAndLoadFont(name string) (ret []*sfnt.Font, err error) {
 	return
 }
 
-func (m *Manager) createFace(f *sfnt.Font) (font.Face, error) {
+func (m *Manager) createFace(f *sfnt.Font, bold bool) (font.Face, error) {
 	face, err := opentype.NewFace(f, &opentype.FaceOptions{
 		Size:    m.size,
 		DPI:     m.dpi(),
@@ -506,7 +518,7 @@ func (m *Manager) createFace(f *sfnt.Font) (font.Face, error) {
 		return nil, fmt.Errorf("opentype new fallback face: %w", err)
 	}
 	charSizeX, charSizeY, offsetY := m.calcFaceMetrics(face)
-	customFace := newCustomFace(charSizeX, charSizeY, offsetY, face)
+	customFace := newCustomFace(charSizeX, charSizeY, offsetY, face, bold)
 	face = newMultiFace(1, customFace, face, brailleFace, fallbackFace)
 	face = newCacheFace(face)
 	return face, nil

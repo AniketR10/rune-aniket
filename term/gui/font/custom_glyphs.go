@@ -24,11 +24,19 @@
 package font
 
 import (
-	"image"
 	"image/color"
+	"math"
 
 	"golang.org/x/image/math/fixed"
 	"unstable.build/go-tui/term/gui/drawrect"
+)
+
+type style uint8
+
+const (
+	styleNone style = iota
+	styleSingle
+	styleBold
 )
 
 var (
@@ -38,25 +46,32 @@ var (
 	colorFillAlphaStep3 = color.RGBA{R: 64, G: 64, B: 64, A: 64}
 )
 
-func (m *custom) shadeGlyph(dot fixed.Point26_6, c color.RGBA) (
-	dr image.Rectangle, mask image.Image,
-	maskp image.Point, advance fixed.Int26_6, ok bool,
-) {
-	dr = image.Rect(
-		dot.X.Floor(),
-		(dot.Y - m.offsetY).Floor(),
-		(dot.X + m.width).Floor(),
-		(dot.Y + m.height - m.offsetY).Floor(),
-	)
+func (m *custom) plusGlyph(
+	dot fixed.Point26_6,
+	leftHorizontal, rightHorizontal, topVertical, bottomVertical style,
+) (ok bool) {
+	width := fixedToFloat64(m.width)
+	height := fixedToFloat64(m.height)
 
+	lhwidth := m.strokeWidthFromMask(leftHorizontal)
+	rhwidth := m.strokeWidthFromMask(rightHorizontal)
+	tvwidth := m.strokeWidthFromMask(topVertical)
+	bvwidth := m.strokeWidthFromMask(bottomVertical)
+
+	m.drawRect(0, math.Max(height/2-lhwidth/2, 1), width/2, lhwidth, colorFill)
+	m.drawRect(width/2, math.Max(height/2-rhwidth/2, 1), width/2, rhwidth, colorFill)
+	m.drawRect(math.Max(width/2-tvwidth/2, 1), 0, tvwidth, height/2, colorFill)
+	m.drawRect(math.Max(width/2-bvwidth/2, 1), height/2, bvwidth, height/2, colorFill)
+
+	ok = true
+	return
+}
+
+func (m *custom) shadeGlyph(dot fixed.Point26_6, c color.RGBA) (ok bool) {
 	width := fixedToFloat64(m.width)
 	height := fixedToFloat64(m.height)
 
 	m.drawRect(0, 0, width, height, c)
-
-	mask = m.mask
-	maskp = mask.Bounds().Min
-	advance = fixed.I(int(m.width))
 	ok = true
 	return
 }
@@ -64,4 +79,15 @@ func (m *custom) shadeGlyph(dot fixed.Point26_6, c color.RGBA) (
 func (m *custom) drawRect(x, y, width, height float64, color color.RGBA) {
 	m.vs, m.is = drawrect.DrawRect(&m.path, m.vs, m.is, m.mask,
 		float32(x), float32(y), float32(width), float32(height), color, false)
+}
+
+func (m *custom) strokeWidthFromMask(mask style) float64 {
+	switch mask {
+	case styleSingle:
+		return float64(m.strokeWidth)
+	case styleBold:
+		return float64(m.boldStrokeWidth)
+	default:
+		return 0
+	}
 }
