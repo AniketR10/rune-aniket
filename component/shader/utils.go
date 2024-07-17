@@ -23,34 +23,17 @@
 package shader
 
 import (
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/tcell/v3"
 )
 
-// Fade is a Shader that interpolates the foreground and background color
-// slowly as epoc progresses, creating a fade in effect.
-func Fade() Shader {
-	return &fade{}
-}
-
-type fade struct {
-}
-
-func (s fade) Shade(epoch, total int, cells [][]term.Cell) {
-	if epoch >= total {
-		return
-	}
-	if epoch == 0 {
-		for y, row := range cells {
-			for x, cell := range row {
-				cells[y][x].Fg = cell.Bg
-			}
-		}
-		return
-	}
-	opacity := float64(epoch) / float64(total)
-	for y, row := range cells {
-		for x, cell := range row {
-			cells[y][x].Fg = interpolateColor(opacity, cell.Bg, cell.Fg)
-		}
-	}
+// interpolateColor calculates a color that is a linear blend between the
+// provided color and target color.
+func interpolateColor(factor float64, color, target tcell.Color) tcell.Color {
+	r, g, b := color.RGB()
+	tr, tg, tb := target.RGB()
+	return tcell.NewRGBColor(
+		int32(float64(r)+((float64(tr)-float64(r))*factor)),
+		int32(float64(g)+((float64(tg)-float64(g))*factor)),
+		int32(float64(b)+((float64(tb)-float64(b))*factor)),
+	)
 }
