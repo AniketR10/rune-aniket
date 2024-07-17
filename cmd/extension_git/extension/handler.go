@@ -163,6 +163,8 @@ func newGitHandler(
 
 	ret.initializeConfigValues(pconfig)
 
+	ret.git = newCmdGitService(ret.exec, cwd, fs)
+
 	clip, err := sysclip.NewRegister()
 	if err != nil {
 		ret.log(log.ErrorLevel, "failed to get system clipboard: %v", err)

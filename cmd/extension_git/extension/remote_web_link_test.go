@@ -205,11 +205,12 @@ func TestWeblinkGenerator(t *testing.T) {
 			inputFile:    reposPath + "/gitproj6_two-remotes/recipes/guasacaca.md",
 			inputLine:    8,
 			expect: "https://github.com/unstablebuild/gitproj6-mirror" +
-				"/src/commit/5367f818c4e7092a224ae0f32da1b7bab8843cc0/recipes/guasacaca.md#L8",
+				"/blob/5367f818c4e7092a224ae0f32da1b7bab8843cc0/recipes/guasacaca.md#L8",
 		},
 	}
 
 	c := copyRemoteURL{}
+	c.providerResolver = &stringsContainsResolver{}
 	for _, tcase := range tsuite {
 		t.Run(tcase.name, func(t *testing.T) {
 			workspaceCwdURI, err := workspaceapi.ParseURI("file://" + tcase.workspaceCwd)

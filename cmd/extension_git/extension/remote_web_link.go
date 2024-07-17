@@ -41,9 +41,10 @@ import (
 var gitRemoteRegex = regexp.MustCompile(`^(?:(https)://|(git)\@)([^/:]+)[:/]([^/]+)/([\w-]+)(?:\.git)?$`)
 
 type copyRemoteURL struct {
-	git  gitService
-	clip clipboard.Register
-	noti browserapi.Notifications
+	git              gitService
+	clip             clipboard.Register
+	noti             browserapi.Notifications
+	providerResolver providerResolver
 }
 
 func newCopyRemoteURL(
@@ -53,6 +54,7 @@ func newCopyRemoteURL(
 	ret.git = git
 	ret.clip = clip
 	ret.noti = noti
+	ret.providerResolver = &stringsContainsResolver{}
 	return ret
 }
 
@@ -137,9 +139,14 @@ func (c *copyRemoteURL) generate(workPath string, remoteName string, line int) (
 	parts.file = fileRelPath
 	parts.line = line
 
-	weblink, err := c.buildWeblink(parts)
+	provider, err := c.providerResolver.resolveByRemoteDomain(parts.domain)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("could not guess provider: %s", parts.domain)
+	}
+
+	weblink, err := provider.buildWeblink(parts)
+	if err != nil {
+		return "", fmt.Errorf("provider build web link: %w", err)
 	}
 
 	return weblink, nil
@@ -164,18 +171,6 @@ func (c *copyRemoteURL) parseRemoteURL(remoteURL string) (remoteURLParts, error)
 	ret.repo = matches[5]
 
 	return ret, nil
-}
-
-func (c *copyRemoteURL) buildWeblink(parts remoteURLParts) (string, error) {
-	partsMap := parts.ToMap()
-	weblink, err := expand(
-		"https://{domain}/{owner}/{repo}/src/commit/{commit}/{file}#L{line}",
-		partsMap,
-	)
-	if err != nil {
-		return "", err
-	}
-	return weblink, nil
 }
 
 func (c *copyRemoteURL) clipboardCopy(text string) error {
