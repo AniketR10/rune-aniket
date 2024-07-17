@@ -28,6 +28,7 @@ import (
 	"image/color"
 
 	"golang.org/x/image/math/fixed"
+	"unstable.build/go-tui/term/gui/drawrect"
 )
 
 var (
@@ -37,7 +38,6 @@ var (
 	colorFillAlphaStep3 = color.RGBA{R: 64, G: 64, B: 64, A: 64}
 )
 
-// Shades: '░', '▒', '▓', '█'.
 func (m *custom) shadeGlyph(dot fixed.Point26_6, c color.RGBA) (
 	dr image.Rectangle, mask image.Image,
 	maskp image.Point, advance fixed.Int26_6, ok bool,
@@ -49,28 +49,19 @@ func (m *custom) shadeGlyph(dot fixed.Point26_6, c color.RGBA) (
 		(dot.Y + m.height - m.offsetY).Floor(),
 	)
 
-	width := int(m.width)
-	height := int(m.height)
+	width := fixedToFloat64(m.width)
+	height := fixedToFloat64(m.height)
 
-	nPixels := width * height
-	if cap(m.mask.Pix) < nPixels {
-		m.mask.Pix = make([]uint8, 2*nPixels)
-	}
-	m.mask.Pix = m.mask.Pix[:nPixels]
-	m.mask.Stride = width
-	m.mask.Rect.Min.X = 0
-	m.mask.Rect.Min.Y = 0
-	m.mask.Rect.Max.X = width
-	m.mask.Rect.Max.Y = height
+	m.drawRect(0, 0, width, height, c)
 
-	for y := 0; y < height; y++ {
-		for x := 0; x < width; x++ {
-			m.mask.Set(x, y, c)
-		}
-	}
-	mask = &m.mask
+	mask = m.mask
 	maskp = mask.Bounds().Min
 	advance = fixed.I(int(m.width))
 	ok = true
 	return
+}
+
+func (m *custom) drawRect(x, y, width, height float64, color color.RGBA) {
+	m.vs, m.is = drawrect.DrawRect(&m.path, m.vs, m.is, m.mask,
+		float32(x), float32(y), float32(width), float32(height), color, false)
 }

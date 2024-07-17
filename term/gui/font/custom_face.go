@@ -26,8 +26,10 @@ package font
 import (
 	"image"
 
+	"github.com/hajimehoshi/ebiten/v2"
 	"golang.org/x/image/font"
 	"golang.org/x/image/math/fixed"
+	"unstable.build/go-tui/term/gui/drawrect"
 )
 
 var _ font.Face = (*custom)(nil)
@@ -37,12 +39,18 @@ var _ font.Face = (*custom)(nil)
 type custom struct {
 	width, height fixed.Int26_6
 	face          font.Face
-	mask          image.RGBA
 	offsetY       fixed.Int26_6
+
+	// re-use allocs
+	mask *ebiten.Image
+	vs   []ebiten.Vertex
+	is   []uint16
+	path drawrect.Path
 }
 
 func newCustomFace(width, height, offsetY float64, standard font.Face) *custom {
 	return &custom{
+		mask:    ebiten.NewImage(int(width), int(height)),
 		offsetY: float64ToFixed(offsetY),
 		face:    standard,
 		width:   float64ToFixed(width),
@@ -51,18 +59,18 @@ func newCustomFace(width, height, offsetY float64, standard font.Face) *custom {
 }
 
 func (m *custom) Glyph(dot fixed.Point26_6, r rune) (
-	dr image.Rectangle, mask image.Image,
-	maskp image.Point, advance fixed.Int26_6, ok bool,
+	dr image.Rectangle, i image.Image,
+	p image.Point, a fixed.Int26_6, ok bool,
 ) {
 	switch r {
 	case '░':
-		dr, mask, maskp, advance, ok = m.shadeGlyph(dot, colorFillAlphaStep3)
+		dr, i, p, a, ok = m.shadeGlyph(dot, colorFillAlphaStep3)
 	case '▒':
-		dr, mask, maskp, advance, ok = m.shadeGlyph(dot, colorFillAlphaStep2)
+		dr, i, p, a, ok = m.shadeGlyph(dot, colorFillAlphaStep2)
 	case '▓':
-		dr, mask, maskp, advance, ok = m.shadeGlyph(dot, colorFillAlphaStep1)
+		dr, i, p, a, ok = m.shadeGlyph(dot, colorFillAlphaStep1)
 	case '█':
-		dr, mask, maskp, advance, ok = m.shadeGlyph(dot, colorFill)
+		dr, i, p, a, ok = m.shadeGlyph(dot, colorFill)
 	}
 	return
 }
@@ -115,4 +123,8 @@ func fixedRectangleFromImageRectangle(r image.Rectangle) fixed.Rectangle26_6 {
 
 func float64ToFixed(x float64) fixed.Int26_6 {
 	return fixed.Int26_6(x * (1 << 6))
+}
+
+func fixedToFloat64(x fixed.Int26_6) float64 {
+	return float64(x) / (1 << 6)
 }
