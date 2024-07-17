@@ -62,6 +62,14 @@ const (
 	commandCopyRemoteURL = "gitCopyRemoteURL"
 )
 
+var (
+	commandCopyRemoteURLManual = textapi.CommandManual{
+		Name:     commandCopyRemoteURL,
+		Summary:  "Copies to clipboard the web permalink of the remote repository at that line.",
+		Synopsis: "[remote]",
+	}
+)
+
 // Grantee returns this extension's Grantee and the permissions required to run it.
 func Grantee() (extension.Grantee, []extension.Permission) {
 	return extutil.NewEditorEventHandler(GitHandlerCommands, newGitHandler,
@@ -69,22 +77,19 @@ func Grantee() (extension.Grantee, []extension.Permission) {
 }
 
 var (
+	commandNextChangeManual = textapi.CommandManual{
+		Name:    commandNextChange,
+		Summary: "Moves cursor to the next diff hunk emitted by git.",
+	}
+	commandPrevChangeManual = textapi.CommandManual{
+		Name:    commandPrevChange,
+		Summary: "Moves cursor to the previous diff hunk emitted by git.",
+	}
 	// GitHandlerCommands returns the commands that this extension is
 	// interested in registering.
 	GitHandlerCommands = []textapi.CommandManual{
-		{
-			Name:    commandNextChange,
-			Summary: "Moves cursor to the next diff hunk emitted by git.",
-		},
-		{
-			Name:    commandPrevChange,
-			Summary: "Moves cursor to the previous diff hunk emitted by git.",
-		},
-		{
-			Name:     commandCopyRemoteURL,
-			Summary:  "Copies to clipboard the web permalink of the remote repository at that line.",
-			Synopsis: "[remote]",
-		},
+		commandNextChangeManual,
+		commandPrevChangeManual,
 	}
 	// GitHandlerEvents returns the events that this extension is
 	// interested in subscribing to.
@@ -126,12 +131,11 @@ type gitEditorHandler struct {
 		sync.Mutex
 		scroll component.Scroll
 	}
-	git             gitService
-	gitDiffListID   string
-	delAttr         term.Attributes
-	addAttr         term.Attributes
-	clip            clipboard.Register
-	clipUnavailable bool
+	git           gitService
+	gitDiffListID string
+	delAttr       term.Attributes
+	addAttr       term.Attributes
+	clip          clipboard.Register
 }
 
 func newGitHandler(
@@ -152,113 +156,161 @@ func newGitHandler(
 		ret.scroll.scroll.Attributes = defaultScrollAttr
 	}
 
-	var cwd workspaceapi.URI
-	var fs workspaceapi.FileSystem
-	for _, grant := range grants {
-		switch grant.Permission {
-		case extension.PermissionFileSystem:
-			fs, err = workspaceextension.FileSystem(ctx, grant, broker)
-			if err != nil {
-				return nil, err
-			}
-			cwdURI, err := fs.URI(".")
-			if err != nil {
-				return nil, err
-			}
-			cwd = cwdURI
-		case extension.PermissionExecute:
-			ret.exec, err = workspaceextension.Executor(ctx, grant, broker)
-			if err != nil {
-				return nil, err
-			}
-		case extension.PermissionBrowserEventPublisher:
-			ret.p, err = browserextension.EventPublisher(ctx, grant, broker)
-			if err != nil {
-				return nil, err
-			}
-		case extension.PermissionBrowserNotifications:
-			m, err := browserextension.Notifications(ctx, grant, broker)
-			if err != nil {
-				return nil, fmt.Errorf("acquire browser notifications: %w ", err)
-			}
-			ret.m = m
-		case extension.PermissionBrowserWindowManager:
-			ret.wm, err = browserextension.WindowManager(ctx, grant, broker)
-			if err != nil {
-				return nil, err
-			}
-			syncComp := component.Sync(&ret.scroll, component.WithLogging(&ret.scroll.scroll, log.Tracef))
-			cfg := browserapi.BarConfig{
-				Frame:       browserapi.BarFrameDefault,
-				Size:        1,
-				Orientation: browserapi.OrientationLeft,
-			}
-			err = ret.wm.Bar(cfg, handler.Nop(syncComp))
-			if err != nil {
-				return nil, err
-			}
-		case extension.PermissionConfig:
-			config, err := configextension.FetchConfig(ctx, grant, broker)
-			if err != nil {
-				return nil, err
-			}
-			tabspaces, err := extutil.Tabspaces(config)
-			if err != nil {
-				return nil, fmt.Errorf("get configured tabspaces: %v", err)
-			}
-			wrap, err := extutil.Wrap(config)
-			if err != nil {
-				return nil, fmt.Errorf("get configured wrap mode: %v", err)
-			}
-			ret.tracker.Init(tabspaces, wrap)
-			ret.log(log.DebugLevel, "initialized content tracker with tabspaces: %d and wrap mode: %v",
-				tabspaces, ret.scroll.scroll.Wrap)
-
-			// could have been already initialized as a bar,
-			// depending on order of permissions
-			ret.scroll.Lock()
-			ret.scroll.scroll.Wrap = wrap
-			ret.scroll.Unlock()
-		}
-	}
-
-	if fs == nil {
-		return nil, errors.New("file system not granted")
-	}
-	ret.git = newCmdGitService(ret.exec, cwd, fs)
-
-	ret.gitDiffListID, err = pconfig.GetString("git_diff_list_id")
+	cwd, fs, err := ret.processGrants(ctx, grants, broker)
 	if err != nil {
-		if err != config.ErrNotFound {
-			ret.log(log.WarnLevel, "failed to get 'git_diff_list_id' from config: %v", err)
-		}
-		ret.gitDiffListID = defaultGitDiffListID
+		return nil, fmt.Errorf("process grants: %w", err)
 	}
 
-	ret.addAttr, err = config.GetAttributes(pconfig, "add_attr")
+	ret.initializeConfigValues(pconfig)
+
+	clip, err := sysclip.NewRegister()
 	if err != nil {
-		if err != config.ErrNotFound {
-			ret.log(log.WarnLevel, "failed to get 'add_attr' from config: %v", err)
-		}
-		ret.addAttr = defaultAddAttr
+		ret.log(log.ErrorLevel, "failed to get system clipboard: %v", err)
+	} else {
+		err = ret.setupCopyRemoteURL(clip, cwd, fs)
 	}
 
-	ret.delAttr, err = config.GetAttributes(pconfig, "del_attr")
 	if err != nil {
-		if err != config.ErrNotFound {
-			ret.log(log.WarnLevel, "failed to get 'del_attr' from config: %v", err)
-		}
-		ret.delAttr = defaultDelAttr
-	}
-
-	ret.clip, err = sysclip.NewRegister()
-	if err != nil {
-		ret.clipUnavailable = true
+		ret.log(log.ErrorLevel, "setup copyRemoteURL command: %v", err)
+		_ = ret.m.Notify(notifications.LevelError,
+			"could not install copyRemoteURL command: %v", err)
 	}
 
 	go ret.handleEvents(cwd)
 
 	return ret, nil
+}
+
+func (h *gitEditorHandler) processGrants(
+	ctx context.Context, grants []extension.Grant, broker rpc.MuxBroker,
+) (
+	cwd workspaceapi.URI, fs workspaceapi.FileSystem, err error,
+) {
+	for _, grant := range grants {
+		switch grant.Permission {
+		case extension.PermissionFileSystem:
+			fs, err = workspaceextension.FileSystem(ctx, grant, broker)
+			if err != nil {
+				return
+			}
+			var cwdURI workspaceapi.URI
+			cwdURI, err = fs.URI(".")
+			if err != nil {
+				return
+			}
+			cwd = cwdURI
+		case extension.PermissionExecute:
+			h.exec, err = workspaceextension.Executor(ctx, grant, broker)
+			if err != nil {
+				return
+			}
+		case extension.PermissionBrowserEventPublisher:
+			h.p, err = browserextension.EventPublisher(ctx, grant, broker)
+			if err != nil {
+				return
+			}
+		case extension.PermissionBrowserNotifications:
+			var m browserapi.Notifications
+			m, err = browserextension.Notifications(ctx, grant, broker)
+			if err != nil {
+				err = fmt.Errorf("acquire browser notifications: %w ", err)
+				return
+			}
+			h.m = m
+		case extension.PermissionBrowserWindowManager:
+			h.wm, err = browserextension.WindowManager(ctx, grant, broker)
+			if err != nil {
+				return
+			}
+
+			syncComp := component.Sync(&h.scroll, component.WithLogging(&h.scroll.scroll, log.Tracef))
+			cfg := browserapi.BarConfig{
+				Frame:       browserapi.BarFrameDefault,
+				Size:        1,
+				Orientation: browserapi.OrientationLeft,
+			}
+			err = h.wm.Bar(cfg, handler.Nop(syncComp))
+			if err != nil {
+				return
+			}
+		case extension.PermissionConfig:
+			var config config.Config
+			config, err = configextension.FetchConfig(ctx, grant, broker)
+			if err != nil {
+				return
+			}
+			var tabspaces int
+			tabspaces, err = extutil.Tabspaces(config)
+			if err != nil {
+				err = fmt.Errorf("get configured tabspaces: %v", err)
+				return
+			}
+			var wrap bool
+			wrap, err = extutil.Wrap(config)
+			if err != nil {
+				err = fmt.Errorf("get configured wrap mode: %v", err)
+				return
+			}
+			h.tracker.Init(tabspaces, wrap)
+			h.log(log.DebugLevel, "initialized content tracker with tabspaces: %d and wrap mode: %v",
+				tabspaces, h.scroll.scroll.Wrap)
+
+			// could have been already initialized as a bar,
+			// depending on order of permissions
+			h.scroll.Lock()
+			h.scroll.scroll.Wrap = wrap
+			h.scroll.Unlock()
+		}
+	}
+	return
+}
+
+func (h *gitEditorHandler) initializeConfigValues(pconfig config.Config) {
+	var err error
+
+	h.gitDiffListID, err = pconfig.GetString("git_diff_list_id")
+	if err != nil {
+		if err != config.ErrNotFound {
+			h.log(log.WarnLevel, "failed to get 'git_diff_list_id' from config: %v", err)
+		}
+		h.gitDiffListID = defaultGitDiffListID
+	}
+
+	h.addAttr, err = config.GetAttributes(pconfig, "add_attr")
+	if err != nil {
+		if err != config.ErrNotFound {
+			h.log(log.WarnLevel, "failed to get 'add_attr' from config: %v", err)
+		}
+		h.addAttr = defaultAddAttr
+	}
+
+	h.delAttr, err = config.GetAttributes(pconfig, "del_attr")
+	if err != nil {
+		if err != config.ErrNotFound {
+			h.log(log.WarnLevel, "failed to get 'del_attr' from config: %v", err)
+		}
+		h.delAttr = defaultDelAttr
+	}
+}
+
+func (h *gitEditorHandler) setupCopyRemoteURL(
+	clip clipboard.Register, cwd workspaceapi.URI, fs workspaceapi.FileSystem,
+) (err error) {
+	h.git = newCmdGitService(h.exec, cwd, fs)
+	h.clip = clip
+	// copyRemoteURL functionality is refactored out into `remote_web_link.go`
+	// for readibility and maintainability
+	err = h.ed.SubscribeCommand(
+		commandCopyRemoteURLManual,
+		newCopyRemoteURL(h.git, h.clip, h.m),
+	)
+
+	if err != nil {
+		err = fmt.Errorf("subscribe command: %w", err)
+		return
+	}
+	return
+
 }
 
 func (h *gitEditorHandler) Complete(ctx context.Context, name string, args []string) (
@@ -283,21 +335,6 @@ func (h *gitEditorHandler) HandleCommand(ctx context.Context, cmd textapi.Comman
 		err = h.ed.MoveToPrevLocation(cmd.Resource, h.gitDiffListID)
 		if err != nil {
 			err = fmt.Errorf("move to prev location: %v", err)
-		}
-	case commandCopyRemoteURL:
-		if h.clipUnavailable {
-			err = errors.New("system clipboard unavailable")
-			return
-		}
-
-		remoteName := "origin"
-		if len(cmd.Args) > 0 {
-			remoteName = cmd.Args[0]
-		}
-
-		err = h.copyRemoteURL(cmd.URI, remoteName, cmd.Cursor.Content)
-		if err != nil {
-			err = fmt.Errorf("copy remote url: %v", err)
 		}
 	}
 	return
@@ -396,32 +433,6 @@ func (h *gitEditorHandler) runDiff(ctx context.Context, ev textapi.Event) {
 	res.Metadata.(*metadata).locations = locs
 
 	h.setLocationList(ev, locs)
-}
-
-func (h *gitEditorHandler) copyRemoteURL(
-	uri workspaceapi.URI,
-	remoteName string,
-	cmdCursor term.Coordinates,
-) error {
-	webLink, err := remoteWebLink(h.git, remoteName, uri.Path(), cmdCursor.Y)
-	if err != nil {
-		return err
-	}
-
-	if err := h.copyToClipboard(webLink); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (h *gitEditorHandler) copyToClipboard(text string) error {
-	err := h.clip.Copy(clipboard.DefaultRegisterID, clipboard.Data{Text: text})
-	if err != nil {
-		return fmt.Errorf("copy web URL: %w", err)
-	}
-	_ = h.m.Notify(notifications.LevelSuccess, "web url copied to clipboard")
-	return nil
 }
 
 func (h *gitEditorHandler) resetBar() {

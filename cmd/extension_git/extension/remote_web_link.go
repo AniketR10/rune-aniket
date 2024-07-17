@@ -23,56 +23,69 @@
 package extension
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/unstablebuild/blue/iterator"
+	browserapi "unstable.build/go-tui/api/browser"
+	textapi "unstable.build/go-tui/api/text"
+	"unstable.build/go-tui/component/notifications"
+	"unstable.build/go-tui/text/clipboard"
 )
 
 // extracts protocol, domain, owner and repo name from a git remote URL.
 var gitRemoteRegex = regexp.MustCompile(`^(?:(https)://|(git)\@)([^/:]+)[:/]([^/]+)/([\w-]+)(?:\.git)?$`)
 
-func remoteWebLink(
-	git gitService, remoteName string, workPath string, line int,
-) (string, error) {
-	// line of the document starts at 0 whereas in text editors start at 1
-	correctedLine := line + 1
+type copyRemoteURL struct {
+	git  gitService
+	clip clipboard.Register
+	noti browserapi.Notifications
+}
 
-	remoteURL, err := git.remoteURL(workPath, remoteName)
+func newCopyRemoteURL(
+	git gitService, clip clipboard.Register, noti browserapi.Notifications,
+) *copyRemoteURL {
+	ret := new(copyRemoteURL)
+	ret.git = git
+	ret.clip = clip
+	ret.noti = noti
+	return ret
+}
+
+// satisfy textapi.CommandHandler
+func (c *copyRemoteURL) HandleCommand(ctx context.Context, cmd textapi.Command) (
+	exit bool, err error,
+) {
+	remoteName := "origin"
+	if len(cmd.Args) > 1 {
+		remoteName = cmd.Args[0]
+	}
+
+	line := cmd.Cursor.Content.Y + 1
+	workPath := cmd.URI.Path()
+
+	weblink, err := c.generate(workPath, remoteName, line)
 	if err != nil {
-		return "", fmt.Errorf("remote url: %w", err)
-	}
-	if remoteURL == "" {
-		return "", errors.New("empty parsed remote url")
+		return
 	}
 
-	urlParts, err := parseRemoteURL(remoteURL)
+	err = c.clipboardCopy(weblink)
 	if err != nil {
-		return "", fmt.Errorf("parse remote url: %w", err)
+		return
 	}
 
-	currentCommit, err := git.currentCommit(workPath)
-	if err != nil {
-		return "", fmt.Errorf("current commit: %w", err)
-	}
+	return
+}
 
-	fileRelPath, err := git.relPath(workPath)
-	if err != nil {
-		return "", fmt.Errorf("rel path: %w", err)
-	}
-
-	urlParts.commit = currentCommit
-	urlParts.file = fileRelPath
-	urlParts.line = correctedLine
-
-	urlPartsMap := urlParts.ToMap()
-	webLink, err := expand("https://{domain}/{owner}/{repo}/src/commit/{commit}/{file}#L{line}", urlPartsMap)
-	if err != nil {
-		return "", fmt.Errorf("expand tpl map: %w", err)
-	}
-
-	return webLink, nil
+// satisfy apitext.CommandHandler
+func (c *copyRemoteURL) Complete(ctx context.Context, cmd string, args []string) (
+	iterator.Iterator[string], error,
+) {
+	return iterator.Empty[string](), nil
 }
 
 type remoteURLParts struct {
@@ -96,13 +109,48 @@ func (r remoteURLParts) ToMap() map[string]string {
 
 }
 
-// parseRemoteURL parses domain, owner, repo from a git SSH or HTTPS URL.
-func parseRemoteURL(remoteURL string) (remoteURLParts, error) {
+func (c *copyRemoteURL) generate(workPath string, remoteName string, line int) (string, error) {
+	fileRelPath, err := c.git.relPath(workPath)
+	if err != nil {
+		return "", err
+	}
+
+	remoteURL, err := c.git.remoteURL(workPath, remoteName)
+	if err != nil {
+		return "", fmt.Errorf("git remote url: %w", err)
+	}
+	if remoteURL == "" {
+		return "", errors.New("empty parsed remote url")
+	}
+
+	parts, err := c.parseRemoteURL(remoteURL)
+	if err != nil {
+		return "", fmt.Errorf("git parse remote url: %w", err)
+	}
+
+	currentCommit, err := c.git.currentCommit(workPath)
+	if err != nil {
+		return "", fmt.Errorf("git current commit: %w", err)
+	}
+
+	parts.commit = currentCommit
+	parts.file = fileRelPath
+	parts.line = line
+
+	weblink, err := c.buildWeblink(parts)
+	if err != nil {
+		return "", err
+	}
+
+	return weblink, nil
+}
+
+func (c *copyRemoteURL) parseRemoteURL(remoteURL string) (remoteURLParts, error) {
 	// Match HTTPS URLs as well as git SSH URLs like the ones below:
 	//
 	// - git@git.unstable.build:unstablebuild/go-tui.git
 	// - https://git.unstable.build/unstablebuild/go-tui.git
-	//
+
 	matches := gitRemoteRegex.FindStringSubmatch(remoteURL)
 	if len(matches) != 6 {
 		return remoteURLParts{}, errors.New("parse remote url")
@@ -116,6 +164,35 @@ func parseRemoteURL(remoteURL string) (remoteURLParts, error) {
 	ret.repo = matches[5]
 
 	return ret, nil
+}
+
+func (c *copyRemoteURL) buildWeblink(parts remoteURLParts) (string, error) {
+	partsMap := parts.ToMap()
+	weblink, err := expand(
+		"https://{domain}/{owner}/{repo}/src/commit/{commit}/{file}#L{line}",
+		partsMap,
+	)
+	if err != nil {
+		return "", err
+	}
+	return weblink, nil
+}
+
+func (c *copyRemoteURL) clipboardCopy(text string) error {
+	err := c.clip.Copy(clipboard.DefaultRegisterID, clipboard.Data{Text: text})
+	if err != nil {
+		return fmt.Errorf("copy web URL: %w", err)
+	}
+
+	c.notify(notifications.LevelSuccess, "web url copied to clipboard")
+
+	return nil
+}
+
+func (c *copyRemoteURL) notify(
+	level notifications.Level, msg string, args ...interface{},
+) {
+	_ = c.noti.Notify(level, msg, args...)
 }
 
 // expand rewrites s to replace {k} with match[k] for each key k in match. All

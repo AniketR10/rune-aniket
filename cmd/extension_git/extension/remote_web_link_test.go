@@ -23,14 +23,114 @@
 package extension
 
 import (
+	"context"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	textapi "unstable.build/go-tui/api/text"
 	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/component/notifications"
+	"unstable.build/go-tui/term"
+	"unstable.build/go-tui/text/clipboard"
 )
 
-func TestRemoteWebLink(t *testing.T) {
+type notiRecord struct {
+	level notifications.Level
+	text  string
+}
+
+type testNotifications struct {
+	msg []notiRecord
+}
+
+func (n *testNotifications) Notify(
+	level notifications.Level, msg string, args ...interface{},
+) error {
+	n.msg = append(n.msg, notiRecord{
+		level: level,
+		text:  fmt.Sprintf(msg, args...)},
+	)
+	return nil
+}
+
+func (n *testNotifications) NotifyOnce(
+	level notifications.Level, msg string, args ...interface{},
+) error {
+	return n.Notify(level, msg, args...)
+}
+
+func assertNoti(
+	t *testing.T, noti notiRecord, level notifications.Level, text string,
+) {
+	assert.Equal(t, notiRecord{level: level, text: text}, noti)
+}
+
+// setupCommandHandler prepares git repos and constructs the CommandHandler to
+// run test against with all its dependencies.
+func setupCommandHandler(t *testing.T) (
+	h *copyRemoteURL,
+	reposPath string,
+	fileURI workspaceapi.URI,
+	git *cmdGitService,
+	noti *testNotifications,
+) {
+	reposPath = setupGitRepos(t)
+
+	workspaceCwd := reposPath + "/gitproj6_two-remotes"
+	workspaceCwdURI, err := workspaceapi.ParseURI("file://" + workspaceCwd)
+	require.NoError(t, err)
+
+	git = setupGitService(t, workspaceCwdURI)
+	noti = &testNotifications{}
+	clip := clipboard.NewInMemory()
+
+	fileURI = workspaceapi.Join(workspaceCwdURI, "recipes/guasacaca.md")
+
+	h = newCopyRemoteURL(
+		git, clip, noti,
+	)
+
+	return
+}
+
+func TestCommandHandler(t *testing.T) {
+	t.Run("happy command", func(t *testing.T) {
+		h, reposPath, fileURI, _, testNoti := setupCommandHandler(t)
+		defer tearDownGitRepos(reposPath)
+
+		exit, err := h.HandleCommand(context.Background(), textapi.Command{
+			Name: commandCopyRemoteURL,
+			Args: []string{}, // without args uses "origin"
+			URI:  fileURI,
+			Cursor: struct {
+				Content term.Coordinates
+				Window  term.Coordinates
+			}{Content: term.Coordinates{Y: 3}},
+		})
+
+		assert.False(t, exit)
+		require.NoError(t, err)
+		paste, err := h.clip.Paste(clipboard.DefaultRegisterID)
+
+		assert.Len(t, testNoti.msg, 1)
+		assertNoti(t, testNoti.msg[0],
+			notifications.LevelSuccess,
+			"web url copied to clipboard",
+		)
+
+		require.NoError(t, err)
+		assert.Equal(t,
+			"https://git.unstable.build/unstablebuild/gitproj6"+
+				"/src/commit/5367f818c4e7092a224ae0f32da1b7bab8843cc0"+
+				"/recipes/guasacaca.md#L4",
+			paste.Text,
+		)
+	})
+}
+
+func TestWeblinkGenerator(t *testing.T) {
 	reposPath := setupGitRepos(t)
 	defer tearDownGitRepos(reposPath)
 
@@ -48,7 +148,7 @@ func TestRemoteWebLink(t *testing.T) {
 			workspaceCwd: reposPath + "/gitproj6_two-remotes",
 			remoteName:   "origin",
 			inputFile:    reposPath + "/gitproj6_two-remotes/recipes/guasacaca.md",
-			inputLine:    32,
+			inputLine:    33,
 			expect: "https://git.unstable.build/unstablebuild/gitproj6" +
 				"/src/commit/5367f818c4e7092a224ae0f32da1b7bab8843cc0/recipes/guasacaca.md#L33",
 		},
@@ -57,7 +157,7 @@ func TestRemoteWebLink(t *testing.T) {
 			workspaceCwd: reposPath + "/gitproj6_two-remotes",
 			remoteName:   "origin",
 			inputFile:    reposPath + "/gitproj5_one-remote/recipes/chile-colorado.md",
-			inputLine:    7,
+			inputLine:    8,
 			expect: "https://git.unstable.build/unstablebuild/gitproj5" +
 				"/src/commit/b0c7a3e628f4bfb0cb60f2ee048b7e47017c57e7/recipes/chile-colorado.md#L8",
 		},
@@ -66,7 +166,7 @@ func TestRemoteWebLink(t *testing.T) {
 			workspaceCwd: reposPath + "/gitproj6_two-remotes",
 			remoteName:   "origin",
 			inputFile:    "../gitproj5_one-remote/recipes/chile-colorado.md",
-			inputLine:    7,
+			inputLine:    8,
 			expect: "https://git.unstable.build/unstablebuild/gitproj5" +
 				"/src/commit/b0c7a3e628f4bfb0cb60f2ee048b7e47017c57e7/recipes/chile-colorado.md#L8",
 		},
@@ -75,7 +175,7 @@ func TestRemoteWebLink(t *testing.T) {
 			workspaceCwd: reposPath + "/gitproj6_two-remotes",
 			remoteName:   "private-mirror",
 			inputFile:    reposPath + "/gitproj6_two-remotes/recipes/guasacaca.md",
-			inputLine:    7,
+			inputLine:    8,
 			expect: "https://git.unstable.build/unstablebuild/gitproj6-mirror" +
 				"/src/commit/5367f818c4e7092a224ae0f32da1b7bab8843cc0/recipes/guasacaca.md#L8",
 		},
@@ -87,7 +187,7 @@ func TestRemoteWebLink(t *testing.T) {
 			workspaceCwd: reposPath + "/gitproj6_two-remotes",
 			remoteName:   "unexistent-remote-name",
 			inputFile:    reposPath + "/gitproj6_two-remotes/recipes/chile-colorado.md",
-			inputLine:    7,
+			inputLine:    8,
 		},
 		{
 			name:      "empty remote name",
@@ -96,26 +196,29 @@ func TestRemoteWebLink(t *testing.T) {
 			workspaceCwd: reposPath + "/gitproj6_two-remotes",
 			remoteName:   "",
 			inputFile:    reposPath + "/gitproj6_two-remotes/recipes/chile-colorado.md",
-			inputLine:    7,
+			inputLine:    8,
 		},
 		{
 			name:         "github remotes",
 			workspaceCwd: reposPath + "/gitproj6_two-remotes",
 			remoteName:   "public-mirror",
 			inputFile:    reposPath + "/gitproj6_two-remotes/recipes/guasacaca.md",
-			inputLine:    7,
+			inputLine:    8,
 			expect: "https://github.com/unstablebuild/gitproj6-mirror" +
 				"/src/commit/5367f818c4e7092a224ae0f32da1b7bab8843cc0/recipes/guasacaca.md#L8",
 		},
 	}
 
+	c := copyRemoteURL{}
 	for _, tcase := range tsuite {
 		t.Run(tcase.name, func(t *testing.T) {
 			workspaceCwdURI, err := workspaceapi.ParseURI("file://" + tcase.workspaceCwd)
 			require.NoError(t, err)
 
 			git := setupGitService(t, workspaceCwdURI)
-			res, err := remoteWebLink(git, tcase.remoteName, tcase.inputFile, tcase.inputLine)
+			c.git = git
+
+			res, err := c.generate(tcase.inputFile, tcase.remoteName, tcase.inputLine)
 			if tcase.mustError {
 				require.Error(t, err)
 			} else {
@@ -173,9 +276,10 @@ func TestParseRemoteURL(t *testing.T) {
 		},
 	}
 
+	c := copyRemoteURL{}
 	for _, tcase := range tsuite {
 		t.Run(tcase.name, func(t *testing.T) {
-			res, err := parseRemoteURL(tcase.input)
+			res, err := c.parseRemoteURL(tcase.input)
 			if tcase.mustError {
 				assert.Error(t, err)
 			} else {
@@ -214,6 +318,7 @@ func TestExpand(t *testing.T) {
 			expect:      ".:1-2:.",
 		},
 	}
+
 	for _, tcase := range tsuite {
 		t.Run(tcase.name, func(t *testing.T) {
 			res, err := expand(tcase.inputString, tcase.inputValues)
