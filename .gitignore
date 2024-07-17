@@ -23,3 +23,6 @@ target
 .sixrc
 go.work
 go.work.sum
+
+# crash files
+six_crash_report_*
