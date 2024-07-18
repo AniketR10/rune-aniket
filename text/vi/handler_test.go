@@ -709,3 +709,45 @@ func TestNoModeHandlesNonCtrlModifiers(t *testing.T) {
 		}
 	}
 }
+
+func TestMoveCursorArrowKeys(t *testing.T) {
+	t.Run("arrow keys can be used to move cursor", func(t *testing.T) {
+		vi := setupVi(t, "aaaa\nbbbb\ncccc\ndddd", 2)
+		vi.Resize(4, 4)
+
+		modes := []viMode{
+			normalMode,
+			insertMode,
+			visualMode,
+		}
+
+		for _, mod := range modes {
+			vi.currMode = mod
+
+			coords, _, _ := vi.Cursor()
+			require.Equal(t, 0, coords.X)
+			require.Equal(t, 0, coords.Y)
+
+			vi.Handle(term.Event{Type: term.EventKey, Key: term.KeyArrowRight})
+			coords, _, _ = vi.Cursor()
+			require.Equal(t, 1, coords.X)
+			require.Equal(t, 0, coords.Y)
+
+			vi.Handle(term.Event{Type: term.EventKey, Key: term.KeyArrowDown})
+			coords, _, _ = vi.Cursor()
+			require.Equal(t, 1, coords.X)
+			require.Equal(t, 1, coords.Y)
+
+			vi.Handle(term.Event{Type: term.EventKey, Key: term.KeyArrowLeft})
+			coords, _, _ = vi.Cursor()
+			require.Equal(t, 0, coords.X)
+			require.Equal(t, 1, coords.Y)
+
+			vi.Handle(term.Event{Type: term.EventKey, Key: term.KeyArrowUp})
+			coords, _, _ = vi.Cursor()
+			require.Equal(t, 0, coords.X)
+			require.Equal(t, 0, coords.Y)
+		}
+
+	})
+}

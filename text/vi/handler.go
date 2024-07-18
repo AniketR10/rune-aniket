@@ -480,10 +480,23 @@ func (vi *viHandlerImpl) handleNormal(ev term.Event) (quit, handled bool) {
 			vi.searchMode = moveToNext
 			vi.search(vi.cursor.Word())
 		default:
-			if ev.Key == term.KeyEsc {
+			switch ev.Key {
+			case term.KeyEsc:
 				handled = vi.setNormalMode()
 				vi.cursor.Unselect()
-			} else {
+			case term.KeyArrowUp:
+				vi.cursor.MoveToMark(vi.free)
+				vi.cursor.MoveUp()
+			case term.KeyArrowRight:
+				vi.cursor.MoveToMark(vi.free)
+				vi.cursor.MoveRight()
+			case term.KeyArrowDown:
+				vi.cursor.MoveToMark(vi.free)
+				vi.cursor.MoveDown()
+			case term.KeyArrowLeft:
+				vi.cursor.MoveToMark(vi.free)
+				vi.cursor.MoveLeft()
+			default:
 				handled = false
 			}
 		}
@@ -527,6 +540,22 @@ func (vi *viHandlerImpl) handleInsert(ev term.Event) (quit, handled bool) {
 			handled = true
 		case term.KeyEsc:
 			vi.exitInsert()
+			handled = true
+		case term.KeyArrowUp:
+			vi.cursor.MoveToMark(vi.free)
+			vi.cursor.MoveUp()
+			handled = true
+		case term.KeyArrowRight:
+			vi.cursor.MoveToMark(vi.free)
+			vi.cursor.MoveRight()
+			handled = true
+		case term.KeyArrowDown:
+			vi.cursor.MoveToMark(vi.free)
+			vi.cursor.MoveDown()
+			handled = true
+		case term.KeyArrowLeft:
+			vi.cursor.MoveToMark(vi.free)
+			vi.cursor.MoveLeft()
 			handled = true
 		default:
 			if ev.Ch != 0 {
