@@ -239,7 +239,8 @@ func (r *renderer) drawRow(
 
 		if cell.Attrs&tcell.AttrUnderline != 0 {
 			underlinePixelY := pixelY + r.font.CellSize.Y/2
-			drawrect.DrawStroke(r.frame, float32(pixelX), float32(underlinePixelY),
+			r.bufVertices, r.bufIndices = drawrect.DrawStroke(&r.bufPath, r.bufVertices, r.bufIndices,
+				r.frame, float32(pixelX), float32(underlinePixelY),
 				float32(pixelX+r.font.CellSize.X),
 				float32(underlinePixelY), 2, fg, false)
 		}

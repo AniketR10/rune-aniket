@@ -65,24 +65,29 @@ func drawVerticesForUtil(
 	dst.DrawTriangles(vs, is, whiteSubImage, &op)
 }
 
-// StrokeLine strokes a line (x0, y0)-(x1, y1) with the specified width and color.
+// DrawStroke strokes a line (x0, y0)-(x1, y1) with the specified width and color.
 //
 // clr has be to be a solid (non-transparent) color.
 func DrawStroke(
-	dst *ebiten.Image, x0, y0, x1, y1 float32,
+	path *Path, vs []ebiten.Vertex, is []uint16, dst *ebiten.Image,
+	x0, y0, x1, y1 float32,
 	strokeWidth float32, clr color.RGBA, antialias bool,
-) {
-	var path Path
+) ([]ebiten.Vertex, []uint16) {
+	path.Reset()
 	path.MoveTo(x0, y0)
 	path.LineTo(x1, y1)
 	strokeOp := &StrokeOptions{}
 	strokeOp.Width = strokeWidth
-	vs, is := path.AppendVerticesAndIndicesForStroke(nil, nil, strokeOp)
+
+	vs = vs[:0]
+	is = is[:0]
+	vs, is = path.AppendVerticesAndIndicesForStroke(vs, is, strokeOp)
 
 	drawVerticesForUtil(dst, vs, is, clr, antialias)
+	return vs, is
 }
 
-// DrawFilledRect fills a rectangle with the specified width and color.
+// DrawRect fills a rectangle with the specified width and color.
 func DrawRect(
 	path *Path, vs []ebiten.Vertex, is []uint16, dst *ebiten.Image,
 	x, y, width, height float32, clr color.RGBA, antialias bool,
