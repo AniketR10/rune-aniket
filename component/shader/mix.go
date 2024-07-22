@@ -24,20 +24,20 @@ package shader
 
 import "unstable.build/go-tui/term"
 
-// Multi combines multiple shaders into one. They're run
+// Mix combines multiple shaders into one. They're run
 // in the same order they're passed to this constructor.
-func Multi(shaders ...Shader) Shader {
+func Mix(shaders ...Shader) Shader {
 	if len(shaders) == 0 {
 		panic("shaders must not be 0")
 	}
-	return multiShader{shaders: shaders}
+	return mixShader{shaders: shaders}
 }
 
-type multiShader struct {
+type mixShader struct {
 	shaders []Shader
 }
 
-func (m multiShader) Shade(frame, total int, in [][]term.Cell) {
+func (m mixShader) Shade(frame, total int, in [][]term.Cell) {
 	for _, shader := range m.shaders {
 		shader.Shade(frame, total, in)
 	}
