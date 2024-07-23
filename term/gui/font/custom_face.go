@@ -30,7 +30,6 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 	"golang.org/x/image/font"
 	"golang.org/x/image/math/fixed"
-	"unstable.build/go-tui/term/gui/drawrect"
 )
 
 var _ font.Face = (*custom)(nil)
@@ -38,37 +37,24 @@ var _ font.Face = (*custom)(nil)
 // handles special runes used to build (T)UIs for
 // pixel perfect rendering.
 type custom struct {
-	width, height   fixed.Int26_6
-	face            font.Face
-	offsetY         fixed.Int26_6
-	strokeWidth     int
-	boldStrokeWidth int
+	width, height fixed.Int26_6
+	face          font.Face
+	offsetY       fixed.Int26_6
+	boldFont      bool
 
 	// re-use allocs
 	mask *ebiten.Image
-	vs   []ebiten.Vertex
-	is   []uint16
-	path drawrect.Path
 }
 
 func newCustomFace(width, height, offsetY float64, standard font.Face, bold bool) *custom {
-	// 1/8 of the cell for standard stroke width, if font is bold, then 1/6
-	factor := 8.0
-	if bold {
-		factor = 6.0
-	}
-	strokeWidth := int(math.Max(math.Trunc(width/factor), 1))
-	// double for bold stroke
-	boldStrokeWidth := 2 * strokeWidth
 	mask := ebiten.NewImage(int(math.Max(width, 1)), int(math.Max(height, 1)))
 	return &custom{
-		mask:            mask,
-		strokeWidth:     strokeWidth,
-		boldStrokeWidth: boldStrokeWidth,
-		offsetY:         float64ToFixed(offsetY),
-		face:            standard,
-		width:           float64ToFixed(width),
-		height:          float64ToFixed(height),
+		boldFont: bold,
+		mask:     mask,
+		offsetY:  float64ToFixed(offsetY),
+		face:     standard,
+		width:    float64ToFixed(width),
+		height:   float64ToFixed(height),
 	}
 }
 
@@ -78,184 +64,185 @@ func (m *custom) Glyph(dot fixed.Point26_6, r rune) (
 ) {
 	m.mask.Clear()
 
+	dr = image.Rect(
+		dot.X.Floor(),
+		(dot.Y - m.offsetY).Floor(),
+		(dot.X + m.width).Floor(),
+		(dot.Y + m.height - m.offsetY).Floor(),
+	)
+
 	switch r {
 	case '░':
-		ok = m.shadeGlyph(dot, colorFillAlphaStep3)
+		ok = m.shadeGlyph(dr, colorFillAlphaStep3)
 	case '▒':
-		ok = m.shadeGlyph(dot, colorFillAlphaStep2)
+		ok = m.shadeGlyph(dr, colorFillAlphaStep2)
 	case '▓':
-		ok = m.shadeGlyph(dot, colorFillAlphaStep1)
+		ok = m.shadeGlyph(dr, colorFillAlphaStep1)
 	case '█':
-		ok = m.shadeGlyph(dot, colorFill)
+		ok = m.shadeGlyph(dr, colorFill)
 	case '─':
-		ok = m.plusGlyph(dot, styleSingle, styleSingle, 0, 0)
+		ok = m.plusGlyph(dr, styleSingle, styleSingle, 0, 0)
 	case '━':
-		ok = m.plusGlyph(dot, styleBold, styleBold, 0, 0)
+		ok = m.plusGlyph(dr, styleBold, styleBold, 0, 0)
 	case '╴':
-		ok = m.plusGlyph(dot, styleSingle, 0, 0, 0)
+		ok = m.plusGlyph(dr, styleSingle, 0, 0, 0)
 	case '╶':
-		ok = m.plusGlyph(dot, 0, styleSingle, 0, 0)
+		ok = m.plusGlyph(dr, 0, styleSingle, 0, 0)
 	case '╸':
-		ok = m.plusGlyph(dot, styleBold, 0, 0, 0)
+		ok = m.plusGlyph(dr, styleBold, 0, 0, 0)
 	case '╺':
-		ok = m.plusGlyph(dot, 0, styleBold, 0, 0)
+		ok = m.plusGlyph(dr, 0, styleBold, 0, 0)
 	case '│':
-		ok = m.plusGlyph(dot, 0, 0, styleSingle, styleSingle)
+		ok = m.plusGlyph(dr, 0, 0, styleSingle, styleSingle)
 	case '┃':
-		ok = m.plusGlyph(dot, 0, 0, styleBold, styleBold)
+		ok = m.plusGlyph(dr, 0, 0, styleBold, styleBold)
 	case '╵':
-		ok = m.plusGlyph(dot, 0, 0, styleSingle, 0)
+		ok = m.plusGlyph(dr, 0, 0, styleSingle, 0)
 	case '╷':
-		ok = m.plusGlyph(dot, 0, 0, 0, styleSingle)
+		ok = m.plusGlyph(dr, 0, 0, 0, styleSingle)
 	case '╹':
-		ok = m.plusGlyph(dot, 0, 0, styleBold, 0)
+		ok = m.plusGlyph(dr, 0, 0, styleBold, 0)
 	case '╻':
-		ok = m.plusGlyph(dot, 0, 0, 0, styleBold)
+		ok = m.plusGlyph(dr, 0, 0, 0, styleBold)
 	case '┌':
-		ok = m.plusGlyph(dot, 0, styleSingle, 0, styleSingle)
+		ok = m.plusGlyph(dr, 0, styleSingle, 0, styleSingle)
 	case '┍':
-		ok = m.plusGlyph(dot, 0, styleBold, 0, styleSingle)
+		ok = m.plusGlyph(dr, 0, styleBold, 0, styleSingle)
 	case '┎':
-		ok = m.plusGlyph(dot, 0, styleSingle, 0, styleBold)
+		ok = m.plusGlyph(dr, 0, styleSingle, 0, styleBold)
 	case '┏':
-		ok = m.plusGlyph(dot, 0, styleBold, 0, styleBold)
+		ok = m.plusGlyph(dr, 0, styleBold, 0, styleBold)
 	case '┐':
-		ok = m.plusGlyph(dot, styleSingle, 0, 0, styleSingle)
+		ok = m.plusGlyph(dr, styleSingle, 0, 0, styleSingle)
 	case '┑':
-		ok = m.plusGlyph(dot, styleBold, 0, 0, styleSingle)
+		ok = m.plusGlyph(dr, styleBold, 0, 0, styleSingle)
 	case '┒':
-		ok = m.plusGlyph(dot, styleSingle, 0, 0, styleBold)
+		ok = m.plusGlyph(dr, styleSingle, 0, 0, styleBold)
 	case '┓':
-		ok = m.plusGlyph(dot, styleBold, 0, 0, styleBold)
+		ok = m.plusGlyph(dr, styleBold, 0, 0, styleBold)
 	case '└':
-		ok = m.plusGlyph(dot, 0, styleSingle, styleSingle, 0)
+		ok = m.plusGlyph(dr, 0, styleSingle, styleSingle, 0)
 	case '┕':
-		ok = m.plusGlyph(dot, 0, styleBold, styleSingle, 0)
+		ok = m.plusGlyph(dr, 0, styleBold, styleSingle, 0)
 	case '┖':
-		ok = m.plusGlyph(dot, 0, styleSingle, styleBold, 0)
+		ok = m.plusGlyph(dr, 0, styleSingle, styleBold, 0)
 	case '┗':
-		ok = m.plusGlyph(dot, 0, styleBold, styleBold, 0)
+		ok = m.plusGlyph(dr, 0, styleBold, styleBold, 0)
 	case '┘':
-		ok = m.plusGlyph(dot, styleSingle, 0, styleSingle, 0)
+		ok = m.plusGlyph(dr, styleSingle, 0, styleSingle, 0)
 	case '┙':
-		ok = m.plusGlyph(dot, styleBold, 0, styleSingle, 0)
+		ok = m.plusGlyph(dr, styleBold, 0, styleSingle, 0)
 	case '┚':
-		ok = m.plusGlyph(dot, styleSingle, 0, styleBold, 0)
+		ok = m.plusGlyph(dr, styleSingle, 0, styleBold, 0)
 	case '┛':
-		ok = m.plusGlyph(dot, styleBold, 0, styleBold, 0)
+		ok = m.plusGlyph(dr, styleBold, 0, styleBold, 0)
 	case '├':
-		ok = m.plusGlyph(dot, 0, styleSingle, styleSingle, styleSingle)
+		ok = m.plusGlyph(dr, 0, styleSingle, styleSingle, styleSingle)
 	case '┝':
-		ok = m.plusGlyph(dot, 0, styleSingle, styleSingle, styleBold)
+		ok = m.plusGlyph(dr, 0, styleSingle, styleSingle, styleBold)
 	case '┞':
-		ok = m.plusGlyph(dot, 0, styleSingle, styleBold, styleSingle)
+		ok = m.plusGlyph(dr, 0, styleSingle, styleBold, styleSingle)
 	case '┟':
-		ok = m.plusGlyph(dot, 0, styleSingle, styleSingle, styleBold)
+		ok = m.plusGlyph(dr, 0, styleSingle, styleSingle, styleBold)
 	case '┠':
-		ok = m.plusGlyph(dot, 0, styleSingle, styleBold, styleBold)
+		ok = m.plusGlyph(dr, 0, styleSingle, styleBold, styleBold)
 	case '┡':
-		ok = m.plusGlyph(dot, 0, styleBold, styleBold, styleSingle)
+		ok = m.plusGlyph(dr, 0, styleBold, styleBold, styleSingle)
 	case '┢':
-		ok = m.plusGlyph(dot, 0, styleBold, styleSingle, styleBold)
+		ok = m.plusGlyph(dr, 0, styleBold, styleSingle, styleBold)
 	case '┣':
-		ok = m.plusGlyph(dot, 0, styleBold, styleBold, styleBold)
+		ok = m.plusGlyph(dr, 0, styleBold, styleBold, styleBold)
 	case '┤':
-		ok = m.plusGlyph(dot, styleSingle, 0, styleSingle, styleSingle)
+		ok = m.plusGlyph(dr, styleSingle, 0, styleSingle, styleSingle)
 	case '┥':
-		ok = m.plusGlyph(dot, styleBold, 0, styleSingle, styleSingle)
+		ok = m.plusGlyph(dr, styleBold, 0, styleSingle, styleSingle)
 	case '┦':
-		ok = m.plusGlyph(dot, styleSingle, 0, styleBold, styleSingle)
+		ok = m.plusGlyph(dr, styleSingle, 0, styleBold, styleSingle)
 	case '┧':
-		ok = m.plusGlyph(dot, styleSingle, 0, styleSingle, styleBold)
+		ok = m.plusGlyph(dr, styleSingle, 0, styleSingle, styleBold)
 	case '┨':
-		ok = m.plusGlyph(dot, styleSingle, 0, styleBold, styleBold)
+		ok = m.plusGlyph(dr, styleSingle, 0, styleBold, styleBold)
 	case '┩':
-		ok = m.plusGlyph(dot, styleBold, 0, styleBold, styleSingle)
+		ok = m.plusGlyph(dr, styleBold, 0, styleBold, styleSingle)
 	case '┪':
-		ok = m.plusGlyph(dot, styleBold, 0, styleSingle, styleBold)
+		ok = m.plusGlyph(dr, styleBold, 0, styleSingle, styleBold)
 	case '┫':
-		ok = m.plusGlyph(dot, styleBold, 0, styleBold, styleBold)
+		ok = m.plusGlyph(dr, styleBold, 0, styleBold, styleBold)
 	case '┬':
-		ok = m.plusGlyph(dot, styleSingle, styleSingle, 0, styleSingle)
+		ok = m.plusGlyph(dr, styleSingle, styleSingle, 0, styleSingle)
 	case '┭':
-		ok = m.plusGlyph(dot, styleBold, styleSingle, 0, styleSingle)
+		ok = m.plusGlyph(dr, styleBold, styleSingle, 0, styleSingle)
 	case '┮':
-		ok = m.plusGlyph(dot, styleSingle, styleBold, 0, styleSingle)
+		ok = m.plusGlyph(dr, styleSingle, styleBold, 0, styleSingle)
 	case '┯':
-		ok = m.plusGlyph(dot, styleBold, styleBold, 0, styleSingle)
+		ok = m.plusGlyph(dr, styleBold, styleBold, 0, styleSingle)
 	case '┰':
-		ok = m.plusGlyph(dot, styleSingle, styleSingle, 0, styleBold)
+		ok = m.plusGlyph(dr, styleSingle, styleSingle, 0, styleBold)
 	case '┱':
-		ok = m.plusGlyph(dot, styleBold, styleSingle, 0, styleBold)
+		ok = m.plusGlyph(dr, styleBold, styleSingle, 0, styleBold)
 	case '┲':
-		ok = m.plusGlyph(dot, styleSingle, styleBold, 0, styleBold)
+		ok = m.plusGlyph(dr, styleSingle, styleBold, 0, styleBold)
 	case '┳':
-		ok = m.plusGlyph(dot, styleBold, styleBold, 0, styleBold)
+		ok = m.plusGlyph(dr, styleBold, styleBold, 0, styleBold)
 	case '┴':
-		ok = m.plusGlyph(dot, styleSingle, styleSingle, styleSingle, 0)
+		ok = m.plusGlyph(dr, styleSingle, styleSingle, styleSingle, 0)
 	case '┵':
-		ok = m.plusGlyph(dot, styleBold, styleSingle, styleSingle, 0)
+		ok = m.plusGlyph(dr, styleBold, styleSingle, styleSingle, 0)
 	case '┶':
-		ok = m.plusGlyph(dot, styleSingle, styleBold, styleSingle, 0)
+		ok = m.plusGlyph(dr, styleSingle, styleBold, styleSingle, 0)
 	case '┷':
-		ok = m.plusGlyph(dot, styleBold, styleBold, styleSingle, 0)
+		ok = m.plusGlyph(dr, styleBold, styleBold, styleSingle, 0)
 	case '┸':
-		ok = m.plusGlyph(dot, styleSingle, styleSingle, styleBold, 0)
+		ok = m.plusGlyph(dr, styleSingle, styleSingle, styleBold, 0)
 	case '┹':
-		ok = m.plusGlyph(dot, styleBold, styleSingle, styleBold, 0)
+		ok = m.plusGlyph(dr, styleBold, styleSingle, styleBold, 0)
 	case '┺':
-		ok = m.plusGlyph(dot, styleSingle, styleBold, styleBold, 0)
+		ok = m.plusGlyph(dr, styleSingle, styleBold, styleBold, 0)
 	case '┻':
-		ok = m.plusGlyph(dot, styleBold, styleBold, styleBold, 0)
+		ok = m.plusGlyph(dr, styleBold, styleBold, styleBold, 0)
 	case '┼':
-		ok = m.plusGlyph(dot, styleSingle, styleSingle, styleSingle, styleSingle)
+		ok = m.plusGlyph(dr, styleSingle, styleSingle, styleSingle, styleSingle)
 	case '┽':
-		ok = m.plusGlyph(dot, styleBold, styleSingle, styleSingle, styleSingle)
+		ok = m.plusGlyph(dr, styleBold, styleSingle, styleSingle, styleSingle)
 	case '┾':
-		ok = m.plusGlyph(dot, styleSingle, styleBold, styleSingle, styleSingle)
+		ok = m.plusGlyph(dr, styleSingle, styleBold, styleSingle, styleSingle)
 	case '┿':
-		ok = m.plusGlyph(dot, styleBold, styleBold, styleSingle, styleSingle)
+		ok = m.plusGlyph(dr, styleBold, styleBold, styleSingle, styleSingle)
 	case '╀':
-		ok = m.plusGlyph(dot, styleSingle, styleSingle, styleBold, styleSingle)
+		ok = m.plusGlyph(dr, styleSingle, styleSingle, styleBold, styleSingle)
 	case '╁':
-		ok = m.plusGlyph(dot, styleSingle, styleSingle, styleSingle, styleBold)
+		ok = m.plusGlyph(dr, styleSingle, styleSingle, styleSingle, styleBold)
 	case '╂':
-		ok = m.plusGlyph(dot, styleSingle, styleSingle, styleBold, styleBold)
+		ok = m.plusGlyph(dr, styleSingle, styleSingle, styleBold, styleBold)
 	case '╃':
-		ok = m.plusGlyph(dot, styleBold, styleSingle, styleBold, styleSingle)
+		ok = m.plusGlyph(dr, styleBold, styleSingle, styleBold, styleSingle)
 	case '╄':
-		ok = m.plusGlyph(dot, styleSingle, styleBold, styleBold, styleSingle)
+		ok = m.plusGlyph(dr, styleSingle, styleBold, styleBold, styleSingle)
 	case '╅':
-		ok = m.plusGlyph(dot, styleBold, styleSingle, styleSingle, styleBold)
+		ok = m.plusGlyph(dr, styleBold, styleSingle, styleSingle, styleBold)
 	case '╆':
-		ok = m.plusGlyph(dot, styleSingle, styleBold, styleSingle, styleBold)
+		ok = m.plusGlyph(dr, styleSingle, styleBold, styleSingle, styleBold)
 	case '╇':
-		ok = m.plusGlyph(dot, styleBold, styleBold, styleBold, styleSingle)
+		ok = m.plusGlyph(dr, styleBold, styleBold, styleBold, styleSingle)
 	case '╈':
-		ok = m.plusGlyph(dot, styleBold, styleBold, styleSingle, styleBold)
+		ok = m.plusGlyph(dr, styleBold, styleBold, styleSingle, styleBold)
 	case '╉':
-		ok = m.plusGlyph(dot, styleBold, styleSingle, styleBold, styleBold)
+		ok = m.plusGlyph(dr, styleBold, styleSingle, styleBold, styleBold)
 	case '╊':
-		ok = m.plusGlyph(dot, styleSingle, styleBold, styleBold, styleBold)
+		ok = m.plusGlyph(dr, styleSingle, styleBold, styleBold, styleBold)
 	case '╋':
-		ok = m.plusGlyph(dot, styleBold, styleBold, styleBold, styleBold)
+		ok = m.plusGlyph(dr, styleBold, styleBold, styleBold, styleBold)
 	case '╼':
-		ok = m.plusGlyph(dot, styleSingle, styleBold, 0, 0)
+		ok = m.plusGlyph(dr, styleSingle, styleBold, 0, 0)
 	case '╾':
-		ok = m.plusGlyph(dot, styleBold, styleSingle, 0, 0)
+		ok = m.plusGlyph(dr, styleBold, styleSingle, 0, 0)
 	case '╽':
-		ok = m.plusGlyph(dot, 0, 0, styleSingle, styleBold)
+		ok = m.plusGlyph(dr, 0, 0, styleSingle, styleBold)
 	case '╿':
-		ok = m.plusGlyph(dot, 0, 0, styleBold, styleSingle)
+		ok = m.plusGlyph(dr, 0, 0, styleBold, styleSingle)
 	}
 
 	if ok {
-		dr = image.Rect(
-			dot.X.Floor(),
-			(dot.Y - m.offsetY).Floor(),
-			(dot.X + m.width).Floor(),
-			(dot.Y + m.height - m.offsetY).Floor(),
-		)
 		mask = m.mask
 		maskp = mask.Bounds().Min
 		advance = fixed.I(int(m.width))
@@ -312,8 +299,4 @@ func fixedRectangleFromImageRectangle(r image.Rectangle) fixed.Rectangle26_6 {
 
 func float64ToFixed(x float64) fixed.Int26_6 {
 	return fixed.Int26_6(x * (1 << 6))
-}
-
-func fixedToFloat64(x fixed.Int26_6) float64 {
-	return float64(x) / (1 << 6)
 }
