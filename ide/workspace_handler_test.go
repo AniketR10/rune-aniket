@@ -27,6 +27,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 
 	_ "net/http/pprof"
 	"sync"
@@ -915,79 +916,139 @@ func TestSwitchToWorkspaceComplete(t *testing.T) {
 }
 
 func TestExternalCommands(t *testing.T) {
-	dir, err := os.MkdirTemp("", "")
-	require.NoError(t, err)
-	dir2, err := os.MkdirTemp("", "")
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		os.RemoveAll(dir)
-		os.RemoveAll(dir2)
+	t.Run("happy path", func(t *testing.T) {
+		dir, err := os.MkdirTemp("", "")
+		require.NoError(t, err)
+		dir2, err := os.MkdirTemp("", "")
+		require.NoError(t, err)
+		t.Cleanup(func() {
+			os.RemoveAll(dir)
+			os.RemoveAll(dir2)
+		})
+
+		m := newTestWorkspaceManagerHandlerWithDir(t, defaultConfigWithWrap(false), nil, dir)
+		err = m.subscribeCommand(textapi.CommandManual{Name: "ramon"},
+			text.FuncCommandHandler(func(context.Context, textapi.Command) (bool, error) {
+				return false, nil
+			}, func(ctx context.Context, name string, args []string) (
+				iterator.Iterator[string], string, error,
+			) {
+				return iterator.FromSlice([]string{"wasup", "wasep"}), "", nil
+			}))
+		require.NoError(t, err)
+
+		cases := []testutil.HandlerSequenceTestCase{
+			{":ramo w", // existing workspace
+				`┌────────────────────────────┐
+│                            │
+├────────────────────────────┤
+│                            │
+│                            │
+│                            │
+│                            │
+┌────────────────────────────┐
+│ramon w▐                    │
+│wasup                       │
+│wasep                       │
+└────────────────────────────┘
+│                            │
+│                            │
+└────────────────────────────┘`},
+			{fmt.Sprintf(":addWorkspace %s>:ramo w", dir2), // new workspace
+				`┌────────────────────────────┐
+│                            │
+├────────────────────────────┤
+│                            │
+│                            │
+│                            │
+│                            │
+┌────────────────────────────┐
+│ramon w▐                    │
+│wasup                       │
+│wasep                       │
+└────────────────────────────┘
+│                            │
+│                            │
+└────────────────────────────┘`},
+			{":swWo 8>:ramo w", // empty workspace
+				`┌────────────────────────────┐
+│                            │
+├────────────────────────────┤
+│                            │
+│                            │
+│                            │
+│                            │
+┌────────────────────────────┐
+│ramon w▐                    │
+│wasup                       │
+│wasep                       │
+└────────────────────────────┘
+│                            │
+│                            │
+└────────────────────────────┘`},
+		}
+		testutil.TestHandlerSequence(t, m, 30, 15, cases)
+
+		require.NoError(t, m.Close())
 	})
 
-	m := newTestWorkspaceManagerHandlerWithDir(t, defaultConfigWithWrap(false), nil, dir)
-	err = m.subscribeCommand(textapi.CommandManual{Name: "ramon"},
-		text.FuncCommandHandler(func(context.Context, textapi.Command) (bool, error) {
-			return false, nil
-		}, func(ctx context.Context, name string, args []string) (
-			iterator.Iterator[string], string, error,
-		) {
-			return iterator.FromSlice([]string{"wasup", "wasep"}), "", nil
-		}))
-	require.NoError(t, err)
+	t.Run("is goroutine safe", func(t *testing.T) {
+		dir, err := os.MkdirTemp("", "")
+		require.NoError(t, err)
+		dir2, err := os.MkdirTemp("", "")
+		require.NoError(t, err)
+		t.Cleanup(func() {
+			os.RemoveAll(dir)
+			os.RemoveAll(dir2)
+		})
 
-	cases := []testutil.HandlerSequenceTestCase{
-		{":ramo w", // existing workspace
-			`┌────────────────────────────┐
-│                            │
-├────────────────────────────┤
-│                            │
-│                            │
-│                            │
-│                            │
-┌────────────────────────────┐
-│ramon w▐                    │
-│wasup                       │
-│wasep                       │
-└────────────────────────────┘
-│                            │
-│                            │
-└────────────────────────────┘`},
-		{fmt.Sprintf(":addWorkspace %s>:ramo w", dir2), // new workspace
-			`┌────────────────────────────┐
-│                            │
-├────────────────────────────┤
-│                            │
-│                            │
-│                            │
-│                            │
-┌────────────────────────────┐
-│ramon w▐                    │
-│wasup                       │
-│wasep                       │
-└────────────────────────────┘
-│                            │
-│                            │
-└────────────────────────────┘`},
-		{":swWo 8>:ramo w", // empty workspace
-			`┌────────────────────────────┐
-│                            │
-├────────────────────────────┤
-│                            │
-│                            │
-│                            │
-│                            │
-┌────────────────────────────┐
-│ramon w▐                    │
-│wasup                       │
-│wasep                       │
-└────────────────────────────┘
-│                            │
-│                            │
-└────────────────────────────┘`},
-	}
-	testutil.TestHandlerSequence(t, m, 30, 15, cases)
+		m := newTestWorkspaceManagerHandlerWithDir(t, defaultConfigWithWrap(false), nil, dir)
 
-	require.NoError(t, m.Close())
+		const n = 50
+		var wg sync.WaitGroup
+		var errs [n]error
+
+		wg.Add(n)
+		for i := 0; i < n; i++ {
+			go func(i int) {
+				defer wg.Done()
+				errs[i] = m.subscribeCommand(textapi.CommandManual{Name: "cmd" + strconv.Itoa(i)},
+					text.FuncCommandHandler(func(context.Context, textapi.Command) (bool, error) {
+						return false, nil
+					}, func(ctx context.Context, name string, args []string) (
+						iterator.Iterator[string], string, error,
+					) {
+						return iterator.FromSlice([]string{strconv.Itoa(i), strconv.Itoa(i + 1000)}), "", nil
+					}))
+			}(i)
+		}
+		wg.Wait()
+		for _, err := range errs {
+			require.NoError(t, err)
+		}
+
+		cases := []testutil.HandlerSequenceTestCase{
+			{":c0 1", // existing workspace
+				`┌────────────────────────────┐
+│                            │
+├────────────────────────────┤
+│                            │
+│                            │
+│                            │
+│                            │
+┌────────────────────────────┐
+│cmd0 1▐                     │
+│1000                        │
+│                            │
+└────────────────────────────┘
+│                            │
+│                            │
+└────────────────────────────┘`},
+		}
+		testutil.TestHandlerSequence(t, m, 30, 15, cases)
+
+		require.NoError(t, m.Close())
+	})
 }
 
 func newTestWorkspaceManagerHandlerWithManager(

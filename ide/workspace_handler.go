@@ -960,6 +960,9 @@ type externalCommand struct {
 func (h *workspaceManagerHandler) subscribeCommand(
 	cmd textapi.CommandManual, handler text.CommandHandler,
 ) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
 	if _, ok := h.externalCommands[cmd.Name]; ok {
 		return fmt.Errorf("command '%s' already registered", cmd.Name)
 	}
