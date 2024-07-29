@@ -938,7 +938,9 @@ func TestExternalCommands(t *testing.T) {
 		require.NoError(t, err)
 
 		cases := []testutil.HandlerSequenceTestCase{
-			{":ramo w", // existing workspace
+			// '_' simulates sleeps; we can't and shouldn't
+			// enable sync command prompt from here
+			{":ramo w__", // existing workspace
 				`┌────────────────────────────┐
 │                            │
 ├────────────────────────────┤
@@ -954,7 +956,7 @@ func TestExternalCommands(t *testing.T) {
 │                            │
 │                            │
 └────────────────────────────┘`},
-			{fmt.Sprintf(":addWorkspace %s>:ramo w", dir2), // new workspace
+			{fmt.Sprintf(":addWorkspace %s>:ramo w__", dir2), // new workspace
 				`┌────────────────────────────┐
 │                            │
 ├────────────────────────────┤
@@ -970,7 +972,7 @@ func TestExternalCommands(t *testing.T) {
 │                            │
 │                            │
 └────────────────────────────┘`},
-			{":swWo 8>:ramo w", // empty workspace
+			{":swWo 8>:ramo w__", // empty workspace
 				`┌────────────────────────────┐
 │                            │
 ├────────────────────────────┤
