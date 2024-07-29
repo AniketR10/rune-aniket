@@ -43,14 +43,19 @@ type custom struct {
 	boldFont      bool
 
 	// re-use allocs
-	mask *ebiten.Image
+	mask    *ebiten.Image
+	altMask *ebiten.Image
 }
 
 func newCustomFace(width, height, offsetY float64, standard font.Face, bold bool) *custom {
-	mask := ebiten.NewImage(int(math.Max(width, 1)), int(math.Max(height, 1)))
+	w := int(math.Max(width, 1))
+	h := int(math.Max(height, 1))
+	mask := ebiten.NewImage(w, h)
+	altMask := ebiten.NewImage(w, h)
 	return &custom{
 		boldFont: bold,
 		mask:     mask,
+		altMask:  altMask,
 		offsetY:  float64ToFixed(offsetY),
 		face:     standard,
 		width:    float64ToFixed(width),
@@ -63,6 +68,7 @@ func (m *custom) Glyph(dot fixed.Point26_6, r rune) (
 	maskp image.Point, advance fixed.Int26_6, ok bool,
 ) {
 	m.mask.Clear()
+	m.altMask.Clear()
 
 	dr = image.Rect(
 		dot.X.Floor(),
@@ -240,6 +246,14 @@ func (m *custom) Glyph(dot fixed.Point26_6, r rune) (
 		ok = m.plusGlyph(dr, 0, 0, styleSingle, styleBold)
 	case '╿':
 		ok = m.plusGlyph(dr, 0, 0, styleBold, styleSingle)
+	case '╯':
+		ok = m.arcPlusGlyph(dr, styleSingle, 0, 0, 0)
+	case '╰':
+		ok = m.arcPlusGlyph(dr, 0, styleSingle, 0, 0)
+	case '╮':
+		ok = m.arcPlusGlyph(dr, 0, 0, styleSingle, 0)
+	case '╭':
+		ok = m.arcPlusGlyph(dr, 0, 0, 0, styleSingle)
 	}
 
 	if ok {

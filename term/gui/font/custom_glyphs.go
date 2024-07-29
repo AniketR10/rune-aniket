@@ -27,6 +27,8 @@ import (
 	"image"
 	"image/color"
 	"math"
+
+	"github.com/hajimehoshi/ebiten/v2"
 )
 
 type style uint8
@@ -56,10 +58,10 @@ func (m *custom) plusGlyph(
 	xv, yh, xh, yv, lhsize, rhsize, tvsize, bvsize := plusGlyphBounds(
 		bounds, lhstroke, rhstroke, tvstroke, bvstroke)
 
-	m.drawHorizontalLine(bounds, float64(bounds.Min.X), yh, lhsize, lhstroke)
-	m.drawHorizontalLine(bounds, xh, yh, rhsize, rhstroke)
-	m.drawVerticalLine(bounds, xv, float64(bounds.Min.Y), tvsize, tvstroke)
-	m.drawVerticalLine(bounds, xv, yv, bvsize, bvstroke)
+	m.drawHorizontalLine(bounds, m.mask, float64(bounds.Min.X), yh, lhsize, lhstroke)
+	m.drawHorizontalLine(bounds, m.mask, xh, yh, rhsize, rhstroke)
+	m.drawVerticalLine(bounds, m.mask, xv, float64(bounds.Min.Y), tvsize, tvstroke)
+	m.drawVerticalLine(bounds, m.mask, xv, yv, bvsize, bvstroke)
 
 	ok = true
 	return
@@ -71,24 +73,161 @@ func (m *custom) shadeGlyph(bounds image.Rectangle, c color.RGBA) (ok bool) {
 	x := float64(bounds.Min.X)
 	y := float64(bounds.Min.Y)
 
-	m.drawRect(bounds, x, y, width, height, c)
+	m.drawRect(bounds, m.mask, x, y, width, height, c)
 	ok = true
 	return
 }
 
-func (m *custom) drawVerticalLine(bounds image.Rectangle, x, y, size float64, width int) {
+func (m *custom) arcPlusGlyph(
+	bounds image.Rectangle,
+	topLeft, topRight, bottomLeft, bottomRight style,
+) (ok bool) {
+	if topRight == styleSingle {
+		m.drawArcPlusGlyphTopRight(m.mask, bounds)
+		ok = true
+		return
+	}
+
+	if topLeft == styleSingle {
+		m.drawArcPlusGlyphTopLeft(m.mask, bounds)
+		ok = true
+		return
+	}
+
+	if bottomRight == styleSingle {
+		m.drawArcPlusGlyphBottomRight(bounds)
+		ok = true
+		return
+	}
+
+	if bottomLeft == styleSingle {
+		m.drawArcPlusGlyphBottomLeft(bounds)
+		ok = true
+		return
+	}
+
+	return
+}
+
+func (m *custom) drawArcPlusGlyphBottomLeft(bounds image.Rectangle) {
+	m.drawArcPlusGlyphTopLeft(m.altMask, bounds)
+
+	var opt ebiten.DrawImageOptions
+	opt.GeoM.Scale(1, -1)
+	opt.GeoM.Translate(0, float64(bounds.Max.Y-bounds.Min.Y))
+	m.mask.DrawImage(m.altMask, &opt)
+}
+
+func (m *custom) drawArcPlusGlyphBottomRight(bounds image.Rectangle) {
+	m.drawArcPlusGlyphTopRight(m.altMask, bounds)
+
+	var opt ebiten.DrawImageOptions
+	opt.GeoM.Scale(1, -1)
+	opt.GeoM.Translate(0, float64(bounds.Max.Y-bounds.Min.Y))
+	m.mask.DrawImage(m.altMask, &opt)
+}
+
+func (m *custom) drawArcPlusGlyphTopRight(image *ebiten.Image, bounds image.Rectangle) {
+	strokeWidth := m.strokeWidthFromMask(bounds, styleSingle)
+
+	xv := centerX(bounds)
+	yh := centerY(bounds)
+	vBoundsFrom := xv
+	vBoundsTo := xv + float64(strokeWidth)
+	hBoundsFrom := yh
+	hBoundsTo := yh + float64(strokeWidth)
+
+	rx1, ry1 := vBoundsFrom, hBoundsFrom
+	for ; rx1 < vBoundsTo && ry1 < hBoundsTo; rx1, ry1 = rx1+1, ry1+1 {
+		rx2 := rx1 * rx1
+		ry2 := ry1 * ry1
+		quarter := rx2 / math.Sqrt(rx2+ry2)
+
+		for x := float64(bounds.Min.X); x < quarter; x++ {
+			y := ry1 * math.Sqrt(1-x*x/rx2)
+			x := float64(bounds.Min.X) + float64(bounds.Max.X) - (x + 1 - float64(bounds.Min.X))
+			y = math.Min(math.Max(y, float64(bounds.Min.Y)), hBoundsTo-1)
+			x = centerToX(x, bounds, strokeWidth)
+			y = centerFromY(y, bounds, strokeWidth)
+			image.Set(int(x), int(y), colorFill)
+		}
+
+		quarter = ry2 / math.Sqrt(rx2+ry2)
+		for y := float64(bounds.Min.Y); y < quarter; y++ {
+			x := rx1 * math.Sqrt(1-y*y/ry2)
+			y := math.Min(math.Max(y, float64(bounds.Min.Y)), ry1)
+			x = float64(bounds.Max.X) - (x + 1 - float64(bounds.Min.X))
+			x = centerToX(x, bounds, strokeWidth)
+			y = centerFromY(y, bounds, strokeWidth)
+			image.Set(int(x), int(y), colorFill)
+		}
+	}
+
+	// ensure the part closer to the edge of the cell is filled
+	m.drawVerticalLine(bounds, image, xv, float64(bounds.Min.Y),
+		math.Max(1, float64(strokeWidth)/2), strokeWidth)
+}
+
+func (m *custom) drawArcPlusGlyphTopLeft(image *ebiten.Image, bounds image.Rectangle) {
+	strokeWidth := m.strokeWidthFromMask(bounds, styleSingle)
+
+	xv := centerX(bounds)
+	yh := centerY(bounds)
+	vBoundsFrom := centerFromX(xv, bounds, strokeWidth)
+	vBoundsTo := centerToX(xv, bounds, strokeWidth)
+	hBoundsFrom := centerFromY(yh, bounds, strokeWidth)
+	hBoundsTo := centerToY(yh, bounds, strokeWidth)
+
+	rx1, ry1 := vBoundsFrom, hBoundsFrom
+	for ; rx1 < vBoundsTo && ry1 < hBoundsTo; rx1, ry1 = rx1+1, ry1+1 {
+		rx2 := rx1 * rx1
+		ry2 := ry1 * ry1
+		quarter := rx2 / math.Sqrt(rx2+ry2)
+
+		for x := float64(bounds.Min.X); x < quarter; x++ {
+			y := ry1 * math.Sqrt(1-x*x/rx2)
+			x := math.Min(math.Max(x+1, float64(bounds.Min.X)), rx1)
+			y = math.Min(math.Max(y, float64(bounds.Min.Y)), hBoundsTo-1)
+			image.Set(int(x), int(y), colorFill)
+		}
+
+		quarter = ry2 / math.Sqrt(rx2+ry2)
+		for y := float64(bounds.Min.Y); y < quarter; y++ {
+			x := rx1 * math.Sqrt(1-y*y/ry2)
+			y := math.Min(math.Max(y, float64(bounds.Min.Y)), ry1)
+			x = math.Min(math.Max(x+1, float64(bounds.Min.X)), vBoundsTo-1)
+			image.Set(int(x), int(y), colorFill)
+		}
+	}
+
+	// ensure the part closer to the edge of the cell is filled
+	m.drawHorizontalLine(bounds, image, float64(bounds.Min.X), yh,
+		math.Max(1, float64(strokeWidth)/2), strokeWidth)
+	m.drawVerticalLine(bounds, image, xv, float64(bounds.Min.Y),
+		math.Max(1, float64(strokeWidth)/2), strokeWidth)
+}
+
+func (m *custom) drawVerticalLine(
+	bounds image.Rectangle, image *ebiten.Image,
+	x, y, size float64, width int,
+) {
 	startx := centerFromX(x, bounds, width)
 	endx := centerToX(x, bounds, width)
-	m.drawRect(bounds, startx, y, endx-startx, size, colorFill)
+	m.drawRect(bounds, image, startx, y, endx-startx, size, colorFill)
 }
 
-func (m *custom) drawHorizontalLine(bounds image.Rectangle, x, y, size float64, width int) {
+func (m *custom) drawHorizontalLine(
+	bounds image.Rectangle, image *ebiten.Image,
+	x, y, size float64, width int) {
 	starty := centerFromY(y, bounds, width)
 	endy := centerToY(y, bounds, width)
-	m.drawRect(bounds, x, starty, size, endy-starty, colorFill)
+	m.drawRect(bounds, image, x, starty, size, endy-starty, colorFill)
 }
 
-func (m *custom) drawRect(bounds image.Rectangle, x, y, width, height float64, color color.RGBA) {
+func (m *custom) drawRect(
+	bounds image.Rectangle, image *ebiten.Image,
+	x, y, width, height float64, color color.RGBA,
+) {
 	startx := int(x)
 	endx := int(math.Min(x+width, float64(bounds.Max.X)))
 
@@ -97,7 +236,7 @@ func (m *custom) drawRect(bounds image.Rectangle, x, y, width, height float64, c
 
 	for y := starty; y < endy; y++ {
 		for x := startx; x < endx; x++ {
-			m.mask.Set(x, y, color)
+			image.Set(x, y, color)
 		}
 	}
 }
