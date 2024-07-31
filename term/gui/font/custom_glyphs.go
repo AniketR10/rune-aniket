@@ -145,7 +145,8 @@ func (m *custom) drawArcPlusGlyphTopRight(image *ebiten.Image, bounds image.Rect
 
 		for x := float64(bounds.Min.X); x < quarter; x++ {
 			y := ry1 * math.Sqrt(1-x*x/rx2)
-			x := float64(bounds.Min.X) + float64(bounds.Max.X) - (x + 1 - float64(bounds.Min.X))
+			x := float64(bounds.Min.X) + float64(bounds.Max.X) -
+				(x + 1 - float64(bounds.Min.X))
 			y = math.Min(math.Max(y, float64(bounds.Min.Y)), hBoundsTo-1)
 			x = centerToX(x, bounds, strokeWidth)
 			y = centerFromY(y, bounds, strokeWidth)
@@ -229,15 +230,33 @@ func (m *custom) drawRect(
 	x, y, width, height float64, color color.RGBA,
 ) {
 	startx := int(x)
-	endx := int(math.Min(x+width, float64(bounds.Max.X)))
+	endx := int(math.Min(x+width-1, float64(bounds.Max.X-1)))
 
 	starty := int(y)
-	endy := int(math.Min(y+height, float64(bounds.Max.Y)))
+	endy := int(math.Min(y+height-1, float64(bounds.Max.Y-1)))
 
-	for y := starty; y < endy; y++ {
-		for x := startx; x < endx; x++ {
+	for y := starty; y <= endy; y++ {
+		for x := startx; x <= endx; x++ {
 			image.Set(x, y, color)
 		}
+	}
+}
+
+func (m *custom) strokeWidthFromMask(bounds image.Rectangle, mask style) int {
+	// 1/8 of the cell for standard stroke width, if font is bold, then 1/6
+	factor := 8.0
+	if m.boldFont {
+		factor = 6.0
+	}
+	width := float64(bounds.Max.X - bounds.Min.X)
+	switch mask {
+	case styleSingle:
+		return int(math.Max(math.Trunc(width/factor), 1))
+	case styleBold:
+		// double for bold stroke
+		return int(math.Max(math.Trunc(width/factor), 1)) * 2
+	default:
+		return 0
 	}
 }
 
@@ -273,45 +292,39 @@ func plusGlyphBounds(
 }
 
 func centerY(bounds image.Rectangle) float64 {
-	// bounds.Min.X could be negative
+	// bounds.Min.Y could be negative
 	return float64(bounds.Min.Y) + float64(bounds.Max.Y-bounds.Min.Y)/2
 }
 
 func centerX(bounds image.Rectangle) float64 {
-	// bounds.Min.Y could be negative
+	// bounds.Min.X could be negative
 	return float64(bounds.Min.X) + float64(bounds.Max.X-bounds.Min.X)/2
 }
 
 func centerFromX(x float64, bounds image.Rectangle, strokeWidth int) float64 {
-	return math.Max(math.Trunc(x-float64(strokeWidth)/2), float64(bounds.Min.X))
+	return math.Max(
+		math.Trunc(x-float64(strokeWidth)/2),
+		float64(bounds.Min.X),
+	)
 }
 
 func centerFromY(y float64, bounds image.Rectangle, strokeWidth int) float64 {
-	return math.Max(math.Trunc(y-float64(strokeWidth)/2), float64(bounds.Min.Y))
+	return math.Max(
+		math.Trunc(y-float64(strokeWidth)/2),
+		float64(bounds.Min.Y),
+	)
 }
 
 func centerToX(x float64, bounds image.Rectangle, strokeWidth int) float64 {
-	return math.Min(math.Trunc(x+float64(strokeWidth)/2), float64(bounds.Max.X))
+	return math.Min(
+		math.Trunc(x+float64(strokeWidth)/2),
+		float64(bounds.Max.X-1),
+	)
 }
 
 func centerToY(y float64, bounds image.Rectangle, strokeWidth int) float64 {
-	return math.Min(math.Trunc(y+float64(strokeWidth)/2), float64(bounds.Max.Y))
-}
-
-func (m *custom) strokeWidthFromMask(bounds image.Rectangle, mask style) int {
-	// 1/8 of the cell for standard stroke width, if font is bold, then 1/6
-	factor := 8.0
-	if m.boldFont {
-		factor = 6.0
-	}
-	width := float64(bounds.Max.X - bounds.Min.X)
-	switch mask {
-	case styleSingle:
-		return int(math.Max(math.Trunc(width/factor), 1))
-	case styleBold:
-		// double for bold stroke
-		return int(math.Max(math.Trunc(width/factor), 1)) * 2
-	default:
-		return 0
-	}
+	return math.Min(
+		math.Trunc(y+float64(strokeWidth)/2),
+		float64(bounds.Max.Y-1),
+	)
 }

@@ -258,8 +258,8 @@ func (m *custom) Glyph(dot fixed.Point26_6, r rune) (
 
 	if ok {
 		mask = m.mask
-		maskp = mask.Bounds().Min
-		advance = fixed.I(int(m.width))
+		maskp = dr.Min
+		advance = fixed.I(dr.Max.X - dr.Min.X)
 	}
 	return
 }
