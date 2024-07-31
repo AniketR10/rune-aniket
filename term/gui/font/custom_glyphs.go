@@ -238,6 +238,36 @@ func (m *custom) dottedHorizontalGlyph(
 	return
 }
 
+func (m *custom) dottedVerticalGlyph(
+	bounds image.Rectangle, s style, gaps int,
+) (ok bool) {
+	strokeWidth := m.strokeWidthFromMask(bounds, s)
+	dashGapLen := float64(m.strokeWidthFromMask(bounds, styleBold))
+
+	height := float64(bounds.Max.Y - bounds.Min.Y)
+	dashLen := math.Trunc(math.Max(
+		float64(height-dashGapLen*float64(gaps+1))/float64(gaps+1),
+		1,
+	))
+	x := centerX(bounds)
+	for gap := 0.; gap < float64(gaps+1); gap++ {
+		y := float64(bounds.Min.Y) + math.Trunc(
+			math.Min(
+				float64(gap*(dashLen+dashGapLen)),
+				float64(bounds.Max.Y)-1,
+			),
+		)
+		if int(gap) == gaps {
+			// add or reduce pixels to the last dash length such that gaps are always
+			// equal, which gives a more visually pleasing result
+			dashLen = float64(bounds.Max.Y) - dashGapLen - y
+		}
+		m.drawVerticalLine(bounds, m.mask, x, y, float64(dashLen), strokeWidth)
+	}
+	ok = true
+	return
+}
+
 func (m *custom) drawVerticalLine(
 	bounds image.Rectangle, image *ebiten.Image,
 	x, y, size float64, width int,

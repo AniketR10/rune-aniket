@@ -266,6 +266,18 @@ func (m *custom) Glyph(dot fixed.Point26_6, r rune) (
 		ok = m.dottedHorizontalGlyph(dr, styleSingle, 1)
 	case '╍':
 		ok = m.dottedHorizontalGlyph(dr, styleBold, 1)
+	case '┆':
+		ok = m.dottedVerticalGlyph(dr, styleSingle, 2)
+	case '┇':
+		ok = m.dottedVerticalGlyph(dr, styleBold, 2)
+	case '┊':
+		ok = m.dottedVerticalGlyph(dr, styleSingle, 3)
+	case '┋':
+		ok = m.dottedVerticalGlyph(dr, styleBold, 3)
+	case '╎':
+		ok = m.dottedVerticalGlyph(dr, styleSingle, 1)
+	case '╏':
+		ok = m.dottedVerticalGlyph(dr, styleBold, 1)
 	}
 
 	if ok {
