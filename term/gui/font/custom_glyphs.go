@@ -208,6 +208,36 @@ func (m *custom) drawArcPlusGlyphTopLeft(image *ebiten.Image, bounds image.Recta
 		math.Max(1, float64(strokeWidth)/2), strokeWidth)
 }
 
+func (m *custom) dottedHorizontalGlyph(
+	bounds image.Rectangle, s style, gaps int,
+) (ok bool) {
+	strokeWidth := m.strokeWidthFromMask(bounds, s)
+	dashGapLen := float64(m.strokeWidthFromMask(bounds, styleSingle))
+
+	width := float64(bounds.Max.X - bounds.Min.X)
+	dashLen := math.Trunc(math.Max(
+		float64(width-dashGapLen*float64(gaps+1))/float64(gaps+1),
+		1,
+	))
+	y := centerY(bounds)
+	for gap := 0.; gap < float64(gaps+1); gap++ {
+		x := float64(bounds.Min.X) + math.Trunc(
+			math.Min(
+				float64(gap*(dashLen+dashGapLen)),
+				float64(bounds.Max.X)-1,
+			),
+		)
+		if int(gap) == gaps {
+			// add or reduce pixels to the last dash length such that gaps are always
+			// equal, which gives a more visually pleasing result
+			dashLen = float64(bounds.Max.X) - dashGapLen - x
+		}
+		m.drawHorizontalLine(bounds, m.mask, x, y, float64(dashLen), strokeWidth)
+	}
+	ok = true
+	return
+}
+
 func (m *custom) drawVerticalLine(
 	bounds image.Rectangle, image *ebiten.Image,
 	x, y, size float64, width int,
