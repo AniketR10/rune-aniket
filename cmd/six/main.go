@@ -303,7 +303,7 @@ func run() int {
 	var eventLoopMutex sync.Mutex
 	opts := []ide.Option{
 		ide.WithExtensionsRunner(ide.FuncExtensionsRunner(extensionRunner)),
-		ide.WithInitShader(shader.Fade(), 4 * time.Second),
+		ide.WithInitShader(shader.Fade(), 4*time.Second),
 		ide.WithLocker(&eventLoopMutex),
 		ide.WithConfigFilename(configFilename),
 		ide.WithDefaultWallpaper(wallpaper),

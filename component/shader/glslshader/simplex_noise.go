@@ -20,37 +20,28 @@
 // THIS SOURCE CODE AND/OR RELATED INFORMATION DOES NOT CONVEY OR IMPLY ANY RIGHTS TO
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
-package shader
 
-import (
-	"unstable.build/go-tui/term"
-)
+package glslshader
 
-// Fade is a Shader that interpolates the foreground and background color
-// slowly as epoc progresses, creating a fade in effect.
-func Fade() Shader {
-	return &fade{}
+// noiseSimplex returns spatial noise that is between -1.0 and 1.0
+// [Noise - simplex - 2D by iq]: https://www.shadertoy.com/view/Msf3WH
+func noiseSimplex(p vec2D) float64 {
+	K1 := 0.366025404 // (sqrt(3)-1)/2;
+	K2 := 0.211324865 // (3-sqrt(3))/6;
+
+	i := floor2D(p.addSc((p.x + p.y) * K1))
+	a := p.sub(i).addSc((i.x + i.y) * K2)
+	m := step(a.y, a.x)
+	o := vec2(m, 1.0-m)
+	b := a.sub(o).addSc(K2)
+	c := a.subSc(1.0).addSc(2.0 * K2)
+	h := max3D(vec3(0.5).sub(vec3(dot2D(a, a), dot2D(b, b), dot2D(c, c))), vec3(0.0))
+	n := h.mult(h).mult(h).mult(h).mult(vec3(dot2D(a, hash(i.addSc(0.0))), dot2D(b, hash(i.add(o))), dot2D(c, hash(i.addSc(1.0)))))
+	return dot3D(n, vec3(70.0))
 }
 
-type fade struct {
-}
-
-func (s fade) Shade(epoch, total int, cells [][]term.Cell) {
-	if epoch >= total {
-		return
-	}
-	if epoch == 0 {
-		for y, row := range cells {
-			for x, cell := range row {
-				cells[y][x].Fg = cell.Bg
-			}
-		}
-		return
-	}
-	opacity := float64(epoch) / float64(total)
-	for y, row := range cells {
-		for x, cell := range row {
-			cells[y][x].Fg = interpolateColor(opacity, cell.Bg, cell.Fg)
-		}
-	}
+// replace this by something better
+func hash(p vec2D) vec2D {
+	p = vec2(dot2D(p, vec2(127.1, 311.7)), dot2D(p, vec2(269.5, 183.3)))
+	return vec2(-1.0).add(vec2(2.0).mult(fract2D(sin2D(p).multSc(43758.5453123))))
 }

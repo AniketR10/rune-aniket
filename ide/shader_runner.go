@@ -33,6 +33,7 @@ import (
 	"unstable.build/go-tui"
 	textapi "unstable.build/go-tui/api/text"
 	"unstable.build/go-tui/component/shader"
+	"unstable.build/go-tui/component/shader/glslshader"
 	"unstable.build/go-tui/term"
 )
 
@@ -57,18 +58,6 @@ func (r *shaderRunner) HandleCommand(ctx context.Context, cmd textapi.Command) (
 		return
 	}
 
-	var s shader.Shader
-	// parse shader and duration
-	switch cmd.Args[0] {
-	case "fade":
-		s = shader.Fade()
-	case "nop":
-		s = shader.Nop()
-	default:
-		err = errors.New("expected one of the available shaders")
-		return
-	}
-
 	d := defaultShaderDuration
 	if len(cmd.Args) > 1 {
 		d, err = time.ParseDuration(cmd.Args[1])
@@ -87,6 +76,22 @@ func (r *shaderRunner) HandleCommand(ctx context.Context, cmd textapi.Command) (
 		}
 	}
 
+	var s shader.Shader
+	// parse shader and duration
+	switch cmd.Args[0] {
+	case "fade":
+		s = shader.Fade()
+	case "noise":
+		s = glslshader.Noise(glslshader.DefaultNoiseParams(), float64(fps))
+	case "nop":
+		s = shader.Nop()
+	case "trippy":
+		s = glslshader.Trippy(glslshader.DefaultTrippyParams(), float64(fps))
+	default:
+		err = errors.New("expected one of the available shaders")
+		return
+	}
+
 	r.runShader(s, fps, d)
 	return
 }
@@ -95,7 +100,12 @@ func (r *shaderRunner) Complete(ctx context.Context, name string, args []string)
 	iterator.Iterator[string], string, error,
 ) {
 	if len(args) <= 1 {
-		return iterator.FromSlice([]string{"fade", "nop"}), "", nil
+		return iterator.FromSlice([]string{
+			"fade",
+			"noise",
+			"nop",
+			"trippy",
+		}), "", nil
 	}
 	return iterator.Empty[string](), "", nil
 }

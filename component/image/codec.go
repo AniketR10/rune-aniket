@@ -42,7 +42,7 @@ const (
 	AlternateDensityCharacters = "    .:░▒▓█"
 	// this is a modifier to take height to width cell aspect ratio
 	// into consideration.
-	heightToWidthCellAspectRatio float64 = 2.3
+	HeightToWidthCellAspectRatio float64 = 2.3
 )
 
 // DefaultScaler is the default draw.Scaler used by EncodeScaler, EncodeColor and Encode.
@@ -65,7 +65,7 @@ func DefaultConfig() Config {
 func ResizeMaintainAspectRatio(srcWidth, srcHeight, dstWidth, dstHeight int) (
 	width, height int,
 ) {
-	aspectRatio := float64(srcWidth) / float64(srcHeight) * heightToWidthCellAspectRatio
+	aspectRatio := float64(srcWidth) / float64(srcHeight) * HeightToWidthCellAspectRatio
 	height = dstHeight
 	for {
 		width = int(float64(height) * aspectRatio)

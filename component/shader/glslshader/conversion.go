@@ -20,20 +20,18 @@
 // THIS SOURCE CODE AND/OR RELATED INFORMATION DOES NOT CONVEY OR IMPLY ANY RIGHTS TO
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
-package shader
 
-import (
-	"github.com/unstablebuild/tcell/v3"
-)
+// nolint: unused
+package glslshader
 
-// interpolateColor calculates a color that is a linear blend between the
-// provided color and target color.
-func interpolateColor(factor float64, color, target tcell.Color) tcell.Color {
-	r, g, b := color.RGB()
-	tr, tg, tb := target.RGB()
-	return tcell.NewRGBColor(
-		int32(float64(r)+((float64(tr)-float64(r))*factor)),
-		int32(float64(g)+((float64(tg)-float64(g))*factor)),
-		int32(float64(b)+((float64(tb)-float64(b))*factor)),
-	)
+import "github.com/unstablebuild/tcell/v3"
+
+func colToVec(col tcell.Color) vec3D {
+	r, g, b := col.RGB()
+	return vec3(float(r), float(g), float(b))
+
+}
+
+func vecToCol(v vec3D) tcell.Color {
+	return tcell.NewRGBColor(int32(v.x), int32(v.y), int32(v.z))
 }

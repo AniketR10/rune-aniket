@@ -20,69 +20,27 @@
 // THIS SOURCE CODE AND/OR RELATED INFORMATION DOES NOT CONVEY OR IMPLY ANY RIGHTS TO
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
-package shader
+
+package shaderutils
 
 import (
-	"testing"
-
-	"github.com/stretchr/testify/assert"
 	"github.com/unstablebuild/tcell/v3"
-	"unstable.build/go-tui/term"
 )
 
-func TestFade(t *testing.T) {
-	suite := []struct {
-		frame   int
-		total   int
-		in      [][]term.Cell
-		wantOut [][]term.Cell
-	}{
-		{},
-		{frame: 0, total: 9, in: [][]term.Cell{}, wantOut: [][]term.Cell{}},
-		{
-			frame: 0,
-			total: 9,
-			in: [][]term.Cell{{
-				{Attributes: term.Attributes{Fg: 0, Bg: tcell.ColorBlack}},
-			}},
-			wantOut: [][]term.Cell{{
-				{Attributes: term.Attributes{Fg: tcell.ColorBlack, Bg: tcell.ColorBlack}},
-			}},
-		},
-		{
-			frame: 10,
-			total: 9,
-			in: [][]term.Cell{{
-				{Attributes: term.Attributes{Fg: 0, Bg: tcell.ColorBlack}},
-			}},
-			wantOut: [][]term.Cell{{
-				{Attributes: term.Attributes{Fg: 0, Bg: tcell.ColorBlack}},
-			}},
-		},
-		{
-			frame: 4,
-			total: 9,
-			in: [][]term.Cell{{
-				{Attributes: term.Attributes{Fg: tcell.NewRGBColor(10, 10, 10), Bg: tcell.ColorBlack}},
-			}},
-			wantOut: [][]term.Cell{{
-				{Attributes: term.Attributes{Fg: tcell.NewRGBColor(4, 4, 4), Bg: tcell.ColorBlack}},
-			}},
-		},
-		{
-			frame: 4,
-			total: 9,
-			in: [][]term.Cell{{
-				{Attributes: term.Attributes{Fg: tcell.NewRGBColor(10, 10, 10), Bg: 0}},
-			}},
-			wantOut: [][]term.Cell{{
-				{Attributes: term.Attributes{Fg: tcell.NewRGBColor(3, 3, 3), Bg: 0}},
-			}},
-		},
-	}
+// InterpolateColor calculates a color that is a linear blend between the
+// provided color and target color.
+func InterpolateColor(factor float64, color, target tcell.Color) tcell.Color {
+	r, g, b := color.RGB()
+	tr, tg, tb := target.RGB()
+	return tcell.NewRGBColor(
+		int32(float64(r)+((float64(tr)-float64(r))*factor)),
+		int32(float64(g)+((float64(tg)-float64(g))*factor)),
+		int32(float64(b)+((float64(tb)-float64(b))*factor)),
+	)
+}
 
-	for _, test := range suite {
-		Fade().Shade(test.frame, test.total, test.in)
-		assert.Equal(t, test.wantOut, test.in)
-	}
+// ColorBrightness returns a normalized value 0..1 indicating the intensity of the color.
+func ColorBrightness(color tcell.Color) float64 {
+	r, g, b := color.RGB()
+	return float64(r+g+b) / float64(255*3)
 }
