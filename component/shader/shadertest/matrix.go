@@ -21,27 +21,16 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package glslshader
+package shadertest
 
-import (
-	"testing"
+import "unstable.build/go-tui/term"
 
-	"github.com/stretchr/testify/assert"
-	"unstable.build/go-tui/component/shader/shadertest"
-)
-
-func TestTrippy(t *testing.T) {
-	shadertest.TestShader(t, Noise(DefaultNoiseParams(), 30))
-
-	sh := Trippy(DefaultTrippyParams(), 30)
-
-	t.Run("rand produces noise between 0 and 1", func(t *testing.T) {
-		res := sh.(*trippy).rand(vec2(123.0, 456.0))
-		assert.True(t, res > -1.0 && res < 1.0)
-	})
-
-	t.Run("noise produces noise between 0 and 1", func(t *testing.T) {
-		res := sh.(*trippy).noise(vec2(789.0, 123.0))
-		assert.True(t, res > -1.0 && res < 1.0)
-	})
+// MakeCellMatrix creates an two-dimensional array of zero-value cells
+// representing a grid of w rows and h cols.
+func MakeCellMatrix(w int, h int) [][]term.Cell {
+	cells := make([][]term.Cell, h)
+	for y := 0; y < h; y++ {
+		cells[y] = make([]term.Cell, w)
+	}
+	return cells
 }

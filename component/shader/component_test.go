@@ -34,7 +34,7 @@ import (
 )
 
 func TestShader(t *testing.T) {
-	// checks that in al cases animation is closed
+	// checks that in all cases animation is closed
 	defer goleak.VerifyNone(t)
 
 	t.Run("draws underlying component after shader is done", func(t *testing.T) {

@@ -21,27 +21,29 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package glslshader
+/*
+Package shadertest provides testing harnesses to produce suites to run on
+the shaders you create as well as to provide utilities to create the data
+for those tests.
 
-import (
-	"testing"
+When creating your shader make sure to test it by calling the suite harness:
 
-	"github.com/stretchr/testify/assert"
-	"unstable.build/go-tui/component/shader/shadertest"
-)
+	func TestCoolEffects(t *testing.T) {
+		// run the general intesive suite
+		shadertest.TestShader(t, shader.CoolEffects())
 
-func TestTrippy(t *testing.T) {
-	shadertest.TestShader(t, Noise(DefaultNoiseParams(), 30))
+		// other tests particular to CoolEffects shader go below:
+		sh := CoolEffects(DefaultCoolEffectsParams())
 
-	sh := Trippy(DefaultTrippyParams(), 30)
+		// [...]
+	}
 
-	t.Run("rand produces noise between 0 and 1", func(t *testing.T) {
-		res := sh.(*trippy).rand(vec2(123.0, 456.0))
-		assert.True(t, res > -1.0 && res < 1.0)
-	})
+If importing shadertest package into your shader test introduces cyclic
+dependency then place the test file within shadertest package as
+shader_cool_effects_test.go (in this case):
 
-	t.Run("noise produces noise between 0 and 1", func(t *testing.T) {
-		res := sh.(*trippy).noise(vec2(789.0, 123.0))
-		assert.True(t, res > -1.0 && res < 1.0)
-	})
-}
+	func TestCoolEffects(t *testing.T) {
+		TestShader(t, shader.CoolEffects())
+	}
+*/
+package shadertest

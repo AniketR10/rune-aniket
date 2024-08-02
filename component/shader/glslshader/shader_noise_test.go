@@ -29,11 +29,14 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"unstable.build/go-tui/component/shader/shadertest"
 	"unstable.build/go-tui/component/shader/shaderutils"
 	"unstable.build/go-tui/term"
 )
 
 func TestNoise(t *testing.T) {
+	shadertest.TestShader(t, Noise(DefaultNoiseParams(), 30))
+
 	tsuite := []struct {
 		name   string
 		scale  float

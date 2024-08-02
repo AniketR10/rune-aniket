@@ -21,27 +21,58 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package glslshader
+package shadertest
 
 import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"unstable.build/go-tui/component/shader/shadertest"
+	"unstable.build/go-tui/term"
 )
 
-func TestTrippy(t *testing.T) {
-	shadertest.TestShader(t, Noise(DefaultNoiseParams(), 30))
+func TestMakeCellMatrix(t *testing.T) {
+	tsuite := []struct {
+		name   string
+		rows   int
+		cols   int
+		panics bool
+	}{
+		{
+			name: "creates a list of 'rows' lists with 'cols' cells each of them",
+			rows: 4,
+			cols: 7,
+		},
+		{
+			name: "zero cells",
+			rows: 0,
+			cols: 0,
+		},
+		{
+			name:   "negative dimensions",
+			rows:   -4,
+			cols:   -7,
+			panics: true,
+		},
+	}
 
-	sh := Trippy(DefaultTrippyParams(), 30)
+	for _, tcase := range tsuite {
+		t.Run(tcase.name, func(t *testing.T) {
+			if tcase.panics {
+				assert.Panics(t, func() {
+					MakeCellMatrix(tcase.cols, tcase.rows)
+				})
+				return
+			}
 
-	t.Run("rand produces noise between 0 and 1", func(t *testing.T) {
-		res := sh.(*trippy).rand(vec2(123.0, 456.0))
-		assert.True(t, res > -1.0 && res < 1.0)
-	})
+			cells := MakeCellMatrix(tcase.cols, tcase.rows)
+			assert.Len(t, cells, tcase.rows)
 
-	t.Run("noise produces noise between 0 and 1", func(t *testing.T) {
-		res := sh.(*trippy).noise(vec2(789.0, 123.0))
-		assert.True(t, res > -1.0 && res < 1.0)
-	})
+			for y := 0; y < tcase.rows; y++ {
+				assert.Len(t, cells[y], tcase.cols)
+				for x := 0; x < tcase.cols; x++ {
+					assert.Equal(t, term.Cell{}, cells[y][x])
+				}
+			}
+		})
+	}
 }
