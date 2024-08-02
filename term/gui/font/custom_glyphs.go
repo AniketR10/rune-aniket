@@ -268,6 +268,68 @@ func (m *custom) dottedVerticalGlyph(
 	return
 }
 
+func (m *custom) blockGlyph(bounds image.Rectangle, matrix [][]bool) (ok bool) {
+	rows := len(matrix)
+	for i, row := range matrix {
+		ok = true
+		cols := len(row)
+		for j, render := range row {
+			if !render {
+				continue
+			}
+			width := math.Max(1, float64(bounds.Max.X-bounds.Min.X)/float64(cols))
+			height := math.Max(1, float64(bounds.Max.Y-bounds.Min.Y)/float64(rows))
+			x := math.Min(
+				float64(bounds.Max.X)-width,
+				float64(bounds.Min.X)+float64(j)*width,
+			)
+			y := math.Min(
+				float64(bounds.Max.Y)-height,
+				float64(bounds.Min.Y)+float64(i)*height,
+			)
+
+			m.drawRect(bounds, m.mask, x, y, width, height, colorFill)
+		}
+	}
+	return
+}
+
+func (m *custom) blockGlyphOuterSquare(
+	bounds image.Rectangle,
+	top, bottom, left, right style,
+) (ok bool) {
+	topStroke := m.strokeWidthFromMask(bounds, top)
+	bottomStroke := m.strokeWidthFromMask(bounds, bottom)
+	leftStroke := m.strokeWidthFromMask(bounds, left)
+	rightStroke := m.strokeWidthFromMask(bounds, right)
+
+	width := float64(bounds.Max.X - bounds.Min.X)
+	height := float64(bounds.Max.Y - bounds.Min.Y)
+
+	m.drawRect(bounds, m.mask,
+		float64(bounds.Min.X), float64(bounds.Min.Y),
+		width, float64(topStroke),
+		colorFill,
+	)
+	m.drawRect(bounds, m.mask,
+		float64(bounds.Min.X), float64(bounds.Max.Y)-float64(bottomStroke),
+		width, float64(bottomStroke),
+		colorFill,
+	)
+	m.drawRect(bounds, m.mask,
+		float64(bounds.Min.X), float64(bounds.Min.Y),
+		float64(leftStroke), height,
+		colorFill,
+	)
+	m.drawRect(bounds, m.mask,
+		float64(bounds.Max.X)-float64(rightStroke), float64(bounds.Min.Y),
+		float64(rightStroke), height,
+		colorFill,
+	)
+	ok = true
+	return
+}
+
 func (m *custom) drawVerticalLine(
 	bounds image.Rectangle, image *ebiten.Image,
 	x, y, size float64, width int,

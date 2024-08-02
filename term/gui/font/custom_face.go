@@ -278,6 +278,325 @@ func (m *custom) Glyph(dot fixed.Point26_6, r rune) (
 		ok = m.dottedVerticalGlyph(dr, styleSingle, 1)
 	case '╏':
 		ok = m.dottedVerticalGlyph(dr, styleBold, 1)
+	case '▉':
+		ok = m.blockGlyph(dr, [][]bool{{true, true, true, true, true, true, true, false}})
+	case '▊':
+		ok = m.blockGlyph(dr, [][]bool{{true, true, true, false}})
+	case '▋':
+		ok = m.blockGlyph(dr, [][]bool{{true, true, true, true, true, false, false, false}})
+	case '▌':
+		ok = m.blockGlyph(dr, [][]bool{{true, false}})
+	case '▍':
+		ok = m.blockGlyph(dr, [][]bool{{true, true, true, false, false, false, false, false}})
+	case '▎':
+		ok = m.blockGlyph(dr, [][]bool{{true, false, false, false}})
+	case '▏':
+		ok = m.blockGlyphOuterSquare(dr, 0, 0, styleSingle, 0)
+	case '▔':
+		ok = m.blockGlyphOuterSquare(dr, styleSingle, 0, 0, 0)
+	case '▀':
+		ok = m.blockGlyph(dr, [][]bool{{true}, {false}})
+	case '▁':
+		ok = m.blockGlyphOuterSquare(dr, 0, styleSingle, 0, 0)
+	case '▂':
+		ok = m.blockGlyph(dr, [][]bool{
+			{false}, {false}, {false}, {true},
+		})
+	case '▃':
+		ok = m.blockGlyph(dr, [][]bool{
+			{false}, {false}, {false}, {false}, {false}, {true}, {true}, {true},
+		})
+	case '▄':
+		ok = m.blockGlyph(dr, [][]bool{{false}, {true}})
+	case '▅':
+		ok = m.blockGlyph(dr, [][]bool{
+			{false}, {false}, {false}, {true}, {true}, {true}, {true}, {true},
+		})
+	case '▆':
+		ok = m.blockGlyph(dr, [][]bool{
+			{false}, {true}, {true}, {true},
+		})
+	case '▇':
+		ok = m.blockGlyph(dr, [][]bool{
+			{false}, {true}, {true}, {true}, {true}, {true}, {true}, {true},
+		})
+	case '▐':
+		ok = m.blockGlyph(dr, [][]bool{{false, true}})
+	case '▕':
+		ok = m.blockGlyphOuterSquare(dr, 0, 0, 0, styleSingle)
+	case '▖':
+		ok = m.blockGlyph(dr, [][]bool{{false, false}, {true, false}})
+	case '▗':
+		ok = m.blockGlyph(dr, [][]bool{{false, false}, {false, true}})
+	case '▘':
+		ok = m.blockGlyph(dr, [][]bool{{true, false}, {false, false}})
+	case '▙':
+		ok = m.blockGlyph(dr, [][]bool{{true, false}, {true, true}})
+	case '▚':
+		ok = m.blockGlyph(dr, [][]bool{{true, false}, {false, true}})
+	case '▛':
+		ok = m.blockGlyph(dr, [][]bool{{true, true}, {true, false}})
+	case '▜':
+		ok = m.blockGlyph(dr, [][]bool{{true, true}, {false, true}})
+	case '▝':
+		ok = m.blockGlyph(dr, [][]bool{{false, true}, {false, false}})
+	case '▞':
+		ok = m.blockGlyph(dr, [][]bool{{false, true}, {true, false}})
+	case '▟':
+		ok = m.blockGlyph(dr, [][]bool{{false, true}, {true, true}})
+
+	// Some of Unicode 13 Symbols for Legacy Computing block
+	// https://en.wikipedia.org/wiki/Symbols_for_Legacy_Computing
+	case '\U0001fb00':
+		ok = m.blockGlyph(dr, [][]bool{
+			{true, false}, {false, false}, {false, false},
+		})
+	case '\U0001fb01':
+		ok = m.blockGlyph(dr, [][]bool{
+			{false, true}, {false, false}, {false, false},
+		})
+	case '\U0001fb02':
+		ok = m.blockGlyph(dr, [][]bool{
+			{false, true}, {false, false}, {false, false},
+		})
+	case '\U0001fb03':
+		ok = m.blockGlyph(dr, [][]bool{
+			{false, false}, {true, false}, {false, false},
+		})
+	case '\U0001fb04':
+		ok = m.blockGlyph(dr, [][]bool{
+			{true, false}, {true, false}, {false, false},
+		})
+	case '\U0001fb05':
+		ok = m.blockGlyph(dr, [][]bool{
+			{false, true}, {true, false}, {false, false},
+		})
+	case '\U0001fb06':
+		ok = m.blockGlyph(dr, [][]bool{
+			{true, true}, {true, false}, {false, false},
+		})
+	case '\U0001fb07':
+		ok = m.blockGlyph(dr, [][]bool{
+			{false, false}, {false, true}, {false, false},
+		})
+	case '\U0001fb08':
+		ok = m.blockGlyph(dr, [][]bool{
+			{true, false}, {false, true}, {false, false},
+		})
+	case '\U0001fb09':
+		ok = m.blockGlyph(dr, [][]bool{
+			{false, true}, {false, true}, {false, false},
+		})
+	case '\U0001fb0A':
+		ok = m.blockGlyph(dr, [][]bool{
+			{true, true}, {false, true}, {false, false},
+		})
+	case '\U0001fb0B':
+		ok = m.blockGlyph(dr, [][]bool{
+			{false, false}, {true, true}, {false, false},
+		})
+	case '\U0001fb0C':
+		ok = m.blockGlyph(dr, [][]bool{
+			{true, false}, {true, true}, {false, false},
+		})
+	case '\U0001fb0D':
+		ok = m.blockGlyph(dr, [][]bool{
+			{false, true}, {true, true}, {false, false},
+		})
+	case '\U0001fb0E':
+		ok = m.blockGlyph(dr, [][]bool{
+			{true, true}, {true, true}, {false, false},
+		})
+	case '\U0001fb0F':
+		ok = m.blockGlyph(dr, [][]bool{
+			{false, false}, {false, false}, {true, false},
+		})
+	case '\U0001fb10':
+		ok = m.blockGlyph(dr, [][]bool{
+			{true, false}, {false, false}, {true, false},
+		})
+	case '\U0001fb11':
+		ok = m.blockGlyph(dr, [][]bool{
+			{false, true}, {false, false}, {true, false},
+		})
+	case '\U0001fb12':
+		ok = m.blockGlyph(dr, [][]bool{
+			{false, true}, {false, false}, {true, false},
+		})
+	case '\U0001fb13':
+		ok = m.blockGlyph(dr, [][]bool{
+			{false, false}, {true, false}, {true, false},
+		})
+	case '\U0001fb14':
+		ok = m.blockGlyph(dr, [][]bool{
+			{true, false}, {true, false}, {true, false},
+		})
+	case '\U0001fb15':
+		ok = m.blockGlyph(dr, [][]bool{
+			{false, true}, {true, false}, {true, false},
+		})
+	case '\U0001fb16':
+		ok = m.blockGlyph(dr, [][]bool{
+			{true, true}, {true, false}, {true, false},
+		})
+	case '\U0001fb17':
+		ok = m.blockGlyph(dr, [][]bool{
+			{false, false}, {false, true}, {true, false},
+		})
+	case '\U0001fb18':
+		ok = m.blockGlyph(dr, [][]bool{
+			{true, false}, {false, true}, {true, false},
+		})
+	case '\U0001fb19':
+		ok = m.blockGlyph(dr, [][]bool{
+			{false, true}, {false, true}, {true, false},
+		})
+	case '\U0001fb1A':
+		ok = m.blockGlyph(dr, [][]bool{
+			{true, true}, {false, true}, {true, false},
+		})
+	case '\U0001fb1B':
+		ok = m.blockGlyph(dr, [][]bool{
+			{false, false}, {true, true}, {true, false},
+		})
+	case '\U0001fb1C':
+		ok = m.blockGlyph(dr, [][]bool{
+			{true, false}, {true, true}, {true, false},
+		})
+	case '\U0001fb1D':
+		ok = m.blockGlyph(dr, [][]bool{
+			{false, true}, {true, true}, {true, false},
+		})
+	case '\U0001fb1E':
+		ok = m.blockGlyph(dr, [][]bool{
+			{false, false}, {false, false}, {false, true},
+		})
+	case '\U0001fb1F':
+		ok = m.blockGlyph(dr, [][]bool{
+			{true, false}, {false, false}, {false, false},
+		})
+	case '\U0001fb20':
+		ok = m.blockGlyph(dr, [][]bool{
+			{false, true}, {false, false}, {false, true},
+		})
+	case '\U0001fb21':
+		ok = m.blockGlyph(dr, [][]bool{
+			{true, true}, {false, false}, {false, true},
+		})
+	case '\U0001fb22':
+		ok = m.blockGlyph(dr, [][]bool{
+			{false, false}, {true, false}, {false, true},
+		})
+	case '\U0001fb23':
+		ok = m.blockGlyph(dr, [][]bool{
+			{true, false}, {true, false}, {false, true},
+		})
+	case '\U0001fb24':
+		ok = m.blockGlyph(dr, [][]bool{
+			{false, true}, {true, false}, {false, true},
+		})
+	case '\U0001fb25':
+		ok = m.blockGlyph(dr, [][]bool{
+			{true, true}, {true, false}, {false, true},
+		})
+	case '\U0001fb26':
+		ok = m.blockGlyph(dr, [][]bool{
+			{false, false}, {false, true}, {false, true},
+		})
+	case '\U0001fb27':
+		ok = m.blockGlyph(dr, [][]bool{
+			{true, false}, {false, true}, {false, true},
+		})
+	case '\U0001fb28':
+		ok = m.blockGlyph(dr, [][]bool{
+			{true, true}, {false, true}, {false, true},
+		})
+	case '\U0001fb29':
+		ok = m.blockGlyph(dr, [][]bool{
+			{false, false}, {true, true}, {false, true},
+		})
+	case '\U0001fb2A':
+		ok = m.blockGlyph(dr, [][]bool{
+			{true, false}, {true, true}, {false, true},
+		})
+	case '\U0001fb2B':
+		ok = m.blockGlyph(dr, [][]bool{
+			{false, true}, {true, true}, {false, true},
+		})
+	case '\U0001fb2C':
+		ok = m.blockGlyph(dr, [][]bool{
+			{true, true}, {true, true}, {false, true},
+		})
+	case '\U0001fb2D':
+		ok = m.blockGlyph(dr, [][]bool{
+			{false, false}, {false, false}, {true, true},
+		})
+	case '\U0001fb2E':
+		ok = m.blockGlyph(dr, [][]bool{
+			{true, false}, {false, false}, {true, true},
+		})
+	case '\U0001fb2F':
+		ok = m.blockGlyph(dr, [][]bool{
+			{false, true}, {false, false}, {true, true},
+		})
+	case '\U0001fb30':
+		ok = m.blockGlyph(dr, [][]bool{
+			{true, true}, {false, false}, {true, true},
+		})
+	case '\U0001fb31':
+		ok = m.blockGlyph(dr, [][]bool{
+			{false, false}, {true, false}, {true, true},
+		})
+	case '\U0001fb32':
+		ok = m.blockGlyph(dr, [][]bool{
+			{true, false}, {true, false}, {true, true},
+		})
+	case '\U0001fb33':
+		ok = m.blockGlyph(dr, [][]bool{
+			{false, true}, {true, false}, {true, true},
+		})
+	case '\U0001fb34':
+		ok = m.blockGlyph(dr, [][]bool{
+			{true, true}, {true, false}, {true, true},
+		})
+	case '\U0001fb35':
+		ok = m.blockGlyph(dr, [][]bool{
+			{false, false}, {false, true}, {true, true},
+		})
+	case '\U0001fb36':
+		ok = m.blockGlyph(dr, [][]bool{
+			{true, false}, {false, true}, {true, true},
+		})
+	case '\U0001fb37':
+		ok = m.blockGlyph(dr, [][]bool{
+			{false, true}, {false, true}, {true, true},
+		})
+	case '\U0001fb38':
+		ok = m.blockGlyph(dr, [][]bool{
+			{true, true}, {false, true}, {true, true},
+		})
+	case '\U0001fb39':
+		ok = m.blockGlyph(dr, [][]bool{
+			{false, false}, {true, true}, {true, true},
+		})
+	case '\U0001fb3A':
+		ok = m.blockGlyph(dr, [][]bool{
+			{true, false}, {true, true}, {true, true},
+		})
+	case '\U0001fb3B':
+		ok = m.blockGlyph(dr, [][]bool{
+			{false, true}, {true, true}, {true, true},
+		})
+	case '\U0001fb7C':
+		ok = m.blockGlyphOuterSquare(dr, 0, styleSingle, styleSingle, 0)
+	case '\U0001fb7D':
+		ok = m.blockGlyphOuterSquare(dr, styleSingle, 0, styleSingle, 0)
+	case '\U0001fb7E':
+		ok = m.blockGlyphOuterSquare(dr, styleSingle, 0, 0, styleSingle)
+	case '\U0001fb7F':
+		ok = m.blockGlyphOuterSquare(dr, 0, styleSingle, 0, styleSingle)
+	case '\U0001fb80':
+		ok = m.blockGlyphOuterSquare(dr, styleSingle, styleSingle, 0, 0)
 	}
 
 	if ok {
