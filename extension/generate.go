@@ -20,6 +20,7 @@
 // THIS SOURCE CODE AND/OR RELATED INFORMATION DOES NOT CONVEY OR IMPLY ANY RIGHTS TO
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
+
 package extension
 
 //go:generate protoc rpc/grantee.proto -I=. -I=../ --go_out=./ --go-grpc_out=./ --go_opt=Mrpc/grantee.proto=unstable.build/go-tui/extension/rpc

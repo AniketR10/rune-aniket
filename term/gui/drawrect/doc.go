@@ -20,8 +20,5 @@
 // THIS SOURCE CODE AND/OR RELATED INFORMATION DOES NOT CONVEY OR IMPLY ANY RIGHTS TO
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
-//
-// Package drawrect provides helpers to draw rectangles using ebiten engine.
-//
-// It's a port of eibten/v2/vector with performance optimizatons and removed clutter.
+
 package drawrect

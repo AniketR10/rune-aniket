@@ -20,6 +20,7 @@
 // THIS SOURCE CODE AND/OR RELATED INFORMATION DOES NOT CONVEY OR IMPLY ANY RIGHTS TO
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
+
 package config
 
 //go:generate protoc rpc/config.proto -I=. -I=../ --go_out=./ --go-grpc_out=./ --go_opt=Mrpc/config.proto=unstable.build/go-tui/api/config/rpc

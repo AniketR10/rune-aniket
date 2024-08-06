@@ -20,6 +20,7 @@
 // THIS SOURCE CODE AND/OR RELATED INFORMATION DOES NOT CONVEY OR IMPLY ANY RIGHTS TO
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
+
 package scheme
 
 //go:generate mockgen -destination=./test/scheme_gomock.go -package test -self_package unstable.build/go-tui/api/scheme/test -source ./scheme.go
