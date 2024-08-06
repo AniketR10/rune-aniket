@@ -80,6 +80,8 @@ func (r *shaderRunner) HandleCommand(ctx context.Context, cmd textapi.Command) (
 	var s shader.Shader
 	// parse shader and duration
 	switch cmd.Args[0] {
+	case "bomb":
+		s = shader.Bomb(shader.DefaultBombParams())
 	case "fade":
 		s = shader.Fade()
 	case "noise":
@@ -102,6 +104,7 @@ func (r *shaderRunner) Complete(ctx context.Context, name string, args []string)
 ) {
 	if len(args) <= 1 {
 		return iterator.FromSlice([]string{
+			"bomb",
 			"fade",
 			"noise",
 			"nop",
