@@ -223,7 +223,7 @@ func (c *Component) Init(config Config) {
 	c.union.Left = config.FrameUnionCharSet.Left
 	c.union.Top = config.FrameUnionCharSet.Top
 	c.union.Bottom = config.FrameUnionCharSet.Bottom
-	c.union.Frame = c.config.Frame
+	c.union.Frame = c.config.Frame && c.config.FrameUnion
 
 	c.tabs.SetAttr(config.FocusTabAttr, config.NonFocusTabAttr,
 		config.WindowManagerConfig.FrameAttr, config.WindowManagerConfig.FrameAttr)

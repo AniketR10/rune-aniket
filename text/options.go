@@ -161,6 +161,15 @@ func WithWallpaper(wallpaper browser.Wallpaper) Option {
 	}
 }
 
+// WithFrameUnion defines whether the frames should be unioned or not.
+// By default is true if the configuration given to WithWindowManagerConfig
+// sets Frame to true.
+func WithFrameUnion(frameUnion bool) Option {
+	return func(cfg *Config) {
+		cfg.Config.FrameUnion = frameUnion
+	}
+}
+
 // WithFrameUnionCharSet configures the characters used to draw the frame union
 // between the browser tabs and the window manager.
 func WithFrameUnionCharSet(cs component.FrameUnionCharSet) Option {

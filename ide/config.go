@@ -628,6 +628,24 @@ func (c ideConfig) dim() (dim bool) {
 	return c.windowManagerBool("dim", defaultWindowManagerConfig.Dim)
 }
 
+func (c ideConfig) frameUnion() (ret bool) {
+	ret = c.frame()
+	cfg, ok := c.browser()
+	if !ok {
+		return
+	}
+
+	var err error
+	ret, err = cfg.GetBool("union_frames")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["browser.union_frames"] = err
+		}
+		return
+	}
+	return
+}
+
 func (c ideConfig) frameUnionCharset() (cs component.FrameUnionCharSet) {
 	cs = component.DefaultFrameUnionCharSet()
 	cs.FrameCharSet = c.windowFrameCharset()

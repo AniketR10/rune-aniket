@@ -42,6 +42,7 @@ func DefaultConfig() Config {
 		NonFocusTabAttr:     term.Attributes{Fg: tcell.ColorRed},
 		FrameUnionCharSet:   component.DefaultFrameUnionCharSet(),
 		WindowManagerConfig: handler.DefaultWindowManagerConfig(),
+		FrameUnion:          handler.DefaultWindowManagerConfig().Frame,
 		PromptConfig: PromptConfig{
 			TextAttr:       term.Attributes{},
 			HighlightAttr:  term.Attributes{Bg: tcell.ColorRed, Fg: tcell.ColorWhite},
@@ -94,6 +95,7 @@ type Config struct {
 	TabBarOffset     int
 	TabBarHeight     int
 	TabNameSeparator string
+	FrameUnion       bool
 
 	PromptConfig
 

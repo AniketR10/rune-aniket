@@ -26,28 +26,29 @@ color_theme_6: &background2 '#1e1e1e'
 
 frame_theme: &frame true
 focus_frame_charset_theme: &focus_frame_charset
-  horizontaltop: '─'
-  horizontalbottom: '─'
-  verticalright: '│'
-  verticalleft: '│'
-  topleft: '┌'
-  topright: '┐'
-  bottomleft: '└'
-  bottomright: '┘'
+  horizontaltop: '▔'
+  horizontalbottom: '▁'
+  verticalright: '▕'
+  verticalleft: '▏'
+  topleft: '🭽'
+  topright: '🭾'
+  bottomleft: '🭼'
+  bottomright: '🭿'
 frame_charset_theme: &frame_charset
-  horizontaltop: '─'
-  horizontalbottom: '─'
-  verticalright: '│'
-  verticalleft: '│'
-  topleft: '┌'
-  topright: '┐'
-  bottomleft: '└'
-  bottomright: '┘'
+  horizontaltop: '▔'
+  horizontalbottom: '▁'
+  verticalright: '▕'
+  verticalleft: '▏'
+  topleft: '🭽'
+  topright: '🭾'
+  bottomleft: '🭼'
+  bottomright: '🭿'
 frameunion_charset_theme: &frameunion_charset
-  left: '├'
-  right: '┤'
-  top: '┬'
-  bottom: '┴'
+  # no-op since union is disabled via browser.union_frames
+  left: '🭽'
+  right: '🭾'
+  top: '🭿'
+  bottom: '🭼'
 frame_attr_theme: &frame_attr
   fg: *framecolor
   bg: *background
@@ -491,6 +492,7 @@ command:
       - bold
 
 browser:
+  union_frames: false
   tab_name_separator: '  '
   # Whether to add the URI of the workspace to the workspace bar
   workspace_bar_uri: true

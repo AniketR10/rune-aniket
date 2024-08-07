@@ -470,6 +470,7 @@ func (h *workspaceManagerHandler) textOpts(cfg ideConfig) []text.Option {
 		text.WithTabspaces(cfg.browserTabspaces()),
 		text.WithWindowManagerConfig(cfg.windowManagerConfig()),
 		text.WithFrameUnionCharSet(cfg.frameUnionCharset()),
+		text.WithFrameUnion(cfg.frameUnion()),
 		text.WithCommandKey(cfg.commandKey()),
 		text.WithCommandMaxHistory(cfg.commandMaxHistory()),
 		text.WithNotificationsConfig(notificationsCfg),
