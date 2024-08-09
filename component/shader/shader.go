@@ -27,7 +27,7 @@ import (
 	"unstable.build/go-tui/term"
 )
 
-// Shader abstracts the ability to aplly shader-like effects
+// Shader abstracts the ability to apply shader-like effects
 // to other components.
 type Shader interface {
 	// Shade applies the shader's transformation
