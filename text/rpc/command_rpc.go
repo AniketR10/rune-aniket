@@ -95,9 +95,7 @@ func (c *commandClient) Complete(ctx context.Context, name string, args []string
 	}, neverReplaceArgs, nil
 }
 
-func (c *commandClient) HandleCommand(ctx context.Context, cmd textapi.Command) (
-	bool, error,
-) {
+func (c *commandClient) HandleCommand(ctx context.Context, cmd textapi.Command) error {
 	c.log(log.TraceLevel, "handle command: %s", cmd.Name)
 
 	ctx, cancelFn := context.WithTimeout(ctx, defaultClientTimeout)
@@ -127,16 +125,16 @@ func (c *commandClient) HandleCommand(ctx context.Context, cmd textapi.Command) 
 	c.s.editor.Unlock()
 	defer c.s.editor.Lock()
 
-	resp, err := c.pb.HandleCommand(ctx, &req)
+	_, err := c.pb.HandleCommand(ctx, &req)
 	runtime.KeepAlive(c)
 	if err != nil {
 		c.log(log.TraceLevel, "handle command %s error: %v", cmd.Name, err)
 		if st, ok := status.FromError(err); ok {
-			return false, errors.New(strings.Trim(st.Message(), "\n"))
+			return errors.New(strings.Trim(st.Message(), "\n"))
 		}
-		return false, err
+		return err
 	}
-	return resp.GetExit(), nil
+	return nil
 }
 func (c *commandClient) log(level log.Level, msg string, args ...interface{}) {
 	log.WithFields(log.Fields{logging.KeyClass: "textpb.commandClient"}).
@@ -238,12 +236,10 @@ func (s *commandServer) HandleCommand(
 		return nil, err
 	}
 
-	exit, err := s.h.HandleCommand(ctx, cmd)
-	if err != nil {
+	if err := s.h.HandleCommand(ctx, cmd); err != nil {
 		return nil, err
 	}
 	res := new(HandleCommandResponse)
-	res.Exit = exit
 	return res, nil
 }
 

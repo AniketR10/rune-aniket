@@ -186,8 +186,8 @@ func (e *ex) subscribeCommands() error {
 		// Name is only defined as a key to exCommands
 		man.man.Name = name
 		err := e.comp.SubscribeCommand(man.man, text.FuncCommandHandler(
-			func(ctx context.Context, cmd textapi.Command) (bool, error) {
-				return false, man.handler(e, cmd.Args...)
+			func(ctx context.Context, cmd textapi.Command) error {
+				return man.handler(e, cmd.Args...)
 			}, func(ctx context.Context, cmd string, args []string) (
 				iterator.Iterator[string], string, error,
 			) {

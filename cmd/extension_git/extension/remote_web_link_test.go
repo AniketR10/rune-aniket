@@ -101,7 +101,7 @@ func TestCommandHandler(t *testing.T) {
 		h, reposPath, fileURI, _, testNoti := setupCommandHandler(t)
 		defer tearDownGitRepos(reposPath)
 
-		exit, err := h.HandleCommand(context.Background(), textapi.Command{
+		err := h.HandleCommand(context.Background(), textapi.Command{
 			Name: commandCopyRemoteURL,
 			Args: []string{}, // without args uses "origin"
 			URI:  fileURI,
@@ -111,7 +111,6 @@ func TestCommandHandler(t *testing.T) {
 			}{Content: term.Coordinates{Y: 3}},
 		})
 
-		assert.False(t, exit)
 		require.NoError(t, err)
 		paste, err := h.clip.Paste(clipboard.DefaultRegisterID)
 

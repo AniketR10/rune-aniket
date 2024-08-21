@@ -130,7 +130,7 @@ func (h *gfEditorHandler) Complete(ctx context.Context, name string, args []stri
 }
 
 func (h *gfEditorHandler) HandleCommand(ctx context.Context, cmd textapi.Command) (
-	exit bool, err error,
+	err error,
 ) {
 	if cmd.Resource == nil {
 		return

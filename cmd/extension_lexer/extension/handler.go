@@ -310,7 +310,7 @@ func (h *syntaxHandler) Complete(ctx context.Context, name string, args []string
 }
 
 func (h *syntaxHandler) HandleCommand(ctx context.Context, cmd textapi.Command) (
-	exit bool, err error,
+	err error,
 ) {
 	switch cmd.Name {
 	case cmdSyntaxQuery:
@@ -555,26 +555,26 @@ func (h *syntaxHandler) browseNodes(
 }
 
 func (h *syntaxHandler) handleQuerySyntax(ctx context.Context, cmd textapi.Command) (
-	exit bool, err error,
+	err error,
 ) {
 	query := strings.Join(cmd.Args, " ")
 	if query == "" {
-		return false, errors.New("empty query")
+		return errors.New("empty query")
 	}
 	uri := cmd.URI.String()
 
 	f, ok := h.files[uri]
 	if !ok {
-		return false, fmt.Errorf("could not find buffer for file %s", uri)
+		return fmt.Errorf("could not find buffer for file %s", uri)
 	}
 
 	if f.tree == nil {
-		return false, errNotAvailable
+		return errNotAvailable
 	}
 
 	q, err := sitter.NewQuery([]byte(query), f.language)
 	if err != nil {
-		return false, fmt.Errorf("new query: %v", err)
+		return fmt.Errorf("new query: %v", err)
 	}
 	qc := sitter.NewQueryCursor()
 	qc.Exec(q, f.tree.RootNode())
@@ -589,7 +589,7 @@ func (h *syntaxHandler) handleQuerySyntax(ctx context.Context, cmd textapi.Comma
 			nodes = append(nodes, c.Node)
 		}
 	}
-	return false, h.browseNodes(cmd.URI, cmd.Window, f.language, nodes, &f.Buffer)
+	return h.browseNodes(cmd.URI, cmd.Window, f.language, nodes, &f.Buffer)
 }
 
 func (h *syntaxHandler) handleOpen(ctx context.Context, ev textapi.Event) error {

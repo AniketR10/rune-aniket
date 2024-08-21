@@ -683,7 +683,7 @@ func newTestComponentErr(ed text.Editor) (*text.Component, error) {
 
 func testRegister(t *testing.T,
 	constructor func(ed text.Editor, mu *sync.Mutex, resource workspaceapi.URI) (*text.Component, text.Editor, error)) {
-	t.Run("Registered handler is unsubscribed upon returning exit=true", func(t *testing.T) {
+	t.Run("Subscribed handler is called", func(t *testing.T) {
 		var mu sync.Mutex
 		resource1, err := workspaceapi.ParseURI("file:///HERS")
 		require.NoError(t, err)
@@ -711,13 +711,13 @@ func testRegister(t *testing.T,
 		var called int
 		var wg sync.WaitGroup
 		sut.SubscribeCommand(myCmd,
-			text.FuncCommandHandler(func(ctx context.Context, cmd textapi.Command) (bool, error) {
+			text.FuncCommandHandler(func(ctx context.Context, cmd textapi.Command) error {
 				defer wg.Done()
 				assert.Equal(t, myCmd.Name, cmd.Name)
 				assert.Equal(t, myArgs, cmd.Args)
 				assert.NotNil(t, cmd.Window)
 				called++
-				return true, nil
+				return nil
 			}, nil))
 
 		wg.Add(1)
@@ -738,12 +738,6 @@ func testRegister(t *testing.T,
 
 		wg.Wait()
 
-		for i := 0; i < 20; i++ {
-			mu.Lock()
-			c.DispatchCommand(cmd)
-			mu.Unlock()
-		}
-
 		assert.Equal(t, 1, called)
 	})
 
@@ -758,8 +752,8 @@ func testRegister(t *testing.T,
 		require.NoError(t, err)
 
 		sut.SubscribeCommand(myCmd,
-			text.FuncCommandHandler(func(ctx context.Context, cmd textapi.Command) (bool, error) {
-				return false, nil
+			text.FuncCommandHandler(func(ctx context.Context, cmd textapi.Command) error {
+				return nil
 			}, func(ctx context.Context, cmd string, args []string) (iterator.Iterator[string], string, error) {
 				assert.Equal(t, []string{"1", "2"}, args)
 				return iterator.FromSlice([]string{"4EVER"}), "sub", nil

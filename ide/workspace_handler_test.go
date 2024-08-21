@@ -929,8 +929,8 @@ func TestExternalCommands(t *testing.T) {
 
 		m := newTestWorkspaceManagerHandlerWithDir(t, defaultConfigWithWrap(false), nil, dir)
 		err = m.subscribeCommand(textapi.CommandManual{Name: "ramon"},
-			text.FuncCommandHandler(func(context.Context, textapi.Command) (bool, error) {
-				return false, nil
+			text.FuncCommandHandler(func(context.Context, textapi.Command) error {
+				return nil
 			}, func(ctx context.Context, name string, args []string) (
 				iterator.Iterator[string], string, error,
 			) {
@@ -1016,8 +1016,8 @@ func TestExternalCommands(t *testing.T) {
 			go func(i int) {
 				defer wg.Done()
 				errs[i] = m.subscribeCommand(textapi.CommandManual{Name: "cmd" + strconv.Itoa(i)},
-					text.FuncCommandHandler(func(context.Context, textapi.Command) (bool, error) {
-						return false, nil
+					text.FuncCommandHandler(func(context.Context, textapi.Command) error {
+						return nil
 					}, func(ctx context.Context, name string, args []string) (
 						iterator.Iterator[string], string, error,
 					) {

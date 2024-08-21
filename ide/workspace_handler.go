@@ -904,8 +904,8 @@ func (h *workspaceManagerHandler) subscribeInternalCommands(
 		cmd := cmd
 		man.man.Name = cmd
 		err := ex.comp.SubscribeCommand(man.man, text.FuncCommandHandler(
-			func(ctx context.Context, cmd textapi.Command) (bool, error) {
-				return false, man.handler(h, cmd.Args...)
+			func(ctx context.Context, cmd textapi.Command) error {
+				return man.handler(h, cmd.Args...)
 			}, func(ctx context.Context, name string, args []string) (
 				iterator.Iterator[string], string, error,
 			) {

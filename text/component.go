@@ -500,13 +500,9 @@ func (c *Component) DispatchCommand(cmd textapi.Command) (handled bool, err erro
 		return false, nil
 	}
 	c.log(log.DebugLevel, "Dispatching command %q with args %v", cmd.Name, cmd.Args)
-	exit, err := man.handler.HandleCommand(context.Background(), cmd)
+	err = man.handler.HandleCommand(context.Background(), cmd)
 	if err != nil {
 		return true, err
-	}
-	if exit {
-		c.log(log.DebugLevel, "Removing command %q: returned exit=true: %#v", cmd.Name, man)
-		delete(c.cmdSubscribers, cmd.Name)
 	}
 	return true, nil
 }

@@ -61,7 +61,7 @@ func newCopyRemoteURL(
 
 // satisfy textapi.CommandHandler
 func (c *copyRemoteURL) HandleCommand(ctx context.Context, cmd textapi.Command) (
-	exit bool, err error,
+	err error,
 ) {
 	remoteName := "origin"
 	if len(cmd.Args) > 1 {

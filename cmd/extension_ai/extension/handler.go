@@ -374,7 +374,7 @@ func (h *aiEditorHandler) Handle(ctx context.Context, ev textapi.Event) (exit bo
 
 func (h *aiEditorHandler) HandleCommand(
 	ctx context.Context, cmd textapi.Command,
-) (exit bool, err error) {
+) (err error) {
 	switch cmd.Name {
 	case commandQuery:
 		return h.handleQuery(cmd)
@@ -384,7 +384,7 @@ func (h *aiEditorHandler) HandleCommand(
 		return h.handleResetChat(cmd)
 	}
 
-	return false, nil
+	return nil
 }
 
 func (h *aiEditorHandler) Complete(ctx context.Context, name string, args []string) (
@@ -425,10 +425,10 @@ func (h *aiEditorHandler) newDialogueComponent() *dialogue.Component {
 	return dialogue.NewComponent(h.cfg)
 }
 
-func (h *aiEditorHandler) handleChat(cmd textapi.Command) (bool, error) {
+func (h *aiEditorHandler) handleChat(cmd textapi.Command) error {
 	if len(cmd.Args) > 0 {
 		if err := isAvailableModel(h.availableModels, cmd.Args[0]); err == nil {
-			return false, errors.New("Model must be passed as a second argument to a dialogue ID. " +
+			return errors.New("Model must be passed as a second argument to a dialogue ID. " +
 				"Check command manual for more details.")
 		}
 	}
@@ -436,14 +436,14 @@ func (h *aiEditorHandler) handleChat(cmd textapi.Command) (bool, error) {
 	if len(cmd.Args) > 1 {
 		model = cmd.Args[1]
 		if err := isAvailableModel(h.availableModels, model); err != nil {
-			return false, err
+			return err
 		}
 	}
 
 	comp := h.newDialogueComponent()
 	backendService, err := h.svcFn(h.config, h.availableModels, model)
 	if err != nil {
-		return false, fmt.Errorf("new backend: %v", err)
+		return fmt.Errorf("new backend: %v", err)
 	}
 
 	mu := new(sync.Mutex)
@@ -457,7 +457,7 @@ func (h *aiEditorHandler) handleChat(cmd textapi.Command) (bool, error) {
 	d, err := h.getDialogue(ctx, h.dialogueStore, cmd)
 	if err != nil {
 		cancel()
-		return false, err
+		return err
 	}
 
 	syncComp := syncComponent{mu: mu, comp: comp, h: h}
@@ -482,16 +482,16 @@ func (h *aiEditorHandler) handleChat(cmd textapi.Command) (bool, error) {
 	}
 	tab, err := h.wm.Tab(uri, uri.String(), bhandler)
 	if err != nil {
-		return true, fmt.Errorf("create tab: %v", err)
+		return fmt.Errorf("create tab: %v", err)
 	}
 
 	if err := cmd.Window.SetContent(tab); err != nil {
-		return false, fmt.Errorf("window set content: %v", err)
+		return fmt.Errorf("window set content: %v", err)
 	}
-	return false, nil
+	return nil
 }
 
-func (h *aiEditorHandler) handleQuery(cmd textapi.Command) (bool, error) {
+func (h *aiEditorHandler) handleQuery(cmd textapi.Command) error {
 	mu := new(sync.Mutex)
 	comp := h.newDialogueComponent()
 	dhandler, tx, rx := dialogue.Handler(mu, comp, h.p, h.clip)
@@ -553,9 +553,9 @@ func (h *aiEditorHandler) handleQuery(cmd textapi.Command) (bool, error) {
 	}
 	win, err := h.wm.Floating(floating, floatingConfig)
 	if err != nil {
-		return false, fmt.Errorf("floating window: %v", err)
+		return fmt.Errorf("floating window: %v", err)
 	}
-	return false, nil
+	return nil
 }
 
 func (h *aiEditorHandler) getDialogue(
@@ -572,21 +572,21 @@ func (h *aiEditorHandler) getDialogue(
 	return d, nil
 }
 
-func (h *aiEditorHandler) handleResetChat(cmd textapi.Command) (bool, error) {
+func (h *aiEditorHandler) handleResetChat(cmd textapi.Command) error {
 	dialogueID := getDialogueID(cmd)
 	err := h.dialogueStore.Delete(h.ctx, dialogueID)
 	if err != nil {
-		return false, fmt.Errorf("remove dialogue store: %w", err)
+		return fmt.Errorf("remove dialogue store: %w", err)
 	}
 	comp, ok := h.openChats.Load(dialogueID)
 	if !ok {
-		return false, fmt.Errorf("dialogue %q does not exist", dialogueID)
+		return fmt.Errorf("dialogue %q does not exist", dialogueID)
 	}
 	syncComp := comp.(syncComponent)
 	syncComp.mu.Lock()
 	syncComp.comp.Reset()
 	syncComp.mu.Unlock()
-	return false, nil
+	return nil
 }
 
 func (h *aiEditorHandler) log(level log.Level, msg string, args ...any) {

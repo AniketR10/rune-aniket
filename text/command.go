@@ -33,7 +33,7 @@ import (
 // CommandHandler wraps the basic methods HandleCommand and Complete.
 type CommandHandler interface {
 	// HandleCommand is called when user issued a command previously registered via SubscribeCommand.
-	HandleCommand(context.Context, textapi.Command) (exit bool, err error)
+	HandleCommand(context.Context, textapi.Command) (err error)
 
 	// Complete takes command args and returns a list of expanded options for them.
 	// It also returns a expanded version of the last arg, or an empty string
@@ -58,7 +58,7 @@ type CommandManual struct {
 // every time HandleCommand is invoked. If completeFn is not nil,
 // then it is called when Complete is invoked.
 func FuncCommandHandler(
-	fn func(context.Context, textapi.Command) (bool, error),
+	fn func(context.Context, textapi.Command) error,
 	completeFn func(context.Context, string, []string) (iterator.Iterator[string], string, error),
 ) CommandHandler {
 	return fnCommandHandler{
@@ -68,11 +68,11 @@ func FuncCommandHandler(
 }
 
 type fnCommandHandler struct {
-	cb         func(context.Context, textapi.Command) (bool, error)
+	cb         func(context.Context, textapi.Command) error
 	completeFn func(context.Context, string, []string) (iterator.Iterator[string], string, error)
 }
 
-func (f fnCommandHandler) HandleCommand(ctx context.Context, c textapi.Command) (bool, error) {
+func (f fnCommandHandler) HandleCommand(ctx context.Context, c textapi.Command) error {
 	return f.cb(ctx, c)
 }
 

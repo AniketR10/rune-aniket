@@ -136,7 +136,7 @@ func (t *chaosCommandHandler) Complete(
 }
 
 func (h *chaosCommandHandler) HandleCommand(ctx context.Context, cmd textapi.Command) (
-	exit bool, err error,
+	err error,
 ) {
 	h.log(log.TraceLevel, "handle command start")
 	defer h.log(log.TraceLevel, "handle command end")
@@ -150,11 +150,11 @@ func (h *chaosCommandHandler) HandleCommand(ctx context.Context, cmd textapi.Com
 	}
 	switch cmd.Name {
 	case commandChaosHandler:
-		return false, h.handleNewChaosHandler(ctx, cmd)
+		return h.handleNewChaosHandler(ctx, cmd)
 	case commandChaosUpdateEventLatency:
-		return false, h.handleUpdateEventLatency(ctx, cmd)
+		return h.handleUpdateEventLatency(ctx, cmd)
 	case commandChaosUpdateCommandLatency:
-		return false, h.handleUpdateCommandLatency(ctx, cmd)
+		return h.handleUpdateCommandLatency(ctx, cmd)
 	}
 
 	return

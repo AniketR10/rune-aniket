@@ -175,9 +175,9 @@ func (h *sedEditorHandler) Complete(ctx context.Context, name string, args []str
 
 func (h *sedEditorHandler) HandleCommand(
 	ctx context.Context, cmd textapi.Command,
-) (bool, error) {
+) error {
 	if cmd.Name != commandSed {
-		return false, errors.New("unknown command")
+		return errors.New("unknown command")
 	}
 
 	var start time.Time
@@ -188,10 +188,10 @@ func (h *sedEditorHandler) HandleCommand(
 
 	if len(cmd.Args) != 1 {
 		err := errors.New("Usage: sed <command>")
-		return false, err
+		return err
 	}
 	if cmd.Resource == nil {
-		return false, errors.New("cannot run sed here")
+		return errors.New("cannot run sed here")
 	}
 	var content string
 	var from, to term.Coordinates
@@ -203,23 +203,23 @@ func (h *sedEditorHandler) HandleCommand(
 		var err error
 		from, to, content, err = h.readHandlerContent(cmd.Resource)
 		if err != nil {
-			return false, err
+			return err
 		}
 	}
 	result, err := h.execSed(cmd.Args[0], content)
 	if err != nil {
-		return false, err
+		return err
 	}
 
 	err = h.writeHandlerContent(ctx, cmd.Resource, from, to, result)
 	if err != nil {
-		return false, err
+		return err
 	}
 	if log.IsLevelEnabled(log.TraceLevel) {
 		log.Tracef("HandleCommand(%#v) in %s", cmd, time.Since(start))
 	}
 
-	return false, nil
+	return nil
 }
 
 func (h *sedEditorHandler) Handle(

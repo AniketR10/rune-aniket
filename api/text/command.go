@@ -51,7 +51,7 @@ type Command struct {
 // CommandHandler is a callback interface that wraps the basic method Command.
 type CommandHandler interface {
 	// Handle is called when user issued a command previously registered via SubscribeCommand.
-	HandleCommand(context.Context, Command) (exit bool, err error)
+	HandleCommand(context.Context, Command) (err error)
 
 	// Complete takes command args and returns a list of expanded options for them.
 	// It also returns a expanded version of the last arg, or an empty string
@@ -80,29 +80,11 @@ type CommandManual struct {
 	Commands []CommandManual
 }
 
-type fnCommandHandler struct {
-	cb         func(context.Context, Command) (bool, error)
-	completeFn func(context.Context, string, []string) (iterator.Iterator[string], error)
-}
-
-func (f fnCommandHandler) HandleCommand(ctx context.Context, c Command) (bool, error) {
-	return f.cb(ctx, c)
-}
-
-func (f fnCommandHandler) Complete(ctx context.Context, cmd string, args []string) (
-	iterator.Iterator[string], error,
-) {
-	if f.completeFn != nil {
-		return f.completeFn(ctx, cmd, args)
-	}
-	return iterator.FromSlice[string](nil), nil
-}
-
 // FuncCommandHandler returns an CommandHandler that calls fn
 // every time HandleCommand is invoked and completer when
 // Complete is invoked.
 func FuncCommandHandler(
-	fn func(context.Context, Command) (bool, error),
+	fn func(context.Context, Command) error,
 	completer func(context.Context, string, []string) (iterator.Iterator[string], error),
 ) CommandHandler {
 	return fnCommandHandler{
@@ -114,9 +96,27 @@ func FuncCommandHandler(
 // NopCommandCompleter returns an CommandHandler that calls fn
 // every time HandleCommand is invoked, but does not have a completion function.
 func NopCommandCompleter(
-	fn func(context.Context, Command) (bool, error),
+	fn func(context.Context, Command) error,
 ) CommandHandler {
 	return fnCommandHandler{
 		cb: fn,
 	}
+}
+
+type fnCommandHandler struct {
+	cb         func(context.Context, Command) error
+	completeFn func(context.Context, string, []string) (iterator.Iterator[string], error)
+}
+
+func (f fnCommandHandler) HandleCommand(ctx context.Context, c Command) error {
+	return f.cb(ctx, c)
+}
+
+func (f fnCommandHandler) Complete(ctx context.Context, cmd string, args []string) (
+	iterator.Iterator[string], error,
+) {
+	if f.completeFn != nil {
+		return f.completeFn(ctx, cmd, args)
+	}
+	return iterator.FromSlice[string](nil), nil
 }

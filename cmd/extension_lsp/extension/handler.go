@@ -2046,7 +2046,7 @@ func (h *lspEditorHandler) Complete(ctx context.Context, name string, args []str
 
 func (h *lspEditorHandler) HandleCommand(
 	ctx context.Context, cmd textapi.Command,
-) (exit bool, err error) {
+) (err error) {
 	if cmd.Resource == nil {
 		return
 	}

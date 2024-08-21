@@ -269,7 +269,7 @@ func (e *Grantee) OpenIssueTemplate(
 	if err != nil {
 		return fmt.Errorf("marshal template: %w", err)
 	}
-	_, err = e.openIssueTemplate(ctx, cmd.Window, data, "custom-create-template")
+	err = e.openIssueTemplate(ctx, cmd.Window, data, "custom-create-template")
 	return err
 }
 
@@ -333,7 +333,7 @@ func (e *Grantee) PermissionGranted(ctx context.Context, grants []extension.Gran
 				man := man
 				man.man.Name = cmd
 				err = ed.SubscribeCommand(man.man, textapi.NopCommandCompleter(
-					func(ctx context.Context, cmd textapi.Command) (bool, error) {
+					func(ctx context.Context, cmd textapi.Command) error {
 						return man.handler(e, ctx, cmd)
 					}))
 				if err != nil {
@@ -420,18 +420,18 @@ func (e *Grantee) notify(level notifications.Level, msg string, args ...any) {
 	}
 }
 
-func (e *Grantee) issueRefresh(ctx context.Context, cmd textapi.Command) (bool, error) {
-	return false, e.svc.EvictAll(ctx)
+func (e *Grantee) issueRefresh(ctx context.Context, cmd textapi.Command) error {
+	return e.svc.EvictAll(ctx)
 }
 
-func (e *Grantee) openEmptyIssueTemplate(ctx context.Context, cmd textapi.Command) (bool, error) {
+func (e *Grantee) openEmptyIssueTemplate(ctx context.Context, cmd textapi.Command) error {
 	return e.openIssueTemplate(ctx, cmd.Window, e.defTemplate, "issue-")
 }
 
 func (e *Grantee) openCustomIssueTemplate(
 	template []byte, templateName string,
-) func(*Grantee, context.Context, textapi.Command) (bool, error) {
-	return func(e *Grantee, ctx context.Context, cmd textapi.Command) (bool, error) {
+) func(*Grantee, context.Context, textapi.Command) error {
+	return func(e *Grantee, ctx context.Context, cmd textapi.Command) error {
 		return e.openIssueTemplate(ctx, cmd.Window, template, templateName)
 	}
 }
@@ -495,48 +495,48 @@ func (e *Grantee) createOrUpdateIssue(ctx context.Context, ev textapi.Event) boo
 
 func (e *Grantee) openIssueTemplate(
 	ctx context.Context, win browserapi.Window, template []byte, templateName string,
-) (bool, error) {
+) error {
 	if e.o == nil || e.wm == nil {
-		return false, errors.New("browser permissions necessary to create an issue were not granted")
+		return errors.New("browser permissions necessary to create an issue were not granted")
 	}
 	oldURI := e.pendingIssueURI.Load().(workspaceapi.URI)
 	if !oldURI.Equal(workspaceapi.URI{}) {
-		return false, errors.New("there's already a pending issue open. " +
+		return errors.New("there's already a pending issue open. " +
 			"You should close it first before attempting to create a new one.")
 	}
 
 	f, err := os.CreateTemp("", templateName)
 	if err != nil {
-		return false, fmt.Errorf("temp file: %v", err)
+		return fmt.Errorf("temp file: %v", err)
 	}
 
 	_, err = f.Write(template)
 	if err != nil {
-		return false, fmt.Errorf("write template to file: %v", err)
+		return fmt.Errorf("write template to file: %v", err)
 	}
 
 	_ = f.Close()
 	newURI, err := workspaceapi.CurrentUserHostURI(f.Name())
 	if err != nil {
-		return false, fmt.Errorf("URI: %v", err)
+		return fmt.Errorf("URI: %v", err)
 	}
 
 	h, err := e.o.Open(newURI)
 	if err != nil {
 		_ = os.Remove(f.Name())
-		return false, fmt.Errorf("open temp file: %v", err)
+		return fmt.Errorf("open temp file: %v", err)
 	}
 
 	err = win.SetContent(h)
 	if err != nil && !errors.Is(err, browserapi.ErrTabNotFree) {
 		_ = h.Close()
 		_ = os.Remove(f.Name())
-		return false, fmt.Errorf("set focus window content: %v", err)
+		return fmt.Errorf("set focus window content: %v", err)
 	}
 
 	e.pendingIssueURI.Store(newURI)
 
-	return false, nil
+	return nil
 }
 
 func (e *Grantee) initScheme(m schemeapi.SchemeManager) error {
@@ -579,5 +579,5 @@ func getDefaultAuthor() string {
 
 type commandAll struct {
 	man     textapi.CommandManual
-	handler func(*Grantee, context.Context, textapi.Command) (bool, error)
+	handler func(*Grantee, context.Context, textapi.Command) error
 }

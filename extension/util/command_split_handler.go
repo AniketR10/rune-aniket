@@ -198,11 +198,11 @@ func (t *cmdSplitHandler) Complete(ctx context.Context, name string, args []stri
 	return iterator.FromSlice[string](nil), nil
 }
 
-func (t *cmdSplitHandler) HandleCommand(ctx context.Context, cmd textapi.Command) (exit bool, err error) {
+func (t *cmdSplitHandler) HandleCommand(ctx context.Context, cmd textapi.Command) (err error) {
 	if cmd.Name == t.config.Command.Name {
-		return false, t.openSplitWindow(ctx, cmd)
+		return t.openSplitWindow(ctx, cmd)
 	}
-	return false, nil
+	return nil
 }
 
 func (t *cmdSplitHandler) PermissionGranted(ctx context.Context, grants []extension.Grant) (ret error) {

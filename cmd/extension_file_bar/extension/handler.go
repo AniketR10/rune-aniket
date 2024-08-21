@@ -227,7 +227,7 @@ func (t *fileBarEditorHandler) Complete(ctx context.Context, name string, args [
 }
 
 func (h *fileBarEditorHandler) HandleCommand(ctx context.Context, cmd textapi.Command) (
-	exit bool, err error,
+	err error,
 ) {
 	return
 }

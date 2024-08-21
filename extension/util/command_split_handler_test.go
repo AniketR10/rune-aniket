@@ -180,9 +180,8 @@ func TestCommandSplitHandlerOpenWindow(t *testing.T) {
 			Context:    ctx,
 		}
 		testSplitWindow(t, config, grants, func(h *cmdSplitHandler) {
-			ok, err := h.HandleCommand(context.Background(), textapi.Command{Name: cmdName})
+			err := h.HandleCommand(context.Background(), textapi.Command{Name: cmdName})
 			require.NoError(t, err)
-			assert.False(t, ok)
 		})
 	})
 }

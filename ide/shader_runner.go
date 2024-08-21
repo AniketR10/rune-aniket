@@ -52,7 +52,7 @@ type shaderRunner struct {
 }
 
 func (r *shaderRunner) HandleCommand(ctx context.Context, cmd textapi.Command) (
-	exit bool, err error,
+	err error,
 ) {
 	if len(cmd.Args) == 0 {
 		err = errors.New("expected at least one argument with the shader name")
