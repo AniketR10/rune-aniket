@@ -426,7 +426,7 @@ command:
     # as a single command.
     splitWindowTerminal:
       - splitWindow
-      - newTerminal
+      - newTerminalTab
     layout:
       - splitWindowTerminal
       - focusPrevWindow
