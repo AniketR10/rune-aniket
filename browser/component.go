@@ -202,12 +202,16 @@ func (c *Component) Init(config Config) {
 	c.nextSplit = browserapi.OrientationRight
 
 	c.tabs.Init()
-	c.tabs.OnClick = func(id int) {
+	c.tabs.OnClick = func(id int) bool {
+		if id < 0 || id >= len(c.buffers) {
+			return false
+		}
 		t := c.buffers[id]
 		err := c.tryUpdateWindowContent(c.Focus().(*browserWindow), t)
 		if err != nil && err != browserapi.ErrTabNotFree {
 			c.setError(err)
 		}
+		return true
 	}
 
 	c.wm.Init(c.wallpaper(), config.WindowManagerConfig)

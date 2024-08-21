@@ -35,7 +35,7 @@ var _ tui.Handler = (*Tabs)(nil)
 type Tabs struct {
 	component.Tabs
 
-	OnClick func(int)
+	OnClick func(int) bool
 }
 
 // NewTabs returns a Tabs component which handles mouse events.
@@ -47,37 +47,40 @@ func NewTabs() *Tabs {
 
 // Init initializes this Tabs with the given underlying handler
 // and frame attributes.
-func (f *Tabs) Init() {
-	f.Tabs.Init()
+func (t *Tabs) Init() {
+	t.Tabs.Init()
 }
 
 // Handle delegates the event to the underlying handler.
-func (f *Tabs) Handle(ev term.Event) (quit, handled bool) {
+func (t *Tabs) Handle(ev term.Event) (quit, handled bool) {
 	if ev.Type != term.EventMouse || ev.Key != term.MouseLeft {
 		return
 	}
 	mousePos := term.Coordinates{X: ev.MouseX, Y: ev.MouseY}
-	idx, ok := f.Tabs.TabAt(mousePos)
+	idx, ok := t.Tabs.TabAt(mousePos)
 	if !ok {
+		if t.OnClick != nil {
+			handled = t.OnClick(-1)
+		}
 		return
 	}
 
 	handled = true
 
-	f.SetFocus(idx)
-	if f.OnClick != nil {
-		f.OnClick(idx)
+	t.SetFocus(idx)
+	if t.OnClick != nil {
+		_ = t.OnClick(idx)
 	}
 	return
 }
 
 // Cursor returns the underlying handler's cursor position
 // with the frame offset.
-func (f *Tabs) Cursor() (term.Coordinates, term.CursorStyle, bool) {
+func (t *Tabs) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 	return term.Coordinates{}, term.CursorStyleDefault, false
 }
 
 // Man just delegates Man call to underlying handler.
-func (f *Tabs) Man() tui.Manual {
+func (t *Tabs) Man() tui.Manual {
 	panic("TODO")
 }

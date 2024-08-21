@@ -60,6 +60,7 @@ const (
 	cmdCloseWorkspace    = "closeWorkspace"
 	cmdReloadWorkspace   = "reloadWorkspace"
 	cmdAddWorkspace      = "addWorkspace"
+	workspaceSlots       = 10
 )
 
 var (
@@ -95,7 +96,7 @@ type workspaceManagerHandler struct {
 	bar              handler.Tabs
 	focusProxy       handler.Proxy
 	width, height    int
-	workspaces       []*workspaceHandler
+	workspaces       [workspaceSlots]*workspaceHandler
 	workspaceCount   int
 	focus            int
 	homeWorkspace    workspace.Workspace
@@ -172,7 +173,6 @@ func (h *workspaceManagerHandler) init(
 	workspacesBarHeight, workspacesBarOffset int, workspacesBarFrame bool,
 ) error {
 	h.mu = locker
-	h.workspaces = make([]*workspaceHandler, 10)
 	h.externalCommands = make(map[string]externalCommand)
 	h.frame = cfg.frame()
 	h.reloadConfig = reloadConfig
@@ -371,11 +371,15 @@ func (h *workspaceManagerHandler) Draw(w term.Writer) {
 	}
 }
 
-func (h *workspaceManagerHandler) switchToWorkspace(i int) {
+func (h *workspaceManagerHandler) switchToWorkspace(i int) bool {
+	if i < 0 || i >= workspaceSlots {
+		return false
+	}
 	h.focus = i
 	h.focusProxy.Target = h.focusHandler()
 	// resize so disappearing bar feature can be implemented
 	h.Resize(h.width, h.height)
+	return true
 }
 
 func (h *workspaceManagerHandler) Handle(ev term.Event) (exit, handled bool) {
