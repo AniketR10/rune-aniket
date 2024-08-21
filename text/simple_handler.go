@@ -89,7 +89,7 @@ func (h *simpleEditorHandler) Resize(width, height int) {
 func (h *simpleEditorHandler) Draw(w term.Writer) {
 	locs, _ := h.cursor.LocationsAtCursor()
 	for _, loc := range locs {
-		h.less.SetMessage(loc.Message)
+		h.less.SetMessage("%s", loc.Message)
 		return
 	}
 	h.less.Draw(w)

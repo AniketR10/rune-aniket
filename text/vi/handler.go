@@ -160,7 +160,7 @@ func (vi *viHandlerImpl) setActiveLocationListMessage(locs map[string]textapi.Lo
 	// in current cursor position, then there's no guarantee of which one
 	// is going to be rendered.
 	for _, loc := range locs {
-		vi.less.SetMessage(loc.Message)
+		vi.less.SetMessage("%s", loc.Message)
 		return
 	}
 }
@@ -231,7 +231,7 @@ func (vi *viHandlerImpl) setMode(mode viMode) {
 	default:
 		panic(fmt.Sprintf("unknown mode: %v", mode))
 	}
-	vi.less.SetMessage(text)
+	vi.less.SetMessage("%s", text)
 	vi.currMode = mode
 }
 

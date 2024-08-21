@@ -451,12 +451,12 @@ func (e *Grantee) createReport(ctx context.Context, temp issue.Report) string {
 	if err != nil {
 		err = fmt.Errorf("create report: %w", err)
 		e.notify(notifications.LevelError, err.Error())
-		e.log(log.ErrorLevel, err.Error())
+		e.log(log.ErrorLevel, "%s", err.Error())
 		return ""
 	}
 	msg := fmt.Sprintf("created issue report %s", id)
 	e.notify(notifications.LevelSuccess, msg)
-	e.log(log.InfoLevel, msg)
+	e.log(log.InfoLevel, "%s", msg)
 	return id
 }
 
@@ -465,13 +465,13 @@ func (e *Grantee) updateReport(ctx context.Context, id string, temp issue.Report
 	if err != nil {
 		err = fmt.Errorf("update report: %v", err)
 		e.notify(notifications.LevelError, err.Error())
-		e.log(log.ErrorLevel, err.Error())
+		e.log(log.ErrorLevel, "%s", err.Error())
 		return
 	}
 
 	msg := fmt.Sprintf("updated issue report %s", id)
 	e.notify(notifications.LevelSuccess, msg)
-	e.log(log.InfoLevel, msg)
+	e.log(log.InfoLevel, "%s", msg)
 }
 
 func (e *Grantee) createOrUpdateIssue(ctx context.Context, ev textapi.Event) bool {
@@ -480,7 +480,7 @@ func (e *Grantee) createOrUpdateIssue(ctx context.Context, ev textapi.Event) boo
 	if err != nil {
 		err = fmt.Errorf("unmarshal: %v", err)
 		e.notify(notifications.LevelError, err.Error())
-		e.log(log.WarnLevel, err.Error())
+		e.log(log.WarnLevel, "%s", err.Error())
 		return false
 	}
 	if e.pendingIssueID != "" {

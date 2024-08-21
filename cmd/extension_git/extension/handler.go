@@ -427,7 +427,7 @@ func (h *gitEditorHandler) runDiff(ctx context.Context, ev textapi.Event) {
 
 	if diff == nil {
 		if err != nil {
-			h.log(log.ErrorLevel, err.Error())
+			h.log(log.ErrorLevel, "%s", err.Error())
 		}
 		return
 	}
