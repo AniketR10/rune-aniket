@@ -635,13 +635,13 @@ func (c ideConfig) frameUnion() (ret bool) {
 		return
 	}
 
-	var err error
-	ret, err = cfg.GetBool("union_frames")
+	unionFrames, err := cfg.GetBool("union_frames")
 	if err != nil {
 		if err != config.ErrNotFound {
 			c.errors["browser.union_frames"] = err
 		}
-		return
+	} else {
+		ret = unionFrames
 	}
 	return
 }

@@ -208,6 +208,7 @@ func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
 	assert.Equal(t, logrus.ErrorLevel, cfg.logLevel())
 	assert.Equal(t, term.InputCurrent, cfg.inputMode())
 	assert.Equal(t, component.DefaultFrameUnionCharSet(), cfg.frameUnionCharset())
+	assert.True(t, cfg.frameUnion())
 
 	actualNotifications := cfg.notificationsConfig()
 	expectedNotifications := browser.DefaultConfig().Notifications
@@ -308,6 +309,7 @@ func TestConfigSetting(t *testing.T) {
 		FocusFrameCharSet: handler.DefaultWindowManagerConfig().FrameCharSet,
 	}
 	assert.Equal(t, expectedConfig, cfg.windowManagerConfig())
+	assert.True(t, cfg.frameUnion())
 
 	expectedCommandAliases := map[string][]string{
 		"todo":   {"e file:///tmp/todo.md", "jenesaisquoi"},
