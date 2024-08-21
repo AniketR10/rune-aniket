@@ -179,10 +179,19 @@ func WithWorkspacesBarOffset(xoffset int) Option {
 	}
 }
 
+// WithTabsClickCallback sets a callback to be called every time the top tabs bar
+// is clicked.
+func WithTabsClickCallback(fn func(int) bool) Option {
+	return func(opts *options) {
+		opts.tabsClickCallback = fn
+	}
+}
+
 type options struct {
 	publishEvent        EventPublisher
 	extensionRunner     ExtensionsRunner
 	tabBarOffset        int
+	tabsClickCallback   func(int) bool
 	tabBarHeight        int
 	workspacesBarFrame  bool
 	workspacesBarHeight int

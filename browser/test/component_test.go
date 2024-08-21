@@ -782,6 +782,23 @@ func TestComponentSetFocus(t *testing.T) {
 	assert.Equal(t, win1, c.Focus())
 }
 
+func TestComponentOnTabsClick(t *testing.T) {
+	cfg := browser.DefaultConfig()
+	var called int
+	cfg.OnTabsClick = func(i int) bool {
+		called++
+		return true
+	}
+	c := browser.NewComponent(cfg)
+	c.Resize(20, 8)
+
+	require.Equal(t, 0, called)
+
+	_, handled := c.Handle(term.Event{Type: term.EventMouse, Key: term.MouseLeft})
+	assert.True(t, handled)
+	assert.Equal(t, 1, called)
+}
+
 func TestComponentSplitNil(t *testing.T) {
 	t.Run("Split with nil sets a wallpaper", func(t *testing.T) {
 		w := term.NewStringWriter(24, 8)

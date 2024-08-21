@@ -202,9 +202,12 @@ func (c *Component) Init(config Config) {
 	c.nextSplit = browserapi.OrientationRight
 
 	c.tabs.Init()
-	c.tabs.OnClick = func(id int) bool {
+	c.tabs.OnClick = func(id int) (ret bool) {
+		if config.OnTabsClick != nil {
+			ret = config.OnTabsClick(id)
+		}
 		if id < 0 || id >= len(c.buffers) {
-			return false
+			return ret
 		}
 		t := c.buffers[id]
 		err := c.tryUpdateWindowContent(c.Focus().(*browserWindow), t)

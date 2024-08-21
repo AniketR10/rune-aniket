@@ -116,7 +116,7 @@ func TestWorkspaceConfig(t *testing.T) {
 				return true
 			}, runner, new(sync.Mutex), nil,
 			func() (ideConfig, error) { return cfg, errors.New("boom") },
-			".sixrc", 0, 0, 0, 0, true)
+			".sixrc", 0, 0, 0, 0, true, nil)
 		require.NoError(t, err)
 		defer m.Close()
 
@@ -211,7 +211,7 @@ func TestWorkspaceExtensions(t *testing.T) {
 		dir, err := os.MkdirTemp("", "")
 		require.NoError(t, err)
 		m := newTestWorkspaceManagerHandlerWithManagerAndExtensions(t, manager,
-			&uri, cfg, runner, nil, nil, dir)
+			&uri, cfg, runner, nil, nil, dir, nil)
 		defer m.Close()
 
 		assert.Equal(t, "git", called)
@@ -252,7 +252,7 @@ func TestWorkspaceExtensions(t *testing.T) {
 				}, nil
 			})
 		m := newTestWorkspaceManagerHandlerWithManagerAndExtensions(t, manager,
-			&uri, cfg, runner, extensions, nil, dir)
+			&uri, cfg, runner, extensions, nil, dir, nil)
 		defer m.Close()
 
 		assert.Equal(t, "myID", called)
@@ -731,7 +731,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 				runner := FuncExtensionsRunner(testRunnerFn)
 
 				m1 := newTestWorkspaceManagerHandlerWithManagerAndExtensions(t, manager,
-					&uri, cfg, runner, nil, nil, dir)
+					&uri, cfg, runner, nil, nil, dir, nil)
 
 				cases := []testutil.HandlerSequenceTestCase{
 					{":edit 1234>ih3ll0\nw1rld <:write>:edit 4567>ihello\nworld <:write>:notificationsCloseAll>",
@@ -750,7 +750,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 				require.NoError(t, m1.Close())
 
 				m2 := newTestWorkspaceManagerHandlerWithManagerAndExtensions(t, manager,
-					&uri, cfg, runner, nil, nil, dir)
+					&uri, cfg, runner, nil, nil, dir, nil)
 
 				cases = []testutil.HandlerSequenceTestCase{
 					{"",
@@ -780,7 +780,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 				require.NoError(t, m2.Close())
 
 				m3 := newTestWorkspaceManagerHandlerWithManagerAndExtensions(t, manager,
-					&uri, cfg, runner, nil, nil, dir)
+					&uri, cfg, runner, nil, nil, dir, nil)
 
 				cases = []testutil.HandlerSequenceTestCase{
 					{"",
@@ -1054,6 +1054,49 @@ func TestExternalCommands(t *testing.T) {
 	})
 }
 
+func TestComponentOnTabsClickIntegration(t *testing.T) {
+	// setup
+	dir, err := os.MkdirTemp("", "")
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		os.RemoveAll(dir)
+	})
+	manager := workspace.NewManager(config.NopConfig())
+	require.NoError(t, manager.RegisterScheme(workspace.MemoryScheme,
+		workspace.NewMemoryScheme))
+
+	var uri *workspaceapi.URI
+	if dir != "" {
+		var err error
+		uri = new(workspaceapi.URI)
+		*uri, err = workspaceapi.ParseURI(fmt.Sprintf("memory://%s", dir))
+		require.NoError(t, err)
+	}
+	runner := FuncExtensionsRunner(testRunnerFn)
+	cfg := defaultCfg()
+	var called int
+	m := newTestWorkspaceManagerHandlerWithManagerAndExtensions(t, manager,
+		uri, cfg, runner, nil, nil, dir,
+		func(i int) bool {
+			called++
+			return true
+		})
+	m.Resize(20, 8)
+
+	// sut
+	require.Equal(t, 0, called)
+
+	_, handled := m.Handle(term.Event{Type: term.EventMouse, Key: term.MouseLeft})
+	assert.True(t, handled)
+	assert.Equal(t, 1, called)
+
+	_, handled = m.Handle(term.Event{Type: term.EventMouse, Key: term.MouseLeft, MouseY: 7})
+	assert.False(t, handled)
+	assert.Equal(t, 1, called)
+
+	require.NoError(t, m.Close())
+}
+
 func newTestWorkspaceManagerHandlerWithManager(
 	t *testing.T, manager *workspace.Manager,
 	uri workspaceapi.URI, cfg ideConfig, filenames []string,
@@ -1061,13 +1104,14 @@ func newTestWorkspaceManagerHandlerWithManager(
 	dir, err := os.MkdirTemp("", "")
 	require.NoError(t, err)
 	return newTestWorkspaceManagerHandlerWithManagerAndExtensions(t, manager,
-		&uri, cfg, FuncExtensionsRunner(testRunnerFn), nil, filenames, dir)
+		&uri, cfg, FuncExtensionsRunner(testRunnerFn), nil, filenames, dir, nil)
 }
 
 func newTestWorkspaceManagerHandlerWithManagerAndExtensions(
 	t *testing.T, manager *workspace.Manager,
 	uri *workspaceapi.URI, cfg ideConfig, runner ExtensionsRunner,
 	extensions map[string]Extension, files []string, dir string,
+	onTabsClick func(int) bool,
 ) *testWorkspaceManagerHandler {
 	homeURI, err := workspaceapi.ParseURI("memory:///home")
 	require.NoError(t, err)
@@ -1081,7 +1125,7 @@ func newTestWorkspaceManagerHandlerWithManagerAndExtensions(
 			return true
 		}, runner, new(sync.Mutex), extensions,
 		func() (ideConfig, error) { return cfg, nil },
-		".sixrc", 0, 0, 0, 0, true)
+		".sixrc", 0, 0, 0, 0, true, onTabsClick)
 	require.NoError(t, err)
 	return m
 }
@@ -1102,7 +1146,7 @@ func newTestWorkspaceManagerHandlerWithDir(
 	}
 	runner := FuncExtensionsRunner(testRunnerFn)
 	return newTestWorkspaceManagerHandlerWithManagerAndExtensions(t, manager,
-		uri, cc, runner, nil, filenames, dir)
+		uri, cc, runner, nil, filenames, dir, nil)
 }
 
 func newTestWorkspaceManagerHandler(

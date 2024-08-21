@@ -75,6 +75,7 @@ type workspaceManagerHandler struct {
 	storage           document.Service
 	workspace         workspace.WorkspaceManager
 	publishEvent      func(term.Event) bool
+	tabsClickCallback func(int) bool
 	extensionRunner   ExtensionsRunner
 	sixDir            string
 	tabBarOffset      int
@@ -116,6 +117,7 @@ func newWorkspaceManagerHandler(
 	reloadConfig func() (ideConfig, error), workspaceConfigFilename string,
 	tabBarOffset, tabBarHeight int,
 	workspacesBarHeight, workspacesBarOffset int, workspacesBarFrame bool,
+	tabsClickCallback func(int) bool,
 ) (*workspaceManagerHandler, error) {
 	ret := new(workspaceManagerHandler)
 
@@ -124,7 +126,7 @@ func newWorkspaceManagerHandler(
 		publishEvent, extensionRunner, locker, builtinExtensions,
 		reloadConfig, workspaceConfigFilename,
 		tabBarOffset, tabBarHeight,
-		workspacesBarHeight, workspacesBarOffset, workspacesBarFrame)
+		workspacesBarHeight, workspacesBarOffset, workspacesBarFrame, tabsClickCallback)
 	if err != nil {
 		return nil, err
 	}
@@ -171,12 +173,14 @@ func (h *workspaceManagerHandler) init(
 	reloadConfig func() (ideConfig, error), workspaceConfigFilename string,
 	tabBarOffset, tabBarHeight int,
 	workspacesBarHeight, workspacesBarOffset int, workspacesBarFrame bool,
+	tabsClickCallback func(int) bool,
 ) error {
 	h.mu = locker
 	h.externalCommands = make(map[string]externalCommand)
 	h.frame = cfg.frame()
 	h.reloadConfig = reloadConfig
 	h.workspaceConfigFilename = workspaceConfigFilename
+	h.tabsClickCallback = tabsClickCallback
 	h.publishEvent = publishEvent
 	h.workspace = manager
 	h.sixDir = sixDir
@@ -475,6 +479,7 @@ func (h *workspaceManagerHandler) textOpts(cfg ideConfig) []text.Option {
 		text.WithWindowManagerConfig(cfg.windowManagerConfig()),
 		text.WithFrameUnionCharSet(cfg.frameUnionCharset()),
 		text.WithFrameUnion(cfg.frameUnion()),
+		text.WithTabsClickCallback(h.tabsClickCallback),
 		text.WithCommandKey(cfg.commandKey()),
 		text.WithCommandMaxHistory(cfg.commandMaxHistory()),
 		text.WithNotificationsConfig(notificationsCfg),

@@ -170,6 +170,14 @@ func WithFrameUnion(frameUnion bool) Option {
 	}
 }
 
+// WithTabsClickCallback sets a callback to be called every time the top tabs bar
+// is clicked.
+func WithTabsClickCallback(fn func(int) bool) Option {
+	return func(cfg *Config) {
+		cfg.Config.OnTabsClick = fn
+	}
+}
+
 // WithFrameUnionCharSet configures the characters used to draw the frame union
 // between the browser tabs and the window manager.
 func WithFrameUnionCharSet(cs component.FrameUnionCharSet) Option {

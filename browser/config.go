@@ -96,6 +96,7 @@ type Config struct {
 	TabBarHeight     int
 	TabNameSeparator string
 	FrameUnion       bool
+	OnTabsClick      func(int) bool
 
 	PromptConfig
 
