@@ -205,7 +205,7 @@ func (c *Component) Init(config Config) {
 	c.tabs.OnClick = func(id int) {
 		t := c.buffers[id]
 		err := c.tryUpdateWindowContent(c.Focus().(*browserWindow), t)
-		if err != nil {
+		if err != nil && err != browserapi.ErrTabNotFree {
 			c.setError(err)
 		}
 	}
@@ -726,7 +726,7 @@ func (c *Component) Bar(cfg browserapi.BarConfig, h tui.Handler) {
 }
 
 func (c *Component) setError(err error) {
-	c.Notify(notifications.LevelError, "Error: %s", err)
+	c.Notify(notifications.LevelError, "%s", err)
 }
 
 // Notify formats the given msg and args and displays it on next Draw.
