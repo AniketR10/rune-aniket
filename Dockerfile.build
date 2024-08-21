@@ -27,7 +27,7 @@ RUN make debug && \
 	go test -c -o /dev/null $(go list -f '{{if .TestGoFiles}}{{.ImportPath}}{{end}}' ./...) && \
 	cp bin/* /go/bin
 RUN go install github.com/unstablebuild/blue/cmd/bluectl@latest
-RUN go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.58.1
+RUN go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.60.2
 
 # use clean image with no source code! 
 FROM --platform=linux/amd64 golang:alpine
