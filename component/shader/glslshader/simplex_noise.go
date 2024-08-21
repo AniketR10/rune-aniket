@@ -25,23 +25,33 @@ package glslshader
 
 // noiseSimplex returns spatial noise that is between -1.0 and 1.0
 // [Noise - simplex - 2D by iq]: https://www.shadertoy.com/view/Msf3WH
-func noiseSimplex(p vec2D) float64 {
-	K1 := 0.366025404 // (sqrt(3)-1)/2;
-	K2 := 0.211324865 // (3-sqrt(3))/6;
+func noiseSimplex(p vec2D) float {
+	const (
+		k1 = 0.366025404 // (sqrt(3)-1)/2
+		k2 = 0.211324865 // (3-sqrt(3))/6
+		k3 = 70.0
+	)
 
-	i := floor2D(p.addSc((p.x + p.y) * K1))
-	a := p.sub(i).addSc((i.x + i.y) * K2)
+	i := floor2D(p.addSc((p.x + p.y) * k1))
+	a := p.sub(i).addSc((i.x + i.y) * k2)
 	m := step(a.y, a.x)
 	o := vec2(m, 1.0-m)
-	b := a.sub(o).addSc(K2)
-	c := a.subSc(1.0).addSc(2.0 * K2)
+	b := a.sub(o).addSc(k2)
+	c := a.subSc(1.0).addSc(2.0 * k2)
 	h := max3D(vec3(0.5).sub(vec3(dot2D(a, a), dot2D(b, b), dot2D(c, c))), vec3(0.0))
 	n := h.mult(h).mult(h).mult(h).mult(vec3(dot2D(a, hash(i.addSc(0.0))), dot2D(b, hash(i.add(o))), dot2D(c, hash(i.addSc(1.0)))))
-	return dot3D(n, vec3(70.0))
+	return dot3D(n, vec3(k3))
 }
 
 // replace this by something better
 func hash(p vec2D) vec2D {
-	p = vec2(dot2D(p, vec2(127.1, 311.7)), dot2D(p, vec2(269.5, 183.3)))
-	return vec2(-1.0).add(vec2(2.0).mult(fract2D(sin2D(p).multSc(43758.5453123))))
+	const (
+		k1 = 127.1
+		k2 = 311.7
+		k3 = 269.5
+		k4 = 183.3
+		k5 = 43758.5453123
+	)
+	p = vec2(dot2D(p, vec2(k1, k2)), dot2D(p, vec2(k3, k4)))
+	return vec2(-1.0).add(vec2(2.0).mult(fract2D(sin2D(p).multSc(k5))))
 }
