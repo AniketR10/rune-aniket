@@ -847,6 +847,29 @@ func (e *ex) newTerminalTab(args ...string) error {
 	return nil
 }
 
+func (e *ex) newTerminalTabOrSplit(args ...string) error {
+	var initialCmd string
+	if len(args) > 0 {
+		initialCmd = args[0]
+	}
+	t, err := e.newEmulatorTab(initialCmd)
+	if err != nil {
+		return err
+	}
+	win := e.invokeWindow()
+	content, _ := win.Content()
+	if _, ok := content.(*browser.Tab); !ok {
+		err = win.SetContent(t)
+	} else {
+		_, err = e.comp.Split(browserapi.OrientationDefault, win, t)
+	}
+	if err != nil {
+		_ = t.Close()
+		return err
+	}
+	return nil
+}
+
 func (e *ex) panic(args ...string) error {
 	panic("this could be a panic")
 }

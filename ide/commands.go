@@ -216,18 +216,29 @@ var (
 			},
 			handler: (*ex).panic,
 		},
-		"newTerminal": {
+		"newTerminalTab": {
 			man: textapi.CommandManual{
-				Summary: "Opens a new terminal emulator and starts a shell on the current " +
-					"active window, replacing its contents. If 'shell' is not set in " +
-					"terminal config, then the system shell defined in the SHELL " +
+				Summary: "Opens a new terminal emulator tab and attaches it to the current " +
+					"active window. If 'shell' is not set in " +
+					"terminal config, then the default system shell defined via SHELL " +
 					"environment variable is used.",
 			},
 			handler: (*ex).newTerminalTab,
 		},
+		"newTerminalTabOrSplit": {
+			man: textapi.CommandManual{
+				Summary: "Opens a new terminal emulator tab and attaches it to the" +
+					"current active window if empty, or creates a new split window if" +
+					"window is not empty. " +
+					"If 'shell' is not set in " +
+					"terminal config, then the default system shell defined via SHELL " +
+					"environment variable is used.",
+			},
+			handler: (*ex).newTerminalTabOrSplit,
+		},
 		cmdEdit: {
 			man: textapi.CommandManual{
-				Summary: "Opens the given file URI for editing on the current active " +
+				Summary: "Opens the file at the given URI for editing on the current active " +
 					"window, replacing its contents. If no scheme is provided, file:// " +
 					"is used by default. This allows a user opening files in " +
 					"workspaces outside the current workspace or host. " +
@@ -242,13 +253,14 @@ var (
 		},
 		"!": {
 			man: textapi.CommandManual{
-				Summary: "Runs an executable, whether its a plugin or not, on an " +
-					"ephemeral terminal emulator. The stdout and stderr of the execution " +
-					"are printed on a floating window along with stats and a progress sign until " +
-					"user closes the window or hits the ESC key. " +
-					"If not executable is passed, the companion terminal emulator is opened. " +
-					"This emulator is different " +
-					"than a terminal emulator created by newTerminal in that it preserves " +
+				Summary: "Opens a new terminal emulator with the given executable " +
+					"and arguments on a new floating window. " +
+					"The stdout and stderr of the execution " +
+					"are printed on the window along with stats and a progress sign until " +
+					"user closes the window or hits the ESC key. \n\n" +
+					"If no executable is passed, this command opens the companion terminal emulator" +
+					"The compation terminal emulator is different " +
+					"than a terminal emulator created by newTerminalTab in that it preserves " +
 					"the session output accross invocations. The floating window created as a " +
 					"result of this command can be closed via standard window or tab close commands.",
 				Synopsis: "[executable [args]]",
