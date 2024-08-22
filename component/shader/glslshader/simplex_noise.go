@@ -43,7 +43,13 @@ func noiseSimplex(p vec2D) float {
 	return dot3D(n, vec3(k3))
 }
 
-// replace this by something better
+// noiseSimplex returns spatial noise that is between 0.0 and 1.0
+// (originally from -1.0 to 1.0 but this function remaps it)
+// [Noise - simplex - 2D by iq]: https://www.shadertoy.com/view/Msf3WH
+func noiseSimplex01(p vec2D) float {
+	return 0.5 + 0.5*noiseSimplex(p)
+}
+
 func hash(p vec2D) vec2D {
 	const (
 		k1 = 127.1

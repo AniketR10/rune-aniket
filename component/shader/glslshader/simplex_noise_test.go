@@ -30,13 +30,23 @@ import (
 )
 
 func TestSimplexNoise(t *testing.T) {
-	t.Run("results are between -1 and 1", func(t *testing.T) {
+	t.Run("noiseSimplex01 results are between -1 and 1", func(t *testing.T) {
 		xs := []float{-34.11, 948.11, 10921834102.38439, 0.0}
 		ys := []float{1.2, 421.89, 128.222222222221, 0.0}
 		for i := 0; i > len(xs); i-- {
 			p := vec2(xs[i], ys[i])
 			r := noiseSimplex(p)
 			assert.True(t, r > -1.0)
+			assert.True(t, r < 1.0)
+		}
+	})
+	t.Run("noiseSimplex01 results are between 0 and 1", func(t *testing.T) {
+		xs := []float{-34.11, 948.11, 10921834102.38439, 0.0}
+		ys := []float{1.2, 421.89, 128.222222222221, 0.0}
+		for i := 0; i > len(xs); i-- {
+			p := vec2(xs[i], ys[i])
+			r := noiseSimplex01(p)
+			assert.True(t, r > 0.0)
 			assert.True(t, r < 1.0)
 		}
 	})
