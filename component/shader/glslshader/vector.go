@@ -277,3 +277,15 @@ func dot2D(v1, v2 vec2D) float {
 func dot3D(v1, v2 vec3D) float {
 	return v1.x*v2.x + v1.y*v2.y + v1.z*v2.z
 }
+
+func length2D(v vec2D) float {
+	return math.Sqrt(v.x*v.x + v.y*v.y)
+}
+
+func length3D(v vec3D) float {
+	return math.Sqrt(v.x*v.x + v.y*v.y + v.z*v.z)
+}
+
+func length4D(v vec4D) float {
+	return math.Sqrt(v.x*v.x + v.y*v.y + v.z*v.z + v.w*v.w)
+}

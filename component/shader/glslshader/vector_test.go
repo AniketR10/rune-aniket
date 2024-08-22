@@ -443,3 +443,74 @@ func TestDot(t *testing.T) {
 		assert.Equal(t, 0.0, res)
 	})
 }
+
+func TestLength(t *testing.T) {
+	t.Run("2D length", func(t *testing.T) {
+		got := length2D(vec2(0.0, 0.0))
+		assert.Equal(t, 0.0, got)
+
+		got = length2D(vec2(1.0, 0.0))
+		assert.Equal(t, 1.0, got)
+
+		got = length2D(vec2(0.0, 1.0))
+		assert.Equal(t, 1.0, got)
+
+		got = length2D(vec2(3.0, 4.0))
+		assert.Equal(t, 5.0, got)
+
+		got = length2D(vec2(-145.43, 41.04))
+		assert.InDelta(t, 151.10978293942455, got, 1e-6)
+
+		got = length2D(vec2(1e-3, 3e3))
+		assert.InDelta(t, 3000.000000000167, got, 1e-6)
+	})
+
+	t.Run("3D length", func(t *testing.T) {
+		got := length3D(vec3(0.0, 0.0, 0.0))
+		assert.Equal(t, 0.0, got)
+
+		got = length3D(vec3(1.0, 0.0, 0.0))
+		assert.Equal(t, 1.0, got)
+
+		got = length3D(vec3(0.0, 1.0, 0.0))
+		assert.Equal(t, 1.0, got)
+
+		got = length3D(vec3(0.0, 0.0, 1.0))
+		assert.Equal(t, 1.0, got)
+
+		got = length3D(vec3(1.0, 2.0, 2.0))
+		assert.Equal(t, 3.0, got)
+
+		got = length3D(vec3(44.1, 68.1, 14.045))
+		assert.InDelta(t, 82.33882453010851, got, 1e-6)
+
+		got = length3D(vec3(4e9, 6e-7, 0.4))
+		assert.InDelta(t, 4e9, got, 1e-6)
+	})
+
+	t.Run("4D length", func(t *testing.T) {
+		got := length4D(vec4(0.0, 0.0, 0.0, 0.0))
+		assert.Equal(t, 0.0, got)
+
+		got = length4D(vec4(1.0, 0.0, 0.0, 0.0))
+		assert.Equal(t, 1.0, got)
+
+		got = length4D(vec4(0.0, 1.0, 0.0, 0.0))
+		assert.Equal(t, 1.0, got)
+
+		got = length4D(vec4(0.0, 0.0, 1.0, 0.0))
+		assert.Equal(t, 1.0, got)
+
+		got = length4D(vec4(0.0, 0.0, 0.0, 1.0))
+		assert.Equal(t, 1.0, got)
+
+		got = length4D(vec4(1.0, 2.0, 3.0, 4.0))
+		assert.InDelta(t, 5.477225575051661, got, 1e-6)
+
+		got = length4D(vec4(44.1, 68.1, 14.045, 2.93472))
+		assert.InDelta(t, 82.39110756919341, got, 1e-6)
+
+		got = length4D(vec4(3e6, 3e-5, 333.0, 0.1))
+		assert.InDelta(t, 3.0000000184815014e+06, got, 1e-6)
+	})
+}
