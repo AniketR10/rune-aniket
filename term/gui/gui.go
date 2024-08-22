@@ -308,6 +308,26 @@ func (g *GUI) DecreaseFontSize() error {
 	return err
 }
 
+// IncreaseLineHeight increases the size of the rendered font,
+// making the interface appear bigger.
+func (g *GUI) IncreaseLineHeight() error {
+	err := g.fontManager.IncreaseLineHeight()
+	if err == nil {
+		g.resize(g.width, g.height, g.fontManager.DeviceScale())
+	}
+	return err
+}
+
+// DecreaseLineHeight increases the size of the rendered font,
+// making the interface appear bigger.
+func (g *GUI) DecreaseLineHeight() error {
+	err := g.fontManager.DecreaseLineHeight()
+	if err == nil {
+		g.resize(g.width, g.height, g.fontManager.DeviceScale())
+	}
+	return err
+}
+
 // SetFont sets the font collection identified by the given family name.
 // If family is set to an empty string, the default builtin font is used.
 func (g *GUI) SetFont(family string) error {

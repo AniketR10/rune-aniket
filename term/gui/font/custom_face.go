@@ -657,3 +657,7 @@ func fixedRectangleFromImageRectangle(r image.Rectangle) fixed.Rectangle26_6 {
 func float64ToFixed(x float64) fixed.Int26_6 {
 	return fixed.Int26_6(x * (1 << 6))
 }
+
+func fixedToFloat64(x fixed.Int26_6) float64 {
+	return float64(x>>6) + float64(x&((1<<6)-1))/float64(1<<6)
+}

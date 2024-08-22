@@ -96,15 +96,6 @@ func NewManager() (*Manager, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse braille font: %w", err)
 	}
-	// TODO use builtin glyphs for special characters that
-	// need specific offsets. This is how alacritty always
-	// gets pixel perfect frame borders.
-	// We can achieve this by wrapping a font.Face
-	// with a custom font.Face that provides builtin glyphs
-	// for a known whitelist of characters, and uses the underlying
-	// font's glyphs for the rest.
-	// ret.offset.Y = fixed.Int26_6(float64(1.0) * (1 << 6))
-	// ret.offset.X = 58 // between 0.5 and 1.0
 	return ret, nil
 }
 
@@ -113,7 +104,7 @@ func (m *Manager) IncreaseSize() error {
 	return m.SetSize(m.size + 1)
 }
 
-// IncreaseSize decreases the size of the font by 1.
+// DecreaseSize decreases the size of the font by 1.
 func (m *Manager) DecreaseSize() error {
 	if m.size <= 1 {
 		return nil
@@ -160,6 +151,30 @@ func (m *Manager) SetSize(size float64) error {
 	}
 	m.size = size
 	return m.ReloadFont()
+}
+
+// SetOffset sets the x and y offset of the configured font.
+// It will reload the font with the new DPI and return
+// an error if there was a problem reloading the font.
+func (m *Manager) SetOffset(x, y float64) error {
+	fixedX := float64ToFixed(x)
+	fixedY := float64ToFixed(y)
+	if m.offset.Y == fixedY && m.offset.X == fixedX {
+		return nil
+	}
+	m.offset.X = fixedX
+	m.offset.Y = fixedY
+	return m.ReloadFont()
+}
+
+// IncreaseLineHeight increases the line height of the font by 1 pixel.
+func (m *Manager) IncreaseLineHeight() error {
+	return m.SetOffset(fixedToFloat64(m.offset.X), fixedToFloat64(m.offset.Y)+1)
+}
+
+// DecreaseLineHeight decreases the line height of the font by 1 pixel.
+func (m *Manager) DecreaseLineHeight() error {
+	return m.SetOffset(fixedToFloat64(m.offset.X), fixedToFloat64(m.offset.Y)-1)
 }
 
 // ReloadFont reloads the font. This can be used

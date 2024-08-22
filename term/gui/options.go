@@ -137,6 +137,15 @@ func WithDefaultAttributes(attr term.Attributes) Option {
 	}
 }
 
+// WithLineHeightOffset defines positive or negative offset given
+// to the font's default line height.
+// See font.Manager.SetOffset for more details.
+func WithLineHeightOffset(offset float64) Option {
+	return func(g *GUI) error {
+		return g.fontManager.SetOffset(0, offset)
+	}
+}
+
 // WithRenderOffset defines the render offset in pixels.
 // Default is no offset.
 func WithRenderOffset(x, y int) Option {
