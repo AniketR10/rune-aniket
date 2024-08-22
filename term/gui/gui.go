@@ -352,6 +352,12 @@ func (g *GUI) SetOpacity(background, foreground float64) {
 // It has no effect if WithTransparentBackground has not
 // been passed as an option to this GUI.
 func (g *GUI) SetBackgroundBlur(radius int) {
+	// if user is trying to remove blur, it will naturally
+	// try to set it to 0, but radius 0 is interpreted as no-op
+	// by ebiten.
+	if radius == 0 {
+		radius = 1
+	}
 	ebiten.SetWindowBackgroundBlur(radius)
 	g.resize(g.width, g.height, g.fontManager.DeviceScale())
 }
