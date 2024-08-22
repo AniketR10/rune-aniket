@@ -42,6 +42,7 @@ import (
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
+	"unstable.build/go-tui/text/clipboard"
 	"unstable.build/go-tui/workspace"
 	"unstable.build/go-tui/workspace/ssh"
 )
@@ -287,6 +288,11 @@ func (i *IDE) Handler() (tui.Handler, func()) {
 // Browser returns the current browser in focus.
 func (i *IDE) Browser() browser.Browser {
 	return i.workspaceHandler.focusBrowser()
+}
+
+// Clipboard returns the configured clipboard.
+func (i *IDE) Clipboard() clipboard.Register {
+	return i.clipboard()
 }
 
 func (i *IDE) closeResources() (ret error) {
