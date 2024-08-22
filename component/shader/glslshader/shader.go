@@ -57,19 +57,21 @@ func shadeGLSL(frame, total int, fps float, in [][]term.Cell, shader cellRunner)
 		return
 	}
 
-	cols := len(in)
-	rows := len(in[0])
+	rows := len(in)
+	cols := len(in[0])
 
 	time := float(frame) / fps
 
 	for y, row := range in {
-		yFlipARCorrect := int(math.Round(float(cols-y-1) * image.HeightToWidthCellAspectRatio))
-		colsFlipARCorrect := int(math.Round(float(cols) * image.HeightToWidthCellAspectRatio))
+		yFlipARCorrect := int(math.Round(float(rows-y-1) *
+			image.HeightToWidthCellAspectRatio))
+		rowsFlipARCorrect := int(math.Round(float(rows) *
+			image.HeightToWidthCellAspectRatio))
 		for x := range row {
 			char, fg, bg := shader.runCell(
 				frame, total, fps, time,
 				x, yFlipARCorrect,
-				rows, colsFlipARCorrect,
+				cols, rowsFlipARCorrect,
 				in[y][x].Ch, in[y][x].Fg, in[y][x].Bg,
 			)
 			in[y][x].Ch = char
