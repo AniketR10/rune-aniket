@@ -24,6 +24,8 @@
 package shaderutils
 
 import (
+	"math"
+
 	"github.com/unstablebuild/tcell/v3"
 )
 
@@ -43,4 +45,25 @@ func InterpolateColor(factor float64, color, target tcell.Color) tcell.Color {
 func ColorBrightness(color tcell.Color) float64 {
 	r, g, b := color.RGB()
 	return float64(r+g+b) / float64(255*3)
+}
+
+// SampleGradient interpolates a color from a gradient at a given position
+// where factor=0 is the first color and factor=1 the last.
+func SampleGradient(factor float64, gradient []tcell.Color) tcell.Color {
+	t := math.Min(1, math.Max(0, factor))
+	stops := float64(len(gradient) - 1)
+	tt := t * stops
+
+	currIdx := int(math.Floor(tt))
+	nextIdx := currIdx + 1
+	if nextIdx >= len(gradient) {
+		nextIdx = len(gradient) - 1
+	}
+
+	tDec := tt - math.Floor(tt)
+
+	col1 := gradient[currIdx]
+	col2 := gradient[nextIdx]
+
+	return InterpolateColor(tDec, col1, col2)
 }

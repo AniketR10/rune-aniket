@@ -129,3 +129,90 @@ func TestColorBrightness(t *testing.T) {
 		})
 	}
 }
+
+func TestSampleGradient(t *testing.T) {
+	tsuite := []struct {
+		name     string
+		factor   float64
+		gradient []tcell.Color
+		expect   tcell.Color
+	}{
+		{
+			name:   "start",
+			factor: 0.0,
+			gradient: []tcell.Color{
+				tcell.NewRGBColor(255, 0, 0),
+				tcell.NewRGBColor(0, 255, 0),
+				tcell.NewRGBColor(0, 0, 255),
+			},
+			expect: tcell.NewRGBColor(255, 0, 0),
+		},
+		{
+			name:   "inbetween, first half",
+			factor: 0.22,
+			gradient: []tcell.Color{
+				tcell.NewRGBColor(255, 0, 0),
+				tcell.NewRGBColor(0, 255, 0),
+				tcell.NewRGBColor(0, 0, 255),
+			},
+			expect: tcell.NewRGBColor(142, 112, 0),
+		},
+		{
+			name:   "inbetween, middle",
+			factor: 0.5,
+			gradient: []tcell.Color{
+				tcell.NewRGBColor(255, 0, 0),
+				tcell.NewRGBColor(0, 255, 0),
+				tcell.NewRGBColor(0, 0, 255),
+			},
+			expect: tcell.NewRGBColor(0, 255, 0),
+		},
+		{
+			name:   "inbetween second half",
+			factor: 0.864,
+			gradient: []tcell.Color{
+				tcell.NewRGBColor(255, 0, 0),
+				tcell.NewRGBColor(0, 255, 0),
+				tcell.NewRGBColor(0, 0, 255),
+			},
+			expect: tcell.NewRGBColor(0, 69, 185),
+		},
+		{
+			name:   "end",
+			factor: 0.0,
+			gradient: []tcell.Color{
+				tcell.NewRGBColor(255, 0, 0),
+				tcell.NewRGBColor(0, 255, 0),
+				tcell.NewRGBColor(0, 0, 255),
+			},
+			expect: tcell.NewRGBColor(255, 0, 0),
+		},
+		{
+			name:   "beyond start",
+			factor: -0.5,
+			gradient: []tcell.Color{
+				tcell.NewRGBColor(255, 0, 0),
+				tcell.NewRGBColor(0, 255, 0),
+				tcell.NewRGBColor(0, 0, 255),
+			},
+			expect: tcell.NewRGBColor(255, 0, 0),
+		},
+		{
+			name:   "beyond end",
+			factor: 1.5,
+			gradient: []tcell.Color{
+				tcell.NewRGBColor(255, 0, 0),
+				tcell.NewRGBColor(0, 255, 0),
+				tcell.NewRGBColor(0, 0, 255),
+			},
+			expect: tcell.NewRGBColor(0, 0, 255),
+		},
+	}
+
+	for _, tcase := range tsuite {
+		t.Run(tcase.name, func(t *testing.T) {
+			result := SampleGradient(tcase.factor, tcase.gradient)
+			assert.Equal(t, tcase.expect, result)
+		})
+	}
+}
