@@ -24,5 +24,8 @@ target
 go.work
 go.work.sum
 
+# macos
+.DS_Store
+
 # crash files
 six_crash_report_*
