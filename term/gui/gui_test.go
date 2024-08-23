@@ -33,7 +33,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/term"
-	"unstable.build/go-tui/text/clipboard"
 )
 
 func TestUpdate(t *testing.T) {
@@ -115,49 +114,6 @@ func TestUpdate(t *testing.T) {
 		delete(input.pressedKeys, ebiten.KeyEnter)
 		require.NoError(t, gui.Update())
 		require.Equal(t, 2, called)
-	})
-
-	t.Run("delivers pasted text to handler via EventPasteStart/End", func(t *testing.T) {
-		const text = "SOA"
-		var expectedIterationID int64
-		var called int
-		mock := mockHandler{
-			assertDraw: func(w term.Writer) {
-				actualIteration, ok := tui.IterationFromContext(w.Context())
-				require.True(t, ok)
-				assert.Equal(t, expectedIterationID, actualIteration)
-			},
-			assertEvent: func(ev term.Event) (exit, handled bool) {
-				switch called {
-				case 0:
-					assert.Equal(t, term.EventPasteStart, ev.Type)
-				case 4:
-					assert.Equal(t, term.EventPasteEnd, ev.Type)
-				default:
-					assert.Equal(t, term.EventKey, ev.Type, called)
-					switch called {
-					case 1:
-						assert.Equal(t, 'S', ev.Ch)
-						assert.Equal(t, []byte{'S'}, ev.Raw)
-					case 2:
-						assert.Equal(t, 'O', ev.Ch)
-						assert.Equal(t, []byte{'O'}, ev.Raw)
-					case 3:
-						assert.Equal(t, 'A', ev.Ch)
-						assert.Equal(t, []byte{'A'}, ev.Raw)
-					}
-				}
-				called++
-				return
-			},
-		}
-		clip := clipboard.NewInMemory()
-		gui, _ := newTestGUI(t, &mock, WithClipboard(clip))
-		require.NoError(t, clip.Copy(clipboard.DefaultRegisterID, clipboard.Data{Text: text}))
-		require.NoError(t, gui.PasteFromClipboard())
-
-		require.NoError(t, gui.Update())
-		require.Equal(t, 5, called)
 	})
 
 	t.Run("delegates events to handler", func(t *testing.T) {
@@ -353,8 +309,8 @@ func TestLayout(t *testing.T) {
 	})
 }
 
-func newTestGUI(t *testing.T, mock *mockHandler, opts ...Option) (*GUI, *mockInputManager) {
-	gui, err := New(mock, opts...)
+func newTestGUI(t *testing.T, mock *mockHandler) (*GUI, *mockInputManager) {
+	gui, err := New(mock)
 	require.NoError(t, err)
 
 	ret := &mockInputManager{pressedKeys: make(map[ebiten.Key]struct{})}

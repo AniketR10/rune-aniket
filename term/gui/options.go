@@ -27,7 +27,6 @@ import (
 	"sync"
 
 	"unstable.build/go-tui/term"
-	"unstable.build/go-tui/text/clipboard"
 )
 
 // Option allows configuring an instance of GUI.
@@ -153,15 +152,6 @@ func WithRenderOffset(x, y int) Option {
 	return func(g *GUI) error {
 		g.renderOffset.X = x
 		g.renderOffset.Y = y
-		return nil
-	}
-}
-
-// WithClipboard sets the clipboard to be used by
-// the GUI.PasteFromClipboard and GUI.CopyToClipboard methods.
-func WithClipboard(clip clipboard.Register) Option {
-	return func(g *GUI) error {
-		g.clipboard = clip
 		return nil
 	}
 }

@@ -39,7 +39,6 @@ import (
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/term/gui/font"
-	"unstable.build/go-tui/text/clipboard"
 )
 
 var (
@@ -65,7 +64,6 @@ type GUI struct {
 	fontManager       *font.Manager
 	updateChan        chan term.Event
 	handler           tui.Handler
-	clipboard         clipboard.Register
 	writer            *cell.BufferWriter
 	mouse             *mouse
 	input             *input
@@ -86,7 +84,6 @@ type GUI struct {
 	}
 
 	pendingEvents []term.Event
-	pasteEvents   []term.Event
 	needsDraw     bool
 	needsRender   bool
 	width         int
@@ -114,7 +111,6 @@ func New(handler tui.Handler, options ...Option) (*GUI, error) {
 		enableLigatures:  true,
 		cursorAttributes: term.Attributes{Bg: tcell.ColorRed},
 	}
-	ret.clipboard = clipboard.NewInMemory() // default clipboard
 	ret.input = newInput(ret.fontManager)
 	ret.mouse = newMouse(ret.fontManager)
 	ret.ctx = context.Background()
@@ -219,23 +215,11 @@ func (g *GUI) Update() error {
 		}
 	}
 
-	for _, ev := range g.pasteEvents {
-		switch ev.Type {
-		case term.EventPasteStart, term.EventKey, term.EventPasteEnd:
-			needsDraw = true
-			exit, _ := g.handler.Handle(ev)
-			if exit {
-				return ErrHandlerExited
-			}
-		}
-	}
-
 	if needsDraw {
 		g.drawHandler(tui.ContextWithIteration(g.ctx, g.iteration))
 	}
 
 	g.pendingEvents = g.pendingEvents[:0]
-	g.pasteEvents = g.pasteEvents[:0]
 	g.iteration++
 	return nil
 }
@@ -382,38 +366,6 @@ func (g *GUI) SetBackgroundBlur(radius int) {
 // font families on the system.
 func (g *GUI) AvailableFontFamilies() (iterator.Iterator[string], error) {
 	return g.fontManager.AvailableFontFamilies()
-}
-
-// PasteFromClipboard posts the contents of the configured clipboard as
-// a term.EventPasteStart/term.EventPasteEnd sequence of events.
-//
-// It is up to the caller to manage synchronization: it is assumed that
-// this method is called only when holding the configured lock.
-func (g *GUI) PasteFromClipboard() error {
-	data, err := g.clipboard.Paste(clipboard.DefaultRegisterID)
-	if err != nil {
-		return fmt.Errorf("clipboard paste: %w", err)
-	}
-
-	if len(data.Text) == 0 {
-		return nil
-	}
-
-	g.pasteEvents = append(g.pasteEvents, term.Event{
-		Type: term.EventPasteStart,
-	})
-	for _, ch := range data.Text {
-		raw := []byte(string(ch))
-		g.pasteEvents = append(g.pasteEvents, term.Event{
-			Type: term.EventKey,
-			Ch:   ch,
-			Raw:  raw,
-		})
-	}
-	g.pasteEvents = append(g.pasteEvents, term.Event{
-		Type: term.EventPasteEnd,
-	})
-	return nil
 }
 
 func (g *GUI) drawHandler(ctx context.Context) {
