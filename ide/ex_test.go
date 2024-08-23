@@ -55,6 +55,7 @@ import (
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/term/vte"
 	"unstable.build/go-tui/text"
+	"unstable.build/go-tui/text/clipboard"
 	texttest "unstable.build/go-tui/text/test"
 	testutil "unstable.build/go-tui/util/test"
 	"unstable.build/go-tui/workspace"
@@ -706,7 +707,7 @@ func TestMultipleFilesStartup(t *testing.T) {
 	mockBuf := testFileBuffer{}
 	workspace := testLoader{buf: &mockBuf}
 	b := newExForTestingWithWorkspace(t, &workspace, texttest.NopEditor(),
-		vte.DefaultConfig(), nopPublishEvent, opts...)
+		vte.DefaultConfig(), nopPublishEvent, clipboard.NewInMemory(), opts...)
 	defer b.Close()
 
 	testutil.TestHandlerSequence(t, b, 20, 10, cases)
@@ -734,7 +735,7 @@ func TestWriteExclamationNoQuit(t *testing.T) {
 	mockBuf := testFileBuffer{}
 	workspace := testLoader{buf: &mockBuf}
 	b := newExForTestingWithWorkspace(t, &workspace, texttest.NopEditor(),
-		vte.DefaultConfig(), nopPublishEvent, opts...)
+		vte.DefaultConfig(), nopPublishEvent, clipboard.NewInMemory(), opts...)
 	defer b.Close()
 
 	testutil.TestHandlerSequence(t, b, 20, 10, cases)
@@ -762,7 +763,7 @@ func TestBrowserCloseLastWindow(t *testing.T) {
 	mockBuf := testFileBuffer{}
 	workspace := testLoader{buf: &mockBuf}
 	b := newExForTestingWithWorkspace(t, &workspace, texttest.NopEditor(),
-		vte.DefaultConfig(), nopPublishEvent, opts...)
+		vte.DefaultConfig(), nopPublishEvent, clipboard.NewInMemory(), opts...)
 	defer b.Close()
 
 	testutil.TestHandlerSequence(t, b, 20, 10, cases)
@@ -919,7 +920,7 @@ func TestExKeySequence(t *testing.T) {
 				defer mu.Unlock()
 				ex.Handle(ev)
 				return true
-			}, opts...))
+			}, clipboard.NewInMemory(), opts...))
 		ex.subscribeCommands()
 		b := testEx{ex}
 		closeFns = append(closeFns, func() error {
@@ -1090,7 +1091,7 @@ func newExForTestingTerminal(
 	opts = append(opts, text.WithCommandOverlayConfig(testCommandOverlayConfig()))
 	opts = append(opts, defCommandKeyBindings()...)
 	require.NoError(t, ex.init(ed, workspace, document.NewInMemoryService(),
-		emulatorCfg, publishEvent, opts...))
+		emulatorCfg, publishEvent, clipboard.NewInMemory(), opts...))
 	ex.subscribeCommands()
 	return testEx{ex}
 }
@@ -1100,6 +1101,7 @@ func newExForTestingWithWorkspace(
 	ed text.Editor,
 	emulatorCfg vte.Config,
 	publishEvent func(term.Event) bool,
+	clip clipboard.Register,
 	opts ...text.Option,
 ) testEx {
 	ex := new(ex)
@@ -1107,7 +1109,7 @@ func newExForTestingWithWorkspace(
 	opts = append(opts, text.WithCommandOverlayConfig(testCommandOverlayConfig()))
 	opts = append(opts, defCommandKeyBindings()...)
 	require.NoError(t, ex.init(ed, workspace, document.NewInMemoryService(),
-		emulatorCfg, publishEvent, opts...))
+		emulatorCfg, publishEvent, clip, opts...))
 	ex.subscribeCommands()
 	ex.newEmulatorHandler = func(initialCmd string, cfg vte.Config) (vteHandler, error) {
 		return newTestVteWithConfig(initialCmd, cfg), nil
@@ -1120,7 +1122,14 @@ func newExForTestingWithWorkspace(
 
 func newExForTesting(t *testing.T, ed text.Editor, opts ...text.Option) testEx {
 	return newExForTestingWithWorkspace(t, &testLoader{}, ed, vte.DefaultConfig(),
-		nopPublishEvent, opts...)
+		nopPublishEvent, clipboard.NewInMemory(), opts...)
+}
+
+func newExForTestingClipboard(
+	t *testing.T, ed text.Editor, clip clipboard.Register, opts ...text.Option,
+) testEx {
+	return newExForTestingWithWorkspace(t, &testLoader{}, ed, vte.DefaultConfig(),
+		nopPublishEvent, clip, opts...)
 }
 
 func TestNewWindow(t *testing.T) {
@@ -1467,7 +1476,8 @@ AAAAAAAAAAAAAAAAAAAA`,
 
 	workspace := workspace.NewSchemeWorkspace(uri, fileScheme)
 	b := newExForTestingWithWorkspace(t, workspace,
-		texttest.NopEditor(), vte.DefaultConfig(), nopPublishEvent, opts...)
+		texttest.NopEditor(), vte.DefaultConfig(), nopPublishEvent,
+		clipboard.NewInMemory(), opts...)
 	defer b.Close()
 
 	testutil.TestHandlerSequence(t, b, 20, 10, cases)
@@ -1619,7 +1629,8 @@ reloadFile!
 		touchTestFile(t, scheme, "daworg")
 		touchTestFile(t, scheme, "retalls")
 		b := newExForTestingWithWorkspace(t, workspace.NewSchemeWorkspace(uri, scheme),
-			texttest.NopEditor(), vte.DefaultConfig(), nopPublishEvent, opts...)
+			texttest.NopEditor(), vte.DefaultConfig(), nopPublishEvent,
+			clipboard.NewInMemory(), opts...)
 		t.Cleanup(func() { _ = b.Close() })
 		return b
 	}
@@ -1702,7 +1713,7 @@ func TestTerminalOnFocus(t *testing.T) {
 		scheme, _ := workspace.NewMemoryScheme(context.Background(), config.NopConfig(), uri)
 		testConfig := vte.DefaultConfig()
 		ex := newExForTestingWithWorkspace(t, workspace.NewSchemeWorkspace(uri, scheme),
-			texttest.NopEditor(), testConfig, nopPublishEvent)
+			texttest.NopEditor(), testConfig, nopPublishEvent, clipboard.NewInMemory())
 		tvte := newTestVte()
 		ex.newEmulatorHandler = func(initialCmd string, cfg vte.Config) (vteHandler, error) {
 			assert.Equal(t, "echo bla", initialCmd)
@@ -1765,7 +1776,7 @@ func TestTerminalOnFocus(t *testing.T) {
 		scheme, _ := workspace.NewMemoryScheme(context.Background(), config.NopConfig(), uri)
 		testConfig := vte.DefaultConfig()
 		ex := newExForTestingWithWorkspace(t, workspace.NewSchemeWorkspace(uri, scheme),
-			texttest.NopEditor(), testConfig, nopPublishEvent)
+			texttest.NopEditor(), testConfig, nopPublishEvent, clipboard.NewInMemory())
 		tvte := newTestVte()
 		ex.newEmulatorHandler = func(initialCmd string, cfg vte.Config) (vteHandler, error) {
 			testConfig := testConfig
@@ -1821,7 +1832,7 @@ func TestTerminalOnFocus(t *testing.T) {
 		scheme, _ := workspace.NewMemoryScheme(context.Background(), config.NopConfig(), uri)
 		testConfig := vte.DefaultConfig()
 		ex := newExForTestingWithWorkspace(t, workspace.NewSchemeWorkspace(uri, scheme),
-			texttest.NopEditor(), testConfig, nopPublishEvent)
+			texttest.NopEditor(), testConfig, nopPublishEvent, clipboard.NewInMemory())
 		tvte := newTestVte()
 		ex.newPluginHandler = func(args ...string) (pluginHandler, error) {
 			require.Len(t, args, 2)
@@ -1996,10 +2007,73 @@ func TestMacro(t *testing.T) {
 
 	e = newExForTestingWithWorkspace(t, &testLoader{},
 		texttest.NopEditor(), vte.DefaultConfig(),
-		publishEvent, opts...)
+		publishEvent, clipboard.NewInMemory(), opts...)
 	defer e.Close()
 
 	testutil.TestHandlerSequence(t, e, 30, 15, cases)
+}
+
+func TestCopyToClipboard(t *testing.T) {
+	clip := clipboard.NewInMemory()
+	testCopyToClipboard(t, clip, func(ed text.Editor, opts ...text.Option) (
+		tui.Handler, browser.Browser, error,
+	) {
+		b := newExForTestingClipboard(t, texttest.NopEditor(), clip, opts...)
+		defer b.Close()
+		return b, b.Browser(), nil
+	})
+}
+
+func testCopyToClipboard(
+	t *testing.T, clip clipboard.Register, constructor browserConstructor,
+) {
+	cases := []testutil.HandlerSequenceTestCase{
+		{":e hello.go>",
+			`┌────────────────────────────┐
+│hello.go                    │
+├────────────────────────────┤
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+└────────────────────────────┘`},
+
+		{":clipboardCopy>",
+			`┌────────────────────────────┐
+│copied to clipboard         │
+└━━━━━━━━━━━━━━━━━━━━━━━━━━━━┘
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+└────────────────────────────┘`},
+	}
+
+	opts := []text.Option{
+		text.WithCommandKey(testCommandKey),
+	}
+	bh, _, err := constructor(texttest.NopEditor(), opts...)
+	require.NoError(t, err)
+
+	testutil.TestHandlerSequence(t, bh, 30, 15, cases)
+
+	data, err := clip.Paste(clipboard.DefaultRegisterID)
+	require.NoError(t, err)
+	assert.Equal(t, "A", data.Text)
 }
 
 func notificationsConfig() notifications.Config {

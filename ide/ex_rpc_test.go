@@ -46,6 +46,7 @@ import (
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/term/vte"
 	"unstable.build/go-tui/text"
+	"unstable.build/go-tui/text/clipboard"
 	texttest "unstable.build/go-tui/text/test"
 )
 
@@ -114,6 +115,7 @@ func (h *safeHandler) Close() error {
 
 func newTestRPCBrowser(t *testing.T,
 	destructor *func(),
+	clip clipboard.Register,
 ) browserConstructor {
 	return func(ed text.Editor, opts ...text.Option) (
 		tui.Handler, browser.Browser, error,
@@ -125,7 +127,7 @@ func newTestRPCBrowser(t *testing.T,
 		ex := new(ex)
 		ex.syncCommandPrompt = true
 		err := ex.init(ed, &testLoader{}, document.NewInMemoryService(),
-			vte.DefaultConfig(), nopPublishEvent, opts...)
+			vte.DefaultConfig(), nopPublishEvent, clip, opts...)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -165,8 +167,16 @@ func newTestRPCBrowser(t *testing.T,
 
 func TestIntegrationRPCBrowserDraw(t *testing.T) {
 	var destructor func()
-	constructor := newTestRPCBrowser(t, &destructor)
+	constructor := newTestRPCBrowser(t, &destructor, clipboard.NewInMemory())
 	testBrowserHandlerDraw(t, constructor)
+	destructor()
+}
+
+func TestIntegrationCopyToClipboard(t *testing.T) {
+	var destructor func()
+	clip := clipboard.NewInMemory()
+	constructor := newTestRPCBrowser(t, &destructor, clip)
+	testCopyToClipboard(t, clip, constructor)
 	destructor()
 }
 
@@ -174,7 +184,9 @@ func TestRPCBrowserCloseLeak(t *testing.T) {
 	uri, err := workspaceapi.ParseURI("file:///a")
 	require.NoError(t, err)
 	var destructor func()
-	_, b, err := newTestRPCBrowser(t, &destructor)(texttest.NopEditor(), text.WithFile(uri))
+	_, b, err := newTestRPCBrowser(t,
+		&destructor, clipboard.NewInMemory())(
+		texttest.NopEditor(), text.WithFile(uri))
 	require.NoError(t, err)
 	defer destructor()
 

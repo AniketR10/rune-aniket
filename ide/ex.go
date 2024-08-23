@@ -53,6 +53,7 @@ import (
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/term/vte"
 	"unstable.build/go-tui/text"
+	"unstable.build/go-tui/text/clipboard"
 	"unstable.build/go-tui/workspace"
 	"unstable.build/go-tui/workspace/walkdir"
 )
@@ -94,6 +95,7 @@ type pluginHandler interface {
 type ex struct {
 	config               text.Config
 	comp                 text.Component
+	clip                 clipboard.Register
 	ed                   text.Editor
 	storage              document.Service
 	emulatorConfig       vte.Config
@@ -127,10 +129,11 @@ func newEx(
 	storage document.Service,
 	emulatorConfig vte.Config,
 	publishEvent func(term.Event) bool,
+	clip clipboard.Register,
 	opts ...text.Option,
 ) (e *ex, err error) {
 	e = new(ex)
-	err = e.init(ed, m, storage, emulatorConfig, publishEvent, opts...)
+	err = e.init(ed, m, storage, emulatorConfig, publishEvent, clip, opts...)
 	if err != nil {
 		return
 	}
@@ -145,9 +148,10 @@ func (e *ex) init(
 	storage document.Service,
 	emulatorConfig vte.Config,
 	publishEvent func(term.Event) bool,
+	clip clipboard.Register,
 	opts ...text.Option,
 ) (err error) {
-	err = e.doInit(ed, m, storage, emulatorConfig, publishEvent, opts...)
+	err = e.doInit(ed, m, storage, emulatorConfig, publishEvent, clip, opts...)
 	if err != nil {
 		return
 	}
@@ -305,8 +309,10 @@ func (e *ex) doInit(
 	storage document.Service,
 	emulatorConfig vte.Config,
 	publishEvent func(term.Event) bool,
+	clip clipboard.Register,
 	opts ...text.Option,
 ) (err error) {
+	e.clip = clip
 	e.workspace = m
 	e.publishEvent = publishEvent
 	e.storage = storage
@@ -676,6 +682,27 @@ func (e *ex) pauseNotifications(args ...string) error {
 
 func (e *ex) resumeNotifications(args ...string) error {
 	e.comp.ResumeNotifications()
+	return nil
+}
+
+func (e *ex) copyToClipboard(args ...string) error {
+	var handler tui.Handler = e.comp.Browser()
+	if e.fullscreen != nil {
+		handler = e.fullscreen
+	}
+	data, ok := handler.Selection()
+	if !ok {
+		_ = e.Browser().Notify(notifications.LevelInfo, "nothing to copy")
+		return nil
+	}
+	err := e.clip.Copy(clipboard.DefaultRegisterID, clipboard.Data{Text: data})
+	if err != nil {
+		_ = e.Browser().Notify(notifications.LevelError,
+			"failed to copy to clipboard: %v", err)
+		err = fmt.Errorf("clipboard copy: %w", err)
+		return err
+	}
+	_ = e.Browser().Notify(notifications.LevelSuccess, "copied to clipboard")
 	return nil
 }
 

@@ -208,7 +208,8 @@ func (h *workspaceManagerHandler) init(
 	}
 	h.homeWorkspace = homeWorkspace
 	h.empty, err = newEx(ed, homeWorkspace, h.storage,
-		cfg.terminalConfig(), h.publishEvent, globalOpts...)
+		cfg.terminalConfig(), h.publishEvent, cfg.clipboard(),
+		globalOpts...)
 	if err != nil {
 		return fmt.Errorf("new ex: %w", err)
 	}
@@ -569,7 +570,7 @@ func (h *workspaceManagerHandler) addWorkspace(
 	// workspace capable of opening URIs other than the workspaceapi.URI
 	multicwd := workspace.Multi(h.ctxWithLocker, h.workspace, cwd, uri)
 	ex, err := newEx(ed, multicwd, h.storage, cfg.terminalConfig(),
-		h.publishEvent, textOpts...)
+		h.publishEvent, cfg.clipboard(), textOpts...)
 	if err != nil {
 		return fmt.Errorf("new multi workspace: %w", err)
 	}

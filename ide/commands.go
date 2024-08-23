@@ -55,7 +55,7 @@ var (
 		},
 		"macro": {
 			man: textapi.CommandManual{
-				Summary: "Replay the given sequence of keys back into Ox's event loop " +
+				Summary: "Replay the given sequence of keys back into the event loop " +
 					"as if the user had dispatched them. This allows for building macros that " +
 					"perform tasks that couldn't be accomplished with " +
 					"combinations of commands alone. For instance `macro :edit` opens " +
@@ -266,6 +266,12 @@ var (
 				Synopsis: "[executable [args]]",
 			},
 			handler: (*ex).executePlugin,
+		},
+		"clipboardCopy": {
+			man: textapi.CommandManual{
+				Summary: "Copies the selected text into the configured clipboard. ",
+			},
+			handler: (*ex).copyToClipboard,
 		},
 		cmdSetDefaultColors: {
 			man: textapi.CommandManual{
