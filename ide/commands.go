@@ -259,7 +259,7 @@ var (
 					"are printed on the window along with stats and a progress sign until " +
 					"user closes the window or hits the ESC key. \n\n" +
 					"If no executable is passed, this command opens the companion terminal emulator" +
-					"The compation terminal emulator is different " +
+					"The companion terminal emulator is different " +
 					"than a terminal emulator created by newTerminalTab in that it preserves " +
 					"the session output accross invocations. The floating window created as a " +
 					"result of this command can be closed via standard window or tab close commands.",
