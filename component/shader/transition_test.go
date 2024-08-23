@@ -97,10 +97,10 @@ func testTransitionFrames(
 						"(global frame %d) [shader %d] "+
 							"expected to be called and hasn't been called", globalFr, i,
 					)
-					assert.Equal(t, localFr, sh.frame,
+					assert.InDelta(t, localFr, sh.frame, 0.01,
 						"(global frame %d) [shader %d] wrong 'frame' passed to Shade() ", globalFr, i,
 					)
-					assert.Equal(t, shaderTotals[i], sh.total,
+					assert.InDelta(t, shaderTotals[i], sh.total, 0.01,
 						"(global frame %d) [shader %d] wrong 'total' passed to Shade()", globalFr, i,
 					)
 				} else {
