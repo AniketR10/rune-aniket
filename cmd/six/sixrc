@@ -436,6 +436,8 @@ command:
     <c-w>: closeTab
     <c-l>: nextTab
     <c-h>: previousTab
+    <c-x><c-v>: clipboardPaste
+    <c-x><c-c>: clipboardCopy
     <c-x><c-h>: focusPrevWindow
     <c-x><c-l>: focusNextWindow
     <c-x><c-j>: focusBelowWindow

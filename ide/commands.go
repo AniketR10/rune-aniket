@@ -273,6 +273,12 @@ var (
 			},
 			handler: (*ex).copyToClipboard,
 		},
+		"clipboardPaste": {
+			man: textapi.CommandManual{
+				Summary: "Paste the last text copied into the configured clipboard. ",
+			},
+			handler: (*ex).pasteFromClipboard,
+		},
 		cmdSetDefaultColors: {
 			man: textapi.CommandManual{
 				Summary: "Changes the default background and optionally foreground colors of" +

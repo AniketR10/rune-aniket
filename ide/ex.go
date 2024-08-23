@@ -685,6 +685,37 @@ func (e *ex) resumeNotifications(args ...string) error {
 	return nil
 }
 
+func (e *ex) pasteFromClipboard(args ...string) error {
+	var handler tui.Handler = e.comp.Browser()
+	if e.fullscreen != nil {
+		handler = e.fullscreen
+	}
+	data, err := e.clip.Paste(clipboard.DefaultRegisterID)
+	if err != nil {
+		return fmt.Errorf("clipboard paste: %w", err)
+	}
+	if len(data.Text) == 0 {
+		_ = e.Browser().Notify(notifications.LevelInfo, "nothing to paste")
+		return nil
+	}
+
+	handler.Handle(term.Event{
+		Type: term.EventPasteStart,
+	})
+	for _, ch := range data.Text {
+		raw := []byte(string(ch))
+		handler.Handle(term.Event{
+			Type: term.EventKey,
+			Ch:   ch,
+			Raw:  raw,
+		})
+	}
+	handler.Handle(term.Event{
+		Type: term.EventPasteEnd,
+	})
+	return nil
+}
+
 func (e *ex) copyToClipboard(args ...string) error {
 	var handler tui.Handler = e.comp.Browser()
 	if e.fullscreen != nil {
@@ -992,7 +1023,8 @@ func (e *ex) handleEvent(ev term.Event) (
 
 	if ev.Type != term.EventKey {
 		e.log(log.DebugLevel, "delegating non-key event: %+v", ev)
-		return e.comp.Browser().Handle(ev)
+		_, handled = e.comp.Browser().Handle(ev)
+		return
 	}
 
 	// If ex is configured with non character
