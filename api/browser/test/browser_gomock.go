@@ -123,6 +123,21 @@ func (mr *MockHandlerMockRecorder) Resize(width, height interface{}) *gomock.Cal
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Resize", reflect.TypeOf((*MockHandler)(nil).Resize), width, height)
 }
 
+// Selection mocks base method.
+func (m *MockHandler) Selection() (string, bool) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Selection")
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
+}
+
+// Selection indicates an expected call of Selection.
+func (mr *MockHandlerMockRecorder) Selection() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Selection", reflect.TypeOf((*MockHandler)(nil).Selection))
+}
+
 // MockFloating is a mock of Floating interface.
 type MockFloating struct {
 	ctrl     *gomock.Controller
@@ -242,6 +257,21 @@ func (m *MockFloating) Resize(width, height int) {
 func (mr *MockFloatingMockRecorder) Resize(width, height interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Resize", reflect.TypeOf((*MockFloating)(nil).Resize), width, height)
+}
+
+// Selection mocks base method.
+func (m *MockFloating) Selection() (string, bool) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Selection")
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
+}
+
+// Selection indicates an expected call of Selection.
+func (mr *MockFloatingMockRecorder) Selection() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Selection", reflect.TypeOf((*MockFloating)(nil).Selection))
 }
 
 // MockWindow is a mock of Window interface.

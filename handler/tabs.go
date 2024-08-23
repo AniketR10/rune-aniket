@@ -74,10 +74,14 @@ func (t *Tabs) Handle(ev term.Event) (quit, handled bool) {
 	return
 }
 
-// Cursor returns the underlying handler's cursor position
-// with the frame offset.
+// Cursor satisfies tui.Handler but always returns false.
 func (t *Tabs) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 	return term.Coordinates{}, term.CursorStyleDefault, false
+}
+
+// Selection satisfies tui.Handler but always returns false.
+func (t *Tabs) Selection() (string, bool) {
+	return "", false
 }
 
 // Man just delegates Man call to underlying handler.

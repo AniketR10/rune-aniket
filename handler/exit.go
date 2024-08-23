@@ -28,12 +28,6 @@ import (
 	"unstable.build/go-tui/term"
 )
 
-type keyExit struct {
-	tui.Component
-	key term.KeyComb
-	cb  func()
-}
-
 // KeyExit wraps a tui.Component which exits upon receiveing key.
 func KeyExit(c tui.Component, key term.KeyComb) tui.Handler {
 	return &keyExit{Component: c, key: key}
@@ -42,6 +36,12 @@ func KeyExit(c tui.Component, key term.KeyComb) tui.Handler {
 // KeyExitCallback wraps a tui.Component which exits and calls cb upon receiveing key.
 func KeyExitCallback(c tui.Component, key term.KeyComb, cb func()) tui.Handler {
 	return &keyExit{Component: c, key: key, cb: cb}
+}
+
+type keyExit struct {
+	tui.Component
+	key term.KeyComb
+	cb  func()
 }
 
 func (e *keyExit) Handle(ev term.Event) (exit, handled bool) {
@@ -55,6 +55,10 @@ func (e *keyExit) Handle(ev term.Event) (exit, handled bool) {
 
 func (e *keyExit) Cursor() (pos term.Coordinates, style term.CursorStyle, show bool) {
 	return
+}
+
+func (e *keyExit) Selection() (string, bool) {
+	return "", false
 }
 
 func (e *keyExit) Man() tui.Manual {

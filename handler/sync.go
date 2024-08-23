@@ -30,14 +30,14 @@ import (
 	"unstable.build/go-tui/term"
 )
 
-type hsync struct {
-	mu sync.Locker
-	h  tui.Handler
-}
-
 // Sync wraps a tui.Handler to provide access synchronization with mu.
 func Sync(mu sync.Locker, h tui.Handler) tui.Handler {
 	return hsync{mu: mu, h: h}
+}
+
+type hsync struct {
+	mu sync.Locker
+	h  tui.Handler
 }
 
 func (s hsync) Resize(width, height int) {
@@ -62,6 +62,12 @@ func (s hsync) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.h.Cursor()
+}
+
+func (s hsync) Selection() (string, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.h.Selection()
 }
 
 func (s hsync) Man() tui.Manual {

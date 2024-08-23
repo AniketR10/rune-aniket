@@ -109,6 +109,10 @@ func (p *player) Cursor() (pos term.Coordinates, style term.CursorStyle, show bo
 	return
 }
 
+func (p *player) Selection() (string, bool) {
+	return "", false
+}
+
 func (p *player) Man() tui.Manual {
 	return tui.Manual{}
 }

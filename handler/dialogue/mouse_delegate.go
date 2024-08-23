@@ -26,27 +26,26 @@ package dialogue
 import (
 	"fmt"
 
-	log "github.com/sirupsen/logrus"
-	"github.com/unstablebuild/blue/logging"
 	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
-	"unstable.build/go-tui/text/clipboard"
 )
 
 func newMouseDelegate(
-	l *component.ResponsiveList, clip clipboard.Register,
-) text.MouseDelegate {
-	return &mouseDelegate{list: l, clipboard: clip}
+	l *component.ResponsiveList,
+) *mouseDelegate {
+	return &mouseDelegate{list: l}
 }
+
+var _ text.MouseDelegate = (*mouseDelegate)(nil)
 
 // satisfies text.MouseDelegate
 type mouseDelegate struct {
 	list          *component.ResponsiveList
 	selection     component.WithAttributes
 	selectionAttr term.Attributes
-	clipboard     clipboard.Register
+	selectionText string
 }
 
 func (d *mouseDelegate) OnAction(ev term.Event, pos term.Coordinates, action text.MouseAction) bool {
@@ -78,15 +77,11 @@ func (d *mouseDelegate) SetSelectionEnd(pos term.Coordinates) {
 	content := node.Value().(*component.Span).Content().(*component.AttrSetter)
 	d.selectionAttr = content.SetAttr(term.Attributes{Attrs: tcell.AttrReverse})
 	d.selection = content
+	d.selectionText = content.Content().(fmt.Stringer).String()
+}
 
-	err := d.clipboard.Copy(clipboard.DefaultRegisterID,
-		clipboard.Data{Text: content.Content().(fmt.Stringer).String()})
-	if err != nil {
-		log.WithFields(log.Fields{
-			logging.KeyClass: "dialogue.mouseDelegate",
-			logging.KeyError: err,
-		}).Error("copy to clipboard")
-	}
+func (d *mouseDelegate) Selection() (string, bool) {
+	return d.selectionText, d.selection != nil
 }
 
 func (d *mouseDelegate) ClearSelection() {

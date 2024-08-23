@@ -31,17 +31,15 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"unstable.build/go-tui/term"
-	"unstable.build/go-tui/text/clipboard"
 )
 
 func TestHandlerIntegration(t *testing.T) {
-	clip := clipboard.NewInMemory()
 	interrupt := make(chan struct{})
 	h, tx, rx := Handler(new(sync.Mutex),
 		NewComponent(ComponentConfig{}), term.FuncInterrupter(func(context.Context) error {
 			interrupt <- struct{}{}
 			return nil
-		}), clip)
+		}))
 	defer close(tx)
 	h.Resize(20, 9)
 
@@ -76,23 +74,5 @@ Well, hello Sir.
  ┌──────────────┐   
  │              │   
  └──────────────┘   `, out)
-	})
-
-	t.Run("double click should select and copy to clipboard", func(t *testing.T) {
-		_, handled := h.Handle(term.Event{Type: term.EventMouse, Key: term.MouseLeft})
-		assert.True(t, handled)
-		_, handled = h.Handle(term.Event{Type: term.EventMouse, Key: term.MouseLeft})
-		assert.True(t, handled)
-
-		data, err := clip.Paste(clipboard.DefaultRegisterID)
-		require.NoError(t, err)
-		assert.Equal(t, "Hello assistant!", data.Text)
-
-		_, handled = h.Handle(term.Event{Type: term.EventMouse, MouseY: 1, Key: term.MouseLeft})
-		assert.True(t, handled)
-
-		data, err = clip.Paste(clipboard.DefaultRegisterID)
-		require.NoError(t, err)
-		assert.Equal(t, "Well, hello Sir.", data.Text)
 	})
 }

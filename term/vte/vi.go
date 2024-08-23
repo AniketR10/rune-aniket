@@ -224,6 +224,14 @@ func (v *viHandler) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 	return v.sync.vi.Cursor()
 }
 
+// Selection satisfies tui.Handler.
+func (v *viHandler) Selection() (string, bool) {
+	v.sync.mu.Lock()
+	defer v.sync.mu.Unlock()
+
+	return v.sync.vi.Selection()
+}
+
 // Edit implements the following behavior (B is content not allowed to edit,
 // A is content allowed to edit, E is edit):
 //

@@ -65,6 +65,11 @@ type Client struct {
 		show  bool
 		style term.CursorStyle
 	}
+
+	selection struct {
+		text string
+		ok   bool
+	}
 }
 
 // NewClient allocates storage for a new Client and initializes it.
@@ -116,12 +121,20 @@ func (c *Client) Draw(w term.Writer) {
 	c.cursor.Coordinates.X = int(cursor.GetPosition().GetX())
 	c.cursor.Coordinates.Y = int(cursor.GetPosition().GetY())
 
+	selection := resp.GetSelection()
+	c.selection.text = selection.GetText()
+	c.selection.ok = selection.GetOk()
+
 	doDraw(w, resp)
 }
 
 // Cursor satisfies tui.Handler
 func (c *Client) Cursor() (pos term.Coordinates, style term.CursorStyle, show bool) {
 	return c.cursor.Coordinates, c.cursor.style, c.cursor.show
+}
+
+func (c *Client) Selection() (string, bool) {
+	return c.selection.text, c.selection.ok
 }
 
 // Handle satisfies tui.Handler

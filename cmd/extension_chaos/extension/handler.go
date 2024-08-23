@@ -251,6 +251,13 @@ func (h *chaosHandler) Handle(ev term.Event) (exit, handled bool) {
 	return
 }
 
+func (h *chaosHandler) Selection() (string, bool) {
+	if !h.panic {
+		time.Sleep(h.sleepTime)
+	}
+	return "", false
+}
+
 func (h *chaosHandler) Cursor() (
 	pos term.Coordinates, style term.CursorStyle, show bool,
 ) {

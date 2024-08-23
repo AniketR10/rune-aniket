@@ -183,6 +183,11 @@ func (l *Less) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 	return ret, term.CursorStyleDefault, true
 }
 
+// Selection satisfies tui.Handler
+func (l *Less) Selection() (string, bool) {
+	return "", false
+}
+
 // Draw satisfies tui.Component
 func (l *Less) Draw(w term.Writer) {
 	l.scroll.Draw(w)

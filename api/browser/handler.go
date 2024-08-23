@@ -146,6 +146,12 @@ func (s syncHandler) Cursor() (c term.Coordinates, style term.CursorStyle, show 
 	return s.handler.Cursor()
 }
 
+func (s syncHandler) Selection() (string, bool) {
+	s.locker.Lock()
+	defer s.locker.Unlock()
+	return s.handler.Selection()
+}
+
 func (s syncHandler) Man() tui.Manual {
 	s.locker.Lock()
 	defer s.locker.Unlock()

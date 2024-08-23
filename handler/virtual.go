@@ -34,7 +34,7 @@ type Virtual struct {
 	component.Virtual
 }
 
-// Handle tui.Handler
+// Handle satisfies tui.Handler.
 func (v *Virtual) Handle(ev term.Event) (bool, bool) {
 	if ev.Type == term.EventMouse {
 		offset := v.Position()
@@ -44,7 +44,7 @@ func (v *Virtual) Handle(ev term.Event) (bool, bool) {
 	return v.C.(tui.Handler).Handle(ev)
 }
 
-// Cursor tui.Handler
+// Cursor satisfies tui.Handler.
 func (v *Virtual) Cursor() (pos term.Coordinates, style term.CursorStyle, show bool) {
 	pos, style, show = v.C.(tui.Handler).Cursor()
 	offset := v.Position()
@@ -53,7 +53,12 @@ func (v *Virtual) Cursor() (pos term.Coordinates, style term.CursorStyle, show b
 	return
 }
 
-// Man tui.Handler
+// Selection satisfies tui.Handler.
+func (v *Virtual) Selection() (string, bool) {
+	return v.C.(tui.Handler).Selection()
+}
+
+// Man satisfies tui.Handler.
 func (v *Virtual) Man() tui.Manual {
 	return v.C.(tui.Handler).Man()
 }

@@ -122,6 +122,12 @@ func (vi *Vi) init(viHandler *viHandlerImpl, buf *cell.Buffer, resource workspac
 	vi.snapshotContent()
 }
 
+// Selection returns the text currently selected by Vi's visual mode,
+// or false if there's no text selected.
+func (vi *Vi) Selection() (string, bool) {
+	return vi.handler.Selection()
+}
+
 // Cursor satisfies tui.Handler
 func (vi *Vi) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 	return vi.handler.Cursor()

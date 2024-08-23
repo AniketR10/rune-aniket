@@ -104,6 +104,14 @@ func (s simpleHandler) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 	return c, style, ok
 }
 
+func (s simpleHandler) Selection() (string, bool) {
+	match, ok := s.Focus()
+	if !ok {
+		return "", false
+	}
+	return string(match.Data()), true
+}
+
 func (s simpleHandler) Man() tui.Manual {
 	panic("TODO")
 }

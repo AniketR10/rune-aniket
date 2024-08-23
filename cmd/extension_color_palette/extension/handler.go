@@ -150,6 +150,10 @@ func (h *colorPaletteHandler) Cursor() (pos term.Coordinates, style term.CursorS
 	return
 }
 
+func (h *colorPaletteHandler) Selection() (string, bool) {
+	return "", false
+}
+
 func (h *colorPaletteHandler) Man() tui.Manual {
 	return tui.Manual{}
 }

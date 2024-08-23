@@ -323,6 +323,17 @@ func (e *Handler) Cursor() (pos term.Coordinates, style term.CursorStyle, show b
 	return
 }
 
+// Selection satisfies tui.Handler.
+func (e *Handler) Selection() (data string, ok bool) {
+	if e.exit.Load() {
+		return
+	}
+	if e.viMode {
+		return e.vi.Selection()
+	}
+	return e.comp.Selection()
+}
+
 // Man satisfies tui.Handler.
 func (e *Handler) Man() tui.Manual {
 	if e.viMode {

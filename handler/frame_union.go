@@ -150,6 +150,11 @@ func (u *FrameUnion) Cursor() (pos term.Coordinates, style term.CursorStyle, sho
 	return
 }
 
+// Selection returns the main component's selection.
+func (u *FrameUnion) Selection() (string, bool) {
+	return u.main.Selection()
+}
+
 // Man satisfies tui.Handler.
 func (u *FrameUnion) Man() tui.Manual {
 	return tui.Manual{}

@@ -53,6 +53,10 @@ func (n nopHandler) Cursor() (pos term.Coordinates, style term.CursorStyle, show
 	return
 }
 
+func (n nopHandler) Selection() (string, bool) {
+	return "", false
+}
+
 func (n nopHandler) Man() tui.Manual {
 	return tui.Manual{}
 }

@@ -185,6 +185,12 @@ func (h *simpleEditorHandler) Cursor() (
 	return h.cursor.Coordinates(), term.CursorStyleSteadyBar, true
 }
 
+// Selection satisfies tui.Handler.
+func (h *simpleEditorHandler) Selection() (string, bool) {
+	text := h.cursor.Selection()
+	return text, text != ""
+}
+
 // Man satisfies tui.Handler
 func (h *simpleEditorHandler) Man() tui.Manual {
 	return tui.Manual{}

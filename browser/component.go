@@ -919,6 +919,11 @@ func (c *Component) Cursor() (pos term.Coordinates, style term.CursorStyle, show
 	return c.union.Cursor()
 }
 
+// Selection returns the underlying FrameUnion's selection.
+func (c *Component) Selection() (string, bool) {
+	return c.union.Selection()
+}
+
 // Prompt creates a new prompt to be drawn as an overlay on the next call to Draw
 // and it also takes over event control until user either exits prompt or selects
 // an option. The passed options and bindings must be equal in length, or bindings

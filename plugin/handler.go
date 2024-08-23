@@ -159,6 +159,11 @@ func (e *Handler) Cursor() (pos term.Coordinates, style term.CursorStyle, show b
 	return
 }
 
+// Selection satisfies browser.Floating.
+func (e *Handler) Selection() (string, bool) {
+	return e.handler().Selection()
+}
+
 // Man satisfies browser.Floating.
 func (e *Handler) Man() tui.Manual {
 	return e.handler().Man()

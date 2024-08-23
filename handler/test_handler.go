@@ -39,6 +39,7 @@ type TestHandler struct {
 	Exit           bool
 	Handled        bool
 	HandleOverride func(term.Event) (bool, bool)
+	SelectionText  string
 }
 
 // NewTestHandler will allocate storage for a new handler and initialize it
@@ -64,6 +65,11 @@ func (t *TestHandler) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 		return term.Coordinates{X: -1, Y: -1}, 0, false
 	}
 	return t.CursorPos, t.CursorStyle, true
+}
+
+// Selection satisfies tui.Handler.
+func (t *TestHandler) Selection() (string, bool) {
+	return t.SelectionText, t.SelectionText != ""
 }
 
 // Man returns set Manual.

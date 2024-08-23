@@ -18,8 +18,14 @@ message DrawResponse {
 		int32 style = 3;
 	}
 
+	message Selection {
+		string text = 1;
+		bool ok = 2;
+	}
+
 	repeated term.CellRow rows = 1;
 	Cursor cursor = 2;
+	Selection selection = 3;
 }
 
 message HandleRequest {

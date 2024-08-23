@@ -57,6 +57,11 @@ func (i *Proxy) Cursor() (pos term.Coordinates, style term.CursorStyle, show boo
 	return i.Target.Cursor()
 }
 
+// Selection satisfies tui.Handler.
+func (i *Proxy) Selection() (string, bool) {
+	return i.Target.Selection()
+}
+
 // Man satisfies tui.Handler.
 func (i *Proxy) Man() tui.Manual {
 	return i.Target.Man()

@@ -98,9 +98,14 @@ func (b *Tab) Handle(ev term.Event) (exit, handled bool) {
 	return
 }
 
-// Cursor satisfies tui.Handler
+// Cursor satisfies tui.Handler.
 func (b *Tab) Cursor() (pos term.Coordinates, style term.CursorStyle, show bool) {
 	return b.handler.Cursor()
+}
+
+// Selection satisfies tui.Handler.
+func (b *Tab) Selection() (string, bool) {
+	return b.handler.Selection()
 }
 
 // Man satisfies tui.Handler

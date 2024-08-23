@@ -32,7 +32,6 @@ import (
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
-	"unstable.build/go-tui/text/clipboard"
 )
 
 // EOM must be used by clients of Handler on the returned tx
@@ -51,19 +50,20 @@ const EOM = "\n\n\n"
 // locker is used to synchronize access to c.
 func Handler(
 	locker sync.Locker, c *Component,
-	interrupter term.Interrupter, clip clipboard.Register,
+	interrupter term.Interrupter,
 ) (h tui.Handler, tx chan<- string, rx <-chan string) {
 	ch1 := make(chan string)
 	ch2 := make(chan string)
-
-	mouse := text.NewMouse(newMouseDelegate(&c.messages, clip))
+	mouseDelegate := newMouseDelegate(&c.messages)
+	mouse := text.NewMouse(mouseDelegate)
 	sh := &dialogueHandler{
-		interrupter: interrupter,
-		mouse:       mouse,
-		comp:        c,
-		rx:          ch2,
-		tx:          ch1,
-		mu:          locker,
+		interrupter:   interrupter,
+		mouse:         mouse,
+		mouseDelegate: mouseDelegate,
+		comp:          c,
+		rx:            ch2,
+		tx:            ch1,
+		mu:            locker,
 	}
 	go sh.consumeIncoming()
 
@@ -71,6 +71,7 @@ func Handler(
 }
 
 type dialogueHandler struct {
+	*mouseDelegate
 	comp        *Component
 	interrupter term.Interrupter
 	mouse       *text.Mouse
@@ -179,6 +180,10 @@ func (s *dialogueHandler) Handle(ev term.Event) (exit, handled bool) {
 	}
 
 	return
+}
+
+func (s *dialogueHandler) Selection() (string, bool) {
+	return s.mouseDelegate.Selection()
 }
 
 func (s *dialogueHandler) Cursor() (

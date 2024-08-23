@@ -49,6 +49,10 @@ func (f floatingBuffer) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 	return f.h.Cursor()
 }
 
+func (f floatingBuffer) Selection() (string, bool) {
+	return f.h.Selection()
+}
+
 func (f floatingBuffer) Man() tui.Manual {
 	return f.h.Man()
 }

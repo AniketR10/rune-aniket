@@ -195,6 +195,11 @@ func (i *Box) Cursor() (pos term.Coordinates, style term.CursorStyle, show bool)
 	return i.frame.Cursor()
 }
 
+// Selection satisfies tui.Handler.
+func (i *Box) Selection() (string, bool) {
+	return i.frame.Selection()
+}
+
 // Man satisfies tui.Handler.
 func (i *Box) Man() tui.Manual {
 	return tui.Manual{}

@@ -826,6 +826,12 @@ func (vi *viHandlerImpl) handleGo(ev term.Event) (quit, handled bool) {
 	return
 }
 
+// Selection satisfies tui.Handler
+func (vi *viHandlerImpl) Selection() (string, bool) {
+	text := vi.cursor.Selection()
+	return text, text != ""
+}
+
 // Handle satisfies tui.Handler
 func (vi *viHandlerImpl) Handle(ev term.Event) (quit, handled bool) {
 	// only a user event clears a pending set cursor

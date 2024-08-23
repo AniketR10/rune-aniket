@@ -135,6 +135,11 @@ func (f *Prompt) Handle(ev term.Event) (exit, handled bool) {
 	return
 }
 
+// Selection satisfies tui.Handler but always returns false.
+func (f *Prompt) Selection() (string, bool) {
+	return "", false
+}
+
 // Cursor satisfies tui.Handler.
 func (f *Prompt) Cursor() (pos term.Coordinates, style term.CursorStyle, show bool) {
 	return

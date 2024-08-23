@@ -451,7 +451,7 @@ func (h *aiEditorHandler) handleChat(cmd textapi.Command) error {
 	// do not append queryOptions, the default ones suffice
 	opts := defaultOpts
 	dialogueManager := aiDialogue.NewManager(backendService, h.dialogueStore, opts...)
-	dhandler, tx, rx := dialogue.Handler(mu, comp, h.p, h.clip)
+	dhandler, tx, rx := dialogue.Handler(mu, comp, h.p)
 
 	ctx, cancel := context.WithCancel(h.ctx)
 	d, err := h.getDialogue(ctx, h.dialogueStore, cmd)
@@ -494,7 +494,7 @@ func (h *aiEditorHandler) handleChat(cmd textapi.Command) error {
 func (h *aiEditorHandler) handleQuery(cmd textapi.Command) error {
 	mu := new(sync.Mutex)
 	comp := h.newDialogueComponent()
-	dhandler, tx, rx := dialogue.Handler(mu, comp, h.p, h.clip)
+	dhandler, tx, rx := dialogue.Handler(mu, comp, h.p)
 
 	queryID := strconv.Itoa(rand.Int())
 	ctx, cancel := context.WithCancel(h.ctx)

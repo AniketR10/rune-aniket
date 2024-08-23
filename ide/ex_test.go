@@ -2057,6 +2057,10 @@ func (t *testVte) Cursor() (ret term.Coordinates, style term.CursorStyle, show b
 	return
 }
 
+func (t *testVte) Selection() (string, bool) {
+	return "", false
+}
+
 func (t *testVte) Man() tui.Manual {
 	return tui.Manual{}
 }

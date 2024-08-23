@@ -379,6 +379,10 @@ func (c *AsyncClient) sendDrawReq(r request) error {
 	c.state = stateAsyncIdle // reset error timeout after a successful response
 	c.timeout = startingErrorTimeout
 
+	selection := resp.GetSelection()
+	c.selection.text = selection.GetText()
+	c.selection.ok = selection.GetOk()
+
 	return nil
 }
 

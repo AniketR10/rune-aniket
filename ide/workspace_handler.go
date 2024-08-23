@@ -421,6 +421,10 @@ func (h *workspaceManagerHandler) Cursor() (term.Coordinates, term.CursorStyle, 
 	return h.focusHandler().Cursor()
 }
 
+func (h *workspaceManagerHandler) Selection() (string, bool) {
+	return h.focusHandler().Selection()
+}
+
 func (h *workspaceManagerHandler) Man() tui.Manual {
 	return h.focusHandler().Man()
 }

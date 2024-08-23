@@ -28,11 +28,6 @@ import (
 	"unstable.build/go-tui/term"
 )
 
-type wrapHandler struct {
-	h  tui.Handler
-	fn func(term.Event) (bool, bool)
-}
-
 // Wrap wraps a tui.Handler with a fn that gets called
 // instead of Handle called on h. The rest of tui.Handler
 // methods are delegated directly to h, so if h.Handle needs to be
@@ -42,6 +37,11 @@ type wrapHandler struct {
 // are also dispatched as events to fn, after Resize has been called on h.
 func Wrap(h tui.Handler, fn func(term.Event) (bool, bool)) tui.Handler {
 	return wrapHandler{h: h, fn: fn}
+}
+
+type wrapHandler struct {
+	h  tui.Handler
+	fn func(term.Event) (bool, bool)
 }
 
 func (n wrapHandler) Resize(width, height int) {
@@ -59,6 +59,10 @@ func (n wrapHandler) Handle(ev term.Event) (exit, handled bool) {
 
 func (n wrapHandler) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 	return n.h.Cursor()
+}
+
+func (n wrapHandler) Selection() (string, bool) {
+	return n.h.Selection()
 }
 
 func (n wrapHandler) Man() tui.Manual {

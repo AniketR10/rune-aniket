@@ -135,6 +135,21 @@ func (mr *MockHandlerMockRecorder) Resource() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Resource", reflect.TypeOf((*MockHandler)(nil).Resource))
 }
 
+// Selection mocks base method.
+func (m *MockHandler) Selection() (string, bool) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Selection")
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
+}
+
+// Selection indicates an expected call of Selection.
+func (mr *MockHandlerMockRecorder) Selection() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Selection", reflect.TypeOf((*MockHandler)(nil).Selection))
+}
+
 // MockCellEditor is a mock of CellEditor interface.
 type MockCellEditor struct {
 	ctrl     *gomock.Controller

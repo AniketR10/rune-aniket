@@ -66,6 +66,11 @@ func (k keyMappingHandler) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 	return k.inner.Cursor()
 }
 
+// Selection delegates call to underlying handler.
+func (k keyMappingHandler) Selection() (string, bool) {
+	return k.inner.Selection()
+}
+
 // Man returns remapped Manual from underlying handler.
 func (k keyMappingHandler) Man() tui.Manual {
 	m := k.inner.Man()

@@ -25,10 +25,13 @@ package browser
 
 import (
 	"unstable.build/go-tui"
+	browserapi "unstable.build/go-tui/api/browser"
 	"unstable.build/go-tui/term"
 )
 
 const errMsg = "this Handler is a token handler that cannot be used directly"
+
+var _ browserapi.Handler = Token{}
 
 // Token is a token handler used to indicate which of the remote handlers
 // to set as content to a remote server. It satisfies tui.Handler so that clients
@@ -45,6 +48,11 @@ func (h Token) Handle(term.Event) (exit, handled bool) {
 
 // Cursor panics if called. This tui.Handler implementation is symbolic.
 func (h Token) Cursor() (term.Coordinates, term.CursorStyle, bool) {
+	panic(errMsg)
+}
+
+// Selection panics if called. This tui.Handler implementation is symbolic.
+func (h Token) Selection() (string, bool) {
 	panic(errMsg)
 }
 

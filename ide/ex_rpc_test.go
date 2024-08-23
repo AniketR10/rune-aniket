@@ -95,6 +95,13 @@ func (h *safeHandler) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 	defer h.mu.Unlock()
 	return h.Handler.Cursor()
 }
+
+func (h *safeHandler) Selection() (string, bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.Handler.Selection()
+}
+
 func (h *safeHandler) Man() tui.Manual {
 	h.mu.Lock()
 	defer h.mu.Unlock()

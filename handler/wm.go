@@ -313,7 +313,13 @@ func (wm *WindowManager) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 	return term.CoordinatesSum(cursor, offset), style, show
 }
 
-// Man : Handler
+// Selectiopn satisfies tui.Handler.
+func (wm *WindowManager) Selection() (string, bool) {
+	content := wm.focus.Content()
+	return content.Selection()
+}
+
+// Man satisfies tui.Handler.
 func (wm *WindowManager) Man() tui.Manual {
 	return tui.Manual{
 		Summary: "WindowManager implements a tiled window manager.",

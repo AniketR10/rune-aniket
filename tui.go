@@ -56,6 +56,11 @@ type Handler interface {
 	Handle(term.Event) (exit, handled bool)
 	// Cursor should return the cursor coordinates, style and whether it should be shown at all.
 	Cursor() (c term.Coordinates, s term.CursorStyle, show bool)
+
+	// Selection returns the selected text and true if there's currently any, or
+	// an empty string and false if there's no text selected.
+	Selection() (string, bool)
+
 	// Man returns a Handler's usage manual. See Manual for more information.
 	Man() Manual
 }

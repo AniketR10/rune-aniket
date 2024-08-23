@@ -387,6 +387,10 @@ func (m *mockHandler) Cursor() (c term.Coordinates, s term.CursorStyle, show boo
 	return
 }
 
+func (m *mockHandler) Selection() (string, bool) {
+	return "", false
+}
+
 func (m *mockHandler) Man() tui.Manual {
 	return tui.Manual{}
 }

@@ -76,6 +76,11 @@ func (f *Frame) Cursor() (pos term.Coordinates, style term.CursorStyle, show boo
 	return
 }
 
+// Selection returns the underlying handler's selection.
+func (f *Frame) Selection() (string, bool) {
+	return f.handler.Selection()
+}
+
 // Man just delegates Man call to underlying handler.
 func (f *Frame) Man() tui.Manual {
 	return f.handler.Man()

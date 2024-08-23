@@ -87,6 +87,12 @@ func (f *floatingClientImpl) Cursor() (pos term.Coordinates, style term.CursorSt
 	return pos, style, show
 }
 
+func (f *floatingClientImpl) Selection() (string, bool) {
+	selection, ok := f.client.Selection()
+	runtime.KeepAlive(f)
+	return selection, ok
+}
+
 func (f *floatingClientImpl) Man() tui.Manual {
 	man := f.client.Man()
 	runtime.KeepAlive(f)

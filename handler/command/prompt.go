@@ -912,6 +912,11 @@ func (h *Prompt) reset() {
 	h.list.Buffer().Reset()
 }
 
+// Selection satisfies tui.Handler.
+func (h *Prompt) Selection() (string, bool) {
+	return "", false
+}
+
 // Cursor satisfies tui.Handler
 func (h *Prompt) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 	if h.width == 0 {

@@ -1140,13 +1140,12 @@ func (e *ex) Handle(ev term.Event) (exit, handled bool) {
 func (e *ex) Cursor() (
 	pos term.Coordinates, style term.CursorStyle, show bool,
 ) {
-	if e.cmd != nil {
-		return e.cmdV.Cursor()
-	}
-	if e.fullscreen != nil {
-		return e.fullscreen.Cursor()
-	}
-	return e.comp.Browser().Cursor()
+	return e.focusHandler().Cursor()
+}
+
+// Selection satisfies tui.Handler.
+func (e *ex) Selection() (string, bool) {
+	return e.focusHandler().Selection()
 }
 
 // Man satisfies tui.Handler.
@@ -1216,11 +1215,6 @@ func (e *ex) Browser() browser.Browser {
 	return &e.comp
 }
 
-func (e *ex) cleanPartialReissueState() {
-	e.cancelPartialReissue = nil
-	e.ctxPartialReissue = context.Background()
-}
-
 // Close closes the resources associated with this browser.
 func (e *ex) Close() (ret error) {
 	e.sequencer.Reset()
@@ -1242,6 +1236,21 @@ func (e *ex) Close() (ret error) {
 		}
 	}
 	return
+}
+
+func (e *ex) cleanPartialReissueState() {
+	e.cancelPartialReissue = nil
+	e.ctxPartialReissue = context.Background()
+}
+
+func (e *ex) focusHandler() tui.Handler {
+	if e.cmd != nil {
+		return &e.cmdV
+	}
+	if e.fullscreen != nil {
+		return e.fullscreen
+	}
+	return e.comp.Browser()
 }
 
 type pluginAdapter struct {

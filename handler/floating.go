@@ -43,15 +43,6 @@ func StaticFloating(h tui.Handler, width, height int) Floating {
 	return staticFloating{width: width, height: height, Handler: h}
 }
 
-type staticFloating struct {
-	tui.Handler
-	width, height int
-}
-
-func (s staticFloating) Dimensions() (int, int) {
-	return s.width, s.height
-}
-
 // PaddedFloating wraps a Floating component and adds a pre-determined
 // amount of x axis and y axis padding.
 func PaddedFloating(f Floating, padx, pady int) Floating {
@@ -62,6 +53,15 @@ func PaddedFloating(f Floating, padx, pady int) Floating {
 // nothing when any of the tui.Handler methods are called.
 func NopFloatingHandler(h component.Floating) Floating {
 	return nopFloating{Floating: h}
+}
+
+type staticFloating struct {
+	tui.Handler
+	width, height int
+}
+
+func (s staticFloating) Dimensions() (int, int) {
+	return s.width, s.height
 }
 
 type paddedFloating struct {
@@ -86,6 +86,10 @@ func (n nopFloating) Handle(term.Event) (bool, bool) {
 
 func (n nopFloating) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 	return term.Coordinates{}, term.CursorStyleDefault, false
+}
+
+func (n nopFloating) Selection() (string, bool) {
+	return "", false
 }
 
 func (n nopFloating) Man() tui.Manual {

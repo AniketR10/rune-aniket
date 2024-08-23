@@ -581,6 +581,10 @@ func (h *fuzzyFinderHandler) Handle(ev term.Event) (exit, handled bool) {
 	return
 }
 
+func (h *fuzzyFinderHandler) Selection() (string, bool) {
+	return h.listHandler.Selection()
+}
+
 func (h *fuzzyFinderHandler) Cursor() (
 	pos term.Coordinates, style term.CursorStyle, show bool,
 ) {
