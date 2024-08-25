@@ -34,7 +34,7 @@ import (
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
-	timage "unstable.build/go-tui/component/image"
+	"unstable.build/go-tui/component/asciiart"
 	"unstable.build/go-tui/term"
 )
 
@@ -46,7 +46,7 @@ var _ (tui.Component) = (*Component)(nil)
 // upon calls to Draw.
 type Component struct {
 	trackID, streamID  string
-	cfg                timage.Config
+	cfg                asciiart.Config
 	interrupter        term.Interrupter
 	reader             video.Reader
 	ctx                context.Context
@@ -64,7 +64,7 @@ type Component struct {
 func NewComponent(
 	trackID, streamID string,
 	interrupter term.Interrupter, fps int,
-	reader video.Reader, cfg timage.Config,
+	reader video.Reader, cfg asciiart.Config,
 ) *Component {
 	ret := new(Component)
 	ret.Init(trackID, streamID, interrupter, fps, reader, cfg)
@@ -76,7 +76,7 @@ func NewComponent(
 func (c *Component) Init(
 	trackID, streamID string,
 	interrupter term.Interrupter, fps int, reader video.Reader,
-	cfg timage.Config,
+	cfg asciiart.Config,
 ) {
 	c.trackID, c.streamID = trackID, streamID
 	c.cfg = cfg
@@ -142,7 +142,7 @@ func (c *Component) consumeVideoSource(cadence time.Duration) {
 			// pre-calculate aspect ratio to avoid
 			// Encode having to calculate it for each frame.
 			if c.cfg.MaintainAspectRatio && frameWidth != 0 && frameHeight != 0 {
-				width, height = timage.ResizeMaintainAspectRatio(
+				width, height = asciiart.ResizeMaintainAspectRatio(
 					frameWidth, frameHeight, width, height)
 			}
 			c.log(log.TraceLevel, "resize received. width=%d height=%d", width, height)
@@ -180,7 +180,7 @@ func (c *Component) consumeFrame(width, height int) (
 	// Encode having to calculate it for each frame.
 	cfg := c.cfg
 	cfg.MaintainAspectRatio = false
-	timage.Encode(&c.buf, width, height, img, cfg)
+	asciiart.Encode(&c.buf, width, height, img, cfg)
 
 	frameWidth = img.Bounds().Dx()
 	frameHeight = img.Bounds().Dy()

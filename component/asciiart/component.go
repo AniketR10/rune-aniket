@@ -21,7 +21,7 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package image
+package asciiart
 
 import (
 	"image"
@@ -32,9 +32,9 @@ import (
 	"unstable.build/go-tui/term"
 )
 
-// New returns a tui.Component that renders the given image
-// with the given config.
-func New(img image.Image, config Config) tui.Component {
+// NewComponent returns a tui.Component that renders the given image
+// as ascii art.
+func NewComponent(img image.Image, config Config) tui.Component {
 	return &imgComp{
 		img:    img,
 		config: config,

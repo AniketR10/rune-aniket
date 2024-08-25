@@ -32,7 +32,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
-	timage "unstable.build/go-tui/component/image"
+	"unstable.build/go-tui/component/asciiart"
 	"unstable.build/go-tui/term"
 )
 
@@ -46,7 +46,7 @@ func TestComponent(t *testing.T) {
 		return nil
 	})
 	reader := testVideoReader{}
-	cfg := timage.DefaultConfig()
+	cfg := asciiart.DefaultConfig()
 	w := term.NewStringWriter(8, 4)
 
 	expected := "1111    \n1111    \n    @@@@\n    @@@@"

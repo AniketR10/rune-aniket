@@ -27,7 +27,7 @@ import (
 	"math"
 
 	"github.com/unstablebuild/tcell/v3"
-	"unstable.build/go-tui/component/image"
+	"unstable.build/go-tui/component/asciiart"
 	"unstable.build/go-tui/component/shader/shaderutils"
 	"unstable.build/go-tui/term"
 )
@@ -69,7 +69,7 @@ func (s *bomb) Shade(epoch, total int, cells [][]term.Cell) {
 		return
 	}
 
-	cAR := 1 / image.HeightToWidthCellAspectRatio
+	cAR := 1 / asciiart.HeightToWidthCellAspectRatio
 	cARSq := cAR * cAR
 
 	cols := len(cells)

@@ -38,7 +38,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/component"
-	timage "unstable.build/go-tui/component/image"
+	"unstable.build/go-tui/component/asciiart"
 	"unstable.build/go-tui/term"
 )
 
@@ -57,7 +57,7 @@ type Device struct {
 // NewDevice creates a new video capturing device and exposes it as a tui.Component.
 // The given interrupter will be used to invoke draws at the given fps frames per second.
 // See more details here: https://github.com/pion/mediadevices/blob/master/examples/webrtc/main.go
-func NewDevice(interrupter term.Interrupter, fps int, cfg timage.Config) (
+func NewDevice(interrupter term.Interrupter, fps int, cfg asciiart.Config) (
 	*Device, error,
 ) {
 	/*
@@ -114,7 +114,7 @@ func NewDevice(interrupter term.Interrupter, fps int, cfg timage.Config) (
 // MediaStream.
 func (d *Device) Init(
 	interrupter term.Interrupter, fps int,
-	stream mediadevices.MediaStream, cfg timage.Config,
+	stream mediadevices.MediaStream, cfg asciiart.Config,
 ) error {
 	d.stream = stream
 	d.tracks = stream.GetTracks()

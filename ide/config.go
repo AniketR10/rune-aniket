@@ -43,7 +43,7 @@ import (
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component"
-	timage "unstable.build/go-tui/component/image"
+	"unstable.build/go-tui/component/asciiart"
 	"unstable.build/go-tui/component/notifications"
 	extutil "unstable.build/go-tui/extension/util"
 	"unstable.build/go-tui/handler"
@@ -1076,12 +1076,12 @@ func openImage(imagePath string) (image.Image, error) {
 func makeWallpaper(img image.Image, densityCharacters string) browser.Wallpaper {
 	return browser.Wallpaper{
 		NewComponent: func() tui.Component {
-			cfg := timage.DefaultConfig()
+			cfg := asciiart.DefaultConfig()
 			cfg.Color = true
 			cfg.MaintainAspectRatio = true
 			cfg.DensityCharacters = densityCharacters
-			image := timage.New(img, cfg)
-			return component.NewSpan(image, component.SpanConfig{
+			comp := asciiart.NewComponent(img, cfg)
+			return component.NewSpan(comp, component.SpanConfig{
 				PadHorizontalPerc: 0.4,
 				PadVerticalPerc:   0.2,
 				ContentAlignment:  component.SpanAlignmentCentered,

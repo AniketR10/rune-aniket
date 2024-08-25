@@ -21,7 +21,7 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package image
+package asciiart
 
 import (
 	"bytes"
@@ -43,7 +43,7 @@ func TestNewComponent(t *testing.T) {
 		panic(fmt.Errorf("png decode: %v", err))
 	}
 
-	o := New(img, DefaultConfig())
+	o := NewComponent(img, DefaultConfig())
 
 	w := term.NewStringWriter(60, 20)
 

@@ -27,7 +27,7 @@ import (
 	"math"
 
 	"github.com/unstablebuild/tcell/v3"
-	"unstable.build/go-tui/component/image"
+	"unstable.build/go-tui/component/asciiart"
 	"unstable.build/go-tui/term"
 )
 
@@ -64,9 +64,9 @@ func shadeGLSL(frame, total int, fps float, in [][]term.Cell, shader cellRunner)
 
 	for y, row := range in {
 		yFlipARCorrect := int(math.Round(float(rows-y-1) *
-			image.HeightToWidthCellAspectRatio))
+			asciiart.HeightToWidthCellAspectRatio))
 		rowsFlipARCorrect := int(math.Round(float(rows) *
-			image.HeightToWidthCellAspectRatio))
+			asciiart.HeightToWidthCellAspectRatio))
 		for x := range row {
 			char, fg, bg := shader.runCell(
 				frame, total, fps, time,

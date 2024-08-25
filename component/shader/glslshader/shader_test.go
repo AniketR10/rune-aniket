@@ -29,7 +29,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/unstablebuild/tcell/v3"
-	"unstable.build/go-tui/component/image"
+	"unstable.build/go-tui/component/asciiart"
 	"unstable.build/go-tui/component/shader/shadertest"
 	"unstable.build/go-tui/term"
 )
@@ -65,7 +65,7 @@ func TestShadeGLSL(t *testing.T) {
 		cells := shadertest.MakeCellMatrix(4, 3)
 		sh.Shade(20, 100, cells)
 		assert.NotEqual(t, 3, sh.cr.resolutionY)
-		assert.Equal(t, int(math.Round(3*image.HeightToWidthCellAspectRatio)), sh.cr.resolutionY)
+		assert.Equal(t, int(math.Round(3*asciiart.HeightToWidthCellAspectRatio)), sh.cr.resolutionY)
 	})
 
 	t.Run("receives rows in reverse order (vertical axis is flipped)", func(t *testing.T) {
@@ -91,7 +91,7 @@ func TestShadeGLSL(t *testing.T) {
 		sh.Shade(20, 100, cells)
 
 		topLeftCoord := sh.cr.coordsExecuted[0]
-		assert.Equal(t, topLeftCoord.y, int(math.Round((25-1)*image.HeightToWidthCellAspectRatio)))
+		assert.Equal(t, topLeftCoord.y, int(math.Round((25-1)*asciiart.HeightToWidthCellAspectRatio)))
 	})
 }
 
