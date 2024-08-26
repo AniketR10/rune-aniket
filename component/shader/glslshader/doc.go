@@ -61,7 +61,21 @@ by shadeGLSL() and you only responsible for your runCell().
 
 Check out [Tutorial: Write a Pixel Shader] for a complete guide on the topic.
 
-[Shadertoy]: https://www.shadertoy.com/
+# Design & Workflow
+
+We recommend using [ShaderToy] or [KodeLife] for shader look development, and
+when you are done port over the GLSL code into Go to avoid having to recompile
+Go as you are exploring the parameter space or writing new shader code.
+
+If you, Unstable Build developer, are given the task of updating the aesthetic
+of a shader you don't need to write it directly in Go. For complex shaders we
+store [KodeLife] project and the .glsl file under Unstable Build's
+engineering/Shaders Google Drive folder. Either open up the [KodeLife] project
+or adapt the .glsl code within [ShaderToy] for your development iteration
+cycles, and when you are done translate to Go into the project.
+
+[Shadertoy]: https://www.shadertoy.com
+[KodeLife]: https://hexler.net/kodelife
 [Tutorial: Write a Pixel Shader]: https://x.unstable.build/docs/tutorials/ox/pixel_shader
 */
 package glslshader
