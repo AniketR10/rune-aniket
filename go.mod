@@ -1,8 +1,8 @@
 module unstable.build/go-tui
 
-go 1.21
+go 1.23
 
-toolchain go1.21.5
+toolchain go1.23.0
 
 require (
 	github.com/alecthomas/chroma v0.10.0
