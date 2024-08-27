@@ -35,6 +35,7 @@ import (
 	textapi "unstable.build/go-tui/api/text"
 	"unstable.build/go-tui/component/shader"
 	"unstable.build/go-tui/component/shader/glslshader"
+	"unstable.build/go-tui/component/shader/timeshader"
 	"unstable.build/go-tui/term"
 )
 
@@ -88,6 +89,12 @@ func (r *shaderRunner) HandleCommand(ctx context.Context, cmd textapi.Command) (
 		s = glslshader.Embers(glslshader.DefaultEmbersParams(), float64(fps))
 	case "fade":
 		s = shader.Fade()
+	case "incendium":
+		s = glslshader.Incendium(glslshader.DefaultIncendiumParams(), float64(fps))
+	case "incendiumReversed":
+		s = timeshader.Reverse(glslshader.Incendium(glslshader.DefaultIncendiumParams(), float64(fps)))
+	case "incendiumPingPong":
+		s = timeshader.PingPong(glslshader.Incendium(glslshader.DefaultIncendiumParams(), float64(fps)))
 	case "flames":
 		s = glslshader.Flames(glslshader.DefaultFlamesParams(), float64(fps))
 	case "flamesA":
@@ -122,6 +129,9 @@ func (r *shaderRunner) Complete(ctx context.Context, name string, args []string)
 			"bomb",
 			"embers",
 			"fade",
+			"incendium",
+			"incendiumReversed",
+			"incendiumPingPong",
 			"flames",
 			"flamesA",
 			"flamesV",
