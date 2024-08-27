@@ -32,8 +32,6 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
-
-	"unstable.build/go-tui/util"
 )
 
 // URI represents a parsed URI reference.
@@ -291,5 +289,18 @@ func makeLocalURI(path string) (URI, error) {
 
 func sanitizeFilePath(resource string) string {
 	resource = filepath.Clean(resource)
-	return util.SanitizeLine(resource)
+	return sanitizeLine(resource)
+}
+
+func sanitizeLine(in string) string {
+	var b strings.Builder
+	for _, r := range in {
+		switch r {
+		case '\x00':
+		case '\n':
+		default:
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }

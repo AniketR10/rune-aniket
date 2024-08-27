@@ -42,7 +42,6 @@ import (
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/extension/extensionrpc"
 	"unstable.build/go-tui/rpc"
-	"unstable.build/go-tui/util"
 )
 
 const (
@@ -233,7 +232,7 @@ func (m *Manager) doGrant(
 	var serverResources []io.Closer
 	granted := make(map[string]*extensionrpc.PermissionGrant)
 	for _, p := range perms {
-		permissionID := util.SanitizeLine(p.GetId())
+		permissionID := p.GetId()
 		if _, granted := granted[permissionID]; granted {
 			continue
 		}

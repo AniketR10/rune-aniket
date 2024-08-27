@@ -27,6 +27,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -42,7 +43,6 @@ import (
 
 	handlerrpc "unstable.build/go-tui/handler/rpc"
 	"unstable.build/go-tui/rpc"
-	"unstable.build/go-tui/util"
 )
 
 var (
@@ -462,7 +462,7 @@ func (s *Server) setBrowserMessage(
 func (s *Server) notify(
 	ctx context.Context, req *NotifyRequest, once bool,
 ) (*NotifyResponse, error) {
-	msg := util.SanitizeLine(req.GetMsg())
+	msg := sanitizeLine(req.GetMsg())
 	level := notifications.Level(req.GetLevel())
 	switch level {
 	case notifications.LevelInfo,
@@ -505,4 +505,17 @@ func protoToModelBarFrame(p BarRequest_Frame) (o browserapi.BarFrame) {
 		o = browserapi.BarFrameNever
 	}
 	return
+}
+
+func sanitizeLine(in string) string {
+	var b strings.Builder
+	for _, r := range in {
+		switch r {
+		case '\x00':
+		case '\n':
+		default:
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }

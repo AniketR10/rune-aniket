@@ -33,8 +33,6 @@ import (
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-
-	"unstable.build/go-tui/util"
 )
 
 // implements MuxBroker
@@ -56,7 +54,7 @@ func NewUnixGRPCBroker(dataDir, pkg, version string) MuxBroker {
 }
 
 func (t *grpcBroker) NewChannel(tags ...string) (MuxServer, error) {
-	ret, err := util.TempUnixListenerTags(t.dataDir, tags...)
+	ret, err := TempUnixListenerTags(t.dataDir, tags...)
 	if err != nil {
 		return nil, fmt.Errorf("temp unix listener")
 	}
