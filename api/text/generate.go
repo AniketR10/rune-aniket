@@ -23,4 +23,4 @@
 
 package api
 
-//go:generate mockgen -destination=./test/editor_gomock.go -package test -self_package unstable.build/go-tui/api/text/test -source ./editor.go
+//go:generate mockgen -destination=./texttest/editor_gomock.go -package texttest -self_package unstable.build/go-tui/api/text/texttest -source ./editor.go

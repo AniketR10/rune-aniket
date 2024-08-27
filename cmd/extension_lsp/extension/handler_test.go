@@ -34,12 +34,12 @@ import (
 	"github.com/unstablebuild/golang-internal-tools/span"
 	"unstable.build/go-tui/api/config"
 	textapi "unstable.build/go-tui/api/text"
-	textapitest "unstable.build/go-tui/api/text/test"
+	textapitest "unstable.build/go-tui/api/text/texttest"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
-	texttest "unstable.build/go-tui/text/test"
+	"unstable.build/go-tui/text/texttest"
 )
 
 var (

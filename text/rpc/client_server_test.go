@@ -52,7 +52,7 @@ import (
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
-	texttest "unstable.build/go-tui/text/test"
+	"unstable.build/go-tui/text/texttest"
 	"unstable.build/go-tui/workspace"
 )
 

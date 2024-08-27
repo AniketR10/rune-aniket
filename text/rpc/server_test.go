@@ -44,7 +44,7 @@ import (
 	"unstable.build/go-tui/term"
 	termpb "unstable.build/go-tui/term/rpc"
 	"unstable.build/go-tui/text"
-	texttest "unstable.build/go-tui/text/test"
+	"unstable.build/go-tui/text/texttest"
 )
 
 const asyncResultsSleepDuration = 300 * time.Millisecond

@@ -38,7 +38,7 @@ import (
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
 	textpb "unstable.build/go-tui/text/rpc"
-	texttest "unstable.build/go-tui/text/test"
+	"unstable.build/go-tui/text/texttest"
 )
 
 func assertClientMethodNoError(

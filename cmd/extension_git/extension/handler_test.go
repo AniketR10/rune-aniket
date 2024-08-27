@@ -28,7 +28,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
-	textapitest "unstable.build/go-tui/api/text/test"
+	textapitest "unstable.build/go-tui/api/text/texttest"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/text/clipboard"
 )

@@ -57,7 +57,7 @@ import (
 	"unstable.build/go-tui/term/vte"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/text/clipboard"
-	texttest "unstable.build/go-tui/text/test"
+	"unstable.build/go-tui/text/texttest"
 	"unstable.build/go-tui/workspace"
 )
 

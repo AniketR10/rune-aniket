@@ -33,7 +33,7 @@ import (
 	"github.com/unstablebuild/blue/document"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
-	texttest "unstable.build/go-tui/text/test"
+	"unstable.build/go-tui/text/texttest"
 )
 
 func TestHistory(t *testing.T) {
