@@ -36,8 +36,8 @@ import (
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/handler"
+	"unstable.build/go-tui/handler/handlertest"
 	"unstable.build/go-tui/term"
-	testutil "unstable.build/go-tui/util/test"
 )
 
 const testHandlerManualDesc = "remote SUPER extension"
@@ -114,7 +114,7 @@ func TestClientHandlerDraw(t *testing.T) {
 	t.Run("draw", func(t *testing.T) {
 		stubClient := newStubClient(t)
 		defer stubClient.Close()
-		cases := []testutil.HandlerSequenceTestCase{
+		cases := []handlertest.SequenceTestCase{
 			{"",
 				`AAAA
 AAAA
@@ -126,7 +126,7 @@ BBBB
 BBBB`},
 		}
 
-		testutil.TestHandlerSequence(t, stubClient, 4, 4, cases)
+		handlertest.TestHandlerSequence(t, stubClient, 4, 4, cases)
 	})
 
 	t.Run("draw multi codepoint utf-8", func(t *testing.T) {
@@ -138,7 +138,7 @@ BBBB`},
 ┗━━━━━┛`, component.StringConfig{Alignment: component.SpanAlignmentCentered})),
 			},
 		)
-		cases := []testutil.HandlerSequenceTestCase{
+		cases := []handlertest.SequenceTestCase{
 			{"",
 				`┏━━━━━┓
 ┃  中  ┃
@@ -146,7 +146,7 @@ BBBB`},
 ┗━━━━━┛`},
 		}
 
-		testutil.TestHandlerSequence(t, stubClient, 7, 4, cases)
+		handlertest.TestHandlerSequence(t, stubClient, 7, 4, cases)
 	})
 
 	t.Run("calls resize only when dimensions have changed", func(t *testing.T) {
@@ -215,7 +215,7 @@ func TestIntegrationClientHandlerDraw(t *testing.T) {
 	defer closeFn()
 	defer serverClient.Close()
 
-	cases := []testutil.HandlerSequenceTestCase{
+	cases := []handlertest.SequenceTestCase{
 		{"",
 			`AAAA
 AAAA

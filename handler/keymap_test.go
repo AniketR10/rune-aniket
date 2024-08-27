@@ -28,8 +28,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"unstable.build/go-tui"
+	"unstable.build/go-tui/handler/handlertest"
 	"unstable.build/go-tui/term"
-	testutil "unstable.build/go-tui/util/test"
 )
 
 func TestKeyMappedLessHandle(t *testing.T) {
@@ -55,7 +55,7 @@ func TestKeyMappedLessHandle(t *testing.T) {
 		{},
 	})
 	less1, writer3 := setup(t, nil, 8, 4)
-	testutil.TestHandler(t, WithMapping(less1, map[term.KeyComb]term.KeyComb{
+	handlertest.TestHandler(t, WithMapping(less1, map[term.KeyComb]term.KeyComb{
 		{Ch: 'k'}:                   {Ch: 'k'},
 		{Ch: 'U'}:                   {Ch: 'j'},
 		{Ch: '%'}:                   {Ch: 'h'},

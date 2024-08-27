@@ -48,11 +48,11 @@ import (
 	"unstable.build/go-tui/browser/browsertest"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/handler"
+	"unstable.build/go-tui/handler/handlertest"
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
 	texttest "unstable.build/go-tui/text/test"
-	testutil "unstable.build/go-tui/util/test"
 	"unstable.build/go-tui/workspace"
 )
 
@@ -577,7 +577,7 @@ func resetLocationList(l text.LocationList) {
 func testTabIntegration(t *testing.T,
 	constructor func(ed text.Editor, mu *sync.Mutex) (*text.Component, browserapi.WindowManager, error)) {
 	t.Run("switches to a tab upon call to SetContent", func(t *testing.T) {
-		cases := []testutil.HandlerSequenceTestCase{
+		cases := []handlertest.SequenceTestCase{
 			{"",
 				`┌──────────────────┐
 │$$  ##            │
@@ -616,7 +616,7 @@ func testTabIntegration(t *testing.T,
 			require.NoError(t, win.SetContent(t2))
 			return handler.Sync(&mu, handler.Nop(c.Browser()))
 		}
-		testutil.TestHandlerIsolated(t, fn, 20, 10, cases)
+		handlertest.TestHandlerIsolated(t, fn, 20, 10, cases)
 	})
 }
 

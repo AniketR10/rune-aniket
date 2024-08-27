@@ -45,9 +45,9 @@ import (
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component/comptest"
 	"unstable.build/go-tui/handler"
+	"unstable.build/go-tui/handler/handlertest"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
-	testutil "unstable.build/go-tui/util/test"
 	"unstable.build/go-tui/workspace"
 	workspacetest "unstable.build/go-tui/workspace/test"
 )
@@ -1346,7 +1346,7 @@ func TestTabIntegration(t *testing.T) {
 func testTabIntegration(t *testing.T,
 	constructor func(ed text.Editor, mu *sync.Mutex) (*text.Component, browser.WindowManager, error)) {
 	t.Run("switches to a tab upon call to SetContent", func(t *testing.T) {
-		cases := []testutil.HandlerSequenceTestCase{
+		cases := []handlertest.SequenceTestCase{
 			{"",
 				`┌──────────────────┐
 │$$  ##            │
@@ -1385,7 +1385,7 @@ func testTabIntegration(t *testing.T,
 			require.NoError(t, win.SetContent(t2))
 			return handler.Sync(&mu, handler.Nop(c))
 		}
-		testutil.TestHandlerIsolated(t, fn, 20, 10, cases)
+		handlertest.TestHandlerIsolated(t, fn, 20, 10, cases)
 	})
 }
 

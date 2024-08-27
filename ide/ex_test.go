@@ -52,16 +52,16 @@ import (
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/handler"
+	"unstable.build/go-tui/handler/handlertest"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/term/vte"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/text/clipboard"
 	texttest "unstable.build/go-tui/text/test"
-	testutil "unstable.build/go-tui/util/test"
 	"unstable.build/go-tui/workspace"
 )
 
-// testutil.TestHandlerSequence maps ':' characters to the following event
+// handlertest.TestHandlerSequence maps ':' characters to the following event
 // this is to work around ex's assumptions on underlying handler.
 var testCommandKey = term.KeyComb{Ch: '\\', Mod: term.ModCtrl}
 
@@ -196,7 +196,7 @@ func TestComponentOpenEditorIntegration(t *testing.T) {
 }
 
 func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
-	cases := []testutil.HandlerSequenceTestCase{
+	cases := []handlertest.SequenceTestCase{
 		{"a",
 			`┌──────────────────┐
 │                  │
@@ -348,7 +348,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 	)
 	require.NoError(t, err)
 
-	testutil.TestHandlerSequence(t, bh, 20, 10, cases)
+	handlertest.TestHandlerSequence(t, bh, 20, 10, cases)
 
 	focus, err := b.Focus()
 	require.NoError(t, err)
@@ -364,7 +364,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 	_, err = b.Split(browserapi.OrientationBottom, focus, h)
 	require.NoError(t, err)
 
-	cases = []testutil.HandlerSequenceTestCase{
+	cases = []handlertest.SequenceTestCase{
 		{"",
 			`┌──────────────────┐
 │cabin.go  other.go│
@@ -389,7 +389,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 └────────┘└────────┘`},
 	}
 
-	testutil.TestHandlerSequence(t, bh, 20, 10, cases)
+	handlertest.TestHandlerSequence(t, bh, 20, 10, cases)
 
 	var closed int
 	hx := browsertest.NewTestHandler()
@@ -397,7 +397,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 	hx.CloseCallback = func() error { closed++; return nil }
 	require.NoError(t, focus.SetContent(hx))
 
-	cases = []testutil.HandlerSequenceTestCase{
+	cases = []handlertest.SequenceTestCase{
 		{"",
 			`┌──────────────────┐
 │cabin.go  other.go│
@@ -411,12 +411,12 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 └────────┘└────────┘`},
 	}
 
-	testutil.TestHandlerSequence(t, bh, 20, 10, cases)
+	handlertest.TestHandlerSequence(t, bh, 20, 10, cases)
 
 	require.NoError(t, win.Close())
 	require.NoError(t, focus.Close())
 
-	cases = []testutil.HandlerSequenceTestCase{
+	cases = []handlertest.SequenceTestCase{
 		// test CommandKeyBindings
 		{"4$$$",
 			`┌──────────────────┐
@@ -441,18 +441,18 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 │IIIIIIIIIIIIIIIIII│
 └──────────────────┘`},
 	}
-	testutil.TestHandlerSequence(t, bh, 20, 10, cases)
+	handlertest.TestHandlerSequence(t, bh, 20, 10, cases)
 
-	cases = []testutil.HandlerSequenceTestCase{
+	cases = []handlertest.SequenceTestCase{
 		{"", `┌──┐
 │..│
 ├II┤
 IIII`},
 	}
-	testutil.TestHandlerSequence(t, bh, 4, 4, cases)
+	handlertest.TestHandlerSequence(t, bh, 4, 4, cases)
 
 	require.NoError(t, b.Notify(notifications.LevelInfo, "wasup: %s", "Z"))
-	cases = []testutil.HandlerSequenceTestCase{
+	cases = []handlertest.SequenceTestCase{
 		{"",
 			`┌────┌─────────────┐
 │othe│ wasup: Z    │
@@ -465,7 +465,7 @@ IIII`},
 │IIIIIIIIIIIIIIIIII│
 └──────────────────┘`},
 	}
-	testutil.TestHandlerSequence(t, bh, 20, 10, cases)
+	handlertest.TestHandlerSequence(t, bh, 20, 10, cases)
 
 	uri, err := workspaceapi.ParseURI("file:///bugz")
 	require.NoError(t, err)
@@ -476,7 +476,7 @@ IIII`},
 	err = focus.SetContent(nh)
 	require.NoError(t, err)
 
-	cases = []testutil.HandlerSequenceTestCase{
+	cases = []handlertest.SequenceTestCase{
 		{"b",
 			`┌────┌─────────────┐
 │othe│ wasup: Z    │
@@ -511,7 +511,7 @@ IIII`},
 │BBBBBBBBBBBBBBBBBB│
 └──────────────────┘`},
 	}
-	testutil.TestHandlerSequence(t, bh, 20, 10, cases)
+	handlertest.TestHandlerSequence(t, bh, 20, 10, cases)
 
 	floating1, err := b.Floating(browsertest.NewTestFloating(4, 2),
 		component.FloatingConfig{Offset: term.Coordinates{X: 1, Y: 1}})
@@ -523,7 +523,7 @@ IIII`},
 	// should not be able to split over a floating window, which is currently in focus
 	_, err = b.Split(browserapi.OrientationTop, focus, browsertest.NewTestHandler())
 	require.Error(t, err)
-	cases = []testutil.HandlerSequenceTestCase{
+	cases = []handlertest.SequenceTestCase{
 		{"",
 			`┌────┌─────────────┐
 │othe│ wasup: Z    │
@@ -548,11 +548,11 @@ IIII`},
 └──────────────────┘`},
 	}
 
-	testutil.TestHandlerSequence(t, bh, 20, 10, cases)
+	handlertest.TestHandlerSequence(t, bh, 20, 10, cases)
 
 	require.NoError(t, floating1.Close())
 
-	cases = []testutil.HandlerSequenceTestCase{
+	cases = []handlertest.SequenceTestCase{
 		{"",
 			`┌────┌─────────────┐
 │othe│ not a file  │
@@ -565,7 +565,7 @@ IIII`},
 │BBBBBBBBBBBBBBBBBB│
 └──────────────────┘`},
 	}
-	testutil.TestHandlerSequence(t, bh, 20, 10, cases)
+	handlertest.TestHandlerSequence(t, bh, 20, 10, cases)
 
 	o := browserapi.BarConfig{Size: 1, Orientation: browserapi.OrientationTop}
 	for i := 0; i < 4; i++ {
@@ -577,7 +577,7 @@ IIII`},
 	}
 
 	// test case for issue #27
-	cases = []testutil.HandlerSequenceTestCase{
+	cases = []handlertest.SequenceTestCase{
 		{":e ait^^^aix^^^^ airsoft.map>",
 			`┌──────────────────────────────────┌─────────────┐
 │other.go  bugz  airsoft.map       │ not a file  │
@@ -590,7 +590,7 @@ IIII`},
 │111111111111111111111111111111111111111111111111│
 └────────────────────────────────────────────────┘`},
 	}
-	testutil.TestHandlerSequence(t, bh, 50, 10, cases)
+	handlertest.TestHandlerSequence(t, bh, 50, 10, cases)
 
 	assert.NoError(t, bh.(io.Closer).Close())
 	assert.NoError(t, b.Close())
@@ -647,7 +647,7 @@ func TestBrowserHandlerInterrupts(t *testing.T) {
 }
 
 func TestMultipleFilesStartup(t *testing.T) {
-	cases := []testutil.HandlerSequenceTestCase{
+	cases := []handlertest.SequenceTestCase{
 		{"",
 			`┌──────────────────┐
 │cabin.go  wi.go   │
@@ -710,12 +710,12 @@ func TestMultipleFilesStartup(t *testing.T) {
 		vte.DefaultConfig(), nopPublishEvent, clipboard.NewInMemory(), opts...)
 	defer b.Close()
 
-	testutil.TestHandlerSequence(t, b, 20, 10, cases)
+	handlertest.TestHandlerSequence(t, b, 20, 10, cases)
 
 }
 
 func TestWriteExclamationNoQuit(t *testing.T) {
-	cases := []testutil.HandlerSequenceTestCase{
+	cases := []handlertest.SequenceTestCase{
 		{":w!>",
 			`┌──────────────────┐
 │Cannot save       │
@@ -738,12 +738,12 @@ func TestWriteExclamationNoQuit(t *testing.T) {
 		vte.DefaultConfig(), nopPublishEvent, clipboard.NewInMemory(), opts...)
 	defer b.Close()
 
-	testutil.TestHandlerSequence(t, b, 20, 10, cases)
+	handlertest.TestHandlerSequence(t, b, 20, 10, cases)
 	assert.False(t, b.exit)
 }
 
 func TestBrowserCloseLastWindow(t *testing.T) {
-	cases := []testutil.HandlerSequenceTestCase{
+	cases := []handlertest.SequenceTestCase{
 		{":closeWindow>",
 			`┌──────────────────┐
 │Cannot close      │
@@ -766,12 +766,12 @@ func TestBrowserCloseLastWindow(t *testing.T) {
 		vte.DefaultConfig(), nopPublishEvent, clipboard.NewInMemory(), opts...)
 	defer b.Close()
 
-	testutil.TestHandlerSequence(t, b, 20, 10, cases)
+	handlertest.TestHandlerSequence(t, b, 20, 10, cases)
 	assert.False(t, b.exit)
 }
 
 func TestExCommandResponsive(t *testing.T) {
-	cases := []testutil.HandlerSequenceTestCase{
+	cases := []handlertest.SequenceTestCase{
 		{":edit",
 			`                    
                     
@@ -819,14 +819,14 @@ eeeeeeeeeeeee▐
 		closeFns = append(closeFns, b.Close)
 		return b
 	}
-	testutil.TestHandlerIsolated(t, fn, 20, 10, cases)
+	handlertest.TestHandlerIsolated(t, fn, 20, 10, cases)
 	for _, close := range closeFns {
 		close()
 	}
 }
 
 func TestExKeySequence(t *testing.T) {
-	cases := []testutil.HandlerSequenceTestCase{
+	cases := []handlertest.SequenceTestCase{
 		{"zgl",
 			`┌──────────────────┐
 │10k.go  button.go │
@@ -930,14 +930,14 @@ func TestExKeySequence(t *testing.T) {
 		})
 		return handler.Sync(&mu, b)
 	}
-	testutil.TestHandlerIsolated(t, fn, 20, 10, cases)
+	handlertest.TestHandlerIsolated(t, fn, 20, 10, cases)
 	for _, close := range closeFns {
 		close()
 	}
 }
 
 func TestExTabIntegration(t *testing.T) {
-	cases := []testutil.HandlerSequenceTestCase{
+	cases := []handlertest.SequenceTestCase{
 		{"",
 			`┌──────────────────┐
 │Fieshta  Pahty    │
@@ -983,7 +983,7 @@ func TestExTabIntegration(t *testing.T) {
 		closeFns = append(closeFns, b.Close)
 		return b
 	}
-	testutil.TestHandlerIsolated(t, fn, 20, 10, cases)
+	handlertest.TestHandlerIsolated(t, fn, 20, 10, cases)
 	for _, close := range closeFns {
 		close()
 	}
@@ -1133,7 +1133,7 @@ func newExForTestingClipboard(
 }
 
 func TestNewWindow(t *testing.T) {
-	cases := []testutil.HandlerSequenceTestCase{
+	cases := []handlertest.SequenceTestCase{
 		{":newWindow>:changeSplitOrientation h>:newWindow>",
 			`┌──────────────────┐
 │ changed split    │
@@ -1179,11 +1179,11 @@ func TestNewWindow(t *testing.T) {
 	b := newExForTesting(t, texttest.NopEditor(), opts...)
 	defer b.Close()
 
-	testutil.TestHandlerSequence(t, b, 20, 10, cases)
+	handlertest.TestHandlerSequence(t, b, 20, 10, cases)
 }
 
 func TestCommandHistory(t *testing.T) {
-	cases := []testutil.HandlerSequenceTestCase{
+	cases := []handlertest.SequenceTestCase{
 		{":e hello.go>:e wi.go>1234",
 			`┌──────────────────┐
 │hello.go  wi.go   │
@@ -1214,11 +1214,11 @@ func TestCommandHistory(t *testing.T) {
 	b := newExForTesting(t, texttest.NopEditor(), opts...)
 	defer b.Close()
 
-	testutil.TestHandlerSequence(t, b, 20, 10, cases)
+	handlertest.TestHandlerSequence(t, b, 20, 10, cases)
 }
 
 func TestCommandAliases(t *testing.T) {
-	cases := []testutil.HandlerSequenceTestCase{
+	cases := []handlertest.SequenceTestCase{
 		{":todo>1234",
 			`┌──────────────────┐
 │hello.go  wi.go   │
@@ -1254,11 +1254,11 @@ func TestCommandAliases(t *testing.T) {
 	b := newExForTesting(t, texttest.NopEditor(), opts...)
 	defer b.Close()
 
-	testutil.TestHandlerSequence(t, b, 20, 10, cases)
+	handlertest.TestHandlerSequence(t, b, 20, 10, cases)
 }
 
 func TestIntegrationEphemeralTerminal(t *testing.T) {
-	cases := []testutil.HandlerSequenceTestCase{
+	cases := []handlertest.SequenceTestCase{
 		{":! sleep 20>",
 			`┌──────────────────┐
 │                  │
@@ -1329,12 +1329,12 @@ func TestIntegrationEphemeralTerminal(t *testing.T) {
 		texttest.NopEditor(), vte.DefaultConfig(), nopPublishEvent, opts...)
 	defer b.Close()
 
-	testutil.TestHandlerSequence(t, b, 20, 10, cases)
+	handlertest.TestHandlerSequence(t, b, 20, 10, cases)
 }
 
 func TestIntegrationCompanionTerminal(t *testing.T) {
 
-	cases := []testutil.HandlerSequenceTestCase{
+	cases := []handlertest.SequenceTestCase{
 		{":!>_______",
 			`┌──────────────────┐
 │                  │
@@ -1429,11 +1429,11 @@ func TestIntegrationCompanionTerminal(t *testing.T) {
 		texttest.NopEditor(), cfg, nopPublishEvent, opts...)
 	defer b.Close()
 
-	testutil.TestHandlerSequence(t, b, 20, 10, cases)
+	handlertest.TestHandlerSequence(t, b, 20, 10, cases)
 }
 
 func TestFullScreen(t *testing.T) {
-	cases := []testutil.HandlerSequenceTestCase{
+	cases := []handlertest.SequenceTestCase{
 		{":splitWindow>:edit aaa>:edit bbb>:toggleFullscreen>",
 			`AAAAAAAAAAAAAAAAAAAA
 AAAAAAAAAAAAAAAAAAAA
@@ -1480,7 +1480,7 @@ AAAAAAAAAAAAAAAAAAAA`,
 		clipboard.NewInMemory(), opts...)
 	defer b.Close()
 
-	testutil.TestHandlerSequence(t, b, 20, 10, cases)
+	handlertest.TestHandlerSequence(t, b, 20, 10, cases)
 }
 
 func TestExposedRootNodeIssue(t *testing.T) {
@@ -1503,7 +1503,7 @@ func TestExposedRootNodeIssue(t *testing.T) {
 			},
 		}),
 	}
-	cases := []testutil.HandlerSequenceTestCase{
+	cases := []handlertest.SequenceTestCase{
 		{":boom>",
 			`┌──────────────────┐
 │ changed split    │
@@ -1520,11 +1520,11 @@ func TestExposedRootNodeIssue(t *testing.T) {
 
 	b := newExForTesting(t, texttest.NopEditor(), opts...)
 	defer b.Close()
-	testutil.TestHandlerSequence(t, b, 20, 10, cases)
+	handlertest.TestHandlerSequence(t, b, 20, 10, cases)
 }
 
 func TestEditCompletion(t *testing.T) {
-	cases := []testutil.HandlerSequenceTestCase{
+	cases := []handlertest.SequenceTestCase{
 		{":edit re",
 			`                    
                     
@@ -1635,11 +1635,11 @@ reloadFile!
 		return b
 	}
 
-	testutil.TestHandlerIsolated(t, fn, 20, 10, cases)
+	handlertest.TestHandlerIsolated(t, fn, 20, 10, cases)
 }
 
 func TestRenameTab(t *testing.T) {
-	cases := []testutil.HandlerSequenceTestCase{
+	cases := []handlertest.SequenceTestCase{
 		{":e hello.go>:renameTab 8berSucks>",
 			`┌──────────────────┐
 │8berSucks         │
@@ -1659,12 +1659,12 @@ func TestRenameTab(t *testing.T) {
 	b := newExForTesting(t, texttest.NopEditor(), opts...)
 	defer b.Close()
 
-	testutil.TestHandlerSequence(t, b, 20, 10, cases)
+	handlertest.TestHandlerSequence(t, b, 20, 10, cases)
 }
 
 func TestEventNone(t *testing.T) {
 	t.Run("delegates to underlying handler", func(t *testing.T) {
-		cases := []testutil.HandlerSequenceTestCase{
+		cases := []handlertest.SequenceTestCase{
 			{"🎉e hello.go>",
 				`┌──────────────────┐
 │hello.go          │
@@ -1685,11 +1685,11 @@ func TestEventNone(t *testing.T) {
 		b := newExForTesting(t, texttest.NopEditor(), opts...)
 		defer b.Close()
 
-		testutil.TestHandlerSequence(t, b, 20, 10, cases)
+		handlertest.TestHandlerSequence(t, b, 20, 10, cases)
 
 		b.Handle(term.Event{Type: term.EventNone})
 
-		cases = []testutil.HandlerSequenceTestCase{
+		cases = []handlertest.SequenceTestCase{
 			{"",
 				`┌──────────────────┐
 │hello.go          │
@@ -1702,7 +1702,7 @@ func TestEventNone(t *testing.T) {
 │BBBBBBBBBBBBBBBBBB│
 └──────────────────┘`},
 		}
-		testutil.TestHandlerSequence(t, b, 20, 10, cases)
+		handlertest.TestHandlerSequence(t, b, 20, 10, cases)
 	})
 }
 
@@ -1878,7 +1878,7 @@ func TestTerminalOnFocus(t *testing.T) {
 }
 
 func TestSwitchToTab(t *testing.T) {
-	cases := []testutil.HandlerSequenceTestCase{
+	cases := []handlertest.SequenceTestCase{
 		{":e hello.go>B:e world.go>",
 			`┌────────────────────────────┐
 │hello.go  world.go          │
@@ -1968,11 +1968,11 @@ func TestSwitchToTab(t *testing.T) {
 	b := newExForTesting(t, texttest.NopEditor(), opts...)
 	defer b.Close()
 
-	testutil.TestHandlerSequence(t, b, 30, 15, cases)
+	handlertest.TestHandlerSequence(t, b, 30, 15, cases)
 }
 
 func TestMacro(t *testing.T) {
-	cases := []testutil.HandlerSequenceTestCase{
+	cases := []handlertest.SequenceTestCase{
 		{`:e hello.go>:macro 01234>`,
 			`┌────────────────────────────┐
 │hello.go                    │
@@ -2010,7 +2010,7 @@ func TestMacro(t *testing.T) {
 		publishEvent, clipboard.NewInMemory(), opts...)
 	defer e.Close()
 
-	testutil.TestHandlerSequence(t, e, 30, 15, cases)
+	handlertest.TestHandlerSequence(t, e, 30, 15, cases)
 }
 
 func TestCopyToClipboard(t *testing.T) {
@@ -2027,7 +2027,7 @@ func TestCopyToClipboard(t *testing.T) {
 func testCopyToClipboard(
 	t *testing.T, clip clipboard.Register, constructor browserConstructor,
 ) {
-	cases := []testutil.HandlerSequenceTestCase{
+	cases := []handlertest.SequenceTestCase{
 		{":e hello.go>",
 			`┌────────────────────────────┐
 │hello.go                    │
@@ -2100,7 +2100,7 @@ func testCopyToClipboard(
 	bh, _, err := constructor(texttest.NopEditor(), opts...)
 	require.NoError(t, err)
 
-	testutil.TestHandlerSequence(t, bh, 30, 15, cases)
+	handlertest.TestHandlerSequence(t, bh, 30, 15, cases)
 
 	data, err := clip.Paste(clipboard.DefaultRegisterID)
 	require.NoError(t, err)

@@ -30,8 +30,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/component/comptest"
+	"unstable.build/go-tui/handler/handlertest"
 	"unstable.build/go-tui/term"
-	testutil "unstable.build/go-tui/util/test"
 )
 
 const content = `AAAAABBBBB
@@ -281,8 +281,8 @@ func TestLessHandle(t *testing.T) {
 	testLessHandle(t, cases)
 }
 
-func getLessHandleTestFlow(events [19]term.Event) []testutil.HandlerTestCase {
-	return []testutil.HandlerTestCase{
+func getLessHandleTestFlow(events [19]term.Event) []handlertest.SingleTestCase {
+	return []handlertest.SingleTestCase{
 		{
 			events[0], `
 AAAAABBB
@@ -412,7 +412,7 @@ KKXXLLLL
 	}
 }
 
-func testLessHandle(t *testing.T, cases []testutil.HandlerTestCase) {
+func testLessHandle(t *testing.T, cases []handlertest.SingleTestCase) {
 	var less [2]Less
 	var less1 *Less
 	var writer1, writer2, writer3 *term.StringWriter
@@ -421,11 +421,11 @@ func testLessHandle(t *testing.T, cases []testutil.HandlerTestCase) {
 	less1, writer3 = setup(t, nil, 8, 4)
 
 	// test cases with allocated less
-	testutil.TestHandler(t, &less[0], cases, writer1)
-	testutil.TestHandler(t, &less[1], cases, writer2)
+	handlertest.TestHandler(t, &less[0], cases, writer1)
+	handlertest.TestHandler(t, &less[1], cases, writer2)
 
 	// test cases with stack less
-	testutil.TestHandler(t, less1, cases, writer3)
+	handlertest.TestHandler(t, less1, cases, writer3)
 }
 
 func setup(t *testing.T, less *Less, width, height int) (*Less, *term.StringWriter) {

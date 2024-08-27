@@ -33,8 +33,8 @@ import (
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/handler/handlertest"
 	"unstable.build/go-tui/term"
-	testutil "unstable.build/go-tui/util/test"
 )
 
 const snippet = `
@@ -135,7 +135,7 @@ func TestCellAtCursor(t *testing.T) {
 }
 
 func TestViIntegrationSequence(t *testing.T) {
-	cases := []testutil.HandlerSequenceTestCase{
+	cases := []handlertest.SequenceTestCase{
 		{"",
 			`▐                   
 /*                  
@@ -425,11 +425,11 @@ diff_buf_adjust(win_
 	}
 
 	vi := setupViIntegration(t, snippet, 2)
-	testutil.TestHandlerSequence(t, vi, 20, 10, cases)
+	handlertest.TestHandlerSequence(t, vi, 20, 10, cases)
 }
 
 func TestVidfd(t *testing.T) {
-	cases := []testutil.HandlerSequenceTestCase{
+	cases := []handlertest.SequenceTestCase{
 		{"jjdfd",
 			`                    
 /*                  
@@ -457,11 +457,11 @@ diff_buf_adjust(win_
 	newVi := func(t *testing.T) tui.Handler {
 		return setupVi(t, snippet, 2)
 	}
-	testutil.TestHandlerIsolated(t, newVi, 20, 10, cases)
+	handlertest.TestHandlerIsolated(t, newVi, 20, 10, cases)
 }
 
 func TestViDeleteAWord(t *testing.T) {
-	cases := []testutil.HandlerSequenceTestCase{
+	cases := []handlertest.SequenceTestCase{
 		{"jjjjjwdw",
 			`                    
 /*                  
@@ -533,11 +533,11 @@ diff_buf_adjust(win_
 	newVi := func(t *testing.T) tui.Handler {
 		return setupVi(t, snippet, 2)
 	}
-	testutil.TestHandlerIsolated(t, newVi, 20, 10, cases)
+	handlertest.TestHandlerIsolated(t, newVi, 20, 10, cases)
 }
 
 func TestViCursorIsolated(t *testing.T) {
-	cases := []testutil.HandlerSequenceTestCase{
+	cases := []handlertest.SequenceTestCase{
 		{"jjddp",
 			`                    
 /*                  
@@ -592,7 +592,7 @@ diff_buf_adjust(win_
 	newVi := func(t *testing.T) tui.Handler {
 		return setupViIntegration(t, snippet, 2)
 	}
-	testutil.TestHandlerIsolated(t, newVi, 20, 10, cases)
+	handlertest.TestHandlerIsolated(t, newVi, 20, 10, cases)
 }
 
 func TestIntegrationScrollEvent(t *testing.T) {

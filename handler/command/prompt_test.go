@@ -39,9 +39,9 @@ import (
 	"github.com/unstablebuild/blue/iterator"
 	textapi "unstable.build/go-tui/api/text"
 	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/handler/handlertest"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
-	testutil "unstable.build/go-tui/util/test"
 )
 
 func TestCommandHandlerManualsDrawTooSmallForManual(t *testing.T) {
@@ -158,10 +158,10 @@ mercedes my▐
 				term.NopInterrupter(), tcase.commands, cfg,
 			)
 			defer b.Close()
-			cases := []testutil.HandlerSequenceTestCase{
+			cases := []handlertest.SequenceTestCase{
 				{InputSequence: "_" + tcase.sequence + "_", Expected: tcase.expectedDraw[1:]},
 			}
-			testutil.TestHandlerSequence(t, testCommandHandler{b}, 20, 10, cases)
+			handlertest.TestHandlerSequence(t, testCommandHandler{b}, 20, 10, cases)
 		})
 	}
 }
@@ -824,10 +824,10 @@ myArg 1
 				term.NopInterrupter(), testNoManualCommands(tcase.commands), cfg,
 			)
 			defer b.Close()
-			cases := []testutil.HandlerSequenceTestCase{
+			cases := []handlertest.SequenceTestCase{
 				{InputSequence: tcase.sequence, Expected: tcase.expectedDraw[1:]},
 			}
-			testutil.TestHandlerSequence(t, testCommandHandler{b}, 20, 10, cases)
+			handlertest.TestHandlerSequence(t, testCommandHandler{b}, 20, 10, cases)
 		})
 	}
 }

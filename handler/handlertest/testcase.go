@@ -21,7 +21,7 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package test
+package handlertest
 
 import (
 	"fmt"
@@ -35,23 +35,23 @@ import (
 	"unstable.build/go-tui/term"
 )
 
-// HandlerSequenceTestCase represents an input sequence and
+// SequenceTestCase represents an input sequence and
 // the result expected draw string representation.
-type HandlerSequenceTestCase struct {
+type SequenceTestCase struct {
 	InputSequence string
 	Expected      string
 }
 
 // HandlerTestCase represents an event and the result
 // expected draw string representation.
-type HandlerTestCase struct {
+type SingleTestCase struct {
 	Event    term.Event
 	Expected string
 }
 
 func handleTestCase(
 	t *testing.T, i int, w *term.StringWriter,
-	h tui.Handler, tcase HandlerSequenceTestCase,
+	h tui.Handler, tcase SequenceTestCase,
 	width, height int,
 ) {
 	err := w.Clear(term.Attributes{Fg: 0, Bg: 0})
@@ -124,13 +124,13 @@ func handleTestCase(
 }
 
 // TestHandlerIsolated is a helper function that drives
-// a set of HandlerSequenceTestCase and its results in an isolated fashion:
+// a set of SequenceTestCase and its results in an isolated fashion:
 // fn will be called on every test case.
 //
 // See TestHandlerSequence for more details.
 func TestHandlerIsolated(
 	t *testing.T, fn func(t *testing.T) tui.Handler, width, height int,
-	cases []HandlerSequenceTestCase,
+	cases []SequenceTestCase,
 ) {
 	writer := term.NewStringWriter(width, height)
 
@@ -144,13 +144,13 @@ func TestHandlerIsolated(
 }
 
 // TestHandlerSequence is a helper function that drives
-// a set of HandlerSequenceTestCase and its results.
+// a set of SequenceTestCase and its results.
 //
 // Certain key events are encoded in characters. For instance, a '>' character
 // signals term.KeyEnter and '<' character signals term.KeyEsc.
 func TestHandlerSequence(
 	t *testing.T, handler tui.Handler, width, height int,
-	cases []HandlerSequenceTestCase,
+	cases []SequenceTestCase,
 ) {
 	writer := term.NewStringWriter(width, height)
 	handler.Resize(width, height)
@@ -164,7 +164,7 @@ func TestHandlerSequence(
 // a sequence of HandlerTestCase.
 func TestHandler(
 	t *testing.T, handler tui.Handler,
-	cases []HandlerTestCase, w *term.StringWriter,
+	cases []SingleTestCase, w *term.StringWriter,
 ) {
 	var err error
 

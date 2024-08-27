@@ -30,9 +30,9 @@ import (
 	"github.com/unstablebuild/blue/document"
 	textapi "unstable.build/go-tui/api/text"
 	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/handler/handlertest"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
-	testutil "unstable.build/go-tui/util/test"
 )
 
 var goodTestCommands = []text.CommandManual{
@@ -556,10 +556,10 @@ Alias of jeep
 				term.NopInterrupter(), tcase.commands, cfg,
 			)
 			defer b.Close()
-			cases := []testutil.HandlerSequenceTestCase{
+			cases := []handlertest.SequenceTestCase{
 				{InputSequence: tcase.sequence, Expected: tcase.expectedDraw[1:]},
 			}
-			testutil.TestHandlerSequence(t, testCommandHandler{b}, 40, 20, cases)
+			handlertest.TestHandlerSequence(t, testCommandHandler{b}, 40, 20, cases)
 		})
 	}
 }

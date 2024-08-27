@@ -33,8 +33,8 @@ import (
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/comptest"
+	"unstable.build/go-tui/handler/handlertest"
 	"unstable.build/go-tui/term"
-	testutil "unstable.build/go-tui/util/test"
 )
 
 func altEvent(ch rune) term.Event {
@@ -125,7 +125,7 @@ func TestWindowManagerHandleFrame(t *testing.T) {
 	_, ok := handler.SplitVertical(handler.Focus(), rightHandler)
 	require.True(t, ok)
 
-	cases := []testutil.HandlerTestCase{
+	cases := []handlertest.SingleTestCase{
 		{
 			term.Event{}, `
 ┌────┐┌────┐
@@ -137,9 +137,9 @@ func TestWindowManagerHandleFrame(t *testing.T) {
 
 	require.True(t, handler.FocusRight())
 
-	testutil.TestHandler(t, handler, cases, writer)
+	handlertest.TestHandler(t, handler, cases, writer)
 
-	cases = []testutil.HandlerTestCase{
+	cases = []handlertest.SingleTestCase{
 		{
 			term.Event{}, `
 ┌────┐┌────┐
@@ -149,7 +149,7 @@ func TestWindowManagerHandleFrame(t *testing.T) {
 		},
 	}
 
-	testutil.TestHandler(t, handler, cases, writer)
+	handlertest.TestHandler(t, handler, cases, writer)
 }
 
 func TestWindowFocusInitSplitVertical(t *testing.T) {
@@ -199,7 +199,7 @@ func TestWindowManagerSetFocusContent(t *testing.T) {
 	prev := wm.Focus().SetContent(rightHandler)
 	assert.Equal(t, prev, leftHandler)
 
-	cases := []testutil.HandlerTestCase{
+	cases := []handlertest.SingleTestCase{
 		{
 			term.Event{}, `
 ┌──┐┌──┐
@@ -211,7 +211,7 @@ func TestWindowManagerSetFocusContent(t *testing.T) {
 
 	require.True(t, wm.FocusRight())
 
-	testutil.TestHandler(t, wm, cases, writer)
+	handlertest.TestHandler(t, wm, cases, writer)
 
 	fb := component.FrameCharSet{}
 	fb.TopLeft = '╔'
@@ -226,7 +226,7 @@ func TestWindowManagerSetFocusContent(t *testing.T) {
 
 	wm.SetFrameCharSet(component.FrameCharSetDefault(), fb)
 
-	cases = []testutil.HandlerTestCase{
+	cases = []handlertest.SingleTestCase{
 		{
 			term.Event{}, `
 ┌──┐╔══╗
@@ -236,7 +236,7 @@ func TestWindowManagerSetFocusContent(t *testing.T) {
 		},
 	}
 
-	testutil.TestHandler(t, wm, cases, writer)
+	handlertest.TestHandler(t, wm, cases, writer)
 }
 
 func TestWindowManagerInit(t *testing.T) {

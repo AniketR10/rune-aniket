@@ -44,9 +44,9 @@ import (
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/extension"
+	"unstable.build/go-tui/handler/handlertest"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
-	testutil "unstable.build/go-tui/util/test"
 	"unstable.build/go-tui/workspace"
 )
 
@@ -122,7 +122,7 @@ func TestWorkspaceConfig(t *testing.T) {
 
 		assert.EqualValues(t, mockConfig, passed)
 
-		cases := []testutil.HandlerSequenceTestCase{
+		cases := []handlertest.SequenceTestCase{
 			{"",
 				`┌──────────────────┐
 │Config decode     │
@@ -135,7 +135,7 @@ func TestWorkspaceConfig(t *testing.T) {
 │                  │
 └──────────────────┘`},
 		}
-		testutil.TestHandlerSequence(t, m, 20, 10, cases)
+		handlertest.TestHandlerSequence(t, m, 20, 10, cases)
 	})
 
 	t.Run("does not reload workspace config", func(t *testing.T) {
@@ -266,7 +266,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 		return m
 	}
 
-	cases := []testutil.HandlerSequenceTestCase{
+	cases := []handlertest.SequenceTestCase{
 		{"",
 			`┌──────────────────┐
 │                  │
@@ -501,7 +501,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 │1  4              │
 └──────────────────┘`},
 	}
-	testutil.TestHandlerIsolated(t, fn, 20, 10, cases)
+	handlertest.TestHandlerIsolated(t, fn, 20, 10, cases)
 }
 
 func TestWorkspaceManagerClosePromptIntegration(t *testing.T) {
@@ -511,7 +511,7 @@ func TestWorkspaceManagerClosePromptIntegration(t *testing.T) {
 		filenames := []string{"1234", "4567"}
 		m := newTestWorkspaceManagerHandlerWithDir(t, defaultCfg(), filenames, dir)
 
-		cases := []testutil.HandlerSequenceTestCase{
+		cases := []handlertest.SequenceTestCase{
 			{"ihola <",
 				`┌──────────────────┐
 │1234*  4567       │
@@ -535,7 +535,7 @@ func TestWorkspaceManagerClosePromptIntegration(t *testing.T) {
 │  you sure you    │
 └──────────────────┘`},
 		}
-		testutil.TestHandlerSequence(t, m, 20, 10, cases)
+		handlertest.TestHandlerSequence(t, m, 20, 10, cases)
 
 		exit, handled := m.Handle(term.Event{Type: term.EventKey, Ch: 'y'})
 		assert.True(t, exit)
@@ -550,7 +550,7 @@ func TestWorkspaceManagerClosePromptIntegration(t *testing.T) {
 		filenames := []string{"1234", "4567"}
 		m := newTestWorkspaceManagerHandlerWithDir(t, defaultCfg(), filenames, dir)
 
-		cases := []testutil.HandlerSequenceTestCase{
+		cases := []handlertest.SequenceTestCase{
 			{"ihola <",
 				`┌──────────────────┐
 │1234*  4567       │
@@ -574,7 +574,7 @@ func TestWorkspaceManagerClosePromptIntegration(t *testing.T) {
 │  you sure you    │
 └──────────────────┘`},
 		}
-		testutil.TestHandlerSequence(t, m, 20, 10, cases)
+		handlertest.TestHandlerSequence(t, m, 20, 10, cases)
 
 		exit, handled := m.Handle(term.Event{Type: term.EventKey, Ch: 'n'})
 		assert.False(t, exit)
@@ -594,7 +594,7 @@ func TestWorkspaceManagerClosePromptIntegration(t *testing.T) {
 			filenames := []string{"1234", "4567"}
 			m := newTestWorkspaceManagerHandlerWithDir(t, defaultCfg(), filenames, dir)
 
-			cases := []testutil.HandlerSequenceTestCase{
+			cases := []handlertest.SequenceTestCase{
 				{"ihola <",
 					`┌──────────────────┐
 │1234*  4567       │
@@ -608,7 +608,7 @@ func TestWorkspaceManagerClosePromptIntegration(t *testing.T) {
 └──────────────────┘`},
 			}
 
-			testutil.TestHandlerSequence(t, m, 20, 10, cases)
+			handlertest.TestHandlerSequence(t, m, 20, 10, cases)
 
 			exit, handled := m.Handle(term.Event{
 				Ch:  testCommandKey.Ch,
@@ -647,7 +647,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 				filenames := []string{"1234", "4567"}
 				m := newTestWorkspaceManagerHandlerWithDir(t, defaultConfigWithWrap(wrap), filenames, dir)
 
-				cases := []testutil.HandlerSequenceTestCase{
+				cases := []handlertest.SequenceTestCase{
 					{"",
 						`┌──────────────────┐
 │1234  4567        │
@@ -660,7 +660,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 │            NORMAL│
 └──────────────────┘`},
 				}
-				testutil.TestHandlerSequence(t, m, 20, 10, cases)
+				handlertest.TestHandlerSequence(t, m, 20, 10, cases)
 
 				require.NoError(t, m.Close())
 			})
@@ -668,7 +668,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 			t.Run("initial files from restore previous session prompt", func(t *testing.T) {
 				m := newTestWorkspaceManagerHandlerWithDir(t, defaultConfigWithWrap(wrap), nil, dir)
 
-				cases := []testutil.HandlerSequenceTestCase{
+				cases := []handlertest.SequenceTestCase{
 					{"",
 						`┌──────────────────┐
 │                  │
@@ -692,7 +692,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 │            NORMAL│
 └──────────────────┘`},
 				}
-				testutil.TestHandlerSequence(t, m, 20, 10, cases)
+				handlertest.TestHandlerSequence(t, m, 20, 10, cases)
 				require.NoError(t, m.Close())
 			})
 
@@ -701,7 +701,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 				cfg.cfg["workspace"].(map[string]interface{})["auto_restore"] = true
 				m := newTestWorkspaceManagerHandlerWithDir(t, cfg, nil, dir)
 
-				cases := []testutil.HandlerSequenceTestCase{
+				cases := []handlertest.SequenceTestCase{
 					{"",
 						`┌──────────────────┐
 │1234  4567        │
@@ -714,7 +714,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 │            NORMAL│
 └──────────────────┘`},
 				}
-				testutil.TestHandlerSequence(t, m, 20, 10, cases)
+				handlertest.TestHandlerSequence(t, m, 20, 10, cases)
 				require.NoError(t, m.Close())
 			})
 
@@ -733,7 +733,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 				m1 := newTestWorkspaceManagerHandlerWithManagerAndExtensions(t, manager,
 					&uri, cfg, runner, nil, nil, dir, nil)
 
-				cases := []testutil.HandlerSequenceTestCase{
+				cases := []handlertest.SequenceTestCase{
 					{":edit 1234>ih3ll0\nw1rld <:write>:edit 4567>ihello\nworld <:write>:notificationsCloseAll>",
 						`┌──────────────────┐
 │1234  4567        │
@@ -746,13 +746,13 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 │            NORMAL│
 └──────────────────┘`},
 				}
-				testutil.TestHandlerSequence(t, m1, 20, 10, cases)
+				handlertest.TestHandlerSequence(t, m1, 20, 10, cases)
 				require.NoError(t, m1.Close())
 
 				m2 := newTestWorkspaceManagerHandlerWithManagerAndExtensions(t, manager,
 					&uri, cfg, runner, nil, nil, dir, nil)
 
-				cases = []testutil.HandlerSequenceTestCase{
+				cases = []handlertest.SequenceTestCase{
 					{"",
 						`┌──────────────────┐
 │1234  4567        │
@@ -776,13 +776,13 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 │            NORMAL│
 └──────────────────┘`},
 				}
-				testutil.TestHandlerSequence(t, m2, 20, 10, cases)
+				handlertest.TestHandlerSequence(t, m2, 20, 10, cases)
 				require.NoError(t, m2.Close())
 
 				m3 := newTestWorkspaceManagerHandlerWithManagerAndExtensions(t, manager,
 					&uri, cfg, runner, nil, nil, dir, nil)
 
-				cases = []testutil.HandlerSequenceTestCase{
+				cases = []handlertest.SequenceTestCase{
 					{"",
 						`┌──────────────────┐
 │1234  4567        │
@@ -795,7 +795,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 │            NORMAL│
 └──────────────────┘`},
 				}
-				testutil.TestHandlerSequence(t, m3, 20, 10, cases)
+				handlertest.TestHandlerSequence(t, m3, 20, 10, cases)
 				require.NoError(t, m3.Close())
 			})
 
@@ -804,7 +804,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 				require.NoError(t, err)
 				m := newTestWorkspaceManagerHandlerWithDir(t, defaultConfigWithWrap(wrap), nil, dir)
 
-				cases := []testutil.HandlerSequenceTestCase{
+				cases := []handlertest.SequenceTestCase{
 					{":edit A>ih3ll0\nw1rld <:write>:edit B>ihello\nworld <:write>:notificationsCloseAll>",
 						`┌──────────────────┐
 │A  B              │
@@ -850,7 +850,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 │            NORMAL│
 └──────────────────┘`},
 				}
-				testutil.TestHandlerSequence(t, m, 20, 10, cases)
+				handlertest.TestHandlerSequence(t, m, 20, 10, cases)
 				require.NoError(t, m.Close())
 			})
 		})
@@ -861,7 +861,7 @@ func TestInitializeNoCwd(t *testing.T) {
 	m := newTestWorkspaceManagerHandlerWithDir(t,
 		defaultConfigWithWrap(false), []string{"ignored"}, "")
 
-	cases := []testutil.HandlerSequenceTestCase{
+	cases := []handlertest.SequenceTestCase{
 		{"",
 			`┌──────────────────┐
 │                  │
@@ -874,7 +874,7 @@ func TestInitializeNoCwd(t *testing.T) {
 │1                 │
 └──────────────────┘`},
 	}
-	testutil.TestHandlerSequence(t, m, 20, 10, cases)
+	handlertest.TestHandlerSequence(t, m, 20, 10, cases)
 
 	require.NoError(t, m.Close())
 }
@@ -888,7 +888,7 @@ func TestSwitchToWorkspaceComplete(t *testing.T) {
 
 	m := newTestWorkspaceManagerHandlerWithDir(t, defaultConfigWithWrap(false), nil, dir)
 
-	cases := []testutil.HandlerSequenceTestCase{
+	cases := []handlertest.SequenceTestCase{
 		{":swWo ",
 			`┌──────────────────────────────────────┐
 │                                      │
@@ -911,7 +911,7 @@ func TestSwitchToWorkspaceComplete(t *testing.T) {
 │9                                     │
 └──────────────────────────────────────┘`},
 	}
-	testutil.TestHandlerSequence(t, m, 40, 20, cases)
+	handlertest.TestHandlerSequence(t, m, 40, 20, cases)
 
 	require.NoError(t, m.Close())
 }
@@ -938,7 +938,7 @@ func TestExternalCommands(t *testing.T) {
 			}))
 		require.NoError(t, err)
 
-		cases := []testutil.HandlerSequenceTestCase{
+		cases := []handlertest.SequenceTestCase{
 			// '_' simulates sleeps; we can't and shouldn't
 			// enable sync command prompt from here
 			{":ramo w__", // existing workspace
@@ -990,7 +990,7 @@ func TestExternalCommands(t *testing.T) {
 │                            │
 └────────────────────────────┘`},
 		}
-		testutil.TestHandlerSequence(t, m, 30, 15, cases)
+		handlertest.TestHandlerSequence(t, m, 30, 15, cases)
 
 		require.NoError(t, m.Close())
 	})
@@ -1030,7 +1030,7 @@ func TestExternalCommands(t *testing.T) {
 			require.NoError(t, err)
 		}
 
-		cases := []testutil.HandlerSequenceTestCase{
+		cases := []handlertest.SequenceTestCase{
 			{":c0 1", // existing workspace
 				`┌────────────────────────────┐
 │                            │
@@ -1048,7 +1048,7 @@ func TestExternalCommands(t *testing.T) {
 │                            │
 └────────────────────────────┘`},
 		}
-		testutil.TestHandlerSequence(t, m, 30, 15, cases)
+		handlertest.TestHandlerSequence(t, m, 30, 15, cases)
 
 		require.NoError(t, m.Close())
 	})
@@ -1178,7 +1178,7 @@ func defaultCfg() ideConfig {
 		"clipboard": "memory",
 		"command": map[string]interface{}{
 			"show_manual_after": "1h",
-			"key":               "<c-\\\\>", // see testutil.TestHandlerIsolated
+			"key":               "<c-\\\\>", // see handlertest.TestHandlerIsolated
 			"key_bindings": map[string]interface{}{
 				"1": "switchToWorkspace 1",
 				"2": "switchToWorkspace 2",
