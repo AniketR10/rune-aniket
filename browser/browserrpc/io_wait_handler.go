@@ -28,53 +28,53 @@ import (
 	"sync"
 
 	"google.golang.org/grpc"
-	handlerpb "unstable.build/go-tui/handler/rpc"
+	"unstable.build/go-tui/handler/handlerrpc"
 )
 
 type ioUnlockHandler struct {
 	lock sync.Locker
-	h    handlerpb.HandlerClient
+	h    handlerrpc.HandlerClient
 }
 
 func newIOWaitUnlockHandlerClient(
-	h handlerpb.HandlerClient, lock sync.Locker,
-) handlerpb.HandlerClient {
+	h handlerrpc.HandlerClient, lock sync.Locker,
+) handlerrpc.HandlerClient {
 	ret := new(ioUnlockHandler)
 	ret.init(h, lock)
 	return ret
 }
 
-func (h *ioUnlockHandler) init(hc handlerpb.HandlerClient, lock sync.Locker) {
+func (h *ioUnlockHandler) init(hc handlerrpc.HandlerClient, lock sync.Locker) {
 	h.h = hc
 	h.lock = lock
 }
 
 func (h *ioUnlockHandler) Draw(
-	ctx context.Context, in *handlerpb.DrawRequest, opts ...grpc.CallOption,
-) (*handlerpb.DrawResponse, error) {
+	ctx context.Context, in *handlerrpc.DrawRequest, opts ...grpc.CallOption,
+) (*handlerrpc.DrawResponse, error) {
 	// do not unlock for Draw, as impls should simply draw, not call other APIs.
 	return h.h.Draw(ctx, in, opts...)
 }
 
 func (h *ioUnlockHandler) Handle(
-	ctx context.Context, in *handlerpb.HandleRequest, opts ...grpc.CallOption,
-) (*handlerpb.HandleResponse, error) {
+	ctx context.Context, in *handlerrpc.HandleRequest, opts ...grpc.CallOption,
+) (*handlerrpc.HandleResponse, error) {
 	h.lock.Unlock()
 	defer h.lock.Lock()
 	return h.h.Handle(ctx, in, opts...)
 }
 
 func (h *ioUnlockHandler) Man(
-	ctx context.Context, in *handlerpb.ManRequest, opts ...grpc.CallOption,
-) (*handlerpb.ManResponse, error) {
+	ctx context.Context, in *handlerrpc.ManRequest, opts ...grpc.CallOption,
+) (*handlerrpc.ManResponse, error) {
 	h.lock.Unlock()
 	defer h.lock.Lock()
 	return h.h.Man(ctx, in, opts...)
 }
 
 func (h *ioUnlockHandler) Close(
-	ctx context.Context, in *handlerpb.CloseRequest, opts ...grpc.CallOption,
-) (*handlerpb.CloseResponse, error) {
+	ctx context.Context, in *handlerrpc.CloseRequest, opts ...grpc.CallOption,
+) (*handlerrpc.CloseResponse, error) {
 	h.lock.Unlock()
 	defer h.lock.Lock()
 	return h.h.Close(ctx, in, opts...)

@@ -41,7 +41,7 @@ import (
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/notifications"
 
-	handlerrpc "unstable.build/go-tui/handler/rpc"
+	"unstable.build/go-tui/handler/handlerrpc"
 	"unstable.build/go-tui/rpc"
 )
 

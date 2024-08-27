@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-option go_package = "unstable.build/go-tui/handler/rpc";
+option go_package = "unstable.build/go-tui/handler/handlerrpc";
 
 import "term/termrpc/term.proto";
 

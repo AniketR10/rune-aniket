@@ -23,4 +23,4 @@
 
 package handler
 
-//go:generate protoc rpc/handler.proto -I=. -I=../ --go_out=./ --go-grpc_out=./ --go_opt=Mrpc/handler.proto=unstable.build/go-tui/handler/rpc
+//go:generate protoc handlerrpc/handler.proto -I=. -I=../ --go_out=./ --go-grpc_out=./ --go_opt=Mhandlerrpc/handler.proto=unstable.build/go-tui/handler/handlerrpc

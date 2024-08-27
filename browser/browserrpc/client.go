@@ -40,7 +40,7 @@ import (
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/handler"
-	handlerpb "unstable.build/go-tui/handler/rpc"
+	"unstable.build/go-tui/handler/handlerrpc"
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term"
 	termrpc "unstable.build/go-tui/term/termrpc"
@@ -154,8 +154,8 @@ func serveHandler(
 					srv:     srv,
 					cancel:  cancel,
 				}
-				hsrv := handlerpb.NewServer(h)
-				handlerpb.RegisterHandlerServer(srv.Registrar(), hsrv)
+				hsrv := handlerrpc.NewServer(h)
+				handlerrpc.RegisterHandlerServer(srv.Registrar(), hsrv)
 
 				// if it satisfies Floating as well then register it
 				if floating, ok := h.(browserapi.Floating); ok {
