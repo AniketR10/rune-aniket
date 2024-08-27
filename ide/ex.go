@@ -45,6 +45,7 @@ import (
 	textapi "unstable.build/go-tui/api/text"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser"
+	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/handler"
@@ -53,7 +54,6 @@ import (
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/term/vte"
 	"unstable.build/go-tui/text"
-	"unstable.build/go-tui/text/clipboard"
 	"unstable.build/go-tui/workspace"
 	"unstable.build/go-tui/workspace/walkdir"
 )

@@ -26,8 +26,8 @@ package vte
 import (
 	"github.com/unstablebuild/tcell/v3"
 	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/term"
-	"unstable.build/go-tui/text/clipboard"
 )
 
 // DefaultConfig returns a sane default Config.

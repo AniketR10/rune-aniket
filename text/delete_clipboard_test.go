@@ -29,9 +29,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/term"
-	"unstable.build/go-tui/text/clipboard"
 )
 
 func TestDeleteClipboard(t *testing.T) {

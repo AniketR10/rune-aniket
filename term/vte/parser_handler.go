@@ -37,10 +37,10 @@ import (
 	"github.com/unstablebuild/tcell/v3"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser"
+	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/term/vte/parser"
 	"unstable.build/go-tui/term/vte/screen"
-	"unstable.build/go-tui/text/clipboard"
 )
 
 var _ parser.Handler = (*parserHandler)(nil)

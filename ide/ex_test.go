@@ -49,6 +49,7 @@ import (
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/browser/browsertest"
 	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/handler"
@@ -56,7 +57,6 @@ import (
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/term/vte"
 	"unstable.build/go-tui/text"
-	"unstable.build/go-tui/text/clipboard"
 	"unstable.build/go-tui/text/texttest"
 	"unstable.build/go-tui/workspace"
 )

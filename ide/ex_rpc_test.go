@@ -42,11 +42,11 @@ import (
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/browser/browserrpc"
 	"unstable.build/go-tui/browser/browsertest"
+	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/term/vte"
 	"unstable.build/go-tui/text"
-	"unstable.build/go-tui/text/clipboard"
 	"unstable.build/go-tui/text/texttest"
 )
 

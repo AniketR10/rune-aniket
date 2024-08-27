@@ -34,12 +34,12 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/browser"
+	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/command"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/term/vte"
-	"unstable.build/go-tui/text/clipboard"
 )
 
 var sampleConfig = `

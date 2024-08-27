@@ -25,8 +25,8 @@ package vi
 
 import (
 	"github.com/unstablebuild/tcell/v3"
+	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/term"
-	"unstable.build/go-tui/text/clipboard"
 )
 
 // viConfig holds configuration for Vi.

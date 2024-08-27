@@ -32,9 +32,9 @@ import (
 	"github.com/stretchr/testify/require"
 	textapi "unstable.build/go-tui/api/text"
 	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/term"
-	"unstable.build/go-tui/text/clipboard"
 )
 
 type notiRecord struct {

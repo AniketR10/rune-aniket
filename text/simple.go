@@ -30,8 +30,8 @@ import (
 	textapi "unstable.build/go-tui/api/text"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/term"
-	"unstable.build/go-tui/text/clipboard"
 )
 
 // DefaultSimpleEditor returns a simple to use Editor implementation.

@@ -30,7 +30,7 @@ import (
 	"github.com/stretchr/testify/require"
 	textapitest "unstable.build/go-tui/api/text/texttest"
 	workspaceapi "unstable.build/go-tui/api/workspace"
-	"unstable.build/go-tui/text/clipboard"
+	"unstable.build/go-tui/clipboard"
 )
 
 func TestExtensionHandler(t *testing.T) {

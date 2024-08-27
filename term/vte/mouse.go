@@ -28,9 +28,9 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/logging"
+	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
-	"unstable.build/go-tui/text/clipboard"
 )
 
 type mouseDriver struct {

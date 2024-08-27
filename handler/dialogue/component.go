@@ -30,11 +30,11 @@ import (
 
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/handler/input"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
-	"unstable.build/go-tui/text/clipboard"
 )
 
 // ComponentConfig holds configuration options for dialogue.Component.

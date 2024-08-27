@@ -46,6 +46,8 @@ import (
 	storageextension "unstable.build/go-tui/api/storage/extension"
 	textapi "unstable.build/go-tui/api/text"
 	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/clipboard"
+	"unstable.build/go-tui/clipboard/sysclip"
 	"unstable.build/go-tui/cmd/extension_ai/backend"
 	aiDialogue "unstable.build/go-tui/cmd/extension_ai/dialogue"
 	"unstable.build/go-tui/component"
@@ -58,8 +60,6 @@ import (
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
-	"unstable.build/go-tui/text/clipboard"
-	sysclip "unstable.build/go-tui/text/clipboard/system"
 )
 
 const (

@@ -45,6 +45,8 @@ import (
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	workspaceextension "unstable.build/go-tui/api/workspace/extension"
 	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/clipboard"
+	"unstable.build/go-tui/clipboard/sysclip"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/extension"
@@ -52,8 +54,6 @@ import (
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term"
-	"unstable.build/go-tui/text/clipboard"
-	sysclip "unstable.build/go-tui/text/clipboard/system"
 )
 
 const (

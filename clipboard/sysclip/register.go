@@ -21,14 +21,14 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package system
+package sysclip
 
 import (
 	"errors"
 	"sync/atomic"
 
 	sysclip "github.com/atotto/clipboard"
-	"unstable.build/go-tui/text/clipboard"
+	"unstable.build/go-tui/clipboard"
 )
 
 type register struct {

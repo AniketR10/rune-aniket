@@ -26,9 +26,9 @@ package search
 import (
 	"unstable.build/go-tui"
 	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
-	"unstable.build/go-tui/text/clipboard"
 )
 
 type simpleHandler struct {

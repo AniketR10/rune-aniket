@@ -34,8 +34,8 @@ import (
 	"github.com/unstablebuild/blue/iterator"
 	browserapi "unstable.build/go-tui/api/browser"
 	textapi "unstable.build/go-tui/api/text"
+	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/component/notifications"
-	"unstable.build/go-tui/text/clipboard"
 )
 
 // extracts protocol, domain, owner and repo name from a git remote URL.
