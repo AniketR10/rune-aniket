@@ -38,7 +38,7 @@ import (
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/term"
-	"unstable.build/go-tui/term/vte/screen"
+	"unstable.build/go-tui/term/vte/vtescreen"
 	"unstable.build/go-tui/term/vte/vtetest"
 	"unstable.build/go-tui/text"
 )
@@ -616,7 +616,7 @@ func TestViEditUnit(t *testing.T) {
 		var vi viHandler
 		vi.doInit(comp, DefaultConfig())
 
-		ctx := screen.NewContext(context.Background())
+		ctx := vtescreen.NewContext(context.Background())
 		vi.Edit(ctx, term.Coordinates{}, term.Coordinates{Y: 1, X: 1}, "b\nb")
 		assert.Equal(t, "b\nb", comp.scroll.Buffer().String())
 	})
@@ -1179,7 +1179,7 @@ type testParentComponent struct {
 
 func newTestParentComponent(content string, cursorAtScroll term.Coordinates) *testParentComponent {
 	buf := new(cell.Buffer)
-	buf.InitPerformance(cell.DefaultTabspaces, 1, 1, screen.DefaultChar)
+	buf.InitPerformance(cell.DefaultTabspaces, 1, 1, vtescreen.DefaultChar)
 
 	scroll := new(component.Scroll)
 	scroll.InitPerformance(buf)
@@ -1246,7 +1246,7 @@ func newTestRemote(scroll *component.Scroll, cursorPosition term.Coordinates) *t
 	ret.cursor = new(text.Cursor)
 	ret.cursor.InitPerformance(scroll)
 	// needed to ensure that remote edits bypass Edit checks
-	ret.ctx = screen.NewContext(context.Background())
+	ret.ctx = vtescreen.NewContext(context.Background())
 	ret.cursor.MoveToScroll(cursorPosition)
 	return ret
 }

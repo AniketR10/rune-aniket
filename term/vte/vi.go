@@ -41,7 +41,7 @@ import (
 	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/term"
-	"unstable.build/go-tui/term/vte/screen"
+	"unstable.build/go-tui/term/vte/vtescreen"
 	"unstable.build/go-tui/text/vi"
 )
 
@@ -109,7 +109,7 @@ func (v *viHandler) doInit(comp parentComponent, config Config) {
 		vi.WithAutoSkipNullCells(false),
 	}
 	copyBuffer := new(cell.Buffer)
-	copyBuffer.InitPerformance(cell.DefaultTabspaces, 120, 80, screen.DefaultChar)
+	copyBuffer.InitPerformance(cell.DefaultTabspaces, 120, 80, vtescreen.DefaultChar)
 	copyScroll := new(component.Scroll)
 	copyScroll.InitPerformance(copyBuffer)
 	v.copy.vi = new(vi.Vi)
@@ -267,7 +267,7 @@ func (v *viHandler) Edit(ctx context.Context, start, end term.Coordinates, str s
 	from, to term.Coordinates, old string,
 ) {
 	v.editCopy(ctx, start, end, str)
-	if screenContext := screen.IsScreenContext(ctx); screenContext {
+	if screenContext := vtescreen.IsScreenContext(ctx); screenContext {
 		v.vteParserEdited = true
 		v.sync.vi.OnWillEdit(ctx, start, end, str)
 		from, to, old = v.sync.editor.Edit(ctx, start, end, str)
@@ -745,7 +745,7 @@ func (v *viHandler) lastValidLineColumn(y int) term.Coordinates {
 
 	for x := len(cells[y]) - 1; x >= 0; x-- {
 		ch := cells[y][x].Ch
-		if ch != screen.DefaultChar && ch != ' ' {
+		if ch != vtescreen.DefaultChar && ch != ' ' {
 			return term.Coordinates{Y: y, X: x}
 		}
 	}

@@ -26,7 +26,7 @@ package vte
 import (
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/term"
-	"unstable.build/go-tui/term/vte/screen"
+	"unstable.build/go-tui/term/vte/vtescreen"
 )
 
 // lastPromptLine this attempts to find the last "shell" prompt line,
@@ -51,7 +51,7 @@ func lastPromptLine(view cell.View, width int, excludeTailSpaces bool) (from ter
 		for y := len(cells) - 1; y >= 0; y-- {
 			for x := len(cells[y]) - 1; x >= 0; x-- {
 				ch := cells[y][x].Ch
-				if ch != screen.DefaultChar && ch != ' ' {
+				if ch != vtescreen.DefaultChar && ch != ' ' {
 					to = term.Coordinates{Y: y, X: x + 1}
 					break outerSpace
 				}
@@ -61,7 +61,7 @@ func lastPromptLine(view cell.View, width int, excludeTailSpaces bool) (from ter
 	outer:
 		for y := len(cells) - 1; y >= 0; y-- {
 			for x := len(cells[y]) - 1; x >= 0; x-- {
-				if cells[y][x].Ch != screen.DefaultChar {
+				if cells[y][x].Ch != vtescreen.DefaultChar {
 					to = term.Coordinates{Y: y, X: x + 1}
 					break outer
 				}
@@ -83,7 +83,7 @@ func lastPromptLine(view cell.View, width int, excludeTailSpaces bool) (from ter
 		}
 		for ; x >= 0; x-- {
 			cell := cells[y][x]
-			if cell.Ch == screen.DefaultChar {
+			if cell.Ch == vtescreen.DefaultChar {
 				from = last
 				return
 			}

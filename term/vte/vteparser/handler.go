@@ -21,7 +21,7 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package parser
+package vteparser
 
 import (
 	"github.com/unstablebuild/tcell/v3"
@@ -154,22 +154,22 @@ type Handler interface {
 	// TerminalAttribute sets a terminal attribute at the current cursor position.
 	TerminalAttribute(attr Attr)
 
-	// SetMode sets an parser.Mode.
+	// SetMode sets an vteparser.Mode.
 	SetMode(mode Mode)
 
-	// UnsetMode unsets an parser.Mode.
+	// UnsetMode unsets an vteparser.Mode.
 	UnsetMode(mode Mode)
 
-	// ReportMode reports an parser.Mode back into the pty stream.
+	// ReportMode reports an vteparser.Mode back into the pty stream.
 	ReportMode(mode Mode)
 
-	// SetPrivate sets an parser.PrivateMode.
+	// SetPrivate sets an vteparser.PrivateMode.
 	SetPrivateMode(PrivateMode)
 
-	// UnsetPrivate unsets an parser.PrivateMode.
+	// UnsetPrivate unsets an vteparser.PrivateMode.
 	UnsetPrivateMode(PrivateMode)
 
-	// ReportPrivateMode (DECRPM) reports an parser.PrivateMode back into the pty stream.
+	// ReportPrivateMode (DECRPM) reports an vteparser.PrivateMode back into the pty stream.
 	ReportPrivateMode(PrivateMode)
 
 	// SetScrollingRegion (DECSTBM) sets the terminal scrolling region.

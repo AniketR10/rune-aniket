@@ -21,7 +21,7 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package screen
+package vtescreen
 
 import (
 	"context"
@@ -30,7 +30,7 @@ import (
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/term"
-	"unstable.build/go-tui/term/vte/parser"
+	"unstable.build/go-tui/term/vte/vteparser"
 	"unstable.build/go-tui/text"
 )
 
@@ -66,7 +66,7 @@ type CursorState struct {
 	position term.Coordinates
 	attr     term.Attributes
 	hidden   bool // hidden flag on cursor attrs, not cursor itself
-	Charsets map[parser.CharsetIndex]parser.StandardCharset
+	Charsets map[vteparser.CharsetIndex]vteparser.StandardCharset
 }
 
 // NewAltBuffer allocates storage for a new AltBuffer and initializes it.
@@ -84,7 +84,7 @@ func (b *AltBuffer) Init() {
 	b.topScrollableRegion = 0
 	b.bottomScrollableRegion = b.height
 	b.cursor = CursorState{
-		Charsets: make(map[parser.CharsetIndex]parser.StandardCharset),
+		Charsets: make(map[vteparser.CharsetIndex]vteparser.StandardCharset),
 	}
 	b.Cells.InitPerformance(cell.DefaultTabspaces, 120, 80, b.defaultChar)
 	b.resetLinesTrim(0, b.height, true, b.defaultChar)
@@ -105,7 +105,7 @@ func (b *AltBuffer) Resize(width, height int) {
 // all the cells to the right of the cursor. It does not extend the number columns
 // in the buffer, as it should always be capped at exactly b.Width(), set by
 // the previous call to Resize.
-func (b *AltBuffer) Insert(c rune, width int, charset parser.CharsetIndex) {
+func (b *AltBuffer) Insert(c rune, width int, charset vteparser.CharsetIndex) {
 	b.Cells.InsertContext(b.ctx, b.cursor.position, b.defaultChar)
 	b.Write(c, width, charset)
 	columns := b.Cells.Columns(b.cursor.position.Y)
@@ -118,7 +118,7 @@ func (b *AltBuffer) Insert(c rune, width int, charset parser.CharsetIndex) {
 
 // Write writes the given character with the given width to the cell
 // at the current cursor position.
-func (b *AltBuffer) Write(c rune, width int, charset parser.CharsetIndex) {
+func (b *AltBuffer) Write(c rune, width int, charset vteparser.CharsetIndex) {
 	if charset, ok := b.cursor.Charsets[charset]; ok {
 		c = charset.Map(c)
 	}
@@ -315,7 +315,7 @@ func (b *AltBuffer) SaveCursor() {
 func (b *AltBuffer) CloneCursor() (ret CursorState) {
 	ret.attr = b.cursor.attr
 	ret.position = b.cursor.position
-	ret.Charsets = make(map[parser.CharsetIndex]parser.StandardCharset)
+	ret.Charsets = make(map[vteparser.CharsetIndex]vteparser.StandardCharset)
 	for k, v := range b.cursor.Charsets {
 		ret.Charsets[k] = v
 	}
@@ -373,7 +373,7 @@ func (b *AltBuffer) SetCursorAttributes(attr term.Attributes) {
 
 // ConfigureCharset configures the given charset index to use charset.
 func (b *AltBuffer) ConfigureCharset(
-	index parser.CharsetIndex, charset parser.StandardCharset,
+	index vteparser.CharsetIndex, charset vteparser.StandardCharset,
 ) {
 	b.cursor.Charsets[index] = charset
 }

@@ -21,7 +21,7 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package screen
+package vtescreen
 
 import (
 	"testing"
@@ -31,7 +31,7 @@ import (
 	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/term"
-	"unstable.build/go-tui/term/vte/parser"
+	"unstable.build/go-tui/term/vte/vteparser"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -526,8 +526,8 @@ func TestWriteInsert(t *testing.T) {
 		resetAltBuffer(t, b, "aa\nbb\n  \n  \n  \n  \n  \n  \n  \n  ")
 		b.SetCursorAtScreen(term.Coordinates{}, false)
 
-		b.ConfigureCharset(parser.CharsetIndexG1, parser.StandardCharsetSpecialCharacterAndLineDrawing)
-		b.Write('`', 1, parser.CharsetIndexG1)
+		b.ConfigureCharset(vteparser.CharsetIndexG1, vteparser.StandardCharsetSpecialCharacterAndLineDrawing)
+		b.Write('`', 1, vteparser.CharsetIndexG1)
 		assertEqualBuf(t, b, "◆a\nbb\n  \n  \n  \n  \n  \n  \n  \n  ")
 	})
 
@@ -536,7 +536,7 @@ func TestWriteInsert(t *testing.T) {
 		resetAltBuffer(t, b, "aa\nbb\n  \n  \n  \n  \n  \n  \n  \n  ")
 		b.SetCursorAtScreen(term.Coordinates{}, false)
 
-		b.Write('`', 1, parser.CharsetIndexG1)
+		b.Write('`', 1, vteparser.CharsetIndexG1)
 		assertEqualBuf(t, b, "`a\nbb\n  \n  \n  \n  \n  \n  \n  \n  ")
 	})
 

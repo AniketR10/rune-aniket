@@ -30,7 +30,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"unstable.build/go-tui/term/vte/parser"
+	"unstable.build/go-tui/term/vte/vteparser"
 )
 
 func TestWaitParserHandler(t *testing.T) {
@@ -123,12 +123,12 @@ func TestWaitParserHandler(t *testing.T) {
 }
 
 type mockBellHandler struct {
-	parser.Handler
+	vteparser.Handler
 }
 
 func newMockBellHandler() *mockBellHandler {
 	ret := new(mockBellHandler)
-	ret.Handler = parser.NopHandler()
+	ret.Handler = vteparser.NopHandler()
 	return ret
 }
 

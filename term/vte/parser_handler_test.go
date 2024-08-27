@@ -39,8 +39,8 @@ import (
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/term"
-	"unstable.build/go-tui/term/vte/parser"
-	"unstable.build/go-tui/term/vte/screen"
+	"unstable.build/go-tui/term/vte/vteparser"
+	"unstable.build/go-tui/term/vte/vtescreen"
 	"unstable.build/go-tui/workspace/workspacetest"
 )
 
@@ -84,7 +84,7 @@ func TestIntegrationParserHandler(t *testing.T) {
 				p.Resize(5, 5)
 				p.Input('a')
 				p.Goto(0, 1)
-				p.ClearLine(parser.LineClearModeRight)
+				p.ClearLine(vteparser.LineClearModeRight)
 				p.Goto(1, 0)
 				p.Input('b')
 				assertEqualBuf(t, p, "a    \nb    \n     \n     \n     ")
@@ -97,7 +97,7 @@ func TestIntegrationParserHandler(t *testing.T) {
 				p.Resize(5, 5)
 				p.Input('a')
 				p.Goto(0, 1)
-				p.ClearLine(parser.LineClearModeRight)
+				p.ClearLine(vteparser.LineClearModeRight)
 				p.Goto(1, 0)
 				p.Input('b')
 				assertEqualBuf(t, p, "a    \nb    \n     \n     \n     ")
@@ -137,7 +137,7 @@ func TestIntegrationParserHandler(t *testing.T) {
 				p.Input(' ')
 				p.Input(' ')
 				p.Goto(4, 0)
-				p.ClearLine(parser.LineClearModeRight)
+				p.ClearLine(vteparser.LineClearModeRight)
 				p.Goto(1, 0)
 				assertEqualBuf(t, p, "a    \n     \n     \n     \n     ")
 			},
@@ -285,10 +285,10 @@ func TestIntegrationParserHandler(t *testing.T) {
 				p.Linefeed()
 				p.CarriageReturn()
 				p.Linefeed()
-				p.ClearScreen(parser.ClearModeBelow)
+				p.ClearScreen(vteparser.ClearModeBelow)
 				p.Input('$')
 				p.Input(' ')
-				p.ClearLine(parser.LineClearModeRight)
+				p.ClearLine(vteparser.LineClearModeRight)
 				assertEqualBuf(t, p, "e    \n$ .  \nout  \n     \n$    ")
 			},
 		},
@@ -300,7 +300,7 @@ func TestIntegrationParserHandler(t *testing.T) {
 				resetBuffer(t, p, "a    \nb    \nc    \nd    \ne    \n$ .  ")
 				assertEqualBuf(t, p, "b    \nc    \nd    \ne    \n$ .  ")
 				p.Resize(4, 4)
-				p.ClearScreen(parser.ClearModeAll)
+				p.ClearScreen(vteparser.ClearModeAll)
 				p.Goto(0, 0)
 				p.Input('$')
 				assertEqualBuf(t, p, "$   \n    \n    \n    ")
@@ -313,10 +313,10 @@ func TestIntegrationParserHandler(t *testing.T) {
 				p.Resize(5, 5)
 				resetBuffer(t, p, "a    \nb    \nc    \nd    \ne    \n$ .  ")
 				p.Goto(0, 0)
-				p.ClearScreen(parser.ClearModeAll)
-				p.ClearScreen(parser.ClearModeBelow)
+				p.ClearScreen(vteparser.ClearModeAll)
+				p.ClearScreen(vteparser.ClearModeBelow)
 				p.Input('$')
-				p.ClearLine(parser.LineClearModeRight)
+				p.ClearLine(vteparser.LineClearModeRight)
 				assertEqualBuf(t, p, "$    \n     \n     \n     \n     ")
 			},
 		},
@@ -328,10 +328,10 @@ func TestIntegrationParserHandler(t *testing.T) {
 				resetBuffer(t, p, "a    \nb    \nc    \nd    \ne    \n$ .  \nout  \n$    ")
 				assertEqualBuf(t, p, "d    \ne    \n$ .  \nout  \n$    ")
 				p.Goto(0, 0)
-				p.ClearScreen(parser.ClearModeAll)
-				p.ClearScreen(parser.ClearModeBelow)
+				p.ClearScreen(vteparser.ClearModeAll)
+				p.ClearScreen(vteparser.ClearModeBelow)
 				p.Input('$')
-				p.ClearLine(parser.LineClearModeRight)
+				p.ClearLine(vteparser.LineClearModeRight)
 				assertEqualBuf(t, p, "$    \n     \n     \n     \n     ")
 
 				// simulate user scrolling
@@ -438,7 +438,7 @@ func TestIntegrationParserHandler(t *testing.T) {
 				resetBuffer(t, p, "a    \nb    \nc    \nd    \ne    \n$ .  \nout  \n$    ")
 				assertEqualBuf(t, p, "d    \ne    \n$ .  \nout  \n$    ")
 				assert.Equal(t, term.Coordinates{Y: 4, X: 4}, p.sync.buf.CursorAtScreen())
-				p.ClearScreen(parser.ClearModeAbove)
+				p.ClearScreen(vteparser.ClearModeAbove)
 				assertEqualBuf(t, p, "     \n     \n     \n     \n     ")
 			},
 		},
@@ -450,7 +450,7 @@ func TestIntegrationParserHandler(t *testing.T) {
 				resetBuffer(t, p, "a    \nb    \nc    \nd    \ne    \n$ .  \nout  \n$    ")
 				assertEqualBuf(t, p, "d    \ne    \n$ .  \nout  \n$    ")
 
-				p.ClearScreen(parser.ClearModeSaved)
+				p.ClearScreen(vteparser.ClearModeSaved)
 				assertEqualBuf(t, p, "d    \ne    \n$ .  \nout  \n$    ")
 
 				assert.True(t, p.scrollDown(1, true))
@@ -467,7 +467,7 @@ func TestIntegrationParserHandler(t *testing.T) {
 				p.Resize(5, 5)
 				resetBuffer(t, p, "a    \nb    \nc    \nd    \ne    ")
 
-				p.ClearScreen(parser.ClearModeSaved)
+				p.ClearScreen(vteparser.ClearModeSaved)
 				assertEqualBuf(t, p, "a    \nb    \nc    \nd    \ne    ")
 			},
 		},
@@ -485,7 +485,7 @@ func TestIntegrationParserHandler(t *testing.T) {
 				p.ScrollUp(1)
 				assertEqualBuf(t, p, "a    \nb    \nc    \nd    \n     ")
 
-				p.ClearScreen(parser.ClearModeSaved)
+				p.ClearScreen(vteparser.ClearModeSaved)
 				assertEqualBuf(t, p, "a    \nb    \nc    \nd    \n     ")
 
 				p.ScrollDown(1)
@@ -501,7 +501,7 @@ func TestIntegrationParserHandler(t *testing.T) {
 				assertEqualBuf(t, p, "d    \ne    \n$ .  \nout  \n$    ")
 
 				p.sync.primBuf.SetOffset(term.Coordinates{Y: 999})
-				p.ClearScreen(parser.ClearModeSaved)
+				p.ClearScreen(vteparser.ClearModeSaved)
 				assertEqualBuf(t, p, "     \n     \n     \n     \n     ")
 
 				assert.True(t, p.scrollDown(1, true))
@@ -788,7 +788,7 @@ func TestIntegrationParserHandler(t *testing.T) {
 			sut: func(t *testing.T, p *parserHandler, tm *mockTabManager, pty *workspacetest.File) {
 				assert.False(t, tm.belled)
 				p.onFocusChange(false)
-				p.UnsetPrivateMode(parser.PrivateModeUrgencyHints)
+				p.UnsetPrivateMode(vteparser.PrivateModeUrgencyHints)
 				p.Bell()
 				assert.False(t, tm.belled)
 				assert.Zero(t, tm.setName)
@@ -802,7 +802,7 @@ func TestIntegrationParserHandler(t *testing.T) {
 			sut: func(t *testing.T, p *parserHandler, tm *mockTabManager, pty *workspacetest.File) {
 				assert.False(t, tm.belled)
 				p.onFocusChange(true)
-				p.UnsetPrivateMode(parser.PrivateModeUrgencyHints)
+				p.UnsetPrivateMode(vteparser.PrivateModeUrgencyHints)
 				p.Bell()
 				assert.True(t, tm.belled)
 				assert.Zero(t, tm.setName)
@@ -862,9 +862,9 @@ func TestIntegrationParserHandler(t *testing.T) {
 			ph.sync.altBuf.SetDefaultChar(' ')
 
 			if test.altBuffer {
-				ph.SetPrivateMode(parser.PrivateModeSwapScreenAndSetRestoreCursor)
+				ph.SetPrivateMode(vteparser.PrivateModeSwapScreenAndSetRestoreCursor)
 			} else {
-				ph.UnsetPrivateMode(parser.PrivateModeSwapScreenAndSetRestoreCursor)
+				ph.UnsetPrivateMode(vteparser.PrivateModeSwapScreenAndSetRestoreCursor)
 			}
 
 			test.sut(t, ph, &tm, &mockPtyFile)
@@ -877,23 +877,23 @@ func assertEqualBuf(t *testing.T, p *parserHandler, expected string) {
 }
 
 func assertEqualScreenBuf(t *testing.T, p screenBuffer, expected string) {
-	if prim, ok := p.(*screen.PrimaryBuffer); ok {
+	if prim, ok := p.(*vtescreen.PrimaryBuffer); ok {
 		width, height := prim.Dimensions()
 		writer := term.NewStringWriter(width, height)
 		prim.Draw(writer)
 		writer.Flush()
 		assert.Equal(t, expected, writer.String())
 	} else {
-		assert.Equal(t, expected, cell.CellsToString(p.(*screen.AltBuffer).Cells.RawCells()))
+		assert.Equal(t, expected, cell.CellsToString(p.(*vtescreen.AltBuffer).Cells.RawCells()))
 	}
 }
 
 func resetBuffer(t *testing.T, p *parserHandler, to string) {
 	writeToBuffer(p, to)
-	if prim, ok := p.sync.buf.(*screen.PrimaryBuffer); ok {
+	if prim, ok := p.sync.buf.(*vtescreen.PrimaryBuffer); ok {
 		require.Equal(t, to, cell.CellsToString(prim.Cells.RawCells()))
 	} else {
-		require.Equal(t, to, cell.CellsToString(p.sync.buf.(*screen.AltBuffer).Cells.RawCells()))
+		require.Equal(t, to, cell.CellsToString(p.sync.buf.(*vtescreen.AltBuffer).Cells.RawCells()))
 	}
 }
 

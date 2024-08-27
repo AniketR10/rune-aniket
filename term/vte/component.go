@@ -42,7 +42,7 @@ import (
 	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/term"
-	"unstable.build/go-tui/term/vte/parser"
+	"unstable.build/go-tui/term/vte/vteparser"
 	"unstable.build/go-tui/text"
 )
 
@@ -62,7 +62,7 @@ type Component struct {
 	width, height     int
 	parserHandler     parserHandler
 	waitParserHandler *waitParserHandler
-	parser            parser.Parser
+	parser            vteparser.Parser
 	complete          bool
 	selectionAttr     term.Attributes
 	defAttr           term.Attributes
@@ -108,13 +108,13 @@ func (t *Component) Init(
 		cfg.scheduleBell, t.uri, cfg.NeedsAttentionAttributes)
 	// start with pty slave file name as title
 	t.parserHandler.SetTitle(t.uri.Name())
-	var h parser.Handler = &t.parserHandler
+	var h vteparser.Handler = &t.parserHandler
 	if log.IsLevelEnabled(log.TraceLevel) {
-		h = parser.HandlerWithLogging("vte.parserHandler", h)
+		h = vteparser.HandlerWithLogging("vte.parserHandler", h)
 	}
 	t.waitParserHandler = newWaitParserHandler(t.ctx, h)
 	h = t.waitParserHandler
-	t.parser.Init(h, new(parser.StdTimeout))
+	t.parser.Init(h, new(vteparser.StdTimeout))
 	t.SetDefaultAttributes(t.defAttr)
 	return err
 }

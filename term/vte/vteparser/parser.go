@@ -21,14 +21,14 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package parser
+package vteparser
 
 import (
 	"bytes"
 	"time"
 
 	log "github.com/sirupsen/logrus"
-	"unstable.build/go-tui/term/vte/scanner"
+	"unstable.build/go-tui/term/vte/vtescanner"
 )
 
 const (
@@ -69,7 +69,7 @@ type parserState struct {
 // Parser wraps a Parser to ultimately call methods on a Handler.
 type Parser struct {
 	state   parserState
-	scanner *scanner.Scanner
+	scanner *vtescanner.Scanner
 	handler Handler
 }
 
@@ -90,11 +90,11 @@ func (p *Parser) Init(handler Handler, timeout Timeout) {
 			timeout: timeout,
 		},
 	}
-	var driver scanner.Driver = newDriver(&p.state, handler)
+	var driver vtescanner.Driver = newDriver(&p.state, handler)
 	if log.IsLevelEnabled(log.TraceLevel) {
-		driver = scanner.WithLoggingDriver(driver)
+		driver = vtescanner.WithLoggingDriver(driver)
 	}
-	p.scanner = scanner.NewScanner(driver)
+	p.scanner = vtescanner.NewScanner(driver)
 }
 
 // SyncTimeout returns the synchronized update timeout.

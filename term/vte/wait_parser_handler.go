@@ -29,18 +29,18 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/logging"
-	"unstable.build/go-tui/term/vte/parser"
+	"unstable.build/go-tui/term/vte/vteparser"
 )
 
-var _ parser.Handler = (*waitParserHandler)(nil)
+var _ vteparser.Handler = (*waitParserHandler)(nil)
 
 type waitParserHandler struct {
 	ch      chan func()
 	trigger func()
-	parser.Handler
+	vteparser.Handler
 }
 
-func newWaitParserHandler(ctx context.Context, h parser.Handler) *waitParserHandler {
+func newWaitParserHandler(ctx context.Context, h vteparser.Handler) *waitParserHandler {
 	ret := &waitParserHandler{
 		// NOTE: The channel size MUST BE smaller than the default
 		// event-loop channel size so we stop processing callbacks

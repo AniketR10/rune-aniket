@@ -39,11 +39,11 @@ import (
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/term"
-	"unstable.build/go-tui/term/vte/parser"
-	"unstable.build/go-tui/term/vte/screen"
+	"unstable.build/go-tui/term/vte/vteparser"
+	"unstable.build/go-tui/term/vte/vtescreen"
 )
 
-var _ parser.Handler = (*parserHandler)(nil)
+var _ vteparser.Handler = (*parserHandler)(nil)
 
 const (
 	pkgVersion             = 1
@@ -59,8 +59,8 @@ type parserHandler struct {
 	sync      struct {
 		mu      sync.Locker
 		buf     screenBuffer
-		primBuf *screen.PrimaryBuffer
-		altBuf  *screen.AltBuffer
+		primBuf *vtescreen.PrimaryBuffer
+		altBuf  *vtescreen.AltBuffer
 	}
 	tabs            tabstops
 	maxScrollLength int
@@ -95,7 +95,7 @@ type parserHandler struct {
 	shouldWrap     bool
 	useAlt         bool
 	usedAlt        bool
-	currentCharset parser.CharsetIndex
+	currentCharset vteparser.CharsetIndex
 }
 
 // use a common api for alternate and primary buffers
@@ -105,8 +105,8 @@ type screenBuffer interface {
 	SetCursorAtScroll(c term.Coordinates, relative bool)
 	CursorAtScreen() term.Coordinates
 	CursorAtScroll() term.Coordinates
-	Insert(c rune, width int, charset parser.CharsetIndex)
-	Write(c rune, width int, charset parser.CharsetIndex)
+	Insert(c rune, width int, charset vteparser.CharsetIndex)
+	Write(c rune, width int, charset vteparser.CharsetIndex)
 	Delete(count int)
 	ResetCells(start, end int)
 	ResetLines(start, end int)
@@ -141,8 +141,8 @@ func (t *parserHandler) init(
 	uri workspaceapi.URI,
 	needsAttentionAttr term.Attributes,
 ) {
-	t.sync.altBuf = screen.NewAltBuffer()
-	t.sync.primBuf = screen.NewPrimaryBuffer()
+	t.sync.altBuf = vtescreen.NewAltBuffer()
+	t.sync.primBuf = vtescreen.NewPrimaryBuffer()
 	t.sync.buf = t.sync.primBuf
 	t.sync.mu = mu
 	t.pty = pty
@@ -190,7 +190,7 @@ func (t *parserHandler) SetTitle(title string) {
 }
 
 // Set the cursor style.
-func (t *parserHandler) SetCursorStyle(style parser.CursorStyle) {
+func (t *parserHandler) SetCursorStyle(style vteparser.CursorStyle) {
 	t.sync.mu.Lock()
 	defer t.sync.mu.Unlock()
 
@@ -205,20 +205,20 @@ func (t *parserHandler) SetCursorStyle(style parser.CursorStyle) {
 	}
 
 	switch style.Shape {
-	case parser.CursorShapeBlock:
+	case vteparser.CursorShapeBlock:
 		t.cursorStyle = term.CursorStyleBlinkingBlock
-	case parser.CursorShapeUnderline:
+	case vteparser.CursorShapeUnderline:
 		t.cursorStyle = term.CursorStyleBlinkingUnderline
-	case parser.CursorShapeBeam:
+	case vteparser.CursorShapeBeam:
 		t.cursorStyle = term.CursorStyleBlinkingBar
-	case parser.CursorShapeHollowBlock:
+	case vteparser.CursorShapeHollowBlock:
 		/* unsupported by tcell */
 		t.cursorStyle = term.CursorStyleBlinkingBlock
 	}
 }
 
 // Set the cursor shape.
-func (t *parserHandler) SetCursorShape(shape parser.CursorShape) {
+func (t *parserHandler) SetCursorShape(shape vteparser.CursorShape) {
 	t.sync.mu.Lock()
 	defer t.sync.mu.Unlock()
 
@@ -399,7 +399,7 @@ func (t *parserHandler) PutTab() {
 		return
 	}
 
-	var cursor screen.CursorState
+	var cursor vtescreen.CursorState
 	if t.useAlt {
 		cursor = t.sync.altBuf.Cursor()
 	} else {
@@ -412,7 +412,7 @@ func (t *parserHandler) PutTab() {
 
 	// overwrite cell at current position, if it's an empty cell
 	cell := t.sync.buf.CellAt(pos)
-	if cell != nil && cell.Ch == screen.DefaultChar {
+	if cell != nil && cell.Ch == vtescreen.DefaultChar {
 		cell.Ch = c
 	}
 
@@ -489,14 +489,14 @@ func (t *parserHandler) SetHorizontalTabstop() {
 }
 
 // Clear tab stops.
-func (t *parserHandler) ClearTabs(mode parser.TabulationClearMode) {
+func (t *parserHandler) ClearTabs(mode vteparser.TabulationClearMode) {
 	t.sync.mu.Lock()
 	defer t.sync.mu.Unlock()
 
 	switch mode {
-	case parser.TabulationClearModeCurrent:
+	case vteparser.TabulationClearModeCurrent:
 		t.tabs.set(t.sync.buf.CursorAtScroll().X, false)
-	case parser.TabulationClearModeAll:
+	case vteparser.TabulationClearModeAll:
 		t.tabs.clearAll()
 	default:
 		t.log(log.WarnLevel, "unknown clear tabs mode: %v", mode)
@@ -613,22 +613,22 @@ func (t *parserHandler) RestoreCursorPosition() {
 }
 
 // Clear the current line.
-func (t *parserHandler) ClearLine(mode parser.LineClearMode) {
+func (t *parserHandler) ClearLine(mode vteparser.LineClearMode) {
 	t.sync.mu.Lock()
 	defer t.sync.mu.Unlock()
 
 	pos := t.sync.buf.CursorAtScroll()
 	var start, end int
 	switch mode {
-	case parser.LineClearModeRight:
+	case vteparser.LineClearModeRight:
 		if t.shouldWrap {
 			return
 		}
 		start = pos.X
 		end = t.endOfLine(pos.Y)
-	case parser.LineClearModeLeft:
+	case vteparser.LineClearModeLeft:
 		end = pos.X + 1
-	case parser.LineClearModeAll:
+	case vteparser.LineClearModeAll:
 		end = t.endOfLine(pos.Y)
 	default:
 		t.log(log.WarnLevel, "unknown clear line mode: %v", mode)
@@ -639,7 +639,7 @@ func (t *parserHandler) ClearLine(mode parser.LineClearMode) {
 }
 
 // Clear the screen.
-func (t *parserHandler) ClearScreen(mode parser.ClearMode) {
+func (t *parserHandler) ClearScreen(mode vteparser.ClearMode) {
 	t.sync.mu.Lock()
 	defer t.sync.mu.Unlock()
 
@@ -648,13 +648,13 @@ func (t *parserHandler) ClearScreen(mode parser.ClearMode) {
 	lines := t.maxRows()
 
 	switch mode {
-	case parser.ClearModeBelow:
+	case vteparser.ClearModeBelow:
 		t.sync.buf.ResetCells(pos.X, columns)
 		if pos.Y+1 < lines {
 			t.sync.buf.ResetLines(pos.Y+1, lines)
 		}
 
-	case parser.ClearModeAbove:
+	case vteparser.ClearModeAbove:
 		if pos.Y > 1 {
 			t.sync.buf.ResetLines(0, pos.Y)
 		}
@@ -662,14 +662,14 @@ func (t *parserHandler) ClearScreen(mode parser.ClearMode) {
 		end := int(math.Min(float64(pos.X+1), float64(columns)))
 		t.sync.buf.ResetCells(start, end)
 
-	case parser.ClearModeAll:
+	case vteparser.ClearModeAll:
 		if t.useAlt {
 			t.resetBufLines(t.sync.buf)
 		} else {
 			t.clearPrimaryView()
 		}
 
-	case parser.ClearModeSaved:
+	case vteparser.ClearModeSaved:
 		if t.useAlt {
 			return
 		}
@@ -714,59 +714,59 @@ func (t *parserHandler) ReverseIndex() {
 }
 
 // Set a parserHandler attribute.
-func (t *parserHandler) TerminalAttribute(pattr parser.Attr) {
+func (t *parserHandler) TerminalAttribute(pattr vteparser.Attr) {
 	t.sync.mu.Lock()
 	defer t.sync.mu.Unlock()
 
 	attr := t.sync.buf.CursorAttributes()
 
 	switch pattr.Type {
-	case parser.ResetAttr:
+	case vteparser.ResetAttr:
 		attr.Fg = 0
 		attr.Bg = 0
 		attr.Attrs = 0
-	case parser.BoldAttr:
+	case vteparser.BoldAttr:
 		attr.Attrs |= tcell.AttrBold
-	case parser.DimAttr:
+	case vteparser.DimAttr:
 		attr.Attrs |= tcell.AttrDim
-	case parser.ItalicAttr:
+	case vteparser.ItalicAttr:
 		attr.Attrs |= tcell.AttrItalic
-	case parser.UnderlineAttr:
+	case vteparser.UnderlineAttr:
 		attr.Attrs |= tcell.AttrUnderline
-	case parser.BlinkSlowAttr, parser.BlinkFastAttr:
+	case vteparser.BlinkSlowAttr, vteparser.BlinkFastAttr:
 		attr.Attrs |= tcell.AttrBlink
-	case parser.ReverseAttr:
+	case vteparser.ReverseAttr:
 		attr.Attrs |= tcell.AttrReverse
-	case parser.HiddenAttr:
+	case vteparser.HiddenAttr:
 		t.sync.buf.SetHiddenCursor(true)
 		return
-	case parser.StrikeAttr:
+	case vteparser.StrikeAttr:
 		attr.Attrs |= tcell.AttrStrikeThrough
-	case parser.CancelBoldAttr:
+	case vteparser.CancelBoldAttr:
 		attr.Attrs &^= tcell.AttrBold
-	case parser.CancelBoldDimAttr:
+	case vteparser.CancelBoldDimAttr:
 		attr.Attrs &^= tcell.AttrBold
 		attr.Attrs &^= tcell.AttrDim
-	case parser.CancelItalicAttr:
+	case vteparser.CancelItalicAttr:
 		attr.Attrs &^= tcell.AttrItalic
-	case parser.CancelUnderlineAttr:
+	case vteparser.CancelUnderlineAttr:
 		attr.Attrs &^= tcell.AttrUnderline
-	case parser.CancelBlinkAttr:
+	case vteparser.CancelBlinkAttr:
 		attr.Attrs &^= tcell.AttrBlink
-	case parser.CancelReverseAttr:
+	case vteparser.CancelReverseAttr:
 		attr.Attrs &^= tcell.AttrReverse
-	case parser.CancelHiddenAttr:
+	case vteparser.CancelHiddenAttr:
 		t.sync.buf.SetHiddenCursor(false)
 		return
-	case parser.CancelStrikeAttr:
+	case vteparser.CancelStrikeAttr:
 		attr.Attrs &^= tcell.AttrStrikeThrough
-	case parser.ForegroundAttr:
+	case vteparser.ForegroundAttr:
 		attr.Fg = pattr.Color
-	case parser.BackgroundAttr:
+	case vteparser.BackgroundAttr:
 		attr.Bg = pattr.Color
-	case parser.DoubleUnderlineAttr, parser.UndercurlAttr,
-		parser.DottedUnderlineAttr, parser.DashedUnderlineAttr,
-		parser.UnderlineColorAttr:
+	case vteparser.DoubleUnderlineAttr, vteparser.UndercurlAttr,
+		vteparser.DottedUnderlineAttr, vteparser.DashedUnderlineAttr,
+		vteparser.UnderlineColorAttr:
 		/* ignored */
 		return
 	}
@@ -775,46 +775,46 @@ func (t *parserHandler) TerminalAttribute(pattr parser.Attr) {
 }
 
 // Report private mode
-func (t *parserHandler) ReportPrivateMode(mode parser.PrivateMode) {
+func (t *parserHandler) ReportPrivateMode(mode vteparser.PrivateMode) {
 	// no need to sync since writes only occur on pty parsing goroutine
 
 	var modeVar *bool
 	switch mode {
-	case parser.PrivateModeCursorKeys:
+	case vteparser.PrivateModeCursorKeys:
 		modeVar = &t.modeCursorKeys
-	case parser.PrivateModeColumnMode:
+	case vteparser.PrivateModeColumnMode:
 		/* not supported for reporting */
-	case parser.PrivateModeOrigin:
+	case vteparser.PrivateModeOrigin:
 		modeVar = &t.modeOrigin
-	case parser.PrivateModeScreen:
+	case vteparser.PrivateModeScreen:
 		/* DECSCNM not supported */
-	case parser.PrivateModeLineWrap:
+	case vteparser.PrivateModeLineWrap:
 		modeVar = &t.modeWrap
-	case parser.PrivateModeBlinkingCursor:
+	case vteparser.PrivateModeBlinkingCursor:
 		modeVar = &t.modeBlinkingCursor
-	case parser.PrivateModeShowCursor:
+	case vteparser.PrivateModeShowCursor:
 		modeVar = &t.modeShowCursor
-	case parser.PrivateModeReportMouseClicks:
+	case vteparser.PrivateModeReportMouseClicks:
 		modeVar = &t.modeReportMouseClicks
-	case parser.PrivateModeReportCellMouseMotion:
+	case vteparser.PrivateModeReportCellMouseMotion:
 		modeVar = &t.modeReportCellMouseMotion
-	case parser.PrivateModeReportAllMouseMotion:
+	case vteparser.PrivateModeReportAllMouseMotion:
 		modeVar = &t.modeReportAllMouseMotion
-	case parser.PrivateModeReportFocusInOut:
+	case vteparser.PrivateModeReportFocusInOut:
 		modeVar = &t.modeReportFocusInOut
-	case parser.PrivateModeUtf8Mouse:
+	case vteparser.PrivateModeUtf8Mouse:
 		modeVar = &t.modeUtf8Mouse
-	case parser.PrivateModeSgrMouse:
+	case vteparser.PrivateModeSgrMouse:
 		modeVar = &t.modeSgrMouse
-	case parser.PrivateModeAlternateScroll:
+	case vteparser.PrivateModeAlternateScroll:
 		modeVar = &t.modeAlternateScroll
-	case parser.PrivateModeUrgencyHints:
+	case vteparser.PrivateModeUrgencyHints:
 		modeVar = &t.modeUrgencyHints
-	case parser.PrivateModeSwapScreenAndSetRestoreCursor:
+	case vteparser.PrivateModeSwapScreenAndSetRestoreCursor:
 		modeVar = &t.useAlt
-	case parser.PrivateModeBracketedPaste:
+	case vteparser.PrivateModeBracketedPaste:
 		modeVar = &t.modeBracketedPaste
-	case parser.PrivateModeSyncUpdate:
+	case vteparser.PrivateModeSyncUpdate:
 		modeVar = &t.modeSyncUpdate
 	default:
 		t.log(log.WarnLevel, "Set unkown private mode: %v", mode)
@@ -823,48 +823,48 @@ func (t *parserHandler) ReportPrivateMode(mode parser.PrivateMode) {
 }
 
 // Set private mode.
-func (t *parserHandler) SetPrivateMode(mode parser.PrivateMode) {
+func (t *parserHandler) SetPrivateMode(mode vteparser.PrivateMode) {
 	t.sync.mu.Lock()
 	defer t.sync.mu.Unlock()
 
 	switch mode {
-	case parser.PrivateModeCursorKeys:
+	case vteparser.PrivateModeCursorKeys:
 		t.modeCursorKeys = true
-	case parser.PrivateModeColumnMode:
+	case vteparser.PrivateModeColumnMode:
 		t.deccolm()
-	case parser.PrivateModeOrigin:
+	case vteparser.PrivateModeOrigin:
 		t.modeOrigin = true
-	case parser.PrivateModeScreen:
+	case vteparser.PrivateModeScreen:
 		/* DECSCNM not supported */
-	case parser.PrivateModeLineWrap:
+	case vteparser.PrivateModeLineWrap:
 		t.modeWrap = true
-	case parser.PrivateModeBlinkingCursor:
+	case vteparser.PrivateModeBlinkingCursor:
 		t.modeBlinkingCursor = true
-	case parser.PrivateModeShowCursor:
+	case vteparser.PrivateModeShowCursor:
 		t.modeShowCursor = true
-	case parser.PrivateModeReportMouseClicks:
+	case vteparser.PrivateModeReportMouseClicks:
 		t.modeReportMouseClicks = true
-	case parser.PrivateModeReportCellMouseMotion:
+	case vteparser.PrivateModeReportCellMouseMotion:
 		t.modeReportCellMouseMotion = true
-	case parser.PrivateModeReportAllMouseMotion:
+	case vteparser.PrivateModeReportAllMouseMotion:
 		t.modeReportAllMouseMotion = true
-	case parser.PrivateModeReportFocusInOut:
+	case vteparser.PrivateModeReportFocusInOut:
 		t.modeReportFocusInOut = true
-	case parser.PrivateModeUtf8Mouse:
+	case vteparser.PrivateModeUtf8Mouse:
 		t.modeUtf8Mouse = true
-	case parser.PrivateModeSgrMouse:
+	case vteparser.PrivateModeSgrMouse:
 		t.modeSgrMouse = true
-	case parser.PrivateModeAlternateScroll:
+	case vteparser.PrivateModeAlternateScroll:
 		t.modeAlternateScroll = true
-	case parser.PrivateModeUrgencyHints:
+	case vteparser.PrivateModeUrgencyHints:
 		t.modeUrgencyHints = true
-	case parser.PrivateModeSwapScreenAndSetRestoreCursor:
+	case vteparser.PrivateModeSwapScreenAndSetRestoreCursor:
 		if !t.useAlt {
 			t.swapAlt()
 		}
-	case parser.PrivateModeBracketedPaste:
+	case vteparser.PrivateModeBracketedPaste:
 		t.modeBracketedPaste = true
-	case parser.PrivateModeSyncUpdate:
+	case vteparser.PrivateModeSyncUpdate:
 		t.modeSyncUpdate = true
 	default:
 		t.log(log.WarnLevel, "Set unkown private mode: %v", mode)
@@ -873,48 +873,48 @@ func (t *parserHandler) SetPrivateMode(mode parser.PrivateMode) {
 }
 
 // Unset private mode.
-func (t *parserHandler) UnsetPrivateMode(mode parser.PrivateMode) {
+func (t *parserHandler) UnsetPrivateMode(mode vteparser.PrivateMode) {
 	t.sync.mu.Lock()
 	defer t.sync.mu.Unlock()
 
 	switch mode {
-	case parser.PrivateModeCursorKeys:
+	case vteparser.PrivateModeCursorKeys:
 		t.modeCursorKeys = false
-	case parser.PrivateModeColumnMode:
+	case vteparser.PrivateModeColumnMode:
 		t.deccolm()
-	case parser.PrivateModeOrigin:
+	case vteparser.PrivateModeOrigin:
 		t.modeOrigin = false
-	case parser.PrivateModeScreen:
+	case vteparser.PrivateModeScreen:
 		/* DECSCNM not supported */
-	case parser.PrivateModeLineWrap:
+	case vteparser.PrivateModeLineWrap:
 		t.modeWrap = false
-	case parser.PrivateModeBlinkingCursor:
+	case vteparser.PrivateModeBlinkingCursor:
 		t.modeBlinkingCursor = false
-	case parser.PrivateModeShowCursor:
+	case vteparser.PrivateModeShowCursor:
 		t.modeShowCursor = false
-	case parser.PrivateModeReportMouseClicks:
+	case vteparser.PrivateModeReportMouseClicks:
 		t.modeReportMouseClicks = false
-	case parser.PrivateModeReportCellMouseMotion:
+	case vteparser.PrivateModeReportCellMouseMotion:
 		t.modeReportCellMouseMotion = false
-	case parser.PrivateModeReportAllMouseMotion:
+	case vteparser.PrivateModeReportAllMouseMotion:
 		t.modeReportAllMouseMotion = false
-	case parser.PrivateModeReportFocusInOut:
+	case vteparser.PrivateModeReportFocusInOut:
 		t.modeReportFocusInOut = false
-	case parser.PrivateModeUtf8Mouse:
+	case vteparser.PrivateModeUtf8Mouse:
 		t.modeUtf8Mouse = false
-	case parser.PrivateModeSgrMouse:
+	case vteparser.PrivateModeSgrMouse:
 		t.modeSgrMouse = false
-	case parser.PrivateModeAlternateScroll:
+	case vteparser.PrivateModeAlternateScroll:
 		t.modeAlternateScroll = false
-	case parser.PrivateModeUrgencyHints:
+	case vteparser.PrivateModeUrgencyHints:
 		t.modeUrgencyHints = false
-	case parser.PrivateModeSwapScreenAndSetRestoreCursor:
+	case vteparser.PrivateModeSwapScreenAndSetRestoreCursor:
 		if t.useAlt {
 			t.swapAlt()
 		}
-	case parser.PrivateModeBracketedPaste:
+	case vteparser.PrivateModeBracketedPaste:
 		t.modeBracketedPaste = false
-	case parser.PrivateModeSyncUpdate:
+	case vteparser.PrivateModeSyncUpdate:
 		t.modeSyncUpdate = false
 	default:
 		t.log(log.WarnLevel, "Unset unkown private mode: %v", mode)
@@ -923,14 +923,14 @@ func (t *parserHandler) UnsetPrivateMode(mode parser.PrivateMode) {
 }
 
 // Report mode
-func (t *parserHandler) ReportMode(mode parser.Mode) {
+func (t *parserHandler) ReportMode(mode vteparser.Mode) {
 	// no need to sync since writes only occur on pty parsing goroutine
 
 	var modeVar *bool
 	switch mode {
-	case parser.ModeInsert:
+	case vteparser.ModeInsert:
 		modeVar = &t.modeInsert
-	case parser.ModeLineFeedNewLine:
+	case vteparser.ModeLineFeedNewLine:
 		modeVar = &t.modeLineFeedNewLine
 	default:
 		t.log(log.DebugLevel, "Report unkown public mode: %v", mode)
@@ -940,14 +940,14 @@ func (t *parserHandler) ReportMode(mode parser.Mode) {
 }
 
 // Set mode.
-func (t *parserHandler) SetMode(mode parser.Mode) {
+func (t *parserHandler) SetMode(mode vteparser.Mode) {
 	t.sync.mu.Lock()
 	defer t.sync.mu.Unlock()
 
 	switch mode {
-	case parser.ModeInsert:
+	case vteparser.ModeInsert:
 		t.modeInsert = true
-	case parser.ModeLineFeedNewLine:
+	case vteparser.ModeLineFeedNewLine:
 		t.modeLineFeedNewLine = true
 	default:
 		t.log(log.WarnLevel, "Set unkown public mode: %v", mode)
@@ -956,14 +956,14 @@ func (t *parserHandler) SetMode(mode parser.Mode) {
 }
 
 // Unset mode.
-func (t *parserHandler) UnsetMode(mode parser.Mode) {
+func (t *parserHandler) UnsetMode(mode vteparser.Mode) {
 	t.sync.mu.Lock()
 	defer t.sync.mu.Unlock()
 
 	switch mode {
-	case parser.ModeInsert:
+	case vteparser.ModeInsert:
 		t.modeInsert = false
-	case parser.ModeLineFeedNewLine:
+	case vteparser.ModeLineFeedNewLine:
 		t.modeLineFeedNewLine = false
 	default:
 		t.log(log.WarnLevel, "Unset unkown public mode: %v", mode)
@@ -997,7 +997,7 @@ func (t *parserHandler) UnsetKeypadApplicationMode() {
 //
 // 'Invoke' one of G0 to G3 in the GL area. Also referred to as shift in,
 // shift out and locking shift depending on the set being activated.
-func (t *parserHandler) SetActiveCharset(index parser.CharsetIndex) {
+func (t *parserHandler) SetActiveCharset(index vteparser.CharsetIndex) {
 	t.sync.mu.Lock()
 	defer t.sync.mu.Unlock()
 
@@ -1009,12 +1009,12 @@ func (t *parserHandler) SetActiveCharset(index parser.CharsetIndex) {
 // 'Designate' a graphic character set as one of G0 to G3 so that it can
 // later be 'invoked' by `SetActiveCharset`.
 func (t *parserHandler) ConfigureCharset(
-	index parser.CharsetIndex, charset parser.StandardCharset,
+	index vteparser.CharsetIndex, charset vteparser.StandardCharset,
 ) {
 	t.sync.mu.Lock()
 	defer t.sync.mu.Unlock()
 
-	var buf *screen.AltBuffer
+	var buf *vtescreen.AltBuffer
 	if t.useAlt {
 		buf = t.sync.altBuf
 	} else {
@@ -1095,7 +1095,7 @@ func (t *parserHandler) Decaln() {
 
 	// keep the screenBuffer ifc small and Decaln
 	// is not critical path
-	var buf *screen.AltBuffer
+	var buf *vtescreen.AltBuffer
 	if t.useAlt {
 		buf = t.sync.altBuf
 	} else {
@@ -1142,7 +1142,7 @@ func (t *parserHandler) TextAreaSizeChars() {
 }
 
 // Set hyperlink.
-func (t *parserHandler) SetHyperlink(link *parser.Hyperlink) {
+func (t *parserHandler) SetHyperlink(link *vteparser.Hyperlink) {
 	t.log(log.WarnLevel, "unsupported call to SetHyperlink")
 }
 
@@ -1152,7 +1152,7 @@ func (t *parserHandler) ReportKeyboardMode() {
 }
 
 // PushKeyboardMode pushes the keyboard mode into the keyboard mode stack.
-func (t *parserHandler) PushKeyboardMode(mode parser.KeyboardMode) {
+func (t *parserHandler) PushKeyboardMode(mode vteparser.KeyboardMode) {
 	t.log(log.WarnLevel, "unsupported call to PushKeyboardMode: "+
 		"kitty keyboard handling not supported yet")
 }
@@ -1166,14 +1166,14 @@ func (t *parserHandler) PopKeyboardModes(count int) {
 
 // SetKeyboardMode sets the [`keyboard mode`] using the given [`behavior`].
 func (t *parserHandler) SetKeyboardMode(
-	mode parser.KeyboardMode, behavior parser.KeyboardModesApplyBehavior,
+	mode vteparser.KeyboardMode, behavior vteparser.KeyboardModesApplyBehavior,
 ) {
 	t.log(log.WarnLevel, "unsupported call to SetKeyboardMode: "+
 		"kitty keyboard handling not supported yet")
 }
 
 // SetModifyOtherKeys sets XTerm's [`ModifyOtherKeys`] option.
-func (t *parserHandler) SetModifyOtherKeys(mode parser.ModifyOtherKeysMode) {
+func (t *parserHandler) SetModifyOtherKeys(mode vteparser.ModifyOtherKeysMode) {
 	t.log(log.WarnLevel, "unsupported call to SetModifyOtherKeys")
 }
 
@@ -1379,19 +1379,19 @@ func (t *parserHandler) moveLeft(delta int) {
 	t.setCursorAtScreen(pos, t.modeOrigin)
 }
 
-func (t *parserHandler) setCursorShape(shape parser.CursorShape) {
-	t.cursorHidden = shape == parser.CursorShapeHidden
+func (t *parserHandler) setCursorShape(shape vteparser.CursorShape) {
+	t.cursorHidden = shape == vteparser.CursorShapeHidden
 	if t.cursorHidden {
 		return
 	}
 	switch shape {
-	case parser.CursorShapeBlock:
+	case vteparser.CursorShapeBlock:
 		t.cursorStyle = term.CursorStyleSteadyBlock
-	case parser.CursorShapeUnderline:
+	case vteparser.CursorShapeUnderline:
 		t.cursorStyle = term.CursorStyleSteadyUnderline
-	case parser.CursorShapeBeam:
+	case vteparser.CursorShapeBeam:
 		t.cursorStyle = term.CursorStyleSteadyBar
-	case parser.CursorShapeHollowBlock:
+	case vteparser.CursorShapeHollowBlock:
 		/* unsupported by tcell */
 		t.cursorStyle = term.CursorStyleSteadyBlock
 	}
@@ -1441,7 +1441,7 @@ func (t *parserHandler) clearPrimaryView() {
 	for y := buf.Rows() - 1; y >= 0; y-- {
 		for x := 0; x < buf.Columns(y); x++ {
 			c := cells[y][x]
-			if c.Ch != screen.DefaultChar {
+			if c.Ch != vtescreen.DefaultChar {
 				newOffset := term.Coordinates{Y: y + 1}
 				t.log(log.TraceLevel, "new offset after clear view %+v", newOffset)
 				buf.SetOffset(newOffset)
