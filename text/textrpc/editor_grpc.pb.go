@@ -2,9 +2,9 @@
 // versions:
 // - protoc-gen-go-grpc v1.2.0
 // - protoc             v5.27.1
-// source: rpc/editor.proto
+// source: textrpc/editor.proto
 
-package rpc
+package textrpc
 
 import (
 	context "context"
@@ -538,7 +538,7 @@ var Editor_ServiceDesc = grpc.ServiceDesc{
 			ClientStreams: true,
 		},
 	},
-	Metadata: "rpc/editor.proto",
+	Metadata: "textrpc/editor.proto",
 }
 
 // CommandHandlerClient is the client API for CommandHandler service.
@@ -688,5 +688,5 @@ var CommandHandler_ServiceDesc = grpc.ServiceDesc{
 			ServerStreams: true,
 		},
 	},
-	Metadata: "rpc/editor.proto",
+	Metadata: "textrpc/editor.proto",
 }

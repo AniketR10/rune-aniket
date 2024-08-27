@@ -42,7 +42,7 @@ import (
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/rpc"
 	prototest "unstable.build/go-tui/rpc/test"
-	textpb "unstable.build/go-tui/text/rpc"
+	"unstable.build/go-tui/text/textrpc"
 )
 
 var emptyConfig = config.MapConfig(make(map[string]interface{}))
@@ -72,8 +72,8 @@ func expectSubscribe(
 ) *rpc.MockMuxConn {
 	conn := prototest.ExpectBrokerDial(t, ctrl, broker, token)
 	prototest.ExpectBrokerNewChannel(t, "1234", broker)
-	cmdRpc := textpb.CommandManual{Name: cmd}
-	expected := textpb.RegisterCommandRequest{ChannelId: "1234", Command: &cmdRpc}
+	cmdRpc := textrpc.CommandManual{Name: cmd}
+	expected := textrpc.RegisterCommandRequest{ChannelId: "1234", Command: &cmdRpc}
 
 	conn.EXPECT().
 		Invoke(gomock.Any(),

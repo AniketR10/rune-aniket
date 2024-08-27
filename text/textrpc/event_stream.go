@@ -21,7 +21,7 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package rpc
+package textrpc
 
 import (
 	"context"
@@ -127,7 +127,7 @@ func (e *eventStreamClient) waitForUnsubscribe() error {
 }
 
 func (e *eventStreamClient) log(level log.Level, msg string, args ...interface{}) {
-	log.WithFields(log.Fields{logging.KeyClass: "textpb.eventStreamClient"}).
+	log.WithFields(log.Fields{logging.KeyClass: "textrpc.eventStreamClient"}).
 		Logf(level, msg, args...)
 }
 
@@ -149,7 +149,7 @@ func newEventStreamServer(
 }
 
 func (s eventStreamServer) log(level log.Level, msg string, args ...interface{}) {
-	log.WithFields(log.Fields{logging.KeyClass: "textpb.eventStreamServer"}).
+	log.WithFields(log.Fields{logging.KeyClass: "textrpc.eventStreamServer"}).
 		Logf(level, msg, args...)
 }
 

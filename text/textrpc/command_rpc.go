@@ -21,7 +21,7 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package rpc
+package textrpc
 
 import (
 	"context"
@@ -137,7 +137,7 @@ func (c *commandClient) HandleCommand(ctx context.Context, cmd textapi.Command) 
 	return nil
 }
 func (c *commandClient) log(level log.Level, msg string, args ...interface{}) {
-	log.WithFields(log.Fields{logging.KeyClass: "textpb.commandClient"}).
+	log.WithFields(log.Fields{logging.KeyClass: "textrpc.commandClient"}).
 		Logf(level, msg, args...)
 }
 
@@ -244,7 +244,7 @@ func (s *commandServer) HandleCommand(
 }
 
 func (c *commandServer) log(level log.Level, msg string, args ...interface{}) {
-	log.WithFields(log.Fields{logging.KeyClass: "textpb.commandServer"}).
+	log.WithFields(log.Fields{logging.KeyClass: "textrpc.commandServer"}).
 		Logf(level, msg, args...)
 }
 

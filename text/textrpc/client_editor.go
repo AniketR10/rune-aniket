@@ -21,7 +21,7 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package rpc
+package textrpc
 
 import (
 	"context"
@@ -29,22 +29,34 @@ import (
 
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/term"
+	termpb "unstable.build/go-tui/term/rpc"
 )
 
-type clientView struct {
+type clientWriter struct {
 	uri    workspaceapi.URI
 	client *Client
 }
 
-func (r clientView) RawCells() ([][]term.Cell, error) {
-	ctx := context.Background()
-	req := RawCellsRequest{ResourceName: NewURI(r.uri)}
-
-	res, err := r.client.ed.RawCells(ctx, &req)
-	runtime.KeepAlive(r.client)
+func (w clientWriter) Edit(
+	ctx context.Context, start, end term.Coordinates, str string,
+) (from, to term.Coordinates, old string, err error) {
+	var protoStart, protoEnd termpb.Coordinates
+	protoStart.FromModel(start)
+	protoEnd.FromModel(end)
+	req := EditCellRequest{
+		ResourceName: NewURI(w.uri),
+		Start:        &protoStart,
+		End:          &protoEnd,
+		Str:          str,
+	}
+	res, err := w.client.ed.EditCell(ctx, &req)
+	runtime.KeepAlive(w.client)
 	if err != nil {
-		return nil, err
+		return from, to, "", err
 	}
 
-	return RawCellsResponseToBuffer(res).RawCells(), nil
+	from = res.GetFrom().ToModel()
+	to = res.GetTo().ToModel()
+	old = res.GetOld()
+	return
 }

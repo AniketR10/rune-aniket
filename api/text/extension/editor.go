@@ -30,7 +30,7 @@ import (
 	textapi "unstable.build/go-tui/api/text"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/rpc"
-	textpb "unstable.build/go-tui/text/rpc"
+	"unstable.build/go-tui/text/textrpc"
 )
 
 func dialEditor(ctx context.Context, grant extension.Grant, broker rpc.MuxBroker) (
@@ -41,7 +41,7 @@ func dialEditor(ctx context.Context, grant extension.Grant, broker rpc.MuxBroker
 	if err != nil {
 		return nil, err
 	}
-	c := textpb.NewClient(grant.Context, broker, conn)
+	c := textrpc.NewClient(grant.Context, broker, conn)
 	return c, nil
 }
 

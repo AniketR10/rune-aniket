@@ -21,7 +21,7 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package rpc
+package textrpc
 
 import (
 	"context"
@@ -89,7 +89,7 @@ func (s *Server) dialCommandHandler(
 ) (text.CommandHandler, error) {
 	s.log(log.TraceLevel,
 		"(%p editor.Server): dialing command handler with id: %s", s, channelID)
-	handlerConn, err := s.broker.DialChannel(ctx, channelID, os.Args[0], "textpb.Server")
+	handlerConn, err := s.broker.DialChannel(ctx, channelID, os.Args[0], "textrpc.Server")
 	if err != nil {
 		return nil, err
 	}

@@ -30,7 +30,7 @@ import (
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
-	textpb "unstable.build/go-tui/text/rpc"
+	"unstable.build/go-tui/text/textrpc"
 )
 
 // EditorResources returns a map of Permission to a ResourceServer
@@ -62,8 +62,8 @@ func (s *editorResourceServer) Register(
 	extensionID string, grantor Grantor, registrar rpc.ServiceRegistrar,
 	broker rpc.MuxBroker, lock sync.Locker,
 ) (io.Closer, error) {
-	server := textpb.NewServer(broker, s.b, lock)
-	textpb.RegisterEditorServer(registrar,
+	server := textrpc.NewServer(broker, s.b, lock)
+	textrpc.RegisterEditorServer(registrar,
 		interruptEditorServer(server, func() {
 			s.publishEvent(term.Event{Type: term.EventInterrupt})
 		}))

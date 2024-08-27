@@ -23,7 +23,7 @@
 
 package text
 
-//go:generate protoc rpc/editor.proto -I=. -I=../ --go_out=./ --go-grpc_out=./ --go_opt=Mrpc/editor.proto=unstable.build/go-tui/text/rpc
+//go:generate protoc textrpc/editor.proto -I=. -I=../ --go_out=./ --go-grpc_out=./ --go_opt=Mtextrpc/editor.proto=unstable.build/go-tui/text/textrpc
 //go:generate mockgen -destination=./texttest/event_handler_gomock.go -package texttest -self_package unstable.build/go-tui/text/texttest -source ./event_handler.go
 //go:generate mockgen -destination=./texttest/editor_gomock.go -package texttest -self_package unstable.build/go-tui/text/texttest -source ./editor.go
 //go:generate mockgen -destination=./texttest/event_handler_gomock.go -package texttest -self_package unstable.build/go-tui/text/texttest -source ./event_handler.go

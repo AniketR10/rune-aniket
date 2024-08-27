@@ -37,7 +37,7 @@ import (
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
-	textpb "unstable.build/go-tui/text/rpc"
+	"unstable.build/go-tui/text/textrpc"
 	"unstable.build/go-tui/text/texttest"
 )
 
@@ -60,7 +60,7 @@ func TestIntegrationRace(t *testing.T) {
 	uri, err := workspaceapi.ParseURI("file:///tmp/test")
 	require.NoError(t, err)
 
-	th := textpb.Token{URI: uri}
+	th := textrpc.Token{URI: uri}
 	broker := rpc.NewUnixGRPCBroker("", "", "")
 	defer broker.Close()
 
