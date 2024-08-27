@@ -100,6 +100,8 @@ func (r *shaderRunner) HandleCommand(ctx context.Context, cmd textapi.Command) (
 		s = glslshader.Noise(glslshader.DefaultNoiseParams(), float64(fps))
 	case "nop":
 		s = shader.Nop()
+	case "risingChars":
+		s = glslshader.RisingChars(glslshader.DefaultRisingCharsParams())
 	case "trippy":
 		s = glslshader.Trippy(glslshader.DefaultTrippyParams(), float64(fps))
 	default:
@@ -126,6 +128,7 @@ func (r *shaderRunner) Complete(ctx context.Context, name string, args []string)
 			"inferno",
 			"noise",
 			"nop",
+			"risingChars",
 			"trippy",
 		}), "", nil
 	}
