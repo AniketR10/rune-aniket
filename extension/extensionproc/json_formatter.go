@@ -21,28 +21,40 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package process
+package extensionproc
 
 import (
 	log "github.com/sirupsen/logrus"
-	"github.com/unstablebuild/blue/retry"
-	"unstable.build/go-tui/rpc"
 )
 
-func initHostBroker(config managerConfig, dataDir, pkg, version string) (rpc.MuxBroker, error) {
-	broker := rpc.NewUnixGRPCBroker(dataDir, pkg, version)
-	broker = rpc.WithRetryBroker(broker, retry.DefaultStrategy)
-	if log.IsLevelEnabled(log.TraceLevel) {
-		broker = rpc.LoggingBroker(broker, log.StandardLogger())
-	}
-	return broker, nil
+type jsonFormatter struct {
+	formatter *log.JSONFormatter
 }
 
-func initClientBroker(logger *log.Logger, dataDir, pkg, version string) rpc.MuxBroker {
-	broker := rpc.NewUnixGRPCBroker(dataDir, pkg, version)
-	broker = rpc.WithRetryBroker(broker, retry.DefaultStrategy)
-	if logger.IsLevelEnabled(log.TraceLevel) {
-		broker = rpc.LoggingBroker(broker, logger)
+func newJSONFormatter() log.Formatter {
+	return jsonFormatter{
+		formatter: &log.JSONFormatter{
+			// timestamp format expected by hclog
+			TimestampFormat: "2006-01-02T15:04:05.000000Z07:00",
+			FieldMap: log.FieldMap{
+				log.FieldKeyTime: "@timestamp",
+				log.FieldKeyMsg:  "@message",
+				// log.FieldKeyLevel: "@level",
+			},
+		},
 	}
-	return broker
+}
+
+func (j jsonFormatter) Format(entry *log.Entry) ([]byte, error) {
+	if entry.Data == nil {
+		entry.Data = make(log.Fields)
+	}
+	// map 'warning' (logrus) to 'warn' (hclog) or otherwise
+	// warning logs are printed verbatim (json).
+	levelStr := entry.Level.String()
+	if entry.Level == log.WarnLevel {
+		levelStr = "warn"
+	}
+	entry.Data["@level"] = levelStr
+	return j.formatter.Format(entry)
 }

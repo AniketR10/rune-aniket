@@ -29,7 +29,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui/cmd/extension_ai/extension"
-	"unstable.build/go-tui/extension/process"
+	"unstable.build/go-tui/extension/extensionproc"
 )
 
 func main() {
@@ -38,5 +38,5 @@ func main() {
 	}()
 
 	grantee, perms := extension.DefaultOpenAIGrantee()
-	process.Serve(grantee, perms...)
+	extensionproc.Serve(grantee, perms...)
 }

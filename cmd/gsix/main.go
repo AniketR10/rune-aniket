@@ -42,7 +42,7 @@ import (
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/extension"
-	"unstable.build/go-tui/extension/process"
+	"unstable.build/go-tui/extension/extensionproc"
 	"unstable.build/go-tui/ide"
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term"
@@ -116,15 +116,15 @@ func extensionRunner(
 	notifications browser.Notifications,
 ) (extension.Runner, error) {
 	notifications = &protectedNotifications{notifications: notifications, locker: locker}
-	extensionOpts := []process.Option{
-		process.WithLocker(locker),
-		process.WithWorkspace(uri),
-		process.WithDataDir(dataDir),
-		process.WithPackageName("gsix"),
-		process.WithPackageVersion(Tag),
-		process.WithNotifications(notifications),
+	extensionOpts := []extensionproc.Option{
+		extensionproc.WithLocker(locker),
+		extensionproc.WithWorkspace(uri),
+		extensionproc.WithDataDir(dataDir),
+		extensionproc.WithPackageName("gsix"),
+		extensionproc.WithPackageVersion(Tag),
+		extensionproc.WithNotifications(notifications),
 	}
-	return process.NewManager(extension.GrantAll(res), extensionOpts...)
+	return extensionproc.NewManager(extension.GrantAll(res), extensionOpts...)
 }
 
 func run() int {

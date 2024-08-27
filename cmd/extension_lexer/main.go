@@ -29,7 +29,7 @@ import (
 	_ "net/http/pprof"
 
 	"unstable.build/go-tui/cmd/extension_lexer/extension"
-	"unstable.build/go-tui/extension/process"
+	"unstable.build/go-tui/extension/extensionproc"
 )
 
 func main() {
@@ -38,5 +38,5 @@ func main() {
 	}()
 
 	grantee, perms := extension.Grantee()
-	process.Serve(grantee, perms...)
+	extensionproc.Serve(grantee, perms...)
 }

@@ -29,7 +29,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui/cmd/extension_issues/firestore"
-	"unstable.build/go-tui/extension/process"
+	"unstable.build/go-tui/extension/extensionproc"
 )
 
 var (
@@ -43,5 +43,5 @@ func main() {
 	}()
 
 	grantee, perms := firestore.Grantee(Tag)
-	process.Serve(grantee, perms...)
+	extensionproc.Serve(grantee, perms...)
 }

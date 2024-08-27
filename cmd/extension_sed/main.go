@@ -25,10 +25,10 @@ package main
 
 import (
 	"unstable.build/go-tui/cmd/extension_sed/extension"
-	"unstable.build/go-tui/extension/process"
+	"unstable.build/go-tui/extension/extensionproc"
 )
 
 func main() {
 	grantee, perms := extension.Grantee()
-	process.Serve(grantee, perms...)
+	extensionproc.Serve(grantee, perms...)
 }

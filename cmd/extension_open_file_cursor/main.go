@@ -25,7 +25,7 @@ package main
 
 import (
 	"unstable.build/go-tui/cmd/extension_open_file_cursor/extension"
-	"unstable.build/go-tui/extension/process"
+	"unstable.build/go-tui/extension/extensionproc"
 )
 
 func main() {
@@ -34,5 +34,5 @@ func main() {
 	}()*/
 
 	grantee, perms := extension.Grantee()
-	process.Serve(grantee, perms...)
+	extensionproc.Serve(grantee, perms...)
 }
