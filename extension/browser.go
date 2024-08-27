@@ -28,7 +28,7 @@ import (
 	"sync"
 
 	"unstable.build/go-tui/browser"
-	browserpb "unstable.build/go-tui/browser/rpc"
+	"unstable.build/go-tui/browser/browserrpc"
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term"
 )
@@ -78,25 +78,25 @@ func (s browserResourcePermissionServer) Register(
 	extensionID string, grantor Grantor, registrar rpc.ServiceRegistrar,
 	broker rpc.MuxBroker, lock sync.Locker,
 ) (io.Closer, error) {
-	server := browserpb.NewServer(broker, s.b, lock)
+	server := browserrpc.NewServer(broker, s.b, lock)
 	rpcServer := interruptBrowserServer(server, func() {
 		s.publishEvent(term.Event{Type: term.EventInterrupt})
 	})
 	switch s.p {
 	case PermissionBrowserWindowManager:
-		browserpb.RegisterWindowManagerServer(registrar, rpcServer)
+		browserrpc.RegisterWindowManagerServer(registrar, rpcServer)
 	case PermissionBrowserResourceOpener:
-		browserpb.RegisterResourceOpenerServer(registrar, rpcServer)
+		browserrpc.RegisterResourceOpenerServer(registrar, rpcServer)
 	case PermissionBrowserNotifications:
-		browserpb.RegisterNotificationsServer(registrar, rpcServer)
+		browserrpc.RegisterNotificationsServer(registrar, rpcServer)
 	case PermissionBrowserEventPublisher:
-		browserpb.RegisterEventPublisherServer(registrar, rpcServer)
+		browserrpc.RegisterEventPublisherServer(registrar, rpcServer)
 	}
 	return browserCloser{server}, nil
 }
 
 type browserCloser struct {
-	server *browserpb.Server
+	server *browserrpc.Server
 }
 
 func (b browserCloser) Close() error {

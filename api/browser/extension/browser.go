@@ -28,7 +28,7 @@ import (
 	"os"
 
 	browserapi "unstable.build/go-tui/api/browser"
-	browserpb "unstable.build/go-tui/browser/rpc"
+	"unstable.build/go-tui/browser/browserrpc"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/rpc"
 )
@@ -41,7 +41,7 @@ func dialBrowser(ctx context.Context, grant extension.Grant, broker rpc.MuxBroke
 	if err != nil {
 		return nil, err
 	}
-	c := browserpb.NewClient(grant.Context, broker, conn)
+	c := browserrpc.NewClient(grant.Context, broker, conn)
 	return c, nil
 }
 

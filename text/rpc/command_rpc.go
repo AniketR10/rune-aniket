@@ -38,7 +38,7 @@ import (
 	textapi "unstable.build/go-tui/api/text"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser"
-	browserpb "unstable.build/go-tui/browser/rpc"
+	"unstable.build/go-tui/browser/browserrpc"
 	"unstable.build/go-tui/rpc"
 	termpb "unstable.build/go-tui/term/rpc"
 	"unstable.build/go-tui/text"
@@ -151,12 +151,12 @@ func (c *commandClient) Close() error {
 type commandServer struct {
 	UnimplementedCommandHandlerServer
 	h       textapi.CommandHandler
-	browser *browserpb.Client
+	browser *browserrpc.Client
 	// delay client finalizer until commandServer is GC'd
 	c *Client
 }
 
-func newCommandServer(h textapi.CommandHandler, bc *browserpb.Client, c *Client) *commandServer {
+func newCommandServer(h textapi.CommandHandler, bc *browserrpc.Client, c *Client) *commandServer {
 	ret := new(commandServer)
 	ret.h = h
 	ret.browser = bc

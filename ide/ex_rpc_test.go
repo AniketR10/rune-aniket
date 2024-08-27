@@ -40,8 +40,8 @@ import (
 	browserapi "unstable.build/go-tui/api/browser"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser"
-	browserpb "unstable.build/go-tui/browser/rpc"
-	browsertest "unstable.build/go-tui/browser/test"
+	"unstable.build/go-tui/browser/browserrpc"
+	"unstable.build/go-tui/browser/browsertest"
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/term/vte"
@@ -139,18 +139,18 @@ func newTestRPCBrowser(t *testing.T,
 
 		var serverMutex sync.Mutex
 		grpcServer := grpc.NewServer()
-		server := browserpb.NewServer(broker, ex.Browser(), &serverMutex)
+		server := browserrpc.NewServer(broker, ex.Browser(), &serverMutex)
 		server.SetSyncMode()
-		browserpb.RegisterWindowManagerServer(grpcServer, server)
-		browserpb.RegisterNotificationsServer(grpcServer, server)
-		browserpb.RegisterResourceOpenerServer(grpcServer, server)
+		browserrpc.RegisterWindowManagerServer(grpcServer, server)
+		browserrpc.RegisterNotificationsServer(grpcServer, server)
+		browserrpc.RegisterResourceOpenerServer(grpcServer, server)
 
 		go grpcServer.Serve(lis)
 
 		conn, err := grpc.Dial(lis.Addr().String(), grpc.WithInsecure())
 		require.NoError(t, err)
 
-		bc := browserpb.NewClient(context.Background(), broker, conn)
+		bc := browserrpc.NewClient(context.Background(), broker, conn)
 		h := &safeHandler{Handler: ex, mu: &serverMutex}
 		*destructor = func() {
 			serverMutex.Lock()

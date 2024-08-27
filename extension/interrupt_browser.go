@@ -26,23 +26,23 @@ package extension
 import (
 	"context"
 
-	browserpb "unstable.build/go-tui/browser/rpc"
+	"unstable.build/go-tui/browser/browserrpc"
 )
 
 type browserServer interface {
-	browserpb.WindowManagerServer
-	browserpb.EventPublisherServer
-	browserpb.NotificationsServer
-	browserpb.ResourceOpenerServer
+	browserrpc.WindowManagerServer
+	browserrpc.EventPublisherServer
+	browserrpc.NotificationsServer
+	browserrpc.ResourceOpenerServer
 }
 
 // this structure wraps a browser.Browser to
 // provide interrupt on write requests coming from the wire
 type interruptBrowser struct {
-	browserpb.UnimplementedEventPublisherServer
-	browserpb.UnimplementedNotificationsServer
-	browserpb.UnimplementedResourceOpenerServer
-	browserpb.UnimplementedWindowManagerServer
+	browserrpc.UnimplementedEventPublisherServer
+	browserrpc.UnimplementedNotificationsServer
+	browserrpc.UnimplementedResourceOpenerServer
+	browserrpc.UnimplementedWindowManagerServer
 	browserServer browserServer
 	interruptDraw func()
 }
@@ -51,89 +51,89 @@ func interruptBrowserServer(srv browserServer, interruptDraw func()) browserServ
 	return &interruptBrowser{browserServer: srv, interruptDraw: interruptDraw}
 }
 
-// Focus satisfies browserpb.BrowserServer
+// Focus satisfies browserrpc.BrowserServer
 func (s *interruptBrowser) Publish(
-	ctx context.Context, req *browserpb.PublishRequest,
-) (*browserpb.PublishResponse, error) {
+	ctx context.Context, req *browserrpc.PublishRequest,
+) (*browserrpc.PublishResponse, error) {
 	res, err := s.browserServer.Publish(ctx, req)
 	return res, err
 }
 
-// Focus satisfies browserpb.BrowserServer
+// Focus satisfies browserrpc.BrowserServer
 func (s *interruptBrowser) Focus(
-	ctx context.Context, req *browserpb.FocusRequest,
-) (*browserpb.FocusResponse, error) {
+	ctx context.Context, req *browserrpc.FocusRequest,
+) (*browserrpc.FocusResponse, error) {
 	res, err := s.browserServer.Focus(ctx, req)
 	return res, err
 }
 
-// Floating satisfies browserpb.BrowserServer
+// Floating satisfies browserrpc.BrowserServer
 func (s *interruptBrowser) Floating(
-	ctx context.Context, req *browserpb.FloatingWindowRequest,
-) (*browserpb.FloatingWindowResponse, error) {
+	ctx context.Context, req *browserrpc.FloatingWindowRequest,
+) (*browserrpc.FloatingWindowResponse, error) {
 	res, err := s.browserServer.Floating(ctx, req)
 	s.interruptDraw()
 	return res, err
 }
 
-// Tab satisfies browserpb.BrowserServer
+// Tab satisfies browserrpc.BrowserServer
 func (s *interruptBrowser) Tab(
-	ctx context.Context, req *browserpb.TabRequest,
-) (*browserpb.TabResponse, error) {
+	ctx context.Context, req *browserrpc.TabRequest,
+) (*browserrpc.TabResponse, error) {
 	res, err := s.browserServer.Tab(ctx, req)
 	s.interruptDraw()
 	return res, err
 }
 
-// Split satisfies browserpb.BrowserServer
+// Split satisfies browserrpc.BrowserServer
 func (s *interruptBrowser) Split(
-	ctx context.Context, req *browserpb.SplitRequest,
-) (*browserpb.SplitResponse, error) {
+	ctx context.Context, req *browserrpc.SplitRequest,
+) (*browserrpc.SplitResponse, error) {
 	res, err := s.browserServer.Split(ctx, req)
 	s.interruptDraw()
 	return res, err
 }
 
-// Bar satisfies browserpb.BrowserServer
+// Bar satisfies browserrpc.BrowserServer
 func (s *interruptBrowser) Bar(
-	ctx context.Context, req *browserpb.BarRequest,
-) (*browserpb.BarResponse, error) {
+	ctx context.Context, req *browserrpc.BarRequest,
+) (*browserrpc.BarResponse, error) {
 	res, err := s.browserServer.Bar(ctx, req)
 	s.interruptDraw()
 	return res, err
 }
 
-// Notify satisfies browserpb.BrowserServer
+// Notify satisfies browserrpc.BrowserServer
 func (s *interruptBrowser) Notify(
-	ctx context.Context, req *browserpb.NotifyRequest,
-) (*browserpb.NotifyResponse, error) {
+	ctx context.Context, req *browserrpc.NotifyRequest,
+) (*browserrpc.NotifyResponse, error) {
 	res, err := s.browserServer.Notify(ctx, req)
 	s.interruptDraw()
 	return res, err
 }
 
-// Open satisfies browserpb.BrowserServer
+// Open satisfies browserrpc.BrowserServer
 func (s *interruptBrowser) Open(
-	ctx context.Context, req *browserpb.OpenResourceRequest,
-) (*browserpb.OpenResourceResponse, error) {
+	ctx context.Context, req *browserrpc.OpenResourceRequest,
+) (*browserrpc.OpenResourceResponse, error) {
 	res, err := s.browserServer.Open(ctx, req)
 	s.interruptDraw()
 	return res, err
 }
 
-// SetContent satisfies browserpb.BrowserServer
+// SetContent satisfies browserrpc.BrowserServer
 func (s *interruptBrowser) SetContent(
-	ctx context.Context, req *browserpb.WindowSetContentRequest,
-) (*browserpb.WindowSetContentResponse, error) {
+	ctx context.Context, req *browserrpc.WindowSetContentRequest,
+) (*browserrpc.WindowSetContentResponse, error) {
 	res, err := s.browserServer.SetContent(ctx, req)
 	s.interruptDraw()
 	return res, err
 }
 
-// Close satisfies browserpb.BrowserServer
+// Close satisfies browserrpc.BrowserServer
 func (s *interruptBrowser) Close(
-	ctx context.Context, req *browserpb.WindowCloseRequest,
-) (*browserpb.WindowCloseResponse, error) {
+	ctx context.Context, req *browserrpc.WindowCloseRequest,
+) (*browserrpc.WindowCloseResponse, error) {
 	res, err := s.browserServer.Close(ctx, req)
 	s.interruptDraw()
 	return res, err

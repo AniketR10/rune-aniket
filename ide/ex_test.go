@@ -47,7 +47,7 @@ import (
 	schemeapi "unstable.build/go-tui/api/scheme"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser"
-	browsertest "unstable.build/go-tui/browser/test"
+	"unstable.build/go-tui/browser/browsertest"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/notifications"

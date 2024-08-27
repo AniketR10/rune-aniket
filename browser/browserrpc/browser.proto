@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-option go_package = "unstable.build/go-tui/browser/rpc";
+option go_package = "unstable.build/go-tui/browser/browserrpc";
 
 import "term/rpc/term.proto";
 

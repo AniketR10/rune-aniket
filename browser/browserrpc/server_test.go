@@ -21,7 +21,7 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package rpc
+package browserrpc
 
 import (
 	"context"
@@ -34,7 +34,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	workspaceapi "unstable.build/go-tui/api/workspace"
-	browsertest "unstable.build/go-tui/browser/test"
+	"unstable.build/go-tui/browser/browsertest"
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term"

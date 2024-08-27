@@ -59,7 +59,7 @@ generate: GOPRIVATE=github.com/unstablebuild,unstable.build/*
 generate:
 	@ rm -rf **/*rpc*/*.pb.go
 	@ go generate ./...
-	@ mv browser/unstable.build/go-tui/browser/rpc/* browser/rpc
+	@ mv browser/unstable.build/go-tui/browser/browserrpc/* browser/browserrpc
 	@ mv text/unstable.build/go-tui/text/rpc/* text/rpc
 	@ mv extension/unstable.build/go-tui/extension/extensionrpc/* extension/extensionrpc
 	@ mv workspace/unstable.build/go-tui/workspace/rpc/* workspace/rpc

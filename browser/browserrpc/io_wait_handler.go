@@ -21,49 +21,61 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package test
+package browserrpc
 
 import (
-	"unstable.build/go-tui/handler"
+	context "context"
+	"sync"
+
+	"google.golang.org/grpc"
+	handlerpb "unstable.build/go-tui/handler/rpc"
 )
 
-// TestHandler is a testing Handler.
-type TestHandler struct {
-	handler.TestHandler
-	CloseCallback func() error
+type ioUnlockHandler struct {
+	lock sync.Locker
+	h    handlerpb.HandlerClient
 }
 
-// NewTestHandler allocates storage for a new TestHandler and initializes it.
-func NewTestHandler() *TestHandler {
-	ret := new(TestHandler)
-	ret.TestHandler = *handler.NewTestHandler()
+func newIOWaitUnlockHandlerClient(
+	h handlerpb.HandlerClient, lock sync.Locker,
+) handlerpb.HandlerClient {
+	ret := new(ioUnlockHandler)
+	ret.init(h, lock)
 	return ret
 }
 
-// Close calls t.Close.
-func (t *TestHandler) Close() error {
-	if t.CloseCallback != nil {
-		return t.CloseCallback()
-	}
-	return nil
+func (h *ioUnlockHandler) init(hc handlerpb.HandlerClient, lock sync.Locker) {
+	h.h = hc
+	h.lock = lock
 }
 
-// TestFloating is a testing Handler.
-type TestFloating struct {
-	TestHandler
-	width, height int
+func (h *ioUnlockHandler) Draw(
+	ctx context.Context, in *handlerpb.DrawRequest, opts ...grpc.CallOption,
+) (*handlerpb.DrawResponse, error) {
+	// do not unlock for Draw, as impls should simply draw, not call other APIs.
+	return h.h.Draw(ctx, in, opts...)
 }
 
-// NewTestHandler allocates storage for a new TestHandler and initializes it.
-func NewTestFloating(width, height int) *TestFloating {
-	ret := new(TestFloating)
-	ret.TestHandler = *NewTestHandler()
-	ret.width = width
-	ret.height = height
-	return ret
+func (h *ioUnlockHandler) Handle(
+	ctx context.Context, in *handlerpb.HandleRequest, opts ...grpc.CallOption,
+) (*handlerpb.HandleResponse, error) {
+	h.lock.Unlock()
+	defer h.lock.Lock()
+	return h.h.Handle(ctx, in, opts...)
 }
 
-// Close calls t.Close.
-func (t *TestFloating) Dimensions() (width, height int) {
-	return t.width, t.height
+func (h *ioUnlockHandler) Man(
+	ctx context.Context, in *handlerpb.ManRequest, opts ...grpc.CallOption,
+) (*handlerpb.ManResponse, error) {
+	h.lock.Unlock()
+	defer h.lock.Lock()
+	return h.h.Man(ctx, in, opts...)
+}
+
+func (h *ioUnlockHandler) Close(
+	ctx context.Context, in *handlerpb.CloseRequest, opts ...grpc.CallOption,
+) (*handlerpb.CloseResponse, error) {
+	h.lock.Unlock()
+	defer h.lock.Lock()
+	return h.h.Close(ctx, in, opts...)
 }

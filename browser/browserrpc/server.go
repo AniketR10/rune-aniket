@@ -21,7 +21,7 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package rpc
+package browserrpc
 
 import (
 	"context"
@@ -214,7 +214,7 @@ func (s *Server) Split(
 				return nil, fmt.Errorf("cannot split over a closed window: %d", req.GetWindowId())
 			}
 			return wm.Split(protoToModelOrientation(req.GetOrientation()), win, h)
-		}, "browserpb.Server", "split")
+		}, "browserrpc.Server", "split")
 	if err != nil {
 		return nil, err
 	}
@@ -228,7 +228,7 @@ func (s *Server) Bar(
 	ctx context.Context, req *BarRequest,
 ) (*BarResponse, error) {
 	handlerID := req.GetChannelId()
-	handler, err := s.getContentHandler(ctx, handlerID, "browserpb.Server", "bar")
+	handler, err := s.getContentHandler(ctx, handlerID, "browserrpc.Server", "bar")
 	if err != nil {
 		return nil, err
 	}
@@ -359,7 +359,7 @@ func (s *Server) Floating(
 	windowID, err := s.newRemoteResource(ctx, req.GetChannelId(),
 		func(wm browser.WindowManager, h browserapi.Handler) (browser.Window, error) {
 			return wm.Floating(h.(browser.Floating), cfg)
-		}, "browserpb.Server", "floating")
+		}, "browserrpc.Server", "floating")
 	if err != nil {
 		return nil, err
 	}
@@ -379,7 +379,7 @@ func (s *Server) Tab(ctx context.Context, req *TabRequest,
 	}
 
 	handler, err := s.getContentHandler(ctx, req.GetChannelId(),
-		"browserpb.Server", "tab")
+		"browserrpc.Server", "tab")
 	if err != nil {
 		return nil, err
 	}
@@ -395,7 +395,7 @@ func (s *Server) SetContent(
 	ctx context.Context, req *WindowSetContentRequest,
 ) (*WindowSetContentResponse, error) {
 	client, err := s.getContentHandler(ctx, req.GetChannelId(),
-		"browserpb.Server", "setContent")
+		"browserrpc.Server", "setContent")
 	if err != nil {
 		return nil, fmt.Errorf("failed to dial to remote handler: %v", err)
 	}

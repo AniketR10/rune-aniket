@@ -21,31 +21,19 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package rpc
+package browsertest
 
-import (
-	"context"
+import api "unstable.build/go-tui/api/browser"
 
-	"unstable.build/go-tui/browser"
-)
+type noopWindow struct{}
 
-var _ FloatingServer = floatingServer{}
+func (w noopWindow) Content() (api.Handler, error)  { return nil, nil }
+func (w noopWindow) SetContent(h api.Handler) error { return nil }
+func (w noopWindow) Close() error                   { return nil }
+func (w noopWindow) ID() uint64                     { return 0 }
+func (w noopWindow) Focus() (bool, error)           { return false, nil }
 
-type floatingServer struct {
-	UnimplementedFloatingServer
-	f browser.Floating
-}
-
-func newFloatingServer(f browser.Floating) floatingServer {
-	return floatingServer{f: f}
-}
-
-func (f floatingServer) Dimensions(ctx context.Context, req *DimensionsRequest) (
-	*DimensionsResponse, error,
-) {
-	width, height := f.f.Dimensions()
-	res := new(DimensionsResponse)
-	res.Width = uint32(width)
-	res.Height = uint32(height)
-	return res, nil
+// NopWindow returns a window that does nothing.
+func NopWindow() api.Window {
+	return noopWindow{}
 }

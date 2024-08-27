@@ -35,7 +35,7 @@ import (
 	textapi "unstable.build/go-tui/api/text"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser"
-	browserpb "unstable.build/go-tui/browser/rpc"
+	"unstable.build/go-tui/browser/browserrpc"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term"
@@ -78,7 +78,7 @@ var _ textapi.Editor = (*Client)(nil)
 // Client satisfies text.Editor by calling a remote editor over grpc.
 type Client struct {
 	broker          rpc.MuxBroker
-	browser         *browserpb.Client
+	browser         *browserrpc.Client
 	cc              rpc.MuxConn
 	ed              EditorClient
 	clientCtx       context.Context
@@ -106,7 +106,7 @@ func (c *Client) Init(
 	if !ok {
 		ctx = rpc.ContextWithWaitGroup(ctx, new(sync.WaitGroup))
 	}
-	c.browser = browserpb.NewClient(ctx, broker, cc)
+	c.browser = browserrpc.NewClient(ctx, broker, cc)
 	c.clientCtx, c.clientCancelCtx = context.WithCancel(ctx)
 }
 

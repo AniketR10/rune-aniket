@@ -2,9 +2,9 @@
 // versions:
 // - protoc-gen-go-grpc v1.2.0
 // - protoc             v5.27.1
-// source: rpc/browser.proto
+// source: browserrpc/browser.proto
 
-package rpc
+package browserrpc
 
 import (
 	context "context"
@@ -101,7 +101,7 @@ var ResourceOpener_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "rpc/browser.proto",
+	Metadata: "browserrpc/browser.proto",
 }
 
 // NotificationsClient is the client API for Notifications service.
@@ -223,7 +223,7 @@ var Notifications_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "rpc/browser.proto",
+	Metadata: "browserrpc/browser.proto",
 }
 
 // EventPublisherClient is the client API for EventPublisher service.
@@ -309,7 +309,7 @@ var EventPublisher_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "rpc/browser.proto",
+	Metadata: "browserrpc/browser.proto",
 }
 
 // WindowManagerClient is the client API for WindowManager service.
@@ -685,7 +685,7 @@ var WindowManager_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "rpc/browser.proto",
+	Metadata: "browserrpc/browser.proto",
 }
 
 // FloatingClient is the client API for Floating service.
@@ -771,5 +771,5 @@ var Floating_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "rpc/browser.proto",
+	Metadata: "browserrpc/browser.proto",
 }

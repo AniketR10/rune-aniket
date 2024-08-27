@@ -44,8 +44,8 @@ import (
 	browserapi "unstable.build/go-tui/api/browser"
 	textapi "unstable.build/go-tui/api/text"
 	workspaceapi "unstable.build/go-tui/api/workspace"
-	browserpb "unstable.build/go-tui/browser/rpc"
-	browsertest "unstable.build/go-tui/browser/test"
+	"unstable.build/go-tui/browser/browserrpc"
+	"unstable.build/go-tui/browser/browsertest"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/rpc"
@@ -91,12 +91,12 @@ func setupIntTest(
 }
 
 func setupWmIntTest(
-	t *testing.T, broker rpc.MuxBroker, s *browserpb.Server,
-) (*browserpb.Client, func()) {
+	t *testing.T, broker rpc.MuxBroker, s *browserrpc.Server,
+) (*browserrpc.Client, func()) {
 	conn, closeFn := doSetupIntTest(t, broker, func(grpcServer *grpc.Server) {
-		browserpb.RegisterWindowManagerServer(grpcServer, s)
+		browserrpc.RegisterWindowManagerServer(grpcServer, s)
 	})
-	client := browserpb.NewClient(context.Background(), broker, conn)
+	client := browserrpc.NewClient(context.Background(), broker, conn)
 	return client, func() {
 		client.Close()
 		closeFn()
@@ -505,7 +505,7 @@ func TestRPCTab(t *testing.T) {
 		}
 
 		b := rpc.NewUnixGRPCBroker("", "", "")
-		s := browserpb.NewServer(b, c, mu)
+		s := browserrpc.NewServer(b, c, mu)
 		s.SetSyncMode()
 
 		client, closeFn := setupWmIntTest(t, b, s)

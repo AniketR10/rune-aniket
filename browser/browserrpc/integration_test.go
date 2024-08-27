@@ -21,7 +21,7 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package rpc
+package browserrpc
 
 import (
 	context "context"
@@ -37,7 +37,7 @@ import (
 	"google.golang.org/grpc"
 	browserapi "unstable.build/go-tui/api/browser"
 	"unstable.build/go-tui/browser"
-	browsertest "unstable.build/go-tui/browser/test"
+	"unstable.build/go-tui/browser/browsertest"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term"

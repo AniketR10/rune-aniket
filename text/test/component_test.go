@@ -41,7 +41,7 @@ import (
 	textapi "unstable.build/go-tui/api/text"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser"
-	browsertest "unstable.build/go-tui/browser/test"
+	"unstable.build/go-tui/browser/browsertest"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/term"
