@@ -36,7 +36,7 @@ import (
 	status "google.golang.org/grpc/status"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/term"
-	termrpc "unstable.build/go-tui/term/rpc"
+	"unstable.build/go-tui/term/termrpc"
 )
 
 const defaultRPCTimeout = 4 * time.Second

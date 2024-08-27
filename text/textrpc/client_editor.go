@@ -29,7 +29,7 @@ import (
 
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/term"
-	termpb "unstable.build/go-tui/term/rpc"
+	termrpc "unstable.build/go-tui/term/termrpc"
 )
 
 type clientWriter struct {
@@ -40,7 +40,7 @@ type clientWriter struct {
 func (w clientWriter) Edit(
 	ctx context.Context, start, end term.Coordinates, str string,
 ) (from, to term.Coordinates, old string, err error) {
-	var protoStart, protoEnd termpb.Coordinates
+	var protoStart, protoEnd termrpc.Coordinates
 	protoStart.FromModel(start)
 	protoEnd.FromModel(end)
 	req := EditCellRequest{

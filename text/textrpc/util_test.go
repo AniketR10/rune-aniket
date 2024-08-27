@@ -29,7 +29,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
-	termpb "unstable.build/go-tui/term/rpc"
+	termrpc "unstable.build/go-tui/term/termrpc"
 )
 
 func TestBufferEditRequest(t *testing.T) {
@@ -41,8 +41,8 @@ func TestBufferEditRequest(t *testing.T) {
 			in: "a",
 			out: EditRequest{
 				ResourceName: &URI{Uri: ""},
-				Buffer: []*termpb.CellRow{
-					{Cells: []*termpb.Cell{{Character: 'a'}}},
+				Buffer: []*termrpc.CellRow{
+					{Cells: []*termrpc.Cell{{Character: 'a'}}},
 				},
 			},
 		},
@@ -50,10 +50,10 @@ func TestBufferEditRequest(t *testing.T) {
 			in: "a\nbb\nccc",
 			out: EditRequest{
 				ResourceName: &URI{Uri: ""},
-				Buffer: []*termpb.CellRow{
-					{Cells: []*termpb.Cell{{Character: 'a'}}},
-					{Cells: []*termpb.Cell{{Character: 'b'}, {Character: 'b'}}},
-					{Cells: []*termpb.Cell{{Character: 'c'}, {Character: 'c'}, {Character: 'c'}}},
+				Buffer: []*termrpc.CellRow{
+					{Cells: []*termrpc.Cell{{Character: 'a'}}},
+					{Cells: []*termrpc.Cell{{Character: 'b'}, {Character: 'b'}}},
+					{Cells: []*termrpc.Cell{{Character: 'c'}, {Character: 'c'}, {Character: 'c'}}},
 				},
 			},
 		},

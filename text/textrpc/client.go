@@ -39,7 +39,7 @@ import (
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term"
-	termpb "unstable.build/go-tui/term/rpc"
+	termrpc "unstable.build/go-tui/term/termrpc"
 	"unstable.build/go-tui/text"
 )
 
@@ -236,8 +236,8 @@ func makeLocationListRequest(
 	}
 
 	for loc, ok := l.Current(); ok; loc, ok = l.Next() {
-		var from, to termpb.Coordinates
-		var attr termpb.Attributes
+		var from, to termrpc.Coordinates
+		var attr termrpc.Attributes
 		from.FromModel(loc.From)
 		to.FromModel(loc.To)
 		attr.FromModel(loc.Attr)
@@ -304,7 +304,7 @@ func (c *Client) SetCursor(h textapi.Handler, pos term.Coordinates) error {
 	defer cancel()
 
 	token := h.(Token)
-	var protoPos termpb.Coordinates
+	var protoPos termrpc.Coordinates
 	protoPos.FromModel(pos)
 	req := SetCursorRequest{Pos: &protoPos, ResourceName: NewURI(token.URI)}
 	_, err := c.ed.SetCursor(ctx, &req)
@@ -345,7 +345,7 @@ func (c *Client) SetDefaultAttributes(h textapi.Handler, attrs term.Attributes) 
 	defer cancel()
 
 	token := h.(Token)
-	var rpcAttrs termpb.Attributes
+	var rpcAttrs termrpc.Attributes
 	rpcAttrs.FromModel(attrs)
 	req := SetDefaultAttributesRequest{
 		ResourceName: NewURI(token.URI),

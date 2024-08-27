@@ -30,16 +30,16 @@ import (
 	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/term"
-	termpb "unstable.build/go-tui/term/rpc"
+	"unstable.build/go-tui/term/termrpc"
 )
 
-var zeroCell = termpb.Cell{}
+var zeroCell = termrpc.Cell{}
 
 // NewDrawResponse converts a tui.Component into a DrawResponse.
 func NewDrawResponse(ctx context.Context, comp tui.Component, width, height int) *DrawResponse {
 	resp := &DrawResponse{
 		Cursor: &DrawResponse_Cursor{
-			Position: &termpb.Coordinates{},
+			Position: &termrpc.Coordinates{},
 		},
 	}
 	w := newDrawResponseWriter(ctx, width, height, resp)
@@ -89,9 +89,9 @@ func (r drawResponseWriter) SetCell(pos term.Coordinates, c term.Cell) {
 		return
 	}
 
-	var cell *termpb.Cell
+	var cell *termrpc.Cell
 	if r.res.Rows[pos.Y].Cells[pos.X] == &zeroCell {
-		cell = new(termpb.Cell)
+		cell = new(termrpc.Cell)
 	} else {
 		cell = r.res.Rows[pos.Y].Cells[pos.X]
 	}
@@ -112,9 +112,9 @@ func (r drawResponseWriter) UnionAttributes(pos term.Coordinates, attr term.Attr
 		return
 	}
 
-	var cell *termpb.Cell
+	var cell *termrpc.Cell
 	if r.res.Rows[pos.Y].Cells[pos.X] == &zeroCell {
-		cell = new(termpb.Cell)
+		cell = new(termrpc.Cell)
 	} else {
 		cell = r.res.Rows[pos.Y].Cells[pos.X]
 	}
@@ -151,9 +151,9 @@ func (r drawResponseWriter) Context() context.Context {
 }
 
 func newDrawResponseWriter(ctx context.Context, width, height int, r *DrawResponse) drawResponseWriter {
-	cellRowSlab := make([]termpb.CellRow, height)
-	cellRowWidthSlab := make([]*termpb.Cell, height*width)
-	r.Rows = make([]*termpb.CellRow, height)
+	cellRowSlab := make([]termrpc.CellRow, height)
+	cellRowWidthSlab := make([]*termrpc.Cell, height*width)
+	r.Rows = make([]*termrpc.CellRow, height)
 	for i := 0; i < height; i++ {
 		r.Rows[i] = &cellRowSlab[i]
 		r.Rows[i].Cells = cellRowWidthSlab[i*width : (i+1)*width]

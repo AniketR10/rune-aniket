@@ -35,7 +35,7 @@ import (
 	textapi "unstable.build/go-tui/api/text"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/rpc"
-	termpb "unstable.build/go-tui/term/rpc"
+	"unstable.build/go-tui/term/termrpc"
 	"unstable.build/go-tui/text"
 )
 
@@ -344,7 +344,7 @@ func (s *Server) Cursor(ctx context.Context, in *CursorRequest) (
 		return nil, err
 	}
 
-	var protoPos termpb.Coordinates
+	var protoPos termrpc.Coordinates
 	protoPos.FromModel(pos)
 
 	return &CursorResponse{Pos: &protoPos}, nil
@@ -398,7 +398,7 @@ func (s *Server) EditCell(ctx context.Context, in *EditCellRequest) (
 		return nil, err
 	}
 
-	var protoFrom, protoTo termpb.Coordinates
+	var protoFrom, protoTo termrpc.Coordinates
 	protoFrom.FromModel(from)
 	protoTo.FromModel(to)
 

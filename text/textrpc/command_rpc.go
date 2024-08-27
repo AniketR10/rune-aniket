@@ -40,7 +40,7 @@ import (
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/browser/browserrpc"
 	"unstable.build/go-tui/rpc"
-	termpb "unstable.build/go-tui/term/rpc"
+	termrpc "unstable.build/go-tui/term/termrpc"
 	"unstable.build/go-tui/text"
 )
 
@@ -101,7 +101,7 @@ func (c *commandClient) HandleCommand(ctx context.Context, cmd textapi.Command) 
 	ctx, cancelFn := context.WithTimeout(ctx, defaultClientTimeout)
 	defer cancelFn()
 
-	var cursorContent, cursorWindow termpb.Coordinates
+	var cursorContent, cursorWindow termrpc.Coordinates
 	cursorContent.FromModel(cmd.Cursor.Content)
 	cursorWindow.FromModel(cmd.Cursor.Window)
 

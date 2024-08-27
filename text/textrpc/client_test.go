@@ -38,7 +38,7 @@ import (
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term"
-	termpb "unstable.build/go-tui/term/rpc"
+	"unstable.build/go-tui/term/termrpc"
 	"unstable.build/go-tui/text"
 )
 
@@ -165,23 +165,23 @@ func TestSetLocationListRequest(t *testing.T) {
 			Priority:     2,
 			Locations: []*SetLocationListRequest_Location{
 				{
-					From: &termpb.Coordinates{},
-					To:   &termpb.Coordinates{X: 1, Y: 3},
-					Attr: &termpb.Attributes{Attrs: int64(tcell.AttrBold)},
+					From: &termrpc.Coordinates{},
+					To:   &termrpc.Coordinates{X: 1, Y: 3},
+					Attr: &termrpc.Attributes{Attrs: int64(tcell.AttrBold)},
 				},
 				{
-					To:   &termpb.Coordinates{},
-					From: &termpb.Coordinates{X: 1, Y: 3},
-					Attr: &termpb.Attributes{
+					To:   &termrpc.Coordinates{},
+					From: &termrpc.Coordinates{X: 1, Y: 3},
+					Attr: &termrpc.Attributes{
 						Foreground: uint64(tcell.ColorBlack),
 						Background: uint64(tcell.ColorGreen),
 					},
 					Msg: "wsb: hold BBBY",
 				},
 				{
-					From: &termpb.Coordinates{},
-					To:   &termpb.Coordinates{},
-					Attr: &termpb.Attributes{},
+					From: &termrpc.Coordinates{},
+					To:   &termrpc.Coordinates{},
+					Attr: &termrpc.Attributes{},
 				},
 			},
 		}
@@ -203,9 +203,9 @@ func TestSetLocationListRequest(t *testing.T) {
 			ListId:       locID,
 			Locations: []*SetLocationListRequest_Location{
 				{
-					From: &termpb.Coordinates{},
-					To:   &termpb.Coordinates{X: 1, Y: 3},
-					Attr: &termpb.Attributes{Attrs: int64(tcell.AttrBold)},
+					From: &termrpc.Coordinates{},
+					To:   &termrpc.Coordinates{X: 1, Y: 3},
+					Attr: &termrpc.Attributes{Attrs: int64(tcell.AttrBold)},
 					Msg:  myMsg,
 				},
 			},

@@ -37,7 +37,7 @@ import (
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term"
-	termpb "unstable.build/go-tui/term/rpc"
+	termrpc "unstable.build/go-tui/term/termrpc"
 )
 
 var (
@@ -45,18 +45,18 @@ var (
 	key2 = term.Event{Type: term.EventKey,
 		Mod: term.ModAlt, Key: term.KeyBackspace}
 	key3      = term.Event{Type: term.EventMouse, MouseX: 10, MouseY: 11111}
-	protoKey1 = termpb.Event{
-		Type: termpb.Event_TypeKey,
+	protoKey1 = termrpc.Event{
+		Type: termrpc.Event_TypeKey,
 		Char: '4',
-		Mod:  termpb.Event_Ctrl,
+		Mod:  termrpc.Event_Ctrl,
 	}
-	protoKey2 = termpb.Event{
-		Type: termpb.Event_TypeKey,
-		Mod:  termpb.Event_CtrlAlt,
+	protoKey2 = termrpc.Event{
+		Type: termrpc.Event_TypeKey,
+		Mod:  termrpc.Event_CtrlAlt,
 		Char: 'h',
 	}
-	protoKey3 = termpb.Event{
-		Type:   termpb.Event_TypeMouse,
+	protoKey3 = termrpc.Event{
+		Type:   termrpc.Event_TypeMouse,
 		MouseX: 10,
 		MouseY: 11111,
 	}
@@ -176,15 +176,15 @@ func TestClientPublish(t *testing.T) {
 	tsuite := []struct {
 		rpc string
 		fn  func(*Client) error
-		ev  *termpb.Event
+		ev  *termrpc.Event
 	}{
-		{"PublishEventNone", (*Client).PublishEventNone, &termpb.Event{Type: termpb.Event_TypeNone}},
+		{"PublishEventNone", (*Client).PublishEventNone, &termrpc.Event{Type: termrpc.Event_TypeNone}},
 		{"Interrupt", func(c *Client) error {
 			return c.Interrupt(context.Background())
-		}, &termpb.Event{Type: termpb.Event_TypeInterrupt}},
+		}, &termrpc.Event{Type: termrpc.Event_TypeInterrupt}},
 		{"Interrupt with context payload", func(c *Client) error {
 			return c.Interrupt(term.ContextWithPayload(context.Background(), []byte("1234")))
-		}, &termpb.Event{Type: termpb.Event_TypeInterrupt, Raw: []byte("1234")}},
+		}, &termrpc.Event{Type: termrpc.Event_TypeInterrupt, Raw: []byte("1234")}},
 	}
 	for _, tcase := range tsuite {
 		t.Run(fmt.Sprintf("%s bubbles up rpc error and so stops event handler resources", tcase.rpc),

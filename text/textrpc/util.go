@@ -29,7 +29,7 @@ import (
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/term"
-	termpb "unstable.build/go-tui/term/rpc"
+	termrpc "unstable.build/go-tui/term/termrpc"
 )
 
 // NewEditRequests converts a buf into an EditRequest.
@@ -65,7 +65,7 @@ func NewRawCellsResponse(cells [][]term.Cell) *RawCellsResponse {
 	return &RawCellsResponse{Rows: rawCellsToProtoCells(cells)}
 }
 
-func rowsToBuffer(in []*termpb.CellRow) *cell.Buffer {
+func rowsToBuffer(in []*termrpc.CellRow) *cell.Buffer {
 	var maxWidth int
 	for _, row := range in {
 		if len(row.Cells) > maxWidth {
@@ -87,7 +87,7 @@ func rowsToBuffer(in []*termpb.CellRow) *cell.Buffer {
 	return ret
 }
 
-func rawCellsToProtoCells(cells [][]term.Cell) []*termpb.CellRow {
+func rawCellsToProtoCells(cells [][]term.Cell) []*termrpc.CellRow {
 	var size int
 	for _, row := range cells {
 		size += len(row)
@@ -95,11 +95,11 @@ func rawCellsToProtoCells(cells [][]term.Cell) []*termpb.CellRow {
 
 	// these slabs reduce allocations from ~N (=num cells)
 	// to 4 which reduces this function's ns/op from 60 to 80%
-	rows := make([]*termpb.CellRow, len(cells))
-	protoCellRowSlabPtr := make([]termpb.CellRow, len(cells))
-	cellRowSlab := make([]*termpb.Cell, size)
+	rows := make([]*termrpc.CellRow, len(cells))
+	protoCellRowSlabPtr := make([]termrpc.CellRow, len(cells))
+	cellRowSlab := make([]*termrpc.Cell, size)
 	cellRowSlabIdx := 0
-	cellSlabPtr := make([]termpb.Cell, size)
+	cellSlabPtr := make([]termrpc.Cell, size)
 	cellSlabPtrIdx := 0
 
 	for y, row := range cells {

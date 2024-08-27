@@ -43,7 +43,7 @@ import (
 	handlerpb "unstable.build/go-tui/handler/rpc"
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term"
-	termpb "unstable.build/go-tui/term/rpc"
+	termrpc "unstable.build/go-tui/term/termrpc"
 )
 
 var _ browserapi.Browser = (*Client)(nil)
@@ -302,7 +302,7 @@ func (c *Client) Open(resource workspaceapi.URI) (browserapi.Handler, error) {
 // PublishEventNone satisfies Browser.
 func (c *Client) PublishEventNone() error {
 	ctx := context.Background()
-	protoEv := new(termpb.Event)
+	protoEv := new(termrpc.Event)
 	err := protoEv.FromModel(term.Event{Type: term.EventNone})
 	if err != nil {
 		return err
@@ -317,7 +317,7 @@ func (c *Client) PublishEventNone() error {
 // Interrupt satisfies Browser.
 func (c *Client) Interrupt(ctx context.Context) error {
 	payload, _ := term.PayloadFromContext(ctx)
-	protoEv := new(termpb.Event)
+	protoEv := new(termrpc.Event)
 	err := protoEv.FromModel(term.Event{Type: term.EventInterrupt, Raw: payload})
 	if err != nil {
 		return err
@@ -365,7 +365,7 @@ func focus(
 func (c *Client) Floating(
 	h browserapi.Floating, cfg component.FloatingConfig,
 ) (browserapi.Window, error) {
-	var atProto termpb.Coordinates
+	var atProto termrpc.Coordinates
 	atProto.FromModel(cfg.Offset)
 
 	freq := FloatingWindowRequest{

@@ -30,7 +30,7 @@ import (
 	"google.golang.org/grpc"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/term"
-	termpb "unstable.build/go-tui/term/rpc"
+	"unstable.build/go-tui/term/termrpc"
 )
 
 type mockHandlerClient struct {
@@ -52,7 +52,7 @@ func (c *mockHandlerClient) Draw(
 
 	resp := NewDrawResponse(context.Background(), c.remote, width, height)
 	resp.Cursor = &DrawResponse_Cursor{
-		Position: &termpb.Coordinates{
+		Position: &termrpc.Coordinates{
 			X: int32(pos.X),
 			Y: int32(pos.Y),
 		},
@@ -99,7 +99,7 @@ func (c *mockHandlerClient) Man(
 	}
 
 	man := c.remote.Man()
-	protoMan := termpb.Manual{}
+	protoMan := termrpc.Manual{}
 	protoMan.FromModel(man)
 
 	return &ManResponse{Man: &protoMan}, nil

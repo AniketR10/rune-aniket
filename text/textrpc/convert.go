@@ -27,7 +27,7 @@ import (
 	"fmt"
 
 	textapi "unstable.build/go-tui/api/text"
-	termpb "unstable.build/go-tui/term/rpc"
+	"unstable.build/go-tui/term/termrpc"
 )
 
 func protoTypeToModel(protoType EditorEvent_Type) (ev textapi.EventType, err error) {
@@ -118,7 +118,7 @@ func toProto(e textapi.Event) EditorEvent {
 
 	ret.ResourceName = NewURI(e.URI)
 
-	var start, end, from, to termpb.Coordinates
+	var start, end, from, to termrpc.Coordinates
 	start.FromModel(e.Start)
 	end.FromModel(e.End)
 	from.FromModel(e.From)

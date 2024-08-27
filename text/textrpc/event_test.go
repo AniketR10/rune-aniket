@@ -34,7 +34,7 @@ import (
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/term"
-	termpb "unstable.build/go-tui/term/rpc"
+	termrpc "unstable.build/go-tui/term/termrpc"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/text/texttest"
 )
@@ -247,10 +247,10 @@ func TestEventProto(t *testing.T) {
 			},
 			out: EditorEvent{
 				Type:  EditorEvent_TypeScroll,
-				Start: &termpb.Coordinates{X: 1, Y: 2},
-				End:   &termpb.Coordinates{X: 3, Y: 4},
-				From:  &termpb.Coordinates{X: 5, Y: 6},
-				To:    &termpb.Coordinates{X: 7, Y: 8},
+				Start: &termrpc.Coordinates{X: 1, Y: 2},
+				End:   &termrpc.Coordinates{X: 3, Y: 4},
+				From:  &termrpc.Coordinates{X: 5, Y: 6},
+				To:    &termrpc.Coordinates{X: 7, Y: 8},
 			},
 		},
 	}

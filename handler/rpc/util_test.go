@@ -29,7 +29,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"unstable.build/go-tui/component"
-	termpb "unstable.build/go-tui/term/rpc"
+	"unstable.build/go-tui/term/termrpc"
 )
 
 func TestNewDrawResponse(t *testing.T) {
@@ -40,51 +40,51 @@ func TestNewDrawResponse(t *testing.T) {
 		{
 			in: "a",
 			out: &DrawResponse{
-				Rows: []*termpb.CellRow{
-					{Cells: []*termpb.Cell{&zeroCell, &zeroCell, &zeroCell, &zeroCell, &zeroCell}},
-					{Cells: []*termpb.Cell{&zeroCell, &zeroCell, &zeroCell, &zeroCell, &zeroCell}},
-					{Cells: []*termpb.Cell{
+				Rows: []*termrpc.CellRow{
+					{Cells: []*termrpc.Cell{&zeroCell, &zeroCell, &zeroCell, &zeroCell, &zeroCell}},
+					{Cells: []*termrpc.Cell{&zeroCell, &zeroCell, &zeroCell, &zeroCell, &zeroCell}},
+					{Cells: []*termrpc.Cell{
 						&zeroCell,
 						&zeroCell,
 						{Character: 'a', Width: 1},
 						&zeroCell,
 						&zeroCell,
 					}},
-					{Cells: []*termpb.Cell{&zeroCell, &zeroCell, &zeroCell, &zeroCell, &zeroCell}},
-					{Cells: []*termpb.Cell{&zeroCell, &zeroCell, &zeroCell, &zeroCell, &zeroCell}},
+					{Cells: []*termrpc.Cell{&zeroCell, &zeroCell, &zeroCell, &zeroCell, &zeroCell}},
+					{Cells: []*termrpc.Cell{&zeroCell, &zeroCell, &zeroCell, &zeroCell, &zeroCell}},
 				},
-				Cursor: &DrawResponse_Cursor{Position: &termpb.Coordinates{}},
+				Cursor: &DrawResponse_Cursor{Position: &termrpc.Coordinates{}},
 			},
 		},
 		{
 			in: "aaaaaa\naaaaaa\naaaaaa",
 			out: &DrawResponse{
-				Rows: []*termpb.CellRow{
-					{Cells: []*termpb.Cell{&zeroCell, &zeroCell, &zeroCell, &zeroCell, &zeroCell}},
-					{Cells: []*termpb.Cell{
+				Rows: []*termrpc.CellRow{
+					{Cells: []*termrpc.Cell{&zeroCell, &zeroCell, &zeroCell, &zeroCell, &zeroCell}},
+					{Cells: []*termrpc.Cell{
 						{Character: 'a', Width: 1}, {Character: 'a', Width: 1}, {Character: 'a', Width: 1},
 						{Character: 'a', Width: 1}, {Character: 'a', Width: 1},
 					}},
-					{Cells: []*termpb.Cell{
+					{Cells: []*termrpc.Cell{
 						{Character: 'a', Width: 1}, {Character: 'a', Width: 1}, {Character: 'a', Width: 1},
 						{Character: 'a', Width: 1}, {Character: 'a', Width: 1},
 					}},
-					{Cells: []*termpb.Cell{
+					{Cells: []*termrpc.Cell{
 						{Character: 'a', Width: 1}, {Character: 'a', Width: 1}, {Character: 'a', Width: 1},
 						{Character: 'a', Width: 1}, {Character: 'a', Width: 1},
 					}},
-					{Cells: []*termpb.Cell{&zeroCell, &zeroCell, &zeroCell, &zeroCell, &zeroCell}},
+					{Cells: []*termrpc.Cell{&zeroCell, &zeroCell, &zeroCell, &zeroCell, &zeroCell}},
 				},
-				Cursor: &DrawResponse_Cursor{Position: &termpb.Coordinates{}},
+				Cursor: &DrawResponse_Cursor{Position: &termrpc.Coordinates{}},
 			},
 		},
 		{
 			in: "👨‍👧‍👦",
 			out: &DrawResponse{
-				Rows: []*termpb.CellRow{
-					{Cells: []*termpb.Cell{&zeroCell, &zeroCell, &zeroCell, &zeroCell, &zeroCell}},
-					{Cells: []*termpb.Cell{&zeroCell, &zeroCell, &zeroCell, &zeroCell, &zeroCell}},
-					{Cells: []*termpb.Cell{
+				Rows: []*termrpc.CellRow{
+					{Cells: []*termrpc.Cell{&zeroCell, &zeroCell, &zeroCell, &zeroCell, &zeroCell}},
+					{Cells: []*termrpc.Cell{&zeroCell, &zeroCell, &zeroCell, &zeroCell, &zeroCell}},
+					{Cells: []*termrpc.Cell{
 						&zeroCell,
 						{
 							Character: '👨',
@@ -95,10 +95,10 @@ func TestNewDrawResponse(t *testing.T) {
 						&zeroCell,
 						&zeroCell,
 					}},
-					{Cells: []*termpb.Cell{&zeroCell, &zeroCell, &zeroCell, &zeroCell, &zeroCell}},
-					{Cells: []*termpb.Cell{&zeroCell, &zeroCell, &zeroCell, &zeroCell, &zeroCell}},
+					{Cells: []*termrpc.Cell{&zeroCell, &zeroCell, &zeroCell, &zeroCell, &zeroCell}},
+					{Cells: []*termrpc.Cell{&zeroCell, &zeroCell, &zeroCell, &zeroCell, &zeroCell}},
 				},
-				Cursor: &DrawResponse_Cursor{Position: &termpb.Coordinates{}},
+				Cursor: &DrawResponse_Cursor{Position: &termrpc.Coordinates{}},
 			},
 		},
 	}

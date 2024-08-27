@@ -63,7 +63,7 @@ generate:
 	@ mv text/unstable.build/go-tui/text/textrpc/* text/textrpc
 	@ mv extension/unstable.build/go-tui/extension/extensionrpc/* extension/extensionrpc
 	@ mv workspace/unstable.build/go-tui/workspace/workspacerpc/* workspace/workspacerpc
-	@ mv term/unstable.build/go-tui/term/rpc/* term/rpc
+	@ mv term/unstable.build/go-tui/term/termrpc/* term/termrpc
 	@ mv handler/unstable.build/go-tui/handler/rpc/* handler/rpc
 	@ mv api/config/unstable.build/go-tui/api/config/rpc/* api/config/rpc
 	@ rm -rf **/unstable.build **/github.com

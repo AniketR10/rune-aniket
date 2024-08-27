@@ -4,7 +4,7 @@ option go_package = "unstable.build/go-tui/text/textrpc";
 
 package text;
 
-import "term/rpc/term.proto";
+import "term/termrpc/term.proto";
 
 message URI {
 	string uri = 1;

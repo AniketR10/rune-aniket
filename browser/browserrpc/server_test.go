@@ -38,7 +38,7 @@ import (
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term"
-	termpb "unstable.build/go-tui/term/rpc"
+	termrpc "unstable.build/go-tui/term/termrpc"
 )
 
 const asyncResultsSleepDuration = 300 * time.Millisecond
@@ -133,7 +133,7 @@ func TestServerPublish(t *testing.T) {
 		defer ctrl.Finish()
 		var mu sync.Mutex
 		s, mock, _ := newTestServer(ctrl, &mu)
-		req := PublishRequest{Ev: &termpb.Event{Type: termpb.Event_TypeInterrupt}}
+		req := PublishRequest{Ev: &termrpc.Event{Type: termrpc.Event_TypeInterrupt}}
 
 		mock.EXPECT().PublishEvent(gomock.Eq(term.Event{Type: term.EventInterrupt})).Times(1)
 
@@ -147,7 +147,7 @@ func TestServerPublish(t *testing.T) {
 		defer ctrl.Finish()
 		var mu sync.Mutex
 		s, mock, _ := newTestServer(ctrl, &mu)
-		req := PublishRequest{Ev: &termpb.Event{Type: termpb.Event_TypeNone}}
+		req := PublishRequest{Ev: &termrpc.Event{Type: termrpc.Event_TypeNone}}
 
 		mock.EXPECT().PublishEvent(gomock.Eq(term.Event{Type: term.EventNone})).Times(1)
 
@@ -161,7 +161,7 @@ func TestServerPublish(t *testing.T) {
 		defer ctrl.Finish()
 		var mu sync.Mutex
 		s, mock, _ := newTestServer(ctrl, &mu)
-		req := PublishRequest{Ev: &termpb.Event{Type: termpb.Event_TypeInterrupt}}
+		req := PublishRequest{Ev: &termrpc.Event{Type: termrpc.Event_TypeInterrupt}}
 
 		mock.EXPECT().PublishEvent(gomock.Any()).Return(errors.New("uRock"))
 
@@ -175,7 +175,7 @@ func TestServerPublish(t *testing.T) {
 		defer ctrl.Finish()
 		var mu sync.Mutex
 		s, mock, _ := newTestServer(ctrl, &mu)
-		req := PublishRequest{Ev: &termpb.Event{Type: termpb.Event_TypeNone}}
+		req := PublishRequest{Ev: &termrpc.Event{Type: termrpc.Event_TypeNone}}
 
 		mock.EXPECT().PublishEvent(gomock.Any()).Return(errors.New("uRock"))
 

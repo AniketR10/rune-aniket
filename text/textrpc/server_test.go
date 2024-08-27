@@ -42,7 +42,7 @@ import (
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/rpc/rpctest"
 	"unstable.build/go-tui/term"
-	termpb "unstable.build/go-tui/term/rpc"
+	termrpc "unstable.build/go-tui/term/termrpc"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/text/texttest"
 )
@@ -329,7 +329,7 @@ func TestServerSetCursor(t *testing.T) {
 		expectEditor(t, mock, resource)
 		mock.EXPECT().SetCursor(gomock.Any(), gomock.Eq(pos)).Return(nil).Times(1)
 
-		var protoPos termpb.Coordinates
+		var protoPos termrpc.Coordinates
 		protoPos.FromModel(pos)
 
 		req := SetCursorRequest{ResourceName: NewURI(resource), Pos: &protoPos}

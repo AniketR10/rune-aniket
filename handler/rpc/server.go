@@ -33,8 +33,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/logging"
 	"unstable.build/go-tui"
-
-	termpb "unstable.build/go-tui/term/rpc"
+	"unstable.build/go-tui/term/termrpc"
 )
 
 type dimensions struct {
@@ -121,7 +120,7 @@ func (s *Server) Man(context.Context, *ManRequest) (
 	*ManResponse, error,
 ) {
 	man := s.handler.Man()
-	protoMan := new(termpb.Manual)
+	protoMan := new(termrpc.Manual)
 	err := protoMan.FromModel(man)
 	if err != nil {
 		return nil, err

@@ -2,7 +2,7 @@ syntax = "proto3";
 
 option go_package = "unstable.build/go-tui/handler/rpc";
 
-import "term/rpc/term.proto";
+import "term/termrpc/term.proto";
 
 package handler;
 
