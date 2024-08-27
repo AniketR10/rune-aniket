@@ -36,7 +36,7 @@ import (
 	"unstable.build/go-tui/cmd/extension_ai/backend/openai"
 	"unstable.build/go-tui/cmd/extension_ai/dialogue"
 	"unstable.build/go-tui/extension"
-	extutil "unstable.build/go-tui/extension/util"
+	"unstable.build/go-tui/extension/extutil"
 	"unstable.build/go-tui/rpc"
 )
 

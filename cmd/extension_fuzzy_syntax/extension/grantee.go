@@ -38,7 +38,7 @@ import (
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cmd/extension_fuzzy_file/finder"
 	"unstable.build/go-tui/extension"
-	extutil "unstable.build/go-tui/extension/util"
+	"unstable.build/go-tui/extension/extutil"
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/workspace/walkdir"

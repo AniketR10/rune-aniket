@@ -41,7 +41,7 @@ import (
 	"unstable.build/go-tui/component/asciiart"
 	"unstable.build/go-tui/component/asciiart/capture"
 	"unstable.build/go-tui/extension"
-	extutil "unstable.build/go-tui/extension/util"
+	"unstable.build/go-tui/extension/extutil"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term"

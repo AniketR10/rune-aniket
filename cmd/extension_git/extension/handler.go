@@ -50,7 +50,7 @@ import (
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/extension"
-	extutil "unstable.build/go-tui/extension/util"
+	"unstable.build/go-tui/extension/extutil"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term"

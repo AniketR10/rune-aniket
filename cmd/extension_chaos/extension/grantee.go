@@ -26,7 +26,7 @@ package extension
 import (
 	textapi "unstable.build/go-tui/api/text"
 	"unstable.build/go-tui/extension"
-	extutil "unstable.build/go-tui/extension/util"
+	"unstable.build/go-tui/extension/extutil"
 )
 
 // Grantee returns this extension's Grantee and the permissions required to run it.

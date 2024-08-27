@@ -46,7 +46,7 @@ import (
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/asciiart"
 	"unstable.build/go-tui/component/notifications"
-	extutil "unstable.build/go-tui/extension/util"
+	"unstable.build/go-tui/extension/extutil"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/term/vte"

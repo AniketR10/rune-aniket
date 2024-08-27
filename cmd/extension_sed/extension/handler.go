@@ -42,7 +42,7 @@ import (
 	workspaceextension "unstable.build/go-tui/api/workspace/extension"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/extension"
-	extutil "unstable.build/go-tui/extension/util"
+	"unstable.build/go-tui/extension/extutil"
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term"
 )
