@@ -37,8 +37,8 @@ import (
 	"unstable.build/go-tui/api/config"
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/extension"
-	extensionpb "unstable.build/go-tui/extension/rpc"
-	extensiontest "unstable.build/go-tui/extension/test"
+	"unstable.build/go-tui/extension/extensiontest"
+	"unstable.build/go-tui/extension/extensionrpc"
 	"unstable.build/go-tui/rpc"
 )
 
@@ -134,7 +134,7 @@ func TestManagerRun(t *testing.T) {
 		mgr, pbClient, _ := newTestManager(&grantor)
 		defer mgr.Close()
 
-		pbClient.fixturePermissions = []*extensionpb.Permission{{Id: "read"}, {Id: "read"}}
+		pbClient.fixturePermissions = []*extensionrpc.Permission{{Id: "read"}, {Id: "read"}}
 		testRunAndWait(t, mgr, pbClient)
 
 		assert.NotNil(t, pbClient.permissions)
@@ -200,7 +200,7 @@ func TestManagerRun(t *testing.T) {
 		defer mgr.Close()
 
 		pbClient.fixturePermissions =
-			[]*extensionpb.Permission{{Id: "read"}}
+			[]*extensionrpc.Permission{{Id: "read"}}
 		pbClient.err = errors.New("woopsie")
 		pbClient.onShutdownChan = make(chan struct{})
 
@@ -216,7 +216,7 @@ func TestManagerRun(t *testing.T) {
 		defer mgr.Close()
 
 		pbClient.fixturePermissions =
-			[]*extensionpb.Permission{{Id: "read"}}
+			[]*extensionrpc.Permission{{Id: "read"}}
 		pbClient.sleepPermissions = 2 * time.Second
 		pbClient.onShutdownChan = make(chan struct{})
 
@@ -232,7 +232,7 @@ func TestManagerRun(t *testing.T) {
 		defer mgr.Close()
 
 		pbClient.fixturePermissions =
-			[]*extensionpb.Permission{{Id: "read"}}
+			[]*extensionrpc.Permission{{Id: "read"}}
 		pbClient.onShutdownChan = make(chan struct{})
 
 		err := mgr.Run("green", "/here/is/my/extension", nil)
@@ -252,7 +252,7 @@ func TestManagerRun(t *testing.T) {
 		defer mgr.Close()
 
 		pbClient.fixturePermissions =
-			[]*extensionpb.Permission{{Id: "read"}}
+			[]*extensionrpc.Permission{{Id: "read"}}
 		pbClient.onShutdownChan = make(chan struct{})
 
 		err := mgr.Run("yellow", "/here/is/my/extension", nil)
@@ -286,7 +286,7 @@ func TestManagerRun(t *testing.T) {
 	t.Run("should wait for extension Shutdown before returning from a call to Close", func(t *testing.T) {
 		mgr, pbClient, _ := newTestManager(&extensiontest.MockGrantor{})
 
-		pbClient.fixturePermissions = []*extensionpb.Permission{{Id: "read"}}
+		pbClient.fixturePermissions = []*extensionrpc.Permission{{Id: "read"}}
 		pbClient.onShutdownChan = make(chan struct{})
 
 		extensionIDs := []string{"green", "blue"}
@@ -316,7 +316,7 @@ func TestManagerRun(t *testing.T) {
 		var rmu sync.Mutex
 		mgr, pbClient, _ := newTestManager(&extensiontest.MockGrantor{}, WithLocker(&rmu))
 
-		pbClient.fixturePermissions = []*extensionpb.Permission{{Id: "read"}}
+		pbClient.fixturePermissions = []*extensionrpc.Permission{{Id: "read"}}
 		pbClient.onShutdownChan = make(chan struct{})
 		pbClient.locker = &rmu
 

@@ -2,9 +2,9 @@
 // versions:
 // - protoc-gen-go-grpc v1.2.0
 // - protoc             v5.27.1
-// source: rpc/grantee.proto
+// source: extensionrpc/grantee.proto
 
-package rpc
+package extensionrpc
 
 import (
 	context "context"
@@ -209,5 +209,5 @@ var Grantee_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "rpc/grantee.proto",
+	Metadata: "extensionrpc/grantee.proto",
 }

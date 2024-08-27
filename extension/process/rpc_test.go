@@ -37,66 +37,66 @@ import (
 	"google.golang.org/grpc"
 	"unstable.build/go-tui/api/config"
 	"unstable.build/go-tui/extension"
-	extensionpb "unstable.build/go-tui/extension/rpc"
+	"unstable.build/go-tui/extension/extensionrpc"
 	"unstable.build/go-tui/rpc"
 )
 
 type testGranteePbClient struct {
 	locker             sync.Locker
 	err                error
-	fixturePermissions []*extensionpb.Permission
+	fixturePermissions []*extensionrpc.Permission
 	sleepPermissions   time.Duration
 	healthChan         chan struct{}
 	onShutdownChan     chan struct{}
 
-	_permissions *extensionpb.PermRequest
-	_onGrant     *extensionpb.OnPermGrantRequest
-	_shutdown    *extensionpb.ShutdownRequest
-	_health      *extensionpb.HealthRequest
+	_permissions *extensionrpc.PermRequest
+	_onGrant     *extensionrpc.OnPermGrantRequest
+	_shutdown    *extensionrpc.ShutdownRequest
+	_health      *extensionrpc.HealthRequest
 }
 
-func (c *testGranteePbClient) permissions() (extensionpb.PermRequest, bool) {
+func (c *testGranteePbClient) permissions() (extensionrpc.PermRequest, bool) {
 	c.locker.Lock()
 	defer c.locker.Unlock()
 	if c._permissions == nil {
-		return extensionpb.PermRequest{}, false
+		return extensionrpc.PermRequest{}, false
 	}
 	return *c._permissions, true
 }
-func (c *testGranteePbClient) onGrant() (extensionpb.OnPermGrantRequest, bool) {
+func (c *testGranteePbClient) onGrant() (extensionrpc.OnPermGrantRequest, bool) {
 	c.locker.Lock()
 	defer c.locker.Unlock()
 	if c._onGrant == nil {
-		return extensionpb.OnPermGrantRequest{}, false
+		return extensionrpc.OnPermGrantRequest{}, false
 	}
 	return *c._onGrant, true
 }
-func (c *testGranteePbClient) shutdown() (extensionpb.ShutdownRequest, bool) {
+func (c *testGranteePbClient) shutdown() (extensionrpc.ShutdownRequest, bool) {
 	c.locker.Lock()
 	defer c.locker.Unlock()
 	if c._shutdown == nil {
-		return extensionpb.ShutdownRequest{}, false
+		return extensionrpc.ShutdownRequest{}, false
 
 	}
 	return *c._shutdown, true
 }
-func (c *testGranteePbClient) health() (extensionpb.HealthRequest, bool) {
+func (c *testGranteePbClient) health() (extensionrpc.HealthRequest, bool) {
 	c.locker.Lock()
 	defer c.locker.Unlock()
 	if c._health == nil {
-		return extensionpb.HealthRequest{}, false
+		return extensionrpc.HealthRequest{}, false
 
 	}
 	return *c._health, true
 }
 
 func (c *testGranteePbClient) Permissions(
-	ctx context.Context, in *extensionpb.PermRequest, opts ...grpc.CallOption,
-) (*extensionpb.PermResponse, error) {
+	ctx context.Context, in *extensionrpc.PermRequest, opts ...grpc.CallOption,
+) (*extensionrpc.PermResponse, error) {
 	c.locker.Lock()
 	c._permissions = in
 	c.locker.Unlock()
-	permissions := new(extensionpb.PermResponse)
+	permissions := new(extensionrpc.PermResponse)
 	if c.err != nil {
 		return nil, c.err
 	}
@@ -106,20 +106,20 @@ func (c *testGranteePbClient) Permissions(
 }
 
 func (c *testGranteePbClient) OnGrant(
-	ctx context.Context, in *extensionpb.OnPermGrantRequest, opts ...grpc.CallOption,
-) (*extensionpb.OnPermGrantResponse, error) {
+	ctx context.Context, in *extensionrpc.OnPermGrantRequest, opts ...grpc.CallOption,
+) (*extensionrpc.OnPermGrantResponse, error) {
 	c.locker.Lock()
 	c._onGrant = in
 	c.locker.Unlock()
 	if c.err != nil {
 		return nil, c.err
 	}
-	return new(extensionpb.OnPermGrantResponse), nil
+	return new(extensionrpc.OnPermGrantResponse), nil
 }
 
 func (c *testGranteePbClient) Shutdown(
-	ctx context.Context, in *extensionpb.ShutdownRequest, opts ...grpc.CallOption,
-) (*extensionpb.ShutdownResponse, error) {
+	ctx context.Context, in *extensionrpc.ShutdownRequest, opts ...grpc.CallOption,
+) (*extensionrpc.ShutdownResponse, error) {
 	if c.onShutdownChan != nil {
 		go func(ch chan struct{}) {
 			c.locker.Lock()
@@ -131,12 +131,12 @@ func (c *testGranteePbClient) Shutdown(
 	if c.err != nil {
 		return nil, c.err
 	}
-	return new(extensionpb.ShutdownResponse), nil
+	return new(extensionrpc.ShutdownResponse), nil
 }
 
 func (c *testGranteePbClient) Health(
-	ctx context.Context, in *extensionpb.HealthRequest, opts ...grpc.CallOption,
-) (*extensionpb.HealthResponse, error) {
+	ctx context.Context, in *extensionrpc.HealthRequest, opts ...grpc.CallOption,
+) (*extensionrpc.HealthResponse, error) {
 	if c.err != nil {
 		return nil, c.err
 	}
@@ -148,14 +148,14 @@ func (c *testGranteePbClient) Health(
 			c._health = in
 		}
 	}
-	return new(extensionpb.HealthResponse), nil
+	return new(extensionrpc.HealthResponse), nil
 }
 
 func TestUnitClient(t *testing.T) {
 	t.Run("permissions sends permissions", func(t *testing.T) {
 		mockpbClient := &testGranteePbClient{locker: new(sync.Mutex)}
 		mockpbClient.fixturePermissions =
-			[]*extensionpb.Permission{{Id: "ballz"}}
+			[]*extensionrpc.Permission{{Id: "ballz"}}
 
 		client := newGranteeClient(nil, mockpbClient)
 
@@ -177,9 +177,9 @@ func TestUnitClient(t *testing.T) {
 		mockpbClient := &testGranteePbClient{locker: new(sync.Mutex)}
 		client := newGranteeClient(nil, mockpbClient)
 
-		grant := &extensionpb.PermissionGrant{Id: "shits", Address: "1234"}
-		granted := map[string]*extensionpb.PermissionGrant{"poopers": grant}
-		denied := []*extensionpb.Permission{{Id: "poops"}}
+		grant := &extensionrpc.PermissionGrant{Id: "shits", Address: "1234"}
+		granted := map[string]*extensionrpc.PermissionGrant{"poopers": grant}
+		denied := []*extensionrpc.Permission{{Id: "poops"}}
 
 		err := client.sendGrants(context.Background(), denied, granted)
 		require.NoError(t, err)
@@ -187,7 +187,7 @@ func TestUnitClient(t *testing.T) {
 		onGrant, ok := mockpbClient.onGrant()
 		require.True(t, ok)
 		assert.Equal(t, onGrant.GetDenied(), denied)
-		assert.Equal(t, []*extensionpb.PermissionGrant{grant}, onGrant.GetGranted())
+		assert.Equal(t, []*extensionrpc.PermissionGrant{grant}, onGrant.GetGranted())
 	})
 
 	t.Run("sendGrants bubbles up error", func(t *testing.T) {
@@ -290,14 +290,14 @@ func setupIntTest(
 	grpcServer := grpc.NewServer()
 	server := newGranteeServer(grpcServer, rpc.NewUnixGRPCBroker("", "", ""),
 		granteeMock, perms, time.Duration(0))
-	extensionpb.RegisterGranteeServer(grpcServer, server)
+	extensionrpc.RegisterGranteeServer(grpcServer, server)
 
 	go grpcServer.Serve(lis)
 
 	conn, err := grpc.Dial(lis.Addr().String(), grpc.WithInsecure())
 	require.NoError(t, err)
 
-	client = newGranteeClient(nil, extensionpb.NewGranteeClient(conn))
+	client = newGranteeClient(nil, extensionrpc.NewGranteeClient(conn))
 	closeFn = func() {
 		client.shutdown("test harness")
 		grpcServer.Stop()
@@ -315,7 +315,7 @@ func TestIntegrationExtensionClientServer(t *testing.T) {
 		protoPerms, err := client.permissions(context.Background(), nil)
 		require.NoError(t, err)
 
-		assert.Equal(t, []*extensionpb.Permission{
+		assert.Equal(t, []*extensionrpc.Permission{
 			{Id: "write"}, {Id: "read"},
 		}, protoPerms)
 		assert.Equal(t, 1, grantee.onConnected)
@@ -380,8 +380,8 @@ func TestIntegrationExtensionClientServer(t *testing.T) {
 		client, closeFn := setupIntTest(t, &grantee, perms)
 		defer closeFn()
 
-		denied := []*extensionpb.Permission{{Id: "append"}}
-		granted := map[string]*extensionpb.PermissionGrant{"read": {Id: "read", Address: "1"}}
+		denied := []*extensionrpc.Permission{{Id: "append"}}
+		granted := map[string]*extensionrpc.PermissionGrant{"read": {Id: "read", Address: "1"}}
 		err := client.sendGrants(context.Background(), denied, granted)
 		require.NoError(t, err)
 
@@ -395,8 +395,8 @@ func TestIntegrationExtensionClientServer(t *testing.T) {
 		client, closeFn := setupIntTest(t, &grantee, perms)
 		defer closeFn()
 
-		denied := []*extensionpb.Permission{{Id: "garbage"}}
-		granted := map[string]*extensionpb.PermissionGrant{
+		denied := []*extensionrpc.Permission{{Id: "garbage"}}
+		granted := map[string]*extensionrpc.PermissionGrant{
 			"write": {Id: "write", Address: "1"},
 			"trash": {Id: "trash", Address: "2"},
 		}
@@ -413,8 +413,8 @@ func TestIntegrationExtensionClientServer(t *testing.T) {
 		client, closeFn := setupIntTest(t, &grantee, perms)
 		defer closeFn()
 
-		denied := []*extensionpb.Permission{{Id: "garbage"}}
-		granted := map[string]*extensionpb.PermissionGrant{
+		denied := []*extensionrpc.Permission{{Id: "garbage"}}
+		granted := map[string]*extensionrpc.PermissionGrant{
 			"write": {Id: "write", Address: "1"},
 		}
 		err := client.sendGrants(context.Background(), denied, granted)

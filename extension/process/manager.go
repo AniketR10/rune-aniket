@@ -40,7 +40,7 @@ import (
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/extension"
-	extensionpb "unstable.build/go-tui/extension/rpc"
+	"unstable.build/go-tui/extension/extensionrpc"
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/util"
 )
@@ -216,7 +216,7 @@ func (m *Manager) doGrant(
 	ctx context.Context,
 	extensionID string,
 	client *granteeClientWrap,
-	perms []*extensionpb.Permission,
+	perms []*extensionrpc.Permission,
 ) error {
 	srv, err := m.broker.NewChannel(extensionID)
 	if err != nil {
@@ -229,9 +229,9 @@ func (m *Manager) doGrant(
 	// for denied permissions we do not call ResourceRegistrar.Register so
 	// if a malicious or otherwise client attempts to get a resource that was not granted
 	// they'll receive an unimplemented status code.
-	var denied []*extensionpb.Permission
+	var denied []*extensionrpc.Permission
 	var serverResources []io.Closer
-	granted := make(map[string]*extensionpb.PermissionGrant)
+	granted := make(map[string]*extensionrpc.PermissionGrant)
 	for _, p := range perms {
 		permissionID := util.SanitizeLine(p.GetId())
 		if _, granted := granted[permissionID]; granted {
@@ -253,7 +253,7 @@ func (m *Manager) doGrant(
 			continue
 		}
 
-		granted[permissionID] = &extensionpb.PermissionGrant{
+		granted[permissionID] = &extensionrpc.PermissionGrant{
 			Id: permissionID,
 			// TODO pass temporary token that can be used
 			// by client and server auth middleware

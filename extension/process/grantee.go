@@ -34,7 +34,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"unstable.build/go-tui/extension"
-	extensionpb "unstable.build/go-tui/extension/rpc"
+	"unstable.build/go-tui/extension/extensionrpc"
 	"unstable.build/go-tui/rpc"
 )
 
@@ -65,7 +65,7 @@ func (p *granteeExtension) GRPCServer(_ *goplugin.GRPCBroker, s *grpc.Server) er
 	if log.IsLevelEnabled(log.TraceLevel) {
 		server = &loggingGranteeServer{GranteeServer: server}
 	}
-	extensionpb.RegisterGranteeServer(s, server)
+	extensionrpc.RegisterGranteeServer(s, server)
 	return nil
 }
 
@@ -73,7 +73,7 @@ func (p *granteeExtension) GRPCServer(_ *goplugin.GRPCBroker, s *grpc.Server) er
 func (p *granteeExtension) GRPCClient(
 	ctx context.Context, _ *goplugin.GRPCBroker, c *grpc.ClientConn,
 ) (interface{}, error) {
-	pbClient := extensionpb.NewGranteeClient(c)
+	pbClient := extensionrpc.NewGranteeClient(c)
 	if log.IsLevelEnabled(log.TraceLevel) {
 		pbClient = &loggingGranteeClient{GranteeClient: pbClient}
 	}

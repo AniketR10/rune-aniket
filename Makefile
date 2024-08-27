@@ -57,11 +57,11 @@ coverage: $(BIN)
 
 generate: GOPRIVATE=github.com/unstablebuild,unstable.build/*
 generate:
-	@ rm -rf **/rpc/*.pb.go
+	@ rm -rf **/*rpc*/*.pb.go
 	@ go generate ./...
 	@ mv browser/unstable.build/go-tui/browser/rpc/* browser/rpc
 	@ mv text/unstable.build/go-tui/text/rpc/* text/rpc
-	@ mv extension/unstable.build/go-tui/extension/rpc/* extension/rpc
+	@ mv extension/unstable.build/go-tui/extension/extensionrpc/* extension/extensionrpc
 	@ mv workspace/unstable.build/go-tui/workspace/rpc/* workspace/rpc
 	@ mv term/unstable.build/go-tui/term/rpc/* term/rpc
 	@ mv handler/unstable.build/go-tui/handler/rpc/* handler/rpc

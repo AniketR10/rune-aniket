@@ -34,7 +34,7 @@ import (
 	"google.golang.org/grpc"
 	"unstable.build/go-tui/api/config"
 	"unstable.build/go-tui/extension"
-	extensionpb "unstable.build/go-tui/extension/rpc"
+	"unstable.build/go-tui/extension/extensionrpc"
 	"unstable.build/go-tui/rpc"
 )
 
@@ -43,7 +43,7 @@ const (
 )
 
 type granteeServer struct {
-	extensionpb.UnimplementedGranteeServer
+	extensionrpc.UnimplementedGranteeServer
 	mu        sync.Mutex
 	req       []extension.Permission
 	broker    rpc.MuxBroker
@@ -62,7 +62,7 @@ func newGranteeServer(
 	s *grpc.Server, broker rpc.MuxBroker,
 	grantee extension.Grantee, req []extension.Permission,
 	keepAlive time.Duration,
-) extensionpb.GranteeServer {
+) extensionrpc.GranteeServer {
 	ret := new(granteeServer)
 	ret.broker = broker
 	ret.grantee = grantee
@@ -110,12 +110,12 @@ func (s *granteeServer) monitorKeepAlive() {
 	}
 }
 
-func (s *granteeServer) Permissions(ctx context.Context, req *extensionpb.PermRequest) (
-	*extensionpb.PermResponse, error,
+func (s *granteeServer) Permissions(ctx context.Context, req *extensionrpc.PermRequest) (
+	*extensionrpc.PermResponse, error,
 ) {
-	resp := new(extensionpb.PermResponse)
+	resp := new(extensionrpc.PermResponse)
 	for _, perm := range s.req {
-		resp.Perms = append(resp.Perms, &extensionpb.Permission{Id: string(perm)})
+		resp.Perms = append(resp.Perms, &extensionrpc.Permission{Id: string(perm)})
 	}
 
 	// Note: this is how Manager sends the config
@@ -150,8 +150,8 @@ func (s *granteeServer) Permissions(ctx context.Context, req *extensionpb.PermRe
 	return resp, nil
 }
 
-func (s *granteeServer) OnGrant(ctx context.Context, req *extensionpb.OnPermGrantRequest) (
-	*extensionpb.OnPermGrantResponse, error,
+func (s *granteeServer) OnGrant(ctx context.Context, req *extensionrpc.OnPermGrantRequest) (
+	*extensionrpc.OnPermGrantResponse, error,
 ) {
 	/* only trigger OnPermission* for permissions that were actually requested */
 
@@ -189,7 +189,7 @@ func (s *granteeServer) OnGrant(ctx context.Context, req *extensionpb.OnPermGran
 		}
 	}
 
-	return new(extensionpb.OnPermGrantResponse), nil
+	return new(extensionrpc.OnPermGrantResponse), nil
 }
 
 func (s *granteeServer) doShutdown(ctx context.Context, reason string) (ret error) {
@@ -238,18 +238,18 @@ func (s *granteeServer) doShutdown(ctx context.Context, reason string) (ret erro
 	return ret
 }
 
-func (s *granteeServer) Shutdown(ctx context.Context, in *extensionpb.ShutdownRequest) (
-	*extensionpb.ShutdownResponse, error,
+func (s *granteeServer) Shutdown(ctx context.Context, in *extensionrpc.ShutdownRequest) (
+	*extensionrpc.ShutdownResponse, error,
 ) {
 	err := s.doShutdown(ctx, in.GetReason())
 	if err != nil {
 		return nil, err
 	}
-	return new(extensionpb.ShutdownResponse), nil
+	return new(extensionrpc.ShutdownResponse), nil
 }
 
-func (s *granteeServer) Health(ctx context.Context, req *extensionpb.HealthRequest) (
-	*extensionpb.HealthResponse, error,
+func (s *granteeServer) Health(ctx context.Context, req *extensionrpc.HealthRequest) (
+	*extensionrpc.HealthResponse, error,
 ) {
 	if err := s.grantee.Health(ctx); err != nil {
 		return nil, err
@@ -261,18 +261,18 @@ func (s *granteeServer) Health(ctx context.Context, req *extensionpb.HealthReque
 	if s.keepAlive != nil {
 		s.keepAlive <- struct{}{}
 	}
-	return new(extensionpb.HealthResponse), nil
+	return new(extensionrpc.HealthResponse), nil
 }
 
 type granteeClient struct {
 	mBroker rpc.MuxBroker
-	client  extensionpb.GranteeClient
+	client  extensionrpc.GranteeClient
 
 	pClient *goplugin.Client
 }
 
 func newGranteeClient(
-	broker rpc.MuxBroker, client extensionpb.GranteeClient,
+	broker rpc.MuxBroker, client extensionrpc.GranteeClient,
 ) *granteeClient {
 	ret := new(granteeClient)
 	ret.client = client
@@ -281,9 +281,9 @@ func newGranteeClient(
 }
 
 func (c *granteeClient) permissions(ctx context.Context, cfg config.Config) (
-	perms []*extensionpb.Permission, err error,
+	perms []*extensionrpc.Permission, err error,
 ) {
-	var req extensionpb.PermRequest
+	var req extensionrpc.PermRequest
 	if cfg == nil {
 		req.Config = []byte("{}")
 	} else {
@@ -304,10 +304,10 @@ func (c *granteeClient) permissions(ctx context.Context, cfg config.Config) (
 
 func (c *granteeClient) sendGrants(
 	ctx context.Context,
-	denied []*extensionpb.Permission,
-	granted map[string]*extensionpb.PermissionGrant,
+	denied []*extensionrpc.Permission,
+	granted map[string]*extensionrpc.PermissionGrant,
 ) error {
-	req := new(extensionpb.OnPermGrantRequest)
+	req := new(extensionrpc.OnPermGrantRequest)
 
 	req.Denied = append(req.Denied, denied...)
 
@@ -320,7 +320,7 @@ func (c *granteeClient) sendGrants(
 }
 
 func (c *granteeClient) health(ctx context.Context) error {
-	req := extensionpb.HealthRequest{}
+	req := extensionrpc.HealthRequest{}
 	_, err := c.client.Health(ctx, &req)
 	return err
 }
@@ -346,7 +346,7 @@ func (c *granteeClient) shutdown(reason string) error {
 		defDurationGracefulShutClient)
 	defer cancelFn()
 
-	req := extensionpb.ShutdownRequest{Reason: reason}
+	req := extensionrpc.ShutdownRequest{Reason: reason}
 	_, err := c.client.Shutdown(ctx, &req)
 	return err
 }
