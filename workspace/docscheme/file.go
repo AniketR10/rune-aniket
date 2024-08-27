@@ -37,7 +37,7 @@ import (
 	"github.com/unstablebuild/blue/encoding"
 	"github.com/unstablebuild/blue/retry"
 	workspaceapi "unstable.build/go-tui/api/workspace"
-	"unstable.build/go-tui/storage"
+	"unstable.build/go-tui/localstorage"
 	"unstable.build/go-tui/workspace"
 )
 
@@ -49,7 +49,7 @@ type fileInfo struct {
 	isDir    bool
 }
 
-type file[T storage.Document[T]] struct {
+type file[T localstorage.Document[T]] struct {
 	s             *scheme[T]
 	errMissingID  error
 	marshaler     encoding.Marshaler
@@ -63,7 +63,7 @@ type file[T storage.Document[T]] struct {
 }
 
 // return not fully initialzed until init is called
-func newFile[T storage.Document[T]](
+func newFile[T localstorage.Document[T]](
 	docID string, m encoding.Marshaler, errMissingID error,
 	fd uintptr, svc *service, mode fs.FileMode,
 	retryStrategy retry.Strategy,

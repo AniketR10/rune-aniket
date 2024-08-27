@@ -21,53 +21,25 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package storage
+package storagecache
 
-import (
-	"context"
-	"fmt"
-	"os"
-	"path/filepath"
+import "unstable.build/go-tui/localstorage"
 
-	"github.com/unstablebuild/blue/document"
-	"github.com/unstablebuild/blue/document/firstmover"
-	"github.com/unstablebuild/blue/encoding"
-	"unstable.build/go-tui/api/config"
-	workspaceapi "unstable.build/go-tui/api/workspace"
-	"unstable.build/go-tui/storage/schemedoc"
-	"unstable.build/go-tui/workspace"
-)
+type cacheIterator[T localstorage.Document[T]] struct {
+	docs []T
+	idx  int
+}
 
-// New returns a document.Service storage service that
-// uses the local directory dir to setup a local filesystem-based
-// multi-process safe, goroutine-safe document.Service.
-func New(ctx context.Context, dir string, marshaler encoding.Marshaler) (
-	document.Service, error,
-) {
-	storageDir := filepath.Join(dir, ".db")
-	err := os.MkdirAll(storageDir, 0777)
-	if err != nil {
-		return nil, fmt.Errorf("mkdir: %v", err)
-	}
-	storageDirURI, err := workspaceapi.CurrentUserHostURI(storageDir)
-	if err != nil {
-		return nil, fmt.Errorf("URI: %v", err)
-	}
-	scheme, err := workspace.NewFileScheme(ctx, config.NopConfig(), storageDirURI)
-	if err != nil {
-		return nil, err
-	}
-	storage, err := schemedoc.NewDocumentService(scheme, marshaler)
-	if err != nil {
-		return nil, err
-	}
+func (i *cacheIterator[T]) HasNext() bool {
+	return i.idx < len(i.docs)
+}
 
-	// place lock path at parent dir of .db
-	lockPath := filepath.Join(dir, ".dblock")
+func (i *cacheIterator[T]) NextTo(doc interface{}) error {
+	*doc.(*T) = i.docs[i.idx]
+	i.idx++
+	return nil
+}
 
-	cfg := firstmover.DefaultConfig()
-	cfg.Marshaler = marshaler
-	cfg.CloseError = schemedoc.ErrClosing
-	storage = firstmover.New(storage, lockPath, cfg)
-	return storage, nil
+func (i *cacheIterator[T]) Close() error {
+	return nil
 }

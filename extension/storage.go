@@ -37,8 +37,8 @@ import (
 	bproto "github.com/unstablebuild/blue/document/rpc/proto"
 	"github.com/unstablebuild/blue/encoding/toml"
 
+	"unstable.build/go-tui/localstorage"
 	"unstable.build/go-tui/rpc"
-	"unstable.build/go-tui/storage"
 	"unstable.build/go-tui/workspace"
 )
 
@@ -57,7 +57,7 @@ func (s *storageResourceServer) setupStorage(lock sync.Locker, extensionID strin
 	// pass locker to underlying file scheme, so we can synchronize
 	// network storage requests against event loop access.
 	ctx := workspace.ContextWithLocker(context.Background(), lock)
-	svc, err := storage.New(ctx, path, toml.Marshaler())
+	svc, err := localstorage.New(ctx, path, toml.Marshaler())
 	if err != nil {
 		log.Warnf("Failed to setup storage for extension %q: %v."+
 			"Fallback to in-memory", extensionID, err)

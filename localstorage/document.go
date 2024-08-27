@@ -21,25 +21,17 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package cache
+package localstorage
 
-import "unstable.build/go-tui/storage"
+import "time"
 
-type cacheIterator[T storage.Document[T]] struct {
-	docs []T
-	idx  int
-}
-
-func (i *cacheIterator[T]) HasNext() bool {
-	return i.idx < len(i.docs)
-}
-
-func (i *cacheIterator[T]) NextTo(doc interface{}) error {
-	*doc.(*T) = i.docs[i.idx]
-	i.idx++
-	return nil
-}
-
-func (i *cacheIterator[T]) Close() error {
-	return nil
+// Document abstracts a document that knows about the ID
+// used to index it in the underlying document.Service and
+// about the last time that it was updated.
+type Document[T any] interface {
+	ID() string
+	WithID(string) T
+	UpdatedTime() time.Time
+	WithUpdatedTime(time.Time) T
+	WithUpdatedBy(author string) T
 }

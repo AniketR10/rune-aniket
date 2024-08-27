@@ -38,7 +38,7 @@ import (
 	"unstable.build/go-tui/api/config"
 	schemeapi "unstable.build/go-tui/api/scheme"
 	workspaceapi "unstable.build/go-tui/api/workspace"
-	"unstable.build/go-tui/storage"
+	"unstable.build/go-tui/localstorage"
 	"unstable.build/go-tui/workspace"
 )
 
@@ -59,7 +59,7 @@ import (
 // do not sync the contents of a file to permanent storage.
 // Sync must be called to send data to permanent storage. This is to allow
 // for documents to become illegal temporarily while editing.
-func Scheme[T storage.Document[T]](
+func Scheme[T localstorage.Document[T]](
 	rootURI workspaceapi.URI, svc document.Service,
 	marshaler encoding.Marshaler, errMissingID error,
 	author string,
@@ -89,7 +89,7 @@ type service struct {
 	transaction sync.Mutex
 }
 
-type scheme[T storage.Document[T]] struct {
+type scheme[T localstorage.Document[T]] struct {
 	unimplementedTerminal
 	unimplementedExecutor
 	workspace          workspaceapi.URI

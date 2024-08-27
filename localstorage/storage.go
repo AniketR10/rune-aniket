@@ -21,17 +21,53 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package storage
+package localstorage
 
-import "time"
+import (
+	"context"
+	"fmt"
+	"os"
+	"path/filepath"
 
-// Document abstracts a document that knows about the ID
-// used to index it in the underlying document.Service and
-// about the last time that it was updated.
-type Document[T any] interface {
-	ID() string
-	WithID(string) T
-	UpdatedTime() time.Time
-	WithUpdatedTime(time.Time) T
-	WithUpdatedBy(author string) T
+	"github.com/unstablebuild/blue/document"
+	"github.com/unstablebuild/blue/document/firstmover"
+	"github.com/unstablebuild/blue/encoding"
+	"unstable.build/go-tui/api/config"
+	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/localstorage/schemedoc"
+	"unstable.build/go-tui/workspace"
+)
+
+// New returns a document.Service storage service that
+// uses the local directory dir to setup a local filesystem-based
+// multi-process safe, goroutine-safe document.Service.
+func New(ctx context.Context, dir string, marshaler encoding.Marshaler) (
+	document.Service, error,
+) {
+	storageDir := filepath.Join(dir, ".db")
+	err := os.MkdirAll(storageDir, 0777)
+	if err != nil {
+		return nil, fmt.Errorf("mkdir: %v", err)
+	}
+	storageDirURI, err := workspaceapi.CurrentUserHostURI(storageDir)
+	if err != nil {
+		return nil, fmt.Errorf("URI: %v", err)
+	}
+	scheme, err := workspace.NewFileScheme(ctx, config.NopConfig(), storageDirURI)
+	if err != nil {
+		return nil, err
+	}
+	storage, err := schemedoc.NewDocumentService(scheme, marshaler)
+	if err != nil {
+		return nil, err
+	}
+
+	// place lock path at parent dir of .db
+	lockPath := filepath.Join(dir, ".dblock")
+
+	cfg := firstmover.DefaultConfig()
+	cfg.Marshaler = marshaler
+	cfg.CloseError = schemedoc.ErrClosing
+	storage = firstmover.New(storage, lockPath, cfg)
+	return storage, nil
 }

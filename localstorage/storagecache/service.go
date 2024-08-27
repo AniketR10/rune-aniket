@@ -21,7 +21,7 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package cache
+package storagecache
 
 import (
 	"context"
@@ -32,7 +32,7 @@ import (
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/document"
-	"unstable.build/go-tui/storage"
+	"unstable.build/go-tui/localstorage"
 )
 
 // Service implements a simple caching document.Service for instances
@@ -41,14 +41,14 @@ import (
 // by calling EvictAll. Callers must employ the List method to internally
 // populate the cache otherwise all Get operations will be cache misses.
 // Any write evicts all the records in the cache.
-type Service[T storage.Document[T]] struct {
+type Service[T localstorage.Document[T]] struct {
 	cache  document.Service
 	svc    document.Service
 	cached atomic.Bool
 }
 
 // New allocates storage and initializes a new cache.Service. See Init for more details.
-func New[T storage.Document[T]](svc, cache document.Service) *Service[T] {
+func New[T localstorage.Document[T]](svc, cache document.Service) *Service[T] {
 	ret := new(Service[T])
 	ret.Init(svc, cache)
 	// perform the ifc satisfaction compile time check here

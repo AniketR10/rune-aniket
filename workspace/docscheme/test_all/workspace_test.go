@@ -32,7 +32,7 @@ import (
 	"unstable.build/go-tui/api/config"
 	schemeapi "unstable.build/go-tui/api/scheme"
 	workspaceapi "unstable.build/go-tui/api/workspace"
-	"unstable.build/go-tui/storage/schemedoc"
+	"unstable.build/go-tui/localstorage/schemedoc"
 	"unstable.build/go-tui/workspace"
 	"unstable.build/go-tui/workspace/docscheme"
 )

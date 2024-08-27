@@ -48,7 +48,7 @@ import (
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/handler"
-	"unstable.build/go-tui/storage"
+	"unstable.build/go-tui/localstorage"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/text/vi"
@@ -187,7 +187,7 @@ func (h *workspaceManagerHandler) init(
 	h.extensionRunner = extensionRunner
 	h.builtinExtensions = builtinExtensions
 	h.ctxWithLocker = workspace.ContextWithLocker(context.Background(), h.mu)
-	storage, err := storage.New(h.ctxWithLocker, sixDir, toml.Marshaler())
+	storage, err := localstorage.New(h.ctxWithLocker, sixDir, toml.Marshaler())
 	if err != nil {
 		storage = document.NewInMemoryService()
 		log.Warnf("Could not setup fs-backed storage: %v. Using ephemeral.", err)

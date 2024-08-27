@@ -51,8 +51,8 @@ import (
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/extension"
+	"unstable.build/go-tui/localstorage/storagecache"
 	"unstable.build/go-tui/rpc"
-	"unstable.build/go-tui/storage/cache"
 	"unstable.build/go-tui/workspace/docscheme"
 )
 
@@ -107,7 +107,7 @@ func GranteeWithService(
 type Grantee struct {
 	config     config.Config
 	broker     rpc.MuxBroker
-	svc        *cache.Service[issue.ReportDocument]
+	svc        *storagecache.Service[issue.ReportDocument]
 	tracker    issue.Tracker
 	marshaler  encoding.Marshaler
 	m          browserapi.Notifications
@@ -366,7 +366,7 @@ func (e *Grantee) PermissionGranted(ctx context.Context, grants []extension.Gran
 	// As long as there aren't many oob (outside of six) requests this should be
 	// able to cache expensive list + get all operations pretty well
 	// because it's using the host's global storage as the cache
-	e.svc = cache.New[issue.ReportDocument](svc, e.s)
+	e.svc = storagecache.New[issue.ReportDocument](svc, e.s)
 	e.tracker = issue.NewDocumentTracker(e.svc)
 
 	if !e.registerScheme {
