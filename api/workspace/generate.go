@@ -23,4 +23,4 @@
 
 package api
 
-//go:generate mockgen -destination=./test/workspace_gomock.go -package test -self_package unstable.build/go-tui/api/workspace/test -source ./workspace.go
+//go:generate mockgen -destination=./workspacetest/workspace_gomock.go -package workspacetest -self_package unstable.build/go-tui/api/workspace/workspacetest -source ./workspace.go

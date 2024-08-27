@@ -42,10 +42,9 @@ import (
 	"unstable.build/go-tui/api/config"
 	schemeapi "unstable.build/go-tui/api/scheme"
 	workspaceapi "unstable.build/go-tui/api/workspace"
-	workspaceapitest "unstable.build/go-tui/api/workspace/test"
+	workspaceapitest "unstable.build/go-tui/api/workspace/workspacetest"
 	"unstable.build/go-tui/workspace"
-	"unstable.build/go-tui/workspace/test"
-	workspacetest "unstable.build/go-tui/workspace/test"
+	"unstable.build/go-tui/workspace/workspacetest"
 )
 
 func doSetupClientServerTest(
@@ -395,7 +394,7 @@ func setupClientServerIntegrationTest(
 }
 
 func TestSchemeIntegration(t *testing.T) {
-	test.TestWorkspaceSchemeFiles(t, func(t *testing.T) schemeapi.Scheme {
+	workspacetest.TestWorkspaceSchemeFiles(t, func(t *testing.T) schemeapi.Scheme {
 		memURI, err := workspaceapi.ParseURI("memory:///tmp")
 		require.NoError(t, err)
 		scheme, err := workspace.NewMemoryScheme(context.Background(), config.NopConfig(), memURI)
@@ -405,7 +404,7 @@ func TestSchemeIntegration(t *testing.T) {
 		return client
 	})
 
-	test.TestWorkspaceSchemeExecutor(t, func(t *testing.T) schemeapi.Scheme {
+	workspacetest.TestWorkspaceSchemeExecutor(t, func(t *testing.T) schemeapi.Scheme {
 		dir, err := os.MkdirTemp("", "workspacepb_suite")
 		require.NoError(t, err)
 

@@ -42,8 +42,7 @@ import (
 	schemeapi "unstable.build/go-tui/api/scheme"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/workspace"
-	"unstable.build/go-tui/workspace/test"
-	workspacetest "unstable.build/go-tui/workspace/test"
+	"unstable.build/go-tui/workspace/workspacetest"
 )
 
 type nopExecutor struct {
@@ -342,7 +341,7 @@ func TestIntegrationManagerIsWorkspaceFile(t *testing.T) {
 func TestSSHScheme(t *testing.T) {
 	var cleanup []func() error
 	t.Run("with memory scheme remote", func(t *testing.T) {
-		test.TestWorkspaceSchemeFiles(t, func(t *testing.T) schemeapi.Scheme {
+		workspacetest.TestWorkspaceSchemeFiles(t, func(t *testing.T) schemeapi.Scheme {
 			workspaceURI, err := workspaceapi.ParseURI("ssh://test@host.com/")
 			require.NoError(t, err)
 			remoteURI, err := workspaceapi.ParseURI("memory:///")
@@ -364,7 +363,7 @@ func TestSSHScheme(t *testing.T) {
 	})
 
 	t.Run("with file scheme remote", func(t *testing.T) {
-		test.TestWorkspaceSchemeFiles(t, func(t *testing.T) schemeapi.Scheme {
+		workspacetest.TestWorkspaceSchemeFiles(t, func(t *testing.T) schemeapi.Scheme {
 			dir, err := os.MkdirTemp("", "ssh_scheme_suite")
 			require.NoError(t, err)
 

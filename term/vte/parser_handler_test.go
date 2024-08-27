@@ -41,7 +41,7 @@ import (
 	"unstable.build/go-tui/term/vte/parser"
 	"unstable.build/go-tui/term/vte/screen"
 	"unstable.build/go-tui/text/clipboard"
-	workspacetest "unstable.build/go-tui/workspace/test"
+	"unstable.build/go-tui/workspace/workspacetest"
 )
 
 func TestIntegrationParserHandler(t *testing.T) {

@@ -32,10 +32,10 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	workspaceapi "unstable.build/go-tui/api/workspace"
-	workspaceapitest "unstable.build/go-tui/api/workspace/test"
+	workspaceapitest "unstable.build/go-tui/api/workspace/workspacetest"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/rpc"
-	workspacetest "unstable.build/go-tui/workspace/test"
+	"unstable.build/go-tui/workspace/workspacetest"
 )
 
 func assertClientMethodNoError(

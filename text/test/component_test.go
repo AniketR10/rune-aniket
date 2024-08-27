@@ -49,7 +49,7 @@ import (
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/workspace"
-	workspacetest "unstable.build/go-tui/workspace/test"
+	"unstable.build/go-tui/workspace/workspacetest"
 )
 
 var (

@@ -37,7 +37,7 @@ import (
 	schemeapi "unstable.build/go-tui/api/scheme"
 	schemetest "unstable.build/go-tui/api/scheme/test"
 	workspaceapi "unstable.build/go-tui/api/workspace"
-	workspaceapitest "unstable.build/go-tui/api/workspace/test"
+	workspaceapitest "unstable.build/go-tui/api/workspace/workspacetest"
 	"unstable.build/go-tui/workspace"
 )
 

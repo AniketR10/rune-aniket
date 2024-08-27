@@ -43,7 +43,7 @@ import (
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/workspace/docscheme"
-	"unstable.build/go-tui/workspace/test"
+	"unstable.build/go-tui/workspace/workspacetest"
 )
 
 func TestMemoryWorkspaceScheme(t *testing.T) {
@@ -94,32 +94,32 @@ func testWorkspaceSchemeSuite(
 		// there should not be any path manipulation with a document.Service
 		// backed schemeapi.Scheme.
 		const testPaths = false
-		test.TestWorkspaceSchemeOpen(t, schemeFn,
+		workspacetest.TestWorkspaceSchemeOpen(t, schemeFn,
 			createTestFile, readContent, writeContent, testPaths)
 	})
 	t.Run("Remove", func(t *testing.T) {
-		test.TestWorkspaceSchemeRemove(t, schemeFn, createTestFile)
+		workspacetest.TestWorkspaceSchemeRemove(t, schemeFn, createTestFile)
 	})
 	t.Run("Rename", func(t *testing.T) {
-		test.TestWorkspaceSchemeRename(t, schemeFn, createTestFile, readContent)
+		workspacetest.TestWorkspaceSchemeRename(t, schemeFn, createTestFile, readContent)
 	})
 	t.Run("Stat", func(t *testing.T) {
-		test.TestWorkspaceSchemeStat(t, schemeFn, createTestFile)
+		workspacetest.TestWorkspaceSchemeStat(t, schemeFn, createTestFile)
 	})
 	t.Run("Lstat", func(t *testing.T) {
-		test.TestWorkspaceSchemeLstat(t, schemeFn, createTestFile)
+		workspacetest.TestWorkspaceSchemeLstat(t, schemeFn, createTestFile)
 	})
 	t.Run("Link", func(t *testing.T) {
-		test.TestWorkspaceSchemeReadLink(t, schemeFn, createTestFile)
+		workspacetest.TestWorkspaceSchemeReadLink(t, schemeFn, createTestFile)
 	})
 	t.Run("ReadDir", func(t *testing.T) {
-		test.TestWorkspaceSchemeReadDir(t, schemeFn, createTestFile)
+		workspacetest.TestWorkspaceSchemeReadDir(t, schemeFn, createTestFile)
 	})
 	t.Run("workspace.ListFiles integration", func(t *testing.T) {
-		test.TestWorkspaceSchemeListFilesIntegration(t, schemeFn, createTestFile)
+		workspacetest.TestWorkspaceSchemeListFilesIntegration(t, schemeFn, createTestFile)
 	})
 	t.Run("workspace.Load integration", func(t *testing.T) {
-		test.TestWorkspaceLoadIntegration(t, schemeFn,
+		workspacetest.TestWorkspaceLoadIntegration(t, schemeFn,
 			createTestFile, readContent, writeToBuffer)
 	})
 }

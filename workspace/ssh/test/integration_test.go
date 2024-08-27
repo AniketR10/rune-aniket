@@ -21,7 +21,7 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package test
+package workspacetest
 
 import (
 	"context"
@@ -39,8 +39,8 @@ import (
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/workspace"
 	"unstable.build/go-tui/workspace/ssh"
-	"unstable.build/go-tui/workspace/test"
 	"unstable.build/go-tui/workspace/walkdir"
+	"unstable.build/go-tui/workspace/workspacetest"
 )
 
 // NOTE if this is failing or you are iterating on functionality
@@ -66,11 +66,11 @@ func TestIntegrationScheme(t *testing.T) {
 	for desc, cfg := range cfgs {
 		cfg := cfg
 		t.Run(desc, func(t *testing.T) {
-			test.TestWorkspaceSchemeFiles(t, func(t *testing.T) schemeapi.Scheme {
+			workspacetest.TestWorkspaceSchemeFiles(t, func(t *testing.T) schemeapi.Scheme {
 				return newSchemeIntegration(t, hostname, cfg)
 			})
 
-			test.TestWorkspaceSchemeExecutor(t, func(t *testing.T) schemeapi.Scheme {
+			workspacetest.TestWorkspaceSchemeExecutor(t, func(t *testing.T) schemeapi.Scheme {
 				return newSchemeIntegration(t, hostname, cfg)
 			})
 		})

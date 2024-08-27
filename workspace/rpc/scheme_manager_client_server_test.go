@@ -41,7 +41,7 @@ import (
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/workspace"
-	"unstable.build/go-tui/workspace/test"
+	"unstable.build/go-tui/workspace/workspacetest"
 )
 
 func doSetupSchemeManagerClientServerTest(
@@ -118,7 +118,7 @@ func setupProxyTest(t *testing.T, mockScheme schemeapi.Scheme) (
 }
 
 func TestSchemeManagerClientServerSchemeSuiteIntegration(t *testing.T) {
-	test.TestWorkspaceSchemeFiles(t, func(t *testing.T) schemeapi.Scheme {
+	workspacetest.TestWorkspaceSchemeFiles(t, func(t *testing.T) schemeapi.Scheme {
 		memURI, err := workspaceapi.ParseURI("memory:///tmp")
 		require.NoError(t, err)
 		scheme, err := workspace.NewMemoryScheme(context.Background(), config.NopConfig(), memURI)
