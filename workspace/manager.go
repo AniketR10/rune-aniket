@@ -37,7 +37,7 @@ import (
 )
 
 var (
-	errProcNotFound   = errors.New("process not found")
+	errProcNotFound = errors.New("process not found")
 )
 
 var _ SchemeManager = (*Manager)(nil)

@@ -28,8 +28,8 @@ import (
 	"time"
 
 	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/component/comptest"
 	"unstable.build/go-tui/term"
-	testutil "unstable.build/go-tui/util/test"
 )
 
 func TestComponentDraw(t *testing.T) {
@@ -44,7 +44,7 @@ func TestComponentDraw(t *testing.T) {
 
 	w := term.NewStringWriter(40, 15)
 
-	tests := []testutil.ComponentTestCase{
+	tests := []comptest.TestCase{
 		{
 			nil, `
 XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
@@ -206,5 +206,5 @@ XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX`,
 		},
 	}
 
-	testutil.TestComponent(t, c, w, tests)
+	comptest.TestComponent(t, c, w, tests)
 }

@@ -30,8 +30,8 @@ import (
 	"image/png"
 	"testing"
 
+	"unstable.build/go-tui/component/comptest"
 	"unstable.build/go-tui/term"
-	testutil "unstable.build/go-tui/util/test"
 )
 
 //go:embed test/logo.png
@@ -47,7 +47,7 @@ func TestNewComponent(t *testing.T) {
 
 	w := term.NewStringWriter(60, 20)
 
-	tests := []testutil.ComponentTestCase{
+	tests := []comptest.TestCase{
 		{
 			func() { o.Resize(30, 15) }, `
               6                                             
@@ -117,5 +117,5 @@ func TestNewComponent(t *testing.T) {
 		},
 	}
 
-	testutil.TestComponent(t, o, w, tests)
+	comptest.TestComponent(t, o, w, tests)
 }

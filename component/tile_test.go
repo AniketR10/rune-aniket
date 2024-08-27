@@ -28,8 +28,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"unstable.build/go-tui"
+	"unstable.build/go-tui/component/comptest"
 	"unstable.build/go-tui/term"
-	testutil "unstable.build/go-tui/util/test"
 )
 
 func TestNew(t *testing.T) {
@@ -339,7 +339,7 @@ func TestTileNodeDraw(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tests := []testutil.ComponentTestCase{
+	tests := []comptest.TestCase{
 		{
 			nil, `
 AAAAAAAA
@@ -497,7 +497,7 @@ XXXXXXXX`,
 		},
 	}
 
-	testutil.TestComponent(t, tree, w, tests)
+	comptest.TestComponent(t, tree, w, tests)
 }
 
 func TestTileNodeSize(t *testing.T) {

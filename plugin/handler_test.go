@@ -36,10 +36,10 @@ import (
 	browserapi "unstable.build/go-tui/api/browser"
 	"unstable.build/go-tui/api/config"
 	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/component/comptest"
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/term"
-	testutil "unstable.build/go-tui/util/test"
 	"unstable.build/go-tui/workspace"
 )
 
@@ -147,12 +147,12 @@ $
 
 			w := term.NewStringWriter(14, 6)
 
-			tests := []testutil.ComponentTestCase{
+			tests := []comptest.TestCase{
 				{Action: nil, Expected: test.drawnComponent},
 			}
 
 			<-ch
-			testutil.TestComponent(t, h, w, tests)
+			comptest.TestComponent(t, h, w, tests)
 		})
 	}
 }

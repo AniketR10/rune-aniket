@@ -31,8 +31,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/component/comptest"
 	"unstable.build/go-tui/term"
-	testutil "unstable.build/go-tui/util/test"
 )
 
 func TestNewList(t *testing.T) {
@@ -129,7 +129,7 @@ func testListDraw(t *testing.T, skipCases []int, constructor func(int) testList)
 
 	w := term.NewStringWriter(8, 4)
 
-	tests := []testutil.ComponentTestCase{
+	tests := []comptest.TestCase{
 		{
 			nil, `
         
@@ -369,7 +369,7 @@ dddddddd`,
 		},
 	}
 
-	var filteredTests []testutil.ComponentTestCase
+	var filteredTests []comptest.TestCase
 	for i, test := range tests {
 		include := true
 		for _, skipCase := range skipCases {
@@ -383,7 +383,7 @@ dddddddd`,
 		}
 	}
 
-	testutil.TestComponent(t, l, w, filteredTests)
+	comptest.TestComponent(t, l, w, filteredTests)
 }
 
 func TestListNode(t *testing.T) {

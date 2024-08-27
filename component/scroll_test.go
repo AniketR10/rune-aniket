@@ -32,8 +32,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/component/comptest"
 	"unstable.build/go-tui/term"
-	testutil "unstable.build/go-tui/util/test"
 )
 
 const (
@@ -147,7 +147,7 @@ func TestScrollDraw(t *testing.T) {
 
 	w := term.NewStringWriter(width, height)
 
-	tests := []testutil.ComponentTestCase{
+	tests := []comptest.TestCase{
 		{nil, "Love in \nLove isn"},
 		{func() { assert.False(t, scroll.SeekUp()) }, "Love in \nLove isn"},
 		{func() { assert.False(t, scroll.SeekLeft()) }, "Love in \nLove isn"},
@@ -228,7 +228,7 @@ func TestScrollDrawWrap(t *testing.T) {
 
 	w := term.NewStringWriter(width, height)
 
-	tests := []testutil.ComponentTestCase{
+	tests := []comptest.TestCase{
 		{nil, "Love in \nyour hea"},
 		{func() { scroll.SeekUp() }, "Love in \nyour hea"},
 		{func() { scroll.SeekLeft() }, "Love in \nyour hea"},
@@ -249,7 +249,7 @@ func TestScrollDrawWrap(t *testing.T) {
 		{func() { scroll.SeekNextResult() }, "Love in your heart w"},
 	}
 
-	testutil.TestComponent(t, scroll, w, tests)
+	comptest.TestComponent(t, scroll, w, tests)
 }
 
 func TestScrollDrawWrap2(t *testing.T) {
@@ -262,18 +262,18 @@ func TestScrollDrawWrap2(t *testing.T) {
 
 	w := term.NewStringWriter(width, height)
 
-	tests := []testutil.ComponentTestCase{
+	tests := []comptest.TestCase{
 		{nil, "Love in "},
 	}
 
-	testutil.TestComponent(t, scroll, w, tests)
+	comptest.TestComponent(t, scroll, w, tests)
 }
 
 func TestScrollDraw3(t *testing.T) {
 	width, height := 51, 17
 	scroll, w := newScrollWrapTestCase(t, width, height)
 
-	tests := []testutil.ComponentTestCase{
+	tests := []comptest.TestCase{
 		{nil, `module github.com/unstablebuild/blue               
                                                    
 go 1.14                                            
@@ -310,7 +310,7 @@ irect
     github.com/jacobsa/go-serial v0.0.0-20180131005`},
 	}
 
-	testutil.TestComponent(t, scroll, w, tests)
+	comptest.TestComponent(t, scroll, w, tests)
 }
 
 func TestScrollDrawInvalidSize(t *testing.T) {
@@ -327,10 +327,10 @@ func TestScrollDrawInvalidSize(t *testing.T) {
 				scroll, w := constructor(t, width, height)
 				scroll.Resize(-22, 1)
 
-				tests := []testutil.ComponentTestCase{
+				tests := []comptest.TestCase{
 					{nil, `          `},
 				}
-				testutil.TestComponent(t, scroll, w, tests)
+				comptest.TestComponent(t, scroll, w, tests)
 			})
 		t.Run(fmt.Sprintf("%d: negative height is considered as 0", i),
 			func(t *testing.T) {
@@ -338,10 +338,10 @@ func TestScrollDrawInvalidSize(t *testing.T) {
 				scroll, w := constructor(t, width, height)
 				scroll.Resize(10, -1)
 
-				tests := []testutil.ComponentTestCase{
+				tests := []comptest.TestCase{
 					{nil, `          `},
 				}
-				testutil.TestComponent(t, scroll, w, tests)
+				comptest.TestComponent(t, scroll, w, tests)
 			})
 	}
 
@@ -518,7 +518,7 @@ func TestScrollDrawWrapWithBufferUpdates(t *testing.T) {
 
 	w := term.NewStringWriter(20, 9)
 
-	tests := []testutil.ComponentTestCase{
+	tests := []comptest.TestCase{
 		{
 			nil, `
                     
@@ -663,7 +663,7 @@ ness. Let's test its
 ke it overflow below`,
 		},
 	}
-	testutil.TestComponent(t, b, w, tests)
+	comptest.TestComponent(t, b, w, tests)
 }
 
 func TestScrollToWindowCoordinates(t *testing.T) {
@@ -791,7 +791,7 @@ func TestScrollDrawSearchResults(t *testing.T) {
 
 	scroll.RecalculateWraps()
 
-	tests := []testutil.ComponentTestCase{
+	tests := []comptest.TestCase{
 		{func() {
 			assert.Equal(t, 9, scroll.Search("github"))
 		}, `       github                                      
@@ -872,7 +872,7 @@ irect
                                                    `},
 	}
 
-	testutil.TestComponent(t, resultDrawer{scroll}, w, tests)
+	comptest.TestComponent(t, resultDrawer{scroll}, w, tests)
 }
 
 func TestWindowCoordinatesPanicDeleteRow(t *testing.T) {

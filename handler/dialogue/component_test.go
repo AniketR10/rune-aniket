@@ -28,8 +28,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/component/comptest"
 	"unstable.build/go-tui/term"
-	testutil "unstable.build/go-tui/util/test"
 )
 
 func testDrawComponent(t *testing.T, cfg ComponentConfig, expectedOut string) {
@@ -39,11 +39,11 @@ func testDrawComponent(t *testing.T, cfg ComponentConfig, expectedOut string) {
 
 	w := term.NewStringWriter(21, 11)
 
-	tests := []testutil.ComponentTestCase{
+	tests := []comptest.TestCase{
 		{Expected: expectedOut},
 	}
 
-	testutil.TestComponent(t, s, w, tests)
+	comptest.TestComponent(t, s, w, tests)
 }
 
 func TestComponentDraw(t *testing.T) {
@@ -71,7 +71,7 @@ func TestComponentDraw(t *testing.T) {
 			}
 
 			w := term.NewStringWriter(21, 11)
-			tests := []testutil.ComponentTestCase{
+			tests := []comptest.TestCase{
 				{
 					Action: func() {},
 					Expected: `wasup bro            
@@ -285,7 +285,7 @@ $
                      `,
 				},
 			}
-			testutil.TestComponent(t, comp, w, tests)
+			comptest.TestComponent(t, comp, w, tests)
 		})
 	}
 }

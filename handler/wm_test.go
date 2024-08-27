@@ -32,6 +32,7 @@ import (
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/component/comptest"
 	"unstable.build/go-tui/term"
 	testutil "unstable.build/go-tui/util/test"
 )
@@ -504,7 +505,7 @@ func TestWindowManagerSplit(t *testing.T) {
 	h2 := TestHandler{TestComponent: component.TestComponent{Ch: 'B'}}
 	h3 := TestHandler{TestComponent: component.TestComponent{Ch: 'C'}}
 
-	tests := []testutil.ComponentTestCase{
+	tests := []comptest.TestCase{
 		{
 			nil, `
 ┌──────────────────┐
@@ -664,5 +665,5 @@ C────────DCCCCCCCCC│
 		},
 	}
 
-	testutil.TestComponent(t, wm, w, tests)
+	comptest.TestComponent(t, wm, w, tests)
 }

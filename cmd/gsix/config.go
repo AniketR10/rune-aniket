@@ -23,7 +23,7 @@
 
 package main
 
-import(
+import (
 	_ "embed"
 )
 

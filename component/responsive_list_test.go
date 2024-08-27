@@ -29,8 +29,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"unstable.build/go-tui"
+	"unstable.build/go-tui/component/comptest"
 	"unstable.build/go-tui/term"
-	testutil "unstable.build/go-tui/util/test"
 )
 
 type responsiveTestList struct {
@@ -118,7 +118,7 @@ func TestResponsiveListResponsiveness(t *testing.T) {
 
 	w := term.NewStringWriter(8, 4)
 
-	tests := []testutil.ComponentTestCase{
+	tests := []comptest.TestCase{
 		{
 			nil, `
         
@@ -192,7 +192,7 @@ ZZZZZZZZ`,
 		},
 	}
 
-	testutil.TestComponent(t, l, w, tests)
+	comptest.TestComponent(t, l, w, tests)
 }
 
 func TestResponsiveListResizeLarger(t *testing.T) {
@@ -200,7 +200,7 @@ func TestResponsiveListResizeLarger(t *testing.T) {
 
 	w := term.NewStringWriter(8, 4)
 
-	tests := []testutil.ComponentTestCase{
+	tests := []comptest.TestCase{
 		{
 			func() {
 				l.PushBack(&TestResponsive{
@@ -261,7 +261,7 @@ ZZZZZZZZ`,
 		},
 	}
 
-	testutil.TestComponent(t, l, w, tests)
+	comptest.TestComponent(t, l, w, tests)
 }
 
 func TestResponsiveListScroll(t *testing.T) {
@@ -273,7 +273,7 @@ func TestResponsiveListScroll(t *testing.T) {
 	l.PushBack(testResponsive('c', 3))
 	l.Resize(7, 3)
 
-	tests := []testutil.ComponentTestCase{
+	tests := []comptest.TestCase{
 		{
 			nil, `
 aaaaaaa 
@@ -333,7 +333,7 @@ bbbbbbb
 		},
 	}
 
-	testutil.TestComponent(t, l, w, tests)
+	comptest.TestComponent(t, l, w, tests)
 }
 
 func TestResponsiveListScrollAlignmentBottom(t *testing.T) {
@@ -346,7 +346,7 @@ func TestResponsiveListScrollAlignmentBottom(t *testing.T) {
 	l.PushBack(testResponsive('c', 3))
 	l.Resize(7, 3)
 
-	tests := []testutil.ComponentTestCase{
+	tests := []comptest.TestCase{
 		{
 			nil, `
 ccccccc 
@@ -432,5 +432,5 @@ ccccccc
 		},
 	}
 
-	testutil.TestComponent(t, l, w, tests)
+	comptest.TestComponent(t, l, w, tests)
 }

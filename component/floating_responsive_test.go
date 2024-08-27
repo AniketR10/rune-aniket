@@ -27,8 +27,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"unstable.build/go-tui/component/comptest"
 	"unstable.build/go-tui/term"
-	testutil "unstable.build/go-tui/util/test"
 )
 
 func TestFloatingResponsiveDraw(t *testing.T) {
@@ -44,7 +44,7 @@ func TestFloatingResponsiveDraw(t *testing.T) {
 
 	w := term.NewStringWriter(20, 9)
 
-	tests := []testutil.ComponentTestCase{
+	tests := []comptest.TestCase{
 		{
 			nil, `
                     
@@ -75,7 +75,7 @@ Q4_K_M
                     `,
 		},
 	}
-	testutil.TestComponent(t, l, w, tests)
+	comptest.TestComponent(t, l, w, tests)
 
 }
 

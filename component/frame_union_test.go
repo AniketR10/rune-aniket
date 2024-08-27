@@ -28,8 +28,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"unstable.build/go-tui/component/comptest"
 	"unstable.build/go-tui/term"
-	testutil "unstable.build/go-tui/util/test"
 )
 
 func TestDrawFrameUnionNoFrame(t *testing.T) {
@@ -46,7 +46,7 @@ func TestDrawFrameUnionNoFrame(t *testing.T) {
 
 	w := term.NewStringWriter(20, 20)
 
-	tests := []testutil.ComponentTestCase{
+	tests := []comptest.TestCase{
 		{
 			nil, `
 XXXXXXXXXXXXXXXXXXXX
@@ -220,7 +220,7 @@ BBBBBBBBBBBBBBBBBBBB`,
 		},
 	}
 
-	testutil.TestComponent(t, f, w, tests)
+	comptest.TestComponent(t, f, w, tests)
 }
 
 func TestDrawFrameUnionWithFrame(t *testing.T) {
@@ -240,7 +240,7 @@ func TestDrawFrameUnionWithFrame(t *testing.T) {
 
 	w := term.NewStringWriter(20, 20)
 
-	tests := []testutil.ComponentTestCase{
+	tests := []comptest.TestCase{
 		{
 			nil, `
 ┌──────────────────┐
@@ -443,7 +443,7 @@ AA
 		},
 	}
 
-	testutil.TestComponent(t, f, w, tests)
+	comptest.TestComponent(t, f, w, tests)
 
 	t.Run("ComponentAt returns the component at position offset", func(t *testing.T) {
 		c, ok := f.ComponentAt(term.Coordinates{})
@@ -580,7 +580,7 @@ func TestDrawFrameUnionUnionNoFrame(t *testing.T) {
                     
                     
                     `,
-	},
+		},
 		{
 			description: "mixed top bottom unions, start with frame, no left, or right",
 			setup: func(f *FrameUnion) {
@@ -612,7 +612,7 @@ func TestDrawFrameUnionUnionNoFrame(t *testing.T) {
                     
                     
                     `,
-	},
+		},
 		{
 			description: "mixed left right unions, start with no frame, no top , or bottom",
 			setup: func(f *FrameUnion) {
@@ -644,7 +644,7 @@ func TestDrawFrameUnionUnionNoFrame(t *testing.T) {
                     
                     
                     `,
-	},
+		},
 		{
 			description: "mixed left right unions, start with frame, top and bottom frame",
 			setup: func(f *FrameUnion) {
@@ -676,7 +676,7 @@ func TestDrawFrameUnionUnionNoFrame(t *testing.T) {
                     
                     
                     `,
-	},
+		},
 		{
 			description: "mixed left right unions, start with frame, last top first bottom no frame",
 			setup: func(f *FrameUnion) {
@@ -708,7 +708,7 @@ func TestDrawFrameUnionUnionNoFrame(t *testing.T) {
                     
                     
                     `,
-	},
+		},
 	}
 
 	for _, test := range suite {
@@ -719,11 +719,11 @@ func TestDrawFrameUnionUnionNoFrame(t *testing.T) {
 			f.Resize(20, 16)
 
 			w := term.NewStringWriter(20, 20)
-			tests := []testutil.ComponentTestCase{
+			tests := []comptest.TestCase{
 				{Action: nil, Expected: test.expected},
 			}
 
-			testutil.TestComponent(t, f, w, tests)
+			comptest.TestComponent(t, f, w, tests)
 
 		})
 	}
@@ -739,7 +739,7 @@ func TestDrawFrameUnionWithFrameBottomOnly(t *testing.T) {
 
 	w := term.NewStringWriter(20, 20)
 
-	tests := []testutil.ComponentTestCase{
+	tests := []comptest.TestCase{
 		{
 			nil, `
 ┌──────────────────┐
@@ -765,7 +765,7 @@ func TestDrawFrameUnionWithFrameBottomOnly(t *testing.T) {
 		},
 	}
 
-	testutil.TestComponent(t, f, w, tests)
+	comptest.TestComponent(t, f, w, tests)
 }
 
 func TestComponentAtOutOfBounds(t *testing.T) {

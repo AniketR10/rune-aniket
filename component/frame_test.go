@@ -28,8 +28,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/unstablebuild/tcell/v3"
+	"unstable.build/go-tui/component/comptest"
 	"unstable.build/go-tui/term"
-	testutil "unstable.build/go-tui/util/test"
 )
 
 func TestDrawFrame(t *testing.T) {
@@ -40,7 +40,7 @@ func TestDrawFrame(t *testing.T) {
 
 	w := term.NewStringWriter(9, 5)
 
-	tests := []testutil.ComponentTestCase{
+	tests := []comptest.TestCase{
 		{
 			nil, `
 ┌──────┐ 
@@ -109,7 +109,7 @@ TT
 		},
 	}
 
-	testutil.TestComponent(t, f, w, tests)
+	comptest.TestComponent(t, f, w, tests)
 }
 
 func TestComponentDimensions(t *testing.T) {

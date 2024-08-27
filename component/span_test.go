@@ -28,8 +28,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"unstable.build/go-tui/component/comptest"
 	"unstable.build/go-tui/term"
-	testutil "unstable.build/go-tui/util/test"
 )
 
 func TestSpanDimensions(t *testing.T) {
@@ -148,7 +148,7 @@ func TestDrawDefaultSpan(t *testing.T) {
 
 	w := term.NewStringWriter(9, 5)
 
-	tests := []testutil.ComponentTestCase{
+	tests := []comptest.TestCase{
 		{
 			nil, `
 XXXXXXXX 
@@ -320,5 +320,5 @@ XXXXXXXX
 		},
 	}
 
-	testutil.TestComponent(t, s, w, tests)
+	comptest.TestComponent(t, s, w, tests)
 }

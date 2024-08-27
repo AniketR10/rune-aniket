@@ -29,8 +29,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"unstable.build/go-tui"
+	"unstable.build/go-tui/component/comptest"
 	"unstable.build/go-tui/term"
-	testutil "unstable.build/go-tui/util/test"
 )
 
 func TestComponentWindowZeroValue(t *testing.T) {
@@ -79,7 +79,7 @@ func TestComponentWindowSplit(t *testing.T) {
 	h2 := TestComponent{Ch: 'B'}
 	h3 := TestComponent{Ch: 'C'}
 
-	tests := []testutil.ComponentTestCase{
+	tests := []comptest.TestCase{
 		{
 			nil, `
 ┌──────────────────┐
@@ -463,5 +463,5 @@ func TestComponentWindowSplit(t *testing.T) {
 		},
 	}
 
-	testutil.TestComponent(t, wm, w, tests)
+	comptest.TestComponent(t, wm, w, tests)
 }

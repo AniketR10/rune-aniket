@@ -190,7 +190,6 @@ func benchListFiles(b *testing.B, totalFiles, nestEvery, emptyDirsPerFile int) {
 	b.StopTimer()
 	closeFn()
 }
- 
 
 func setupTestDirectory(
 	t testing.TB, totalFiles, nestEvery, emptyDirsPerFile int,

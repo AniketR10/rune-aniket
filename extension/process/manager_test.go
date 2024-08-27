@@ -37,8 +37,8 @@ import (
 	"unstable.build/go-tui/api/config"
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/extension"
-	"unstable.build/go-tui/extension/extensiontest"
 	"unstable.build/go-tui/extension/extensionrpc"
+	"unstable.build/go-tui/extension/extensiontest"
 	"unstable.build/go-tui/rpc"
 )
 

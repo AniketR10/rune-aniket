@@ -26,8 +26,8 @@ package component
 import (
 	"testing"
 
+	"unstable.build/go-tui/component/comptest"
 	"unstable.build/go-tui/term"
-	testutil "unstable.build/go-tui/util/test"
 )
 
 func TestDrawOverlay(t *testing.T) {
@@ -43,7 +43,7 @@ func TestDrawOverlay(t *testing.T) {
 
 	w := term.NewStringWriter(16, 9)
 
-	tests := []testutil.ComponentTestCase{
+	tests := []comptest.TestCase{
 		{
 			func() { o.Resize(16, 9) }, `
 ****************
@@ -80,5 +80,5 @@ a
 		},
 	}
 
-	testutil.TestComponent(t, o, w, tests)
+	comptest.TestComponent(t, o, w, tests)
 }

@@ -56,12 +56,12 @@ func TestKeyMappedLessHandle(t *testing.T) {
 	})
 	less1, writer3 := setup(t, nil, 8, 4)
 	testutil.TestHandler(t, WithMapping(less1, map[term.KeyComb]term.KeyComb{
-		{Ch: 'k'}:                    {Ch: 'k'},
-		{Ch: 'U'}:                    {Ch: 'j'},
-		{Ch: '%'}:                    {Ch: 'h'},
-		{Ch: '\\'}:                   {Ch: '/'},
-		{Key: term.KeyArrowRight}:    {Ch: '$'},
-		{Key: term.KeyArrowLeft}:     {Ch: '0'},
+		{Ch: 'k'}:                   {Ch: 'k'},
+		{Ch: 'U'}:                   {Ch: 'j'},
+		{Ch: '%'}:                   {Ch: 'h'},
+		{Ch: '\\'}:                  {Ch: '/'},
+		{Key: term.KeyArrowRight}:   {Ch: '$'},
+		{Key: term.KeyArrowLeft}:    {Ch: '0'},
 		{Ch: 'N', Mod: term.ModAlt}: {Ch: 'N'},
 		{Ch: 'n', Mod: term.ModAlt}: {Ch: 'n'},
 	}), cases, writer3)

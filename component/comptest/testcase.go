@@ -21,7 +21,7 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package test
+package comptest
 
 import (
 	"fmt"
@@ -33,9 +33,9 @@ import (
 	"unstable.build/go-tui/term"
 )
 
-// ComponentTestCase represents an action and how a component
+// TestCase represents an action and how a component
 // is expected to be drawn after this action.
-type ComponentTestCase struct {
+type TestCase struct {
 	Action   func()
 	Expected string
 }
@@ -51,7 +51,7 @@ type StringerWriter interface {
 // TestComponent tests a given component against a set of ComponentTestCase.
 func TestComponent(
 	t *testing.T, m tui.Component,
-	w StringerWriter, cases []ComponentTestCase,
+	w StringerWriter, cases []TestCase,
 ) {
 	var err error
 

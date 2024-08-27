@@ -30,8 +30,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/goleak"
 	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/component/comptest"
 	"unstable.build/go-tui/term"
-	testutil "unstable.build/go-tui/util/test"
 )
 
 func TestShader(t *testing.T) {
@@ -44,7 +44,7 @@ func TestShader(t *testing.T) {
 		s.Resize(20, 10)
 
 		w := term.NewStringWriter(21, 11)
-		tests := []testutil.ComponentTestCase{
+		tests := []comptest.TestCase{
 			{Expected: `
 @@@@@@@@@@@@@@@@@@@@ 
 @@@@@@@@@@@@@@@@@@@@ 
@@ -71,7 +71,7 @@ AAAAAAAAAAAAAAAAAAAA
                      `},
 		}
 
-		testutil.TestComponent(t, s, w, tests)
+		comptest.TestComponent(t, s, w, tests)
 	})
 
 	t.Run("resizes underlying component", func(t *testing.T) {
@@ -80,7 +80,7 @@ AAAAAAAAAAAAAAAAAAAA
 		s.Resize(20, 10)
 
 		w := term.NewStringWriter(21, 11)
-		tests := []testutil.ComponentTestCase{
+		tests := []comptest.TestCase{
 			{Expected: `
 @@@@@@@@@@@@@@@@@@@@ 
 @@@@@@@@@@@@@@@@@@@@ 
@@ -94,10 +94,10 @@ AAAAAAAAAAAAAAAAAAAA
 @@@@@@@@@@@@@@@@@@@@ 
                      `},
 		}
-		testutil.TestComponent(t, s, w, tests)
+		comptest.TestComponent(t, s, w, tests)
 
 		s.Resize(21, 11)
-		tests = []testutil.ComponentTestCase{
+		tests = []comptest.TestCase{
 			{Expected: `
 AAAAAAAAAAAAAAAAAAAAA
 AAAAAAAAAAAAAAAAAAAAA
@@ -112,7 +112,7 @@ AAAAAAAAAAAAAAAAAAAAA
 AAAAAAAAAAAAAAAAAAAAA`},
 		}
 
-		testutil.TestComponent(t, s, w, tests)
+		comptest.TestComponent(t, s, w, tests)
 	})
 
 	t.Run("passes frame and total to shader", func(t *testing.T) {

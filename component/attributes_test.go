@@ -30,8 +30,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/component/comptest"
 	"unstable.build/go-tui/term"
-	testutil "unstable.build/go-tui/util/test"
 )
 
 func TestDrawAttributes(t *testing.T) {
@@ -42,7 +42,7 @@ func TestDrawAttributes(t *testing.T) {
 
 		s.Resize(8, 4)
 
-		tests := []testutil.ComponentTestCase{
+		tests := []comptest.TestCase{
 			{
 				nil, `
 XXXXXXXX 
@@ -53,7 +53,7 @@ XXXXXXXX
 			},
 		}
 
-		testutil.TestComponent(t, s, w, tests)
+		comptest.TestComponent(t, s, w, tests)
 	})
 }
 

@@ -22,6 +22,7 @@
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
 //go:build js
+
 package term
 
 import (

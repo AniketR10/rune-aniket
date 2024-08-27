@@ -27,8 +27,8 @@ import (
 	"testing"
 
 	"unstable.build/go-tui"
+	"unstable.build/go-tui/component/comptest"
 	"unstable.build/go-tui/term"
-	testutil "unstable.build/go-tui/util/test"
 )
 
 func TestGridDraw(t *testing.T) {
@@ -36,7 +36,7 @@ func TestGridDraw(t *testing.T) {
 		l := Grid(nil)
 		l.Resize(4, 4)
 		w := term.NewStringWriter(20, 9)
-		tests := []testutil.ComponentTestCase{
+		tests := []comptest.TestCase{
 			{
 				nil, `
                     
@@ -50,7 +50,7 @@ func TestGridDraw(t *testing.T) {
                     `,
 			},
 		}
-		testutil.TestComponent(t, l, w, tests)
+		comptest.TestComponent(t, l, w, tests)
 	})
 
 	t.Run("happy path", func(t *testing.T) {
@@ -63,7 +63,7 @@ func TestGridDraw(t *testing.T) {
 
 		w := term.NewStringWriter(20, 9)
 
-		tests := []testutil.ComponentTestCase{
+		tests := []comptest.TestCase{
 			{
 				nil, `
 aaaaaaaaaabbbbbbbbbb
@@ -99,7 +99,7 @@ eeeeeeeeeeffffffffff`,
                     `,
 			},
 		}
-		testutil.TestComponent(t, l, w, tests)
+		comptest.TestComponent(t, l, w, tests)
 	})
 
 	t.Run("zero row", func(t *testing.T) {
@@ -110,7 +110,7 @@ eeeeeeeeeeffffffffff`,
 		})
 		l.Resize(4, 4)
 		w := term.NewStringWriter(20, 9)
-		tests := []testutil.ComponentTestCase{
+		tests := []comptest.TestCase{
 			{
 				nil, `
 aaaa                
@@ -124,7 +124,7 @@ bbbb
                     `,
 			},
 		}
-		testutil.TestComponent(t, l, w, tests)
+		comptest.TestComponent(t, l, w, tests)
 	})
 
 }

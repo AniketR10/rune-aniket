@@ -26,8 +26,8 @@ package component
 import (
 	"testing"
 
+	"unstable.build/go-tui/component/comptest"
 	"unstable.build/go-tui/term"
-	testutil "unstable.build/go-tui/util/test"
 )
 
 func TestReferenceDraw(t *testing.T) {
@@ -40,7 +40,7 @@ func TestReferenceDraw(t *testing.T) {
 
 	w := term.NewStringWriter(9, 5)
 
-	tests := []testutil.ComponentTestCase{
+	tests := []comptest.TestCase{
 		{
 			nil, `
 XXXXXXXX 
@@ -50,11 +50,11 @@ XXXXXXXX
          `,
 		},
 	}
-	testutil.TestComponent(t, s, w, tests)
+	comptest.TestComponent(t, s, w, tests)
 
 	s.Init(&TestComponent{Ch: 'Y'})
 
-	tests = []testutil.ComponentTestCase{
+	tests = []comptest.TestCase{
 		{
 			nil, `
 YYYYYYYY 
@@ -64,5 +64,5 @@ YYYYYYYY
          `,
 		},
 	}
-	testutil.TestComponent(t, s, w, tests)
+	comptest.TestComponent(t, s, w, tests)
 }

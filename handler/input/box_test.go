@@ -30,10 +30,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/component/comptest"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/text/clipboard"
-	testutil "unstable.build/go-tui/util/test"
 )
 
 func TestBox(t *testing.T) {
@@ -65,7 +65,7 @@ func TestBox(t *testing.T) {
 
 		w := term.NewStringWriter(20, 9)
 
-		tests := []testutil.ComponentTestCase{
+		tests := []comptest.TestCase{
 			{
 				nil, `
 ┌──────────────────┐
@@ -214,7 +214,7 @@ hello world
 └──────────────────┘`,
 			},
 		}
-		testutil.TestComponent(t, b, w, tests)
+		comptest.TestComponent(t, b, w, tests)
 	})
 	t.Run("with placeholder", func(t *testing.T) {
 		buf := cell.NewBuffer()
@@ -223,7 +223,7 @@ hello world
 
 		w := term.NewStringWriter(20, 9)
 
-		tests := []testutil.ComponentTestCase{
+		tests := []comptest.TestCase{
 			{
 				nil, `
 ┌──────────────────┐
@@ -328,7 +328,7 @@ HERE...
 └──────────────────┘`,
 			},
 		}
-		testutil.TestComponent(t, b, w, tests)
+		comptest.TestComponent(t, b, w, tests)
 	})
 
 	t.Run("with long placeholder", func(t *testing.T) {
@@ -338,7 +338,7 @@ HERE...
 
 		w := term.NewStringWriter(20, 9)
 
-		tests := []testutil.ComponentTestCase{
+		tests := []comptest.TestCase{
 			{
 				nil, `
 ┌──────────────────┐
@@ -403,7 +403,7 @@ te to your
 └──────────────────┘`,
 			},
 		}
-		testutil.TestComponent(t, b, w, tests)
+		comptest.TestComponent(t, b, w, tests)
 	})
 	t.Run("with min, max height", func(t *testing.T) {
 		buf := cell.NewBuffer()
@@ -412,7 +412,7 @@ te to your
 
 		w := term.NewStringWriter(20, 9)
 
-		tests := []testutil.ComponentTestCase{
+		tests := []comptest.TestCase{
 			{
 				nil, `
 ┌──────────────────┐
@@ -485,7 +485,7 @@ RE
 └──────────────────┘`,
 			},
 		}
-		testutil.TestComponent(t, b, w, tests)
+		comptest.TestComponent(t, b, w, tests)
 	})
 }
 

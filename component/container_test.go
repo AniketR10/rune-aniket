@@ -28,8 +28,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"unstable.build/go-tui/component/comptest"
 	"unstable.build/go-tui/term"
-	testutil "unstable.build/go-tui/util/test"
 )
 
 func TestContainerDimensions(t *testing.T) {
@@ -53,7 +53,7 @@ func TestContainerDraw(t *testing.T) {
 		l := NewContainer()
 		l.Resize(4, 4)
 		w := term.NewStringWriter(20, 9)
-		tests := []testutil.ComponentTestCase{
+		tests := []comptest.TestCase{
 			{
 				nil, `
                     
@@ -67,7 +67,7 @@ func TestContainerDraw(t *testing.T) {
                     `,
 			},
 		}
-		testutil.TestComponent(t, l, w, tests)
+		comptest.TestComponent(t, l, w, tests)
 	})
 
 	t.Run("happy path", func(t *testing.T) {
@@ -86,7 +86,7 @@ func TestContainerDraw(t *testing.T) {
 
 		w := term.NewStringWriter(20, 9)
 
-		tests := []testutil.ComponentTestCase{
+		tests := []comptest.TestCase{
 			{
 				nil, `
 aaaaaaaaaabbbbbbbbbb
@@ -260,7 +260,7 @@ ZZZZZYYYYYYYYYYXXXXX
                     `,
 			},
 		}
-		testutil.TestComponent(t, l, w, tests)
+		comptest.TestComponent(t, l, w, tests)
 	})
 
 	t.Run("zero row", func(t *testing.T) {
@@ -272,7 +272,7 @@ ZZZZZYYYYYYYYYYXXXXX
 		r3.AddComponent(testResponsive('b', 1), 12)
 		l.Resize(4, 4)
 		w := term.NewStringWriter(20, 9)
-		tests := []testutil.ComponentTestCase{
+		tests := []comptest.TestCase{
 			{
 				nil, `
 aaaa                
@@ -286,7 +286,7 @@ bbbb
                     `,
 			},
 		}
-		testutil.TestComponent(t, l, w, tests)
+		comptest.TestComponent(t, l, w, tests)
 	})
 
 }

@@ -355,7 +355,7 @@ func (c *AsyncClient) sendDrawReq(r request) error {
 	}
 
 	// call Interrupt after we have unlocked mu
-    // nolint:errcheck
+	// nolint:errcheck
 	defer c.interrupter.Interrupt(r.ctx)
 
 	c.mu.Lock()

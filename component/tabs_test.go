@@ -28,8 +28,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"unstable.build/go-tui/component/comptest"
 	"unstable.build/go-tui/term"
-	testutil "unstable.build/go-tui/util/test"
 )
 
 func TestTabsDraw(t *testing.T) {
@@ -41,7 +41,7 @@ func TestTabsDraw(t *testing.T) {
 
 	w := term.NewStringWriter(20, 9)
 
-	tests := []testutil.ComponentTestCase{
+	tests := []comptest.TestCase{
 		{
 			nil, `
 ┌──────────────────┐
@@ -180,7 +180,7 @@ func TestTabsDraw(t *testing.T) {
 		},
 	}
 
-	testutil.TestComponent(t, l, w, tests)
+	comptest.TestComponent(t, l, w, tests)
 }
 
 func TestTabsDrawCustomSeparator(t *testing.T) {
@@ -190,7 +190,7 @@ func TestTabsDrawCustomSeparator(t *testing.T) {
 
 	w := term.NewStringWriter(20, 9)
 
-	tests := []testutil.ComponentTestCase{
+	tests := []comptest.TestCase{
 		{
 			nil, `
 ┌──────────────────┐
@@ -229,7 +229,7 @@ func TestTabsDrawCustomSeparator(t *testing.T) {
 		},
 	}
 
-	testutil.TestComponent(t, l, w, tests)
+	comptest.TestComponent(t, l, w, tests)
 }
 
 func setupOneTab(width, height int) *Tabs {

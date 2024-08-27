@@ -26,8 +26,8 @@ package component
 import (
 	"testing"
 
+	"unstable.build/go-tui/component/comptest"
 	"unstable.build/go-tui/term"
-	testutil "unstable.build/go-tui/util/test"
 )
 
 func TestDrawBackgroundNoZero(t *testing.T) {
@@ -42,7 +42,7 @@ func TestDrawBackgroundNoZero(t *testing.T) {
 
 	w := term.NewStringWriter(9, 5)
 
-	tests := []testutil.ComponentTestCase{
+	tests := []comptest.TestCase{
 		{
 			nil, `
 XXXXXXXXO
@@ -53,7 +53,7 @@ OOOOOOOOO`,
 		},
 	}
 
-	testutil.TestComponent(t, b, w, tests)
+	comptest.TestComponent(t, b, w, tests)
 }
 
 func TestDrawBackground(t *testing.T) {
@@ -68,7 +68,7 @@ func TestDrawBackground(t *testing.T) {
 
 	w := term.NewStringWriter(9, 5)
 
-	tests := []testutil.ComponentTestCase{
+	tests := []comptest.TestCase{
 		{
 			nil, `
 XXXXXXXX 
@@ -79,5 +79,5 @@ XXXXXXXX
 		},
 	}
 
-	testutil.TestComponent(t, b, w, tests)
+	comptest.TestComponent(t, b, w, tests)
 }

@@ -28,8 +28,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"unstable.build/go-tui/component/comptest"
 	"unstable.build/go-tui/term"
-	testutil "unstable.build/go-tui/util/test"
 )
 
 func TestIntegrationScroll(t *testing.T) {
@@ -44,7 +44,7 @@ func TestIntegrationScroll(t *testing.T) {
 
 	w := term.NewStringWriter(12, height)
 
-	tests := []testutil.ComponentTestCase{
+	tests := []comptest.TestCase{
 		{
 			nil, `
 AAAAAAAA    
@@ -74,7 +74,7 @@ DDDDDDDD    `,
 		},
 	}
 
-	testutil.TestComponent(t, &virtualScroll, w, tests)
+	comptest.TestComponent(t, &virtualScroll, w, tests)
 }
 
 func TestVirtualDraw(t *testing.T) {
@@ -84,7 +84,7 @@ func TestVirtualDraw(t *testing.T) {
 
 	w := term.NewStringWriter(width, height)
 
-	tests := []testutil.ComponentTestCase{
+	tests := []comptest.TestCase{
 		{
 			nil, `
 $$$$
@@ -103,5 +103,5 @@ $$$$`,
  $$$`,
 		},
 	}
-	testutil.TestComponent(t, &v, w, tests)
+	comptest.TestComponent(t, &v, w, tests)
 }

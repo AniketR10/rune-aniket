@@ -34,10 +34,10 @@ import (
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	browser "unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/component/comptest"
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/term"
-	testutil "unstable.build/go-tui/util/test"
 )
 
 func splitVerticalLeft(c *browser.Component, h browserapi.Handler) (browser.Window, bool) {
@@ -477,7 +477,7 @@ func TestComponentMultipleWindow(t *testing.T) {
 	h3 := NewTestHandler()
 	h3.Ch = 'C'
 
-	tests := []testutil.ComponentTestCase{
+	tests := []comptest.TestCase{
 		{
 			nil /* X on top left window is overriden by union */, `
 O──────────────────┐
@@ -537,7 +537,7 @@ X──────────────────┐
 		},
 	}
 
-	testutil.TestComponent(t, c, w, tests)
+	comptest.TestComponent(t, c, w, tests)
 }
 
 func TestComponentNotify(t *testing.T) {
@@ -552,7 +552,7 @@ func TestComponentNotify(t *testing.T) {
 	c.Notify(notifications.LevelInfo, "wasup: %s", "holaaaaaaaaaaaaaaaaaaaaaaaaa")
 	c.Notify(notifications.LevelSuccess, "wasup: %s", "hola")
 
-	tests := []testutil.ComponentTestCase{
+	tests := []comptest.TestCase{
 		{
 			nil, `
 ┌────┌─────────────┐    
@@ -566,7 +566,7 @@ func TestComponentNotify(t *testing.T) {
 		},
 	}
 
-	testutil.TestComponent(t, c, w, tests)
+	comptest.TestComponent(t, c, w, tests)
 }
 
 func TestComponentPrompt(t *testing.T) {
@@ -603,7 +603,7 @@ func TestComponentPrompt(t *testing.T) {
 		tab := c.NewTab(uri, "music", h, nil)
 		require.NoError(t, c.Focus().SetContent(tab))
 
-		tests := []testutil.ComponentTestCase{
+		tests := []comptest.TestCase{
 			{
 				nil, `
 ┌──────────────────┐    
@@ -759,7 +759,7 @@ func TestComponentPrompt(t *testing.T) {
 			},
 		}
 
-		testutil.TestComponent(t, c, w, tests)
+		comptest.TestComponent(t, c, w, tests)
 	})
 }
 
@@ -814,7 +814,7 @@ func TestComponentSplitNil(t *testing.T) {
 		c.SetDefaultSplit(browserapi.OrientationLeft)
 		c.Resize(20, 8)
 		c.Split(browserapi.OrientationDefault, c.Focus(), nil)
-		tests := []testutil.ComponentTestCase{
+		tests := []comptest.TestCase{
 			{
 				nil, `
 ┌──────────────────┐    
@@ -827,7 +827,7 @@ func TestComponentSplitNil(t *testing.T) {
 └────────┘└────────┘    `,
 			},
 		}
-		testutil.TestComponent(t, c, w, tests)
+		comptest.TestComponent(t, c, w, tests)
 	})
 }
 

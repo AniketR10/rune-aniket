@@ -26,8 +26,8 @@ package component
 import (
 	"testing"
 
+	"unstable.build/go-tui/component/comptest"
 	"unstable.build/go-tui/term"
-	testutil "unstable.build/go-tui/util/test"
 )
 
 func TestDrawDivider(t *testing.T) {
@@ -40,7 +40,7 @@ func TestDrawDivider(t *testing.T) {
 
 	w := term.NewStringWriter(9, 5)
 
-	tests := []testutil.ComponentTestCase{
+	tests := []comptest.TestCase{
 		{
 			func() { f.Resize(4, 4) }, `
          
@@ -65,7 +65,7 @@ func TestDrawDivider(t *testing.T) {
 		},
 	}
 
-	testutil.TestComponent(t, f, w, tests)
+	comptest.TestComponent(t, f, w, tests)
 }
 
 func TestDrawDividerNonUnit(t *testing.T) {
@@ -78,7 +78,7 @@ func TestDrawDividerNonUnit(t *testing.T) {
 
 	w := term.NewStringWriter(9, 5)
 
-	tests := []testutil.ComponentTestCase{
+	tests := []comptest.TestCase{
 		{
 			func() { f.Resize(4, 4) }, `
          
@@ -103,5 +103,5 @@ func TestDrawDividerNonUnit(t *testing.T) {
 		},
 	}
 
-	testutil.TestComponent(t, f, w, tests)
+	comptest.TestComponent(t, f, w, tests)
 }

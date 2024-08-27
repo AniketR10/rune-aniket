@@ -43,6 +43,7 @@ import (
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/browser/browsertest"
 	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/component/comptest"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
@@ -247,7 +248,7 @@ func TestComponentOpen(t *testing.T) {
 		c, loader, _, _ := newTestComponentWithFile(t, "file:///tmp/wasup")
 		c.Resize(30, 20)
 
-		tests := []testutil.ComponentTestCase{
+		tests := []comptest.TestCase{
 			{nil, `
 ┌────────────────────────────┐
 │wasup                       │
@@ -416,7 +417,7 @@ func TestComponentOpen(t *testing.T) {
 		}
 
 		w := term.NewStringWriter(30, 20)
-		testutil.TestComponent(t, c, w, tests)
+		comptest.TestComponent(t, c, w, tests)
 
 	})
 
@@ -424,7 +425,7 @@ func TestComponentOpen(t *testing.T) {
 		c, _, _, _ := newTestComponentWithFile(t, "file:///tmp/wasup")
 		c.Resize(30, 20)
 
-		tests := []testutil.ComponentTestCase{
+		tests := []comptest.TestCase{
 			{nil, `
 ┌────────────────────────────┐
 │wasup                       │
@@ -477,7 +478,7 @@ func TestComponentOpen(t *testing.T) {
 		}
 
 		w := term.NewStringWriter(30, 20)
-		testutil.TestComponent(t, c, w, tests)
+		comptest.TestComponent(t, c, w, tests)
 
 	})
 }

@@ -28,8 +28,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/unstablebuild/tcell/v3"
+	"unstable.build/go-tui/component/comptest"
 	"unstable.build/go-tui/term"
-	testutil "unstable.build/go-tui/util/test"
 )
 
 func testDrawPrompt(t *testing.T, cfg PromptConfig, expectedOut string) {
@@ -39,11 +39,11 @@ func testDrawPrompt(t *testing.T, cfg PromptConfig, expectedOut string) {
 
 	w := term.NewStringWriter(21, 11)
 
-	tests := []testutil.ComponentTestCase{
+	tests := []comptest.TestCase{
 		{Expected: expectedOut},
 	}
 
-	testutil.TestComponent(t, s, w, tests)
+	comptest.TestComponent(t, s, w, tests)
 }
 
 func TestDrawPrompt(t *testing.T) {
@@ -181,7 +181,7 @@ func TestPromptInitReset(t *testing.T) {
 		p.Resize(20, 10)
 		w := term.NewStringWriter(21, 11)
 
-		tests := []testutil.ComponentTestCase{
+		tests := []comptest.TestCase{
 			{Expected: `
                      
                      
@@ -196,7 +196,7 @@ yyyyyyyyyynnnnnnnnnn
                      `,
 			},
 		}
-		testutil.TestComponent(t, &p, w, tests)
+		comptest.TestComponent(t, &p, w, tests)
 	})
 
 	t.Run("SetAttr", func(t *testing.T) {

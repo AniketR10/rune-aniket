@@ -55,7 +55,7 @@ type granteeServer struct {
 	cancelCtx func()
 	closeWg   sync.WaitGroup
 
-	keepAliveTimeout     time.Duration
+	keepAliveTimeout time.Duration
 }
 
 func newGranteeServer(

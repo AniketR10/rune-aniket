@@ -29,6 +29,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/tcell/v3"
+	"unstable.build/go-tui/component/comptest"
 	"unstable.build/go-tui/term"
 	testutil "unstable.build/go-tui/util/test"
 )
@@ -50,7 +51,7 @@ func TestLessDrawSuperimposedBar(t *testing.T) {
 
 	w := term.NewStringWriter(20, 9)
 
-	tests := []testutil.ComponentTestCase{
+	tests := []comptest.TestCase{
 		{
 			nil, `
                     
@@ -115,7 +116,7 @@ ss
                     `,
 		},
 	}
-	testutil.TestComponent(t, b, w, tests)
+	comptest.TestComponent(t, b, w, tests)
 }
 
 func TestLessDrawNoBarWrap(t *testing.T) {
@@ -124,7 +125,7 @@ func TestLessDrawNoBarWrap(t *testing.T) {
 
 	w := term.NewStringWriter(20, 9)
 
-	tests := []testutil.ComponentTestCase{
+	tests := []comptest.TestCase{
 		{
 			nil, `
                     
@@ -252,7 +253,7 @@ ke it overflow below
  and wrap,which migh`,
 		},
 	}
-	testutil.TestComponent(t, b, w, tests)
+	comptest.TestComponent(t, b, w, tests)
 }
 
 func TestLessHandle(t *testing.T) {
