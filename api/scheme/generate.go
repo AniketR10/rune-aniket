@@ -23,4 +23,4 @@
 
 package scheme
 
-//go:generate mockgen -destination=./test/scheme_gomock.go -package test -self_package unstable.build/go-tui/api/scheme/test -source ./scheme.go
+//go:generate mockgen -destination=./schemetest/scheme_gomock.go -package schemetest -self_package unstable.build/go-tui/api/scheme/schemetest -source ./scheme.go

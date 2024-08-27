@@ -35,7 +35,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/blue/retry"
 	schemeapi "unstable.build/go-tui/api/scheme"
-	schemetest "unstable.build/go-tui/api/scheme/test"
+	"unstable.build/go-tui/api/scheme/schemetest"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	workspaceapitest "unstable.build/go-tui/api/workspace/workspacetest"
 	"unstable.build/go-tui/workspace"

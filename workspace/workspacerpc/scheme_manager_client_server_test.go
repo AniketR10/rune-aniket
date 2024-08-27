@@ -37,7 +37,7 @@ import (
 	"google.golang.org/grpc"
 	"unstable.build/go-tui/api/config"
 	schemeapi "unstable.build/go-tui/api/scheme"
-	schemetest "unstable.build/go-tui/api/scheme/test"
+	"unstable.build/go-tui/api/scheme/schemetest"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/workspace"
