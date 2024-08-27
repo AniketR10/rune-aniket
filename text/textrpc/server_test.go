@@ -40,7 +40,7 @@ import (
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/rpc"
-	prototest "unstable.build/go-tui/rpc/test"
+	"unstable.build/go-tui/rpc/rpctest"
 	"unstable.build/go-tui/term"
 	termpb "unstable.build/go-tui/term/rpc"
 	"unstable.build/go-tui/text"
@@ -155,7 +155,7 @@ func TestServerRegister(t *testing.T) {
 		broker, mock, s := newTestServer(t, ctrl)
 
 		channelID := "1234"
-		conn := prototest.ExpectBrokerDialChannel(t, ctrl, broker, channelID)
+		conn := rpctest.ExpectBrokerDialChannel(t, ctrl, broker, channelID)
 
 		expectedMan := textapi.CommandManual{
 			Name:     "bla",
@@ -203,7 +203,7 @@ func TestServerRegister(t *testing.T) {
 		broker, mock, s := newTestServer(t, ctrl)
 
 		channelID := "1234"
-		conn := prototest.ExpectBrokerDialChannel(t, ctrl, broker, channelID)
+		conn := rpctest.ExpectBrokerDialChannel(t, ctrl, broker, channelID)
 
 		var wg sync.WaitGroup
 		mock.EXPECT().SubscribeCommand(gomock.Any(), gomock.Any()).

@@ -41,7 +41,7 @@ import (
 	"unstable.build/go-tui/browser/browsertest"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/rpc"
-	prototest "unstable.build/go-tui/rpc/test"
+	"unstable.build/go-tui/rpc/rpctest"
 	"unstable.build/go-tui/text/textrpc"
 )
 
@@ -70,8 +70,8 @@ func expectSubscribe(
 	t *testing.T, ctrl *gomock.Controller,
 	broker *rpc.MockMuxBroker, cmd string, token string,
 ) *rpc.MockMuxConn {
-	conn := prototest.ExpectBrokerDial(t, ctrl, broker, token)
-	prototest.ExpectBrokerNewChannel(t, "1234", broker)
+	conn := rpctest.ExpectBrokerDial(t, ctrl, broker, token)
+	rpctest.ExpectBrokerNewChannel(t, "1234", broker)
 	cmdRpc := textrpc.CommandManual{Name: cmd}
 	expected := textrpc.RegisterCommandRequest{ChannelId: "1234", Command: &cmdRpc}
 
