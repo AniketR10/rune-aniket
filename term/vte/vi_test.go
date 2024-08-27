@@ -39,7 +39,7 @@ import (
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/term/vte/screen"
-	vtetest "unstable.build/go-tui/term/vte/test"
+	"unstable.build/go-tui/term/vte/vtetest"
 	"unstable.build/go-tui/text"
 )
 

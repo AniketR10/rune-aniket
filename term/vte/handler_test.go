@@ -35,7 +35,7 @@ import (
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/term"
-	vtetest "unstable.build/go-tui/term/vte/test"
+	"unstable.build/go-tui/term/vte/vtetest"
 	"unstable.build/go-tui/workspace"
 )
 
