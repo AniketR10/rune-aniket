@@ -86,6 +86,12 @@ func (r *shaderRunner) HandleCommand(ctx context.Context, cmd textapi.Command) (
 		s = shader.Bomb(shader.DefaultBombParams())
 	case "fade":
 		s = shader.Fade()
+	case "flames":
+		s = glslshader.Flames(glslshader.DefaultFlamesParams(), float64(fps))
+	case "flamesA":
+		s = glslshader.Flames(glslshader.FlamesPresetAShape(), float64(fps))
+	case "flamesV":
+		s = glslshader.Flames(glslshader.FlamesPresetVShape(), float64(fps))
 	case "inferno":
 		s = glslshader.Inferno(glslshader.DefaultInfernoParams(), float64(fps))
 	case "noise":
@@ -111,6 +117,9 @@ func (r *shaderRunner) Complete(ctx context.Context, name string, args []string)
 			"blaze",
 			"bomb",
 			"fade",
+			"flames",
+			"flamesA",
+			"flamesV",
 			"inferno",
 			"noise",
 			"nop",
