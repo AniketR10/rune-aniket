@@ -56,7 +56,7 @@ import (
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/workspace"
 	"unstable.build/go-tui/workspace/workspacerpc"
-	"unstable.build/go-tui/workspace/ssh"
+	"unstable.build/go-tui/workspace/workspacessh"
 )
 
 const (
@@ -199,7 +199,7 @@ func startWorkspaceServer() int {
 	//nolint:errcheck
 	defer server.Stop()
 
-	err = ssh.StartSchemeServer(log.StandardLogger(), server, grpcServer)
+	err = workspacessh.StartSchemeServer(log.StandardLogger(), server, grpcServer)
 	if err != nil {
 		log.Error(err)
 		return 4

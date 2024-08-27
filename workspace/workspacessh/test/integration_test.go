@@ -38,8 +38,8 @@ import (
 	schemeapi "unstable.build/go-tui/api/scheme"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/workspace"
-	"unstable.build/go-tui/workspace/ssh"
 	"unstable.build/go-tui/workspace/walkdir"
+	"unstable.build/go-tui/workspace/workspacessh"
 	"unstable.build/go-tui/workspace/workspacetest"
 )
 
@@ -167,11 +167,11 @@ func newSchemeIntegration(
 	ctx := workspace.ContextWithLocker(context.Background(), &mu)
 	mu.Lock()
 
-	s, err := ssh.New(ctx, cfg, workspaceURI)
+	s, err := workspacessh.New(ctx, cfg, workspaceURI)
 	require.NoError(t, err)
 
 	t.Cleanup(func() {
-		s, err := ssh.New(ctx, cfg, workspaceURI)
+		s, err := workspacessh.New(ctx, cfg, workspaceURI)
 		require.NoError(t, err)
 		it, err := walkdir.ListFiles(context.Background(), s, "/tmp")
 		require.NoError(t, err)

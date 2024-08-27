@@ -43,7 +43,7 @@ import (
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/workspace"
-	"unstable.build/go-tui/workspace/ssh"
+	"unstable.build/go-tui/workspace/workspacessh"
 )
 
 // IDE encapsulates the ability to run an IDE within a TUI session.
@@ -147,7 +147,7 @@ func (i *IDE) init(
 
 	// register default schemes
 	workspaceManager := workspace.NewManager(i.ideConfig.workspace())
-	err := workspaceManager.RegisterScheme(ssh.Scheme, ssh.New)
+	err := workspaceManager.RegisterScheme(workspacessh.Scheme, workspacessh.New)
 	if err != nil {
 		return fmt.Errorf("register ssh scheme: %w", err)
 	}
