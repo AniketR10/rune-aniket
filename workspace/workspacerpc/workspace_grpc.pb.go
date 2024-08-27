@@ -2,9 +2,9 @@
 // versions:
 // - protoc-gen-go-grpc v1.2.0
 // - protoc             v5.27.1
-// source: rpc/workspace.proto
+// source: workspacerpc/workspace.proto
 
-package rpc
+package workspacerpc
 
 import (
 	context "context"
@@ -137,7 +137,7 @@ var Terminal_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "rpc/workspace.proto",
+	Metadata: "workspacerpc/workspace.proto",
 }
 
 // SchemeClient is the client API for Scheme service.
@@ -439,7 +439,7 @@ var Scheme_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "rpc/workspace.proto",
+	Metadata: "workspacerpc/workspace.proto",
 }
 
 // ExecutorClient is the client API for Executor service.
@@ -594,7 +594,7 @@ var Executor_ServiceDesc = grpc.ServiceDesc{
 			ClientStreams: true,
 		},
 	},
-	Metadata: "rpc/workspace.proto",
+	Metadata: "workspacerpc/workspace.proto",
 }
 
 // FilesClient is the client API for Files service.
@@ -896,7 +896,7 @@ var Files_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "rpc/workspace.proto",
+	Metadata: "workspacerpc/workspace.proto",
 }
 
 // ProxySchemeClient is the client API for ProxyScheme service.
@@ -982,7 +982,7 @@ var ProxyScheme_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "rpc/workspace.proto",
+	Metadata: "workspacerpc/workspace.proto",
 }
 
 // ManagerClient is the client API for Manager service.
@@ -1068,5 +1068,5 @@ var Manager_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "rpc/workspace.proto",
+	Metadata: "workspacerpc/workspace.proto",
 }

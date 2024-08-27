@@ -21,7 +21,7 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package rpc
+package workspacerpc
 
 import (
 	"context"
@@ -405,7 +405,7 @@ func TestSchemeIntegration(t *testing.T) {
 	})
 
 	workspacetest.TestWorkspaceSchemeExecutor(t, func(t *testing.T) schemeapi.Scheme {
-		dir, err := os.MkdirTemp("", "workspacepb_suite")
+		dir, err := os.MkdirTemp("", "workspacerpc_suite")
 		require.NoError(t, err)
 
 		workspaceURI, err := workspaceapi.ParseURI("file://" + dir)

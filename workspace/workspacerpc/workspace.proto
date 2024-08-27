@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-option go_package = "unstable.build/go-tui/workspace/rpc";
+option go_package = "unstable.build/go-tui/workspace/workspacerpc";
 
 package workspace;
 

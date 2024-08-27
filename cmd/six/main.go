@@ -55,7 +55,7 @@ import (
 	"unstable.build/go-tui/ide"
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/workspace"
-	workspacepb "unstable.build/go-tui/workspace/rpc"
+	"unstable.build/go-tui/workspace/workspacerpc"
 	"unstable.build/go-tui/workspace/ssh"
 )
 
@@ -195,7 +195,7 @@ func startWorkspaceServer() int {
 	}
 	defer scheme.Close()
 
-	server := workspacepb.NewServer(scheme, new(sync.Mutex))
+	server := workspacerpc.NewServer(scheme, new(sync.Mutex))
 	//nolint:errcheck
 	defer server.Stop()
 

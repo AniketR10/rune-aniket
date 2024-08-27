@@ -30,7 +30,7 @@ import (
 	schemeapi "unstable.build/go-tui/api/scheme"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/rpc"
-	workspacepb "unstable.build/go-tui/workspace/rpc"
+	"unstable.build/go-tui/workspace/workspacerpc"
 )
 
 func dialSchemeManager(ctx context.Context, grant extension.Grant, broker rpc.MuxBroker) (
@@ -41,7 +41,7 @@ func dialSchemeManager(ctx context.Context, grant extension.Grant, broker rpc.Mu
 	if err != nil {
 		return nil, err
 	}
-	c := workspacepb.NewSchemeManager(grant.Context, broker, conn)
+	c := workspacerpc.NewSchemeManager(grant.Context, broker, conn)
 	return c, nil
 }
 

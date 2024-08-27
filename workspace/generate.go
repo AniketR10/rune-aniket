@@ -23,5 +23,5 @@
 
 package workspace
 
-//go:generate protoc rpc/workspace.proto --go_out=./ --go-grpc_out=./ --go_opt=Mrpc/workspace.proto=unstable.build/go-tui/workspace/rpc
+//go:generate protoc workspacerpc/workspace.proto --go_out=./ --go-grpc_out=./ --go_opt=Mworkspacerpc/workspace.proto=unstable.build/go-tui/workspace/workspacerpc
 //go:generate mockgen -destination=./workspacetest/workspace_gomock.go -package workspacetest -self_package unstable.build/go-tui/workspace/workspacetest -source ./workspace.go

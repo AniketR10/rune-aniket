@@ -42,7 +42,7 @@ import (
 	"unstable.build/go-tui/api/config"
 	schemeapi "unstable.build/go-tui/api/scheme"
 	workspaceapi "unstable.build/go-tui/api/workspace"
-	workspacepb "unstable.build/go-tui/workspace/rpc"
+	"unstable.build/go-tui/workspace/workspacerpc"
 )
 
 const (
@@ -329,7 +329,7 @@ func (s *scheme) connectScheme(
 		}
 	}()
 
-	return workspacepb.NewClient(conn), nil
+	return workspacerpc.NewClient(conn), nil
 }
 
 func (s *scheme) setPipes(

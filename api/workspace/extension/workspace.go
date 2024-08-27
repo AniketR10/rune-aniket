@@ -30,18 +30,18 @@ import (
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/rpc"
-	workspacepb "unstable.build/go-tui/workspace/rpc"
+	"unstable.build/go-tui/workspace/workspacerpc"
 )
 
 func dial(ctx context.Context, grant extension.Grant, broker rpc.MuxBroker) (
-	*workspacepb.Client, error,
+	*workspacerpc.Client, error,
 ) {
 	conn, err := broker.DialChannel(ctx, grant.Token,
 		os.Args[0], "workspace", string(grant.Permission))
 	if err != nil {
 		return nil, err
 	}
-	c := workspacepb.NewClient(conn)
+	c := workspacerpc.NewClient(conn)
 	return c, nil
 }
 

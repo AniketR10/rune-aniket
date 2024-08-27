@@ -33,7 +33,7 @@ import (
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/workspace"
-	workspacepb "unstable.build/go-tui/workspace/rpc"
+	"unstable.build/go-tui/workspace/workspacerpc"
 )
 
 type workspaceResourceServer struct {
@@ -59,20 +59,20 @@ func (s *workspaceResourceServer) Register(
 		Workspace: s.b,
 	}
 	w.ctx, w.cancelCtx = context.WithCancel(context.Background())
-	server := workspacepb.NewServer(w, lock)
+	server := workspacerpc.NewServer(w, lock)
 	switch s.p {
 	case PermissionFileSystem:
-		if !rpc.IsRegistered(registrar, workspacepb.Files_ServiceDesc) {
-			workspacepb.RegisterFilesServer(registrar, server)
+		if !rpc.IsRegistered(registrar, workspacerpc.Files_ServiceDesc) {
+			workspacerpc.RegisterFilesServer(registrar, server)
 		}
-		workspacepb.RegisterSchemeServer(registrar, server)
+		workspacerpc.RegisterSchemeServer(registrar, server)
 	case PermissionTerminal:
-		if !rpc.IsRegistered(registrar, workspacepb.Files_ServiceDesc) {
-			workspacepb.RegisterFilesServer(registrar, server)
+		if !rpc.IsRegistered(registrar, workspacerpc.Files_ServiceDesc) {
+			workspacerpc.RegisterFilesServer(registrar, server)
 		}
-		workspacepb.RegisterTerminalServer(registrar, server)
+		workspacerpc.RegisterTerminalServer(registrar, server)
 	case PermissionExecute:
-		workspacepb.RegisterExecutorServer(registrar, server)
+		workspacerpc.RegisterExecutorServer(registrar, server)
 	}
 	w.server = server
 	return w, nil
@@ -95,7 +95,7 @@ type trackingWorkspace struct {
 	workspace.Workspace
 	ctx       context.Context
 	cancelCtx func()
-	server    *workspacepb.Server
+	server    *workspacerpc.Server
 }
 
 func (w *trackingWorkspace) Command(ctx context.Context, cmd workspaceapi.Cmd) (

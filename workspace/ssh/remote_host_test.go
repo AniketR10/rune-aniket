@@ -40,7 +40,7 @@ import (
 	"unstable.build/go-tui/api/config"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/workspace"
-	workspacepb "unstable.build/go-tui/workspace/rpc"
+	"unstable.build/go-tui/workspace/workspacerpc"
 )
 
 var logger = log.New()
@@ -108,8 +108,8 @@ func TestReaderWriterListener(t *testing.T) {
 		scheme, err := workspace.NewMemoryScheme(context.Background(), config.NopConfig(), uri)
 		require.NoError(t, err)
 
-		server := workspacepb.NewServer(scheme, new(sync.Mutex))
-		workspacepb.RegisterSchemeServer(grpcServer, server)
+		server := workspacerpc.NewServer(scheme, new(sync.Mutex))
+		workspacerpc.RegisterSchemeServer(grpcServer, server)
 		go func() {
 			inWrite.Close()
 		}()

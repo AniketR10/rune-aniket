@@ -29,7 +29,7 @@ import (
 
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/workspace"
-	workspacepb "unstable.build/go-tui/workspace/rpc"
+	"unstable.build/go-tui/workspace/workspacerpc"
 )
 
 type schemeManagerResourceServer struct {
@@ -46,8 +46,8 @@ func (s *schemeManagerResourceServer) Register(
 	extensionID string, grantor Grantor, registrar rpc.ServiceRegistrar,
 	broker rpc.MuxBroker, lock sync.Locker,
 ) (io.Closer, error) {
-	server := workspacepb.NewSchemeManagerServer(broker, s.b, lock)
-	workspacepb.RegisterManagerServer(registrar, server)
+	server := workspacerpc.NewSchemeManagerServer(broker, s.b, lock)
+	workspacerpc.RegisterManagerServer(registrar, server)
 	return server, nil
 }
 

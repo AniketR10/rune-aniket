@@ -21,7 +21,7 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package rpc
+package workspacerpc
 
 import (
 	"context"
@@ -481,7 +481,7 @@ func (s *Server) log(
 	level log.Level, msg string, args ...interface{},
 ) {
 	log.
-		WithField(logging.KeyClass, "workspacepb.Server").
+		WithField(logging.KeyClass, "workspacerpc.Server").
 		Logf(level, msg, args...)
 }
 

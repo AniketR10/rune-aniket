@@ -31,13 +31,13 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
-	workspacepb "unstable.build/go-tui/workspace/rpc"
+	"unstable.build/go-tui/workspace/workspacerpc"
 )
 
-// StartSchemeServer installs server to handle incoming workspacepb requests
+// StartSchemeServer installs server to handle incoming workspacerpc requests
 // over the calling process' os.Stdin and sends responses over os.Stdout.
 func StartSchemeServer(
-	logger *log.Logger, server *workspacepb.Server,
+	logger *log.Logger, server *workspacerpc.Server,
 	grpcServer *grpc.Server,
 ) error {
 	lis := newStdioListener(
@@ -47,10 +47,10 @@ func StartSchemeServer(
 			logger.Debugf("connection closed unexpectedly")
 			go grpcServer.Stop()
 		})
-	workspacepb.RegisterSchemeServer(grpcServer, server)
-	workspacepb.RegisterFilesServer(grpcServer, server)
-	workspacepb.RegisterExecutorServer(grpcServer, server)
-	workspacepb.RegisterTerminalServer(grpcServer, server)
+	workspacerpc.RegisterSchemeServer(grpcServer, server)
+	workspacerpc.RegisterFilesServer(grpcServer, server)
+	workspacerpc.RegisterExecutorServer(grpcServer, server)
+	workspacerpc.RegisterTerminalServer(grpcServer, server)
 	if err := grpcServer.Serve(lis); err != nil {
 		return fmt.Errorf("Server: %s", err)
 	}
