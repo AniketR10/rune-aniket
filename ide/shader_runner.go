@@ -84,6 +84,8 @@ func (r *shaderRunner) HandleCommand(ctx context.Context, cmd textapi.Command) (
 		s = glslshader.Blaze(glslshader.DefaultBlazeParams(), float64(fps))
 	case "bomb":
 		s = shader.Bomb(shader.DefaultBombParams())
+	case "embers":
+		s = glslshader.Embers(glslshader.DefaultEmbersParams(), float64(fps))
 	case "fade":
 		s = shader.Fade()
 	case "flames":
@@ -116,6 +118,7 @@ func (r *shaderRunner) Complete(ctx context.Context, name string, args []string)
 		return iterator.FromSlice([]string{
 			"blaze",
 			"bomb",
+			"embers",
 			"fade",
 			"flames",
 			"flamesA",
