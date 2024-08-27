@@ -28,7 +28,7 @@ import (
 	"sync"
 
 	"unstable.build/go-tui/api/config"
-	configpb "unstable.build/go-tui/api/config/rpc"
+	"unstable.build/go-tui/api/config/configrpc"
 	"unstable.build/go-tui/rpc"
 )
 
@@ -46,8 +46,8 @@ func (s *configResourceServer) Register(
 	extensionID string, grantor Grantor, registrar rpc.ServiceRegistrar,
 	broker rpc.MuxBroker, lock sync.Locker,
 ) (io.Closer, error) {
-	server := configpb.NewServer(s.cfg, lock)
-	configpb.RegisterConfigServer(registrar, server)
+	server := configrpc.NewServer(s.cfg, lock)
+	configrpc.RegisterConfigServer(registrar, server)
 	return nopCloser{}, nil
 }
 

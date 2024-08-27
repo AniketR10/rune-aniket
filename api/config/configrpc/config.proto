@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-option go_package = "unstable.build/go-tui/api/config/rpc";
+option go_package = "unstable.build/go-tui/api/config/configrpc";
 
 package config;
 

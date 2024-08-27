@@ -65,7 +65,7 @@ generate:
 	@ mv workspace/unstable.build/go-tui/workspace/workspacerpc/* workspace/workspacerpc
 	@ mv term/unstable.build/go-tui/term/termrpc/* term/termrpc
 	@ mv handler/unstable.build/go-tui/handler/handlerrpc/* handler/handlerrpc
-	@ mv api/config/unstable.build/go-tui/api/config/rpc/* api/config/rpc
+	@ mv api/config/unstable.build/go-tui/api/config/configrpc/* api/config/configrpc
 	@ rm -rf **/unstable.build **/github.com
 
 license:

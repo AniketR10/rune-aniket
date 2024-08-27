@@ -23,4 +23,4 @@
 
 package config
 
-//go:generate protoc rpc/config.proto -I=. -I=../ --go_out=./ --go-grpc_out=./ --go_opt=Mrpc/config.proto=unstable.build/go-tui/api/config/rpc
+//go:generate protoc configrpc/config.proto -I=. -I=../ --go_out=./ --go-grpc_out=./ --go_opt=Mconfigrpc/config.proto=unstable.build/go-tui/api/config/configrpc

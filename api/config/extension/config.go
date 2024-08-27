@@ -28,7 +28,7 @@ import (
 	"os"
 
 	"unstable.build/go-tui/api/config"
-	configpb "unstable.build/go-tui/api/config/rpc"
+	"unstable.build/go-tui/api/config/configrpc"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/rpc"
 )
@@ -41,7 +41,7 @@ func dialConfig(ctx context.Context, grant extension.Grant, broker rpc.MuxBroker
 	if err != nil {
 		return nil, err
 	}
-	c, err := configpb.FetchConfig(conn)
+	c, err := configrpc.FetchConfig(conn)
 	if err != nil {
 		return nil, err
 	}
