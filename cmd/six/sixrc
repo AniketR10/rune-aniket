@@ -420,6 +420,7 @@ command:
     # aliases can be used to disambiguate commands from others,
     # creating shortcuts.
     ref: lspReferences
+    e: edit
     issues: addWorkspace bluectl+issues:///
     config: edit ~/.sixrc
     # You can also add combinations of commands to be run
