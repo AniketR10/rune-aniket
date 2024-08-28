@@ -8,14 +8,14 @@ import (
 	"unstable.build/go-tui/term"
 )
 
-type macroKey struct {
+type echoKey struct {
 	term.KeyComb
 	instructWait bool
 }
 
-// parseMacroKeys recursively parses key combinations combined with instructions,
+// parseEchoKeys recursively parses key combinations combined with instructions,
 // encoded between {} characters.
-func parseMacroKeys(sequence string) (ret []macroKey, err error) {
+func parseEchoKeys(sequence string) (ret []echoKey, err error) {
 	idxOpen := strings.IndexRune(sequence, '{')
 	if idxOpen < 0 {
 		idxOpen = len(sequence)
@@ -25,7 +25,7 @@ func parseMacroKeys(sequence string) (ret []macroKey, err error) {
 	var keys []term.KeyComb
 	keys, err = term.ParseKeys(sequence[0:idxOpen])
 	for _, key := range keys {
-		ret = append(ret, macroKey{KeyComb: key})
+		ret = append(ret, echoKey{KeyComb: key})
 	}
 	if err != nil {
 		ret = nil
@@ -46,7 +46,7 @@ func parseMacroKeys(sequence string) (ret []macroKey, err error) {
 	instruction := remainder[0 : idxClose+1]
 	switch instruction {
 	case "{wait}":
-		ret = append(ret, macroKey{instructWait: true})
+		ret = append(ret, echoKey{instructWait: true})
 	default:
 		err = fmt.Errorf("invalid instruction: %s", instruction)
 	}
@@ -55,8 +55,8 @@ func parseMacroKeys(sequence string) (ret []macroKey, err error) {
 		return
 	}
 
-	var recKeys []macroKey
-	recKeys, err = parseMacroKeys(remainder[idxClose+1:])
+	var recKeys []echoKey
+	recKeys, err = parseEchoKeys(remainder[idxClose+1:])
 	if err != nil {
 		ret = nil
 		return

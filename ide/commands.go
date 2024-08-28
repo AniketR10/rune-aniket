@@ -53,18 +53,21 @@ var (
 			},
 			handler: (*ex).renameTab,
 		},
-		"macro": {
+		"echo": {
 			man: textapi.CommandManual{
 				Summary: "Replay the given sequence of keys back into the event loop " +
 					"as if the user had dispatched them. This allows for building macros that " +
 					"perform tasks that couldn't be accomplished with " +
-					"combinations of commands alone. For instance `macro :edit` opens " +
-					"the command prompt with a prepopulated command. The syntax of " +
+					"combinations of commands alone. For instance `echo :edit` opens " +
+					"the command prompt with a pre-populated command. The syntax of " +
 					"non-character keys is the same used in the `key_bindings` section " +
-					"of the config.",
+					"of the config. There's a special {wait} instruction that can be " +
+					"interleaved to deterministically wait for the command prompt " +
+					"auto-completer to finish populating the search list before " +
+					"processing the next key.",
 				Synopsis: "sequence",
 			},
-			handler: (*ex).macro,
+			handler: (*ex).echo,
 		},
 		"previousTab": {
 			man: textapi.CommandManual{

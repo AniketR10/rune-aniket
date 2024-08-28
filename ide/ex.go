@@ -952,12 +952,12 @@ func (e *ex) newWindow(args ...string) error {
 	return nil
 }
 
-func (e *ex) macro(args ...string) error {
+func (e *ex) echo(args ...string) error {
 	sequence := strings.Join(args, " ")
 	if sequence == "" {
 		return errors.New("expected one argument with the sequence of keys")
 	}
-	keys, err := parseMacroKeys(sequence)
+	keys, err := parseEchoKeys(sequence)
 	if err != nil {
 		return fmt.Errorf("invalid syntax: %v", err)
 	}

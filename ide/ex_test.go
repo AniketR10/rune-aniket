@@ -208,7 +208,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 │                  │
 │                  │
 └──────────────────┘`},
-		{":e cabin.go>",
+		{":edit cabin.go>",
 			`┌──────────────────┐
 │cabin.go          │
 ├──────────────────┤
@@ -230,7 +230,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
 └──────────────────┘`},
-		{":e /tmp/other.go>",
+		{":edit /tmp/other.go>",
 			`┌──────────────────┐
 │cabin.go  other.go│
 ├──────────────────┤
@@ -318,7 +318,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 │EEEEEEEEEEEEEEEEEE│
 │EEEEEEEEEEEEEEEEEE│
 └──────────────────┘`},
-		{":e other.go>1111",
+		{":edit other.go>1111",
 			`┌──────────────────┐
 │cabin.go  other.go│
 ├──────────────────┤
@@ -429,7 +429,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 │HHHHHHHHHHHHHHHHHH│
 │HHHHHHHHHHHHHHHHHH│
 └──────────────────┘`},
-		{":closeAllT>:e other.go>bcde####",
+		{":closeAllT>:edit other.go>bcde####",
 			`┌──────────────────┐
 │other.go          │
 ├──────────────────┤
@@ -578,7 +578,7 @@ IIII`},
 
 	// test case for issue #27
 	cases = []handlertest.SequenceTestCase{
-		{":e ait^^^aix^^^^ airsoft.map>",
+		{":edit ait^^^aix^^^^ airsoft.map>",
 			`┌──────────────────────────────────┌─────────────┐
 │other.go  bugz  airsoft.map       │ not a file  │
 ├──────────────────────────────────└─────────────┘
@@ -794,7 +794,7 @@ eeeeeeeeeeeeeeeee
 eeeeeeeeeeeeeeeee   
 eeeeeeeeeeeeeeeee   
 eeeeeeeeeeeeeeee▐   `},
-		{":e eeeeeeeeeeeeeeeeeeeeeeeee",
+		{":edit eeeeeeeeeeeeeeeeeeeeeeeee",
 			`                    
                     
                     
@@ -1184,7 +1184,7 @@ func TestNewWindow(t *testing.T) {
 
 func TestCommandHistory(t *testing.T) {
 	cases := []handlertest.SequenceTestCase{
-		{":e hello.go>:e wi.go>1234",
+		{":edit hello.go>:edit wi.go>1234",
 			`┌──────────────────┐
 │hello.go  wi.go   │
 ├──────────────────┤
@@ -1640,7 +1640,7 @@ reloadFile!
 
 func TestRenameTab(t *testing.T) {
 	cases := []handlertest.SequenceTestCase{
-		{":e hello.go>:renameTab 8berSucks>",
+		{":edit hello.go>:renameTab 8berSucks>",
 			`┌──────────────────┐
 │8berSucks         │
 ├──────────────────┤
@@ -1665,7 +1665,7 @@ func TestRenameTab(t *testing.T) {
 func TestEventNone(t *testing.T) {
 	t.Run("delegates to underlying handler", func(t *testing.T) {
 		cases := []handlertest.SequenceTestCase{
-			{"🎉e hello.go>",
+			{"🎉edit hello.go>",
 				`┌──────────────────┐
 │hello.go          │
 ├──────────────────┤
@@ -1879,7 +1879,7 @@ func TestTerminalOnFocus(t *testing.T) {
 
 func TestSwitchToTab(t *testing.T) {
 	cases := []handlertest.SequenceTestCase{
-		{":e hello.go>B:e world.go>",
+		{":edit hello.go>B:edit world.go>",
 			`┌────────────────────────────┐
 │hello.go  world.go          │
 ├────────────────────────────┤
@@ -1971,9 +1971,9 @@ func TestSwitchToTab(t *testing.T) {
 	handlertest.TestHandlerSequence(t, b, 30, 15, cases)
 }
 
-func TestMacro(t *testing.T) {
+func TestEcho(t *testing.T) {
 	cases := []handlertest.SequenceTestCase{
-		{`:e hello.go>:macro 01234>`,
+		{`:edit hello.go>:echo 01234>`,
 			`┌────────────────────────────┐
 │hello.go                    │
 ├────────────────────────────┤
@@ -2028,7 +2028,7 @@ func testCopyToClipboard(
 	t *testing.T, clip clipboard.Register, constructor browserConstructor,
 ) {
 	cases := []handlertest.SequenceTestCase{
-		{":e hello.go>",
+		{":edit hello.go>",
 			`┌────────────────────────────┐
 │hello.go                    │
 ├────────────────────────────┤
