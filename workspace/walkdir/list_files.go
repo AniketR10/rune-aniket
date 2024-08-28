@@ -27,7 +27,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -37,14 +36,6 @@ import (
 	"github.com/unstablebuild/blue/iterator"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 )
-
-var defaultWorkers int
-
-func init() {
-	maxProcs := runtime.GOMAXPROCS(0)
-	numCPU := runtime.NumCPU()
-	defaultWorkers = int(math.Min(float64(maxProcs), float64(numCPU))) * 8
-}
 
 // Reader abstracts the ability to read directory contents.
 type Reader interface {
@@ -114,6 +105,8 @@ func ListFiles(
 
 	return iterator, nil
 }
+
+var defaultWorkers = runtime.NumCPU() * 8
 
 func traverseDirWorker(
 	ctx context.Context, w Reader, wg *sync.WaitGroup,

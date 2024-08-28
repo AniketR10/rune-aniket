@@ -29,7 +29,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -45,16 +44,10 @@ import (
 )
 
 var (
-	defaultWorkers     int
+	defaultWorkers     = runtime.NumCPU()
 	errUnknownLanguage = errors.New("unknown language")
 	errInvalidQuery    = errors.New("invalid query for language")
 )
-
-func init() {
-	maxProcs := runtime.GOMAXPROCS(0)
-	numCPU := runtime.NumCPU()
-	defaultWorkers = int(math.Min(float64(maxProcs), float64(numCPU)))
-}
 
 func readSymbols(
 	ctx context.Context, w walkdir.Reader,
