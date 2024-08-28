@@ -323,6 +323,7 @@ func (i *IDE) Close() error {
 func (i *IDE) initRunning() {
 	atomic.StoreInt32(&i.running, 1)
 	if i.options.shader != nil {
-		i.root.runShader(i.options.shader, defaultShaderFPS, i.options.shaderDuration)
+		i.root.runShader(i.options.shader,
+			i.options.shaderFPS, i.options.shaderDuration)
 	}
 }
