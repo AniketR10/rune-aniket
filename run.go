@@ -86,7 +86,7 @@ var interruptPending atomic.Bool
 func PublishEvent(ev term.Event) bool {
 	// only conflate interrupts that have no payload
 	if ev.Type == term.EventInterrupt && ev.Raw == nil &&
-		!interruptPending.CompareAndSwap(false, true) {
+		ev.UserFunc == nil && !interruptPending.CompareAndSwap(false, true) {
 		return true
 	}
 	return term.PublishEvent(ev)
