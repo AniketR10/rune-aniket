@@ -431,6 +431,12 @@ command:
       - splitWindowTerminal
       - focusPrevWindow
       - searchFile
+    # macro is a powerful command that allows you to programmatically inject
+    # keyboard input to the event loop. For example, the following alias
+    # utilizes the power of macro to run the last macro again.
+    # The {wait} instruction can be used to wait for the command prompt
+    # search list completion to finish.
+    macroRunLast: macro :macro<space>{wait}<tab><enter>
   # Configure bindings from key combinations to commands.
   key_bindings:
     <c-w>: closeTab

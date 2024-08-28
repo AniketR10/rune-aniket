@@ -957,12 +957,21 @@ func (e *ex) macro(args ...string) error {
 	if sequence == "" {
 		return errors.New("expected one argument with the sequence of keys")
 	}
-	keys, err := term.ParseKeys(sequence)
+	keys, err := parseMacroKeys(sequence)
 	if err != nil {
 		return fmt.Errorf("invalid syntax: %v", err)
 	}
 	ok := true
 	for _, keyComb := range keys {
+		if keyComb.instructWait {
+			ok = ok && e.publishEvent(term.Event{
+				Type: term.EventInterrupt,
+				UserFunc: func() {
+					e.Wait()
+				},
+			})
+			continue
+		}
 		ok = ok && e.publishEvent(term.Event{
 			Type: term.EventKey,
 			Ch:   keyComb.Ch,
