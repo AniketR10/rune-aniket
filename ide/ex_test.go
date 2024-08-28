@@ -1241,6 +1241,17 @@ func TestCommandAliases(t *testing.T) {
 │AAAAAAAAAAAAAAAAAA│
 │AAAAAAAAAAAAAAAAAA│
 └──────────────────┘`},
+		{":e x.go>",
+			`┌──────────────────┐
+│..  wi.go  x.go   │
+├──────────────────┤
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+└──────────────────┘`},
 	}
 
 	opts := []text.Option{
@@ -1248,6 +1259,7 @@ func TestCommandAliases(t *testing.T) {
 		text.WithCommandKey(testCommandKey),
 		text.WithCommandAliases(map[string][]string{
 			"todo": {"edit hello.go", "edit wi.go"},
+			"e":    {"edit"},
 			"bp":   {"nextTab"},
 		}),
 	}

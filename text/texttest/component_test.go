@@ -983,7 +983,7 @@ func TestDispatchCommand(t *testing.T) {
 			text.FuncCommandHandler(func(ctx context.Context, cmd textapi.Command) error {
 				newWindowCalled = true
 				assert.Equal(t, cmd.Name, "newWindow")
-				assert.Equal(t, cmd.Args, []string{})
+				assert.Equal(t, cmd.Args, []string{"newArgs"})
 				return nil
 			}, nil))
 
@@ -991,7 +991,7 @@ func TestDispatchCommand(t *testing.T) {
 			text.FuncCommandHandler(func(ctx context.Context, cmd textapi.Command) error {
 				editCalled = true
 				assert.Equal(t, cmd.Name, "edit")
-				assert.Equal(t, cmd.Args, []string{"/tmp/todo.md"})
+				assert.Equal(t, cmd.Args, []string{"/tmp/todo.md", "newArgs"})
 				return nil
 			}, nil))
 
@@ -999,6 +999,7 @@ func TestDispatchCommand(t *testing.T) {
 			Resource: NewTestHandler(),
 			URI:      uri,
 			Name:     "workstation_layout",
+			Args:     []string{"newArgs"},
 			Window:   win,
 		}
 		ok, err := c.DispatchCommand(cmd)

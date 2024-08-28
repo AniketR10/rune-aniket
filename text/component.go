@@ -484,9 +484,15 @@ func (c *Component) DispatchCommand(cmd textapi.Command) (handled bool, err erro
 		c.log(log.DebugLevel, "Dispatching alias %s: %#v", cmd.Name, targets)
 		for _, target := range targets {
 			argv := strings.Split(target, " ")
-			cmd.Name = argv[0]
-			cmd.Args = argv[1:]
-			targetHandled, targetErr := c.DispatchCommand(cmd)
+			targetCmd := textapi.Command{
+				Name:     argv[0],
+				Args:     append(argv[1:], cmd.Args...),
+				URI:      cmd.URI,
+				Resource: cmd.Resource,
+				Window:   cmd.Window,
+				Cursor:   cmd.Cursor,
+			}
+			targetHandled, targetErr := c.DispatchCommand(targetCmd)
 			if targetErr != nil {
 				return targetHandled, fmt.Errorf("%s: %s", target, targetErr)
 			}
