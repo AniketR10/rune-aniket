@@ -46,11 +46,15 @@ func Inferno(params InfernoParams, fps float) shader.Shader {
 }
 
 type InfernoParams struct {
-	Speed vec2D
+	Speed       vec2D
+	SwapRedBlue bool
 }
 
 func DefaultInfernoParams() InfernoParams {
-	return InfernoParams{Speed: vec2(1.2, 0.1)}
+	return InfernoParams{
+		Speed:       vec2(1.2, 0.1),
+		SwapRedBlue: false,
+	}
 }
 
 type inferno struct {
@@ -85,6 +89,10 @@ func (s *inferno) runCell(
 	col := c.mult(vec3(cos(shift * fragCoord.y / iResolution.y)))
 	col = clamp3D(col, vec3(0.0), vec3(1.0))
 	col = col.multSc(255.0)
+
+	if s.SwapRedBlue {
+		col = vec3(col.z, col.y, col.x) // blue flames insteead of red
+	}
 
 	fg = inFg
 	bg = tcell.NewRGBColor(int32(col.x), int32(col.y), int32(col.z))

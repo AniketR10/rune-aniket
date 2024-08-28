@@ -55,11 +55,15 @@ func Blaze(params BlazeParams, fps float) shader.Shader {
 }
 
 type BlazeParams struct {
-	Speed vec2D
+	Speed       vec2D
+	SwapRedBlue bool
 }
 
 func DefaultBlazeParams() BlazeParams {
-	return BlazeParams{Speed: vec2(1.2, 0.1)}
+	return BlazeParams{
+		Speed:       vec2(1.2, 0.1),
+		SwapRedBlue: false,
+	}
 }
 
 type blaze struct {
@@ -123,6 +127,10 @@ func (s *blaze) runCell(
 	hsv.y = (2.2 - hsv.z*.9) * 1.20
 	color = s.hsv2rgb(hsv)
 	color = clamp3D(color, vec3(0.0), vec3(1.0))
+
+	if s.SwapRedBlue {
+		color = vec3(color.z, color.y, color.x) // blue flames insteead of red
+	}
 
 	color = color.multSc(255.0)
 

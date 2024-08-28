@@ -83,6 +83,10 @@ func (r *shaderRunner) HandleCommand(ctx context.Context, cmd textapi.Command) (
 	switch cmd.Args[0] {
 	case "blaze":
 		s = glslshader.Blaze(glslshader.DefaultBlazeParams(), float64(fps))
+	case "blazeBlue":
+		params := glslshader.DefaultBlazeParams()
+		params.SwapRedBlue = true
+		s = glslshader.Blaze(params, float64(fps))
 	case "bomb":
 		s = shader.Bomb(shader.DefaultBombParams())
 	case "embers":
@@ -103,6 +107,10 @@ func (r *shaderRunner) HandleCommand(ctx context.Context, cmd textapi.Command) (
 		s = glslshader.Flames(glslshader.FlamesPresetVShape(), float64(fps))
 	case "inferno":
 		s = glslshader.Inferno(glslshader.DefaultInfernoParams(), float64(fps))
+	case "infernoBlue":
+		params := glslshader.DefaultInfernoParams()
+		params.SwapRedBlue = true
+		s = glslshader.Inferno(params, float64(fps))
 	case "noise":
 		s = glslshader.Noise(glslshader.DefaultNoiseParams(), float64(fps))
 	case "nop":
@@ -126,6 +134,7 @@ func (r *shaderRunner) Complete(ctx context.Context, name string, args []string)
 	if len(args) <= 1 {
 		return iterator.FromSlice([]string{
 			"blaze",
+			"blazeBlue",
 			"bomb",
 			"embers",
 			"fade",
@@ -136,6 +145,7 @@ func (r *shaderRunner) Complete(ctx context.Context, name string, args []string)
 			"flamesA",
 			"flamesV",
 			"inferno",
+			"infernoBlue",
 			"noise",
 			"nop",
 			"risingChars",
