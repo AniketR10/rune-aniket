@@ -25,7 +25,6 @@ package gui
 
 import (
 	"context"
-	"sync"
 	"testing"
 
 	ebiten "github.com/hajimehoshi/ebiten/v2"
@@ -245,22 +244,16 @@ func TestUpdate(t *testing.T) {
 		require.NoError(t, gui.Update())
 		require.Equal(t, 1, called)
 
-		var wg sync.WaitGroup
-		wg.Add(1)
-
-		// simulate publish; UserFunc is processed asynchronously
-		go gui.consumeEvents()
-		gui.updateChan <- term.Event{
+		// simulate publish
+		gui.pendingEvents = append(gui.pendingEvents, term.Event{
 			Type: term.EventInterrupt,
 			UserFunc: func() {
-				defer wg.Done()
 				userFnCalled++
 			},
-		}
+		})
 
-		wg.Wait()
 		require.NoError(t, gui.Update())
-		require.Equal(t, 1, called)
+		require.Equal(t, 2, called)
 		assert.Equal(t, 1, userFnCalled)
 	})
 

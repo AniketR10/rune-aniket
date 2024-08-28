@@ -203,6 +203,9 @@ func (g *GUI) Update() error {
 				// and a regular iteration loop.
 				ctx = g.ctx
 			}
+			if ev.UserFunc != nil {
+				ev.UserFunc()
+			}
 			g.interruptPending.Store(false)
 			g.drawHandler(ctx)
 			needsDraw = false
@@ -405,15 +408,6 @@ func (g *GUI) consumeEvents() {
 		ev, ok := <-g.updateChan
 		if !ok {
 			return
-		}
-		// dispatch UserFunc outside of
-		// input processing to avoid input keys
-		// taking precedence over callbacks, thus
-		// yielding in a laggy experience for
-		// functionality that depends on UserFunc.
-		if ev.UserFunc != nil {
-			ev.UserFunc()
-			continue
 		}
 		if ev.Type == term.EventInterrupt && ev.Raw == nil &&
 			ev.UserFunc == nil && !g.interruptPending.CompareAndSwap(false, true) {
