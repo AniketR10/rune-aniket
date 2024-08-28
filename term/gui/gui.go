@@ -29,6 +29,7 @@ import (
 	"fmt"
 	"image"
 	"sync"
+	"sync/atomic"
 
 	ebiten "github.com/hajimehoshi/ebiten/v2"
 	log "github.com/sirupsen/logrus"
@@ -76,6 +77,7 @@ type GUI struct {
 	cursorAttributes  term.Attributes
 	defaultAttr       term.Attributes
 	renderer          *renderer
+	interruptPending  atomic.Bool
 
 	cursor struct {
 		pos   term.Coordinates
@@ -201,6 +203,7 @@ func (g *GUI) Update() error {
 				// and a regular iteration loop.
 				ctx = g.ctx
 			}
+			g.interruptPending.Store(false)
 			g.drawHandler(ctx)
 			needsDraw = false
 			continue
@@ -410,6 +413,10 @@ func (g *GUI) consumeEvents() {
 		// functionality that depends on UserFunc.
 		if ev.UserFunc != nil {
 			ev.UserFunc()
+			continue
+		}
+		if ev.Type == term.EventInterrupt && ev.Raw == nil &&
+			ev.UserFunc == nil && !g.interruptPending.CompareAndSwap(false, true) {
 			continue
 		}
 		g.mu.Lock()
