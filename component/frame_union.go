@@ -74,12 +74,6 @@ type FrameUnion struct {
 	FrameUnionCharSet
 }
 
-type frameVirtual struct {
-	size int
-	Virtual
-	frame bool
-}
-
 // NewFrameUnion allocates storage for a new FrameUnion and initializes it.
 func NewFrameUnion(main tui.Component) *FrameUnion {
 	ret := new(FrameUnion)
@@ -100,7 +94,7 @@ func (u *FrameUnion) UnionTop(top tui.Component, height int) {
 	u.UnionTopFrame(top, height, true)
 }
 
-// UnionTop stacks top on top of the main component, and if
+// UnionTopFrame stacks top on top of the main component, and if
 // u.Frame is set to true and the given frame argument too, it will
 // union the frames of the adjacent components with the configured
 // union charset. This method panics if top is nil.
@@ -122,7 +116,7 @@ func (u *FrameUnion) UnionBottom(bottom tui.Component, height int) {
 	u.UnionBottomFrame(bottom, height, true)
 }
 
-// UnionBottom stacks bottom under of the main component, and if
+// UnionBottomFrame stacks bottom under of the main component, and if
 // u.Frame is set to true and the given frame argument too, it will
 // union the frames of the adjacent components with the configured
 // union charset. This method panics if bottom is nil.
@@ -145,7 +139,7 @@ func (u *FrameUnion) UnionLeft(left tui.Component, width int) {
 	u.UnionLeftFrame(left, width, true)
 }
 
-// UnionLeft stacks left to the left of the main component, and if
+// UnionLeftFrame stacks left to the left of the main component, and if
 // u.Frame is set to true and the given frame argument too, it will
 // union the frames of the adjacent components with the configured
 // union charset. This method panics if left is nil.
@@ -167,7 +161,7 @@ func (u *FrameUnion) UnionRight(right tui.Component, width int) {
 	u.UnionRightFrame(right, width, true)
 }
 
-// UnionRight stacks right to the right of the main component, and if
+// UnionRightFrame stacks right to the right of the main component, and if
 // u.Frame is set to true and the given frame argument too, it will
 // union the frames of the adjacent components with the configured
 // union charset. This method panics if right is nil.
@@ -182,20 +176,6 @@ func (u *FrameUnion) UnionRightFrame(right tui.Component, width int, frame bool)
 	}}
 	u.right = append(head, u.right...)
 	u.Resize(u.width, u.height)
-}
-
-func (u *FrameUnion) componentAt(
-	components []*frameVirtual, pos term.Coordinates,
-) (Virtual, bool) {
-	for _, t := range components {
-		tpos := t.Position()
-		twidth := t.Width()
-		theight := t.Height()
-		if pos.X >= tpos.X && pos.Y >= tpos.Y && pos.X < tpos.X+twidth && pos.Y < tpos.Y+theight {
-			return t.Virtual, true
-		}
-	}
-	return Virtual{}, false
 }
 
 // ComponentAt returns the component at pos or false if there's no component at pos.
@@ -269,6 +249,12 @@ func (u *FrameUnion) Draw(w term.Writer) {
 	}
 
 	u.drawUnionCells(w)
+}
+
+type frameVirtual struct {
+	size int
+	Virtual
+	frame bool
 }
 
 func (u *FrameUnion) drawUnionCells(w term.Writer) {
@@ -350,6 +336,20 @@ func (u *FrameUnion) setVerticalUnionFrameCells(
 		w.SetCell(term.Coordinates{X: u.width - 1, Y: y},
 			term.Cell{Width: 1, Ch: right, Attributes: u.Attributes})
 	}
+}
+
+func (u *FrameUnion) componentAt(
+	components []*frameVirtual, pos term.Coordinates,
+) (Virtual, bool) {
+	for _, t := range components {
+		tpos := t.Position()
+		twidth := t.Width()
+		theight := t.Height()
+		if pos.X >= tpos.X && pos.Y >= tpos.Y && pos.X < tpos.X+twidth && pos.Y < tpos.Y+theight {
+			return t.Virtual, true
+		}
+	}
+	return Virtual{}, false
 }
 
 func (u *FrameUnion) setHorizontalUnionFrameCells(

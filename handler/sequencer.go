@@ -33,8 +33,10 @@ import (
 	"unstable.build/go-tui/term"
 )
 
+// SequenceMatchResult represents the result of sequencing.
 type SequenceMatchResult uint8
 
+// List of sequence match results.
 const (
 	SequenceNoMatch SequenceMatchResult = iota
 	SequencePartialMatch

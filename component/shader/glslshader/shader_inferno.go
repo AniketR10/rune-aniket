@@ -45,11 +45,13 @@ func Inferno(params InfernoParams, fps float) shader.Shader {
 	}
 }
 
+// InfernoParams defines the parameters used by the Inferno shader.
 type InfernoParams struct {
 	Speed       vec2D
 	SwapRedBlue bool
 }
 
+// DefaultInfernoParams return a set of sane InfernoParams.
 func DefaultInfernoParams() InfernoParams {
 	return InfernoParams{
 		Speed:       vec2(1.2, 0.1),

@@ -64,7 +64,7 @@ func (t Token) Resource() workspaceapi.URI {
 func (t Token) SetWrap(wrap bool) {
 }
 
-// SetWrap satisfies text.Handler
+// SetCursorAtScroll satisfies text.Handler
 func (t Token) SetCursorAtScroll(term.Coordinates) bool {
 	return false
 }
@@ -201,7 +201,7 @@ func (c *Client) SubscribeEvents(
 	return nil
 }
 
-// SubscribeCommandrequests the editor server to register cmd with h.
+// SubscribeCommand requests the editor server to register cmd with h.
 func (c *Client) SubscribeCommand(man textapi.CommandManual, h textapi.CommandHandler) error {
 	ctx, cancel := c.ctxWithTimeout()
 	defer cancel()

@@ -33,8 +33,10 @@ import (
 // time allowed between mouse clicks to chain them into e.g. double-click
 const clickChainWindow = 500 * time.Millisecond
 
+// MouseAction represents a mouse action.
 type MouseAction uint16
 
+// List of mouse actions.
 const (
 	MouseLeftClick MouseAction = iota
 	MouseRightClick

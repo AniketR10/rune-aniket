@@ -72,7 +72,7 @@ func (wm *WindowManager) TileTree() *TileTree {
 	return &wm.tree
 }
 
-// DrawFloatingWindow can be used to arbitrarily draw floating windows returned
+// DrawWindow can be used to arbitrarily draw floating windows returned
 // by FloatingWindows. If win is not a floating window, this method will panic.
 func (wm *WindowManager) DrawWindow(win Window, w term.Writer) {
 	if f, ok := win.node.(*floatingNode); ok {

@@ -86,7 +86,7 @@ func ResourceTrackerEventsContent() []textapi.EventType {
 	}
 }
 
-// ResourceTrackerEventsContentFlush returns a slice of textapi.EventType
+// ResourceTrackerEventsFlushOnly returns a slice of textapi.EventType
 // required in calls to textapi.Editor.SubscribeEvents for a ResourceTracker
 // to replicate only the resource content, upon flushing. Edits before
 // flushing to disk are ignored and also scroll and cursor offsets

@@ -64,6 +64,7 @@ func (t *TestHandler) SetCursorAtScroll(term.Coordinates) bool {
 	return false
 }
 
+// Close satisfies text.Handler.
 func (t *TestHandler) Close() error {
 	return nil
 }

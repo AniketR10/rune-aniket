@@ -94,7 +94,7 @@ func New(inner tui.Component, cfg Config) *Container {
 	return ret
 }
 
-// Initi initializes this Container with inner and cfg. It panics if cfg.Width <= 0.
+// Init initializes this Container with inner and cfg. It panics if cfg.Width <= 0.
 func (n *Container) Init(inner tui.Component, cfg Config) {
 	if cfg.Width <= 0 {
 		panic(fmt.Sprintf("notifications.Container with invalid width: %v", cfg.Width))

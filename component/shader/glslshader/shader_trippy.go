@@ -41,10 +41,12 @@ func Trippy(params TrippyParams, fps float) shader.Shader {
 	}
 }
 
+// DefaultTrippyParams return a set of sane TrippyParams.
 func DefaultTrippyParams() TrippyParams {
 	return TrippyParams{Speed: 1.0}
 }
 
+// TrippyParams defines the parameters used by the Trippy shader.
 type TrippyParams struct {
 	Speed float // float is an alias of float64
 }

@@ -41,7 +41,7 @@ import (
 )
 
 const (
-	// FileScheme represents the local file URL scheme.
+	// MemoryScheme represents an in-memory URI scheme.
 	MemoryScheme = "memory"
 )
 

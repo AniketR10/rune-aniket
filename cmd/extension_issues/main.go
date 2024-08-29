@@ -33,7 +33,7 @@ import (
 )
 
 var (
-	// compile-time variable
+	// Tag is compile-time variable set to the git tag.
 	Tag = "development"
 )
 

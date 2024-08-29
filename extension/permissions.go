@@ -24,13 +24,13 @@
 package extension
 
 const (
-	// PermissionWorkspaceFileSystem requests access to manage
+	// PermissionFileSystem requests access to manage
 	// the files in a workspace.
 	PermissionFileSystem Permission = "_PermWorkspaceFileSystem"
-	// PermissionWorkspaceExecute requests access to execute
+	// PermissionExecute requests access to execute
 	// and stop processes in a workspace.
 	PermissionExecute Permission = "_PermWorkspaceExecute"
-	// PermissionWorkspaceTerminal requests access to manage
+	// PermissionTerminal requests access to manage
 	// a workspace's ptys.
 	PermissionTerminal Permission = "_PermWorkspaceTerminal"
 

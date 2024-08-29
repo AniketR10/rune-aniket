@@ -97,6 +97,7 @@ const (
 // See Manual for more information on how to switch between modes.
 type LessMode uint8
 
+// List of less modes.
 const (
 	LessNormalMode LessMode = iota
 	LessSearchMode

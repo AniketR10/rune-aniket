@@ -34,6 +34,7 @@ import (
 	"unstable.build/go-tui/text"
 )
 
+// DefaultChar is the default char used to fill empty cells.
 const DefaultChar = '\x00'
 
 // AltBuffer implements a vte terminal screen buffer by wrapping a cell.Buffer
@@ -399,7 +400,7 @@ func (b *AltBuffer) SetDefaultAttributes(attr term.Attributes) {
 	b.scroll.Attributes = attr
 }
 
-// Select select the word at the given screen position.
+// SelectWordAt selects the word at the given screen position.
 func (b *AltBuffer) SelectWordAt(pos term.Coordinates) {
 	pos = term.CoordinatesSum(pos, b.scroll.Offset())
 	b.selection.from, b.selection.to, _ = b.scroll.WordAt(pos)
@@ -421,7 +422,7 @@ func (b *AltBuffer) Select(pos term.Coordinates) {
 	b.selection.mode = text.StandardSelection
 }
 
-// Select anchors the current screen position as the end of a text selection.
+// SelectEnd anchors the current screen position as the end of a text selection.
 func (b *AltBuffer) SelectEnd(pos term.Coordinates) {
 	if b.selection.mode == text.NoSelection {
 		return

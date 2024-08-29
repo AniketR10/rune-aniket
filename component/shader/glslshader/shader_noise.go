@@ -36,6 +36,7 @@ func Noise(params NoiseParams, fps float) shader.Shader {
 	return &noise{params, fps}
 }
 
+// DefaultNoiseParams return a set of sane NoiseParams.
 func DefaultNoiseParams() NoiseParams {
 	return NoiseParams{
 		Animated:  true,
@@ -46,6 +47,7 @@ func DefaultNoiseParams() NoiseParams {
 	}
 }
 
+// NoiseParams defines the parameters used by the Noise shader.
 type NoiseParams struct {
 	Animated  bool
 	Amplitude float

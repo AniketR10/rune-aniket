@@ -81,7 +81,7 @@ func (s *storageResourceServer) Register(
 	return svc, nil
 }
 
-// StorageResource returns a map of Permission to a ResourceServer
+// StorageResources returns a map of Permission to a ResourceServer
 // capable of serving a document.Service.
 func StorageResources(storageDir string) map[Permission]ResourceRegistrar {
 	s := newStorageResourceServer(storageDir)

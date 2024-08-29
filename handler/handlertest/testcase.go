@@ -42,7 +42,7 @@ type SequenceTestCase struct {
 	Expected      string
 }
 
-// HandlerTestCase represents an event and the result
+// SingleTestCase represents an event and the result
 // expected draw string representation.
 type SingleTestCase struct {
 	Event    term.Event

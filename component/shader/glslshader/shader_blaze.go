@@ -34,7 +34,7 @@ import (
 	"unstable.build/go-tui/term"
 )
 
-// Fire shader remixed from CaliCoastReplay's 301's Fire Shader - Remix 2
+// Blaze shader remixed from CaliCoastReplay's 301's Fire Shader - Remix 2
 // (https://www.shadertoy.com/view/MtcGD7)
 func Blaze(params BlazeParams, fps float) shader.Shader {
 	return &blaze{
@@ -54,11 +54,13 @@ func Blaze(params BlazeParams, fps float) shader.Shader {
 	}
 }
 
+// BlazeParams defines the parameters used by the Bomb shader.
 type BlazeParams struct {
 	Speed       vec2D
 	SwapRedBlue bool
 }
 
+// DefaultBlazeParams return a set of sane BlazeParams.
 func DefaultBlazeParams() BlazeParams {
 	return BlazeParams{
 		Speed:       vec2(1.2, 0.1),

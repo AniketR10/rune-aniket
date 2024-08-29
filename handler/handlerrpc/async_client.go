@@ -92,7 +92,7 @@ type AsyncClient struct {
 	}
 }
 
-// NewClient allocates storage for a new Client and initializes it.
+// NewAsyncClient allocates storage for a new AsyncClient and initializes it.
 func NewAsyncClient(interrupter term.Interrupter, pbClient HandlerClient) *AsyncClient {
 	ret := new(AsyncClient)
 	ret.Init(interrupter, pbClient)
@@ -196,7 +196,7 @@ func (c *AsyncClient) Handle(ev term.Event) (bool, bool) {
 	return c.Client.Handle(ev)
 }
 
-// Handle satisfies tui.Handle.
+// Man satisfies tui.Handle.
 func (c *AsyncClient) Man() tui.Manual {
 	c.mu.Lock()
 	circuitBreak := c.circuitBreak

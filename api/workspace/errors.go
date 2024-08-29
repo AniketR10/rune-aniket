@@ -50,6 +50,7 @@ type Error struct {
 	IsNotExist   bool
 }
 
+// String returns the string representation of the underlying error.
 func (e *Error) String() string {
 	if e == nil {
 		return "<nil>"
@@ -58,6 +59,8 @@ func (e *Error) String() string {
 	return e.ToError().Error()
 }
 
+// ToError returns a os error or the underlying
+// error.
 func (e Error) ToError() error {
 	if e.IsPermission {
 		return os.ErrPermission

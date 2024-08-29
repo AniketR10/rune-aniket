@@ -97,7 +97,7 @@ func (s *SchemeManagerServer) dialScheme(
 	return client, nil
 }
 
-// Register satisfies ManagerServer.
+// RegisterScheme satisfies ManagerServer.
 func (s *SchemeManagerServer) RegisterScheme(ctx context.Context, req *RegisterSchemeRequest) (
 	res *RegisterSchemeResponse, err error,
 ) {

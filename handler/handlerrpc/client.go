@@ -133,6 +133,7 @@ func (c *Client) Cursor() (pos term.Coordinates, style term.CursorStyle, show bo
 	return c.cursor.Coordinates, c.cursor.style, c.cursor.show
 }
 
+// Selection satisfies tui.Handler.
 func (c *Client) Selection() (string, bool) {
 	return c.selection.text, c.selection.ok
 }

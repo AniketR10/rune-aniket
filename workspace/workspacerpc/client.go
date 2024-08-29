@@ -51,6 +51,7 @@ var _ workspaceapi.Terminal = (*Client)(nil)
 // for scheme registry-side
 var _ schemeapi.Scheme = (*Client)(nil)
 
+// Client is a workspace and scheme client.
 type Client struct {
 	cc        rpc.MuxConn
 	exec      ExecutorClient

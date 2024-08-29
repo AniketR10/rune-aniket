@@ -38,14 +38,17 @@ type ErrContextWindowExceeded struct {
 	Count, Max int
 }
 
+// Error satisfies the error interface.
 func (e *ErrContextWindowExceeded) Error() string {
 	return fmt.Sprintf("model context window exceeded (%d, max is %d)", e.Count, e.Max)
 }
 
+// Unwrap satisfies the error interface.
 func (e *ErrContextWindowExceeded) Unwrap() error {
 	return nil
 }
 
+// Is satisfies the error interface.
 func (e *ErrContextWindowExceeded) Is(target error) bool {
 	_, ok := target.(*ErrContextWindowExceeded)
 	return ok
@@ -111,6 +114,7 @@ type ChatCompletionResponse struct {
 // Role is the role of the message author in a message stream.
 type Role string
 
+// List of roles assigned to the different messages.
 const (
 	RoleAssistant Role = "assistant"
 	RoleUser      Role = "user"

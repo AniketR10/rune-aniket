@@ -71,7 +71,7 @@ func JSONFromMap(m map[string]interface{}) JSON {
 	return JSON{mapConfig: MapConfig(m).(mapConfig)}
 }
 
-// JSONFromMap returns a JSON Config from the given Config.
+// JSONFromConfig returns a JSON Config from the given Config.
 func JSONFromConfig(c Config) JSON {
 	m := make(map[string]interface{})
 	c.Iterate(func(k string, v interface{}) {
@@ -205,9 +205,7 @@ func GetMapInt(pconfig Config, key string) (map[string]int, error) {
 	return ret, nil
 }
 
-// GetEvent is a helper which extracts and parses a component.FrameCharSet
-//
-//	as a map of string to runes from a Config.
+// GetFrameCharset is a helper which extracts and parses a component.FrameCharSet.
 func GetFrameCharset(c Config, key string, def component.FrameCharSet) (
 	component.FrameCharSet, error,
 ) {
@@ -262,11 +260,13 @@ func GetKey(c Config, key string) (term.KeyComb, error) {
 	return term.ParseKey(s)
 }
 
+// MarshalText satisfies encoding.TextMarshaler.
 func (c *JSON) MarshalText() ([]byte, error) {
 	text, err := json.Marshal(c.mapConfig)
 	return text, err
 }
 
+// UnmarshalText satisfies encoding.TextUnmarshaler.
 func (c *JSON) UnmarshalText(text []byte) error {
 	c.mapConfig = make(map[string]interface{})
 	err := json.Unmarshal(text, &c.mapConfig)

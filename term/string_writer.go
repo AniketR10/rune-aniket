@@ -48,6 +48,7 @@ func NewStringWriter(width, height int) (t *StringWriter) {
 	return
 }
 
+// Init initializes this StringWriter with the given height and width.
 func (w *StringWriter) Init(width, height int) {
 	w.Resize(width, height)
 	w.CursorCh = '▐'
@@ -85,6 +86,7 @@ func (w *StringWriter) SetCell(pos Coordinates, cell Cell) {
 	w.cellbuf[idx] = cell
 }
 
+// UnionAttributes satisfies Writer.
 func (w *StringWriter) UnionAttributes(pos Coordinates, attr Attributes) {
 	if outOfBounds(w.height, w.width, pos) {
 		panic(fmt.Sprintf("SetCell(x=%d;y=%d): out of bounds: width=%d;height=%d",
@@ -94,7 +96,7 @@ func (w *StringWriter) UnionAttributes(pos Coordinates, attr Attributes) {
 	w.cellbuf[idx].Attributes = AttributesUnion(w.cellbuf[idx].Attributes, attr)
 }
 
-// Flush satisfies Writer.
+// Flush flushes the contents of this writer into the underlying cell buffer.
 func (w *StringWriter) Flush() (err error) {
 	for i, c := range w.cellbuf {
 		if i != 0 && i%w.width == 0 {
@@ -123,6 +125,7 @@ func (w *StringWriter) Clear(attr Attributes) (err error) {
 	return
 }
 
+// String returns the string representation of the contents of this Writer.
 func (w *StringWriter) String() string {
 	return w.buffer.String()
 }

@@ -155,7 +155,7 @@ func (b *PrimaryBuffer) InsertLines(count int) {
 	}
 }
 
-// InsertLines deletes lines on the cursor's position.
+// DeleteLines deletes lines on the cursor's position.
 func (b *PrimaryBuffer) DeleteLines(count int) {
 	from := b.cursor.position
 	to := from
@@ -170,7 +170,7 @@ func (b *PrimaryBuffer) SetCursorAtScroll(c term.Coordinates, relative bool) {
 	b.cursor.position.Y = int(math.Max(float64(c.Y), 0))
 }
 
-// SetCursorAtScroll sets the cursor at the screen position c.
+// SetCursorAtScreen sets the cursor at the screen position c.
 // The relative argument is ignored for PrimaryBuffer.
 func (b *PrimaryBuffer) SetCursorAtScreen(c term.Coordinates, relative bool) {
 	b.SetCursorAtScroll(term.CoordinatesSum(c, b.scroll.Offset()), false)

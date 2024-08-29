@@ -121,7 +121,7 @@ func (s *scheme[T]) init(svc document.Service, uri workspaceapi.URI, m encoding.
 }
 
 func (s *scheme[T]) URI(path string) (workspaceapi.URI, error) {
-	return workspace.WorkspaceURI(s.workspace, path)
+	return workspace.NewWorkspaceURI(s.workspace, path)
 }
 
 func (s *scheme[T]) docIDFromPath(path string) (string, string, error) {

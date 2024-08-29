@@ -42,12 +42,14 @@ func TransitionCut(params TransitionCutParams, shader1, shader2 Shader) Shader {
 	}
 }
 
+// DefaultTransitionCutParams return a set of sane TransitionCutParams.
 func DefaultTransitionCutParams() TransitionCutParams {
 	return TransitionCutParams{
 		ChangeAtPerc: 0.5,
 	}
 }
 
+// TransitionCutParams defines the parameters used by the TransitionCut shader.
 type TransitionCutParams struct {
 	// Point within closed interval [0.0,1.0] at which the shader change happens.
 	ChangeAtPerc float64

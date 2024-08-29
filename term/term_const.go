@@ -44,6 +44,7 @@ const (
 	EventUnfocus              = EventType(termbox.EventUnfocus)
 )
 
+// List of keys.
 const (
 	KeyF1          Key = Key(termbox.KeyF1)
 	KeyF2              = Key(termbox.KeyF2)

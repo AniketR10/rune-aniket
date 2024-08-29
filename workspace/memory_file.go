@@ -52,7 +52,7 @@ type MemoryFileSys struct {
 	Offset int64
 }
 
-// NewmemFile allocates storage for a new file and initializes it
+// NewMemoryFile allocates storage for a new file and initializes it
 // with the given filename, file descriptor, mode and initial data.
 func NewMemoryFile(
 	filename string, fd uintptr, mode fs.FileMode, data []byte,

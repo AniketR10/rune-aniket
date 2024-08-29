@@ -5,6 +5,9 @@ run:
     - target
 # we should slowly fix tests too
 issues:
+  include:
+    - EXC0012 # exported symbols should have comment or be unexported
+    - EXC0014 # comment on exported symbols should be of the form
   exclude:
     - SA1019 # deprecations
   exclude-rules:
@@ -17,3 +20,15 @@ issues:
         - ineffassign
         - staticcheck
         - gosimple
+        - revive
+linters:
+  enable:
+    - revive
+
+linters-settings:
+  revive:
+    rules:
+      - name: unused-parameter
+        Disabled: true
+      - name: exported
+        severity: error

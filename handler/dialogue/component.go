@@ -194,7 +194,7 @@ func (c *Component) AddReceiveMessageBreak() {
 	c.msg.Reset()
 }
 
-// AddReceiveMessage adds the following message chunk
+// AddReceiveMessageChunk adds the following message chunk
 // as a received message. A new message is started
 // by calling AddReceiveMessageBreak.
 func (c *Component) AddReceiveMessageChunk(chunk string) {
@@ -257,7 +257,7 @@ func (c *Component) RemoveReceiveMessageHint() {
 	c.hint = nil
 }
 
-// Dimensions satisfies component.Responsive.
+// Height satisfies component.Responsive.
 func (c *Component) Height(width int) (height int) {
 	// do not use container.Height, as first row (messages) is designed
 	// to take the remaining space

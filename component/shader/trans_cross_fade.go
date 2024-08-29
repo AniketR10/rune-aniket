@@ -68,6 +68,7 @@ func TransitionCrossFade(
 	}
 }
 
+// DefaultTransitionCrossFadeParams return a set of sane TransitionCrossFadeParams.
 func DefaultTransitionCrossFadeParams() TransitionCrossFadeParams {
 	return TransitionCrossFadeParams{
 		ChangeAtPerc: 0.5,
@@ -75,6 +76,7 @@ func DefaultTransitionCrossFadeParams() TransitionCrossFadeParams {
 	}
 }
 
+// TransitionCrossFadeParams defines the parameters used by the TransitionCrossFade shader.
 type TransitionCrossFadeParams struct {
 	// Point within closed interval [0.0,1.0] at which the shader change happens.
 	ChangeAtPerc float64

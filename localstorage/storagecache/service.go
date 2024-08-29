@@ -64,6 +64,7 @@ func (s *Service[T]) Init(svc, cache document.Service) {
 	s.cache = cache
 }
 
+// EvictAll evicts all documents from this cache.
 func (s *Service[T]) EvictAll(ctx context.Context) error {
 	err := s.evictAll(ctx, s.cache, "cache")
 	if err != nil {

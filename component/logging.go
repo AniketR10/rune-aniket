@@ -28,7 +28,7 @@ import (
 	"unstable.build/go-tui/term"
 )
 
-// WithLoggin wraps comp to log calls to Resize and Draw using the provided logger.
+// WithLogging wraps comp to log calls to Resize and Draw using the provided logger.
 func WithLogging(comp tui.Component, logger func(string, ...any)) tui.Component {
 	if logger == nil {
 		panic("logger cannot be nil")

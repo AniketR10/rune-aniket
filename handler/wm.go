@@ -313,7 +313,7 @@ func (wm *WindowManager) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 	return term.CoordinatesSum(cursor, offset), style, show
 }
 
-// Selectiopn satisfies tui.Handler.
+// Selection satisfies tui.Handler.
 func (wm *WindowManager) Selection() (string, bool) {
 	content := wm.focus.Content()
 	return content.Selection()

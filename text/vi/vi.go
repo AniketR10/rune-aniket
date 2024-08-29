@@ -89,7 +89,7 @@ func (vi *Vi) Init(buf *cell.Buffer, resource workspaceapi.URI, opts ...Option) 
 
 	text.WithCopyDelete(viHandler.config.defaultRegister,
 		vi, vi.cursor, buf)
-	vi.buf.Subscribe(vi)
+	vi.buf.Subscribe((*cellSubscriber)(vi))
 }
 
 // InitWithScroll initialies this vi handle with the given component.Scroll
@@ -173,27 +173,6 @@ func (vi *Vi) copyRepeat() {
 
 func (vi *Vi) pushNewSnapshot() {
 	vi.pushUndo(vi.currSnapshot)
-}
-
-func (vi *Vi) OnWillEdit(
-	ctx context.Context, from, to term.Coordinates, str string,
-) {
-	if (!vi.oob && vi.oobEdited) || (!vi.currEdited && !vi.resetting) {
-		pubVi := (*Vi)(vi)
-		pubVi.currSnapshot.cursor = from
-		pubVi.pushNewSnapshot()
-		pubVi.resetRedoTimeline()
-	}
-}
-
-func (vi *Vi) OnDidEdit(
-	ctx context.Context, start, end term.Coordinates, old string,
-) {
-	if !vi.resetting {
-		vi.evEdited = true
-		vi.currEdited = true
-	}
-	vi.oobEdited = vi.oob
 }
 
 // Paste satisfies text.Clipboard. See Copy.
@@ -463,4 +442,29 @@ func (vi *Vi) pushRedo(content snapshot) {
 
 func (vi *Vi) resetRedoTimeline() {
 	vi.redoTimeline = vi.redoTimeline[:0]
+}
+
+type cellSubscriber = Vi
+
+// OnWillEdit satisfies cell.Subscriber.
+func (vi *cellSubscriber) OnWillEdit(
+	ctx context.Context, from, to term.Coordinates, str string,
+) {
+	if (!vi.oob && vi.oobEdited) || (!vi.currEdited && !vi.resetting) {
+		pubVi := (*Vi)(vi)
+		pubVi.currSnapshot.cursor = from
+		pubVi.pushNewSnapshot()
+		pubVi.resetRedoTimeline()
+	}
+}
+
+// OnDidEdit satisfies cell.Subscriber.
+func (vi *cellSubscriber) OnDidEdit(
+	ctx context.Context, start, end term.Coordinates, old string,
+) {
+	if !vi.resetting {
+		vi.evEdited = true
+		vi.currEdited = true
+	}
+	vi.oobEdited = vi.oob
 }

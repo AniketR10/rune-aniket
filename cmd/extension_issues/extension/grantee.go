@@ -292,7 +292,7 @@ func (e *Grantee) Handle(ctx context.Context, ev textapi.Event) bool {
 	return false
 }
 
-// Handle satisfies extension.Grantee.
+// PermissionGranted satisfies extension.Grantee.
 func (e *Grantee) PermissionGranted(ctx context.Context, grants []extension.Grant) error {
 	e.log(log.DebugLevel, "permissions granted: %v", grants)
 

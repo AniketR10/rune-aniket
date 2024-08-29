@@ -21,6 +21,7 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
+//revive:disable:exported
 package texttest
 
 import (
@@ -35,6 +36,7 @@ import (
 	"unstable.build/go-tui/text"
 )
 
+// TestEditor is an editor that can be used in tests.
 type TestEditor struct {
 	uri  workspaceapi.URI
 	buf  *cell.Buffer

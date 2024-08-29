@@ -60,6 +60,7 @@ const (
 	defaultMaxHistory   = 2000
 )
 
+// Permissions returns the permissions required by this extension.
 func Permissions() []extension.Permission {
 	return []extension.Permission{
 		extension.Permission(extension.PermissionBrowserResourceOpener),

@@ -71,7 +71,7 @@ const (
 )
 
 var (
-	AIHandlerCommands = []textapi.CommandManual{
+	aIHandlerCommands = []textapi.CommandManual{
 		{
 			Name: commandQuery,
 			Summary: "Send a coding question to your AI assistant. " +
@@ -91,8 +91,8 @@ var (
 			Synopsis: "[dialogue_id]",
 		},
 	}
-	AIHandlerEvents      = append(extutil.ResourceTrackerEventsComplete(), textapi.EventTypeUnfocus)
-	AIHandlerPermissions = []extension.Permission{
+	aIHandlerEvents      = append(extutil.ResourceTrackerEventsComplete(), textapi.EventTypeUnfocus)
+	aIHandlerPermissions = []extension.Permission{
 		extension.PermissionBrowserWindowManager,
 		extension.PermissionBrowserResourceOpener,
 		extension.PermissionBrowserNotifications,

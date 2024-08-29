@@ -37,16 +37,17 @@ import (
 )
 
 const (
-	// DefaultDensityCharacters are the default characters used by Encode and EncodeScaler
-	// as density denotation characters. See EncodeScalerCharacters for more details.
-	DefaultDensityCharacters   = "   `'_.,-*=+:;cba!?0123456789$W#@"
+	// DefaultDensityCharacters are the default characters used by Encode
+	// as density encoding characters.
+	DefaultDensityCharacters = "   `'_.,-*=+:;cba!?0123456789$W#@"
+	// AlternateDensityCharacters is a set of more realistic encoding characters.
 	AlternateDensityCharacters = "    .:░▒▓█"
-	// this is a modifier to take height to width cell aspect ratio
+	// HeightToWidthCellAspectRatio is a modifier to take height to width cell aspect ratio
 	// into consideration.
 	HeightToWidthCellAspectRatio float64 = 2.3
 )
 
-// DefaultScaler is the default draw.Scaler used by EncodeScaler, EncodeColor and Encode.
+// DefaultScaler is the default draw.Scaler in DefaultConfig.
 func DefaultScaler() draw.Scaler {
 	return draw.NearestNeighbor
 }
@@ -54,7 +55,7 @@ func DefaultScaler() draw.Scaler {
 // DefaultConfig returns the default sane configuration for Encode.
 func DefaultConfig() Config {
 	return Config{
-		Scaler:            draw.NearestNeighbor,
+		Scaler:            DefaultScaler(),
 		DensityCharacters: DefaultDensityCharacters,
 		Color:             false,
 		AdjustContrast:    0,

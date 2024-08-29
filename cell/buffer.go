@@ -469,6 +469,7 @@ func (b *Buffer) Reset() {
 	}
 }
 
+// Version returns the version of this buffer.
 func (b *Buffer) Version() int {
 	return b.undoer.version
 }

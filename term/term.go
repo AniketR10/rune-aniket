@@ -142,6 +142,7 @@ func FromTcellEvent(tev tcell.Event) Event {
 // whether the cursor blinks or is solid.  Support for changing this is not universal.
 type CursorStyle int
 
+// List of cursor styles.
 const (
 	CursorStyleDefault           = CursorStyle(tcell.CursorStyleDefault)
 	CursorStyleBlinkingBlock     = CursorStyle(tcell.CursorStyleBlinkingBlock)

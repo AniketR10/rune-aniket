@@ -57,7 +57,7 @@ func (p *Parser) Advance(b byte) {
 	p.state = state
 }
 
-func (p *Parser) performAction(b byte, action Action) {
+func (p *Parser) performAction(b byte, action action) {
 	switch action {
 	case invalidSequence:
 		p.point = 0

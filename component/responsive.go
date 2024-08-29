@@ -45,6 +45,7 @@ type Responsive interface {
 	Height(width int) int
 }
 
+// StringResponsiveConfig adds responsive-specific configuration to a StringConfig.
 type StringResponsiveConfig struct {
 	// NoSplitWords instructs the underlying string responsive component
 	// to attempt to not split words in half when possible.

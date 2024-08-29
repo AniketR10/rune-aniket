@@ -29,14 +29,6 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 )
 
-// Direction represents clockwise or counterclockwise.
-type Direction int
-
-const (
-	Clockwise Direction = iota
-	CounterClockwise
-)
-
 func abs(x float32) float32 {
 	if x < 0 {
 		return -x
@@ -151,6 +143,7 @@ func (p *Path) AppendVerticesAndIndicesForFilling(vertices []ebiten.Vertex, indi
 // LineCap represents the way in which how the ends of the stroke are rendered.
 type LineCap int
 
+// List of LineCap.
 const (
 	LineCapButt LineCap = iota
 	LineCapSquare
@@ -159,6 +152,7 @@ const (
 // LineJoin represents the way in which how two segments are joined.
 type LineJoin int
 
+// List of LineJoin.
 const (
 	LineJoinMiter LineJoin = iota
 	LineJoinBevel

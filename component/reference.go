@@ -53,6 +53,7 @@ func (r *Reference) Init(ref tui.Component) {
 	r.dirty = true
 }
 
+// Resize satisfies tui.Component.
 func (r *Reference) Resize(width, height int) {
 	r.height, r.width = height, width
 	if r.component == nil {
@@ -62,6 +63,7 @@ func (r *Reference) Resize(width, height int) {
 	r.component.Resize(width, height)
 }
 
+// Draw satisfies tui.Component.
 func (r *Reference) Draw(w term.Writer) {
 	if r.component == nil {
 		return

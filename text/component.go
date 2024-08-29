@@ -162,7 +162,7 @@ func (c *Component) Init(ed Editor, storage document.Service, w workspace.Loader
 	c.comp.Init(c.config.Config)
 	c.notifier = &c.comp
 	c.storage = storage
-	c.comp.Subscribe(c)
+	c.comp.Subscribe((*handlerWindowSubscriber)(c))
 
 	c.ed = ed
 	c.workspace = w
@@ -204,14 +204,6 @@ func (c *Component) Init(ed Editor, storage document.Service, w workspace.Loader
 
 	// validate that config aliases are not recursive
 	return ValidateCommandAliases(c.config.CommandAliases)
-}
-
-func (c *Component) OnFocus(old, focus handler.Window) {
-	if old != (handler.Window{}) {
-		c.tryDispatchEvent(old, textapi.EventTypeUnfocus)
-	}
-	c.tryDispatchEventFocus(focus)
-	(*Component)(c).focus = focus
 }
 
 func (c *Component) tryDispatchEventFocus(win handler.Window) {
@@ -453,7 +445,7 @@ func (c *Component) CommandKeyBinding(key term.KeyComb) ([]string, bool) {
 	return cmd, ok
 }
 
-// ComplateCommand calls command's cmd completer with the given args and returns
+// CompleteCommand calls the command's completer with the given args and returns
 // an interator with the possible argument completions.
 func (c *Component) CompleteCommand(ctx context.Context, cmd string, args ...string) (
 	iterator.Iterator[string], string, error,
@@ -987,6 +979,8 @@ func (c *Component) Resource(uri workspaceapi.URI) (browserapi.Handler, bool) {
 	return c.comp.Tab(uri)
 }
 
+// Window returns the window with the given id and true or nil and false if no
+// window with the given id could be found in the underlying browser.
 func (c *Component) Window(id uint64) (browser.Window, bool) {
 	return c.comp.Window(id)
 }
@@ -1123,4 +1117,14 @@ func nonCryptoHashString(s string) string {
 // stand-in type for NotifyOnce
 type storedNotification struct {
 	ID string
+}
+
+type handlerWindowSubscriber = Component
+
+func (c *handlerWindowSubscriber) OnFocus(old, focus handler.Window) {
+	if old != (handler.Window{}) {
+		c.tryDispatchEvent(old, textapi.EventTypeUnfocus)
+	}
+	c.tryDispatchEventFocus(focus)
+	(*Component)(c).focus = focus
 }

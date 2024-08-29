@@ -34,19 +34,19 @@ import (
 	"unstable.build/go-tui/debug"
 )
 
-// UnaryLoggingRecoveryHandler implements a grpc.UnaryServerInterceptor
+// UnaryLoggingRecoveryInterceptor implements a grpc.UnaryServerInterceptor
 // that recovers and logs panics.
 func UnaryLoggingRecoveryInterceptor(tags ...string) grpc.UnaryServerInterceptor {
 	return recovery.UnaryServerInterceptor(logOption(tags...))
 }
 
-// StreamLoggingRecoveryHandler implements a grpc.UnaryServerInterceptor
+// StreamLoggingRecoveryInterceptor implements a grpc.UnaryServerInterceptor
 // that recovers and logs panics.
 func StreamLoggingRecoveryInterceptor(tags ...string) grpc.StreamServerInterceptor {
 	return recovery.StreamServerInterceptor(logOption(tags...))
 }
 
-// UnaryReportRecoveryHandler implements a grpc.UnaryServerInterceptor
+// UnaryReportRecoveryInterceptor implements a grpc.UnaryServerInterceptor
 // that recovers and logs panics.
 func UnaryReportRecoveryInterceptor(
 	dir, pkg, version string, shouldPanic bool,
@@ -70,7 +70,7 @@ func UnaryReportRecoveryInterceptor(
 	}
 }
 
-// StreamReportRecoveryHandler implements a grpc.UnaryServerInterceptor
+// StreamReportRecoveryInterceptor implements a grpc.UnaryServerInterceptor
 // that recovers and logs panics.
 func StreamReportRecoveryInterceptor(
 	dir, pkg, version string, shouldPanic bool,

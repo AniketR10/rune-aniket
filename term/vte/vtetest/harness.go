@@ -33,6 +33,7 @@ import (
 	"unstable.build/go-tui/term"
 )
 
+// Case is a vte test case.
 type Case struct {
 	InputSequence string
 	Expected      string

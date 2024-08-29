@@ -115,7 +115,7 @@ func WithRecoveryFile(swapFilePath workspaceapi.URI) Option {
 	}
 }
 
-// WithFilepath returns an Option that sets the filepath of the file to open with
+// WithFile returns an Option that sets the filepath of the file to open with
 // a Editor handler.
 func WithFile(file workspaceapi.URI) Option {
 	return func(cfg *Config) {

@@ -83,9 +83,9 @@ func IsWorkspaceURI(workspace Workspace, uri workspaceapi.URI) (bool, error) {
 		uri.User() == uriAtWorkspace.User(), nil
 }
 
-// WorkspaceURI expands the given path with the given workspaceapi.URI
+// NewWorkspaceURI expands the given path with the given workspaceapi.URI
 // and returns its corresponding URI. See ExpandPathWithURI for more details.
-func WorkspaceURI(workspace workspaceapi.URI, path string) (workspaceapi.URI, error) {
+func NewWorkspaceURI(workspace workspaceapi.URI, path string) (workspaceapi.URI, error) {
 	absPath, err := workspaceapi.ExpandPathWithURI(path, workspace)
 	if err != nil {
 		return workspaceapi.URI{}, err

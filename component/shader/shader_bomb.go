@@ -43,6 +43,7 @@ func Bomb(params BombParams) Shader {
 	return b
 }
 
+// BombParams defines the parameters used by the Bomb shader.
 type BombParams struct {
 	RingCol       tcell.Color
 	RingStart     float64
@@ -50,6 +51,7 @@ type BombParams struct {
 	CharBandwidth float64
 }
 
+// DefaultBombParams return a set of sane BombParams.
 func DefaultBombParams() BombParams {
 	return BombParams{
 		RingCol:       tcell.NewRGBColor(255, 0, 0),

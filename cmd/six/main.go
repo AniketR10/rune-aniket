@@ -72,9 +72,11 @@ const (
 )
 
 var (
-	// compile-time variables
+	// Tag is a compile-time variable
 	Tag     = "development"
+	// Commit is a compile-time variable
 	Commit  = "HEAD"
+	// Version is the version of this executable.
 	Version string
 
 	defaultConfigPath string

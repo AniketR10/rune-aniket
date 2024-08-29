@@ -49,7 +49,7 @@ import (
 
 const defaultFPS = 30
 
-// Greantee returns this extension's extension.Grantee, and it required permissions.
+// Grantee returns this extension's extension.Grantee, and it required permissions.
 func Grantee() (extension.Grantee, []extension.Permission) {
 	webcamGrantee, perms := extutil.NewCommandSplitHandler(extutil.CommandSplitHandlerConfig{
 		SplitOrientation: browserapi.OrientationRight,

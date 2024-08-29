@@ -37,10 +37,12 @@ type TestComponent struct {
 	width, height int
 }
 
+// Resize satisfies tui.Component.
 func (t *TestComponent) Resize(width, height int) {
 	t.width, t.height = width, height
 }
 
+// Draw satisfies tui.Component.
 func (t *TestComponent) Draw(w term.Writer) {
 	for tx := t.width - 1; tx >= 0; tx-- {
 		for ty := 0 + t.height - 1; ty >= 0; ty-- {
@@ -60,6 +62,7 @@ func (t *TestComponent) SetAttr(attr term.Attributes) (ret term.Attributes) {
 	return
 }
 
+// TestResponsive is a Responsive and Floating for testing.
 type TestResponsive struct {
 	TestComponent
 	PassedWidth int
@@ -67,11 +70,13 @@ type TestResponsive struct {
 	WantWidth   int
 }
 
+// Height satisfies Responsive.
 func (t *TestResponsive) Height(width int) int {
 	t.PassedWidth = width
 	return t.WantHeight
 }
 
+// Dimensions satisfies Floating.
 func (t *TestResponsive) Dimensions() (width, height int) {
 	return t.WantWidth, t.WantHeight
 }

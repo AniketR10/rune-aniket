@@ -32,7 +32,7 @@ import (
 	termrpc "unstable.build/go-tui/term/termrpc"
 )
 
-// NewEditRequests converts a buf into an EditRequest.
+// NewEditRequest converts a buf into an EditRequest.
 func NewEditRequest(file workspaceapi.URI, buf *cell.Buffer) EditRequest {
 	return EditRequest{
 		Buffer:       rawCellsToProtoCells(buf.RawCells()),

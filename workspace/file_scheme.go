@@ -84,7 +84,7 @@ func OpenFile(filename string, flag int, perm os.FileMode) (workspaceapi.File, e
 	return f, nil
 }
 
-// ReeadFile reads the file named by filename and returns the contents.
+// ReadFile reads the file named by filename and returns the contents.
 // See os.ReadFile for more details.
 func ReadFile(filename string) ([]byte, error) {
 	f, err := OpenFile(filename, os.O_RDONLY, 0)

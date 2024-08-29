@@ -147,7 +147,7 @@ func (s *scheme) expandPath(path string) (string, error) {
 }
 
 func (s *scheme) URI(path string) (workspaceapi.URI, error) {
-	return workspace.WorkspaceURI(s.uri, path)
+	return workspace.NewWorkspaceURI(s.uri, path)
 }
 
 // NewFile simply calls Open under the hood as upspin files are generally not cached in memory.

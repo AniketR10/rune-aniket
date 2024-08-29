@@ -204,7 +204,7 @@ func (t *Component) Resize(width, height int) error {
 }
 
 // ModeBracketedPaste returns whether bracketed paste mode is set.
-func (t *Component) ModeBracketedPate() bool {
+func (t *Component) ModeBracketedPaste() bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return t.parserHandler.modeBracketedPaste
@@ -448,7 +448,7 @@ func (t *Component) Select(pos term.Coordinates) {
 	}
 }
 
-// Select anchors the current cursor position as the end of a text selection.
+// SelectEnd anchors the current cursor position as the end of a text selection.
 func (t *Component) SelectEnd(pos term.Coordinates) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -460,7 +460,7 @@ func (t *Component) SelectEnd(pos term.Coordinates) {
 	}
 }
 
-// Select select the word under the current cursor position.
+// SelectWordAt selects the word under the current cursor position.
 func (t *Component) SelectWordAt(pos term.Coordinates) {
 	t.mu.Lock()
 	defer t.mu.Unlock()

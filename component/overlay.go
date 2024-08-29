@@ -44,6 +44,7 @@ func NewOverlay(
 	return ret
 }
 
+// Init initializes this overlay with the given background, cover and configuration.
 func (o *Overlay) Init(
 	background, cover tui.Component, backAttr term.Attributes, config SpanConfig,
 ) {
@@ -54,11 +55,13 @@ func (o *Overlay) Init(
 	o.background = background
 }
 
+// Resize satisfies tui.Component.
 func (o *Overlay) Resize(width, height int) {
 	o.background.Resize(width, height)
 	o.Span.Resize(width, height)
 }
 
+// Draw satisfies tui.Component.
 func (o *Overlay) Draw(w term.Writer) {
 	o.background.Draw(w)
 	o.Span.Draw(w)

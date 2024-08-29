@@ -282,7 +282,7 @@ func (m *Manager) BoldFontFace() font.Face {
 	return m.boldFace
 }
 
-// BoldFontFace returns the configured italic font.Face or the fallback
+// ItalicFontFace returns the configured italic font.Face or the fallback
 // if no italic font face was found when loading the font.
 func (m *Manager) ItalicFontFace() font.Face {
 	if m.italicFace == nil {
@@ -291,7 +291,7 @@ func (m *Manager) ItalicFontFace() font.Face {
 	return m.italicFace
 }
 
-// BoldFontFace returns the configured bold and italic font.Face or the fallback
+// BoldItalicFontFace returns the configured bold and italic font.Face or the fallback
 // if no bold and italic font face was found when loading the font.
 func (m *Manager) BoldItalicFontFace() font.Face {
 	if m.boldItalicFace == nil {

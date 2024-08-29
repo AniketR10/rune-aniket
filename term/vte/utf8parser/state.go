@@ -23,10 +23,10 @@
 
 package utf8parser
 
-type Action int
+type action int
 
 const (
-	invalidSequence Action = iota
+	invalidSequence action = iota
 	emitByte
 	setByte1
 	setByte2
@@ -50,7 +50,7 @@ const (
 )
 
 // Advance the parser state.
-func (s state) advance(b byte) (state, Action) {
+func (s state) advance(b byte) (state, action) {
 	switch s {
 	case ground:
 		switch {

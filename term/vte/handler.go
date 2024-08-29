@@ -370,7 +370,7 @@ func (e *Handler) Close() error {
 func (e *Handler) handleInput(ev term.Event) (handled bool, raw []byte) {
 	if isStart := ev.Type == term.EventPasteStart; isStart || ev.Type == term.EventPasteEnd {
 		e.bracketedPaste = isStart
-		programBracketedMode := e.comp.ModeBracketedPate()
+		programBracketedMode := e.comp.ModeBracketedPaste()
 		e.log(log.DebugLevel, "handled bracketed paste start=%t,"+
 			" programBracketedMode : %v", isStart, programBracketedMode)
 		// if bracketed paste mode is not set, then we are done

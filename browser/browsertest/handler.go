@@ -54,7 +54,7 @@ type TestFloating struct {
 	width, height int
 }
 
-// NewTestHandler allocates storage for a new TestHandler and initializes it.
+// NewTestFloating allocates storage for a new TestHandler and initializes it.
 func NewTestFloating(width, height int) *TestFloating {
 	ret := new(TestFloating)
 	ret.TestHandler = *NewTestHandler()
@@ -63,7 +63,7 @@ func NewTestFloating(width, height int) *TestFloating {
 	return ret
 }
 
-// Close calls t.Close.
+// Dimensions returns the floating component dimensions.
 func (t *TestFloating) Dimensions() (width, height int) {
 	return t.width, t.height
 }

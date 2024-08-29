@@ -36,6 +36,7 @@ import (
 )
 
 const (
+	// DefaultTabspaces is the default number of tabspaces used by this package.
 	DefaultTabspaces int = 4
 	defColumnCap     int = 64
 	defRowCap        int = 64

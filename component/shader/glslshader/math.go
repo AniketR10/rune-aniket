@@ -28,8 +28,7 @@ import (
 	"math"
 )
 
-type Float = float64
-type float = Float
+type float = float64
 
 var mathE = 1.0e-10
 

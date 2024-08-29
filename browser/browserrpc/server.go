@@ -391,6 +391,7 @@ func (s *Server) Tab(ctx context.Context, req *TabRequest,
 	return &TabResponse{}, err
 }
 
+// SetContent satisfies BrowserServer.
 func (s *Server) SetContent(
 	ctx context.Context, req *WindowSetContentRequest,
 ) (*WindowSetContentResponse, error) {
@@ -419,6 +420,7 @@ func (s *Server) SetContent(
 	return new(WindowSetContentResponse), nil
 }
 
+// Close satisfies BrowserServer.
 func (s *Server) Close(
 	ctx context.Context, req *WindowCloseRequest,
 ) (*WindowCloseResponse, error) {

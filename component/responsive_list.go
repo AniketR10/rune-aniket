@@ -54,7 +54,7 @@ type ResponsiveList struct {
 	// dirty bool
 }
 
-// NewList allocates storage for a new ResponsiveList and initializes it.
+// NewResponsiveList allocates storage for a new ResponsiveList and initializes it.
 func NewResponsiveList() (l *ResponsiveList) {
 	l = new(ResponsiveList)
 	l.Init()
@@ -180,7 +180,7 @@ func (l *ResponsiveList) SeekEnd() (ok bool) {
 	return l.seekEnd()
 }
 
-// SeekStarts shifts the contents of this list to the start of the list.
+// SeekStart shifts the contents of this list to the start of the list.
 func (l *ResponsiveList) SeekStart() (ok bool) {
 	if l.Alignment == SpanAlignmentBottom {
 		return l.seekEnd()

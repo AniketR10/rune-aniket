@@ -53,12 +53,18 @@ type CellView interface {
 	RawCells() ([][]term.Cell, error)
 }
 
+// LocationPriority defines the order of which location attributes and
+// messages are processed.
 type LocationPriority uint
 
 const (
+	// LocationPriorityInfo defines an informational location.
 	LocationPriorityInfo LocationPriority = iota
+	// LocationPriorityWarning defines a warning location.
 	LocationPriorityWarning
+	// LocationPriorityError defines an error location.
 	LocationPriorityError
+	// LocationPriorityCritical defines an critical location.
 	LocationPriorityCritical
 )
 

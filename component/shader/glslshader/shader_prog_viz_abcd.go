@@ -28,7 +28,7 @@ import (
 	"unstable.build/go-tui/term"
 )
 
-// ProgressViz1234 shows the process percentage as the first 10 letters of the
+// ProgressVizABCD shows the process percentage as the first 10 letters of the
 // alphabet, A being the start and I the end of the animation duration. The
 // background is painted green where x is highest and blue where y is highest.
 func ProgressVizABCD() shader.Shader {

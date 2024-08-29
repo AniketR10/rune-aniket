@@ -55,6 +55,7 @@ func NewScanner(driver Driver) *Scanner {
 	return ret
 }
 
+// Init initializes this scanner with the given Driver.
 func (p *Scanner) Init(driver Driver) {
 	p.utf8.Init(utf8Receiver{p, driver})
 	p.driver = driver

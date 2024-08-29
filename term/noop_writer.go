@@ -21,13 +21,14 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
+//revive:disable:exported
 package term
 
 import "context"
 
 var _ Writer = NoopWriter{}
 
-// used for benchmarks
+// NoopWriter is a Writer that does nothing.
 type NoopWriter struct{}
 
 func (w NoopWriter) SetCell(pos Coordinates, cell Cell) {

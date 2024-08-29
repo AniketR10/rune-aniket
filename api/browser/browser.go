@@ -62,10 +62,15 @@ type Window interface {
 type Orientation uint8
 
 const (
+	// OrientationDefault represents the default window orientation.
 	OrientationDefault Orientation = iota
+	// OrientationTop sets the component at the top.
 	OrientationTop
+	// OrientationBottom sets the component at the bottom.
 	OrientationBottom
+	// OrientationLeft sets the component on the left.
 	OrientationLeft
+	// OrientationRight sets the component on the right.
 	OrientationRight
 )
 
@@ -73,8 +78,14 @@ const (
 type BarFrame uint8
 
 const (
+	// BarFrameDefault signals that the bar should use the default frame
+	// configuration of the WindowManager.
 	BarFrameDefault BarFrame = iota
+	// BarFrameAlways signals that the bar should always be framed,
+	// regardless of the WindowManager configuration.
 	BarFrameAlways
+	// BarFrameNever signals that the bar should never be framed,
+	// regardless of the WindowManager configuration.
 	BarFrameNever
 )
 

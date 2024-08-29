@@ -30,10 +30,14 @@ import (
 )
 
 type (
+	// InputMode is the keyboard input mode.
 	InputMode int
+	// EventType is the type of event being dispatched.
 	EventType uint8
-	Modifier  uint8
-	Key       uint16
+	// Modifier is a key modifier like <alt> or <ctrl>.
+	Modifier uint8
+	// Key is a keyboard key.
+	Key uint16
 )
 
 // Attributes represents a cell background and foreground attributes.

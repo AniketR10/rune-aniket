@@ -56,8 +56,8 @@ func GranteeWithService(
 			svcFunc, defaultAvailableModels, defaultModel, options...)
 	}
 	grantee, perms := extutil.NewEditorEventHandler(
-		AIHandlerCommands, commandEventHandler, AIHandlerEvents,
-		AIHandlerPermissions...)
+		aIHandlerCommands, commandEventHandler, aIHandlerEvents,
+		aIHandlerPermissions...)
 	return grantee, perms
 }
 

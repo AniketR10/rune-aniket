@@ -58,7 +58,7 @@ func (u *FrameUnion) UnionTop(top tui.Component, height int) {
 	u.FrameUnion.UnionTop(top, height)
 }
 
-// UnionTop stacks top on top of the main handler, and if
+// UnionTopFrame stacks top on top of the main handler, and if
 // u.Frame is set to true and the given frame argument too, it will
 // union the frames of the adjacent handlers with the configured
 // union charset. This method panics if top is nil.
@@ -72,7 +72,7 @@ func (u *FrameUnion) UnionBottom(bottom tui.Component, height int) {
 	u.FrameUnion.UnionBottom(bottom, height)
 }
 
-// UnionBottom stacks bottom under of the main handler, and if
+// UnionBottomFrame stacks bottom under of the main handler, and if
 // u.Frame is set to true and the given frame argument too, it will
 // union the frames of the adjacent handlers with the configured
 // union charset. This method panics if bottom is nil.
@@ -86,7 +86,7 @@ func (u *FrameUnion) UnionLeft(left tui.Component, width int) {
 	u.FrameUnion.UnionLeft(left, width)
 }
 
-// UnionLeft stacks left to the left of the main handler, and if
+// UnionLeftFrame stacks left to the left of the main handler, and if
 // u.Frame is set to true and the given frame argument too, it will
 // union the frames of the adjacent handlers with the configured
 // union charset. This method panics if left is nil.
@@ -100,7 +100,7 @@ func (u *FrameUnion) UnionRight(right tui.Component, width int) {
 	u.FrameUnion.UnionRight(right, width)
 }
 
-// UnionRight stacks right to the right of the main handler, and if
+// UnionRightFrame stacks right to the right of the main handler, and if
 // u.Frame is set to true and the given frame argument too, it will
 // union the frames of the adjacent handlers with the configured
 // union charset. This method panics if right is nil.

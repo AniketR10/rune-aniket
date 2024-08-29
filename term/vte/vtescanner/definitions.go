@@ -23,6 +23,7 @@
 
 package vtescanner
 
+// List of constants used by the scanner.
 const (
 	MaxIntermediates = 2
 	MaxOSCParams     = 16
@@ -35,6 +36,7 @@ const (
 // State represents the scanner state.
 type State uint8
 
+// List of scanner states.
 const (
 	Anywhere State = iota
 	CsiEntry
@@ -57,6 +59,7 @@ const (
 // Action represents the scanner action.
 type Action int
 
+// List of scanner actions.
 const (
 	None Action = iota
 	Clear
