@@ -136,6 +136,9 @@ func (c *FileClient) Close() error {
 }
 
 func (c *FileClient) log(level log.Level, msg string, args ...interface{}) {
+	if !log.IsLevelEnabled(level) {
+		return
+	}
 	log.WithField(logging.KeyClass, "workspace.FileClient").
 		Logf(level, msg, args...)
 }

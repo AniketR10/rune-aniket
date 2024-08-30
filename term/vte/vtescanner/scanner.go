@@ -256,6 +256,9 @@ func (p *Scanner) oscDispatch(ch byte) {
 }
 
 func (p *Scanner) log(level log.Level, msg string, args ...any) {
+	if !log.IsLevelEnabled(level) {
+		return
+	}
 	log.WithField(logging.KeyClass, "scanner.Scanner").
 		Logf(level, msg, args...)
 }

@@ -82,8 +82,10 @@ func (s *SchemeManagerServer) Init(
 }
 
 func (c *SchemeManagerServer) log(level log.Level, msg string, args ...interface{}) {
-	log.
-		WithField(logging.KeyClass, "SchemeManagerServer").Logf(level, msg, args...)
+	if !log.IsLevelEnabled(level) {
+		return
+	}
+	log.WithField(logging.KeyClass, "SchemeManagerServer").Logf(level, msg, args...)
 }
 
 func (s *SchemeManagerServer) dialScheme(

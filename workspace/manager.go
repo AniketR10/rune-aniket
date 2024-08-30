@@ -188,6 +188,9 @@ func (m *Manager) Close() error {
 }
 
 func (m *Manager) log(level log.Level, msg string, args ...interface{}) {
+	if !log.IsLevelEnabled(level) {
+		return
+	}
 	log.WithField(logging.KeyClass, "workspace.Manager").
 		Logf(level, msg, args...)
 }

@@ -1183,6 +1183,9 @@ func (t *parserHandler) ReportModifyOtherKeys() {
 }
 
 func (t *parserHandler) log(level log.Level, line string, params ...interface{}) {
+	if !log.IsLevelEnabled(level) {
+		return
+	}
 	log.WithField(logging.KeyClass, "vte.parserHandler").
 		Logf(level, line, params...)
 }

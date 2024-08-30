@@ -480,8 +480,10 @@ func (s *Server) Stat(ctx context.Context, req *StatRequest) (
 func (s *Server) log(
 	level log.Level, msg string, args ...interface{},
 ) {
-	log.
-		WithField(logging.KeyClass, "workspacerpc.Server").
+	if !log.IsLevelEnabled(level) {
+		return
+	}
+	log.WithField(logging.KeyClass, "workspacerpc.Server").
 		Logf(level, msg, args...)
 }
 

@@ -44,6 +44,9 @@ func WithRetryBroker(b MuxBroker, strategy retry.Strategy) MuxBroker {
 }
 
 func (b retryBroker) log(method string, attempt int, err error) {
+	if !log.IsLevelEnabled(log.TraceLevel) {
+		return
+	}
 	log.WithFields(log.Fields{
 		logging.KeyClass: "rpc.retryBroker",
 		"method":         method,

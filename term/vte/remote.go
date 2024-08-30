@@ -291,6 +291,9 @@ func (p loggingRemote) triggerBell() error {
 }
 
 func (t loggingRemote) log(line string, params ...interface{}) {
+	if !log.IsLevelEnabled(log.TraceLevel) {
+		return
+	}
 	log.WithField(logging.KeyClass, "vte.loggingRemote").
 		Tracef(line, params...)
 }

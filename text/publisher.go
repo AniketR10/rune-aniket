@@ -232,6 +232,9 @@ func (p *cursorPublisher) CursorReference() *Cursor {
 }
 
 func (p *Publisher) log(level log.Level, msg string, args ...any) {
+	if !log.IsLevelEnabled(level) {
+		return
+	}
 	log.WithFields(log.Fields{
 		logging.KeyClass: "text.Publisher",
 	}).Logf(level, msg, args...)

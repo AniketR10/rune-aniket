@@ -257,6 +257,9 @@ func (e *ex) completeReadFile(
 }
 
 func (e *ex) log(level log.Level, msg string, args ...interface{}) {
+	if !log.IsLevelEnabled(level) {
+		return
+	}
 	log.WithField(logging.KeyClass, "ide.ex").Logf(level, msg, args...)
 }
 

@@ -127,6 +127,9 @@ func (e *eventStreamClient) waitForUnsubscribe() error {
 }
 
 func (e *eventStreamClient) log(level log.Level, msg string, args ...interface{}) {
+	if !log.IsLevelEnabled(level) {
+		return
+	}
 	log.WithFields(log.Fields{logging.KeyClass: "textrpc.eventStreamClient"}).
 		Logf(level, msg, args...)
 }

@@ -157,6 +157,9 @@ func newServerCommandStreamer(
 }
 
 func (s *serverCommandStreamer) log(level log.Level, msg string, args ...interface{}) {
+	if !log.IsLevelEnabled(level) {
+		return
+	}
 	log.WithFields(log.Fields{logging.KeyClass: "serverCommandStreamer"}).
 		Logf(level, msg, args...)
 }

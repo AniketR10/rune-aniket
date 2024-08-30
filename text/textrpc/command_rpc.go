@@ -137,6 +137,9 @@ func (c *commandClient) HandleCommand(ctx context.Context, cmd textapi.Command) 
 	return nil
 }
 func (c *commandClient) log(level log.Level, msg string, args ...interface{}) {
+	if !log.IsLevelEnabled(level) {
+		return
+	}
 	log.WithFields(log.Fields{logging.KeyClass: "textrpc.commandClient"}).
 		Logf(level, msg, args...)
 }

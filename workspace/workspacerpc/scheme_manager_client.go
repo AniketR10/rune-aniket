@@ -77,6 +77,9 @@ func (c *SchemeManagerClient) init(
 }
 
 func (c *SchemeManagerClient) log(level log.Level, msg string, args ...interface{}) {
+	if !log.IsLevelEnabled(level) {
+		return
+	}
 	log.WithField(logging.KeyClass, "SchemeManagerClient").Logf(level, msg, args...)
 }
 

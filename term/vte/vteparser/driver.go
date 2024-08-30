@@ -745,6 +745,9 @@ func (p *driver) attrsFromSgrParameters(params [][]uint16) []Attr {
 }
 
 func (p *driver) log(level log.Level, msg string, args ...any) {
+	if !log.IsLevelEnabled(level) {
+		return
+	}
 	log.WithField(logging.KeyClass, "parser.driver").
 		Logf(level, msg, args...)
 }

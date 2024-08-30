@@ -155,6 +155,9 @@ func (e *mouseDriver) copySelectionToClipboard() {
 }
 
 func (e *mouseDriver) log(level log.Level, msg string, args ...any) {
+	if !log.IsLevelEnabled(level) {
+		return
+	}
 	log.WithField(logging.KeyClass, "vte.mouseDriver").
 		Logf(level, msg, args...)
 }

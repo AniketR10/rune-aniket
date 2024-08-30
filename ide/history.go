@@ -72,6 +72,9 @@ func newHistory(storage document.Service) *history {
 }
 
 func (h *history) log(level log.Level, msg string, args ...interface{}) {
+	if !log.IsLevelEnabled(level) {
+		return
+	}
 	log.WithFields(log.Fields{logging.KeyClass: "ide.history"}).
 		Logf(level, msg, args...)
 }

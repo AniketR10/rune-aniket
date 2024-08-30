@@ -229,6 +229,9 @@ const (
 )
 
 func (c *AsyncClient) log(level log.Level, msg string, args ...interface{}) {
+	if !log.IsLevelEnabled(level) {
+		return
+	}
 	log.WithFields(log.Fields{
 		logging.KeyClass: "handler.AsyncClient",
 		"ptr":            fmt.Sprintf("%p", c),

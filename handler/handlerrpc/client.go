@@ -225,6 +225,9 @@ func (c *Client) collectError(call string, err error) {
 }
 
 func (c *Client) log(level log.Level, msg string, args ...interface{}) {
+	if !log.IsLevelEnabled(level) {
+		return
+	}
 	log.WithFields(log.Fields{
 		logging.KeyClass: "handler.Client",
 		"ptr":            fmt.Sprintf("%p", c),

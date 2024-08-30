@@ -86,8 +86,10 @@ func NewComponent(ed Editor, storage document.Service, w workspace.Loader, confi
 }
 
 func (c *Component) log(level log.Level, msg string, args ...interface{}) {
-	log.
-		WithField(logging.KeyClass, "text.Component").Logf(level, msg, args...)
+	if !log.IsLevelEnabled(level) {
+		return
+	}
+	log.WithField(logging.KeyClass, "text.Component").Logf(level, msg, args...)
 }
 
 func (c *Component) newCellBuffer() *cell.Buffer {

@@ -111,6 +111,9 @@ func (c *Client) Init(
 }
 
 func (c *Client) log(level log.Level, msg string, args ...interface{}) {
+	if !log.IsLevelEnabled(level) {
+		return
+	}
 	log.WithField(logging.KeyClass, "text.Client").Logf(level, msg, args...)
 }
 

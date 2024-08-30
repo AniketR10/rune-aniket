@@ -431,6 +431,9 @@ func (g *GUI) consumeEvents() {
 }
 
 func (p *GUI) log(level log.Level, msg string, args ...any) {
+	if !log.IsLevelEnabled(level) {
+		return
+	}
 	log.WithFields(log.Fields{
 		logging.KeyClass: "gui",
 	}).Logf(level, msg, args...)

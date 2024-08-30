@@ -451,8 +451,10 @@ func (c *Component) SetContentToTab(win Window, tabIdx int) bool {
 }
 
 func (c *Component) log(level log.Level, msg string, args ...interface{}) {
-	log.
-		WithField(logging.KeyClass, "browser.Component").Logf(level, msg, args...)
+	if !log.IsLevelEnabled(level) {
+		return
+	}
+	log.WithField(logging.KeyClass, "browser.Component").Logf(level, msg, args...)
 }
 
 func (c *Component) closeHandler(h browserapi.Handler) {

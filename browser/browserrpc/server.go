@@ -98,6 +98,9 @@ func (s *Server) SetSyncMode() {
 }
 
 func (s *Server) log(level log.Level, msg string, args ...interface{}) {
+	if !log.IsLevelEnabled(level) {
+		return
+	}
 	log.WithField(logging.KeyClass, "browser.Server").Logf(level, msg, args...)
 }
 

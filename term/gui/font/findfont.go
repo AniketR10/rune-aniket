@@ -128,6 +128,9 @@ func (s systemFindFont) find(matcher matcher) (
 }
 
 func (p *systemFindFont) log(level log.Level, msg string, args ...any) {
+	if !log.IsLevelEnabled(level) {
+		return
+	}
 	log.WithFields(log.Fields{
 		logging.KeyClass: "font.Manager",
 	}).Logf(level, msg, args...)

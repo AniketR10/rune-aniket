@@ -183,6 +183,9 @@ type client struct {
 }
 
 func (a client) log(level log.Level, msg string, args ...any) {
+	if !log.IsLevelEnabled(level) {
+		return
+	}
 	log.WithFields(log.Fields{
 		logging.KeyClass: "openai.Client",
 		"model":          a.config.Model,

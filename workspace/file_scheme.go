@@ -253,8 +253,10 @@ func (p *fileScheme) URI(path string) (workspaceapi.URI, error) {
 }
 
 func (p *fileScheme) log(level log.Level, msg string, args ...interface{}) {
-	log.
-		WithField(logging.KeyClass, "fileScheme").
+	if !log.IsLevelEnabled(level) {
+		return
+	}
+	log.WithField(logging.KeyClass, "fileScheme").
 		WithField("URI", p.workspace.String()).
 		Logf(level, msg, args...)
 }

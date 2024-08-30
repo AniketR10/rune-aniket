@@ -618,6 +618,9 @@ func (h *Prompt) completeTopList() bool {
 }
 
 func (h *Prompt) log(level log.Level, msg string, args ...interface{}) {
+	if !log.IsLevelEnabled(level) {
+		return
+	}
 	log.WithField(logging.KeyClass, "command.Prompt").
 		Logf(level, msg, args...)
 }

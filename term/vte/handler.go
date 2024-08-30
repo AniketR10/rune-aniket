@@ -415,6 +415,9 @@ func (e *Handler) handleInput(ev term.Event) (handled bool, raw []byte) {
 }
 
 func (e *Handler) log(level log.Level, msg string, args ...any) {
+	if !log.IsLevelEnabled(level) {
+		return
+	}
 	log.WithFields(log.Fields{
 		logging.KeyClass: "vte.Handler",
 	}).Logf(level, msg, args...)

@@ -86,6 +86,9 @@ func (s *Server) Draw(ctx context.Context, in *DrawRequest) (
 }
 
 func (s *Server) log(level log.Level, msg string, args ...interface{}) {
+	if !log.IsLevelEnabled(level) {
+		return
+	}
 	log.WithField(logging.KeyClass, "handler.Server").Logf(level, msg, args...)
 }
 

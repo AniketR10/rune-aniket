@@ -584,6 +584,9 @@ func (v *viHandler) enterViMode(pos term.Coordinates) {
 }
 
 func (v *viHandler) log(level log.Level, line string, params ...interface{}) {
+	if !log.IsLevelEnabled(level) {
+		return
+	}
 	log.WithField(logging.KeyClass, "vte.viHandler").
 		Logf(level, line, params...)
 }

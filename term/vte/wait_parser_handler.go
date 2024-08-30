@@ -123,6 +123,9 @@ func (w *waitParserHandler) Bell() {
 }
 
 func (v *waitParserHandler) log(level log.Level, line string, params ...interface{}) {
+	if !log.IsLevelEnabled(level) {
+		return
+	}
 	log.WithField(logging.KeyClass, "vte.waitParserHandler").
 		Logf(level, line, params...)
 }
