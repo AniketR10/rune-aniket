@@ -189,32 +189,37 @@ func (g *GUI) Update() error {
 		g.pendingEvents = append(g.pendingEvents, keyEv)
 	}
 
+	var drawnWithPayload bool
 	// set context with default iteration
+	ctx := tui.ContextWithIteration(g.ctx, g.iteration)
 	for _, ev := range g.pendingEvents {
 		switch ev.Type {
 		case term.EventInterrupt:
-			var ctx context.Context
-			if ev.Raw != nil {
-				if id, ok := tui.IterationFromRawBytes(ev.Raw); ok {
-					// override writer context with a specific iteration ID
-					ctx = tui.ContextWithIteration(g.ctx, id)
+			if ev.Raw == nil {
+				if ev.UserFunc != nil {
+					ev.UserFunc()
 				} else {
-					// override writer context with a user-payload
-					ctx = term.ContextWithPayload(g.ctx, ev.Raw)
+					// only call Draw again if we haven't
+					// already with a custom payload.
+					needsDraw = !drawnWithPayload
+					ctx = g.ctx
 				}
+				continue
+			}
+
+			var payloadCtx context.Context
+			if id, ok := tui.IterationFromRawBytes(ev.Raw); ok {
+				// override writer context with a specific iteration ID
+				// that might not be this tick's iteration ID
+				payloadCtx = tui.ContextWithIteration(g.ctx, id)
 			} else {
-				// override writer context with no iteration id; instead reset to nil
-				// so clients can differentiate between an interrupt
-				// and a regular iteration loop.
-				ctx = g.ctx
+				// override writer context with a user-payload
+				payloadCtx = term.ContextWithPayload(g.ctx, ev.Raw)
 			}
-			if ev.UserFunc != nil {
-				ev.UserFunc()
-			}
-			g.interruptPending.Store(false)
-			g.drawHandler(ctx)
 			needsDraw = false
-			continue
+			drawnWithPayload = true
+			g.interruptPending.Store(false)
+			g.drawHandler(payloadCtx)
 		case term.EventError, term.EventResize:
 			/* not dispatched by GUI */
 		default:
@@ -227,7 +232,8 @@ func (g *GUI) Update() error {
 	}
 
 	if needsDraw {
-		g.drawHandler(tui.ContextWithIteration(g.ctx, g.iteration))
+		g.interruptPending.Store(false)
+		g.drawHandler(ctx)
 	}
 
 	g.pendingEvents = g.pendingEvents[:0]

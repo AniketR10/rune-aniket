@@ -231,18 +231,18 @@ func TestUpdate(t *testing.T) {
 	})
 
 	t.Run("if interrupt contains user function this is called before next call to Draw", func(t *testing.T) {
-		var called int
+		var drawCalled int
 		var userFnCalled int
 		mock := mockHandler{assertDraw: func(w term.Writer) {
-			if called != 0 {
+			if drawCalled != 0 {
 				assert.Equal(t, 1, userFnCalled)
 			}
-			called++
+			drawCalled++
 		}}
 		gui, _ := newTestGUI(t, &mock)
 
 		require.NoError(t, gui.Update())
-		require.Equal(t, 1, called)
+		require.Equal(t, 1, drawCalled)
 
 		// simulate publish
 		gui.pendingEvents = append(gui.pendingEvents, term.Event{
@@ -253,7 +253,7 @@ func TestUpdate(t *testing.T) {
 		})
 
 		require.NoError(t, gui.Update())
-		require.Equal(t, 2, called)
+		require.Equal(t, 1, drawCalled)
 		assert.Equal(t, 1, userFnCalled)
 	})
 
