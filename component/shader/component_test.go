@@ -24,10 +24,13 @@
 package shader
 
 import (
+	"context"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/comptest"
@@ -35,11 +38,15 @@ import (
 )
 
 func TestShader(t *testing.T) {
-	// checks that in all cases animation is closed
 	defer goleak.VerifyNone(t)
 
 	t.Run("draws underlying component after shader is done", func(t *testing.T) {
-		interrupter := term.NopInterrupter()
+		var wg sync.WaitGroup
+		wg.Add(1)
+		interrupter := term.FuncInterrupter(func(_ context.Context) error {
+			defer wg.Done()
+			return nil
+		})
 		s := New(&component.TestComponent{Ch: 'A'}, &testShader{}, interrupter, 1, 1*time.Second)
 		s.Resize(20, 10)
 
@@ -57,7 +64,12 @@ func TestShader(t *testing.T) {
 @@@@@@@@@@@@@@@@@@@@ 
 @@@@@@@@@@@@@@@@@@@@ 
                      `},
-			{Expected: `
+			{
+				Action: func() {
+					wg.Wait()
+					assert.Equal(t, true, s.done.Load())
+				},
+				Expected: `
 AAAAAAAAAAAAAAAAAAAA 
 AAAAAAAAAAAAAAAAAAAA 
 AAAAAAAAAAAAAAAAAAAA 
@@ -72,10 +84,16 @@ AAAAAAAAAAAAAAAAAAAA
 		}
 
 		comptest.TestComponent(t, s, w, tests)
+		require.NoError(t, s.Close())
 	})
 
 	t.Run("resizes underlying component", func(t *testing.T) {
-		interrupter := term.NopInterrupter()
+		var wg sync.WaitGroup
+		wg.Add(1)
+		interrupter := term.FuncInterrupter(func(_ context.Context) error {
+			defer wg.Done()
+			return nil
+		})
 		s := New(&component.TestComponent{Ch: 'A'}, &testShader{}, interrupter, 1, 1*time.Second)
 		s.Resize(20, 10)
 
@@ -98,7 +116,12 @@ AAAAAAAAAAAAAAAAAAAA
 
 		s.Resize(21, 11)
 		tests = []comptest.TestCase{
-			{Expected: `
+			{
+				Action: func() {
+					wg.Wait()
+					assert.Equal(t, true, s.done.Load())
+				},
+				Expected: `
 AAAAAAAAAAAAAAAAAAAAA
 AAAAAAAAAAAAAAAAAAAAA
 AAAAAAAAAAAAAAAAAAAAA
@@ -113,33 +136,47 @@ AAAAAAAAAAAAAAAAAAAAA`},
 		}
 
 		comptest.TestComponent(t, s, w, tests)
+		require.NoError(t, s.Close())
 	})
 
 	t.Run("passes frame and total to shader", func(t *testing.T) {
-		interrupter := term.NopInterrupter()
-		mock := &testShader{}
-		s := New(&component.TestComponent{Ch: 'A'}, mock, interrupter, 30, 1*time.Second)
 		w := term.NewStringWriter(21, 11)
+		mock := &testShader{}
+		fps := 30
 
-		n := 30
+		var wg sync.WaitGroup
+		var s *Component
+		var i int
 		var expectedFrames []int
 		var expectedTotals []int
-		for i := 0; i < n; i++ {
+		const total = 30
+		interrupter := term.FuncInterrupter(func(_ context.Context) error {
+			defer wg.Done()
+			i++
+			mock.called = false
 			s.Draw(w)
-			expectedFrames = append(expectedFrames, i)
-			expectedTotals = append(expectedTotals, n)
-			assert.Equal(t, expectedFrames, mock.frames)
-			assert.Equal(t, expectedTotals, mock.totals)
-		}
+			if i != total {
+				expectedFrames = append(expectedFrames, i)
+				expectedTotals = append(expectedTotals, total)
+				assert.Equal(t, expectedFrames, mock.frames)
+				assert.Equal(t, expectedTotals, mock.totals)
+			}
+			return nil
+		})
+		s = New(&component.TestComponent{Ch: 'A'}, mock, interrupter, fps, 1*time.Second)
+		wg.Wait()
+		assert.NoError(t, s.Close())
 	})
 }
 
 type testShader struct {
+	called bool
 	frames []int
 	totals []int
 }
 
 func (t *testShader) Shade(frame, total int, in [][]term.Cell) {
+	t.called = true
 	t.frames = append(t.frames, frame)
 	t.totals = append(t.totals, total)
 
