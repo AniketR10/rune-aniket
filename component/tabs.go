@@ -69,7 +69,8 @@ func newListFrame(
 	scrollAttr, frameAttr term.Attributes, buf *cell.Buffer, border bool,
 	frameBorders FrameCharSet,
 ) (content tui.Component) {
-	scroll := NewScroll(buf)
+	scroll := new(Scroll)
+	scroll.InitPerformance(buf)
 	scroll.Attributes = scrollAttr
 	background := term.Cell{Attributes: scroll.Attributes}
 	spanCfg := SpanConfig{
@@ -100,7 +101,8 @@ func (t *Tabs) Init() {
 	t.focusAttr = defaultFocusAttr
 	t.nonFocusAttr = defaultNonFocusAttr
 	t.frameBorders = FrameCharSetDefault()
-	t.fileListBuf = cell.NewBuffer()
+	t.fileListBuf = new(cell.Buffer)
+	t.fileListBuf.InitPerformance(cell.DefaultTabspaces, 1, 10, ' ')
 	t.fileListFrame = newListFrame(
 		defaultScrollAttr, defaultFrameAttr, t.fileListBuf,
 		t.border, t.frameBorders)

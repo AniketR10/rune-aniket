@@ -58,6 +58,7 @@ type Component struct {
 	nextSplit browserapi.Orientation
 	container notifications.Container
 
+	dirtyTabs   bool
 	focusWindow handler.Window
 	config      Config
 	buffers     []*Tab
@@ -95,6 +96,7 @@ func (c *browserContent) Handle(ev term.Event) (exit, handled bool) {
 		// a non-ephemeral handler (Tab), is set free.
 		if prev != content {
 			if t, ok := content.(*Tab); ok {
+				c.c.dirtyTabs = true
 				t.setFree()
 			}
 		}
@@ -484,6 +486,7 @@ func (c *Component) updateWindowContent(
 	if ok {
 		id := c.findTabID(tab)
 		c.tabs.SetFocus(id)
+		c.dirtyTabs = true
 		tab.setWindow(win)
 	} else if _, ok := content.(*browserContent); !ok {
 		content = &browserContent{
@@ -504,6 +507,7 @@ func (c *Component) updateWindowContent(
 // only tabs are able to be re-installed after content is updated.
 func (c *Component) releaseHandler(h browserapi.Handler) {
 	if t, ok := h.(*Tab); ok {
+		c.dirtyTabs = true
 		t.setFree()
 	} else {
 		c.closeHandler(h)
@@ -643,6 +647,7 @@ func (c *Component) split(
 	}
 	ret := c.newWindow(win)
 	if isTab {
+		c.dirtyTabs = true
 		h.(*Tab).setWindow(ret)
 		h.(*Tab).callOnFocus()
 	}
@@ -789,11 +794,14 @@ func (c *Component) overwriteFocusWindowUnion(w term.Writer) {
 
 // Draw satisfies tui.Component
 func (c *Component) Draw(w term.Writer) {
-	c.tabs.ResetFocus()
-	for id, t := range c.buffers {
-		if !t.free {
-			c.tabs.SetFocus(id)
+	if c.dirtyTabs {
+		c.tabs.ResetFocus()
+		for id, t := range c.buffers {
+			if !t.free {
+				c.tabs.SetFocus(id)
+			}
 		}
+		c.dirtyTabs = false
 	}
 
 	c.container.Draw(w)
