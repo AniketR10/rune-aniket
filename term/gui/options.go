@@ -155,3 +155,11 @@ func WithRenderOffset(x, y int) Option {
 		return nil
 	}
 }
+
+// WithPrintTPS prints the current TPS in the resulting graphical screen.
+func WithPrintTPS(print bool) Option {
+	return func(g *GUI) error {
+		g.printTPS = print
+		return nil
+	}
+}

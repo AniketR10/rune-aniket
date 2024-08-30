@@ -32,6 +32,7 @@ import (
 	"sync/atomic"
 
 	ebiten "github.com/hajimehoshi/ebiten/v2"
+	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/logging"
@@ -70,6 +71,7 @@ type GUI struct {
 	input             *input
 	bgOpacity         float64
 	fgOpacity         float64
+	printTPS          bool
 	bgBlurRadius      int
 	enableTransparent bool
 	enableLigatures   bool
@@ -166,6 +168,9 @@ func (g *GUI) Draw(screen *ebiten.Image) {
 		g.cursor.pos, g.cursor.style, float64(g.renderOffset.X),
 		float64(g.renderOffset.Y))
 	g.needsRender = false
+	if g.printTPS {
+		ebitenutil.DebugPrint(screen, fmt.Sprintf("TPS: %0.2f", ebiten.ActualTPS()))
+	}
 }
 
 // Update satisfies ebiten.Game. It's called every time a new frame is to be scheduled.
