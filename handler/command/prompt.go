@@ -224,7 +224,12 @@ func (h *Prompt) Draw(w term.Writer) {
 		manHeight, separatorHeight, listHeight := h.calculateSplitHeights(h.width, h.height)
 		if separatorHeight != 0 {
 			separatorOffset := term.Coordinates{Y: listHeight}
-			separatorWriter := component.VirtualWriter(w, separatorOffset, separatorHeight, h.width)
+			separatorWriter := component.VirtualWriter{
+				Writer: w,
+				Offset: separatorOffset,
+				Height: separatorHeight,
+				Width:  h.width,
+			}
 			comp := component.TestComponent{
 				Ch:         h.config.FrameCharSet.HorizontalBottom,
 				Attributes: h.config.FrameAttr,
@@ -236,7 +241,12 @@ func (h *Prompt) Draw(w term.Writer) {
 
 		if manHeight != 0 {
 			manOffset := term.Coordinates{Y: listHeight + separatorHeight}
-			manWriter := component.VirtualWriter(w, manOffset, manHeight, h.width)
+			manWriter := component.VirtualWriter{
+				Writer: w,
+				Offset: manOffset,
+				Height: manHeight,
+				Width:  h.width,
+			}
 			h.manualComponent.Resize(h.width, manHeight)
 			h.manualComponent.Draw(manWriter)
 		}

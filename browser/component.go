@@ -832,8 +832,13 @@ func (c *Component) DrawWindow(target Window, w term.Writer) {
 	// emulate union draw
 	pos := c.WindowManagerPosition()
 	width, height := c.WindowManagerSize()
-	w = component.VirtualWriter(w, pos, height, width)
-	c.wm.DrawWindow(target.(*browserWindow).win, w)
+	vw := component.VirtualWriter{
+		Writer: w,
+		Offset: pos,
+		Height: height,
+		Width:  width,
+	}
+	c.wm.DrawWindow(target.(*browserWindow).win, vw)
 }
 
 // ShiftFocus calls the underlying WindowManager.ShiftFocus.

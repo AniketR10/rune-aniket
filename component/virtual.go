@@ -51,8 +51,12 @@ func (c *Virtual) Resize(width, height int) {
 // Draw uses a virtual writer to perform bound checking and
 // if successful draw the inner component in the virtual coordinate space.
 func (c *Virtual) Draw(writer term.Writer) {
-	w := virtualWriter{writer: writer, offset: c.pos, height: c.height, width: c.width}
-	c.C.Draw(&w)
+	c.C.Draw(VirtualWriter{
+		Writer: writer,
+		Offset: c.pos,
+		Height: c.height,
+		Width:  c.width,
+	})
 }
 
 // Move changes the position of this virtual component
@@ -77,41 +81,35 @@ func (c *Virtual) Position() term.Coordinates {
 	return c.pos
 }
 
+var _ term.Writer = VirtualWriter{}
+
 // VirtualWriter wraps the given w with a writer that applies an
 // offset and SetCell clipping according to offset, height and width.
-func VirtualWriter(
-	w term.Writer, offset term.Coordinates, height, width int,
-) term.Writer {
-	return &virtualWriter{
-		writer: w,
-		offset: offset,
-		height: height,
-		width:  width,
-	}
+type VirtualWriter struct {
+	Writer        term.Writer
+	Offset        term.Coordinates
+	Height, Width int
 }
 
-type virtualWriter struct {
-	writer        term.Writer
-	offset        term.Coordinates
-	height, width int
-}
-
-func (w *virtualWriter) SetCell(pos term.Coordinates, c term.Cell) {
-	if pos.X >= w.width || pos.Y >= w.height || pos.Y < 0 || pos.X < 0 {
+// SetCell satisfies term.Writer.
+func (w VirtualWriter) SetCell(pos term.Coordinates, c term.Cell) {
+	if pos.X >= w.Width || pos.Y >= w.Height || pos.Y < 0 || pos.X < 0 {
 		return
 	}
-	pos = term.Coordinates{X: w.offset.X + pos.X, Y: w.offset.Y + pos.Y}
-	w.writer.SetCell(pos, c)
+	pos = term.Coordinates{X: w.Offset.X + pos.X, Y: w.Offset.Y + pos.Y}
+	w.Writer.SetCell(pos, c)
 }
 
-func (w *virtualWriter) UnionAttributes(pos term.Coordinates, attr term.Attributes) {
-	if pos.X >= w.width || pos.Y >= w.height || pos.Y < 0 || pos.X < 0 {
+// UnionAttributes satisfies term.Writer.
+func (w VirtualWriter) UnionAttributes(pos term.Coordinates, attr term.Attributes) {
+	if pos.X >= w.Width || pos.Y >= w.Height || pos.Y < 0 || pos.X < 0 {
 		return
 	}
-	pos = term.Coordinates{X: w.offset.X + pos.X, Y: w.offset.Y + pos.Y}
-	w.writer.UnionAttributes(pos, attr)
+	pos = term.Coordinates{X: w.Offset.X + pos.X, Y: w.Offset.Y + pos.Y}
+	w.Writer.UnionAttributes(pos, attr)
 }
 
-func (w *virtualWriter) Context() context.Context {
-	return w.writer.Context()
+// Context satisfies term.Writer.
+func (w VirtualWriter) Context() context.Context {
+	return w.Writer.Context()
 }

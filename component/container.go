@@ -86,7 +86,7 @@ func (c *Container) Draw(w term.Writer) {
 	c.Resize(c.width, c.height)
 
 	// provides additional SetCell clipping for components past height
-	vw := VirtualWriter(w, term.Coordinates{}, c.height, c.width)
+	vw := VirtualWriter{w, term.Coordinates{}, c.height, c.width}
 	for _, row := range c.rows {
 		row.Draw(vw)
 	}

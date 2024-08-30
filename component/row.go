@@ -81,7 +81,7 @@ func (r *Row) Draw(w term.Writer) {
 	}
 
 	// use Virtual position, set by Container
-	w = VirtualWriter(w, r.Position(), r.height, r.width)
+	w = VirtualWriter{w, r.Position(), r.height, r.width}
 	for _, comp := range r.content {
 		comp.Virtual.Draw(w)
 	}

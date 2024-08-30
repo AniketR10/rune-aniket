@@ -185,7 +185,7 @@ func (t *TileNode) drawTile(node *TileNode, w term.Writer) bool {
 	for _, ti := range t.children {
 		// call drawTile and use Virtual's position, width, height
 		// to emulate Virtual.Draw via VirtualWriter
-		vwriter := VirtualWriter(w, ti.Position(), ti.Height(), ti.Width())
+		vwriter := VirtualWriter{w, ti.Position(), ti.Height(), ti.Width()}
 		if ok := ti.C.(*TileNode).drawTile(node, vwriter); ok {
 			return true
 		}

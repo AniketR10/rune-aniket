@@ -1266,9 +1266,13 @@ func (e *ex) Draw(w term.Writer) {
 				e.comp.Draw(w)
 			}
 		}
-		w = component.VirtualWriter(w,
-			e.cmdV.Position(), e.cmdV.Height(), e.cmdV.Width())
-		e.cmdBrowser.DrawWindow(e.cmdWin, w)
+		vw := component.VirtualWriter{
+			Writer: w,
+			Offset: e.cmdV.Position(),
+			Height: e.cmdV.Height(),
+			Width:  e.cmdV.Width(),
+		}
+		e.cmdBrowser.DrawWindow(e.cmdWin, vw)
 	} else if e.fullscreen != nil {
 		e.fullscreen.Draw(w)
 	} else {
