@@ -34,6 +34,7 @@ import (
 // Tutorial file from: http://x.unstable.build/docs/tutorials/ox/pixel_shader#porting-from-shadertoy
 func Trippy(params TrippyParams, fps float) shader.Shader {
 	return &trippy{
+		helper:       newHelper(),
 		TrippyParams: params,
 		fps:          fps,
 		noiseD:       vec2(0.0, 1.0),
@@ -53,13 +54,14 @@ type TrippyParams struct {
 
 type trippy struct {
 	TrippyParams
+	helper  *glslHelper
 	fps     float
 	noiseD  vec2D
 	randVec vec2D
 }
 
 func (s *trippy) Shade(frame, total int, in [][]term.Cell) {
-	shadeGLSL(frame, total, s.fps, in, s)
+	s.helper.shadeGLSL(frame, total, s.fps, in, s)
 }
 
 func (s *trippy) runCell(

@@ -32,6 +32,7 @@ import (
 // Inferno shader remixed from codevinsky's Fire (https://www.shadertoy.com/view/XsXXRN)
 func Inferno(params InfernoParams, fps float) shader.Shader {
 	return &inferno{
+		helper:        newHelper(),
 		InfernoParams: params,
 		fps:           fps,
 		c1:            vec3(0.5, 0.0, 0.1),
@@ -60,6 +61,7 @@ func DefaultInfernoParams() InfernoParams {
 }
 
 type inferno struct {
+	helper *glslHelper
 	InfernoParams
 	fps float
 	c1  vec3D
@@ -129,5 +131,5 @@ func (s *inferno) fbm(n vec2D) float {
 }
 
 func (s *inferno) Shade(frame, total int, in [][]term.Cell) {
-	shadeGLSL(frame, total, s.fps, in, s)
+	s.helper.shadeGLSL(frame, total, s.fps, in, s)
 }

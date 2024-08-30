@@ -98,15 +98,19 @@ func TestShadeGLSL(t *testing.T) {
 func newFakeShader() *fakeShader {
 	cr := &fakeCellRunner{}
 	cr.coordsExecuted = []coord{}
-	return &fakeShader{cr: cr}
+	helper := newHelper()
+	// last row processed might not be the last row, so asserts might not work
+	helper.workers = 1
+	return &fakeShader{helper: helper, cr: cr}
 }
 
 type fakeShader struct {
-	cr *fakeCellRunner
+	cr     *fakeCellRunner
+	helper *glslHelper
 }
 
 func (s *fakeShader) Shade(frame, total int, in [][]term.Cell) {
-	shadeGLSL(frame, total, 30, in, s.cr)
+	s.helper.shadeGLSL(frame, total, 30, in, s.cr)
 }
 
 type coord struct {

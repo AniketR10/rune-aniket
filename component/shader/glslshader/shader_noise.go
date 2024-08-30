@@ -33,7 +33,11 @@ import (
 //
 // This is intended to be used as an exploration of that noise space.
 func Noise(params NoiseParams, fps float) shader.Shader {
-	return &noise{params, fps}
+	return &noise{
+		NoiseParams: params,
+		fps:         fps,
+		helper:      newHelper(),
+	}
 }
 
 // DefaultNoiseParams return a set of sane NoiseParams.
@@ -58,11 +62,12 @@ type NoiseParams struct {
 
 type noise struct {
 	NoiseParams
-	fps float
+	helper *glslHelper
+	fps    float
 }
 
 func (s *noise) Shade(frame, total int, in [][]term.Cell) {
-	shadeGLSL(frame, total, s.fps, in, s)
+	s.helper.shadeGLSL(frame, total, s.fps, in, s)
 }
 
 func (s *noise) runCell(

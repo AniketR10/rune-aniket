@@ -25,6 +25,8 @@ package glslshader
 
 import (
 	"math"
+	"runtime"
+	"sync"
 
 	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/component/asciiart"
@@ -45,6 +47,29 @@ type cellRunner interface {
 	) (char rune, fg, bg tcell.Color)
 }
 
+// glslHelper is a helper structure which parallelizes computation
+type glslHelper struct {
+	workers     int
+	workersChan chan shadeRequest
+}
+
+func newHelper() *glslHelper {
+	// must return a pointer, so we can use a runtime.Finalizer below
+	// to cleanup worker goroutines upon garbage collection.
+	return &glslHelper{workers: runtime.NumCPU()}
+}
+
+type shadeRequest struct {
+	wg            *sync.WaitGroup
+	y, rows, cols int
+	row           []term.Cell
+	time          float
+	frame, total  int
+	fps           float
+	in            [][]term.Cell
+	shader        cellRunner
+}
+
 // shadeGLSL adapts the input space to look like common pixel shader's input
 // interface.
 //
@@ -52,9 +77,13 @@ type cellRunner interface {
 // aspect is taken into account, since pixels are squared and cells aren't.
 //
 // Intended to be run by the Shade() method of any pixel shader.
-func shadeGLSL(frame, total int, fps float, in [][]term.Cell, shader cellRunner) {
+func (g *glslHelper) shadeGLSL(frame, total int, fps float, in [][]term.Cell, shader cellRunner) {
 	if frame >= total {
 		return
+	}
+
+	if g.workersChan == nil {
+		g.initWorkers()
 	}
 
 	rows := len(in)
@@ -62,22 +91,66 @@ func shadeGLSL(frame, total int, fps float, in [][]term.Cell, shader cellRunner)
 
 	time := float(frame) / fps
 
+	var wg sync.WaitGroup
+	wg.Add(len(in))
 	for y, row := range in {
-		yFlipARCorrect := int(math.Round(float(rows-y-1) *
-			asciiart.HeightToWidthCellAspectRatio))
-		rowsFlipARCorrect := int(math.Round(float(rows) *
-			asciiart.HeightToWidthCellAspectRatio))
-		for x := range row {
-			char, fg, bg := shader.runCell(
-				frame, total, fps, time,
-				x, yFlipARCorrect,
-				cols, rowsFlipARCorrect,
-				in[y][x].Ch, in[y][x].Fg, in[y][x].Bg,
-			)
-			in[y][x].Ch = char
-			in[y][x].Fg = fg
-			in[y][x].Bg = bg
+		g.workersChan <- shadeRequest{
+			wg: &wg,
+			y:  y, rows: rows, cols: cols,
+			row:   row,
+			time:  time,
+			frame: frame, total: total,
+			fps:    fps,
+			in:     in,
+			shader: shader,
 		}
 	}
+	wg.Wait()
+}
 
+func (g *glslHelper) initWorkers() {
+	ch := make(chan shadeRequest)
+	for i := 0; i < g.workers; i++ {
+		go func() {
+			for {
+				req, ok := <-ch
+				if !ok {
+					return
+				}
+				shadeRow(req.wg, req.y, req.rows, req.cols,
+					req.row, req.time, req.frame, req.total,
+					req.fps, req.in, req.shader)
+			}
+		}()
+	}
+
+	// cleanup workers when helper/shader is no longer in use
+	runtime.SetFinalizer(g, func(g *glslHelper) {
+		close(g.workersChan)
+	})
+
+	g.workersChan = ch
+}
+
+func shadeRow(
+	wg *sync.WaitGroup, y, rows, cols int, row []term.Cell, time float,
+	frame, total int, fps float, in [][]term.Cell, shader cellRunner,
+) {
+	defer wg.Done()
+
+	yFlipARCorrect := int(math.Round(float(rows-y-1) *
+		asciiart.HeightToWidthCellAspectRatio))
+	rowsFlipARCorrect := int(math.Round(float(rows) *
+		asciiart.HeightToWidthCellAspectRatio))
+	for x := range row {
+		char, fg, bg := shader.runCell(
+			frame, total, fps, time,
+			x, yFlipARCorrect,
+			cols, rowsFlipARCorrect,
+			in[y][x].Ch, in[y][x].Fg, in[y][x].Bg,
+		)
+		in[y][x].Ch = char
+		in[y][x].Fg = fg
+		in[y][x].Bg = bg
+	}
 }

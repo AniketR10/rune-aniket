@@ -38,6 +38,7 @@ import (
 // (https://www.shadertoy.com/view/MtcGD7)
 func Blaze(params BlazeParams, fps float) shader.Shader {
 	return &blaze{
+		helper:      newHelper(),
 		BlazeParams: params,
 		fps:         fps,
 		c1:          vec3(0.5, 0.0, 0.1),
@@ -69,6 +70,7 @@ func DefaultBlazeParams() BlazeParams {
 }
 
 type blaze struct {
+	helper *glslHelper
 	BlazeParams
 	fps      float
 	c1       vec3D
@@ -186,5 +188,5 @@ func (s *blaze) fbm(n vec2D) float {
 }
 
 func (s *blaze) Shade(frame, total int, in [][]term.Cell) {
-	shadeGLSL(frame, total, s.fps, in, s)
+	s.helper.shadeGLSL(frame, total, s.fps, in, s)
 }
