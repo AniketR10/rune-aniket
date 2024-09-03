@@ -156,10 +156,10 @@ func WithRenderOffset(x, y int) Option {
 	}
 }
 
-// WithPrintTPS prints the current TPS in the resulting graphical screen.
-func WithPrintTPS(print bool) Option {
+// WithPrintFPS prints the current FPS in the resulting graphical screen.
+func WithPrintFPS(print bool) Option {
 	return func(g *GUI) error {
-		g.printTPS = print
+		g.printFPS = print
 		return nil
 	}
 }

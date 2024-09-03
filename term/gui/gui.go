@@ -71,7 +71,7 @@ type GUI struct {
 	input             *input
 	bgOpacity         float64
 	fgOpacity         float64
-	printTPS          bool
+	printFPS          bool
 	bgBlurRadius      int
 	enableTransparent bool
 	enableLigatures   bool
@@ -168,8 +168,8 @@ func (g *GUI) Draw(screen *ebiten.Image) {
 		g.cursor.pos, g.cursor.style, float64(g.renderOffset.X),
 		float64(g.renderOffset.Y))
 	g.needsRender = false
-	if g.printTPS {
-		ebitenutil.DebugPrint(screen, fmt.Sprintf("TPS: %0.2f", ebiten.ActualTPS()))
+	if g.printFPS {
+		ebitenutil.DebugPrint(screen, fmt.Sprintf("FPS: %0.2f", ebiten.ActualFPS()))
 	}
 }
 
