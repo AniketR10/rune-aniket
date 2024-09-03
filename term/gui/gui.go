@@ -253,7 +253,9 @@ func (g *GUI) Layout(width, height int) (int, int) {
 			// reloading font shouldn't really fail
 			_ = g.fontManager.ReloadFont()
 		}
+		g.mu.Lock()
 		g.resize(width, height, s)
+		g.mu.Unlock()
 	}
 
 	return int(float64(width) * s), int(float64(height) * s)

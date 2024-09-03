@@ -25,6 +25,7 @@ package gui
 
 import (
 	"context"
+	"sync"
 	"testing"
 
 	ebiten "github.com/hajimehoshi/ebiten/v2"
@@ -268,6 +269,49 @@ func TestUpdate(t *testing.T) {
 		input.pressedKeys[ebiten.KeyEnter] = struct{}{}
 		require.Equal(t, ErrHandlerExited, gui.Update())
 	})
+}
+
+func TestRootHandlerSynchronization(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var mu sync.Mutex
+	var handler *mockHandler
+	handler = &mockHandler{
+		assertDraw: func(_ term.Writer) {
+			assert.Equal(t, 105, handler.width)
+			assert.Equal(t, 47, handler.height)
+		},
+		assertEvent: func(ev term.Event) (bool, bool) {
+			assert.Equal(t, 105, handler.width)
+			assert.Equal(t, 47, handler.height)
+			return false, false
+		},
+	}
+	gui, err := New(handler, WithLocker(&mu))
+	require.NoError(t, err)
+
+	// simulates a write, with Resize
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+			default:
+			}
+			mu.Lock()
+			handler.Resize(105, 47)
+			mu.Unlock()
+		}
+	}()
+
+	// read via gui.Draw, Update, and Layout
+	for n := 0; n < 1000; n++ {
+		gui.Layout(1000, 1000)
+		gui.Update()
+		gui.Draw(ebiten.NewImage(1000, 1000))
+	}
+
+	// running with -race should result in no data races
 }
 
 func TestLayout(t *testing.T) {
