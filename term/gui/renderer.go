@@ -166,6 +166,10 @@ func (r *renderer) Draw(
 }
 
 func (r *renderer) renderContent(cells [][]term.Cell) {
+	// fill default background so we can skip drawing individual
+	// cells with default background.
+	r.frame.Fill(r.bgColor)
+
 	// draw base content for each row
 	for viewY := len(cells) - 1; viewY >= 0; viewY-- {
 		r.drawRow(cells, viewY, r.fgColor, r.bgColor)
@@ -202,6 +206,11 @@ func (r *renderer) drawRow(
 
 		// we don't need to draw empty cells, just draw background
 		if cell.Ch == 0 || cell.Ch == '\t' {
+			// do not draw default background as a rect, since it's already
+			// been instructed via frame.Fill above.
+			if bg == defaultBackgroundColor {
+				continue
+			}
 			r.bufVertices, r.bufIndices = drawrect.DrawRect(&r.bufPath, r.bufVertices, r.bufIndices,
 				r.frame, float32(pixelX), float32(pixelY),
 				float32(r.font.CellSize.X), float32(r.font.CellSize.Y), bg, false)
@@ -254,10 +263,13 @@ func (r *renderer) drawRow(
 			continue
 		}
 
-		// draw background
-		r.bufVertices, r.bufIndices = drawrect.DrawRect(&r.bufPath, r.bufVertices, r.bufIndices,
-			r.frame, float32(pixelX), float32(pixelY),
-			float32(r.font.CellSize.X), float32(r.font.CellSize.Y), bg, false)
+		// do not draw default background as a rect, since it's already
+		// been instructed via frame.Fill above.
+		if bg != defaultBackgroundColor {
+			r.bufVertices, r.bufIndices = drawrect.DrawRect(&r.bufPath, r.bufVertices, r.bufIndices,
+				r.frame, float32(pixelX), float32(pixelY),
+				float32(r.font.CellSize.X), float32(r.font.CellSize.Y), bg, false)
+		}
 
 		// draw text
 		r.drawer.DrawWithOptions(r.frame, cell.Ch, cell.Combining, useFace, &opts)
