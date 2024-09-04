@@ -34,8 +34,8 @@ var _ tui.Handler = (*Tabs)(nil)
 // Tabs add mouse handling to component.Tabs.
 type Tabs struct {
 	component.Tabs
-
-	OnClick func(int) bool
+	mousePressedLeft bool
+	OnClick          func(int) bool
 }
 
 // NewTabs returns a Tabs component which handles mouse events.
@@ -53,7 +53,21 @@ func (t *Tabs) Init() {
 
 // Handle delegates the event to the underlying handler.
 func (t *Tabs) Handle(ev term.Event) (quit, handled bool) {
-	if ev.Type != term.EventMouse || ev.Key != term.MouseLeft {
+	defer func() {
+		// if button is released then MouseRelease is dispatched
+		// so this is reset
+		t.mousePressedLeft = ev.Key == term.MouseLeft
+	}()
+
+	if ev.Type != term.EventMouse || ev.Key != term.MouseLeft || ev.Mod != 0 {
+		return
+	}
+
+	// do not dispatch drags as multiple click events:
+	// MouseRelease must be dispatched between MouseLeft for
+	// events to be considered multiple mouse clicks.
+	pressedLeft := ev.Key == term.MouseLeft && !t.mousePressedLeft
+	if !pressedLeft {
 		return
 	}
 	mousePos := term.Coordinates{X: ev.MouseX, Y: ev.MouseY}
