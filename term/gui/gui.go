@@ -53,8 +53,9 @@ var (
 
 const (
 	defaultWidth, defaultHeight = 800, 600
-	// tps                         = int(1*time.Second/defaultKeyPressRepeat) + 1
-	tps = 60
+	// 90 strikes a good balance between key repeat smoothness and
+	// not too taxing on the host's resources.
+	tps = 90
 )
 
 // GUI implements a graphical TUI runtime as an alternative runtime to what
