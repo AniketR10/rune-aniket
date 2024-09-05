@@ -151,6 +151,7 @@ type SchemeClient interface {
 	Stat(ctx context.Context, in *StatRequest, opts ...grpc.CallOption) (*StatResponse, error)
 	ReadLink(ctx context.Context, in *ReadLinkRequest, opts ...grpc.CallOption) (*ReadLinkResponse, error)
 	ReadDir(ctx context.Context, in *ReadDirRequest, opts ...grpc.CallOption) (*ReadDirResponse, error)
+	MkdirAll(ctx context.Context, in *MkdirAllRequest, opts ...grpc.CallOption) (*MkdirAllResponse, error)
 }
 
 type schemeClient struct {
@@ -224,6 +225,15 @@ func (c *schemeClient) ReadDir(ctx context.Context, in *ReadDirRequest, opts ...
 	return out, nil
 }
 
+func (c *schemeClient) MkdirAll(ctx context.Context, in *MkdirAllRequest, opts ...grpc.CallOption) (*MkdirAllResponse, error) {
+	out := new(MkdirAllResponse)
+	err := c.cc.Invoke(ctx, "/workspace.Scheme/MkdirAll", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // SchemeServer is the server API for Scheme service.
 // All implementations must embed UnimplementedSchemeServer
 // for forward compatibility
@@ -235,6 +245,7 @@ type SchemeServer interface {
 	Stat(context.Context, *StatRequest) (*StatResponse, error)
 	ReadLink(context.Context, *ReadLinkRequest) (*ReadLinkResponse, error)
 	ReadDir(context.Context, *ReadDirRequest) (*ReadDirResponse, error)
+	MkdirAll(context.Context, *MkdirAllRequest) (*MkdirAllResponse, error)
 	mustEmbedUnimplementedSchemeServer()
 }
 
@@ -262,6 +273,9 @@ func (UnimplementedSchemeServer) ReadLink(context.Context, *ReadLinkRequest) (*R
 }
 func (UnimplementedSchemeServer) ReadDir(context.Context, *ReadDirRequest) (*ReadDirResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ReadDir not implemented")
+}
+func (UnimplementedSchemeServer) MkdirAll(context.Context, *MkdirAllRequest) (*MkdirAllResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method MkdirAll not implemented")
 }
 func (UnimplementedSchemeServer) mustEmbedUnimplementedSchemeServer() {}
 
@@ -402,6 +416,24 @@ func _Scheme_ReadDir_Handler(srv interface{}, ctx context.Context, dec func(inte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Scheme_MkdirAll_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MkdirAllRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SchemeServer).MkdirAll(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/workspace.Scheme/MkdirAll",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SchemeServer).MkdirAll(ctx, req.(*MkdirAllRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Scheme_ServiceDesc is the grpc.ServiceDesc for Scheme service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -436,6 +468,10 @@ var Scheme_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ReadDir",
 			Handler:    _Scheme_ReadDir_Handler,
+		},
+		{
+			MethodName: "MkdirAll",
+			Handler:    _Scheme_MkdirAll_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

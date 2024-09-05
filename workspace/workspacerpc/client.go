@@ -238,6 +238,23 @@ func (c *Client) ReadLink(filename string) (string, error) {
 	return resp.GetFilename(), nil
 }
 
+// MkdirAll satisfies workspaceapi.Workspace.
+func (c *Client) MkdirAll(path string, perm os.FileMode) error {
+	ctx, cleanup := ctxWithTimeout(c.ctx)
+	defer cleanup()
+
+	req := MkdirAllRequest{Path: path, Mode: int32(perm)}
+	resp, err := c.scheme.MkdirAll(ctx, &req)
+	runtime.KeepAlive(c)
+	if err != nil {
+		return err
+	}
+	if werr, ok := isTypedError(resp); ok {
+		return werr.ToError()
+	}
+	return nil
+}
+
 // Start satisfies workspaceapi.Workspace
 func (c *Client) Start(cmd workspaceapi.Cmd) (workspaceapi.Pid, error) {
 	return c.StartCommand(context.Background(), cmd)

@@ -115,6 +115,9 @@ func testWorkspaceSchemeSuite(
 	t.Run("ReadDir", func(t *testing.T) {
 		workspacetest.TestWorkspaceSchemeReadDir(t, schemeFn, createTestFile)
 	})
+	t.Run("MkdirAll", func(t *testing.T) {
+		workspacetest.TestWorkspaceSchemeMkdirAll(t, schemeFn, createTestFile)
+	})
 	t.Run("workspace.ListFiles integration", func(t *testing.T) {
 		workspacetest.TestWorkspaceSchemeListFilesIntegration(t, schemeFn, createTestFile)
 	})

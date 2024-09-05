@@ -85,6 +85,11 @@ func (t toWorkspace) Lstat(path string) (os.FileInfo, error) {
 func (t toWorkspace) ReadLink(name string) (string, error) {
 	panic("unimplemented")
 }
+
+func (t toWorkspace) MkdirAll(path string, perm os.FileMode) error {
+	return t.fs.MkdirAll(path, perm)
+}
+
 func (t toWorkspace) ReadDir(name string) ([]os.DirEntry, error) {
 	return t.fs.ReadDir(name)
 }

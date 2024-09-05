@@ -436,6 +436,10 @@ func (s *scheme) NewFile(fd uintptr, name string) workspaceapi.File {
 	return s.Scheme.NewFile(fd, name)
 }
 
+func (s *scheme) MkdirAll(path string, perm os.FileMode) error {
+	return s.Scheme.MkdirAll(path, perm)
+}
+
 func (s *scheme) URI(path string) (workspaceapi.URI, error) {
 	absPath, err := s.expandPath(path)
 	if err != nil {

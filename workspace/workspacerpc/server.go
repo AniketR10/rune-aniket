@@ -28,6 +28,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"sync"
 	"syscall"
@@ -174,6 +175,29 @@ func (s *Server) ReadDir(ctx context.Context, req *ReadDirRequest) (
 		}
 	}
 	resp.Path = rpcEntries
+	return resp, nil
+}
+
+// MkdirAll satisfies SchemeServer.
+func (s *Server) MkdirAll(ctx context.Context, req *MkdirAllRequest) (
+	*MkdirAllResponse, error,
+) {
+	path := req.GetPath()
+	mode := req.GetMode()
+	s.locker.Lock()
+	defer s.locker.Unlock()
+
+	err := s.s.MkdirAll(path, fs.FileMode(mode))
+	if err != nil {
+		isPermission := errors.Is(err, os.ErrPermission)
+		if isPermission {
+			resp := new(MkdirAllResponse)
+			resp.IsPermissionErr = isPermission
+			return resp, nil
+		}
+		return nil, err
+	}
+	resp := new(MkdirAllResponse)
 	return resp, nil
 }
 

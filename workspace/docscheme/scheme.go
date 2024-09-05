@@ -30,6 +30,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/unstablebuild/blue/document"
@@ -122,6 +123,15 @@ func (s *scheme[T]) init(svc document.Service, uri workspaceapi.URI, m encoding.
 
 func (s *scheme[T]) URI(path string) (workspaceapi.URI, error) {
 	return workspace.NewWorkspaceURI(s.workspace, path)
+}
+
+func (s *scheme[T]) MkdirAll(path string, perm os.FileMode) error {
+	// no-op, but provide error if file exists
+	finfo, err := s.Stat(path)
+	if err == nil && !finfo.IsDir() {
+		return &os.PathError{Op: "mkdir", Path: path, Err: syscall.ENOTDIR}
+	}
+	return nil
 }
 
 func (s *scheme[T]) docIDFromPath(path string) (string, string, error) {

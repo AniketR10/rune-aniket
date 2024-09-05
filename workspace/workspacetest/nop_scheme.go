@@ -129,6 +129,10 @@ func (t *testScheme) ReadDir(string) (
 	panic("unimplemented")
 }
 
+func (t *testScheme) MkdirAll(path string, perm os.FileMode) error {
+	panic("unimplemented")
+}
+
 func (t *testScheme) Close() error {
 	return nil
 }

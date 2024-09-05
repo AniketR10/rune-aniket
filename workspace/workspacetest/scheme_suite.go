@@ -234,6 +234,9 @@ func TestWorkspaceSchemeFiles(
 	t.Run("ReadDir", func(t *testing.T) {
 		TestWorkspaceSchemeReadDir(t, schemeFn, defaultCreateTestFile)
 	})
+	t.Run("MkdirAll", func(t *testing.T) {
+		TestWorkspaceSchemeMkdirAll(t, schemeFn, defaultCreateTestFile)
+	})
 	t.Run("workspace.ListFiles integration", func(t *testing.T) {
 		TestWorkspaceSchemeListFilesIntegration(t, schemeFn, defaultCreateTestFile)
 	})
@@ -1068,5 +1071,46 @@ func TestWorkspaceSchemeReadDir(
 			assert.Equal(t, "file2", entries[0].Name())
 			assert.Equal(t, "file1", entries[1].Name())
 		}
+	})
+}
+
+func TestWorkspaceSchemeMkdirAll(
+	t *testing.T,
+	schemeFn func(t *testing.T) schemeapi.Scheme,
+	createTestFile func(*testing.T, schemeapi.Scheme, string, string) (workspaceapi.File, func()),
+) {
+	t.Run("a file should return an error", func(t *testing.T) {
+		scheme := schemeFn(t)
+		defer scheme.Close()
+
+		_, cleanup := createTestFile(t, scheme, "./file", "")
+		defer cleanup()
+
+		f, werr := scheme.Open("./file", os.O_RDONLY, 0)
+		require.Nil(t, werr)
+		require.NoError(t, f.Close())
+
+		err := scheme.MkdirAll("./file", 0700)
+		require.Error(t, err)
+	})
+
+	t.Run("workspace dir should be a no-op", func(t *testing.T) {
+		scheme := schemeFn(t)
+		defer scheme.Close()
+
+		err := scheme.MkdirAll(".", 0700)
+		require.NoError(t, err)
+	})
+
+	t.Run("nested dir and then create a nested file should always work", func(t *testing.T) {
+		scheme := schemeFn(t)
+		defer scheme.Close()
+
+		err := scheme.MkdirAll("./nested/directory/very/nested", 0700)
+		require.NoError(t, err)
+
+		file, werr := scheme.Open("./nested/directory/very/nested/file", os.O_CREATE, 0666)
+		require.Nil(t, werr, werr.String())
+		require.NoError(t, file.Close())
 	})
 }

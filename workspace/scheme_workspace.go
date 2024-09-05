@@ -198,6 +198,10 @@ func (m *schemeWorkspace) SetPtySize(p workspaceapi.Pty, width, height int) erro
 	return m.p.SetPtySize(p, width, height)
 }
 
+func (m *schemeWorkspace) MkdirAll(path string, perm os.FileMode) error {
+	return m.p.MkdirAll(path, perm)
+}
+
 func (m *schemeWorkspace) Close() error {
 	return m.p.Close()
 }

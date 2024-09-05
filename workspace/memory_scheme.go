@@ -300,6 +300,15 @@ func (m *memoryScheme) ReadDir(name string) (
 	return ret, nil
 }
 
+func (m *memoryScheme) MkdirAll(path string, perm os.FileMode) error {
+	// no-op, but provide error if file exists
+	finfo, err := m.Stat(path)
+	if err == nil && !finfo.IsDir() {
+		return &os.PathError{Op: "mkdir", Path: path, Err: syscall.ENOTDIR}
+	}
+	return nil
+}
+
 func (m *memoryScheme) Close() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()

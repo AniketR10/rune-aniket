@@ -252,6 +252,17 @@ message CommandPayload {
 	string error = 6;
 }
 
+message MkdirAllRequest {
+	string path = 1;
+	int32 mode = 2;
+}
+
+message MkdirAllResponse {
+	bool is_exist_err = 2;
+	bool is_not_exist_err = 3;
+	bool is_permission_err = 4;
+}
+
 service Terminal {
 	rpc NewPty(NewPtyRequest) returns (NewPtyResponse);
 	rpc SetPtySize(SetPtySizeRequest) returns (SetPtySizeResponse);
@@ -265,6 +276,7 @@ service Scheme {
 	rpc Stat(StatRequest) returns (StatResponse);
 	rpc ReadLink(ReadLinkRequest) returns (ReadLinkResponse);
 	rpc ReadDir(ReadDirRequest) returns (ReadDirResponse);
+	rpc MkdirAll(MkdirAllRequest) returns (MkdirAllResponse);
 }
 
 service Executor {

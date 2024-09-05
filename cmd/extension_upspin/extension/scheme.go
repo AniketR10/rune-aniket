@@ -335,6 +335,52 @@ func (s *scheme) SetPtySize(workspaceapi.Pty, int, int) error {
 	return errExecute
 }
 
+// inspired by os.MkdirAll
+func (s *scheme) MkdirAll(path string, perm os.FileMode) error {
+	dir, err := s.Stat(path)
+	if err == nil {
+		if dir.IsDir() {
+			return nil
+		}
+		return &os.PathError{Op: "mkdir", Path: path, Err: syscall.ENOTDIR}
+	}
+
+	i := len(path) - 1
+	for i >= 0 && path[i] == '/' {
+		i--
+	}
+	for i >= 0 && path[i] != '/' {
+		i--
+	}
+	if i < 0 {
+		i = 0
+	}
+
+	if parent := path[:i]; len(parent) > 0 {
+		err = s.MkdirAll(parent, perm)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Parent now exists; invoke Mkdir and use its result.
+	uname, err := s.makeUpspinPathname(path)
+	if err != nil {
+		return err
+	}
+	_, err = s.client.MakeDirectory(uname)
+	if err != nil {
+		// Handle arguments like "foo/." by
+		// double-checking that directory doesn't exist.
+		dir, err1 := s.Lstat(path)
+		if err1 == nil && dir.IsDir() {
+			return nil
+		}
+		return err
+	}
+	return nil
+}
+
 func (s *scheme) Close() error {
 	return nil
 }

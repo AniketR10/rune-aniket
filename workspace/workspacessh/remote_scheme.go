@@ -325,6 +325,14 @@ func (s *remoteScheme) ReadDir(name string) ([]os.DirEntry, error) {
 	return scheme.ReadDir(name)
 }
 
+func (s *remoteScheme) MkdirAll(path string, perm os.FileMode) error {
+	err, scheme := s.state()
+	if err != nil {
+		return err
+	}
+	return scheme.MkdirAll(path, perm)
+}
+
 func (s *remoteScheme) SetPtySize(pty workspaceapi.Pty, width, height int) error {
 	err, scheme := s.state()
 	if err != nil {

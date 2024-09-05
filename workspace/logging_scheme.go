@@ -167,6 +167,13 @@ func (t loggingScheme) ReadDir(name string) (
 	return
 }
 
+func (t loggingScheme) MkdirAll(path string, perm os.FileMode) error {
+	t.trace("MkdirAll(%s, %v)", path, perm)
+	err := t.other.MkdirAll(path, perm)
+	t.trace("MkdirAll(%s, %v): %v", path, perm, err)
+	return err
+}
+
 func (t loggingScheme) Close() (err error) {
 	t.trace("Close")
 	err = t.other.Close()

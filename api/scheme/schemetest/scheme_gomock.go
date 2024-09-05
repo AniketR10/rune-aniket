@@ -67,6 +67,20 @@ func (mr *MockSchemeMockRecorder) Lstat(path interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Lstat", reflect.TypeOf((*MockScheme)(nil).Lstat), path)
 }
 
+// MkdirAll mocks base method.
+func (m *MockScheme) MkdirAll(arg0 string, arg1 os.FileMode) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MkdirAll", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// MkdirAll indicates an expected call of MkdirAll.
+func (mr *MockSchemeMockRecorder) MkdirAll(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MkdirAll", reflect.TypeOf((*MockScheme)(nil).MkdirAll), arg0, arg1)
+}
+
 // NewFile mocks base method.
 func (m *MockScheme) NewFile(fd uintptr, name string) api.File {
 	m.ctrl.T.Helper()

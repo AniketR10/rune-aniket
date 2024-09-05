@@ -48,6 +48,12 @@ type FileSystem interface {
 
 	// ReadDir reads the named directory, returning all its directory entries.
 	ReadDir(name string) ([]os.DirEntry, error)
+
+	// MkdirAll creates a directory named path, along with any necessary parents,
+	// and returns nil, or else returns an error. The permission bits perm (before
+	// umask) are used for all directories that MkdirAll creates. If path is
+	// already a directory, MkdirAll does nothing and returns nil.
+	MkdirAll(path string, perm os.FileMode) error
 }
 
 // Cmd represents an external command being prepared to run. See exec.Cmd for

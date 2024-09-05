@@ -174,6 +174,10 @@ func (t *testScheme) Stat(path string) (os.FileInfo, error) {
 	return t.statFunc(path)
 }
 
+func (t *testScheme) MkdirAll(path string, perm os.FileMode) error {
+	panic("unimplemented")
+}
+
 func (t *testScheme) NewPty(ctx context.Context) (ret workspaceapi.Pty, err error) {
 	panic("unimplemented")
 }

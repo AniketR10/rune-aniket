@@ -395,6 +395,17 @@ func (p *fileScheme) SetPtySize(pp workspaceapi.Pty, width, height int) error {
 	return nil
 }
 
+func (p *fileScheme) MkdirAll(path string, perm os.FileMode) error {
+	var err error
+	path, err = workspaceapi.ExpandPath(path, p.getUserOrLookup, func() (string, error) {
+		return p.workspace.Path(), nil
+	})
+	if err != nil {
+		return err
+	}
+	return os.MkdirAll(path, perm)
+}
+
 func (p *fileScheme) Close() error {
 	p.cancelCtx()
 	return nil

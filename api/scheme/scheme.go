@@ -53,6 +53,7 @@ type Scheme interface {
 	Lstat(path string) (os.FileInfo, error)
 	ReadLink(path string) (string, error)
 	ReadDir(string) ([]os.DirEntry, error)
+	MkdirAll(string, os.FileMode) error
 
 	Executor
 
