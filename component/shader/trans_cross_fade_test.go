@@ -457,36 +457,36 @@ func TestStackingTransitionCrossFade(t *testing.T) {
 		},
 		{
 			name:  "frames partitioned unevenly outer ChangeAtPercs=0.8 T(T(A, B), C)",
-			total: 20,
+			total: 21,
 			transition: TransitionCrossFade(
 				TransitionCrossFadeParams{ChangeAtPerc: 0.8, OverlapPerc: 0.25},
 				TransitionCrossFade(defaultParams, shA, shB),
 				shC,
 			),
 			transitionShaders: []*mockShader{shA, shB, shC},
-			globalFrames:      []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19},
+			globalFrames:      []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21},
 			shaderTotals:      []int{12, 12, 7},
 			shaderFrames: [][]int{
-				{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, x, x, x, x, x, x, x, x}, // shA
-				{x, x, x, x, x, x, x, x, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, x}, // shB
-				{x, x, x, x, x, x, x, x, x, x, x, x, x, x, 1, 2, 3, 4, 5, 6},   // shC
+				{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, x, x, x, x, x, x, x, x, x, x}, // shA
+				{x, x, x, x, x, x, x, x, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, x, x, x}, // shB
+				{x, x, x, x, x, x, x, x, x, x, x, x, x, x, x, 1, 2, 3, 4, 5, 6, 7},   // shC
 			},
 		},
 		{
 			name:  "frames partitioned unevenly outer ChangeAtPercs=0.8 T(A, T(B, C))",
-			total: 20,
+			total: 19,
 			transition: TransitionCrossFade(
 				TransitionCrossFadeParams{ChangeAtPerc: 0.8, OverlapPerc: 0.25},
 				shA,
 				TransitionCrossFade(defaultParams, shB, shC),
 			),
 			transitionShaders: []*mockShader{shA, shB, shC},
-			globalFrames:      []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19},
-			shaderTotals:      []int{19, 4, 4},
+			globalFrames:      []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18},
+			shaderTotals:      []int{18, 4, 4},
 			shaderFrames: [][]int{
-				{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, x}, // shA
-				{x, x, x, x, x, x, x, x, x, x, x, x, x, x, 1, 2, 3, x, x, x},          // shB
-				{x, x, x, x, x, x, x, x, x, x, x, x, x, x, x, x, 0, 1, 2, 3},          // shC
+				{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, x}, // shA
+				{x, x, x, x, x, x, x, x, x, x, x, x, x, 0, 1, 2, 3, x, x},         // shB
+				{x, x, x, x, x, x, x, x, x, x, x, x, x, x, x, x, 1, 2, 3},         // shC
 			},
 		},
 		{
