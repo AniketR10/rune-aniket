@@ -34,10 +34,11 @@ import (
 
 // Bomb shows an expansive ring expanding from the center outwards displacing
 // the characters under the ring outwards making it look like magnifier.
-func Bomb(params BombParams) Shader {
+func Bomb(params BombParams, defaultAttrs term.Attributes) Shader {
 	b := &bomb{
-		BombParams: params,
-		ringScale:  1.0 / (1 - params.RingStart - (1 - params.RingEnd)),
+		BombParams:  params,
+		ringScale:   1.0 / (1 - params.RingStart - (1 - params.RingEnd)),
+		defaultAttr: defaultAttrs,
 	}
 
 	return b
@@ -63,7 +64,8 @@ func DefaultBombParams() BombParams {
 
 type bomb struct {
 	BombParams
-	ringScale float64
+	defaultAttr term.Attributes
+	ringScale   float64
 }
 
 func (s *bomb) Shade(epoch, total int, cells [][]term.Cell) {
@@ -102,7 +104,7 @@ func (s *bomb) Shade(epoch, total int, cells [][]term.Cell) {
 				// shade the ring using a falloff
 				gr := math.Max(0, math.Min(1, (vl/rl)+(2*((1-t)-0.5))))
 				res := math.Max(0, math.Min(1, s.ringScale*(gr-(1-s.RingEnd))))
-				bg := shaderutils.InterpolateColor(res, cells[y][x].Bg, s.RingCol)
+				bg := shaderutils.InterpolateColor(res, cells[y][x].Bg, s.RingCol, s.defaultAttr.Bg)
 				cells[y][x].Bg = bg
 
 				// show text in the inner circle from certain threshold

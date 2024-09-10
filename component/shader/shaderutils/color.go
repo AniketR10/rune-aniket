@@ -31,7 +31,15 @@ import (
 
 // InterpolateColor calculates a color that is a linear blend between the
 // provided color and target color.
-func InterpolateColor(factor float64, color, target tcell.Color) tcell.Color {
+//
+// In case color is the tcell.ColorDefault then it is resolved with
+// resolveColorDefault.
+func InterpolateColor(
+	factor float64, color, target, resolveColorDefault tcell.Color,
+) tcell.Color {
+	if color == tcell.ColorDefault {
+		color = resolveColorDefault
+	}
 	r, g, b := color.RGB()
 	tr, tg, tb := target.RGB()
 	return tcell.NewRGBColor(
@@ -42,7 +50,13 @@ func InterpolateColor(factor float64, color, target tcell.Color) tcell.Color {
 }
 
 // ColorBrightness returns a normalized value 0..1 indicating the intensity of the color.
-func ColorBrightness(color tcell.Color) float64 {
+//
+// In case color is the tcell.ColorDefault then it is resolved with
+// resolveColorDefault.
+func ColorBrightness(color, resolveColorDefault tcell.Color) float64 {
+	if color == tcell.ColorDefault {
+		color = resolveColorDefault
+	}
 	r, g, b := color.RGB()
 	return float64(r+g+b) / float64(255*3)
 }
@@ -65,5 +79,5 @@ func SampleGradient(factor float64, gradient []tcell.Color) tcell.Color {
 	col1 := gradient[currIdx]
 	col2 := gradient[nextIdx]
 
-	return InterpolateColor(tDec, col1, col2)
+	return InterpolateColor(tDec, col1, col2, 0)
 }

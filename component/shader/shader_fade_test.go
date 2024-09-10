@@ -33,10 +33,11 @@ import (
 
 func TestFade(t *testing.T) {
 	suite := []struct {
-		frame   int
-		total   int
-		in      [][]term.Cell
-		wantOut [][]term.Cell
+		frame        int
+		total        int
+		defaultAttrs term.Attributes
+		in           [][]term.Cell
+		wantOut      [][]term.Cell
 	}{
 		{},
 		{frame: 0, total: 9, in: [][]term.Cell{}, wantOut: [][]term.Cell{}},
@@ -80,10 +81,21 @@ func TestFade(t *testing.T) {
 				{Attributes: term.Attributes{Fg: tcell.NewRGBColor(3, 3, 3), Bg: 0}},
 			}},
 		},
+		{
+			frame:        4,
+			total:        9,
+			defaultAttrs: term.Attributes{Fg: tcell.NewRGBColor(10, 0, 0), Bg: tcell.NewRGBColor(0, 0, 10)},
+			in: [][]term.Cell{{
+				{Attributes: term.Attributes{Fg: tcell.ColorDefault, Bg: tcell.ColorDefault}},
+			}},
+			wantOut: [][]term.Cell{{
+				{Attributes: term.Attributes{Fg: tcell.NewRGBColor(4, 0, 5), Bg: tcell.ColorDefault}},
+			}},
+		},
 	}
 
 	for _, test := range suite {
-		Fade().Shade(test.frame, test.total, test.in)
+		Fade(test.defaultAttrs).Shade(test.frame, test.total, test.in)
 		assert.Equal(t, test.wantOut, test.in)
 	}
 }

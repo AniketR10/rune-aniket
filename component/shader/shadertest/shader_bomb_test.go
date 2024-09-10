@@ -27,8 +27,9 @@ import (
 	"testing"
 
 	"unstable.build/go-tui/component/shader"
+	"unstable.build/go-tui/term"
 )
 
 func TestBomb(t *testing.T) {
-	TestShader(t, shader.Bomb(shader.DefaultBombParams()))
+	TestShader(t, shader.Bomb(shader.DefaultBombParams(), term.Attributes{}))
 }

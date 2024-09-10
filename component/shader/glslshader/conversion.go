@@ -24,9 +24,14 @@
 // nolint: unused
 package glslshader
 
-import "github.com/unstablebuild/tcell/v3"
+import (
+	"github.com/unstablebuild/tcell/v3"
+)
 
-func colToVec(col tcell.Color) vec3D {
+func colToVec(col, resolveColorDefault tcell.Color) vec3D {
+	if col == tcell.ColorDefault {
+		col = resolveColorDefault
+	}
 	r, g, b := col.RGB()
 	return vec3(float(r), float(g), float(b))
 

@@ -202,7 +202,7 @@ func (i *IDE) init(
 	workspaceHandler.logNonFatalErrs(workspaceHandler.focusBrowser(),
 		configErr, i.ideConfig.errors)
 
-	i.root.init(workspaceHandler, i)
+	i.root.init(workspaceHandler, i, i.defaultAttr())
 	return i.workspaceHandler.subscribeCommand(runShaderCmdManual, &i.root)
 }
 
@@ -322,8 +322,8 @@ func (i *IDE) Close() error {
 
 func (i *IDE) initRunning() {
 	atomic.StoreInt32(&i.running, 1)
-	if i.options.shader != nil {
-		i.root.runShader(i.options.shader,
+	if i.options.shaderFn != nil {
+		i.root.runShader(i.options.shaderFn(i.defaultAttr()),
 			i.options.shaderFPS, i.options.shaderDuration)
 	}
 }

@@ -36,7 +36,7 @@ import (
 // Embers are shows burning in ring-like blobs that turn into ashes as sparks
 // glitter on top. As this happens ascending rising particles displace the
 // original characters that end up landing on the original position.
-func Embers(params EmbersParams, fps float) shader.Shader {
+func Embers(params EmbersParams, defaultAttr term.Attributes, fps float) shader.Shader {
 	// Change normalized parameters to suitable ranges.
 	params.DurationPercCoolDown = clamp(params.DurationPercCoolDown, 0.0, 1.0)
 	params.DurationPercDisappear = clamp(params.DurationPercDisappear, 0.0, 1.0)
@@ -57,6 +57,7 @@ func Embers(params EmbersParams, fps float) shader.Shader {
 
 	return &embers{
 		EmbersParams: params,
+		defaultAttr:  defaultAttr,
 		fps:          fps,
 	}
 }
@@ -151,7 +152,8 @@ type EmbersColors struct {
 
 type embers struct {
 	EmbersParams
-	fps float
+	defaultAttr term.Attributes
+	fps         float
 }
 
 func (s *embers) Shade(frame, total int, cells [][]term.Cell) {
@@ -218,8 +220,8 @@ func (s *embers) processCell(x, y int, frame, total int, cells [][]term.Cell) (
 		0.0, 1.0,
 	)
 	hotRingsFg := mix3D(
-		colToVec(s.Colors.Sparks2),
-		colToVec(s.Colors.Sparks1),
+		colToVec(s.Colors.Sparks2, s.defaultAttr.Fg),
+		colToVec(s.Colors.Sparks1, s.defaultAttr.Fg),
 		noiseSimplex01(p.multSc(75.0)),
 	)
 	fg := vecToCol(mix3D(
@@ -292,11 +294,19 @@ func (s *embers) embers(
 		sp := 0.5*sin(
 			(s.SparksSpeed*(float(frame)/float(s.fps)))/(3.0+sparksLoc*4.0)+
 				float(cellX*kBreakPatternX+cellY*kBreakPatternY)) + 0.5
-		fg = mix3D(colToVec(s.Colors.Sparks2), colToVec(s.Colors.Sparks1), sp)
+		fg = mix3D(
+			colToVec(s.Colors.Sparks2, s.defaultAttr.Fg),
+			colToVec(s.Colors.Sparks1, s.defaultAttr.Fg),
+			sp,
+		)
 
 	} else {
 		// Non-spark characters living inside the ember blobs.
-		fg = mix3D(colToVec(s.Colors.Fg1), colToVec(s.Colors.Fg2), fgAmount)
+		fg = mix3D(
+			colToVec(s.Colors.Fg1, s.defaultAttr.Fg),
+			colToVec(s.Colors.Fg2, s.defaultAttr.Fg),
+			fgAmount,
+		)
 		hotRings = fgAmount
 		const kNonSparkHotRingThreshold = 0.33
 		const kNonSparkHotRingMult = 3
@@ -311,7 +321,9 @@ func (s *embers) embers(
 	}
 
 	bg = mix3D(
-		colToVec(s.Colors.Bg2), colToVec(s.Colors.Bg1), 0.5+0.5*sin(3.0*bgAmount),
+		colToVec(s.Colors.Bg2, s.defaultAttr.Bg),
+		colToVec(s.Colors.Bg1, s.defaultAttr.Bg),
+		0.5+0.5*sin(3.0*bgAmount),
 	)
 
 	return
@@ -334,7 +346,7 @@ func (s *embers) ashes(p vec2D) (fg vec3D, bg vec3D) {
 	af += kAmplitude3 * (-0.5 + clamp(noiseSimplex01(p.multSc(kScale3)), 0.0, 1.0))
 	af = clamp(af, 0.0, 1.0)
 
-	bg = mix3D(colToVec(s.Colors.Ashes), vec3(0.0), af)
+	bg = mix3D(colToVec(s.Colors.Ashes, s.defaultAttr.Bg), vec3(0.0), af)
 	fg = bg.addSc(kFgBase + kFgNoiseAmplitude*noiseSimplex(p.multSc(kFgNoiseScale)))
 
 	return fg, bg

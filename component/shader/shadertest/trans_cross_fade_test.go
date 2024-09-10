@@ -27,11 +27,13 @@ import (
 	"testing"
 
 	"unstable.build/go-tui/component/shader"
+	"unstable.build/go-tui/term"
 )
 
 func TestTransitionCrossFade(t *testing.T) {
 	TestShader(t, shader.TransitionCrossFade(
 		shader.DefaultTransitionCrossFadeParams(),
+		term.Attributes{},
 		&testShader1234{},
 		&testShaderABCD{},
 	))

@@ -197,6 +197,7 @@ type FlamesBgOpacityContour struct {
 
 type flames struct {
 	FlamesParams
+	defaultAttr term.Attributes
 	// Stats used for skipping unnecessary calculations.
 	flamesOptimization
 	fps float
@@ -345,12 +346,14 @@ func (s *flames) processCell(x, y int, frame, total int, cells [][]term.Cell) {
 				fadingTail,
 				cells[y][x].Bg,
 				s.sampleFlamesGradient(factor),
+				s.defaultAttr.Fg,
 			)
 		} else {
 			fg = shaderutils.InterpolateColor(
 				fadingTail,
 				cells[y][x].Fg,
 				s.sampleFlamesGradient(factor),
+				s.defaultAttr.Fg,
 			)
 		}
 
@@ -379,6 +382,7 @@ func (s *flames) processCell(x, y int, frame, total int, cells [][]term.Cell) {
 			// Mid part of the flame will paint some offset colors to make the
 			// chars stand out as mentioned above (see docstring above consts).
 			s.sampleFlamesGradient(kBgSampleStart+kBgSampleScale*factor),
+			s.defaultAttr.Bg,
 		)
 
 		// If the flame animation char is the fullblock we can do something
@@ -408,9 +412,10 @@ func (s *flames) processCell(x, y int, frame, total int, cells [][]term.Cell) {
 				smoothstep(kClearStart, kClearEnd, factor),
 				fg,
 				vecToCol(colToVec(
-					s.sampleFlamesGradient(1.0-factor)).multSc(
+					s.sampleFlamesGradient(1.0-factor), s.defaultAttr.Fg).multSc(
 					smoothstep(kDarkenDone, kDarkenStart, factor),
 				)),
+				s.defaultAttr.Fg,
 			)
 		}
 		cells[y][x].Bg = bg
@@ -445,6 +450,7 @@ func (s *flames) sampleFlamesGradient(t float) tcell.Color {
 		tDec,
 		s.ColorGradient[currIdx],
 		s.ColorGradient[nextIdx],
+		s.defaultAttr.Bg,
 	)
 }
 

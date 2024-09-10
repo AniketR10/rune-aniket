@@ -51,6 +51,7 @@ import (
 //	|     [·c·r·o·s·s·]
 func TransitionCrossFade(
 	params TransitionCrossFadeParams,
+	defaultAttr term.Attributes,
 	shader1, shader2 Shader,
 ) Shader {
 	if params.ChangeAtPerc < 0.0 || params.ChangeAtPerc > 1.0 {
@@ -65,6 +66,7 @@ func TransitionCrossFade(
 		TransitionCrossFadeParams: params,
 		shader1:                   shader1,
 		shader2:                   shader2,
+		defaultAttr:               defaultAttr,
 	}
 }
 
@@ -91,6 +93,7 @@ type transCrossFade struct {
 	shader2     Shader
 	buf         [][]term.Cell
 	activations [][]bool
+	defaultAttr term.Attributes
 }
 
 func (t *transCrossFade) Shade(frame, total int, in [][]term.Cell) {
@@ -168,8 +171,12 @@ func (t *transCrossFade) interpolateBuffer(
 
 	for y, row := range final {
 		for x := range row {
-			final[y][x].Fg = shaderutils.InterpolateColor(prog0to05, final[y][x].Fg, t.buf[y][x].Fg)
-			final[y][x].Bg = shaderutils.InterpolateColor(prog0to05, final[y][x].Bg, t.buf[y][x].Bg)
+			final[y][x].Fg = shaderutils.InterpolateColor(
+				prog0to05, final[y][x].Fg, t.buf[y][x].Fg, t.defaultAttr.Fg,
+			)
+			final[y][x].Bg = shaderutils.InterpolateColor(
+				prog0to05, final[y][x].Bg, t.buf[y][x].Bg, t.defaultAttr.Bg,
+			)
 			t.activations[y][x] = false
 		}
 	}

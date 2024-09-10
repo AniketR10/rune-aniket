@@ -37,10 +37,12 @@ import (
 // - glslshader.Flames
 // - glslshader.Embers
 // - glslshader.RisingChars
-func Incendium(params IncendiumParams, fps float) shader.Shader {
+func Incendium(
+	params IncendiumParams, defaultAttr term.Attributes, fps float,
+) shader.Shader {
 	shFlames := Flames(params.Flames, fps).(*flames)
-	shEmbers := Embers(params.Embers, fps).(*embers)
-	shRisingChars := RisingChars(params.RisingChars).(*risingChars)
+	shEmbers := Embers(params.Embers, defaultAttr, fps).(*embers)
+	shRisingChars := RisingChars(params.RisingChars, defaultAttr).(*risingChars)
 	return &incendium{
 		IncendiumParams:   params,
 		fps:               fps,

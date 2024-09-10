@@ -27,8 +27,9 @@ import (
 	"testing"
 
 	"unstable.build/go-tui/component/shader"
+	"unstable.build/go-tui/term"
 )
 
 func TestFade(t *testing.T) {
-	TestShader(t, shader.Fade())
+	TestShader(t, shader.Fade(term.Attributes{}))
 }

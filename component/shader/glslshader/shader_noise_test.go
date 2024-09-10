@@ -29,6 +29,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/component/shader/shadertest"
 	"unstable.build/go-tui/component/shader/shaderutils"
 	"unstable.build/go-tui/term"
@@ -271,7 +272,9 @@ func TestNoise(t *testing.T) {
 			grid := "\n"
 			for _, row := range cells {
 				for _, cell := range row {
-					grid += strconv.Itoa(int(math.Round(shaderutils.ColorBrightness(cell.Bg) * 9)))
+					grid += strconv.Itoa(int(math.Round(
+						shaderutils.ColorBrightness(cell.Bg, tcell.ColorDefault) * 9,
+					)))
 				}
 				grid += "\n"
 			}

@@ -27,9 +27,10 @@ import (
 	"testing"
 
 	"unstable.build/go-tui/component/shader/shadertest"
+	"unstable.build/go-tui/term"
 )
 
 func TestEmbers(t *testing.T) {
-	sh := Embers(DefaultEmbersParams(), 30)
+	sh := Embers(DefaultEmbersParams(), term.Attributes{}, 30)
 	shadertest.TestShader(t, sh)
 }

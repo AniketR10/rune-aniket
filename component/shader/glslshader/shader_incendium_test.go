@@ -27,9 +27,10 @@ import (
 	"testing"
 
 	"unstable.build/go-tui/component/shader/shadertest"
+	"unstable.build/go-tui/term"
 )
 
 func TestIncendium(t *testing.T) {
-	sh := Incendium(DefaultIncendiumParams(), 30)
+	sh := Incendium(DefaultIncendiumParams(), term.Attributes{}, 30)
 	shadertest.TestShader(t, sh)
 }

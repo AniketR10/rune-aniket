@@ -27,9 +27,10 @@ import (
 	"testing"
 
 	"unstable.build/go-tui/component/shader/shadertest"
+	"unstable.build/go-tui/term"
 )
 
 func TestRisingChars(t *testing.T) {
-	sh := RisingChars(DefaultRisingCharsParams())
+	sh := RisingChars(DefaultRisingCharsParams(), term.Attributes{})
 	shadertest.TestShader(t, sh)
 }

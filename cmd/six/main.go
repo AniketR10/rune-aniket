@@ -54,6 +54,7 @@ import (
 	"unstable.build/go-tui/extension/extensionproc"
 	"unstable.build/go-tui/ide"
 	"unstable.build/go-tui/rpc"
+	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/workspace"
 	"unstable.build/go-tui/workspace/workspacerpc"
 	"unstable.build/go-tui/workspace/workspacessh"
@@ -73,9 +74,9 @@ const (
 
 var (
 	// Tag is a compile-time variable
-	Tag     = "development"
+	Tag = "development"
 	// Commit is a compile-time variable
-	Commit  = "HEAD"
+	Commit = "HEAD"
 	// Version is the version of this executable.
 	Version string
 
@@ -306,7 +307,10 @@ func run() int {
 	var eventLoopMutex sync.Mutex
 	opts := []ide.Option{
 		ide.WithExtensionsRunner(ide.FuncExtensionsRunner(extensionRunner)),
-		ide.WithInitShader(shader.Fade(), 30, 4*time.Second),
+		ide.WithInitShader(
+			func(defAttr term.Attributes) shader.Shader {
+				return shader.Fade(defAttr)
+			}, 30, 4*time.Second),
 		ide.WithLocker(&eventLoopMutex),
 		ide.WithConfigFilename(configFilename),
 		ide.WithDefaultWallpaper(wallpaper),

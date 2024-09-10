@@ -50,6 +50,7 @@ func TestTransitionCrossFade(t *testing.T) {
 
 		transition := TransitionCrossFade(
 			TransitionCrossFadeParams{ChangeAtPerc: 0.5, OverlapPerc: overlapPerc},
+			term.Attributes{},
 			shRedAAAs,
 			shGreenBBBs,
 		)
@@ -99,6 +100,7 @@ func TestTransitionCrossFade(t *testing.T) {
 		shGreenBBBs := newConstantShader('B', tcell.ColorDarkGreen, tcell.ColorGreen)
 		transition := TransitionCrossFade(
 			TransitionCrossFadeParams{ChangeAtPerc: 0.5, OverlapPerc: 0.4},
+			term.Attributes{},
 			shRedAAAs,
 			shGreenBBBs,
 		)
@@ -106,7 +108,9 @@ func TestTransitionCrossFade(t *testing.T) {
 		frames := []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}
 
 		lerpFg := func(factor float64) tcell.Color {
-			return shaderutils.InterpolateColor(factor, tcell.ColorDarkRed, tcell.ColorDarkGreen)
+			return shaderutils.InterpolateColor(
+				factor, tcell.ColorDarkRed, tcell.ColorDarkGreen, 0,
+			)
 		}
 		expectFgs := []tcell.Color{
 			tcell.ColorDarkRed,
@@ -122,7 +126,9 @@ func TestTransitionCrossFade(t *testing.T) {
 		}
 
 		lerpBg := func(factor float64) tcell.Color {
-			return shaderutils.InterpolateColor(factor, tcell.ColorRed, tcell.ColorGreen)
+			return shaderutils.InterpolateColor(
+				factor, tcell.ColorRed, tcell.ColorGreen, 0,
+			)
 		}
 		expectBgs := []tcell.Color{
 			tcell.ColorRed,
@@ -355,10 +361,16 @@ func TestTransitionCrossFade(t *testing.T) {
 			var transition Shader
 			if tcase.panicsConstructing {
 				assert.Panics(t, func() {
-					transition = TransitionCrossFade(tcase.params, sh1, sh2)
+					transition = TransitionCrossFade(
+						tcase.params, term.Attributes{},
+						sh1, sh2,
+					)
 				})
 			} else {
-				transition = TransitionCrossFade(tcase.params, sh1, sh2)
+				transition = TransitionCrossFade(
+					tcase.params, term.Attributes{},
+					sh1, sh2,
+				)
 			}
 
 			testTransitionFrames(
@@ -401,6 +413,7 @@ func TestStackingTransitionCrossFade(t *testing.T) {
 			total: 20,
 			transition: TransitionCrossFade(
 				TransitionCrossFadeParams{ChangeAtPerc: 0.4, OverlapPerc: 0.3},
+				term.Attributes{},
 				shA,
 				shB,
 			),
@@ -418,9 +431,11 @@ func TestStackingTransitionCrossFade(t *testing.T) {
 			total: 20,
 			transition: TransitionCrossFade(
 				TransitionCrossFadeParams{ChangeAtPerc: 0.5, OverlapPerc: 0.3},
+				term.Attributes{},
 				shA,
 				TransitionCrossFade(
 					TransitionCrossFadeParams{ChangeAtPerc: 0.5, OverlapPerc: 0.3},
+					term.Attributes{},
 					shB,
 					shC,
 				),
@@ -439,8 +454,10 @@ func TestStackingTransitionCrossFade(t *testing.T) {
 			total: 20,
 			transition: TransitionCrossFade(
 				TransitionCrossFadeParams{ChangeAtPerc: 0.5, OverlapPerc: 0.3},
+				term.Attributes{},
 				TransitionCrossFade(
 					TransitionCrossFadeParams{ChangeAtPerc: 0.5, OverlapPerc: 0.3},
+					term.Attributes{},
 					shA,
 					shB,
 				),
@@ -460,7 +477,11 @@ func TestStackingTransitionCrossFade(t *testing.T) {
 			total: 21,
 			transition: TransitionCrossFade(
 				TransitionCrossFadeParams{ChangeAtPerc: 0.8, OverlapPerc: 0.25},
-				TransitionCrossFade(defaultParams, shA, shB),
+				term.Attributes{},
+				TransitionCrossFade(defaultParams, term.Attributes{},
+					shA,
+					shB,
+				),
 				shC,
 			),
 			transitionShaders: []*mockShader{shA, shB, shC},
@@ -477,8 +498,12 @@ func TestStackingTransitionCrossFade(t *testing.T) {
 			total: 19,
 			transition: TransitionCrossFade(
 				TransitionCrossFadeParams{ChangeAtPerc: 0.8, OverlapPerc: 0.25},
+				term.Attributes{},
 				shA,
-				TransitionCrossFade(defaultParams, shB, shC),
+				TransitionCrossFade(defaultParams, term.Attributes{},
+					shB,
+					shC,
+				),
 			),
 			transitionShaders: []*mockShader{shA, shB, shC},
 			globalFrames:      []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18},
@@ -494,7 +519,13 @@ func TestStackingTransitionCrossFade(t *testing.T) {
 			total: 20,
 			transition: TransitionCrossFade(
 				defaultParams,
-				TransitionCrossFade(TransitionCrossFadeParams{ChangeAtPerc: 0.8, OverlapPerc: 0.25}, shA, shB),
+				term.Attributes{},
+				TransitionCrossFade(
+					TransitionCrossFadeParams{ChangeAtPerc: 0.8, OverlapPerc: 0.25},
+					term.Attributes{},
+					shA,
+					shB,
+				),
 				shC,
 			),
 			transitionShaders: []*mockShader{shA, shB, shC},
@@ -509,11 +540,13 @@ func TestStackingTransitionCrossFade(t *testing.T) {
 		{
 			name:  "frames partitioned unevenly outer ChangeAtPercs=0.7 inner ChangeAtPercs=0.1 T(A, T(B, C))",
 			total: 20,
-			transition: TransitionCrossFade(TransitionCrossFadeParams{ChangeAtPerc: 0.7, OverlapPerc: 0.25},
+			transition: TransitionCrossFade(
+				TransitionCrossFadeParams{ChangeAtPerc: 0.7, OverlapPerc: 0.25},
+				term.Attributes{},
 				shA,
-				TransitionCrossFade(TransitionCrossFadeParams{ChangeAtPerc: 0.1, OverlapPerc: 0.25},
-					shB,
-					shC,
+				TransitionCrossFade(TransitionCrossFadeParams{
+					ChangeAtPerc: 0.1, OverlapPerc: 0.25}, term.Attributes{},
+					shB, shC,
 				),
 			),
 			transitionShaders: []*mockShader{shA, shB, shC},
@@ -530,13 +563,16 @@ func TestStackingTransitionCrossFade(t *testing.T) {
 			total: 20,
 			transition: TransitionCrossFade(
 				TransitionCrossFadeParams{ChangeAtPerc: 0.5, OverlapPerc: 0.25},
+				term.Attributes{},
 				TransitionCrossFade(
 					TransitionCrossFadeParams{ChangeAtPerc: 0.5, OverlapPerc: 0.25},
+					term.Attributes{},
 					shA,
 					shB,
 				),
 				TransitionCrossFade(
 					TransitionCrossFadeParams{ChangeAtPerc: 0.5, OverlapPerc: 0.25},
+					term.Attributes{},
 					shC,
 					shD,
 				),
@@ -556,13 +592,16 @@ func TestStackingTransitionCrossFade(t *testing.T) {
 			total: 20,
 			transition: TransitionCrossFade(
 				TransitionCrossFadeParams{ChangeAtPerc: 0.5, OverlapPerc: 0.75},
+				term.Attributes{},
 				TransitionCrossFade(
 					TransitionCrossFadeParams{ChangeAtPerc: 0.5, OverlapPerc: 0.75},
+					term.Attributes{},
 					shA,
 					shB,
 				),
 				TransitionCrossFade(
 					TransitionCrossFadeParams{ChangeAtPerc: 0.5, OverlapPerc: 0.75},
+					term.Attributes{},
 					shC,
 					shD,
 				),
@@ -580,11 +619,11 @@ func TestStackingTransitionCrossFade(t *testing.T) {
 		{
 			name:  "frames partitioned evenly T(A, T(B, T(C, D))",
 			total: 16,
-			transition: TransitionCrossFade(defaultParams,
+			transition: TransitionCrossFade(defaultParams, term.Attributes{},
 				shA,
-				TransitionCrossFade(defaultParams,
+				TransitionCrossFade(defaultParams, term.Attributes{},
 					shB,
-					TransitionCrossFade(defaultParams,
+					TransitionCrossFade(defaultParams, term.Attributes{},
 						shC,
 						shD,
 					),
@@ -603,14 +642,14 @@ func TestStackingTransitionCrossFade(t *testing.T) {
 		{
 			name:  "frames partitioned mix duplets T(A, T(T(B, C), T(D, E)))",
 			total: 30,
-			transition: TransitionCrossFade(defaultParams,
+			transition: TransitionCrossFade(defaultParams, term.Attributes{},
 				shA,
-				TransitionCrossFade(defaultParams,
-					TransitionCrossFade(defaultParams,
+				TransitionCrossFade(defaultParams, term.Attributes{},
+					TransitionCrossFade(defaultParams, term.Attributes{},
 						shB,
 						shC,
 					),
-					TransitionCrossFade(defaultParams,
+					TransitionCrossFade(defaultParams, term.Attributes{},
 						shD,
 						shE,
 					),

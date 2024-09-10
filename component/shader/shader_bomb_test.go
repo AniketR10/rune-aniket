@@ -27,45 +27,46 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"unstable.build/go-tui/term"
 )
 
 func TestBomb(t *testing.T) {
 	t.Run("the smaller the ring start the greater the ring scale is", func(t *testing.T) {
 		params := DefaultBombParams()
-		sh := Bomb(params).(*bomb)
+		sh := Bomb(params, term.Attributes{}).(*bomb)
 		ringScale1 := sh.ringScale
 		params.RingStart -= 0.1
-		sh = Bomb(params).(*bomb)
+		sh = Bomb(params, term.Attributes{}).(*bomb)
 		ringScale2 := sh.ringScale
 		assert.Less(t, ringScale2, ringScale1)
 	})
 
 	t.Run("the greater the ring start the smaller the ring scale is", func(t *testing.T) {
 		params := DefaultBombParams()
-		sh := Bomb(params).(*bomb)
+		sh := Bomb(params, term.Attributes{}).(*bomb)
 		ringScale1 := sh.ringScale
 		params.RingStart += 0.1
-		sh = Bomb(params).(*bomb)
+		sh = Bomb(params, term.Attributes{}).(*bomb)
 		ringScale2 := sh.ringScale
 		assert.Greater(t, ringScale2, ringScale1)
 	})
 
 	t.Run("the smaller the ring end the smaller the ring scale is", func(t *testing.T) {
 		params := DefaultBombParams()
-		sh := Bomb(params).(*bomb)
+		sh := Bomb(params, term.Attributes{}).(*bomb)
 		ringScale1 := sh.ringScale
 		params.RingEnd -= 0.1
-		sh = Bomb(params).(*bomb)
+		sh = Bomb(params, term.Attributes{}).(*bomb)
 		ringScale2 := sh.ringScale
 		assert.Greater(t, ringScale2, ringScale1)
 	})
 
 	t.Run("the greater the ring end the greater the ring scale is", func(t *testing.T) {
 		params := DefaultBombParams()
-		sh := Bomb(params).(*bomb)
+		sh := Bomb(params, term.Attributes{}).(*bomb)
 		ringScale1 := sh.ringScale
 		params.RingEnd += 0.1
-		sh = Bomb(params).(*bomb)
+		sh = Bomb(params, term.Attributes{}).(*bomb)
 		ringScale2 := sh.ringScale
 		assert.Less(t, ringScale2, ringScale1)
 	})

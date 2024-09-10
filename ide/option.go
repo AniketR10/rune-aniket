@@ -131,10 +131,11 @@ func WithScheduleNextTick(scheduleFn func(func()) bool) Option {
 // WithInitShader configures the IDE to initialize with the
 // given Shader animation.
 func WithInitShader(
-	shader shader.Shader, fps int, duration time.Duration,
+	shaderFn func(defaultAttr term.Attributes) shader.Shader,
+	fps int, duration time.Duration,
 ) Option {
 	return func(opts *options) {
-		opts.shader = shader
+		opts.shaderFn = shaderFn
 		opts.shaderFPS = fps
 		opts.shaderDuration = duration
 	}
@@ -204,7 +205,7 @@ type options struct {
 	defaultConfig       string
 	bell                func()
 	scheduleFn          func(func()) bool
-	shader              shader.Shader
+	shaderFn            func(term.Attributes) shader.Shader
 	shaderDuration      time.Duration
 	shaderFPS           int
 }

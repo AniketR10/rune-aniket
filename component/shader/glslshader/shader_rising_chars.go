@@ -34,7 +34,9 @@ import (
 // RisingChars produce ascending particles that displacing the original
 // characters. The traveling character ends up landing on the original position
 // producing a kind of alien abduction effect.
-func RisingChars(params RisingCharsParams) shader.Shader {
+func RisingChars(
+	params RisingCharsParams, defaultAttr term.Attributes,
+) shader.Shader {
 	params.DurationPercTravelling = clamp(params.DurationPercTravelling, 0.0, 1.0)
 	params.DurationPercStillness = clamp(params.DurationPercStillness, 0.0, 1.0)
 
@@ -51,6 +53,7 @@ func RisingChars(params RisingCharsParams) shader.Shader {
 
 	return &risingChars{
 		RisingCharsParams: params,
+		defaultAttr:       defaultAttr,
 	}
 }
 
@@ -87,6 +90,7 @@ func DefaultRisingCharsParams() RisingCharsParams {
 }
 
 type risingChars struct {
+	defaultAttr term.Attributes
 	RisingCharsParams
 	charTxs []charTx // character translations
 }
@@ -184,7 +188,7 @@ func (s *risingChars) processCell(
 			))
 			fg = vecToCol(
 				mix3D(
-					colToVec(fg),
+					colToVec(fg, s.defaultAttr.Fg),
 					vec3(255.0*(0.5+0.5*n)),
 					0.5+0.5*sin(s.CharFgFlickerSpeed*math.Pi*(float(frame)/float(total))+
 						float(charTx.dest.X+charTx.dest.Y))),

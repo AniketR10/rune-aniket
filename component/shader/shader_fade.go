@@ -24,17 +24,19 @@
 package shader
 
 import (
+	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/component/shader/shaderutils"
 	"unstable.build/go-tui/term"
 )
 
 // Fade is a Shader that interpolates the foreground and background color
 // slowly as epoc progresses, creating a fade in effect.
-func Fade() Shader {
-	return &fade{}
+func Fade(defaultAttrs term.Attributes) Shader {
+	return &fade{defaultAttr: defaultAttrs}
 }
 
 type fade struct {
+	defaultAttr term.Attributes
 }
 
 func (s fade) Shade(epoch, total int, cells [][]term.Cell) {
@@ -44,6 +46,9 @@ func (s fade) Shade(epoch, total int, cells [][]term.Cell) {
 	if epoch == 0 {
 		for y, row := range cells {
 			for x, cell := range row {
+				if cell.Bg == tcell.ColorDefault {
+					cell.Bg = s.defaultAttr.Bg
+				}
 				cells[y][x].Fg = cell.Bg
 			}
 		}
@@ -52,7 +57,15 @@ func (s fade) Shade(epoch, total int, cells [][]term.Cell) {
 	opacity := float64(epoch) / float64(total)
 	for y, row := range cells {
 		for x, cell := range row {
-			cells[y][x].Fg = shaderutils.InterpolateColor(opacity, cell.Bg, cell.Fg)
+			if cell.Bg == tcell.ColorDefault {
+				cell.Bg = s.defaultAttr.Bg
+			}
+			if cell.Fg == tcell.ColorDefault {
+				cell.Fg = s.defaultAttr.Fg
+			}
+			cells[y][x].Fg = shaderutils.InterpolateColor(
+				opacity, cell.Bg, cell.Fg, s.defaultAttr.Fg,
+			)
 		}
 	}
 }

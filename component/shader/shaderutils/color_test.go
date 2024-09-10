@@ -32,11 +32,12 @@ import (
 
 func TestInterpolateColor(t *testing.T) {
 	tsuite := []struct {
-		name      string
-		colA      tcell.Color
-		colB      tcell.Color
-		factor    float64
-		expectRGB []int32
+		name                string
+		colA                tcell.Color
+		colB                tcell.Color
+		resolveColorDefault tcell.Color
+		factor              float64
+		expectRGB           []int32
 	}{
 		{
 			name:      "begins with colA",
@@ -73,11 +74,21 @@ func TestInterpolateColor(t *testing.T) {
 			factor:    1.5,
 			expectRGB: []int32{15, 251, 250},
 		},
+		{
+			name:                "interpolating default color",
+			colA:                tcell.ColorDefault,
+			colB:                tcell.NewRGBColor(0, 0, 0),
+			factor:              0.5,
+			resolveColorDefault: tcell.NewRGBColor(200, 0, 0),
+			expectRGB:           []int32{100, 0, 0},
+		},
 	}
 
 	for _, tcase := range tsuite {
 		t.Run(tcase.name, func(t *testing.T) {
-			res := InterpolateColor(tcase.factor, tcase.colA, tcase.colB)
+			res := InterpolateColor(
+				tcase.factor, tcase.colA, tcase.colB, tcase.resolveColorDefault,
+			)
 			r, g, b := res.RGB()
 			assert.Equal(t, tcase.expectRGB, []int32{r, g, b})
 		})
@@ -86,9 +97,10 @@ func TestInterpolateColor(t *testing.T) {
 
 func TestColorBrightness(t *testing.T) {
 	tsuite := []struct {
-		name   string
-		col    tcell.Color
-		expect float64
+		name                string
+		col                 tcell.Color
+		resolveColorDefault tcell.Color
+		expect              float64
 	}{
 		{
 			name:   "black",
@@ -120,11 +132,17 @@ func TestColorBrightness(t *testing.T) {
 			col:    tcell.NewRGBColor(-10, -10, -255),
 			expect: 0.6444444444444445, // strange result but can stimulate creativity
 		},
+		{
+			name:                "default color",
+			col:                 tcell.ColorDefault,
+			resolveColorDefault: tcell.NewRGBColor(255, 255, 255),
+			expect:              1.0,
+		},
 	}
 
 	for _, tcase := range tsuite {
 		t.Run(tcase.name, func(t *testing.T) {
-			res := ColorBrightness(tcase.col)
+			res := ColorBrightness(tcase.col, tcase.resolveColorDefault)
 			assert.Equal(t, res, tcase.expect)
 		})
 	}
