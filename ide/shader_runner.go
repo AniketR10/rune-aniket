@@ -78,47 +78,93 @@ func (r *shaderRunner) HandleCommand(ctx context.Context, cmd textapi.Command) (
 		}
 	}
 
+	const (
+		fadeInPerc  = 0.1
+		fadeOutPerc = 0.1
+	)
 	var s shader.Shader
 	// parse shader and duration
 	switch cmd.Args[0] {
 	case "blaze":
-		s = glslshader.Blaze(glslshader.DefaultBlazeParams(), float64(fps))
+		s = wrapShaderCrossFadeInOut(
+			glslshader.Blaze(glslshader.DefaultBlazeParams(), float64(fps)),
+			fadeInPerc, fadeOutPerc,
+		)
 	case "blazeBlue":
 		params := glslshader.DefaultBlazeParams()
 		params.SwapRedBlue = true
-		s = glslshader.Blaze(params, float64(fps))
+		s = wrapShaderCrossFadeInOut(
+			glslshader.Blaze(params, float64(fps)),
+			fadeInPerc, fadeOutPerc,
+		)
 	case "bomb":
 		s = shader.Bomb(shader.DefaultBombParams())
 	case "embers":
-		s = glslshader.Embers(glslshader.DefaultEmbersParams(), float64(fps))
+		s = wrapShaderCrossFadeInOut(
+			glslshader.Embers(glslshader.DefaultEmbersParams(), float64(fps)),
+			fadeInPerc, fadeOutPerc,
+		)
 	case "fade":
 		s = shader.Fade()
 	case "incendium":
-		s = glslshader.Incendium(glslshader.DefaultIncendiumParams(), float64(fps))
+		s = wrapShaderCrossFadeInOut(
+			glslshader.Incendium(glslshader.DefaultIncendiumParams(), float64(fps)),
+			fadeInPerc, fadeOutPerc,
+		)
 	case "incendiumReversed":
-		s = timeshader.Reverse(glslshader.Incendium(glslshader.DefaultIncendiumParams(), float64(fps)))
+		s = wrapShaderCrossFadeInOut(
+			timeshader.Reverse(glslshader.Incendium(glslshader.DefaultIncendiumParams(), float64(fps))),
+			fadeInPerc, fadeOutPerc,
+		)
 	case "incendiumPingPong":
-		s = timeshader.PingPong(glslshader.Incendium(glslshader.DefaultIncendiumParams(), float64(fps)))
+		s = wrapShaderCrossFadeInOut(
+			timeshader.PingPong(glslshader.Incendium(glslshader.DefaultIncendiumParams(), float64(fps))),
+			fadeInPerc, fadeOutPerc,
+		)
 	case "flames":
-		s = glslshader.Flames(glslshader.DefaultFlamesParams(), float64(fps))
+		s = wrapShaderCrossFadeInOut(
+			glslshader.Flames(glslshader.DefaultFlamesParams(), float64(fps)),
+			0.0, fadeOutPerc,
+		)
 	case "flamesA":
-		s = glslshader.Flames(glslshader.FlamesPresetAShape(), float64(fps))
+		s = wrapShaderCrossFadeInOut(
+			glslshader.Flames(glslshader.FlamesPresetAShape(), float64(fps)),
+			0.0, fadeOutPerc,
+		)
 	case "flamesV":
-		s = glslshader.Flames(glslshader.FlamesPresetVShape(), float64(fps))
+		s = wrapShaderCrossFadeInOut(
+			glslshader.Flames(glslshader.FlamesPresetVShape(), float64(fps)),
+			0.0, fadeOutPerc,
+		)
 	case "inferno":
-		s = glslshader.Inferno(glslshader.DefaultInfernoParams(), float64(fps))
+		s = wrapShaderCrossFadeInOut(
+			glslshader.Inferno(glslshader.DefaultInfernoParams(), float64(fps)),
+			fadeInPerc, fadeOutPerc,
+		)
 	case "infernoBlue":
 		params := glslshader.DefaultInfernoParams()
 		params.SwapRedBlue = true
-		s = glslshader.Inferno(params, float64(fps))
+		s = wrapShaderCrossFadeInOut(
+			glslshader.Inferno(params, float64(fps)),
+			fadeInPerc, fadeOutPerc,
+		)
 	case "noise":
-		s = glslshader.Noise(glslshader.DefaultNoiseParams(), float64(fps))
+		s = wrapShaderCrossFadeInOut(
+			glslshader.Noise(glslshader.DefaultNoiseParams(), float64(fps)),
+			fadeInPerc, fadeOutPerc,
+		)
 	case "nop":
 		s = shader.Nop()
 	case "risingChars":
-		s = glslshader.RisingChars(glslshader.DefaultRisingCharsParams())
+		s = wrapShaderCrossFadeInOut(
+			glslshader.RisingChars(glslshader.DefaultRisingCharsParams()),
+			fadeInPerc, fadeOutPerc,
+		)
 	case "trippy":
-		s = glslshader.Trippy(glslshader.DefaultTrippyParams(), float64(fps))
+		s = wrapShaderCrossFadeInOut(
+			glslshader.Trippy(glslshader.DefaultTrippyParams(), float64(fps)),
+			fadeInPerc, fadeOutPerc,
+		)
 	default:
 		err = errors.New("expected one of the available shaders")
 		return
@@ -180,4 +226,28 @@ func (r *shaderRunner) Resize(width, height int) {
 
 func (r *shaderRunner) Close() error {
 	return r.shader.Close()
+}
+
+// Adds fade in and out to a given shader.
+//
+// fadeInPerc specifies the percentage of the whole animation you want fading
+// in (e.g. 0.1 means 10% of the beginning frames of shader will be
+// transition), and similarly with fadeOutPerc (10% would mean at 90% of the
+// animation it starts fading out).
+func wrapShaderCrossFadeInOut(sh shader.Shader, fadeInPerc, fadeOutPerc float64) shader.Shader {
+	return shader.TransitionCrossFade(
+		shader.TransitionCrossFadeParams{
+			ChangeAtPerc: fadeInPerc,
+			OverlapPerc:  fadeInPerc,
+		},
+		shader.Nop(),
+		shader.TransitionCrossFade(
+			shader.TransitionCrossFadeParams{
+				ChangeAtPerc: 1.0 - fadeOutPerc,
+				OverlapPerc:  fadeOutPerc,
+			},
+			sh,
+			shader.Nop(),
+		),
+	)
 }
