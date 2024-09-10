@@ -61,6 +61,16 @@ func drawVerticesForUtil(
 
 	var op ebiten.DrawTrianglesOptions
 	op.ColorScaleMode = ebiten.ColorScaleModePremultipliedAlpha
+	// this blend set allows bgColors to fill background,
+	// but disables blending color alpha
+	op.Blend = ebiten.Blend{
+		BlendFactorSourceRGB:        ebiten.BlendFactorOne,
+		BlendFactorSourceAlpha:      ebiten.BlendFactorOne,
+		BlendFactorDestinationRGB:   ebiten.BlendFactorOneMinusSourceAlpha,
+		BlendFactorDestinationAlpha: ebiten.BlendFactorOneMinusSourceAlpha,
+		BlendOperationRGB:           ebiten.BlendOperationMax,
+		BlendOperationAlpha:         ebiten.BlendOperationMax,
+	}
 	op.AntiAlias = antialias
 	dst.DrawTriangles(vs, is, whiteSubImage, &op)
 }
