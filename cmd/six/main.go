@@ -24,10 +24,14 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	_ "embed"
 	"errors"
 	"flag"
 	"fmt"
+	"image"
+	"image/png"
 	"io"
 	"net/http"
 	_ "net/http/pprof"
@@ -48,7 +52,9 @@ import (
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/component/asciiart"
 	"unstable.build/go-tui/component/shader"
+	"unstable.build/go-tui/component/shader/glslshader"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/extension/extensionproc"
@@ -295,25 +301,23 @@ func run() int {
 		}
 	}
 
-	strcfg := component.StringConfig{
-		Alignment: component.SpanAlignmentCentered,
-	}
-	wallpaper := browser.Wallpaper{
-		NewComponent: func() tui.Component {
-			return component.NewStringWithConfig(sixDefaultWallpaper, strcfg)
-		},
-	}
+	unstableBuildLogo := unstableBuildLogo()
 
 	var eventLoopMutex sync.Mutex
 	opts := []ide.Option{
 		ide.WithExtensionsRunner(ide.FuncExtensionsRunner(extensionRunner)),
 		ide.WithInitShader(
 			func(defAttr term.Attributes) shader.Shader {
-				return shader.Fade(defAttr)
-			}, 30, 4*time.Second),
+				return glslshader.Burning(
+					glslshader.BurningPresetGentle(unstableBuildLogo, true),
+					defAttr,
+					10*time.Second,
+					60,
+				)
+			}, 60, 10*time.Second),
 		ide.WithLocker(&eventLoopMutex),
 		ide.WithConfigFilename(configFilename),
-		ide.WithDefaultWallpaper(wallpaper),
+		ide.WithDefaultWallpaper(makeWallpaper(unstableBuildLogo)),
 		ide.WithDefaultConfigYAML(defaultConfig),
 	}
 
@@ -347,4 +351,32 @@ func run() int {
 	}
 
 	return 0
+}
+
+//go:embed unstable_build_logo.png
+var unstableBuildLogoBytes []byte
+
+func unstableBuildLogo() image.Image {
+	img, err := png.Decode(bytes.NewReader(unstableBuildLogoBytes))
+	if err != nil {
+		panic(fmt.Errorf("png decode: %v", err))
+	}
+	return img
+}
+
+func makeWallpaper(img image.Image) browser.Wallpaper {
+	return browser.Wallpaper{
+		NewComponent: func() tui.Component {
+			cfg := asciiart.DefaultConfig()
+			cfg.Color = true
+			cfg.MaintainAspectRatio = true
+			cfg.DensityCharacters = "\u2009▓▓▓▓▓▓▓▓▓"
+			image := asciiart.NewComponent(img, cfg)
+			return component.NewSpan(image, component.SpanConfig{
+				PadHorizontalPerc: 0.4,
+				PadVerticalPerc:   0.2,
+				ContentAlignment:  component.SpanAlignmentCentered,
+			})
+		},
+	}
 }

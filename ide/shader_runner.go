@@ -85,6 +85,7 @@ func (r *shaderRunner) HandleCommand(ctx context.Context, cmd textapi.Command) (
 	)
 	var s shader.Shader
 	// parse shader and duration
+	// TODO: Review and leave only useful shaders. This at the moment is a review showroom!
 	switch cmd.Args[0] {
 	case "blaze":
 		s = wrapShaderCrossFadeInOut(
@@ -161,6 +162,20 @@ func (r *shaderRunner) HandleCommand(ctx context.Context, cmd textapi.Command) (
 			fadeInPerc, fadeOutPerc,
 			r.defAttr,
 		)
+	case "burningOnlyRedFlamesLightsOn":
+		params := glslshader.BurningPresetGentleOnlyFlames(false)
+		s = glslshader.Burning(params, r.defAttr, d, float64(fps))
+	case "burningOnlyRedFlamesLightsOff":
+		params := glslshader.BurningPresetGentleOnlyFlames(true)
+		s = glslshader.Burning(params, r.defAttr, d, float64(fps))
+	case "burningOnlyBlueFlamesLightsOn":
+		params := glslshader.BurningPresetGentleOnlyFlames(false)
+		params.Colors.SwapRedBlue = true
+		s = glslshader.Burning(params, r.defAttr, d, float64(fps))
+	case "burningOnlyBlueFlamesLightsOff":
+		params := glslshader.BurningPresetGentleOnlyFlames(true)
+		params.Colors.SwapRedBlue = true
+		s = glslshader.Burning(params, r.defAttr, d, float64(fps))
 	case "noise":
 		s = wrapShaderCrossFadeInOut(
 			glslshader.Noise(glslshader.DefaultNoiseParams(), float64(fps)),
@@ -195,6 +210,7 @@ func (r *shaderRunner) Complete(ctx context.Context, name string, args []string)
 ) {
 	if len(args) <= 1 {
 		return iterator.FromSlice([]string{
+			// TODO: Review and leave only useful shaders. This at the moment is a review showroom!
 			"blaze",
 			"blazeBlue",
 			"bomb",
@@ -208,6 +224,10 @@ func (r *shaderRunner) Complete(ctx context.Context, name string, args []string)
 			"flamesV",
 			"inferno",
 			"infernoBlue",
+			"burningOnlyRedFlamesLightsOn",
+			"burningOnlyRedFlamesLightsOff",
+			"burningOnlyBlueFlamesLightsOn",
+			"burningOnlyBlueFlamesLightsOff",
 			"noise",
 			"nop",
 			"risingChars",
