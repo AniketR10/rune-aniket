@@ -95,6 +95,71 @@ func TestShadeGLSL(t *testing.T) {
 	})
 }
 
+func TestCoordinateSpaceTransform(t *testing.T) {
+	t.Run("pixel shader frag coords from cell coords", func(t *testing.T) {
+		x := 2
+		y := 10
+		cols := 100
+		rows := 30
+		fragX, fragY, resX, resY := cellCoordToFragCoords(x, y, cols, rows)
+		assert.Equal(t, 2, fragX)
+		assert.Equal(t, 44, fragY)
+		assert.Equal(t, 100, resX)
+		assert.Equal(t, 69, resY)
+	})
+
+	t.Run("cell coords from pixel shader frag coords", func(t *testing.T) {
+		fragX := 2
+		fragY := 44
+		resX := 100
+		resY := 69
+		x, y, cols, rows := fragCoordsToCellCoords(fragX, fragY, resX, resY)
+		assert.Equal(t, 2, x)
+		assert.Equal(t, 10, y)
+		assert.Equal(t, 100, cols)
+		assert.Equal(t, 30, rows)
+	})
+
+	t.Run(
+		"check we can generally convert from cell coords to fragment coords and viceversa",
+		func(t *testing.T) {
+			inX := 2
+			inY := 10
+			inRows := 30
+			inCols := 100
+
+			fragX, fragY, resX, resY := cellCoordToFragCoords(inX, inY, inCols, inRows)
+			outX, outY, outCols, outRows := fragCoordsToCellCoords(fragX, fragY, resX, resY)
+
+			assert.Equal(t, inX, outX)
+			assert.Equal(t, inY, outY)
+			assert.Equal(t, inCols, outCols)
+			assert.Equal(t, inRows, outRows)
+		})
+
+	// Reflect the current behaviour where due to truncated divisions of floats
+	// the transformed values can't be transformed back into their originals.
+	// Because of this limitation we introduced the cellCoords as an argument
+	// to cellRunner.runCell...
+	t.Run(
+		"converting from cell to frag coord and back might produce inaccurate results",
+		func(t *testing.T) {
+			rows := 30
+			cols := 100
+			inaccurate := false
+			for y := 0; y < rows; y++ {
+				for x := 0; x < cols; x++ {
+					fragX, fragY, resX, resY := cellCoordToFragCoords(x, y, cols, rows)
+					outX, outY, outCols, outRows := fragCoordsToCellCoords(fragX, fragY, resX, resY)
+					if x != outX || y != outY || cols != outCols || rows != outRows {
+						inaccurate = true
+					}
+				}
+			}
+			assert.True(t, inaccurate)
+		})
+}
+
 func newFakeShader() *fakeShader {
 	cr := &fakeCellRunner{}
 	cr.coordsExecuted = []coord{}
@@ -129,6 +194,7 @@ type fakeCellRunner struct {
 
 func (s *fakeCellRunner) runCell(
 	frame, total int, fps float, time float,
+	cellCoords term.Coordinates,
 	fragCoordX, fragCoordY int,
 	resolutionX, resolutionY int,
 	inChar rune, inFg, inBg tcell.Color,

@@ -72,6 +72,7 @@ func (s *noise) Shade(frame, total int, in [][]term.Cell) {
 
 func (s *noise) runCell(
 	frame, total int, fps float, time float,
+	cellCoords term.Coordinates,
 	fragCoordX, fragCoordY int,
 	resolutionX, resolutionY int,
 	inChar rune, inFg, inBg tcell.Color,

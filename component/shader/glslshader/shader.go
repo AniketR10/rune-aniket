@@ -39,8 +39,11 @@ type cellRunner interface {
 	// For instance Shadertoy's fragCoord would be fragCoordX and fragCoordY,
 	// iResolution would be resolutionX and resolutionY and iTime would be
 	// time (which is in seconds too).
+	//
+	// The original cell indices are passed along (cellCoords).
 	runCell(
 		frame, total int, fps float, time float,
+		cellCoords term.Coordinates,
 		fragCoordX, fragCoordY int,
 		resolutionX, resolutionY int,
 		inChar rune, inFg, inBg tcell.Color,
@@ -77,7 +80,9 @@ type shadeRequest struct {
 // aspect is taken into account, since pixels are squared and cells aren't.
 //
 // Intended to be run by the Shade() method of any pixel shader.
-func (g *glslHelper) shadeGLSL(frame, total int, fps float, in [][]term.Cell, shader cellRunner) {
+func (g *glslHelper) shadeGLSL(
+	frame, total int, fps float, in [][]term.Cell, shader cellRunner,
+) {
 	if frame >= total {
 		return
 	}
@@ -138,19 +143,51 @@ func shadeRow(
 ) {
 	defer wg.Done()
 
-	yFlipARCorrect := int(math.Round(float(rows-y-1) *
-		asciiart.HeightToWidthCellAspectRatio))
-	rowsFlipARCorrect := int(math.Round(float(rows) *
-		asciiart.HeightToWidthCellAspectRatio))
+	_, fragCoordY, resolutionX, resolutionY := cellCoordToFragCoords(
+		0, y, cols, rows,
+	)
+
 	for x := range row {
 		char, fg, bg := shader.runCell(
 			frame, total, fps, time,
-			x, yFlipARCorrect,
-			cols, rowsFlipARCorrect,
+			term.Coordinates{X: x, Y: y},
+			x, fragCoordY,
+			resolutionX, resolutionY,
 			in[y][x].Ch, in[y][x].Fg, in[y][x].Bg,
 		)
 		in[y][x].Ch = char
 		in[y][x].Fg = fg
 		in[y][x].Bg = bg
 	}
+}
+
+func cellCoordToFragCoords(x, y, cols, rows int) (
+	fragCoordX, fragCoordY int, resolutionX, resolutionY int,
+) {
+	yFlipARCorrect := int(math.Round(float(rows-y-1) *
+		asciiart.HeightToWidthCellAspectRatio))
+	rowsFlipARCorrect := int(math.Round(float(rows) *
+		asciiart.HeightToWidthCellAspectRatio))
+
+	fragCoordX = x
+	fragCoordY = yFlipARCorrect
+	resolutionX = cols
+	resolutionY = rowsFlipARCorrect
+	return
+}
+
+func fragCoordsToCellCoords(
+	fragCoordX, fragCoordY, resolutionX, resolutionY int,
+) (x, y int, rows, cols int) {
+	x = fragCoordX
+	y = int(
+		math.Round(
+			float(resolutionY-fragCoordY-1) /
+				asciiart.HeightToWidthCellAspectRatio,
+		),
+	)
+	cols = int(float(resolutionY) / asciiart.HeightToWidthCellAspectRatio)
+	rows = resolutionX
+	return
+
 }

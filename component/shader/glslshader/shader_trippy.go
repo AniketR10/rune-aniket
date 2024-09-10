@@ -66,6 +66,7 @@ func (s *trippy) Shade(frame, total int, in [][]term.Cell) {
 
 func (s *trippy) runCell(
 	frame, total int, fps float, time float,
+	cellCoords term.Coordinates,
 	fragCoordX, fragCoordY int,
 	resolutionX, resolutionY int,
 	inChar rune, inFg, inBg tcell.Color,

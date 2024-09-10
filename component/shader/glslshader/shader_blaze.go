@@ -88,6 +88,7 @@ type blaze struct {
 
 func (s *blaze) runCell(
 	frame, total int, fps float, time float,
+	cellCoords term.Coordinates,
 	fragCoordX, fragCoordY int,
 	resolutionX, resolutionY int,
 	inChar rune, inFg, inBg tcell.Color,
