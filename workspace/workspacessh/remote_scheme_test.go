@@ -31,7 +31,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
+	"go.uber.org/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/blue/retry"
 	schemeapi "unstable.build/go-tui/api/scheme"

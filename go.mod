@@ -11,7 +11,6 @@ require (
 	github.com/ernestrc/dom v0.2.5-0.20201125033726-789c946aa938
 	github.com/ernestrc/go-multierror v1.1.2
 	github.com/ernestrc/sensible v0.3.1
-	github.com/golang/mock v1.6.0
 	github.com/hashicorp/go-hclog v0.14.1
 	github.com/hashicorp/go-plugin v1.0.1
 	github.com/junegunn/fzf v0.0.0-20201216124428-ab3937ee5a62
@@ -27,9 +26,9 @@ require (
 	github.com/unstablebuild/tcell/v3 v3.5.0
 	go.uber.org/config v1.4.0
 	go.uber.org/goleak v1.2.0
-	golang.org/x/crypto v0.23.0
+	golang.org/x/crypto v0.27.0
 	golang.org/x/image v0.16.0
-	golang.org/x/term v0.20.0
+	golang.org/x/term v0.24.0
 	google.golang.org/grpc v1.54.0
 	google.golang.org/protobuf v1.31.0
 	gopkg.in/yaml.v3 v3.0.1
@@ -50,12 +49,12 @@ require (
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/rivo/uniseg v0.4.4
 	golang.org/x/lint v0.0.0-20210508222113-6edffad5e616 // indirect
-	golang.org/x/mod v0.17.0 // indirect
-	golang.org/x/net v0.25.0 // indirect
-	golang.org/x/sync v0.7.0 // indirect
-	golang.org/x/sys v0.20.0 // indirect
-	golang.org/x/text v0.15.0 // indirect
-	golang.org/x/tools v0.21.0 // indirect
+	golang.org/x/mod v0.21.0 // indirect
+	golang.org/x/net v0.29.0 // indirect
+	golang.org/x/sync v0.8.0 // indirect
+	golang.org/x/sys v0.25.0 // indirect
+	golang.org/x/text v0.18.0 // indirect
+	golang.org/x/tools v0.25.0 // indirect
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2 // indirect
 	gopkg.in/mgo.v2 v2.0.0-20190816093944-a6b53ec6cb22 // indirect
 )
@@ -67,6 +66,7 @@ require (
 	github.com/pkoukk/tiktoken-go-loader v0.0.1
 	github.com/sashabaranov/go-openai v1.20.3
 	github.com/unstablebuild/pty v1.3.1
+	go.uber.org/mock v0.4.0
 	go.uber.org/multierr v1.4.0
 )
 

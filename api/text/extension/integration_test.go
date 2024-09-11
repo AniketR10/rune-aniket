@@ -29,7 +29,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/golang/mock/gomock"
+	"go.uber.org/mock/gomock"
 	"github.com/stretchr/testify/require"
 	textapi "unstable.build/go-tui/api/text"
 	workspaceapi "unstable.build/go-tui/api/workspace"

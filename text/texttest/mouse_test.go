@@ -26,7 +26,7 @@ package texttest
 import (
 	"testing"
 
-	gomock "github.com/golang/mock/gomock"
+	gomock "go.uber.org/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
