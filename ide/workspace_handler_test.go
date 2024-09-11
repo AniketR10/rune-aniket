@@ -505,6 +505,31 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 }
 
 func TestWorkspaceManagerClosePromptIntegration(t *testing.T) {
+	t.Run("prompts on quit if files are clean, user continues", func(t *testing.T) {
+		m := newTestWorkspaceManagerHandler(t, defaultCfg(), []string{})
+
+		cases := []handlertest.SequenceTestCase{
+			{":quit>",
+				`┌──────────────────┐
+│                  │
+├──────────────────┤
+│                  │
+│  Are you sure    │
+│  you want to     │
+│  exit?           │
+│                  │
+│                  │
+└──────────────────┘`},
+		}
+		handlertest.TestHandlerSequence(t, m, 20, 10, cases)
+
+		exit, handled := m.Handle(term.Event{Type: term.EventKey, Ch: 'y'})
+		assert.True(t, exit)
+		assert.True(t, handled)
+
+		require.NoError(t, m.Close())
+	})
+
 	t.Run("prompts on quit if files are dirty, user continues", func(t *testing.T) {
 		dir, err := os.MkdirTemp("", "")
 		require.NoError(t, err)
@@ -587,7 +612,7 @@ func TestWorkspaceManagerClosePromptIntegration(t *testing.T) {
 		require.NoError(t, m.Close())
 	})
 
-	for _, cmd := range []string{"forceQuit!", "writeQuit", "writeForceQuit!"} {
+	for _, cmd := range []string{"forceQuit!", "writeForceQuit!"} {
 		t.Run(fmt.Sprintf("does not prompt on %s", cmd), func(t *testing.T) {
 			dir, err := os.MkdirTemp("", "")
 			require.NoError(t, err)

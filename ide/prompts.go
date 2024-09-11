@@ -69,24 +69,31 @@ func (h *workspaceManagerHandler) openRestorePrompt(
 	)
 }
 
-func (h *workspaceManagerHandler) openExitPrompt(ex *ex) {
+func (h *workspaceManagerHandler) openConfirmExitPrompt(ex *ex, hasDirtyFilesOpen bool) {
 	const (
 		yes = "Yes"
 		no  = "No"
 	)
 
+	promptText := "Are you sure you want to exit?"
+
+	if hasDirtyFilesOpen {
+		promptText = "There are open files with changes pending to be written. " +
+			promptText
+	}
+
 	var promptWindow browserapi.Window
 	promptWindow = ex.comp.Prompt(
-		"There are open files with changes pending to be written. Are you sure you want to exit?",
+		promptText,
 		[]string{yes, no},
 		[]term.KeyComb{{Ch: 'y'}, {Ch: 'n'}},
 		func(i int, option string) {
 			switch option {
 			case yes:
-				h.promptForceExit = true
+				h.confirmedForceExit = true
 				h.publishEvent(term.Event{Type: term.EventNone})
 			case no:
-				h.promptForceExit = false
+				h.confirmedForceExit = false
 				if promptWindow != nil {
 					promptWindow.Close()
 				}

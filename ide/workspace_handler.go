@@ -69,18 +69,18 @@ var (
 )
 
 type workspaceManagerHandler struct {
-	mu                sync.Locker
-	promptForceExit   bool
-	ctxWithLocker     context.Context
-	storage           document.Service
-	workspace         workspace.WorkspaceManager
-	publishEvent      func(term.Event) bool
-	tabsClickCallback func(int) bool
-	extensionRunner   ExtensionsRunner
-	sixDir            string
-	tabBarOffset      int
-	tabBarHeight      int
-	builtinExtensions map[string]Extension
+	mu                 sync.Locker
+	confirmedForceExit bool
+	ctxWithLocker      context.Context
+	storage            document.Service
+	workspace          workspace.WorkspaceManager
+	publishEvent       func(term.Event) bool
+	tabsClickCallback  func(int) bool
+	extensionRunner    ExtensionsRunner
+	sixDir             string
+	tabBarOffset       int
+	tabBarHeight       int
+	builtinExtensions  map[string]Extension
 	// this is the name of of the file to be expected in workspace folders
 	workspaceConfigFilename string
 	addWorkspacePath        bool
@@ -395,7 +395,7 @@ func (h *workspaceManagerHandler) Handle(ev term.Event) (exit, handled bool) {
 	focus := h.focusHandler()
 	exit, handled = focus.Handle(ev)
 	if !exit {
-		return h.promptForceExit, handled || h.promptForceExit
+		return h.confirmedForceExit, handled || h.confirmedForceExit
 	}
 
 	var exHandler *ex
@@ -407,15 +407,16 @@ func (h *workspaceManagerHandler) Handle(ev term.Event) (exit, handled bool) {
 		panic("unknown focus handler")
 	}
 
-	if exHandler.forceExit || h.promptForceExit || !h.history.dirtyFilesOpen() {
+	if exHandler.forceExit || h.confirmedForceExit {
 		return true, true
 	}
 
+	hasDirtyFilesOpen := h.history.dirtyFilesOpen()
 	exHandler.forceExit = false
 	exHandler.exit = false
-
-	h.openExitPrompt(exHandler)
+	h.openConfirmExitPrompt(exHandler, hasDirtyFilesOpen)
 	return false, true
+
 }
 
 func (h *workspaceManagerHandler) Cursor() (term.Coordinates, term.CursorStyle, bool) {
