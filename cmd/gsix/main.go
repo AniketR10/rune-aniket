@@ -24,22 +24,30 @@
 package main
 
 import (
+	"bytes"
+	_ "embed"
 	"errors"
 	"flag"
 	"fmt"
+	"image"
+	"image/png"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
 	"path"
 	"runtime"
 	"sync"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/component/asciiart"
 	"unstable.build/go-tui/component/notifications"
+	"unstable.build/go-tui/component/shader"
+	"unstable.build/go-tui/component/shader/glslshader"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/extension/extensionproc"
@@ -57,9 +65,9 @@ const (
 
 var (
 	// Tag is a compile-time variable
-	Tag     = "development"
+	Tag = "development"
 	// Commit is a compile-time variable
-	Commit  = "HEAD"
+	Commit = "HEAD"
 	// Version represents the version of this executable.
 	Version string
 
@@ -174,15 +182,6 @@ func run() int {
 		}
 	}
 
-	strcfg := component.StringConfig{
-		Alignment: component.SpanAlignmentCentered,
-	}
-	wallpaper := browser.Wallpaper{
-		NewComponent: func() tui.Component {
-			return component.NewStringWithConfig(gsixDefaultWallpaper, strcfg)
-		},
-	}
-
 	publishChan := make(chan term.Event, 50)
 	publishEvent := func(ev term.Event) bool {
 		select {
@@ -193,9 +192,19 @@ func run() int {
 		}
 	}
 
+	unstableBuildLogo := unstableBuildLogo()
+
 	var mu sync.Mutex
 	opts := []ide.Option{
 		ide.WithExtensionsRunner(ide.FuncExtensionsRunner(extensionRunner)),
+		ide.WithInitShader(
+			func(defaultAttr term.Attributes) shader.Shader {
+				return glslshader.Burning(
+					glslshader.BurningPresetGentle(unstableBuildLogo, true),
+					defaultAttr,
+					10*time.Second, 60,
+				)
+			}, 60, 10*time.Second),
 		ide.WithDefaultConfigYAML(defaultConfig),
 		ide.WithTabBarOffset(12),
 		ide.WithTabBarHeight(3),
@@ -204,7 +213,7 @@ func run() int {
 		ide.WithWorkspacesBarFrame(false),
 		ide.WithLocker(&mu),
 		ide.WithConfigFilename(configFilename),
-		ide.WithDefaultWallpaper(wallpaper),
+		ide.WithDefaultWallpaper(makeWallpaper(unstableBuildLogo)),
 		ide.WithDefaultConfigYAML(defaultConfig),
 		ide.WithBell(func() { /* TODO; nop bell for now */ }),
 		ide.WithPublishEvent(publishEvent),
@@ -288,4 +297,32 @@ func (n *protectedNotifications) NotifyOnce(
 	n.locker.Lock()
 	defer n.locker.Unlock()
 	return n.notifications.NotifyOnce(level, msg, args...)
+}
+
+//go:embed unstable_build_logo.png
+var unstableBuildLogoBytes []byte
+
+func unstableBuildLogo() image.Image {
+	img, err := png.Decode(bytes.NewReader(unstableBuildLogoBytes))
+	if err != nil {
+		panic(fmt.Errorf("png decode: %v", err))
+	}
+	return img
+}
+
+func makeWallpaper(img image.Image) browser.Wallpaper {
+	return browser.Wallpaper{
+		NewComponent: func() tui.Component {
+			cfg := asciiart.DefaultConfig()
+			cfg.Color = true
+			cfg.MaintainAspectRatio = true
+			cfg.DensityCharacters = "\u2009▓▓▓▓▓▓▓▓▓"
+			image := asciiart.NewComponent(img, cfg)
+			return component.NewSpan(image, component.SpanConfig{
+				PadHorizontalPerc: 0.4,
+				PadVerticalPerc:   0.2,
+				ContentAlignment:  component.SpanAlignmentCentered,
+			})
+		},
+	}
 }

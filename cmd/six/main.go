@@ -307,12 +307,11 @@ func run() int {
 	opts := []ide.Option{
 		ide.WithExtensionsRunner(ide.FuncExtensionsRunner(extensionRunner)),
 		ide.WithInitShader(
-			func(defAttr term.Attributes) shader.Shader {
+			func(defaultAttr term.Attributes) shader.Shader {
 				return glslshader.Burning(
 					glslshader.BurningPresetGentle(unstableBuildLogo, true),
-					defAttr,
-					10*time.Second,
-					60,
+					defaultAttr,
+					10*time.Second, 60,
 				)
 			}, 60, 10*time.Second),
 		ide.WithLocker(&eventLoopMutex),
