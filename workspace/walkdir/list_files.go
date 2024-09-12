@@ -57,6 +57,7 @@ func ListFiles(
 	var wg sync.WaitGroup
 	iterCh := make(chan string)
 	workerCh := make(chan string)
+	closeWaitCh := make(chan struct{})
 	allErrors := make([]error, defaultWorkers)
 
 	workspaceURI, err := w.URI(".")
@@ -71,7 +72,11 @@ func ListFiles(
 	// get root as relative path to workspace
 	root = workspaceapi.RelPath(workspaceURI, rootURI)
 
-	iterator := &listFilesIterator{dataCh: iterCh, ctx: ctx}
+	iterator := &listFilesIterator{dataCh: iterCh}
+	ctx, cancel := context.WithCancel(ctx)
+	iterator.ctx = ctx
+	iterator.cancel = cancel
+	iterator.closeWaitCh = closeWaitCh
 
 	for i := 0; i < defaultWorkers; i++ {
 		go traverseDirWorker(ctx, w, &wg, iterCh, workerCh,
@@ -93,6 +98,10 @@ func ListFiles(
 	workerCh <- root
 
 	go func() {
+		defer close(closeWaitCh)
+		defer close(iterCh)
+		defer close(workerCh)
+
 		wg.Wait()
 		iterator.mu.Lock()
 		defer iterator.mu.Unlock()
@@ -101,7 +110,6 @@ func ListFiles(
 				iterator.err = multierr.Append(iterator.err, err)
 			}
 		}
-		close(iterCh)
 	}()
 
 	return iterator, nil
@@ -114,16 +122,17 @@ func traverseDirWorker(
 	iterCh, workerCh chan string, cwd string, mu *sync.Mutex, err *error,
 ) {
 	for {
-		select {
-		case <-ctx.Done():
+		// do not use ctx here, as we could endup with an outstanding
+		// counter on the wait group, which would leak a goroutine.
+		path, ok := <-workerCh
+		if !ok {
 			return
-		case path := <-workerCh:
-			dirErr := dirTraversal(ctx, w, cwd, path, wg, iterCh, workerCh)
-			if dirErr != nil {
-				mu.Lock()
-				*err = multierr.Append(*err, dirErr)
-				mu.Unlock()
-			}
+		}
+		dirErr := dirTraversal(ctx, w, cwd, path, wg, iterCh, workerCh)
+		if dirErr != nil {
+			mu.Lock()
+			*err = multierr.Append(*err, dirErr)
+			mu.Unlock()
 		}
 	}
 }
@@ -175,10 +184,12 @@ func dirTraversal(
 }
 
 type listFilesIterator struct {
-	mu     sync.Mutex
-	err    error
-	ctx    context.Context
-	dataCh chan string
+	mu          sync.Mutex
+	err         error
+	ctx         context.Context
+	dataCh      chan string
+	cancel      func()
+	closeWaitCh chan struct{}
 }
 
 func (l *listFilesIterator) Next() (string, bool) {
@@ -194,6 +205,8 @@ func (l *listFilesIterator) Next() (string, bool) {
 }
 
 func (l *listFilesIterator) Close() error {
+	l.cancel()
+	<-l.closeWaitCh
 	return nil
 }
 

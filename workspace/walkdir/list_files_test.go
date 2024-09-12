@@ -35,6 +35,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/blue/iterator"
+	"go.uber.org/goleak"
 	"unstable.build/go-tui/api/config"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/workspace"
@@ -52,6 +53,7 @@ func assertIteratorEqual(
 		actual = append(actual, next)
 	}
 	require.NoError(t, it.Err())
+	require.NoError(t, it.Close())
 
 	sort.Strings(actual)
 	sort.Strings(expected)
@@ -59,7 +61,10 @@ func assertIteratorEqual(
 }
 
 func TestListFiles(t *testing.T) {
+
 	t.Run("lists all files under workspace as relative", func(t *testing.T) {
+		defer goleak.VerifyNone(t)
+
 		dir, err := os.MkdirTemp("", "")
 		require.NoError(t, err)
 		for _, path := range []string{".", dir} {
@@ -82,7 +87,32 @@ func TestListFiles(t *testing.T) {
 		}
 	})
 
+	t.Run("Close before scanning all should abort", func(t *testing.T) {
+		defer goleak.VerifyNone(t)
+
+		dir, err := os.MkdirTemp("", "")
+		require.NoError(t, err)
+		uri, err := workspaceapi.CurrentUserHostURI(dir)
+		require.NoError(t, err)
+
+		const n = 1000
+		for i := 0; i < n; i++ {
+			subdir := filepath.Join(dir, strconv.Itoa(i))
+			require.NoError(t, os.MkdirAll(subdir, 0777))
+			_, err = os.OpenFile(filepath.Join(subdir, "a"), os.O_CREATE, 0666)
+			require.NoError(t, err)
+		}
+
+		scheme, err := workspace.NewFileScheme(context.Background(), config.NopConfig(), uri)
+		require.NoError(t, err)
+
+		it, err := ListFiles(context.Background(), scheme, dir)
+		require.NoError(t, it.Close())
+	})
+
 	t.Run("lists all files under non-workspace dir as absolute", func(t *testing.T) {
+		defer goleak.VerifyNone(t)
+
 		workspaceDir, err := os.MkdirTemp("", "")
 		require.NoError(t, err)
 
@@ -107,6 +137,8 @@ func TestListFiles(t *testing.T) {
 }
 
 func TestFileSchemeListFilesLarge(t *testing.T) {
+	defer goleak.VerifyNone(t)
+
 	const n = 100
 
 	workspaceURI, closeFn := setupTestDirectory(t, n, 10, 10)
