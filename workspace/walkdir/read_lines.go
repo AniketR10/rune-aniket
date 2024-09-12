@@ -52,7 +52,7 @@ func ReadLines(ctx context.Context, w Reader, paths iterator.Iterator[string]) (
 		}(&errors[i])
 	}
 
-	it := &listFilesIterator{ctx: ctx, ch: lines}
+	it := &listFilesIterator{ctx: ctx, dataCh: lines}
 
 	var itErr error
 	go func() {

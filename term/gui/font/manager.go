@@ -484,6 +484,7 @@ func (m *Manager) findAndLoadFont(name string) (ret []*sfnt.Font, err error) {
 		return nil, fmt.Errorf("find font with family '%s': %w", name, err)
 	}
 
+	defer fonts.Close()
 	for {
 		meta, ok := fonts.Next()
 		if !ok {

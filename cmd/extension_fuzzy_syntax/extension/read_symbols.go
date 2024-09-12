@@ -71,6 +71,7 @@ func readSymbols(
 	}
 
 	it := &listSymbolsIterator{ctx: ctx, ch: results}
+	ctx, it.cancel = context.WithCancel(ctx)
 
 	var itErr error
 	go func() {
@@ -297,10 +298,11 @@ func readSymbolsWorker(
 }
 
 type listSymbolsIterator struct {
-	mu  sync.Mutex
-	err error
-	ctx context.Context
-	ch  chan string
+	mu     sync.Mutex
+	err    error
+	ctx    context.Context
+	ch     chan string
+	cancel func()
 }
 
 func (l *listSymbolsIterator) Next() (string, bool) {
@@ -329,6 +331,11 @@ func (l *listSymbolsIterator) Err() error {
 		return err
 	}
 	return multierror.Append(err, l.ctx.Err())
+}
+
+func (l *listSymbolsIterator) Close() error {
+	l.cancel()
+	return nil
 }
 
 type commonErrors struct {

@@ -307,7 +307,6 @@ type completionStreamIterator struct {
 func (s *completionStreamIterator) Next() (ret backend.ChatCompletionResponse, ok bool) {
 	resp, err := s.stream.Recv()
 	if err != nil {
-		s.stream.Close()
 		if !errors.Is(err, io.EOF) {
 			s.err = err
 		}
@@ -367,6 +366,9 @@ func (s *completionStreamIterator) Next() (ret backend.ChatCompletionResponse, o
 // encountered by the Iterator.
 func (s *completionStreamIterator) Err() error {
 	return s.err
+}
+func (s *completionStreamIterator) Close() error {
+	return s.stream.Close()
 }
 
 func (s *completionStreamIterator) appendToolCallsArguments(newToolCallsArgs []openai.ToolCall) {

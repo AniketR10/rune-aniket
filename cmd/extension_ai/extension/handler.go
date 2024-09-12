@@ -687,6 +687,7 @@ func drawMessage(
 	it iterator.Iterator[string], tx chan<- string,
 	noti browserapi.Notifications,
 ) {
+	defer it.Close()
 	for {
 		response, ok := it.Next()
 		if !ok {

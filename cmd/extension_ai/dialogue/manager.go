@@ -291,3 +291,7 @@ func (s *completionStreamIterator) Next() (string, bool) {
 func (s *completionStreamIterator) Err() error {
 	return s.err
 }
+
+func (s *completionStreamIterator) Close() error {
+	return s.it.Close()
+}

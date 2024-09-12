@@ -262,15 +262,16 @@ func (c *completeClientIterator) Next() (string, bool) {
 	res, err := c.client.Recv()
 	if err != nil {
 		c.err = err
-		c.cancelFn()
 		return "", false
-	}
-	if res.Done {
-		c.cancelFn()
 	}
 	return res.Value, !res.Done
 }
 
 func (c *completeClientIterator) Err() error {
 	return c.err
+}
+
+func (c *completeClientIterator) Close() error {
+	c.cancelFn()
+	return nil
 }

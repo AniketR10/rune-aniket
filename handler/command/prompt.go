@@ -769,6 +769,7 @@ func (h *Prompt) pushCompletionListSync(
 	it iterator.Iterator[string],
 ) {
 	defer cancel()
+	defer it.Close()
 	var i int
 	for ; ; i++ {
 		next, ok := it.Next()
@@ -839,6 +840,7 @@ func (h *Prompt) pushCompletionList(
 ) {
 	defer close(ch)
 	defer cancel()
+	defer it.Close()
 
 	// draw progress animation while iterator is still returning results
 	frames, seq := component.ProgressAnimationFrames()

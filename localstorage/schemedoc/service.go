@@ -368,5 +368,5 @@ func (d *docIter) NextTo(doc interface{}) error {
 }
 
 func (d *docIter) Close() error {
-	return nil
+	return d.it.Close()
 }

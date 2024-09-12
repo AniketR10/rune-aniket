@@ -55,10 +55,9 @@ func ListFiles(
 	ctx context.Context, w Reader, root string,
 ) (iterator.Iterator[string], error) {
 	var wg sync.WaitGroup
-	ch := make(chan string)
+	iterCh := make(chan string)
 	workerCh := make(chan string)
 	allErrors := make([]error, defaultWorkers)
-	iterator := &listFilesIterator{ctx: ctx, ch: ch}
 
 	workspaceURI, err := w.URI(".")
 	if err != nil {
@@ -72,8 +71,10 @@ func ListFiles(
 	// get root as relative path to workspace
 	root = workspaceapi.RelPath(workspaceURI, rootURI)
 
+	iterator := &listFilesIterator{dataCh: iterCh, ctx: ctx}
+
 	for i := 0; i < defaultWorkers; i++ {
-		go traverseDirWorker(ctx, w, &wg, ch, workerCh,
+		go traverseDirWorker(ctx, w, &wg, iterCh, workerCh,
 			workspaceURI.Path(), &iterator.mu, &allErrors[i])
 	}
 
@@ -100,7 +101,7 @@ func ListFiles(
 				iterator.err = multierr.Append(iterator.err, err)
 			}
 		}
-		close(ch)
+		close(iterCh)
 	}()
 
 	return iterator, nil
@@ -110,14 +111,14 @@ var defaultWorkers = runtime.NumCPU() * 8
 
 func traverseDirWorker(
 	ctx context.Context, w Reader, wg *sync.WaitGroup,
-	ch, workerCh chan string, cwd string, mu *sync.Mutex, err *error,
+	iterCh, workerCh chan string, cwd string, mu *sync.Mutex, err *error,
 ) {
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case path := <-workerCh:
-			dirErr := dirTraversal(ctx, w, cwd, path, wg, ch, workerCh)
+			dirErr := dirTraversal(ctx, w, cwd, path, wg, iterCh, workerCh)
 			if dirErr != nil {
 				mu.Lock()
 				*err = multierr.Append(*err, dirErr)
@@ -129,7 +130,7 @@ func traverseDirWorker(
 
 func dirTraversal(
 	ctx context.Context, w Reader, cwd, dirname string,
-	wg *sync.WaitGroup, ch, workerCh chan string,
+	wg *sync.WaitGroup, iterCh, workerCh chan string,
 ) error {
 	defer wg.Done()
 	absPath := dirname
@@ -150,7 +151,7 @@ func dirTraversal(
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case ch <- path:
+			case iterCh <- path:
 				continue
 			}
 		}
@@ -164,7 +165,7 @@ func dirTraversal(
 		case workerCh <- path:
 		default:
 			// the rest of workers are busy, keep going
-			err := dirTraversal(ctx, w, cwd, path, wg, ch, workerCh)
+			err := dirTraversal(ctx, w, cwd, path, wg, iterCh, workerCh)
 			if err != nil {
 				ret = multierr.Append(ret, err)
 			}
@@ -174,10 +175,10 @@ func dirTraversal(
 }
 
 type listFilesIterator struct {
-	mu  sync.Mutex
-	err error
-	ctx context.Context
-	ch  chan string
+	mu     sync.Mutex
+	err    error
+	ctx    context.Context
+	dataCh chan string
 }
 
 func (l *listFilesIterator) Next() (string, bool) {
@@ -187,9 +188,13 @@ func (l *listFilesIterator) Next() (string, bool) {
 		defer l.mu.Unlock()
 		l.err = multierr.Append(l.err, l.ctx.Err())
 		return "", false
-	case path, ok := <-l.ch:
+	case path, ok := <-l.dataCh:
 		return path, ok
 	}
+}
+
+func (l *listFilesIterator) Close() error {
+	return nil
 }
 
 func (l *listFilesIterator) Err() error {

@@ -94,6 +94,8 @@ func TestManager(t *testing.T) {
 		err = it.Err()
 		require.NoError(t, err)
 
+		require.NoError(t, it.Close())
+
 		assert.True(t, it.(*completionStreamIterator).it.(*testStream).closed)
 	})
 
@@ -141,6 +143,8 @@ func TestManager(t *testing.T) {
 
 		err = it.Err()
 		require.NoError(t, err)
+
+		require.NoError(t, it.Close())
 
 		assert.True(t, it.(*completionStreamIterator).it.(*testStream).closed)
 		assert.Equal(t, 2, called)
@@ -357,7 +361,6 @@ func (t *testStream) Next() (ret backend.ChatCompletionResponse, ok bool) {
 		return
 	}
 	if len(t.res) == 0 {
-		t.closed = true
 		return
 	}
 	ok = true
@@ -368,6 +371,11 @@ func (t *testStream) Next() (ret backend.ChatCompletionResponse, ok bool) {
 
 func (t *testStream) Err() error {
 	return t.err
+}
+
+func (t *testStream) Close() error {
+	t.closed = true
+	return nil
 }
 
 func newTestStore(t *testing.T) Store {

@@ -833,12 +833,19 @@ myArg 1
 }
 
 type testNeverEndingIterator struct {
-	iterator.Iterator[string]
 }
 
 func (c testNeverEndingIterator) Next() (string, bool) {
 	time.Sleep(10 * time.Millisecond)
 	return "hola 123", true
+}
+
+func (c testNeverEndingIterator) Err() error {
+	return nil
+}
+
+func (c testNeverEndingIterator) Close() error {
+	return nil
 }
 
 func neverEndingComplete() (func(context.Context, string, ...string) (iterator.Iterator[string], string), func(*testing.T)) {
@@ -893,7 +900,6 @@ func TestCommandHandlerCancel(t *testing.T) {
 
 type testFeederIterator struct {
 	feeder chan string
-	iterator.Iterator[string]
 }
 
 func (c testFeederIterator) Next() (string, bool) {
@@ -903,6 +909,10 @@ func (c testFeederIterator) Next() (string, bool) {
 
 func (c testFeederIterator) Err() error {
 	return errors.New("bang")
+}
+
+func (c testFeederIterator) Close() error {
+	return nil
 }
 
 func TestCommandHandlerHistory(t *testing.T) {

@@ -289,7 +289,7 @@ func (h *fuzzyFinderHandler) doScanDataViaWorkspaceAPI(
 	if err := it.Err(); err != nil {
 		return err
 	}
-	return nil
+	return it.Close()
 }
 
 func (h *fuzzyFinderHandler) scanDataViaWorkspaceAPI(
