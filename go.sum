@@ -224,10 +224,6 @@ github.com/stretchr/testify v1.8.4/go.mod h1:sz/lmYIOXD/1dqDmKjjqLyZ2RngseejIcXl
 github.com/stretchr/testify v1.9.0 h1:HtqpIVDClZ4nwg75+f6Lvsy/wHu+3BoSGCbBAcpTsTg=
 github.com/stretchr/testify v1.9.0/go.mod h1:r2ic/lqez/lEtzL7wO/rwa5dbSLXVDPFyf8C91i36aY=
 github.com/tv42/httpunix v0.0.0-20191220191345-2ba4b9c3382c/go.mod h1:hzIxponao9Kjc7aWznkXaL4U4TWaDSs8zcsY4Ka08nM=
-github.com/unstablebuild/blue v1.50.1 h1:+j2v7waOJsNOIgmPP1S5tGE3ZcO0Y9dpuPRz0DHESf8=
-github.com/unstablebuild/blue v1.50.1/go.mod h1:luwzR8Hezpbe0qMFrDpnqhBFCw344h23VYt88HDzlsw=
-github.com/unstablebuild/blue v1.52.0 h1:kSwqIVHC44HwB/5i3RDuK9t6Qsgz5TuTcrKkYm+sKf4=
-github.com/unstablebuild/blue v1.52.0/go.mod h1:MSh3kG9E8gFJQWu8ITigx4W/OqW1SAxLcVYBIMuH5Fw=
 github.com/unstablebuild/blue v1.52.1 h1:8xD9BOTeOF2hUhAA2usBeMWrp33ecu5hyJVcwvAtalI=
 github.com/unstablebuild/blue v1.52.1/go.mod h1:MSh3kG9E8gFJQWu8ITigx4W/OqW1SAxLcVYBIMuH5Fw=
 github.com/unstablebuild/ebiten/v2 v2.7.5-ub.8 h1:gybhaaa8+6pG8cnsDxOR5xLGMSvLlvanR0hDODk4MVk=
