@@ -41,6 +41,8 @@ func ReadLines(ctx context.Context, w Reader, paths iterator.Iterator[string]) (
 ) {
 	files := make(chan string)
 	lines := make(chan string)
+	closeWaitCh := make(chan struct{})
+	ctx, cancel := context.WithCancel(ctx)
 
 	var wg sync.WaitGroup
 	wg.Add(defaultWorkers)
@@ -52,10 +54,20 @@ func ReadLines(ctx context.Context, w Reader, paths iterator.Iterator[string]) (
 		}(&errors[i])
 	}
 
-	it := &listFilesIterator{ctx: ctx, dataCh: lines}
+	it := &listFilesIterator{
+		ctx:    ctx,
+		dataCh: lines,
+	}
+	it.cancel = cancel
+	it.closeWaitCh = closeWaitCh
 
 	var itErr error
 	go func() {
+		defer close(closeWaitCh)
+		defer close(lines)
+		defer paths.Close()
+
+	loop:
 		for {
 			file, ok := paths.Next()
 			if !ok {
@@ -64,7 +76,11 @@ func ReadLines(ctx context.Context, w Reader, paths iterator.Iterator[string]) (
 				}
 				break
 			}
-			files <- file
+			select {
+			case <-ctx.Done():
+				break loop
+			case files <- file:
+			}
 		}
 		close(files)
 		wg.Wait()
@@ -78,7 +94,6 @@ func ReadLines(ctx context.Context, w Reader, paths iterator.Iterator[string]) (
 				it.err = multierr.Append(it.err, err)
 			}
 		}
-		close(lines)
 	}()
 	return it, nil
 }

@@ -108,6 +108,7 @@ func TestReadLines(t *testing.T) {
 			// order doesn't matter and the iterator is unordered
 			sort.Strings(lines)
 			assert.Equal(t, tcase.wantOut, lines)
+			assert.NoError(t, itOut.Close())
 		})
 	}
 }
