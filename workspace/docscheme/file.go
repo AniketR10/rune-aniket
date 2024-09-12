@@ -34,7 +34,7 @@ import (
 	"time"
 
 	"github.com/unstablebuild/blue/document"
-	"github.com/unstablebuild/blue/encoding"
+	"github.com/unstablebuild/blue/document/docmarshal"
 	"github.com/unstablebuild/blue/retry"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/localstorage"
@@ -52,7 +52,7 @@ type fileInfo struct {
 type file[T localstorage.Document[T]] struct {
 	s             *scheme[T]
 	errMissingID  error
-	marshaler     encoding.Marshaler
+	marshaler     docmarshal.Marshaler
 	retryStrategy retry.Strategy
 	svc           *service
 
@@ -64,7 +64,7 @@ type file[T localstorage.Document[T]] struct {
 
 // return not fully initialzed until init is called
 func newFile[T localstorage.Document[T]](
-	docID string, m encoding.Marshaler, errMissingID error,
+	docID string, m docmarshal.Marshaler, errMissingID error,
 	fd uintptr, svc *service, mode fs.FileMode,
 	retryStrategy retry.Strategy,
 	val T, addTemplate bool, s *scheme[T],

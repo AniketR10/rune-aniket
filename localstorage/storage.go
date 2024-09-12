@@ -29,9 +29,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/unstablebuild/blue/document"
+	"github.com/unstablebuild/blue/document/docmarshal"
 	"github.com/unstablebuild/blue/document/firstmover"
-	"github.com/unstablebuild/blue/encoding"
 	"unstable.build/go-tui/api/config"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/localstorage/schemedoc"
@@ -41,8 +40,8 @@ import (
 // New returns a document.Service storage service that
 // uses the local directory dir to setup a local filesystem-based
 // multi-process safe, goroutine-safe document.Service.
-func New(ctx context.Context, dir string, marshaler encoding.Marshaler) (
-	document.Service, error,
+func New(ctx context.Context, dir string, marshaler docmarshal.Marshaler) (
+	*firstmover.Service, error,
 ) {
 	storageDir := filepath.Join(dir, ".db")
 	err := os.MkdirAll(storageDir, 0777)
@@ -68,6 +67,5 @@ func New(ctx context.Context, dir string, marshaler encoding.Marshaler) (
 	cfg := firstmover.DefaultConfig()
 	cfg.Marshaler = marshaler
 	cfg.CloseError = schemedoc.ErrClosing
-	storage = firstmover.New(storage, lockPath, cfg)
-	return storage, nil
+	return firstmover.New(storage, lockPath, cfg), nil
 }

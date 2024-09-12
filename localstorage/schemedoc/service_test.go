@@ -33,19 +33,19 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/blue/document"
-	test "github.com/unstablebuild/blue/document/test"
-	"github.com/unstablebuild/blue/encoding"
-	"github.com/unstablebuild/blue/encoding/bson"
-	"github.com/unstablebuild/blue/encoding/json"
-	"github.com/unstablebuild/blue/encoding/toml"
-	"github.com/unstablebuild/blue/encoding/yaml"
+	"github.com/unstablebuild/blue/document/docmarshal"
+	"github.com/unstablebuild/blue/document/docmarshal/docbson"
+	"github.com/unstablebuild/blue/document/docmarshal/docjson"
+	"github.com/unstablebuild/blue/document/docmarshal/doctoml"
+	"github.com/unstablebuild/blue/document/docmarshal/docyaml"
+	"github.com/unstablebuild/blue/document/doctest"
 	"unstable.build/go-tui/api/config"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/workspace"
 )
 
-func testMemoryWorkspaceServiceWithMarshaler(t *testing.T, m encoding.Marshaler) {
-	test.TestDocumentService(t, func(t *testing.T) document.Service {
+func testMemoryWorkspaceServiceWithMarshaler(t *testing.T, m docmarshal.Marshaler) {
+	doctest.TestDocumentService(t, func(t *testing.T) document.Service {
 		uri, err := workspaceapi.ParseURI("memory:///")
 		require.NoError(t, err)
 		scheme, err := workspace.NewMemoryScheme(context.Background(), config.NopConfig(), uri)
@@ -56,8 +56,8 @@ func testMemoryWorkspaceServiceWithMarshaler(t *testing.T, m encoding.Marshaler)
 	})
 }
 
-func testFileWorkspaceServiceWithMarshaler(t *testing.T, m encoding.Marshaler) {
-	test.TestDocumentService(t, func(t *testing.T) document.Service {
+func testFileWorkspaceServiceWithMarshaler(t *testing.T, m docmarshal.Marshaler) {
+	doctest.TestDocumentService(t, func(t *testing.T) document.Service {
 		name, err := os.MkdirTemp("", "workspace_document_service_test")
 		require.NoError(t, err)
 		uri, err := workspaceapi.ParseURI("file://" + name)
@@ -76,10 +76,10 @@ func testFileWorkspaceServiceWithMarshaler(t *testing.T, m encoding.Marshaler) {
 
 func TestFileWorkspaceServiceJSON(t *testing.T) {
 	t.Run("backed by FileScheme", func(t *testing.T) {
-		testFileWorkspaceServiceWithMarshaler(t, json.Marshaler())
+		testFileWorkspaceServiceWithMarshaler(t, docjson.Marshaler())
 	})
 	t.Run("backed by MemoryScheme", func(t *testing.T) {
-		testMemoryWorkspaceServiceWithMarshaler(t, json.Marshaler())
+		testMemoryWorkspaceServiceWithMarshaler(t, docjson.Marshaler())
 	})
 }
 
@@ -87,9 +87,9 @@ func TestFileWorkspaceServiceBSON(t *testing.T) {
 	// test preconditions for bson only, because only bson supports
 	// time-based preconditions.
 	t.Run("backed by FileScheme", func(t *testing.T) {
-		testFileWorkspaceServiceWithMarshaler(t, bson.Marshaler())
+		testFileWorkspaceServiceWithMarshaler(t, docbson.Marshaler())
 
-		test.TestDocumentServicePreconditions(t, func(t *testing.T) document.Service {
+		doctest.TestDocumentServicePreconditions(t, func(t *testing.T) document.Service {
 			name, err := os.MkdirTemp("", "workspace_document_service_test")
 			require.NoError(t, err)
 			uri, err := workspaceapi.ParseURI("file://" + name)
@@ -97,7 +97,7 @@ func TestFileWorkspaceServiceBSON(t *testing.T) {
 			scheme, err := workspace.NewFileScheme(context.Background(),
 				config.NopConfig(), uri)
 			require.NoError(t, err)
-			svc, err := NewDocumentService(scheme, bson.Marshaler())
+			svc, err := NewDocumentService(scheme, docbson.Marshaler())
 			require.NoError(t, err)
 			t.Cleanup(func() {
 				_ = svc.Close()
@@ -107,15 +107,15 @@ func TestFileWorkspaceServiceBSON(t *testing.T) {
 		})
 	})
 	t.Run("backed by MemoryScheme", func(t *testing.T) {
-		testMemoryWorkspaceServiceWithMarshaler(t, bson.Marshaler())
+		testMemoryWorkspaceServiceWithMarshaler(t, docbson.Marshaler())
 
-		test.TestDocumentServicePreconditions(t, func(t *testing.T) document.Service {
+		doctest.TestDocumentServicePreconditions(t, func(t *testing.T) document.Service {
 			uri, err := workspaceapi.ParseURI("memory:///")
 			require.NoError(t, err)
 			scheme, err := workspace.NewMemoryScheme(context.Background(),
 				config.NopConfig(), uri)
 			require.NoError(t, err)
-			svc, err := NewDocumentService(scheme, bson.Marshaler())
+			svc, err := NewDocumentService(scheme, docbson.Marshaler())
 			require.NoError(t, err)
 			return svc
 		})
@@ -125,10 +125,10 @@ func TestFileWorkspaceServiceBSON(t *testing.T) {
 
 func TestFileWorkspaceServiceTOML(t *testing.T) {
 	t.Run("backed by FileScheme", func(t *testing.T) {
-		testFileWorkspaceServiceWithMarshaler(t, toml.Marshaler())
+		testFileWorkspaceServiceWithMarshaler(t, doctoml.Marshaler())
 	})
 	t.Run("backed by MemoryScheme", func(t *testing.T) {
-		testMemoryWorkspaceServiceWithMarshaler(t, toml.Marshaler())
+		testMemoryWorkspaceServiceWithMarshaler(t, doctoml.Marshaler())
 	})
 }
 
@@ -139,10 +139,10 @@ func TestFileWorkspaceServiceYAML(t *testing.T) {
 	// working as expected, then there should be nothing fundamentally wrong by
 	// using YAML.
 	t.Run("backed by FileScheme", func(t *testing.T) {
-		testFileWorkspaceServiceWithMarshaler(t, yaml.Marshaler())
+		testFileWorkspaceServiceWithMarshaler(t, docyaml.Marshaler())
 	})
 	t.Run("backed by MemoryScheme", func(t *testing.T) {
-		testMemoryWorkspaceServiceWithMarshaler(t, yaml.Marshaler())
+		testMemoryWorkspaceServiceWithMarshaler(t, docyaml.Marshaler())
 	})
 }
 
@@ -157,7 +157,7 @@ func TestSetOverrideIssue(t *testing.T) {
 	require.NoError(t, err)
 	scheme, err := workspace.NewFileScheme(context.Background(), config.NopConfig(), uri)
 	require.NoError(t, err)
-	svc, err := NewDocumentService(scheme, toml.Marshaler())
+	svc, err := NewDocumentService(scheme, doctoml.Marshaler())
 	require.NoError(t, err)
 
 	require.NoError(t, svc.Set(context.Background(), "1234", &testStruct{Content: []string{
@@ -185,7 +185,7 @@ func TestEscapeBoundaries(t *testing.T) {
 	require.NoError(t, err)
 	schemeA, err := workspace.NewFileScheme(context.Background(), config.NopConfig(), uriA)
 	require.NoError(t, err)
-	svcA, err := NewDocumentService(schemeA, toml.Marshaler())
+	svcA, err := NewDocumentService(schemeA, doctoml.Marshaler())
 	require.NoError(t, err)
 	require.NoError(t, svcA.Set(context.Background(), "1234", &testStruct{Content: []string{
 		"SECRET",
@@ -197,7 +197,7 @@ func TestEscapeBoundaries(t *testing.T) {
 	require.NoError(t, err)
 	schemeB, err := workspace.NewFileScheme(context.Background(), config.NopConfig(), uriB)
 	require.NoError(t, err)
-	svcB, err := NewDocumentService(schemeB, toml.Marshaler())
+	svcB, err := NewDocumentService(schemeB, doctoml.Marshaler())
 	require.NoError(t, err)
 
 	// its not able to read

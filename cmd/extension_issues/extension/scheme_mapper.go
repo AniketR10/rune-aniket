@@ -32,7 +32,7 @@ import (
 	"strings"
 
 	log "github.com/sirupsen/logrus"
-	"github.com/unstablebuild/blue/encoding"
+	"github.com/unstablebuild/blue/document/docmarshal"
 	"github.com/unstablebuild/blue/issue"
 	"unstable.build/go-tui/api/config"
 	schemeapi "unstable.build/go-tui/api/scheme"
@@ -48,7 +48,7 @@ const (
 // by ListFiles.
 func issueMapperScheme(
 	schemeFunc schemeapi.SchemeFunc,
-	marshaler encoding.Marshaler,
+	marshaler docmarshal.Marshaler,
 	maxSubjectLen int,
 ) schemeapi.SchemeFunc {
 	return func(ctx context.Context, cfg config.Config, uri workspaceapi.URI) (
@@ -64,7 +64,7 @@ func issueMapperScheme(
 
 type mapper struct {
 	schemeapi.Scheme // of T
-	m                encoding.Marshaler
+	m                docmarshal.Marshaler
 	maxSubjectLen    int
 }
 

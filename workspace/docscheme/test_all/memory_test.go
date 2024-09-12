@@ -36,7 +36,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/blue/document"
-	"github.com/unstablebuild/blue/encoding/json"
+	"github.com/unstablebuild/blue/document/docmarshal/docjson"
 	"unstable.build/go-tui/api/config"
 	schemeapi "unstable.build/go-tui/api/scheme"
 	workspaceapi "unstable.build/go-tui/api/workspace"
@@ -55,7 +55,7 @@ func TestMemoryWorkspaceScheme(t *testing.T) {
 			require.NoError(t, err)
 			svc := document.NewInMemoryService()
 			scheme, err := docscheme.Scheme[testStruct](workspaceURI, svc,
-				json.Marshaler(), errMissingID, "author")(ctx, config.NopConfig(), workspaceURI)
+				docjson.Marshaler(), errMissingID, "author")(ctx, config.NopConfig(), workspaceURI)
 			require.NoError(t, err)
 			return scheme
 		})
@@ -66,7 +66,7 @@ func TestMemoryWorkspaceScheme(t *testing.T) {
 			require.NoError(t, err)
 			svc := document.NewInMemoryService()
 			scheme, err := docscheme.Scheme[testStruct](workspaceURI, svc,
-				json.Marshaler(), errMissingID, "author")(ctx, config.NopConfig(), workspaceURI)
+				docjson.Marshaler(), errMissingID, "author")(ctx, config.NopConfig(), workspaceURI)
 			require.NoError(t, err)
 			return scheme
 		})
@@ -79,7 +79,7 @@ func TestMemoryWorkspaceSchemeTransientFailures(t *testing.T) {
 		require.NoError(t, err)
 		svc := &errService{root: document.NewInMemoryService()}
 		ctx := context.Background()
-		s, err := docscheme.Scheme[testStruct](workspaceURI, svc, json.Marshaler(),
+		s, err := docscheme.Scheme[testStruct](workspaceURI, svc, docjson.Marshaler(),
 			errMissingID, "author")(ctx, config.NopConfig(), workspaceURI)
 		require.NoError(t, err)
 		return s
@@ -135,7 +135,7 @@ func createTestFile(t *testing.T, s schemeapi.Scheme, filename, content string) 
 	doc.Content = content
 	doc.Id = filename
 
-	data, err := json.Marshaler().Marshal(doc)
+	data, err := docjson.Marshaler().Marshal(doc)
 	require.NoError(t, err)
 
 	require.NoError(t, file.Truncate(0))
@@ -151,7 +151,7 @@ func createTestFile(t *testing.T, s schemeapi.Scheme, filename, content string) 
 func writeToBuffer(buf *cell.Buffer, data []byte) (int, error) {
 	var doc testStruct
 
-	err := json.Marshaler().Unmarshal([]byte(buf.String()), &doc)
+	err := docjson.Marshaler().Unmarshal([]byte(buf.String()), &doc)
 	if err != nil {
 		return 0, fmt.Errorf("Unmarshal: %v: %q", err, buf.String())
 	}
@@ -160,7 +160,7 @@ func writeToBuffer(buf *cell.Buffer, data []byte) (int, error) {
 	builder.Write(data)
 	doc.Content = builder.String()
 
-	data, err = json.Marshaler().Marshal(doc)
+	data, err = docjson.Marshaler().Marshal(doc)
 	if err != nil {
 		return 0, fmt.Errorf("Marshal: %v", err)
 	}
@@ -176,7 +176,7 @@ func readContent(r io.Reader) ([]byte, error) {
 		return nil, err
 	}
 	var temp testStruct
-	err = json.Marshaler().Unmarshal(data, &temp)
+	err = docjson.Marshaler().Unmarshal(data, &temp)
 	if err != nil {
 		return nil, err
 	}
@@ -191,7 +191,7 @@ func writeContent(f workspaceapi.File, data []byte) (int, error) {
 	}
 	var temp testStruct
 	if len(allData) != 0 {
-		err = json.Marshaler().Unmarshal(allData, &temp)
+		err = docjson.Marshaler().Unmarshal(allData, &temp)
 		if err != nil {
 			return 0, err
 		}
@@ -200,7 +200,7 @@ func writeContent(f workspaceapi.File, data []byte) (int, error) {
 	}
 
 	temp.Content = string(data)
-	allData, err = json.Marshaler().Marshal(temp)
+	allData, err = docjson.Marshaler().Marshal(temp)
 	if err != nil {
 		return 0, err
 	}

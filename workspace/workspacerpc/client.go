@@ -33,7 +33,7 @@ import (
 
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
-	bluectx "github.com/unstablebuild/blue/context"
+	"github.com/unstablebuild/blue/bluectx"
 	"github.com/unstablebuild/blue/logging"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	schemeapi "unstable.build/go-tui/api/scheme"

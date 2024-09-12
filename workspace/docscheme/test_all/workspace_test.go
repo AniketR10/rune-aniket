@@ -28,7 +28,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"github.com/unstablebuild/blue/encoding/json"
+	"github.com/unstablebuild/blue/document/docmarshal/docjson"
 	"unstable.build/go-tui/api/config"
 	schemeapi "unstable.build/go-tui/api/scheme"
 	workspaceapi "unstable.build/go-tui/api/workspace"
@@ -47,10 +47,10 @@ func TestMemoryWorkspaceSchemeBackedByWorkspaceSchemeService(t *testing.T) {
 			ctx, config.NopConfig(), workspaceURI)
 		require.NoError(t, err)
 
-		svc, err := schemedoc.NewDocumentService(scheme, json.Marshaler())
+		svc, err := schemedoc.NewDocumentService(scheme, docjson.Marshaler())
 		require.NoError(t, err)
 
-		s, err := docscheme.Scheme[testStruct](workspaceURI, svc, json.Marshaler(),
+		s, err := docscheme.Scheme[testStruct](workspaceURI, svc, docjson.Marshaler(),
 			errMissingID, "author")(ctx, config.NopConfig(), workspaceURI)
 		require.NoError(t, err)
 		return s

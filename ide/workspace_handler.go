@@ -38,7 +38,7 @@ import (
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/document"
-	"github.com/unstablebuild/blue/encoding/toml"
+	"github.com/unstablebuild/blue/document/docmarshal/doctoml"
 	"github.com/unstablebuild/blue/iterator"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/api/config"
@@ -174,7 +174,7 @@ func (h *workspaceManagerHandler) init(
 	tabBarOffset, tabBarHeight int,
 	workspacesBarHeight, workspacesBarOffset int, workspacesBarFrame bool,
 	tabsClickCallback func(int) bool,
-) error {
+) (err error) {
 	h.mu = locker
 	h.externalCommands = make(map[string]externalCommand)
 	h.frame = cfg.frame()
@@ -187,7 +187,8 @@ func (h *workspaceManagerHandler) init(
 	h.extensionRunner = extensionRunner
 	h.builtinExtensions = builtinExtensions
 	h.ctxWithLocker = workspace.ContextWithLocker(context.Background(), h.mu)
-	storage, err := localstorage.New(h.ctxWithLocker, sixDir, toml.Marshaler())
+	var storage document.Service
+	storage, err = localstorage.New(h.ctxWithLocker, sixDir, doctoml.Marshaler())
 	if err != nil {
 		storage = document.NewInMemoryService()
 		log.Warnf("Could not setup fs-backed storage: %v. Using ephemeral.", err)

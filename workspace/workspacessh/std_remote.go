@@ -34,7 +34,7 @@ import (
 	"syscall"
 	"time"
 
-	bluectx "github.com/unstablebuild/blue/context"
+	"github.com/unstablebuild/blue/bluectx"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/knownhosts"
 	"golang.org/x/term"

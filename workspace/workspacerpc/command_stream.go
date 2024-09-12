@@ -35,8 +35,8 @@ import (
 
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
+	"github.com/unstablebuild/blue/bluenet"
 	"github.com/unstablebuild/blue/logging"
-	bluenet "github.com/unstablebuild/blue/net"
 	schemeapi "unstable.build/go-tui/api/scheme"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 )

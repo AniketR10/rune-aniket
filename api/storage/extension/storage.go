@@ -28,8 +28,8 @@ import (
 	"os"
 
 	"github.com/unstablebuild/blue/document"
-	docrpc "github.com/unstablebuild/blue/document/rpc"
-	"github.com/unstablebuild/blue/encoding/toml"
+	"github.com/unstablebuild/blue/document/docmarshal/doctoml"
+	"github.com/unstablebuild/blue/document/docrpc"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/rpc"
 )
@@ -46,7 +46,7 @@ func dialStorage(ctx context.Context, grant extension.Grant, broker rpc.MuxBroke
 		return nil, err
 	}
 	c := new(docrpc.Client)
-	c.Init(conn, toml.Marshaler())
+	c.Init(conn, doctoml.Marshaler())
 	partition, ok := partitionFromContext(grant.Context)
 	if !ok {
 		partition = "default"

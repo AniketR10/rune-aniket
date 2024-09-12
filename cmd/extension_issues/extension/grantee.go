@@ -35,9 +35,9 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/document"
-	doclogging "github.com/unstablebuild/blue/document/logging"
-	"github.com/unstablebuild/blue/encoding"
-	"github.com/unstablebuild/blue/encoding/yaml"
+	"github.com/unstablebuild/blue/document/doclog"
+	"github.com/unstablebuild/blue/document/docmarshal"
+	"github.com/unstablebuild/blue/document/docmarshal/docyaml"
 	"github.com/unstablebuild/blue/issue"
 	"github.com/unstablebuild/blue/logging"
 	browserapi "unstable.build/go-tui/api/browser"
@@ -109,7 +109,7 @@ type Grantee struct {
 	broker     rpc.MuxBroker
 	svc        *storagecache.Service[issue.ReportDocument]
 	tracker    issue.Tracker
-	marshaler  encoding.Marshaler
+	marshaler  docmarshal.Marshaler
 	m          browserapi.Notifications
 	o          browserapi.ResourceOpener
 	wm         browserapi.WindowManager
@@ -135,7 +135,7 @@ func NewGrantee(
 	versionTag, scheme string,
 	svcFn func(config.Config) (document.Service, error),
 ) *Grantee {
-	m := yaml.Marshaler()
+	m := docyaml.Marshaler()
 	s := &Grantee{
 		cmds:       defaultCommands,
 		marshaler:  m,
@@ -360,7 +360,7 @@ func (e *Grantee) PermissionGranted(ctx context.Context, grants []extension.Gran
 	if err != nil {
 		return fmt.Errorf("create issues service: %w", err)
 	}
-	svc = doclogging.WithLogging(svc, "IssuesStorage")
+	svc = doclog.WithLogging(svc, "IssuesStorage")
 
 	// avoid too many reads to service (i.e. firestore), which is pretty slow.
 	// As long as there aren't many oob (outside of six) requests this should be
@@ -540,7 +540,7 @@ func (e *Grantee) openIssueTemplate(
 }
 
 func (e *Grantee) initScheme(m schemeapi.SchemeManager) error {
-	marshaler := yaml.Marshaler()
+	marshaler := docyaml.Marshaler()
 	rootURI, err := workspaceapi.ParseURI(fmt.Sprintf("%s:///", e.scheme))
 	if err != nil {
 		panic(err)

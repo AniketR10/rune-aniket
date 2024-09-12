@@ -30,8 +30,8 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
+	"github.com/unstablebuild/blue/bluenet"
 	"github.com/unstablebuild/blue/logging"
-	bluenet "github.com/unstablebuild/blue/net"
 )
 
 var _ net.Conn = (*stdConn)(nil)

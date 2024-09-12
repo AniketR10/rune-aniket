@@ -32,10 +32,10 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/document"
-	doclog "github.com/unstablebuild/blue/document/logging"
-	docrpc "github.com/unstablebuild/blue/document/rpc"
-	bproto "github.com/unstablebuild/blue/document/rpc/proto"
-	"github.com/unstablebuild/blue/encoding/toml"
+	"github.com/unstablebuild/blue/document/doclog"
+	"github.com/unstablebuild/blue/document/docmarshal/doctoml"
+	"github.com/unstablebuild/blue/document/docrpc"
+	"github.com/unstablebuild/blue/document/docrpc/docpb"
 
 	"unstable.build/go-tui/localstorage"
 	"unstable.build/go-tui/rpc"
@@ -57,7 +57,7 @@ func (s *storageResourceServer) setupStorage(lock sync.Locker, extensionID strin
 	// pass locker to underlying file scheme, so we can synchronize
 	// network storage requests against event loop access.
 	ctx := workspace.ContextWithLocker(context.Background(), lock)
-	svc, err := localstorage.New(ctx, path, toml.Marshaler())
+	svc, err := localstorage.New(ctx, path, doctoml.Marshaler())
 	if err != nil {
 		log.Warnf("Failed to setup storage for extension %q: %v."+
 			"Fallback to in-memory", extensionID, err)
@@ -73,8 +73,8 @@ func (s *storageResourceServer) Register(
 	svc := s.setupStorage(lock, extensionID)
 	svc = doclog.WithLogging(svc, fmt.Sprintf("/ExtensionStorage/%s", extensionID))
 	server := new(docrpc.Server)
-	server.Init(svc, toml.Marshaler())
-	bproto.RegisterDocumentStoreServer(registrar, server)
+	server.Init(svc, doctoml.Marshaler())
+	docpb.RegisterDocumentStoreServer(registrar, server)
 	// doc server stops grpc.Server, which is not something storageResourceserver
 	// should be concerned about. Close storage resources created
 	// within this call to register.

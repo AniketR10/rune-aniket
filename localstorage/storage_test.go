@@ -33,29 +33,29 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/blue/document"
+	"github.com/unstablebuild/blue/document/docmarshal/doctoml"
+	"github.com/unstablebuild/blue/document/doctest"
 	"github.com/unstablebuild/blue/document/firstmover"
-	"github.com/unstablebuild/blue/document/test"
-	"github.com/unstablebuild/blue/encoding/toml"
 )
 
 func TestStorageConcurrentInstances(t *testing.T) {
-	dirs := make(map[string][]document.Service)
+	dirs := make(map[string][]*firstmover.Service)
 	wgs := make([]*sync.WaitGroup, 0)
 
 	// NOTE: don't test List as the returned iterator from it is not fully resilient
 	// to changes in leader; certaintly not to such an aggressive test.
-	test.TestDocumentServiceNoList(t, func(t *testing.T) document.Service {
+	doctest.TestDocumentServiceNoList(t, func(t *testing.T) document.Service {
 		const n = 100
 		name, err := os.MkdirTemp("", "workspace_document_service_test")
 		require.NoError(t, err)
 		if _, ok := dirs[name]; ok {
 			require.NoError(t, fmt.Errorf("created a duplicate temp dir: %s", name))
 		}
-		dirs[name] = make([]document.Service, 0, n)
-		instances := make([]document.Service, 0, n)
+		dirs[name] = make([]*firstmover.Service, 0, n)
+		instances := make([]*firstmover.Service, 0, n)
 
 		for i := 0; i < n-1; i++ {
-			instance, err := New(context.Background(), name, toml.Marshaler())
+			instance, err := New(context.Background(), name, doctoml.Marshaler())
 			require.NoError(t, err)
 			_ = instance.Get(context.Background(), "a", nil)
 			instances = append(instances, instance)
@@ -71,7 +71,7 @@ func TestStorageConcurrentInstances(t *testing.T) {
 				defer wg.Done()
 				time.Sleep(time.Duration(200 * time.Millisecond))
 				for idx, instance := range instances {
-					if firstmover.TestIsLeader(instance) {
+					if instance.IsLeader() {
 						_ = instance.Close()
 						if idx == len(instances)-1 {
 							instances = instances[:idx]

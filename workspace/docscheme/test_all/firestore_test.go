@@ -30,8 +30,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/blue/document/docmarshal/docjson"
 	"github.com/unstablebuild/blue/document/firestore"
-	"github.com/unstablebuild/blue/encoding/json"
 	"unstable.build/go-tui/api/config"
 	schemeapi "unstable.build/go-tui/api/scheme"
 	workspaceapi "unstable.build/go-tui/api/workspace"
@@ -68,7 +68,7 @@ func TestFirestoreWorkspaceScheme(t *testing.T) {
 		svc, err := firestore.New(testProjectID, collection, "")
 		require.NoError(t, err)
 		scheme, err := docscheme.Scheme[testStruct](workspaceURI, svc,
-			json.Marshaler(), errMissingID, "author")(ctx, config.NopConfig(), workspaceURI)
+			docjson.Marshaler(), errMissingID, "author")(ctx, config.NopConfig(), workspaceURI)
 		require.NoError(t, err)
 		return scheme
 	})
@@ -84,7 +84,7 @@ func TestFirestoreWorkspaceScheme(t *testing.T) {
 		svc, err := firestore.New(testProjectID, collection, "")
 		require.NoError(t, err)
 		scheme, err := docscheme.Scheme[testStruct](workspaceURI, svc,
-			json.Marshaler(), errMissingID, "author")(ctx, config.NopConfig(), workspaceURI)
+			docjson.Marshaler(), errMissingID, "author")(ctx, config.NopConfig(), workspaceURI)
 		require.NoError(t, err)
 
 		f, werr := scheme.Open("/.something.swp", os.O_CREATE, 0)

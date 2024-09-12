@@ -34,7 +34,7 @@ import (
 
 	multierr "github.com/ernestrc/go-multierror"
 	"github.com/unstablebuild/blue/document"
-	"github.com/unstablebuild/blue/encoding"
+	"github.com/unstablebuild/blue/document/docmarshal"
 	"github.com/unstablebuild/blue/iterator"
 	schemeapi "unstable.build/go-tui/api/scheme"
 	workspaceapi "unstable.build/go-tui/api/workspace"
@@ -48,7 +48,7 @@ var ErrClosing = errors.New("Service is closing")
 // NewDocumentService returns a document.Service backed by a schemeapi.Scheme.
 // It its goroutine-safe but only one instance can be operating at a time
 // on a given workspace.
-func NewDocumentService(scheme schemeapi.Scheme, marshaler encoding.Marshaler) (
+func NewDocumentService(scheme schemeapi.Scheme, marshaler docmarshal.Marshaler) (
 	document.Service, error,
 ) {
 	svc := service{
@@ -61,7 +61,7 @@ func NewDocumentService(scheme schemeapi.Scheme, marshaler encoding.Marshaler) (
 
 type service struct {
 	scheme    schemeapi.Scheme
-	marshaler encoding.Marshaler
+	marshaler docmarshal.Marshaler
 
 	// Used to wait on all writes before Close returns.
 	// This is to guarantee that once lock is released,

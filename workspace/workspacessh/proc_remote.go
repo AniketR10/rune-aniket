@@ -31,7 +31,7 @@ import (
 	"syscall"
 
 	"github.com/ernestrc/go-multierror"
-	bluectx "github.com/unstablebuild/blue/context"
+	"github.com/unstablebuild/blue/bluectx"
 	"unstable.build/go-tui/api/config"
 	schemeapi "unstable.build/go-tui/api/scheme"
 	workspaceapi "unstable.build/go-tui/api/workspace"

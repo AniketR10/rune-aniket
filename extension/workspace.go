@@ -29,7 +29,7 @@ import (
 	"sync"
 	"time"
 
-	bluectx "github.com/unstablebuild/blue/context"
+	"github.com/unstablebuild/blue/bluectx"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/workspace"

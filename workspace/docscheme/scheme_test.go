@@ -37,8 +37,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/blue/document"
-	"github.com/unstablebuild/blue/encoding/json"
-	"github.com/unstablebuild/blue/encoding/yaml"
+	"github.com/unstablebuild/blue/document/docmarshal/docjson"
+	"github.com/unstablebuild/blue/document/docmarshal/docyaml"
 	"unstable.build/go-tui/api/config"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
@@ -82,7 +82,7 @@ func TestDocumentOpen(t *testing.T) {
 
 		workspaceURI, err := workspaceapi.ParseURI("inmemory:///tmp")
 		require.NoError(t, err)
-		marshaler := yaml.Marshaler()
+		marshaler := docyaml.Marshaler()
 		svc := document.NewInMemoryServiceWithMarshaler(marshaler)
 		scheme, err := Scheme[testStruct](workspaceURI, svc,
 			marshaler, errors.New("missing id"), "author")(ctx, config.NopConfig(), workspaceURI)
@@ -101,7 +101,7 @@ func TestDocumentOpen(t *testing.T) {
 		ctx := context.Background()
 		workspaceURI, err := workspaceapi.ParseURI("inmemory:///tmp")
 		require.NoError(t, err)
-		marshaler := json.Marshaler()
+		marshaler := docjson.Marshaler()
 
 		svc := document.NewInMemoryServiceWithMarshaler(marshaler)
 
@@ -154,7 +154,7 @@ func readAll(r io.Reader) ([]byte, error) {
 		return nil, err
 	}
 	var temp testStruct
-	err = json.Marshaler().Unmarshal(data, &temp)
+	err = docjson.Marshaler().Unmarshal(data, &temp)
 	if err != nil {
 		return nil, err
 	}
@@ -165,7 +165,7 @@ func readAll(r io.Reader) ([]byte, error) {
 func write(buf *cell.Buffer, data []byte) (int, error) {
 	var doc testStruct
 
-	err := json.Marshaler().Unmarshal([]byte(buf.String()), &doc)
+	err := docjson.Marshaler().Unmarshal([]byte(buf.String()), &doc)
 	if err != nil {
 		return 0, fmt.Errorf("Unmarshal: %v: %q", err, buf.String())
 	}
@@ -174,7 +174,7 @@ func write(buf *cell.Buffer, data []byte) (int, error) {
 	builder.Write(data)
 	doc.Content = builder.String()
 
-	data, err = json.Marshaler().Marshal(doc)
+	data, err = docjson.Marshaler().Marshal(doc)
 	if err != nil {
 		return 0, fmt.Errorf("Marshal: %v", err)
 	}

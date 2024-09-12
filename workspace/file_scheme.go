@@ -38,7 +38,7 @@ import (
 
 	"github.com/ernestrc/sensible/find"
 	log "github.com/sirupsen/logrus"
-	bluectx "github.com/unstablebuild/blue/context"
+	"github.com/unstablebuild/blue/bluectx"
 	"github.com/unstablebuild/blue/logging"
 	"github.com/unstablebuild/pty"
 	"unstable.build/go-tui/api/config"

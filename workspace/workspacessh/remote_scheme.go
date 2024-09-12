@@ -35,7 +35,7 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
-	bluectx "github.com/unstablebuild/blue/context"
+	"github.com/unstablebuild/blue/bluectx"
 	"github.com/unstablebuild/blue/logging"
 	"github.com/unstablebuild/blue/retry"
 	schemeapi "unstable.build/go-tui/api/scheme"

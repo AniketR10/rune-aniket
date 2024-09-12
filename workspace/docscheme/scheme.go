@@ -34,7 +34,7 @@ import (
 	"time"
 
 	"github.com/unstablebuild/blue/document"
-	"github.com/unstablebuild/blue/encoding"
+	"github.com/unstablebuild/blue/document/docmarshal"
 	"github.com/unstablebuild/blue/retry"
 	"unstable.build/go-tui/api/config"
 	schemeapi "unstable.build/go-tui/api/scheme"
@@ -62,7 +62,7 @@ import (
 // for documents to become illegal temporarily while editing.
 func Scheme[T localstorage.Document[T]](
 	rootURI workspaceapi.URI, svc document.Service,
-	marshaler encoding.Marshaler, errMissingID error,
+	marshaler docmarshal.Marshaler, errMissingID error,
 	author string,
 ) schemeapi.SchemeFunc {
 	return func(_ context.Context, cfg config.Config, uri workspaceapi.URI) (
@@ -95,7 +95,7 @@ type scheme[T localstorage.Document[T]] struct {
 	unimplementedExecutor
 	workspace          workspaceapi.URI
 	author             string
-	marshaler          encoding.Marshaler
+	marshaler          docmarshal.Marshaler
 	svc                service
 	errMissingID       error
 	retryRealFailure   retry.Strategy
@@ -105,7 +105,9 @@ type scheme[T localstorage.Document[T]] struct {
 	fd                 uintptr // next fd
 }
 
-func (s *scheme[T]) init(svc document.Service, uri workspaceapi.URI, m encoding.Marshaler, author string) {
+func (s *scheme[T]) init(
+	svc document.Service, uri workspaceapi.URI, m docmarshal.Marshaler, author string,
+) {
 	s.svc.svc = svc
 	s.marshaler = m
 	s.author = author
