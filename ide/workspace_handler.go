@@ -70,6 +70,7 @@ var (
 
 type workspaceManagerHandler struct {
 	mu                 sync.Locker
+	exitPromptOpen     bool
 	confirmedForceExit bool
 	ctxWithLocker      context.Context
 	storage            document.Service
@@ -412,10 +413,15 @@ func (h *workspaceManagerHandler) Handle(ev term.Event) (exit, handled bool) {
 		return true, true
 	}
 
-	hasDirtyFilesOpen := h.history.dirtyFilesOpen()
+	if !h.exitPromptOpen {
+		hasDirtyFilesOpen := h.history.dirtyFilesOpen()
+		h.exitPromptOpen = true
+		h.openConfirmExitPrompt(exHandler, hasDirtyFilesOpen)
+	}
+
 	exHandler.forceExit = false
 	exHandler.exit = false
-	h.openConfirmExitPrompt(exHandler, hasDirtyFilesOpen)
+
 	return false, true
 
 }

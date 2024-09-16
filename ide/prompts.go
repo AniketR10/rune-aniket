@@ -88,6 +88,7 @@ func (h *workspaceManagerHandler) openConfirmExitPrompt(ex *ex, hasDirtyFilesOpe
 		[]string{yes, no},
 		[]term.KeyComb{{Ch: 'y'}, {Ch: 'n'}},
 		func(i int, option string) {
+			defer func() { h.exitPromptOpen = false }()
 			switch option {
 			case yes:
 				h.confirmedForceExit = true
