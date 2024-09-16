@@ -57,6 +57,7 @@ func Incendium(
 // Most parameters are in the normalized range 0-1. Exceeding the range is
 // allowed in most of the cases (it's specified in the docstring).
 type IncendiumParams struct {
+	ExtraFlames float // 0..1 brings out more of the flames visual component
 	Flames      FlamesParams
 	Embers      EmbersParams
 	RisingChars RisingCharsParams
@@ -122,7 +123,7 @@ func (s *incendium) Shade(frame, total int, cells [][]term.Cell) {
 		for x := 0; x < len(cells[0]); x++ {
 			// Don't bother rendering Flames shader if no cells would be changed.
 			if !wouldRenderNoFlames {
-				s.shaderFlames.processCell(x, y, frame, total, cells)
+				s.shaderFlames.processCell(x, y, frame, total+int(2*s.ExtraFlames*float(total)), cells)
 			}
 
 			// Do not render embers if unless the incendium passed over the cells.
