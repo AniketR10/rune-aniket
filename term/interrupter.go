@@ -30,7 +30,7 @@ import (
 
 // Interrupter wraps the basic method Interrupt, which
 // sends an interrupt event to the main loop, forcing a redraw
-// of all compontents.
+// of all components.
 //
 // The given context is piped back into the next loop iteration
 // so callers can use it to distinguish between an interrupt-driven

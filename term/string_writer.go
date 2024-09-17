@@ -41,7 +41,7 @@ type StringWriter struct {
 }
 
 // NewStringWriter allocates storage for a new StringWriter and
-// itnializes it.
+// initializes it.
 func NewStringWriter(width, height int) (t *StringWriter) {
 	t = new(StringWriter)
 	t.Init(width, height)

@@ -144,7 +144,7 @@ func TestPromptSetOptionAttr(t *testing.T) {
 }
 
 func TestPromptDefaults(t *testing.T) {
-	t.Run("panics on emptym message", func(t *testing.T) {
+	t.Run("panics on empty message", func(t *testing.T) {
 		assert.Panics(t, func() {
 			_ = NewPrompt(PromptConfig{
 				Message: "", Options: []string{"a"},
