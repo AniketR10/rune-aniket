@@ -150,7 +150,9 @@ AAAAAAAAAAAAAAAAAAAAA`},
 		var expectedFrames []int
 		var expectedTotals []int
 		const total = 30
+		ready := make(chan struct{})
 		interrupter := term.FuncInterrupter(func(_ context.Context) error {
+			<-ready
 			defer wg.Done()
 			i++
 			mock.called = false
@@ -163,7 +165,9 @@ AAAAAAAAAAAAAAAAAAAAA`},
 			}
 			return nil
 		})
+		wg.Add(total)
 		s = New(&component.TestComponent{Ch: 'A'}, mock, interrupter, fps, 1*time.Second)
+		close(ready)
 		wg.Wait()
 		assert.NoError(t, s.Close())
 	})
