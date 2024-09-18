@@ -228,7 +228,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Printf("Saved crash report %q\n", path)
+	fmt.Printf("Saved crash report file://%v\n", path)
 	os.Exit(4)
 }
 
