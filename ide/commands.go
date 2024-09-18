@@ -191,7 +191,8 @@ var (
 		},
 		"toggleFullscreen": {
 			man: textapi.CommandManual{
-				Summary: "Sets the contents of the current active window to full-screen. A subsequent invocation of this command will effectively undo this.",
+				Summary: "Sets the contents of the current active window to full-screen. " +
+					"A subsequent invocation of this command will effectively undo this.",
 			},
 			handler: (*ex).toggleFullscreen,
 		},
@@ -230,8 +231,8 @@ var (
 		},
 		"newTerminalTabOrSplit": {
 			man: textapi.CommandManual{
-				Summary: "Opens a new terminal emulator tab and attaches it to the" +
-					"current active window if empty, or creates a new split window if" +
+				Summary: "Opens a new terminal emulator tab and attaches it to the " +
+					"current active window if empty, or creates a new split window if " +
 					"window is not empty. " +
 					"If 'shell' is not set in " +
 					"terminal config, then the default system shell defined via SHELL " +
@@ -284,7 +285,7 @@ var (
 		},
 		cmdSetDefaultColors: {
 			man: textapi.CommandManual{
-				Summary: "Changes the default background and optionally foreground colors of" +
+				Summary: "Changes the default background and optionally foreground colors of " +
 					"the window in focus. The color can be a named color or an RGB value " +
 					"in hexadecimal notation (i.e. #FFFFFF).",
 				Synopsis: "background [foreground]",
