@@ -620,7 +620,6 @@ func (l *List) handleSearch(
 		// the list or can cancel the search
 	}
 
-	l.list.Reset()
 	for node, ok := tempList.Front(); ok; node, ok = node.Next() {
 		l.list.PushBack(node.Value().(component.WithAttributes))
 	}
@@ -660,6 +659,10 @@ func (l *List) asyncSearch(ctx context.Context) {
 	input := make([][]byte, len(l.input))
 	copy(input, l.input)
 	searchInput := l.getSearchQuery()
+	// reset data now, so moving forward, all the prior input
+	// is managed by the goroutine below, and the new items are
+	// managed by the Push goroutine
+	l.list.Reset()
 	go l.handleSearch(ctx, cancelWait, input, searchInput)
 }
 
