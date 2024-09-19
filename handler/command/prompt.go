@@ -769,23 +769,30 @@ func (h *Prompt) pushCompletionListSync(
 	it iterator.Iterator[string],
 ) {
 	defer cancel()
-	defer it.Close()
 	var i int
-	for ; ; i++ {
-		next, ok := it.Next(ctx)
-		if !ok {
-			break
+	push := func(it iterator.Iterator[string]) {
+		for ; ; i++ {
+			next, ok := it.Next(ctx)
+			if !ok {
+				break
+			}
+			h.list.PushSync([]byte(next))
 		}
-		h.list.PushSync([]byte(next))
-	}
-
-	if i == 0 {
-		// push args history if default completion iterator is empty
-		it, ok := h.commandArgsHistoryIterator(ctx, cmdAndArgs)
-		if ok {
-			h.pushCompletionListSync(ctx, cancel, cmdAndArgs, it)
+		if err := it.Err(); err != nil && !errors.Is(err, context.Canceled) {
+			h.log(log.ErrorLevel, "completion iterator error: %v", err)
 		}
+		_ = it.Close()
 	}
+	push(it)
+	if i != 0 {
+		return
+	}
+	// push args history if default completion iterator is empty
+	it, ok := h.commandArgsHistoryIterator(ctx, cmdAndArgs)
+	if !ok {
+		return
+	}
+	push(it)
 }
 
 func (h *Prompt) commandArgsHistoryIterator(
@@ -842,7 +849,6 @@ func (h *Prompt) pushCompletionList(
 ) {
 	defer close(ch)
 	defer cancel()
-	defer it.Close()
 
 	// draw progress animation while iterator is still returning results
 	frames, seq := component.ProgressAnimationFrames()
@@ -859,37 +865,41 @@ func (h *Prompt) pushCompletionList(
 	h.mu.Unlock()
 
 	var i int
-	for ; ; i++ {
-		next, ok := it.Next(ctx)
-		if !ok {
-			break
+	push := func(it iterator.Iterator[string]) {
+		for ; ; i++ {
+			next, ok := it.Next(ctx)
+			if !ok {
+				break
+			}
+			select {
+			case <-ctx.Done():
+				h.log(log.TraceLevel, "context canceled for ch %p before completed push", ch)
+				return
+			case ch <- []byte(next):
+				h.log(log.TraceLevel, "pushed %q onto search list for ch %p", next, ch)
+			}
 		}
-		select {
-		case <-ctx.Done():
-			h.log(log.TraceLevel, "context canceled for ch %p before completed push", ch)
-			return
-		case ch <- []byte(next):
-			h.log(log.TraceLevel, "pushed %q onto search list for ch %p", next, ch)
-		}
-	}
 
-	err := it.Err()
-	if err != nil {
-		if !errors.Is(err, context.Canceled) {
+		err := it.Err()
+		if err != nil && !errors.Is(err, context.Canceled) {
 			h.log(log.ErrorLevel, "completion iterator error: %v", err)
 		}
+		_ = it.Close()
+	}
+
+	push(it)
+	if i != 0 {
 		return
 	}
 
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	if i == 0 {
-		it, ok := h.commandArgsHistoryIterator(ctx, cmdAndArgs)
-		if ok {
-			h.pushCompletionListSync(ctx, cancel, cmdAndArgs, it)
-		}
+	it, ok := h.commandArgsHistoryIterator(ctx, cmdAndArgs)
+	if !ok {
+		return
 	}
+	push(it)
 }
 
 // Reset resets the commands listed in this Prompt.
