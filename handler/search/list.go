@@ -39,13 +39,15 @@ import (
 
 // List is a collection of elements that can be interactively searched.
 type List struct {
-	mu           sync.Mutex
-	quitChan     chan struct{}
-	input        [][]byte
-	searchCtx    context.Context
-	cancelSearch func()
-	height       int
-	width        int
+	mu            sync.Mutex
+	quitChan      chan struct{}
+	input         [][]byte
+	waitSearchCtx context.Context
+	cancelSearch  func()
+	waitPushCtx   context.Context
+	cancelPush    func()
+	height        int
+	width         int
 
 	cfg listConfig
 
@@ -109,13 +111,21 @@ func (l *List) Init(cfg ListConfig) {
 
 	l.setFilesCount()
 	l.quitChan = make(chan struct{})
-	l.searchCtx, l.cancelSearch = context.WithCancel(context.Background())
+	var ctx context.Context
+	ctx, l.cancelSearch = context.WithCancel(context.Background())
+	l.waitSearchCtx = ctx
+	ctx, l.cancelPush = context.WithCancel(context.Background())
+	l.waitPushCtx = ctx
 	l.cancelSearch()
+	l.cancelPush()
 }
 
 // ToggleCaseSensitivity toggles whether the search should be case sensitive or not.
 // It returns the previous setting and launches a new search asynchronously.
 func (l *List) ToggleCaseSensitivity() bool {
+	l.cancelSearch()
+	<-l.waitSearchCtx.Done()
+
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	ret := l.cfg.caseSensitive
@@ -144,9 +154,26 @@ func (l *List) TotalCount() int {
 // Push returns a channel that can be used to push data to this list asynchronously.
 // Clients should call close on the channel if no more data is expected.
 // See PushSync for more details.
+//
+// No more than one goroutine should be calling Push concurrently with the rest
+// of methods of this List.
 func (l *List) Push(ctx context.Context) chan<- []byte {
+	l.cancelPush()
+	<-l.waitPushCtx.Done()
+
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	// we want the cancel from outside to not cancel waitPushCtx
+	// because we use that for ensuring that no more data will be pushed
+	var cancelWait func()
+	l.waitPushCtx, cancelWait = context.WithCancel(ctx)
+
+	// cancel from outside though should cancel the internal one
+	ctx, l.cancelPush = context.WithCancel(l.waitPushCtx)
+
 	datachan := make(chan []byte)
-	go l.consumeAsyncElements(ctx, datachan, l.quitChan)
+	go l.consumeAsyncElements(ctx, cancelWait, datachan, l.quitChan)
 	return datachan
 }
 
@@ -299,25 +326,25 @@ func (l *List) RemoveFocus() bool {
 }
 
 // Wait waits for the current search to finish if any and returns.
-// It does not wait for any pending data being consumed asyncronously
-// via Push.
 func (l *List) Wait() {
 	l.mu.Lock()
-	ctx := l.searchCtx
+	searchCtx := l.waitSearchCtx
+	pushCtx := l.waitPushCtx
 	l.mu.Unlock()
 
-	if ctx == nil {
-		return
-	}
-
-	<-ctx.Done()
+	<-searchCtx.Done()
+	<-pushCtx.Done()
 }
 
 // Cancel cancels the current search if there's any.
+//
+// Cancel can be used before Wait to ensure that
+// we don't wait indefinitely.
 func (l *List) Cancel() {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.cancelSearch()
+	l.cancelPush()
 }
 
 // Draw satisfies tui.Component
@@ -475,8 +502,11 @@ func (l *List) pushData(data []byte, slab *util.Slab, sortList bool) (matched bo
 }
 
 func (l *List) consumeAsyncElements(
-	ctx context.Context, datachan chan []byte, quitChan chan struct{},
+	ctx context.Context, cancel func(),
+	datachan chan []byte, quitChan chan struct{},
 ) {
+	defer cancel()
+
 	t := time.NewTicker(l.cfg.interruptEvery)
 	tickerCh := make(chan struct{}) // need a way to signal from below
 	defer close(tickerCh)
@@ -619,13 +649,18 @@ func (l *List) drawMatchCounts(w term.Writer) {
 }
 
 func (l *List) asyncSearch(ctx context.Context) {
-	l.cancelSearch()
-	l.searchCtx, l.cancelSearch = context.WithCancel(ctx)
+	// we want the cancel from outside to not cancel waitSearchCtx
+	// because we use that for ensuring that no more data will be pushed
+	var cancelWait func()
+	l.waitSearchCtx, cancelWait = context.WithCancel(ctx)
+
+	// cancel from outside though should cancel the internal one
+	ctx, l.cancelSearch = context.WithCancel(l.waitSearchCtx)
 
 	input := make([][]byte, len(l.input))
 	copy(input, l.input)
 	searchInput := l.getSearchQuery()
-	go l.handleSearch(l.searchCtx, l.cancelSearch, input, searchInput)
+	go l.handleSearch(ctx, cancelWait, input, searchInput)
 }
 
 func (l *List) resize(width, height int) {
@@ -688,6 +723,9 @@ type syncBuffer struct {
 func (s syncBuffer) OnWillEdit(
 	ctx context.Context, start, end term.Coordinates, str string,
 ) {
+	s.parent.cancelSearch()
+	<-s.parent.waitSearchCtx.Done()
+
 	s.parent.mu.Lock()
 	defer s.parent.mu.Unlock()
 	s.buf.Edit(ctx, start, end, str)

@@ -301,25 +301,22 @@ func testListAsyncPush(t *testing.T, constructor listConstructor) {
 	})
 
 	t.Run("concurrent search query", func(t *testing.T) {
-		var wg sync.WaitGroup
-		l, buf := constructor(ListConfig{Interrupter: wgInterrupter(&wg)})
+		l, buf := constructor(ListConfig{Interrupter: term.NopInterrupter()})
 		n := 100
 		l.Resize(n, n)
 
-		wg.Add(3)
+		ch := l.Push(context.Background())
 		go func() {
-			ch := pushTestData(l, n)
-			close(ch)
+			defer close(ch)
+			for i := 0; i < n; i++ {
+				ch <- []byte(strconv.Itoa(i))
+			}
 		}()
 
 		buf.WriteString("9")
-		l.Wait()
 		buf.WriteString("9")
-		l.Wait()
 
-		wg.Wait()
 		l.Wait()
-
 		assert.Equal(t, n, l.TotalCount())
 		assert.Equal(t, 1, l.MatchCount())
 
@@ -745,7 +742,7 @@ func benchmarkHandleSearch(b *testing.B, n int, bottomSearchBar bool) {
 			l.cancelSearch()
 		}
 		ctx := context.Background()
-		l.searchCtx, l.cancelSearch = context.WithCancel(ctx)
+		l.waitSearchCtx, l.cancelSearch = context.WithCancel(ctx)
 		l.list.Reset()
 		l.mu.Unlock()
 		l.handleSearch(context.Background(), func() {}, data, "D")

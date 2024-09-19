@@ -64,6 +64,7 @@ func (s simpleHandler) Handle(ev term.Event) (exit, handled bool) {
 	case 0:
 		switch ev.Key {
 		case term.KeyEnter, term.KeyTab:
+			s.Cancel()
 			s.Wait()
 			item, ok := s.Focus()
 			if ok {

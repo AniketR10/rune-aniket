@@ -973,6 +973,10 @@ func (h *Prompt) Man() tui.Manual {
 
 // Wait waits for any asynchronous completion
 // or search to finish before it returns.
+//
+// Cancel should be used before Wait to prevent
+// it from blocking indefinitely, in case a completion
+// list takes a long time to process.
 func (h *Prompt) Wait() {
 	h.mu.Lock()
 	completionCtx := h.completionCtx
@@ -1139,6 +1143,8 @@ func (h *Prompt) buildManualComponent(bufString string) component.Responsive {
 }
 
 func (h *Prompt) getManualFromFocus() (man text.CommandManual, ok bool) {
+	// it's ok to wait here, since the list of
+	// commands is short and pre-determined
 	h.list.Wait()
 	m, ok := h.list.Focus()
 	if !ok {
