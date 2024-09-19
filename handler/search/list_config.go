@@ -142,3 +142,18 @@ func (c ListConfig) toInternal() listConfig {
 		setFileCountEvery: c.setFileCountEvery,
 	}
 }
+
+// internal representation of ListConfig
+type listConfig struct {
+	matchedTextAttr   term.Attributes
+	matchCountAttr    term.Attributes
+	searchBaseAttr    term.Attributes
+	textAttr          term.Attributes
+	focusAttr         term.Attributes
+	algo              fzf.Algo
+	interrupter       term.Interrupter
+	caseSensitive     bool
+	bottomSearchBar   bool
+	interruptEvery    time.Duration
+	setFileCountEvery int
+}

@@ -39,11 +39,6 @@ const (
 	defaultStoreTimeout = 5 * time.Second
 )
 
-type historyDocument struct {
-	Queries []string
-	Version int64
-}
-
 // History acts as a persisted stack of queries. It provides operations
 // to push queries and retrieve previously persisted queries.
 // A pop operation is not provided explicitly although calling Add
@@ -189,4 +184,9 @@ func (h *History) Next() string {
 // Slice returns all queries as a slice.
 func (h *History) Slice() []string {
 	return h.doc.Queries
+}
+
+type historyDocument struct {
+	Queries []string
+	Version int64
 }

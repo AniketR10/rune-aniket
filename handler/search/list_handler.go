@@ -31,12 +31,6 @@ import (
 	"unstable.build/go-tui/text"
 )
 
-type simpleHandler struct {
-	*List
-	ed tui.Handler
-	fn func(string)
-}
-
 // Handler wraps a List to satisfy tui.Handler.
 // It handles enter key by calling fn with the element in focus,
 // if there's an element in focus at all.
@@ -53,6 +47,12 @@ func Handler(l *List, fn func(string)) tui.Handler {
 		Edit(workspaceapi.RandomURI("search"), buf)
 	ret := simpleHandler{List: l, fn: fn, ed: ed}
 	return ret
+}
+
+type simpleHandler struct {
+	*List
+	ed tui.Handler
+	fn func(string)
 }
 
 func (s simpleHandler) Handle(ev term.Event) (exit, handled bool) {
