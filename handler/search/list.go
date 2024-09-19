@@ -137,6 +137,8 @@ func (l *List) Init(cfg ListConfig) {
 
 	l.setFilesCount()
 	l.quitChan = make(chan struct{})
+	l.searchCtx, l.cancelSearch = context.WithCancel(context.Background())
+	l.cancelSearch()
 }
 
 // ToggleCaseSensitivity toggles whether the search should be case sensitive or not.
@@ -248,12 +250,7 @@ func (l *List) setFilesCount() {
 }
 
 func (l *List) sortMatchesList() {
-	if l.cfg.bottomSearchBar {
-		l.list.Sort(sortByResultScoreInverted)
-	} else {
-		l.list.Sort(sortByResultScore)
-	}
-	l.setFilesCount()
+	sortMatchesList(l.cfg.bottomSearchBar, &l.list.FocusList)
 }
 
 func (l *List) pushData(data []byte, slab *util.Slab, sortList bool) (matched bool) {
@@ -275,9 +272,8 @@ func (l *List) pushData(data []byte, slab *util.Slab, sortList bool) (matched bo
 		}
 		if l.cfg.bottomSearchBar {
 			l.sortMatchesList()
-		} else {
-			l.setFilesCount()
 		}
+		l.setFilesCount()
 		return
 	}
 
@@ -291,22 +287,24 @@ func (l *List) pushData(data []byte, slab *util.Slab, sortList bool) (matched bo
 
 	if sortList {
 		l.sortMatchesList()
+		l.setFilesCount()
 	}
 
 	return
 }
 
-func (l *List) consumeAsyncElements(ctx context.Context, datachan chan []byte, quitChan chan struct{}) {
+func (l *List) consumeAsyncElements(
+	ctx context.Context, datachan chan []byte, quitChan chan struct{},
+) {
 	t := time.NewTicker(l.cfg.interruptEvery)
 	tickerCh := make(chan struct{}) // need a way to signal from below
 	defer close(tickerCh)
 	defer func() {
 		l.mu.Lock()
-		if len(l.getSearchQuery()) == 0 {
-			l.setFilesCount()
-		} else {
+		if len(l.getSearchQuery()) != 0 {
 			l.sortMatchesList()
 		}
+		l.setFilesCount()
 		interrupter := l.cfg.interrupter
 		l.mu.Unlock()
 		_ = interrupter.Interrupt(context.Background())
@@ -326,9 +324,8 @@ func (l *List) consumeAsyncElements(ctx context.Context, datachan chan []byte, q
 				interrupter := l.cfg.interrupter
 				if len(l.getSearchQuery()) != 0 || l.cfg.bottomSearchBar {
 					l.sortMatchesList()
-				} else {
-					l.setFilesCount()
 				}
+				l.setFilesCount()
 				dirty = false
 				l.mu.Unlock()
 				_ = interrupter.Interrupt(context.Background())
@@ -369,31 +366,52 @@ func (l *List) handleSearch(
 	ctx context.Context, cancelFn func(), input [][]byte,
 	searchInput string,
 ) {
+	// defer cancel search context so Wait can rely on searchCtx
+	// to wait for search to be done. Cleanup resources
+	// even if parent ctx.Done returns before the child ctx.
+	defer cancelFn()
+
+	// add matches to a goroutine-local focus list
+	// to reduce lock contention while pushing matches to the list.
+	// Also sort this temp list, rather than the final list,
+	// which reduces contention.
+	tempList := component.NewFocusList()
 	slab := makeSlab()
 	search(l.cfg.algo, input, searchInput, slab, l.cfg.caseSensitive,
 		func(match Match) bool {
-			// NOTE: this creates a lot of contention when performing queries
-			// on very large inputs that are still being collected via Push.
-			// search list should be refactor to use on goroutine which takes
-			// requests of either: new search (with query + all input), new data, or draw
-			// that should be the only goroutine with access to l.list
-			l.mu.Lock()
-			defer l.mu.Unlock()
-			select {
-			case <-ctx.Done():
-				return false
-			default:
-			}
-			addMatch(&l.list.FocusList, match, l.cfg.textAttr, l.cfg.matchedTextAttr)
+			addMatch(tempList, match, l.cfg.textAttr, l.cfg.matchedTextAttr)
 			return true
 		})
+	sortMatchesList(l.cfg.bottomSearchBar, tempList)
 
 	l.mu.Lock()
-	l.sortMatchesList()
-	cancelFn()
-	interrupter := l.cfg.interrupter
+	defer l.cfg.interrupter.Interrupt(ctx) //nolint:errcheck
+
+	// NOTE: there's a race condition to start pushing matches if we do not push
+	// them in batch. Before we start pushing elements, ensure that the
+	// context is still active.
+	//
+	// When a new search is triggered halfway through processing the input, the lock is
+	// acquired, and a search is performed above in parallel with all the previosly consumed
+	// items, as new items arrive, individual searches are performed by pushData on the
+	// new items.
+	select {
+	case <-ctx.Done():
+		// if search was canceled then we're done
+		l.mu.Unlock()
+		return
+	default:
+		// if we are holding the lock then nothing else is updating
+		// the list or can cancel the search
+	}
+
+	l.list.Reset()
+	for node, ok := tempList.Front(); ok; node, ok = node.Next() {
+		l.list.PushBack(node.Value().(component.WithAttributes))
+	}
+	l.setFilesCount()
 	l.mu.Unlock()
-	_ = interrupter.Interrupt(context.Background())
+
 }
 
 // Push returns a channel that can be used to push data to this list asynchronously.
@@ -419,6 +437,7 @@ func (l *List) Pause() {
 	// to avoid adding extra logic to an already contentious and hot path
 	l.mu.Lock()
 	l.sortMatchesList()
+	l.setFilesCount()
 	interrupter := l.cfg.interrupter
 	l.mu.Unlock()
 	_ = interrupter.Interrupt(context.Background())
@@ -496,16 +515,12 @@ func (l *List) IterateVisible(fn func(Match)) {
 }
 
 func (l *List) asyncSearch(ctx context.Context) {
-	if l.cancelSearch != nil {
-		l.cancelSearch()
-	}
-
+	l.cancelSearch()
 	l.searchCtx, l.cancelSearch = context.WithCancel(ctx)
 
 	input := make([][]byte, len(l.input))
 	copy(input, l.input)
 	searchInput := l.getSearchQuery()
-	l.list.Reset()
 	go l.handleSearch(l.searchCtx, l.cancelSearch, input, searchInput)
 }
 
@@ -513,10 +528,7 @@ func (l *List) asyncSearch(ctx context.Context) {
 func (l *List) DataReset() {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	cancel := l.cancelSearch
-	if cancel != nil {
-		cancel()
-	}
+	l.cancelSearch()
 	l.input = l.input[:0]
 	l.list.Reset()
 	l.setFilesCount()
@@ -527,10 +539,7 @@ func (l *List) RemoveFocus() bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	cancel := l.cancelSearch
-	if cancel != nil {
-		cancel()
-	}
+	l.cancelSearch()
 
 	listNode, ok := l.list.Focus()
 
@@ -590,12 +599,8 @@ func (l *List) Wait() {
 // Cancel cancels the current search if there's any.
 func (l *List) Cancel() {
 	l.mu.Lock()
-	cancel := l.cancelSearch
-	l.mu.Unlock()
-	if cancel == nil {
-		return
-	}
-	cancel()
+	defer l.mu.Unlock()
+	l.cancelSearch()
 }
 
 func (l *List) drawList(w term.Writer) {
@@ -765,9 +770,7 @@ func (l *List) Close() error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	if l.cancelSearch != nil {
-		l.cancelSearch()
-	}
+	l.cancelSearch()
 	l.list.Reset()
 	if l.quitChan == nil {
 		return nil
@@ -775,4 +778,12 @@ func (l *List) Close() error {
 	close(l.quitChan)
 	l.quitChan = nil
 	return nil
+}
+
+func sortMatchesList(bottomSearchBar bool, list *component.FocusList) {
+	if bottomSearchBar {
+		list.Sort(sortByResultScoreInverted)
+	} else {
+		list.Sort(sortByResultScore)
+	}
 }
