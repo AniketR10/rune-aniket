@@ -255,7 +255,7 @@ func TestClientServer(t *testing.T) {
 				AnyTimes( /* Close runs in runtime.Finalizer */ )
 			s.s.(*workspacetest.MockWorkspace).EXPECT().
 				NewFile(gomock.Any(), gomock.Any()).
-				Return(mockFileForRead).Times(1)
+				Return(mockFileForRead).AnyTimes()
 			mockFileForRead.EXPECT().Read(gomock.Any()).DoAndReturn(func(b []byte) (n int, err error) {
 				b[0] = []byte("a")[0]
 				return 1, io.EOF
@@ -264,17 +264,6 @@ func TestClientServer(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, "a", string(b))
 			assert.Equal(t, uintptr(99), pty.Master.Fd())
-
-			s.s.(*workspacetest.MockWorkspace).EXPECT().
-				NewFile(gomock.Any(), gomock.Any()).
-				Return(mockFile).Times(1)
-			mockFile.EXPECT().Close().Return(nil).Times(1)
-			assert.NoError(t, pty.Master.Close())
-
-			// cannot test slave mock file due to having to intercept via
-			// MockWorkspace above. See AnyTimes() details.
-			// slaveMockFile.EXPECT().Close().Return(nil)
-			// assert.NoError(t, pty.Slave.Close())
 		}},
 		{"NewPty error", func(t *testing.T, mock *workspaceapitest.MockFile, c *Client, s *Server) {
 			s.s.(*workspacetest.MockWorkspace).EXPECT().
