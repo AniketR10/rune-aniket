@@ -77,7 +77,6 @@ func (t *grpcBroker) DialChannel(ctx context.Context, address string, tags ...st
 	conn MuxConn, err error,
 ) {
 	opts := []grpc.DialOption{
-		grpc.WithStatsHandler(nil),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithBlock(),
 		grpc.WithContextDialer(
