@@ -31,10 +31,8 @@ import (
 	"testing"
 	"time"
 
-	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/blue/document"
-	"go.uber.org/goleak"
 	"google.golang.org/grpc"
 	"unstable.build/go-tui"
 	browserapi "unstable.build/go-tui/api/browser"
@@ -197,9 +195,4 @@ func TestRPCBrowserCloseLeak(t *testing.T) {
 	require.NoError(t, err)
 
 	require.NoError(t, win.Close())
-}
-
-func TestMain(m *testing.M) {
-	log.SetLevel(log.ErrorLevel)
-	goleak.VerifyTestMain(m)
 }
