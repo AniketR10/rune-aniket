@@ -46,7 +46,7 @@ func assertIteratorEqual(
 ) {
 	var actual []string
 	for {
-		next, ok := it.Next()
+		next, ok := it.Next(context.Background())
 		if !ok {
 			break
 		}
@@ -152,14 +152,14 @@ func TestFileSchemeListFilesLarge(t *testing.T) {
 	require.NoError(t, err)
 
 	for i := 0; i < n; i++ {
-		path, ok := it.Next()
+		path, ok := it.Next(context.Background())
 		require.True(t, ok)
 		require.NoError(t, it.Err())
 		assert.NotZero(t, path)
 		assert.False(t, filepath.IsAbs(path))
 	}
 
-	path, ok := it.Next()
+	path, ok := it.Next(context.Background())
 	require.False(t, ok)
 	assert.NoError(t, it.Err())
 	assert.Zero(t, path)
@@ -216,7 +216,7 @@ func benchListFiles(b *testing.B, totalFiles, nestEvery, emptyDirsPerFile int) {
 		// consume iterator
 		ok := true
 		for ok {
-			_, ok = it.Next()
+			_, ok = it.Next(context.Background())
 		}
 	}
 	b.StopTimer()

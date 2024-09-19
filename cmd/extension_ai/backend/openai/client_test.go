@@ -69,7 +69,7 @@ func TestCreateChatCompletion(t *testing.T) {
 		var finishReason backend.FinishReason
 		var builder strings.Builder
 		for i := 0; ; i++ {
-			resp, ok := it.Next()
+			resp, ok := it.Next(ctx)
 			if !ok {
 				break
 			}
@@ -141,7 +141,7 @@ func TestCreateChatCompletion(t *testing.T) {
 		var finishReason backend.FinishReason
 		var builder strings.Builder
 		for i := 0; ; i++ {
-			resp, ok := it.Next()
+			resp, ok := it.Next(ctx)
 			if !ok {
 				break
 			}
@@ -192,7 +192,7 @@ func TestCreateChatCompletion(t *testing.T) {
 		var last backend.ChatCompletionResponse
 		for i := 0; ; i++ {
 			var ok bool
-			resp, ok := it.Next()
+			resp, ok := it.Next(ctx)
 			if !ok {
 				break
 			}

@@ -229,6 +229,7 @@ func (a client) CreateChatCompletion(
 	// see https://platform.openai.com/docs/guides/error-codes/api-errors
 	var stream *openai.ChatCompletionStream
 	var n int
+	ctx, cancel := context.WithCancel(ctx)
 	err := retry.Retry(ctx, retryStrategy, func(ctx context.Context) (bool, error) {
 		n++
 		var err error
@@ -271,9 +272,11 @@ func (a client) CreateChatCompletion(
 		}
 	})
 	if err != nil {
+		cancel()
 		return nil, err
 	}
-	return &completionStreamIterator{client: a, stream: stream}, nil
+	it := iterator.FromValueStream[openai.ChatCompletionStreamResponse](ctx, cancel, stream)
+	return &completionStreamIterator{client: a, it: it}, nil
 }
 
 func (a client) ExceedsContextWindow(messages []backend.ChatCompletionMessage) (bool, error) {
@@ -298,17 +301,22 @@ func (a client) countTokens(messages []backend.ChatCompletionMessage) (ret int) 
 // wraps an openai.ChatCompletionStream to satisfy iterator.Iterator
 type completionStreamIterator struct {
 	client
-	role   backend.Role
-	stream *openai.ChatCompletionStream
-	err    error
-	meta   any
+	role backend.Role
+	it   iterator.Iterator[openai.ChatCompletionStreamResponse]
+	err  error
+	meta any
 }
 
-func (s *completionStreamIterator) Next() (ret backend.ChatCompletionResponse, ok bool) {
-	resp, err := s.stream.Recv()
-	if err != nil {
-		if !errors.Is(err, io.EOF) {
-			s.err = err
+func (s *completionStreamIterator) Next(ctx context.Context) (
+	ret backend.ChatCompletionResponse, ok bool,
+) {
+	resp, ok := s.it.Next(ctx)
+	if !ok {
+		err := s.it.Err()
+		if err != nil {
+			if !errors.Is(err, io.EOF) {
+				s.err = err
+			}
 		}
 		return
 	}
@@ -368,7 +376,7 @@ func (s *completionStreamIterator) Err() error {
 	return s.err
 }
 func (s *completionStreamIterator) Close() error {
-	return s.stream.Close()
+	return s.it.Close()
 }
 
 func (s *completionStreamIterator) appendToolCallsArguments(newToolCallsArgs []openai.ToolCall) {

@@ -176,7 +176,7 @@ func newSchemeIntegration(
 		it, err := walkdir.ListFiles(context.Background(), s, "/tmp")
 		require.NoError(t, err)
 		for {
-			f, ok := it.Next()
+			f, ok := it.Next(context.Background())
 			if !ok {
 				break
 			}

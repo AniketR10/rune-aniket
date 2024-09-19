@@ -765,7 +765,7 @@ func testRegister(t *testing.T,
 		it, str, err := c.CompleteCommand(context.Background(), "HODL", []string{"1", "2"}...)
 		require.NoError(t, err)
 
-		sl, err := iterator.ToSlice(it)
+		sl, err := iterator.ToSlice(context.Background(), it)
 		require.NoError(t, err)
 
 		assert.Equal(t, []string{"4EVER"}, sl)

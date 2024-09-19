@@ -901,7 +901,7 @@ func TestWorkspaceSchemeListFilesIntegration(
 		defer scheme.Close()
 		it, err := walkdir.ListFiles(context.Background(), scheme, "")
 		require.NoError(t, err)
-		_, ok := it.Next()
+		_, ok := it.Next(context.Background())
 		require.False(t, ok)
 	})
 
@@ -923,7 +923,7 @@ func TestWorkspaceSchemeListFilesIntegration(
 			require.NoError(t, err)
 
 			for i := 0; i < totalFiles; i++ {
-				path, ok := it.Next()
+				path, ok := it.Next(context.Background())
 				require.True(t, ok, i)
 				require.NoError(t, it.Err())
 				assert.NotZero(t, path)
@@ -931,7 +931,7 @@ func TestWorkspaceSchemeListFilesIntegration(
 				assert.Equal(t, cwd.Path(), filepath.Dir(filepath.Join(cwd.Path(), path)))
 			}
 
-			path, ok := it.Next()
+			path, ok := it.Next(context.Background())
 			require.False(t, ok)
 			assert.NoError(t, it.Err())
 			assert.Zero(t, path)
@@ -955,7 +955,7 @@ func TestWorkspaceSchemeListFilesIntegration(
 		require.NoError(t, err)
 
 		for i := 0; i < totalFiles; i++ {
-			path, ok := it.Next()
+			path, ok := it.Next(context.Background())
 			require.True(t, ok, i)
 			require.NoError(t, it.Err())
 			assert.NotZero(t, path)
@@ -963,7 +963,7 @@ func TestWorkspaceSchemeListFilesIntegration(
 			assert.Equal(t, cwd.Path(), filepath.Dir(filepath.Join(cwd.Path(), path)))
 		}
 
-		path, ok := it.Next()
+		path, ok := it.Next(context.Background())
 		require.False(t, ok)
 		assert.NoError(t, it.Err())
 		assert.Zero(t, path)
@@ -986,7 +986,7 @@ func TestWorkspaceSchemeListFilesIntegration(
 		require.NoError(t, err)
 
 		for i := 0; i < totalFiles; i++ {
-			path, ok := it.Next()
+			path, ok := it.Next(context.Background())
 			require.True(t, ok, i)
 			require.NoError(t, it.Err())
 			assert.NotZero(t, path)
@@ -994,10 +994,31 @@ func TestWorkspaceSchemeListFilesIntegration(
 			assert.Equal(t, cwd.Path(), filepath.Dir(filepath.Join(cwd.Path(), path)))
 		}
 
-		path, ok := it.Next()
+		path, ok := it.Next(context.Background())
 		require.False(t, ok)
 		assert.NoError(t, it.Err())
 		assert.Zero(t, path)
+	})
+
+	t.Run("passing canceled context to the returned iterator's Next returns an error", func(t *testing.T) {
+		scheme := schemeFn(t)
+		defer scheme.Close()
+		totalFiles := 10
+
+		for i := 0; i < totalFiles; i++ {
+			_, cleanup := createTestFile(t, scheme, "file"+strconv.Itoa(i), strconv.Itoa(i))
+			defer cleanup()
+		}
+
+		ctx, cancel := context.WithCancel(context.Background())
+
+		it, err := walkdir.ListFiles(ctx, scheme, "./file1")
+		require.NoError(t, err)
+
+		cancel()
+		_, ok := it.Next(ctx)
+		require.False(t, ok)
+		assert.Error(t, it.Err())
 	})
 
 	t.Run("does not return error if root's base dir does not exist", func(t *testing.T) {
@@ -1021,7 +1042,7 @@ func TestWorkspaceSchemeListFilesIntegration(
 		require.NoError(t, err)
 
 		for i := 0; i < totalFiles; i++ {
-			path, ok := it.Next()
+			path, ok := it.Next(context.Background())
 			require.True(t, ok, i)
 			require.NoError(t, it.Err())
 			assert.NotZero(t, path)
@@ -1029,7 +1050,7 @@ func TestWorkspaceSchemeListFilesIntegration(
 			assert.Equal(t, cwd.Path(), filepath.Dir(filepath.Join(cwd.Path(), path)))
 		}
 
-		path, ok := it.Next()
+		path, ok := it.Next(context.Background())
 		require.False(t, ok)
 		assert.NoError(t, it.Err())
 		assert.Zero(t, path)

@@ -76,7 +76,7 @@ func readSymbols(
 	var itErr error
 	go func() {
 		for {
-			file, ok := paths.Next()
+			file, ok := paths.Next(ctx)
 			if !ok {
 				if err := paths.Err(); err != nil {
 					itErr = err
@@ -305,8 +305,13 @@ type listSymbolsIterator struct {
 	cancel func()
 }
 
-func (l *listSymbolsIterator) Next() (string, bool) {
+func (l *listSymbolsIterator) Next(ctx context.Context) (string, bool) {
 	select {
+	case <-ctx.Done():
+		l.mu.Lock()
+		defer l.mu.Unlock()
+		l.err = multierror.Append(l.err, ctx.Err())
+		return "", false
 	case <-l.ctx.Done():
 		l.mu.Lock()
 		defer l.mu.Unlock()

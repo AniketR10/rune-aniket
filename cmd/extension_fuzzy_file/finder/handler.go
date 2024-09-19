@@ -276,7 +276,7 @@ func (h *fuzzyFinderHandler) doScanDataViaWorkspaceAPI(
 	}
 
 	for {
-		resource, ok := it.Next()
+		resource, ok := it.Next(ctx)
 		if !ok {
 			break
 		}

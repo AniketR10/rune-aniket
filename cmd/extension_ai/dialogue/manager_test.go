@@ -64,7 +64,7 @@ func TestManager(t *testing.T) {
 		manager := newTestManager(client, store)
 		it, err := manager.CreateCompletion(ctx, "myId", []string{"hello"})
 		require.NoError(t, err)
-		_, ok := it.Next()
+		_, ok := it.Next(context.Background())
 		require.False(t, ok)
 		err = it.Err()
 		require.Error(t, err)
@@ -83,12 +83,12 @@ func TestManager(t *testing.T) {
 		it, err := manager.CreateCompletion(ctx, "myId", []string{"hello"})
 		require.NoError(t, err)
 		for i := 0; i < 3; i++ {
-			next, ok := it.Next()
+			next, ok := it.Next(context.Background())
 			require.True(t, ok)
 			assert.Equal(t, strconv.Itoa(i), next)
 		}
 
-		_, ok := it.Next()
+		_, ok := it.Next(context.Background())
 		require.False(t, ok)
 
 		err = it.Err()
@@ -133,12 +133,12 @@ func TestManager(t *testing.T) {
 		it, err := manager.CreateCompletion(ctx, "myId", []string{"hello"})
 		require.NoError(t, err)
 		for i := 0; i < 3; i++ {
-			next, ok := it.Next()
+			next, ok := it.Next(context.Background())
 			require.True(t, ok)
 			assert.Equal(t, strconv.Itoa(i), next)
 		}
 
-		_, ok := it.Next()
+		_, ok := it.Next(context.Background())
 		require.False(t, ok)
 
 		err = it.Err()
@@ -190,11 +190,11 @@ func TestManager(t *testing.T) {
 				require.NoError(t, err)
 
 				for i := 0; i < 2; i++ {
-					_, ok := it.Next()
+					_, ok := it.Next(context.Background())
 					require.True(t, ok)
 				}
 
-				_, ok := it.Next()
+				_, ok := it.Next(context.Background())
 				require.False(t, ok)
 
 				err = it.Err()
@@ -221,7 +221,7 @@ func TestManager(t *testing.T) {
 		for i := 0; i < n; i++ {
 			it, err := manager.CreateCompletion(ctx, "myId", []string{fmt.Sprintf("hello:%d", i)})
 			require.NoError(t, err)
-			l, err := iterator.ToSlice(it)
+			l, err := iterator.ToSlice(context.Background(), it)
 			require.NoError(t, err)
 			require.Len(t, l, m)
 		}
@@ -259,12 +259,12 @@ func TestManager(t *testing.T) {
 		it, err := manager.CreateCompletion(ctx, "myId", input)
 		require.NoError(t, err)
 		for i := 0; i < 3; i++ {
-			next, ok := it.Next()
+			next, ok := it.Next(context.Background())
 			require.True(t, ok)
 			assert.Equal(t, strconv.Itoa(i), next)
 		}
 
-		_, ok := it.Next()
+		_, ok := it.Next(context.Background())
 		require.False(t, ok)
 
 		err = it.Err()
@@ -302,12 +302,12 @@ func TestManager(t *testing.T) {
 			it, err := manager.CreateCompletion(ctx, "myId", input)
 			require.NoError(t, err)
 			for i := 0; i < 3; i++ {
-				next, ok := it.Next()
+				next, ok := it.Next(context.Background())
 				require.True(t, ok)
 				assert.Equal(t, strconv.Itoa(i), next)
 			}
 
-			_, ok := it.Next()
+			_, ok := it.Next(context.Background())
 			require.False(t, ok)
 
 			err = it.Err()
@@ -356,7 +356,7 @@ type testStream struct {
 	closed bool
 }
 
-func (t *testStream) Next() (ret backend.ChatCompletionResponse, ok bool) {
+func (t *testStream) Next(context.Context) (ret backend.ChatCompletionResponse, ok bool) {
 	if t.err != nil {
 		return
 	}

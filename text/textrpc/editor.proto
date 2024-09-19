@@ -179,8 +179,6 @@ message CompleteRequest {
 
 message CompleteResponse {
 	string value = 1;
-	string error = 2;
-	bool done = 3;
 }
 
 service CommandHandler {

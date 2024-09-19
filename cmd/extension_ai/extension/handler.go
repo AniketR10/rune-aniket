@@ -689,7 +689,7 @@ func drawMessage(
 ) {
 	defer it.Close()
 	for {
-		response, ok := it.Next()
+		response, ok := it.Next(ctx)
 		if !ok {
 			break
 		}

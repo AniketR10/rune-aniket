@@ -182,7 +182,9 @@ func (s *service) Delete(ctx context.Context, ID string) error {
 	return err
 }
 
-func (s *service) List(ctx context.Context, filters []document.Filter) (document.Iterator, error) {
+func (s *service) List(
+	ctx context.Context, filters []document.Filter,
+) (document.Iterator, error) {
 	for _, f := range filters {
 		if len(f.FieldPath) == 0 || f.Op == "" {
 			panic("invalid filter")
@@ -198,7 +200,7 @@ func (s *service) List(ctx context.Context, filters []document.Filter) (document
 	it := iterator.Map(iterator.FromSlice(entries), func(entry os.DirEntry) string {
 		return entry.Name()
 	})
-	return &docIter{filters: filters, svc: s, it: it}, nil
+	return &docIter{ctx: ctx, filters: filters, svc: s, it: it}, nil
 }
 
 func (s *service) Close() (ret error) {
@@ -287,6 +289,7 @@ func (s *service) write(f workspaceapi.File, doc interface{}) error {
 }
 
 type docIter struct {
+	ctx     context.Context
 	filters []document.Filter
 	svc     *service
 	it      iterator.Iterator[string]
@@ -297,7 +300,7 @@ type docIter struct {
 
 func (d *docIter) HasNext() (ok bool) {
 	for d.nextMatchFile == nil && d.doneErr == nil {
-		nextFile, ok := d.it.Next()
+		nextFile, ok := d.it.Next(d.ctx)
 		if !ok {
 			d.doneErr = d.it.Err()
 			return false

@@ -69,7 +69,7 @@ func ReadLines(ctx context.Context, w Reader, paths iterator.Iterator[string]) (
 
 	loop:
 		for {
-			file, ok := paths.Next()
+			file, ok := paths.Next(ctx)
 			if !ok {
 				if err := paths.Err(); err != nil {
 					itErr = err

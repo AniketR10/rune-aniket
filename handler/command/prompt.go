@@ -749,7 +749,7 @@ func (h *Prompt) setCompletionList(
 		}
 	}
 
-	it, isEmpty := iterator.IsEmpty(it)
+	it, isEmpty := iterator.IsEmpty(ctx, it)
 	if isEmpty {
 		it = h.manualCompleter(ctx, cmdAndArgs[0], cmdAndArgs[1:]...)
 	}
@@ -772,7 +772,7 @@ func (h *Prompt) pushCompletionListSync(
 	defer it.Close()
 	var i int
 	for ; ; i++ {
-		next, ok := it.Next()
+		next, ok := it.Next(ctx)
 		if !ok {
 			break
 		}
@@ -781,14 +781,16 @@ func (h *Prompt) pushCompletionListSync(
 
 	if i == 0 {
 		// push args history if default completion iterator is empty
-		it, ok := h.commandArgsHistoryIterator(cmdAndArgs)
+		it, ok := h.commandArgsHistoryIterator(ctx, cmdAndArgs)
 		if ok {
 			h.pushCompletionListSync(ctx, cancel, cmdAndArgs, it)
 		}
 	}
 }
 
-func (h *Prompt) commandArgsHistoryIterator(cmdAndArgs []string) (iterator.Iterator[string], bool) {
+func (h *Prompt) commandArgsHistoryIterator(
+	ctx context.Context, cmdAndArgs []string,
+) (iterator.Iterator[string], bool) {
 	history := h.history.Slice()
 	it := iterator.FromSlice(history)
 
@@ -823,7 +825,7 @@ func (h *Prompt) commandArgsHistoryIterator(cmdAndArgs []string) (iterator.Itera
 		}
 		return false
 	})
-	it, isEmpty := iterator.IsEmpty(uniqueArgs)
+	it, isEmpty := iterator.IsEmpty(ctx, uniqueArgs)
 
 	if !isEmpty {
 		h.completingWithHistory = true
@@ -858,7 +860,7 @@ func (h *Prompt) pushCompletionList(
 
 	var i int
 	for ; ; i++ {
-		next, ok := it.Next()
+		next, ok := it.Next(ctx)
 		if !ok {
 			break
 		}
@@ -883,7 +885,7 @@ func (h *Prompt) pushCompletionList(
 	defer h.mu.Unlock()
 
 	if i == 0 {
-		it, ok := h.commandArgsHistoryIterator(cmdAndArgs)
+		it, ok := h.commandArgsHistoryIterator(ctx, cmdAndArgs)
 		if ok {
 			h.pushCompletionListSync(ctx, cancel, cmdAndArgs, it)
 		}

@@ -1160,7 +1160,7 @@ func assertIteratorLen(t *testing.T, n int, it iterator.Iterator[string]) []stri
 	var ret []string
 	var i int
 	for ; ; i++ {
-		next, ok := it.Next()
+		next, ok := it.Next(context.Background())
 		if !ok {
 			break
 		}

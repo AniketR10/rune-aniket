@@ -835,7 +835,7 @@ myArg 1
 type testNeverEndingIterator struct {
 }
 
-func (c testNeverEndingIterator) Next() (string, bool) {
+func (c testNeverEndingIterator) Next(context.Context) (string, bool) {
 	time.Sleep(10 * time.Millisecond)
 	return "hola 123", true
 }
@@ -902,7 +902,7 @@ type testFeederIterator struct {
 	feeder chan string
 }
 
-func (c testFeederIterator) Next() (string, bool) {
+func (c testFeederIterator) Next(context.Context) (string, bool) {
 	s, ok := <-c.feeder
 	return s, ok
 }

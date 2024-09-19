@@ -57,7 +57,7 @@ func (s systemFindFont) findByFamily(family string) (
 		return nil, err
 	}
 
-	it, isEmpty := iterator.IsEmpty(fonts)
+	it, isEmpty := iterator.IsEmpty(context.Background(), fonts)
 	if isEmpty {
 		return nil, fmt.Errorf("font '%s' not found", family)
 	}

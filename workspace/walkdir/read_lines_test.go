@@ -98,7 +98,7 @@ func TestReadLines(t *testing.T) {
 			require.NoError(t, err)
 			var lines []string
 			for {
-				line, ok := itOut.Next()
+				line, ok := itOut.Next(context.Background())
 				if !ok {
 					require.NoError(t, itOut.Err())
 					break

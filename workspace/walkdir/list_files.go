@@ -192,8 +192,13 @@ type listFilesIterator struct {
 	closeWaitCh chan struct{}
 }
 
-func (l *listFilesIterator) Next() (string, bool) {
+func (l *listFilesIterator) Next(ctx context.Context) (string, bool) {
 	select {
+	case <-ctx.Done():
+		l.mu.Lock()
+		defer l.mu.Unlock()
+		l.err = multierr.Append(l.err, ctx.Err())
+		return "", false
 	case <-l.ctx.Done():
 		l.mu.Lock()
 		defer l.mu.Unlock()

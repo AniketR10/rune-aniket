@@ -88,11 +88,12 @@ func (c *commandClient) Complete(ctx context.Context, name string, args []string
 	}
 
 	const neverReplaceArgs = ""
-	return &completeClientIterator{
-		cancelFn: cancelFn,
-		parent:   c,
-		client:   client,
-	}, neverReplaceArgs, nil
+	respIt := iterator.FromStream[CompleteResponse](ctx, cancelFn, client)
+	it := iterator.Map[*CompleteResponse, string](respIt,
+		func(resp *CompleteResponse) string {
+			return resp.Value
+		})
+	return it, neverReplaceArgs, nil
 }
 
 func (c *commandClient) HandleCommand(ctx context.Context, cmd textapi.Command) error {
@@ -206,7 +207,7 @@ func (s *commandServer) Complete(
 	}
 
 	for {
-		next, ok := completer.Next()
+		next, ok := completer.Next(srv.Context())
 		if !ok {
 			break
 		}
@@ -216,16 +217,7 @@ func (s *commandServer) Complete(
 		}
 	}
 
-	resp := CompleteResponse{Done: true}
-	if err := completer.Err(); err != nil {
-		resp.Error = err.Error()
-	}
-
-	if err := srv.Send(&resp); err != nil {
-		return fmt.Errorf("send last completion msg: %w", err)
-	}
-
-	return nil
+	return completer.Err()
 }
 
 func (s *commandServer) HandleCommand(
@@ -249,29 +241,4 @@ func (s *commandServer) HandleCommand(
 func (c *commandServer) log(level log.Level, msg string, args ...interface{}) {
 	log.WithFields(log.Fields{logging.KeyClass: "textrpc.commandServer"}).
 		Logf(level, msg, args...)
-}
-
-type completeClientIterator struct {
-	parent   *commandClient
-	client   CommandHandler_CompleteClient
-	err      error
-	cancelFn func()
-}
-
-func (c *completeClientIterator) Next() (string, bool) {
-	res, err := c.client.Recv()
-	if err != nil {
-		c.err = err
-		return "", false
-	}
-	return res.Value, !res.Done
-}
-
-func (c *completeClientIterator) Err() error {
-	return c.err
-}
-
-func (c *completeClientIterator) Close() error {
-	c.cancelFn()
-	return nil
 }

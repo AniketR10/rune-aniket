@@ -225,8 +225,8 @@ type completionStreamIterator struct {
 	err          error
 }
 
-func (s *completionStreamIterator) Next() (string, bool) {
-	resp, ok := s.it.Next()
+func (s *completionStreamIterator) Next(ctx context.Context) (string, bool) {
+	resp, ok := s.it.Next(ctx)
 	if ok {
 		s.completionID = resp.ID
 		// last ok responsive should contain the finish reason
@@ -248,7 +248,7 @@ func (s *completionStreamIterator) Next() (string, bool) {
 	if s.completer != nil {
 		// we want to dispatch it for all finish reasons, but only after we have
 		// finished appending new messages to the dialogue store
-		defer s.completer.Complete(s.ctx, s.dialogueID,
+		defer s.completer.Complete(ctx, s.dialogueID,
 			s.completionID, s.finishReason, response)
 	}
 	switch s.finishReason {
@@ -267,7 +267,7 @@ func (s *completionStreamIterator) Next() (string, bool) {
 		return "", false
 	}
 	newMsgs := append(s.userPrompt, response)
-	err := s.store.Create(s.ctx, s.dialogueID, newMsgs)
+	err := s.store.Create(ctx, s.dialogueID, newMsgs)
 	if errors.Is(err, document.ErrAlreadyExists) {
 		// Calls to ExceedsContextWindow might be producing network requests
 		// so we must ensure that we also trim the messages persisted
@@ -275,9 +275,9 @@ func (s *completionStreamIterator) Next() (string, bool) {
 		// and so we call ExceedsContextWindow at most twice.
 		if s.exceedsContextWindow {
 			totalMessages := append(s.totalMessages, response)
-			err = s.store.Set(s.ctx, s.dialogueID, totalMessages)
+			err = s.store.Set(ctx, s.dialogueID, totalMessages)
 		} else {
-			err = s.store.AppendMessages(s.ctx, s.dialogue, newMsgs)
+			err = s.store.AppendMessages(ctx, s.dialogue, newMsgs)
 		}
 	}
 	if err != nil {
