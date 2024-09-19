@@ -730,7 +730,6 @@ func (h *Prompt) setCompletionList(
 		}
 	}
 
-	h.list.DataReset()
 	it, newLastArg := h.completer.Complete(ctx, finalExternalCmdAndArgs[0], finalExternalCmdAndArgs[1:]...)
 	if newLastArg != "" {
 		newCmdAndArgs := make([]string, len(cmdAndArgs))
@@ -755,9 +754,12 @@ func (h *Prompt) setCompletionList(
 	}
 
 	if sync {
+		h.list.Wait()
+		h.list.DataReset()
 		h.pushCompletionListSync(ctx, cancel, cmdAndArgs, it)
 	} else {
 		ch := h.list.Push(ctx)
+		h.list.DataReset()
 		go h.pushCompletionList(ctx, ch, cancel, cmdAndArgs, it)
 	}
 }
