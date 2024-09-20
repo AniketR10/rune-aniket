@@ -52,6 +52,10 @@ const (
 	watcherWaitTimeout = 2 * time.Minute
 )
 
+var (
+	errProcNotFound = errors.New("process not found")
+)
+
 // NewFileScheme returns a Scheme that manages resources
 // on the local file system.
 func NewFileScheme(

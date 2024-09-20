@@ -25,7 +25,6 @@ package workspace
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	multierr "github.com/ernestrc/go-multierror"
@@ -36,48 +35,48 @@ import (
 	workspaceapi "unstable.build/go-tui/api/workspace"
 )
 
-var (
-	errProcNotFound = errors.New("process not found")
-)
-
 var _ SchemeManager = (*Manager)(nil)
 
 // Manager manages resources for a collection of workspaces.
 // It allows clients to register new Schemes and add new workspaces.
 type Manager struct {
-	cfg config.Config
+	cfg           config.Config
+	workspaceFunc func(workspaceapi.URI, schemeapi.Scheme) Workspace
 
 	schemes    map[string]schemeapi.SchemeFunc
 	workspaces map[string]managerWorkspace
 }
 
-// adds remove on Close
-type managerWorkspace struct {
-	m   *Manager
-	uri workspaceapi.URI
-	Workspace
-}
-
-func (w managerWorkspace) Close() error {
-	ret := w.Workspace.Close()
-	w.m.removeWorkspace(w.uri)
-	return ret
-}
-
-// NewManager allocates storage for a new Manager and initializes it.
+// NewManager allocates storage for a new Manager and initializes it
+// with the default workspace constructor (NewSchemeWorkspace).
 // See Manager.Init for more details.
-func NewManager(cfg config.Config) *Manager {
+func NewManager(
+	cfg config.Config,
+) *Manager {
+	return NewManagerWithWorkspaceFunc(cfg, NewSchemeWorkspace)
+}
+
+// NewManagerWithWorkspaceFunc allocates storage for a new Manager and initializes it
+// with the given workspace constructor. See Manager.Init for more details.
+func NewManagerWithWorkspaceFunc(
+	cfg config.Config,
+	workspaceFunc func(workspaceapi.URI, schemeapi.Scheme) Workspace,
+) *Manager {
 	ret := new(Manager)
-	ret.Init(cfg)
+	ret.Init(cfg, workspaceFunc)
 	return ret
 }
 
 // Init initializes m and register a default implementation for local file management
 // under the file:// scheme.
-func (m *Manager) Init(cfg config.Config) {
+func (m *Manager) Init(
+	cfg config.Config,
+	workspaceFunc func(workspaceapi.URI, schemeapi.Scheme) Workspace,
+) {
 	m.cfg = cfg
 	m.schemes = make(map[string]schemeapi.SchemeFunc)
 	m.workspaces = make(map[string]managerWorkspace)
+	m.workspaceFunc = workspaceFunc
 }
 
 // RegisterScheme registers a new scheme for the given scheme and uses fn
@@ -152,7 +151,7 @@ func (m *Manager) AddWorkspace(
 		return nil, fmt.Errorf("new workspace %q: %w", uri, err)
 	}
 
-	workspace := NewSchemeWorkspace(uri, scheme)
+	workspace := m.workspaceFunc(uri, scheme)
 	managerWorkspace := managerWorkspace{uri: uri, m: m, Workspace: workspace}
 	m.workspaces[uri.String()] = managerWorkspace
 
@@ -193,4 +192,17 @@ func (m *Manager) log(level log.Level, msg string, args ...interface{}) {
 	}
 	log.WithField(logging.KeyClass, "workspace.Manager").
 		Logf(level, msg, args...)
+}
+
+// adds remove on Close
+type managerWorkspace struct {
+	m   *Manager
+	uri workspaceapi.URI
+	Workspace
+}
+
+func (w managerWorkspace) Close() error {
+	ret := w.Workspace.Close()
+	w.m.removeWorkspace(w.uri)
+	return ret
 }

@@ -146,7 +146,8 @@ func (i *IDE) init(
 	i.locker = op.locker
 
 	// register default schemes
-	workspaceManager := workspace.NewManager(i.ideConfig.workspace())
+	workspaceManager := workspace.NewManagerWithWorkspaceFunc(
+		i.ideConfig.workspace(), workspace.NewSchemeWorkspace)
 	err := workspaceManager.RegisterScheme(workspacessh.Scheme, workspacessh.New)
 	if err != nil {
 		return fmt.Errorf("register ssh scheme: %w", err)
