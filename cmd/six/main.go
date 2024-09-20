@@ -218,8 +218,24 @@ func startWorkspaceServer() int {
 }
 
 func main() {
+	flag.Parse()
+
+	// ensure that data path exists
+	if _, err := os.Stat(*flagDataPath); err != nil {
+		if !errors.Is(err, os.ErrNotExist) {
+			err = fmt.Errorf("stat %q: %s", *flagDataPath, err)
+			fmt.Printf("%s", err)
+            os.Exit(1)
+		}
+		if err := os.MkdirAll(*flagDataPath, 0777); err != nil {
+			err = fmt.Errorf("mkdir %q: %s", *flagDataPath, err)
+			fmt.Printf("%s", err)
+            os.Exit(1)
+		}
+	}
+
 	var code int
-	ok, path, err := debug.CapturePanicReportDir(".", "six", Tag, func() {
+	ok, path, err := debug.CapturePanicReportDir(*flagDataPath, "six", Tag, func() {
 		code = run()
 	})
 	if ok {
@@ -255,8 +271,6 @@ func run() int {
 	var err error
 	var filenames []string
 
-	flag.Parse()
-
 	if *flagVersion {
 		fmt.Printf("Six %s\n", Version)
 		return 0
@@ -282,20 +296,6 @@ func run() int {
 	if *flagConfigPath != defaultConfigPath {
 		if _, err := os.Stat(*flagConfigPath); err != nil {
 			err = fmt.Errorf("stat %q: %s", *flagConfigPath, err)
-			fmt.Printf("%s", err)
-			return 1
-		}
-	}
-
-	// ensure that data path exists
-	if _, err := os.Stat(*flagDataPath); err != nil {
-		if !errors.Is(err, os.ErrNotExist) {
-			err = fmt.Errorf("stat %q: %s", *flagDataPath, err)
-			fmt.Printf("%s", err)
-			return 1
-		}
-		if err := os.Mkdir(*flagDataPath, 0777); err != nil {
-			err = fmt.Errorf("mkdir %q: %s", *flagDataPath, err)
 			fmt.Printf("%s", err)
 			return 1
 		}
