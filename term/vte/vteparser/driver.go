@@ -666,10 +666,9 @@ func (p *driver) attrsFromSgrParameters(params [][]uint16) []Attr {
 				attr = UnderlineAttr
 			}
 			if len(param) == 1 {
-				// FIXME this needs to consume all the params
 				n, color, ok := parseSGRColor(mapParamsToHeadParam(params[i+1:]))
 				if ok {
-					i += n - 1
+					i += n
 					attrs = append(attrs, Attr{Type: attr, Color: color})
 					continue
 				}

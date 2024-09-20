@@ -91,6 +91,28 @@ func TestParserIntegration(t *testing.T) {
 			},
 		},
 		{
+			"parsing ForegroundAttr must not parse blue component also as separate attr",
+			[]byte{0x1b, '[', '3', '8', ';', '2', ';', '0', ';', '2', '5', '5', ';', '0', 'm'},
+			func(t *testing.T, handler mockHandler) {
+				expected := tcell.NewRGBColor(0, 255, 0)
+				// The blue component was being parsed as iota's 0 value (ResetAttr) wiping the RGB attr.
+				assert.NotEqual(t, &Attr{Type: ResetAttr}, handler.attr)
+				assert.Equal(t, &Attr{Type: ForegroundAttr, Color: expected}, handler.attr)
+				assert.Len(t, handler.attrs, 1)
+			},
+		},
+		{
+			"parsing BackgroundAttr must not parse blue component also as separate attr",
+			[]byte{0x1b, '[', '4', '8', ';', '2', ';', '0', ';', '2', '5', '5', ';', '0', 'm'},
+			func(t *testing.T, handler mockHandler) {
+				expected := tcell.NewRGBColor(0, 255, 0)
+				// The blue component was being parsed as iota's 0 value (ResetAttr) wiping the RGB attr.
+				assert.NotEqual(t, &Attr{Type: ResetAttr}, handler.attr)
+				assert.Equal(t, &Attr{Type: BackgroundAttr, Color: expected}, handler.attr)
+				assert.Len(t, handler.attrs, 1)
+			},
+		},
+		{
 			"parse designate G0 as line drawing",
 			[]byte{0x1b, '(', '0'},
 			func(t *testing.T, handler mockHandler) {
@@ -120,6 +142,7 @@ func TestParserIntegration(t *testing.T) {
 			}
 
 			test.assert(t, handler)
+			handler.resetState()
 		})
 	}
 }
@@ -131,6 +154,7 @@ type mockHandler struct {
 	index            CharsetIndex
 	charset          StandardCharset
 	attr             *Attr
+	attrs            []*Attr
 	identityReported bool
 }
 
@@ -138,12 +162,14 @@ func (m *mockHandler) init() {
 	m.index = CharsetIndexG0
 	m.charset = StandardCharsetASCII
 	m.attr = nil
+	m.attrs = make([]*Attr, 0)
 	m.identityReported = false
 }
 
 func (m *mockHandler) TerminalAttribute(attr Attr) {
 	m.attr = new(Attr)
 	*m.attr = attr
+	m.attrs = append(m.attrs, &attr)
 }
 
 func (m *mockHandler) ConfigureCharset(index CharsetIndex, charset StandardCharset) {
