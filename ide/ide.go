@@ -193,7 +193,7 @@ func (i *IDE) init(
 				op.defaultWallpaper, op.defaultConfig, op.bell, op.scheduleFn)
 		}, op.workspaceConfig, op.tabBarOffset,
 		op.tabBarHeight, op.workspacesBarHeight,
-		op.workspacesBarOffset, op.workspacesBarFrame, op.tabsClickCallback)
+		op.workspacesBarOffset, op.workspacesBarFrame, op.tabsClickCallback, &i.root)
 	if err != nil {
 		return fmt.Errorf("new workspace manager: %w", err)
 	}
@@ -202,7 +202,16 @@ func (i *IDE) init(
 	workspaceHandler.logNonFatalErrs(workspaceHandler.focusBrowser(),
 		configErr, i.ideConfig.errors)
 
-	i.root.init(workspaceHandler, i, i.defaultAttr())
+	shutdownShaderCfg := nopShutdownShaderConfig()
+	if op.shutdownShaderFn != nil {
+		shutdownShaderCfg = shutdownShaderConfig{
+			shader:   op.shutdownShaderFn(i.defaultAttr()),
+			fps:      op.shutdownShaderFPS,
+			duration: op.shutdownShaderDuration,
+		}
+	}
+
+	i.root.init(workspaceHandler, i, i.defaultAttr(), shutdownShaderCfg)
 	return i.workspaceHandler.subscribeCommand(runShaderCmdManual, &i.root)
 }
 
@@ -322,8 +331,8 @@ func (i *IDE) Close() error {
 
 func (i *IDE) initRunning() {
 	atomic.StoreInt32(&i.running, 1)
-	if i.options.shaderFn != nil {
-		i.root.runShader(i.options.shaderFn(i.defaultAttr()),
-			i.options.shaderFPS, i.options.shaderDuration)
+	if i.options.initShaderFn != nil {
+		i.root.runShader(i.options.initShaderFn(i.defaultAttr()),
+			i.options.initShaderFPS, i.options.initShaderDuration)
 	}
 }

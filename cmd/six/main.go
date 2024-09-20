@@ -314,6 +314,12 @@ func run() int {
 					10*time.Second, 60,
 				)
 			}, 60, 10*time.Second),
+		ide.WithShutdownShader(
+			func(defaultAttr term.Attributes) shader.Shader {
+				return glslshader.Incendium(
+					glslshader.DefaultIncendiumParams(), defaultAttr, 60,
+				)
+			}, 60, 10*time.Second),
 		ide.WithLocker(&eventLoopMutex),
 		ide.WithConfigFilename(configFilename),
 		ide.WithDefaultWallpaper(makeWallpaper(unstableBuildLogo)),

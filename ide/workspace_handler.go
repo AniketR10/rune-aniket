@@ -106,6 +106,7 @@ type workspaceManagerHandler struct {
 	openPrevFiles    []file
 	openPrevFilesEx  *ex
 	openPrevFilesWin browser.Window
+	shaderRunner     *shaderRunner
 }
 
 func newWorkspaceManagerHandler(
@@ -119,6 +120,7 @@ func newWorkspaceManagerHandler(
 	tabBarOffset, tabBarHeight int,
 	workspacesBarHeight, workspacesBarOffset int, workspacesBarFrame bool,
 	tabsClickCallback func(int) bool,
+	shaderRunner *shaderRunner,
 ) (*workspaceManagerHandler, error) {
 	ret := new(workspaceManagerHandler)
 
@@ -127,7 +129,8 @@ func newWorkspaceManagerHandler(
 		publishEvent, extensionRunner, locker, builtinExtensions,
 		reloadConfig, workspaceConfigFilename,
 		tabBarOffset, tabBarHeight,
-		workspacesBarHeight, workspacesBarOffset, workspacesBarFrame, tabsClickCallback)
+		workspacesBarHeight, workspacesBarOffset, workspacesBarFrame, tabsClickCallback,
+		shaderRunner)
 	if err != nil {
 		return nil, err
 	}
@@ -174,8 +177,9 @@ func (h *workspaceManagerHandler) init(
 	reloadConfig func() (ideConfig, error), workspaceConfigFilename string,
 	tabBarOffset, tabBarHeight int,
 	workspacesBarHeight, workspacesBarOffset int, workspacesBarFrame bool,
-	tabsClickCallback func(int) bool,
+	tabsClickCallback func(int) bool, shaderRunner *shaderRunner,
 ) (err error) {
+	h.shaderRunner = shaderRunner
 	h.mu = locker
 	h.externalCommands = make(map[string]externalCommand)
 	h.frame = cfg.frame()
@@ -417,6 +421,7 @@ func (h *workspaceManagerHandler) Handle(ev term.Event) (exit, handled bool) {
 		hasDirtyFilesOpen := h.history.dirtyFilesOpen()
 		h.exitPromptOpen = true
 		h.openConfirmExitPrompt(exHandler, hasDirtyFilesOpen)
+		h.shaderRunner.runShutdownShader()
 	}
 
 	exHandler.forceExit = false

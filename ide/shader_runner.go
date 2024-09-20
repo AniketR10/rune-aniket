@@ -44,13 +44,28 @@ const (
 	defaultShaderDuration = 1 * time.Second
 )
 
+type shutdownShaderConfig struct {
+	shader   shader.Shader
+	fps      int
+	duration time.Duration
+}
+
+func nopShutdownShaderConfig() shutdownShaderConfig {
+	return shutdownShaderConfig{
+		shader:   shader.Nop(),
+		fps:      defaultShaderFPS,
+		duration: 100 * time.Millisecond,
+	}
+}
+
 // used as the root tui.Handler to dynamically run shaders
 type shaderRunner struct {
 	tui.Handler
-	interrupter   term.Interrupter
-	shader        *shader.Component
-	defAttr       term.Attributes
-	width, height int
+	interrupter       term.Interrupter
+	shader            *shader.Component
+	defAttr           term.Attributes
+	width, height     int
+	shutdownShaderCfg shutdownShaderConfig
 }
 
 func (r *shaderRunner) HandleCommand(ctx context.Context, cmd textapi.Command) (
@@ -237,18 +252,47 @@ func (r *shaderRunner) Complete(ctx context.Context, name string, args []string)
 	return iterator.Empty[string](), "", nil
 }
 
-func (r *shaderRunner) init(root tui.Handler, interrupter term.Interrupter, defAttr term.Attributes) {
+func (r *shaderRunner) init(
+	root tui.Handler,
+	interrupter term.Interrupter,
+	defAttr term.Attributes,
+	shutdownShaderCfg shutdownShaderConfig,
+) {
 	r.Handler = root
 	r.interrupter = interrupter
 	r.defAttr = defAttr
-	// initialize zero shader so we can treat field always as non-nil
-	r.shader = shader.New(r.Handler, shader.Nop(), r.interrupter, defaultShaderFPS, 0)
+	r.shutdownShaderCfg = shutdownShaderCfg
+
+	// Initialize zero shader so we can treat field always as non-nil.
+	//
+	// Some duration > 0 is passed so the r.shader.done stays true,
+	// that's something that happens after rendering any shader and
+	// allows us to only use one variable (c.done) to determine if a
+	// shader is running or not.
+	r.shader = shader.New(r.Handler, shader.Nop(), r.interrupter, defaultShaderFPS, 100*time.Millisecond)
 }
 
 func (r *shaderRunner) runShader(s shader.Shader, fps int, duration time.Duration) {
 	_ = r.shader.Close()
 	r.shader = shader.New(r.Handler, s, r.interrupter, fps, duration)
 	r.shader.Resize(r.width, r.height)
+}
+
+func (r *shaderRunner) cancel() {
+	// Some duration > 0 is passed so the r.shader.done stays true,
+	// that's something that happens after rendering any shader and
+	// allows us to only use one variable (c.done) to determine if a
+	// shader is running or not.
+	r.runShader(shader.Nop(), defaultShaderFPS, 100*time.Millisecond)
+}
+
+func (r *shaderRunner) runShutdownShader() {
+	// If no shutdown shader is set this will run a shader.Nop(). If a shader was
+	// running when runShutdownShader is called it will appear as canceling it.
+	r.runShader(
+		r.shutdownShaderCfg.shader,
+		r.shutdownShaderCfg.fps,
+		r.shutdownShaderCfg.duration)
 }
 
 func (r *shaderRunner) Draw(w term.Writer) {

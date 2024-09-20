@@ -217,6 +217,16 @@ func TestIDEInitializationIntegration(t *testing.T) {
 	})
 }
 
+type mockShader struct {
+	called bool
+	frames []int
+}
+
+func (s *mockShader) Shade(frame, total int, in [][]term.Cell) {
+	s.called = true
+	s.frames = append(s.frames, frame)
+}
+
 func makeTestFiles(t *testing.T) (*os.File, *os.File) {
 	configFile, err := os.CreateTemp("", "six_ide_test")
 	require.NoError(t, err)

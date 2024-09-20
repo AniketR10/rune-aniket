@@ -138,7 +138,6 @@ func (h *workspaceManagerHandler) openConfirmExitPrompt(ex *ex, hasDirtyFilesOpe
 func newOpenConfirmExitPromptHandler(
 	wm *workspaceManagerHandler,
 	confirmOption, rejectOption string,
-
 ) handler.PromptHandler {
 	return &openConfirmExitPromptHandler{
 		wm:            wm,
@@ -162,6 +161,7 @@ func (h *openConfirmExitPromptHandler) OnSelect(
 		h.wm.confirmedForceExit = true
 		h.wm.publishEvent(term.Event{Type: term.EventNone})
 	case h.rejectOption:
+		h.wm.shaderRunner.cancel()
 		h.wm.confirmedForceExit = false
 		h.promptWindow.Close()
 	}
@@ -169,5 +169,6 @@ func (h *openConfirmExitPromptHandler) OnSelect(
 
 func (h *openConfirmExitPromptHandler) OnClose() error {
 	h.wm.exitPromptOpen = false
+	h.wm.shaderRunner.cancel()
 	return nil
 }

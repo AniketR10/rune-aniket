@@ -135,9 +135,22 @@ func WithInitShader(
 	fps int, duration time.Duration,
 ) Option {
 	return func(opts *options) {
-		opts.shaderFn = shaderFn
-		opts.shaderFPS = fps
-		opts.shaderDuration = duration
+		opts.initShaderFn = shaderFn
+		opts.initShaderFPS = fps
+		opts.initShaderDuration = duration
+	}
+}
+
+// WithShutdownShader configures the IDE to close with the
+// given Shader animation upon "quit" or "writeQuit".
+func WithShutdownShader(
+	shaderFn func(defaultAttr term.Attributes) shader.Shader,
+	fps int, duration time.Duration,
+) Option {
+	return func(opts *options) {
+		opts.shutdownShaderFn = shaderFn
+		opts.shutdownShaderFPS = fps
+		opts.shutdownShaderDuration = duration
 	}
 }
 
@@ -205,9 +218,13 @@ type options struct {
 	defaultConfig       string
 	bell                func()
 	scheduleFn          func(func()) bool
-	shaderFn            func(term.Attributes) shader.Shader
-	shaderDuration      time.Duration
-	shaderFPS           int
+
+	initShaderFn           func(term.Attributes) shader.Shader
+	initShaderDuration     time.Duration
+	initShaderFPS          int
+	shutdownShaderFn       func(term.Attributes) shader.Shader
+	shutdownShaderDuration time.Duration
+	shutdownShaderFPS      int
 }
 
 func defaultOptions() options {

@@ -131,6 +131,7 @@ func (c *Component) interrupt(ctx context.Context) {
 				return
 			}
 		case <-ctx.Done():
+			c.done.Store(true)
 			return
 		}
 	}
