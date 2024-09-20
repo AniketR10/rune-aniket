@@ -948,7 +948,7 @@ func (c *Component) Selection() (string, bool) {
 func (c *Component) Prompt(
 	message string, options []string,
 	bindings []term.KeyComb,
-	cb func(int, string),
+	promptHandler handler.PromptHandler,
 ) Window {
 	if len(options) == 0 || (len(bindings) != 0 && len(options) != len(bindings)) {
 		panic("Prompt given invalid options and/or bindings")
@@ -961,8 +961,8 @@ func (c *Component) Prompt(
 			BackgroundAttributes: c.config.PromptConfig.BackgroundAttr,
 			MinWidth:             c.config.PromptConfig.MinWidth,
 		},
+		PromptHandler:  promptHandler,
 		OptionBindings: bindings,
-		OptionCallback: cb,
 		OptionAttr:     c.config.PromptConfig.TextAttr,
 		HighlightAttr:  c.config.PromptConfig.HighlightAttr,
 	}
@@ -970,11 +970,12 @@ func (c *Component) Prompt(
 		promptConfig.Frame = component.FrameCharSetDefault()
 	}
 
+	prompt := handler.NewPrompt(promptConfig)
 	floatingConfig := component.FloatingConfig{
 		Alignment: component.SpanAlignmentCentered,
 	}
 
-	return c.Floating(NopFloatingHandler(handler.NewPrompt(promptConfig)), floatingConfig)
+	return c.Floating(prompt, floatingConfig)
 }
 
 // Subscribe subscribes sub to window focus events.

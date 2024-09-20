@@ -30,6 +30,7 @@ import (
 	browserapi "unstable.build/go-tui/api/browser"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/component/notifications"
+	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/workspace"
 )
@@ -47,32 +48,34 @@ and lose all the new updates?`, file)
 
 	c.comp.Prompt(msg, []string{yesOpt, noOpt},
 		[]term.KeyComb{{Ch: 'Y'}, {Ch: 'N'}},
-		func(i int, opt string) {
+		handler.FuncPromptHandler(
+			func(i int, opt string) {
 
-			var h browserapi.Handler
-			var err error
+				var h browserapi.Handler
+				var err error
 
-			switch opt {
-			case yesOpt:
-				var swapDir, swapFile workspaceapi.URI
-				swapDir, err = c.getSwapDir(file)
-				if err == nil {
-					swapFile, err = workspace.DefaultSwapFile(swapDir, file)
+				switch opt {
+				case yesOpt:
+					var swapDir, swapFile workspaceapi.URI
+					swapDir, err = c.getSwapDir(file)
 					if err == nil {
-						h, err = c.openFileTab(file, swapFile, false, true)
+						swapFile, err = workspace.DefaultSwapFile(swapDir, file)
+						if err == nil {
+							h, err = c.openFileTab(file, swapFile, false, true)
+						}
 					}
+				case noOpt:
 				}
-			case noOpt:
-			}
-			if h != nil {
-				err = c.comp.Focus().SetContent(h)
-			}
-			if err != nil {
-				c.log(log.ErrorLevel, "recovery prompt: %v", err)
-				_ = c.Notify(notifications.LevelError, "%v", err)
-				return
-			}
-		})
+				if h != nil {
+					err = c.comp.Focus().SetContent(h)
+				}
+				if err != nil {
+					c.log(log.ErrorLevel, "recovery prompt: %v", err)
+					_ = c.Notify(notifications.LevelError, "%v", err)
+					return
+				}
+			},
+			func() error { return nil }))
 }
 
 func (c *Component) openRecoveryPrompt(file workspaceapi.URI) {
@@ -99,59 +102,53 @@ func (c *Component) openRecoveryPrompt(file workspaceapi.URI) {
 		}
 	}
 
-	var promptWindow browserapi.Window
-	promptWindow = c.comp.Prompt(msg, []string{recoverOpt, readOnlyOpt, editOpt, skipOpt},
+	c.comp.Prompt(msg, []string{recoverOpt, readOnlyOpt, editOpt, skipOpt},
 		[]term.KeyComb{{Ch: 'R'}, {Ch: 'O'}, {Ch: 'E'}, {Ch: 'S'}},
-		func(i int, opt string) {
-			// close so if invokeWindow is Closed (called from another prompt)
-			// Focus() does not return the Prompt window
-			if promptWindow != nil {
-				_ = promptWindow.Close()
-			}
+		handler.FuncPromptHandler(
+			func(i int, opt string) {
+				var h browserapi.Handler
+				var err error
 
-			var h browserapi.Handler
-			var err error
-
-			switch opt {
-			case recoverOpt:
-				var swapDir, swapFile workspaceapi.URI
-				swapDir, err = c.getSwapDir(file)
-				if err == nil {
-					swapFile, err = workspace.DefaultSwapFile(swapDir, file)
+				switch opt {
+				case recoverOpt:
+					var swapDir, swapFile workspaceapi.URI
+					swapDir, err = c.getSwapDir(file)
 					if err == nil {
-						h, err = c.RecoverFileTab(file, swapFile, false)
-						if err == workspaceapi.ErrStaleData {
-							c.openAreYouSurePrompt(file)
-							return
-						}
-					}
-				}
-			case readOnlyOpt:
-				h, err = c.OpenFileTab(file, true)
-			case editOpt:
-				var swapDir, swapFile workspaceapi.URI
-				swapDir, err = c.getSwapDir(file)
-				if err == nil {
-					swapFile, err = workspace.DefaultSwapFile(swapDir, file)
-					if err == nil {
-						err = c.workspace.Remove(swapFile.Path())
+						swapFile, err = workspace.DefaultSwapFile(swapDir, file)
 						if err == nil {
-							h, err = c.OpenFileTab(file, false)
+							h, err = c.RecoverFileTab(file, swapFile, false)
+							if err == workspaceapi.ErrStaleData {
+								c.openAreYouSurePrompt(file)
+								return
+							}
 						}
 					}
+				case readOnlyOpt:
+					h, err = c.OpenFileTab(file, true)
+				case editOpt:
+					var swapDir, swapFile workspaceapi.URI
+					swapDir, err = c.getSwapDir(file)
+					if err == nil {
+						swapFile, err = workspace.DefaultSwapFile(swapDir, file)
+						if err == nil {
+							err = c.workspace.Remove(swapFile.Path())
+							if err == nil {
+								h, err = c.OpenFileTab(file, false)
+							}
+						}
+					}
+				case skipOpt:
 				}
-			case skipOpt:
-			}
-			if h != nil {
-				if invokeWindow.Closed() {
-					invokeWindow = c.comp.Focus()
+				if h != nil {
+					if invokeWindow.Closed() {
+						invokeWindow = c.comp.Focus()
+					}
+					err = invokeWindow.SetContent(h)
 				}
-				err = invokeWindow.SetContent(h)
-			}
-			if err != nil {
-				c.log(log.ErrorLevel, "recovery prompt: %v", err)
-				_ = c.Notify(notifications.LevelError, "%v", err)
-				return
-			}
-		})
+				if err != nil {
+					c.log(log.ErrorLevel, "recovery prompt: %v", err)
+					_ = c.Notify(notifications.LevelError, "%v", err)
+				}
+			},
+			func() error { return nil }))
 }

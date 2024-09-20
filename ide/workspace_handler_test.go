@@ -572,6 +572,48 @@ func TestWorkspaceManagerClosePromptIntegration(t *testing.T) {
 		require.NoError(t, m.Close())
 	})
 
+	t.Run("open prompt, close it, open again", func(t *testing.T) {
+		m := newTestWorkspaceManagerHandler(t, defaultCfg(), []string{})
+
+		cases := []handlertest.SequenceTestCase{
+			{":quit>",
+				`┌──────────────────┐
+│                  │
+├──────────────────┤
+│                  │
+│  Are you sure    │
+│  you want to     │
+│  exit?           │
+│                  │
+│                  │
+└──────────────────┘`},
+			{"n",
+				`┌──────────────────┐
+│                  │
+├──────────────────┤
+│                  │
+│                  │
+│workspaceWallpaper│
+│                  │
+│                  │
+│                  │
+└──────────────────┘`},
+			{":quit>",
+				`┌──────────────────┐
+│                  │
+├──────────────────┤
+│                  │
+│  Are you sure    │
+│  you want to     │
+│  exit?           │
+│                  │
+│                  │
+└──────────────────┘`},
+		}
+		handlertest.TestHandlerSequence(t, m, 20, 10, cases)
+		require.NoError(t, m.Close())
+	})
+
 	t.Run("prompts on quit if files are dirty, user continues", func(t *testing.T) {
 		dir, err := os.MkdirTemp("", "")
 		require.NoError(t, err)

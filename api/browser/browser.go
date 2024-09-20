@@ -50,7 +50,9 @@ type Floating interface {
 // Window is the interface that represents
 // a closeable window in a WindowManager.
 type Window interface {
+	// SetContent sets the content of this window to the given handler.
 	SetContent(Handler) error
+
 	// Focus returns whether this window is in focus.
 	Focus() (bool, error)
 

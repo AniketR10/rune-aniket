@@ -24,9 +24,10 @@
 package ide
 
 import (
-	browserapi "unstable.build/go-tui/api/browser"
 	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component/notifications"
+	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/term"
 )
 
@@ -43,30 +44,71 @@ func (h *workspaceManagerHandler) openRestorePrompt(
 	// use the window before prompt was open
 	invokeWindow := ex.invokeWindow()
 
-	var promptWindow browserapi.Window
-	promptWindow = ex.comp.Prompt(
+	promptHandler := newOpenRestorePromptHandler(
+		h, ex, workspaceURI, invokeWindow, cache, restoreCwd, noRestore,
+	).(*openRestorePromptHandler)
+	promptWindow := ex.comp.Prompt(
 		"Do you want to restore the previous session?",
 		[]string{restoreCwd, noRestore},
 		[]term.KeyComb{{Ch: 'y'}, {Ch: 'n'}},
-		func(i int, option string) {
-			// close so if invokeWindow is Closed (called from another prompt)
-			// Focus() does not return the Prompt window
-			if promptWindow != nil {
-				_ = promptWindow.Close()
-			}
-			var err error
-
-			switch option {
-			case restoreCwd:
-				err = h.openPrevSessionFiles(ex, cache, invokeWindow)
-			case noRestore:
-				h.history.resetWorkspaceCache(workspaceURI)
-			}
-			if err != nil {
-				_ = h.empty.Browser().Notify(notifications.LevelError, err.Error())
-			}
-		},
+		promptHandler,
 	)
+	promptHandler.promptWindow = promptWindow
+}
+
+func newOpenRestorePromptHandler(
+	wm *workspaceManagerHandler,
+	ex *ex,
+	workspaceURI workspaceapi.URI,
+	invokeWindow browser.Window,
+	cache []file,
+	restoreCwdOption, noRestoreOption string,
+) handler.PromptHandler {
+	return &openRestorePromptHandler{
+		wm:               wm,
+		ex:               ex,
+		workspaceURI:     workspaceURI,
+		invokeWindow:     invokeWindow,
+		cache:            cache,
+		restoreCwdOption: restoreCwdOption,
+		noRestoreOption:  noRestoreOption,
+	}
+}
+
+type openRestorePromptHandler struct {
+	wm               *workspaceManagerHandler
+	ex               *ex
+	workspaceURI     workspaceapi.URI
+	invokeWindow     browser.Window
+	promptWindow     browser.Window
+	cache            []file
+	restoreCwdOption string
+	noRestoreOption  string
+}
+
+func (h *openRestorePromptHandler) OnSelect(idx int, option string) {
+	// close so if invokeWindow is Closed (called from another prompt)
+	// Focus() does not return the Prompt window
+	if h.promptWindow != nil {
+		_ = h.promptWindow.Close()
+	}
+
+	var err error
+
+	switch option {
+	case h.restoreCwdOption:
+		err = h.wm.openPrevSessionFiles(h.ex, h.cache, h.invokeWindow)
+	case h.noRestoreOption:
+		h.wm.history.resetWorkspaceCache(h.workspaceURI)
+	}
+
+	if err != nil {
+		_ = h.wm.empty.Browser().Notify(notifications.LevelError, err.Error())
+	}
+}
+
+func (h *openRestorePromptHandler) OnClose() error {
+	return nil
 }
 
 func (h *workspaceManagerHandler) openConfirmExitPrompt(ex *ex, hasDirtyFilesOpen bool) {
@@ -82,23 +124,50 @@ func (h *workspaceManagerHandler) openConfirmExitPrompt(ex *ex, hasDirtyFilesOpe
 			promptText
 	}
 
-	var promptWindow browserapi.Window
-	promptWindow = ex.comp.Prompt(
+	promptHandler := newOpenConfirmExitPromptHandler(
+		h, yes, no).(*openConfirmExitPromptHandler)
+	promptWindow := ex.comp.Prompt(
 		promptText,
 		[]string{yes, no},
 		[]term.KeyComb{{Ch: 'y'}, {Ch: 'n'}},
-		func(i int, option string) {
-			defer func() { h.exitPromptOpen = false }()
-			switch option {
-			case yes:
-				h.confirmedForceExit = true
-				h.publishEvent(term.Event{Type: term.EventNone})
-			case no:
-				h.confirmedForceExit = false
-				if promptWindow != nil {
-					promptWindow.Close()
-				}
-			}
-		},
+		promptHandler,
 	)
+	promptHandler.promptWindow = promptWindow
+}
+
+func newOpenConfirmExitPromptHandler(
+	wm *workspaceManagerHandler,
+	confirmOption, rejectOption string,
+
+) handler.PromptHandler {
+	return &openConfirmExitPromptHandler{
+		wm:            wm,
+		confirmOption: confirmOption,
+		rejectOption:  rejectOption,
+	}
+}
+
+type openConfirmExitPromptHandler struct {
+	wm            *workspaceManagerHandler
+	promptWindow  browser.Window
+	confirmOption string
+	rejectOption  string
+}
+
+func (h *openConfirmExitPromptHandler) OnSelect(
+	idx int, option string,
+) {
+	switch option {
+	case h.confirmOption:
+		h.wm.confirmedForceExit = true
+		h.wm.publishEvent(term.Event{Type: term.EventNone})
+	case h.rejectOption:
+		h.wm.confirmedForceExit = false
+		h.promptWindow.Close()
+	}
+}
+
+func (h *openConfirmExitPromptHandler) OnClose() error {
+	h.wm.exitPromptOpen = false
+	return nil
 }

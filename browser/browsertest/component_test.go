@@ -589,6 +589,20 @@ func TestComponentPrompt(t *testing.T) {
 			c.Prompt("", []string{"a", "b"}, []term.KeyComb{{}, {}}, nil)
 		})
 	})
+	t.Run("runs close callback when closed", func(t *testing.T) {
+		c := browser.NewComponent(browser.DefaultConfig())
+		c.Resize(20, 12)
+		closeCalled := false
+		c.Prompt("Albert Pla?", []string{"Buah!", "Hmm"}, nil,
+			handler.FuncPromptHandler(
+				func(idx int, option string) {},
+				func() error {
+					closeCalled = true
+					return nil
+				}))
+		c.Close()
+		assert.True(t, closeCalled)
+	})
 	t.Run("Draw", func(t *testing.T) {
 		w := term.NewStringWriter(24, 12)
 
@@ -619,7 +633,7 @@ func TestComponentPrompt(t *testing.T) {
 │888888888888888888│    
 └──────────────────┘    `,
 			}, {func() {
-				c.Prompt("Virgen Maria?", []string{"Boh", "Meh"}, nil, func(int, string) {})
+				c.Prompt("Virgen Maria?", []string{"Boh", "Meh"}, nil, handler.NopPromptHandler())
 			}, `
 ┌──────────────────┐    
 │music             │    
@@ -649,10 +663,13 @@ func TestComponentPrompt(t *testing.T) {
 │888888888888888888│    
 └──────────────────┘    `,
 			}, {func() {
-				c.Prompt("Tokischa?", []string{"Yay", "Nay"}, nil, func(int, string) {
-					c.Prompt("Robert Love", []string{"YAS!"}, nil, func(int, string) {})
-				})
-				c.Prompt("Rosalia?", []string{"Yay", "Nay"}, nil, func(int, string) {})
+				c.Prompt("Tokischa?", []string{"Yay", "Nay"}, nil,
+					handler.FuncPromptHandler(
+						func(idx int, option string) {
+							c.Prompt("Robert Love", []string{"YAS!"}, nil, handler.NopPromptHandler())
+						},
+						func() error { return nil }))
+				c.Prompt("Rosalia?", []string{"Yay", "Nay"}, nil, handler.NopPromptHandler())
 			}, `
 ┌──────────────────┐    
 │music             │    

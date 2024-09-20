@@ -65,11 +65,14 @@ func TestPromptHandle(t *testing.T) {
 			Options: []string{opt0, opt1},
 			Frame:   component.FrameCharSetDefault(),
 		},
-		OptionCallback: func(i int, opt string) {
-			calledI = i
-			calledOpt = opt
-		},
+		PromptHandler: FuncPromptHandler(
+			func(i int, opt string) {
+				calledI = i
+				calledOpt = opt
+			},
+			func() error { return nil }),
 		OptionBindings: []term.KeyComb{
+
 			{Ch: 'W'},
 			{Ch: 'Y'},
 		},
@@ -167,4 +170,59 @@ func TestPromptHandle(t *testing.T) {
 		assert.Equal(t, -1, calledI)
 		assert.Equal(t, "-1", calledOpt)
 	})
+}
+
+func TestPromptHandler(t *testing.T) {
+	t.Run("OnSelect is called upon Select", func(t *testing.T) {
+		promptHandler := new(testPromptHandler)
+		p := NewPrompt(PromptConfig{
+			PromptConfig: component.PromptConfig{
+				Message: "blah", Options: []string{"a", "b"},
+			},
+			PromptHandler: promptHandler,
+			OptionBindings: []term.KeyComb{
+				{Ch: 'a'},
+				{Ch: 'b'},
+			}})
+		p.Handle(term.Event{
+			Type: term.EventKey, Ch: 'b'})
+		assert.True(t, promptHandler.onSelectCalled)
+		assert.False(t, promptHandler.onCloseCalled)
+		assert.Equal(t, promptHandler.selectedIdx, 1)
+		assert.Equal(t, promptHandler.selectedOption, "b")
+	})
+
+	t.Run("OnClose is called upon Close", func(t *testing.T) {
+		promptHandler := new(testPromptHandler)
+		p := NewPrompt(PromptConfig{
+			PromptConfig: component.PromptConfig{
+				Message: "blah", Options: []string{"a", "b"},
+			},
+			PromptHandler: promptHandler,
+			OptionBindings: []term.KeyComb{
+				{Ch: 'a'},
+				{Ch: 'b'},
+			}})
+		p.Close()
+		assert.False(t, promptHandler.onSelectCalled)
+		assert.True(t, promptHandler.onCloseCalled)
+	})
+}
+
+type testPromptHandler struct {
+	onCloseCalled  bool
+	onSelectCalled bool
+	selectedIdx    int
+	selectedOption string
+}
+
+func (h *testPromptHandler) OnClose() error {
+	h.onCloseCalled = true
+	return nil
+}
+
+func (h *testPromptHandler) OnSelect(idx int, option string) {
+	h.onSelectCalled = true
+	h.selectedIdx = idx
+	h.selectedOption = option
 }

@@ -1017,9 +1017,9 @@ func (c *Component) SetTabName(uri workspaceapi.URI, title string, attr term.Att
 func (c *Component) Prompt(
 	message string, options []string,
 	bindings []term.KeyComb,
-	cb func(int, string),
+	promptHandler handler.PromptHandler,
 ) browser.Window {
-	return c.comp.Prompt(message, options, bindings, cb)
+	return c.comp.Prompt(message, options, bindings, promptHandler)
 }
 
 // SubscribeWindow subscribes sub to changes in focus due to changing the window in focus.

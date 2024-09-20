@@ -30,12 +30,34 @@ import (
 	"unstable.build/go-tui/term"
 )
 
+// PromptHandler provides hooks to be called upon Prompt actions.
+type PromptHandler interface {
+	// OnSelect is run when the user makes a choice from the prompt.
+	OnSelect(idx int, option string)
+	// OnClose runs when the user dismisses the prompt (usually by closing the
+	// component that hosts the Prompt).
+	OnClose() error
+}
+
+// NopPromptHandler won't do anything on selecting prompt choices nor closing.
+func NopPromptHandler() PromptHandler {
+	return nopPromptHandler{}
+}
+
+// FuncPromptHandler will run the given callbacks upon selecting or closing.
+func FuncPromptHandler(
+	selectCb func(idx int, option string),
+	closeCb func() error,
+) PromptHandler {
+	return funcPromptHandler{selectCb: selectCb, closeCb: closeCb}
+}
+
 // PromptConfig holds configuration for a Prompt.
 type PromptConfig struct {
 	component.PromptConfig
+	PromptHandler
 
 	OptionBindings []term.KeyComb
-	OptionCallback func(i int, option string)
 	HighlightAttr  term.Attributes
 	OptionAttr     term.Attributes
 }
@@ -70,9 +92,6 @@ func (f *Prompt) Init(cfg PromptConfig) {
 		len(cfg.OptionBindings) != len(cfg.Options) {
 		panic("invalid OptionBindings; length should match of Options")
 	}
-	if cfg.OptionCallback == nil {
-		cfg.OptionCallback = func(i int, option string) {}
-	}
 
 	if cfg.HighlightAttr == (term.Attributes{}) {
 		cfg.HighlightAttr = term.Attributes{
@@ -80,6 +99,10 @@ func (f *Prompt) Init(cfg PromptConfig) {
 			Fg:    cfg.OptionAttr.Fg,
 			Attrs: cfg.OptionAttr.Attrs | tcell.AttrReverse,
 		}
+	}
+
+	if cfg.PromptHandler == nil {
+		cfg.PromptHandler = NopPromptHandler()
 	}
 
 	f.cfg = cfg
@@ -105,7 +128,7 @@ func (f *Prompt) Handle(ev term.Event) (exit, handled bool) {
 		return
 	}
 	if i, ok := f.bindings[ev.KeyComb()]; ok {
-		f.cfg.OptionCallback(i, f.cfg.Options[i])
+		f.cfg.OnSelect(i, f.cfg.Options[i])
 		exit = true
 		handled = true
 		return
@@ -125,7 +148,7 @@ func (f *Prompt) Handle(ev term.Event) (exit, handled bool) {
 			f.highlightOption()
 		}
 	case term.KeyEnter:
-		f.cfg.OptionCallback(f.hi, f.cfg.Options[f.hi])
+		f.cfg.OnSelect(f.hi, f.cfg.Options[f.hi])
 		exit = true
 		handled = true
 	case term.KeyEsc:
@@ -140,6 +163,11 @@ func (f *Prompt) Selection() (string, bool) {
 	return "", false
 }
 
+// Close satisfies tui.Handler running the configured close callback.
+func (f *Prompt) Close() error {
+	return f.cfg.OnClose()
+}
+
 // Cursor satisfies tui.Handler.
 func (f *Prompt) Cursor() (pos term.Coordinates, style term.CursorStyle, show bool) {
 	return
@@ -148,4 +176,25 @@ func (f *Prompt) Cursor() (pos term.Coordinates, style term.CursorStyle, show bo
 // Man satisfies tui.Component.
 func (f *Prompt) Man() tui.Manual {
 	panic("TODO")
+}
+
+type nopPromptHandler struct{}
+
+func (h nopPromptHandler) OnSelect(idx int, option string) {}
+
+func (h nopPromptHandler) OnClose() error {
+	return nil
+}
+
+type funcPromptHandler struct {
+	selectCb func(idx int, option string)
+	closeCb  func() error
+}
+
+func (h funcPromptHandler) OnSelect(idx int, option string) {
+	h.selectCb(idx, option)
+}
+
+func (h funcPromptHandler) OnClose() error {
+	return h.closeCb()
 }
