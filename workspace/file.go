@@ -238,7 +238,7 @@ func (f *file) initFiles(filePath, swapDir string, readOnly bool) error {
 
 func (f *file) initBuffer(buf *cell.Buffer, file workspaceapi.File) (err error) {
 	buf.Reset()
-	view := newUnixFileReader(buf.View())
+	view := NewUnixFileView(buf.View())
 
 	// file could be not created yet, so initialize from the swap
 	// in case some scheme implementations initialize files with
@@ -257,7 +257,7 @@ func (f *file) initBuffer(buf *cell.Buffer, file workspaceapi.File) (err error) 
 		}()
 	}
 
-	if !view.endsWithEOL() {
+	if !view.EndsWithEOL() {
 		buf.WriteString("\n")
 	}
 

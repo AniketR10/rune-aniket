@@ -28,25 +28,28 @@ import (
 	"unstable.build/go-tui/term"
 )
 
-// unixFileView is a reader that hides the last EOL if present.
-type unixFileView struct {
-	reader cell.View
+// NewUnixFileView returns newly initialized UnixFileView.
+func NewUnixFileView(v cell.View) UnixFileView {
+	return UnixFileView{view: v}
 }
 
-func newUnixFileReader(r cell.View) *unixFileView {
-	b := new(unixFileView)
-	b.reader = r
-	return b
+// UnixFileView is a cell.View that hides the last EOL if present,
+// to account for unix last EOL termination.
+type UnixFileView struct {
+	view cell.View
 }
 
-func (b *unixFileView) endsWithEOL() bool {
-	cells := b.reader.RawCells()
+// EndsWithEOL returns true if the underlying cell.View ends
+// with a new line.
+func (b UnixFileView) EndsWithEOL() bool {
+	cells := b.view.RawCells()
 	return len(cells) > 1 && len(cells[len(cells)-1]) == 0
 }
 
-func (b *unixFileView) Rows() (rows int) {
-	rows = b.reader.Rows()
-	if !b.endsWithEOL() {
+// Rows satisfies cell.View.
+func (b UnixFileView) Rows() (rows int) {
+	rows = b.view.Rows()
+	if !b.EndsWithEOL() {
 		return
 	}
 	rows--
@@ -54,26 +57,30 @@ func (b *unixFileView) Rows() (rows int) {
 
 }
 
-func (b *unixFileView) Columns(row int) int {
-	return b.reader.Columns(row)
+// Columns satisfies cell.View.
+func (b UnixFileView) Columns(row int) int {
+	return b.view.Columns(row)
 }
 
-func (b *unixFileView) Cell(pos term.Coordinates) (term.Cell, bool) {
-	return b.reader.Cell(pos)
+// Cell satisfies cell.View.
+func (b UnixFileView) Cell(pos term.Coordinates) (term.Cell, bool) {
+	return b.view.Cell(pos)
 }
 
-func (b *unixFileView) RawCells() (cells [][]term.Cell) {
-	cells = b.reader.RawCells()
-	if !b.endsWithEOL() {
+// RawCells satisfies cell.View.
+func (b UnixFileView) RawCells() (cells [][]term.Cell) {
+	cells = b.view.RawCells()
+	if !b.EndsWithEOL() {
 		return
 	}
 	cells = cells[:len(cells)-1]
 	return
 }
 
-func (b *unixFileView) String() string {
-	if !b.endsWithEOL() {
-		return b.reader.String()
+// String satisfies cell.View.
+func (b UnixFileView) String() string {
+	if !b.EndsWithEOL() {
+		return b.view.String()
 	}
 	return cell.CellsToString(b.RawCells())
 }
