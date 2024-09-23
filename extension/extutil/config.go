@@ -36,9 +36,9 @@ import (
 	"unstable.build/go-tui/text/vi"
 )
 
-// Tabspaces extract browser.tabspaces from the given cfg.
+// Tabspaces extract editor.tabspaces from the given cfg.
 func Tabspaces(cfg config.Config) (int, error) {
-	browserConfig, err := cfg.GetConfig("browser")
+	editorConfig, err := cfg.GetConfig("editor")
 	if err != nil {
 		if err != config.ErrNotFound {
 			err = fmt.Errorf("failed to get 'tabspaces' from config: %v", err)
@@ -47,7 +47,7 @@ func Tabspaces(cfg config.Config) (int, error) {
 		return cell.DefaultTabspaces, nil
 	}
 
-	ret, err := browserConfig.GetInt("tabspaces")
+	ret, err := editorConfig.GetInt("tabspaces")
 	if err != nil {
 		if err != config.ErrNotFound {
 			err = fmt.Errorf("failed to get 'tabspaces' from config: %v", err)

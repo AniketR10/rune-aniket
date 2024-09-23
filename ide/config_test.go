@@ -198,7 +198,7 @@ terminal:
 
 func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
 	assert.Len(t, cfg.extensions(), 0)
-	assert.Equal(t, 4, cfg.browserTabspaces())
+	assert.Equal(t, 4, cfg.editorTabspaces())
 	assert.NotNil(t, cfg.wallpaper())
 	defWmConfig := handler.DefaultWindowManagerConfig()
 	defWmConfig.FocusFrameAttr = defWmConfig.FrameAttr
@@ -289,7 +289,7 @@ func TestConfigSetting(t *testing.T) {
 	var cfg ideConfig
 	initConfig(&cfg, m, browser.NopWallpaper(), term.RingBell, term.ScheduleNextTick)
 
-	assert.Equal(t, 4, cfg.browserTabspaces())
+	assert.Equal(t, 4, cfg.editorTabspaces())
 	_, ok := cfg.wallpaper().NewComponent().(component.String)
 	assert.True(t, ok)
 	assert.Equal(t, "/tmp/debug.log", cfg.logOutputPath())
@@ -468,4 +468,22 @@ command:
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "Alias cycle detected")
 	assert.Empty(t, cfg.commandAliases())
+}
+
+func TestTabspaces(t *testing.T) {
+	f, err := os.CreateTemp("", "")
+	require.NoError(t, err)
+	defer os.Remove(f.Name())
+
+	_, err = f.WriteString(`
+editor:
+  tabspaces: 2
+`)
+	require.NoError(t, err)
+
+	var cfg ideConfig
+	err = loadConfig(&cfg, f.Name(), browser.NopWallpaper(), "{}",
+		term.RingBell, term.ScheduleNextTick)
+	require.NoError(t, err)
+	assert.Equal(t, 2, cfg.editorTabspaces())
 }

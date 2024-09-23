@@ -77,6 +77,7 @@ input_mode:
 clipboard: "system"
 
 editor:
+  tabspaces: 4
   # mode determines what kind of editor to use. Options are
   # 'modal', which simulates vi/vim and 'modeless' which
   # works like the rest of text editors.

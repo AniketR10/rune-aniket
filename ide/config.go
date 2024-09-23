@@ -999,16 +999,16 @@ func (c ideConfig) modelessBool(name string) (ret bool) {
 	return ret
 }
 
-func (c ideConfig) browserTabspaces() (tabs int) {
+func (c ideConfig) editorTabspaces() (tabs int) {
 	tabs = text.DefaultConfig().Tabspaces
-	cfg, ok := c.browser()
+	cfg, ok := c.editor()
 	if !ok {
 		return
 	}
 	cfgTabs, err := cfg.GetInt("tabspaces")
 	if err != nil {
 		if err != config.ErrNotFound {
-			c.errors["browser.tabspaces"] = err
+			c.errors["editor.tabspaces"] = err
 		}
 		return
 	}

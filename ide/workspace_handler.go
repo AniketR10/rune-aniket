@@ -493,7 +493,7 @@ func (h *workspaceManagerHandler) textOpts(cfg ideConfig) []text.Option {
 	notificationsCfg.Interrupter = interrupter
 
 	ret := []text.Option{
-		text.WithTabspaces(cfg.browserTabspaces()),
+		text.WithTabspaces(cfg.editorTabspaces()),
 		text.WithWindowManagerConfig(cfg.windowManagerConfig()),
 		text.WithFrameUnionCharSet(cfg.frameUnionCharset()),
 		text.WithFrameUnion(cfg.frameUnion()),
