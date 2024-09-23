@@ -237,6 +237,43 @@ func TestCursorMove(t *testing.T) {
 			term.Coordinates{X: 0, Y: 0},
 		},
 		{
+			"MoveStartLineNonBlank moves to first none blank character of line, starts blank",
+			1000, 1000,
+			func(t *testing.T, e *Cursor) {
+				e.cursor.Y = 20
+				assert.True(t, e.MoveStartLineNonBlank())
+			},
+			term.Coordinates{X: 8, Y: 20},
+		},
+ 		{
+			"MoveStartLineNonBlank moves to first none blank character of line, doesn't start blank",
+			1000, 1000,
+			func(t *testing.T, e *Cursor) {
+				e.cursor.Y = 6
+				assert.True(t, e.MoveStartLineNonBlank())
+			},
+			term.Coordinates{X: 0, Y: 6},
+		},
+ 		{
+			"MoveStartLineNonBlank moves to first none blank character of line, cursor beyond end",
+			1000, 1000,
+			func(t *testing.T, e *Cursor) {
+				e.cursor.X = 27
+				e.cursor.Y = 20
+				assert.True(t, e.MoveStartLineNonBlank())
+			},
+			term.Coordinates{X: 8, Y: 20},
+		},
+ 		{
+			"MoveStartLineNonBlank empty line",
+			1000, 1000,
+			func(t *testing.T, e *Cursor) {
+				e.cursor.Y = 10
+				assert.False(t, e.MoveStartLineNonBlank())
+			},
+			term.Coordinates{X: 0, Y: 10},
+		},
+		{
 			"MoveStartLine should seek to start of line if start is out of window",
 			10, 10,
 			func(t *testing.T, e *Cursor) {

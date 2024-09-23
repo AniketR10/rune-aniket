@@ -331,6 +331,37 @@ func (c *Cursor) MoveStartLine() (ok bool) {
 	return
 }
 
+// MoveStartLineNonBlank moves the cursor at the first character that's not
+// blank (e.g. space, tab, etc.) in the current line.
+func (c *Cursor) MoveStartLineNonBlank() bool {
+	enable := c.disablePublishing()
+	defer enable()
+
+	initialScrollPos := c.cursorAtScroll()
+	c.setCursor(term.Coordinates{X: 0, Y: initialScrollPos.Y}, false)
+	cells := c.view().RawCells()
+
+	x := 0
+	isBlank := true
+	for isBlank {
+		if x >= len(cells) {
+			return false
+		}
+		cell, ok := c.cellAtCursor()
+		if !ok {
+			return false
+		}
+		isBlank = isOneOf(cell, blankCharacters)
+		if !isBlank {
+			return true
+		}
+		c.setCursor(term.Coordinates{X: x, Y: initialScrollPos.Y}, false)
+		x++
+	}
+
+	return true
+}
+
 // MoveEndLine moves the cursor at the end of the current line, scrolling
 // to the end of the line if required.
 func (c *Cursor) MoveEndLine() (ok bool) {
@@ -640,6 +671,8 @@ var allSpecialCharacters = map[rune]struct{}{
 	'\x00': {}, '\\': {}, '/': {}, '+': {}, '`': {}, '_': {}, '@': {}}
 
 var skipCharacters = map[rune]struct{}{' ': {}, '\t': {}, '\x00': {}, '_': {}}
+
+var blankCharacters = map[rune]struct{}{'\x00': {}, ' ': {}, '\t': {}}
 
 const budgetFindWord = 100
 

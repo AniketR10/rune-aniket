@@ -399,6 +399,8 @@ func (vi *viHandlerImpl) handleNormal(ev term.Event) (quit, handled bool) {
 			vi.pasteClipboard(vi.config.defaultRegister, false)
 		case '0':
 			vi.cursor.MoveStartLine()
+		case '^':
+			vi.cursor.MoveStartLineNonBlank()
 		case '$':
 			vi.cursor.MoveEndLine()
 		case 'G':
