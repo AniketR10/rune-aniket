@@ -28,12 +28,14 @@ import (
 	"os"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"unstable.build/go-tui/api/config"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser"
+	"unstable.build/go-tui/component/shader"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/term"
 )
@@ -213,6 +215,25 @@ func TestIDEInitializationIntegration(t *testing.T) {
 		require.NoError(t, err)
 
 		require.NotNil(t, i.root)
+		assert.NoError(t, i.closeResources())
+	})
+
+	t.Run("init shader is run when passed WithInitShader option", func(t *testing.T) {
+		initShader := new(mockShader)
+		i := new(IDE)
+		err := i.init("", "", "", "", []string{""},
+			WithInitShader(
+				func(_ term.Attributes) shader.Shader {
+					return initShader
+				},
+				30, 1*time.Second,
+			))
+		require.NoError(t, err)
+
+		i.initRunning()
+		i.root.Draw(&term.NoopWriter{})
+
+		assert.True(t, initShader.called)
 		assert.NoError(t, i.closeResources())
 	})
 }
