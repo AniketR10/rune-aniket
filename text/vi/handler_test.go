@@ -604,7 +604,8 @@ func TestIntegrationScrollEvent(t *testing.T) {
 		{"MoveToMatchingRune", term.Coordinates{Y: 7}, term.Event{Type: term.EventKey, Ch: '%'}},
 		{"MoveEndLine", term.Coordinates{Y: 2}, term.Event{Type: term.EventKey, Ch: '$'}},
 		{"MoveRightStartWord", term.Coordinates{X: 4, Y: 9}, term.Event{Type: term.EventKey, Ch: 'w'}},
-		{"MoveLeftStartWord", term.Coordinates{X: 21, Y: 9}, term.Event{Type: term.EventKey, Ch: 'B'}},
+		{"MoveLeftStartWord", term.Coordinates{X: 21, Y: 9}, term.Event{Type: term.EventKey, Ch: 'b'}},
+		{"MoveLeftStartWordGroup", term.Coordinates{X: 21, Y: 9}, term.Event{Type: term.EventKey, Ch: 'B'}},
 	}
 
 	for _, tcase := range tsuite {
@@ -625,6 +626,87 @@ func TestIntegrationScrollEvent(t *testing.T) {
 			assert.Equal(t, 1, called)
 		})
 	}
+}
+
+func TestIntegrationMoveWordSpecialChars(t *testing.T) {
+	t.Run("navigating special chars MoveRightEndWord and MoveLeftStartWord", func(t *testing.T) {
+		const snippetSpecialChars = `aaa.aaa,aaa:aaa;aaa aaa)aaa"aaa'aaa(aaa{aaa}aaa[aaa` +
+			`]aaa	aaa\aaa/aaa+aaa_aaa@aaa#aaa=aaa<aaa>aaa!aaa?aaa|` +
+			`aaa^aaa&aaa*aaa%aaa.`
+
+		vi := setupVi(t, snippetSpecialChars, 2)
+		prevCoords := term.Coordinates{X: 0, Y: 0}
+		vi.setCursorAtScroll(prevCoords)
+		vi.Resize(200, 30)
+		jumps := []rune{
+			'a', '.', 'a', ',', 'a', ':', 'a', ';', 'a', 'a', ')', 'a', '"',
+			'a', '\'', 'a', '(', 'a', '{', 'a', '}', 'a', '[', 'a',
+			']', 'a', 'a', '\\', 'a', '/', 'a', '+', 'a', 'a', '@', 'a', '#', 'a',
+			'=', 'a', '<', 'a', '>', 'a', '!', 'a', '?', 'a', '|',
+			'a', '^', 'a', '&', 'a', '*', 'a',
+		}
+
+		// forward
+		for i := 0; i < len(jumps); i++ {
+			_, ok := vi.Handle(term.Event{Type: term.EventKey, Ch: 'e'})
+			require.True(t, ok)
+			cell, ok := vi.cursor.Cell()
+			require.True(t, ok)
+			require.Equal(t, jumps[i], cell.Ch, "(forward) expected '%c', got '%c'", jumps[i], cell.Ch)
+		}
+
+		// backwards
+		for i := len(jumps) - 1; i >= 0; i-- {
+			_, ok := vi.Handle(term.Event{Type: term.EventKey, Ch: 'b'})
+			require.True(t, ok)
+			cell, ok := vi.cursor.Cell()
+			require.True(t, ok)
+			require.Equal(t, jumps[i], cell.Ch, "(backwards) expected '%c', got '%c'", jumps[i], cell.Ch)
+		}
+	})
+	t.Run("navigating new lines MoveRightEndWord and MoveLeftStartWord", func(t *testing.T) {
+		const snippetNewLines = `aa#aaa
+aaaa.a
+$aaaaa
+aaa@aa`
+
+		vi := setupVi(t, snippetNewLines, 2)
+		prevCoords := term.Coordinates{X: 0, Y: 0}
+		vi.setCursorAtScroll(prevCoords)
+		vi.Resize(10, 10)
+
+		jumps := []rune{
+			'a', '#', 'a',
+			'a', 'a', '.', 'a',
+			'$', 'a',
+			'a', 'a', '@', 'a',
+		}
+
+		// forward
+		for i := 0; i < len(jumps); i++ {
+			_, ok := vi.Handle(term.Event{Type: term.EventKey, Ch: 'e'})
+			require.True(t, ok)
+			cell, ok := vi.cursor.Cell()
+			require.True(t, ok)
+			require.Equal(t, jumps[i], cell.Ch, "(forward) expected '%c', got '%c'", jumps[i], cell.Ch)
+		}
+
+		revJumps := []rune{
+			'a', '@', 'a',
+			'a', '$',
+			'a', '.', 'a', 'a',
+			'a', '#', 'a',
+		}
+
+		// backwards
+		for i := 0; i < len(revJumps); i++ {
+			_, ok := vi.Handle(term.Event{Type: term.EventKey, Ch: 'b'})
+			require.True(t, ok)
+			cell, ok := vi.cursor.Cell()
+			require.True(t, ok)
+			require.Equal(t, revJumps[i], cell.Ch, "(backwards) expected '%c', got '%c'", revJumps[i], cell.Ch)
+		}
+	})
 }
 
 func TestIntegrationNewFile(t *testing.T) {
