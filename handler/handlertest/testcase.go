@@ -120,7 +120,7 @@ func handleTestCase(
 	require.NoError(t, err)
 
 	out := w.String()
-	assert.Equal(t, tcase.Expected, out, "test case %d", i)
+	assert.Equal(t, tcase.Expected, out, "test case %d (input: %s)", i, tcase.InputSequence)
 }
 
 // TestHandlerIsolated is a helper function that drives
@@ -135,11 +135,13 @@ func TestHandlerIsolated(
 	writer := term.NewStringWriter(width, height)
 
 	for i, tcase := range cases {
-		t.Run(fmt.Sprintf("test case %d", i), func(t *testing.T) {
-			handler := fn(t)
-			handler.Resize(width, height)
-			handleTestCase(t, i, writer, handler, tcase, width, height)
-		})
+		t.Run(
+			fmt.Sprintf("test case %d (input: %s)", i, tcase.InputSequence),
+			func(t *testing.T) {
+				handler := fn(t)
+				handler.Resize(width, height)
+				handleTestCase(t, i, writer, handler, tcase, width, height)
+			})
 	}
 }
 
