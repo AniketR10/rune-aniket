@@ -81,6 +81,7 @@ func OpenFile(filename string, flag int, perm os.FileMode) (workspaceapi.File, e
 	if err != nil {
 		return nil, fmt.Errorf("file scheme: %v", err)
 	}
+	defer fs.Close() // nolint:errcheck
 	f, werr := fs.Open(filename, flag, perm)
 	if werr != nil {
 		return nil, werr.ToError()
