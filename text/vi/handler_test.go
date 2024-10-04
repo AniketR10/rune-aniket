@@ -25,6 +25,8 @@ package vi
 
 import (
 	"fmt"
+	"math"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -422,10 +424,181 @@ diff_buf_adjust(win_
 diff_buf_adjust(win_
 {                   
               NORMAL`},
+		{"7h1j1l1k1h7l",
+			`                    
+/*                  
+ * Check if the curr
+ *                  
+ * potat▐diff buffer
+ */                 
+  void              
+diff_buf_adjust(win_
+{                   
+              NORMAL`},
+		{"3h",
+			`                    
+/*                  
+ * Check if the curr
+ *                  
+ * po▐atodiff buffer
+ */                 
+  void              
+diff_buf_adjust(win_
+{                   
+              NORMAL`},
+		{"10000000000000000000000000000000000000000h",
+			`                    
+/*                  
+ * Check if the curr
+ *                  
+▐* potatodiff buffer
+ */                 
+  void              
+diff_buf_adjust(win_
+{                   
+              NORMAL`},
+		{"3j",
+			`                    
+/*                  
+ * Check if the curr
+ *                  
+ * potatodiff buffer
+ */                 
+  void              
+▐iff_buf_adjust(win_
+{                   
+              NORMAL`},
+		{"8l",
+			`                    
+/*                  
+ * Check if the curr
+ *                  
+ * potatodiff buffer
+ */                 
+  void              
+diff_buf▐adjust(win_
+{                   
+              NORMAL`},
+		// 10j means move 10 rows down; not go to start of line (0) and move 1 row down
+		{"10j",
+			`  win_T  *wp;       
+  int        i;     
+                    
+  if (!win->w_p_diff
+  {                 
+  /* When there is n
+   * it from the dif
+  FOR_ALL_WINDOWS(wp
+    if (▐p->w_buffer
+              NORMAL`},
+		{"2k",
+			`  win_T  *wp;       
+  int        i;     
+                    
+  if (!win->w_p_diff
+  {                 
+  /* When there is n
+   * it ▐rom the dif
+  FOR_ALL_WINDOWS(wp
+    if (wp->w_buffer
+              NORMAL`},
+		{"10k",
+			` *▐                 
+  void              
+diff_buf_adjust(win_
+{                   
+  win_T  *wp;       
+  int        i;     
+                    
+  if (!win->w_p_diff
+  {                 
+              NORMAL`},
+		{"922337203685477580719973197k",
+			`▐                   
+/*                  
+ * Check if the curr
+ *                  
+ * potatodiff buffer
+ */                 
+  void              
+diff_buf_adjust(win_
+{                   
+              NORMAL`},
+		{"jj",
+			`                    
+/*                  
+ *▐Check if the curr
+ *                  
+ * potatodiff buffer
+ */                 
+  void              
+diff_buf_adjust(win_
+{                   
+              NORMAL`},
+		{"4\\$h", // '4' will be forgotten because of $ (go to last line char)
+			`                    
+                    
+ved from the list ▐f
+                    
+                    
+                    
+                    
+                    
+                    
+              NORMAL`},
+		{"98765432123456789098765432100000000000000013414l",
+			`                    
+                    
+ved from the list o▐
+                    
+                    
+                    
+                    
+                    
+                    
+              NORMAL`},
+		{"33<h",
+			`                    
+                    
+ved from the list ▐f
+                    
+                    
+                    
+                    
+                    
+                    
+              NORMAL`},
 	}
 
 	vi := setupViIntegration(t, snippet, 2)
 	handlertest.TestHandlerSequence(t, vi, 20, 10, cases)
+}
+
+func TestViCount(t *testing.T) {
+	motions := []rune{'h', 'j', 'k', 'l'}
+	for _, motion := range motions {
+		t.Run(fmt.Sprintf(
+			"20%c multiplies motion by 20", // doesn't go necessarily to start of line
+			motion),
+			func(t *testing.T) {
+				vi := setupVi(t, snippet, 2)
+				vi.Resize(100, 100)
+				vi.cursor.MoveToScroll(term.Coordinates{X: 3, Y: 3})
+				vi.Handle(term.Event{Type: term.EventKey, Ch: '2'})
+				vi.Handle(term.Event{Type: term.EventKey, Ch: '0'})
+				vi.Handle(term.Event{Type: term.EventKey, Ch: motion})
+				switch motion {
+				case 'h':
+					assert.Equal(t, vi.cursor.Coordinates(), term.Coordinates{X: 0, Y: 3})
+				case 'j':
+					assert.Equal(t, vi.cursor.Coordinates(), term.Coordinates{X: 3, Y: 23})
+				case 'k':
+					assert.Equal(t, vi.cursor.Coordinates(), term.Coordinates{X: 0, Y: 0})
+				case 'l':
+					assert.Equal(t, vi.cursor.Coordinates(), term.Coordinates{X: 15, Y: 3})
+				}
+			})
+	}
 }
 
 func TestVidfd(t *testing.T) {
@@ -753,6 +926,251 @@ func TestExitVisualMode(t *testing.T) {
 
 		vi.Handle(term.Event{Type: term.EventKey, Ch: 'c', Mod: term.ModCtrl})
 		assert.Equal(t, vi.mode(), normalMode)
+	})
+}
+
+func TestViCountChangeToVisualMode(t *testing.T) {
+	codeSnippet := "abcdefghij\n1234567"
+	// In a window width of 4 without wrapping::
+	//
+	//   abcd (efghij hidden right)
+	//   1234 (567 hidden right)
+	//
+	// In a window width of 4 with wrapping::
+	//
+	//   abcd
+	//   efgh
+	//   ij
+	//   1234
+	//   567
+
+	suite := []struct {
+		name                   string
+		scrollWidth            int
+		cursorAt               term.Coordinates
+		countDigits            []rune
+		selection              string
+		expectScrollCoords     term.Coordinates
+		expectScrollCoordsWrap term.Coordinates
+		expectWindowCoords     term.Coordinates
+		expectWindowCoordsWrap term.Coordinates
+	}{
+		{
+			name:                   "1v unitary selects only current char",
+			scrollWidth:            4,
+			cursorAt:               term.Coordinates{X: 1, Y: 0}, // 'b' in snippet
+			countDigits:            []rune{'1'},
+			selection:              "b",
+			expectScrollCoords:     term.Coordinates{X: 1, Y: 0},
+			expectScrollCoordsWrap: term.Coordinates{X: 1, Y: 0},
+			expectWindowCoords:     term.Coordinates{X: 1, Y: 0},
+			expectWindowCoordsWrap: term.Coordinates{X: 1, Y: 0},
+		},
+		{
+			name:                   "2v count N and change from normal to visual mode moves cursor N cells right",
+			scrollWidth:            4,
+			cursorAt:               term.Coordinates{X: 1, Y: 0}, // 'b' in snippet
+			countDigits:            []rune{'2'},
+			selection:              "bc",
+			expectScrollCoords:     term.Coordinates{X: 2, Y: 0},
+			expectScrollCoordsWrap: term.Coordinates{X: 2, Y: 0},
+			expectWindowCoords:     term.Coordinates{X: 2, Y: 0},
+			expectWindowCoordsWrap: term.Coordinates{X: 2, Y: 0},
+		},
+		{
+			name:        "11v narrow scroll count N and change from normal to visual exceeds line end but not entire content",
+			scrollWidth: 4,
+			cursorAt:    term.Coordinates{X: 2, Y: 0}, // 'c' in snippet
+			countDigits: []rune{'1', '5'},
+			selection:   "cdefghij", // does not beyond code line
+			// cursor will be at last char if it doesn't have room rightwards (last char index: 9)
+			expectScrollCoords:     term.Coordinates{X: 9, Y: 0},
+			expectScrollCoordsWrap: term.Coordinates{X: 10, Y: 0},
+			expectWindowCoords:     term.Coordinates{X: 3, Y: 0},
+			expectWindowCoordsWrap: term.Coordinates{X: 2, Y: 2},
+		},
+		{
+			name:        "11v wide scroll count N and change from normal to visual exceeds line end but not entire content",
+			scrollWidth: 100,
+			cursorAt:    term.Coordinates{X: 2, Y: 0}, // 'c' in snippet
+			countDigits: []rune{'1', '5'},
+			selection:   "cdefghij", // does not beyond code line
+			// cursor will be at last char if it doesn't have room rightwards (last char index: 9)
+			expectScrollCoords:     term.Coordinates{X: 10, Y: 0},
+			expectScrollCoordsWrap: term.Coordinates{X: 10, Y: 0},
+			expectWindowCoords:     term.Coordinates{X: 10, Y: 0},
+			expectWindowCoordsWrap: term.Coordinates{X: 10, Y: 0},
+		},
+		{
+			name:                   "3v count N and change from normal to visual in last column wraps row below",
+			scrollWidth:            4,
+			cursorAt:               term.Coordinates{X: 3, Y: 0}, // 'd' in snippet
+			countDigits:            []rune{'3'},
+			selection:              "def",
+			expectScrollCoords:     term.Coordinates{X: 5, Y: 0},
+			expectScrollCoordsWrap: term.Coordinates{X: 5, Y: 0},
+			expectWindowCoords:     term.Coordinates{X: 3, Y: 0},
+			expectWindowCoordsWrap: term.Coordinates{X: 1, Y: 1},
+		},
+		{
+			name:        "99999999999999999999v narrow scroll count N and change from normal to visual",
+			scrollWidth: 4,
+			cursorAt:    term.Coordinates{X: 3, Y: 0}, // 'd' in snippet
+			countDigits: []rune{'9', '9', '9', '9', '9', '9', '9', '9', '9', '9', '9', '9', '9', '9', '9', '9', '9', '9', '9', '9'},
+			selection:   "defghij",
+			// cursor will be at last char if it doesn't have room rightwards (last char index: 9)
+			expectScrollCoords:     term.Coordinates{X: 9, Y: 0},
+			expectScrollCoordsWrap: term.Coordinates{X: 10, Y: 0},
+			expectWindowCoords:     term.Coordinates{X: 3, Y: 0},
+			expectWindowCoordsWrap: term.Coordinates{X: 2, Y: 2},
+		},
+		{
+			name:        "99999999999999999999v wide scroll count N and change from normal to visual",
+			scrollWidth: 100,
+			cursorAt:    term.Coordinates{X: 3, Y: 0}, // 'd' in snippet
+			countDigits: []rune{'9', '9', '9', '9', '9', '9', '9', '9', '9', '9', '9', '9', '9', '9', '9', '9', '9', '9', '9', '9'},
+			selection:   "defghij",
+			// cursor will be at last char if it doesn't have room rightwards (last char index: 9)
+			expectScrollCoords:     term.Coordinates{X: 10, Y: 0},
+			expectScrollCoordsWrap: term.Coordinates{X: 10, Y: 0},
+			expectWindowCoords:     term.Coordinates{X: 10, Y: 0},
+			expectWindowCoordsWrap: term.Coordinates{X: 10, Y: 0},
+		},
+		{
+			name:                   "stay within code line",
+			scrollWidth:            4,
+			cursorAt:               term.Coordinates{X: 0, Y: 0}, // 'a' in snippet
+			countDigits:            []rune{'1', '0'},
+			selection:              "abcdefghij",
+			expectScrollCoords:     term.Coordinates{X: 9, Y: 0},
+			expectScrollCoordsWrap: term.Coordinates{X: 9, Y: 0},
+			expectWindowCoords:     term.Coordinates{X: 3, Y: 0},
+			expectWindowCoordsWrap: term.Coordinates{X: 1, Y: 2},
+		},
+	}
+
+	for _, tcase := range suite {
+		for _, wrap := range []bool{false, true} {
+			name := tcase.name
+			if wrap {
+				name += " (wrap)"
+			}
+
+			t.Run(name, func(t *testing.T) {
+				vi := setupVi(t, codeSnippet, 2, WithWrap(wrap))
+				vi.Resize(tcase.scrollWidth, 20)
+
+				vi.Draw(term.NoopWriter{})
+
+				vi.cursor.MoveToScroll(tcase.cursorAt)
+
+				for _, countDigit := range tcase.countDigits {
+					vi.Handle(term.Event{Type: term.EventKey, Ch: countDigit})
+				}
+				vi.Handle(term.Event{Type: term.EventKey, Ch: 'v'})
+
+				windowCoords := vi.cursor.Coordinates()
+				scrollCoords := vi.cursor.ScrollCoordinates(windowCoords)
+
+				if wrap {
+					assert.Equal(t, tcase.expectScrollCoordsWrap,
+						scrollCoords, "wrong scroll coords (wrap)")
+					assert.Equal(t, tcase.expectWindowCoordsWrap,
+						windowCoords, "wrong window coords (wrap)")
+				} else {
+					assert.Equal(t, tcase.expectScrollCoords,
+						scrollCoords, "wrong scroll coords")
+					assert.Equal(t, tcase.expectWindowCoords,
+						windowCoords, "wrong window coords")
+				}
+			})
+		}
+	}
+}
+
+func TestViCountChangeToLineVisualMode(t *testing.T) {
+	codeSnippet := "abc\n123\ndef\n456\nghij\n7891"
+	suite := []struct {
+		name        string
+		scrollWidth int
+		cursorAt    term.Coordinates
+		countDigits []rune
+		selection   string
+	}{
+		{
+			name:        "1V unitary selects current line",
+			scrollWidth: 2,
+			cursorAt:    term.Coordinates{X: 1, Y: 0}, // 'b' in snippet
+			countDigits: []rune{'1'},
+			selection:   "abc\n",
+		},
+		{
+			name:        "2V unitary selects current line and line below",
+			scrollWidth: 2,
+			cursorAt:    term.Coordinates{X: 1, Y: 0}, // 'b' in snippet
+			countDigits: []rune{'2'},
+			selection:   "abc\n123\n",
+		},
+		{
+			name:        "999V content overflow",
+			scrollWidth: 2,
+			cursorAt:    term.Coordinates{X: 1, Y: 3}, // '5' in snippet
+			countDigits: []rune{'9', '9', '9'},
+			selection:   "456\nghij\n7891\n",
+		},
+	}
+
+	for _, tcase := range suite {
+		for _, wrap := range []bool{true, false} {
+			name := tcase.name
+			if wrap {
+				name += " (wrap)"
+			}
+
+			t.Run(name, func(t *testing.T) {
+				vi := setupVi(t, codeSnippet, 2, WithWrap(wrap))
+				vi.Resize(tcase.scrollWidth, 4)
+				vi.cursor.MoveToScroll(tcase.cursorAt)
+
+				for _, countDigit := range tcase.countDigits {
+					vi.Handle(term.Event{Type: term.EventKey, Ch: countDigit})
+				}
+				vi.Handle(term.Event{Type: term.EventKey, Ch: 'V'})
+				assert.Equal(t, tcase.selection, vi.cursor.Selection())
+			})
+		}
+	}
+}
+
+func TestResetCount(t *testing.T) {
+	t.Run("numbers are accumulated into vi counter", func(t *testing.T) {
+		code := ""
+		for i := 0; i < 45; i++ {
+			code += fmt.Sprintf("%v\n", i)
+		}
+
+		vi := setupVi(t, code, 2)
+		vi.Resize(5, 50)
+
+		vi.Handle(term.Event{Type: term.EventKey, Ch: '1'})
+		vi.Handle(term.Event{Type: term.EventKey, Ch: '1'})
+		vi.Handle(term.Event{Type: term.EventKey, Ch: 'j'})
+
+		assert.Equal(t, vi.cursor.Coordinates().Y, 11)
+	})
+	t.Run("when parsing numbers and the parsed int exceeds MaxInt count should become MaxInt and not be reset", func(t *testing.T) {
+		vi := setupVi(t, "aaa\nbbb\nccc\nddd", 2)
+		vi.Resize(10, 10)
+
+		maxIntStr := strconv.Itoa(math.MaxInt)
+
+		for _, maxIntChar := range maxIntStr {
+			vi.Handle(term.Event{Type: term.EventKey, Ch: maxIntChar})
+		}
+		vi.Handle(term.Event{Type: term.EventKey, Ch: '9'})
+		vi.Handle(term.Event{Type: term.EventKey, Ch: 'j'})
+
+		assert.Equal(t, vi.cursor.Coordinates().Y, 3)
 	})
 }
 

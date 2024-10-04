@@ -24,7 +24,11 @@
 package vi
 
 import (
+	"errors"
 	"fmt"
+	"math"
+	"strconv"
+	"unicode"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/logging"
@@ -95,6 +99,8 @@ type viHandlerImpl struct {
 	}
 	pendingSetCursor *term.Coordinates
 	setLocations     bool
+	countDigits      string
+	count            int
 }
 
 func (vi *viHandlerImpl) init(buf *cell.Buffer, opts ...Option) {
@@ -121,6 +127,7 @@ func (vi *viHandlerImpl) init(buf *cell.Buffer, opts ...Option) {
 	vi.free = vi.cursor.Mark()
 
 	vi.setMode(normalMode)
+	vi.resetCount()
 }
 
 func (vi *viHandlerImpl) initWithScroll(scroll *component.Scroll, opts ...Option) {
@@ -338,6 +345,13 @@ func (vi *viHandlerImpl) pasteClipboard(registerID string, after bool) bool {
 }
 
 func (vi *viHandlerImpl) handleNormal(ev term.Event) (quit, handled bool) {
+	doResetCount := true
+	defer func() {
+		if doResetCount {
+			vi.resetCount()
+		}
+	}()
+
 	quit, handled = vi.handleMoveToCharacter(vi.moveMode, ev)
 	if handled {
 		return
@@ -397,8 +411,6 @@ func (vi *viHandlerImpl) handleNormal(ev term.Event) (quit, handled bool) {
 			vi.pasteClipboard(vi.config.defaultRegister, true)
 		case 'P':
 			vi.pasteClipboard(vi.config.defaultRegister, false)
-		case '0':
-			vi.cursor.MoveStartLine()
 		case '^':
 			vi.cursor.MoveStartLineNonBlank()
 		case '$':
@@ -407,14 +419,30 @@ func (vi *viHandlerImpl) handleNormal(ev term.Event) (quit, handled bool) {
 			vi.cursor.MoveLastLine()
 		case 'j':
 			vi.cursor.MoveToMark(vi.free)
-			vi.cursor.MoveDown()
+			if vi.count == 1 {
+				vi.cursor.MoveDown()
+			} else {
+				vi.cursor.MoveDownLines(vi.count)
+			}
 		case 'k':
 			vi.cursor.MoveToMark(vi.free)
-			vi.cursor.MoveUp()
+			if vi.count == 1 {
+				vi.cursor.MoveUp()
+			} else {
+				vi.cursor.MoveUpLines(vi.count)
+			}
 		case 'h':
-			vi.cursor.MoveLeft()
+			if vi.count == 1 {
+				vi.cursor.MoveLeft()
+			} else {
+				vi.cursor.MoveLeftColumns(vi.count)
+			}
 		case 'l':
-			vi.cursor.MoveRight()
+			if vi.count == 1 {
+				vi.cursor.MoveRight()
+			} else {
+				vi.cursor.MoveRightColumns(vi.count)
+			}
 		case 'O':
 			vi.setInsertMode()
 			vi.cursor.InsertLineAbove()
@@ -453,8 +481,14 @@ func (vi *viHandlerImpl) handleNormal(ev term.Event) (quit, handled bool) {
 			vi.setInsertMode()
 		case 'v':
 			vi.setVisualMode()
+			if vi.count > 1 {
+				vi.cursor.MoveRightColumns(vi.count - 1)
+			}
 		case 'V':
 			vi.setVisualLineMode()
+			if vi.count > 1 {
+				vi.cursor.MoveDownLines(vi.count - 1)
+			}
 		case 'w':
 			vi.cursor.MoveRightStartWord()
 		case 'W':
@@ -500,12 +534,35 @@ func (vi *viHandlerImpl) handleNormal(ev term.Event) (quit, handled bool) {
 				vi.cursor.MoveToMark(vi.free)
 				vi.cursor.MoveLeft()
 			default:
+				if ev.Ch == '0' && vi.countDigits == "" {
+					vi.cursor.MoveStartLine()
+				} else if unicode.IsDigit(ev.Ch) {
+					vi.countDigits += string(ev.Ch)
+					parsedCount, err := strconv.Atoi(vi.countDigits)
+					if err == nil {
+						vi.count = parsedCount
+						doResetCount = false
+					} else {
+						if errors.Is(err, strconv.ErrRange) {
+							vi.count = math.MaxInt
+							doResetCount = false
+						} else {
+							vi.logError(fmt.Errorf("count digits parse: %s %v", err, parsedCount))
+						}
+					}
+					return
+				}
 				handled = false
 			}
 		}
 	}
 
 	return
+}
+
+func (vi *viHandlerImpl) resetCount() {
+	vi.count = 1
+	vi.countDigits = ""
 }
 
 func (vi *viHandlerImpl) search(text string) {

@@ -390,7 +390,7 @@ func (c *Cursor) MoveLastLine() (ok bool) {
 	return ok
 }
 
-// MoveDown moves the cursor to the line under the current line, scrolling
+// MoveDown moves the cursor one line below the current line, scrolling
 // the content if required. It returns false and does nothing when the end
 // of the content is reached.
 func (c *Cursor) MoveDown() (ok bool) {
@@ -407,8 +407,16 @@ func (c *Cursor) MoveDown() (ok bool) {
 	return
 }
 
-// MoveUp moves the cursor the the line above the current line, scrolling
-// the content up if required.
+// MoveDownLines moves the cursor "n" lines below the current line, scrolling
+// the content if required. It returns false and does nothing when the end
+// of the content is reached.
+func (c *Cursor) MoveDownLines(n int) (ok bool) {
+	return c.multiplyMove(n, c.MoveDown)
+}
+
+// MoveUp moves the cursor one line above the current line, scrolling
+// the content if required. It returns false and does nothing when the end
+// of the content is reached.
 func (c *Cursor) MoveUp() (ok bool) {
 	cursor := c.cursor
 	if cursor.Y < 0 {
@@ -429,8 +437,16 @@ func (c *Cursor) MoveUp() (ok bool) {
 	return
 }
 
-// MoveLeft moves the cursor to the cell left of the current cell, scrolling
-// the content left if required.
+// MoveUpLines moves the cursor "n" lines above the current line, scrolling
+// the content if required. It returns false and does nothing when the end
+// of the content is reached.
+func (c *Cursor) MoveUpLines(n int) (ok bool) {
+	return c.multiplyMove(n, c.MoveUp)
+}
+
+// MoveLeft moves the cursor one column before the current cell, scrolling
+// the content if required. It returns false and does nothing when the end
+// of the content is reached.
 func (c *Cursor) MoveLeft() (ok bool) {
 	cursor := c.cursor
 	if cursor.X < 0 {
@@ -459,8 +475,16 @@ func (c *Cursor) MoveLeft() (ok bool) {
 	return
 }
 
-// MoveRight moves the cursor to the cell right of the current cell, scrolling
-// the content right if required.
+// MoveLeftColumns moves the cursor "n" columns before the current cell, scrolling
+// the content if required. It returns false and does nothing when the end
+// of the content is reached.
+func (c *Cursor) MoveLeftColumns(n int) (ok bool) {
+	return c.multiplyMove(n, c.MoveLeft)
+}
+
+// MoveRight moves the cursor one column after the current cell, scrolling
+// the content if required. It returns false and does nothing when the end
+// of the content is reached.
 func (c *Cursor) MoveRight() (ok bool) {
 	if c.scroll.Wrap {
 		atScroll := c.cursorAtScroll()
@@ -484,6 +508,13 @@ func (c *Cursor) MoveRight() (ok bool) {
 	ok = true
 	c.setCursor(term.Coordinates{X: c.cursor.X + 1, Y: c.cursor.Y}, false)
 	return
+}
+
+// MoveRightColumns moves the cursor "n" columns after the current cell, scrolling
+// the content if required. It returns false and does nothing when the end
+// of the content is reached.
+func (c *Cursor) MoveRightColumns(n int) (ok bool) {
+	return c.multiplyMove(n, c.MoveRight)
 }
 
 // MoveLeftWrap will move the cursor to the left or wrap to end of
@@ -531,6 +562,21 @@ func (c *Cursor) MoveRightWrap() bool {
 	_, ok = c.MoveToScroll(term.Coordinates{X: (i * c.scroll.Width()), Y: pos.Y})
 	return ok
 }
+
+func (c *Cursor) multiplyMove(n int, move func() bool) (ok bool) {
+	enable := c.disablePublishing()
+	defer enable()
+	for i := 0; i < n; i++ {
+		mOk := move()
+		// If it was moving ok and now it stopped, we're done.
+		if ok && !mOk {
+			return
+		}
+		ok = mOk || ok
+	}
+	return
+}
+
 
 func (c *Cursor) cursorAtScroll() term.Coordinates {
 	return c.scroll.WindowToScrollCoordinates(c.cursor)

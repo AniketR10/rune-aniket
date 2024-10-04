@@ -245,7 +245,7 @@ func TestCursorMove(t *testing.T) {
 			},
 			term.Coordinates{X: 8, Y: 20},
 		},
- 		{
+		{
 			"MoveStartLineNonBlank moves to first none blank character of line, doesn't start blank",
 			1000, 1000,
 			func(t *testing.T, e *Cursor) {
@@ -254,7 +254,7 @@ func TestCursorMove(t *testing.T) {
 			},
 			term.Coordinates{X: 0, Y: 6},
 		},
- 		{
+		{
 			"MoveStartLineNonBlank moves to first none blank character of line, cursor beyond end",
 			1000, 1000,
 			func(t *testing.T, e *Cursor) {
@@ -264,7 +264,7 @@ func TestCursorMove(t *testing.T) {
 			},
 			term.Coordinates{X: 8, Y: 20},
 		},
- 		{
+		{
 			"MoveStartLineNonBlank empty line",
 			1000, 1000,
 			func(t *testing.T, e *Cursor) {
@@ -419,7 +419,7 @@ func TestCursorMove(t *testing.T) {
 			term.Coordinates{X: 0, Y: 10},
 		},
 		{
-			"MoveDown should NOT seek up if reached last line",
+			"MoveDown should NOT seek down if reached last line",
 			10, 10,
 			func(t *testing.T, e *Cursor) {
 				e.cursor.Y = 9
@@ -429,6 +429,85 @@ func TestCursorMove(t *testing.T) {
 				assert.Equal(t, offsetY, e.scroll.Offset().Y)
 			},
 			term.Coordinates{X: 0, Y: 31},
+		},
+		{
+			"MoveDownLines with count 0 does nothing",
+			1000, 1000,
+			func(t *testing.T, e *Cursor) {
+				e.cursor.Y = 3
+				assert.False(t, e.MoveDownLines(0))
+			},
+			term.Coordinates{X: 0, Y: 3},
+		},
+		{
+			"MoveDownLines with negative count does nothing",
+			1000, 1000,
+			func(t *testing.T, e *Cursor) {
+				e.cursor.Y = 3
+				assert.False(t, e.MoveDownLines(-2))
+			},
+			term.Coordinates{X: 0, Y: 3},
+		},
+		{
+			"MoveDownLines with count 3 should move cursor left 3 times",
+			1000, 1000,
+			func(t *testing.T, e *Cursor) {
+				e.cursor.Y = 3
+				assert.True(t, e.MoveDownLines(3))
+			},
+			term.Coordinates{X: 0, Y: 6},
+		},
+		{
+			"MoveDownLines should move the cursor position past the last line until end of window",
+			1000, 1000,
+			func(t *testing.T, e *Cursor) {
+				e.cursor.Y = 0
+				assert.True(t, e.MoveDownLines(200))
+				assert.True(t, e.MoveDownLines(200))
+				assert.True(t, e.MoveDownLines(200))
+				assert.True(t, e.MoveDownLines(200))
+				assert.True(t, e.MoveDownLines(199))
+			},
+			term.Coordinates{X: 0, Y: 999},
+		},
+		{
+			"MoveDownLines should seek down if reached last line in window but not at last line",
+			1000, 10,
+			func(t *testing.T, e *Cursor) {
+				e.cursor.Y = 9
+				assert.True(t, e.MoveDownLines(3))
+				assert.Equal(t, 3, e.scroll.Offset().Y)
+			},
+			term.Coordinates{X: 0, Y: 12},
+		},
+		{
+			"MoveDownLines should scroll to window end and stick cursor at last content line if jumping beyond last content line",
+			1000, 20,
+			func(t *testing.T, e *Cursor) {
+				e.cursor.Y = 5
+				assert.Equal(t, 0, e.scroll.Offset().Y)
+				assert.True(t, e.MoveDownLines(777))
+				assert.Equal(t, 12, e.scroll.Offset().Y)
+			},
+			term.Coordinates{X: 0, Y: 31},
+		},
+		{
+			"MoveUpLines with count 0 does nothing",
+			1000, 1000,
+			func(t *testing.T, e *Cursor) {
+				e.cursor.Y = 3
+				assert.False(t, e.MoveUpLines(0))
+			},
+			term.Coordinates{X: 0, Y: 3},
+		},
+		{
+			"MoveUpLines with negative count does nothing",
+			1000, 1000,
+			func(t *testing.T, e *Cursor) {
+				e.cursor.Y = 3
+				assert.False(t, e.MoveUpLines(-2))
+			},
+			term.Coordinates{X: 0, Y: 3},
 		},
 		{
 			"MoveUp should do nothing if already on first line",
@@ -478,6 +557,52 @@ func TestCursorMove(t *testing.T) {
 			term.Coordinates{X: 0, Y: 0},
 		},
 		{
+			"MoveUpLines should fix cursor position if negative",
+			1000, 1000,
+			func(t *testing.T, e *Cursor) {
+				e.cursor.Y = -1
+				assert.True(t, e.MoveUpLines(4))
+			},
+			term.Coordinates{X: 0, Y: 0},
+		},
+		{
+			"MoveUpLines should move the cursor N lines",
+			1000, 1000,
+			func(t *testing.T, e *Cursor) {
+				e.cursor.Y = 10
+				assert.True(t, e.MoveUpLines(5))
+			},
+			term.Coordinates{X: 0, Y: 5},
+		},
+		{
+			"MoveUpLines should not go beyond the top line 0 of content",
+			1000, 1000,
+			func(t *testing.T, e *Cursor) {
+				e.cursor.Y = 10
+				assert.True(t, e.MoveUpLines(66))
+			},
+			term.Coordinates{X: 0, Y: 0},
+		},
+		{
+			"MoveUpLines should seek up if not at first content line and cursor is at first line of window",
+			100, 10, // avoid creating wraps in wrap mode
+			func(t *testing.T, e *Cursor) {
+				e.scroll.SeekEndFile()
+				offsetY := e.scroll.Offset().Y
+				assert.True(t, e.MoveUpLines(4))
+				assert.Equal(t, offsetY-4, e.scroll.Offset().Y)
+			},
+			term.Coordinates{X: 0, Y: 18},
+		},
+		{
+			"MoveUpLines should NOT seek up if already at first line",
+			1000, 1000,
+			func(t *testing.T, e *Cursor) {
+				assert.False(t, e.MoveUpLines(8))
+			},
+			term.Coordinates{X: 0, Y: 0},
+		},
+		{
 			"MoveLeft should do nothing if already at start of line",
 			1000, 1000,
 			func(t *testing.T, e *Cursor) {
@@ -517,8 +642,87 @@ func TestCursorMove(t *testing.T) {
 				for i := 0; i < 100; i++ {
 					e.MoveLeft()
 				}
+				assert.Zero(t, e.scroll.Offset().X)
 			},
 			term.Coordinates{X: 0, Y: 0},
+		},
+		{
+			"MoveLeftColumns with count 0 does nothing",
+			1000, 1000,
+			func(t *testing.T, e *Cursor) {
+				e.cursor.X = 7
+				assert.False(t, e.MoveLeftColumns(0))
+			},
+			term.Coordinates{X: 7, Y: 0},
+		},
+		{
+			"MoveLeftColumns with negative count does nothing",
+			1000, 1000,
+			func(t *testing.T, e *Cursor) {
+				e.cursor.X = 7
+				assert.False(t, e.MoveLeftColumns(-2))
+			},
+			term.Coordinates{X: 7, Y: 0},
+		},
+		{
+			"MoveLeftColumns should do nothing if already at start of line",
+			1000, 1000,
+			func(t *testing.T, e *Cursor) {
+				assert.False(t, e.MoveLeftColumns(4))
+			},
+			term.Coordinates{X: 0, Y: 0},
+		},
+		{
+			"MoveLeftColumns should move cursor left",
+			1000, 1000,
+			func(t *testing.T, e *Cursor) {
+				e.cursor.X = 7
+				assert.True(t, e.MoveLeftColumns(4))
+			},
+			term.Coordinates{X: 3, Y: 0},
+		},
+		{
+			"MoveLeftColumns fixes cursor pos if negative",
+			1000, 1000,
+			func(t *testing.T, e *Cursor) {
+				e.cursor.X = -1
+				assert.True(t, e.MoveLeftColumns(4))
+			},
+			term.Coordinates{X: 0, Y: 0},
+		},
+		{
+			"MoveLeftColumns should seek left if at start of window but not at start of line",
+			10, 10,
+			func(t *testing.T, e *Cursor) {
+				if e.scroll.Wrap {
+					t.Skip()
+					return
+				}
+				assert.Zero(t, e.scroll.Offset().X)
+				e.scroll.SeekEndLine()
+				assert.NotZero(t, e.scroll.Offset().X)
+				e.MoveLeftColumns(100)
+				assert.Zero(t, e.scroll.Offset().X)
+			},
+			term.Coordinates{X: 0, Y: 0},
+		},
+		{
+			"MoveRightColumns with count 0 does nothing",
+			1000, 1000,
+			func(t *testing.T, e *Cursor) {
+				e.cursor.X = 4
+				assert.False(t, e.MoveRightColumns(0))
+			},
+			term.Coordinates{X: 4, Y: 0},
+		},
+		{
+			"MoveRightColumns with negative count does nothing",
+			1000, 1000,
+			func(t *testing.T, e *Cursor) {
+				e.cursor.X = 4
+				assert.False(t, e.MoveRightColumns(-2))
+			},
+			term.Coordinates{X: 4, Y: 0},
 		},
 		{
 			"MoveRight should move cursor right",
@@ -562,6 +766,49 @@ func TestCursorMove(t *testing.T) {
 				for i := 0; i < 100; i++ {
 					e.MoveRight()
 				}
+			},
+			// line is 77 characters long so cursor should be a t x=76
+			term.Coordinates{X: 76, Y: 2},
+		},
+		{
+			"MoveRightColumns should move cursor right",
+			10, 10,
+			func(t *testing.T, e *Cursor) {
+				e.cursor.Y = 2
+				e.cursor.X = 5
+				assert.True(t, e.MoveRightColumns(3))
+			},
+			term.Coordinates{X: 8, Y: 2},
+		},
+		{
+			"MoveRightColumns should move cursor right even if past current line's end of line",
+			1000, 1000,
+			func(t *testing.T, e *Cursor) {
+				assert.True(t, e.MoveRightColumns(8))
+			},
+			term.Coordinates{X: 8, Y: 0},
+		},
+		{
+			"MoveRightColumns should move cursor right even if at the end of the line",
+			1000, 1000,
+			func(t *testing.T, e *Cursor) {
+				e.cursor.X = 1
+				assert.True(t, e.MoveRightColumns(10))
+			},
+			term.Coordinates{X: 11, Y: 0},
+		},
+		{
+			"MoveRight should seek right if at end of window but not at end of line",
+			10, 10,
+			func(t *testing.T, e *Cursor) {
+				if e.scroll.Wrap {
+					t.Skip()
+					return
+				}
+				e.cursor.Y = 2
+				e.cursor.X = 5
+				e.scroll.SeekStartLine()
+				e.MoveRightColumns(100)
 			},
 			// line is 77 characters long so cursor should be a t x=76
 			term.Coordinates{X: 76, Y: 2},
@@ -822,6 +1069,49 @@ func TestCursorMove(t *testing.T) {
 
 			cursor := e.CursorAtScroll()
 			assert.Equal(t, tcase.cursorAtScroll, cursor)
+		})
+	}
+}
+
+func TestCursorMultiMovePublish(t *testing.T) {
+	suite := []struct {
+		initialScrollPos term.Coordinates
+		name             string
+		moveFn           func(*Cursor) bool
+	}{
+		{
+			initialScrollPos: term.Coordinates{X: 0, Y: 0},
+			name:             "MoveDownLines multiplied move publishes a single scroll event",
+			moveFn:           func(c *Cursor) bool { return c.MoveDownLines(44) },
+		},
+		{
+			initialScrollPos: term.Coordinates{X: 0, Y: 100},
+			name:             "MoveUpLines multiplied move publishes a single scroll event",
+			moveFn:           func(c *Cursor) bool { return c.MoveUpLines(20) },
+		},
+		{
+			initialScrollPos: term.Coordinates{X: 100, Y: 2},
+			name:             "MoveLeftColumns multiplied move publishes a single scroll event",
+			moveFn:           func(c *Cursor) bool { return c.MoveLeftColumns(33) },
+		},
+		{
+			initialScrollPos: term.Coordinates{X: 0, Y: 3},
+			name:             "MoveRightColumns multiplied move publishes a single scroll event",
+			moveFn:           func(c *Cursor) bool { return c.MoveRightColumns(333) },
+		},
+	}
+
+	for _, tcase := range suite {
+		t.Run(tcase.name, func(t *testing.T) {
+			e := setupCursor(t, 10, 6, false)
+			e.cursor = tcase.initialScrollPos
+			subscriberCalls := 0
+			sub := component.FuncScrollSubscriber(func(from, to term.Coordinates) {
+				subscriberCalls++
+			})
+			e.SubscribeScroll(sub)
+			tcase.moveFn(e)
+			assert.Equal(t, 1, subscriberCalls)
 		})
 	}
 }
