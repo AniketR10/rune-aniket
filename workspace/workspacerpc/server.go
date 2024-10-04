@@ -32,7 +32,6 @@ import (
 	"os"
 	"sync"
 	"syscall"
-	"time"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/logging"
@@ -494,8 +493,7 @@ func (s *Server) Stat(ctx context.Context, req *StatRequest) (
 	resp.Name = fs.Name()
 	resp.Size = fs.Size()
 	resp.Mode = int32(fs.Mode())
-	resp.ModTime = new(timestamppb.Timestamp)
-	*resp.ModTime = stdTimeToProto(fs.ModTime())
+	resp.ModTime = timestamppb.New(fs.ModTime())
 	resp.IsDir = fs.IsDir()
 
 	return resp, nil
@@ -509,12 +507,6 @@ func (s *Server) log(
 	}
 	log.WithField(logging.KeyClass, "workspacerpc.Server").
 		Logf(level, msg, args...)
-}
-
-func stdTimeToProto(ts time.Time) timestamppb.Timestamp {
-	seconds := ts.Unix()
-	nanos := ts.Nanosecond()
-	return timestamppb.Timestamp{Seconds: seconds, Nanos: int32(nanos)}
 }
 
 func getOpenRequestFlag(req *OpenRequest) int {

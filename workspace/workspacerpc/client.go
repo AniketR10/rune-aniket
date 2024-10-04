@@ -35,7 +35,6 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/bluectx"
 	"github.com/unstablebuild/blue/logging"
-	"google.golang.org/protobuf/types/known/timestamppb"
 	schemeapi "unstable.build/go-tui/api/scheme"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/rpc"
@@ -454,7 +453,7 @@ func (f *fileClientInfo) Mode() os.FileMode {
 }
 
 func (f *fileClientInfo) ModTime() time.Time {
-	return protoTimeToStd(f.StatResponse.GetModTime())
+	return f.StatResponse.GetModTime().AsTime()
 }
 
 func (f *fileClientInfo) IsDir() bool {
@@ -486,10 +485,6 @@ func (e dirEntry) Type() os.FileMode {
 
 func (e dirEntry) Info() (os.FileInfo, error) {
 	return e.c.Stat(e.Name())
-}
-
-func protoTimeToStd(ts *timestamppb.Timestamp) time.Time {
-	return time.Unix(ts.GetSeconds(), int64(ts.GetNanos()))
 }
 
 func makeOpenRequest(name string, flag int, perm os.FileMode) *OpenRequest {
