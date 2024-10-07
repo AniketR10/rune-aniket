@@ -634,6 +634,17 @@ diff_buf_adjust(win_
 diff_buf_adjust(win_
 {                   
               NORMAL`},
+		{"99999ggkk",
+			`  {                 
+dicurtab->tp_diff_in
+    diff_redraw(TRUE
+    }               
+  }                 
+  }                 
+▐ else              
+  diff_buf_add(win->
+}                   
+              NORMAL`},
 	}
 
 	vi := setupViIntegration(t, snippet, 2)
@@ -1470,6 +1481,47 @@ func TestNoModeHandlesNonCtrlModifiers(t *testing.T) {
 				exit, handled := vi.Handle(term.Event{Type: term.EventKey, Mod: mod, Ch: 'a'})
 				assert.False(t, exit)
 				assert.False(t, handled)
+			})
+		}
+	}
+}
+
+func TestCursorOutOfBounds(t *testing.T) {
+	for _, wrap := range []bool{false, true} {
+		for _, contentWindowOverflow := range []bool{false, true} {
+			name := "cursor go beyond rows and move one up"
+			if wrap {
+				name += " (wrap)"
+			}
+			if contentWindowOverflow {
+				name += " (content overflow)"
+			}
+
+			t.Run(name, func(t *testing.T) {
+				vi := setupVi(t, "aaaa\nbbbb\ncccc\ndddd\neeee", 2, WithWrap(wrap))
+
+				windowWidth := 2
+				if contentWindowOverflow {
+					vi.Resize(windowWidth, 3)
+				} else {
+					vi.Resize(windowWidth, 10)
+				}
+
+				beyondRowsCoords := term.Coordinates{Y: 99}
+				ok := vi.setCursorAtScroll(beyondRowsCoords)
+				require.True(t, ok)
+
+				scrollCoords := vi.cursor.ScrollCoordinates(vi.cursor.Coordinates())
+				assert.Equal(t, term.Coordinates{X: 0, Y: 99}, scrollCoords)
+
+				vi.Handle(term.Event{Type: term.EventKey, Ch: 'k'})
+				scrollCoords = vi.cursor.ScrollCoordinates(vi.cursor.Coordinates())
+				assert.Equal(t, term.Coordinates{X: 0, Y: 4}, scrollCoords)
+
+				vi.Handle(term.Event{Type: term.EventKey, Ch: 'k'})
+				scrollCoords = vi.cursor.ScrollCoordinates(vi.cursor.Coordinates())
+				assert.Equal(t, term.Coordinates{X: 0, Y: 3}, scrollCoords,
+					"the cursor is trapped at the last line")
 			})
 		}
 	}

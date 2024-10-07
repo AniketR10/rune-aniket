@@ -188,3 +188,22 @@ func TestHandler(
 		assert.Equal(t, expected, w.String())
 	}
 }
+
+// DrawHandler is a helper function that renders the handler into a string.
+//
+// It can be beneficial for print-debugging your tests:
+//
+//	fmt.Printf("\n%s", handlertest.DrawHandler(vi, 20, 20))
+//
+// Extracted from [handleTestCase].
+func DrawHandler(handler tui.Handler, width, height int) string {
+	w := term.NewStringWriter(width, height)
+	handler.Draw(w)
+	cursor, _, ok := handler.Cursor()
+	if ok {
+		w.SetCursor(cursor)
+	}
+	w.Flush()
+	out := w.String()
+	return out
+}

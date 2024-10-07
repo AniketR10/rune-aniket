@@ -956,7 +956,14 @@ func (vi *viHandlerImpl) doMoveToBounds(prev text.CursorMark) {
 	switch vi.mode() {
 	case normalMode, yankMode, searchMode, gMode, deleteMode:
 		if !vi.config.debug && vi.config.cursorCorrections {
+			prevCoords := vi.cursor.Coordinates()
 			vi.cursor.MoveToBounds(0)
+			// Only vertical marking. Not horizontal because otherwise when scrolling
+			// down with `j` or `k` from middle columns the cursor will start snapping
+			// to shorter column indices as it comes across shorter text lines.
+			if vi.cursor.Coordinates().Y != prevCoords.Y {
+				vi.free = vi.cursor.Mark()
+			}
 			if vi.config.skipNulls {
 				if after {
 					vi.cursor.MoveToPrevNonNull()
