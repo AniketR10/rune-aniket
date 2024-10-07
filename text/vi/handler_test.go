@@ -391,6 +391,28 @@ diff_buf_adjust(win_
 {                   
   win_T  *wp;       
               NORMAL`},
+		{"12gg",
+			` * diff buffers.    
+ */                 
+  void              
+diff_buf_adjust(win_
+{                   
+  win_T  *wp;       
+  int        i;     
+                    
+ ▐if (!win->w_p_diff
+              NORMAL`},
+		{"gg",
+			`▐                   
+/*                  
+ * Check if the curr
+ * diff buffers.    
+ */                 
+  void              
+diff_buf_adjust(win_
+{                   
+  win_T  *wp;       
+              NORMAL`},
 		{"jjyyp",
 			`                    
 /*                  
@@ -435,7 +457,29 @@ diff_buf_adjust(win_
 diff_buf_adjust(win_
 {                   
               NORMAL`},
-		{"3h",
+		{"1g1g1g1gg",
+			`▐                   
+/*                  
+ * Check if the curr
+ *                  
+ * potatodiff buffer
+ */                 
+  void              
+diff_buf_adjust(win_
+{                   
+              NORMAL`},
+		{"gg5gg",
+			`                    
+/*                  
+ * Check if the curr
+ *                  
+▐* potatodiff buffer
+ */                 
+  void              
+diff_buf_adjust(win_
+{                   
+              NORMAL`},
+		{"8l3h",
 			`                    
 /*                  
  * Check if the curr
@@ -567,6 +611,28 @@ ved from the list ▐f
                     
                     
                     
+              NORMAL`},
+		{"6gg3h",
+			`                    
+/*                  
+ * Check if the curr
+ *                  
+ * potatodiff buffer
+▐*/                 
+  void              
+diff_buf_adjust(win_
+{                   
+              NORMAL`},
+		{"111<0gg",
+			`▐                   
+/*                  
+ * Check if the curr
+ *                  
+ * potatodiff buffer
+ */                 
+  void              
+diff_buf_adjust(win_
+{                   
               NORMAL`},
 	}
 
@@ -1140,6 +1206,204 @@ func TestViCountChangeToLineVisualMode(t *testing.T) {
 			})
 		}
 	}
+}
+
+func TestVigg(t *testing.T) {
+	code := `11111111111
+222222
+333333333333
+
+ 5
+6
+7777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777
+   88888888
+9999
+11111111
+  222222222222222
+3333333
+   4444444444444444
+`
+	codeLong := code
+	for i := 0; i < 200; i++ {
+		codeLong += code
+	}
+
+	suite := []struct {
+		name         string
+		fileText     string
+		narrowWrap   bool // scroll width of 4 with wrapping enaled
+		moveCursorFn func(*viHandlerImpl)
+		ggCommand    string
+		expectCoord  term.Coordinates
+	}{
+		{
+			name:        "gg from 0,0",
+			fileText:    code,
+			narrowWrap:  true,
+			ggCommand:   "gg",
+			expectCoord: term.Coordinates{X: 0, Y: 0},
+		},
+		{
+			name:         "gg from 1,0",
+			fileText:     code,
+			narrowWrap:   true,
+			moveCursorFn: func(vi *viHandlerImpl) { vi.cursor.MoveRight() },
+			ggCommand:    "gg",
+			expectCoord:  term.Coordinates{X: 0, Y: 0},
+		},
+		{
+			name:       "6gg from start of wrapped line",
+			fileText:   code,
+			narrowWrap: true,
+			moveCursorFn: func(vi *viHandlerImpl) {
+				vi.cursor.MoveDown()
+				vi.cursor.MoveRightColumns(2)
+			},
+			ggCommand:   "6gg",
+			expectCoord: term.Coordinates{X: 0, Y: 7}, // lonely 6 in `code`
+		},
+		{
+			name:       "6gg from middle of wrapped line",
+			fileText:   code,
+			narrowWrap: true,
+			moveCursorFn: func(vi *viHandlerImpl) {
+				vi.cursor.MoveDown()
+				vi.cursor.MoveRightColumns(2)
+			},
+			ggCommand:   "6gg",
+			expectCoord: term.Coordinates{X: 0, Y: 7}, // lonely 6 in `code`
+		},
+		{
+			name:       "6gg from end of wrapped line",
+			fileText:   code,
+			narrowWrap: true,
+			moveCursorFn: func(vi *viHandlerImpl) {
+				vi.cursor.MoveDown()
+				vi.cursor.MoveEndLine()
+			},
+			ggCommand:   "6gg",
+			expectCoord: term.Coordinates{X: 0, Y: 7}, // lonely 6 in `code`
+		},
+		{
+			name:       "gg to same line called from wrapped lines below brings cursor to start of line",
+			fileText:   code,
+			narrowWrap: true,
+			ggCommand:  "3gg",
+			moveCursorFn: func(vi *viHandlerImpl) {
+				// Move to wrapped line of 333s in `code`.
+				vi.cursor.MoveDownLines(7)
+				vi.cursor.MoveRightColumns(2)
+			},
+			expectCoord: term.Coordinates{X: 0, Y: 5}, // beginning of 333s
+		},
+		{
+			name:     "gg from end of long file",
+			fileText: codeLong,
+			moveCursorFn: func(vi *viHandlerImpl) {
+				vi.cursor.MoveLastLine()
+
+			},
+			ggCommand:   "gg",
+			expectCoord: term.Coordinates{X: 0, Y: 0},
+		},
+		{
+			name:     "gg from middle of long file",
+			fileText: codeLong,
+			moveCursorFn: func(vi *viHandlerImpl) {
+				vi.cursor.MoveLastLine()
+				scrollCoords := vi.cursor.ScrollCoordinates(vi.cursor.Coordinates())
+				vi.cursor.MoveFirstLine()
+				vi.cursor.MoveDownLines(scrollCoords.Y / 2)
+
+			},
+			ggCommand:   "gg",
+			expectCoord: term.Coordinates{X: 0, Y: 0},
+		},
+		{
+			name:        "999gg beyond limits of file",
+			fileText:    code,
+			ggCommand:   "999gg",
+			expectCoord: term.Coordinates{X: 0, Y: 8},
+		},
+		{
+			name:     "0g",
+			fileText: code,
+			moveCursorFn: func(vi *viHandlerImpl) {
+				vi.cursor.MoveLastLine()
+			},
+			ggCommand:   "0gg",
+			expectCoord: term.Coordinates{X: 0, Y: 0},
+		},
+		{
+			name:     "00g",
+			fileText: code,
+			moveCursorFn: func(vi *viHandlerImpl) {
+				vi.cursor.MoveLastLine()
+			},
+			ggCommand:   "00gg",
+			expectCoord: term.Coordinates{X: 0, Y: 0},
+		},
+		{
+			name:        "3gg in single char file",
+			fileText:    "a",
+			ggCommand:   "3gg",
+			expectCoord: term.Coordinates{X: 0, Y: 0},
+		},
+		{
+			name:        "3gg in empty file",
+			fileText:    "",
+			ggCommand:   "3gg",
+			expectCoord: term.Coordinates{X: 0, Y: 0},
+		},
+		{
+			name:        "3gg in file that's only new lines",
+			fileText:    "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+			ggCommand:   "3gg",
+			expectCoord: term.Coordinates{X: 0, Y: 2},
+		},
+		// TODO: OX-352 Large go-to-lines (:<lineno> or <lineno>gg) going beyond content length
+		//{
+		//	name: "9999999999999999999999999999999999999999999999999999gg",
+		//	fileText: code,
+		//	ggCommand: "9999999999999999999999999999999999999999999999999999gg",
+		//	expectCoord: term.Coordinates{X: 0, Y: 8},
+		//},
+	}
+
+	for _, tcase := range suite {
+		t.Run(tcase.name, func(t *testing.T) {
+			vi := setupVi(t, tcase.fileText, 2, WithWrap(tcase.narrowWrap))
+			scrollWidth := 100
+			if tcase.narrowWrap {
+				scrollWidth = 4
+			}
+			vi.Resize(scrollWidth, 10)
+			vi.Draw(term.NoopWriter{})
+			if tcase.moveCursorFn != nil {
+				tcase.moveCursorFn(vi)
+			}
+			for _, commandChar := range tcase.ggCommand {
+				vi.Handle(term.Event{Type: term.EventKey, Ch: commandChar})
+			}
+			assert.Equal(t, tcase.expectCoord, vi.cursor.Coordinates())
+		})
+	}
+}
+
+func TestViggBeyondContent(t *testing.T) {
+	t.Run("discrepancy between visual cursor and actual cursor", func(t *testing.T) {
+		fileText := "a\nb\nc\nd"
+		vi := setupVi(t, fileText, 2)
+		vi.Resize(100, 30)
+		vi.Draw(term.NoopWriter{})
+		for _, commandChar := range "999gg" {
+			vi.Handle(term.Event{Type: term.EventKey, Ch: commandChar})
+		}
+		assert.Equal(t, term.Coordinates{X: 0, Y: 3}, vi.cursor.Coordinates())
+		vi.cursor.MoveUp()
+		assert.Equal(t, term.Coordinates{X: 0, Y: 2}, vi.cursor.Coordinates())
+
+	})
 }
 
 func TestResetCount(t *testing.T) {

@@ -387,6 +387,7 @@ func (vi *viHandlerImpl) handleNormal(ev term.Event) (quit, handled bool) {
 			vi.setMoveToCharacterMode(moveToPrev)
 		case 'g':
 			vi.setGMode()
+			doResetCount = false
 		case 'd':
 			vi.setDeleteMode(false)
 		case 'c':
@@ -877,7 +878,13 @@ func (vi *viHandlerImpl) handleGo(ev term.Event) (quit, handled bool) {
 	case 0:
 		switch ev.Ch {
 		case 'g':
-			vi.cursor.MoveFirstLine()
+			vi.cursor.MoveToMark(vi.free)
+			if vi.count == 1 {
+				vi.cursor.MoveFirstLine()
+			} else {
+				vi.setCursorAtScroll(term.Coordinates{Y: vi.count - 1})
+			}
+			vi.resetCount()
 			handled = true
 		default:
 		}
