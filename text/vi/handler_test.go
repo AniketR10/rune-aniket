@@ -86,6 +86,22 @@ func setupVi(
 	return vi
 }
 
+func setupViWithScroll(
+	t *testing.T, text string, tabspaces int, opts ...Option,
+) *viHandlerImpl {
+	buf := cell.NewBuffer()
+	buf.InitWithTabspaces(tabspaces)
+	_, err := buf.ReadFrom(strings.NewReader(text))
+	require.NoError(t, err)
+
+	scroll := component.NewScroll(buf)
+
+	vi := new(viHandlerImpl)
+	vi.initWithScroll(scroll, opts...)
+
+	return vi
+}
+
 func setupViIntegration(
 	t *testing.T, text string, tabspaces int, opts ...Option,
 ) tui.Handler {
@@ -1446,6 +1462,13 @@ func TestResetCount(t *testing.T) {
 		vi.Handle(term.Event{Type: term.EventKey, Ch: 'j'})
 
 		assert.Equal(t, vi.cursor.Coordinates().Y, 3)
+	})
+
+	t.Run("single motion on vi initialized with scroll", func(t *testing.T) {
+		vi := setupViWithScroll(t, "aaa\nbbb\nccc\nddd", 2)
+		vi.Resize(10, 10)
+		vi.Handle(term.Event{Type: term.EventKey, Ch: 'j'})
+		assert.Equal(t, 1, vi.cursor.Coordinates().Y)
 	})
 }
 

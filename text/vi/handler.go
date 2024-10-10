@@ -151,6 +151,7 @@ func (vi *viHandlerImpl) initWithScroll(scroll *component.Scroll, opts ...Option
 	vi.cursor.InitPerformance(vi.less.Scroll())
 	vi.free = vi.cursor.Mark()
 	vi.setMode(normalMode)
+	vi.resetCount()
 }
 
 // Resize satisfies tui.Component
