@@ -1388,13 +1388,12 @@ func TestVigg(t *testing.T) {
 			ggCommand:   "3gg",
 			expectCoord: term.Coordinates{X: 0, Y: 2},
 		},
-		// TODO: OX-352 Large go-to-lines (:<lineno> or <lineno>gg) going beyond content length
-		//{
-		//	name: "9999999999999999999999999999999999999999999999999999gg",
-		//	fileText: code,
-		//	ggCommand: "9999999999999999999999999999999999999999999999999999gg",
-		//	expectCoord: term.Coordinates{X: 0, Y: 8},
-		//},
+		{
+			name:        "9999999999999999999999999999999999999999999999999999gg",
+			fileText:    code,
+			ggCommand:   "9999999999999999999999999999999999999999999999999999gg",
+			expectCoord: term.Coordinates{X: 0, Y: 8},
+		},
 	}
 
 	for _, tcase := range suite {
@@ -1430,6 +1429,17 @@ func TestViggBeyondContent(t *testing.T) {
 		vi.cursor.MoveUp()
 		assert.Equal(t, term.Coordinates{X: 0, Y: 2}, vi.cursor.Coordinates())
 
+	})
+}
+
+func TestSetCursorAtScrollBounds(t *testing.T) {
+	fileText := "123\n456\n789\nd"
+	vi := setupVi(t, fileText, 2)
+	vi.Resize(8, 8)
+
+	t.Run("vertical bounds", func(t *testing.T) {
+		vi.setCursorAtScroll(term.Coordinates{X: 0, Y: 999})
+		assert.Equal(t, term.Coordinates{X: 0, Y: 4}, vi.cursor.Coordinates())
 	})
 }
 
@@ -1535,15 +1545,11 @@ func TestCursorOutOfBounds(t *testing.T) {
 				require.True(t, ok)
 
 				scrollCoords := vi.cursor.ScrollCoordinates(vi.cursor.Coordinates())
-				assert.Equal(t, term.Coordinates{X: 0, Y: 99}, scrollCoords)
+				assert.Equal(t, term.Coordinates{X: 0, Y: 5}, scrollCoords)
 
 				vi.Handle(term.Event{Type: term.EventKey, Ch: 'k'})
 				scrollCoords = vi.cursor.ScrollCoordinates(vi.cursor.Coordinates())
-				assert.Equal(t, term.Coordinates{X: 0, Y: 4}, scrollCoords)
-
-				vi.Handle(term.Event{Type: term.EventKey, Ch: 'k'})
-				scrollCoords = vi.cursor.ScrollCoordinates(vi.cursor.Coordinates())
-				assert.Equal(t, term.Coordinates{X: 0, Y: 3}, scrollCoords,
+				assert.Equal(t, term.Coordinates{X: 0, Y: 4}, scrollCoords,
 					"the cursor is trapped at the last line")
 			})
 		}

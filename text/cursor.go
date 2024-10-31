@@ -213,6 +213,9 @@ func (c *Cursor) MoveToScroll(pos term.Coordinates) (
 	if pos.X < 0 {
 		pos.X = 0
 	}
+	if pos.Y > 0 && pos.Y > c.rows() {
+		pos.Y = c.rows()
+	}
 	ret = c.cursorAtScroll()
 	c.moveToScroll(pos)
 	ok = ret != c.cursorAtScroll()
@@ -402,6 +405,9 @@ func (c *Cursor) MoveDown() (ok bool) {
 		}
 		return
 	}
+	if pos.Y+1 > c.rows() {
+		return
+	}
 	ok = true
 	c.setCursor(term.Coordinates{X: c.cursor.X, Y: c.cursor.Y + 1}, false)
 	return
@@ -576,7 +582,6 @@ func (c *Cursor) multiplyMove(n int, move func() bool) (ok bool) {
 	}
 	return
 }
-
 
 func (c *Cursor) cursorAtScroll() term.Coordinates {
 	return c.scroll.WindowToScrollCoordinates(c.cursor)

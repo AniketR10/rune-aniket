@@ -394,7 +394,7 @@ func TestCursorMove(t *testing.T) {
 			term.Coordinates{X: 0, Y: 31},
 		},
 		{
-			"MoveDown should move the cursor position past the last line until end of window",
+			"MoveDown should not move the cursor position past the last line until end of window",
 			1000, 1000,
 			func(t *testing.T, e *Cursor) {
 				if e.scroll.Wrap {
@@ -406,7 +406,7 @@ func TestCursorMove(t *testing.T) {
 					e.MoveDown()
 				}
 			},
-			term.Coordinates{X: 0, Y: 999},
+			term.Coordinates{X: 0, Y: 32},
 		},
 		{
 			"MoveDown should seek down if reached last line in window but not at last line",
@@ -458,17 +458,14 @@ func TestCursorMove(t *testing.T) {
 			term.Coordinates{X: 0, Y: 6},
 		},
 		{
-			"MoveDownLines should move the cursor position past the last line until end of window",
+			"MoveDownLines should not move the cursor position past the last line until end of window",
 			1000, 1000,
 			func(t *testing.T, e *Cursor) {
 				e.cursor.Y = 0
-				assert.True(t, e.MoveDownLines(200))
-				assert.True(t, e.MoveDownLines(200))
-				assert.True(t, e.MoveDownLines(200))
-				assert.True(t, e.MoveDownLines(200))
-				assert.True(t, e.MoveDownLines(199))
+				assert.True(t, e.MoveDownLines(200)) // this places it at content last row + 1
+				assert.False(t, e.MoveDownLines(200))
 			},
-			term.Coordinates{X: 0, Y: 999},
+			term.Coordinates{X: 0, Y: 32},
 		},
 		{
 			"MoveDownLines should seek down if reached last line in window but not at last line",
