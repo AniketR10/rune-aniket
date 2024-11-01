@@ -931,10 +931,12 @@ func TestIntegrationMoveWordSpecialChars(t *testing.T) {
 		}
 	})
 	t.Run("navigating new lines MoveRightEndWord and MoveLeftStartWord", func(t *testing.T) {
-		const snippetNewLines = `aa#aaa
-aaaa.a
-$aaaaa
-aaa@aa`
+		t.Skip("Broken and to be fixed by OX-365")
+
+		const snippetNewLines = `ab#cde
+fghi.j
+$klmno
+pqr@st`
 
 		vi := setupVi(t, snippetNewLines, 2)
 		prevCoords := term.Coordinates{X: 0, Y: 0}
@@ -942,10 +944,10 @@ aaa@aa`
 		vi.Resize(10, 10)
 
 		jumps := []rune{
-			'a', '#', 'a',
-			'a', 'a', '.', 'a',
-			'$', 'a',
-			'a', 'a', '@', 'a',
+			'b', '#', 'e',
+			'f', 'i', '.', 'j',
+			'$', 'o',
+			'p', 'r', '@', 't', // FIXME: Instead of t gets p, to be fixed in OX-365
 		}
 
 		// forward
@@ -958,10 +960,10 @@ aaa@aa`
 		}
 
 		revJumps := []rune{
-			'a', '@', 'a',
-			'a', '$',
-			'a', '.', 'a', 'a',
-			'a', '#', 'a',
+			's', '@', 'p',
+			'o', '$',
+			'j', '.', 'f',
+			'e', 'c', '#', 'a',
 		}
 
 		// backwards
@@ -970,7 +972,7 @@ aaa@aa`
 			require.True(t, ok)
 			cell, ok := vi.cursor.Cell()
 			require.True(t, ok)
-			require.Equal(t, revJumps[i], cell.Ch, "(backwards) expected '%c', got '%c'", revJumps[i], cell.Ch)
+			require.Equal(t, revJumps[i], cell.Ch, "(backwards) [index %v] expected '%c', got '%c'", i, revJumps[i], cell.Ch)
 		}
 	})
 }

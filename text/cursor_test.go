@@ -673,10 +673,11 @@ func TestCursorMove(t *testing.T) {
 			"MoveLeftColumns should move cursor left",
 			1000, 1000,
 			func(t *testing.T, e *Cursor) {
+				e.cursor.Y = 2
 				e.cursor.X = 7
 				assert.True(t, e.MoveLeftColumns(4))
 			},
-			term.Coordinates{X: 3, Y: 0},
+			term.Coordinates{X: 3, Y: 2},
 		},
 		{
 			"MoveLeftColumns fixes cursor pos if negative",
@@ -732,21 +733,24 @@ func TestCursorMove(t *testing.T) {
 			term.Coordinates{X: 6, Y: 2},
 		},
 		{
-			"MoveRight should move cursor right even if past current line's end of line",
+			"MoveRight should not move cursor right if past current line's end of line",
 			1000, 1000,
 			func(t *testing.T, e *Cursor) {
-				assert.True(t, e.MoveRight())
+				e.cursor.X = 4
+				e.cursor.Y = 1
+				assert.False(t, e.MoveRight())
 			},
-			term.Coordinates{X: 1, Y: 0},
+			term.Coordinates{X: 4, Y: 1},
 		},
 		{
-			"MoveRight should move cursor right even if at the end of the line",
+			"MoveRight should not move cursor right if at the end of the line",
 			1000, 1000,
 			func(t *testing.T, e *Cursor) {
-				e.cursor.X = 1
-				assert.True(t, e.MoveRight())
+				e.cursor.X = 2
+				e.cursor.Y = 1
+				assert.False(t, e.MoveRight())
 			},
-			term.Coordinates{X: 2, Y: 0},
+			term.Coordinates{X: 2, Y: 1},
 		},
 		{
 			"MoveRight should seek right if at end of window but not at end of line",
@@ -778,21 +782,23 @@ func TestCursorMove(t *testing.T) {
 			term.Coordinates{X: 8, Y: 2},
 		},
 		{
-			"MoveRightColumns should move cursor right even if past current line's end of line",
-			1000, 1000,
-			func(t *testing.T, e *Cursor) {
-				assert.True(t, e.MoveRightColumns(8))
-			},
-			term.Coordinates{X: 8, Y: 0},
-		},
-		{
-			"MoveRightColumns should move cursor right even if at the end of the line",
+			"MoveRightColumns should not move cursor right if past current line's end of line",
 			1000, 1000,
 			func(t *testing.T, e *Cursor) {
 				e.cursor.X = 1
-				assert.True(t, e.MoveRightColumns(10))
+				assert.False(t, e.MoveRightColumns(8))
 			},
-			term.Coordinates{X: 11, Y: 0},
+			term.Coordinates{X: 1, Y: 0},
+		},
+		{
+			"MoveRightColumns should not move cursor right if at the end of the line",
+			1000, 1000,
+			func(t *testing.T, e *Cursor) {
+				e.cursor.X = 2
+				e.cursor.Y = 1
+				assert.False(t, e.MoveRightColumns(10))
+			},
+			term.Coordinates{X: 2, Y: 1},
 		},
 		{
 			"MoveRight should seek right if at end of window but not at end of line",
@@ -1044,6 +1050,16 @@ func TestCursorMove(t *testing.T) {
 				assert.Equal(t, 'C', c.Ch)
 			},
 			term.Coordinates{X: 3, Y: 2},
+		},
+		{
+			"MoveToScroll cursor beyond vertical content to a column that's not first one snaps to first one",
+			10, 10,
+			func(t *testing.T, e *Cursor) {
+				e.MoveLastLine()
+				cur := e.Coordinates()
+				e.MoveToScroll(term.Coordinates{X: cur.X+1, Y: cur.Y+1})
+			},
+			term.Coordinates{X: 0, Y: 10},
 		},
 	}
 
@@ -1941,9 +1957,9 @@ func TestCursorMoveToBoundsOld(t *testing.T) {
 	pos := e.Coordinates()
 	assert.Equal(t, term.Coordinates{}, pos)
 
-	assert.True(t, e.MoveRight())
-	assert.True(t, e.MoveRight())
-	assert.True(t, e.MoveRight())
+	e.cursor.X += 1
+	e.cursor.X += 1
+	e.cursor.X += 1
 
 	e.MoveToBounds(2)
 
@@ -1979,7 +1995,7 @@ func TestCursorMoveToBoundsOld(t *testing.T) {
 func TestCursorSkipNulls(t *testing.T) {
 	e := setupCursor(t, 100, 100, false)
 
-	assert.True(t, e.MoveRight())
+	e.cursor.X += 1
 
 	e.MoveToNextNonNull()
 
@@ -2478,9 +2494,9 @@ func TestCursorInsertBlock(t *testing.T) {
 	}{
 		{term.Coordinates{}, "a\nb\nc", "aa\nbb\ncc"},
 		{term.Coordinates{Y: 1}, "a\nb\nc", "a\nab\nbc\nc"},
-		{term.Coordinates{Y: 1, X: 1}, "a\nb\nc", "a\nba\ncb\n c"},
+		{term.Coordinates{Y: 1, X: 1}, "a\nb\nc", "a\nba\ncb\nc"},
 		{term.Coordinates{Y: 2}, "a\nb\nc", "a\nb\nac\nb\nc"},
-		{term.Coordinates{Y: 2, X: 1}, "a\nb\nc", "a\nb\nca\n b\n c"},
+		{term.Coordinates{Y: 2, X: 1}, "a\nb\nc", "a\nb\nca\nb\nc"},
 	}
 
 	for i, tcase := range tsuite {
@@ -2542,20 +2558,11 @@ func TestCursorMoveRightWrap(t *testing.T) {
 		assert.True(t, c.MoveRightWrap())
 		assert.Equal(t, term.Coordinates{X: 1}, c.CursorAtScroll())
 		assert.True(t, c.MoveRightWrap())
-		assert.Equal(t, term.Coordinates{X: 2}, c.CursorAtScroll())
-		assert.True(t, c.MoveRightWrap())
 		assert.Equal(t, term.Coordinates{Y: 1, X: 0}, c.CursorAtScroll())
 		assert.True(t, c.MoveRightWrap())
 		assert.Equal(t, term.Coordinates{Y: 1, X: 1}, c.CursorAtScroll())
 		assert.True(t, c.MoveRightWrap())
-		assert.Equal(t, term.Coordinates{Y: 1, X: 2}, c.CursorAtScroll())
-		assert.True(t, c.MoveRightWrap())
 		assert.Equal(t, term.Coordinates{Y: 2, X: 0}, c.CursorAtScroll())
-		assert.True(t, c.MoveRightWrap())
-		assert.Equal(t, term.Coordinates{Y: 2, X: 1}, c.CursorAtScroll())
-		assert.True(t, c.MoveRightWrap())
-		assert.Equal(t, term.Coordinates{Y: 2, X: 2}, c.CursorAtScroll())
-
 		assert.False(t, c.MoveRightWrap())
 	})
 
@@ -2584,9 +2591,6 @@ func TestCursorMoveLeftWrap(t *testing.T) {
 
 		c.MoveToScroll(term.Coordinates{Y: 2, X: 2})
 
-		assert.True(t, c.MoveLeftWrap())
-		assert.Equal(t, term.Coordinates{Y: 2, X: 1}, c.CursorAtScroll())
-		assert.True(t, c.MoveLeftWrap())
 		assert.Equal(t, term.Coordinates{Y: 2, X: 0}, c.CursorAtScroll())
 		assert.True(t, c.MoveLeftWrap())
 		assert.Equal(t, term.Coordinates{Y: 1, X: 0}, c.CursorAtScroll())
@@ -2602,10 +2606,6 @@ func TestCursorMoveLeftWrap(t *testing.T) {
 
 		c.MoveToScroll(term.Coordinates{Y: 2, X: 2})
 
-		assert.True(t, c.MoveLeftWrap())
-		assert.Equal(t, term.Coordinates{Y: 2, X: 1}, c.CursorAtScroll())
-		assert.True(t, c.MoveLeftWrap())
-		assert.Equal(t, term.Coordinates{Y: 2, X: 0}, c.CursorAtScroll())
 		assert.True(t, c.MoveLeftWrap())
 		assert.Equal(t, term.Coordinates{Y: 1, X: 1}, c.CursorAtScroll())
 		assert.True(t, c.MoveLeftWrap())

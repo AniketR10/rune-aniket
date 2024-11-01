@@ -216,6 +216,14 @@ func (c *Cursor) MoveToScroll(pos term.Coordinates) (
 	if pos.Y > 0 && pos.Y > c.rows() {
 		pos.Y = c.rows()
 	}
+	if pos.Y < c.rows() {
+		columns := c.view().Columns(pos.Y)
+		if pos.X > 0 && pos.X > columns {
+			pos.X = columns
+		}
+	} else if pos.Y == c.rows() {
+		pos.X = 0
+	}
 	ret = c.cursorAtScroll()
 	c.moveToScroll(pos)
 	ok = ret != c.cursorAtScroll()
@@ -492,13 +500,12 @@ func (c *Cursor) MoveLeftColumns(n int) (ok bool) {
 // the content if required. It returns false and does nothing when the end
 // of the content is reached.
 func (c *Cursor) MoveRight() (ok bool) {
+	atScroll := c.cursorAtScroll()
+	if (atScroll.Y < c.rows() && atScroll.X+1 > c.view().Columns(atScroll.Y)) ||
+		atScroll.Y >= c.rows() {
+		return
+	}
 	if c.scroll.Wrap {
-		atScroll := c.cursorAtScroll()
-		if atScroll.Y >= c.rows() ||
-			(atScroll.X+1 > c.view().Columns(atScroll.Y) &&
-				c.cursor.X+1 >= c.scroll.Width()) {
-			return
-		}
 		_, ok = c.MoveToScroll(term.Coordinates{X: atScroll.X + 1, Y: atScroll.Y})
 		return
 	}
