@@ -391,6 +391,7 @@ func (vi *viHandlerImpl) handleNormal(ev term.Event) (quit, handled bool) {
 			doResetCount = false
 		case 'd':
 			vi.setDeleteMode(false)
+			doResetCount = false
 		case 'c':
 			vi.setDeleteMode(true)
 		case 'y':
@@ -839,6 +840,13 @@ func (vi *viHandlerImpl) handleYank(ev term.Event) (quit, handled bool) {
 func (vi *viHandlerImpl) handleDelete(ev term.Event) (quit, handled bool) {
 	if !vi.deleteInsert && vi.moveMode == moveNone && ev.Ch == 'd' && ev.Mod == 0 {
 		if vi.cursor.SelectLine() {
+			if vi.count > 1 {
+				for i := 0; i < vi.count; i++ {
+					if !vi.cursor.MoveLineDown() {
+						break
+					}
+				}
+			}
 			vi.cursor.DeleteSelection()
 		}
 		vi.setNormalMode()

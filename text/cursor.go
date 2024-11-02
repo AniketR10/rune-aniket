@@ -413,7 +413,7 @@ func (c *Cursor) MoveDown() (ok bool) {
 		}
 		return
 	}
-	if pos.Y+1 > c.rows() {
+	if c.cursorAtScroll().Y+1 > c.rows() {
 		return
 	}
 	ok = true

@@ -661,6 +661,17 @@ dicurtab->tp_diff_in
   diff_buf_add(win->
 }                   
               NORMAL`},
+		{"kkk3dd",
+			`  {                 
+dicurtab->tp_diff_in
+    diff_redraw(TRUE
+▐ diff_buf_add(win->
+}                   
+                    
+                    
+                    
+                    
+              NORMAL`},
 	}
 
 	vi := setupViIntegration(t, snippet, 2)
@@ -694,6 +705,102 @@ func TestViCount(t *testing.T) {
 	}
 }
 
+func TestVidd(t *testing.T) {
+	suite := []struct {
+		name             string
+		moveCursorFn     func(*viHandlerImpl)
+		content          string
+		events           string
+		expectContent    string
+		expectCoords     term.Coordinates
+		expectCoordsWrap term.Coordinates
+	}{
+		{
+			name: "2dd",
+			moveCursorFn: func(vi *viHandlerImpl) {
+				vi.cursor.MoveToScroll(term.Coordinates{Y: 2})
+			},
+			content:          "0000\n1111\n2222\n3333\n4444\n5555\n",
+			events:           "2dd",
+			expectContent:    "0000\n1111\n5555\n",
+			expectCoords:     term.Coordinates{Y: 2},
+			expectCoordsWrap: term.Coordinates{Y: 2},
+		},
+		{
+			name: "3dd from last line",
+			moveCursorFn: func(vi *viHandlerImpl) {
+				vi.cursor.MoveLastLine()
+			},
+			content:          "0000\n1111\n2222\n3333\n4444\n5555\n",
+			events:           "3dd",
+			expectContent:    "0000\n1111\n2222\n3333\n4444\n5555\n",
+			expectCoords:     term.Coordinates{Y: 6},
+			expectCoordsWrap: term.Coordinates{Y: 6},
+		},
+		{
+			name: "4dd from second to last line",
+			moveCursorFn: func(vi *viHandlerImpl) {
+				vi.cursor.MoveLastLine()
+				vi.cursor.MoveLineUp()
+			},
+			content:          "0000\n1111\n2222\n3333\n4444\n5555\n",
+			events:           "3dd",
+			expectContent:    "0000\n1111\n2222\n3333\n4444\n",
+			expectCoords:     term.Coordinates{Y: 5},
+			expectCoordsWrap: term.Coordinates{Y: 4},
+		},
+		{
+			name:             "10dd from first line wipes all content",
+			content:          "0000\n1111\n2222\n3333\n4444\n5555\n",
+			events:           "10dd",
+			expectContent:    "",
+			expectCoords:     term.Coordinates{Y: 0},
+			expectCoordsWrap: term.Coordinates{Y: 0},
+		},
+		{
+			name:             "999999999999999999999999999999999999dd",
+			content:          "0000\n1111\n2222\n3333\n4444",
+			events:           "999999999999999999999999999999999999dd",
+			expectContent:    "",
+			expectCoords:     term.Coordinates{Y: 0},
+			expectCoordsWrap: term.Coordinates{Y: 0},
+		},
+	}
+
+	for _, tcase := range suite {
+		for _, wrap := range []bool{false, true} {
+			name := tcase.name
+			if wrap {
+				name += " (wrap)"
+			}
+			t.Run(name, func(t *testing.T) {
+				vi := setupVi(t, tcase.content, 2, WithWrap(wrap))
+				if wrap {
+					vi.Resize(2, 10)
+				} else {
+					vi.Resize(10, 10)
+				}
+				vi.Draw(term.NoopWriter{})
+				if tcase.moveCursorFn != nil {
+					tcase.moveCursorFn(vi)
+				}
+				for _, eventChar := range tcase.events {
+					vi.Handle(term.Event{Type: term.EventKey, Ch: eventChar})
+				}
+				if wrap {
+					assert.Equal(t, tcase.expectCoordsWrap, vi.cursor.Coordinates())
+				} else {
+					assert.Equal(t, tcase.expectCoords, vi.cursor.Coordinates())
+				}
+				vi.cursor.MoveFirstLine()
+				vi.cursor.Select()
+				vi.cursor.MoveLastLine()
+				assert.Equal(t, tcase.expectContent, vi.cursor.Selection())
+			})
+		}
+	}
+}
+
 func TestVidfd(t *testing.T) {
 	cases := []handlertest.SequenceTestCase{
 		{"jjdfd",
@@ -724,6 +831,30 @@ diff_buf_adjust(win_
 		return setupVi(t, snippet, 2)
 	}
 	handlertest.TestHandlerIsolated(t, newVi, 20, 10, cases)
+}
+
+func TestWrapMoveDownLastLogicalLine(t *testing.T) {
+	sample := `abcde
+fghih
+ijklm
+opkrs
+tuvxy
+11111
+22222
+33333
+44444
+55555
+66666
+`
+	vi := setupVi(t, sample, 2, WithWrap(true))
+	vi.Resize(3, 20)
+	vi.Draw(term.NoopWriter{})
+	for _, eventChar := range "jjjjjjjjjjjjjjjjjjjjj" {
+		vi.Handle(term.Event{Type: term.EventKey, Ch: eventChar})
+	}
+	assert.Equal(t, term.Coordinates{X: 3, Y: 10}, vi.cursor.ScrollCoordinates(vi.cursor.Coordinates()))
+	vi.cursor.SelectLine()
+	assert.Equal(t, "66666\n", vi.cursor.Selection())
 }
 
 func TestViDeleteAWord(t *testing.T) {
@@ -1154,7 +1285,8 @@ func TestViCountChangeToVisualMode(t *testing.T) {
 			t.Run(name, func(t *testing.T) {
 				vi := setupVi(t, codeSnippet, 2, WithWrap(wrap))
 				vi.Resize(tcase.scrollWidth, 20)
-
+				// In order to create the wraps a Draw  must be issued so [scroll.Draw]
+				// can create them, otherwise it's the same as passing WithWrap(false).
 				vi.Draw(term.NoopWriter{})
 
 				vi.cursor.MoveToScroll(tcase.cursorAt)
@@ -1262,14 +1394,14 @@ func TestVigg(t *testing.T) {
 		fileText     string
 		narrowWrap   bool // scroll width of 4 with wrapping enaled
 		moveCursorFn func(*viHandlerImpl)
-		ggCommand    string
+		events       string
 		expectCoord  term.Coordinates
 	}{
 		{
 			name:        "gg from 0,0",
 			fileText:    code,
 			narrowWrap:  true,
-			ggCommand:   "gg",
+			events:      "gg",
 			expectCoord: term.Coordinates{X: 0, Y: 0},
 		},
 		{
@@ -1277,7 +1409,7 @@ func TestVigg(t *testing.T) {
 			fileText:     code,
 			narrowWrap:   true,
 			moveCursorFn: func(vi *viHandlerImpl) { vi.cursor.MoveRight() },
-			ggCommand:    "gg",
+			events:       "gg",
 			expectCoord:  term.Coordinates{X: 0, Y: 0},
 		},
 		{
@@ -1288,7 +1420,7 @@ func TestVigg(t *testing.T) {
 				vi.cursor.MoveDown()
 				vi.cursor.MoveRightColumns(2)
 			},
-			ggCommand:   "6gg",
+			events:      "6gg",
 			expectCoord: term.Coordinates{X: 0, Y: 7}, // lonely 6 in `code`
 		},
 		{
@@ -1299,7 +1431,7 @@ func TestVigg(t *testing.T) {
 				vi.cursor.MoveDown()
 				vi.cursor.MoveRightColumns(2)
 			},
-			ggCommand:   "6gg",
+			events:      "6gg",
 			expectCoord: term.Coordinates{X: 0, Y: 7}, // lonely 6 in `code`
 		},
 		{
@@ -1310,14 +1442,14 @@ func TestVigg(t *testing.T) {
 				vi.cursor.MoveDown()
 				vi.cursor.MoveEndLine()
 			},
-			ggCommand:   "6gg",
+			events:      "6gg",
 			expectCoord: term.Coordinates{X: 0, Y: 7}, // lonely 6 in `code`
 		},
 		{
 			name:       "gg to same line called from wrapped lines below brings cursor to start of line",
 			fileText:   code,
 			narrowWrap: true,
-			ggCommand:  "3gg",
+			events:     "3gg",
 			moveCursorFn: func(vi *viHandlerImpl) {
 				// Move to wrapped line of 333s in `code`.
 				vi.cursor.MoveDownLines(7)
@@ -1332,7 +1464,7 @@ func TestVigg(t *testing.T) {
 				vi.cursor.MoveLastLine()
 
 			},
-			ggCommand:   "gg",
+			events:      "gg",
 			expectCoord: term.Coordinates{X: 0, Y: 0},
 		},
 		{
@@ -1345,13 +1477,13 @@ func TestVigg(t *testing.T) {
 				vi.cursor.MoveDownLines(scrollCoords.Y / 2)
 
 			},
-			ggCommand:   "gg",
+			events:      "gg",
 			expectCoord: term.Coordinates{X: 0, Y: 0},
 		},
 		{
 			name:        "999gg beyond limits of file",
 			fileText:    code,
-			ggCommand:   "999gg",
+			events:      "999gg",
 			expectCoord: term.Coordinates{X: 0, Y: 8},
 		},
 		{
@@ -1360,7 +1492,7 @@ func TestVigg(t *testing.T) {
 			moveCursorFn: func(vi *viHandlerImpl) {
 				vi.cursor.MoveLastLine()
 			},
-			ggCommand:   "0gg",
+			events:      "0gg",
 			expectCoord: term.Coordinates{X: 0, Y: 0},
 		},
 		{
@@ -1369,31 +1501,31 @@ func TestVigg(t *testing.T) {
 			moveCursorFn: func(vi *viHandlerImpl) {
 				vi.cursor.MoveLastLine()
 			},
-			ggCommand:   "00gg",
+			events:      "00gg",
 			expectCoord: term.Coordinates{X: 0, Y: 0},
 		},
 		{
 			name:        "3gg in single char file",
 			fileText:    "a",
-			ggCommand:   "3gg",
+			events:      "3gg",
 			expectCoord: term.Coordinates{X: 0, Y: 0},
 		},
 		{
 			name:        "3gg in empty file",
 			fileText:    "",
-			ggCommand:   "3gg",
+			events:      "3gg",
 			expectCoord: term.Coordinates{X: 0, Y: 0},
 		},
 		{
 			name:        "3gg in file that's only new lines",
 			fileText:    "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
-			ggCommand:   "3gg",
+			events:      "3gg",
 			expectCoord: term.Coordinates{X: 0, Y: 2},
 		},
 		{
 			name:        "9999999999999999999999999999999999999999999999999999gg",
 			fileText:    code,
-			ggCommand:   "9999999999999999999999999999999999999999999999999999gg",
+			events:      "9999999999999999999999999999999999999999999999999999gg",
 			expectCoord: term.Coordinates{X: 0, Y: 8},
 		},
 	}
@@ -1410,8 +1542,8 @@ func TestVigg(t *testing.T) {
 			if tcase.moveCursorFn != nil {
 				tcase.moveCursorFn(vi)
 			}
-			for _, commandChar := range tcase.ggCommand {
-				vi.Handle(term.Event{Type: term.EventKey, Ch: commandChar})
+			for _, eventChar := range tcase.events {
+				vi.Handle(term.Event{Type: term.EventKey, Ch: eventChar})
 			}
 			assert.Equal(t, tcase.expectCoord, vi.cursor.Coordinates())
 		})
@@ -1424,8 +1556,8 @@ func TestViggBeyondContent(t *testing.T) {
 		vi := setupVi(t, fileText, 2)
 		vi.Resize(100, 30)
 		vi.Draw(term.NoopWriter{})
-		for _, commandChar := range "999gg" {
-			vi.Handle(term.Event{Type: term.EventKey, Ch: commandChar})
+		for _, eventChar := range "999gg" {
+			vi.Handle(term.Event{Type: term.EventKey, Ch: eventChar})
 		}
 		assert.Equal(t, term.Coordinates{X: 0, Y: 3}, vi.cursor.Coordinates())
 		vi.cursor.MoveUp()
