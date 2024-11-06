@@ -349,7 +349,8 @@ func (c *Cursor) MoveStartLineNonBlank() bool {
 	defer enable()
 
 	initialScrollPos := c.cursorAtScroll()
-	c.setCursor(term.Coordinates{X: 0, Y: initialScrollPos.Y}, false)
+	c.setCursor(c.scroll.ScrollToWindowCoordinates(
+		term.Coordinates{X: 0, Y: initialScrollPos.Y}), false)
 	cells := c.view().RawCells()
 
 	x := 0
@@ -366,7 +367,8 @@ func (c *Cursor) MoveStartLineNonBlank() bool {
 		if !isBlank {
 			return true
 		}
-		c.setCursor(term.Coordinates{X: x, Y: initialScrollPos.Y}, false)
+		c.setCursor(c.scroll.ScrollToWindowCoordinates(
+			term.Coordinates{X: x, Y: initialScrollPos.Y}), false)
 		x++
 	}
 

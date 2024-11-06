@@ -672,6 +672,28 @@ dicurtab->tp_diff_in
                     
                     
               NORMAL`},
+		{"\\$",
+			`                    
+tp_diff_invalid = TR
+edraw(TRUE);        
+_add(win->w_buffer)▐
+                    
+                    
+                    
+                    
+                    
+              NORMAL`},
+		{"\\$44\\^", // 44 should be ignored
+			`{                   
+curtab->tp_diff_inva
+  diff_redraw(TRUE);
+▐iff_buf_add(win->w_
+                    
+                    
+                    
+                    
+                    
+              NORMAL`},
 	}
 
 	vi := setupViIntegration(t, snippet, 2)
