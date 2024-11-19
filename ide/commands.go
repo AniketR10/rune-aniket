@@ -196,6 +196,34 @@ var (
 			},
 			handler: (*ex).toggleFullscreen,
 		},
+		"notificationsSendInfo": {
+			man: textapi.CommandManual{
+				Summary:  "Sends an info-level notification.",
+				Synopsis: "message",
+			},
+			handler: (*ex).sendNotificationInfo,
+		},
+		"notificationsSendSuccess": {
+			man: textapi.CommandManual{
+				Summary:  "Sends a success-level notification.",
+				Synopsis: "message",
+			},
+			handler: (*ex).sendNotificationSuccess,
+		},
+		"notificationsSendWarning": {
+			man: textapi.CommandManual{
+				Summary:  "Sends a warning-level notification.",
+				Synopsis: "message",
+			},
+			handler: (*ex).sendNotificationWarning,
+		},
+		"notificationsSendError": {
+			man: textapi.CommandManual{
+				Summary:  "Sends an error-level notification.",
+				Synopsis: "message",
+			},
+			handler: (*ex).sendNotificationError,
+		},
 		"notificationsCloseAll": {
 			man: textapi.CommandManual{
 				Summary: "Closes all active notifications rendered by the browser.",

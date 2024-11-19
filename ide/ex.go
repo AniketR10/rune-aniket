@@ -666,6 +666,34 @@ func (e *ex) closeNotifications(args ...string) error {
 	return nil
 }
 
+func (e *ex) sendNotificationInfo(args ...string) error {
+	if len(args) == 0 {
+		return errors.New("command expects at least one argument")
+	}
+	return e.comp.Notify(notifications.LevelInfo, strings.Join(args, " "))
+}
+
+func (e *ex) sendNotificationSuccess(args ...string) error {
+	if len(args) == 0 {
+		return errors.New("command expects at least one argument")
+	}
+	return e.comp.Notify(notifications.LevelSuccess, strings.Join(args, " "))
+}
+
+func (e *ex) sendNotificationWarning(args ...string) error {
+	if len(args) == 0 {
+		return errors.New("command expects at least one argument")
+	}
+	return e.comp.Notify(notifications.LevelWarn, strings.Join(args, " "))
+}
+
+func (e *ex) sendNotificationError(args ...string) error {
+	if len(args) == 0 {
+		return errors.New("command expects at least one argument")
+	}
+	return e.comp.Notify(notifications.LevelError, strings.Join(args, " "))
+}
+
 func (e *ex) toggleFullscreen(args ...string) error {
 	if e.fullscreen != nil {
 		e.fullscreen = nil
