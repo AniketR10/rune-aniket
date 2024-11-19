@@ -720,7 +720,7 @@ func TestWriteExclamationNoQuit(t *testing.T) {
 			`┌──────────────────┐
 │Cannot save       │
 │this buffer       │
-└━━━━━━━━━━━━━━━━━━┘
+└──────────────────┘
 │                  │
 │                  │
 │                  │
@@ -749,7 +749,7 @@ func TestBrowserCloseLastWindow(t *testing.T) {
 │Cannot close      │
 │last tiled        │
 │window            │
-└━━━━━━━━━━━━━━━━━━┘
+└──────────────────┘
 │                  │
 │                  │
 │                  │
@@ -1610,10 +1610,10 @@ retalls
                     
 edi▐                
 edit                
+notificationsSendInf
 readFile            
 reloadFile!         
-                    
-                    `},
+notificationsSendWar`},
 		{":edit dawo⬇✌re✌^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
 			`                    
                     
@@ -1959,7 +1959,7 @@ func TestSwitchToTab(t *testing.T) {
 		{":switchToTab 0>",
 			`┌────────────────────────────┐
 │The first tab is 1          │
-└━━━━━━━━━━━━━━━━━━━━━━━━━━━━┘
+└────────────────────────────┘
 │BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
@@ -2059,7 +2059,7 @@ func testCopyToClipboard(
 		{":clipboardPaste>",
 			`┌────────────────────────────┐
 │nothing to paste            │
-└════════════════════════════┘
+└────────────────────────────┘
 │AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
 │AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
 │AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
@@ -2075,7 +2075,7 @@ func testCopyToClipboard(
 		{":notificationsCloseAll>:clipboardCopy>",
 			`┌────────────────────────────┐
 │copied to clipboard         │
-└━━━━━━━━━━━━━━━━━━━━━━━━━━━━┘
+└────────────────────────────┘
 │AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
 │AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
 │AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
