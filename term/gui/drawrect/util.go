@@ -66,10 +66,10 @@ func drawVerticesForUtil(
 	op.Blend = ebiten.Blend{
 		BlendFactorSourceRGB:        ebiten.BlendFactorOne,
 		BlendFactorSourceAlpha:      ebiten.BlendFactorOne,
-		BlendFactorDestinationRGB:   ebiten.BlendFactorOneMinusSourceAlpha,
-		BlendFactorDestinationAlpha: ebiten.BlendFactorOneMinusSourceAlpha,
-		BlendOperationRGB:           ebiten.BlendOperationMax,
-		BlendOperationAlpha:         ebiten.BlendOperationMax,
+		BlendFactorDestinationRGB:   ebiten.BlendFactorZero,
+		BlendFactorDestinationAlpha: ebiten.BlendFactorZero,
+		BlendOperationRGB:           ebiten.BlendOperationAdd,
+		BlendOperationAlpha:         ebiten.BlendOperationAdd,
 	}
 	op.AntiAlias = antialias
 	dst.DrawTriangles(vs, is, whiteSubImage, &op)

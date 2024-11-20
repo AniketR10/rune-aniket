@@ -150,7 +150,7 @@ func (r *renderer) Draw(
 	screen.Clear()
 	screen.DrawImage(r.bgColors, nil)
 
-	opt := ebiten.DrawImageOptions{}
+	var opt ebiten.DrawImageOptions
 	opt.GeoM.Translate(offsetX, offsetY)
 	// this blend set allows bgColors to fill background,
 	// but disables blending color alpha
@@ -211,7 +211,8 @@ func (r *renderer) drawRow(
 			if bg == defaultBackgroundColor {
 				continue
 			}
-			r.bufVertices, r.bufIndices = drawrect.DrawRect(&r.bufPath, r.bufVertices, r.bufIndices,
+			r.bufVertices, r.bufIndices = drawrect.DrawRect(
+				&r.bufPath, r.bufVertices, r.bufIndices,
 				r.frame, float32(pixelX), float32(pixelY),
 				float32(r.font.CellSize.X), float32(r.font.CellSize.Y), bg, false)
 			continue
