@@ -57,7 +57,6 @@ var ligatures = map[string]rune{
 }
 
 type renderer struct {
-	frame            *ebiten.Image
 	fontManager      *font.Manager
 	drawer           *drawtext.Drawer
 	font             fontFace
@@ -119,7 +118,6 @@ func newRenderer(
 	bgColors := ebiten.NewImage(imageWidth, imageHeight)
 	bgColors.Fill(bgColor)
 	return &renderer{
-		frame:            ebiten.NewImage(imageWidth, imageHeight),
 		fontManager:      fontManager,
 		drawer:           drawtext.New(),
 		bgColor:          bgColor,
@@ -140,44 +138,26 @@ func (r *renderer) Draw(
 	cursorStyle term.CursorStyle,
 	offsetX, offsetY float64,
 ) {
-	r.frame.Clear()
-
-	r.renderContent(cells)
-	if drawCursor {
-		r.renderCursor(cells, cursorPos, cursorStyle)
-	}
-
 	screen.Clear()
-	screen.DrawImage(r.bgColors, nil)
-
-	var opt ebiten.DrawImageOptions
-	opt.GeoM.Translate(offsetX, offsetY)
-	// this blend set allows bgColors to fill background,
-	// but disables blending color alpha
-	opt.Blend = ebiten.Blend{
-		BlendFactorSourceRGB:        ebiten.BlendFactorOne,
-		BlendFactorSourceAlpha:      ebiten.BlendFactorOne,
-		BlendFactorDestinationRGB:   ebiten.BlendFactorOneMinusSourceAlpha,
-		BlendFactorDestinationAlpha: ebiten.BlendFactorOneMinusSourceAlpha,
-		BlendOperationRGB:           ebiten.BlendOperationMax,
-		BlendOperationAlpha:         ebiten.BlendOperationMax,
-	}
-	screen.DrawImage(r.frame, &opt)
-}
-
-func (r *renderer) renderContent(cells [][]term.Cell) {
 	// fill default background so we can skip drawing individual
 	// cells with default background.
-	r.frame.Fill(r.bgColor)
+	screen.DrawImage(r.bgColors, nil)
 
+	r.renderContent(screen, cells)
+	if drawCursor {
+		r.renderCursor(screen, cells, cursorPos, cursorStyle)
+	}
+}
+
+func (r *renderer) renderContent(screen *ebiten.Image, cells [][]term.Cell) {
 	// draw base content for each row
 	for viewY := len(cells) - 1; viewY >= 0; viewY-- {
-		r.drawRow(cells, viewY, r.fgColor, r.bgColor)
+		r.drawRow(screen, cells, viewY, r.fgColor, r.bgColor)
 	}
 }
 
 func (r *renderer) drawRow(
-	cells [][]term.Cell, viewY int,
+	screen *ebiten.Image, cells [][]term.Cell, viewY int,
 	defaultForegroundColor, defaultBackgroundColor color.RGBA,
 ) {
 	row := cells[viewY]
@@ -213,7 +193,7 @@ func (r *renderer) drawRow(
 			}
 			r.bufVertices, r.bufIndices = drawrect.DrawRect(
 				&r.bufPath, r.bufVertices, r.bufIndices,
-				r.frame, float32(pixelX), float32(pixelY),
+				screen, float32(pixelX), float32(pixelY),
 				float32(r.font.CellSize.X), float32(r.font.CellSize.Y), bg, false)
 			continue
 		}
@@ -250,13 +230,13 @@ func (r *renderer) drawRow(
 		if cell.Attrs&tcell.AttrUnderline != 0 {
 			underlinePixelY := pixelY + r.font.CellSize.Y/2
 			r.bufVertices, r.bufIndices = drawrect.DrawStroke(&r.bufPath, r.bufVertices, r.bufIndices,
-				r.frame, float32(pixelX), float32(underlinePixelY),
+				screen, float32(pixelX), float32(underlinePixelY),
 				float32(pixelX+r.font.CellSize.X),
 				float32(underlinePixelY), 2, fg, false)
 		}
 
 		if r.enableLigatures && skipRunes == 0 {
-			skipRunes = r.handleLigatures(cells, viewX, viewY, useFace, fg)
+			skipRunes = r.handleLigatures(screen, cells, viewX, viewY, useFace, fg)
 		}
 
 		if skipRunes > 0 {
@@ -268,23 +248,25 @@ func (r *renderer) drawRow(
 		// been instructed via frame.Fill above.
 		if bg != defaultBackgroundColor {
 			r.bufVertices, r.bufIndices = drawrect.DrawRect(&r.bufPath, r.bufVertices, r.bufIndices,
-				r.frame, float32(pixelX), float32(pixelY),
+				screen, float32(pixelX), float32(pixelY),
 				float32(r.font.CellSize.X), float32(r.font.CellSize.Y), bg, false)
 		}
 
 		// draw text
-		r.drawer.DrawWithOptions(r.frame, cell.Ch, cell.Combining, useFace, &opts)
+		r.drawer.DrawWithOptions(screen, cell.Ch, cell.Combining, useFace, &opts)
 	}
 }
 
 func (r *renderer) handleLigatures(
-	cells [][]term.Cell, sx, sy int, face imagefont.Face, color color.RGBA,
+	screen *ebiten.Image, cells [][]term.Cell, sx, sy int,
+	face imagefont.Face, color color.RGBA,
 ) (length int) {
-	return handleLigatures(r.drawer, cells, sx, sy, face, color, r.font, r.frame)
+	return handleLigatures(r.drawer, cells, sx, sy, face, color, r.font, screen)
 }
 
 func (r *renderer) renderCursor(
-	cells [][]term.Cell, pos term.Coordinates, style term.CursorStyle,
+	screen *ebiten.Image, cells [][]term.Cell,
+	pos term.Coordinates, style term.CursorStyle,
 ) {
 	cell := r.getCell(cells, pos)
 
@@ -308,11 +290,11 @@ func (r *renderer) renderCursor(
 	if !ebiten.IsFocused() {
 		r.bufVertices, r.bufIndices = drawrect.DrawRect(
 			&r.bufPath, r.bufVertices, r.bufIndices,
-			r.frame, float32(pixelX), float32(pixelY),
+			screen, float32(pixelX), float32(pixelY),
 			float32(pixelW), float32(pixelH), r.cursorBackground, false)
 		r.bufVertices, r.bufIndices = drawrect.DrawRect(
 			&r.bufPath, r.bufVertices, r.bufIndices,
-			r.frame, float32(pixelX+1), float32(pixelY+1),
+			screen, float32(pixelX+1), float32(pixelY+1),
 			float32(pixelW-2), float32(pixelH-2), r.cursorForeground, false)
 		return
 	}
@@ -322,17 +304,17 @@ func (r *renderer) renderCursor(
 	case term.CursorStyleBlinkingBar, term.CursorStyleSteadyBar:
 		r.bufVertices, r.bufIndices = drawrect.DrawRect(
 			&r.bufPath, r.bufVertices, r.bufIndices,
-			r.frame, float32(pixelX), float32(pixelY), 2,
+			screen, float32(pixelX), float32(pixelY), 2,
 			float32(pixelH), r.cursorBackground, false)
 	case term.CursorStyleBlinkingUnderline, term.CursorStyleSteadyUnderline:
 		r.bufVertices, r.bufIndices = drawrect.DrawRect(
 			&r.bufPath, r.bufVertices, r.bufIndices,
-			r.frame, float32(pixelX), float32(pixelY+pixelH-2),
+			screen, float32(pixelX), float32(pixelY+pixelH-2),
 			float32(pixelW), 2, r.cursorBackground, false)
 	default:
 		r.bufVertices, r.bufIndices = drawrect.DrawRect(
 			&r.bufPath, r.bufVertices, r.bufIndices,
-			r.frame, float32(pixelX), float32(pixelY),
+			screen, float32(pixelX), float32(pixelY),
 			float32(pixelW), float32(pixelH), r.cursorBackground, false)
 		if cell.Ch != 0 {
 			var opts ebiten.DrawImageOptions
@@ -344,7 +326,7 @@ func (r *renderer) renderCursor(
 				float32(cb)/0xffff,
 				float32(ca)/0xffff,
 			)
-			r.drawer.DrawWithOptions(r.frame, cell.Ch, cell.Combining, useFace, &opts)
+			r.drawer.DrawWithOptions(screen, cell.Ch, cell.Combining, useFace, &opts)
 		}
 	}
 }
