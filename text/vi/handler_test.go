@@ -35,6 +35,7 @@ import (
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/handlertest"
 	"unstable.build/go-tui/term"
 )
@@ -71,49 +72,6 @@ diff_buf_adjust(win_T *win)
 	else
 	diff_buf_add(win->w_buffer);
 }`
-
-func setupVi(
-	t *testing.T, text string, tabspaces int, opts ...Option,
-) *viHandlerImpl {
-	buf := cell.NewBuffer()
-	buf.InitWithTabspaces(tabspaces)
-	_, err := buf.ReadFrom(strings.NewReader(text))
-	require.NoError(t, err)
-
-	vi := new(viHandlerImpl)
-	vi.init(buf, opts...)
-
-	return vi
-}
-
-func setupViWithScroll(
-	t *testing.T, text string, tabspaces int, opts ...Option,
-) *viHandlerImpl {
-	buf := cell.NewBuffer()
-	buf.InitWithTabspaces(tabspaces)
-	_, err := buf.ReadFrom(strings.NewReader(text))
-	require.NoError(t, err)
-
-	scroll := component.NewScroll(buf)
-
-	vi := new(viHandlerImpl)
-	vi.initWithScroll(scroll, opts...)
-
-	return vi
-}
-
-func setupViIntegration(
-	t *testing.T, text string, tabspaces int, opts ...Option,
-) tui.Handler {
-	buf := cell.NewBuffer()
-	buf.InitWithTabspaces(tabspaces)
-	_, err := buf.ReadFrom(strings.NewReader(text))
-	require.NoError(t, err)
-
-	vi := New(buf, uri, opts...)
-
-	return vi
-}
 
 func TestCellAtCursor(t *testing.T) {
 	cases := []struct {
@@ -1752,4 +1710,60 @@ func TestMoveCursorArrowKeys(t *testing.T) {
 		}
 
 	})
+}
+
+func TestSetNormalModeClearing(t *testing.T) {
+	vi := setupVi(t, "aaaa\nbbbb\ncccc\ndddd", 2)
+	vi.Resize(4, 4)
+
+	vi.Handle(term.Event{Type: term.EventKey, Ch: '/'})
+	assert.Equal(t, searchMode, vi.mode())
+
+	vi.setNormalMode()
+	assert.Equal(t, normalMode, vi.mode())
+
+	assert.Equal(t, handler.LessNormalMode, vi.less.Mode())
+}
+
+func setupVi(
+	t *testing.T, text string, tabspaces int, opts ...Option,
+) *viHandlerImpl {
+	buf := cell.NewBuffer()
+	buf.InitWithTabspaces(tabspaces)
+	_, err := buf.ReadFrom(strings.NewReader(text))
+	require.NoError(t, err)
+
+	vi := new(viHandlerImpl)
+	vi.init(buf, opts...)
+
+	return vi
+}
+
+func setupViWithScroll(
+	t *testing.T, text string, tabspaces int, opts ...Option,
+) *viHandlerImpl {
+	buf := cell.NewBuffer()
+	buf.InitWithTabspaces(tabspaces)
+	_, err := buf.ReadFrom(strings.NewReader(text))
+	require.NoError(t, err)
+
+	scroll := component.NewScroll(buf)
+
+	vi := new(viHandlerImpl)
+	vi.initWithScroll(scroll, opts...)
+
+	return vi
+}
+
+func setupViIntegration(
+	t *testing.T, text string, tabspaces int, opts ...Option,
+) tui.Handler {
+	buf := cell.NewBuffer()
+	buf.InitWithTabspaces(tabspaces)
+	_, err := buf.ReadFrom(strings.NewReader(text))
+	require.NoError(t, err)
+
+	vi := New(buf, uri, opts...)
+
+	return vi
 }

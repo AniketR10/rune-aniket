@@ -55,7 +55,7 @@ const (
 	visualBlockMode
 	replaceMode
 	replaceOneMode
-	searchMode
+	searchMode // this is never set in currMode, but returned by mode()
 )
 
 const (
@@ -76,6 +76,7 @@ type viHandler interface {
 	setCursorAtScroll(pos term.Coordinates) bool
 	setNormalMode() bool
 	cursorAtScroll() term.Coordinates
+	search(string)
 	moveToBounds()
 	unselect() bool
 }
@@ -244,9 +245,10 @@ func (vi *viHandlerImpl) setMode(mode viMode) {
 }
 
 func (vi *viHandlerImpl) setNormalMode() bool {
-	if vi.currMode == normalMode && vi.moveMode == moveNone {
-		return false
+	if vi.less.Mode() == handler.LessSearchMode {
+		vi.less.SetNormalMode()
 	}
+
 	vi.setMode(normalMode)
 	vi.moveMode = moveNone
 	return true
@@ -689,7 +691,7 @@ func (vi *viHandlerImpl) handleVisual(ev term.Event) (quit, handled bool) {
 			vi.cursor.DeleteSelection()
 			vi.setInsertMode()
 		case 'I':
-			switch vi.currMode {
+			switch vi.mode() {
 			case visualBlockMode:
 				vi.handleVisualBlockInsertStart()
 			default:
@@ -706,7 +708,7 @@ func (vi *viHandlerImpl) handleVisual(ev term.Event) (quit, handled bool) {
 		quit, handled = vi.handleNormal(ev)
 	}
 
-	switch vi.currMode {
+	switch vi.mode() {
 	case visualMode, visualLineMode, visualBlockMode:
 	default:
 		vi.cursor.Unselect()

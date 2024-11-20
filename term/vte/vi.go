@@ -148,8 +148,10 @@ func (v *viHandler) Handle(ev term.Event) (exit, handled bool) {
 			})
 		}
 		v.sync.vi.Unselect()
+		v.sync.vi.Search("")
 		v.sync.vi.SetNormalMode()
 		v.copy.vi.Unselect()
+		v.copy.vi.Search("")
 		v.copy.vi.SetNormalMode()
 	}
 	return

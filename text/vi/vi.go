@@ -347,6 +347,11 @@ func (vi *Vi) IsSearchMode() bool {
 	return vi.handler.mode() == searchMode
 }
 
+// Search runs a text search on the underlying scroll content.
+func (vi *Vi) Search(target string) {
+	vi.handler.search(target)
+}
+
 // SetNormalMode switches the mode to normal.
 // It returns false if the current mode was already normal mode.
 func (vi *Vi) SetNormalMode() bool {
