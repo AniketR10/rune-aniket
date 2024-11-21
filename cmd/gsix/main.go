@@ -247,7 +247,6 @@ func run() int {
 		gui.WithPublishChannel(publishChan),
 		gui.WithRenderOffset(0, 10),
 		gui.WithLocker(&mu),
-		gui.WithDefaultAttributes(i.DefaultAttributes()),
 	}
 
 	//for _, hinter := range hinters.All() {

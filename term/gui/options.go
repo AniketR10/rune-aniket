@@ -26,6 +26,7 @@ package gui
 import (
 	"sync"
 
+	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/term"
 )
 
@@ -128,15 +129,6 @@ func WithLocker(mu sync.Locker) Option {
 	}
 }
 
-// WithDefaultAttributes defines the default background
-// and foreground attributes.
-func WithDefaultAttributes(attr term.Attributes) Option {
-	return func(g *GUI) error {
-		g.defaultAttr = attr
-		return nil
-	}
-}
-
 // WithLineHeightOffset defines positive or negative offset given
 // to the font's default line height.
 // See font.Manager.SetOffset for more details.
@@ -160,6 +152,26 @@ func WithRenderOffset(x, y int) Option {
 func WithPrintFPS(print bool) Option {
 	return func(g *GUI) error {
 		g.printFPS = print
+		return nil
+	}
+}
+
+// Theme is a color theme which defines the default foreground and background colors
+// as well as color mappings between colors. Tipically the initial 16-bit colors supported
+// by XTERM/ECMA are mapped to arbitrary RGB colors.
+type Theme struct {
+	Foreground tcell.Color
+	Background tcell.Color
+	Cursor     tcell.Color
+	Colors     map[tcell.Color]tcell.Color
+}
+
+// WithColorThemes defines the color themes available for later calls to GUI.SetTheme,
+// and initial is used as the default theme.
+func WithColorThemes(initial string, themes map[string]Theme) Option {
+	return func(g *GUI) error {
+		g.initialTheme = initial
+		g.colorThemes = themes
 		return nil
 	}
 }

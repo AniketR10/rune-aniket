@@ -152,13 +152,12 @@ func (r *renderer) Draw(
 func (r *renderer) renderContent(screen *ebiten.Image, cells [][]term.Cell) {
 	// draw base content for each row
 	for viewY := len(cells) - 1; viewY >= 0; viewY-- {
-		r.drawRow(screen, cells, viewY, r.fgColor, r.bgColor)
+		r.drawRow(screen, cells, viewY)
 	}
 }
 
 func (r *renderer) drawRow(
 	screen *ebiten.Image, cells [][]term.Cell, viewY int,
-	defaultForegroundColor, defaultBackgroundColor color.RGBA,
 ) {
 	row := cells[viewY]
 	pixelY := float64(viewY) * r.font.CellSize.Y
@@ -173,8 +172,8 @@ func (r *renderer) drawRow(
 	for viewX := 0; viewX < len(row); viewX++ {
 		cell := row[viewX]
 
-		fg := tcellToColor(cell.Fg, defaultForegroundColor, r.fgOpacity)
-		bg := tcellToColor(cell.Bg, defaultBackgroundColor, r.bgOpacity)
+		fg := tcellToColor(cell.Fg, r.fgColor, r.fgOpacity)
+		bg := tcellToColor(cell.Bg, r.bgColor, r.bgOpacity)
 		pixelX := r.font.CellSize.X * float64(viewX)
 
 		// reverse attr if AttrReverse
@@ -188,7 +187,7 @@ func (r *renderer) drawRow(
 		if cell.Ch == 0 || cell.Ch == '\t' {
 			// do not draw default background as a rect, since it's already
 			// been instructed via frame.Fill above.
-			if bg == defaultBackgroundColor {
+			if bg == r.bgColor {
 				continue
 			}
 			r.bufVertices, r.bufIndices = drawrect.DrawRect(
@@ -246,8 +245,9 @@ func (r *renderer) drawRow(
 
 		// do not draw default background as a rect, since it's already
 		// been instructed via frame.Fill above.
-		if bg != defaultBackgroundColor {
-			r.bufVertices, r.bufIndices = drawrect.DrawRect(&r.bufPath, r.bufVertices, r.bufIndices,
+		if bg != r.bgColor {
+			r.bufVertices, r.bufIndices = drawrect.DrawRect(
+				&r.bufPath, r.bufVertices, r.bufIndices,
 				screen, float32(pixelX), float32(pixelY),
 				float32(r.font.CellSize.X), float32(r.font.CellSize.Y), bg, false)
 		}

@@ -82,6 +82,11 @@ type GUI struct {
 	renderer          *renderer
 	interruptPending  atomic.Bool
 
+	originalColorValues map[tcell.Color]int32
+	originalValuesColor map[int32]tcell.Color
+	initialTheme        string
+	colorThemes         map[string]Theme
+
 	cursor struct {
 		pos   term.Coordinates
 		style term.CursorStyle
@@ -121,10 +126,26 @@ func New(handler tui.Handler, options ...Option) (*GUI, error) {
 	ret.ctx = context.Background()
 	ret.ctx, ret.cancelCtx = context.WithCancel(ret.ctx)
 
+	ret.defaultAttr.Fg = tcell.ColorWhite
+	ret.defaultAttr.Bg = tcell.ColorBlack
 	for _, option := range options {
 		if err := option(ret); err != nil {
 			return nil, fmt.Errorf("option: %w", err)
 		}
+	}
+
+	// clone original values for restoration
+	ret.originalColorValues = make(map[tcell.Color]int32, len(tcell.ColorValues))
+	for k, v := range tcell.ColorValues {
+		ret.originalColorValues[k] = v
+	}
+	ret.originalValuesColor = make(map[int32]tcell.Color, len(tcell.ValuesColor))
+	for k, v := range tcell.ValuesColor {
+		ret.originalValuesColor[k] = v
+	}
+
+	if ret.initialTheme != "" {
+		ret.setTheme(ret.colorThemes[ret.initialTheme])
 	}
 
 	// initialze renderer, writer, etc.
@@ -358,6 +379,34 @@ func (g *GUI) SetFont(family string) error {
 	return err
 }
 
+// SetTheme sets the color theme to be used in the next render iteration.
+// The theme must have been passed via WithColorThemes option before, otherwise
+// this function returns an error.
+func (g *GUI) SetTheme(name string) error {
+	defer g.resize(g.width, g.height, g.fontManager.DeviceScale())
+
+	g.resetTheme()
+	if name == "" {
+		return nil
+	}
+
+	theme, ok := g.colorThemes[name]
+	if !ok {
+		return fmt.Errorf("unkown theme '%s'", name)
+	}
+	g.setTheme(theme)
+	return nil
+}
+
+// Themes returns the list of themes configured via WithColorThemes.
+func (g *GUI) Themes() []string {
+	var themes []string
+	for name := range g.colorThemes {
+		themes = append(themes, name)
+	}
+	return themes
+}
+
 // SetOpacity sets the background and foreground opacity.
 // It has no effect if WithTransparentBackground has not
 // been passed as an option to this GUI.
@@ -440,4 +489,31 @@ func (p *GUI) log(level log.Level, msg string, args ...any) {
 	log.WithFields(log.Fields{
 		logging.KeyClass: "gui",
 	}).Logf(level, msg, args...)
+}
+
+func (g *GUI) resetTheme() {
+	clear(tcell.ColorValues)
+	for k, v := range g.originalColorValues {
+		tcell.ColorValues[k] = v
+	}
+
+	clear(tcell.ValuesColor)
+	for k, v := range g.originalValuesColor {
+		tcell.ValuesColor[k] = v
+	}
+
+	g.defaultAttr.Fg = tcell.ColorWhite
+	g.defaultAttr.Bg = tcell.ColorBlack
+	g.cursorAttributes = term.Attributes{Bg: tcell.ColorRed}
+}
+
+func (g *GUI) setTheme(theme Theme) {
+	for color, value := range theme.Colors {
+		tcell.ColorValues[color] = value.Hex()
+		tcell.ValuesColor[value.Hex()] = color
+	}
+
+	g.defaultAttr.Fg = theme.Foreground
+	g.defaultAttr.Bg = theme.Background
+	g.cursorAttributes = term.Attributes{Bg: theme.Cursor}
 }
