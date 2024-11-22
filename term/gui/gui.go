@@ -382,20 +382,20 @@ func (g *GUI) SetFont(family string) error {
 // SetTheme sets the color theme to be used in the next render iteration.
 // The theme must have been passed via WithColorThemes option before, otherwise
 // this function returns an error.
-func (g *GUI) SetTheme(name string) error {
+func (g *GUI) SetTheme(name string) (Theme, error) {
 	defer g.resize(g.width, g.height, g.fontManager.DeviceScale())
 
 	g.resetTheme()
 	if name == "" {
-		return nil
+		return Theme{}, nil
 	}
 
 	theme, ok := g.colorThemes[name]
 	if !ok {
-		return fmt.Errorf("unkown theme '%s'", name)
+		return Theme{}, fmt.Errorf("unkown theme '%s'", name)
 	}
 	g.setTheme(theme)
-	return nil
+	return theme, nil
 }
 
 // Themes returns the list of themes configured via WithColorThemes.
