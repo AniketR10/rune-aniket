@@ -45,14 +45,14 @@ const (
 )
 
 type shutdownShaderConfig struct {
-	shader   shader.Shader
+	shader   func(term.Attributes) shader.Shader
 	fps      int
 	duration time.Duration
 }
 
 func nopShutdownShaderConfig() shutdownShaderConfig {
 	return shutdownShaderConfig{
-		shader:   shader.Nop(),
+		shader:   func(_ term.Attributes) shader.Shader { return shader.Nop() },
 		fps:      defaultShaderFPS,
 		duration: 100 * time.Millisecond,
 	}
@@ -290,7 +290,7 @@ func (r *shaderRunner) runShutdownShader() {
 	// If no shutdown shader is set this will run a shader.Nop(). If a shader was
 	// running when runShutdownShader is called it will appear as canceling it.
 	r.runShader(
-		r.shutdownShaderCfg.shader,
+		r.shutdownShaderCfg.shader(r.defAttr),
 		r.shutdownShaderCfg.fps,
 		r.shutdownShaderCfg.duration)
 }
@@ -316,7 +316,8 @@ func (r *shaderRunner) Close() error {
 // transition), and similarly with fadeOutPerc (10% would mean at 90% of the
 // animation it starts fading out).
 func wrapShaderCrossFadeInOut(
-	sh shader.Shader, fadeInPerc, fadeOutPerc float64, defaultAttr term.Attributes,
+	sh shader.Shader, fadeInPerc, fadeOutPerc float64,
+	defaultAttr term.Attributes,
 ) shader.Shader {
 	return shader.TransitionCrossFade(
 		shader.TransitionCrossFadeParams{

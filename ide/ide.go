@@ -92,6 +92,113 @@ func NewRecovery(
 	return
 }
 
+// Interrupt satisfies term.Interrupter
+func (i *IDE) Interrupt(ctx context.Context) error {
+	payload, _ := term.PayloadFromContext(ctx)
+	if !i.publishEvent(term.Event{Type: term.EventInterrupt, Raw: payload}) {
+		return errEventStreamNotReady
+	}
+	return nil
+}
+
+// Run initialzes the underlying terminal environment and runs
+// it with a workspace handler
+func (i *IDE) Run() error {
+	err := tui.Init()
+	if err != nil {
+		return fmt.Errorf("tui init: %w", err)
+	}
+
+	term.SetAttr(i.DefaultAttributes())
+	term.SetInputMode(i.ideConfig.inputMode())
+
+	i.initRunning()
+	err = tui.RunWithLocker(&i.root, i.locker)
+	if err != nil {
+		return fmt.Errorf("tui run: %w", err)
+	}
+
+	return nil
+}
+
+// SubscribeCommand subscribes the given handler in calls to the given cmd,
+// or returns an error if there's already a CommandHandler
+// installed for this command.
+//
+// The command will be automatically installed to all active
+// and future workspaces.
+func (c *IDE) SubscribeCommand(
+	cmd textapi.CommandManual, handler text.CommandHandler,
+) error {
+	return c.workspaceHandler.subscribeCommand(cmd, handler)
+}
+
+// DefaultAttributes return the default attributes to be used to fill the screen.
+func (i *IDE) DefaultAttributes() term.Attributes {
+	return i.root.defAttr
+}
+
+// SetDefaultAttributes sets the default attributes to be used to fill the screen.
+func (i *IDE) SetDefaultAttributes(defAttr term.Attributes) {
+	i.root.defAttr = defAttr
+}
+
+// Config returns the configuration loaded by this IDE.
+func (i *IDE) Config() config.Config {
+	return config.MapConfig(i.ideConfig.cfg)
+}
+
+// Handler returns the root Handler of this IDE, and
+// a cleanup function when this IDE is no longer in use.
+// This can be used insteaf of Run and Close, which
+// install this IDE on a TUI system.
+func (i *IDE) Handler() (tui.Handler, func()) {
+	i.initRunning()
+	return &i.root, func() {
+		running := atomic.CompareAndSwapInt32(&i.running, 1, 0)
+		if !running {
+			return
+		}
+		_ = i.closeResources()
+	}
+}
+
+// Browser returns the current browser in focus.
+func (i *IDE) Browser() browser.Browser {
+	return i.workspaceHandler.focusBrowser()
+}
+
+// Close satisfies io.Closer by closing this all ide's resources, including
+// the terminal state.
+func (i *IDE) Close() error {
+	running := atomic.CompareAndSwapInt32(&i.running, 1, 0)
+	if !running {
+		return nil
+	}
+	err := i.closeResources()
+	tui.Close()
+	return err
+}
+
+func (i *IDE) closeResources() (ret error) {
+	i.workspaceHandler.mu.Lock()
+	defer i.workspaceHandler.mu.Unlock()
+
+	if err := i.workspaceHandler.Close(); err != nil {
+		ret = multierr.Append(ret, err)
+	}
+
+	if err := i.workspaceManager.Close(); err != nil {
+		ret = multierr.Append(ret, err)
+	}
+
+	if err := i.root.Close(); err != nil {
+		ret = multierr.Append(ret, err)
+	}
+
+	return
+}
+
 func (i *IDE) init(
 	cwd, cfgfilename, recfilename string, sixDir string,
 	filenames []string,
@@ -206,13 +313,13 @@ func (i *IDE) init(
 	shutdownShaderCfg := nopShutdownShaderConfig()
 	if op.shutdownShaderFn != nil {
 		shutdownShaderCfg = shutdownShaderConfig{
-			shader:   op.shutdownShaderFn(i.defaultAttr()),
+			shader:   op.shutdownShaderFn,
 			fps:      op.shutdownShaderFPS,
 			duration: op.shutdownShaderDuration,
 		}
 	}
 
-	i.root.init(workspaceHandler, i, i.defaultAttr(), shutdownShaderCfg)
+	i.root.init(workspaceHandler, i, i.ideConfig.defaultAttr(), shutdownShaderCfg)
 	return i.workspaceHandler.subscribeCommand(runShaderCmdManual, &i.root)
 }
 
@@ -228,112 +335,10 @@ func (i *IDE) publishEvent(ev term.Event) bool {
 	return i.publishEventFn(ev)
 }
 
-// Interrupt satisfies term.Interrupter
-func (i *IDE) Interrupt(ctx context.Context) error {
-	payload, _ := term.PayloadFromContext(ctx)
-	if !i.publishEvent(term.Event{Type: term.EventInterrupt, Raw: payload}) {
-		return errEventStreamNotReady
-	}
-	return nil
-}
-
-// Run initialzes the underlying terminal environment and runs
-// it with a workspace handler
-func (i *IDE) Run() error {
-	err := tui.Init()
-	if err != nil {
-		return fmt.Errorf("tui init: %w", err)
-	}
-
-	term.SetAttr(i.DefaultAttributes())
-	term.SetInputMode(i.ideConfig.inputMode())
-
-	i.initRunning()
-	err = tui.RunWithLocker(&i.root, i.locker)
-	if err != nil {
-		return fmt.Errorf("tui run: %w", err)
-	}
-
-	return nil
-}
-
-// SubscribeCommand subscribes the given handler in calls to the given cmd,
-// or returns an error if there's already a CommandHandler
-// installed for this command.
-//
-// The command will be automatically installed to all active
-// and future workspaces.
-func (c *IDE) SubscribeCommand(
-	cmd textapi.CommandManual, handler text.CommandHandler,
-) error {
-	return c.workspaceHandler.subscribeCommand(cmd, handler)
-}
-
-// DefaultAttributes return the default attributes to be used to fill the screen.
-func (i *IDE) DefaultAttributes() term.Attributes {
-	return i.ideConfig.defaultAttr()
-}
-
-// Config returns the configuration loaded by this IDE.
-func (i *IDE) Config() config.Config {
-	return config.MapConfig(i.ideConfig.cfg)
-}
-
-// Handler returns the root Handler of this IDE, and
-// a cleanup function when this IDE is no longer in use.
-// This can be used insteaf of Run and Close, which
-// install this IDE on a TUI system.
-func (i *IDE) Handler() (tui.Handler, func()) {
-	i.initRunning()
-	return &i.root, func() {
-		running := atomic.CompareAndSwapInt32(&i.running, 1, 0)
-		if !running {
-			return
-		}
-		_ = i.closeResources()
-	}
-}
-
-// Browser returns the current browser in focus.
-func (i *IDE) Browser() browser.Browser {
-	return i.workspaceHandler.focusBrowser()
-}
-
-func (i *IDE) closeResources() (ret error) {
-	i.workspaceHandler.mu.Lock()
-	defer i.workspaceHandler.mu.Unlock()
-
-	if err := i.workspaceHandler.Close(); err != nil {
-		ret = multierr.Append(ret, err)
-	}
-
-	if err := i.workspaceManager.Close(); err != nil {
-		ret = multierr.Append(ret, err)
-	}
-
-	if err := i.root.Close(); err != nil {
-		ret = multierr.Append(ret, err)
-	}
-
-	return
-}
-
-// Close satisfies io.Closer by closing this all ide's resources, including
-// the terminal state.
-func (i *IDE) Close() error {
-	running := atomic.CompareAndSwapInt32(&i.running, 1, 0)
-	if !running {
-		return nil
-	}
-	err := i.closeResources()
-	tui.Close()
-	return err
-}
-
 func (i *IDE) initRunning() {
 	atomic.StoreInt32(&i.running, 1)
 	if i.options.initShaderFn != nil {
-		i.root.runShader(i.options.initShaderFn(i.defaultAttr()),
+		i.root.runShader(i.options.initShaderFn(i.root.defAttr),
 			i.options.initShaderFPS, i.options.initShaderDuration)
 	}
 }

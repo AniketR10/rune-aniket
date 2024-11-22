@@ -45,6 +45,7 @@ import (
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/component/shader"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/handlertest"
@@ -756,9 +757,12 @@ func TestWorkspaceManagerClosePromptIntegration(t *testing.T) {
 	t.Run(
 		"exit shader runs on exit and dirty exit prompt and closes when rejecting or dismissing",
 		func(t *testing.T) {
-			mockShutdownShader := &mockShader{}
+			var mockShutdownShader mockShader
+			mockShutdownShaderFn := func(term.Attributes) shader.Shader {
+				return &mockShutdownShader
+			}
 			shutdownShaderCfg := shutdownShaderConfig{
-				shader:   mockShutdownShader,
+				shader:   mockShutdownShaderFn,
 				fps:      30,
 				duration: 1 * time.Second,
 			}

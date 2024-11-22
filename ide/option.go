@@ -144,7 +144,7 @@ func WithInitShader(
 // WithShutdownShader configures the IDE to close with the
 // given Shader animation upon "quit" or "writeQuit".
 func WithShutdownShader(
-	shaderFn func(defaultAttr term.Attributes) shader.Shader,
+	shaderFn func(term.Attributes) shader.Shader,
 	fps int, duration time.Duration,
 ) Option {
 	return func(opts *options) {
