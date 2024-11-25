@@ -65,135 +65,11 @@ type Component struct {
 	windows     map[uint64]*browserWindow
 }
 
-// component.WindowManager sinchronously removes tui.Handlers
-// upon returning exit=true on calls to Handle. This
-// structure is used to call Close when this occurs.
-type browserContent struct {
-	browserapi.Handler
-	closed bool
-	c      *Component
-}
-
-func (c *browserContent) Dimensions() (int, int) {
-	return c.Handler.(Floating).Dimensions()
-}
-
-// allow for advanced use of content
-func (c *browserContent) Content() browserapi.Handler {
-	return c.Handler
-}
-
-func (c *browserContent) Handle(ev term.Event) (exit, handled bool) {
-	prev := c.c.focusWindow.Content()
-	win := c.c.focusWindow
-	exit, handled = c.Handler.Handle(ev)
-	if exit {
-		c.c.closeHandler(c)
-		content := win.Content()
-		// if previous content is not the same as the new content, then it must
-		// mean that the underlying Handler swapped the content before exiting.
-		// This window is going away (see handler.WindowManager) so make sure that
-		// a non-ephemeral handler (Tab), is set free.
-		if prev != content {
-			if t, ok := content.(*Tab); ok {
-				c.c.dirtyTabs = true
-				t.setFree()
-			}
-		}
-	}
-	return
-}
-
-func (c *browserContent) Close() error {
-	if c.closed {
-		return nil
-	}
-	c.closed = true
-	return c.Handler.Close()
-}
-
-func (c *Component) newWindow(win handler.Window) *browserWindow {
-	browserWin := &browserWindow{
-		parent: c,
-		win:    win,
-	}
-	c.windows[browserWin.ID()] = browserWin
-	c.log(log.TraceLevel, "new window: %d", win.ID())
-	return browserWin
-}
-
-// closeWindow closes win or returns an error if win is the last Window.
-func (c *Component) closeWindow(win *browserWindow) error {
-	_, ok := c.findWindow(win.ID())
-	if !ok {
-		panic("window not found")
-	}
-
-	content := win.win.Content().(browserapi.Handler)
-	err := win.win.Close()
-	c.log(log.TraceLevel, "closing window: %d, %v", win.ID(), err)
-	if err != nil {
-		return err
-	}
-
-	delete(c.windows, win.ID())
-
-	// ensure that if handler calls Closed to ensure that
-	// window is closed, the answer will be correct.
-	win.parent = nil
-	c.releaseHandler(content)
-	return nil
-}
-
-func (c *Component) findWindow(winID uint64) (*browserWindow, bool) {
-	w, ok := c.windows[winID]
-	return w, ok
-}
-
 // NewComponent allocates storage for a new Component and initializes it.
 func NewComponent(config Config) *Component {
 	ret := new(Component)
 	ret.Init(config)
 	return ret
-}
-
-func (c *Component) wallpaper() browserapi.Handler {
-	wallpaper := c.config.Wallpaper
-	if wallpaper.NewComponent == nil {
-		wallpaper.NewComponent = component.Nop
-	}
-	instance := wallpaper.NewComponent()
-	// if background attrs were passed try to re-construct string wallpaper
-	// or set a background via component.Background.
-	if wallpaper.BackgroundAttr != (term.Attributes{}) {
-		if str, ok := instance.(component.String); ok {
-			cfg := str.Config()
-			cfg.BackgroundAttributes = wallpaper.BackgroundAttr
-			cfg.Attributes.Bg = wallpaper.BackgroundAttr.Bg
-			instance = component.NewStringWithConfig(str.String(), cfg)
-		} else {
-			// activate override behaviour
-			nonZeroCh := ' '
-			instance = component.NewBackground(instance,
-				term.Cell{Ch: nonZeroCh, Attributes: wallpaper.BackgroundAttr})
-		}
-	}
-	// make wallpaper satisfy Floating to avoid browserContent panic
-	// if wallpaper is being set as a default on a floating window
-	floating := component.StaticFloating(instance, 80, 40)
-	return &browserContent{
-		Handler: NopFloatingHandler(handler.NopFloatingHandler(floating)),
-		c:       c,
-	}
-}
-
-// satisfies handler.WindowSubscriber to
-// override union attrs of focus window
-type wmSubscriber Component
-
-func (s *wmSubscriber) OnFocus(prev, focus handler.Window) {
-	c := (*Component)(s)
-	c.focusWindow = focus
 }
 
 // Init initializes this Component with config.
@@ -257,7 +133,9 @@ func (c *Component) Init(config Config) {
 }
 
 // NewTab adds a new tab to the list of tabs on this Component.
-func (c *Component) NewTab(resource workspaceapi.URI, name string, h browserapi.Handler, f io.Closer) *Tab {
+func (c *Component) NewTab(
+	resource workspaceapi.URI, name string, h browserapi.Handler, f io.Closer,
+) *Tab {
 	t := newTab(c, resource, h, f)
 	c.buffers = append(c.buffers, t)
 	c.tabs.Add(name)
@@ -288,7 +166,9 @@ func (c *Component) TabName(uri workspaceapi.URI) (string, string, bool) {
 
 // SetTabNameAndAttrs overrides the name and attributes of the tab with the given uri.
 // It returns false if there's no tab with id.
-func (c *Component) SetTabNameAndAttrs(uri workspaceapi.URI, name string, attr term.Attributes) bool {
+func (c *Component) SetTabNameAndAttrs(
+	uri workspaceapi.URI, name string, attr term.Attributes,
+) bool {
 	for i, t := range c.buffers {
 		if t.uri.String() == uri.String() {
 			c.tabs.SetTabName(i, name)
@@ -313,9 +193,11 @@ func (c *Component) ResetTabNameAndAttrs(uri workspaceapi.URI) bool {
 	return false
 }
 
-// SetTabDefaultNameAndAttrs resets the attributes and name of the tab with the given uri.
-// It returns false if there's no tab with id.
-func (c *Component) SetTabDefaultNameAndAttrs(uri workspaceapi.URI, name string, attr term.Attributes) bool {
+// SetTabDefaultNameAndAttrs resets the attributes and name of the
+// tab with the given uri. It returns false if there's no tab with id.
+func (c *Component) SetTabDefaultNameAndAttrs(
+	uri workspaceapi.URI, name string, attr term.Attributes,
+) bool {
 	for i, t := range c.buffers {
 		if t.uri.String() == uri.String() {
 			c.tabs.SetTabDefaultAttr(i, attr)
@@ -331,68 +213,6 @@ func (c *Component) Tabs() (ret []*Tab) {
 	ret = make([]*Tab, len(c.buffers))
 	copy(ret, c.buffers)
 	return
-}
-
-func (c *Component) closeTab(t *Tab) {
-	err := t.Close()
-	if err != nil {
-		c.log(log.WarnLevel, "tab Close error: %v", err)
-	}
-}
-
-func (c *Component) doRemoveTab(t *Tab) {
-	id := c.findTabID(t)
-	if !t.free {
-		panic("trying to remove tab that is still attached to a window")
-	}
-	c.closeTab(t)
-
-	c.buffers = append(c.buffers[:id], c.buffers[id+1:]...)
-	ok := c.tabs.Remove(id)
-	if !ok {
-		panic(fmt.Sprintf("corrupted tabs: could not find tab with id %v", id))
-	}
-}
-
-func (c *Component) findTabID(t *Tab) int {
-	for i, f := range c.buffers {
-		if f == t {
-			return i
-		}
-	}
-	panic("could not find tab")
-}
-
-func (c *Component) browserTabID(win *browserWindow) (
-	*Tab, int,
-) {
-	t, ok := browserTabAtWindow(win)
-	if !ok {
-		return nil, 0
-	}
-	return t, c.findTabID(t)
-}
-
-func (c *Component) updateWindowTab(win *browserWindow, tabID int) bool {
-	if tabID >= len(c.buffers) {
-		panic(fmt.Sprintf("invalid tab at index: %d", tabID))
-	}
-	t := c.buffers[tabID]
-	if t.free {
-		c.updateWindowContent(win, t)
-		return true
-	}
-	return false
-}
-
-func (c *Component) updateWithNextFreeTab(win Window) bool {
-	freeBufs := c.freeTabs()
-	if len(freeBufs) != 0 {
-		c.updateWindowContent(win.(*browserWindow), c.buffers[freeBufs[0]])
-		return true
-	}
-
-	return false
 }
 
 // PreviousTab updates win with the tab before the current tab.
@@ -452,73 +272,6 @@ func (c *Component) SetContentToTab(win Window, tabIdx int) bool {
 		bWin.parent != nil && c.updateWindowTab(bWin, tabIdx)
 }
 
-func (c *Component) log(level log.Level, msg string, args ...interface{}) {
-	if !log.IsLevelEnabled(level) {
-		return
-	}
-	log.WithField(logging.KeyClass, "browser.Component").Logf(level, msg, args...)
-}
-
-func (c *Component) closeHandler(h browserapi.Handler) {
-	err := h.Close()
-	if err != nil {
-		c.log(log.WarnLevel, "Close error: %v", err)
-	}
-	c.log(log.DebugLevel, "Component.closeHandler(%p)", h)
-}
-
-func (c *Component) tryUpdateWindowContent(
-	win *browserWindow, content browserapi.Handler,
-) error {
-	if b, ok := content.(*Tab); ok {
-		if !b.free {
-			return browserapi.ErrTabNotFree
-		}
-	}
-	c.updateWindowContent(win, content)
-	return nil
-}
-
-func (c *Component) updateWindowContent(
-	win *browserWindow, content browserapi.Handler,
-) browserapi.Handler {
-	tab, ok := content.(*Tab)
-	if ok {
-		id := c.findTabID(tab)
-		c.tabs.SetFocus(id)
-		c.dirtyTabs = true
-		tab.setWindow(win)
-	} else if _, ok := content.(*browserContent); !ok {
-		content = &browserContent{
-			Handler: content,
-			c:       c,
-		}
-	}
-	oldComponent := win.win.SetContent(content).(browserapi.Handler)
-	// first call OnFree
-	c.releaseHandler(oldComponent)
-	// then call OnFocus if applicable
-	if ok {
-		tab.callOnFocus()
-	}
-	return oldComponent
-}
-
-// only tabs are able to be re-installed after content is updated.
-func (c *Component) releaseHandler(h browserapi.Handler) {
-	if t, ok := h.(*Tab); ok {
-		c.dirtyTabs = true
-		t.setFree()
-	} else {
-		c.closeHandler(h)
-	}
-}
-
-func browserTabAtWindow(win *browserWindow) (*Tab, bool) {
-	t, ok := win.win.Content().(*Tab)
-	return t, ok
-}
-
 // RemoveAllTabs removes all tabs but the last one.
 func (c *Component) RemoveAllTabs() {
 	c.wm.Iterate(func(w handler.Window) {
@@ -539,27 +292,6 @@ func (c *Component) Window(id uint64) (Window, bool) {
 	return ret, ok
 }
 
-func (c *Component) freeTabs() []int {
-	freeBufs := make([]int, 0)
-	for i, b := range c.buffers {
-		if b.free {
-			freeBufs = append(freeBufs, i)
-		}
-	}
-	return freeBufs
-}
-
-// returns the next free tab or an empty Handler
-func (c *Component) getFreeTab() (browserapi.Handler, bool) {
-	freeBufs := c.freeTabs()
-	if len(freeBufs) == 0 {
-		return c.wallpaper(), false
-	}
-
-	id := freeBufs[0]
-	return c.buffers[id], true
-}
-
 // RemoveWindowContent removes the content at win. It returns false
 // if content was replaced with start handler because the content at win
 // was the last content in this Component.
@@ -571,87 +303,6 @@ func (c *Component) RemoveWindowContent(win Window) bool {
 		c.doRemoveTab(oldTab)
 	}
 	return isNotStartHandler
-}
-
-func (c *Component) splitRegular(
-	split func(*handler.WindowManager, handler.Window, tui.Handler) (handler.Window, bool),
-	splitWindow Window,
-	newHandler browserapi.Handler,
-) (*browserWindow, bool) {
-	win := c.split(split, splitWindow, newHandler)
-	if win == nil {
-		return nil, false
-	}
-	c.wm.SetFocus(win.win)
-	return win, true
-}
-
-func (c *Component) splitInverted(
-	split func(*handler.WindowManager, handler.Window, tui.Handler) (handler.Window, bool),
-	splitWindow Window,
-	newHandler browserapi.Handler,
-) (*browserWindow, bool) {
-	focusBrowserWin := c.focus()
-	focusHandlerWin := focusBrowserWin.win
-	focusHandler := focusBrowserWin.win.Content()
-
-	// perform a regular split
-	newBrowserWin := c.split(split, splitWindow, newHandler)
-	if newBrowserWin == nil {
-		return nil, false
-	}
-	newHandlerWin := newBrowserWin.win
-	newBrowserHandler := newHandlerWin.Content()
-
-	// switch underlying handler.Window
-	// so the new *browserWindow refers to the
-	// original focus handler.Window
-	focusBrowserWin.win = newHandlerWin
-	newBrowserWin.win = focusHandlerWin
-
-	// switch content
-	newBrowserWin.win.SetContent(newBrowserHandler)
-	focusBrowserWin.win.SetContent(focusHandler)
-
-	// ammend id mapping
-	c.windows[newBrowserWin.ID()] = newBrowserWin
-	c.windows[focusBrowserWin.ID()] = focusBrowserWin
-
-	// return new instance of browser window
-	// pointing to old instance of focus window
-	return newBrowserWin, true
-}
-
-func (c *Component) newWindowContent(h browserapi.Handler) (browserapi.Handler, bool) {
-	if h == nil {
-		h = c.wallpaper()
-	}
-	_, ok := h.(*Tab)
-	if !ok {
-		h = &browserContent{
-			Handler: h,
-			c:       c,
-		}
-	}
-	return h, ok
-}
-
-func (c *Component) split(
-	split func(*handler.WindowManager, handler.Window, tui.Handler) (handler.Window, bool),
-	splitWin Window, h browserapi.Handler,
-) *browserWindow {
-	h, isTab := c.newWindowContent(h)
-	win, ok := split(&c.wm, splitWin.(*browserWindow).win, h)
-	if !ok {
-		return nil
-	}
-	ret := c.newWindow(win)
-	if isTab {
-		c.dirtyTabs = true
-		h.(*Tab).setWindow(ret)
-		h.(*Tab).callOnFocus()
-	}
-	return ret
 }
 
 // SetDefaultSplit sets the default split to be used when Split
@@ -670,7 +321,9 @@ func (c *Component) SetDefaultSplit(o browserapi.Orientation) browserapi.Orienta
 //
 // Note that if h is not a handler created with NewTab
 // the handler is cleaned as soon as the window's content is swapped.
-func (c *Component) Split(o browserapi.Orientation, win Window, h browserapi.Handler) (Window, bool) {
+func (c *Component) Split(
+	o browserapi.Orientation, win Window, h browserapi.Handler,
+) (Window, bool) {
 	if win.(*browserWindow).parent == nil {
 		panic("trying to split over a closed window")
 	}
@@ -739,10 +392,6 @@ func (c *Component) Bar(cfg browserapi.BarConfig, h tui.Handler) {
 	}
 }
 
-func (c *Component) setError(err error) {
-	c.Notify(notifications.LevelError, "%s", err)
-}
-
 // Notify formats the given msg and args and displays it on next Draw.
 func (c *Component) Notify(level notifications.Level, msg string, args ...interface{}) {
 	c.container.Notify(level, fmt.Sprintf(msg, args...))
@@ -752,44 +401,6 @@ func (c *Component) Notify(level notifications.Level, msg string, args ...interf
 func (c *Component) Resize(width, height int) {
 	c.width, c.height = width, height
 	c.container.Resize(width, height)
-}
-
-func (c *Component) overwriteFocusWindowUnion(w term.Writer) {
-	if !c.config.Frame || c.focusWindow == (handler.Window{}) || c.wm.SizeTiles() == 1 {
-		return
-	}
-	topleft := c.focusWindow.Position()
-	mainPos := c.union.MainPosition()
-	mainWidth := c.union.MainWidth()
-	mainHeight := c.union.MainHeight()
-	attr := c.config.WindowManagerConfig.FocusFrameAttr
-	cs := c.config.WindowManagerConfig.FocusFrameCharSet
-
-	if topleft == (term.Coordinates{}) {
-		cell := term.Cell{Width: 1, Ch: cs.TopLeft, Attributes: attr}
-		w.SetCell(mainPos, cell)
-	}
-
-	topright := term.Coordinates{X: topleft.X + c.focusWindow.Width(), Y: topleft.Y}
-	if topright == (term.Coordinates{X: mainWidth, Y: 0}) {
-		cell := term.Cell{Width: 1, Ch: cs.TopRight, Attributes: attr}
-		pos := term.Coordinates{X: mainPos.X + mainWidth - 1, Y: mainPos.Y}
-		w.SetCell(pos, cell)
-	}
-
-	bottomleft := term.Coordinates{X: topleft.X, Y: topleft.Y + c.focusWindow.Height()}
-	if bottomleft == (term.Coordinates{Y: mainHeight, X: 0}) {
-		cell := term.Cell{Width: 1, Ch: cs.BottomLeft, Attributes: attr}
-		pos := term.Coordinates{X: mainPos.X, Y: mainPos.Y + mainHeight - 1}
-		w.SetCell(pos, cell)
-	}
-
-	bottomright := term.Coordinates{X: topleft.X + c.focusWindow.Width(), Y: topleft.Y + c.focusWindow.Height()}
-	if bottomright == (term.Coordinates{Y: mainHeight, X: mainWidth}) {
-		cell := term.Cell{Width: 1, Ch: cs.BottomRight, Attributes: attr}
-		pos := term.Coordinates{X: mainPos.X + mainWidth - 1, Y: mainPos.Y + mainHeight - 1}
-		w.SetCell(pos, cell)
-	}
 }
 
 // Draw satisfies tui.Component
@@ -858,14 +469,6 @@ func (c *Component) FocusTab() (*Tab, bool) {
 	h, _ := w.Content()
 	t, ok := h.(*Tab)
 	return t, ok
-}
-
-func (c *Component) focus() *browserWindow {
-	win, ok := c.findWindow(c.wm.Focus().ID())
-	if !ok {
-		panic("corrupted browser: cannot find focus window")
-	}
-	return win
 }
 
 // Shiftable calls the underlying WindowManager.Shiftable.
@@ -1034,6 +637,249 @@ func (c *Component) ResumeNotifications() {
 	c.container.ResumeAll()
 }
 
+func (c *Component) log(level log.Level, msg string, args ...interface{}) {
+	if !log.IsLevelEnabled(level) {
+		return
+	}
+	log.WithField(logging.KeyClass, "browser.Component").Logf(level, msg, args...)
+}
+
+func (c *Component) setError(err error) {
+	c.Notify(notifications.LevelError, "%s", err)
+}
+
+func (c *Component) focus() *browserWindow {
+	win, ok := c.findWindow(c.wm.Focus().ID())
+	if !ok {
+		panic("corrupted browser: cannot find focus window")
+	}
+	return win
+}
+
+func (c *Component) closeTab(t *Tab) {
+	err := t.Close()
+	if err != nil {
+		c.log(log.WarnLevel, "tab Close error: %v", err)
+	}
+}
+
+func (c *Component) doRemoveTab(t *Tab) {
+	id := c.findTabID(t)
+	if !t.free {
+		panic("trying to remove tab that is still attached to a window")
+	}
+	c.closeTab(t)
+
+	c.buffers = append(c.buffers[:id], c.buffers[id+1:]...)
+	ok := c.tabs.Remove(id)
+	if !ok {
+		panic(fmt.Sprintf("corrupted tabs: could not find tab with id %v", id))
+	}
+}
+
+func (c *Component) findTabID(t *Tab) int {
+	for i, f := range c.buffers {
+		if f == t {
+			return i
+		}
+	}
+	panic("could not find tab")
+}
+
+func (c *Component) browserTabID(win *browserWindow) (
+	*Tab, int,
+) {
+	t, ok := browserTabAtWindow(win)
+	if !ok {
+		return nil, 0
+	}
+	return t, c.findTabID(t)
+}
+
+func (c *Component) updateWindowTab(win *browserWindow, tabID int) bool {
+	if tabID >= len(c.buffers) {
+		panic(fmt.Sprintf("invalid tab at index: %d", tabID))
+	}
+	t := c.buffers[tabID]
+	if t.free {
+		c.updateWindowContent(win, t)
+		return true
+	}
+	return false
+}
+
+func (c *Component) updateWithNextFreeTab(win Window) bool {
+	freeBufs := c.freeTabs()
+	if len(freeBufs) != 0 {
+		c.updateWindowContent(win.(*browserWindow), c.buffers[freeBufs[0]])
+		return true
+	}
+
+	return false
+}
+
+func (c *Component) closeHandler(h browserapi.Handler) {
+	err := h.Close()
+	if err != nil {
+		c.log(log.WarnLevel, "Close error: %v", err)
+	}
+	c.log(log.DebugLevel, "Component.closeHandler(%p)", h)
+}
+
+func (c *Component) tryUpdateWindowContent(
+	win *browserWindow, content browserapi.Handler,
+) error {
+	if b, ok := content.(*Tab); ok {
+		if !b.free {
+			return browserapi.ErrTabNotFree
+		}
+	}
+	c.updateWindowContent(win, content)
+	return nil
+}
+
+func (c *Component) updateWindowContent(
+	win *browserWindow, content browserapi.Handler,
+) browserapi.Handler {
+	tab, ok := content.(*Tab)
+	if ok {
+		id := c.findTabID(tab)
+		c.tabs.SetFocus(id)
+		c.dirtyTabs = true
+		tab.setWindow(win)
+	} else if _, ok := content.(*browserContent); !ok {
+		content = &browserContent{
+			Handler: content,
+			c:       c,
+		}
+	}
+	oldComponent := win.win.SetContent(content).(browserapi.Handler)
+	// first call OnFree
+	c.releaseHandler(oldComponent)
+	// then call OnFocus if applicable
+	if ok {
+		tab.callOnFocus()
+	}
+	return oldComponent
+}
+
+// only tabs are able to be re-installed after content is updated.
+func (c *Component) releaseHandler(h browserapi.Handler) {
+	if t, ok := h.(*Tab); ok {
+		c.dirtyTabs = true
+		t.setFree()
+	} else {
+		c.closeHandler(h)
+	}
+}
+
+func browserTabAtWindow(win *browserWindow) (*Tab, bool) {
+	t, ok := win.win.Content().(*Tab)
+	return t, ok
+}
+
+func (c *Component) freeTabs() []int {
+	freeBufs := make([]int, 0)
+	for i, b := range c.buffers {
+		if b.free {
+			freeBufs = append(freeBufs, i)
+		}
+	}
+	return freeBufs
+}
+
+// returns the next free tab or an empty Handler
+func (c *Component) getFreeTab() (browserapi.Handler, bool) {
+	freeBufs := c.freeTabs()
+	if len(freeBufs) == 0 {
+		return c.wallpaper(), false
+	}
+
+	id := freeBufs[0]
+	return c.buffers[id], true
+}
+
+func (c *Component) splitRegular(
+	split func(*handler.WindowManager, handler.Window, tui.Handler) (handler.Window, bool),
+	splitWindow Window,
+	newHandler browserapi.Handler,
+) (*browserWindow, bool) {
+	win := c.split(split, splitWindow, newHandler)
+	if win == nil {
+		return nil, false
+	}
+	c.wm.SetFocus(win.win)
+	return win, true
+}
+
+func (c *Component) splitInverted(
+	split func(*handler.WindowManager, handler.Window, tui.Handler) (handler.Window, bool),
+	splitWindow Window,
+	newHandler browserapi.Handler,
+) (*browserWindow, bool) {
+	focusBrowserWin := c.focus()
+	focusHandlerWin := focusBrowserWin.win
+	focusHandler := focusBrowserWin.win.Content()
+
+	// perform a regular split
+	newBrowserWin := c.split(split, splitWindow, newHandler)
+	if newBrowserWin == nil {
+		return nil, false
+	}
+	newHandlerWin := newBrowserWin.win
+	newBrowserHandler := newHandlerWin.Content()
+
+	// switch underlying handler.Window
+	// so the new *browserWindow refers to the
+	// original focus handler.Window
+	focusBrowserWin.win = newHandlerWin
+	newBrowserWin.win = focusHandlerWin
+
+	// switch content
+	newBrowserWin.win.SetContent(newBrowserHandler)
+	focusBrowserWin.win.SetContent(focusHandler)
+
+	// ammend id mapping
+	c.windows[newBrowserWin.ID()] = newBrowserWin
+	c.windows[focusBrowserWin.ID()] = focusBrowserWin
+
+	// return new instance of browser window
+	// pointing to old instance of focus window
+	return newBrowserWin, true
+}
+
+func (c *Component) newWindowContent(h browserapi.Handler) (browserapi.Handler, bool) {
+	if h == nil {
+		h = c.wallpaper()
+	}
+	_, ok := h.(*Tab)
+	if !ok {
+		h = &browserContent{
+			Handler: h,
+			c:       c,
+		}
+	}
+	return h, ok
+}
+
+func (c *Component) split(
+	split func(*handler.WindowManager, handler.Window, tui.Handler) (handler.Window, bool),
+	splitWin Window, h browserapi.Handler,
+) *browserWindow {
+	h, isTab := c.newWindowContent(h)
+	win, ok := split(&c.wm, splitWin.(*browserWindow).win, h)
+	if !ok {
+		return nil
+	}
+	ret := c.newWindow(win)
+	if isTab {
+		c.dirtyTabs = true
+		h.(*Tab).setWindow(ret)
+		h.(*Tab).callOnFocus()
+	}
+	return ret
+}
+
 func (c *Component) tabsSize() int {
 	if c.config.TabBarHeight != 0 {
 		return c.config.TabBarHeight
@@ -1042,4 +888,172 @@ func (c *Component) tabsSize() int {
 		return 3
 	}
 	return 1
+}
+
+func (c *Component) newWindow(win handler.Window) *browserWindow {
+	browserWin := &browserWindow{
+		parent: c,
+		win:    win,
+	}
+	c.windows[browserWin.ID()] = browserWin
+	c.log(log.TraceLevel, "new window: %d", win.ID())
+	return browserWin
+}
+
+// closeWindow closes win or returns an error if win is the last Window.
+func (c *Component) closeWindow(win *browserWindow) error {
+	_, ok := c.findWindow(win.ID())
+	if !ok {
+		panic("window not found")
+	}
+
+	content := win.win.Content().(browserapi.Handler)
+	err := win.win.Close()
+	c.log(log.TraceLevel, "closing window: %d, %v", win.ID(), err)
+	if err != nil {
+		return err
+	}
+
+	delete(c.windows, win.ID())
+
+	// ensure that if handler calls Closed to ensure that
+	// window is closed, the answer will be correct.
+	win.parent = nil
+	c.releaseHandler(content)
+	return nil
+}
+
+func (c *Component) findWindow(winID uint64) (*browserWindow, bool) {
+	w, ok := c.windows[winID]
+	return w, ok
+}
+
+func (c *Component) overwriteFocusWindowUnion(w term.Writer) {
+	if !c.config.Frame || c.focusWindow == (handler.Window{}) || c.wm.SizeTiles() == 1 {
+		return
+	}
+	topleft := c.focusWindow.Position()
+	mainPos := c.union.MainPosition()
+	mainWidth := c.union.MainWidth()
+	mainHeight := c.union.MainHeight()
+	attr := c.config.WindowManagerConfig.FocusFrameAttr
+	cs := c.config.WindowManagerConfig.FocusFrameCharSet
+
+	if topleft == (term.Coordinates{}) {
+		cell := term.Cell{Width: 1, Ch: cs.TopLeft, Attributes: attr}
+		w.SetCell(mainPos, cell)
+	}
+
+	topright := term.Coordinates{X: topleft.X + c.focusWindow.Width(), Y: topleft.Y}
+	if topright == (term.Coordinates{X: mainWidth, Y: 0}) {
+		cell := term.Cell{Width: 1, Ch: cs.TopRight, Attributes: attr}
+		pos := term.Coordinates{X: mainPos.X + mainWidth - 1, Y: mainPos.Y}
+		w.SetCell(pos, cell)
+	}
+
+	bottomleft := term.Coordinates{X: topleft.X, Y: topleft.Y + c.focusWindow.Height()}
+	if bottomleft == (term.Coordinates{Y: mainHeight, X: 0}) {
+		cell := term.Cell{Width: 1, Ch: cs.BottomLeft, Attributes: attr}
+		pos := term.Coordinates{X: mainPos.X, Y: mainPos.Y + mainHeight - 1}
+		w.SetCell(pos, cell)
+	}
+
+	bottomright := term.Coordinates{
+		X: topleft.X + c.focusWindow.Width(),
+		Y: topleft.Y + c.focusWindow.Height(),
+	}
+	if bottomright == (term.Coordinates{Y: mainHeight, X: mainWidth}) {
+		cell := term.Cell{Width: 1, Ch: cs.BottomRight, Attributes: attr}
+		pos := term.Coordinates{
+			X: mainPos.X + mainWidth - 1,
+			Y: mainPos.Y + mainHeight - 1,
+		}
+		w.SetCell(pos, cell)
+	}
+}
+
+func (c *Component) wallpaper() browserapi.Handler {
+	wallpaper := c.config.Wallpaper
+	if wallpaper.NewComponent == nil {
+		wallpaper.NewComponent = component.Nop
+	}
+	instance := wallpaper.NewComponent()
+	// if background attrs were passed try to re-construct string wallpaper
+	// or set a background via component.Background.
+	if wallpaper.BackgroundAttr != (term.Attributes{}) {
+		if str, ok := instance.(component.String); ok {
+			cfg := str.Config()
+			cfg.BackgroundAttributes = wallpaper.BackgroundAttr
+			cfg.Attributes.Bg = wallpaper.BackgroundAttr.Bg
+			instance = component.NewStringWithConfig(str.String(), cfg)
+		} else {
+			// activate override behaviour
+			nonZeroCh := ' '
+			instance = component.NewBackground(instance,
+				term.Cell{Ch: nonZeroCh, Attributes: wallpaper.BackgroundAttr})
+		}
+	}
+	// make wallpaper satisfy Floating to avoid browserContent panic
+	// if wallpaper is being set as a default on a floating window
+	floating := component.StaticFloating(instance, 80, 40)
+	return &browserContent{
+		Handler: NopFloatingHandler(handler.NopFloatingHandler(floating)),
+		c:       c,
+	}
+}
+
+// satisfies handler.WindowSubscriber to
+// override union attrs of focus window
+type wmSubscriber Component
+
+func (s *wmSubscriber) OnFocus(prev, focus handler.Window) {
+	c := (*Component)(s)
+	c.focusWindow = focus
+}
+
+// component.WindowManager sinchronously removes tui.Handlers
+// upon returning exit=true on calls to Handle. This
+// structure is used to call Close when this occurs.
+type browserContent struct {
+	browserapi.Handler
+	closed bool
+	c      *Component
+}
+
+func (c *browserContent) Dimensions() (int, int) {
+	return c.Handler.(Floating).Dimensions()
+}
+
+// allow for advanced use of content
+func (c *browserContent) Content() browserapi.Handler {
+	return c.Handler
+}
+
+func (c *browserContent) Handle(ev term.Event) (exit, handled bool) {
+	prev := c.c.focusWindow.Content()
+	win := c.c.focusWindow
+	exit, handled = c.Handler.Handle(ev)
+	if exit {
+		c.c.closeHandler(c)
+		content := win.Content()
+		// if previous content is not the same as the new content, then it must
+		// mean that the underlying Handler swapped the content before exiting.
+		// This window is going away (see handler.WindowManager) so make sure that
+		// a non-ephemeral handler (Tab), is set free.
+		if prev != content {
+			if t, ok := content.(*Tab); ok {
+				c.c.dirtyTabs = true
+				t.setFree()
+			}
+		}
+	}
+	return
+}
+
+func (c *browserContent) Close() error {
+	if c.closed {
+		return nil
+	}
+	c.closed = true
+	return c.Handler.Close()
 }
