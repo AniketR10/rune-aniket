@@ -64,6 +64,8 @@ type Scroll struct {
 	Wrap bool
 }
 
+var _ Scrollable = (*Scroll)(nil)
+
 // NewScroll allocates storage for a Scroll and initializes it.
 func NewScroll(buf *cell.Buffer) (s *Scroll) {
 	s = new(Scroll)
@@ -106,6 +108,16 @@ func (s *Scroll) CanSeekUp() bool {
 // CanSeekDown returns true if SeekDown would seek one row down.
 func (s *Scroll) CanSeekDown() bool {
 	return s.offset.Y < s.getMaxYOffset()
+}
+
+// MaxSeekOffset returns the max seek offset.
+func (s *Scroll) MaxSeekOffset() int {
+	return s.getMaxYOffset()
+}
+
+// SeekOffset returns the current seek offset.
+func (s *Scroll) SeekOffset() int {
+	return s.offset.Y
 }
 
 // CanSeekLeft returns true if SeekLeft would seek one column left.

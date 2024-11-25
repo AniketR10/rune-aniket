@@ -24,6 +24,8 @@
 package component
 
 import (
+	"math"
+
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/term"
 )
@@ -218,10 +220,20 @@ func FrameCharSetStackTailHighlight() FrameCharSet {
 type Frame struct {
 	FrameCharSet
 	term.Attributes
+	ScrollBarAttributes term.Attributes
+	ScrollBarChar       rune
 
 	content         Virtual
 	bwidth, bheight int
 	width, height   int
+}
+
+// Scrollable abstracts a component that can scroll up or down.
+type Scrollable interface {
+	SeekUp() bool
+	SeekDown() bool
+	SeekOffset() int
+	MaxSeekOffset() int
 }
 
 var _ WithAttributes = (*Frame)(nil)
@@ -336,6 +348,42 @@ func (f *Frame) Draw(w term.Writer) {
 		term.Cell{Width: 1, Ch: f.BottomRight, Attributes: f.Attributes})
 
 	f.content.Draw(w)
+
+	scrollable, ok := f.content.C.(Scrollable)
+	if !ok {
+		return
+	}
+
+	maxOffset := scrollable.MaxSeekOffset()
+	if maxOffset == 0 {
+		return
+	}
+
+	ch := f.ScrollBarChar
+	if ch == 0 {
+		ch = f.VerticalRight
+	}
+	offset, height := calculateScrollBar(scrollable.SeekOffset(), maxOffset, f.height)
+	for i := offset; i < offset+height; i++ {
+		w.SetCell(term.Coordinates{X: limitX, Y: i},
+			term.Cell{
+				Width:      1,
+				Ch:         ch,
+				Attributes: f.ScrollBarAttributes,
+			})
+	}
+}
+
+func calculateScrollBar(offset, maxOffset, height int) (
+	proportionalOffset, proportionalHeight int,
+) {
+	effectiveHeight := height - 2
+	rows := maxOffset + effectiveHeight
+	proportionalOffset = 1 + int(
+		math.Floor(float64((offset*effectiveHeight))/float64(rows)))
+	proportionalHeight = int(math.Max(1,
+		math.Ceil(float64(effectiveHeight*effectiveHeight)/float64(rows))))
+	return
 }
 
 // ContentPosition returns the position of the content inside this frame.

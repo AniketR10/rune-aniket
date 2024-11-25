@@ -24,10 +24,12 @@
 package component
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/unstablebuild/tcell/v3"
+	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component/comptest"
 	"unstable.build/go-tui/term"
 )
@@ -112,6 +114,184 @@ TT
 	comptest.TestComponent(t, f, w, tests)
 }
 
+func TestFrameDrawWithScrollable(t *testing.T) {
+	buf := cell.NewBuffer()
+	buf.WriteString("A\nB\nC\nD\nE\nF")
+	u := NewScroll(buf)
+	f := NewFrame(u)
+
+	f.Resize(8, 4)
+	f.ScrollBarChar = '|'
+
+	w := term.NewStringWriter(9, 20)
+
+	tests := []comptest.TestCase{
+		{
+			nil, `
+┌──────┐ 
+│A     | 
+│B     │ 
+└──────┘ 
+         
+         
+         
+         
+         
+         
+         
+         
+         
+         
+         
+         
+         
+         
+         
+         `,
+		},
+		{
+			func() { f.Resize(8, 20) }, `
+┌──────┐ 
+│A     │ 
+│B     │ 
+│C     │ 
+│D     │ 
+│E     │ 
+│F     │ 
+│      │ 
+│      │ 
+│      │ 
+│      │ 
+│      │ 
+│      │ 
+│      │ 
+│      │ 
+│      │ 
+│      │ 
+│      │ 
+│      │ 
+└──────┘ `,
+		},
+		{
+			func() { buf.WriteString("\n0\n1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12") }, `
+┌──────┐ 
+│A     | 
+│B     | 
+│C     | 
+│D     | 
+│E     | 
+│F     | 
+│0     | 
+│1     | 
+│2     | 
+│3     | 
+│4     | 
+│5     | 
+│6     | 
+│7     | 
+│8     | 
+│9     | 
+│10    | 
+│11    | 
+└──────┘ `,
+		},
+		{
+			func() { buf.WriteString("\n13\n14\n15\n16\n17\n18\n19\n20") }, `
+┌──────┐ 
+│A     | 
+│B     | 
+│C     | 
+│D     | 
+│E     | 
+│F     | 
+│0     | 
+│1     | 
+│2     | 
+│3     | 
+│4     | 
+│5     | 
+│6     │ 
+│7     │ 
+│8     │ 
+│9     │ 
+│10    │ 
+│11    │ 
+└──────┘ `,
+		},
+		{
+			func() { u.SeekDown() }, `
+┌──────┐ 
+│B     | 
+│C     | 
+│D     | 
+│E     | 
+│F     | 
+│0     | 
+│1     | 
+│2     | 
+│3     | 
+│4     | 
+│5     | 
+│6     | 
+│7     │ 
+│8     │ 
+│9     │ 
+│10    │ 
+│11    │ 
+│12    │ 
+└──────┘ `,
+		},
+		{
+			func() { u.SeekDown() }, `
+┌──────┐ 
+│C     │ 
+│D     | 
+│E     | 
+│F     | 
+│0     | 
+│1     | 
+│2     | 
+│3     | 
+│4     | 
+│5     | 
+│6     | 
+│7     | 
+│8     | 
+│9     │ 
+│10    │ 
+│11    │ 
+│12    │ 
+│13    │ 
+└──────┘ `,
+		},
+		{
+			func() { u.SeekEndFile() }, `
+┌──────┐ 
+│3     │ 
+│4     │ 
+│5     │ 
+│6     │ 
+│7     │ 
+│8     │ 
+│9     | 
+│10    | 
+│11    | 
+│12    | 
+│13    | 
+│14    | 
+│15    | 
+│16    | 
+│17    | 
+│18    | 
+│19    | 
+│20    | 
+└──────┘ `,
+		},
+	}
+
+	comptest.TestComponent(t, f, w, tests)
+}
+
 func TestComponentDimensions(t *testing.T) {
 	f := NewFrame(StaticFloating(&TestComponent{}, 2, 2))
 	actualWidth, actualHeight := f.Dimensions()
@@ -144,4 +324,61 @@ func TestFrameWithAttributes(t *testing.T) {
 	prev := f.Content().(WithAttributes).SetAttr(term.Attributes{})
 	assert.Equal(t, tcell.ColorGreen, prev.Bg)
 	assert.Equal(t, tcell.ColorRed, prev.Fg)
+}
+
+func TestFrameScrollbarCalculate(t *testing.T) {
+	suite := []struct {
+		offset, maxOffset, height      int
+		expectedOffset, expectedHeight int
+	}{
+		{
+			offset:         0,
+			maxOffset:      0,
+			height:         10,
+			expectedOffset: 1,
+			expectedHeight: 8,
+		},
+		{
+			offset:         10,
+			maxOffset:      10,
+			height:         12,
+			expectedOffset: 6,
+			expectedHeight: 5,
+		},
+		{
+			offset:         10,
+			maxOffset:      20,
+			height:         12,
+			expectedOffset: 4,
+			expectedHeight: 4,
+		},
+		{
+			offset:         500,
+			maxOffset:      1000,
+			height:         12,
+			expectedOffset: 5,
+			expectedHeight: 1,
+		},
+	}
+
+	for i, test := range suite {
+		t.Run(fmt.Sprintf("test case %d", i), func(t *testing.T) {
+			actualOffset, actualHeight := calculateScrollBar(
+				test.offset, test.maxOffset, test.height)
+			assert.Equal(t, test.expectedOffset, actualOffset, "offset")
+			assert.Equal(t, test.expectedHeight, actualHeight, "height")
+		})
+	}
+
+	t.Run("doesn't panic if offset > maxOffset", func(t *testing.T) {
+		assert.NotPanics(t, func() {
+			calculateScrollBar(999, 1, 10)
+		})
+	})
+
+	t.Run("doesn't panic if everything is 0", func(t *testing.T) {
+		assert.NotPanics(t, func() {
+			calculateScrollBar(0, 0, 0)
+		})
+	})
 }

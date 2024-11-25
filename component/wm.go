@@ -24,6 +24,7 @@
 package component
 
 import (
+	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/term"
 )
@@ -31,8 +32,10 @@ import (
 // WindowManagerConfig represents the configuration for a WindowManager
 // to be initialized.
 type WindowManagerConfig struct {
-	Frame     bool
-	FrameAttr term.Attributes
+	Frame         bool
+	FrameAttr     term.Attributes
+	ScrollBarAttr term.Attributes
+	ScrollBarChar rune
 	FrameCharSet
 }
 
@@ -48,6 +51,8 @@ func (wm *WindowManager) withFrame(handler tui.Component) *Frame {
 	f := NewFrame(handler)
 	f.FrameCharSet = wm.config.FrameCharSet
 	f.Attributes = wm.config.FrameAttr
+	f.ScrollBarAttributes = wm.config.ScrollBarAttr
+	f.ScrollBarChar = wm.config.ScrollBarChar
 	return f
 }
 
@@ -251,9 +256,11 @@ func (wm *WindowManager) closeFloatingWindow(w *floatingNode) {
 
 // DefaultWindowManagerConfig returns a sane WindowManagerConfig.
 func DefaultWindowManagerConfig() WindowManagerConfig {
+	charset := FrameCharSetDefault()
 	return WindowManagerConfig{
-		Frame:        true,
-		FrameAttr:    term.Attributes{},
-		FrameCharSet: FrameCharSetDefault(),
+		Frame:         true,
+		FrameAttr:     term.Attributes{},
+		FrameCharSet:  charset,
+		ScrollBarAttr: term.Attributes{Attrs: tcell.AttrBold},
 	}
 }
