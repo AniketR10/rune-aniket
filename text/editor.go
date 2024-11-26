@@ -31,6 +31,7 @@ import (
 	textapi "unstable.build/go-tui/api/text"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/term"
 )
 
@@ -38,6 +39,7 @@ import (
 // not be compatible with other APIs.
 type Handler interface {
 	browserapi.Handler
+	component.Scrollable
 
 	// This is only used to differentiate editor.Handler from the rest
 	// of tui.Handler in a browser.Component.

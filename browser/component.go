@@ -352,10 +352,7 @@ func (c *Component) Floating(
 	if h == nil {
 		panic("nil Floating handler")
 	}
-	h = &browserContent{
-		Handler: h,
-		c:       c,
-	}
+	h = c.newBrowserContent(h)
 	win := c.newWindow(c.wm.FloatingWindow(h, cfg))
 	c.wm.SetFocus(win.win)
 	return win
@@ -747,10 +744,11 @@ func (c *Component) updateWindowContent(
 		c.tabs.SetFocus(id)
 		c.dirtyTabs = true
 		tab.setWindow(win)
-	} else if _, ok := content.(*browserContent); !ok {
-		content = &browserContent{
-			Handler: content,
-			c:       c,
+	} else {
+		_, sok := content.(*browserScrollableContent)
+		_, bok := content.(*browserContent)
+		if !sok && !bok {
+			content = c.newBrowserContent(content)
 		}
 	}
 	oldComponent := win.win.SetContent(content).(browserapi.Handler)
@@ -854,10 +852,7 @@ func (c *Component) newWindowContent(h browserapi.Handler) (browserapi.Handler, 
 	}
 	_, ok := h.(*Tab)
 	if !ok {
-		h = &browserContent{
-			Handler: h,
-			c:       c,
-		}
+		h = c.newBrowserContent(h)
 	}
 	return h, ok
 }
@@ -1002,13 +997,14 @@ func (c *Component) wallpaper() browserapi.Handler {
 	}
 }
 
-// satisfies handler.WindowSubscriber to
-// override union attrs of focus window
-type wmSubscriber Component
-
-func (s *wmSubscriber) OnFocus(prev, focus handler.Window) {
-	c := (*Component)(s)
-	c.focusWindow = focus
+// returns either a browserScrollableContent or browserContent so
+// type assertions on component.Scrollable are not masked.
+func (c *Component) newBrowserContent(content browserapi.Handler) Floating {
+	bc := browserContent{c: c, Handler: content}
+	if _, ok := content.(component.Scrollable); ok {
+		return &browserScrollableContent{browserContent: bc}
+	}
+	return &bc
 }
 
 // component.WindowManager sinchronously removes tui.Handlers
@@ -1056,4 +1052,33 @@ func (c *browserContent) Close() error {
 	}
 	c.closed = true
 	return c.Handler.Close()
+}
+
+type browserScrollableContent struct {
+	browserContent
+}
+
+func (c *browserScrollableContent) SeekUp() bool {
+	return c.Handler.(component.Scrollable).SeekUp()
+}
+
+func (c *browserScrollableContent) SeekDown() bool {
+	return c.Handler.(component.Scrollable).SeekDown()
+}
+
+func (c *browserScrollableContent) SeekOffset() int {
+	return c.Handler.(component.Scrollable).SeekOffset()
+}
+
+func (c *browserScrollableContent) MaxSeekOffset() int {
+	return c.Handler.(component.Scrollable).MaxSeekOffset()
+}
+
+// satisfies handler.WindowSubscriber to
+// override union attrs of focus window
+type wmSubscriber Component
+
+func (s *wmSubscriber) OnFocus(prev, focus handler.Window) {
+	c := (*Component)(s)
+	c.focusWindow = focus
 }

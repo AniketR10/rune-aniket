@@ -38,7 +38,7 @@ import (
 	"unstable.build/go-tui/text"
 )
 
-var _ tui.Handler = (*Vi)(nil)
+var _ text.Handler = (*Vi)(nil)
 
 type snapshot struct {
 	content string
@@ -372,6 +372,26 @@ func (vi *Vi) SetDefaultAttributes(attrs term.Attributes) error {
 // Close satisfies editor.Handler.
 func (vi *Vi) Close() error {
 	return nil
+}
+
+// SeekUp satisfies component.Scrollable.
+func (vi *Vi) SeekUp() bool {
+	return vi.less.Scroll().SeekUp()
+}
+
+// SeekDown satisfies component.Scrollable.
+func (vi *Vi) SeekDown() bool {
+	return vi.less.Scroll().SeekDown()
+}
+
+// SeekOffset satisfies component.Scrollable.
+func (vi *Vi) SeekOffset() int {
+	return vi.less.Scroll().SeekOffset()
+}
+
+// MaxSeekOffset satisfies component.Scrollable.
+func (vi *Vi) MaxSeekOffset() int {
+	return vi.less.Scroll().MaxSeekOffset()
 }
 
 func (vi *Vi) repeat() (handled bool) {

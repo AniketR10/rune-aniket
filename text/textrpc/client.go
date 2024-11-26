@@ -73,6 +73,26 @@ func (t Token) SetCursorAtScroll(term.Coordinates) bool {
 func (t Token) ShowCommandBar(show bool) {
 }
 
+// SeekUp satisfies text.Handler.
+func (t Token) SeekUp() bool {
+	return false
+}
+
+// SeekDown satisfies text.Handler.
+func (t Token) SeekDown() bool {
+	return false
+}
+
+// SeekOffset satisfies text.Handler.
+func (t Token) SeekOffset() int {
+	return 0
+}
+
+// MaxSeekOffset satisfies text.Handler.
+func (t Token) MaxSeekOffset() int {
+	return 0
+}
+
 var _ textapi.Editor = (*Client)(nil)
 
 // Client satisfies text.Editor by calling a remote editor over grpc.

@@ -29,12 +29,19 @@ import (
 	"unstable.build/go-tui"
 	browserapi "unstable.build/go-tui/api/browser"
 	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/term"
 )
+
+var _ component.Scrollable = (*Tab)(nil)
 
 // Tab is a structure that represents a tab in a Browser.Component.
 // It satisfies browser.Handler interface so it can be used
 // with browser.Browser API. See browser.Component.NewTab for more details.
+//
+// If the underlying browser.Handler of a Tab satisfies component.Scrollable,
+// then Tab satisfies it too; otherwise all the component.Scrollable methods
+// are no-op.
 type Tab struct {
 	parent      *Component
 	uri         workspaceapi.URI
@@ -43,42 +50,6 @@ type Tab struct {
 	free        bool
 	win         Window
 	subscribers []TabSubscriber
-}
-
-// newTab allocates storage for a new tab and initializes it.
-func newTab(c *Component, uri workspaceapi.URI, h browserapi.Handler, f io.Closer) *Tab {
-	ret := new(Tab)
-	ret.init(c, uri, h, f)
-	return ret
-}
-
-// Init initializes this tab with id, h as the Handler, and f as the
-// io.Closer handle.
-func (b *Tab) init(c *Component, uri workspaceapi.URI, h browserapi.Handler, f io.Closer) {
-	b.parent = c
-	b.uri = uri
-	b.closer = f
-	b.handler = h
-	b.free = true
-}
-
-func (b *Tab) callOnFocus() {
-	for _, sub := range b.subscribers {
-		sub.OnFocus(b)
-	}
-}
-
-func (b *Tab) setWindow(win Window) {
-	b.free = false
-	b.win = win
-}
-
-func (b *Tab) setFree() {
-	b.free = true
-	b.win = nil
-	for _, sub := range b.subscribers {
-		sub.OnFree(b)
-	}
 }
 
 // Resize satisfies tui.Component
@@ -160,5 +131,81 @@ func (b *Tab) Subscribe(sub TabSubscriber) {
 		sub.OnFree(b)
 	} else {
 		sub.OnFocus(b)
+	}
+}
+
+// SeekUp satisfies component.Scrollable.
+func (b *Tab) SeekUp() bool {
+	scrollable, ok := b.handler.(component.Scrollable)
+	if !ok {
+		return false
+	}
+	return scrollable.SeekUp()
+}
+
+// SeekDown satisfies component.Scrollable.
+func (b *Tab) SeekDown() bool {
+	scrollable, ok := b.handler.(component.Scrollable)
+	if !ok {
+		return false
+	}
+	return scrollable.SeekDown()
+}
+
+// SeekOffset satisfies component.Scrollable.
+func (b *Tab) SeekOffset() int {
+	scrollable, ok := b.handler.(component.Scrollable)
+	if !ok {
+		return 0
+	}
+	return scrollable.SeekOffset()
+}
+
+// MaxSeekOffset satisfies component.Scrollable.
+func (b *Tab) MaxSeekOffset() int {
+	scrollable, ok := b.handler.(component.Scrollable)
+	if !ok {
+		return 0
+	}
+	return scrollable.MaxSeekOffset()
+}
+
+// newTab allocates storage for a new tab and initializes it.
+func newTab(
+	c *Component, uri workspaceapi.URI, h browserapi.Handler, f io.Closer,
+) *Tab {
+	ret := new(Tab)
+	ret.init(c, uri, h, f)
+	return ret
+}
+
+// Init initializes this tab with id, h as the Handler, and f as the
+// io.Closer handle.
+func (b *Tab) init(
+	c *Component, uri workspaceapi.URI, h browserapi.Handler, f io.Closer,
+) {
+	b.parent = c
+	b.uri = uri
+	b.closer = f
+	b.handler = h
+	b.free = true
+}
+
+func (b *Tab) callOnFocus() {
+	for _, sub := range b.subscribers {
+		sub.OnFocus(b)
+	}
+}
+
+func (b *Tab) setWindow(win Window) {
+	b.free = false
+	b.win = win
+}
+
+func (b *Tab) setFree() {
+	b.free = true
+	b.win = nil
+	for _, sub := range b.subscribers {
+		sub.OnFree(b)
 	}
 }

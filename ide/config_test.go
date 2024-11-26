@@ -159,6 +159,9 @@ browser:
             topright: '┓'
             bottomleft: '┗'
             bottomright: '┛'
+        scroll_bar_attr:
+            fg: "#f0f0f0"
+        scroll_bar_char: '|'
     frameunion_charset:
         left: '┣'
         right: '┫'
@@ -300,9 +303,11 @@ func TestConfigSetting(t *testing.T) {
 
 	expectedConfig := handler.WindowManagerConfig{
 		WindowManagerConfig: component.WindowManagerConfig{
-			Frame:        true,
-			FrameAttr:    term.Attributes{Fg: tcell.ColorRed},
-			FrameCharSet: component.FrameCharSetHighlight(),
+			Frame:         true,
+			FrameAttr:     term.Attributes{Fg: tcell.ColorRed},
+			FrameCharSet:  component.FrameCharSetHighlight(),
+			ScrollBarAttr: term.Attributes{Fg: tcell.GetColor("#f0f0f0")},
+			ScrollBarChar: '|',
 		},
 		Dim:               false,
 		FocusFrameAttr:    handler.DefaultWindowManagerConfig().FrameAttr,

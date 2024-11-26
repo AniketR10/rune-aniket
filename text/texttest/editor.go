@@ -119,6 +119,26 @@ func (w HandlerFromAPIHandler) SetCursorAtScroll(pos term.Coordinates) bool {
 	return false
 }
 
+// SeekUp satisfies component.Scrollable.
+func (t HandlerFromAPIHandler) SeekUp() bool {
+	return false
+}
+
+// SeekDown satisfies component.Scrollable.
+func (t HandlerFromAPIHandler) SeekDown() bool {
+	return false
+}
+
+// SeekOffset satisfies component.Scrollable.
+func (t HandlerFromAPIHandler) SeekOffset() int {
+	return 0
+}
+
+// MaxSeekOffset satisfies component.Scrollable.
+func (t HandlerFromAPIHandler) MaxSeekOffset() int {
+	return 0
+}
+
 type APICommandHandlerFromCommandHandler struct {
 	text.CommandHandler
 }

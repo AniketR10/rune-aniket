@@ -579,6 +579,22 @@ func (c ideConfig) windowFrameCharset() (cs component.FrameCharSet) {
 	return c.windowCharset("frame_charset", defaultWindowManagerConfig.FrameCharSet)
 }
 
+func (c ideConfig) windowScrollBarAttr() (attr term.Attributes) {
+	return c.windowAttr("scroll_bar_attr", defaultWindowManagerConfig.ScrollBarAttr)
+}
+
+func (c ideConfig) windowScrollBarChar() (ch rune) {
+	cfg, ok := c.windowManager()
+	if !ok {
+		return
+	}
+	r, err := cfg.GetRune("scroll_bar_char")
+	if err == nil {
+		ch = r
+	}
+	return
+}
+
 func (c ideConfig) windowFocusFrameCharset() (cs component.FrameCharSet) {
 	return c.windowCharset("focus_frame_charset",
 		defaultWindowManagerConfig.FocusFrameCharSet)
@@ -707,9 +723,11 @@ func (c ideConfig) windowManagerConfig() handler.WindowManagerConfig {
 		FocusFrameAttr:    c.windowFocusFrameAttr(),
 		FocusFrameCharSet: c.windowFocusFrameCharset(),
 		WindowManagerConfig: component.WindowManagerConfig{
-			Frame:        c.frame(),
-			FrameAttr:    c.windowFrameAttr(),
-			FrameCharSet: c.windowFrameCharset(),
+			Frame:         c.frame(),
+			FrameAttr:     c.windowFrameAttr(),
+			FrameCharSet:  c.windowFrameCharset(),
+			ScrollBarAttr: c.windowScrollBarAttr(),
+			ScrollBarChar: c.windowScrollBarChar(),
 		},
 	}
 }

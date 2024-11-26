@@ -68,3 +68,23 @@ func (t *TestHandler) SetCursorAtScroll(term.Coordinates) bool {
 func (t *TestHandler) Close() error {
 	return nil
 }
+
+// SeekUp satisfies component.Scrollable.
+func (t *TestHandler) SeekUp() bool {
+	return false
+}
+
+// SeekDown satisfies component.Scrollable.
+func (t *TestHandler) SeekDown() bool {
+	return false
+}
+
+// SeekOffset satisfies component.Scrollable.
+func (t *TestHandler) SeekOffset() int {
+	return 0
+}
+
+// MaxSeekOffset satisfies component.Scrollable.
+func (t *TestHandler) MaxSeekOffset() int {
+	return 0
+}

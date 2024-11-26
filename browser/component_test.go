@@ -113,7 +113,94 @@ func TestWindowClosedOnClose(t *testing.T) {
 		}
 		return h.Close()
 	}), component.FloatingConfig{})
-	require.NoError(t, win.Close())
+	assert.NoError(t, win.Close())
+}
+
+func TestBrowserScrollable(t *testing.T) {
+	t.Run("create floating window", func(t *testing.T) {
+		b := NewComponent(DefaultConfig())
+		scrollable := newTestScrollableHandler()
+
+		win := b.Floating(scrollable, component.FloatingConfig{})
+		content, err := win.Content()
+		require.NoError(t, err)
+
+		_, ok := content.(component.Scrollable)
+		assert.True(t, ok)
+		assert.NoError(t, win.Close())
+	})
+
+	t.Run("create split window", func(t *testing.T) {
+		b := NewComponent(DefaultConfig())
+		scrollable := newTestScrollableHandler()
+
+		win, ok := b.Split(browserapi.OrientationLeft, b.Focus(), scrollable)
+		require.True(t, ok)
+
+		content, err := win.Content()
+		require.NoError(t, err)
+
+		_, ok = content.(component.Scrollable)
+		assert.True(t, ok)
+		assert.NoError(t, win.Close())
+	})
+
+	t.Run("update content of window", func(t *testing.T) {
+		b := NewComponent(DefaultConfig())
+
+		win, ok := b.Split(browserapi.OrientationLeft, b.Focus(), newTestHandler())
+		require.True(t, ok)
+
+		scrollable := newTestScrollableHandler()
+		err := win.SetContent(scrollable)
+		require.NoError(t, err)
+
+		content, err := win.Content()
+		require.NoError(t, err)
+
+		_, ok = content.(component.Scrollable)
+		assert.True(t, ok)
+		assert.NoError(t, win.Close())
+	})
+
+	t.Run("new tab", func(t *testing.T) {
+		b := NewComponent(DefaultConfig())
+
+		uri1, err := workspaceapi.ParseURI("file:///a")
+		require.NoError(t, err)
+		h := newTestScrollableHandler()
+		tab := b.NewTab(uri1, "a", h, h)
+
+		content := tab.Handler()
+		_, ok := content.(component.Scrollable)
+		assert.True(t, ok)
+	})
+}
+
+var _ component.Scrollable = (*nopScrollableHandler)(nil)
+
+type nopScrollableHandler struct {
+	nopHandler
+}
+
+func (b *nopScrollableHandler) SeekUp() bool {
+	return false
+}
+
+func (b *nopScrollableHandler) SeekDown() bool {
+	return false
+}
+
+func (b *nopScrollableHandler) SeekOffset() int {
+	return 0
+}
+
+func (b *nopScrollableHandler) MaxSeekOffset() int {
+	return 0
+}
+
+func newTestScrollableHandler() *nopScrollableHandler {
+	return &nopScrollableHandler{}
 }
 
 type nopHandler struct {

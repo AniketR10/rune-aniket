@@ -116,6 +116,20 @@ func (mr *MockHandlerMockRecorder) Man() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Man", reflect.TypeOf((*MockHandler)(nil).Man))
 }
 
+// MaxSeekOffset mocks base method.
+func (m *MockHandler) MaxSeekOffset() int {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MaxSeekOffset")
+	ret0, _ := ret[0].(int)
+	return ret0
+}
+
+// MaxSeekOffset indicates an expected call of MaxSeekOffset.
+func (mr *MockHandlerMockRecorder) MaxSeekOffset() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MaxSeekOffset", reflect.TypeOf((*MockHandler)(nil).MaxSeekOffset))
+}
+
 // Resize mocks base method.
 func (m *MockHandler) Resize(width, height int) {
 	m.ctrl.T.Helper()
@@ -140,6 +154,48 @@ func (m *MockHandler) Resource() api0.URI {
 func (mr *MockHandlerMockRecorder) Resource() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Resource", reflect.TypeOf((*MockHandler)(nil).Resource))
+}
+
+// SeekDown mocks base method.
+func (m *MockHandler) SeekDown() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SeekDown")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// SeekDown indicates an expected call of SeekDown.
+func (mr *MockHandlerMockRecorder) SeekDown() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SeekDown", reflect.TypeOf((*MockHandler)(nil).SeekDown))
+}
+
+// SeekOffset mocks base method.
+func (m *MockHandler) SeekOffset() int {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SeekOffset")
+	ret0, _ := ret[0].(int)
+	return ret0
+}
+
+// SeekOffset indicates an expected call of SeekOffset.
+func (mr *MockHandlerMockRecorder) SeekOffset() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SeekOffset", reflect.TypeOf((*MockHandler)(nil).SeekOffset))
+}
+
+// SeekUp mocks base method.
+func (m *MockHandler) SeekUp() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SeekUp")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// SeekUp indicates an expected call of SeekUp.
+func (mr *MockHandlerMockRecorder) SeekUp() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SeekUp", reflect.TypeOf((*MockHandler)(nil).SeekUp))
 }
 
 // Selection mocks base method.

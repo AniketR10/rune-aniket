@@ -55,7 +55,11 @@ func (w *browserWindow) Content() (browserapi.Handler, error) {
 	h := w.win.Content().(browserapi.Handler)
 	t, ok := h.(*Tab)
 	if !ok {
-		return h.(*browserContent).Handler, nil
+		bc, ok := h.(*browserContent)
+		if ok {
+			return bc.Handler, nil
+		}
+		return h.(*browserScrollableContent).Handler, nil
 	}
 	return t, nil
 }

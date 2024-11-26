@@ -29,9 +29,12 @@ import (
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/clipboard"
+	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/term"
 )
+
+var _ component.Scrollable = (*simpleEditorHandler)(nil)
 
 type simpleEditorHandler struct {
 	buf              *cell.Buffer
@@ -222,4 +225,20 @@ func (h *simpleEditorHandler) SetCursorAtScroll(pos term.Coordinates) bool {
 
 	_, ok := h.cursor.MoveToScroll(pos)
 	return ok
+}
+
+func (h *simpleEditorHandler) SeekUp() bool {
+	return h.less.Scroll().SeekUp()
+}
+
+func (h *simpleEditorHandler) SeekDown() bool {
+	return h.less.Scroll().SeekDown()
+}
+
+func (h *simpleEditorHandler) SeekOffset() int {
+	return h.less.Scroll().SeekOffset()
+}
+
+func (h *simpleEditorHandler) MaxSeekOffset() int {
+	return h.less.Scroll().MaxSeekOffset()
 }

@@ -103,6 +103,26 @@ func (e *TestEditorHandler) SetWrap(wrap bool) {
 func (t *TestEditorHandler) ShowCommandBar(show bool) {
 }
 
+// SeekUp satisfies component.Scrollable.
+func (t *TestEditorHandler) SeekUp() bool {
+	return false
+}
+
+// SeekDown satisfies component.Scrollable.
+func (t *TestEditorHandler) SeekDown() bool {
+	return false
+}
+
+// SeekOffset satisfies component.Scrollable.
+func (t *TestEditorHandler) SeekOffset() int {
+	return 0
+}
+
+// MaxSeekOffset satisfies component.Scrollable.
+func (t *TestEditorHandler) MaxSeekOffset() int {
+	return 0
+}
+
 func (e *TestEditor) Edit(resource workspaceapi.URI, buf *cell.Buffer) (text.Handler, error) {
 	e.uri = resource
 	e.buf = buf
