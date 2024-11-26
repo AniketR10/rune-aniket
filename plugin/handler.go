@@ -72,6 +72,8 @@ type Handler struct {
 	bar *pluginHandlerBar
 }
 
+var _ component.Scrollable = (*Handler)(nil)
+
 const exitKeyRepeatTimeout = 400 * time.Millisecond
 
 // New allocates storage for a new plugin.Handler and initializes it.
@@ -180,6 +182,26 @@ func (p *Handler) Close() error {
 // vte.Handler.
 func (p *Handler) OnFocusChange(inFocus bool) {
 	p.emulator.OnFocusChange(inFocus)
+}
+
+// SeekUp satisfies component.Scrollable.
+func (e *Handler) SeekUp() bool {
+	return e.emulator.SeekUp()
+}
+
+// SeekDown satisfies component.Scrollable.
+func (e *Handler) SeekDown() bool {
+	return e.emulator.SeekDown()
+}
+
+// SeekOffset satisfies component.Scrollable.
+func (e *Handler) SeekOffset() int {
+	return e.emulator.SeekOffset()
+}
+
+// MaxSeekOffset satisfies component.Scrollable.
+func (e *Handler) MaxSeekOffset() int {
+	return e.emulator.MaxSeekOffset()
 }
 
 func (h *Handler) initState(

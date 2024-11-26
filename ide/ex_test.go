@@ -2168,6 +2168,22 @@ func (t *testVte) Handle(ev term.Event) (bool, bool) {
 	return false, false
 }
 
+func (t *testVte) SeekUp() bool {
+	return false
+}
+
+func (t *testVte) SeekDown() bool {
+	return false
+}
+
+func (t *testVte) SeekOffset() int {
+	return 0
+}
+
+func (t *testVte) MaxSeekOffset() int {
+	return 0
+}
+
 func (t *testVte) Cursor() (ret term.Coordinates, style term.CursorStyle, show bool) {
 	show = true
 	ret = term.Coordinates{X: len(t.initialCmd)}

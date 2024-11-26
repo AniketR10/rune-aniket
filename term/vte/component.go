@@ -348,6 +348,30 @@ func (t *Component) ScrollTop() (ok bool) {
 	return t.parserHandler.scrollDown(offset.Y, true)
 }
 
+// ScrollOffset returns the current vertical scroll offset.
+func (t *Component) ScrollOffset() int {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.parserHandler.useAlt {
+		return 0
+	}
+
+	buffer := t.parserHandler.sync.primBuf
+	return buffer.Offset().Y
+}
+
+// MaxScrollOffset returns the current vertical scroll offset.
+func (t *Component) MaxScrollOffset() int {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.parserHandler.useAlt {
+		return 0
+	}
+
+	buffer := t.parserHandler.sync.primBuf
+	return buffer.MaxOffset()
+}
+
 // ScrollBottom scrolls down the content of this terminal emulator to the bottom.
 func (t *Component) ScrollBottom() (ok bool) {
 	t.mu.Lock()

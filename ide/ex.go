@@ -78,6 +78,7 @@ type workspaceLoader interface {
 
 type vteHandler interface {
 	browserapi.Handler
+	component.Scrollable
 	OnFocusChange(bool)
 	SetDefaultAttributes(term.Attributes)
 	IsComplete() bool
@@ -1435,6 +1436,8 @@ func onFocusChangeTab(t *browser.Tab, isInFocus bool) {
 	emulator.OnFocusChange(isInFocus)
 }
 
+var _ component.Scrollable = vteAdapter{}
+
 // adapts vte.Handler to vteHandler
 type vteAdapter struct {
 	*vte.Handler
@@ -1456,6 +1459,8 @@ func (v vteAdapter) Title() string {
 	return v.Component().Title()
 }
 
+var _ component.Scrollable = companionTerminalHandler{}
+
 // Aids in ensure that Close is not called when window is closed:
 // session should remain open as long as this workspace is not closed.
 // Also ensures that we can identify companionTerminal on window focus
@@ -1463,6 +1468,26 @@ func (v vteAdapter) Title() string {
 type companionTerminalHandler struct {
 	browser.Floating
 	vth vteHandler
+}
+
+// SeekUp satisfies component.Scrollable.
+func (c companionTerminalHandler) SeekUp() bool {
+	return c.vth.SeekUp()
+}
+
+// SeekDown satisfies component.Scrollable.
+func (c companionTerminalHandler) SeekDown() bool {
+	return c.vth.SeekDown()
+}
+
+// SeekOffset satisfies component.Scrollable.
+func (c companionTerminalHandler) SeekOffset() int {
+	return c.vth.SeekOffset()
+}
+
+// MaxSeekOffset satisfies component.Scrollable.
+func (c companionTerminalHandler) MaxSeekOffset() int {
+	return c.vth.MaxSeekOffset()
 }
 
 func (c companionTerminalHandler) Close() error {

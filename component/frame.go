@@ -228,14 +228,6 @@ type Frame struct {
 	width, height   int
 }
 
-// Scrollable abstracts a component that can scroll up or down.
-type Scrollable interface {
-	SeekUp() bool
-	SeekDown() bool
-	SeekOffset() int
-	MaxSeekOffset() int
-}
-
 var _ WithAttributes = (*Frame)(nil)
 var _ Responsive = (*Frame)(nil)
 var _ Floating = (*Frame)(nil)

@@ -342,6 +342,26 @@ func (e *Handler) Man() tui.Manual {
 	panic("TODO")
 }
 
+// SeekUp satisfies component.Scrollable.
+func (e *Handler) SeekUp() bool {
+	return e.comp.ScrollUp(1)
+}
+
+// SeekDown satisfies component.Scrollable.
+func (e *Handler) SeekDown() bool {
+	return e.comp.ScrollDown(1)
+}
+
+// SeekOffset satisfies component.Scrollable.
+func (e *Handler) SeekOffset() int {
+	return e.comp.ScrollOffset()
+}
+
+// MaxSeekOffset satisfies component.Scrollable.
+func (e *Handler) MaxSeekOffset() int {
+	return e.comp.MaxScrollOffset()
+}
+
 // Close closes this terminal emulator and all the resources
 // associated with it.
 func (e *Handler) Close() error {
