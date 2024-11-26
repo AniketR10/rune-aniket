@@ -45,11 +45,15 @@ type WindowManagerConfig struct {
 
 // WindowManager implements Handler as a tiled window manager.
 type WindowManager struct {
-	comp      component.WindowManager
-	config    WindowManagerConfig
-	prevFocus Window // best effort to set focus to prev win upon ShiftFocus
-	focus     Window
-	subs      []WindowSubscriber
+	comp   component.WindowManager
+	config WindowManagerConfig
+	// best effort to set focus to prev win upon ShiftFocus
+	prevFocus                Window
+	focus                    Window
+	subs                     []WindowSubscriber
+	prevMouseScrollBarDrag   bool
+	prevMouseLeftChild       component.Window
+	prevMouseScrollBarOffset int
 }
 
 // WindowSubscriber wraps the OnFocus callback used
@@ -124,6 +128,10 @@ func (wm *WindowManager) Handle(ev term.Event) (exit bool, handled bool) {
 	if ev.Type == term.EventMouse {
 		mousePos := term.Coordinates{X: ev.MouseX, Y: ev.MouseY}
 		childAtMouse, ok := wm.comp.WindowAt(mousePos)
+		if wm.prevMouseScrollBarDrag {
+			childAtMouse = wm.prevMouseLeftChild
+			ok = true
+		}
 		if !ok {
 			return
 		}
@@ -144,9 +152,15 @@ func (wm *WindowManager) Handle(ev term.Event) (exit bool, handled bool) {
 			position, height, ok := frame.ScrollBar()
 			if ok {
 				end := position.Y + height
-				if ev.MouseX == position.X && ev.MouseY >= position.Y && ev.MouseY < end {
-					return wm.handleScrollBarMouse(frame, ev)
+				if ev.MouseX == position.X && ev.MouseY >= position.Y && ev.MouseY < end ||
+					wm.prevMouseScrollBarDrag {
+					return wm.handleScrollBarMouse(childAtMouse, position.Y, height, frame, ev)
 				}
+				// lost drag; reset if mouse is now outside of scroll bar
+				wm.resetScrollBarMouse()
+			} else {
+				// lost scroll bar; content could have changed
+				wm.resetScrollBarMouse()
 			}
 		}
 
@@ -481,15 +495,40 @@ func (wm *WindowManager) UnsubscribeAll() {
 	wm.subs = nil
 }
 
-func (wm *WindowManager) handleScrollBarMouse(frame *component.Frame, ev term.Event) (
-	bool, bool,
-) {
+func (wm *WindowManager) resetScrollBarMouse() {
+	wm.prevMouseScrollBarDrag = false
+}
+
+func (wm *WindowManager) handleScrollBarMouse(
+	win component.Window, barPos, barHeight int,
+	frame *component.Frame, ev term.Event,
+) (bool, bool) {
 	frame.ScrollBarChar = wm.scrollBarHoverChar(frame)
 	if ev.Key != term.MouseLeft {
+		wm.resetScrollBarMouse()
 		return false, false
 	}
 
-	// TODO
+	prevDrag := wm.prevMouseScrollBarDrag
+	if !prevDrag {
+		wm.prevMouseScrollBarOffset = barPos - ev.MouseY
+		wm.prevMouseScrollBarDrag = true
+		wm.prevMouseLeftChild = win
+		return false, false
+	}
+
+	scroll := frame.Content().(component.Scrollable)
+	mouseOffset := wm.prevMouseScrollBarOffset
+	if barPos-mouseOffset > ev.MouseY {
+		for i := 0; i < barPos-mouseOffset-ev.MouseY && scroll.SeekUp(); i++ {
+		}
+		return false, true
+	} else if barPos+mouseOffset < ev.MouseY {
+		for i := 0; i < ev.MouseY-barPos+mouseOffset && scroll.SeekDown(); i++ {
+		}
+		return false, true
+	}
+
 	return false, false
 }
 

@@ -735,6 +735,62 @@ func TestWindowManagerScrollBar(t *testing.T) {
 │B   ││b   │
 └────┘└────┘`,
 		},
+		{
+			term.Event{Type: term.EventMouse, Key: term.MouseLeft, MouseX: 11, MouseY: 1}, `
+┌────┐┌────┐
+│A   |│a   X
+│B   ││b   │
+└────┘└────┘`,
+		},
+		{
+			term.Event{Type: term.EventMouse, Key: term.MouseLeft, MouseX: 11, MouseY: 2}, `
+┌────┐┌────┐
+│A   |│b   X
+│B   ││c   │
+└────┘└────┘`,
+		},
+		{
+			term.Event{Type: term.EventMouse, Key: term.MouseLeft, MouseX: 11, MouseY: 3}, `
+┌────┐┌────┐
+│A   |│c   │
+│B   ││    X
+└────┘└────┘`,
+		},
+		{
+			term.Event{Type: term.EventMouse, Key: term.MouseLeft, MouseX: 1, MouseY: 0}, `
+┌────┐┌────┐
+│A   |│a   X
+│B   ││b   │
+└────┘└────┘`,
+		},
+		{
+			term.Event{Type: term.EventMouse, Key: term.MouseRelease, MouseX: 1, MouseY: 0}, `
+┌────┐┌────┐
+│A   |│a   X
+│B   ││b   │
+└────┘└────┘`,
+		},
+		{
+			term.Event{Type: term.EventMouse, Key: term.MouseRelease, MouseX: 1, MouseY: 0}, `
+┌────┐┌────┐
+│A   |│a   |
+│B   ││b   │
+└────┘└────┘`,
+		},
+		{
+			term.Event{Type: term.EventMouse, Key: term.MouseLeft, MouseX: 5, MouseY: 1}, `
+┌────┐┌────┐
+│A   X│a   |
+│B   ││b   │
+└────┘└────┘`,
+		},
+		{
+			term.Event{Type: term.EventMouse, Key: term.MouseLeft, MouseX: 25, MouseY: 25}, `
+┌────┐┌────┐
+│C   ││a   |
+│    X│b   │
+└────┘└────┘`,
+		},
 	}
 
 	handlertest.TestHandler(t, wm, cases, writer)
