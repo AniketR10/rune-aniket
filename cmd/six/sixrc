@@ -502,6 +502,11 @@ browser:
     focus_frame_attr: *focus_frame_attr
     frame_charset: *frame_charset
     focus_frame_charset: *focus_frame_charset
+    scroll_bar_attr:
+      fg: *highlight
+      bg: *background
+    scroll_bar_char: '┃'
+    scroll_bar_hover_char: '║'
   frameunion_charset: *frameunion_charset
   focus_tab_attr:
     fg: *highlight
