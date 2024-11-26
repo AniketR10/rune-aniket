@@ -162,6 +162,7 @@ browser:
         scroll_bar_attr:
             fg: "#f0f0f0"
         scroll_bar_char: '|'
+        scroll_bar_hover_char: 'X'
     frameunion_charset:
         left: '┣'
         right: '┫'
@@ -309,9 +310,10 @@ func TestConfigSetting(t *testing.T) {
 			ScrollBarAttr: term.Attributes{Fg: tcell.GetColor("#f0f0f0")},
 			ScrollBarChar: '|',
 		},
-		Dim:               false,
-		FocusFrameAttr:    handler.DefaultWindowManagerConfig().FrameAttr,
-		FocusFrameCharSet: handler.DefaultWindowManagerConfig().FrameCharSet,
+		Dim:                false,
+		ScrollBarHoverChar: 'X',
+		FocusFrameAttr:     handler.DefaultWindowManagerConfig().FrameAttr,
+		FocusFrameCharSet:  handler.DefaultWindowManagerConfig().FrameCharSet,
 	}
 	assert.Equal(t, expectedConfig, cfg.windowManagerConfig())
 	assert.True(t, cfg.frameUnion())

@@ -37,9 +37,10 @@ import (
 type WindowManagerConfig struct {
 	component.WindowManagerConfig
 
-	Dim               bool
-	FocusFrameAttr    term.Attributes
-	FocusFrameCharSet component.FrameCharSet
+	Dim                bool
+	FocusFrameAttr     term.Attributes
+	FocusFrameCharSet  component.FrameCharSet
+	ScrollBarHoverChar rune
 }
 
 // WindowManager implements Handler as a tiled window manager.
@@ -118,7 +119,7 @@ func (wm *WindowManager) SetAttr(def, focus term.Attributes) {
 	wm.setFocusAttr(wm.focus)
 }
 
-// Handle : Handler
+// Handle satisfies tui.Handler.
 func (wm *WindowManager) Handle(ev term.Event) (exit bool, handled bool) {
 	if ev.Type == term.EventMouse {
 		mousePos := term.Coordinates{X: ev.MouseX, Y: ev.MouseY}
@@ -126,26 +127,48 @@ func (wm *WindowManager) Handle(ev term.Event) (exit bool, handled bool) {
 		if !ok {
 			return
 		}
-		if wm.Focus().Window != childAtMouse {
-			if ev.Key == term.MouseLeft {
-				wm.SetFocus(wm.newNode(childAtMouse))
-			}
-			return
-		}
 		offset := childAtMouse.Position()
-		if wm.config.Frame {
-			offset.Y++
-			offset.X++
-		}
 		ev.MouseX -= offset.X
 		ev.MouseY -= offset.Y
+
+		// reset scroll bars
+		wm.comp.Iterate(func(win component.Window) {
+			f, ok := win.Frame()
+			if ok {
+				f.ScrollBarChar = wm.config.ScrollBarChar
+			}
+		})
+
+		// set scroll bar hover char, if applicable
+		if frame, ok := childAtMouse.Frame(); ok {
+			position, height, ok := frame.ScrollBar()
+			if ok {
+				end := position.Y + height
+				if ev.MouseX == position.X && ev.MouseY >= position.Y && ev.MouseY < end {
+					return wm.handleScrollBarMouse(frame, ev)
+				}
+			}
+		}
+
+		if wm.config.Frame {
+			ev.MouseY--
+			ev.MouseX--
+		}
 
 		// mouse on frame
 		if ev.MouseX < 0 {
 			ev.MouseX = 0
 		}
+
 		if ev.MouseY < 0 {
 			ev.MouseY = 0
+		}
+
+		if wm.Focus().Window != childAtMouse {
+			if ev.Key == term.MouseLeft {
+				wm.SetFocus(wm.newNode(childAtMouse))
+			}
+			return
 		}
 	}
 
@@ -456,4 +479,29 @@ func (wm *WindowManager) Subscribe(sub WindowSubscriber) {
 // UnsubscribeAll unsubscribes all WindowSubscriber.
 func (wm *WindowManager) UnsubscribeAll() {
 	wm.subs = nil
+}
+
+func (wm *WindowManager) handleScrollBarMouse(frame *component.Frame, ev term.Event) (
+	bool, bool,
+) {
+	frame.ScrollBarChar = wm.scrollBarHoverChar(frame)
+	if ev.Key != term.MouseLeft {
+		return false, false
+	}
+
+	// TODO
+	return false, false
+}
+
+func (wm *WindowManager) scrollBarHoverChar(f *component.Frame) (ch rune) {
+	ch = wm.config.ScrollBarHoverChar
+	if ch != 0 {
+		return
+	}
+	ch = f.ScrollBarChar
+	if ch != 0 {
+		return
+	}
+	ch = f.FrameCharSet.VerticalRight
+	return
 }

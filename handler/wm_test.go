@@ -51,6 +51,8 @@ func prepareTest(width, height int, frame bool, root tui.Handler) (
 	writer := term.NewStringWriter(width, height)
 	cfg := DefaultWindowManagerConfig()
 	cfg.Frame = frame
+	cfg.ScrollBarChar = '|'
+	cfg.ScrollBarHoverChar = 'X'
 	handler := NewWindowManager(root, cfg)
 	handler.Resize(width, height)
 
@@ -666,4 +668,74 @@ C────────DCCCCCCCCC│
 	}
 
 	comptest.TestComponent(t, wm, w, tests)
+}
+
+type scrollableHandler struct {
+	component.Scrollable
+	tui.Handler
+}
+
+func TestWindowManagerScrollBar(t *testing.T) {
+	buf2 := cell.NewBuffer()
+	buf2.WriteString("a\nb\nc\n")
+	comp2 := component.NewScroll(buf2)
+	rightHandler := scrollableHandler{Scrollable: comp2, Handler: Nop(comp2)}
+
+	buf1 := cell.NewBuffer()
+	buf1.WriteString("A\nB\nC\n")
+	comp1 := component.NewScroll(buf1)
+	leftHandler := scrollableHandler{Scrollable: comp1, Handler: Nop(comp1)}
+
+	width, height := 12, 4
+	writer, wm := prepareTest(width, height, true, leftHandler)
+
+	_, ok := wm.SplitVertical(wm.Focus(), rightHandler)
+	require.True(t, ok)
+
+	cases := []handlertest.SingleTestCase{
+		{
+			term.Event{}, `
+┌────┐┌────┐
+│A   |│a   |
+│B   ││b   │
+└────┘└────┘`,
+		},
+		{
+			term.Event{Type: term.EventMouse, Key: term.MouseRelease, MouseX: 5, MouseY: 1}, `
+┌────┐┌────┐
+│A   X│a   |
+│B   ││b   │
+└────┘└────┘`,
+		},
+		{
+			term.Event{Type: term.EventMouse, Key: term.MouseRelease, MouseX: 6, MouseY: 1}, `
+┌────┐┌────┐
+│A   |│a   |
+│B   ││b   │
+└────┘└────┘`,
+		},
+		{
+			term.Event{Type: term.EventMouse, Key: term.MouseRelease, MouseX: 5, MouseY: 1}, `
+┌────┐┌────┐
+│A   X│a   |
+│B   ││b   │
+└────┘└────┘`,
+		},
+		{
+			term.Event{Type: term.EventMouse, Key: term.MouseRelease, MouseX: 11, MouseY: 1}, `
+┌────┐┌────┐
+│A   |│a   X
+│B   ││b   │
+└────┘└────┘`,
+		},
+		{
+			term.Event{Type: term.EventMouse, Key: term.MouseRelease, MouseX: 11, MouseY: 2}, `
+┌────┐┌────┐
+│A   |│a   |
+│B   ││b   │
+└────┘└────┘`,
+		},
+	}
+
+	handlertest.TestHandler(t, wm, cases, writer)
 }

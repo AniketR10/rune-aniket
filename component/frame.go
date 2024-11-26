@@ -349,6 +349,39 @@ func (f *Frame) Draw(w term.Writer) {
 
 	f.content.Draw(w)
 
+	offset, height, ok := f.ScrollBar()
+	if !ok {
+		return
+	}
+
+	ch := f.ScrollBarChar
+	if ch == 0 {
+		ch = f.VerticalRight
+	}
+
+	for i := offset.Y; i < offset.Y+height; i++ {
+		w.SetCell(term.Coordinates{X: limitX, Y: i},
+			term.Cell{
+				Width:      1,
+				Ch:         ch,
+				Attributes: f.ScrollBarAttributes,
+			})
+	}
+}
+
+// ContentPosition returns the position of the content inside this frame.
+func (f *Frame) ContentPosition() term.Coordinates {
+	return calculateContentOffset(f.bwidth, f.bheight, SpanAlignmentCentered)
+}
+
+// ContentSize returns the size and width of the inner content.
+func (f *Frame) ContentSize() (int, int) {
+	return f.content.Width(), f.content.Height()
+}
+
+// ScrollBar returns the position and height of the scrollbar, if a scroll bar
+// is to be drawn, otherwise it returns false.
+func (f *Frame) ScrollBar() (pos term.Coordinates, height int, ok bool) {
 	scrollable, ok := f.content.C.(Scrollable)
 	if !ok {
 		return
@@ -359,19 +392,8 @@ func (f *Frame) Draw(w term.Writer) {
 		return
 	}
 
-	ch := f.ScrollBarChar
-	if ch == 0 {
-		ch = f.VerticalRight
-	}
 	offset, height := calculateScrollBar(scrollable.SeekOffset(), maxOffset, f.height)
-	for i := offset; i < offset+height; i++ {
-		w.SetCell(term.Coordinates{X: limitX, Y: i},
-			term.Cell{
-				Width:      1,
-				Ch:         ch,
-				Attributes: f.ScrollBarAttributes,
-			})
-	}
+	return term.Coordinates{Y: offset, X: f.width - 1}, height, true
 }
 
 func calculateScrollBar(offset, maxOffset, height int) (
@@ -384,14 +406,4 @@ func calculateScrollBar(offset, maxOffset, height int) (
 	proportionalHeight = int(math.Max(1,
 		math.Ceil(float64(effectiveHeight*effectiveHeight)/float64(rows))))
 	return
-}
-
-// ContentPosition returns the position of the content inside this frame.
-func (f *Frame) ContentPosition() term.Coordinates {
-	return calculateContentOffset(f.bwidth, f.bheight, SpanAlignmentCentered)
-}
-
-// ContentSize returns the size and width of the inner content.
-func (f *Frame) ContentSize() (int, int) {
-	return f.content.Width(), f.content.Height()
 }
