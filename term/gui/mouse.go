@@ -70,9 +70,17 @@ func (m *mouse) processMouse() (ev term.Event, ok bool) {
 	}
 
 	pos := m.calculateCoordinates()
-	if pos.X >= m.width || pos.X < 0 || pos.Y >= m.height || pos.Y < 0 {
-		ok = false
-		return
+	if pos.X >= m.width {
+		pos.X = m.width - 1
+	}
+	if pos.Y >= m.height {
+		pos.Y = m.height - 1
+	}
+	if pos.X < 0 {
+		pos.X = 0
+	}
+	if pos.Y < 0 {
+		pos.Y = 0
 	}
 
 	ev = term.Event{Type: term.EventMouse}
