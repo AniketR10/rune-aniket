@@ -25,8 +25,13 @@ package command
 
 import (
 	"context"
+	"fmt"
+	"os/user"
+	"strings"
 
 	"github.com/unstablebuild/blue/iterator"
+	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/workspace/walkdir"
 )
 
 // Completer abstracts the ability to complete command arguments.
@@ -35,24 +40,80 @@ type Completer interface {
 	// over an expanded list of options for the last argument. It also returns
 	// an expanded version of the last argument, if there is one, or an empty
 	// string if the last argument could/should not be automatically expanded.
-	Complete(ctx context.Context, cmd string, args ...string) (
-		iterator.Iterator[string], string,
+	Complete(ctx context.Context, args []string) (
+		iterator.Iterator[string], string, error,
 	)
 }
 
 // FuncCompleter returns a Completer that calls fn every time Complete is called.
 func FuncCompleter(
-	fn func(context.Context, string, ...string) (iterator.Iterator[string], string),
+	fn func(context.Context, []string) (iterator.Iterator[string], string, error),
 ) Completer {
 	return fnCompleter{fn: fn}
 }
 
 type fnCompleter struct {
-	fn func(context.Context, string, ...string) (iterator.Iterator[string], string)
+	fn func(context.Context, []string) (iterator.Iterator[string], string, error)
 }
 
 func (d fnCompleter) Complete(
-	ctx context.Context, cmd string, args ...string,
-) (iterator.Iterator[string], string) {
-	return d.fn(ctx, cmd, args...)
+	ctx context.Context, args []string,
+) (iterator.Iterator[string], string, error) {
+	return d.fn(ctx, args)
+}
+
+// FilePathCompleter returns a files path completer with the given directory reader.
+func FilePathCompleter(reader walkdir.Reader) Completer {
+	return FuncCompleter(func(
+		ctx context.Context, args []string,
+	) (iterator.Iterator[string], string, error) {
+		if len(args) == 0 || args[len(args)-1] == "" {
+			it, err := walkdir.ListFiles(ctx, reader, ".")
+			if err != nil {
+				return nil, "", err
+			}
+			return it, "", nil
+		}
+
+		var modifiedLast string
+		last := args[len(args)-1]
+
+		// take ~ as the home of the user using the editor.
+		// rather than the home directory of the user at the workspace.
+		// do not always expand without making sure that we are not
+		// erasing trailing /, which prevents user from editing files
+		// in folders.
+		var err error
+		if strings.Contains(last, "~") {
+			last, err = workspaceapi.ExpandPath(last, user.Current,
+				func() (string, error) {
+					// do not really expand to cwd,
+					// let parseURIOrWorkspaceURI take care of that
+					return ".", nil
+				})
+			if err != nil {
+				return nil, "", fmt.Errorf("expand path: %v", err)
+			}
+			modifiedLast = last
+		}
+
+		uri, err := parseURIOrWorkspaceURI(reader, last)
+		if err != nil {
+			return nil, "", err
+		}
+
+		it, err := walkdir.ListFiles(ctx, reader, uri.Path())
+		if err != nil {
+			return nil, "", err
+		}
+		return it, modifiedLast, nil
+	})
+}
+
+func parseURIOrWorkspaceURI(reader walkdir.Reader, path string) (workspaceapi.URI, error) {
+	uri, err := workspaceapi.ParseURI(path)
+	if err != nil {
+		uri, err = reader.URI(path)
+	}
+	return uri, err
 }

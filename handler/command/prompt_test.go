@@ -177,7 +177,7 @@ func TestCommandHandlerDispatch(t *testing.T) {
 		desc        string
 		sequence    string
 		commands    []string
-		completeCmd func() (func(ctx context.Context, command string, args ...string) (iterator.Iterator[string], string), func(*testing.T))
+		completeCmd func() (func(ctx context.Context, args []string) (iterator.Iterator[string], string, error), func(*testing.T))
 		dispatchCmd func() (func(command string, args ...string) bool, func(*testing.T))
 	}{
 		{"dispatches command NOT in list with no args",
@@ -302,7 +302,7 @@ func TestCommandHandlerDraw(t *testing.T) {
 		desc         string
 		sequence     string
 		commands     []string
-		completeCmd  func() (func(ctx context.Context, command string, args ...string) (iterator.Iterator[string], string), func(*testing.T))
+		completeCmd  func() (func(ctx context.Context, args []string) (iterator.Iterator[string], string, error), func(*testing.T))
 		dispatchCmd  func() (func(command string, args ...string) bool, func(*testing.T))
 		expectedDraw string
 	}{
@@ -848,10 +848,10 @@ func (c testNeverEndingIterator) Close() error {
 	return nil
 }
 
-func neverEndingComplete() (func(context.Context, string, ...string) (iterator.Iterator[string], string), func(*testing.T)) {
-	return func(ctx context.Context, command string, args ...string) (iterator.Iterator[string], string) {
+func neverEndingComplete() (func(context.Context, []string) (iterator.Iterator[string], string, error), func(*testing.T)) {
+	return func(ctx context.Context, args []string) (iterator.Iterator[string], string, error) {
 		it := testNeverEndingIterator{}
-		return it, "123"
+		return it, "123", nil
 	}, func(*testing.T) {}
 }
 
@@ -1097,61 +1097,64 @@ func init() {
 }
 
 func nopComplete() (
-	func(context.Context, string, ...string) (iterator.Iterator[string], string), func(*testing.T),
+	func(context.Context, []string) (iterator.Iterator[string], string, error), func(*testing.T),
 ) {
-	return func(ctx context.Context, command string, args ...string) (iterator.Iterator[string], string) {
-		return iterator.FromSlice[string](nil), ""
+	return func(ctx context.Context, args []string) (iterator.Iterator[string], string, error) {
+		return iterator.FromSlice[string](nil), "", nil
 	}, func(*testing.T) {}
 }
 
 func completeWith(data ...string) func() (
-	func(context.Context, string, ...string) (iterator.Iterator[string], string), func(*testing.T),
+	func(context.Context, []string) (iterator.Iterator[string], string, error), func(*testing.T),
 ) {
 	return func() (
-		func(ctx context.Context, command string, args ...string) (iterator.Iterator[string], string), func(*testing.T),
+		func(ctx context.Context, args []string) (iterator.Iterator[string], string, error), func(*testing.T),
 	) {
-		return func(ctx context.Context, command string, args ...string) (
-				iterator.Iterator[string], string,
+		return func(ctx context.Context, args []string) (
+				iterator.Iterator[string], string, error,
 			) {
+				args = args[1:]
 				if len(args) != 0 && args[len(args)-1] == "~" {
-					return iterator.FromSlice(data), "expanded/"
+					return iterator.FromSlice(data), "expanded/", nil
 				}
-				return iterator.FromSlice(data), ""
+				return iterator.FromSlice(data), "", nil
 			},
 			func(*testing.T) {}
 	}
 }
 
 func completeRespectively(data []string) func() (
-	func(context.Context, string, ...string) (iterator.Iterator[string], string), func(*testing.T),
+	func(context.Context, []string) (iterator.Iterator[string], string, error), func(*testing.T),
 ) {
-	return func() (func(context.Context, string, ...string) (iterator.Iterator[string], string), func(*testing.T)) {
-		return func(ctx context.Context, command string, args ...string) (iterator.Iterator[string], string) {
+	return func() (func(context.Context, []string) (iterator.Iterator[string], string, error), func(*testing.T)) {
+		return func(ctx context.Context, args []string) (iterator.Iterator[string], string, error) {
+			args = args[1:]
 			if len(args) > len(data) {
-				return iterator.FromSlice[string](nil), ""
+				return iterator.FromSlice[string](nil), "", nil
 			}
 			completing := []string{data[len(args)-1]}
-			return iterator.FromSlice(completing), ""
+			return iterator.FromSlice(completing), "", nil
 		}, func(*testing.T) {}
 	}
 }
 
 func expectCompleteWith(expectedArgs [][]string, data [][]string) func() (
-	func(ctx context.Context, command string, args ...string) (iterator.Iterator[string], string), func(*testing.T),
+	func(ctx context.Context, args []string) (iterator.Iterator[string], string, error), func(*testing.T),
 ) {
 	var actualArgsSlice [][]string
 	var called int
-	return func() (func(context.Context, string, ...string) (iterator.Iterator[string], string), func(*testing.T)) {
-		return func(ctx context.Context, command string, args ...string) (iterator.Iterator[string], string) {
+	return func() (func(context.Context, []string) (iterator.Iterator[string], string, error), func(*testing.T)) {
+		return func(ctx context.Context, args []string) (iterator.Iterator[string], string, error) {
+				args = args[1:]
 				if called >= len(data) {
 					called++ // cleanup will catch it
 					actualArgsSlice = append(actualArgsSlice, args)
-					return iterator.FromSlice[string](nil), ""
+					return iterator.FromSlice[string](nil), "", nil
 				}
 				actualArgsSlice = append(actualArgsSlice, args)
 				ret := iterator.FromSlice(data[called])
 				called++
-				return ret, ""
+				return ret, "", nil
 			}, func(t *testing.T) {
 				require.Equal(t, len(expectedArgs), called,
 					"actual => %v", actualArgsSlice)

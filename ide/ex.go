@@ -27,7 +27,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os/user"
 	"sort"
 	"strconv"
 	"strings"
@@ -103,6 +102,7 @@ type ex struct {
 	newEmulatorHandler   func(string, vte.Config) (vteHandler, error)
 	newPluginHandler     func(...string) (pluginHandler, error)
 	workspace            workspaceLoader
+	filepathCompleter    command.Completer
 	sequencer            handler.Sequencer
 	publishEvent         func(term.Event) bool
 	cancelPartialReissue func()
@@ -180,6 +180,7 @@ func (e *ex) init(
 		return plugin.New(e.Browser(), e.Browser(), e.workspace, e.workspace,
 			e.Browser(), strings.Join(args, " "), e.width, pluginOpts...)
 	}
+	e.filepathCompleter = command.FilePathCompleter(e.workspace)
 	return
 }
 
@@ -205,56 +206,11 @@ func (e *ex) subscribeCommands() error {
 	return ret
 }
 
-func (e *ex) completeEdit(
-	ctx context.Context, args []string,
-) (iterator.Iterator[string], string, error) {
-	if len(args) == 0 || args[len(args)-1] == "" {
-		it, err := walkdir.ListFiles(ctx, e.workspace, ".")
-		if err != nil {
-			return nil, "", err
-		}
-		return it, "", nil
-	}
-
-	var modifiedLast string
-	last := args[len(args)-1]
-
-	// take ~ as the home of the user using the editor.
-	// rather than the home directory of the user at the workspace.
-	// do not always expand without making sure that we are not
-	// erasing trailing /, which prevents user from editing files
-	// in folders.
-	var err error
-	if strings.Contains(last, "~") {
-		last, err = workspaceapi.ExpandPath(last, user.Current,
-			func() (string, error) {
-				// do not really expand to cwd,
-				// let parseURIOrWorkspaceURI take care of that
-				return ".", nil
-			})
-		if err != nil {
-			return nil, "", fmt.Errorf("expand path: %v", err)
-		}
-		modifiedLast = last
-	}
-
-	uri, err := e.parseURIOrWorkspaceURI(last)
-	if err != nil {
-		return nil, "", err
-	}
-
-	it, err := walkdir.ListFiles(ctx, e.workspace, uri.Path())
-	if err != nil {
-		return nil, "", err
-	}
-	return it, modifiedLast, nil
-}
-
 func (e *ex) completeReadFile(
 	ctx context.Context, args []string,
 ) (iterator.Iterator[string], string, error) {
 	// `:readFile` auto-completion works the same as the `:edit` command.
-	return e.completeEdit(ctx, args)
+	return e.filepathCompleter.Complete(ctx, args)
 }
 
 func (e *ex) log(level log.Level, msg string, args ...interface{}) {
@@ -285,7 +241,7 @@ func (e *ex) completeCommand(
 		}
 		return iterator.FromSlice(colorNames), "", nil
 	case cmdEdit:
-		return e.completeEdit(ctx, args)
+		return e.filepathCompleter.Complete(ctx, args)
 	case cmdReadFile:
 		return e.completeReadFile(ctx, args)
 	case cmdSplitWindow, cmdNewWindow:
@@ -349,15 +305,17 @@ func (e *ex) Wait() {
 }
 
 // Complete satisfies command.Completer for command.Handler.
-func (e *ex) Complete(ctx context.Context, cmd string, args ...string) (
-	iterator.Iterator[string], string,
+func (e *ex) Complete(ctx context.Context, args []string) (
+	iterator.Iterator[string], string, error,
 ) {
-	it, newArg, err := e.comp.CompleteCommand(ctx, cmd, args...)
+	if len(args) == 0 {
+		return nil, "", errors.New("missing command")
+	}
+	it, newArg, err := e.comp.CompleteCommand(ctx, args[0], args[1:]...)
 	if err != nil {
 		e.setError(fmt.Errorf("complete command: %v", err))
-		return iterator.FromSlice[string](nil), ""
 	}
-	return it, newArg
+	return it, newArg, err
 }
 
 // Dispatch satisfies command.Dispatcher for command.Handler.

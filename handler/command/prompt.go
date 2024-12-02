@@ -730,7 +730,10 @@ func (h *Prompt) setCompletionList(
 		}
 	}
 
-	it, newLastArg := h.completer.Complete(ctx, finalExternalCmdAndArgs[0], finalExternalCmdAndArgs[1:]...)
+	it, newLastArg, err := h.completer.Complete(ctx, finalExternalCmdAndArgs)
+	if err != nil {
+		it = iterator.Empty[string]()
+	}
 	if newLastArg != "" {
 		newCmdAndArgs := make([]string, len(cmdAndArgs))
 		copy(newCmdAndArgs, cmdAndArgs)
