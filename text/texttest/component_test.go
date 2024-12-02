@@ -31,11 +31,11 @@ import (
 	"sync"
 	"testing"
 
-	gomock "go.uber.org/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/iterator"
+	gomock "go.uber.org/mock/gomock"
 	"unstable.build/go-tui"
 	browserapi "unstable.build/go-tui/api/browser"
 	textapi "unstable.build/go-tui/api/text"
@@ -45,6 +45,7 @@ import (
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component/comptest"
 	"unstable.build/go-tui/handler"
+	"unstable.build/go-tui/handler/command"
 	"unstable.build/go-tui/handler/handlertest"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
@@ -1231,7 +1232,7 @@ func TestComponentCommands(t *testing.T) {
 			}, nil))
 		cmds := c.Commands()
 		require.Len(t, cmds, 1)
-		expectedMan := text.CommandManual{CommandManual: textapi.CommandManual{Name: "myCmd", Summary: "mySummary", Synopsis: "mySynopsis"}}
+		expectedMan := command.Manual{Name: "myCmd", Summary: "mySummary", Synopsis: "mySynopsis"}
 		assert.Equal(t, expectedMan, cmds[0])
 	})
 	t.Run("returns configured aliases", func(t *testing.T) {
@@ -1243,7 +1244,7 @@ func TestComponentCommands(t *testing.T) {
 		require.NoError(t, err)
 		cmds := c.Commands()
 		require.Len(t, cmds, 1)
-		expectedMan := text.CommandManual{CommandManual: textapi.CommandManual{Name: "blah"}, AliasOf: []string{"myCmd"}}
+		expectedMan := command.Manual{Name: "blah", AliasOf: []string{"myCmd"}}
 		assert.Equal(t, expectedMan, cmds[0])
 	})
 }

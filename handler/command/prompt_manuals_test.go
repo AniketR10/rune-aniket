@@ -28,38 +28,36 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/document"
-	textapi "unstable.build/go-tui/api/text"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/handler/handlertest"
 	"unstable.build/go-tui/term"
-	"unstable.build/go-tui/text"
 )
 
-var goodTestCommands = []text.CommandManual{
-	{CommandManual: textapi.CommandManual{Name: "subaru", Summary: "2021 top of the line, high tech.", Synopsis: "outback touring xt"}},
-	{CommandManual: textapi.CommandManual{Name: "jeep", Summary: "2022 bottom of the line, great offroading.", Synopsis: "gladiator sport s"}},
-	{CommandManual: textapi.CommandManual{Name: "mercedes", Summary: "2014 old luxury car.", Synopsis: "GL 450",
-		Commands: []textapi.CommandManual{
+var goodTestCommands = []Manual{
+	{Name: "subaru", Summary: "2021 top of the line, high tech.", Synopsis: "outback touring xt"},
+	{Name: "jeep", Summary: "2022 bottom of the line, great offroading.", Synopsis: "gladiator sport s"},
+	{Name: "mercedes", Summary: "2014 old luxury car.", Synopsis: "GL 450",
+		Commands: []Manual{
 			{Name: "GL", Summary: "GLs are 7 seater.", Synopsis: "[450]",
-				Commands: []textapi.CommandManual{
+				Commands: []Manual{
 					{Name: "450", Summary: "450 is middle tier", Synopsis: ""}},
 			}},
-	}},
-	{CommandManual: textapi.CommandManual{Name: "gladiator"}, AliasOf: []string{"jeep"}},
-	{CommandManual: textapi.CommandManual{Name: "current"}, AliasOf: []string{"subaru", "jeep"}},
+	},
+	{Name: "gladiator", AliasOf: []string{"jeep"}},
+	{Name: "current", AliasOf: []string{"subaru", "jeep"}},
 }
 
-var goodLotsTestCommands = []text.CommandManual{
-	{CommandManual: textapi.CommandManual{Name: "0", Summary: "The void.", Synopsis: "<nothing>"}},
-	{CommandManual: textapi.CommandManual{Name: "1", Summary: "Top of the line.", Synopsis: "<nothing>"}},
-	{CommandManual: textapi.CommandManual{Name: "2", Summary: "Next in kin"}},
-	{CommandManual: textapi.CommandManual{Name: "3", Summary: "Podium."}},
-	{CommandManual: textapi.CommandManual{Name: "4", Summary: "Who knows."}},
-	{CommandManual: textapi.CommandManual{Name: "5", Summary: "Who cares."}},
-	{CommandManual: textapi.CommandManual{Name: "6", Summary: "Say what?"}},
-	{CommandManual: textapi.CommandManual{Name: "7", Summary: "Cool."}},
-	{CommandManual: textapi.CommandManual{Name: "8", Summary: "Numbers."}},
-	{CommandManual: textapi.CommandManual{Name: "9", Summary: "Bottom of the line."}},
+var goodLotsTestCommands = []Manual{
+	{Name: "0", Summary: "The void.", Synopsis: "<nothing>"},
+	{Name: "1", Summary: "Top of the line.", Synopsis: "<nothing>"},
+	{Name: "2", Summary: "Next in kin"},
+	{Name: "3", Summary: "Podium."},
+	{Name: "4", Summary: "Who knows."},
+	{Name: "5", Summary: "Who cares."},
+	{Name: "6", Summary: "Say what?"},
+	{Name: "7", Summary: "Cool."},
+	{Name: "8", Summary: "Numbers."},
+	{Name: "9", Summary: "Bottom of the line."},
 }
 
 func TestCommandHandlerManualsDraw(t *testing.T) {
@@ -72,7 +70,7 @@ func TestCommandHandlerManualsDraw(t *testing.T) {
 	tsuite := []struct {
 		desc         string
 		sequence     string
-		commands     []text.CommandManual
+		commands     []Manual
 		expectedDraw string
 	}{
 		{"initializes no commands empty", "", nil, `

@@ -29,11 +29,32 @@ import (
 	"strings"
 	"text/template"
 
-	textapi "unstable.build/go-tui/api/text"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/term"
-	"unstable.build/go-tui/text"
 )
+
+// Manual represents a command's manual and documentation.
+type Manual struct {
+	Name string
+
+	// Summary is a short 80-100 character description.
+	Summary string
+
+	// Synopsis is a single line synopsis of how
+	// this CLI is to be used. It should ONLY include
+	// the semantic information about how arguments are parsed.
+	//
+	// Example: [<options>] [<revision-range>] [[--] <path>...]
+	Synopsis string
+
+	// Commands is a list of accepted commands or nil
+	// if no commands are expected.
+	Commands []Manual
+
+	// AliasOf defines this command as an alias of the
+	// given command or sequence of commands.
+	AliasOf []string
+}
 
 const manualTemplate = `USAGE
 {{ .Name }} {{ .Synopsis }}
@@ -57,7 +78,7 @@ func init() {
 }
 
 func makeManualComponent(
-	man text.CommandManual,
+	man Manual,
 	frameCharSet component.FrameCharSet,
 	attr term.Attributes,
 ) component.Responsive {
@@ -89,15 +110,15 @@ func makeManualComponent(
 	return ret
 }
 
-func writeTemplate(w io.Writer, m text.CommandManual) error {
+func writeTemplate(w io.Writer, m Manual) error {
 	if err := tmpl.Execute(w, m); err != nil {
 		return fmt.Errorf("template execute: %v", err)
 	}
 	return nil
 }
 
-func getSubcommandManual(cmd text.CommandManual, input []string) (
-	man text.CommandManual, ok bool,
+func getSubcommandManual(cmd Manual, input []string) (
+	man Manual, ok bool,
 ) {
 	if len(input) == 0 {
 		return
@@ -105,7 +126,7 @@ func getSubcommandManual(cmd text.CommandManual, input []string) (
 	name := input[0]
 	for _, subCmd := range cmd.Commands {
 		if subCmd.Name == name {
-			textSubCmd := toTextManual(subCmd)
+			textSubCmd := subCmd
 			subSubCmd, subSubCmdOk := getSubcommandManual(textSubCmd, input[1:])
 			if subSubCmdOk {
 				return subSubCmd, true
@@ -116,17 +137,6 @@ func getSubcommandManual(cmd text.CommandManual, input []string) (
 	return
 }
 
-func toTextManual(api textapi.CommandManual) text.CommandManual {
-	return text.CommandManual{
-		CommandManual: textapi.CommandManual{
-			Name:     api.Name,
-			Synopsis: api.Synopsis,
-			Summary:  api.Summary,
-			Commands: api.Commands,
-		},
-	}
-}
-
-func manualToName(man textapi.CommandManual) string {
+func manualToName(man Manual) string {
 	return man.Name
 }

@@ -44,14 +44,13 @@ import (
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/search"
 	"unstable.build/go-tui/term"
-	"unstable.build/go-tui/text"
 )
 
 // NewPrompt allocates storage for a new Prompt and initializes it.
 func NewPrompt(
 	storage document.Service, completer Completer,
 	dispatcher Dispatcher, interrupter term.Interrupter,
-	commands []text.CommandManual, config Config,
+	commands []Manual, config Config,
 ) *Prompt {
 	ret := new(Prompt)
 	ret.Init(storage, completer, dispatcher, interrupter, commands, config)
@@ -77,7 +76,7 @@ type Prompt struct {
 	history    search.History
 
 	commandAndArgs []string
-	commandsBackup []text.CommandManual
+	commandsBackup []Manual
 	userScrolling  bool
 	bracketedPaste bool
 
@@ -125,7 +124,7 @@ const (
 func (h *Prompt) Init(
 	storage document.Service, completer Completer,
 	dispatcher Dispatcher, interrupter term.Interrupter,
-	commands []text.CommandManual, config Config,
+	commands []Manual, config Config,
 ) {
 	cfg := search.ListConfig{
 		Algo:             search.FuzzyMatch,
@@ -140,7 +139,7 @@ func (h *Prompt) Init(
 
 func (h *Prompt) doInit(
 	storage document.Service, completer Completer, interrupter term.Interrupter,
-	dispatcher Dispatcher, commands []text.CommandManual, config Config,
+	dispatcher Dispatcher, commands []Manual, config Config,
 	listCfg search.ListConfig,
 ) {
 	h.mode = modeCommandPromptCommand
@@ -910,7 +909,7 @@ func (h *Prompt) pushCompletionList(
 // Reset resets the commands listed in this Prompt.
 // It should be called after initialization and every time
 // new commands are available.
-func (h *Prompt) Reset(commands []text.CommandManual) {
+func (h *Prompt) Reset(commands []Manual) {
 	h.setCommandMode()
 	h.buf.Reset()
 	h.list.Buffer().Reset()
@@ -925,7 +924,7 @@ func (h *Prompt) cancelCompletionPush(reason string) {
 	h.list.Cancel()
 }
 
-func (h *Prompt) resetListWith(items []text.CommandManual) {
+func (h *Prompt) resetListWith(items []Manual) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -1100,7 +1099,7 @@ func (h *Prompt) startManualTimer() {
 }
 
 func (h *Prompt) buildManualComponent(bufString string) component.Responsive {
-	var man text.CommandManual
+	var man Manual
 	var ok bool
 	cmdAndArgs := strings.Split(strings.TrimSpace(bufString), " ")
 
@@ -1147,7 +1146,7 @@ func (h *Prompt) buildManualComponent(bufString string) component.Responsive {
 	return nil
 }
 
-func (h *Prompt) getManualFromFocus() (man text.CommandManual, ok bool) {
+func (h *Prompt) getManualFromFocus() (man Manual, ok bool) {
 	// it's ok to wait here, since the list of
 	// commands is short and pre-determined
 	h.list.Wait()
@@ -1164,13 +1163,13 @@ func (h *Prompt) getManualFromFocus() (man text.CommandManual, ok bool) {
 	return
 }
 
-func (h *Prompt) getManualForCommand(cmd string) (text.CommandManual, bool) {
+func (h *Prompt) getManualForCommand(cmd string) (Manual, bool) {
 	for _, man := range h.commandsBackup {
 		if man.Name == cmd {
 			return man, true
 		}
 	}
-	return text.CommandManual{}, false
+	return Manual{}, false
 }
 func (h *Prompt) manualCompleter(
 	ctx context.Context, cmd string, args ...string,

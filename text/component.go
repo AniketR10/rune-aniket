@@ -47,6 +47,7 @@ import (
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/handler"
+	"unstable.build/go-tui/handler/command"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/workspace"
 )
@@ -839,25 +840,16 @@ func (c *Component) UnsubscribeEvents(sub EventHandler) (ret bool, err error) {
 
 // Commands returns a list of commands registered via SubscribeCommand
 // or via Config.CommandAliases.
-func (c *Component) Commands() (ret []CommandManual) {
-	ret = make([]CommandManual, len(c.cmdSubscribers))
+func (c *Component) Commands() (ret []command.Manual) {
+	ret = make([]command.Manual, len(c.cmdSubscribers))
 	var i int
 	for _, cmd := range c.cmdSubscribers {
-		ret[i] = CommandManual{
-			CommandManual: textapi.CommandManual{
-				Name:     cmd.man.Name,
-				Synopsis: cmd.man.Synopsis,
-				Summary:  cmd.man.Summary,
-				Commands: cmd.man.Commands,
-			},
-		}
+		ret[i] = cmd.man
 		i++
 	}
 	for alias, aliasOf := range c.config.CommandAliases {
-		ret = append(ret, CommandManual{
-			CommandManual: textapi.CommandManual{
-				Name: alias,
-			},
+		ret = append(ret, command.Manual{
+			Name:    alias,
 			AliasOf: aliasOf,
 		})
 	}
@@ -871,7 +863,10 @@ func (c *Component) SubscribeCommand(cmd textapi.CommandManual, cm CommandHandle
 		return errors.New("command already registered")
 	}
 
-	c.cmdSubscribers[cmd.Name] = commandAll{man: cmd, handler: cm}
+	c.cmdSubscribers[cmd.Name] = commandAll{
+		man:     apiManualToManual(cmd),
+		handler: cm,
+	}
 	return nil
 }
 
@@ -1083,7 +1078,7 @@ func (e *editorFlusherCloser) Close() error {
 
 type commandAll struct {
 	handler CommandHandler
-	man     textapi.CommandManual
+	man     command.Manual
 }
 
 // wraps Editor returned in calls to Edit
@@ -1129,4 +1124,20 @@ func (c *handlerWindowSubscriber) OnFocus(old, focus handler.Window) {
 	}
 	c.tryDispatchEventFocus(focus)
 	(*Component)(c).focus = focus
+}
+
+func apiManualToManual(cmd textapi.CommandManual) command.Manual {
+	var subcmds []command.Manual
+	if len(cmd.Commands) != 0 {
+		subcmds = make([]command.Manual, len(cmd.Commands))
+		for i, cmd := range cmd.Commands {
+			subcmds[i] = apiManualToManual(cmd)
+		}
+	}
+	return command.Manual{
+		Name:     cmd.Name,
+		Summary:  cmd.Summary,
+		Synopsis: cmd.Synopsis,
+		Commands: subcmds,
+	}
 }

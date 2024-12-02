@@ -43,17 +43,6 @@ type CommandHandler interface {
 	)
 }
 
-// CommandManual represents a command's manual and documentation.
-// It adds an AliasOf field to textapi.CommandManual, something
-// we don't want to expose to external clients.
-type CommandManual struct {
-	textapi.CommandManual
-
-	// AliasOf defines this command as an alias of the
-	// given command or sequence of commands.
-	AliasOf []string
-}
-
 // FuncCommandHandler returns an CommandHandler that calls fn
 // every time HandleCommand is invoked. If completeFn is not nil,
 // then it is called when Complete is invoked.

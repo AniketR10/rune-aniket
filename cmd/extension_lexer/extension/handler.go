@@ -49,6 +49,7 @@ import (
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	workspaceextension "unstable.build/go-tui/api/workspace/extension"
 	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/clipboard"
 	syntaxExtension "unstable.build/go-tui/cmd/extension_fuzzy_syntax/extension"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/notifications"
@@ -58,6 +59,7 @@ import (
 	"unstable.build/go-tui/handler/search"
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term"
+	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/text/vi"
 )
 
@@ -491,7 +493,11 @@ func (h *syntaxHandler) browseNodes(
 		}
 	}
 
-	sh := search.Handler(list, func(text string) {
+	clipboard := clipboard.NewInMemory()
+	attr := term.Attributes{} // does not matter for Handler's purpose
+	sed, _ := text.NewSimpleEditor(clipboard, true, true, attr, attr, attr).
+		Edit(workspaceapi.RandomURI("search"), list.Buffer())
+	sh := search.Handler(list, sed, func(text string) {
 		done = true
 
 		// liberate all tabs

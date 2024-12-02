@@ -46,12 +46,14 @@ import (
 	textextension "unstable.build/go-tui/api/text/extension"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	workspaceextension "unstable.build/go-tui/api/workspace/extension"
+	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/handler/search"
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term"
+	"unstable.build/go-tui/text"
 )
 
 const (
@@ -446,7 +448,11 @@ func New(
 
 	listConfig := h.getListConfig(cfg)
 	h.list.Init(listConfig)
-	h.listHandler = search.Handler(&h.list, func(item string) {
+	clipboard := clipboard.NewInMemory()
+	attr := term.Attributes{} // does not matter for Handler's purpose
+	ed, _ := text.NewSimpleEditor(clipboard, true, true, attr, attr, attr).
+		Edit(workspaceapi.RandomURI("search"), h.list.Buffer())
+	h.listHandler = search.Handler(&h.list, ed, func(item string) {
 		searchQuery := h.list.Buffer().String()
 		h.openResource(searchQuery, item)
 		h.addSearchHistory(searchQuery)

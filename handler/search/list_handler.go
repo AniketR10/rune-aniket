@@ -25,10 +25,7 @@ package search
 
 import (
 	"unstable.build/go-tui"
-	workspaceapi "unstable.build/go-tui/api/workspace"
-	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/term"
-	"unstable.build/go-tui/text"
 )
 
 // Handler wraps a List to satisfy tui.Handler.
@@ -36,15 +33,7 @@ import (
 // if there's an element in focus at all.
 // It handles esc key by exiting and handles arrow keys up/down
 // by scrolling up and down the list.
-func Handler(l *List, fn func(string)) tui.Handler {
-	// this must be set for List searchBar Responsive logic to make sense
-	const wrap = true
-
-	buf := l.Buffer()
-	clipboard := clipboard.NewInMemory()
-	attr := term.Attributes{} // do not matter for Handler's purpouse
-	ed, _ := text.NewSimpleEditor(clipboard, wrap, true, attr, attr, attr).
-		Edit(workspaceapi.RandomURI("search"), buf)
+func Handler(l *List, ed tui.Handler, fn func(string)) tui.Handler {
 	ret := simpleHandler{List: l, fn: fn, ed: ed}
 	return ret
 }

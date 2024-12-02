@@ -37,11 +37,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/iterator"
-	textapi "unstable.build/go-tui/api/text"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/handler/handlertest"
 	"unstable.build/go-tui/term"
-	"unstable.build/go-tui/text"
 )
 
 func TestCommandHandlerManualsDrawTooSmallForManual(t *testing.T) {
@@ -54,7 +52,7 @@ func TestCommandHandlerManualsDrawTooSmallForManual(t *testing.T) {
 	tsuite := []struct {
 		desc         string
 		sequence     string
-		commands     []text.CommandManual
+		commands     []Manual
 		expectedDraw string
 	}{
 		{"initializes no commands empty", "", nil, `
@@ -1195,9 +1193,9 @@ func expectDispatch(expectedCmd string, expectedArgs ...string) func() (func(str
 	}
 }
 
-func testNoManualCommands(cmds []string) (ret []text.CommandManual) {
+func testNoManualCommands(cmds []string) (ret []Manual) {
 	for _, cmd := range cmds {
-		ret = append(ret, text.CommandManual{CommandManual: textapi.CommandManual{Name: cmd}})
+		ret = append(ret, Manual{Name: cmd})
 	}
 	return
 }

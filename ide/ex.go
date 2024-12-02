@@ -1137,8 +1137,7 @@ func (e *ex) handleEvent(ev term.Event) (
 func (e *ex) resetCommandList(cmd *command.Prompt) {
 	// commands can be registered dynamicall via Editor.Register:
 	// compile a new list every time we switch to command mode
-	var commands []text.CommandManual
-	commands = append(commands, e.comp.Commands()...)
+	commands := e.comp.Commands()
 	sort.Slice(commands, func(i, j int) bool {
 		return commands[i].Name < commands[j].Name
 	})
@@ -1158,7 +1157,7 @@ func (e *ex) openCommandPrompt() {
 	commandCfg.FrameAttr = e.config.FrameAttr
 	commandCfg.ShowManualAfter = e.config.CommandOverlay.ShowManualAfter
 	commandCfg.Sync = e.syncCommandPrompt
-	cmd := command.NewPrompt(e.storage, e, e, e, []text.CommandManual{}, commandCfg)
+	cmd := command.NewPrompt(e.storage, e, e, e, []command.Manual{}, commandCfg)
 
 	commandHandler := browser.FuncFloating(
 		browser.FuncHandler(
