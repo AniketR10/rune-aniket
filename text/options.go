@@ -33,6 +33,7 @@ import (
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/handler"
+	"unstable.build/go-tui/handler/command"
 	"unstable.build/go-tui/term"
 )
 
@@ -55,7 +56,7 @@ type Config struct {
 	CommandMaxHistory       int
 	CommandKeyBindings      map[term.KeyComb][]string
 	CommandSequenceBindings map[handler.Sequence][]string
-	CommandAliases          map[string][]string
+	CommandAliases          map[string]CommandAlias
 	SequencerTimeout        time.Duration
 	DirtyTabAttr            term.Attributes
 
@@ -63,6 +64,13 @@ type Config struct {
 
 	CommandOverlay CommandOverlayConfig
 	browser.Config
+}
+
+// CommandAlias is a command to command alias, along with completion configuration.
+type CommandAlias struct {
+	Name      string
+	Commands  []string
+	Completer func(*Component) command.Completer
 }
 
 // DefaultCommandOverlayConfig returns the default Config's CommandOverlayConfig.
@@ -88,7 +96,7 @@ func DefaultConfig() Config {
 		DirtyTabAttr:            term.Attributes{Attrs: tcell.AttrBold},
 		CommandKeyBindings:      make(map[term.KeyComb][]string),
 		CommandSequenceBindings: make(map[handler.Sequence][]string),
-		CommandAliases:          make(map[string][]string),
+		CommandAliases:          make(map[string]CommandAlias),
 		SequencerTimeout:        400 * time.Millisecond,
 		CommandOverlay:          DefaultCommandOverlayConfig(),
 		EventPublisher:          func(term.Event) bool { return false },
@@ -279,7 +287,7 @@ func WithCommandOverlayConfig(c CommandOverlayConfig) Option {
 }
 
 // WithCommandAliases defines command aliases.
-func WithCommandAliases(aliases map[string][]string) Option {
+func WithCommandAliases(aliases map[string]CommandAlias) Option {
 	return func(cfg *Config) {
 		cfg.CommandAliases = aliases
 	}
@@ -301,7 +309,7 @@ func WithEventPublisher(f func(term.Event) bool) Option {
 
 // ValidateCommandAliases validates that the given command aliases configuration
 // doesn't contain any self-referencing aliases.
-func ValidateCommandAliases(aliases map[string][]string) error {
+func ValidateCommandAliases(aliases map[string]CommandAlias) error {
 	for alias := range aliases {
 		if isErr := exploreAlias(aliases, alias, make(map[string]struct{})); isErr {
 			return fmt.Errorf("Alias cycle detected: '%s'", alias)
@@ -310,9 +318,12 @@ func ValidateCommandAliases(aliases map[string][]string) error {
 	return nil
 }
 
-func exploreAlias(aliases map[string][]string, exploringAlias string, origins map[string]struct{}) bool {
+func exploreAlias(
+	aliases map[string]CommandAlias, exploringAlias string,
+	origins map[string]struct{},
+) bool {
 	origins[exploringAlias] = struct{}{}
-	for _, target := range aliases[exploringAlias] {
+	for _, target := range aliases[exploringAlias].Commands {
 		if _, seenInPath := origins[target]; seenInPath {
 			return true
 		}

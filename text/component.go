@@ -50,6 +50,7 @@ import (
 	"unstable.build/go-tui/handler/command"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/workspace"
+	"unstable.build/go-tui/workspace/walkdir"
 )
 
 // used for command and event handlers
@@ -59,13 +60,19 @@ var _ tui.Component = (*Component)(nil)
 var _ browser.Browser = (*Component)(nil)
 var _ Editor = (*Component)(nil)
 
+// Workspace abstracts the workspace functionality needed for a Component.
+type Workspace interface {
+	workspace.Loader
+	walkdir.Reader
+}
+
 // Component is an implementation of browser.Browser for file editing.
 // It also satisfies tui.Component, and text.Editor.
 type Component struct {
 	comp           browser.Component
 	notifier       notifier
 	storage        document.Service
-	workspace      workspace.Loader
+	workspace      Workspace
 	ed             Editor
 	config         Config
 	focus          handler.Window
@@ -75,7 +82,7 @@ type Component struct {
 }
 
 // NewComponent allocates storage for a new Component and initializes it.
-func NewComponent(ed Editor, storage document.Service, w workspace.Loader, config Config) (
+func NewComponent(ed Editor, storage document.Service, w Workspace, config Config) (
 	c *Component, err error,
 ) {
 	c = new(Component)
@@ -159,7 +166,10 @@ func (c *Component) newFileBuffer(
 // Init initializes this Component with the given editor and Options.
 // It returns an error if an initial filepath was given through WithFilePath option
 // and the file failed to be opened.
-func (c *Component) Init(ed Editor, storage document.Service, w workspace.Loader, config Config) error {
+func (c *Component) Init(
+	ed Editor, storage document.Service,
+	w Workspace, config Config,
+) error {
 	c.config = config
 
 	c.comp.Init(c.config.Config)
@@ -453,10 +463,12 @@ func (c *Component) CommandKeyBinding(key term.KeyComb) ([]string, bool) {
 func (c *Component) CompleteCommand(ctx context.Context, cmd string, args ...string) (
 	iterator.Iterator[string], string, error,
 ) {
-	// aliases cannot be auto-completed
-	if _, ok := c.config.CommandAliases[cmd]; ok {
-		c.log(log.DebugLevel, "complete command %q: aliases cannot get completed", cmd)
-		return iterator.FromSlice[string](nil), "", nil
+	if a, ok := c.config.CommandAliases[cmd]; ok {
+		if a.Completer == nil {
+			return iterator.FromSlice[string](nil), "", nil
+		}
+		return a.Completer(c).
+			Complete(ctx, append([]string{cmd}, args...))
 	}
 
 	man, ok := c.cmdSubscribers[cmd]
@@ -477,7 +489,7 @@ func (c *Component) DispatchCommand(cmd textapi.Command) (handled bool, err erro
 	targets, ok := c.config.CommandAliases[cmd.Name]
 	if ok {
 		c.log(log.DebugLevel, "Dispatching alias %s: %#v", cmd.Name, targets)
-		for _, target := range targets {
+		for _, target := range targets.Commands {
 			argv := strings.Split(target, " ")
 			targetCmd := textapi.Command{
 				Name:     argv[0],
@@ -850,7 +862,7 @@ func (c *Component) Commands() (ret []command.Manual) {
 	for alias, aliasOf := range c.config.CommandAliases {
 		ret = append(ret, command.Manual{
 			Name:    alias,
-			AliasOf: aliasOf,
+			AliasOf: aliasOf.Commands,
 		})
 	}
 	return ret
@@ -1020,6 +1032,11 @@ func (c *Component) Prompt(
 // SubscribeWindow subscribes sub to changes in focus due to changing the window in focus.
 func (c *Component) SubscribeWindow(sub handler.WindowSubscriber) {
 	c.comp.Subscribe(sub)
+}
+
+// Workspace returns the workspace used by this Component.
+func (c *Component) Workspace() Workspace {
+	return c.workspace
 }
 
 // Close closes all resources associated with this Component.

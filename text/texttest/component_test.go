@@ -26,6 +26,7 @@ package texttest
 import (
 	"context"
 	"errors"
+	"os"
 	"os/user"
 	"strings"
 	"sync"
@@ -108,6 +109,20 @@ func (t *testLoader) Recover(
 }
 
 func (t *testLoader) URI(path string) (workspaceapi.URI, error) {
+	panic("unused")
+}
+
+func (t *testLoader) Open(path string, flag int, perm os.FileMode) (
+	workspaceapi.File, *workspaceapi.Error,
+) {
+	panic("unused")
+}
+
+func (t *testLoader) Stat(path string) (os.FileInfo, error) {
+	panic("unused")
+}
+
+func (t *testLoader) ReadDir(name string) ([]os.DirEntry, error) {
 	panic("unused")
 }
 
@@ -969,10 +984,9 @@ func TestDispatchCommand(t *testing.T) {
 
 	t.Run("uses aliases from config to dispatch", func(t *testing.T) {
 		config := text.DefaultConfig()
-		config.CommandAliases = map[string][]string{
-			"workstation_layout": {
-				"newWindow",
-				"edit /tmp/todo.md",
+		config.CommandAliases = map[string]text.CommandAlias{
+			"workstation_layout": text.CommandAlias{
+				Commands: []string{"newWindow", "edit /tmp/todo.md"},
 			},
 		}
 		c, _ := newTestComponentConfig(t, NopEditor(), config)
@@ -1032,10 +1046,10 @@ func TestDispatchCommand(t *testing.T) {
 
 	t.Run("handles bad aliases", func(t *testing.T) {
 		config := text.DefaultConfig()
-		config.CommandAliases = map[string][]string{
-			"bad1": {""},
-			"bad2": {},
-			"bad3": nil,
+		config.CommandAliases = map[string]text.CommandAlias{
+			"bad1": text.CommandAlias{Commands: []string{""}},
+			"bad2": text.CommandAlias{Commands: []string{}},
+			"bad3": text.CommandAlias{},
 		}
 		c, _ := newTestComponentConfig(t, NopEditor(), config)
 		win, _ := c.Focus()
@@ -1072,9 +1086,9 @@ func TestDispatchCommand(t *testing.T) {
 
 	t.Run("NewComponent returns error if aliases create an infinite loop of command calls", func(t *testing.T) {
 		cfg := text.DefaultConfig()
-		cfg.CommandAliases = map[string][]string{
-			"blah": {"bleh"},
-			"bleh": {"blah"},
+		cfg.CommandAliases = map[string]text.CommandAlias{
+			"blah": text.CommandAlias{Commands: []string{"bleh"}},
+			"bleh": text.CommandAlias{Commands: []string{"blah"}},
 		}
 		_, err := text.NewComponent(NopEditor(), document.NewInMemoryService(), &testLoader{}, cfg)
 		require.Error(t, err)
@@ -1083,9 +1097,9 @@ func TestDispatchCommand(t *testing.T) {
 
 	t.Run("NewComponent does not return error if aliases simply embeds another alias", func(t *testing.T) {
 		cfg := text.DefaultConfig()
-		cfg.CommandAliases = map[string][]string{
-			"blah": {"bleh"},
-			"bleh": {"bloh"},
+		cfg.CommandAliases = map[string]text.CommandAlias{
+			"blah": text.CommandAlias{Commands: []string{"bleh"}},
+			"bleh": text.CommandAlias{Commands: []string{"bloh"}},
 		}
 		_, err := text.NewComponent(NopEditor(), document.NewInMemoryService(), &testLoader{}, cfg)
 		require.NoError(t, err)
@@ -1093,10 +1107,10 @@ func TestDispatchCommand(t *testing.T) {
 
 	t.Run("NewComponent returns error if aliases create an infinite loop of nested command calls", func(t *testing.T) {
 		cfg := text.DefaultConfig()
-		cfg.CommandAliases = map[string][]string{
-			"blah": {"bleh"},
-			"bleh": {"bloh"},
-			"bloh": {"bluh", "blah"},
+		cfg.CommandAliases = map[string]text.CommandAlias{
+			"blah": text.CommandAlias{Commands: []string{"bleh"}},
+			"bleh": text.CommandAlias{Commands: []string{"bloh"}},
+			"bloh": text.CommandAlias{Commands: []string{"bluh", "blah"}},
 		}
 		_, err := text.NewComponent(NopEditor(), document.NewInMemoryService(), &testLoader{}, cfg)
 		require.Error(t, err)
@@ -1105,16 +1119,60 @@ func TestDispatchCommand(t *testing.T) {
 
 	t.Run("NewComponent does not return error if aliases simply embeds another nested alias", func(t *testing.T) {
 		cfg := text.DefaultConfig()
-		cfg.CommandAliases = map[string][]string{
-			"blah": {"bleh"},
-			"bleh": {"bloh"},
-			"bloh": {"bluh", "otherThing"},
+		cfg.CommandAliases = map[string]text.CommandAlias{
+			"blah": text.CommandAlias{Commands: []string{"bleh"}},
+			"bleh": text.CommandAlias{Commands: []string{"bloh"}},
+			"bloh": text.CommandAlias{Commands: []string{"bluh", "otherThing"}},
 		}
 		_, err := text.NewComponent(NopEditor(), document.NewInMemoryService(), &testLoader{}, cfg)
 		require.NoError(t, err)
 	})
 }
 func TestCompleteCommand(t *testing.T) {
+	t.Run("uses alias completer, if defined", func(t *testing.T) {
+		completer := func(c *text.Component) command.Completer {
+			return command.FuncCompleter(func(ctx context.Context, args []string) (
+				iterator.Iterator[string], string, error,
+			) {
+				return iterator.FromSlice[string]([]string{"a", "b", "c"}), "sus", nil
+			})
+		}
+		cfg := text.DefaultConfig()
+		cfg.CommandAliases = map[string]text.CommandAlias{
+			"blah": text.CommandAlias{Commands: []string{"bleh"}, Completer: completer},
+		}
+		c, err := text.NewComponent(NopEditor(), document.NewInMemoryService(), &testLoader{}, cfg)
+		require.NoError(t, err)
+
+		it, arg, err := c.CompleteCommand(context.Background(), "blah")
+		require.NoError(t, err)
+
+		slice, err := iterator.ToSlice(context.Background(), it)
+		require.NoError(t, err)
+
+		assert.Equal(t, []string{"a", "b", "c"}, slice)
+		assert.Equal(t, "sus", arg)
+	})
+
+	t.Run("bubbles up alias completer error", func(t *testing.T) {
+		completer := func(c *text.Component) command.Completer {
+			return command.FuncCompleter(func(ctx context.Context, args []string) (
+				iterator.Iterator[string], string, error,
+			) {
+				return nil, "", errors.New("kaboom")
+			})
+		}
+		cfg := text.DefaultConfig()
+		cfg.CommandAliases = map[string]text.CommandAlias{
+			"blah": text.CommandAlias{Commands: []string{"bleh"}, Completer: completer},
+		}
+		c, err := text.NewComponent(NopEditor(), document.NewInMemoryService(), &testLoader{}, cfg)
+		require.NoError(t, err)
+
+		_, _, err = c.CompleteCommand(context.Background(), "blah")
+		require.EqualError(t, err, "kaboom")
+	})
+
 	t.Run("returns empty iterator if there's no registered handler", func(t *testing.T) {
 		c, _ := newTestComponent(t, NopEditor())
 
@@ -1123,12 +1181,14 @@ func TestCompleteCommand(t *testing.T) {
 		assertIteratorLen(t, 0, it)
 	})
 
-	t.Run("returns empty iterator if attempting to complete alias", func(t *testing.T) {
+	t.Run("returns empty iterator if attempting to complete alias with no completer defined", func(t *testing.T) {
 		cfg := text.DefaultConfig()
-		cfg.CommandAliases = map[string][]string{
-			"workstation_layout": {
-				"newWindow",
-				"edit /tmp/todo.md",
+		cfg.CommandAliases = map[string]text.CommandAlias{
+			"workstation_layout": text.CommandAlias{
+				Commands: []string{
+					"newWindow",
+					"edit /tmp/todo.md",
+				},
 			},
 		}
 		c, _ := newTestComponentConfig(t, NopEditor(), cfg)
@@ -1237,8 +1297,8 @@ func TestComponentCommands(t *testing.T) {
 	})
 	t.Run("returns configured aliases", func(t *testing.T) {
 		cfg := text.DefaultConfig()
-		cfg.CommandAliases = map[string][]string{
-			"blah": {"myCmd"},
+		cfg.CommandAliases = map[string]text.CommandAlias{
+			"blah": text.CommandAlias{Commands: []string{"myCmd"}},
 		}
 		c, err := text.NewComponent(NopEditor(), document.NewInMemoryService(), &testLoader{}, cfg)
 		require.NoError(t, err)
@@ -1399,7 +1459,7 @@ func TestFlush(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		mock := NewMockHandler(ctrl)
 		mockEditor := NewMockEditor(ctrl)
-		mockWorkspace := workspacetest.NewMockLoader(ctrl)
+		mockWorkspace := NewMockWorkspace(ctrl)
 		mockFlusherCloser := workspacetest.NewMockFlusherCloser(ctrl)
 
 		c, err := text.NewComponent(mockEditor, document.NewInMemoryService(), mockWorkspace, text.DefaultConfig())

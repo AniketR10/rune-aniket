@@ -24,6 +24,7 @@
 package ide
 
 import (
+	"context"
 	_ "embed"
 	"errors"
 	"fmt"
@@ -36,6 +37,7 @@ import (
 
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
+	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/tcell/v3"
 	yaml "gopkg.in/yaml.v3"
 	"unstable.build/go-tui"
@@ -48,6 +50,7 @@ import (
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/extension/extutil"
 	"unstable.build/go-tui/handler"
+	"unstable.build/go-tui/handler/command"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/term/vte"
 	"unstable.build/go-tui/text"
@@ -325,8 +328,8 @@ func (c ideConfig) commandOverlayShowManualAfter() (ret time.Duration) {
 	return
 }
 
-func (c ideConfig) commandAliases() (ret map[string][]string) {
-	ret = make(map[string][]string)
+func (c ideConfig) commandAliases() (ret map[string]text.CommandAlias) {
+	ret = make(map[string]text.CommandAlias)
 	cfg, ok := c.command()
 	if !ok {
 		return
@@ -341,21 +344,82 @@ func (c ideConfig) commandAliases() (ret map[string][]string) {
 	}
 
 	for k, v := range cfgsAliases {
+		alias := text.CommandAlias{Name: k}
 		switch tp := v.(type) {
+		case map[string]any:
+			for kk, vv := range tp {
+				switch kk {
+				case "commands", "command":
+					switch ttp := vv.(type) {
+					case string:
+						alias.Commands = make([]string, 1)
+						alias.Commands[0] = ttp
+					case []any:
+						alias.Commands = make([]string, 0)
+						for _, v := range ttp {
+							switch vtp := v.(type) {
+							case string:
+								alias.Commands = append(alias.Commands, vtp)
+							default:
+								err = multierr.Append(err,
+									fmt.Errorf("invalid value type for command.%s.%s", keyCommandAliases, k))
+							}
+						}
+					}
+				case "completer":
+					switch ttp := vv.(type) {
+					case string:
+						switch ttp {
+						case "filepath":
+							alias.Completer = filepathCompleter
+						case "history":
+							alias.Completer = nil // default is history
+						default:
+							err = multierr.Append(err,
+								fmt.Errorf("invalid value for command.%s.%s.completer: "+
+									"expected 'history', 'files' or list of completion options",
+									keyCommandAliases, k))
+						}
+					case []any:
+						options := make([]string, 0)
+						for _, v := range ttp {
+							switch vtp := v.(type) {
+							case string:
+								options = append(options, vtp)
+							default:
+								err = multierr.Append(err,
+									fmt.Errorf("invalid value type for option in "+
+										"command.%s.%s.completer: expected string or list of "+
+										"strings", keyCommandAliases, k))
+							}
+						}
+						alias.Completer = func(c *text.Component) command.Completer {
+							return command.FuncCompleter(func(context.Context, []string) (
+								iterator.Iterator[string], string, error,
+							) {
+								return iterator.FromSlice(options), "", nil
+							})
+						}
+					}
+				}
+			}
 		case string:
-			ret[k] = make([]string, 1)
-			ret[k][0] = tp
-		case []interface{}:
-			ret[k] = make([]string, 0)
+			alias.Commands = make([]string, 1)
+			alias.Commands[0] = tp
+		case []any:
+			alias.Commands = make([]string, 0)
 			for _, v := range tp {
 				switch vtp := v.(type) {
 				case string:
-					ret[k] = append(ret[k], vtp)
+					alias.Commands = append(alias.Commands, vtp)
 				default:
 					err = multierr.Append(err,
 						fmt.Errorf("invalid value type for command.%s.%s", keyCommandAliases, k))
 				}
 			}
+		}
+		if len(alias.Commands) != 0 {
+			ret[k] = alias
 		}
 	}
 	if err != nil {
@@ -1485,4 +1549,8 @@ func loadFileConfig(c *ideConfig, configpath string) (err error) {
 	overrideConfig(c.cfg, cfg)
 
 	return nil
+}
+
+func filepathCompleter(c *text.Component) command.Completer {
+	return command.FilePathCompleter(c.Workspace())
 }

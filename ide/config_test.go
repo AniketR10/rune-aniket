@@ -24,6 +24,7 @@
 package ide
 
 import (
+	"context"
 	"os"
 	"strings"
 	"testing"
@@ -32,6 +33,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/clipboard"
@@ -40,6 +42,7 @@ import (
 	"unstable.build/go-tui/handler/command"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/term/vte"
+	"unstable.build/go-tui/text"
 )
 
 var sampleConfig = `
@@ -97,6 +100,17 @@ command:
       - e file:///tmp/todo.md
       - jenesaisquoi
     error: 1
+    parcels:
+      commands:
+        - Somethinggreater
+        - NowIcaresomemore
+        - Comingback
+      completer: filepath
+    daynight:
+      commands: ram
+      completer:
+        - a
+        - B
   manual_attr:
     fg: black
     bg: yellow
@@ -318,11 +332,44 @@ func TestConfigSetting(t *testing.T) {
 	assert.Equal(t, expectedConfig, cfg.windowManagerConfig())
 	assert.True(t, cfg.frameUnion())
 
-	expectedCommandAliases := map[string][]string{
-		"todo":   {"e file:///tmp/todo.md", "jenesaisquoi"},
-		"cherry": {"bomb"},
+	expectedCommandAliases := map[string]text.CommandAlias{
+		"todo": text.CommandAlias{Name: "todo",
+			Commands: []string{"e file:///tmp/todo.md", "jenesaisquoi"}},
+		"cherry": text.CommandAlias{Name: "cherry", Commands: []string{"bomb"}},
+		"parcels": text.CommandAlias{
+			Name: "parcels",
+			Commands: []string{
+				"Somethinggreater",
+				"NowIcaresomemore",
+				"Comingback",
+			},
+			Completer: nil,
+		},
+		"daynight": text.CommandAlias{
+			Name:      "daynight",
+			Commands:  []string{"ram"},
+			Completer: nil,
+		},
 	}
-	assert.Equal(t, expectedCommandAliases, cfg.commandAliases())
+	actualCommandAliases := cfg.commandAliases()
+	parcelsAlias := actualCommandAliases["parcels"]
+	assert.NotNil(t, parcelsAlias.Completer)
+	parcelsAlias.Completer = nil
+	actualCommandAliases["parcels"] = parcelsAlias
+
+	daynight := actualCommandAliases["daynight"]
+	require.NotNil(t, daynight.Completer)
+	it, _, err := daynight.Completer(new(text.Component)).
+		Complete(context.Background(), []string{})
+	require.NoError(t, err)
+	daynight.Completer = nil
+	actualCommandAliases["daynight"] = daynight
+
+	actualOptions, err := iterator.ToSlice(context.Background(), it)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"a", "B"}, actualOptions)
+
+	assert.Equal(t, expectedCommandAliases, actualCommandAliases)
 	assert.Equal(t, 2*time.Second, cfg.commandOverlayShowManualAfter())
 	assert.Equal(t, term.Attributes{Fg: tcell.ColorBlack, Bg: tcell.ColorYellow, Attrs: tcell.AttrBold},
 		cfg.commandOverlayManualAttr())

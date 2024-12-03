@@ -1257,10 +1257,10 @@ func TestCommandAliases(t *testing.T) {
 	opts := []text.Option{
 		text.WithCommandOverlayConfig(testCommandOverlayConfig()),
 		text.WithCommandKey(testCommandKey),
-		text.WithCommandAliases(map[string][]string{
-			"todo": {"edit hello.go", "edit wi.go"},
-			"e":    {"edit"},
-			"bp":   {"nextTab"},
+		text.WithCommandAliases(map[string]text.CommandAlias{
+			"todo": text.CommandAlias{Commands: []string{"edit hello.go", "edit wi.go"}},
+			"e":    text.CommandAlias{Commands: []string{"edit"}},
+			"bp":   text.CommandAlias{Commands: []string{"nextTab"}},
 		}),
 	}
 	b := newExForTesting(t, texttest.NopEditor(), opts...)
@@ -1503,15 +1503,17 @@ func TestExposedRootNodeIssue(t *testing.T) {
 		text.WithCommandOverlayConfig(testCommandOverlayConfig()),
 		text.WithCommandKey(testCommandKey),
 		text.WithNotificationsConfig(notifications),
-		text.WithCommandAliases(map[string][]string{
-			"boom": {
-				"newWindow",
-				"changeSplitOrientation h",
-				"newWindow",
-				"changeSplitOrientation v",
-				"newWindow",
-				"focusPrevWindow",
-				"focusPrevWindow",
+		text.WithCommandAliases(map[string]text.CommandAlias{
+			"boom": text.CommandAlias{
+				Commands: []string{
+					"newWindow",
+					"changeSplitOrientation h",
+					"newWindow",
+					"changeSplitOrientation v",
+					"newWindow",
+					"focusPrevWindow",
+					"focusPrevWindow",
+				},
 			},
 		}),
 	}

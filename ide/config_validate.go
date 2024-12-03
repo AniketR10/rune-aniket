@@ -31,7 +31,7 @@ import (
 )
 
 func validateConfig(cfg map[string]any) (err error) {
-	c := ideConfig{cfg: cfg}
+	c := ideConfig{cfg: cfg, errors: make(map[string]error)}
 
 	if err = validateAliases(&c, cfg); err != nil {
 		return

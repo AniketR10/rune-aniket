@@ -27,18 +27,19 @@ import (
 	"context"
 	"errors"
 	"net"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
-	gomock "go.uber.org/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/tcell/v3"
+	gomock "go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 	"unstable.build/go-tui"
 	browserapi "unstable.build/go-tui/api/browser"
@@ -669,6 +670,20 @@ func (t *testLoader) Recover(
 	return t.Load(file, buf, workspaceapi.URI{}, false)
 }
 func (t *testLoader) URI(path string) (workspaceapi.URI, error) {
+	panic("unused")
+}
+
+func (t *testLoader) Open(path string, flag int, perm os.FileMode) (
+	workspaceapi.File, *workspaceapi.Error,
+) {
+	panic("unused")
+}
+
+func (t *testLoader) Stat(path string) (os.FileInfo, error) {
+	panic("unused")
+}
+
+func (t *testLoader) ReadDir(name string) ([]os.DirEntry, error) {
 	panic("unused")
 }
 
