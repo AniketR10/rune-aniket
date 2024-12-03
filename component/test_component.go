@@ -44,6 +44,9 @@ func (t *TestComponent) Resize(width, height int) {
 
 // Draw satisfies tui.Component.
 func (t *TestComponent) Draw(w term.Writer) {
+	if t.Ch == 0 {
+		return
+	}
 	for tx := t.width - 1; tx >= 0; tx-- {
 		for ty := 0 + t.height - 1; ty >= 0; ty-- {
 			w.SetCell(term.Coordinates{X: tx, Y: ty},

@@ -77,6 +77,7 @@ func TestComponentWindowSplit(t *testing.T) {
 	var prevFloating tui.Component
 	var ok bool
 	h2 := TestComponent{Ch: 'B'}
+	hnop := TestComponent{Ch: 0}
 	h3 := TestComponent{Ch: 'C'}
 
 	tests := []comptest.TestCase{
@@ -256,7 +257,7 @@ func TestComponentWindowSplit(t *testing.T) {
 │CCCCCCCCCCCCCCCCCC│
 └──────────────────┘`,
 		}, {func() {
-			floating := StaticFloating(&h2, 2, 2)
+			floating := StaticFloating(&hnop, 2, 2)
 			w2.Close()
 			assert.True(t, w2.Closed())
 			w2 = wm.FloatingWindow(floating,
@@ -269,8 +270,8 @@ func TestComponentWindowSplit(t *testing.T) {
 ┌──────────────────┐
 │CCCCCCCCCCCCCCCCCC│
 │CCCCCCC┌──┐CCCCCCC│
-│CCCCCCC│BB│CCCCCCC│
-│CCCCCCC│BB│CCCCCCC│
+│CCCCCCC│  │CCCCCCC│
+│CCCCCCC│  │CCCCCCC│
 │CCCCCCC└──┘CCCCCCC│
 │CCCCCCCCCCCCCCCCCC│
 └──────────────────┘`,

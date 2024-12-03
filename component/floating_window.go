@@ -86,6 +86,12 @@ func (w *floatingNode) Draw(wr term.Writer) {
 	if desiredWidth != w.desiredWidth || desiredHeight != w.desiredHeight {
 		w.resize()
 	}
+	// clear content
+	for y := w.realOffset.Y; y < w.realOffset.Y+w.realHeight; y++ {
+		for x := w.realOffset.X; x < w.realOffset.X+w.realWidth; x++ {
+			wr.SetCell(term.Coordinates{Y: y, X: x}, term.Cell{})
+		}
+	}
 	w.content.Draw(wr)
 }
 
