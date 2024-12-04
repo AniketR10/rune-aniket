@@ -604,6 +604,11 @@ func (e *ex) focusWindow(args ...string) error {
 	if len(args) == 0 {
 		return errors.New("command expects at least one argument")
 	}
+
+	if e.invokeWindow() == e.companionTerminalWin {
+		return e.toggleCompanionTerminal()
+	}
+
 	switch args[0] {
 	case "right":
 		e.comp.Browser().FocusRight()
@@ -622,6 +627,10 @@ func (e *ex) focusWindow(args ...string) error {
 func (e *ex) moveWindow(args ...string) error {
 	if len(args) == 0 {
 		return errors.New("command expects at least one argument")
+	}
+
+	if e.invokeWindow() == e.companionTerminalWin {
+		return e.toggleCompanionTerminal()
 	}
 
 	var ok bool

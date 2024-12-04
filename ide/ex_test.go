@@ -1907,7 +1907,7 @@ func TestTerminalOnFocus(t *testing.T) {
 		assert.False(t, tvte.onFocusChange[2])
 
 		// switching back to floating should trigger again
-		ex.Handle(term.Event{Type: term.EventMouse, MouseX: 50, MouseY: 50, Key: term.MouseLeft})
+		ex.executePlugin()
 		require.Len(t, tvte.onFocusChange, 4)
 		assert.True(t, tvte.onFocusChange[3])
 
