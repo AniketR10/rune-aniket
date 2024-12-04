@@ -244,9 +244,9 @@ func (e *ex) completeCommand(
 		return e.filepathCompleter.Complete(ctx, args)
 	case cmdReadFile:
 		return e.completeReadFile(ctx, args)
-	case cmdSplitWindow, cmdNewWindow:
+	case cmdSplitWindow, cmdNewWindow, cmdFocusWindow, cmdMoveWindow:
 		if len(args) <= 1 {
-			return iterator.FromSlice([]string{"right", "left", "top", "bottom"}), "", nil
+			return iterator.FromSlice([]string{"right", "left", "up", "down"}), "", nil
 		}
 	case cmdChangeSplitOrientation:
 		if len(args) <= 1 {
@@ -607,14 +607,50 @@ func (e *ex) focusWindow(args ...string) error {
 	switch args[0] {
 	case "right":
 		e.comp.Browser().FocusRight()
-	case "bottom":
+	case "down":
 		e.comp.Browser().FocusDown()
 	case "left":
 		e.comp.Browser().FocusLeft()
-	case "top":
+	case "up":
 		e.comp.Browser().FocusUp()
 	default:
 		return fmt.Errorf("invalid argument %q", args[0])
+	}
+	return nil
+}
+
+func (e *ex) moveWindow(args ...string) error {
+	if len(args) == 0 {
+		return errors.New("command expects at least one argument")
+	}
+
+	var ok bool
+	switch args[0] {
+	case "right":
+		ok = e.comp.Browser().SwapContentRight()
+		if ok {
+			e.comp.Browser().FocusRight()
+		}
+	case "down":
+		ok = e.comp.Browser().SwapContentDown()
+		if ok {
+			e.comp.Browser().FocusDown()
+		}
+	case "left":
+		ok = e.comp.Browser().SwapContentLeft()
+		if ok {
+			e.comp.Browser().FocusLeft()
+		}
+	case "up":
+		ok = e.comp.Browser().SwapContentUp()
+		if ok {
+			e.comp.Browser().FocusUp()
+		}
+	default:
+		return fmt.Errorf("invalid argument %q", args[0])
+	}
+	if !ok {
+		return errors.New("cannot move window in this direction")
 	}
 	return nil
 }
@@ -927,11 +963,11 @@ func (e *ex) newWindow(args ...string) error {
 		switch args[0] {
 		case "right":
 			orientation = browserapi.OrientationRight
-		case "bottom":
+		case "down":
 			orientation = browserapi.OrientationBottom
 		case "left":
 			orientation = browserapi.OrientationLeft
-		case "top":
+		case "up":
 			orientation = browserapi.OrientationTop
 		default:
 			return fmt.Errorf("invalid orientation argument %q", args[0])

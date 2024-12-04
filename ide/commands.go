@@ -37,6 +37,8 @@ const (
 	cmdNewWindow              = "newWindow"
 	cmdSetDefaultColors       = "setDefaultColors"
 	cmdSwitchToTab            = "switchToTab"
+	cmdFocusWindow            = "focusWindow"
+	cmdMoveWindow             = "moveWindow"
 )
 
 type commandAll struct {
@@ -165,12 +167,19 @@ var (
 		},
 		cmdSplitWindow: manSplitWindow,
 		cmdNewWindow:   manSplitWindow,
-		"focusWindow": {
+		cmdFocusWindow: {
 			man: textapi.CommandManual{
 				Summary:  "Switches the window focus to the window on the given side of the current active window.",
-				Synopsis: "[right|left|top|bottom]",
+				Synopsis: "[right|left|up|down]",
 			},
 			handler: (*ex).focusWindow,
+		},
+		cmdMoveWindow: {
+			man: textapi.CommandManual{
+				Summary:  "Moves the window in the given direction.",
+				Synopsis: "[right|left|up|down]",
+			},
+			handler: (*ex).moveWindow,
 		},
 		"toggleFullscreen": {
 			man: textapi.CommandManual{
@@ -320,7 +329,7 @@ var (
 				"If no orientation is passed, the default split orientation is used. " +
 				fmt.Sprintf("Check %s for more details on how changing the "+
 					"default orientation works.", cmdChangeSplitOrientation),
-			Synopsis: "[right|left|top|bottom]",
+			Synopsis: "[right|left|up|down]",
 		},
 		handler: (*ex).newWindow,
 	}

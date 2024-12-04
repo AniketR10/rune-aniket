@@ -1495,6 +1495,93 @@ AAAAAAAAAAAAAAAAAAAA`,
 	handlertest.TestHandlerSequence(t, b, 20, 10, cases)
 }
 
+func TestMoveWindows(t *testing.T) {
+	cases := []handlertest.SequenceTestCase{
+		{":splitWindow>:edit aaa>:moveWindow left>",
+			`┌──────────────────┐
+│aaa               │
+┌────────┐┌────────┤
+│AAAAAAAA││        │
+│AAAAAAAA││        │
+│AAAAAAAA││        │
+│AAAAAAAA││        │
+│AAAAAAAA││        │
+│AAAAAAAA││        │
+└────────┘└────────┘`,
+		},
+		{":moveWindow right>",
+			`┌──────────────────┐
+│aaa               │
+├────────┐┌────────┐
+│        ││AAAAAAAA│
+│        ││AAAAAAAA│
+│        ││AAAAAAAA│
+│        ││AAAAAAAA│
+│        ││AAAAAAAA│
+│        ││AAAAAAAA│
+└────────┘└────────┘`,
+		},
+		{":splitWindow down>:focusWindow up>:moveWindow down>",
+			`┌──────────────────┐
+│aaa               │
+├────────┐┌────────┤
+│        ││        │
+│        ││        │
+│        │└────────┘
+│        │┌────────┐
+│        ││AAAAAAAA│
+│        ││AAAAAAAA│
+└────────┘└────────┘`,
+		},
+		{":moveWindow up>",
+			`┌──────────────────┐
+│aaa               │
+├────────┐┌────────┐
+│        ││AAAAAAAA│
+│        ││AAAAAAAA│
+│        │└────────┘
+│        │┌────────┐
+│        ││        │
+│        ││        │
+└────────┘└────────┘`,
+		},
+		{":moveWindow left>",
+			`┌──────────────────┐
+│aaa               │
+┌────────┐┌────────┤
+│AAAAAAAA││        │
+│AAAAAAAA││        │
+│AAAAAAAA│└────────┘
+│AAAAAAAA│┌────────┐
+│AAAAAAAA││        │
+│AAAAAAAA││        │
+└────────┘└────────┘`,
+		},
+	}
+
+	opts := []text.Option{
+		text.WithCommandKey(testCommandKey),
+		text.WithCommandOverlayConfig(testCommandOverlayConfig()),
+	}
+
+	tempDir, err := os.MkdirTemp("", "")
+	require.NoError(t, err)
+	uri, err := workspaceapi.ParseURI(filepath.Join("file://", tempDir))
+	require.NoError(t, err)
+	ctx := context.Background()
+	fileScheme, err := workspace.NewFileScheme(ctx, config.NopConfig(), uri)
+	require.NoError(t, err)
+	defer fileScheme.Close()
+
+	workspace := workspace.NewSchemeWorkspace(uri, fileScheme)
+	b := newExForTestingWithWorkspace(t, workspace,
+		texttest.NopEditor(), vte.DefaultConfig(), nopPublishEvent,
+		clipboard.NewInMemory(), opts...)
+	defer b.Close()
+
+	handlertest.TestHandlerSequence(t, b, 20, 10, cases)
+}
+
 func TestExposedRootNodeIssue(t *testing.T) {
 	notifications := browser.DefaultConfig().Notifications
 	notifications.ProgressBar = false // deterministic tests

@@ -504,6 +504,26 @@ func (c *Component) FocusUp() bool {
 	return c.wm.FocusUp()
 }
 
+// SwapContentDown calls the underlying WindowManager.SwapContentDown.
+func (c *Component) SwapContentDown() bool {
+	return c.wm.SwapContentDown()
+}
+
+// SwapContentLeft calls the underlying WindowManager.SwapContentLeft.
+func (c *Component) SwapContentLeft() bool {
+	return c.wm.SwapContentLeft()
+}
+
+// SwapContentRight calls the underlying WindowManager.SwapContentRight.
+func (c *Component) SwapContentRight() bool {
+	return c.wm.SwapContentRight()
+}
+
+// SwapContentUp calls the underlying WindowManager.SwapContentUp.
+func (c *Component) SwapContentUp() bool {
+	return c.wm.SwapContentUp()
+}
+
 // SetFocus sets the underlying WindowManager's focus to win.
 func (c *Component) SetFocus(win Window) Window {
 	bwin := win.(*browserWindow)

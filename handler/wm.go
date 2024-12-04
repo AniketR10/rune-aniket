@@ -247,34 +247,49 @@ func (wm *WindowManager) FloatingWindow(
 	return ret
 }
 
-func (wm *WindowManager) switchFocus(tileFn func(Window) (Window, bool)) bool {
-	tile, ok := tileFn(wm.focus)
-	if !ok {
-		return false
-	}
-	wm.SetFocus(wm.newNode(tile.Window))
-	return true
+// SwapContentLeft swaps the content of the tile on the left side of the tile in focus.
+// If the tile in focus is the left-most tile in this window manager, then this method does nothing.
+func (wm *WindowManager) SwapContentLeft() bool {
+	return wm.swapContent((Window).TileLeft)
 }
 
-// FocusLeft switches the focus to the tile on the left side of the tile in focus
+// SwapContentRight switches the focus to the tile on the right side of the tile in focus.
+// If the tile in focus is the right-most tile in this window manager, then this method does nothing.
+func (wm *WindowManager) SwapContentRight() bool {
+	return wm.swapContent((Window).TileRight)
+}
+
+// SwapContentUp switches the focus to the tile above the tile in focus.
+// If the tile in focus is the up-most tile in this window manager, then this method does nothing.
+func (wm *WindowManager) SwapContentUp() bool {
+	return wm.swapContent((Window).TileUp)
+}
+
+// SwapContentDown switches the focus to the tile beneath the tile in focus.
+// If the tile in focus is the down-most tile in this window manager, then this method does nothing.
+func (wm *WindowManager) SwapContentDown() bool {
+	return wm.swapContent((Window).TileDown)
+}
+
+// FocusLeft switches the focus to the tile on the left side of the tile in focus.
 // If the tile in focus is the left-most tile in this window manager, then this method does nothing.
 func (wm *WindowManager) FocusLeft() bool {
 	return wm.switchFocus((Window).TileLeft)
 }
 
-// FocusRight switches the focus to the tile on the right side of the tile in focus
+// FocusRight switches the focus to the tile on the right side of the tile in focus.
 // If the tile in focus is the right-most tile in this window manager, then this method does nothing.
 func (wm *WindowManager) FocusRight() bool {
 	return wm.switchFocus((Window).TileRight)
 }
 
-// FocusUp switches the focus to the tile above the tile in focus
+// FocusUp switches the focus to the tile above the tile in focus.
 // If the tile in focus is the up-most tile in this window manager, then this method does nothing.
 func (wm *WindowManager) FocusUp() bool {
 	return wm.switchFocus((Window).TileUp)
 }
 
-// FocusDown switches the focus to the tile beneath the tile in focus
+// FocusDown switches the focus to the tile beneath the tile in focus.
 // If the tile in focus is the down-most tile in this window manager, then this method does nothing.
 func (wm *WindowManager) FocusDown() bool {
 	return wm.switchFocus((Window).TileDown)
@@ -543,4 +558,24 @@ func (wm *WindowManager) scrollBarHoverChar(f *component.Frame) (ch rune) {
 	}
 	ch = f.FrameCharSet.VerticalRight
 	return
+}
+
+func (wm *WindowManager) switchFocus(tileFn func(Window) (Window, bool)) bool {
+	tile, ok := tileFn(wm.focus)
+	if !ok {
+		return false
+	}
+	wm.SetFocus(wm.newNode(tile.Window))
+	return true
+}
+
+func (wm *WindowManager) swapContent(tileFn func(Window) (Window, bool)) bool {
+	tile, ok := tileFn(wm.focus)
+	if !ok {
+		return false
+	}
+	focusContent := wm.focus.Content()
+	swapContent := tile.SetContent(focusContent)
+	wm.focus.SetContent(swapContent)
+	return true
 }
