@@ -165,29 +165,12 @@ var (
 		},
 		cmdSplitWindow: manSplitWindow,
 		cmdNewWindow:   manSplitWindow,
-		"focusNextWindow": {
+		"focusWindow": {
 			man: textapi.CommandManual{
-				Summary: "Switches the window focus to the window on the right-side of the current active window.",
+				Summary:  "Switches the window focus to the window on the given side of the current active window.",
+				Synopsis: "[right|left|top|bottom]",
 			},
-			handler: (*ex).focusNextWindow,
-		},
-		"focusPrevWindow": {
-			man: textapi.CommandManual{
-				Summary: "Switches the window focus to the window on the left-side of the current active window.",
-			},
-			handler: (*ex).focusPrevWindow,
-		},
-		"focusAboveWindow": {
-			man: textapi.CommandManual{
-				Summary: "Switches the window focus to the window above of the current active window.",
-			},
-			handler: (*ex).focusAboveWindow,
-		},
-		"focusBelowWindow": {
-			man: textapi.CommandManual{
-				Summary: "Switches the window focus to the window below of the current active window.",
-			},
-			handler: (*ex).focusBelowWindow,
+			handler: (*ex).focusWindow,
 		},
 		"toggleFullscreen": {
 			man: textapi.CommandManual{

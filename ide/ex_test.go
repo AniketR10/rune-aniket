@@ -1511,8 +1511,8 @@ func TestExposedRootNodeIssue(t *testing.T) {
 					"newWindow",
 					"changeSplitOrientation v",
 					"newWindow",
-					"focusPrevWindow",
-					"focusPrevWindow",
+					"focusWindow left",
+					"focusWindow left",
 				},
 			},
 		}),
@@ -1765,7 +1765,7 @@ func TestTerminalOnFocus(t *testing.T) {
 		assert.False(t, tvte.onFocusChange[4])
 
 		// focus back to tab window
-		ex.focusPrevWindow()
+		ex.focusWindow("left")
 		require.Len(t, tvte.onFocusChange, 6)
 		assert.True(t, tvte.onFocusChange[5])
 
@@ -1815,7 +1815,7 @@ func TestTerminalOnFocus(t *testing.T) {
 		assert.True(t, tvte.onFocusChange[1])
 
 		// switching from floating to other window should trigger on focus change
-		ex.focusPrevWindow()
+		ex.focusWindow("left")
 		require.Len(t, tvte.onFocusChange, 3)
 		assert.False(t, tvte.onFocusChange[2])
 
@@ -1865,7 +1865,7 @@ func TestTerminalOnFocus(t *testing.T) {
 		assert.True(t, tvte.onFocusChange[1])
 
 		// switching from floating to other window should trigger on focus change
-		ex.focusPrevWindow()
+		ex.focusWindow("left")
 		require.Len(t, tvte.onFocusChange, 3)
 		assert.False(t, tvte.onFocusChange[2])
 

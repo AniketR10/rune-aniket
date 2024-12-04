@@ -433,7 +433,7 @@ command:
       - newTerminalTab
     layout:
       - splitWindowTerminal
-      - focusPrevWindow
+      - focusWindow left
       - searchFile
     # echo is a powerful command that allows you to programmatically inject
     # keyboard input to the event loop. For example, the following alias
@@ -448,10 +448,10 @@ command:
     <c-h>: previousTab
     <c-x><c-v>: clipboardPaste
     <c-x><c-c>: clipboardCopy
-    <c-x><c-h>: focusPrevWindow
-    <c-x><c-l>: focusNextWindow
-    <c-x><c-j>: focusBelowWindow
-    <c-x><c-k>: focusAboveWindow
+    <c-x><c-h>: focusWindow left
+    <c-x><c-l>: focusWindow right
+    <c-x><c-j>: focusWindow top
+    <c-x><c-k>: focusWindow bottom
     <c-x><c-w>: closeWindow
     <c-x>h: changeSplitOrientation h
     <c-x>v: changeSplitOrientation v

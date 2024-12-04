@@ -600,23 +600,22 @@ func (e *ex) invokeWindow() browser.Window {
 	return ret
 }
 
-func (e *ex) focusNextWindow(args ...string) error {
-	e.comp.Browser().FocusRight()
-	return nil
-}
-
-func (e *ex) focusPrevWindow(args ...string) error {
-	e.comp.Browser().FocusLeft()
-	return nil
-}
-
-func (e *ex) focusAboveWindow(args ...string) error {
-	e.comp.Browser().FocusUp()
-	return nil
-}
-
-func (e *ex) focusBelowWindow(args ...string) error {
-	e.comp.Browser().FocusDown()
+func (e *ex) focusWindow(args ...string) error {
+	if len(args) == 0 {
+		return errors.New("command expects at least one argument")
+	}
+	switch args[0] {
+	case "right":
+		e.comp.Browser().FocusRight()
+	case "bottom":
+		e.comp.Browser().FocusDown()
+	case "left":
+		e.comp.Browser().FocusLeft()
+	case "top":
+		e.comp.Browser().FocusUp()
+	default:
+		return fmt.Errorf("invalid argument %q", args[0])
+	}
 	return nil
 }
 
