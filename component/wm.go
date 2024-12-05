@@ -52,7 +52,7 @@ type WindowManager struct {
 	minimizedOffset term.Coordinates
 	minimizedHeight int
 	minimizedWidth  int
-	minimizedPos    map[uint64]int
+	minimizedPos    map[uint64]windowPos
 }
 
 // Draw satisfies tui.Component
@@ -98,11 +98,12 @@ func (wm *WindowManager) DrawWindow(win Window, w term.Writer) {
 		return
 	}
 
-	pos, ok := wm.minimizedPos[f.ID()]
+	winPos, ok := wm.minimizedPos[f.ID()]
 	if !ok {
 		panic("corrupt WindowManager: no pre-calculated minimized position for floating node")
 	}
 
+	pos := winPos.pos
 	switch f.minimized {
 	case SpanAlignmentTop:
 		w.SetCell(term.Coordinates{X: 0, Y: pos}, term.Cell{
@@ -201,7 +202,7 @@ func (wm *WindowManager) Init(
 	wm.float = make([]*floatingNode, 0)
 	wm.minimizedDirty = true
 	wm.config = config
-	wm.minimizedPos = make(map[uint64]int)
+	wm.minimizedPos = make(map[uint64]windowPos)
 
 	if wm.config.Frame {
 		content = wm.withFrame(content)
@@ -277,20 +278,71 @@ func (wm *WindowManager) WindowAt(pos term.Coordinates) (Window, bool) {
 		return Window{}, false
 	}
 
-	float := -1
+	// first return any floating window that might be rendered over everything else
+	floating := -1
 	for i, fw := range wm.float {
+		if fw.minimized != 0 {
+			continue
+		}
 		fwpos := fw.Position()
 		fwidth, fheight := fw.Width(), fw.Height()
 		if pos.X >= fwpos.X && pos.Y >= fwpos.Y &&
 			pos.X <= fwpos.X+fwidth && pos.Y <= fwpos.Y+fheight {
-			float = i
+			floating = i
 		}
 	}
-
-	if float >= 0 {
-		return wm.nodeToWindow(wm.float[float]), true
+	if floating >= 0 {
+		return wm.nodeToWindow(wm.float[floating]), true
 	}
 
+	// return any minimized top windows at position
+	if pos.Y < wm.minimizedOffset.Y {
+		for _, winPos := range wm.minimizedPos {
+			if winPos.win.node.(*floatingNode).minimized == SpanAlignmentTop &&
+				winPos.pos == pos.Y {
+				return winPos.win, true
+			}
+		}
+		panic("corrupted wm: minimized window under offset not found")
+	}
+
+	// return any minimized bottom windows at position
+	if pos.Y >= wm.minimizedOffset.Y+wm.minimizedHeight {
+		pos.Y -= (wm.minimizedOffset.Y + wm.minimizedHeight)
+		for _, winPos := range wm.minimizedPos {
+			if winPos.win.node.(*floatingNode).minimized == SpanAlignmentBottom &&
+				winPos.pos == pos.Y {
+				return winPos.win, true
+			}
+		}
+		panic("corrupted wm: minimized window above offset not found")
+	}
+
+	// return any minimized left windows at position
+	if pos.X < wm.minimizedOffset.X {
+		for _, winPos := range wm.minimizedPos {
+			if winPos.win.node.(*floatingNode).minimized == SpanAlignmentLeft &&
+				winPos.pos == pos.X {
+				return winPos.win, true
+			}
+		}
+		panic("corrupted wm: minimized window before offset not found")
+	}
+
+	// return any minimized right windows at position
+	if pos.X >= wm.minimizedOffset.X+wm.minimizedWidth {
+		pos.X -= (wm.minimizedOffset.X + wm.minimizedWidth)
+		for _, winPos := range wm.minimizedPos {
+			if winPos.win.node.(*floatingNode).minimized == SpanAlignmentRight &&
+				winPos.pos == pos.X {
+				return winPos.win, true
+			}
+		}
+		panic("corrupted wm: minimized window after offset not found")
+	}
+
+	pos.Y -= wm.minimizedOffset.Y
+	pos.X -= wm.minimizedOffset.X
 	return wm.nodeToWindow(wm.tree.TileAt(pos)), true
 }
 
@@ -385,16 +437,16 @@ func (wm *WindowManager) calculateMinimizedOffsets() {
 	for _, win := range wm.FloatingWindows() {
 		switch win.node.(*floatingNode).minimized {
 		case SpanAlignmentTop:
-			wm.minimizedPos[win.ID()] = offsetTop
+			wm.minimizedPos[win.ID()] = windowPos{pos: offsetTop, win: win}
 			offsetTop++
 		case SpanAlignmentBottom:
-			wm.minimizedPos[win.ID()] = offsetBottom
+			wm.minimizedPos[win.ID()] = windowPos{pos: offsetBottom, win: win}
 			offsetBottom++
 		case SpanAlignmentLeft:
-			wm.minimizedPos[win.ID()] = offsetLeft
+			wm.minimizedPos[win.ID()] = windowPos{pos: offsetLeft, win: win}
 			offsetLeft++
 		case SpanAlignmentRight:
-			wm.minimizedPos[win.ID()] = offsetRight
+			wm.minimizedPos[win.ID()] = windowPos{pos: offsetRight, win: win}
 			offsetRight++
 		default:
 		}
@@ -402,4 +454,9 @@ func (wm *WindowManager) calculateMinimizedOffsets() {
 	wm.minimizedOffset = term.Coordinates{Y: offsetTop, X: offsetLeft}
 	wm.minimizedHeight = wm.height - offsetBottom - offsetTop
 	wm.minimizedWidth = wm.width - offsetRight - offsetLeft
+}
+
+type windowPos struct {
+	win Window
+	pos int
 }

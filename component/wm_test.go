@@ -591,6 +591,35 @@ func TestWindowManagerMinimize(t *testing.T) {
 └└└──────────────┘┘┘
 └──────────────────┘
 └──────────────────┘`,
+		}, {func() {
+			win, ok := wm.WindowAt(term.Coordinates{X: 2, Y: 1})
+			assert.True(t, ok)
+			assert.Equal(t, 'A', win.Content().(*TestComponent).Ch)
+
+			win, ok = wm.WindowAt(term.Coordinates{X: 0, Y: 0})
+			assert.True(t, ok)
+			assert.Equal(t, '5', win.Content().(*staticFloating).Component.(*TestComponent).Ch)
+
+			win, ok = wm.WindowAt(term.Coordinates{X: 0, Y: 1})
+			assert.True(t, ok)
+			assert.Equal(t, '2', win.Content().(*staticFloating).Component.(*TestComponent).Ch)
+
+			win, ok = wm.WindowAt(term.Coordinates{X: 19, Y: 1})
+			assert.True(t, ok)
+			assert.Equal(t, '7', win.Content().(*staticFloating).Component.(*TestComponent).Ch)
+
+			win, ok = wm.WindowAt(term.Coordinates{X: 19, Y: 7})
+			assert.True(t, ok)
+			assert.Equal(t, '8', win.Content().(*staticFloating).Component.(*TestComponent).Ch)
+		}, `
+┌──────────────────┐
+┌┌┌──────────────┐┐┐
+│││AAAAAAAAAAAAAA│││
+│││AAAAAAAAAAAAAA│││
+│││AAAAAAAAAAAAAA│││
+└└└──────────────┘┘┘
+└──────────────────┘
+└──────────────────┘`,
 		},
 	}
 
