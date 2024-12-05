@@ -291,8 +291,67 @@ func (w Window) ID() uint64 {
 
 // IsFloating returns true if this is a floating window.
 func (w Window) IsFloating() bool {
-	_, ok := w.node.(*TileNode)
-	return !ok
+	_, ok := w.node.(*floatingNode)
+	return ok
+}
+
+// MinimizeUp minimizes this window and displays it above the window manager,
+// if this window is a floating window.
+func (w Window) MinimizeUp() bool {
+	n, ok := w.node.(*floatingNode)
+	if !ok || n.minimized != 0 {
+		return false
+	}
+	n.wm.minimizedDirty = true
+	n.minimized = SpanAlignmentTop
+	return ok
+}
+
+// MinimizeDown minimizes this window and displays it below the window manager,
+// if this window is a floating window.
+func (w Window) MinimizeDown() bool {
+	n, ok := w.node.(*floatingNode)
+	if !ok || n.minimized != 0 {
+		return false
+	}
+	n.wm.minimizedDirty = true
+	n.minimized = SpanAlignmentBottom
+	return ok
+}
+
+// MinimizeLeft minimizes this window and displays it left of the window manager,
+// if this window is a floating window.
+func (w Window) MinimizeLeft() bool {
+	n, ok := w.node.(*floatingNode)
+	if !ok || n.minimized != 0 {
+		return false
+	}
+	n.wm.minimizedDirty = true
+	n.minimized = SpanAlignmentLeft
+	return ok
+}
+
+// MinimizeRight minimizes this window and displays it left of the window manager,
+// if this window is a floating window.
+func (w Window) MinimizeRight() bool {
+	n, ok := w.node.(*floatingNode)
+	if !ok || n.minimized != 0 {
+		return false
+	}
+	n.wm.minimizedDirty = true
+	n.minimized = SpanAlignmentRight
+	return ok
+}
+
+// Unminimize un-minimizes this window and displays it at the back at the front.
+func (w Window) Unminimize() bool {
+	n, ok := w.node.(*floatingNode)
+	if !ok || n.minimized == 0 {
+		return false
+	}
+	n.wm.minimizedDirty = true
+	n.minimized = 0
+	return ok
 }
 
 // Close removes this Window from the WindowManager

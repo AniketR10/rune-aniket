@@ -35,6 +35,7 @@ type floatingNode struct {
 	alignment                   Alignment        // desired alignment
 	maxWidth, maxHeight         int              // window space size
 	desiredWidth, desiredHeight int              // content desired Dimensions size
+	minimized                   Alignment
 
 	realWidth, realHeight int              // calculated upon Resize, considering trimming
 	realOffset            term.Coordinates // calculated offset with alignment

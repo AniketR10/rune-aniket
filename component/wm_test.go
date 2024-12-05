@@ -66,7 +66,7 @@ func TestComponentWindowZeroValue(t *testing.T) {
 	})
 }
 
-func TestComponentWindowSplit(t *testing.T) {
+func TestWindowManagerSplit(t *testing.T) {
 	w := term.NewStringWriter(20, 8)
 
 	h1 := TestComponent{Ch: 'A'}
@@ -460,6 +460,136 @@ func TestComponentWindowSplit(t *testing.T) {
 │                  │
 │                  │
 │                  │
+└──────────────────┘`,
+		},
+	}
+
+	comptest.TestComponent(t, wm, w, tests)
+}
+
+func TestWindowManagerMinimize(t *testing.T) {
+	w := term.NewStringWriter(20, 8)
+
+	h1 := TestComponent{Ch: 'A'}
+	wm, _ := NewWindowManager(&h1, DefaultWindowManagerConfig())
+	wm.Resize(20, 8)
+
+	var fwin Window
+	tests := []comptest.TestCase{
+		{
+			func() {
+				floating := StaticFloating(&TestComponent{Ch: '1'}, 2, 2)
+				fwin = wm.FloatingWindow(floating,
+					FloatingConfig{
+						Alignment: SpanAlignmentCentered,
+					},
+				)
+				assert.True(t, fwin.MinimizeUp())
+			}, `
+┌──────────────────┐
+┌──────────────────┐
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+└──────────────────┘`,
+		}, {func() {
+			w := wm.FloatingWindow(StaticFloating(&TestComponent{Ch: '2'}, 2, 2),
+				FloatingConfig{
+					Alignment: SpanAlignmentCentered,
+				},
+			)
+			assert.True(t, w.MinimizeLeft())
+			assert.False(t, w.MinimizeLeft())
+
+			w = wm.FloatingWindow(StaticFloating(&TestComponent{Ch: '3'}, 2, 2),
+				FloatingConfig{
+					Alignment: SpanAlignmentCentered,
+				},
+			)
+			assert.True(t, w.MinimizeRight())
+			assert.False(t, w.MinimizeRight())
+
+			w = wm.FloatingWindow(StaticFloating(&TestComponent{Ch: '4'}, 2, 2),
+				FloatingConfig{
+					Alignment: SpanAlignmentCentered,
+				},
+			)
+			assert.True(t, w.MinimizeDown())
+			assert.False(t, w.MinimizeDown())
+			assert.False(t, w.MinimizeLeft())
+			assert.False(t, w.MinimizeRight())
+			assert.False(t, w.MinimizeUp())
+		}, `
+
+┌──────────────────┐
+┌┌────────────────┐┐
+││AAAAAAAAAAAAAAAA││
+││AAAAAAAAAAAAAAAA││
+││AAAAAAAAAAAAAAAA││
+││AAAAAAAAAAAAAAAA││
+└└────────────────┘┘
+└──────────────────┘`,
+		}, {func() {
+			assert.True(t, fwin.Unminimize())
+			assert.False(t, fwin.Unminimize())
+		}, `
+┌┌────────────────┐┐
+││AAAAA┌──┐AAAAAAA││
+││AAAAA│11│AAAAAAA││
+││AAAAA│11│AAAAAAA││
+││AAAAA└──┘AAAAAAA││
+││AAAAAAAAAAAAAAAA││
+└└────────────────┘┘
+└──────────────────┘`,
+		}, {func() {
+			assert.True(t, fwin.MinimizeUp())
+			w := wm.FloatingWindow(StaticFloating(&TestComponent{Ch: '5'}, 2, 2),
+				FloatingConfig{
+					Alignment: SpanAlignmentCentered,
+				},
+			)
+			assert.True(t, w.MinimizeUp())
+			w = wm.FloatingWindow(StaticFloating(&TestComponent{Ch: '6'}, 2, 2),
+				FloatingConfig{
+					Alignment: SpanAlignmentCentered,
+				},
+			)
+			assert.True(t, w.MinimizeLeft())
+
+			w = wm.FloatingWindow(StaticFloating(&TestComponent{Ch: '7'}, 2, 2),
+				FloatingConfig{
+					Alignment: SpanAlignmentCentered,
+				},
+			)
+			assert.True(t, w.MinimizeRight())
+
+			w = wm.FloatingWindow(StaticFloating(&TestComponent{Ch: '8'}, 2, 2),
+				FloatingConfig{
+					Alignment: SpanAlignmentCentered,
+				},
+			)
+			assert.True(t, w.MinimizeDown())
+		}, `
+┌──────────────────┐
+┌──────────────────┐
+┌┌┌──────────────┐┐┐
+│││AAAAAAAAAAAAAA│││
+│││AAAAAAAAAAAAAA│││
+└└└──────────────┘┘┘
+└──────────────────┘
+└──────────────────┘`,
+		}, {func() {
+			require.NoError(t, fwin.Close())
+		}, `
+┌──────────────────┐
+┌┌┌──────────────┐┐┐
+│││AAAAAAAAAAAAAA│││
+│││AAAAAAAAAAAAAA│││
+│││AAAAAAAAAAAAAA│││
+└└└──────────────┘┘┘
+└──────────────────┘
 └──────────────────┘`,
 		},
 	}

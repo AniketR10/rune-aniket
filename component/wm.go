@@ -45,23 +45,21 @@ type WindowManager struct {
 	width, height int
 	float         []*floatingNode
 	config        WindowManagerConfig
-}
 
-func (wm *WindowManager) withFrame(handler tui.Component) *Frame {
-	f := NewFrame(handler)
-	f.FrameCharSet = wm.config.FrameCharSet
-	f.Attributes = wm.config.FrameAttr
-	f.ScrollBarAttributes = wm.config.ScrollBarAttr
-	f.ScrollBarChar = wm.config.ScrollBarChar
-	return f
+	// this is cached and calculated to figure out
+	// how to offset windows when there are minimized floating windows.
+	minimizedDirty  bool
+	minimizedOffset term.Coordinates
+	minimizedHeight int
+	minimizedWidth  int
+	minimizedPos    map[uint64]int
 }
 
 // Draw satisfies tui.Component
 func (wm *WindowManager) Draw(w term.Writer) {
-	wm.tree.Draw(w)
-	for _, f := range wm.float {
-		f.Draw(w)
-	}
+	wm.Iterate(func(win Window) {
+		wm.DrawWindow(win, w)
+	})
 }
 
 // FloatingWindows return a slice of all the open floating windows.
@@ -80,11 +78,111 @@ func (wm *WindowManager) TileTree() *TileTree {
 // DrawWindow can be used to arbitrarily draw floating windows returned
 // by FloatingWindows. If win is not a floating window, this method will panic.
 func (wm *WindowManager) DrawWindow(win Window, w term.Writer) {
-	if f, ok := win.node.(*floatingNode); ok {
+	if wm.minimizedDirty {
+		wm.Resize(wm.width, wm.height)
+	}
+	f, ok := win.node.(*floatingNode)
+	if !ok {
+		w = VirtualWriter{
+			Writer: w,
+			Offset: wm.minimizedOffset,
+			Height: wm.height,
+			Width:  wm.width,
+		}
+		wm.tree.DrawTile(win.node.(*TileNode), w)
+		return
+	}
+
+	if f.minimized == 0 {
 		f.Draw(w)
 		return
 	}
-	wm.tree.DrawTile(win.node.(*TileNode), w)
+
+	pos, ok := wm.minimizedPos[f.ID()]
+	if !ok {
+		panic("corrupt WindowManager: no pre-calculated minimized position for floating node")
+	}
+
+	switch f.minimized {
+	case SpanAlignmentTop:
+		w.SetCell(term.Coordinates{X: 0, Y: pos}, term.Cell{
+			Width:      1,
+			Ch:         wm.config.TopLeft,
+			Attributes: wm.config.FrameAttr,
+		})
+		for x := 1; x < wm.width-1; x++ {
+			w.SetCell(term.Coordinates{X: x, Y: pos}, term.Cell{
+				Width:      1,
+				Ch:         wm.config.HorizontalTop,
+				Attributes: wm.config.FrameAttr,
+			})
+		}
+		w.SetCell(term.Coordinates{X: wm.width - 1, Y: pos}, term.Cell{
+			Width:      1,
+			Ch:         wm.config.TopRight,
+			Attributes: wm.config.FrameAttr,
+		})
+	case SpanAlignmentBottom:
+		bottomPos := wm.height - pos - 1
+		w.SetCell(term.Coordinates{X: 0, Y: bottomPos}, term.Cell{
+			Width:      1,
+			Ch:         wm.config.BottomLeft,
+			Attributes: wm.config.FrameAttr,
+		})
+		for x := 1; x < wm.width-1; x++ {
+			w.SetCell(term.Coordinates{X: x, Y: bottomPos}, term.Cell{
+				Width:      1,
+				Ch:         wm.config.HorizontalBottom,
+				Attributes: wm.config.FrameAttr,
+			})
+		}
+		w.SetCell(term.Coordinates{X: wm.width - 1, Y: bottomPos}, term.Cell{
+			Width:      1,
+			Ch:         wm.config.BottomRight,
+			Attributes: wm.config.FrameAttr,
+		})
+	case SpanAlignmentLeft:
+		yOffset := wm.minimizedOffset.Y
+		height := wm.minimizedHeight
+		w.SetCell(term.Coordinates{X: pos, Y: yOffset}, term.Cell{
+			Width:      1,
+			Ch:         wm.config.TopLeft,
+			Attributes: wm.config.FrameAttr,
+		})
+		for y := 1 + yOffset; y < yOffset+height-1; y++ {
+			w.SetCell(term.Coordinates{X: pos, Y: y}, term.Cell{
+				Width:      1,
+				Ch:         wm.config.VerticalLeft,
+				Attributes: wm.config.FrameAttr,
+			})
+		}
+		w.SetCell(term.Coordinates{X: pos, Y: yOffset + height - 1}, term.Cell{
+			Width:      1,
+			Ch:         wm.config.BottomLeft,
+			Attributes: wm.config.FrameAttr,
+		})
+	case SpanAlignmentRight:
+		rightPos := wm.width - pos - 1
+		yOffset := wm.minimizedOffset.Y
+		height := wm.minimizedHeight
+		w.SetCell(term.Coordinates{X: rightPos, Y: yOffset}, term.Cell{
+			Width:      1,
+			Ch:         wm.config.TopRight,
+			Attributes: wm.config.FrameAttr,
+		})
+		for y := 1 + yOffset; y < yOffset+height-1; y++ {
+			w.SetCell(term.Coordinates{X: rightPos, Y: y}, term.Cell{
+				Width:      1,
+				Ch:         wm.config.VerticalRight,
+				Attributes: wm.config.FrameAttr,
+			})
+		}
+		w.SetCell(term.Coordinates{X: rightPos, Y: yOffset + height - 1}, term.Cell{
+			Width:      1,
+			Ch:         wm.config.BottomRight,
+			Attributes: wm.config.FrameAttr,
+		})
+	}
 }
 
 // NewWindowManager allocates storage for a new WindowManager and initializes it.
@@ -101,7 +199,9 @@ func (wm *WindowManager) Init(
 	content tui.Component, config WindowManagerConfig,
 ) (n Window) {
 	wm.float = make([]*floatingNode, 0)
+	wm.minimizedDirty = true
 	wm.config = config
+	wm.minimizedPos = make(map[uint64]int)
 
 	if wm.config.Frame {
 		content = wm.withFrame(content)
@@ -123,10 +223,12 @@ func (wm *WindowManager) Iterate(op func(Window)) {
 // Resize satisfies tui.Component.
 func (wm *WindowManager) Resize(width, height int) {
 	wm.width, wm.height = width, height
-	wm.tree.Resize(width, height)
+	wm.calculateMinimizedOffsets()
+	wm.tree.Resize(wm.minimizedWidth, wm.minimizedHeight)
 	for _, fw := range wm.float {
-		fw.SetMaxSize(width, height)
+		fw.SetMaxSize(wm.minimizedWidth, wm.minimizedHeight)
 	}
+	wm.minimizedDirty = false
 }
 
 // SizeTiles returns the number of tiled windows of this WindowManager.
@@ -138,10 +240,6 @@ func (wm *WindowManager) SizeTiles() int {
 // WindowManager.
 func (wm *WindowManager) SizeFloating() int {
 	return len(wm.float)
-}
-
-func (wm *WindowManager) nodeToWindow(node windowNode) Window {
-	return Window{node: node, wm: wm}
 }
 
 // SplitHorizontal creates a new Window by splitting the height of win in two and
@@ -242,16 +340,8 @@ func (wm *WindowManager) FloatingWindow(
 	}
 	f := newFloatingNode(wm, content, cfg, wm.width, wm.height)
 	wm.float = append(wm.float, f)
+	wm.minimizedDirty = true
 	return wm.nodeToWindow(f)
-}
-
-func (wm *WindowManager) closeFloatingWindow(w *floatingNode) {
-	for i, f := range wm.float {
-		if f == w {
-			wm.float = append(wm.float[:i], wm.float[i+1:]...)
-			break
-		}
-	}
 }
 
 // DefaultWindowManagerConfig returns a sane WindowManagerConfig.
@@ -263,4 +353,53 @@ func DefaultWindowManagerConfig() WindowManagerConfig {
 		FrameCharSet:  charset,
 		ScrollBarAttr: term.Attributes{Attrs: tcell.AttrBold},
 	}
+}
+
+func (wm *WindowManager) withFrame(handler tui.Component) *Frame {
+	f := NewFrame(handler)
+	f.FrameCharSet = wm.config.FrameCharSet
+	f.Attributes = wm.config.FrameAttr
+	f.ScrollBarAttributes = wm.config.ScrollBarAttr
+	f.ScrollBarChar = wm.config.ScrollBarChar
+	return f
+}
+
+func (wm *WindowManager) closeFloatingWindow(w *floatingNode) {
+	for i, f := range wm.float {
+		if f == w {
+			wm.float = append(wm.float[:i], wm.float[i+1:]...)
+			wm.minimizedDirty = true
+			break
+		}
+	}
+}
+
+func (wm *WindowManager) nodeToWindow(node windowNode) Window {
+	return Window{node: node, wm: wm}
+}
+
+func (wm *WindowManager) calculateMinimizedOffsets() {
+	clear(wm.minimizedPos)
+
+	var offsetLeft, offsetTop, offsetBottom, offsetRight int
+	for _, win := range wm.FloatingWindows() {
+		switch win.node.(*floatingNode).minimized {
+		case SpanAlignmentTop:
+			wm.minimizedPos[win.ID()] = offsetTop
+			offsetTop++
+		case SpanAlignmentBottom:
+			wm.minimizedPos[win.ID()] = offsetBottom
+			offsetBottom++
+		case SpanAlignmentLeft:
+			wm.minimizedPos[win.ID()] = offsetLeft
+			offsetLeft++
+		case SpanAlignmentRight:
+			wm.minimizedPos[win.ID()] = offsetRight
+			offsetRight++
+		default:
+		}
+	}
+	wm.minimizedOffset = term.Coordinates{Y: offsetTop, X: offsetLeft}
+	wm.minimizedHeight = wm.height - offsetBottom - offsetTop
+	wm.minimizedWidth = wm.width - offsetRight - offsetLeft
 }
