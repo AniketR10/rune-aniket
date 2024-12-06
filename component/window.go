@@ -56,7 +56,20 @@ func (w Window) Position() term.Coordinates {
 	if w.wm == nil {
 		panic(errCalledZeroValuedWin)
 	}
-	return w.node.Position()
+
+	if w.wm.minimizedDirty {
+		w.wm.Resize(w.wm.width, w.wm.height)
+	}
+
+	fnode, ok := w.node.(*floatingNode)
+	if ok {
+		return fnode.Position()
+	}
+
+	pos := w.node.Position()
+	pos.Y += w.wm.minimizedOffset.Y
+	pos.X += w.wm.minimizedOffset.X
+	return pos
 }
 
 // Width returns the width of this Window.
@@ -205,19 +218,26 @@ func (w Window) TileDown() (ret Window, ok bool) {
 	if w.wm == nil {
 		panic(errCalledZeroValuedWin)
 	}
-	t, ok := w.node.(*TileNode)
-	if !ok {
-		pos := w.node.Position()
-		pos.Y += w.node.Height()
-		pos.Y++
-		return w.wm.WindowAt(pos)
+	if w.wm.minimizedDirty {
+		w.wm.Resize(w.wm.width, w.wm.height)
 	}
-	node := t.TileDown()
-	if node == nil {
-		ok = false
+	pos := w.Position()
+	pos.Y += w.Height()
+	pos.X += w.Width() / 2
+	ret, ok = w.wm.WindowAt(pos)
+	if ok {
 		return
 	}
-	return w.wm.nodeToWindow(node), true
+	// fallback to using the TileTree methods, so if component is of
+	// an awkward size, we still return a tile
+	if t, tok := w.node.(*TileNode); tok {
+		node := t.TileDown()
+		if node == nil {
+			return
+		}
+		return w.wm.nodeToWindow(node), true
+	}
+	return
 }
 
 // TileLeft returns the window left-adjacent to t or false if t is the
@@ -226,19 +246,26 @@ func (w Window) TileLeft() (ret Window, ok bool) {
 	if w.wm == nil {
 		panic(errCalledZeroValuedWin)
 	}
-	t, ok := w.node.(*TileNode)
-	if !ok {
-		pos := w.node.Position()
-		pos.X--
-		return w.wm.WindowAt(pos)
+	if w.wm.minimizedDirty {
+		w.wm.Resize(w.wm.width, w.wm.height)
 	}
-	node := t.TileLeft()
-	if node == nil {
-		ok = false
+	pos := w.Position()
+	pos.X--
+	pos.Y += w.Height() / 2
+	ret, ok = w.wm.WindowAt(pos)
+	if ok {
 		return
-
 	}
-	return w.wm.nodeToWindow(node), true
+	// fallback to using the TileTree methods, so if component is of
+	// an awkward size, we still return a tile
+	if t, tok := w.node.(*TileNode); tok {
+		node := t.TileLeft()
+		if node == nil {
+			return
+		}
+		return w.wm.nodeToWindow(node), true
+	}
+	return
 }
 
 // TileRight returns the window right-adjacent to t or false if t is the
@@ -247,20 +274,26 @@ func (w Window) TileRight() (ret Window, ok bool) {
 	if w.wm == nil {
 		panic(errCalledZeroValuedWin)
 	}
-	t, ok := w.node.(*TileNode)
-	if !ok {
-		pos := w.node.Position()
-		pos.X += w.node.Width()
-		pos.X++
-		return w.wm.WindowAt(pos)
+	if w.wm.minimizedDirty {
+		w.wm.Resize(w.wm.width, w.wm.height)
 	}
-	node := t.TileRight()
-	if node == nil {
-		ok = false
+	pos := w.Position()
+	pos.X += w.Width()
+	pos.Y += w.Height() / 2
+	ret, ok = w.wm.WindowAt(pos)
+	if ok {
 		return
-
 	}
-	return w.wm.nodeToWindow(node), true
+	// fallback to using the TileTree methods, so if component is of
+	// an awkward size, we still return a tile
+	if t, tok := w.node.(*TileNode); tok {
+		node := t.TileRight()
+		if node == nil {
+			return
+		}
+		return w.wm.nodeToWindow(node), true
+	}
+	return
 }
 
 // TileUp returns the window on top of t or false if t is the
@@ -269,19 +302,26 @@ func (w Window) TileUp() (ret Window, ok bool) {
 	if w.wm == nil {
 		panic(errCalledZeroValuedWin)
 	}
-	t, ok := w.node.(*TileNode)
-	if !ok {
-		pos := w.node.Position()
-		pos.Y--
-		return w.wm.WindowAt(pos)
+	if w.wm.minimizedDirty {
+		w.wm.Resize(w.wm.width, w.wm.height)
 	}
-	node := t.TileUp()
-	if node == nil {
-		ok = false
+	pos := w.Position()
+	pos.Y--
+	pos.X += w.Width() / 2
+	ret, ok = w.wm.WindowAt(pos)
+	if ok {
 		return
-
 	}
-	return w.wm.nodeToWindow(node), true
+	// fallback to using the TileTree methods, so if component is of
+	// an awkward size, we still return a tile
+	if t, tok := w.node.(*TileNode); tok {
+		node := t.TileUp()
+		if node == nil {
+			return
+		}
+		return w.wm.nodeToWindow(node), true
+	}
+	return
 }
 
 // ID returns a unique identifier for this window.
@@ -293,6 +333,15 @@ func (w Window) ID() uint64 {
 func (w Window) IsFloating() bool {
 	_, ok := w.node.(*floatingNode)
 	return ok
+}
+
+// IsMinimized returns true if this is a floating window and it's minimized.
+func (w Window) IsMinimized() (Alignment, bool) {
+	if !w.IsFloating() {
+		return 0, false
+	}
+	alignment := w.node.(*floatingNode).minimized
+	return alignment, alignment != 0
 }
 
 // MinimizeUp minimizes this window and displays it above the window manager,
@@ -366,6 +415,7 @@ func (w Window) Close() error {
 		return errors.New("Cannot close last node")
 	}
 
+	w.wm.minimizedDirty = true
 	w.node.Close()
 	return nil
 }

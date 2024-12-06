@@ -67,11 +67,31 @@ func (w *floatingNode) ID() uint64 {
 }
 
 func (w *floatingNode) Width() int {
-	return w.realWidth
+	if w.minimized == 0 {
+		return w.realWidth
+	}
+	switch w.minimized {
+	case SpanAlignmentTop, SpanAlignmentBottom:
+		return w.wm.minimizedPos[w.ID()].length()
+	case SpanAlignmentLeft, SpanAlignmentRight:
+		return 1
+	default:
+		panic("invalid minimize alignment")
+	}
 }
 
 func (w *floatingNode) Height() int {
-	return w.realHeight
+	if w.minimized == 0 {
+		return w.realHeight
+	}
+	switch w.minimized {
+	case SpanAlignmentTop, SpanAlignmentBottom:
+		return 1
+	case SpanAlignmentLeft, SpanAlignmentRight:
+		return w.wm.minimizedPos[w.ID()].length()
+	default:
+		panic("invalid minimize alignment")
+	}
 }
 
 func (w *floatingNode) Content() tui.Component {
@@ -141,7 +161,10 @@ func (w *floatingNode) Close() {
 }
 
 func (w *floatingNode) Position() term.Coordinates {
-	return w.realOffset
+	if w.minimized == 0 {
+		return w.realOffset
+	}
+	return w.wm.minimizedPos[w.ID()].from()
 }
 
 func (w *floatingNode) updateDesiredDimensions() {

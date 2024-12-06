@@ -281,14 +281,19 @@ func TestWindowManagerSetAttr(t *testing.T) {
 	assert.Equal(t, red, b.Fg)
 }
 
-func testWindowManagerClose(t *testing.T, frame bool) {
+func testWindowManagerClose(
+	t *testing.T,
+	frame bool,
+	split func(*WindowManager, Window, tui.Handler) (Window, bool),
+) {
 	h1 := NewTestHandler()
+	h1.Ch = 'C'
 	h2 := NewTestHandler()
-	h2.Ch = 'D' // different char to enable assert.Equal
+	h2.Ch = 'D'
 	cfg := DefaultWindowManagerConfig()
 	cfg.Frame = frame
 	wm := NewWindowManager(h1, cfg)
-	node2, ok := wm.SplitHorizontal(wm.Focus(), h2)
+	node2, ok := split(wm, wm.Focus(), h2)
 	require.True(t, ok)
 
 	assert.NotEqual(t, node2, wm.Focus())
@@ -297,13 +302,22 @@ func testWindowManagerClose(t *testing.T, frame bool) {
 }
 
 func TestWindowManagerClose(t *testing.T) {
-	t.Run("Close with frame", func(t *testing.T) {
-		testWindowManagerClose(t, true)
-	})
+	suite := []struct {
+		description string
+		split       func(*WindowManager, Window, tui.Handler) (Window, bool)
+		frame       bool
+	}{
+		{"split horizontal with frame", (*WindowManager).SplitHorizontal, true},
+		{"split horizontal without frame", (*WindowManager).SplitHorizontal, false},
+		{"split vertical with frame", (*WindowManager).SplitVertical, true},
+		{"split vertical without frame", (*WindowManager).SplitVertical, false},
+	}
 
-	t.Run("Close without frame", func(t *testing.T) {
-		testWindowManagerClose(t, false)
-	})
+	for _, test := range suite {
+		t.Run("Close "+test.description, func(t *testing.T) {
+			testWindowManagerClose(t, test.frame, test.split)
+		})
+	}
 }
 
 func testWindowManagerContent(t *testing.T, frame bool) {

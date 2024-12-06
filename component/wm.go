@@ -103,82 +103,79 @@ func (wm *WindowManager) DrawWindow(win Window, w term.Writer) {
 		panic("corrupt WindowManager: no pre-calculated minimized position for floating node")
 	}
 
-	pos := winPos.pos
+	pos := winPos.from()
+	length := winPos.length()
 	switch f.minimized {
 	case SpanAlignmentTop:
-		w.SetCell(term.Coordinates{X: 0, Y: pos}, term.Cell{
+		w.SetCell(pos, term.Cell{
 			Width:      1,
 			Ch:         wm.config.TopLeft,
 			Attributes: wm.config.FrameAttr,
 		})
-		for x := 1; x < wm.width-1; x++ {
-			w.SetCell(term.Coordinates{X: x, Y: pos}, term.Cell{
+		for x := 1; x < length-1; x++ {
+			w.SetCell(term.Coordinates{X: x, Y: pos.Y}, term.Cell{
 				Width:      1,
 				Ch:         wm.config.HorizontalTop,
 				Attributes: wm.config.FrameAttr,
 			})
 		}
-		w.SetCell(term.Coordinates{X: wm.width - 1, Y: pos}, term.Cell{
+		w.SetCell(term.Coordinates{X: length - 1, Y: pos.Y}, term.Cell{
 			Width:      1,
 			Ch:         wm.config.TopRight,
 			Attributes: wm.config.FrameAttr,
 		})
 	case SpanAlignmentBottom:
-		bottomPos := wm.height - pos - 1
-		w.SetCell(term.Coordinates{X: 0, Y: bottomPos}, term.Cell{
+		w.SetCell(pos, term.Cell{
 			Width:      1,
 			Ch:         wm.config.BottomLeft,
 			Attributes: wm.config.FrameAttr,
 		})
-		for x := 1; x < wm.width-1; x++ {
-			w.SetCell(term.Coordinates{X: x, Y: bottomPos}, term.Cell{
+		for x := 1; x < length-1; x++ {
+			w.SetCell(term.Coordinates{X: x, Y: pos.Y}, term.Cell{
 				Width:      1,
 				Ch:         wm.config.HorizontalBottom,
 				Attributes: wm.config.FrameAttr,
 			})
 		}
-		w.SetCell(term.Coordinates{X: wm.width - 1, Y: bottomPos}, term.Cell{
+		w.SetCell(term.Coordinates{X: length - 1, Y: pos.Y}, term.Cell{
 			Width:      1,
 			Ch:         wm.config.BottomRight,
 			Attributes: wm.config.FrameAttr,
 		})
 	case SpanAlignmentLeft:
 		yOffset := wm.minimizedOffset.Y
-		height := wm.minimizedHeight
-		w.SetCell(term.Coordinates{X: pos, Y: yOffset}, term.Cell{
+		w.SetCell(pos, term.Cell{
 			Width:      1,
 			Ch:         wm.config.TopLeft,
 			Attributes: wm.config.FrameAttr,
 		})
-		for y := 1 + yOffset; y < yOffset+height-1; y++ {
-			w.SetCell(term.Coordinates{X: pos, Y: y}, term.Cell{
+		for y := 1 + yOffset; y < yOffset+length-1; y++ {
+			w.SetCell(term.Coordinates{X: pos.X, Y: y}, term.Cell{
 				Width:      1,
 				Ch:         wm.config.VerticalLeft,
 				Attributes: wm.config.FrameAttr,
 			})
 		}
-		w.SetCell(term.Coordinates{X: pos, Y: yOffset + height - 1}, term.Cell{
+		w.SetCell(term.Coordinates{X: pos.X, Y: yOffset + length - 1}, term.Cell{
 			Width:      1,
 			Ch:         wm.config.BottomLeft,
 			Attributes: wm.config.FrameAttr,
 		})
 	case SpanAlignmentRight:
-		rightPos := wm.width - pos - 1
 		yOffset := wm.minimizedOffset.Y
-		height := wm.minimizedHeight
-		w.SetCell(term.Coordinates{X: rightPos, Y: yOffset}, term.Cell{
+		w.SetCell(pos, term.Cell{
 			Width:      1,
 			Ch:         wm.config.TopRight,
 			Attributes: wm.config.FrameAttr,
 		})
-		for y := 1 + yOffset; y < yOffset+height-1; y++ {
-			w.SetCell(term.Coordinates{X: rightPos, Y: y}, term.Cell{
+		for y := 1 + yOffset; y < yOffset+length-1; y++ {
+			w.SetCell(term.Coordinates{X: pos.X, Y: y}, term.Cell{
 				Width:      1,
 				Ch:         wm.config.VerticalRight,
 				Attributes: wm.config.FrameAttr,
 			})
 		}
-		w.SetCell(term.Coordinates{X: rightPos, Y: yOffset + height - 1}, term.Cell{
+		w.SetCell(term.Coordinates{X: pos.X, Y: yOffset + length - 1}, term.Cell{
 			Width:      1,
 			Ch:         wm.config.BottomRight,
 			Attributes: wm.config.FrameAttr,
@@ -278,13 +275,17 @@ func (wm *WindowManager) WindowAt(pos term.Coordinates) (Window, bool) {
 		return Window{}, false
 	}
 
+	if wm.minimizedDirty {
+		wm.Resize(wm.width, wm.height)
+	}
+
 	// first return any floating window that might be rendered over everything else
 	floating := -1
 	for i, fw := range wm.float {
 		if fw.minimized != 0 {
 			continue
 		}
-		fwpos := fw.Position()
+		fwpos := wm.nodeToWindow(fw).Position()
 		fwidth, fheight := fw.Width(), fw.Height()
 		if pos.X >= fwpos.X && pos.Y >= fwpos.Y &&
 			pos.X <= fwpos.X+fwidth && pos.Y <= fwpos.Y+fheight {
@@ -295,50 +296,11 @@ func (wm *WindowManager) WindowAt(pos term.Coordinates) (Window, bool) {
 		return wm.nodeToWindow(wm.float[floating]), true
 	}
 
-	// return any minimized top windows at position
-	if pos.Y < wm.minimizedOffset.Y {
-		for _, winPos := range wm.minimizedPos {
-			if winPos.win.node.(*floatingNode).minimized == SpanAlignmentTop &&
-				winPos.pos == pos.Y {
-				return winPos.win, true
-			}
+	for _, winPos := range wm.minimizedPos {
+		from, to := winPos.position()
+		if pos.X >= from.X && pos.X < to.X && pos.Y >= from.Y && pos.Y < to.Y {
+			return winPos.win, true
 		}
-		panic("corrupted wm: minimized window under offset not found")
-	}
-
-	// return any minimized bottom windows at position
-	if pos.Y >= wm.minimizedOffset.Y+wm.minimizedHeight {
-		pos.Y -= (wm.minimizedOffset.Y + wm.minimizedHeight)
-		for _, winPos := range wm.minimizedPos {
-			if winPos.win.node.(*floatingNode).minimized == SpanAlignmentBottom &&
-				winPos.pos == pos.Y {
-				return winPos.win, true
-			}
-		}
-		panic("corrupted wm: minimized window above offset not found")
-	}
-
-	// return any minimized left windows at position
-	if pos.X < wm.minimizedOffset.X {
-		for _, winPos := range wm.minimizedPos {
-			if winPos.win.node.(*floatingNode).minimized == SpanAlignmentLeft &&
-				winPos.pos == pos.X {
-				return winPos.win, true
-			}
-		}
-		panic("corrupted wm: minimized window before offset not found")
-	}
-
-	// return any minimized right windows at position
-	if pos.X >= wm.minimizedOffset.X+wm.minimizedWidth {
-		pos.X -= (wm.minimizedOffset.X + wm.minimizedWidth)
-		for _, winPos := range wm.minimizedPos {
-			if winPos.win.node.(*floatingNode).minimized == SpanAlignmentRight &&
-				winPos.pos == pos.X {
-				return winPos.win, true
-			}
-		}
-		panic("corrupted wm: minimized window after offset not found")
 	}
 
 	pos.Y -= wm.minimizedOffset.Y
@@ -420,7 +382,6 @@ func (wm *WindowManager) closeFloatingWindow(w *floatingNode) {
 	for i, f := range wm.float {
 		if f == w {
 			wm.float = append(wm.float[:i], wm.float[i+1:]...)
-			wm.minimizedDirty = true
 			break
 		}
 	}
@@ -456,7 +417,60 @@ func (wm *WindowManager) calculateMinimizedOffsets() {
 	wm.minimizedWidth = wm.width - offsetRight - offsetLeft
 }
 
+// post-draw helper to find where minimized windows are positioned
 type windowPos struct {
 	win Window
 	pos int
+}
+
+func (w windowPos) position() (term.Coordinates, term.Coordinates) {
+	from := w.from()
+	length := w.length()
+	var to term.Coordinates
+	switch w.win.node.(*floatingNode).minimized {
+	case SpanAlignmentTop, SpanAlignmentBottom:
+		to = from
+		to.Y++
+		to.X += length
+	case SpanAlignmentLeft, SpanAlignmentRight:
+		to = from
+		to.X++
+		to.Y += length
+	default:
+		panic("invalid minimize alignment")
+	}
+	return from, to
+}
+
+func (w windowPos) from() term.Coordinates {
+	switch w.win.node.(*floatingNode).minimized {
+	case SpanAlignmentTop:
+		return term.Coordinates{X: 0, Y: w.pos}
+	case SpanAlignmentBottom:
+		return term.Coordinates{X: 0, Y: w.win.wm.height - w.pos - 1}
+	case SpanAlignmentLeft:
+		return term.Coordinates{X: w.pos, Y: w.win.wm.minimizedOffset.Y}
+	case SpanAlignmentRight:
+		return term.Coordinates{
+			X: w.win.wm.width - w.pos - 1,
+			Y: w.win.wm.minimizedOffset.Y,
+		}
+	default:
+		panic("invalid minimize alignment")
+	}
+}
+
+func (w windowPos) length() int {
+	switch w.win.node.(*floatingNode).minimized {
+	case SpanAlignmentTop:
+		return w.win.wm.width
+	case SpanAlignmentBottom:
+		return w.win.wm.width
+	case SpanAlignmentLeft:
+		return w.win.wm.minimizedHeight
+	case SpanAlignmentRight:
+		return w.win.wm.minimizedHeight
+	default:
+		panic("invalid minimize alignment")
+	}
 }
