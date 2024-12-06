@@ -81,26 +81,33 @@ func (wm *WindowManager) DrawWindow(win Window, w term.Writer) {
 	if wm.minimizedDirty {
 		wm.Resize(wm.width, wm.height)
 	}
+
+	nonMinimizedW := VirtualWriter{
+		Writer: w,
+		Offset: wm.minimizedOffset,
+		Height: wm.height,
+		Width:  wm.width,
+	}
+
 	f, ok := win.node.(*floatingNode)
 	if !ok {
-		w = VirtualWriter{
-			Writer: w,
-			Offset: wm.minimizedOffset,
-			Height: wm.height,
-			Width:  wm.width,
-		}
-		wm.tree.DrawTile(win.node.(*TileNode), w)
+		wm.tree.DrawTile(win.node.(*TileNode), nonMinimizedW)
 		return
 	}
 
 	if f.minimized == 0 {
-		f.Draw(w)
+		f.Draw(nonMinimizedW)
 		return
 	}
 
 	winPos, ok := wm.minimizedPos[f.ID()]
 	if !ok {
 		panic("corrupt WindowManager: no pre-calculated minimized position for floating node")
+	}
+
+	if wm.minimizedOffset.Y < 0 || wm.minimizedOffset.X < 0 ||
+		wm.minimizedWidth <= 0 || wm.minimizedHeight <= 0 {
+		return
 	}
 
 	pos := winPos.from()
@@ -288,7 +295,7 @@ func (wm *WindowManager) WindowAt(pos term.Coordinates) (Window, bool) {
 		fwpos := wm.nodeToWindow(fw).Position()
 		fwidth, fheight := fw.Width(), fw.Height()
 		if pos.X >= fwpos.X && pos.Y >= fwpos.Y &&
-			pos.X <= fwpos.X+fwidth && pos.Y <= fwpos.Y+fheight {
+			pos.X < fwpos.X+fwidth && pos.Y < fwpos.Y+fheight {
 			floating = i
 		}
 	}
@@ -352,7 +359,7 @@ func (wm *WindowManager) FloatingWindow(
 	if wm.config.Frame {
 		content = wm.withFrame(content)
 	}
-	f := newFloatingNode(wm, content, cfg, wm.width, wm.height)
+	f := newFloatingNode(wm, content, cfg, wm.minimizedWidth, wm.minimizedHeight)
 	wm.float = append(wm.float, f)
 	wm.minimizedDirty = true
 	return wm.nodeToWindow(f)

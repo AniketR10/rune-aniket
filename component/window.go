@@ -62,7 +62,7 @@ func (w Window) Position() term.Coordinates {
 	}
 
 	fnode, ok := w.node.(*floatingNode)
-	if ok {
+	if ok && fnode.minimized != 0 {
 		return fnode.Position()
 	}
 

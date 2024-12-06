@@ -536,10 +536,10 @@ func TestWindowManagerMinimize(t *testing.T) {
 			assert.False(t, fwin.Unminimize())
 		}, Expected: `
 ┌┌────────────────┐┐
-││AAAAA┌──┐AAAAAAA││
-││AAAAA│uu│AAAAAAA││
-││AAAAA│uu│AAAAAAA││
-││AAAAA└──┘AAAAAAA││
+││AAAAAA┌──┐AAAAAA││
+││AAAAAA│uu│AAAAAA││
+││AAAAAA│uu│AAAAAA││
+││AAAAAA└──┘AAAAAA││
 ││AAAAAAAAAAAAAAAA││
 └└────────────────┘┘
 └──────────────────┘`,
@@ -693,6 +693,96 @@ func TestWindowManagerMinimize(t *testing.T) {
 └└└──────────────┘┘┘
 └──────────────────┘
 └──────────────────┘`,
+		}, {Action: func() {
+			win, ok := wm.WindowAt(term.Coordinates{Y: 6})
+			require.True(t, ok)
+			assert.Equal(t, 'D', win.Content().(*staticFloating).Component.(*TestComponent).Ch)
+
+			require.True(t, win.Unminimize())
+		}, Expected: `
+┌──────────────────┐
+┌┌┌──────────────┐┐┐
+│││AAAAA┌──┐AAAAA│││
+│││AAAAA│DD│AAAAA│││
+│││AAAAA│DD│AAAAA│││
+│││AAAAA└──┘AAAAA│││
+└└└──────────────┘┘┘
+└──────────────────┘`,
+		}, {Action: func() {
+			win, ok := wm.WindowAt(term.Coordinates{Y: 3, X: 9})
+			require.True(t, ok)
+			assert.Equal(t, 'D', win.Content().(*staticFloating).Component.(*TestComponent).Ch)
+			require.True(t, win.MinimizeDown())
+
+			w := wm.FloatingWindow(StaticFloating(&TestComponent{Ch: 'X'}, 7, 100),
+				FloatingConfig{
+					Alignment: SpanAlignmentCentered,
+				},
+			)
+			wof, ok := w.TileRight()
+			require.True(t, ok)
+			assert.Equal(t, 'A', wof.Content().(*TestComponent).Ch)
+		}, Expected: `
+┌──────────────────┐
+┌┌┌──┌───────┐───┐┐┐
+│││AA│XXXXXXX│AAA│││
+│││AA│XXXXXXX│AAA│││
+│││AA│XXXXXXX│AAA│││
+└└└──└───────┘───┘┘┘
+└──────────────────┘
+└──────────────────┘`,
+		}, {Action: func() {
+			win, ok := wm.WindowAt(term.Coordinates{Y: 3, X: 6})
+			require.True(t, ok)
+			assert.Equal(t, 'X', win.Content().(*staticFloating).Component.(*TestComponent).Ch)
+			require.NoError(t, win.Close())
+
+			w := wm.FloatingWindow(StaticFloating(&TestComponent{Ch: 'X'}, 100, 100),
+				FloatingConfig{
+					Alignment: SpanAlignmentCentered,
+				},
+			)
+			wof, ok := w.TileRight()
+			require.True(t, ok)
+			assert.Equal(t, 'R', wof.Content().(*staticFloating).Component.(*TestComponent).Ch)
+
+			wof, ok = w.TileLeft()
+			require.True(t, ok)
+			assert.Equal(t, 'L', wof.Content().(*staticFloating).Component.(*TestComponent).Ch)
+
+			wof, ok = w.TileUp()
+			require.True(t, ok)
+			assert.Equal(t, 'U', wof.Content().(*staticFloating).Component.(*TestComponent).Ch)
+
+			wof, ok = w.TileDown()
+			require.True(t, ok)
+			assert.Equal(t, 'D', wof.Content().(*staticFloating).Component.(*TestComponent).Ch)
+		}, Expected: `
+┌──────────────────┐
+┌┌┌──────────────┐┐┐
+│││XXXXXXXXXXXXXX│││
+│││XXXXXXXXXXXXXX│││
+│││XXXXXXXXXXXXXX│││
+└└└──────────────┘┘┘
+└──────────────────┘
+└──────────────────┘`,
+		}, {Action: func() {
+			assert.NotPanics(t, func() {
+				wm.Resize(2, 2)
+				wm.WindowAt(term.Coordinates{X: 0, Y: 0})
+				wm.WindowAt(term.Coordinates{X: 0, Y: 1})
+				wm.WindowAt(term.Coordinates{X: 1, Y: 0})
+				wm.WindowAt(term.Coordinates{X: 1, Y: 1})
+			})
+		}, Expected: `
+                    
+  ┌─                
+  │X                
+                    
+                    
+                    
+                    
+                    `,
 		},
 	}
 
