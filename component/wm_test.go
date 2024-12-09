@@ -24,6 +24,7 @@
 package component
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -787,4 +788,114 @@ func TestWindowManagerMinimize(t *testing.T) {
 	}
 
 	comptest.TestComponent(t, wm, w, tests)
+}
+
+func TestComponentWindowAt(t *testing.T) {
+	h1 := &TestComponent{Ch: '1'}
+	wm, w1 := NewWindowManager(h1, DefaultWindowManagerConfig())
+	wm.Resize(20, 8)
+
+	h2 := &TestComponent{Ch: '2'}
+	w2, ok := wm.SplitVertical(w1, h2)
+	require.True(t, ok)
+
+	h3 := &TestComponent{Ch: '3'}
+	w3, ok := wm.SplitHorizontal(w2, h3)
+	require.True(t, ok)
+
+	h4 := &TestComponent{Ch: '4'}
+	w4, ok := wm.SplitVertical(w3, h4)
+	require.True(t, ok)
+
+	wf := wm.FloatingWindow(StaticFloating(&TestComponent{Ch: 'f'}, 100, 100),
+		FloatingConfig{
+			Alignment: SpanAlignmentCentered,
+		},
+	)
+
+	require.True(t, wf.MinimizeDown())
+
+	wF := wm.FloatingWindow(StaticFloating(&TestComponent{Ch: 'F'}, 2, 2),
+		FloatingConfig{
+			Alignment: SpanAlignmentCentered,
+		},
+	)
+
+	/*
+			  ┌────────┐┌────────┐
+		      │1111111┌──┐2222222│
+		      │1111111│FF│───────┘
+		      │1111111│FF│──┐┌───┐
+		      │1111111└──┘33││444│
+		      │11111111││333││444│
+		      └────────┘└───┘└───┘
+		      └──────────────────┘
+	*/
+
+	suite := []struct {
+		at               term.Coordinates
+		expectedOut      Window
+		expectedNotFound bool
+	}{
+		{
+			at:          term.Coordinates{X: 10, Y: 3},
+			expectedOut: wF,
+		},
+		{
+			at:          term.Coordinates{X: 14, Y: 6},
+			expectedOut: w3,
+		},
+		{
+			at:          term.Coordinates{X: 12, Y: 3},
+			expectedOut: w3,
+		},
+		{
+			at:          term.Coordinates{X: 19, Y: 2},
+			expectedOut: w2,
+		},
+		{
+			at:          term.Coordinates{X: 10, Y: 0},
+			expectedOut: w2,
+		},
+		{
+			at:          term.Coordinates{X: 0, Y: 7},
+			expectedOut: wf,
+		},
+		{
+			at:          term.Coordinates{X: 19, Y: 7},
+			expectedOut: wf,
+		},
+		{
+			at:          term.Coordinates{X: 0, Y: 6},
+			expectedOut: w1,
+		},
+		{
+			at:          term.Coordinates{X: 9, Y: 0},
+			expectedOut: w1,
+		},
+		{
+			at:          term.Coordinates{X: 15, Y: 3},
+			expectedOut: w4,
+		},
+		{
+			at:          term.Coordinates{X: 19, Y: 6},
+			expectedOut: w4,
+		},
+		{
+			at:          term.Coordinates{X: 8, Y: 1},
+			expectedOut: wF,
+		},
+		{
+			at:          term.Coordinates{X: 11, Y: 4},
+			expectedOut: wF,
+		},
+	}
+	for i, test := range suite {
+		t.Run(fmt.Sprintf("test case %d", i), func(t *testing.T) {
+			actualOut, actualOk := wm.WindowAt(test.at)
+			require.Equal(t, !test.expectedNotFound, actualOk)
+			assert.Equal(t, test.expectedOut, actualOut)
+		})
+	}
+
 }

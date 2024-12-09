@@ -455,25 +455,29 @@ func (t *TileNode) Content() tui.Component {
 	return t.content
 }
 
-func (t *TileNode) tileAt(pos term.Coordinates) *TileNode {
+func (t *TileNode) tileAt(tileOffset, pos term.Coordinates) *TileNode {
 	if t.direction == vertical {
 		for _, child := range t.children {
 			childPos := child.Position()
+			childPos.X += tileOffset.X
+			childPos.Y += tileOffset.Y
 			if pos.X >= childPos.X && pos.X < childPos.X+child.Width() {
-				return child.C.(*TileNode).tileAt(pos)
+				return child.C.(*TileNode).tileAt(childPos, pos)
 			}
 		}
 	} else {
 		for _, child := range t.children {
 			childPos := child.Position()
+			childPos.X += tileOffset.X
+			childPos.Y += tileOffset.Y
 			if pos.Y >= childPos.Y && pos.Y < childPos.Y+child.Height() {
-				return child.C.(*TileNode).tileAt(pos)
+				return child.C.(*TileNode).tileAt(childPos, pos)
 			}
 		}
 	}
 
 	if len(t.children) != 0 {
-		panic(fmt.Sprintf("could not finde tile at %+v", pos))
+		panic(fmt.Sprintf("could not find tile at %+v", pos))
 	}
 
 	return t
@@ -519,7 +523,7 @@ func (t *TileTree) TileAt(pos term.Coordinates) *TileNode {
 	if pos.X < 0 || pos.Y < 0 || pos.X >= t.root.width || pos.Y >= t.root.height {
 		panic("Coordinates out of bounds")
 	}
-	return t.root.tileAt(pos)
+	return t.root.tileAt(term.Coordinates{}, pos)
 }
 
 // SetContentResize sets the content of a TileNode to c.
