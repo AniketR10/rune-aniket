@@ -36,6 +36,7 @@ type floatingNode struct {
 	maxWidth, maxHeight         int              // window space size
 	desiredWidth, desiredHeight int              // content desired Dimensions size
 	minimized                   Alignment
+	minimizedPadding            int
 
 	realWidth, realHeight int              // calculated upon Resize, considering trimming
 	realOffset            term.Coordinates // calculated offset with alignment
@@ -74,7 +75,7 @@ func (w *floatingNode) Width() int {
 	case SpanAlignmentTop, SpanAlignmentBottom:
 		return w.wm.minimizedPos[w.ID()].length()
 	case SpanAlignmentLeft, SpanAlignmentRight:
-		return 1
+		return 1 + w.minimizedPadding
 	default:
 		panic("invalid minimize alignment")
 	}
@@ -86,7 +87,7 @@ func (w *floatingNode) Height() int {
 	}
 	switch w.minimized {
 	case SpanAlignmentTop, SpanAlignmentBottom:
-		return 1
+		return 1 + w.minimizedPadding
 	case SpanAlignmentLeft, SpanAlignmentRight:
 		return w.wm.minimizedPos[w.ID()].length()
 	default:
