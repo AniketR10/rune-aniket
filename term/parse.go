@@ -668,6 +668,8 @@ func ParseKey(str string) (KeyComb, error) {
 			return KeyComb{Ch: '"'}, nil
 		case "<s-=>", "<shift-=>":
 			return KeyComb{Ch: '+'}, nil
+		case "<s-+>", "<shift-+>":
+			return KeyComb{Ch: '+'}, nil
 		case "<s-->", "<shift-->":
 			return KeyComb{Ch: '_'}, nil
 
@@ -995,6 +997,10 @@ func ParseKey(str string) (KeyComb, error) {
 		case "<c-s-'>", "<ctrl-shift-'>":
 			return KeyComb{Mod: ModCtrl, Ch: '"'}, nil
 		case "<c-s-=>", "<ctrl-shift-=>":
+			return KeyComb{Mod: ModCtrl, Ch: '+'}, nil
+		case "<c-s-+>", "<ctrl-shift-+>":
+			return KeyComb{Mod: ModCtrl, Ch: '+'}, nil
+		case "<c-+>", "<ctrl-+>":
 			return KeyComb{Mod: ModCtrl, Ch: '+'}, nil
 		case "<c-s-->", "<ctrl-shift-->":
 			return KeyComb{Mod: ModCtrl, Ch: '_'}, nil
@@ -1488,6 +1494,10 @@ func ParseKey(str string) (KeyComb, error) {
 			return KeyComb{Mod: ModCtrlAlt, Ch: '"'}, nil
 		case "<c-s-a-=>", "<ctrl-shift-alt-=>":
 			return KeyComb{Mod: ModCtrlAlt, Ch: '+'}, nil
+		case "<c-s-a-+>", "<ctrl-shift-alt-+>":
+			return KeyComb{Mod: ModCtrlAlt, Ch: '+'}, nil
+		case "<c-a-+>", "<ctrl-alt-+>":
+			return KeyComb{Mod: ModCtrlAlt, Ch: '+'}, nil
 		case "<c-s-a-->", "<ctrl-shift-alt-->":
 			return KeyComb{Mod: ModCtrlAlt, Ch: '_'}, nil
 
@@ -1651,6 +1661,10 @@ func ParseKey(str string) (KeyComb, error) {
 		case "<c-s-m-'>", "<ctrl-shift-meta-'>":
 			return KeyComb{Mod: ModCtrlMeta, Ch: '"'}, nil
 		case "<c-s-m-=>", "<ctrl-shift-meta-=>":
+			return KeyComb{Mod: ModCtrlMeta, Ch: '+'}, nil
+		case "<c-s-m-+>", "<ctrl-shift-meta-+>":
+			return KeyComb{Mod: ModCtrlMeta, Ch: '+'}, nil
+		case "<c-m-+>", "<ctrl-meta-+>":
 			return KeyComb{Mod: ModCtrlMeta, Ch: '+'}, nil
 		case "<c-s-m-->", "<ctrl-shift-meta-->":
 			return KeyComb{Mod: ModCtrlMeta, Ch: '_'}, nil
@@ -1980,6 +1994,10 @@ func ParseKey(str string) (KeyComb, error) {
 			return KeyComb{Mod: ModMeta, Ch: '"'}, nil
 		case "<s-m-=>", "<shift-meta-=>":
 			return KeyComb{Mod: ModMeta, Ch: '+'}, nil
+		case "<s-m-+>", "<shift-meta-+>":
+			return KeyComb{Mod: ModMeta, Ch: '+'}, nil
+		case "<m-+>", "<meta-+>":
+			return KeyComb{Mod: ModMeta, Ch: '+'}, nil
 		case "<s-m-->", "<shift-meta-->":
 			return KeyComb{Mod: ModMeta, Ch: '_'}, nil
 
@@ -2308,6 +2326,10 @@ func ParseKey(str string) (KeyComb, error) {
 			return KeyComb{Mod: ModAltMeta, Ch: '"'}, nil
 		case "<a-s-m-=>", "<alt-shift-meta-=>":
 			return KeyComb{Mod: ModAltMeta, Ch: '+'}, nil
+		case "<a-s-m-+>", "<alt-shift-meta-+>":
+			return KeyComb{Mod: ModAltMeta, Ch: '+'}, nil
+		case "<a-m-+>", "<alt-meta-+>":
+			return KeyComb{Mod: ModAltMeta, Ch: '+'}, nil
 		case "<a-s-m-->", "<alt-shift-meta-->":
 			return KeyComb{Mod: ModAltMeta, Ch: '_'}, nil
 
@@ -2471,6 +2493,10 @@ func ParseKey(str string) (KeyComb, error) {
 		case "<a-s-'>", "<alt-shift-'>":
 			return KeyComb{Mod: ModAlt, Ch: '"'}, nil
 		case "<a-s-=>", "<alt-shift-=>":
+			return KeyComb{Mod: ModAlt, Ch: '+'}, nil
+		case "<a-s-+>", "<alt-shift-+>":
+			return KeyComb{Mod: ModAlt, Ch: '+'}, nil
+		case "<a-+>", "<alt-+>":
 			return KeyComb{Mod: ModAlt, Ch: '+'}, nil
 		case "<a-s-->", "<alt-shift-->":
 			return KeyComb{Mod: ModAlt, Ch: '_'}, nil
