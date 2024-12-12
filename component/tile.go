@@ -31,10 +31,10 @@ import (
 	"unstable.build/go-tui/term"
 )
 
-type splitdir uint8
+type splitDir uint8
 
 const (
-	root splitdir = iota
+	noSplit splitDir = iota
 	vertical
 	horizontal
 )
@@ -50,17 +50,19 @@ type TileNode struct {
 	width, height int
 	content       tui.Component
 	children      []*Virtual
-	direction     splitdir
+	childSplit    splitDir
 	parent        *TileNode
+	fixedSize     int
+	dirty         bool
 }
 
 // Init initializes a TileTree or resets it if already initialied.
 func (t *TileTree) Init(content tui.Component) (n *TileNode) {
 	n = new(TileNode)
-	t.root.direction = root
+	t.root.childSplit = vertical
 	t.root.children = []*Virtual{{C: n}}
 	t.root.tree = t
-	n.initNode(vertical, content, &t.root)
+	n.initNode(content, &t.root)
 	return
 }
 
@@ -87,60 +89,18 @@ func (t *TileTree) DrawTile(node *TileNode, w term.Writer) {
 	t.root.drawTile(node, w)
 }
 
-func (t *TileNode) initNode(
-	direction splitdir, content tui.Component, parent *TileNode,
-) {
+func (t *TileNode) initNode(content tui.Component, parent *TileNode) {
 	t.content = content
 	t.children = []*Virtual{}
-	t.direction = direction
 	t.parent = parent
 	t.tree = parent.tree
 }
 
-func (t *TileNode) resizeHorizontal(width, height int) {
-	length := len(t.children)
-	cheight := height / length
-	hspare := height - cheight*length
-
-	useSpareIdx := length - hspare
-	spareCell := 0
-
-	for i, ti := range t.children {
-		offset := ((i - useSpareIdx) * spareCell)
-		ti.Move(term.Coordinates{Y: i*cheight + offset})
-
-		if i == useSpareIdx {
-			spareCell = 1
-		}
-
-		ti.Resize(width, cheight+spareCell)
-	}
-}
-
-func (t *TileNode) resizeVertical(width, height int) {
-	length := len(t.children)
-	cwidth := width / length
-	wspare := width - cwidth*length
-
-	useSpareIdx := length - wspare
-	spareCell := 0
-
-	for i, ti := range t.children {
-		offset := ((i - useSpareIdx) * spareCell)
-		ti.Move(term.Coordinates{X: i*cwidth + offset})
-
-		if i == useSpareIdx {
-			spareCell = 1
-		}
-
-		ti.Resize(cwidth+spareCell, height)
-	}
-}
-
-// Resize : Component
+// Resize satisfies tui.Component.
 func (t *TileNode) Resize(width, height int) {
 	t.height = height
 	t.width = width
+	t.dirty = false
 
 	if len(t.children) == 0 && t.content == nil {
 		panic("corrupted node: non-empty children and content")
@@ -151,7 +111,7 @@ func (t *TileNode) Resize(width, height int) {
 		return
 	}
 
-	if t.direction == vertical {
+	if t.childSplit == vertical {
 		t.resizeVertical(width, height)
 		return
 
@@ -160,10 +120,14 @@ func (t *TileNode) Resize(width, height int) {
 	t.resizeHorizontal(width, height)
 }
 
-// Draw : Component
+// Draw satisfies tui.Component.
 func (t *TileNode) Draw(w term.Writer) {
 	if len(t.children) == 0 && t.content == nil {
 		panic("corrupted node: non-empty children and content")
+	}
+
+	if t.dirty {
+		t.Resize(t.width, t.height)
 	}
 
 	if t.content != nil {
@@ -174,14 +138,18 @@ func (t *TileNode) Draw(w term.Writer) {
 	for _, ti := range t.children {
 		ti.Draw(w)
 	}
-
 }
 
 func (t *TileNode) drawTile(node *TileNode, w term.Writer) bool {
+	if t.dirty {
+		t.Resize(t.width, t.height)
+	}
+
 	if t == node {
 		t.content.Draw(w)
 		return true
 	}
+
 	for _, ti := range t.children {
 		// call drawTile and use Virtual's position, width, height
 		// to emulate Virtual.Draw via VirtualWriter
@@ -204,7 +172,7 @@ func (t *TileNode) childIdx(child *TileNode) int {
 }
 
 func (t *TileNode) addChildAtIdx(
-	child *TileNode, content tui.Component, direction splitdir, idx int,
+	child *TileNode, content tui.Component, direction splitDir, idx int,
 ) {
 	if idx > len(t.children) {
 		panic(fmt.Errorf("trying to append child at index out of bounds: %d; len=%d",
@@ -219,20 +187,23 @@ func (t *TileNode) addChildAtIdx(
 	// tree through various APIs.
 	if len(t.children) == 0 {
 		proxyNode := new(TileNode)
-		proxyNode.initNode(direction, nil, t.parent)
+		proxyNode.initNode(nil, t.parent)
+		proxyNode.childSplit = direction
+		proxyNode.fixedSize = t.fixedSize
 		proxyNode.children = append(proxyNode.children, &Virtual{C: t}, v)
 
 		idx := t.parent.childIdx(t)
 		t.parent.children[idx] = &Virtual{C: proxyNode}
 
-		child.initNode(direction, content, proxyNode)
-		t.initNode(direction, t.content, proxyNode)
+		child.initNode(content, proxyNode)
+		t.initNode(t.content, proxyNode)
+		t.fixedSize = 0
 
 		proxyNode.parent.Resize(proxyNode.parent.width, proxyNode.parent.height)
 		return
 	}
 
-	child.initNode(direction, content, t)
+	child.initNode(content, t)
 
 	t.children = append(t.children, nil)
 	copy(t.children[idx+1:], t.children[idx:])
@@ -241,7 +212,7 @@ func (t *TileNode) addChildAtIdx(
 	t.Resize(t.width, t.height)
 }
 
-func split(over *TileNode, direction splitdir, content tui.Component) (
+func split(over *TileNode, direction splitDir, content tui.Component) (
 	n *TileNode,
 ) {
 	if content == nil {
@@ -255,7 +226,7 @@ func split(over *TileNode, direction splitdir, content tui.Component) (
 
 	parent := over.parent
 
-	if parent.direction == direction {
+	if parent.childSplit == direction {
 		i := parent.childIdx(over)
 		parent.addChildAtIdx(n, content, direction, i+1)
 		return
@@ -284,6 +255,7 @@ func removeChild(parent, child *TileNode) {
 		proxyNode.parent.children[idx] = lastNode
 
 		lastNode.C.(*TileNode).parent = proxyNode.parent
+		lastNode.C.(*TileNode).fixedSize = 0
 
 		proxyNode.parent.Resize(proxyNode.parent.width, proxyNode.parent.height)
 
@@ -293,6 +265,8 @@ func removeChild(parent, child *TileNode) {
 		return
 	}
 
+	// be extra safe: when a child is removed from a parent, reset all fixed sizes
+	parent.resetFixedSizes()
 	parent.Resize(parent.width, parent.height)
 }
 
@@ -301,7 +275,7 @@ func (t *TileNode) Close() {
 	if t.parent == nil {
 		return
 	}
-	if t.parent.parent == nil && len(t.parent.children) == 1 {
+	if t.parent == &t.tree.root && len(t.parent.children) == 1 {
 		panic("unsupported: trying to close last node")
 	}
 
@@ -369,13 +343,13 @@ func getParentIdx(node *TileNode) (parent *TileNode, i int) {
 	return
 }
 
-func tileLeftDir(node *TileNode, direction splitdir) *TileNode {
+func tileLeftDir(node *TileNode, direction splitDir) *TileNode {
 	parent, i := getParentIdx(node)
-	if parent.parent == nil {
+	if i == 0 && parent.parent == nil {
 		return nil
 	}
 
-	if i == 0 || parent.direction != direction {
+	if i == 0 || parent.childSplit != direction {
 		return tileLeftDir(parent, direction)
 	}
 
@@ -387,13 +361,13 @@ func tileLeftDir(node *TileNode, direction splitdir) *TileNode {
 	return link.rightMostChild()
 }
 
-func tileRightDir(node *TileNode, direction splitdir) *TileNode {
+func tileRightDir(node *TileNode, direction splitDir) *TileNode {
 	parent, i := getParentIdx(node)
-	if parent.parent == nil {
+	if i == len(parent.children)-1 && parent.parent == nil {
 		return nil
 	}
 
-	if i == len(parent.children)-1 || parent.direction != direction {
+	if i == len(parent.children)-1 || parent.childSplit != direction {
 		return tileRightDir(parent, direction)
 	}
 
@@ -456,7 +430,11 @@ func (t *TileNode) Content() tui.Component {
 }
 
 func (t *TileNode) tileAt(tileOffset, pos term.Coordinates) *TileNode {
-	if t.direction == vertical {
+	if t.childSplit == noSplit {
+		return t
+	}
+
+	if t.childSplit == vertical {
 		for _, child := range t.children {
 			childPos := child.Position()
 			childPos.X += tileOffset.X
@@ -465,7 +443,7 @@ func (t *TileNode) tileAt(tileOffset, pos term.Coordinates) *TileNode {
 				return child.C.(*TileNode).tileAt(childPos, pos)
 			}
 		}
-	} else {
+	} else if t.childSplit == horizontal {
 		for _, child := range t.children {
 			childPos := child.Position()
 			childPos.X += tileOffset.X
@@ -476,11 +454,7 @@ func (t *TileNode) tileAt(tileOffset, pos term.Coordinates) *TileNode {
 		}
 	}
 
-	if len(t.children) != 0 {
-		panic(fmt.Sprintf("could not find tile at %+v", pos))
-	}
-
-	return t
+	panic(fmt.Sprintf("could not find tile at %+v", pos))
 }
 
 func (t *TileNode) tilePosition(child *TileNode, currOffset term.Coordinates) (
@@ -536,6 +510,56 @@ func (t *TileNode) SetContentResize(c tui.Component, resize bool) (prev tui.Comp
 	return
 }
 
+// SetFixedHeight sets the height of this node, or returns
+// false if this node's height cannot be fixed.
+//
+// Calling this method with height=0 effectively resets the
+// height to be automatically calculated based on the space available.
+func (t *TileNode) SetFixedHeight(height int) bool {
+	if t.parent == nil {
+		panic("corrupted tile tree: exposed root node")
+	}
+	if t.parent.childSplit == horizontal {
+		if !t.parent.canSetFixedSize(t.parent.height, height) {
+			return false
+		}
+		t.parent.resetFixedSizes()
+		t.fixedSize = height
+		t.parent.dirty = true
+		t.dirty = true
+		return true
+	}
+	if t.parent.parent == nil {
+		return false
+	}
+	return t.parent.SetFixedHeight(height)
+}
+
+// SetFixedWidth sets the width of this node, or returns
+// false if this node's width cannot be fixed.
+//
+// Calling this method with width=0 effectively resets the
+// width to be automatically calculated based on the space available.
+func (t *TileNode) SetFixedWidth(width int) bool {
+	if t.parent == nil {
+		panic("corrupted tile tree: exposed root node")
+	}
+	if t.parent.childSplit == vertical {
+		if !t.parent.canSetFixedSize(t.parent.width, width) {
+			return false
+		}
+		t.parent.resetFixedSizes()
+		t.fixedSize = width
+		t.parent.dirty = true
+		t.dirty = true
+		return true
+	}
+	if t.parent.parent == nil {
+		return false
+	}
+	return t.parent.SetFixedWidth(width)
+}
+
 // ID returns a unique identifier for this tile.
 func (t *TileNode) ID() uint64 {
 	return uint64(uintptr(unsafe.Pointer(t)))
@@ -575,4 +599,83 @@ func (t *TileTree) Iterate(op func(*TileNode)) {
 // Closed returns if this Window has been closed.
 func (t *TileNode) Closed() bool {
 	return t.parent == nil
+}
+
+func (t *TileNode) fixedSizeNodes() (totalFixedSize, fixedSizeNodes int) {
+	for _, ti := range t.children {
+		fixedSize := ti.C.(*TileNode).fixedSize
+		if fixedSize != 0 {
+			totalFixedSize += fixedSize
+			fixedSizeNodes++
+		}
+	}
+	return
+}
+
+func (t *TileNode) resizeHorizontal(width, height int) {
+	length := len(t.children)
+	fixedHeight, fixedSizeNodes := t.fixedSizeNodes()
+	cheight := (height - fixedHeight) / (length - fixedSizeNodes)
+	hspare := height - fixedHeight - cheight*(length-fixedSizeNodes)
+
+	useSpareIdx := length - hspare
+	spareCell := 0
+
+	var offset int
+	for i, ti := range t.children {
+		fixedSize := ti.C.(*TileNode).fixedSize
+		ti.Move(term.Coordinates{Y: offset})
+		if fixedSize != 0 {
+			ti.Resize(width, fixedSize)
+			offset += fixedSize
+		} else {
+			if i == useSpareIdx {
+				spareCell = 1
+			}
+			nheight := cheight + spareCell
+			ti.Resize(width, nheight)
+			offset += nheight
+		}
+	}
+}
+
+func (t *TileNode) resizeVertical(width, height int) {
+	length := len(t.children)
+	fixedWidth, fixedSizeNodes := t.fixedSizeNodes()
+	cwidth := (width - fixedWidth) / (length - fixedSizeNodes)
+	wspare := width - fixedWidth - cwidth*(length-fixedSizeNodes)
+
+	useSpareIdx := length - wspare
+	spareCell := 0
+
+	var offset int
+	for i, ti := range t.children {
+		fixedSize := ti.C.(*TileNode).fixedSize
+		ti.Move(term.Coordinates{X: offset})
+		if fixedSize != 0 {
+			ti.Resize(fixedSize, height)
+			offset += fixedSize
+		} else {
+			if i == useSpareIdx {
+				spareCell = 1
+			}
+			nwidth := cwidth + spareCell
+			ti.Resize(nwidth, height)
+			offset += nwidth
+		}
+	}
+}
+
+func (t *TileNode) canSetFixedSize(avail, fixedSize int) bool {
+	if len(t.children) <= 1 {
+		return false
+	}
+	effective := (avail - fixedSize) / (len(t.children) - 1)
+	return effective >= 3 // do not let a fixed compress to much th rest of tiles
+}
+
+func (t *TileNode) resetFixedSizes() {
+	for _, c := range t.children {
+		c.C.(*TileNode).fixedSize = 0
+	}
 }

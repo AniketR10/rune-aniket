@@ -212,6 +212,40 @@ func (wm *WindowManager) SplitVertical(win Window, content tui.Component) (Windo
 	return wm.nodeToWindow(node), true
 }
 
+// SetHeight fixes the height of the given window and returns true if possible,
+// or returns false if not.
+//
+// Calling this method with height=0 effectively reverts back to the height
+// being automatically distributed between windows.
+func (wm *WindowManager) SetHeight(win Window, height int) bool {
+	t, ok := win.node.(*TileNode)
+	if !ok {
+		return false
+	}
+	// 0 resets, but less than 3 would make the window almost disappear
+	if wm.config.Frame && height < 3 && height > 0 {
+		return false
+	}
+	return t.SetFixedHeight(height)
+}
+
+// SetWidth fixes the width of the given window and returns true if possible,
+// or returns false if not.
+//
+// Calling this method with width=0 effectively reverts back to the width
+// being automatically distributed between windows.
+func (wm *WindowManager) SetWidth(win Window, width int) bool {
+	t, ok := win.node.(*TileNode)
+	if !ok {
+		return false
+	}
+	// 0 resets, but less than 3 would make the window almost disappear
+	if wm.config.Frame && width < 3 && width > 0 {
+		return false
+	}
+	return t.SetFixedWidth(width)
+}
+
 // WindowAt returns the window at pos.
 func (wm *WindowManager) WindowAt(pos term.Coordinates) (Window, bool) {
 	if pos.X < 0 || pos.Y < 0 || pos.X >= wm.width || pos.Y >= wm.height {

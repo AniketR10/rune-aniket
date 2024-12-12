@@ -169,6 +169,18 @@ func (w Window) Close() error {
 		// this should always
 		w.wm.SetFocus(w.wm.newNode(tile.Window))
 		w.wm.prevFocus = Window{}
+	} else if isFocus && !ok {
+		// this could be a floating window and width/height might be 0 so Shiftable
+		// might not yield the correct results. Just pick any window to focus to.
+		var focus *Window
+		w.wm.Iterate(func(w Window) {
+			focus = &w
+		})
+		if focus == nil {
+			panic("cannot find window to focus to, but this is not last window")
+		}
+		w.wm.SetFocus(w.wm.newNode(focus.Window))
+		w.wm.prevFocus = Window{}
 	}
 
 	// make sure that focus attrs are "reset" if wm size is 1

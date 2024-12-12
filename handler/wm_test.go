@@ -301,6 +301,29 @@ func testWindowManagerClose(
 	assert.Equal(t, node2, wm.Focus())
 }
 
+func testWindowManagerCloseLast(
+	t *testing.T,
+	frame bool,
+	split func(*WindowManager, Window, tui.Handler) (Window, bool),
+) {
+	h1 := NewTestHandler()
+	h1.Ch = 'C'
+	h2 := NewTestHandler()
+	h2.Ch = 'D'
+	cfg := DefaultWindowManagerConfig()
+	cfg.Frame = frame
+	wm := NewWindowManager(h1, cfg)
+	node2, ok := split(wm, wm.Focus(), h2)
+	require.True(t, ok)
+
+	node1 := wm.Focus()
+	assert.NotEqual(t, node2, node1)
+	require.NotNil(t, wm.SetFocus(node2))
+	assert.Equal(t, node2, wm.Focus())
+	require.NoError(t, node2.Close())
+	assert.Equal(t, node1, wm.Focus())
+}
+
 func TestWindowManagerClose(t *testing.T) {
 	suite := []struct {
 		description string
@@ -316,6 +339,7 @@ func TestWindowManagerClose(t *testing.T) {
 	for _, test := range suite {
 		t.Run("Close "+test.description, func(t *testing.T) {
 			testWindowManagerClose(t, test.frame, test.split)
+			testWindowManagerCloseLast(t, test.frame, test.split)
 		})
 	}
 }

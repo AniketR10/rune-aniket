@@ -1003,3 +1003,177 @@ func TestComponentWindowAt(t *testing.T) {
 		})
 	}
 }
+
+func TestFixedSizeWindows(t *testing.T) {
+	h1 := &TestComponent{Ch: '1'}
+	wm, w1 := NewWindowManager(h1, DefaultWindowManagerConfig())
+	wm.Resize(20, 8)
+
+	var w2, w3, w4, wf, wF Window
+	tests := []comptest.TestCase{
+		{
+			Action: func() {
+
+				assert.False(t, wm.SetHeight(w1, 3))
+				// it's the only window so it should fail
+				require.False(t, wm.SetWidth(w1, 3))
+
+				h2 := &TestComponent{Ch: '2'}
+				var ok bool
+				w2, ok = wm.SplitVertical(w1, h2)
+				require.True(t, ok)
+
+				assert.False(t, wm.SetHeight(w2, 3))
+				require.True(t, wm.SetWidth(w1, 3))
+				// should reset the fixed width of w1
+				require.True(t, wm.SetWidth(w2, 3))
+
+				// cannot resize to less than content size 1
+				// with frame, that is less than 3.
+				require.False(t, wm.SetWidth(w2, 2))
+
+			}, Expected: `
+┌───────────────┐┌─┐
+│111111111111111││2│
+│111111111111111││2│
+│111111111111111││2│
+│111111111111111││2│
+│111111111111111││2│
+│111111111111111││2│
+└───────────────┘└─┘`,
+		},
+		{
+			Action: func() {
+				h3 := &TestComponent{Ch: '3'}
+				var ok bool
+				w3, ok = wm.SplitHorizontal(w2, h3)
+				require.True(t, ok)
+			}, Expected: `
+┌───────────────┐┌─┐
+│111111111111111││2│
+│111111111111111││2│
+│111111111111111│└─┘
+│111111111111111│┌─┐
+│111111111111111││3│
+│111111111111111││3│
+└───────────────┘└─┘`,
+		},
+		{
+			Action: func() {
+				assert.True(t, wm.SetHeight(w3, 3))
+				assert.True(t, wm.SetWidth(w3, 13))
+			}, Expected: `
+┌─────┐┌───────────┐
+│11111││22222222222│
+│11111││22222222222│
+│11111││22222222222│
+│11111│└───────────┘
+│11111│┌───────────┐
+│11111││33333333333│
+└─────┘└───────────┘`,
+		},
+		{
+			Action: func() {
+				h4 := &TestComponent{Ch: '4'}
+				var ok bool
+				w4, ok = wm.SplitVertical(w3, h4)
+				require.True(t, ok)
+			}, Expected: `
+┌─────┐┌───────────┐
+│11111││22222222222│
+│11111││22222222222│
+│11111││22222222222│
+│11111│└───────────┘
+│11111│┌────┐┌─────┐
+│11111││3333││44444│
+└─────┘└────┘└─────┘`,
+		},
+		{
+			Action: func() {
+				wf = wm.FloatingWindow(StaticFloating(&TestComponent{Ch: 'f'}, 100, 100),
+					FloatingConfig{
+						Alignment: SpanAlignmentCentered,
+					},
+				)
+				require.True(t, wf.MinimizeDown(1))
+
+				wF = wm.FloatingWindow(StaticFloating(&TestComponent{Ch: 'F'}, 2, 2),
+					FloatingConfig{
+						Alignment: SpanAlignmentCentered,
+					},
+				)
+
+			}, Expected: `
+┌─────┐┌───────────┐
+│11111││┌──┐2222222│
+│11111│└│FF│───────┘
+│11111│┌│FF│┐┌─────┐
+│11111││└──┘││44444│
+└─────┘└────┘└─────┘
+│ffffffffffffffffff│
+└──────────────────┘`,
+		},
+		{
+			Action: func() {
+				assert.False(t, wm.SetHeight(w4, w4.Height()+1))
+				assert.True(t, wm.SetWidth(w4, w4.Width()+2))
+			}, Expected: `
+┌─────┐┌───────────┐
+│11111││┌──┐2222222│
+│11111│└│FF│───────┘
+│11111│┌│FF│───────┐
+│11111││└──┘4444444│
+└─────┘└──┘└───────┘
+│ffffffffffffffffff│
+└──────────────────┘`,
+		},
+		{
+			Action: func() {
+				assert.False(t, wm.SetHeight(w2, w2.Height()+1))
+				assert.True(t, wm.SetWidth(w2, w2.Width()+2))
+				assert.False(t, wm.SetWidth(w2, w2.Width()+8))
+			}, Expected: `
+┌───┐┌─────────────┐
+│111││22┌──┐2222222│
+│111│└──│FF│───────┘
+│111│┌──│FF│───────┐
+│111││33└──┘4444444│
+└───┘└────┘└───────┘
+│ffffffffffffffffff│
+└──────────────────┘`,
+		},
+		{
+			Action: func() {
+				require.NoError(t, w3.Close())
+				require.NoError(t, w1.Close())
+			}, Expected: `
+┌──────────────────┐
+│2222222┌──┐2222222│
+└───────│FF│───────┘
+┌───────│FF│───────┐
+│4444444└──┘4444444│
+└──────────────────┘
+│ffffffffffffffffff│
+└──────────────────┘`,
+		},
+		{
+			Action: func() {
+				require.NoError(t, wf.Close())
+				require.NoError(t, wF.Close())
+				require.NoError(t, w2.Close())
+				require.Error(t, w4.Close())
+			}, Expected: `
+┌──────────────────┐
+│444444444444444444│
+│444444444444444444│
+│444444444444444444│
+│444444444444444444│
+│444444444444444444│
+│444444444444444444│
+└──────────────────┘`,
+		},
+	}
+
+	w := term.NewStringWriter(20, 8)
+	comptest.TestComponent(t, wm, w, tests)
+}
