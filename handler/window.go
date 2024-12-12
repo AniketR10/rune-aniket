@@ -131,6 +131,28 @@ func (w Window) Height() int {
 	return w.Window.Height()
 }
 
+// MaxWidth returns the max fixed width that this window can be set, based on the
+// available space and siblings.
+func (w Window) MaxWidth() int {
+	return w.Window.MaxWidth()
+}
+
+// MaxHeight returns the max fixed height that this window can be set, based on the
+// available space and siblings.
+func (w Window) MaxHeight() int {
+	return w.Window.MaxHeight()
+}
+
+// MinWidth returns the min fixed width that this window can be set.
+func (w Window) MinWidth() int {
+	return w.Window.MinWidth()
+}
+
+// MinHeight returns the min fixed height that this window can be set.
+func (w Window) MinHeight() int {
+	return w.Window.MinHeight()
+}
+
 // Close removes this window from the tree.
 // It returns an error if window is last window on the WindowManager.
 func (w Window) Close() error {

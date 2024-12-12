@@ -88,6 +88,48 @@ func (w Window) Height() int {
 	return w.node.Height()
 }
 
+// MaxWidth returns the max fixed width that this window can be set, based on the
+// available space and siblings.
+func (w Window) MaxWidth() int {
+	_, ok := w.node.(*floatingNode)
+	if ok {
+		return w.wm.minimizedWidth
+	}
+	if w.wm.minimizedDirty {
+		w.wm.Resize(w.wm.width, w.wm.height)
+	}
+	return w.node.(*TileNode).MaxWidth()
+}
+
+// MaxHeight returns the max fixed height that this window can be set, based on the
+// available space and siblings.
+func (w Window) MaxHeight() int {
+	_, ok := w.node.(*floatingNode)
+	if ok {
+		return w.wm.minimizedHeight
+	}
+	if w.wm.minimizedDirty {
+		w.wm.Resize(w.wm.width, w.wm.height)
+	}
+	return w.node.(*TileNode).MaxHeight()
+}
+
+// MinWidth returns the min fixed width that this window can be set.
+func (w Window) MinWidth() int {
+	if w.wm.config.Frame {
+		return 3
+	}
+	return 1
+}
+
+// MinHeight returns the min fixed height that this window can be set.
+func (w Window) MinHeight() int {
+	if w.wm.config.Frame {
+		return 3
+	}
+	return 1
+}
+
 // Content returns the content of this Window, or false
 // if this Window is a zero-valued Window.
 func (w Window) Content() (c tui.Component) {

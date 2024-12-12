@@ -1017,11 +1017,20 @@ func TestFixedSizeWindows(t *testing.T) {
 				assert.False(t, wm.SetHeight(w1, 3))
 				// it's the only window so it should fail
 				require.False(t, wm.SetWidth(w1, 3))
+				assert.Equal(t, 20, w1.MaxWidth())
+				assert.Equal(t, 8, w1.MaxHeight())
+				assert.Equal(t, 3, w1.MinWidth())
+				assert.Equal(t, 3, w1.MinHeight())
 
 				h2 := &TestComponent{Ch: '2'}
 				var ok bool
 				w2, ok = wm.SplitVertical(w1, h2)
 				require.True(t, ok)
+
+				assert.Equal(t, 17, w1.MaxWidth())
+				assert.Equal(t, 8, w1.MaxHeight())
+				assert.Equal(t, 17, w2.MaxWidth())
+				assert.Equal(t, 8, w2.MaxHeight())
 
 				assert.False(t, wm.SetHeight(w2, 3))
 				require.True(t, wm.SetWidth(w1, 3))
@@ -1048,6 +1057,12 @@ func TestFixedSizeWindows(t *testing.T) {
 				var ok bool
 				w3, ok = wm.SplitHorizontal(w2, h3)
 				require.True(t, ok)
+				assert.Equal(t, 17, w1.MaxWidth())
+				assert.Equal(t, 8, w1.MaxHeight())
+				assert.Equal(t, 17, w2.MaxWidth())
+				assert.Equal(t, 5, w2.MaxHeight())
+				assert.Equal(t, 17, w3.MaxWidth())
+				assert.Equal(t, 5, w3.MaxHeight())
 			}, Expected: `
 ┌───────────────┐┌─┐
 │111111111111111││2│
@@ -1078,6 +1093,14 @@ func TestFixedSizeWindows(t *testing.T) {
 				var ok bool
 				w4, ok = wm.SplitVertical(w3, h4)
 				require.True(t, ok)
+				assert.Equal(t, 17, w1.MaxWidth()) // let's keep things simple
+				assert.Equal(t, 8, w1.MaxHeight())
+				assert.Equal(t, 17, w2.MaxWidth())
+				assert.Equal(t, 5, w2.MaxHeight())
+				assert.Equal(t, 10, w3.MaxWidth()) // ditto
+				assert.Equal(t, 5, w3.MaxHeight())
+				assert.Equal(t, 10, w4.MaxWidth()) // ditto
+				assert.Equal(t, 5, w3.MaxHeight())
 			}, Expected: `
 ┌─────┐┌───────────┐
 │11111││22222222222│
@@ -1103,6 +1126,14 @@ func TestFixedSizeWindows(t *testing.T) {
 					},
 				)
 
+				assert.Equal(t, 17, w1.MaxWidth())
+				assert.Equal(t, 6, w1.MaxHeight())
+				assert.Equal(t, 17, w2.MaxWidth())
+				assert.Equal(t, 3, w2.MaxHeight())
+				assert.Equal(t, 10, w3.MaxWidth())
+				assert.Equal(t, 3, w3.MaxHeight())
+				assert.Equal(t, 10, w4.MaxWidth())
+				assert.Equal(t, 3, w3.MaxHeight())
 			}, Expected: `
 ┌─────┐┌───────────┐
 │11111││┌──┐2222222│

@@ -575,6 +575,36 @@ func (t *TileNode) Width() int {
 	return t.width
 }
 
+// MaxWidth returns the max fixed width that this window can be set, based on the
+// available space and siblings.
+func (t *TileNode) MaxWidth() int {
+	if t.parent == nil {
+		panic("corrupted tile tree: exposed root node")
+	}
+	if t.parent.childSplit == vertical {
+		return t.parent.width - (3 * (len(t.parent.children) - 1))
+	}
+	if t.parent.parent == nil {
+		return t.parent.width
+	}
+	return t.parent.MaxWidth()
+}
+
+// MaxHeight returns the max fixed height that this window can be set, based on the
+// available space and siblings.
+func (t *TileNode) MaxHeight() int {
+	if t.parent == nil {
+		panic("corrupted tile tree: exposed root node")
+	}
+	if t.parent.childSplit == horizontal {
+		return t.parent.height - (3 * (len(t.parent.children) - 1))
+	}
+	if t.parent.parent == nil {
+		return t.parent.height
+	}
+	return t.parent.MaxHeight()
+}
+
 // Position returns the position of this tile node inside its TileTree.
 func (t *TileNode) Position() term.Coordinates {
 	return t.tree.TilePosition(t)

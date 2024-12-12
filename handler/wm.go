@@ -435,6 +435,24 @@ func (wm *WindowManager) SetDim(to bool) (prev bool) {
 	return
 }
 
+// SetHeight fixes the height of the given window and returns true if possible,
+// or returns false if not.
+//
+// Calling this method with height=0 effectively reverts back to the height
+// being automatically distributed between windows.
+func (wm *WindowManager) SetHeight(win Window, height int) bool {
+	return wm.comp.SetHeight(win.Window, height)
+}
+
+// SetWidth fixes the width of the given window and returns true if possible,
+// or returns false if not.
+//
+// Calling this method with width=0 effectively reverts back to the width
+// being automatically distributed between windows.
+func (wm *WindowManager) SetWidth(win Window, width int) bool {
+	return wm.comp.SetWidth(win.Window, width)
+}
+
 // Resize : tui.Component
 func (wm *WindowManager) Resize(width, height int) {
 	wm.comp.Resize(width, height)
