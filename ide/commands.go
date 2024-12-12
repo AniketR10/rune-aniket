@@ -38,7 +38,7 @@ const (
 	cmdSetDefaultColors       = "setDefaultColors"
 	cmdSwitchToTab            = "switchToTab"
 	cmdFocusWindow            = "focusWindow"
-	cmdMoveWindow             = "moveWindow"
+	cmdMoveWindow             = "moveWindowContent"
 )
 
 type commandAll struct {
@@ -176,7 +176,7 @@ var (
 		},
 		cmdMoveWindow: {
 			man: textapi.CommandManual{
-				Summary:  "Moves the window in the given direction.",
+				Summary:  "Moves the content of the window in focus to the window in the given direction.",
 				Synopsis: "[right|left|up|down]",
 			},
 			handler: (*ex).moveWindow,

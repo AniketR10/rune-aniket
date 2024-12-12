@@ -1497,7 +1497,7 @@ AAAAAAAAAAAAAAAAAAAA`,
 
 func TestMoveWindows(t *testing.T) {
 	cases := []handlertest.SequenceTestCase{
-		{":splitWindow>:edit aaa>:moveWindow left>",
+		{":splitWindow>:edit aaa>:moveWindowContent left>",
 			`┌──────────────────┐
 │aaa               │
 ┌────────┐┌────────┤
@@ -1509,7 +1509,7 @@ func TestMoveWindows(t *testing.T) {
 │AAAAAAAA││        │
 └────────┘└────────┘`,
 		},
-		{":moveWindow right>",
+		{":moveWindowContent right>",
 			`┌──────────────────┐
 │aaa               │
 ├────────┐┌────────┐
@@ -1521,7 +1521,7 @@ func TestMoveWindows(t *testing.T) {
 │        ││AAAAAAAA│
 └────────┘└────────┘`,
 		},
-		{":splitWindow down>:focusWindow up>:moveWindow down>",
+		{":splitWindow down>:focusWindow up>:moveWindowContent down>",
 			`┌──────────────────┐
 │aaa               │
 ├────────┐┌────────┤
@@ -1533,7 +1533,7 @@ func TestMoveWindows(t *testing.T) {
 │        ││AAAAAAAA│
 └────────┘└────────┘`,
 		},
-		{":moveWindow up>",
+		{":moveWindowContent up>",
 			`┌──────────────────┐
 │aaa               │
 ├────────┐┌────────┐
@@ -1545,7 +1545,7 @@ func TestMoveWindows(t *testing.T) {
 │        ││        │
 └────────┘└────────┘`,
 		},
-		{":moveWindow left>",
+		{":moveWindowContent left>",
 			`┌──────────────────┐
 │aaa               │
 ┌────────┐┌────────┤
