@@ -343,7 +343,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 	}
 	bh, b, err := constructor(texttest.NopEditor(),
 		text.WithCommandKey(testCommandKey),
-		text.WithCommandKeyBinding(term.KeyComb{Ch: '4'}, []string{"closeWindow"}),
+		text.WithCommandKeyBinding(term.KeyComb{Ch: '4'}, [][]string{{"closeWindow"}}),
 		text.WithNotificationsConfig(notificationsConfig()),
 	)
 	require.NoError(t, err)
@@ -900,11 +900,11 @@ func TestExKeySequence(t *testing.T) {
 			text.WithCommandSequenceBinding(handler.Sequence{
 				First: term.KeyComb{Ch: 'g'},
 				Last:  term.KeyComb{Ch: 'l'},
-			}, []string{"nextTab"}),
+			}, [][]string{{"nextTab"}}),
 			text.WithCommandSequenceBinding(handler.Sequence{
 				First: term.KeyComb{Ch: 'g'},
 				Last:  term.KeyComb{Ch: 'g'},
-			}, []string{"closeAllTabs"}),
+			}, [][]string{{"closeAllTabs"}}),
 			text.WithSequencerTimeout(1 * time.Second),
 			text.WithCommandOverlayConfig(testCommandOverlayConfig()),
 		}
@@ -1071,11 +1071,11 @@ func (t testEx) Handle(ev term.Event) (bool, bool) {
 
 func defCommandKeyBindings() (opts []text.Option) {
 	opts = append(opts, text.WithCommandKeyBinding(
-		term.KeyComb{Mod: term.ModCtrl, Ch: 'w'}, []string{"closeTab"}))
+		term.KeyComb{Mod: term.ModCtrl, Ch: 'w'}, [][]string{{"closeTab"}}))
 	opts = append(opts, text.WithCommandKeyBinding(
-		term.KeyComb{Mod: term.ModCtrl, Ch: 'l'}, []string{"nextTab"}))
+		term.KeyComb{Mod: term.ModCtrl, Ch: 'l'}, [][]string{{"nextTab"}}))
 	opts = append(opts, text.WithCommandKeyBinding(
-		term.KeyComb{Mod: term.ModCtrl, Ch: 'h'}, []string{"previousTab"}))
+		term.KeyComb{Mod: term.ModCtrl, Ch: 'h'}, [][]string{{"previousTab"}}))
 	return
 }
 
@@ -1411,9 +1411,12 @@ func TestIntegrationCompanionTerminal(t *testing.T) {
 
 	opts := []text.Option{
 		text.WithCommandKey(testCommandKey),
-		text.WithCommandKeyBinding(term.KeyComb{Mod: term.ModCtrl, Ch: 'h'}, []string{"closeWindow"}),
-		text.WithCommandKeyBinding(term.KeyComb{Mod: term.ModCtrl, Ch: 'l'}, []string{"nextTab"}),
-		text.WithCommandKeyBinding(term.KeyComb{Mod: term.ModCtrl, Ch: 'v'}, []string{"closeTab"}),
+		text.WithCommandKeyBinding(term.KeyComb{Mod: term.ModCtrl, Ch: 'h'},
+			[][]string{{"closeWindow"}}),
+		text.WithCommandKeyBinding(term.KeyComb{Mod: term.ModCtrl, Ch: 'l'},
+			[][]string{{"nextTab"}}),
+		text.WithCommandKeyBinding(term.KeyComb{Mod: term.ModCtrl, Ch: 'v'},
+			[][]string{{"closeTab"}}),
 		text.WithCommandOverlayConfig(testCommandOverlayConfig()),
 	}
 
@@ -1916,6 +1919,39 @@ func TestEventNone(t *testing.T) {
 		}
 		handlertest.TestHandlerSequence(t, b, 20, 10, cases)
 	})
+}
+
+func TestMultipleCommandArgsKeyBindings(t *testing.T) {
+
+	cases := []handlertest.SequenceTestCase{
+		{"`",
+			`┌──────────────────┐
+│                  │
+├──────────────────┤
+│                  │
+│                  │
+│                  │
+└──────────────────┘
+┌──────────────────┐
+│                  │
+└──────────────────┘`,
+		},
+	}
+
+	opts := []text.Option{
+		text.WithCommandKey(testCommandKey),
+		text.WithCommandKeyBinding(term.KeyComb{Mod: term.ModCtrl, Ch: 'v'},
+			[][]string{
+				{"splitWindow", "down"},
+				{"resizeWindow", "min", "height"},
+			}),
+		text.WithCommandOverlayConfig(testCommandOverlayConfig()),
+	}
+
+	b := newExForTesting(t, texttest.NopEditor(), opts...)
+	defer b.Close()
+
+	handlertest.TestHandlerSequence(t, b, 20, 10, cases)
 }
 
 func TestTerminalOnFocus(t *testing.T) {

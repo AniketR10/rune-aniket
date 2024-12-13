@@ -1148,11 +1148,11 @@ func (e *ex) handleEvent(ev term.Event) (
 		seq, match = e.sequencer.Sequence(keyComb)
 	}
 
-	var cmdAndArgs []string
+	var cmdsAndArgs [][]string
 	var ok bool
 	switch match {
 	case handler.SequenceMatch:
-		cmdAndArgs, ok = e.config.CommandSequenceBindings[seq]
+		cmdsAndArgs, ok = e.config.CommandSequenceBindings[seq]
 		if !ok {
 			panic("key sequencer matched but no command configured")
 		}
@@ -1193,7 +1193,7 @@ func (e *ex) handleEvent(ev term.Event) (
 				_, _ = e.comp.Browser().Handle(e.reissueEvent)
 			}
 		}
-		cmdAndArgs, _ = e.comp.CommandKeyBinding(keyComb)
+		cmdsAndArgs, _ = e.comp.CommandKeyBinding(keyComb)
 	}
 
 	if match != handler.SequenceMatch {
@@ -1202,24 +1202,30 @@ func (e *ex) handleEvent(ev term.Event) (
 			ev.KeyComb())
 		_, handled = e.comp.Browser().Handle(ev)
 		if handled {
-			if len(cmdAndArgs) != 0 {
+			if len(cmdsAndArgs) != 0 {
 				// notify user of ambiguous sequence
 				_ = e.comp.NotifyOnce(notifications.LevelWarn, "Command sequence %q is mapped to %q, "+
 					"but could not get triggered because active window also handles it. "+
 					"Consider changing the command sequence mapping to something else.",
-					keyComb, cmdAndArgs)
+					keyComb, cmdsAndArgs)
 			}
 			return
 		}
 	}
 
-	// finally dispatch user event command or sequence command
-	if len(cmdAndArgs) != 0 {
+	// finally dispatch command or sequence of commands
+	for _, cmdAndArgs := range cmdsAndArgs {
 		quit, err := e.runCommand(cmdAndArgs[0], cmdAndArgs[1:])
 		if err != nil {
 			e.setError(err)
 		}
-		return quit, true
+		handled = true
+		if quit {
+			return quit, handled
+		}
+	}
+	if handled {
+		return false, handled
 	}
 
 	// If ex is configured with character

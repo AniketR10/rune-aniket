@@ -119,9 +119,12 @@ func newTestRPCBrowser(t *testing.T,
 		tui.Handler, browser.Browser, error,
 	) {
 		opts = append(opts, text.WithCommandOverlayConfig(testCommandOverlayConfig()))
-		opts = append(opts, text.WithCommandKeyBinding(term.KeyComb{Ch: 'w', Mod: term.ModCtrl}, []string{"closeTab"}))
-		opts = append(opts, text.WithCommandKeyBinding(term.KeyComb{Ch: 'l', Mod: term.ModCtrl}, []string{"nextTab"}))
-		opts = append(opts, text.WithCommandKeyBinding(term.KeyComb{Ch: 'h', Mod: term.ModCtrl}, []string{"previousTab"}))
+		opts = append(opts, text.WithCommandKeyBinding(term.KeyComb{Ch: 'w', Mod: term.ModCtrl},
+			[][]string{{"closeTab"}}))
+		opts = append(opts, text.WithCommandKeyBinding(term.KeyComb{Ch: 'l', Mod: term.ModCtrl},
+			[][]string{{"nextTab"}}))
+		opts = append(opts, text.WithCommandKeyBinding(term.KeyComb{Ch: 'h', Mod: term.ModCtrl},
+			[][]string{{"previousTab"}}))
 		ex := new(ex)
 		ex.syncCommandPrompt = true
 		err := ex.init(ed, &testLoader{}, document.NewInMemoryService(),

@@ -122,10 +122,10 @@ command:
     <c-x><c-p>: openAllDoors
     f<c-p>: openDoors small
     <c-x>9:
-      - openDoors
-      - large
+      - openDoors 1
+      - large 2
     <c-x>p:
-      - invalid
+      - invalid A
       - smtg:
         - else
     <-x>f: invalidMapping
@@ -450,22 +450,22 @@ func TestConfigSetting(t *testing.T) {
 	assert.Equal(t, tcell.GetColor("#f3f3f3"), virtualEditorSelectionAttr.Fg)
 	assert.Equal(t, tcell.ColorGreen, virtualEditorSelectionAttr.Bg)
 
-	wantMappings := map[handler.Sequence][]string{
-		{First: term.KeyComb{Ch: 'f'}}:                    {"searchFile"},
-		{First: term.KeyComb{Ch: 'l'}}:                    {"searchText"},
-		{First: term.KeyComb{Ch: 'x', Mod: term.ModCtrl}}: {"closeDoors"},
+	wantMappings := map[handler.Sequence][][]string{
+		{First: term.KeyComb{Ch: 'f'}}:                    {{"searchFile"}},
+		{First: term.KeyComb{Ch: 'l'}}:                    {{"searchText"}},
+		{First: term.KeyComb{Ch: 'x', Mod: term.ModCtrl}}: {{"closeDoors"}},
 		{
 			First: term.KeyComb{Ch: 'x', Mod: term.ModCtrl},
 			Last:  term.KeyComb{Ch: 'p', Mod: term.ModCtrl},
-		}: {"openAllDoors"},
+		}: {{"openAllDoors"}},
 		{
 			First: term.KeyComb{Ch: 'f'},
 			Last:  term.KeyComb{Ch: 'p', Mod: term.ModCtrl},
-		}: {"openDoors", "small"},
+		}: {{"openDoors", "small"}},
 		{
 			First: term.KeyComb{Ch: 'x', Mod: term.ModCtrl},
 			Last:  term.KeyComb{Ch: '9'},
-		}: {"openDoors", "large"},
+		}: {{"openDoors", "1"}, {"large", "2"}},
 	}
 	assert.Equal(t, wantMappings, cfg.commandKeyMappings())
 	assert.False(t, cfg.autoRestore())

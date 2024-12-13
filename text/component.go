@@ -452,7 +452,7 @@ func (c *Component) Editor(resource workspaceapi.URI) (Handler, error) {
 // CommandKeyBinding returns a command that was mapped to the given key
 // combination and true or an empty string and false if there was
 // no command mapped to the given key.
-func (c *Component) CommandKeyBinding(key term.KeyComb) ([]string, bool) {
+func (c *Component) CommandKeyBinding(key term.KeyComb) ([][]string, bool) {
 	cmd, ok := c.config.CommandKeyBindings[key]
 	c.log(log.TraceLevel, "command key binding for %#v: %s", key, cmd)
 	return cmd, ok

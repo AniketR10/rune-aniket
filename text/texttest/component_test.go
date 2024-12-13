@@ -176,20 +176,35 @@ func TestComponentCommandKeyBinding(t *testing.T) {
 
 	t.Run("returns mapped command", func(t *testing.T) {
 		config := text.DefaultConfig()
-		config.CommandKeyBindings[keya] = []string{"myCmd"}
+		config.CommandKeyBindings[keya] = [][]string{{"myCmd"}}
 		c, _ := newTestComponentConfig(t, NopEditor(), config)
 		cmd, ok := c.CommandKeyBinding(keya)
 		assert.True(t, ok)
-		assert.Equal(t, []string{"myCmd"}, cmd)
+		assert.Equal(t, [][]string{{"myCmd"}}, cmd)
 	})
 
 	t.Run("returns mapped command and args", func(t *testing.T) {
 		config := text.DefaultConfig()
-		config.CommandKeyBindings[keya] = []string{"myCmd", "1"}
+		config.CommandKeyBindings[keya] = [][]string{{"myCmd", "1"}}
 		c, _ := newTestComponentConfig(t, NopEditor(), config)
 		cmd, ok := c.CommandKeyBinding(keya)
 		assert.True(t, ok)
-		assert.Equal(t, []string{"myCmd", "1"}, cmd)
+		assert.Equal(t, [][]string{{"myCmd", "1"}}, cmd)
+	})
+
+	t.Run("returns multiple mapped commands and args", func(t *testing.T) {
+		config := text.DefaultConfig()
+		config.CommandKeyBindings[keya] = [][]string{
+			{"myCmd", "1"},
+			{"GZA", "Duel Of The Iron Mic", "Masta Killa", "Dreddy Kruger"},
+		}
+		c, _ := newTestComponentConfig(t, NopEditor(), config)
+		cmd, ok := c.CommandKeyBinding(keya)
+		assert.True(t, ok)
+		assert.Equal(t, [][]string{
+			{"myCmd", "1"},
+			{"GZA", "Duel Of The Iron Mic", "Masta Killa", "Dreddy Kruger"},
+		}, cmd)
 	})
 }
 
