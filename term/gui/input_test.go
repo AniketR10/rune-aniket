@@ -314,6 +314,32 @@ func TestInputFireOnce(t *testing.T) {
 			pressedChars:  []rune{},
 			expectedEvent: term.Event{Type: term.EventKey, Mod: term.ModAltMeta},
 		},
+		{
+			description:  "dispatches non-alt modifier with arrow key with raw set",
+			pressedKeys:  []ebiten.Key{ebiten.KeyArrowUp, ebiten.KeyShift, ebiten.KeyMeta},
+			pressedChars: []rune{},
+			expectedEvent: term.Event{
+				Type: term.EventKey, Key: term.KeyArrowUp, Mod: term.ModShiftMeta,
+			},
+		},
+		{
+			description:  "dispatches arrow key with raw set",
+			pressedKeys:  []ebiten.Key{ebiten.KeyArrowUp},
+			pressedChars: []rune{},
+			expectedEvent: term.Event{
+				Type: term.EventKey, Key: term.KeyArrowUp,
+				Raw: []byte("\x1b[A"),
+			},
+		},
+		{
+			description:  "dispatches alt arrow key with raw set",
+			pressedKeys:  []ebiten.Key{ebiten.KeyAlt, ebiten.KeyArrowUp},
+			pressedChars: []rune{},
+			expectedEvent: term.Event{
+				Type: term.EventKey, Mod: term.ModAlt, Key: term.KeyArrowUp,
+				Raw: []byte("\x1b[1;3A"),
+			},
+		},
 	}
 
 	for _, test := range suite {

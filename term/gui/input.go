@@ -502,28 +502,44 @@ func doMapEbitenKey(key ebiten.Key, mod term.Modifier) (ev term.Event, ok bool) 
 			}, true
 		}
 	case ebiten.KeyArrowDown:
+		var raw []byte
+		if mod == term.ModAlt || mod == 0 {
+			raw = []byte(fmt.Sprintf("\x1b[%sB", getModifierStr(mod)))
+		}
 		return term.Event{
 			Mod: mod,
 			Key: term.KeyArrowDown,
-			Raw: []byte(fmt.Sprintf("\x1b[%sB", getModifierStr(mod))),
+			Raw: raw,
 		}, true
 	case ebiten.KeyArrowLeft:
+		var raw []byte
+		if mod == term.ModAlt || mod == 0 {
+			raw = []byte(fmt.Sprintf("\x1b[%sD", getModifierStr(mod)))
+		}
 		return term.Event{
 			Mod: mod,
 			Key: term.KeyArrowLeft,
-			Raw: []byte(fmt.Sprintf("\x1b[%sD", getModifierStr(mod))),
+			Raw: raw,
 		}, true
 	case ebiten.KeyArrowRight:
+		var raw []byte
+		if mod == term.ModAlt || mod == 0 {
+			raw = []byte(fmt.Sprintf("\x1b[%sC", getModifierStr(mod)))
+		}
 		return term.Event{
 			Mod: mod,
 			Key: term.KeyArrowRight,
-			Raw: []byte(fmt.Sprintf("\x1b[%sC", getModifierStr(mod))),
+			Raw: raw,
 		}, true
 	case ebiten.KeyArrowUp:
+		var raw []byte
+		if mod == term.ModAlt || mod == 0 {
+			raw = []byte(fmt.Sprintf("\x1b[%sA", getModifierStr(mod)))
+		}
 		return term.Event{
 			Mod: mod,
 			Key: term.KeyArrowUp,
-			Raw: []byte(fmt.Sprintf("\x1b[%sA", getModifierStr(mod))),
+			Raw: raw,
 		}, true
 	case ebiten.KeyBackspace:
 		var raw []byte
