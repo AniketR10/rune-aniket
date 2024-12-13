@@ -524,6 +524,62 @@ func (c *Component) SwapContentUp() bool {
 	return c.wm.SwapContentUp()
 }
 
+// ResetWindowSize resets width and height to be automatically calculated.
+func (c *Component) ResetWindowSize() bool {
+	w := c.wm.Focus()
+	okh := c.wm.SetHeight(w, 0)
+	okw := c.wm.SetWidth(w, 0)
+	return okh || okw
+}
+
+// SetMaxWindowHeight maximizes the focus window's height.
+func (c *Component) SetMaxWindowHeight() bool {
+	w := c.wm.Focus()
+	return c.wm.SetHeight(w, w.MaxHeight())
+}
+
+// SetMaxWindowWidth maximizes the focus window's width.
+func (c *Component) SetMaxWindowWidth() bool {
+	w := c.wm.Focus()
+	return c.wm.SetWidth(w, w.MaxWidth())
+}
+
+// SetMinWindowHeight minimizes the focus window's height.
+func (c *Component) SetMinWindowHeight() bool {
+	w := c.wm.Focus()
+	return c.wm.SetHeight(w, w.MinHeight())
+}
+
+// SetMinWindowWidth minimizes the focus window's width.
+func (c *Component) SetMinWindowWidth() bool {
+	w := c.wm.Focus()
+	return c.wm.SetWidth(w, w.MinWidth())
+}
+
+// IncreaseWindowHeight increases the focus window's height.
+func (c *Component) IncreaseWindowHeight() bool {
+	w := c.wm.Focus()
+	return c.wm.SetHeight(w, w.Height()+1)
+}
+
+// DecreaseWindowHeight decreases the focus window's height.
+func (c *Component) DecreaseWindowHeight() bool {
+	w := c.wm.Focus()
+	return c.wm.SetHeight(w, w.Height()-1)
+}
+
+// IncreaseWindowWidth increases the focus window's width.
+func (c *Component) IncreaseWindowWidth() bool {
+	w := c.wm.Focus()
+	return c.wm.SetWidth(w, w.Width()+1)
+}
+
+// DecreaseWindowWidth decreases the focus window's width.
+func (c *Component) DecreaseWindowWidth() bool {
+	w := c.wm.Focus()
+	return c.wm.SetWidth(w, w.Width()-1)
+}
+
 // SetFocus sets the underlying WindowManager's focus to win.
 func (c *Component) SetFocus(win Window) Window {
 	bwin := win.(*browserWindow)

@@ -252,6 +252,13 @@ func (e *ex) completeCommand(
 		if len(args) <= 1 {
 			return iterator.FromSlice([]string{"horizontal", "vertical"}), "", nil
 		}
+	case cmdResizeWindow:
+		if len(args) == 1 {
+			return iterator.FromSlice([]string{"increase", "decrease", "reset", "max", "min"}), "", nil
+		}
+		if len(args) == 2 {
+			return iterator.FromSlice([]string{"width", "height"}), "", nil
+		}
 	}
 	return iterator.FromSlice[string](nil), "", nil
 }
@@ -660,6 +667,56 @@ func (e *ex) moveWindow(args ...string) error {
 	}
 	if !ok {
 		return errors.New("cannot move window in this direction")
+	}
+	return nil
+}
+
+func (e *ex) resizeWindow(args ...string) error {
+	if (len(args) == 1 && args[0] != "reset") || len(args) == 0 {
+		return errors.New("invalid arguments")
+	}
+
+	switch args[0] {
+	case "reset":
+		e.comp.Browser().ResetWindowSize()
+	case "min":
+		switch args[1] {
+		case "height":
+			e.comp.Browser().SetMinWindowHeight()
+		case "width":
+			e.comp.Browser().SetMinWindowWidth()
+		default:
+			return fmt.Errorf("invalid second argument %q", args[1])
+		}
+	case "max":
+		switch args[1] {
+		case "height":
+			e.comp.Browser().SetMaxWindowHeight()
+		case "width":
+			e.comp.Browser().SetMaxWindowWidth()
+		default:
+			return fmt.Errorf("invalid second argument %q", args[1])
+		}
+	case "increase":
+		switch args[1] {
+		case "height":
+			e.comp.Browser().IncreaseWindowHeight()
+		case "width":
+			e.comp.Browser().IncreaseWindowWidth()
+		default:
+			return fmt.Errorf("invalid second argument %q", args[1])
+		}
+	case "decrease":
+		switch args[1] {
+		case "height":
+			e.comp.Browser().DecreaseWindowHeight()
+		case "width":
+			e.comp.Browser().DecreaseWindowWidth()
+		default:
+			return fmt.Errorf("invalid second argument %q", args[1])
+		}
+	default:
+		return fmt.Errorf("invalid first argument %q", args[0])
 	}
 	return nil
 }

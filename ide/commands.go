@@ -39,6 +39,7 @@ const (
 	cmdSwitchToTab            = "switchToTab"
 	cmdFocusWindow            = "focusWindow"
 	cmdMoveWindow             = "moveWindowContent"
+	cmdResizeWindow           = "resizeWindow"
 )
 
 type commandAll struct {
@@ -161,7 +162,7 @@ var (
 					"given orientation if passed via arguments. The options are 'horizontal' which " +
 					"sets the next split to be below the current active window or 'vertical' which " +
 					"sets the next split to be right of the current active window.",
-				Synopsis: "[horizontal|vertical]",
+				Synopsis: "(horizontal|vertical)",
 			},
 			handler: (*ex).splitDirectionChange,
 		},
@@ -170,16 +171,23 @@ var (
 		cmdFocusWindow: {
 			man: textapi.CommandManual{
 				Summary:  "Switches the window focus to the window on the given side of the current active window.",
-				Synopsis: "[right|left|up|down]",
+				Synopsis: "(right|left|up|down)",
 			},
 			handler: (*ex).focusWindow,
 		},
 		cmdMoveWindow: {
 			man: textapi.CommandManual{
 				Summary:  "Moves the content of the window in focus to the window in the given direction.",
-				Synopsis: "[right|left|up|down]",
+				Synopsis: "(right|left|up|down)",
 			},
 			handler: (*ex).moveWindow,
+		},
+		cmdResizeWindow: {
+			man: textapi.CommandManual{
+				Summary:  "Resizes the window by increasing or decreasing its width or height.",
+				Synopsis: "(increase|decrease|max|min|reset) (height|width)",
+			},
+			handler: (*ex).resizeWindow,
 		},
 		"toggleFullscreen": {
 			man: textapi.CommandManual{

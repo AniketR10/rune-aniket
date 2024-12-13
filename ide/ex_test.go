@@ -1495,7 +1495,7 @@ AAAAAAAAAAAAAAAAAAAA`,
 	handlertest.TestHandlerSequence(t, b, 20, 10, cases)
 }
 
-func TestMoveWindows(t *testing.T) {
+func TestMoveWindowContent(t *testing.T) {
 	cases := []handlertest.SequenceTestCase{
 		{":splitWindow>:edit aaa>:moveWindowContent left>",
 			`┌──────────────────┐
@@ -1556,6 +1556,117 @@ func TestMoveWindows(t *testing.T) {
 │AAAAAAAA││        │
 │AAAAAAAA││        │
 └────────┘└────────┘`,
+		},
+	}
+
+	opts := []text.Option{
+		text.WithCommandKey(testCommandKey),
+		text.WithCommandOverlayConfig(testCommandOverlayConfig()),
+	}
+
+	tempDir, err := os.MkdirTemp("", "")
+	require.NoError(t, err)
+	uri, err := workspaceapi.ParseURI(filepath.Join("file://", tempDir))
+	require.NoError(t, err)
+	ctx := context.Background()
+	fileScheme, err := workspace.NewFileScheme(ctx, config.NopConfig(), uri)
+	require.NoError(t, err)
+	defer fileScheme.Close()
+
+	workspace := workspace.NewSchemeWorkspace(uri, fileScheme)
+	b := newExForTestingWithWorkspace(t, workspace,
+		texttest.NopEditor(), vte.DefaultConfig(), nopPublishEvent,
+		clipboard.NewInMemory(), opts...)
+	defer b.Close()
+
+	handlertest.TestHandlerSequence(t, b, 20, 10, cases)
+}
+
+func TestResizeWindows(t *testing.T) {
+	cases := []handlertest.SequenceTestCase{
+		{":splitWindow>:edit aaa>:resizeWindow increase width>",
+			`┌──────────────────┐
+│aaa               │
+├───────┐┌─────────┐
+│       ││AAAAAAAAA│
+│       ││AAAAAAAAA│
+│       ││AAAAAAAAA│
+│       ││AAAAAAAAA│
+│       ││AAAAAAAAA│
+│       ││AAAAAAAAA│
+└───────┘└─────────┘`,
+		},
+		{":splitWindow down>:resizeWindow min height>",
+			`┌──────────────────┐
+│aaa               │
+├───────┐┌─────────┤
+│       ││AAAAAAAAA│
+│       ││AAAAAAAAA│
+│       ││AAAAAAAAA│
+│       │└─────────┘
+│       │┌─────────┐
+│       ││         │
+└───────┘└─────────┘`,
+		},
+		{":resizeWindow max height>",
+			`┌──────────────────┐
+│aaa               │
+├───────┐┌─────────┤
+│       ││AAAAAAAAA│
+│       │└─────────┘
+│       │┌─────────┐
+│       ││         │
+│       ││         │
+│       ││         │
+└───────┘└─────────┘`,
+		},
+		{":resizeWindow max width>",
+			`┌──────────────────┐
+│aaa               │
+├─┐┌───────────────┤
+│ ││AAAAAAAAAAAAAAA│
+│ │└───────────────┘
+│ │┌───────────────┐
+│ ││               │
+│ ││               │
+│ ││               │
+└─┘└───────────────┘`,
+		},
+		{":resizeWindow min width>",
+			`┌──────────────────┐
+│aaa               │
+├───────────────┐┌─┤
+│               ││A│
+│               │└─┘
+│               │┌─┐
+│               ││ │
+│               ││ │
+│               ││ │
+└───────────────┘└─┘`,
+		},
+		{":resizeWindow reset>",
+			`┌──────────────────┐
+│aaa               │
+├────────┐┌────────┤
+│        ││AAAAAAAA│
+│        ││AAAAAAAA│
+│        │└────────┘
+│        │┌────────┐
+│        ││        │
+│        ││        │
+└────────┘└────────┘`,
+		},
+		{":resizeWindow decrease height>:resizeWindow decrease width>",
+			`┌──────────────────┐
+│aaa               │
+├─────────┐┌───────┤
+│         ││AAAAAAA│
+│         ││AAAAAAA│
+│         ││AAAAAAA│
+│         │└───────┘
+│         │┌───────┐
+│         ││       │
+└─────────┘└───────┘`,
 		},
 	}
 
