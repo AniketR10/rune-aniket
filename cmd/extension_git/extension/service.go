@@ -151,7 +151,7 @@ func (c *cmdGitService) diff(workPath string) (*diff.FileDiff, error) {
 	// diff` to work. It could be `dir1/file1.sh` and `/a/b/c/my-repo`
 	// respectively or `/a/b/c/my-repo/dir` and `file1.sh`. At the moment we
 	// relativize around repo root path, so it's the former.
-	out, err := c.git(repoPath, []string{"diff", "-U0", relFile})
+	out, err := c.git(repoPath, []string{"diff", "-U0", "--no-ext-diff", relFile})
 	if err != nil {
 		return nil, fmt.Errorf("git cmd: %w", err)
 	}
