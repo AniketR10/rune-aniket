@@ -676,47 +676,51 @@ func (e *ex) resizeWindow(args ...string) error {
 		return errors.New("invalid arguments")
 	}
 
+	var ok bool
 	switch args[0] {
 	case "reset":
-		e.comp.Browser().ResetWindowSize()
+		ok = e.comp.Browser().ResetWindowSize()
 	case "min":
 		switch args[1] {
 		case "height":
-			e.comp.Browser().SetMinWindowHeight()
+			ok = e.comp.Browser().SetMinWindowHeight()
 		case "width":
-			e.comp.Browser().SetMinWindowWidth()
+			ok = e.comp.Browser().SetMinWindowWidth()
 		default:
 			return fmt.Errorf("invalid second argument %q", args[1])
 		}
 	case "max":
 		switch args[1] {
 		case "height":
-			e.comp.Browser().SetMaxWindowHeight()
+			ok = e.comp.Browser().SetMaxWindowHeight()
 		case "width":
-			e.comp.Browser().SetMaxWindowWidth()
+			ok = e.comp.Browser().SetMaxWindowWidth()
 		default:
 			return fmt.Errorf("invalid second argument %q", args[1])
 		}
 	case "increase":
 		switch args[1] {
 		case "height":
-			e.comp.Browser().IncreaseWindowHeight()
+			ok = e.comp.Browser().IncreaseWindowHeight()
 		case "width":
-			e.comp.Browser().IncreaseWindowWidth()
+			ok = e.comp.Browser().IncreaseWindowWidth()
 		default:
 			return fmt.Errorf("invalid second argument %q", args[1])
 		}
 	case "decrease":
 		switch args[1] {
 		case "height":
-			e.comp.Browser().DecreaseWindowHeight()
+			ok = e.comp.Browser().DecreaseWindowHeight()
 		case "width":
-			e.comp.Browser().DecreaseWindowWidth()
+			ok = e.comp.Browser().DecreaseWindowWidth()
 		default:
 			return fmt.Errorf("invalid second argument %q", args[1])
 		}
 	default:
 		return fmt.Errorf("invalid first argument %q", args[0])
+	}
+	if !ok {
+		return errors.New("could not resize this window in this way")
 	}
 	return nil
 }
