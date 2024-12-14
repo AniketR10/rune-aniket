@@ -116,6 +116,11 @@ func (w Window) MaxHeight() int {
 
 // MinWidth returns the min fixed width that this window can be set.
 func (w Window) MinWidth() int {
+	n, ok := w.node.(*floatingNode)
+	if ok {
+		compWidth, _ := n.compDimensions()
+		return compWidth
+	}
 	if w.wm.config.Frame {
 		return 3
 	}
@@ -124,6 +129,11 @@ func (w Window) MinWidth() int {
 
 // MinHeight returns the min fixed height that this window can be set.
 func (w Window) MinHeight() int {
+	n, ok := w.node.(*floatingNode)
+	if ok {
+		_, compHeight := n.compDimensions()
+		return compHeight
+	}
 	if w.wm.config.Frame {
 		return 3
 	}

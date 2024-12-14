@@ -35,6 +35,7 @@ type floatingNode struct {
 	alignment                   Alignment        // desired alignment
 	maxWidth, maxHeight         int              // window space size
 	desiredWidth, desiredHeight int              // content desired Dimensions size
+	userWidth, userHeight       int
 	minimized                   Alignment
 	minimizedPadding            int
 
@@ -168,8 +169,36 @@ func (w *floatingNode) Position() term.Coordinates {
 	return w.wm.minimizedPos[w.ID()].from()
 }
 
+func (w *floatingNode) compDimensions() (int, int) {
+	return w.content.C.(Floating).Dimensions()
+}
+
+func (w *floatingNode) setWidth(width int) bool {
+	compWidth, _ := w.compDimensions()
+	if w.minimized != 0 && width < compWidth && width != 0 { // width 0 resets
+		return false
+	}
+	w.userWidth = width
+	return true
+}
+
+func (w *floatingNode) setHeight(height int) bool {
+	_, compHeight := w.compDimensions()
+	if w.minimized != 0 && height < compHeight && height != 0 { // height 0 resets
+		return false
+	}
+	w.userHeight = height
+	return true
+}
+
 func (w *floatingNode) updateDesiredDimensions() {
-	w.desiredWidth, w.desiredHeight = w.content.C.(Floating).Dimensions()
+	w.desiredWidth, w.desiredHeight = w.compDimensions()
+	if w.userWidth > w.desiredWidth {
+		w.desiredWidth = w.userWidth
+	}
+	if w.userHeight > w.desiredHeight {
+		w.desiredHeight = w.userHeight
+	}
 }
 
 func (w *floatingNode) resize() {

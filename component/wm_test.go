@@ -1175,6 +1175,41 @@ func TestFixedSizeWindows(t *testing.T) {
 		},
 		{
 			Action: func() {
+				assert.False(t, wm.SetHeight(wf, 5)) // is minimized
+				assert.False(t, wm.SetWidth(wf, 5))  // is minimized
+				assert.True(t, wm.SetHeight(wF, wF.Height()+1))
+				assert.True(t, wm.SetWidth(wF, wF.Width()+1))
+
+				assert.Equal(t, 4, wF.MinHeight())
+				assert.Equal(t, 4, wF.MinWidth())
+				assert.Equal(t, 6, wF.MaxHeight())
+				assert.Equal(t, 20, wF.MaxWidth())
+			}, Expected: `
+┌───┐┌─┌───┐───────┐
+│111││2│FFF│2222222│
+│111│└─│FFF│───────┘
+│111│┌─│FFF│───────┐
+│111││3└───┘4444444│
+└───┘└────┘└───────┘
+│ffffffffffffffffff│
+└──────────────────┘`,
+		},
+		{
+			Action: func() {
+				assert.True(t, wm.SetHeight(wF, 0)) // reset
+				assert.True(t, wm.SetWidth(wF, 0))  // reset
+			}, Expected: `
+┌───┐┌─────────────┐
+│111││22┌──┐2222222│
+│111│└──│FF│───────┘
+│111│┌──│FF│───────┐
+│111││33└──┘4444444│
+└───┘└────┘└───────┘
+│ffffffffffffffffff│
+└──────────────────┘`,
+		},
+		{
+			Action: func() {
 				require.NoError(t, w3.Close())
 				require.NoError(t, w1.Close())
 			}, Expected: `
