@@ -191,8 +191,10 @@ var (
 		},
 		"toggleFullscreen": {
 			man: textapi.CommandManual{
-				Summary: "Sets the contents of the current active window to full-screen. " +
-					"A subsequent invocation of this command will effectively undo this.",
+				Summary: "This is a toggle version of 'resizeWindow max height+width'." +
+					"A subsequent invocation of this command will effectively reset the " +
+					"window size via 'resizeWindow reset'. Shifting the focus to another " +
+					"window also resets the size of the current window in fullscreen.",
 			},
 			handler: (*ex).toggleFullscreen,
 		},

@@ -1450,16 +1450,16 @@ func TestIntegrationCompanionTerminal(t *testing.T) {
 func TestFullScreen(t *testing.T) {
 	cases := []handlertest.SequenceTestCase{
 		{":splitWindow>:edit aaa>:edit bbb>:toggleFullscreen>",
-			`AAAAAAAAAAAAAAAAAAAA
-AAAAAAAAAAAAAAAAAAAA
-AAAAAAAAAAAAAAAAAAAA
-AAAAAAAAAAAAAAAAAAAA
-AAAAAAAAAAAAAAAAAAAA
-AAAAAAAAAAAAAAAAAAAA
-AAAAAAAAAAAAAAAAAAAA
-AAAAAAAAAAAAAAAAAAAA
-AAAAAAAAAAAAAAAAAAAA
-AAAAAAAAAAAAAAAAAAAA`,
+			`┌──────────────────┐
+│aaa  bbb          │
+├─┐┌───────────────┐
+│ ││AAAAAAAAAAAAAAA│
+│ ││AAAAAAAAAAAAAAA│
+│ ││AAAAAAAAAAAAAAA│
+│ ││AAAAAAAAAAAAAAA│
+│ ││AAAAAAAAAAAAAAA│
+│ ││AAAAAAAAAAAAAAA│
+└─┘└───────────────┘`,
 		},
 		{":toggleFullScreen>",
 			`┌──────────────────┐

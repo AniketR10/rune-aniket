@@ -112,14 +112,14 @@ type ex struct {
 	syncCommandPrompt    bool
 	// use floating windows functionality without having to work around focus commands
 	// and how to se cmd.Window correctly.
-	cmdBrowser browser.Component
-	cmdV       handler.Virtual
-	cmdWin     browser.Window
-	fullscreen browserapi.Handler
-	exit       bool
-	forceExit  bool
-	height     int
-	width      int
+	cmdBrowser   browser.Component
+	cmdV         handler.Virtual
+	cmdWin       browser.Window
+	fullscreenID uint64
+	exit         bool
+	forceExit    bool
+	height       int
+	width        int
 
 	companionTerminal    vteHandler
 	companionTerminalWin browser.Window
@@ -755,14 +755,15 @@ func (e *ex) sendNotificationError(args ...string) error {
 }
 
 func (e *ex) toggleFullscreen(args ...string) error {
-	if e.fullscreen != nil {
-		e.fullscreen = nil
-		e.comp.Resize(e.width, e.height)
+	if e.fullscreenID != 0 {
+		e.comp.Browser().ResetWindowSize()
+		e.fullscreenID = 0
 		return nil
 	}
-	content, _ := e.invokeWindow().Content()
-	e.fullscreen = content
-	e.fullscreen.Resize(e.width, e.height)
+	win := e.invokeWindow()
+	e.comp.Browser().SetMaxWindowHeight()
+	e.comp.Browser().SetMaxWindowWidth()
+	e.fullscreenID = win.ID()
 	return nil
 }
 
@@ -778,9 +779,6 @@ func (e *ex) resumeNotifications(args ...string) error {
 
 func (e *ex) pasteFromClipboard(args ...string) error {
 	var handler tui.Handler = e.comp.Browser()
-	if e.fullscreen != nil {
-		handler = e.fullscreen
-	}
 	data, err := e.clip.Paste(clipboard.DefaultRegisterID)
 	if err != nil {
 		return fmt.Errorf("clipboard paste: %w", err)
@@ -809,9 +807,6 @@ func (e *ex) pasteFromClipboard(args ...string) error {
 
 func (e *ex) copyToClipboard(args ...string) error {
 	var handler tui.Handler = e.comp.Browser()
-	if e.fullscreen != nil {
-		handler = e.fullscreen
-	}
 	data, ok := handler.Selection()
 	if !ok {
 		_ = e.Browser().Notify(notifications.LevelInfo, "nothing to copy")
@@ -1105,11 +1100,7 @@ func (e *ex) handleEvent(ev term.Event) (
 	exit, handled bool,
 ) {
 	if ev.Type == term.EventMouse {
-		if e.fullscreen != nil {
-			_, handled = e.fullscreen.Handle(ev)
-		} else {
-			_, handled = e.comp.Browser().Handle(ev)
-		}
+		_, handled = e.comp.Browser().Handle(ev)
 		return
 	}
 
@@ -1296,6 +1287,10 @@ func (e *ex) Handle(ev term.Event) (exit, handled bool) {
 		_, handled = e.cmdV.Handle(ev)
 	} else {
 		_, handled = e.handleEvent(ev)
+		currFocus, _ := e.comp.Focus()
+		if e.fullscreenID != 0 && currFocus.ID() != e.fullscreenID {
+			_ = e.toggleFullscreen()
+		}
 	}
 	return e.exit, handled
 }
@@ -1322,9 +1317,6 @@ func (e *ex) Resize(width, height int) {
 	e.height = height
 	e.width = width
 	e.comp.Resize(width, height)
-	if e.fullscreen != nil {
-		e.fullscreen.Resize(width, height)
-	}
 	// if a top bar is added we don't reposition
 	// command window until the next resize, but that's
 	// acceptable because bars are added once
@@ -1347,17 +1339,9 @@ func (e *ex) Draw(w term.Writer) {
 		defer e.comp.SetDim(prev)
 
 		if e.config.Config.Dim {
-			if e.fullscreen != nil {
-				e.fullscreen.Draw(term.DimWriter(w))
-			} else {
-				e.comp.Draw(term.DimWriter(w))
-			}
+			e.comp.Draw(term.DimWriter(w))
 		} else {
-			if e.fullscreen != nil {
-				e.fullscreen.Draw(w)
-			} else {
-				e.comp.Draw(w)
-			}
+			e.comp.Draw(w)
 		}
 		vw := component.VirtualWriter{
 			Writer: w,
@@ -1366,8 +1350,6 @@ func (e *ex) Draw(w term.Writer) {
 			Width:  e.cmdV.Width(),
 		}
 		e.cmdBrowser.DrawWindow(e.cmdWin, vw)
-	} else if e.fullscreen != nil {
-		e.fullscreen.Draw(w)
 	} else {
 		e.comp.Draw(w)
 	}
@@ -1414,9 +1396,6 @@ func (e *ex) cleanPartialReissueState() {
 func (e *ex) focusHandler() tui.Handler {
 	if e.cmd != nil {
 		return &e.cmdV
-	}
-	if e.fullscreen != nil {
-		return e.fullscreen
 	}
 	return e.comp.Browser()
 }
