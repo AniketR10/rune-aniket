@@ -337,7 +337,7 @@ func (t *TileNode) rightMostChild() *TileNode {
 func getParentIdx(node *TileNode) (parent *TileNode, i int) {
 	parent = node.parent
 	if parent == nil {
-		panic("corrupted tree: exposed root node")
+		return nil, 0
 	}
 	i = parent.childIdx(node)
 	return
@@ -345,10 +345,9 @@ func getParentIdx(node *TileNode) (parent *TileNode, i int) {
 
 func tileLeftDir(node *TileNode, direction splitDir) *TileNode {
 	parent, i := getParentIdx(node)
-	if i == 0 && parent.parent == nil {
+	if parent == nil {
 		return nil
 	}
-
 	if i == 0 || parent.childSplit != direction {
 		return tileLeftDir(parent, direction)
 	}
@@ -363,10 +362,9 @@ func tileLeftDir(node *TileNode, direction splitDir) *TileNode {
 
 func tileRightDir(node *TileNode, direction splitDir) *TileNode {
 	parent, i := getParentIdx(node)
-	if i == len(parent.children)-1 && parent.parent == nil {
+	if parent == nil {
 		return nil
 	}
-
 	if i == len(parent.children)-1 || parent.childSplit != direction {
 		return tileRightDir(parent, direction)
 	}

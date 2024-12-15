@@ -790,6 +790,39 @@ func TestWindowManagerMinimize(t *testing.T) {
 	comptest.TestComponent(t, wm, w, tests)
 }
 
+func TestExposedRootTileAt(t *testing.T) {
+	h1 := TestComponent{Ch: 'A'}
+	wm, w1 := NewWindowManager(&h1, DefaultWindowManagerConfig())
+	wm.Resize(20, 8)
+
+	_, found := w1.TileUp()
+	require.False(t, found)
+	_, found = w1.TileLeft()
+	require.False(t, found)
+	_, found = w1.TileRight()
+	require.False(t, found)
+	_, found = w1.TileDown()
+	require.False(t, found)
+
+	h2 := TestComponent{Ch: 'B'}
+	w2, ok := wm.SplitVertical(w1, &h2)
+	require.True(t, ok)
+
+	_, found = w2.TileUp()
+	assert.False(t, found)
+
+	require.NoError(t, w1.Close())
+
+	_, found = w2.TileUp()
+	assert.False(t, found)
+	_, found = w2.TileLeft()
+	assert.False(t, found)
+	_, found = w2.TileRight()
+	assert.False(t, found)
+	_, found = w2.TileDown()
+	assert.False(t, found)
+}
+
 func TestComponentWindowAt(t *testing.T) {
 	h1 := &TestComponent{Ch: '1'}
 	wm, w1 := NewWindowManager(h1, DefaultWindowManagerConfig())
