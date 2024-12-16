@@ -913,6 +913,14 @@ func (c *Cursor) Paste(str string, mode SelectMode, after bool) {
 		}
 	}
 
+	if ok := c.DeleteSelection(); ok {
+		// vim keeps the new line when pasting on a fully selected line
+		if mode == LineSelection {
+			c.InsertString("\n")
+			c.MoveUp()
+		}
+	}
+
 	switch mode {
 	case StandardSelection:
 		if after {

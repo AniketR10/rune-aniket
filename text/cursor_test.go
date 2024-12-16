@@ -1057,7 +1057,7 @@ func TestCursorMove(t *testing.T) {
 			func(t *testing.T, e *Cursor) {
 				e.MoveLastLine()
 				cur := e.Coordinates()
-				e.MoveToScroll(term.Coordinates{X: cur.X+1, Y: cur.Y+1})
+				e.MoveToScroll(term.Coordinates{X: cur.X + 1, Y: cur.Y + 1})
 			},
 			term.Coordinates{X: 0, Y: 10},
 		},
@@ -2482,6 +2482,76 @@ func TestCursorPaste(t *testing.T) {
 				assert.Equal(t, tcase.expectedEndPosition, c.Coordinates())
 			})
 		}
+	}
+}
+
+func TestPasteWithSelection(t *testing.T) {
+	name := "no selection"
+	for _, wrap := range []bool{false, true} {
+		if wrap {
+			name += " (wrap)"
+		}
+		t.Run(name, func(t *testing.T) {
+			c := setupCursorContent(t, 4, 10, "abcdefgh\nijklmnopqrstuvxyz", true)
+			c.MoveRightColumns(4)
+			c.Paste("123", NoSelection, false)
+			assert.Equal(t, "abcd123efgh\nijklmnopqrstuvxyz", c.buffer().String())
+		})
+	}
+
+	name = "standard selection"
+	for _, wrap := range []bool{false, true} {
+		if wrap {
+			name += " (wrap)"
+		}
+		t.Run(name, func(t *testing.T) {
+			c := setupCursorContent(t, 4, 10, "abcdefgh\nijklmnopqrstuvxyz", wrap)
+			c.MoveRightColumns(3)
+			c.Select()
+			c.MoveRightColumns(3)
+			require.Equal(t, "defg", c.Selection())
+			require.Equal(t, c.selection.mode, StandardSelection)
+			c.Paste("123", StandardSelection, false)
+			assert.Equal(t, "abc123h\nijklmnopqrstuvxyz", c.buffer().String())
+		})
+	}
+
+	name = "line selection"
+	for _, wrap := range []bool{false, true} {
+		if wrap {
+			name += " (wrap)"
+		}
+		t.Run(name, func(t *testing.T) {
+			c := setupCursorContent(t, 4, 10, "abcdefgh\nijklmnopqrstuvxyz", false)
+			c.MoveRightColumns(5)
+			c.SelectLine()
+
+			// NOTE: If PR #127 goes through this text will break because it will
+			// select physical line instead of logical. So we would get "efgh".
+			require.Equal(t, "abcdefgh\n", c.Selection())
+			require.Equal(t, c.selection.mode, LineSelection)
+			c.Paste("123", LineSelection, false)
+			assert.Equal(t, "123\nijklmnopqrstuvxyz", c.buffer().String())
+		})
+	}
+
+	name = "block selection"
+	for _, wrap := range []bool{false, true} {
+		if wrap {
+			name += " (wrap)"
+		}
+		t.Run(name, func(t *testing.T) {
+			c := setupCursorContent(t, 4, 10, "012\nabcd\n34567\n", false)
+			c.MoveRight()
+			c.SelectBlock()
+			c.MoveDown()
+			c.MoveDown()
+			c.MoveRight()
+			require.Equal(t, "12\nbc\n45", c.Selection())
+			require.Equal(t, c.selection.mode, BlockSelection)
+			c.Paste("XXX\nYYY\nZZZ", BlockSelection, false)
+			assert.Equal(t, "0XXX\naYYYd\n3ZZZ67\n", c.buffer().String())
+		})
 	}
 }
 

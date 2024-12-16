@@ -343,6 +343,16 @@ func (vi *viHandlerImpl) pasteClipboard(registerID string, after bool) bool {
 	// and interpreted by cursor.
 	mode, _ := paste.Metadata.(text.SelectMode)
 
+	// Pasting on visual selection will first delete it before inserting the pasted
+	// text. cursor.DeleteSelection sets the cursor mode to NoSelection so the state
+	// that called replacing from (text.LineSelection or others) is lost.
+	//
+	// This does not happen if no deletion happens between the yanking and the pasting,
+	// in other words: if the user is not replacing but simply yank-pasting.
+	if vi.currMode == visualLineMode {
+		mode = text.LineSelection
+	}
+
 	vi.cursor.Paste(str, mode, after)
 	return true
 }
@@ -413,7 +423,14 @@ func (vi *viHandlerImpl) handleNormal(ev term.Event) (quit, handled bool) {
 				vi.cursor.MoveToPrevMatch()
 			}
 		case 'p':
-			vi.pasteClipboard(vi.config.defaultRegister, true)
+			// In Vim when pasting on a visual selection it doesn't make any difference
+			// if you press "p" or "P" it will always paste before the cursor.
+			pasteAfter := true
+			switch vi.currMode {
+			case visualMode, visualLineMode, visualBlockMode:
+				pasteAfter = false
+			}
+			vi.pasteClipboard(vi.config.defaultRegister, pasteAfter)
 		case 'P':
 			vi.pasteClipboard(vi.config.defaultRegister, false)
 		case '^':
@@ -710,6 +727,9 @@ func (vi *viHandlerImpl) handleVisual(ev term.Event) (quit, handled bool) {
 
 	switch vi.mode() {
 	case visualMode, visualLineMode, visualBlockMode:
+		if ev.Mod == 0 && ev.Ch == 'p' {
+			vi.setNormalMode()
+		}
 	default:
 		vi.cursor.Unselect()
 	}

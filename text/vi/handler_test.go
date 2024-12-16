@@ -1767,3 +1767,159 @@ func setupViIntegration(
 
 	return vi
 }
+
+func TestPasteVisualMode(t *testing.T) {
+	name := "standard select"
+	for _, wrap := range []bool{false, true} {
+		if wrap {
+			name += " (wrap)"
+		}
+
+		t.Run(name, func(t *testing.T) {
+			vi := setupVi(t, "ABC0123456789", 2)
+			if wrap {
+				vi.Resize(4, 10)
+			} else {
+				vi.Resize(10, 10)
+			}
+
+			events := "vllyvlld"
+			for _, event := range events {
+				vi.Handle(term.Event{Type: term.EventKey, Ch: event})
+			}
+
+			require.Equal(t, "0123456789", vi.less.Buffer().String())
+			paste, err := vi.config.clipboard.Paste(vi.config.defaultRegister)
+			require.NoError(t, err)
+			require.Equal(t, "ABC", paste.Text)
+
+			events = "lllvll"
+			for _, event := range events {
+				vi.Handle(term.Event{Type: term.EventKey, Ch: event})
+			}
+			require.Equal(t, "345", vi.cursor.Selection())
+
+			vi.Handle(term.Event{Type: term.EventKey, Ch: 'p'})
+
+			// after pasting in visual mode vim goes to normal mode again
+			assert.Equal(t, normalMode, vi.mode())
+
+			assert.Equal(t, "012ABC6789", vi.less.Buffer().String())
+
+			cell, ok := vi.cursor.Cell()
+			require.True(t, ok)
+			require.Equal(t, 'A', cell.Ch,
+				"current cell char is not 'A' but '%c'", cell.Ch)
+		})
+	}
+
+	name = "line select"
+	for _, wrap := range []bool{false, true} {
+		if wrap {
+			name += " (wrap)"
+		}
+
+		t.Run(name, func(t *testing.T) {
+			vi := setupVi(t, "ABC0123456\n789\n", 2)
+			if wrap {
+				vi.Resize(4, 10)
+			} else {
+				vi.Resize(10, 10)
+			}
+
+			events := "vllyvlld"
+			for _, event := range events {
+				vi.Handle(term.Event{Type: term.EventKey, Ch: event})
+			}
+
+			require.Equal(t, "0123456\n789\n", vi.less.Buffer().String())
+			paste, err := vi.config.clipboard.Paste(vi.config.defaultRegister)
+			require.NoError(t, err)
+			require.Equal(t, "ABC", paste.Text)
+
+			events = "V"
+			for _, event := range events {
+				vi.Handle(term.Event{Type: term.EventKey, Ch: event})
+			}
+
+			if wrap {
+				// FIXME: Is "0123456\n"
+				// At the moment Cursor.SelectLine does not honor wrap lines and honors
+				// logical lines. This will be changed by PR #127 "Add directional vi
+				// (d)elete and (y)ank  (OX-222).
+				// require.Equal(t, "0123", vi.cursor.Selection())
+			} else {
+				require.Equal(t, "0123456\n", vi.cursor.Selection())
+			}
+
+			vi.Handle(term.Event{Type: term.EventKey, Ch: 'p'})
+
+			// after pasting in visual mode vim goes to normal mode again
+			assert.Equal(t, normalMode, vi.mode())
+
+			if wrap {
+				// FIXME: Is "ABC789\n"
+				// At the moment Cursor.SelectLine does not honor wrap lines and honors
+				// logical lines. This will be changed by PR #127 "Add directional vi
+				// (d)elete and (y)ank  (OX-222).
+				//assert.Equal(t, "ABC456\n789\n", vi.less.Buffer().String())
+			} else {
+				assert.Equal(t, "ABC\n789\n", vi.less.Buffer().String())
+			}
+
+			cell, ok := vi.cursor.Cell()
+			require.True(t, ok)
+			require.Equal(t, 'A', cell.Ch,
+				"current cell char is not 'A' but '%c'", cell.Ch)
+		})
+	}
+
+	name = "block select"
+	for _, wrap := range []bool{false, true} {
+		if wrap {
+			name += " (wrap)"
+		}
+
+		t.Run(name, func(t *testing.T) {
+			vi := setupVi(t, "ABC\nDEF\n0123456\n789\n", 2)
+			if wrap {
+				vi.Resize(4, 10)
+			} else {
+				vi.Resize(10, 10)
+			}
+
+			vi.Handle(term.Event{Type: term.EventKey, Ch: 'v', Mod: term.ModCtrl})
+			for _, event := range "lljyVjd" {
+				vi.Handle(term.Event{Type: term.EventKey, Ch: event})
+			}
+
+			require.Equal(t, "0123456\n789\n", vi.less.Buffer().String())
+			paste, err := vi.config.clipboard.Paste(vi.config.defaultRegister)
+			require.NoError(t, err)
+			require.Equal(t, "ABC\nDEF", paste.Text)
+
+			vi.Handle(term.Event{Type: term.EventKey, Ch: 'l'})
+			vi.Handle(term.Event{Type: term.EventKey, Ch: 'v', Mod: term.ModCtrl})
+			vi.Handle(term.Event{Type: term.EventKey, Ch: 'j'})
+
+			if wrap {
+				require.Equal(t, "1\n8", vi.cursor.Selection())
+			} else {
+				require.Equal(t, "1\n8", vi.cursor.Selection())
+			}
+
+			vi.Handle(term.Event{Type: term.EventKey, Ch: 'p'})
+
+			if wrap {
+				assert.Equal(t, "0ABC23456\n7DEF9\n", vi.less.Buffer().String())
+			} else {
+				assert.Equal(t, "0ABC23456\n7DEF9\n", vi.less.Buffer().String())
+			}
+
+			cell, ok := vi.cursor.Cell()
+			require.True(t, ok)
+			require.Equal(t, 'A', cell.Ch,
+				"current cell char is not 'A' but '%c'", cell.Ch)
+		})
+	}
+}
