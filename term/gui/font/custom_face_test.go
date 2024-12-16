@@ -84,7 +84,7 @@ func TestCustomFace(t *testing.T) {
 		for _, width := range standardWidths {
 			for _, height := range standardWidths {
 				for _, offsetY := range standardOffsets {
-					f := newCustomFace(width, height, offsetY, &mockFace{}, false)
+					f := newCustomFace(width, height, offsetY, &mockFace{}, false, 0, 0)
 					for _, r := range handled {
 						assert.NotPanics(t, func() {
 							f.GlyphBounds(r)

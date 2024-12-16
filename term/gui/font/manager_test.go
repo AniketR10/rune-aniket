@@ -31,7 +31,7 @@ import (
 )
 
 func TestLoadDefaultFont(t *testing.T) {
-	m, err := NewManager()
+	m, err := NewManager(0, 0)
 	require.NoError(t, err)
 	assert.NotPanics(t, func() {
 		assert.NotNil(t, m.RegularFontFace())

@@ -182,7 +182,7 @@ func (r *renderer) drawRow(
 	screen *ebiten.Image, cells [][]term.Cell, viewY int,
 ) {
 	row := cells[viewY]
-	pixelY := float64(viewY) * r.font.CellSize.Y
+	pixelY := r.fontManager.PixelY(viewY)
 	textPixelY := pixelY + r.font.OffsetY
 
 	var useFace imagefont.Face
@@ -196,7 +196,7 @@ func (r *renderer) drawRow(
 
 		fg := tcellToColor(cell.Fg, r.fgColor, r.fgOpacity)
 		bg := tcellToColor(cell.Bg, r.bgColor, r.bgOpacity)
-		pixelX := r.font.CellSize.X * float64(viewX)
+		pixelX := r.fontManager.PixelX(viewX)
 
 		// reverse attr if AttrReverse
 		if cell.Attrs&tcell.AttrReverse != 0 {
@@ -303,8 +303,8 @@ func (r *renderer) renderCursor(
 		useFace = r.font.Italic
 	}
 
-	pixelX := float64(pos.X) * r.font.CellSize.X
-	pixelY := float64(pos.Y) * r.font.CellSize.Y
+	pixelX := r.fontManager.PixelX(pos.X)
+	pixelY := r.fontManager.PixelY(pos.Y)
 	textPixelY := pixelY + r.font.OffsetY
 	pixelW, pixelH := r.font.CellSize.X, r.font.CellSize.Y
 

@@ -68,6 +68,8 @@ type Manager struct {
 	charSize       CharSize
 	offset         fixed.Point26_6
 	cellOffsetY    float64
+	cellOverlapX   int
+	cellOverlapY   int
 }
 
 // CharSize represent a character dimensions in pixels.
@@ -78,9 +80,15 @@ type CharSize struct {
 
 // NewManager allocates storage for a new Manager and initializes it
 // with the default font and dpi.
-func NewManager() (*Manager, error) {
+func NewManager(overlapX, overlapY int) (*Manager, error) {
 	ret := &Manager{
 		size: 16,
+		// cell pixels start/end overlap by exactly 1 pixel,
+		// so we can achieve pixel-perfect text based frame UI.
+		// This only works when rendered cell's frame is exactly 1 pixel:
+		// example:▕▏
+		cellOverlapX: overlapX,
+		cellOverlapY: overlapY,
 	}
 	cwdURI, _ := workspaceapi.CurrentUserHostURI(".")
 	fs, err := workspace.NewFileScheme(context.Background(), config.NopConfig(), cwdURI)
@@ -96,6 +104,10 @@ func NewManager() (*Manager, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse braille font: %w", err)
 	}
+
+	// compensate default cell overlap
+	ret.setOffsetX(float64(overlapX))
+	ret.setOffsetY(float64(overlapY))
 	return ret, nil
 }
 
@@ -157,13 +169,11 @@ func (m *Manager) SetSize(size float64) error {
 // It will reload the font with the new DPI and return
 // an error if there was a problem reloading the font.
 func (m *Manager) SetOffset(x, y float64) error {
-	fixedX := float64ToFixed(x)
-	fixedY := float64ToFixed(y)
-	if m.offset.Y == fixedY && m.offset.X == fixedX {
+	xok := m.setOffsetX(y)
+	yok := m.setOffsetY(y)
+	if !xok && !yok {
 		return nil
 	}
-	m.offset.X = fixedX
-	m.offset.Y = fixedY
 	return m.ReloadFont()
 }
 
@@ -273,6 +283,16 @@ func (m *Manager) RegularFontFace() font.Face {
 	return m.regularFace
 }
 
+// PixelY returns the y position of the from pixel of the given cell row.
+func (m *Manager) PixelY(y int) float64 {
+	return float64(y)*m.charSize.Y - float64(y)*float64(m.cellOverlapY)
+}
+
+// PixelX returns the x position of the from pixel of the given cell column.
+func (m *Manager) PixelX(x int) float64 {
+	return m.charSize.X*float64(x) - float64(x)*float64(m.cellOverlapX)
+}
+
 // BoldFontFace returns the configured bold font.Face or the fallback
 // if no bold font face was found when loading the font.
 func (m *Manager) BoldFontFace() font.Face {
@@ -332,11 +352,11 @@ func (m *Manager) ensureFontLoaded() {
 }
 
 func (m *Manager) cellsWidth(width int) float64 {
-	return float64(width) * m.DeviceScale() / m.charSize.X
+	return float64(width) * m.DeviceScale() / (m.charSize.X - float64(m.cellOverlapX))
 }
 
 func (m *Manager) cellsHeight(height int) float64 {
-	return float64(height) * m.DeviceScale() / m.charSize.Y
+	return float64(height) * m.DeviceScale() / (m.charSize.Y - float64(m.cellOverlapY))
 }
 
 func (m *Manager) loadFallbackFont() error {
@@ -535,7 +555,8 @@ func (m *Manager) createFace(f *sfnt.Font, bold bool) (font.Face, error) {
 		return nil, fmt.Errorf("opentype new fallback face: %w", err)
 	}
 	charSizeX, charSizeY, offsetY := m.calcFaceMetrics(face)
-	customFace := newCustomFace(charSizeX, charSizeY, offsetY, face, bold)
+	customFace := newCustomFace(charSizeX, charSizeY, offsetY,
+		face, bold, m.cellOverlapX, m.cellOverlapY)
 	face = newMultiFace(1, customFace, face, brailleFace, fallbackFace)
 	face = newCacheFace(face)
 	return face, nil
@@ -563,11 +584,29 @@ func (m *Manager) calcFaceMetrics(face font.Face) (float64, float64, float64) {
 	return charSizeX, charSizeY, cellOffsetY
 }
 
-func (p *Manager) log(level log.Level, msg string, args ...any) {
+func (m *Manager) log(level log.Level, msg string, args ...any) {
 	if !log.IsLevelEnabled(level) {
 		return
 	}
 	log.WithFields(log.Fields{
 		logging.KeyClass: "font.Manager",
 	}).Logf(level, msg, args...)
+}
+
+func (m *Manager) setOffsetX(x float64) bool {
+	fixedX := float64ToFixed(x)
+	if m.offset.X == fixedX {
+		return false
+	}
+	m.offset.X = fixedX
+	return true
+}
+
+func (m *Manager) setOffsetY(y float64) bool {
+	fixedY := float64ToFixed(y)
+	if m.offset.Y == fixedY {
+		return false
+	}
+	m.offset.Y = fixedY
+	return true
 }

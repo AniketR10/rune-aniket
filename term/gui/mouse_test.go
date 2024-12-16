@@ -194,7 +194,7 @@ func TestMouseEvents(t *testing.T) {
 
 func newTestMouse(t *testing.T) (*mockMouseManager, *mouse) {
 	mock := &mockMouseManager{pressedButtons: map[ebiten.MouseButton]struct{}{}}
-	f, err := font.NewManager()
+	f, err := font.NewManager(0, 0)
 	require.NoError(t, err)
 	f.SetFontByFamilyName("")
 	f.SetDeviceScale(1)

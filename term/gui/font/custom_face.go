@@ -41,13 +41,19 @@ type custom struct {
 	face          font.Face
 	offsetY       fixed.Int26_6
 	boldFont      bool
+	overlapX      int
+	overlapY      int
 
 	// re-use allocs
 	mask    *ebiten.Image
 	altMask *ebiten.Image
 }
 
-func newCustomFace(width, height, offsetY float64, standard font.Face, bold bool) *custom {
+func newCustomFace(
+	width, height, offsetY float64,
+	standard font.Face, bold bool,
+	overlapX, overlapY int,
+) *custom {
 	w := int(math.Max(width, 1))
 	h := int(math.Max(height, 1))
 	mask := ebiten.NewImage(w, h)
@@ -60,6 +66,9 @@ func newCustomFace(width, height, offsetY float64, standard font.Face, bold bool
 		face:     standard,
 		width:    float64ToFixed(width),
 		height:   float64ToFixed(height),
+		// we want certain characters to take into consideration cell overlap pixels
+		overlapX: overlapX,
+		overlapY: overlapY,
 	}
 }
 

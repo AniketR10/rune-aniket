@@ -68,8 +68,8 @@ func (m *custom) plusGlyph(
 }
 
 func (m *custom) shadeGlyph(bounds image.Rectangle, c color.RGBA) (ok bool) {
-	width := float64(bounds.Max.X - bounds.Min.X)
-	height := float64(bounds.Max.Y - bounds.Min.Y)
+	width := float64(bounds.Max.X - bounds.Min.X - m.overlapX)
+	height := float64(bounds.Max.Y - bounds.Min.Y - m.overlapY)
 	x := float64(bounds.Min.X)
 	y := float64(bounds.Min.Y)
 
@@ -277,8 +277,8 @@ func (m *custom) blockGlyph(bounds image.Rectangle, matrix [][]bool) (ok bool) {
 			if !render {
 				continue
 			}
-			width := math.Max(1, float64(bounds.Max.X-bounds.Min.X)/float64(cols))
-			height := math.Max(1, float64(bounds.Max.Y-bounds.Min.Y)/float64(rows))
+			width := math.Max(1, float64(bounds.Max.X-bounds.Min.X-m.overlapX)/float64(cols))
+			height := math.Max(1, float64(bounds.Max.Y-bounds.Min.Y-m.overlapY)/float64(rows))
 			x := math.Min(
 				float64(bounds.Max.X)-width,
 				float64(bounds.Min.X)+float64(j)*width,

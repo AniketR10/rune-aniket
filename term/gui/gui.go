@@ -106,7 +106,11 @@ type GUI struct {
 // New allocates storage for a new GUI and initializes it with the given
 // tui.Handler and options.
 func New(handler tui.Handler, options ...Option) (*GUI, error) {
-	fontManager, err := font.NewManager()
+	const (
+		cellOverlapX = 1
+		cellOverlapY = 1
+	)
+	fontManager, err := font.NewManager(cellOverlapX, cellOverlapY)
 	if err != nil {
 		return nil, fmt.Errorf("font manager: %v", err)
 	}

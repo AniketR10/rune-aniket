@@ -77,7 +77,7 @@ func benchmarkRendererContent(
 	opacity float64,
 ) {
 
-	manager, err := font.NewManager()
+	manager, err := font.NewManager(1, 1)
 	if err != nil {
 		b.Logf("new manager: %v", err)
 		b.FailNow()
@@ -113,7 +113,7 @@ func benchmarkRendererContent(
 }
 
 func benchmarkRenderLigatures(b *testing.B, pixelsWidth, pixelsHeight int) {
-	manager, err := font.NewManager()
+	manager, err := font.NewManager(1, 1)
 	if err != nil {
 		b.Logf("new manager: %v", err)
 		b.FailNow()
