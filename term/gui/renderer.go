@@ -41,8 +41,26 @@ const (
 )
 
 var (
-	colorBlack color.RGBA = color.RGBA{A: 255}
-	colorWhite color.RGBA = color.RGBA{R: 255, G: 255, B: 255, A: 255}
+	defaultDrawTextOptions = ebiten.DrawImageOptions{
+		Blend: ebiten.Blend{
+			BlendFactorSourceRGB:        ebiten.BlendFactorOne,
+			BlendFactorSourceAlpha:      ebiten.BlendFactorOne,
+			BlendFactorDestinationRGB:   ebiten.BlendFactorOneMinusSourceAlpha,
+			BlendFactorDestinationAlpha: ebiten.BlendFactorOneMinusSourceAlpha,
+			BlendOperationRGB:           ebiten.BlendOperationAdd,
+			BlendOperationAlpha:         ebiten.BlendOperationAdd,
+		},
+	}
+	defaultBackgroundOptions = ebiten.DrawImageOptions{
+		Blend: ebiten.Blend{
+			BlendFactorSourceRGB:        ebiten.BlendFactorOne,
+			BlendFactorSourceAlpha:      ebiten.BlendFactorOne,
+			BlendFactorDestinationRGB:   ebiten.BlendFactorZero,
+			BlendFactorDestinationAlpha: ebiten.BlendFactorZero,
+			BlendOperationRGB:           ebiten.BlendOperationAdd,
+			BlendOperationAlpha:         ebiten.BlendOperationAdd,
+		},
+	}
 )
 
 var ligatures = map[string]rune{
@@ -99,22 +117,25 @@ func newRenderer(
 	fontManager *font.Manager, bgOpacity, fgOpacity float64, enableLigatures bool,
 	cursorAttributes, defaultAttr term.Attributes,
 ) *renderer {
+	bgBlack := applyOpacity(0, 0, 0, bgOpacity)
+	fgWhite := applyOpacity(255, 255, 255, fgOpacity)
+
 	imageWidth, imageHeight := fontManager.ImageWidth(width), fontManager.ImageHeight(height)
 	var cursorForeground, cursorBackground color.RGBA
 	if cursorAttributes.Bg.Valid() {
 		rr, g, b := cursorAttributes.Bg.TrueColor().RGB()
 		cursorBackground = color.RGBA{R: uint8(rr), G: uint8(g), B: uint8(b), A: 255}
 	} else {
-		cursorBackground = colorWhite
+		cursorBackground = applyOpacity(0, 0, 0, bgOpacity)
 	}
 	if cursorAttributes.Fg.Valid() {
 		rr, g, b := cursorAttributes.Fg.TrueColor().RGB()
 		cursorForeground = color.RGBA{R: uint8(rr), G: uint8(g), B: uint8(b), A: 255}
 	} else {
-		cursorForeground = colorBlack
+		cursorForeground = applyOpacity(0, 0, 0, fgOpacity)
 	}
 
-	bgColor := tcellToColor(defaultAttr.Bg, colorBlack, bgOpacity)
+	bgColor := tcellToColor(defaultAttr.Bg, bgBlack, bgOpacity)
 	bgColors := ebiten.NewImage(imageWidth, imageHeight)
 	bgColors.Fill(bgColor)
 	return &renderer{
@@ -122,7 +143,7 @@ func newRenderer(
 		drawer:           drawtext.New(),
 		bgColor:          bgColor,
 		bgColors:         bgColors,
-		fgColor:          tcellToColor(defaultAttr.Fg, colorWhite, fgOpacity),
+		fgColor:          tcellToColor(defaultAttr.Fg, fgWhite, fgOpacity),
 		font:             newFontFace(fontManager),
 		bgOpacity:        bgOpacity,
 		fgOpacity:        fgOpacity,
@@ -141,7 +162,8 @@ func (r *renderer) Draw(
 	screen.Clear()
 	// fill default background so we can skip drawing individual
 	// cells with default background.
-	screen.DrawImage(r.bgColors, nil)
+	opts := defaultBackgroundOptions
+	screen.DrawImage(r.bgColors, &opts)
 
 	r.renderContent(screen, cells)
 	if drawCursor {
@@ -193,15 +215,15 @@ func (r *renderer) drawRow(
 			r.bufVertices, r.bufIndices = drawrect.DrawRect(
 				&r.bufPath, r.bufVertices, r.bufIndices,
 				screen, float32(pixelX), float32(pixelY),
-				float32(r.font.CellSize.X), float32(r.font.CellSize.Y), bg, false)
+				float32(r.font.CellSize.X), float32(r.font.CellSize.Y), bg)
 			continue
 		}
 
 		isBold := cell.Attrs&tcell.AttrBold != 0
 		isItalic := cell.Attrs&tcell.AttrItalic != 0
 
-		var opts ebiten.DrawImageOptions
-		opts.GeoM.Translate(pixelX, textPixelY)
+		drawTextOptions := defaultDrawTextOptions
+		drawTextOptions.GeoM.Translate(pixelX, textPixelY)
 
 		// pick a font face for the cell
 		if !isBold && !isItalic {
@@ -214,7 +236,7 @@ func (r *renderer) drawRow(
 			useFace = r.font.Italic
 		}
 		cr, cg, cb, ca := fg.RGBA()
-		opts.ColorScale.Scale(
+		drawTextOptions.ColorScale.Scale(
 			float32(cr)/0xffff,
 			float32(cg)/0xffff,
 			float32(cb)/0xffff,
@@ -223,7 +245,7 @@ func (r *renderer) drawRow(
 
 		// dim fg text if AttrDim
 		if cell.Attrs&tcell.AttrDim != 0 {
-			opts.ColorScale.ScaleAlpha(dimAlphaPerc)
+			drawTextOptions.ColorScale.ScaleAlpha(dimAlphaPerc)
 		}
 
 		if cell.Attrs&tcell.AttrUnderline != 0 {
@@ -231,7 +253,7 @@ func (r *renderer) drawRow(
 			r.bufVertices, r.bufIndices = drawrect.DrawStroke(&r.bufPath, r.bufVertices, r.bufIndices,
 				screen, float32(pixelX), float32(underlinePixelY),
 				float32(pixelX+r.font.CellSize.X),
-				float32(underlinePixelY), 2, fg, false)
+				float32(underlinePixelY), 2, fg)
 		}
 
 		if r.enableLigatures && skipRunes == 0 {
@@ -249,11 +271,11 @@ func (r *renderer) drawRow(
 			r.bufVertices, r.bufIndices = drawrect.DrawRect(
 				&r.bufPath, r.bufVertices, r.bufIndices,
 				screen, float32(pixelX), float32(pixelY),
-				float32(r.font.CellSize.X), float32(r.font.CellSize.Y), bg, false)
+				float32(r.font.CellSize.X), float32(r.font.CellSize.Y), bg)
 		}
 
 		// draw text
-		r.drawer.DrawWithOptions(screen, cell.Ch, cell.Combining, useFace, &opts)
+		r.drawer.DrawWithOptions(screen, cell.Ch, cell.Combining, useFace, &drawTextOptions)
 	}
 }
 
@@ -291,11 +313,11 @@ func (r *renderer) renderCursor(
 		r.bufVertices, r.bufIndices = drawrect.DrawRect(
 			&r.bufPath, r.bufVertices, r.bufIndices,
 			screen, float32(pixelX), float32(pixelY),
-			float32(pixelW), float32(pixelH), r.cursorBackground, false)
+			float32(pixelW), float32(pixelH), r.cursorBackground)
 		r.bufVertices, r.bufIndices = drawrect.DrawRect(
 			&r.bufPath, r.bufVertices, r.bufIndices,
 			screen, float32(pixelX+1), float32(pixelY+1),
-			float32(pixelW-2), float32(pixelH-2), r.cursorForeground, false)
+			float32(pixelW-2), float32(pixelH-2), r.cursorForeground)
 		return
 	}
 
@@ -305,17 +327,17 @@ func (r *renderer) renderCursor(
 		r.bufVertices, r.bufIndices = drawrect.DrawRect(
 			&r.bufPath, r.bufVertices, r.bufIndices,
 			screen, float32(pixelX), float32(pixelY), 2,
-			float32(pixelH), r.cursorBackground, false)
+			float32(pixelH), r.cursorBackground)
 	case term.CursorStyleBlinkingUnderline, term.CursorStyleSteadyUnderline:
 		r.bufVertices, r.bufIndices = drawrect.DrawRect(
 			&r.bufPath, r.bufVertices, r.bufIndices,
 			screen, float32(pixelX), float32(pixelY+pixelH-2),
-			float32(pixelW), 2, r.cursorBackground, false)
+			float32(pixelW), 2, r.cursorBackground)
 	default:
 		r.bufVertices, r.bufIndices = drawrect.DrawRect(
 			&r.bufPath, r.bufVertices, r.bufIndices,
 			screen, float32(pixelX), float32(pixelY),
-			float32(pixelW), float32(pixelH), r.cursorBackground, false)
+			float32(pixelW), float32(pixelH), r.cursorBackground)
 		if cell.Ch != 0 {
 			var opts ebiten.DrawImageOptions
 			opts.GeoM.Translate(pixelX, textPixelY)
@@ -343,16 +365,7 @@ func tcellToColor(tcolor tcell.Color, def color.RGBA, opacity float64) color.RGB
 		return def
 	}
 	r, g, b := tcolor.TrueColor().RGB()
-	if opacity == 1 {
-		return color.RGBA{R: uint8(r), G: uint8(g), B: uint8(b), A: 255}
-	}
-	alpha := uint8(float64(255) * opacity)
-	return color.RGBA{
-		R: uint8(float64(r) * opacity),
-		G: uint8(float64(g) * opacity),
-		B: uint8(float64(b) * opacity),
-		A: alpha,
-	}
+	return applyOpacity(r, g, b, opacity)
 }
 
 func handleLigatures(
@@ -390,4 +403,14 @@ func handleLigatures(
 	}
 
 	return 0
+}
+
+func applyOpacity(r, g, b int32, opacity float64) color.RGBA {
+	alpha := uint8(float64(255) * opacity)
+	return color.RGBA{
+		R: uint8(float64(r) * opacity),
+		G: uint8(float64(g) * opacity),
+		B: uint8(float64(b) * opacity),
+		A: alpha,
+	}
 }

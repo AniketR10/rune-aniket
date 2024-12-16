@@ -35,6 +35,21 @@ var (
 	whiteSubImage = whiteImage.SubImage(image.Rect(1, 1, 2, 2)).(*ebiten.Image)
 )
 
+var defaultDrawTrianglesOptions = ebiten.DrawTrianglesOptions{
+	ColorScaleMode: ebiten.ColorScaleModePremultipliedAlpha,
+	// rects always occupy the whole cell, so this blend allows to
+	// fill background but disables blending of color and alpha.
+	Blend: ebiten.Blend{
+		BlendFactorSourceRGB:        ebiten.BlendFactorOne,
+		BlendFactorSourceAlpha:      ebiten.BlendFactorOne,
+		BlendFactorDestinationRGB:   ebiten.BlendFactorZero,
+		BlendFactorDestinationAlpha: ebiten.BlendFactorZero,
+		BlendOperationRGB:           ebiten.BlendOperationAdd,
+		BlendOperationAlpha:         ebiten.BlendOperationAdd,
+	},
+	AntiAlias: false,
+}
+
 func init() {
 	b := whiteImage.Bounds()
 	pix := make([]byte, 4*b.Dx()*b.Dy())
@@ -47,7 +62,7 @@ func init() {
 
 func drawVerticesForUtil(
 	dst *ebiten.Image, vs []ebiten.Vertex,
-	is []uint16, clr color.RGBA, antialias bool,
+	is []uint16, clr color.RGBA,
 ) {
 	r, g, b, a := clr.RGBA()
 	for i := range vs {
@@ -59,20 +74,7 @@ func drawVerticesForUtil(
 		vs[i].ColorA = float32(a) / 0xffff
 	}
 
-	var op ebiten.DrawTrianglesOptions
-	op.ColorScaleMode = ebiten.ColorScaleModePremultipliedAlpha
-	// this blend set allows bgColors to fill background,
-	// but disables blending color alpha
-	op.Blend = ebiten.Blend{
-		BlendFactorSourceRGB:        ebiten.BlendFactorOne,
-		BlendFactorSourceAlpha:      ebiten.BlendFactorOne,
-		BlendFactorDestinationRGB:   ebiten.BlendFactorZero,
-		BlendFactorDestinationAlpha: ebiten.BlendFactorZero,
-		BlendOperationRGB:           ebiten.BlendOperationAdd,
-		BlendOperationAlpha:         ebiten.BlendOperationAdd,
-	}
-	op.AntiAlias = antialias
-	dst.DrawTriangles(vs, is, whiteSubImage, &op)
+	dst.DrawTriangles(vs, is, whiteSubImage, &defaultDrawTrianglesOptions)
 }
 
 // DrawStroke strokes a line (x0, y0)-(x1, y1) with the specified width and color.
@@ -81,7 +83,7 @@ func drawVerticesForUtil(
 func DrawStroke(
 	path *Path, vs []ebiten.Vertex, is []uint16, dst *ebiten.Image,
 	x0, y0, x1, y1 float32,
-	strokeWidth float32, clr color.RGBA, antialias bool,
+	strokeWidth float32, clr color.RGBA,
 ) ([]ebiten.Vertex, []uint16) {
 	path.Reset()
 	path.MoveTo(x0, y0)
@@ -93,14 +95,14 @@ func DrawStroke(
 	is = is[:0]
 	vs, is = path.AppendVerticesAndIndicesForStroke(vs, is, strokeOp)
 
-	drawVerticesForUtil(dst, vs, is, clr, antialias)
+	drawVerticesForUtil(dst, vs, is, clr)
 	return vs, is
 }
 
 // DrawRect fills a rectangle with the specified width and color.
 func DrawRect(
 	path *Path, vs []ebiten.Vertex, is []uint16, dst *ebiten.Image,
-	x, y, width, height float32, clr color.RGBA, antialias bool,
+	x, y, width, height float32, clr color.RGBA,
 ) ([]ebiten.Vertex, []uint16) {
 	path.Reset()
 	path.MoveTo(x, y)
@@ -112,6 +114,6 @@ func DrawRect(
 	is = is[:0]
 	vs, is = path.AppendVerticesAndIndicesForFilling(vs, is)
 
-	drawVerticesForUtil(dst, vs, is, clr, antialias)
+	drawVerticesForUtil(dst, vs, is, clr)
 	return vs, is
 }
