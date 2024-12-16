@@ -400,7 +400,10 @@ func (w Window) IsMinimized() (Alignment, bool) {
 // if this window is a floating window.
 func (w Window) MinimizeUp(padding int) bool {
 	n, ok := w.node.(*floatingNode)
-	if !ok || n.minimized != 0 {
+	if !ok {
+		return w.minimizeViaSize()
+	}
+	if n.minimized != 0 {
 		return false
 	}
 	n.wm.minimizedDirty = true
@@ -413,7 +416,10 @@ func (w Window) MinimizeUp(padding int) bool {
 // if this window is a floating window.
 func (w Window) MinimizeDown(padding int) bool {
 	n, ok := w.node.(*floatingNode)
-	if !ok || n.minimized != 0 {
+	if !ok {
+		return w.minimizeViaSize()
+	}
+	if n.minimized != 0 {
 		return false
 	}
 	n.wm.minimizedDirty = true
@@ -426,7 +432,10 @@ func (w Window) MinimizeDown(padding int) bool {
 // if this window is a floating window.
 func (w Window) MinimizeLeft(padding int) bool {
 	n, ok := w.node.(*floatingNode)
-	if !ok || n.minimized != 0 {
+	if !ok {
+		return w.minimizeViaSize()
+	}
+	if n.minimized != 0 {
 		return false
 	}
 	n.wm.minimizedDirty = true
@@ -439,7 +448,10 @@ func (w Window) MinimizeLeft(padding int) bool {
 // if this window is a floating window.
 func (w Window) MinimizeRight(padding int) bool {
 	n, ok := w.node.(*floatingNode)
-	if !ok || n.minimized != 0 {
+	if !ok {
+		return w.minimizeViaSize()
+	}
+	if n.minimized != 0 {
 		return false
 	}
 	n.wm.minimizedDirty = true
@@ -451,7 +463,10 @@ func (w Window) MinimizeRight(padding int) bool {
 // Unminimize un-minimizes this window and displays it at the back at the front.
 func (w Window) Unminimize() bool {
 	n, ok := w.node.(*floatingNode)
-	if !ok || n.minimized == 0 {
+	if !ok {
+		return w.unminimizeViaSize()
+	}
+	if n.minimized == 0 {
 		return false
 	}
 	n.wm.minimizedDirty = true
@@ -480,4 +495,24 @@ func (w Window) Close() error {
 // Closed returns if this Window has been closed.
 func (w Window) Closed() bool {
 	return w.wm == nil || w.node.Closed()
+}
+
+func (w Window) minimizeViaSize() (ok bool) {
+	okh := w.wm.SetHeight(w, w.MinHeight())
+	okw := w.wm.SetWidth(w, w.MinWidth())
+	ok = okh || okw
+	if ok {
+		w.wm.minimizedDirty = true
+	}
+	return
+}
+
+func (w Window) unminimizeViaSize() (ok bool) {
+	okh := w.wm.SetHeight(w, 0)
+	okw := w.wm.SetWidth(w, 0)
+	ok = okh || okw
+	if ok {
+		w.wm.minimizedDirty = true
+	}
+	return
 }
