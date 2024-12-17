@@ -365,18 +365,12 @@ func (m *custom) drawRect(
 }
 
 func (m *custom) strokeWidthFromMask(bounds image.Rectangle, mask style) int {
-	// 1/8 of the cell for standard stroke width, if font is bold, then 1/6
-	factor := 8.0
-	if m.boldFont {
-		factor = 6.0
-	}
-	width := float64(bounds.Max.X - bounds.Min.X)
 	switch mask {
 	case styleSingle:
-		return int(math.Max(math.Trunc(width/factor), 1))
+		return 1
 	case styleBold:
 		// double for bold stroke
-		return int(math.Max(math.Trunc(width/factor), 1)) * 2
+		return 2
 	default:
 		return 0
 	}
