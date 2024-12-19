@@ -25,6 +25,7 @@ package gui
 
 import (
 	"image/color"
+	"math"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/unstablebuild/tcell/v3"
@@ -291,6 +292,7 @@ func (r *renderer) renderCursor(
 	pos term.Coordinates, style term.CursorStyle,
 ) {
 	cell := r.getCell(cells, pos)
+	width := math.Max(1, float64(cell.Width))
 
 	useFace := r.font.Regular
 	isBold := cell.Attributes.Attrs&tcell.AttrBold != 0
@@ -306,7 +308,7 @@ func (r *renderer) renderCursor(
 	pixelX := r.fontManager.PixelX(pos.X)
 	pixelY := r.fontManager.PixelY(pos.Y)
 	textPixelY := pixelY + r.font.OffsetY
-	pixelW, pixelH := r.font.CellSize.X, r.font.CellSize.Y
+	pixelW, pixelH := r.font.CellSize.X*width, r.font.CellSize.Y
 
 	// empty rect without focus
 	if !ebiten.IsFocused() {
