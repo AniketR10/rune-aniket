@@ -177,6 +177,49 @@ func TestBrowserScrollable(t *testing.T) {
 	})
 }
 
+func TestComponentCloseOtherWindows(t *testing.T) {
+	t.Run("fails if there's only one window", func(t *testing.T) {
+		b := NewComponent(DefaultConfig())
+		require.Error(t, b.CloseOtherWindows(b.Focus()))
+		assert.Equal(t, 1, b.Tiles())
+		assert.Equal(t, 0, b.FloatingWindows())
+	})
+	t.Run("fails if there's one tiled window and one floating window", func(t *testing.T) {
+		b := NewComponent(DefaultConfig())
+		_ = b.Floating(newTestHandler(), component.FloatingConfig{
+			Alignment: component.SpanAlignmentHorizontallyCentered,
+		})
+		require.Error(t, b.CloseOtherWindows(b.Focus()))
+		assert.Equal(t, 1, b.Tiles())
+		assert.Equal(t, 1, b.FloatingWindows())
+	})
+	t.Run("fails if called on floating window", func(t *testing.T) {
+		b := NewComponent(DefaultConfig())
+		win := b.Floating(newTestHandler(), component.FloatingConfig{
+			Alignment: component.SpanAlignmentHorizontallyCentered,
+		})
+		require.Error(t, b.CloseOtherWindows(win))
+		assert.Equal(t, 1, b.Tiles())
+		assert.Equal(t, 1, b.FloatingWindows())
+	})
+	t.Run("closes all floating and non-floating windows except focus", func(t *testing.T) {
+		b := NewComponent(DefaultConfig())
+		orig := b.Focus()
+		_ = b.Floating(newTestHandler(), component.FloatingConfig{
+			Alignment: component.SpanAlignmentHorizontallyCentered,
+		})
+		win, ok := b.Split(browserapi.OrientationDefault, orig, newTestHandler())
+		require.True(t, ok)
+		require.NoError(t, b.CloseOtherWindows(win))
+		assert.Equal(t, 1, b.Tiles())
+		assert.Equal(t, 0, b.FloatingWindows())
+
+		require.Error(t, b.CloseOtherWindows(win))
+		assert.Equal(t, 1, b.Tiles())
+		assert.Equal(t, 0, b.FloatingWindows())
+	})
+}
+
 var _ component.Scrollable = (*nopScrollableHandler)(nil)
 
 type nopScrollableHandler struct {

@@ -115,6 +115,13 @@ var (
 			},
 			handler: (*ex).closeFocusWindow,
 		},
+		"closeOtherWindows": {
+			man: textapi.CommandManual{
+				Summary: "Closes all the windows except the current active window. " +
+					"This command fails if there's only one window remaining.",
+			},
+			handler: (*ex).closeOtherWindows,
+		},
 		"writeQuit": {
 			man: textapi.CommandManual{
 				Summary: "Write the current file to disk and exits if and only if " +

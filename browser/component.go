@@ -24,6 +24,7 @@
 package browser
 
 import (
+	"errors"
 	"fmt"
 	"io"
 
@@ -667,6 +668,31 @@ func (c *Component) Tiles() int {
 // FloatingWindows returns the number of floating windows in this Component.
 func (c *Component) FloatingWindows() int {
 	return c.wm.SizeFloating()
+}
+
+// CloseOtherWindows closes all the windows except the given window.
+func (c *Component) CloseOtherWindows(win Window) (retErr error) {
+	if win.IsFloating() {
+		return errors.New("cannot close all tiled windows")
+	}
+	var ok bool
+	c.wm.Iterate(func(w handler.Window) {
+		if w.ID() == win.ID() {
+			return
+		}
+		if err := w.Close(); err != nil {
+			retErr = multierror.Append(retErr, err)
+			return
+		}
+		ok = true
+	})
+	if retErr != nil {
+		return retErr
+	}
+	if !ok {
+		retErr = errors.New("No windows to close")
+	}
+	return
 }
 
 // Close closes the resources associated with this browser.

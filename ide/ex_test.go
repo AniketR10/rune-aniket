@@ -1217,6 +1217,41 @@ func TestCommandHistory(t *testing.T) {
 	handlertest.TestHandlerSequence(t, b, 20, 10, cases)
 }
 
+func TestCloseOtherWindows(t *testing.T) {
+	cases := []handlertest.SequenceTestCase{
+		{":edit hello.go>:splitWindow>:splitWindow>:focusWindow left>:focusWindow left>",
+			`┌──────────────────┐
+│hello.go          │
+┌────┐┌─────┐┌─────┤
+│AAAA││     ││     │
+│AAAA││     ││     │
+│AAAA││     ││     │
+│AAAA││     ││     │
+│AAAA││     ││     │
+│AAAA││     ││     │
+└────┘└─────┘└─────┘`},
+		{":closeOtherWindows>",
+			`┌──────────────────┐
+│hello.go          │
+├──────────────────┤
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+└──────────────────┘`},
+	}
+
+	opts := []text.Option{
+		text.WithCommandKey(testCommandKey),
+	}
+	b := newExForTesting(t, texttest.NopEditor(), opts...)
+	defer b.Close()
+
+	handlertest.TestHandlerSequence(t, b, 20, 10, cases)
+}
+
 func TestCommandAliases(t *testing.T) {
 	cases := []handlertest.SequenceTestCase{
 		{":todo>1234",
@@ -1318,6 +1353,30 @@ func TestIntegrationEphemeralTerminal(t *testing.T) {
 │                  │
 │                  │
 └──────────────────┘`,
+		},
+		{":! sleep 20>",
+			`┌──────────────────┐
+│                  │
+├┌────────────────┐┤
+││ ◦   sleep 20 0s││
+││────────────────││
+││▐               ││
+││                ││
+││                ││
+││                ││
+└└────────────────┘┘`,
+		},
+		{":closeOtherWindows>",
+			`┌──────────────────┐
+│cannot close      │
+│all tiled         │
+│windows           │
+└──────────────────┘
+││▐               ││
+││                ││
+││                ││
+││                ││
+└└────────────────┘┘`,
 		},
 	}
 

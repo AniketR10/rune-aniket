@@ -447,6 +447,10 @@ func (e *ex) closeFocusWindow(args ...string) error {
 	return win.Close()
 }
 
+func (e *ex) closeOtherWindows(args ...string) error {
+	return e.comp.Browser().CloseOtherWindows(e.invokeWindow())
+}
+
 func (e *ex) flushCloseIgnoreNonFlushed(args ...string) error {
 	e.forceExit = true
 	e.exit = true
