@@ -1421,6 +1421,10 @@ func (c ideConfig) terminalNeedsAttentionAttr() term.Attributes {
 		term.Attributes{Attrs: tcell.AttrBlink})
 }
 
+func (c ideConfig) terminalDynamicTabName() bool {
+	return c.terminalBool("dynamic_tab_name")
+}
+
 func (c ideConfig) terminal() (config.Config, bool) {
 	if c.cfg == nil {
 		return nil, false
@@ -1486,6 +1490,7 @@ func (c ideConfig) terminalConfig() vte.Config {
 	ret.Attributes = c.terminalDefaultAttr()
 	ret.SelectionAttributes = c.terminalSelectionAttr()
 	ret.NeedsAttentionAttributes = c.terminalNeedsAttentionAttr()
+	ret.DynamicTabName = c.terminalDynamicTabName()
 	ret.Modal = c.terminalModal()
 	ret.Debug = c.terminalDebug()
 	ret.Shell = c.terminalShell()

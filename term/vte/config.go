@@ -39,6 +39,7 @@ func DefaultConfig() Config {
 		RingBell:                 func() {},
 		SelectionAttributes:      term.Attributes{Attrs: tcell.AttrReverse},
 		NeedsAttentionAttributes: term.Attributes{Attrs: tcell.AttrBlink},
+		DynamicTabName:           false,
 	}
 }
 
@@ -53,6 +54,9 @@ type Config struct {
 	// ScheduleNextTick schedules an arbitrary function to be run
 	// in the next event-loop tick.
 	ScheduleNextTick func(func()) bool
+
+	// Use the VTE's title as the tab name.
+	DynamicTabName bool
 
 	// RingBell writes to the raw pty directly, bypassing the event loop.
 	// This should only be used when called from the an event loop goroutine.

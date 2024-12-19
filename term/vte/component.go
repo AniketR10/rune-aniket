@@ -104,10 +104,11 @@ func (t *Component) Init(
 		panic("nil schedule/bell function(s)")
 	}
 
-	t.parserHandler.init(&t.mu, t.pty, tm, t.clipboard,
-		cfg.scheduleBell, t.uri, cfg.NeedsAttentionAttributes)
+	t.parserHandler.init(
+		&t.mu, t.pty, tm, t.clipboard, cfg.scheduleBell, t.uri,
+		cfg.NeedsAttentionAttributes, cfg.DynamicTabName)
+
 	// start with pty slave file name as title
-	t.parserHandler.SetTitle(t.uri.Name())
 	var h vteparser.Handler = &t.parserHandler
 	if log.IsLevelEnabled(log.TraceLevel) {
 		h = vteparser.HandlerWithLogging("vte.parserHandler", h)

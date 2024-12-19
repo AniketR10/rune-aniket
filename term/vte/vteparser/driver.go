@@ -145,7 +145,7 @@ func (p *driver) OSCDispatch(params [][]byte, bellTerminated bool) {
 				title.WriteString(string(x))
 				title.WriteByte(';')
 			}
-			titleStr := strings.TrimSpace(title.String())
+			titleStr := strings.Trim(title.String(), ";")
 			p.handler.SetTitle(titleStr)
 			return
 		}

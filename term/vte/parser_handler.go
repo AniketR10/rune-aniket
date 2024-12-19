@@ -62,8 +62,9 @@ type parserHandler struct {
 		primBuf *vtescreen.PrimaryBuffer
 		altBuf  *vtescreen.AltBuffer
 	}
-	tabs            tabstops
-	maxScrollLength int
+	tabs              tabstops
+	maxScrollLength   int
+	useTitleAsTabname bool
 
 	needsAttentionAttr        term.Attributes
 	needsAttention            bool
@@ -127,9 +128,11 @@ func newParserHandler(
 	bell func(),
 	uri workspaceapi.URI,
 	needsAttentionAttr term.Attributes,
+	useTitleAsTabname bool,
 ) *parserHandler {
 	ret := new(parserHandler)
-	ret.init(mu, pty, tm, clipboard, bell, uri, needsAttentionAttr)
+	ret.init(mu, pty, tm, clipboard, bell, uri,
+		needsAttentionAttr, useTitleAsTabname)
 	return ret
 }
 
@@ -140,6 +143,7 @@ func (t *parserHandler) init(
 	bell func(),
 	uri workspaceapi.URI,
 	needsAttentionAttr term.Attributes,
+	useTitleAsTabname bool,
 ) {
 	t.sync.altBuf = vtescreen.NewAltBuffer()
 	t.sync.primBuf = vtescreen.NewPrimaryBuffer()
@@ -149,9 +153,11 @@ func (t *parserHandler) init(
 	t.clipboard = clipboard
 	t.tm = tm
 	t.uri = uri
+	t.title = uri.Name()
 	t.maxScrollLength = defaultMaxScrollLength
 	t.bell = bell
 	t.needsAttentionAttr = needsAttentionAttr
+	t.useTitleAsTabname = useTitleAsTabname
 
 	// assume we are in focus when initialized
 	t.inFocus = true
@@ -181,12 +187,11 @@ func (t *parserHandler) SetTitle(title string) {
 	t.sync.mu.Lock()
 	defer t.sync.mu.Unlock()
 
-	// NOTE: currently setting titles dynamically is disabled
-	// The reason behind it is that most of the titles set by
-	// the shell or underlying programs are not very useful:
-	//    1. Often they contain the folder, which is redundant with workspaces
-	//    2. They're tipically too long for most applications and too detailed.
-	t.title = title
+	if !t.useTitleAsTabname {
+		return
+	}
+
+	t.updateTabName(title)
 }
 
 // Set the cursor style.
@@ -693,7 +698,8 @@ func (t *parserHandler) ResetState() {
 	bell := t.bell
 	mu := t.sync.mu
 	*t = parserHandler{}
-	t.init(mu, pty, tm, clipboard, bell, uri, needsAttentionAttr)
+	t.init(mu, pty, tm, clipboard, bell, uri,
+		needsAttentionAttr, t.useTitleAsTabname)
 }
 
 // Reverse Index.
@@ -1120,7 +1126,10 @@ func (t *parserHandler) PopTitle() {
 	if len(t.titles) > 0 {
 		e := t.titles[len(t.titles)-1]
 		t.titles = t.titles[:len(t.titles)-1]
-		t.title = e
+		if !t.useTitleAsTabname {
+			return
+		}
+		t.updateTabName(e)
 	}
 }
 
@@ -1464,7 +1473,7 @@ func (t *parserHandler) maxRows() int {
 
 func (t *parserHandler) clearNeedsAttention() {
 	t.needsAttention = false
-	err := t.tm.SetTabName(t.uri, t.uri.Name(), term.Attributes{})
+	err := t.tm.SetTabName(t.uri, t.title, term.Attributes{})
 	if err != nil {
 		t.log(log.ErrorLevel, "set tab name: %v", err)
 	}
@@ -1472,7 +1481,7 @@ func (t *parserHandler) clearNeedsAttention() {
 
 func (t *parserHandler) setNeedsAttention() {
 	t.needsAttention = true
-	err := t.tm.SetTabName(t.uri, t.uri.Name(), t.needsAttentionAttr)
+	err := t.tm.SetTabName(t.uri, t.title, t.needsAttentionAttr)
 	if err != nil {
 		t.log(log.ErrorLevel, "set tab name: %v", err)
 	}
@@ -1497,6 +1506,15 @@ func (t *parserHandler) onFocusChange(inFocus bool) (cmd string, ok bool) {
 	}
 	ok = true
 	return
+}
+
+func (t *parserHandler) updateTabName(title string) {
+	t.title = title
+	if t.needsAttention {
+		t.setNeedsAttention()
+	} else {
+		t.clearNeedsAttention()
+	}
 }
 
 func (t *parserHandler) usedAlternate() bool {

@@ -206,6 +206,7 @@ workspace:
 terminal:
     shell: sh
     modal: true
+    dynamic_tab_name: true
     attr:
         fg: white
         bg: yellow
@@ -425,6 +426,7 @@ func TestConfigSetting(t *testing.T) {
 		SelectionAttributes:      term.Attributes{Fg: tcell.ColorGreen, Bg: tcell.ColorTeal},
 		NeedsAttentionAttributes: term.Attributes{Attrs: tcell.AttrBlink, Fg: tcell.ColorRed},
 		Modal:                    true,
+		DynamicTabName:           true,
 	}
 	assert.Equal(t, expectedEmulatorConfig, vteConfig)
 
