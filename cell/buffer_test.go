@@ -85,6 +85,42 @@ func TestBufferInsert(t *testing.T) {
 	assert.Equal(t, term.Coordinates{Y: 1, X: 4}, next)
 }
 
+func TestBufferInsertMultiWidth(t *testing.T) {
+	t.Run("append, next should consider width", func(t *testing.T) {
+		buf := NewBuffer()
+		var next term.Coordinates
+
+		next = buf.Insert(next, 'h')
+		next = buf.Insert(next, 'e')
+		next = buf.Insert(next, 'l')
+		next = buf.Insert(next, 'l')
+		next = buf.Insert(next, '国')
+
+		assert.Equal(t, 1, buf.Rows())
+		cols := buf.Columns(0)
+		assert.Equal(t, 6, cols)
+		assert.Equal(t, "hell国", buf.String())
+		assert.Equal(t, term.Coordinates{X: 6}, next)
+	})
+
+	t.Run("insert in the middle of row should shift the width of the rune", func(t *testing.T) {
+		buf := NewBuffer()
+		var next term.Coordinates
+
+		next = buf.Insert(next, 'h')
+		next = buf.Insert(next, 'e')
+		next = buf.Insert(next, 'l')
+		next = buf.Insert(next, 'l')
+		next = buf.Insert(term.Coordinates{X: 1}, '国')
+
+		assert.Equal(t, 1, buf.Rows())
+		cols := buf.Columns(0)
+		assert.Equal(t, 6, cols)
+		assert.Equal(t, "h国ell", buf.String())
+		assert.Equal(t, term.Coordinates{X: 3}, next)
+	})
+}
+
 func TestBufferDeleteRow(t *testing.T) {
 	tsuite := []struct {
 		content     string
