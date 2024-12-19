@@ -73,6 +73,7 @@ message TabRequest {
 	string channel_id = 1;
     string resource_id = 2;
     string resource_name = 3;
+    string resource_icon = 4;
 }
 
 message TabResponse {

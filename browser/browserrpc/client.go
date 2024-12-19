@@ -396,7 +396,9 @@ func (c *Client) Floating(
 }
 
 // Tab satisfies browser.WindowManager
-func (c *Client) Tab(uri workspaceapi.URI, name string, h browserapi.Handler) (browserapi.Handler, error) {
+func (c *Client) Tab(
+	uri workspaceapi.URI, icon rune, name string, h browserapi.Handler,
+) (browserapi.Handler, error) {
 	channelID, srv, err := serveHandler(c.clientCtx, c.broker, h)
 	if err != nil {
 		return nil, fmt.Errorf("serve handler: %w", err)
@@ -406,6 +408,7 @@ func (c *Client) Tab(uri workspaceapi.URI, name string, h browserapi.Handler) (b
 		ChannelId:    channelID,
 		ResourceId:   uriStr,
 		ResourceName: name,
+		ResourceIcon: string(icon),
 	}
 	ctx := context.Background()
 	_, err = c.wm.Tab(ctx, &req)

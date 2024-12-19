@@ -340,7 +340,7 @@ func (h *workspaceManagerHandler) Resize(width, height int) {
 	var barFocusIdx int
 	for i, w := range h.workspaces {
 		if w != nil {
-			idx := h.bar.Add(h.makeWorkspaceTabName(i, w))
+			idx := h.bar.Add(0, h.makeWorkspaceTabName(i, w))
 			if i == h.focus {
 				barFocusIdx = idx
 				if !drawBar {
@@ -348,7 +348,7 @@ func (h *workspaceManagerHandler) Resize(width, height int) {
 				}
 			}
 		} else if i == h.focus {
-			idx := h.bar.Add(h.makeWorkspaceTabName(i, w))
+			idx := h.bar.Add(0, h.makeWorkspaceTabName(i, w))
 			barFocusIdx = idx
 		}
 	}
@@ -505,6 +505,7 @@ func (h *workspaceManagerHandler) textOpts(cfg ideConfig) []text.Option {
 		text.WithNonFocusTabAttr(cfg.nonFocusTabAttr()),
 		text.WithWallpaper(cfg.wallpaper()),
 		text.WithDirtyTabAttr(cfg.dirtyTabAttr()),
+		text.WithIconSet(cfg.icons()),
 		text.WithCommandOverlayConfig(cfg.commandOverlayConfig()),
 		text.WithCommandAliases(cfg.commandAliases()),
 		text.WithPromptConfig(cfg.promptConfig()),

@@ -960,6 +960,7 @@ func (e *ex) toggleCompanionTerminal() error {
 }
 
 func (e *ex) newEmulatorTab(initialCmd string) (*browser.Tab, error) {
+	const vteIcon = '$'
 	cfg := e.emulatorConfig
 	h, err := e.newEmulatorHandler(initialCmd, cfg)
 	if err != nil {
@@ -971,7 +972,7 @@ func (e *ex) newEmulatorTab(initialCmd string) (*browser.Tab, error) {
 		_ = h.Close()
 		return nil, err
 	}
-	t, err := e.comp.Tab(uri, h.Title(), h)
+	t, err := e.comp.Tab(uri, vteIcon, h.Title(), h)
 	if err != nil {
 		_ = h.Close()
 		return nil, fmt.Errorf("wm.Tab: %s", err)

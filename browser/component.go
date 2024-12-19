@@ -135,11 +135,12 @@ func (c *Component) Init(config Config) {
 
 // NewTab adds a new tab to the list of tabs on this Component.
 func (c *Component) NewTab(
-	resource workspaceapi.URI, name string, h browserapi.Handler, f io.Closer,
+	resource workspaceapi.URI, icon rune, name string,
+	h browserapi.Handler, f io.Closer,
 ) *Tab {
 	t := newTab(c, resource, h, f)
 	c.buffers = append(c.buffers, t)
-	c.tabs.Add(name)
+	c.tabs.Add(icon, name)
 	return t
 }
 

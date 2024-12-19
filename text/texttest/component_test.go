@@ -282,7 +282,7 @@ func TestComponentOpen(t *testing.T) {
 		tests := []comptest.TestCase{
 			{nil, `
 ┌────────────────────────────┐
-│wasup                       │
+│o wasup                     │
 ├────────────────────────────┤
 │                            │
 │                            │
@@ -311,7 +311,7 @@ func TestComponentOpen(t *testing.T) {
 				require.Equal(t, workspaceapi.ErrFileAlreadyOpen, err)
 			}, `
 ┌────────────────────────────┐
-│wasup                       │
+│o wasup                     │
 ├────────────────────────────┤
 │                            │
 ┌────────────────────────────┐
@@ -337,7 +337,7 @@ func TestComponentOpen(t *testing.T) {
 				assert.True(t, handled)
 			}, `
 ┌────────────────────────────┐
-│wasup  busy                 │
+│o wasup  o busy             │
 ├────────────────────────────┤
 │AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
 │AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
@@ -360,7 +360,7 @@ func TestComponentOpen(t *testing.T) {
 			{func() { // test double prompt, switches focuses correctly
 				loader.expectError = workspaceapi.ErrFileAlreadyOpen
 
-				uri1, err := workspaceapi.ParseURI("file:///tmp/moar")
+				uri1, err := workspaceapi.ParseURI("file:///tmp/m")
 				require.NoError(t, err)
 
 				_, err = c.Open(uri1)
@@ -373,7 +373,7 @@ func TestComponentOpen(t *testing.T) {
 				require.Equal(t, workspaceapi.ErrFileAlreadyOpen, err)
 			}, `
 ┌────────────────────────────┐
-│wasup  busy                 │
+│o wasup  o busy             │
 ├────────────────────────────┤
 │AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
 ┌────────────────────────────┐
@@ -399,17 +399,17 @@ func TestComponentOpen(t *testing.T) {
 				assert.True(t, handled)
 			}, `
 ┌────────────────────────────┐
-│wasup  busy  more           │
+│o wasup  o busy  o more     │
 ├────────────────────────────┤
 │AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
 ┌────────────────────────────┐
 │                            │
 │                            │
-│   File file:///tmp/moar    │
-│   is already open by       │
-│   another process or an    │
-│   edit session for this    │
-│   file crashed.            │
+│  File file:///tmp/m is     │
+│  already open by another   │
+│  process or an edit        │
+│  session for this file     │
+│  crashed.                  │
 │                            │
 │                            │
 │  Rec    Ope    for    Ski  │
@@ -425,7 +425,7 @@ func TestComponentOpen(t *testing.T) {
 				assert.True(t, handled)
 			}, `
 ┌────────────────────────────┐
-│wasup  busy  more  moar     │
+│o wasup  o busy  o more  o m│
 ├────────────────────────────┤
 │AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
 │AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
@@ -459,7 +459,7 @@ func TestComponentOpen(t *testing.T) {
 		tests := []comptest.TestCase{
 			{nil, `
 ┌────────────────────────────┐
-│wasup                       │
+│o wasup                     │
 ├────────────────────────────┤
 │                            │
 │                            │
@@ -486,7 +486,7 @@ func TestComponentOpen(t *testing.T) {
 				require.NoError(t, c.SetTabName(uri, "whatevs", term.Attributes{}))
 			}, `
 ┌────────────────────────────┐
-│whatevs                     │
+│o whatevs                   │
 ├────────────────────────────┤
 │                            │
 │                            │
@@ -1426,7 +1426,7 @@ func testTabIntegration(t *testing.T,
 		cases := []handlertest.SequenceTestCase{
 			{"",
 				`┌──────────────────┐
-│$$  ##            │
+│x $$  x ##        │
 ├──────────────────┤
 │##################│
 │##################│
@@ -1448,12 +1448,12 @@ func testTabIntegration(t *testing.T,
 			require.NoError(t, err)
 			b1 := browsertest.NewTestHandler()
 			b1.Ch = '$'
-			_, err = wm.Tab(resource1, "$$", b1)
+			_, err = wm.Tab(resource1, 'x', "$$", b1)
 			require.NoError(t, err)
 
 			b2 := browsertest.NewTestHandler()
 			b2.Ch = '#'
-			t2, err := wm.Tab(resource2, "##", b2)
+			t2, err := wm.Tab(resource2, 'x', "##", b2)
 			require.NoError(t, err)
 
 			win, err := wm.Focus()
@@ -1503,7 +1503,7 @@ func TestFlush(t *testing.T) {
 		win, err := c.Focus()
 		require.NoError(t, err)
 
-		h, err := c.Tab(resource1, "Rupi Kaur", mock)
+		h, err := c.Tab(resource1, 'x', "Rupi Kaur", mock)
 		require.NoError(t, win.SetContent(h))
 
 		require.Equal(t, textapi.ErrInvalidSave, c.Flush(win))

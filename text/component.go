@@ -29,6 +29,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"io"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -371,7 +372,12 @@ func (c *Component) openFileTab(
 	}
 	fc.h = editor
 
-	t = c.newTab(file, file.Name(), editor, fc)
+	ext := filepath.Ext(file.Name())
+	icon, ok := c.config.Icons.Extensions[ext]
+	if !ok {
+		icon = c.config.Icons.Default
+	}
+	t = c.newTab(file, icon, file.Name(), editor, fc)
 	return t, nil
 }
 
@@ -954,22 +960,16 @@ func (c *Component) Floating(
 	return c.comp.Floating(h, cfg), nil
 }
 
-func (c *Component) newTab(
-	resource workspaceapi.URI, name string, h browserapi.Handler, closer io.Closer,
-) *browser.Tab {
-	t := c.comp.NewTab(resource, name, h, closer)
-	t.Subscribe(&compTabSubscriber{parent: c})
-	return t
-}
-
 // Tab satisfies browser.WindowManager.
-func (c *Component) Tab(resource workspaceapi.URI, name string, h browserapi.Handler) (
-	browserapi.Handler, error,
-) {
+func (c *Component) Tab(
+	resource workspaceapi.URI, icon rune, name string, h browserapi.Handler,
+) (browserapi.Handler, error) {
 	if _, ok := h.(Handler); ok {
 		panic("handler must not be a text.Handler. " +
-			// Otherwise events might be inconsistently delivered: i.e. EventTypeFocus/Unfocus events
-			// will be delievered for text.Handler that have not had EventTypeOpen delivered.
+			// Otherwise events might be inconsistently
+			// delivered: i.e. EventTypeFocus/Unfocus events
+			// will be delievered for text.Handler
+			// that have not had EventTypeOpen delivered.
 			"Use OpenFileTab if attempting to create a tab with the return value of Edit")
 	}
 
@@ -979,7 +979,7 @@ func (c *Component) Tab(resource workspaceapi.URI, name string, h browserapi.Han
 		return t, err
 	}
 
-	t = c.newTab(resource, name, h, nil)
+	t = c.newTab(resource, icon, name, h, nil)
 	return t, nil
 }
 
@@ -1050,6 +1050,15 @@ func (c *Component) Close() error {
 		return err
 	}
 	return nil
+}
+
+func (c *Component) newTab(
+	resource workspaceapi.URI, icon rune, name string,
+	h browserapi.Handler, closer io.Closer,
+) *browser.Tab {
+	t := c.comp.NewTab(resource, icon, name, h, closer)
+	t.Subscribe(&compTabSubscriber{parent: c})
+	return t
 }
 
 // used to intercept calls to Close and Flush to dispatch

@@ -59,11 +59,18 @@ type Config struct {
 	CommandAliases          map[string]CommandAlias
 	SequencerTimeout        time.Duration
 	DirtyTabAttr            term.Attributes
+	Icons                   IconSet
 
 	EventPublisher func(term.Event) bool
 
 	CommandOverlay CommandOverlayConfig
 	browser.Config
+}
+
+// IconSet is used to render icons next to file names in tabs.
+type IconSet struct {
+	Extensions map[string]rune
+	Default    rune
 }
 
 // CommandAlias is a command to command alias, along with completion configuration.
@@ -100,6 +107,10 @@ func DefaultConfig() Config {
 		SequencerTimeout:        400 * time.Millisecond,
 		CommandOverlay:          DefaultCommandOverlayConfig(),
 		EventPublisher:          func(term.Event) bool { return false },
+		Icons: IconSet{
+			Extensions: map[string]rune{},
+			Default:    'o',
+		},
 	}
 	return cfg
 }
@@ -297,6 +308,13 @@ func WithCommandAliases(aliases map[string]CommandAlias) Option {
 func WithPromptConfig(c browser.PromptConfig) Option {
 	return func(cfg *Config) {
 		cfg.Config.PromptConfig = c
+	}
+}
+
+// WithIconSet sets the Components's file icons.
+func WithIconSet(icons IconSet) Option {
+	return func(cfg *Config) {
+		cfg.Icons = icons
 	}
 }
 

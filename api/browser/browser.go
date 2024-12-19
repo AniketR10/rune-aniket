@@ -126,7 +126,7 @@ type WindowManager interface {
 	// used with the rest of methods that take a browser.Handler.
 	// URI is used to uniquely identify a tab and name is used as a label
 	// to display it in the tab bar.
-	Tab(uri workspaceapi.URI, name string, h Handler) (Handler, error)
+	Tab(uri workspaceapi.URI, icon rune, name string, h Handler) (Handler, error)
 }
 
 // Notifications is the interface that wraps methods to display

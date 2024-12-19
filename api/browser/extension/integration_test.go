@@ -137,9 +137,9 @@ func TestIntegrationRace(t *testing.T) {
 		}, func(
 			mock *browserapitest.MockBrowserMockRecorder,
 		) *gomock.Call {
-			return mock.Tab(gomock.Any(), gomock.Any(), gomock.Any()).Return(h, nil)
+			return mock.Tab(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(h, nil)
 		}, func(ifc interface{}) error {
-			_, err := ifc.(browserapi.WindowManager).Tab(uri, "", h)
+			_, err := ifc.(browserapi.WindowManager).Tab(uri, 0, "", h)
 			return err
 		}},
 		{extension.PermissionBrowserWindowManager, func(token extension.Grant, broker rpc.MuxBroker) (interface{}, error) {

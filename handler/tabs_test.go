@@ -59,9 +59,9 @@ func TestTabsOnClick(t *testing.T) {
 			return true
 		}
 
-		assert.Equal(t, 0, h.Add("Burning"))
-		assert.Equal(t, 1, h.Add("Man"))
-		assert.Equal(t, 2, h.Add("2024"))
+		assert.Equal(t, 0, h.Add(0, "Burning"))
+		assert.Equal(t, 1, h.Add(0, "Man"))
+		assert.Equal(t, 2, h.Add('x', "2024"))
 
 		_, handled := h.Handle(term.Event{
 			Type:   term.EventMouse,

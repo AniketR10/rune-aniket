@@ -61,7 +61,7 @@ func TestWindowDraw(t *testing.T) {
 			uri1, err := workspaceapi.ParseURI("file:///a")
 			require.NoError(t, err)
 			h := newTestHandler()
-			b.NewTab(uri1, "a", h, h)
+			b.NewTab(uri1, 'a', "a", h, h)
 			cfg := browserapi.BarConfig{Size: 1, Orientation: browserapi.OrientationTop}
 			b.Bar(cfg, newTestHandler())
 			cfg.Orientation = browserapi.OrientationBottom
@@ -169,7 +169,7 @@ func TestBrowserScrollable(t *testing.T) {
 		uri1, err := workspaceapi.ParseURI("file:///a")
 		require.NoError(t, err)
 		h := newTestScrollableHandler()
-		tab := b.NewTab(uri1, "a", h, h)
+		tab := b.NewTab(uri1, 'x', "a", h, h)
 
 		content := tab.Handler()
 		_, ok := content.(component.Scrollable)

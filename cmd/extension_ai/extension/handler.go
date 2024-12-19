@@ -480,7 +480,8 @@ func (h *aiEditorHandler) handleChat(cmd textapi.Command) error {
 	if err != nil {
 		panic(err)
 	}
-	tab, err := h.wm.Tab(uri, uri.String(), bhandler)
+	const icon = '󱫆'
+	tab, err := h.wm.Tab(uri, icon, uri.String(), bhandler)
 	if err != nil {
 		return fmt.Errorf("create tab: %v", err)
 	}

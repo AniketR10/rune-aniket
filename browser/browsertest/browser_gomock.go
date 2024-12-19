@@ -393,18 +393,18 @@ func (mr *MockWindowManagerMockRecorder) Split(arg0, arg1, arg2 any) *gomock.Cal
 }
 
 // Tab mocks base method.
-func (m *MockWindowManager) Tab(uri api0.URI, name string, h api.Handler) (api.Handler, error) {
+func (m *MockWindowManager) Tab(uri api0.URI, icon rune, name string, h api.Handler) (api.Handler, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Tab", uri, name, h)
+	ret := m.ctrl.Call(m, "Tab", uri, icon, name, h)
 	ret0, _ := ret[0].(api.Handler)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Tab indicates an expected call of Tab.
-func (mr *MockWindowManagerMockRecorder) Tab(uri, name, h any) *gomock.Call {
+func (mr *MockWindowManagerMockRecorder) Tab(uri, icon, name, h any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Tab", reflect.TypeOf((*MockWindowManager)(nil).Tab), uri, name, h)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Tab", reflect.TypeOf((*MockWindowManager)(nil).Tab), uri, icon, name, h)
 }
 
 // Window mocks base method.
@@ -460,18 +460,18 @@ func (mr *MockTabManagerMockRecorder) SetTabName(arg0, arg1, arg2 any) *gomock.C
 }
 
 // Tab mocks base method.
-func (m *MockTabManager) Tab(uri api0.URI, name string, h api.Handler) (api.Handler, error) {
+func (m *MockTabManager) Tab(uri api0.URI, icon rune, name string, h api.Handler) (api.Handler, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Tab", uri, name, h)
+	ret := m.ctrl.Call(m, "Tab", uri, icon, name, h)
 	ret0, _ := ret[0].(api.Handler)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Tab indicates an expected call of Tab.
-func (mr *MockTabManagerMockRecorder) Tab(uri, name, h any) *gomock.Call {
+func (mr *MockTabManagerMockRecorder) Tab(uri, icon, name, h any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Tab", reflect.TypeOf((*MockTabManager)(nil).Tab), uri, name, h)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Tab", reflect.TypeOf((*MockTabManager)(nil).Tab), uri, icon, name, h)
 }
 
 // MockNotifications is a mock of Notifications interface.
@@ -833,18 +833,18 @@ func (mr *MockBrowserMockRecorder) Split(arg0, arg1, arg2 any) *gomock.Call {
 }
 
 // Tab mocks base method.
-func (m *MockBrowser) Tab(uri api0.URI, name string, h api.Handler) (api.Handler, error) {
+func (m *MockBrowser) Tab(uri api0.URI, icon rune, name string, h api.Handler) (api.Handler, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Tab", uri, name, h)
+	ret := m.ctrl.Call(m, "Tab", uri, icon, name, h)
 	ret0, _ := ret[0].(api.Handler)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Tab indicates an expected call of Tab.
-func (mr *MockBrowserMockRecorder) Tab(uri, name, h any) *gomock.Call {
+func (mr *MockBrowserMockRecorder) Tab(uri, icon, name, h any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Tab", reflect.TypeOf((*MockBrowser)(nil).Tab), uri, name, h)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Tab", reflect.TypeOf((*MockBrowser)(nil).Tab), uri, icon, name, h)
 }
 
 // Window mocks base method.

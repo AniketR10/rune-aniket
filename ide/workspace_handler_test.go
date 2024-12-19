@@ -300,7 +300,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 └──────────────────┘`},
 		{":edit /tmp/12345aZZ>ihello<yyp",
 			`┌──────────────────┐
-│12345aZZ*         │
+│o 12345aZZ*       │
 ├──────────────────┤
 │hello             │
 │▐ello             │
@@ -311,7 +311,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 └──────────────────┘`},
 		{":edit /tmp/12345aZZ>ihello<yyp:reloadWorkspace>", // un-saved
 			`┌──────────────────┐
-│12345aZZ          │
+│o 12345aZZ        │
 ├──────────────────┤
 │                  │
 │▐                 │
@@ -322,7 +322,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 └──────────────────┘`},
 		{":edit /tmp/12345aZZ>ihello<yyp:w>:reloadWorkspace>", // saved
 			`┌──────────────────┐
-│12345aZZ          │
+│o 12345aZZ        │
 ├──────────────────┤
 │hello             │
 │▐ello             │
@@ -333,7 +333,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 └──────────────────┘`},
 		{":edit memory\\:///12345aZZ>ihello<yyp:w>:reloadWorkspace>", // full uri
 			`┌──────────────────┐
-│12345aZZ          │
+│o 12345aZZ        │
 ├──────────────────┤
 │hello             │
 │▐ello             │
@@ -357,7 +357,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 		// to use ':' to indicate memory scheme)
 		{":cwo>:aw memory\\:///tmp2>:edit 12345aZZ>:w>:cwo>:aw  memory\\:///tmp2>y",
 			`┌──────────────────┐
-│12345aZZ          │
+│o 12345aZZ        │
 ├──────────────────┤
 │▐                 │
 │                  │
@@ -500,7 +500,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 └──────────────────┘`},
 		{":swWo 4>:addWorkspace memory\\:///tmp2>:edit memory\\:///tmp2/12>:reloadWorkspace>", // reloads non-primary workspace
 			`┌──────────────────┐
-│12                │
+│o 12              │
 ├──────────────────┤
 │▐                 │
 │                  │
@@ -633,7 +633,7 @@ func TestWorkspaceManagerClosePromptIntegration(t *testing.T) {
 		cases := []handlertest.SequenceTestCase{
 			{"ihola <",
 				`┌──────────────────┐
-│1234*  4567       │
+│o 1234*  o 4567   │
 ├──────────────────┤
 │hola▐             │
 │                  │
@@ -644,7 +644,7 @@ func TestWorkspaceManagerClosePromptIntegration(t *testing.T) {
 └──────────────────┘`},
 			{":quit>",
 				`┌──────────────────┐
-│1234*  4567       │
+│o 1234*  o 4567   │
 ├──────────────────┤
 │  There are       │
 │  open files      │
@@ -673,7 +673,7 @@ func TestWorkspaceManagerClosePromptIntegration(t *testing.T) {
 		cases := []handlertest.SequenceTestCase{
 			{"ihola <",
 				`┌──────────────────┐
-│1234*  4567       │
+│o 1234*  o 4567   │
 ├──────────────────┤
 │hola▐             │
 │                  │
@@ -684,7 +684,7 @@ func TestWorkspaceManagerClosePromptIntegration(t *testing.T) {
 └──────────────────┘`},
 			{":quit>",
 				`┌──────────────────┐
-│1234*  4567       │
+│o 1234*  o 4567   │
 ├──────────────────┤
 │  There are       │
 │  open files      │
@@ -718,7 +718,7 @@ func TestWorkspaceManagerClosePromptIntegration(t *testing.T) {
 			cases := []handlertest.SequenceTestCase{
 				{"ihola <",
 					`┌──────────────────┐
-│1234*  4567       │
+│o 1234*  o 4567   │
 ├──────────────────┤
 │hola▐             │
 │                  │
@@ -827,7 +827,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 				cases := []handlertest.SequenceTestCase{
 					{"",
 						`┌──────────────────┐
-│1234  4567        │
+│o 1234  o 4567    │
 ├──────────────────┤
 │▐                 │
 │                  │
@@ -860,7 +860,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 └──────────────────┘`},
 					{"y",
 						`┌──────────────────┐
-│1234  4567        │
+│o 1234  o 4567    │
 ├──────────────────┤
 │▐                 │
 │                  │
@@ -882,7 +882,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 				cases := []handlertest.SequenceTestCase{
 					{"",
 						`┌──────────────────┐
-│1234  4567        │
+│o 1234  o 4567    │
 ├──────────────────┤
 │▐                 │
 │                  │
@@ -914,7 +914,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 				cases := []handlertest.SequenceTestCase{
 					{":edit 1234>ih3ll0\nw1rld <:write>:edit 4567>ihello\nworld <:write>:notificationsCloseAll>",
 						`┌──────────────────┐
-│1234  4567        │
+│o 1234  o 4567    │
 ├──────────────────┤
 │hello             │
 │world▐            │
@@ -933,7 +933,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 				cases = []handlertest.SequenceTestCase{
 					{"",
 						`┌──────────────────┐
-│1234  4567        │
+│o 1234  o 4567    │
 ├──────────────────┤
 │hello             │
 │world▐            │
@@ -944,7 +944,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 └──────────────────┘`},
 					{"i\na\nb\nc\nd\ne\nf<:write>",
 						`┌──────────────────┐
-│1234  4567        │
+│o 1234  o 4567    │
 ├──────────────────┤
 │b                 │
 │c                 │
@@ -963,7 +963,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 				cases = []handlertest.SequenceTestCase{
 					{"",
 						`┌──────────────────┐
-│1234  4567        │
+│o 1234  o 4567    │
 ├──────────────────┤
 │b                 │
 │c                 │
@@ -985,7 +985,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 				cases := []handlertest.SequenceTestCase{
 					{":edit A>ih3ll0\nw1rld <:write>:edit B>ihello\nworld <:write>:notificationsCloseAll>",
 						`┌──────────────────┐
-│A  B              │
+│o A  o B          │
 ├──────────────────┤
 │hello             │
 │world▐            │
@@ -996,7 +996,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 └──────────────────┘`},
 					{":reloadWorkspace>",
 						`┌──────────────────┐
-│A  B              │
+│o A  o B          │
 ├──────────────────┤
 │hello             │
 │world▐            │
@@ -1007,7 +1007,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 └──────────────────┘`},
 					{"i\na\nb\nc\nd\ne\nf<:write>",
 						`┌──────────────────┐
-│A  B              │
+│o A  o B          │
 ├──────────────────┤
 │b                 │
 │c                 │
@@ -1018,7 +1018,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 └──────────────────┘`},
 					{":reloadWorkspace>",
 						`┌──────────────────┐
-│A  B              │
+│o A  o B          │
 ├──────────────────┤
 │b                 │
 │c                 │

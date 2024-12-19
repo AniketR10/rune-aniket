@@ -103,7 +103,9 @@ type TabManager interface {
 	// used with the rest of methods that take a browser.Handler.
 	// URI is used to uniquely identify a tab and name is used as a label
 	// to display it in the tab bar.
-	Tab(uri workspaceapi.URI, name string, h browserapi.Handler) (browserapi.Handler, error)
+	Tab(uri workspaceapi.URI, icon rune, name string, h browserapi.Handler) (
+		browserapi.Handler, error,
+	)
 
 	// SetTabName sets the title and attributes of the title of the given tab.
 	// If the given browserapi.Handler is not a tab, then this method returns an error.

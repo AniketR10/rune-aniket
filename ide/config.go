@@ -640,6 +640,43 @@ func (c ideConfig) dirtyTabAttr() term.Attributes {
 		text.DefaultConfig().DirtyTabAttr)
 }
 
+func (c ideConfig) icons() (ret text.IconSet) {
+	ret = text.DefaultConfig().Icons
+	e, ok := c.editor()
+	if !ok {
+		return
+	}
+
+	m, err := e.GetMap("icons")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["editor.icons"] = err
+		}
+		return
+	}
+
+	def, ok := m["default"]
+	if ok {
+		defStr, ok := def.(string)
+		if !ok {
+			c.errors["editor.icons.default"] = errors.New("expected a map of strings")
+		} else if defStr != "" {
+			ret.Default = []rune(defStr)[0]
+		}
+		delete(m, "default")
+	}
+	for k, v := range m {
+		vstr, ok := v.(string)
+		if !ok {
+			c.errors[fmt.Sprintf("editor.icons.%s", k)] =
+				errors.New("expected a map of strings")
+		} else if vstr != "" {
+			ret.Extensions[k] = []rune(vstr)[0]
+		}
+	}
+	return ret
+}
+
 func (c ideConfig) windowFrameCharset() (cs component.FrameCharSet) {
 	return c.windowCharset("frame_charset", defaultWindowManagerConfig.FrameCharSet)
 }

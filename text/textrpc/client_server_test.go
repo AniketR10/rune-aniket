@@ -581,7 +581,7 @@ func testTabIntegration(t *testing.T,
 		cases := []handlertest.SequenceTestCase{
 			{"",
 				`┌──────────────────┐
-│$$  ##            │
+│x $$  x ##        │
 ├──────────────────┤
 │##################│
 │##################│
@@ -603,12 +603,12 @@ func testTabIntegration(t *testing.T,
 			require.NoError(t, err)
 			b1 := browsertest.NewTestHandler()
 			b1.Ch = '$'
-			_, err = wm.Tab(resource1, "$$", b1)
+			_, err = wm.Tab(resource1, 'x', "$$", b1)
 			require.NoError(t, err)
 
 			b2 := browsertest.NewTestHandler()
 			b2.Ch = '#'
-			t2, err := wm.Tab(resource2, "##", b2)
+			t2, err := wm.Tab(resource2, 'x', "##", b2)
 			require.NoError(t, err)
 
 			win, err := wm.Focus()

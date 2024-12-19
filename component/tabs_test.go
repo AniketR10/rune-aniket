@@ -54,9 +54,9 @@ func TestTabsDraw(t *testing.T) {
                     
                     `,
 		}, {
-			func() { l.Add("Atzari") }, `
+			func() { l.Add('X', "Atzari") }, `
 ┌──────────────────┐
-│Atzari            │
+│X Atzari          │
 │                  │
 ├──────────────────┤
                     
@@ -70,18 +70,18 @@ func TestTabsDraw(t *testing.T) {
 │                  │
 │                  │
 │                  │
-│Atzari            │
+│X Atzari          │
 │                  │
 │                  │
 │                  │
 ├──────────────────┤`,
 		}, {
 			func() {
-				l.Add("Saturn")
+				l.Add('$', "Saturn")
 				l.Resize(20, 4)
 			}, `
 ┌──────────────────┐
-│Atzari  Saturn    │
+│X Atzari  $ Saturn│
 │                  │
 ├──────────────────┤
                     
@@ -90,9 +90,9 @@ func TestTabsDraw(t *testing.T) {
                     
                     `,
 		}, {
-			func() { l.Add("Other") }, `
+			func() { l.Add('X', "Other") }, `
 ┌──────────────────┐
-│Atzari  Saturn  ..│
+│X Atzari  $ Satu..│
 │                  │
 ├──────────────────┤
                     
@@ -101,9 +101,9 @@ func TestTabsDraw(t *testing.T) {
                     
                     `,
 		}, {
-			func() { l.Add("Things") }, `
+			func() { l.Add('X', "Things") }, `
 ┌──────────────────┐
-│Atzari  Saturn  ..│
+│X Atzari  $ Satu..│
 │                  │
 ├──────────────────┤
                     
@@ -114,7 +114,7 @@ func TestTabsDraw(t *testing.T) {
 		}, {
 			func() { l.SetFocus(2) }, `
 ┌──────────────────┐
-│..  Saturn  Othe..│
+│..  $ Saturn  X ..│
 │                  │
 ├──────────────────┤
                     
@@ -123,9 +123,9 @@ func TestTabsDraw(t *testing.T) {
                     
                     `,
 		}, {
-			func() { l.Add("Morsins"); l.Add("Morsillonins") }, `
+			func() { l.Add('#', "Morsins"); l.Add('#', "Morsillonins") }, `
 ┌──────────────────┐
-│..  Saturn  Othe..│
+│..  $ Saturn  X ..│
 │                  │
 ├──────────────────┤
                     
@@ -136,7 +136,7 @@ func TestTabsDraw(t *testing.T) {
 		}, {
 			func() { l.SetFocus(5) }, `
 ┌──────────────────┐
-│..  Morsillonins  │
+│..  # Morsillonins│
 │                  │
 ├──────────────────┤
                     
@@ -146,7 +146,7 @@ func TestTabsDraw(t *testing.T) {
                     `,
 		}, {
 			func() { l.SetBorder(false); l.Resize(20, 1) }, `
-..  Morsillonins    
+..  # Morsillonins  
                     
                     
                     
@@ -157,7 +157,7 @@ func TestTabsDraw(t *testing.T) {
                     `,
 		}, {
 			func() { l.SetFocus(3) }, `
-..  Morsillonins    
+..  # Morsillonins  
                     
                     
                     
@@ -203,9 +203,9 @@ func TestTabsDrawCustomSeparator(t *testing.T) {
                     
                     `,
 		}, {
-			func() { l.Add("Atzari") }, `
+			func() { l.Add('#', "Atzari") }, `
 ┌──────────────────┐
-│Atzari            │
+│# Atzari          │
 │                  │
 └──────────────────┘
                     
@@ -215,10 +215,10 @@ func TestTabsDrawCustomSeparator(t *testing.T) {
                     `,
 		}, {
 			func() {
-				l.Add("Saturn")
+				l.Add('#', "Saturn")
 			}, `
 ┌──────────────────┐
-│Atzari | Saturn   │
+│# Atzari | # Sat..│
 │                  │
 └──────────────────┘
                     
@@ -237,7 +237,7 @@ func setupOneTab(width, height int) *Tabs {
 	l.Resize(width, height)
 
 	const name = "blah"
-	l.Add(name)
+	l.Add('#', name)
 
 	return l
 }
@@ -269,16 +269,15 @@ func TestTabsTabAt(t *testing.T) {
 	t.Run("should take offset into consideration", func(t *testing.T) {
 		l := setupOneTab(4, 4)
 
-		l.Add("111111")
-		l.Add("222222222222222222222")
-		l.Add("3")
-		l.SetFocus(l.Add("4"))
+		l.Add(0, "1111")
+		l.Add(0, "2222222222222222222")
+		l.Add(0, "3")
+		l.SetFocus(l.Add(0, "4"))
 
 		// force calculating offsets
 		w := term.NewStringWriter(4, 4)
 		l.Draw(w)
 		require.NoError(t, w.Flush())
-		t.Log(w.String())
 
 		idx, ok := l.TabAt(term.Coordinates{})
 		require.True(t, ok)

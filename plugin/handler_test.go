@@ -186,7 +186,9 @@ func (n nopBrowser) NotifyOnce(notifications.Level, string, ...interface{}) erro
 	return nil
 }
 
-func (n nopBrowser) Tab(uri workspaceapi.URI, name string, h browserapi.Handler) (
+func (n nopBrowser) Tab(
+	uri workspaceapi.URI, icon rune, name string, h browserapi.Handler,
+) (
 	browserapi.Handler, error,
 ) {
 	panic("should not be called")

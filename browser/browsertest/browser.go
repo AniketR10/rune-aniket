@@ -102,8 +102,10 @@ func (b toBrowser) Bar(o browserapi.BarConfig, h tui.Handler) error {
 	return b.b.Bar(o, h)
 }
 
-func (b toBrowser) Tab(uri workspaceapi.URI, name string, h browserapi.Handler) (browserapi.Handler, error) {
-	return b.b.Tab(uri, name, h)
+func (b toBrowser) Tab(
+	uri workspaceapi.URI, icon rune, name string, h browserapi.Handler,
+) (browserapi.Handler, error) {
+	return b.b.Tab(uri, icon, name, h)
 }
 
 func (b toBrowser) Window(id uint64) (browser.Window, bool) {

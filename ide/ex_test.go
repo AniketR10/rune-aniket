@@ -208,9 +208,9 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 │                  │
 │                  │
 └──────────────────┘`},
-		{":edit cabin.go>",
+		{":edit a.go>",
 			`┌──────────────────┐
-│cabin.go          │
+│o a.go            │
 ├──────────────────┤
 │AAAAAAAAAAAAAAAAAA│
 │AAAAAAAAAAAAAAAAAA│
@@ -221,7 +221,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 └──────────────────┘`},
 		{"a",
 			`┌──────────────────┐
-│cabin.go          │
+│o a.go            │
 ├──────────────────┤
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
@@ -230,9 +230,9 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
 └──────────────────┘`},
-		{":edit /tmp/other.go>",
+		{":edit /tmp/o.go>",
 			`┌──────────────────┐
-│cabin.go  other.go│
+│o a.go  o o.go    │
 ├──────────────────┤
 │AAAAAAAAAAAAAAAAAA│
 │AAAAAAAAAAAAAAAAAA│
@@ -240,21 +240,21 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 │AAAAAAAAAAAAAAAAAA│
 │AAAAAAAAAAAAAAAAAA│
 │AAAAAAAAAAAAAAAAAA│
-└──────────────────┘`},
-		{"#", // simulates ctrl-h
-			`┌──────────────────┐
-│cabin.go  other.go│
-├──────────────────┤
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
 └──────────────────┘`},
 		{"#", // simulates ctrl-h
 			`┌──────────────────┐
-│cabin.go  other.go│
+│o a.go  o o.go    │
+├──────────────────┤
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
+└──────────────────┘`},
+		{"#", // simulates ctrl-h
+			`┌──────────────────┐
+│o a.go  o o.go    │
 ├──────────────────┤
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
@@ -265,7 +265,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 └──────────────────┘`},
 		{"$", // simulates ctrl-l
 			`┌──────────────────┐
-│cabin.go  other.go│
+│o a.go  o o.go    │
 ├──────────────────┤
 │CCCCCCCCCCCCCCCCCC│
 │CCCCCCCCCCCCCCCCCC│
@@ -276,7 +276,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 └──────────────────┘`},
 		{"$", // simulates ctrl-l
 			`┌──────────────────┐
-│cabin.go  other.go│
+│o a.go  o o.go    │
 ├──────────────────┤
 │CCCCCCCCCCCCCCCCCC│
 │CCCCCCCCCCCCCCCCCC│
@@ -287,7 +287,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 └──────────────────┘`},
 		{":cTab>",
 			`┌──────────────────┐
-│cabin.go          │
+│o a.go            │
 ├──────────────────┤
 │DDDDDDDDDDDDDDDDDD│
 │DDDDDDDDDDDDDDDDDD│
@@ -298,7 +298,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 └──────────────────┘`},
 		{":wq!^^^^^",
 			`┌──────────────────┐
-│cabin.go          │
+│o a.go            │
 ├──────────────────┤
 │EEEEEEEEEEEEEEEEEE│
 │EEEEEEEEEEEEEEEEEE│
@@ -309,7 +309,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 └──────────────────┘`},
 		{":<",
 			`┌──────────────────┐
-│cabin.go          │
+│o a.go            │
 ├──────────────────┤
 │EEEEEEEEEEEEEEEEEE│
 │EEEEEEEEEEEEEEEEEE│
@@ -318,9 +318,9 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 │EEEEEEEEEEEEEEEEEE│
 │EEEEEEEEEEEEEEEEEE│
 └──────────────────┘`},
-		{":edit other.go>1111",
+		{":edit o.go>1111",
 			`┌──────────────────┐
-│cabin.go  other.go│
+│o a.go  o o.go    │
 ├──────────────────┤
 │EEEEEEEEEEEEEEEEEE│
 │EEEEEEEEEEEEEEEEEE│
@@ -331,7 +331,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 └──────────────────┘`},
 		{"$$##",
 			`┌──────────────────┐
-│cabin.go  other.go│
+│o a.go  o o.go    │
 ├──────────────────┤
 │GGGGGGGGGGGGGGGGGG│
 │GGGGGGGGGGGGGGGGGG│
@@ -367,7 +367,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 	cases = []handlertest.SequenceTestCase{
 		{"",
 			`┌──────────────────┐
-│cabin.go  other.go│
+│o a.go  o o.go    │
 ├────────┐┌────────┤
 │AAAAAAAA││GGGGGGGG│
 │AAAAAAAA││GGGGGGGG│
@@ -378,7 +378,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 └────────┘└────────┘`},
 		{":<111111111",
 			`┌──────────────────┐
-│cabin.go  other.go│
+│o a.go  o o.go    │
 ├────────┐┌────────┤
 │AAAAAAAA││GGGGGGGG│
 │AAAAAAAA││GGGGGGGG│
@@ -400,7 +400,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 	cases = []handlertest.SequenceTestCase{
 		{"",
 			`┌──────────────────┐
-│cabin.go  other.go│
+│o a.go  o o.go    │
 ├────────┐┌────────┤
 │$$$$$$$$││GGGGGGGG│
 │$$$$$$$$││GGGGGGGG│
@@ -420,7 +420,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 		// test CommandKeyBindings
 		{"4$$$",
 			`┌──────────────────┐
-│cabin.go  other.go│
+│o a.go  o o.go    │
 ├──────────────────┤
 │HHHHHHHHHHHHHHHHHH│
 │HHHHHHHHHHHHHHHHHH│
@@ -429,9 +429,9 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 │HHHHHHHHHHHHHHHHHH│
 │HHHHHHHHHHHHHHHHHH│
 └──────────────────┘`},
-		{":closeAllT>:edit other.go>bcde####",
+		{":closeAllT>:edit o.go>bcde####",
 			`┌──────────────────┐
-│other.go          │
+│o o.go            │
 ├──────────────────┤
 │IIIIIIIIIIIIIIIIII│
 │IIIIIIIIIIIIIIIIII│
@@ -455,7 +455,7 @@ IIII`},
 	cases = []handlertest.SequenceTestCase{
 		{"",
 			`┌────┌─────────────┐
-│othe│ wasup: Z    │
+│o o.│ wasup: Z    │
 ├────└─────────────┘
 │IIIIIIIIIIIIIIIIII│
 │IIIIIIIIIIIIIIIIII│
@@ -479,7 +479,7 @@ IIII`},
 	cases = []handlertest.SequenceTestCase{
 		{"b",
 			`┌────┌─────────────┐
-│othe│ wasup: Z    │
+│o o.│ wasup: Z    │
 ├────└─────────────┘
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
@@ -490,7 +490,7 @@ IIII`},
 └──────────────────┘`},
 		{":3>",
 			`┌────┌─────────────┐
-│othe│ wasup: Z    │
+│o o.│ wasup: Z    │
 ├────└─────────────┘
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
@@ -501,7 +501,7 @@ IIII`},
 └──────────────────┘`},
 		{":0>",
 			`┌────┌─────────────┐
-│othe│ wasup: Z    │
+│o o.│ wasup: Z    │
 ├────└─────────────┘
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
@@ -526,7 +526,7 @@ IIII`},
 	cases = []handlertest.SequenceTestCase{
 		{"",
 			`┌────┌─────────────┐
-│othe│ wasup: Z    │
+│o o.│ wasup: Z    │
 ├────└─────────────┘
 │┌────┐BBBBBBBBBBBB│
 ││AAAA│BBBBBBBBBBBB│
@@ -537,7 +537,7 @@ IIII`},
 └──────────────────┘`},
 		{":e!>", // test reload non file
 			`┌────┌─────────────┐
-│othe│ not a file  │
+│o o.│ not a file  │
 ├────└─────────────┘
 │┌───┌─────────────┐
 ││AAA│ wasup: Z    │
@@ -555,7 +555,7 @@ IIII`},
 	cases = []handlertest.SequenceTestCase{
 		{"",
 			`┌────┌─────────────┐
-│othe│ not a file  │
+│o o.│ not a file  │
 ├────└─────────────┘
 │BBBB┌─────────────┐
 │BBBB│ wasup: Z    │
@@ -580,7 +580,7 @@ IIII`},
 	cases = []handlertest.SequenceTestCase{
 		{":edit ait^^^aix^^^^ airsoft.map>",
 			`┌──────────────────────────────────┌─────────────┐
-│other.go  bugz  airsoft.map       │ not a file  │
+│o o.go  o bugz  o airsoft.map     │ not a file  │
 ├──────────────────────────────────└─────────────┘
 │0000000000000000000000000000000000┌─────────────┐
 ├─┬────────────────────────────────│ wasup: Z    │
@@ -650,7 +650,7 @@ func TestMultipleFilesStartup(t *testing.T) {
 	cases := []handlertest.SequenceTestCase{
 		{"",
 			`┌──────────────────┐
-│cabin.go  wi.go   │
+│o a.go  o wi.go   │
 ├──────────────────┤
 │AAAAAAAAAAAAAAAAAA│
 │AAAAAAAAAAAAAAAAAA│
@@ -661,7 +661,7 @@ func TestMultipleFilesStartup(t *testing.T) {
 └──────────────────┘`},
 		{"aa",
 			`┌──────────────────┐
-│cabin.go  wi.go   │
+│o a.go  o wi.go   │
 ├──────────────────┤
 │CCCCCCCCCCCCCCCCCC│
 │CCCCCCCCCCCCCCCCCC│
@@ -672,7 +672,7 @@ func TestMultipleFilesStartup(t *testing.T) {
 └──────────────────┘`},
 		{"#", // simulates ctrl-h
 			`┌──────────────────┐
-│cabin.go  wi.go   │
+│o a.go  o wi.go   │
 ├──────────────────┤
 │AAAAAAAAAAAAAAAAAA│
 │AAAAAAAAAAAAAAAAAA│
@@ -683,7 +683,7 @@ func TestMultipleFilesStartup(t *testing.T) {
 └──────────────────┘`},
 		{"#:reloadFile>",
 			`┌──────────────────┐
-│wi.go  cabin.go   │
+│o wi.go  o a.go   │
 ├──────────────────┤
 │AAAAAAAAAAAAAAAAAA│
 │AAAAAAAAAAAAAAAAAA│
@@ -694,7 +694,7 @@ func TestMultipleFilesStartup(t *testing.T) {
 └──────────────────┘`},
 	}
 
-	file1, err := workspaceapi.ParseURI("file:///cabin.go")
+	file1, err := workspaceapi.ParseURI("file:///a.go")
 	require.NoError(t, err)
 	file2, err := workspaceapi.ParseURI("file:///wi.go")
 	require.NoError(t, err)
@@ -829,7 +829,7 @@ func TestExKeySequence(t *testing.T) {
 	cases := []handlertest.SequenceTestCase{
 		{"zgl",
 			`┌──────────────────┐
-│10k.go  button.go │
+│o 10k.go  o 2     │
 ├──────────────────┤
 │AAAAAAAAAAAAAAAAAA│
 │AAAAAAAAAAAAAAAAAA│
@@ -840,7 +840,7 @@ func TestExKeySequence(t *testing.T) {
 └──────────────────┘`},
 		{"g",
 			`┌──────────────────┐
-│10k.go  button.go │
+│o 10k.go  o 2     │
 ├──────────────────┤
 │AAAAAAAAAAAAAAAAAA│
 │AAAAAAAAAAAAAAAAAA│
@@ -851,7 +851,7 @@ func TestExKeySequence(t *testing.T) {
 └──────────────────┘`},
 		{"go",
 			`┌──────────────────┐
-│10k.go  button.go │
+│o 10k.go  o 2     │
 ├──────────────────┤
 │CCCCCCCCCCCCCCCCCC│
 │CCCCCCCCCCCCCCCCCC│
@@ -864,7 +864,7 @@ func TestExKeySequence(t *testing.T) {
 		// stale and re-issue event.
 		{"g____________________",
 			`┌──────────────────┐
-│10k.go  button.go │
+│o 10k.go  o 2     │
 ├──────────────────┤
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
@@ -891,7 +891,7 @@ func TestExKeySequence(t *testing.T) {
 		var mu sync.Mutex
 		file1, err := workspaceapi.ParseURI("file:///10k.go")
 		require.NoError(t, err)
-		file2, err := workspaceapi.ParseURI("file:///button.go")
+		file2, err := workspaceapi.ParseURI("file:///2")
 		require.NoError(t, err)
 		opts := []text.Option{
 			text.WithFile(file1),
@@ -940,7 +940,7 @@ func TestExTabIntegration(t *testing.T) {
 	cases := []handlertest.SequenceTestCase{
 		{"",
 			`┌──────────────────┐
-│Fieshta  Pahty    │
+│x Fieshta  x Pahty│
 ├──────────────────┤
 │AAAAAAAAAAAAAAAAAA│
 │AAAAAAAAAAAAAAAAAA│
@@ -973,9 +973,9 @@ func TestExTabIntegration(t *testing.T) {
 		require.NoError(t, err)
 		uri2, err := workspaceapi.ParseURI("file:///Pahty")
 		require.NoError(t, err)
-		tab, err := b.comp.Tab(uri1, "Fieshta", browsertest.NewTestHandler())
+		tab, err := b.comp.Tab(uri1, 'x', "Fieshta", browsertest.NewTestHandler())
 		require.NoError(t, err)
-		_, err = b.comp.Tab(uri2, "Pahty", browsertest.NewTestHandler())
+		_, err = b.comp.Tab(uri2, 'x', "Pahty", browsertest.NewTestHandler())
 		require.NoError(t, err)
 		focus, err := b.comp.Focus()
 		require.NoError(t, err)
@@ -1043,7 +1043,7 @@ func TestExExit(t *testing.T) {
 		uri, err := workspaceapi.ParseURI("file:///bols")
 		require.NoError(t, err)
 
-		tab, err := b.comp.Tab(uri, "bleh", h)
+		tab, err := b.comp.Tab(uri, 'x', "bleh", h)
 		require.NoError(t, err)
 
 		w, err := b.comp.Focus()
@@ -1184,9 +1184,9 @@ func TestNewWindow(t *testing.T) {
 
 func TestCommandHistory(t *testing.T) {
 	cases := []handlertest.SequenceTestCase{
-		{":edit hello.go>:edit wi.go>1234",
+		{":edit a.go>:edit wi.go>1234",
 			`┌──────────────────┐
-│hello.go  wi.go   │
+│o a.go  o wi.go   │
 ├──────────────────┤
 │EEEEEEEEEEEEEEEEEE│
 │EEEEEEEEEEEEEEEEEE│
@@ -1197,7 +1197,7 @@ func TestCommandHistory(t *testing.T) {
 └──────────────────┘`},
 		{"::::>",
 			`┌──────────────────┐
-│hello.go  wi.go   │
+│o a.go  o wi.go   │
 ├──────────────────┤
 │EEEEEEEEEEEEEEEEEE│
 │EEEEEEEEEEEEEEEEEE│
@@ -1221,7 +1221,7 @@ func TestCloseOtherWindows(t *testing.T) {
 	cases := []handlertest.SequenceTestCase{
 		{":edit hello.go>:splitWindow>:splitWindow>:focusWindow left>:focusWindow left>",
 			`┌──────────────────┐
-│hello.go          │
+│o hello.go        │
 ┌────┐┌─────┐┌─────┤
 │AAAA││     ││     │
 │AAAA││     ││     │
@@ -1232,7 +1232,7 @@ func TestCloseOtherWindows(t *testing.T) {
 └────┘└─────┘└─────┘`},
 		{":closeOtherWindows>",
 			`┌──────────────────┐
-│hello.go          │
+│o hello.go        │
 ├──────────────────┤
 │AAAAAAAAAAAAAAAAAA│
 │AAAAAAAAAAAAAAAAAA│
@@ -1256,7 +1256,7 @@ func TestCommandAliases(t *testing.T) {
 	cases := []handlertest.SequenceTestCase{
 		{":todo>1234",
 			`┌──────────────────┐
-│hello.go  wi.go   │
+│o a.go  o wi.go   │
 ├──────────────────┤
 │EEEEEEEEEEEEEEEEEE│
 │EEEEEEEEEEEEEEEEEE│
@@ -1267,7 +1267,7 @@ func TestCommandAliases(t *testing.T) {
 └──────────────────┘`},
 		{":bp>",
 			`┌──────────────────┐
-│hello.go  wi.go   │
+│o a.go  o wi.go   │
 ├──────────────────┤
 │AAAAAAAAAAAAAAAAAA│
 │AAAAAAAAAAAAAAAAAA│
@@ -1278,7 +1278,7 @@ func TestCommandAliases(t *testing.T) {
 └──────────────────┘`},
 		{":e x.go>",
 			`┌──────────────────┐
-│..  wi.go  x.go   │
+│..  o wi.go  o x..│
 ├──────────────────┤
 │AAAAAAAAAAAAAAAAAA│
 │AAAAAAAAAAAAAAAAAA│
@@ -1293,7 +1293,7 @@ func TestCommandAliases(t *testing.T) {
 		text.WithCommandOverlayConfig(testCommandOverlayConfig()),
 		text.WithCommandKey(testCommandKey),
 		text.WithCommandAliases(map[string]text.CommandAlias{
-			"todo": text.CommandAlias{Commands: []string{"edit hello.go", "edit wi.go"}},
+			"todo": text.CommandAlias{Commands: []string{"edit a.go", "edit wi.go"}},
 			"e":    text.CommandAlias{Commands: []string{"edit"}},
 			"bp":   text.CommandAlias{Commands: []string{"nextTab"}},
 		}),
@@ -1510,7 +1510,7 @@ func TestFullScreen(t *testing.T) {
 	cases := []handlertest.SequenceTestCase{
 		{":splitWindow>:edit aaa>:edit bbb>:toggleFullscreen>",
 			`┌──────────────────┐
-│aaa  bbb          │
+│o aaa  o bbb      │
 ├─┐┌───────────────┐
 │ ││AAAAAAAAAAAAAAA│
 │ ││AAAAAAAAAAAAAAA│
@@ -1522,7 +1522,7 @@ func TestFullScreen(t *testing.T) {
 		},
 		{":toggleFullScreen>",
 			`┌──────────────────┐
-│aaa  bbb          │
+│o aaa  o bbb      │
 ├────────┐┌────────┐
 │        ││AAAAAAAA│
 │        ││AAAAAAAA│
@@ -1561,7 +1561,7 @@ func TestMoveWindowContent(t *testing.T) {
 	cases := []handlertest.SequenceTestCase{
 		{":splitWindow>:edit aaa>:moveWindowContent left>",
 			`┌──────────────────┐
-│aaa               │
+│o aaa             │
 ┌────────┐┌────────┤
 │AAAAAAAA││        │
 │AAAAAAAA││        │
@@ -1573,7 +1573,7 @@ func TestMoveWindowContent(t *testing.T) {
 		},
 		{":moveWindowContent right>",
 			`┌──────────────────┐
-│aaa               │
+│o aaa             │
 ├────────┐┌────────┐
 │        ││AAAAAAAA│
 │        ││AAAAAAAA│
@@ -1585,7 +1585,7 @@ func TestMoveWindowContent(t *testing.T) {
 		},
 		{":splitWindow down>:focusWindow up>:moveWindowContent down>",
 			`┌──────────────────┐
-│aaa               │
+│o aaa             │
 ├────────┐┌────────┤
 │        ││        │
 │        ││        │
@@ -1597,7 +1597,7 @@ func TestMoveWindowContent(t *testing.T) {
 		},
 		{":moveWindowContent up>",
 			`┌──────────────────┐
-│aaa               │
+│o aaa             │
 ├────────┐┌────────┐
 │        ││AAAAAAAA│
 │        ││AAAAAAAA│
@@ -1609,7 +1609,7 @@ func TestMoveWindowContent(t *testing.T) {
 		},
 		{":moveWindowContent left>",
 			`┌──────────────────┐
-│aaa               │
+│o aaa             │
 ┌────────┐┌────────┤
 │AAAAAAAA││        │
 │AAAAAAAA││        │
@@ -1648,7 +1648,7 @@ func TestResizeWindows(t *testing.T) {
 	cases := []handlertest.SequenceTestCase{
 		{":splitWindow>:edit aaa>:resizeWindow increase width>",
 			`┌──────────────────┐
-│aaa               │
+│o aaa             │
 ├───────┐┌─────────┐
 │       ││AAAAAAAAA│
 │       ││AAAAAAAAA│
@@ -1660,7 +1660,7 @@ func TestResizeWindows(t *testing.T) {
 		},
 		{":splitWindow down>:resizeWindow min height>",
 			`┌──────────────────┐
-│aaa               │
+│o aaa             │
 ├───────┐┌─────────┤
 │       ││AAAAAAAAA│
 │       ││AAAAAAAAA│
@@ -1672,7 +1672,7 @@ func TestResizeWindows(t *testing.T) {
 		},
 		{":resizeWindow max height>",
 			`┌──────────────────┐
-│aaa               │
+│o aaa             │
 ├───────┐┌─────────┤
 │       ││AAAAAAAAA│
 │       │└─────────┘
@@ -1684,7 +1684,7 @@ func TestResizeWindows(t *testing.T) {
 		},
 		{":resizeWindow max width>",
 			`┌──────────────────┐
-│aaa               │
+│o aaa             │
 ├─┐┌───────────────┤
 │ ││AAAAAAAAAAAAAAA│
 │ │└───────────────┘
@@ -1696,7 +1696,7 @@ func TestResizeWindows(t *testing.T) {
 		},
 		{":resizeWindow min width>",
 			`┌──────────────────┐
-│aaa               │
+│o aaa             │
 ├───────────────┐┌─┤
 │               ││A│
 │               │└─┘
@@ -1708,7 +1708,7 @@ func TestResizeWindows(t *testing.T) {
 		},
 		{":resizeWindow reset>",
 			`┌──────────────────┐
-│aaa               │
+│o aaa             │
 ├────────┐┌────────┤
 │        ││AAAAAAAA│
 │        ││AAAAAAAA│
@@ -1720,7 +1720,7 @@ func TestResizeWindows(t *testing.T) {
 		},
 		{":resizeWindow decrease height>:resizeWindow decrease width>",
 			`┌──────────────────┐
-│aaa               │
+│o aaa             │
 ├─────────┐┌───────┤
 │         ││AAAAAAA│
 │         ││AAAAAAA│
@@ -1916,7 +1916,7 @@ func TestRenameTab(t *testing.T) {
 	cases := []handlertest.SequenceTestCase{
 		{":edit hello.go>:renameTab 8berSucks>",
 			`┌──────────────────┐
-│8berSucks         │
+│o 8berSucks       │
 ├──────────────────┤
 │AAAAAAAAAAAAAAAAAA│
 │AAAAAAAAAAAAAAAAAA│
@@ -1941,7 +1941,7 @@ func TestEventNone(t *testing.T) {
 		cases := []handlertest.SequenceTestCase{
 			{"🎉edit hello.go>",
 				`┌──────────────────┐
-│hello.go          │
+│o hello.go        │
 ├──────────────────┤
 │AAAAAAAAAAAAAAAAAA│
 │AAAAAAAAAAAAAAAAAA│
@@ -1966,7 +1966,7 @@ func TestEventNone(t *testing.T) {
 		cases = []handlertest.SequenceTestCase{
 			{"",
 				`┌──────────────────┐
-│hello.go          │
+│o hello.go        │
 ├──────────────────┤
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
@@ -2188,7 +2188,7 @@ func TestSwitchToTab(t *testing.T) {
 	cases := []handlertest.SequenceTestCase{
 		{":edit hello.go>B:edit world.go>",
 			`┌────────────────────────────┐
-│hello.go  world.go          │
+│o hello.go  o world.go      │
 ├────────────────────────────┤
 │AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
 │AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
@@ -2205,7 +2205,7 @@ func TestSwitchToTab(t *testing.T) {
 
 		{":switchToTab ",
 			`┌────────────────────────────┐
-│hello.go  world.go          │
+│o hello.go  o world.go      │
 ├────────────────────────────┤
 │AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
 │AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
@@ -2221,7 +2221,7 @@ func TestSwitchToTab(t *testing.T) {
 └────────────────────────────┘`},
 		{"1>",
 			`┌────────────────────────────┐
-│hello.go  world.go          │
+│o hello.go  o world.go      │
 ├────────────────────────────┤
 │BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
@@ -2237,7 +2237,7 @@ func TestSwitchToTab(t *testing.T) {
 └────────────────────────────┘`},
 		{":switchToTab 3>",
 			`┌────────────────────────────┐
-│hello.go  world.go          │
+│o hello.go  o world.go      │
 ├────────────────────────────┤
 │BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
@@ -2282,7 +2282,7 @@ func TestEcho(t *testing.T) {
 	cases := []handlertest.SequenceTestCase{
 		{`:edit hello.go>:echo 01234>`,
 			`┌────────────────────────────┐
-│hello.go                    │
+│o hello.go                  │
 ├────────────────────────────┤
 │AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
 │AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
@@ -2337,7 +2337,7 @@ func testCopyToClipboard(
 	cases := []handlertest.SequenceTestCase{
 		{":edit hello.go>",
 			`┌────────────────────────────┐
-│hello.go                    │
+│o hello.go                  │
 ├────────────────────────────┤
 │AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
 │AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
@@ -2385,7 +2385,7 @@ func testCopyToClipboard(
 └────────────────────────────┘`},
 		{":notificationsCloseAll>:clipboardPaste>",
 			`┌────────────────────────────┐
-│hello.go                    │
+│o hello.go                  │
 ├────────────────────────────┤
 │DDDDDDDDDDDDDDDDDDDDDDDDDDDD│
 │DDDDDDDDDDDDDDDDDDDDDDDDDDDD│

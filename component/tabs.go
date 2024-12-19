@@ -41,6 +41,7 @@ var (
 type tab struct {
 	name    string
 	defName string
+	icon    rune
 	focus   bool
 	defAttr term.Attributes
 	attr    term.Attributes
@@ -214,6 +215,13 @@ func (t *Tabs) SetTabName(idx int, name string) {
 	t.dirty = true
 }
 
+// SetTabIcon sets the icon of tab with idx. If tab with idx does not exist,
+// this method will panic.
+func (t *Tabs) SetTabIcon(idx int, icon rune) {
+	t.tabs[idx].icon = icon
+	t.dirty = true
+}
+
 // SetTabDefaultName sets the default name of tab with idx. Calls to ResetTabName
 // will reset the tab name to the given name. If tab with idx does not exist,
 // this method will panic.
@@ -242,13 +250,14 @@ func (t *Tabs) DefaultTabName(idx int) string {
 	return t.tabs[idx].defName
 }
 
-// Add adds a tab with the given name.
-func (t *Tabs) Add(name string) int {
+// Add adds a tab with the given name and icon.
+func (t *Tabs) Add(icon rune, name string) int {
 	t.dirty = true
 	tt := &tab{
 		defAttr: term.Attributes{},
 		attr:    term.Attributes{},
 		defName: name,
+		icon:    icon,
 		name:    name,
 	}
 	if t.tabs == nil {
@@ -284,6 +293,9 @@ func (t *Tabs) TabAt(pos term.Coordinates) (int, bool) {
 	idx := -1
 
 	for i, z := range t.tabs[t.offsetIdx:] {
+		if z.icon != 0 {
+			x += 2
+		}
 		x += len(t.separator)
 		x += len(z.name)
 		if x >= pos.X {
@@ -327,6 +339,10 @@ func (t *Tabs) prepareFileList() {
 			attr = term.AttributesUnion(t.nonFocusAttr, attr)
 		}
 
+		if tab.icon != 0 {
+			next = t.fileListBuf.Insert(next, tab.icon)
+			next = t.fileListBuf.Insert(next, ' ')
+		}
 		_, next = t.fileListBuf.InsertStringWithAttr(
 			next, tab.name, attr)
 
@@ -344,7 +360,11 @@ func (t *Tabs) prepareFileList() {
 		effectiveWidth = t.width
 	}
 	for i := 0; i < len(t.tabs) && focusLen+focusPos.X > effectiveWidth; i++ {
-		lenTab := len(t.tabs[i].name)
+		z := t.tabs[i]
+		lenTab := len(z.name)
+		if z.icon != 0 {
+			lenTab += 2
+		}
 		if i < len(t.tabs)-1 {
 			lenTab += lenSeparator
 		}

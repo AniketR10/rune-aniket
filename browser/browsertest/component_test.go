@@ -92,7 +92,7 @@ func TestComponentCloseWindow(t *testing.T) {
 
 			var h browserapi.Handler
 			h = NewTestHandler()
-			h = c.NewTab(uri, "OAK", h, nil)
+			h = c.NewTab(uri, 'x', "OAK", h, nil)
 
 			win, ok := tcase.split(c, h)
 			require.True(t, ok)
@@ -180,9 +180,9 @@ func TestComponentRemoveAllTabs(t *testing.T) {
 			require.NoError(t, err)
 
 			handlers := [3]testCloser{}
-			c.NewTab(uri1, "a", &handlers[0], &handlers[0])
-			c.NewTab(uri2, "b", &handlers[1], &handlers[1])
-			c.NewTab(uri3, "c", &handlers[2], &handlers[2])
+			c.NewTab(uri1, 'x', "a", &handlers[0], &handlers[0])
+			c.NewTab(uri2, 'x', "b", &handlers[1], &handlers[1])
+			c.NewTab(uri3, 'x', "c", &handlers[2], &handlers[2])
 			updateWithNextFreeTab(c, c.Focus())
 			c.ShiftFocus()
 			updateWithNextFreeTab(c, c.Focus())
@@ -234,7 +234,7 @@ func TestComponentSetContent(t *testing.T) {
 			uri, err := workspaceapi.ParseURI("file:///Merry_Christmas")
 			require.NoError(t, err)
 
-			christmasTab := c.NewTab(uri, "Merry Christmas", NewTestHandler(), nil)
+			christmasTab := c.NewTab(uri, 'x', "Merry Christmas", NewTestHandler(), nil)
 
 			assertFreeTab(t, christmasTab, true)
 			require.NoError(t, win0.SetContent(christmasTab))
@@ -288,10 +288,10 @@ func TestComponentEditWindowTab(t *testing.T) {
 			uri3, err := workspaceapi.ParseURI("file:///GOOG")
 			require.NoError(t, err)
 
-			amzn := c.NewTab(uri1, "AMZN", NewTestHandler(), nil)
+			amzn := c.NewTab(uri1, 'x', "AMZN", NewTestHandler(), nil)
 			updateWithNextFreeTab(c, win0)
-			tsla := c.NewTab(uri2, "TSLA", NewTestHandler(), nil)
-			goog := c.NewTab(uri3, "GOOG", NewTestHandler(), nil)
+			tsla := c.NewTab(uri2, 'x', "TSLA", NewTestHandler(), nil)
+			goog := c.NewTab(uri3, 'x', "GOOG", NewTestHandler(), nil)
 			win, ok := tcase.split(c, goog)
 			require.True(t, ok)
 
@@ -447,8 +447,8 @@ func TestComponentHandlerClose(t *testing.T) {
 					uri2, err := workspaceapi.ParseURI("file:///Stash")
 					require.NoError(t, err)
 
-					c.NewTab(uri1, "Robinhood", NewTestHandler(), nil)
-					c.NewTab(uri2, "Stash", NewTestHandler(), nil)
+					c.NewTab(uri1, 'x', "Robinhood", NewTestHandler(), nil)
+					c.NewTab(uri2, 'x', "Stash", NewTestHandler(), nil)
 					win, ok := split(c, mock)
 					require.True(t, ok)
 
@@ -614,14 +614,14 @@ func TestComponentPrompt(t *testing.T) {
 
 		h := NewTestHandler()
 		h.Ch = '8'
-		tab := c.NewTab(uri, "music", h, nil)
+		tab := c.NewTab(uri, 'x', "music", h, nil)
 		require.NoError(t, c.Focus().SetContent(tab))
 
 		tests := []comptest.TestCase{
 			{
 				nil, `
 ┌──────────────────┐    
-│music             │    
+│x music           │    
 ├──────────────────┤    
 │888888888888888888│    
 │888888888888888888│    
@@ -636,7 +636,7 @@ func TestComponentPrompt(t *testing.T) {
 				c.Prompt("Virgen Maria?", []string{"Boh", "Meh"}, nil, handler.NopPromptHandler())
 			}, `
 ┌──────────────────┐    
-│music             │    
+│x music           │    
 ├──────────────────┤    
 │                  │    
 │                  │    
@@ -651,7 +651,7 @@ func TestComponentPrompt(t *testing.T) {
 				c.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
 			}, `
 ┌──────────────────┐    
-│music             │    
+│x music           │    
 ├──────────────────┤    
 │888888888888888888│    
 │888888888888888888│    
@@ -672,7 +672,7 @@ func TestComponentPrompt(t *testing.T) {
 				c.Prompt("Rosalia?", []string{"Yay", "Nay"}, nil, handler.NopPromptHandler())
 			}, `
 ┌──────────────────┐    
-│music             │    
+│x music           │    
 ├──────────────────┤    
 │                  │    
 │                  │    
@@ -687,7 +687,7 @@ func TestComponentPrompt(t *testing.T) {
 				c.Resize(10, 6)
 			}, `
 ┌────────┐              
-│music   │              
+│x music │              
 ├────────┤              
 │  Rosa  │              
 │  lia?  │              
@@ -702,7 +702,7 @@ func TestComponentPrompt(t *testing.T) {
 				c.Resize(24, 8)
 			}, `
 ┌──────────────────────┐
-│music                 │
+│x music               │
 ├──────────────────────┤
 │                      │
 │       Rosalia?       │
@@ -717,7 +717,7 @@ func TestComponentPrompt(t *testing.T) {
 				c.Resize(20, 12)
 			}, `
 ┌──────────────────┐    
-│music             │    
+│x music           │    
 ├──────────────────┤    
 │                  │    
 │                  │    
@@ -732,7 +732,7 @@ func TestComponentPrompt(t *testing.T) {
 				c.Handle(term.Event{Type: term.EventKey, Key: term.KeyEsc})
 			}, `
 ┌──────────────────┐    
-│music             │    
+│x music           │    
 ├──────────────────┤    
 │                  │    
 │                  │    
@@ -747,7 +747,7 @@ func TestComponentPrompt(t *testing.T) {
 				c.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
 			}, `
 ┌──────────────────┐    
-│music             │    
+│x music           │    
 ├──────────────────┤    
 │                  │    
 │                  │    
@@ -762,7 +762,7 @@ func TestComponentPrompt(t *testing.T) {
 				c.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
 			}, `
 ┌──────────────────┐    
-│music             │    
+│x music           │    
 ├──────────────────┤    
 │888888888888888888│    
 │888888888888888888│    
@@ -872,7 +872,7 @@ func TestHandleExitAfterContentSetIssue(t *testing.T) {
 	uri, err := workspaceapi.ParseURI("my:///thing")
 	require.NoError(t, err)
 
-	tab := c.NewTab(uri, "bla", NewTestHandler(), nil)
+	tab := c.NewTab(uri, 'x', "bla", NewTestHandler(), nil)
 
 	mockHandler := contentSwapper{c: c, tab: tab}
 	require.NoError(t, c.Focus().SetContent(&mockHandler))

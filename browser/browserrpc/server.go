@@ -375,10 +375,16 @@ func (s *Server) Floating(
 func (s *Server) Tab(ctx context.Context, req *TabRequest,
 ) (*TabResponse, error) {
 	name := req.GetResourceName()
+	iconStr := req.GetResourceIcon()
 	id := req.GetResourceId()
 	uri, err := workspaceapi.ParseURI(id)
 	if err != nil {
 		return nil, err
+	}
+
+	var icon rune
+	if len(iconStr) != 0 {
+		icon = []rune(iconStr)[0]
 	}
 
 	handler, err := s.getContentHandler(ctx, req.GetChannelId(),
@@ -390,7 +396,7 @@ func (s *Server) Tab(ctx context.Context, req *TabRequest,
 	s.browser.Lock()
 	defer s.browser.Unlock()
 
-	_, err = s.browser.Tab(uri, name, handler)
+	_, err = s.browser.Tab(uri, icon, name, handler)
 	return &TabResponse{}, err
 }
 

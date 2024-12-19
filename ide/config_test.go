@@ -87,6 +87,10 @@ editor:
         selection_attr:
             bg: green
             fg: "#f3f3f3"
+    icons:
+        default: x
+        .go: $
+        .py: 1 # ignored
 
 input_mode:
   - mouse
@@ -227,6 +231,7 @@ func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
 	assert.Equal(t, term.InputCurrent, cfg.inputMode())
 	assert.Equal(t, component.DefaultFrameUnionCharSet(), cfg.frameUnionCharset())
 	assert.True(t, cfg.frameUnion())
+	assert.Equal(t, text.DefaultConfig().Icons, cfg.icons())
 
 	actualNotifications := cfg.notificationsConfig()
 	expectedNotifications := browser.DefaultConfig().Notifications
@@ -331,6 +336,10 @@ func TestConfigSetting(t *testing.T) {
 	}
 	assert.Equal(t, expectedConfig, cfg.windowManagerConfig())
 	assert.True(t, cfg.frameUnion())
+
+	expectedIcons := text.IconSet{Default: 'x', Extensions: map[string]rune{".go": '$'}}
+	actualIcons := cfg.icons()
+	assert.Equal(t, expectedIcons, actualIcons)
 
 	expectedCommandAliases := map[string]text.CommandAlias{
 		"todo": text.CommandAlias{Name: "todo",

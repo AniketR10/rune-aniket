@@ -929,7 +929,9 @@ type mockTabManager struct {
 	setAttr term.Attributes
 }
 
-func (tm *mockTabManager) Tab(uri workspaceapi.URI, name string, h browserapi.Handler) (
+func (tm *mockTabManager) Tab(
+	uri workspaceapi.URI, icon rune, name string, h browserapi.Handler,
+) (
 	browserapi.Handler, error,
 ) {
 	panic("not in use")

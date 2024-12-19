@@ -1329,7 +1329,9 @@ func (r *testRemote) triggerBell() error {
 type nopTabManager struct {
 }
 
-func (nopTabManager) Tab(uri workspaceapi.URI, name string, h browserapi.Handler) (browserapi.Handler, error) {
+func (nopTabManager) Tab(
+	uri workspaceapi.URI, icon rune, name string, h browserapi.Handler,
+) (browserapi.Handler, error) {
 	panic("not implemented")
 }
 
