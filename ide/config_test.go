@@ -89,6 +89,7 @@ editor:
             fg: "#f3f3f3"
     icons:
         default: x
+        terminal: '&'
         .go: $
         .py: 1 # ignored
 
@@ -338,7 +339,11 @@ func TestConfigSetting(t *testing.T) {
 	assert.Equal(t, expectedConfig, cfg.windowManagerConfig())
 	assert.True(t, cfg.frameUnion())
 
-	expectedIcons := text.IconSet{Default: 'x', Extensions: map[string]rune{".go": '$'}}
+	expectedIcons := text.IconSet{
+		Default:    'x',
+		Terminal:   '&',
+		Extensions: map[string]rune{".go": '$'},
+	}
 	actualIcons := cfg.icons()
 	assert.Equal(t, expectedIcons, actualIcons)
 

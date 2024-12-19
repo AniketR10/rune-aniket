@@ -71,6 +71,7 @@ type Config struct {
 type IconSet struct {
 	Extensions map[string]rune
 	Default    rune
+	Terminal   rune
 }
 
 // CommandAlias is a command to command alias, along with completion configuration.
@@ -110,6 +111,7 @@ func DefaultConfig() Config {
 		Icons: IconSet{
 			Extensions: map[string]rune{},
 			Default:    'o',
+			Terminal:   '$',
 		},
 	}
 	return cfg

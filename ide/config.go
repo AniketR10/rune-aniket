@@ -655,16 +655,9 @@ func (c ideConfig) icons() (ret text.IconSet) {
 		return
 	}
 
-	def, ok := m["default"]
-	if ok {
-		defStr, ok := def.(string)
-		if !ok {
-			c.errors["editor.icons.default"] = errors.New("expected a map of strings")
-		} else if defStr != "" {
-			ret.Default = []rune(defStr)[0]
-		}
-		delete(m, "default")
-	}
+	ret.Default = c.getSpecialIcon(m, "default")
+	ret.Terminal = c.getSpecialIcon(m, "terminal")
+
 	for k, v := range m {
 		vstr, ok := v.(string)
 		if !ok {
@@ -675,6 +668,22 @@ func (c ideConfig) icons() (ret text.IconSet) {
 		}
 	}
 	return ret
+}
+
+func (c ideConfig) getSpecialIcon(m map[string]any, key string) (ret rune) {
+	iconIfc, ok := m[key]
+	if !ok {
+		return
+	}
+	iconStr, ok := iconIfc.(string)
+	if !ok {
+		c.errors[fmt.Sprintf("editor.icons.%s", key)] =
+			errors.New("expected a string")
+	} else if iconStr != "" {
+		ret = []rune(iconStr)[0]
+	}
+	delete(m, key)
+	return
 }
 
 func (c ideConfig) windowFrameCharset() (cs component.FrameCharSet) {
