@@ -1059,7 +1059,12 @@ func (c *Cursor) setSelection() (ok bool) {
 	case StandardSelection:
 		c.selection.cells, sels, ok = c.buffer().Select(from, to)
 	case LineSelection:
-		c.selection.cells, sels, ok = c.buffer().SelectLine(from, to)
+		if c.scroll.Wrap {
+			from, to := c.selectWholeWrapLines(from, to)
+			c.selection.cells, sels, ok = c.buffer().Select(from, to)
+		} else {
+			c.selection.cells, sels, ok = c.buffer().SelectLine(from, to)
+		}
 	case BlockSelection:
 		c.selection.cells, sels, ok = c.buffer().SelectBlock(from, to)
 	case NoSelection:
@@ -1260,7 +1265,21 @@ func (c *Cursor) DeleteSelection() (ok bool) {
 	case StandardSelection:
 		start, str = c.buffer().Delete(from, to)
 	case LineSelection:
-		start, str = c.buffer().DeleteLine(from, to)
+		if c.scroll.Wrap {
+			from, to := c.selectWholeWrapLines(from, to)
+			atScroll := c.cursorAtScroll()
+
+			// allow deleting empty lines (those only having a new line)
+			if atScroll.X == 0 &&
+				(atScroll.Y >= c.rows() || c.view().Columns(atScroll.Y) == 0) {
+				start, str = c.buffer().DeleteLine(from, to)
+			} else {
+				start, str = c.buffer().Delete(from, to)
+			}
+
+		} else {
+			start, str = c.buffer().DeleteLine(from, to)
+		}
 	case BlockSelection:
 		start, str = c.buffer().DeleteBlock(from, to)
 	}
@@ -1283,6 +1302,16 @@ func (c *Cursor) CopySelection(registerID string, clip clipboard.Register) (ok b
 
 	selection := c.Selection()
 	mode := c.selection.mode
+
+	// allow copying empty lines (those that only have a new line)
+	if c.selection.mode == LineSelection && selection == "" {
+		atScroll := c.cursorAtScroll()
+		if atScroll.X == 0 &&
+			(atScroll.Y >= c.rows() || c.view().Columns(atScroll.Y) == 0) {
+			selection = "\n"
+		}
+	}
+
 	c.Unselect()
 	c.moveToScroll(c.selection.scrollFrom)
 
@@ -1716,4 +1745,27 @@ func (c *Cursor) setCursorAfterUpdate(atScroll term.Coordinates) {
 		res.X++
 	}
 	c.setCursor(res, c.shouldSeek)
+}
+
+// selectWholeWrapLines transforms (scroll-space) input from-to selections to a new
+// (scroll-space) selection that covers the entire wrapped lines inbetween.
+func (c *Cursor) selectWholeWrapLines(inFrom, inTo term.Coordinates) (
+	outFrom, outTo term.Coordinates,
+) {
+	fromWindow := c.scroll.ScrollToWindowCoordinates(inFrom)
+	toWindow := c.scroll.ScrollToWindowCoordinates(inTo)
+
+	fromWindow.X = 0
+	toWindow.X = c.scroll.Width()
+
+	outFrom = c.scroll.WindowToScrollCoordinates(fromWindow)
+	outTo = c.scroll.WindowToScrollCoordinates(toWindow)
+
+	// include the newline if at end of logical line
+	if outTo.Y >= c.rows() || outTo.X == c.scroll.Buffer().Columns(outTo.Y) {
+		outTo.X = 0
+		outTo.Y += 1
+	}
+
+	return
 }
