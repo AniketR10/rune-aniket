@@ -89,6 +89,33 @@ var (
 	defaultDirtyAttr      = term.Attributes{Fg: tcell.ColorYellow}
 )
 
+type truncatedScroll struct {
+	component.Scroll
+}
+
+func (s *truncatedScroll) Resize(width, height int) {
+	s.Scroll.Resize(width, height)
+	text := s.Buffer().String()
+	truncatedText := s.truncateLeft(text, s.Width(), '<')
+	if truncatedText != text {
+		s.Buffer().Reset()
+		s.Init(s.Buffer())
+		s.Buffer().WriteString(truncatedText)
+	}
+}
+
+func (s *truncatedScroll) truncateLeft(text string, width int, overflowSymbol rune) string {
+	if len(text) <= width || width < 2 {
+		return text
+	}
+	idx := len(text) - width
+	newText := text[idx:]
+	if overflowSymbol != 0 {
+		newText = string(overflowSymbol) + newText[1:]
+	}
+	return newText
+}
+
 type fileInfo struct {
 	dirty bool
 }
@@ -108,9 +135,9 @@ type fileBarEditorHandler struct {
 
 	bar struct {
 		sync.Mutex
-		comp     component.Reference
-		filename component.Scroll
-		coords   component.Scroll
+		comp       component.Reference
+		filename   truncatedScroll
+		coords     component.Scroll
 	}
 }
 
@@ -279,7 +306,6 @@ func (h *fileBarEditorHandler) refreshBarContent(ev textapi.Event) {
 		return
 	}
 
-	name := h.prettyFileName(res.URI())
 	totalRows := res.Buffer().Rows()
 	totalCols := 0
 	cursor := res.Cursor()
@@ -288,7 +314,8 @@ func (h *fileBarEditorHandler) refreshBarContent(ev textapi.Event) {
 	}
 	coords := fmt.Sprintf("%d/%d %d/%d", cursor.X+1, totalCols, cursor.Y+1, totalRows)
 
-	h.bar.filename.Buffer().WriteString(name)
+	filename := h.prettyFileName(res.URI())
+	h.bar.filename.Buffer().WriteString(filename)
 	h.bar.coords.Buffer().WriteString(coords)
 
 	if h.showDirty && res.Metadata.(*fileInfo).dirty {
