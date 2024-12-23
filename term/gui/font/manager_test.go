@@ -37,3 +37,32 @@ func TestLoadDefaultFont(t *testing.T) {
 		assert.NotNil(t, m.RegularFontFace())
 	})
 }
+
+func TestPixelAndCellCalculation(t *testing.T) {
+	t.Run("doesn't panic", func(t *testing.T) {
+		m, err := NewManager(100, 2)
+		require.NoError(t, err)
+		assert.NotPanics(t, func() {
+			m.PixelX(-10)
+			m.PixelY(-10)
+			m.CellX(-10)
+			m.CellY(-10)
+		})
+	})
+
+	t.Run("PixelX/Y returns the pixel corresponding to the given cell", func(t *testing.T) {
+		m, err := NewManager(2, 1)
+		require.NoError(t, err)
+		assert.NotNil(t, m.RegularFontFace())
+		assert.Equal(t, float64(190), m.PixelX(10))
+		assert.Equal(t, float64(420), m.PixelY(10))
+	})
+
+	t.Run("CellX/Y returns the cell corresponding to the given pixel", func(t *testing.T) {
+		m, err := NewManager(2, 1)
+		require.NoError(t, err)
+		assert.NotNil(t, m.RegularFontFace())
+		assert.Equal(t, 10, m.CellX(190))
+		assert.Equal(t, 10, m.CellY(420))
+	})
+}

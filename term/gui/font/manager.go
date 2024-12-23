@@ -283,14 +283,28 @@ func (m *Manager) RegularFontFace() font.Face {
 	return m.regularFace
 }
 
-// PixelY returns the y position of the from pixel of the given cell row.
+// PixelY returns the y offset of a pixel corresponding to the y cell offset.
 func (m *Manager) PixelY(y int) float64 {
+	m.ensureFontLoaded()
 	return float64(y)*m.charSize.Y - float64(y)*float64(m.cellOverlapY)
 }
 
-// PixelX returns the x position of the from pixel of the given cell column.
+// PixelX returns the x offset of a pixel corresponding to the x cell offset.
 func (m *Manager) PixelX(x int) float64 {
+	m.ensureFontLoaded()
 	return m.charSize.X*float64(x) - float64(x)*float64(m.cellOverlapX)
+}
+
+// CellY returns the y offset of a cell corresponding to the y pixel offset.
+func (m *Manager) CellY(y float64) int {
+	m.ensureFontLoaded()
+	return int(y / math.Max(1, m.charSize.Y-float64(m.cellOverlapY)))
+}
+
+// CellX returns the x offset of a cell corresponding to the x pixel offset.
+func (m *Manager) CellX(x float64) int {
+	m.ensureFontLoaded()
+	return int(x / math.Max(1, m.charSize.X-float64(m.cellOverlapX)))
 }
 
 // BoldFontFace returns the configured bold font.Face or the fallback

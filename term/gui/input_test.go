@@ -606,7 +606,7 @@ func TestInputFireRepeatKey(t *testing.T) {
 
 func newTestInput(t *testing.T) (*mockInputManager, *input) {
 	mock := &mockInputManager{pressedKeys: map[ebiten.Key]struct{}{}}
-	f, err := font.NewManager(0, 0)
+	f, err := font.NewManager(1, 1)
 	require.NoError(t, err)
 	f.SetFontByFamilyName("")
 	f.SetDeviceScale(1)

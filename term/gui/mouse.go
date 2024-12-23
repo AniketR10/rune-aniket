@@ -24,8 +24,6 @@
 package gui
 
 import (
-	"math"
-
 	"github.com/hajimehoshi/ebiten/v2"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/term/gui/font"
@@ -124,8 +122,8 @@ func (m *mouse) processMouse() (ev term.Event, ok bool) {
 }
 
 func (m *mouse) calculateCoordinates() (ret term.Coordinates) {
-	ret.X = int(math.Floor(float64(m.state.x) / m.fontManager.CharSize().X))
-	ret.Y = int(math.Floor(float64(m.state.y) / m.fontManager.CharSize().Y))
+	ret.X = int(m.fontManager.CellX(float64(m.state.x)))
+	ret.Y = int(m.fontManager.CellY(float64(m.state.y)))
 	return
 }
 
