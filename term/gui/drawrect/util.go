@@ -39,6 +39,8 @@ var defaultDrawTrianglesOptions = ebiten.DrawTrianglesOptions{
 	ColorScaleMode: ebiten.ColorScaleModePremultipliedAlpha,
 	// rects always occupy the whole cell, so this blend allows to
 	// fill background but disables blending of color and alpha.
+	// This effectivelty allows us to not need to draw every cell's
+	// background, since most are the default background.
 	Blend: ebiten.Blend{
 		BlendFactorSourceRGB:        ebiten.BlendFactorOne,
 		BlendFactorSourceAlpha:      ebiten.BlendFactorOne,

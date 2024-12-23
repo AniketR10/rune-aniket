@@ -52,14 +52,14 @@ var (
 			BlendOperationAlpha:         ebiten.BlendOperationAdd,
 		},
 	}
-	defaultBackgroundOptions = ebiten.DrawImageOptions{
+	frameToScreenOptions = ebiten.DrawImageOptions{
 		Blend: ebiten.Blend{
 			BlendFactorSourceRGB:        ebiten.BlendFactorOne,
 			BlendFactorSourceAlpha:      ebiten.BlendFactorOne,
-			BlendFactorDestinationRGB:   ebiten.BlendFactorZero,
-			BlendFactorDestinationAlpha: ebiten.BlendFactorZero,
-			BlendOperationRGB:           ebiten.BlendOperationAdd,
-			BlendOperationAlpha:         ebiten.BlendOperationAdd,
+			BlendFactorDestinationRGB:   ebiten.BlendFactorOneMinusSourceAlpha,
+			BlendFactorDestinationAlpha: ebiten.BlendFactorOneMinusSourceAlpha,
+			BlendOperationRGB:           ebiten.BlendOperationMax,
+			BlendOperationAlpha:         ebiten.BlendOperationMax,
 		},
 	}
 )
@@ -83,7 +83,7 @@ type renderer struct {
 	fgOpacity        float64
 	bgColor          color.RGBA
 	fgColor          color.RGBA
-	bgColors         *ebiten.Image
+	frame            *ebiten.Image
 	enableLigatures  bool
 	cursorBackground color.RGBA
 	cursorForeground color.RGBA
@@ -137,13 +137,11 @@ func newRenderer(
 	}
 
 	bgColor := tcellToColor(defaultAttr.Bg, bgBlack, bgOpacity)
-	bgColors := ebiten.NewImage(imageWidth, imageHeight)
-	bgColors.Fill(bgColor)
 	return &renderer{
 		fontManager:      fontManager,
 		drawer:           drawtext.New(),
 		bgColor:          bgColor,
-		bgColors:         bgColors,
+		frame:            ebiten.NewImage(imageWidth, imageHeight),
 		fgColor:          tcellToColor(defaultAttr.Fg, fgWhite, fgOpacity),
 		font:             newFontFace(fontManager),
 		bgOpacity:        bgOpacity,
@@ -160,16 +158,15 @@ func (r *renderer) Draw(
 	cursorStyle term.CursorStyle,
 	offsetX, offsetY float64,
 ) {
-	screen.Clear()
 	// fill default background so we can skip drawing individual
 	// cells with default background.
-	opts := defaultBackgroundOptions
-	screen.DrawImage(r.bgColors, &opts)
-
-	r.renderContent(screen, cells)
+	r.frame.Fill(r.bgColor)
+	r.renderContent(r.frame, cells)
 	if drawCursor {
-		r.renderCursor(screen, cells, cursorPos, cursorStyle)
+		r.renderCursor(r.frame, cells, cursorPos, cursorStyle)
 	}
+	screen.Fill(r.bgColor)
+	screen.DrawImage(r.frame, &frameToScreenOptions)
 }
 
 func (r *renderer) renderContent(screen *ebiten.Image, cells [][]term.Cell) {
