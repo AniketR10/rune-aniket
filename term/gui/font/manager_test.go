@@ -53,6 +53,7 @@ func TestPixelAndCellCalculation(t *testing.T) {
 	t.Run("PixelX/Y returns the pixel corresponding to the given cell", func(t *testing.T) {
 		m, err := NewManager(2, 1)
 		require.NoError(t, err)
+		setTestCharSize(m, 21, 43)
 		assert.NotNil(t, m.RegularFontFace())
 		assert.Equal(t, float64(190), m.PixelX(10))
 		assert.Equal(t, float64(420), m.PixelY(10))
@@ -61,8 +62,15 @@ func TestPixelAndCellCalculation(t *testing.T) {
 	t.Run("CellX/Y returns the cell corresponding to the given pixel", func(t *testing.T) {
 		m, err := NewManager(2, 1)
 		require.NoError(t, err)
+		setTestCharSize(m, 21, 43)
 		assert.NotNil(t, m.RegularFontFace())
 		assert.Equal(t, 10, m.CellX(190))
 		assert.Equal(t, 10, m.CellY(420))
 	})
+}
+
+func setTestCharSize(m *Manager, x, y float64) {
+	m.ensureFontLoaded()
+	m.charSize.X = x
+	m.charSize.Y = y
 }
