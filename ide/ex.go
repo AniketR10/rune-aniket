@@ -227,12 +227,15 @@ func (e *ex) completeCommand(
 	switch cmd {
 	case cmdSwitchToTab:
 		if len(args) <= 1 {
-			n := len(e.comp.Browser().Tabs())
-			var tabs []string
-			for i := 0; i < n; i++ {
-				tabs = append(tabs, strconv.Itoa(i+1))
+			var tabNames []string
+			for i, tab := range e.comp.Browser().Tabs() {
+				pretty := strconv.Itoa(i + 1)
+				if name, _, ok := e.comp.Browser().TabName(tab.URI()); ok {
+					pretty += " " + name
+				}
+				tabNames = append(tabNames, pretty)
 			}
-			return iterator.FromSlice(tabs), "", nil
+			return iterator.FromSlice(tabNames), "", nil
 		}
 	case cmdSetDefaultColors:
 		var colorNames []string
@@ -404,7 +407,7 @@ func (e *ex) nextTab(args ...string) error {
 }
 
 func (e *ex) switchToTab(args ...string) error {
-	if len(args) != 1 {
+	if len(args) < 1 {
 		return errInvalidTab
 	}
 	idxStr := args[0]

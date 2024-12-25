@@ -2213,8 +2213,8 @@ func TestSwitchToTab(t *testing.T) {
 │AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
 ┌────────────────────────────┐
 │switchToTab ▐               │
-│1                           │
-│2                           │
+│1 hello.go                  │
+│2 world.go                  │
 └────────────────────────────┘
 │AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
 │AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
@@ -2235,37 +2235,85 @@ func TestSwitchToTab(t *testing.T) {
 │BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
 └────────────────────────────┘`},
+		{"2 world.go>",
+			`┌────────────────────────────┐
+│o hello.go  o world.go      │
+├────────────────────────────┤
+│MMMMMMMMMMMMMMMMMMMMMMMMMMMM│
+│MMMMMMMMMMMMMMMMMMMMMMMMMMMM│
+│MMMMMMMMMMMMMMMMMMMMMMMMMMMM│
+│MMMMMMMMMMMMMMMMMMMMMMMMMMMM│
+│MMMMMMMMMMMMMMMMMMMMMMMMMMMM│
+│MMMMMMMMMMMMMMMMMMMMMMMMMMMM│
+│MMMMMMMMMMMMMMMMMMMMMMMMMMMM│
+│MMMMMMMMMMMMMMMMMMMMMMMMMMMM│
+│MMMMMMMMMMMMMMMMMMMMMMMMMMMM│
+│MMMMMMMMMMMMMMMMMMMMMMMMMMMM│
+│MMMMMMMMMMMMMMMMMMMMMMMMMMMM│
+└────────────────────────────┘`},
+		{"1 hell>",
+			`┌────────────────────────────┐
+│o hello.go  o world.go      │
+├────────────────────────────┤
+│TTTTTTTTTTTTTTTTTTTTTTTTTTTT│
+│TTTTTTTTTTTTTTTTTTTTTTTTTTTT│
+│TTTTTTTTTTTTTTTTTTTTTTTTTTTT│
+│TTTTTTTTTTTTTTTTTTTTTTTTTTTT│
+│TTTTTTTTTTTTTTTTTTTTTTTTTTTT│
+│TTTTTTTTTTTTTTTTTTTTTTTTTTTT│
+│TTTTTTTTTTTTTTTTTTTTTTTTTTTT│
+│TTTTTTTTTTTTTTTTTTTTTTTTTTTT│
+│TTTTTTTTTTTTTTTTTTTTTTTTTTTT│
+│TTTTTTTTTTTTTTTTTTTTTTTTTTTT│
+│TTTTTTTTTTTTTTTTTTTTTTTTTTTT│
+└────────────────────────────┘`},
+		{"2 notexist.go>",
+			`┌────────────────────────────┐
+│o hello.go  o world.go      │
+├────────────────────────────┤
+│bbbbbbbbbbbbbbbbbbbbbbbbbbbb│
+│bbbbbbbbbbbbbbbbbbbbbbbbbbbb│
+│bbbbbbbbbbbbbbbbbbbbbbbbbbbb│
+│bbbbbbbbbbbbbbbbbbbbbbbbbbbb│
+│bbbbbbbbbbbbbbbbbbbbbbbbbbbb│
+│bbbbbbbbbbbbbbbbbbbbbbbbbbbb│
+│bbbbbbbbbbbbbbbbbbbbbbbbbbbb│
+│bbbbbbbbbbbbbbbbbbbbbbbbbbbb│
+│bbbbbbbbbbbbbbbbbbbbbbbbbbbb│
+│bbbbbbbbbbbbbbbbbbbbbbbbbbbb│
+│bbbbbbbbbbbbbbbbbbbbbbbbbbbb│
+└────────────────────────────┘`},
 		{":switchToTab 3>",
 			`┌────────────────────────────┐
 │o hello.go  o world.go      │
 ├────────────────────────────┤
-│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│bbbbbbbbbbbbbbbbbbbbbbbbbbbb│
+│bbbbbbbbbbbbbbbbbbbbbbbbbbbb│
+│bbbbbbbbbbbbbbbbbbbbbbbbbbbb│
+│bbbbbbbbbbbbbbbbbbbbbbbbbbbb│
+│bbbbbbbbbbbbbbbbbbbbbbbbbbbb│
+│bbbbbbbbbbbbbbbbbbbbbbbbbbbb│
+│bbbbbbbbbbbbbbbbbbbbbbbbbbbb│
+│bbbbbbbbbbbbbbbbbbbbbbbbbbbb│
+│bbbbbbbbbbbbbbbbbbbbbbbbbbbb│
+│bbbbbbbbbbbbbbbbbbbbbbbbbbbb│
+│bbbbbbbbbbbbbbbbbbbbbbbbbbbb│
 └────────────────────────────┘`},
 		{":switchToTab 0>",
 			`┌────────────────────────────┐
 │The first tab is 1          │
 └────────────────────────────┘
-│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│bbbbbbbbbbbbbbbbbbbbbbbbbbbb│
+│bbbbbbbbbbbbbbbbbbbbbbbbbbbb│
+│bbbbbbbbbbbbbbbbbbbbbbbbbbbb│
+│bbbbbbbbbbbbbbbbbbbbbbbbbbbb│
+│bbbbbbbbbbbbbbbbbbbbbbbbbbbb│
+│bbbbbbbbbbbbbbbbbbbbbbbbbbbb│
+│bbbbbbbbbbbbbbbbbbbbbbbbbbbb│
+│bbbbbbbbbbbbbbbbbbbbbbbbbbbb│
+│bbbbbbbbbbbbbbbbbbbbbbbbbbbb│
+│bbbbbbbbbbbbbbbbbbbbbbbbbbbb│
+│bbbbbbbbbbbbbbbbbbbbbbbbbbbb│
 └────────────────────────────┘`},
 	}
 
