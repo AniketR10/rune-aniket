@@ -786,7 +786,10 @@ func (vi *viHandlerImpl) handleReplace(ev term.Event) (quit, handled bool) {
 		// do not delete column == len(row); it contains a newline
 		// and that would conflate the current row with the next
 		if vi.cursor.Column() < vi.less.Buffer().Columns(vi.cursor.Line()) {
-			vi.cursor.Replace(ev.Ch)
+			next := vi.cursor.Replace(ev.Ch)
+			if vi.mode() == replaceMode { // replaceOneMode therefore stays in same char
+				vi.cursor.MoveToScroll(next)
+			}
 		} else {
 			vi.cursor.Insert(ev.Ch)
 		}

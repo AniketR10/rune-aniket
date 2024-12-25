@@ -2583,36 +2583,50 @@ func TestCursorReplace(t *testing.T) {
 	t.Run("non wrap", func(t *testing.T) {
 		const initialContent = "a\nb\nc"
 		c := setupCursorContent(t, 5, 5, initialContent, false)
+		assert.Equal(t, term.Coordinates{X: 0, Y: 0}, c.cursor)
 
 		c.Replace('X')
 		assert.Equal(t, "X\nb\nc", c.buffer().String())
+		assert.Equal(t, term.Coordinates{X: 0, Y: 0}, c.cursor)
 
 		c.MoveDown()
-		c.MoveLeft()
+
+		assert.Equal(t, term.Coordinates{X: 0, Y: 1}, c.cursor)
 		c.Replace('Y')
 		assert.Equal(t, "X\nY\nc", c.buffer().String())
+		assert.Equal(t, term.Coordinates{X: 0, Y: 1}, c.cursor)
 
 		c.MoveDown()
-		c.MoveLeft()
+		assert.Equal(t, term.Coordinates{X: 0, Y: 2}, c.cursor)
+
 		c.Replace('Z')
 		assert.Equal(t, "X\nY\nZ", c.buffer().String())
+		assert.Equal(t, term.Coordinates{X: 0, Y: 2}, c.cursor)
 
 		c.Replace('A')
-		assert.Equal(t, "X\nY\nZA", c.buffer().String())
+		assert.Equal(t, "X\nY\nA", c.buffer().String())
+		assert.Equal(t, term.Coordinates{X: 0, Y: 2}, c.cursor)
 
 		c.Replace('B')
-		assert.Equal(t, "X\nY\nZAB", c.buffer().String())
+		assert.Equal(t, "X\nY\nB", c.buffer().String())
+		assert.Equal(t, term.Coordinates{X: 0, Y: 2}, c.cursor)
 	})
 
 	t.Run("wrap", func(t *testing.T) {
 		const initialContent = "aaaaaaaaaaa\nb\nc"
-		c := setupCursorContent(t, 5, 5, initialContent, false)
+		c := setupCursorContent(t, 5, 5, initialContent, true)
 
 		c.MoveEndLine()
 		c.MoveLeft()
+		assert.Equal(t, term.Coordinates{X: 4, Y: 1}, c.cursor)
+
 		c.Replace('X')
+		assert.Equal(t, term.Coordinates{X: 4, Y: 1}, c.cursor)
+		assert.Equal(t, "aaaaaaaaaXa\nb\nc", c.buffer().String())
+
 		c.Replace('Y')
-		assert.Equal(t, "aaaaaaaaaXY\nb\nc", c.buffer().String())
+		assert.Equal(t, term.Coordinates{X: 4, Y: 1}, c.cursor)
+		assert.Equal(t, "aaaaaaaaaYa\nb\nc", c.buffer().String())
 	})
 }
 

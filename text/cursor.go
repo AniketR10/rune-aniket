@@ -968,24 +968,26 @@ func (c *Cursor) Paste(str string, mode SelectMode, after bool) {
 	}
 }
 
-// Replace is equivalent to ReplaceContext with context.Background.
-func (c *Cursor) Replace(r rune) {
-	c.ReplaceContext(context.Background(), r)
+// Replace is equivalent to ReplaceContext with context.Background. It returns the
+// position next to the replaced character for the caller to decide whether to move.
+func (c *Cursor) Replace(r rune) (next term.Coordinates) {
+	return c.ReplaceContext(context.Background(), r)
 }
 
-// ReplaceContext replaces the cell under the cursor with r.
-func (c *Cursor) ReplaceContext(ctx context.Context, r rune) {
+// ReplaceContext replaces the cell under the cursor with r. It returns the position
+// next to the replaced character for the caller to decide whether to move.
+func (c *Cursor) ReplaceContext(ctx context.Context, r rune) (next term.Coordinates) {
 	mode := c.selection.mode
 	c.selection.mode = NoSelection
 	c.setSelection()
 
 	from := c.cursorAtScroll()
 	to := term.Coordinates{X: from.X + 1, Y: from.Y}
-	_, next, _ := c.buffer().Edit(ctx, from, to, string(r))
+	_, next, _ = c.buffer().Edit(ctx, from, to, string(r))
 
 	c.selection.mode = mode
 	c.setSelection()
-	c.setCursorAfterUpdate(next)
+	return
 }
 
 // Delete is equivalent to DeleteContext with context.Background.

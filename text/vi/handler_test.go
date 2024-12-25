@@ -652,6 +652,28 @@ curtab->tp_diff_inva
                     
                     
               NORMAL`},
+		{"rpl",
+			`{                   
+curtab->tp_diff_inva
+  diff_redraw(TRUE);
+p▐ff_buf_add(win->w_
+                    
+                    
+                    
+                    
+                    
+              NORMAL`},
+		{"Rabcdef",
+			`{                   
+curtab->tp_diff_inva
+  diff_redraw(TRUE);
+pabcdef▐_add(win->w_
+                    
+                    
+                    
+                    
+                    
+             REPLACE`},
 	}
 
 	vi := setupViIntegration(t, snippet, 2)
