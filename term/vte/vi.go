@@ -788,6 +788,16 @@ func (v *viHandler) drawPromptLine(w term.Writer) {
 	}
 }
 
+func (v *viHandler) setDefaultAttributes(attr term.Attributes) {
+	v.sync.mu.Lock()
+	defer v.sync.mu.Unlock()
+	_ = v.sync.vi.SetDefaultAttributes(attr)
+
+	v.copy.mu.Lock()
+	defer v.copy.mu.Unlock()
+	_ = v.copy.vi.SetDefaultAttributes(attr)
+}
+
 // used to know before calling v.sync.vi's Handle whether change is going
 type copyEditor struct {
 	v *viHandler

@@ -168,6 +168,15 @@ func (e *Handler) Component() *Component {
 	return e.comp
 }
 
+// SetDefaultAttributes sets the background and foreground attributes
+// of the underlying buffer.
+func (e *Handler) SetDefaultAttributes(attr term.Attributes) {
+	if e.viMode {
+		e.vi.setDefaultAttributes(attr)
+	}
+	e.comp.SetDefaultAttributes(attr)
+}
+
 // Resize satisfies tui.Component.
 func (e *Handler) Resize(width, height int) {
 	// avoid divisions by 0 in terminal impl

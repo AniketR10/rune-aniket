@@ -1498,7 +1498,7 @@ type vteAdapter struct {
 }
 
 func (v vteAdapter) SetDefaultAttributes(attr term.Attributes) {
-	v.Component().SetDefaultAttributes(attr)
+	v.Handler.SetDefaultAttributes(attr)
 }
 
 func (v vteAdapter) IsComplete() bool {
