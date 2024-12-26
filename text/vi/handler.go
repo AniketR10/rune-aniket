@@ -798,31 +798,17 @@ func (vi *viHandlerImpl) handleReplace(ev term.Event) (quit, handled bool) {
 }
 
 func (vi *viHandlerImpl) handleMetaNormal(ev term.Event) (quit, handled, done bool) {
-	before := vi.cursor.ScrollCoordinates(vi.cursor.Coordinates())
+	before := vi.cursor.Coordinates()
 	vi.cursor.Select()
 
 	prevMode := vi.moveMode
 	quit, handled = vi.handleNormal(ev)
 	isMoveSwitch := prevMode == moveNone && vi.moveMode != moveNone
-	after := vi.cursor.ScrollCoordinates(vi.cursor.Coordinates())
-
-	// NOTE: When wrapping we are different from vim because we move the cursor
-	// physical lines and not logical lines. E.g. `d2j` would result in `4444\n` in
-	// the non-wrapped editor below and `2\n3333\n4444\n` in the wrap one:
-	//
-	//   1111      111
-	//   2222      1
-	//   3333      222
-	//   4444      2
-	//             333
-	//             3
-	//             444
-	//             4
-	isCounting := vi.count != 1
+	after := vi.cursor.Coordinates()
 
 	if before == after {
 		vi.cursor.Unselect()
-		if !isMoveSwitch && !isCounting {
+		if !isMoveSwitch {
 			handled = false
 			vi.setNormalMode()
 		}
@@ -831,10 +817,11 @@ func (vi *viHandlerImpl) handleMetaNormal(ev term.Event) (quit, handled, done bo
 
 	done = true
 
+	// handle <op>wWeEbB idiosyncrasies
+	after = vi.cursor.Coordinates()
 	switch ev.Mod {
 	case 0:
 		switch ev.Ch {
-		// handle <op>wWeEbB idiosyncrasies
 		case 'e', 'E':
 		case 'w', 'W':
 			vi.cursor.MoveLeft()
@@ -845,10 +832,6 @@ func (vi *viHandlerImpl) handleMetaNormal(ev term.Event) (quit, handled, done bo
 			if before.Y > after.Y {
 				vi.cursor.MoveLeftStartWord()
 			}
-		case 'j', 'k':
-			vi.cursor.SelectLine()
-		case 'G':
-			vi.cursor.MoveEndLine()
 		default:
 			if before.Y != after.Y {
 				vi.cursor.SelectLine()
@@ -889,7 +872,6 @@ func (vi *viHandlerImpl) handleDelete(ev term.Event) (quit, handled bool) {
 					}
 				}
 			}
-
 			vi.cursor.DeleteSelection()
 		}
 		vi.setNormalMode()
@@ -913,6 +895,7 @@ func (vi *viHandlerImpl) handleDelete(ev term.Event) (quit, handled bool) {
 	if !done {
 		return
 	}
+
 	vi.cursor.DeleteSelection()
 	if vi.deleteInsert {
 		vi.setInsertMode()

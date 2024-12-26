@@ -707,611 +707,37 @@ func TestViCount(t *testing.T) {
 	}
 }
 
-func TestVid(t *testing.T) {
-	suite := []struct {
-		name              string
-		moveCursorFn      func(vi *viHandlerImpl, wrap bool)
-		content           string
-		events            string
-		expectContent     string
-		expectContentWrap string
-		expectCoords      term.Coordinates
-		expectCoordsWrap  term.Coordinates
-	}{
-		{
-			name:              "d3j from first line",
-			content:           "00000\n111111111\n22222\n33333\n44444\n55555\n",
-			events:            "d3j",
-			expectContent:     "44444\n55555\n",
-			expectContentWrap: "1\n22222\n33333\n44444\n55555\n",
-			expectCoords:      term.Coordinates{Y: 0},
-			expectCoordsWrap:  term.Coordinates{Y: 0},
-		},
-		{
-			name: "d3j from middle line",
-			moveCursorFn: func(vi *viHandlerImpl, wrap bool) {
-				vi.cursor.MoveDown()
-				vi.cursor.MoveDown()
-				vi.cursor.MoveDown()
-			},
-			content:           "00000\n111111111\n22222\n33333\n44444\n55555\n",
-			events:            "d3j",
-			expectContent:     "00000\n111111111\n22222\n",
-			expectContentWrap: "00000\n1111\n33333\n44444\n55555\n",
-			expectCoords:      term.Coordinates{Y: 3},
-			expectCoordsWrap:  term.Coordinates{X: 3, Y: 2},
-		},
-		{
-			name: "d3j from last line",
-			moveCursorFn: func(vi *viHandlerImpl, wrap bool) {
-				vi.cursor.MoveLastLine()
-			},
-			content:           "00000\n111111111\n22222\n33333\n44444\n55555\n",
-			events:            "d3j",
-			expectContent:     "00000\n111111111\n22222\n33333\n44444\n55555\n",
-			expectContentWrap: "00000\n111111111\n22222\n33333\n44444\n55555\n",
-			expectCoords:      term.Coordinates{Y: 6},
-			expectCoordsWrap:  term.Coordinates{Y: 7},
-		},
-		{
-			name:              "d99j going beyond",
-			content:           "00000\n111111111\n22222\n33333\n44444\n55555\n",
-			events:            "d99j",
-			expectContent:     "",
-			expectContentWrap: "",
-			expectCoords:      term.Coordinates{Y: 0},
-			expectCoordsWrap:  term.Coordinates{Y: 0},
-		},
-		{
-			name:              "d3k from first line",
-			content:           "00000\n111111111\n22222\n33333\n44444\n55555\n",
-			events:            "d3k",
-			expectContent:     "00000\n111111111\n22222\n33333\n44444\n55555\n",
-			expectContentWrap: "00000\n111111111\n22222\n33333\n44444\n55555\n",
-			expectCoords:      term.Coordinates{Y: 0},
-			expectCoordsWrap:  term.Coordinates{Y: 0},
-		},
-		{
-			name: "d3k from middle line",
-			moveCursorFn: func(vi *viHandlerImpl, wrap bool) {
-				vi.cursor.MoveDown()
-				vi.cursor.MoveDown()
-				vi.cursor.MoveDown()
-				vi.cursor.MoveDown()
-			},
-			content:           "00000\n111111111\n22222\n33333\n44444\n55555\n",
-			events:            "d3k",
-			expectContent:     "00000\n55555\n",
-			expectContentWrap: "0000\n22222\n33333\n44444\n55555\n",
-			expectCoords:      term.Coordinates{Y: 1},
-			expectCoordsWrap:  term.Coordinates{X: 3, Y: 0},
-		},
-		{
-			name: "d3k from last line",
-			moveCursorFn: func(vi *viHandlerImpl, wrap bool) {
-				vi.cursor.MoveLastLine()
-			},
-			content:           "00000\n111111111\n22222\n33333\n44444\n55555\n",
-			events:            "d3k",
-			expectContent:     "00000\n111111111\n22222\n",
-			expectContentWrap: "00000\n111111111\n22222\n33333\n4444",
-			expectCoords:      term.Coordinates{X: 0, Y: 3},
-			expectCoordsWrap:  term.Coordinates{X: 3, Y: 3},
-		},
-		{
-			name: "d99k going beyond",
-			moveCursorFn: func(vi *viHandlerImpl, wrap bool) {
-				vi.cursor.MoveDown()
-			},
-			events:            "d99k",
-			content:           "00000\n111111111\n22222\n33333\n44444\n55555\n",
-			expectContent:     "22222\n33333\n44444\n55555\n",
-			expectContentWrap: "\n111111111\n22222\n33333\n44444\n55555\n",
-			expectCoords:      term.Coordinates{Y: 0},
-			expectCoordsWrap:  term.Coordinates{Y: 0},
-		},
-		{
-			name:              "d2l from starting column",
-			content:           "012345\n67890\n",
-			events:            "d2l",
-			expectContent:     "345\n67890\n",
-			expectContentWrap: "345\n67890\n",
-			expectCoords:      term.Coordinates{Y: 0},
-			expectCoordsWrap:  term.Coordinates{Y: 0},
-		},
-		{
-			name:              "d99l going beyond from starting column",
-			content:           "012345\n67890\n",
-			events:            "d99l",
-			expectContent:     "\n67890\n",
-			expectContentWrap: "\n67890\n",
-			expectCoords:      term.Coordinates{Y: 0},
-			expectCoordsWrap:  term.Coordinates{Y: 0},
-		},
-		{
-			name: "d2l from middle column",
-			moveCursorFn: func(vi *viHandlerImpl, wrap bool) {
-				vi.cursor.MoveRight()
-				vi.cursor.MoveRight()
-			},
-			content:           "012345\n67890\n",
-			events:            "d2l",
-			expectContent:     "015\n67890\n",
-			expectContentWrap: "015\n67890\n",
-			expectCoords:      term.Coordinates{X: 2, Y: 0},
-			expectCoordsWrap:  term.Coordinates{X: 2, Y: 0},
-		},
-		{
-			name: "d2l from last column",
-			moveCursorFn: func(vi *viHandlerImpl, wrap bool) {
-				vi.cursor.MoveEndLine()
-			},
-			content:           "012345\n67890\n",
-			events:            "d2l",
-			expectContent:     "01234\n67890\n",
-			expectContentWrap: "01234\n67890\n",
-			expectCoords:      term.Coordinates{X: 4, Y: 0},
-			expectCoordsWrap:  term.Coordinates{X: 0, Y: 1},
-		},
-		{
-			// NOTE: (wrap test) FAILS because when line has the same size of window
-			// MoveRight places cursor to logical line below, so it wraps when it shouldn't.
-			// To be fixed in OX-369 (https://git.unstable.build/unstablebuild/go-tui/pulls/128)
-			//name:              "d99l going beyond current line length is window width",
-			//content:           "0123\n678\n",
-			//events:            "d99l",
-			//expectContent:     "\n678\n",
-			//expectContentWrap: "\n678\n",
-			//expectCoords:      term.Coordinates{Y: 0},
-			//expectCoordsWrap:  term.Coordinates{Y: 0},
-		},
-		{
-			name:              "d99h going beyond from starting column",
-			content:           "012345\n67890\n",
-			events:            "d99h",
-			expectContent:     "012345\n67890\n",
-			expectContentWrap: "012345\n67890\n",
-			expectCoords:      term.Coordinates{Y: 0},
-			expectCoordsWrap:  term.Coordinates{Y: 0},
-		},
-		{
-			name: "d2h from middle column",
-			moveCursorFn: func(vi *viHandlerImpl, wrap bool) {
-				vi.cursor.MoveRight()
-				vi.cursor.MoveRight()
-				vi.cursor.MoveRight()
-			},
-			content:           "012345\n67890\n",
-			events:            "d2h",
-			expectContent:     "045\n67890\n",
-			expectContentWrap: "045\n67890\n",
-			expectCoords:      term.Coordinates{X: 1, Y: 0},
-			expectCoordsWrap:  term.Coordinates{X: 1, Y: 0},
-		},
-		{
-			name: "d2h from last column",
-			moveCursorFn: func(vi *viHandlerImpl, wrap bool) {
-				vi.cursor.MoveEndLine()
-			},
-			content:           "012345\n67890\n",
-			events:            "d2h",
-			expectContent:     "012\n67890\n",
-			expectContentWrap: "012\n67890\n",
-			expectCoords:      term.Coordinates{X: 2, Y: 0},
-			expectCoordsWrap:  term.Coordinates{X: 2, Y: 0},
-		},
-		{
-			name: "dj from non first column",
-			moveCursorFn: func(vi *viHandlerImpl, wrap bool) {
-				vi.cursor.MoveRight() // cursor at char 'b'
-			},
-			content:           "abcdefghijklmnopqrstuvxyz\n123\n456\n789\n",
-			events:            "dj",
-			expectContent:     "456\n789\n",
-			expectContentWrap: "ijklmnopqrstuvxyz\n123\n456\n789\n",
-			expectCoords:      term.Coordinates{X: 0, Y: 0},
-			expectCoordsWrap:  term.Coordinates{X: 0, Y: 0},
-		},
-		{
-			name: "dj no new line end of file",
-			moveCursorFn: func(vi *viHandlerImpl, wrap bool) {
-				vi.cursor.MoveRight()
-			},
-			content:           "abcdefghijklmnopqrstuvxyz\n123\n456\n789",
-			events:            "dj",
-			expectContent:     "456\n789",
-			expectContentWrap: "ijklmnopqrstuvxyz\n123\n456\n789",
-			expectCoords:      term.Coordinates{X: 0, Y: 0},
-			expectCoordsWrap:  term.Coordinates{X: 0, Y: 0},
-		},
-		{
-			name: "dj end of wrapped line",
-			moveCursorFn: func(vi *viHandlerImpl, wrap bool) {
-				vi.cursor.MoveRight()
-			},
-			content:           "00001111\n2222\n",
-			events:            "dj",
-			expectContent:     "",
-			expectContentWrap: "2222\n",
-		},
-		{
-			name: "d2k from bottom, new line end of file",
-			moveCursorFn: func(vi *viHandlerImpl, wrap bool) {
-				vi.cursor.MoveLastLine()
-				vi.cursor.MoveEndLine()
-				_, ok := vi.cursor.Cell()
-				require.False(t, ok) // it's the new line!
-
-			},
-			content:           "123\n456\n789\nabcdefghijklmnopqrstuvxyz\n",
-			events:            "d2k",
-			expectContent:     "123\n456\n",
-			expectContentWrap: "123\n456\n789\nabcdefghijklmnopqrst",
-			expectCoords:      term.Coordinates{X: 0, Y: 2},
-			expectCoordsWrap:  term.Coordinates{X: 3, Y: 4},
-		},
-		{
-			name: "d2k from bottom, no new line end of file",
-			moveCursorFn: func(vi *viHandlerImpl, wrap bool) {
-				vi.cursor.MoveLastLine()
-				vi.cursor.MoveEndLine()
-				cell, ok := vi.cursor.Cell()
-				require.True(t, ok)
-				require.Equal(t, 'z', cell.Ch,
-					fmt.Sprintf("expected 'z' but got '%c'", cell.Ch))
-			},
-			content:           "123\n456\n789\nabcdefghijklmnopqrstuvxyz",
-			events:            "d2k",
-			expectContent:     "123\n",
-			expectContentWrap: "123\n456\n789\nabcdefghijklmnop",
-			expectCoords:      term.Coordinates{X: 0, Y: 1},
-			expectCoordsWrap:  term.Coordinates{X: 3, Y: 4},
-		},
-		{
-			name:              "dG deletes entire wraps in bottom line",
-			content:           "123\n456\n789\nabcdefghijklmnopqrstuvxyz",
-			events:            "dG",
-			expectContent:     "",
-			expectContentWrap: "",
-			expectCoords:      term.Coordinates{X: 0, Y: 0},
-			expectCoordsWrap:  term.Coordinates{X: 0, Y: 0},
-		},
-	}
-
-	for _, tcase := range suite {
-		for _, wrap := range []bool{false, true} {
-			name := tcase.name
-			if wrap {
-				name += " (wrap)"
-			}
-			t.Run(name, func(t *testing.T) {
-				vi := setupVi(t, tcase.content, 2, WithWrap(wrap))
-				if wrap {
-					vi.Resize(4, 10)
-				} else {
-					vi.Resize(10, 10)
-				}
-				vi.Draw(term.NoopWriter{})
-				if tcase.moveCursorFn != nil {
-					tcase.moveCursorFn(vi, wrap)
-				}
-				for _, eventChar := range tcase.events {
-					vi.Handle(term.Event{Type: term.EventKey, Ch: eventChar})
-				}
-				if wrap {
-					assert.Equal(t, tcase.expectCoordsWrap, vi.cursor.Coordinates())
-				} else {
-					assert.Equal(t, tcase.expectCoords, vi.cursor.Coordinates())
-				}
-				if wrap {
-					assert.Equal(t, tcase.expectContentWrap, vi.less.Buffer().String())
-				} else {
-					assert.Equal(t, tcase.expectContent, vi.less.Buffer().String())
-				}
-			})
-		}
-	}
-}
-
-func TestViy(t *testing.T) {
-	suite := []struct {
-		name              string
-		moveCursorFn      func(vi *viHandlerImpl, wrap bool)
-		content           string
-		events            string
-		expectContent     string
-		expectContentWrap string
-	}{
-		{
-			name:              "y3j from first line",
-			content:           "00000\n11111111111\n2222\n3333\n4444\n5555\n",
-			events:            "y3j",
-			expectContent:     "00000\n11111111111\n2222\n3333\n",
-			expectContentWrap: "00000\n11111111",
-		},
-		{
-			name: "y3j from middle line",
-			moveCursorFn: func(vi *viHandlerImpl, wrap bool) {
-				vi.cursor.MoveDown()
-				vi.cursor.MoveDown()
-				vi.cursor.MoveDown()
-			},
-			content:           "00000\n11111111111\n2222\n3333\n4444\n5555\n6666\n7777\n",
-			events:            "y3j",
-			expectContent:     "3333\n4444\n5555\n6666\n",
-			expectContentWrap: "1111111\n2222\n3333\n",
-		},
-		{
-			name: "y3j from last line",
-			moveCursorFn: func(vi *viHandlerImpl, wrap bool) {
-				vi.cursor.MoveLastLine()
-			},
-			content:           "00000\n11111111111\n2222\n3333\n4444\n5555\n6666\n",
-			events:            "y3j",
-			expectContent:     "\n",
-			expectContentWrap: "\n",
-		},
-		{
-			name:    "y99j going beyond",
-			content: "00000\n11111111111\n2222\n3333\n4444\n5555\n6666\n",
-			events:  "y99j",
-			// that extra new line \n only happens in tests
-			expectContent:     "00000\n11111111111\n2222\n3333\n4444\n5555\n6666\n\n",
-			expectContentWrap: "00000\n11111111111\n2222\n3333\n4444\n5555\n6666\n",
-		},
-		{
-			name:              "y3k from first line",
-			content:           "00000\n11111111111\n2222\n3333\n4444\n5555\n",
-			events:            "y3k",
-			expectContent:     "",
-			expectContentWrap: "",
-		},
-		{
-			name: "y3k from middle line",
-			moveCursorFn: func(vi *viHandlerImpl, wrap bool) {
-				vi.cursor.MoveDown()
-				vi.cursor.MoveDown()
-				vi.cursor.MoveDown()
-				vi.cursor.MoveDown()
-			},
-			content:           "00000\n11111111111\n2222\n3333\n4444\n5555\n6666\n7777\n",
-			events:            "y3k",
-			expectContent:     "11111111111\n2222\n3333\n4444\n",
-			expectContentWrap: "0\n11111111111",
-		},
-		{
-			name: "y3k from last line",
-			moveCursorFn: func(vi *viHandlerImpl, wrap bool) {
-				vi.cursor.MoveLastLine()
-			},
-			content: "00000\n11111111111\n2222\n3333\n4444\n5555\n6666\n",
-			events:  "y3k",
-			// that extra new line \n only happens in tests
-			expectContent:     "4444\n5555\n6666\n\n",
-			expectContentWrap: "4444\n5555\n6666\n",
-		},
-		{
-			name: "y99k going beyond",
-			moveCursorFn: func(vi *viHandlerImpl, wrap bool) {
-				vi.cursor.MoveDown()
-			},
-			events:            "y99k",
-			content:           "00000000\n11111111111\n2222\n3333\n4444\n5555\n6666\n",
-			expectContent:     "00000000\n11111111111\n",
-			expectContentWrap: "00000000\n",
-		},
-		{
-			name:              "y2l from starting column",
-			content:           "012345\n67890\n",
-			events:            "y2l",
-			expectContent:     "012",
-			expectContentWrap: "012",
-		},
-		{
-			name:              "y99l going beyond from starting column",
-			content:           "012345\n67890\n",
-			events:            "y99l",
-			expectContent:     "012345",
-			expectContentWrap: "012345",
-		},
-		{
-			name: "y2l from middle column",
-			moveCursorFn: func(vi *viHandlerImpl, wrap bool) {
-				vi.cursor.MoveRight()
-				vi.cursor.MoveRight()
-			},
-			content:           "012345\n67890\n",
-			events:            "y2l",
-			expectContent:     "234",
-			expectContentWrap: "234",
-		},
-		{
-			name: "y2l from last column",
-			moveCursorFn: func(vi *viHandlerImpl, wrap bool) {
-				vi.cursor.MoveEndLine()
-			},
-			content:           "012345\n67890\n",
-			events:            "y2l",
-			expectContent:     "5",
-			expectContentWrap: "5",
-		},
-		{
-			// NOTE: (wrap test) FAILS because when line has the same size of window
-			// MoveRight places cursor to logical line below, so it wraps when it shouldn't.
-			// To be fixed in OX-369 (https://git.unstable.build/unstablebuild/go-tui/pulls/128)
-			//name:              "y99l going beyond current line length is window width",
-			//content:           "0123\n678\n",
-			//events:            "y99l",
-			//expectContent:     "0123",
-			//// TODO: Should be "0123"
-			//expectContentWrap: "0123\n678\n",
-		},
-		{
-			name:              "y99h going beyond from starting column",
-			content:           "012345\n67890\n",
-			events:            "y99h",
-			expectContent:     "",
-			expectContentWrap: "",
-		},
-		{
-			name: "y2h from middle column",
-			moveCursorFn: func(vi *viHandlerImpl, wrap bool) {
-				vi.cursor.MoveRight()
-				vi.cursor.MoveRight()
-				vi.cursor.MoveRight()
-			},
-			content:           "012345\n67890\n",
-			events:            "y2h",
-			expectContent:     "123",
-			expectContentWrap: "123",
-		},
-		{
-			name: "y2h from last column",
-			moveCursorFn: func(vi *viHandlerImpl, wrap bool) {
-				vi.cursor.MoveEndLine()
-			},
-			content:           "012345\n67890\n",
-			events:            "y2h",
-			expectContent:     "345",
-			expectContentWrap: "345",
-		},
-		{
-			name: "yj from non first column",
-			moveCursorFn: func(vi *viHandlerImpl, wrap bool) {
-				vi.cursor.MoveRight() // cursor at char 'b'
-			},
-			content:           "abcdefghijklmnopqrstuvxyz\n123\n456\n789\n",
-			events:            "yj",
-			expectContent:     "abcdefghijklmnopqrstuvxyz\n123\n",
-			expectContentWrap: "abcdefgh",
-		},
-		{
-			name: "yj no new line end of file",
-			moveCursorFn: func(vi *viHandlerImpl, wrap bool) {
-				vi.cursor.MoveRight()
-			},
-			content:           "abcdefghijklmnopqrstuvxyz\n123\n456\n789",
-			events:            "yj",
-			expectContent:     "abcdefghijklmnopqrstuvxyz\n123\n",
-			expectContentWrap: "abcdefgh",
-		},
-		{
-			name: "yj end of wrapped line",
-			moveCursorFn: func(vi *viHandlerImpl, wrap bool) {
-				vi.cursor.MoveRight()
-			},
-			content:           "00001111\n2222\n",
-			events:            "yj",
-			expectContent:     "00001111\n2222\n",
-			expectContentWrap: "00001111\n",
-		},
-		{
-			name: "y2k from bottom, new line end of file",
-			moveCursorFn: func(vi *viHandlerImpl, wrap bool) {
-				vi.cursor.MoveLastLine()
-				vi.cursor.MoveEndLine()
-				_, ok := vi.cursor.Cell()
-				require.False(t, ok) // it's the new line!
-
-			},
-			content: "123\n456\n789\nabcdefghijklmnopqrstuvxyz\n",
-			events:  "y2k",
-			// that extra new line \n only happens in tests
-			expectContent:     "789\nabcdefghijklmnopqrstuvxyz\n\n",
-			expectContentWrap: "uvxyz\n",
-		},
-		{
-			name: "y2k from bottom, no new line end of file",
-			moveCursorFn: func(vi *viHandlerImpl, wrap bool) {
-				vi.cursor.MoveLastLine()
-				vi.cursor.MoveEndLine()
-				cell, ok := vi.cursor.Cell()
-				require.True(t, ok)
-				require.Equal(t, 'z', cell.Ch,
-					fmt.Sprintf("expected 'z' but got '%c'", cell.Ch))
-			},
-			content:           "123\n456\n789\nabcdefghijklmnopqrstuvxyz",
-			events:            "y2k",
-			expectContent:     "456\n789\nabcdefghijklmnopqrstuvxyz\n",
-			expectContentWrap: "qrstuvxyz",
-		},
-		{
-			name:              "yG copies entire wraps in bottom line",
-			content:           "123\n456\n789\nabcdefghijklmnopqrstuvxyz",
-			events:            "yG",
-			expectContent:     "123\n456\n789\nabcdefghijklmnopqrstuvxyz",
-			expectContentWrap: "123\n456\n789\nabcdefghijklmnopqrstuvxyz",
-		},
-	}
-
-	for _, tcase := range suite {
-		for _, wrap := range []bool{false, true} {
-			name := tcase.name
-			if wrap {
-				name += " (wrap)"
-			}
-			t.Run(name, func(t *testing.T) {
-				vi := setupVi(t, tcase.content, 2, WithWrap(wrap))
-				if wrap {
-					vi.Resize(4, 10)
-				} else {
-					vi.Resize(10, 10)
-				}
-				vi.Draw(term.NoopWriter{})
-				if tcase.moveCursorFn != nil {
-					tcase.moveCursorFn(vi, wrap)
-				}
-				for _, eventChar := range tcase.events {
-					vi.Handle(term.Event{Type: term.EventKey, Ch: eventChar})
-				}
-
-				paste, err := vi.config.clipboard.Paste(vi.config.defaultRegister)
-				require.NoError(t, err)
-
-				if wrap {
-					assert.Equal(t, tcase.expectContentWrap, paste.Text)
-				} else {
-					assert.Equal(t, tcase.expectContent, paste.Text)
-				}
-			})
-		}
-	}
-}
-
 func TestVidd(t *testing.T) {
 	suite := []struct {
-		name              string
-		moveCursorFn      func(*viHandlerImpl)
-		content           string
-		events            string
-		expectContent     string
-		expectContentWrap string
-		expectCoords      term.Coordinates
-		expectCoordsWrap  term.Coordinates
+		name             string
+		moveCursorFn     func(*viHandlerImpl)
+		content          string
+		events           string
+		expectContent    string
+		expectCoords     term.Coordinates
+		expectCoordsWrap term.Coordinates
 	}{
 		{
 			name: "2dd",
 			moveCursorFn: func(vi *viHandlerImpl) {
 				vi.cursor.MoveToScroll(term.Coordinates{Y: 2})
 			},
-			content:           "0000\n1111\n2222\n3333\n4444\n5555\n",
-			events:            "2dd",
-			expectContent:     "0000\n1111\n5555\n",
-			expectContentWrap: "0000\n1111\n44\n5555\n",
-			expectCoords:      term.Coordinates{Y: 2},
-			expectCoordsWrap:  term.Coordinates{Y: 2},
+			content:          "0000\n1111\n2222\n3333\n4444\n5555\n",
+			events:           "2dd",
+			expectContent:    "0000\n1111\n5555\n",
+			expectCoords:     term.Coordinates{Y: 2},
+			expectCoordsWrap: term.Coordinates{Y: 2},
 		},
 		{
 			name: "3dd from last line",
 			moveCursorFn: func(vi *viHandlerImpl) {
 				vi.cursor.MoveLastLine()
 			},
-			content:           "0000\n1111\n2222\n3333\n4444\n5555\n",
-			events:            "3dd",
-			expectContent:     "0000\n1111\n2222\n3333\n4444\n5555\n",
-			expectContentWrap: "0000\n1111\n2222\n3333\n4444\n5555\n",
-			expectCoords:      term.Coordinates{Y: 6},
-			expectCoordsWrap:  term.Coordinates{Y: 6},
+			content:          "0000\n1111\n2222\n3333\n4444\n5555\n",
+			events:           "3dd",
+			expectContent:    "0000\n1111\n2222\n3333\n4444\n5555\n",
+			expectCoords:     term.Coordinates{Y: 6},
+			expectCoordsWrap: term.Coordinates{Y: 6},
 		},
 		{
 			name: "4dd from second to last line",
@@ -1319,12 +745,11 @@ func TestVidd(t *testing.T) {
 				vi.cursor.MoveLastLine()
 				vi.cursor.MoveLineUp()
 			},
-			content:           "0000\n1111\n2222\n3333\n4444\n5555\n",
-			events:            "3dd",
-			expectContent:     "0000\n1111\n2222\n3333\n4444\n",
-			expectContentWrap: "0000\n1111\n2222\n3333\n4444\n",
-			expectCoords:      term.Coordinates{Y: 5},
-			expectCoordsWrap:  term.Coordinates{Y: 4},
+			content:          "0000\n1111\n2222\n3333\n4444\n5555\n",
+			events:           "3dd",
+			expectContent:    "0000\n1111\n2222\n3333\n4444\n",
+			expectCoords:     term.Coordinates{Y: 5},
+			expectCoordsWrap: term.Coordinates{Y: 4},
 		},
 		{
 			name:             "10dd from first line wipes all content",
@@ -1342,18 +767,6 @@ func TestVidd(t *testing.T) {
 			expectCoords:     term.Coordinates{Y: 0},
 			expectCoordsWrap: term.Coordinates{Y: 0},
 		},
-		{
-			name: "dd on empty line in middle of content",
-			moveCursorFn: func(vi *viHandlerImpl) {
-				vi.cursor.MoveDown()
-			},
-			content:           "00\n\n11",
-			events:            "dd",
-			expectContent:     "00\n11",
-			expectContentWrap: "00\n11",
-			expectCoords:      term.Coordinates{Y: 1},
-			expectCoordsWrap:  term.Coordinates{Y: 1},
-		},
 	}
 
 	for _, tcase := range suite {
@@ -1378,65 +791,13 @@ func TestVidd(t *testing.T) {
 				}
 				if wrap {
 					assert.Equal(t, tcase.expectCoordsWrap, vi.cursor.Coordinates())
-					assert.Equal(t, tcase.expectContentWrap, vi.less.Buffer().String())
 				} else {
 					assert.Equal(t, tcase.expectCoords, vi.cursor.Coordinates())
-					assert.Equal(t, tcase.expectContent, vi.less.Buffer().String())
 				}
-			})
-		}
-	}
-}
-
-func TestViyy(t *testing.T) {
-	suite := []struct {
-		name              string
-		moveCursorFn      func(*viHandlerImpl)
-		content           string
-		events            string
-		expectContent     string
-		expectContentWrap string
-	}{
-		{
-			name: "yy on empty line in middle of content",
-			moveCursorFn: func(vi *viHandlerImpl) {
-				vi.cursor.MoveDown()
-			},
-			content:           "00\n\n11",
-			events:            "yy",
-			expectContent:     "\n",
-			expectContentWrap: "\n",
-		},
-	}
-	for _, tcase := range suite {
-		for _, wrap := range []bool{false, true} {
-			name := tcase.name
-			if wrap {
-				name += " (wrap)"
-			}
-			t.Run(name, func(t *testing.T) {
-				vi := setupVi(t, tcase.content, 2, WithWrap(wrap))
-				if wrap {
-					vi.Resize(2, 10)
-				} else {
-					vi.Resize(10, 10)
-				}
-				vi.Draw(term.NoopWriter{})
-				if tcase.moveCursorFn != nil {
-					tcase.moveCursorFn(vi)
-				}
-				for _, eventChar := range tcase.events {
-					vi.Handle(term.Event{Type: term.EventKey, Ch: eventChar})
-				}
-
-				paste, err := vi.config.clipboard.Paste(vi.config.defaultRegister)
-				require.NoError(t, err)
-
-				if wrap {
-					assert.Equal(t, tcase.expectContentWrap, paste.Text)
-				} else {
-					assert.Equal(t, tcase.expectContent, paste.Text)
-				}
+				vi.cursor.MoveFirstLine()
+				vi.cursor.Select()
+				vi.cursor.MoveLastLine()
+				assert.Equal(t, tcase.expectContent, vi.cursor.Selection())
 			})
 		}
 	}
@@ -1495,7 +856,7 @@ tuvxy
 	}
 	assert.Equal(t, term.Coordinates{X: 3, Y: 10}, vi.cursor.ScrollCoordinates(vi.cursor.Coordinates()))
 	vi.cursor.SelectLine()
-	assert.Equal(t, "66", vi.cursor.Selection())
+	assert.Equal(t, "66666\n", vi.cursor.Selection())
 }
 
 func TestViDeleteAWord(t *testing.T) {
@@ -1612,7 +973,7 @@ diff_buf_adjust(win_
               NORMAL`},
 		// TODO check yank paste after last line
 		// the only thing from integration tests is that there's no
-		// unix View that trims last EOL, this must in turn translate in
+		// unix View that trims last EOL, this must in turn translatre in
 		// some internal difference which renders this test failure
 		/*{"Gyyp",
 					`    curtab->tp_diff_
@@ -1957,38 +1318,34 @@ func TestViCountChangeToVisualMode(t *testing.T) {
 }
 
 func TestViCountChangeToLineVisualMode(t *testing.T) {
-	codeSnippet := "abcde\n12345\nfghijk\n67890\nlmnop"
+	codeSnippet := "abc\n123\ndef\n456\nghij\n7891"
 	suite := []struct {
-		name          string
-		scrollWidth   int
-		cursorAt      term.Coordinates
-		countDigits   []rune
-		selection     string
-		selectionWrap string
+		name        string
+		scrollWidth int
+		cursorAt    term.Coordinates
+		countDigits []rune
+		selection   string
 	}{
 		{
-			name:          "1V unitary selects current line",
-			scrollWidth:   4,
-			cursorAt:      term.Coordinates{X: 1, Y: 0}, // 'b' in snippet
-			countDigits:   []rune{'1'},
-			selection:     "abcde\n",
-			selectionWrap: "abcd",
+			name:        "1V unitary selects current line",
+			scrollWidth: 2,
+			cursorAt:    term.Coordinates{X: 1, Y: 0}, // 'b' in snippet
+			countDigits: []rune{'1'},
+			selection:   "abc\n",
 		},
 		{
-			name:          "2V unitary selects current line and line below",
-			scrollWidth:   4,
-			cursorAt:      term.Coordinates{X: 1, Y: 0}, // 'b' in snippet
-			countDigits:   []rune{'2'},
-			selection:     "abcde\n12345\n",
-			selectionWrap: "abcde\n1234",
+			name:        "2V unitary selects current line and line below",
+			scrollWidth: 2,
+			cursorAt:    term.Coordinates{X: 1, Y: 0}, // 'b' in snippet
+			countDigits: []rune{'2'},
+			selection:   "abc\n123\n",
 		},
 		{
-			name:          "999V content overflow",
-			scrollWidth:   4,
-			cursorAt:      term.Coordinates{X: 1, Y: 3}, // '5' in snippet
-			countDigits:   []rune{'9', '9', '9'},
-			selection:     "67890\nlmnop\n",
-			selectionWrap: "67890\nlmno",
+			name:        "999V content overflow",
+			scrollWidth: 2,
+			cursorAt:    term.Coordinates{X: 1, Y: 3}, // '5' in snippet
+			countDigits: []rune{'9', '9', '9'},
+			selection:   "456\nghij\n7891\n",
 		},
 	}
 
@@ -2008,11 +1365,7 @@ func TestViCountChangeToLineVisualMode(t *testing.T) {
 					vi.Handle(term.Event{Type: term.EventKey, Ch: countDigit})
 				}
 				vi.Handle(term.Event{Type: term.EventKey, Ch: 'V'})
-				if wrap {
-					assert.Equal(t, tcase.selectionWrap, vi.cursor.Selection())
-				} else {
-					assert.Equal(t, tcase.selection, vi.cursor.Selection())
-				}
+				assert.Equal(t, tcase.selection, vi.cursor.Selection())
 			})
 		}
 	}
@@ -2489,14 +1842,13 @@ func TestPasteVisualMode(t *testing.T) {
 		}
 
 		t.Run(name, func(t *testing.T) {
-			vi := setupVi(t, "ABC0123456\n789\n", 2, WithWrap(wrap))
+			vi := setupVi(t, "ABC0123456\n789\n", 2)
 			if wrap {
 				vi.Resize(4, 10)
 			} else {
 				vi.Resize(10, 10)
 			}
 
-			// visual select ABC, copy it, visual select ABC delete it
 			events := "vllyvlld"
 			for _, event := range events {
 				vi.Handle(term.Event{Type: term.EventKey, Ch: event})
@@ -2507,13 +1859,17 @@ func TestPasteVisualMode(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, "ABC", paste.Text)
 
-			// select whole line (in wrap mode selects the physical line, not logical)
 			events = "V"
 			for _, event := range events {
 				vi.Handle(term.Event{Type: term.EventKey, Ch: event})
 			}
+
 			if wrap {
-				require.Equal(t, "0123", vi.cursor.Selection())
+				// FIXME: Is "0123456\n"
+				// At the moment Cursor.SelectLine does not honor wrap lines and honors
+				// logical lines. This will be changed by PR #127 "Add directional vi
+				// (d)elete and (y)ank  (OX-222).
+				// require.Equal(t, "0123", vi.cursor.Selection())
 			} else {
 				require.Equal(t, "0123456\n", vi.cursor.Selection())
 			}
@@ -2524,7 +1880,11 @@ func TestPasteVisualMode(t *testing.T) {
 			assert.Equal(t, normalMode, vi.mode())
 
 			if wrap {
-				assert.Equal(t, "ABC\n456\n789\n", vi.less.Buffer().String())
+				// FIXME: Is "ABC789\n"
+				// At the moment Cursor.SelectLine does not honor wrap lines and honors
+				// logical lines. This will be changed by PR #127 "Add directional vi
+				// (d)elete and (y)ank  (OX-222).
+				//assert.Equal(t, "ABC456\n789\n", vi.less.Buffer().String())
 			} else {
 				assert.Equal(t, "ABC\n789\n", vi.less.Buffer().String())
 			}
