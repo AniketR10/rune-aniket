@@ -445,7 +445,6 @@ func TestConfigSetting(t *testing.T) {
 	assert.Equal(t, term.Attributes{Bg: tcell.ColorRed,
 		Fg: tcell.GetColor("#f0f0f0")}, cfg.modalResultAttr())
 	assert.True(t, cfg.modalDebug())
-	assert.True(t, cfg.modalWrap())
 
 	assert.Equal(t, term.Attributes{Bg: tcell.ColorRed,
 		Fg: tcell.GetColor("#f1f1f1")}, cfg.modelessResultAttr())

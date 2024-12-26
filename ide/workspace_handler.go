@@ -155,7 +155,6 @@ func (h *workspaceManagerHandler) newBuiltinModalEditor(cfg ideConfig) text.Edit
 		vi.WithResAttr(cfg.modalResultAttr()),
 		vi.WithAttr(cfg.modalAttr()),
 		vi.WithDebug(cfg.modalDebug()),
-		vi.WithWrap(cfg.modalWrap()),
 		vi.WithClipboard(cfg.clipboard()),
 	)
 	return vi.Editor(viOpts...)

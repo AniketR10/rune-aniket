@@ -1049,10 +1049,6 @@ func (c ideConfig) modalDebug() (ret bool) {
 	return c.modalBool("debug")
 }
 
-func (c ideConfig) modalWrap() (ret bool) {
-	return c.modalBool("wrap")
-}
-
 func (c ideConfig) clipboard() clipboard.Register {
 	cfg := config.MapConfig(c.cfg)
 	ret, err := extutil.Clipboard(cfg)
