@@ -26,6 +26,9 @@ package extension
 import (
 	"context"
 	"fmt"
+	"path/filepath"
+	"regexp"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -67,6 +70,7 @@ var (
 	// interested in subscribing to.
 	FileBarHandlerEvents = []textapi.EventType{
 		textapi.EventTypeOpen,
+		textapi.EventTypeClose,
 		textapi.EventTypeEdit,
 		textapi.EventTypeFlush,
 		textapi.EventTypeCursor,
@@ -122,6 +126,37 @@ type fileInfo struct {
 	dirty bool
 }
 
+type symbRegexDef struct {
+	start *regexp.Regexp // match where a symbol starts
+	end   *regexp.Regexp // match where the symbol ends line(s) below the symbRegexDef.start match
+}
+
+var regexMap = map[string]symbRegexDef{
+	".go": {
+		start: regexp.MustCompile(`^func\s*(?:\([^\)]+\)\s*)?([a-zA-Z_][a-zA-Z0-9_]*)\s*\(`),
+		end:   regexp.MustCompile(`^}`),
+	},
+	".ts": {
+		start: regexp.MustCompile(
+			`^(?:export\s+)?(?:async\s+)?(?:\w+\s*[:=]\s*)?(?:function\s+)?(\w+)\s*\(`),
+		end: regexp.MustCompile(`^}`),
+	},
+}
+
+func parseExtension(resourceURIPath string) (def symbRegexDef, ok bool) {
+	ext := filepath.Ext(resourceURIPath)
+	if v, ok := regexMap[ext]; ok {
+		return v, true
+	}
+	return symbRegexDef{}, false
+}
+
+type symbInfo struct {
+	name  string
+	start int
+	end   int
+}
+
 type fileBarEditorHandler struct {
 	wm   browserapi.WindowManager
 	p    browserapi.EventPublisher
@@ -136,11 +171,16 @@ type fileBarEditorHandler struct {
 	tracker                 extutil.ResourceTracker
 	dirtyIcon               string
 
+	showFunctionName bool
+	currSymbolName   string
+	symbols          map[string][]symbInfo
+
 	bar struct {
 		sync.Mutex
-		comp     component.Reference
-		filename truncatedScroll
-		coords   component.Scroll
+		comp       component.Reference
+		filename   truncatedScroll
+		symbolname truncatedScroll
+		coords     component.Scroll
 	}
 }
 
@@ -200,6 +240,13 @@ func newFileBarEditorHandler(
 		ret.bar.coords.Attributes = defaultScrollAttr
 	}
 
+	ret.showFunctionName, err = pconfig.GetBool("show_function_name")
+	if err != nil {
+		if err != config.ErrNotFound {
+			log.Warningf("failed to get 'show_function_name' from config: %v", err)
+		}
+	}
+
 	ret.initBar(component.Nop())
 
 	for _, grant := range grants {
@@ -252,6 +299,8 @@ func newFileBarEditorHandler(
 
 	ret.bar.filename.Init(cell.NewBuffer())
 	ret.bar.coords.Init(cell.NewBuffer())
+	ret.bar.symbolname.Init(cell.NewBuffer())
+	ret.symbols = make(map[string][]symbInfo, 0)
 
 	go ret.handleEvents()
 
@@ -302,6 +351,8 @@ func (h *fileBarEditorHandler) resetBarContent() {
 
 	h.bar.filename.Buffer().Reset()
 	h.bar.filename.Init(h.bar.filename.Buffer())
+	h.bar.symbolname.Buffer().Reset()
+	h.bar.symbolname.Init(h.bar.symbolname.Buffer())
 	h.bar.coords.Buffer().Reset()
 	h.bar.coords.Init(h.bar.coords.Buffer())
 }
@@ -314,6 +365,9 @@ func (h *fileBarEditorHandler) refreshBarContent(ev textapi.Event) {
 
 	res, ok := h.getResource(ev)
 	if !ok {
+		if h.showFunctionName {
+			h.bar.symbolname.Buffer().Reset()
+		}
 		return
 	}
 
@@ -346,7 +400,23 @@ func (h *fileBarEditorHandler) refreshBarContent(ev textapi.Event) {
 	}
 	fileSpan := component.NewSpan(&h.bar.filename, fileSpanCfg)
 	coordsSpan := component.NewSpan(&h.bar.coords, coordsSpanCfg)
-	h.initBar(component.Grid([][]tui.Component{{fileSpan, coordsSpan}}))
+
+	var grid tui.Component
+	if h.showFunctionName {
+		h.bar.symbolname.Buffer().Reset()
+		h.bar.symbolname.Init(h.bar.symbolname.Buffer())
+		h.bar.symbolname.Buffer().WriteString(h.currSymbolName)
+		symbolSpanCfg := component.SpanConfig{
+			ContentAlignment: component.SpanAlignmentHorizontallyCentered,
+			PadHorizontal:    -h.bar.symbolname.Buffer().Columns(0),
+		}
+		symbolSpan := component.NewSpan(&h.bar.symbolname, symbolSpanCfg)
+		grid = component.Grid([][]tui.Component{{fileSpan, symbolSpan, coordsSpan}})
+	} else {
+		grid = component.Grid([][]tui.Component{{fileSpan, coordsSpan}})
+	}
+
+	h.initBar(grid)
 }
 
 func (h *fileBarEditorHandler) initBar(c tui.Component) {
@@ -381,24 +451,45 @@ func (h *fileBarEditorHandler) handleEvents() {
 
 		switch ev.Type {
 		case textapi.EventTypeEdit:
+			if h.showFunctionName {
+				if res, ok := h.getResource(ev); ok {
+					h.buildSymbolData(ev.URI, res.Scroll.Buffer().RawCells())
+				}
+			}
 			h.setFileDirty(ev, true)
 			h.refreshBarContent(ev)
 			h.interrupt(ctx)
 		case textapi.EventTypeOpen:
 			res, _ := h.getResource(ev)
 			res.Metadata = new(fileInfo)
-			h.refreshBarContent(ev)
-			h.interrupt(ctx)
+			if h.showFunctionName {
+				if res, ok := h.getResource(ev); ok {
+					h.buildSymbolData(ev.URI, res.Scroll.Buffer().RawCells())
+				}
+			}
+		case textapi.EventTypeClose:
+			if h.showFunctionName {
+				h.cleanSymbolData(ev.URI)
+			}
 		case textapi.EventTypeFlush:
 			h.setFileDirty(ev, false)
 			fallthrough
 		case textapi.EventTypeFocus:
+			if h.showFunctionName {
+				h.resolveCursorSymbol(ev.URI, ev.From.Y)
+			}
 			h.refreshBarContent(ev)
 			h.interrupt(ctx)
 		case textapi.EventTypeUnfocus:
+			if h.showFunctionName {
+				h.currSymbolName = ""
+			}
 			h.resetBarContent()
 			h.interrupt(ctx)
 		case textapi.EventTypeCursor:
+			if h.showFunctionName {
+				h.resolveCursorSymbol(ev.URI, ev.From.Y)
+			}
 			h.refreshBarContent(ev)
 			h.interrupt(ctx)
 		}
@@ -429,4 +520,70 @@ func (h *fileBarEditorHandler) getResource(ev textapi.Event) (
 			ev.URI.String())
 	}
 	return res, ok
+}
+
+func (h *fileBarEditorHandler) buildSymbolData(uri workspaceapi.URI, cells [][]term.Cell) {
+	symbRegex, ok := parseExtension(uri.Path())
+	if !ok {
+		return
+	}
+
+	resourceName := uri.String()
+	h.symbols[resourceName] = make([]symbInfo, 0)
+
+	for line, row := range cells {
+		rowStr := cell.CellsToString([][]term.Cell{row})
+
+		// match for symbol start
+		matches := symbRegex.start.FindStringSubmatch(rowStr)
+		if len(matches) > 1 {
+			h.symbols[resourceName] = append(h.symbols[resourceName], symbInfo{
+				name:  matches[1],
+				start: line,
+			})
+
+			// if the previous symbol was not closed, do so
+			numSymb := len(h.symbols[resourceName])
+			if numSymb > 1 && h.symbols[resourceName][numSymb-2].end == 0 {
+				h.symbols[resourceName][numSymb-1].end = line
+			}
+			continue
+		}
+
+		// match for symbol end and close the last symbol
+		if symbRegex.end.MatchString(rowStr) {
+			numSymb := len(h.symbols[resourceName])
+			if numSymb > 0 {
+				h.symbols[resourceName][numSymb-1].end = line
+			}
+		}
+	}
+}
+
+func (h *fileBarEditorHandler) resolveCursorSymbol(uri workspaceapi.URI, currLine int) {
+	resourceName := uri.String()
+
+	numSymb := len(h.symbols[resourceName])
+	if numSymb == 0 {
+		return
+	}
+
+	idx := sort.Search(numSymb, func(i int) bool {
+		symb := h.symbols[resourceName][i]
+		r := symb.end >= currLine
+		return r
+	})
+
+	// sort.Search would return "numSymb" when search finds nothing.
+	if idx < numSymb && h.symbols[resourceName][idx].start <= currLine {
+		h.currSymbolName = h.symbols[resourceName][idx].name
+	} else {
+		h.currSymbolName = ""
+	}
+}
+
+func (h *fileBarEditorHandler) cleanSymbolData(uri workspaceapi.URI) {
+	resourceName := uri.String()
+	h.symbols[resourceName] = make([]symbInfo, 0)
+	h.currSymbolName = ""
 }

@@ -58,6 +58,7 @@ const (
 
 	// EventTypeFocus is dispatched when an editor handler is on browser.Focus.
 	// Start contains the width (X) and height (Y) of the content in focus.
+	// From contains the position of the cursor at that content focus.
 	// If content is resized, EventTypeFocus is sent again, with the new dimensions.
 	EventTypeFocus
 

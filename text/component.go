@@ -230,11 +230,13 @@ func (c *Component) tryDispatchEventFocus(win handler.Window) {
 	if !ok {
 		return
 	}
+	cursor, _ := c.ed.Cursor(res)
 	(*Component)(c).dispatchEvent(textapi.Event{
 		Type:     textapi.EventTypeFocus,
 		URI:      t.URI(),
 		Resource: res,
 		Start:    c.getContentDimensions(win),
+		From:     cursor,
 	})
 }
 
@@ -297,11 +299,13 @@ func (s *compTabSubscriber) OnFocus(t *browser.Tab) {
 		return
 	}
 	dimensions := s.parent.getContentDimensions(s.parent.focus)
+	cursor, _ := s.parent.ed.Cursor(res)
 	s.parent.dispatchEvent(textapi.Event{
 		Type:     textapi.EventTypeFocus,
 		URI:      t.URI(),
 		Resource: res,
 		Start:    dimensions,
+		From:     cursor,
 	})
 }
 
@@ -773,12 +777,14 @@ func (c *Component) dispatchFocusUponSubscribe(h EventHandler) bool {
 	if ok {
 		dimensions := c.getContentDimensions(c.focus)
 		resHandler, ok := t.Handler().(Handler)
+		cursor, _ := c.ed.Cursor(resHandler)
 		if ok {
 			ev := textapi.Event{
 				Type:     textapi.EventTypeFocus,
 				URI:      t.URI(),
 				Resource: resHandler,
 				Start:    dimensions,
+				From:     cursor,
 			}
 			return h.Handle(ctx, ev)
 		}

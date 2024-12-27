@@ -1486,6 +1486,8 @@ func TestFlush(t *testing.T) {
 		mockWorkspace.EXPECT().Load(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 			Return(mockFlusherCloser, nil).Times(1)
 		mock.EXPECT().Resize(gomock.Any(), gomock.Any()).Times(1)
+		mockEditor.EXPECT().Cursor(gomock.Any()).
+			Return(term.Coordinates{}, nil).Times(1)
 		mockEditor.EXPECT().CellView(gomock.Any()).
 			Return(text.NewCellView(cell.NewBuffer().View())).Times(1)
 		mockEditor.EXPECT().Edit(gomock.Any(), gomock.Any()).Return(mock, nil)
