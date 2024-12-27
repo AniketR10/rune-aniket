@@ -1031,7 +1031,7 @@ func TestIntegrationMoveWordSpecialChars(t *testing.T) {
 	t.Run("navigating special chars MoveRightEndWord and MoveLeftStartWord", func(t *testing.T) {
 		const snippetSpecialChars = `aaa.aaa,aaa:aaa;aaa aaa)aaa"aaa'aaa(aaa{aaa}aaa[aaa` +
 			`]aaa	aaa\aaa/aaa+aaa_aaa@aaa#aaa=aaa<aaa>aaa!aaa?aaa|` +
-			`aaa^aaa&aaa*aaa%aaa.`
+			`aaa^aaa&aaa*aaa%aaa.aaa-`
 
 		vi := setupVi(t, snippetSpecialChars, 2)
 		prevCoords := term.Coordinates{X: 0, Y: 0}
@@ -1042,7 +1042,7 @@ func TestIntegrationMoveWordSpecialChars(t *testing.T) {
 			'a', '\'', 'a', '(', 'a', '{', 'a', '}', 'a', '[', 'a',
 			']', 'a', 'a', '\\', 'a', '/', 'a', '+', 'a', 'a', '@', 'a', '#', 'a',
 			'=', 'a', '<', 'a', '>', 'a', '!', 'a', '?', 'a', '|',
-			'a', '^', 'a', '&', 'a', '*', 'a',
+			'a', '^', 'a', '&', 'a', '*', 'a', '%', 'a', '.', 'a', '-',
 		}
 
 		// forward
@@ -1055,12 +1055,12 @@ func TestIntegrationMoveWordSpecialChars(t *testing.T) {
 		}
 
 		// backwards
-		for i := len(jumps) - 1; i >= 0; i-- {
+		for i := len(jumps) - 1; i >= 1; i-- {
 			_, ok := vi.Handle(term.Event{Type: term.EventKey, Ch: 'b'})
 			require.True(t, ok)
 			cell, ok := vi.cursor.Cell()
 			require.True(t, ok)
-			require.Equal(t, jumps[i], cell.Ch, "(backwards) expected '%c', got '%c'", jumps[i], cell.Ch)
+			require.Equal(t, jumps[i-1], cell.Ch, "(backwards) expected '%c', got '%c'", jumps[i-1], cell.Ch)
 		}
 	})
 	t.Run("navigating new lines MoveRightEndWord and MoveLeftStartWord", func(t *testing.T) {
