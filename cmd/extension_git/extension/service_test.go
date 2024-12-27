@@ -120,27 +120,27 @@ func TestCmdDiff(t *testing.T) {
 	defer tearDownGitRepos(reposPath)
 
 	tsuite := []struct {
-		name           string
-		expectErr      bool
-		workspaceCwd   string
-		diffFilePath   string
-		diffAssertions func(*diff.FileDiff)
+		name         string
+		workspaceCwd string
+		workPath     string
+		expectErr    bool
+		assertions   func(t *testing.T, res *diff.FileDiff)
 	}{
 		{
-			name:      "diff folder path within workspace with multiple files changed",
-			expectErr: true,
+			name:         "diff folder path within workspace with multiple files changed",
+			workspaceCwd: reposPath + "/gitproj3_multi-file-diff",
+			workPath:     reposPath + "/gitproj3_multi-file-diff/recipes",
+			expectErr:    true,
 			// ERROR: file diff reader: read from stdout: line 8, char 333:
 			// bad hunk line (does not start with ' ', '-', '+', or '\'): diff
 			// --git a/recipes/cucumber-raita.md b/recipes/cucumber-raita.md
-			workspaceCwd:   reposPath + "/gitproj3_multi-file-diff",
-			diffFilePath:   reposPath + "/gitproj3_multi-file-diff/recipes",
-			diffAssertions: func(res *diff.FileDiff) {},
+			assertions: func(t *testing.T, res *diff.FileDiff) {},
 		},
 		{
 			name:         "diff folder path within workspace with single file changed",
 			workspaceCwd: reposPath + "/gitproj2_one-file-diff",
-			diffFilePath: reposPath + "/gitproj2_one-file-diff/recipes/baba-ganoush.md",
-			diffAssertions: func(res *diff.FileDiff) {
+			workPath:     reposPath + "/gitproj2_one-file-diff/recipes/baba-ganoush.md",
+			assertions: func(t *testing.T, res *diff.FileDiff) {
 				// since only one file in that folder has changes we get very lucky
 				assert.Equal(t, "a/recipes/baba-ganoush.md", res.OrigName)
 				assert.Len(t, res.Hunks, 1)
@@ -149,8 +149,8 @@ func TestCmdDiff(t *testing.T) {
 		{
 			name:         "diff absolute file path within workspace",
 			workspaceCwd: reposPath + "/gitproj2_one-file-diff",
-			diffFilePath: reposPath + "/gitproj2_one-file-diff/recipes/baba-ganoush.md",
-			diffAssertions: func(res *diff.FileDiff) {
+			workPath:     reposPath + "/gitproj2_one-file-diff/recipes/baba-ganoush.md",
+			assertions: func(t *testing.T, res *diff.FileDiff) {
 				assert.Equal(t, "a/recipes/baba-ganoush.md", res.OrigName)
 				assert.Len(t, res.Hunks, 1)
 				assert.Equal(
@@ -165,8 +165,8 @@ func TestCmdDiff(t *testing.T) {
 		{
 			name:         "diff absolute file path outside workspace",
 			workspaceCwd: reposPath + "/gitproj2_one-file-diff",
-			diffFilePath: reposPath + "/gitproj3_multi-file-diff/recipes/cucumber-raita.md",
-			diffAssertions: func(res *diff.FileDiff) {
+			workPath:     reposPath + "/gitproj3_multi-file-diff/recipes/cucumber-raita.md",
+			assertions: func(t *testing.T, res *diff.FileDiff) {
 				assert.Equal(t, "a/recipes/cucumber-raita.md", res.OrigName)
 				assert.Len(t, res.Hunks, 2)
 			},
@@ -174,8 +174,8 @@ func TestCmdDiff(t *testing.T) {
 		{
 			name:         "diff relative file path within workspace",
 			workspaceCwd: reposPath + "/gitproj2_one-file-diff",
-			diffFilePath: "./recipes/baba-ganoush.md",
-			diffAssertions: func(res *diff.FileDiff) {
+			workPath:     "./recipes/baba-ganoush.md",
+			assertions: func(t *testing.T, res *diff.FileDiff) {
 				assert.Equal(t, "a/recipes/baba-ganoush.md", res.OrigName)
 				assert.Len(t, res.Hunks, 1)
 			},
@@ -183,8 +183,8 @@ func TestCmdDiff(t *testing.T) {
 		{
 			name:         "diff relative (no dot ./) file path within workspace",
 			workspaceCwd: reposPath + "/gitproj2_one-file-diff",
-			diffFilePath: "recipes/baba-ganoush.md",
-			diffAssertions: func(res *diff.FileDiff) {
+			workPath:     "recipes/baba-ganoush.md",
+			assertions: func(t *testing.T, res *diff.FileDiff) {
 				assert.Equal(t, "a/recipes/baba-ganoush.md", res.OrigName)
 				assert.Len(t, res.Hunks, 1)
 			},
@@ -192,77 +192,70 @@ func TestCmdDiff(t *testing.T) {
 		{
 			name:         "diff relative file path outside workspace",
 			workspaceCwd: reposPath + "/gitproj2_one-file-diff",
-			diffFilePath: "../gitproj3_multi-file-diff/recipes/cucumber-raita.md",
-			diffAssertions: func(res *diff.FileDiff) {
+			workPath:     "../gitproj3_multi-file-diff/recipes/cucumber-raita.md",
+			assertions: func(t *testing.T, res *diff.FileDiff) {
 				assert.Equal(t, "a/recipes/cucumber-raita.md", res.OrigName)
 				assert.Len(t, res.Hunks, 2)
 			},
 		},
 		{
-			name:      "diff file path no git repo",
-			expectErr: true,
+			name:         "diff file path no git repo",
+			workspaceCwd: reposPath + "/proj4_no-git",
+			workPath:     reposPath + "/proj4_no-git/file1.sh",
+			expectErr:    true,
 			// ERROR: rel path: repo path: git cmd: process exit with non-zero
 			// status (exit status 128) fatal: not a git repository (or any of
 			// the parent director
-			workspaceCwd:   reposPath + "/proj4_no-git",
-			diffFilePath:   reposPath + "/proj4_no-git/file1.sh",
-			diffAssertions: func(res *diff.FileDiff) {},
+			assertions: func(t *testing.T, res *diff.FileDiff) {},
 		},
 		{
-			name:      "repoless absolute path above cwd repo",
-			expectErr: true,
+			name:         "repoless absolute path above cwd repo",
+			workspaceCwd: reposPath + "/gitproj2_one-file-diff",
+			workPath:     reposPath + "/top-level-file-sibling-to-repos.txt",
+			expectErr:    true,
 			// ERROR: rel path: repo path: git cmd: process exit with non-zero
 			// status (exit status 128) fatal: not a git repository (or any of
 			// the parent director
-			workspaceCwd:   reposPath + "/gitproj2_one-file-diff",
-			diffFilePath:   reposPath + "/top-level-file-sibling-to-repos.txt",
-			diffAssertions: func(res *diff.FileDiff) {},
+			assertions: func(t *testing.T, res *diff.FileDiff) {},
 		},
 		{
-			name:      "repoless relative path above cwd repo",
-			expectErr: true,
+			name:         "repoless relative path above cwd repo",
+			workspaceCwd: reposPath + "/gitproj2_one-file-diff",
+			workPath:     "../top-level-file-sibling-to-repos.txt",
+			expectErr:    true,
 			// ERROR: rel path: repo path: git cmd: process exit with non-zero
 			// status (exit status 128) fatal: not a git repository (or any of
 			// the parent director
-			workspaceCwd:   reposPath + "/gitproj2_one-file-diff",
-			diffFilePath:   "../top-level-file-sibling-to-repos.txt",
-			diffAssertions: func(res *diff.FileDiff) {},
+			assertions: func(t *testing.T, res *diff.FileDiff) {},
 		},
 		{
-			name:      "diff relative file path without changes",
-			expectErr: true,
+			name:         "diff relative file path without changes",
+			workspaceCwd: reposPath + "/gitproj2_one-file-diff",
+			workPath:     "./README.txt",
+			expectErr:    true,
 			// ERROR (`errDiffNoChanges`): diff no changes
-			workspaceCwd:   reposPath + "/gitproj2_one-file-diff",
-			diffFilePath:   "./README.txt",
-			diffAssertions: func(res *diff.FileDiff) {},
+			assertions: func(t *testing.T, res *diff.FileDiff) {},
 		},
 		{
-			name:      "non-existent absolute file",
-			expectErr: true,
+			name:         "non-existent absolute file",
+			workspaceCwd: reposPath + "/gitproj2_one-file-diff",
+			workPath:     reposPath + "/this-file-does-not-exist.lol",
+			expectErr:    true,
 			// ERROR: rel path: repo path: git cmd: process exit with non-zero
 			// status (exit status 128) fatal: not a git repository (or any of
 			// the parent director
-			workspaceCwd:   reposPath + "/gitproj2_one-file-diff",
-			diffFilePath:   reposPath + "/this-file-does-not-exist.lol",
-			diffAssertions: func(res *diff.FileDiff) {},
+			assertions: func(t *testing.T, res *diff.FileDiff) {},
 		},
 	}
 
 	for _, tcase := range tsuite {
 		t.Run(tcase.name, func(t *testing.T) {
-			workspaceCwdURI, err := workspaceapi.ParseURI("file://" + tcase.workspaceCwd)
-			require.NoError(t, err)
-
-			git := setupGitService(t, workspaceCwdURI)
-
-			res, err := git.diff(tcase.diffFilePath)
-			if tcase.expectErr {
-				require.Error(t, err)
-			} else {
-				require.NoError(t, err)
-			}
-
-			tcase.diffAssertions(res)
+			testServiceFunction(t,
+				tcase.workspaceCwd,
+				func(git *cmdGitService) (res *diff.FileDiff, err error) {
+					return git.diff(tcase.workPath)
+				},
+				tcase.expectErr, tcase.assertions)
 		})
 	}
 }
@@ -273,16 +266,19 @@ func TestCmdGitCurrentCommit(t *testing.T) {
 
 	tsuite := []struct {
 		name         string
-		expectErr    bool
 		workspaceCwd string
 		workPath     string
+		expectErr    bool
 		expect       string
 	}{
 		{
 			name:         "repoless workPath",
-			expectErr:    true,
 			workspaceCwd: reposPath + "/proj4_no-git",
 			workPath:     reposPath + "/proj4_no-git",
+			expectErr:    true,
+			// ERROR: rel path: repo path: git cmd: process exit with non-zero status
+			// (exit status 128) fatal: not a git repository (or any of the parent
+			// directories): .git
 		},
 		{
 			name:         "workPath absolute folder within cwd",
@@ -323,19 +319,15 @@ func TestCmdGitCurrentCommit(t *testing.T) {
 	}
 	for _, tcase := range tsuite {
 		t.Run(tcase.name, func(t *testing.T) {
-			workspaceCwdURI, err := workspaceapi.ParseURI("file://" + tcase.workspaceCwd)
-			require.NoError(t, err)
-
-			git := setupGitService(t, workspaceCwdURI)
-
-			res, err := git.currentCommit(tcase.workPath)
-			if tcase.expectErr {
-				require.Error(t, err)
-			} else {
-				require.NoError(t, err)
-			}
-
-			assert.Equal(t, tcase.expect, res)
+			testServiceFunction(t,
+				tcase.workspaceCwd,
+				func(git *cmdGitService) (res string, err error) {
+					return git.currentCommit(tcase.workPath)
+				},
+				tcase.expectErr,
+				func(t *testing.T, res string) {
+					assert.Equal(t, tcase.expect, res)
+				})
 		})
 	}
 }
@@ -345,63 +337,59 @@ func TestCmdGitRemoteURL(t *testing.T) {
 	defer tearDownGitRepos(reposPath)
 
 	tsuite := []struct {
-		name            string
-		mustError       bool
-		workspaceCwd    string
-		workPath        string
-		remoteName      string
-		expectRemoteURL string
+		name         string
+		workspaceCwd string
+		workPath     string
+		remoteName   string
+		expectErr    bool
+		expect       string
 	}{
 		{
-			name:      "repoless workPath",
-			mustError: true,
+			name:         "repoless workPath",
+			workspaceCwd: reposPath + "/proj4_no-git",
+			workPath:     reposPath + "/proj4_no-git",
+			expectErr:    true,
 			// ERROR: process exit with non-zero status (exit status 128)
 			// fatal: not a git repository (or any of the parent directories):
 			// .git
-			workspaceCwd: reposPath + "/proj4_no-git",
-			workPath:     reposPath + "/proj4_no-git",
-			remoteName:   "origin",
+			remoteName: "origin",
 		},
 		{
-			name:            "remote exists",
-			workspaceCwd:    reposPath + "/gitproj6_two-remotes",
-			workPath:        reposPath + "/gitproj6_two-remotes",
-			remoteName:      "origin",
-			expectRemoteURL: "git@git.unstable.build:unstablebuild/gitproj6.git",
-		},
-		{
-			name:      "empty remote name",
-			mustError: true,
-			// ERROR: must pass remote name
+			name:         "remote exists",
 			workspaceCwd: reposPath + "/gitproj6_two-remotes",
 			workPath:     reposPath + "/gitproj6_two-remotes",
+			remoteName:   "origin",
+			expect:       "git@git.unstable.build:unstablebuild/gitproj6.git",
 		},
 		{
-			name:      "inexistent remote name",
-			mustError: true,
-			// ERROR: process exit with non-zero status (exit status 2) error:
-			// No such remote 'unexistent-remote-name'
+			name:         "empty remote name",
+			workspaceCwd: reposPath + "/gitproj6_two-remotes",
+			workPath:     reposPath + "/gitproj6_two-remotes",
+			expectErr:    true,
+			// ERROR: must pass remote name
+		},
+		{
+			name:         "inexistent remote name",
 			workspaceCwd: reposPath + "/gitproj6_two-remotes",
 			workPath:     reposPath + "/gitproj6_two-remotes",
 			remoteName:   "unexistent-remote-name",
+			expectErr:    true,
+			// ERROR: process exit with non-zero status (exit status 2) error:
+			// No such remote 'unexistent-remote-name'
 		},
 	}
 
 	for _, tcase := range tsuite {
 		t.Run(tcase.name, func(t *testing.T) {
-			workspaceCwdURI, err := workspaceapi.ParseURI("file://" + tcase.workspaceCwd)
-			require.NoError(t, err)
-
-			git := setupGitService(t, workspaceCwdURI)
-
-			res, err := git.remoteURL(tcase.workPath, tcase.remoteName)
-			if tcase.mustError {
-				require.Error(t, err)
-			} else {
-				require.NoError(t, err)
-			}
-
-			assert.Equal(t, tcase.expectRemoteURL, res)
+			testServiceFunction(t,
+				tcase.workspaceCwd,
+				func(git *cmdGitService) (res string, err error) {
+					return git.remoteURL(tcase.workPath, tcase.remoteName)
+				},
+				tcase.expectErr,
+				func(t *testing.T, res string) {
+					assert.Equal(t, tcase.expect, res)
+				})
 		})
 	}
 }
@@ -412,91 +400,87 @@ func TestCmdRepoPath(t *testing.T) {
 
 	tsuite := []struct {
 		name         string
-		mustError    bool
 		workspaceCwd string
 		file         string
-		expectRepo   string
+		expectErr    bool
+		expect       string
 	}{
 		{
-			name:      "absolute file not a repo",
-			mustError: true,
+			name:         "absolute file not a repo",
+			workspaceCwd: reposPath,
+			file:         reposPath + "/top-level-file-sibling-to-repos.txt",
+			expectErr:    true,
 			// ERROR: repo path: git cmd: process exit with non-zero status
 			// (exit status 128) fatal: not a git repository (or any of the
 			// parent directories): .git
-			workspaceCwd: reposPath,
-			file:         reposPath + "/top-level-file-sibling-to-repos.txt",
 		},
 		{
 			name:         "absolute file within repo same cwd",
 			workspaceCwd: reposPath + "/gitproj2_one-file-diff",
 			file:         reposPath + "/gitproj2_one-file-diff/recipes/baba-ganoush.md",
-			expectRepo:   reposPath + "/gitproj2_one-file-diff",
+			expect:       reposPath + "/gitproj2_one-file-diff",
 		},
 		{
 			name:         "absolute file in other repo not below cwd",
 			workspaceCwd: reposPath + "/gitproj2_one-file-diff",
 			file:         reposPath + "/gitproj3_multi-file-diff/recipes/cucumber-raita.md",
-			expectRepo:   reposPath + "/gitproj3_multi-file-diff",
+			expect:       reposPath + "/gitproj3_multi-file-diff",
 		},
 		{
 			name:         "absolute file within repo below cwd",
 			workspaceCwd: reposPath,
 			file:         reposPath + "/gitproj2_one-file-diff/recipes/baba-ganoush.md",
-			expectRepo:   reposPath + "/gitproj2_one-file-diff",
+			expect:       reposPath + "/gitproj2_one-file-diff",
 		},
 		{
 			name:         "absolute file within repo above cwd",
 			workspaceCwd: reposPath + "/gitproj2_one-file-diff/recipes",
 			file:         reposPath + "/gitproj2_one-file-diff/recipes/baba-ganoush.md",
-			expectRepo:   reposPath + "/gitproj2_one-file-diff",
+			expect:       reposPath + "/gitproj2_one-file-diff",
 		},
 		{
 			name:         "relative file within repo same level cwd",
 			workspaceCwd: reposPath + "/gitproj2_one-file-diff",
 			file:         "./recipes/baba-ganoush.md",
-			expectRepo:   reposPath + "/gitproj2_one-file-diff",
+			expect:       reposPath + "/gitproj2_one-file-diff",
 		},
 		{
 			name:         "relative file (no dot ./) within repo same level cwd",
 			workspaceCwd: reposPath + "/gitproj2_one-file-diff",
 			file:         "recipes/baba-ganoush.md",
-			expectRepo:   reposPath + "/gitproj2_one-file-diff",
+			expect:       reposPath + "/gitproj2_one-file-diff",
 		},
 		{
 			name:         "relative file within repo below cwd",
 			workspaceCwd: reposPath,
 			file:         "./gitproj2_one-file-diff/recipes/baba-ganoush.md",
-			expectRepo:   reposPath + "/gitproj2_one-file-diff",
+			expect:       reposPath + "/gitproj2_one-file-diff",
 		},
 		{
 			name:         "relative file within repo above cwd",
 			workspaceCwd: reposPath + "/gitproj2_one-file-diff/recipes",
 			file:         "../README.txt",
-			expectRepo:   reposPath + "/gitproj2_one-file-diff",
+			expect:       reposPath + "/gitproj2_one-file-diff",
 		},
 		{
 			name:         "relative file in other repo sibling to cwd",
 			workspaceCwd: reposPath + "/gitproj2_one-file-diff/recipes",
 			file:         "../../gitproj3_multi-file-diff/recipes/cucumber-raita.md",
-			expectRepo:   reposPath + "/gitproj3_multi-file-diff",
+			expect:       reposPath + "/gitproj3_multi-file-diff",
 		},
 	}
 
 	for _, tcase := range tsuite {
 		t.Run(tcase.name, func(t *testing.T) {
-			workspaceCwdURI, err := workspaceapi.ParseURI("file://" + tcase.workspaceCwd)
-			require.NoError(t, err)
-
-			git := setupGitService(t, workspaceCwdURI)
-
-			reposPath, err := git.repoPath(tcase.file)
-			if tcase.mustError {
-				require.Error(t, err)
-			} else {
-				require.NoError(t, err)
-			}
-
-			assert.Equal(t, tcase.expectRepo, reposPath)
+			testServiceFunction(t,
+				tcase.workspaceCwd,
+				func(git *cmdGitService) (res string, err error) {
+					return git.repoPath(tcase.file)
+				},
+				tcase.expectErr,
+				func(t *testing.T, res string) {
+					assert.Equal(t, tcase.expect, res)
+				})
 		})
 	}
 }
@@ -506,102 +490,109 @@ func TestCmdRelPath(t *testing.T) {
 	defer tearDownGitRepos(reposPath)
 
 	tsuite := []struct {
-		name          string
-		mustError     bool
-		workspaceCwd  string
-		file          string
-		expectRepo    string
-		expectRelPath string
+		name         string
+		workspaceCwd string
+		file         string
+		expectErr    bool
+		expect       string
 	}{
 		{
-			name:      "absolute file not a repo",
-			mustError: true,
+			name:         "absolute file not a repo",
+			workspaceCwd: reposPath,
+			file:         reposPath + "/top-level-file-sibling-to-repos.txt",
+			expectErr:    true,
 			// ERROR: repo path: git cmd: process exit with non-zero status
 			// (exit status 128) fatal: not a git repository (or any of the
 			// parent directories): .git
+		},
+		{
+			name:         "absolute file within repo same cwd",
+			workspaceCwd: reposPath + "/gitproj2_one-file-diff",
+			file:         reposPath + "/gitproj2_one-file-diff/recipes/baba-ganoush.md",
+			expect:       "recipes/baba-ganoush.md",
+		},
+		{
+			name:         "absolute file in other repo not below cwd",
+			workspaceCwd: reposPath + "/gitproj2_one-file-diff",
+			file:         reposPath + "/gitproj3_multi-file-diff/recipes/cucumber-raita.md",
+			expect:       "recipes/cucumber-raita.md",
+		},
+		{
+			name:         "absolute file within repo below cwd",
 			workspaceCwd: reposPath,
-			file:         reposPath + "/top-level-file-sibling-to-repos.txt",
+			file:         reposPath + "/gitproj2_one-file-diff/recipes/baba-ganoush.md",
+			expect:       "recipes/baba-ganoush.md",
 		},
 		{
-			name:          "absolute file within repo same cwd",
-			workspaceCwd:  reposPath + "/gitproj2_one-file-diff",
-			file:          reposPath + "/gitproj2_one-file-diff/recipes/baba-ganoush.md",
-			expectRepo:    reposPath + "/gitproj2_one-file-diff",
-			expectRelPath: "recipes/baba-ganoush.md",
+			name:         "absolute file within repo above cwd",
+			workspaceCwd: reposPath + "/gitproj2_one-file-diff/recipes",
+			file:         reposPath + "/gitproj2_one-file-diff/recipes/baba-ganoush.md",
+			expect:       "recipes/baba-ganoush.md",
 		},
 		{
-			name:          "absolute file in other repo not below cwd",
-			workspaceCwd:  reposPath + "/gitproj2_one-file-diff",
-			file:          reposPath + "/gitproj3_multi-file-diff/recipes/cucumber-raita.md",
-			expectRepo:    reposPath + "/gitproj3_multi-file-diff",
-			expectRelPath: "recipes/cucumber-raita.md",
+			name:         "relative file within repo same level cwd",
+			workspaceCwd: reposPath + "/gitproj2_one-file-diff",
+			file:         "./recipes/baba-ganoush.md",
+			expect:       "recipes/baba-ganoush.md",
 		},
 		{
-			name:          "absolute file within repo below cwd",
-			workspaceCwd:  reposPath,
-			file:          reposPath + "/gitproj2_one-file-diff/recipes/baba-ganoush.md",
-			expectRepo:    reposPath + "/gitproj2_one-file-diff",
-			expectRelPath: "recipes/baba-ganoush.md",
+			name:         "relative file (no dot ./) within repo same level cwd",
+			workspaceCwd: reposPath + "/gitproj2_one-file-diff",
+			file:         "recipes/baba-ganoush.md",
+			expect:       "recipes/baba-ganoush.md",
 		},
 		{
-			name:          "absolute file within repo above cwd",
-			workspaceCwd:  reposPath + "/gitproj2_one-file-diff/recipes",
-			file:          reposPath + "/gitproj2_one-file-diff/recipes/baba-ganoush.md",
-			expectRepo:    reposPath + "/gitproj2_one-file-diff",
-			expectRelPath: "recipes/baba-ganoush.md",
+			name:         "relative file within repo below cwd",
+			workspaceCwd: reposPath,
+			file:         "./gitproj2_one-file-diff/recipes/baba-ganoush.md",
+			expect:       "recipes/baba-ganoush.md",
 		},
 		{
-			name:          "relative file within repo same level cwd",
-			workspaceCwd:  reposPath + "/gitproj2_one-file-diff",
-			file:          "./recipes/baba-ganoush.md",
-			expectRepo:    reposPath + "/gitproj2_one-file-diff",
-			expectRelPath: "recipes/baba-ganoush.md",
+			name:         "relative file within repo above cwd",
+			workspaceCwd: reposPath + "/gitproj2_one-file-diff/recipes",
+			file:         "../README.txt",
+			expect:       "README.txt",
 		},
 		{
-			name:          "relative file (no dot ./) within repo same level cwd",
-			workspaceCwd:  reposPath + "/gitproj2_one-file-diff",
-			file:          "recipes/baba-ganoush.md",
-			expectRepo:    reposPath + "/gitproj2_one-file-diff",
-			expectRelPath: "recipes/baba-ganoush.md",
-		},
-		{
-			name:          "relative file within repo below cwd",
-			workspaceCwd:  reposPath,
-			file:          "./gitproj2_one-file-diff/recipes/baba-ganoush.md",
-			expectRepo:    reposPath + "/gitproj2_one-file-diff",
-			expectRelPath: "recipes/baba-ganoush.md",
-		},
-		{
-			name:          "relative file within repo above cwd",
-			workspaceCwd:  reposPath + "/gitproj2_one-file-diff/recipes",
-			file:          "../README.txt",
-			expectRepo:    reposPath + "/gitproj2_one-file-diff",
-			expectRelPath: "README.txt",
-		},
-		{
-			name:          "relative file in other repo sibling to cwd",
-			workspaceCwd:  reposPath + "/gitproj2_one-file-diff/recipes",
-			file:          "../../gitproj3_multi-file-diff/recipes/cucumber-raita.md",
-			expectRepo:    reposPath + "/gitproj3_multi-file-diff",
-			expectRelPath: "recipes/cucumber-raita.md",
+			name:         "relative file in other repo sibling to cwd",
+			workspaceCwd: reposPath + "/gitproj2_one-file-diff/recipes",
+			file:         "../../gitproj3_multi-file-diff/recipes/cucumber-raita.md",
+			expect:       "recipes/cucumber-raita.md",
 		},
 	}
 
 	for _, tcase := range tsuite {
 		t.Run(tcase.name, func(t *testing.T) {
-			workspaceCwdURI, err := workspaceapi.ParseURI("file://" + tcase.workspaceCwd)
-			require.NoError(t, err)
-
-			git := setupGitService(t, workspaceCwdURI)
-
-			relFile, err := git.relPath(tcase.file)
-			if tcase.mustError {
-				require.Error(t, err)
-			} else {
-				require.NoError(t, err)
-			}
-
-			assert.Equal(t, tcase.expectRelPath, relFile)
+			testServiceFunction(t,
+				tcase.workspaceCwd,
+				func(git *cmdGitService) (res string, err error) {
+					return git.relPath(tcase.file)
+				},
+				tcase.expectErr,
+				func(t *testing.T, res string) {
+					assert.Equal(t, tcase.expect, res)
+				})
 		})
 	}
+}
+
+func testServiceFunction[T any](
+	t *testing.T, workspaceCwd string,
+	serviceFn func(git *cmdGitService) (res T, err error),
+	expectErr bool,
+	assertions func(t *testing.T, res T),
+) {
+	workspaceCwdURI, err := workspaceapi.ParseURI("file://" + workspaceCwd)
+	require.NoError(t, err)
+
+	git := setupGitService(t, workspaceCwdURI)
+
+	res, err := serviceFn(git)
+	if expectErr {
+		require.Error(t, err)
+	} else {
+		require.NoError(t, err)
+	}
+
+	assertions(t, res)
 }
