@@ -286,6 +286,20 @@ func (c *Component) RemoveAllTabs() {
 	})
 }
 
+// RemoveInactiveTabs removes all tabs that aren't used by any window.
+// If no tabs were closed then false is returned.
+func (c *Component) RemoveInactiveTabs() (removed bool) {
+	for _, tab := range c.Tabs() {
+		if !tab.free {
+			// used by a window
+			continue
+		}
+		c.doRemoveTab(tab)
+		removed = true
+	}
+	return
+}
+
 // Window returns the window with the given ID or false if there's
 // no window with the given ID.
 func (c *Component) Window(id uint64) (Window, bool) {

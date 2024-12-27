@@ -441,6 +441,15 @@ func (e *ex) closeAllTabs(args ...string) error {
 	return nil
 }
 
+func (e *ex) closeInactiveTabs(args ...string) error {
+	b := e.comp.Browser()
+	if removed := b.RemoveInactiveTabs(); !removed {	
+		return errors.New("no inactive tabs left")
+		
+	}
+	return nil
+}
+
 func (e *ex) closeFocusWindow(args ...string) error {
 	win := e.invokeWindow()
 	if win == e.companionTerminalWin {

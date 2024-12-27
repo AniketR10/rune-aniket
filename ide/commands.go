@@ -107,6 +107,12 @@ var (
 			},
 			handler: (*ex).closeAllTabs,
 		},
+		"closeInactiveTabs": {
+			man: textapi.CommandManual{
+				Summary: "Closes all tabs that aren't used by any window.",
+			},
+			handler: (*ex).closeInactiveTabs,
+		},
 		"closeWindow": {
 			man: textapi.CommandManual{
 				Summary: "Closes the current active window and switches focus " +

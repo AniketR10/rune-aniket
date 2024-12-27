@@ -220,6 +220,42 @@ func TestComponentCloseOtherWindows(t *testing.T) {
 	})
 }
 
+func TestRemoveInactiveTabs(t *testing.T) {
+	b := NewComponent(DefaultConfig())
+
+	tabDefs := []struct {
+		name   string
+		active bool
+	}{
+		{"a", false}, {"b", true}, {"c", true}, {"d", false}}
+
+	for _, tabDef := range tabDefs {
+		uri, err := workspaceapi.ParseURI("file:///" + tabDef.name)
+		require.NoError(t, err)
+		h := newTestHandler()
+		tab := b.NewTab(uri, 'o', tabDef.name, h, h)
+		if tabDef.active {
+			b.Split(browserapi.OrientationRight, b.Focus(), tab)
+		}
+	}
+
+	tabNames := make([]string, 0)
+	for _, tab := range b.Tabs() {
+		tabName, _, _ := b.TabName(tab.URI())
+		tabNames = append(tabNames, tabName)
+	}
+	assert.Equal(t, []string{"a", "b", "c", "d"}, tabNames)
+
+	b.RemoveInactiveTabs()
+	tabNames = tabNames[:0]
+
+	for _, tab := range b.Tabs() {
+		tabName, _, _ := b.TabName(tab.URI())
+		tabNames = append(tabNames, tabName)
+	}
+	assert.Equal(t, []string{"b", "c"}, tabNames)
+}
+
 var _ component.Scrollable = (*nopScrollableHandler)(nil)
 
 type nopScrollableHandler struct {
