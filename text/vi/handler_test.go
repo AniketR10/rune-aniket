@@ -1945,3 +1945,76 @@ func TestPasteVisualMode(t *testing.T) {
 		})
 	}
 }
+
+func TestVisualBlockInsert(t *testing.T) {
+	fileContent := "aaaaaa\nbbbbbb\ncccccc\ndddddd"
+
+	suite := []struct {
+		name          string
+		moveCursorFn  func(*viHandlerImpl)
+		inputSequence string
+		expect        string
+	}{
+		{
+			name:          "no backspace",
+			inputSequence: "01234",
+			expect:        "01234aaaaaa\n01234bbbbbb\n01234cccccc\ndddddd",
+		},
+		{
+			name:          "backspace",
+			inputSequence: "01234^xy",
+			expect:        "0123xyaaaaaa\n0123xybbbbbb\n0123xycccccc\ndddddd",
+		},
+		{
+			name:          "many backspace",
+			inputSequence: "01234^^^xy",
+			expect:        "01xyaaaaaa\n01xybbbbbb\n01xycccccc\ndddddd",
+		},
+		{
+			name:          "more backspaces than characters in row",
+			inputSequence: "ABC^^^^^^^",
+			expect:        "aaaaaa\nbbbbbb\ncccccc\ndddddd",
+		},
+		{
+			name:          "backspace only",
+			inputSequence: "^",
+			expect:        "aaaaaa\nbbbbbb\ncccccc\ndddddd",
+		},
+		{
+			name:          "many backspace only",
+			inputSequence: "^^^",
+			expect:        "aaaaaa\nbbbbbb\ncccccc\ndddddd",
+		},
+	}
+
+	for _, tcase := range suite {
+		t.Run(tcase.name, func(t *testing.T) {
+			vi := setupVi(t, fileContent, 2)
+			vi.Resize(4, 4)
+
+			if tcase.moveCursorFn != nil {
+				tcase.moveCursorFn(vi)
+			}
+
+			vi.Handle(term.Event{Type: term.EventKey, Ch: 'v', Mod: term.ModCtrl})
+			vi.Handle(term.Event{Type: term.EventKey, Ch: 'j'})
+			vi.Handle(term.Event{Type: term.EventKey, Ch: 'j'})
+			vi.Handle(term.Event{Type: term.EventKey, Ch: 'I'})
+
+			for _, ch := range tcase.inputSequence {
+				// following same convetions as handler.handlertest.SequenceTestCase
+				if ch == '^' {
+					vi.Handle(term.Event{Type: term.EventKey, Key: term.KeyBackspace})
+				} else {
+					vi.Handle(term.Event{Type: term.EventKey, Ch: ch})
+				}
+
+			}
+
+			vi.Handle(term.Event{Type: term.EventKey, Key: term.KeyEsc})
+			assert.Equal(t, tcase.expect,
+				vi.less.Buffer().String())
+
+		})
+	}
+}

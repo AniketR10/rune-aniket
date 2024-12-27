@@ -31,7 +31,7 @@ import (
 )
 
 // Repeater is a helper structure to enable repeating the last
-// insert or delete in a buffer. See Repeat for more details.
+// text insertion or delete in a buffer. See Repeat for more details.
 type Repeater struct {
 	buf    *cell.Buffer
 	cursor *Cursor
@@ -59,10 +59,16 @@ func (r *Repeater) Init(cursor *Cursor, buf *cell.Buffer) {
 	buf.SubscribeUsage(r)
 }
 
-// Repeat repeats the last call to the buffer's Writer Insert or Delete.
+// Repeat repeats the last Delete or last text insertion.
+//
+// Last text insertion is the accumulated string written through buffer's Writer's
+// Insert since construction of Repeater or since last call to Repeater's Clear.
 func (r *Repeater) Repeat() (ok bool) {
 	if r.i {
+		// avoid OnWillEdit loop
+		r.repeating = true
 		r.cursor.InsertString(r.insertStr)
+		r.repeating = false
 		ok = true
 		return
 	}
@@ -85,6 +91,11 @@ func (r *Repeater) Repeat() (ok bool) {
 	return
 }
 
+// Clear resets the insert string to be repeated.
+func (r *Repeater) Clear() {
+	r.insertStr = ""
+}
+
 // OnWillEdit satisfies cell.Subscriber.
 func (r *Repeater) OnWillEdit(
 	ctx context.Context, start, end term.Coordinates, str string,
@@ -92,9 +103,9 @@ func (r *Repeater) OnWillEdit(
 	if r.repeating {
 		return
 	}
-	r.d = start != end
-	r.i = str != ""
-	r.insertStr = str
+	r.d = r.insertStr == "" && start != end
+	r.i = r.insertStr != "" || str != ""
+	r.insertStr += str
 	r.deleteFrom = start
 	r.deleteTo = end
 }
@@ -103,4 +114,11 @@ func (r *Repeater) OnWillEdit(
 func (r *Repeater) OnDidEdit(
 	ctx context.Context, from, to term.Coordinates, old string,
 ) {
+	// text has been deleted most likely by backlash
+	if r.insertStr != "" && old != "" {
+		idx := len(r.insertStr) - len(old)
+		if idx >= 0 && idx < len(r.insertStr) {
+			r.insertStr = r.insertStr[:idx]
+		}
+	}
 }

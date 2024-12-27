@@ -255,6 +255,7 @@ func (vi *viHandlerImpl) setNormalMode() bool {
 }
 
 func (vi *viHandlerImpl) setInsertMode() {
+	vi.repeater.Clear()
 	vi.blockRepeat.From = term.Coordinates{}
 	vi.blockRepeat.To = term.Coordinates{}
 	vi.setMode(insertMode)

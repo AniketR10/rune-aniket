@@ -42,27 +42,39 @@ func TestRepeater(t *testing.T) {
 	cursor.InsertString("helloworld")
 	assert.True(t, repeater.Repeat())
 	assert.Equal(t, "helloworldhelloworld", buf.String())
+	repeater.Clear()
 
 	cursor.Insert('X')
 	cursor.MoveUp()
 	cursor.MoveStartLine()
 	assert.True(t, repeater.Repeat())
 	assert.Equal(t, "XhelloworldhelloworldX", buf.String())
+	assert.True(t, repeater.Repeat())
+	assert.Equal(t, "XXhelloworldhelloworldX", buf.String())
+	repeater.Clear()
+
+	// all inserts are accumulated into the repeater
+	cursor.InsertString("00")
+	cursor.InsertString("11")
+	cursor.InsertString("22")
+	assert.True(t, repeater.Repeat())
+	assert.Equal(t, "XX001122001122helloworldhelloworldX", buf.String())
+	repeater.Clear()
 
 	cursor.MoveStartLine()
 	cursor.Select()
 	cursor.MoveRight()
 	cursor.DeleteSelection()
 	assert.True(t, repeater.Repeat())
-	assert.Equal(t, "loworldhelloworldX", buf.String())
+	assert.Equal(t, "1122001122helloworldhelloworldX", buf.String())
 	assert.True(t, cursor.MoveEndLine())
 	cursor.cursor.X++
 	require.False(t, repeater.Repeat())
 	// nop because end is out of bounds
-	assert.Equal(t, "loworldhelloworldX", buf.String())
+	assert.Equal(t, "1122001122helloworldhelloworldX", buf.String())
 
 	cursor.MoveLeft()
 	cursor.MoveLeft()
 	require.True(t, repeater.Repeat())
-	assert.Equal(t, "loworldhelloworl", buf.String())
+	assert.Equal(t, "1122001122helloworldhelloworl", buf.String())
 }
