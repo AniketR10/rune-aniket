@@ -170,7 +170,7 @@ func TestHandler(
 ) {
 	var err error
 
-	for _, tcase := range cases {
+	for i, tcase := range cases {
 		if err = w.Clear(term.Attributes{}); err != nil {
 			t.Fatal(err)
 		}
@@ -185,7 +185,8 @@ func TestHandler(
 
 		// for readability, we expected strings are written starting with \n
 		expected := strings.TrimLeft(tcase.Expected, "\n")
-		assert.Equal(t, expected, w.String())
+		assert.Equal(t, expected, w.String(), "test %d: ch <%c> key <%v> ",
+			i, tcase.Event.Ch, tcase.Event.Key)
 	}
 }
 

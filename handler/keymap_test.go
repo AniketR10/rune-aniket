@@ -33,12 +33,12 @@ import (
 )
 
 func TestKeyMappedLessHandle(t *testing.T) {
-	cases := getLessHandleTestFlow([19]term.Event{
+	cases := getLessHandleTestFlow([26]term.Event{
 		{},
 		{Ch: 'k', Type: term.EventKey},
 		{Ch: 'U', Type: term.EventKey},
+		{Ch: 'v', Type: term.EventKey},
 		{Ch: '%', Type: term.EventKey},
-		{Ch: 'l', Type: term.EventKey},
 		{Key: term.KeyArrowRight, Type: term.EventKey},
 		{Key: term.KeyArrowLeft, Type: term.EventKey},
 		{Ch: 'G', Type: term.EventKey},
@@ -52,14 +52,23 @@ func TestKeyMappedLessHandle(t *testing.T) {
 		{Ch: 'g', Type: term.EventKey},
 		{Ch: 'N', Type: term.EventKey, Mod: term.ModAlt},
 		{Ch: 'n', Type: term.EventKey, Mod: term.ModAlt},
-		{},
+		{Ch: 'G', Type: term.EventKey},
+		{Ch: '_', Type: term.EventKey},
+		{Ch: 'X', Type: term.EventKey},
+		{Ch: 'X', Type: term.EventKey},
+		{Key: term.KeyEnter, Type: term.EventKey},
+		{Ch: 'n', Type: term.EventKey, Mod: term.ModAlt},
+		{Ch: 'n', Type: term.EventKey, Mod: term.ModAlt},
+		{Ch: 'N', Type: term.EventKey, Mod: term.ModAlt},
 	})
 	less1, writer3 := setup(t, nil, 8, 4)
 	handlertest.TestHandler(t, WithMapping(less1, map[term.KeyComb]term.KeyComb{
 		{Ch: 'k'}:                   {Ch: 'k'},
 		{Ch: 'U'}:                   {Ch: 'j'},
 		{Ch: '%'}:                   {Ch: 'h'},
+		{Ch: 'v'}:                   {Ch: 'l'},
 		{Ch: '\\'}:                  {Ch: '/'},
+		{Ch: '_'}:                   {Ch: '?'},
 		{Key: term.KeyArrowRight}:   {Ch: '$'},
 		{Key: term.KeyArrowLeft}:    {Ch: '0'},
 		{Ch: 'N', Mod: term.ModAlt}: {Ch: 'N'},

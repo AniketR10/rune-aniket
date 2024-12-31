@@ -72,6 +72,7 @@ type Less struct {
 	msg               component.Responsive
 	msgVirt           component.Virtual
 	mode              LessMode
+	moveMode          LessMoveMode
 	usedMsgBarAttr    term.Attributes
 	usedSearchBarAttr term.Attributes
 	delEOF            bool
@@ -101,6 +102,15 @@ type LessMode uint8
 const (
 	LessNormalMode LessMode = iota
 	LessSearchMode
+)
+
+// LessMoveMode represents the moving direction of the search.
+type LessMoveMode uint8
+
+// List of less moving modes.
+const (
+	LessMoveForward LessMoveMode = iota
+	LessMoveBackward
 )
 
 // LessEvent type represents a less event.
@@ -144,11 +154,20 @@ func (l *Less) SetNormalMode() {
 }
 
 // SetSearchMode sets the mode to search mode.
-func (l *Less) SetSearchMode() {
+func (l *Less) SetSearchMode(moveMode LessMoveMode) {
 	buf := l.searchScroll.Buffer()
 	buf.Reset()
-	buf.WriteString("/")
+
+	switch moveMode {
+	case LessMoveForward:
+		buf.WriteString("/")
+	case LessMoveBackward:
+		buf.WriteString("?")
+	}
+
 	l.mode = LessSearchMode
+	l.moveMode = moveMode
+
 	if l.config.SuperimposeMessage && l.scroll.Attributes != l.usedSearchBarAttr {
 		l.updateSearchBarAttr()
 	}
@@ -331,7 +350,12 @@ func (l *Less) searchHandleEvent(ev term.Event) (bool, bool) {
 		l.search = l.SearchText()
 		l.scroll.Search(l.search)
 		l.SetNormalMode()
-		l.scroll.SeekNextResult()
+		switch l.moveMode {
+		case LessMoveForward:
+			l.scroll.SeekNextResult()
+		case LessMoveBackward:
+			l.scroll.SeekPrevResult()
+		}
 		l.sendEvent(LessEvent{Type: Search, Data: []byte(l.search)})
 
 	case term.KeyEsc:
@@ -369,9 +393,19 @@ func (l *Less) normalHandleEvent(ev term.Event) (exit, handled bool) {
 		exit = true
 		handled = true
 	case 'N':
-		handled = l.scroll.SeekPrevResult()
+		switch l.moveMode {
+		case LessMoveForward:
+			handled = l.scroll.SeekPrevResult()
+		case LessMoveBackward:
+			handled = l.scroll.SeekNextResult()
+		}
 	case 'n':
-		handled = l.scroll.SeekNextResult()
+		switch l.moveMode {
+		case LessMoveForward:
+			handled = l.scroll.SeekNextResult()
+		case LessMoveBackward:
+			handled = l.scroll.SeekPrevResult()
+		}
 	case '0':
 		handled = l.scroll.SeekStartLine()
 	case '$':
@@ -389,8 +423,12 @@ func (l *Less) normalHandleEvent(ev term.Event) (exit, handled bool) {
 	case 'l':
 		handled = l.scroll.SeekRight()
 	case '/':
-		l.SetSearchMode()
+		l.SetSearchMode(LessMoveForward)
 		handled = true
+	case '?':
+		l.SetSearchMode(LessMoveBackward)
+		handled = true
+
 	default:
 		switch ev.Key {
 		case term.KeyEsc:

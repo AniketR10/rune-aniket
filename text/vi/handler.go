@@ -315,7 +315,6 @@ func (vi *viHandlerImpl) handleSearch(ev term.Event) (bool, bool) {
 		case term.KeyEnter:
 			text := vi.less.SearchText()
 			vi.less.SetNormalMode()
-			vi.searchMode = moveToNext
 			if text == "" {
 				vi.setMode(normalMode) // force set message
 			} else {
@@ -526,7 +525,6 @@ func (vi *viHandlerImpl) handleNormal(ev term.Event) (quit, handled bool) {
 			vi.cursor.MoveLeftStartWordGroup()
 		case '?':
 			vi.searchMode = moveToPrev
-			ev.Ch = '/'
 			vi.less.Handle(ev)
 		case '/':
 			vi.searchMode = moveToNext

@@ -34,7 +34,7 @@ import (
 	"unstable.build/go-tui/term"
 )
 
-const content = `AAAAABBBBB
+const content = `AAAXXBBBBB
 CCCCCDDDDD
 EEEEEFFFFF
 GGGGGHHHHH
@@ -257,12 +257,12 @@ ke it overflow below
 }
 
 func TestLessHandle(t *testing.T) {
-	cases := getLessHandleTestFlow([19]term.Event{
+	cases := getLessHandleTestFlow([26]term.Event{
 		{},
 		{Ch: 'k', Type: term.EventKey},
 		{Ch: 'j', Type: term.EventKey},
-		{Ch: 'h', Type: term.EventKey},
 		{Ch: 'l', Type: term.EventKey},
+		{Ch: 'h', Type: term.EventKey},
 		{Ch: '$', Type: term.EventKey},
 		{Ch: '0', Type: term.EventKey},
 		{Ch: 'G', Type: term.EventKey},
@@ -276,23 +276,30 @@ func TestLessHandle(t *testing.T) {
 		{Ch: 'g', Type: term.EventKey},
 		{Ch: 'N', Type: term.EventKey},
 		{Ch: 'n', Type: term.EventKey},
-		{},
+		{Ch: 'G', Type: term.EventKey},
+		{Ch: '?', Type: term.EventKey},
+		{Ch: 'X', Type: term.EventKey},
+		{Ch: 'X', Type: term.EventKey},
+		{Key: term.KeyEnter, Type: term.EventKey},
+		{Ch: 'n', Type: term.EventKey},
+		{Ch: 'n', Type: term.EventKey},
+		{Ch: 'N', Type: term.EventKey},
 	})
 	testLessHandle(t, cases)
 }
 
-func getLessHandleTestFlow(events [19]term.Event) []handlertest.SingleTestCase {
+func getLessHandleTestFlow(events [26]term.Event) []handlertest.SingleTestCase {
 	return []handlertest.SingleTestCase{
 		{
 			events[0], `
-AAAAABBB
+AAAXXBBB
 CCCCCDDD
 EEEEEFFF
         `,
 		},
 		{
 			events[1], `
-AAAAABBB
+AAAXXBBB
 CCCCCDDD
 EEEEEFFF
         `,
@@ -306,16 +313,16 @@ GGGGGHHH
 		},
 		{
 			events[3], `
-CCCCCDDD
-EEEEEFFF
-GGGGGHHH
+CCCCDDDD
+EEEEFFFF
+GGGGHHHH
         `,
 		},
 		{
 			events[4], `
-CCCCDDDD
-EEEEFFFF
-GGGGHHHH
+CCCCCDDD
+EEEEEFFF
+GGGGGHHH
         `,
 		},
 		{
@@ -341,56 +348,56 @@ GGGGGHHH
 		},
 		{
 			events[8], `
-AAAAABBB
+AAAXXBBB
 CCCCCDDD
 EEEEEFFF
         `,
 		},
 		{
 			events[9], `
-AAAAABBB
+AAAXXBBB
 CCCCCDDD
 EEEEEFFF
 /       `,
 		},
 		{
 			events[10], `
-AAAAABBB
+AAAXXBBB
 CCCCCDDD
 EEEEEFFF
 /X      `,
 		},
 		{
 			events[11], `
-AAAAABBB
+AAAXXBBB
 CCCCCDDD
 EEEEEFFF
 /       `,
 		},
 		{
 			events[12], `
-AAAAABBB
+AAAXXBBB
 CCCCCDDD
 EEEEEFFF
 /X      `,
 		},
 		{
 			events[13], `
-AAAAABBB
+AAAXXBBB
 CCCCCDDD
 EEEEEFFF
 /XX     `,
 		},
 		{
 			events[14], `
-KKKKXXLL
-99999999
-88888888
+AAAXXBBB
+CCCCCDDD
+EEEEEFFF
         `,
 		},
 		{
 			events[15], `
-AAAAABBB
+AAAXXBBB
 CCCCCDDD
 EEEEEFFF
         `,
@@ -404,9 +411,65 @@ EEEEEFFF
 		},
 		{
 			events[17], `
+AXXBBBBB
+CCCDDDDD
+EEEFFFFF
+        `,
+		},
+		{
+			events[18], `
+88888888
+33333333
+111111XX
+        `,
+		},
+		{
+			events[19], `
+88888888
+33333333
+111111XX
+?       `,
+		},
+		{
+			events[20], `
+88888888
+33333333
+111111XX
+?X      `,
+		},
+		{
+			events[21], `
+88888888
+33333333
+111111XX
+?XX     `,
+		},
+		{
+			events[22], `
 KKXXLLLL
 99999999
 88888888
+        `,
+		},
+		{
+			events[23], `
+AXXBBBBB
+CCCDDDDD
+EEEFFFFF
+        `,
+		},
+		{
+			events[24], `
+111111XX
+        
+        
+        `,
+		},
+		{
+			events[25], `
+AXXBBBBB
+CCCDDDDD
+EEEFFFFF
         `,
 		},
 	}

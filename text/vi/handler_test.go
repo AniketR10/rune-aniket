@@ -663,17 +663,50 @@ p▐ff_buf_add(win->w_
                     
                     
               NORMAL`},
-		{"Rabcdef",
+		{"Rabcdef<",
 			`{                   
 curtab->tp_diff_inva
   diff_redraw(TRUE);
-pabcdef▐_add(win->w_
+pabcde▐f_add(win->w_
                     
                     
                     
                     
                     
-             REPLACE`},
+              NORMAL`},
+		{"?diff>",
+			`{                   
+curtab->tp_diff_inva
+  ▐iff_redraw(TRUE);
+pabcdeff_add(win->w_
+                    
+                    
+                    
+                    
+                    
+    searching 'diff'`},
+		{"n",
+			`{                   
+curtab->tp_▐iff_inva
+  diff_redraw(TRUE);
+pabcdeff_add(win->w_
+                    
+                    
+                    
+                    
+                    
+    searching 'diff'`},
+		{"N",
+			`{                   
+curtab->tp_diff_inva
+  ▐iff_redraw(TRUE);
+pabcdeff_add(win->w_
+                    
+                    
+                    
+                    
+                    
+    searching 'diff'`},
 	}
 
 	vi := setupViIntegration(t, snippet, 2)
