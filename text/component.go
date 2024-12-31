@@ -648,6 +648,12 @@ func (c *Component) Focus() (browser.Window, error) {
 	return c.comp.Focus(), nil
 }
 
+// FocusTab returns the Tab corresponding to the current window in focus,
+// or false if the current window in focus is not drawing a Tab.
+func (c *Component) FocusTab() (*browser.Tab, bool) {
+	return c.comp.FocusTab()
+}
+
 // SetFocus sets the window in focus and returns the previous window in focus.
 // It satisfies browser.Browser.
 func (c *Component) SetFocus(win browser.Window) (browser.Window, error) {

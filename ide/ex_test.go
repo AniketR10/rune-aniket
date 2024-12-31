@@ -28,6 +28,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os/user"
 
 	"os"
 	"path/filepath"
@@ -2366,6 +2367,57 @@ func TestEcho(t *testing.T) {
 	defer e.Close()
 
 	handlertest.TestHandlerSequence(t, e, 30, 15, cases)
+}
+
+func TestCopyPath(t *testing.T) {
+	tsuite := []struct {
+		name   string
+		cmd    string
+		expect func() string
+	}{
+		{
+			name:   "relative",
+			cmd:    ":copyPath",
+			expect: func() string { return "hello.go" },
+		},
+		{
+			name: "absolute",
+			cmd:  ":copyPath absolute",
+			expect: func() string {
+				absPath, _ := workspaceapi.ExpandPath(
+					"hello.go", user.Current, os.Getwd)
+				return absPath // e.g. /Users/ramon/Devel/go-tui/hello.go
+			},
+		},
+	}
+	for _, tcase := range tsuite {
+		t.Run(tcase.name, func(t *testing.T) {
+			cases := []handlertest.SequenceTestCase{
+				{fmt.Sprintf(":edit hello.go>%s>", tcase.cmd),
+					`┌──────────────────┐
+│file path         │
+│copied to         │
+│clipboard         │
+└──────────────────┘
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+└──────────────────┘`},
+			}
+
+			clip := clipboard.NewInMemory()
+			opts := []text.Option{text.WithCommandKey(testCommandKey)}
+			e := newExForTestingClipboard(t, texttest.NopEditor(), clip, opts...)
+			defer e.Close()
+			handlertest.TestHandlerSequence(t, e, 20, 10, cases)
+
+			data, err := clip.Paste(clipboard.DefaultRegisterID)
+			require.NoError(t, err)
+			assert.Equal(t, tcase.expect(), data.Text)
+		})
+	}
+
 }
 
 func TestCopyToClipboard(t *testing.T) {

@@ -40,6 +40,7 @@ const (
 	cmdFocusWindow            = "focusWindow"
 	cmdMoveWindow             = "moveWindowContent"
 	cmdResizeWindow           = "resizeWindow"
+	cmdCopyPath               = "copyPath"
 )
 
 type commandAll struct {
@@ -297,6 +298,13 @@ var (
 				Synopsis: "[scheme:][//[userinfo@]host][/]filepath",
 			},
 			handler: (*ex).editFiles,
+		},
+		cmdCopyPath: {
+			man: textapi.CommandManual{
+				Summary:  "Copies the current editor's URI path.",
+				Synopsis: "[absolute]",
+			},
+			handler: (*ex).copyPath,
 		},
 		"!": {
 			man: textapi.CommandManual{

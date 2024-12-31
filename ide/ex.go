@@ -262,6 +262,10 @@ func (e *ex) completeCommand(
 		if len(args) == 2 {
 			return iterator.FromSlice([]string{"width", "height"}), "", nil
 		}
+	case cmdCopyPath:
+		if len(args) <= 1 {
+			return iterator.FromSlice([]string{"absolute"}), "", nil
+		}
 	}
 	return iterator.FromSlice[string](nil), "", nil
 }
@@ -573,6 +577,35 @@ func (e *ex) editFiles(args ...string) error {
 			return err
 		}
 	}
+
+	return nil
+}
+
+func (e *ex) copyPath(args ...string) error {
+	absolute := len(args) > 0 && args[0] == "absolute"
+	t, ok := e.comp.FocusTab()
+	if !ok {
+		return errors.New("not a tab")
+	}
+	if _, ok := t.Handler().(text.Handler); !ok {
+		return errors.New("not a file")
+	}
+
+	uri := t.URI()
+	var path string
+	if absolute {
+		path = uri.Path()
+	} else {
+		path = uri.Name()
+	}
+
+	err := e.clip.Copy(clipboard.DefaultRegisterID, clipboard.Data{Text: path})
+	if err != nil {
+		return fmt.Errorf("clipboard copy: %v", err)
+	}
+
+	e.comp.Browser().Notify(notifications.LevelSuccess,
+		"file path copied to clipboard")
 
 	return nil
 }
