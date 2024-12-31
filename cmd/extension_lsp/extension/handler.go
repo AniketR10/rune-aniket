@@ -814,15 +814,13 @@ func newLspHandler(
 			}
 			ret.tabspaces, err = extutil.Tabspaces(config)
 			if err != nil {
-				ret.tabspaces = cell.DefaultTabspaces
 				log.Warnf("Could not get tabspaces from config: %s.. Using default of %d",
 					err, ret.tabspaces)
 			}
 			ret.frame, err = extutil.WindowManagerFrame(config)
 			if err != nil {
-				ret.tabspaces = cell.DefaultTabspaces
-				log.Warnf("Could not get tabspaces from config: %s.. Using default of %d",
-					err, ret.tabspaces)
+				log.Warnf("Could not get frame from config: %s.. Using default of %t",
+					err, ret.frame)
 			}
 		}
 	}

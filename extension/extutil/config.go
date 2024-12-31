@@ -41,7 +41,7 @@ func Tabspaces(cfg config.Config) (int, error) {
 	editorConfig, err := cfg.GetConfig("editor")
 	if err != nil {
 		if err != config.ErrNotFound {
-			err = fmt.Errorf("failed to get 'tabspaces' from config: %v", err)
+			err = fmt.Errorf("failed to get 'editor' from config: %v", err)
 			return 0, err
 		}
 		return cell.DefaultTabspaces, nil
@@ -63,7 +63,7 @@ func WindowManagerFrame(cfg config.Config) (bool, error) {
 	browserConfig, err := cfg.GetConfig("browser")
 	if err != nil {
 		if err != config.ErrNotFound {
-			err = fmt.Errorf("failed to get 'tabspaces' from config: %v", err)
+			err = fmt.Errorf("failed to get 'browser' from config: %v", err)
 			return false, err
 		}
 		return browser.DefaultConfig().Frame, nil
@@ -72,7 +72,7 @@ func WindowManagerFrame(cfg config.Config) (bool, error) {
 	wmConfig, err := browserConfig.GetConfig("window_manager")
 	if err != nil {
 		if err != config.ErrNotFound {
-			err = fmt.Errorf("failed to get 'tabspaces' from config: %v", err)
+			err = fmt.Errorf("failed to get 'window_manager' from config: %v", err)
 			return false, err
 		}
 		return browser.DefaultConfig().Frame, nil
@@ -81,7 +81,7 @@ func WindowManagerFrame(cfg config.Config) (bool, error) {
 	ret, err := wmConfig.GetBool("frame")
 	if err != nil {
 		if err != config.ErrNotFound {
-			err = fmt.Errorf("failed to get 'tabspaces' from config: %v", err)
+			err = fmt.Errorf("failed to get 'frame' from config: %v", err)
 			return false, err
 		}
 		ret = browser.DefaultConfig().Frame
@@ -93,7 +93,7 @@ func WindowManagerFrame(cfg config.Config) (bool, error) {
 func Clipboard(cfg config.Config) (clipboard.Register, error) {
 	sys, err := cfg.GetString("clipboard")
 	if err != nil && err != config.ErrNotFound {
-		err = fmt.Errorf("failed to get 'tabspaces' from config: %v", err)
+		err = fmt.Errorf("failed to get 'clipboard' from config: %v", err)
 		return nil, err
 	}
 
