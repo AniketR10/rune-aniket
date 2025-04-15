@@ -447,9 +447,9 @@ func (e *ex) closeAllTabs(args ...string) error {
 
 func (e *ex) closeInactiveTabs(args ...string) error {
 	b := e.comp.Browser()
-	if removed := b.RemoveInactiveTabs(); !removed {	
+	if removed := b.RemoveInactiveTabs(); !removed {
 		return errors.New("no inactive tabs left")
-		
+
 	}
 	return nil
 }
@@ -1004,58 +1004,72 @@ func (e *ex) toggleCompanionTerminal() error {
 	return nil
 }
 
-func (e *ex) newEmulatorTab(initialCmd string) (*browser.Tab, error) {
-	cfg := e.emulatorConfig
-	h, err := e.newEmulatorHandler(initialCmd, cfg)
-	if err != nil {
-		return nil, err
-	}
-
-	uri := h.URI()
-	if err != nil {
-		_ = h.Close()
-		return nil, err
-	}
-	t, err := e.comp.Tab(uri, e.config.Icons.Terminal, h.Title(), h)
-	if err != nil {
-		_ = h.Close()
-		return nil, fmt.Errorf("wm.Tab: %s", err)
-	}
-
-	tab := t.(*browser.Tab)
-	tab.Subscribe((*tabSubscriber)(e))
-	return tab, nil
-}
-
 func (e *ex) newTerminalTab(args ...string) error {
 	var initialCmd string
 	if len(args) > 0 {
 		initialCmd = args[0]
 	}
-	t, err := e.newEmulatorTab(initialCmd)
+	cfg := e.emulatorConfig
+	h, err := e.newEmulatorHandler(initialCmd, cfg)
 	if err != nil {
 		return err
 	}
+
+	uri := h.URI()
+	if err != nil {
+		_ = h.Close()
+		return err
+	}
+	t, err := e.comp.Tab(uri, e.config.Icons.Terminal, h.Title(), h)
+	if err != nil {
+		_ = h.Close()
+		return fmt.Errorf("wm.Tab: %s", err)
+	}
+
+	tab := t.(*browser.Tab)
+	tab.Subscribe((*tabSubscriber)(e))
+
 	win := e.invokeWindow()
-	if err := win.SetContent(t); err != nil {
-		_ = t.Close()
+	if err := win.SetContent(tab); err != nil {
+		_ = tab.Close()
 		return err
 	}
 	return nil
 }
 
-func (e *ex) newTerminalTabOrSplit(args ...string) error {
+func (e *ex) newTerminal(args ...string) error {
 	var initialCmd string
 	if len(args) > 0 {
 		initialCmd = args[0]
 	}
-	t, err := e.newEmulatorTab(initialCmd)
+	cfg := e.emulatorConfig
+	h, err := e.newEmulatorHandler(initialCmd, cfg)
+	if err != nil {
+		return err
+	}
+
+	win := e.invokeWindow()
+	if err := win.SetContent(h); err != nil {
+		_ = h.Close()
+		return err
+	}
+	return nil
+}
+
+func (e *ex) newTerminalOrSplit(args ...string) error {
+	var initialCmd string
+	if len(args) > 0 {
+		initialCmd = args[0]
+	}
+	t, err := e.newEmulatorHandler(initialCmd, e.emulatorConfig)
 	if err != nil {
 		return err
 	}
 	win := e.invokeWindow()
 	content, _ := win.Content()
-	if _, ok := content.(*browser.Tab); !ok {
+	_, vok := content.(vteHandler)
+	_, tok := content.(*browser.Tab)
+	if !vok && !tok {
 		err = win.SetContent(t)
 	} else {
 		_, err = e.comp.Split(browserapi.OrientationDefault, win, t)
