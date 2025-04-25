@@ -405,15 +405,7 @@ func (h *workspaceManagerHandler) Handle(ev term.Event) (exit, handled bool) {
 		return h.confirmedForceExit, handled || h.confirmedForceExit
 	}
 
-	var exHandler *ex
-	if ex, ok := focus.(*ex); ok {
-		exHandler = ex
-	} else if wh, ok := focus.(*workspaceHandler); ok {
-		exHandler = wh.ex
-	} else {
-		panic("unknown focus handler")
-	}
-
+	exHandler := h.exHandler(focus)
 	if exHandler.forceExit || h.confirmedForceExit {
 		return true, true
 	}
@@ -658,6 +650,17 @@ func (h *workspaceManagerHandler) addWorkspace(
 	return h.openPrevSessionFiles(ex, prevSessionFiles, ex.invokeWindow())
 }
 
+func (h *workspaceManagerHandler) addOrCreateWorkspace(
+	uri workspaceapi.URI,
+) error {
+	err := h.addWorkspace(uri, "", nil, true, true, -1)
+	if err != nil && errors.Is(err, os.ErrNotExist) {
+		h.openCreateWorkspacePrompt(h.exHandler(h.focusHandler()), uri)
+		return nil
+	}
+	return err
+}
+
 func (h *workspaceManagerHandler) openPrevSessionFiles(
 	ex *ex, files []file, invokeWindow browser.Window,
 ) (err error) {
@@ -737,10 +740,9 @@ func (h *workspaceManagerHandler) commandAddWorkspace(args ...string) error {
 	}
 	path := args[0]
 
-	// try to use literal URI
 	uri, parseErr := workspaceapi.ParseURI(path)
 	if parseErr == nil {
-		return h.addWorkspace(uri, "", nil, true, true, -1)
+		return h.addOrCreateWorkspace(uri)
 	}
 
 	uri, pathErr := workspaceapi.CurrentUserHostURI(path)
@@ -748,7 +750,7 @@ func (h *workspaceManagerHandler) commandAddWorkspace(args ...string) error {
 		err := multierr.Append(pathErr, parseErr)
 		return err
 	}
-	return h.addWorkspace(uri, "", nil, true, true, -1)
+	return h.addOrCreateWorkspace(uri)
 }
 
 func (h *workspaceManagerHandler) closeWorkspace() (workspaceapi.URI, []workspaceapi.URI, error) {
@@ -1017,4 +1019,16 @@ func (h *workspaceManagerHandler) subscribeCommand(
 	// store for future workspaces
 	h.externalCommands[cmd.Name] = extCmd
 	return nil
+}
+
+func (h *workspaceManagerHandler) exHandler(focus tui.Handler) *ex {
+	if ex, ok := focus.(*ex); ok {
+		return ex
+	}
+	if wh, ok := focus.(*workspaceHandler); ok {
+		return wh.ex
+	}
+
+	panic("unknown focus handler")
+
 }

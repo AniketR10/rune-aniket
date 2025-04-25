@@ -24,6 +24,11 @@
 package ide
 
 import (
+	"errors"
+	"fmt"
+	"os"
+
+	log "github.com/sirupsen/logrus"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component/notifications"
@@ -31,26 +36,28 @@ import (
 	"unstable.build/go-tui/term"
 )
 
+const (
+	yesOpt = "Yes"
+	noOpt  = "No"
+)
+
+var yesNoKeyCombs = []term.KeyComb{{Ch: 'y'}, {Ch: 'n'}}
+
 func (h *workspaceManagerHandler) openRestorePrompt(
 	ex *ex,
 	workspaceURI workspaceapi.URI,
 	cache []file,
 ) {
-	const (
-		restoreCwd = "Yes"
-		noRestore  = "No"
-	)
-
 	// use the window before prompt was open
 	invokeWindow := ex.invokeWindow()
 
 	promptHandler := newOpenRestorePromptHandler(
-		h, ex, workspaceURI, invokeWindow, cache, restoreCwd, noRestore,
+		h, ex, workspaceURI, invokeWindow, cache, yesOpt, noOpt,
 	).(*openRestorePromptHandler)
 	promptWindow := ex.comp.Prompt(
 		"Do you want to restore the previous session?",
-		[]string{restoreCwd, noRestore},
-		[]term.KeyComb{{Ch: 'y'}, {Ch: 'n'}},
+		[]string{yesOpt, noOpt},
+		yesNoKeyCombs,
 		promptHandler,
 	)
 	promptHandler.promptWindow = promptWindow
@@ -112,10 +119,6 @@ func (h *openRestorePromptHandler) OnClose() error {
 }
 
 func (h *workspaceManagerHandler) openConfirmExitPrompt(ex *ex, hasDirtyFilesOpen bool) {
-	const (
-		yes = "Yes"
-		no  = "No"
-	)
 
 	promptText := "Are you sure you want to exit?"
 
@@ -124,43 +127,43 @@ func (h *workspaceManagerHandler) openConfirmExitPrompt(ex *ex, hasDirtyFilesOpe
 			promptText
 	}
 
-	promptHandler := newOpenConfirmExitPromptHandler(
-		h, yes, no).(*openConfirmExitPromptHandler)
+	promptHandler := &openConfirmExitPromptHandler{wm: h}
 	promptWindow := ex.comp.Prompt(
 		promptText,
-		[]string{yes, no},
-		[]term.KeyComb{{Ch: 'y'}, {Ch: 'n'}},
+		[]string{yesOpt, noOpt},
+		yesNoKeyCombs,
 		promptHandler,
 	)
 	promptHandler.promptWindow = promptWindow
 }
 
-func newOpenConfirmExitPromptHandler(
-	wm *workspaceManagerHandler,
-	confirmOption, rejectOption string,
-) handler.PromptHandler {
-	return &openConfirmExitPromptHandler{
-		wm:            wm,
-		confirmOption: confirmOption,
-		rejectOption:  rejectOption,
-	}
+func (h *workspaceManagerHandler) openCreateWorkspacePrompt(ex *ex, uri workspaceapi.URI) {
+	promptText := fmt.Sprintf(
+		"workspace with URI %s does not exist. Do you want to create it?",
+		uri.String())
+
+	promptHandler := &createWorkspaceHandler{ex: ex, uri: uri, wm: h}
+	ex.comp.Prompt(
+		promptText,
+		[]string{yesOpt, noOpt},
+		yesNoKeyCombs,
+		promptHandler,
+	)
 }
 
 type openConfirmExitPromptHandler struct {
-	wm            *workspaceManagerHandler
-	promptWindow  browser.Window
-	confirmOption string
-	rejectOption  string
+	wm           *workspaceManagerHandler
+	promptWindow browser.Window
 }
 
 func (h *openConfirmExitPromptHandler) OnSelect(
 	idx int, option string,
 ) {
 	switch option {
-	case h.confirmOption:
+	case yesOpt:
 		h.wm.confirmedForceExit = true
 		h.wm.publishEvent(term.Event{Type: term.EventNone})
-	case h.rejectOption:
+	case noOpt:
 		h.wm.shaderRunner.cancel()
 		h.wm.confirmedForceExit = false
 		h.promptWindow.Close()
@@ -171,4 +174,64 @@ func (h *openConfirmExitPromptHandler) OnClose() error {
 	h.wm.exitPromptOpen = false
 	h.wm.shaderRunner.cancel()
 	return nil
+}
+
+type createWorkspaceHandler struct {
+	ex  *ex
+	wm  *workspaceManagerHandler
+	uri workspaceapi.URI
+}
+
+func (h *createWorkspaceHandler) OnSelect(
+	idx int, option string,
+) {
+	switch option {
+	case yesOpt:
+		path := h.uri.Path()
+		// NOTE: if we just use the default workspaceLoader, we might
+		// be using the wrong scheme (or on the wrong host). Recursively,
+		// attempt to create a workspace on some parent directory of path,
+		// and then proceed to MkdirAll from that root.
+		parent, err := h.createParentWorkspace(h.uri)
+		if err != nil {
+			_ = h.ex.Browser().Notify(notifications.LevelError,
+				"create parent workspace: %v", err.Error())
+			log.Errorf("create parent to mkdirall of %s: %v", path, err)
+			return
+		}
+		err = parent.MkdirAll(path, 0755)
+		if err != nil {
+			_ = h.ex.Browser().Notify(notifications.LevelError, "mkdirall: %v", err)
+			log.Errorf("mkdirall %s: %v", path, err)
+			return
+		}
+
+		log.Tracef("mkdirall %s: ok", path)
+
+		err = h.wm.addWorkspace(h.uri, "", nil, true, true, -1)
+		if err != nil {
+			_ = h.ex.Browser().Notify(notifications.LevelError, err.Error())
+			log.Errorf("addWorkspace %s: %v", h.uri, err)
+			return
+		}
+		log.Tracef("addWorkspace %s: ok", h.uri)
+	case noOpt:
+	}
+}
+
+func (h *createWorkspaceHandler) OnClose() error {
+	return nil
+}
+
+func (h *createWorkspaceHandler) createParentWorkspace(uri workspaceapi.URI) (workspaceLoader, error) {
+	parent := workspaceapi.Dir(uri)
+	if parent.Equal(uri) {
+		return nil, errors.New("reached root dir")
+	}
+
+	cwd, err := h.wm.workspace.AddWorkspace(h.wm.ctxWithLocker, uri)
+	if err != nil && errors.Is(err, os.ErrNotExist) {
+		return h.createParentWorkspace(parent)
+	}
+	return cwd, err
 }

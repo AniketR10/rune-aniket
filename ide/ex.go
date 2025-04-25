@@ -27,6 +27,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -73,6 +74,7 @@ type workspaceLoader interface {
 	walkdir.Reader
 	schemeapi.Terminal
 	schemeapi.Executor
+	MkdirAll(string, os.FileMode) error
 }
 
 type vteHandler interface {

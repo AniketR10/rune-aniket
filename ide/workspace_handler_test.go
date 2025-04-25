@@ -1284,6 +1284,125 @@ func TestComponentOnTabsClickIntegration(t *testing.T) {
 	require.NoError(t, m.Close())
 }
 
+func TestWorkspaceManagerCreateWorkspace(t *testing.T) {
+	m := newTestWorkspaceManagerHandler(t, defaultCfg(), nil, nopShutdownShaderConfig())
+	t.Cleanup(func() { m.Close() })
+
+	require.NoError(t, m.workspace.RegisterScheme(workspace.FileScheme,
+		workspace.NewFileScheme))
+
+	// create new temp dir, with consistent name, so test below works
+	const (
+		tempDir  = "/tmp/TestWorkspaceManagerCreateWorkspace"
+		tempDir2 = "/tmp/TestWorkspaceManagerCreateWorkspace2"
+	)
+	for _, tempDir := range []string{tempDir, tempDir2} {
+		err := os.MkdirAll(tempDir, 0600)
+		require.NoError(t, err)
+		err = os.RemoveAll(tempDir)
+		require.NoError(t, err)
+		t.Cleanup(func() {
+			os.RemoveAll(tempDir)
+		})
+	}
+
+	cases := []handlertest.SequenceTestCase{
+		{fmt.Sprintf(":addWorkspace file\\://%s>", tempDir),
+			`┌────────────────────────────┐
+│                            │
+├────────────────────────────┤
+│                            │
+┌────────────────────────────┐
+│                            │
+│                            │
+│  workspace with URI        │
+│  file:///tmp/TestWorkspac  │
+│  eManagerCreateWorkspace   │
+│  does not exist. Do you    │
+│  want to create it?        │
+│                            │
+│                            │
+│     Yes            No      │
+│                            │
+└────────────────────────────┘
+│                            │
+│                            │
+└────────────────────────────┘`},
+		{"y>",
+			`┌────────────────────────────┐
+│                            │
+├────────────────────────────┤
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│     workspaceWallpaper     │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+├────────────────────────────┤
+│1 1  2 2                    │
+└────────────────────────────┘`},
+		{fmt.Sprintf(":addWorkspace %s>", tempDir2), // not fully specified
+			`┌────────────────────────────┐
+│                            │
+├────────────────────────────┤
+┌────────────────────────────┐
+│                            │
+│                            │
+│  workspace with URI        │
+│  file:///tmp/TestWorkspac  │
+│  eManagerCreateWorkspace2  │
+│   does not exist. Do you   │
+│  want to create it?        │
+│                            │
+│                            │
+│     Yes            No      │
+│                            │
+└────────────────────────────┘
+│                            │
+├────────────────────────────┤
+│1 1  2 2                    │
+└────────────────────────────┘`},
+		{"y>",
+			`┌────────────────────────────┐
+│                            │
+├────────────────────────────┤
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│     workspaceWallpaper     │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+├────────────────────────────┤
+│1 1  2 2  3 3               │
+└────────────────────────────┘`},
+	}
+
+	handlertest.TestHandlerSequence(t, m, 30, 20, cases)
+
+	// test that they indeed exist
+	for _, tempDir := range []string{tempDir, tempDir2} {
+		fs, err := os.Stat(tempDir)
+		require.NoError(t, err)
+		require.True(t, fs.IsDir())
+	}
+}
+
 func newTestWorkspaceManagerHandlerWithManager(
 	t *testing.T, manager *workspace.Manager,
 	uri workspaceapi.URI, cfg ideConfig, filenames []string,
@@ -1351,6 +1470,9 @@ func newTestWorkspaceManagerHandler(
 ) *testWorkspaceManagerHandler {
 	dir, err := os.MkdirTemp("", "")
 	require.NoError(t, err)
+	t.Cleanup(func() {
+		os.RemoveAll(dir)
+	})
 	return newTestWorkspaceManagerHandlerWithDir(t, cc, filenames, dir, shutdownShaderCfg)
 }
 

@@ -28,6 +28,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os/user"
 
 	"os"
@@ -90,9 +91,15 @@ type testLoader struct {
 func (w *testLoader) Remove(string) error {
 	return nil
 }
+
+func (w *testLoader) MkdirAll(string, fs.FileMode) error {
+	return nil
+}
+
 func (w *testLoader) Close() error {
 	return nil
 }
+
 func (w *testLoader) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (workspaceapi.Pid, error) {
 	panic("unimplemented")
 }
