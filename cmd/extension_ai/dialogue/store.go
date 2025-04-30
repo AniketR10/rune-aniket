@@ -28,12 +28,12 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/unstablebuild/blue/ai/llm"
 	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/logging"
 	"github.com/unstablebuild/blue/logging/trace"
 	"github.com/unstablebuild/blue/retry"
-	"unstable.build/go-tui/cmd/extension_ai/backend"
 )
 
 const (
@@ -53,16 +53,16 @@ var retryStrategy = retry.CombinedStrategy(
 // Store abstracts dialogue persistence to durable storage.
 type Store interface {
 	Health(context.Context) error
-	Create(context.Context, string, []backend.ChatCompletionMessage) error
-	Set(context.Context, string, []backend.ChatCompletionMessage) error
+	Create(context.Context, string, []llm.ChatCompletionMessage) error
+	Set(context.Context, string, []llm.ChatCompletionMessage) error
 	Get(context.Context, string) (Dialogue, error)
 	Delete(context.Context, string) error
-	AppendMessages(context.Context, Dialogue, []backend.ChatCompletionMessage) error
+	AppendMessages(context.Context, Dialogue, []llm.ChatCompletionMessage) error
 	List(context.Context) (iterator.Iterator[Dialogue], error)
 }
 
 // NewStore allocates storage for a new Store and
-// initializes it with the given backend.
+// initializes it with the given llm.
 func NewStore(backend document.Service) Store {
 	return store{backend: backend}
 }
@@ -75,7 +75,7 @@ type store struct {
 type Dialogue struct {
 	ID        string
 	Version   int
-	Messages  []backend.ChatCompletionMessage
+	Messages  []llm.ChatCompletionMessage
 	UpdatedAt time.Time
 }
 
@@ -89,7 +89,7 @@ func (s store) Health(ctx context.Context) error {
 
 func (s store) Create(
 	ctx context.Context, id string,
-	msgs []backend.ChatCompletionMessage,
+	msgs []llm.ChatCompletionMessage,
 ) error {
 	traceID, ctx := trace.FromContextOrNew(ctx)
 	fields := makeStoreLoggingFields(storeLoggingClass, id)
@@ -105,7 +105,7 @@ func (s store) Create(
 }
 
 func (s store) Set(
-	ctx context.Context, ID string, msgs []backend.ChatCompletionMessage,
+	ctx context.Context, ID string, msgs []llm.ChatCompletionMessage,
 ) error {
 	traceID, ctx := trace.FromContextOrNew(ctx)
 	fields := makeStoreLoggingFields(storeLoggingClass, ID)
@@ -153,7 +153,7 @@ func (s store) Delete(
 }
 
 func (s store) AppendMessages(
-	ctx context.Context, d Dialogue, msgs []backend.ChatCompletionMessage,
+	ctx context.Context, d Dialogue, msgs []llm.ChatCompletionMessage,
 ) error {
 	traceID, ctx := trace.FromContextOrNew(ctx)
 	fields := makeStoreLoggingFields(storeLoggingClass, d.ID)
@@ -194,7 +194,7 @@ func makeStoreLoggingFields(class string, id string) []logging.Field {
 	}
 }
 
-func newDialogue(id string, msgs []backend.ChatCompletionMessage) Dialogue {
+func newDialogue(id string, msgs []llm.ChatCompletionMessage) Dialogue {
 	return Dialogue{
 		ID:        id,
 		Messages:  msgs,

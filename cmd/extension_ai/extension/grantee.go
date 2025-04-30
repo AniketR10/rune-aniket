@@ -32,8 +32,8 @@ import (
 	"github.com/unstablebuild/blue/logging"
 	configapi "unstable.build/go-tui/api/config"
 	textapi "unstable.build/go-tui/api/text"
-	"unstable.build/go-tui/cmd/extension_ai/backend"
-	"unstable.build/go-tui/cmd/extension_ai/backend/openai"
+	"github.com/unstablebuild/blue/ai/llm"
+	"github.com/unstablebuild/blue/ai/llm/openai"
 	"unstable.build/go-tui/cmd/extension_ai/dialogue"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/extension/extutil"
@@ -41,9 +41,9 @@ import (
 )
 
 // GranteeWithService returns this extension's grantee, with the given
-// backend.Service constructor as the backend servicing the LLM.
+// llm.Service constructor as the backend servicing the LLM.
 func GranteeWithService(
-	svcFunc func(configapi.Config, map[string]int, string) (backend.Service, error),
+	svcFunc func(configapi.Config, map[string]int, string) (llm.Service, error),
 	defaultAvailableModels map[string]int,
 	defaultModel string,
 	options ...dialogue.Option,
@@ -72,7 +72,7 @@ const (
 func DefaultOpenAIGrantee() (extension.Grantee, []extension.Permission) {
 	openaiSvc := func(
 		config configapi.Config, availableModels map[string]int, model string,
-	) (backend.Service, error) {
+	) (llm.Service, error) {
 		apiKey, err := config.GetString("api_key")
 		if err != nil {
 			err = fmt.Errorf("failed to get 'api_key' from config: %w", err)
@@ -134,8 +134,8 @@ func DefaultOpenAIGrantee() (extension.Grantee, []extension.Permission) {
 
 func logCompletion(
 	ctx context.Context, dialogueID, completionID string,
-	finishReason backend.FinishReason,
-	msg backend.ChatCompletionMessage,
+	finishReason llm.FinishReason,
+	msg llm.ChatCompletionMessage,
 ) {
 	log.WithFields(log.Fields{
 		"reason":            finishReason,

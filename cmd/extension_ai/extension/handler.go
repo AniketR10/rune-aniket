@@ -48,7 +48,7 @@ import (
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/clipboard/sysclip"
-	"unstable.build/go-tui/cmd/extension_ai/backend"
+	"github.com/unstablebuild/blue/ai/llm"
 	aiDialogue "unstable.build/go-tui/cmd/extension_ai/dialogue"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/notifications"
@@ -145,7 +145,7 @@ var (
 func CommandEventHandler(
 	ctx context.Context, ed textapi.Editor, grants []extension.Grant,
 	broker rpc.MuxBroker, pconfig configapi.Config,
-	svcFn func(configapi.Config, map[string]int, string) (backend.Service, error),
+	svcFn func(configapi.Config, map[string]int, string) (llm.Service, error),
 	defaultAvailableModels map[string]int,
 	defaultModel string,
 	queryOptions ...aiDialogue.Option,
@@ -244,9 +244,9 @@ func CommandEventHandler(
 			ret.log(log.WarnLevel, "Error getting 'initial_context' from extension config: %v", err)
 		}
 	} else {
-		opts = append(opts, aiDialogue.WithInitialContext([]backend.ChatCompletionMessage{
+		opts = append(opts, aiDialogue.WithInitialContext([]llm.ChatCompletionMessage{
 			{
-				Role:    backend.RoleSystem,
+				Role:    llm.RoleSystem,
 				Content: initialContext,
 			},
 		}))
@@ -322,7 +322,7 @@ type aiEditorHandler struct {
 	queryDialogueManager *aiDialogue.Manager
 
 	clip   clipboard.Register
-	svcFn  func(configapi.Config, map[string]int, string) (backend.Service, error)
+	svcFn  func(configapi.Config, map[string]int, string) (llm.Service, error)
 	ed     textapi.Editor
 	wm     browserapi.WindowManager
 	n      browserapi.Notifications
@@ -501,7 +501,7 @@ func (h *aiEditorHandler) handleQuery(cmd textapi.Command) error {
 	ctx, cancel := context.WithCancel(h.ctx)
 
 	query := strings.Join(cmd.Args, " ")
-	msg := backend.ChatCompletionMessage{Content: query, Role: backend.RoleUser}
+	msg := llm.ChatCompletionMessage{Content: query, Role: llm.RoleUser}
 	addMessage(comp, msg)
 
 	syncComp := syncComponent{mu: mu, comp: comp, h: h}
@@ -679,7 +679,7 @@ type aiEditorHandlerCompleter aiEditorHandler
 
 func (h *aiEditorHandlerCompleter) Complete(
 	ctx context.Context, dialogueID, completionID string,
-	reason backend.FinishReason, msg backend.ChatCompletionMessage,
+	reason llm.FinishReason, msg llm.ChatCompletionMessage,
 ) {
 }
 
@@ -728,14 +728,14 @@ func getDialogueID(cmd textapi.Command) string {
 	return id
 }
 
-func addMessage(c *dialogue.Component, msg backend.ChatCompletionMessage) {
+func addMessage(c *dialogue.Component, msg llm.ChatCompletionMessage) {
 	switch msg.Role {
-	case backend.RoleAssistant:
+	case llm.RoleAssistant:
 		c.AddReceiveMessageChunk(msg.Content)
 		c.AddReceiveMessageBreak()
-	case backend.RoleUser:
+	case llm.RoleUser:
 		c.AddSendMessage(msg.Content)
-	// case backend.RoleSystem, backend.RoleTool:
+	// case llm.RoleSystem, llm.RoleTool:
 	default:
 		/* do not render */
 	}

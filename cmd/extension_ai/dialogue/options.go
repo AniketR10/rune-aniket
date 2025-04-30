@@ -26,7 +26,7 @@ package dialogue
 import (
 	"context"
 
-	"unstable.build/go-tui/cmd/extension_ai/backend"
+	"github.com/unstablebuild/blue/ai/llm"
 )
 
 // Option is an optional configuration passed when initialigin a Manager.
@@ -34,7 +34,7 @@ type Option func(*config)
 
 // WithInitialContext returns an option that sets the given messages
 // as the initial messages of every conversation.
-func WithInitialContext(msgs []backend.ChatCompletionMessage) Option {
+func WithInitialContext(msgs []llm.ChatCompletionMessage) Option {
 	return func(cfg *config) {
 		cfg.initialContext = msgs
 	}
@@ -47,7 +47,7 @@ func WithCompleter(completer Completer) Option {
 		if cfg.completer != nil {
 			prev := cfg.completer
 			cfg.completer = FuncCompleter(func(ctx context.Context, dialogueID, completionID string,
-				reason backend.FinishReason, msg backend.ChatCompletionMessage) {
+				reason llm.FinishReason, msg llm.ChatCompletionMessage) {
 				prev.Complete(ctx, dialogueID, completionID, reason, msg)
 				completer.Complete(ctx, dialogueID, completionID, reason, msg)
 			})

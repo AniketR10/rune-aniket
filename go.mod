@@ -21,7 +21,7 @@ require (
 	github.com/smacker/go-tree-sitter v0.0.0-20230501083651-a7d92773b3aa
 	github.com/sourcegraph/go-diff v0.6.1
 	github.com/stretchr/testify v1.9.0
-	github.com/unstablebuild/blue v1.56.5
+	github.com/unstablebuild/blue v1.56.14
 	github.com/unstablebuild/golang-internal-tools v0.0.2
 	github.com/unstablebuild/tcell/v3 v3.5.1
 	go.uber.org/config v1.4.0
@@ -62,9 +62,6 @@ require (
 require (
 	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.0.1
 	github.com/hajimehoshi/ebiten/v2 v2.7.4
-	github.com/pkoukk/tiktoken-go v0.1.6
-	github.com/pkoukk/tiktoken-go-loader v0.0.1
-	github.com/sashabaranov/go-openai v1.20.3
 	github.com/unstablebuild/pty v1.3.1
 	go.uber.org/mock v0.4.0
 	go.uber.org/multierr v1.4.0
@@ -106,6 +103,9 @@ require (
 	github.com/pion/stun v0.6.1 // indirect
 	github.com/pion/transport/v2 v2.2.4 // indirect
 	github.com/pion/turn/v2 v2.1.5 // indirect
+	github.com/pkoukk/tiktoken-go v0.1.7 // indirect
+	github.com/pkoukk/tiktoken-go-loader v0.0.1 // indirect
+	github.com/sashabaranov/go-openai v1.39.0 // indirect
 	go.opencensus.io v0.24.0 // indirect
 	go.uber.org/atomic v1.5.0 // indirect
 	go.uber.org/tools v0.0.0-20190618225709-2cfd321de3ee // indirect

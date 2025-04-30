@@ -36,10 +36,10 @@ import (
 	"github.com/unstablebuild/blue/logging"
 	"github.com/unstablebuild/blue/logging/trace"
 	workspaceapi "unstable.build/go-tui/api/workspace"
-	"unstable.build/go-tui/cmd/extension_ai/backend"
+	"github.com/unstablebuild/blue/ai/llm"
 )
 
-// Manager implements chat completion via a backend.Service.
+// Manager implements chat completion via a llm.Service.
 // It uses Store to persist context window across sessions.
 //
 // Manager implements an interface that is goroutine-safe
@@ -47,19 +47,19 @@ import (
 type Manager struct {
 	config
 	store     Store
-	svc       backend.Service
+	svc       llm.Service
 	resources sync.Map
 }
 
 // NewManager allocates storage for a new Manager and initializes it.
-func NewManager(svc backend.Service, store Store, opts ...Option) *Manager {
+func NewManager(svc llm.Service, store Store, opts ...Option) *Manager {
 	ret := new(Manager)
 	ret.Init(svc, store, opts...)
 	return ret
 }
 
 // Init initializes this Manager with the given backend service, store and options.
-func (m *Manager) Init(svc backend.Service, store Store, opts ...Option) {
+func (m *Manager) Init(svc llm.Service, store Store, opts ...Option) {
 	m.store = store
 	m.svc = svc
 
@@ -113,7 +113,7 @@ func (m *Manager) CreateCompletion(
 }
 
 type config struct {
-	initialContext []backend.ChatCompletionMessage
+	initialContext []llm.ChatCompletionMessage
 	completer      Completer
 }
 
@@ -130,15 +130,15 @@ func (m *Manager) doCreateCompletion(
 			err = fmt.Errorf("get stored dialogue: %w", err)
 			return
 		}
-		dialogue.Messages = make([]backend.ChatCompletionMessage, len(m.config.initialContext))
+		dialogue.Messages = make([]llm.ChatCompletionMessage, len(m.config.initialContext))
 		copy(dialogue.Messages, m.config.initialContext)
 	}
 
-	var prompt []backend.ChatCompletionMessage
+	var prompt []llm.ChatCompletionMessage
 
 	m.resources.Range(func(k, v any) bool {
-		prompt = append(prompt, backend.ChatCompletionMessage{
-			Role: backend.RoleSystem,
+		prompt = append(prompt, llm.ChatCompletionMessage{
+			Role: llm.RoleSystem,
 			Content: fmt.Sprintf("The file with URI %s is "+
 				"in the user's context:\n```\n%s\n```", k, v),
 		})
@@ -147,13 +147,13 @@ func (m *Manager) doCreateCompletion(
 
 	for _, msg := range input {
 		prompt = append(prompt,
-			backend.ChatCompletionMessage{Role: backend.RoleUser, Content: msg})
+			llm.ChatCompletionMessage{Role: llm.RoleUser, Content: msg})
 	}
 
 	// append new message to chat context, but keep msgs
 	// len intact so at the end of the stream when we call AppendMessages
 	// dialogue.Messages still reflects the previous version
-	totalMessages := make([]backend.ChatCompletionMessage, len(dialogue.Messages)+len(prompt))
+	totalMessages := make([]llm.ChatCompletionMessage, len(dialogue.Messages)+len(prompt))
 	copy(totalMessages, dialogue.Messages)
 	copy(totalMessages[len(dialogue.Messages):], prompt)
 
@@ -182,7 +182,7 @@ func (m *Manager) doCreateCompletion(
 	// with ExceedsContextWindow implementation so proceed and
 	// let CreateChatCompletion return the appropiate error.
 
-	req := backend.ChatCompletionRequest{
+	req := llm.ChatCompletionRequest{
 		Messages: totalMessages,
 	}
 	it, err := m.svc.CreateChatCompletion(ctx, req)
@@ -210,15 +210,15 @@ func (m *Manager) doCreateCompletion(
 type completionStreamIterator struct {
 	ctx                  context.Context
 	dialogueID           string
-	userPrompt           []backend.ChatCompletionMessage
-	totalMessages        []backend.ChatCompletionMessage
+	userPrompt           []llm.ChatCompletionMessage
+	totalMessages        []llm.ChatCompletionMessage
 	dialogue             Dialogue
 	exceedsContextWindow bool
 	store                Store
-	it                   iterator.Iterator[backend.ChatCompletionResponse]
+	it                   iterator.Iterator[llm.ChatCompletionResponse]
 	completer            Completer
 
-	finishReason backend.FinishReason
+	finishReason llm.FinishReason
 	completionID string
 	metadata     any
 	response     strings.Builder
@@ -240,8 +240,8 @@ func (s *completionStreamIterator) Next(ctx context.Context) (string, bool) {
 		s.err = err
 		return "", false
 	}
-	response := backend.ChatCompletionMessage{
-		Role:     backend.RoleAssistant,
+	response := llm.ChatCompletionMessage{
+		Role:     llm.RoleAssistant,
 		Content:  s.response.String(),
 		Metadata: s.metadata,
 	}
@@ -252,13 +252,13 @@ func (s *completionStreamIterator) Next(ctx context.Context) (string, bool) {
 			s.completionID, s.finishReason, response)
 	}
 	switch s.finishReason {
-	case backend.FinishReasonStop, backend.FinishReasonToolCall:
+	case llm.FinishReasonStop, llm.FinishReasonToolCall:
 		/* ok */
-	case backend.FinishReasonContentFilter:
+	case llm.FinishReasonContentFilter:
 		s.err = errors.New("omitted content due to a flag from the backend's content filters")
-	case backend.FinishReasonNull:
+	case llm.FinishReasonNull:
 		s.err = errors.New("unexpected end of stream")
-	case backend.FinishReasonLength:
+	case llm.FinishReasonLength:
 		s.err = errors.New("incomplete model output due to configuration parameter or token limit")
 	default:
 		s.err = errors.New("unknown stream finish reason")

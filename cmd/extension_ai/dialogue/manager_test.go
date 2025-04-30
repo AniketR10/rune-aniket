@@ -35,7 +35,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/iterator"
-	"unstable.build/go-tui/cmd/extension_ai/backend"
+	"github.com/unstablebuild/blue/ai/llm"
 )
 
 func TestManager(t *testing.T) {
@@ -73,11 +73,11 @@ func TestManager(t *testing.T) {
 
 	t.Run("streams completion back and consumes entire original stream", func(t *testing.T) {
 		store := newTestStore(t)
-		client := testClient{streamRes: []backend.ChatCompletionResponse{
-			{Message: backend.ChatCompletionMessage{Content: "0"}},
-			{Message: backend.ChatCompletionMessage{Content: "1"}},
-			{Message: backend.ChatCompletionMessage{Content: "2"},
-				FinishReason: backend.FinishReasonStop},
+		client := testClient{streamRes: []llm.ChatCompletionResponse{
+			{Message: llm.ChatCompletionMessage{Content: "0"}},
+			{Message: llm.ChatCompletionMessage{Content: "1"}},
+			{Message: llm.ChatCompletionMessage{Content: "2"},
+				FinishReason: llm.FinishReasonStop},
 		}}
 		manager := newTestManager(client, store)
 		it, err := manager.CreateCompletion(ctx, "myId", []string{"hello"})
@@ -102,28 +102,28 @@ func TestManager(t *testing.T) {
 	t.Run("dispatches Completer.Complete when configured to do so", func(t *testing.T) {
 		store := newTestStore(t)
 		myMetadata := "myMeta"
-		client := testClient{streamRes: []backend.ChatCompletionResponse{
-			{Message: backend.ChatCompletionMessage{Content: "0"}},
-			{Message: backend.ChatCompletionMessage{Content: "1"}},
+		client := testClient{streamRes: []llm.ChatCompletionResponse{
+			{Message: llm.ChatCompletionMessage{Content: "0"}},
+			{Message: llm.ChatCompletionMessage{Content: "1"}},
 			{
 				ID: "1234",
-				Message: backend.ChatCompletionMessage{
+				Message: llm.ChatCompletionMessage{
 					Content:  "2",
 					Metadata: myMetadata,
 				},
-				FinishReason: backend.FinishReasonToolCall,
+				FinishReason: llm.FinishReasonToolCall,
 			},
 		}}
 		var called int
 		completer := FuncCompleter(func(ctx context.Context, dialogueID, completionID string,
-			reason backend.FinishReason, msg backend.ChatCompletionMessage) {
-			expectedMsg := backend.ChatCompletionMessage{
+			reason llm.FinishReason, msg llm.ChatCompletionMessage) {
+			expectedMsg := llm.ChatCompletionMessage{
 				Content:  "012",
-				Role:     backend.RoleAssistant,
+				Role:     llm.RoleAssistant,
 				Metadata: myMetadata,
 			}
 			assert.Equal(t, expectedMsg, msg)
-			assert.Equal(t, backend.FinishReasonToolCall, reason)
+			assert.Equal(t, llm.FinishReasonToolCall, reason)
 			assert.Equal(t, "1234", completionID)
 			assert.Equal(t, "myId", dialogueID)
 			called++
@@ -151,33 +151,33 @@ func TestManager(t *testing.T) {
 	})
 
 	t.Run("returns error for non-ok finish reasons", func(t *testing.T) {
-		finishReasons := []backend.FinishReason{
-			backend.FinishReasonLength,
-			backend.FinishReasonContentFilter,
-			backend.FinishReasonNull,
-			backend.FinishReason(""),
-			backend.FinishReason("somethingElse"),
+		finishReasons := []llm.FinishReason{
+			llm.FinishReasonLength,
+			llm.FinishReasonContentFilter,
+			llm.FinishReasonNull,
+			llm.FinishReason(""),
+			llm.FinishReason("somethingElse"),
 		}
 		for _, finishReason := range finishReasons {
 			t.Run(string(finishReason), func(t *testing.T) {
 				store := newTestStore(t)
-				client := testClient{streamRes: []backend.ChatCompletionResponse{
+				client := testClient{streamRes: []llm.ChatCompletionResponse{
 					{
 						ID:      "inconsistent IDs, should use last",
-						Message: backend.ChatCompletionMessage{Content: "X"},
+						Message: llm.ChatCompletionMessage{Content: "X"},
 					},
 					{
 						ID:           "1234",
-						Message:      backend.ChatCompletionMessage{Content: "0"},
+						Message:      llm.ChatCompletionMessage{Content: "0"},
 						FinishReason: finishReason,
 					},
 				}}
 				var called bool
 				completer := func(ctx context.Context, dialogueID, completionID string,
-					reason backend.FinishReason, msg backend.ChatCompletionMessage) {
-					expectedMsg := backend.ChatCompletionMessage{
+					reason llm.FinishReason, msg llm.ChatCompletionMessage) {
+					expectedMsg := llm.ChatCompletionMessage{
 						Content: "X0",
-						Role:    backend.RoleAssistant,
+						Role:    llm.RoleAssistant,
 					}
 					assert.Equal(t, expectedMsg, msg)
 					assert.Equal(t, finishReason, reason)
@@ -207,11 +207,11 @@ func TestManager(t *testing.T) {
 
 	t.Run("stores messages in store", func(t *testing.T) {
 		store := newTestStore(t)
-		messages := []backend.ChatCompletionResponse{
-			{Message: backend.ChatCompletionMessage{Content: "0"}},
-			{Message: backend.ChatCompletionMessage{Content: "1"}},
-			{Message: backend.ChatCompletionMessage{Content: "2"},
-				FinishReason: backend.FinishReasonStop},
+		messages := []llm.ChatCompletionResponse{
+			{Message: llm.ChatCompletionMessage{Content: "0"}},
+			{Message: llm.ChatCompletionMessage{Content: "1"}},
+			{Message: llm.ChatCompletionMessage{Content: "2"},
+				FinishReason: llm.FinishReasonStop},
 		}
 		client := testClient{streamRes: messages}
 		manager := newTestManager(client, store)
@@ -233,11 +233,11 @@ func TestManager(t *testing.T) {
 		require.Len(t, dialogue.Messages, n*2)
 		for i, msg := range dialogue.Messages {
 			if i%2 == 0 {
-				assert.Equal(t, backend.ChatCompletionMessage{
-					Role: backend.RoleUser, Content: fmt.Sprintf("hello:%d", i/2)}, msg)
+				assert.Equal(t, llm.ChatCompletionMessage{
+					Role: llm.RoleUser, Content: fmt.Sprintf("hello:%d", i/2)}, msg)
 			} else {
-				assert.Equal(t, backend.ChatCompletionMessage{
-					Role: backend.RoleAssistant, Content: "012"}, msg)
+				assert.Equal(t, llm.ChatCompletionMessage{
+					Role: llm.RoleAssistant, Content: "012"}, msg)
 			}
 		}
 	})
@@ -247,11 +247,11 @@ func TestManager(t *testing.T) {
 		store := newTestStore(t)
 		client := testClient{
 			exceedsContextWindow: contextWindow,
-			streamRes: []backend.ChatCompletionResponse{
-				{Message: backend.ChatCompletionMessage{Content: "0"}},
-				{Message: backend.ChatCompletionMessage{Content: "1"}},
-				{Message: backend.ChatCompletionMessage{Content: "2"},
-					FinishReason: backend.FinishReasonStop},
+			streamRes: []llm.ChatCompletionResponse{
+				{Message: llm.ChatCompletionMessage{Content: "0"}},
+				{Message: llm.ChatCompletionMessage{Content: "1"}},
+				{Message: llm.ChatCompletionMessage{Content: "2"},
+					FinishReason: llm.FinishReasonStop},
 			},
 		}
 		input, _ := makeContentTokens(contextWindow)
@@ -282,16 +282,16 @@ func TestManager(t *testing.T) {
 		store := newTestStore(t)
 		client := testClient{
 			exceedsContextWindow: contextWindow,
-			streamRes: []backend.ChatCompletionResponse{
-				{Message: backend.ChatCompletionMessage{Content: "0"}},
-				{Message: backend.ChatCompletionMessage{Content: "1"}},
-				{Message: backend.ChatCompletionMessage{Content: "2"},
-					FinishReason: backend.FinishReasonStop},
+			streamRes: []llm.ChatCompletionResponse{
+				{Message: llm.ChatCompletionMessage{Content: "0"}},
+				{Message: llm.ChatCompletionMessage{Content: "1"}},
+				{Message: llm.ChatCompletionMessage{Content: "2"},
+					FinishReason: llm.FinishReasonStop},
 			},
 		}
 		manager := newTestManager(client, store)
 
-		var msgs []backend.ChatCompletionMessage
+		var msgs []llm.ChatCompletionMessage
 		for {
 			exceeds, _ := client.ExceedsContextWindow(msgs)
 			if exceeds {
@@ -322,27 +322,27 @@ func TestManager(t *testing.T) {
 	})
 }
 
-var _ backend.Service = testClient{}
+var _ llm.Service = testClient{}
 
 type testClient struct {
 	exceedsContextWindow int
 	err                  error
 	streamErr            error
-	streamRes            []backend.ChatCompletionResponse
+	streamRes            []llm.ChatCompletionResponse
 }
 
 func (t testClient) CreateChatCompletion(
 	ctx context.Context,
-	request backend.ChatCompletionRequest,
-) (iterator.Iterator[backend.ChatCompletionResponse], error) {
+	request llm.ChatCompletionRequest,
+) (iterator.Iterator[llm.ChatCompletionResponse], error) {
 	if exceeds, _ := t.ExceedsContextWindow(request.Messages); exceeds {
-		return nil, &backend.ErrContextWindowExceeded{}
+		return nil, &llm.ErrContextWindowExceeded{}
 	}
 	return &testStream{res: t.streamRes, err: t.streamErr}, t.err
 }
 
 func (t testClient) ExceedsContextWindow(
-	msgs []backend.ChatCompletionMessage,
+	msgs []llm.ChatCompletionMessage,
 ) (bool, error) {
 	if t.exceedsContextWindow == 0 {
 		return false, t.err
@@ -352,11 +352,11 @@ func (t testClient) ExceedsContextWindow(
 
 type testStream struct {
 	err    error
-	res    []backend.ChatCompletionResponse
+	res    []llm.ChatCompletionResponse
 	closed bool
 }
 
-func (t *testStream) Next(context.Context) (ret backend.ChatCompletionResponse, ok bool) {
+func (t *testStream) Next(context.Context) (ret llm.ChatCompletionResponse, ok bool) {
 	if t.err != nil {
 		return
 	}
@@ -384,15 +384,15 @@ func newTestStore(t *testing.T) Store {
 	return store
 }
 
-func newTestManager(client backend.Service, store Store, options ...Option) *Manager {
+func newTestManager(client llm.Service, store Store, options ...Option) *Manager {
 	return NewManager(client, store, options...)
 }
 
-func makeContentTokens(greaterThan int) ([]string, []backend.ChatCompletionMessage) {
+func makeContentTokens(greaterThan int) ([]string, []llm.ChatCompletionMessage) {
 	var ret []string
-	var msgs []backend.ChatCompletionMessage
+	var msgs []llm.ChatCompletionMessage
 	for i := 0; len(msgs) < greaterThan; i++ {
-		msgs = append(msgs, backend.ChatCompletionMessage{Content: strconv.Itoa(i)})
+		msgs = append(msgs, llm.ChatCompletionMessage{Content: strconv.Itoa(i)})
 		ret = append(ret, strconv.Itoa(i))
 	}
 	return ret, msgs
