@@ -1057,6 +1057,41 @@ func TestInitializeNoCwd(t *testing.T) {
 	require.NoError(t, m.Close())
 }
 
+func TestNoBar(t *testing.T) {
+	cfg := defaultConfigWithWrap(false)
+	cfg.cfg["browser"] = map[string]any{"workspace_bar": false}
+	m := newTestWorkspaceManagerHandlerWithDir(t,
+		cfg, []string{"ignored"}, "", nopShutdownShaderConfig())
+
+	cases := []handlertest.SequenceTestCase{
+		{"",
+			`┌──────────────────┐
+│                  │
+├──────────────────┤
+│                  │
+│                  │
+│workspaceWallpaper│
+│                  │
+│                  │
+│                  │
+└──────────────────┘`},
+		{":switchToWorkspace 2>",
+			`┌──────────────────┐
+│                  │
+├──────────────────┤
+│                  │
+│                  │
+│workspaceWallpaper│
+│                  │
+│                  │
+│                  │
+└──────────────────┘`},
+	}
+	handlertest.TestHandlerSequence(t, m, 20, 10, cases)
+
+	require.NoError(t, m.Close())
+}
+
 func TestSwitchToWorkspaceComplete(t *testing.T) {
 	dir, err := os.MkdirTemp("", "")
 	require.NoError(t, err)
@@ -1517,6 +1552,9 @@ func defaultCfg() ideConfig {
 		"workspace": map[string]interface{}{
 			"wallpaper":    "workspaceWallpaper",
 			"auto_restore": false,
+		},
+		"browser": map[string]interface{}{
+			"workspace_bar": "number",
 		},
 		"notifications": map[string]interface{}{
 			"progress_bar": false,

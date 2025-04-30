@@ -495,8 +495,11 @@ command:
       - bold
 
 browser:
-  # Whether to add the URI of the workspace to the workspace bar
-  workspace_bar_uri: false
+  # When multiple workspaces are open, this setting controls what the
+  # workspace bar shows: the workspace’s simplified path ("path"),
+  # its number only ("number"), or nothing at all (false), effectively disabling
+  # the bar.
+  workspace_bar: path
   window_manager:
     dim: true
     frame: *frame

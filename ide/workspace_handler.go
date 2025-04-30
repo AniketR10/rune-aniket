@@ -84,7 +84,7 @@ type workspaceManagerHandler struct {
 	builtinExtensions  map[string]Extension
 	// this is the name of of the file to be expected in workspace folders
 	workspaceConfigFilename string
-	addWorkspacePath        bool
+	workspaceBarKind        workspaceBarKind
 	userHome                string
 	history                 *history
 	workspacesBarHeight     int
@@ -240,7 +240,7 @@ func (h *workspaceManagerHandler) init(
 	h.union.Left = charset.Left
 	h.union.Top = charset.Top
 	h.union.Bottom = charset.Bottom
-	h.addWorkspacePath = cfg.workspacePath()
+	h.workspaceBarKind = cfg.workspaceBarKind()
 	h.history = newHistory(h.storage)
 
 	// best effort
@@ -302,7 +302,8 @@ func (h *workspaceManagerHandler) focusBrowser() browser.Browser {
 }
 
 func (h *workspaceManagerHandler) drawBar() bool {
-	return h.workspaceCount > 1 || h.focusHandler() == h.empty
+	return (h.workspaceCount > 1 || h.focusHandler() == h.empty) &&
+		h.workspaceBarKind != workspaceBarKindDisabled
 }
 
 func (h *workspaceManagerHandler) barSize() int {
@@ -319,7 +320,14 @@ func (h *workspaceManagerHandler) barSize() int {
 func (h *workspaceManagerHandler) makeWorkspaceTabName(
 	i int, w *workspaceHandler,
 ) string {
-	if w == nil || !h.addWorkspacePath {
+	switch h.workspaceBarKind {
+	case workspaceBarKindDisabled:
+		return ""
+	case workspaceBarKindNumbers:
+		return strconv.Itoa(i + 1)
+	case workspaceBarKindPaths:
+	}
+	if w == nil {
 		return strconv.Itoa(i + 1)
 	}
 	if w.uri.Scheme() == workspace.FileScheme && h.userHome != "" {

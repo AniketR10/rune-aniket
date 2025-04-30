@@ -471,7 +471,16 @@ func (c ideConfig) windowFrameAttr() (attr term.Attributes) {
 	return c.windowAttr("frame_attr", defaultWindowManagerConfig.FrameAttr)
 }
 
-func (c ideConfig) workspacePath() (ret bool) {
+type workspaceBarKind uint8
+
+const (
+	workspaceBarKindDisabled workspaceBarKind = iota
+	workspaceBarKindPaths
+	workspaceBarKindNumbers
+)
+
+func (c ideConfig) workspaceBarKind() (ret workspaceBarKind) {
+	ret = workspaceBarKindNumbers
 	if c.cfg == nil {
 		return
 	}
@@ -479,15 +488,34 @@ func (c ideConfig) workspacePath() (ret bool) {
 	if !ok {
 		return
 	}
-	cfgBarUri, err := cfg.GetBool("workspace_bar_uri")
+
+	if barKindBool, err := cfg.GetBool("workspace_bar"); err == nil {
+		if barKindBool {
+			return workspaceBarKindPaths
+		} else {
+			return workspaceBarKindDisabled
+		}
+	}
+
+	barKindStr, err := cfg.GetString("workspace_bar")
 	if err != nil {
 		if err != config.ErrNotFound {
-			c.errors["browser.workspace_bar_uri"] = err
+			c.errors["browser.workspace_bar"] = err
 		}
 		return
 	}
-	ret = cfgBarUri
-	return
+	switch barKindStr {
+	case "false":
+		return workspaceBarKindDisabled
+	case "number", "numbers":
+		return workspaceBarKindNumbers
+	case "path", "paths":
+		return workspaceBarKindPaths
+	default:
+		c.errors["browser.workspace_bar"] = errors.New("expected either " +
+			"false, 'number' or 'path'")
+		return
+	}
 }
 
 func (c ideConfig) windowFocusFrameAttr() (attr term.Attributes) {

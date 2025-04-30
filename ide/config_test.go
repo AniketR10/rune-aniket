@@ -154,6 +154,7 @@ notifications:
         bottomleft: '┗'
         bottomright: '┛'
 browser:
+    workspace_bar: false
     tab_name_separator: 'XX'
     tabspaces: 4
     prompt:
@@ -234,6 +235,8 @@ func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
 	assert.Equal(t, component.DefaultFrameUnionCharSet(), cfg.frameUnionCharset())
 	assert.True(t, cfg.frameUnion())
 	assert.Equal(t, text.DefaultConfig().Icons, cfg.icons())
+
+	assert.Equal(t, workspaceBarKindNumbers, cfg.workspaceBarKind())
 
 	actualNotifications := cfg.notificationsConfig()
 	expectedNotifications := browser.DefaultConfig().Notifications
@@ -346,6 +349,8 @@ func TestConfigSetting(t *testing.T) {
 	}
 	actualIcons := cfg.icons()
 	assert.Equal(t, expectedIcons, actualIcons)
+
+	assert.Equal(t, workspaceBarKindDisabled, cfg.workspaceBarKind())
 
 	expectedCommandAliases := map[string]text.CommandAlias{
 		"todo": text.CommandAlias{Name: "todo",
