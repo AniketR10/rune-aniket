@@ -33,9 +33,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/blue/ai/llm"
 	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/iterator"
-	"github.com/unstablebuild/blue/ai/llm"
 )
 
 func TestManager(t *testing.T) {
@@ -234,10 +234,12 @@ func TestManager(t *testing.T) {
 		for i, msg := range dialogue.Messages {
 			if i%2 == 0 {
 				assert.Equal(t, llm.ChatCompletionMessage{
-					Role: llm.RoleUser, Content: fmt.Sprintf("hello:%d", i/2)}, msg)
+					Role: llm.RoleUser, OtherContent: []llm.ChatMessagePart{},
+					Content: fmt.Sprintf("hello:%d", i/2)}, msg)
 			} else {
 				assert.Equal(t, llm.ChatCompletionMessage{
-					Role: llm.RoleAssistant, Content: "012"}, msg)
+					Role: llm.RoleAssistant, OtherContent: []llm.ChatMessagePart{},
+					Content: "012"}, msg)
 			}
 		}
 	})

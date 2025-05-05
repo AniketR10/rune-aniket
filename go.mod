@@ -21,7 +21,7 @@ require (
 	github.com/smacker/go-tree-sitter v0.0.0-20230501083651-a7d92773b3aa
 	github.com/sourcegraph/go-diff v0.6.1
 	github.com/stretchr/testify v1.9.0
-	github.com/unstablebuild/blue v1.56.14
+	github.com/unstablebuild/blue v1.57.0
 	github.com/unstablebuild/golang-internal-tools v0.0.2
 	github.com/unstablebuild/tcell/v3 v3.5.1
 	go.uber.org/config v1.4.0
@@ -75,7 +75,7 @@ require (
 	cloud.google.com/go/longrunning v0.4.1 // indirect
 	github.com/BurntSushi/toml v1.2.1 // indirect
 	github.com/blackjack/webcam v0.5.0 // indirect
-	github.com/dlclark/regexp2 v1.10.0 // indirect
+	github.com/dlclark/regexp2 v1.11.5 // indirect
 	github.com/ebitengine/gomobile v0.0.0-20240518074828-e86332849895 // indirect
 	github.com/ebitengine/hideconsole v1.0.0 // indirect
 	github.com/ebitengine/purego v0.7.0 // indirect

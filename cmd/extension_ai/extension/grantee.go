@@ -62,7 +62,7 @@ func GranteeWithService(
 }
 
 const (
-	defaultDefaultModel = openai.GPT3Dot5Turbo
+	defaultDefaultModel = openai.O4Mini
 	defaultBaseURL      = "" // uses openai's default base URL
 )
 
