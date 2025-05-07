@@ -147,6 +147,18 @@ func TestParserIntegration(t *testing.T) {
 	}
 }
 
+func TestParserSetSyncMode(t *testing.T) {
+	input := []byte{27, 91, 63, 50, 48, 50, 54, 104, 27}
+	var handler mockHandler
+	handler.init()
+
+	parser := NewParser(loggingHandler{h: &handler}, new(StdTimeout))
+
+	for _, b := range input {
+		parser.Advance(b)
+	}
+}
+
 var _ Handler = (*mockHandler)(nil)
 
 type mockHandler struct {

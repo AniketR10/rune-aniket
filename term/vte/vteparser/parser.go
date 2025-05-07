@@ -25,6 +25,7 @@ package vteparser
 
 import (
 	"bytes"
+	"math"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -142,7 +143,7 @@ func (p *Parser) advanceSync(ch byte) {
 func (p *Parser) advanceSyncCSI() {
 	// Get the last few bytes for comparison.
 	len := len(p.state.syncState.buffer)
-	offset := len - syncEscapeLen
+	offset := int(math.Max(float64(len-syncEscapeLen), 0))
 	end := p.state.syncState.buffer[offset:]
 
 	// NOTE: It is technically legal to specify multiple private modes in the same
