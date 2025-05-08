@@ -31,12 +31,12 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/unstablebuild/blue/ai/llm"
 	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/logging"
 	"github.com/unstablebuild/blue/logging/trace"
 	workspaceapi "unstable.build/go-tui/api/workspace"
-	"github.com/unstablebuild/blue/ai/llm"
 )
 
 // Manager implements chat completion via a llm.Service.

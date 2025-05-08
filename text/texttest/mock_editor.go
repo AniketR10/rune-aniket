@@ -28,7 +28,7 @@ import (
 	"context"
 	"errors"
 
-	textapi "unstable.build/go-tui/api/text"
+	"unstable.build/go-tui/api/textapi"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser/browsertest"
 	"unstable.build/go-tui/cell"

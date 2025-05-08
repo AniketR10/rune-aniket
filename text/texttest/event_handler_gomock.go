@@ -14,7 +14,7 @@ import (
 	reflect "reflect"
 
 	gomock "go.uber.org/mock/gomock"
-	api "unstable.build/go-tui/api/text"
+	textapi "unstable.build/go-tui/api/textapi"
 )
 
 // MockEventHandler is a mock of EventHandler interface.
@@ -41,7 +41,7 @@ func (m *MockEventHandler) EXPECT() *MockEventHandlerMockRecorder {
 }
 
 // Handle mocks base method.
-func (m *MockEventHandler) Handle(arg0 context.Context, arg1 api.Event) bool {
+func (m *MockEventHandler) Handle(arg0 context.Context, arg1 textapi.Event) bool {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Handle", arg0, arg1)
 	ret0, _ := ret[0].(bool)

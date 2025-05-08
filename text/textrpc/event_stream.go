@@ -36,7 +36,7 @@ import (
 	"github.com/unstablebuild/blue/logging"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
-	textapi "unstable.build/go-tui/api/text"
+	"unstable.build/go-tui/api/textapi"
 )
 
 var _ textapi.EventHandler = (*eventStreamClient)(nil)

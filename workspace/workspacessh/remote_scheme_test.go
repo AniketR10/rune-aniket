@@ -31,9 +31,9 @@ import (
 	"testing"
 	"time"
 
-	"go.uber.org/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/blue/retry"
+	"go.uber.org/mock/gomock"
 	schemeapi "unstable.build/go-tui/api/scheme"
 	"unstable.build/go-tui/api/scheme/schemetest"
 	workspaceapi "unstable.build/go-tui/api/workspace"

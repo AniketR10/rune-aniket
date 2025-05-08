@@ -46,7 +46,7 @@ import (
 	configapi "unstable.build/go-tui/api/config"
 	configextension "unstable.build/go-tui/api/config/extension"
 	storageextension "unstable.build/go-tui/api/storage/extension"
-	textapi "unstable.build/go-tui/api/text"
+	"unstable.build/go-tui/api/textapi"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/clipboard/sysclip"

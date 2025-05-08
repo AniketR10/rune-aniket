@@ -26,7 +26,7 @@ package textrpc
 import (
 	"fmt"
 
-	textapi "unstable.build/go-tui/api/text"
+	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/term/termrpc"
 )
 

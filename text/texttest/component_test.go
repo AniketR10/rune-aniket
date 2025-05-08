@@ -39,7 +39,7 @@ import (
 	gomock "go.uber.org/mock/gomock"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/api/browserapi"
-	textapi "unstable.build/go-tui/api/text"
+	"unstable.build/go-tui/api/textapi"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/browser/browsertest"

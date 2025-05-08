@@ -30,10 +30,10 @@ import (
 	"sync"
 	"testing"
 
-	gomock "go.uber.org/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
+	gomock "go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 	"unstable.build/go-tui/api/browserapi"
 	"unstable.build/go-tui/browser"

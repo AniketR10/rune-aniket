@@ -33,8 +33,8 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/logging"
 	"unstable.build/go-tui/api/config"
-	textapi "unstable.build/go-tui/api/text"
-	textextension "unstable.build/go-tui/api/text/extension"
+	"unstable.build/go-tui/api/textapi"
+	"unstable.build/go-tui/api/textapi/textext"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/rpc"
 )
@@ -134,7 +134,7 @@ func (t *editorGrantee) PermissionGranted(ctx context.Context, grants []extensio
 		var err error
 		switch grant.Permission {
 		case extension.PermissionEditor:
-			t.ed, err = textextension.Editor(ctx, grant, t.broker)
+			t.ed, err = textext.Editor(ctx, grant, t.broker)
 			if err == nil {
 				err = t.subscribeToEvents(ctx, grants)
 			}

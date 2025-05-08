@@ -42,7 +42,7 @@ import (
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/api/browserapi"
 	schemeapi "unstable.build/go-tui/api/scheme"
-	textapi "unstable.build/go-tui/api/text"
+	"unstable.build/go-tui/api/textapi"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/clipboard"

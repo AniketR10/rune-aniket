@@ -30,8 +30,8 @@ import (
 	"net"
 	"testing"
 
-	"go.uber.org/mock/gomock"
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
 	"unstable.build/go-tui/rpc"

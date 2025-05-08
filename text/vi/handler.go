@@ -33,7 +33,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/logging"
 	"unstable.build/go-tui"
-	textapi "unstable.build/go-tui/api/text"
+	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/handler"

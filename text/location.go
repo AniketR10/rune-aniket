@@ -24,7 +24,7 @@
 package text
 
 import (
-	textapi "unstable.build/go-tui/api/text"
+	"unstable.build/go-tui/api/textapi"
 )
 
 // LocationList is the interface that groups Prev and Next

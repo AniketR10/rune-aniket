@@ -32,7 +32,7 @@ import (
 	"github.com/unstablebuild/blue/document"
 	"unstable.build/go-tui/api/browserapi"
 	"unstable.build/go-tui/api/config"
-	textapi "unstable.build/go-tui/api/text"
+	"unstable.build/go-tui/api/textapi"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/term"

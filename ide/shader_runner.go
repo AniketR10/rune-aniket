@@ -32,7 +32,7 @@ import (
 
 	"github.com/unstablebuild/blue/iterator"
 	"unstable.build/go-tui"
-	textapi "unstable.build/go-tui/api/text"
+	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/component/shader"
 	"unstable.build/go-tui/component/shader/glslshader"
 	"unstable.build/go-tui/component/shader/timeshader"

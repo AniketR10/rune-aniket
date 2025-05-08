@@ -225,12 +225,12 @@ func main() {
 		if !errors.Is(err, os.ErrNotExist) {
 			err = fmt.Errorf("stat %q: %s", *flagDataPath, err)
 			fmt.Printf("%s", err)
-            os.Exit(1)
+			os.Exit(1)
 		}
 		if err := os.MkdirAll(*flagDataPath, 0777); err != nil {
 			err = fmt.Errorf("mkdir %q: %s", *flagDataPath, err)
 			fmt.Printf("%s", err)
-            os.Exit(1)
+			os.Exit(1)
 		}
 	}
 

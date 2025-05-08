@@ -21,13 +21,13 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package extension
+package textext
 
 import (
 	"context"
 	"os"
 
-	textapi "unstable.build/go-tui/api/text"
+	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/text/textrpc"

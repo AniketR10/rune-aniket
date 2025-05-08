@@ -42,8 +42,8 @@ import (
 	"unstable.build/go-tui/api/browserapi/browserext"
 	"unstable.build/go-tui/api/config"
 	storageextension "unstable.build/go-tui/api/storage/extension"
-	textapi "unstable.build/go-tui/api/text"
-	textextension "unstable.build/go-tui/api/text/extension"
+	"unstable.build/go-tui/api/textapi"
+	"unstable.build/go-tui/api/textapi/textext"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	workspaceextension "unstable.build/go-tui/api/workspace/extension"
 	"unstable.build/go-tui/clipboard"
@@ -385,7 +385,7 @@ func (h *fuzzyFinderHandler) initGrants(
 		case extension.Permission(extension.PermissionExecute):
 			h.executor, err = workspaceextension.Executor(ctx, grant, broker)
 		case extension.Permission(extension.PermissionEditor):
-			h.ed, err = textextension.Editor(ctx, grant, broker)
+			h.ed, err = textext.Editor(ctx, grant, broker)
 		case extension.Permission(extension.PermissionBrowserNotifications):
 			h.m, err = browserext.Notifications(ctx, grant, broker)
 		case extension.Permission(extension.PermissionBrowserEventPublisher):

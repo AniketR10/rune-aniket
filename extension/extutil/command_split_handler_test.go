@@ -37,7 +37,7 @@ import (
 	"unstable.build/go-tui/api/browserapi"
 	browserapitest "unstable.build/go-tui/api/browserapi/browsertest"
 	"unstable.build/go-tui/api/config"
-	textapi "unstable.build/go-tui/api/text"
+	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/browser/browsertest"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/rpc"

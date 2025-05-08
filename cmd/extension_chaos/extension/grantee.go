@@ -24,7 +24,7 @@
 package extension
 
 import (
-	textapi "unstable.build/go-tui/api/text"
+	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/extension/extutil"
 )

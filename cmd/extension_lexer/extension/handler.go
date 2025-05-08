@@ -45,7 +45,7 @@ import (
 	"unstable.build/go-tui/api/browserapi/browserext"
 	"unstable.build/go-tui/api/config"
 	configextension "unstable.build/go-tui/api/config/extension"
-	textapi "unstable.build/go-tui/api/text"
+	"unstable.build/go-tui/api/textapi"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	workspaceextension "unstable.build/go-tui/api/workspace/extension"
 	"unstable.build/go-tui/cell"

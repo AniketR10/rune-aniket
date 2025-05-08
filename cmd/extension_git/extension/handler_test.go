@@ -26,9 +26,9 @@ package extension
 import (
 	"testing"
 
-	"go.uber.org/mock/gomock"
 	"github.com/stretchr/testify/require"
-	textapitest "unstable.build/go-tui/api/text/texttest"
+	"go.uber.org/mock/gomock"
+	textapitest "unstable.build/go-tui/api/textapi/texttest"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/clipboard"
 )

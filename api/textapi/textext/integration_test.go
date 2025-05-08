@@ -21,7 +21,7 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package extension
+package textext
 
 import (
 	"context"
@@ -29,9 +29,9 @@ import (
 	"sync"
 	"testing"
 
-	"go.uber.org/mock/gomock"
 	"github.com/stretchr/testify/require"
-	textapi "unstable.build/go-tui/api/text"
+	"go.uber.org/mock/gomock"
+	"unstable.build/go-tui/api/textapi"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/rpc"

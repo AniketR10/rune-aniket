@@ -29,7 +29,7 @@ import (
 	"strings"
 
 	"github.com/unstablebuild/tcell/v3"
-	textapi "unstable.build/go-tui/api/text"
+	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/component"

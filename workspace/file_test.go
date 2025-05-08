@@ -36,9 +36,9 @@ import (
 	"testing"
 	"time"
 
-	gomock "go.uber.org/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	gomock "go.uber.org/mock/gomock"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	workspaceapitest "unstable.build/go-tui/api/workspace/workspacetest"
 	"unstable.build/go-tui/cell"

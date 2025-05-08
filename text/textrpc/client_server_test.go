@@ -43,7 +43,7 @@ import (
 	"google.golang.org/grpc"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/api/browserapi"
-	textapi "unstable.build/go-tui/api/text"
+	"unstable.build/go-tui/api/textapi"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser/browserrpc"
 	"unstable.build/go-tui/browser/browsertest"

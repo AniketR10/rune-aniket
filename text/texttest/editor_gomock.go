@@ -15,8 +15,8 @@ import (
 
 	gomock "go.uber.org/mock/gomock"
 	tui "unstable.build/go-tui"
-	api "unstable.build/go-tui/api/text"
-	api0 "unstable.build/go-tui/api/workspace"
+	textapi "unstable.build/go-tui/api/textapi"
+	api "unstable.build/go-tui/api/workspace"
 	cell "unstable.build/go-tui/cell"
 	term "unstable.build/go-tui/term"
 	text "unstable.build/go-tui/text"
@@ -143,10 +143,10 @@ func (mr *MockHandlerMockRecorder) Resize(width, height any) *gomock.Call {
 }
 
 // Resource mocks base method.
-func (m *MockHandler) Resource() api0.URI {
+func (m *MockHandler) Resource() api.URI {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Resource")
-	ret0, _ := ret[0].(api0.URI)
+	ret0, _ := ret[0].(api.URI)
 	return ret0
 }
 
@@ -396,7 +396,7 @@ func (mr *MockEditorMockRecorder) Cursor(arg0 any) *gomock.Call {
 }
 
 // Edit mocks base method.
-func (m *MockEditor) Edit(file api0.URI, buf *cell.Buffer) (text.Handler, error) {
+func (m *MockEditor) Edit(file api.URI, buf *cell.Buffer) (text.Handler, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Edit", file, buf)
 	ret0, _ := ret[0].(text.Handler)
@@ -411,7 +411,7 @@ func (mr *MockEditorMockRecorder) Edit(file, buf any) *gomock.Call {
 }
 
 // Editor mocks base method.
-func (m *MockEditor) Editor(arg0 api0.URI) (text.Handler, error) {
+func (m *MockEditor) Editor(arg0 api.URI) (text.Handler, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Editor", arg0)
 	ret0, _ := ret[0].(text.Handler)
@@ -482,7 +482,7 @@ func (mr *MockEditorMockRecorder) SetDefaultAttributes(arg0, arg1 any) *gomock.C
 }
 
 // SetLocationList mocks base method.
-func (m *MockEditor) SetLocationList(arg0 text.Handler, arg1 api.LocationPriority, arg2 string, arg3 text.LocationList) error {
+func (m *MockEditor) SetLocationList(arg0 text.Handler, arg1 textapi.LocationPriority, arg2 string, arg3 text.LocationList) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SetLocationList", arg0, arg1, arg2, arg3)
 	ret0, _ := ret[0].(error)
@@ -496,7 +496,7 @@ func (mr *MockEditorMockRecorder) SetLocationList(arg0, arg1, arg2, arg3 any) *g
 }
 
 // SubscribeCommand mocks base method.
-func (m *MockEditor) SubscribeCommand(arg0 api.CommandManual, arg1 text.CommandHandler) error {
+func (m *MockEditor) SubscribeCommand(arg0 textapi.CommandManual, arg1 text.CommandHandler) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SubscribeCommand", arg0, arg1)
 	ret0, _ := ret[0].(error)
@@ -510,7 +510,7 @@ func (mr *MockEditorMockRecorder) SubscribeCommand(arg0, arg1 any) *gomock.Call 
 }
 
 // SubscribeEvents mocks base method.
-func (m *MockEditor) SubscribeEvents(arg0 []api.EventType, arg1 text.EventHandler) error {
+func (m *MockEditor) SubscribeEvents(arg0 []textapi.EventType, arg1 text.EventHandler) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SubscribeEvents", arg0, arg1)
 	ret0, _ := ret[0].(error)

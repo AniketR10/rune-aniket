@@ -36,8 +36,8 @@ import (
 	"unstable.build/go-tui/api/browserapi"
 	"unstable.build/go-tui/api/browserapi/browserext"
 	"unstable.build/go-tui/api/config"
-	textapi "unstable.build/go-tui/api/text"
-	textextension "unstable.build/go-tui/api/text/extension"
+	"unstable.build/go-tui/api/textapi"
+	"unstable.build/go-tui/api/textapi/textext"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/rpc"
 )
@@ -217,7 +217,7 @@ func (t *cmdSplitHandler) PermissionGranted(ctx context.Context, grants []extens
 		case extension.PermissionBrowserWindowManager:
 			t.wm, err = browserext.WindowManager(ctx, g, t.broker)
 		case extension.PermissionEditor:
-			t.ed, err = textextension.Editor(ctx, g, t.broker)
+			t.ed, err = textext.Editor(ctx, g, t.broker)
 			if err == nil {
 				err = t.ed.SubscribeCommand(t.config.Command, t)
 			}

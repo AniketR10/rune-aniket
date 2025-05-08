@@ -61,7 +61,7 @@ func graphemeClusterWidth(cluster string, boundaries int) int {
 	// but we should add the full list of nerd font icons
 	// width width > 1.
 	case "", "", "", "", "", "", "", "", "", "", "", "",
-		"", "", "", "", "", "", "", "", "","", " ",
+		"", "", "", "", "", "", "", "", "", "", " ",
 		"󱫆", "", "", "":
 		return 2
 	default:

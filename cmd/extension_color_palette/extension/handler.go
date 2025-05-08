@@ -31,7 +31,7 @@ import (
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/api/browserapi"
 	"unstable.build/go-tui/api/config"
-	textapi "unstable.build/go-tui/api/text"
+	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/extension/extutil"

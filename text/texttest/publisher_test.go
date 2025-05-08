@@ -27,10 +27,10 @@ import (
 	"context"
 	"testing"
 
-	gomock "go.uber.org/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	textapi "unstable.build/go-tui/api/text"
+	gomock "go.uber.org/mock/gomock"
+	"unstable.build/go-tui/api/textapi"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"

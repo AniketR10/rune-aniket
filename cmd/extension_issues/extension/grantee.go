@@ -46,8 +46,8 @@ import (
 	schemeapi "unstable.build/go-tui/api/scheme"
 	schemeextension "unstable.build/go-tui/api/scheme/extension"
 	storageextension "unstable.build/go-tui/api/storage/extension"
-	textapi "unstable.build/go-tui/api/text"
-	textextension "unstable.build/go-tui/api/text/extension"
+	"unstable.build/go-tui/api/textapi"
+	"unstable.build/go-tui/api/textapi/textext"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/extension"
@@ -317,7 +317,7 @@ func (e *Grantee) PermissionGranted(ctx context.Context, grants []extension.Gran
 			}
 			e.m = m
 		case extension.Permission(extension.PermissionEditor):
-			ed, err := textextension.Editor(ctx, g, e.broker)
+			ed, err := textext.Editor(ctx, g, e.broker)
 			if err != nil {
 				return fmt.Errorf("acquire editor: %w ", err)
 			}

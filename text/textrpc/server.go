@@ -32,7 +32,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/logging"
-	textapi "unstable.build/go-tui/api/text"
+	"unstable.build/go-tui/api/textapi"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term/termrpc"

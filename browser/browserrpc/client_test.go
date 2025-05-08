@@ -29,10 +29,10 @@ import (
 	"fmt"
 	"testing"
 
-	gomock "go.uber.org/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
+	gomock "go.uber.org/mock/gomock"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/rpc"

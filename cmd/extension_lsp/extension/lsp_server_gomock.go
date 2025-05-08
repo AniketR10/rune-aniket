@@ -8,8 +8,8 @@ import (
 	context "context"
 	reflect "reflect"
 
-	gomock "go.uber.org/mock/gomock"
 	protocol "github.com/unstablebuild/golang-internal-tools/lsp/protocol"
+	gomock "go.uber.org/mock/gomock"
 )
 
 // MockServer is a mock of Server interface.
