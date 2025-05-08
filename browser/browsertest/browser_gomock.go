@@ -14,8 +14,8 @@ import (
 
 	gomock "go.uber.org/mock/gomock"
 	tui "unstable.build/go-tui"
-	api "unstable.build/go-tui/api/browser"
-	api0 "unstable.build/go-tui/api/workspace"
+	browserapi "unstable.build/go-tui/api/browserapi"
+	api "unstable.build/go-tui/api/workspace"
 	browser "unstable.build/go-tui/browser"
 	component "unstable.build/go-tui/component"
 	notifications "unstable.build/go-tui/component/notifications"
@@ -210,10 +210,10 @@ func (mr *MockWindowMockRecorder) Closed() *gomock.Call {
 }
 
 // Content mocks base method.
-func (m *MockWindow) Content() (api.Handler, error) {
+func (m *MockWindow) Content() (browserapi.Handler, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Content")
-	ret0, _ := ret[0].(api.Handler)
+	ret0, _ := ret[0].(browserapi.Handler)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -268,7 +268,7 @@ func (mr *MockWindowMockRecorder) IsFloating() *gomock.Call {
 }
 
 // SetContent mocks base method.
-func (m *MockWindow) SetContent(arg0 api.Handler) error {
+func (m *MockWindow) SetContent(arg0 browserapi.Handler) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SetContent", arg0)
 	ret0, _ := ret[0].(error)
@@ -305,7 +305,7 @@ func (m *MockWindowManager) EXPECT() *MockWindowManagerMockRecorder {
 }
 
 // Bar mocks base method.
-func (m *MockWindowManager) Bar(arg0 api.BarConfig, arg1 tui.Handler) error {
+func (m *MockWindowManager) Bar(arg0 browserapi.BarConfig, arg1 tui.Handler) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Bar", arg0, arg1)
 	ret0, _ := ret[0].(error)
@@ -364,7 +364,7 @@ func (mr *MockWindowManagerMockRecorder) SetFocus(win any) *gomock.Call {
 }
 
 // SetTabName mocks base method.
-func (m *MockWindowManager) SetTabName(arg0 api0.URI, arg1 string, arg2 term.Attributes) error {
+func (m *MockWindowManager) SetTabName(arg0 api.URI, arg1 string, arg2 term.Attributes) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SetTabName", arg0, arg1, arg2)
 	ret0, _ := ret[0].(error)
@@ -378,7 +378,7 @@ func (mr *MockWindowManagerMockRecorder) SetTabName(arg0, arg1, arg2 any) *gomoc
 }
 
 // Split mocks base method.
-func (m *MockWindowManager) Split(arg0 api.Orientation, arg1 browser.Window, arg2 api.Handler) (browser.Window, error) {
+func (m *MockWindowManager) Split(arg0 browserapi.Orientation, arg1 browser.Window, arg2 browserapi.Handler) (browser.Window, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Split", arg0, arg1, arg2)
 	ret0, _ := ret[0].(browser.Window)
@@ -393,10 +393,10 @@ func (mr *MockWindowManagerMockRecorder) Split(arg0, arg1, arg2 any) *gomock.Cal
 }
 
 // Tab mocks base method.
-func (m *MockWindowManager) Tab(uri api0.URI, icon rune, name string, h api.Handler) (api.Handler, error) {
+func (m *MockWindowManager) Tab(uri api.URI, icon rune, name string, h browserapi.Handler) (browserapi.Handler, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Tab", uri, icon, name, h)
-	ret0, _ := ret[0].(api.Handler)
+	ret0, _ := ret[0].(browserapi.Handler)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -446,7 +446,7 @@ func (m *MockTabManager) EXPECT() *MockTabManagerMockRecorder {
 }
 
 // SetTabName mocks base method.
-func (m *MockTabManager) SetTabName(arg0 api0.URI, arg1 string, arg2 term.Attributes) error {
+func (m *MockTabManager) SetTabName(arg0 api.URI, arg1 string, arg2 term.Attributes) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SetTabName", arg0, arg1, arg2)
 	ret0, _ := ret[0].(error)
@@ -460,10 +460,10 @@ func (mr *MockTabManagerMockRecorder) SetTabName(arg0, arg1, arg2 any) *gomock.C
 }
 
 // Tab mocks base method.
-func (m *MockTabManager) Tab(uri api0.URI, icon rune, name string, h api.Handler) (api.Handler, error) {
+func (m *MockTabManager) Tab(uri api.URI, icon rune, name string, h browserapi.Handler) (browserapi.Handler, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Tab", uri, icon, name, h)
-	ret0, _ := ret[0].(api.Handler)
+	ret0, _ := ret[0].(browserapi.Handler)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -559,10 +559,10 @@ func (m *MockResourceOpener) EXPECT() *MockResourceOpenerMockRecorder {
 }
 
 // Open mocks base method.
-func (m *MockResourceOpener) Open(resource api0.URI) (api.Handler, error) {
+func (m *MockResourceOpener) Open(resource api.URI) (browserapi.Handler, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Open", resource)
-	ret0, _ := ret[0].(api.Handler)
+	ret0, _ := ret[0].(browserapi.Handler)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -574,10 +574,10 @@ func (mr *MockResourceOpenerMockRecorder) Open(resource any) *gomock.Call {
 }
 
 // Resource mocks base method.
-func (m *MockResourceOpener) Resource(arg0 api0.URI) (api.Handler, bool) {
+func (m *MockResourceOpener) Resource(arg0 api.URI) (browserapi.Handler, bool) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Resource", arg0)
-	ret0, _ := ret[0].(api.Handler)
+	ret0, _ := ret[0].(browserapi.Handler)
 	ret1, _ := ret[1].(bool)
 	return ret0, ret1
 }
@@ -649,7 +649,7 @@ func (m *MockBrowser) EXPECT() *MockBrowserMockRecorder {
 }
 
 // Bar mocks base method.
-func (m *MockBrowser) Bar(arg0 api.BarConfig, arg1 tui.Handler) error {
+func (m *MockBrowser) Bar(arg0 browserapi.BarConfig, arg1 tui.Handler) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Bar", arg0, arg1)
 	ret0, _ := ret[0].(error)
@@ -745,10 +745,10 @@ func (mr *MockBrowserMockRecorder) NotifyOnce(level, msg any, args ...any) *gomo
 }
 
 // Open mocks base method.
-func (m *MockBrowser) Open(resource api0.URI) (api.Handler, error) {
+func (m *MockBrowser) Open(resource api.URI) (browserapi.Handler, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Open", resource)
-	ret0, _ := ret[0].(api.Handler)
+	ret0, _ := ret[0].(browserapi.Handler)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -774,10 +774,10 @@ func (mr *MockBrowserMockRecorder) PublishEvent(arg0 any) *gomock.Call {
 }
 
 // Resource mocks base method.
-func (m *MockBrowser) Resource(arg0 api0.URI) (api.Handler, bool) {
+func (m *MockBrowser) Resource(arg0 api.URI) (browserapi.Handler, bool) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Resource", arg0)
-	ret0, _ := ret[0].(api.Handler)
+	ret0, _ := ret[0].(browserapi.Handler)
 	ret1, _ := ret[1].(bool)
 	return ret0, ret1
 }
@@ -804,7 +804,7 @@ func (mr *MockBrowserMockRecorder) SetFocus(win any) *gomock.Call {
 }
 
 // SetTabName mocks base method.
-func (m *MockBrowser) SetTabName(arg0 api0.URI, arg1 string, arg2 term.Attributes) error {
+func (m *MockBrowser) SetTabName(arg0 api.URI, arg1 string, arg2 term.Attributes) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SetTabName", arg0, arg1, arg2)
 	ret0, _ := ret[0].(error)
@@ -818,7 +818,7 @@ func (mr *MockBrowserMockRecorder) SetTabName(arg0, arg1, arg2 any) *gomock.Call
 }
 
 // Split mocks base method.
-func (m *MockBrowser) Split(arg0 api.Orientation, arg1 browser.Window, arg2 api.Handler) (browser.Window, error) {
+func (m *MockBrowser) Split(arg0 browserapi.Orientation, arg1 browser.Window, arg2 browserapi.Handler) (browser.Window, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Split", arg0, arg1, arg2)
 	ret0, _ := ret[0].(browser.Window)
@@ -833,10 +833,10 @@ func (mr *MockBrowserMockRecorder) Split(arg0, arg1, arg2 any) *gomock.Call {
 }
 
 // Tab mocks base method.
-func (m *MockBrowser) Tab(uri api0.URI, icon rune, name string, h api.Handler) (api.Handler, error) {
+func (m *MockBrowser) Tab(uri api.URI, icon rune, name string, h browserapi.Handler) (browserapi.Handler, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Tab", uri, icon, name, h)
-	ret0, _ := ret[0].(api.Handler)
+	ret0, _ := ret[0].(browserapi.Handler)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

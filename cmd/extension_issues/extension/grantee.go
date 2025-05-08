@@ -40,8 +40,8 @@ import (
 	"github.com/unstablebuild/blue/document/docmarshal/docyaml"
 	"github.com/unstablebuild/blue/issue"
 	"github.com/unstablebuild/blue/logging"
-	browserapi "unstable.build/go-tui/api/browser"
-	browserextension "unstable.build/go-tui/api/browser/extension"
+	"unstable.build/go-tui/api/browserapi"
+	"unstable.build/go-tui/api/browserapi/browserext"
 	"unstable.build/go-tui/api/config"
 	schemeapi "unstable.build/go-tui/api/scheme"
 	schemeextension "unstable.build/go-tui/api/scheme/extension"
@@ -299,19 +299,19 @@ func (e *Grantee) PermissionGranted(ctx context.Context, grants []extension.Gran
 	for _, g := range grants {
 		switch g.Permission {
 		case extension.Permission(extension.PermissionBrowserWindowManager):
-			wm, err := browserextension.WindowManager(ctx, g, e.broker)
+			wm, err := browserext.WindowManager(ctx, g, e.broker)
 			if err != nil {
 				return fmt.Errorf("acquire browser window manager: %w ", err)
 			}
 			e.wm = wm
 		case extension.Permission(extension.PermissionBrowserResourceOpener):
-			o, err := browserextension.ResourceOpener(ctx, g, e.broker)
+			o, err := browserext.ResourceOpener(ctx, g, e.broker)
 			if err != nil {
 				return fmt.Errorf("acquire browser resource opener: %w ", err)
 			}
 			e.o = o
 		case extension.Permission(extension.PermissionBrowserNotifications):
-			m, err := browserextension.Notifications(ctx, g, e.broker)
+			m, err := browserext.Notifications(ctx, g, e.broker)
 			if err != nil {
 				return fmt.Errorf("acquire browser notifications: %w ", err)
 			}

@@ -33,8 +33,8 @@ import (
 	"sync"
 
 	log "github.com/sirupsen/logrus"
-	browserapi "unstable.build/go-tui/api/browser"
-	browserextension "unstable.build/go-tui/api/browser/extension"
+	"unstable.build/go-tui/api/browserapi"
+	"unstable.build/go-tui/api/browserapi/browserext"
 	"unstable.build/go-tui/api/config"
 	textapi "unstable.build/go-tui/api/text"
 	"unstable.build/go-tui/component"
@@ -61,7 +61,7 @@ func Grantee() (extension.Grantee, []extension.Permission) {
 			for _, grant := range grants {
 				if grant.Permission == extension.PermissionBrowserEventPublisher {
 					var err error
-					publisher, err = browserextension.EventPublisher(ctx, grant, broker)
+					publisher, err = browserext.EventPublisher(ctx, grant, broker)
 					if err != nil {
 						return nil, fmt.Errorf("browser extension event publisher: %v", err)
 					}

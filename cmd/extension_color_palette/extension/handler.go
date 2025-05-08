@@ -29,7 +29,7 @@ import (
 
 	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui"
-	browserapi "unstable.build/go-tui/api/browser"
+	"unstable.build/go-tui/api/browserapi"
 	"unstable.build/go-tui/api/config"
 	textapi "unstable.build/go-tui/api/text"
 	"unstable.build/go-tui/component"

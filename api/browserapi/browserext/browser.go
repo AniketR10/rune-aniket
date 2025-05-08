@@ -21,12 +21,58 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package api
+package browserext
 
-import "errors"
+import (
+	"context"
+	"os"
 
-var (
-	// ErrTabNotFree is returned when a tab is being used in call to
-	// SetContent but it's already owned by another Window.
-	ErrTabNotFree = errors.New("Tab already rendered in Window")
+	"unstable.build/go-tui/api/browserapi"
+	"unstable.build/go-tui/browser/browserrpc"
+	"unstable.build/go-tui/extension"
+	"unstable.build/go-tui/rpc"
 )
+
+func dialBrowser(ctx context.Context, grant extension.Grant, broker rpc.MuxBroker) (
+	browserapi.Browser, error,
+) {
+	conn, err := broker.DialChannel(ctx, grant.Token,
+		os.Args[0], "browser", string(grant.Permission))
+	if err != nil {
+		return nil, err
+	}
+	c := browserrpc.NewClient(grant.Context, broker, conn)
+	return c, nil
+}
+
+// WindowManager acquires the browser's WindowManager
+// resource with the given token.
+func WindowManager(ctx context.Context, grant extension.Grant, broker rpc.MuxBroker) (
+	browserapi.WindowManager, error,
+) {
+	return dialBrowser(ctx, grant, broker)
+}
+
+// ResourceOpener acquires the browser's ResourceOpener
+// resource with the given token.
+func ResourceOpener(ctx context.Context, grant extension.Grant, broker rpc.MuxBroker) (
+	browserapi.ResourceOpener, error,
+) {
+	return dialBrowser(ctx, grant, broker)
+}
+
+// Notifications acquires the browser's Notifications
+// resource with the given token.
+func Notifications(ctx context.Context, grant extension.Grant, broker rpc.MuxBroker) (
+	browserapi.Notifications, error,
+) {
+	return dialBrowser(ctx, grant, broker)
+}
+
+// EventPublisher acquires the browser's EventPublisher
+// resource with the given token.
+func EventPublisher(ctx context.Context, grant extension.Grant, broker rpc.MuxBroker) (
+	browserapi.EventPublisher, error,
+) {
+	return dialBrowser(ctx, grant, broker)
+}

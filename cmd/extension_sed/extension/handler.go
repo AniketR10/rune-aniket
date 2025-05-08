@@ -34,8 +34,8 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/iterator"
-	browserapi "unstable.build/go-tui/api/browser"
-	browserextension "unstable.build/go-tui/api/browser/extension"
+	"unstable.build/go-tui/api/browserapi"
+	"unstable.build/go-tui/api/browserapi/browserext"
 	"unstable.build/go-tui/api/config"
 	textapi "unstable.build/go-tui/api/text"
 	workspaceapi "unstable.build/go-tui/api/workspace"
@@ -104,7 +104,7 @@ func newSedHandler(
 		case extension.PermissionExecute:
 			ret.exec, err = workspaceextension.Executor(ctx, grant, broker)
 		case extension.PermissionBrowserNotifications:
-			ret.m, err = browserextension.Notifications(ctx, grant, broker)
+			ret.m, err = browserext.Notifications(ctx, grant, broker)
 		}
 		if err != nil {
 			return nil, err

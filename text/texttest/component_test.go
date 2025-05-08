@@ -38,7 +38,7 @@ import (
 	"github.com/unstablebuild/blue/iterator"
 	gomock "go.uber.org/mock/gomock"
 	"unstable.build/go-tui"
-	browserapi "unstable.build/go-tui/api/browser"
+	"unstable.build/go-tui/api/browserapi"
 	textapi "unstable.build/go-tui/api/text"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser"

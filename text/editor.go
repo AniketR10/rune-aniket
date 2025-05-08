@@ -27,7 +27,7 @@ import (
 	"context"
 	"fmt"
 
-	browserapi "unstable.build/go-tui/api/browser"
+	"unstable.build/go-tui/api/browserapi"
 	textapi "unstable.build/go-tui/api/text"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"

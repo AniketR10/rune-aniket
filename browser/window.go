@@ -26,7 +26,7 @@ package browser
 import (
 	"errors"
 
-	browserapi "unstable.build/go-tui/api/browser"
+	"unstable.build/go-tui/api/browserapi"
 	"unstable.build/go-tui/handler"
 )
 

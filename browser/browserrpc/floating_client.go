@@ -28,7 +28,7 @@ import (
 	"runtime"
 
 	"unstable.build/go-tui"
-	browserapi "unstable.build/go-tui/api/browser"
+	"unstable.build/go-tui/api/browserapi"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term"

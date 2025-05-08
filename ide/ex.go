@@ -40,7 +40,7 @@ import (
 	"github.com/unstablebuild/blue/logging"
 	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui"
-	browserapi "unstable.build/go-tui/api/browser"
+	"unstable.build/go-tui/api/browserapi"
 	schemeapi "unstable.build/go-tui/api/scheme"
 	textapi "unstable.build/go-tui/api/text"
 	workspaceapi "unstable.build/go-tui/api/workspace"

@@ -30,7 +30,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"unstable.build/go-tui"
-	browserapi "unstable.build/go-tui/api/browser"
+	"unstable.build/go-tui/api/browserapi"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	browser "unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component"

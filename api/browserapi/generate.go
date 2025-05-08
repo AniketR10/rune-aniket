@@ -21,19 +21,6 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package browsertest
+package browserapi
 
-import api "unstable.build/go-tui/api/browser"
-
-type noopWindow struct{}
-
-func (w noopWindow) Content() (api.Handler, error)  { return nil, nil }
-func (w noopWindow) SetContent(h api.Handler) error { return nil }
-func (w noopWindow) Close() error                   { return nil }
-func (w noopWindow) ID() uint64                     { return 0 }
-func (w noopWindow) Focus() (bool, error)           { return false, nil }
-
-// NopWindow returns a window that does nothing.
-func NopWindow() api.Window {
-	return noopWindow{}
-}
+//go:generate mockgen -destination=./browsertest/browser_gomock.go -package browsertest -self_package unstable.build/go-tui/api/browserapi/browsertest -source ./browser.go

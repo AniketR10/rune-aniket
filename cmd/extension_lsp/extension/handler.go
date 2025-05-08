@@ -46,8 +46,8 @@ import (
 	"github.com/unstablebuild/golang-internal-tools/lsp/source"
 	"github.com/unstablebuild/golang-internal-tools/span"
 	"github.com/unstablebuild/tcell/v3"
-	browserapi "unstable.build/go-tui/api/browser"
-	browserextension "unstable.build/go-tui/api/browser/extension"
+	"unstable.build/go-tui/api/browserapi"
+	"unstable.build/go-tui/api/browserapi/browserext"
 	"unstable.build/go-tui/api/config"
 	configextension "unstable.build/go-tui/api/config/extension"
 	textapi "unstable.build/go-tui/api/text"
@@ -788,22 +788,22 @@ func newLspHandler(
 				return nil, err
 			}
 		case extension.PermissionBrowserEventPublisher:
-			ret.p, err = browserextension.EventPublisher(ctx, g, broker)
+			ret.p, err = browserext.EventPublisher(ctx, g, broker)
 			if err != nil {
 				return nil, err
 			}
 		case extension.PermissionBrowserResourceOpener:
-			ret.o, err = browserextension.ResourceOpener(ctx, g, broker)
+			ret.o, err = browserext.ResourceOpener(ctx, g, broker)
 			if err != nil {
 				return nil, err
 			}
 		case extension.PermissionBrowserWindowManager:
-			ret.wm, err = browserextension.WindowManager(ctx, g, broker)
+			ret.wm, err = browserext.WindowManager(ctx, g, broker)
 			if err != nil {
 				return nil, err
 			}
 		case extension.PermissionBrowserNotifications:
-			ret.m, err = browserextension.Notifications(ctx, g, broker)
+			ret.m, err = browserext.Notifications(ctx, g, broker)
 			if err != nil {
 				return nil, err
 			}

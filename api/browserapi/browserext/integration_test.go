@@ -21,7 +21,7 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package extension
+package browserext
 
 import (
 	"context"
@@ -29,10 +29,10 @@ import (
 	"sync"
 	"testing"
 
-	"go.uber.org/mock/gomock"
 	"github.com/stretchr/testify/require"
-	browserapi "unstable.build/go-tui/api/browser"
-	browserapitest "unstable.build/go-tui/api/browser/browsertest"
+	"go.uber.org/mock/gomock"
+	"unstable.build/go-tui/api/browserapi"
+	browserapitest "unstable.build/go-tui/api/browserapi/browsertest"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser/browsertest"
 	"unstable.build/go-tui/component"

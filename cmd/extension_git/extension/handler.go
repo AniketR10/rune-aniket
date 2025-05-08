@@ -37,8 +37,8 @@ import (
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/logging"
 	"github.com/unstablebuild/tcell/v3"
-	browserapi "unstable.build/go-tui/api/browser"
-	browserextension "unstable.build/go-tui/api/browser/extension"
+	"unstable.build/go-tui/api/browserapi"
+	"unstable.build/go-tui/api/browserapi/browserext"
 	"unstable.build/go-tui/api/config"
 	configextension "unstable.build/go-tui/api/config/extension"
 	textapi "unstable.build/go-tui/api/text"
@@ -208,20 +208,20 @@ func (h *gitEditorHandler) processGrants(
 				return
 			}
 		case extension.PermissionBrowserEventPublisher:
-			h.p, err = browserextension.EventPublisher(ctx, grant, broker)
+			h.p, err = browserext.EventPublisher(ctx, grant, broker)
 			if err != nil {
 				return
 			}
 		case extension.PermissionBrowserNotifications:
 			var m browserapi.Notifications
-			m, err = browserextension.Notifications(ctx, grant, broker)
+			m, err = browserext.Notifications(ctx, grant, broker)
 			if err != nil {
 				err = fmt.Errorf("acquire browser notifications: %w ", err)
 				return
 			}
 			h.m = m
 		case extension.PermissionBrowserWindowManager:
-			h.wm, err = browserextension.WindowManager(ctx, grant, broker)
+			h.wm, err = browserext.WindowManager(ctx, grant, broker)
 			if err != nil {
 				return
 			}

@@ -33,8 +33,8 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/logging"
-	browserapi "unstable.build/go-tui/api/browser"
-	browserextension "unstable.build/go-tui/api/browser/extension"
+	"unstable.build/go-tui/api/browserapi"
+	"unstable.build/go-tui/api/browserapi/browserext"
 	"unstable.build/go-tui/api/config"
 	textapi "unstable.build/go-tui/api/text"
 	textextension "unstable.build/go-tui/api/text/extension"
@@ -215,7 +215,7 @@ func (t *cmdSplitHandler) PermissionGranted(ctx context.Context, grants []extens
 	for _, g := range grants {
 		switch g.Permission {
 		case extension.PermissionBrowserWindowManager:
-			t.wm, err = browserextension.WindowManager(ctx, g, t.broker)
+			t.wm, err = browserext.WindowManager(ctx, g, t.broker)
 		case extension.PermissionEditor:
 			t.ed, err = textextension.Editor(ctx, g, t.broker)
 			if err == nil {

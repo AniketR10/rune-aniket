@@ -31,7 +31,7 @@ import (
 	"strings"
 
 	"github.com/unstablebuild/blue/iterator"
-	browserapi "unstable.build/go-tui/api/browser"
+	"unstable.build/go-tui/api/browserapi"
 	"unstable.build/go-tui/api/config"
 	configextension "unstable.build/go-tui/api/config/extension"
 	textapi "unstable.build/go-tui/api/text"

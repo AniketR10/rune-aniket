@@ -35,7 +35,7 @@ import (
 	"github.com/unstablebuild/blue/logging"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
-	browserapi "unstable.build/go-tui/api/browser"
+	"unstable.build/go-tui/api/browserapi"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component"

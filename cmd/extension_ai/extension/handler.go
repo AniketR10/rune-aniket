@@ -41,8 +41,8 @@ import (
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/logging"
 	"unstable.build/go-tui"
-	browserapi "unstable.build/go-tui/api/browser"
-	browserextension "unstable.build/go-tui/api/browser/extension"
+	"unstable.build/go-tui/api/browserapi"
+	"unstable.build/go-tui/api/browserapi/browserext"
 	configapi "unstable.build/go-tui/api/config"
 	configextension "unstable.build/go-tui/api/config/extension"
 	storageextension "unstable.build/go-tui/api/storage/extension"
@@ -264,13 +264,13 @@ func CommandEventHandler(
 		case extension.PermissionStorage:
 			ret.db, err = storageextension.Storage(ctx, g, broker)
 		case extension.PermissionBrowserEventPublisher:
-			ret.p, err = browserextension.EventPublisher(ctx, g, broker)
+			ret.p, err = browserext.EventPublisher(ctx, g, broker)
 		case extension.PermissionBrowserResourceOpener:
-			ret.o, err = browserextension.ResourceOpener(ctx, g, broker)
+			ret.o, err = browserext.ResourceOpener(ctx, g, broker)
 		case extension.PermissionBrowserWindowManager:
-			ret.wm, err = browserextension.WindowManager(ctx, g, broker)
+			ret.wm, err = browserext.WindowManager(ctx, g, broker)
 		case extension.PermissionBrowserNotifications:
-			ret.n, err = browserextension.Notifications(ctx, g, broker)
+			ret.n, err = browserext.Notifications(ctx, g, broker)
 		case extension.PermissionConfig:
 			config, err := configextension.FetchConfig(ctx, g, broker)
 			if err != nil {

@@ -147,20 +147,6 @@ func (mr *MockWorkspaceMockRecorder) Open(path, flag, perm any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Open", reflect.TypeOf((*MockWorkspace)(nil).Open), path, flag, perm)
 }
 
-// Publish mocks base method.
-func (m *MockWorkspace) Publish(ctx context.Context, topic string, msg []byte) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Publish", ctx, topic, msg)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// Publish indicates an expected call of Publish.
-func (mr *MockWorkspaceMockRecorder) Publish(ctx, topic, msg any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Publish", reflect.TypeOf((*MockWorkspace)(nil).Publish), ctx, topic, msg)
-}
-
 // ReadDir mocks base method.
 func (m *MockWorkspace) ReadDir(arg0 string) ([]os.DirEntry, error) {
 	m.ctrl.T.Helper()
@@ -189,21 +175,6 @@ func (m *MockWorkspace) ReadLink(path string) (string, error) {
 func (mr *MockWorkspaceMockRecorder) ReadLink(path any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReadLink", reflect.TypeOf((*MockWorkspace)(nil).ReadLink), path)
-}
-
-// Receive mocks base method.
-func (m *MockWorkspace) Receive(ctx context.Context, topic string) ([]byte, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Receive", ctx, topic)
-	ret0, _ := ret[0].([]byte)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// Receive indicates an expected call of Receive.
-func (mr *MockWorkspaceMockRecorder) Receive(ctx, topic any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Receive", reflect.TypeOf((*MockWorkspace)(nil).Receive), ctx, topic)
 }
 
 // Recover mocks base method.

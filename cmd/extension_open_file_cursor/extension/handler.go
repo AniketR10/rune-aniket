@@ -32,8 +32,8 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/logging"
-	browserapi "unstable.build/go-tui/api/browser"
-	browserextension "unstable.build/go-tui/api/browser/extension"
+	"unstable.build/go-tui/api/browserapi"
+	"unstable.build/go-tui/api/browserapi/browserext"
 	"unstable.build/go-tui/api/config"
 	configextension "unstable.build/go-tui/api/config/extension"
 	textapi "unstable.build/go-tui/api/text"
@@ -96,7 +96,7 @@ func newGFHandler(
 		case extension.PermissionFileSystem:
 			ret.fs, err = workspaceextension.FileSystem(ctx, grant, broker)
 		case extension.PermissionBrowserResourceOpener:
-			ret.o, err = browserextension.ResourceOpener(ctx, grant, broker)
+			ret.o, err = browserext.ResourceOpener(ctx, grant, broker)
 		case extension.PermissionConfig:
 			cfg, err := configextension.FetchConfig(ctx, grant, broker)
 			if err != nil {

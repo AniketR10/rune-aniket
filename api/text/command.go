@@ -27,7 +27,7 @@ import (
 	"context"
 
 	"github.com/unstablebuild/blue/iterator"
-	browserapi "unstable.build/go-tui/api/browser"
+	"unstable.build/go-tui/api/browserapi"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/term"
 )

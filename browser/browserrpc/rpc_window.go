@@ -32,7 +32,7 @@ import (
 
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
-	browserapi "unstable.build/go-tui/api/browser"
+	"unstable.build/go-tui/api/browserapi"
 	"unstable.build/go-tui/rpc"
 )
 
