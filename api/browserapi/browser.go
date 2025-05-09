@@ -28,7 +28,7 @@ import (
 	"io"
 
 	"unstable.build/go-tui"
-	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/handler"

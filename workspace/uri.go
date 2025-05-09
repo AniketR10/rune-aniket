@@ -27,7 +27,7 @@ import (
 	"fmt"
 	"path/filepath"
 
-	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/api/workspaceapi"
 )
 
 func checkURIRelative(a, b workspaceapi.URI) error {

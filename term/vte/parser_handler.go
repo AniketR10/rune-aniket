@@ -34,7 +34,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/logging"
 	"github.com/unstablebuild/tcell/v3"
-	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/cell/graphemecluster"
 	"unstable.build/go-tui/clipboard"

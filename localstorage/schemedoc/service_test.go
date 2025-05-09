@@ -40,7 +40,7 @@ import (
 	"github.com/unstablebuild/blue/document/docmarshal/docyaml"
 	"github.com/unstablebuild/blue/document/doctest"
 	"unstable.build/go-tui/api/config"
-	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/workspace"
 )
 

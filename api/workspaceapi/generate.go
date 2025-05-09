@@ -21,63 +21,6 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package api
+package workspaceapi
 
-import (
-	"errors"
-	"os"
-)
-
-var (
-	// ErrFileIsNotRegular is returned when file type was not expected to be a directory.
-	ErrFileIsNotRegular = errors.New("file type is not regular")
-
-	// ErrFileIsNotWritable is returned when file is opened in read-only.
-	ErrFileIsNotWritable = errors.New("file is not writable")
-
-	// ErrFileAlreadyOpen is returned when a file is not expected to be opened already.
-	ErrFileAlreadyOpen = errors.New("file open by another process or previous process was closed abruptly")
-
-	// ErrStaleData is returned when a file was modified by some other application.
-	ErrStaleData = errors.New("file was modified by another process since reading it")
-)
-
-// Error is used to abstract os.Is(.*) functions
-type Error struct {
-	Err          error
-	IsPermission bool
-	IsExist      bool
-	IsNotExist   bool
-}
-
-// String returns the string representation of the underlying error.
-func (e *Error) String() string {
-	if e == nil {
-		return "<nil>"
-	}
-
-	return e.ToError().Error()
-}
-
-// ToError returns a os error or the underlying
-// error.
-func (e Error) ToError() error {
-	if e.IsPermission {
-		return os.ErrPermission
-	}
-	if e.IsNotExist {
-		return os.ErrNotExist
-	}
-	if e.IsExist {
-		return os.ErrExist
-	}
-	if e.Err != nil {
-		return e.Err
-	}
-	panic("workspaceapi.Error with nil Error")
-}
-
-// NopError returns an Error that simply wraps err.
-func NopError(err error) *Error {
-	return &Error{Err: err}
-}
+//go:generate mockgen -destination=./workspacetest/workspace_gomock.go -package workspacetest -self_package unstable.build/go-tui/api/workspaceapi/workspacetest -source ./workspace.go

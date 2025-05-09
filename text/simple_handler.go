@@ -26,7 +26,7 @@ package text
 import (
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
-	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/component"

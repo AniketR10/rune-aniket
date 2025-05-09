@@ -38,8 +38,8 @@ import (
 	"unstable.build/go-tui/api/browserapi/browserext"
 	"unstable.build/go-tui/api/config"
 	"unstable.build/go-tui/api/textapi"
-	workspaceapi "unstable.build/go-tui/api/workspace"
-	workspaceextension "unstable.build/go-tui/api/workspace/extension"
+	"unstable.build/go-tui/api/workspaceapi"
+	"unstable.build/go-tui/api/workspaceapi/workspaceext"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/extension/extutil"
@@ -102,7 +102,7 @@ func newSedHandler(
 	for _, grant := range grants {
 		switch grant.Permission {
 		case extension.PermissionExecute:
-			ret.exec, err = workspaceextension.Executor(ctx, grant, broker)
+			ret.exec, err = workspaceext.Executor(ctx, grant, broker)
 		case extension.PermissionBrowserNotifications:
 			ret.m, err = browserext.Notifications(ctx, grant, broker)
 		}

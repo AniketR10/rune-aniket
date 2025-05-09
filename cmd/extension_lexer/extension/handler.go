@@ -46,8 +46,8 @@ import (
 	"unstable.build/go-tui/api/config"
 	configextension "unstable.build/go-tui/api/config/extension"
 	"unstable.build/go-tui/api/textapi"
-	workspaceapi "unstable.build/go-tui/api/workspace"
-	workspaceextension "unstable.build/go-tui/api/workspace/extension"
+	"unstable.build/go-tui/api/workspaceapi"
+	"unstable.build/go-tui/api/workspaceapi/workspaceext"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/clipboard"
 	syntaxExtension "unstable.build/go-tui/cmd/extension_fuzzy_syntax/extension"
@@ -242,7 +242,7 @@ func newSyntaxHandler(
 				return nil, err
 			}
 		case extension.PermissionFileSystem:
-			ret.fs, err = workspaceextension.FileSystem(ctx, g, broker)
+			ret.fs, err = workspaceext.FileSystem(ctx, g, broker)
 			if err != nil {
 				return nil, err
 			}

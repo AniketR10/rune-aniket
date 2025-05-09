@@ -48,7 +48,7 @@ import (
 	"unstable.build/go-tui/api/storageapi/storageext"
 	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/api/textapi/textext"
-	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/localstorage/storagecache"

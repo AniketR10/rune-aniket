@@ -43,8 +43,8 @@ import (
 	"unstable.build/go-tui/api/config"
 	configextension "unstable.build/go-tui/api/config/extension"
 	"unstable.build/go-tui/api/textapi"
-	workspaceapi "unstable.build/go-tui/api/workspace"
-	workspaceextension "unstable.build/go-tui/api/workspace/extension"
+	"unstable.build/go-tui/api/workspaceapi"
+	"unstable.build/go-tui/api/workspaceapi/workspaceext"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/extension"
@@ -272,7 +272,7 @@ func newFileBarEditorHandler(
 				return nil, err
 			}
 		case extension.Permission(extension.PermissionFileSystem):
-			w, err := workspaceextension.FileSystem(ctx, grant, broker)
+			w, err := workspaceext.FileSystem(ctx, grant, broker)
 			if err != nil {
 				return nil, err
 			}

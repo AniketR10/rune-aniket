@@ -16,7 +16,7 @@ import (
 	gomock "go.uber.org/mock/gomock"
 	tui "unstable.build/go-tui"
 	textapi "unstable.build/go-tui/api/textapi"
-	api "unstable.build/go-tui/api/workspace"
+	workspaceapi "unstable.build/go-tui/api/workspaceapi"
 	term "unstable.build/go-tui/term"
 )
 
@@ -127,10 +127,10 @@ func (mr *MockHandlerMockRecorder) Resize(width, height any) *gomock.Call {
 }
 
 // Resource mocks base method.
-func (m *MockHandler) Resource() api.URI {
+func (m *MockHandler) Resource() workspaceapi.URI {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Resource")
-	ret0, _ := ret[0].(api.URI)
+	ret0, _ := ret[0].(workspaceapi.URI)
 	return ret0
 }
 
@@ -300,7 +300,7 @@ func (mr *MockEditorMockRecorder) Cursor(arg0 any) *gomock.Call {
 }
 
 // Editor mocks base method.
-func (m *MockEditor) Editor(resource api.URI) (textapi.Handler, error) {
+func (m *MockEditor) Editor(resource workspaceapi.URI) (textapi.Handler, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Editor", resource)
 	ret0, _ := ret[0].(textapi.Handler)

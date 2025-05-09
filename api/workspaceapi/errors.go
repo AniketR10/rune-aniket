@@ -21,47 +21,63 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package extension
+package workspaceapi
 
 import (
-	"context"
+	"errors"
 	"os"
-
-	workspaceapi "unstable.build/go-tui/api/workspace"
-	"unstable.build/go-tui/extension"
-	"unstable.build/go-tui/rpc"
-	"unstable.build/go-tui/workspace/workspacerpc"
 )
 
-func dial(ctx context.Context, grant extension.Grant, broker rpc.MuxBroker) (
-	*workspacerpc.Client, error,
-) {
-	conn, err := broker.DialChannel(ctx, grant.Token,
-		os.Args[0], "workspace", string(grant.Permission))
-	if err != nil {
-		return nil, err
+var (
+	// ErrFileIsNotRegular is returned when file type was not expected to be a directory.
+	ErrFileIsNotRegular = errors.New("file type is not regular")
+
+	// ErrFileIsNotWritable is returned when file is opened in read-only.
+	ErrFileIsNotWritable = errors.New("file is not writable")
+
+	// ErrFileAlreadyOpen is returned when a file is not expected to be opened already.
+	ErrFileAlreadyOpen = errors.New("file open by another process or previous process was closed abruptly")
+
+	// ErrStaleData is returned when a file was modified by some other application.
+	ErrStaleData = errors.New("file was modified by another process since reading it")
+)
+
+// Error is used to abstract os.Is(.*) functions
+type Error struct {
+	Err          error
+	IsPermission bool
+	IsExist      bool
+	IsNotExist   bool
+}
+
+// String returns the string representation of the underlying error.
+func (e *Error) String() string {
+	if e == nil {
+		return "<nil>"
 	}
-	c := workspacerpc.NewClient(conn)
-	return c, nil
+
+	return e.ToError().Error()
 }
 
-// FileSystem acquires the workspace's file-system with the given token.
-func FileSystem(ctx context.Context, grant extension.Grant, broker rpc.MuxBroker) (
-	workspaceapi.FileSystem, error,
-) {
-	return dial(ctx, grant, broker)
+// ToError returns a os error or the underlying
+// error.
+func (e Error) ToError() error {
+	if e.IsPermission {
+		return os.ErrPermission
+	}
+	if e.IsNotExist {
+		return os.ErrNotExist
+	}
+	if e.IsExist {
+		return os.ErrExist
+	}
+	if e.Err != nil {
+		return e.Err
+	}
+	panic("workspaceapi.Error with nil Error")
 }
 
-// Executor acquires the workspace's processes executor with the given token.
-func Executor(ctx context.Context, grant extension.Grant, broker rpc.MuxBroker) (
-	workspaceapi.Executor, error,
-) {
-	return dial(ctx, grant, broker)
-}
-
-// Terminal acquires the workspace's pseudo-terminal with the given token.
-func Terminal(ctx context.Context, grant extension.Grant, broker rpc.MuxBroker) (
-	workspaceapi.Terminal, error,
-) {
-	return dial(ctx, grant, broker)
+// NopError returns an Error that simply wraps err.
+func NopError(err error) *Error {
+	return &Error{Err: err}
 }

@@ -33,7 +33,7 @@ import (
 	"unstable.build/go-tui/api/browserapi"
 	"unstable.build/go-tui/api/config"
 	"unstable.build/go-tui/api/textapi"
-	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/cmd/extension_fuzzy_file/finder"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/extension/extutil"

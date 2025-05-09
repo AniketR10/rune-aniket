@@ -32,7 +32,7 @@ import (
 	"sync"
 	"time"
 
-	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/api/workspaceapi"
 )
 
 // memFile is an in-memory workspaceapi.File implementation.

@@ -36,7 +36,7 @@ import (
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
 	"unstable.build/go-tui/api/browserapi"
-	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/notifications"

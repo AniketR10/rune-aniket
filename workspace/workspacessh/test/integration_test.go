@@ -36,7 +36,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"unstable.build/go-tui/api/config"
 	"unstable.build/go-tui/api/schemeapi"
-	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/workspace"
 	"unstable.build/go-tui/workspace/walkdir"
 	"unstable.build/go-tui/workspace/workspacessh"

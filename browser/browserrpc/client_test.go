@@ -33,7 +33,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
 	gomock "go.uber.org/mock/gomock"
-	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term"

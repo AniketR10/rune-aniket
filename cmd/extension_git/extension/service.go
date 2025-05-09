@@ -32,7 +32,7 @@ import (
 	"strings"
 
 	"github.com/sourcegraph/go-diff/diff"
-	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/api/workspaceapi"
 )
 
 var _ gitService = (*cmdGitService)(nil)

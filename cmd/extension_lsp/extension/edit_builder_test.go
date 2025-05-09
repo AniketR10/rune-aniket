@@ -29,7 +29,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/unstablebuild/golang-internal-tools/lsp/protocol"
 	"github.com/unstablebuild/golang-internal-tools/span"
-	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/text"
 )

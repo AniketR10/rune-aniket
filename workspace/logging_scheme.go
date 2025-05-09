@@ -32,7 +32,7 @@ import (
 	"github.com/unstablebuild/blue/logging"
 	"unstable.build/go-tui/api/config"
 	"unstable.build/go-tui/api/schemeapi"
-	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/api/workspaceapi"
 )
 
 // LoggingScheme wraps a SchemeFunc with a constructor

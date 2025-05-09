@@ -35,7 +35,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/api/browserapi"
-	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/term"

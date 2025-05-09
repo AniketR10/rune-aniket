@@ -33,7 +33,7 @@ import (
 	"go.uber.org/mock/gomock"
 	"unstable.build/go-tui/api/browserapi"
 	browserapitest "unstable.build/go-tui/api/browserapi/browsertest"
-	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/browser/browsertest"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/notifications"

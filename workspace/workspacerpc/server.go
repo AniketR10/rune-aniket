@@ -37,7 +37,7 @@ import (
 	"github.com/unstablebuild/blue/logging"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"unstable.build/go-tui/api/schemeapi"
-	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/api/workspaceapi"
 )
 
 var (

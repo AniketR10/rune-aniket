@@ -35,7 +35,7 @@ import (
 	"unstable.build/go-tui/api/config"
 	"unstable.build/go-tui/api/textapi"
 	textapitest "unstable.build/go-tui/api/textapi/texttest"
-	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"

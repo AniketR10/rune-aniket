@@ -32,7 +32,7 @@ import (
 	"syscall"
 
 	"unstable.build/go-tui/api/config"
-	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/api/workspaceapi"
 )
 
 var (

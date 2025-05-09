@@ -41,8 +41,8 @@ import (
 	"google.golang.org/grpc"
 	"unstable.build/go-tui/api/config"
 	"unstable.build/go-tui/api/schemeapi"
-	workspaceapi "unstable.build/go-tui/api/workspace"
-	workspaceapitest "unstable.build/go-tui/api/workspace/workspacetest"
+	"unstable.build/go-tui/api/workspaceapi"
+	workspaceapitest "unstable.build/go-tui/api/workspaceapi/workspacetest"
 	"unstable.build/go-tui/workspace"
 	"unstable.build/go-tui/workspace/workspacetest"
 )

@@ -36,7 +36,7 @@ import (
 	"github.com/unstablebuild/blue/logging"
 	"go.uber.org/multierr"
 	"unstable.build/go-tui/api/schemeapi"
-	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/clipboard"

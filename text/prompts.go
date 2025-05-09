@@ -28,7 +28,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui/api/browserapi"
-	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/term"

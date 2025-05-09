@@ -42,8 +42,8 @@ import (
 	"unstable.build/go-tui/api/config"
 	configextension "unstable.build/go-tui/api/config/extension"
 	"unstable.build/go-tui/api/textapi"
-	workspaceapi "unstable.build/go-tui/api/workspace"
-	workspaceextension "unstable.build/go-tui/api/workspace/extension"
+	"unstable.build/go-tui/api/workspaceapi"
+	"unstable.build/go-tui/api/workspaceapi/workspaceext"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/clipboard/sysclip"
@@ -192,7 +192,7 @@ func (h *gitEditorHandler) processGrants(
 	for _, grant := range grants {
 		switch grant.Permission {
 		case extension.PermissionFileSystem:
-			fs, err = workspaceextension.FileSystem(ctx, grant, broker)
+			fs, err = workspaceext.FileSystem(ctx, grant, broker)
 			if err != nil {
 				return
 			}
@@ -203,7 +203,7 @@ func (h *gitEditorHandler) processGrants(
 			}
 			cwd = cwdURI
 		case extension.PermissionExecute:
-			h.exec, err = workspaceextension.Executor(ctx, grant, broker)
+			h.exec, err = workspaceext.Executor(ctx, grant, broker)
 			if err != nil {
 				return
 			}

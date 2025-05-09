@@ -30,7 +30,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/api/config"
-	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component/shader"
 	"unstable.build/go-tui/extension"

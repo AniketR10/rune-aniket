@@ -36,8 +36,8 @@ import (
 	"go.uber.org/mock/gomock"
 	"unstable.build/go-tui/api/schemeapi"
 	"unstable.build/go-tui/api/schemeapi/schemetest"
-	workspaceapi "unstable.build/go-tui/api/workspace"
-	workspaceapitest "unstable.build/go-tui/api/workspace/workspacetest"
+	"unstable.build/go-tui/api/workspaceapi"
+	workspaceapitest "unstable.build/go-tui/api/workspaceapi/workspacetest"
 	"unstable.build/go-tui/workspace"
 )
 

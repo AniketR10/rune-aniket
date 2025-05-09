@@ -47,7 +47,7 @@ import (
 	configextension "unstable.build/go-tui/api/config/extension"
 	"unstable.build/go-tui/api/storageapi/storageext"
 	"unstable.build/go-tui/api/textapi"
-	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/clipboard/sysclip"
 	aiDialogue "unstable.build/go-tui/cmd/extension_ai/dialogue"

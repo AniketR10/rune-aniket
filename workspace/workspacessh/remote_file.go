@@ -28,7 +28,7 @@ import (
 	"os"
 	"runtime"
 
-	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/api/workspaceapi"
 )
 
 var (

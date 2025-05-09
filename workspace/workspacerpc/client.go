@@ -36,7 +36,7 @@ import (
 	"github.com/unstablebuild/blue/bluectx"
 	"github.com/unstablebuild/blue/logging"
 	"unstable.build/go-tui/api/schemeapi"
-	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/rpc"
 )
 

@@ -21,16 +21,47 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package api
+package workspaceext
 
-// ChanWatcher returns a Watcher that simply returns
-// ch when Watch is called.
-func ChanWatcher(ch chan error) Watcher {
-	return waitCh(ch)
+import (
+	"context"
+	"os"
+
+	"unstable.build/go-tui/api/workspaceapi"
+	"unstable.build/go-tui/extension"
+	"unstable.build/go-tui/rpc"
+	"unstable.build/go-tui/workspace/workspacerpc"
+)
+
+func dial(ctx context.Context, grant extension.Grant, broker rpc.MuxBroker) (
+	*workspacerpc.Client, error,
+) {
+	conn, err := broker.DialChannel(ctx, grant.Token,
+		os.Args[0], "workspace", string(grant.Permission))
+	if err != nil {
+		return nil, err
+	}
+	c := workspacerpc.NewClient(conn)
+	return c, nil
 }
 
-type waitCh chan error
+// FileSystem acquires the workspace's file-system with the given token.
+func FileSystem(ctx context.Context, grant extension.Grant, broker rpc.MuxBroker) (
+	workspaceapi.FileSystem, error,
+) {
+	return dial(ctx, grant, broker)
+}
 
-func (w waitCh) Watch() chan error {
-	return w
+// Executor acquires the workspace's processes executor with the given token.
+func Executor(ctx context.Context, grant extension.Grant, broker rpc.MuxBroker) (
+	workspaceapi.Executor, error,
+) {
+	return dial(ctx, grant, broker)
+}
+
+// Terminal acquires the workspace's pseudo-terminal with the given token.
+func Terminal(ctx context.Context, grant extension.Grant, broker rpc.MuxBroker) (
+	workspaceapi.Terminal, error,
+) {
+	return dial(ctx, grant, broker)
 }

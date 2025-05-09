@@ -35,7 +35,7 @@ import (
 	"google.golang.org/grpc"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/api/browserapi"
-	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/notifications"

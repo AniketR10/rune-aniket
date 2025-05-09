@@ -26,7 +26,7 @@ package textrpc
 import (
 	"context"
 
-	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/term"
 	termrpc "unstable.build/go-tui/term/termrpc"

@@ -36,7 +36,7 @@ import (
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/logging"
 	"github.com/unstablebuild/blue/logging/trace"
-	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/api/workspaceapi"
 )
 
 // Manager implements chat completion via a llm.Service.

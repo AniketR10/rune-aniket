@@ -17,7 +17,7 @@ import (
 
 	gomock "go.uber.org/mock/gomock"
 	schemeapi "unstable.build/go-tui/api/schemeapi"
-	api "unstable.build/go-tui/api/workspace"
+	workspaceapi "unstable.build/go-tui/api/workspaceapi"
 )
 
 // MockScheme is a mock of Scheme interface.
@@ -87,10 +87,10 @@ func (mr *MockSchemeMockRecorder) MkdirAll(arg0, arg1 any) *gomock.Call {
 }
 
 // NewFile mocks base method.
-func (m *MockScheme) NewFile(fd uintptr, name string) api.File {
+func (m *MockScheme) NewFile(fd uintptr, name string) workspaceapi.File {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "NewFile", fd, name)
-	ret0, _ := ret[0].(api.File)
+	ret0, _ := ret[0].(workspaceapi.File)
 	return ret0
 }
 
@@ -101,10 +101,10 @@ func (mr *MockSchemeMockRecorder) NewFile(fd, name any) *gomock.Call {
 }
 
 // NewPty mocks base method.
-func (m *MockScheme) NewPty(arg0 context.Context) (api.Pty, error) {
+func (m *MockScheme) NewPty(arg0 context.Context) (workspaceapi.Pty, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "NewPty", arg0)
-	ret0, _ := ret[0].(api.Pty)
+	ret0, _ := ret[0].(workspaceapi.Pty)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -116,11 +116,11 @@ func (mr *MockSchemeMockRecorder) NewPty(arg0 any) *gomock.Call {
 }
 
 // Open mocks base method.
-func (m *MockScheme) Open(path string, flag int, perm os.FileMode) (api.File, *api.Error) {
+func (m *MockScheme) Open(path string, flag int, perm os.FileMode) (workspaceapi.File, *workspaceapi.Error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Open", path, flag, perm)
-	ret0, _ := ret[0].(api.File)
-	ret1, _ := ret[1].(*api.Error)
+	ret0, _ := ret[0].(workspaceapi.File)
+	ret1, _ := ret[1].(*workspaceapi.Error)
 	return ret0, ret1
 }
 
@@ -189,7 +189,7 @@ func (mr *MockSchemeMockRecorder) Rename(old, new any) *gomock.Call {
 }
 
 // SetPtySize mocks base method.
-func (m *MockScheme) SetPtySize(p api.Pty, width, height int) error {
+func (m *MockScheme) SetPtySize(p workspaceapi.Pty, width, height int) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SetPtySize", p, width, height)
 	ret0, _ := ret[0].(error)
@@ -203,7 +203,7 @@ func (mr *MockSchemeMockRecorder) SetPtySize(p, width, height any) *gomock.Call 
 }
 
 // Signal mocks base method.
-func (m *MockScheme) Signal(arg0 api.Pid, arg1 syscall.Signal) error {
+func (m *MockScheme) Signal(arg0 workspaceapi.Pid, arg1 syscall.Signal) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Signal", arg0, arg1)
 	ret0, _ := ret[0].(error)
@@ -217,10 +217,10 @@ func (mr *MockSchemeMockRecorder) Signal(arg0, arg1 any) *gomock.Call {
 }
 
 // StartCommand mocks base method.
-func (m *MockScheme) StartCommand(ctx context.Context, cmd api.Cmd) (api.Pid, error) {
+func (m *MockScheme) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (workspaceapi.Pid, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "StartCommand", ctx, cmd)
-	ret0, _ := ret[0].(api.Pid)
+	ret0, _ := ret[0].(workspaceapi.Pid)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -247,10 +247,10 @@ func (mr *MockSchemeMockRecorder) Stat(path any) *gomock.Call {
 }
 
 // URI mocks base method.
-func (m *MockScheme) URI(path string) (api.URI, error) {
+func (m *MockScheme) URI(path string) (workspaceapi.URI, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "URI", path)
-	ret0, _ := ret[0].(api.URI)
+	ret0, _ := ret[0].(workspaceapi.URI)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -285,10 +285,10 @@ func (m *MockTerminal) EXPECT() *MockTerminalMockRecorder {
 }
 
 // NewPty mocks base method.
-func (m *MockTerminal) NewPty(arg0 context.Context) (api.Pty, error) {
+func (m *MockTerminal) NewPty(arg0 context.Context) (workspaceapi.Pty, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "NewPty", arg0)
-	ret0, _ := ret[0].(api.Pty)
+	ret0, _ := ret[0].(workspaceapi.Pty)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -300,7 +300,7 @@ func (mr *MockTerminalMockRecorder) NewPty(arg0 any) *gomock.Call {
 }
 
 // SetPtySize mocks base method.
-func (m *MockTerminal) SetPtySize(p api.Pty, width, height int) error {
+func (m *MockTerminal) SetPtySize(p workspaceapi.Pty, width, height int) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SetPtySize", p, width, height)
 	ret0, _ := ret[0].(error)
@@ -351,7 +351,7 @@ func (mr *MockExecutorMockRecorder) Close() *gomock.Call {
 }
 
 // Signal mocks base method.
-func (m *MockExecutor) Signal(arg0 api.Pid, arg1 syscall.Signal) error {
+func (m *MockExecutor) Signal(arg0 workspaceapi.Pid, arg1 syscall.Signal) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Signal", arg0, arg1)
 	ret0, _ := ret[0].(error)
@@ -365,10 +365,10 @@ func (mr *MockExecutorMockRecorder) Signal(arg0, arg1 any) *gomock.Call {
 }
 
 // StartCommand mocks base method.
-func (m *MockExecutor) StartCommand(ctx context.Context, cmd api.Cmd) (api.Pid, error) {
+func (m *MockExecutor) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (workspaceapi.Pid, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "StartCommand", ctx, cmd)
-	ret0, _ := ret[0].(api.Pid)
+	ret0, _ := ret[0].(workspaceapi.Pid)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

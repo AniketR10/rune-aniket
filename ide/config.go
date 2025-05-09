@@ -42,7 +42,7 @@ import (
 	yaml "gopkg.in/yaml.v3"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/api/config"
-	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/component"

@@ -30,7 +30,7 @@ import (
 	"strings"
 
 	"github.com/unstablebuild/blue/iterator"
-	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/workspace/walkdir"
 )
 

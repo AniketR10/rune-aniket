@@ -37,7 +37,7 @@ import (
 	blupspin "github.com/unstablebuild/blue/upspin"
 	"unstable.build/go-tui/api/config"
 	"unstable.build/go-tui/api/schemeapi"
-	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/workspace"
 	upclient "upspin.io/client"
 	upcfg "upspin.io/config"

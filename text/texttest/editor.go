@@ -30,7 +30,7 @@ import (
 
 	"github.com/unstablebuild/blue/iterator"
 	"unstable.build/go-tui/api/textapi"
-	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/api/workspaceapi"
 	cell "unstable.build/go-tui/cell"
 	term "unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"

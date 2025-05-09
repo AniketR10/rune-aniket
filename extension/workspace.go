@@ -30,7 +30,7 @@ import (
 	"time"
 
 	"github.com/unstablebuild/blue/bluectx"
-	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/workspace"
 	"unstable.build/go-tui/workspace/workspacerpc"

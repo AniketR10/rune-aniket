@@ -36,7 +36,7 @@ import (
 	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/document/docmarshal"
 	"github.com/unstablebuild/blue/retry"
-	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/localstorage"
 	"unstable.build/go-tui/workspace"
 )

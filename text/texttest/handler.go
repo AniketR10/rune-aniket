@@ -24,7 +24,7 @@
 package texttest
 
 import (
-	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/handler"
 	term "unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"

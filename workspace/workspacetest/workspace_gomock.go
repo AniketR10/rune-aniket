@@ -17,7 +17,7 @@ import (
 
 	gomock "go.uber.org/mock/gomock"
 	schemeapi "unstable.build/go-tui/api/schemeapi"
-	api "unstable.build/go-tui/api/workspace"
+	workspaceapi "unstable.build/go-tui/api/workspaceapi"
 	cell "unstable.build/go-tui/cell"
 	workspace "unstable.build/go-tui/workspace"
 )
@@ -60,7 +60,7 @@ func (mr *MockWorkspaceMockRecorder) Close() *gomock.Call {
 }
 
 // Load mocks base method.
-func (m *MockWorkspace) Load(file api.URI, buf *cell.Buffer, swapDir api.URI, readOnly bool) (workspace.FlusherCloser, error) {
+func (m *MockWorkspace) Load(file workspaceapi.URI, buf *cell.Buffer, swapDir workspaceapi.URI, readOnly bool) (workspace.FlusherCloser, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Load", file, buf, swapDir, readOnly)
 	ret0, _ := ret[0].(workspace.FlusherCloser)
@@ -104,10 +104,10 @@ func (mr *MockWorkspaceMockRecorder) MkdirAll(arg0, arg1 any) *gomock.Call {
 }
 
 // NewFile mocks base method.
-func (m *MockWorkspace) NewFile(fd uintptr, name string) api.File {
+func (m *MockWorkspace) NewFile(fd uintptr, name string) workspaceapi.File {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "NewFile", fd, name)
-	ret0, _ := ret[0].(api.File)
+	ret0, _ := ret[0].(workspaceapi.File)
 	return ret0
 }
 
@@ -118,10 +118,10 @@ func (mr *MockWorkspaceMockRecorder) NewFile(fd, name any) *gomock.Call {
 }
 
 // NewPty mocks base method.
-func (m *MockWorkspace) NewPty(arg0 context.Context) (api.Pty, error) {
+func (m *MockWorkspace) NewPty(arg0 context.Context) (workspaceapi.Pty, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "NewPty", arg0)
-	ret0, _ := ret[0].(api.Pty)
+	ret0, _ := ret[0].(workspaceapi.Pty)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -133,11 +133,11 @@ func (mr *MockWorkspaceMockRecorder) NewPty(arg0 any) *gomock.Call {
 }
 
 // Open mocks base method.
-func (m *MockWorkspace) Open(path string, flag int, perm os.FileMode) (api.File, *api.Error) {
+func (m *MockWorkspace) Open(path string, flag int, perm os.FileMode) (workspaceapi.File, *workspaceapi.Error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Open", path, flag, perm)
-	ret0, _ := ret[0].(api.File)
-	ret1, _ := ret[1].(*api.Error)
+	ret0, _ := ret[0].(workspaceapi.File)
+	ret1, _ := ret[1].(*workspaceapi.Error)
 	return ret0, ret1
 }
 
@@ -178,7 +178,7 @@ func (mr *MockWorkspaceMockRecorder) ReadLink(path any) *gomock.Call {
 }
 
 // Recover mocks base method.
-func (m *MockWorkspace) Recover(file, swapFilePath api.URI, buf *cell.Buffer, force bool) (workspace.FlusherCloser, error) {
+func (m *MockWorkspace) Recover(file, swapFilePath workspaceapi.URI, buf *cell.Buffer, force bool) (workspace.FlusherCloser, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Recover", file, swapFilePath, buf, force)
 	ret0, _ := ret[0].(workspace.FlusherCloser)
@@ -221,7 +221,7 @@ func (mr *MockWorkspaceMockRecorder) Rename(old, new any) *gomock.Call {
 }
 
 // SetPtySize mocks base method.
-func (m *MockWorkspace) SetPtySize(p api.Pty, width, height int) error {
+func (m *MockWorkspace) SetPtySize(p workspaceapi.Pty, width, height int) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SetPtySize", p, width, height)
 	ret0, _ := ret[0].(error)
@@ -235,7 +235,7 @@ func (mr *MockWorkspaceMockRecorder) SetPtySize(p, width, height any) *gomock.Ca
 }
 
 // Signal mocks base method.
-func (m *MockWorkspace) Signal(arg0 api.Pid, arg1 syscall.Signal) error {
+func (m *MockWorkspace) Signal(arg0 workspaceapi.Pid, arg1 syscall.Signal) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Signal", arg0, arg1)
 	ret0, _ := ret[0].(error)
@@ -249,10 +249,10 @@ func (mr *MockWorkspaceMockRecorder) Signal(arg0, arg1 any) *gomock.Call {
 }
 
 // StartCommand mocks base method.
-func (m *MockWorkspace) StartCommand(ctx context.Context, cmd api.Cmd) (api.Pid, error) {
+func (m *MockWorkspace) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (workspaceapi.Pid, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "StartCommand", ctx, cmd)
-	ret0, _ := ret[0].(api.Pid)
+	ret0, _ := ret[0].(workspaceapi.Pid)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -279,10 +279,10 @@ func (mr *MockWorkspaceMockRecorder) Stat(path any) *gomock.Call {
 }
 
 // URI mocks base method.
-func (m *MockWorkspace) URI(path string) (api.URI, error) {
+func (m *MockWorkspace) URI(path string) (workspaceapi.URI, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "URI", path)
-	ret0, _ := ret[0].(api.URI)
+	ret0, _ := ret[0].(workspaceapi.URI)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -317,7 +317,7 @@ func (m *MockLoader) EXPECT() *MockLoaderMockRecorder {
 }
 
 // Load mocks base method.
-func (m *MockLoader) Load(file api.URI, buf *cell.Buffer, swapDir api.URI, readOnly bool) (workspace.FlusherCloser, error) {
+func (m *MockLoader) Load(file workspaceapi.URI, buf *cell.Buffer, swapDir workspaceapi.URI, readOnly bool) (workspace.FlusherCloser, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Load", file, buf, swapDir, readOnly)
 	ret0, _ := ret[0].(workspace.FlusherCloser)
@@ -332,7 +332,7 @@ func (mr *MockLoaderMockRecorder) Load(file, buf, swapDir, readOnly any) *gomock
 }
 
 // Recover mocks base method.
-func (m *MockLoader) Recover(file, swapFilePath api.URI, buf *cell.Buffer, force bool) (workspace.FlusherCloser, error) {
+func (m *MockLoader) Recover(file, swapFilePath workspaceapi.URI, buf *cell.Buffer, force bool) (workspace.FlusherCloser, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Recover", file, swapFilePath, buf, force)
 	ret0, _ := ret[0].(workspace.FlusherCloser)
@@ -435,7 +435,7 @@ func (m *MockWorkspaceManager) EXPECT() *MockWorkspaceManagerMockRecorder {
 }
 
 // AddWorkspace mocks base method.
-func (m *MockWorkspaceManager) AddWorkspace(arg0 context.Context, arg1 api.URI) (workspace.Workspace, error) {
+func (m *MockWorkspaceManager) AddWorkspace(arg0 context.Context, arg1 workspaceapi.URI) (workspace.Workspace, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddWorkspace", arg0, arg1)
 	ret0, _ := ret[0].(workspace.Workspace)

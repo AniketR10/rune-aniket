@@ -43,7 +43,7 @@ import (
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/api/config"
 	"unstable.build/go-tui/api/textapi"
-	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/extension"

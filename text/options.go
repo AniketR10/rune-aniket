@@ -28,7 +28,7 @@ import (
 	"time"
 
 	"github.com/unstablebuild/tcell/v3"
-	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/notifications"

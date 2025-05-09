@@ -26,7 +26,7 @@ package textapi
 import (
 	"context"
 
-	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/term"
 )
 

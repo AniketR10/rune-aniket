@@ -16,7 +16,7 @@ import (
 	gomock "go.uber.org/mock/gomock"
 	tui "unstable.build/go-tui"
 	browserapi "unstable.build/go-tui/api/browserapi"
-	api "unstable.build/go-tui/api/workspace"
+	workspaceapi "unstable.build/go-tui/api/workspaceapi"
 	component "unstable.build/go-tui/component"
 	notifications "unstable.build/go-tui/component/notifications"
 	term "unstable.build/go-tui/term"
@@ -443,7 +443,7 @@ func (mr *MockWindowManagerMockRecorder) Split(arg0, arg1, arg2 any) *gomock.Cal
 }
 
 // Tab mocks base method.
-func (m *MockWindowManager) Tab(uri api.URI, icon rune, name string, h browserapi.Handler) (browserapi.Handler, error) {
+func (m *MockWindowManager) Tab(uri workspaceapi.URI, icon rune, name string, h browserapi.Handler) (browserapi.Handler, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Tab", uri, icon, name, h)
 	ret0, _ := ret[0].(browserapi.Handler)
@@ -542,7 +542,7 @@ func (m *MockResourceOpener) EXPECT() *MockResourceOpenerMockRecorder {
 }
 
 // Open mocks base method.
-func (m *MockResourceOpener) Open(resource api.URI) (browserapi.Handler, error) {
+func (m *MockResourceOpener) Open(resource workspaceapi.URI) (browserapi.Handler, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Open", resource)
 	ret0, _ := ret[0].(browserapi.Handler)
@@ -741,7 +741,7 @@ func (mr *MockBrowserMockRecorder) NotifyOnce(level, msg any, args ...any) *gomo
 }
 
 // Open mocks base method.
-func (m *MockBrowser) Open(resource api.URI) (browserapi.Handler, error) {
+func (m *MockBrowser) Open(resource workspaceapi.URI) (browserapi.Handler, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Open", resource)
 	ret0, _ := ret[0].(browserapi.Handler)
@@ -800,7 +800,7 @@ func (mr *MockBrowserMockRecorder) Split(arg0, arg1, arg2 any) *gomock.Call {
 }
 
 // Tab mocks base method.
-func (m *MockBrowser) Tab(uri api.URI, icon rune, name string, h browserapi.Handler) (browserapi.Handler, error) {
+func (m *MockBrowser) Tab(uri workspaceapi.URI, icon rune, name string, h browserapi.Handler) (browserapi.Handler, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Tab", uri, icon, name, h)
 	ret0, _ := ret[0].(browserapi.Handler)

@@ -14,7 +14,7 @@ import (
 	reflect "reflect"
 
 	gomock "go.uber.org/mock/gomock"
-	api "unstable.build/go-tui/api/workspace"
+	workspaceapi "unstable.build/go-tui/api/workspaceapi"
 	cell "unstable.build/go-tui/cell"
 	notifications "unstable.build/go-tui/component/notifications"
 	workspace "unstable.build/go-tui/workspace"
@@ -44,7 +44,7 @@ func (m *MockWorkspace) EXPECT() *MockWorkspaceMockRecorder {
 }
 
 // Load mocks base method.
-func (m *MockWorkspace) Load(file api.URI, buf *cell.Buffer, swapDir api.URI, readOnly bool) (workspace.FlusherCloser, error) {
+func (m *MockWorkspace) Load(file workspaceapi.URI, buf *cell.Buffer, swapDir workspaceapi.URI, readOnly bool) (workspace.FlusherCloser, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Load", file, buf, swapDir, readOnly)
 	ret0, _ := ret[0].(workspace.FlusherCloser)
@@ -59,11 +59,11 @@ func (mr *MockWorkspaceMockRecorder) Load(file, buf, swapDir, readOnly any) *gom
 }
 
 // Open mocks base method.
-func (m *MockWorkspace) Open(path string, flag int, perm os.FileMode) (api.File, *api.Error) {
+func (m *MockWorkspace) Open(path string, flag int, perm os.FileMode) (workspaceapi.File, *workspaceapi.Error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Open", path, flag, perm)
-	ret0, _ := ret[0].(api.File)
-	ret1, _ := ret[1].(*api.Error)
+	ret0, _ := ret[0].(workspaceapi.File)
+	ret1, _ := ret[1].(*workspaceapi.Error)
 	return ret0, ret1
 }
 
@@ -89,7 +89,7 @@ func (mr *MockWorkspaceMockRecorder) ReadDir(name any) *gomock.Call {
 }
 
 // Recover mocks base method.
-func (m *MockWorkspace) Recover(file, swapFilePath api.URI, buf *cell.Buffer, force bool) (workspace.FlusherCloser, error) {
+func (m *MockWorkspace) Recover(file, swapFilePath workspaceapi.URI, buf *cell.Buffer, force bool) (workspace.FlusherCloser, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Recover", file, swapFilePath, buf, force)
 	ret0, _ := ret[0].(workspace.FlusherCloser)
@@ -133,10 +133,10 @@ func (mr *MockWorkspaceMockRecorder) Stat(path any) *gomock.Call {
 }
 
 // URI mocks base method.
-func (m *MockWorkspace) URI(arg0 string) (api.URI, error) {
+func (m *MockWorkspace) URI(arg0 string) (workspaceapi.URI, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "URI", arg0)
-	ret0, _ := ret[0].(api.URI)
+	ret0, _ := ret[0].(workspaceapi.URI)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

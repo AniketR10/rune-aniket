@@ -32,7 +32,7 @@ import (
 	"github.com/unstablebuild/blue/document/docmarshal"
 	"github.com/unstablebuild/blue/document/firstmover"
 	"unstable.build/go-tui/api/config"
-	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/localstorage/schemedoc"
 	"unstable.build/go-tui/workspace"
 )

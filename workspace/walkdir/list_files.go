@@ -34,7 +34,7 @@ import (
 
 	multierr "github.com/ernestrc/go-multierror"
 	"github.com/unstablebuild/blue/iterator"
-	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/api/workspaceapi"
 )
 
 // Reader abstracts the ability to read directory contents.

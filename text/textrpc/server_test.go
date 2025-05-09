@@ -35,7 +35,7 @@ import (
 	"github.com/unstablebuild/blue/document"
 	gomock "go.uber.org/mock/gomock"
 	"unstable.build/go-tui/api/textapi"
-	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component/notifications"

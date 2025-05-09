@@ -27,7 +27,7 @@ import (
 	"context"
 	"runtime"
 
-	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/term"
 	termrpc "unstable.build/go-tui/term/termrpc"
 )

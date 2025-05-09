@@ -27,7 +27,7 @@ import (
 	"context"
 	"syscall"
 
-	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/api/workspaceapi"
 )
 
 type unimplementedExecutor struct {

@@ -27,7 +27,7 @@ import (
 	"context"
 
 	"unstable.build/go-tui/api/browserapi"
-	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/term"
 )
 

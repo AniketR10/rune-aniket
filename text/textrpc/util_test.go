@@ -27,7 +27,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/cell"
 	termrpc "unstable.build/go-tui/term/termrpc"
 )

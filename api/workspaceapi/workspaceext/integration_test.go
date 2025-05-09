@@ -21,7 +21,7 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package extension
+package workspaceext
 
 import (
 	"context"
@@ -31,8 +31,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
-	workspaceapi "unstable.build/go-tui/api/workspace"
-	workspaceapitest "unstable.build/go-tui/api/workspace/workspacetest"
+	"unstable.build/go-tui/api/workspaceapi"
+	workspaceapitest "unstable.build/go-tui/api/workspaceapi/workspacetest"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/workspace/workspacetest"

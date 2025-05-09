@@ -51,8 +51,8 @@ import (
 	"unstable.build/go-tui/api/config"
 	configextension "unstable.build/go-tui/api/config/extension"
 	"unstable.build/go-tui/api/textapi"
-	workspaceapi "unstable.build/go-tui/api/workspace"
-	workspaceextension "unstable.build/go-tui/api/workspace/extension"
+	"unstable.build/go-tui/api/workspaceapi"
+	"unstable.build/go-tui/api/workspaceapi/workspaceext"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/component"
@@ -773,7 +773,7 @@ func newLspHandler(
 	for _, g := range grants {
 		switch g.Permission {
 		case extension.PermissionFileSystem:
-			ret.fs, err = workspaceextension.FileSystem(ctx, g, broker)
+			ret.fs, err = workspaceext.FileSystem(ctx, g, broker)
 			if err != nil {
 				return nil, err
 			}
@@ -783,7 +783,7 @@ func newLspHandler(
 			}
 			ret.cwd = cwdURI.Path()
 		case extension.PermissionExecute:
-			ret.exec, err = workspaceextension.Executor(ctx, g, broker)
+			ret.exec, err = workspaceext.Executor(ctx, g, broker)
 			if err != nil {
 				return nil, err
 			}

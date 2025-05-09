@@ -34,7 +34,7 @@ import (
 	gomock "go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 	"unstable.build/go-tui/api/textapi"
-	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term"

@@ -21,6 +21,16 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package api
+package workspaceapi
 
-//go:generate mockgen -destination=./workspacetest/workspace_gomock.go -package workspacetest -self_package unstable.build/go-tui/api/workspace/workspacetest -source ./workspace.go
+// ChanWatcher returns a Watcher that simply returns
+// ch when Watch is called.
+func ChanWatcher(ch chan error) Watcher {
+	return waitCh(ch)
+}
+
+type waitCh chan error
+
+func (w waitCh) Watch() chan error {
+	return w
+}

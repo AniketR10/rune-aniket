@@ -37,7 +37,7 @@ import (
 	"github.com/unstablebuild/blue/document/docmarshal"
 	"github.com/unstablebuild/blue/iterator"
 	"unstable.build/go-tui/api/schemeapi"
-	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/api/workspaceapi"
 )
 
 // ErrClosing is returned to inflight write requests

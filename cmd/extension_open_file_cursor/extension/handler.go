@@ -37,8 +37,8 @@ import (
 	"unstable.build/go-tui/api/config"
 	configextension "unstable.build/go-tui/api/config/extension"
 	"unstable.build/go-tui/api/textapi"
-	workspaceapi "unstable.build/go-tui/api/workspace"
-	workspaceextension "unstable.build/go-tui/api/workspace/extension"
+	"unstable.build/go-tui/api/workspaceapi"
+	"unstable.build/go-tui/api/workspaceapi/workspaceext"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/extension/extutil"
 	"unstable.build/go-tui/rpc"
@@ -94,7 +94,7 @@ func newGFHandler(
 	for _, grant := range grants {
 		switch grant.Permission {
 		case extension.PermissionFileSystem:
-			ret.fs, err = workspaceextension.FileSystem(ctx, grant, broker)
+			ret.fs, err = workspaceext.FileSystem(ctx, grant, broker)
 		case extension.PermissionBrowserResourceOpener:
 			ret.o, err = browserext.ResourceOpener(ctx, grant, broker)
 		case extension.PermissionConfig:

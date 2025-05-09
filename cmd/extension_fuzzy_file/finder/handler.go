@@ -44,8 +44,8 @@ import (
 	"unstable.build/go-tui/api/storageapi/storageext"
 	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/api/textapi/textext"
-	workspaceapi "unstable.build/go-tui/api/workspace"
-	workspaceextension "unstable.build/go-tui/api/workspace/extension"
+	"unstable.build/go-tui/api/workspaceapi"
+	"unstable.build/go-tui/api/workspaceapi/workspaceext"
 	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/notifications"
@@ -381,9 +381,9 @@ func (h *fuzzyFinderHandler) initGrants(
 	for _, grant := range grants {
 		switch grant.Permission {
 		case extension.Permission(extension.PermissionFileSystem):
-			h.fs, err = workspaceextension.FileSystem(ctx, grant, broker)
+			h.fs, err = workspaceext.FileSystem(ctx, grant, broker)
 		case extension.Permission(extension.PermissionExecute):
-			h.executor, err = workspaceextension.Executor(ctx, grant, broker)
+			h.executor, err = workspaceext.Executor(ctx, grant, broker)
 		case extension.Permission(extension.PermissionEditor):
 			h.ed, err = textext.Editor(ctx, grant, broker)
 		case extension.Permission(extension.PermissionBrowserNotifications):

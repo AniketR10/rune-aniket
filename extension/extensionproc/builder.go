@@ -31,7 +31,7 @@ import (
 	goplugin "github.com/hashicorp/go-plugin"
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/logging"
-	workspaceapi "unstable.build/go-tui/api/workspace"
+	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/workspace"
 )
