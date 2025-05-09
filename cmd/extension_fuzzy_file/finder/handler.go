@@ -41,7 +41,7 @@ import (
 	"unstable.build/go-tui/api/browserapi"
 	"unstable.build/go-tui/api/browserapi/browserext"
 	"unstable.build/go-tui/api/config"
-	storageextension "unstable.build/go-tui/api/storage/extension"
+	"unstable.build/go-tui/api/storageapi/storageext"
 	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/api/textapi/textext"
 	workspaceapi "unstable.build/go-tui/api/workspace"
@@ -393,7 +393,7 @@ func (h *fuzzyFinderHandler) initGrants(
 		case extension.Permission(extension.PermissionBrowserResourceOpener):
 			h.f, err = browserext.ResourceOpener(ctx, grant, broker)
 		case extension.PermissionStorage:
-			h.s, err = storageextension.Storage(ctx, grant, broker)
+			h.s, err = storageext.Storage(ctx, grant, broker)
 			if err == nil {
 				h.history.Init(h.s, historyDocumentID, maxHistory)
 				err = h.history.Load()

@@ -45,7 +45,7 @@ import (
 	"unstable.build/go-tui/api/browserapi/browserext"
 	configapi "unstable.build/go-tui/api/config"
 	configextension "unstable.build/go-tui/api/config/extension"
-	storageextension "unstable.build/go-tui/api/storage/extension"
+	"unstable.build/go-tui/api/storageapi/storageext"
 	"unstable.build/go-tui/api/textapi"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/clipboard"
@@ -262,7 +262,7 @@ func CommandEventHandler(
 	for _, g := range grants {
 		switch g.Permission {
 		case extension.PermissionStorage:
-			ret.db, err = storageextension.Storage(ctx, g, broker)
+			ret.db, err = storageext.Storage(ctx, g, broker)
 		case extension.PermissionBrowserEventPublisher:
 			ret.p, err = browserext.EventPublisher(ctx, g, broker)
 		case extension.PermissionBrowserResourceOpener:

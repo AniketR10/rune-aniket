@@ -21,31 +21,43 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package extension
+package storageext
 
 import (
 	"context"
+	"os"
 
+	"github.com/unstablebuild/blue/document"
+	"github.com/unstablebuild/blue/document/docmarshal/doctoml"
+	"github.com/unstablebuild/blue/document/docrpc"
 	"unstable.build/go-tui/extension"
+	"unstable.build/go-tui/rpc"
 )
 
-// WithPartition creates a storage partition with name, such that
-// calls to extension.Storage will return a document.Service that's
-// logically partition from the rest.
-func WithPartition(grant extension.Grant, name string) extension.Grant {
-	grant.Context = contextWithPartition(grant.Context, name)
-	return grant
+// NOTE: this is exposing blue/document types which we might not
+// want to do directly. If we ever open-source that library
+// then remove this comment.
+func dialStorage(ctx context.Context, grant extension.Grant, broker rpc.MuxBroker) (
+	document.Service, error,
+) {
+	conn, err := broker.DialChannel(ctx, grant.Token,
+		os.Args[0], "storage", string(grant.Permission))
+	if err != nil {
+		return nil, err
+	}
+	c := new(docrpc.Client)
+	c.Init(conn, doctoml.Marshaler())
+	partition, ok := partitionFromContext(grant.Context)
+	if !ok {
+		partition = "default"
+	}
+	return document.WithPartition(c, partition), nil
 }
 
-type ctxKey int
-
-var partitionKey ctxKey
-
-func contextWithPartition(ctx context.Context, partition string) context.Context {
-	return context.WithValue(ctx, partitionKey, partition)
-}
-
-func partitionFromContext(ctx context.Context) (string, bool) {
-	partition, ok := ctx.Value(partitionKey).(string)
-	return partition, ok
+// Storage acquires a client to persistent storage with
+// the given token.
+func Storage(ctx context.Context, grant extension.Grant, broker rpc.MuxBroker) (
+	document.Service, error,
+) {
+	return dialStorage(ctx, grant, broker)
 }

@@ -45,7 +45,7 @@ import (
 	"unstable.build/go-tui/api/config"
 	"unstable.build/go-tui/api/schemeapi"
 	"unstable.build/go-tui/api/schemeapi/schemeext"
-	storageextension "unstable.build/go-tui/api/storage/extension"
+	"unstable.build/go-tui/api/storageapi/storageext"
 	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/api/textapi/textext"
 	workspaceapi "unstable.build/go-tui/api/workspace"
@@ -348,7 +348,7 @@ func (e *Grantee) PermissionGranted(ctx context.Context, grants []extension.Gran
 			}
 			e.sm = m
 		case extension.PermissionStorage:
-			s, err := storageextension.Storage(ctx, g, e.broker)
+			s, err := storageext.Storage(ctx, g, e.broker)
 			if err != nil {
 				return fmt.Errorf("acquire storage: %w", err)
 			}
