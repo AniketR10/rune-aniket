@@ -201,13 +201,13 @@ func (c *Client) SubscribeEvents(
 	evs []textapi.EventType, h textapi.EventHandler,
 ) error {
 	c.log(log.TraceLevel, "SubscribeEvents: %v", evs)
-	stream, err := c.ed.Subscribe(c.clientCtx)
+	stream, err := c.ed.SubscribeEvent(c.clientCtx)
 	c.log(log.TraceLevel, "SubscribeEvents: %v: %v", evs, err)
 	if err != nil {
 		return err
 	}
 
-	var req EditorSubscribeRequest
+	var req SubscribeEventRequest
 	for _, ev := range evs {
 		req.Type = append(req.Type, protoType(textapi.Event{Type: ev}))
 	}

@@ -41,7 +41,7 @@ message EditorEvent {
   string content = 8;
 }
 
-message EditorSubscribeRequest {
+message SubscribeEventRequest {
 	repeated EditorEvent.Type type = 1;
 	bool unsubscribe = 3;
 }
@@ -157,7 +157,7 @@ service Editor {
 	rpc SetDefaultAttributes(SetDefaultAttributesRequest) returns (SetDefaultAttributesResponse);
 
 	// streams
-	rpc Subscribe(stream EditorSubscribeRequest) returns (stream EditorEvent);
+	rpc SubscribeEvent(stream SubscribeEventRequest) returns (stream EditorEvent);
 }
 
 message HandleCommandRequest {

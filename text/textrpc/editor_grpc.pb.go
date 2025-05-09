@@ -37,7 +37,7 @@ type EditorClient interface {
 	RawCells(ctx context.Context, in *RawCellsRequest, opts ...grpc.CallOption) (*RawCellsResponse, error)
 	SetDefaultAttributes(ctx context.Context, in *SetDefaultAttributesRequest, opts ...grpc.CallOption) (*SetDefaultAttributesResponse, error)
 	// streams
-	Subscribe(ctx context.Context, opts ...grpc.CallOption) (Editor_SubscribeClient, error)
+	SubscribeEvent(ctx context.Context, opts ...grpc.CallOption) (Editor_SubscribeEventClient, error)
 }
 
 type editorClient struct {
@@ -147,30 +147,30 @@ func (c *editorClient) SetDefaultAttributes(ctx context.Context, in *SetDefaultA
 	return out, nil
 }
 
-func (c *editorClient) Subscribe(ctx context.Context, opts ...grpc.CallOption) (Editor_SubscribeClient, error) {
-	stream, err := c.cc.NewStream(ctx, &Editor_ServiceDesc.Streams[0], "/text.Editor/Subscribe", opts...)
+func (c *editorClient) SubscribeEvent(ctx context.Context, opts ...grpc.CallOption) (Editor_SubscribeEventClient, error) {
+	stream, err := c.cc.NewStream(ctx, &Editor_ServiceDesc.Streams[0], "/text.Editor/SubscribeEvent", opts...)
 	if err != nil {
 		return nil, err
 	}
-	x := &editorSubscribeClient{stream}
+	x := &editorSubscribeEventClient{stream}
 	return x, nil
 }
 
-type Editor_SubscribeClient interface {
-	Send(*EditorSubscribeRequest) error
+type Editor_SubscribeEventClient interface {
+	Send(*SubscribeEventRequest) error
 	Recv() (*EditorEvent, error)
 	grpc.ClientStream
 }
 
-type editorSubscribeClient struct {
+type editorSubscribeEventClient struct {
 	grpc.ClientStream
 }
 
-func (x *editorSubscribeClient) Send(m *EditorSubscribeRequest) error {
+func (x *editorSubscribeEventClient) Send(m *SubscribeEventRequest) error {
 	return x.ClientStream.SendMsg(m)
 }
 
-func (x *editorSubscribeClient) Recv() (*EditorEvent, error) {
+func (x *editorSubscribeEventClient) Recv() (*EditorEvent, error) {
 	m := new(EditorEvent)
 	if err := x.ClientStream.RecvMsg(m); err != nil {
 		return nil, err
@@ -197,7 +197,7 @@ type EditorServer interface {
 	RawCells(context.Context, *RawCellsRequest) (*RawCellsResponse, error)
 	SetDefaultAttributes(context.Context, *SetDefaultAttributesRequest) (*SetDefaultAttributesResponse, error)
 	// streams
-	Subscribe(Editor_SubscribeServer) error
+	SubscribeEvent(Editor_SubscribeEventServer) error
 	mustEmbedUnimplementedEditorServer()
 }
 
@@ -238,8 +238,8 @@ func (UnimplementedEditorServer) RawCells(context.Context, *RawCellsRequest) (*R
 func (UnimplementedEditorServer) SetDefaultAttributes(context.Context, *SetDefaultAttributesRequest) (*SetDefaultAttributesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SetDefaultAttributes not implemented")
 }
-func (UnimplementedEditorServer) Subscribe(Editor_SubscribeServer) error {
-	return status.Errorf(codes.Unimplemented, "method Subscribe not implemented")
+func (UnimplementedEditorServer) SubscribeEvent(Editor_SubscribeEventServer) error {
+	return status.Errorf(codes.Unimplemented, "method SubscribeEvent not implemented")
 }
 func (UnimplementedEditorServer) mustEmbedUnimplementedEditorServer() {}
 
@@ -452,26 +452,26 @@ func _Editor_SetDefaultAttributes_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Editor_Subscribe_Handler(srv interface{}, stream grpc.ServerStream) error {
-	return srv.(EditorServer).Subscribe(&editorSubscribeServer{stream})
+func _Editor_SubscribeEvent_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(EditorServer).SubscribeEvent(&editorSubscribeEventServer{stream})
 }
 
-type Editor_SubscribeServer interface {
+type Editor_SubscribeEventServer interface {
 	Send(*EditorEvent) error
-	Recv() (*EditorSubscribeRequest, error)
+	Recv() (*SubscribeEventRequest, error)
 	grpc.ServerStream
 }
 
-type editorSubscribeServer struct {
+type editorSubscribeEventServer struct {
 	grpc.ServerStream
 }
 
-func (x *editorSubscribeServer) Send(m *EditorEvent) error {
+func (x *editorSubscribeEventServer) Send(m *EditorEvent) error {
 	return x.ServerStream.SendMsg(m)
 }
 
-func (x *editorSubscribeServer) Recv() (*EditorSubscribeRequest, error) {
-	m := new(EditorSubscribeRequest)
+func (x *editorSubscribeEventServer) Recv() (*SubscribeEventRequest, error) {
+	m := new(SubscribeEventRequest)
 	if err := x.ServerStream.RecvMsg(m); err != nil {
 		return nil, err
 	}
@@ -532,8 +532,8 @@ var Editor_ServiceDesc = grpc.ServiceDesc{
 	},
 	Streams: []grpc.StreamDesc{
 		{
-			StreamName:    "Subscribe",
-			Handler:       _Editor_Subscribe_Handler,
+			StreamName:    "SubscribeEvent",
+			Handler:       _Editor_SubscribeEvent_Handler,
 			ServerStreams: true,
 			ClientStreams: true,
 		},

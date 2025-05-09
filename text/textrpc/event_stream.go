@@ -49,12 +49,12 @@ const (
 type eventStreamClient struct {
 	ctx       context.Context
 	cancelCtx func()
-	stream    Editor_SubscribeServer
+	stream    Editor_SubscribeEventServer
 	ch        chan *EditorEvent
 }
 
 func newEventStreamClient(
-	ctx context.Context, stream Editor_SubscribeServer, locker sync.Locker,
+	ctx context.Context, stream Editor_SubscribeEventServer, locker sync.Locker,
 ) *eventStreamClient {
 	ctx, cancel := context.WithCancel(ctx)
 	ch := make(chan *EditorEvent, eventChanBuffer)
@@ -135,13 +135,13 @@ func (e *eventStreamClient) log(level log.Level, msg string, args ...interface{}
 }
 
 type eventStreamServer struct {
-	stream    Editor_SubscribeClient
+	stream    Editor_SubscribeEventClient
 	parentCtx context.Context
 	handler   textapi.EventHandler
 }
 
 func newEventStreamServer(
-	parentCtx context.Context, stream Editor_SubscribeClient,
+	parentCtx context.Context, stream Editor_SubscribeEventClient,
 	handler textapi.EventHandler,
 ) eventStreamServer {
 	return eventStreamServer{
@@ -199,7 +199,7 @@ func (s eventStreamServer) receiveEvents(c *Client) {
 	default:
 	}
 
-	req := EditorSubscribeRequest{Unsubscribe: true}
+	req := SubscribeEventRequest{Unsubscribe: true}
 	s.log(log.TraceLevel, "send unsubscribe")
 	err := s.stream.Send(&req)
 	if err != nil {

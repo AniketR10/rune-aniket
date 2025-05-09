@@ -154,8 +154,8 @@ func (s *Server) Editor(ctx context.Context, in *EditorRequest) (
 	return &EditorResponse{}, nil
 }
 
-// Subscribe satisfies EditorServer
-func (s *Server) Subscribe(stream Editor_SubscribeServer) error {
+// SubscribeEvent satisfies EditorServer
+func (s *Server) SubscribeEvent(stream Editor_SubscribeEventServer) error {
 	defer s.log(log.TraceLevel, "stream event completed: stream=%p", stream)
 
 	req, err := stream.Recv()
