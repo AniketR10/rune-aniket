@@ -43,8 +43,8 @@ import (
 	"unstable.build/go-tui/api/browserapi"
 	"unstable.build/go-tui/api/browserapi/browserext"
 	"unstable.build/go-tui/api/config"
-	schemeapi "unstable.build/go-tui/api/scheme"
-	schemeextension "unstable.build/go-tui/api/scheme/extension"
+	"unstable.build/go-tui/api/schemeapi"
+	"unstable.build/go-tui/api/schemeapi/schemeext"
 	storageextension "unstable.build/go-tui/api/storage/extension"
 	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/api/textapi/textext"
@@ -342,7 +342,7 @@ func (e *Grantee) PermissionGranted(ctx context.Context, grants []extension.Gran
 				e.log(log.DebugLevel, "Subscribed to create issue command %q", cmd)
 			}
 		case extension.PermissionSchemeManager:
-			m, err := schemeextension.SchemeManager(ctx, g, e.broker)
+			m, err := schemeext.SchemeManager(ctx, g, e.broker)
 			if err != nil {
 				return fmt.Errorf("acquire scheme manager: %w", err)
 			}

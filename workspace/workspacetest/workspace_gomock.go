@@ -16,7 +16,7 @@ import (
 	syscall "syscall"
 
 	gomock "go.uber.org/mock/gomock"
-	scheme "unstable.build/go-tui/api/scheme"
+	schemeapi "unstable.build/go-tui/api/schemeapi"
 	api "unstable.build/go-tui/api/workspace"
 	cell "unstable.build/go-tui/cell"
 	workspace "unstable.build/go-tui/workspace"
@@ -384,7 +384,7 @@ func (m *MockSchemeManager) EXPECT() *MockSchemeManagerMockRecorder {
 }
 
 // RegisterScheme mocks base method.
-func (m *MockSchemeManager) RegisterScheme(arg0 string, arg1 scheme.SchemeFunc) error {
+func (m *MockSchemeManager) RegisterScheme(arg0 string, arg1 schemeapi.SchemeFunc) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RegisterScheme", arg0, arg1)
 	ret0, _ := ret[0].(error)
@@ -450,7 +450,7 @@ func (mr *MockWorkspaceManagerMockRecorder) AddWorkspace(arg0, arg1 any) *gomock
 }
 
 // RegisterScheme mocks base method.
-func (m *MockWorkspaceManager) RegisterScheme(arg0 string, arg1 scheme.SchemeFunc) error {
+func (m *MockWorkspaceManager) RegisterScheme(arg0 string, arg1 schemeapi.SchemeFunc) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RegisterScheme", arg0, arg1)
 	ret0, _ := ret[0].(error)

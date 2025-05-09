@@ -30,7 +30,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/blue/document/docmarshal/docjson"
 	"unstable.build/go-tui/api/config"
-	schemeapi "unstable.build/go-tui/api/scheme"
+	"unstable.build/go-tui/api/schemeapi"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/localstorage/schemedoc"
 	"unstable.build/go-tui/workspace"

@@ -37,7 +37,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/bluenet"
 	"github.com/unstablebuild/blue/logging"
-	schemeapi "unstable.build/go-tui/api/scheme"
+	"unstable.build/go-tui/api/schemeapi"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 )
 

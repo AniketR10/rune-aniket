@@ -21,33 +21,6 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package extension
+package schemeapi
 
-import (
-	"context"
-	"os"
-
-	schemeapi "unstable.build/go-tui/api/scheme"
-	"unstable.build/go-tui/extension"
-	"unstable.build/go-tui/rpc"
-	"unstable.build/go-tui/workspace/workspacerpc"
-)
-
-func dialSchemeManager(ctx context.Context, grant extension.Grant, broker rpc.MuxBroker) (
-	schemeapi.SchemeManager, error,
-) {
-	conn, err := broker.DialChannel(ctx, grant.Token,
-		os.Args[0], "scheme", string(grant.Permission))
-	if err != nil {
-		return nil, err
-	}
-	c := workspacerpc.NewSchemeManager(grant.Context, broker, conn)
-	return c, nil
-}
-
-// SchemeManager acquires the workspace's URI scheme manager with the given token.
-func SchemeManager(ctx context.Context, grant extension.Grant, broker rpc.MuxBroker) (
-	schemeapi.SchemeManager, error,
-) {
-	return dialSchemeManager(ctx, grant, broker)
-}
+//go:generate mockgen -destination=./schemetest/scheme_gomock.go -package schemetest -self_package unstable.build/go-tui/api/schemeapi/schemetest -source ./scheme.go

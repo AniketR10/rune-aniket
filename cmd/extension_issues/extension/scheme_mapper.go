@@ -35,7 +35,7 @@ import (
 	"github.com/unstablebuild/blue/document/docmarshal"
 	"github.com/unstablebuild/blue/issue"
 	"unstable.build/go-tui/api/config"
-	schemeapi "unstable.build/go-tui/api/scheme"
+	"unstable.build/go-tui/api/schemeapi"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 )
 

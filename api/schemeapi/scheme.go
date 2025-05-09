@@ -22,7 +22,7 @@
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
 //revive:disable:exported
-package scheme
+package schemeapi
 
 import (
 	"context"

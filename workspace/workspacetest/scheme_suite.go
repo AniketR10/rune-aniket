@@ -39,7 +39,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	schemeapi "unstable.build/go-tui/api/scheme"
+	"unstable.build/go-tui/api/schemeapi"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/workspace"

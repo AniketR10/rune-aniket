@@ -33,7 +33,7 @@ import (
 	"github.com/ernestrc/go-multierror"
 	"github.com/unstablebuild/blue/bluectx"
 	"unstable.build/go-tui/api/config"
-	schemeapi "unstable.build/go-tui/api/scheme"
+	"unstable.build/go-tui/api/schemeapi"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/workspace"
 )

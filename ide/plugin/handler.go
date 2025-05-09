@@ -33,7 +33,7 @@ import (
 
 	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui"
-	schemeapi "unstable.build/go-tui/api/scheme"
+	"unstable.build/go-tui/api/schemeapi"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/cell"
