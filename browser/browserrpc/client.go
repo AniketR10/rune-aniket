@@ -180,11 +180,43 @@ func serveHandler(
 	return
 }
 
-// DialWindow dials the window with the given windowID token.
-func (c *Client) DialWindow(windowID uint64) (browserapi.Window, error) {
-	client := newWindowClient(c.clientCtx, windowID, c.wm, c.broker)
+// NewWindow returns a browserapi.Window that represents the window
+// with the given ID.
+func (c *Client) NewWindow(windowID uint64) browserapi.Window {
+	client := newWindowClient(windowID)
 	c.log(log.TraceLevel, "get window with id %d: %#v", windowID, client)
-	return client, nil
+	return client
+}
+
+// CloseWindow satisfies browserapi.Browser.
+func (c *Client) CloseWindow(win browserapi.Window) error {
+	ctx := context.Background()
+	req := WindowCloseRequest{WindowId: win.WindowID()}
+
+	_, err := c.wm.CloseWindow(ctx, &req)
+	runtime.KeepAlive(c)
+	return err
+}
+
+// SetWindowContent satisfies browserapi.Browser.
+func (c *Client) SetWindowContent(win browserapi.Window, h browserapi.Handler) error {
+	channelID, srv, err := serveHandler(c.clientCtx, c.broker, h)
+	if err != nil {
+		return fmt.Errorf("serve handler: %w", err)
+	}
+	req := WindowSetContentRequest{
+		ChannelId: channelID,
+		WindowId:  win.WindowID(),
+	}
+	ctx := context.Background()
+	_, err = c.wm.SetContent(ctx, &req)
+	if err != nil {
+		if srv != nil {
+			srv.Stop()
+		}
+		return err
+	}
+	return nil
 }
 
 type clientSplit func(cc WindowManagerClient,
@@ -211,13 +243,7 @@ func (c *Client) split(
 		}
 		return nil, err
 	}
-	out, err := c.DialWindow(res.GetWindowId())
-	if err != nil {
-		if srv != nil {
-			srv.Stop()
-		}
-		return nil, err
-	}
+	out := c.NewWindow(res.GetWindowId())
 	return out, nil
 }
 
@@ -228,16 +254,6 @@ func (c *Client) Split(
 	win, err := c.split((WindowManagerClient).Split, o, win, h)
 	runtime.KeepAlive(c)
 	return win, err
-}
-
-// Resource satisfies Browser.
-func (c *Client) Resource(workspaceapi.URI) (browserapi.Handler, bool) {
-	panic("Resource unimplemented in browser client")
-}
-
-// Window satisfies Browser.
-func (c *Client) Window(uint64) (browserapi.Window, bool) {
-	panic("Window unimplemented in browser client")
 }
 
 // Bar satisfies Browser.
@@ -332,36 +348,16 @@ func (c *Client) Interrupt(ctx context.Context) error {
 	return err
 }
 
-// SetFocus satisfies Browser.
-func (c *Client) SetFocus(win browserapi.Window) (browserapi.Window, error) {
-	ctx := context.Background()
-	client := win.(*windowClientImpl)
-	req := SetFocusRequest{WindowId: client.windowID}
-	res, err := c.wm.SetFocus(ctx, &req)
-	runtime.KeepAlive(c)
-	if err != nil {
-		return nil, err
-	}
-	return c.DialWindow(res.GetWindowId())
-}
-
 // Focus satisfies Browser.
 func (c *Client) Focus() (browserapi.Window, error) {
-	win, err := focus(c.clientCtx, c.wm, c.broker)
-	runtime.KeepAlive(c)
-	return win, err
-}
-
-func focus(
-	clientCtx context.Context, wm WindowManagerClient, broker rpc.MuxBroker,
-) (browserapi.Window, error) {
-	req := FocusRequest{}
-	res, err := wm.Focus(clientCtx, &req)
+	var req FocusRequest
+	res, err := c.wm.Focus(c.clientCtx, &req)
 	if err != nil {
 		return nil, err
 	}
-	client := newWindowClient(clientCtx, res.GetWindowId(), wm, broker)
-	return client, nil
+	win := newWindowClient(res.GetWindowId())
+	runtime.KeepAlive(c)
+	return win, err
 }
 
 // Floating satisfies browser.WindowManager
@@ -465,4 +461,20 @@ func toProtoFrame(o browserapi.BarFrame) BarRequest_Frame {
 	default:
 		panic("invalid orientation")
 	}
+}
+
+var _ browserapi.Window = (*windowClientImpl)(nil)
+
+type windowClientImpl struct {
+	windowID uint64
+}
+
+func newWindowClient(windowID uint64) *windowClientImpl {
+	ret := new(windowClientImpl)
+	ret.windowID = windowID
+	return ret
+}
+
+func (w *windowClientImpl) WindowID() uint64 {
+	return w.windowID
 }

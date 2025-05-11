@@ -142,7 +142,7 @@ func (t *cmdSplitHandler) cleanWindow() bool {
 }
 
 func (t *cmdSplitHandler) closeWindow() {
-	err := t.win.Close()
+	err := t.wm.CloseWindow(t.win)
 	if err != nil {
 		t.log(log.ErrorLevel, "closing extension window: %v", err)
 	}
@@ -178,7 +178,7 @@ func (t *cmdSplitHandler) openSplitWindow(ctx context.Context, cmd textapi.Comma
 		return err
 	}
 
-	win, err = wm.Split(t.config.SplitOrientation, focusWin, browserapi.FuncHandler(h, t.exitClean))
+	splitWin, err := wm.Split(t.config.SplitOrientation, focusWin, browserapi.FuncHandler(h, t.exitClean))
 	if err != nil {
 		err = fmt.Errorf("wm.Split: %w", err)
 		return err
@@ -188,7 +188,7 @@ func (t *cmdSplitHandler) openSplitWindow(ctx context.Context, cmd textapi.Comma
 	defer t.mu.Unlock()
 
 	t.h = h
-	t.win = win
+	t.win = splitWin
 	return nil
 }
 

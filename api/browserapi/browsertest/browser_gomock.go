@@ -302,47 +302,18 @@ func (m *MockWindow) EXPECT() *MockWindowMockRecorder {
 	return m.recorder
 }
 
-// Close mocks base method.
-func (m *MockWindow) Close() error {
+// WindowID mocks base method.
+func (m *MockWindow) WindowID() uint64 {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Close")
-	ret0, _ := ret[0].(error)
+	ret := m.ctrl.Call(m, "WindowID")
+	ret0, _ := ret[0].(uint64)
 	return ret0
 }
 
-// Close indicates an expected call of Close.
-func (mr *MockWindowMockRecorder) Close() *gomock.Call {
+// WindowID indicates an expected call of WindowID.
+func (mr *MockWindowMockRecorder) WindowID() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockWindow)(nil).Close))
-}
-
-// Focus mocks base method.
-func (m *MockWindow) Focus() (bool, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Focus")
-	ret0, _ := ret[0].(bool)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// Focus indicates an expected call of Focus.
-func (mr *MockWindowMockRecorder) Focus() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Focus", reflect.TypeOf((*MockWindow)(nil).Focus))
-}
-
-// SetContent mocks base method.
-func (m *MockWindow) SetContent(arg0 browserapi.Handler) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SetContent", arg0)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// SetContent indicates an expected call of SetContent.
-func (mr *MockWindowMockRecorder) SetContent(arg0 any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetContent", reflect.TypeOf((*MockWindow)(nil).SetContent), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WindowID", reflect.TypeOf((*MockWindow)(nil).WindowID))
 }
 
 // MockWindowManager is a mock of WindowManager interface.
@@ -382,6 +353,20 @@ func (mr *MockWindowManagerMockRecorder) Bar(arg0, arg1 any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Bar", reflect.TypeOf((*MockWindowManager)(nil).Bar), arg0, arg1)
 }
 
+// CloseWindow mocks base method.
+func (m *MockWindowManager) CloseWindow(arg0 browserapi.Window) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CloseWindow", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// CloseWindow indicates an expected call of CloseWindow.
+func (mr *MockWindowManagerMockRecorder) CloseWindow(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloseWindow", reflect.TypeOf((*MockWindowManager)(nil).CloseWindow), arg0)
+}
+
 // Floating mocks base method.
 func (m *MockWindowManager) Floating(h browserapi.Floating, cfg component.FloatingConfig) (browserapi.Window, error) {
 	m.ctrl.T.Helper()
@@ -412,19 +397,18 @@ func (mr *MockWindowManagerMockRecorder) Focus() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Focus", reflect.TypeOf((*MockWindowManager)(nil).Focus))
 }
 
-// SetFocus mocks base method.
-func (m *MockWindowManager) SetFocus(win browserapi.Window) (browserapi.Window, error) {
+// SetWindowContent mocks base method.
+func (m *MockWindowManager) SetWindowContent(arg0 browserapi.Window, arg1 browserapi.Handler) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SetFocus", win)
-	ret0, _ := ret[0].(browserapi.Window)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret := m.ctrl.Call(m, "SetWindowContent", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
-// SetFocus indicates an expected call of SetFocus.
-func (mr *MockWindowManagerMockRecorder) SetFocus(win any) *gomock.Call {
+// SetWindowContent indicates an expected call of SetWindowContent.
+func (mr *MockWindowManagerMockRecorder) SetWindowContent(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetFocus", reflect.TypeOf((*MockWindowManager)(nil).SetFocus), win)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetWindowContent", reflect.TypeOf((*MockWindowManager)(nil).SetWindowContent), arg0, arg1)
 }
 
 // Split mocks base method.
@@ -658,6 +642,20 @@ func (mr *MockBrowserMockRecorder) Close() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockBrowser)(nil).Close))
 }
 
+// CloseWindow mocks base method.
+func (m *MockBrowser) CloseWindow(arg0 browserapi.Window) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CloseWindow", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// CloseWindow indicates an expected call of CloseWindow.
+func (mr *MockBrowserMockRecorder) CloseWindow(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloseWindow", reflect.TypeOf((*MockBrowser)(nil).CloseWindow), arg0)
+}
+
 // Floating mocks base method.
 func (m *MockBrowser) Floating(h browserapi.Floating, cfg component.FloatingConfig) (browserapi.Window, error) {
 	m.ctrl.T.Helper()
@@ -769,19 +767,18 @@ func (mr *MockBrowserMockRecorder) PublishEventNone() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PublishEventNone", reflect.TypeOf((*MockBrowser)(nil).PublishEventNone))
 }
 
-// SetFocus mocks base method.
-func (m *MockBrowser) SetFocus(win browserapi.Window) (browserapi.Window, error) {
+// SetWindowContent mocks base method.
+func (m *MockBrowser) SetWindowContent(arg0 browserapi.Window, arg1 browserapi.Handler) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SetFocus", win)
-	ret0, _ := ret[0].(browserapi.Window)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret := m.ctrl.Call(m, "SetWindowContent", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
-// SetFocus indicates an expected call of SetFocus.
-func (mr *MockBrowserMockRecorder) SetFocus(win any) *gomock.Call {
+// SetWindowContent indicates an expected call of SetWindowContent.
+func (mr *MockBrowserMockRecorder) SetWindowContent(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetFocus", reflect.TypeOf((*MockBrowser)(nil).SetFocus), win)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetWindowContent", reflect.TypeOf((*MockBrowser)(nil).SetWindowContent), arg0, arg1)
 }
 
 // Split mocks base method.

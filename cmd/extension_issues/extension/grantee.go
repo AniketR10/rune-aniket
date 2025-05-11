@@ -527,7 +527,7 @@ func (e *Grantee) openIssueTemplate(
 		return fmt.Errorf("open temp file: %v", err)
 	}
 
-	err = win.SetContent(h)
+	err = e.wm.SetWindowContent(win, h)
 	if err != nil && !errors.Is(err, browserapi.ErrTabNotFree) {
 		_ = h.Close()
 		_ = os.Remove(f.Name())

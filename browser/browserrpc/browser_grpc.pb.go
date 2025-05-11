@@ -317,15 +317,12 @@ var EventPublisher_ServiceDesc = grpc.ServiceDesc{
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type WindowManagerClient interface {
 	Focus(ctx context.Context, in *FocusRequest, opts ...grpc.CallOption) (*FocusResponse, error)
-	SetFocus(ctx context.Context, in *SetFocusRequest, opts ...grpc.CallOption) (*FocusResponse, error)
 	Split(ctx context.Context, in *SplitRequest, opts ...grpc.CallOption) (*SplitResponse, error)
 	Bar(ctx context.Context, in *BarRequest, opts ...grpc.CallOption) (*BarResponse, error)
 	Floating(ctx context.Context, in *FloatingWindowRequest, opts ...grpc.CallOption) (*FloatingWindowResponse, error)
 	Tab(ctx context.Context, in *TabRequest, opts ...grpc.CallOption) (*TabResponse, error)
-	// window
 	SetContent(ctx context.Context, in *WindowSetContentRequest, opts ...grpc.CallOption) (*WindowSetContentResponse, error)
-	Content(ctx context.Context, in *WindowContentRequest, opts ...grpc.CallOption) (*WindowContentResponse, error)
-	Close(ctx context.Context, in *WindowCloseRequest, opts ...grpc.CallOption) (*WindowCloseResponse, error)
+	CloseWindow(ctx context.Context, in *WindowCloseRequest, opts ...grpc.CallOption) (*WindowCloseResponse, error)
 }
 
 type windowManagerClient struct {
@@ -339,15 +336,6 @@ func NewWindowManagerClient(cc grpc.ClientConnInterface) WindowManagerClient {
 func (c *windowManagerClient) Focus(ctx context.Context, in *FocusRequest, opts ...grpc.CallOption) (*FocusResponse, error) {
 	out := new(FocusResponse)
 	err := c.cc.Invoke(ctx, "/browser.WindowManager/Focus", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *windowManagerClient) SetFocus(ctx context.Context, in *SetFocusRequest, opts ...grpc.CallOption) (*FocusResponse, error) {
-	out := new(FocusResponse)
-	err := c.cc.Invoke(ctx, "/browser.WindowManager/SetFocus", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -399,18 +387,9 @@ func (c *windowManagerClient) SetContent(ctx context.Context, in *WindowSetConte
 	return out, nil
 }
 
-func (c *windowManagerClient) Content(ctx context.Context, in *WindowContentRequest, opts ...grpc.CallOption) (*WindowContentResponse, error) {
-	out := new(WindowContentResponse)
-	err := c.cc.Invoke(ctx, "/browser.WindowManager/Content", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *windowManagerClient) Close(ctx context.Context, in *WindowCloseRequest, opts ...grpc.CallOption) (*WindowCloseResponse, error) {
+func (c *windowManagerClient) CloseWindow(ctx context.Context, in *WindowCloseRequest, opts ...grpc.CallOption) (*WindowCloseResponse, error) {
 	out := new(WindowCloseResponse)
-	err := c.cc.Invoke(ctx, "/browser.WindowManager/Close", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/browser.WindowManager/CloseWindow", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -422,15 +401,12 @@ func (c *windowManagerClient) Close(ctx context.Context, in *WindowCloseRequest,
 // for forward compatibility
 type WindowManagerServer interface {
 	Focus(context.Context, *FocusRequest) (*FocusResponse, error)
-	SetFocus(context.Context, *SetFocusRequest) (*FocusResponse, error)
 	Split(context.Context, *SplitRequest) (*SplitResponse, error)
 	Bar(context.Context, *BarRequest) (*BarResponse, error)
 	Floating(context.Context, *FloatingWindowRequest) (*FloatingWindowResponse, error)
 	Tab(context.Context, *TabRequest) (*TabResponse, error)
-	// window
 	SetContent(context.Context, *WindowSetContentRequest) (*WindowSetContentResponse, error)
-	Content(context.Context, *WindowContentRequest) (*WindowContentResponse, error)
-	Close(context.Context, *WindowCloseRequest) (*WindowCloseResponse, error)
+	CloseWindow(context.Context, *WindowCloseRequest) (*WindowCloseResponse, error)
 	mustEmbedUnimplementedWindowManagerServer()
 }
 
@@ -440,9 +416,6 @@ type UnimplementedWindowManagerServer struct {
 
 func (UnimplementedWindowManagerServer) Focus(context.Context, *FocusRequest) (*FocusResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Focus not implemented")
-}
-func (UnimplementedWindowManagerServer) SetFocus(context.Context, *SetFocusRequest) (*FocusResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method SetFocus not implemented")
 }
 func (UnimplementedWindowManagerServer) Split(context.Context, *SplitRequest) (*SplitResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Split not implemented")
@@ -459,11 +432,8 @@ func (UnimplementedWindowManagerServer) Tab(context.Context, *TabRequest) (*TabR
 func (UnimplementedWindowManagerServer) SetContent(context.Context, *WindowSetContentRequest) (*WindowSetContentResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SetContent not implemented")
 }
-func (UnimplementedWindowManagerServer) Content(context.Context, *WindowContentRequest) (*WindowContentResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Content not implemented")
-}
-func (UnimplementedWindowManagerServer) Close(context.Context, *WindowCloseRequest) (*WindowCloseResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Close not implemented")
+func (UnimplementedWindowManagerServer) CloseWindow(context.Context, *WindowCloseRequest) (*WindowCloseResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CloseWindow not implemented")
 }
 func (UnimplementedWindowManagerServer) mustEmbedUnimplementedWindowManagerServer() {}
 
@@ -492,24 +462,6 @@ func _WindowManager_Focus_Handler(srv interface{}, ctx context.Context, dec func
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(WindowManagerServer).Focus(ctx, req.(*FocusRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _WindowManager_SetFocus_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(SetFocusRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(WindowManagerServer).SetFocus(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/browser.WindowManager/SetFocus",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(WindowManagerServer).SetFocus(ctx, req.(*SetFocusRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -604,38 +556,20 @@ func _WindowManager_SetContent_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
-func _WindowManager_Content_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(WindowContentRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(WindowManagerServer).Content(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/browser.WindowManager/Content",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(WindowManagerServer).Content(ctx, req.(*WindowContentRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _WindowManager_Close_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _WindowManager_CloseWindow_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(WindowCloseRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(WindowManagerServer).Close(ctx, in)
+		return srv.(WindowManagerServer).CloseWindow(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/browser.WindowManager/Close",
+		FullMethod: "/browser.WindowManager/CloseWindow",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(WindowManagerServer).Close(ctx, req.(*WindowCloseRequest))
+		return srv.(WindowManagerServer).CloseWindow(ctx, req.(*WindowCloseRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -650,10 +584,6 @@ var WindowManager_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Focus",
 			Handler:    _WindowManager_Focus_Handler,
-		},
-		{
-			MethodName: "SetFocus",
-			Handler:    _WindowManager_SetFocus_Handler,
 		},
 		{
 			MethodName: "Split",
@@ -676,12 +606,8 @@ var WindowManager_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _WindowManager_SetContent_Handler,
 		},
 		{
-			MethodName: "Content",
-			Handler:    _WindowManager_Content_Handler,
-		},
-		{
-			MethodName: "Close",
-			Handler:    _WindowManager_Close_Handler,
+			MethodName: "CloseWindow",
+			Handler:    _WindowManager_CloseWindow_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

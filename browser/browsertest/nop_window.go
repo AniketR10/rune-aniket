@@ -42,7 +42,7 @@ func (w *noopWindow) Close() error {
 	w.content = nil
 	return err
 }
-func (w *noopWindow) ID() uint64           { return 0 }
+func (w *noopWindow) WindowID() uint64     { return 1 }
 func (w *noopWindow) Focus() (bool, error) { return false, nil }
 func (w *noopWindow) Closed() bool         { return false }
 func (w *noopWindow) IsFloating() bool     { return false }

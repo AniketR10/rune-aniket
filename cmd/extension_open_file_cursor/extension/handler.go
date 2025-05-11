@@ -72,12 +72,14 @@ var (
 		extension.PermissionFileSystem,
 		extension.PermissionConfig,
 		extension.PermissionBrowserResourceOpener,
+		extension.PermissionBrowserWindowManager,
 	}
 )
 
 type gfEditorHandler struct {
 	ed textapi.Editor
 	o  browserapi.ResourceOpener
+	wm browserapi.WindowManager
 	fs workspaceapi.FileSystem
 
 	tracker extutil.ResourceTracker
@@ -97,6 +99,8 @@ func newGFHandler(
 			ret.fs, err = workspaceext.FileSystem(ctx, grant, broker)
 		case extension.PermissionBrowserResourceOpener:
 			ret.o, err = browserext.ResourceOpener(ctx, grant, broker)
+		case extension.PermissionBrowserWindowManager:
+			ret.wm, err = browserext.WindowManager(ctx, grant, broker)
 		case extension.PermissionConfig:
 			cfg, err := configextension.FetchConfig(ctx, grant, broker)
 			if err != nil {
@@ -214,7 +218,7 @@ func (h *gfEditorHandler) openFileUnderCursor(win browserapi.Window, uri workspa
 		return fmt.Errorf("could not Open URI: %v", err)
 	}
 
-	err = win.SetContent(opened)
+	err = h.wm.SetWindowContent(win, opened)
 	if err != nil && err != browserapi.ErrTabNotFree {
 		return err
 	}

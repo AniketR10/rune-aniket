@@ -818,7 +818,7 @@ func (e *ex) toggleFullscreen(args ...string) error {
 	win := e.invokeWindow()
 	e.comp.Browser().SetMaxWindowHeight()
 	e.comp.Browser().SetMaxWindowWidth()
-	e.fullscreenID = win.ID()
+	e.fullscreenID = win.WindowID()
 	return nil
 }
 
@@ -1357,7 +1357,7 @@ func (e *ex) Handle(ev term.Event) (exit, handled bool) {
 	} else {
 		_, handled = e.handleEvent(ev)
 		currFocus, _ := e.comp.Focus()
-		if e.fullscreenID != 0 && currFocus.ID() != e.fullscreenID {
+		if e.fullscreenID != 0 && currFocus.WindowID() != e.fullscreenID {
 			_ = e.toggleFullscreen()
 		}
 	}

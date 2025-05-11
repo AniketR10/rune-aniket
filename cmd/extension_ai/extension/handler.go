@@ -487,7 +487,7 @@ func (h *aiEditorHandler) handleChat(cmd textapi.Command) error {
 		return fmt.Errorf("create tab: %v", err)
 	}
 
-	if err := cmd.Window.SetContent(tab); err != nil {
+	if err := h.wm.SetWindowContent(cmd.Window, tab); err != nil {
 		return fmt.Errorf("window set content: %v", err)
 	}
 	return nil
@@ -545,11 +545,12 @@ func (h *aiEditorHandler) handleQuery(cmd textapi.Command) error {
 	go createCompletions(ctx, cancel, tx, msgRx,
 		h.queryDialogueManager, queryID, syncComp, h.n)
 
+	var err error
 	var win browserapi.Window
 	bhandler := browserapi.FuncHandler(handler, func() error {
 		cancel()
 		if win != nil {
-			return win.Close()
+			return h.wm.CloseWindow(win)
 		}
 		return nil
 	})
@@ -560,7 +561,7 @@ func (h *aiEditorHandler) handleQuery(cmd textapi.Command) error {
 	floatingConfig := component.FloatingConfig{
 		Alignment: component.SpanAlignmentCentered,
 	}
-	win, err := h.wm.Floating(floating, floatingConfig)
+	win, err = h.wm.Floating(floating, floatingConfig)
 	if err != nil {
 		return fmt.Errorf("floating window: %v", err)
 	}

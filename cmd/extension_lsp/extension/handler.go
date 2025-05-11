@@ -1531,7 +1531,7 @@ func (h *lspEditorHandler) goToLocation(win browserapi.Window, l protocol.Locati
 		}
 	}
 
-	err = win.SetContent(buf)
+	err = h.wm.SetWindowContent(win, buf)
 	if err != nil && err != browserapi.ErrTabNotFree {
 		err = fmt.Errorf("win.SetContent: %v", err)
 		return err
@@ -1787,7 +1787,7 @@ func (h *lspEditorHandler) browseLocations(
 			closeWin := win
 			h.mu.Unlock()
 			if shouldClose {
-				return closeWin.Close()
+				return h.wm.CloseWindow(closeWin)
 			}
 			return nil
 		}

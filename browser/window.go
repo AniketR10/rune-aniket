@@ -39,7 +39,7 @@ func (w *browserWindow) Focus() (bool, error) {
 	return w.win.Focus(), nil
 }
 
-func (w *browserWindow) ID() uint64 {
+func (w *browserWindow) WindowID() uint64 {
 	return w.win.ID()
 }
 

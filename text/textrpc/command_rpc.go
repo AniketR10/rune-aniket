@@ -119,7 +119,7 @@ func (c *commandClient) HandleCommand(ctx context.Context, cmd textapi.Command) 
 		ResourceName:  uri,
 		CursorContent: &cursorContent,
 		CursorWindow:  &cursorWindow,
-		WindowId:      adapter.ID(),
+		WindowId:      adapter.WindowID(),
 	}
 
 	// do not block waiting for I/O
@@ -184,7 +184,7 @@ func (s *commandServer) commandFromProto(
 	e.Cursor.Content = pe.GetCursorContent().ToModel()
 	e.Args = pe.GetArgs()
 	e.Name = pe.GetName()
-	e.Window, err = s.browser.DialWindow(uint64(pe.GetWindowId()))
+	e.Window = s.browser.NewWindow(uint64(pe.GetWindowId()))
 	return err
 }
 

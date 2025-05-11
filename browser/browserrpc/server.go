@@ -200,7 +200,7 @@ func (s *Server) newRemoteResource(
 	if win == nil {
 		return 0, nil
 	}
-	return win.ID(), nil
+	return win.WindowID(), nil
 }
 
 // Split satisfies BrowserServer
@@ -311,45 +311,44 @@ func (s *Server) Focus(
 ) (*FocusResponse, error) {
 	s.browser.Lock()
 	defer s.browser.Unlock()
-	win, err := s.browser.Focus()
 
+	win, err := s.browser.Focus()
 	if err != nil {
 		return nil, err
 	}
 
 	res := &FocusResponse{
-		WindowId: win.ID(),
+		WindowId: win.WindowID(),
 	}
 
 	return res, nil
 }
 
-// SetFocus satisfies BrowserServer
-func (s *Server) SetFocus(
-	ctx context.Context, req *SetFocusRequest,
-) (*FocusResponse, error) {
+// CloseWindow satisfies BrowserServer.
+func (s *Server) CloseWindow(
+	ctx context.Context, req *WindowCloseRequest,
+) (*WindowCloseResponse, error) {
+	id := req.GetWindowId()
+	if id == 0 {
+		return nil, fmt.Errorf("missing request window id: %d", id)
+	}
+
 	s.browser.Lock()
 	defer s.browser.Unlock()
 
-	win, ok := s.browser.Window(req.GetWindowId())
+	// if window could not be found, then we should
+	// mimic idempotent close behaviour
+	win, ok := s.browser.Window(id)
 	if !ok {
-		return nil, fmt.Errorf("cannot find window with windowID: %d", req.GetWindowId())
+		return new(WindowCloseResponse), nil
 	}
 
-	if win.Closed() {
-		return nil, fmt.Errorf("cannot set focus to a closed window: %d", req.GetWindowId())
-	}
-
-	prev, err := s.browser.SetFocus(win)
+	err := win.Close()
 	if err != nil {
 		return nil, err
 	}
 
-	res := &FocusResponse{
-		WindowId: prev.ID(),
-	}
-
-	return res, nil
+	return new(WindowCloseResponse), nil
 }
 
 // Floating satisfies BrowserServer

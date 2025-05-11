@@ -134,7 +134,7 @@ func (s *interruptBrowser) SetContent(
 func (s *interruptBrowser) Close(
 	ctx context.Context, req *browserrpc.WindowCloseRequest,
 ) (*browserrpc.WindowCloseResponse, error) {
-	res, err := s.browserServer.Close(ctx, req)
+	res, err := s.browserServer.CloseWindow(ctx, req)
 	s.interruptDraw()
 	return res, err
 }

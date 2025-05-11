@@ -614,7 +614,7 @@ func testTabIntegration(t *testing.T,
 			win, err := wm.Focus()
 			require.NoError(t, err)
 
-			require.NoError(t, win.SetContent(t2))
+			require.NoError(t, wm.SetWindowContent(win, t2))
 			return handler.Sync(&mu, handler.Nop(c.Browser()))
 		}
 		handlertest.TestHandlerIsolated(t, fn, 20, 10, cases)

@@ -692,7 +692,7 @@ func (c *Component) CloseOtherWindows(win Window) (retErr error) {
 	}
 	var ok bool
 	c.wm.Iterate(func(w handler.Window) {
-		if w.ID() == win.ID() {
+		if w.ID() == win.WindowID() {
 			return
 		}
 		if err := w.Close(); err != nil {
@@ -955,8 +955,8 @@ func (c *Component) splitInverted(
 	focusBrowserWin.win.SetContent(focusHandler)
 
 	// ammend id mapping
-	c.windows[newBrowserWin.ID()] = newBrowserWin
-	c.windows[focusBrowserWin.ID()] = focusBrowserWin
+	c.windows[newBrowserWin.WindowID()] = newBrowserWin
+	c.windows[focusBrowserWin.WindowID()] = focusBrowserWin
 
 	// return new instance of browser window
 	// pointing to old instance of focus window
@@ -1007,26 +1007,26 @@ func (c *Component) newWindow(win handler.Window) *browserWindow {
 		parent: c,
 		win:    win,
 	}
-	c.windows[browserWin.ID()] = browserWin
+	c.windows[browserWin.WindowID()] = browserWin
 	c.log(log.TraceLevel, "new window: %d", win.ID())
 	return browserWin
 }
 
 // closeWindow closes win or returns an error if win is the last Window.
 func (c *Component) closeWindow(win *browserWindow) error {
-	_, ok := c.findWindow(win.ID())
+	_, ok := c.findWindow(win.WindowID())
 	if !ok {
 		panic("window not found")
 	}
 
 	content := win.win.Content().(browserapi.Handler)
 	err := win.win.Close()
-	c.log(log.TraceLevel, "closing window: %d, %v", win.ID(), err)
+	c.log(log.TraceLevel, "closing window: %d, %v", win.WindowID(), err)
 	if err != nil {
 		return err
 	}
 
-	delete(c.windows, win.ID())
+	delete(c.windows, win.WindowID())
 
 	// ensure that if handler calls Closed to ensure that
 	// window is closed, the answer will be correct.

@@ -51,18 +51,19 @@ func (a WindowToAPIWindow) Content() (browserapi.Handler, error) {
 	return a.Win.Content()
 }
 
-func (a WindowToAPIWindow) ID() uint64 {
-	return a.Win.ID()
+func (a WindowToAPIWindow) WindowID() uint64 {
+	return a.Win.WindowID()
 }
 
 // WindowFromAPIWindow is a convenience method to work
 // with browserapi.Window and browser.Window in the same package.
 type WindowFromAPIWindow struct {
-	Win browserapi.Window
+	Browser browserapi.Browser
+	Win     browserapi.Window
 }
 
 func (a WindowFromAPIWindow) SetContent(h browserapi.Handler) error {
-	return a.Win.SetContent(h)
+	return a.Browser.SetWindowContent(a.Win, h)
 }
 
 func (a WindowFromAPIWindow) Content() (browserapi.Handler, error) {
@@ -72,16 +73,16 @@ func (a WindowFromAPIWindow) Content() (browserapi.Handler, error) {
 	return h.(browserapi.Handler), err
 }
 
-func (a WindowFromAPIWindow) ID() uint64 {
-	return a.Win.(interface{ ID() uint64 }).ID()
+func (a WindowFromAPIWindow) WindowID() uint64 {
+	return a.Win.WindowID()
 }
 
 func (a WindowFromAPIWindow) Focus() (bool, error) {
-	return a.Win.Focus()
+	return a.Win.(interface{ Focus() (bool, error) }).Focus()
 }
 
 func (a WindowFromAPIWindow) Close() error {
-	return a.Win.Close()
+	return a.Browser.CloseWindow(a.Win)
 }
 
 func (w WindowFromAPIWindow) Closed() bool {

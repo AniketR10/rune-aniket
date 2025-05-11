@@ -239,20 +239,6 @@ func (mr *MockWindowMockRecorder) Focus() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Focus", reflect.TypeOf((*MockWindow)(nil).Focus))
 }
 
-// ID mocks base method.
-func (m *MockWindow) ID() uint64 {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ID")
-	ret0, _ := ret[0].(uint64)
-	return ret0
-}
-
-// ID indicates an expected call of ID.
-func (mr *MockWindowMockRecorder) ID() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ID", reflect.TypeOf((*MockWindow)(nil).ID))
-}
-
 // IsFloating mocks base method.
 func (m *MockWindow) IsFloating() bool {
 	m.ctrl.T.Helper()
@@ -279,6 +265,20 @@ func (m *MockWindow) SetContent(arg0 browserapi.Handler) error {
 func (mr *MockWindowMockRecorder) SetContent(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetContent", reflect.TypeOf((*MockWindow)(nil).SetContent), arg0)
+}
+
+// WindowID mocks base method.
+func (m *MockWindow) WindowID() uint64 {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "WindowID")
+	ret0, _ := ret[0].(uint64)
+	return ret0
+}
+
+// WindowID indicates an expected call of WindowID.
+func (mr *MockWindowMockRecorder) WindowID() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WindowID", reflect.TypeOf((*MockWindow)(nil).WindowID))
 }
 
 // MockWindowManager is a mock of WindowManager interface.
@@ -346,21 +346,6 @@ func (m *MockWindowManager) Focus() (browser.Window, error) {
 func (mr *MockWindowManagerMockRecorder) Focus() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Focus", reflect.TypeOf((*MockWindowManager)(nil).Focus))
-}
-
-// SetFocus mocks base method.
-func (m *MockWindowManager) SetFocus(win browser.Window) (browser.Window, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SetFocus", win)
-	ret0, _ := ret[0].(browser.Window)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// SetFocus indicates an expected call of SetFocus.
-func (mr *MockWindowManagerMockRecorder) SetFocus(win any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetFocus", reflect.TypeOf((*MockWindowManager)(nil).SetFocus), win)
 }
 
 // SetTabName mocks base method.
@@ -786,21 +771,6 @@ func (m *MockBrowser) Resource(arg0 workspaceapi.URI) (browserapi.Handler, bool)
 func (mr *MockBrowserMockRecorder) Resource(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Resource", reflect.TypeOf((*MockBrowser)(nil).Resource), arg0)
-}
-
-// SetFocus mocks base method.
-func (m *MockBrowser) SetFocus(win browser.Window) (browser.Window, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SetFocus", win)
-	ret0, _ := ret[0].(browser.Window)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// SetFocus indicates an expected call of SetFocus.
-func (mr *MockBrowserMockRecorder) SetFocus(win any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetFocus", reflect.TypeOf((*MockBrowser)(nil).SetFocus), win)
 }
 
 // SetTabName mocks base method.

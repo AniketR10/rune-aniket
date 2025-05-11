@@ -57,8 +57,8 @@ type Window interface {
 	// Content returns the content of this window.
 	Content() (browserapi.Handler, error)
 
-	// ID is the window identifier.
-	ID() uint64
+	// WindowID is the window identifier.
+	WindowID() uint64
 
 	// Closed returns true if this window has already been closed.
 	Closed() bool
@@ -74,10 +74,6 @@ type WindowManager interface {
 
 	// Focus returns the current Window in focus.
 	Focus() (Window, error)
-
-	// SetFocus sets win to be the Window in focus and returns the
-	// previous window in focus.
-	SetFocus(win Window) (Window, error)
 
 	// Split splits the current window in focus in two, and installs
 	// Handler in the new window.

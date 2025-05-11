@@ -377,7 +377,7 @@ func (h *syntaxHandler) goToLocation(
 		return err
 	}
 
-	err = win.SetContent(buf)
+	err = h.wm.SetWindowContent(win, buf)
 	if err != nil && err != browserapi.ErrTabNotFree {
 		err = fmt.Errorf("win.SetContent: %v", err)
 		return err
@@ -449,7 +449,7 @@ func (h *syntaxHandler) browseNodes(
 			shouldClose := done && win != nil
 			closeWin := win
 			if shouldClose {
-				return closeWin.Close()
+				return h.wm.CloseWindow(closeWin)
 			}
 			return nil
 		}
@@ -543,7 +543,6 @@ func (h *syntaxHandler) browseNodes(
 
 		return edh.Handle(ev)
 	})
-
 	bhtop := browserapi.FuncHandler(eh, closeWin(bottom))
 	top, err = h.wm.Split(browserapi.OrientationBottom, win, bhtop)
 	if err != nil {
@@ -557,6 +556,7 @@ func (h *syntaxHandler) browseNodes(
 		err = fmt.Errorf("wm.Split: %v", err)
 		return err
 	}
+
 	return nil
 }
 

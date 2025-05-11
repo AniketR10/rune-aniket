@@ -50,14 +50,7 @@ type Floating interface {
 // Window is the interface that represents
 // a closeable window in a WindowManager.
 type Window interface {
-	// SetContent sets the content of this window to the given handler.
-	SetContent(Handler) error
-
-	// Focus returns whether this window is in focus.
-	Focus() (bool, error)
-
-	// Close closes the window.
-	Close() error
+	WindowID() uint64
 }
 
 // Orientation represents a window orientation.
@@ -105,10 +98,6 @@ type WindowManager interface {
 	// Focus returns the current Window in focus.
 	Focus() (Window, error)
 
-	// SetFocus sets win to be the Window in focus and returns the
-	// previous window in focus.
-	SetFocus(win Window) (Window, error)
-
 	// Split splits the current window in focus in two, and installs
 	// Handler in the new window.
 	Split(Orientation, Window, Handler) (Window, error)
@@ -127,6 +116,12 @@ type WindowManager interface {
 	// URI is used to uniquely identify a tab and name is used as a label
 	// to display it in the tab bar.
 	Tab(uri workspaceapi.URI, icon rune, name string, h Handler) (Handler, error)
+
+	// SetWindowContent sets the content of the given window to the given handler.
+	SetWindowContent(Window, Handler) error
+
+	// Close closes the given window.
+	CloseWindow(Window) error
 }
 
 // Notifications is the interface that wraps methods to display

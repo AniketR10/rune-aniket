@@ -27,11 +27,7 @@ import "unstable.build/go-tui/api/browserapi"
 
 type noopWindow struct{}
 
-func (w noopWindow) Content() (browserapi.Handler, error)  { return nil, nil }
-func (w noopWindow) SetContent(h browserapi.Handler) error { return nil }
-func (w noopWindow) Close() error                          { return nil }
-func (w noopWindow) ID() uint64                            { return 0 }
-func (w noopWindow) Focus() (bool, error)                  { return false, nil }
+func (w noopWindow) WindowID() uint64 { return 0 }
 
 // NopWindow returns a window that does nothing.
 func NopWindow() browserapi.Window {

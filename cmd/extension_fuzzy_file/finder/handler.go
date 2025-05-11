@@ -68,6 +68,7 @@ func Permissions() []extension.Permission {
 		extension.Permission(extension.PermissionBrowserResourceOpener),
 		extension.Permission(extension.PermissionBrowserEventPublisher),
 		extension.Permission(extension.PermissionBrowserNotifications),
+		extension.Permission(extension.PermissionBrowserWindowManager),
 		extension.PermissionStorage,
 		extension.Permission(extension.PermissionEditor),
 		extension.Permission(extension.PermissionFileSystem),
@@ -78,6 +79,7 @@ func Permissions() []extension.Permission {
 type fuzzyFinderHandler struct {
 	s                    document.Service
 	f                    browserapi.ResourceOpener
+	wm                   browserapi.WindowManager
 	p                    browserapi.EventPublisher
 	m                    browserapi.Notifications
 	ed                   textapi.Editor
@@ -218,7 +220,7 @@ func (h *fuzzyFinderHandler) setContent(
 ) error {
 	h.mu.Unlock()
 	defer h.mu.Lock()
-	err := h.invokeWindow.SetContent(b)
+	err := h.wm.SetWindowContent(h.invokeWindow, b)
 	if err != nil && !errors.Is(err, browserapi.ErrTabNotFree) {
 		return err
 	}
@@ -382,15 +384,17 @@ func (h *fuzzyFinderHandler) initGrants(
 		switch grant.Permission {
 		case extension.Permission(extension.PermissionFileSystem):
 			h.fs, err = workspaceext.FileSystem(ctx, grant, broker)
-		case extension.Permission(extension.PermissionExecute):
+		case extension.PermissionExecute:
 			h.executor, err = workspaceext.Executor(ctx, grant, broker)
-		case extension.Permission(extension.PermissionEditor):
+		case extension.PermissionEditor:
 			h.ed, err = textext.Editor(ctx, grant, broker)
-		case extension.Permission(extension.PermissionBrowserNotifications):
+		case extension.PermissionBrowserNotifications:
 			h.m, err = browserext.Notifications(ctx, grant, broker)
-		case extension.Permission(extension.PermissionBrowserEventPublisher):
+		case extension.PermissionBrowserWindowManager:
+			h.wm, err = browserext.WindowManager(ctx, grant, broker)
+		case extension.PermissionBrowserEventPublisher:
 			h.p, err = browserext.EventPublisher(ctx, grant, broker)
-		case extension.Permission(extension.PermissionBrowserResourceOpener):
+		case extension.PermissionBrowserResourceOpener:
 			h.f, err = browserext.ResourceOpener(ctx, grant, broker)
 		case extension.PermissionStorage:
 			h.s, err = storageext.Storage(ctx, grant, broker)

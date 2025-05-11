@@ -32,8 +32,8 @@ import (
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component"
-	notifications "unstable.build/go-tui/component/notifications"
-	term "unstable.build/go-tui/term"
+	"unstable.build/go-tui/component/notifications"
+	"unstable.build/go-tui/term"
 )
 
 // BrowserFromAPIBrowser wraps a browserapi.Browser and returns
@@ -51,21 +51,7 @@ func (b toBrowser) Focus() (browser.Window, error) {
 	if err != nil {
 		return nil, err
 	}
-	return WindowFromAPIWindow{Win: win}, nil
-}
-
-func (b toBrowser) SetFocus(win browser.Window) (browser.Window, error) {
-	var inWin browserapi.Window
-	if a, ok := win.(WindowFromAPIWindow); ok {
-		inWin = a.Win
-	} else {
-		inWin = WindowToAPIWindow{Win: win}
-	}
-	retWin, err := b.b.SetFocus(inWin)
-	if err != nil {
-		return nil, err
-	}
-	return WindowFromAPIWindow{Win: retWin}, nil
+	return WindowFromAPIWindow{Browser: b.b, Win: win}, nil
 }
 
 func (b toBrowser) SetTabName(uri workspaceapi.URI, name string, attr term.Attributes) error {
@@ -85,7 +71,7 @@ func (b toBrowser) Split(
 	if err != nil {
 		return nil, err
 	}
-	return WindowFromAPIWindow{Win: retWin}, nil
+	return WindowFromAPIWindow{Browser: b.b, Win: retWin}, nil
 }
 
 func (b toBrowser) Floating(
@@ -95,7 +81,7 @@ func (b toBrowser) Floating(
 	if err != nil {
 		return nil, err
 	}
-	return WindowFromAPIWindow{Win: retWin}, nil
+	return WindowFromAPIWindow{Browser: b.b, Win: retWin}, nil
 }
 
 func (b toBrowser) Bar(o browserapi.BarConfig, h tui.Handler) error {
