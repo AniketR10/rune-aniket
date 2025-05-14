@@ -425,7 +425,7 @@ func (c *AsyncClient) drawPending(w term.Writer) {
 }
 
 func (c *AsyncClient) drawReady(w term.Writer) {
-	doDraw(w, c.resp.DrawResponse)
+	doDraw(w, c.resp.DrawResponse.GetRows())
 }
 
 func (c *AsyncClient) contextPayloadIsSelf(ctx context.Context) bool {

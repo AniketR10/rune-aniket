@@ -42,8 +42,9 @@ func NewDrawResponse(ctx context.Context, comp tui.Component, width, height int)
 			Position: &termrpc.Coordinates{},
 		},
 	}
-	w := newDrawResponseWriter(ctx, width, height, resp)
+	w := newDrawResponseWriter(ctx, width, height)
 	comp.Draw(w)
+	resp.Rows = w.rows
 	return resp
 }
 
@@ -79,7 +80,7 @@ var _ term.Writer = drawResponseWriter{}
 
 type drawResponseWriter struct {
 	width, height int
-	res           *DrawResponse
+	rows          []*termrpc.CellRow
 	ctx           context.Context
 }
 
@@ -90,10 +91,10 @@ func (r drawResponseWriter) SetCell(pos term.Coordinates, c term.Cell) {
 	}
 
 	var cell *termrpc.Cell
-	if r.res.Rows[pos.Y].Cells[pos.X] == &zeroCell {
+	if r.rows[pos.Y].Cells[pos.X] == &zeroCell {
 		cell = new(termrpc.Cell)
 	} else {
-		cell = r.res.Rows[pos.Y].Cells[pos.X]
+		cell = r.rows[pos.Y].Cells[pos.X]
 	}
 	cell.Character = uint32(c.Ch)
 	cell.Foreground = uint64(c.Fg)
@@ -104,7 +105,7 @@ func (r drawResponseWriter) SetCell(pos term.Coordinates, c term.Cell) {
 		cell.Combining = append(cell.Combining, uint32(c))
 	}
 
-	r.res.Rows[pos.Y].Cells[pos.X] = cell
+	r.rows[pos.Y].Cells[pos.X] = cell
 }
 
 func (r drawResponseWriter) UnionAttributes(pos term.Coordinates, attr term.Attributes) {
@@ -113,10 +114,10 @@ func (r drawResponseWriter) UnionAttributes(pos term.Coordinates, attr term.Attr
 	}
 
 	var cell *termrpc.Cell
-	if r.res.Rows[pos.Y].Cells[pos.X] == &zeroCell {
+	if r.rows[pos.Y].Cells[pos.X] == &zeroCell {
 		cell = new(termrpc.Cell)
 	} else {
-		cell = r.res.Rows[pos.Y].Cells[pos.X]
+		cell = r.rows[pos.Y].Cells[pos.X]
 	}
 
 	uattr := term.AttributesUnion(term.Attributes{
@@ -129,7 +130,7 @@ func (r drawResponseWriter) UnionAttributes(pos term.Coordinates, attr term.Attr
 	cell.Background = uint64(uattr.Bg)
 	cell.Attrs = int64(uattr.Attrs)
 
-	r.res.Rows[pos.Y].Cells[pos.X] = cell
+	r.rows[pos.Y].Cells[pos.X] = cell
 }
 
 // Flush satisfies term.Writer
@@ -150,23 +151,23 @@ func (r drawResponseWriter) Context() context.Context {
 	return r.ctx
 }
 
-func newDrawResponseWriter(ctx context.Context, width, height int, r *DrawResponse) drawResponseWriter {
+func newDrawResponseWriter(ctx context.Context, width, height int) drawResponseWriter {
 	cellRowSlab := make([]termrpc.CellRow, height)
 	cellRowWidthSlab := make([]*termrpc.Cell, height*width)
-	r.Rows = make([]*termrpc.CellRow, height)
+	rows := make([]*termrpc.CellRow, height)
 	for i := 0; i < height; i++ {
-		r.Rows[i] = &cellRowSlab[i]
-		r.Rows[i].Cells = cellRowWidthSlab[i*width : (i+1)*width]
+		rows[i] = &cellRowSlab[i]
+		rows[i].Cells = cellRowWidthSlab[i*width : (i+1)*width]
 		for j := 0; j < width; j++ {
 			// SetCell substitutes zeroCell for a newly allocated cell;
 			// this allows us to speed up client/server communication
-			r.Rows[i].Cells[j] = &zeroCell
+			rows[i].Cells[j] = &zeroCell
 		}
 	}
 	return drawResponseWriter{
 		ctx:    ctx,
 		width:  width,
 		height: height,
-		res:    r,
+		rows:   rows,
 	}
 }

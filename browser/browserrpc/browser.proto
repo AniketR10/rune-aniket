@@ -3,6 +3,7 @@ syntax = "proto3";
 option go_package = "unstable.build/go-tui/browser/browserrpc";
 
 import "term/termrpc/term.proto";
+import "handler/handlerrpc/handler.proto";
 
 package browser;
 
@@ -110,7 +111,7 @@ service WindowManager {
 	rpc Focus(FocusRequest) returns (FocusResponse);
 	rpc Split(SplitRequest) returns (SplitResponse);
 	rpc Bar(BarRequest) returns (BarResponse);
-	rpc Floating(FloatingWindowRequest) returns (FloatingWindowResponse);
+	rpc Floating(stream FloatingWindowMessage) returns (stream handler.ServerMessage) {};
 	rpc Tab(TabRequest) returns (TabResponse);
 	rpc SetContent(WindowSetContentRequest) returns (WindowSetContentResponse);
 	rpc CloseWindow(WindowCloseRequest) returns (WindowCloseResponse);
@@ -139,4 +140,18 @@ message DimensionsResponse {
 
 service Floating {
 	rpc Dimensions(DimensionsRequest) returns (DimensionsResponse);
+}
+
+message FloatingWindowMessage {
+	handler.MessageType type = 1;
+	handler.DrawStreamResponse draw = 2;
+	handler.HandleStreamResponse handle = 3;
+	handler.ManStreamResponse man = 4;
+	handler.CloseStreamResponse close = 5;
+	handler.CursorStreamResponse cursor = 6;
+	handler.SelectionStreamResponse selection = 7;
+	handler.DimensionsStreamResponse dimensions = 8;
+	handler.ResizeStreamResponse resize = 9;
+
+	FloatingWindowRequest request = 10;
 }

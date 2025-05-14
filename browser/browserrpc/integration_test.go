@@ -111,9 +111,6 @@ func TestIntegrationClientServer(t *testing.T) {
 			mock.EXPECT().Floating(gomock.Any(), gomock.Any()).
 				DoAndReturn(func(h browser.Floating, cfg component.FloatingConfig) (browser.Window, error) {
 					defer wg.Done()
-					actualWidth, actualHeight := h.Dimensions()
-					assert.Equal(t, 2, actualWidth)
-					assert.Equal(t, 2, actualHeight)
 					assert.Equal(t, tcase.Offset, cfg.Offset)
 					assert.Equal(t, tcase.Alignment, cfg.Alignment)
 					return win1, win1.SetContent(h)

@@ -125,7 +125,7 @@ func (c *Client) Draw(w term.Writer) {
 	c.selection.text = selection.GetText()
 	c.selection.ok = selection.GetOk()
 
-	doDraw(w, resp)
+	doDraw(w, resp.GetRows())
 }
 
 // Cursor satisfies tui.Handler
@@ -234,8 +234,8 @@ func (c *Client) log(level log.Level, msg string, args ...interface{}) {
 	}).Logf(level, msg, args...)
 }
 
-func doDraw(w term.Writer, resp *DrawResponse) {
-	for y, row := range resp.GetRows() {
+func doDraw(w term.Writer, rows []*termrpc.CellRow) {
+	for y, row := range rows {
 		for x, c := range row.Cells {
 			cell := c.ToModel()
 			w.SetCell(term.Coordinates{X: x, Y: y}, cell)

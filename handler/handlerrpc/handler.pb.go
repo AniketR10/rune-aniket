@@ -4,6 +4,8 @@
 // 	protoc        v5.27.1
 // source: handlerrpc/handler.proto
 
+// rpc handler
+
 package handlerrpc
 
 import (
@@ -20,6 +22,76 @@ const (
 	// Verify that runtime/protoimpl is sufficiently up-to-date.
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
+
+type MessageType int32
+
+const (
+	MessageType_Draw       MessageType = 0
+	MessageType_Handle     MessageType = 1
+	MessageType_Man        MessageType = 2
+	MessageType_Close      MessageType = 3
+	MessageType_Cursor     MessageType = 4
+	MessageType_Selection  MessageType = 5
+	MessageType_Dimensions MessageType = 6
+	MessageType_Resize     MessageType = 7
+	MessageType_Request    MessageType = 9
+	MessageType_Response   MessageType = 10
+)
+
+// Enum value maps for MessageType.
+var (
+	MessageType_name = map[int32]string{
+		0:  "Draw",
+		1:  "Handle",
+		2:  "Man",
+		3:  "Close",
+		4:  "Cursor",
+		5:  "Selection",
+		6:  "Dimensions",
+		7:  "Resize",
+		9:  "Request",
+		10: "Response",
+	}
+	MessageType_value = map[string]int32{
+		"Draw":       0,
+		"Handle":     1,
+		"Man":        2,
+		"Close":      3,
+		"Cursor":     4,
+		"Selection":  5,
+		"Dimensions": 6,
+		"Resize":     7,
+		"Request":    9,
+		"Response":   10,
+	}
+)
+
+func (x MessageType) Enum() *MessageType {
+	p := new(MessageType)
+	*p = x
+	return p
+}
+
+func (x MessageType) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (MessageType) Descriptor() protoreflect.EnumDescriptor {
+	return file_handlerrpc_handler_proto_enumTypes[0].Descriptor()
+}
+
+func (MessageType) Type() protoreflect.EnumType {
+	return &file_handlerrpc_handler_proto_enumTypes[0]
+}
+
+func (x MessageType) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use MessageType.Descriptor instead.
+func (MessageType) EnumDescriptor() ([]byte, []int) {
+	return file_handlerrpc_handler_proto_rawDescGZIP(), []int{0}
+}
 
 type DrawRequest struct {
 	state         protoimpl.MessageState
@@ -402,6 +474,933 @@ func (*CloseResponse) Descriptor() ([]byte, []int) {
 	return file_handlerrpc_handler_proto_rawDescGZIP(), []int{7}
 }
 
+type InstallResourceResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	WindowId uint64 `protobuf:"varint,1,opt,name=window_id,json=windowId,proto3" json:"window_id,omitempty"`
+}
+
+func (x *InstallResourceResponse) Reset() {
+	*x = InstallResourceResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_handlerrpc_handler_proto_msgTypes[8]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *InstallResourceResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*InstallResourceResponse) ProtoMessage() {}
+
+func (x *InstallResourceResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_handlerrpc_handler_proto_msgTypes[8]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use InstallResourceResponse.ProtoReflect.Descriptor instead.
+func (*InstallResourceResponse) Descriptor() ([]byte, []int) {
+	return file_handlerrpc_handler_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *InstallResourceResponse) GetWindowId() uint64 {
+	if x != nil {
+		return x.WindowId
+	}
+	return 0
+}
+
+type ServerMessage struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Type       MessageType              `protobuf:"varint,1,opt,name=type,proto3,enum=handler.MessageType" json:"type,omitempty"`
+	Draw       *DrawStreamRequest       `protobuf:"bytes,2,opt,name=draw,proto3" json:"draw,omitempty"`
+	Handle     *HandleStreamRequest     `protobuf:"bytes,3,opt,name=handle,proto3" json:"handle,omitempty"`
+	Man        *ManStreamRequest        `protobuf:"bytes,4,opt,name=man,proto3" json:"man,omitempty"`
+	Close      *CloseStreamRequest      `protobuf:"bytes,5,opt,name=close,proto3" json:"close,omitempty"`
+	Cursor     *CursorStreamRequest     `protobuf:"bytes,6,opt,name=cursor,proto3" json:"cursor,omitempty"`
+	Selection  *SelectionStreamRequest  `protobuf:"bytes,7,opt,name=selection,proto3" json:"selection,omitempty"`
+	Dimensions *DimensionsStreamRequest `protobuf:"bytes,8,opt,name=dimensions,proto3" json:"dimensions,omitempty"`
+	Resize     *ResizeStreamRequest     `protobuf:"bytes,9,opt,name=resize,proto3" json:"resize,omitempty"`
+	Response   *InstallResourceResponse `protobuf:"bytes,10,opt,name=response,proto3" json:"response,omitempty"`
+}
+
+func (x *ServerMessage) Reset() {
+	*x = ServerMessage{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_handlerrpc_handler_proto_msgTypes[9]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *ServerMessage) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ServerMessage) ProtoMessage() {}
+
+func (x *ServerMessage) ProtoReflect() protoreflect.Message {
+	mi := &file_handlerrpc_handler_proto_msgTypes[9]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ServerMessage.ProtoReflect.Descriptor instead.
+func (*ServerMessage) Descriptor() ([]byte, []int) {
+	return file_handlerrpc_handler_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *ServerMessage) GetType() MessageType {
+	if x != nil {
+		return x.Type
+	}
+	return MessageType_Draw
+}
+
+func (x *ServerMessage) GetDraw() *DrawStreamRequest {
+	if x != nil {
+		return x.Draw
+	}
+	return nil
+}
+
+func (x *ServerMessage) GetHandle() *HandleStreamRequest {
+	if x != nil {
+		return x.Handle
+	}
+	return nil
+}
+
+func (x *ServerMessage) GetMan() *ManStreamRequest {
+	if x != nil {
+		return x.Man
+	}
+	return nil
+}
+
+func (x *ServerMessage) GetClose() *CloseStreamRequest {
+	if x != nil {
+		return x.Close
+	}
+	return nil
+}
+
+func (x *ServerMessage) GetCursor() *CursorStreamRequest {
+	if x != nil {
+		return x.Cursor
+	}
+	return nil
+}
+
+func (x *ServerMessage) GetSelection() *SelectionStreamRequest {
+	if x != nil {
+		return x.Selection
+	}
+	return nil
+}
+
+func (x *ServerMessage) GetDimensions() *DimensionsStreamRequest {
+	if x != nil {
+		return x.Dimensions
+	}
+	return nil
+}
+
+func (x *ServerMessage) GetResize() *ResizeStreamRequest {
+	if x != nil {
+		return x.Resize
+	}
+	return nil
+}
+
+func (x *ServerMessage) GetResponse() *InstallResourceResponse {
+	if x != nil {
+		return x.Response
+	}
+	return nil
+}
+
+type DrawStreamRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Width  int32 `protobuf:"varint,1,opt,name=width,proto3" json:"width,omitempty"`
+	Height int32 `protobuf:"varint,2,opt,name=height,proto3" json:"height,omitempty"`
+}
+
+func (x *DrawStreamRequest) Reset() {
+	*x = DrawStreamRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_handlerrpc_handler_proto_msgTypes[10]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *DrawStreamRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DrawStreamRequest) ProtoMessage() {}
+
+func (x *DrawStreamRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_handlerrpc_handler_proto_msgTypes[10]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DrawStreamRequest.ProtoReflect.Descriptor instead.
+func (*DrawStreamRequest) Descriptor() ([]byte, []int) {
+	return file_handlerrpc_handler_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *DrawStreamRequest) GetWidth() int32 {
+	if x != nil {
+		return x.Width
+	}
+	return 0
+}
+
+func (x *DrawStreamRequest) GetHeight() int32 {
+	if x != nil {
+		return x.Height
+	}
+	return 0
+}
+
+type DrawStreamResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Rows      []*termrpc.CellRow            `protobuf:"bytes,1,rep,name=rows,proto3" json:"rows,omitempty"`
+	Cursor    *DrawStreamResponse_Cursor    `protobuf:"bytes,2,opt,name=cursor,proto3" json:"cursor,omitempty"`
+	Selection *DrawStreamResponse_Selection `protobuf:"bytes,3,opt,name=selection,proto3" json:"selection,omitempty"`
+}
+
+func (x *DrawStreamResponse) Reset() {
+	*x = DrawStreamResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_handlerrpc_handler_proto_msgTypes[11]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *DrawStreamResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DrawStreamResponse) ProtoMessage() {}
+
+func (x *DrawStreamResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_handlerrpc_handler_proto_msgTypes[11]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DrawStreamResponse.ProtoReflect.Descriptor instead.
+func (*DrawStreamResponse) Descriptor() ([]byte, []int) {
+	return file_handlerrpc_handler_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *DrawStreamResponse) GetRows() []*termrpc.CellRow {
+	if x != nil {
+		return x.Rows
+	}
+	return nil
+}
+
+func (x *DrawStreamResponse) GetCursor() *DrawStreamResponse_Cursor {
+	if x != nil {
+		return x.Cursor
+	}
+	return nil
+}
+
+func (x *DrawStreamResponse) GetSelection() *DrawStreamResponse_Selection {
+	if x != nil {
+		return x.Selection
+	}
+	return nil
+}
+
+type HandleStreamRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Event *termrpc.Event `protobuf:"bytes,1,opt,name=event,proto3" json:"event,omitempty"`
+}
+
+func (x *HandleStreamRequest) Reset() {
+	*x = HandleStreamRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_handlerrpc_handler_proto_msgTypes[12]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *HandleStreamRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*HandleStreamRequest) ProtoMessage() {}
+
+func (x *HandleStreamRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_handlerrpc_handler_proto_msgTypes[12]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use HandleStreamRequest.ProtoReflect.Descriptor instead.
+func (*HandleStreamRequest) Descriptor() ([]byte, []int) {
+	return file_handlerrpc_handler_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *HandleStreamRequest) GetEvent() *termrpc.Event {
+	if x != nil {
+		return x.Event
+	}
+	return nil
+}
+
+type HandleStreamResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Handled bool `protobuf:"varint,1,opt,name=handled,proto3" json:"handled,omitempty"`
+	Quit    bool `protobuf:"varint,2,opt,name=quit,proto3" json:"quit,omitempty"`
+}
+
+func (x *HandleStreamResponse) Reset() {
+	*x = HandleStreamResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_handlerrpc_handler_proto_msgTypes[13]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *HandleStreamResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*HandleStreamResponse) ProtoMessage() {}
+
+func (x *HandleStreamResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_handlerrpc_handler_proto_msgTypes[13]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use HandleStreamResponse.ProtoReflect.Descriptor instead.
+func (*HandleStreamResponse) Descriptor() ([]byte, []int) {
+	return file_handlerrpc_handler_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *HandleStreamResponse) GetHandled() bool {
+	if x != nil {
+		return x.Handled
+	}
+	return false
+}
+
+func (x *HandleStreamResponse) GetQuit() bool {
+	if x != nil {
+		return x.Quit
+	}
+	return false
+}
+
+type ManStreamRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+}
+
+func (x *ManStreamRequest) Reset() {
+	*x = ManStreamRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_handlerrpc_handler_proto_msgTypes[14]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *ManStreamRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ManStreamRequest) ProtoMessage() {}
+
+func (x *ManStreamRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_handlerrpc_handler_proto_msgTypes[14]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ManStreamRequest.ProtoReflect.Descriptor instead.
+func (*ManStreamRequest) Descriptor() ([]byte, []int) {
+	return file_handlerrpc_handler_proto_rawDescGZIP(), []int{14}
+}
+
+type ManStreamResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Man *termrpc.Manual `protobuf:"bytes,1,opt,name=man,proto3" json:"man,omitempty"`
+}
+
+func (x *ManStreamResponse) Reset() {
+	*x = ManStreamResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_handlerrpc_handler_proto_msgTypes[15]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *ManStreamResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ManStreamResponse) ProtoMessage() {}
+
+func (x *ManStreamResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_handlerrpc_handler_proto_msgTypes[15]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ManStreamResponse.ProtoReflect.Descriptor instead.
+func (*ManStreamResponse) Descriptor() ([]byte, []int) {
+	return file_handlerrpc_handler_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *ManStreamResponse) GetMan() *termrpc.Manual {
+	if x != nil {
+		return x.Man
+	}
+	return nil
+}
+
+type CursorStreamRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+}
+
+func (x *CursorStreamRequest) Reset() {
+	*x = CursorStreamRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_handlerrpc_handler_proto_msgTypes[16]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *CursorStreamRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CursorStreamRequest) ProtoMessage() {}
+
+func (x *CursorStreamRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_handlerrpc_handler_proto_msgTypes[16]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CursorStreamRequest.ProtoReflect.Descriptor instead.
+func (*CursorStreamRequest) Descriptor() ([]byte, []int) {
+	return file_handlerrpc_handler_proto_rawDescGZIP(), []int{16}
+}
+
+type CursorStreamResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Position *termrpc.Coordinates `protobuf:"bytes,1,opt,name=position,proto3" json:"position,omitempty"`
+	Show     bool                 `protobuf:"varint,2,opt,name=show,proto3" json:"show,omitempty"`
+	Style    int32                `protobuf:"varint,3,opt,name=style,proto3" json:"style,omitempty"`
+}
+
+func (x *CursorStreamResponse) Reset() {
+	*x = CursorStreamResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_handlerrpc_handler_proto_msgTypes[17]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *CursorStreamResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CursorStreamResponse) ProtoMessage() {}
+
+func (x *CursorStreamResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_handlerrpc_handler_proto_msgTypes[17]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CursorStreamResponse.ProtoReflect.Descriptor instead.
+func (*CursorStreamResponse) Descriptor() ([]byte, []int) {
+	return file_handlerrpc_handler_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *CursorStreamResponse) GetPosition() *termrpc.Coordinates {
+	if x != nil {
+		return x.Position
+	}
+	return nil
+}
+
+func (x *CursorStreamResponse) GetShow() bool {
+	if x != nil {
+		return x.Show
+	}
+	return false
+}
+
+func (x *CursorStreamResponse) GetStyle() int32 {
+	if x != nil {
+		return x.Style
+	}
+	return 0
+}
+
+type SelectionStreamRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+}
+
+func (x *SelectionStreamRequest) Reset() {
+	*x = SelectionStreamRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_handlerrpc_handler_proto_msgTypes[18]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *SelectionStreamRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SelectionStreamRequest) ProtoMessage() {}
+
+func (x *SelectionStreamRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_handlerrpc_handler_proto_msgTypes[18]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SelectionStreamRequest.ProtoReflect.Descriptor instead.
+func (*SelectionStreamRequest) Descriptor() ([]byte, []int) {
+	return file_handlerrpc_handler_proto_rawDescGZIP(), []int{18}
+}
+
+type SelectionStreamResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Text string `protobuf:"bytes,1,opt,name=text,proto3" json:"text,omitempty"`
+	Ok   bool   `protobuf:"varint,2,opt,name=ok,proto3" json:"ok,omitempty"`
+}
+
+func (x *SelectionStreamResponse) Reset() {
+	*x = SelectionStreamResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_handlerrpc_handler_proto_msgTypes[19]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *SelectionStreamResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SelectionStreamResponse) ProtoMessage() {}
+
+func (x *SelectionStreamResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_handlerrpc_handler_proto_msgTypes[19]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SelectionStreamResponse.ProtoReflect.Descriptor instead.
+func (*SelectionStreamResponse) Descriptor() ([]byte, []int) {
+	return file_handlerrpc_handler_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *SelectionStreamResponse) GetText() string {
+	if x != nil {
+		return x.Text
+	}
+	return ""
+}
+
+func (x *SelectionStreamResponse) GetOk() bool {
+	if x != nil {
+		return x.Ok
+	}
+	return false
+}
+
+type DimensionsStreamRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+}
+
+func (x *DimensionsStreamRequest) Reset() {
+	*x = DimensionsStreamRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_handlerrpc_handler_proto_msgTypes[20]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *DimensionsStreamRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DimensionsStreamRequest) ProtoMessage() {}
+
+func (x *DimensionsStreamRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_handlerrpc_handler_proto_msgTypes[20]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DimensionsStreamRequest.ProtoReflect.Descriptor instead.
+func (*DimensionsStreamRequest) Descriptor() ([]byte, []int) {
+	return file_handlerrpc_handler_proto_rawDescGZIP(), []int{20}
+}
+
+type DimensionsStreamResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Width  int32 `protobuf:"varint,1,opt,name=width,proto3" json:"width,omitempty"`
+	Height int32 `protobuf:"varint,2,opt,name=height,proto3" json:"height,omitempty"`
+}
+
+func (x *DimensionsStreamResponse) Reset() {
+	*x = DimensionsStreamResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_handlerrpc_handler_proto_msgTypes[21]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *DimensionsStreamResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DimensionsStreamResponse) ProtoMessage() {}
+
+func (x *DimensionsStreamResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_handlerrpc_handler_proto_msgTypes[21]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DimensionsStreamResponse.ProtoReflect.Descriptor instead.
+func (*DimensionsStreamResponse) Descriptor() ([]byte, []int) {
+	return file_handlerrpc_handler_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *DimensionsStreamResponse) GetWidth() int32 {
+	if x != nil {
+		return x.Width
+	}
+	return 0
+}
+
+func (x *DimensionsStreamResponse) GetHeight() int32 {
+	if x != nil {
+		return x.Height
+	}
+	return 0
+}
+
+type ResizeStreamRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Width  int32 `protobuf:"varint,1,opt,name=width,proto3" json:"width,omitempty"`
+	Height int32 `protobuf:"varint,2,opt,name=height,proto3" json:"height,omitempty"`
+}
+
+func (x *ResizeStreamRequest) Reset() {
+	*x = ResizeStreamRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_handlerrpc_handler_proto_msgTypes[22]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *ResizeStreamRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ResizeStreamRequest) ProtoMessage() {}
+
+func (x *ResizeStreamRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_handlerrpc_handler_proto_msgTypes[22]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ResizeStreamRequest.ProtoReflect.Descriptor instead.
+func (*ResizeStreamRequest) Descriptor() ([]byte, []int) {
+	return file_handlerrpc_handler_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *ResizeStreamRequest) GetWidth() int32 {
+	if x != nil {
+		return x.Width
+	}
+	return 0
+}
+
+func (x *ResizeStreamRequest) GetHeight() int32 {
+	if x != nil {
+		return x.Height
+	}
+	return 0
+}
+
+type ResizeStreamResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+}
+
+func (x *ResizeStreamResponse) Reset() {
+	*x = ResizeStreamResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_handlerrpc_handler_proto_msgTypes[23]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *ResizeStreamResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ResizeStreamResponse) ProtoMessage() {}
+
+func (x *ResizeStreamResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_handlerrpc_handler_proto_msgTypes[23]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ResizeStreamResponse.ProtoReflect.Descriptor instead.
+func (*ResizeStreamResponse) Descriptor() ([]byte, []int) {
+	return file_handlerrpc_handler_proto_rawDescGZIP(), []int{23}
+}
+
+type CloseStreamRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+}
+
+func (x *CloseStreamRequest) Reset() {
+	*x = CloseStreamRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_handlerrpc_handler_proto_msgTypes[24]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *CloseStreamRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CloseStreamRequest) ProtoMessage() {}
+
+func (x *CloseStreamRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_handlerrpc_handler_proto_msgTypes[24]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CloseStreamRequest.ProtoReflect.Descriptor instead.
+func (*CloseStreamRequest) Descriptor() ([]byte, []int) {
+	return file_handlerrpc_handler_proto_rawDescGZIP(), []int{24}
+}
+
+type CloseStreamResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+}
+
+func (x *CloseStreamResponse) Reset() {
+	*x = CloseStreamResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_handlerrpc_handler_proto_msgTypes[25]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *CloseStreamResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CloseStreamResponse) ProtoMessage() {}
+
+func (x *CloseStreamResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_handlerrpc_handler_proto_msgTypes[25]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CloseStreamResponse.ProtoReflect.Descriptor instead.
+func (*CloseStreamResponse) Descriptor() ([]byte, []int) {
+	return file_handlerrpc_handler_proto_rawDescGZIP(), []int{25}
+}
+
 type DrawResponse_Cursor struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -415,7 +1414,7 @@ type DrawResponse_Cursor struct {
 func (x *DrawResponse_Cursor) Reset() {
 	*x = DrawResponse_Cursor{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_handlerrpc_handler_proto_msgTypes[8]
+		mi := &file_handlerrpc_handler_proto_msgTypes[26]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -428,7 +1427,7 @@ func (x *DrawResponse_Cursor) String() string {
 func (*DrawResponse_Cursor) ProtoMessage() {}
 
 func (x *DrawResponse_Cursor) ProtoReflect() protoreflect.Message {
-	mi := &file_handlerrpc_handler_proto_msgTypes[8]
+	mi := &file_handlerrpc_handler_proto_msgTypes[26]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -477,7 +1476,7 @@ type DrawResponse_Selection struct {
 func (x *DrawResponse_Selection) Reset() {
 	*x = DrawResponse_Selection{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_handlerrpc_handler_proto_msgTypes[9]
+		mi := &file_handlerrpc_handler_proto_msgTypes[27]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -490,7 +1489,7 @@ func (x *DrawResponse_Selection) String() string {
 func (*DrawResponse_Selection) ProtoMessage() {}
 
 func (x *DrawResponse_Selection) ProtoReflect() protoreflect.Message {
-	mi := &file_handlerrpc_handler_proto_msgTypes[9]
+	mi := &file_handlerrpc_handler_proto_msgTypes[27]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -514,6 +1513,124 @@ func (x *DrawResponse_Selection) GetText() string {
 }
 
 func (x *DrawResponse_Selection) GetOk() bool {
+	if x != nil {
+		return x.Ok
+	}
+	return false
+}
+
+type DrawStreamResponse_Cursor struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Position *termrpc.Coordinates `protobuf:"bytes,1,opt,name=position,proto3" json:"position,omitempty"`
+	Show     bool                 `protobuf:"varint,2,opt,name=show,proto3" json:"show,omitempty"`
+	Style    int32                `protobuf:"varint,3,opt,name=style,proto3" json:"style,omitempty"`
+}
+
+func (x *DrawStreamResponse_Cursor) Reset() {
+	*x = DrawStreamResponse_Cursor{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_handlerrpc_handler_proto_msgTypes[28]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *DrawStreamResponse_Cursor) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DrawStreamResponse_Cursor) ProtoMessage() {}
+
+func (x *DrawStreamResponse_Cursor) ProtoReflect() protoreflect.Message {
+	mi := &file_handlerrpc_handler_proto_msgTypes[28]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DrawStreamResponse_Cursor.ProtoReflect.Descriptor instead.
+func (*DrawStreamResponse_Cursor) Descriptor() ([]byte, []int) {
+	return file_handlerrpc_handler_proto_rawDescGZIP(), []int{11, 0}
+}
+
+func (x *DrawStreamResponse_Cursor) GetPosition() *termrpc.Coordinates {
+	if x != nil {
+		return x.Position
+	}
+	return nil
+}
+
+func (x *DrawStreamResponse_Cursor) GetShow() bool {
+	if x != nil {
+		return x.Show
+	}
+	return false
+}
+
+func (x *DrawStreamResponse_Cursor) GetStyle() int32 {
+	if x != nil {
+		return x.Style
+	}
+	return 0
+}
+
+type DrawStreamResponse_Selection struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Text string `protobuf:"bytes,1,opt,name=text,proto3" json:"text,omitempty"`
+	Ok   bool   `protobuf:"varint,2,opt,name=ok,proto3" json:"ok,omitempty"`
+}
+
+func (x *DrawStreamResponse_Selection) Reset() {
+	*x = DrawStreamResponse_Selection{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_handlerrpc_handler_proto_msgTypes[29]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *DrawStreamResponse_Selection) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DrawStreamResponse_Selection) ProtoMessage() {}
+
+func (x *DrawStreamResponse_Selection) ProtoReflect() protoreflect.Message {
+	mi := &file_handlerrpc_handler_proto_msgTypes[29]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DrawStreamResponse_Selection.ProtoReflect.Descriptor instead.
+func (*DrawStreamResponse_Selection) Descriptor() ([]byte, []int) {
+	return file_handlerrpc_handler_proto_rawDescGZIP(), []int{11, 1}
+}
+
+func (x *DrawStreamResponse_Selection) GetText() string {
+	if x != nil {
+		return x.Text
+	}
+	return ""
+}
+
+func (x *DrawStreamResponse_Selection) GetOk() bool {
 	if x != nil {
 		return x.Ok
 	}
@@ -563,25 +1680,138 @@ var file_handlerrpc_handler_proto_rawDesc = []byte{
 	0x20, 0x01, 0x28, 0x0b, 0x32, 0x0c, 0x2e, 0x74, 0x65, 0x72, 0x6d, 0x2e, 0x4d, 0x61, 0x6e, 0x75,
 	0x61, 0x6c, 0x52, 0x03, 0x6d, 0x61, 0x6e, 0x22, 0x0e, 0x0a, 0x0c, 0x43, 0x6c, 0x6f, 0x73, 0x65,
 	0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x22, 0x0f, 0x0a, 0x0d, 0x43, 0x6c, 0x6f, 0x73, 0x65,
-	0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x32, 0xe3, 0x01, 0x0a, 0x07, 0x48, 0x61, 0x6e,
-	0x64, 0x6c, 0x65, 0x72, 0x12, 0x33, 0x0a, 0x04, 0x44, 0x72, 0x61, 0x77, 0x12, 0x14, 0x2e, 0x68,
-	0x61, 0x6e, 0x64, 0x6c, 0x65, 0x72, 0x2e, 0x44, 0x72, 0x61, 0x77, 0x52, 0x65, 0x71, 0x75, 0x65,
-	0x73, 0x74, 0x1a, 0x15, 0x2e, 0x68, 0x61, 0x6e, 0x64, 0x6c, 0x65, 0x72, 0x2e, 0x44, 0x72, 0x61,
-	0x77, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x39, 0x0a, 0x06, 0x48, 0x61, 0x6e,
-	0x64, 0x6c, 0x65, 0x12, 0x16, 0x2e, 0x68, 0x61, 0x6e, 0x64, 0x6c, 0x65, 0x72, 0x2e, 0x48, 0x61,
-	0x6e, 0x64, 0x6c, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x17, 0x2e, 0x68, 0x61,
-	0x6e, 0x64, 0x6c, 0x65, 0x72, 0x2e, 0x48, 0x61, 0x6e, 0x64, 0x6c, 0x65, 0x52, 0x65, 0x73, 0x70,
-	0x6f, 0x6e, 0x73, 0x65, 0x12, 0x30, 0x0a, 0x03, 0x4d, 0x61, 0x6e, 0x12, 0x13, 0x2e, 0x68, 0x61,
-	0x6e, 0x64, 0x6c, 0x65, 0x72, 0x2e, 0x4d, 0x61, 0x6e, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74,
-	0x1a, 0x14, 0x2e, 0x68, 0x61, 0x6e, 0x64, 0x6c, 0x65, 0x72, 0x2e, 0x4d, 0x61, 0x6e, 0x52, 0x65,
-	0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x36, 0x0a, 0x05, 0x43, 0x6c, 0x6f, 0x73, 0x65, 0x12,
-	0x15, 0x2e, 0x68, 0x61, 0x6e, 0x64, 0x6c, 0x65, 0x72, 0x2e, 0x43, 0x6c, 0x6f, 0x73, 0x65, 0x52,
-	0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x16, 0x2e, 0x68, 0x61, 0x6e, 0x64, 0x6c, 0x65, 0x72,
-	0x2e, 0x43, 0x6c, 0x6f, 0x73, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x42, 0x2a,
-	0x5a, 0x28, 0x75, 0x6e, 0x73, 0x74, 0x61, 0x62, 0x6c, 0x65, 0x2e, 0x62, 0x75, 0x69, 0x6c, 0x64,
-	0x2f, 0x67, 0x6f, 0x2d, 0x74, 0x75, 0x69, 0x2f, 0x68, 0x61, 0x6e, 0x64, 0x6c, 0x65, 0x72, 0x2f,
-	0x68, 0x61, 0x6e, 0x64, 0x6c, 0x65, 0x72, 0x72, 0x70, 0x63, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74,
-	0x6f, 0x33,
+	0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x36, 0x0a, 0x17, 0x49, 0x6e, 0x73, 0x74,
+	0x61, 0x6c, 0x6c, 0x52, 0x65, 0x73, 0x6f, 0x75, 0x72, 0x63, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f,
+	0x6e, 0x73, 0x65, 0x12, 0x1b, 0x0a, 0x09, 0x77, 0x69, 0x6e, 0x64, 0x6f, 0x77, 0x5f, 0x69, 0x64,
+	0x18, 0x01, 0x20, 0x01, 0x28, 0x04, 0x52, 0x08, 0x77, 0x69, 0x6e, 0x64, 0x6f, 0x77, 0x49, 0x64,
+	0x22, 0xaa, 0x04, 0x0a, 0x0d, 0x53, 0x65, 0x72, 0x76, 0x65, 0x72, 0x4d, 0x65, 0x73, 0x73, 0x61,
+	0x67, 0x65, 0x12, 0x28, 0x0a, 0x04, 0x74, 0x79, 0x70, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0e,
+	0x32, 0x14, 0x2e, 0x68, 0x61, 0x6e, 0x64, 0x6c, 0x65, 0x72, 0x2e, 0x4d, 0x65, 0x73, 0x73, 0x61,
+	0x67, 0x65, 0x54, 0x79, 0x70, 0x65, 0x52, 0x04, 0x74, 0x79, 0x70, 0x65, 0x12, 0x2e, 0x0a, 0x04,
+	0x64, 0x72, 0x61, 0x77, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1a, 0x2e, 0x68, 0x61, 0x6e,
+	0x64, 0x6c, 0x65, 0x72, 0x2e, 0x44, 0x72, 0x61, 0x77, 0x53, 0x74, 0x72, 0x65, 0x61, 0x6d, 0x52,
+	0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x52, 0x04, 0x64, 0x72, 0x61, 0x77, 0x12, 0x34, 0x0a, 0x06,
+	0x68, 0x61, 0x6e, 0x64, 0x6c, 0x65, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1c, 0x2e, 0x68,
+	0x61, 0x6e, 0x64, 0x6c, 0x65, 0x72, 0x2e, 0x48, 0x61, 0x6e, 0x64, 0x6c, 0x65, 0x53, 0x74, 0x72,
+	0x65, 0x61, 0x6d, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x52, 0x06, 0x68, 0x61, 0x6e, 0x64,
+	0x6c, 0x65, 0x12, 0x2b, 0x0a, 0x03, 0x6d, 0x61, 0x6e, 0x18, 0x04, 0x20, 0x01, 0x28, 0x0b, 0x32,
+	0x19, 0x2e, 0x68, 0x61, 0x6e, 0x64, 0x6c, 0x65, 0x72, 0x2e, 0x4d, 0x61, 0x6e, 0x53, 0x74, 0x72,
+	0x65, 0x61, 0x6d, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x52, 0x03, 0x6d, 0x61, 0x6e, 0x12,
+	0x31, 0x0a, 0x05, 0x63, 0x6c, 0x6f, 0x73, 0x65, 0x18, 0x05, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1b,
+	0x2e, 0x68, 0x61, 0x6e, 0x64, 0x6c, 0x65, 0x72, 0x2e, 0x43, 0x6c, 0x6f, 0x73, 0x65, 0x53, 0x74,
+	0x72, 0x65, 0x61, 0x6d, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x52, 0x05, 0x63, 0x6c, 0x6f,
+	0x73, 0x65, 0x12, 0x34, 0x0a, 0x06, 0x63, 0x75, 0x72, 0x73, 0x6f, 0x72, 0x18, 0x06, 0x20, 0x01,
+	0x28, 0x0b, 0x32, 0x1c, 0x2e, 0x68, 0x61, 0x6e, 0x64, 0x6c, 0x65, 0x72, 0x2e, 0x43, 0x75, 0x72,
+	0x73, 0x6f, 0x72, 0x53, 0x74, 0x72, 0x65, 0x61, 0x6d, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74,
+	0x52, 0x06, 0x63, 0x75, 0x72, 0x73, 0x6f, 0x72, 0x12, 0x3d, 0x0a, 0x09, 0x73, 0x65, 0x6c, 0x65,
+	0x63, 0x74, 0x69, 0x6f, 0x6e, 0x18, 0x07, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1f, 0x2e, 0x68, 0x61,
+	0x6e, 0x64, 0x6c, 0x65, 0x72, 0x2e, 0x53, 0x65, 0x6c, 0x65, 0x63, 0x74, 0x69, 0x6f, 0x6e, 0x53,
+	0x74, 0x72, 0x65, 0x61, 0x6d, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x52, 0x09, 0x73, 0x65,
+	0x6c, 0x65, 0x63, 0x74, 0x69, 0x6f, 0x6e, 0x12, 0x40, 0x0a, 0x0a, 0x64, 0x69, 0x6d, 0x65, 0x6e,
+	0x73, 0x69, 0x6f, 0x6e, 0x73, 0x18, 0x08, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x20, 0x2e, 0x68, 0x61,
+	0x6e, 0x64, 0x6c, 0x65, 0x72, 0x2e, 0x44, 0x69, 0x6d, 0x65, 0x6e, 0x73, 0x69, 0x6f, 0x6e, 0x73,
+	0x53, 0x74, 0x72, 0x65, 0x61, 0x6d, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x52, 0x0a, 0x64,
+	0x69, 0x6d, 0x65, 0x6e, 0x73, 0x69, 0x6f, 0x6e, 0x73, 0x12, 0x34, 0x0a, 0x06, 0x72, 0x65, 0x73,
+	0x69, 0x7a, 0x65, 0x18, 0x09, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1c, 0x2e, 0x68, 0x61, 0x6e, 0x64,
+	0x6c, 0x65, 0x72, 0x2e, 0x52, 0x65, 0x73, 0x69, 0x7a, 0x65, 0x53, 0x74, 0x72, 0x65, 0x61, 0x6d,
+	0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x52, 0x06, 0x72, 0x65, 0x73, 0x69, 0x7a, 0x65, 0x12,
+	0x3c, 0x0a, 0x08, 0x72, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x18, 0x0a, 0x20, 0x01, 0x28,
+	0x0b, 0x32, 0x20, 0x2e, 0x68, 0x61, 0x6e, 0x64, 0x6c, 0x65, 0x72, 0x2e, 0x49, 0x6e, 0x73, 0x74,
+	0x61, 0x6c, 0x6c, 0x52, 0x65, 0x73, 0x6f, 0x75, 0x72, 0x63, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f,
+	0x6e, 0x73, 0x65, 0x52, 0x08, 0x72, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x41, 0x0a,
+	0x11, 0x44, 0x72, 0x61, 0x77, 0x53, 0x74, 0x72, 0x65, 0x61, 0x6d, 0x52, 0x65, 0x71, 0x75, 0x65,
+	0x73, 0x74, 0x12, 0x14, 0x0a, 0x05, 0x77, 0x69, 0x64, 0x74, 0x68, 0x18, 0x01, 0x20, 0x01, 0x28,
+	0x05, 0x52, 0x05, 0x77, 0x69, 0x64, 0x74, 0x68, 0x12, 0x16, 0x0a, 0x06, 0x68, 0x65, 0x69, 0x67,
+	0x68, 0x74, 0x18, 0x02, 0x20, 0x01, 0x28, 0x05, 0x52, 0x06, 0x68, 0x65, 0x69, 0x67, 0x68, 0x74,
+	0x22, 0xcc, 0x02, 0x0a, 0x12, 0x44, 0x72, 0x61, 0x77, 0x53, 0x74, 0x72, 0x65, 0x61, 0x6d, 0x52,
+	0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x21, 0x0a, 0x04, 0x72, 0x6f, 0x77, 0x73, 0x18,
+	0x01, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x0d, 0x2e, 0x74, 0x65, 0x72, 0x6d, 0x2e, 0x43, 0x65, 0x6c,
+	0x6c, 0x52, 0x6f, 0x77, 0x52, 0x04, 0x72, 0x6f, 0x77, 0x73, 0x12, 0x3a, 0x0a, 0x06, 0x63, 0x75,
+	0x72, 0x73, 0x6f, 0x72, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x22, 0x2e, 0x68, 0x61, 0x6e,
+	0x64, 0x6c, 0x65, 0x72, 0x2e, 0x44, 0x72, 0x61, 0x77, 0x53, 0x74, 0x72, 0x65, 0x61, 0x6d, 0x52,
+	0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x2e, 0x43, 0x75, 0x72, 0x73, 0x6f, 0x72, 0x52, 0x06,
+	0x63, 0x75, 0x72, 0x73, 0x6f, 0x72, 0x12, 0x43, 0x0a, 0x09, 0x73, 0x65, 0x6c, 0x65, 0x63, 0x74,
+	0x69, 0x6f, 0x6e, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x25, 0x2e, 0x68, 0x61, 0x6e, 0x64,
+	0x6c, 0x65, 0x72, 0x2e, 0x44, 0x72, 0x61, 0x77, 0x53, 0x74, 0x72, 0x65, 0x61, 0x6d, 0x52, 0x65,
+	0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x2e, 0x53, 0x65, 0x6c, 0x65, 0x63, 0x74, 0x69, 0x6f, 0x6e,
+	0x52, 0x09, 0x73, 0x65, 0x6c, 0x65, 0x63, 0x74, 0x69, 0x6f, 0x6e, 0x1a, 0x61, 0x0a, 0x06, 0x43,
+	0x75, 0x72, 0x73, 0x6f, 0x72, 0x12, 0x2d, 0x0a, 0x08, 0x70, 0x6f, 0x73, 0x69, 0x74, 0x69, 0x6f,
+	0x6e, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x11, 0x2e, 0x74, 0x65, 0x72, 0x6d, 0x2e, 0x43,
+	0x6f, 0x6f, 0x72, 0x64, 0x69, 0x6e, 0x61, 0x74, 0x65, 0x73, 0x52, 0x08, 0x70, 0x6f, 0x73, 0x69,
+	0x74, 0x69, 0x6f, 0x6e, 0x12, 0x12, 0x0a, 0x04, 0x73, 0x68, 0x6f, 0x77, 0x18, 0x02, 0x20, 0x01,
+	0x28, 0x08, 0x52, 0x04, 0x73, 0x68, 0x6f, 0x77, 0x12, 0x14, 0x0a, 0x05, 0x73, 0x74, 0x79, 0x6c,
+	0x65, 0x18, 0x03, 0x20, 0x01, 0x28, 0x05, 0x52, 0x05, 0x73, 0x74, 0x79, 0x6c, 0x65, 0x1a, 0x2f,
+	0x0a, 0x09, 0x53, 0x65, 0x6c, 0x65, 0x63, 0x74, 0x69, 0x6f, 0x6e, 0x12, 0x12, 0x0a, 0x04, 0x74,
+	0x65, 0x78, 0x74, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x74, 0x65, 0x78, 0x74, 0x12,
+	0x0e, 0x0a, 0x02, 0x6f, 0x6b, 0x18, 0x02, 0x20, 0x01, 0x28, 0x08, 0x52, 0x02, 0x6f, 0x6b, 0x22,
+	0x38, 0x0a, 0x13, 0x48, 0x61, 0x6e, 0x64, 0x6c, 0x65, 0x53, 0x74, 0x72, 0x65, 0x61, 0x6d, 0x52,
+	0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x21, 0x0a, 0x05, 0x65, 0x76, 0x65, 0x6e, 0x74, 0x18,
+	0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x0b, 0x2e, 0x74, 0x65, 0x72, 0x6d, 0x2e, 0x45, 0x76, 0x65,
+	0x6e, 0x74, 0x52, 0x05, 0x65, 0x76, 0x65, 0x6e, 0x74, 0x22, 0x44, 0x0a, 0x14, 0x48, 0x61, 0x6e,
+	0x64, 0x6c, 0x65, 0x53, 0x74, 0x72, 0x65, 0x61, 0x6d, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73,
+	0x65, 0x12, 0x18, 0x0a, 0x07, 0x68, 0x61, 0x6e, 0x64, 0x6c, 0x65, 0x64, 0x18, 0x01, 0x20, 0x01,
+	0x28, 0x08, 0x52, 0x07, 0x68, 0x61, 0x6e, 0x64, 0x6c, 0x65, 0x64, 0x12, 0x12, 0x0a, 0x04, 0x71,
+	0x75, 0x69, 0x74, 0x18, 0x02, 0x20, 0x01, 0x28, 0x08, 0x52, 0x04, 0x71, 0x75, 0x69, 0x74, 0x22,
+	0x12, 0x0a, 0x10, 0x4d, 0x61, 0x6e, 0x53, 0x74, 0x72, 0x65, 0x61, 0x6d, 0x52, 0x65, 0x71, 0x75,
+	0x65, 0x73, 0x74, 0x22, 0x33, 0x0a, 0x11, 0x4d, 0x61, 0x6e, 0x53, 0x74, 0x72, 0x65, 0x61, 0x6d,
+	0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x1e, 0x0a, 0x03, 0x6d, 0x61, 0x6e, 0x18,
+	0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x0c, 0x2e, 0x74, 0x65, 0x72, 0x6d, 0x2e, 0x4d, 0x61, 0x6e,
+	0x75, 0x61, 0x6c, 0x52, 0x03, 0x6d, 0x61, 0x6e, 0x22, 0x15, 0x0a, 0x13, 0x43, 0x75, 0x72, 0x73,
+	0x6f, 0x72, 0x53, 0x74, 0x72, 0x65, 0x61, 0x6d, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x22,
+	0x6f, 0x0a, 0x14, 0x43, 0x75, 0x72, 0x73, 0x6f, 0x72, 0x53, 0x74, 0x72, 0x65, 0x61, 0x6d, 0x52,
+	0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x2d, 0x0a, 0x08, 0x70, 0x6f, 0x73, 0x69, 0x74,
+	0x69, 0x6f, 0x6e, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x11, 0x2e, 0x74, 0x65, 0x72, 0x6d,
+	0x2e, 0x43, 0x6f, 0x6f, 0x72, 0x64, 0x69, 0x6e, 0x61, 0x74, 0x65, 0x73, 0x52, 0x08, 0x70, 0x6f,
+	0x73, 0x69, 0x74, 0x69, 0x6f, 0x6e, 0x12, 0x12, 0x0a, 0x04, 0x73, 0x68, 0x6f, 0x77, 0x18, 0x02,
+	0x20, 0x01, 0x28, 0x08, 0x52, 0x04, 0x73, 0x68, 0x6f, 0x77, 0x12, 0x14, 0x0a, 0x05, 0x73, 0x74,
+	0x79, 0x6c, 0x65, 0x18, 0x03, 0x20, 0x01, 0x28, 0x05, 0x52, 0x05, 0x73, 0x74, 0x79, 0x6c, 0x65,
+	0x22, 0x18, 0x0a, 0x16, 0x53, 0x65, 0x6c, 0x65, 0x63, 0x74, 0x69, 0x6f, 0x6e, 0x53, 0x74, 0x72,
+	0x65, 0x61, 0x6d, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x22, 0x3d, 0x0a, 0x17, 0x53, 0x65,
+	0x6c, 0x65, 0x63, 0x74, 0x69, 0x6f, 0x6e, 0x53, 0x74, 0x72, 0x65, 0x61, 0x6d, 0x52, 0x65, 0x73,
+	0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x12, 0x0a, 0x04, 0x74, 0x65, 0x78, 0x74, 0x18, 0x01, 0x20,
+	0x01, 0x28, 0x09, 0x52, 0x04, 0x74, 0x65, 0x78, 0x74, 0x12, 0x0e, 0x0a, 0x02, 0x6f, 0x6b, 0x18,
+	0x02, 0x20, 0x01, 0x28, 0x08, 0x52, 0x02, 0x6f, 0x6b, 0x22, 0x19, 0x0a, 0x17, 0x44, 0x69, 0x6d,
+	0x65, 0x6e, 0x73, 0x69, 0x6f, 0x6e, 0x73, 0x53, 0x74, 0x72, 0x65, 0x61, 0x6d, 0x52, 0x65, 0x71,
+	0x75, 0x65, 0x73, 0x74, 0x22, 0x48, 0x0a, 0x18, 0x44, 0x69, 0x6d, 0x65, 0x6e, 0x73, 0x69, 0x6f,
+	0x6e, 0x73, 0x53, 0x74, 0x72, 0x65, 0x61, 0x6d, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65,
+	0x12, 0x14, 0x0a, 0x05, 0x77, 0x69, 0x64, 0x74, 0x68, 0x18, 0x01, 0x20, 0x01, 0x28, 0x05, 0x52,
+	0x05, 0x77, 0x69, 0x64, 0x74, 0x68, 0x12, 0x16, 0x0a, 0x06, 0x68, 0x65, 0x69, 0x67, 0x68, 0x74,
+	0x18, 0x02, 0x20, 0x01, 0x28, 0x05, 0x52, 0x06, 0x68, 0x65, 0x69, 0x67, 0x68, 0x74, 0x22, 0x43,
+	0x0a, 0x13, 0x52, 0x65, 0x73, 0x69, 0x7a, 0x65, 0x53, 0x74, 0x72, 0x65, 0x61, 0x6d, 0x52, 0x65,
+	0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x14, 0x0a, 0x05, 0x77, 0x69, 0x64, 0x74, 0x68, 0x18, 0x01,
+	0x20, 0x01, 0x28, 0x05, 0x52, 0x05, 0x77, 0x69, 0x64, 0x74, 0x68, 0x12, 0x16, 0x0a, 0x06, 0x68,
+	0x65, 0x69, 0x67, 0x68, 0x74, 0x18, 0x02, 0x20, 0x01, 0x28, 0x05, 0x52, 0x06, 0x68, 0x65, 0x69,
+	0x67, 0x68, 0x74, 0x22, 0x16, 0x0a, 0x14, 0x52, 0x65, 0x73, 0x69, 0x7a, 0x65, 0x53, 0x74, 0x72,
+	0x65, 0x61, 0x6d, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x14, 0x0a, 0x12, 0x43,
+	0x6c, 0x6f, 0x73, 0x65, 0x53, 0x74, 0x72, 0x65, 0x61, 0x6d, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73,
+	0x74, 0x22, 0x15, 0x0a, 0x13, 0x43, 0x6c, 0x6f, 0x73, 0x65, 0x53, 0x74, 0x72, 0x65, 0x61, 0x6d,
+	0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x2a, 0x89, 0x01, 0x0a, 0x0b, 0x4d, 0x65, 0x73,
+	0x73, 0x61, 0x67, 0x65, 0x54, 0x79, 0x70, 0x65, 0x12, 0x08, 0x0a, 0x04, 0x44, 0x72, 0x61, 0x77,
+	0x10, 0x00, 0x12, 0x0a, 0x0a, 0x06, 0x48, 0x61, 0x6e, 0x64, 0x6c, 0x65, 0x10, 0x01, 0x12, 0x07,
+	0x0a, 0x03, 0x4d, 0x61, 0x6e, 0x10, 0x02, 0x12, 0x09, 0x0a, 0x05, 0x43, 0x6c, 0x6f, 0x73, 0x65,
+	0x10, 0x03, 0x12, 0x0a, 0x0a, 0x06, 0x43, 0x75, 0x72, 0x73, 0x6f, 0x72, 0x10, 0x04, 0x12, 0x0d,
+	0x0a, 0x09, 0x53, 0x65, 0x6c, 0x65, 0x63, 0x74, 0x69, 0x6f, 0x6e, 0x10, 0x05, 0x12, 0x0e, 0x0a,
+	0x0a, 0x44, 0x69, 0x6d, 0x65, 0x6e, 0x73, 0x69, 0x6f, 0x6e, 0x73, 0x10, 0x06, 0x12, 0x0a, 0x0a,
+	0x06, 0x52, 0x65, 0x73, 0x69, 0x7a, 0x65, 0x10, 0x07, 0x12, 0x0b, 0x0a, 0x07, 0x52, 0x65, 0x71,
+	0x75, 0x65, 0x73, 0x74, 0x10, 0x09, 0x12, 0x0c, 0x0a, 0x08, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e,
+	0x73, 0x65, 0x10, 0x0a, 0x32, 0xe3, 0x01, 0x0a, 0x07, 0x48, 0x61, 0x6e, 0x64, 0x6c, 0x65, 0x72,
+	0x12, 0x33, 0x0a, 0x04, 0x44, 0x72, 0x61, 0x77, 0x12, 0x14, 0x2e, 0x68, 0x61, 0x6e, 0x64, 0x6c,
+	0x65, 0x72, 0x2e, 0x44, 0x72, 0x61, 0x77, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x15,
+	0x2e, 0x68, 0x61, 0x6e, 0x64, 0x6c, 0x65, 0x72, 0x2e, 0x44, 0x72, 0x61, 0x77, 0x52, 0x65, 0x73,
+	0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x39, 0x0a, 0x06, 0x48, 0x61, 0x6e, 0x64, 0x6c, 0x65, 0x12,
+	0x16, 0x2e, 0x68, 0x61, 0x6e, 0x64, 0x6c, 0x65, 0x72, 0x2e, 0x48, 0x61, 0x6e, 0x64, 0x6c, 0x65,
+	0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x17, 0x2e, 0x68, 0x61, 0x6e, 0x64, 0x6c, 0x65,
+	0x72, 0x2e, 0x48, 0x61, 0x6e, 0x64, 0x6c, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65,
+	0x12, 0x30, 0x0a, 0x03, 0x4d, 0x61, 0x6e, 0x12, 0x13, 0x2e, 0x68, 0x61, 0x6e, 0x64, 0x6c, 0x65,
+	0x72, 0x2e, 0x4d, 0x61, 0x6e, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x14, 0x2e, 0x68,
+	0x61, 0x6e, 0x64, 0x6c, 0x65, 0x72, 0x2e, 0x4d, 0x61, 0x6e, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e,
+	0x73, 0x65, 0x12, 0x36, 0x0a, 0x05, 0x43, 0x6c, 0x6f, 0x73, 0x65, 0x12, 0x15, 0x2e, 0x68, 0x61,
+	0x6e, 0x64, 0x6c, 0x65, 0x72, 0x2e, 0x43, 0x6c, 0x6f, 0x73, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65,
+	0x73, 0x74, 0x1a, 0x16, 0x2e, 0x68, 0x61, 0x6e, 0x64, 0x6c, 0x65, 0x72, 0x2e, 0x43, 0x6c, 0x6f,
+	0x73, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x42, 0x2a, 0x5a, 0x28, 0x75, 0x6e,
+	0x73, 0x74, 0x61, 0x62, 0x6c, 0x65, 0x2e, 0x62, 0x75, 0x69, 0x6c, 0x64, 0x2f, 0x67, 0x6f, 0x2d,
+	0x74, 0x75, 0x69, 0x2f, 0x68, 0x61, 0x6e, 0x64, 0x6c, 0x65, 0x72, 0x2f, 0x68, 0x61, 0x6e, 0x64,
+	0x6c, 0x65, 0x72, 0x72, 0x70, 0x63, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
 }
 
 var (
@@ -596,43 +1826,82 @@ func file_handlerrpc_handler_proto_rawDescGZIP() []byte {
 	return file_handlerrpc_handler_proto_rawDescData
 }
 
-var file_handlerrpc_handler_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_handlerrpc_handler_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_handlerrpc_handler_proto_msgTypes = make([]protoimpl.MessageInfo, 30)
 var file_handlerrpc_handler_proto_goTypes = []interface{}{
-	(*DrawRequest)(nil),            // 0: handler.DrawRequest
-	(*DrawResponse)(nil),           // 1: handler.DrawResponse
-	(*HandleRequest)(nil),          // 2: handler.HandleRequest
-	(*HandleResponse)(nil),         // 3: handler.HandleResponse
-	(*ManRequest)(nil),             // 4: handler.ManRequest
-	(*ManResponse)(nil),            // 5: handler.ManResponse
-	(*CloseRequest)(nil),           // 6: handler.CloseRequest
-	(*CloseResponse)(nil),          // 7: handler.CloseResponse
-	(*DrawResponse_Cursor)(nil),    // 8: handler.DrawResponse.Cursor
-	(*DrawResponse_Selection)(nil), // 9: handler.DrawResponse.Selection
-	(*termrpc.CellRow)(nil),        // 10: term.CellRow
-	(*termrpc.Event)(nil),          // 11: term.Event
-	(*termrpc.Manual)(nil),         // 12: term.Manual
-	(*termrpc.Coordinates)(nil),    // 13: term.Coordinates
+	(MessageType)(0),                     // 0: handler.MessageType
+	(*DrawRequest)(nil),                  // 1: handler.DrawRequest
+	(*DrawResponse)(nil),                 // 2: handler.DrawResponse
+	(*HandleRequest)(nil),                // 3: handler.HandleRequest
+	(*HandleResponse)(nil),               // 4: handler.HandleResponse
+	(*ManRequest)(nil),                   // 5: handler.ManRequest
+	(*ManResponse)(nil),                  // 6: handler.ManResponse
+	(*CloseRequest)(nil),                 // 7: handler.CloseRequest
+	(*CloseResponse)(nil),                // 8: handler.CloseResponse
+	(*InstallResourceResponse)(nil),      // 9: handler.InstallResourceResponse
+	(*ServerMessage)(nil),                // 10: handler.ServerMessage
+	(*DrawStreamRequest)(nil),            // 11: handler.DrawStreamRequest
+	(*DrawStreamResponse)(nil),           // 12: handler.DrawStreamResponse
+	(*HandleStreamRequest)(nil),          // 13: handler.HandleStreamRequest
+	(*HandleStreamResponse)(nil),         // 14: handler.HandleStreamResponse
+	(*ManStreamRequest)(nil),             // 15: handler.ManStreamRequest
+	(*ManStreamResponse)(nil),            // 16: handler.ManStreamResponse
+	(*CursorStreamRequest)(nil),          // 17: handler.CursorStreamRequest
+	(*CursorStreamResponse)(nil),         // 18: handler.CursorStreamResponse
+	(*SelectionStreamRequest)(nil),       // 19: handler.SelectionStreamRequest
+	(*SelectionStreamResponse)(nil),      // 20: handler.SelectionStreamResponse
+	(*DimensionsStreamRequest)(nil),      // 21: handler.DimensionsStreamRequest
+	(*DimensionsStreamResponse)(nil),     // 22: handler.DimensionsStreamResponse
+	(*ResizeStreamRequest)(nil),          // 23: handler.ResizeStreamRequest
+	(*ResizeStreamResponse)(nil),         // 24: handler.ResizeStreamResponse
+	(*CloseStreamRequest)(nil),           // 25: handler.CloseStreamRequest
+	(*CloseStreamResponse)(nil),          // 26: handler.CloseStreamResponse
+	(*DrawResponse_Cursor)(nil),          // 27: handler.DrawResponse.Cursor
+	(*DrawResponse_Selection)(nil),       // 28: handler.DrawResponse.Selection
+	(*DrawStreamResponse_Cursor)(nil),    // 29: handler.DrawStreamResponse.Cursor
+	(*DrawStreamResponse_Selection)(nil), // 30: handler.DrawStreamResponse.Selection
+	(*termrpc.CellRow)(nil),              // 31: term.CellRow
+	(*termrpc.Event)(nil),                // 32: term.Event
+	(*termrpc.Manual)(nil),               // 33: term.Manual
+	(*termrpc.Coordinates)(nil),          // 34: term.Coordinates
 }
 var file_handlerrpc_handler_proto_depIdxs = []int32{
-	10, // 0: handler.DrawResponse.rows:type_name -> term.CellRow
-	8,  // 1: handler.DrawResponse.cursor:type_name -> handler.DrawResponse.Cursor
-	9,  // 2: handler.DrawResponse.selection:type_name -> handler.DrawResponse.Selection
-	11, // 3: handler.HandleRequest.event:type_name -> term.Event
-	12, // 4: handler.ManResponse.man:type_name -> term.Manual
-	13, // 5: handler.DrawResponse.Cursor.position:type_name -> term.Coordinates
-	0,  // 6: handler.Handler.Draw:input_type -> handler.DrawRequest
-	2,  // 7: handler.Handler.Handle:input_type -> handler.HandleRequest
-	4,  // 8: handler.Handler.Man:input_type -> handler.ManRequest
-	6,  // 9: handler.Handler.Close:input_type -> handler.CloseRequest
-	1,  // 10: handler.Handler.Draw:output_type -> handler.DrawResponse
-	3,  // 11: handler.Handler.Handle:output_type -> handler.HandleResponse
-	5,  // 12: handler.Handler.Man:output_type -> handler.ManResponse
-	7,  // 13: handler.Handler.Close:output_type -> handler.CloseResponse
-	10, // [10:14] is the sub-list for method output_type
-	6,  // [6:10] is the sub-list for method input_type
-	6,  // [6:6] is the sub-list for extension type_name
-	6,  // [6:6] is the sub-list for extension extendee
-	0,  // [0:6] is the sub-list for field type_name
+	31, // 0: handler.DrawResponse.rows:type_name -> term.CellRow
+	27, // 1: handler.DrawResponse.cursor:type_name -> handler.DrawResponse.Cursor
+	28, // 2: handler.DrawResponse.selection:type_name -> handler.DrawResponse.Selection
+	32, // 3: handler.HandleRequest.event:type_name -> term.Event
+	33, // 4: handler.ManResponse.man:type_name -> term.Manual
+	0,  // 5: handler.ServerMessage.type:type_name -> handler.MessageType
+	11, // 6: handler.ServerMessage.draw:type_name -> handler.DrawStreamRequest
+	13, // 7: handler.ServerMessage.handle:type_name -> handler.HandleStreamRequest
+	15, // 8: handler.ServerMessage.man:type_name -> handler.ManStreamRequest
+	25, // 9: handler.ServerMessage.close:type_name -> handler.CloseStreamRequest
+	17, // 10: handler.ServerMessage.cursor:type_name -> handler.CursorStreamRequest
+	19, // 11: handler.ServerMessage.selection:type_name -> handler.SelectionStreamRequest
+	21, // 12: handler.ServerMessage.dimensions:type_name -> handler.DimensionsStreamRequest
+	23, // 13: handler.ServerMessage.resize:type_name -> handler.ResizeStreamRequest
+	9,  // 14: handler.ServerMessage.response:type_name -> handler.InstallResourceResponse
+	31, // 15: handler.DrawStreamResponse.rows:type_name -> term.CellRow
+	29, // 16: handler.DrawStreamResponse.cursor:type_name -> handler.DrawStreamResponse.Cursor
+	30, // 17: handler.DrawStreamResponse.selection:type_name -> handler.DrawStreamResponse.Selection
+	32, // 18: handler.HandleStreamRequest.event:type_name -> term.Event
+	33, // 19: handler.ManStreamResponse.man:type_name -> term.Manual
+	34, // 20: handler.CursorStreamResponse.position:type_name -> term.Coordinates
+	34, // 21: handler.DrawResponse.Cursor.position:type_name -> term.Coordinates
+	34, // 22: handler.DrawStreamResponse.Cursor.position:type_name -> term.Coordinates
+	1,  // 23: handler.Handler.Draw:input_type -> handler.DrawRequest
+	3,  // 24: handler.Handler.Handle:input_type -> handler.HandleRequest
+	5,  // 25: handler.Handler.Man:input_type -> handler.ManRequest
+	7,  // 26: handler.Handler.Close:input_type -> handler.CloseRequest
+	2,  // 27: handler.Handler.Draw:output_type -> handler.DrawResponse
+	4,  // 28: handler.Handler.Handle:output_type -> handler.HandleResponse
+	6,  // 29: handler.Handler.Man:output_type -> handler.ManResponse
+	8,  // 30: handler.Handler.Close:output_type -> handler.CloseResponse
+	27, // [27:31] is the sub-list for method output_type
+	23, // [23:27] is the sub-list for method input_type
+	23, // [23:23] is the sub-list for extension type_name
+	23, // [23:23] is the sub-list for extension extendee
+	0,  // [0:23] is the sub-list for field type_name
 }
 
 func init() { file_handlerrpc_handler_proto_init() }
@@ -738,7 +2007,7 @@ func file_handlerrpc_handler_proto_init() {
 			}
 		}
 		file_handlerrpc_handler_proto_msgTypes[8].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*DrawResponse_Cursor); i {
+			switch v := v.(*InstallResourceResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -750,7 +2019,247 @@ func file_handlerrpc_handler_proto_init() {
 			}
 		}
 		file_handlerrpc_handler_proto_msgTypes[9].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*ServerMessage); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_handlerrpc_handler_proto_msgTypes[10].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*DrawStreamRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_handlerrpc_handler_proto_msgTypes[11].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*DrawStreamResponse); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_handlerrpc_handler_proto_msgTypes[12].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*HandleStreamRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_handlerrpc_handler_proto_msgTypes[13].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*HandleStreamResponse); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_handlerrpc_handler_proto_msgTypes[14].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*ManStreamRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_handlerrpc_handler_proto_msgTypes[15].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*ManStreamResponse); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_handlerrpc_handler_proto_msgTypes[16].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*CursorStreamRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_handlerrpc_handler_proto_msgTypes[17].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*CursorStreamResponse); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_handlerrpc_handler_proto_msgTypes[18].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*SelectionStreamRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_handlerrpc_handler_proto_msgTypes[19].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*SelectionStreamResponse); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_handlerrpc_handler_proto_msgTypes[20].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*DimensionsStreamRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_handlerrpc_handler_proto_msgTypes[21].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*DimensionsStreamResponse); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_handlerrpc_handler_proto_msgTypes[22].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*ResizeStreamRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_handlerrpc_handler_proto_msgTypes[23].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*ResizeStreamResponse); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_handlerrpc_handler_proto_msgTypes[24].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*CloseStreamRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_handlerrpc_handler_proto_msgTypes[25].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*CloseStreamResponse); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_handlerrpc_handler_proto_msgTypes[26].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*DrawResponse_Cursor); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_handlerrpc_handler_proto_msgTypes[27].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*DrawResponse_Selection); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_handlerrpc_handler_proto_msgTypes[28].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*DrawStreamResponse_Cursor); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_handlerrpc_handler_proto_msgTypes[29].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*DrawStreamResponse_Selection); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -767,13 +2276,14 @@ func file_handlerrpc_handler_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_handlerrpc_handler_proto_rawDesc,
-			NumEnums:      0,
-			NumMessages:   10,
+			NumEnums:      1,
+			NumMessages:   30,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_handlerrpc_handler_proto_goTypes,
 		DependencyIndexes: file_handlerrpc_handler_proto_depIdxs,
+		EnumInfos:         file_handlerrpc_handler_proto_enumTypes,
 		MessageInfos:      file_handlerrpc_handler_proto_msgTypes,
 	}.Build()
 	File_handlerrpc_handler_proto = out.File

@@ -66,7 +66,8 @@ generate:
 	@ mv term/unstable.build/go-tui/term/termrpc/* term/termrpc
 	@ mv handler/unstable.build/go-tui/handler/handlerrpc/* handler/handlerrpc
 	@ mv api/config/unstable.build/go-tui/api/config/configrpc/* api/config/configrpc
-	@ rm -rf **/unstable.build **/github.com
+	@ mv handler/handlerrpc/unstable.build/go-tui/handler/handlerrpc/handlerrpctest/* handler/handlerrpc/handlerrpctest
+	@ rm -rf **/unstable.build **/github.com **/**/unstable.build
 
 license:
 	@ bluectl license LICENSE `find . -name \*.go | grep -v gomock | grep -v .pb.go | xargs`

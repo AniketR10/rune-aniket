@@ -368,31 +368,46 @@ func (c *Client) Focus() (browserapi.Window, error) {
 func (c *Client) Floating(
 	h browserapi.Floating, cfg component.FloatingConfig,
 ) (browserapi.Window, error) {
+	stream, err := c.wm.Floating(c.clientCtx)
+	if err != nil {
+		return nil, fmt.Errorf("new floating stream: %w", err)
+	}
+
 	var atProto termrpc.Coordinates
 	atProto.FromModel(cfg.Offset)
 
-	freq := FloatingWindowRequest{
+	req := FloatingWindowRequest{
 		Offset:    &atProto,
 		Alignment: uint32(cfg.Alignment),
 	}
+	sendMsg := FloatingWindowMessage{
+		Type:    handlerrpc.MessageType_Request,
+		Request: &req,
+	}
 
-	var fakeWindow windowClientImpl
-	win, err := c.split(func(cc WindowManagerClient,
-		ctx context.Context, req *SplitRequest,
-		opts ...grpc.CallOption) (*SplitResponse, error) {
+	if err := stream.SendMsg(&sendMsg); err != nil {
+		return nil, fmt.Errorf("send floating request: %w", err)
+	}
 
-		freq.ChannelId = req.GetChannelId()
+	var recvMsg handlerrpc.ServerMessage
+	if err := stream.RecvMsg(&recvMsg); err != nil {
+		return nil, fmt.Errorf("recv floating response: %w", err)
+	}
 
-		fres, err := cc.Floating(ctx, &freq)
-		if err != nil {
-			return nil, err
-		}
-		return &SplitResponse{
-			WindowId: fres.GetWindowId(),
-		}, nil
-	}, browserapi.OrientationDefault, &fakeWindow, h)
+	if recvMsg.GetResponse() == nil {
+		return nil, fmt.Errorf("recv nil response: %v", &recvMsg)
+	}
+
+	windowID := int(recvMsg.GetResponse().GetWindowId())
+	server := handlerrpc.NewServerStream[*FloatingWindowMessage](
+		stream, windowID, h,
+		func() *FloatingWindowMessage {
+			return new(FloatingWindowMessage)
+		})
+	go server.ReceiveMessages()
+
 	runtime.KeepAlive(c)
-	return win, err
+	return newWindowClient(uint64(windowID)), nil
 }
 
 // Tab satisfies browser.WindowManager

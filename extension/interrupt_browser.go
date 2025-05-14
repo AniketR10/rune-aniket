@@ -68,12 +68,10 @@ func (s *interruptBrowser) Focus(
 }
 
 // Floating satisfies browserrpc.BrowserServer
-func (s *interruptBrowser) Floating(
-	ctx context.Context, req *browserrpc.FloatingWindowRequest,
-) (*browserrpc.FloatingWindowResponse, error) {
-	res, err := s.browserServer.Floating(ctx, req)
+func (s *interruptBrowser) Floating(srv browserrpc.WindowManager_FloatingServer) error {
+	err := s.browserServer.Floating(srv)
 	s.interruptDraw()
-	return res, err
+	return err
 }
 
 // Tab satisfies browserrpc.BrowserServer

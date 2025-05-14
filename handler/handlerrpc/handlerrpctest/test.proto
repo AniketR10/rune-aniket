@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+option go_package = "/handlerrpctest";
+
+import "handler/handlerrpc/handler.proto";
+
+package test;
+
+service TestService {
+	rpc TestStream(stream TestMessage) returns (stream handler.ServerMessage) {};
+}
+
+message TestRequest {
+}
+
+message TestResponse {
+}
+
+message TestMessage {
+	handler.MessageType type = 1;
+	handler.DrawStreamResponse draw = 2;
+	handler.HandleStreamResponse handle = 3;
+	handler.ManStreamResponse man = 4;
+	handler.CloseStreamResponse close = 5;
+	handler.CursorStreamResponse cursor = 6;
+	handler.SelectionStreamResponse selection = 7;
+	handler.DimensionsStreamResponse dimensions = 8;
+	handler.ResizeStreamResponse resize = 9;
+
+	TestRequest request = 10;
+	TestResponse response = 11;
+}

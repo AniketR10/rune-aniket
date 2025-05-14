@@ -11,6 +11,7 @@ import (
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
+	handlerrpc "unstable.build/go-tui/handler/handlerrpc"
 )
 
 // This is a compile-time assertion to ensure that this generated file
@@ -319,7 +320,7 @@ type WindowManagerClient interface {
 	Focus(ctx context.Context, in *FocusRequest, opts ...grpc.CallOption) (*FocusResponse, error)
 	Split(ctx context.Context, in *SplitRequest, opts ...grpc.CallOption) (*SplitResponse, error)
 	Bar(ctx context.Context, in *BarRequest, opts ...grpc.CallOption) (*BarResponse, error)
-	Floating(ctx context.Context, in *FloatingWindowRequest, opts ...grpc.CallOption) (*FloatingWindowResponse, error)
+	Floating(ctx context.Context, opts ...grpc.CallOption) (WindowManager_FloatingClient, error)
 	Tab(ctx context.Context, in *TabRequest, opts ...grpc.CallOption) (*TabResponse, error)
 	SetContent(ctx context.Context, in *WindowSetContentRequest, opts ...grpc.CallOption) (*WindowSetContentResponse, error)
 	CloseWindow(ctx context.Context, in *WindowCloseRequest, opts ...grpc.CallOption) (*WindowCloseResponse, error)
@@ -360,13 +361,35 @@ func (c *windowManagerClient) Bar(ctx context.Context, in *BarRequest, opts ...g
 	return out, nil
 }
 
-func (c *windowManagerClient) Floating(ctx context.Context, in *FloatingWindowRequest, opts ...grpc.CallOption) (*FloatingWindowResponse, error) {
-	out := new(FloatingWindowResponse)
-	err := c.cc.Invoke(ctx, "/browser.WindowManager/Floating", in, out, opts...)
+func (c *windowManagerClient) Floating(ctx context.Context, opts ...grpc.CallOption) (WindowManager_FloatingClient, error) {
+	stream, err := c.cc.NewStream(ctx, &WindowManager_ServiceDesc.Streams[0], "/browser.WindowManager/Floating", opts...)
 	if err != nil {
 		return nil, err
 	}
-	return out, nil
+	x := &windowManagerFloatingClient{stream}
+	return x, nil
+}
+
+type WindowManager_FloatingClient interface {
+	Send(*FloatingWindowMessage) error
+	Recv() (*handlerrpc.ServerMessage, error)
+	grpc.ClientStream
+}
+
+type windowManagerFloatingClient struct {
+	grpc.ClientStream
+}
+
+func (x *windowManagerFloatingClient) Send(m *FloatingWindowMessage) error {
+	return x.ClientStream.SendMsg(m)
+}
+
+func (x *windowManagerFloatingClient) Recv() (*handlerrpc.ServerMessage, error) {
+	m := new(handlerrpc.ServerMessage)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
 }
 
 func (c *windowManagerClient) Tab(ctx context.Context, in *TabRequest, opts ...grpc.CallOption) (*TabResponse, error) {
@@ -403,7 +426,7 @@ type WindowManagerServer interface {
 	Focus(context.Context, *FocusRequest) (*FocusResponse, error)
 	Split(context.Context, *SplitRequest) (*SplitResponse, error)
 	Bar(context.Context, *BarRequest) (*BarResponse, error)
-	Floating(context.Context, *FloatingWindowRequest) (*FloatingWindowResponse, error)
+	Floating(WindowManager_FloatingServer) error
 	Tab(context.Context, *TabRequest) (*TabResponse, error)
 	SetContent(context.Context, *WindowSetContentRequest) (*WindowSetContentResponse, error)
 	CloseWindow(context.Context, *WindowCloseRequest) (*WindowCloseResponse, error)
@@ -423,8 +446,8 @@ func (UnimplementedWindowManagerServer) Split(context.Context, *SplitRequest) (*
 func (UnimplementedWindowManagerServer) Bar(context.Context, *BarRequest) (*BarResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Bar not implemented")
 }
-func (UnimplementedWindowManagerServer) Floating(context.Context, *FloatingWindowRequest) (*FloatingWindowResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Floating not implemented")
+func (UnimplementedWindowManagerServer) Floating(WindowManager_FloatingServer) error {
+	return status.Errorf(codes.Unimplemented, "method Floating not implemented")
 }
 func (UnimplementedWindowManagerServer) Tab(context.Context, *TabRequest) (*TabResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Tab not implemented")
@@ -502,22 +525,30 @@ func _WindowManager_Bar_Handler(srv interface{}, ctx context.Context, dec func(i
 	return interceptor(ctx, in, info, handler)
 }
 
-func _WindowManager_Floating_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(FloatingWindowRequest)
-	if err := dec(in); err != nil {
+func _WindowManager_Floating_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(WindowManagerServer).Floating(&windowManagerFloatingServer{stream})
+}
+
+type WindowManager_FloatingServer interface {
+	Send(*handlerrpc.ServerMessage) error
+	Recv() (*FloatingWindowMessage, error)
+	grpc.ServerStream
+}
+
+type windowManagerFloatingServer struct {
+	grpc.ServerStream
+}
+
+func (x *windowManagerFloatingServer) Send(m *handlerrpc.ServerMessage) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func (x *windowManagerFloatingServer) Recv() (*FloatingWindowMessage, error) {
+	m := new(FloatingWindowMessage)
+	if err := x.ServerStream.RecvMsg(m); err != nil {
 		return nil, err
 	}
-	if interceptor == nil {
-		return srv.(WindowManagerServer).Floating(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/browser.WindowManager/Floating",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(WindowManagerServer).Floating(ctx, req.(*FloatingWindowRequest))
-	}
-	return interceptor(ctx, in, info, handler)
+	return m, nil
 }
 
 func _WindowManager_Tab_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -594,10 +625,6 @@ var WindowManager_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _WindowManager_Bar_Handler,
 		},
 		{
-			MethodName: "Floating",
-			Handler:    _WindowManager_Floating_Handler,
-		},
-		{
 			MethodName: "Tab",
 			Handler:    _WindowManager_Tab_Handler,
 		},
@@ -610,7 +637,14 @@ var WindowManager_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _WindowManager_CloseWindow_Handler,
 		},
 	},
-	Streams:  []grpc.StreamDesc{},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "Floating",
+			Handler:       _WindowManager_Floating_Handler,
+			ServerStreams: true,
+			ClientStreams: true,
+		},
+	},
 	Metadata: "browserrpc/browser.proto",
 }
 

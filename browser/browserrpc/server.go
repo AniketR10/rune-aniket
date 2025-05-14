@@ -352,22 +352,51 @@ func (s *Server) CloseWindow(
 }
 
 // Floating satisfies BrowserServer
-func (s *Server) Floating(
-	ctx context.Context, req *FloatingWindowRequest,
-) (*FloatingWindowResponse, error) {
+func (s *Server) Floating(srv WindowManager_FloatingServer) error {
+	msg, err := srv.Recv()
+	if err != nil {
+		return fmt.Errorf("receive initial request: %w", err)
+	}
+	req := msg.GetRequest()
+	if msg.GetType() != handlerrpc.MessageType_Request || req == nil {
+		return errors.New("receive initial request: missing request")
+	}
+
+	client := handlerrpc.NewClientStream[*FloatingWindowMessage](s.serverCtx, srv,
+		func() *FloatingWindowMessage {
+			return new(FloatingWindowMessage)
+		})
+
 	at := req.GetOffset().ToModel()
 	alignment := component.Alignment(req.GetAlignment())
 	cfg := component.FloatingConfig{Offset: at, Alignment: alignment}
-	windowID, err := s.newRemoteResource(ctx, req.GetChannelId(),
-		func(wm browser.WindowManager, h browserapi.Handler) (browser.Window, error) {
-			return wm.Floating(h.(browser.Floating), cfg)
-		}, "browserrpc.Server", "floating")
+
+	// NOTE: intercept the first calls to Dimensions and Resize
+	// so send install response before stream starts exchanging
+	// messages.
+	streamHandler := &floatingStreamHandler{Floating: client}
+
+	s.browser.Lock()
+	win, err := s.browser.Floating(streamHandler, cfg)
+	s.browser.Unlock()
 	if err != nil {
-		return nil, err
+		return fmt.Errorf("new floating window: %w", err)
 	}
-	return &FloatingWindowResponse{
-		WindowId: windowID,
-	}, nil
+
+	id := win.WindowID()
+	resp := handlerrpc.InstallResourceResponse{WindowId: id}
+	respMsg := handlerrpc.ServerMessage{Response: &resp}
+	if err := srv.SendMsg(&respMsg); err != nil {
+		// don't close window, let next call to client stream tui.Handler
+		// to error out and bubble up to user accordingly.
+		return fmt.Errorf("send install response: %w", err)
+	}
+
+	streamHandler.Lock()
+	streamHandler.setup = true
+	streamHandler.Unlock()
+
+	return client.ReceiveMessages(id)
 }
 
 // Tab satisfies BrowserServer
@@ -528,4 +557,30 @@ func sanitizeLine(in string) string {
 		}
 	}
 	return b.String()
+}
+
+type floatingStreamHandler struct {
+	sync.Mutex
+	browserapi.Floating
+	setup bool
+}
+
+func (f *floatingStreamHandler) Dimensions() (width, height int) {
+	f.Lock()
+	defer f.Unlock()
+
+	if !f.setup {
+		return
+	}
+	return f.Floating.Dimensions()
+}
+
+func (f *floatingStreamHandler) Resize(width, height int) {
+	f.Lock()
+	defer f.Unlock()
+
+	if !f.setup {
+		return
+	}
+	f.Floating.Resize(width, height)
 }
