@@ -61,13 +61,9 @@ message BarResponse {
 }
 
 message FloatingWindowRequest {
-	string channel_id = 1;
+	string uri = 1;
 	term.Coordinates offset = 2;
 	uint32 alignment = 3;
-}
-
-message FloatingWindowResponse {
-	uint64 window_id = 1;
 }
 
 message TabRequest {

@@ -34,7 +34,6 @@ import (
 	"github.com/unstablebuild/blue/logging"
 	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/api/workspaceapi"
-	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/browser/browserrpc"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/rpc"
@@ -51,7 +50,7 @@ var _ text.Handler = Token{}
 
 // Token wraps a browser.Token to satisfy editor.Handler.
 type Token struct {
-	browser.Token
+	browserrpc.Token
 	workspaceapi.URI
 }
 

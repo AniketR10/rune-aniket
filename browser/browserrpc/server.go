@@ -146,18 +146,15 @@ func (s *Server) dialHandler(ctx context.Context, channelID string, tags ...stri
 	}
 
 	ctx, cancelFn := context.WithCancel(s.serverCtx)
-	fClient := NewFloatingClient(handlerConn)
-	cc := newFloatingClient(handlercc, fClient, cancelFn, handlerConn)
 
 	go s.consumeErrors(ctx, channelID, handlercc.Errors())
-	go s.consumeErrors(ctx, channelID, cc.errorCh)
 	go rpc.MonitorConnection(ctx, defaultFailureTimeout, handlerConn,
 		func(reason string) {
 			cancelFn()
 			handlerConn.Close()
 		})
 
-	return cc, nil
+	return handlercc, nil
 }
 
 func (s *Server) getContentHandler(

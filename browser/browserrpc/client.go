@@ -25,6 +25,7 @@ package browserrpc
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"runtime"
@@ -142,9 +143,9 @@ func serveHandler(
 	if h == nil {
 		panic("passed nil Handler to browser client")
 	}
-	tokenHandler, ok := h.(browser.Token)
+	tokenHandler, ok := h.(Token)
 	if ok {
-		channelID = tokenHandler.ID
+		channelID = tokenHandler.URI
 	} else {
 		// cancel if close is called before client context is done
 		ctx, cancel := context.WithCancel(ctx)
@@ -160,12 +161,6 @@ func serveHandler(
 				}
 				hsrv := handlerrpc.NewServer(h)
 				handlerrpc.RegisterHandlerServer(srv.Registrar(), hsrv)
-
-				// if it satisfies Floating as well then register it
-				if floating, ok := h.(browserapi.Floating); ok {
-					fsrv := newFloatingServer(floating)
-					RegisterFloatingServer(srv.Registrar(), fsrv)
-				}
 			}, "browser", "client", "handler")
 		if err != nil {
 			return
@@ -319,7 +314,7 @@ func (c *Client) Open(resource workspaceapi.URI) (browserapi.Handler, error) {
 		return nil, err
 	}
 
-	return browser.Token{ID: res.GetChannelId()}, err
+	return Token{URI: res.GetChannelId()}, err
 }
 
 // PublishEventNone satisfies Browser.
@@ -368,6 +363,9 @@ func (c *Client) Focus() (browserapi.Window, error) {
 func (c *Client) Floating(
 	h browserapi.Floating, cfg component.FloatingConfig,
 ) (browserapi.Window, error) {
+	if _, ok := h.(Token); ok {
+		return nil, errors.New("cannot install a resource handler in a floating window")
+	}
 	stream, err := c.wm.Floating(c.clientCtx)
 	if err != nil {
 		return nil, fmt.Errorf("new floating stream: %w", err)
@@ -434,7 +432,7 @@ func (c *Client) Tab(
 		}
 		return nil, err
 	}
-	return browser.Token{ID: uriStr}, err
+	return Token{URI: uriStr}, err
 }
 
 // Close closes all resources associated with this Client.

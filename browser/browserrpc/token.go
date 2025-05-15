@@ -21,7 +21,7 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package browser
+package browserrpc
 
 import (
 	"unstable.build/go-tui"
@@ -33,12 +33,12 @@ const errMsg = "this Handler is a token handler that cannot be used directly"
 
 var _ browserapi.Handler = Token{}
 
-// Token is a token handler used to indicate which of the remote handlers
+// Token is a handler used to indicate which of the remote handlers
 // to set as content to a remote server. It satisfies tui.Handler so that clients
 // can take the result of an browser.Open type of requests and pass it to Split* or SetContent
 // type of responses.
 type Token struct {
-	ID string
+	URI string
 }
 
 // Handle panics if called. This tui.Handler implementation is symbolic.
@@ -68,6 +68,11 @@ func (h Token) Resize(width, height int) {
 
 // Draw panics if called. This tui.Handler implementation is symbolic.
 func (h Token) Draw(w term.Writer) {
+	panic(errMsg)
+}
+
+// Dimensions panics if called. This tui.Handler implementation is symbolic.
+func (h Token) Dimensions() (width, height int) {
 	panic(errMsg)
 }
 
