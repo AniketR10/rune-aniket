@@ -318,7 +318,7 @@ var EventPublisher_ServiceDesc = grpc.ServiceDesc{
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type WindowManagerClient interface {
 	Focus(ctx context.Context, in *FocusRequest, opts ...grpc.CallOption) (*FocusResponse, error)
-	Split(ctx context.Context, in *SplitRequest, opts ...grpc.CallOption) (*SplitResponse, error)
+	Split(ctx context.Context, opts ...grpc.CallOption) (WindowManager_SplitClient, error)
 	Bar(ctx context.Context, in *BarRequest, opts ...grpc.CallOption) (*BarResponse, error)
 	Floating(ctx context.Context, opts ...grpc.CallOption) (WindowManager_FloatingClient, error)
 	Tab(ctx context.Context, in *TabRequest, opts ...grpc.CallOption) (*TabResponse, error)
@@ -343,13 +343,35 @@ func (c *windowManagerClient) Focus(ctx context.Context, in *FocusRequest, opts 
 	return out, nil
 }
 
-func (c *windowManagerClient) Split(ctx context.Context, in *SplitRequest, opts ...grpc.CallOption) (*SplitResponse, error) {
-	out := new(SplitResponse)
-	err := c.cc.Invoke(ctx, "/browser.WindowManager/Split", in, out, opts...)
+func (c *windowManagerClient) Split(ctx context.Context, opts ...grpc.CallOption) (WindowManager_SplitClient, error) {
+	stream, err := c.cc.NewStream(ctx, &WindowManager_ServiceDesc.Streams[0], "/browser.WindowManager/Split", opts...)
 	if err != nil {
 		return nil, err
 	}
-	return out, nil
+	x := &windowManagerSplitClient{stream}
+	return x, nil
+}
+
+type WindowManager_SplitClient interface {
+	Send(*SplitWindowMessage) error
+	Recv() (*handlerrpc.ServerMessage, error)
+	grpc.ClientStream
+}
+
+type windowManagerSplitClient struct {
+	grpc.ClientStream
+}
+
+func (x *windowManagerSplitClient) Send(m *SplitWindowMessage) error {
+	return x.ClientStream.SendMsg(m)
+}
+
+func (x *windowManagerSplitClient) Recv() (*handlerrpc.ServerMessage, error) {
+	m := new(handlerrpc.ServerMessage)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
 }
 
 func (c *windowManagerClient) Bar(ctx context.Context, in *BarRequest, opts ...grpc.CallOption) (*BarResponse, error) {
@@ -362,7 +384,7 @@ func (c *windowManagerClient) Bar(ctx context.Context, in *BarRequest, opts ...g
 }
 
 func (c *windowManagerClient) Floating(ctx context.Context, opts ...grpc.CallOption) (WindowManager_FloatingClient, error) {
-	stream, err := c.cc.NewStream(ctx, &WindowManager_ServiceDesc.Streams[0], "/browser.WindowManager/Floating", opts...)
+	stream, err := c.cc.NewStream(ctx, &WindowManager_ServiceDesc.Streams[1], "/browser.WindowManager/Floating", opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -424,7 +446,7 @@ func (c *windowManagerClient) CloseWindow(ctx context.Context, in *WindowCloseRe
 // for forward compatibility
 type WindowManagerServer interface {
 	Focus(context.Context, *FocusRequest) (*FocusResponse, error)
-	Split(context.Context, *SplitRequest) (*SplitResponse, error)
+	Split(WindowManager_SplitServer) error
 	Bar(context.Context, *BarRequest) (*BarResponse, error)
 	Floating(WindowManager_FloatingServer) error
 	Tab(context.Context, *TabRequest) (*TabResponse, error)
@@ -440,8 +462,8 @@ type UnimplementedWindowManagerServer struct {
 func (UnimplementedWindowManagerServer) Focus(context.Context, *FocusRequest) (*FocusResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Focus not implemented")
 }
-func (UnimplementedWindowManagerServer) Split(context.Context, *SplitRequest) (*SplitResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Split not implemented")
+func (UnimplementedWindowManagerServer) Split(WindowManager_SplitServer) error {
+	return status.Errorf(codes.Unimplemented, "method Split not implemented")
 }
 func (UnimplementedWindowManagerServer) Bar(context.Context, *BarRequest) (*BarResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Bar not implemented")
@@ -489,22 +511,30 @@ func _WindowManager_Focus_Handler(srv interface{}, ctx context.Context, dec func
 	return interceptor(ctx, in, info, handler)
 }
 
-func _WindowManager_Split_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(SplitRequest)
-	if err := dec(in); err != nil {
+func _WindowManager_Split_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(WindowManagerServer).Split(&windowManagerSplitServer{stream})
+}
+
+type WindowManager_SplitServer interface {
+	Send(*handlerrpc.ServerMessage) error
+	Recv() (*SplitWindowMessage, error)
+	grpc.ServerStream
+}
+
+type windowManagerSplitServer struct {
+	grpc.ServerStream
+}
+
+func (x *windowManagerSplitServer) Send(m *handlerrpc.ServerMessage) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func (x *windowManagerSplitServer) Recv() (*SplitWindowMessage, error) {
+	m := new(SplitWindowMessage)
+	if err := x.ServerStream.RecvMsg(m); err != nil {
 		return nil, err
 	}
-	if interceptor == nil {
-		return srv.(WindowManagerServer).Split(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/browser.WindowManager/Split",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(WindowManagerServer).Split(ctx, req.(*SplitRequest))
-	}
-	return interceptor(ctx, in, info, handler)
+	return m, nil
 }
 
 func _WindowManager_Bar_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -617,10 +647,6 @@ var WindowManager_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _WindowManager_Focus_Handler,
 		},
 		{
-			MethodName: "Split",
-			Handler:    _WindowManager_Split_Handler,
-		},
-		{
 			MethodName: "Bar",
 			Handler:    _WindowManager_Bar_Handler,
 		},
@@ -638,6 +664,12 @@ var WindowManager_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "Split",
+			Handler:       _WindowManager_Split_Handler,
+			ServerStreams: true,
+			ClientStreams: true,
+		},
 		{
 			StreamName:    "Floating",
 			Handler:       _WindowManager_Floating_Handler,

@@ -28,6 +28,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"sync/atomic"
 
 	log "github.com/sirupsen/logrus"
@@ -365,7 +366,8 @@ func (s *ClientStream[T]) closeStream(err error) {
 		s.log(log.TraceLevel, "close stream called multiple times")
 		return
 	}
-	if errors.Is(err, io.EOF) {
+	if err != nil &&
+		(errors.Is(err, io.EOF) || strings.Contains(err.Error(), "context canceled")) {
 		err = nil
 	}
 	if err != nil {

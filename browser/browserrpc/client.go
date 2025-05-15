@@ -137,45 +137,6 @@ func (c *Client) Init(
 	c.clientCtx, c.clientCancelCtx = context.WithCancel(ctx)
 }
 
-func serveHandler(
-	ctx context.Context, broker rpc.MuxBroker, h browserapi.Handler,
-) (channelID string, srv rpc.MuxServer, err error) {
-	if h == nil {
-		panic("passed nil Handler to browser client")
-	}
-	tokenHandler, ok := h.(Token)
-	if ok {
-		channelID = tokenHandler.URI
-	} else {
-		// cancel if close is called before client context is done
-		ctx, cancel := context.WithCancel(ctx)
-		ctxWg := rpc.WaitGroupFromContext(ctx)
-		channelID, err = rpc.AcceptAndServeChannel(ctx, broker,
-			func(channelID string, msrv rpc.MuxServer) {
-				ctxWg.Add(1)
-				srv = msrv
-				h = &browserClientHandler{
-					Handler: h,
-					srv:     srv,
-					cancel:  cancel,
-				}
-				hsrv := handlerrpc.NewServer(h)
-				handlerrpc.RegisterHandlerServer(srv.Registrar(), hsrv)
-			}, "browser", "client", "handler")
-		if err != nil {
-			return
-		}
-		go func(ctx context.Context) {
-			defer ctxWg.Done()
-			// do not reference Client so finalizer can still run
-			<-ctx.Done()
-			srv.Stop()
-		}(ctx)
-	}
-
-	return
-}
-
 // NewWindow returns a browserapi.Window that represents the window
 // with the given ID.
 func (c *Client) NewWindow(windowID uint64) browserapi.Window {
@@ -218,41 +179,57 @@ func (c *Client) SetWindowContent(win browserapi.Window, h browserapi.Handler) e
 	return nil
 }
 
-type clientSplit func(cc WindowManagerClient,
-	ctx context.Context, req *SplitRequest,
-	opts ...grpc.CallOption) (*SplitResponse, error)
-
-func (c *Client) split(
-	split clientSplit, o browserapi.Orientation, in browserapi.Window, h browserapi.Handler,
-) (browserapi.Window, error) {
-	channelID, srv, err := serveHandler(c.clientCtx, c.broker, h)
-	if err != nil {
-		return nil, fmt.Errorf("serve handler: %w", err)
-	}
-	req := SplitRequest{
-		ChannelId:   channelID,
-		Orientation: toProtoOrientation(o),
-		WindowId:    in.(*windowClientImpl).windowID,
-	}
-	ctx := context.Background()
-	res, err := split(c.wm, ctx, &req)
-	if err != nil {
-		if srv != nil {
-			srv.Stop()
-		}
-		return nil, err
-	}
-	out := c.NewWindow(res.GetWindowId())
-	return out, nil
-}
-
 // Split satisfies Browser.
 func (c *Client) Split(
 	o browserapi.Orientation, win browserapi.Window, h browserapi.Handler,
 ) (browserapi.Window, error) {
-	win, err := c.split((WindowManagerClient).Split, o, win, h)
+	stream, err := c.wm.Split(c.clientCtx)
+	if err != nil {
+		return nil, fmt.Errorf("new split stream: %w", err)
+	}
+
+	var uri string
+	if token, ok := h.(Token); ok {
+		uri = token.URI
+	}
+
+	req := SplitRequest{
+		Uri:         uri,
+		Orientation: toProtoOrientation(o),
+		WindowId:    win.WindowID(),
+	}
+	sendMsg := SplitWindowMessage{
+		Type:    handlerrpc.MessageType_Request,
+		Request: &req,
+	}
+
+	if err := stream.SendMsg(&sendMsg); err != nil {
+		return nil, fmt.Errorf("send split request: %w", err)
+	}
+
+	var recvMsg handlerrpc.ServerMessage
+	if err := stream.RecvMsg(&recvMsg); err != nil {
+		return nil, fmt.Errorf("recv split response: %w", err)
+	}
+
+	if recvMsg.GetResponse() == nil {
+		return nil, fmt.Errorf("recv nil split response: %v", &recvMsg)
+	}
+
+	windowID := int(recvMsg.GetResponse().GetWindowId())
+	if uri != "" {
+		return newWindowClient(uint64(windowID)), nil
+	}
+
+	server := handlerrpc.NewServerStream[*SplitWindowMessage](
+		stream, windowID, h,
+		func() *SplitWindowMessage {
+			return new(SplitWindowMessage)
+		})
+	go server.ReceiveMessages()
+
 	runtime.KeepAlive(c)
-	return win, err
+	return newWindowClient(uint64(windowID)), nil
 }
 
 // Bar satisfies Browser.
@@ -314,7 +291,7 @@ func (c *Client) Open(resource workspaceapi.URI) (browserapi.Handler, error) {
 		return nil, err
 	}
 
-	return Token{URI: res.GetChannelId()}, err
+	return Token{URI: res.GetUri()}, err
 }
 
 // PublishEventNone satisfies Browser.
@@ -393,7 +370,7 @@ func (c *Client) Floating(
 	}
 
 	if recvMsg.GetResponse() == nil {
-		return nil, fmt.Errorf("recv nil response: %v", &recvMsg)
+		return nil, fmt.Errorf("recv nil floating response: %v", &recvMsg)
 	}
 
 	windowID := int(recvMsg.GetResponse().GetWindowId())
@@ -447,6 +424,45 @@ func (c *Client) Close() (err error) {
 		c.clientCancelCtx = nil
 	}
 	runtime.SetFinalizer(c, nil)
+	return
+}
+
+func serveHandler(
+	ctx context.Context, broker rpc.MuxBroker, h browserapi.Handler,
+) (channelID string, srv rpc.MuxServer, err error) {
+	if h == nil {
+		panic("passed nil Handler to browser client")
+	}
+	tokenHandler, ok := h.(Token)
+	if ok {
+		channelID = tokenHandler.URI
+	} else {
+		// cancel if close is called before client context is done
+		ctx, cancel := context.WithCancel(ctx)
+		ctxWg := rpc.WaitGroupFromContext(ctx)
+		channelID, err = rpc.AcceptAndServeChannel(ctx, broker,
+			func(channelID string, msrv rpc.MuxServer) {
+				ctxWg.Add(1)
+				srv = msrv
+				h = &browserClientHandler{
+					Handler: h,
+					srv:     srv,
+					cancel:  cancel,
+				}
+				hsrv := handlerrpc.NewServer(h)
+				handlerrpc.RegisterHandlerServer(srv.Registrar(), hsrv)
+			}, "browser", "client", "handler")
+		if err != nil {
+			return
+		}
+		go func(ctx context.Context) {
+			defer ctxWg.Done()
+			// do not reference Client so finalizer can still run
+			<-ctx.Done()
+			srv.Stop()
+		}(ctx)
+	}
+
 	return
 }
 

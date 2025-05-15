@@ -35,6 +35,7 @@ import (
 	"go.uber.org/goleak"
 	gomock "go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
+	"unstable.build/go-tui/api/browserapi"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/browser/browsertest"
 	"unstable.build/go-tui/component"
@@ -77,7 +78,7 @@ func newClientServerIntegration(
 	return client, closeFn
 }
 
-func TestIntegrationClientServer(t *testing.T) {
+func TestIntegrationClientServerFloating(t *testing.T) {
 	tsuite := []component.FloatingConfig{
 		{Offset: term.Coordinates{X: 1, Y: 1}},
 		{Alignment: component.SpanAlignmentLeft},
@@ -119,6 +120,47 @@ func TestIntegrationClientServer(t *testing.T) {
 			require.NoError(t, err)
 
 			wg.Wait()
+			mock.EXPECT().Window(gomock.Any()).Return(win1, true).AnyTimes()
+			require.NoError(t, client.SetWindowContent(resWin1, browsertest.NewTestHandler()))
+			require.NoError(t, client.CloseWindow(resWin1))
+		})
+	}
+}
+
+func TestClientServerIntegrationSplit(t *testing.T) {
+	tsuite := []browserapi.Orientation{
+		browserapi.OrientationDefault,
+		browserapi.OrientationTop,
+		browserapi.OrientationBottom,
+		browserapi.OrientationLeft,
+		browserapi.OrientationRight,
+	}
+
+	for _, _tcase := range tsuite {
+		tcase := _tcase
+		t.Run(fmt.Sprintf("%+v", tcase), func(t *testing.T) {
+			defer goleak.VerifyNone(t)
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			mock := browsertest.NewMockBrowser(ctrl)
+			client, cleanup := newClientServerIntegration(t, mock)
+			defer cleanup()
+
+			win0 := browsertest.NopWindow()
+			win1 := browsertest.NopWindow()
+
+			mock.EXPECT().Window(gomock.Any()).Return(win1, true).AnyTimes()
+			mock.EXPECT().Split(gomock.Any(), gomock.Any(), gomock.Any()).
+				DoAndReturn(func(
+					o browserapi.Orientation, win browserapi.Window, h browserapi.Handler,
+				) (browser.Window, error) {
+					assert.Equal(t, tcase, o)
+					return win1, nil
+				})
+			resWin1, err := client.Split(tcase, win0, browsertest.NewTestHandler())
+			require.NoError(t, err)
+
 			mock.EXPECT().Window(gomock.Any()).Return(win1, true).AnyTimes()
 			require.NoError(t, client.SetWindowContent(resWin1, browsertest.NewTestHandler()))
 			require.NoError(t, client.CloseWindow(resWin1))

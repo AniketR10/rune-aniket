@@ -29,6 +29,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -157,70 +158,62 @@ func (s *Server) dialHandler(ctx context.Context, channelID string, tags ...stri
 	return handlercc, nil
 }
 
-func (s *Server) getContentHandler(
-	ctx context.Context, channelID string, tags ...string,
-) (browserapi.Handler, error) {
-	// if it's not a URI, then it must be a remote handler
-	uri, err := workspaceapi.ParseURI(channelID)
-	if err != nil {
-		return s.dialHandler(ctx, channelID, tags...)
-	}
-	s.browser.Lock()
-	h, ok := s.browser.Resource(uri)
-	s.browser.Unlock()
-	if !ok {
-		return s.dialHandler(ctx, channelID, tags...)
-	}
-
-	s.log(log.DebugLevel, "(%p browser.Server): using return of Open/Content handler for channelID: %s",
-		s, channelID)
-	return h, nil
-}
-
-func (s *Server) newRemoteResource(
-	ctx context.Context, channelID string,
-	action func(browser.WindowManager, browserapi.Handler) (browser.Window, error),
-	tags ...string,
-) (uint64, error) {
-	handler, err := s.getContentHandler(ctx, channelID, tags...)
-	if err != nil {
-		return 0, err
-	}
-
-	s.browser.Lock()
-	defer s.browser.Unlock()
-
-	win, err := action(s.browser, handler)
-	if err != nil {
-		return 0, err
-	}
-	if win == nil {
-		return 0, nil
-	}
-	return win.WindowID(), nil
-}
-
 // Split satisfies BrowserServer
-func (s *Server) Split(
-	ctx context.Context, req *SplitRequest,
-) (*SplitResponse, error) {
-	windowID, err := s.newRemoteResource(ctx, req.GetChannelId(),
-		func(wm browser.WindowManager, h browserapi.Handler) (browser.Window, error) {
-			win, ok := s.browser.Window(req.GetWindowId())
-			if !ok {
-				return nil, fmt.Errorf("cannot find window with windowID: %d", req.GetWindowId())
-			}
-			if win.Closed() {
-				return nil, fmt.Errorf("cannot split over a closed window: %d", req.GetWindowId())
-			}
-			return wm.Split(protoToModelOrientation(req.GetOrientation()), win, h)
-		}, "browserrpc.Server", "split")
+func (s *Server) Split(srv WindowManager_SplitServer) error {
+	msg, err := srv.Recv()
 	if err != nil {
-		return nil, err
+		return fmt.Errorf("receive initial request: %w", err)
 	}
-	return &SplitResponse{
-		WindowId: windowID,
-	}, nil
+	req := msg.GetRequest()
+	if msg.GetType() != handlerrpc.MessageType_Request || req == nil {
+		return errors.New("receive initial request: missing request")
+	}
+	inWin, ok := s.browser.Window(req.GetWindowId())
+	if !ok {
+		return fmt.Errorf("cannot find window with windowID: %d", req.GetWindowId())
+	}
+	if inWin.Closed() {
+		return fmt.Errorf("cannot split over a closed window: %d", req.GetWindowId())
+	}
+
+	orientation := protoToModelOrientation(req.GetOrientation())
+	uri := req.GetUri()
+
+	var handler browserapi.Handler
+	var client *handlerrpc.ClientStream[*SplitWindowMessage]
+	if uri == "" {
+		client = handlerrpc.NewClientStream(s.serverCtx, srv,
+			func() *SplitWindowMessage {
+				return new(SplitWindowMessage)
+			})
+		handler = &streamHandler{mu: s.browser, Handler: client}
+	} else {
+		h, err := s.getResourceHandler(uri)
+		if err != nil {
+			return fmt.Errorf("get resource handler: %w", err)
+		}
+		handler = h
+	}
+
+	s.browser.Lock()
+	outWin, err := s.browser.Split(orientation, inWin, handler)
+	s.browser.Unlock()
+	if err != nil {
+		return fmt.Errorf("new split window: %w", err)
+	}
+
+	id := outWin.WindowID()
+	resp := handlerrpc.InstallResourceResponse{WindowId: id}
+	respMsg := handlerrpc.ServerMessage{Response: &resp}
+	if err := srv.SendMsg(&respMsg); err != nil {
+		return fmt.Errorf("send install response: %w", err)
+	}
+
+	if client == nil {
+		return nil
+	}
+	handler.(*streamHandler).doneSetup()
+	return client.ReceiveMessages(id)
 }
 
 // Bar satisfies BrowserServer
@@ -278,7 +271,7 @@ func (s *Server) Open(
 		return nil, err
 	}
 
-	return &OpenResourceResponse{ChannelId: uri.String()}, nil
+	return &OpenResourceResponse{Uri: uri.String()}, nil
 }
 
 // Publish satisfies BrowserServer
@@ -389,10 +382,7 @@ func (s *Server) Floating(srv WindowManager_FloatingServer) error {
 		return fmt.Errorf("send install response: %w", err)
 	}
 
-	streamHandler.Lock()
-	streamHandler.setup = true
-	streamHandler.Unlock()
-
+	streamHandler.setup.Store(true)
 	return client.ReceiveMessages(id)
 }
 
@@ -483,6 +473,42 @@ func (s *Server) Stop() (err error) {
 	return nil
 }
 
+func (s *Server) getContentHandler(
+	ctx context.Context, channelID string, tags ...string,
+) (browserapi.Handler, error) {
+	// if it's not a URI, then it must be a remote handler
+	uri, err := workspaceapi.ParseURI(channelID)
+	if err != nil {
+		return s.dialHandler(ctx, channelID, tags...)
+	}
+	s.browser.Lock()
+	h, ok := s.browser.Resource(uri)
+	s.browser.Unlock()
+	if !ok {
+		return s.dialHandler(ctx, channelID, tags...)
+	}
+
+	s.log(log.DebugLevel, "(%p browser.Server): using return of Open/Content handler for channelID: %s",
+		s, channelID)
+	return h, nil
+}
+
+func (s *Server) getResourceHandler(uriStr string) (browserapi.Handler, error) {
+	// if it's not a URI, then it must be a remote handler
+	uri, err := workspaceapi.ParseURI(uriStr)
+	if err != nil {
+		return nil, fmt.Errorf("parse uri %q: %w", uriStr, err)
+	}
+	s.browser.Lock()
+	h, ok := s.browser.Resource(uri)
+	s.browser.Unlock()
+	if !ok {
+		return nil, fmt.Errorf("resource with uri %s not found", uriStr)
+	}
+
+	return h, nil
+}
+
 func (s *Server) setBrowserMessage(
 	level notifications.Level, msg string, once bool,
 ) error {
@@ -556,27 +582,44 @@ func sanitizeLine(in string) string {
 	return b.String()
 }
 
+type streamHandler struct {
+	browserapi.Handler
+	mu     sync.Locker
+	setup  atomic.Bool
+	width  int
+	height int
+}
+
+func (f *streamHandler) Resize(width, height int) {
+	if !f.setup.Load() {
+		f.width = width
+		f.height = height
+		return
+	}
+	f.Handler.Resize(width, height)
+}
+
+func (f *streamHandler) doneSetup() {
+	f.mu.Lock()
+	f.Handler.Resize(f.width, f.height)
+	f.mu.Unlock()
+	f.setup.Store(true)
+}
+
 type floatingStreamHandler struct {
-	sync.Mutex
 	browserapi.Floating
-	setup bool
+	setup atomic.Bool
 }
 
 func (f *floatingStreamHandler) Dimensions() (width, height int) {
-	f.Lock()
-	defer f.Unlock()
-
-	if !f.setup {
+	if !f.setup.Load() {
 		return
 	}
 	return f.Floating.Dimensions()
 }
 
 func (f *floatingStreamHandler) Resize(width, height int) {
-	f.Lock()
-	defer f.Unlock()
-
-	if !f.setup {
+	if !f.setup.Load() {
 		return
 	}
 	f.Floating.Resize(width, height)

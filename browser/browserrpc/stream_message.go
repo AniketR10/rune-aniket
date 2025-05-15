@@ -74,3 +74,51 @@ func (m *FloatingWindowMessage) SetDimensions(r *handlerrpc.DimensionsStreamResp
 	m.Dimensions = r
 	m.Type = handlerrpc.MessageType_Dimensions
 }
+
+// SetDraw satisfies handlerrpc.StreamMessage.
+func (m *SplitWindowMessage) SetDraw(r *handlerrpc.DrawStreamResponse) {
+	m.Draw = r
+	m.Type = handlerrpc.MessageType_Draw
+}
+
+// SetResize satisfies handlerrpc.StreamMessage.
+func (m *SplitWindowMessage) SetResize(r *handlerrpc.ResizeStreamResponse) {
+	m.Resize = r
+	m.Type = handlerrpc.MessageType_Resize
+}
+
+// SetHandle satisfies handlerrpc.StreamMessage.
+func (m *SplitWindowMessage) SetHandle(r *handlerrpc.HandleStreamResponse) {
+	m.Handle = r
+	m.Type = handlerrpc.MessageType_Handle
+}
+
+// SetMan satisfies handlerrpc.StreamMessage.
+func (m *SplitWindowMessage) SetMan(r *handlerrpc.ManStreamResponse) {
+	m.Man = r
+	m.Type = handlerrpc.MessageType_Man
+}
+
+// SetClose satisfies handlerrpc.StreamMessage.
+func (m *SplitWindowMessage) SetClose(r *handlerrpc.CloseStreamResponse) {
+	m.Close = r
+	m.Type = handlerrpc.MessageType_Close
+}
+
+// SetCursor satisfies handlerrpc.StreamMessage.
+func (m *SplitWindowMessage) SetCursor(r *handlerrpc.CursorStreamResponse) {
+	m.Cursor = r
+	m.Type = handlerrpc.MessageType_Cursor
+}
+
+// SetSelection satisfies handlerrpc.StreamMessage.
+func (m *SplitWindowMessage) SetSelection(r *handlerrpc.SelectionStreamResponse) {
+	m.Selection = r
+	m.Type = handlerrpc.MessageType_Selection
+}
+
+// SetDimensions satisfies handlerrpc.StreamMessage.
+func (m *SplitWindowMessage) SetDimensions(r *handlerrpc.DimensionsStreamResponse) {
+	m.Dimensions = r
+	m.Type = handlerrpc.MessageType_Dimensions
+}

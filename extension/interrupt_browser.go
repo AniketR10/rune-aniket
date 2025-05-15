@@ -84,12 +84,10 @@ func (s *interruptBrowser) Tab(
 }
 
 // Split satisfies browserrpc.BrowserServer
-func (s *interruptBrowser) Split(
-	ctx context.Context, req *browserrpc.SplitRequest,
-) (*browserrpc.SplitResponse, error) {
-	res, err := s.browserServer.Split(ctx, req)
+func (s *interruptBrowser) Split(srv browserrpc.WindowManager_SplitServer) error {
+	err := s.browserServer.Split(srv)
 	s.interruptDraw()
-	return res, err
+	return err
 }
 
 // Bar satisfies browserrpc.BrowserServer

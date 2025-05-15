@@ -12,7 +12,7 @@ message OpenResourceRequest {
 }
 
 message OpenResourceResponse {
-	string channel_id = 1;
+	string uri = 1;
 }
 
 message NotifyRequest {
@@ -36,13 +36,9 @@ enum Orientation {
 }
 
 message SplitRequest {
-	string channel_id = 1;
+	string uri = 1;
 	Orientation orientation = 2;
 	uint64 window_id = 3;
-}
-
-message SplitResponse {
-	uint64 window_id = 1;
 }
 
 message BarRequest {
@@ -61,9 +57,8 @@ message BarResponse {
 }
 
 message FloatingWindowRequest {
-	string uri = 1;
-	term.Coordinates offset = 2;
-	uint32 alignment = 3;
+	term.Coordinates offset = 1;
+	uint32 alignment = 2;
 }
 
 message TabRequest {
@@ -105,7 +100,7 @@ service EventPublisher {
 
 service WindowManager {
 	rpc Focus(FocusRequest) returns (FocusResponse);
-	rpc Split(SplitRequest) returns (SplitResponse);
+	rpc Split(stream SplitWindowMessage) returns (stream handler.ServerMessage) {};
 	rpc Bar(BarRequest) returns (BarResponse);
 	rpc Floating(stream FloatingWindowMessage) returns (stream handler.ServerMessage) {};
 	rpc Tab(TabRequest) returns (TabResponse);
@@ -150,4 +145,18 @@ message FloatingWindowMessage {
 	handler.ResizeStreamResponse resize = 9;
 
 	FloatingWindowRequest request = 10;
+}
+
+message SplitWindowMessage {
+	handler.MessageType type = 1;
+	handler.DrawStreamResponse draw = 2;
+	handler.HandleStreamResponse handle = 3;
+	handler.ManStreamResponse man = 4;
+	handler.CloseStreamResponse close = 5;
+	handler.CursorStreamResponse cursor = 6;
+	handler.SelectionStreamResponse selection = 7;
+	handler.DimensionsStreamResponse dimensions = 8;
+	handler.ResizeStreamResponse resize = 9;
+
+	SplitRequest request = 10;
 }

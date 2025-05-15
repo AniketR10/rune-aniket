@@ -188,7 +188,9 @@ func (c *ServerStream[T]) ReceiveMessages() {
 			err = errors.New("stream received invalid message: req/resp")
 		}
 		if err != nil {
-			c.log(log.ErrorLevel, err.Error())
+			if !errors.Is(err, io.EOF) {
+				c.log(log.ErrorLevel, err.Error())
+			}
 			return
 		}
 	}
