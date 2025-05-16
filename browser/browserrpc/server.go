@@ -30,7 +30,6 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/logging"
@@ -44,10 +43,6 @@ import (
 
 	"unstable.build/go-tui/handler/handlerrpc"
 	"unstable.build/go-tui/rpc"
-)
-
-const (
-	defaultFailureTimeout = 5 * time.Second
 )
 
 // Server serves a Browser over GRPC.
@@ -99,59 +94,6 @@ func (s *Server) log(level log.Level, msg string, args ...interface{}) {
 		return
 	}
 	log.WithField(logging.KeyClass, "browser.Server").Logf(level, msg, args...)
-}
-
-func (s *Server) consumeErrors(
-	ctx context.Context, channelID string, ch <-chan error,
-) {
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case err := <-ch:
-			err = fmt.Errorf("handler.Client %s error: %v", channelID, err)
-			s.log(log.WarnLevel, "%v", err)
-			msgErr := s.setBrowserMessage(notifications.LevelError, err.Error(), false)
-			if msgErr != nil {
-				s.log(log.WarnLevel, "error calling browser.Notify upon handler.Client"+
-					" error: %v: %v", msgErr, err)
-			}
-		}
-	}
-}
-
-func (s *Server) dialHandler(ctx context.Context, channelID string, tags ...string) (
-	browserapi.Handler, error,
-) {
-	s.log(log.DebugLevel, "dialing handler at %q", channelID)
-	handlerConn, err := s.broker.DialChannel(ctx, channelID, tags...)
-	if err != nil {
-		return nil, err
-	}
-
-	interrupter := browser.EventPublisherInterrupter(s.browser.Browser)
-	pbClient := handlerrpc.NewHandlerClient(handlerConn)
-	pbClient = newIOWaitUnlockHandlerClient(pbClient, s.browser.Locker)
-	var handlercc interface {
-		browserapi.Handler
-		Errors() <-chan error
-	}
-	if s.syncMode {
-		handlercc = handlerrpc.NewClient(pbClient)
-	} else {
-		handlercc = handlerrpc.NewAsyncClient(interrupter, pbClient)
-	}
-
-	ctx, cancelFn := context.WithCancel(s.serverCtx)
-
-	go s.consumeErrors(ctx, channelID, handlercc.Errors())
-	go rpc.MonitorConnection(ctx, defaultFailureTimeout, handlerConn,
-		func(reason string) {
-			cancelFn()
-			handlerConn.Close()
-		})
-
-	return handlercc, nil
 }
 
 // Split satisfies BrowserServer
@@ -397,14 +339,22 @@ func (s *Server) Floating(srv WindowManager_FloatingServer) error {
 }
 
 // Tab satisfies BrowserServer
-func (s *Server) Tab(ctx context.Context, req *TabRequest,
-) (*TabResponse, error) {
+func (s *Server) Tab(srv WindowManager_TabServer) error {
+	msg, err := srv.Recv()
+	if err != nil {
+		return fmt.Errorf("receive initial request: %w", err)
+	}
+	req := msg.GetRequest()
+	if msg.GetType() != handlerrpc.MessageType_Request || req == nil {
+		return errors.New("receive initial request: missing request")
+	}
+
 	name := req.GetResourceName()
 	iconStr := req.GetResourceIcon()
-	id := req.GetResourceId()
-	uri, err := workspaceapi.ParseURI(id)
+	resourceID := req.GetResourceId()
+	resourceURI, err := workspaceapi.ParseURI(resourceID)
 	if err != nil {
-		return nil, err
+		return fmt.Errorf("parse uri: %w", err)
 	}
 
 	var icon rune
@@ -412,17 +362,27 @@ func (s *Server) Tab(ctx context.Context, req *TabRequest,
 		icon = []rune(iconStr)[0]
 	}
 
-	handler, err := s.getContentHandler(ctx, req.GetChannelId(),
-		"browserrpc.Server", "tab")
-	if err != nil {
-		return nil, err
-	}
+	client := handlerrpc.NewClientStream(s.serverCtx, srv,
+		func() *TabMessage {
+			return new(TabMessage)
+		})
+	handler := &streamHandler{mu: s.browser, Handler: client}
 
 	s.browser.Lock()
-	defer s.browser.Unlock()
+	_, err = s.browser.Tab(resourceURI, icon, name, handler)
+	s.browser.Unlock()
+	if err != nil {
+		return fmt.Errorf("new split window: %w", err)
+	}
 
-	_, err = s.browser.Tab(uri, icon, name, handler)
-	return &TabResponse{}, err
+	resp := handlerrpc.InstallResourceResponse{}
+	respMsg := handlerrpc.ServerMessage{Response: &resp}
+	if err := srv.SendMsg(&respMsg); err != nil {
+		return fmt.Errorf("send install response: %w", err)
+	}
+
+	handler.doneSetup()
+	return client.ReceiveMessages()
 }
 
 // SetContent satisfies BrowserServer.
@@ -508,26 +468,6 @@ func (s *Server) Stop() (err error) {
 		s.serverCancelCtx = nil
 	}
 	return nil
-}
-
-func (s *Server) getContentHandler(
-	ctx context.Context, channelID string, tags ...string,
-) (browserapi.Handler, error) {
-	// if it's not a URI, then it must be a remote handler
-	uri, err := workspaceapi.ParseURI(channelID)
-	if err != nil {
-		return s.dialHandler(ctx, channelID, tags...)
-	}
-	s.browser.Lock()
-	h, ok := s.browser.Resource(uri)
-	s.browser.Unlock()
-	if !ok {
-		return s.dialHandler(ctx, channelID, tags...)
-	}
-
-	s.log(log.DebugLevel, "(%p browser.Server): using return of Open/Content handler for channelID: %s",
-		s, channelID)
-	return h, nil
 }
 
 func (s *Server) getResourceHandler(uriStr string) (browserapi.Handler, error) {

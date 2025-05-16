@@ -75,12 +75,10 @@ func (s *interruptBrowser) Floating(srv browserrpc.WindowManager_FloatingServer)
 }
 
 // Tab satisfies browserrpc.BrowserServer
-func (s *interruptBrowser) Tab(
-	ctx context.Context, req *browserrpc.TabRequest,
-) (*browserrpc.TabResponse, error) {
-	res, err := s.browserServer.Tab(ctx, req)
+func (s *interruptBrowser) Tab(srv browserrpc.WindowManager_TabServer) error {
+	err := s.browserServer.Tab(srv)
 	s.interruptDraw()
-	return res, err
+	return err
 }
 
 // Split satisfies browserrpc.BrowserServer

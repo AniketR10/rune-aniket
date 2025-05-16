@@ -58,13 +58,9 @@ message FloatingWindowRequest {
 }
 
 message TabRequest {
-	string channel_id = 1;
-    string resource_id = 2;
-    string resource_name = 3;
-    string resource_icon = 4;
-}
-
-message TabResponse {
+    string resource_id = 1;
+    string resource_name = 2;
+    string resource_icon = 3;
 }
 
 message FocusRequest {
@@ -99,7 +95,7 @@ service WindowManager {
 	rpc Split(stream SplitWindowMessage) returns (stream handler.ServerMessage) {};
 	rpc Bar(stream BarMessage) returns (stream handler.ServerMessage) {};
 	rpc Floating(stream FloatingWindowMessage) returns (stream handler.ServerMessage) {};
-	rpc Tab(TabRequest) returns (TabResponse);
+	rpc Tab(stream TabMessage) returns (stream handler.ServerMessage);
 	rpc SetContent(stream WindowSetContentMessage) returns (stream handler.ServerMessage) {};
 	rpc CloseWindow(WindowCloseRequest) returns (WindowCloseResponse);
 }
@@ -180,4 +176,18 @@ message WindowSetContentMessage {
 	handler.ResizeStreamResponse resize = 9;
 
 	WindowSetContentRequest request = 10;
+}
+
+message TabMessage {
+	handler.MessageType type = 1;
+	handler.DrawStreamResponse draw = 2;
+	handler.HandleStreamResponse handle = 3;
+	handler.ManStreamResponse man = 4;
+	handler.CloseStreamResponse close = 5;
+	handler.CursorStreamResponse cursor = 6;
+	handler.SelectionStreamResponse selection = 7;
+	handler.DimensionsStreamResponse dimensions = 8;
+	handler.ResizeStreamResponse resize = 9;
+
+	TabRequest request = 10;
 }

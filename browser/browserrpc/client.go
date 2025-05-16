@@ -40,7 +40,6 @@ import (
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/notifications"
-	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/handlerrpc"
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term"
@@ -48,22 +47,6 @@ import (
 )
 
 var _ browserapi.Browser = (*Client)(nil)
-
-const closedCopy = `
-          ___
-         /___/\_               
-        _\   \/_/\__           
-      __\       \/_/\          
-      \   __    __ \ \         
-     __\  \_\   \_\ \ \   __   
-    /_/\\   __   __  \ \_/_/\  
-    \_\/_\__\/\__\/\__\/_\_\/  
-       \_\/_/\       /_\_\/    
-          \_\/       \_\/      
-    
-
-Oops! This should not be here.
-`
 
 // Client satisfies Browser by talking to a browser server over RPC.
 type Client struct {
@@ -78,30 +61,6 @@ type Client struct {
 	clientCancelCtx func()
 }
 
-type browserClientHandler struct {
-	browserapi.Handler
-	srv    rpc.MuxServer
-	cancel func()
-}
-
-func (c *browserClientHandler) Close() error {
-	go func() {
-		// cancel calls Stop, so wait until we are done
-		defer c.cancel()
-		c.srv.GracefulStop()
-	}()
-	err := c.Handler.Close()
-	// avoid cyclical references preventing
-	// runtime finalizers from running
-	c.Handler = browserapi.NopFloatingHandler(
-		handler.NopFloatingHandler(component.NewString(closedCopy)))
-	return err
-}
-
-func (c *browserClientHandler) Dimensions() (width, height int) {
-	return c.Handler.(browserapi.Floating).Dimensions()
-}
-
 // NewClient allocates storage for a new Client and initializes it.
 func NewClient(
 	ctx context.Context, broker rpc.MuxBroker, cc grpc.ClientConnInterface,
@@ -110,13 +69,6 @@ func NewClient(
 	ret.Init(ctx, broker, cc)
 	runtime.SetFinalizer(ret, func(c *Client) { c.Close() })
 	return ret
-}
-
-func (c *Client) log(level log.Level, msg string, args ...interface{}) {
-	if !log.IsLevelEnabled(level) {
-		return
-	}
-	log.WithField(logging.KeyClass, "browser.Client").Logf(level, msg, args...)
 }
 
 // Init initializes this Client with broker and client.
@@ -431,26 +383,43 @@ func (c *Client) Floating(
 func (c *Client) Tab(
 	uri workspaceapi.URI, icon rune, name string, h browserapi.Handler,
 ) (browserapi.Handler, error) {
-	channelID, srv, err := serveHandler(c.clientCtx, c.broker, h)
+	if _, ok := h.(Token); ok {
+		return nil, errors.New("cannot create a tab from a remote resource")
+	}
+	stream, err := c.wm.Tab(c.clientCtx)
 	if err != nil {
-		return nil, fmt.Errorf("serve handler: %w", err)
+		return nil, fmt.Errorf("new floating stream: %w", err)
 	}
 	uriStr := uri.String()
 	req := TabRequest{
-		ChannelId:    channelID,
 		ResourceId:   uriStr,
 		ResourceName: name,
 		ResourceIcon: string(icon),
 	}
-	ctx := context.Background()
-	_, err = c.wm.Tab(ctx, &req)
-	runtime.KeepAlive(c)
-	if err != nil {
-		if srv != nil {
-			srv.Stop()
-		}
-		return nil, err
+	sendMsg := TabMessage{
+		Type:    handlerrpc.MessageType_Request,
+		Request: &req,
 	}
+
+	if err := stream.SendMsg(&sendMsg); err != nil {
+		return nil, fmt.Errorf("send floating request: %w", err)
+	}
+
+	var recvMsg handlerrpc.ServerMessage
+	if err := stream.RecvMsg(&recvMsg); err != nil {
+		return nil, fmt.Errorf("recv floating response: %w", err)
+	}
+
+	if recvMsg.GetResponse() == nil {
+		return nil, fmt.Errorf("recv nil floating response: %v", &recvMsg)
+	}
+
+	server := handlerrpc.NewServerStream(stream, h, func() *TabMessage {
+		return new(TabMessage)
+	})
+	go server.ReceiveMessages()
+
+	runtime.KeepAlive(c)
 	return Token{URI: uriStr}, err
 }
 
@@ -469,43 +438,11 @@ func (c *Client) Close() (err error) {
 	return
 }
 
-func serveHandler(
-	ctx context.Context, broker rpc.MuxBroker, h browserapi.Handler,
-) (channelID string, srv rpc.MuxServer, err error) {
-	if h == nil {
-		panic("passed nil Handler to browser client")
+func (c *Client) log(level log.Level, msg string, args ...interface{}) {
+	if !log.IsLevelEnabled(level) {
+		return
 	}
-	tokenHandler, ok := h.(Token)
-	if ok {
-		channelID = tokenHandler.URI
-	} else {
-		// cancel if close is called before client context is done
-		ctx, cancel := context.WithCancel(ctx)
-		ctxWg := rpc.WaitGroupFromContext(ctx)
-		channelID, err = rpc.AcceptAndServeChannel(ctx, broker,
-			func(channelID string, msrv rpc.MuxServer) {
-				ctxWg.Add(1)
-				srv = msrv
-				h = &browserClientHandler{
-					Handler: h,
-					srv:     srv,
-					cancel:  cancel,
-				}
-				hsrv := handlerrpc.NewServer(h)
-				handlerrpc.RegisterHandlerServer(srv.Registrar(), hsrv)
-			}, "browser", "client", "handler")
-		if err != nil {
-			return
-		}
-		go func(ctx context.Context) {
-			defer ctxWg.Done()
-			// do not reference Client so finalizer can still run
-			<-ctx.Done()
-			srv.Stop()
-		}(ctx)
-	}
-
-	return
+	log.WithField(logging.KeyClass, "browser.Client").Logf(level, msg, args...)
 }
 
 func toProtoOrientation(o browserapi.Orientation) Orientation {

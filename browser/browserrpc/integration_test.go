@@ -37,6 +37,7 @@ import (
 	"google.golang.org/grpc"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/api/browserapi"
+	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/browser/browsertest"
 	"unstable.build/go-tui/component"
@@ -215,4 +216,42 @@ func TestClientServerIntegrationBar(t *testing.T) {
 			require.NoError(t, err)
 		})
 	}
+}
+
+func TestClientServerIntegrationTab(t *testing.T) {
+	defer goleak.VerifyNone(t)
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mock := browsertest.NewMockBrowser(ctrl)
+	client, cleanup := newClientServerIntegration(t, mock)
+	defer cleanup()
+
+	expectedURI, err := workspaceapi.ParseURI("ABV://SanCarlos@2017/BlueLime")
+	require.NoError(t, err)
+	expectedIcon := 'X'
+	expectedName := "Linduro"
+
+	mock.EXPECT().Resource(gomock.Any()).Return(browsertest.NewTestHandler(), true)
+	mock.EXPECT().Tab(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		DoAndReturn(func(
+			uri workspaceapi.URI, icon rune, name string, h browserapi.Handler,
+		) (browserapi.Handler, error) {
+			assert.Equal(t, expectedURI, uri)
+			assert.Equal(t, expectedIcon, icon)
+			assert.Equal(t, expectedName, name)
+			return browsertest.NewTestHandler(), nil
+		})
+	tab, err := client.Tab(expectedURI, expectedIcon,
+		expectedName, browsertest.NewTestHandler())
+	require.NoError(t, err)
+
+	win1 := browsertest.NopWindow()
+	mock.EXPECT().Focus().Return(win1, nil)
+
+	win, err := client.Focus()
+	require.NoError(t, err)
+
+	mock.EXPECT().Window(gomock.Any()).Return(win1, true).AnyTimes()
+	require.NoError(t, client.SetWindowContent(win, tab))
 }
