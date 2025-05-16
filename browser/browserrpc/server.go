@@ -217,27 +217,41 @@ func (s *Server) Split(srv WindowManager_SplitServer) error {
 }
 
 // Bar satisfies BrowserServer
-func (s *Server) Bar(
-	ctx context.Context, req *BarRequest,
-) (*BarResponse, error) {
-	handlerID := req.GetChannelId()
-	handler, err := s.getContentHandler(ctx, handlerID, "browserrpc.Server", "bar")
+func (s *Server) Bar(srv WindowManager_BarServer) error {
+	msg, err := srv.Recv()
 	if err != nil {
-		return nil, err
+		return fmt.Errorf("receive bar request: %w", err)
 	}
+	req := msg.GetRequest()
+	if msg.GetType() != handlerrpc.MessageType_Request || req == nil {
+		return errors.New("receive bar request: missing request")
+	}
+	client := handlerrpc.NewClientStream(s.serverCtx, srv,
+		func() *BarMessage {
+			return new(BarMessage)
+		})
 
 	cfg := browserapi.BarConfig{}
 	cfg.Orientation = protoToModelOrientation(req.GetOrientation())
 	cfg.Size = int(req.GetSize())
 	cfg.Frame = protoToModelBarFrame(req.GetFrame())
 
+	streamHandler := &streamHandler{mu: s.browser, Handler: client}
+
 	s.browser.Lock()
-	defer s.browser.Unlock()
-	err = s.browser.Bar(cfg, handler)
+	err = s.browser.Bar(cfg, streamHandler)
+	s.browser.Unlock()
 	if err != nil {
-		return nil, err
+		return err
 	}
-	return new(BarResponse), nil
+	resp := handlerrpc.InstallResourceResponse{}
+	respMsg := handlerrpc.ServerMessage{Response: &resp}
+	if err := srv.SendMsg(&respMsg); err != nil {
+		return fmt.Errorf("send bar install response: %w", err)
+	}
+
+	streamHandler.doneSetup()
+	return client.ReceiveMessages(0)
 }
 
 // Notify satisfies BrowserServer

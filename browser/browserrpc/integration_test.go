@@ -35,6 +35,7 @@ import (
 	"go.uber.org/goleak"
 	gomock "go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
+	"unstable.build/go-tui"
 	"unstable.build/go-tui/api/browserapi"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/browser/browsertest"
@@ -164,6 +165,54 @@ func TestClientServerIntegrationSplit(t *testing.T) {
 			mock.EXPECT().Window(gomock.Any()).Return(win1, true).AnyTimes()
 			require.NoError(t, client.SetWindowContent(resWin1, browsertest.NewTestHandler()))
 			require.NoError(t, client.CloseWindow(resWin1))
+		})
+	}
+}
+
+func TestClientServerIntegrationBar(t *testing.T) {
+	tsuite := []browserapi.BarConfig{
+		{Orientation: browserapi.OrientationDefault, Frame: browserapi.BarFrameAlways, Size: 1},
+		{Orientation: browserapi.OrientationTop, Frame: browserapi.BarFrameAlways, Size: 1},
+		{Orientation: browserapi.OrientationBottom, Frame: browserapi.BarFrameAlways, Size: 1},
+		{Orientation: browserapi.OrientationLeft, Frame: browserapi.BarFrameAlways, Size: 1},
+		{Orientation: browserapi.OrientationRight, Frame: browserapi.BarFrameAlways, Size: 1},
+		{Orientation: browserapi.OrientationDefault, Frame: browserapi.BarFrameDefault, Size: 1},
+		{Orientation: browserapi.OrientationTop, Frame: browserapi.BarFrameDefault, Size: 1},
+		{Orientation: browserapi.OrientationBottom, Frame: browserapi.BarFrameDefault, Size: 1},
+		{Orientation: browserapi.OrientationLeft, Frame: browserapi.BarFrameDefault, Size: 1},
+		{Orientation: browserapi.OrientationRight, Frame: browserapi.BarFrameDefault, Size: 1},
+		{Orientation: browserapi.OrientationDefault, Frame: browserapi.BarFrameNever, Size: 1},
+		{Orientation: browserapi.OrientationTop, Frame: browserapi.BarFrameNever, Size: 1},
+		{Orientation: browserapi.OrientationBottom, Frame: browserapi.BarFrameNever, Size: 1},
+		{Orientation: browserapi.OrientationLeft, Frame: browserapi.BarFrameNever, Size: 1},
+		{Orientation: browserapi.OrientationRight, Frame: browserapi.BarFrameNever, Size: 1},
+	}
+
+	for _, _tcase := range tsuite {
+		tcase := _tcase
+		t.Run(fmt.Sprintf("%+v", tcase), func(t *testing.T) {
+			defer goleak.VerifyNone(t)
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			mock := browsertest.NewMockBrowser(ctrl)
+			client, cleanup := newClientServerIntegration(t, mock)
+			defer cleanup()
+
+			win1 := browsertest.NopWindow()
+
+			mock.EXPECT().Window(gomock.Any()).Return(win1, true).AnyTimes()
+			mock.EXPECT().Bar(gomock.Any(), gomock.Any()).
+				DoAndReturn(func(
+					config browserapi.BarConfig, h tui.Handler,
+				) error {
+					assert.Equal(t, tcase.Orientation, config.Orientation)
+					assert.Equal(t, tcase.Frame, config.Frame)
+					assert.Equal(t, tcase.Size, config.Size)
+					return nil
+				})
+			err := client.Bar(tcase, browsertest.NewTestHandler())
+			require.NoError(t, err)
 		})
 	}
 }

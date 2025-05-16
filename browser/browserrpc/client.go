@@ -38,7 +38,6 @@ import (
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/api/browserapi"
 	"unstable.build/go-tui/api/workspaceapi"
-	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/handler"
@@ -234,25 +233,46 @@ func (c *Client) Split(
 
 // Bar satisfies Browser.
 func (c *Client) Bar(config browserapi.BarConfig, h tui.Handler) error {
-	channelID, srv, err := serveHandler(c.clientCtx, c.broker, browser.NopHandler(h))
-	if err != nil {
-		return fmt.Errorf("serve handler: %w", err)
+	if _, ok := h.(Token); ok {
+		return errors.New("cannot install a resource handler as a bar")
 	}
+
+	stream, err := c.wm.Bar(c.clientCtx)
+	if err != nil {
+		return fmt.Errorf("new bar stream: %w", err)
+	}
+
 	req := BarRequest{
-		ChannelId:   channelID,
 		Orientation: toProtoOrientation(config.Orientation),
 		Size:        uint32(config.Size),
 		Frame:       toProtoFrame(config.Frame),
 	}
-	ctx := context.Background()
-	_, err = c.wm.Bar(ctx, &req)
-	runtime.KeepAlive(c)
-	if err != nil {
-		if srv != nil {
-			srv.Stop()
-		}
-		return err
+	sendMsg := BarMessage{
+		Type:    handlerrpc.MessageType_Request,
+		Request: &req,
 	}
+
+	if err := stream.SendMsg(&sendMsg); err != nil {
+		return fmt.Errorf("send bar request: %w", err)
+	}
+
+	var recvMsg handlerrpc.ServerMessage
+	if err := stream.RecvMsg(&recvMsg); err != nil {
+		return fmt.Errorf("recv bar response: %w", err)
+	}
+
+	if recvMsg.GetResponse() == nil {
+		return fmt.Errorf("recv nil bar response: %v", &recvMsg)
+	}
+
+	server := handlerrpc.NewServerStream(
+		stream, 0 /* windowID */, browserapi.NopHandler(h),
+		func() *BarMessage {
+			return new(BarMessage)
+		})
+	go server.ReceiveMessages()
+
+	runtime.KeepAlive(c)
 	return nil
 }
 

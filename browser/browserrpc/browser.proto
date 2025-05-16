@@ -47,13 +47,9 @@ message BarRequest {
 		Always = 1;
 		Never = 2;
 	}
-	string channel_id = 1;
-	Orientation orientation = 2;
-	uint32 size = 3;
-	Frame frame = 4;
-}
-
-message BarResponse {
+	Orientation orientation = 1;
+	uint32 size = 2;
+	Frame frame = 3;
 }
 
 message FloatingWindowRequest {
@@ -101,7 +97,7 @@ service EventPublisher {
 service WindowManager {
 	rpc Focus(FocusRequest) returns (FocusResponse);
 	rpc Split(stream SplitWindowMessage) returns (stream handler.ServerMessage) {};
-	rpc Bar(BarRequest) returns (BarResponse);
+	rpc Bar(stream BarMessage) returns (stream handler.ServerMessage) {};
 	rpc Floating(stream FloatingWindowMessage) returns (stream handler.ServerMessage) {};
 	rpc Tab(TabRequest) returns (TabResponse);
 	rpc SetContent(WindowSetContentRequest) returns (WindowSetContentResponse);
@@ -159,4 +155,18 @@ message SplitWindowMessage {
 	handler.ResizeStreamResponse resize = 9;
 
 	SplitRequest request = 10;
+}
+
+message BarMessage {
+	handler.MessageType type = 1;
+	handler.DrawStreamResponse draw = 2;
+	handler.HandleStreamResponse handle = 3;
+	handler.ManStreamResponse man = 4;
+	handler.CloseStreamResponse close = 5;
+	handler.CursorStreamResponse cursor = 6;
+	handler.SelectionStreamResponse selection = 7;
+	handler.DimensionsStreamResponse dimensions = 8;
+	handler.ResizeStreamResponse resize = 9;
+
+	BarRequest request = 10;
 }

@@ -122,3 +122,51 @@ func (m *SplitWindowMessage) SetDimensions(r *handlerrpc.DimensionsStreamRespons
 	m.Dimensions = r
 	m.Type = handlerrpc.MessageType_Dimensions
 }
+
+// SetDraw satisfies handlerrpc.StreamMessage.
+func (m *BarMessage) SetDraw(r *handlerrpc.DrawStreamResponse) {
+	m.Draw = r
+	m.Type = handlerrpc.MessageType_Draw
+}
+
+// SetResize satisfies handlerrpc.StreamMessage.
+func (m *BarMessage) SetResize(r *handlerrpc.ResizeStreamResponse) {
+	m.Resize = r
+	m.Type = handlerrpc.MessageType_Resize
+}
+
+// SetHandle satisfies handlerrpc.StreamMessage.
+func (m *BarMessage) SetHandle(r *handlerrpc.HandleStreamResponse) {
+	m.Handle = r
+	m.Type = handlerrpc.MessageType_Handle
+}
+
+// SetMan satisfies handlerrpc.StreamMessage.
+func (m *BarMessage) SetMan(r *handlerrpc.ManStreamResponse) {
+	m.Man = r
+	m.Type = handlerrpc.MessageType_Man
+}
+
+// SetClose satisfies handlerrpc.StreamMessage.
+func (m *BarMessage) SetClose(r *handlerrpc.CloseStreamResponse) {
+	m.Close = r
+	m.Type = handlerrpc.MessageType_Close
+}
+
+// SetCursor satisfies handlerrpc.StreamMessage.
+func (m *BarMessage) SetCursor(r *handlerrpc.CursorStreamResponse) {
+	m.Cursor = r
+	m.Type = handlerrpc.MessageType_Cursor
+}
+
+// SetSelection satisfies handlerrpc.StreamMessage.
+func (m *BarMessage) SetSelection(r *handlerrpc.SelectionStreamResponse) {
+	m.Selection = r
+	m.Type = handlerrpc.MessageType_Selection
+}
+
+// SetDimensions satisfies handlerrpc.StreamMessage.
+func (m *BarMessage) SetDimensions(r *handlerrpc.DimensionsStreamResponse) {
+	m.Dimensions = r
+	m.Type = handlerrpc.MessageType_Dimensions
+}

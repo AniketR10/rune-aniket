@@ -91,12 +91,10 @@ func (s *interruptBrowser) Split(srv browserrpc.WindowManager_SplitServer) error
 }
 
 // Bar satisfies browserrpc.BrowserServer
-func (s *interruptBrowser) Bar(
-	ctx context.Context, req *browserrpc.BarRequest,
-) (*browserrpc.BarResponse, error) {
-	res, err := s.browserServer.Bar(ctx, req)
+func (s *interruptBrowser) Bar(srv browserrpc.WindowManager_BarServer) error {
+	err := s.browserServer.Bar(srv)
 	s.interruptDraw()
-	return res, err
+	return err
 }
 
 // Notify satisfies browserrpc.BrowserServer
