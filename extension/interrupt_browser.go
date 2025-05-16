@@ -116,12 +116,10 @@ func (s *interruptBrowser) Open(
 }
 
 // SetContent satisfies browserrpc.BrowserServer
-func (s *interruptBrowser) SetContent(
-	ctx context.Context, req *browserrpc.WindowSetContentRequest,
-) (*browserrpc.WindowSetContentResponse, error) {
-	res, err := s.browserServer.SetContent(ctx, req)
+func (s *interruptBrowser) SetContent(srv browserrpc.WindowManager_SetContentServer) error {
+	err := s.browserServer.SetContent(srv)
 	s.interruptDraw()
-	return res, err
+	return err
 }
 
 // Close satisfies browserrpc.BrowserServer

@@ -322,7 +322,7 @@ type WindowManagerClient interface {
 	Bar(ctx context.Context, opts ...grpc.CallOption) (WindowManager_BarClient, error)
 	Floating(ctx context.Context, opts ...grpc.CallOption) (WindowManager_FloatingClient, error)
 	Tab(ctx context.Context, in *TabRequest, opts ...grpc.CallOption) (*TabResponse, error)
-	SetContent(ctx context.Context, in *WindowSetContentRequest, opts ...grpc.CallOption) (*WindowSetContentResponse, error)
+	SetContent(ctx context.Context, opts ...grpc.CallOption) (WindowManager_SetContentClient, error)
 	CloseWindow(ctx context.Context, in *WindowCloseRequest, opts ...grpc.CallOption) (*WindowCloseResponse, error)
 }
 
@@ -445,13 +445,35 @@ func (c *windowManagerClient) Tab(ctx context.Context, in *TabRequest, opts ...g
 	return out, nil
 }
 
-func (c *windowManagerClient) SetContent(ctx context.Context, in *WindowSetContentRequest, opts ...grpc.CallOption) (*WindowSetContentResponse, error) {
-	out := new(WindowSetContentResponse)
-	err := c.cc.Invoke(ctx, "/browser.WindowManager/SetContent", in, out, opts...)
+func (c *windowManagerClient) SetContent(ctx context.Context, opts ...grpc.CallOption) (WindowManager_SetContentClient, error) {
+	stream, err := c.cc.NewStream(ctx, &WindowManager_ServiceDesc.Streams[3], "/browser.WindowManager/SetContent", opts...)
 	if err != nil {
 		return nil, err
 	}
-	return out, nil
+	x := &windowManagerSetContentClient{stream}
+	return x, nil
+}
+
+type WindowManager_SetContentClient interface {
+	Send(*WindowSetContentMessage) error
+	Recv() (*handlerrpc.ServerMessage, error)
+	grpc.ClientStream
+}
+
+type windowManagerSetContentClient struct {
+	grpc.ClientStream
+}
+
+func (x *windowManagerSetContentClient) Send(m *WindowSetContentMessage) error {
+	return x.ClientStream.SendMsg(m)
+}
+
+func (x *windowManagerSetContentClient) Recv() (*handlerrpc.ServerMessage, error) {
+	m := new(handlerrpc.ServerMessage)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
 }
 
 func (c *windowManagerClient) CloseWindow(ctx context.Context, in *WindowCloseRequest, opts ...grpc.CallOption) (*WindowCloseResponse, error) {
@@ -472,7 +494,7 @@ type WindowManagerServer interface {
 	Bar(WindowManager_BarServer) error
 	Floating(WindowManager_FloatingServer) error
 	Tab(context.Context, *TabRequest) (*TabResponse, error)
-	SetContent(context.Context, *WindowSetContentRequest) (*WindowSetContentResponse, error)
+	SetContent(WindowManager_SetContentServer) error
 	CloseWindow(context.Context, *WindowCloseRequest) (*WindowCloseResponse, error)
 	mustEmbedUnimplementedWindowManagerServer()
 }
@@ -496,8 +518,8 @@ func (UnimplementedWindowManagerServer) Floating(WindowManager_FloatingServer) e
 func (UnimplementedWindowManagerServer) Tab(context.Context, *TabRequest) (*TabResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Tab not implemented")
 }
-func (UnimplementedWindowManagerServer) SetContent(context.Context, *WindowSetContentRequest) (*WindowSetContentResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method SetContent not implemented")
+func (UnimplementedWindowManagerServer) SetContent(WindowManager_SetContentServer) error {
+	return status.Errorf(codes.Unimplemented, "method SetContent not implemented")
 }
 func (UnimplementedWindowManagerServer) CloseWindow(context.Context, *WindowCloseRequest) (*WindowCloseResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CloseWindow not implemented")
@@ -629,22 +651,30 @@ func _WindowManager_Tab_Handler(srv interface{}, ctx context.Context, dec func(i
 	return interceptor(ctx, in, info, handler)
 }
 
-func _WindowManager_SetContent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(WindowSetContentRequest)
-	if err := dec(in); err != nil {
+func _WindowManager_SetContent_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(WindowManagerServer).SetContent(&windowManagerSetContentServer{stream})
+}
+
+type WindowManager_SetContentServer interface {
+	Send(*handlerrpc.ServerMessage) error
+	Recv() (*WindowSetContentMessage, error)
+	grpc.ServerStream
+}
+
+type windowManagerSetContentServer struct {
+	grpc.ServerStream
+}
+
+func (x *windowManagerSetContentServer) Send(m *handlerrpc.ServerMessage) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func (x *windowManagerSetContentServer) Recv() (*WindowSetContentMessage, error) {
+	m := new(WindowSetContentMessage)
+	if err := x.ServerStream.RecvMsg(m); err != nil {
 		return nil, err
 	}
-	if interceptor == nil {
-		return srv.(WindowManagerServer).SetContent(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/browser.WindowManager/SetContent",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(WindowManagerServer).SetContent(ctx, req.(*WindowSetContentRequest))
-	}
-	return interceptor(ctx, in, info, handler)
+	return m, nil
 }
 
 func _WindowManager_CloseWindow_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -681,10 +711,6 @@ var WindowManager_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _WindowManager_Tab_Handler,
 		},
 		{
-			MethodName: "SetContent",
-			Handler:    _WindowManager_SetContent_Handler,
-		},
-		{
 			MethodName: "CloseWindow",
 			Handler:    _WindowManager_CloseWindow_Handler,
 		},
@@ -705,6 +731,12 @@ var WindowManager_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "Floating",
 			Handler:       _WindowManager_Floating_Handler,
+			ServerStreams: true,
+			ClientStreams: true,
+		},
+		{
+			StreamName:    "SetContent",
+			Handler:       _WindowManager_SetContent_Handler,
 			ServerStreams: true,
 			ClientStreams: true,
 		},

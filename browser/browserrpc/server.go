@@ -46,10 +46,6 @@ import (
 	"unstable.build/go-tui/rpc"
 )
 
-var (
-	errWindowNotFound = errors.New("window with id not found or already closed")
-)
-
 const (
 	defaultFailureTimeout = 5 * time.Second
 )
@@ -430,32 +426,59 @@ func (s *Server) Tab(ctx context.Context, req *TabRequest,
 }
 
 // SetContent satisfies BrowserServer.
-func (s *Server) SetContent(
-	ctx context.Context, req *WindowSetContentRequest,
-) (*WindowSetContentResponse, error) {
-	client, err := s.getContentHandler(ctx, req.GetChannelId(),
-		"browserrpc.Server", "setContent")
+func (s *Server) SetContent(srv WindowManager_SetContentServer) error {
+	msg, err := srv.Recv()
 	if err != nil {
-		return nil, fmt.Errorf("failed to dial to remote handler: %v", err)
+		return fmt.Errorf("receive initial request: %w", err)
+	}
+	req := msg.GetRequest()
+	if msg.GetType() != handlerrpc.MessageType_Request || req == nil {
+		return errors.New("receive initial request: missing request")
+	}
+	inWin, ok := s.browser.Window(req.GetWindowId())
+	if !ok {
+		return fmt.Errorf("cannot find window with windowID: %d", req.GetWindowId())
+	}
+	if inWin.Closed() {
+		return fmt.Errorf("cannot set content to a closed window: %d", req.GetWindowId())
+	}
+
+	uri := req.GetUri()
+
+	var handler browserapi.Handler
+	var client *handlerrpc.ClientStream[*WindowSetContentMessage]
+	if uri == "" {
+		client = handlerrpc.NewClientStream(s.serverCtx, srv,
+			func() *WindowSetContentMessage {
+				return new(WindowSetContentMessage)
+			})
+		handler = &streamHandler{mu: s.browser, Handler: client}
+	} else {
+		h, err := s.getResourceHandler(uri)
+		if err != nil {
+			return fmt.Errorf("get resource handler: %w", err)
+		}
+		handler = h
 	}
 
 	s.browser.Lock()
-	defer s.browser.Unlock()
-
-	win, ok := s.browser.Window(req.GetWindowId())
-	if !ok {
-		return nil, errWindowNotFound
-	}
-	if win.Closed() {
-		return nil, fmt.Errorf("cannot split over a closed window: %d",
-			req.GetWindowId())
-	}
-	err = win.SetContent(client)
+	err = inWin.SetContent(handler)
+	s.browser.Unlock()
 	if err != nil {
-		return nil, fmt.Errorf("window set content: %v", err)
+		return fmt.Errorf("window set content: %w", err)
 	}
 
-	return new(WindowSetContentResponse), nil
+	resp := handlerrpc.InstallResourceResponse{}
+	respMsg := handlerrpc.ServerMessage{Response: &resp}
+	if err := srv.SendMsg(&respMsg); err != nil {
+		return fmt.Errorf("send install response: %w", err)
+	}
+
+	if client == nil {
+		return nil
+	}
+	handler.(*streamHandler).doneSetup()
+	return client.ReceiveMessages(0)
 }
 
 // Close satisfies BrowserServer.

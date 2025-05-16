@@ -156,25 +156,51 @@ func (c *Client) CloseWindow(win browserapi.Window) error {
 
 // SetWindowContent satisfies browserapi.Browser.
 func (c *Client) SetWindowContent(win browserapi.Window, h browserapi.Handler) error {
-	channelID, srv, err := serveHandler(c.clientCtx, c.broker, h)
+	stream, err := c.wm.SetContent(c.clientCtx)
 	if err != nil {
-		return fmt.Errorf("serve handler: %w", err)
+		return fmt.Errorf("new set content stream: %w", err)
+	}
+
+	var uri string
+	if token, ok := h.(Token); ok {
+		uri = token.URI
 	}
 	req := WindowSetContentRequest{
-		ChannelId: channelID,
-		WindowId:  win.WindowID(),
+		Uri:      uri,
+		WindowId: win.WindowID(),
 	}
-	ctx := context.Background()
-	_, err = c.wm.SetContent(ctx, &req)
-	if err != nil {
-		if srv != nil {
-			srv.Stop()
-		}
+	sendMsg := WindowSetContentMessage{
+		Type:    handlerrpc.MessageType_Request,
+		Request: &req,
+	}
+	if err := stream.SendMsg(&sendMsg); err != nil {
+		return fmt.Errorf("send set content request: %w", err)
+	}
+
+	var recvMsg handlerrpc.ServerMessage
+	if err := stream.RecvMsg(&recvMsg); err != nil {
 		if strings.Contains(err.Error(), browserapi.ErrTabNotFree.Error()) {
 			return browserapi.ErrTabNotFree
 		}
-		return err
+		return fmt.Errorf("recv set content response: %w", err)
 	}
+
+	if recvMsg.GetResponse() == nil {
+		return fmt.Errorf("recv nil set content response: %v", &recvMsg)
+	}
+
+	if uri != "" {
+		return nil
+	}
+
+	server := handlerrpc.NewServerStream(
+		stream, 0, h,
+		func() *WindowSetContentMessage {
+			return new(WindowSetContentMessage)
+		})
+	go server.ReceiveMessages()
+
+	runtime.KeepAlive(c)
 	return nil
 }
 

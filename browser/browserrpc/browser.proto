@@ -100,7 +100,7 @@ service WindowManager {
 	rpc Bar(stream BarMessage) returns (stream handler.ServerMessage) {};
 	rpc Floating(stream FloatingWindowMessage) returns (stream handler.ServerMessage) {};
 	rpc Tab(TabRequest) returns (TabResponse);
-	rpc SetContent(WindowSetContentRequest) returns (WindowSetContentResponse);
+	rpc SetContent(stream WindowSetContentMessage) returns (stream handler.ServerMessage) {};
 	rpc CloseWindow(WindowCloseRequest) returns (WindowCloseResponse);
 }
 
@@ -113,10 +113,7 @@ message WindowCloseResponse {
 
 message WindowSetContentRequest {
 	uint64 window_id = 1;
-	string channel_id = 2;
-}
-
-message WindowSetContentResponse {
+	string uri = 2;
 }
 
 message DimensionsRequest {}
@@ -169,4 +166,18 @@ message BarMessage {
 	handler.ResizeStreamResponse resize = 9;
 
 	BarRequest request = 10;
+}
+
+message WindowSetContentMessage {
+	handler.MessageType type = 1;
+	handler.DrawStreamResponse draw = 2;
+	handler.HandleStreamResponse handle = 3;
+	handler.ManStreamResponse man = 4;
+	handler.CloseStreamResponse close = 5;
+	handler.CursorStreamResponse cursor = 6;
+	handler.SelectionStreamResponse selection = 7;
+	handler.DimensionsStreamResponse dimensions = 8;
+	handler.ResizeStreamResponse resize = 9;
+
+	WindowSetContentRequest request = 10;
 }
