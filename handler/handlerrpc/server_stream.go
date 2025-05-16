@@ -32,6 +32,8 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/logging"
 	grpc "google.golang.org/grpc"
+	codes "google.golang.org/grpc/codes"
+	status "google.golang.org/grpc/status"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/term"
@@ -47,26 +49,24 @@ type Handler interface {
 // ServerStream implements a tui.Handler (+handler.Floating) server over
 // a grpc.ClientStream.
 type ServerStream[T StreamMessage] struct {
-	windowID int
-	stream   grpc.ClientStream
-	handler  Handler
-	newT     func() T
-	height   atomic.Int32
-	width    atomic.Int32
+	stream  grpc.ClientStream
+	handler Handler
+	newT    func() T
+	height  atomic.Int32
+	width   atomic.Int32
 }
 
 // NewServerStream allocates storage for a new Handler server
 // and initializes it with the given grpc stream, windowID
 // and type parameter constructor.
 func NewServerStream[T StreamMessage](
-	stream grpc.ClientStream, windowID int, handler Handler,
+	stream grpc.ClientStream, handler Handler,
 	newT func() T,
 ) *ServerStream[T] {
 	return &ServerStream[T]{
-		stream:   stream,
-		windowID: windowID,
-		handler:  handler,
-		newT:     newT,
+		stream:  stream,
+		handler: handler,
+		newT:    newT,
 	}
 }
 
@@ -81,7 +81,7 @@ func (c *ServerStream[T]) ReceiveMessages() {
 		var recvMsg ServerMessage
 		err := c.stream.RecvMsg(&recvMsg)
 		if err != nil {
-			if errors.Is(err, io.EOF) {
+			if errors.Is(err, io.EOF) || status.Code(err) == codes.Canceled {
 				c.log(log.DebugLevel, "stream is closing")
 			} else {
 				c.log(log.ErrorLevel, "stream receive: %v", err)
@@ -175,11 +175,15 @@ func (c *ServerStream[T]) ReceiveMessages() {
 			}
 
 		case MessageType_Close:
+			err := c.handler.Close()
+			if err != nil {
+				c.log(log.ErrorLevel, "close handler: %v", err)
+			}
 			var resp CloseStreamResponse
 			sendMsg.SetClose(&resp)
 			err = c.stream.SendMsg(sendMsg)
 			if err != nil {
-				c.log(log.ErrorLevel, "send close stream response", err.Error())
+				c.log(log.ErrorLevel, "send close stream response: %v", err)
 			}
 			c.log(log.TraceLevel, "received close and sent response message")
 			return

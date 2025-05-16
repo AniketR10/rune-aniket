@@ -209,7 +209,7 @@ func (s *Server) Split(srv WindowManager_SplitServer) error {
 		return nil
 	}
 	handler.(*streamHandler).doneSetup()
-	return client.ReceiveMessages(id)
+	return client.ReceiveMessages()
 }
 
 // Bar satisfies BrowserServer
@@ -247,7 +247,7 @@ func (s *Server) Bar(srv WindowManager_BarServer) error {
 	}
 
 	streamHandler.doneSetup()
-	return client.ReceiveMessages(0)
+	return client.ReceiveMessages()
 }
 
 // Notify satisfies BrowserServer
@@ -393,7 +393,7 @@ func (s *Server) Floating(srv WindowManager_FloatingServer) error {
 	}
 
 	streamHandler.setup.Store(true)
-	return client.ReceiveMessages(id)
+	return client.ReceiveMessages()
 }
 
 // Tab satisfies BrowserServer
@@ -468,7 +468,7 @@ func (s *Server) SetContent(srv WindowManager_SetContentServer) error {
 		return fmt.Errorf("window set content: %w", err)
 	}
 
-	resp := handlerrpc.InstallResourceResponse{}
+	resp := handlerrpc.InstallResourceResponse{WindowId: inWin.WindowID()}
 	respMsg := handlerrpc.ServerMessage{Response: &resp}
 	if err := srv.SendMsg(&respMsg); err != nil {
 		return fmt.Errorf("send install response: %w", err)
@@ -478,7 +478,7 @@ func (s *Server) SetContent(srv WindowManager_SetContentServer) error {
 		return nil
 	}
 	handler.(*streamHandler).doneSetup()
-	return client.ReceiveMessages(0)
+	return client.ReceiveMessages()
 }
 
 // Close satisfies BrowserServer.

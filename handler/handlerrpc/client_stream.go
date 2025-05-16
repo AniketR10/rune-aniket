@@ -89,7 +89,6 @@ type ClientStream[T StreamMessage] struct {
 	ctx       context.Context
 	stream    grpc.ServerStream
 	closeChan chan error
-	windowID  uint64
 	closed    atomic.Bool
 	height    atomic.Int32
 	width     atomic.Int32
@@ -111,8 +110,7 @@ func NewClientStream[T StreamMessage](
 
 // ReceiveMessages blocks until all messages have been received and the stream
 // is ready to be closed.
-func (s *ClientStream[T]) ReceiveMessages(windowID uint64) error {
-	s.windowID = windowID
+func (s *ClientStream[T]) ReceiveMessages() error {
 	select {
 	case err := <-s.closeChan:
 		return err

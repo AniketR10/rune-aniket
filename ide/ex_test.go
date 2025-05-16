@@ -424,6 +424,8 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 	require.NoError(t, win.Close())
 	require.NoError(t, focus.Close())
 
+	assert.Equal(t, 1, closed)
+
 	cases = []handlertest.SequenceTestCase{
 		// test CommandKeyBindings
 		{"4$$$",

@@ -194,8 +194,7 @@ func (c *Client) SetWindowContent(win browserapi.Window, h browserapi.Handler) e
 	}
 
 	server := handlerrpc.NewServerStream(
-		stream, 0, h,
-		func() *WindowSetContentMessage {
+		stream, h, func() *WindowSetContentMessage {
 			return new(WindowSetContentMessage)
 		})
 	go server.ReceiveMessages()
@@ -247,8 +246,7 @@ func (c *Client) Split(
 	}
 
 	server := handlerrpc.NewServerStream[*SplitWindowMessage](
-		stream, windowID, h,
-		func() *SplitWindowMessage {
+		stream, h, func() *SplitWindowMessage {
 			return new(SplitWindowMessage)
 		})
 	go server.ReceiveMessages()
@@ -292,8 +290,7 @@ func (c *Client) Bar(config browserapi.BarConfig, h tui.Handler) error {
 	}
 
 	server := handlerrpc.NewServerStream(
-		stream, 0 /* windowID */, browserapi.NopHandler(h),
-		func() *BarMessage {
+		stream, browserapi.NopHandler(h), func() *BarMessage {
 			return new(BarMessage)
 		})
 	go server.ReceiveMessages()
@@ -421,8 +418,7 @@ func (c *Client) Floating(
 
 	windowID := int(recvMsg.GetResponse().GetWindowId())
 	server := handlerrpc.NewServerStream[*FloatingWindowMessage](
-		stream, windowID, h,
-		func() *FloatingWindowMessage {
+		stream, h, func() *FloatingWindowMessage {
 			return new(FloatingWindowMessage)
 		})
 	go server.ReceiveMessages()

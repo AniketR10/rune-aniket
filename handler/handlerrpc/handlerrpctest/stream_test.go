@@ -246,7 +246,7 @@ func (t *testServer) TestStream(srv TestService_TestStreamServer) error {
 		return fmt.Errorf("send install response: %w", err)
 	}
 
-	return t.client.ReceiveMessages(t.windowID)
+	return t.client.ReceiveMessages()
 }
 
 func setupIntTest(t *testing.T, mock handlerrpc.Handler) (
@@ -263,7 +263,7 @@ func setupIntTest(t *testing.T, mock handlerrpc.Handler) (
 	require.NoError(t, err)
 
 	server := handlerrpc.NewServerStream[*TestMessage](serverStream,
-		windowID, mock, func() *TestMessage { return new(TestMessage) })
+		mock, func() *TestMessage { return new(TestMessage) })
 
 	req := TestRequest{}
 	sendMsg := TestMessage{
