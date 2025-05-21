@@ -125,7 +125,7 @@ func (c *Client) Init(
 	if !ok {
 		ctx = rpc.ContextWithWaitGroup(ctx, new(sync.WaitGroup))
 	}
-	c.browser = browserrpc.NewClient(ctx, broker, cc)
+	c.browser = browserrpc.NewClient(ctx, cc)
 	c.clientCtx, c.clientCancelCtx = context.WithCancel(ctx)
 }
 

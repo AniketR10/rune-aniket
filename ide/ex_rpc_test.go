@@ -140,7 +140,7 @@ func newTestRPCBrowser(t *testing.T,
 
 		var serverMutex sync.Mutex
 		grpcServer := grpc.NewServer()
-		server := browserrpc.NewServer(broker, ex.Browser(), &serverMutex)
+		server := browserrpc.NewServer(ex.Browser(), &serverMutex)
 		server.SetSyncMode()
 		browserrpc.RegisterWindowManagerServer(grpcServer, server)
 		browserrpc.RegisterNotificationsServer(grpcServer, server)
@@ -151,7 +151,7 @@ func newTestRPCBrowser(t *testing.T,
 		conn, err := grpc.Dial(lis.Addr().String(), grpc.WithInsecure())
 		require.NoError(t, err)
 
-		bc := browserrpc.NewClient(context.Background(), broker, conn)
+		bc := browserrpc.NewClient(context.Background(), conn)
 		h := &safeHandler{Handler: ex, mu: &serverMutex}
 		*destructor = func() {
 			serverMutex.Lock()

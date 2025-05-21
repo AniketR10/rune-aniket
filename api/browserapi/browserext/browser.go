@@ -41,7 +41,7 @@ func dialBrowser(ctx context.Context, grant extension.Grant, broker rpc.MuxBroke
 	if err != nil {
 		return nil, err
 	}
-	c := browserrpc.NewClient(grant.Context, broker, conn)
+	c := browserrpc.NewClient(grant.Context, conn)
 	return c, nil
 }
 

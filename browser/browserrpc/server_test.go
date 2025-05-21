@@ -36,7 +36,6 @@ import (
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/browser/browsertest"
 	"unstable.build/go-tui/component/notifications"
-	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term"
 	termrpc "unstable.build/go-tui/term/termrpc"
 )
@@ -47,20 +46,19 @@ func newServerWithNoBroker(ctrl *gomock.Controller) (
 	*Server, *browsertest.MockBrowser,
 ) {
 	mock := browsertest.NewMockBrowser(ctrl)
-	s := NewServer(nil, mock, new(sync.Mutex))
+	s := NewServer(mock, new(sync.Mutex))
 	s.SetSyncMode()
 	return s, mock
 }
 
 func newTestServer(ctrl *gomock.Controller, mu *sync.Mutex) (
-	*Server, *browsertest.MockBrowser, *rpc.MockMuxBroker,
+	*Server, *browsertest.MockBrowser,
 ) {
 	mockBrowser := browsertest.NewMockBrowser(ctrl)
-	mockBroker := rpc.NewMockMuxBroker(ctrl)
-	s := NewServer(mockBroker, mockBrowser, mu)
+	s := NewServer(mockBrowser, mu)
 	s.SetSyncMode()
 
-	return s, mockBrowser, mockBroker
+	return s, mockBrowser
 }
 
 func TestServerNotify(t *testing.T) {
@@ -98,7 +96,7 @@ func TestServerOpen(t *testing.T) {
 	t.Run("delegates Open to underlying Browser", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
-		s, mock, _ := newTestServer(ctrl, new(sync.Mutex))
+		s, mock := newTestServer(ctrl, new(sync.Mutex))
 		uri, err := workspaceapi.ParseURI("file:///tmp/coronavirus.sql")
 		require.NoError(t, err)
 
@@ -114,7 +112,7 @@ func TestServerOpen(t *testing.T) {
 	t.Run("bubbles up Open Browser error", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
-		s, mock, _ := newTestServer(ctrl, new(sync.Mutex))
+		s, mock := newTestServer(ctrl, new(sync.Mutex))
 
 		mock.EXPECT().Open(gomock.Any()).Return(nil, errors.New("oopsie daisy"))
 
@@ -132,7 +130,7 @@ func TestServerPublish(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 		var mu sync.Mutex
-		s, mock, _ := newTestServer(ctrl, &mu)
+		s, mock := newTestServer(ctrl, &mu)
 		req := PublishRequest{Ev: &termrpc.Event{Type: termrpc.Event_TypeInterrupt}}
 
 		mock.EXPECT().PublishEvent(gomock.Eq(term.Event{Type: term.EventInterrupt})).Times(1)
@@ -146,7 +144,7 @@ func TestServerPublish(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 		var mu sync.Mutex
-		s, mock, _ := newTestServer(ctrl, &mu)
+		s, mock := newTestServer(ctrl, &mu)
 		req := PublishRequest{Ev: &termrpc.Event{Type: termrpc.Event_TypeNone}}
 
 		mock.EXPECT().PublishEvent(gomock.Eq(term.Event{Type: term.EventNone})).Times(1)
@@ -160,7 +158,7 @@ func TestServerPublish(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 		var mu sync.Mutex
-		s, mock, _ := newTestServer(ctrl, &mu)
+		s, mock := newTestServer(ctrl, &mu)
 		req := PublishRequest{Ev: &termrpc.Event{Type: termrpc.Event_TypeInterrupt}}
 
 		mock.EXPECT().PublishEvent(gomock.Any()).Return(errors.New("uRock"))
@@ -174,7 +172,7 @@ func TestServerPublish(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 		var mu sync.Mutex
-		s, mock, _ := newTestServer(ctrl, &mu)
+		s, mock := newTestServer(ctrl, &mu)
 		req := PublishRequest{Ev: &termrpc.Event{Type: termrpc.Event_TypeNone}}
 
 		mock.EXPECT().PublishEvent(gomock.Any()).Return(errors.New("uRock"))

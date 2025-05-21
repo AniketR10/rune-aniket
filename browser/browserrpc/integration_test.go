@@ -41,7 +41,6 @@ import (
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/browser/browsertest"
 	"unstable.build/go-tui/component"
-	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term"
 )
 
@@ -50,11 +49,10 @@ func newClientServerIntegration(
 ) (*Client, func()) {
 	lis, err := net.Listen("tcp", ":0")
 	require.NoError(t, err)
-	broker := rpc.NewUnixGRPCBroker("", "", "")
 	mutex := new(sync.Mutex)
 
 	grpcServer := grpc.NewServer()
-	rpcServer := NewServer(broker, h, mutex)
+	rpcServer := NewServer(h, mutex)
 	rpcServer.SetSyncMode()
 	RegisterWindowManagerServer(grpcServer, rpcServer)
 	RegisterResourceOpenerServer(grpcServer, rpcServer)
@@ -66,7 +64,7 @@ func newClientServerIntegration(
 	conn, err := grpc.Dial(lis.Addr().String(), grpc.WithInsecure())
 	require.NoError(t, err)
 
-	client := NewClient(context.Background(), broker, conn)
+	client := NewClient(context.Background(), conn)
 
 	closeFn := func() {
 		client.Close()

@@ -42,7 +42,6 @@ import (
 	"unstable.build/go-tui/component/notifications"
 
 	"unstable.build/go-tui/handler/handlerrpc"
-	"unstable.build/go-tui/rpc"
 )
 
 // Server serves a Browser over GRPC.
@@ -52,7 +51,6 @@ type Server struct {
 	UnimplementedResourceOpenerServer
 	UnimplementedWindowManagerServer
 
-	broker   rpc.MuxBroker
 	syncMode bool
 
 	browser struct {
@@ -65,19 +63,14 @@ type Server struct {
 }
 
 // NewServer allocates storage for a new Server and initializes it.
-func NewServer(
-	broker rpc.MuxBroker, browser browser.Browser, lock sync.Locker,
-) *Server {
+func NewServer(browser browser.Browser, lock sync.Locker) *Server {
 	ret := new(Server)
-	ret.Init(broker, browser, lock)
+	ret.Init(browser, lock)
 	return ret
 }
 
-// Init initializes this Server with broker and browser.
-func (s *Server) Init(
-	broker rpc.MuxBroker, browser browser.Browser, lock sync.Locker,
-) {
-	s.broker = broker
+// Init initializes this Server with the given browser impl and locker.
+func (s *Server) Init(browser browser.Browser, lock sync.Locker) {
 	s.browser.Browser = browser
 	s.browser.Locker = lock
 	s.serverCtx, s.serverCancelCtx = context.WithCancel(context.Background())

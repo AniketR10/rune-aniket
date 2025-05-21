@@ -70,11 +70,9 @@ func assertNoLeaks(t *testing.T) {
 func newMockedClient(ctrl *gomock.Controller) (
 	client *Client,
 	mockCC *rpc.MockClientConnInterface,
-	mockMux *rpc.MockMuxBroker,
 ) {
 	mockCC = rpc.NewMockClientConnInterface(ctrl)
-	mockMux = rpc.NewMockMuxBroker(ctrl)
-	client = NewClient(context.Background(), mockMux, mockCC)
+	client = NewClient(context.Background(), mockCC)
 	return
 }
 
@@ -104,7 +102,7 @@ func TestClientNotify(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		client, mockCC, _ := newMockedClient(ctrl)
+		client, mockCC := newMockedClient(ctrl)
 
 		myMsg, arg1, arg2 := "oh la la: %s %d", "obla di obla da", 5
 		in := &NotifyRequest{Level: uint32(notifications.LevelWarn), Msg: fmt.Sprintf(myMsg, arg1, arg2)}
@@ -123,7 +121,7 @@ func TestClientNotify(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		client, mockCC, _ := newMockedClient(ctrl)
+		client, mockCC := newMockedClient(ctrl)
 
 		expectInvokeError(mockCC)
 
@@ -147,7 +145,7 @@ func TestClientOpen(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		client, mockCC, _ := newMockedClient(ctrl)
+		client, mockCC := newMockedClient(ctrl)
 
 		myResource, err := workspaceapi.ParseURI("file:///fjkelwjfeklw")
 		require.NoError(t, err)
@@ -162,7 +160,7 @@ func TestClientOpen(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		client, mockCC, _ := newMockedClient(ctrl)
+		client, mockCC := newMockedClient(ctrl)
 
 		expectInvokeError(mockCC)
 
@@ -192,7 +190,7 @@ func TestClientPublish(t *testing.T) {
 				ctrl := gomock.NewController(t)
 				defer ctrl.Finish()
 
-				client, mockCC, _ := newMockedClient(ctrl)
+				client, mockCC := newMockedClient(ctrl)
 				mockCC.EXPECT().
 					Invoke(gomock.Any(),
 						gomock.Eq("/browser.EventPublisher/Publish"),
@@ -209,7 +207,7 @@ func TestClientPublish(t *testing.T) {
 				ctrl := gomock.NewController(t)
 				defer ctrl.Finish()
 
-				client, mockCC, _ := newMockedClient(ctrl)
+				client, mockCC := newMockedClient(ctrl)
 				ev := tcase.ev
 				in := &PublishRequest{Ev: ev}
 				out := new(PublishResponse)

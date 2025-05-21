@@ -97,7 +97,7 @@ func setupWmIntTest(
 	conn, closeFn := doSetupIntTest(t, broker, func(grpcServer *grpc.Server) {
 		browserrpc.RegisterWindowManagerServer(grpcServer, s)
 	})
-	client := browserrpc.NewClient(context.Background(), broker, conn)
+	client := browserrpc.NewClient(context.Background(), conn)
 	return client, func() {
 		client.Close()
 		closeFn()
@@ -506,7 +506,7 @@ func TestRPCTab(t *testing.T) {
 		}
 
 		b := rpc.NewUnixGRPCBroker("", "", "")
-		s := browserrpc.NewServer(b, c, mu)
+		s := browserrpc.NewServer(c, mu)
 		s.SetSyncMode()
 
 		client, closeFn := setupWmIntTest(t, b, s)

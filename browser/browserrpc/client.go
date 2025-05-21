@@ -50,37 +50,31 @@ var _ browserapi.Browser = (*Client)(nil)
 
 // Client satisfies Browser by talking to a browser server over RPC.
 type Client struct {
-	broker rpc.MuxBroker
-	cc     grpc.ClientConnInterface
-	wm     WindowManagerClient
-	msg    NotificationsClient
-	f      ResourceOpenerClient
-	p      EventPublisherClient
+	cc  grpc.ClientConnInterface
+	wm  WindowManagerClient
+	msg NotificationsClient
+	f   ResourceOpenerClient
+	p   EventPublisherClient
 
 	clientCtx       context.Context
 	clientCancelCtx func()
 }
 
 // NewClient allocates storage for a new Client and initializes it.
-func NewClient(
-	ctx context.Context, broker rpc.MuxBroker, cc grpc.ClientConnInterface,
-) *Client {
+func NewClient(ctx context.Context, cc grpc.ClientConnInterface) *Client {
 	ret := new(Client)
-	ret.Init(ctx, broker, cc)
+	ret.Init(ctx, cc)
 	runtime.SetFinalizer(ret, func(c *Client) { c.Close() })
 	return ret
 }
 
-// Init initializes this Client with broker and client.
-func (c *Client) Init(
-	ctx context.Context, broker rpc.MuxBroker, cc grpc.ClientConnInterface,
-) {
+// Init initializes this Client with the given client and parent context.
+func (c *Client) Init(ctx context.Context, cc grpc.ClientConnInterface) {
 	c.wm = NewWindowManagerClient(cc)
 	c.msg = NewNotificationsClient(cc)
 	c.cc = cc
 	c.f = NewResourceOpenerClient(cc)
 	c.p = NewEventPublisherClient(cc)
-	c.broker = broker
 	ok := rpc.IsContextWithWaitGroup(ctx)
 	if !ok {
 		ctx = rpc.ContextWithWaitGroup(ctx, new(sync.WaitGroup))

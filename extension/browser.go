@@ -78,7 +78,7 @@ func (s browserResourcePermissionServer) Register(
 	extensionID string, grantor Grantor, registrar rpc.ServiceRegistrar,
 	broker rpc.MuxBroker, lock sync.Locker,
 ) (io.Closer, error) {
-	server := browserrpc.NewServer(broker, s.b, lock)
+	server := browserrpc.NewServer(s.b, lock)
 	rpcServer := interruptBrowserServer(server, func() {
 		s.publishEvent(term.Event{Type: term.EventInterrupt})
 	})
