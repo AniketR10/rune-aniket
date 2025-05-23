@@ -41,7 +41,7 @@ func dialEditor(ctx context.Context, grant extension.Grant, broker rpc.MuxBroker
 	if err != nil {
 		return nil, err
 	}
-	c := textrpc.NewClient(grant.Context, broker, conn)
+	c := textrpc.NewClient(grant.Context, conn)
 	return c, nil
 }
 

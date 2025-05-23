@@ -32,8 +32,6 @@ import (
 	"strings"
 	"sync"
 
-	log "github.com/sirupsen/logrus"
-	"github.com/unstablebuild/blue/logging"
 	"google.golang.org/grpc"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/api/browserapi"
@@ -80,14 +78,6 @@ func (c *Client) Init(ctx context.Context, cc grpc.ClientConnInterface) {
 		ctx = rpc.ContextWithWaitGroup(ctx, new(sync.WaitGroup))
 	}
 	c.clientCtx, c.clientCancelCtx = context.WithCancel(ctx)
-}
-
-// NewWindow returns a browserapi.Window that represents the window
-// with the given ID.
-func (c *Client) NewWindow(windowID uint64) browserapi.Window {
-	client := newWindowClient(windowID)
-	c.log(log.TraceLevel, "get window with id %d: %#v", windowID, client)
-	return client
 }
 
 // CloseWindow satisfies browserapi.Browser.
@@ -432,13 +422,6 @@ func (c *Client) Close() (err error) {
 	return
 }
 
-func (c *Client) log(level log.Level, msg string, args ...interface{}) {
-	if !log.IsLevelEnabled(level) {
-		return
-	}
-	log.WithField(logging.KeyClass, "browser.Client").Logf(level, msg, args...)
-}
-
 func toProtoOrientation(o browserapi.Orientation) Orientation {
 	switch o {
 	case browserapi.OrientationDefault:
@@ -467,20 +450,4 @@ func toProtoFrame(o browserapi.BarFrame) BarRequest_Frame {
 	default:
 		panic("invalid orientation")
 	}
-}
-
-var _ browserapi.Window = (*windowClientImpl)(nil)
-
-type windowClientImpl struct {
-	windowID uint64
-}
-
-func newWindowClient(windowID uint64) *windowClientImpl {
-	ret := new(windowClientImpl)
-	ret.windowID = windowID
-	return ret
-}
-
-func (w *windowClientImpl) WindowID() uint64 {
-	return w.windowID
 }

@@ -88,6 +88,107 @@ func (EditorEvent_Type) EnumDescriptor() ([]byte, []int) {
 	return file_textrpc_editor_proto_rawDescGZIP(), []int{3, 0}
 }
 
+type ClientCommandMessage_MessageType int32
+
+const (
+	ClientCommandMessage_Handle        ClientCommandMessage_MessageType = 0
+	ClientCommandMessage_CompleteValue ClientCommandMessage_MessageType = 1
+	ClientCommandMessage_CompleteDone  ClientCommandMessage_MessageType = 2
+	ClientCommandMessage_Request       ClientCommandMessage_MessageType = 3
+)
+
+// Enum value maps for ClientCommandMessage_MessageType.
+var (
+	ClientCommandMessage_MessageType_name = map[int32]string{
+		0: "Handle",
+		1: "CompleteValue",
+		2: "CompleteDone",
+		3: "Request",
+	}
+	ClientCommandMessage_MessageType_value = map[string]int32{
+		"Handle":        0,
+		"CompleteValue": 1,
+		"CompleteDone":  2,
+		"Request":       3,
+	}
+)
+
+func (x ClientCommandMessage_MessageType) Enum() *ClientCommandMessage_MessageType {
+	p := new(ClientCommandMessage_MessageType)
+	*p = x
+	return p
+}
+
+func (x ClientCommandMessage_MessageType) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ClientCommandMessage_MessageType) Descriptor() protoreflect.EnumDescriptor {
+	return file_textrpc_editor_proto_enumTypes[1].Descriptor()
+}
+
+func (ClientCommandMessage_MessageType) Type() protoreflect.EnumType {
+	return &file_textrpc_editor_proto_enumTypes[1]
+}
+
+func (x ClientCommandMessage_MessageType) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ClientCommandMessage_MessageType.Descriptor instead.
+func (ClientCommandMessage_MessageType) EnumDescriptor() ([]byte, []int) {
+	return file_textrpc_editor_proto_rawDescGZIP(), []int{24, 0}
+}
+
+type ServerCommandMessage_MessageType int32
+
+const (
+	ServerCommandMessage_Handle   ServerCommandMessage_MessageType = 0
+	ServerCommandMessage_Complete ServerCommandMessage_MessageType = 1
+	ServerCommandMessage_Response ServerCommandMessage_MessageType = 2
+)
+
+// Enum value maps for ServerCommandMessage_MessageType.
+var (
+	ServerCommandMessage_MessageType_name = map[int32]string{
+		0: "Handle",
+		1: "Complete",
+		2: "Response",
+	}
+	ServerCommandMessage_MessageType_value = map[string]int32{
+		"Handle":   0,
+		"Complete": 1,
+		"Response": 2,
+	}
+)
+
+func (x ServerCommandMessage_MessageType) Enum() *ServerCommandMessage_MessageType {
+	p := new(ServerCommandMessage_MessageType)
+	*p = x
+	return p
+}
+
+func (x ServerCommandMessage_MessageType) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ServerCommandMessage_MessageType) Descriptor() protoreflect.EnumDescriptor {
+	return file_textrpc_editor_proto_enumTypes[2].Descriptor()
+}
+
+func (ServerCommandMessage_MessageType) Type() protoreflect.EnumType {
+	return &file_textrpc_editor_proto_enumTypes[2]
+}
+
+func (x ServerCommandMessage_MessageType) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ServerCommandMessage_MessageType.Descriptor instead.
+func (ServerCommandMessage_MessageType) EnumDescriptor() ([]byte, []int) {
+	return file_textrpc_editor_proto_rawDescGZIP(), []int{25, 0}
+}
+
 type URI struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -808,17 +909,17 @@ func (*MoveToLocationResponse) Descriptor() ([]byte, []int) {
 	return file_textrpc_editor_proto_rawDescGZIP(), []int{12}
 }
 
-type RegisterCommandRequest struct {
+type SetCursorRequest struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	Command   *CommandManual `protobuf:"bytes,1,opt,name=command,proto3" json:"command,omitempty"`
-	ChannelId string         `protobuf:"bytes,2,opt,name=channel_id,json=channelId,proto3" json:"channel_id,omitempty"`
+	Pos          *termrpc.Coordinates `protobuf:"bytes,1,opt,name=pos,proto3" json:"pos,omitempty"`
+	ResourceName *URI                 `protobuf:"bytes,2,opt,name=resource_name,json=resourceName,proto3" json:"resource_name,omitempty"`
 }
 
-func (x *RegisterCommandRequest) Reset() {
-	*x = RegisterCommandRequest{}
+func (x *SetCursorRequest) Reset() {
+	*x = SetCursorRequest{}
 	if protoimpl.UnsafeEnabled {
 		mi := &file_textrpc_editor_proto_msgTypes[13]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -826,13 +927,13 @@ func (x *RegisterCommandRequest) Reset() {
 	}
 }
 
-func (x *RegisterCommandRequest) String() string {
+func (x *SetCursorRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*RegisterCommandRequest) ProtoMessage() {}
+func (*SetCursorRequest) ProtoMessage() {}
 
-func (x *RegisterCommandRequest) ProtoReflect() protoreflect.Message {
+func (x *SetCursorRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_textrpc_editor_proto_msgTypes[13]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -844,23 +945,380 @@ func (x *RegisterCommandRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RegisterCommandRequest.ProtoReflect.Descriptor instead.
-func (*RegisterCommandRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use SetCursorRequest.ProtoReflect.Descriptor instead.
+func (*SetCursorRequest) Descriptor() ([]byte, []int) {
 	return file_textrpc_editor_proto_rawDescGZIP(), []int{13}
 }
 
-func (x *RegisterCommandRequest) GetCommand() *CommandManual {
+func (x *SetCursorRequest) GetPos() *termrpc.Coordinates {
 	if x != nil {
-		return x.Command
+		return x.Pos
 	}
 	return nil
 }
 
-func (x *RegisterCommandRequest) GetChannelId() string {
+func (x *SetCursorRequest) GetResourceName() *URI {
 	if x != nil {
-		return x.ChannelId
+		return x.ResourceName
 	}
-	return ""
+	return nil
+}
+
+type SetCursorResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+}
+
+func (x *SetCursorResponse) Reset() {
+	*x = SetCursorResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_textrpc_editor_proto_msgTypes[14]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *SetCursorResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetCursorResponse) ProtoMessage() {}
+
+func (x *SetCursorResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_textrpc_editor_proto_msgTypes[14]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetCursorResponse.ProtoReflect.Descriptor instead.
+func (*SetCursorResponse) Descriptor() ([]byte, []int) {
+	return file_textrpc_editor_proto_rawDescGZIP(), []int{14}
+}
+
+type CursorRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	ResourceName *URI `protobuf:"bytes,1,opt,name=resource_name,json=resourceName,proto3" json:"resource_name,omitempty"`
+}
+
+func (x *CursorRequest) Reset() {
+	*x = CursorRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_textrpc_editor_proto_msgTypes[15]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *CursorRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CursorRequest) ProtoMessage() {}
+
+func (x *CursorRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_textrpc_editor_proto_msgTypes[15]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CursorRequest.ProtoReflect.Descriptor instead.
+func (*CursorRequest) Descriptor() ([]byte, []int) {
+	return file_textrpc_editor_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *CursorRequest) GetResourceName() *URI {
+	if x != nil {
+		return x.ResourceName
+	}
+	return nil
+}
+
+type CursorResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Pos *termrpc.Coordinates `protobuf:"bytes,1,opt,name=pos,proto3" json:"pos,omitempty"`
+}
+
+func (x *CursorResponse) Reset() {
+	*x = CursorResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_textrpc_editor_proto_msgTypes[16]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *CursorResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CursorResponse) ProtoMessage() {}
+
+func (x *CursorResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_textrpc_editor_proto_msgTypes[16]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CursorResponse.ProtoReflect.Descriptor instead.
+func (*CursorResponse) Descriptor() ([]byte, []int) {
+	return file_textrpc_editor_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *CursorResponse) GetPos() *termrpc.Coordinates {
+	if x != nil {
+		return x.Pos
+	}
+	return nil
+}
+
+type EditorRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	ResourceName *URI `protobuf:"bytes,1,opt,name=resource_name,json=resourceName,proto3" json:"resource_name,omitempty"`
+}
+
+func (x *EditorRequest) Reset() {
+	*x = EditorRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_textrpc_editor_proto_msgTypes[17]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *EditorRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EditorRequest) ProtoMessage() {}
+
+func (x *EditorRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_textrpc_editor_proto_msgTypes[17]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EditorRequest.ProtoReflect.Descriptor instead.
+func (*EditorRequest) Descriptor() ([]byte, []int) {
+	return file_textrpc_editor_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *EditorRequest) GetResourceName() *URI {
+	if x != nil {
+		return x.ResourceName
+	}
+	return nil
+}
+
+type EditorResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+}
+
+func (x *EditorResponse) Reset() {
+	*x = EditorResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_textrpc_editor_proto_msgTypes[18]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *EditorResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EditorResponse) ProtoMessage() {}
+
+func (x *EditorResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_textrpc_editor_proto_msgTypes[18]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EditorResponse.ProtoReflect.Descriptor instead.
+func (*EditorResponse) Descriptor() ([]byte, []int) {
+	return file_textrpc_editor_proto_rawDescGZIP(), []int{18}
+}
+
+type SetDefaultAttributesRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	ResourceName *URI                `protobuf:"bytes,1,opt,name=resource_name,json=resourceName,proto3" json:"resource_name,omitempty"`
+	Attributes   *termrpc.Attributes `protobuf:"bytes,2,opt,name=attributes,proto3" json:"attributes,omitempty"`
+}
+
+func (x *SetDefaultAttributesRequest) Reset() {
+	*x = SetDefaultAttributesRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_textrpc_editor_proto_msgTypes[19]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *SetDefaultAttributesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetDefaultAttributesRequest) ProtoMessage() {}
+
+func (x *SetDefaultAttributesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_textrpc_editor_proto_msgTypes[19]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetDefaultAttributesRequest.ProtoReflect.Descriptor instead.
+func (*SetDefaultAttributesRequest) Descriptor() ([]byte, []int) {
+	return file_textrpc_editor_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *SetDefaultAttributesRequest) GetResourceName() *URI {
+	if x != nil {
+		return x.ResourceName
+	}
+	return nil
+}
+
+func (x *SetDefaultAttributesRequest) GetAttributes() *termrpc.Attributes {
+	if x != nil {
+		return x.Attributes
+	}
+	return nil
+}
+
+type SetDefaultAttributesResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+}
+
+func (x *SetDefaultAttributesResponse) Reset() {
+	*x = SetDefaultAttributesResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_textrpc_editor_proto_msgTypes[20]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *SetDefaultAttributesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetDefaultAttributesResponse) ProtoMessage() {}
+
+func (x *SetDefaultAttributesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_textrpc_editor_proto_msgTypes[20]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetDefaultAttributesResponse.ProtoReflect.Descriptor instead.
+func (*SetDefaultAttributesResponse) Descriptor() ([]byte, []int) {
+	return file_textrpc_editor_proto_rawDescGZIP(), []int{20}
+}
+
+type SubscribeCommandRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Command *CommandManual `protobuf:"bytes,1,opt,name=command,proto3" json:"command,omitempty"`
+}
+
+func (x *SubscribeCommandRequest) Reset() {
+	*x = SubscribeCommandRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_textrpc_editor_proto_msgTypes[21]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *SubscribeCommandRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SubscribeCommandRequest) ProtoMessage() {}
+
+func (x *SubscribeCommandRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_textrpc_editor_proto_msgTypes[21]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SubscribeCommandRequest.ProtoReflect.Descriptor instead.
+func (*SubscribeCommandRequest) Descriptor() ([]byte, []int) {
+	return file_textrpc_editor_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *SubscribeCommandRequest) GetCommand() *CommandManual {
+	if x != nil {
+		return x.Command
+	}
+	return nil
 }
 
 type CommandManual struct {
@@ -877,7 +1335,7 @@ type CommandManual struct {
 func (x *CommandManual) Reset() {
 	*x = CommandManual{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_textrpc_editor_proto_msgTypes[14]
+		mi := &file_textrpc_editor_proto_msgTypes[22]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -890,7 +1348,7 @@ func (x *CommandManual) String() string {
 func (*CommandManual) ProtoMessage() {}
 
 func (x *CommandManual) ProtoReflect() protoreflect.Message {
-	mi := &file_textrpc_editor_proto_msgTypes[14]
+	mi := &file_textrpc_editor_proto_msgTypes[22]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -903,7 +1361,7 @@ func (x *CommandManual) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CommandManual.ProtoReflect.Descriptor instead.
 func (*CommandManual) Descriptor() ([]byte, []int) {
-	return file_textrpc_editor_proto_rawDescGZIP(), []int{14}
+	return file_textrpc_editor_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *CommandManual) GetName() string {
@@ -934,379 +1392,14 @@ func (x *CommandManual) GetCommands() []*CommandManual {
 	return nil
 }
 
-type RegisterCommandResponse struct {
+type SubscribeCommandResponse struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 }
 
-func (x *RegisterCommandResponse) Reset() {
-	*x = RegisterCommandResponse{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_textrpc_editor_proto_msgTypes[15]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
-}
-
-func (x *RegisterCommandResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*RegisterCommandResponse) ProtoMessage() {}
-
-func (x *RegisterCommandResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_textrpc_editor_proto_msgTypes[15]
-	if protoimpl.UnsafeEnabled && x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use RegisterCommandResponse.ProtoReflect.Descriptor instead.
-func (*RegisterCommandResponse) Descriptor() ([]byte, []int) {
-	return file_textrpc_editor_proto_rawDescGZIP(), []int{15}
-}
-
-type SetCursorRequest struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	Pos          *termrpc.Coordinates `protobuf:"bytes,1,opt,name=pos,proto3" json:"pos,omitempty"`
-	ResourceName *URI                 `protobuf:"bytes,2,opt,name=resource_name,json=resourceName,proto3" json:"resource_name,omitempty"`
-}
-
-func (x *SetCursorRequest) Reset() {
-	*x = SetCursorRequest{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_textrpc_editor_proto_msgTypes[16]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
-}
-
-func (x *SetCursorRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*SetCursorRequest) ProtoMessage() {}
-
-func (x *SetCursorRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_textrpc_editor_proto_msgTypes[16]
-	if protoimpl.UnsafeEnabled && x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use SetCursorRequest.ProtoReflect.Descriptor instead.
-func (*SetCursorRequest) Descriptor() ([]byte, []int) {
-	return file_textrpc_editor_proto_rawDescGZIP(), []int{16}
-}
-
-func (x *SetCursorRequest) GetPos() *termrpc.Coordinates {
-	if x != nil {
-		return x.Pos
-	}
-	return nil
-}
-
-func (x *SetCursorRequest) GetResourceName() *URI {
-	if x != nil {
-		return x.ResourceName
-	}
-	return nil
-}
-
-type SetCursorResponse struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-}
-
-func (x *SetCursorResponse) Reset() {
-	*x = SetCursorResponse{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_textrpc_editor_proto_msgTypes[17]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
-}
-
-func (x *SetCursorResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*SetCursorResponse) ProtoMessage() {}
-
-func (x *SetCursorResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_textrpc_editor_proto_msgTypes[17]
-	if protoimpl.UnsafeEnabled && x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use SetCursorResponse.ProtoReflect.Descriptor instead.
-func (*SetCursorResponse) Descriptor() ([]byte, []int) {
-	return file_textrpc_editor_proto_rawDescGZIP(), []int{17}
-}
-
-type CursorRequest struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	ResourceName *URI `protobuf:"bytes,1,opt,name=resource_name,json=resourceName,proto3" json:"resource_name,omitempty"`
-}
-
-func (x *CursorRequest) Reset() {
-	*x = CursorRequest{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_textrpc_editor_proto_msgTypes[18]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
-}
-
-func (x *CursorRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*CursorRequest) ProtoMessage() {}
-
-func (x *CursorRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_textrpc_editor_proto_msgTypes[18]
-	if protoimpl.UnsafeEnabled && x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use CursorRequest.ProtoReflect.Descriptor instead.
-func (*CursorRequest) Descriptor() ([]byte, []int) {
-	return file_textrpc_editor_proto_rawDescGZIP(), []int{18}
-}
-
-func (x *CursorRequest) GetResourceName() *URI {
-	if x != nil {
-		return x.ResourceName
-	}
-	return nil
-}
-
-type CursorResponse struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	Pos *termrpc.Coordinates `protobuf:"bytes,1,opt,name=pos,proto3" json:"pos,omitempty"`
-}
-
-func (x *CursorResponse) Reset() {
-	*x = CursorResponse{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_textrpc_editor_proto_msgTypes[19]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
-}
-
-func (x *CursorResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*CursorResponse) ProtoMessage() {}
-
-func (x *CursorResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_textrpc_editor_proto_msgTypes[19]
-	if protoimpl.UnsafeEnabled && x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use CursorResponse.ProtoReflect.Descriptor instead.
-func (*CursorResponse) Descriptor() ([]byte, []int) {
-	return file_textrpc_editor_proto_rawDescGZIP(), []int{19}
-}
-
-func (x *CursorResponse) GetPos() *termrpc.Coordinates {
-	if x != nil {
-		return x.Pos
-	}
-	return nil
-}
-
-type EditorRequest struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	ResourceName *URI `protobuf:"bytes,1,opt,name=resource_name,json=resourceName,proto3" json:"resource_name,omitempty"`
-}
-
-func (x *EditorRequest) Reset() {
-	*x = EditorRequest{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_textrpc_editor_proto_msgTypes[20]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
-}
-
-func (x *EditorRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*EditorRequest) ProtoMessage() {}
-
-func (x *EditorRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_textrpc_editor_proto_msgTypes[20]
-	if protoimpl.UnsafeEnabled && x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use EditorRequest.ProtoReflect.Descriptor instead.
-func (*EditorRequest) Descriptor() ([]byte, []int) {
-	return file_textrpc_editor_proto_rawDescGZIP(), []int{20}
-}
-
-func (x *EditorRequest) GetResourceName() *URI {
-	if x != nil {
-		return x.ResourceName
-	}
-	return nil
-}
-
-type EditorResponse struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-}
-
-func (x *EditorResponse) Reset() {
-	*x = EditorResponse{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_textrpc_editor_proto_msgTypes[21]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
-}
-
-func (x *EditorResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*EditorResponse) ProtoMessage() {}
-
-func (x *EditorResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_textrpc_editor_proto_msgTypes[21]
-	if protoimpl.UnsafeEnabled && x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use EditorResponse.ProtoReflect.Descriptor instead.
-func (*EditorResponse) Descriptor() ([]byte, []int) {
-	return file_textrpc_editor_proto_rawDescGZIP(), []int{21}
-}
-
-type SetDefaultAttributesRequest struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	ResourceName *URI                `protobuf:"bytes,1,opt,name=resource_name,json=resourceName,proto3" json:"resource_name,omitempty"`
-	Attributes   *termrpc.Attributes `protobuf:"bytes,2,opt,name=attributes,proto3" json:"attributes,omitempty"`
-}
-
-func (x *SetDefaultAttributesRequest) Reset() {
-	*x = SetDefaultAttributesRequest{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_textrpc_editor_proto_msgTypes[22]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
-}
-
-func (x *SetDefaultAttributesRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*SetDefaultAttributesRequest) ProtoMessage() {}
-
-func (x *SetDefaultAttributesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_textrpc_editor_proto_msgTypes[22]
-	if protoimpl.UnsafeEnabled && x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use SetDefaultAttributesRequest.ProtoReflect.Descriptor instead.
-func (*SetDefaultAttributesRequest) Descriptor() ([]byte, []int) {
-	return file_textrpc_editor_proto_rawDescGZIP(), []int{22}
-}
-
-func (x *SetDefaultAttributesRequest) GetResourceName() *URI {
-	if x != nil {
-		return x.ResourceName
-	}
-	return nil
-}
-
-func (x *SetDefaultAttributesRequest) GetAttributes() *termrpc.Attributes {
-	if x != nil {
-		return x.Attributes
-	}
-	return nil
-}
-
-type SetDefaultAttributesResponse struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-}
-
-func (x *SetDefaultAttributesResponse) Reset() {
-	*x = SetDefaultAttributesResponse{}
+func (x *SubscribeCommandResponse) Reset() {
+	*x = SubscribeCommandResponse{}
 	if protoimpl.UnsafeEnabled {
 		mi := &file_textrpc_editor_proto_msgTypes[23]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -1314,13 +1407,13 @@ func (x *SetDefaultAttributesResponse) Reset() {
 	}
 }
 
-func (x *SetDefaultAttributesResponse) String() string {
+func (x *SubscribeCommandResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*SetDefaultAttributesResponse) ProtoMessage() {}
+func (*SubscribeCommandResponse) ProtoMessage() {}
 
-func (x *SetDefaultAttributesResponse) ProtoReflect() protoreflect.Message {
+func (x *SubscribeCommandResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_textrpc_editor_proto_msgTypes[23]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -1332,9 +1425,159 @@ func (x *SetDefaultAttributesResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SetDefaultAttributesResponse.ProtoReflect.Descriptor instead.
-func (*SetDefaultAttributesResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use SubscribeCommandResponse.ProtoReflect.Descriptor instead.
+func (*SubscribeCommandResponse) Descriptor() ([]byte, []int) {
 	return file_textrpc_editor_proto_rawDescGZIP(), []int{23}
+}
+
+type ClientCommandMessage struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Type          ClientCommandMessage_MessageType `protobuf:"varint,1,opt,name=type,proto3,enum=text.ClientCommandMessage_MessageType" json:"type,omitempty"`
+	Handle        *HandleCommandResponse           `protobuf:"bytes,2,opt,name=handle,proto3" json:"handle,omitempty"`
+	CompleteValue *CompleteCommandValue            `protobuf:"bytes,3,opt,name=complete_value,json=completeValue,proto3" json:"complete_value,omitempty"`
+	CompleteDone  *CompleteCommandDone             `protobuf:"bytes,4,opt,name=complete_done,json=completeDone,proto3" json:"complete_done,omitempty"`
+	Request       *SubscribeCommandRequest         `protobuf:"bytes,5,opt,name=request,proto3" json:"request,omitempty"`
+}
+
+func (x *ClientCommandMessage) Reset() {
+	*x = ClientCommandMessage{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_textrpc_editor_proto_msgTypes[24]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *ClientCommandMessage) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ClientCommandMessage) ProtoMessage() {}
+
+func (x *ClientCommandMessage) ProtoReflect() protoreflect.Message {
+	mi := &file_textrpc_editor_proto_msgTypes[24]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ClientCommandMessage.ProtoReflect.Descriptor instead.
+func (*ClientCommandMessage) Descriptor() ([]byte, []int) {
+	return file_textrpc_editor_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *ClientCommandMessage) GetType() ClientCommandMessage_MessageType {
+	if x != nil {
+		return x.Type
+	}
+	return ClientCommandMessage_Handle
+}
+
+func (x *ClientCommandMessage) GetHandle() *HandleCommandResponse {
+	if x != nil {
+		return x.Handle
+	}
+	return nil
+}
+
+func (x *ClientCommandMessage) GetCompleteValue() *CompleteCommandValue {
+	if x != nil {
+		return x.CompleteValue
+	}
+	return nil
+}
+
+func (x *ClientCommandMessage) GetCompleteDone() *CompleteCommandDone {
+	if x != nil {
+		return x.CompleteDone
+	}
+	return nil
+}
+
+func (x *ClientCommandMessage) GetRequest() *SubscribeCommandRequest {
+	if x != nil {
+		return x.Request
+	}
+	return nil
+}
+
+type ServerCommandMessage struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Type     ServerCommandMessage_MessageType `protobuf:"varint,1,opt,name=type,proto3,enum=text.ServerCommandMessage_MessageType" json:"type,omitempty"`
+	Handle   *HandleCommandRequest            `protobuf:"bytes,2,opt,name=handle,proto3" json:"handle,omitempty"`
+	Complete *CompleteCommandRequest          `protobuf:"bytes,3,opt,name=complete,proto3" json:"complete,omitempty"`
+	Response *SubscribeCommandResponse        `protobuf:"bytes,4,opt,name=response,proto3" json:"response,omitempty"`
+}
+
+func (x *ServerCommandMessage) Reset() {
+	*x = ServerCommandMessage{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_textrpc_editor_proto_msgTypes[25]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *ServerCommandMessage) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ServerCommandMessage) ProtoMessage() {}
+
+func (x *ServerCommandMessage) ProtoReflect() protoreflect.Message {
+	mi := &file_textrpc_editor_proto_msgTypes[25]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ServerCommandMessage.ProtoReflect.Descriptor instead.
+func (*ServerCommandMessage) Descriptor() ([]byte, []int) {
+	return file_textrpc_editor_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *ServerCommandMessage) GetType() ServerCommandMessage_MessageType {
+	if x != nil {
+		return x.Type
+	}
+	return ServerCommandMessage_Handle
+}
+
+func (x *ServerCommandMessage) GetHandle() *HandleCommandRequest {
+	if x != nil {
+		return x.Handle
+	}
+	return nil
+}
+
+func (x *ServerCommandMessage) GetComplete() *CompleteCommandRequest {
+	if x != nil {
+		return x.Complete
+	}
+	return nil
+}
+
+func (x *ServerCommandMessage) GetResponse() *SubscribeCommandResponse {
+	if x != nil {
+		return x.Response
+	}
+	return nil
 }
 
 type HandleCommandRequest struct {
@@ -1353,7 +1596,7 @@ type HandleCommandRequest struct {
 func (x *HandleCommandRequest) Reset() {
 	*x = HandleCommandRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_textrpc_editor_proto_msgTypes[24]
+		mi := &file_textrpc_editor_proto_msgTypes[26]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1366,7 +1609,7 @@ func (x *HandleCommandRequest) String() string {
 func (*HandleCommandRequest) ProtoMessage() {}
 
 func (x *HandleCommandRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_textrpc_editor_proto_msgTypes[24]
+	mi := &file_textrpc_editor_proto_msgTypes[26]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1379,7 +1622,7 @@ func (x *HandleCommandRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HandleCommandRequest.ProtoReflect.Descriptor instead.
 func (*HandleCommandRequest) Descriptor() ([]byte, []int) {
-	return file_textrpc_editor_proto_rawDescGZIP(), []int{24}
+	return file_textrpc_editor_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *HandleCommandRequest) GetName() string {
@@ -1428,12 +1671,14 @@ type HandleCommandResponse struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
+
+	Error string `protobuf:"bytes,1,opt,name=error,proto3" json:"error,omitempty"`
 }
 
 func (x *HandleCommandResponse) Reset() {
 	*x = HandleCommandResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_textrpc_editor_proto_msgTypes[25]
+		mi := &file_textrpc_editor_proto_msgTypes[27]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1446,7 +1691,7 @@ func (x *HandleCommandResponse) String() string {
 func (*HandleCommandResponse) ProtoMessage() {}
 
 func (x *HandleCommandResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_textrpc_editor_proto_msgTypes[25]
+	mi := &file_textrpc_editor_proto_msgTypes[27]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1459,35 +1704,43 @@ func (x *HandleCommandResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HandleCommandResponse.ProtoReflect.Descriptor instead.
 func (*HandleCommandResponse) Descriptor() ([]byte, []int) {
-	return file_textrpc_editor_proto_rawDescGZIP(), []int{25}
+	return file_textrpc_editor_proto_rawDescGZIP(), []int{27}
 }
 
-type CompleteRequest struct {
+func (x *HandleCommandResponse) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+type CompleteCommandRequest struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	Name string   `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Args []string `protobuf:"bytes,2,rep,name=args,proto3" json:"args,omitempty"`
+	Id   int64    `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	Name string   `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Args []string `protobuf:"bytes,3,rep,name=args,proto3" json:"args,omitempty"`
 }
 
-func (x *CompleteRequest) Reset() {
-	*x = CompleteRequest{}
+func (x *CompleteCommandRequest) Reset() {
+	*x = CompleteCommandRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_textrpc_editor_proto_msgTypes[26]
+		mi := &file_textrpc_editor_proto_msgTypes[28]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
 }
 
-func (x *CompleteRequest) String() string {
+func (x *CompleteCommandRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*CompleteRequest) ProtoMessage() {}
+func (*CompleteCommandRequest) ProtoMessage() {}
 
-func (x *CompleteRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_textrpc_editor_proto_msgTypes[26]
+func (x *CompleteCommandRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_textrpc_editor_proto_msgTypes[28]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1498,50 +1751,58 @@ func (x *CompleteRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CompleteRequest.ProtoReflect.Descriptor instead.
-func (*CompleteRequest) Descriptor() ([]byte, []int) {
-	return file_textrpc_editor_proto_rawDescGZIP(), []int{26}
+// Deprecated: Use CompleteCommandRequest.ProtoReflect.Descriptor instead.
+func (*CompleteCommandRequest) Descriptor() ([]byte, []int) {
+	return file_textrpc_editor_proto_rawDescGZIP(), []int{28}
 }
 
-func (x *CompleteRequest) GetName() string {
+func (x *CompleteCommandRequest) GetId() int64 {
+	if x != nil {
+		return x.Id
+	}
+	return 0
+}
+
+func (x *CompleteCommandRequest) GetName() string {
 	if x != nil {
 		return x.Name
 	}
 	return ""
 }
 
-func (x *CompleteRequest) GetArgs() []string {
+func (x *CompleteCommandRequest) GetArgs() []string {
 	if x != nil {
 		return x.Args
 	}
 	return nil
 }
 
-type CompleteResponse struct {
+type CompleteCommandValue struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	Value string `protobuf:"bytes,1,opt,name=value,proto3" json:"value,omitempty"`
+	Id    int64  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	Value string `protobuf:"bytes,2,opt,name=value,proto3" json:"value,omitempty"`
 }
 
-func (x *CompleteResponse) Reset() {
-	*x = CompleteResponse{}
+func (x *CompleteCommandValue) Reset() {
+	*x = CompleteCommandValue{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_textrpc_editor_proto_msgTypes[27]
+		mi := &file_textrpc_editor_proto_msgTypes[29]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
 }
 
-func (x *CompleteResponse) String() string {
+func (x *CompleteCommandValue) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*CompleteResponse) ProtoMessage() {}
+func (*CompleteCommandValue) ProtoMessage() {}
 
-func (x *CompleteResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_textrpc_editor_proto_msgTypes[27]
+func (x *CompleteCommandValue) ProtoReflect() protoreflect.Message {
+	mi := &file_textrpc_editor_proto_msgTypes[29]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1552,14 +1813,76 @@ func (x *CompleteResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CompleteResponse.ProtoReflect.Descriptor instead.
-func (*CompleteResponse) Descriptor() ([]byte, []int) {
-	return file_textrpc_editor_proto_rawDescGZIP(), []int{27}
+// Deprecated: Use CompleteCommandValue.ProtoReflect.Descriptor instead.
+func (*CompleteCommandValue) Descriptor() ([]byte, []int) {
+	return file_textrpc_editor_proto_rawDescGZIP(), []int{29}
 }
 
-func (x *CompleteResponse) GetValue() string {
+func (x *CompleteCommandValue) GetId() int64 {
+	if x != nil {
+		return x.Id
+	}
+	return 0
+}
+
+func (x *CompleteCommandValue) GetValue() string {
 	if x != nil {
 		return x.Value
+	}
+	return ""
+}
+
+type CompleteCommandDone struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Id    int64  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	Error string `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
+}
+
+func (x *CompleteCommandDone) Reset() {
+	*x = CompleteCommandDone{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_textrpc_editor_proto_msgTypes[30]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *CompleteCommandDone) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CompleteCommandDone) ProtoMessage() {}
+
+func (x *CompleteCommandDone) ProtoReflect() protoreflect.Message {
+	mi := &file_textrpc_editor_proto_msgTypes[30]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CompleteCommandDone.ProtoReflect.Descriptor instead.
+func (*CompleteCommandDone) Descriptor() ([]byte, []int) {
+	return file_textrpc_editor_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *CompleteCommandDone) GetId() int64 {
+	if x != nil {
+		return x.Id
+	}
+	return 0
+}
+
+func (x *CompleteCommandDone) GetError() string {
+	if x != nil {
+		return x.Error
 	}
 	return ""
 }
@@ -1578,7 +1901,7 @@ type SetLocationListRequest_Location struct {
 func (x *SetLocationListRequest_Location) Reset() {
 	*x = SetLocationListRequest_Location{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_textrpc_editor_proto_msgTypes[28]
+		mi := &file_textrpc_editor_proto_msgTypes[31]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1591,7 +1914,7 @@ func (x *SetLocationListRequest_Location) String() string {
 func (*SetLocationListRequest_Location) ProtoMessage() {}
 
 func (x *SetLocationListRequest_Location) ProtoReflect() protoreflect.Message {
-	mi := &file_textrpc_editor_proto_msgTypes[28]
+	mi := &file_textrpc_editor_proto_msgTypes[31]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1739,23 +2062,6 @@ var file_textrpc_editor_proto_rawDesc = []byte{
 	0x65, 0x4e, 0x61, 0x6d, 0x65, 0x12, 0x17, 0x0a, 0x07, 0x6c, 0x69, 0x73, 0x74, 0x5f, 0x69, 0x64,
 	0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x06, 0x6c, 0x69, 0x73, 0x74, 0x49, 0x64, 0x22, 0x18,
 	0x0a, 0x16, 0x4d, 0x6f, 0x76, 0x65, 0x54, 0x6f, 0x4c, 0x6f, 0x63, 0x61, 0x74, 0x69, 0x6f, 0x6e,
-	0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x66, 0x0a, 0x16, 0x52, 0x65, 0x67, 0x69,
-	0x73, 0x74, 0x65, 0x72, 0x43, 0x6f, 0x6d, 0x6d, 0x61, 0x6e, 0x64, 0x52, 0x65, 0x71, 0x75, 0x65,
-	0x73, 0x74, 0x12, 0x2d, 0x0a, 0x07, 0x63, 0x6f, 0x6d, 0x6d, 0x61, 0x6e, 0x64, 0x18, 0x01, 0x20,
-	0x01, 0x28, 0x0b, 0x32, 0x13, 0x2e, 0x74, 0x65, 0x78, 0x74, 0x2e, 0x43, 0x6f, 0x6d, 0x6d, 0x61,
-	0x6e, 0x64, 0x4d, 0x61, 0x6e, 0x75, 0x61, 0x6c, 0x52, 0x07, 0x63, 0x6f, 0x6d, 0x6d, 0x61, 0x6e,
-	0x64, 0x12, 0x1d, 0x0a, 0x0a, 0x63, 0x68, 0x61, 0x6e, 0x6e, 0x65, 0x6c, 0x5f, 0x69, 0x64, 0x18,
-	0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x09, 0x63, 0x68, 0x61, 0x6e, 0x6e, 0x65, 0x6c, 0x49, 0x64,
-	0x22, 0x8a, 0x01, 0x0a, 0x0d, 0x43, 0x6f, 0x6d, 0x6d, 0x61, 0x6e, 0x64, 0x4d, 0x61, 0x6e, 0x75,
-	0x61, 0x6c, 0x12, 0x12, 0x0a, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09,
-	0x52, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x12, 0x18, 0x0a, 0x07, 0x73, 0x75, 0x6d, 0x6d, 0x61, 0x72,
-	0x79, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x07, 0x73, 0x75, 0x6d, 0x6d, 0x61, 0x72, 0x79,
-	0x12, 0x1a, 0x0a, 0x08, 0x73, 0x79, 0x6e, 0x6f, 0x70, 0x73, 0x69, 0x73, 0x18, 0x03, 0x20, 0x01,
-	0x28, 0x09, 0x52, 0x08, 0x73, 0x79, 0x6e, 0x6f, 0x70, 0x73, 0x69, 0x73, 0x12, 0x2f, 0x0a, 0x08,
-	0x63, 0x6f, 0x6d, 0x6d, 0x61, 0x6e, 0x64, 0x73, 0x18, 0x04, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x13,
-	0x2e, 0x74, 0x65, 0x78, 0x74, 0x2e, 0x43, 0x6f, 0x6d, 0x6d, 0x61, 0x6e, 0x64, 0x4d, 0x61, 0x6e,
-	0x75, 0x61, 0x6c, 0x52, 0x08, 0x63, 0x6f, 0x6d, 0x6d, 0x61, 0x6e, 0x64, 0x73, 0x22, 0x19, 0x0a,
-	0x17, 0x52, 0x65, 0x67, 0x69, 0x73, 0x74, 0x65, 0x72, 0x43, 0x6f, 0x6d, 0x6d, 0x61, 0x6e, 0x64,
 	0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x67, 0x0a, 0x10, 0x53, 0x65, 0x74, 0x43,
 	0x75, 0x72, 0x73, 0x6f, 0x72, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x23, 0x0a, 0x03,
 	0x70, 0x6f, 0x73, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x11, 0x2e, 0x74, 0x65, 0x72, 0x6d,
@@ -1787,94 +2093,153 @@ var file_textrpc_editor_proto_rawDesc = []byte{
 	0x69, 0x62, 0x75, 0x74, 0x65, 0x73, 0x52, 0x0a, 0x61, 0x74, 0x74, 0x72, 0x69, 0x62, 0x75, 0x74,
 	0x65, 0x73, 0x22, 0x1e, 0x0a, 0x1c, 0x53, 0x65, 0x74, 0x44, 0x65, 0x66, 0x61, 0x75, 0x6c, 0x74,
 	0x41, 0x74, 0x74, 0x72, 0x69, 0x62, 0x75, 0x74, 0x65, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e,
-	0x73, 0x65, 0x22, 0xfd, 0x01, 0x0a, 0x14, 0x48, 0x61, 0x6e, 0x64, 0x6c, 0x65, 0x43, 0x6f, 0x6d,
-	0x6d, 0x61, 0x6e, 0x64, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x12, 0x0a, 0x04, 0x6e,
-	0x61, 0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x12,
-	0x12, 0x0a, 0x04, 0x61, 0x72, 0x67, 0x73, 0x18, 0x02, 0x20, 0x03, 0x28, 0x09, 0x52, 0x04, 0x61,
-	0x72, 0x67, 0x73, 0x12, 0x2e, 0x0a, 0x0d, 0x72, 0x65, 0x73, 0x6f, 0x75, 0x72, 0x63, 0x65, 0x5f,
-	0x6e, 0x61, 0x6d, 0x65, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x09, 0x2e, 0x74, 0x65, 0x78,
-	0x74, 0x2e, 0x55, 0x52, 0x49, 0x52, 0x0c, 0x72, 0x65, 0x73, 0x6f, 0x75, 0x72, 0x63, 0x65, 0x4e,
-	0x61, 0x6d, 0x65, 0x12, 0x38, 0x0a, 0x0e, 0x63, 0x75, 0x72, 0x73, 0x6f, 0x72, 0x5f, 0x63, 0x6f,
-	0x6e, 0x74, 0x65, 0x6e, 0x74, 0x18, 0x04, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x11, 0x2e, 0x74, 0x65,
-	0x72, 0x6d, 0x2e, 0x43, 0x6f, 0x6f, 0x72, 0x64, 0x69, 0x6e, 0x61, 0x74, 0x65, 0x73, 0x52, 0x0d,
-	0x63, 0x75, 0x72, 0x73, 0x6f, 0x72, 0x43, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x74, 0x12, 0x36, 0x0a,
-	0x0d, 0x63, 0x75, 0x72, 0x73, 0x6f, 0x72, 0x5f, 0x77, 0x69, 0x6e, 0x64, 0x6f, 0x77, 0x18, 0x05,
-	0x20, 0x01, 0x28, 0x0b, 0x32, 0x11, 0x2e, 0x74, 0x65, 0x72, 0x6d, 0x2e, 0x43, 0x6f, 0x6f, 0x72,
-	0x64, 0x69, 0x6e, 0x61, 0x74, 0x65, 0x73, 0x52, 0x0c, 0x63, 0x75, 0x72, 0x73, 0x6f, 0x72, 0x57,
-	0x69, 0x6e, 0x64, 0x6f, 0x77, 0x12, 0x1b, 0x0a, 0x09, 0x77, 0x69, 0x6e, 0x64, 0x6f, 0x77, 0x5f,
-	0x69, 0x64, 0x18, 0x06, 0x20, 0x01, 0x28, 0x04, 0x52, 0x08, 0x77, 0x69, 0x6e, 0x64, 0x6f, 0x77,
-	0x49, 0x64, 0x22, 0x17, 0x0a, 0x15, 0x48, 0x61, 0x6e, 0x64, 0x6c, 0x65, 0x43, 0x6f, 0x6d, 0x6d,
-	0x61, 0x6e, 0x64, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x39, 0x0a, 0x0f, 0x43,
-	0x6f, 0x6d, 0x70, 0x6c, 0x65, 0x74, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x12,
+	0x73, 0x65, 0x22, 0x48, 0x0a, 0x17, 0x53, 0x75, 0x62, 0x73, 0x63, 0x72, 0x69, 0x62, 0x65, 0x43,
+	0x6f, 0x6d, 0x6d, 0x61, 0x6e, 0x64, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x2d, 0x0a,
+	0x07, 0x63, 0x6f, 0x6d, 0x6d, 0x61, 0x6e, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x13,
+	0x2e, 0x74, 0x65, 0x78, 0x74, 0x2e, 0x43, 0x6f, 0x6d, 0x6d, 0x61, 0x6e, 0x64, 0x4d, 0x61, 0x6e,
+	0x75, 0x61, 0x6c, 0x52, 0x07, 0x63, 0x6f, 0x6d, 0x6d, 0x61, 0x6e, 0x64, 0x22, 0x8a, 0x01, 0x0a,
+	0x0d, 0x43, 0x6f, 0x6d, 0x6d, 0x61, 0x6e, 0x64, 0x4d, 0x61, 0x6e, 0x75, 0x61, 0x6c, 0x12, 0x12,
 	0x0a, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x6e, 0x61,
-	0x6d, 0x65, 0x12, 0x12, 0x0a, 0x04, 0x61, 0x72, 0x67, 0x73, 0x18, 0x02, 0x20, 0x03, 0x28, 0x09,
-	0x52, 0x04, 0x61, 0x72, 0x67, 0x73, 0x22, 0x28, 0x0a, 0x10, 0x43, 0x6f, 0x6d, 0x70, 0x6c, 0x65,
-	0x74, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x14, 0x0a, 0x05, 0x76, 0x61,
-	0x6c, 0x75, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x05, 0x76, 0x61, 0x6c, 0x75, 0x65,
-	0x32, 0xb5, 0x06, 0x0a, 0x06, 0x45, 0x64, 0x69, 0x74, 0x6f, 0x72, 0x12, 0x2d, 0x0a, 0x04, 0x45,
-	0x64, 0x69, 0x74, 0x12, 0x11, 0x2e, 0x74, 0x65, 0x78, 0x74, 0x2e, 0x45, 0x64, 0x69, 0x74, 0x52,
-	0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x12, 0x2e, 0x74, 0x65, 0x78, 0x74, 0x2e, 0x45, 0x64,
-	0x69, 0x74, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x47, 0x0a, 0x08, 0x52, 0x65,
-	0x67, 0x69, 0x73, 0x74, 0x65, 0x72, 0x12, 0x1c, 0x2e, 0x74, 0x65, 0x78, 0x74, 0x2e, 0x52, 0x65,
-	0x67, 0x69, 0x73, 0x74, 0x65, 0x72, 0x43, 0x6f, 0x6d, 0x6d, 0x61, 0x6e, 0x64, 0x52, 0x65, 0x71,
-	0x75, 0x65, 0x73, 0x74, 0x1a, 0x1d, 0x2e, 0x74, 0x65, 0x78, 0x74, 0x2e, 0x52, 0x65, 0x67, 0x69,
-	0x73, 0x74, 0x65, 0x72, 0x43, 0x6f, 0x6d, 0x6d, 0x61, 0x6e, 0x64, 0x52, 0x65, 0x73, 0x70, 0x6f,
-	0x6e, 0x73, 0x65, 0x12, 0x3c, 0x0a, 0x09, 0x53, 0x65, 0x74, 0x43, 0x75, 0x72, 0x73, 0x6f, 0x72,
-	0x12, 0x16, 0x2e, 0x74, 0x65, 0x78, 0x74, 0x2e, 0x53, 0x65, 0x74, 0x43, 0x75, 0x72, 0x73, 0x6f,
-	0x72, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x17, 0x2e, 0x74, 0x65, 0x78, 0x74, 0x2e,
-	0x53, 0x65, 0x74, 0x43, 0x75, 0x72, 0x73, 0x6f, 0x72, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73,
-	0x65, 0x12, 0x33, 0x0a, 0x06, 0x43, 0x75, 0x72, 0x73, 0x6f, 0x72, 0x12, 0x13, 0x2e, 0x74, 0x65,
-	0x78, 0x74, 0x2e, 0x43, 0x75, 0x72, 0x73, 0x6f, 0x72, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74,
-	0x1a, 0x14, 0x2e, 0x74, 0x65, 0x78, 0x74, 0x2e, 0x43, 0x75, 0x72, 0x73, 0x6f, 0x72, 0x52, 0x65,
-	0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x33, 0x0a, 0x06, 0x45, 0x64, 0x69, 0x74, 0x6f, 0x72,
-	0x12, 0x13, 0x2e, 0x74, 0x65, 0x78, 0x74, 0x2e, 0x45, 0x64, 0x69, 0x74, 0x6f, 0x72, 0x52, 0x65,
-	0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x14, 0x2e, 0x74, 0x65, 0x78, 0x74, 0x2e, 0x45, 0x64, 0x69,
-	0x74, 0x6f, 0x72, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x4e, 0x0a, 0x0f, 0x53,
-	0x65, 0x74, 0x4c, 0x6f, 0x63, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x4c, 0x69, 0x73, 0x74, 0x12, 0x1c,
-	0x2e, 0x74, 0x65, 0x78, 0x74, 0x2e, 0x53, 0x65, 0x74, 0x4c, 0x6f, 0x63, 0x61, 0x74, 0x69, 0x6f,
-	0x6e, 0x4c, 0x69, 0x73, 0x74, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x1d, 0x2e, 0x74,
-	0x65, 0x78, 0x74, 0x2e, 0x53, 0x65, 0x74, 0x4c, 0x6f, 0x63, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x4c,
-	0x69, 0x73, 0x74, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x4f, 0x0a, 0x12, 0x4d,
-	0x6f, 0x76, 0x65, 0x54, 0x6f, 0x4e, 0x65, 0x78, 0x74, 0x4c, 0x6f, 0x63, 0x61, 0x74, 0x69, 0x6f,
-	0x6e, 0x12, 0x1b, 0x2e, 0x74, 0x65, 0x78, 0x74, 0x2e, 0x4d, 0x6f, 0x76, 0x65, 0x54, 0x6f, 0x4c,
-	0x6f, 0x63, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x1c,
-	0x2e, 0x74, 0x65, 0x78, 0x74, 0x2e, 0x4d, 0x6f, 0x76, 0x65, 0x54, 0x6f, 0x4c, 0x6f, 0x63, 0x61,
-	0x74, 0x69, 0x6f, 0x6e, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x4f, 0x0a, 0x12,
-	0x4d, 0x6f, 0x76, 0x65, 0x54, 0x6f, 0x50, 0x72, 0x65, 0x76, 0x4c, 0x6f, 0x63, 0x61, 0x74, 0x69,
+	0x6d, 0x65, 0x12, 0x18, 0x0a, 0x07, 0x73, 0x75, 0x6d, 0x6d, 0x61, 0x72, 0x79, 0x18, 0x02, 0x20,
+	0x01, 0x28, 0x09, 0x52, 0x07, 0x73, 0x75, 0x6d, 0x6d, 0x61, 0x72, 0x79, 0x12, 0x1a, 0x0a, 0x08,
+	0x73, 0x79, 0x6e, 0x6f, 0x70, 0x73, 0x69, 0x73, 0x18, 0x03, 0x20, 0x01, 0x28, 0x09, 0x52, 0x08,
+	0x73, 0x79, 0x6e, 0x6f, 0x70, 0x73, 0x69, 0x73, 0x12, 0x2f, 0x0a, 0x08, 0x63, 0x6f, 0x6d, 0x6d,
+	0x61, 0x6e, 0x64, 0x73, 0x18, 0x04, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x13, 0x2e, 0x74, 0x65, 0x78,
+	0x74, 0x2e, 0x43, 0x6f, 0x6d, 0x6d, 0x61, 0x6e, 0x64, 0x4d, 0x61, 0x6e, 0x75, 0x61, 0x6c, 0x52,
+	0x08, 0x63, 0x6f, 0x6d, 0x6d, 0x61, 0x6e, 0x64, 0x73, 0x22, 0x1a, 0x0a, 0x18, 0x53, 0x75, 0x62,
+	0x73, 0x63, 0x72, 0x69, 0x62, 0x65, 0x43, 0x6f, 0x6d, 0x6d, 0x61, 0x6e, 0x64, 0x52, 0x65, 0x73,
+	0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x90, 0x03, 0x0a, 0x14, 0x43, 0x6c, 0x69, 0x65, 0x6e, 0x74,
+	0x43, 0x6f, 0x6d, 0x6d, 0x61, 0x6e, 0x64, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x12, 0x3a,
+	0x0a, 0x04, 0x74, 0x79, 0x70, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0e, 0x32, 0x26, 0x2e, 0x74,
+	0x65, 0x78, 0x74, 0x2e, 0x43, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x43, 0x6f, 0x6d, 0x6d, 0x61, 0x6e,
+	0x64, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x2e, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65,
+	0x54, 0x79, 0x70, 0x65, 0x52, 0x04, 0x74, 0x79, 0x70, 0x65, 0x12, 0x33, 0x0a, 0x06, 0x68, 0x61,
+	0x6e, 0x64, 0x6c, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1b, 0x2e, 0x74, 0x65, 0x78,
+	0x74, 0x2e, 0x48, 0x61, 0x6e, 0x64, 0x6c, 0x65, 0x43, 0x6f, 0x6d, 0x6d, 0x61, 0x6e, 0x64, 0x52,
+	0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x52, 0x06, 0x68, 0x61, 0x6e, 0x64, 0x6c, 0x65, 0x12,
+	0x41, 0x0a, 0x0e, 0x63, 0x6f, 0x6d, 0x70, 0x6c, 0x65, 0x74, 0x65, 0x5f, 0x76, 0x61, 0x6c, 0x75,
+	0x65, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1a, 0x2e, 0x74, 0x65, 0x78, 0x74, 0x2e, 0x43,
+	0x6f, 0x6d, 0x70, 0x6c, 0x65, 0x74, 0x65, 0x43, 0x6f, 0x6d, 0x6d, 0x61, 0x6e, 0x64, 0x56, 0x61,
+	0x6c, 0x75, 0x65, 0x52, 0x0d, 0x63, 0x6f, 0x6d, 0x70, 0x6c, 0x65, 0x74, 0x65, 0x56, 0x61, 0x6c,
+	0x75, 0x65, 0x12, 0x3e, 0x0a, 0x0d, 0x63, 0x6f, 0x6d, 0x70, 0x6c, 0x65, 0x74, 0x65, 0x5f, 0x64,
+	0x6f, 0x6e, 0x65, 0x18, 0x04, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x19, 0x2e, 0x74, 0x65, 0x78, 0x74,
+	0x2e, 0x43, 0x6f, 0x6d, 0x70, 0x6c, 0x65, 0x74, 0x65, 0x43, 0x6f, 0x6d, 0x6d, 0x61, 0x6e, 0x64,
+	0x44, 0x6f, 0x6e, 0x65, 0x52, 0x0c, 0x63, 0x6f, 0x6d, 0x70, 0x6c, 0x65, 0x74, 0x65, 0x44, 0x6f,
+	0x6e, 0x65, 0x12, 0x37, 0x0a, 0x07, 0x72, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x18, 0x05, 0x20,
+	0x01, 0x28, 0x0b, 0x32, 0x1d, 0x2e, 0x74, 0x65, 0x78, 0x74, 0x2e, 0x53, 0x75, 0x62, 0x73, 0x63,
+	0x72, 0x69, 0x62, 0x65, 0x43, 0x6f, 0x6d, 0x6d, 0x61, 0x6e, 0x64, 0x52, 0x65, 0x71, 0x75, 0x65,
+	0x73, 0x74, 0x52, 0x07, 0x72, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x22, 0x4b, 0x0a, 0x0b, 0x4d,
+	0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x54, 0x79, 0x70, 0x65, 0x12, 0x0a, 0x0a, 0x06, 0x48, 0x61,
+	0x6e, 0x64, 0x6c, 0x65, 0x10, 0x00, 0x12, 0x11, 0x0a, 0x0d, 0x43, 0x6f, 0x6d, 0x70, 0x6c, 0x65,
+	0x74, 0x65, 0x56, 0x61, 0x6c, 0x75, 0x65, 0x10, 0x01, 0x12, 0x10, 0x0a, 0x0c, 0x43, 0x6f, 0x6d,
+	0x70, 0x6c, 0x65, 0x74, 0x65, 0x44, 0x6f, 0x6e, 0x65, 0x10, 0x02, 0x12, 0x0b, 0x0a, 0x07, 0x52,
+	0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x10, 0x03, 0x22, 0xb3, 0x02, 0x0a, 0x14, 0x53, 0x65, 0x72,
+	0x76, 0x65, 0x72, 0x43, 0x6f, 0x6d, 0x6d, 0x61, 0x6e, 0x64, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67,
+	0x65, 0x12, 0x3a, 0x0a, 0x04, 0x74, 0x79, 0x70, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0e, 0x32,
+	0x26, 0x2e, 0x74, 0x65, 0x78, 0x74, 0x2e, 0x53, 0x65, 0x72, 0x76, 0x65, 0x72, 0x43, 0x6f, 0x6d,
+	0x6d, 0x61, 0x6e, 0x64, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x2e, 0x4d, 0x65, 0x73, 0x73,
+	0x61, 0x67, 0x65, 0x54, 0x79, 0x70, 0x65, 0x52, 0x04, 0x74, 0x79, 0x70, 0x65, 0x12, 0x32, 0x0a,
+	0x06, 0x68, 0x61, 0x6e, 0x64, 0x6c, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1a, 0x2e,
+	0x74, 0x65, 0x78, 0x74, 0x2e, 0x48, 0x61, 0x6e, 0x64, 0x6c, 0x65, 0x43, 0x6f, 0x6d, 0x6d, 0x61,
+	0x6e, 0x64, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x52, 0x06, 0x68, 0x61, 0x6e, 0x64, 0x6c,
+	0x65, 0x12, 0x38, 0x0a, 0x08, 0x63, 0x6f, 0x6d, 0x70, 0x6c, 0x65, 0x74, 0x65, 0x18, 0x03, 0x20,
+	0x01, 0x28, 0x0b, 0x32, 0x1c, 0x2e, 0x74, 0x65, 0x78, 0x74, 0x2e, 0x43, 0x6f, 0x6d, 0x70, 0x6c,
+	0x65, 0x74, 0x65, 0x43, 0x6f, 0x6d, 0x6d, 0x61, 0x6e, 0x64, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73,
+	0x74, 0x52, 0x08, 0x63, 0x6f, 0x6d, 0x70, 0x6c, 0x65, 0x74, 0x65, 0x12, 0x3a, 0x0a, 0x08, 0x72,
+	0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x18, 0x04, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1e, 0x2e,
+	0x74, 0x65, 0x78, 0x74, 0x2e, 0x53, 0x75, 0x62, 0x73, 0x63, 0x72, 0x69, 0x62, 0x65, 0x43, 0x6f,
+	0x6d, 0x6d, 0x61, 0x6e, 0x64, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x52, 0x08, 0x72,
+	0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x35, 0x0a, 0x0b, 0x4d, 0x65, 0x73, 0x73, 0x61,
+	0x67, 0x65, 0x54, 0x79, 0x70, 0x65, 0x12, 0x0a, 0x0a, 0x06, 0x48, 0x61, 0x6e, 0x64, 0x6c, 0x65,
+	0x10, 0x00, 0x12, 0x0c, 0x0a, 0x08, 0x43, 0x6f, 0x6d, 0x70, 0x6c, 0x65, 0x74, 0x65, 0x10, 0x01,
+	0x12, 0x0c, 0x0a, 0x08, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x10, 0x02, 0x22, 0xfd,
+	0x01, 0x0a, 0x14, 0x48, 0x61, 0x6e, 0x64, 0x6c, 0x65, 0x43, 0x6f, 0x6d, 0x6d, 0x61, 0x6e, 0x64,
+	0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x12, 0x0a, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x18,
+	0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x12, 0x12, 0x0a, 0x04, 0x61,
+	0x72, 0x67, 0x73, 0x18, 0x02, 0x20, 0x03, 0x28, 0x09, 0x52, 0x04, 0x61, 0x72, 0x67, 0x73, 0x12,
+	0x2e, 0x0a, 0x0d, 0x72, 0x65, 0x73, 0x6f, 0x75, 0x72, 0x63, 0x65, 0x5f, 0x6e, 0x61, 0x6d, 0x65,
+	0x18, 0x03, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x09, 0x2e, 0x74, 0x65, 0x78, 0x74, 0x2e, 0x55, 0x52,
+	0x49, 0x52, 0x0c, 0x72, 0x65, 0x73, 0x6f, 0x75, 0x72, 0x63, 0x65, 0x4e, 0x61, 0x6d, 0x65, 0x12,
+	0x38, 0x0a, 0x0e, 0x63, 0x75, 0x72, 0x73, 0x6f, 0x72, 0x5f, 0x63, 0x6f, 0x6e, 0x74, 0x65, 0x6e,
+	0x74, 0x18, 0x04, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x11, 0x2e, 0x74, 0x65, 0x72, 0x6d, 0x2e, 0x43,
+	0x6f, 0x6f, 0x72, 0x64, 0x69, 0x6e, 0x61, 0x74, 0x65, 0x73, 0x52, 0x0d, 0x63, 0x75, 0x72, 0x73,
+	0x6f, 0x72, 0x43, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x74, 0x12, 0x36, 0x0a, 0x0d, 0x63, 0x75, 0x72,
+	0x73, 0x6f, 0x72, 0x5f, 0x77, 0x69, 0x6e, 0x64, 0x6f, 0x77, 0x18, 0x05, 0x20, 0x01, 0x28, 0x0b,
+	0x32, 0x11, 0x2e, 0x74, 0x65, 0x72, 0x6d, 0x2e, 0x43, 0x6f, 0x6f, 0x72, 0x64, 0x69, 0x6e, 0x61,
+	0x74, 0x65, 0x73, 0x52, 0x0c, 0x63, 0x75, 0x72, 0x73, 0x6f, 0x72, 0x57, 0x69, 0x6e, 0x64, 0x6f,
+	0x77, 0x12, 0x1b, 0x0a, 0x09, 0x77, 0x69, 0x6e, 0x64, 0x6f, 0x77, 0x5f, 0x69, 0x64, 0x18, 0x06,
+	0x20, 0x01, 0x28, 0x04, 0x52, 0x08, 0x77, 0x69, 0x6e, 0x64, 0x6f, 0x77, 0x49, 0x64, 0x22, 0x2d,
+	0x0a, 0x15, 0x48, 0x61, 0x6e, 0x64, 0x6c, 0x65, 0x43, 0x6f, 0x6d, 0x6d, 0x61, 0x6e, 0x64, 0x52,
+	0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x14, 0x0a, 0x05, 0x65, 0x72, 0x72, 0x6f, 0x72,
+	0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x05, 0x65, 0x72, 0x72, 0x6f, 0x72, 0x22, 0x50, 0x0a,
+	0x16, 0x43, 0x6f, 0x6d, 0x70, 0x6c, 0x65, 0x74, 0x65, 0x43, 0x6f, 0x6d, 0x6d, 0x61, 0x6e, 0x64,
+	0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x0e, 0x0a, 0x02, 0x69, 0x64, 0x18, 0x01, 0x20,
+	0x01, 0x28, 0x03, 0x52, 0x02, 0x69, 0x64, 0x12, 0x12, 0x0a, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x18,
+	0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x12, 0x12, 0x0a, 0x04, 0x61,
+	0x72, 0x67, 0x73, 0x18, 0x03, 0x20, 0x03, 0x28, 0x09, 0x52, 0x04, 0x61, 0x72, 0x67, 0x73, 0x22,
+	0x3c, 0x0a, 0x14, 0x43, 0x6f, 0x6d, 0x70, 0x6c, 0x65, 0x74, 0x65, 0x43, 0x6f, 0x6d, 0x6d, 0x61,
+	0x6e, 0x64, 0x56, 0x61, 0x6c, 0x75, 0x65, 0x12, 0x0e, 0x0a, 0x02, 0x69, 0x64, 0x18, 0x01, 0x20,
+	0x01, 0x28, 0x03, 0x52, 0x02, 0x69, 0x64, 0x12, 0x14, 0x0a, 0x05, 0x76, 0x61, 0x6c, 0x75, 0x65,
+	0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x05, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x22, 0x3b, 0x0a,
+	0x13, 0x43, 0x6f, 0x6d, 0x70, 0x6c, 0x65, 0x74, 0x65, 0x43, 0x6f, 0x6d, 0x6d, 0x61, 0x6e, 0x64,
+	0x44, 0x6f, 0x6e, 0x65, 0x12, 0x0e, 0x0a, 0x02, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x03,
+	0x52, 0x02, 0x69, 0x64, 0x12, 0x14, 0x0a, 0x05, 0x65, 0x72, 0x72, 0x6f, 0x72, 0x18, 0x02, 0x20,
+	0x01, 0x28, 0x09, 0x52, 0x05, 0x65, 0x72, 0x72, 0x6f, 0x72, 0x32, 0xbc, 0x06, 0x0a, 0x06, 0x45,
+	0x64, 0x69, 0x74, 0x6f, 0x72, 0x12, 0x2d, 0x0a, 0x04, 0x45, 0x64, 0x69, 0x74, 0x12, 0x11, 0x2e,
+	0x74, 0x65, 0x78, 0x74, 0x2e, 0x45, 0x64, 0x69, 0x74, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74,
+	0x1a, 0x12, 0x2e, 0x74, 0x65, 0x78, 0x74, 0x2e, 0x45, 0x64, 0x69, 0x74, 0x52, 0x65, 0x73, 0x70,
+	0x6f, 0x6e, 0x73, 0x65, 0x12, 0x3c, 0x0a, 0x09, 0x53, 0x65, 0x74, 0x43, 0x75, 0x72, 0x73, 0x6f,
+	0x72, 0x12, 0x16, 0x2e, 0x74, 0x65, 0x78, 0x74, 0x2e, 0x53, 0x65, 0x74, 0x43, 0x75, 0x72, 0x73,
+	0x6f, 0x72, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x17, 0x2e, 0x74, 0x65, 0x78, 0x74,
+	0x2e, 0x53, 0x65, 0x74, 0x43, 0x75, 0x72, 0x73, 0x6f, 0x72, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e,
+	0x73, 0x65, 0x12, 0x33, 0x0a, 0x06, 0x43, 0x75, 0x72, 0x73, 0x6f, 0x72, 0x12, 0x13, 0x2e, 0x74,
+	0x65, 0x78, 0x74, 0x2e, 0x43, 0x75, 0x72, 0x73, 0x6f, 0x72, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73,
+	0x74, 0x1a, 0x14, 0x2e, 0x74, 0x65, 0x78, 0x74, 0x2e, 0x43, 0x75, 0x72, 0x73, 0x6f, 0x72, 0x52,
+	0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x33, 0x0a, 0x06, 0x45, 0x64, 0x69, 0x74, 0x6f,
+	0x72, 0x12, 0x13, 0x2e, 0x74, 0x65, 0x78, 0x74, 0x2e, 0x45, 0x64, 0x69, 0x74, 0x6f, 0x72, 0x52,
+	0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x14, 0x2e, 0x74, 0x65, 0x78, 0x74, 0x2e, 0x45, 0x64,
+	0x69, 0x74, 0x6f, 0x72, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x4e, 0x0a, 0x0f,
+	0x53, 0x65, 0x74, 0x4c, 0x6f, 0x63, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x4c, 0x69, 0x73, 0x74, 0x12,
+	0x1c, 0x2e, 0x74, 0x65, 0x78, 0x74, 0x2e, 0x53, 0x65, 0x74, 0x4c, 0x6f, 0x63, 0x61, 0x74, 0x69,
+	0x6f, 0x6e, 0x4c, 0x69, 0x73, 0x74, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x1d, 0x2e,
+	0x74, 0x65, 0x78, 0x74, 0x2e, 0x53, 0x65, 0x74, 0x4c, 0x6f, 0x63, 0x61, 0x74, 0x69, 0x6f, 0x6e,
+	0x4c, 0x69, 0x73, 0x74, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x4f, 0x0a, 0x12,
+	0x4d, 0x6f, 0x76, 0x65, 0x54, 0x6f, 0x4e, 0x65, 0x78, 0x74, 0x4c, 0x6f, 0x63, 0x61, 0x74, 0x69,
 	0x6f, 0x6e, 0x12, 0x1b, 0x2e, 0x74, 0x65, 0x78, 0x74, 0x2e, 0x4d, 0x6f, 0x76, 0x65, 0x54, 0x6f,
 	0x4c, 0x6f, 0x63, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a,
 	0x1c, 0x2e, 0x74, 0x65, 0x78, 0x74, 0x2e, 0x4d, 0x6f, 0x76, 0x65, 0x54, 0x6f, 0x4c, 0x6f, 0x63,
-	0x61, 0x74, 0x69, 0x6f, 0x6e, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x39, 0x0a,
-	0x08, 0x45, 0x64, 0x69, 0x74, 0x43, 0x65, 0x6c, 0x6c, 0x12, 0x15, 0x2e, 0x74, 0x65, 0x78, 0x74,
-	0x2e, 0x45, 0x64, 0x69, 0x74, 0x43, 0x65, 0x6c, 0x6c, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74,
-	0x1a, 0x16, 0x2e, 0x74, 0x65, 0x78, 0x74, 0x2e, 0x45, 0x64, 0x69, 0x74, 0x43, 0x65, 0x6c, 0x6c,
-	0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x39, 0x0a, 0x08, 0x52, 0x61, 0x77, 0x43,
-	0x65, 0x6c, 0x6c, 0x73, 0x12, 0x15, 0x2e, 0x74, 0x65, 0x78, 0x74, 0x2e, 0x52, 0x61, 0x77, 0x43,
-	0x65, 0x6c, 0x6c, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x16, 0x2e, 0x74, 0x65,
-	0x78, 0x74, 0x2e, 0x52, 0x61, 0x77, 0x43, 0x65, 0x6c, 0x6c, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f,
-	0x6e, 0x73, 0x65, 0x12, 0x5d, 0x0a, 0x14, 0x53, 0x65, 0x74, 0x44, 0x65, 0x66, 0x61, 0x75, 0x6c,
-	0x74, 0x41, 0x74, 0x74, 0x72, 0x69, 0x62, 0x75, 0x74, 0x65, 0x73, 0x12, 0x21, 0x2e, 0x74, 0x65,
-	0x78, 0x74, 0x2e, 0x53, 0x65, 0x74, 0x44, 0x65, 0x66, 0x61, 0x75, 0x6c, 0x74, 0x41, 0x74, 0x74,
-	0x72, 0x69, 0x62, 0x75, 0x74, 0x65, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x22,
-	0x2e, 0x74, 0x65, 0x78, 0x74, 0x2e, 0x53, 0x65, 0x74, 0x44, 0x65, 0x66, 0x61, 0x75, 0x6c, 0x74,
-	0x41, 0x74, 0x74, 0x72, 0x69, 0x62, 0x75, 0x74, 0x65, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e,
-	0x73, 0x65, 0x12, 0x44, 0x0a, 0x0e, 0x53, 0x75, 0x62, 0x73, 0x63, 0x72, 0x69, 0x62, 0x65, 0x45,
-	0x76, 0x65, 0x6e, 0x74, 0x12, 0x1b, 0x2e, 0x74, 0x65, 0x78, 0x74, 0x2e, 0x53, 0x75, 0x62, 0x73,
-	0x63, 0x72, 0x69, 0x62, 0x65, 0x45, 0x76, 0x65, 0x6e, 0x74, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73,
-	0x74, 0x1a, 0x11, 0x2e, 0x74, 0x65, 0x78, 0x74, 0x2e, 0x45, 0x64, 0x69, 0x74, 0x6f, 0x72, 0x45,
-	0x76, 0x65, 0x6e, 0x74, 0x28, 0x01, 0x30, 0x01, 0x32, 0x97, 0x01, 0x0a, 0x0e, 0x43, 0x6f, 0x6d,
-	0x6d, 0x61, 0x6e, 0x64, 0x48, 0x61, 0x6e, 0x64, 0x6c, 0x65, 0x72, 0x12, 0x48, 0x0a, 0x0d, 0x48,
-	0x61, 0x6e, 0x64, 0x6c, 0x65, 0x43, 0x6f, 0x6d, 0x6d, 0x61, 0x6e, 0x64, 0x12, 0x1a, 0x2e, 0x74,
-	0x65, 0x78, 0x74, 0x2e, 0x48, 0x61, 0x6e, 0x64, 0x6c, 0x65, 0x43, 0x6f, 0x6d, 0x6d, 0x61, 0x6e,
-	0x64, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x1b, 0x2e, 0x74, 0x65, 0x78, 0x74, 0x2e,
-	0x48, 0x61, 0x6e, 0x64, 0x6c, 0x65, 0x43, 0x6f, 0x6d, 0x6d, 0x61, 0x6e, 0x64, 0x52, 0x65, 0x73,
-	0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x3b, 0x0a, 0x08, 0x43, 0x6f, 0x6d, 0x70, 0x6c, 0x65, 0x74,
-	0x65, 0x12, 0x15, 0x2e, 0x74, 0x65, 0x78, 0x74, 0x2e, 0x43, 0x6f, 0x6d, 0x70, 0x6c, 0x65, 0x74,
-	0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x16, 0x2e, 0x74, 0x65, 0x78, 0x74, 0x2e,
-	0x43, 0x6f, 0x6d, 0x70, 0x6c, 0x65, 0x74, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65,
-	0x30, 0x01, 0x42, 0x24, 0x5a, 0x22, 0x75, 0x6e, 0x73, 0x74, 0x61, 0x62, 0x6c, 0x65, 0x2e, 0x62,
-	0x75, 0x69, 0x6c, 0x64, 0x2f, 0x67, 0x6f, 0x2d, 0x74, 0x75, 0x69, 0x2f, 0x74, 0x65, 0x78, 0x74,
-	0x2f, 0x74, 0x65, 0x78, 0x74, 0x72, 0x70, 0x63, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
+	0x61, 0x74, 0x69, 0x6f, 0x6e, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x4f, 0x0a,
+	0x12, 0x4d, 0x6f, 0x76, 0x65, 0x54, 0x6f, 0x50, 0x72, 0x65, 0x76, 0x4c, 0x6f, 0x63, 0x61, 0x74,
+	0x69, 0x6f, 0x6e, 0x12, 0x1b, 0x2e, 0x74, 0x65, 0x78, 0x74, 0x2e, 0x4d, 0x6f, 0x76, 0x65, 0x54,
+	0x6f, 0x4c, 0x6f, 0x63, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74,
+	0x1a, 0x1c, 0x2e, 0x74, 0x65, 0x78, 0x74, 0x2e, 0x4d, 0x6f, 0x76, 0x65, 0x54, 0x6f, 0x4c, 0x6f,
+	0x63, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x39,
+	0x0a, 0x08, 0x45, 0x64, 0x69, 0x74, 0x43, 0x65, 0x6c, 0x6c, 0x12, 0x15, 0x2e, 0x74, 0x65, 0x78,
+	0x74, 0x2e, 0x45, 0x64, 0x69, 0x74, 0x43, 0x65, 0x6c, 0x6c, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73,
+	0x74, 0x1a, 0x16, 0x2e, 0x74, 0x65, 0x78, 0x74, 0x2e, 0x45, 0x64, 0x69, 0x74, 0x43, 0x65, 0x6c,
+	0x6c, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x39, 0x0a, 0x08, 0x52, 0x61, 0x77,
+	0x43, 0x65, 0x6c, 0x6c, 0x73, 0x12, 0x15, 0x2e, 0x74, 0x65, 0x78, 0x74, 0x2e, 0x52, 0x61, 0x77,
+	0x43, 0x65, 0x6c, 0x6c, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x16, 0x2e, 0x74,
+	0x65, 0x78, 0x74, 0x2e, 0x52, 0x61, 0x77, 0x43, 0x65, 0x6c, 0x6c, 0x73, 0x52, 0x65, 0x73, 0x70,
+	0x6f, 0x6e, 0x73, 0x65, 0x12, 0x5d, 0x0a, 0x14, 0x53, 0x65, 0x74, 0x44, 0x65, 0x66, 0x61, 0x75,
+	0x6c, 0x74, 0x41, 0x74, 0x74, 0x72, 0x69, 0x62, 0x75, 0x74, 0x65, 0x73, 0x12, 0x21, 0x2e, 0x74,
+	0x65, 0x78, 0x74, 0x2e, 0x53, 0x65, 0x74, 0x44, 0x65, 0x66, 0x61, 0x75, 0x6c, 0x74, 0x41, 0x74,
+	0x74, 0x72, 0x69, 0x62, 0x75, 0x74, 0x65, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a,
+	0x22, 0x2e, 0x74, 0x65, 0x78, 0x74, 0x2e, 0x53, 0x65, 0x74, 0x44, 0x65, 0x66, 0x61, 0x75, 0x6c,
+	0x74, 0x41, 0x74, 0x74, 0x72, 0x69, 0x62, 0x75, 0x74, 0x65, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f,
+	0x6e, 0x73, 0x65, 0x12, 0x44, 0x0a, 0x0e, 0x53, 0x75, 0x62, 0x73, 0x63, 0x72, 0x69, 0x62, 0x65,
+	0x45, 0x76, 0x65, 0x6e, 0x74, 0x12, 0x1b, 0x2e, 0x74, 0x65, 0x78, 0x74, 0x2e, 0x53, 0x75, 0x62,
+	0x73, 0x63, 0x72, 0x69, 0x62, 0x65, 0x45, 0x76, 0x65, 0x6e, 0x74, 0x52, 0x65, 0x71, 0x75, 0x65,
+	0x73, 0x74, 0x1a, 0x11, 0x2e, 0x74, 0x65, 0x78, 0x74, 0x2e, 0x45, 0x64, 0x69, 0x74, 0x6f, 0x72,
+	0x45, 0x76, 0x65, 0x6e, 0x74, 0x28, 0x01, 0x30, 0x01, 0x12, 0x4e, 0x0a, 0x10, 0x53, 0x75, 0x62,
+	0x73, 0x63, 0x72, 0x69, 0x62, 0x65, 0x43, 0x6f, 0x6d, 0x6d, 0x61, 0x6e, 0x64, 0x12, 0x1a, 0x2e,
+	0x74, 0x65, 0x78, 0x74, 0x2e, 0x43, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x43, 0x6f, 0x6d, 0x6d, 0x61,
+	0x6e, 0x64, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x1a, 0x1a, 0x2e, 0x74, 0x65, 0x78, 0x74,
+	0x2e, 0x53, 0x65, 0x72, 0x76, 0x65, 0x72, 0x43, 0x6f, 0x6d, 0x6d, 0x61, 0x6e, 0x64, 0x4d, 0x65,
+	0x73, 0x73, 0x61, 0x67, 0x65, 0x28, 0x01, 0x30, 0x01, 0x42, 0x24, 0x5a, 0x22, 0x75, 0x6e, 0x73,
+	0x74, 0x61, 0x62, 0x6c, 0x65, 0x2e, 0x62, 0x75, 0x69, 0x6c, 0x64, 0x2f, 0x67, 0x6f, 0x2d, 0x74,
+	0x75, 0x69, 0x2f, 0x74, 0x65, 0x78, 0x74, 0x2f, 0x74, 0x65, 0x78, 0x74, 0x72, 0x70, 0x63, 0x62,
+	0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
 }
 
 var (
@@ -1889,111 +2254,121 @@ func file_textrpc_editor_proto_rawDescGZIP() []byte {
 	return file_textrpc_editor_proto_rawDescData
 }
 
-var file_textrpc_editor_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_textrpc_editor_proto_msgTypes = make([]protoimpl.MessageInfo, 29)
+var file_textrpc_editor_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
+var file_textrpc_editor_proto_msgTypes = make([]protoimpl.MessageInfo, 32)
 var file_textrpc_editor_proto_goTypes = []interface{}{
 	(EditorEvent_Type)(0),                   // 0: text.EditorEvent.Type
-	(*URI)(nil),                             // 1: text.URI
-	(*EditRequest)(nil),                     // 2: text.EditRequest
-	(*EditResponse)(nil),                    // 3: text.EditResponse
-	(*EditorEvent)(nil),                     // 4: text.EditorEvent
-	(*SubscribeEventRequest)(nil),           // 5: text.SubscribeEventRequest
-	(*SetLocationListRequest)(nil),          // 6: text.SetLocationListRequest
-	(*SetLocationListResponse)(nil),         // 7: text.SetLocationListResponse
-	(*EditCellRequest)(nil),                 // 8: text.EditCellRequest
-	(*EditCellResponse)(nil),                // 9: text.EditCellResponse
-	(*RawCellsRequest)(nil),                 // 10: text.RawCellsRequest
-	(*RawCellsResponse)(nil),                // 11: text.RawCellsResponse
-	(*MoveToLocationRequest)(nil),           // 12: text.MoveToLocationRequest
-	(*MoveToLocationResponse)(nil),          // 13: text.MoveToLocationResponse
-	(*RegisterCommandRequest)(nil),          // 14: text.RegisterCommandRequest
-	(*CommandManual)(nil),                   // 15: text.CommandManual
-	(*RegisterCommandResponse)(nil),         // 16: text.RegisterCommandResponse
-	(*SetCursorRequest)(nil),                // 17: text.SetCursorRequest
-	(*SetCursorResponse)(nil),               // 18: text.SetCursorResponse
-	(*CursorRequest)(nil),                   // 19: text.CursorRequest
-	(*CursorResponse)(nil),                  // 20: text.CursorResponse
-	(*EditorRequest)(nil),                   // 21: text.EditorRequest
-	(*EditorResponse)(nil),                  // 22: text.EditorResponse
-	(*SetDefaultAttributesRequest)(nil),     // 23: text.SetDefaultAttributesRequest
-	(*SetDefaultAttributesResponse)(nil),    // 24: text.SetDefaultAttributesResponse
-	(*HandleCommandRequest)(nil),            // 25: text.HandleCommandRequest
-	(*HandleCommandResponse)(nil),           // 26: text.HandleCommandResponse
-	(*CompleteRequest)(nil),                 // 27: text.CompleteRequest
-	(*CompleteResponse)(nil),                // 28: text.CompleteResponse
-	(*SetLocationListRequest_Location)(nil), // 29: text.SetLocationListRequest.Location
-	(*termrpc.CellRow)(nil),                 // 30: term.CellRow
-	(*termrpc.Coordinates)(nil),             // 31: term.Coordinates
-	(*termrpc.Attributes)(nil),              // 32: term.Attributes
+	(ClientCommandMessage_MessageType)(0),   // 1: text.ClientCommandMessage.MessageType
+	(ServerCommandMessage_MessageType)(0),   // 2: text.ServerCommandMessage.MessageType
+	(*URI)(nil),                             // 3: text.URI
+	(*EditRequest)(nil),                     // 4: text.EditRequest
+	(*EditResponse)(nil),                    // 5: text.EditResponse
+	(*EditorEvent)(nil),                     // 6: text.EditorEvent
+	(*SubscribeEventRequest)(nil),           // 7: text.SubscribeEventRequest
+	(*SetLocationListRequest)(nil),          // 8: text.SetLocationListRequest
+	(*SetLocationListResponse)(nil),         // 9: text.SetLocationListResponse
+	(*EditCellRequest)(nil),                 // 10: text.EditCellRequest
+	(*EditCellResponse)(nil),                // 11: text.EditCellResponse
+	(*RawCellsRequest)(nil),                 // 12: text.RawCellsRequest
+	(*RawCellsResponse)(nil),                // 13: text.RawCellsResponse
+	(*MoveToLocationRequest)(nil),           // 14: text.MoveToLocationRequest
+	(*MoveToLocationResponse)(nil),          // 15: text.MoveToLocationResponse
+	(*SetCursorRequest)(nil),                // 16: text.SetCursorRequest
+	(*SetCursorResponse)(nil),               // 17: text.SetCursorResponse
+	(*CursorRequest)(nil),                   // 18: text.CursorRequest
+	(*CursorResponse)(nil),                  // 19: text.CursorResponse
+	(*EditorRequest)(nil),                   // 20: text.EditorRequest
+	(*EditorResponse)(nil),                  // 21: text.EditorResponse
+	(*SetDefaultAttributesRequest)(nil),     // 22: text.SetDefaultAttributesRequest
+	(*SetDefaultAttributesResponse)(nil),    // 23: text.SetDefaultAttributesResponse
+	(*SubscribeCommandRequest)(nil),         // 24: text.SubscribeCommandRequest
+	(*CommandManual)(nil),                   // 25: text.CommandManual
+	(*SubscribeCommandResponse)(nil),        // 26: text.SubscribeCommandResponse
+	(*ClientCommandMessage)(nil),            // 27: text.ClientCommandMessage
+	(*ServerCommandMessage)(nil),            // 28: text.ServerCommandMessage
+	(*HandleCommandRequest)(nil),            // 29: text.HandleCommandRequest
+	(*HandleCommandResponse)(nil),           // 30: text.HandleCommandResponse
+	(*CompleteCommandRequest)(nil),          // 31: text.CompleteCommandRequest
+	(*CompleteCommandValue)(nil),            // 32: text.CompleteCommandValue
+	(*CompleteCommandDone)(nil),             // 33: text.CompleteCommandDone
+	(*SetLocationListRequest_Location)(nil), // 34: text.SetLocationListRequest.Location
+	(*termrpc.CellRow)(nil),                 // 35: term.CellRow
+	(*termrpc.Coordinates)(nil),             // 36: term.Coordinates
+	(*termrpc.Attributes)(nil),              // 37: term.Attributes
 }
 var file_textrpc_editor_proto_depIdxs = []int32{
-	1,  // 0: text.EditRequest.resource_name:type_name -> text.URI
-	30, // 1: text.EditRequest.buffer:type_name -> term.CellRow
+	3,  // 0: text.EditRequest.resource_name:type_name -> text.URI
+	35, // 1: text.EditRequest.buffer:type_name -> term.CellRow
 	0,  // 2: text.EditorEvent.type:type_name -> text.EditorEvent.Type
-	1,  // 3: text.EditorEvent.resource_name:type_name -> text.URI
-	31, // 4: text.EditorEvent.start:type_name -> term.Coordinates
-	31, // 5: text.EditorEvent.end:type_name -> term.Coordinates
-	31, // 6: text.EditorEvent.from:type_name -> term.Coordinates
-	31, // 7: text.EditorEvent.to:type_name -> term.Coordinates
+	3,  // 3: text.EditorEvent.resource_name:type_name -> text.URI
+	36, // 4: text.EditorEvent.start:type_name -> term.Coordinates
+	36, // 5: text.EditorEvent.end:type_name -> term.Coordinates
+	36, // 6: text.EditorEvent.from:type_name -> term.Coordinates
+	36, // 7: text.EditorEvent.to:type_name -> term.Coordinates
 	0,  // 8: text.SubscribeEventRequest.type:type_name -> text.EditorEvent.Type
-	1,  // 9: text.SetLocationListRequest.resource_name:type_name -> text.URI
-	29, // 10: text.SetLocationListRequest.locations:type_name -> text.SetLocationListRequest.Location
-	1,  // 11: text.EditCellRequest.resource_name:type_name -> text.URI
-	31, // 12: text.EditCellRequest.start:type_name -> term.Coordinates
-	31, // 13: text.EditCellRequest.end:type_name -> term.Coordinates
-	31, // 14: text.EditCellResponse.from:type_name -> term.Coordinates
-	31, // 15: text.EditCellResponse.to:type_name -> term.Coordinates
-	1,  // 16: text.RawCellsRequest.resource_name:type_name -> text.URI
-	30, // 17: text.RawCellsResponse.rows:type_name -> term.CellRow
-	1,  // 18: text.MoveToLocationRequest.resource_name:type_name -> text.URI
-	15, // 19: text.RegisterCommandRequest.command:type_name -> text.CommandManual
-	15, // 20: text.CommandManual.commands:type_name -> text.CommandManual
-	31, // 21: text.SetCursorRequest.pos:type_name -> term.Coordinates
-	1,  // 22: text.SetCursorRequest.resource_name:type_name -> text.URI
-	1,  // 23: text.CursorRequest.resource_name:type_name -> text.URI
-	31, // 24: text.CursorResponse.pos:type_name -> term.Coordinates
-	1,  // 25: text.EditorRequest.resource_name:type_name -> text.URI
-	1,  // 26: text.SetDefaultAttributesRequest.resource_name:type_name -> text.URI
-	32, // 27: text.SetDefaultAttributesRequest.attributes:type_name -> term.Attributes
-	1,  // 28: text.HandleCommandRequest.resource_name:type_name -> text.URI
-	31, // 29: text.HandleCommandRequest.cursor_content:type_name -> term.Coordinates
-	31, // 30: text.HandleCommandRequest.cursor_window:type_name -> term.Coordinates
-	31, // 31: text.SetLocationListRequest.Location.from:type_name -> term.Coordinates
-	31, // 32: text.SetLocationListRequest.Location.to:type_name -> term.Coordinates
-	32, // 33: text.SetLocationListRequest.Location.attr:type_name -> term.Attributes
-	2,  // 34: text.Editor.Edit:input_type -> text.EditRequest
-	14, // 35: text.Editor.Register:input_type -> text.RegisterCommandRequest
-	17, // 36: text.Editor.SetCursor:input_type -> text.SetCursorRequest
-	19, // 37: text.Editor.Cursor:input_type -> text.CursorRequest
-	21, // 38: text.Editor.Editor:input_type -> text.EditorRequest
-	6,  // 39: text.Editor.SetLocationList:input_type -> text.SetLocationListRequest
-	12, // 40: text.Editor.MoveToNextLocation:input_type -> text.MoveToLocationRequest
-	12, // 41: text.Editor.MoveToPrevLocation:input_type -> text.MoveToLocationRequest
-	8,  // 42: text.Editor.EditCell:input_type -> text.EditCellRequest
-	10, // 43: text.Editor.RawCells:input_type -> text.RawCellsRequest
-	23, // 44: text.Editor.SetDefaultAttributes:input_type -> text.SetDefaultAttributesRequest
-	5,  // 45: text.Editor.SubscribeEvent:input_type -> text.SubscribeEventRequest
-	25, // 46: text.CommandHandler.HandleCommand:input_type -> text.HandleCommandRequest
-	27, // 47: text.CommandHandler.Complete:input_type -> text.CompleteRequest
-	3,  // 48: text.Editor.Edit:output_type -> text.EditResponse
-	16, // 49: text.Editor.Register:output_type -> text.RegisterCommandResponse
-	18, // 50: text.Editor.SetCursor:output_type -> text.SetCursorResponse
-	20, // 51: text.Editor.Cursor:output_type -> text.CursorResponse
-	22, // 52: text.Editor.Editor:output_type -> text.EditorResponse
-	7,  // 53: text.Editor.SetLocationList:output_type -> text.SetLocationListResponse
-	13, // 54: text.Editor.MoveToNextLocation:output_type -> text.MoveToLocationResponse
-	13, // 55: text.Editor.MoveToPrevLocation:output_type -> text.MoveToLocationResponse
-	9,  // 56: text.Editor.EditCell:output_type -> text.EditCellResponse
-	11, // 57: text.Editor.RawCells:output_type -> text.RawCellsResponse
-	24, // 58: text.Editor.SetDefaultAttributes:output_type -> text.SetDefaultAttributesResponse
-	4,  // 59: text.Editor.SubscribeEvent:output_type -> text.EditorEvent
-	26, // 60: text.CommandHandler.HandleCommand:output_type -> text.HandleCommandResponse
-	28, // 61: text.CommandHandler.Complete:output_type -> text.CompleteResponse
-	48, // [48:62] is the sub-list for method output_type
-	34, // [34:48] is the sub-list for method input_type
-	34, // [34:34] is the sub-list for extension type_name
-	34, // [34:34] is the sub-list for extension extendee
-	0,  // [0:34] is the sub-list for field type_name
+	3,  // 9: text.SetLocationListRequest.resource_name:type_name -> text.URI
+	34, // 10: text.SetLocationListRequest.locations:type_name -> text.SetLocationListRequest.Location
+	3,  // 11: text.EditCellRequest.resource_name:type_name -> text.URI
+	36, // 12: text.EditCellRequest.start:type_name -> term.Coordinates
+	36, // 13: text.EditCellRequest.end:type_name -> term.Coordinates
+	36, // 14: text.EditCellResponse.from:type_name -> term.Coordinates
+	36, // 15: text.EditCellResponse.to:type_name -> term.Coordinates
+	3,  // 16: text.RawCellsRequest.resource_name:type_name -> text.URI
+	35, // 17: text.RawCellsResponse.rows:type_name -> term.CellRow
+	3,  // 18: text.MoveToLocationRequest.resource_name:type_name -> text.URI
+	36, // 19: text.SetCursorRequest.pos:type_name -> term.Coordinates
+	3,  // 20: text.SetCursorRequest.resource_name:type_name -> text.URI
+	3,  // 21: text.CursorRequest.resource_name:type_name -> text.URI
+	36, // 22: text.CursorResponse.pos:type_name -> term.Coordinates
+	3,  // 23: text.EditorRequest.resource_name:type_name -> text.URI
+	3,  // 24: text.SetDefaultAttributesRequest.resource_name:type_name -> text.URI
+	37, // 25: text.SetDefaultAttributesRequest.attributes:type_name -> term.Attributes
+	25, // 26: text.SubscribeCommandRequest.command:type_name -> text.CommandManual
+	25, // 27: text.CommandManual.commands:type_name -> text.CommandManual
+	1,  // 28: text.ClientCommandMessage.type:type_name -> text.ClientCommandMessage.MessageType
+	30, // 29: text.ClientCommandMessage.handle:type_name -> text.HandleCommandResponse
+	32, // 30: text.ClientCommandMessage.complete_value:type_name -> text.CompleteCommandValue
+	33, // 31: text.ClientCommandMessage.complete_done:type_name -> text.CompleteCommandDone
+	24, // 32: text.ClientCommandMessage.request:type_name -> text.SubscribeCommandRequest
+	2,  // 33: text.ServerCommandMessage.type:type_name -> text.ServerCommandMessage.MessageType
+	29, // 34: text.ServerCommandMessage.handle:type_name -> text.HandleCommandRequest
+	31, // 35: text.ServerCommandMessage.complete:type_name -> text.CompleteCommandRequest
+	26, // 36: text.ServerCommandMessage.response:type_name -> text.SubscribeCommandResponse
+	3,  // 37: text.HandleCommandRequest.resource_name:type_name -> text.URI
+	36, // 38: text.HandleCommandRequest.cursor_content:type_name -> term.Coordinates
+	36, // 39: text.HandleCommandRequest.cursor_window:type_name -> term.Coordinates
+	36, // 40: text.SetLocationListRequest.Location.from:type_name -> term.Coordinates
+	36, // 41: text.SetLocationListRequest.Location.to:type_name -> term.Coordinates
+	37, // 42: text.SetLocationListRequest.Location.attr:type_name -> term.Attributes
+	4,  // 43: text.Editor.Edit:input_type -> text.EditRequest
+	16, // 44: text.Editor.SetCursor:input_type -> text.SetCursorRequest
+	18, // 45: text.Editor.Cursor:input_type -> text.CursorRequest
+	20, // 46: text.Editor.Editor:input_type -> text.EditorRequest
+	8,  // 47: text.Editor.SetLocationList:input_type -> text.SetLocationListRequest
+	14, // 48: text.Editor.MoveToNextLocation:input_type -> text.MoveToLocationRequest
+	14, // 49: text.Editor.MoveToPrevLocation:input_type -> text.MoveToLocationRequest
+	10, // 50: text.Editor.EditCell:input_type -> text.EditCellRequest
+	12, // 51: text.Editor.RawCells:input_type -> text.RawCellsRequest
+	22, // 52: text.Editor.SetDefaultAttributes:input_type -> text.SetDefaultAttributesRequest
+	7,  // 53: text.Editor.SubscribeEvent:input_type -> text.SubscribeEventRequest
+	27, // 54: text.Editor.SubscribeCommand:input_type -> text.ClientCommandMessage
+	5,  // 55: text.Editor.Edit:output_type -> text.EditResponse
+	17, // 56: text.Editor.SetCursor:output_type -> text.SetCursorResponse
+	19, // 57: text.Editor.Cursor:output_type -> text.CursorResponse
+	21, // 58: text.Editor.Editor:output_type -> text.EditorResponse
+	9,  // 59: text.Editor.SetLocationList:output_type -> text.SetLocationListResponse
+	15, // 60: text.Editor.MoveToNextLocation:output_type -> text.MoveToLocationResponse
+	15, // 61: text.Editor.MoveToPrevLocation:output_type -> text.MoveToLocationResponse
+	11, // 62: text.Editor.EditCell:output_type -> text.EditCellResponse
+	13, // 63: text.Editor.RawCells:output_type -> text.RawCellsResponse
+	23, // 64: text.Editor.SetDefaultAttributes:output_type -> text.SetDefaultAttributesResponse
+	6,  // 65: text.Editor.SubscribeEvent:output_type -> text.EditorEvent
+	28, // 66: text.Editor.SubscribeCommand:output_type -> text.ServerCommandMessage
+	55, // [55:67] is the sub-list for method output_type
+	43, // [43:55] is the sub-list for method input_type
+	43, // [43:43] is the sub-list for extension type_name
+	43, // [43:43] is the sub-list for extension extendee
+	0,  // [0:43] is the sub-list for field type_name
 }
 
 func init() { file_textrpc_editor_proto_init() }
@@ -2159,42 +2534,6 @@ func file_textrpc_editor_proto_init() {
 			}
 		}
 		file_textrpc_editor_proto_msgTypes[13].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*RegisterCommandRequest); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_textrpc_editor_proto_msgTypes[14].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*CommandManual); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_textrpc_editor_proto_msgTypes[15].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*RegisterCommandResponse); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_textrpc_editor_proto_msgTypes[16].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*SetCursorRequest); i {
 			case 0:
 				return &v.state
@@ -2206,7 +2545,7 @@ func file_textrpc_editor_proto_init() {
 				return nil
 			}
 		}
-		file_textrpc_editor_proto_msgTypes[17].Exporter = func(v interface{}, i int) interface{} {
+		file_textrpc_editor_proto_msgTypes[14].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*SetCursorResponse); i {
 			case 0:
 				return &v.state
@@ -2218,7 +2557,7 @@ func file_textrpc_editor_proto_init() {
 				return nil
 			}
 		}
-		file_textrpc_editor_proto_msgTypes[18].Exporter = func(v interface{}, i int) interface{} {
+		file_textrpc_editor_proto_msgTypes[15].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*CursorRequest); i {
 			case 0:
 				return &v.state
@@ -2230,7 +2569,7 @@ func file_textrpc_editor_proto_init() {
 				return nil
 			}
 		}
-		file_textrpc_editor_proto_msgTypes[19].Exporter = func(v interface{}, i int) interface{} {
+		file_textrpc_editor_proto_msgTypes[16].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*CursorResponse); i {
 			case 0:
 				return &v.state
@@ -2242,7 +2581,7 @@ func file_textrpc_editor_proto_init() {
 				return nil
 			}
 		}
-		file_textrpc_editor_proto_msgTypes[20].Exporter = func(v interface{}, i int) interface{} {
+		file_textrpc_editor_proto_msgTypes[17].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*EditorRequest); i {
 			case 0:
 				return &v.state
@@ -2254,7 +2593,7 @@ func file_textrpc_editor_proto_init() {
 				return nil
 			}
 		}
-		file_textrpc_editor_proto_msgTypes[21].Exporter = func(v interface{}, i int) interface{} {
+		file_textrpc_editor_proto_msgTypes[18].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*EditorResponse); i {
 			case 0:
 				return &v.state
@@ -2266,7 +2605,7 @@ func file_textrpc_editor_proto_init() {
 				return nil
 			}
 		}
-		file_textrpc_editor_proto_msgTypes[22].Exporter = func(v interface{}, i int) interface{} {
+		file_textrpc_editor_proto_msgTypes[19].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*SetDefaultAttributesRequest); i {
 			case 0:
 				return &v.state
@@ -2278,7 +2617,7 @@ func file_textrpc_editor_proto_init() {
 				return nil
 			}
 		}
-		file_textrpc_editor_proto_msgTypes[23].Exporter = func(v interface{}, i int) interface{} {
+		file_textrpc_editor_proto_msgTypes[20].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*SetDefaultAttributesResponse); i {
 			case 0:
 				return &v.state
@@ -2290,8 +2629,44 @@ func file_textrpc_editor_proto_init() {
 				return nil
 			}
 		}
+		file_textrpc_editor_proto_msgTypes[21].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*SubscribeCommandRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_textrpc_editor_proto_msgTypes[22].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*CommandManual); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_textrpc_editor_proto_msgTypes[23].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*SubscribeCommandResponse); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
 		file_textrpc_editor_proto_msgTypes[24].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*HandleCommandRequest); i {
+			switch v := v.(*ClientCommandMessage); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -2303,7 +2678,7 @@ func file_textrpc_editor_proto_init() {
 			}
 		}
 		file_textrpc_editor_proto_msgTypes[25].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*HandleCommandResponse); i {
+			switch v := v.(*ServerCommandMessage); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -2315,7 +2690,7 @@ func file_textrpc_editor_proto_init() {
 			}
 		}
 		file_textrpc_editor_proto_msgTypes[26].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*CompleteRequest); i {
+			switch v := v.(*HandleCommandRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -2327,7 +2702,7 @@ func file_textrpc_editor_proto_init() {
 			}
 		}
 		file_textrpc_editor_proto_msgTypes[27].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*CompleteResponse); i {
+			switch v := v.(*HandleCommandResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -2339,6 +2714,42 @@ func file_textrpc_editor_proto_init() {
 			}
 		}
 		file_textrpc_editor_proto_msgTypes[28].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*CompleteCommandRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_textrpc_editor_proto_msgTypes[29].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*CompleteCommandValue); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_textrpc_editor_proto_msgTypes[30].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*CompleteCommandDone); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_textrpc_editor_proto_msgTypes[31].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*SetLocationListRequest_Location); i {
 			case 0:
 				return &v.state
@@ -2356,10 +2767,10 @@ func file_textrpc_editor_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_textrpc_editor_proto_rawDesc,
-			NumEnums:      1,
-			NumMessages:   29,
+			NumEnums:      3,
+			NumMessages:   32,
 			NumExtensions: 0,
-			NumServices:   2,
+			NumServices:   1,
 		},
 		GoTypes:           file_textrpc_editor_proto_goTypes,
 		DependencyIndexes: file_textrpc_editor_proto_depIdxs,

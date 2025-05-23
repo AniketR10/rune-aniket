@@ -27,14 +27,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"sync"
 
+	"github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/logging"
 	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/api/workspaceapi"
-	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term/termrpc"
 	"unstable.build/go-tui/text"
 )
@@ -47,7 +46,6 @@ var (
 type Server struct {
 	UnimplementedEditorServer
 
-	broker    rpc.MuxBroker
 	ctx       context.Context
 	cancelCtx func()
 
@@ -55,62 +53,20 @@ type Server struct {
 		text.Editor
 		sync.Locker
 	}
-
-	// subscriptions, just to unsubscribe upon close
-	eventSub []text.EventHandler
-	cmdSub   []textapi.CommandManual
 }
 
 // NewServer allocates storage for a new Server and initializes it.
-func NewServer(
-	broker rpc.MuxBroker, editor text.Editor, lock sync.Locker,
-) *Server {
+func NewServer(editor text.Editor, lock sync.Locker) *Server {
 	ret := new(Server)
-	ret.Init(broker, editor, lock)
+	ret.Init(editor, lock)
 	return ret
 }
 
 // Init initializes this Server with broker and browser.
-func (s *Server) Init(
-	broker rpc.MuxBroker, editor text.Editor, lock sync.Locker,
-) {
-	s.broker = broker
+func (s *Server) Init(editor text.Editor, lock sync.Locker) {
 	s.editor.Editor = editor
 	s.editor.Locker = lock
 	s.ctx, s.cancelCtx = context.WithCancel(context.Background())
-}
-
-func (s *Server) log(level log.Level, msg string, args ...interface{}) {
-	if !log.IsLevelEnabled(level) {
-		return
-	}
-	log.WithField(logging.KeyClass, "text.Server").Logf(level, msg, args...)
-}
-
-func (s *Server) dialCommandHandler(
-	ctx context.Context, channelID string,
-) (text.CommandHandler, error) {
-	s.log(log.TraceLevel,
-		"(%p editor.Server): dialing command handler with id: %s", s, channelID)
-	handlerConn, err := s.broker.DialChannel(ctx, channelID, os.Args[0], "textrpc.Server")
-	if err != nil {
-		return nil, err
-	}
-	return newCommandClient(handlerConn, s), nil
-}
-
-func (s *Server) editHandler(
-	resource workspaceapi.URI, get func(workspaceapi.URI) (text.Handler, error),
-) error {
-	s.editor.Lock()
-	defer s.editor.Unlock()
-
-	_, err := get(resource)
-	if err != nil {
-		return err
-	}
-
-	return nil
 }
 
 // Edit satisfies EditorServer
@@ -158,7 +114,8 @@ func (s *Server) Editor(ctx context.Context, in *EditorRequest) (
 func (s *Server) SubscribeEvent(stream Editor_SubscribeEventServer) error {
 	defer s.log(log.TraceLevel, "stream event completed: stream=%p", stream)
 
-	req, err := stream.Recv()
+	var req SubscribeEventRequest
+	err := stream.RecvMsg(&req)
 	s.log(log.TraceLevel, "Subscribe: received request: %v: %v", req.GetType(), err)
 	if err != nil {
 		return fmt.Errorf("receive stream request: %v", err)
@@ -178,12 +135,10 @@ func (s *Server) SubscribeEvent(stream Editor_SubscribeEventServer) error {
 
 	s.editor.Lock()
 	err = s.editor.SubscribeEvents(evTypes, handler)
+	s.editor.Unlock()
 	if err != nil {
-		s.editor.Unlock()
 		return fmt.Errorf("subscribe editor events: %v", err)
 	}
-	s.eventSub = append(s.eventSub, handler)
-	s.editor.Unlock()
 
 	s.log(log.TraceLevel, "waiting for unsubscribe: stream=%p", stream)
 	defer s.log(log.TraceLevel, "unsubscribed subscriber: stream=%p", stream)
@@ -193,58 +148,51 @@ func (s *Server) SubscribeEvent(stream Editor_SubscribeEventServer) error {
 	return err
 }
 
-func (s *Server) unsubscribeClient(handler *eventStreamClient) {
+// SubscribeCommand satisfies EditorServer
+func (s *Server) SubscribeCommand(srv Editor_SubscribeCommandServer) error {
+	var msg ClientCommandMessage
+	err := srv.RecvMsg(&msg)
+	if err != nil {
+		return fmt.Errorf("receive subscribe command request: %w", err)
+	}
+	req := msg.GetRequest()
+	if msg.GetType() != ClientCommandMessage_Request || req == nil {
+		return errors.New("receive subscribe command request: missing request")
+	}
+
+	clientStream := newCommandClientStream(s.ctx, srv, s.editor)
+	man := makeStdMan(req.GetCommand())
+
+	s.editor.Lock()
+	err = s.editor.SubscribeCommand(man, clientStream)
+	s.editor.Unlock()
+	if err != nil {
+		return err
+	}
+
+	resp := SubscribeCommandResponse{}
+	respMsg := ServerCommandMessage{Type: ServerCommandMessage_Response, Response: &resp}
+	if err := srv.SendMsg(&respMsg); err != nil {
+		return fmt.Errorf("send bar install response: %w", err)
+	}
+
+	err = clientStream.receiveMessages()
+
 	s.editor.Lock()
 	defer s.editor.Unlock()
 
-	_, err := s.editor.UnsubscribeEvents(handler)
-	for i, hi := range s.eventSub {
-		if hi == handler {
-			s.eventSub[i] = s.eventSub[len(s.eventSub)-1]
-			s.eventSub = s.eventSub[:len(s.eventSub)-1]
-			break
-		}
+	// replace the command handler in place so command doesn't "disappear"
+	if uerr := s.editor.UnsubscribeCommand(man.Name); uerr != nil {
+		err = multierror.Append(err, uerr)
+	}
+	if uerr := s.editor.SubscribeCommand(man,
+		text.FuncCommandHandler(func(context.Context, textapi.Command) error {
+			return errors.New("command was unsubscribed")
+		}, nil)); uerr != nil {
+		err = multierror.Append(err, uerr)
 	}
 
-	if err != nil {
-		s.log(log.ErrorLevel, "unsubscribe client from all events: %v", err)
-	}
-}
-
-// Register satisfies EditorServer
-func (s *Server) Register(ctx context.Context, in *RegisterCommandRequest) (
-	*RegisterCommandResponse, error,
-) {
-	channelID := in.GetChannelId()
-	commander, err := s.dialCommandHandler(ctx, channelID)
-	if err != nil {
-		return nil, err
-	}
-
-	man := makeStdMan(in.GetCommand())
-
-	s.editor.Lock()
-	err = s.editor.SubscribeCommand(man, commander)
-	if err != nil {
-		s.editor.Unlock()
-		return nil, err
-	}
-	s.cmdSub = append(s.cmdSub, man)
-	s.editor.Unlock()
-
-	return new(RegisterCommandResponse), nil
-}
-
-func getLocations(locs []*SetLocationListRequest_Location) (ret []textapi.Location) {
-	for _, loc := range locs {
-		ret = append(ret, textapi.Location{
-			Attr:    loc.GetAttr().ToModel(),
-			From:    loc.GetFrom().ToModel(),
-			To:      loc.GetTo().ToModel(),
-			Message: loc.GetMsg(),
-		})
-	}
-	return
+	return err
 }
 
 // SetLocationList satisfies EditorServer
@@ -353,33 +301,6 @@ func (s *Server) Cursor(ctx context.Context, in *CursorRequest) (
 	return &CursorResponse{Pos: &protoPos}, nil
 }
 
-func (s *Server) moveToLocation(
-	ctx context.Context, in *MoveToLocationRequest, next bool,
-) (res *MoveToLocationResponse, err error) {
-	id := in.GetListId()
-
-	s.editor.Lock()
-	defer s.editor.Unlock()
-
-	h, ok := s.getHandler("moveToLocation", in.GetResourceName())
-	if !ok {
-		return nil, errHandlerNotFound
-	}
-
-	if next {
-		err = s.editor.MoveToNextLocation(h, id)
-	} else {
-		err = s.editor.MoveToPrevLocation(h, id)
-	}
-
-	if err != nil {
-		return nil, err
-	}
-
-	res = new(MoveToLocationResponse)
-	return res, nil
-}
-
 // EditCell satisfies EditorServer
 func (s *Server) EditCell(ctx context.Context, in *EditCellRequest) (
 	*EditCellResponse, error,
@@ -436,16 +357,37 @@ func (s *Server) RawCells(ctx context.Context, in *RawCellsRequest) (
 // Close closes all resources associated with this server.
 func (s *Server) Close() (err error) {
 	s.cancelCtx()
-	// ensure that we unsubscribe all subscribers created
-	// by this server. Some of these might already been unsubscribed,
-	// so this completes the cleanup for the ones that haven't.
-	for _, sub := range s.cmdSub {
-		_ = s.editor.UnsubscribeCommand(sub.Name)
+	return nil
+}
+
+func (s *Server) unsubscribeClient(handler *eventStreamClient) {
+	s.editor.Lock()
+	defer s.editor.Unlock()
+
+	_, err := s.editor.UnsubscribeEvents(handler)
+	if err != nil {
+		s.log(log.ErrorLevel, "unsubscribe client from all events: %v", err)
 	}
-	for _, sub := range s.eventSub {
-		_, _ = s.editor.UnsubscribeEvents(sub)
+}
+
+func (s *Server) log(level log.Level, msg string, args ...interface{}) {
+	if !log.IsLevelEnabled(level) {
+		return
 	}
-	s.eventSub = nil
+	log.WithField(logging.KeyClass, "text.Server").Logf(level, msg, args...)
+}
+
+func (s *Server) editHandler(
+	resource workspaceapi.URI, get func(workspaceapi.URI) (text.Handler, error),
+) error {
+	s.editor.Lock()
+	defer s.editor.Unlock()
+
+	_, err := get(resource)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -461,6 +403,33 @@ func (s *Server) getHandler(call string, uri *URI) (text.Handler, bool) {
 	return h, err == nil
 }
 
+func (s *Server) moveToLocation(
+	ctx context.Context, in *MoveToLocationRequest, next bool,
+) (res *MoveToLocationResponse, err error) {
+	id := in.GetListId()
+
+	s.editor.Lock()
+	defer s.editor.Unlock()
+
+	h, ok := s.getHandler("moveToLocation", in.GetResourceName())
+	if !ok {
+		return nil, errHandlerNotFound
+	}
+
+	if next {
+		err = s.editor.MoveToNextLocation(h, id)
+	} else {
+		err = s.editor.MoveToPrevLocation(h, id)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	res = new(MoveToLocationResponse)
+	return res, nil
+}
+
 func makeStdMan(rpcMan *CommandManual) textapi.CommandManual {
 	var cmds []textapi.CommandManual
 	for _, cmd := range rpcMan.GetCommands() {
@@ -472,4 +441,16 @@ func makeStdMan(rpcMan *CommandManual) textapi.CommandManual {
 		Synopsis: rpcMan.GetSynopsis(),
 		Commands: cmds,
 	}
+}
+
+func getLocations(locs []*SetLocationListRequest_Location) (ret []textapi.Location) {
+	for _, loc := range locs {
+		ret = append(ret, textapi.Location{
+			Attr:    loc.GetAttr().ToModel(),
+			From:    loc.GetFrom().ToModel(),
+			To:      loc.GetTo().ToModel(),
+			Message: loc.GetMsg(),
+		})
+	}
+	return
 }

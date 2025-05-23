@@ -90,20 +90,6 @@ message MoveToLocationRequest {
 message MoveToLocationResponse {
 }
 
-message RegisterCommandRequest {
-	CommandManual command = 1;
-    string channel_id = 2;
-}
-
-message CommandManual {
-	string name = 1;
-    string summary = 2;
-    string synopsis = 3;
-	repeated CommandManual commands = 4;
-}
-
-message RegisterCommandResponse {}
-
 message SetCursorRequest {
 	term.Coordinates pos = 1;
     URI resource_name = 2;
@@ -137,7 +123,6 @@ message SetDefaultAttributesResponse {
 
 service Editor {
 	rpc Edit(EditRequest) returns (EditResponse);
-	rpc Register(RegisterCommandRequest) returns (RegisterCommandResponse);
 	rpc SetCursor(SetCursorRequest) returns (SetCursorResponse);
 	rpc Cursor(CursorRequest) returns (CursorResponse);
 	rpc Editor(EditorRequest) returns (EditorResponse);
@@ -158,6 +143,47 @@ service Editor {
 
 	// streams
 	rpc SubscribeEvent(stream SubscribeEventRequest) returns (stream EditorEvent);
+	rpc SubscribeCommand(stream ClientCommandMessage) returns (stream ServerCommandMessage);
+}
+
+message SubscribeCommandRequest {
+	CommandManual command = 1;
+}
+
+message CommandManual {
+	string name = 1;
+    string summary = 2;
+    string synopsis = 3;
+	repeated CommandManual commands = 4;
+}
+
+message SubscribeCommandResponse {}
+
+
+message ClientCommandMessage {
+	enum MessageType {
+		Handle = 0;
+		CompleteValue = 1;
+		CompleteDone = 2;
+		Request = 3;
+	}
+	MessageType type = 1;
+	HandleCommandResponse handle = 2;
+	CompleteCommandValue complete_value = 3;
+	CompleteCommandDone complete_done = 4;
+	SubscribeCommandRequest request = 5;
+}
+
+message ServerCommandMessage {
+	enum MessageType {
+		Handle = 0;
+		Complete = 1;
+		Response = 2;
+	}
+	MessageType type = 1;
+	HandleCommandRequest handle = 2;
+	CompleteCommandRequest complete = 3;
+	SubscribeCommandResponse response = 4;
 }
 
 message HandleCommandRequest {
@@ -170,18 +196,21 @@ message HandleCommandRequest {
 }
 
 message HandleCommandResponse {
+	string error = 1;
 }
 
-message CompleteRequest {
-	string name = 1;
-	repeated string args = 2;
+message CompleteCommandRequest {
+	int64 id = 1;
+	string name = 2;
+	repeated string args = 3;
 }
 
-message CompleteResponse {
-	string value = 1;
+message CompleteCommandValue {
+	int64 id = 1;
+	string value = 2;
 }
 
-service CommandHandler {
-	rpc HandleCommand(HandleCommandRequest) returns (HandleCommandResponse);
-	rpc Complete(CompleteRequest) returns (stream CompleteResponse);
+message CompleteCommandDone {
+	int64 id = 1;
+	string error = 2;
 }

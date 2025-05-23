@@ -48,15 +48,12 @@ func (e *interruptEditor) Edit(ctx context.Context, req *textrpc.EditRequest) (
 	return res, err
 }
 
-func (e *interruptEditor) Subscribe(stream textrpc.Editor_SubscribeEventServer) error {
+func (e *interruptEditor) SubscribeEvent(stream textrpc.Editor_SubscribeEventServer) error {
 	return e.EditorServer.SubscribeEvent(stream)
 }
 
-func (e *interruptEditor) Register(ctx context.Context, req *textrpc.RegisterCommandRequest) (
-	*textrpc.RegisterCommandResponse, error,
-) {
-	res, err := e.EditorServer.Register(ctx, req)
-	return res, err
+func (e *interruptEditor) SubscribeCommand(stream textrpc.Editor_SubscribeCommandServer) error {
+	return e.EditorServer.SubscribeCommand(stream)
 
 }
 

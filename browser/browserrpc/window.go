@@ -21,51 +21,28 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package extension
+package browserrpc
 
-import (
-	"io"
-	"sync"
+import "unstable.build/go-tui/api/browserapi"
 
-	"unstable.build/go-tui/rpc"
-	"unstable.build/go-tui/term"
-	"unstable.build/go-tui/text"
-	"unstable.build/go-tui/text/textrpc"
-)
-
-// EditorResources returns a map of Permission to a ResourceServer
-// capable of serving each of the b Editor's resources.
-func EditorResources(
-	b text.Editor, publishEvent func(term.Event) bool,
-) map[Permission]ResourceRegistrar {
-	s := newEditorResourceServer(b, publishEvent)
-	return map[Permission]ResourceRegistrar{
-		PermissionEditor: s,
-	}
+// NewWindow returns a browserapi.Window that represents the window
+// with the given ID.
+func NewWindow(windowID uint64) browserapi.Window {
+	return newWindowClient(windowID)
 }
 
-type editorResourceServer struct {
-	b            text.Editor
-	publishEvent func(term.Event) bool
+var _ browserapi.Window = (*windowClientImpl)(nil)
+
+type windowClientImpl struct {
+	windowID uint64
 }
 
-func newEditorResourceServer(
-	b text.Editor, publishEvent func(term.Event) bool,
-) *editorResourceServer {
-	ret := new(editorResourceServer)
-	ret.b = b
-	ret.publishEvent = publishEvent
+func newWindowClient(windowID uint64) *windowClientImpl {
+	ret := new(windowClientImpl)
+	ret.windowID = windowID
 	return ret
 }
 
-func (s *editorResourceServer) Register(
-	extensionID string, grantor Grantor, registrar rpc.ServiceRegistrar,
-	broker rpc.MuxBroker, lock sync.Locker,
-) (io.Closer, error) {
-	server := textrpc.NewServer(s.b, lock)
-	textrpc.RegisterEditorServer(registrar,
-		interruptEditorServer(server, func() {
-			s.publishEvent(term.Event{Type: term.EventInterrupt})
-		}))
-	return server, nil
+func (w *windowClientImpl) WindowID() uint64 {
+	return w.windowID
 }

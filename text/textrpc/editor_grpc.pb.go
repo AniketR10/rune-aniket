@@ -23,7 +23,6 @@ const _ = grpc.SupportPackageIsVersion7
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type EditorClient interface {
 	Edit(ctx context.Context, in *EditRequest, opts ...grpc.CallOption) (*EditResponse, error)
-	Register(ctx context.Context, in *RegisterCommandRequest, opts ...grpc.CallOption) (*RegisterCommandResponse, error)
 	SetCursor(ctx context.Context, in *SetCursorRequest, opts ...grpc.CallOption) (*SetCursorResponse, error)
 	Cursor(ctx context.Context, in *CursorRequest, opts ...grpc.CallOption) (*CursorResponse, error)
 	Editor(ctx context.Context, in *EditorRequest, opts ...grpc.CallOption) (*EditorResponse, error)
@@ -38,6 +37,7 @@ type EditorClient interface {
 	SetDefaultAttributes(ctx context.Context, in *SetDefaultAttributesRequest, opts ...grpc.CallOption) (*SetDefaultAttributesResponse, error)
 	// streams
 	SubscribeEvent(ctx context.Context, opts ...grpc.CallOption) (Editor_SubscribeEventClient, error)
+	SubscribeCommand(ctx context.Context, opts ...grpc.CallOption) (Editor_SubscribeCommandClient, error)
 }
 
 type editorClient struct {
@@ -51,15 +51,6 @@ func NewEditorClient(cc grpc.ClientConnInterface) EditorClient {
 func (c *editorClient) Edit(ctx context.Context, in *EditRequest, opts ...grpc.CallOption) (*EditResponse, error) {
 	out := new(EditResponse)
 	err := c.cc.Invoke(ctx, "/text.Editor/Edit", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *editorClient) Register(ctx context.Context, in *RegisterCommandRequest, opts ...grpc.CallOption) (*RegisterCommandResponse, error) {
-	out := new(RegisterCommandResponse)
-	err := c.cc.Invoke(ctx, "/text.Editor/Register", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -178,12 +169,42 @@ func (x *editorSubscribeEventClient) Recv() (*EditorEvent, error) {
 	return m, nil
 }
 
+func (c *editorClient) SubscribeCommand(ctx context.Context, opts ...grpc.CallOption) (Editor_SubscribeCommandClient, error) {
+	stream, err := c.cc.NewStream(ctx, &Editor_ServiceDesc.Streams[1], "/text.Editor/SubscribeCommand", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &editorSubscribeCommandClient{stream}
+	return x, nil
+}
+
+type Editor_SubscribeCommandClient interface {
+	Send(*ClientCommandMessage) error
+	Recv() (*ServerCommandMessage, error)
+	grpc.ClientStream
+}
+
+type editorSubscribeCommandClient struct {
+	grpc.ClientStream
+}
+
+func (x *editorSubscribeCommandClient) Send(m *ClientCommandMessage) error {
+	return x.ClientStream.SendMsg(m)
+}
+
+func (x *editorSubscribeCommandClient) Recv() (*ServerCommandMessage, error) {
+	m := new(ServerCommandMessage)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 // EditorServer is the server API for Editor service.
 // All implementations must embed UnimplementedEditorServer
 // for forward compatibility
 type EditorServer interface {
 	Edit(context.Context, *EditRequest) (*EditResponse, error)
-	Register(context.Context, *RegisterCommandRequest) (*RegisterCommandResponse, error)
 	SetCursor(context.Context, *SetCursorRequest) (*SetCursorResponse, error)
 	Cursor(context.Context, *CursorRequest) (*CursorResponse, error)
 	Editor(context.Context, *EditorRequest) (*EditorResponse, error)
@@ -198,6 +219,7 @@ type EditorServer interface {
 	SetDefaultAttributes(context.Context, *SetDefaultAttributesRequest) (*SetDefaultAttributesResponse, error)
 	// streams
 	SubscribeEvent(Editor_SubscribeEventServer) error
+	SubscribeCommand(Editor_SubscribeCommandServer) error
 	mustEmbedUnimplementedEditorServer()
 }
 
@@ -207,9 +229,6 @@ type UnimplementedEditorServer struct {
 
 func (UnimplementedEditorServer) Edit(context.Context, *EditRequest) (*EditResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Edit not implemented")
-}
-func (UnimplementedEditorServer) Register(context.Context, *RegisterCommandRequest) (*RegisterCommandResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Register not implemented")
 }
 func (UnimplementedEditorServer) SetCursor(context.Context, *SetCursorRequest) (*SetCursorResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SetCursor not implemented")
@@ -241,6 +260,9 @@ func (UnimplementedEditorServer) SetDefaultAttributes(context.Context, *SetDefau
 func (UnimplementedEditorServer) SubscribeEvent(Editor_SubscribeEventServer) error {
 	return status.Errorf(codes.Unimplemented, "method SubscribeEvent not implemented")
 }
+func (UnimplementedEditorServer) SubscribeCommand(Editor_SubscribeCommandServer) error {
+	return status.Errorf(codes.Unimplemented, "method SubscribeCommand not implemented")
+}
 func (UnimplementedEditorServer) mustEmbedUnimplementedEditorServer() {}
 
 // UnsafeEditorServer may be embedded to opt out of forward compatibility for this service.
@@ -268,24 +290,6 @@ func _Editor_Edit_Handler(srv interface{}, ctx context.Context, dec func(interfa
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(EditorServer).Edit(ctx, req.(*EditRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Editor_Register_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(RegisterCommandRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(EditorServer).Register(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/text.Editor/Register",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(EditorServer).Register(ctx, req.(*RegisterCommandRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -478,6 +482,32 @@ func (x *editorSubscribeEventServer) Recv() (*SubscribeEventRequest, error) {
 	return m, nil
 }
 
+func _Editor_SubscribeCommand_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(EditorServer).SubscribeCommand(&editorSubscribeCommandServer{stream})
+}
+
+type Editor_SubscribeCommandServer interface {
+	Send(*ServerCommandMessage) error
+	Recv() (*ClientCommandMessage, error)
+	grpc.ServerStream
+}
+
+type editorSubscribeCommandServer struct {
+	grpc.ServerStream
+}
+
+func (x *editorSubscribeCommandServer) Send(m *ServerCommandMessage) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func (x *editorSubscribeCommandServer) Recv() (*ClientCommandMessage, error) {
+	m := new(ClientCommandMessage)
+	if err := x.ServerStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 // Editor_ServiceDesc is the grpc.ServiceDesc for Editor service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -488,10 +518,6 @@ var Editor_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Edit",
 			Handler:    _Editor_Edit_Handler,
-		},
-		{
-			MethodName: "Register",
-			Handler:    _Editor_Register_Handler,
 		},
 		{
 			MethodName: "SetCursor",
@@ -537,155 +563,11 @@ var Editor_ServiceDesc = grpc.ServiceDesc{
 			ServerStreams: true,
 			ClientStreams: true,
 		},
-	},
-	Metadata: "textrpc/editor.proto",
-}
-
-// CommandHandlerClient is the client API for CommandHandler service.
-//
-// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
-type CommandHandlerClient interface {
-	HandleCommand(ctx context.Context, in *HandleCommandRequest, opts ...grpc.CallOption) (*HandleCommandResponse, error)
-	Complete(ctx context.Context, in *CompleteRequest, opts ...grpc.CallOption) (CommandHandler_CompleteClient, error)
-}
-
-type commandHandlerClient struct {
-	cc grpc.ClientConnInterface
-}
-
-func NewCommandHandlerClient(cc grpc.ClientConnInterface) CommandHandlerClient {
-	return &commandHandlerClient{cc}
-}
-
-func (c *commandHandlerClient) HandleCommand(ctx context.Context, in *HandleCommandRequest, opts ...grpc.CallOption) (*HandleCommandResponse, error) {
-	out := new(HandleCommandResponse)
-	err := c.cc.Invoke(ctx, "/text.CommandHandler/HandleCommand", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *commandHandlerClient) Complete(ctx context.Context, in *CompleteRequest, opts ...grpc.CallOption) (CommandHandler_CompleteClient, error) {
-	stream, err := c.cc.NewStream(ctx, &CommandHandler_ServiceDesc.Streams[0], "/text.CommandHandler/Complete", opts...)
-	if err != nil {
-		return nil, err
-	}
-	x := &commandHandlerCompleteClient{stream}
-	if err := x.ClientStream.SendMsg(in); err != nil {
-		return nil, err
-	}
-	if err := x.ClientStream.CloseSend(); err != nil {
-		return nil, err
-	}
-	return x, nil
-}
-
-type CommandHandler_CompleteClient interface {
-	Recv() (*CompleteResponse, error)
-	grpc.ClientStream
-}
-
-type commandHandlerCompleteClient struct {
-	grpc.ClientStream
-}
-
-func (x *commandHandlerCompleteClient) Recv() (*CompleteResponse, error) {
-	m := new(CompleteResponse)
-	if err := x.ClientStream.RecvMsg(m); err != nil {
-		return nil, err
-	}
-	return m, nil
-}
-
-// CommandHandlerServer is the server API for CommandHandler service.
-// All implementations must embed UnimplementedCommandHandlerServer
-// for forward compatibility
-type CommandHandlerServer interface {
-	HandleCommand(context.Context, *HandleCommandRequest) (*HandleCommandResponse, error)
-	Complete(*CompleteRequest, CommandHandler_CompleteServer) error
-	mustEmbedUnimplementedCommandHandlerServer()
-}
-
-// UnimplementedCommandHandlerServer must be embedded to have forward compatible implementations.
-type UnimplementedCommandHandlerServer struct {
-}
-
-func (UnimplementedCommandHandlerServer) HandleCommand(context.Context, *HandleCommandRequest) (*HandleCommandResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method HandleCommand not implemented")
-}
-func (UnimplementedCommandHandlerServer) Complete(*CompleteRequest, CommandHandler_CompleteServer) error {
-	return status.Errorf(codes.Unimplemented, "method Complete not implemented")
-}
-func (UnimplementedCommandHandlerServer) mustEmbedUnimplementedCommandHandlerServer() {}
-
-// UnsafeCommandHandlerServer may be embedded to opt out of forward compatibility for this service.
-// Use of this interface is not recommended, as added methods to CommandHandlerServer will
-// result in compilation errors.
-type UnsafeCommandHandlerServer interface {
-	mustEmbedUnimplementedCommandHandlerServer()
-}
-
-func RegisterCommandHandlerServer(s grpc.ServiceRegistrar, srv CommandHandlerServer) {
-	s.RegisterService(&CommandHandler_ServiceDesc, srv)
-}
-
-func _CommandHandler_HandleCommand_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(HandleCommandRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(CommandHandlerServer).HandleCommand(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/text.CommandHandler/HandleCommand",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(CommandHandlerServer).HandleCommand(ctx, req.(*HandleCommandRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _CommandHandler_Complete_Handler(srv interface{}, stream grpc.ServerStream) error {
-	m := new(CompleteRequest)
-	if err := stream.RecvMsg(m); err != nil {
-		return err
-	}
-	return srv.(CommandHandlerServer).Complete(m, &commandHandlerCompleteServer{stream})
-}
-
-type CommandHandler_CompleteServer interface {
-	Send(*CompleteResponse) error
-	grpc.ServerStream
-}
-
-type commandHandlerCompleteServer struct {
-	grpc.ServerStream
-}
-
-func (x *commandHandlerCompleteServer) Send(m *CompleteResponse) error {
-	return x.ServerStream.SendMsg(m)
-}
-
-// CommandHandler_ServiceDesc is the grpc.ServiceDesc for CommandHandler service.
-// It's only intended for direct use with grpc.RegisterService,
-// and not to be introspected or modified (even as a copy)
-var CommandHandler_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "text.CommandHandler",
-	HandlerType: (*CommandHandlerServer)(nil),
-	Methods: []grpc.MethodDesc{
 		{
-			MethodName: "HandleCommand",
-			Handler:    _CommandHandler_HandleCommand_Handler,
-		},
-	},
-	Streams: []grpc.StreamDesc{
-		{
-			StreamName:    "Complete",
-			Handler:       _CommandHandler_Complete_Handler,
+			StreamName:    "SubscribeCommand",
+			Handler:       _Editor_SubscribeCommand_Handler,
 			ServerStreams: true,
+			ClientStreams: true,
 		},
 	},
 	Metadata: "textrpc/editor.proto",

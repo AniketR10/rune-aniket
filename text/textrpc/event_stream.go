@@ -109,7 +109,6 @@ func (e *eventStreamClient) Close() error {
 }
 
 func (e *eventStreamClient) waitForUnsubscribe() error {
-	// do not unlock here, Server should already have unlocked
 	req, err := e.stream.Recv()
 	if err != nil {
 		return fmt.Errorf("stream receive: %v", err)
@@ -119,7 +118,7 @@ func (e *eventStreamClient) waitForUnsubscribe() error {
 	}
 
 	// wait for CloseSend
-	if _, err = e.stream.Recv(); err != io.EOF {
+	if _, err = e.stream.Recv(); !errors.Is(err, io.EOF) {
 		return fmt.Errorf("stream receive: %v", err)
 	}
 

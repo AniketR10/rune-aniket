@@ -30,45 +30,10 @@ import (
 
 	"os"
 	"path/filepath"
-	"time"
 
 	log "github.com/sirupsen/logrus"
-	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/grpclog"
 )
-
-// MonitorConnection blocks the calling goroutine and calls doClosed callback
-// and returns only when connection state is shutdown, or it has been in a transient
-// failure for too long.
-func MonitorConnection(
-	ctx context.Context, failureTimeout time.Duration,
-	conn MuxConn, doClosed func(reason string),
-) {
-
-	for {
-		state := conn.GetState()
-		switch state {
-		case connectivity.Idle, connectivity.Connecting, connectivity.Ready:
-			if !conn.WaitForStateChange(ctx, state) {
-				doClosed("context canceled")
-				return
-			}
-		case connectivity.TransientFailure:
-			failureCtx, cancelFn := context.WithTimeout(ctx, failureTimeout)
-			didChange := conn.WaitForStateChange(failureCtx, connectivity.TransientFailure)
-			cancelFn()
-			if !didChange {
-				doClosed("timeout waiting for transient failure to recover")
-				return
-			}
-		case connectivity.Shutdown:
-			doClosed("grpc connection state = shutdown")
-			return
-		default:
-			panic(fmt.Sprintf("unknown connection state: %v", state))
-		}
-	}
-}
 
 // AcceptAndServeChannel calls the underlying broker's NewChannel
 // and calls register before serving new connections. Use context

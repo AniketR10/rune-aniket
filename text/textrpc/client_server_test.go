@@ -50,59 +50,11 @@ import (
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/handlertest"
-	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/text/texttest"
 	"unstable.build/go-tui/workspace"
 )
-
-func doSetupIntTest(
-	t *testing.T, broker rpc.MuxBroker, register func(*grpc.Server),
-) (conn *grpc.ClientConn, closeFn func()) {
-	lis, err := net.Listen("tcp", ":0")
-	require.NoError(t, err)
-
-	grpcServer := grpc.NewServer()
-	register(grpcServer)
-
-	go grpcServer.Serve(lis)
-
-	conn, err = grpc.Dial(lis.Addr().String(), grpc.WithInsecure())
-	require.NoError(t, err)
-
-	closeFn = func() {
-		grpcServer.Stop()
-		lis.Close()
-	}
-	return
-}
-
-func setupIntTest(
-	t *testing.T, broker rpc.MuxBroker, s *Server,
-) (*Client, func()) {
-	conn, closeFn := doSetupIntTest(t, broker, func(grpcServer *grpc.Server) {
-		RegisterEditorServer(grpcServer, s)
-	})
-	client := NewClient(context.Background(), broker, conn)
-	return client, func() {
-		client.Close()
-		closeFn()
-	}
-}
-
-func setupWmIntTest(
-	t *testing.T, broker rpc.MuxBroker, s *browserrpc.Server,
-) (*browserrpc.Client, func()) {
-	conn, closeFn := doSetupIntTest(t, broker, func(grpcServer *grpc.Server) {
-		browserrpc.RegisterWindowManagerServer(grpcServer, s)
-	})
-	client := browserrpc.NewClient(context.Background(), conn)
-	return client, func() {
-		client.Close()
-		closeFn()
-	}
-}
 
 func TestClientServerIntegration(t *testing.T) {
 	uri, err := workspaceapi.ParseURI("file:///test")
@@ -110,11 +62,10 @@ func TestClientServerIntegration(t *testing.T) {
 	t.Run("client through server calls underlying editor Edit", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
-		b := rpc.NewUnixGRPCBroker("", "", "")
 		ed := texttest.NewMockEditor(ctrl)
-		s := NewServer(b, ed, nopLocker{})
+		s := NewServer(ed, nopLocker{})
 
-		client, closeFn := setupIntTest(t, b, s)
+		client, closeFn := setupIntTest(t, s)
 		defer closeFn()
 
 		expectEdit(t, ed, uri, "hero")
@@ -128,11 +79,10 @@ func TestClientServerIntegration(t *testing.T) {
 	t.Run("client through server calls underlying Editor", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
-		b := rpc.NewUnixGRPCBroker("", "", "")
 		ed := texttest.NewMockEditor(ctrl)
-		s := NewServer(b, ed, nopLocker{})
+		s := NewServer(ed, nopLocker{})
 
-		client, closeFn := setupIntTest(t, b, s)
+		client, closeFn := setupIntTest(t, s)
 		defer closeFn()
 
 		ed.EXPECT().Editor(gomock.Any()).Times(1).
@@ -147,11 +97,10 @@ func TestClientServerIntegration(t *testing.T) {
 	t.Run("underlying editor Edito errors bubble up to client", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
-		b := rpc.NewUnixGRPCBroker("", "", "")
 		ed := texttest.NewMockEditor(ctrl)
-		s := NewServer(b, ed, nopLocker{})
+		s := NewServer(ed, nopLocker{})
 
-		client, closeFn := setupIntTest(t, b, s)
+		client, closeFn := setupIntTest(t, s)
 		defer closeFn()
 
 		ed.EXPECT().Edit(gomock.Any(), gomock.Any()).
@@ -222,11 +171,10 @@ func TestClientServerIntegration(t *testing.T) {
 			tcase := _tcase
 			t.Run(tcase.name, func(t *testing.T) {
 				var wg sync.WaitGroup
-				b := rpc.NewUnixGRPCBroker("", "", "")
 				ed := texttest.NopEditorWithCallback(wg.Done)
-				s := NewServer(b, ed, new(sync.Mutex))
+				s := NewServer(ed, new(sync.Mutex))
 
-				client, closeFn := setupIntTest(t, b, s)
+				client, closeFn := setupIntTest(t, s)
 				defer closeFn()
 
 				wg.Add(1)
@@ -266,11 +214,10 @@ func TestClientServerIntegration(t *testing.T) {
 
 	t.Run("calls unsubscribe if event stream completes", func(t *testing.T) {
 		var wg sync.WaitGroup
-		b := rpc.NewUnixGRPCBroker("", "", "")
 		ed := texttest.NopEditorWithCallback(wg.Done)
-		s := NewServer(b, ed, new(sync.Mutex))
+		s := NewServer(ed, new(sync.Mutex))
 
-		client, closeFn := setupIntTest(t, b, s)
+		client, closeFn := setupIntTest(t, s)
 		defer closeFn()
 
 		wg.Add(1)
@@ -299,11 +246,10 @@ func TestClientServerIntegration(t *testing.T) {
 
 	t.Run("event handler drops messages if event handler server is not processing events", func(t *testing.T) {
 		var wg sync.WaitGroup
-		b := rpc.NewUnixGRPCBroker("", "", "")
 		ed := texttest.NopEditorWithCallback(wg.Done)
-		s := NewServer(b, ed, new(sync.Mutex))
+		s := NewServer(ed, new(sync.Mutex))
 
-		client, closeFn := setupIntTest(t, b, s)
+		client, closeFn := setupIntTest(t, s)
 		defer closeFn()
 
 		var mu sync.Mutex
@@ -360,11 +306,10 @@ func TestClientServerIntegration(t *testing.T) {
 		var wg sync.WaitGroup
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
-		b := rpc.NewUnixGRPCBroker("", "", "")
 		ed := texttest.NewMockEditor(ctrl)
-		s := NewServer(b, ed, new(sync.Mutex))
+		s := NewServer(ed, new(sync.Mutex))
 
-		client, closeFn := setupIntTest(t, b, s)
+		client, closeFn := setupIntTest(t, s)
 		defer closeFn()
 
 		expectEdit(t, ed, uri, "")
@@ -395,11 +340,10 @@ func TestClientServerIntegration(t *testing.T) {
 		var wg sync.WaitGroup
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
-		b := rpc.NewUnixGRPCBroker("", "", "")
 		ed := texttest.NewMockEditor(ctrl)
-		s := NewServer(b, ed, new(sync.Mutex))
+		s := NewServer(ed, new(sync.Mutex))
 
-		client, closeFn := setupIntTest(t, b, s)
+		client, closeFn := setupIntTest(t, s)
 		defer closeFn()
 
 		expectEdit(t, ed, uri, "")
@@ -430,11 +374,10 @@ func TestClientServerIntegration(t *testing.T) {
 	t.Run("Writer returns a Writer that is able to modify underlying buffer", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
-		b := rpc.NewUnixGRPCBroker("", "", "")
 		ed := texttest.NewMockEditor(ctrl)
-		s := NewServer(b, ed, nopLocker{})
+		s := NewServer(ed, nopLocker{})
 
-		client, closeFn := setupIntTest(t, b, s)
+		client, closeFn := setupIntTest(t, s)
 		defer closeFn()
 
 		buf := cell.NewBuffer()
@@ -469,11 +412,10 @@ func TestClientServerIntegration(t *testing.T) {
 	t.Run("Reader returns a Reader that is able to read underlying buffer", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
-		b := rpc.NewUnixGRPCBroker("", "", "")
 		ed := texttest.NewMockEditor(ctrl)
-		s := NewServer(b, ed, nopLocker{})
+		s := NewServer(ed, nopLocker{})
 
-		client, closeFn := setupIntTest(t, b, s)
+		client, closeFn := setupIntTest(t, s)
 		defer closeFn()
 
 		buf := cell.NewBuffer()
@@ -496,6 +438,307 @@ func TestClientServerIntegration(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "guacamole\npollos hermanos", cell.CellsToString(cells))
 	})
+
+	t.Run("dispatches commands to subscribed command handler", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		ed := texttest.NewMockEditor(ctrl)
+		s := NewServer(ed, new(sync.Mutex))
+
+		client, closeFn := setupIntTest(t, s)
+		defer closeFn()
+
+		var (
+			dispatched       textapi.Command
+			dispatchedTimes  int
+			subscribed       textapi.CommandManual
+			subscribedTimes  int
+			subscribedClient text.CommandHandler
+		)
+		handler := textapi.FuncCommandHandler(func(_ context.Context, man textapi.Command) error {
+			dispatched = man
+			dispatchedTimes++
+			return nil
+		}, nil)
+
+		man := textapi.CommandManual{
+			Name:     "bla",
+			Synopsis: "blabla",
+			Commands: []textapi.CommandManual{
+				{
+					Name:     "ble",
+					Synopsis: "bleble",
+				},
+			},
+		}
+		ed.EXPECT().SubscribeCommand(gomock.Any(), gomock.Any()).DoAndReturn(
+			func(man textapi.CommandManual, h text.CommandHandler) error {
+				subscribed = man
+				subscribedTimes++
+				subscribedClient = h
+				return nil
+			})
+		err := client.SubscribeCommand(man, handler)
+		require.NoError(t, err)
+
+		require.Equal(t, 1, subscribedTimes)
+		assert.Equal(t, "bla", subscribed.Name)
+		assert.Equal(t, "blabla", subscribed.Synopsis)
+		require.Len(t, subscribed.Commands, 1)
+		assert.Equal(t, "ble", subscribed.Commands[0].Name)
+		assert.Equal(t, "bleble", subscribed.Commands[0].Synopsis)
+		require.NotNil(t, subscribedClient)
+
+		// dispatch
+		resource := texttest.NewTestHandler()
+		resource.URI = uri
+		command := textapi.Command{
+			Name:     "bla",
+			Args:     []string{"ble"},
+			URI:      uri,
+			Resource: resource,
+			Window:   browserrpc.NewWindow(199),
+		}
+		command.Cursor.Content = term.Coordinates{X: 1, Y: 2}
+		command.Cursor.Window = term.Coordinates{X: 3, Y: 4}
+		s.editor.Lock()
+		err = subscribedClient.HandleCommand(context.Background(), command)
+		s.editor.Unlock()
+		require.NoError(t, err)
+
+		require.Equal(t, 1, dispatchedTimes)
+		assert.Equal(t, "bla", dispatched.Name)
+		require.Len(t, dispatched.Args, 1)
+		assert.Equal(t, "ble", dispatched.Args[0])
+		assert.Equal(t, "file:///test", dispatched.URI.String())
+		assert.Equal(t, uint64(199), dispatched.Window.WindowID())
+		assert.Equal(t, "file:///test", dispatched.Resource.Resource().String())
+
+		var wg sync.WaitGroup
+		waitForReplaceCommand(t, &wg, ed, client, "bla")
+	})
+
+	t.Run("handles command handler error by bubbling it up", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		ed := texttest.NewMockEditor(ctrl)
+		s := NewServer(ed, new(sync.Mutex))
+
+		client, closeFn := setupIntTest(t, s)
+		defer closeFn()
+
+		var (
+			subscribedClient text.CommandHandler
+		)
+		handler := textapi.FuncCommandHandler(func(_ context.Context, man textapi.Command) error {
+			return errors.New("boom")
+		}, nil)
+
+		man := textapi.CommandManual{Name: "bla"}
+		ed.EXPECT().SubscribeCommand(gomock.Any(), gomock.Any()).DoAndReturn(
+			func(man textapi.CommandManual, h text.CommandHandler) error {
+				subscribedClient = h
+				return nil
+			})
+		err := client.SubscribeCommand(man, handler)
+		require.NoError(t, err)
+
+		require.NotNil(t, subscribedClient)
+
+		// dispatch
+		resource := texttest.NewTestHandler()
+		resource.URI = uri
+		command := textapi.Command{Name: "bla"}
+		s.editor.Lock()
+		err = subscribedClient.HandleCommand(context.Background(), command)
+		s.editor.Unlock()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "boom")
+
+		var wg sync.WaitGroup
+		waitForReplaceCommand(t, &wg, ed, client, "bla")
+	})
+
+	t.Run("returns subscribe error", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		ed := texttest.NewMockEditor(ctrl)
+		s := NewServer(ed, new(sync.Mutex))
+
+		client, closeFn := setupIntTest(t, s)
+		defer closeFn()
+
+		handler := textapi.FuncCommandHandler(func(_ context.Context, man textapi.Command) error {
+			return nil
+		}, nil)
+
+		man := textapi.CommandManual{Name: "bla"}
+		ed.EXPECT().SubscribeCommand(gomock.Any(), gomock.Any()).DoAndReturn(
+			func(man textapi.CommandManual, h text.CommandHandler) error {
+				return errors.New("boom")
+			})
+		err := client.SubscribeCommand(man, handler)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "boom")
+	})
+
+	t.Run("completes commands", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		ed := texttest.NewMockEditor(ctrl)
+		s := NewServer(ed, new(sync.Mutex))
+
+		client, closeFn := setupIntTest(t, s)
+		defer closeFn()
+
+		var (
+			subscribedClient text.CommandHandler
+			dispatched       string
+			dispatchedArgs   []string
+			dispatchedTimes  int
+		)
+		expectedIterator := iterator.FromSlice([]string{"a", "b", "c"})
+		handler := textapi.FuncCommandHandler(
+			func(_ context.Context, man textapi.Command) error {
+				return nil
+			}, func(_ context.Context, cmd string, args []string) (
+				iterator.Iterator[string], error,
+			) {
+				dispatched = cmd
+				dispatchedArgs = args
+				dispatchedTimes++
+				return expectedIterator, nil
+			})
+
+		man := textapi.CommandManual{Name: "bla"}
+		ed.EXPECT().SubscribeCommand(gomock.Any(), gomock.Any()).DoAndReturn(
+			func(man textapi.CommandManual, h text.CommandHandler) error {
+				subscribedClient = h
+				return nil
+			})
+		err := client.SubscribeCommand(man, handler)
+		require.NoError(t, err)
+
+		require.NotNil(t, subscribedClient)
+
+		// complete
+		s.editor.Lock()
+		it, _, err := subscribedClient.Complete(context.Background(), "bla", []string{"ble"})
+		s.editor.Unlock()
+		require.NoError(t, err)
+
+		actualIterator, err := iterator.ToSlice(context.Background(), it)
+		require.NoError(t, err)
+		assert.Equal(t, actualIterator, []string{"a", "b", "c"})
+
+		require.Equal(t, 1, dispatchedTimes)
+		assert.Equal(t, "bla", dispatched)
+		require.Len(t, dispatchedArgs, 1)
+		assert.Equal(t, "ble", dispatchedArgs[0])
+
+		var wg sync.WaitGroup
+		waitForReplaceCommand(t, &wg, ed, client, "bla")
+	})
+
+	t.Run("returns complete error", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		ed := texttest.NewMockEditor(ctrl)
+		s := NewServer(ed, new(sync.Mutex))
+
+		client, closeFn := setupIntTest(t, s)
+		defer closeFn()
+
+		var (
+			subscribedClient text.CommandHandler
+		)
+		handler := textapi.FuncCommandHandler(
+			func(_ context.Context, man textapi.Command) error {
+				return nil
+			}, func(_ context.Context, cmd string, args []string) (
+				iterator.Iterator[string], error,
+			) {
+				return nil, errors.New("boom")
+			})
+
+		man := textapi.CommandManual{Name: "bla"}
+		ed.EXPECT().SubscribeCommand(gomock.Any(), gomock.Any()).DoAndReturn(
+			func(man textapi.CommandManual, h text.CommandHandler) error {
+				subscribedClient = h
+				return nil
+			})
+		err := client.SubscribeCommand(man, handler)
+		require.NoError(t, err)
+
+		require.NotNil(t, subscribedClient)
+
+		s.editor.Lock()
+		it, _, err := subscribedClient.Complete(context.Background(), "bla", []string{"ble"})
+		s.editor.Unlock()
+		require.NoError(t, err)
+
+		_, err = iterator.ToSlice(context.Background(), it)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "boom")
+
+		var wg sync.WaitGroup
+		waitForReplaceCommand(t, &wg, ed, client, "bla")
+	})
+
+	t.Run("returns iterator error", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		ed := texttest.NewMockEditor(ctrl)
+		s := NewServer(ed, new(sync.Mutex))
+
+		client, closeFn := setupIntTest(t, s)
+		defer closeFn()
+
+		var (
+			subscribedClient text.CommandHandler
+		)
+		handler := textapi.FuncCommandHandler(
+			func(_ context.Context, man textapi.Command) error {
+				return nil
+			}, func(_ context.Context, cmd string, args []string) (
+				iterator.Iterator[string], error,
+			) {
+				return iterator.Error[string](errors.New("boom")), nil
+			})
+
+		man := textapi.CommandManual{Name: "bla"}
+		ed.EXPECT().SubscribeCommand(gomock.Any(), gomock.Any()).DoAndReturn(
+			func(man textapi.CommandManual, h text.CommandHandler) error {
+				subscribedClient = h
+				return nil
+			})
+		err := client.SubscribeCommand(man, handler)
+		require.NoError(t, err)
+
+		require.NotNil(t, subscribedClient)
+
+		s.editor.Lock()
+		it, _, err := subscribedClient.Complete(context.Background(), "bla", []string{"ble"})
+		s.editor.Unlock()
+		require.NoError(t, err)
+
+		_, err = iterator.ToSlice(context.Background(), it)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "boom")
+
+		var wg sync.WaitGroup
+		waitForReplaceCommand(t, &wg, ed, client, "bla")
+	})
+}
+
+func waitForReplaceCommand(
+	t *testing.T, wg *sync.WaitGroup,
+	ed *texttest.MockEditor, client *Client, expectCmd string,
+) {
+	wg.Add(1)
+	ed.EXPECT().UnsubscribeCommand(gomock.Any()).DoAndReturn(
+		func(cmd string) error {
+			assert.Equal(t, expectCmd, cmd)
+			wg.Done()
+			return nil
+		})
+	ed.EXPECT().SubscribeCommand(gomock.Any(), gomock.Any()).Return(nil)
+	require.NoError(t, client.Close())
+	wg.Wait()
 }
 
 func TestRPCTab(t *testing.T) {
@@ -505,11 +748,10 @@ func TestRPCTab(t *testing.T) {
 			return nil, nil, err
 		}
 
-		b := rpc.NewUnixGRPCBroker("", "", "")
 		s := browserrpc.NewServer(c, mu)
 		s.SetSyncMode()
 
-		client, closeFn := setupWmIntTest(t, b, s)
+		client, closeFn := setupWmIntTest(t, s)
 		t.Cleanup(func() {
 			mu.Lock()
 			s.Stop()
@@ -519,31 +761,6 @@ func TestRPCTab(t *testing.T) {
 
 		return c, client, err
 	})
-}
-
-func TestRPCRegister(t *testing.T) {
-	testRegister(t, func(ed text.Editor, mu *sync.Mutex, res workspaceapi.URI) (*text.Component, text.Editor, error) {
-		c, err := newTestComponentErr(ed)
-		if err != nil {
-			return nil, nil, err
-		}
-
-		b := rpc.NewUnixGRPCBroker("", "", "")
-		s := NewServer(b, c, mu)
-
-		client, closeFn := setupIntTest(t, b, s)
-		t.Cleanup(func() {
-			mu.Lock()
-			s.Close()
-			mu.Unlock()
-			closeFn()
-		})
-
-		return c, texttest.EditorFromAPIEditor{Ed: client}, err
-	})
-}
-
-func TestRPCComplete(t *testing.T) {
 }
 
 func assertLocation(t *testing.T, l text.LocationList, idx int, loca textapi.Location) {
@@ -696,95 +913,49 @@ func newTestComponentErr(ed text.Editor) (*text.Component, error) {
 	return c, nil
 }
 
-func testRegister(t *testing.T,
-	constructor func(ed text.Editor, mu *sync.Mutex, resource workspaceapi.URI) (*text.Component, text.Editor, error)) {
-	t.Run("Subscribed handler is called", func(t *testing.T) {
-		var mu sync.Mutex
-		resource1, err := workspaceapi.ParseURI("file:///HERS")
-		require.NoError(t, err)
-		myArgs := []string{"a", "bbbbbbbbbbbbbbbbbbbbb"}
-		myCmd := textapi.CommandManual{
-			Name:     "BUY",
-			Synopsis: "what",
-			Summary:  "It's prime day!",
-			Commands: []textapi.CommandManual{
-				{
-					Name:     "applycoupon",
-					Synopsis: "howmuch",
-					Summary:  "do it",
-				},
-			},
-		}
-		c, sut, err := constructor(texttest.NopEditor(), &mu, resource1)
-		require.NoError(t, err)
+func doSetupIntTest(
+	t *testing.T, register func(*grpc.Server),
+) (conn *grpc.ClientConn, closeFn func()) {
+	lis, err := net.Listen("tcp", ":0")
+	require.NoError(t, err)
 
-		mu.Lock()
-		h1, err := c.Edit(resource1, cell.NewBuffer())
-		mu.Unlock()
-		require.NoError(t, err)
+	grpcServer := grpc.NewServer()
+	register(grpcServer)
 
-		var called int
-		var wg sync.WaitGroup
-		sut.SubscribeCommand(myCmd,
-			text.FuncCommandHandler(func(ctx context.Context, cmd textapi.Command) error {
-				defer wg.Done()
-				assert.Equal(t, myCmd.Name, cmd.Name)
-				assert.Equal(t, myArgs, cmd.Args)
-				assert.NotNil(t, cmd.Window)
-				called++
-				return nil
-			}, nil))
+	go grpcServer.Serve(lis)
 
-		wg.Add(1)
-		mu.Lock()
-		win, err := c.Focus()
-		require.NoError(t, err)
-		cmd := textapi.Command{
-			Resource: h1,
-			URI:      resource1,
-			Name:     myCmd.Name,
-			Args:     myArgs,
-			Window:   win,
-		}
-		ok, err := c.DispatchCommand(cmd)
-		require.NoError(t, err)
-		assert.True(t, ok)
-		mu.Unlock()
+	conn, err = grpc.Dial(lis.Addr().String(), grpc.WithInsecure())
+	require.NoError(t, err)
 
-		wg.Wait()
+	closeFn = func() {
+		grpcServer.Stop()
+		lis.Close()
+	}
+	return
+}
 
-		assert.Equal(t, 1, called)
+func setupIntTest(
+	t *testing.T, s *Server,
+) (*Client, func()) {
+	conn, closeFn := doSetupIntTest(t, func(grpcServer *grpc.Server) {
+		RegisterEditorServer(grpcServer, s)
 	})
+	client := NewClient(context.Background(), conn)
+	return client, func() {
+		client.Close()
+		closeFn()
+	}
+}
 
-	t.Run("Complete is called", func(t *testing.T) {
-		var mu sync.Mutex
-		resource1, err := workspaceapi.ParseURI("file:///HERS")
-		require.NoError(t, err)
-		myCmd := textapi.CommandManual{
-			Name: "HODL",
-		}
-		c, sut, err := constructor(texttest.NopEditor(), &mu, resource1)
-		require.NoError(t, err)
-
-		sut.SubscribeCommand(myCmd,
-			text.FuncCommandHandler(func(ctx context.Context, cmd textapi.Command) error {
-				return nil
-			}, func(ctx context.Context, cmd string, args []string) (iterator.Iterator[string], string, error) {
-				assert.Equal(t, []string{"1", "2"}, args)
-				return iterator.FromSlice([]string{"4EVER"}), "sub", nil
-			}))
-
-		mu.Lock()
-		defer mu.Unlock()
-
-		it, str, err := c.CompleteCommand(context.Background(), "HODL", []string{"1", "2"}...)
-		require.NoError(t, err)
-
-		sl, err := iterator.ToSlice(context.Background(), it)
-		require.NoError(t, err)
-
-		assert.Equal(t, []string{"4EVER"}, sl)
-		clientsShouldNeverBeAllowedSubstitution := ""
-		assert.Equal(t, clientsShouldNeverBeAllowedSubstitution, str)
+func setupWmIntTest(
+	t *testing.T, s *browserrpc.Server,
+) (*browserrpc.Client, func()) {
+	conn, closeFn := doSetupIntTest(t, func(grpcServer *grpc.Server) {
+		browserrpc.RegisterWindowManagerServer(grpcServer, s)
 	})
+	client := browserrpc.NewClient(context.Background(), conn)
+	return client, func() {
+		client.Close()
+		closeFn()
+	}
 }

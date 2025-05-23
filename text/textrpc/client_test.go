@@ -42,62 +42,12 @@ import (
 	"unstable.build/go-tui/text"
 )
 
-var (
-	loc1 = textapi.Location{
-		To:   term.Coordinates{X: 1, Y: 3},
-		Attr: term.Attributes{Attrs: tcell.AttrBold},
-	}
-	loc2 = textapi.Location{
-		From:    term.Coordinates{X: 1, Y: 3},
-		Attr:    term.Attributes{Fg: tcell.ColorBlack, Bg: tcell.ColorGreen},
-		Message: "wsb: hold BBBY",
-	}
-	loc3 = textapi.Location{}
-)
-
-func newTestClient(ctrl *gomock.Controller) (
-	*rpc.MockMuxBroker, *rpc.MockMuxConn, *Client,
-) {
-	broker := rpc.NewMockMuxBroker(ctrl)
-	cc := rpc.NewMockMuxConn(ctrl)
-	c := NewClient(context.Background(), broker, cc)
-	// runtime finalizer calls close after test is done
-	cc.EXPECT().Close().AnyTimes()
-	return broker, cc, c
-}
-
-func expectClientEdit(
-	t *testing.T, mockCC *rpc.MockMuxConn,
-	expectedContent string, uri workspaceapi.URI,
-) {
-	mockCC.EXPECT().
-		Invoke(gomock.Any(),
-			gomock.Eq("/text.Editor/Edit"),
-			gomock.Any(),
-			gomock.Any()).
-		DoAndReturn(func(
-			ctx context.Context, method string, args interface{},
-			reply interface{}, opts ...grpc.CallOption) error {
-			editReq, ok := args.(*EditRequest)
-			require.True(t, ok)
-
-			buf := EditRequestToBuffer(editReq)
-			assert.Equal(t, expectedContent, buf.String())
-			assert.Equal(t, uri.String(), editReq.ResourceName.GetUri())
-
-			_, ok = reply.(*EditResponse)
-			assert.True(t, ok)
-			return nil
-		}).
-		Times(1)
-}
-
 func TestClientEdit(t *testing.T) {
 	bufContent1 := "The Maytals"
 
 	t.Run("happy path", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
-		_, cc, c := newTestClient(ctrl)
+		cc, c := newTestClient(ctrl)
 		uri, err := workspaceapi.ParseURI("file:///tmp/hello")
 		require.NoError(t, err)
 
@@ -113,7 +63,7 @@ func TestClientEdit(t *testing.T) {
 
 	t.Run("handles underlying client error ", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
-		_, cc, c := newTestClient(ctrl)
+		cc, c := newTestClient(ctrl)
 
 		cc.EXPECT().
 			Invoke(gomock.Any(),
@@ -246,4 +196,53 @@ func BenchmarkSetLocationListRequest1000(b *testing.B) {
 
 func BenchmarkSetLocationListRequest10000(b *testing.B) {
 	benchmarkSetLocationListRequest(b, 10000)
+}
+
+var (
+	loc1 = textapi.Location{
+		To:   term.Coordinates{X: 1, Y: 3},
+		Attr: term.Attributes{Attrs: tcell.AttrBold},
+	}
+	loc2 = textapi.Location{
+		From:    term.Coordinates{X: 1, Y: 3},
+		Attr:    term.Attributes{Fg: tcell.ColorBlack, Bg: tcell.ColorGreen},
+		Message: "wsb: hold BBBY",
+	}
+	loc3 = textapi.Location{}
+)
+
+func newTestClient(ctrl *gomock.Controller) (
+	*rpc.MockMuxConn, *Client,
+) {
+	cc := rpc.NewMockMuxConn(ctrl)
+	c := NewClient(context.Background(), cc)
+	// runtime finalizer calls close after test is done
+	cc.EXPECT().Close().AnyTimes()
+	return cc, c
+}
+
+func expectClientEdit(
+	t *testing.T, mockCC *rpc.MockMuxConn,
+	expectedContent string, uri workspaceapi.URI,
+) {
+	mockCC.EXPECT().
+		Invoke(gomock.Any(),
+			gomock.Eq("/text.Editor/Edit"),
+			gomock.Any(),
+			gomock.Any()).
+		DoAndReturn(func(
+			ctx context.Context, method string, args interface{},
+			reply interface{}, opts ...grpc.CallOption) error {
+			editReq, ok := args.(*EditRequest)
+			require.True(t, ok)
+
+			buf := EditRequestToBuffer(editReq)
+			assert.Equal(t, expectedContent, buf.String())
+			assert.Equal(t, uri.String(), editReq.ResourceName.GetUri())
+
+			_, ok = reply.(*EditResponse)
+			assert.True(t, ok)
+			return nil
+		}).
+		Times(1)
 }

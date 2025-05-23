@@ -105,7 +105,7 @@ func TestIntegrationRace(t *testing.T) {
 		{extension.PermissionEditor, func(token extension.Grant, broker rpc.MuxBroker) (interface{}, error) {
 			return Editor(context.Background(), token, broker)
 		}, func(ed *texttest.MockEditorMockRecorder) *gomock.Call {
-			return ed.SubscribeCommand(gomock.Any(), gomock.Any()).Return(nil)
+			return nil // already set in test scaffold
 		}, func(ifc interface{}) error {
 			h := textapi.FuncCommandHandler(nil, nil)
 			return ifc.(textapi.Editor).SubscribeCommand(textapi.CommandManual{}, h)
@@ -140,10 +140,17 @@ func TestIntegrationRace(t *testing.T) {
 		require.NoError(t, err)
 
 		edMock.EXPECT().UnsubscribeEvents(gomock.Any()).AnyTimes()
+		// unregister/register replacement command handler to avoid
+		// user having "missing" commands
+		edMock.EXPECT().UnsubscribeCommand(gomock.Any()).AnyTimes()
+		edMock.EXPECT().SubscribeCommand(gomock.Any(), gomock.Any()).AnyTimes()
 
 		n := 5
 		if tcase.expect != nil {
-			tcase.expect(edMock.EXPECT()).Times(n * 2)
+			expect := tcase.expect(edMock.EXPECT())
+			if expect != nil {
+				expect.Times(n * 2)
+			}
 		}
 		for i := 0; i < n; i++ {
 			wg.Add(2)

@@ -39,8 +39,6 @@ import (
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component/notifications"
-	"unstable.build/go-tui/rpc"
-	"unstable.build/go-tui/rpc/rpctest"
 	"unstable.build/go-tui/term"
 	termrpc "unstable.build/go-tui/term/termrpc"
 	"unstable.build/go-tui/text"
@@ -55,11 +53,10 @@ type nopLocker struct{}
 func (l nopLocker) Lock()   {}
 func (l nopLocker) Unlock() {}
 
-func newTestServer(t *testing.T, ctrl *gomock.Controller) (*rpc.MockMuxBroker, *texttest.MockEditor, *Server) {
-	broker := rpc.NewMockMuxBroker(ctrl)
+func newTestServer(t *testing.T, ctrl *gomock.Controller) (*texttest.MockEditor, *Server) {
 	ed := texttest.NewMockEditor(ctrl)
-	s := NewServer(broker, ed, new(sync.Mutex))
-	return broker, ed, s
+	s := NewServer(ed, new(sync.Mutex))
+	return ed, s
 }
 
 func expectEdit(t *testing.T, mock *texttest.MockEditor, resource workspaceapi.URI, content string) {
@@ -80,7 +77,7 @@ func expectEditor(t *testing.T, mock *texttest.MockEditor, resource workspaceapi
 }
 
 func callServerEdit(
-	t *testing.T, ctx context.Context, broker *rpc.MockMuxBroker,
+	t *testing.T, ctx context.Context,
 	s *Server, uri workspaceapi.URI, content string,
 ) {
 	buf := cell.NewBuffer()
@@ -100,22 +97,22 @@ func TestServerEdit(t *testing.T) {
 
 	t.Run("Edit is propagated to underlying Editor", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
-		broker, mock, s := newTestServer(t, ctrl)
+		mock, s := newTestServer(t, ctrl)
 		expectEdit(t, mock, resource, bufContent1)
-		callServerEdit(t, ctx, broker, s, resource, bufContent1)
+		callServerEdit(t, ctx, s, resource, bufContent1)
 	})
 
 	t.Run("relative path is converted to absolute", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
-		broker, mock, s := newTestServer(t, ctrl)
+		mock, s := newTestServer(t, ctrl)
 		require.NoError(t, err)
 		expectEdit(t, mock, resource, bufContent1)
-		callServerEdit(t, ctx, broker, s, resource, bufContent1)
+		callServerEdit(t, ctx, s, resource, bufContent1)
 	})
 
 	t.Run("bubbles up underlying's Editor Edit errors", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
-		_, mock, s := newTestServer(t, ctrl)
+		mock, s := newTestServer(t, ctrl)
 
 		mock.EXPECT().Edit(gomock.Any(), gomock.Any()).
 			Return(nil, errors.New("NOLINUX")).
@@ -146,89 +143,6 @@ func assertEqualLocations(t *testing.T, loc, expected text.LocationList) {
 	assert.EqualValues(t, expectedLocations, locations)
 }
 
-func TestServerRegister(t *testing.T) {
-	t.Run("calls underlying editor SubscribeCommand", func(t *testing.T) {
-		ctx := context.Background()
-		ctrl := gomock.NewController(t)
-		defer ctrl.Finish()
-
-		broker, mock, s := newTestServer(t, ctrl)
-
-		channelID := "1234"
-		conn := rpctest.ExpectBrokerDialChannel(t, ctrl, broker, channelID)
-
-		expectedMan := textapi.CommandManual{
-			Name:     "bla",
-			Synopsis: "[cmd]",
-			Summary:  "lots of talking",
-			Commands: []textapi.CommandManual{
-				{Name: "subbla", Synopsis: "[subcmd]", Summary: "sub talking"},
-			},
-		}
-		var wg sync.WaitGroup
-		mock.EXPECT().SubscribeCommand(gomock.Eq(expectedMan), gomock.Any()).
-			DoAndReturn(func(textapi.CommandManual, text.CommandHandler) error {
-				wg.Done()
-				return nil
-			})
-
-		wg.Add(1)
-		man := CommandManual{
-			Name:     "bla",
-			Synopsis: "[cmd]",
-			Summary:  "lots of talking",
-			Commands: []*CommandManual{
-				{Name: "subbla", Synopsis: "[subcmd]", Summary: "sub talking"},
-			},
-		}
-		req := RegisterCommandRequest{Command: &man, ChannelId: channelID}
-		res, err := s.Register(ctx, &req)
-		require.NoError(t, err)
-		require.NotNil(t, res)
-		wg.Wait()
-
-		conn.EXPECT().Close().AnyTimes()
-		mock.EXPECT().UnsubscribeCommand(gomock.Eq("bla"))
-
-		s.editor.Lock()
-		assert.NoError(t, s.Close())
-		s.editor.Unlock()
-	})
-
-	t.Run("handles SubscribeCommand errors", func(t *testing.T) {
-		ctx := context.Background()
-		ctrl := gomock.NewController(t)
-		defer ctrl.Finish()
-
-		broker, mock, s := newTestServer(t, ctrl)
-
-		channelID := "1234"
-		conn := rpctest.ExpectBrokerDialChannel(t, ctrl, broker, channelID)
-
-		var wg sync.WaitGroup
-		mock.EXPECT().SubscribeCommand(gomock.Any(), gomock.Any()).
-			DoAndReturn(func(textapi.CommandManual, text.CommandHandler) error {
-				wg.Done()
-				return errors.New("boom")
-			})
-
-		conn.EXPECT().Close().AnyTimes()
-		man := CommandManual{Name: "bla"}
-
-		wg.Add(1)
-		req := RegisterCommandRequest{Command: &man, ChannelId: channelID}
-		res, err := s.Register(ctx, &req)
-		require.Error(t, err)
-		require.Nil(t, res)
-		assert.Contains(t, err.Error(), "boom")
-		wg.Wait()
-
-		s.editor.Lock()
-		assert.NoError(t, s.Close())
-		s.editor.Unlock()
-	})
-}
-
 func TestServerSetLocationList(t *testing.T) {
 	resource, err := workspaceapi.ParseURI("file:///go-tui")
 	require.NoError(t, err)
@@ -238,11 +152,11 @@ func TestServerSetLocationList(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		broker, mock, s := newTestServer(t, ctrl)
+		mock, s := newTestServer(t, ctrl)
 
 		content := "main"
 		expectEdit(t, mock, resource, content)
-		callServerEdit(t, ctx, broker, s, resource, content)
+		callServerEdit(t, ctx, s, resource, content)
 
 		locs := text.LocationSlice([]textapi.Location{{Message: "wsb: hold AMC", To: term.Coordinates{X: 3}}})
 		expectEditor(t, mock, resource)
@@ -265,7 +179,6 @@ func TestServerSetLocationList(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		broker := rpc.NewMockMuxBroker(ctrl)
 		ed := texttest.NopEditor()
 		c, err := text.NewComponent(ed, document.NewInMemoryService(), &testLoader{}, text.Config{
 			Config: browser.Config{
@@ -277,10 +190,10 @@ func TestServerSetLocationList(t *testing.T) {
 			},
 		})
 		require.NoError(t, err)
-		s := NewServer(broker, c, new(sync.Mutex))
+		s := NewServer(c, new(sync.Mutex))
 
 		content := "main"
-		callServerEdit(t, ctx, broker, s, resource, content)
+		callServerEdit(t, ctx, s, resource, content)
 
 		locs := []textapi.Location{
 			{From: term.Coordinates{X: 0, Y: 0}, To: term.Coordinates{X: 3, Y: 0}},
@@ -317,13 +230,13 @@ func TestServerSetCursor(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		broker, mock, s := newTestServer(t, ctrl)
+		mock, s := newTestServer(t, ctrl)
 
 		resource, err := workspaceapi.ParseURI("file:///SetCursorer")
 		require.NoError(t, err)
 		content := "Oh my"
 		expectEdit(t, mock, resource, content)
-		callServerEdit(t, ctx, broker, s, resource, content)
+		callServerEdit(t, ctx, s, resource, content)
 
 		pos := term.Coordinates{X: 4, Y: 5}
 		expectEditor(t, mock, resource)
@@ -345,12 +258,12 @@ func TestServerCursor(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		broker, mock, s := newTestServer(t, ctrl)
+		mock, s := newTestServer(t, ctrl)
 
 		resource, err := workspaceapi.ParseURI("file:///Cursorer")
 		require.NoError(t, err)
 		expectEdit(t, mock, resource, "")
-		callServerEdit(t, ctx, broker, s, resource, "")
+		callServerEdit(t, ctx, s, resource, "")
 
 		pos := term.Coordinates{X: 4, Y: 5}
 		expectEditor(t, mock, resource)

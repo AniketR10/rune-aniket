@@ -25,13 +25,12 @@ package textrpc
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"runtime"
 	"sync"
 	"time"
 
-	log "github.com/sirupsen/logrus"
-	"github.com/unstablebuild/blue/logging"
 	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/browser/browserrpc"
@@ -96,7 +95,6 @@ var _ textapi.Editor = (*Client)(nil)
 
 // Client satisfies text.Editor by calling a remote editor over grpc.
 type Client struct {
-	broker          rpc.MuxBroker
 	browser         *browserrpc.Client
 	cc              rpc.MuxConn
 	ed              EditorClient
@@ -105,62 +103,23 @@ type Client struct {
 }
 
 // NewClient allocates storage for a new Client and initializes it.
-func NewClient(
-	ctx context.Context, broker rpc.MuxBroker, cc rpc.MuxConn,
-) *Client {
+func NewClient(ctx context.Context, cc rpc.MuxConn) *Client {
 	ret := new(Client)
-	ret.Init(ctx, broker, cc)
+	ret.Init(ctx, cc)
 	runtime.SetFinalizer(ret, func(c *Client) { c.Close() })
 	return ret
 }
 
 // Init initializes this Client with broker and client.
-func (c *Client) Init(
-	ctx context.Context, broker rpc.MuxBroker, cc rpc.MuxConn,
-) {
+func (c *Client) Init(ctx context.Context, cc rpc.MuxConn) {
 	c.ed = NewEditorClient(cc)
 	c.cc = cc
-	c.broker = broker
 	ok := rpc.IsContextWithWaitGroup(ctx)
 	if !ok {
 		ctx = rpc.ContextWithWaitGroup(ctx, new(sync.WaitGroup))
 	}
 	c.browser = browserrpc.NewClient(ctx, cc)
 	c.clientCtx, c.clientCancelCtx = context.WithCancel(ctx)
-}
-
-func (c *Client) log(level log.Level, msg string, args ...interface{}) {
-	if !log.IsLevelEnabled(level) {
-		return
-	}
-	log.WithField(logging.KeyClass, "text.Client").Logf(level, msg, args...)
-}
-
-func (c *Client) serveCommandHandler(h textapi.CommandHandler) (
-	ret string, srv rpc.MuxServer, err error,
-) {
-	ctxWg := rpc.WaitGroupFromContext(c.clientCtx)
-	// NOTE: there's no way to unregister from the public API, so extensions
-	// cannot create more than one command handler per command.
-	// If we ever add unregister to the API, we should cleanup
-	// cyclical references here so the Client's runtime finalizer can
-	// run correctly, in the case where clients use multiple
-	// clients to register and unregister new commands.
-	ret, err = rpc.AcceptAndServeChannel(c.clientCtx, c.broker,
-		func(channelID string, _srv rpc.MuxServer) {
-			ctxWg.Add(1)
-			srv = _srv
-			s := newCommandServer(h, c.browser, c)
-			RegisterCommandHandlerServer(srv.Registrar(), s)
-		}, "text", "client", "command")
-	if err == nil {
-		go func(ctx context.Context) {
-			defer ctxWg.Done()
-			<-ctx.Done()
-			srv.Stop()
-		}(c.clientCtx)
-	}
-	return
 }
 
 // Edit requests editor server to edit buf.
@@ -199,9 +158,7 @@ func (c *Client) Editor(file workspaceapi.URI) (textapi.Handler, error) {
 func (c *Client) SubscribeEvents(
 	evs []textapi.EventType, h textapi.EventHandler,
 ) error {
-	c.log(log.TraceLevel, "SubscribeEvents: %v", evs)
 	stream, err := c.ed.SubscribeEvent(c.clientCtx)
-	c.log(log.TraceLevel, "SubscribeEvents: %v: %v", evs, err)
 	if err != nil {
 		return err
 	}
@@ -212,7 +169,6 @@ func (c *Client) SubscribeEvents(
 	}
 
 	err = stream.Send(&req)
-	c.log(log.TraceLevel, "sent initial request: %v", err)
 	if err != nil {
 		return fmt.Errorf("stream send request: %v", err)
 	}
@@ -220,30 +176,39 @@ func (c *Client) SubscribeEvents(
 	handler := newEventStreamServer(c.clientCtx, stream, h)
 	go handler.receiveEvents(c)
 
+	runtime.KeepAlive(c)
+
 	return nil
 }
 
 // SubscribeCommand requests the editor server to register cmd with h.
 func (c *Client) SubscribeCommand(man textapi.CommandManual, h textapi.CommandHandler) error {
-	ctx, cancel := c.ctxWithTimeout()
-	defer cancel()
-
-	channelID, srv, err := c.serveCommandHandler(h)
+	stream, err := c.ed.SubscribeCommand(c.clientCtx)
 	if err != nil {
-		return fmt.Errorf("serve command handler: %w", err)
-	}
-
-	rpcMan := makeProtoManual(man)
-	req := RegisterCommandRequest{Command: &rpcMan, ChannelId: channelID}
-	_, err = c.ed.Register(ctx, &req)
-	runtime.KeepAlive(c)
-	if err != nil {
-		if srv != nil {
-			srv.Stop()
-		}
 		return err
 	}
+	rpcMan := makeProtoManual(man)
+	req := SubscribeCommandRequest{Command: &rpcMan}
+	sendMsg := ClientCommandMessage{Request: &req, Type: ClientCommandMessage_Request}
 
+	if err := stream.Send(&sendMsg); err != nil {
+		return fmt.Errorf("send subscribe command request: %w", err)
+	}
+
+	var recvMsg ServerCommandMessage
+	err = stream.RecvMsg(&recvMsg)
+	if err != nil {
+		return fmt.Errorf("send subscribe command request: %w", err)
+	}
+
+	if recvMsg.GetType() != ServerCommandMessage_Response || recvMsg.GetResponse() == nil {
+		return errors.New("recv subscribe command response: nil response")
+	}
+
+	srvStream := newCommandServerStream(c.clientCtx, stream, h)
+	go srvStream.receiveMessages()
+
+	runtime.KeepAlive(c)
 	return nil
 }
 
@@ -383,10 +348,10 @@ func (c *Client) Close() (ret error) {
 	if c.clientCancelCtx != nil {
 		c.clientCancelCtx()
 		c.clientCancelCtx = nil
+		ret = c.cc.Close()
+		c.cc = nil
+		runtime.SetFinalizer(c, nil)
 	}
-	ret = c.cc.Close()
-	c.cc = nil
-	runtime.SetFinalizer(c, nil)
 	return ret
 }
 

@@ -25,7 +25,6 @@ package extutil
 
 import (
 	"context"
-	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -41,8 +40,6 @@ import (
 	"unstable.build/go-tui/browser/browsertest"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/rpc"
-	"unstable.build/go-tui/rpc/rpctest"
-	"unstable.build/go-tui/text/textrpc"
 )
 
 var emptyConfig = config.MapConfig(make(map[string]interface{}))
@@ -64,25 +61,6 @@ func expectInitialization(
 	h.Connected(context.Background(), broker, emptyConfig)
 	h.Health(context.Background())
 	return broker
-}
-
-func expectSubscribe(
-	t *testing.T, ctrl *gomock.Controller,
-	broker *rpc.MockMuxBroker, cmd string, token string,
-) *rpc.MockMuxConn {
-	conn := rpctest.ExpectBrokerDial(t, ctrl, broker, token)
-	rpctest.ExpectBrokerNewChannel(t, "1234", broker)
-	cmdRpc := textrpc.CommandManual{Name: cmd}
-	expected := textrpc.RegisterCommandRequest{ChannelId: "1234", Command: &cmdRpc}
-
-	conn.EXPECT().
-		Invoke(gomock.Any(),
-			gomock.Eq("/text.Editor/Register"),
-			gomock.Eq(&expected),
-			gomock.Any()).
-		Times(1)
-
-	return conn
 }
 
 type nopConn struct {
@@ -124,33 +102,6 @@ func TestCommandSplitHandlerEmpty(t *testing.T) {
 		h := &cmdSplitHandler{config: config}
 
 		expectInitialization(t, ctrl, h)
-	})
-
-	t.Run("subscribe to cmd event when subscriber permission is received", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		defer ctrl.Finish()
-		config := CommandSplitHandlerConfig{Command: testCommand("blah")}
-		h := &cmdSplitHandler{config: config}
-		broker := expectInitialization(t, ctrl, h)
-
-		token := "123"
-		conn := expectSubscribe(t, ctrl, broker, "blah", token)
-
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
-		ctx = rpc.ContextWithWaitGroup(ctx, new(sync.WaitGroup))
-
-		// called async waiting for ctx to be done
-		conn.EXPECT().Close().AnyTimes()
-
-		grants := []extension.Grant{
-			{
-				Token:      token,
-				Permission: extension.Permission(extension.PermissionEditor),
-				Context:    ctx,
-			},
-		}
-		h.PermissionGranted(context.Background(), grants)
 	})
 
 	t.Run("does nothing if shutdown is called when window not active", func(t *testing.T) {
