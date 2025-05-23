@@ -205,11 +205,6 @@ extensions:
   # This extension is for simulating a extension panic or other type of debugging.
   chaos:
     path: /usr/local/bin/extension_chaos
-  # This extension adds a new scheme "upspin" which implements
-  # e2e encrypted workspaces. If you're interested in this feature
-  # please follow instructions here: https://upspin.io/doc/signup.md.
-  upspin:
-    path: /usr/local/bin/extension_upspin
   # This extension adds a command colorPalette which opens a new window
   # and shows all the colors available to configure in the various
   # styles thorought this configuration.
@@ -424,7 +419,6 @@ command:
     e:
       command: edit
       completer: filepath
-    issues: addWorkspace bluectl+issues:///
     config: edit ~/.sixrc
     # You can also add combinations of commands to be run
     # as a single command.
