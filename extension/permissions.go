@@ -54,7 +54,4 @@ const (
 
 	// PermissionConfig requests access to read the loaded configuration.
 	PermissionConfig Permission = "_PermConfig"
-
-	// PermissionSchemeManager requests access to the workspace's URI scheme manager.
-	PermissionSchemeManager Permission = "_PermSchemeManager"
 )

@@ -655,9 +655,6 @@ func (h *workspaceManagerHandler) buildExtensions(
 		extension.EditorResources(ex.Editor(), h.publishEvent))
 	res = extension.MergeResourceMap(res,
 		extension.WorkspaceResources(cwd))
-	// NOTE: extensions that register new schemes will fail for subsequent workspaces
-	res = extension.MergeResourceMap(res,
-		extension.SchemeManagerResources(h.workspace))
 	res = extension.MergeResourceMap(res,
 		extension.StorageResources(h.sixDir))
 	res = extension.MergeResourceMap(res,
@@ -667,8 +664,7 @@ func (h *workspaceManagerHandler) buildExtensions(
 	if err := os.MkdirAll(dataDir, 0777); err != nil {
 		return nil, fmt.Errorf("mkdir .extension: %v", err)
 	}
-	runner, err := h.extensionRunner.WorkspaceExtensionsRunner(
-		h.mu, uri, res, dataDir, ex.Browser())
+	runner, err := h.extensionRunner.WorkspaceExtensionsRunner(h.mu, uri, res, dataDir, ex.Browser())
 	if err != nil {
 		return nil, fmt.Errorf("error initializing extension manager: %v", err)
 	}
