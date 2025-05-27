@@ -429,8 +429,8 @@ func (h *aiEditorHandler) newDialogueComponent() *dialogue.Component {
 func (h *aiEditorHandler) handleChat(cmd textapi.Command) error {
 	if len(cmd.Args) > 0 {
 		if err := isAvailableModel(h.availableModels, cmd.Args[0]); err == nil {
-			return errors.New("Model must be passed as a second argument to a dialogue ID. " +
-				"Check command manual for more details.")
+			return errors.New("model must be passed as a second argument to a dialogue ID, " +
+				"check command manual for more details")
 		}
 	}
 	model := h.defaultModel
@@ -769,7 +769,7 @@ func availableModelsString(availableModels map[string]int) string {
 func isAvailableModel(available map[string]int, model string) error {
 	if _, ok := available[model]; !ok {
 		availableStr := availableModelsString(available)
-		return fmt.Errorf("Model '%s' is not supported. Available models: %s",
+		return fmt.Errorf("model '%s' is not supported. Available models: %s",
 			model, availableStr)
 	}
 	return nil

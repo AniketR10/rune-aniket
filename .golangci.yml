@@ -1,34 +1,44 @@
-run:
-  timeout: 5m
-  exclude-dirs:
-    - bin
-    - target
-# we should slowly fix tests too
-issues:
-  include:
-    - EXC0012 # exported symbols should have comment or be unexported
-    - EXC0014 # comment on exported symbols should be of the form
-  exclude:
-    - SA1019 # deprecations
-  exclude-rules:
-    - path: (.+)_test.go
-      linters:
-        - funlen
-        - errcheck
-        - unused
-        - govet
-        - ineffassign
-        - staticcheck
-        - gosimple
-        - revive
+version: "2"
 linters:
   enable:
     - revive
-
-linters-settings:
-  revive:
+  settings:
+    revive:
+      rules:
+        - name: unused-parameter
+          disabled: true
+        - name: exported
+          severity: error
+  exclusions:
+    generated: lax
+    presets:
+      - common-false-positives
+      - legacy
+      - std-error-handling
     rules:
-      - name: unused-parameter
-        Disabled: true
-      - name: exported
-        severity: error
+      - linters:
+          - errcheck
+          - funlen
+          - govet
+          - ineffassign
+          - revive
+          - staticcheck
+          - unused
+        path: (.+)_test.go
+      - path: (.+)\.go$
+        text: SA1019
+      - path: (.+)\.go$
+        text: QF1008
+      - path: (.+)\.go$
+        text: QF1001
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

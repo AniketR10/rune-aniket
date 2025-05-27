@@ -172,7 +172,7 @@ func newRemoteScheme(
 
 // this should only be called from within event loop,
 // otherwhise need to sync first with locker.
-func (s *remoteScheme) state() (err error, scheme schemeapi.Scheme) {
+func (s *remoteScheme) state() (err error, scheme schemeapi.Scheme) { //nolint:staticcheck
 	currState := s.currState.Load().(state)
 	err = currState.lastSessionError
 	scheme = currState.scheme

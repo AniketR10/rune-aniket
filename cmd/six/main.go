@@ -116,11 +116,11 @@ func init() {
 func cwdURI() workspaceapi.URI {
 	wd, err := os.Getwd()
 	if err != nil {
-		log.Fatalf("Failed to get working directory: %s", err)
+		log.Fatalf("get working directory: %s", err)
 	}
 	uri, err := workspaceapi.CurrentUserHostURI(wd)
 	if err != nil {
-		log.Fatalf("Failed to parse working directory as URI %s: %s", wd, err)
+		log.Fatalf("parse working directory as URI %s: %s", wd, err)
 	}
 	return uri
 }

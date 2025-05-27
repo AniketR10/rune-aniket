@@ -118,7 +118,7 @@ func (c *cmdGitService) git(workPath string, args []string) (string, error) {
 		// clean any new line there might be
 		return "", &gitExecError{
 			exit:   err,
-			stderr: strings.Replace(stderr.String(), "\n", " ", -1),
+			stderr: strings.ReplaceAll(stderr.String(), "\n", " "),
 		}
 	}
 

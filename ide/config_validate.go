@@ -75,9 +75,9 @@ func validateCommandPrompt(c *ideConfig, cfg map[string]any) (err error) {
 
 		if isIncompatible {
 			cfg["command"].(map[string]any)[keyCommandKey] = "<c-space>"
-			return fmt.Errorf("Command key must use ctrl or alt modifiers in " +
-				"modeless editor mode otherwise you wouldn't be able to activate it." +
-				" Falling back to <c-space>.")
+			return fmt.Errorf("command key must use ctrl or alt modifiers in " +
+				"modeless editor mode otherwise you wouldn't be able to activate it," +
+				" falling back to <c-space>")
 		}
 	}
 	return

@@ -193,7 +193,7 @@ func (c *ServerStream[T]) ReceiveMessages() {
 		}
 		if err != nil {
 			if !errors.Is(err, io.EOF) {
-				c.log(log.ErrorLevel, err.Error())
+				c.log(log.ErrorLevel, "%s", err.Error())
 			}
 			return
 		}

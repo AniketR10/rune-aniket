@@ -94,7 +94,7 @@ func (c *Client) URI(path string) (workspaceapi.URI, error) {
 	}
 	uri, err := workspaceapi.ParseURI(resp.GetUri())
 	if err != nil {
-		return workspaceapi.URI{}, fmt.Errorf("Could not parse URI response from server: %w", err)
+		return workspaceapi.URI{}, fmt.Errorf("could not parse URI response from server: %w", err)
 	}
 	return uri, nil
 }

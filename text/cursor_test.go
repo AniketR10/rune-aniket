@@ -2327,11 +2327,11 @@ func TestCursorReplaceAllWithNewline(t *testing.T) {
 func cwdURI(t *testing.T) workspaceapi.URI {
 	wd, err := os.Getwd()
 	if err != nil {
-		t.Fatalf("Failed to get working directory: %s", err)
+		t.Fatalf("get working directory: %s", err)
 	}
 	uri, err := workspaceapi.CurrentUserHostURI(wd)
 	if err != nil {
-		t.Fatalf("Failed to parse working directory as URI %s: %s", wd, err)
+		t.Fatalf("parse working directory as URI %s: %s", wd, err)
 	}
 	return uri
 }

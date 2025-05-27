@@ -139,7 +139,7 @@ func (e *simpleEditor) SetCursor(h Handler, pos term.Coordinates) error {
 
 	ok := e.pub.Handler(h).(*simpleEditorHandler).SetCursorAtScroll(pos)
 	if !ok {
-		return errors.New("MoveToScroll: invalid cursor position")
+		return errors.New("move to scroll: invalid cursor position")
 	}
 	return nil
 }

@@ -432,7 +432,8 @@ func (t *TileNode) tileAt(tileOffset, pos term.Coordinates) *TileNode {
 		return t
 	}
 
-	if t.childSplit == vertical {
+	switch t.childSplit {
+	case vertical:
 		for _, child := range t.children {
 			childPos := child.Position()
 			childPos.X += tileOffset.X
@@ -441,7 +442,7 @@ func (t *TileNode) tileAt(tileOffset, pos term.Coordinates) *TileNode {
 				return child.C.(*TileNode).tileAt(childPos, pos)
 			}
 		}
-	} else if t.childSplit == horizontal {
+	case horizontal:
 		for _, child := range t.children {
 			childPos := child.Position()
 			childPos.X += tileOffset.X

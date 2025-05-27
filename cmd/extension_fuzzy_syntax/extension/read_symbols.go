@@ -277,19 +277,20 @@ func readSymbolsWorker(
 			}
 			readErr := readFileSymbols(ctx, w, query, path, functions, tabspaces, queryFn)
 			if readErr != nil {
-				if readErr == errUnknownLanguage {
+				switch readErr {
+				case errUnknownLanguage:
 					ext := filepath.Ext(path)
 					if _, ok := missingLanguage[ext]; !ok {
 						missingLanguage[ext] = &commonErrors{}
 					}
 					missingLanguage[ext].missingLanguage++
-				} else if readErr == errInvalidQuery {
+				case errInvalidQuery:
 					ext := filepath.Ext(path)
 					if _, ok := missingLanguage[ext]; !ok {
 						missingLanguage[ext] = &commonErrors{}
 					}
 					missingLanguage[ext].invalidQuery++
-				} else {
+				default:
 					*err = multierror.Append(*err, readErr)
 				}
 			}

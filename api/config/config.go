@@ -170,7 +170,7 @@ func GetDuration(
 	durStr, err := pconfig.GetString(key)
 	if err != nil {
 		if err != ErrNotFound {
-			err = fmt.Errorf("Error getting '%s' from config: %w", key, err)
+			err = fmt.Errorf("get '%s' from config: %w", key, err)
 			return 0, err
 		}
 		return def, nil
@@ -178,7 +178,7 @@ func GetDuration(
 
 	duration, err := time.ParseDuration(durStr)
 	if err != nil {
-		err = fmt.Errorf("Error parsing duration '%s' from config: %w", key, err)
+		err = fmt.Errorf("parse duration '%s' from config: %w", key, err)
 		return 0, err
 	}
 

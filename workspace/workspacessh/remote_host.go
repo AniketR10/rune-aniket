@@ -52,7 +52,7 @@ func StartSchemeServer(
 	workspacerpc.RegisterExecutorServer(grpcServer, server)
 	workspacerpc.RegisterTerminalServer(grpcServer, server)
 	if err := grpcServer.Serve(lis); err != nil {
-		return fmt.Errorf("Server: %s", err)
+		return fmt.Errorf("serve: %w", err)
 	}
 	return nil
 }

@@ -705,7 +705,7 @@ func (c *Component) CloseOtherWindows(win Window) (retErr error) {
 		return retErr
 	}
 	if !ok {
-		retErr = errors.New("No windows to close")
+		retErr = errors.New("no windows to close")
 	}
 	return
 }

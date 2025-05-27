@@ -326,7 +326,7 @@ func (t *parserHandler) MoveDown(rows int) {
 func (t *parserHandler) IdentifyTerminal(secondary bool) {
 	var err error
 	if secondary {
-		_, err = t.pty.Master.Write([]byte(fmt.Sprintf("\x1b[>0;%d;1c", pkgVersion)))
+		_, err = fmt.Fprintf(t.pty.Master, "\x1b[>0;%d;1c", pkgVersion)
 	} else {
 		_, err = t.pty.Master.Write([]byte("\x1b[?6c"))
 	}
@@ -1209,9 +1209,7 @@ func (t *parserHandler) reportMode(template string, mode int, modeVar *bool) {
 		rep = 2
 	}
 
-	_, err := t.pty.Master.Write([]byte(
-		fmt.Sprintf(template, mode, rep),
-	))
+	_, err := fmt.Fprintf(t.pty.Master, template, mode, rep)
 	if err != nil {
 		t.log(log.WarnLevel, "report mode with template %q: %v", template, err)
 	}

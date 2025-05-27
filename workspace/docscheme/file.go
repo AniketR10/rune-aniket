@@ -77,7 +77,7 @@ func newFile[T localstorage.Document[T]](
 	if addTemplate {
 		data, err := ret.marshaler.Marshal(ret.val)
 		if err != nil {
-			return nil, fmt.Errorf("Marshal: %v", err)
+			return nil, fmt.Errorf("marshal: %v", err)
 		}
 		ret.memFile = workspace.NewMemoryFile(docID, fd, mode, data, &s.mu)
 	} else {
@@ -113,7 +113,7 @@ func (f *file[T]) sync(ctx context.Context) error {
 	var temp T
 	err = f.marshaler.Unmarshal(buf.Bytes(), &temp)
 	if err != nil {
-		return fmt.Errorf("Unmarshal: %v", err)
+		return fmt.Errorf("unmarshal: %v", err)
 	}
 
 	f.val = temp
@@ -169,7 +169,7 @@ func (f *file[T]) sync(ctx context.Context) error {
 	// write updated time back into memory file
 	data, err := f.marshaler.Marshal(f.val)
 	if err != nil {
-		return fmt.Errorf("Unmarshal: %v", err)
+		return fmt.Errorf("unmarshal: %v", err)
 	}
 
 	if err := f.memFile.Truncate(0); err != nil {

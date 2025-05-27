@@ -89,7 +89,7 @@ func (h *History) Load() error {
 		err = h.store.Create(ctx, h.docID, &h.doc)
 	}
 	if err != nil {
-		return fmt.Errorf("Failed to load search history from store: %s", err)
+		return fmt.Errorf("failed to load search history from store: %s", err)
 	}
 	return nil
 }

@@ -543,9 +543,10 @@ func doMapEbitenKey(key ebiten.Key, mod term.Modifier) (ev term.Event, ok bool) 
 		}, true
 	case ebiten.KeyBackspace:
 		var raw []byte
-		if mod == term.ModAlt {
+		switch mod {
+		case term.ModAlt:
 			raw = []byte{0x1b, 0x7f}
-		} else if mod == 0 {
+		case 0:
 			// the rest of modifiers do nothing
 			raw = []byte{0x7f}
 		}
@@ -712,9 +713,10 @@ func doMapEbitenKey(key ebiten.Key, mod term.Modifier) (ev term.Event, ok bool) 
 		}, true
 	case ebiten.KeyTab:
 		var raw []byte
-		if mod == term.ModShift {
+		switch mod {
+		case term.ModShift:
 			raw = []byte{0x1b, 0x5b, 0x5a}
-		} else if mod == 0 {
+		case 0:
 			raw = []byte{0x09}
 		}
 		return term.Event{

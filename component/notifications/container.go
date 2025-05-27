@@ -303,7 +303,7 @@ func (n *Container) pauseNotification(el component.ListNode) {
 
 func (n *Container) resumeNotification(t *notificationTicket, msg string) {
 	comp := t.el.Value().(*notificationComp)
-	if comp.pausedAt == (time.Time{}) {
+	if comp.pausedAt.Equal(time.Time{}) {
 		return // resume is idempotent
 	}
 	remaining := comp.end.Sub(comp.pausedAt)

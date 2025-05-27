@@ -489,9 +489,10 @@ func (h *fuzzyFinderHandler) getListConfig(c config.Config) search.ListConfig {
 		log.Errorf("failed to load 'algo' from config: %v", err)
 	}
 	algo := search.FuzzyMatch
-	if algoStr == "equal" {
+	switch algoStr {
+	case "equal":
 		algo = search.EqualMatch
-	} else if algoStr == "contains" {
+	case "contains":
 		algo = search.ContainsMatch
 	}
 

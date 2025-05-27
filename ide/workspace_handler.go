@@ -35,7 +35,6 @@ import (
 	"sync"
 
 	"github.com/ernestrc/go-multierror"
-	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/document/docmarshal/doctoml"
@@ -269,7 +268,7 @@ func (h *workspaceManagerHandler) init(
 	// actually creating the workspace handler.
 	tempcwd, err := h.workspace.AddWorkspace(h.ctxWithLocker, *cwd)
 	if err != nil {
-		return fmt.Errorf("Failed to create new workspace for %q: %s", *cwd, err)
+		return fmt.Errorf("add new workspace for %q: %s", *cwd, err)
 	}
 	var uris []workspaceapi.URI
 	for _, filename := range filenames {
@@ -733,7 +732,7 @@ func (h *workspaceManagerHandler) logNonFatalErrs(
 	all := configErr
 	for key, err := range configErrs {
 		err = fmt.Errorf("load %q: %v", key, err)
-		all = multierr.Append(all, err)
+		all = multierror.Append(all, err)
 	}
 	if all != nil {
 		log.Warn(all)
@@ -768,7 +767,7 @@ func (h *workspaceManagerHandler) commandAddWorkspace(args ...string) error {
 
 	uri, pathErr := workspaceapi.CurrentUserHostURI(path)
 	if pathErr != nil {
-		err := multierr.Append(pathErr, parseErr)
+		err := multierror.Append(pathErr, parseErr)
 		return err
 	}
 	return h.addOrCreateWorkspace(uri)
@@ -846,14 +845,14 @@ func (h *workspaceManagerHandler) Close() (ret error) {
 			continue
 		}
 		if err := hm.Close(); err != nil {
-			ret = multierr.Append(ret, err)
+			ret = multierror.Append(ret, err)
 		}
 	}
 	if err := h.empty.Close(); err != nil {
-		ret = multierr.Append(ret, err)
+		ret = multierror.Append(ret, err)
 	}
 	if err := h.storage.Close(); err != nil {
-		ret = multierr.Append(ret, err)
+		ret = multierror.Append(ret, err)
 	}
 	return
 }
@@ -866,10 +865,10 @@ type workspaceHandler struct {
 
 func (hm *workspaceHandler) Close() (ret error) {
 	if err := hm.ex.Close(); err != nil {
-		ret = multierr.Append(ret, err)
+		ret = multierror.Append(ret, err)
 	}
 	if err := hm.Extensions.Close(); err != nil {
-		ret = multierr.Append(ret, err)
+		ret = multierror.Append(ret, err)
 	}
 	return
 }
@@ -964,7 +963,7 @@ func (h *workspaceManagerHandler) subscribeInternalCommands(
 				return h.completeCommand(ctx, name, args)
 			}))
 		if err != nil {
-			ret = multierr.Append(ret, fmt.Errorf("subscribe command '%s': %w", cmd, err))
+			ret = multierror.Append(ret, fmt.Errorf("subscribe command '%s': %w", cmd, err))
 		}
 	}
 	return ret
@@ -999,7 +998,7 @@ func (h *workspaceManagerHandler) subscribeExternalCommands(
 	for _, cmd := range commands {
 		err := ex.comp.SubscribeCommand(cmd.cmd, cmd.handler)
 		if err != nil {
-			ret = multierr.Append(ret,
+			ret = multierror.Append(ret,
 				fmt.Errorf("subscribe command '%s': %v", cmd.cmd.Name, err))
 		}
 	}
@@ -1030,7 +1029,7 @@ func (h *workspaceManagerHandler) subscribeCommand(
 			continue
 		}
 		if err := h.subscribeExternalCommands(w.ex, extCmd); err != nil {
-			ret = multierr.Append(ret, err)
+			ret = multierror.Append(ret, err)
 		}
 	}
 	if ret != nil {

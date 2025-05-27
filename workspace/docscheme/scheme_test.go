@@ -167,7 +167,7 @@ func write(buf *cell.Buffer, data []byte) (int, error) {
 
 	err := docjson.Marshaler().Unmarshal([]byte(buf.String()), &doc)
 	if err != nil {
-		return 0, fmt.Errorf("Unmarshal: %v: %q", err, buf.String())
+		return 0, fmt.Errorf("unmarshal: %v: %q", err, buf.String())
 	}
 	var builder strings.Builder
 	builder.WriteString(doc.Content)
@@ -176,7 +176,7 @@ func write(buf *cell.Buffer, data []byte) (int, error) {
 
 	data, err = docjson.Marshaler().Marshal(doc)
 	if err != nil {
-		return 0, fmt.Errorf("Marshal: %v", err)
+		return 0, fmt.Errorf("marshal: %v", err)
 	}
 
 	end := term.Coordinates{Y: buf.Rows(), X: buf.Columns(buf.Rows()-1) + 1}

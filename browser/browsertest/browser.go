@@ -115,9 +115,10 @@ func (b toBrowser) Resource(u workspaceapi.URI) (browserapi.Handler, bool) {
 }
 
 func (b toBrowser) PublishEvent(ev term.Event) error {
-	if ev.Type == term.EventInterrupt {
+	switch ev.Type {
+	case term.EventInterrupt:
 		return b.b.Interrupt(context.Background())
-	} else if ev.Type == term.EventNone {
+	case term.EventNone:
 		return b.b.PublishEventNone()
 	}
 	return fmt.Errorf("cannot publish event type: %v", ev.Type)

@@ -332,7 +332,7 @@ func WithEventPublisher(f func(term.Event) bool) Option {
 func ValidateCommandAliases(aliases map[string]CommandAlias) error {
 	for alias := range aliases {
 		if isErr := exploreAlias(aliases, alias, make(map[string]struct{})); isErr {
-			return fmt.Errorf("Alias cycle detected: '%s'", alias)
+			return fmt.Errorf("alias cycle detected: '%s'", alias)
 		}
 	}
 	return nil

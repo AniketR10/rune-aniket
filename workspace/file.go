@@ -366,7 +366,7 @@ func (f *file) init(
 }
 
 func (f *file) delayCopySwapError(err error) {
-	f.delayedError = fmt.Errorf("Swap file error %s: %s", f.swapFileName, err)
+	f.delayedError = fmt.Errorf("swap file error %s: %s", f.swapFileName, err)
 }
 
 func (f *file) copyFlushSwapFile(str string) (ok bool) {

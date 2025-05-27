@@ -540,7 +540,7 @@ command:
 	err = loadConfig(&cfg, f.Name(), browser.NopWallpaper(), "{}",
 		term.RingBell, term.ScheduleNextTick)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "Alias cycle detected")
+	assert.Contains(t, err.Error(), "alias cycle detected")
 	assert.Empty(t, cfg.commandAliases())
 }
 

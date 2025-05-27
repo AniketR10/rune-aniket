@@ -183,7 +183,7 @@ func readMetadata(path string, r io.ReadSeeker) ([]metadata, error) {
 func expandUser(path string) (expandedPath string) {
 	if strings.HasPrefix(path, "~") {
 		if u, err := user.Current(); err == nil {
-			return strings.Replace(path, "~", u.HomeDir, -1)
+			return strings.ReplaceAll(path, "~", u.HomeDir)
 		}
 	}
 	return path

@@ -187,7 +187,7 @@ func (h *sedEditorHandler) HandleCommand(
 	}
 
 	if len(cmd.Args) != 1 {
-		err := errors.New("Usage: sed <command>")
+		err := errors.New("usage: sed <command>")
 		return err
 	}
 	if cmd.Resource == nil {

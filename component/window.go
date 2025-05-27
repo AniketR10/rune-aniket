@@ -484,7 +484,7 @@ func (w Window) Close() error {
 	}
 
 	if _, ok := w.node.(*TileNode); ok && w.wm.SizeTiles() == 1 {
-		return errors.New("Cannot close last node")
+		return errors.New("cannot close last node")
 	}
 
 	w.wm.minimizedDirty = true

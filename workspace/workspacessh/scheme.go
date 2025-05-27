@@ -225,7 +225,7 @@ func (s *scheme) workspaceExists(
 		return fmt.Errorf("could not check if workspace path %q exists: %w", uri.Path(), err)
 	}
 	if !ok {
-		return fmt.Errorf("path %q was not found on remote."+
+		return fmt.Errorf("path %q was not found on remote "+ //nolint:staticcheck
 			debugPathError, uri.Path(), cmdAndArgs)
 	}
 	return nil

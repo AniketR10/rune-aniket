@@ -64,7 +64,7 @@ const (
 )
 
 var (
-	errInvalidSetCursor    = errors.New("Cannot set cursor on this buffer")
+	errInvalidSetCursor    = errors.New("cannot set cursor on this buffer")
 	errEventStreamNotReady = errors.New("event stream not ready to publish")
 	errInvalidTab          = errors.New("expected exactly one argument with the tab position")
 )
@@ -422,7 +422,7 @@ func (e *ex) switchToTab(args ...string) error {
 		return errInvalidTab
 	}
 	if idx == 0 {
-		return errors.New("The first tab is 1")
+		return errors.New("the first tab is 1")
 	}
 	b := e.comp.Browser()
 	b.SetContentToTab(e.invokeWindow(), idx-1)
@@ -517,11 +517,11 @@ func (e *ex) dispatchCommand(cmd string, args ...string) (err error) {
 	if !handled {
 		target, ok := e.config.CommandAliases[cmd]
 		if !ok && e.workspace == nil {
-			err = fmt.Errorf("Unknown command or alias %q or cannot run on an empty workspace", cmd)
+			err = fmt.Errorf("unknown command or alias %q or cannot run on an empty workspace", cmd)
 		} else if !ok {
-			err = fmt.Errorf("Unknown command or command alias %q", cmd)
+			err = fmt.Errorf("unknown command or command alias %q", cmd)
 		} else if e.workspace == nil {
-			err = fmt.Errorf("Cannot run %q (alias of %v) on an empty workspace",
+			err = fmt.Errorf("cannot run %q (alias of %v) on an empty workspace",
 				cmd, target)
 		} else {
 			err = fmt.Errorf("%s is aliased to an unknown command %v", cmd, target)
@@ -893,7 +893,7 @@ func (e *ex) setDefaultColors(args ...string) error {
 	content, _ := e.invokeWindow().Content()
 	t, ok := content.(*browser.Tab)
 	if !ok {
-		return errors.New("Cannot change colors of this window")
+		return errors.New("cannot change colors of this window")
 	}
 	th, ok := t.Handler().(text.Handler)
 	if ok {
@@ -904,7 +904,7 @@ func (e *ex) setDefaultColors(args ...string) error {
 		emh.SetDefaultAttributes(attrs)
 		return nil
 	}
-	return errors.New("Cannot change colors of this window")
+	return errors.New("cannot change colors of this window")
 }
 
 func (e *ex) readFile(args ...string) error {

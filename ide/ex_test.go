@@ -728,7 +728,7 @@ func TestWriteExclamationNoQuit(t *testing.T) {
 	cases := []handlertest.SequenceTestCase{
 		{":w!>",
 			`┌──────────────────┐
-│Cannot save       │
+│cannot save       │
 │this buffer       │
 └──────────────────┘
 │                  │
@@ -756,7 +756,7 @@ func TestBrowserCloseLastWindow(t *testing.T) {
 	cases := []handlertest.SequenceTestCase{
 		{":closeWindow>",
 			`┌──────────────────┐
-│Cannot close      │
+│cannot close      │
 │last tiled        │
 │window            │
 └──────────────────┘
@@ -2311,7 +2311,7 @@ func TestSwitchToTab(t *testing.T) {
 └────────────────────────────┘`},
 		{":switchToTab 0>",
 			`┌────────────────────────────┐
-│The first tab is 1          │
+│the first tab is 1          │
 └────────────────────────────┘
 │bbbbbbbbbbbbbbbbbbbbbbbbbbbb│
 │bbbbbbbbbbbbbbbbbbbbbbbbbbbb│

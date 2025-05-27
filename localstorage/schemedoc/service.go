@@ -43,7 +43,7 @@ import (
 // ErrClosing is returned to inflight write requests
 // before comitting changes to disk if the service
 // is currently closing.
-var ErrClosing = errors.New("Service is closing")
+var ErrClosing = errors.New("service is closing")
 
 // NewDocumentService returns a document.Service backed by a schemeapi.Scheme.
 // It its goroutine-safe but only one instance can be operating at a time

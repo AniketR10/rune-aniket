@@ -483,7 +483,7 @@ func (h *lspEditorHandler) startLanguageServer(
 func (h *lspEditorHandler) initLanguageServers(pconfig config.Config) error {
 	cfg, err := pconfig.GetMap("exec")
 	if err != nil {
-		err = fmt.Errorf("Failed to get lsp servers 'exec' config: %v", err)
+		err = fmt.Errorf("failed to get lsp servers 'exec' config: %v", err)
 		return err
 	}
 
@@ -502,7 +502,7 @@ func getSemanticTypesAttr(pconfig config.Config) (map[string]tcell.Color, error)
 	colors, err := pconfig.GetConfig("syntax_highlighting")
 	if err != nil {
 		if err != config.ErrNotFound {
-			err = fmt.Errorf("Error getting 'syntax_highlighting' from extension config: %v", err)
+			err = fmt.Errorf("get 'syntax_highlighting' from extension config: %v", err)
 			return nil, err
 		}
 		return ret, nil
@@ -512,7 +512,7 @@ func getSemanticTypesAttr(pconfig config.Config) (map[string]tcell.Color, error)
 		attr, err := colors.GetColor(semanticType)
 		if err != nil {
 			if err != config.ErrNotFound {
-				err = fmt.Errorf("Error getting 'syntax_highlighting.%s' "+
+				err = fmt.Errorf("get 'syntax_highlighting.%s' "+
 					"from extension config: %v", semanticType, err)
 				return nil, err
 			}
@@ -550,7 +550,7 @@ func getDiagnosticAttr(pconfig config.Config) (
 	colors, err := pconfig.GetConfig("diagnostics")
 	if err != nil {
 		if err != config.ErrNotFound {
-			err = fmt.Errorf("Error getting 'diagnostics' from extension config: %v", err)
+			err = fmt.Errorf("get 'diagnostics' from extension config: %v", err)
 			return nil, err
 		}
 		return ret, nil
@@ -561,7 +561,7 @@ func getDiagnosticAttr(pconfig config.Config) (
 		attr, err := config.GetAttributes(colors, name)
 		if err != nil {
 			if err != config.ErrNotFound {
-				err = fmt.Errorf("Error getting 'diagnostics.%s' "+
+				err = fmt.Errorf("get 'diagnostics.%s' "+
 					"from extension config: %v", name, err)
 				return nil, err
 			}
@@ -1239,7 +1239,7 @@ func (h *lspEditorHandler) handleFileEdit(ev textapi.Event) error {
 	defer cancelFn()
 	f, ok := h.getFile(ev.URI)
 	if !ok {
-		err := fmt.Errorf("Received insert/delete event for an unknown file: %#v", ev)
+		err := fmt.Errorf("received insert/delete event for an unknown file: %#v", ev)
 		return err
 	}
 
@@ -1366,7 +1366,7 @@ func (h *lspEditorHandler) handleFileClose(ev textapi.Event) error {
 	defer cancelFn()
 	f, ok := h.removeFile(ev.URI)
 	if !ok {
-		err := fmt.Errorf("Received close event for an unknown file: %#v", ev)
+		err := fmt.Errorf("received close event for an unknown file: %#v", ev)
 		return err
 	}
 	srv, ok := h.getServer(f.languageID)
