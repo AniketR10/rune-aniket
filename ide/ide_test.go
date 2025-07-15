@@ -238,6 +238,37 @@ func TestIDEInitializationIntegration(t *testing.T) {
 	})
 }
 
+func TestOpen(t *testing.T) {
+	assertURI := func(t *testing.T, i *IDE, expected workspaceapi.URI) {
+		ex := i.workspaceHandler.exHandler(i.workspaceHandler.focusHandler())
+		uri, _, ok := ex.handlerInFocus()
+		require.True(t, ok)
+		assert.Equal(t, expected, uri)
+	}
+
+	t.Run("empty workspace", func(t *testing.T) {
+		i, err := New("", "", "", nil)
+		require.NoError(t, err)
+		file, _ := makeTestFiles(t)
+		uri, err := workspaceapi.CurrentUserHostURI(file.Name())
+		require.NoError(t, err)
+
+		require.NoError(t, i.Open(uri))
+		assertURI(t, i, uri)
+	})
+
+	t.Run("a workspace", func(t *testing.T) {
+		i, err := New(os.TempDir(), "", "", nil)
+		require.NoError(t, err)
+		file, _ := makeTestFiles(t)
+		uri, err := workspaceapi.CurrentUserHostURI(file.Name())
+		require.NoError(t, err)
+
+		require.NoError(t, i.Open(uri))
+		assertURI(t, i, uri)
+	})
+}
+
 type mockShader struct {
 	called bool
 	frames []int

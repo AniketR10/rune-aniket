@@ -168,6 +168,16 @@ func (i *IDE) Browser() browser.Browser {
 	return i.workspaceHandler.focusBrowser()
 }
 
+// Open opens the given file, in the currently active workspace.
+func (i *IDE) Open(file workspaceapi.URI) error {
+	ex := i.workspaceHandler.exHandler(i.workspaceHandler.focusHandler())
+	_, err := ex.editFileURI(file, ex.invokeWindow())
+	if err != nil {
+		return err
+	}
+	return err
+}
+
 // Close satisfies io.Closer by closing this all ide's resources, including
 // the terminal state.
 func (i *IDE) Close() error {
