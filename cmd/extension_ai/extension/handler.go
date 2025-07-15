@@ -509,6 +509,9 @@ func (h *aiEditorHandler) handleQuery(cmd textapi.Command) error {
 	ctx, cancel := context.WithCancel(h.ctx)
 
 	query := strings.Join(cmd.Args, " ")
+	if query == "" {
+		query = " " // avoid library omiting Content field when zero-valued
+	}
 	msg := llm.ChatCompletionMessage{Content: query, Role: llm.RoleUser}
 	addMessage(comp, msg)
 
