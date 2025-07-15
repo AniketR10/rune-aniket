@@ -28,6 +28,7 @@ import (
 	"fmt"
 	"io"
 	"runtime"
+	"strings"
 	"sync"
 
 	log "github.com/sirupsen/logrus"
@@ -213,6 +214,9 @@ func (c *Client) SetWindowContent(win browserapi.Window, h browserapi.Handler) e
 	if err != nil {
 		if srv != nil {
 			srv.Stop()
+		}
+		if strings.Contains(err.Error(), browserapi.ErrTabNotFree.Error()) {
+			return browserapi.ErrTabNotFree
 		}
 		return err
 	}
