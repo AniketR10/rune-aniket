@@ -203,12 +203,19 @@ func TestWorkspaceExtensions(t *testing.T) {
 
 		// extension.Runner.Run is called asynchronously
 		var called string
+		var n int
 
 		runner := FuncExtensionsRunner(
 			func(locker sync.Locker, _uri workspaceapi.URI,
-				res map[extension.Permission]extension.ResourceRegistrar, s string, n browser.Notifications,
+				res map[extension.Permission]extension.ResourceRegistrar,
+				s string, noti browser.Notifications,
 			) (extension.Runner, error) {
-				assert.Equal(t, uri, _uri)
+				if n == 1 { // first is the home directory used as "empty" workspace
+					assert.Equal(t, uri, _uri)
+				} else {
+					assert.Equal(t, "memory:///home", _uri.String())
+				}
+				n++
 				return fnRunner{fn: func(extensionID, path string, cfg config.Config) error {
 					called = extensionID
 					assert.Equal(t, "myPath", path)
@@ -247,11 +254,18 @@ func TestWorkspaceExtensions(t *testing.T) {
 
 		// extension.Runner.Run is called asynchronously
 		var called string
+		var n int
 
 		runner := FuncExtensionsRunner(
 			func(locker sync.Locker, _uri workspaceapi.URI,
-				res map[extension.Permission]extension.ResourceRegistrar, s string, n browser.Notifications) (extension.Runner, error) {
-				assert.Equal(t, uri, _uri)
+				res map[extension.Permission]extension.ResourceRegistrar,
+				s string, noti browser.Notifications) (extension.Runner, error) {
+				if n == 1 { // first is the home directory used as "empty" workspace
+					assert.Equal(t, uri, _uri)
+				} else {
+					assert.Equal(t, "memory:///home", _uri.String())
+				}
+				n++
 				return fnRunner{fn: func(extensionID, path string, cfg config.Config) error {
 					called = extensionID
 					assert.Equal(t, "myPath2", path)

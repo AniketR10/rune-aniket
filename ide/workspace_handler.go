@@ -213,6 +213,7 @@ func (h *workspaceManagerHandler) init(
 	if err != nil {
 		return fmt.Errorf("add home workspace: %v", err)
 	}
+
 	h.homeWorkspace = homeWorkspace
 	h.empty, err = newEx(ed, homeWorkspace, h.storage,
 		cfg.terminalConfig(), h.publishEvent, cfg.clipboard(),
@@ -223,6 +224,11 @@ func (h *workspaceManagerHandler) init(
 	if err = h.subscribeAllCommands(h.empty); err != nil {
 		return err
 	}
+	runner, err := h.buildExtensions(cfg, homeDirUri, h.homeWorkspace, h.empty)
+	if err != nil {
+		return err
+	}
+	h.initExtensions(runner, cfg)
 
 	h.bar.Init()
 	h.bar.OnClick = h.switchToWorkspace
@@ -593,28 +599,10 @@ func (h *workspaceManagerHandler) addWorkspace(
 		return err
 	}
 
-	res := extension.BrowserResources(ex.Browser(), h.publishEvent)
-	res = extension.MergeResourceMap(res,
-		extension.EditorResources(ex.Editor(), h.publishEvent))
-	res = extension.MergeResourceMap(res,
-		extension.WorkspaceResources(cwd))
-	// NOTE: extensions that register new schemes will fail for subsequent workspaces
-	res = extension.MergeResourceMap(res,
-		extension.SchemeManagerResources(h.workspace))
-	res = extension.MergeResourceMap(res,
-		extension.StorageResources(h.sixDir))
-	res = extension.MergeResourceMap(res,
-		extension.ConfigResources(config.MapConfig(cleanedExtensionConfig(cfg.cfg))))
-
-	dataDir := filepath.Join(h.sixDir, ".extension")
-	if err := os.MkdirAll(dataDir, 0777); err != nil {
-		return fmt.Errorf("mkdir .extension: %v", err)
-	}
-	runner, err := h.extensionRunner.WorkspaceExtensionsRunner(h.mu, uri, res, dataDir, ex.Browser())
+	runner, err := h.buildExtensions(cfg, uri, cwd, ex)
 	if err != nil {
-		return fmt.Errorf("error initializing extension manager: %v", err)
+		return err
 	}
-
 	h.initExtensions(runner, cfg)
 
 	if i == -1 {
@@ -656,6 +644,35 @@ func (h *workspaceManagerHandler) addWorkspace(
 	}
 
 	return h.openPrevSessionFiles(ex, prevSessionFiles, ex.invokeWindow())
+}
+
+func (h *workspaceManagerHandler) buildExtensions(
+	cfg ideConfig, uri workspaceapi.URI,
+	cwd workspace.Workspace, ex *ex,
+) (extension.Runner, error) {
+	res := extension.BrowserResources(ex.Browser(), h.publishEvent)
+	res = extension.MergeResourceMap(res,
+		extension.EditorResources(ex.Editor(), h.publishEvent))
+	res = extension.MergeResourceMap(res,
+		extension.WorkspaceResources(cwd))
+	// NOTE: extensions that register new schemes will fail for subsequent workspaces
+	res = extension.MergeResourceMap(res,
+		extension.SchemeManagerResources(h.workspace))
+	res = extension.MergeResourceMap(res,
+		extension.StorageResources(h.sixDir))
+	res = extension.MergeResourceMap(res,
+		extension.ConfigResources(config.MapConfig(cleanedExtensionConfig(cfg.cfg))))
+
+	dataDir := filepath.Join(h.sixDir, ".extension")
+	if err := os.MkdirAll(dataDir, 0777); err != nil {
+		return nil, fmt.Errorf("mkdir .extension: %v", err)
+	}
+	runner, err := h.extensionRunner.WorkspaceExtensionsRunner(
+		h.mu, uri, res, dataDir, ex.Browser())
+	if err != nil {
+		return nil, fmt.Errorf("error initializing extension manager: %v", err)
+	}
+	return runner, nil
 }
 
 func (h *workspaceManagerHandler) addOrCreateWorkspace(
