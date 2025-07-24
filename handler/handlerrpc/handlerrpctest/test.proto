@@ -25,7 +25,6 @@ message TestMessage {
 	handler.CursorStreamResponse cursor = 6;
 	handler.SelectionStreamResponse selection = 7;
 	handler.DimensionsStreamResponse dimensions = 8;
-	handler.ResizeStreamResponse resize = 9;
 
 	TestRequest request = 10;
 	TestResponse response = 11;

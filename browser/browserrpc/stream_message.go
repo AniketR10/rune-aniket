@@ -33,12 +33,6 @@ func (m *FloatingWindowMessage) SetDraw(r *handlerrpc.DrawStreamResponse) {
 	m.Type = handlerrpc.MessageType_Draw
 }
 
-// SetResize satisfies handlerrpc.StreamMessage.
-func (m *FloatingWindowMessage) SetResize(r *handlerrpc.ResizeStreamResponse) {
-	m.Resize = r
-	m.Type = handlerrpc.MessageType_Resize
-}
-
 // SetHandle satisfies handlerrpc.StreamMessage.
 func (m *FloatingWindowMessage) SetHandle(r *handlerrpc.HandleStreamResponse) {
 	m.Handle = r
@@ -79,12 +73,6 @@ func (m *FloatingWindowMessage) SetDimensions(r *handlerrpc.DimensionsStreamResp
 func (m *SplitWindowMessage) SetDraw(r *handlerrpc.DrawStreamResponse) {
 	m.Draw = r
 	m.Type = handlerrpc.MessageType_Draw
-}
-
-// SetResize satisfies handlerrpc.StreamMessage.
-func (m *SplitWindowMessage) SetResize(r *handlerrpc.ResizeStreamResponse) {
-	m.Resize = r
-	m.Type = handlerrpc.MessageType_Resize
 }
 
 // SetHandle satisfies handlerrpc.StreamMessage.
@@ -129,12 +117,6 @@ func (m *BarMessage) SetDraw(r *handlerrpc.DrawStreamResponse) {
 	m.Type = handlerrpc.MessageType_Draw
 }
 
-// SetResize satisfies handlerrpc.StreamMessage.
-func (m *BarMessage) SetResize(r *handlerrpc.ResizeStreamResponse) {
-	m.Resize = r
-	m.Type = handlerrpc.MessageType_Resize
-}
-
 // SetHandle satisfies handlerrpc.StreamMessage.
 func (m *BarMessage) SetHandle(r *handlerrpc.HandleStreamResponse) {
 	m.Handle = r
@@ -177,12 +159,6 @@ func (m *WindowSetContentMessage) SetDraw(r *handlerrpc.DrawStreamResponse) {
 	m.Type = handlerrpc.MessageType_Draw
 }
 
-// SetResize satisfies handlerrpc.StreamMessage.
-func (m *WindowSetContentMessage) SetResize(r *handlerrpc.ResizeStreamResponse) {
-	m.Resize = r
-	m.Type = handlerrpc.MessageType_Resize
-}
-
 // SetHandle satisfies handlerrpc.StreamMessage.
 func (m *WindowSetContentMessage) SetHandle(r *handlerrpc.HandleStreamResponse) {
 	m.Handle = r
@@ -223,12 +199,6 @@ func (m *WindowSetContentMessage) SetDimensions(r *handlerrpc.DimensionsStreamRe
 func (m *TabMessage) SetDraw(r *handlerrpc.DrawStreamResponse) {
 	m.Draw = r
 	m.Type = handlerrpc.MessageType_Draw
-}
-
-// SetResize satisfies handlerrpc.StreamMessage.
-func (m *TabMessage) SetResize(r *handlerrpc.ResizeStreamResponse) {
-	m.Resize = r
-	m.Type = handlerrpc.MessageType_Resize
 }
 
 // SetHandle satisfies handlerrpc.StreamMessage.

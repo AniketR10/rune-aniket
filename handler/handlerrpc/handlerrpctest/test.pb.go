@@ -104,7 +104,6 @@ type TestMessage struct {
 	Cursor        *handlerrpc.CursorStreamResponse     `protobuf:"bytes,6,opt,name=cursor,proto3" json:"cursor,omitempty"`
 	Selection     *handlerrpc.SelectionStreamResponse  `protobuf:"bytes,7,opt,name=selection,proto3" json:"selection,omitempty"`
 	Dimensions    *handlerrpc.DimensionsStreamResponse `protobuf:"bytes,8,opt,name=dimensions,proto3" json:"dimensions,omitempty"`
-	Resize        *handlerrpc.ResizeStreamResponse     `protobuf:"bytes,9,opt,name=resize,proto3" json:"resize,omitempty"`
 	Request       *TestRequest                         `protobuf:"bytes,10,opt,name=request,proto3" json:"request,omitempty"`
 	Response      *TestResponse                        `protobuf:"bytes,11,opt,name=response,proto3" json:"response,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -197,13 +196,6 @@ func (x *TestMessage) GetDimensions() *handlerrpc.DimensionsStreamResponse {
 	return nil
 }
 
-func (x *TestMessage) GetResize() *handlerrpc.ResizeStreamResponse {
-	if x != nil {
-		return x.Resize
-	}
-	return nil
-}
-
 func (x *TestMessage) GetRequest() *TestRequest {
 	if x != nil {
 		return x.Request
@@ -224,7 +216,7 @@ const file_handlerrpctest_test_proto_rawDesc = "" +
 	"\n" +
 	"\x19handlerrpctest/test.proto\x12\x04test\x1a handler/handlerrpc/handler.proto\"\r\n" +
 	"\vTestRequest\"\x0e\n" +
-	"\fTestResponse\"\xcf\x04\n" +
+	"\fTestResponse\"\x98\x04\n" +
 	"\vTestMessage\x12(\n" +
 	"\x04type\x18\x01 \x01(\x0e2\x14.handler.MessageTypeR\x04type\x12/\n" +
 	"\x04draw\x18\x02 \x01(\v2\x1b.handler.DrawStreamResponseR\x04draw\x125\n" +
@@ -235,8 +227,7 @@ const file_handlerrpctest_test_proto_rawDesc = "" +
 	"\tselection\x18\a \x01(\v2 .handler.SelectionStreamResponseR\tselection\x12A\n" +
 	"\n" +
 	"dimensions\x18\b \x01(\v2!.handler.DimensionsStreamResponseR\n" +
-	"dimensions\x125\n" +
-	"\x06resize\x18\t \x01(\v2\x1d.handler.ResizeStreamResponseR\x06resize\x12+\n" +
+	"dimensions\x12+\n" +
 	"\arequest\x18\n" +
 	" \x01(\v2\x11.test.TestRequestR\arequest\x12.\n" +
 	"\bresponse\x18\v \x01(\v2\x12.test.TestResponseR\bresponse2L\n" +
@@ -269,8 +260,7 @@ var file_handlerrpctest_test_proto_goTypes = []any{
 	(*handlerrpc.CursorStreamResponse)(nil),     // 8: handler.CursorStreamResponse
 	(*handlerrpc.SelectionStreamResponse)(nil),  // 9: handler.SelectionStreamResponse
 	(*handlerrpc.DimensionsStreamResponse)(nil), // 10: handler.DimensionsStreamResponse
-	(*handlerrpc.ResizeStreamResponse)(nil),     // 11: handler.ResizeStreamResponse
-	(*handlerrpc.ServerMessage)(nil),            // 12: handler.ServerMessage
+	(*handlerrpc.ServerMessage)(nil),            // 11: handler.ServerMessage
 }
 var file_handlerrpctest_test_proto_depIdxs = []int32{
 	3,  // 0: test.TestMessage.type:type_name -> handler.MessageType
@@ -281,16 +271,15 @@ var file_handlerrpctest_test_proto_depIdxs = []int32{
 	8,  // 5: test.TestMessage.cursor:type_name -> handler.CursorStreamResponse
 	9,  // 6: test.TestMessage.selection:type_name -> handler.SelectionStreamResponse
 	10, // 7: test.TestMessage.dimensions:type_name -> handler.DimensionsStreamResponse
-	11, // 8: test.TestMessage.resize:type_name -> handler.ResizeStreamResponse
-	0,  // 9: test.TestMessage.request:type_name -> test.TestRequest
-	1,  // 10: test.TestMessage.response:type_name -> test.TestResponse
-	2,  // 11: test.TestService.TestStream:input_type -> test.TestMessage
-	12, // 12: test.TestService.TestStream:output_type -> handler.ServerMessage
-	12, // [12:13] is the sub-list for method output_type
-	11, // [11:12] is the sub-list for method input_type
-	11, // [11:11] is the sub-list for extension type_name
-	11, // [11:11] is the sub-list for extension extendee
-	0,  // [0:11] is the sub-list for field type_name
+	0,  // 8: test.TestMessage.request:type_name -> test.TestRequest
+	1,  // 9: test.TestMessage.response:type_name -> test.TestResponse
+	2,  // 10: test.TestService.TestStream:input_type -> test.TestMessage
+	11, // 11: test.TestService.TestStream:output_type -> handler.ServerMessage
+	11, // [11:12] is the sub-list for method output_type
+	10, // [10:11] is the sub-list for method input_type
+	10, // [10:10] is the sub-list for extension type_name
+	10, // [10:10] is the sub-list for extension extendee
+	0,  // [0:10] is the sub-list for field type_name
 }
 
 func init() { file_handlerrpctest_test_proto_init() }

@@ -1226,42 +1226,6 @@ func (x *ResizeStreamRequest) GetHeight() int32 {
 	return 0
 }
 
-type ResizeStreamResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ResizeStreamResponse) Reset() {
-	*x = ResizeStreamResponse{}
-	mi := &file_handlerrpc_handler_proto_msgTypes[23]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ResizeStreamResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ResizeStreamResponse) ProtoMessage() {}
-
-func (x *ResizeStreamResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_handlerrpc_handler_proto_msgTypes[23]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ResizeStreamResponse.ProtoReflect.Descriptor instead.
-func (*ResizeStreamResponse) Descriptor() ([]byte, []int) {
-	return file_handlerrpc_handler_proto_rawDescGZIP(), []int{23}
-}
-
 type CloseStreamRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -1270,7 +1234,7 @@ type CloseStreamRequest struct {
 
 func (x *CloseStreamRequest) Reset() {
 	*x = CloseStreamRequest{}
-	mi := &file_handlerrpc_handler_proto_msgTypes[24]
+	mi := &file_handlerrpc_handler_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1282,7 +1246,7 @@ func (x *CloseStreamRequest) String() string {
 func (*CloseStreamRequest) ProtoMessage() {}
 
 func (x *CloseStreamRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_handlerrpc_handler_proto_msgTypes[24]
+	mi := &file_handlerrpc_handler_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1295,7 +1259,7 @@ func (x *CloseStreamRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CloseStreamRequest.ProtoReflect.Descriptor instead.
 func (*CloseStreamRequest) Descriptor() ([]byte, []int) {
-	return file_handlerrpc_handler_proto_rawDescGZIP(), []int{24}
+	return file_handlerrpc_handler_proto_rawDescGZIP(), []int{23}
 }
 
 type CloseStreamResponse struct {
@@ -1306,7 +1270,7 @@ type CloseStreamResponse struct {
 
 func (x *CloseStreamResponse) Reset() {
 	*x = CloseStreamResponse{}
-	mi := &file_handlerrpc_handler_proto_msgTypes[25]
+	mi := &file_handlerrpc_handler_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1318,7 +1282,7 @@ func (x *CloseStreamResponse) String() string {
 func (*CloseStreamResponse) ProtoMessage() {}
 
 func (x *CloseStreamResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_handlerrpc_handler_proto_msgTypes[25]
+	mi := &file_handlerrpc_handler_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1331,7 +1295,7 @@ func (x *CloseStreamResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CloseStreamResponse.ProtoReflect.Descriptor instead.
 func (*CloseStreamResponse) Descriptor() ([]byte, []int) {
-	return file_handlerrpc_handler_proto_rawDescGZIP(), []int{25}
+	return file_handlerrpc_handler_proto_rawDescGZIP(), []int{24}
 }
 
 type DrawResponse_Cursor struct {
@@ -1345,7 +1309,7 @@ type DrawResponse_Cursor struct {
 
 func (x *DrawResponse_Cursor) Reset() {
 	*x = DrawResponse_Cursor{}
-	mi := &file_handlerrpc_handler_proto_msgTypes[26]
+	mi := &file_handlerrpc_handler_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1357,7 +1321,7 @@ func (x *DrawResponse_Cursor) String() string {
 func (*DrawResponse_Cursor) ProtoMessage() {}
 
 func (x *DrawResponse_Cursor) ProtoReflect() protoreflect.Message {
-	mi := &file_handlerrpc_handler_proto_msgTypes[26]
+	mi := &file_handlerrpc_handler_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1404,7 +1368,7 @@ type DrawResponse_Selection struct {
 
 func (x *DrawResponse_Selection) Reset() {
 	*x = DrawResponse_Selection{}
-	mi := &file_handlerrpc_handler_proto_msgTypes[27]
+	mi := &file_handlerrpc_handler_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1416,7 +1380,7 @@ func (x *DrawResponse_Selection) String() string {
 func (*DrawResponse_Selection) ProtoMessage() {}
 
 func (x *DrawResponse_Selection) ProtoReflect() protoreflect.Message {
-	mi := &file_handlerrpc_handler_proto_msgTypes[27]
+	mi := &file_handlerrpc_handler_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1457,7 +1421,7 @@ type DrawStreamResponse_Cursor struct {
 
 func (x *DrawStreamResponse_Cursor) Reset() {
 	*x = DrawStreamResponse_Cursor{}
-	mi := &file_handlerrpc_handler_proto_msgTypes[28]
+	mi := &file_handlerrpc_handler_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1469,7 +1433,7 @@ func (x *DrawStreamResponse_Cursor) String() string {
 func (*DrawStreamResponse_Cursor) ProtoMessage() {}
 
 func (x *DrawStreamResponse_Cursor) ProtoReflect() protoreflect.Message {
-	mi := &file_handlerrpc_handler_proto_msgTypes[28]
+	mi := &file_handlerrpc_handler_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1516,7 +1480,7 @@ type DrawStreamResponse_Selection struct {
 
 func (x *DrawStreamResponse_Selection) Reset() {
 	*x = DrawStreamResponse_Selection{}
-	mi := &file_handlerrpc_handler_proto_msgTypes[29]
+	mi := &file_handlerrpc_handler_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1528,7 +1492,7 @@ func (x *DrawStreamResponse_Selection) String() string {
 func (*DrawStreamResponse_Selection) ProtoMessage() {}
 
 func (x *DrawStreamResponse_Selection) ProtoReflect() protoreflect.Message {
-	mi := &file_handlerrpc_handler_proto_msgTypes[29]
+	mi := &file_handlerrpc_handler_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1641,8 +1605,7 @@ const file_handlerrpc_handler_proto_rawDesc = "" +
 	"\x06height\x18\x02 \x01(\x05R\x06height\"C\n" +
 	"\x13ResizeStreamRequest\x12\x14\n" +
 	"\x05width\x18\x01 \x01(\x05R\x05width\x12\x16\n" +
-	"\x06height\x18\x02 \x01(\x05R\x06height\"\x16\n" +
-	"\x14ResizeStreamResponse\"\x14\n" +
+	"\x06height\x18\x02 \x01(\x05R\x06height\"\x14\n" +
 	"\x12CloseStreamRequest\"\x15\n" +
 	"\x13CloseStreamResponse*\x89\x01\n" +
 	"\vMessageType\x12\b\n" +
@@ -1680,7 +1643,7 @@ func file_handlerrpc_handler_proto_rawDescGZIP() []byte {
 }
 
 var file_handlerrpc_handler_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_handlerrpc_handler_proto_msgTypes = make([]protoimpl.MessageInfo, 30)
+var file_handlerrpc_handler_proto_msgTypes = make([]protoimpl.MessageInfo, 29)
 var file_handlerrpc_handler_proto_goTypes = []any{
 	(MessageType)(0),                     // 0: handler.MessageType
 	(*DrawRequest)(nil),                  // 1: handler.DrawRequest
@@ -1706,42 +1669,41 @@ var file_handlerrpc_handler_proto_goTypes = []any{
 	(*DimensionsStreamRequest)(nil),      // 21: handler.DimensionsStreamRequest
 	(*DimensionsStreamResponse)(nil),     // 22: handler.DimensionsStreamResponse
 	(*ResizeStreamRequest)(nil),          // 23: handler.ResizeStreamRequest
-	(*ResizeStreamResponse)(nil),         // 24: handler.ResizeStreamResponse
-	(*CloseStreamRequest)(nil),           // 25: handler.CloseStreamRequest
-	(*CloseStreamResponse)(nil),          // 26: handler.CloseStreamResponse
-	(*DrawResponse_Cursor)(nil),          // 27: handler.DrawResponse.Cursor
-	(*DrawResponse_Selection)(nil),       // 28: handler.DrawResponse.Selection
-	(*DrawStreamResponse_Cursor)(nil),    // 29: handler.DrawStreamResponse.Cursor
-	(*DrawStreamResponse_Selection)(nil), // 30: handler.DrawStreamResponse.Selection
-	(*termrpc.CellRow)(nil),              // 31: term.CellRow
-	(*termrpc.Event)(nil),                // 32: term.Event
-	(*termrpc.Manual)(nil),               // 33: term.Manual
-	(*termrpc.Coordinates)(nil),          // 34: term.Coordinates
+	(*CloseStreamRequest)(nil),           // 24: handler.CloseStreamRequest
+	(*CloseStreamResponse)(nil),          // 25: handler.CloseStreamResponse
+	(*DrawResponse_Cursor)(nil),          // 26: handler.DrawResponse.Cursor
+	(*DrawResponse_Selection)(nil),       // 27: handler.DrawResponse.Selection
+	(*DrawStreamResponse_Cursor)(nil),    // 28: handler.DrawStreamResponse.Cursor
+	(*DrawStreamResponse_Selection)(nil), // 29: handler.DrawStreamResponse.Selection
+	(*termrpc.CellRow)(nil),              // 30: term.CellRow
+	(*termrpc.Event)(nil),                // 31: term.Event
+	(*termrpc.Manual)(nil),               // 32: term.Manual
+	(*termrpc.Coordinates)(nil),          // 33: term.Coordinates
 }
 var file_handlerrpc_handler_proto_depIdxs = []int32{
-	31, // 0: handler.DrawResponse.rows:type_name -> term.CellRow
-	27, // 1: handler.DrawResponse.cursor:type_name -> handler.DrawResponse.Cursor
-	28, // 2: handler.DrawResponse.selection:type_name -> handler.DrawResponse.Selection
-	32, // 3: handler.HandleRequest.event:type_name -> term.Event
-	33, // 4: handler.ManResponse.man:type_name -> term.Manual
+	30, // 0: handler.DrawResponse.rows:type_name -> term.CellRow
+	26, // 1: handler.DrawResponse.cursor:type_name -> handler.DrawResponse.Cursor
+	27, // 2: handler.DrawResponse.selection:type_name -> handler.DrawResponse.Selection
+	31, // 3: handler.HandleRequest.event:type_name -> term.Event
+	32, // 4: handler.ManResponse.man:type_name -> term.Manual
 	0,  // 5: handler.ServerMessage.type:type_name -> handler.MessageType
 	11, // 6: handler.ServerMessage.draw:type_name -> handler.DrawStreamRequest
 	13, // 7: handler.ServerMessage.handle:type_name -> handler.HandleStreamRequest
 	15, // 8: handler.ServerMessage.man:type_name -> handler.ManStreamRequest
-	25, // 9: handler.ServerMessage.close:type_name -> handler.CloseStreamRequest
+	24, // 9: handler.ServerMessage.close:type_name -> handler.CloseStreamRequest
 	17, // 10: handler.ServerMessage.cursor:type_name -> handler.CursorStreamRequest
 	19, // 11: handler.ServerMessage.selection:type_name -> handler.SelectionStreamRequest
 	21, // 12: handler.ServerMessage.dimensions:type_name -> handler.DimensionsStreamRequest
 	23, // 13: handler.ServerMessage.resize:type_name -> handler.ResizeStreamRequest
 	9,  // 14: handler.ServerMessage.response:type_name -> handler.InstallResourceResponse
-	31, // 15: handler.DrawStreamResponse.rows:type_name -> term.CellRow
-	29, // 16: handler.DrawStreamResponse.cursor:type_name -> handler.DrawStreamResponse.Cursor
-	30, // 17: handler.DrawStreamResponse.selection:type_name -> handler.DrawStreamResponse.Selection
-	32, // 18: handler.HandleStreamRequest.event:type_name -> term.Event
-	33, // 19: handler.ManStreamResponse.man:type_name -> term.Manual
-	34, // 20: handler.CursorStreamResponse.position:type_name -> term.Coordinates
-	34, // 21: handler.DrawResponse.Cursor.position:type_name -> term.Coordinates
-	34, // 22: handler.DrawStreamResponse.Cursor.position:type_name -> term.Coordinates
+	30, // 15: handler.DrawStreamResponse.rows:type_name -> term.CellRow
+	28, // 16: handler.DrawStreamResponse.cursor:type_name -> handler.DrawStreamResponse.Cursor
+	29, // 17: handler.DrawStreamResponse.selection:type_name -> handler.DrawStreamResponse.Selection
+	31, // 18: handler.HandleStreamRequest.event:type_name -> term.Event
+	32, // 19: handler.ManStreamResponse.man:type_name -> term.Manual
+	33, // 20: handler.CursorStreamResponse.position:type_name -> term.Coordinates
+	33, // 21: handler.DrawResponse.Cursor.position:type_name -> term.Coordinates
+	33, // 22: handler.DrawStreamResponse.Cursor.position:type_name -> term.Coordinates
 	1,  // 23: handler.Handler.Draw:input_type -> handler.DrawRequest
 	3,  // 24: handler.Handler.Handle:input_type -> handler.HandleRequest
 	5,  // 25: handler.Handler.Man:input_type -> handler.ManRequest
@@ -1768,7 +1730,7 @@ func file_handlerrpc_handler_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_handlerrpc_handler_proto_rawDesc), len(file_handlerrpc_handler_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   30,
+			NumMessages:   29,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

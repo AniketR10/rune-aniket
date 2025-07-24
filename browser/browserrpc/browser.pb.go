@@ -977,7 +977,6 @@ type FloatingWindowMessage struct {
 	Cursor        *handlerrpc.CursorStreamResponse     `protobuf:"bytes,6,opt,name=cursor,proto3" json:"cursor,omitempty"`
 	Selection     *handlerrpc.SelectionStreamResponse  `protobuf:"bytes,7,opt,name=selection,proto3" json:"selection,omitempty"`
 	Dimensions    *handlerrpc.DimensionsStreamResponse `protobuf:"bytes,8,opt,name=dimensions,proto3" json:"dimensions,omitempty"`
-	Resize        *handlerrpc.ResizeStreamResponse     `protobuf:"bytes,9,opt,name=resize,proto3" json:"resize,omitempty"`
 	Request       *FloatingWindowRequest               `protobuf:"bytes,10,opt,name=request,proto3" json:"request,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1069,13 +1068,6 @@ func (x *FloatingWindowMessage) GetDimensions() *handlerrpc.DimensionsStreamResp
 	return nil
 }
 
-func (x *FloatingWindowMessage) GetResize() *handlerrpc.ResizeStreamResponse {
-	if x != nil {
-		return x.Resize
-	}
-	return nil
-}
-
 func (x *FloatingWindowMessage) GetRequest() *FloatingWindowRequest {
 	if x != nil {
 		return x.Request
@@ -1093,7 +1085,6 @@ type SplitWindowMessage struct {
 	Cursor        *handlerrpc.CursorStreamResponse     `protobuf:"bytes,6,opt,name=cursor,proto3" json:"cursor,omitempty"`
 	Selection     *handlerrpc.SelectionStreamResponse  `protobuf:"bytes,7,opt,name=selection,proto3" json:"selection,omitempty"`
 	Dimensions    *handlerrpc.DimensionsStreamResponse `protobuf:"bytes,8,opt,name=dimensions,proto3" json:"dimensions,omitempty"`
-	Resize        *handlerrpc.ResizeStreamResponse     `protobuf:"bytes,9,opt,name=resize,proto3" json:"resize,omitempty"`
 	Request       *SplitRequest                        `protobuf:"bytes,10,opt,name=request,proto3" json:"request,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1185,13 +1176,6 @@ func (x *SplitWindowMessage) GetDimensions() *handlerrpc.DimensionsStreamRespons
 	return nil
 }
 
-func (x *SplitWindowMessage) GetResize() *handlerrpc.ResizeStreamResponse {
-	if x != nil {
-		return x.Resize
-	}
-	return nil
-}
-
 func (x *SplitWindowMessage) GetRequest() *SplitRequest {
 	if x != nil {
 		return x.Request
@@ -1209,7 +1193,6 @@ type BarMessage struct {
 	Cursor        *handlerrpc.CursorStreamResponse     `protobuf:"bytes,6,opt,name=cursor,proto3" json:"cursor,omitempty"`
 	Selection     *handlerrpc.SelectionStreamResponse  `protobuf:"bytes,7,opt,name=selection,proto3" json:"selection,omitempty"`
 	Dimensions    *handlerrpc.DimensionsStreamResponse `protobuf:"bytes,8,opt,name=dimensions,proto3" json:"dimensions,omitempty"`
-	Resize        *handlerrpc.ResizeStreamResponse     `protobuf:"bytes,9,opt,name=resize,proto3" json:"resize,omitempty"`
 	Request       *BarRequest                          `protobuf:"bytes,10,opt,name=request,proto3" json:"request,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1301,13 +1284,6 @@ func (x *BarMessage) GetDimensions() *handlerrpc.DimensionsStreamResponse {
 	return nil
 }
 
-func (x *BarMessage) GetResize() *handlerrpc.ResizeStreamResponse {
-	if x != nil {
-		return x.Resize
-	}
-	return nil
-}
-
 func (x *BarMessage) GetRequest() *BarRequest {
 	if x != nil {
 		return x.Request
@@ -1325,7 +1301,6 @@ type WindowSetContentMessage struct {
 	Cursor        *handlerrpc.CursorStreamResponse     `protobuf:"bytes,6,opt,name=cursor,proto3" json:"cursor,omitempty"`
 	Selection     *handlerrpc.SelectionStreamResponse  `protobuf:"bytes,7,opt,name=selection,proto3" json:"selection,omitempty"`
 	Dimensions    *handlerrpc.DimensionsStreamResponse `protobuf:"bytes,8,opt,name=dimensions,proto3" json:"dimensions,omitempty"`
-	Resize        *handlerrpc.ResizeStreamResponse     `protobuf:"bytes,9,opt,name=resize,proto3" json:"resize,omitempty"`
 	Request       *WindowSetContentRequest             `protobuf:"bytes,10,opt,name=request,proto3" json:"request,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1417,13 +1392,6 @@ func (x *WindowSetContentMessage) GetDimensions() *handlerrpc.DimensionsStreamRe
 	return nil
 }
 
-func (x *WindowSetContentMessage) GetResize() *handlerrpc.ResizeStreamResponse {
-	if x != nil {
-		return x.Resize
-	}
-	return nil
-}
-
 func (x *WindowSetContentMessage) GetRequest() *WindowSetContentRequest {
 	if x != nil {
 		return x.Request
@@ -1441,7 +1409,6 @@ type TabMessage struct {
 	Cursor        *handlerrpc.CursorStreamResponse     `protobuf:"bytes,6,opt,name=cursor,proto3" json:"cursor,omitempty"`
 	Selection     *handlerrpc.SelectionStreamResponse  `protobuf:"bytes,7,opt,name=selection,proto3" json:"selection,omitempty"`
 	Dimensions    *handlerrpc.DimensionsStreamResponse `protobuf:"bytes,8,opt,name=dimensions,proto3" json:"dimensions,omitempty"`
-	Resize        *handlerrpc.ResizeStreamResponse     `protobuf:"bytes,9,opt,name=resize,proto3" json:"resize,omitempty"`
 	Request       *TabRequest                          `protobuf:"bytes,10,opt,name=request,proto3" json:"request,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1533,13 +1500,6 @@ func (x *TabMessage) GetDimensions() *handlerrpc.DimensionsStreamResponse {
 	return nil
 }
 
-func (x *TabMessage) GetResize() *handlerrpc.ResizeStreamResponse {
-	if x != nil {
-		return x.Resize
-	}
-	return nil
-}
-
 func (x *TabMessage) GetRequest() *TabRequest {
 	if x != nil {
 		return x.Request
@@ -1601,7 +1561,7 @@ const file_browserrpc_browser_proto_rawDesc = "" +
 	"\x11DimensionsRequest\"B\n" +
 	"\x12DimensionsResponse\x12\x14\n" +
 	"\x05width\x18\x01 \x01(\rR\x05width\x12\x16\n" +
-	"\x06height\x18\x02 \x01(\rR\x06height\"\xb6\x04\n" +
+	"\x06height\x18\x02 \x01(\rR\x06height\"\xff\x03\n" +
 	"\x15FloatingWindowMessage\x12(\n" +
 	"\x04type\x18\x01 \x01(\x0e2\x14.handler.MessageTypeR\x04type\x12/\n" +
 	"\x04draw\x18\x02 \x01(\v2\x1b.handler.DrawStreamResponseR\x04draw\x125\n" +
@@ -1612,10 +1572,9 @@ const file_browserrpc_browser_proto_rawDesc = "" +
 	"\tselection\x18\a \x01(\v2 .handler.SelectionStreamResponseR\tselection\x12A\n" +
 	"\n" +
 	"dimensions\x18\b \x01(\v2!.handler.DimensionsStreamResponseR\n" +
-	"dimensions\x125\n" +
-	"\x06resize\x18\t \x01(\v2\x1d.handler.ResizeStreamResponseR\x06resize\x128\n" +
+	"dimensions\x128\n" +
 	"\arequest\x18\n" +
-	" \x01(\v2\x1e.browser.FloatingWindowRequestR\arequest\"\xaa\x04\n" +
+	" \x01(\v2\x1e.browser.FloatingWindowRequestR\arequest\"\xf3\x03\n" +
 	"\x12SplitWindowMessage\x12(\n" +
 	"\x04type\x18\x01 \x01(\x0e2\x14.handler.MessageTypeR\x04type\x12/\n" +
 	"\x04draw\x18\x02 \x01(\v2\x1b.handler.DrawStreamResponseR\x04draw\x125\n" +
@@ -1626,10 +1585,9 @@ const file_browserrpc_browser_proto_rawDesc = "" +
 	"\tselection\x18\a \x01(\v2 .handler.SelectionStreamResponseR\tselection\x12A\n" +
 	"\n" +
 	"dimensions\x18\b \x01(\v2!.handler.DimensionsStreamResponseR\n" +
-	"dimensions\x125\n" +
-	"\x06resize\x18\t \x01(\v2\x1d.handler.ResizeStreamResponseR\x06resize\x12/\n" +
+	"dimensions\x12/\n" +
 	"\arequest\x18\n" +
-	" \x01(\v2\x15.browser.SplitRequestR\arequest\"\xa0\x04\n" +
+	" \x01(\v2\x15.browser.SplitRequestR\arequest\"\xe9\x03\n" +
 	"\n" +
 	"BarMessage\x12(\n" +
 	"\x04type\x18\x01 \x01(\x0e2\x14.handler.MessageTypeR\x04type\x12/\n" +
@@ -1641,10 +1599,9 @@ const file_browserrpc_browser_proto_rawDesc = "" +
 	"\tselection\x18\a \x01(\v2 .handler.SelectionStreamResponseR\tselection\x12A\n" +
 	"\n" +
 	"dimensions\x18\b \x01(\v2!.handler.DimensionsStreamResponseR\n" +
-	"dimensions\x125\n" +
-	"\x06resize\x18\t \x01(\v2\x1d.handler.ResizeStreamResponseR\x06resize\x12-\n" +
+	"dimensions\x12-\n" +
 	"\arequest\x18\n" +
-	" \x01(\v2\x13.browser.BarRequestR\arequest\"\xba\x04\n" +
+	" \x01(\v2\x13.browser.BarRequestR\arequest\"\x83\x04\n" +
 	"\x17WindowSetContentMessage\x12(\n" +
 	"\x04type\x18\x01 \x01(\x0e2\x14.handler.MessageTypeR\x04type\x12/\n" +
 	"\x04draw\x18\x02 \x01(\v2\x1b.handler.DrawStreamResponseR\x04draw\x125\n" +
@@ -1655,10 +1612,9 @@ const file_browserrpc_browser_proto_rawDesc = "" +
 	"\tselection\x18\a \x01(\v2 .handler.SelectionStreamResponseR\tselection\x12A\n" +
 	"\n" +
 	"dimensions\x18\b \x01(\v2!.handler.DimensionsStreamResponseR\n" +
-	"dimensions\x125\n" +
-	"\x06resize\x18\t \x01(\v2\x1d.handler.ResizeStreamResponseR\x06resize\x12:\n" +
+	"dimensions\x12:\n" +
 	"\arequest\x18\n" +
-	" \x01(\v2 .browser.WindowSetContentRequestR\arequest\"\xa0\x04\n" +
+	" \x01(\v2 .browser.WindowSetContentRequestR\arequest\"\xe9\x03\n" +
 	"\n" +
 	"TabMessage\x12(\n" +
 	"\x04type\x18\x01 \x01(\x0e2\x14.handler.MessageTypeR\x04type\x12/\n" +
@@ -1670,8 +1626,7 @@ const file_browserrpc_browser_proto_rawDesc = "" +
 	"\tselection\x18\a \x01(\v2 .handler.SelectionStreamResponseR\tselection\x12A\n" +
 	"\n" +
 	"dimensions\x18\b \x01(\v2!.handler.DimensionsStreamResponseR\n" +
-	"dimensions\x125\n" +
-	"\x06resize\x18\t \x01(\v2\x1d.handler.ResizeStreamResponseR\x06resize\x12-\n" +
+	"dimensions\x12-\n" +
 	"\arequest\x18\n" +
 	" \x01(\v2\x13.browser.TabRequestR\arequest*D\n" +
 	"\vOrientation\x12\v\n" +
@@ -1752,8 +1707,7 @@ var file_browserrpc_browser_proto_goTypes = []any{
 	(*handlerrpc.CursorStreamResponse)(nil),     // 32: handler.CursorStreamResponse
 	(*handlerrpc.SelectionStreamResponse)(nil),  // 33: handler.SelectionStreamResponse
 	(*handlerrpc.DimensionsStreamResponse)(nil), // 34: handler.DimensionsStreamResponse
-	(*handlerrpc.ResizeStreamResponse)(nil),     // 35: handler.ResizeStreamResponse
-	(*handlerrpc.ServerMessage)(nil),            // 36: handler.ServerMessage
+	(*handlerrpc.ServerMessage)(nil),            // 35: handler.ServerMessage
 }
 var file_browserrpc_browser_proto_depIdxs = []int32{
 	25, // 0: browser.Mapping.from:type_name -> term.Event
@@ -1771,77 +1725,72 @@ var file_browserrpc_browser_proto_depIdxs = []int32{
 	32, // 12: browser.FloatingWindowMessage.cursor:type_name -> handler.CursorStreamResponse
 	33, // 13: browser.FloatingWindowMessage.selection:type_name -> handler.SelectionStreamResponse
 	34, // 14: browser.FloatingWindowMessage.dimensions:type_name -> handler.DimensionsStreamResponse
-	35, // 15: browser.FloatingWindowMessage.resize:type_name -> handler.ResizeStreamResponse
-	9,  // 16: browser.FloatingWindowMessage.request:type_name -> browser.FloatingWindowRequest
-	27, // 17: browser.SplitWindowMessage.type:type_name -> handler.MessageType
-	28, // 18: browser.SplitWindowMessage.draw:type_name -> handler.DrawStreamResponse
-	29, // 19: browser.SplitWindowMessage.handle:type_name -> handler.HandleStreamResponse
-	30, // 20: browser.SplitWindowMessage.man:type_name -> handler.ManStreamResponse
-	31, // 21: browser.SplitWindowMessage.close:type_name -> handler.CloseStreamResponse
-	32, // 22: browser.SplitWindowMessage.cursor:type_name -> handler.CursorStreamResponse
-	33, // 23: browser.SplitWindowMessage.selection:type_name -> handler.SelectionStreamResponse
-	34, // 24: browser.SplitWindowMessage.dimensions:type_name -> handler.DimensionsStreamResponse
-	35, // 25: browser.SplitWindowMessage.resize:type_name -> handler.ResizeStreamResponse
-	7,  // 26: browser.SplitWindowMessage.request:type_name -> browser.SplitRequest
-	27, // 27: browser.BarMessage.type:type_name -> handler.MessageType
-	28, // 28: browser.BarMessage.draw:type_name -> handler.DrawStreamResponse
-	29, // 29: browser.BarMessage.handle:type_name -> handler.HandleStreamResponse
-	30, // 30: browser.BarMessage.man:type_name -> handler.ManStreamResponse
-	31, // 31: browser.BarMessage.close:type_name -> handler.CloseStreamResponse
-	32, // 32: browser.BarMessage.cursor:type_name -> handler.CursorStreamResponse
-	33, // 33: browser.BarMessage.selection:type_name -> handler.SelectionStreamResponse
-	34, // 34: browser.BarMessage.dimensions:type_name -> handler.DimensionsStreamResponse
-	35, // 35: browser.BarMessage.resize:type_name -> handler.ResizeStreamResponse
-	8,  // 36: browser.BarMessage.request:type_name -> browser.BarRequest
-	27, // 37: browser.WindowSetContentMessage.type:type_name -> handler.MessageType
-	28, // 38: browser.WindowSetContentMessage.draw:type_name -> handler.DrawStreamResponse
-	29, // 39: browser.WindowSetContentMessage.handle:type_name -> handler.HandleStreamResponse
-	30, // 40: browser.WindowSetContentMessage.man:type_name -> handler.ManStreamResponse
-	31, // 41: browser.WindowSetContentMessage.close:type_name -> handler.CloseStreamResponse
-	32, // 42: browser.WindowSetContentMessage.cursor:type_name -> handler.CursorStreamResponse
-	33, // 43: browser.WindowSetContentMessage.selection:type_name -> handler.SelectionStreamResponse
-	34, // 44: browser.WindowSetContentMessage.dimensions:type_name -> handler.DimensionsStreamResponse
-	35, // 45: browser.WindowSetContentMessage.resize:type_name -> handler.ResizeStreamResponse
-	17, // 46: browser.WindowSetContentMessage.request:type_name -> browser.WindowSetContentRequest
-	27, // 47: browser.TabMessage.type:type_name -> handler.MessageType
-	28, // 48: browser.TabMessage.draw:type_name -> handler.DrawStreamResponse
-	29, // 49: browser.TabMessage.handle:type_name -> handler.HandleStreamResponse
-	30, // 50: browser.TabMessage.man:type_name -> handler.ManStreamResponse
-	31, // 51: browser.TabMessage.close:type_name -> handler.CloseStreamResponse
-	32, // 52: browser.TabMessage.cursor:type_name -> handler.CursorStreamResponse
-	33, // 53: browser.TabMessage.selection:type_name -> handler.SelectionStreamResponse
-	34, // 54: browser.TabMessage.dimensions:type_name -> handler.DimensionsStreamResponse
-	35, // 55: browser.TabMessage.resize:type_name -> handler.ResizeStreamResponse
-	10, // 56: browser.TabMessage.request:type_name -> browser.TabRequest
-	2,  // 57: browser.ResourceOpener.Open:input_type -> browser.OpenResourceRequest
-	4,  // 58: browser.Notifications.Notify:input_type -> browser.NotifyRequest
-	4,  // 59: browser.Notifications.NotifyOnce:input_type -> browser.NotifyRequest
-	13, // 60: browser.EventPublisher.Publish:input_type -> browser.PublishRequest
-	11, // 61: browser.WindowManager.Focus:input_type -> browser.FocusRequest
-	21, // 62: browser.WindowManager.Split:input_type -> browser.SplitWindowMessage
-	22, // 63: browser.WindowManager.Bar:input_type -> browser.BarMessage
-	20, // 64: browser.WindowManager.Floating:input_type -> browser.FloatingWindowMessage
-	24, // 65: browser.WindowManager.Tab:input_type -> browser.TabMessage
-	23, // 66: browser.WindowManager.SetContent:input_type -> browser.WindowSetContentMessage
-	15, // 67: browser.WindowManager.CloseWindow:input_type -> browser.WindowCloseRequest
-	18, // 68: browser.Floating.Dimensions:input_type -> browser.DimensionsRequest
-	3,  // 69: browser.ResourceOpener.Open:output_type -> browser.OpenResourceResponse
-	5,  // 70: browser.Notifications.Notify:output_type -> browser.NotifyResponse
-	5,  // 71: browser.Notifications.NotifyOnce:output_type -> browser.NotifyResponse
-	14, // 72: browser.EventPublisher.Publish:output_type -> browser.PublishResponse
-	12, // 73: browser.WindowManager.Focus:output_type -> browser.FocusResponse
-	36, // 74: browser.WindowManager.Split:output_type -> handler.ServerMessage
-	36, // 75: browser.WindowManager.Bar:output_type -> handler.ServerMessage
-	36, // 76: browser.WindowManager.Floating:output_type -> handler.ServerMessage
-	36, // 77: browser.WindowManager.Tab:output_type -> handler.ServerMessage
-	36, // 78: browser.WindowManager.SetContent:output_type -> handler.ServerMessage
-	16, // 79: browser.WindowManager.CloseWindow:output_type -> browser.WindowCloseResponse
-	19, // 80: browser.Floating.Dimensions:output_type -> browser.DimensionsResponse
-	69, // [69:81] is the sub-list for method output_type
-	57, // [57:69] is the sub-list for method input_type
-	57, // [57:57] is the sub-list for extension type_name
-	57, // [57:57] is the sub-list for extension extendee
-	0,  // [0:57] is the sub-list for field type_name
+	9,  // 15: browser.FloatingWindowMessage.request:type_name -> browser.FloatingWindowRequest
+	27, // 16: browser.SplitWindowMessage.type:type_name -> handler.MessageType
+	28, // 17: browser.SplitWindowMessage.draw:type_name -> handler.DrawStreamResponse
+	29, // 18: browser.SplitWindowMessage.handle:type_name -> handler.HandleStreamResponse
+	30, // 19: browser.SplitWindowMessage.man:type_name -> handler.ManStreamResponse
+	31, // 20: browser.SplitWindowMessage.close:type_name -> handler.CloseStreamResponse
+	32, // 21: browser.SplitWindowMessage.cursor:type_name -> handler.CursorStreamResponse
+	33, // 22: browser.SplitWindowMessage.selection:type_name -> handler.SelectionStreamResponse
+	34, // 23: browser.SplitWindowMessage.dimensions:type_name -> handler.DimensionsStreamResponse
+	7,  // 24: browser.SplitWindowMessage.request:type_name -> browser.SplitRequest
+	27, // 25: browser.BarMessage.type:type_name -> handler.MessageType
+	28, // 26: browser.BarMessage.draw:type_name -> handler.DrawStreamResponse
+	29, // 27: browser.BarMessage.handle:type_name -> handler.HandleStreamResponse
+	30, // 28: browser.BarMessage.man:type_name -> handler.ManStreamResponse
+	31, // 29: browser.BarMessage.close:type_name -> handler.CloseStreamResponse
+	32, // 30: browser.BarMessage.cursor:type_name -> handler.CursorStreamResponse
+	33, // 31: browser.BarMessage.selection:type_name -> handler.SelectionStreamResponse
+	34, // 32: browser.BarMessage.dimensions:type_name -> handler.DimensionsStreamResponse
+	8,  // 33: browser.BarMessage.request:type_name -> browser.BarRequest
+	27, // 34: browser.WindowSetContentMessage.type:type_name -> handler.MessageType
+	28, // 35: browser.WindowSetContentMessage.draw:type_name -> handler.DrawStreamResponse
+	29, // 36: browser.WindowSetContentMessage.handle:type_name -> handler.HandleStreamResponse
+	30, // 37: browser.WindowSetContentMessage.man:type_name -> handler.ManStreamResponse
+	31, // 38: browser.WindowSetContentMessage.close:type_name -> handler.CloseStreamResponse
+	32, // 39: browser.WindowSetContentMessage.cursor:type_name -> handler.CursorStreamResponse
+	33, // 40: browser.WindowSetContentMessage.selection:type_name -> handler.SelectionStreamResponse
+	34, // 41: browser.WindowSetContentMessage.dimensions:type_name -> handler.DimensionsStreamResponse
+	17, // 42: browser.WindowSetContentMessage.request:type_name -> browser.WindowSetContentRequest
+	27, // 43: browser.TabMessage.type:type_name -> handler.MessageType
+	28, // 44: browser.TabMessage.draw:type_name -> handler.DrawStreamResponse
+	29, // 45: browser.TabMessage.handle:type_name -> handler.HandleStreamResponse
+	30, // 46: browser.TabMessage.man:type_name -> handler.ManStreamResponse
+	31, // 47: browser.TabMessage.close:type_name -> handler.CloseStreamResponse
+	32, // 48: browser.TabMessage.cursor:type_name -> handler.CursorStreamResponse
+	33, // 49: browser.TabMessage.selection:type_name -> handler.SelectionStreamResponse
+	34, // 50: browser.TabMessage.dimensions:type_name -> handler.DimensionsStreamResponse
+	10, // 51: browser.TabMessage.request:type_name -> browser.TabRequest
+	2,  // 52: browser.ResourceOpener.Open:input_type -> browser.OpenResourceRequest
+	4,  // 53: browser.Notifications.Notify:input_type -> browser.NotifyRequest
+	4,  // 54: browser.Notifications.NotifyOnce:input_type -> browser.NotifyRequest
+	13, // 55: browser.EventPublisher.Publish:input_type -> browser.PublishRequest
+	11, // 56: browser.WindowManager.Focus:input_type -> browser.FocusRequest
+	21, // 57: browser.WindowManager.Split:input_type -> browser.SplitWindowMessage
+	22, // 58: browser.WindowManager.Bar:input_type -> browser.BarMessage
+	20, // 59: browser.WindowManager.Floating:input_type -> browser.FloatingWindowMessage
+	24, // 60: browser.WindowManager.Tab:input_type -> browser.TabMessage
+	23, // 61: browser.WindowManager.SetContent:input_type -> browser.WindowSetContentMessage
+	15, // 62: browser.WindowManager.CloseWindow:input_type -> browser.WindowCloseRequest
+	18, // 63: browser.Floating.Dimensions:input_type -> browser.DimensionsRequest
+	3,  // 64: browser.ResourceOpener.Open:output_type -> browser.OpenResourceResponse
+	5,  // 65: browser.Notifications.Notify:output_type -> browser.NotifyResponse
+	5,  // 66: browser.Notifications.NotifyOnce:output_type -> browser.NotifyResponse
+	14, // 67: browser.EventPublisher.Publish:output_type -> browser.PublishResponse
+	12, // 68: browser.WindowManager.Focus:output_type -> browser.FocusResponse
+	35, // 69: browser.WindowManager.Split:output_type -> handler.ServerMessage
+	35, // 70: browser.WindowManager.Bar:output_type -> handler.ServerMessage
+	35, // 71: browser.WindowManager.Floating:output_type -> handler.ServerMessage
+	35, // 72: browser.WindowManager.Tab:output_type -> handler.ServerMessage
+	35, // 73: browser.WindowManager.SetContent:output_type -> handler.ServerMessage
+	16, // 74: browser.WindowManager.CloseWindow:output_type -> browser.WindowCloseResponse
+	19, // 75: browser.Floating.Dimensions:output_type -> browser.DimensionsResponse
+	64, // [64:76] is the sub-list for method output_type
+	52, // [52:64] is the sub-list for method input_type
+	52, // [52:52] is the sub-list for extension type_name
+	52, // [52:52] is the sub-list for extension extendee
+	0,  // [0:52] is the sub-list for field type_name
 }
 
 func init() { file_browserrpc_browser_proto_init() }

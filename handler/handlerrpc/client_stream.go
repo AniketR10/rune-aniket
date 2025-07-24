@@ -64,7 +64,6 @@ type StreamMessage interface {
 
 	GetType() MessageType
 	GetDraw() *DrawStreamResponse
-	GetResize() *ResizeStreamResponse
 	GetHandle() *HandleStreamResponse
 	GetMan() *ManStreamResponse
 	GetClose() *CloseStreamResponse
@@ -73,7 +72,6 @@ type StreamMessage interface {
 	GetDimensions() *DimensionsStreamResponse
 
 	SetDraw(*DrawStreamResponse)
-	SetResize(*ResizeStreamResponse)
 	SetHandle(*HandleStreamResponse)
 	SetMan(*ManStreamResponse)
 	SetClose(*CloseStreamResponse)
@@ -279,21 +277,6 @@ func (s *ClientStream[T]) Resize(width, height int) {
 		s.closeStream(err)
 		return
 	}
-
-	s.locker.Unlock()
-	defer s.locker.Lock()
-
-	recvMsg := s.newT()
-	if err := s.stream.RecvMsg(recvMsg); err != nil {
-		s.closeStream(fmt.Errorf("receive resize message: %w", err))
-		return
-	}
-
-	if tpe := recvMsg.GetType(); tpe != MessageType_Resize {
-		err := fmt.Errorf("receive resize message: received extraneous msg: %v", tpe)
-		s.closeStream(err)
-		return
-	}
 }
 
 // Draw satisfies Handler.
@@ -377,16 +360,21 @@ func (s *ClientStream[T]) Close() error {
 		return err
 	}
 
-	s.locker.Unlock()
-	defer s.locker.Lock()
-
-	recvMsg := s.newT()
-	if err := s.stream.RecvMsg(recvMsg); err != nil {
-		err = fmt.Errorf("receive close message: %w", err)
+	// Close might be called while Handle is still being processed
+	// by ServerStream. This enables stream to gracefully close
+	// at the same time we don't need to implement a multi-goroutine
+	// stream client or server. Keeps things simple at the expense
+	// of assuming that no other methods will be called by host
+	// during the processing of some other method. A small price to pay.
+	go func() {
+		recvMsg := s.newT()
+		err := s.stream.RecvMsg(recvMsg)
+		if err != nil {
+			err = fmt.Errorf("receive close message: %w", err)
+		}
 		s.closeStream(err)
-		return err
-	}
-	s.closeStream(nil)
+	}()
+
 	return nil
 }
 

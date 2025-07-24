@@ -131,7 +131,6 @@ message FloatingWindowMessage {
 	handler.CursorStreamResponse cursor = 6;
 	handler.SelectionStreamResponse selection = 7;
 	handler.DimensionsStreamResponse dimensions = 8;
-	handler.ResizeStreamResponse resize = 9;
 
 	FloatingWindowRequest request = 10;
 }
@@ -145,7 +144,6 @@ message SplitWindowMessage {
 	handler.CursorStreamResponse cursor = 6;
 	handler.SelectionStreamResponse selection = 7;
 	handler.DimensionsStreamResponse dimensions = 8;
-	handler.ResizeStreamResponse resize = 9;
 
 	SplitRequest request = 10;
 }
@@ -159,7 +157,6 @@ message BarMessage {
 	handler.CursorStreamResponse cursor = 6;
 	handler.SelectionStreamResponse selection = 7;
 	handler.DimensionsStreamResponse dimensions = 8;
-	handler.ResizeStreamResponse resize = 9;
 
 	BarRequest request = 10;
 }
@@ -173,7 +170,6 @@ message WindowSetContentMessage {
 	handler.CursorStreamResponse cursor = 6;
 	handler.SelectionStreamResponse selection = 7;
 	handler.DimensionsStreamResponse dimensions = 8;
-	handler.ResizeStreamResponse resize = 9;
 
 	WindowSetContentRequest request = 10;
 }
@@ -187,7 +183,6 @@ message TabMessage {
 	handler.CursorStreamResponse cursor = 6;
 	handler.SelectionStreamResponse selection = 7;
 	handler.DimensionsStreamResponse dimensions = 8;
-	handler.ResizeStreamResponse resize = 9;
 
 	TabRequest request = 10;
 }

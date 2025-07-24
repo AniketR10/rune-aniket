@@ -74,6 +74,7 @@ func NewServerStream[T StreamMessage](
 // and responds accordingly.
 func (c *ServerStream[T]) ReceiveMessages() {
 	defer func() {
+		// ensure that client doesn't block in case of panic
 		err := c.stream.CloseSend()
 		c.log(log.TraceLevel, "closing connection send: %v", err)
 	}()
@@ -112,9 +113,6 @@ func (c *ServerStream[T]) ReceiveMessages() {
 			c.width.Store(int32(width))
 			c.height.Store(int32(height))
 			c.handler.Resize(width, height)
-			var resp ResizeStreamResponse
-			sendMsg.SetResize(&resp)
-			err = c.stream.SendMsg(sendMsg)
 
 		case MessageType_Handle:
 			var ev term.Event

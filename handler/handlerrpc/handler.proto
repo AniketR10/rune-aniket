@@ -155,9 +155,6 @@ message ResizeStreamRequest {
 	int32 height = 2;
 }
 
-message ResizeStreamResponse {
-}
-
 message CloseStreamRequest {
 }
 

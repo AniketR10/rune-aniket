@@ -31,12 +31,6 @@ func (m *TestMessage) SetDraw(r *handlerrpc.DrawStreamResponse) {
 	m.Type = handlerrpc.MessageType_Draw
 }
 
-// SetResize satisfies handlerrpc.StreamMessage.
-func (m *TestMessage) SetResize(r *handlerrpc.ResizeStreamResponse) {
-	m.Resize = r
-	m.Type = handlerrpc.MessageType_Resize
-}
-
 // SetHandle satisfies handlerrpc.StreamMessage.
 func (m *TestMessage) SetHandle(r *handlerrpc.HandleStreamResponse) {
 	m.Handle = r
