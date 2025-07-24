@@ -216,6 +216,11 @@ AAAAAAAAAAAAAAAAAAAA
 	})
 }
 
+type nopLocker struct{}
+
+func (n nopLocker) Lock()   {}
+func (n nopLocker) Unlock() {}
+
 type testServer struct {
 	UnimplementedTestServiceServer
 	windowID uint64
@@ -230,7 +235,7 @@ func (t *testServer) TestStream(srv TestService_TestStreamServer) error {
 		func() *TestMessage {
 			return new(TestMessage)
 
-		})
+		}, nopLocker{})
 	msg, err := srv.Recv()
 	if err != nil {
 		return fmt.Errorf("receive initial request: %w", err)

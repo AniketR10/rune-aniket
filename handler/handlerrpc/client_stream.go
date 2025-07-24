@@ -29,6 +29,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync"
 	"sync/atomic"
 
 	log "github.com/sirupsen/logrus"
@@ -88,6 +89,7 @@ var _ tui.Handler = (*ClientStream[StreamMessage])(nil)
 type ClientStream[T StreamMessage] struct {
 	ctx       context.Context
 	stream    grpc.ServerStream
+	locker    sync.Locker
 	closeChan chan error
 	closed    atomic.Bool
 	height    atomic.Int32
@@ -96,15 +98,19 @@ type ClientStream[T StreamMessage] struct {
 }
 
 // NewClientStream allocates storage for a new ClientStream and initializes it
-// with the given grpc.ServerStream and type parameter constructor.
+// with the given grpc.ServerStream and type parameter constructor. The given locker
+// is used to unlock before I/O is performed; if no synchronization is needed
+// then a nop locker should be used.
 func NewClientStream[T StreamMessage](
 	ctx context.Context, srv grpc.ServerStream, newT func() T,
+	locker sync.Locker,
 ) *ClientStream[T] {
 	return &ClientStream[T]{
 		ctx:       ctx,
 		stream:    srv,
 		closeChan: make(chan error),
 		newT:      newT,
+		locker:    locker,
 	}
 }
 
@@ -134,6 +140,9 @@ func (s *ClientStream[T]) Handle(ev term.Event) (exit, handled bool) {
 		return
 	}
 
+	s.locker.Unlock()
+	defer s.locker.Lock()
+
 	recvMsg := s.newT()
 	if err := s.stream.RecvMsg(recvMsg); err != nil {
 		s.closeStream(fmt.Errorf("receive handle message: %w", err))
@@ -162,6 +171,9 @@ func (s *ClientStream[T]) Cursor() (c term.Coordinates, cs term.CursorStyle, sho
 		s.closeStream(err)
 		return
 	}
+
+	s.locker.Unlock()
+	defer s.locker.Lock()
 
 	recvMsg := s.newT()
 	if err := s.stream.RecvMsg(recvMsg); err != nil {
@@ -197,6 +209,9 @@ func (s *ClientStream[T]) Selection() (string, bool) {
 		return "", false
 	}
 
+	s.locker.Unlock()
+	defer s.locker.Lock()
+
 	recvMsg := s.newT()
 	if err := s.stream.RecvMsg(recvMsg); err != nil {
 		s.closeStream(fmt.Errorf("receive selection message: %w", err))
@@ -223,6 +238,9 @@ func (s *ClientStream[T]) Man() tui.Manual {
 		s.closeStream(err)
 		return tui.Manual{}
 	}
+
+	s.locker.Unlock()
+	defer s.locker.Lock()
 
 	recvMsg := s.newT()
 	if err := s.stream.RecvMsg(recvMsg); err != nil {
@@ -262,6 +280,9 @@ func (s *ClientStream[T]) Resize(width, height int) {
 		return
 	}
 
+	s.locker.Unlock()
+	defer s.locker.Lock()
+
 	recvMsg := s.newT()
 	if err := s.stream.RecvMsg(recvMsg); err != nil {
 		s.closeStream(fmt.Errorf("receive resize message: %w", err))
@@ -296,6 +317,9 @@ func (s *ClientStream[T]) Draw(w term.Writer) {
 		return
 	}
 
+	s.locker.Unlock()
+	defer s.locker.Lock()
+
 	recvMsg := s.newT()
 	if err := s.stream.RecvMsg(recvMsg); err != nil {
 		s.closeStream(fmt.Errorf("receive draw message: %w", err))
@@ -321,6 +345,9 @@ func (s *ClientStream[T]) Dimensions() (width int, height int) {
 		s.closeStream(err)
 		return
 	}
+
+	s.locker.Unlock()
+	defer s.locker.Lock()
 
 	recvMsg := s.newT()
 	if err := s.stream.RecvMsg(recvMsg); err != nil {
@@ -349,6 +376,10 @@ func (s *ClientStream[T]) Close() error {
 		s.closeStream(err)
 		return err
 	}
+
+	s.locker.Unlock()
+	defer s.locker.Lock()
+
 	recvMsg := s.newT()
 	if err := s.stream.RecvMsg(recvMsg); err != nil {
 		err = fmt.Errorf("receive close message: %w", err)

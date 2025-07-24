@@ -116,7 +116,7 @@ func (s *Server) Split(srv WindowManager_SplitServer) error {
 		client = handlerrpc.NewClientStream(s.serverCtx, srv,
 			func() *SplitWindowMessage {
 				return new(SplitWindowMessage)
-			})
+			}, s.browser)
 		handler = &streamHandler{mu: s.browser, Handler: client}
 	} else {
 		h, err := s.getResourceHandler(uri)
@@ -160,7 +160,7 @@ func (s *Server) Bar(srv WindowManager_BarServer) error {
 	client := handlerrpc.NewClientStream(s.serverCtx, srv,
 		func() *BarMessage {
 			return new(BarMessage)
-		})
+		}, s.browser)
 
 	cfg := browserapi.BarConfig{}
 	cfg.Orientation = protoToModelOrientation(req.GetOrientation())
@@ -300,7 +300,7 @@ func (s *Server) Floating(srv WindowManager_FloatingServer) error {
 	client := handlerrpc.NewClientStream[*FloatingWindowMessage](s.serverCtx, srv,
 		func() *FloatingWindowMessage {
 			return new(FloatingWindowMessage)
-		})
+		}, s.browser)
 
 	at := req.GetOffset().ToModel()
 	alignment := component.Alignment(req.GetAlignment())
@@ -358,7 +358,7 @@ func (s *Server) Tab(srv WindowManager_TabServer) error {
 	client := handlerrpc.NewClientStream(s.serverCtx, srv,
 		func() *TabMessage {
 			return new(TabMessage)
-		})
+		}, s.browser)
 	handler := &streamHandler{mu: s.browser, Handler: client}
 
 	s.browser.Lock()
@@ -404,7 +404,7 @@ func (s *Server) SetContent(srv WindowManager_SetContentServer) error {
 		client = handlerrpc.NewClientStream(s.serverCtx, srv,
 			func() *WindowSetContentMessage {
 				return new(WindowSetContentMessage)
-			})
+			}, s.browser)
 		handler = &streamHandler{mu: s.browser, Handler: client}
 	} else {
 		h, err := s.getResourceHandler(uri)

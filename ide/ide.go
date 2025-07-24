@@ -348,6 +348,9 @@ func (i *IDE) publishEvent(ev term.Event) bool {
 func (i *IDE) initRunning() {
 	atomic.StoreInt32(&i.running, 1)
 	if i.options.initShaderFn != nil {
+		// protect access to root, simulating a std loop iteration
+		i.locker.Lock()
+		defer i.locker.Unlock()
 		i.root.runShader(i.options.initShaderFn(i.root.defAttr),
 			i.options.initShaderFPS, i.options.initShaderDuration)
 	}
