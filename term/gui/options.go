@@ -60,6 +60,15 @@ func WithBackgroundBlur(radius int) Option {
 	}
 }
 
+// WithSize sets the initial width and height of the window.
+func WithSize(width, height int) Option {
+	return func(g *GUI) error {
+		g.defaultWidth = width
+		g.defaultHeight = height
+		return nil
+	}
+}
+
 // WithFontSize defines the size of the default font
 // or the font set via WithFontFamily.
 func WithFontSize(size float64) Option {

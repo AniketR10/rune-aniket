@@ -72,6 +72,8 @@ type GUI struct {
 	input             *input
 	bgOpacity         float64
 	fgOpacity         float64
+	defaultWidth      int
+	defaultHeight     int
 	printFPS          bool
 	bgBlurRadius      int
 	enableTransparent bool
@@ -124,6 +126,8 @@ func New(handler tui.Handler, options ...Option) (*GUI, error) {
 		activeHinter:     -1,
 		enableLigatures:  true,
 		cursorAttributes: term.Attributes{Bg: tcell.ColorRed},
+		defaultWidth:     defaultWidth,
+		defaultHeight:    defaultHeight,
 	}
 	ret.input = newInput(ret.fontManager)
 	ret.mouse = newMouse(ret.fontManager)
@@ -153,7 +157,7 @@ func New(handler tui.Handler, options ...Option) (*GUI, error) {
 	}
 
 	// initialze renderer, writer, etc.
-	ret.resize(defaultWidth, defaultHeight, ret.fontManager.DeviceScale())
+	ret.resize(ret.defaultWidth, ret.defaultHeight, ret.fontManager.DeviceScale())
 
 	return ret, nil
 }
@@ -170,7 +174,7 @@ func (g *GUI) Run(title string) error {
 
 	go g.consumeEvents()
 
-	ebiten.SetWindowSize(defaultWidth, defaultHeight)
+	ebiten.SetWindowSize(g.defaultWidth, g.defaultHeight)
 
 	if g.bgBlurRadius != 0 && g.enableTransparent {
 		ebiten.SetWindowBackgroundBlur(g.bgBlurRadius)
