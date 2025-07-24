@@ -79,7 +79,7 @@ func newMockedClient(ctrl *gomock.Controller) (
 func expectInvokeRPC(mockCC *rpc.MockClientConnInterface) {
 	mockCC.EXPECT().
 		Invoke(gomock.Any(), gomock.Any(),
-			gomock.Any(), gomock.Any()).
+			gomock.Any(), gomock.Any(), gomock.Any()).
 		Times(1).
 		Return(nil)
 }
@@ -87,7 +87,7 @@ func expectInvokeRPC(mockCC *rpc.MockClientConnInterface) {
 func expectInvokeError(mockCC *rpc.MockClientConnInterface) {
 	mockCC.EXPECT().
 		Invoke(gomock.Any(), gomock.Any(),
-			gomock.Any(), gomock.Any()).
+			gomock.Any(), gomock.Any(), gomock.Any()).
 		Times(1).
 		Return(errors.New("woopsie"))
 }
@@ -111,7 +111,7 @@ func TestClientNotify(t *testing.T) {
 		mockCC.EXPECT().
 			Invoke(gomock.Any(),
 				gomock.Eq("/browser.Notifications/Notify"),
-				gomock.Eq(in), gomock.Eq(out)).
+				gomock.Eq(in), gomock.Eq(out), gomock.Any()).
 			Times(1)
 
 		err := client.Notify(notifications.LevelWarn, myMsg, arg1, arg2)
@@ -136,7 +136,7 @@ func expectResourceOpen(mockCC *rpc.MockClientConnInterface, myResource workspac
 	mockCC.EXPECT().
 		Invoke(gomock.Any(),
 			gomock.Eq("/browser.ResourceOpener/Open"),
-			gomock.Eq(in), gomock.Eq(out)).
+			gomock.Eq(in), gomock.Eq(out), gomock.Any()).
 		Times(1)
 }
 
@@ -194,7 +194,7 @@ func TestClientPublish(t *testing.T) {
 				mockCC.EXPECT().
 					Invoke(gomock.Any(),
 						gomock.Eq("/browser.EventPublisher/Publish"),
-						gomock.Any(), gomock.Any()).
+						gomock.Any(), gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(errors.New("uRich"))
 
@@ -215,7 +215,7 @@ func TestClientPublish(t *testing.T) {
 				mockCC.EXPECT().
 					Invoke(gomock.Any(),
 						gomock.Eq("/browser.EventPublisher/Publish"),
-						gomock.Eq(in), gomock.Eq(out)).
+						gomock.Eq(in), gomock.Eq(out), gomock.Any()).
 					Times(1)
 
 				err := tcase.fn(client)

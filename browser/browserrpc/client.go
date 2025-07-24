@@ -28,7 +28,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"runtime"
 	"strings"
 	"sync"
 
@@ -62,7 +61,6 @@ type Client struct {
 func NewClient(ctx context.Context, cc grpc.ClientConnInterface) *Client {
 	ret := new(Client)
 	ret.Init(ctx, cc)
-	runtime.SetFinalizer(ret, func(c *Client) { c.Close() })
 	return ret
 }
 
@@ -82,11 +80,9 @@ func (c *Client) Init(ctx context.Context, cc grpc.ClientConnInterface) {
 
 // CloseWindow satisfies browserapi.Browser.
 func (c *Client) CloseWindow(win browserapi.Window) error {
-	ctx := context.Background()
 	req := WindowCloseRequest{WindowId: win.WindowID()}
 
-	_, err := c.wm.CloseWindow(ctx, &req)
-	runtime.KeepAlive(c)
+	_, err := c.wm.CloseWindow(c.clientCtx, &req)
 	return err
 }
 
@@ -135,7 +131,6 @@ func (c *Client) SetWindowContent(win browserapi.Window, h browserapi.Handler) e
 		})
 	go server.ReceiveMessages()
 
-	runtime.KeepAlive(c)
 	return nil
 }
 
@@ -187,7 +182,6 @@ func (c *Client) Split(
 		})
 	go server.ReceiveMessages()
 
-	runtime.KeepAlive(c)
 	return newWindowClient(uint64(windowID)), nil
 }
 
@@ -231,7 +225,6 @@ func (c *Client) Bar(config browserapi.BarConfig, h tui.Handler) error {
 		})
 	go server.ReceiveMessages()
 
-	runtime.KeepAlive(c)
 	return nil
 }
 
@@ -243,7 +236,6 @@ func (c *Client) Notify(level notifications.Level, msg string, args ...interface
 	req := NotifyRequest{Level: uint32(level), Msg: msg}
 
 	_, err := c.msg.Notify(ctx, &req)
-	runtime.KeepAlive(c)
 	return err
 }
 
@@ -255,7 +247,6 @@ func (c *Client) NotifyOnce(level notifications.Level, msg string, args ...inter
 	req := NotifyRequest{Level: uint32(level), Msg: msg}
 
 	_, err := c.msg.NotifyOnce(ctx, &req)
-	runtime.KeepAlive(c)
 	return err
 }
 
@@ -265,7 +256,6 @@ func (c *Client) Open(resource workspaceapi.URI) (browserapi.Handler, error) {
 	req := OpenResourceRequest{Resource: resource.String()}
 
 	res, err := c.f.Open(ctx, &req)
-	runtime.KeepAlive(c)
 	if err != nil {
 		return nil, err
 	}
@@ -284,7 +274,6 @@ func (c *Client) PublishEventNone() error {
 	req := PublishRequest{Ev: protoEv}
 
 	_, err = c.p.Publish(ctx, &req)
-	runtime.KeepAlive(c)
 	return err
 }
 
@@ -299,7 +288,6 @@ func (c *Client) Interrupt(ctx context.Context) error {
 	req := PublishRequest{Ev: protoEv}
 
 	_, err = c.p.Publish(ctx, &req)
-	runtime.KeepAlive(c)
 	return err
 }
 
@@ -311,7 +299,6 @@ func (c *Client) Focus() (browserapi.Window, error) {
 		return nil, err
 	}
 	win := newWindowClient(res.GetWindowId())
-	runtime.KeepAlive(c)
 	return win, err
 }
 
@@ -359,7 +346,6 @@ func (c *Client) Floating(
 		})
 	go server.ReceiveMessages()
 
-	runtime.KeepAlive(c)
 	return newWindowClient(uint64(windowID)), nil
 }
 
@@ -403,7 +389,6 @@ func (c *Client) Tab(
 	})
 	go server.ReceiveMessages()
 
-	runtime.KeepAlive(c)
 	return Token{URI: uriStr}, err
 }
 
@@ -418,7 +403,6 @@ func (c *Client) Close() (err error) {
 		c.clientCancelCtx()
 		c.clientCancelCtx = nil
 	}
-	runtime.SetFinalizer(c, nil)
 	return
 }
 

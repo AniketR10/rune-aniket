@@ -69,7 +69,7 @@ func TestClientEdit(t *testing.T) {
 			Invoke(gomock.Any(),
 				gomock.Eq("/text.Editor/Edit"),
 				gomock.Any(),
-				gomock.Any()).
+				gomock.Any(), gomock.Any()).
 			Times(1).
 			Return(errors.New("Would be a change of plan"))
 
@@ -229,7 +229,7 @@ func expectClientEdit(
 		Invoke(gomock.Any(),
 			gomock.Eq("/text.Editor/Edit"),
 			gomock.Any(),
-			gomock.Any()).
+			gomock.Any(), gomock.Any()).
 		DoAndReturn(func(
 			ctx context.Context, method string, args interface{},
 			reply interface{}, opts ...grpc.CallOption) error {

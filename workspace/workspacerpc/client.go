@@ -27,7 +27,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"runtime"
 	"syscall"
 	"time"
 
@@ -67,7 +66,6 @@ type Client struct {
 func NewClient(cc rpc.MuxConn) *Client {
 	ret := new(Client)
 	ret.Init(cc)
-	runtime.SetFinalizer(ret, func(c *Client) { c.Close() })
 	return ret
 }
 
@@ -88,7 +86,6 @@ func (c *Client) URI(path string) (workspaceapi.URI, error) {
 
 	req := URIRequest{Path: path}
 	resp, err := c.scheme.URI(ctx, &req)
-	runtime.KeepAlive(c)
 	if err != nil {
 		return workspaceapi.URI{}, err
 	}
@@ -115,7 +112,6 @@ func (c *Client) OpenFile(path string, flag int, mode os.FileMode) (
 
 	req := makeOpenRequest(path, flag, mode)
 	resp, err := c.scheme.Open(ctx, req)
-	runtime.KeepAlive(c)
 	if err != nil {
 		return nil, &workspaceapi.Error{Err: err}
 	}
@@ -134,7 +130,6 @@ func (c *Client) Stat(name string) (os.FileInfo, error) {
 
 	req := StatRequest{Filename: name}
 	resp, err := c.scheme.Stat(ctx, &req)
-	runtime.KeepAlive(c)
 	if err != nil {
 		return nil, err
 	}
@@ -151,7 +146,6 @@ func (c *Client) ReadDir(name string) ([]os.DirEntry, error) {
 
 	req := ReadDirRequest{Root: name}
 	resp, err := c.scheme.ReadDir(ctx, &req)
-	runtime.KeepAlive(c)
 	if err != nil {
 		return nil, err
 	}
@@ -179,7 +173,6 @@ func (c *Client) Remove(path string) error {
 
 	req := RemoveRequest{Filename: path}
 	resp, err := c.scheme.Remove(ctx, &req)
-	runtime.KeepAlive(c)
 	if err != nil {
 		return err
 	}
@@ -196,7 +189,6 @@ func (c *Client) Rename(oldpath, newpath string) error {
 
 	req := RenameRequest{Filename: oldpath, Newfilename: newpath}
 	resp, err := c.scheme.Rename(ctx, &req)
-	runtime.KeepAlive(c)
 	if err != nil {
 		return err
 	}
@@ -213,7 +205,6 @@ func (c *Client) Lstat(name string) (os.FileInfo, error) {
 
 	req := StatRequest{Filename: name, Lstat: true}
 	resp, err := c.scheme.Stat(ctx, &req)
-	runtime.KeepAlive(c)
 	if err != nil {
 		return nil, err
 	}
@@ -230,7 +221,6 @@ func (c *Client) ReadLink(filename string) (string, error) {
 
 	req := ReadLinkRequest{Filename: filename}
 	resp, err := c.scheme.ReadLink(ctx, &req)
-	runtime.KeepAlive(c)
 	if err != nil {
 		return "", err
 	}
@@ -244,7 +234,6 @@ func (c *Client) MkdirAll(path string, perm os.FileMode) error {
 
 	req := MkdirAllRequest{Path: path, Mode: int32(perm)}
 	resp, err := c.scheme.MkdirAll(ctx, &req)
-	runtime.KeepAlive(c)
 	if err != nil {
 		return err
 	}
@@ -355,7 +344,6 @@ func (c *Client) Signal(p workspaceapi.Pid, s syscall.Signal) error {
 
 	req := SignalRequest{Pid: int64(p), Sig: int32(s)}
 	_, err := c.exec.Signal(ctx, &req)
-	runtime.KeepAlive(c)
 	if err != nil {
 		return err
 	}
@@ -375,7 +363,6 @@ func (c *Client) NewPty(ctx context.Context) (workspaceapi.Pty, error) {
 
 	var req NewPtyRequest
 	resp, err := c.term.NewPty(ctx, &req)
-	runtime.KeepAlive(c)
 	if err != nil {
 		return workspaceapi.Pty{}, err
 	}
@@ -406,7 +393,6 @@ func (c *Client) SetPtySize(p workspaceapi.Pty, width, height int) error {
 		Height:   int32(height),
 	}
 	_, err := c.term.SetPtySize(ctx, &req)
-	runtime.KeepAlive(c)
 	return err
 }
 
@@ -423,9 +409,7 @@ func (c *Client) Close() (ret error) {
 		ret = multierr.Append(ret, err)
 	}
 
-	runtime.SetFinalizer(c, nil)
-
-	return
+return
 }
 
 func (c *Client) log(level log.Level, msg string, args ...interface{}) {

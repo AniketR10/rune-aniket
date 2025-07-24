@@ -27,7 +27,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"runtime"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -84,10 +83,6 @@ func (c *Client) Init(pbClient HandlerClient) {
 	c.client = pbClient
 	c.ctx, c.cancel = context.WithCancel(context.Background())
 	c.errors = make(chan error)
-	runtime.SetFinalizer(c, func(c *Client) {
-		// do not make an RPC on a runtime finalizer
-		c.cancel()
-	})
 }
 
 // Errors returns a channel which receives RPC errors.
@@ -109,7 +104,6 @@ func (c *Client) Draw(w term.Writer) {
 
 	req := DrawRequest{Height: int32(c.height), Width: int32(c.width)}
 	resp, err := c.client.Draw(ctx, &req)
-	runtime.KeepAlive(c)
 	if err != nil {
 		c.collectError("Draw", err)
 		return
@@ -151,7 +145,6 @@ func (c *Client) Handle(ev term.Event) (bool, bool) {
 	}
 
 	resp, err := c.client.Handle(ctx, &req)
-	runtime.KeepAlive(c)
 	if err != nil {
 		c.collectError("Handle", err)
 		return false, false
@@ -167,7 +160,6 @@ func (c *Client) Man() tui.Manual {
 	req := ManRequest{}
 
 	resp, err := c.client.Man(ctx, &req)
-	runtime.KeepAlive(c)
 	if err != nil {
 		c.collectError("Man", err)
 		return tui.Manual{}
@@ -201,7 +193,6 @@ func (c *Client) Close() error {
 
 	req := CloseRequest{}
 	_, err := c.client.Close(ctx, &req)
-	runtime.KeepAlive(c)
 	if err != nil {
 		return fmt.Errorf("close rpc: %w", err)
 	}

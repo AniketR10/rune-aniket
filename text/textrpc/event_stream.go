@@ -28,7 +28,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"runtime"
 	"sync"
 	"time"
 
@@ -207,6 +206,4 @@ func (s eventStreamServer) receiveEvents(c *Client) {
 	if err := s.stream.CloseSend(); err != nil {
 		s.log(log.ErrorLevel, "stream close send: %v", err)
 	}
-	// keep alive until we're done streaming events
-	runtime.KeepAlive(c)
 }

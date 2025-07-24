@@ -27,7 +27,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"runtime"
 	"sync"
 	"time"
 
@@ -106,7 +105,6 @@ type Client struct {
 func NewClient(ctx context.Context, cc rpc.MuxConn) *Client {
 	ret := new(Client)
 	ret.Init(ctx, cc)
-	runtime.SetFinalizer(ret, func(c *Client) { c.Close() })
 	return ret
 }
 
@@ -130,7 +128,6 @@ func (c *Client) Edit(file workspaceapi.URI, buf *cell.Buffer) (textapi.Handler,
 	req := NewEditRequest(file, buf)
 
 	_, err := c.ed.Edit(ctx, &req)
-	runtime.KeepAlive(c)
 	if err != nil {
 		return nil, err
 	}
@@ -146,7 +143,6 @@ func (c *Client) Editor(file workspaceapi.URI) (textapi.Handler, error) {
 	req := EditorRequest{ResourceName: NewURI(file)}
 
 	_, err := c.ed.Editor(ctx, &req)
-	runtime.KeepAlive(c)
 	if err != nil {
 		return nil, err
 	}
@@ -176,7 +172,6 @@ func (c *Client) SubscribeEvents(
 	handler := newEventStreamServer(c.clientCtx, stream, h)
 	go handler.receiveEvents(c)
 
-	runtime.KeepAlive(c)
 
 	return nil
 }
@@ -208,7 +203,6 @@ func (c *Client) SubscribeCommand(man textapi.CommandManual, h textapi.CommandHa
 	srvStream := newCommandServerStream(c.clientCtx, stream, h)
 	go srvStream.receiveMessages()
 
-	runtime.KeepAlive(c)
 	return nil
 }
 
@@ -250,7 +244,6 @@ func (c *Client) SetLocationList(
 	token := h.(Token)
 	req := makeLocationListRequest(token.URI, pri, ID, l)
 	_, err := c.ed.SetLocationList(ctx, &req)
-	runtime.KeepAlive(c)
 	return err
 }
 
@@ -265,7 +258,6 @@ func (c *Client) moveToLocation(h textapi.Handler, ID string, next bool) (err er
 	} else {
 		_, err = c.ed.MoveToPrevLocation(ctx, &req)
 	}
-	runtime.KeepAlive(c)
 	return err
 }
 
@@ -273,7 +265,6 @@ func (c *Client) moveToLocation(h textapi.Handler, ID string, next bool) (err er
 // in location list identified by ID.
 func (c *Client) MoveToPrevLocation(h textapi.Handler, ID string) error {
 	err := c.moveToLocation(h, ID, false)
-	runtime.KeepAlive(c)
 	return err
 }
 
@@ -281,7 +272,6 @@ func (c *Client) MoveToPrevLocation(h textapi.Handler, ID string) error {
 // in location list identified by ID.
 func (c *Client) MoveToNextLocation(h textapi.Handler, ID string) error {
 	err := c.moveToLocation(h, ID, true)
-	runtime.KeepAlive(c)
 	return err
 }
 
@@ -295,7 +285,6 @@ func (c *Client) SetCursor(h textapi.Handler, pos term.Coordinates) error {
 	protoPos.FromModel(pos)
 	req := SetCursorRequest{Pos: &protoPos, ResourceName: NewURI(token.URI)}
 	_, err := c.ed.SetCursor(ctx, &req)
-	runtime.KeepAlive(c)
 	return err
 }
 
@@ -307,7 +296,6 @@ func (c *Client) Cursor(h textapi.Handler) (term.Coordinates, error) {
 	token := h.(Token)
 	req := CursorRequest{ResourceName: NewURI(token.URI)}
 	res, err := c.ed.Cursor(ctx, &req)
-	runtime.KeepAlive(c)
 	if err != nil {
 		return term.Coordinates{}, err
 	}
@@ -339,7 +327,6 @@ func (c *Client) SetDefaultAttributes(h textapi.Handler, attrs term.Attributes) 
 		Attributes:   &rpcAttrs,
 	}
 	_, err := c.ed.SetDefaultAttributes(ctx, &req)
-	runtime.KeepAlive(c)
 	return err
 }
 
@@ -350,7 +337,6 @@ func (c *Client) Close() (ret error) {
 		c.clientCancelCtx = nil
 		ret = c.cc.Close()
 		c.cc = nil
-		runtime.SetFinalizer(c, nil)
 	}
 	return ret
 }
