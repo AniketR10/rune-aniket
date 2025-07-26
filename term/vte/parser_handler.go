@@ -1472,16 +1472,18 @@ func (t *parserHandler) maxRows() int {
 func (t *parserHandler) clearNeedsAttention() {
 	t.needsAttention = false
 	err := t.tm.SetTabName(t.uri, t.title, term.Attributes{})
+	// doesn't necessarily need to be a tab vte
 	if err != nil {
-		t.log(log.ErrorLevel, "set tab name: %v", err)
+		t.log(log.TraceLevel, "set tab name uri=%q: %v", t.uri, err)
 	}
 }
 
 func (t *parserHandler) setNeedsAttention() {
 	t.needsAttention = true
 	err := t.tm.SetTabName(t.uri, t.title, t.needsAttentionAttr)
+	// doesn't necessarily need to be a tab vte
 	if err != nil {
-		t.log(log.ErrorLevel, "set tab name: %v", err)
+		t.log(log.TraceLevel, "set tab name: %v", err)
 	}
 }
 
