@@ -205,7 +205,7 @@ func (h *fuzzyFinderHandler) addSearchHistory(searchQuery string) {
 	if err != nil {
 		log.Errorf("error adding search history: %v", err)
 	} else {
-		log.Debugf("added %q to query history: %v", searchQuery, h.history)
+		log.Tracef("added %q to query history", searchQuery)
 	}
 }
 
