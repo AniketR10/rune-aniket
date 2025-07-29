@@ -55,7 +55,7 @@ func (l nopLocker) Unlock() {}
 
 func newTestServer(t *testing.T, ctrl *gomock.Controller) (*texttest.MockEditor, *Server) {
 	ed := texttest.NewMockEditor(ctrl)
-	s := NewServer(ed, new(sync.Mutex))
+	s := NewServer(nopNotifications{}, ed, new(sync.Mutex))
 	return ed, s
 }
 
@@ -190,7 +190,7 @@ func TestServerSetLocationList(t *testing.T) {
 			},
 		})
 		require.NoError(t, err)
-		s := NewServer(c, new(sync.Mutex))
+		s := NewServer(nopNotifications{}, c, new(sync.Mutex))
 
 		content := "main"
 		callServerEdit(t, ctx, s, resource, content)

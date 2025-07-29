@@ -651,7 +651,7 @@ func (h *workspaceManagerHandler) buildExtensions(
 ) (extension.Runner, error) {
 	res := extension.BrowserResources(ex.Browser(), h.publishEvent)
 	res = extension.MergeResourceMap(res,
-		extension.EditorResources(ex.Editor(), h.publishEvent))
+		extension.EditorResources(ex.Browser(), ex.Editor(), h.publishEvent))
 	res = extension.MergeResourceMap(res,
 		extension.WorkspaceResources(cwd))
 	res = extension.MergeResourceMap(res,

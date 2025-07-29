@@ -48,6 +48,7 @@ import (
 	"unstable.build/go-tui/browser/browserrpc"
 	"unstable.build/go-tui/browser/browsertest"
 	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/handlertest"
 	"unstable.build/go-tui/term"
@@ -63,7 +64,7 @@ func TestClientServerIntegration(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 		ed := texttest.NewMockEditor(ctrl)
-		s := NewServer(ed, nopLocker{})
+		s := NewServer(nopNotifications{}, ed, nopLocker{})
 
 		client, closeFn := setupIntTest(t, s)
 		defer closeFn()
@@ -80,7 +81,7 @@ func TestClientServerIntegration(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 		ed := texttest.NewMockEditor(ctrl)
-		s := NewServer(ed, nopLocker{})
+		s := NewServer(nopNotifications{}, ed, nopLocker{})
 
 		client, closeFn := setupIntTest(t, s)
 		defer closeFn()
@@ -98,7 +99,7 @@ func TestClientServerIntegration(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 		ed := texttest.NewMockEditor(ctrl)
-		s := NewServer(ed, nopLocker{})
+		s := NewServer(nopNotifications{}, ed, nopLocker{})
 
 		client, closeFn := setupIntTest(t, s)
 		defer closeFn()
@@ -172,7 +173,7 @@ func TestClientServerIntegration(t *testing.T) {
 			t.Run(tcase.name, func(t *testing.T) {
 				var wg sync.WaitGroup
 				ed := texttest.NopEditorWithCallback(wg.Done)
-				s := NewServer(ed, new(sync.Mutex))
+				s := NewServer(nopNotifications{}, ed, new(sync.Mutex))
 
 				client, closeFn := setupIntTest(t, s)
 				defer closeFn()
@@ -215,7 +216,7 @@ func TestClientServerIntegration(t *testing.T) {
 	t.Run("calls unsubscribe if event stream completes", func(t *testing.T) {
 		var wg sync.WaitGroup
 		ed := texttest.NopEditorWithCallback(wg.Done)
-		s := NewServer(ed, new(sync.Mutex))
+		s := NewServer(nopNotifications{}, ed, new(sync.Mutex))
 
 		client, closeFn := setupIntTest(t, s)
 		defer closeFn()
@@ -247,7 +248,7 @@ func TestClientServerIntegration(t *testing.T) {
 	t.Run("event handler drops messages if event handler server is not processing events", func(t *testing.T) {
 		var wg sync.WaitGroup
 		ed := texttest.NopEditorWithCallback(wg.Done)
-		s := NewServer(ed, new(sync.Mutex))
+		s := NewServer(nopNotifications{}, ed, new(sync.Mutex))
 
 		client, closeFn := setupIntTest(t, s)
 		defer closeFn()
@@ -307,7 +308,7 @@ func TestClientServerIntegration(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 		ed := texttest.NewMockEditor(ctrl)
-		s := NewServer(ed, new(sync.Mutex))
+		s := NewServer(nopNotifications{}, ed, new(sync.Mutex))
 
 		client, closeFn := setupIntTest(t, s)
 		defer closeFn()
@@ -341,7 +342,7 @@ func TestClientServerIntegration(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 		ed := texttest.NewMockEditor(ctrl)
-		s := NewServer(ed, new(sync.Mutex))
+		s := NewServer(nopNotifications{}, ed, new(sync.Mutex))
 
 		client, closeFn := setupIntTest(t, s)
 		defer closeFn()
@@ -375,7 +376,7 @@ func TestClientServerIntegration(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 		ed := texttest.NewMockEditor(ctrl)
-		s := NewServer(ed, nopLocker{})
+		s := NewServer(nopNotifications{}, ed, nopLocker{})
 
 		client, closeFn := setupIntTest(t, s)
 		defer closeFn()
@@ -413,7 +414,7 @@ func TestClientServerIntegration(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 		ed := texttest.NewMockEditor(ctrl)
-		s := NewServer(ed, nopLocker{})
+		s := NewServer(nopNotifications{}, ed, nopLocker{})
 
 		client, closeFn := setupIntTest(t, s)
 		defer closeFn()
@@ -442,21 +443,21 @@ func TestClientServerIntegration(t *testing.T) {
 	t.Run("dispatches commands to subscribed command handler", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		ed := texttest.NewMockEditor(ctrl)
-		s := NewServer(ed, new(sync.Mutex))
+		s := NewServer(nopNotifications{}, ed, new(sync.Mutex))
+		var wg sync.WaitGroup
 
 		client, closeFn := setupIntTest(t, s)
 		defer closeFn()
 
 		var (
 			dispatched       textapi.Command
-			dispatchedTimes  int
 			subscribed       textapi.CommandManual
 			subscribedTimes  int
 			subscribedClient text.CommandHandler
 		)
 		handler := textapi.FuncCommandHandler(func(_ context.Context, man textapi.Command) error {
 			dispatched = man
-			dispatchedTimes++
+			wg.Done()
 			return nil
 		}, nil)
 
@@ -501,11 +502,13 @@ func TestClientServerIntegration(t *testing.T) {
 		command.Cursor.Content = term.Coordinates{X: 1, Y: 2}
 		command.Cursor.Window = term.Coordinates{X: 3, Y: 4}
 		s.editor.Lock()
+
+		wg.Add(1)
 		err = subscribedClient.HandleCommand(context.Background(), command)
 		s.editor.Unlock()
 		require.NoError(t, err)
 
-		require.Equal(t, 1, dispatchedTimes)
+		wg.Wait()
 		assert.Equal(t, "bla", dispatched.Name)
 		require.Len(t, dispatched.Args, 1)
 		assert.Equal(t, "ble", dispatched.Args[0])
@@ -513,20 +516,21 @@ func TestClientServerIntegration(t *testing.T) {
 		assert.Equal(t, uint64(199), dispatched.Window.WindowID())
 		assert.Equal(t, "file:///test", dispatched.Resource.Resource().String())
 
-		var wg sync.WaitGroup
 		waitForReplaceCommand(t, &wg, ed, client, "bla")
 	})
 
-	t.Run("handles command handler error by bubbling it up", func(t *testing.T) {
+	t.Run("handles command handler error by notifying user", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		ed := texttest.NewMockEditor(ctrl)
-		s := NewServer(ed, new(sync.Mutex))
+		noti := browsertest.NewMockNotifications(ctrl)
+		s := NewServer(noti, ed, new(sync.Mutex))
 
 		client, closeFn := setupIntTest(t, s)
 		defer closeFn()
 
 		var (
 			subscribedClient text.CommandHandler
+			wg               sync.WaitGroup
 		)
 		handler := textapi.FuncCommandHandler(func(_ context.Context, man textapi.Command) error {
 			return errors.New("boom")
@@ -547,20 +551,26 @@ func TestClientServerIntegration(t *testing.T) {
 		resource := texttest.NewTestHandler()
 		resource.URI = uri
 		command := textapi.Command{Name: "bla"}
+		wg.Add(1)
+		noti.EXPECT().Notify(gomock.Any(), gomock.Any(), gomock.Any()).
+			Times(1).
+			DoAndReturn(func(notifications.Level, string, ...any) error {
+				wg.Done()
+				return nil
+			})
 		s.editor.Lock()
 		err = subscribedClient.HandleCommand(context.Background(), command)
 		s.editor.Unlock()
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "boom")
+		require.NoError(t, err)
 
-		var wg sync.WaitGroup
+		wg.Wait() // notify was called
 		waitForReplaceCommand(t, &wg, ed, client, "bla")
 	})
 
 	t.Run("returns subscribe error", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		ed := texttest.NewMockEditor(ctrl)
-		s := NewServer(ed, new(sync.Mutex))
+		s := NewServer(nopNotifications{}, ed, new(sync.Mutex))
 
 		client, closeFn := setupIntTest(t, s)
 		defer closeFn()
@@ -582,7 +592,7 @@ func TestClientServerIntegration(t *testing.T) {
 	t.Run("completes commands", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		ed := texttest.NewMockEditor(ctrl)
-		s := NewServer(ed, new(sync.Mutex))
+		s := NewServer(nopNotifications{}, ed, new(sync.Mutex))
 
 		client, closeFn := setupIntTest(t, s)
 		defer closeFn()
@@ -639,7 +649,7 @@ func TestClientServerIntegration(t *testing.T) {
 	t.Run("returns complete error", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		ed := texttest.NewMockEditor(ctrl)
-		s := NewServer(ed, new(sync.Mutex))
+		s := NewServer(nopNotifications{}, ed, new(sync.Mutex))
 
 		client, closeFn := setupIntTest(t, s)
 		defer closeFn()
@@ -683,7 +693,7 @@ func TestClientServerIntegration(t *testing.T) {
 	t.Run("returns iterator error", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		ed := texttest.NewMockEditor(ctrl)
-		s := NewServer(ed, new(sync.Mutex))
+		s := NewServer(nopNotifications{}, ed, new(sync.Mutex))
 
 		client, closeFn := setupIntTest(t, s)
 		defer closeFn()
@@ -958,4 +968,17 @@ func setupWmIntTest(
 		client.Close()
 		closeFn()
 	}
+}
+
+type nopNotifications struct{}
+
+func (n nopNotifications) Notify(
+	level notifications.Level, msg string, args ...interface{},
+) error {
+	return nil
+}
+func (n nopNotifications) NotifyOnce(
+	level notifications.Level, msg string, args ...interface{},
+) error {
+	return nil
 }

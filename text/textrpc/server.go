@@ -34,6 +34,8 @@ import (
 	"github.com/unstablebuild/blue/logging"
 	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/api/workspaceapi"
+	"unstable.build/go-tui/browser"
+	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/term/termrpc"
 	"unstable.build/go-tui/text"
 )
@@ -50,22 +52,28 @@ type Server struct {
 	cancelCtx func()
 
 	editor struct {
+		browser.Notifications
 		text.Editor
 		sync.Locker
 	}
 }
 
 // NewServer allocates storage for a new Server and initializes it.
-func NewServer(editor text.Editor, lock sync.Locker) *Server {
+func NewServer(
+	b browser.Notifications, editor text.Editor, lock sync.Locker,
+) *Server {
 	ret := new(Server)
-	ret.Init(editor, lock)
+	ret.Init(b, editor, lock)
 	return ret
 }
 
 // Init initializes this Server with broker and browser.
-func (s *Server) Init(editor text.Editor, lock sync.Locker) {
+func (s *Server) Init(
+	b browser.Notifications, editor text.Editor, lock sync.Locker,
+) {
 	s.editor.Editor = editor
 	s.editor.Locker = lock
+	s.editor.Notifications = b
 	s.ctx, s.cancelCtx = context.WithCancel(context.Background())
 }
 
@@ -160,7 +168,7 @@ func (s *Server) SubscribeCommand(srv Editor_SubscribeCommandServer) error {
 		return errors.New("receive subscribe command request: missing request")
 	}
 
-	clientStream := newCommandClientStream(s.ctx, srv, s.editor)
+	clientStream := newCommandClientStream(s.ctx, srv)
 	man := makeStdMan(req.GetCommand())
 
 	s.editor.Lock()
@@ -169,6 +177,25 @@ func (s *Server) SubscribeCommand(srv Editor_SubscribeCommandServer) error {
 	if err != nil {
 		return err
 	}
+
+	go func() {
+		for {
+			select {
+			case errMsg := <-clientStream.handleCommand:
+				if errMsg != "" {
+					s.editor.Lock()
+					err := s.editor.Notify(notifications.LevelError, errMsg)
+					if err != nil {
+						s.log(log.ErrorLevel, "%s", errMsg)
+						s.log(log.WarnLevel, "notify: %v", err)
+					}
+					s.editor.Unlock()
+				}
+			case <-s.ctx.Done():
+				return
+			}
+		}
+	}()
 
 	resp := SubscribeCommandResponse{}
 	respMsg := ServerCommandMessage{Type: ServerCommandMessage_Response, Response: &resp}

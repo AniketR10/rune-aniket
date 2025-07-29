@@ -27,6 +27,7 @@ import (
 	"io"
 	"sync"
 
+	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
@@ -36,23 +37,27 @@ import (
 // EditorResources returns a map of Permission to a ResourceServer
 // capable of serving each of the b Editor's resources.
 func EditorResources(
-	b text.Editor, publishEvent func(term.Event) bool,
+	b browser.Notifications, ed text.Editor,
+	publishEvent func(term.Event) bool,
 ) map[Permission]ResourceRegistrar {
-	s := newEditorResourceServer(b, publishEvent)
+	s := newEditorResourceServer(b, ed, publishEvent)
 	return map[Permission]ResourceRegistrar{
 		PermissionEditor: s,
 	}
 }
 
 type editorResourceServer struct {
-	b            text.Editor
+	b            browser.Notifications
+	ed           text.Editor
 	publishEvent func(term.Event) bool
 }
 
 func newEditorResourceServer(
-	b text.Editor, publishEvent func(term.Event) bool,
+	b browser.Notifications, ed text.Editor,
+	publishEvent func(term.Event) bool,
 ) *editorResourceServer {
 	ret := new(editorResourceServer)
+	ret.ed = ed
 	ret.b = b
 	ret.publishEvent = publishEvent
 	return ret
@@ -62,7 +67,7 @@ func (s *editorResourceServer) Register(
 	extensionID string, grantor Grantor, registrar rpc.ServiceRegistrar,
 	broker rpc.MuxBroker, lock sync.Locker,
 ) (io.Closer, error) {
-	server := textrpc.NewServer(s.b, lock)
+	server := textrpc.NewServer(s.b, s.ed, lock)
 	textrpc.RegisterEditorServer(registrar,
 		interruptEditorServer(server, func() {
 			s.publishEvent(term.Event{Type: term.EventInterrupt})

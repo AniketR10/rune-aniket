@@ -42,7 +42,6 @@ import (
 )
 
 type commandClientStream struct {
-	locker        sync.Locker
 	ctx           context.Context
 	handleCommand chan string
 	stream        serverStream
@@ -57,10 +56,9 @@ type serverStream interface {
 }
 
 func newCommandClientStream(
-	ctx context.Context, stream serverStream, locker sync.Locker,
+	ctx context.Context, stream serverStream,
 ) *commandClientStream {
 	return &commandClientStream{
-		locker:        locker,
 		stream:        stream,
 		ctx:           ctx,
 		handleCommand: make(chan string),
@@ -164,24 +162,11 @@ func (c *commandClientStream) HandleCommand(
 	reqMsg.Type = ServerCommandMessage_Handle
 	reqMsg.Handle = &req
 
-	c.locker.Unlock()
-	defer c.locker.Lock()
-
 	if err := c.stream.Send(&reqMsg); err != nil {
 		return fmt.Errorf("send complete request: %w", err)
 	}
 
-	select {
-	case errStr := <-c.handleCommand:
-		if errStr != "" {
-			return errors.New(errStr)
-		}
-		return nil
-	case <-c.ctx.Done():
-		return c.ctx.Err()
-	case <-ctx.Done():
-		return ctx.Err()
-	}
+	return nil
 }
 
 func (c *commandClientStream) Complete(ctx context.Context, cmd string, args []string) (
@@ -198,9 +183,6 @@ func (c *commandClientStream) Complete(ctx context.Context, cmd string, args []s
 	var reqMsg ServerCommandMessage
 	reqMsg.Type = ServerCommandMessage_Complete
 	reqMsg.Complete = &req
-
-	c.locker.Unlock()
-	defer c.locker.Lock()
 
 	if err := c.stream.Send(&reqMsg); err != nil {
 		return nil, "", fmt.Errorf("send complete request: %w", err)

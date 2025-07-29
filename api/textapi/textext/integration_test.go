@@ -33,6 +33,7 @@ import (
 	"go.uber.org/mock/gomock"
 	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/api/workspaceapi"
+	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term"
@@ -65,7 +66,7 @@ func TestIntegrationRace(t *testing.T) {
 	defer broker.Close()
 
 	edMock := texttest.NewMockEditor(ctrl)
-	resources := extension.EditorResources(edMock,
+	resources := extension.EditorResources(nopNotifications{}, edMock,
 		func(term.Event) bool { return true })
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -160,4 +161,17 @@ func TestIntegrationRace(t *testing.T) {
 
 	}
 	wg.Wait()
+}
+
+type nopNotifications struct{}
+
+func (n nopNotifications) Notify(
+	level notifications.Level, msg string, args ...interface{},
+) error {
+	return nil
+}
+func (n nopNotifications) NotifyOnce(
+	level notifications.Level, msg string, args ...interface{},
+) error {
+	return nil
 }
