@@ -219,35 +219,29 @@ func (g *GUI) Update() error {
 		g.pendingEvents = append(g.pendingEvents, keyEv)
 	}
 
-	var drawnWithPayload bool
 	// set context with default iteration
 	ctx := tui.ContextWithIteration(g.ctx, g.iteration)
 	for _, ev := range g.pendingEvents {
 		switch ev.Type {
 		case term.EventInterrupt:
-			if ev.Raw == nil {
-				if ev.UserFunc != nil {
-					ev.UserFunc()
-				} else {
-					// only call Draw again if we haven't
-					// already with a custom payload.
-					needsDraw = needsDraw || !drawnWithPayload
-					ctx = g.ctx
-				}
+			if ev.UserFunc != nil {
+				ev.UserFunc()
 				continue
 			}
-
 			var payloadCtx context.Context
-			if id, ok := tui.IterationFromRawBytes(ev.Raw); ok {
-				// override writer context with a specific iteration ID
-				// that might not be this tick's iteration ID
-				payloadCtx = tui.ContextWithIteration(g.ctx, id)
+			if ev.Raw == nil {
+				payloadCtx = context.Background() // no iterationID
 			} else {
-				// override writer context with a user-payload
-				payloadCtx = term.ContextWithPayload(g.ctx, ev.Raw)
+				if id, ok := tui.IterationFromRawBytes(ev.Raw); ok {
+					// override writer context with a specific iteration ID
+					// that might not be this tick's iteration ID
+					payloadCtx = tui.ContextWithIteration(g.ctx, id)
+				} else {
+					// override writer context with a user-payload
+					payloadCtx = term.ContextWithPayload(g.ctx, ev.Raw)
+				}
 			}
 			needsDraw = false
-			drawnWithPayload = true
 			g.drawHandler(payloadCtx)
 		case term.EventError, term.EventResize:
 			/* not dispatched by GUI */

@@ -231,6 +231,44 @@ func TestUpdate(t *testing.T) {
 		require.Equal(t, 2, called)
 	})
 
+	t.Run("if interrupt without iteration ID, mixed with regular event, calls Draw twice one with, one without iterationID", func(t *testing.T) {
+		var called int
+		mock := mockHandler{assertDraw: func(w term.Writer) {
+			switch called {
+			case 0:
+				actualIterationID, ok := tui.IterationFromContext(w.Context())
+				require.True(t, ok)
+				assert.Equal(t, int64(0), actualIterationID)
+			case 1:
+				_, ok := tui.IterationFromContext(w.Context())
+				require.False(t, ok)
+			case 2:
+				actualIterationID, ok := tui.IterationFromContext(w.Context())
+				require.True(t, ok)
+				assert.Equal(t, int64(1), actualIterationID)
+			}
+			called++
+		}, assertEvent: func(ev term.Event) (bool, bool) {
+			return false, true
+		}}
+		gui, _ := newTestGUI(t, &mock)
+
+		require.NoError(t, gui.Update())
+		require.Equal(t, 1, called)
+
+		gui.pendingEvents = append(gui.pendingEvents, term.Event{
+			Type: term.EventInterrupt,
+		})
+		gui.pendingEvents = append(gui.pendingEvents, term.Event{
+			Type: term.EventKey,
+			Ch:   'a',
+			Raw:  []byte{'a'},
+		})
+
+		require.NoError(t, gui.Update())
+		require.Equal(t, 3, called)
+	})
+
 	t.Run("if interrupt contains user function this is called before next call to Draw", func(t *testing.T) {
 		var drawCalled int
 		var userFnCalled int
