@@ -1,0 +1,340 @@
+// Unstable Build LLC ("COMPANY") CONFIDENTIAL
+//
+// Unpublished Copyright (c) 2017-2024 Unstable Build, All Rights Reserved.
+//
+// NOTICE: All information contained herein is, and remains the property of COMPANY.
+// The intellectual and technical concepts contained herein are proprietary to
+// COMPANY and may be covered by U.S. and Foreign Patents, patents in process,
+// and are protected by trade secret or copyright law. Dissemination of this information
+// or reproduction of this material is strictly forbidden unless prior written permission
+// is obtained from COMPANY. Access to the source code contained herein is hereby
+// forbidden to anyone except current COMPANY employees, managers or contractors who
+// have executed Confidentiality and Non-disclosure agreements explicitly covering such access.
+//
+// The copyright notice above does not evidence any actual or intended publication or
+// disclosure of this source code, which includes information that is confidential and/or
+// proprietary, and is a trade secret, of COMPANY. ANY REPRODUCTION, MODIFICATION,
+// DISTRIBUTION, PUBLIC  PERFORMANCE, OR PUBLIC DISPLAY OF OR THROUGH USE OF THIS SOURCE CODE
+// WITHOUT  THE EXPRESS WRITTEN CONSENT OF COMPANY IS STRICTLY PROHIBITED, AND IN
+// VIOLATION OF APPLICABLE LAWS AND INTERNATIONAL TREATIES. THE RECEIPT OR POSSESSION OF
+// THIS SOURCE CODE AND/OR RELATED INFORMATION DOES NOT CONVEY OR IMPLY ANY RIGHTS TO
+// REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
+// ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
+
+package handlerrpc
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"strings"
+	"sync/atomic"
+
+	log "github.com/sirupsen/logrus"
+	"github.com/unstablebuild/blue/logging"
+	grpc "google.golang.org/grpc"
+	"unstable.build/go-tui"
+	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/term"
+	"unstable.build/go-tui/term/termrpc"
+)
+
+var _ tui.Handler = (*SyncClientStream[StreamMessage])(nil)
+
+// SyncClientStream implements a tui.Handler (+handler.Floating) server over
+// a grpc.ServerStream, synchronously. This should only be used in tests.
+type SyncClientStream[T StreamMessage] struct {
+	ctx       context.Context
+	stream    grpc.ServerStream
+	closeChan chan error
+	closed    atomic.Bool
+	height    atomic.Int32
+	width     atomic.Int32
+	newT      func() T
+}
+
+// NewSyncClientStream allocates storage for a new SyncClientStream and initializes it
+// with the given grpc.ServerStream and type parameter constructor. The given locker
+// is used to unlock before I/O is performed; if no synchronization is needed
+// then a nop locker should be used.
+func NewSyncClientStream[T StreamMessage](
+	ctx context.Context, srv grpc.ServerStream, newT func() T,
+) *SyncClientStream[T] {
+	return &SyncClientStream[T]{
+		ctx:       ctx,
+		stream:    srv,
+		closeChan: make(chan error),
+		newT:      newT,
+	}
+}
+
+// ReceiveMessages blocks until all messages have been received and the stream
+// is ready to be closed.
+func (s *SyncClientStream[T]) ReceiveMessages() error {
+	select {
+	case err := <-s.closeChan:
+		return err
+	case <-s.ctx.Done():
+		return s.ctx.Err()
+	}
+}
+
+// Handle satisfies Handler.
+func (s *SyncClientStream[T]) Handle(ev term.Event) (exit, handled bool) {
+	var tev termrpc.Event
+	err := tev.FromModel(ev)
+	if err != nil {
+		s.closeStream(fmt.Errorf("convert ev to proto ev: %w", err))
+		return false, false
+	}
+	req := HandleStreamRequest{Event: &tev}
+	sendMsg := ServerMessage{Type: MessageType_Handle, Handle: &req}
+	if err := s.stream.SendMsg(&sendMsg); err != nil {
+		s.closeStream(fmt.Errorf("send handle message: %w", err))
+		return
+	}
+
+	recvMsg := s.newT()
+	if err := s.stream.RecvMsg(recvMsg); err != nil {
+		s.closeStream(fmt.Errorf("receive handle message: %w", err))
+		return
+	}
+
+	if tpe := recvMsg.GetType(); tpe != MessageType_Handle {
+		err := fmt.Errorf("receive handle message: received extraneous msg: %v", tpe)
+		s.closeStream(err)
+		return
+	}
+
+	handle := recvMsg.GetHandle()
+	exit = handle.GetQuit()
+	handled = handle.GetHandled()
+	return
+}
+
+// Cursor satisfies Handler.
+func (s *SyncClientStream[T]) Cursor() (c term.Coordinates, cs term.CursorStyle, show bool) {
+	var req CursorStreamRequest
+	sendMsg := ServerMessage{Type: MessageType_Cursor, Cursor: &req}
+	err := s.stream.SendMsg(&sendMsg)
+	if err != nil {
+		err := fmt.Errorf("send cursor message: %w", err)
+		s.closeStream(err)
+		return
+	}
+
+	recvMsg := s.newT()
+	if err := s.stream.RecvMsg(recvMsg); err != nil {
+		s.closeStream(fmt.Errorf("receive cursor message: %w", err))
+		return
+	}
+
+	if tpe := recvMsg.GetType(); tpe != MessageType_Cursor {
+		err := fmt.Errorf("receive cursor message: received extraneous msg: %v", tpe)
+		s.closeStream(err)
+		return
+	}
+
+	cursor := recvMsg.GetCursor()
+	show = cursor.GetShow()
+	if !show {
+		return
+	}
+	cs = term.CursorStyle(cursor.GetStyle())
+	c.X = int(cursor.GetPosition().GetX())
+	c.Y = int(cursor.GetPosition().GetY())
+	return
+}
+
+// Selection satisfies Handler.
+func (s *SyncClientStream[T]) Selection() (string, bool) {
+	var req SelectionStreamRequest
+	sendMsg := ServerMessage{Type: MessageType_Selection, Selection: &req}
+	err := s.stream.SendMsg(&sendMsg)
+	if err != nil {
+		err := fmt.Errorf("send selection message: %w", err)
+		s.closeStream(err)
+		return "", false
+	}
+
+	recvMsg := s.newT()
+	if err := s.stream.RecvMsg(recvMsg); err != nil {
+		s.closeStream(fmt.Errorf("receive selection message: %w", err))
+		return "", false
+	}
+
+	if tpe := recvMsg.GetType(); tpe != MessageType_Selection {
+		err := fmt.Errorf("receive selection message: received extraneous msg: %v", tpe)
+		s.closeStream(err)
+		return "", false
+	}
+
+	selection := recvMsg.GetSelection()
+	return selection.GetText(), selection.GetOk()
+}
+
+// Man satisfies Handler.
+func (s *SyncClientStream[T]) Man() tui.Manual {
+	var req ManStreamRequest
+	sendMsg := ServerMessage{Type: MessageType_Man, Man: &req}
+	err := s.stream.SendMsg(&sendMsg)
+	if err != nil {
+		err := fmt.Errorf("send man message: %w", err)
+		s.closeStream(err)
+		return tui.Manual{}
+	}
+
+	recvMsg := s.newT()
+	if err := s.stream.RecvMsg(recvMsg); err != nil {
+		s.closeStream(fmt.Errorf("receive man message: %w", err))
+		return tui.Manual{}
+	}
+
+	if tpe := recvMsg.GetType(); tpe != MessageType_Man {
+		err := fmt.Errorf("receive man message: received extraneous msg: %v", tpe)
+		s.closeStream(err)
+		return tui.Manual{}
+	}
+
+	tuiMan, err := recvMsg.GetMan().GetMan().ToModel()
+	if err != nil {
+		s.closeStream(fmt.Errorf("man to model: %w", err))
+		return tui.Manual{}
+	}
+
+	return tuiMan
+}
+
+// Resize satisfies Handler.
+func (s *SyncClientStream[T]) Resize(width, height int) {
+	// store for error displaying
+	s.height.Store(int32(height))
+	s.width.Store(int32(width))
+
+	var req ResizeStreamRequest
+	req.Width = int32(width)
+	req.Height = int32(height)
+	sendMsg := ServerMessage{Type: MessageType_Resize, Resize: &req}
+	err := s.stream.SendMsg(&sendMsg)
+	if err != nil {
+		err := fmt.Errorf("send resize message: %w", err)
+		s.closeStream(err)
+		return
+	}
+}
+
+// Draw satisfies Handler.
+func (s *SyncClientStream[T]) Draw(w term.Writer) {
+	if s.closed.Load() {
+		width := int(s.width.Load())
+		height := int(s.height.Load())
+		comp := component.NewStringWithConfig(smtgWrongCopy,
+			component.StringConfig{Alignment: component.SpanAlignmentCentered})
+		comp.Resize(width, height)
+		draw := NewDrawResponse(w.Context(), comp, width, height)
+		doDraw(w, draw.GetRows())
+		return
+	}
+	var req DrawStreamRequest
+	sendMsg := ServerMessage{Type: MessageType_Draw, Draw: &req}
+	err := s.stream.SendMsg(&sendMsg)
+	if err != nil {
+		err := fmt.Errorf("send draw message: %w", err)
+		s.closeStream(err)
+		return
+	}
+
+	recvMsg := s.newT()
+	if err := s.stream.RecvMsg(recvMsg); err != nil {
+		s.closeStream(fmt.Errorf("receive draw message: %w", err))
+		return
+	}
+
+	if tpe := recvMsg.GetType(); tpe != MessageType_Draw {
+		err := fmt.Errorf("receive draw message: received extraneous msg: %v", tpe)
+		s.closeStream(err)
+		return
+	}
+
+	doDraw(w, recvMsg.GetDraw().GetRows())
+}
+
+// Dimensions satisfies Handler.
+func (s *SyncClientStream[T]) Dimensions() (width int, height int) {
+	var req DimensionsStreamRequest
+	sendMsg := ServerMessage{Type: MessageType_Dimensions, Dimensions: &req}
+	err := s.stream.SendMsg(&sendMsg)
+	if err != nil {
+		err := fmt.Errorf("send dimensions message: %w", err)
+		s.closeStream(err)
+		return
+	}
+
+	recvMsg := s.newT()
+	if err := s.stream.RecvMsg(recvMsg); err != nil {
+		s.closeStream(fmt.Errorf("receive dimensions message: %w", err))
+		return
+	}
+
+	if tpe := recvMsg.GetType(); tpe != MessageType_Dimensions {
+		err := fmt.Errorf("receive dimensions message: received extraneous msg: %v", tpe)
+		s.closeStream(err)
+		return
+	}
+
+	width = int(recvMsg.GetDimensions().GetWidth())
+	height = int(recvMsg.GetDimensions().GetHeight())
+	return
+}
+
+// Close satisfies Handler.
+func (s *SyncClientStream[T]) Close() error {
+	var req CloseStreamRequest
+	msg := ServerMessage{Type: MessageType_Close, Close: &req}
+	err := s.stream.SendMsg(&msg)
+	if err != nil {
+		err = fmt.Errorf("send close message: %w", err)
+		s.closeStream(err)
+		return err
+	}
+
+	// Close might be called while Handle is still being processed
+	// by ServerStream. This enables stream to gracefully close
+	// at the same time we don't need to implement a multi-goroutine
+	// stream client or server. Keeps things simple at the expense
+	// of assuming that no other methods will be called by host
+	// during the processing of some other method. A small price to pay.
+	go func() {
+		recvMsg := s.newT()
+		err := s.stream.RecvMsg(recvMsg)
+		if err != nil {
+			err = fmt.Errorf("receive close message: %w", err)
+		}
+		s.closeStream(err)
+	}()
+
+	return nil
+}
+
+func (s *SyncClientStream[T]) closeStream(err error) {
+	if !s.closed.CompareAndSwap(false, true) {
+		s.log(log.TraceLevel, "close stream called multiple times")
+		return
+	}
+	if err != nil &&
+		(errors.Is(err, io.EOF) || strings.Contains(err.Error(), "context canceled")) {
+		err = nil
+	}
+	if err != nil {
+		s.log(log.ErrorLevel, "closing stream due to error: %v", err)
+	}
+	select {
+	case s.closeChan <- err:
+	default:
+	}
+}
+
+func (s *SyncClientStream[T]) log(level log.Level, msg string, args ...interface{}) {
+	log.WithField(logging.KeyClass, "handlerrpc.SyncClientStream").Logf(level, msg, args...)
+}

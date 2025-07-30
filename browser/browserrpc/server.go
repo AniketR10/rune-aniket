@@ -111,12 +111,19 @@ func (s *Server) Split(srv WindowManager_SplitServer) error {
 	uri := req.GetUri()
 
 	var handler browserapi.Handler
-	var client *handlerrpc.ClientStream[*SplitWindowMessage]
+	var client clientIfc
 	if uri == "" {
-		client = handlerrpc.NewClientStream(s.serverCtx, srv,
-			func() *SplitWindowMessage {
-				return new(SplitWindowMessage)
-			}, s.browser)
+		if s.syncMode {
+			client = handlerrpc.NewSyncClientStream(s.serverCtx, srv,
+				func() *SplitWindowMessage {
+					return new(SplitWindowMessage)
+				})
+		} else {
+			client = handlerrpc.NewClientStream(s.serverCtx, srv,
+				func() *SplitWindowMessage {
+					return new(SplitWindowMessage)
+				}, s.browser.PublishEvent)
+		}
 		handler = &streamHandler{mu: s.browser, Handler: client}
 	} else {
 		h, err := s.getResourceHandler(uri)
@@ -135,7 +142,7 @@ func (s *Server) Split(srv WindowManager_SplitServer) error {
 
 	id := outWin.WindowID()
 	resp := handlerrpc.InstallResourceResponse{WindowId: id}
-	respMsg := handlerrpc.ServerMessage{Response: &resp}
+	respMsg := handlerrpc.ServerMessage{Type: handlerrpc.MessageType_Response, Response: &resp}
 	if err := srv.SendMsg(&respMsg); err != nil {
 		return fmt.Errorf("send install response: %w", err)
 	}
@@ -157,10 +164,18 @@ func (s *Server) Bar(srv WindowManager_BarServer) error {
 	if msg.GetType() != handlerrpc.MessageType_Request || req == nil {
 		return errors.New("receive bar request: missing request")
 	}
-	client := handlerrpc.NewClientStream(s.serverCtx, srv,
-		func() *BarMessage {
-			return new(BarMessage)
-		}, s.browser)
+	var client clientIfc
+	if s.syncMode {
+		client = handlerrpc.NewSyncClientStream(s.serverCtx, srv,
+			func() *SplitWindowMessage {
+				return new(SplitWindowMessage)
+			})
+	} else {
+		client = handlerrpc.NewClientStream(s.serverCtx, srv,
+			func() *BarMessage {
+				return new(BarMessage)
+			}, s.browser.PublishEvent)
+	}
 
 	cfg := browserapi.BarConfig{}
 	cfg.Orientation = protoToModelOrientation(req.GetOrientation())
@@ -176,7 +191,7 @@ func (s *Server) Bar(srv WindowManager_BarServer) error {
 		return err
 	}
 	resp := handlerrpc.InstallResourceResponse{}
-	respMsg := handlerrpc.ServerMessage{Response: &resp}
+	respMsg := handlerrpc.ServerMessage{Type: handlerrpc.MessageType_Response, Response: &resp}
 	if err := srv.SendMsg(&respMsg); err != nil {
 		return fmt.Errorf("send bar install response: %w", err)
 	}
@@ -297,10 +312,18 @@ func (s *Server) Floating(srv WindowManager_FloatingServer) error {
 		return errors.New("receive initial request: missing request")
 	}
 
-	client := handlerrpc.NewClientStream[*FloatingWindowMessage](s.serverCtx, srv,
-		func() *FloatingWindowMessage {
-			return new(FloatingWindowMessage)
-		}, s.browser)
+	var client clientIfc
+	if s.syncMode {
+		client = handlerrpc.NewSyncClientStream(s.serverCtx, srv,
+			func() *SplitWindowMessage {
+				return new(SplitWindowMessage)
+			})
+	} else {
+		client = handlerrpc.NewClientStream[*FloatingWindowMessage](s.serverCtx, srv,
+			func() *FloatingWindowMessage {
+				return new(FloatingWindowMessage)
+			}, s.browser.PublishEvent)
+	}
 
 	at := req.GetOffset().ToModel()
 	alignment := component.Alignment(req.GetAlignment())
@@ -320,7 +343,7 @@ func (s *Server) Floating(srv WindowManager_FloatingServer) error {
 
 	id := win.WindowID()
 	resp := handlerrpc.InstallResourceResponse{WindowId: id}
-	respMsg := handlerrpc.ServerMessage{Response: &resp}
+	respMsg := handlerrpc.ServerMessage{Type: handlerrpc.MessageType_Response, Response: &resp}
 	if err := srv.SendMsg(&respMsg); err != nil {
 		// don't close window, let next call to client stream tui.Handler
 		// to error out and bubble up to user accordingly.
@@ -355,10 +378,18 @@ func (s *Server) Tab(srv WindowManager_TabServer) error {
 		icon = []rune(iconStr)[0]
 	}
 
-	client := handlerrpc.NewClientStream(s.serverCtx, srv,
-		func() *TabMessage {
-			return new(TabMessage)
-		}, s.browser)
+	var client clientIfc
+	if s.syncMode {
+		client = handlerrpc.NewSyncClientStream(s.serverCtx, srv,
+			func() *SplitWindowMessage {
+				return new(SplitWindowMessage)
+			})
+	} else {
+		client = handlerrpc.NewClientStream(s.serverCtx, srv,
+			func() *TabMessage {
+				return new(TabMessage)
+			}, s.browser.PublishEvent)
+	}
 	handler := &streamHandler{mu: s.browser, Handler: client}
 
 	s.browser.Lock()
@@ -369,7 +400,7 @@ func (s *Server) Tab(srv WindowManager_TabServer) error {
 	}
 
 	resp := handlerrpc.InstallResourceResponse{}
-	respMsg := handlerrpc.ServerMessage{Response: &resp}
+	respMsg := handlerrpc.ServerMessage{Type: handlerrpc.MessageType_Response, Response: &resp}
 	if err := srv.SendMsg(&respMsg); err != nil {
 		return fmt.Errorf("send install response: %w", err)
 	}
@@ -399,12 +430,19 @@ func (s *Server) SetContent(srv WindowManager_SetContentServer) error {
 	uri := req.GetUri()
 
 	var handler browserapi.Handler
-	var client *handlerrpc.ClientStream[*WindowSetContentMessage]
+	var client clientIfc
 	if uri == "" {
-		client = handlerrpc.NewClientStream(s.serverCtx, srv,
-			func() *WindowSetContentMessage {
-				return new(WindowSetContentMessage)
-			}, s.browser)
+		if s.syncMode {
+			client = handlerrpc.NewSyncClientStream(s.serverCtx, srv,
+				func() *SplitWindowMessage {
+					return new(SplitWindowMessage)
+				})
+		} else {
+			client = handlerrpc.NewClientStream(s.serverCtx, srv,
+				func() *WindowSetContentMessage {
+					return new(WindowSetContentMessage)
+				}, s.browser.PublishEvent)
+		}
 		handler = &streamHandler{mu: s.browser, Handler: client}
 	} else {
 		h, err := s.getResourceHandler(uri)
@@ -422,7 +460,7 @@ func (s *Server) SetContent(srv WindowManager_SetContentServer) error {
 	}
 
 	resp := handlerrpc.InstallResourceResponse{WindowId: inWin.WindowID()}
-	respMsg := handlerrpc.ServerMessage{Response: &resp}
+	respMsg := handlerrpc.ServerMessage{Type: handlerrpc.MessageType_Response, Response: &resp}
 	if err := srv.SendMsg(&respMsg); err != nil {
 		return fmt.Errorf("send install response: %w", err)
 	}
@@ -593,4 +631,9 @@ func (f *floatingStreamHandler) Resize(width, height int) {
 		return
 	}
 	f.Floating.Resize(width, height)
+}
+
+type clientIfc interface {
+	browserapi.Floating
+	ReceiveMessages() error
 }

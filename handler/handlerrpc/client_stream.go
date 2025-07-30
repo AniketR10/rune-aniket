@@ -80,41 +80,65 @@ type StreamMessage interface {
 	SetDimensions(*DimensionsStreamResponse)
 }
 
-var _ tui.Handler = (*ClientStream[StreamMessage])(nil)
-
 // ClientStream implements a tui.Handler (+handler.Floating) server over
 // a grpc.ServerStream.
 type ClientStream[T StreamMessage] struct {
 	ctx       context.Context
+	cancel    func()
 	stream    grpc.ServerStream
-	locker    sync.Locker
 	closeChan chan error
+	publisher func(ev term.Event) error
+	exit      atomic.Bool
 	closed    atomic.Bool
-	height    atomic.Int32
-	width     atomic.Int32
 	newT      func() T
+
+	// these are all cached when client calls Draw
+	mu             sync.Mutex
+	contextPayload string
+	height         int
+	width          int
+	state          asyncState
+	cursor         *CursorStreamResponse
+	selection      *SelectionStreamResponse
+	man            *ManStreamResponse
+	dimensions     *DimensionsStreamResponse
+
+	req struct {
+		height, width int
+		ctx           context.Context
+	}
+	resp struct {
+		*DrawStreamResponse
+		ctx           context.Context
+		height, width int
+	}
 }
 
 // NewClientStream allocates storage for a new ClientStream and initializes it
-// with the given grpc.ServerStream and type parameter constructor. The given locker
-// is used to unlock before I/O is performed; if no synchronization is needed
-// then a nop locker should be used.
+// with the given grpc.ServerStream and type parameter constructor.
 func NewClientStream[T StreamMessage](
 	ctx context.Context, srv grpc.ServerStream, newT func() T,
-	locker sync.Locker,
+	publisher func(ev term.Event) error,
 ) *ClientStream[T] {
-	return &ClientStream[T]{
+	ctx, cancel := context.WithCancel(ctx)
+	s := &ClientStream[T]{
 		ctx:       ctx,
+		cancel:    cancel,
 		stream:    srv,
 		closeChan: make(chan error),
 		newT:      newT,
-		locker:    locker,
+		publisher: publisher,
 	}
+	s.contextPayload = makeContextPayload(s)
+	s.resp.ctx = context.Background()
+	return s
 }
 
 // ReceiveMessages blocks until all messages have been received and the stream
 // is ready to be closed.
 func (s *ClientStream[T]) ReceiveMessages() error {
+	go s.closeStream(s.receiveMessages())
+
 	select {
 	case err := <-s.closeChan:
 		return err
@@ -125,6 +149,13 @@ func (s *ClientStream[T]) ReceiveMessages() error {
 
 // Handle satisfies Handler.
 func (s *ClientStream[T]) Handle(ev term.Event) (exit, handled bool) {
+	if s.exit.Load() {
+		exit = true
+		return
+	}
+	if s.closed.Load() {
+		return
+	}
 	var tev termrpc.Event
 	err := tev.FromModel(ev)
 	if err != nil {
@@ -138,54 +169,21 @@ func (s *ClientStream[T]) Handle(ev term.Event) (exit, handled bool) {
 		return
 	}
 
-	s.locker.Unlock()
-	defer s.locker.Lock()
+	// it's important for Handle to remain asynchronous:
+	// it allows for extensions to call API and avoid deadlocks
+	// due to extensions needing the global lock to be open to call the host
+	// at the same time the host is locked waiting for Handle to return.
 
-	recvMsg := s.newT()
-	if err := s.stream.RecvMsg(recvMsg); err != nil {
-		s.closeStream(fmt.Errorf("receive handle message: %w", err))
-		return
-	}
-
-	if tpe := recvMsg.GetType(); tpe != MessageType_Handle {
-		err := fmt.Errorf("receive handle message: received extraneous msg: %v", tpe)
-		s.closeStream(err)
-		return
-	}
-
-	handle := recvMsg.GetHandle()
-	exit = handle.GetQuit()
-	handled = handle.GetHandled()
+	handled = true
 	return
 }
 
-// Cursor satisfies Handler.
+// Cursor satisfies Handler. This method returns the last cursor collected by Draw.
 func (s *ClientStream[T]) Cursor() (c term.Coordinates, cs term.CursorStyle, show bool) {
-	var req CursorStreamRequest
-	sendMsg := ServerMessage{Type: MessageType_Cursor, Cursor: &req}
-	err := s.stream.SendMsg(&sendMsg)
-	if err != nil {
-		err := fmt.Errorf("send cursor message: %w", err)
-		s.closeStream(err)
-		return
-	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-	s.locker.Unlock()
-	defer s.locker.Lock()
-
-	recvMsg := s.newT()
-	if err := s.stream.RecvMsg(recvMsg); err != nil {
-		s.closeStream(fmt.Errorf("receive cursor message: %w", err))
-		return
-	}
-
-	if tpe := recvMsg.GetType(); tpe != MessageType_Cursor {
-		err := fmt.Errorf("receive cursor message: received extraneous msg: %v", tpe)
-		s.closeStream(err)
-		return
-	}
-
-	cursor := recvMsg.GetCursor()
+	cursor := s.cursor
 	show = cursor.GetShow()
 	if !show {
 		return
@@ -196,76 +194,41 @@ func (s *ClientStream[T]) Cursor() (c term.Coordinates, cs term.CursorStyle, sho
 	return
 }
 
-// Selection satisfies Handler.
+// Selection satisfies Handler. This method returns the last selection collected by Draw.
 func (s *ClientStream[T]) Selection() (string, bool) {
-	var req SelectionStreamRequest
-	sendMsg := ServerMessage{Type: MessageType_Selection, Selection: &req}
-	err := s.stream.SendMsg(&sendMsg)
-	if err != nil {
-		err := fmt.Errorf("send selection message: %w", err)
-		s.closeStream(err)
-		return "", false
-	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-	s.locker.Unlock()
-	defer s.locker.Lock()
-
-	recvMsg := s.newT()
-	if err := s.stream.RecvMsg(recvMsg); err != nil {
-		s.closeStream(fmt.Errorf("receive selection message: %w", err))
-		return "", false
-	}
-
-	if tpe := recvMsg.GetType(); tpe != MessageType_Selection {
-		err := fmt.Errorf("receive selection message: received extraneous msg: %v", tpe)
-		s.closeStream(err)
-		return "", false
-	}
-
-	selection := recvMsg.GetSelection()
+	selection := s.selection
 	return selection.GetText(), selection.GetOk()
 }
 
-// Man satisfies Handler.
+// Man satisfies Handler. This method is not implemented
+// to avoid triggering unimplemented panics.
 func (s *ClientStream[T]) Man() tui.Manual {
-	var req ManStreamRequest
-	sendMsg := ServerMessage{Type: MessageType_Man, Man: &req}
-	err := s.stream.SendMsg(&sendMsg)
-	if err != nil {
-		err := fmt.Errorf("send man message: %w", err)
-		s.closeStream(err)
-		return tui.Manual{}
-	}
-
-	s.locker.Unlock()
-	defer s.locker.Lock()
-
-	recvMsg := s.newT()
-	if err := s.stream.RecvMsg(recvMsg); err != nil {
-		s.closeStream(fmt.Errorf("receive man message: %w", err))
-		return tui.Manual{}
-	}
-
-	if tpe := recvMsg.GetType(); tpe != MessageType_Man {
-		err := fmt.Errorf("receive man message: received extraneous msg: %v", tpe)
-		s.closeStream(err)
-		return tui.Manual{}
-	}
-
-	tuiMan, err := recvMsg.GetMan().GetMan().ToModel()
+	/* man := s.man.Load().(*ManStreamResponse)
+	tuiMan, err := man.GetMan().ToModel()
 	if err != nil {
 		s.closeStream(fmt.Errorf("man to model: %w", err))
 		return tui.Manual{}
 	}
-
 	return tuiMan
+	*/
+	panic("unimplemented")
 }
 
 // Resize satisfies Handler.
 func (s *ClientStream[T]) Resize(width, height int) {
-	// store for error displaying
-	s.height.Store(int32(height))
-	s.width.Store(int32(width))
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// store in any case for error displaying
+	s.height = height
+	s.width = width
+
+	if s.closed.Load() {
+		return
+	}
 
 	var req ResizeStreamRequest
 	req.Width = int32(width)
@@ -279,78 +242,70 @@ func (s *ClientStream[T]) Resize(width, height int) {
 	}
 }
 
-// Draw satisfies Handler.
-func (s *ClientStream[T]) Draw(w term.Writer) {
-	if s.closed.Load() {
-		width := int(s.width.Load())
-		height := int(s.height.Load())
-		comp := component.NewStringWithConfig(smtgWrongCopy,
-			component.StringConfig{Alignment: component.SpanAlignmentCentered})
-		comp.Resize(width, height)
-		draw := NewDrawResponse(w.Context(), comp, width, height)
-		doDraw(w, draw.GetRows())
-		return
-	}
-	var req DrawStreamRequest
-	sendMsg := ServerMessage{Type: MessageType_Draw, Draw: &req}
-	err := s.stream.SendMsg(&sendMsg)
-	if err != nil {
-		err := fmt.Errorf("send draw message: %w", err)
-		s.closeStream(err)
-		return
-	}
+// Dimensions satisfies Handler. This method returns the last
+// dimensions collected by Draw.
+func (s *ClientStream[T]) Dimensions() (width int, height int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-	s.locker.Unlock()
-	defer s.locker.Lock()
-
-	recvMsg := s.newT()
-	if err := s.stream.RecvMsg(recvMsg); err != nil {
-		s.closeStream(fmt.Errorf("receive draw message: %w", err))
-		return
-	}
-
-	if tpe := recvMsg.GetType(); tpe != MessageType_Draw {
-		err := fmt.Errorf("receive draw message: received extraneous msg: %v", tpe)
-		s.closeStream(err)
-		return
-	}
-
-	doDraw(w, recvMsg.GetDraw().GetRows())
+	dim := s.dimensions
+	width = int(dim.GetWidth())
+	height = int(dim.GetHeight())
+	return
 }
 
-// Dimensions satisfies Handler.
-func (s *ClientStream[T]) Dimensions() (width int, height int) {
-	var req DimensionsStreamRequest
-	sendMsg := ServerMessage{Type: MessageType_Dimensions, Dimensions: &req}
-	err := s.stream.SendMsg(&sendMsg)
-	if err != nil {
-		err := fmt.Errorf("send dimensions message: %w", err)
-		s.closeStream(err)
-		return
+// Draw satisfies Handler.
+func (s *ClientStream[T]) Draw(w term.Writer) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	ctx := w.Context()
+	iterationID, reqIsTick := tui.IterationFromContext(ctx)
+
+	switch s.state {
+	case stateAsyncIdle:
+		readySameDimensions := s.width == s.resp.width &&
+			s.height == s.resp.height
+		respIterationID, respIsTick := tui.IterationFromContext(s.resp.ctx)
+		olderIterationID := respIsTick && iterationID <= respIterationID
+		reqIsSameIterationID := (reqIsTick && olderIterationID)
+		selfInterrupt := !reqIsTick && !respIsTick && s.contextPayloadIsSelf(ctx)
+
+		if readySameDimensions && (reqIsSameIterationID || selfInterrupt ||
+			s.contextPayloadIsOtherAsyncClient(ctx)) {
+			s.drawReady(w)
+		} else if s.scheduleDrawRequest(ctx, reqIsTick) {
+			s.drawPending(w)
+		} else {
+			s.drawError(w)
+		}
+	case stateAsyncPending:
+		pendingRespSameDimensions := s.width == s.req.width &&
+			s.height == s.req.height
+		pendingResponseIterationID, pendingResponseIsTick := tui.IterationFromContext(s.req.ctx)
+		olderIterationID := pendingResponseIsTick && iterationID <= pendingResponseIterationID
+		pendingResponseIsSameIterationID := (reqIsTick && olderIterationID)
+
+		if pendingRespSameDimensions && (pendingResponseIsSameIterationID ||
+			s.contextPayloadIsOtherAsyncClient(ctx)) {
+			s.drawPending(w)
+		} else if s.scheduleDrawRequest(ctx, reqIsTick) {
+			s.drawPending(w)
+		} else {
+			s.drawError(w)
+		}
+	case stateAsyncCircuitBreak:
+		s.drawError(w)
+	default:
+		panic("unknown state")
 	}
-
-	s.locker.Unlock()
-	defer s.locker.Lock()
-
-	recvMsg := s.newT()
-	if err := s.stream.RecvMsg(recvMsg); err != nil {
-		s.closeStream(fmt.Errorf("receive dimensions message: %w", err))
-		return
-	}
-
-	if tpe := recvMsg.GetType(); tpe != MessageType_Dimensions {
-		err := fmt.Errorf("receive dimensions message: received extraneous msg: %v", tpe)
-		s.closeStream(err)
-		return
-	}
-
-	width = int(recvMsg.GetDimensions().GetWidth())
-	height = int(recvMsg.GetDimensions().GetHeight())
-	return
 }
 
 // Close satisfies Handler.
 func (s *ClientStream[T]) Close() error {
+	if s.closed.Load() {
+		return nil
+	}
 	var req CloseStreamRequest
 	msg := ServerMessage{Type: MessageType_Close, Close: &req}
 	err := s.stream.SendMsg(&msg)
@@ -360,22 +315,194 @@ func (s *ClientStream[T]) Close() error {
 		return err
 	}
 
-	// Close might be called while Handle is still being processed
-	// by ServerStream. This enables stream to gracefully close
-	// at the same time we don't need to implement a multi-goroutine
-	// stream client or server. Keeps things simple at the expense
-	// of assuming that no other methods will be called by host
-	// during the processing of some other method. A small price to pay.
-	go func() {
-		recvMsg := s.newT()
-		err := s.stream.RecvMsg(recvMsg)
+	return nil
+}
+
+const (
+	smtgWrongCopy = `
+
+          ___
+         /___/\_               
+        _\   \/_/\__           
+      __\       \/_/\          
+      \   __    __ \ \         
+     __\  \_\   \_\ \ \   __   
+    /_/\\   __   __  \ \_/_/\  
+    \_\/_\__\/\__\/\__\/_\_\/  
+       \_\/_/\       /_\_\/    
+          \_\/       \_\/      
+    
+
+Uh, Houston, we've had a problem
+`
+)
+
+var _ tui.Handler = (*ClientStream[StreamMessage])(nil)
+
+type asyncState uint8
+
+const (
+	stateAsyncIdle asyncState = iota
+	stateAsyncPending
+	stateAsyncCircuitBreak
+)
+
+func (s *ClientStream[T]) scheduleDrawRequest(ctx context.Context, reqIsTick bool) bool {
+	// make sure that all requests that we schedule interrupts for have
+	// either an iteration ID or a payload that we can recognize.
+	if !reqIsTick {
+		ctx = s.contextWithSelfPayload(ctx)
+	}
+
+	s.state = stateAsyncPending
+	s.req.width = s.width
+	s.req.height = s.height
+	s.req.ctx = ctx
+
+	{
+		var req CursorStreamRequest
+		sendMsg := ServerMessage{Type: MessageType_Cursor, Cursor: &req}
+		err := s.stream.SendMsg(&sendMsg)
 		if err != nil {
-			err = fmt.Errorf("receive close message: %w", err)
+			err := fmt.Errorf("send cursor message: %w", err)
+			s.closeStream(err)
+			return false
 		}
-		s.closeStream(err)
+	}
+	{
+		var req SelectionStreamRequest
+		sendMsg := ServerMessage{Type: MessageType_Selection, Selection: &req}
+		err := s.stream.SendMsg(&sendMsg)
+		if err != nil {
+			err := fmt.Errorf("send selection message: %w", err)
+			s.closeStream(err)
+			return false
+		}
+	}
+	{
+		var req DimensionsStreamRequest
+		sendMsg := ServerMessage{Type: MessageType_Dimensions, Dimensions: &req}
+		err := s.stream.SendMsg(&sendMsg)
+		if err != nil {
+			err := fmt.Errorf("send dimensions message: %w", err)
+			s.closeStream(err)
+			return false
+		}
+	}
+
+	// finally send a draw request, which will trigger the final interrupt
+	{
+		var req DrawStreamRequest
+		sendMsg := ServerMessage{Type: MessageType_Draw, Draw: &req}
+		err := s.stream.SendMsg(&sendMsg)
+		if err != nil {
+			err := fmt.Errorf("send draw message: %w", err)
+			s.closeStream(err)
+			return false
+		}
+	}
+
+	return true
+}
+
+func (s *ClientStream[T]) processDraw(resp *DrawStreamResponse) {
+	payload, _ := term.PayloadFromContext(s.req.ctx)
+
+	//nolint:errcheck
+	defer s.publisher(term.Event{Type: term.EventInterrupt, Raw: payload})
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.resp.DrawStreamResponse = resp
+
+	s.resp.ctx = s.req.ctx
+	s.resp.height = int(s.req.height)
+	s.resp.width = int(s.req.width)
+
+	s.state = stateAsyncIdle
+}
+
+func (s *ClientStream[T]) receiveMessages() error {
+	defer func() {
+		s.cancel()
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		s.state = stateAsyncCircuitBreak
 	}()
 
-	return nil
+	for {
+		recvMsg := s.newT()
+		if err := s.stream.RecvMsg(recvMsg); err != nil {
+			return fmt.Errorf("stream receive message: %w", err)
+		}
+
+		switch recvMsg.GetType() {
+		case MessageType_Draw:
+			draw := recvMsg.GetDraw()
+			if draw == nil {
+				return fmt.Errorf("receive draw message: missing data")
+			}
+			s.processDraw(draw)
+		case MessageType_Man:
+			man := recvMsg.GetMan()
+			if man == nil || man.GetMan() == nil {
+				return fmt.Errorf("receive man message: missing data")
+			}
+			s.mu.Lock()
+			s.man = man
+			s.mu.Unlock()
+		case MessageType_Cursor:
+			cursor := recvMsg.GetCursor()
+			if cursor == nil {
+				return fmt.Errorf("receive cursor message: missing data")
+			}
+			s.mu.Lock()
+			s.cursor = cursor
+			s.mu.Unlock()
+		case MessageType_Selection:
+			selection := recvMsg.GetSelection()
+			if selection == nil {
+				return fmt.Errorf("receive selection message: missing data")
+			}
+			s.mu.Lock()
+			s.selection = selection
+			s.mu.Unlock()
+		case MessageType_Dimensions:
+			dimensions := recvMsg.GetDimensions()
+			if dimensions == nil {
+				return fmt.Errorf("receive dimensions message: missing data")
+			}
+			s.mu.Lock()
+			s.dimensions = dimensions
+			s.mu.Unlock()
+		case MessageType_Handle:
+			handle := recvMsg.GetHandle()
+			// GetHandled is ignored; Handle always returns true
+			exit := handle.GetQuit()
+			if exit {
+				s.exit.Store(true)
+				// handle response might arrive late, and EventNone
+				// dispatched to a different Handler. This is an acceptable
+				// risk: when user focuses back on handler and sends an event
+				// then Handle will retur exit. This should generally not happen.
+				err := s.publisher(term.Event{Type: term.EventNone})
+				if err != nil {
+					return fmt.Errorf("publish event none: %w", err)
+
+				}
+				// do not return here, allow Close to be
+				// called and propagated to server
+			}
+		case MessageType_Resize:
+			/* nothing to do*/
+		case MessageType_Close:
+			return nil
+		default:
+			/* case MessageType_Request, MessageType_Response: */
+			return fmt.Errorf("received extraneous message type: %d", recvMsg.GetType())
+		}
+	}
 }
 
 func (s *ClientStream[T]) closeStream(err error) {
@@ -390,12 +517,65 @@ func (s *ClientStream[T]) closeStream(err error) {
 	if err != nil {
 		s.log(log.ErrorLevel, "closing stream due to error: %v", err)
 	}
+	// this forces ReceiveMessages to return, which in turn trickles server
+	// to close stream, and receiveMessages RecvMsg returns with error.
 	select {
 	case s.closeChan <- err:
 	default:
 	}
 }
 
+func (s *ClientStream[T]) drawError(w term.Writer) {
+	comp := component.NewStringWithConfig(smtgWrongCopy,
+		component.StringConfig{Alignment: component.SpanAlignmentCentered})
+	comp.Resize(s.width, s.height)
+	comp.Draw(w)
+}
+
+func (s *ClientStream[T]) drawPending(w term.Writer) {
+	if s.width == s.resp.width && s.height == s.resp.height {
+		s.drawReady(w)
+	} else {
+		loading := component.NewStringWithConfig("LOADING",
+			component.StringConfig{Alignment: component.SpanAlignmentCentered})
+		loading.Resize(s.width, s.height)
+		loading.Draw(w)
+	}
+}
+
+func (s *ClientStream[T]) drawReady(w term.Writer) {
+	doDraw(w, s.resp.DrawStreamResponse.GetRows())
+}
+
 func (s *ClientStream[T]) log(level log.Level, msg string, args ...interface{}) {
 	log.WithField(logging.KeyClass, "handlerrpc.ClientStream").Logf(level, msg, args...)
+}
+
+func (s *ClientStream[T]) contextPayloadIsSelf(ctx context.Context) bool {
+	payload, ok := term.PayloadFromContext(ctx)
+	return ok && s.contextPayload == string(payload)
+}
+
+func (s *ClientStream[T]) contextPayloadIsOtherAsyncClient(ctx context.Context) bool {
+	payload, ok := term.PayloadFromContext(ctx)
+	return ok && strings.HasPrefix(string(payload), ctxPayloadPrefix)
+}
+
+const ctxPayloadPrefix = "AsyncClient"
+
+func (s *ClientStream[T]) contextWithSelfPayload(ctx context.Context) context.Context {
+	return term.ContextWithPayload(ctx, []byte(s.contextPayload))
+}
+
+func makeContextPayload[T StreamMessage](s *ClientStream[T]) string {
+	return fmt.Sprintf("%s:%p", ctxPayloadPrefix, s)
+}
+
+func doDraw(w term.Writer, rows []*termrpc.CellRow) {
+	for y, row := range rows {
+		for x, c := range row.Cells {
+			cell := c.ToModel()
+			w.SetCell(term.Coordinates{X: x, Y: y}, cell)
+		}
+	}
 }

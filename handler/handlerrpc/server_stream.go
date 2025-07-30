@@ -27,6 +27,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"strings"
 	"sync/atomic"
 
 	log "github.com/sirupsen/logrus"
@@ -82,7 +83,8 @@ func (c *ServerStream[T]) ReceiveMessages() {
 		var recvMsg ServerMessage
 		err := c.stream.RecvMsg(&recvMsg)
 		if err != nil {
-			if errors.Is(err, io.EOF) || status.Code(err) == codes.Canceled {
+			if strings.Contains(err.Error(), io.EOF.Error()) ||
+				status.Code(err) == codes.Canceled {
 				c.log(log.DebugLevel, "stream is closing")
 			} else {
 				c.log(log.ErrorLevel, "stream receive: %v", err)
@@ -168,8 +170,6 @@ func (c *ServerStream[T]) ReceiveMessages() {
 				resp.Height = int32(height)
 				sendMsg.SetDimensions(&resp)
 				err = c.stream.SendMsg(sendMsg)
-			} else {
-				err = errors.New("called dimensions on non-floating handler")
 			}
 
 		case MessageType_Close:
