@@ -62,8 +62,7 @@ const (
 type GUI struct {
 	ctx               context.Context
 	cancelCtx         func()
-	mu                sync.Mutex
-	handlerMu         sync.Locker
+	mu                sync.Locker
 	fontManager       *font.Manager
 	updateChan        chan term.Event
 	handler           tui.Handler
@@ -117,7 +116,7 @@ func New(handler tui.Handler, options ...Option) (*GUI, error) {
 		return nil, fmt.Errorf("font manager: %v", err)
 	}
 	ret := &GUI{
-		handlerMu:        new(sync.Mutex),
+		mu:               new(sync.Mutex),
 		handler:          handler,
 		updateChan:       make(chan term.Event, 50),
 		bgOpacity:        1,
@@ -247,7 +246,7 @@ func (g *GUI) Update() error {
 			/* not dispatched by GUI */
 		default:
 			needsDraw = true
-			exit := g.handleEvent(ev)
+			exit, _ := g.handler.Handle(ev)
 			if exit {
 				return ErrHandlerExited
 			}
@@ -276,7 +275,9 @@ func (g *GUI) Layout(width, height int) (int, int) {
 			// reloading font shouldn't really fail
 			_ = g.fontManager.ReloadFont()
 		}
+		g.mu.Lock()
 		g.resize(width, height, s)
+		g.mu.Unlock()
 	}
 
 	return int(float64(width) * s), int(float64(height) * s)
@@ -436,25 +437,13 @@ func (g *GUI) AvailableFontFamilies() (iterator.Iterator[string], error) {
 	return g.fontManager.AvailableFontFamilies()
 }
 
-func (g *GUI) handleEvent(ev term.Event) bool {
-	g.handlerMu.Lock()
-	defer g.handlerMu.Unlock()
-
-	exit, _ := g.handler.Handle(ev)
-	return exit
-}
-
 func (g *GUI) drawHandler(ctx context.Context) {
 	g.writer.SetContext(ctx)
 	_ = g.writer.Clear(g.defaultAttr)
-	g.needsDraw = false
-	g.needsRender = true
-
-	g.handlerMu.Lock()
-	defer g.handlerMu.Unlock()
-
 	g.handler.Draw(g.writer)
 	g.cursor.pos, g.cursor.style, g.cursor.show = g.handler.Cursor()
+	g.needsDraw = false
+	g.needsRender = true
 }
 
 func (g *GUI) resize(width, height int, deviceScale float64) {
@@ -468,17 +457,13 @@ func (g *GUI) resize(width, height int, deviceScale float64) {
 		"device scale %f; cells width: %d, height: %d",
 		width, height, deviceScale, cellsWidth, cellsHeight)
 
+	g.handler.Resize(cellsWidth, cellsHeight)
 	g.mouse.resize(cellsWidth, cellsHeight)
 	g.writer = cell.NewBufferWriter(g.ctx, cellsWidth, cellsHeight)
 	g.renderer = newRenderer(g.width, g.height, g.deviceScale,
 		g.fontManager, g.bgOpacity, g.fgOpacity, g.enableLigatures,
 		g.cursorAttributes, g.defaultAttr)
 	g.needsDraw = true
-
-	g.handlerMu.Lock()
-	defer g.handlerMu.Unlock()
-
-	g.handler.Resize(cellsWidth, cellsHeight)
 }
 
 func (g *GUI) consumeEvents() {

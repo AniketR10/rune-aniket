@@ -133,7 +133,7 @@ func WithPublishChannel(ch chan term.Event) Option {
 // access to the GUI's root tui.Handler.
 func WithLocker(mu sync.Locker) Option {
 	return func(g *GUI) error {
-		g.handlerMu = mu
+		g.mu = mu
 		return nil
 	}
 }
