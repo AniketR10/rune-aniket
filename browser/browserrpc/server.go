@@ -99,14 +99,6 @@ func (s *Server) Split(srv WindowManager_SplitServer) error {
 	if msg.GetType() != handlerrpc.MessageType_Request || req == nil {
 		return errors.New("receive initial request: missing request")
 	}
-	inWin, ok := s.browser.Window(req.GetWindowId())
-	if !ok {
-		return fmt.Errorf("cannot find window with windowID: %d", req.GetWindowId())
-	}
-	if inWin.Closed() {
-		return fmt.Errorf("cannot split over a closed window: %d", req.GetWindowId())
-	}
-
 	orientation := protoToModelOrientation(req.GetOrientation())
 	uri := req.GetUri()
 
@@ -134,6 +126,16 @@ func (s *Server) Split(srv WindowManager_SplitServer) error {
 	}
 
 	s.browser.Lock()
+	inWin, ok := s.browser.Window(req.GetWindowId())
+	if !ok {
+		s.browser.Unlock()
+		return fmt.Errorf("cannot find window with windowID: %d", req.GetWindowId())
+	}
+	if inWin.Closed() {
+		s.browser.Unlock()
+		return fmt.Errorf("cannot split over a closed window: %d", req.GetWindowId())
+	}
+
 	outWin, err := s.browser.Split(orientation, inWin, handler)
 	s.browser.Unlock()
 	if err != nil {
@@ -419,13 +421,6 @@ func (s *Server) SetContent(srv WindowManager_SetContentServer) error {
 	if msg.GetType() != handlerrpc.MessageType_Request || req == nil {
 		return errors.New("receive initial request: missing request")
 	}
-	inWin, ok := s.browser.Window(req.GetWindowId())
-	if !ok {
-		return fmt.Errorf("cannot find window with windowID: %d", req.GetWindowId())
-	}
-	if inWin.Closed() {
-		return fmt.Errorf("cannot set content to a closed window: %d", req.GetWindowId())
-	}
 
 	uri := req.GetUri()
 
@@ -453,6 +448,16 @@ func (s *Server) SetContent(srv WindowManager_SetContentServer) error {
 	}
 
 	s.browser.Lock()
+	inWin, ok := s.browser.Window(req.GetWindowId())
+	if !ok {
+		s.browser.Unlock()
+		return fmt.Errorf("cannot find window with windowID: %d", req.GetWindowId())
+	}
+	if inWin.Closed() {
+		s.browser.Unlock()
+		return fmt.Errorf("cannot set content to a closed window: %d", req.GetWindowId())
+	}
+
 	err = inWin.SetContent(handler)
 	s.browser.Unlock()
 	if err != nil {
