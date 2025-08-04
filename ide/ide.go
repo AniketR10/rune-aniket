@@ -34,6 +34,7 @@ import (
 
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
+	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/logging"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/api/config"
@@ -66,12 +67,12 @@ type EventPublisher func(term.Event) bool
 // at cfgfilename and filename. Note that if filename is empty, a default inmutable
 // buffer will be loaded.
 func New(
-	cwd, cfgfilename, sixDir string,
+	cwd, cfgfilename, dataDir string,
 	filenames []string,
 	opts ...Option,
 ) (i *IDE, err error) {
 	i = new(IDE)
-	err = i.init(cwd, cfgfilename, "", sixDir, filenames, opts...)
+	err = i.init(cwd, cfgfilename, "", dataDir, filenames, opts...)
 	return
 }
 
@@ -79,7 +80,7 @@ func New(
 // The underlying editor will use recfilename to try to recover file at filename.
 // Note that this function panics if either filename or recfilename are empty.
 func NewRecovery(
-	cwd, cfgfilename, filename, recfilename, sixDir string,
+	cwd, cfgfilename, filename, recfilename, dataDir string,
 	opts ...Option,
 ) (i *IDE, err error) {
 	if filename == "" || recfilename == "" {
@@ -87,7 +88,7 @@ func NewRecovery(
 			filename, recfilename))
 	}
 	i = new(IDE)
-	err = i.init(cwd, cfgfilename, recfilename, sixDir,
+	err = i.init(cwd, cfgfilename, recfilename, dataDir,
 		[]string{filename}, opts...)
 	return
 }
@@ -168,6 +169,12 @@ func (i *IDE) Browser() browser.Browser {
 	return i.workspaceHandler.focusBrowser()
 }
 
+// Storage returns persistent storage acrosss IDE instances, given
+// the same data dir passed in ide.New, or ide.NewRecovery.
+func (i *IDE) Storage() document.Service {
+	return i.workspaceHandler.storage
+}
+
 // Open opens the given file, in the currently active workspace.
 func (i *IDE) Open(file workspaceapi.URI) error {
 	ex := i.workspaceHandler.exHandler(i.workspaceHandler.focusHandler())
@@ -210,7 +217,7 @@ func (i *IDE) closeResources() (ret error) {
 }
 
 func (i *IDE) init(
-	cwd, cfgfilename, recfilename string, sixDir string,
+	cwd, cfgfilename, recfilename string, dataDir string,
 	filenames []string,
 	opts ...Option,
 ) error {
@@ -305,7 +312,7 @@ func (i *IDE) init(
 
 	workspaceHandler, err := newWorkspaceManagerHandler(cwdURI, homeDirURI,
 		workspaceManager, i.ideConfig, recfilename, filenames,
-		sixDir, i.publishEvent, op.extensionRunner, i.locker, op.extensions,
+		dataDir, i.publishEvent, op.extensionRunner, i.locker, op.extensions,
 		func() (ideConfig, error) {
 			return reloadConfig(cfgfilename,
 				op.defaultWallpaper, op.defaultConfig, op.bell, op.scheduleFn)
