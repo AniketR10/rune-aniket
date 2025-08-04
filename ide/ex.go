@@ -1256,24 +1256,7 @@ func (e *ex) handleEvent(ev term.Event) (
 		cmdsAndArgs, _ = e.comp.CommandKeyBinding(keyComb)
 	}
 
-	if match != handler.SequenceMatch {
-		// then the focus handler takes precedence
-		e.log(log.TraceLevel, "no sequence match: re-dispatching current event %q",
-			ev.KeyComb())
-		_, handled = e.comp.Browser().Handle(ev)
-		if handled {
-			if len(cmdsAndArgs) != 0 {
-				// notify user of ambiguous sequence
-				_ = e.comp.NotifyOnce(notifications.LevelWarn, "Command sequence %q is mapped to %q, "+
-					"but could not get triggered because active window also handles it. "+
-					"Consider changing the command sequence mapping to something else.",
-					keyComb, cmdsAndArgs)
-			}
-			return
-		}
-	}
-
-	// finally dispatch command or sequence of commands
+	// dispatch command or sequence of commands
 	for _, cmdAndArgs := range cmdsAndArgs {
 		quit, err := e.runCommand(cmdAndArgs[0], cmdAndArgs[1:])
 		if err != nil {
@@ -1286,6 +1269,16 @@ func (e *ex) handleEvent(ev term.Event) (
 	}
 	if handled {
 		return false, handled
+	}
+
+	// if event is not bound to command, the finally dispatch to focus handler
+	if match != handler.SequenceMatch {
+		e.log(log.TraceLevel, "no sequence match: re-dispatching current event %q",
+			ev.KeyComb())
+		_, handled = e.comp.Browser().Handle(ev)
+		if handled {
+			return
+		}
 	}
 
 	// If ex is configured with character
