@@ -103,24 +103,6 @@ func (t *cmdSplitHandler) Connected(
 	return nil
 }
 
-func (t *cmdSplitHandler) closeHandler() bool {
-	t.mu.Lock()
-	h := t.h
-	t.h = nil
-	t.mu.Unlock()
-
-	if h == nil {
-		return false
-	}
-
-	err := h.Close()
-	if err != nil {
-		t.log(log.ErrorLevel, "command split handler close: %v", err)
-	}
-
-	return true
-}
-
 func (t *cmdSplitHandler) cleanWindow() bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -129,23 +111,9 @@ func (t *cmdSplitHandler) cleanWindow() bool {
 		return false
 	}
 
-	defer func() {
-		t.win = nil
-	}()
-
-	t.mu.Unlock()
-	defer t.mu.Lock()
-
-	t.closeWindow()
+	t.win = nil
 
 	return true
-}
-
-func (t *cmdSplitHandler) closeWindow() {
-	err := t.wm.CloseWindow(t.win)
-	if err != nil {
-		t.log(log.ErrorLevel, "closing extension window: %v", err)
-	}
 }
 
 func (t *cmdSplitHandler) exitClean() error {
@@ -153,9 +121,6 @@ func (t *cmdSplitHandler) exitClean() error {
 
 	if t.cleanWindow() {
 		t.log(log.DebugLevel, "cleaned window")
-	}
-	if t.closeHandler() {
-		t.log(log.DebugLevel, "closed handler")
 	}
 	return nil
 }
@@ -246,7 +211,6 @@ func (t *cmdSplitHandler) PermissionDenied(ctx context.Context, perms []extensio
 
 func (t *cmdSplitHandler) Shutdown(ctx context.Context, reason string) error {
 	t.log(log.DebugLevel, "extension being shutdown: %s", reason)
-	t.closeHandler()
 	t.cleanWindow()
 	return nil
 }
