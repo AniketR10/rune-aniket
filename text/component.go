@@ -267,16 +267,6 @@ func (c *Component) tryDispatchEvent(win handler.Window, evType textapi.EventTyp
 	})
 }
 
-func (c *Component) setFocusToTab(t *browser.Tab) (browserapi.Handler, error) {
-	err := c.comp.Focus().SetContent(t)
-	if err != nil {
-		if err != browserapi.ErrTabNotFree {
-			return nil, err
-		}
-	}
-	return t, nil
-}
-
 type compTabSubscriber struct {
 	parent *Component
 	window browser.Window
@@ -361,7 +351,7 @@ func (c *Component) openFileTab(
 ) (browserapi.Handler, error) {
 	t, ok := c.comp.Tab(file)
 	if ok {
-		return c.setFocusToTab(t)
+		return t, nil
 	}
 
 	buf := c.newCellBuffer()
@@ -987,8 +977,7 @@ func (c *Component) Tab(
 
 	t, ok := c.comp.Tab(resource)
 	if ok {
-		t, err := c.setFocusToTab(t)
-		return t, err
+		return t, nil
 	}
 
 	t = c.newTab(resource, icon, name, h, nil)
