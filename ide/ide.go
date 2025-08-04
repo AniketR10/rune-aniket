@@ -175,6 +175,11 @@ func (i *IDE) Storage() document.Service {
 	return i.workspaceHandler.storage
 }
 
+// Size returns the current width and height in cells.
+func (i *IDE) Size() (width, height int) {
+	return i.root.width, i.root.height
+}
+
 // Open opens the given file, in the currently active workspace.
 func (i *IDE) Open(file workspaceapi.URI) error {
 	ex := i.workspaceHandler.exHandler(i.workspaceHandler.focusHandler())
