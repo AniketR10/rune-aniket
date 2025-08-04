@@ -159,9 +159,6 @@ func (h *fuzzyFinderHandler) setPipes(
 
 // KillCommand kills the process for the given command
 func (h *fuzzyFinderHandler) killCommand() error {
-	h.mu.Unlock()
-	defer h.mu.Lock()
-
 	return h.executor.Signal(h.pid, syscall.SIGKILL)
 }
 
@@ -198,9 +195,6 @@ func (h *fuzzyFinderHandler) addSearchHistory(searchQuery string) {
 		return
 	}
 
-	h.mu.Unlock()
-	defer h.mu.Lock()
-
 	err := h.history.Add(searchQuery)
 	if err != nil {
 		log.Errorf("error adding search history: %v", err)
@@ -210,16 +204,12 @@ func (h *fuzzyFinderHandler) addSearchHistory(searchQuery string) {
 }
 
 func (h *fuzzyFinderHandler) open(resource workspaceapi.URI) (browserapi.Handler, error) {
-	h.mu.Unlock()
-	defer h.mu.Lock()
 	return h.f.Open(resource)
 }
 
 func (h *fuzzyFinderHandler) setContent(
 	resource workspaceapi.URI, b browserapi.Handler, pos term.Coordinates,
 ) error {
-	h.mu.Unlock()
-	defer h.mu.Lock()
 	err := h.wm.SetWindowContent(h.invokeWindow, b)
 	if err != nil && !errors.Is(err, browserapi.ErrTabNotFree) {
 		return err
@@ -242,9 +232,6 @@ func (h *fuzzyFinderHandler) notifyError(msg string, args ...interface{}) error 
 	if h.m == nil {
 		return nil
 	}
-
-	h.mu.Unlock()
-	defer h.mu.Lock()
 
 	return h.m.Notify(notifications.LevelError, msg, args...)
 }
@@ -302,10 +289,6 @@ func (h *fuzzyFinderHandler) scanDataViaWorkspaceAPI(
 	err := h.doScanDataViaWorkspaceAPI(ctx, datachan)
 	if err != nil && !errors.Is(err, context.Canceled) {
 		log.Errorf("scan data: %v", err)
-
-		// setMessage unlocks locker to prevent deadlock by I/O wait
-		h.mu.Lock()
-		defer h.mu.Unlock()
 
 		merr := h.notifyError("failed to scan: %v", err)
 		if merr != nil {
