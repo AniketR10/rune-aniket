@@ -41,6 +41,7 @@ import (
 	"unstable.build/go-tui/api/browserapi/browserext"
 	"unstable.build/go-tui/api/config"
 	configextension "unstable.build/go-tui/api/config/extension"
+	"unstable.build/go-tui/api/extensionapi"
 	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/api/workspaceapi/workspaceext"
@@ -54,6 +55,7 @@ import (
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term"
+	"unstable.build/go-tui/text/textrpc"
 )
 
 const (
@@ -72,7 +74,7 @@ var (
 )
 
 // Grantee returns this extension's Grantee and the permissions required to run it.
-func Grantee() (extension.Grantee, []extension.Permission) {
+func Grantee() (extension.Grantee, []extensionapi.Permission) {
 	return extutil.NewEditorEventHandler(GitHandlerCommands, newGitHandler,
 		GitHandlerEvents, GitHandlerPermissions...)
 }
@@ -104,14 +106,15 @@ var (
 	}
 	// GitHandlerPermissions are the required permissions for this
 	// extension to run.
-	GitHandlerPermissions = []extension.Permission{
-		extension.PermissionBrowserWindowManager,
-		extension.PermissionBrowserNotifications,
-		extension.PermissionBrowserEventPublisher,
-		extension.PermissionEditor,
-		extension.PermissionExecute,
-		extension.PermissionFileSystem,
-		extension.PermissionConfig,
+	GitHandlerPermissions = []extensionapi.Permission{
+		extensionapi.PermissionBrowserWindowManager,
+		extensionapi.PermissionNotifications,
+		extensionapi.PermissionInterrupt,
+		extensionapi.PermissionEditor,
+		extensionapi.PermissionCommands,
+		extensionapi.PermissionExecute,
+		extensionapi.PermissionFileSystem,
+		extensionapi.PermissionConfig,
 	}
 
 	defaultScrollAttr = term.Attributes{Fg: tcell.ColorBlack}
@@ -191,7 +194,7 @@ func (h *gitEditorHandler) processGrants(
 ) {
 	for _, grant := range grants {
 		switch grant.Permission {
-		case extension.PermissionFileSystem:
+		case extensionapi.PermissionFileSystem:
 			fs, err = workspaceext.FileSystem(ctx, grant, broker)
 			if err != nil {
 				return
@@ -202,17 +205,17 @@ func (h *gitEditorHandler) processGrants(
 				return
 			}
 			cwd = cwdURI
-		case extension.PermissionExecute:
+		case extensionapi.PermissionExecute:
 			h.exec, err = workspaceext.Executor(ctx, grant, broker)
 			if err != nil {
 				return
 			}
-		case extension.PermissionBrowserEventPublisher:
+		case extensionapi.PermissionInterrupt:
 			h.p, err = browserext.EventPublisher(ctx, grant, broker)
 			if err != nil {
 				return
 			}
-		case extension.PermissionBrowserNotifications:
+		case extensionapi.PermissionNotifications:
 			var m browserapi.Notifications
 			m, err = browserext.Notifications(ctx, grant, broker)
 			if err != nil {
@@ -220,7 +223,7 @@ func (h *gitEditorHandler) processGrants(
 				return
 			}
 			h.m = m
-		case extension.PermissionBrowserWindowManager:
+		case extensionapi.PermissionBrowserWindowManager:
 			h.wm, err = browserext.WindowManager(ctx, grant, broker)
 			if err != nil {
 				return
@@ -236,7 +239,7 @@ func (h *gitEditorHandler) processGrants(
 			if err != nil {
 				return
 			}
-		case extension.PermissionConfig:
+		case extensionapi.PermissionConfig:
 			var config config.Config
 			config, err = configextension.FetchConfig(ctx, grant, broker)
 			if err != nil {
@@ -301,9 +304,8 @@ func (h *gitEditorHandler) setupCopyRemoteURL(
 ) (err error) {
 	h.git = newCmdGitService(h.exec, cwd, fs)
 	h.clip = clip
-	// copyRemoteURL functionality is refactored out into `remote_web_link.go`
-	// for readibility and maintainability
-	err = h.ed.SubscribeCommand(
+	// TODO refactor to use workspace API
+	err = h.ed.(*textrpc.Client).SubscribeCommand(
 		commandCopyRemoteURLManual,
 		newCopyRemoteURL(h.git, h.clip, h.m),
 	)
@@ -413,7 +415,7 @@ func (h *gitEditorHandler) runDiff(ctx context.Context, ev textapi.Event) {
 
 	h.initBar(ev)
 
-	diff, err := h.git.diff(ev.URI.Path())
+	diff, err := h.git.diff(ctx, ev.URI.Path())
 	if err != nil {
 		h.resetBar()
 		h.interrupt(ctx)

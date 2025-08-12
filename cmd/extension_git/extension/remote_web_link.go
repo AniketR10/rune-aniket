@@ -71,7 +71,7 @@ func (c *copyRemoteURL) HandleCommand(ctx context.Context, cmd textapi.Command) 
 	line := cmd.Cursor.Content.Y + 1
 	workPath := cmd.URI.Path()
 
-	weblink, err := c.generate(workPath, remoteName, line)
+	weblink, err := c.generate(ctx, workPath, remoteName, line)
 	if err != nil {
 		return
 	}
@@ -112,13 +112,15 @@ func (r remoteURLParts) ToMap() map[string]string {
 
 }
 
-func (c *copyRemoteURL) generate(workPath string, remoteName string, line int) (string, error) {
-	fileRelPath, err := c.git.relPath(workPath)
+func (c *copyRemoteURL) generate(
+	ctx context.Context, workPath string, remoteName string, line int,
+) (string, error) {
+	fileRelPath, err := c.git.relPath(ctx, workPath)
 	if err != nil {
 		return "", err
 	}
 
-	remoteURL, err := c.git.remoteURL(workPath, remoteName)
+	remoteURL, err := c.git.remoteURL(ctx, workPath, remoteName)
 	if err != nil {
 		return "", fmt.Errorf("git remote url: %w", err)
 	}
@@ -131,7 +133,7 @@ func (c *copyRemoteURL) generate(workPath string, remoteName string, line int) (
 		return "", fmt.Errorf("git parse remote url: %w", err)
 	}
 
-	currentCommit, err := c.git.currentCommit(workPath)
+	currentCommit, err := c.git.currentCommit(ctx, workPath)
 	if err != nil {
 		return "", fmt.Errorf("git current commit: %w", err)
 	}

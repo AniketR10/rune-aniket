@@ -36,6 +36,7 @@ import (
 	"unstable.build/go-tui/api/browserapi"
 	browserapitest "unstable.build/go-tui/api/browserapi/browsertest"
 	"unstable.build/go-tui/api/config"
+	"unstable.build/go-tui/api/extensionapi"
 	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/browser/browsertest"
 	"unstable.build/go-tui/extension"
@@ -127,7 +128,7 @@ func TestCommandSplitHandlerOpenWindow(t *testing.T) {
 
 		grants := extension.Grant{
 			Token:      "1555",
-			Permission: extension.Permission(extension.PermissionEditor),
+			Permission: extensionapi.Permission(extensionapi.PermissionEditor),
 			Context:    ctx,
 		}
 		testSplitWindow(t, config, grants, func(h *cmdSplitHandler) {

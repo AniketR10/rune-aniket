@@ -30,13 +30,12 @@ import (
 	"syscall"
 	"time"
 
-	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/bluectx"
 	"github.com/unstablebuild/blue/logging"
+	grpc "google.golang.org/grpc"
 	"unstable.build/go-tui/api/schemeapi"
 	"unstable.build/go-tui/api/workspaceapi"
-	"unstable.build/go-tui/rpc"
 )
 
 const defaultTimeout = 5 * time.Second
@@ -51,7 +50,7 @@ var _ schemeapi.Scheme = (*Client)(nil)
 
 // Client is a workspace and scheme client.
 type Client struct {
-	cc        rpc.MuxConn
+	cc        grpc.ClientConnInterface
 	exec      ExecutorClient
 	scheme    SchemeClient
 	files     FilesClient
@@ -63,20 +62,20 @@ type Client struct {
 // NewClient allocates storage for a new workspace.Client and
 // initializes it with cc. Client satisfies workspaceapi.Workspace
 // by connecting to a Server via the given rpc connection.
-func NewClient(cc rpc.MuxConn) *Client {
+func NewClient(ctx context.Context, cc grpc.ClientConnInterface) *Client {
 	ret := new(Client)
-	ret.Init(cc)
+	ret.Init(ctx, cc)
 	return ret
 }
 
 // Init initializes this client with cc.
-func (c *Client) Init(cc rpc.MuxConn) {
+func (c *Client) Init(ctx context.Context, cc grpc.ClientConnInterface) {
 	c.cc = cc
 	c.scheme = NewSchemeClient(cc)
 	c.files = NewFilesClient(cc)
 	c.term = NewTerminalClient(cc)
 	c.exec = NewExecutorClient(cc)
-	c.ctx, c.cancelCtx = context.WithCancel(context.Background())
+	c.ctx, c.cancelCtx = context.WithCancel(ctx)
 }
 
 // URI satisfies workspaceapi.Workspace.
@@ -244,8 +243,8 @@ func (c *Client) MkdirAll(path string, perm os.FileMode) error {
 }
 
 // Start satisfies workspaceapi.Workspace
-func (c *Client) Start(cmd workspaceapi.Cmd) (workspaceapi.Pid, error) {
-	return c.StartCommand(context.Background(), cmd)
+func (c *Client) Start(ctx context.Context, cmd workspaceapi.Cmd) (workspaceapi.Pid, error) {
+	return c.StartCommand(ctx, cmd)
 }
 
 // StartCommand returns the Pid to execute the named program with the given
@@ -329,7 +328,7 @@ func (c *Client) StartCommand(
 			cancelFn()
 			return 0, res.err
 		}
-		go streamer.streamCommandData(c, cancelFn)
+		go streamer.streamCommandData(cancelFn)
 		return res.pid, nil
 	case <-handshakeCtx.Done():
 		cancelFn()
@@ -404,12 +403,7 @@ func (c *Client) NewFile(fd uintptr, filename string) workspaceapi.File {
 // Close closes all resources associated with this client.
 func (c *Client) Close() (ret error) {
 	c.cancelCtx()
-
-	if err := c.cc.Close(); err != nil {
-		ret = multierr.Append(ret, err)
-	}
-
-return
+	return
 }
 
 func (c *Client) log(level log.Level, msg string, args ...interface{}) {

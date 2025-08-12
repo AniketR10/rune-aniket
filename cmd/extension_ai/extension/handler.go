@@ -45,6 +45,7 @@ import (
 	"unstable.build/go-tui/api/browserapi/browserext"
 	configapi "unstable.build/go-tui/api/config"
 	configextension "unstable.build/go-tui/api/config/extension"
+	"unstable.build/go-tui/api/extensionapi"
 	"unstable.build/go-tui/api/storageapi/storageext"
 	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/api/workspaceapi"
@@ -93,14 +94,15 @@ var (
 		},
 	}
 	aIHandlerEvents      = append(extutil.ResourceTrackerEventsComplete(), textapi.EventTypeUnfocus)
-	aIHandlerPermissions = []extension.Permission{
-		extension.PermissionBrowserWindowManager,
-		extension.PermissionBrowserResourceOpener,
-		extension.PermissionBrowserNotifications,
-		extension.PermissionBrowserEventPublisher,
-		extension.PermissionStorage,
-		extension.PermissionEditor,
-		extension.PermissionConfig,
+	aIHandlerPermissions = []extensionapi.Permission{
+		extensionapi.PermissionBrowserWindowManager,
+		extensionapi.PermissionBrowserResourceOpener,
+		extensionapi.PermissionNotifications,
+		extensionapi.PermissionInterrupt,
+		extensionapi.PermissionStorage,
+		extensionapi.PermissionEditor,
+		extensionapi.PermissionCommands,
+		extensionapi.PermissionConfig,
 	}
 	defaultComponentCfg = dialogue.ComponentConfig{
 		MessagesRowConfig: component.SpanConfig{
@@ -261,17 +263,17 @@ func CommandEventHandler(
 
 	for _, g := range grants {
 		switch g.Permission {
-		case extension.PermissionStorage:
+		case extensionapi.PermissionStorage:
 			ret.db, err = storageext.Storage(ctx, g, broker)
-		case extension.PermissionBrowserEventPublisher:
+		case extensionapi.PermissionInterrupt:
 			ret.p, err = browserext.EventPublisher(ctx, g, broker)
-		case extension.PermissionBrowserResourceOpener:
+		case extensionapi.PermissionBrowserResourceOpener:
 			ret.o, err = browserext.ResourceOpener(ctx, g, broker)
-		case extension.PermissionBrowserWindowManager:
+		case extensionapi.PermissionBrowserWindowManager:
 			ret.wm, err = browserext.WindowManager(ctx, g, broker)
-		case extension.PermissionBrowserNotifications:
+		case extensionapi.PermissionNotifications:
 			ret.n, err = browserext.Notifications(ctx, g, broker)
-		case extension.PermissionConfig:
+		case extensionapi.PermissionConfig:
 			config, err := configextension.FetchConfig(ctx, g, broker)
 			if err != nil {
 				return nil, err

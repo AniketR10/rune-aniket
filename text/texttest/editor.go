@@ -71,7 +71,9 @@ func (e EditorFromAPIEditor) Editor(file workspaceapi.URI) (text.Handler, error)
 }
 
 func (e EditorFromAPIEditor) SubscribeCommand(cmd textapi.CommandManual, h text.CommandHandler) error {
-	return e.Ed.SubscribeCommand(cmd, APICommandHandlerFromCommandHandler{h})
+	return e.Ed.(interface {
+		SubscribeCommand(textapi.CommandManual, textapi.CommandHandler) error
+	}).SubscribeCommand(cmd, APICommandHandlerFromCommandHandler{h})
 }
 
 func (e EditorFromAPIEditor) UnsubscribeCommand(cmd string) error {

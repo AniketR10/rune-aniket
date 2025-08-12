@@ -41,7 +41,7 @@ func dial(ctx context.Context, grant extension.Grant, broker rpc.MuxBroker) (
 	if err != nil {
 		return nil, err
 	}
-	c := workspacerpc.NewClient(conn)
+	c := workspacerpc.NewClient(grant.Context, conn)
 	return c, nil
 }
 

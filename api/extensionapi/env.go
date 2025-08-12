@@ -21,39 +21,37 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package extension
+package extensionapi
 
 import (
 	"fmt"
-	"sync"
+	"os"
+
+	log "github.com/sirupsen/logrus"
 )
 
-// CachingGrantor wraps g and returns a Grantor that returns the same ResourceRegistrar
-// for a given extensionID and permission combination.
-func CachingGrantor(g Grantor) Grantor {
-	return &cacheGrantor{g: g, grants: make(map[string]ResourceRegistrar)}
-}
+const (
+	// EnvLogLevel is the environment variable used to setup
+	// the log level used that should be used by the extension.
+	// The options are:
+	// - "trace"
+	// - "debug"
+	// - "info"
+	// - "warning"
+	// - "error"
+	// - "fatal"
+	// - "panic"
+	EnvLogLevel = "GOTUI_LOG_LEVEL"
+)
 
-type cacheGrantor struct {
-	mu     sync.Mutex
-	g      Grantor
-	grants map[string]ResourceRegistrar
-}
-
-func (c *cacheGrantor) Grant(
-	extension string, perm Permission,
-) (ResourceRegistrar, bool) {
-	key := fmt.Sprintf("%s.%s", extension, perm)
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if cached, ok := c.grants[key]; ok {
-		return cached, true
+func getLogLevelEnv() log.Level {
+	addrStr := os.Getenv(EnvLogLevel)
+	if addrStr == "" {
+		return log.InfoLevel
 	}
-	ret, ok := c.g.Grant(extension, perm)
-	if ok {
-		c.grants[key] = ret
+	l, err := log.ParseLevel(addrStr)
+	if err != nil {
+		panic(fmt.Sprintf("failed to parse log level: %s", err))
 	}
-	return ret, ok
+	return l
 }

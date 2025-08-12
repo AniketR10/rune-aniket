@@ -31,7 +31,6 @@ import (
 	"io"
 	"os"
 	"sync"
-	"syscall"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -41,6 +40,7 @@ import (
 	"unstable.build/go-tui/api/browserapi"
 	"unstable.build/go-tui/api/browserapi/browserext"
 	"unstable.build/go-tui/api/config"
+	"unstable.build/go-tui/api/extensionapi"
 	"unstable.build/go-tui/api/storageapi/storageext"
 	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/api/textapi/textext"
@@ -63,16 +63,16 @@ const (
 )
 
 // Permissions returns the permissions required by this extension.
-func Permissions() []extension.Permission {
-	return []extension.Permission{
-		extension.Permission(extension.PermissionBrowserResourceOpener),
-		extension.Permission(extension.PermissionBrowserEventPublisher),
-		extension.Permission(extension.PermissionBrowserNotifications),
-		extension.Permission(extension.PermissionBrowserWindowManager),
-		extension.PermissionStorage,
-		extension.Permission(extension.PermissionEditor),
-		extension.Permission(extension.PermissionFileSystem),
-		extension.Permission(extension.PermissionExecute),
+func Permissions() []extensionapi.Permission {
+	return []extensionapi.Permission{
+		extensionapi.Permission(extensionapi.PermissionBrowserResourceOpener),
+		extensionapi.Permission(extensionapi.PermissionInterrupt),
+		extensionapi.Permission(extensionapi.PermissionNotifications),
+		extensionapi.Permission(extensionapi.PermissionBrowserWindowManager),
+		extensionapi.PermissionStorage,
+		extensionapi.Permission(extensionapi.PermissionEditor),
+		extensionapi.Permission(extensionapi.PermissionFileSystem),
+		extensionapi.Permission(extensionapi.PermissionExecute),
 	}
 }
 
@@ -106,14 +106,14 @@ type fuzzyFinderHandler struct {
 	history search.History
 }
 
-func (h *fuzzyFinderHandler) execCommand(command string) (
+func (h *fuzzyFinderHandler) execCommand(ctx context.Context, command string) (
 	*os.File, *os.File, workspaceapi.Pid, error,
 ) {
 	shell := os.Getenv("SHELL")
 	if len(shell) == 0 {
 		shell = "sh"
 	}
-	return h.execCommandWith(shell, command)
+	return h.execCommandWith(ctx, shell, command)
 }
 
 // Watch satisfies workspaceapi.Watcher which is employed
@@ -122,9 +122,9 @@ func (h *fuzzyFinderHandler) Watch() chan error {
 	return h.waitChan
 }
 
-func (h *fuzzyFinderHandler) execCommandWith(shell string, commandStr string) (
-	*os.File, *os.File, workspaceapi.Pid, error,
-) {
+func (h *fuzzyFinderHandler) execCommandWith(
+	ctx context.Context, shell string, commandStr string,
+) (*os.File, *os.File, workspaceapi.Pid, error) {
 	cmd := workspaceapi.Cmd{
 		Path:    shell,
 		Args:    []string{"-c", commandStr},
@@ -134,7 +134,7 @@ func (h *fuzzyFinderHandler) execCommandWith(shell string, commandStr string) (
 	if err != nil {
 		return nil, nil, 0, err
 	}
-	pid, err := h.executor.Start(cmd)
+	pid, err := h.executor.Start(ctx, cmd)
 	if err != nil {
 		return nil, nil, 0, fmt.Errorf("failed to create command: %w", err)
 	}
@@ -155,11 +155,6 @@ func (h *fuzzyFinderHandler) setPipes(
 	cmd.Stdout = stdoutWrite
 	cmd.Stderr = stderrWrite
 	return stderr, stdout, nil
-}
-
-// KillCommand kills the process for the given command
-func (h *fuzzyFinderHandler) killCommand() error {
-	return h.executor.Signal(h.pid, syscall.SIGKILL)
 }
 
 func (h *fuzzyFinderHandler) readCommand(ctx context.Context, datachan chan<- []byte, src io.Reader, cancelScan func()) {
@@ -215,7 +210,7 @@ func (h *fuzzyFinderHandler) setContent(
 		return err
 	}
 	if h.ed == nil {
-		log.Info("could not set cursor position because host did not grant extension.PermissionEditor")
+		log.Info("could not set cursor position because host did not grant extensionapi.PermissionEditor")
 		return nil
 	}
 
@@ -320,7 +315,7 @@ func (h *fuzzyFinderHandler) scanData() {
 
 	log.Debugf("using resource list command: %s", h.cmdStr)
 
-	stderr, stdout, exec, err := h.execCommand(h.cmdStr)
+	stderr, stdout, exec, err := h.execCommand(ctx, h.cmdStr)
 	if err != nil {
 		log.Debugf("fallback to scan data via workspace API: %v", err)
 		h.scanDataViaWorkspaceAPI(ctx, datachan)
@@ -365,21 +360,21 @@ func (h *fuzzyFinderHandler) initGrants(
 ) (err error) {
 	for _, grant := range grants {
 		switch grant.Permission {
-		case extension.Permission(extension.PermissionFileSystem):
+		case extensionapi.Permission(extensionapi.PermissionFileSystem):
 			h.fs, err = workspaceext.FileSystem(ctx, grant, broker)
-		case extension.PermissionExecute:
+		case extensionapi.PermissionExecute:
 			h.executor, err = workspaceext.Executor(ctx, grant, broker)
-		case extension.PermissionEditor:
+		case extensionapi.PermissionEditor:
 			h.ed, err = textext.Editor(ctx, grant, broker)
-		case extension.PermissionBrowserNotifications:
+		case extensionapi.PermissionNotifications:
 			h.m, err = browserext.Notifications(ctx, grant, broker)
-		case extension.PermissionBrowserWindowManager:
+		case extensionapi.PermissionBrowserWindowManager:
 			h.wm, err = browserext.WindowManager(ctx, grant, broker)
-		case extension.PermissionBrowserEventPublisher:
+		case extensionapi.PermissionInterrupt:
 			h.p, err = browserext.EventPublisher(ctx, grant, broker)
-		case extension.PermissionBrowserResourceOpener:
+		case extensionapi.PermissionBrowserResourceOpener:
 			h.f, err = browserext.ResourceOpener(ctx, grant, broker)
-		case extension.PermissionStorage:
+		case extensionapi.PermissionStorage:
 			h.s, err = storageext.Storage(ctx, grant, broker)
 			if err == nil {
 				h.history.Init(h.s, historyDocumentID, maxHistory)
@@ -561,11 +556,9 @@ func (h *fuzzyFinderHandler) Handle(ev term.Event) (exit, handled bool) {
 	}
 
 	if comb.Ch == 'c' && comb.Mod == term.ModCtrl {
+		h.killed = true
 		if h.cancelScan != nil {
 			h.cancelScan()
-		}
-		if h.pid != 0 {
-			_ = h.killCommand()
 		}
 	}
 
@@ -598,10 +591,9 @@ func (h *fuzzyFinderHandler) Close() error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	if h.pid != 0 {
-		h.killed = true
-		_ = h.killCommand()
-		h.pid = 0
+	h.killed = true
+	if h.cancelScan != nil {
+		h.cancelScan()
 	}
 	return h.list.Close()
 }

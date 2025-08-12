@@ -233,6 +233,43 @@ func (mr *MockCellViewMockRecorder) RawCells() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RawCells", reflect.TypeOf((*MockCellView)(nil).RawCells))
 }
 
+// MockCommandRegister is a mock of CommandRegister interface.
+type MockCommandRegister struct {
+	ctrl     *gomock.Controller
+	recorder *MockCommandRegisterMockRecorder
+}
+
+// MockCommandRegisterMockRecorder is the mock recorder for MockCommandRegister.
+type MockCommandRegisterMockRecorder struct {
+	mock *MockCommandRegister
+}
+
+// NewMockCommandRegister creates a new mock instance.
+func NewMockCommandRegister(ctrl *gomock.Controller) *MockCommandRegister {
+	mock := &MockCommandRegister{ctrl: ctrl}
+	mock.recorder = &MockCommandRegisterMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockCommandRegister) EXPECT() *MockCommandRegisterMockRecorder {
+	return m.recorder
+}
+
+// RegisterCommand mocks base method.
+func (m *MockCommandRegister) RegisterCommand(arg0 textapi.CommandManual, arg1 textapi.CommandHandler) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RegisterCommand", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RegisterCommand indicates an expected call of RegisterCommand.
+func (mr *MockCommandRegisterMockRecorder) RegisterCommand(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterCommand", reflect.TypeOf((*MockCommandRegister)(nil).RegisterCommand), arg0, arg1)
+}
+
 // MockEditor is a mock of Editor interface.
 type MockEditor struct {
 	ctrl     *gomock.Controller
@@ -382,20 +419,6 @@ func (m *MockEditor) SetLocationList(arg0 textapi.Handler, arg1 textapi.Location
 func (mr *MockEditorMockRecorder) SetLocationList(arg0, arg1, arg2, arg3 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetLocationList", reflect.TypeOf((*MockEditor)(nil).SetLocationList), arg0, arg1, arg2, arg3)
-}
-
-// SubscribeCommand mocks base method.
-func (m *MockEditor) SubscribeCommand(arg0 textapi.CommandManual, arg1 textapi.CommandHandler) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SubscribeCommand", arg0, arg1)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// SubscribeCommand indicates an expected call of SubscribeCommand.
-func (mr *MockEditorMockRecorder) SubscribeCommand(arg0, arg1 any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubscribeCommand", reflect.TypeOf((*MockEditor)(nil).SubscribeCommand), arg0, arg1)
 }
 
 // SubscribeEvents mocks base method.

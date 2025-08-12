@@ -33,6 +33,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"unstable.build/go-tui/api/config"
+	"unstable.build/go-tui/api/extensionapi"
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component/shader"
@@ -297,9 +298,8 @@ func makeTestFiles(t *testing.T) (*os.File, *os.File) {
 }
 
 func testRunnerFn(
-	locker sync.Locker,
 	uri workspaceapi.URI,
-	res map[extension.Permission]extension.ResourceRegistrar,
+	res map[extensionapi.Permission]extension.ResourceRegistrar,
 	dataDir string, n browser.Notifications) (extension.Runner, error) {
 	return testRunner{}, nil
 }

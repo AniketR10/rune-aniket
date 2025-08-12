@@ -25,6 +25,7 @@ package extension
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"path"
@@ -40,16 +41,16 @@ var _ gitService = (*cmdGitService)(nil)
 // gitService is an interface that wraps methods to perform Git operations.
 type gitService interface {
 	// diff returns the file diff for the given file.
-	diff(workPath string) (*diff.FileDiff, error)
+	diff(ctx context.Context, workPath string) (*diff.FileDiff, error)
 
 	// currentCommit returns the current commit hash.
-	currentCommit(workPath string) (string, error)
+	currentCommit(ctx context.Context, workPath string) (string, error)
 
 	// remoteURL returns the remote URL given a remote name.
-	remoteURL(workPath string, remoteName string) (string, error)
+	remoteURL(ctx context.Context, workPath string, remoteName string) (string, error)
 
 	// relPath extracts the path relative to the repository.
-	relPath(workPath string) (string, error)
+	relPath(ctx context.Context, workPath string) (string, error)
 }
 
 type cmdGitService struct {
@@ -82,7 +83,9 @@ func (e *gitExecError) Error() string {
 }
 
 // git executes commands using the Git CLI.
-func (c *cmdGitService) git(workPath string, args []string) (string, error) {
+func (c *cmdGitService) git(ctx context.Context, workPath string, args []string) (
+	string, error,
+) {
 	if workPath == "" {
 		return "", errors.New("call git cmd on empty path")
 	}
@@ -111,7 +114,7 @@ func (c *cmdGitService) git(workPath string, args []string) (string, error) {
 		Stdout:  &stdout,
 		Stderr:  &stderr,
 	}
-	if _, err := c.exec.Start(cmd); err != nil {
+	if _, err := c.exec.Start(ctx, cmd); err != nil {
 		return "", fmt.Errorf("start process: %v", err)
 	}
 	if err := <-ch; err != nil {
@@ -126,8 +129,8 @@ func (c *cmdGitService) git(workPath string, args []string) (string, error) {
 }
 
 // repoPath provides the local file path of the repository.
-func (c *cmdGitService) repoPath(workPath string) (string, error) {
-	p, err := c.git(workPath, []string{"rev-parse", "--show-toplevel"})
+func (c *cmdGitService) repoPath(ctx context.Context, workPath string) (string, error) {
+	p, err := c.git(ctx, workPath, []string{"rev-parse", "--show-toplevel"})
 	if err != nil {
 		return "", fmt.Errorf("git cmd: %w", err)
 	}
@@ -136,13 +139,13 @@ func (c *cmdGitService) repoPath(workPath string) (string, error) {
 }
 
 // diff satisfies gitService.
-func (c *cmdGitService) diff(workPath string) (*diff.FileDiff, error) {
-	relFile, err := c.relPath(workPath)
+func (c *cmdGitService) diff(ctx context.Context, workPath string) (*diff.FileDiff, error) {
+	relFile, err := c.relPath(ctx, workPath)
 	if err != nil {
 		return nil, fmt.Errorf("rel path: %w", err)
 	}
 
-	repoPath, err := c.repoPath(workPath)
+	repoPath, err := c.repoPath(ctx, workPath)
 	if err != nil {
 		return nil, fmt.Errorf("repo path: %w", err)
 	}
@@ -151,7 +154,7 @@ func (c *cmdGitService) diff(workPath string) (*diff.FileDiff, error) {
 	// diff` to work. It could be `dir1/file1.sh` and `/a/b/c/my-repo`
 	// respectively or `/a/b/c/my-repo/dir` and `file1.sh`. At the moment we
 	// relativize around repo root path, so it's the former.
-	out, err := c.git(repoPath, []string{"diff", "-U0", "--no-ext-diff", relFile})
+	out, err := c.git(ctx, repoPath, []string{"diff", "-U0", "--no-ext-diff", relFile})
 	if err != nil {
 		return nil, fmt.Errorf("git cmd: %w", err)
 	}
@@ -173,12 +176,14 @@ func (c *cmdGitService) diff(workPath string) (*diff.FileDiff, error) {
 }
 
 // currentCommit satisfies gitService.
-func (c *cmdGitService) currentCommit(workPath string) (string, error) {
-	_, err := c.relPath(workPath)
+func (c *cmdGitService) currentCommit(
+	ctx context.Context, workPath string,
+) (string, error) {
+	_, err := c.relPath(ctx, workPath)
 	if err != nil {
 		return "", fmt.Errorf("rel path: %w", err)
 	}
-	out, err := c.git(workPath, []string{"rev-parse", "HEAD"})
+	out, err := c.git(ctx, workPath, []string{"rev-parse", "HEAD"})
 	if err != nil {
 		return "", err
 	}
@@ -186,11 +191,13 @@ func (c *cmdGitService) currentCommit(workPath string) (string, error) {
 }
 
 // remoteURL satisfies gitService.
-func (c *cmdGitService) remoteURL(workDir string, remoteName string) (string, error) {
+func (c *cmdGitService) remoteURL(
+	ctx context.Context, workDir string, remoteName string,
+) (string, error) {
 	if remoteName == "" {
 		return "", errors.New("must pass remote name")
 	}
-	out, err := c.git(workDir, []string{"remote", "get-url", remoteName})
+	out, err := c.git(ctx, workDir, []string{"remote", "get-url", remoteName})
 	if err != nil {
 		return "", err
 	}
@@ -207,10 +214,10 @@ func (c *cmdGitService) isDir(file string) (bool, error) {
 }
 
 // relPath satisfies gitService
-func (c *cmdGitService) relPath(workPath string) (
+func (c *cmdGitService) relPath(ctx context.Context, workPath string) (
 	relFile string, err error,
 ) {
-	repo, err := c.repoPath(workPath)
+	repo, err := c.repoPath(ctx, workPath)
 	if err != nil {
 		return relFile, fmt.Errorf("repo path: %w", err)
 	}

@@ -33,10 +33,12 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/logging"
 	"unstable.build/go-tui/api/config"
+	"unstable.build/go-tui/api/extensionapi"
 	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/api/textapi/textext"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/rpc"
+	"unstable.build/go-tui/text/textrpc"
 )
 
 // CommandEventHandler combines EventHandler with CommandHandler.
@@ -53,17 +55,18 @@ type CommandEventHandlerFacility func(context.Context, textapi.Editor, []extensi
 // NewEditorEventHandler returns a extension.Grantee that simply responds to commands.
 // It calls fn to build a CommandEventHandler, subcsribes it to events
 // editor. Event and registers it as the CommandHandler of cmds.
-// It also requests extraPerms, in addition to extension.PermissionEditor.
+// It also requests extraPerms, in addition to extensionapi.PermissionEditor.
 // All granted permissions are returned in the fn callback. If one of the
 // permissions is denied, the extension will exit with an error.
 func NewEditorEventHandler(
 	cmds []textapi.CommandManual,
 	fn CommandEventHandlerFacility,
 	events []textapi.EventType,
-	extraPerms ...extension.Permission,
-) (extension.Grantee, []extension.Permission) {
-	perms := []extension.Permission{
-		extension.Permission(extension.PermissionEditor),
+	extraPerms ...extensionapi.Permission,
+) (extension.Grantee, []extensionapi.Permission) {
+	perms := []extensionapi.Permission{
+		extensionapi.Permission(extensionapi.PermissionEditor),
+		extensionapi.Permission(extensionapi.PermissionCommands),
 	}
 	perms = append(perms, extraPerms...)
 	s := &editorGrantee{evs: events, cmds: cmds, newHandler: fn}
@@ -118,7 +121,8 @@ func (t *editorGrantee) subscribeToEvents(ctx context.Context, grants []extensio
 	}
 
 	for _, cmd := range t.cmds {
-		if err = t.ed.SubscribeCommand(cmd, h); err != nil {
+		// TODO refactor to use workspace api
+		if err = t.ed.(*textrpc.Client).SubscribeCommand(cmd, h); err != nil {
 			return err
 		}
 	}
@@ -133,7 +137,7 @@ func (t *editorGrantee) PermissionGranted(ctx context.Context, grants []extensio
 	for _, grant := range grants {
 		var err error
 		switch grant.Permission {
-		case extension.PermissionEditor:
+		case extensionapi.PermissionEditor:
 			t.ed, err = textext.Editor(ctx, grant, t.broker)
 			if err == nil {
 				err = t.subscribeToEvents(ctx, grants)
@@ -146,12 +150,12 @@ func (t *editorGrantee) PermissionGranted(ctx context.Context, grants []extensio
 	return ret
 }
 
-func (t *editorGrantee) PermissionDenied(ctx context.Context, perms []extension.Permission) error {
+func (t *editorGrantee) PermissionDenied(ctx context.Context, perms []extensionapi.Permission) error {
 	t.log(log.DebugLevel, "permissions denied: %v", perms)
 
 	for _, perm := range perms {
 		switch perm {
-		case extension.PermissionEditor:
+		case extensionapi.PermissionEditor:
 			return errors.New("permission editor must be granted for this extension to work")
 		}
 	}

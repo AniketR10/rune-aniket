@@ -21,41 +21,41 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package extension
+package extensionapi
 
 import (
-	"testing"
+	"io"
+	"os"
 
-	"github.com/stretchr/testify/require"
-	"go.uber.org/mock/gomock"
-	textapitest "unstable.build/go-tui/api/textapi/texttest"
-	"unstable.build/go-tui/api/workspaceapi"
-	"unstable.build/go-tui/clipboard"
+	log "github.com/sirupsen/logrus"
+	"google.golang.org/grpc/grpclog"
 )
 
-func TestExtensionHandler(t *testing.T) {
-	reposPath := setupGitRepos(t)
-	cwd, err := workspaceapi.ParseURI("file://" + reposPath + "/gitproj3_multi-file-diff")
-	require.NoError(t, err)
+// LoggingTimestampFormat is the format used
+const LoggingTimestampFormat = "2006-01-02T15:04:05.000000Z07:00"
 
-	t.Run("copyRemoteURL is subscribed and used", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		defer ctrl.Finish()
+func setupExtensionLogging(level log.Level) {
+	log.SetOutput(os.Stderr)
+	log.SetLevel(level)
+	log.SetFormatter(newJSONFormatter())
 
-		ed := textapitest.NewMockEditor(ctrl)
-		git := setupGitService(t, cwd)
+	disableGRPCLogging()
+}
 
-		h := new(gitEditorHandler)
-		h.ed = ed
-		h.git = git
+func newJSONFormatter() log.Formatter {
+	return &log.JSONFormatter{
+		TimestampFormat: LoggingTimestampFormat,
+		FieldMap: log.FieldMap{
+			log.FieldKeyTime: "@timestamp",
+			log.FieldKeyMsg:  "@message",
+			// log.FieldKeyLevel: "@level",
+		},
+	}
+}
 
-		ed.EXPECT().SubscribeCommand(
-			gomock.Eq(commandCopyRemoteURLManual), gomock.Any(),
-		).Times(1)
-
-		clip := clipboard.NewInMemory()
-		require.NoError(t, err)
-
-		h.setupCopyRemoteURL(clip, git.cwd, git.fs)
-	})
+func disableGRPCLogging() {
+	os.Setenv("GRPC_GO_LOG_SEVERITY_LEVEL", "FATAL")
+	os.Setenv("GRPC_GO_LOG_VERBOSITY_LEVEL", "0")
+	discard := grpclog.NewLoggerV2WithVerbosity(io.Discard, io.Discard, io.Discard, 0)
+	grpclog.SetLoggerV2(discard)
 }

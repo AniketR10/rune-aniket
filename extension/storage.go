@@ -25,7 +25,6 @@ package extension
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"path/filepath"
 	"sync"
@@ -37,6 +36,7 @@ import (
 	"github.com/unstablebuild/blue/document/docrpc"
 	"github.com/unstablebuild/blue/document/docrpc/docpb"
 
+	"unstable.build/go-tui/api/extensionapi"
 	"unstable.build/go-tui/localstorage"
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/workspace"
@@ -52,26 +52,24 @@ func newStorageResourceServer(storageDir string) *storageResourceServer {
 	return ret
 }
 
-func (s *storageResourceServer) setupStorage(lock sync.Locker, extensionID string) document.Service {
-	path := filepath.Join(s.storageDir, ".dbextension", filepath.Clean(extensionID))
+func (s *storageResourceServer) setupStorage(lock sync.Locker) document.Service {
+	path := filepath.Join(s.storageDir, ".dbextension")
 	// pass locker to underlying file scheme, so we can synchronize
 	// network storage requests against event loop access.
 	ctx := workspace.ContextWithLocker(context.Background(), lock)
 	svc, err := localstorage.New(ctx, path, doctoml.Marshaler())
 	if err != nil {
-		log.Warnf("Failed to setup storage for extension %q: %v."+
-			"Fallback to in-memory", extensionID, err)
+		log.Warnf("failed to setup storage for: %v, "+"fallback to in-memory", err)
 		return document.NewInMemoryService()
 	}
 	return svc
 }
 
 func (s *storageResourceServer) Register(
-	extensionID string, grantor Grantor, registrar rpc.ServiceRegistrar,
-	broker rpc.MuxBroker, lock sync.Locker,
+	registrar rpc.ServiceRegistrar, lock sync.Locker,
 ) (io.Closer, error) {
-	svc := s.setupStorage(lock, extensionID)
-	svc = doclog.WithLogging(svc, fmt.Sprintf("/ExtensionStorage/%s", extensionID))
+	svc := s.setupStorage(lock)
+	svc = doclog.WithLogging(svc, "ExtensionStorage")
 	server := new(docrpc.Server)
 	server.Init(svc, doctoml.Marshaler())
 	docpb.RegisterDocumentStoreServer(registrar, server)
@@ -83,9 +81,9 @@ func (s *storageResourceServer) Register(
 
 // StorageResources returns a map of Permission to a ResourceServer
 // capable of serving a document.Service.
-func StorageResources(storageDir string) map[Permission]ResourceRegistrar {
+func StorageResources(storageDir string) map[extensionapi.Permission]ResourceRegistrar {
 	s := newStorageResourceServer(storageDir)
-	return map[Permission]ResourceRegistrar{
-		PermissionStorage: s,
+	return map[extensionapi.Permission]ResourceRegistrar{
+		extensionapi.PermissionStorage: s,
 	}
 }

@@ -328,7 +328,7 @@ func (s *scheme) connectScheme(
 		}
 	}()
 
-	return workspacerpc.NewClient(conn), nil
+	return workspacerpc.NewClient(s.ctx, conn), nil
 }
 
 func (s *scheme) setPipes(

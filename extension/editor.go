@@ -27,6 +27,7 @@ import (
 	"io"
 	"sync"
 
+	"unstable.build/go-tui/api/extensionapi"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term"
@@ -39,10 +40,10 @@ import (
 func EditorResources(
 	b browser.Notifications, ed text.Editor,
 	publishEvent func(term.Event) bool,
-) map[Permission]ResourceRegistrar {
+) map[extensionapi.Permission]ResourceRegistrar {
 	s := newEditorResourceServer(b, ed, publishEvent)
-	return map[Permission]ResourceRegistrar{
-		PermissionEditor: s,
+	return map[extensionapi.Permission]ResourceRegistrar{
+		extensionapi.PermissionEditor: s,
 	}
 }
 
@@ -64,8 +65,7 @@ func newEditorResourceServer(
 }
 
 func (s *editorResourceServer) Register(
-	extensionID string, grantor Grantor, registrar rpc.ServiceRegistrar,
-	broker rpc.MuxBroker, lock sync.Locker,
+	registrar rpc.ServiceRegistrar, lock sync.Locker,
 ) (io.Closer, error) {
 	server := textrpc.NewServer(s.b, s.ed, lock)
 	textrpc.RegisterEditorServer(registrar,

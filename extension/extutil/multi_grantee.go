@@ -28,6 +28,7 @@ import (
 
 	"github.com/ernestrc/go-multierror"
 	"unstable.build/go-tui/api/config"
+	"unstable.build/go-tui/api/extensionapi"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/rpc"
 )
@@ -45,7 +46,9 @@ type multiGrantee struct {
 	children []extension.Grantee
 }
 
-func (m multiGrantee) Connected(ctx context.Context, b rpc.MuxBroker, cfg config.Config) (ret error) {
+func (m multiGrantee) Connected(
+	ctx context.Context, b rpc.MuxBroker, cfg config.Config,
+) (ret error) {
 	for _, child := range m.children {
 		if err := child.Connected(ctx, b, cfg); err != nil {
 			ret = multierror.Append(ret, err)
@@ -54,7 +57,9 @@ func (m multiGrantee) Connected(ctx context.Context, b rpc.MuxBroker, cfg config
 	return nil
 }
 
-func (m multiGrantee) PermissionGranted(ctx context.Context, grants []extension.Grant) (ret error) {
+func (m multiGrantee) PermissionGranted(
+	ctx context.Context, grants []extension.Grant,
+) (ret error) {
 	for _, child := range m.children {
 		if err := child.PermissionGranted(ctx, grants); err != nil {
 			ret = multierror.Append(ret, err)
@@ -63,7 +68,9 @@ func (m multiGrantee) PermissionGranted(ctx context.Context, grants []extension.
 	return nil
 }
 
-func (m multiGrantee) PermissionDenied(ctx context.Context, perms []extension.Permission) (ret error) {
+func (m multiGrantee) PermissionDenied(
+	ctx context.Context, perms []extensionapi.Permission,
+) (ret error) {
 	for _, child := range m.children {
 		if err := child.PermissionDenied(ctx, perms); err != nil {
 			ret = multierror.Append(ret, err)

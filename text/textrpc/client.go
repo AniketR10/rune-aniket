@@ -27,14 +27,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sync"
 	"time"
 
+	grpc "google.golang.org/grpc"
 	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/browser/browserrpc"
 	"unstable.build/go-tui/cell"
-	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term"
 	termrpc "unstable.build/go-tui/term/termrpc"
 	"unstable.build/go-tui/text"
@@ -95,27 +94,23 @@ var _ textapi.Editor = (*Client)(nil)
 // Client satisfies text.Editor by calling a remote editor over grpc.
 type Client struct {
 	browser         *browserrpc.Client
-	cc              rpc.MuxConn
+	cc              grpc.ClientConnInterface
 	ed              EditorClient
 	clientCtx       context.Context
 	clientCancelCtx func()
 }
 
 // NewClient allocates storage for a new Client and initializes it.
-func NewClient(ctx context.Context, cc rpc.MuxConn) *Client {
+func NewClient(ctx context.Context, cc grpc.ClientConnInterface) *Client {
 	ret := new(Client)
 	ret.Init(ctx, cc)
 	return ret
 }
 
 // Init initializes this Client with broker and client.
-func (c *Client) Init(ctx context.Context, cc rpc.MuxConn) {
+func (c *Client) Init(ctx context.Context, cc grpc.ClientConnInterface) {
 	c.ed = NewEditorClient(cc)
 	c.cc = cc
-	ok := rpc.IsContextWithWaitGroup(ctx)
-	if !ok {
-		ctx = rpc.ContextWithWaitGroup(ctx, new(sync.WaitGroup))
-	}
 	c.browser = browserrpc.NewClient(ctx, cc)
 	c.clientCtx, c.clientCancelCtx = context.WithCancel(ctx)
 }
@@ -171,7 +166,6 @@ func (c *Client) SubscribeEvents(
 
 	handler := newEventStreamServer(c.clientCtx, stream, h)
 	go handler.receiveEvents(c)
-
 
 	return nil
 }
@@ -335,7 +329,6 @@ func (c *Client) Close() (ret error) {
 	if c.clientCancelCtx != nil {
 		c.clientCancelCtx()
 		c.clientCancelCtx = nil
-		ret = c.cc.Close()
 		c.cc = nil
 	}
 	return ret

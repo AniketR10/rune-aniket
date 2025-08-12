@@ -29,6 +29,7 @@ import (
 
 	"unstable.build/go-tui/api/config"
 	"unstable.build/go-tui/api/config/configrpc"
+	"unstable.build/go-tui/api/extensionapi"
 	"unstable.build/go-tui/rpc"
 )
 
@@ -43,8 +44,7 @@ func newConfigResourceServer(cfg config.Config) *configResourceServer {
 }
 
 func (s *configResourceServer) Register(
-	extensionID string, grantor Grantor, registrar rpc.ServiceRegistrar,
-	broker rpc.MuxBroker, lock sync.Locker,
+	registrar rpc.ServiceRegistrar, lock sync.Locker,
 ) (io.Closer, error) {
 	server := configrpc.NewServer(s.cfg, lock)
 	configrpc.RegisterConfigServer(registrar, server)
@@ -53,10 +53,10 @@ func (s *configResourceServer) Register(
 
 // ConfigResources returns a map of Permission to a ResourceServer
 // capable of serving each of the b Config's resources.
-func ConfigResources(b config.Config) map[Permission]ResourceRegistrar {
+func ConfigResources(b config.Config) map[extensionapi.Permission]ResourceRegistrar {
 	s := newConfigResourceServer(b)
-	return map[Permission]ResourceRegistrar{
-		PermissionConfig: s,
+	return map[extensionapi.Permission]ResourceRegistrar{
+		extensionapi.PermissionConfig: s,
 	}
 }
 

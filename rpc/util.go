@@ -24,50 +24,12 @@
 package rpc
 
 import (
-	context "context"
-	fmt "fmt"
 	"io"
 
 	"os"
-	"path/filepath"
 
-	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc/grpclog"
 )
-
-// AcceptAndServeChannel calls the underlying broker's NewChannel
-// and calls register before serving new connections. Use context
-// to automatically stop underlying MuxServer when it's no longer needed.
-func AcceptAndServeChannel(
-	ctx context.Context,
-	broker MuxBroker,
-	register func(string, MuxServer),
-	tags ...string,
-) (string, error) {
-	// add running program as tag
-	tags = append(tags, filepath.Base(os.Args[0]))
-
-	srv, err := broker.NewChannel(tags...)
-	if err != nil {
-		return "", fmt.Errorf("new channel: %w", err)
-	}
-
-	if log.IsLevelEnabled(log.TraceLevel) {
-		srv = LoggingGRPCServer(srv)
-	}
-
-	channelID := srv.Addr().String()
-
-	register(channelID, srv)
-
-	go func() {
-		if err := srv.Serve(ctx); err != nil {
-			log.Errorf("serve channel(%v): %v", tags, err)
-		}
-	}()
-
-	return channelID, nil
-}
 
 // DisableGRPCLogging disables grpc stderr loggers.
 func DisableGRPCLogging() {

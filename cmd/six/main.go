@@ -57,7 +57,7 @@ import (
 	"unstable.build/go-tui/component/shader/glslshader"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/extension"
-	"unstable.build/go-tui/extension/extensionproc"
+	"unstable.build/go-tui/extension/extensionv2"
 	"unstable.build/go-tui/ide"
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term"
@@ -248,34 +248,16 @@ func main() {
 	os.Exit(4)
 }
 
-func extensionRunner(
-	locker sync.Locker,
-	uri workspaceapi.URI,
-	res map[extension.Permission]extension.ResourceRegistrar,
-	dataDir string,
-	notifications browser.Notifications,
-) (extension.Runner, error) {
-	notifications = &protectedNotifications{notifications: notifications, locker: locker}
-	extensionOpts := []extensionproc.Option{
-		extensionproc.WithLocker(locker),
-		extensionproc.WithWorkspace(uri),
-		extensionproc.WithDataDir(dataDir),
-		extensionproc.WithPackageName("six"),
-		extensionproc.WithPackageVersion(Tag),
-		extensionproc.WithNotifications(notifications),
-	}
-	return extensionproc.NewManager(extension.GrantAll(res), extensionOpts...)
-}
-
 func run() int {
-	var err error
-	var filenames []string
+	ctx := context.Background()
 
 	if *flagVersion {
 		fmt.Printf("Six %s\n", Version)
 		return 0
 	}
 
+	var err error
+	var filenames []string
 	filenames = append(filenames, flag.Args()...)
 
 	if *flagPprof {
@@ -301,11 +283,24 @@ func run() int {
 		}
 	}
 
-	unstableBuildLogo := unstableBuildLogo()
-
 	var eventLoopMutex sync.Mutex
+
+	grantor := extension.GrantAll()
+	extensionOpts := []extensionv2.Option{
+		extensionv2.WithPackageName("six"),
+		extensionv2.WithPackageVersion(Tag),
+	}
+	runner, err := extensionv2.NewRunner(ctx, &eventLoopMutex,
+		grantor, *flagDataPath, extensionOpts...)
+	if err != nil {
+		err = fmt.Errorf("new extension runner: %v", err)
+		fmt.Printf("%s", err)
+		return 1
+	}
+
+	unstableBuildLogo := unstableBuildLogo()
 	opts := []ide.Option{
-		ide.WithExtensionsRunner(ide.FuncExtensionsRunner(extensionRunner)),
+		ide.WithExtensionsRunner(runner),
 		ide.WithInitShader(
 			func(defaultAttr term.Attributes) shader.Shader {
 				return glslshader.Burning(

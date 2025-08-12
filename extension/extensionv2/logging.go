@@ -21,28 +21,71 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package extensionproc
+package extensionv2
 
 import (
+	"bufio"
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"io"
+
+	"github.com/ernestrc/logd-go/logging"
 	log "github.com/sirupsen/logrus"
-	"github.com/unstablebuild/blue/retry"
-	"unstable.build/go-tui/rpc"
+	"unstable.build/go-tui/api/workspaceapi"
 )
 
-func initHostBroker(config managerConfig, dataDir, pkg, version string) (rpc.MuxBroker, error) {
-	broker := rpc.NewUnixGRPCBroker(dataDir, pkg, version)
-	broker = rpc.WithRetryBroker(broker, retry.DefaultStrategy)
-	if log.IsLevelEnabled(log.TraceLevel) {
-		broker = rpc.LoggingBroker(broker, log.StandardLogger())
-	}
-	return broker, nil
+var _ io.Writer = (*logCollector)(nil)
+
+type logCollector struct {
+	buffer      bytes.Buffer
+	scanner     *bufio.Reader
+	logger      *log.Logger
+	extensionID string
+	workspace   workspaceapi.URI
 }
 
-func initClientBroker(logger *log.Logger, dataDir, pkg, version string) rpc.MuxBroker {
-	broker := rpc.NewUnixGRPCBroker(dataDir, pkg, version)
-	broker = rpc.WithRetryBroker(broker, retry.DefaultStrategy)
-	if logger.IsLevelEnabled(log.TraceLevel) {
-		broker = rpc.LoggingBroker(broker, logger)
+func newCollector(extensionID string, workspace workspaceapi.URI) *logCollector {
+	ret := new(logCollector)
+	ret.logger = log.StandardLogger()
+	ret.scanner = bufio.NewReader(&ret.buffer)
+	ret.extensionID = extensionID
+	ret.workspace = workspace
+	return ret
+}
+
+func (c *logCollector) Write(data []byte) (int, error) {
+	n, _ := c.buffer.Write(data)
+	for {
+		line, err := c.scanner.ReadBytes('\n')
+		if err == io.EOF {
+			_, _ = c.buffer.Write(line)
+			return n, nil
+		}
+		if err != nil {
+			return n, err
+		}
+		m := make(map[string]any)
+		err = json.Unmarshal(line, &m)
+		if err != nil {
+			return n, fmt.Errorf("unmarshal json log: %v", err)
+		}
+		m[logging.KeyThread] = c.extensionID
+		levelIfc, okFound := m[logging.KeyLevel]
+		levelStr, okStr := levelIfc.(string)
+		level, err := log.ParseLevel(levelStr)
+		if okFound && okStr && err == nil {
+			c.log(level, log.Fields(m), "")
+		} else {
+			c.log(log.WarnLevel, log.Fields(m), "")
+		}
 	}
-	return broker
+}
+
+func (m *logCollector) log(level log.Level, fields log.Fields, msg string, args ...any) {
+	if !m.logger.IsLevelEnabled(level) {
+		return
+	}
+	fields["workspace"] = m.workspace.String()
+	m.logger.WithFields(fields).Logf(level, msg, args...)
 }

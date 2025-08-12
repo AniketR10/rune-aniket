@@ -21,31 +21,58 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package storageext
+package config
 
-import (
-	"context"
+import "github.com/unstablebuild/tcell/v3"
 
-	"unstable.build/go-tui/extension"
-)
-
-// WithPartition creates a storage partition with name, such that
-// calls to extension.Storage will return a document.Service that's
-// logically partition from the rest.
-func WithPartition(grant extension.Grant, name string) extension.Grant {
-	grant.Context = contextWithPartition(grant.Context, name)
-	return grant
+// ErrConfig returns a Config that returns err to all methods of Config.
+func ErrConfig(err error) Config {
+	return errConfig{err: err}
 }
 
-type ctxKey int
-
-var partitionKey ctxKey
-
-func contextWithPartition(ctx context.Context, partition string) context.Context {
-	return context.WithValue(ctx, partitionKey, partition)
+type errConfig struct {
+	err error
 }
 
-func partitionFromContext(ctx context.Context) (string, bool) {
-	partition, ok := ctx.Value(partitionKey).(string)
-	return partition, ok
+func (e errConfig) GetInt(string) (int, error) {
+	return 0, e.err
+}
+
+func (e errConfig) GetFloat(string) (float64, error) {
+	return 0, e.err
+}
+
+func (e errConfig) GetString(string) (string, error) {
+	return "", e.err
+}
+
+func (e errConfig) GetBool(string) (bool, error) {
+	return false, e.err
+}
+
+func (e errConfig) GetConfig(string) (Config, error) {
+	return nil, e.err
+}
+
+func (e errConfig) GetMap(string) (map[string]interface{}, error) {
+	return nil, e.err
+}
+
+func (e errConfig) GetAttribute(string) (tcell.AttrMask, error) {
+	return 0, e.err
+}
+
+func (e errConfig) GetColor(string) (tcell.Color, error) {
+	return 0, e.err
+}
+
+func (e errConfig) GetRune(string) (rune, error) {
+	return 0, e.err
+}
+
+func (e errConfig) GetSlice(string) ([]interface{}, error) {
+	return nil, e.err
+}
+
+func (e errConfig) Iterate(fn func(k string, value interface{})) {
 }

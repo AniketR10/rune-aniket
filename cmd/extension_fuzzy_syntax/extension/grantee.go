@@ -34,6 +34,7 @@ import (
 	"unstable.build/go-tui/api/browserapi"
 	"unstable.build/go-tui/api/config"
 	configextension "unstable.build/go-tui/api/config/extension"
+	"unstable.build/go-tui/api/extensionapi"
 	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/cmd/extension_fuzzy_file/finder"
@@ -65,9 +66,9 @@ var (
 )
 
 // Grantee returns this extension's Grantee and the permissions required to run it.
-func Grantee() (extension.Grantee, []extension.Permission) {
+func Grantee() (extension.Grantee, []extensionapi.Permission) {
 	perms := finder.Permissions()
-	perms = append(perms, extension.PermissionConfig)
+	perms = append(perms, extensionapi.PermissionConfig)
 
 	searchFunctions, finalPerms := extutil.NewCommandSplitHandler(extutil.CommandSplitHandlerConfig{
 		SplitOrientation: browserapi.OrientationBottom,
@@ -167,7 +168,7 @@ func newHandler(
 
 	tabspaces := -1
 	for _, grant := range grants {
-		if grant.Permission == extension.PermissionConfig {
+		if grant.Permission == extensionapi.PermissionConfig {
 			config, err := configextension.FetchConfig(ctx, grant, broker)
 			if err != nil {
 				return nil, err

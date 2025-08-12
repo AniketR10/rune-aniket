@@ -30,6 +30,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/api/config"
+	"unstable.build/go-tui/api/extensionapi"
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component/shader"
@@ -255,9 +256,9 @@ func defaultOptions() options {
 type nopExtensions struct {
 }
 
-func (n nopExtensions) WorkspaceExtensionsRunner(locker sync.Locker,
+func (n nopExtensions) WorkspaceExtensionsRunner(
 	uri workspaceapi.URI,
-	res map[extension.Permission]extension.ResourceRegistrar,
+	res map[extensionapi.Permission]extension.ResourceRegistrar,
 	dataDir string, notifications browser.Notifications) (extension.Runner, error) {
 	return nopExtensionsRunner{}, nil
 }

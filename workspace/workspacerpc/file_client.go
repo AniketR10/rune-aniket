@@ -32,8 +32,8 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/logging"
+	grpc "google.golang.org/grpc"
 	"unstable.build/go-tui/api/workspaceapi"
-	"unstable.build/go-tui/rpc"
 )
 
 var _ workspaceapi.File = (*FileClient)(nil)
@@ -55,7 +55,7 @@ type FileClient struct {
 
 func newFileClient(
 	ctx context.Context, c *Client,
-	conn rpc.MuxConn, filename string, fd uintptr,
+	conn grpc.ClientConnInterface, filename string, fd uintptr,
 ) workspaceapi.File {
 	ret := &FileClient{
 		c:        c,

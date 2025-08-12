@@ -44,8 +44,8 @@ type gitTestExecutor struct {
 	schemeExecutor schemeapi.Executor
 }
 
-func (e *gitTestExecutor) Start(cmd workspaceapi.Cmd) (workspaceapi.Pid, error) {
-	return e.schemeExecutor.StartCommand(context.Background(), cmd)
+func (e *gitTestExecutor) Start(ctx context.Context, cmd workspaceapi.Cmd) (workspaceapi.Pid, error) {
+	return e.schemeExecutor.StartCommand(ctx, cmd)
 }
 
 func (e *gitTestExecutor) Signal(pid workspaceapi.Pid, signal syscall.Signal) error {
@@ -253,7 +253,7 @@ func TestCmdDiff(t *testing.T) {
 			testServiceFunction(t,
 				tcase.workspaceCwd,
 				func(git *cmdGitService) (res *diff.FileDiff, err error) {
-					return git.diff(tcase.workPath)
+					return git.diff(context.Background(), tcase.workPath)
 				},
 				tcase.expectErr, tcase.assertions)
 		})
@@ -322,7 +322,7 @@ func TestCmdGitCurrentCommit(t *testing.T) {
 			testServiceFunction(t,
 				tcase.workspaceCwd,
 				func(git *cmdGitService) (res string, err error) {
-					return git.currentCommit(tcase.workPath)
+					return git.currentCommit(context.Background(), tcase.workPath)
 				},
 				tcase.expectErr,
 				func(t *testing.T, res string) {
@@ -384,7 +384,7 @@ func TestCmdGitRemoteURL(t *testing.T) {
 			testServiceFunction(t,
 				tcase.workspaceCwd,
 				func(git *cmdGitService) (res string, err error) {
-					return git.remoteURL(tcase.workPath, tcase.remoteName)
+					return git.remoteURL(context.Background(), tcase.workPath, tcase.remoteName)
 				},
 				tcase.expectErr,
 				func(t *testing.T, res string) {
@@ -475,7 +475,7 @@ func TestCmdRepoPath(t *testing.T) {
 			testServiceFunction(t,
 				tcase.workspaceCwd,
 				func(git *cmdGitService) (res string, err error) {
-					return git.repoPath(tcase.file)
+					return git.repoPath(context.Background(), tcase.file)
 				},
 				tcase.expectErr,
 				func(t *testing.T, res string) {
@@ -566,7 +566,7 @@ func TestCmdRelPath(t *testing.T) {
 			testServiceFunction(t,
 				tcase.workspaceCwd,
 				func(git *cmdGitService) (res string, err error) {
-					return git.relPath(tcase.file)
+					return git.relPath(context.Background(), tcase.file)
 				},
 				tcase.expectErr,
 				func(t *testing.T, res string) {

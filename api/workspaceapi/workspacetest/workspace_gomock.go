@@ -10,6 +10,7 @@
 package workspacetest
 
 import (
+	context "context"
 	os "os"
 	reflect "reflect"
 	syscall "syscall"
@@ -218,18 +219,18 @@ func (mr *MockExecutorMockRecorder) Signal(arg0, arg1 any) *gomock.Call {
 }
 
 // Start mocks base method.
-func (m *MockExecutor) Start(arg0 workspaceapi.Cmd) (workspaceapi.Pid, error) {
+func (m *MockExecutor) Start(arg0 context.Context, arg1 workspaceapi.Cmd) (workspaceapi.Pid, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Start", arg0)
+	ret := m.ctrl.Call(m, "Start", arg0, arg1)
 	ret0, _ := ret[0].(workspaceapi.Pid)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Start indicates an expected call of Start.
-func (mr *MockExecutorMockRecorder) Start(arg0 any) *gomock.Call {
+func (mr *MockExecutorMockRecorder) Start(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*MockExecutor)(nil).Start), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*MockExecutor)(nil).Start), arg0, arg1)
 }
 
 // MockTerminal is a mock of Terminal interface.

@@ -45,6 +45,7 @@ import (
 	"unstable.build/go-tui/api/browserapi/browserext"
 	"unstable.build/go-tui/api/config"
 	configextension "unstable.build/go-tui/api/config/extension"
+	"unstable.build/go-tui/api/extensionapi"
 	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/api/workspaceapi/workspaceext"
@@ -73,7 +74,7 @@ var (
 )
 
 // Grantee returns this extension's Grantee and the permissions required to run it.
-func Grantee() (extension.Grantee, []extension.Permission) {
+func Grantee() (extension.Grantee, []extensionapi.Permission) {
 	return extutil.NewEditorEventHandler(SyntaxHandlerCommands,
 		newSyntaxHandler, SyntaxHandlerEvents,
 		SyntaxHandlerPermissions...)
@@ -102,14 +103,15 @@ var (
 
 	// SyntaxHandlerPermissions are the required permissions for this
 	// extension to run.
-	SyntaxHandlerPermissions = []extension.Permission{
-		extension.PermissionBrowserWindowManager,
-		extension.PermissionBrowserResourceOpener,
-		extension.PermissionBrowserEventPublisher,
-		extension.PermissionBrowserNotifications,
-		extension.PermissionConfig,
-		extension.PermissionFileSystem,
-		extension.PermissionEditor,
+	SyntaxHandlerPermissions = []extensionapi.Permission{
+		extensionapi.PermissionBrowserWindowManager,
+		extensionapi.PermissionBrowserResourceOpener,
+		extensionapi.PermissionInterrupt,
+		extensionapi.PermissionNotifications,
+		extensionapi.PermissionConfig,
+		extensionapi.PermissionFileSystem,
+		extensionapi.PermissionEditor,
+		extensionapi.PermissionCommands,
 	}
 )
 
@@ -221,27 +223,27 @@ func newSyntaxHandler(
 	}
 	for _, g := range grants {
 		switch g.Permission {
-		case extension.PermissionBrowserEventPublisher:
+		case extensionapi.PermissionInterrupt:
 			ret.p, err = browserext.EventPublisher(ctx, g, broker)
 			if err != nil {
 				return nil, err
 			}
-		case extension.PermissionBrowserResourceOpener:
+		case extensionapi.PermissionBrowserResourceOpener:
 			ret.o, err = browserext.ResourceOpener(ctx, g, broker)
 			if err != nil {
 				return nil, err
 			}
-		case extension.PermissionBrowserWindowManager:
+		case extensionapi.PermissionBrowserWindowManager:
 			ret.wm, err = browserext.WindowManager(ctx, g, broker)
 			if err != nil {
 				return nil, err
 			}
-		case extension.PermissionBrowserNotifications:
+		case extensionapi.PermissionNotifications:
 			ret.m, err = browserext.Notifications(ctx, g, broker)
 			if err != nil {
 				return nil, err
 			}
-		case extension.PermissionFileSystem:
+		case extensionapi.PermissionFileSystem:
 			ret.fs, err = workspaceext.FileSystem(ctx, g, broker)
 			if err != nil {
 				return nil, err
@@ -251,7 +253,7 @@ func newSyntaxHandler(
 				return nil, err
 			}
 			ret.cwd = cwdURI.Path()
-		case extension.PermissionConfig:
+		case extensionapi.PermissionConfig:
 			config, err := configextension.FetchConfig(ctx, g, broker)
 			if err != nil {
 				return nil, err

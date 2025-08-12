@@ -11,206 +11,11 @@ package rpc
 
 import (
 	context "context"
-	net "net"
 	reflect "reflect"
 
 	gomock "go.uber.org/mock/gomock"
 	grpc "google.golang.org/grpc"
-	connectivity "google.golang.org/grpc/connectivity"
 )
-
-// MockMuxConn is a mock of MuxConn interface.
-type MockMuxConn struct {
-	ctrl     *gomock.Controller
-	recorder *MockMuxConnMockRecorder
-}
-
-// MockMuxConnMockRecorder is the mock recorder for MockMuxConn.
-type MockMuxConnMockRecorder struct {
-	mock *MockMuxConn
-}
-
-// NewMockMuxConn creates a new mock instance.
-func NewMockMuxConn(ctrl *gomock.Controller) *MockMuxConn {
-	mock := &MockMuxConn{ctrl: ctrl}
-	mock.recorder = &MockMuxConnMockRecorder{mock}
-	return mock
-}
-
-// EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockMuxConn) EXPECT() *MockMuxConnMockRecorder {
-	return m.recorder
-}
-
-// Close mocks base method.
-func (m *MockMuxConn) Close() error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Close")
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// Close indicates an expected call of Close.
-func (mr *MockMuxConnMockRecorder) Close() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockMuxConn)(nil).Close))
-}
-
-// GetState mocks base method.
-func (m *MockMuxConn) GetState() connectivity.State {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetState")
-	ret0, _ := ret[0].(connectivity.State)
-	return ret0
-}
-
-// GetState indicates an expected call of GetState.
-func (mr *MockMuxConnMockRecorder) GetState() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetState", reflect.TypeOf((*MockMuxConn)(nil).GetState))
-}
-
-// Invoke mocks base method.
-func (m *MockMuxConn) Invoke(ctx context.Context, method string, args, reply any, opts ...grpc.CallOption) error {
-	m.ctrl.T.Helper()
-	varargs := []any{ctx, method, args, reply}
-	for _, a := range opts {
-		varargs = append(varargs, a)
-	}
-	ret := m.ctrl.Call(m, "Invoke", varargs...)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// Invoke indicates an expected call of Invoke.
-func (mr *MockMuxConnMockRecorder) Invoke(ctx, method, args, reply any, opts ...any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{ctx, method, args, reply}, opts...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Invoke", reflect.TypeOf((*MockMuxConn)(nil).Invoke), varargs...)
-}
-
-// NewStream mocks base method.
-func (m *MockMuxConn) NewStream(ctx context.Context, desc *grpc.StreamDesc, method string, opts ...grpc.CallOption) (grpc.ClientStream, error) {
-	m.ctrl.T.Helper()
-	varargs := []any{ctx, desc, method}
-	for _, a := range opts {
-		varargs = append(varargs, a)
-	}
-	ret := m.ctrl.Call(m, "NewStream", varargs...)
-	ret0, _ := ret[0].(grpc.ClientStream)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// NewStream indicates an expected call of NewStream.
-func (mr *MockMuxConnMockRecorder) NewStream(ctx, desc, method any, opts ...any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{ctx, desc, method}, opts...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewStream", reflect.TypeOf((*MockMuxConn)(nil).NewStream), varargs...)
-}
-
-// WaitForStateChange mocks base method.
-func (m *MockMuxConn) WaitForStateChange(ctx context.Context, sourceState connectivity.State) bool {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "WaitForStateChange", ctx, sourceState)
-	ret0, _ := ret[0].(bool)
-	return ret0
-}
-
-// WaitForStateChange indicates an expected call of WaitForStateChange.
-func (mr *MockMuxConnMockRecorder) WaitForStateChange(ctx, sourceState any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WaitForStateChange", reflect.TypeOf((*MockMuxConn)(nil).WaitForStateChange), ctx, sourceState)
-}
-
-// MockMuxServer is a mock of MuxServer interface.
-type MockMuxServer struct {
-	ctrl     *gomock.Controller
-	recorder *MockMuxServerMockRecorder
-}
-
-// MockMuxServerMockRecorder is the mock recorder for MockMuxServer.
-type MockMuxServerMockRecorder struct {
-	mock *MockMuxServer
-}
-
-// NewMockMuxServer creates a new mock instance.
-func NewMockMuxServer(ctrl *gomock.Controller) *MockMuxServer {
-	mock := &MockMuxServer{ctrl: ctrl}
-	mock.recorder = &MockMuxServerMockRecorder{mock}
-	return mock
-}
-
-// EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockMuxServer) EXPECT() *MockMuxServerMockRecorder {
-	return m.recorder
-}
-
-// Addr mocks base method.
-func (m *MockMuxServer) Addr() net.Addr {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Addr")
-	ret0, _ := ret[0].(net.Addr)
-	return ret0
-}
-
-// Addr indicates an expected call of Addr.
-func (mr *MockMuxServerMockRecorder) Addr() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Addr", reflect.TypeOf((*MockMuxServer)(nil).Addr))
-}
-
-// GracefulStop mocks base method.
-func (m *MockMuxServer) GracefulStop() {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "GracefulStop")
-}
-
-// GracefulStop indicates an expected call of GracefulStop.
-func (mr *MockMuxServerMockRecorder) GracefulStop() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GracefulStop", reflect.TypeOf((*MockMuxServer)(nil).GracefulStop))
-}
-
-// Registrar mocks base method.
-func (m *MockMuxServer) Registrar() ServiceRegistrar {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Registrar")
-	ret0, _ := ret[0].(ServiceRegistrar)
-	return ret0
-}
-
-// Registrar indicates an expected call of Registrar.
-func (mr *MockMuxServerMockRecorder) Registrar() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Registrar", reflect.TypeOf((*MockMuxServer)(nil).Registrar))
-}
-
-// Serve mocks base method.
-func (m *MockMuxServer) Serve(arg0 context.Context) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Serve", arg0)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// Serve indicates an expected call of Serve.
-func (mr *MockMuxServerMockRecorder) Serve(arg0 any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Serve", reflect.TypeOf((*MockMuxServer)(nil).Serve), arg0)
-}
-
-// Stop mocks base method.
-func (m *MockMuxServer) Stop() {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Stop")
-}
-
-// Stop indicates an expected call of Stop.
-func (mr *MockMuxServerMockRecorder) Stop() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*MockMuxServer)(nil).Stop))
-}
 
 // MockMuxBroker is a mock of MuxBroker interface.
 type MockMuxBroker struct {
@@ -250,14 +55,14 @@ func (mr *MockMuxBrokerMockRecorder) Close() *gomock.Call {
 }
 
 // DialChannel mocks base method.
-func (m *MockMuxBroker) DialChannel(arg0 context.Context, arg1 string, arg2 ...string) (MuxConn, error) {
+func (m *MockMuxBroker) DialChannel(arg0 context.Context, arg1 string, arg2 ...string) (grpc.ClientConnInterface, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "DialChannel", varargs...)
-	ret0, _ := ret[0].(MuxConn)
+	ret0, _ := ret[0].(grpc.ClientConnInterface)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -267,25 +72,6 @@ func (mr *MockMuxBrokerMockRecorder) DialChannel(arg0, arg1 any, arg2 ...any) *g
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]any{arg0, arg1}, arg2...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DialChannel", reflect.TypeOf((*MockMuxBroker)(nil).DialChannel), varargs...)
-}
-
-// NewChannel mocks base method.
-func (m *MockMuxBroker) NewChannel(tags ...string) (MuxServer, error) {
-	m.ctrl.T.Helper()
-	varargs := []any{}
-	for _, a := range tags {
-		varargs = append(varargs, a)
-	}
-	ret := m.ctrl.Call(m, "NewChannel", varargs...)
-	ret0, _ := ret[0].(MuxServer)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// NewChannel indicates an expected call of NewChannel.
-func (mr *MockMuxBrokerMockRecorder) NewChannel(tags ...any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewChannel", reflect.TypeOf((*MockMuxBroker)(nil).NewChannel), tags...)
 }
 
 // MockServiceRegistrar is a mock of ServiceRegistrar interface.

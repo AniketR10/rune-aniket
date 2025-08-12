@@ -36,6 +36,7 @@ import (
 	"unstable.build/go-tui/api/browserapi/browserext"
 	"unstable.build/go-tui/api/config"
 	configextension "unstable.build/go-tui/api/config/extension"
+	"unstable.build/go-tui/api/extensionapi"
 	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/api/workspaceapi/workspaceext"
@@ -54,7 +55,7 @@ var (
 )
 
 // Grantee returns this extension's Grantee and the permissions required to run it.
-func Grantee() (extension.Grantee, []extension.Permission) {
+func Grantee() (extension.Grantee, []extensionapi.Permission) {
 	return extutil.NewEditorEventHandler(gfHandlerCommands, newGFHandler,
 		gfHandlerEvents, gfHandlerPermissions...)
 }
@@ -68,11 +69,11 @@ var (
 		textapi.EventTypeCursor,
 		textapi.EventTypeFocus, // needed in case wrap mode is set
 	}
-	gfHandlerPermissions = []extension.Permission{
-		extension.PermissionFileSystem,
-		extension.PermissionConfig,
-		extension.PermissionBrowserResourceOpener,
-		extension.PermissionBrowserWindowManager,
+	gfHandlerPermissions = []extensionapi.Permission{
+		extensionapi.PermissionFileSystem,
+		extensionapi.PermissionConfig,
+		extensionapi.PermissionBrowserResourceOpener,
+		extensionapi.PermissionBrowserWindowManager,
 	}
 )
 
@@ -95,13 +96,13 @@ func newGFHandler(
 	var err error
 	for _, grant := range grants {
 		switch grant.Permission {
-		case extension.PermissionFileSystem:
+		case extensionapi.PermissionFileSystem:
 			ret.fs, err = workspaceext.FileSystem(ctx, grant, broker)
-		case extension.PermissionBrowserResourceOpener:
+		case extensionapi.PermissionBrowserResourceOpener:
 			ret.o, err = browserext.ResourceOpener(ctx, grant, broker)
-		case extension.PermissionBrowserWindowManager:
+		case extensionapi.PermissionBrowserWindowManager:
 			ret.wm, err = browserext.WindowManager(ctx, grant, broker)
-		case extension.PermissionConfig:
+		case extensionapi.PermissionConfig:
 			cfg, err := configextension.FetchConfig(ctx, grant, broker)
 			if err != nil {
 				return nil, fmt.Errorf("fetch config: %v", err)

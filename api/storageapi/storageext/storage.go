@@ -47,11 +47,7 @@ func dialStorage(ctx context.Context, grant extension.Grant, broker rpc.MuxBroke
 	}
 	c := new(docrpc.Client)
 	c.Init(conn, doctoml.Marshaler())
-	partition, ok := partitionFromContext(grant.Context)
-	if !ok {
-		partition = "default"
-	}
-	return document.WithPartition(c, partition), nil
+	return c, nil
 }
 
 // Storage acquires a client to persistent storage with

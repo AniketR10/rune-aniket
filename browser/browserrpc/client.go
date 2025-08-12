@@ -29,7 +29,6 @@ import (
 	"fmt"
 	"io"
 	"strings"
-	"sync"
 
 	"google.golang.org/grpc"
 	"unstable.build/go-tui"
@@ -38,7 +37,6 @@ import (
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/handler/handlerrpc"
-	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term"
 	termrpc "unstable.build/go-tui/term/termrpc"
 )
@@ -71,10 +69,6 @@ func (c *Client) Init(ctx context.Context, cc grpc.ClientConnInterface) {
 	c.cc = cc
 	c.f = NewResourceOpenerClient(cc)
 	c.p = NewEventPublisherClient(cc)
-	ok := rpc.IsContextWithWaitGroup(ctx)
-	if !ok {
-		ctx = rpc.ContextWithWaitGroup(ctx, new(sync.WaitGroup))
-	}
 	c.clientCtx, c.clientCancelCtx = context.WithCancel(ctx)
 }
 

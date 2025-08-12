@@ -31,6 +31,7 @@ import (
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/api/browserapi"
 	"unstable.build/go-tui/api/config"
+	"unstable.build/go-tui/api/extensionapi"
 	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/extension"
@@ -40,7 +41,7 @@ import (
 )
 
 // Grantee returns this extension's extension.Grantee, and it required permissions.
-func Grantee() (extension.Grantee, []extension.Permission) {
+func Grantee() (extension.Grantee, []extensionapi.Permission) {
 	return extutil.NewCommandSplitHandler(extutil.CommandSplitHandlerConfig{
 		SplitOrientation: browserapi.OrientationRight,
 		Handler: func(ctx context.Context, _ textapi.Command,

@@ -50,6 +50,7 @@ import (
 	"unstable.build/go-tui/api/browserapi/browserext"
 	"unstable.build/go-tui/api/config"
 	configextension "unstable.build/go-tui/api/config/extension"
+	"unstable.build/go-tui/api/extensionapi"
 	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/api/workspaceapi/workspaceext"
@@ -90,7 +91,7 @@ const (
 )
 
 // Grantee returns this extension's Grantee and the permissions required to run it.
-func Grantee() (extension.Grantee, []extension.Permission) {
+func Grantee() (extension.Grantee, []extensionapi.Permission) {
 	return extutil.NewEditorEventHandler(
 		LSPHandlerCommands, newLspHandler,
 		LSPHandlerEvents, LSPHandlerPermissions...)
@@ -154,14 +155,14 @@ var (
 
 	// LSPHandlerPermissions are the required permissions for this
 	// extension to run.
-	LSPHandlerPermissions = []extension.Permission{
-		extension.Permission(extension.PermissionBrowserWindowManager),
-		extension.Permission(extension.PermissionBrowserResourceOpener),
-		extension.Permission(extension.PermissionBrowserEventPublisher),
-		extension.Permission(extension.PermissionBrowserNotifications),
-		extension.Permission(extension.PermissionFileSystem),
-		extension.Permission(extension.PermissionExecute),
-		extension.PermissionConfig,
+	LSPHandlerPermissions = []extensionapi.Permission{
+		extensionapi.Permission(extensionapi.PermissionBrowserWindowManager),
+		extensionapi.Permission(extensionapi.PermissionBrowserResourceOpener),
+		extensionapi.Permission(extensionapi.PermissionInterrupt),
+		extensionapi.Permission(extensionapi.PermissionNotifications),
+		extensionapi.Permission(extensionapi.PermissionFileSystem),
+		extensionapi.Permission(extensionapi.PermissionExecute),
+		extensionapi.PermissionConfig,
 	}
 
 	defaultDiagnosticAttr = map[protocol.DiagnosticSeverity]term.Attributes{
@@ -227,8 +228,10 @@ type execServer struct {
 }
 
 type lspEditorHandler struct {
-	mu     sync.Mutex
-	evChan chan textapi.Event
+	mu        sync.Mutex
+	evChan    chan textapi.Event
+	ctx       context.Context
+	cancelCtx func()
 
 	ed   textapi.Editor
 	wm   browserapi.WindowManager
@@ -449,7 +452,7 @@ func (h *lspEditorHandler) startLanguageServer(
 	}
 
 	log.Debugf("starting %q LSP server with cmd %#v", langID, cmd)
-	pid, err := h.exec.Start(cmd)
+	pid, err := h.exec.Start(h.ctx, cmd)
 	log.Tracef("started %q LSP server with pid=%d: err=%v", langID, pid, err)
 	if err != nil {
 		err = fmt.Errorf("workspace.Start: %v", err)
@@ -624,6 +627,7 @@ func newLspHandler(
 	ret.pendingDiagnostic = make(map[string][]protocol.Diagnostic)
 	ret.pendingGoTo = make(map[string]protocol.Range)
 	ret.evChan = make(chan textapi.Event, handleBackpressureEvs)
+	ret.ctx, ret.cancelCtx = context.WithCancel(ctx)
 
 	var err error
 	ret.semanticTypesAttr, err = getSemanticTypesAttr(pconfig)
@@ -772,7 +776,7 @@ func newLspHandler(
 
 	for _, g := range grants {
 		switch g.Permission {
-		case extension.PermissionFileSystem:
+		case extensionapi.PermissionFileSystem:
 			ret.fs, err = workspaceext.FileSystem(ctx, g, broker)
 			if err != nil {
 				return nil, err
@@ -782,32 +786,32 @@ func newLspHandler(
 				return nil, err
 			}
 			ret.cwd = cwdURI.Path()
-		case extension.PermissionExecute:
+		case extensionapi.PermissionExecute:
 			ret.exec, err = workspaceext.Executor(ctx, g, broker)
 			if err != nil {
 				return nil, err
 			}
-		case extension.PermissionBrowserEventPublisher:
+		case extensionapi.PermissionInterrupt:
 			ret.p, err = browserext.EventPublisher(ctx, g, broker)
 			if err != nil {
 				return nil, err
 			}
-		case extension.PermissionBrowserResourceOpener:
+		case extensionapi.PermissionBrowserResourceOpener:
 			ret.o, err = browserext.ResourceOpener(ctx, g, broker)
 			if err != nil {
 				return nil, err
 			}
-		case extension.PermissionBrowserWindowManager:
+		case extensionapi.PermissionBrowserWindowManager:
 			ret.wm, err = browserext.WindowManager(ctx, g, broker)
 			if err != nil {
 				return nil, err
 			}
-		case extension.PermissionBrowserNotifications:
+		case extensionapi.PermissionNotifications:
 			ret.m, err = browserext.Notifications(ctx, g, broker)
 			if err != nil {
 				return nil, err
 			}
-		case extension.PermissionConfig:
+		case extensionapi.PermissionConfig:
 			config, err := configextension.FetchConfig(ctx, g, broker)
 			if err != nil {
 				return nil, err
@@ -2176,6 +2180,8 @@ func (h *lspEditorHandler) Close() error {
 
 	log.WithFields(log.Fields{}).
 		Logf(level, "shut down servers: %d: %v", len(h.servers), ret)
+
+	h.cancelCtx()
 
 	return ret
 }

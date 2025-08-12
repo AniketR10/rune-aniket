@@ -40,6 +40,7 @@ import (
 	"github.com/unstablebuild/blue/iterator"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/api/config"
+	"unstable.build/go-tui/api/extensionapi"
 	"unstable.build/go-tui/api/schemeapi"
 	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/api/workspaceapi"
@@ -206,8 +207,8 @@ func TestWorkspaceExtensions(t *testing.T) {
 		var n int
 
 		runner := FuncExtensionsRunner(
-			func(locker sync.Locker, _uri workspaceapi.URI,
-				res map[extension.Permission]extension.ResourceRegistrar,
+			func(_uri workspaceapi.URI,
+				res map[extensionapi.Permission]extension.ResourceRegistrar,
 				s string, noti browser.Notifications,
 			) (extension.Runner, error) {
 				if n == 1 { // first is the home directory used as "empty" workspace
@@ -257,8 +258,8 @@ func TestWorkspaceExtensions(t *testing.T) {
 		var n int
 
 		runner := FuncExtensionsRunner(
-			func(locker sync.Locker, _uri workspaceapi.URI,
-				res map[extension.Permission]extension.ResourceRegistrar,
+			func(_uri workspaceapi.URI,
+				res map[extensionapi.Permission]extension.ResourceRegistrar,
 				s string, noti browser.Notifications) (extension.Runner, error) {
 				if n == 1 { // first is the home directory used as "empty" workspace
 					assert.Equal(t, uri, _uri)

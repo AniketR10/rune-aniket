@@ -21,40 +21,48 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package extensionproc
 
-import (
-	log "github.com/sirupsen/logrus"
-)
+package extensionv2
 
-type jsonFormatter struct {
-	formatter *log.JSONFormatter
-}
-
-func newJSONFormatter() log.Formatter {
-	return jsonFormatter{
-		formatter: &log.JSONFormatter{
-			// timestamp format expected by hclog
-			TimestampFormat: "2006-01-02T15:04:05.000000Z07:00",
-			FieldMap: log.FieldMap{
-				log.FieldKeyTime: "@timestamp",
-				log.FieldKeyMsg:  "@message",
-				// log.FieldKeyLevel: "@level",
-			},
-		},
+// WithPackageName returns an option that configures the
+// package name used for creating panic reports.
+func WithPackageName(pkg string) Option {
+	return func(cfg *runnerConfig) {
+		cfg.pkg = pkg
 	}
 }
 
-func (j jsonFormatter) Format(entry *log.Entry) ([]byte, error) {
-	if entry.Data == nil {
-		entry.Data = make(log.Fields)
+// WithPackageVersion returns an option that configures the
+// package version used for creating panic reports.
+func WithPackageVersion(version string) Option {
+	return func(cfg *runnerConfig) {
+		cfg.version = version
 	}
-	// map 'warning' (logrus) to 'warn' (hclog) or otherwise
-	// warning logs are printed verbatim (json).
-	levelStr := entry.Level.String()
-	if entry.Level == log.WarnLevel {
-		levelStr = "warn"
+}
+
+// WithInsecureAuth returns an option that configures
+// host resources to be exposed without authentication or authorization.
+func WithInsecureAuth() Option {
+	return func(cfg *runnerConfig) {
+		cfg.insecureAuth = true
 	}
-	entry.Data["@level"] = levelStr
-	return j.formatter.Format(entry)
+}
+
+// WithInsecureTransport returns an option that configures
+// a extension.Manager's to NOT secure communication
+// between extensions and host.
+func WithInsecureTransport() Option {
+	return func(cfg *runnerConfig) {
+		cfg.insecureTransport = true
+	}
+}
+
+// Option is a configuration option for a runner.
+type Option func(cfg *runnerConfig)
+
+type runnerConfig struct {
+	pkg               string
+	version           string
+	insecureAuth      bool
+	insecureTransport bool
 }

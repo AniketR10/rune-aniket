@@ -27,14 +27,9 @@ import (
 	"context"
 
 	"unstable.build/go-tui/api/config"
+	"unstable.build/go-tui/api/extensionapi"
 	"unstable.build/go-tui/rpc"
 )
-
-// Permission represents a type of resource access.
-type Permission string
-
-// Permissions is a set of Permission.
-type Permissions map[Permission]struct{}
 
 // Grant binds a granted Permission with a Token that
 // can be used with the extension API.
@@ -43,16 +38,17 @@ type Permissions map[Permission]struct{}
 // associated resources when the grant is no longer valid.
 type Grant struct {
 	Token string
-	Permission
+	extensionapi.Permission
 	context.Context
 }
 
 // Grantee needs to be implemented by extensions that want
 // to access extension host resources.
+// Deprecated: this is used in v1 extensions. Check extensionv2 package.
 type Grantee interface {
 	Connected(context.Context, rpc.MuxBroker, config.Config) error
 	PermissionGranted(context.Context, []Grant) error
-	PermissionDenied(context.Context, []Permission) error
+	PermissionDenied(context.Context, []extensionapi.Permission) error
 	Shutdown(ctx context.Context, reason string) error
 	Health(context.Context) error
 }

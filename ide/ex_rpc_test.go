@@ -41,7 +41,6 @@ import (
 	"unstable.build/go-tui/browser/browserrpc"
 	"unstable.build/go-tui/browser/browsertest"
 	"unstable.build/go-tui/clipboard"
-	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/term/vte"
 	"unstable.build/go-tui/text"
@@ -136,8 +135,6 @@ func newTestRPCBrowser(t *testing.T,
 		lis, err := net.Listen("tcp", ":0")
 		require.NoError(t, err)
 
-		broker := rpc.NewUnixGRPCBroker("", "", "")
-
 		var serverMutex sync.Mutex
 		grpcServer := grpc.NewServer()
 		server := browserrpc.NewServer(ex.Browser(), &serverMutex)
@@ -159,7 +156,6 @@ func newTestRPCBrowser(t *testing.T,
 			bc.Close()
 			server.Stop()
 			grpcServer.Stop()
-			broker.Close()
 			ex.Close()
 		}
 		return h, browsertest.BrowserFromAPIBrowser(bc), nil

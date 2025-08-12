@@ -21,73 +21,37 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-//revive:disable:exported
-package extensiontest
+package extension
 
 import (
 	"io"
 	"sync"
 
-	"unstable.build/go-tui/extension"
+	"unstable.build/go-tui/api/extensionapi"
 	"unstable.build/go-tui/rpc"
 )
 
-var _ extension.ResourceRegistrar = (*MockResourceServer)(nil)
-
-// MockResourceServer satisfies extension.ResourceRegistrar for testing.
-type MockResourceServer struct {
-	mu    sync.Mutex
-	muxes []rpc.MuxBroker
+// ResourceRegistrar wraps the basic Serve method, to serve resources over a mux broker.
+type ResourceRegistrar interface {
+	Register(registar rpc.ServiceRegistrar, locker sync.Locker) (
+		io.Closer, error,
+	)
 }
 
-func (s *MockResourceServer) Register(
-	extensionID string, g extension.Grantor, grantor rpc.ServiceRegistrar,
-	mux rpc.MuxBroker, lock sync.Locker,
-) (io.Closer, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	s.muxes = append(s.muxes, mux)
-	return nopCloser{}, nil
-}
-
-func (s *MockResourceServer) Muxes() []rpc.MuxBroker {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	return s.muxes
-}
-
-func (s *MockResourceServer) Close() error {
-	return nil
-}
-
-// MockGrantor satisfies extension.Grantor for testing.
-type MockGrantor struct {
-	mu   sync.Mutex
-	srvs []*MockResourceServer
-}
-
-func (g *MockGrantor) Servers() []*MockResourceServer {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-
-	return g.srvs
-}
-
-func (g *MockGrantor) Grant(extension string, perm extension.Permission) (extension.ResourceRegistrar, bool) {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-
-	server := &MockResourceServer{}
-	g.srvs = append(g.srvs, server)
-
-	return server, true
-}
-
-type nopCloser struct {
-}
-
-func (c nopCloser) Close() error {
-	return nil
+// MergeResourceMap merges m1 with mn.
+// If permissions are overlapping, the last of passed prevails.
+func MergeResourceMap(
+	m1 map[extensionapi.Permission]ResourceRegistrar,
+	mn ...map[extensionapi.Permission]ResourceRegistrar,
+) map[extensionapi.Permission]ResourceRegistrar {
+	ret := make(map[extensionapi.Permission]ResourceRegistrar)
+	for k, v := range m1 {
+		ret[k] = v
+	}
+	for _, m := range mn {
+		for k, v := range m {
+			ret[k] = v
+		}
+	}
+	return ret
 }

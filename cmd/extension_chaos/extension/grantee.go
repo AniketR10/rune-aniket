@@ -24,13 +24,14 @@
 package extension
 
 import (
+	"unstable.build/go-tui/api/extensionapi"
 	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/extension/extutil"
 )
 
 // Grantee returns this extension's Grantee and the permissions required to run it.
-func Grantee() (extension.Grantee, []extension.Permission) {
+func Grantee() (extension.Grantee, []extensionapi.Permission) {
 	return extutil.NewEditorEventHandler(ChaosHandlerCommands, newChaosCommandHandler,
 		ChaosHandlerEvents, ChaosHandlerPermissions...)
 }
@@ -76,8 +77,9 @@ var (
 	}
 	// ChaosHandlerPermissions are the required permissions for this
 	// extension to run.
-	ChaosHandlerPermissions = []extension.Permission{
-		extension.PermissionBrowserWindowManager,
-		extension.PermissionEditor,
+	ChaosHandlerPermissions = []extensionapi.Permission{
+		extensionapi.PermissionBrowserWindowManager,
+		extensionapi.PermissionEditor,
+		extensionapi.PermissionCommands,
 	}
 )

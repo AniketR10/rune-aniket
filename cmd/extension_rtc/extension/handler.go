@@ -36,6 +36,7 @@ import (
 	"unstable.build/go-tui/api/browserapi"
 	"unstable.build/go-tui/api/browserapi/browserext"
 	"unstable.build/go-tui/api/config"
+	"unstable.build/go-tui/api/extensionapi"
 	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/asciiart"
@@ -50,7 +51,7 @@ import (
 const defaultFPS = 30
 
 // Grantee returns this extension's extension.Grantee, and it required permissions.
-func Grantee() (extension.Grantee, []extension.Permission) {
+func Grantee() (extension.Grantee, []extensionapi.Permission) {
 	webcamGrantee, perms := extutil.NewCommandSplitHandler(extutil.CommandSplitHandlerConfig{
 		SplitOrientation: browserapi.OrientationRight,
 		Handler: func(ctx context.Context, cmd textapi.Command,
@@ -59,7 +60,7 @@ func Grantee() (extension.Grantee, []extension.Permission) {
 		) (browserapi.Handler, error) {
 			var publisher term.Interrupter
 			for _, grant := range grants {
-				if grant.Permission == extension.PermissionBrowserEventPublisher {
+				if grant.Permission == extensionapi.PermissionInterrupt {
 					var err error
 					publisher, err = browserext.EventPublisher(ctx, grant, broker)
 					if err != nil {
@@ -150,7 +151,7 @@ func Grantee() (extension.Grantee, []extension.Permission) {
 		},
 	})
 
-	perms = append(perms, extension.PermissionBrowserEventPublisher)
+	perms = append(perms, extensionapi.PermissionInterrupt)
 	grantee := extutil.MultiGrantee(webcamGrantee, convertImageGrantee)
 	return grantee, perms
 }

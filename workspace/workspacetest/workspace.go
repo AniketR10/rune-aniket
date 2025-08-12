@@ -105,7 +105,7 @@ func (t toWorkspace) SetPtySize(p workspaceapi.Pty, width, height int) error {
 func (t toWorkspace) StartCommand(
 	ctx context.Context, cmd workspaceapi.Cmd,
 ) (workspaceapi.Pid, error) {
-	return t.exec.Start(cmd)
+	return t.exec.Start(ctx, cmd)
 }
 
 func (t toWorkspace) Signal(p workspaceapi.Pid, s syscall.Signal) error {

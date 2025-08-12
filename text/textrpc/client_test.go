@@ -212,17 +212,15 @@ var (
 )
 
 func newTestClient(ctrl *gomock.Controller) (
-	*rpc.MockMuxConn, *Client,
+	*rpc.MockClientConnInterface, *Client,
 ) {
-	cc := rpc.NewMockMuxConn(ctrl)
+	cc := rpc.NewMockClientConnInterface(ctrl)
 	c := NewClient(context.Background(), cc)
-	// runtime finalizer calls close after test is done
-	cc.EXPECT().Close().AnyTimes()
 	return cc, c
 }
 
 func expectClientEdit(
-	t *testing.T, mockCC *rpc.MockMuxConn,
+	t *testing.T, mockCC *rpc.MockClientConnInterface,
 	expectedContent string, uri workspaceapi.URI,
 ) {
 	mockCC.EXPECT().

@@ -37,6 +37,7 @@ import (
 	"unstable.build/go-tui/api/browserapi"
 	"unstable.build/go-tui/api/browserapi/browserext"
 	"unstable.build/go-tui/api/config"
+	"unstable.build/go-tui/api/extensionapi"
 	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/api/workspaceapi/workspaceext"
@@ -65,15 +66,16 @@ var (
 		},
 	}
 	sedHandlerEvents      = []textapi.EventType{textapi.EventTypeSelection}
-	sedHandlerPermissions = []extension.Permission{
-		extension.PermissionEditor,
-		extension.PermissionBrowserNotifications,
-		extension.PermissionExecute,
+	sedHandlerPermissions = []extensionapi.Permission{
+		extensionapi.PermissionEditor,
+		extensionapi.PermissionCommands,
+		extensionapi.PermissionNotifications,
+		extensionapi.PermissionExecute,
 	}
 )
 
 // Grantee returns this extension's Grantee and the permissions required to run it.
-func Grantee() (extension.Grantee, []extension.Permission) {
+func Grantee() (extension.Grantee, []extensionapi.Permission) {
 	return extutil.NewEditorEventHandler(sedHandlerCommands, newSedHandler,
 		sedHandlerEvents, sedHandlerPermissions...)
 }
@@ -101,9 +103,9 @@ func newSedHandler(
 	var err error
 	for _, grant := range grants {
 		switch grant.Permission {
-		case extension.PermissionExecute:
+		case extensionapi.PermissionExecute:
 			ret.exec, err = workspaceext.Executor(ctx, grant, broker)
-		case extension.PermissionBrowserNotifications:
+		case extensionapi.PermissionNotifications:
 			ret.m, err = browserext.Notifications(ctx, grant, broker)
 		}
 		if err != nil {
@@ -115,7 +117,7 @@ func newSedHandler(
 }
 
 func (h *sedEditorHandler) execSed(
-	command, content string,
+	ctx context.Context, command, content string,
 ) (result string, ret error) {
 	waitch := make(chan error)
 	var stdout, stderr bytes.Buffer
@@ -127,7 +129,7 @@ func (h *sedEditorHandler) execSed(
 		Stdout:  &stdout,
 		Stderr:  &stderr,
 	}
-	_, err := h.exec.Start(cmd)
+	_, err := h.exec.Start(ctx, cmd)
 	if err != nil {
 		return "", fmt.Errorf("failed to start command: %v", err)
 	}
@@ -206,7 +208,7 @@ func (h *sedEditorHandler) HandleCommand(
 			return err
 		}
 	}
-	result, err := h.execSed(cmd.Args[0], content)
+	result, err := h.execSed(ctx, cmd.Args[0], content)
 	if err != nil {
 		return err
 	}

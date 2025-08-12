@@ -25,7 +25,6 @@ package textrpc
 
 import (
 	"context"
-	"runtime"
 
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/term"
@@ -41,7 +40,6 @@ func (r clientView) RawCells() ([][]term.Cell, error) {
 	req := RawCellsRequest{ResourceName: NewURI(r.uri)}
 
 	res, err := r.client.ed.RawCells(ctx, &req)
-	runtime.KeepAlive(r.client)
 	if err != nil {
 		return nil, err
 	}

@@ -219,7 +219,8 @@ func TestWeblinkGenerator(t *testing.T) {
 			git := setupGitService(t, workspaceCwdURI)
 			c.git = git
 
-			res, err := c.generate(tcase.inputFile, tcase.remoteName, tcase.inputLine)
+			res, err := c.generate(context.Background(),
+				tcase.inputFile, tcase.remoteName, tcase.inputLine)
 			if tcase.mustError {
 				require.Error(t, err)
 			} else {

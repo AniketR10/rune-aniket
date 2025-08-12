@@ -25,7 +25,6 @@ package textrpc
 
 import (
 	"context"
-	"runtime"
 
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/term"
@@ -50,7 +49,6 @@ func (w clientWriter) Edit(
 		Str:          str,
 	}
 	res, err := w.client.ed.EditCell(ctx, &req)
-	runtime.KeepAlive(w.client)
 	if err != nil {
 		return from, to, "", err
 	}

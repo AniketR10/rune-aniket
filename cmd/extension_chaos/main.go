@@ -24,13 +24,27 @@
 package main
 
 import (
+	"fmt"
 	_ "net/http/pprof"
 
 	"unstable.build/go-tui/cmd/extension_chaos/extension"
-	"unstable.build/go-tui/extension/extensionproc"
+	"unstable.build/go-tui/extension/extensionv2"
 )
+
+var (
+	// Tag is a compile-time variable
+	Tag = "development"
+	// Commit is a compile-time variable
+	Commit = "HEAD"
+	// Version is injected at compile time.
+	Version string
+)
+
+func init() {
+	Version = fmt.Sprintf("%s (HEAD is %s)", Tag, Commit)
+}
 
 func main() {
 	grantee, perms := extension.Grantee()
-	extensionproc.Serve(grantee, perms...)
+	extensionv2.ServeLegacy("chaos", "Chaos Extension", Version, grantee, perms...)
 }

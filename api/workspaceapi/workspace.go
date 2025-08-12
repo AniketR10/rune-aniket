@@ -24,6 +24,7 @@
 package workspaceapi
 
 import (
+	"context"
 	"io"
 	"os"
 	"syscall"
@@ -88,7 +89,7 @@ type Watcher interface {
 type Executor interface {
 	// Start starts the given cmd and returns the Pid of the underlying
 	// process.
-	Start(Cmd) (Pid, error)
+	Start(context.Context, Cmd) (Pid, error)
 
 	// Signal sends a signal to the running process.
 	Signal(Pid, syscall.Signal) error

@@ -32,6 +32,7 @@ import (
 	"github.com/unstablebuild/blue/iterator"
 	"unstable.build/go-tui/api/browserapi"
 	"unstable.build/go-tui/api/config"
+	"unstable.build/go-tui/api/extensionapi"
 	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/cmd/extension_fuzzy_file/finder"
@@ -66,7 +67,7 @@ var (
 )
 
 // Grantee returns this extension's Grantee and the permissions required to run it.
-func Grantee() (extension.Grantee, []extension.Permission) {
+func Grantee() (extension.Grantee, []extensionapi.Permission) {
 	return extutil.NewCommandSplitHandler(extutil.CommandSplitHandlerConfig{
 		SplitOrientation: browserapi.OrientationBottom,
 		Handler:          newHandler,

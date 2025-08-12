@@ -33,6 +33,7 @@ import (
 	"github.com/unstablebuild/blue/ai/llm/openai"
 	"github.com/unstablebuild/blue/logging"
 	configapi "unstable.build/go-tui/api/config"
+	"unstable.build/go-tui/api/extensionapi"
 	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/cmd/extension_ai/dialogue"
 	"unstable.build/go-tui/extension"
@@ -47,7 +48,7 @@ func GranteeWithService(
 	defaultAvailableModels map[string]int,
 	defaultModel string,
 	options ...dialogue.Option,
-) (extension.Grantee, []extension.Permission) {
+) (extension.Grantee, []extensionapi.Permission) {
 	commandEventHandler := func(
 		ctx context.Context, ed textapi.Editor, grants []extension.Grant,
 		broker rpc.MuxBroker, pconfig configapi.Config,
@@ -69,7 +70,7 @@ const (
 // DefaultOpenAIGrantee returns GranteeWithService satisfied by an OpenAI-like
 // backend service. Configuration can set a 'base_url' to override openai's
 // service URL with a custom one.
-func DefaultOpenAIGrantee() (extension.Grantee, []extension.Permission) {
+func DefaultOpenAIGrantee() (extension.Grantee, []extensionapi.Permission) {
 	openaiSvc := func(
 		config configapi.Config, availableModels map[string]int, model string,
 	) (llm.Service, error) {

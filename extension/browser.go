@@ -27,6 +27,7 @@ import (
 	"io"
 	"sync"
 
+	"unstable.build/go-tui/api/extensionapi"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/browser/browserrpc"
 	"unstable.build/go-tui/rpc"
@@ -37,17 +38,17 @@ import (
 // capable of serving each of the b Browser's resources.
 func BrowserResources(
 	b browser.Browser, publishEvent func(term.Event) bool,
-) map[Permission]ResourceRegistrar {
+) map[extensionapi.Permission]ResourceRegistrar {
 	s := newBrowserResourceServer(b, publishEvent)
-	return map[Permission]ResourceRegistrar{
-		PermissionBrowserWindowManager: s.forPermission(
-			PermissionBrowserWindowManager),
-		PermissionBrowserResourceOpener: s.forPermission(
-			PermissionBrowserResourceOpener),
-		PermissionBrowserNotifications: s.forPermission(
-			PermissionBrowserNotifications),
-		PermissionBrowserEventPublisher: s.forPermission(
-			PermissionBrowserEventPublisher),
+	return map[extensionapi.Permission]ResourceRegistrar{
+		extensionapi.PermissionBrowserWindowManager: s.forPermission(
+			extensionapi.PermissionBrowserWindowManager),
+		extensionapi.PermissionBrowserResourceOpener: s.forPermission(
+			extensionapi.PermissionBrowserResourceOpener),
+		extensionapi.PermissionNotifications: s.forPermission(
+			extensionapi.PermissionNotifications),
+		extensionapi.PermissionInterrupt: s.forPermission(
+			extensionapi.PermissionInterrupt),
 	}
 }
 
@@ -57,7 +58,7 @@ type browserResourceServer struct {
 }
 
 type browserResourcePermissionServer struct {
-	p Permission
+	p extensionapi.Permission
 	*browserResourceServer
 }
 
@@ -70,26 +71,25 @@ func newBrowserResourceServer(
 	return ret
 }
 
-func (s *browserResourceServer) forPermission(p Permission) ResourceRegistrar {
+func (s *browserResourceServer) forPermission(p extensionapi.Permission) ResourceRegistrar {
 	return browserResourcePermissionServer{p: p, browserResourceServer: s}
 }
 
 func (s browserResourcePermissionServer) Register(
-	extensionID string, grantor Grantor, registrar rpc.ServiceRegistrar,
-	broker rpc.MuxBroker, lock sync.Locker,
+	registrar rpc.ServiceRegistrar, lock sync.Locker,
 ) (io.Closer, error) {
 	server := browserrpc.NewServer(s.b, lock)
 	rpcServer := interruptBrowserServer(server, func() {
 		s.publishEvent(term.Event{Type: term.EventInterrupt})
 	})
 	switch s.p {
-	case PermissionBrowserWindowManager:
+	case extensionapi.PermissionBrowserWindowManager:
 		browserrpc.RegisterWindowManagerServer(registrar, rpcServer)
-	case PermissionBrowserResourceOpener:
+	case extensionapi.PermissionBrowserResourceOpener:
 		browserrpc.RegisterResourceOpenerServer(registrar, rpcServer)
-	case PermissionBrowserNotifications:
+	case extensionapi.PermissionNotifications:
 		browserrpc.RegisterNotificationsServer(registrar, rpcServer)
-	case PermissionBrowserEventPublisher:
+	case extensionapi.PermissionInterrupt:
 		browserrpc.RegisterEventPublisherServer(registrar, rpcServer)
 	}
 	return browserCloser{server}, nil

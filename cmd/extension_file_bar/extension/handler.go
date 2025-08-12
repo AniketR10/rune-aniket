@@ -42,6 +42,7 @@ import (
 	"unstable.build/go-tui/api/browserapi/browserext"
 	"unstable.build/go-tui/api/config"
 	configextension "unstable.build/go-tui/api/config/extension"
+	"unstable.build/go-tui/api/extensionapi"
 	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/api/workspaceapi/workspaceext"
@@ -55,7 +56,7 @@ import (
 )
 
 // Grantee returns this extension's Grantee.
-func Grantee() (extension.Grantee, []extension.Permission) {
+func Grantee() (extension.Grantee, []extensionapi.Permission) {
 	return extutil.NewEditorEventHandler(FileBarHandlerCommands,
 		newFileBarEditorHandler, FileBarHandlerEvents,
 		FileBarHandlerPermissions...)
@@ -80,12 +81,13 @@ var (
 
 	// FileBarHandlerPermissions are the required permissions for this
 	// extension to run.
-	FileBarHandlerPermissions = []extension.Permission{
-		extension.Permission(extension.PermissionBrowserWindowManager),
-		extension.Permission(extension.PermissionBrowserEventPublisher),
-		extension.Permission(extension.PermissionEditor),
-		extension.PermissionConfig,
-		extension.Permission(extension.PermissionFileSystem),
+	FileBarHandlerPermissions = []extensionapi.Permission{
+		extensionapi.Permission(extensionapi.PermissionBrowserWindowManager),
+		extensionapi.Permission(extensionapi.PermissionInterrupt),
+		extensionapi.Permission(extensionapi.PermissionEditor),
+		extensionapi.PermissionCommands,
+		extensionapi.PermissionConfig,
+		extensionapi.Permission(extensionapi.PermissionFileSystem),
 	}
 
 	defaultScrollAttr     = term.Attributes{Fg: tcell.ColorDefault}
@@ -251,12 +253,12 @@ func newFileBarEditorHandler(
 
 	for _, grant := range grants {
 		switch grant.Permission {
-		case extension.Permission(extension.PermissionBrowserEventPublisher):
+		case extensionapi.Permission(extensionapi.PermissionInterrupt):
 			ret.p, err = browserext.EventPublisher(ctx, grant, broker)
 			if err != nil {
 				return nil, err
 			}
-		case extension.Permission(extension.PermissionBrowserWindowManager):
+		case extensionapi.Permission(extensionapi.PermissionBrowserWindowManager):
 			ret.wm, err = browserext.WindowManager(ctx, grant, broker)
 			if err != nil {
 				return nil, err
@@ -271,7 +273,7 @@ func newFileBarEditorHandler(
 			if err != nil {
 				return nil, err
 			}
-		case extension.Permission(extension.PermissionFileSystem):
+		case extensionapi.Permission(extensionapi.PermissionFileSystem):
 			w, err := workspaceext.FileSystem(ctx, grant, broker)
 			if err != nil {
 				return nil, err
@@ -280,7 +282,7 @@ func newFileBarEditorHandler(
 			if err != nil {
 				return nil, err
 			}
-		case extension.PermissionConfig:
+		case extensionapi.PermissionConfig:
 			config, err := configextension.FetchConfig(ctx, grant, broker)
 			if err != nil {
 				return nil, err

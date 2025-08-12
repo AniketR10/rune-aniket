@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/unstablebuild/blue/bluectx"
+	"unstable.build/go-tui/api/extensionapi"
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/workspace"
@@ -38,10 +39,12 @@ import (
 
 type workspaceResourceServer struct {
 	b workspace.Workspace
-	p Permission
+	p extensionapi.Permission
 }
 
-func newWorkspaceResourceServer(b workspace.Workspace, p Permission) *workspaceResourceServer {
+func newWorkspaceResourceServer(
+	b workspace.Workspace, p extensionapi.Permission,
+) *workspaceResourceServer {
 	ret := new(workspaceResourceServer)
 	ret.p = p
 	ret.b = b
@@ -49,8 +52,7 @@ func newWorkspaceResourceServer(b workspace.Workspace, p Permission) *workspaceR
 }
 
 func (s *workspaceResourceServer) Register(
-	extensionID string, grantor Grantor, registrar rpc.ServiceRegistrar,
-	broker rpc.MuxBroker, lock sync.Locker,
+	registrar rpc.ServiceRegistrar, lock sync.Locker,
 ) (io.Closer, error) {
 	// create a closer able to close all processes created by grantee
 	// without closing workspace.Workspace, which we cannot assume about
@@ -61,17 +63,17 @@ func (s *workspaceResourceServer) Register(
 	w.ctx, w.cancelCtx = context.WithCancel(context.Background())
 	server := workspacerpc.NewServer(w, lock)
 	switch s.p {
-	case PermissionFileSystem:
+	case extensionapi.PermissionFileSystem:
 		if !rpc.IsRegistered(registrar, workspacerpc.Files_ServiceDesc) {
 			workspacerpc.RegisterFilesServer(registrar, server)
 		}
 		workspacerpc.RegisterSchemeServer(registrar, server)
-	case PermissionTerminal:
+	case extensionapi.PermissionTerminal:
 		if !rpc.IsRegistered(registrar, workspacerpc.Files_ServiceDesc) {
 			workspacerpc.RegisterFilesServer(registrar, server)
 		}
 		workspacerpc.RegisterTerminalServer(registrar, server)
-	case PermissionExecute:
+	case extensionapi.PermissionExecute:
 		workspacerpc.RegisterExecutorServer(registrar, server)
 	}
 	w.server = server
@@ -80,14 +82,14 @@ func (s *workspaceResourceServer) Register(
 
 // WorkspaceResources returns a map of Permission to a ResourceServer
 // capable of serving each of the b Workspace's resources.
-func WorkspaceResources(b workspace.Workspace) map[Permission]ResourceRegistrar {
-	return map[Permission]ResourceRegistrar{
-		PermissionFileSystem: newWorkspaceResourceServer(
-			b, PermissionFileSystem),
-		PermissionTerminal: newWorkspaceResourceServer(
-			b, PermissionTerminal),
-		PermissionExecute: newWorkspaceResourceServer(
-			b, PermissionExecute),
+func WorkspaceResources(b workspace.Workspace) map[extensionapi.Permission]ResourceRegistrar {
+	return map[extensionapi.Permission]ResourceRegistrar{
+		extensionapi.PermissionFileSystem: newWorkspaceResourceServer(
+			b, extensionapi.PermissionFileSystem),
+		extensionapi.PermissionTerminal: newWorkspaceResourceServer(
+			b, extensionapi.PermissionTerminal),
+		extensionapi.PermissionExecute: newWorkspaceResourceServer(
+			b, extensionapi.PermissionExecute),
 	}
 }
 

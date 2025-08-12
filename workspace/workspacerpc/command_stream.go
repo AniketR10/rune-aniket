@@ -28,8 +28,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
-	"runtime"
 	"syscall"
 	"time"
 
@@ -341,15 +339,15 @@ func (s *serverCommandStreamer) Close() (ret error) {
 }
 
 type clientCommandStreamer struct {
-	req       *StartCommandRequest
-	cmd       workspaceapi.Cmd
-	stream    Executor_StartCommandClient
-	parentCtx context.Context
-	quitCh    chan struct{}
+	req    *StartCommandRequest
+	cmd    workspaceapi.Cmd
+	stream Executor_StartCommandClient
+	ctx    context.Context
+	quitCh chan struct{}
 }
 
 func newClientCommandStreamer(
-	parentCtx context.Context,
+	ctx context.Context,
 	req *StartCommandRequest,
 	cmd workspaceapi.Cmd,
 	stream Executor_StartCommandClient,
@@ -358,7 +356,7 @@ func newClientCommandStreamer(
 	ret.cmd = cmd
 	ret.req = req
 	ret.stream = stream
-	ret.parentCtx = parentCtx
+	ret.ctx = ctx
 	ret.quitCh = make(chan struct{})
 	return ret
 }
@@ -397,7 +395,7 @@ func (s *clientCommandStreamer) streamStdin() {
 		select {
 		case <-s.quitCh:
 			return
-		case <-s.parentCtx.Done():
+		case <-s.ctx.Done():
 			s.log(log.TraceLevel, "parent context is done")
 			return
 		default:
@@ -435,7 +433,7 @@ func (s *clientCommandStreamer) log(level log.Level, msg string, args ...interfa
 	log.WithFields(log.Fields{logging.KeyClass: "clientCommandStreamer"}).Logf(level, msg, args...)
 }
 
-func (s *clientCommandStreamer) streamCommandData(client interface{}, cancelFn func()) {
+func (s *clientCommandStreamer) streamCommandData(cancelFn func()) {
 	s.log(log.TraceLevel, "streaming command data")
 	defer close(s.quitCh)
 	defer cancelFn()
@@ -528,11 +526,10 @@ func (s *clientCommandStreamer) streamCommandData(client interface{}, cancelFn f
 		}
 	}
 	// emulate exec code; pipes should be closed to force EOF
-	for _, fd := range [2]interface{}{s.cmd.Stdout, s.cmd.Stderr} {
-		if closer, ok := fd.(*os.File); ok {
+	for _, fd := range [2]io.Writer{s.cmd.Stdout, s.cmd.Stderr} {
+		if closer, ok := fd.(io.Closer); ok {
 			_ = closer.Close()
 		}
 	}
 	s.log(log.TraceLevel, "done streaming command data: err=%v", err)
-	runtime.KeepAlive(client)
 }

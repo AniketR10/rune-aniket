@@ -45,7 +45,7 @@ func dialConfig(ctx context.Context, grant extension.Grant, broker rpc.MuxBroker
 	if err != nil {
 		return nil, err
 	}
-	return c, conn.Close()
+	return c, nil
 }
 
 // FetchConfig acquires the loaded config with the given permission token.

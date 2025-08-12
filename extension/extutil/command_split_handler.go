@@ -36,10 +36,12 @@ import (
 	"unstable.build/go-tui/api/browserapi"
 	"unstable.build/go-tui/api/browserapi/browserext"
 	"unstable.build/go-tui/api/config"
+	"unstable.build/go-tui/api/extensionapi"
 	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/api/textapi/textext"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/rpc"
+	"unstable.build/go-tui/text/textrpc"
 )
 
 // CommandSplitHandlerConfig provides the configuration required to
@@ -61,21 +63,24 @@ type CommandSplitHandlerConfig struct {
 		rpc.MuxBroker, browserapi.Window, config.Config) (browserapi.Handler, error)
 
 	// Permissions to be requested for Handler.
-	Permissions []extension.Permission
+	Permissions []extensionapi.Permission
 }
 
 // NewCommandSplitHandler returns a extension.Grantee that opens a split window
 // with a new handler when cmd event is fired or command called.
 // This function never returns.
-func NewCommandSplitHandler(config CommandSplitHandlerConfig) (extension.Grantee, []extension.Permission) {
+func NewCommandSplitHandler(config CommandSplitHandlerConfig) (
+	extension.Grantee, []extensionapi.Permission,
+) {
 	if config.Handler == nil || config.Command.Name == "" {
 		panic(fmt.Sprintf("invalid cmd split handler configuration: "+
 			"Handler and Command must be set: %#v", config))
 	}
 
-	perms := []extension.Permission{
-		extension.Permission(extension.PermissionBrowserWindowManager),
-		extension.Permission(extension.PermissionEditor),
+	perms := []extensionapi.Permission{
+		extensionapi.Permission(extensionapi.PermissionBrowserWindowManager),
+		extensionapi.Permission(extensionapi.PermissionEditor),
+		extensionapi.Permission(extensionapi.PermissionCommands),
 	}
 	perms = append(perms, config.Permissions...)
 	return &cmdSplitHandler{config: config}, perms
@@ -116,13 +121,12 @@ func (t *cmdSplitHandler) cleanWindow() bool {
 	return true
 }
 
-func (t *cmdSplitHandler) exitClean() error {
+func (t *cmdSplitHandler) exitClean() {
 	t.log(log.DebugLevel, "received exit signal; cleaning resources...")
 
 	if t.cleanWindow() {
 		t.log(log.DebugLevel, "cleaned window")
 	}
-	return nil
 }
 
 func (t *cmdSplitHandler) openSplitWindow(ctx context.Context, cmd textapi.Command) error {
@@ -143,7 +147,11 @@ func (t *cmdSplitHandler) openSplitWindow(ctx context.Context, cmd textapi.Comma
 		return err
 	}
 
-	splitWin, err := wm.Split(t.config.SplitOrientation, focusWin, browserapi.FuncHandler(h, t.exitClean))
+	cleaningHandler := browserapi.FuncHandler(h, func() error {
+		t.exitClean()
+		return h.Close()
+	})
+	splitWin, err := wm.Split(t.config.SplitOrientation, focusWin, cleaningHandler)
 	if err != nil {
 		err = fmt.Errorf("wm.Split: %w", err)
 		return err
@@ -179,12 +187,13 @@ func (t *cmdSplitHandler) PermissionGranted(ctx context.Context, grants []extens
 	var err error
 	for _, g := range grants {
 		switch g.Permission {
-		case extension.PermissionBrowserWindowManager:
+		case extensionapi.PermissionBrowserWindowManager:
 			t.wm, err = browserext.WindowManager(ctx, g, t.broker)
-		case extension.PermissionEditor:
+		case extensionapi.PermissionEditor:
 			t.ed, err = textext.Editor(ctx, g, t.broker)
 			if err == nil {
-				err = t.ed.SubscribeCommand(t.config.Command, t)
+				// TODO refactor to use v2 workspace api
+				err = t.ed.(*textrpc.Client).SubscribeCommand(t.config.Command, t)
 			}
 		}
 		if err != nil {
@@ -196,12 +205,14 @@ func (t *cmdSplitHandler) PermissionGranted(ctx context.Context, grants []extens
 	return ret
 }
 
-func (t *cmdSplitHandler) PermissionDenied(ctx context.Context, perms []extension.Permission) error {
+func (t *cmdSplitHandler) PermissionDenied(
+	ctx context.Context, perms []extensionapi.Permission,
+) error {
 	t.log(log.DebugLevel, "permission denied: %v", perms)
 
 	for _, perm := range perms {
 		switch perm {
-		case extension.PermissionBrowserWindowManager, extension.PermissionEditor:
+		case extensionapi.PermissionBrowserWindowManager, extensionapi.PermissionEditor:
 			return errors.New("permission window manager and permission " +
 				"editor must be granted for this extension to work")
 		}

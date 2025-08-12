@@ -214,7 +214,7 @@ func (s *Server) SubscribeCommand(srv Editor_SubscribeCommandServer) error {
 	}
 	if uerr := s.editor.SubscribeCommand(man,
 		text.FuncCommandHandler(func(context.Context, textapi.Command) error {
-			return errors.New("command was unsubscribed")
+			return fmt.Errorf("command %q was unsubscribed", man.Name)
 		}, nil)); uerr != nil {
 		err = multierror.Append(err, uerr)
 	}

@@ -103,6 +103,7 @@ type workspaceManagerHandler struct {
 	focus            int
 	homeWorkspace    workspace.Workspace
 	empty            *ex
+	homeRunner       extension.Runner
 	openPrevFiles    []file
 	openPrevFilesEx  *ex
 	openPrevFilesWin browser.Window
@@ -228,6 +229,7 @@ func (h *workspaceManagerHandler) init(
 		return err
 	}
 	h.initExtensions(runner, cfg)
+	h.homeRunner = runner
 
 	h.bar.Init()
 	h.bar.OnClick = h.switchToWorkspace
@@ -534,7 +536,7 @@ func (h *workspaceManagerHandler) textOpts(cfg ideConfig) []text.Option {
 
 // we have no conrol over what extensions are defining in configuration;
 // it could be secret keys or anything worth stealing for a malicious extension
-// that gets granted extension.PermissionConfig.
+// that gets granted extensionapi.PermissionConfig.
 func cleanedExtensionConfig(cfg map[string]interface{}) map[string]interface{} {
 	m := make(map[string]interface{}, len(cfg))
 	for k, v := range cfg {
@@ -663,7 +665,7 @@ func (h *workspaceManagerHandler) buildExtensions(
 	if err := os.MkdirAll(dataDir, 0777); err != nil {
 		return nil, fmt.Errorf("mkdir .extension: %v", err)
 	}
-	runner, err := h.extensionRunner.WorkspaceExtensionsRunner(h.mu, uri, res, dataDir, ex.Browser())
+	runner, err := h.extensionRunner.WorkspaceExtensionsRunner(uri, res, dataDir, ex.Browser())
 	if err != nil {
 		return nil, fmt.Errorf("error initializing extension manager: %v", err)
 	}
@@ -849,6 +851,9 @@ func (h *workspaceManagerHandler) Close() (ret error) {
 		}
 	}
 	if err := h.empty.Close(); err != nil {
+		ret = multierror.Append(ret, err)
+	}
+	if err := h.homeRunner.Close(); err != nil {
 		ret = multierror.Append(ret, err)
 	}
 	if err := h.storage.Close(); err != nil {

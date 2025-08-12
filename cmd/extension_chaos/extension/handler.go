@@ -37,6 +37,7 @@ import (
 	"unstable.build/go-tui/api/browserapi"
 	"unstable.build/go-tui/api/browserapi/browserext"
 	"unstable.build/go-tui/api/config"
+	"unstable.build/go-tui/api/extensionapi"
 	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/extension"
@@ -98,7 +99,7 @@ func newChaosCommandHandler(
 	var err error
 	for _, grant := range grants {
 		switch grant.Permission {
-		case extension.PermissionBrowserWindowManager:
+		case extensionapi.PermissionBrowserWindowManager:
 			ret.wm, err = browserext.WindowManager(ctx, grant, broker)
 			if err != nil {
 				return nil, err

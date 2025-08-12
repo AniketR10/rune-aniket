@@ -68,6 +68,12 @@ const (
 	LocationPriorityCritical
 )
 
+// CommandRegister abstracts the ability to register new commands.
+type CommandRegister interface {
+	// RegisterCommand registers command to be dispatched to CommandHandler.
+	RegisterCommand(CommandManual, CommandHandler) error
+}
+
 // Editor is the interface that wraps an API to manage a text editor.
 type Editor interface {
 	// SubscribeEvents subscribes EventHandler to events of type EventType.
@@ -76,9 +82,6 @@ type Editor interface {
 	// Editor returns the editor.Handler that manages the given resource,
 	// if there is a resource currently open with the given URI.
 	Editor(resource workspaceapi.URI) (Handler, error)
-
-	// SubscribeCommand registers command to be dispatched to CommandHandler.
-	SubscribeCommand(CommandManual, CommandHandler) error
 
 	// SetLocationList sets the Handler's location list for users to
 	// navigate the code. See LocationList for more details.
