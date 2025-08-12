@@ -55,11 +55,11 @@ func TestStorageConcurrentInstances(t *testing.T) {
 		instances := make([]*firstmover.Service, 0, n)
 
 		for i := 0; i < n-1; i++ {
-			instance, err := New(context.Background(), name, doctoml.Marshaler())
+			instance := New(context.Background(), name, doctoml.Marshaler())
 			require.NoError(t, err)
 			_ = instance.Get(context.Background(), "a", nil)
-			instances = append(instances, instance)
-			dirs[name] = append(dirs[name], instance)
+			instances = append(instances, instance.(*delayedLoadingService).service.(*firstmover.Service))
+			dirs[name] = append(dirs[name], instance.(*delayedLoadingService).service.(*firstmover.Service))
 		}
 		ret := instances[len(instances)-1]
 

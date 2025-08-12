@@ -271,6 +271,8 @@ func (i *IDE) init(
 		log.SetLevel(log.PanicLevel)
 	}
 
+	log.Tracef("logging configured and ready")
+
 	i.publishEventFn = op.publishEvent
 	i.locker = op.locker
 

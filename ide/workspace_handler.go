@@ -192,13 +192,7 @@ func (h *workspaceManagerHandler) init(
 	h.extensionRunner = extensionRunner
 	h.builtinExtensions = builtinExtensions
 	h.ctxWithLocker = workspace.ContextWithLocker(context.Background(), h.mu)
-	var storage document.Service
-	storage, err = localstorage.New(h.ctxWithLocker, sixDir, doctoml.Marshaler())
-	if err != nil {
-		storage = document.NewInMemoryService()
-		log.Warnf("Could not setup fs-backed storage: %v. Using ephemeral.", err)
-	}
-	h.storage = storage
+	h.storage = localstorage.New(h.ctxWithLocker, sixDir, doctoml.Marshaler())
 
 	h.workspacesIcon = workspacesIcon
 	h.tabBarOffset = tabBarOffset

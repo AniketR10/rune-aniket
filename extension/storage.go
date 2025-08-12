@@ -29,7 +29,6 @@ import (
 	"path/filepath"
 	"sync"
 
-	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/document/doclog"
 	"github.com/unstablebuild/blue/document/docmarshal/doctoml"
@@ -57,11 +56,7 @@ func (s *storageResourceServer) setupStorage(lock sync.Locker) document.Service 
 	// pass locker to underlying file scheme, so we can synchronize
 	// network storage requests against event loop access.
 	ctx := workspace.ContextWithLocker(context.Background(), lock)
-	svc, err := localstorage.New(ctx, path, doctoml.Marshaler())
-	if err != nil {
-		log.Warnf("failed to setup storage for: %v, "+"fallback to in-memory", err)
-		return document.NewInMemoryService()
-	}
+	svc := localstorage.New(ctx, path, doctoml.Marshaler())
 	return svc
 }
 
