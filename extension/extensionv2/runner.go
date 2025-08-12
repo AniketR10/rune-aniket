@@ -108,12 +108,12 @@ func (r *runner) WorkspaceExtensionsRunner(
 ) (extension.Runner, error) {
 	var ret wrapCloser
 	ret.URI = uri
-	var err error
-	ret.listener, err = r.newUnixListener(uri)
+
+	listener, err := r.newUnixListener(uri)
 	if err != nil {
 		return nil, fmt.Errorf("create unix listener: %w", err)
 	}
-	socket := ret.listener.Addr().String()
+	socket := listener.Addr().String()
 
 	var cert, key []byte
 	var opts []grpc.ServerOption
@@ -123,10 +123,16 @@ func (r *runner) WorkspaceExtensionsRunner(
 		cert, key, err = auth.GenerateSelfSignedCert(
 			[]string{socket}, pkix.Name{CommonName: "ox"}, certExpiresIn)
 		if err != nil {
+			if cerr := listener.Close(); cerr != nil {
+				err = multierror.Append(err, cerr)
+			}
 			return nil, fmt.Errorf("new extension runner: %v", err)
 		}
 		tlsCert, err := tls.X509KeyPair(cert, key)
 		if err != nil {
+			if cerr := listener.Close(); cerr != nil {
+				err = multierror.Append(err, cerr)
+			}
 			return nil, fmt.Errorf("load tls credentials from cert and key: %w", err)
 		}
 		cfg := tls.Config{
@@ -156,7 +162,7 @@ func (r *runner) WorkspaceExtensionsRunner(
 		}
 	}
 
-	go ret.srv.Serve(ret.listener) //nolint:errcheck
+	go ret.srv.Serve(listener) //nolint:errcheck
 
 	ret.Runner = newWorkspaceRunner(r.executor, r.grantor, uri,
 		socket, r.dataDir, cert, r.keys, r.opts...)
@@ -203,9 +209,8 @@ func (r *runner) newUnixListener(uri workspaceapi.URI) (ret net.Listener, err er
 type wrapCloser struct {
 	workspaceapi.URI
 	extension.Runner
-	closers  []io.Closer
-	srv      *grpc.Server
-	listener net.Listener
+	closers []io.Closer
+	srv     *grpc.Server
 }
 
 func (w wrapCloser) Close() (ret error) {
@@ -221,12 +226,7 @@ func (w wrapCloser) Close() (ret error) {
 		}
 	}
 	if w.srv != nil {
-		w.srv.Stop()
-	}
-	if w.listener != nil {
-		if err := w.listener.Close(); err != nil {
-			ret = multierror.Append(ret, err)
-		}
+		w.srv.Stop() // stop closes listener
 	}
 	return
 }
