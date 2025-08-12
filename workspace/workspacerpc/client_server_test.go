@@ -122,14 +122,18 @@ func TestClientServer(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, workspaceapi.Pid(1), pid)
 		}},
-		{"Command context is canceled is propagated", func(t *testing.T, mock *workspaceapitest.MockFile, c *Client, s *Server) {
+		{"Command context cancel is propagated", func(t *testing.T, mock *workspaceapitest.MockFile, c *Client, s *Server) {
 			var cmdCtx context.Context
+			var mu sync.Mutex
 			s.s.(*workspacetest.MockWorkspace).EXPECT().
 				StartCommand(gomock.Any(), gomock.Any()).
 				DoAndReturn(func(ctx context.Context, cmd workspaceapi.Cmd) (workspaceapi.Pid, error) {
 					cmdCtx = ctx
+					mu.Unlock()
 					return workspaceapi.Pid(1), nil
 				})
+
+			mu.Lock()
 			ctx, cancel := context.WithCancel(ctx)
 			pid, err := c.StartCommand(ctx, workspaceapi.Cmd{
 				Path: "six",
@@ -137,10 +141,12 @@ func TestClientServer(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, workspaceapi.Pid(1), pid)
 
+			mu.Lock()
 			cancel()
 			waitCtx, cancelWait := context.WithTimeout(
 				context.Background(), 2*time.Second)
 			defer cancelWait()
+
 			select {
 			case <-waitCtx.Done():
 				t.Logf("failed to kill process in time")

@@ -84,8 +84,9 @@ func (s *Server) StartCommand(stream Executor_StartCommandServer) error {
 		return fmt.Errorf("unexpected first stream message: %v", req.Type)
 	}
 	start := req.Start
+	ctx, cancelCtx := context.WithCancel(s.ctx)
 	streamer, err := newServerCommandStreamer(
-		s.ctx, stream, start.GetName(), start.GetDir(), start.GetArgs(), start.GetEnv(),
+		ctx, cancelCtx, stream, start.GetName(), start.GetDir(), start.GetArgs(), start.GetEnv(),
 		start.GetStdin(), start.GetStdout(), start.GetStderr(),
 		start.GetStdinFd(), start.GetStdoutFd(), start.GetStderrFd(),
 		start.GetStdinName(), start.GetStdoutName(), start.GetStderrName(),
@@ -93,14 +94,16 @@ func (s *Server) StartCommand(stream Executor_StartCommandServer) error {
 		s.s,
 	)
 	if err != nil {
+		cancelCtx()
 		return fmt.Errorf("new streamer: %v", err)
 	}
 	defer streamer.Close()
 
 	s.locker.Lock()
-	pid, err := s.s.StartCommand(s.ctx, streamer.command())
+	pid, err := s.s.StartCommand(ctx, streamer.command())
 	s.locker.Unlock()
 	if err != nil {
+		cancelCtx()
 		s.log(log.WarnLevel, "start command error: %v", err)
 		return fmt.Errorf("start command: %v", err)
 	}

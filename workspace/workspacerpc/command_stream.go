@@ -46,7 +46,6 @@ const watcherWaitTimeout = 2 * time.Minute
 type serverCommandStreamer struct {
 	cmd       workspaceapi.Cmd
 	stream    Executor_StartCommandServer
-	quitCh    chan struct{}
 	doneCh    chan error
 	stdinCh   chan bluenet.ReadResult
 	stdoutCh  chan bluenet.ReadResult
@@ -54,12 +53,14 @@ type serverCommandStreamer struct {
 	stdinFd   uint32
 	stdoutFd  uint32
 	stderrFd  uint32
-	parentCtx context.Context
+	ctx       context.Context
+	cancelCtx func()
 	closers   []io.Closer
 }
 
 func newServerCommandStreamer(
-	parentCtx context.Context,
+	ctx context.Context,
+	cancelCtx func(),
 	stream Executor_StartCommandServer,
 	path, dir string, args, env []string,
 	stdinSet, stdoutSet, stderrSet bool,
@@ -68,7 +69,6 @@ func newServerCommandStreamer(
 	setsid, setctty bool,
 	scheme schemeapi.Scheme,
 ) (*serverCommandStreamer, error) {
-	quitCh := make(chan struct{})
 	doneCh := make(chan error)
 
 	cmd := workspaceapi.Cmd{
@@ -146,10 +146,10 @@ func newServerCommandStreamer(
 
 	ret.cmd = cmd
 	ret.stream = stream
-	ret.quitCh = quitCh
 	ret.doneCh = doneCh
 
-	ret.parentCtx = parentCtx
+	ret.ctx = ctx
+	ret.cancelCtx = cancelCtx
 
 	return ret, nil
 }
@@ -165,6 +165,14 @@ func (s *serverCommandStreamer) log(level log.Level, msg string, args ...interfa
 func (s *serverCommandStreamer) receiveCommandData() {
 	defer s.log(log.TraceLevel, "done receiving command data")
 	defer close(s.stdinCh)
+
+	// propagate context cancel to context passed
+	// to command Start; either because client is closing
+	// stream, or client context passed to Start canceled.
+	go func() {
+		<-s.stream.Context().Done()
+		s.cancelCtx()
+	}()
 
 	if s.stdinFd != 0 {
 		s.log(log.DebugLevel, "not reading from stdin goroutine: remote file mode")
@@ -183,9 +191,7 @@ func (s *serverCommandStreamer) receiveCommandData() {
 				return
 			}
 			select {
-			case <-s.parentCtx.Done():
-				return
-			case <-s.quitCh:
+			case <-s.ctx.Done():
 				return
 			default:
 				ack := make(chan struct{})
@@ -193,9 +199,7 @@ func (s *serverCommandStreamer) receiveCommandData() {
 				case s.stdinCh <- bluenet.ReadResult{Error: err, Ch: ack}:
 					<-ack
 					continue
-				case <-s.parentCtx.Done():
-					return
-				case <-s.quitCh:
+				case <-s.ctx.Done():
 					return
 				}
 			}
@@ -222,9 +226,7 @@ func (s *serverCommandStreamer) receiveCommandData() {
 			s.log(log.TraceLevel,
 				"wrote to stdin: err=%v, data=%d", err, len(data))
 			continue
-		case <-s.parentCtx.Done():
-			return
-		case <-s.quitCh:
+		case <-s.ctx.Done():
 			return
 		}
 	}
@@ -271,10 +273,8 @@ func (s *serverCommandStreamer) sendCommandData(pid workspaceapi.Pid) error {
 	for {
 		var err error
 		select {
-		case <-s.parentCtx.Done():
-			err = errors.New("workspace is closing")
-		case <-s.quitCh:
-			err = errors.New("called Close but command is not done")
+		case <-s.ctx.Done():
+			err = s.ctx.Err()
 		case res, ok := <-s.stdoutCh:
 			if s.stdoutFd != 0 {
 				s.log(log.ErrorLevel, "read from stdout but using file mode: ok=%v, err=%v, data=%d",
@@ -316,6 +316,8 @@ func (s *serverCommandStreamer) sendCommandData(pid workspaceapi.Pid) error {
 			} else {
 				s.log(log.TraceLevel, "send done msg: success")
 			}
+			// after receiving Done, client will disconnect
+			// and RecvMsg in receiveCommandData will return with canceled error.
 			return err
 		}
 		if err != nil {
@@ -334,7 +336,7 @@ func (s *serverCommandStreamer) Close() (ret error) {
 			ret = multierr.Append(ret, err)
 		}
 	}
-	close(s.quitCh)
+	s.cancelCtx()
 	return
 }
 
