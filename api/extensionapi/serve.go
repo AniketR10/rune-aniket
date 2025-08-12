@@ -95,6 +95,11 @@ func serveWorkspaceExtension(
 	extension WorkspaceExtension, meta Metadata,
 	in io.ReadCloser, out io.Writer,
 ) error {
+	sigchan := make(chan os.Signal, 1)
+	signal.Notify(sigchan, syscall.SIGINT, syscall.SIGTERM)
+	signal.Ignore(syscall.SIGPIPE)
+	defer signal.Stop(sigchan)
+
 	level := getLogLevelEnv()
 	setupExtensionLogging(level)
 
@@ -126,7 +131,6 @@ func serveWorkspaceExtension(
 			" in request")
 	}
 
-	sigchan := make(chan os.Signal, 1)
 	errchan := make(chan error, 1)
 	cfg := config.MapConfig(req.Config)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -154,10 +158,6 @@ func serveWorkspaceExtension(
 		_ = os.Stderr.Sync()
 		errchan <- panicErr
 	}()
-
-	signal.Notify(sigchan, syscall.SIGINT, syscall.SIGTERM)
-	signal.Ignore(syscall.SIGPIPE)
-	defer signal.Stop(sigchan)
 
 	for {
 		select {
