@@ -40,6 +40,20 @@ func ServeLegacy(
 	id, name, version string, grantee extension.Grantee,
 	perms ...extensionapi.Permission,
 ) {
+	shim, metadata := NewGranteeShim(id, name, version, grantee, perms...)
+	err := extensionapi.ServeWorkspaceExtension(shim, metadata)
+	if err != nil {
+		log.Errorf("serve extension %q: %v", id, err)
+	}
+}
+
+// NewGranteeShim wraps an extension.Grantee to satisfy extensionapi.WorkspaceExtension
+// and builds a "builtin" extensionapi.Metadata, meaning it used an internal,
+// hardcoded developer ID, key, and email.
+func NewGranteeShim(
+	id, name, version string, grantee extension.Grantee,
+	perms ...extensionapi.Permission,
+) (extensionapi.WorkspaceExtension, extensionapi.Metadata) {
 	permissions := extensionapi.NewPermissions(perms...)
 	cfg := extensionapi.Metadata{
 		DeveloperID:      "ox.dev",
@@ -57,14 +71,11 @@ func ServeLegacy(
 		perms = append(perms, perm)
 	}
 
-	err := extensionapi.ServeWorkspaceExtension(granteeShim{
+	return granteeShim{
 		id:      id,
 		perms:   perms,
 		grantee: grantee,
-	}, cfg)
-	if err != nil {
-		log.Errorf("serve extension %q: %v", id, err)
-	}
+	}, cfg
 }
 
 type granteeShim struct {
