@@ -110,7 +110,7 @@ func (c *cmdGitService) git(ctx context.Context, workPath string, args []string)
 		Path:    "git",
 		Dir:     workDir,
 		Args:    args,
-		Watcher: workspaceapi.ChanWatcher(ch),
+		Watcher: workspaceapi.ChanProcessWatcher(ch),
 		Stdout:  &stdout,
 		Stderr:  &stderr,
 	}

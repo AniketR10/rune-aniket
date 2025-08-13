@@ -264,7 +264,7 @@ func (h *Handler) initState(
 	config.cfg.Shell = cmdAndArgs
 	config.cfg.WidthHint = interactiveWidth
 	config.cfg.HeightHint = interactiveHeight
-	config.cfg.Watcher = workspaceapi.ChanWatcher(ch)
+	config.cfg.Watcher = workspaceapi.ChanProcessWatcher(ch)
 	h.cfg = config.cfg
 
 	return ch, interrupter

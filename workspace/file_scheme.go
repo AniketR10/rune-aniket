@@ -335,9 +335,9 @@ func (p *fileScheme) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (
 			watcherWaitTimeout)
 		defer cancel()
 
-		if cmd.Watcher != nil && cmd.Watcher.Watch() != nil {
+		if cmd.Watcher != nil && cmd.Watcher.WatchProcess() != nil {
 			select {
-			case cmd.Watcher.Watch() <- err:
+			case cmd.Watcher.WatchProcess() <- err:
 			case <-ctx.Done():
 				p.log(log.WarnLevel, "could not deliver error to watcher chan: "+
 					"watcher not ready for too long")

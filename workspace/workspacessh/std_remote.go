@@ -145,7 +145,7 @@ func (s *goSshSession) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (
 		defer cancel()
 
 		err := s.ses.Wait()
-		if cmd.Watcher != nil && cmd.Watcher.Watch() != nil {
+		if cmd.Watcher != nil && cmd.Watcher.WatchProcess() != nil {
 			// avoid buggy watchers to cause this goroutine to block forever,
 			// so the timeout should be in the order of minutes.
 			ctx, cancelTimeout := context.WithTimeout(
@@ -153,7 +153,7 @@ func (s *goSshSession) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (
 			defer cancelTimeout()
 			select {
 			case <-ctx.Done():
-			case cmd.Watcher.Watch() <- err:
+			case cmd.Watcher.WatchProcess() <- err:
 			}
 		}
 	}()

@@ -60,7 +60,7 @@ func TestWorkspaceSchemeExecutor(
 			Path:    "echo",
 			Args:    []string{"blablabla\nblebleble"},
 			Stdout:  &out,
-			Watcher: workspaceapi.ChanWatcher(ch),
+			Watcher: workspaceapi.ChanProcessWatcher(ch),
 		}
 
 		pid, err := scheme.StartCommand(context.Background(), cmd)
@@ -81,7 +81,7 @@ func TestWorkspaceSchemeExecutor(
 			Path:    "sh",
 			Args:    []string{"-c", "echo blabla 1>&2"},
 			Stderr:  &out,
-			Watcher: workspaceapi.ChanWatcher(ch),
+			Watcher: workspaceapi.ChanProcessWatcher(ch),
 		}
 
 		pid, err := scheme.StartCommand(context.Background(), cmd)
@@ -102,7 +102,7 @@ func TestWorkspaceSchemeExecutor(
 			Path:    "cat",
 			Stdin:   strings.NewReader("blabla"),
 			Stdout:  &out,
-			Watcher: workspaceapi.ChanWatcher(ch),
+			Watcher: workspaceapi.ChanProcessWatcher(ch),
 		}
 
 		pid, err := scheme.StartCommand(context.Background(), cmd)
@@ -120,7 +120,7 @@ func TestWorkspaceSchemeExecutor(
 		ch := make(chan error)
 		cmd := workspaceapi.Cmd{
 			Path:    "aCommandThatShoulndtReallyExist55",
-			Watcher: workspaceapi.ChanWatcher(ch),
+			Watcher: workspaceapi.ChanProcessWatcher(ch),
 		}
 
 		pid, err := scheme.StartCommand(context.Background(), cmd)
@@ -139,7 +139,7 @@ func TestWorkspaceSchemeExecutor(
 			Path:    "cat",
 			Args:    []string{"-X"},
 			Stderr:  &out,
-			Watcher: workspaceapi.ChanWatcher(ch),
+			Watcher: workspaceapi.ChanProcessWatcher(ch),
 		}
 
 		pid, err := scheme.StartCommand(context.Background(), cmd)
@@ -161,7 +161,7 @@ func TestWorkspaceSchemeExecutor(
 			Args:    []string{"-c", "echo $XENV"},
 			Stdout:  &out,
 			Env:     []string{"XENV=myEnvVar"},
-			Watcher: workspaceapi.ChanWatcher(ch),
+			Watcher: workspaceapi.ChanProcessWatcher(ch),
 		}
 
 		pid, err := scheme.StartCommand(context.Background(), cmd)
@@ -180,7 +180,7 @@ func TestWorkspaceSchemeExecutor(
 		cmd := workspaceapi.Cmd{
 			Path:    "sleep",
 			Args:    []string{"60"},
-			Watcher: workspaceapi.ChanWatcher(ch),
+			Watcher: workspaceapi.ChanProcessWatcher(ch),
 		}
 
 		ctx, cancel := context.WithCancel(context.Background())

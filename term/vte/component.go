@@ -54,7 +54,7 @@ type Component struct {
 	clipboard clipboard.Register
 	pty       workspaceapi.Pty
 	shell     string
-	watcher   workspaceapi.Watcher
+	watcher   workspaceapi.ProcessWatcher
 	ctx       context.Context
 	cancelCtx func()
 	uri       workspaceapi.URI

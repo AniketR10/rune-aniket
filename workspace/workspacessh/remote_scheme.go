@@ -363,11 +363,11 @@ func (s *remoteScheme) Close() (ret error) {
 
 // wrap watcher to ensure that one of bluectx.First ctxs gets canceled
 type wrapWatcher struct {
-	watcher workspaceapi.Watcher
+	watcher workspaceapi.ProcessWatcher
 	ch      chan error
 }
 
-func newWrapWatcher(watcher workspaceapi.Watcher, cancelFn func()) wrapWatcher {
+func newWrapWatcher(watcher workspaceapi.ProcessWatcher, cancelFn func()) wrapWatcher {
 	ret := wrapWatcher{
 		watcher: watcher,
 		ch:      make(chan error),
@@ -375,10 +375,10 @@ func newWrapWatcher(watcher workspaceapi.Watcher, cancelFn func()) wrapWatcher {
 	go func() {
 		err := <-ret.ch
 		cancelFn()
-		if ret.watcher != nil && ret.watcher.Watch() != nil {
+		if ret.watcher != nil && ret.watcher.WatchProcess() != nil {
 			t := time.After(2 * time.Minute) // in case watcher is unresponsive
 			select {
-			case ret.watcher.Watch() <- err:
+			case ret.watcher.WatchProcess() <- err:
 			case <-t:
 			}
 		}
@@ -386,6 +386,6 @@ func newWrapWatcher(watcher workspaceapi.Watcher, cancelFn func()) wrapWatcher {
 	return ret
 }
 
-func (w wrapWatcher) Watch() chan error {
+func (w wrapWatcher) WatchProcess() chan error {
 	return w.ch
 }

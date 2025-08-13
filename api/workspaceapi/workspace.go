@@ -67,22 +67,22 @@ type Cmd struct {
 	Stdin   io.Reader
 	Stdout  io.Writer
 	Stderr  io.Writer
-	Watcher Watcher
+	Watcher ProcessWatcher
 
 	// SysProcAttr is ignored if passed from a extension.
 	SysProcAttr *syscall.SysProcAttr
 }
 
-// Watcher adds the ability for wait a processes started by Cmd
+// ProcessWatcher adds the ability for wait a processes started by Cmd
 // and collect any I/O errors or non-zero exit code.
-type Watcher interface {
-	// Watch returns a channel that can be used to
+type ProcessWatcher interface {
+	// WatchProcess returns a channel that can be used to
 	// wait for the command to exit and waits for any copying to stdin or
 	// copying from stdout or stderr to complete.
 
 	// The returned error is nil if the command runs, has no problems copying
 	// stdin, stdout, and stderr, and exits with a zero exit status.
-	Watch() chan error
+	WatchProcess() chan error
 }
 
 // Executor is the public facing API of a workspace's command execution.

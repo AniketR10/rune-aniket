@@ -125,7 +125,7 @@ func (h *sedEditorHandler) execSed(
 		Path:    "sed",
 		Args:    []string{command},
 		Stdin:   strings.NewReader(content),
-		Watcher: workspaceapi.ChanWatcher(waitch),
+		Watcher: workspaceapi.ChanProcessWatcher(waitch),
 		Stdout:  &stdout,
 		Stderr:  &stderr,
 	}

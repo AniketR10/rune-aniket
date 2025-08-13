@@ -157,7 +157,7 @@ func (m *workspaceRunner) makeCommand(
 		Path:    argv[0],
 		Args:    argv[1:],
 		Dir:     m.dataDir, // default
-		Watcher: workspaceapi.ChanWatcher(waitCh),
+		Watcher: workspaceapi.ChanProcessWatcher(waitCh),
 	}
 
 	// if local workspace, then do set dir in a best effort for

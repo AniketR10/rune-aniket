@@ -167,7 +167,7 @@ func (s *scheme) runAndWait(
 		Args:    args,
 		Stderr:  &stderr,
 		Stdout:  &stdout,
-		Watcher: workspaceapi.ChanWatcher(ch),
+		Watcher: workspaceapi.ChanProcessWatcher(ch),
 	}
 	_, err = ses.StartCommand(s.ctx, cmd)
 	if err != nil {
@@ -279,7 +279,7 @@ func (s *scheme) connectScheme(
 	cmd := workspaceapi.Cmd{
 		Path:    cmdStr,
 		Args:    args,
-		Watcher: workspaceapi.ChanWatcher(ch),
+		Watcher: workspaceapi.ChanProcessWatcher(ch),
 	}
 
 	stdoutRead, stderrRead, stdinWrite, closers, err := s.setPipes(&cmd)

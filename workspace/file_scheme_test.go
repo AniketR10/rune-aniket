@@ -221,7 +221,7 @@ func TestStartCommand(t *testing.T) {
 			Path:    "/bin/sh",
 			Args:    []string{"-c", "pwd"},
 			Dir:     "/bin",
-			Watcher: workspaceapi.ChanWatcher(ch),
+			Watcher: workspaceapi.ChanProcessWatcher(ch),
 			Stdout:  &stdout,
 			Stderr:  &stderr,
 		}
@@ -259,7 +259,7 @@ func TestStartCommand(t *testing.T) {
 		cmd := workspaceapi.Cmd{
 			Path:    "/bin/sh",
 			Args:    []string{"-c", "pwd"},
-			Watcher: workspaceapi.ChanWatcher(ch),
+			Watcher: workspaceapi.ChanProcessWatcher(ch),
 			Stdout:  &stdout,
 			Stderr:  &stderr,
 		}

@@ -118,7 +118,7 @@ func (h *fuzzyFinderHandler) execCommand(ctx context.Context, command string) (
 
 // Watch satisfies workspaceapi.Watcher which is employed
 // to wait for the underlying command to execute.
-func (h *fuzzyFinderHandler) Watch() chan error {
+func (h *fuzzyFinderHandler) WatchProcess() chan error {
 	return h.waitChan
 }
 

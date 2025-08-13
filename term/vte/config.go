@@ -61,7 +61,7 @@ type Config struct {
 	// RingBell writes to the raw pty directly, bypassing the event loop.
 	// This should only be used when called from the an event loop goroutine.
 	RingBell func()
-	Watcher  workspaceapi.Watcher
+	Watcher  workspaceapi.ProcessWatcher
 
 	Attributes               term.Attributes
 	SelectionAttributes      term.Attributes

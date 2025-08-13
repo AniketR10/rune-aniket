@@ -76,7 +76,7 @@ func newServerCommandStreamer(
 		Dir:     dir,
 		Args:    args,
 		Env:     env,
-		Watcher: workspaceapi.ChanWatcher(doneCh),
+		Watcher: workspaceapi.ChanProcessWatcher(doneCh),
 	}
 	if setsid || setctty {
 		cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: setsid, Setctty: setctty}
@@ -519,9 +519,9 @@ func (s *clientCommandStreamer) streamCommandData(cancelFn func()) {
 		watcherWaitTimeout)
 	defer cancel()
 
-	if s.cmd.Watcher != nil && s.cmd.Watcher.Watch() != nil {
+	if s.cmd.Watcher != nil && s.cmd.Watcher.WatchProcess() != nil {
 		select {
-		case s.cmd.Watcher.Watch() <- err:
+		case s.cmd.Watcher.WatchProcess() <- err:
 		case <-ctx.Done():
 			s.log(log.WarnLevel, "could not deliver error to watcher chan: "+
 				"watcher not ready for too long")
