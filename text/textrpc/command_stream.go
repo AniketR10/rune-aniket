@@ -250,6 +250,9 @@ func newCommandServerStream(
 }
 
 func (s *commandServerStream) sendMessages() {
+	defer func() {
+		_ = s.stream.CloseSend()
+	}()
 	for {
 		select {
 		case <-s.ctx.Done():
@@ -268,11 +271,7 @@ func (s *commandServerStream) sendMessages() {
 
 func (s *commandServerStream) receiveMessages() {
 	go s.sendMessages()
-	defer func() {
-		s.cancelCtx()
-		// ensure that client doesn't block in case of panic
-		_ = s.stream.CloseSend()
-	}()
+	defer s.cancelCtx()
 	for {
 		var reqMsg ServerCommandMessage
 		err := s.stream.RecvMsg(&reqMsg)
