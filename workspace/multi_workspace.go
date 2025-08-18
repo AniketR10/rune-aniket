@@ -145,6 +145,16 @@ func (m multi) MkdirAll(path string, perm os.FileMode) error {
 	return m.def.MkdirAll(path, perm)
 }
 
+func (m multi) Watch(
+	path string, c chan<- workspaceapi.EventInfo, events ...workspaceapi.Event,
+) (int, error) {
+	return m.def.Watch(path, c, events...)
+}
+
+func (m multi) StopWatch(id int) error {
+	return m.def.StopWatch(id)
+}
+
 func (m multi) Close() error {
 	return m.def.Close()
 }

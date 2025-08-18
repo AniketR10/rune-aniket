@@ -38,7 +38,7 @@ import (
 
 func TestFileScheme(t *testing.T) {
 	TestWorkspaceSchemeFiles(t, func(t *testing.T) schemeapi.Scheme {
-		dir, err := os.MkdirTemp("", "file_scheme_suite")
+		dir, err := os.MkdirTemp("/tmp", "file_scheme_suite")
 		require.NoError(t, err)
 
 		workspaceURI, err := workspaceapi.ParseURI("file://" + dir)

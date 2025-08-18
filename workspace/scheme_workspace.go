@@ -201,6 +201,15 @@ func (m *schemeWorkspace) SetPtySize(p workspaceapi.Pty, width, height int) erro
 func (m *schemeWorkspace) MkdirAll(path string, perm os.FileMode) error {
 	return m.p.MkdirAll(path, perm)
 }
+func (m *schemeWorkspace) Watch(
+	path string, c chan<- workspaceapi.EventInfo, events ...workspaceapi.Event,
+) (int, error) {
+	return m.p.Watch(path, c, events...)
+}
+
+func (m *schemeWorkspace) StopWatch(ID int) error {
+	return m.p.StopWatch(ID)
+}
 
 func (m *schemeWorkspace) Close() error {
 	return m.p.Close()

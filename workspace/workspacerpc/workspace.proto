@@ -263,6 +263,45 @@ message MkdirAllResponse {
 	bool is_permission_err = 4;
 }
 
+enum Event {
+	Create = 0;
+	Remove = 1;
+	Write  = 2;
+	Rename = 3;
+}
+
+message WatchRequest {
+	string path = 1;
+	repeated Event events = 2;
+}
+
+message WatchResponse {
+	int64 id = 1;
+}
+
+message WatchData {
+	Event event = 1;
+	string uri = 2;
+	string content = 3;
+	bool is_dir = 4;
+}
+
+message WatchMessage {
+	enum Type {
+		TypeResponse = 0;
+		TypeData = 1;
+	}
+	Type type = 1;
+	WatchResponse response = 2;
+	WatchData data = 3;
+}
+
+message StopWatchRequest {
+	int64 id = 1;
+}
+
+message StopWatchResponse {}
+
 service Terminal {
 	rpc NewPty(NewPtyRequest) returns (NewPtyResponse);
 	rpc SetPtySize(SetPtySizeRequest) returns (SetPtySizeResponse);
@@ -277,6 +316,8 @@ service Scheme {
 	rpc ReadLink(ReadLinkRequest) returns (ReadLinkResponse);
 	rpc ReadDir(ReadDirRequest) returns (ReadDirResponse);
 	rpc MkdirAll(MkdirAllRequest) returns (MkdirAllResponse);
+	rpc Watch(WatchRequest) returns (stream WatchMessage) {};
+	rpc StopWatch(StopWatchRequest) returns (StopWatchResponse);
 }
 
 service Executor {

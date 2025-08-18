@@ -416,33 +416,37 @@ func setupClientServerIntegrationTest(
 }
 
 func TestSchemeIntegration(t *testing.T) {
-	workspacetest.TestWorkspaceSchemeFiles(t, func(t *testing.T) schemeapi.Scheme {
-		memURI, err := workspaceapi.ParseURI("memory:///tmp")
-		require.NoError(t, err)
-		scheme, err := workspace.NewMemoryScheme(context.Background(), config.NopConfig(), memURI)
-		require.NoError(t, err)
-		client, cleanup := setupClientServerIntegrationTest(t, scheme)
-		t.Cleanup(cleanup)
-		return client
+	t.Run("memory", func(t *testing.T) {
+		workspacetest.TestWorkspaceSchemeFiles(t, func(t *testing.T) schemeapi.Scheme {
+			memURI, err := workspaceapi.ParseURI("memory:///tmp")
+			require.NoError(t, err)
+			scheme, err := workspace.NewMemoryScheme(context.Background(), config.NopConfig(), memURI)
+			require.NoError(t, err)
+			client, cleanup := setupClientServerIntegrationTest(t, scheme)
+			t.Cleanup(cleanup)
+			return client
+		})
 	})
 
-	workspacetest.TestWorkspaceSchemeExecutor(t, func(t *testing.T) schemeapi.Scheme {
-		dir, err := os.MkdirTemp("", "workspacerpc_suite")
-		require.NoError(t, err)
+	t.Run("file", func(t *testing.T) {
+		workspacetest.TestWorkspaceSchemeExecutor(t, func(t *testing.T) schemeapi.Scheme {
+			dir, err := os.MkdirTemp("", "workspacerpc_suite")
+			require.NoError(t, err)
 
-		workspaceURI, err := workspaceapi.ParseURI("file://" + dir)
-		require.NoError(t, err)
+			workspaceURI, err := workspaceapi.ParseURI("file://" + dir)
+			require.NoError(t, err)
 
-		fileScheme, err := workspace.NewFileScheme(
-			context.Background(), config.NopConfig(), workspaceURI)
-		require.NoError(t, err)
+			fileScheme, err := workspace.NewFileScheme(
+				context.Background(), config.NopConfig(), workspaceURI)
+			require.NoError(t, err)
 
-		client, cleanup := setupClientServerIntegrationTest(t, fileScheme)
-		t.Cleanup(func() {
-			_ = os.RemoveAll(dir)
-			cleanup()
+			client, cleanup := setupClientServerIntegrationTest(t, fileScheme)
+			t.Cleanup(func() {
+				_ = os.RemoveAll(dir)
+				cleanup()
+			})
+			return client
 		})
-		return client
 	})
 }
 

@@ -32,6 +32,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -236,6 +237,9 @@ func TestWorkspaceSchemeFiles(
 	})
 	t.Run("MkdirAll", func(t *testing.T) {
 		TestWorkspaceSchemeMkdirAll(t, schemeFn, defaultCreateTestFile)
+	})
+	t.Run("Watch", func(t *testing.T) {
+		TestWorkspaceSchemeWatch(t, schemeFn, defaultCreateTestFile)
 	})
 	t.Run("workspace.ListFiles integration", func(t *testing.T) {
 		TestWorkspaceSchemeListFilesIntegration(t, schemeFn, defaultCreateTestFile)
@@ -1133,5 +1137,140 @@ func TestWorkspaceSchemeMkdirAll(
 		file, werr := scheme.Open("./nested/directory/very/nested/file", os.O_CREATE, 0666)
 		require.Nil(t, werr, werr.String())
 		require.NoError(t, file.Close())
+	})
+}
+
+func expectNoMoreEvents(t *testing.T, ch chan workspaceapi.EventInfo) {
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	select {
+	case <-ch:
+		t.Log("was not expecting any more events")
+		t.FailNow()
+	case <-ctx.Done():
+	}
+}
+
+func TestWorkspaceSchemeWatch(
+	t *testing.T,
+	schemeFn func(t *testing.T) schemeapi.Scheme,
+	createTestFile func(*testing.T, schemeapi.Scheme, string, string) (workspaceapi.File, func()),
+) {
+	t.Run("workspaceapi.Create watches for file created events", func(t *testing.T) {
+		scheme := schemeFn(t)
+		defer scheme.Close()
+
+		// believe it or not, some event subsystems report the directory created above
+		// unless padding is added here.
+		time.Sleep(100 * time.Millisecond)
+
+		ch := make(chan workspaceapi.EventInfo, 2)
+		id, err := scheme.Watch(".", ch, workspaceapi.Create)
+		require.NoError(t, err)
+
+		f, cleanup := createTestFile(t, scheme, "sza", "")
+		defer cleanup()
+
+		ei := <-ch
+		require.NoError(t, err)
+		// cannot rely on just comparing full path, as temp
+		// folder used in most harnesses contains symlinks
+		// and event subsystem will resolve them, whereas schemes don't.
+		assert.Equal(t, filepath.Base(f.Name()), filepath.Base(ei.URI().Path()), ei.URI().Path())
+		assert.Equal(t, workspaceapi.Create, ei.Event())
+
+		expectNoMoreEvents(t, ch)
+
+		require.NoError(t, scheme.StopWatch(id))
+	})
+
+	t.Run("workspaceapi.Write watches for file sync events", func(t *testing.T) {
+		scheme := schemeFn(t)
+		defer scheme.Close()
+
+		f, cleanup := createTestFile(t, scheme, "sza", "")
+		defer cleanup()
+
+		ch := make(chan workspaceapi.EventInfo, 2)
+		id, err := scheme.Watch(".", ch, workspaceapi.Write)
+		require.NoError(t, err)
+
+		_, err = f.Write([]byte("1234"))
+		require.NoError(t, err)
+		err = f.Sync()
+		require.NoError(t, err)
+		// Close is the only guarantee that file is actually synced to the
+		// underlying file system
+		err = f.Close()
+		require.NoError(t, err)
+
+		ei := <-ch
+		require.NoError(t, err)
+		assert.Equal(t, filepath.Base(f.Name()), filepath.Base(ei.URI().Path()), ei.URI().Path())
+		assert.Equal(t, workspaceapi.Write, ei.Event())
+
+		expectNoMoreEvents(t, ch)
+
+		require.NoError(t, scheme.StopWatch(id))
+	})
+
+	t.Run("workspaceapi.Rename watches for file rename events", func(t *testing.T) {
+		scheme := schemeFn(t)
+		defer scheme.Close()
+
+		f, cleanup := createTestFile(t, scheme, "sza", "")
+		defer cleanup()
+
+		ch := make(chan workspaceapi.EventInfo, 3)
+		id, err := scheme.Watch(".", ch, workspaceapi.Rename)
+		require.NoError(t, err)
+
+		require.NoError(t, scheme.Rename(f.Name(), "SZA"))
+
+		// order is not guaranteed
+		var files []string
+		for i := 0; i < 2; i++ {
+			timer := time.NewTimer(1 * time.Second)
+			select {
+			case ei := <-ch:
+				assert.Equal(t, workspaceapi.Rename, ei.Event())
+				files = append(files, filepath.Base(ei.URI().Path()))
+			case <-timer.C:
+				t.Log("failed to receive event in time")
+				t.FailNow()
+			}
+		}
+		sort.Strings(files)
+		require.NoError(t, err)
+		assert.Equal(t, "SZA", files[0])
+		assert.Equal(t, "sza", files[1])
+
+		expectNoMoreEvents(t, ch)
+
+		require.NoError(t, scheme.StopWatch(id))
+	})
+
+	t.Run("workspaceapi.Remove watches for file remove events", func(t *testing.T) {
+		scheme := schemeFn(t)
+		defer scheme.Close()
+
+		f, cleanup := createTestFile(t, scheme, "sza", "")
+		defer cleanup()
+
+		ch := make(chan workspaceapi.EventInfo, 2)
+		id, err := scheme.Watch(".", ch, workspaceapi.Remove)
+		require.NoError(t, err)
+
+		require.NoError(t, scheme.Remove(f.Name()))
+
+		ei := <-ch
+		require.NoError(t, err)
+		assert.Equal(t, filepath.Base(f.Name()), filepath.Base(ei.URI().Path()), ei.URI().Path())
+		assert.Equal(t, workspaceapi.Remove, ei.Event())
+
+		expectNoMoreEvents(t, ch)
+
+		require.NoError(t, scheme.StopWatch(id))
 	})
 }

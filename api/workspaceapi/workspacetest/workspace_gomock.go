@@ -115,6 +115,20 @@ func (mr *MockFileSystemMockRecorder) Stat(path any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stat", reflect.TypeOf((*MockFileSystem)(nil).Stat), path)
 }
 
+// StopWatch mocks base method.
+func (m *MockFileSystem) StopWatch(ID int) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "StopWatch", ID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// StopWatch indicates an expected call of StopWatch.
+func (mr *MockFileSystemMockRecorder) StopWatch(ID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StopWatch", reflect.TypeOf((*MockFileSystem)(nil).StopWatch), ID)
+}
+
 // URI mocks base method.
 func (m *MockFileSystem) URI(path string) (workspaceapi.URI, error) {
 	m.ctrl.T.Helper()
@@ -130,41 +144,141 @@ func (mr *MockFileSystemMockRecorder) URI(path any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "URI", reflect.TypeOf((*MockFileSystem)(nil).URI), path)
 }
 
-// MockWatcher is a mock of Watcher interface.
-type MockWatcher struct {
+// Watch mocks base method.
+func (m *MockFileSystem) Watch(path string, ch chan<- workspaceapi.EventInfo, events ...workspaceapi.Event) (int, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{path, ch}
+	for _, a := range events {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "Watch", varargs...)
+	ret0, _ := ret[0].(int)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Watch indicates an expected call of Watch.
+func (mr *MockFileSystemMockRecorder) Watch(path, ch any, events ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{path, ch}, events...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Watch", reflect.TypeOf((*MockFileSystem)(nil).Watch), varargs...)
+}
+
+// MockEventInfo is a mock of EventInfo interface.
+type MockEventInfo struct {
 	ctrl     *gomock.Controller
-	recorder *MockWatcherMockRecorder
+	recorder *MockEventInfoMockRecorder
 }
 
-// MockWatcherMockRecorder is the mock recorder for MockWatcher.
-type MockWatcherMockRecorder struct {
-	mock *MockWatcher
+// MockEventInfoMockRecorder is the mock recorder for MockEventInfo.
+type MockEventInfoMockRecorder struct {
+	mock *MockEventInfo
 }
 
-// NewMockWatcher creates a new mock instance.
-func NewMockWatcher(ctrl *gomock.Controller) *MockWatcher {
-	mock := &MockWatcher{ctrl: ctrl}
-	mock.recorder = &MockWatcherMockRecorder{mock}
+// NewMockEventInfo creates a new mock instance.
+func NewMockEventInfo(ctrl *gomock.Controller) *MockEventInfo {
+	mock := &MockEventInfo{ctrl: ctrl}
+	mock.recorder = &MockEventInfoMockRecorder{mock}
 	return mock
 }
 
 // EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockWatcher) EXPECT() *MockWatcherMockRecorder {
+func (m *MockEventInfo) EXPECT() *MockEventInfoMockRecorder {
 	return m.recorder
 }
 
-// Watch mocks base method.
-func (m *MockWatcher) Watch() chan error {
+// Content mocks base method.
+func (m *MockEventInfo) Content() string {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Watch")
+	ret := m.ctrl.Call(m, "Content")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// Content indicates an expected call of Content.
+func (mr *MockEventInfoMockRecorder) Content() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Content", reflect.TypeOf((*MockEventInfo)(nil).Content))
+}
+
+// Event mocks base method.
+func (m *MockEventInfo) Event() workspaceapi.Event {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Event")
+	ret0, _ := ret[0].(workspaceapi.Event)
+	return ret0
+}
+
+// Event indicates an expected call of Event.
+func (mr *MockEventInfoMockRecorder) Event() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Event", reflect.TypeOf((*MockEventInfo)(nil).Event))
+}
+
+// IsDir mocks base method.
+func (m *MockEventInfo) IsDir() (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsDir")
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// IsDir indicates an expected call of IsDir.
+func (mr *MockEventInfoMockRecorder) IsDir() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsDir", reflect.TypeOf((*MockEventInfo)(nil).IsDir))
+}
+
+// URI mocks base method.
+func (m *MockEventInfo) URI() workspaceapi.URI {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "URI")
+	ret0, _ := ret[0].(workspaceapi.URI)
+	return ret0
+}
+
+// URI indicates an expected call of URI.
+func (mr *MockEventInfoMockRecorder) URI() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "URI", reflect.TypeOf((*MockEventInfo)(nil).URI))
+}
+
+// MockProcessWatcher is a mock of ProcessWatcher interface.
+type MockProcessWatcher struct {
+	ctrl     *gomock.Controller
+	recorder *MockProcessWatcherMockRecorder
+}
+
+// MockProcessWatcherMockRecorder is the mock recorder for MockProcessWatcher.
+type MockProcessWatcherMockRecorder struct {
+	mock *MockProcessWatcher
+}
+
+// NewMockProcessWatcher creates a new mock instance.
+func NewMockProcessWatcher(ctrl *gomock.Controller) *MockProcessWatcher {
+	mock := &MockProcessWatcher{ctrl: ctrl}
+	mock.recorder = &MockProcessWatcherMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockProcessWatcher) EXPECT() *MockProcessWatcherMockRecorder {
+	return m.recorder
+}
+
+// WatchProcess mocks base method.
+func (m *MockProcessWatcher) WatchProcess() chan error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "WatchProcess")
 	ret0, _ := ret[0].(chan error)
 	return ret0
 }
 
-// Watch indicates an expected call of Watch.
-func (mr *MockWatcherMockRecorder) Watch() *gomock.Call {
+// WatchProcess indicates an expected call of WatchProcess.
+func (mr *MockProcessWatcherMockRecorder) WatchProcess() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Watch", reflect.TypeOf((*MockWatcher)(nil).Watch))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WatchProcess", reflect.TypeOf((*MockProcessWatcher)(nil).WatchProcess))
 }
 
 // MockExecutor is a mock of Executor interface.

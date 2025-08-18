@@ -159,14 +159,16 @@ var Terminal_ServiceDesc = grpc.ServiceDesc{
 }
 
 const (
-	Scheme_URI_FullMethodName      = "/workspace.Scheme/URI"
-	Scheme_Open_FullMethodName     = "/workspace.Scheme/Open"
-	Scheme_Remove_FullMethodName   = "/workspace.Scheme/Remove"
-	Scheme_Rename_FullMethodName   = "/workspace.Scheme/Rename"
-	Scheme_Stat_FullMethodName     = "/workspace.Scheme/Stat"
-	Scheme_ReadLink_FullMethodName = "/workspace.Scheme/ReadLink"
-	Scheme_ReadDir_FullMethodName  = "/workspace.Scheme/ReadDir"
-	Scheme_MkdirAll_FullMethodName = "/workspace.Scheme/MkdirAll"
+	Scheme_URI_FullMethodName       = "/workspace.Scheme/URI"
+	Scheme_Open_FullMethodName      = "/workspace.Scheme/Open"
+	Scheme_Remove_FullMethodName    = "/workspace.Scheme/Remove"
+	Scheme_Rename_FullMethodName    = "/workspace.Scheme/Rename"
+	Scheme_Stat_FullMethodName      = "/workspace.Scheme/Stat"
+	Scheme_ReadLink_FullMethodName  = "/workspace.Scheme/ReadLink"
+	Scheme_ReadDir_FullMethodName   = "/workspace.Scheme/ReadDir"
+	Scheme_MkdirAll_FullMethodName  = "/workspace.Scheme/MkdirAll"
+	Scheme_Watch_FullMethodName     = "/workspace.Scheme/Watch"
+	Scheme_StopWatch_FullMethodName = "/workspace.Scheme/StopWatch"
 )
 
 // SchemeClient is the client API for Scheme service.
@@ -181,6 +183,8 @@ type SchemeClient interface {
 	ReadLink(ctx context.Context, in *ReadLinkRequest, opts ...grpc.CallOption) (*ReadLinkResponse, error)
 	ReadDir(ctx context.Context, in *ReadDirRequest, opts ...grpc.CallOption) (*ReadDirResponse, error)
 	MkdirAll(ctx context.Context, in *MkdirAllRequest, opts ...grpc.CallOption) (*MkdirAllResponse, error)
+	Watch(ctx context.Context, in *WatchRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[WatchMessage], error)
+	StopWatch(ctx context.Context, in *StopWatchRequest, opts ...grpc.CallOption) (*StopWatchResponse, error)
 }
 
 type schemeClient struct {
@@ -271,6 +275,35 @@ func (c *schemeClient) MkdirAll(ctx context.Context, in *MkdirAllRequest, opts .
 	return out, nil
 }
 
+func (c *schemeClient) Watch(ctx context.Context, in *WatchRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[WatchMessage], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &Scheme_ServiceDesc.Streams[0], Scheme_Watch_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[WatchRequest, WatchMessage]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type Scheme_WatchClient = grpc.ServerStreamingClient[WatchMessage]
+
+func (c *schemeClient) StopWatch(ctx context.Context, in *StopWatchRequest, opts ...grpc.CallOption) (*StopWatchResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(StopWatchResponse)
+	err := c.cc.Invoke(ctx, Scheme_StopWatch_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // SchemeServer is the server API for Scheme service.
 // All implementations must embed UnimplementedSchemeServer
 // for forward compatibility.
@@ -283,6 +316,8 @@ type SchemeServer interface {
 	ReadLink(context.Context, *ReadLinkRequest) (*ReadLinkResponse, error)
 	ReadDir(context.Context, *ReadDirRequest) (*ReadDirResponse, error)
 	MkdirAll(context.Context, *MkdirAllRequest) (*MkdirAllResponse, error)
+	Watch(*WatchRequest, grpc.ServerStreamingServer[WatchMessage]) error
+	StopWatch(context.Context, *StopWatchRequest) (*StopWatchResponse, error)
 	mustEmbedUnimplementedSchemeServer()
 }
 
@@ -316,6 +351,12 @@ func (UnimplementedSchemeServer) ReadDir(context.Context, *ReadDirRequest) (*Rea
 }
 func (UnimplementedSchemeServer) MkdirAll(context.Context, *MkdirAllRequest) (*MkdirAllResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method MkdirAll not implemented")
+}
+func (UnimplementedSchemeServer) Watch(*WatchRequest, grpc.ServerStreamingServer[WatchMessage]) error {
+	return status.Errorf(codes.Unimplemented, "method Watch not implemented")
+}
+func (UnimplementedSchemeServer) StopWatch(context.Context, *StopWatchRequest) (*StopWatchResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method StopWatch not implemented")
 }
 func (UnimplementedSchemeServer) mustEmbedUnimplementedSchemeServer() {}
 func (UnimplementedSchemeServer) testEmbeddedByValue()                {}
@@ -482,6 +523,35 @@ func _Scheme_MkdirAll_Handler(srv interface{}, ctx context.Context, dec func(int
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Scheme_Watch_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(WatchRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(SchemeServer).Watch(m, &grpc.GenericServerStream[WatchRequest, WatchMessage]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type Scheme_WatchServer = grpc.ServerStreamingServer[WatchMessage]
+
+func _Scheme_StopWatch_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(StopWatchRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SchemeServer).StopWatch(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Scheme_StopWatch_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SchemeServer).StopWatch(ctx, req.(*StopWatchRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Scheme_ServiceDesc is the grpc.ServiceDesc for Scheme service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -521,8 +591,18 @@ var Scheme_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "MkdirAll",
 			Handler:    _Scheme_MkdirAll_Handler,
 		},
+		{
+			MethodName: "StopWatch",
+			Handler:    _Scheme_StopWatch_Handler,
+		},
 	},
-	Streams:  []grpc.StreamDesc{},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "Watch",
+			Handler:       _Scheme_Watch_Handler,
+			ServerStreams: true,
+		},
+	},
 	Metadata: "workspacerpc/workspace.proto",
 }
 

@@ -38,6 +38,7 @@ import (
 // memFile is an in-memory workspaceapi.File implementation.
 type memFile struct {
 	locker   sync.Locker
+	m        *memoryScheme
 	reader   *bytes.Reader
 	data     []byte
 	filename string
@@ -122,6 +123,21 @@ func (c *memFile) Sync() error {
 	defer c.locker.Unlock()
 
 	c.modTime = time.Now()
+	if c.m == nil {
+		return nil
+	}
+
+	watchpoints := c.m.watchpoints[workspaceapi.Write]
+	uri, _ := c.m.URI(c.filename)
+	content := string(c.data)
+	for _, wp := range watchpoints {
+		fi := watchFileInfo{
+			event:   workspaceapi.Write,
+			uri:     uri,
+			content: content,
+		}
+		wp <- fi
+	}
 	return nil
 }
 

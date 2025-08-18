@@ -200,6 +200,16 @@ func (t *testScheme) ReadDir(string) (
 	panic("unimplemented")
 }
 
+func (t *testScheme) Watch(
+	path string, c chan<- workspaceapi.EventInfo, events ...workspaceapi.Event,
+) (int, error) {
+	panic("unimplemented")
+}
+
+func (t *testScheme) StopWatch(ID int) error {
+	panic("unimplemented")
+}
+
 func (t *testScheme) Close() error {
 	return nil
 }

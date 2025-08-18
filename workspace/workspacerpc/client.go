@@ -25,7 +25,9 @@ package workspacerpc
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"syscall"
 	"time"
@@ -400,6 +402,89 @@ func (c *Client) NewFile(fd uintptr, filename string) workspaceapi.File {
 	return newFileClient(c.ctx, c, c.cc, filename, fd)
 }
 
+// Watch satisfies schemeapi.Scheme.
+func (c *Client) Watch(
+	path string, ch chan<- workspaceapi.EventInfo, events ...workspaceapi.Event,
+) (int, error) {
+	var pbEvents []Event
+	for _, ev := range events {
+		pbEvents = append(pbEvents, Event(ev))
+	}
+	req := WatchRequest{Path: path, Events: pbEvents}
+	stream, err := c.scheme.Watch(c.ctx, &req)
+	if err != nil {
+		return 0, err
+	}
+
+	msg, err := stream.Recv()
+	if err != nil {
+		return 0, fmt.Errorf("stream receive response: %w", err)
+	}
+
+	if msg.GetType() != WatchMessage_TypeResponse || msg.GetResponse() == nil {
+		return 0, errors.New("received incorrect watch message response")
+	}
+
+	go func() {
+		defer close(ch)
+		for {
+			msg, err := stream.Recv()
+			if err != nil {
+				if err != io.EOF {
+					log.Errorf("watch stream recv: %v", err)
+				}
+				break
+			}
+			if msg.GetType() != WatchMessage_TypeData || msg.GetData() == nil {
+				log.Error("watch stream recv data: incorrect message type")
+				break
+			}
+			data := msg.GetData()
+			uri, err := workspaceapi.ParseURI(data.GetUri())
+			if err != nil {
+				log.Errorf("could not parse URI response from server: %v", err)
+				break
+			}
+			var ev workspaceapi.Event
+			switch data.GetEvent() {
+			case Event_Create:
+				ev = workspaceapi.Create
+			case Event_Write:
+				ev = workspaceapi.Write
+			case Event_Rename:
+				ev = workspaceapi.Rename
+			case Event_Remove:
+				ev = workspaceapi.Remove
+			}
+			fi := watchFileInfo{
+				event:   ev,
+				uri:     uri,
+				isDir:   data.GetIsDir(),
+				content: data.GetContent(),
+			}
+			select {
+			case ch <- fi:
+			case <-c.ctx.Done():
+				return
+			}
+		}
+	}()
+
+	return int(msg.GetResponse().GetId()), nil
+}
+
+// StopWatch satisfies schemeapi.Scheme.
+func (c *Client) StopWatch(id int) error {
+	ctx, cleanup := ctxWithTimeout(c.ctx)
+	defer cleanup()
+
+	req := StopWatchRequest{
+		Id: int64(id),
+	}
+	_, err := c.scheme.StopWatch(ctx, &req)
+	return err
+}
+
 // Close closes all resources associated with this client.
 func (c *Client) Close() (ret error) {
 	c.cancelCtx()
@@ -508,4 +593,31 @@ func tryUnwrapFile(ifc interface{}) (uint32, string) {
 		return 0, ""
 	}
 	return uint32(fc.Fd()), fc.Name()
+}
+
+type watchFileInfo struct {
+	event   workspaceapi.Event
+	uri     workspaceapi.URI
+	isDir   bool
+	content string
+}
+
+func (w watchFileInfo) Event() workspaceapi.Event {
+	return w.event
+}
+
+func (w watchFileInfo) URI() workspaceapi.URI {
+	return w.uri
+}
+
+func (w watchFileInfo) Content() string {
+	return w.content
+}
+
+func (w watchFileInfo) Sys() interface{} {
+	return nil
+}
+
+func (w watchFileInfo) IsDir() (bool, error) {
+	return w.isDir, nil
 }

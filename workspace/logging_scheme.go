@@ -174,6 +174,22 @@ func (t loggingScheme) MkdirAll(path string, perm os.FileMode) error {
 	return err
 }
 
+func (t loggingScheme) Watch(
+	path string, c chan<- workspaceapi.EventInfo, events ...workspaceapi.Event,
+) (int, error) {
+	t.trace("Watch(%s, %v)", path, events)
+	id, err := t.other.Watch(path, c, events...)
+	t.trace("Watch(%s, %v): %v", path, events, err)
+	return id, err
+}
+
+func (t loggingScheme) StopWatch(id int) error {
+	t.trace("StopWatch(%d)", id)
+	err := t.other.StopWatch(id)
+	t.trace("StopWatch(%d): %v", id, err)
+	return err
+}
+
 func (t loggingScheme) Close() (err error) {
 	t.trace("Close")
 	err = t.other.Close()

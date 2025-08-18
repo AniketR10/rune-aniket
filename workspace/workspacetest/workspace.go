@@ -90,6 +90,16 @@ func (t toWorkspace) MkdirAll(path string, perm os.FileMode) error {
 	return t.fs.MkdirAll(path, perm)
 }
 
+func (t toWorkspace) Watch(
+	path string, c chan<- workspaceapi.EventInfo, events ...workspaceapi.Event,
+) (int, error) {
+	return t.fs.Watch(path, c, events...)
+}
+
+func (t toWorkspace) StopWatch(id int) error {
+	return t.fs.StopWatch(id)
+}
+
 func (t toWorkspace) ReadDir(name string) ([]os.DirEntry, error) {
 	return t.fs.ReadDir(name)
 }

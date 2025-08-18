@@ -22,6 +22,58 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type Event int32
+
+const (
+	Event_Create Event = 0
+	Event_Remove Event = 1
+	Event_Write  Event = 2
+	Event_Rename Event = 3
+)
+
+// Enum value maps for Event.
+var (
+	Event_name = map[int32]string{
+		0: "Create",
+		1: "Remove",
+		2: "Write",
+		3: "Rename",
+	}
+	Event_value = map[string]int32{
+		"Create": 0,
+		"Remove": 1,
+		"Write":  2,
+		"Rename": 3,
+	}
+)
+
+func (x Event) Enum() *Event {
+	p := new(Event)
+	*p = x
+	return p
+}
+
+func (x Event) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (Event) Descriptor() protoreflect.EnumDescriptor {
+	return file_workspacerpc_workspace_proto_enumTypes[0].Descriptor()
+}
+
+func (Event) Type() protoreflect.EnumType {
+	return &file_workspacerpc_workspace_proto_enumTypes[0]
+}
+
+func (x Event) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use Event.Descriptor instead.
+func (Event) EnumDescriptor() ([]byte, []int) {
+	return file_workspacerpc_workspace_proto_rawDescGZIP(), []int{0}
+}
+
 type CommandPayload_Type int32
 
 const (
@@ -61,11 +113,11 @@ func (x CommandPayload_Type) String() string {
 }
 
 func (CommandPayload_Type) Descriptor() protoreflect.EnumDescriptor {
-	return file_workspacerpc_workspace_proto_enumTypes[0].Descriptor()
+	return file_workspacerpc_workspace_proto_enumTypes[1].Descriptor()
 }
 
 func (CommandPayload_Type) Type() protoreflect.EnumType {
-	return &file_workspacerpc_workspace_proto_enumTypes[0]
+	return &file_workspacerpc_workspace_proto_enumTypes[1]
 }
 
 func (x CommandPayload_Type) Number() protoreflect.EnumNumber {
@@ -110,11 +162,11 @@ func (x CommandPayload_IO_Type) String() string {
 }
 
 func (CommandPayload_IO_Type) Descriptor() protoreflect.EnumDescriptor {
-	return file_workspacerpc_workspace_proto_enumTypes[1].Descriptor()
+	return file_workspacerpc_workspace_proto_enumTypes[2].Descriptor()
 }
 
 func (CommandPayload_IO_Type) Type() protoreflect.EnumType {
-	return &file_workspacerpc_workspace_proto_enumTypes[1]
+	return &file_workspacerpc_workspace_proto_enumTypes[2]
 }
 
 func (x CommandPayload_IO_Type) Number() protoreflect.EnumNumber {
@@ -124,6 +176,52 @@ func (x CommandPayload_IO_Type) Number() protoreflect.EnumNumber {
 // Deprecated: Use CommandPayload_IO_Type.Descriptor instead.
 func (CommandPayload_IO_Type) EnumDescriptor() ([]byte, []int) {
 	return file_workspacerpc_workspace_proto_rawDescGZIP(), []int{38, 2, 0}
+}
+
+type WatchMessage_Type int32
+
+const (
+	WatchMessage_TypeResponse WatchMessage_Type = 0
+	WatchMessage_TypeData     WatchMessage_Type = 1
+)
+
+// Enum value maps for WatchMessage_Type.
+var (
+	WatchMessage_Type_name = map[int32]string{
+		0: "TypeResponse",
+		1: "TypeData",
+	}
+	WatchMessage_Type_value = map[string]int32{
+		"TypeResponse": 0,
+		"TypeData":     1,
+	}
+)
+
+func (x WatchMessage_Type) Enum() *WatchMessage_Type {
+	p := new(WatchMessage_Type)
+	*p = x
+	return p
+}
+
+func (x WatchMessage_Type) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (WatchMessage_Type) Descriptor() protoreflect.EnumDescriptor {
+	return file_workspacerpc_workspace_proto_enumTypes[3].Descriptor()
+}
+
+func (WatchMessage_Type) Type() protoreflect.EnumType {
+	return &file_workspacerpc_workspace_proto_enumTypes[3]
+}
+
+func (x WatchMessage_Type) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use WatchMessage_Type.Descriptor instead.
+func (WatchMessage_Type) EnumDescriptor() ([]byte, []int) {
+	return file_workspacerpc_workspace_proto_rawDescGZIP(), []int{44, 0}
 }
 
 type OpenRequest struct {
@@ -2482,6 +2580,310 @@ func (x *MkdirAllResponse) GetIsPermissionErr() bool {
 	return false
 }
 
+type WatchRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Path          string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
+	Events        []Event                `protobuf:"varint,2,rep,packed,name=events,proto3,enum=workspace.Event" json:"events,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WatchRequest) Reset() {
+	*x = WatchRequest{}
+	mi := &file_workspacerpc_workspace_proto_msgTypes[41]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WatchRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WatchRequest) ProtoMessage() {}
+
+func (x *WatchRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_workspacerpc_workspace_proto_msgTypes[41]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WatchRequest.ProtoReflect.Descriptor instead.
+func (*WatchRequest) Descriptor() ([]byte, []int) {
+	return file_workspacerpc_workspace_proto_rawDescGZIP(), []int{41}
+}
+
+func (x *WatchRequest) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *WatchRequest) GetEvents() []Event {
+	if x != nil {
+		return x.Events
+	}
+	return nil
+}
+
+type WatchResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            int64                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WatchResponse) Reset() {
+	*x = WatchResponse{}
+	mi := &file_workspacerpc_workspace_proto_msgTypes[42]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WatchResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WatchResponse) ProtoMessage() {}
+
+func (x *WatchResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_workspacerpc_workspace_proto_msgTypes[42]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WatchResponse.ProtoReflect.Descriptor instead.
+func (*WatchResponse) Descriptor() ([]byte, []int) {
+	return file_workspacerpc_workspace_proto_rawDescGZIP(), []int{42}
+}
+
+func (x *WatchResponse) GetId() int64 {
+	if x != nil {
+		return x.Id
+	}
+	return 0
+}
+
+type WatchData struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Event         Event                  `protobuf:"varint,1,opt,name=event,proto3,enum=workspace.Event" json:"event,omitempty"`
+	Uri           string                 `protobuf:"bytes,2,opt,name=uri,proto3" json:"uri,omitempty"`
+	Content       string                 `protobuf:"bytes,3,opt,name=content,proto3" json:"content,omitempty"`
+	IsDir         bool                   `protobuf:"varint,4,opt,name=is_dir,json=isDir,proto3" json:"is_dir,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WatchData) Reset() {
+	*x = WatchData{}
+	mi := &file_workspacerpc_workspace_proto_msgTypes[43]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WatchData) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WatchData) ProtoMessage() {}
+
+func (x *WatchData) ProtoReflect() protoreflect.Message {
+	mi := &file_workspacerpc_workspace_proto_msgTypes[43]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WatchData.ProtoReflect.Descriptor instead.
+func (*WatchData) Descriptor() ([]byte, []int) {
+	return file_workspacerpc_workspace_proto_rawDescGZIP(), []int{43}
+}
+
+func (x *WatchData) GetEvent() Event {
+	if x != nil {
+		return x.Event
+	}
+	return Event_Create
+}
+
+func (x *WatchData) GetUri() string {
+	if x != nil {
+		return x.Uri
+	}
+	return ""
+}
+
+func (x *WatchData) GetContent() string {
+	if x != nil {
+		return x.Content
+	}
+	return ""
+}
+
+func (x *WatchData) GetIsDir() bool {
+	if x != nil {
+		return x.IsDir
+	}
+	return false
+}
+
+type WatchMessage struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Type          WatchMessage_Type      `protobuf:"varint,1,opt,name=type,proto3,enum=workspace.WatchMessage_Type" json:"type,omitempty"`
+	Response      *WatchResponse         `protobuf:"bytes,2,opt,name=response,proto3" json:"response,omitempty"`
+	Data          *WatchData             `protobuf:"bytes,3,opt,name=data,proto3" json:"data,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WatchMessage) Reset() {
+	*x = WatchMessage{}
+	mi := &file_workspacerpc_workspace_proto_msgTypes[44]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WatchMessage) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WatchMessage) ProtoMessage() {}
+
+func (x *WatchMessage) ProtoReflect() protoreflect.Message {
+	mi := &file_workspacerpc_workspace_proto_msgTypes[44]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WatchMessage.ProtoReflect.Descriptor instead.
+func (*WatchMessage) Descriptor() ([]byte, []int) {
+	return file_workspacerpc_workspace_proto_rawDescGZIP(), []int{44}
+}
+
+func (x *WatchMessage) GetType() WatchMessage_Type {
+	if x != nil {
+		return x.Type
+	}
+	return WatchMessage_TypeResponse
+}
+
+func (x *WatchMessage) GetResponse() *WatchResponse {
+	if x != nil {
+		return x.Response
+	}
+	return nil
+}
+
+func (x *WatchMessage) GetData() *WatchData {
+	if x != nil {
+		return x.Data
+	}
+	return nil
+}
+
+type StopWatchRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            int64                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StopWatchRequest) Reset() {
+	*x = StopWatchRequest{}
+	mi := &file_workspacerpc_workspace_proto_msgTypes[45]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StopWatchRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StopWatchRequest) ProtoMessage() {}
+
+func (x *StopWatchRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_workspacerpc_workspace_proto_msgTypes[45]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StopWatchRequest.ProtoReflect.Descriptor instead.
+func (*StopWatchRequest) Descriptor() ([]byte, []int) {
+	return file_workspacerpc_workspace_proto_rawDescGZIP(), []int{45}
+}
+
+func (x *StopWatchRequest) GetId() int64 {
+	if x != nil {
+		return x.Id
+	}
+	return 0
+}
+
+type StopWatchResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StopWatchResponse) Reset() {
+	*x = StopWatchResponse{}
+	mi := &file_workspacerpc_workspace_proto_msgTypes[46]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StopWatchResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StopWatchResponse) ProtoMessage() {}
+
+func (x *StopWatchResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_workspacerpc_workspace_proto_msgTypes[46]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StopWatchResponse.ProtoReflect.Descriptor instead.
+func (*StopWatchResponse) Descriptor() ([]byte, []int) {
+	return file_workspacerpc_workspace_proto_rawDescGZIP(), []int{46}
+}
+
 type CommandPayload_Done struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	ExitError     string                 `protobuf:"bytes,1,opt,name=exit_error,json=exitError,proto3" json:"exit_error,omitempty"`
@@ -2491,7 +2893,7 @@ type CommandPayload_Done struct {
 
 func (x *CommandPayload_Done) Reset() {
 	*x = CommandPayload_Done{}
-	mi := &file_workspacerpc_workspace_proto_msgTypes[41]
+	mi := &file_workspacerpc_workspace_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2503,7 +2905,7 @@ func (x *CommandPayload_Done) String() string {
 func (*CommandPayload_Done) ProtoMessage() {}
 
 func (x *CommandPayload_Done) ProtoReflect() protoreflect.Message {
-	mi := &file_workspacerpc_workspace_proto_msgTypes[41]
+	mi := &file_workspacerpc_workspace_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2535,7 +2937,7 @@ type CommandPayload_Started struct {
 
 func (x *CommandPayload_Started) Reset() {
 	*x = CommandPayload_Started{}
-	mi := &file_workspacerpc_workspace_proto_msgTypes[42]
+	mi := &file_workspacerpc_workspace_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2547,7 +2949,7 @@ func (x *CommandPayload_Started) String() string {
 func (*CommandPayload_Started) ProtoMessage() {}
 
 func (x *CommandPayload_Started) ProtoReflect() protoreflect.Message {
-	mi := &file_workspacerpc_workspace_proto_msgTypes[42]
+	mi := &file_workspacerpc_workspace_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2580,7 +2982,7 @@ type CommandPayload_IO struct {
 
 func (x *CommandPayload_IO) Reset() {
 	*x = CommandPayload_IO{}
-	mi := &file_workspacerpc_workspace_proto_msgTypes[43]
+	mi := &file_workspacerpc_workspace_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2592,7 +2994,7 @@ func (x *CommandPayload_IO) String() string {
 func (*CommandPayload_IO) ProtoMessage() {}
 
 func (x *CommandPayload_IO) ProtoReflect() protoreflect.Message {
-	mi := &file_workspacerpc_workspace_proto_msgTypes[43]
+	mi := &file_workspacerpc_workspace_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2812,11 +3214,39 @@ const file_workspacerpc_workspace_proto_rawDesc = "" +
 	"\fis_exist_err\x18\x02 \x01(\bR\n" +
 	"isExistErr\x12'\n" +
 	"\x10is_not_exist_err\x18\x03 \x01(\bR\risNotExistErr\x12*\n" +
-	"\x11is_permission_err\x18\x04 \x01(\bR\x0fisPermissionErr2\x94\x01\n" +
+	"\x11is_permission_err\x18\x04 \x01(\bR\x0fisPermissionErr\"L\n" +
+	"\fWatchRequest\x12\x12\n" +
+	"\x04path\x18\x01 \x01(\tR\x04path\x12(\n" +
+	"\x06events\x18\x02 \x03(\x0e2\x10.workspace.EventR\x06events\"\x1f\n" +
+	"\rWatchResponse\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\x03R\x02id\"v\n" +
+	"\tWatchData\x12&\n" +
+	"\x05event\x18\x01 \x01(\x0e2\x10.workspace.EventR\x05event\x12\x10\n" +
+	"\x03uri\x18\x02 \x01(\tR\x03uri\x12\x18\n" +
+	"\acontent\x18\x03 \x01(\tR\acontent\x12\x15\n" +
+	"\x06is_dir\x18\x04 \x01(\bR\x05isDir\"\xc8\x01\n" +
+	"\fWatchMessage\x120\n" +
+	"\x04type\x18\x01 \x01(\x0e2\x1c.workspace.WatchMessage.TypeR\x04type\x124\n" +
+	"\bresponse\x18\x02 \x01(\v2\x18.workspace.WatchResponseR\bresponse\x12(\n" +
+	"\x04data\x18\x03 \x01(\v2\x14.workspace.WatchDataR\x04data\"&\n" +
+	"\x04Type\x12\x10\n" +
+	"\fTypeResponse\x10\x00\x12\f\n" +
+	"\bTypeData\x10\x01\"\"\n" +
+	"\x10StopWatchRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\x03R\x02id\"\x13\n" +
+	"\x11StopWatchResponse*6\n" +
+	"\x05Event\x12\n" +
+	"\n" +
+	"\x06Create\x10\x00\x12\n" +
+	"\n" +
+	"\x06Remove\x10\x01\x12\t\n" +
+	"\x05Write\x10\x02\x12\n" +
+	"\n" +
+	"\x06Rename\x10\x032\x94\x01\n" +
 	"\bTerminal\x12=\n" +
 	"\x06NewPty\x12\x18.workspace.NewPtyRequest\x1a\x19.workspace.NewPtyResponse\x12I\n" +
 	"\n" +
-	"SetPtySize\x12\x1c.workspace.SetPtySizeRequest\x1a\x1d.workspace.SetPtySizeResponse2\xfa\x03\n" +
+	"SetPtySize\x12\x1c.workspace.SetPtySizeRequest\x1a\x1d.workspace.SetPtySizeResponse2\x81\x05\n" +
 	"\x06Scheme\x124\n" +
 	"\x03URI\x12\x15.workspace.URIRequest\x1a\x16.workspace.URIResponse\x127\n" +
 	"\x04Open\x12\x16.workspace.OpenRequest\x1a\x17.workspace.OpenResponse\x12=\n" +
@@ -2825,7 +3255,9 @@ const file_workspacerpc_workspace_proto_rawDesc = "" +
 	"\x04Stat\x12\x16.workspace.StatRequest\x1a\x17.workspace.StatResponse\x12C\n" +
 	"\bReadLink\x12\x1a.workspace.ReadLinkRequest\x1a\x1b.workspace.ReadLinkResponse\x12@\n" +
 	"\aReadDir\x12\x19.workspace.ReadDirRequest\x1a\x1a.workspace.ReadDirResponse\x12C\n" +
-	"\bMkdirAll\x12\x1a.workspace.MkdirAllRequest\x1a\x1b.workspace.MkdirAllResponse2\x95\x01\n" +
+	"\bMkdirAll\x12\x1a.workspace.MkdirAllRequest\x1a\x1b.workspace.MkdirAllResponse\x12=\n" +
+	"\x05Watch\x12\x17.workspace.WatchRequest\x1a\x17.workspace.WatchMessage\"\x000\x01\x12F\n" +
+	"\tStopWatch\x12\x1b.workspace.StopWatchRequest\x1a\x1c.workspace.StopWatchResponse2\x95\x01\n" +
 	"\bExecutor\x12J\n" +
 	"\fStartCommand\x12\x19.workspace.CommandPayload\x1a\x19.workspace.CommandPayload\"\x00(\x010\x01\x12=\n" +
 	"\x06Signal\x12\x18.workspace.SignalRequest\x1a\x19.workspace.SignalResponse2\xb0\x03\n" +
@@ -2854,113 +3286,130 @@ func file_workspacerpc_workspace_proto_rawDescGZIP() []byte {
 	return file_workspacerpc_workspace_proto_rawDescData
 }
 
-var file_workspacerpc_workspace_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_workspacerpc_workspace_proto_msgTypes = make([]protoimpl.MessageInfo, 44)
+var file_workspacerpc_workspace_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
+var file_workspacerpc_workspace_proto_msgTypes = make([]protoimpl.MessageInfo, 50)
 var file_workspacerpc_workspace_proto_goTypes = []any{
-	(CommandPayload_Type)(0),        // 0: workspace.CommandPayload.Type
-	(CommandPayload_IO_Type)(0),     // 1: workspace.CommandPayload.IO.Type
-	(*OpenRequest)(nil),             // 2: workspace.OpenRequest
-	(*OpenResponse)(nil),            // 3: workspace.OpenResponse
-	(*RemoveRequest)(nil),           // 4: workspace.RemoveRequest
-	(*RemoveResponse)(nil),          // 5: workspace.RemoveResponse
-	(*RenameRequest)(nil),           // 6: workspace.RenameRequest
-	(*RenameResponse)(nil),          // 7: workspace.RenameResponse
-	(*StatRequest)(nil),             // 8: workspace.StatRequest
-	(*StatResponse)(nil),            // 9: workspace.StatResponse
-	(*SyncRequest)(nil),             // 10: workspace.SyncRequest
-	(*SyncResponse)(nil),            // 11: workspace.SyncResponse
-	(*TruncateRequest)(nil),         // 12: workspace.TruncateRequest
-	(*TruncateResponse)(nil),        // 13: workspace.TruncateResponse
-	(*CloseFileRequest)(nil),        // 14: workspace.CloseFileRequest
-	(*CloseFileResponse)(nil),       // 15: workspace.CloseFileResponse
-	(*SeekRequest)(nil),             // 16: workspace.SeekRequest
-	(*SeekResponse)(nil),            // 17: workspace.SeekResponse
-	(*ReadRequest)(nil),             // 18: workspace.ReadRequest
-	(*ReadResponse)(nil),            // 19: workspace.ReadResponse
-	(*WriteRequest)(nil),            // 20: workspace.WriteRequest
-	(*WriteResponse)(nil),           // 21: workspace.WriteResponse
-	(*ReadLinkRequest)(nil),         // 22: workspace.ReadLinkRequest
-	(*ReadLinkResponse)(nil),        // 23: workspace.ReadLinkResponse
-	(*StartCommandRequest)(nil),     // 24: workspace.StartCommandRequest
-	(*SignalRequest)(nil),           // 25: workspace.SignalRequest
-	(*SignalResponse)(nil),          // 26: workspace.SignalResponse
-	(*URIRequest)(nil),              // 27: workspace.URIRequest
-	(*URIResponse)(nil),             // 28: workspace.URIResponse
-	(*RegisterSchemeRequest)(nil),   // 29: workspace.RegisterSchemeRequest
-	(*RegisterSchemeResponse)(nil),  // 30: workspace.RegisterSchemeResponse
-	(*InitializeProxyRequest)(nil),  // 31: workspace.InitializeProxyRequest
-	(*InitializeProxyResponse)(nil), // 32: workspace.InitializeProxyResponse
-	(*NewPtyRequest)(nil),           // 33: workspace.NewPtyRequest
-	(*NewPtyResponse)(nil),          // 34: workspace.NewPtyResponse
-	(*SetPtySizeRequest)(nil),       // 35: workspace.SetPtySizeRequest
-	(*SetPtySizeResponse)(nil),      // 36: workspace.SetPtySizeResponse
-	(*ReadDirRequest)(nil),          // 37: workspace.ReadDirRequest
-	(*DirEntry)(nil),                // 38: workspace.DirEntry
-	(*ReadDirResponse)(nil),         // 39: workspace.ReadDirResponse
-	(*CommandPayload)(nil),          // 40: workspace.CommandPayload
-	(*MkdirAllRequest)(nil),         // 41: workspace.MkdirAllRequest
-	(*MkdirAllResponse)(nil),        // 42: workspace.MkdirAllResponse
-	(*CommandPayload_Done)(nil),     // 43: workspace.CommandPayload.Done
-	(*CommandPayload_Started)(nil),  // 44: workspace.CommandPayload.Started
-	(*CommandPayload_IO)(nil),       // 45: workspace.CommandPayload.IO
-	(*timestamppb.Timestamp)(nil),   // 46: google.protobuf.Timestamp
+	(Event)(0),                      // 0: workspace.Event
+	(CommandPayload_Type)(0),        // 1: workspace.CommandPayload.Type
+	(CommandPayload_IO_Type)(0),     // 2: workspace.CommandPayload.IO.Type
+	(WatchMessage_Type)(0),          // 3: workspace.WatchMessage.Type
+	(*OpenRequest)(nil),             // 4: workspace.OpenRequest
+	(*OpenResponse)(nil),            // 5: workspace.OpenResponse
+	(*RemoveRequest)(nil),           // 6: workspace.RemoveRequest
+	(*RemoveResponse)(nil),          // 7: workspace.RemoveResponse
+	(*RenameRequest)(nil),           // 8: workspace.RenameRequest
+	(*RenameResponse)(nil),          // 9: workspace.RenameResponse
+	(*StatRequest)(nil),             // 10: workspace.StatRequest
+	(*StatResponse)(nil),            // 11: workspace.StatResponse
+	(*SyncRequest)(nil),             // 12: workspace.SyncRequest
+	(*SyncResponse)(nil),            // 13: workspace.SyncResponse
+	(*TruncateRequest)(nil),         // 14: workspace.TruncateRequest
+	(*TruncateResponse)(nil),        // 15: workspace.TruncateResponse
+	(*CloseFileRequest)(nil),        // 16: workspace.CloseFileRequest
+	(*CloseFileResponse)(nil),       // 17: workspace.CloseFileResponse
+	(*SeekRequest)(nil),             // 18: workspace.SeekRequest
+	(*SeekResponse)(nil),            // 19: workspace.SeekResponse
+	(*ReadRequest)(nil),             // 20: workspace.ReadRequest
+	(*ReadResponse)(nil),            // 21: workspace.ReadResponse
+	(*WriteRequest)(nil),            // 22: workspace.WriteRequest
+	(*WriteResponse)(nil),           // 23: workspace.WriteResponse
+	(*ReadLinkRequest)(nil),         // 24: workspace.ReadLinkRequest
+	(*ReadLinkResponse)(nil),        // 25: workspace.ReadLinkResponse
+	(*StartCommandRequest)(nil),     // 26: workspace.StartCommandRequest
+	(*SignalRequest)(nil),           // 27: workspace.SignalRequest
+	(*SignalResponse)(nil),          // 28: workspace.SignalResponse
+	(*URIRequest)(nil),              // 29: workspace.URIRequest
+	(*URIResponse)(nil),             // 30: workspace.URIResponse
+	(*RegisterSchemeRequest)(nil),   // 31: workspace.RegisterSchemeRequest
+	(*RegisterSchemeResponse)(nil),  // 32: workspace.RegisterSchemeResponse
+	(*InitializeProxyRequest)(nil),  // 33: workspace.InitializeProxyRequest
+	(*InitializeProxyResponse)(nil), // 34: workspace.InitializeProxyResponse
+	(*NewPtyRequest)(nil),           // 35: workspace.NewPtyRequest
+	(*NewPtyResponse)(nil),          // 36: workspace.NewPtyResponse
+	(*SetPtySizeRequest)(nil),       // 37: workspace.SetPtySizeRequest
+	(*SetPtySizeResponse)(nil),      // 38: workspace.SetPtySizeResponse
+	(*ReadDirRequest)(nil),          // 39: workspace.ReadDirRequest
+	(*DirEntry)(nil),                // 40: workspace.DirEntry
+	(*ReadDirResponse)(nil),         // 41: workspace.ReadDirResponse
+	(*CommandPayload)(nil),          // 42: workspace.CommandPayload
+	(*MkdirAllRequest)(nil),         // 43: workspace.MkdirAllRequest
+	(*MkdirAllResponse)(nil),        // 44: workspace.MkdirAllResponse
+	(*WatchRequest)(nil),            // 45: workspace.WatchRequest
+	(*WatchResponse)(nil),           // 46: workspace.WatchResponse
+	(*WatchData)(nil),               // 47: workspace.WatchData
+	(*WatchMessage)(nil),            // 48: workspace.WatchMessage
+	(*StopWatchRequest)(nil),        // 49: workspace.StopWatchRequest
+	(*StopWatchResponse)(nil),       // 50: workspace.StopWatchResponse
+	(*CommandPayload_Done)(nil),     // 51: workspace.CommandPayload.Done
+	(*CommandPayload_Started)(nil),  // 52: workspace.CommandPayload.Started
+	(*CommandPayload_IO)(nil),       // 53: workspace.CommandPayload.IO
+	(*timestamppb.Timestamp)(nil),   // 54: google.protobuf.Timestamp
 }
 var file_workspacerpc_workspace_proto_depIdxs = []int32{
-	46, // 0: workspace.StatResponse.mod_time:type_name -> google.protobuf.Timestamp
-	38, // 1: workspace.ReadDirResponse.path:type_name -> workspace.DirEntry
-	0,  // 2: workspace.CommandPayload.type:type_name -> workspace.CommandPayload.Type
-	24, // 3: workspace.CommandPayload.start:type_name -> workspace.StartCommandRequest
-	43, // 4: workspace.CommandPayload.done:type_name -> workspace.CommandPayload.Done
-	44, // 5: workspace.CommandPayload.started:type_name -> workspace.CommandPayload.Started
-	45, // 6: workspace.CommandPayload.io:type_name -> workspace.CommandPayload.IO
-	1,  // 7: workspace.CommandPayload.IO.type:type_name -> workspace.CommandPayload.IO.Type
-	33, // 8: workspace.Terminal.NewPty:input_type -> workspace.NewPtyRequest
-	35, // 9: workspace.Terminal.SetPtySize:input_type -> workspace.SetPtySizeRequest
-	27, // 10: workspace.Scheme.URI:input_type -> workspace.URIRequest
-	2,  // 11: workspace.Scheme.Open:input_type -> workspace.OpenRequest
-	4,  // 12: workspace.Scheme.Remove:input_type -> workspace.RemoveRequest
-	6,  // 13: workspace.Scheme.Rename:input_type -> workspace.RenameRequest
-	8,  // 14: workspace.Scheme.Stat:input_type -> workspace.StatRequest
-	22, // 15: workspace.Scheme.ReadLink:input_type -> workspace.ReadLinkRequest
-	37, // 16: workspace.Scheme.ReadDir:input_type -> workspace.ReadDirRequest
-	41, // 17: workspace.Scheme.MkdirAll:input_type -> workspace.MkdirAllRequest
-	40, // 18: workspace.Executor.StartCommand:input_type -> workspace.CommandPayload
-	25, // 19: workspace.Executor.Signal:input_type -> workspace.SignalRequest
-	10, // 20: workspace.Files.Sync:input_type -> workspace.SyncRequest
-	12, // 21: workspace.Files.Truncate:input_type -> workspace.TruncateRequest
-	16, // 22: workspace.Files.Seek:input_type -> workspace.SeekRequest
-	14, // 23: workspace.Files.Close:input_type -> workspace.CloseFileRequest
-	18, // 24: workspace.Files.Read:input_type -> workspace.ReadRequest
-	20, // 25: workspace.Files.Write:input_type -> workspace.WriteRequest
-	8,  // 26: workspace.Files.Stat:input_type -> workspace.StatRequest
-	31, // 27: workspace.ProxyScheme.InitializeProxy:input_type -> workspace.InitializeProxyRequest
-	29, // 28: workspace.Manager.RegisterScheme:input_type -> workspace.RegisterSchemeRequest
-	34, // 29: workspace.Terminal.NewPty:output_type -> workspace.NewPtyResponse
-	36, // 30: workspace.Terminal.SetPtySize:output_type -> workspace.SetPtySizeResponse
-	28, // 31: workspace.Scheme.URI:output_type -> workspace.URIResponse
-	3,  // 32: workspace.Scheme.Open:output_type -> workspace.OpenResponse
-	5,  // 33: workspace.Scheme.Remove:output_type -> workspace.RemoveResponse
-	7,  // 34: workspace.Scheme.Rename:output_type -> workspace.RenameResponse
-	9,  // 35: workspace.Scheme.Stat:output_type -> workspace.StatResponse
-	23, // 36: workspace.Scheme.ReadLink:output_type -> workspace.ReadLinkResponse
-	39, // 37: workspace.Scheme.ReadDir:output_type -> workspace.ReadDirResponse
-	42, // 38: workspace.Scheme.MkdirAll:output_type -> workspace.MkdirAllResponse
-	40, // 39: workspace.Executor.StartCommand:output_type -> workspace.CommandPayload
-	26, // 40: workspace.Executor.Signal:output_type -> workspace.SignalResponse
-	11, // 41: workspace.Files.Sync:output_type -> workspace.SyncResponse
-	13, // 42: workspace.Files.Truncate:output_type -> workspace.TruncateResponse
-	17, // 43: workspace.Files.Seek:output_type -> workspace.SeekResponse
-	15, // 44: workspace.Files.Close:output_type -> workspace.CloseFileResponse
-	19, // 45: workspace.Files.Read:output_type -> workspace.ReadResponse
-	21, // 46: workspace.Files.Write:output_type -> workspace.WriteResponse
-	9,  // 47: workspace.Files.Stat:output_type -> workspace.StatResponse
-	32, // 48: workspace.ProxyScheme.InitializeProxy:output_type -> workspace.InitializeProxyResponse
-	30, // 49: workspace.Manager.RegisterScheme:output_type -> workspace.RegisterSchemeResponse
-	29, // [29:50] is the sub-list for method output_type
-	8,  // [8:29] is the sub-list for method input_type
-	8,  // [8:8] is the sub-list for extension type_name
-	8,  // [8:8] is the sub-list for extension extendee
-	0,  // [0:8] is the sub-list for field type_name
+	54, // 0: workspace.StatResponse.mod_time:type_name -> google.protobuf.Timestamp
+	40, // 1: workspace.ReadDirResponse.path:type_name -> workspace.DirEntry
+	1,  // 2: workspace.CommandPayload.type:type_name -> workspace.CommandPayload.Type
+	26, // 3: workspace.CommandPayload.start:type_name -> workspace.StartCommandRequest
+	51, // 4: workspace.CommandPayload.done:type_name -> workspace.CommandPayload.Done
+	52, // 5: workspace.CommandPayload.started:type_name -> workspace.CommandPayload.Started
+	53, // 6: workspace.CommandPayload.io:type_name -> workspace.CommandPayload.IO
+	0,  // 7: workspace.WatchRequest.events:type_name -> workspace.Event
+	0,  // 8: workspace.WatchData.event:type_name -> workspace.Event
+	3,  // 9: workspace.WatchMessage.type:type_name -> workspace.WatchMessage.Type
+	46, // 10: workspace.WatchMessage.response:type_name -> workspace.WatchResponse
+	47, // 11: workspace.WatchMessage.data:type_name -> workspace.WatchData
+	2,  // 12: workspace.CommandPayload.IO.type:type_name -> workspace.CommandPayload.IO.Type
+	35, // 13: workspace.Terminal.NewPty:input_type -> workspace.NewPtyRequest
+	37, // 14: workspace.Terminal.SetPtySize:input_type -> workspace.SetPtySizeRequest
+	29, // 15: workspace.Scheme.URI:input_type -> workspace.URIRequest
+	4,  // 16: workspace.Scheme.Open:input_type -> workspace.OpenRequest
+	6,  // 17: workspace.Scheme.Remove:input_type -> workspace.RemoveRequest
+	8,  // 18: workspace.Scheme.Rename:input_type -> workspace.RenameRequest
+	10, // 19: workspace.Scheme.Stat:input_type -> workspace.StatRequest
+	24, // 20: workspace.Scheme.ReadLink:input_type -> workspace.ReadLinkRequest
+	39, // 21: workspace.Scheme.ReadDir:input_type -> workspace.ReadDirRequest
+	43, // 22: workspace.Scheme.MkdirAll:input_type -> workspace.MkdirAllRequest
+	45, // 23: workspace.Scheme.Watch:input_type -> workspace.WatchRequest
+	49, // 24: workspace.Scheme.StopWatch:input_type -> workspace.StopWatchRequest
+	42, // 25: workspace.Executor.StartCommand:input_type -> workspace.CommandPayload
+	27, // 26: workspace.Executor.Signal:input_type -> workspace.SignalRequest
+	12, // 27: workspace.Files.Sync:input_type -> workspace.SyncRequest
+	14, // 28: workspace.Files.Truncate:input_type -> workspace.TruncateRequest
+	18, // 29: workspace.Files.Seek:input_type -> workspace.SeekRequest
+	16, // 30: workspace.Files.Close:input_type -> workspace.CloseFileRequest
+	20, // 31: workspace.Files.Read:input_type -> workspace.ReadRequest
+	22, // 32: workspace.Files.Write:input_type -> workspace.WriteRequest
+	10, // 33: workspace.Files.Stat:input_type -> workspace.StatRequest
+	33, // 34: workspace.ProxyScheme.InitializeProxy:input_type -> workspace.InitializeProxyRequest
+	31, // 35: workspace.Manager.RegisterScheme:input_type -> workspace.RegisterSchemeRequest
+	36, // 36: workspace.Terminal.NewPty:output_type -> workspace.NewPtyResponse
+	38, // 37: workspace.Terminal.SetPtySize:output_type -> workspace.SetPtySizeResponse
+	30, // 38: workspace.Scheme.URI:output_type -> workspace.URIResponse
+	5,  // 39: workspace.Scheme.Open:output_type -> workspace.OpenResponse
+	7,  // 40: workspace.Scheme.Remove:output_type -> workspace.RemoveResponse
+	9,  // 41: workspace.Scheme.Rename:output_type -> workspace.RenameResponse
+	11, // 42: workspace.Scheme.Stat:output_type -> workspace.StatResponse
+	25, // 43: workspace.Scheme.ReadLink:output_type -> workspace.ReadLinkResponse
+	41, // 44: workspace.Scheme.ReadDir:output_type -> workspace.ReadDirResponse
+	44, // 45: workspace.Scheme.MkdirAll:output_type -> workspace.MkdirAllResponse
+	48, // 46: workspace.Scheme.Watch:output_type -> workspace.WatchMessage
+	50, // 47: workspace.Scheme.StopWatch:output_type -> workspace.StopWatchResponse
+	42, // 48: workspace.Executor.StartCommand:output_type -> workspace.CommandPayload
+	28, // 49: workspace.Executor.Signal:output_type -> workspace.SignalResponse
+	13, // 50: workspace.Files.Sync:output_type -> workspace.SyncResponse
+	15, // 51: workspace.Files.Truncate:output_type -> workspace.TruncateResponse
+	19, // 52: workspace.Files.Seek:output_type -> workspace.SeekResponse
+	17, // 53: workspace.Files.Close:output_type -> workspace.CloseFileResponse
+	21, // 54: workspace.Files.Read:output_type -> workspace.ReadResponse
+	23, // 55: workspace.Files.Write:output_type -> workspace.WriteResponse
+	11, // 56: workspace.Files.Stat:output_type -> workspace.StatResponse
+	34, // 57: workspace.ProxyScheme.InitializeProxy:output_type -> workspace.InitializeProxyResponse
+	32, // 58: workspace.Manager.RegisterScheme:output_type -> workspace.RegisterSchemeResponse
+	36, // [36:59] is the sub-list for method output_type
+	13, // [13:36] is the sub-list for method input_type
+	13, // [13:13] is the sub-list for extension type_name
+	13, // [13:13] is the sub-list for extension extendee
+	0,  // [0:13] is the sub-list for field type_name
 }
 
 func init() { file_workspacerpc_workspace_proto_init() }
@@ -2973,8 +3422,8 @@ func file_workspacerpc_workspace_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_workspacerpc_workspace_proto_rawDesc), len(file_workspacerpc_workspace_proto_rawDesc)),
-			NumEnums:      2,
-			NumMessages:   44,
+			NumEnums:      4,
+			NumMessages:   50,
 			NumExtensions: 0,
 			NumServices:   6,
 		},

@@ -19,7 +19,7 @@ require (
 	github.com/smacker/go-tree-sitter v0.0.0-20230501083651-a7d92773b3aa
 	github.com/sourcegraph/go-diff v0.6.1
 	github.com/stretchr/testify v1.10.0
-	github.com/unstablebuild/blue v1.58.2
+	github.com/unstablebuild/blue v1.58.3
 	github.com/unstablebuild/golang-internal-tools v0.0.2
 	github.com/unstablebuild/tcell/v3 v3.5.1
 	go.uber.org/goleak v1.2.0
@@ -45,7 +45,7 @@ require (
 	golang.org/x/mod v0.25.0 // indirect
 	golang.org/x/net v0.42.0 // indirect
 	golang.org/x/sync v0.16.0 // indirect
-	golang.org/x/sys v0.34.0 // indirect
+	golang.org/x/sys v0.35.0 // indirect
 	golang.org/x/text v0.27.0 // indirect
 	golang.org/x/tools v0.34.0 // indirect
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2 // indirect
@@ -55,6 +55,7 @@ require (
 require (
 	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.3.2
 	github.com/hajimehoshi/ebiten/v2 v2.7.4
+	github.com/unstablebuild/notify v0.10.1
 	github.com/unstablebuild/pty v1.3.1
 	go.uber.org/mock v0.4.0
 	go.uber.org/multierr v1.4.0
@@ -98,7 +99,5 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250804133106-a7a43d27e69b // indirect
 	honnef.co/go/tools v0.3.2 // indirect
 )
-
-replace github.com/hashicorp/go-plugin => github.com/ernestrc/go-plugin v1.5.4
 
 replace github.com/hajimehoshi/ebiten/v2 => github.com/unstablebuild/ebiten/v2 v2.7.5-ub.9

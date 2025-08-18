@@ -246,6 +246,20 @@ func (mr *MockSchemeMockRecorder) Stat(path any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stat", reflect.TypeOf((*MockScheme)(nil).Stat), path)
 }
 
+// StopWatch mocks base method.
+func (m *MockScheme) StopWatch(arg0 int) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "StopWatch", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// StopWatch indicates an expected call of StopWatch.
+func (mr *MockSchemeMockRecorder) StopWatch(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StopWatch", reflect.TypeOf((*MockScheme)(nil).StopWatch), arg0)
+}
+
 // URI mocks base method.
 func (m *MockScheme) URI(path string) (workspaceapi.URI, error) {
 	m.ctrl.T.Helper()
@@ -259,6 +273,26 @@ func (m *MockScheme) URI(path string) (workspaceapi.URI, error) {
 func (mr *MockSchemeMockRecorder) URI(path any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "URI", reflect.TypeOf((*MockScheme)(nil).URI), path)
+}
+
+// Watch mocks base method.
+func (m *MockScheme) Watch(path string, c chan<- workspaceapi.EventInfo, events ...workspaceapi.Event) (int, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{path, c}
+	for _, a := range events {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "Watch", varargs...)
+	ret0, _ := ret[0].(int)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Watch indicates an expected call of Watch.
+func (mr *MockSchemeMockRecorder) Watch(path, c any, events ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{path, c}, events...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Watch", reflect.TypeOf((*MockScheme)(nil).Watch), varargs...)
 }
 
 // MockTerminal is a mock of Terminal interface.

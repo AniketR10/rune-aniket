@@ -83,6 +83,8 @@ func TestListFiles(t *testing.T) {
 
 				it, err := ListFiles(context.Background(), scheme, path)
 				assertIteratorEqual(t, []string{"a", "b"}, it)
+
+				require.NoError(t, scheme.Close())
 			})
 		}
 	})
@@ -108,6 +110,8 @@ func TestListFiles(t *testing.T) {
 
 		it, err := ListFiles(context.Background(), scheme, dir)
 		require.NoError(t, it.Close())
+
+		require.NoError(t, scheme.Close())
 	})
 
 	t.Run("lists all files under non-workspace dir as absolute", func(t *testing.T) {
@@ -133,6 +137,7 @@ func TestListFiles(t *testing.T) {
 
 		it, err := ListFiles(context.Background(), scheme, dir)
 		assertIteratorEqual(t, []string{f1.Name(), f2.Name()}, it)
+		require.NoError(t, scheme.Close())
 	})
 }
 
@@ -163,6 +168,7 @@ func TestFileSchemeListFilesLarge(t *testing.T) {
 	require.False(t, ok)
 	assert.NoError(t, it.Err())
 	assert.Zero(t, path)
+	require.NoError(t, scheme.Close())
 }
 
 func BenchmarkListFilesTinyDir(b *testing.B) {
@@ -221,6 +227,7 @@ func benchListFiles(b *testing.B, totalFiles, nestEvery, emptyDirsPerFile int) {
 	}
 	b.StopTimer()
 	closeFn()
+	_ = scheme.Close()
 }
 
 func setupTestDirectory(

@@ -333,6 +333,24 @@ func (s *remoteScheme) MkdirAll(path string, perm os.FileMode) error {
 	return scheme.MkdirAll(path, perm)
 }
 
+func (s *remoteScheme) Watch(
+	path string, c chan<- workspaceapi.EventInfo, events ...workspaceapi.Event,
+) (int, error) {
+	err, scheme := s.state()
+	if err != nil {
+		return 0, err
+	}
+	return scheme.Watch(path, c, events...)
+}
+
+func (s *remoteScheme) StopWatch(id int) error {
+	err, scheme := s.state()
+	if err != nil {
+		return err
+	}
+	return scheme.StopWatch(id)
+}
+
 func (s *remoteScheme) SetPtySize(pty workspaceapi.Pty, width, height int) error {
 	err, scheme := s.state()
 	if err != nil {

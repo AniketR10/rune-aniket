@@ -33,13 +33,16 @@ import (
 	"os/user"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
+	"github.com/ernestrc/go-multierror"
 	"github.com/ernestrc/sensible/find"
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/bluectx"
 	"github.com/unstablebuild/blue/logging"
+	"github.com/unstablebuild/notify"
 	"github.com/unstablebuild/pty"
 	"unstable.build/go-tui/api/config"
 	"unstable.build/go-tui/api/schemeapi"
@@ -108,6 +111,9 @@ type fileScheme struct {
 	cancelCtx  func()
 	cmds       sync.Map // map[workspaceapi.Pid]struct{}
 
+	watchpoints    sync.Map
+	nextWatchPoint atomic.Int64
+
 	// This is important to prevent runtime finalizers
 	// running on files that are garbage collected on host
 	// but that clients hold references to.
@@ -131,6 +137,7 @@ func (p *fileScheme) init(cfg config.Config, workspace workspaceapi.URI) error {
 		return fmt.Errorf("workspaceapi.URI does not refer to a directory: %s", workspace.String())
 	}
 	p.workspace = workspace
+	p.nextWatchPoint.Add(1)
 	p.ctx, p.cancelCtx = context.WithCancel(context.Background())
 	return nil
 }
@@ -411,9 +418,90 @@ func (p *fileScheme) MkdirAll(path string, perm os.FileMode) error {
 	return os.MkdirAll(path, perm)
 }
 
-func (p *fileScheme) Close() error {
+func (p *fileScheme) Watch(
+	path string, c chan<- workspaceapi.EventInfo, events ...workspaceapi.Event,
+) (int, error) {
+	path, err := workspaceapi.ExpandPath(path, p.getUserOrLookup, func() (string, error) {
+		return p.workspace.Path(), nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	// NOTE: We cannot simply re-use notify.Event values, because we need
+	// this values to remain stable across platforms: i.e. a value is sent
+	// across the wire from a linux to a macos system.
+	var notifyEvents []notify.Event
+	for _, ev := range events {
+		var nev notify.Event
+		switch ev {
+		case workspaceapi.Create:
+			nev = notify.Create
+		case workspaceapi.Write:
+			nev = notify.Write
+		case workspaceapi.Rename:
+			nev = notify.Rename
+		case workspaceapi.Remove:
+			nev = notify.Remove
+		}
+		notifyEvents = append(notifyEvents, nev)
+	}
+	ch := make(chan notify.EventInfo, 128)
+	go func() {
+		for {
+			select {
+			case <-p.ctx.Done():
+				return
+			case ev, ok := <-ch:
+				if !ok {
+					return
+				}
+				uri, err := p.URI(ev.Path())
+				if err != nil {
+					p.log(log.WarnLevel, "watched file uri %q: %v", ev.Path(), err)
+					continue
+				}
+				// best effort, if ev is Rename then order
+				// of old vs new link is not guaranteed.
+				var content []byte
+				if ev.Event() != notify.Remove {
+					content, _ = ReadFile(uri.Path())
+				}
+				ei := newEventInfo(ev, uri, string(content))
+				select {
+				case c <- ei:
+				case <-p.ctx.Done():
+					return
+				}
+			}
+		}
+	}()
+	w, err := notify.Watch(path, ch, notifyEvents...)
+	if err != nil {
+		return 0, fmt.Errorf("notify: %v", err)
+	}
+	id := p.nextWatchPoint.Add(1)
+	p.watchpoints.Store(int(id), w)
+	return int(id), nil
+}
+
+func (p *fileScheme) StopWatch(ID int) error {
+	w, ok := p.watchpoints.LoadAndDelete(ID)
+	if !ok {
+		return errors.New("watchpoint not found")
+	}
+	closer := w.(io.Closer)
+	return closer.Close()
+}
+
+func (p *fileScheme) Close() (ret error) {
 	p.cancelCtx()
-	return nil
+	p.watchpoints.Range(func(id any, value any) bool {
+		if err := p.StopWatch(id.(int)); err != nil {
+			ret = multierror.Append(ret, err)
+		}
+		return true
+	})
+	return
 }
 
 // enables overriding Close to delete from map.
@@ -450,4 +538,49 @@ func tryUnwrapFileReader(f io.Reader) io.Reader {
 		return f.File
 	}
 	return f
+}
+
+type eventInfo struct {
+	uri     workspaceapi.URI
+	e       workspaceapi.Event
+	d       bool
+	content string
+}
+
+func (e eventInfo) Event() workspaceapi.Event {
+	return e.e
+}
+
+func (e eventInfo) Content() string {
+	return e.content
+}
+
+func (e eventInfo) URI() workspaceapi.URI {
+	return e.uri
+}
+
+func (e eventInfo) IsDir() (bool, error) {
+	return e.d, nil
+}
+
+func newEventInfo(ei notify.EventInfo, uri workspaceapi.URI, content string) eventInfo {
+	var nev workspaceapi.Event
+	switch ei.Event() {
+	case notify.Create:
+		nev = workspaceapi.Create
+	case notify.Write:
+		nev = workspaceapi.Write
+	case notify.Rename:
+		nev = workspaceapi.Rename
+	case notify.Remove:
+		nev = workspaceapi.Remove
+	}
+	// this can be an error only in windows
+	isDir, _ := ei.IsDir()
+	return eventInfo{
+		d:       isDir,
+		content: content,
+		uri:     uri,
+		e:       nev,
+	}
 }

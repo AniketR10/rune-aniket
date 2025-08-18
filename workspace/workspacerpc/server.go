@@ -35,6 +35,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/logging"
+	grpc "google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"unstable.build/go-tui/api/schemeapi"
 	"unstable.build/go-tui/api/workspaceapi"
@@ -53,8 +54,9 @@ type Server struct {
 	ctx       context.Context
 	cancelCtx func()
 
-	locker sync.Locker
-	s      schemeapi.Scheme
+	locker      sync.Locker
+	s           schemeapi.Scheme
+	watchpoints map[int]func()
 }
 
 // NewServer allocates storage for a new server and initializes it with wp.
@@ -71,6 +73,7 @@ func (s *Server) Init(scheme schemeapi.Scheme, locker sync.Locker) {
 	s.ctx, s.cancelCtx = context.WithCancel(context.Background())
 	s.s = scheme
 	s.locker = locker
+	s.watchpoints = make(map[int]func())
 }
 
 // StartCommand satisfies ExecutorServer
@@ -500,6 +503,103 @@ func (s *Server) Stat(ctx context.Context, req *StatRequest) (
 	resp.IsDir = fs.IsDir()
 
 	return resp, nil
+}
+
+// Watch satisfies SchemeServer.
+func (s *Server) Watch(
+	req *WatchRequest, stream grpc.ServerStreamingServer[WatchMessage],
+) error {
+	if req.GetPath() == "" {
+		return errors.New("path cannot be empty")
+	}
+	if len(req.GetEvents()) == 0 {
+		return errors.New("events cannot be empty")
+	}
+
+	var events []workspaceapi.Event
+	for _, ev := range req.GetEvents() {
+		events = append(events, workspaceapi.Event(ev))
+	}
+
+	ch := make(chan workspaceapi.EventInfo)
+	ctx, cancel := context.WithCancel(stream.Context())
+	defer cancel()
+	s.locker.Lock()
+	id, err := s.s.Watch(req.GetPath(), ch, events...)
+	s.watchpoints[id] = cancel
+	s.locker.Unlock()
+	if err != nil {
+		return err
+	}
+
+	defer func() {
+		s.locker.Lock()
+		defer s.locker.Unlock()
+		_ = s.s.StopWatch(id)
+	}()
+
+	resp := WatchMessage{
+		Type: WatchMessage_TypeResponse,
+		Response: &WatchResponse{
+			Id: int64(id),
+		}}
+	if err := stream.Send(&resp); err != nil {
+		return err
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case ev, ok := <-ch:
+			if !ok {
+				return nil
+			}
+
+			var protoEv Event
+			switch ev.Event() {
+			case workspaceapi.Create:
+				protoEv = Event_Create
+			case workspaceapi.Write:
+				protoEv = Event_Write
+			case workspaceapi.Rename:
+				protoEv = Event_Rename
+			case workspaceapi.Remove:
+				protoEv = Event_Remove
+			}
+			// this can be an error only in windows
+			isDir, _ := ev.IsDir()
+			msg := WatchMessage{
+				Type: WatchMessage_TypeData,
+				Data: &WatchData{
+					Uri:     ev.URI().String(),
+					Content: ev.Content(),
+					Event:   protoEv,
+					IsDir:   isDir,
+				}}
+			if err := stream.Send(&msg); err != nil {
+				return err
+			}
+		}
+	}
+}
+
+// StopWatch satisfies SchemeServer.
+func (s *Server) StopWatch(ctx context.Context, req *StopWatchRequest) (
+	*StopWatchResponse, error,
+) {
+	s.locker.Lock()
+	defer s.locker.Unlock()
+
+	id := int(req.GetId())
+	cancel, ok := s.watchpoints[id]
+	if !ok {
+		return nil, errors.New("watchpoint not found")
+	}
+	cancel()
+	delete(s.watchpoints, id)
+
+	return new(StopWatchResponse), nil
 }
 
 func (s *Server) log(

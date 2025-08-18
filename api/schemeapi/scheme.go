@@ -43,6 +43,9 @@ var (
 
 // Scheme abstracts internal workspace scheme implementations.
 type Scheme interface {
+	Executor
+	Terminal
+
 	URI(path string) (workspaceapi.URI, error)
 
 	NewFile(fd uintptr, name string) workspaceapi.File
@@ -55,9 +58,8 @@ type Scheme interface {
 	ReadDir(string) ([]os.DirEntry, error)
 	MkdirAll(string, os.FileMode) error
 
-	Executor
-
-	Terminal
+	Watch(path string, c chan<- workspaceapi.EventInfo, events ...workspaceapi.Event) (int, error)
+	StopWatch(int) error
 }
 
 // Terminal abstracts the ability to manage pseudoterminals.

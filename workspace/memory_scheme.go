@@ -65,10 +65,13 @@ func NewMemoryScheme(
 }
 
 type memoryScheme struct {
-	workspace workspaceapi.URI
-	mu        sync.Mutex
-	files     map[string]*memFile
-	fd        uintptr // next fd
+	workspace      workspaceapi.URI
+	mu             sync.Mutex
+	files          map[string]*memFile
+	fd             uintptr // next fd
+	watchpoints    map[workspaceapi.Event][]chan<- workspaceapi.EventInfo
+	watchpointIDs  map[int]chan<- workspaceapi.EventInfo
+	nextWatchpoint int
 }
 
 func (m *memoryScheme) init(workspace workspaceapi.URI) error {
@@ -76,6 +79,8 @@ func (m *memoryScheme) init(workspace workspaceapi.URI) error {
 		return errors.New("invalid memory URI")
 	}
 	m.workspace = workspace
+	m.watchpoints = make(map[workspaceapi.Event][]chan<- workspaceapi.EventInfo)
+	m.watchpointIDs = make(map[int]chan<- workspaceapi.EventInfo)
 	m.files = make(map[string]*memFile)
 	return nil
 }
@@ -134,8 +139,19 @@ func (m *memoryScheme) Open(path string, flag int, mode os.FileMode) (
 		}
 		m.fd++
 		f = NewMemoryFile(filename, m.fd, mode, data, &m.mu).(*memFile)
+		f.m = m
 		m.mu.Lock()
 		m.files[uriStr] = f
+		watchpoints := m.watchpoints[workspaceapi.Create]
+		content := string(f.data)
+		for _, wp := range watchpoints {
+			fi := watchFileInfo{
+				event:   workspaceapi.Create,
+				uri:     uri,
+				content: content,
+			}
+			wp <- fi
+		}
 		m.mu.Unlock()
 	} else {
 		_, _ = f.Seek(0, 0)
@@ -154,12 +170,22 @@ func (m *memoryScheme) Remove(path string) error {
 	defer m.mu.Unlock()
 
 	uriStr := uri.String()
-	_, ok := m.files[uriStr]
+	f, ok := m.files[uriStr]
 	if !ok {
 		return workspaceapi.Error{IsNotExist: true}.ToError()
 	}
 
 	delete(m.files, uriStr)
+	watchpoints := m.watchpoints[workspaceapi.Remove]
+	content := string(f.data)
+	for _, wp := range watchpoints {
+		fi := watchFileInfo{
+			event:   workspaceapi.Remove,
+			uri:     uri,
+			content: content,
+		}
+		wp <- fi
+	}
 	return nil
 }
 
@@ -185,6 +211,25 @@ func (m *memoryScheme) Rename(old, new string) error {
 	delete(m.files, oldURIStr)
 	f.filename = filepath.Base(new)
 	m.files[newURIStr] = f
+	watchpoints := m.watchpoints[workspaceapi.Rename]
+	content := string(f.data)
+	for _, wp := range watchpoints {
+		fis := []watchFileInfo{
+			{
+				event:   workspaceapi.Rename,
+				uri:     oldURI,
+				content: content,
+			},
+			{
+				event:   workspaceapi.Rename,
+				uri:     newURI,
+				content: content,
+			},
+		}
+		for _, fi := range fis {
+			wp <- fi
+		}
+	}
 	return nil
 }
 
@@ -309,10 +354,81 @@ func (m *memoryScheme) MkdirAll(path string, perm os.FileMode) error {
 	return nil
 }
 
+func (m *memoryScheme) Watch(
+	path string, c chan<- workspaceapi.EventInfo, events ...workspaceapi.Event,
+) (int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.nextWatchpoint++
+	id := m.nextWatchpoint
+	m.watchpointIDs[id] = c
+	for _, event := range events {
+		m.watchpoints[event] = append(m.watchpoints[event], c)
+	}
+	return id, nil
+}
+
+func (m *memoryScheme) StopWatch(id int) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	c, ok := m.watchpointIDs[id]
+	if !ok {
+		return errors.New("watchpoint not found")
+	}
+	delete(m.watchpointIDs, id)
+
+	for event, chs := range m.watchpoints {
+		for i, ch := range chs {
+			if ch == c {
+				// remove channel from list of channels
+				chs[i] = chs[len(chs)-1]
+				chs = chs[:len(chs)-1]
+				break
+			}
+		}
+		m.watchpoints[event] = chs
+	}
+	return nil
+}
+
 func (m *memoryScheme) Close() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	for _, chs := range m.watchpoints {
+		for _, ch := range chs {
+			close(ch)
+		}
+	}
+
 	m.files = nil
+	m.watchpoints = nil
+	m.watchpointIDs = nil
 	return nil
 }
+
+type watchFileInfo struct {
+	event   workspaceapi.Event
+	uri     workspaceapi.URI
+	content string
+}
+
+func (w watchFileInfo) Event() workspaceapi.Event {
+	return w.event
+}
+
+func (w watchFileInfo) URI() workspaceapi.URI {
+	return w.uri
+}
+
+func (w watchFileInfo) Content() string {
+	return w.content
+}
+
+func (w watchFileInfo) Sys() interface{} {
+	return nil
+}
+
+func (w watchFileInfo) IsDir() (bool, error) { return false, nil }
