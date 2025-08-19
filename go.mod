@@ -1,8 +1,8 @@
 module unstable.build/go-tui
 
-go 1.24
+go 1.24.0
 
-toolchain go1.24.0
+toolchain go1.24.3
 
 require (
 	github.com/alecthomas/chroma v0.10.0
@@ -15,7 +15,7 @@ require (
 	github.com/mattn/go-runewidth v0.0.15 // indirect
 	github.com/pion/mediadevices v0.6.2
 	github.com/pion/webrtc/v3 v3.2.37
-	github.com/sirupsen/logrus v1.6.0
+	github.com/sirupsen/logrus v1.9.3
 	github.com/smacker/go-tree-sitter v0.0.0-20230501083651-a7d92773b3aa
 	github.com/sourcegraph/go-diff v0.6.1
 	github.com/stretchr/testify v1.10.0
@@ -23,9 +23,9 @@ require (
 	github.com/unstablebuild/golang-internal-tools v0.0.2
 	github.com/unstablebuild/tcell/v3 v3.5.1
 	go.uber.org/goleak v1.2.0
-	golang.org/x/crypto v0.40.0
+	golang.org/x/crypto v0.41.0
 	golang.org/x/image v0.16.0
-	golang.org/x/term v0.33.0
+	golang.org/x/term v0.34.0
 	google.golang.org/grpc v1.74.2
 	google.golang.org/protobuf v1.36.7
 	gopkg.in/yaml.v3 v3.0.1
@@ -36,23 +36,23 @@ require (
 	github.com/ernestrc/logd-go v0.0.0-20180509171507-65871c1d5504
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/hashicorp/errwrap v1.0.0 // indirect
-	github.com/konsorten/go-windows-terminal-sequences v1.0.3 // indirect
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
 	github.com/mattn/go-isatty v0.0.12 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/rivo/uniseg v0.4.4
 	golang.org/x/lint v0.0.0-20210508222113-6edffad5e616 // indirect
-	golang.org/x/mod v0.25.0 // indirect
-	golang.org/x/net v0.42.0 // indirect
+	golang.org/x/mod v0.27.0 // indirect
+	golang.org/x/net v0.43.0 // indirect
 	golang.org/x/sync v0.16.0 // indirect
 	golang.org/x/sys v0.35.0 // indirect
-	golang.org/x/text v0.27.0 // indirect
-	golang.org/x/tools v0.34.0 // indirect
+	golang.org/x/text v0.28.0 // indirect
+	golang.org/x/tools v0.36.0 // indirect
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2 // indirect
 	gopkg.in/mgo.v2 v2.0.0-20190816093944-a6b53ec6cb22 // indirect
 )
 
 require (
+	github.com/go-git/go-git/v6 v6.0.0-20250819122726-39261590f7f3
 	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.3.2
 	github.com/hajimehoshi/ebiten/v2 v2.7.4
 	github.com/unstablebuild/notify v0.10.1
@@ -71,9 +71,11 @@ require (
 	github.com/ebitengine/hideconsole v1.0.0 // indirect
 	github.com/ebitengine/purego v0.8.3 // indirect
 	github.com/gen2brain/malgo v0.11.21 // indirect
+	github.com/go-git/gcfg/v2 v2.0.2 // indirect
+	github.com/go-git/go-billy/v6 v6.0.0-20250817172114-3a9ca963b728 // indirect
 	github.com/go-jose/go-jose/v4 v4.1.2 // indirect
 	github.com/jezek/xgb v1.1.1 // indirect
-	github.com/kr/pretty v0.3.1 // indirect
+	github.com/kr/text v0.2.0 // indirect
 	github.com/pion/datachannel v1.5.6 // indirect
 	github.com/pion/dtls/v2 v2.2.10 // indirect
 	github.com/pion/ice/v2 v2.3.14 // indirect
@@ -91,11 +93,12 @@ require (
 	github.com/pion/turn/v2 v2.1.5 // indirect
 	github.com/pkoukk/tiktoken-go v0.1.7 // indirect
 	github.com/pkoukk/tiktoken-go-loader v0.0.1 // indirect
-	github.com/rogpeppe/go-internal v1.13.1 // indirect
 	github.com/sashabaranov/go-openai v1.39.0 // indirect
 	go.uber.org/atomic v1.5.0 // indirect
 	go.uber.org/tools v0.0.0-20190618225709-2cfd321de3ee // indirect
 	golang.org/x/exp/typeparams v0.0.0-20220722155223-a9213eeb770e // indirect
+	golang.org/x/tools/go/expect v0.1.1-deprecated // indirect
+	golang.org/x/tools/go/packages/packagestest v0.1.1-deprecated // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250804133106-a7a43d27e69b // indirect
 	honnef.co/go/tools v0.3.2 // indirect
 )
