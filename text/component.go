@@ -231,7 +231,7 @@ func (c *Component) tryDispatchEventFocus(win handler.Window) {
 		return
 	}
 	cursor, _ := c.ed.Cursor(res)
-	(*Component)(c).dispatchEvent(textapi.Event{
+	(*Component)(c).DispatchEvent(textapi.Event{
 		Type:     textapi.EventTypeFocus,
 		URI:      t.URI(),
 		Resource: res,
@@ -260,7 +260,7 @@ func (c *Component) tryDispatchEvent(win handler.Window, evType textapi.EventTyp
 	if !ok {
 		return
 	}
-	(*Component)(c).dispatchEvent(textapi.Event{
+	(*Component)(c).DispatchEvent(textapi.Event{
 		Type:     evType,
 		URI:      t.URI(),
 		Resource: res,
@@ -290,7 +290,7 @@ func (s *compTabSubscriber) OnFocus(t *browser.Tab) {
 	}
 	dimensions := s.parent.getContentDimensions(s.parent.focus)
 	cursor, _ := s.parent.ed.Cursor(res)
-	s.parent.dispatchEvent(textapi.Event{
+	s.parent.DispatchEvent(textapi.Event{
 		Type:     textapi.EventTypeFocus,
 		URI:      t.URI(),
 		Resource: res,
@@ -312,7 +312,7 @@ func (s *compTabSubscriber) OnFree(t *browser.Tab) {
 	if ok, err := s.window.Focus(); err != nil || !ok {
 		return
 	}
-	s.parent.dispatchEvent(textapi.Event{
+	s.parent.DispatchEvent(textapi.Event{
 		Type:     textapi.EventTypeUnfocus,
 		URI:      t.URI(),
 		Resource: res,
@@ -526,20 +526,25 @@ func (c *Component) dispatchFlush(file workspaceapi.URI, h Handler) (string, err
 		return "", err
 	}
 
+	// clear dirty/flushed attributes
+	c.resetTabProperties(file)
+
+	if c.config.DisableDispatchFlush {
+		return content, nil
+	}
+
 	ev := textapi.Event{
 		Type:     textapi.EventTypeFlush,
 		URI:      file,
 		Resource: h,
 		Content:  content,
 	}
-	// clear dirty/flushed attributes
-	c.resetTabProperties(file)
-	c.dispatchEvent(ev)
+	c.DispatchEvent(ev)
 	return content, nil
 }
 
-// dispatchEvent either flush or close events
-func (c *Component) dispatchEvent(ev textapi.Event) (handled bool) {
+// DispatchEvent dispatches the given event to subscribers.
+func (c *Component) DispatchEvent(ev textapi.Event) (handled bool) {
 	subs, ok := c.edSubscribers[ev.Type]
 	if !ok || len(subs) == 0 {
 		return
@@ -1099,7 +1104,7 @@ func (e *editorFlusherCloser) Close() error {
 		URI:      e.uri,
 		Resource: e.h,
 	}
-	e.parent.dispatchEvent(ev)
+	e.parent.DispatchEvent(ev)
 	return e.fc.Close()
 }
 

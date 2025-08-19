@@ -35,7 +35,7 @@ type EventType uint8
 
 const (
 	// EventTypeOpen is dispatched when an editor is called the Edit method.
-	// Content represents the initial content of the underlying file.
+	// Content represents the initial content of the underlying resource.
 	EventTypeOpen EventType = iota
 
 	// EventTypeClose is dispatched when an editor buffer is closed.
@@ -43,7 +43,16 @@ const (
 
 	// EventTypeFlush is dispatched when an editor buffer is Flushed.
 	// Content represents the file content that was flushed.
+	// An EventTypeOpen event doesn't need to preceed an EventTypeFlush;
+	// the editor might not have opened a resource, and yet the resource
+	// might have been modified via other processes (i.e. git).
 	EventTypeFlush
+
+	// EventTypeRename is dispatched when a resource is renamed.
+	EventTypeRename
+
+	// EventTypeRemove is dispatched when a resource is removed from the workspace.
+	EventTypeRemove
 
 	// EventTypeEdit is dispatched when new content is inserted into an editor buffer.
 	// Start, End represent the input to Edit whereas

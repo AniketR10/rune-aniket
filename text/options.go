@@ -60,6 +60,7 @@ type Config struct {
 	SequencerTimeout        time.Duration
 	DirtyTabAttr            term.Attributes
 	Icons                   IconSet
+	DisableDispatchFlush    bool
 
 	EventPublisher func(term.Event) bool
 
@@ -324,6 +325,14 @@ func WithIconSet(icons IconSet) Option {
 func WithEventPublisher(f func(term.Event) bool) Option {
 	return func(cfg *Config) {
 		cfg.EventPublisher = f
+	}
+}
+
+// WithDisableDispatchFlush disables the internal dispatching of
+// Flush events. Clients can still call Component.DispatchEvent
+func WithDisableDispatchFlush() Option {
+	return func(cfg *Config) {
+		cfg.DisableDispatchFlush = true
 	}
 }
 

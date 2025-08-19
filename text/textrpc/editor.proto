@@ -29,6 +29,8 @@ message EditorEvent {
 	TypeUnfocus = 7;
 	TypeCursor = 8;
 	TypeSelection = 9;
+	TypeRename = 10;
+	TypeRemove = 11;
   }
 
   Type type = 1;
