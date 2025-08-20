@@ -97,6 +97,10 @@ func (h *history) loadWorkspaceData(uri workspaceapi.URI, restore bool) {
 		h.log(log.TraceLevel, "reseting cache for workspace: %s", uriStr)
 		h.resetWorkspaceCache(uri)
 	} else {
+		// do not trust what's coming from storage
+		if workspace.Files == nil {
+			workspace.Files = make(map[string]file)
+		}
 		h.cache[uriStr] = workspace
 	}
 	h.log(log.TraceLevel, "loaded workspace %s cache from storage: %v", uriStr, h.cache)

@@ -144,6 +144,21 @@ func TestHistory(t *testing.T) {
 			test.sut(t, svc, h)
 		})
 	}
+
+	t.Run("does not panic if storage is corrupted", func(t *testing.T) {
+		uri, err := workspaceapi.ParseURI("memory:///tmp")
+		require.NoError(t, err)
+		svc := document.NewInMemoryService()
+		require.NoError(t, svc.Set(context.Background(), uri.String(),
+			map[string]any{"Files": "yikes"}))
+
+		ed := texttest.NopEditor()
+		h := newHistory(svc)
+		assert.NotPanics(t, func() {
+			h.recordAddWorkspace(uri, ed, true)
+			ed.Edit(testuri, cell.NewBuffer())
+		})
+	})
 }
 
 type mockService struct {
