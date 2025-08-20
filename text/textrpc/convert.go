@@ -52,8 +52,6 @@ func protoTypeToModel(protoType EditorEvent_Type) (ev textapi.EventType, err err
 		ev = textapi.EventTypeUnfocus
 	case EditorEvent_TypeRemove:
 		ev = textapi.EventTypeRemove
-	case EditorEvent_TypeRename:
-		ev = textapi.EventTypeRename
 	default:
 		err = fmt.Errorf("failed to convert proto editor event: invalid type: %v",
 			protoType)
@@ -110,8 +108,6 @@ func protoType(e textapi.Event) EditorEvent_Type {
 		return EditorEvent_TypeFocus
 	case textapi.EventTypeUnfocus:
 		return EditorEvent_TypeUnfocus
-	case textapi.EventTypeRename:
-		return EditorEvent_TypeRename
 	case textapi.EventTypeRemove:
 		return EditorEvent_TypeRemove
 	default:

@@ -34,8 +34,7 @@ const (
 	EditorEvent_TypeUnfocus   EditorEvent_Type = 7
 	EditorEvent_TypeCursor    EditorEvent_Type = 8
 	EditorEvent_TypeSelection EditorEvent_Type = 9
-	EditorEvent_TypeRename    EditorEvent_Type = 10
-	EditorEvent_TypeRemove    EditorEvent_Type = 11
+	EditorEvent_TypeRemove    EditorEvent_Type = 10
 )
 
 // Enum value maps for EditorEvent_Type.
@@ -50,8 +49,7 @@ var (
 		7:  "TypeUnfocus",
 		8:  "TypeCursor",
 		9:  "TypeSelection",
-		10: "TypeRename",
-		11: "TypeRemove",
+		10: "TypeRemove",
 	}
 	EditorEvent_Type_value = map[string]int32{
 		"TypeOpen":      0,
@@ -63,8 +61,7 @@ var (
 		"TypeUnfocus":   7,
 		"TypeCursor":    8,
 		"TypeSelection": 9,
-		"TypeRename":    10,
-		"TypeRemove":    11,
+		"TypeRemove":    10,
 	}
 )
 
@@ -1886,7 +1883,7 @@ const file_textrpc_editor_proto_rawDesc = "" +
 	"\vEditRequest\x12.\n" +
 	"\rresource_name\x18\x01 \x01(\v2\t.text.URIR\fresourceName\x12%\n" +
 	"\x06buffer\x18\x02 \x03(\v2\r.term.CellRowR\x06buffer\"\x0e\n" +
-	"\fEditResponse\"\xd1\x03\n" +
+	"\fEditResponse\"\xc1\x03\n" +
 	"\vEditorEvent\x12*\n" +
 	"\x04type\x18\x01 \x01(\x0e2\x16.text.EditorEvent.TypeR\x04type\x12.\n" +
 	"\rresource_name\x18\x02 \x01(\v2\t.text.URIR\fresourceName\x12'\n" +
@@ -1894,7 +1891,7 @@ const file_textrpc_editor_proto_rawDesc = "" +
 	"\x03end\x18\x05 \x01(\v2\x11.term.CoordinatesR\x03end\x12%\n" +
 	"\x04from\x18\x06 \x01(\v2\x11.term.CoordinatesR\x04from\x12!\n" +
 	"\x02to\x18\a \x01(\v2\x11.term.CoordinatesR\x02to\x12\x18\n" +
-	"\acontent\x18\b \x01(\tR\acontent\"\xb3\x01\n" +
+	"\acontent\x18\b \x01(\tR\acontent\"\xa3\x01\n" +
 	"\x04Type\x12\f\n" +
 	"\bTypeOpen\x10\x00\x12\r\n" +
 	"\tTypeClose\x10\x01\x12\r\n" +
@@ -1908,10 +1905,8 @@ const file_textrpc_editor_proto_rawDesc = "" +
 	"TypeCursor\x10\b\x12\x11\n" +
 	"\rTypeSelection\x10\t\x12\x0e\n" +
 	"\n" +
-	"TypeRename\x10\n" +
-	"\x12\x0e\n" +
-	"\n" +
-	"TypeRemove\x10\v\"e\n" +
+	"TypeRemove\x10\n" +
+	"\"e\n" +
 	"\x15SubscribeEventRequest\x12*\n" +
 	"\x04type\x18\x01 \x03(\x0e2\x16.text.EditorEvent.TypeR\x04type\x12 \n" +
 	"\vunsubscribe\x18\x03 \x01(\bR\vunsubscribe\"\xd1\x02\n" +

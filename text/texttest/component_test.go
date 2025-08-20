@@ -715,17 +715,6 @@ func TestComponentEditorSubscriber(t *testing.T) {
 			nil,
 		},
 		{
-			"DispatchEvent>EventTypeRename",
-			textapi.EventTypeRename,
-			func(t *testing.T, c *text.Component, resource workspaceapi.URI) {
-				assert.True(t, c.DispatchEvent(textapi.Event{
-					Type: textapi.EventTypeRename,
-					URI:  resource,
-				}))
-			},
-			nil,
-		},
-		{
 			"DispatchEvent>EventTypeRemove",
 			textapi.EventTypeRemove,
 			func(t *testing.T, c *text.Component, resource workspaceapi.URI) {

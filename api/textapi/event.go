@@ -48,9 +48,6 @@ const (
 	// might have been modified via other processes (i.e. git).
 	EventTypeFlush
 
-	// EventTypeRename is dispatched when a resource is renamed.
-	EventTypeRename
-
 	// EventTypeRemove is dispatched when a resource is removed from the workspace.
 	EventTypeRemove
 
