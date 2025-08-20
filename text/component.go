@@ -32,7 +32,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"time"
 
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
@@ -53,9 +52,6 @@ import (
 	"unstable.build/go-tui/workspace"
 	"unstable.build/go-tui/workspace/walkdir"
 )
-
-// used for command and event handlers
-const defaultTimeout = 4 * time.Second
 
 var _ tui.Component = (*Component)(nil)
 var _ browser.Browser = (*Component)(nil)
@@ -550,22 +546,14 @@ func (c *Component) DispatchEvent(ev textapi.Event) (handled bool) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
-	defer cancel()
-
-	// call Handle in batch, as it might be an rpc, and removing from
-	// edSubsribers after each call could introduce race conditions.
-	exits := make([]bool, len(subs))
-	for i, h := range subs {
-		exits[i] = h.Handle(ctx, ev)
-	}
-
 	c.edSubscribers[ev.Type] = make([]EventHandler, 0, len(subs))
-	for i, sub := range subs {
-		if !exits[i] {
-			c.edSubscribers[ev.Type] = append(c.edSubscribers[ev.Type], sub)
+	for _, h := range subs {
+		exit := h.Handle(context.Background(), ev)
+		if !exit {
+			c.edSubscribers[ev.Type] = append(c.edSubscribers[ev.Type], h)
 		}
 	}
+
 	handled = true
 	return
 }
