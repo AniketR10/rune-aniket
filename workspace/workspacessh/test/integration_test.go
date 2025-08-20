@@ -37,7 +37,6 @@ import (
 	"unstable.build/go-tui/api/config"
 	"unstable.build/go-tui/api/schemeapi"
 	"unstable.build/go-tui/api/workspaceapi"
-	"unstable.build/go-tui/workspace"
 	"unstable.build/go-tui/workspace/walkdir"
 	"unstable.build/go-tui/workspace/workspacessh"
 	"unstable.build/go-tui/workspace/workspacetest"
@@ -162,9 +161,8 @@ func newSchemeIntegration(
 	workspaceURI, err := workspaceapi.ParseURI("ssh://test@" + hostname + "/tmp")
 	require.NoError(t, err)
 
-	// emulate event loop holding mutex while we initialize ssh scheme
 	var mu sync.Mutex
-	ctx := workspace.ContextWithLocker(context.Background(), &mu)
+	ctx := context.Background()
 	mu.Lock()
 
 	s, err := workspacessh.New(ctx, cfg, workspaceURI)

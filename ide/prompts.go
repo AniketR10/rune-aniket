@@ -24,6 +24,7 @@
 package ide
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -229,7 +230,7 @@ func (h *createWorkspaceHandler) createParentWorkspace(uri workspaceapi.URI) (wo
 		return nil, errors.New("reached root dir")
 	}
 
-	cwd, err := h.wm.workspace.AddWorkspace(h.wm.ctxWithLocker, uri)
+	cwd, err := h.wm.workspace.AddWorkspace(context.Background(), uri)
 	if err != nil && errors.Is(err, os.ErrNotExist) {
 		return h.createParentWorkspace(parent)
 	}

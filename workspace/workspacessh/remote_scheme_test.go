@@ -38,7 +38,6 @@ import (
 	"unstable.build/go-tui/api/schemeapi/schemetest"
 	"unstable.build/go-tui/api/workspaceapi"
 	workspaceapitest "unstable.build/go-tui/api/workspaceapi/workspacetest"
-	"unstable.build/go-tui/workspace"
 )
 
 func expectSchemeAPISuccess(
@@ -108,9 +107,8 @@ func TestRemoteScheme(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		// emulate event loop synchronization
 		var mu sync.Mutex
-		ctx := workspace.ContextWithLocker(context.Background(), &mu)
+		ctx := context.Background()
 
 		mock := schemetest.NewMockScheme(ctrl)
 		mu.Lock()
@@ -128,9 +126,8 @@ func TestRemoteScheme(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		// emulate event loop synchronization
 		var mu sync.Mutex
-		ctx := workspace.ContextWithLocker(context.Background(), &mu)
+		ctx := context.Background()
 
 		mock := schemetest.NewMockScheme(ctrl)
 		var i int
@@ -164,9 +161,8 @@ func TestRemoteScheme(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		// emulate event loop synchronization
 		var mu sync.Mutex
-		ctx := workspace.ContextWithLocker(context.Background(), &mu)
+		ctx := context.Background()
 
 		mock := schemetest.NewMockScheme(ctrl)
 		var closeHook func(error)
@@ -199,9 +195,8 @@ func TestRemoteScheme(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		// emulate event loop synchronization
 		var mu sync.Mutex
-		ctx := workspace.ContextWithLocker(context.Background(), &mu)
+		ctx := context.Background()
 
 		mock := schemetest.NewMockScheme(ctrl)
 		mu.Lock()

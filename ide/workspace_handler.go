@@ -73,7 +73,6 @@ type workspaceManagerHandler struct {
 	mu                 sync.Locker
 	exitPromptOpen     bool
 	confirmedForceExit bool
-	ctxWithLocker      context.Context
 	storage            document.Service
 	workspace          workspace.WorkspaceManager
 	publishEvent       func(term.Event) bool
@@ -181,6 +180,8 @@ func (h *workspaceManagerHandler) init(
 	workspacesBarHeight, workspacesBarOffset int, workspacesBarFrame bool,
 	tabsClickCallback func(int) bool, shaderRunner *shaderRunner,
 ) (err error) {
+	ctx := context.Background()
+
 	h.shaderRunner = shaderRunner
 	h.mu = locker
 	h.externalCommands = make(map[string]externalCommand)
@@ -193,8 +194,7 @@ func (h *workspaceManagerHandler) init(
 	h.sixDir = sixDir
 	h.extensionRunner = extensionRunner
 	h.builtinExtensions = builtinExtensions
-	h.ctxWithLocker = workspace.ContextWithLocker(context.Background(), h.mu)
-	h.storage = localstorage.New(h.ctxWithLocker, sixDir, doctoml.Marshaler())
+	h.storage = localstorage.New(ctx, sixDir, doctoml.Marshaler())
 
 	h.workspacesIcon = workspacesIcon
 	h.tabBarOffset = tabBarOffset
@@ -205,7 +205,7 @@ func (h *workspaceManagerHandler) init(
 		return fmt.Errorf("new editor: %v", err)
 	}
 
-	homeWorkspace, err := h.workspace.AddWorkspace(h.ctxWithLocker, homeDirUri)
+	homeWorkspace, err := h.workspace.AddWorkspace(ctx, homeDirUri)
 	if err != nil {
 		return fmt.Errorf("add home workspace: %v", err)
 	}
@@ -269,7 +269,7 @@ func (h *workspaceManagerHandler) init(
 
 	// AddWorkspace is idempotent, so it should be fine to here and later when
 	// actually creating the workspace handler.
-	tempcwd, err := h.workspace.AddWorkspace(h.ctxWithLocker, *cwd)
+	tempcwd, err := h.workspace.AddWorkspace(ctx, *cwd)
 	if err != nil {
 		return fmt.Errorf("add new workspace for %q: %s", *cwd, err)
 	}
@@ -561,7 +561,8 @@ func (h *workspaceManagerHandler) addWorkspace(
 			return nil
 		}
 	}
-	cwd, err := h.workspace.AddWorkspace(h.ctxWithLocker, uri)
+	ctx := context.Background()
+	cwd, err := h.workspace.AddWorkspace(ctx, uri)
 	if err != nil {
 		return fmt.Errorf("create new workspace for %q: %w", uri, err)
 	}
@@ -591,7 +592,7 @@ func (h *workspaceManagerHandler) addWorkspace(
 	}
 
 	// workspace capable of opening URIs other than the workspaceapi.URI
-	multicwd := workspace.Multi(h.ctxWithLocker, h.workspace, cwd, uri)
+	multicwd := workspace.Multi(ctx, h.workspace, cwd, uri)
 	ex, err := newEx(ed, multicwd, h.storage, cfg.terminalConfig(),
 		h.publishEvent, cfg.clipboard(), textOpts...)
 	if err != nil {

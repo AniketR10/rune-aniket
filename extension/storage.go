@@ -38,7 +38,6 @@ import (
 	"unstable.build/go-tui/api/extensionapi"
 	"unstable.build/go-tui/localstorage"
 	"unstable.build/go-tui/rpc"
-	"unstable.build/go-tui/workspace"
 )
 
 type storageResourceServer struct {
@@ -53,10 +52,7 @@ func newStorageResourceServer(storageDir string) *storageResourceServer {
 
 func (s *storageResourceServer) setupStorage(lock sync.Locker) document.Service {
 	path := filepath.Join(s.storageDir, ".dbextension")
-	// pass locker to underlying file scheme, so we can synchronize
-	// network storage requests against event loop access.
-	ctx := workspace.ContextWithLocker(context.Background(), lock)
-	svc := localstorage.New(ctx, path, doctoml.Marshaler())
+	svc := localstorage.New(context.Background(), path, doctoml.Marshaler())
 	return svc
 }
 
