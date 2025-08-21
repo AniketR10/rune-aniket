@@ -28,8 +28,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"runtime/debug"
 	"strings"
 
+	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/api/browserapi"
@@ -123,7 +126,7 @@ func (c *Client) SetWindowContent(win browserapi.Window, h browserapi.Handler) e
 		stream, h, func() *WindowSetContentMessage {
 			return new(WindowSetContentMessage)
 		})
-	go server.ReceiveMessages()
+	go capturePanics(server.ReceiveMessages)
 
 	return nil
 }
@@ -174,7 +177,7 @@ func (c *Client) Split(
 		stream, h, func() *SplitWindowMessage {
 			return new(SplitWindowMessage)
 		})
-	go server.ReceiveMessages()
+	go capturePanics(server.ReceiveMessages)
 
 	return newWindowClient(uint64(windowID)), nil
 }
@@ -217,7 +220,7 @@ func (c *Client) Bar(config browserapi.BarConfig, h tui.Handler) error {
 		stream, browserapi.NopHandler(h), func() *BarMessage {
 			return new(BarMessage)
 		})
-	go server.ReceiveMessages()
+	go capturePanics(server.ReceiveMessages)
 
 	return nil
 }
@@ -338,7 +341,7 @@ func (c *Client) Floating(
 		stream, h, func() *FloatingWindowMessage {
 			return new(FloatingWindowMessage)
 		})
-	go server.ReceiveMessages()
+	go capturePanics(server.ReceiveMessages)
 
 	return newWindowClient(uint64(windowID)), nil
 }
@@ -381,7 +384,7 @@ func (c *Client) Tab(
 	server := handlerrpc.NewServerStream(stream, h, func() *TabMessage {
 		return new(TabMessage)
 	})
-	go server.ReceiveMessages()
+	go capturePanics(server.ReceiveMessages)
 
 	return Token{URI: uriStr}, err
 }
@@ -398,6 +401,20 @@ func (c *Client) Close() (err error) {
 		c.clientCancelCtx = nil
 	}
 	return
+}
+
+func capturePanics(fn func()) {
+	defer func() {
+		r := recover()
+		if r == nil {
+			return
+		}
+		stack := string(debug.Stack())
+		log.Errorf("captured panic: %v, stack: %s", r, stack)
+		os.Stderr.Sync()
+		panic(r)
+	}()
+	fn()
 }
 
 func toProtoOrientation(o browserapi.Orientation) Orientation {

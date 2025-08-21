@@ -154,7 +154,7 @@ func (s eventStreamServer) log(level log.Level, msg string, args ...interface{})
 		Logf(level, msg, args...)
 }
 
-func (s eventStreamServer) receiveEvents(c *Client) {
+func (s eventStreamServer) receiveEvents() {
 	defer s.log(log.TraceLevel, "done receiving events")
 	for {
 		protoEv, err := s.stream.Recv()
