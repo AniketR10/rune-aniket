@@ -102,9 +102,7 @@ func newTestLspHandler(
 	ret.diagnosticListID = defaultDiagnosticListID
 	ret.semanticTypesAttr = defaultSemanticTypeAttr
 	ret.diagnosticAttr = defaultDiagnosticAttr
-	ret.evChan = make(chan textapi.Event)
 	ret.tabspaces = 4
-	go ret.handleEvents(ret.evChan)
 	return ret
 }
 

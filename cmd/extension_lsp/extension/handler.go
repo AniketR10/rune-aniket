@@ -83,7 +83,6 @@ const (
 	commandReferences           = "lspReferences"
 	commandAddWorkspace         = "lspAddWorkspaceFolder"
 	commandRemoveWorkspace      = "lspRemoveWorkspaceFolder"
-	handleBackpressureEvs       = 64
 	referencesWindowWidth       = 50
 	referencesWindowHeight      = 15
 	defaultSemanticTokensListID = "lsp_syntax_highlighting"
@@ -149,6 +148,10 @@ var (
 	LSPHandlerEvents = []textapi.EventType{
 		textapi.EventTypeClose,
 		textapi.EventTypeFlush,
+		textapi.EventTypeRemove,
+		textapi.EventTypeRename,
+		textapi.EventTypeChange,
+		textapi.EventTypeCreate,
 		textapi.EventTypeOpen,
 		textapi.EventTypeEdit,
 	}
@@ -229,7 +232,6 @@ type execServer struct {
 
 type lspEditorHandler struct {
 	mu        sync.Mutex
-	evChan    chan textapi.Event
 	ctx       context.Context
 	cancelCtx func()
 
@@ -626,7 +628,6 @@ func newLspHandler(
 	ret.files = make(map[string]*file)
 	ret.pendingDiagnostic = make(map[string][]protocol.Diagnostic)
 	ret.pendingGoTo = make(map[string]protocol.Range)
-	ret.evChan = make(chan textapi.Event, handleBackpressureEvs)
 	ret.ctx, ret.cancelCtx = context.WithCancel(ctx)
 
 	var err error
@@ -831,8 +832,6 @@ func newLspHandler(
 
 	log.Debugf("Initialized LSP handler with cwd %q", ret.cwd)
 
-	go ret.handleEvents(ret.evChan)
-
 	return ret, nil
 }
 
@@ -871,8 +870,6 @@ func (h *lspEditorHandler) getServer(languageID string) (
 func (h *lspEditorHandler) newFile(
 	handler textapi.Handler, uri workspaceapi.URI, content string,
 ) *file {
-	h.mu.Lock()
-	defer h.mu.Unlock()
 
 	spanURI := workspaceURIToSpan(uri)
 	languageID := filepath.Ext(uri.Path())
@@ -888,7 +885,19 @@ func (h *lspEditorHandler) newFile(
 		languageID: languageID,
 	}
 
+	return f
+}
+
+func (h *lspEditorHandler) addNewFile(
+	handler textapi.Handler, uri workspaceapi.URI, content string,
+) *file {
+	f := h.newFile(handler, uri, content)
+
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
 	h.files[uri.String()] = f
+
 	return f
 }
 
@@ -1172,6 +1181,24 @@ func (h *lspEditorHandler) pushFullEdit(
 	return nil
 }
 
+func (h *lspEditorHandler) sendChangeWatchedFiles(
+	ctx context.Context, srv execServer, uri workspaceapi.URI,
+	t protocol.FileChangeType,
+) error {
+	spanURI := workspaceURIToSpan(uri)
+	params := protocol.DidChangeWatchedFilesParams{
+		Changes: []protocol.FileEvent{
+			{URI: protocol.URIFromSpanURI(spanURI), Type: t},
+		},
+	}
+	log.Tracef("lspEditorHandler.Server.DidChangeWatchedFiles(%s)", uri)
+	err := srv.srv.DidChangeWatchedFiles(ctx, &params)
+	if err != nil {
+		err = fmt.Errorf("did change watched files(%s): %v", uri, err)
+	}
+	return err
+}
+
 func (h *lspEditorHandler) sendIncrementalEdit(
 	ctx context.Context, srv execServer, f *file, newCells,
 	oldCells [][]term.Cell, content string, from, to term.Coordinates,
@@ -1220,7 +1247,10 @@ func (h *lspEditorHandler) handleFileFlush(ev textapi.Event) error {
 
 	f, ok := h.getFile(ev.URI)
 	if !ok {
-		f = h.newFile(ev.Resource, ev.URI, ev.Content)
+		// do not add file, as it might or might
+		// not be an open file. If we couldn't find it
+		// in the cache, then it's probably not an open file.
+		f = h.addNewFile(ev.Resource, ev.URI, ev.Content)
 	}
 
 	srv, ok := h.getServer(f.languageID)
@@ -1235,6 +1265,23 @@ func (h *lspEditorHandler) handleFileFlush(ev textapi.Event) error {
 	h.setCells(f, cell.StringToCells(ev.Content, h.tabspaces))
 	ctx = h.newSemanticTokensCtx()
 	return h.semanticTokensFull(ctx, srv, f, h.getCells(f), ev.Content)
+}
+
+func (h *lspEditorHandler) handleChangeWatchedFiles(
+	ev textapi.Event, t protocol.FileChangeType,
+) error {
+	ctx := context.Background()
+	ctx, cancelFn := context.WithTimeout(ctx, h.rpcTimeout)
+	defer cancelFn()
+
+	languageID := filepath.Ext(ev.URI.Path())
+
+	srv, ok := h.getServer(languageID)
+	if !ok {
+		return errNoServer
+	}
+
+	return h.sendChangeWatchedFiles(ctx, srv, ev.URI, t)
 }
 
 func (h *lspEditorHandler) handleFileEdit(ev textapi.Event) error {
@@ -1295,7 +1342,7 @@ func (h *lspEditorHandler) handleFileOpen(ev textapi.Event) error {
 	// lsp expects the last EOL
 	ev.Content += "\n"
 
-	f := h.newFile(ev.Resource, ev.URI, ev.Content)
+	f := h.addNewFile(ev.Resource, ev.URI, ev.Content)
 	srv, ok := h.getServer(f.languageID)
 	if !ok {
 		return errNoServer
@@ -2089,54 +2136,55 @@ func (h *lspEditorHandler) HandleCommand(
 	return
 }
 
-func (h *lspEditorHandler) handleEvents(ch chan textapi.Event) {
-	for ev := range ch {
-		var start time.Time
-		if log.IsLevelEnabled(log.TraceLevel) {
-			start = time.Now()
-			log.Tracef("lspEditorHandler.Handle(%v)", ev.Type)
-		}
-
-		var err error
-		switch ev.Type {
-		case textapi.EventTypeOpen:
-			err = h.handleFileOpen(ev)
-		case textapi.EventTypeClose:
-			err = h.handleFileClose(ev)
-		case textapi.EventTypeFlush:
-			err = h.handleFileFlush(ev)
-		case textapi.EventTypeEdit:
-			err = h.handleFileEdit(ev)
-		}
-
-		if log.IsLevelEnabled(log.TraceLevel) {
-			log.Tracef("lspEditorHandler.Handle(%v) in %s: %s", ev.Type, time.Since(start), err)
-		}
-		if err != nil && err != errNoServer {
-			log.Errorf("failed to process file event %v: %v", ev.Type, err)
-		}
-	}
-}
-
 func (h *lspEditorHandler) Handle(
 	ctx context.Context, ev textapi.Event,
 ) (exit bool) {
 	h.mu.Lock()
 	exit = h.exit
 	h.mu.Unlock()
-
 	if exit {
 		return
 	}
 
-	h.evChan <- ev
+	var start time.Time
+	if log.IsLevelEnabled(log.TraceLevel) {
+		start = time.Now()
+		log.Tracef("lspEditorHandler.Handle(%v)", ev.Type)
+	}
+
+	var err error
+	switch ev.Type {
+	case textapi.EventTypeOpen:
+		err = h.handleFileOpen(ev)
+	case textapi.EventTypeClose:
+		err = h.handleFileClose(ev)
+	case textapi.EventTypeFlush:
+		err = h.handleFileFlush(ev)
+	case textapi.EventTypeRemove:
+		err = h.handleChangeWatchedFiles(ev, protocol.Deleted)
+	case textapi.EventTypeRename:
+		err = h.handleChangeWatchedFiles(ev, protocol.Changed)
+	case textapi.EventTypeCreate:
+		err = h.handleChangeWatchedFiles(ev, protocol.Created)
+	case textapi.EventTypeChange:
+		err = h.handleChangeWatchedFiles(ev, protocol.Changed)
+	case textapi.EventTypeEdit:
+		err = h.handleFileEdit(ev)
+	}
+
+	if log.IsLevelEnabled(log.TraceLevel) {
+		log.Tracef("lspEditorHandler.Handle(%v) in %s: %s", ev.Type, time.Since(start), err)
+	}
+	if err != nil && err != errNoServer {
+		log.Errorf("failed to process file event %v: %v", ev.Type, err)
+	}
+
 	return
 }
 
 func (h *lspEditorHandler) Close() error {
 	h.mu.Lock()
 	h.exit = true
-	close(h.evChan)
 	h.mu.Unlock()
 
 	log.Debugf("shutting down %d servers", len(h.servers))
