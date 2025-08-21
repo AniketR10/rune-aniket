@@ -27,7 +27,6 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"io"
 
 	"github.com/ernestrc/logd-go/logging"
@@ -68,7 +67,9 @@ func (c *logCollector) Write(data []byte) (int, error) {
 		m := make(map[string]any)
 		err = json.Unmarshal(line, &m)
 		if err != nil {
-			return n, fmt.Errorf("unmarshal json log: %v", err)
+			fields := log.Fields{logging.KeyThread: c.extensionID}
+			c.log(log.WarnLevel, fields, "%s", string(line))
+			return n, nil
 		}
 		m[logging.KeyThread] = c.extensionID
 		levelIfc, okFound := m[logging.KeyLevel]
@@ -82,10 +83,10 @@ func (c *logCollector) Write(data []byte) (int, error) {
 	}
 }
 
-func (m *logCollector) log(level log.Level, fields log.Fields, msg string, args ...any) {
-	if !m.logger.IsLevelEnabled(level) {
+func (c *logCollector) log(level log.Level, fields log.Fields, msg string, args ...any) {
+	if !c.logger.IsLevelEnabled(level) {
 		return
 	}
-	fields["workspace"] = m.workspace.String()
-	m.logger.WithFields(fields).Logf(level, msg, args...)
+	fields["workspace"] = c.workspace.String()
+	c.logger.WithFields(fields).Logf(level, msg, args...)
 }
