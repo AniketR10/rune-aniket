@@ -144,7 +144,10 @@ func (m *memoryScheme) Open(path string, flag int, mode os.FileMode) (
 		m.files[uriStr] = f
 		watchpoints := m.watchpoints[workspaceapi.Create]
 		content := string(f.data)
-		for _, wp := range watchpoints {
+		copied := make([]chan<- workspaceapi.EventInfo, len(watchpoints))
+		copy(copied, watchpoints)
+		m.mu.Unlock()
+		for _, wp := range copied {
 			fi := watchFileInfo{
 				event:   workspaceapi.Create,
 				uri:     uri,
@@ -152,7 +155,6 @@ func (m *memoryScheme) Open(path string, flag int, mode os.FileMode) (
 			}
 			wp <- fi
 		}
-		m.mu.Unlock()
 	} else {
 		_, _ = f.Seek(0, 0)
 	}
@@ -167,18 +169,22 @@ func (m *memoryScheme) Remove(path string) error {
 	}
 
 	m.mu.Lock()
-	defer m.mu.Unlock()
 
 	uriStr := uri.String()
 	f, ok := m.files[uriStr]
 	if !ok {
+		m.mu.Unlock()
 		return workspaceapi.Error{IsNotExist: true}.ToError()
 	}
 
 	delete(m.files, uriStr)
 	watchpoints := m.watchpoints[workspaceapi.Remove]
 	content := string(f.data)
-	for _, wp := range watchpoints {
+	copied := make([]chan<- workspaceapi.EventInfo, len(watchpoints))
+	copy(copied, watchpoints)
+	m.mu.Unlock()
+
+	for _, wp := range copied {
 		fi := watchFileInfo{
 			event:   workspaceapi.Remove,
 			uri:     uri,
@@ -202,10 +208,10 @@ func (m *memoryScheme) Rename(old, new string) error {
 	newURIStr := newURI.String()
 
 	m.mu.Lock()
-	defer m.mu.Unlock()
 
 	f, ok := m.files[oldURIStr]
 	if !ok {
+		m.mu.Unlock()
 		return workspaceapi.Error{IsNotExist: true}.ToError()
 	}
 	delete(m.files, oldURIStr)
@@ -213,7 +219,11 @@ func (m *memoryScheme) Rename(old, new string) error {
 	m.files[newURIStr] = f
 	watchpoints := m.watchpoints[workspaceapi.Rename]
 	content := string(f.data)
-	for _, wp := range watchpoints {
+	copied := make([]chan<- workspaceapi.EventInfo, len(watchpoints))
+	copy(copied, watchpoints)
+	m.mu.Unlock()
+
+	for _, wp := range copied {
 		fis := []watchFileInfo{
 			{
 				event:   workspaceapi.Rename,

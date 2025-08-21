@@ -120,17 +120,21 @@ func (c *memFile) Stat() (os.FileInfo, error) {
 // Sync satisfies workspaceapi.File.
 func (c *memFile) Sync() error {
 	c.locker.Lock()
-	defer c.locker.Unlock()
 
 	c.modTime = time.Now()
 	if c.m == nil {
+		c.locker.Unlock()
 		return nil
 	}
 
 	watchpoints := c.m.watchpoints[workspaceapi.Write]
 	uri, _ := c.m.URI(c.filename)
 	content := string(c.data)
-	for _, wp := range watchpoints {
+	copied := make([]chan<- workspaceapi.EventInfo, len(watchpoints))
+	copy(copied, watchpoints)
+	c.locker.Unlock()
+
+	for _, wp := range copied {
 		fi := watchFileInfo{
 			event:   workspaceapi.Write,
 			uri:     uri,
