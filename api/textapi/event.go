@@ -60,6 +60,10 @@ const (
 	// or not in the workspace.
 	EventTypeRemove
 
+	// EventTypeRename is dispatched when a watched resource is renamed out-of-band
+	// or not in the workspace.
+	EventTypeRename
+
 	// EventTypeEdit is dispatched when new content is inserted into an editor buffer.
 	// Start, End represent the input to Edit whereas
 	// From, To represent output coordinates. See cell.Editor.Edit for
