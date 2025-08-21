@@ -282,7 +282,6 @@ message WatchResponse {
 message WatchData {
 	Event event = 1;
 	string uri = 2;
-	string content = 3;
 	bool is_dir = 4;
 }
 

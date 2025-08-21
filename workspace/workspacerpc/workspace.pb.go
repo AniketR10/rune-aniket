@@ -2680,7 +2680,6 @@ type WatchData struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Event         Event                  `protobuf:"varint,1,opt,name=event,proto3,enum=workspace.Event" json:"event,omitempty"`
 	Uri           string                 `protobuf:"bytes,2,opt,name=uri,proto3" json:"uri,omitempty"`
-	Content       string                 `protobuf:"bytes,3,opt,name=content,proto3" json:"content,omitempty"`
 	IsDir         bool                   `protobuf:"varint,4,opt,name=is_dir,json=isDir,proto3" json:"is_dir,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -2726,13 +2725,6 @@ func (x *WatchData) GetEvent() Event {
 func (x *WatchData) GetUri() string {
 	if x != nil {
 		return x.Uri
-	}
-	return ""
-}
-
-func (x *WatchData) GetContent() string {
-	if x != nil {
-		return x.Content
 	}
 	return ""
 }
@@ -3219,11 +3211,10 @@ const file_workspacerpc_workspace_proto_rawDesc = "" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12(\n" +
 	"\x06events\x18\x02 \x03(\x0e2\x10.workspace.EventR\x06events\"\x1f\n" +
 	"\rWatchResponse\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\x03R\x02id\"v\n" +
+	"\x02id\x18\x01 \x01(\x03R\x02id\"\\\n" +
 	"\tWatchData\x12&\n" +
 	"\x05event\x18\x01 \x01(\x0e2\x10.workspace.EventR\x05event\x12\x10\n" +
-	"\x03uri\x18\x02 \x01(\tR\x03uri\x12\x18\n" +
-	"\acontent\x18\x03 \x01(\tR\acontent\x12\x15\n" +
+	"\x03uri\x18\x02 \x01(\tR\x03uri\x12\x15\n" +
 	"\x06is_dir\x18\x04 \x01(\bR\x05isDir\"\xc8\x01\n" +
 	"\fWatchMessage\x120\n" +
 	"\x04type\x18\x01 \x01(\x0e2\x1c.workspace.WatchMessage.TypeR\x04type\x124\n" +

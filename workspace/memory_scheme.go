@@ -143,7 +143,6 @@ func (m *memoryScheme) Open(path string, flag int, mode os.FileMode) (
 		m.mu.Lock()
 		m.files[uriStr] = f
 		watchpoints := m.watchpoints[workspaceapi.Create]
-		content := string(f.data)
 		copied := make([]chan<- workspaceapi.EventInfo, len(watchpoints))
 		copy(copied, watchpoints)
 		m.mu.Unlock()
@@ -151,7 +150,6 @@ func (m *memoryScheme) Open(path string, flag int, mode os.FileMode) (
 			fi := watchFileInfo{
 				event:   workspaceapi.Create,
 				uri:     uri,
-				content: content,
 			}
 			wp <- fi
 		}
@@ -171,7 +169,7 @@ func (m *memoryScheme) Remove(path string) error {
 	m.mu.Lock()
 
 	uriStr := uri.String()
-	f, ok := m.files[uriStr]
+	_, ok := m.files[uriStr]
 	if !ok {
 		m.mu.Unlock()
 		return workspaceapi.Error{IsNotExist: true}.ToError()
@@ -179,7 +177,6 @@ func (m *memoryScheme) Remove(path string) error {
 
 	delete(m.files, uriStr)
 	watchpoints := m.watchpoints[workspaceapi.Remove]
-	content := string(f.data)
 	copied := make([]chan<- workspaceapi.EventInfo, len(watchpoints))
 	copy(copied, watchpoints)
 	m.mu.Unlock()
@@ -188,7 +185,6 @@ func (m *memoryScheme) Remove(path string) error {
 		fi := watchFileInfo{
 			event:   workspaceapi.Remove,
 			uri:     uri,
-			content: content,
 		}
 		wp <- fi
 	}
@@ -218,7 +214,6 @@ func (m *memoryScheme) Rename(old, new string) error {
 	f.filename = filepath.Base(new)
 	m.files[newURIStr] = f
 	watchpoints := m.watchpoints[workspaceapi.Rename]
-	content := string(f.data)
 	copied := make([]chan<- workspaceapi.EventInfo, len(watchpoints))
 	copy(copied, watchpoints)
 	m.mu.Unlock()
@@ -228,12 +223,10 @@ func (m *memoryScheme) Rename(old, new string) error {
 			{
 				event:   workspaceapi.Rename,
 				uri:     oldURI,
-				content: content,
 			},
 			{
 				event:   workspaceapi.Rename,
 				uri:     newURI,
-				content: content,
 			},
 		}
 		for _, fi := range fis {
@@ -422,7 +415,6 @@ func (m *memoryScheme) Close() error {
 type watchFileInfo struct {
 	event   workspaceapi.Event
 	uri     workspaceapi.URI
-	content string
 }
 
 func (w watchFileInfo) Event() workspaceapi.Event {
@@ -431,10 +423,6 @@ func (w watchFileInfo) Event() workspaceapi.Event {
 
 func (w watchFileInfo) URI() workspaceapi.URI {
 	return w.uri
-}
-
-func (w watchFileInfo) Content() string {
-	return w.content
 }
 
 func (w watchFileInfo) Sys() interface{} {

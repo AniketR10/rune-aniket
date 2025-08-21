@@ -525,10 +525,6 @@ func (c *Component) dispatchFlush(file workspaceapi.URI, h Handler) (string, err
 	// clear dirty/flushed attributes
 	c.resetTabProperties(file)
 
-	if c.config.DisableDispatchFlush {
-		return content, nil
-	}
-
 	ev := textapi.Event{
 		Type:     textapi.EventTypeFlush,
 		URI:      file,

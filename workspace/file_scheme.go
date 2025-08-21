@@ -460,13 +460,7 @@ func (p *fileScheme) Watch(
 					p.log(log.WarnLevel, "watched file uri %q: %v", ev.Path(), err)
 					continue
 				}
-				// best effort, if ev is Rename then order
-				// of old vs new link is not guaranteed.
-				var content []byte
-				if ev.Event() != notify.Remove {
-					content, _ = ReadFile(uri.Path())
-				}
-				ei := newEventInfo(ev, uri, string(content))
+				ei := newEventInfo(ev, uri)
 				select {
 				case c <- ei:
 				case <-p.ctx.Done():
@@ -544,15 +538,10 @@ type eventInfo struct {
 	uri     workspaceapi.URI
 	e       workspaceapi.Event
 	d       bool
-	content string
 }
 
 func (e eventInfo) Event() workspaceapi.Event {
 	return e.e
-}
-
-func (e eventInfo) Content() string {
-	return e.content
 }
 
 func (e eventInfo) URI() workspaceapi.URI {
@@ -563,7 +552,7 @@ func (e eventInfo) IsDir() (bool, error) {
 	return e.d, nil
 }
 
-func newEventInfo(ei notify.EventInfo, uri workspaceapi.URI, content string) eventInfo {
+func newEventInfo(ei notify.EventInfo, uri workspaceapi.URI) eventInfo {
 	var nev workspaceapi.Event
 	switch ei.Event() {
 	case notify.Create:
@@ -579,7 +568,6 @@ func newEventInfo(ei notify.EventInfo, uri workspaceapi.URI, content string) eve
 	isDir, _ := ei.IsDir()
 	return eventInfo{
 		d:       isDir,
-		content: content,
 		uri:     uri,
 		e:       nev,
 	}

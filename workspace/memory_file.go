@@ -129,7 +129,6 @@ func (c *memFile) Sync() error {
 
 	watchpoints := c.m.watchpoints[workspaceapi.Write]
 	uri, _ := c.m.URI(c.filename)
-	content := string(c.data)
 	copied := make([]chan<- workspaceapi.EventInfo, len(watchpoints))
 	copy(copied, watchpoints)
 	c.locker.Unlock()
@@ -138,7 +137,6 @@ func (c *memFile) Sync() error {
 		fi := watchFileInfo{
 			event:   workspaceapi.Write,
 			uri:     uri,
-			content: content,
 		}
 		wp <- fi
 	}

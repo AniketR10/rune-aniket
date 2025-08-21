@@ -187,20 +187,6 @@ func (m *MockEventInfo) EXPECT() *MockEventInfoMockRecorder {
 	return m.recorder
 }
 
-// Content mocks base method.
-func (m *MockEventInfo) Content() string {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Content")
-	ret0, _ := ret[0].(string)
-	return ret0
-}
-
-// Content indicates an expected call of Content.
-func (mr *MockEventInfoMockRecorder) Content() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Content", reflect.TypeOf((*MockEventInfo)(nil).Content))
-}
-
 // Event mocks base method.
 func (m *MockEventInfo) Event() workspaceapi.Event {
 	m.ctrl.T.Helper()

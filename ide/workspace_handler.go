@@ -609,10 +609,6 @@ func (h *workspaceManagerHandler) addWorkspace(
 	if err != nil {
 		log.Warnf("create FS event watcher: %v, "+
 			"using internal dispatching which doesn't monitor non open files", err)
-	} else {
-		textOpts = append(textOpts,
-			text.WithDisableDispatchFlush(),
-		)
 	}
 
 	// drain events until ready. This is only relevant for non-buffering
@@ -1145,36 +1141,19 @@ func dispatchFilesystemEvents(
 			}
 			ex.log(log.DebugLevel, "dispatching filesystem event %s for %s", flag, uri)
 			ev := textapi.Event{
-				URI:     uri,
-				Content: fsev.Content(),
+				URI: uri,
 			}
-			mu.Lock()
 			switch flag {
 			case workspaceapi.Create:
-				fallthrough
+				ev.Type = textapi.EventTypeCreate
 			case workspaceapi.Write:
-				ev.Type = textapi.EventTypeFlush
-				// best effort, it might not be an open resource
-				browserHandler, ok := ex.comp.Resource(fsev.URI())
-				if ok {
-					ev.Resource, _ = browserHandler.(textapi.Handler)
-				}
+				ev.Type = textapi.EventTypeChange
 			case workspaceapi.Rename:
-				path := fsev.URI().Path()
-				_, err := cwd.Stat(path)
-				if err != nil {
-					ex.log(log.TraceLevel, "stat %q failed: assuming remove: %v", path, err)
-					ev.Type = textapi.EventTypeRemove
-				} else {
-					ev.Type = textapi.EventTypeFlush
-					browserHandler, ok := ex.comp.Resource(fsev.URI())
-					if ok {
-						ev.Resource, _ = browserHandler.(textapi.Handler)
-					}
-				}
+				ev.Type = textapi.EventTypeRename
 			case workspaceapi.Remove:
 				ev.Type = textapi.EventTypeRemove
 			}
+			mu.Lock()
 			ex.comp.DispatchEvent(ev)
 			mu.Unlock()
 		case <-ctx.Done():

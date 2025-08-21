@@ -107,8 +107,6 @@ type EventInfo interface {
 	URI() URI
 	// IsDir returns true if event is from a directory.
 	IsDir() (bool, error)
-	// Content is the content of the resource at the time of the event.
-	Content() string
 }
 
 // Cmd represents an external command being prepared to run. See exec.Cmd for

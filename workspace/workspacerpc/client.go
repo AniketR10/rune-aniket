@@ -460,7 +460,6 @@ func (c *Client) Watch(
 				event:   ev,
 				uri:     uri,
 				isDir:   data.GetIsDir(),
-				content: data.GetContent(),
 			}
 			select {
 			case ch <- fi:
@@ -599,7 +598,6 @@ type watchFileInfo struct {
 	event   workspaceapi.Event
 	uri     workspaceapi.URI
 	isDir   bool
-	content string
 }
 
 func (w watchFileInfo) Event() workspaceapi.Event {
@@ -608,10 +606,6 @@ func (w watchFileInfo) Event() workspaceapi.Event {
 
 func (w watchFileInfo) URI() workspaceapi.URI {
 	return w.uri
-}
-
-func (w watchFileInfo) Content() string {
-	return w.content
 }
 
 func (w watchFileInfo) Sys() interface{} {

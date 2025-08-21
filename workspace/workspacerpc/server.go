@@ -573,7 +573,6 @@ func (s *Server) Watch(
 				Type: WatchMessage_TypeData,
 				Data: &WatchData{
 					Uri:     ev.URI().String(),
-					Content: ev.Content(),
 					Event:   protoEv,
 					IsDir:   isDir,
 				}}
