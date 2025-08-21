@@ -444,8 +444,8 @@ command:
     <c-x><c-c>: clipboardCopy
     <c-x><c-h>: focusWindow left
     <c-x><c-l>: focusWindow right
-    <c-x><c-j>: focusWindow top
-    <c-x><c-k>: focusWindow bottom
+    <c-x><c-j>: focusWindow up
+    <c-x><c-k>: focusWindow down
     <c-x><c-w>: closeWindow
     <c-x>h: changeSplitOrientation h
     <c-x>v: changeSplitOrientation v
