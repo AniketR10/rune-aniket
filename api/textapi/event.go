@@ -48,7 +48,16 @@ const (
 	// might have been modified via other processes (i.e. git).
 	EventTypeFlush
 
-	// EventTypeRemove is dispatched when a resource is removed from the workspace.
+	// EventTypeCreate is dispatched when a watched resource is created out-of-band
+	// or not in the workspace.
+	EventTypeCreate
+
+	// EventTypeChange is dispatched when a watched resource is updated out-of-band
+	// or not in the workspace.
+	EventTypeChange
+
+	// EventTypeRemove is dispatched when a watched resource is removed out-of-band
+	// or not in the workspace.
 	EventTypeRemove
 
 	// EventTypeEdit is dispatched when new content is inserted into an editor buffer.

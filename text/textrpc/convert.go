@@ -46,6 +46,10 @@ func protoTypeToModel(protoType EditorEvent_Type) (ev textapi.EventType, err err
 		ev = textapi.EventTypeCursor
 	case EditorEvent_TypeSelection:
 		ev = textapi.EventTypeSelection
+	case EditorEvent_TypeCreate:
+		ev = textapi.EventTypeCreate
+	case EditorEvent_TypeChange:
+		ev = textapi.EventTypeChange
 	case EditorEvent_TypeFocus:
 		ev = textapi.EventTypeFocus
 	case EditorEvent_TypeUnfocus:
@@ -100,6 +104,10 @@ func protoType(e textapi.Event) EditorEvent_Type {
 		return EditorEvent_TypeEdit
 	case textapi.EventTypeScroll:
 		return EditorEvent_TypeScroll
+	case textapi.EventTypeChange:
+		return EditorEvent_TypeChange
+	case textapi.EventTypeCreate:
+		return EditorEvent_TypeCreate
 	case textapi.EventTypeCursor:
 		return EditorEvent_TypeCursor
 	case textapi.EventTypeSelection:

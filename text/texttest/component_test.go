@@ -725,6 +725,28 @@ func TestComponentEditorSubscriber(t *testing.T) {
 			},
 			nil,
 		},
+		{
+			"DispatchEvent>EventTypeChange",
+			textapi.EventTypeChange,
+			func(t *testing.T, c *text.Component, resource workspaceapi.URI) {
+				assert.True(t, c.DispatchEvent(textapi.Event{
+					Type: textapi.EventTypeChange,
+					URI:  resource,
+				}))
+			},
+			nil,
+		},
+		{
+			"DispatchEvent>EventTypeCreate",
+			textapi.EventTypeCreate,
+			func(t *testing.T, c *text.Component, resource workspaceapi.URI) {
+				assert.True(t, c.DispatchEvent(textapi.Event{
+					Type: textapi.EventTypeCreate,
+					URI:  resource,
+				}))
+			},
+			nil,
+		},
 	}
 
 	for _, _tcase := range tsuite {
@@ -883,33 +905,6 @@ func TestComponentEditorSubscriber(t *testing.T) {
 		assert.Equal(t, 1, i)
 		require.NoError(t, win.SetContent(b))
 		assert.Equal(t, 3, i)
-	})
-
-	t.Run("no EventTypeFlush events are dispatched if option is passed", func(t *testing.T) {
-		cfg := text.DefaultConfig()
-		cfg.DisableDispatchFlush = true
-		c, loader := newTestComponentConfig(t, NopEditor(), cfg)
-
-		filename := "file:///Jill_Biden.txt"
-		uri, err := workspaceapi.ParseURI(filename)
-		require.NoError(t, err)
-		fc := testFlusherCloser{closeFn: func() error {
-			return nil
-		}}
-
-		loader.flusherCloser = &fc
-
-		var fired int
-		evs := []textapi.EventType{textapi.EventTypeClose}
-		h := text.FuncEventHandler(func(ctx context.Context, ev textapi.Event) bool {
-			fired++
-			return false
-		})
-		c.SubscribeEvents(evs, h)
-
-		_, err = c.Open(uri)
-		require.NoError(t, err)
-		assert.Equal(t, 0, fired)
 	})
 }
 

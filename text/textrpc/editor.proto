@@ -25,6 +25,8 @@ message EditorEvent {
 	TypeFlush = 2;
 	TypeEdit = 3;
 	TypeScroll = 5;
+	TypeCreate = 12;
+	TypeChange = 13;
 	TypeFocus = 6;
 	TypeUnfocus = 7;
 	TypeCursor = 8;

@@ -30,6 +30,8 @@ const (
 	EditorEvent_TypeFlush     EditorEvent_Type = 2
 	EditorEvent_TypeEdit      EditorEvent_Type = 3
 	EditorEvent_TypeScroll    EditorEvent_Type = 5
+	EditorEvent_TypeCreate    EditorEvent_Type = 12
+	EditorEvent_TypeChange    EditorEvent_Type = 13
 	EditorEvent_TypeFocus     EditorEvent_Type = 6
 	EditorEvent_TypeUnfocus   EditorEvent_Type = 7
 	EditorEvent_TypeCursor    EditorEvent_Type = 8
@@ -45,6 +47,8 @@ var (
 		2:  "TypeFlush",
 		3:  "TypeEdit",
 		5:  "TypeScroll",
+		12: "TypeCreate",
+		13: "TypeChange",
 		6:  "TypeFocus",
 		7:  "TypeUnfocus",
 		8:  "TypeCursor",
@@ -57,6 +61,8 @@ var (
 		"TypeFlush":     2,
 		"TypeEdit":      3,
 		"TypeScroll":    5,
+		"TypeCreate":    12,
+		"TypeChange":    13,
 		"TypeFocus":     6,
 		"TypeUnfocus":   7,
 		"TypeCursor":    8,
@@ -1883,7 +1889,7 @@ const file_textrpc_editor_proto_rawDesc = "" +
 	"\vEditRequest\x12.\n" +
 	"\rresource_name\x18\x01 \x01(\v2\t.text.URIR\fresourceName\x12%\n" +
 	"\x06buffer\x18\x02 \x03(\v2\r.term.CellRowR\x06buffer\"\x0e\n" +
-	"\fEditResponse\"\xc1\x03\n" +
+	"\fEditResponse\"\xe1\x03\n" +
 	"\vEditorEvent\x12*\n" +
 	"\x04type\x18\x01 \x01(\x0e2\x16.text.EditorEvent.TypeR\x04type\x12.\n" +
 	"\rresource_name\x18\x02 \x01(\v2\t.text.URIR\fresourceName\x12'\n" +
@@ -1891,14 +1897,18 @@ const file_textrpc_editor_proto_rawDesc = "" +
 	"\x03end\x18\x05 \x01(\v2\x11.term.CoordinatesR\x03end\x12%\n" +
 	"\x04from\x18\x06 \x01(\v2\x11.term.CoordinatesR\x04from\x12!\n" +
 	"\x02to\x18\a \x01(\v2\x11.term.CoordinatesR\x02to\x12\x18\n" +
-	"\acontent\x18\b \x01(\tR\acontent\"\xa3\x01\n" +
+	"\acontent\x18\b \x01(\tR\acontent\"\xc3\x01\n" +
 	"\x04Type\x12\f\n" +
 	"\bTypeOpen\x10\x00\x12\r\n" +
 	"\tTypeClose\x10\x01\x12\r\n" +
 	"\tTypeFlush\x10\x02\x12\f\n" +
 	"\bTypeEdit\x10\x03\x12\x0e\n" +
 	"\n" +
-	"TypeScroll\x10\x05\x12\r\n" +
+	"TypeScroll\x10\x05\x12\x0e\n" +
+	"\n" +
+	"TypeCreate\x10\f\x12\x0e\n" +
+	"\n" +
+	"TypeChange\x10\r\x12\r\n" +
 	"\tTypeFocus\x10\x06\x12\x0f\n" +
 	"\vTypeUnfocus\x10\a\x12\x0e\n" +
 	"\n" +
