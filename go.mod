@@ -54,7 +54,6 @@ require (
 require (
 	github.com/go-git/go-git/v6 v6.0.0-20250819122726-39261590f7f3
 	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.3.2
-	github.com/hajimehoshi/ebiten/v2 v2.7.4
 	github.com/unstablebuild/notify v0.10.1
 	github.com/unstablebuild/pty v1.3.1
 	go.uber.org/mock v0.4.0
@@ -67,14 +66,10 @@ require (
 	github.com/BurntSushi/toml v1.2.1 // indirect
 	github.com/blackjack/webcam v0.5.0 // indirect
 	github.com/dlclark/regexp2 v1.11.5 // indirect
-	github.com/ebitengine/gomobile v0.0.0-20240518074828-e86332849895 // indirect
-	github.com/ebitengine/hideconsole v1.0.0 // indirect
-	github.com/ebitengine/purego v0.8.3 // indirect
 	github.com/gen2brain/malgo v0.11.21 // indirect
 	github.com/go-git/gcfg/v2 v2.0.2 // indirect
 	github.com/go-git/go-billy/v6 v6.0.0-20250817172114-3a9ca963b728 // indirect
 	github.com/go-jose/go-jose/v4 v4.1.2 // indirect
-	github.com/jezek/xgb v1.1.1 // indirect
 	github.com/kr/text v0.2.0 // indirect
 	github.com/pion/datachannel v1.5.6 // indirect
 	github.com/pion/dtls/v2 v2.2.10 // indirect
