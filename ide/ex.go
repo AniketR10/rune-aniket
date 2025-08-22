@@ -200,7 +200,10 @@ func (e *ex) subscribeCommands() error {
 			}, func(ctx context.Context, cmd string, args []string) (
 				iterator.Iterator[string], string, error,
 			) {
-				return e.completeCommand(ctx, cmd, args)
+				if man.completer == nil {
+					return iterator.FromSlice[string](nil), "", nil
+				}
+				return man.completer(e, ctx, cmd, args)
 			}))
 		if err != nil {
 			ret = multierr.Append(ret, fmt.Errorf("subscribe command: %w", err))
@@ -221,56 +224,6 @@ func (e *ex) log(level log.Level, msg string, args ...interface{}) {
 		return
 	}
 	log.WithField(logging.KeyClass, "ide.ex").Logf(level, msg, args...)
-}
-
-func (e *ex) completeCommand(
-	ctx context.Context, cmd string, args []string,
-) (iterator.Iterator[string], string, error) {
-	e.log(log.DebugLevel, "complete command: %s %v", cmd, args)
-	switch cmd {
-	case cmdSwitchToTab:
-		if len(args) <= 1 {
-			var tabNames []string
-			for i, tab := range e.comp.Browser().Tabs() {
-				pretty := strconv.Itoa(i + 1)
-				if name, _, ok := e.comp.Browser().TabName(tab.URI()); ok {
-					pretty += " " + name
-				}
-				tabNames = append(tabNames, pretty)
-			}
-			return iterator.FromSlice(tabNames), "", nil
-		}
-	case cmdSetDefaultColors:
-		var colorNames []string
-		for name := range tcell.ColorNames {
-			colorNames = append(colorNames, name)
-		}
-		return iterator.FromSlice(colorNames), "", nil
-	case cmdEdit:
-		return e.filepathCompleter.Complete(ctx, args)
-	case cmdReadFile:
-		return e.completeReadFile(ctx, args)
-	case cmdSplitWindow, cmdNewWindow, cmdFocusWindow, cmdMoveWindow:
-		if len(args) <= 1 {
-			return iterator.FromSlice([]string{"right", "left", "up", "down"}), "", nil
-		}
-	case cmdChangeSplitOrientation:
-		if len(args) <= 1 {
-			return iterator.FromSlice([]string{"horizontal", "vertical"}), "", nil
-		}
-	case cmdResizeWindow:
-		if len(args) == 1 {
-			return iterator.FromSlice([]string{"increase", "decrease", "reset", "max", "min"}), "", nil
-		}
-		if len(args) == 2 {
-			return iterator.FromSlice([]string{"width", "height"}), "", nil
-		}
-	case cmdCopyPath:
-		if len(args) <= 1 {
-			return iterator.FromSlice([]string{"absolute"}), "", nil
-		}
-	}
-	return iterator.FromSlice[string](nil), "", nil
 }
 
 func (e *ex) Interrupt(ctx context.Context) error {

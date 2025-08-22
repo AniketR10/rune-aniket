@@ -24,29 +24,24 @@
 package ide
 
 import (
-	"fmt"
+	"context"
+	"strconv"
 
+	log "github.com/sirupsen/logrus"
+	"github.com/unstablebuild/blue/iterator"
+	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/api/textapi"
 )
 
 const (
-	cmdEdit                   = "edit"
-	cmdReadFile               = "readfile"
-	cmdChangeSplitOrientation = "windowdefaultsplit"
-	cmdSplitWindow            = "windowsplit"
-	cmdNewWindow              = "windownew"
-	cmdSetDefaultColors       = "defaultcolors"
-	cmdSwitchToTab            = "tabfocus"
-	cmdFocusWindow            = "windowfocus"
-	cmdMoveWindow             = "windowmove"
-	cmdResizeWindow           = "windowresize"
-	cmdCopyPath               = "tabcopypath"
-	cmdClipboardPaste         = "clipboardpaste"
+	cmdClipboardPaste = "clipboardpaste"
 )
 
 type commandAll struct {
-	man     textapi.CommandManual
-	handler func(*ex, ...string) error
+	man       textapi.CommandManual
+	handler   func(*ex, ...string) error
+	completer func(e *ex, ctx context.Context, cmd string, args []string,
+	) (iterator.Iterator[string], string, error)
 }
 
 var (
@@ -95,13 +90,29 @@ var (
 			},
 			handler: (*ex).tabclose,
 		},
-		cmdSwitchToTab: {
+		"tabfocus": {
 			man: textapi.CommandManual{
 				Summary: "Set the content of the current active window to " +
 					"the tab at the given position in the tabs list.",
 				Synopsis: "[position]",
 			},
 			handler: (*ex).tabfocus,
+			completer: func(e *ex, ctx context.Context, cmd string, args []string,
+			) (iterator.Iterator[string], string, error) {
+				if len(args) <= 1 {
+					var tabNames []string
+					for i, tab := range e.comp.Browser().Tabs() {
+						pretty := strconv.Itoa(i + 1)
+						name, _, ok := e.comp.Browser().TabName(tab.URI())
+						if ok {
+							pretty += " " + name
+						}
+						tabNames = append(tabNames, pretty)
+					}
+					return iterator.FromSlice(tabNames), "", nil
+				}
+				return iterator.FromSlice[string](nil), "", nil
+			},
 		},
 		"tabcloseall": {
 			man: textapi.CommandManual{
@@ -171,7 +182,7 @@ var (
 			},
 			handler: (*ex).reloadfile,
 		},
-		cmdChangeSplitOrientation: {
+		"windowdefaultsplit": {
 			man: textapi.CommandManual{
 				Summary: "Toggle the next window split orientation or change it to the " +
 					"given orientation if passed via arguments. The options are 'horizontal' which " +
@@ -180,29 +191,48 @@ var (
 				Synopsis: "(horizontal|vertical)",
 			},
 			handler: (*ex).splitDirectionChange,
+			completer: func(e *ex, ctx context.Context, cmd string, args []string,
+			) (iterator.Iterator[string], string, error) {
+				if len(args) <= 1 {
+					return iterator.FromSlice([]string{"horizontal", "vertical"}), "", nil
+				}
+				return iterator.FromSlice[string](nil), "", nil
+			},
 		},
-		cmdSplitWindow: manSplitWindow,
-		cmdNewWindow:   manSplitWindow,
-		cmdFocusWindow: {
+		"windowsplit": manSplitWindow,
+		"windownew":   manSplitWindow,
+		"windowfocus": {
 			man: textapi.CommandManual{
 				Summary:  "Switches the window focus to the window on the given side of the current active window.",
 				Synopsis: "(right|left|up|down)",
 			},
-			handler: (*ex).windowfocus,
+			handler:   (*ex).windowfocus,
+			completer: completeWithArrows,
 		},
-		cmdMoveWindow: {
+		"windowmove": {
 			man: textapi.CommandManual{
 				Summary:  "Moves the content of the window in focus to the window in the given direction.",
 				Synopsis: "(right|left|up|down)",
 			},
-			handler: (*ex).moveWindow,
+			handler:   (*ex).moveWindow,
+			completer: completeWithArrows,
 		},
-		cmdResizeWindow: {
+		"windowresize": {
 			man: textapi.CommandManual{
 				Summary:  "Resizes the window by increasing or decreasing its width or height.",
 				Synopsis: "(increase|decrease|max|min|reset) (height|width)",
 			},
 			handler: (*ex).windowresize,
+			completer: func(e *ex, ctx context.Context, cmd string, args []string,
+			) (iterator.Iterator[string], string, error) {
+				if len(args) == 1 {
+					return iterator.FromSlice([]string{"increase", "decrease", "reset", "max", "min"}), "", nil
+				}
+				if len(args) == 2 {
+					return iterator.FromSlice([]string{"width", "height"}), "", nil
+				}
+				return iterator.FromSlice[string](nil), "", nil
+			},
 		},
 		"windowtogglemaximize": {
 			man: textapi.CommandManual{
@@ -298,7 +328,7 @@ var (
 			},
 			handler: (*ex).terminalneworsplit,
 		},
-		cmdEdit: {
+		"edit": {
 			man: textapi.CommandManual{
 				Summary: "Opens the file at the given URI for editing on the current active " +
 					"window, replacing its contents. If no scheme is provided, file:// " +
@@ -312,13 +342,27 @@ var (
 				Synopsis: "[scheme:][//[userinfo@]host][/]filepath",
 			},
 			handler: (*ex).editFiles,
+			completer: func(
+				e *ex, ctx context.Context, cmd string, args []string,
+			) (iterator.Iterator[string], string, error) {
+				e.log(log.DebugLevel, "complete command: %s %v", cmd, args)
+				return e.filepathCompleter.Complete(ctx, args)
+			},
 		},
-		cmdCopyPath: {
+		"tabcopypath": {
 			man: textapi.CommandManual{
 				Summary:  "Copies the path of the file in focus.",
 				Synopsis: "[absolute]",
 			},
 			handler: (*ex).tabcopypath,
+			completer: func(
+				e *ex, ctx context.Context, cmd string, args []string,
+			) (iterator.Iterator[string], string, error) {
+				if len(args) <= 1 {
+					return iterator.FromSlice([]string{"absolute"}), "", nil
+				}
+				return iterator.FromSlice[string](nil), "", nil
+			},
 		},
 		"!": {
 			man: textapi.CommandManual{
@@ -348,22 +392,34 @@ var (
 			},
 			handler: (*ex).pasteFromClipboard,
 		},
-		cmdSetDefaultColors: {
+		"colordefault": {
 			man: textapi.CommandManual{
 				Summary: "Changes the default background and optionally foreground colors of " +
-					"the window in focus. The color can be a named color or an RGB value " +
+					"the content in focus. The color can be a named color or an RGB value " +
 					"in hexadecimal notation (i.e. #FFFFFF).",
 				Synopsis: "background [foreground]",
 			},
 			handler: (*ex).defaultcolors,
+			completer: func(e *ex, ctx context.Context, cmd string, args []string,
+			) (iterator.Iterator[string], string, error) {
+				var colorNames []string
+				for name := range tcell.ColorNames {
+					colorNames = append(colorNames, name)
+				}
+				return iterator.FromSlice(colorNames), "", nil
+			},
 		},
-		cmdReadFile: {
+		"readfile": {
 			man: textapi.CommandManual{
 				Summary: "Insert the contents of the passed file name below the cursor. Takes in " +
 					"a uri with a scheme as an argument. If no scheme is passed `file://` is assumed",
 				Synopsis: "[scheme:][//[userinfo@]host][/]filepath",
 			},
 			handler: (*ex).readfile,
+			completer: func(e *ex, ctx context.Context, cmd string, args []string,
+			) (iterator.Iterator[string], string, error) {
+				return e.completeReadFile(ctx, args)
+			},
 		},
 	}
 
@@ -372,11 +428,12 @@ var (
 			Summary: "Splits the current active window vertically or horizontally in two, " +
 				"changing the window focus to it. " +
 				"If no orientation is passed, the default split orientation is used. " +
-				fmt.Sprintf("Check %s for more details on how changing the "+
-					"default orientation works.", cmdChangeSplitOrientation),
+				"Check windowdefaultsplit for more details on how changing the " +
+				"default orientation works.",
 			Synopsis: "[right|left|up|down]",
 		},
-		handler: (*ex).windownew,
+		handler:   (*ex).windownew,
+		completer: completeWithArrows,
 	}
 
 	runShaderCmdManual = textapi.CommandManual{
@@ -386,3 +443,12 @@ var (
 		Synopsis: "name [duration] [fps]",
 	}
 )
+
+func completeWithArrows(e *ex,
+	ctx context.Context, cmd string, args []string,
+) (iterator.Iterator[string], string, error) {
+	if len(args) <= 1 {
+		return iterator.FromSlice([]string{"right", "left", "up", "down"}), "", nil
+	}
+	return iterator.FromSlice[string](nil), "", nil
+}
