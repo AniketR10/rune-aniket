@@ -143,7 +143,7 @@ func WithInitShader(
 }
 
 // WithShutdownShader configures the IDE to close with the
-// given Shader animation upon "quit" or "writeQuit".
+// given Shader animation upon "quit" or "writequit".
 func WithShutdownShader(
 	shaderFn func(term.Attributes) shader.Shader,
 	fps int, duration time.Duration,
@@ -241,7 +241,7 @@ func defaultOptions() options {
 	return options{
 		publishEvent:       tui.PublishEvent,
 		extensionRunner:    nopExtensions{},
-		locker:             nopLocker{},
+		locker:             new(sync.Mutex),
 		extensions:         make(map[string]Extension),
 		workspaceConfig:    ".iderc",
 		defaultWallpaper:   browser.NopWallpaper(),
@@ -274,13 +274,4 @@ func (n nopExtensionsRunner) Run(extensionID, path string, config config.Config)
 
 func (n nopExtensionsRunner) Close() error {
 	return nil
-}
-
-type nopLocker struct {
-}
-
-func (l nopLocker) Lock() {
-}
-
-func (l nopLocker) Unlock() {
 }
