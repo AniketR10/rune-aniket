@@ -2,7 +2,7 @@ GO=go
 CI ?= false
 GOTESTFLAGS ?= -race -timeout 120s
 GOTESTFLAGSNORACE = -timeout 120s
-GOFLAGS="-tags=ebitensinglethread -ldflags=-X main.Tag=$$(git describe --tags) -X main.Commit=$$(git rev-parse --short HEAD)"
+GOFLAGS=-ldflags="-X main.Tag=$$(git describe --tags) -X main.Commit=$$(git rev-parse --short HEAD)"
 UNAME := $(shell uname)
 
 BIN=bin
@@ -100,16 +100,16 @@ $(EXAMPLE_WASM_BLOB): $(WASM_EXAMPLE) $(LIBSRC) $(WASM_EXAMPLE_TARGET)
 	$(CGO_ENABLED) GOOS=js GOARCH=wasm $(GO) build -o $(EXAMPLE_WASM_BLOB) $(WASM_EXAMPLE)
 
 $(EXAMPLES_NON_WASM): $(EXAMPLESRC) $(LIBSRC) $(BIN)
-	@cd $(patsubst bin/example_%,examples/%,$@) && $(CGO_ENABLED) $(GO) build $(GOFLAGS) -o ../../$@
+	@cd $(patsubst bin/example_%,examples/%,$@) && $(CGO_ENABLED) $(GO) build -o ../../$@ $(GOFLAGS)
 
 $(EXECS): $(EXECSRC) $(LIBSRC) $(BIN)
-	@cd $(patsubst bin/%,cmd/%,$@) && $(CGO_ENABLED) $(GO) build $(GOFLAGS) -o ../../$@
+	@cd $(patsubst bin/%,cmd/%,$@) && $(CGO_ENABLED) $(GO) build -o ../../$@ $(GOFLAGS)
 
 make_release: CGO_ENABLED=CGO_ENABLED=1
 make_release:
 	@ mkdir -p $(TARGET)/$(TARGET_OS)_$(TARGET_ARCH)
 	@ cp $(RELEASE_FILES) $(TARGET)
-	@ $(CGO_ENABLED) GOARCH=$(TARGET_ARCH) $(TARGET_ARCH_FLAGS) GOOS=$(TARGET_OS) $(GO) build $(GOFLAGS) -o `pwd`/$(TARGET)/$(TARGET_OS)_$(TARGET_ARCH) ./cmd/...
+	@ $(CGO_ENABLED) GOARCH=$(TARGET_ARCH) $(TARGET_ARCH_FLAGS) GOOS=$(TARGET_OS) $(GO) build -o `pwd`/$(TARGET)/$(TARGET_OS)_$(TARGET_ARCH) $(GOFLAGS) ./cmd/...
 
 ifeq ($(UNAME), Linux)
 release: default
