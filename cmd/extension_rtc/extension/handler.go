@@ -118,7 +118,7 @@ func Grantee() (extension.Grantee, []extensionapi.Permission) {
 			return browserapi.FuncHandler(handler.Nop(component.Sync(new(sync.Mutex), device)), device.Close), nil
 		},
 		Command: textapi.CommandManual{
-			Name: "rtcGetUserMedia",
+			Name: "rtcgetusermedia",
 			Summary: "Opens up a new window with an ASCII-encoded feed of the user's default" +
 				" video input device. This is a prototype that will be evolved into WebRTC " +
 				"peer-to-peer calling system.",
@@ -144,7 +144,7 @@ func Grantee() (extension.Grantee, []extensionapi.Permission) {
 			return h, nil
 		},
 		Command: textapi.CommandManual{
-			Name: "rtcConvertImageToASCII",
+			Name: "rtcconvertimage",
 			Summary: "Converts a local JPEG image to an 130x70 ASCII encoded image and opens" +
 				" up a window to display it.",
 			Synopsis: "image",

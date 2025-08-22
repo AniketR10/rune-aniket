@@ -52,7 +52,7 @@ const (
 var (
 	defaultHistoryKey = term.KeyComb{Ch: 'p', Mod: term.ModCtrl}
 	cmdSearchFile     = textapi.CommandManual{
-		Name: "searchFile",
+		Name: "searchfile",
 		Summary: "Opens a new window to perform a fuzzy search for files in the workspace. " +
 			"Results are sorted by match score in descending order. " +
 			"Arrow keys and <ctrl-k>/<ctrl-j> scroll up and down and <enter> opens up the selected file in a new tab. " +

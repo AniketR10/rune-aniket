@@ -74,15 +74,13 @@ const (
 	defaultConnectTimeout       = 10 * time.Second
 	defaultDisconnectTimeout    = 300 * time.Millisecond
 	firstFileVersion            = 1
-	commandNextDiagnostic       = "lspNextDiagnostic"
-	commandPrevDiagnostic       = "lspPrevDiagnostic"
-	commandHover                = "lspHover"
-	commandGoToDef              = "lspGoToDefinition"
-	commandFormat               = "lspFormat"
-	commandOrganizeImports      = "lspOrganizeImports"
-	commandReferences           = "lspReferences"
-	commandAddWorkspace         = "lspAddWorkspaceFolder"
-	commandRemoveWorkspace      = "lspRemoveWorkspaceFolder"
+	commandNextDiagnostic       = "lspnext"
+	commandPrevDiagnostic       = "lspprev"
+	commandHover                = "lsphover"
+	commandGoToDef              = "lspgotodef"
+	commandFormat               = "lspformat"
+	commandOrganizeImports      = "lspimports"
+	commandReferences           = "lspref"
 	referencesWindowWidth       = 50
 	referencesWindowHeight      = 15
 	defaultSemanticTokensListID = "lsp_syntax_highlighting"
@@ -131,12 +129,6 @@ var (
 				"tiled windows, one for preview and another one for fuzzy search over the " +
 				"files that make use of the given symbol. Standard fuzzy search key bindings apply.",
 		},
-		/*{ disabled now that we manage workspaces separately.
-			Name: commandAddWorkspace,
-		},
-		{
-			Name: commandRemoveWorkspace,
-		},*/
 		{
 			Name:    commandOrganizeImports,
 			Summary: "Formats the imports section of the file as per the LSP server's formatting capabilities.",
@@ -1733,60 +1725,6 @@ func makeWorkspaceFolder(in string) protocol.WorkspaceFolder {
 	}
 }
 
-func (h *lspEditorHandler) handleChangedWorkspace(
-	uri workspaceapi.URI, added []string, removed []string,
-) error {
-	languageID := filepath.Ext(uri.Path())
-	srv, ok := h.getServer(languageID)
-	if !ok {
-		return errNoServer
-	}
-
-	/*cfg := caps.InnerServerCapabilities.Workspace.WorkspaceFolders
-	if !cfg.Supported {
-		h.m.Notify("LSP server does not support changing workspaces")
-		log.Tracef("lspEditorHandler.Server.DidChangeWorkspaceFolders(%#v): not supported", caps)
-		return
-	}*/
-
-	ctx := context.Background()
-	ctx, cancelFn := context.WithTimeout(ctx, h.rpcTimeout)
-	defer cancelFn()
-
-	var remove []protocol.WorkspaceFolder
-	for _, folder := range removed {
-		remove = append(remove, makeWorkspaceFolder(folder))
-	}
-
-	var add []protocol.WorkspaceFolder
-	for _, folder := range added {
-		add = append(add, makeWorkspaceFolder(folder))
-	}
-
-	req := protocol.DidChangeWorkspaceFoldersParams{
-		Event: protocol.WorkspaceFoldersChangeEvent{Added: add, Removed: remove},
-	}
-
-	log.Tracef("lspEditorHandler.Server.DidChangeWorkspaceFolders(%#v)", req)
-
-	err := srv.srv.DidChangeWorkspaceFolders(ctx, &req)
-	if err != nil {
-		err = fmt.Errorf("Server.DidChangeWorkspaceFolders(%s): %v", uri, err)
-		return err
-	}
-	return nil
-}
-
-func (h *lspEditorHandler) handleAddWorkspace(uri workspaceapi.URI, args []string) error {
-	log.Tracef("lspEditorHandler.handleAddWorkspace(%v)", args)
-	return h.handleChangedWorkspace(uri, args, nil)
-}
-
-func (h *lspEditorHandler) handleRemoveWorkspace(uri workspaceapi.URI, args []string) error {
-	log.Tracef("lspEditorHandler.handleRemoveWorkspace(%v)", args)
-	return h.handleChangedWorkspace(uri, nil, args)
-}
-
 func (h *lspEditorHandler) browseLocations(
 	win browserapi.Window, locs []protocol.Location,
 ) error {
@@ -2123,10 +2061,6 @@ func (h *lspEditorHandler) HandleCommand(
 		err = h.handleGoToDefinition(cmd.Cursor.Content, cmd.Resource, cmd.URI, cmd.Window)
 	case commandReferences:
 		err = h.handleReferences(cmd.Cursor.Content, cmd.Cursor.Window, cmd.Resource, cmd.URI, cmd.Window)
-	case commandAddWorkspace:
-		err = h.handleAddWorkspace(cmd.URI, cmd.Args)
-	case commandRemoveWorkspace:
-		err = h.handleRemoveWorkspace(cmd.URI, cmd.Args)
 	case commandFormat:
 		err = h.handleFormat(cmd.Resource, cmd.URI, false)
 	case commandOrganizeImports:

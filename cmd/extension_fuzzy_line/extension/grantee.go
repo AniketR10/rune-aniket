@@ -52,7 +52,7 @@ const (
 var (
 	defaultHistoryKey = term.KeyComb{Ch: '\\', Mod: term.ModCtrl}
 	cmdSearchText     = textapi.CommandManual{
-		Name: "searchText",
+		Name: "searchtext",
 		Summary: "Opens a new window to perform a fuzzy search for file contents in the workspace. " +
 			"Results are sorted by match score in descending order. " +
 			"Arrow keys and <ctrl-k>/<ctrl-j> scroll up and down and <enter> opens up the selected file in a new tab. " +
@@ -77,7 +77,7 @@ func Grantee() (extension.Grantee, []extensionapi.Permission) {
 	})
 }
 
-func readFiles(cwd workspaceapi.FileSystem, ctx context.Context) (
+func readfiles(cwd workspaceapi.FileSystem, ctx context.Context) (
 	iterator.Iterator[string], error,
 ) {
 	it, err := walkdir.ListFiles(ctx, cwd, ".")
@@ -122,5 +122,5 @@ func newHandler(
 		cmdStr = strings.Join(cmd.Args, " ")
 	}
 	return finder.New(ctx, grants, broker, invokeWindow,
-		c, historyKey, defaultHistoryDocumentID, cmdStr, readFiles, parseLine)
+		c, historyKey, defaultHistoryDocumentID, cmdStr, readfiles, parseLine)
 }

@@ -54,7 +54,7 @@ func Grantee() (extension.Grantee, []extensionapi.Permission) {
 }
 
 var colorPaletteCmd = textapi.CommandManual{
-	Name: "colorPalette",
+	Name: "colorpalette",
 	Summary: "Opens a new window and displays all the color codes available " +
 		"to customize the UI via configuration.",
 }

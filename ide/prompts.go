@@ -212,10 +212,10 @@ func (h *createWorkspaceHandler) OnSelect(
 		err = h.wm.addWorkspace(h.uri, "", nil, true, true, -1)
 		if err != nil {
 			_ = h.ex.Browser().Notify(notifications.LevelError, err.Error())
-			log.Errorf("addWorkspace %s: %v", h.uri, err)
+			log.Errorf("add workspace %s: %v", h.uri, err)
 			return
 		}
-		log.Tracef("addWorkspace %s: ok", h.uri)
+		log.Tracef("add workspace %s: ok", h.uri)
 	case noOpt:
 	}
 }

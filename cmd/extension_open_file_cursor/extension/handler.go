@@ -48,7 +48,7 @@ import (
 
 var (
 	commandOpenFileCursor = textapi.CommandManual{
-		Name: "openFileUnderCursor",
+		Name: "editfileoncursor",
 		Summary: "Edit the file whose name is under the cursor. If the file doesn't exist " +
 			"then this command opens a new file.",
 	}

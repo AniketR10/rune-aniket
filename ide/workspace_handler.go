@@ -58,10 +58,10 @@ import (
 )
 
 const (
-	cmdSwitchToWorkspace = "switchToWorkspace"
-	cmdCloseWorkspace    = "closeWorkspace"
-	cmdReloadWorkspace   = "reloadWorkspace"
-	cmdAddWorkspace      = "addWorkspace"
+	cmdSwitchToWorkspace = "workspacefocus"
+	cmdCloseWorkspace    = "workspaceclose"
+	cmdReloadWorkspace   = "workspacereload"
+	cmdAddWorkspace      = "workspacenew"
 	workspaceSlots       = 10
 )
 
@@ -991,7 +991,7 @@ func (h *workspaceManagerHandler) subscribeActiveWorkspaceCommands(ex *ex) (ret 
 		cmdSwitchToWorkspace: {
 			handler: (*workspaceManagerHandler).commandSwitchToWorkspace,
 			man: textapi.CommandManual{
-				Summary:  "Switches the current active workspace to the workspace at the given index.",
+				Summary:  "Switches the current active workspace to the workspace at the given position.",
 				Synopsis: "(1|2|3|4|5|6|7|8|9)",
 			},
 		},

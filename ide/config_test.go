@@ -121,8 +121,8 @@ command:
     bg: yellow
     flags: bold
   key_bindings:
-    f: searchFile
-    l: searchText
+    f: searchfile
+    l: searchtext
     <c-x>: closeDoors
     <c-x><c-p>: openAllDoors
     f<c-p>: openDoors small
@@ -471,8 +471,8 @@ func TestConfigSetting(t *testing.T) {
 	assert.Equal(t, tcell.ColorGreen, virtualEditorSelectionAttr.Bg)
 
 	wantMappings := map[handler.Sequence][][]string{
-		{First: term.KeyComb{Ch: 'f'}}:                    {{"searchFile"}},
-		{First: term.KeyComb{Ch: 'l'}}:                    {{"searchText"}},
+		{First: term.KeyComb{Ch: 'f'}}:                    {{"searchfile"}},
+		{First: term.KeyComb{Ch: 'l'}}:                    {{"searchtext"}},
 		{First: term.KeyComb{Ch: 'x', Mod: term.ModCtrl}}: {{"closeDoors"}},
 		{
 			First: term.KeyComb{Ch: 'x', Mod: term.ModCtrl},

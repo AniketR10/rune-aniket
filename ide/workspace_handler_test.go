@@ -325,7 +325,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 │                  │
 │            NORMAL│
 └──────────────────┘`},
-		{":edit /tmp/12345aZZ>ihello<yyp:reloadWorkspace>", // un-saved
+		{":edit /tmp/12345aZZ>ihello<yyp:workspacerelo>", // un-saved
 			`┌──────────────────┐
 │o 12345aZZ        │
 ├──────────────────┤
@@ -336,7 +336,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 │                  │
 │            NORMAL│
 └──────────────────┘`},
-		{":edit /tmp/12345aZZ>ihello<yyp:w>:reloadWorkspace>", // saved
+		{":edit /tmp/12345aZZ>ihello<yyp:w>:workspacerelo>", // saved
 			`┌──────────────────┐
 │o 12345aZZ        │
 ├──────────────────┤
@@ -347,7 +347,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 │                  │
 │            NORMAL│
 └──────────────────┘`},
-		{":edit memory\\:///12345aZZ>ihello<yyp:w>:reloadWorkspace>", // full uri
+		{":edit memory\\:///12345aZZ>ihello<yyp:w>:workspacerelo>", // full uri
 			`┌──────────────────┐
 │o 12345aZZ        │
 ├──────────────────┤
@@ -358,7 +358,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 │                  │
 │            NORMAL│
 └──────────────────┘`},
-		{":cwo>:aw memory\\:///tmp2>:edit 12345aZZ>:w>:cwo>:aw  memory\\:///tmp2>", // prompt
+		{":woc>:wonew memory\\:///tmp2>:edit 12345aZZ>:w>:woc>:wonew  memory\\:///tmp2>", // prompt
 			`┌──────────────────┐
 │                  │
 ├──────────────────┤
@@ -371,7 +371,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 └──────────────────┘`},
 		// prompt resets cache (use file scheme to avoid needing
 		// to use ':' to indicate memory scheme)
-		{":cwo>:aw memory\\:///tmp2>:edit 12345aZZ>:w>:cwo>:aw  memory\\:///tmp2>y",
+		{":woc>:wonew memory\\:///tmp2>:edit 12345aZZ>:w>:woc>:wonew  memory\\:///tmp2>y",
 			`┌──────────────────┐
 │o 12345aZZ        │
 ├──────────────────┤
@@ -382,7 +382,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 │                  │
 │            NORMAL│
 └──────────────────┘`},
-		{":cwo>:aw memory\\:///tmp2>edit 12345aZZ>:w>:cwo>:aw  memory\\:///tmp2>n:cwo>:aw  memory\\:///tmp2>", // prompt no: resets cache
+		{":woc>:wonew memory\\:///tmp2>edit 12345aZZ>:w>:woc>:wonew  memory\\:///tmp2>n:woc>:wonew  memory\\:///tmp2>", // prompt no: resets cache
 			`┌──────────────────┐
 │                  │
 ├──────────────────┤
@@ -393,7 +393,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 │                  │
 │                  │
 └──────────────────┘`},
-		{":swWo 3>",
+		{":wof 3>",
 			`┌──────────────────┐
 │                  │
 ├──────────────────┤
@@ -404,7 +404,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 ├──────────────────┤
 │1 1  3            │
 └──────────────────┘`},
-		{":cwo>",
+		{":woc>",
 			`┌──────────────────┐
 │                  │
 ├──────────────────┤
@@ -426,7 +426,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 │                  │
 │                  │
 └──────────────────┘`},
-		{":cwo>:cwo>",
+		{":woc>:woc>",
 			`┌──────────────────┐
 │workspace tab     │
 │is empty          │
@@ -437,7 +437,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 ├──────────────────┤
 │1                 │
 └──────────────────┘`},
-		{":swWo 100>",
+		{":wofo 100>",
 			`┌──────────────────┐
 │invalid           │
 │workspace:        │
@@ -448,7 +448,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 │                  │
 │                  │
 └──────────────────┘`},
-		{":addBlaBla>", // addWorkspace should work on a workspace, use next avail
+		{":addBlaBla>", // workspacenew should work on a workspace, use next avail
 			`┌──────────────────┐
 │                  │
 ├──────────────────┤
@@ -470,7 +470,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 ├──────────────────┤
 │1 1  10           │
 └──────────────────┘`},
-		{"2:aw>", // uses tmp dir as workspace in the absence of a uri
+		{"2:wonew>", // uses tmp dir as workspace in the absence of a uri
 			`┌──────────────────┐
 │                  │
 ├──────────────────┤
@@ -481,7 +481,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 ├──────────────────┤
 │1 1  2 2          │
 └──────────────────┘`},
-		{"2:swWo>",
+		{"2:wofo>",
 			`┌──────────────────┐
 │invalid           │
 │arguments.        │
@@ -492,7 +492,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 ├──────────────────┤
 │1 1  2            │
 └──────────────────┘`},
-		{":swWo 3>:addBlaBla>",
+		{":wofo 3>:addBlaBla>",
 			`┌──────────────────┐
 │                  │
 ├──────────────────┤
@@ -503,7 +503,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 ├──────────────────┤
 │1 1  3 3          │
 └──────────────────┘`},
-		{":swWo 4>:addWorkspace memory\\:///>", // can give path as arg to addWorkspace
+		{":wofo 4>:workspacenew memory\\:///>", // can give path as arg to workspacenew
 			`┌──────────────────┐
 │                  │
 ├──────────────────┤
@@ -514,7 +514,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 ├──────────────────┤
 │1 1  4 4          │
 └──────────────────┘`},
-		{":swWo 4>:addWorkspace memory\\:///tmp2>:edit memory\\:///tmp2/12>:reloadWorkspace>", // reloads non-primary workspace
+		{":wofo 4>:workspacenew memory\\:///tmp2>:edit memory\\:///tmp2/12>:workspacerelo>", // reloads non-primary workspace
 			`┌──────────────────┐
 │o 12              │
 ├──────────────────┤
@@ -737,7 +737,7 @@ func TestWorkspaceManagerClosePromptIntegration(t *testing.T) {
 		require.NoError(t, m.Close())
 	})
 
-	for _, cmd := range []string{"forceQuit!", "writeForceQuit!"} {
+	for _, cmd := range []string{"forcequit!", "writeforcequit!"} {
 		t.Run(fmt.Sprintf("does not prompt on %s", cmd), func(t *testing.T) {
 			dir, err := os.MkdirTemp("", "")
 			require.NoError(t, err)
@@ -958,7 +958,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 					&uri, newCfg(), runner, nil, nil, dir, nil, nopShutdownShaderConfig())
 
 				cases := []handlertest.SequenceTestCase{
-					{":edit 1234>ih3ll0\nw1rld <:write>:edit 4567>ihello\nworld <:write>:notificationsCloseAll>",
+					{":edit 1234>ih3ll0\nw1rld <:write>:edit 4567>ihello\nworld <:write>:notificationcloseall>",
 						`┌──────────────────┐
 │o 1234  o 4567    │
 ├──────────────────┤
@@ -1026,13 +1026,13 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 				require.NoError(t, m3.Close())
 			})
 
-			t.Run("position is restored on reloadWorkspace", func(t *testing.T) {
+			t.Run("position is restored on workspacereload", func(t *testing.T) {
 				dir, err := os.MkdirTemp("", "")
 				require.NoError(t, err)
 				m := newTestWorkspaceManagerHandlerWithDir(t, defaultConfigWithWrap(wrap), nil, dir, nopShutdownShaderConfig())
 
 				cases := []handlertest.SequenceTestCase{
-					{":edit A>ih3ll0\nw1rld <:write>:edit B>ihello\nworld <:write>:notificationsCloseAll>",
+					{":edit A>ih3ll0\nw1rld <:write>:edit B>ihello\nworld <:write>:notificationcloseall>",
 						`┌──────────────────┐
 │o A  o B          │
 ├──────────────────┤
@@ -1043,7 +1043,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 │                  │
 │            NORMAL│
 └──────────────────┘`},
-					{":reloadWorkspace>",
+					{":workspacerelo>",
 						`┌──────────────────┐
 │o A  o B          │
 ├──────────────────┤
@@ -1065,7 +1065,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 │▐                 │
 │            NORMAL│
 └──────────────────┘`},
-					{":reloadWorkspace>",
+					{":workspacerelo>",
 						`┌──────────────────┐
 │o A  o B          │
 ├──────────────────┤
@@ -1126,7 +1126,7 @@ func TestNoBar(t *testing.T) {
 │                  │
 │                  │
 └──────────────────┘`},
-		{":switchToWorkspace 2>",
+		{":workspacefocus 2>",
 			`┌──────────────────┐
 │                  │
 ├──────────────────┤
@@ -1155,7 +1155,7 @@ func TestSwitchToWorkspaceComplete(t *testing.T) {
 		nopShutdownShaderConfig())
 
 	cases := []handlertest.SequenceTestCase{
-		{":swWo ",
+		{":wofo ",
 			`┌──────────────────────────────────────┐
 │                                      │
 ├──────────────────────────────────────┤
@@ -1165,7 +1165,7 @@ func TestSwitchToWorkspaceComplete(t *testing.T) {
 │                                      │
 │                                      │
 ┌──────────────────────────────────────┐
-│switchToWorkspace ▐                   │
+│workspacefocus ▐                      │
 │1                                     │
 │2                                     │
 │3                                     │
@@ -1231,7 +1231,7 @@ func TestExternalCommands(t *testing.T) {
 │                            │
 │                            │
 └────────────────────────────┘`},
-			{fmt.Sprintf(":addWorkspace %s>:ramo w__", dir2), // new workspace
+			{fmt.Sprintf(":workspacenew %s>:ramo w__", dir2), // new workspace
 				`┌────────────────────────────┐
 │                            │
 ├────────────────────────────┤
@@ -1247,7 +1247,7 @@ func TestExternalCommands(t *testing.T) {
 │                            │
 │                            │
 └────────────────────────────┘`},
-			{":swWo 8>:ramo w__", // empty workspace
+			{":wofo 8>:ramo w__", // empty workspace
 				`┌────────────────────────────┐
 │                            │
 ├────────────────────────────┤
@@ -1400,7 +1400,7 @@ func TestWorkspaceManagerCreateWorkspace(t *testing.T) {
 	}
 
 	cases := []handlertest.SequenceTestCase{
-		{fmt.Sprintf(":addWorkspace file\\://%s>", tempDir),
+		{fmt.Sprintf(":workspacenew file\\://%s>", tempDir),
 			`┌────────────────────────────┐
 │                            │
 ├────────────────────────────┤
@@ -1442,7 +1442,7 @@ func TestWorkspaceManagerCreateWorkspace(t *testing.T) {
 ├────────────────────────────┤
 │1 1  2 2                    │
 └────────────────────────────┘`},
-		{fmt.Sprintf(":addWorkspace %s>", tempDir2), // not fully specified
+		{fmt.Sprintf(":workspacenew %s>", tempDir2), // not fully specified
 			`┌────────────────────────────┐
 │                            │
 ├────────────────────────────┤
@@ -1593,19 +1593,20 @@ func defaultCfg() ideConfig {
 			"show_manual_after": "1h",
 			"key":               "<c-\\\\>", // see handlertest.TestHandlerIsolated
 			"key_bindings": map[string]interface{}{
-				"1": "switchToWorkspace 1",
-				"2": "switchToWorkspace 2",
-				"3": "switchToWorkspace 3",
-				"4": "switchToWorkspace 4",
-				"5": "switchToWorkspace 5",
-				"6": "switchToWorkspace 6",
-				"7": "switchToWorkspace 7",
-				"8": "switchToWorkspace 8",
-				"9": "switchToWorkspace 9",
-				"0": "switchToWorkspace 10",
+				"1": "workspacefocus 1",
+				"2": "workspacefocus 2",
+				"3": "workspacefocus 3",
+				"4": "workspacefocus 4",
+				"5": "workspacefocus 5",
+				"6": "workspacefocus 6",
+				"7": "workspacefocus 7",
+				"8": "workspacefocus 8",
+				"9": "workspacefocus 9",
+				"0": "workspacefocus 10",
 			},
 			"aliases": map[string]interface{}{
-				"addBlaBla": "addWorkspace memory:///blabla",
+				"addBlaBla": "workspacenew memory:///blabla",
+				"w": "write!",
 			},
 		},
 		"workspace": map[string]interface{}{

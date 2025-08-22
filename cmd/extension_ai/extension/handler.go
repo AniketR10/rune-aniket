@@ -66,8 +66,8 @@ import (
 
 const (
 	commandQuery      = "?"
-	commandChat       = "assistantChat"
-	commandResetChat  = "assistantResetChat"
+	commandChat       = "aichat"
+	commandResetChat  = "airesetchat"
 	defaultRPCTimeout = 20 * time.Second
 	defaultChatName   = "default"
 )

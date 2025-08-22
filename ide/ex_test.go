@@ -293,7 +293,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 │AAAAAAAAAAAAAAAAAA│
 │AAAAAAAAAAAAAAAAAA│
 └──────────────────┘`},
-		{":cTab>",
+		{":tcl>",
 			`┌──────────────────┐
 │o a.go            │
 ├──────────────────┤
@@ -351,7 +351,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 	}
 	bh, b, err := constructor(texttest.NopEditor(),
 		text.WithCommandKey(testCommandKey),
-		text.WithCommandKeyBinding(term.KeyComb{Ch: '4'}, [][]string{{"closeWindow"}}),
+		text.WithCommandKeyBinding(term.KeyComb{Ch: '4'}, [][]string{{"windowclose"}}),
 		text.WithNotificationsConfig(notificationsConfig()),
 	)
 	require.NoError(t, err)
@@ -439,7 +439,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 │CCCCCCCCCCCCCCCCCC│
 │CCCCCCCCCCCCCCCCCC│
 └──────────────────┘`},
-		{":closeAllT>:edit o.go>bcde####",
+		{":tcall>:edit o.go>bcde####",
 			`┌──────────────────┐
 │o o.go            │
 ├──────────────────┤
@@ -691,7 +691,7 @@ func TestMultipleFilesStartup(t *testing.T) {
 │AAAAAAAAAAAAAAAAAA│
 │AAAAAAAAAAAAAAAAAA│
 └──────────────────┘`},
-		{"#:reloadFile>",
+		{"#:reloadfile>",
 			`┌──────────────────┐
 │o wi.go  o a.go   │
 ├──────────────────┤
@@ -754,7 +754,7 @@ func TestWriteExclamationNoQuit(t *testing.T) {
 
 func TestBrowserCloseLastWindow(t *testing.T) {
 	cases := []handlertest.SequenceTestCase{
-		{":closeWindow>",
+		{":windowclose>",
 			`┌──────────────────┐
 │cannot close      │
 │last tiled        │
@@ -910,11 +910,11 @@ func TestExKeySequence(t *testing.T) {
 			text.WithCommandSequenceBinding(handler.Sequence{
 				First: term.KeyComb{Ch: 'g'},
 				Last:  term.KeyComb{Ch: 'l'},
-			}, [][]string{{"nextTab"}}),
+			}, [][]string{{"tabnext"}}),
 			text.WithCommandSequenceBinding(handler.Sequence{
 				First: term.KeyComb{Ch: 'g'},
 				Last:  term.KeyComb{Ch: 'g'},
-			}, [][]string{{"closeAllTabs"}}),
+			}, [][]string{{"tabcloseall"}}),
 			text.WithSequencerTimeout(1 * time.Second),
 			text.WithCommandOverlayConfig(testCommandOverlayConfig()),
 		}
@@ -959,7 +959,7 @@ func TestExTabIntegration(t *testing.T) {
 │AAAAAAAAAAAAAAAAAA│
 │AAAAAAAAAAAAAAAAAA│
 └──────────────────┘`},
-		{":closeAllTabs>",
+		{":tabcloseall>",
 			`┌──────────────────┐
 │                  │
 ├──────────────────┤
@@ -1001,9 +1001,9 @@ func TestExTabIntegration(t *testing.T) {
 
 func TestExExit(t *testing.T) {
 	commands := []string{
-		"writeQuit",
-		"writeForceQuit!",
-		"forceQuit!",
+		"writequit",
+		"writeforcequit!",
+		"forcequit!",
 		"quit",
 	}
 
@@ -1081,11 +1081,11 @@ func (t testEx) Handle(ev term.Event) (bool, bool) {
 
 func defCommandKeyBindings() (opts []text.Option) {
 	opts = append(opts, text.WithCommandKeyBinding(
-		term.KeyComb{Mod: term.ModCtrl, Ch: 'w'}, [][]string{{"closeTab"}}))
+		term.KeyComb{Mod: term.ModCtrl, Ch: 'w'}, [][]string{{"tabclose"}}))
 	opts = append(opts, text.WithCommandKeyBinding(
-		term.KeyComb{Mod: term.ModCtrl, Ch: 'l'}, [][]string{{"nextTab"}}))
+		term.KeyComb{Mod: term.ModCtrl, Ch: 'l'}, [][]string{{"tabnext"}}))
 	opts = append(opts, text.WithCommandKeyBinding(
-		term.KeyComb{Mod: term.ModCtrl, Ch: 'h'}, [][]string{{"previousTab"}}))
+		term.KeyComb{Mod: term.ModCtrl, Ch: 'h'}, [][]string{{"tabprevious"}}))
 	return
 }
 
@@ -1144,7 +1144,7 @@ func newExForTestingClipboard(
 
 func TestNewWindow(t *testing.T) {
 	cases := []handlertest.SequenceTestCase{
-		{":newWindow>:changeSplitOrientation h>:newWindow>",
+		{":windownew>:windowdefaultsplit h>:windownew>",
 			`┌──────────────────┐
 │ changed split    │
 │ direction to     │
@@ -1155,7 +1155,7 @@ func TestNewWindow(t *testing.T) {
 │        ││        │
 │        ││        │
 └────────┘└────────┘`},
-		{":closeW>:closeW>aaaaaaa",
+		{":winclose>:winclose>aaaaaaa",
 			`┌──────────────────┐
 │ changed split    │
 │ direction to     │
@@ -1166,7 +1166,7 @@ func TestNewWindow(t *testing.T) {
 │                  │
 │                  │
 └──────────────────┘`},
-		{":notificationsCloseAll>",
+		{":noticloseall>",
 			`┌──────────────────┐
 │                  │
 ├──────────────────┤
@@ -1229,7 +1229,7 @@ func TestCommandHistory(t *testing.T) {
 
 func TestCloseOtherWindows(t *testing.T) {
 	cases := []handlertest.SequenceTestCase{
-		{":edit hello.go>:splitWindow>:splitWindow>:focusWindow left>:focusWindow left>",
+		{":edit hello.go>:windowsplit>:windowsplit>:windowfocus left>:windowfocus left>",
 			`┌──────────────────┐
 │o hello.go        │
 ┌────┐┌─────┐┌─────┤
@@ -1240,7 +1240,7 @@ func TestCloseOtherWindows(t *testing.T) {
 │AAAA││     ││     │
 │AAAA││     ││     │
 └────┘└─────┘└─────┘`},
-		{":closeOtherWindows>",
+		{":windowcloseall>",
 			`┌──────────────────┐
 │o hello.go        │
 ├──────────────────┤
@@ -1305,7 +1305,7 @@ func TestCommandAliases(t *testing.T) {
 		text.WithCommandAliases(map[string]text.CommandAlias{
 			"todo": text.CommandAlias{Commands: []string{"edit a.go", "edit wi.go"}},
 			"e":    text.CommandAlias{Commands: []string{"edit"}},
-			"bp":   text.CommandAlias{Commands: []string{"nextTab"}},
+			"bp":   text.CommandAlias{Commands: []string{"tabnext"}},
 		}),
 	}
 	b := newExForTesting(t, texttest.NopEditor(), opts...)
@@ -1328,7 +1328,7 @@ func TestIntegrationEphemeralTerminal(t *testing.T) {
 ││                ││
 └└────────────────┘┘`,
 		},
-		{":closeTab>",
+		{":tabclose>",
 			`┌──────────────────┐
 │                  │
 ├──────────────────┤
@@ -1352,7 +1352,7 @@ func TestIntegrationEphemeralTerminal(t *testing.T) {
 ││                ││
 └└────────────────┘┘`,
 		},
-		{":closeWindow>",
+		{":windowclose>",
 			`┌──────────────────┐
 │                  │
 ├──────────────────┤
@@ -1376,7 +1376,7 @@ func TestIntegrationEphemeralTerminal(t *testing.T) {
 ││                ││
 └└────────────────┘┘`,
 		},
-		{":closeOtherWindows>",
+		{":windowcloseall>",
 			`┌──────────────────┐
 │cannot close      │
 │all tiled         │
@@ -1428,7 +1428,7 @@ func TestIntegrationCompanionTerminal(t *testing.T) {
 ││                ││
 └└────────────────┘┘`,
 		},
-		{"<$:notificationsCloseAll>",
+		{"<$:noticloseall>",
 			`┌──────────────────┐
 │                  │
 ├──────────────────┤
@@ -1452,7 +1452,7 @@ func TestIntegrationCompanionTerminal(t *testing.T) {
 ││                ││
 └└────────────────┘┘`,
 		},
-		{"#:notificationsCloseAll>",
+		{"#:noticloseall>",
 			`┌──────────────────┐
 │                  │
 ├──────────────────┤
@@ -1481,11 +1481,11 @@ func TestIntegrationCompanionTerminal(t *testing.T) {
 	opts := []text.Option{
 		text.WithCommandKey(testCommandKey),
 		text.WithCommandKeyBinding(term.KeyComb{Mod: term.ModCtrl, Ch: 'h'},
-			[][]string{{"closeWindow"}}),
+			[][]string{{"windowclose"}}),
 		text.WithCommandKeyBinding(term.KeyComb{Mod: term.ModCtrl, Ch: 'l'},
-			[][]string{{"nextTab"}}),
+			[][]string{{"tabnext"}}),
 		text.WithCommandKeyBinding(term.KeyComb{Mod: term.ModCtrl, Ch: 'v'},
-			[][]string{{"closeTab"}}),
+			[][]string{{"tabclose"}}),
 		text.WithCommandOverlayConfig(testCommandOverlayConfig()),
 	}
 
@@ -1518,7 +1518,7 @@ func TestIntegrationCompanionTerminal(t *testing.T) {
 
 func TestFullScreen(t *testing.T) {
 	cases := []handlertest.SequenceTestCase{
-		{":splitWindow>:edit aaa>:edit bbb>:toggleFullscreen>",
+		{":windowsplit>:edit aaa>:edit bbb>:windowtogglemaximize>",
 			`┌──────────────────┐
 │o aaa  o bbb      │
 ├─┐┌───────────────┐
@@ -1530,7 +1530,7 @@ func TestFullScreen(t *testing.T) {
 │ ││AAAAAAAAAAAAAAA│
 └─┘└───────────────┘`,
 		},
-		{":toggleFullScreen>",
+		{":windowmax>",
 			`┌──────────────────┐
 │o aaa  o bbb      │
 ├────────┐┌────────┐
@@ -1569,7 +1569,7 @@ func TestFullScreen(t *testing.T) {
 
 func TestMoveWindowContent(t *testing.T) {
 	cases := []handlertest.SequenceTestCase{
-		{":splitWindow>:edit aaa>:moveWindowContent left>",
+		{":windowsplit>:edit aaa>:windowmove left>",
 			`┌──────────────────┐
 │o aaa             │
 ┌────────┐┌────────┤
@@ -1581,7 +1581,7 @@ func TestMoveWindowContent(t *testing.T) {
 │AAAAAAAA││        │
 └────────┘└────────┘`,
 		},
-		{":moveWindowContent right>",
+		{":windowmove right>",
 			`┌──────────────────┐
 │o aaa             │
 ├────────┐┌────────┐
@@ -1593,7 +1593,7 @@ func TestMoveWindowContent(t *testing.T) {
 │        ││AAAAAAAA│
 └────────┘└────────┘`,
 		},
-		{":splitWindow down>:focusWindow up>:moveWindowContent down>",
+		{":windowsplit down>:windowfocus up>:windowmove down>",
 			`┌──────────────────┐
 │o aaa             │
 ├────────┐┌────────┤
@@ -1605,7 +1605,7 @@ func TestMoveWindowContent(t *testing.T) {
 │        ││AAAAAAAA│
 └────────┘└────────┘`,
 		},
-		{":moveWindowContent up>",
+		{":windowmove up>",
 			`┌──────────────────┐
 │o aaa             │
 ├────────┐┌────────┐
@@ -1617,7 +1617,7 @@ func TestMoveWindowContent(t *testing.T) {
 │        ││        │
 └────────┘└────────┘`,
 		},
-		{":moveWindowContent left>",
+		{":windowmove left>",
 			`┌──────────────────┐
 │o aaa             │
 ┌────────┐┌────────┤
@@ -1656,7 +1656,7 @@ func TestMoveWindowContent(t *testing.T) {
 
 func TestResizeWindows(t *testing.T) {
 	cases := []handlertest.SequenceTestCase{
-		{":splitWindow>:edit aaa>:resizeWindow increase width>",
+		{":windowsplit>:edit aaa>:windowresize increase width>",
 			`┌──────────────────┐
 │o aaa             │
 ├───────┐┌─────────┐
@@ -1668,7 +1668,7 @@ func TestResizeWindows(t *testing.T) {
 │       ││AAAAAAAAA│
 └───────┘└─────────┘`,
 		},
-		{":splitWindow down>:resizeWindow min height>",
+		{":windowsplit down>:windowresize min height>",
 			`┌──────────────────┐
 │o aaa             │
 ├───────┐┌─────────┤
@@ -1680,7 +1680,7 @@ func TestResizeWindows(t *testing.T) {
 │       ││         │
 └───────┘└─────────┘`,
 		},
-		{":resizeWindow max height>",
+		{":windowresize max height>",
 			`┌──────────────────┐
 │o aaa             │
 ├───────┐┌─────────┤
@@ -1692,7 +1692,7 @@ func TestResizeWindows(t *testing.T) {
 │       ││         │
 └───────┘└─────────┘`,
 		},
-		{":resizeWindow max width>",
+		{":windowresize max width>",
 			`┌──────────────────┐
 │o aaa             │
 ├─┐┌───────────────┤
@@ -1704,7 +1704,7 @@ func TestResizeWindows(t *testing.T) {
 │ ││               │
 └─┘└───────────────┘`,
 		},
-		{":resizeWindow min width>",
+		{":windowresize min width>",
 			`┌──────────────────┐
 │o aaa             │
 ├───────────────┐┌─┤
@@ -1716,7 +1716,7 @@ func TestResizeWindows(t *testing.T) {
 │               ││ │
 └───────────────┘└─┘`,
 		},
-		{":resizeWindow reset>",
+		{":windowresize reset>",
 			`┌──────────────────┐
 │o aaa             │
 ├────────┐┌────────┤
@@ -1728,7 +1728,7 @@ func TestResizeWindows(t *testing.T) {
 │        ││        │
 └────────┘└────────┘`,
 		},
-		{":resizeWindow decrease height>:resizeWindow decrease width>",
+		{":windowresize decrease height>:windowresize decrease width>",
 			`┌──────────────────┐
 │o aaa             │
 ├─────────┐┌───────┤
@@ -1776,13 +1776,13 @@ func TestExposedRootNodeIssue(t *testing.T) {
 		text.WithCommandAliases(map[string]text.CommandAlias{
 			"boom": text.CommandAlias{
 				Commands: []string{
-					"newWindow",
-					"changeSplitOrientation h",
-					"newWindow",
-					"changeSplitOrientation v",
-					"newWindow",
-					"focusWindow left",
-					"focusWindow left",
+					"windownew",
+					"windowdefaultsplit h",
+					"windownew",
+					"windowdefaultsplit v",
+					"windownew",
+					"windowfocus left",
+					"windowfocus left",
 				},
 			},
 		}),
@@ -1882,10 +1882,10 @@ retalls
                     
 edi▐                
 edit                
-notificationsSendInf
-readFile            
-reloadFile!         
-notificationsSendWar`},
+readfile            
+reloadfile!         
+                    
+                    `},
 		{":edit dawo⬇✌re✌^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
 			`                    
                     
@@ -1924,7 +1924,7 @@ notificationsSendWar`},
 
 func TestRenameTab(t *testing.T) {
 	cases := []handlertest.SequenceTestCase{
-		{":edit hello.go>:renameTab 8berSucks>",
+		{":edit hello.go>:tabrename 8berSucks>",
 			`┌──────────────────┐
 │o 8berSucks       │
 ├──────────────────┤
@@ -2011,8 +2011,8 @@ func TestMultipleCommandArgsKeyBindings(t *testing.T) {
 		text.WithCommandKey(testCommandKey),
 		text.WithCommandKeyBinding(term.KeyComb{Mod: term.ModCtrl, Ch: 'v'},
 			[][]string{
-				{"splitWindow", "down"},
-				{"resizeWindow", "min", "height"},
+				{"windowsplit", "down"},
+				{"windowresize", "min", "height"},
 			}),
 		text.WithCommandOverlayConfig(testCommandOverlayConfig()),
 	}
@@ -2046,7 +2046,7 @@ func TestTerminalOnFocus(t *testing.T) {
 		}
 		t.Cleanup(func() { _ = ex.Close() })
 
-		ex.newTerminalTab("echo bla")
+		ex.terminalnewtab("echo bla")
 
 		require.Len(t, tvte.onFocusChange, 2)
 		assert.False(t, tvte.onFocusChange[0])
@@ -2058,17 +2058,17 @@ func TestTerminalOnFocus(t *testing.T) {
 		assert.False(t, tvte.onFocusChange[2])
 
 		// switch back to terminal tab, same window
-		ex.previousTab()
+		ex.tabprevious()
 		require.Len(t, tvte.onFocusChange, 4)
 		assert.True(t, tvte.onFocusChange[3])
 
 		// new window, tab still in screen but not focused
-		ex.newWindow()
+		ex.windownew()
 		require.Len(t, tvte.onFocusChange, 5)
 		assert.False(t, tvte.onFocusChange[4])
 
 		// focus back to tab window
-		ex.focusWindow("left")
+		ex.windowfocus("left")
 		require.Len(t, tvte.onFocusChange, 6)
 		assert.True(t, tvte.onFocusChange[5])
 
@@ -2082,7 +2082,7 @@ func TestTerminalOnFocus(t *testing.T) {
 		require.Len(t, tvte.onFocusChange, 8)
 		assert.True(t, tvte.onFocusChange[7])
 
-		ex.closeTab()
+		ex.tabclose()
 		require.Len(t, tvte.onFocusChange, 9)
 		assert.False(t, tvte.onFocusChange[8])
 	})
@@ -2118,7 +2118,7 @@ func TestTerminalOnFocus(t *testing.T) {
 		assert.True(t, tvte.onFocusChange[1])
 
 		// switching from floating to other window should trigger on focus change
-		ex.focusWindow("left")
+		ex.windowfocus("left")
 		require.Len(t, tvte.onFocusChange, 3)
 		assert.False(t, tvte.onFocusChange[2])
 
@@ -2168,7 +2168,7 @@ func TestTerminalOnFocus(t *testing.T) {
 		assert.True(t, tvte.onFocusChange[1])
 
 		// switching from floating to other window should trigger on focus change
-		ex.focusWindow("left")
+		ex.windowfocus("left")
 		require.Len(t, tvte.onFocusChange, 3)
 		assert.False(t, tvte.onFocusChange[2])
 
@@ -2188,7 +2188,7 @@ func TestTerminalOnFocus(t *testing.T) {
 		assert.True(t, tvte.onFocusChange[5])
 
 		// ephemeral close should trigger another focus event
-		ex.nextTab()
+		ex.tabnext()
 		require.Len(t, tvte.onFocusChange, 7)
 		assert.False(t, tvte.onFocusChange[6])
 	})
@@ -2213,7 +2213,7 @@ func TestSwitchToTab(t *testing.T) {
 │AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
 └────────────────────────────┘`},
 
-		{":switchToTab ",
+		{":tabfocus ",
 			`┌────────────────────────────┐
 │o hello.go  o world.go      │
 ├────────────────────────────┤
@@ -2222,7 +2222,7 @@ func TestSwitchToTab(t *testing.T) {
 │AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
 │AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
 ┌────────────────────────────┐
-│switchToTab ▐               │
+│tabfocus ▐                  │
 │1 hello.go                  │
 │2 world.go                  │
 └────────────────────────────┘
@@ -2293,7 +2293,7 @@ func TestSwitchToTab(t *testing.T) {
 │bbbbbbbbbbbbbbbbbbbbbbbbbbbb│
 │bbbbbbbbbbbbbbbbbbbbbbbbbbbb│
 └────────────────────────────┘`},
-		{":switchToTab 3>",
+		{":tabfocus 3>",
 			`┌────────────────────────────┐
 │o hello.go  o world.go      │
 ├────────────────────────────┤
@@ -2309,7 +2309,7 @@ func TestSwitchToTab(t *testing.T) {
 │bbbbbbbbbbbbbbbbbbbbbbbbbbbb│
 │bbbbbbbbbbbbbbbbbbbbbbbbbbbb│
 └────────────────────────────┘`},
-		{":switchToTab 0>",
+		{":tabfocus 0>",
 			`┌────────────────────────────┐
 │the first tab is 1          │
 └────────────────────────────┘
@@ -2386,12 +2386,12 @@ func TestCopyPath(t *testing.T) {
 	}{
 		{
 			name:   "relative",
-			cmd:    ":copyPath",
+			cmd:    ":tabcopypath",
 			expect: func() string { return "hello.go" },
 		},
 		{
 			name: "absolute",
-			cmd:  ":copyPath absolute",
+			cmd:  ":tabcopypath absolute",
 			expect: func() string {
 				absPath, _ := workspaceapi.ExpandPath(
 					"hello.go", user.Current, os.Getwd)
@@ -2460,7 +2460,7 @@ func testCopyToClipboard(
 │AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
 │AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
 └────────────────────────────┘`},
-		{":clipboardPaste>",
+		{":clipboardpaste>",
 			`┌────────────────────────────┐
 │nothing to paste            │
 └────────────────────────────┘
@@ -2476,7 +2476,7 @@ func testCopyToClipboard(
 │AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
 │AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
 └────────────────────────────┘`},
-		{":notificationsCloseAll>:clipboardCopy>",
+		{":noticloseall>:clipboardcopy>",
 			`┌────────────────────────────┐
 │copied to clipboard         │
 └────────────────────────────┘
@@ -2492,7 +2492,7 @@ func testCopyToClipboard(
 │AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
 │AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
 └────────────────────────────┘`},
-		{":notificationsCloseAll>:clipboardPaste>",
+		{":noticloseall>:clipboardpaste>",
 			`┌────────────────────────────┐
 │o hello.go                  │
 ├────────────────────────────┤

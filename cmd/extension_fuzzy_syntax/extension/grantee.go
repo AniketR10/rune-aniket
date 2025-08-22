@@ -47,19 +47,19 @@ import (
 
 var (
 	cmdSearchTypes = textapi.CommandManual{
-		Name:    "searchSyntaxTypes",
+		Name:    "searchtypes",
 		Summary: "Fuzzy search 'definition.type' symbols in the workspace's AST, using the detected programming language's default AST queries.",
 	}
 	cmdSearchVariables = textapi.CommandManual{
-		Name:    "searchSyntaxVariables",
+		Name:    "searchvar",
 		Summary: "Fuzzy search 'definition.var' symbols in the workspace's AST, using the detected programming language's default AST queries.",
 	}
 	cmdSearchFunctions = textapi.CommandManual{
-		Name:    "searchSyntaxFunctions",
+		Name:    "searchfunc",
 		Summary: "Fuzzy search 'definition.function' symbols in the workspace's AST, using the detected programming language's default AST queries.",
 	}
 	cmdSearchSyntax = textapi.CommandManual{
-		Name:     "searchSyntax",
+		Name:     "searchsyntax",
 		Summary:  "Fuzzy search custom symbols in the workspace's AST, using the given query. Check tree-sitter's manual for more details https://tree-sitter.github.io/tree-sitter/using-parsers#query-syntax",
 		Synopsis: "query",
 	}

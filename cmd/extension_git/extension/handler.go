@@ -60,9 +60,9 @@ import (
 
 const (
 	defaultGitDiffListID = "git_diff"
-	commandNextChange    = "gitNextChange"
-	commandPrevChange    = "gitPrevChange"
-	commandCopyRemoteURL = "gitCopyRemoteURL"
+	commandNextChange    = "gitnextchange"
+	commandPrevChange    = "gitprevchange"
+	commandCopyRemoteURL = "gitcopyremoteurl"
 )
 
 var (

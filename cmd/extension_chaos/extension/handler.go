@@ -47,9 +47,9 @@ import (
 )
 
 const (
-	commandChaosHandler              = "chaosHandler"
-	commandChaosUpdateEventLatency   = "chaosUpdateEventLatency"
-	commandChaosUpdateCommandLatency = "chaosUpdateCommandLatency"
+	commandChaosHandler              = "chaoshandler"
+	commandChaosUpdateEventLatency   = "chaoseventlatency"
+	commandChaosUpdateCommandLatency = "chaoscommandlatency"
 	copy                             = `
               . . .                         
               \|/                          

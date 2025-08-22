@@ -260,7 +260,7 @@ extensions:
     path: /usr/local/bin/extension_fuzzy_syntax
     config: {}
   # This extension adds a fuzzy file search component to the editor. Open
-  # via searchFile command.
+  # via searchfile command.
   fuzzy_file:
     path: /usr/local/bin/extension_fuzzy_file
     config:
@@ -293,7 +293,7 @@ extensions:
         flags:
           - bold
   # This extension adds a fuzzy file line search component to the editor. Open
-  # via searchText command.
+  # via searchtext command.
   fuzzy_line:
     path: /usr/local/bin/extension_fuzzy_line
     config:
@@ -415,60 +415,59 @@ command:
   aliases:
     # aliases can be used to disambiguate commands from others,
     # creating shortcuts.
-    ref: lspReferences
+    ref: lspref
+    w: write
     e:
       command: edit
       completer: filepath
     config: edit ~/.sixrc
     # You can also add combinations of commands to be run
     # as a single command.
-    splitWindowTerminal:
-      - splitWindow
-      - newTerminalTab
-    layout:
-      - splitWindowTerminal
-      - focusWindow left
-      - searchFile
+    terminalsplit:
+      - windowsplit
+      - terminalnewtab
+    windowlayout:
+      - windowsplitterminal
+      - windowfocus left
+      - searchfile
     # echo is a powerful command that allows you to programmatically inject
     # keyboard input to the event loop. For example, the following alias
     # utilizes the power of echo to echo the last sequence again.
     # The {wait} instruction can be used to wait for the command prompt
     # search list completion to finish.
-    echoLast: echo :echo<space>{wait}<tab><enter>
+    echolast: echo :echo<space>{wait}<tab><enter>
   # Configure bindings from key combinations to commands.
   key_bindings:
-    <c-w>: closeTab
-    <c-l>: nextTab
-    <c-h>: previousTab
-    <c-x><c-v>: clipboardPaste
-    <c-x><c-c>: clipboardCopy
-    <c-x><c-h>: focusWindow left
-    <c-x><c-l>: focusWindow right
-    <c-x><c-j>: focusWindow up
-    <c-x><c-k>: focusWindow down
-    <c-x><c-w>: closeWindow
-    <c-x>h: changeSplitOrientation h
-    <c-x>v: changeSplitOrientation v
-    <c-j>: lspNextDiagnostic
-    <c-k>: lspPrevDiagnostic
-    <c-f>: toggleFullscreen
-    <c-t>: lspHover
-    <c-g>: lspGoToDefinition
-    <c-b>: lspFormat
-    <c-p>: searchFile
-    <c-\\>: searchText
-    # Aliases can also be mapped to key combinations
-    <c-x><enter>: splitWindowTerminal
-    gf: openFileUnderCursor
-    <c-x>1: switchToWorkspace 1
-    <c-x>2: switchToWorkspace 2
-    <c-x>3: switchToWorkspace 3
-    <c-x>4: switchToWorkspace 4
-    <c-x>5: switchToWorkspace 5
-    <c-x>6: switchToWorkspace 6
-    <c-x>7: switchToWorkspace 7
-    <c-x>8: switchToWorkspace 8
-    <c-x>9: switchToWorkspace 9
+    <c-w>: tabclose
+    <c-l>: tabnext
+    <c-h>: tabprevious
+    <c-x><c-v>: clipboardpaste
+    <c-x><c-c>: clipboardcopy
+    <c-x><c-h>: windowfocus left
+    <c-x><c-l>: windowfocus right
+    <c-x><c-j>: windowfocus up
+    <c-x><c-k>: windowfocus down
+    <c-x><c-w>: windowClose
+    <c-x>h: windowdefaultsplit h
+    <c-x>v: windowdefaultsplit v
+    <c-j>: lspnext
+    <c-k>: lspprev
+    <c-f>: windowtogglemaximize
+    <c-t>: lsphover
+    <c-g>: lspgotodef
+    <c-b>: lspformat
+    <c-p>: searchfile
+    <c-\\>: searchtext
+    gf: editfileoncursor
+    <c-x>1: workspacefocus 1
+    <c-x>2: workspacefocus 2
+    <c-x>3: workspacefocus 3
+    <c-x>4: workspacefocus 4
+    <c-x>5: workspacefocus 5
+    <c-x>6: workspacefocus 6
+    <c-x>7: workspacefocus 7
+    <c-x>8: workspacefocus 8
+    <c-x>9: workspacefocus 9
   # Colors
   element_attr:
     fg: *default

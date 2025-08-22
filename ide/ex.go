@@ -211,7 +211,7 @@ func (e *ex) subscribeCommands() error {
 func (e *ex) completeReadFile(
 	ctx context.Context, args []string,
 ) (iterator.Iterator[string], string, error) {
-	// `:readFile` auto-completion works the same as the `:edit` command.
+	// `:readfile` auto-completion works the same as the `:edit` command.
 	return e.filepathCompleter.Complete(ctx, args)
 }
 
@@ -370,7 +370,7 @@ func (e *ex) moveFocusCursor(line int) error {
 	return e.comp.SetCursor(h, term.Coordinates{Y: line})
 }
 
-func (e *ex) renameTab(args ...string) error {
+func (e *ex) tabrename(args ...string) error {
 	if len(args) == 0 {
 		return errors.New("expected at least one argument with new tab name")
 	}
@@ -394,7 +394,7 @@ func (e *ex) renameTab(args ...string) error {
 	return e.Browser().SetTabName(t.URI(), args[0], attrs)
 }
 
-func (e *ex) previousTab(args ...string) error {
+func (e *ex) tabprevious(args ...string) error {
 	b := e.comp.Browser()
 	if e.invokeWindow() == e.companionTerminalWin {
 		return e.toggleCompanionTerminal()
@@ -403,7 +403,7 @@ func (e *ex) previousTab(args ...string) error {
 	return nil
 }
 
-func (e *ex) nextTab(args ...string) error {
+func (e *ex) tabnext(args ...string) error {
 	b := e.comp.Browser()
 	if e.invokeWindow() == e.companionTerminalWin {
 		return e.toggleCompanionTerminal()
@@ -412,7 +412,7 @@ func (e *ex) nextTab(args ...string) error {
 	return nil
 }
 
-func (e *ex) switchToTab(args ...string) error {
+func (e *ex) tabfocus(args ...string) error {
 	if len(args) < 1 {
 		return errInvalidTab
 	}
@@ -429,7 +429,7 @@ func (e *ex) switchToTab(args ...string) error {
 	return nil
 }
 
-func (e *ex) closeTab(args ...string) error {
+func (e *ex) tabclose(args ...string) error {
 	b := e.comp.Browser()
 	win := e.invokeWindow()
 	if win == e.companionTerminalWin {
@@ -440,14 +440,14 @@ func (e *ex) closeTab(args ...string) error {
 	return nil
 }
 
-func (e *ex) closeAllTabs(args ...string) error {
+func (e *ex) tabcloseall(args ...string) error {
 	b := e.comp.Browser()
 	// on focus dispatch to vte.Handler via Close
 	b.RemoveAllTabs()
 	return nil
 }
 
-func (e *ex) closeInactiveTabs(args ...string) error {
+func (e *ex) tabcloseinactive(args ...string) error {
 	b := e.comp.Browser()
 	if removed := b.RemoveInactiveTabs(); !removed {
 		return errors.New("no inactive tabs left")
@@ -465,7 +465,7 @@ func (e *ex) closeFocusWindow(args ...string) error {
 	return win.Close()
 }
 
-func (e *ex) closeOtherWindows(args ...string) error {
+func (e *ex) windowcloseall(args ...string) error {
 	return e.comp.Browser().CloseOtherWindows(e.invokeWindow())
 }
 
@@ -485,7 +485,7 @@ func (e *ex) forceFlush(args ...string) error {
 	return e.comp.Flush(e.invokeWindow())
 }
 
-func (e *ex) forceQuit(args ...string) error {
+func (e *ex) forcequit(args ...string) error {
 	e.forceExit = true
 	e.exit = true
 	return nil
@@ -583,7 +583,7 @@ func (e *ex) editFiles(args ...string) error {
 	return nil
 }
 
-func (e *ex) copyPath(args ...string) error {
+func (e *ex) tabcopypath(args ...string) error {
 	absolute := len(args) > 0 && args[0] == "absolute"
 	t, ok := e.comp.FocusTab()
 	if !ok {
@@ -612,7 +612,7 @@ func (e *ex) copyPath(args ...string) error {
 	return nil
 }
 
-func (e *ex) reloadFile(args ...string) error {
+func (e *ex) reloadfile(args ...string) error {
 	b := e.comp.Browser()
 	focus := e.invokeWindow()
 	uri, _, ok := e.handlerInFocus()
@@ -641,7 +641,7 @@ func (e *ex) splitDirectionChange(args ...string) error {
 	return nil
 }
 
-func (e *ex) newWindowHandler(h browserapi.Handler, orientation browserapi.Orientation) {
+func (e *ex) windownewHandler(h browserapi.Handler, orientation browserapi.Orientation) {
 	eb := e.comp.Browser()
 	win := e.invokeWindow()
 	eb.Split(orientation, win, h)
@@ -658,7 +658,7 @@ func (e *ex) invokeWindow() browser.Window {
 	return ret
 }
 
-func (e *ex) focusWindow(args ...string) error {
+func (e *ex) windowfocus(args ...string) error {
 	if len(args) == 0 {
 		return errors.New("command expects at least one argument")
 	}
@@ -722,7 +722,7 @@ func (e *ex) moveWindow(args ...string) error {
 	return nil
 }
 
-func (e *ex) resizeWindow(args ...string) error {
+func (e *ex) windowresize(args ...string) error {
 	if (len(args) == 1 && args[0] != "reset") || len(args) == 0 {
 		return errors.New("invalid arguments")
 	}
@@ -809,7 +809,7 @@ func (e *ex) sendNotificationError(args ...string) error {
 	return e.comp.Notify(notifications.LevelError, strings.Join(args, " "))
 }
 
-func (e *ex) toggleFullscreen(args ...string) error {
+func (e *ex) windowtogglemaximize(args ...string) error {
 	if e.fullscreenID != 0 {
 		e.comp.Browser().ResetWindowSize()
 		e.fullscreenID = 0
@@ -878,7 +878,7 @@ func (e *ex) copyToClipboard(args ...string) error {
 	return nil
 }
 
-func (e *ex) setDefaultColors(args ...string) error {
+func (e *ex) defaultcolors(args ...string) error {
 	if len(args) == 0 {
 		return errors.New("command expects at least one argument 'background'")
 	}
@@ -907,7 +907,7 @@ func (e *ex) setDefaultColors(args ...string) error {
 	return errors.New("cannot change colors of this window")
 }
 
-func (e *ex) readFile(args ...string) error {
+func (e *ex) readfile(args ...string) error {
 	if len(args) != 1 {
 		return errors.New("expected one file name")
 	}
@@ -946,7 +946,7 @@ func (e *ex) executePlugin(args ...string) error {
 		Alignment: component.SpanAlignmentCentered,
 	}
 	// there can be multiple floating windows open
-	// so instead of matching windows on closeTab,
+	// so instead of matching windows on tabclose,
 	// we set a handler that closes the window if the handler
 	// is closed.
 	ph := &pluginAdapter{pluginHandler: h}
@@ -1006,7 +1006,7 @@ func (e *ex) toggleCompanionTerminal() error {
 	return nil
 }
 
-func (e *ex) newTerminalTab(args ...string) error {
+func (e *ex) terminalnewtab(args ...string) error {
 	var initialCmd string
 	if len(args) > 0 {
 		initialCmd = args[0]
@@ -1039,7 +1039,7 @@ func (e *ex) newTerminalTab(args ...string) error {
 	return nil
 }
 
-func (e *ex) newTerminal(args ...string) error {
+func (e *ex) terminalnew(args ...string) error {
 	var initialCmd string
 	if len(args) > 0 {
 		initialCmd = args[0]
@@ -1058,7 +1058,7 @@ func (e *ex) newTerminal(args ...string) error {
 	return nil
 }
 
-func (e *ex) newTerminalOrSplit(args ...string) error {
+func (e *ex) terminalneworsplit(args ...string) error {
 	var initialCmd string
 	if len(args) > 0 {
 		initialCmd = args[0]
@@ -1087,7 +1087,7 @@ func (e *ex) panic(args ...string) error {
 	panic("this could be a panic")
 }
 
-func (e *ex) newWindow(args ...string) error {
+func (e *ex) windownew(args ...string) error {
 	orientation := browserapi.OrientationDefault
 	if len(args) != 0 {
 		switch args[0] {
@@ -1103,7 +1103,7 @@ func (e *ex) newWindow(args ...string) error {
 			return fmt.Errorf("invalid orientation argument %q", args[0])
 		}
 	}
-	e.newWindowHandler(nil, orientation)
+	e.windownewHandler(nil, orientation)
 	return nil
 }
 
@@ -1351,7 +1351,7 @@ func (e *ex) Handle(ev term.Event) (exit, handled bool) {
 		_, handled = e.handleEvent(ev)
 		currFocus, _ := e.comp.Focus()
 		if e.fullscreenID != 0 && currFocus.WindowID() != e.fullscreenID {
-			_ = e.toggleFullscreen()
+			_ = e.windowtogglemaximize()
 		}
 	}
 	return e.exit, handled
