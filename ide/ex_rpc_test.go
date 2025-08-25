@@ -115,6 +115,7 @@ func (h *safeHandler) Close() error {
 func newTestRPCBrowser(t *testing.T,
 	destructor *func(),
 	clip clipboard.Register,
+	otherOpts ...text.Option,
 ) browserConstructor {
 	return func(ed text.Editor, opts ...text.Option) (
 		tui.Handler, browser.Browser, error,
@@ -126,6 +127,7 @@ func newTestRPCBrowser(t *testing.T,
 			[][]string{{"tabnext"}}))
 		opts = append(opts, text.WithCommandKeyBinding(term.KeyComb{Ch: 'h', Mod: term.ModCtrl},
 			[][]string{{"tabprevious"}}))
+		opts = append(opts, otherOpts...)
 		ex := new(ex)
 		ex.syncCommandPrompt = true
 		err := ex.init(ed, &testLoader{}, document.NewInMemoryService(),
@@ -174,7 +176,10 @@ func TestIntegrationRPCBrowserDraw(t *testing.T) {
 func TestIntegrationCopyToClipboard(t *testing.T) {
 	var destructor func()
 	clip := clipboard.NewInMemory()
-	constructor := newTestRPCBrowser(t, &destructor, clip)
+	constructor := newTestRPCBrowser(t, &destructor, clip,
+		text.WithCommandKeyBinding(
+			term.KeyComb{Ch: 'h', Mod: term.ModCtrl}, [][]string{{cmdClipboardPaste}}),
+	)
 	testCopyToClipboard(t, clip, constructor)
 	destructor()
 }

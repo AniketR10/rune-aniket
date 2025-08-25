@@ -1116,10 +1116,12 @@ func newExForTestingWithWorkspace(
 ) testEx {
 	ex := new(ex)
 	ex.syncCommandPrompt = true
-	opts = append(opts, text.WithCommandOverlayConfig(testCommandOverlayConfig()))
-	opts = append(opts, defCommandKeyBindings()...)
+	// user opts override default test opts
+	finalOpts := defCommandKeyBindings()
+	finalOpts = append(finalOpts, text.WithCommandOverlayConfig(testCommandOverlayConfig()))
+	finalOpts = append(finalOpts, opts...)
 	require.NoError(t, ex.init(ed, workspace, document.NewInMemoryService(),
-		emulatorCfg, publishEvent, clip, opts...))
+		emulatorCfg, publishEvent, clip, finalOpts...))
 	ex.subscribeCommands()
 	ex.newEmulatorHandler = func(initialCmd string, cfg vte.Config) (vteHandler, error) {
 		return newTestVteWithConfig(initialCmd, cfg), nil
@@ -2508,10 +2510,28 @@ func testCopyToClipboard(
 │DDDDDDDDDDDDDDDDDDDDDDDDDDDD│
 │DDDDDDDDDDDDDDDDDDDDDDDDDDDD│
 └────────────────────────────┘`},
+		{":####",
+			`┌────────────────────────────┐
+│o hello.go                  │
+├────────────────────────────┤
+│DDDDDDDDDDDDDDDDDDDDDDDDDDDD│
+│DDDDDDDDDDDDDDDDDDDDDDDDDDDD│
+│DDDDDDDDDDDDDDDDDDDDDDDDDDDD│
+│DDDDDDDDDDDDDDDDDDDDDDDDDDDD│
+┌────────────────────────────┐
+│AAAA▐                       │
+│                            │
+│                            │
+└────────────────────────────┘
+│DDDDDDDDDDDDDDDDDDDDDDDDDDDD│
+│DDDDDDDDDDDDDDDDDDDDDDDDDDDD│
+└────────────────────────────┘`},
 	}
 
 	opts := []text.Option{
 		text.WithCommandKey(testCommandKey),
+		text.WithCommandKeyBinding(term.KeyComb{Mod: term.ModCtrl, Ch: 'h'},
+			[][]string{{cmdClipboardPaste}}),
 	}
 	bh, _, err := constructor(texttest.NopEditor(), opts...)
 	require.NoError(t, err)

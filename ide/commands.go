@@ -41,6 +41,7 @@ const (
 	cmdMoveWindow             = "windowmove"
 	cmdResizeWindow           = "windowresize"
 	cmdCopyPath               = "tabcopypath"
+	cmdClipboardPaste         = "clipboardpaste"
 )
 
 type commandAll struct {
@@ -341,7 +342,7 @@ var (
 			},
 			handler: (*ex).copyToClipboard,
 		},
-		"clipboardpaste": {
+		cmdClipboardPaste: {
 			man: textapi.CommandManual{
 				Summary: "Paste the last text copied into the configured clipboard. ",
 			},
