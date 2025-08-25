@@ -406,13 +406,13 @@ func (s *ClientStream[T]) scheduleDrawRequest(ctx context.Context, reqIsTick boo
 }
 
 func (s *ClientStream[T]) processDraw(resp *DrawStreamResponse) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	payload, _ := term.PayloadFromContext(s.req.ctx)
 
 	//nolint:errcheck
 	defer s.publisher(term.Event{Type: term.EventInterrupt, Raw: payload})
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
 
 	s.resp.DrawStreamResponse = resp
 
