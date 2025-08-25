@@ -475,8 +475,14 @@ func (h *fuzzyFinderHandler) getListConfig(c config.Config) search.ListConfig {
 	}
 
 	cfg := search.ListConfig{
-		Algo:          algo,
-		Interrupter:   h.p,
+		Algo: algo,
+		Interrupter: term.FuncInterrupter(func(ctx context.Context) error {
+			err := h.p.Interrupt(ctx)
+			if err != nil {
+				log.Errorf("interrupt: %v", err)
+			}
+			return err
+		}),
 		CaseSensitive: caseSensitive,
 	}
 

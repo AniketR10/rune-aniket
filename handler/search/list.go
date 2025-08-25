@@ -600,7 +600,7 @@ func (l *List) handleSearch(
 	sortMatchesList(l.cfg.bottomSearchBar, tempList)
 
 	l.mu.Lock()
-	defer l.cfg.interrupter.Interrupt(ctx) //nolint:errcheck
+	defer l.cfg.interrupter.Interrupt(context.Background()) //nolint:errcheck
 
 	// NOTE: there's a race condition to start pushing matches if we do not push
 	// them in batch. Before we start pushing elements, ensure that the
