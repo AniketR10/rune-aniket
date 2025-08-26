@@ -83,6 +83,11 @@ const (
 	Rename
 )
 
+// AllEvents returns a slice with all permutations of Event.
+func AllEvents() []Event {
+	return []Event{Create, Remove, Write, Rename}
+}
+
 // String implements fmt.Stringer interface.
 func (e Event) String() string {
 	switch e {
