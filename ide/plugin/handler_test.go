@@ -40,6 +40,7 @@ import (
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/term"
+	"unstable.build/go-tui/term/vte"
 	"unstable.build/go-tui/workspace"
 )
 
@@ -74,17 +75,17 @@ func TestPluginHandler(t *testing.T) {
 	}
 
 	suite := []struct {
-		description          string
-		cmdAndArgs           string
-		maxWidth             int
-		frame                bool
-		expectConstructorErr error
-		drawnComponent       string
+		description    string
+		cmdAndArgs     string
+		maxWidth       int
+		drawnComponent string
+		waitProcess    bool
 	}{
 		{
 			description: "no cmd and args runs a shell by default",
 			cmdAndArgs:  "",
 			maxWidth:    4,
+			waitProcess: false,
 			drawnComponent: `
  ◦     sh   0s
 $             
@@ -97,6 +98,7 @@ $
 			description: "command with arg",
 			cmdAndArgs:  "sleep 2",
 			maxWidth:    4,
+			waitProcess: true,
 			drawnComponent: `
  ◦  sleep 2 0s
               
@@ -109,6 +111,7 @@ $
 			description: "max width 0 doesn't panic",
 			cmdAndArgs:  "sleep 2",
 			maxWidth:    0,
+			waitProcess: true,
 			drawnComponent: `
  ◦  sleep 2 0s
               
@@ -139,6 +142,9 @@ $
 			require.NoError(t, err)
 
 			ch := make(chan struct{})
+			cherr1 := make(chan error)
+			cherr2 := make(chan error)
+			cherr3 := make(chan error)
 			waitInterrupt := term.FuncInterrupter(func(context.Context) error {
 				select {
 				case ch <- struct{}{}:
@@ -146,10 +152,16 @@ $
 				}
 				return nil
 			})
+			vteCfg := vte.DefaultConfig()
+			vteCfg.Watcher = workspaceapi.ChanProcessWatcher(cherr2)
 			h, err := New(nopBrowser{interrupt: waitInterrupt}, nopBrowser{}, fileScheme,
 				fileScheme, nopBrowser{}, test.cmdAndArgs, test.maxWidth,
-				WithFrame(test.frame))
-			require.Equal(t, test.expectConstructorErr, err)
+				WithFrame(false),
+				// test order of watchers
+				WithProcessWatcher(workspaceapi.ChanProcessWatcher(cherr1)),
+				WithVTEConfig(vteCfg),
+				WithProcessWatcher(workspaceapi.ChanProcessWatcher(cherr3)),
+			)
 			h.Resize(14, 6)
 
 			w := term.NewStringWriter(14, 6)
@@ -160,6 +172,11 @@ $
 
 			<-ch
 			comptest.TestComponent(t, h, w, tests)
+			if test.waitProcess {
+				assert.NoError(t, <-cherr1)
+				assert.NoError(t, <-cherr2)
+				assert.NoError(t, <-cherr3)
+			}
 		})
 	}
 }

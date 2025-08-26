@@ -24,6 +24,7 @@
 package plugin
 
 import (
+	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/term/vte"
@@ -36,7 +37,28 @@ type Option func(*handlerConfig)
 // the given vte.Config as the underlying vte.Handler config.
 func WithVTEConfig(cfg vte.Config) Option {
 	return func(hcfg *handlerConfig) {
+		watcher := hcfg.cfg.Watcher
 		hcfg.cfg = cfg
+		if watcher != nil {
+			hcfg.cfg.Watcher = workspaceapi.MultiProcessWatcher(
+				watcher, hcfg.cfg.Watcher,
+			)
+		}
+	}
+}
+
+// WithProcessWatcher instructs Handler to add the given ProcessWatcher
+// to the vte.Config used. If WithVTEConfig is passed, then this ProcessWatcher
+// will be added to the Watcher defined there.
+func WithProcessWatcher(w workspaceapi.ProcessWatcher) Option {
+	return func(hcfg *handlerConfig) {
+		if hcfg.cfg.Watcher != nil {
+			hcfg.cfg.Watcher = workspaceapi.MultiProcessWatcher(
+				hcfg.cfg.Watcher, w,
+			)
+		} else {
+			hcfg.cfg.Watcher = w
+		}
 	}
 }
 

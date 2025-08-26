@@ -264,7 +264,12 @@ func (h *Handler) initState(
 	config.cfg.Shell = cmdAndArgs
 	config.cfg.WidthHint = interactiveWidth
 	config.cfg.HeightHint = interactiveHeight
-	config.cfg.Watcher = workspaceapi.ChanProcessWatcher(ch)
+	if config.cfg.Watcher != nil {
+		config.cfg.Watcher = workspaceapi.MultiProcessWatcher(
+			config.cfg.Watcher, workspaceapi.ChanProcessWatcher(ch))
+	} else {
+		config.cfg.Watcher = workspaceapi.ChanProcessWatcher(ch)
+	}
 	h.cfg = config.cfg
 
 	return ch, interrupter
