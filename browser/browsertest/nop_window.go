@@ -26,6 +26,7 @@ package browsertest
 import (
 	"unstable.build/go-tui/api/browserapi"
 	"unstable.build/go-tui/browser"
+	"unstable.build/go-tui/component"
 )
 
 type noopWindow struct {
@@ -42,10 +43,16 @@ func (w *noopWindow) Close() error {
 	w.content = nil
 	return err
 }
-func (w *noopWindow) WindowID() uint64     { return 1 }
-func (w *noopWindow) Focus() (bool, error) { return false, nil }
-func (w *noopWindow) Closed() bool         { return false }
-func (w *noopWindow) IsFloating() bool     { return false }
+func (w *noopWindow) WindowID() uint64                         { return 1 }
+func (w *noopWindow) Focus() (bool, error)                     { return false, nil }
+func (w *noopWindow) Closed() bool                             { return false }
+func (w *noopWindow) IsFloating() bool                         { return false }
+func (w *noopWindow) IsMinimized() (component.Alignment, bool) { return 0, false }
+func (w *noopWindow) MinimizeUp(padding int) bool              { return false }
+func (w *noopWindow) MinimizeDown(padding int) bool            { return false }
+func (w *noopWindow) MinimizeLeft(padding int) bool            { return false }
+func (w *noopWindow) MinimizeRight(padding int) bool           { return false }
+func (w *noopWindow) Unminimize() bool                         { return false }
 
 // NopWindow returns a window that does nothing.
 func NopWindow() browser.Window {

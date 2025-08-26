@@ -253,6 +253,77 @@ func (mr *MockWindowMockRecorder) IsFloating() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsFloating", reflect.TypeOf((*MockWindow)(nil).IsFloating))
 }
 
+// IsMinimized mocks base method.
+func (m *MockWindow) IsMinimized() (component.Alignment, bool) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsMinimized")
+	ret0, _ := ret[0].(component.Alignment)
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
+}
+
+// IsMinimized indicates an expected call of IsMinimized.
+func (mr *MockWindowMockRecorder) IsMinimized() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsMinimized", reflect.TypeOf((*MockWindow)(nil).IsMinimized))
+}
+
+// MinimizeDown mocks base method.
+func (m *MockWindow) MinimizeDown(padding int) bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MinimizeDown", padding)
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// MinimizeDown indicates an expected call of MinimizeDown.
+func (mr *MockWindowMockRecorder) MinimizeDown(padding any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MinimizeDown", reflect.TypeOf((*MockWindow)(nil).MinimizeDown), padding)
+}
+
+// MinimizeLeft mocks base method.
+func (m *MockWindow) MinimizeLeft(padding int) bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MinimizeLeft", padding)
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// MinimizeLeft indicates an expected call of MinimizeLeft.
+func (mr *MockWindowMockRecorder) MinimizeLeft(padding any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MinimizeLeft", reflect.TypeOf((*MockWindow)(nil).MinimizeLeft), padding)
+}
+
+// MinimizeRight mocks base method.
+func (m *MockWindow) MinimizeRight(padding int) bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MinimizeRight", padding)
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// MinimizeRight indicates an expected call of MinimizeRight.
+func (mr *MockWindowMockRecorder) MinimizeRight(padding any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MinimizeRight", reflect.TypeOf((*MockWindow)(nil).MinimizeRight), padding)
+}
+
+// MinimizeUp mocks base method.
+func (m *MockWindow) MinimizeUp(padding int) bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MinimizeUp", padding)
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// MinimizeUp indicates an expected call of MinimizeUp.
+func (mr *MockWindowMockRecorder) MinimizeUp(padding any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MinimizeUp", reflect.TypeOf((*MockWindow)(nil).MinimizeUp), padding)
+}
+
 // SetContent mocks base method.
 func (m *MockWindow) SetContent(arg0 browserapi.Handler) error {
 	m.ctrl.T.Helper()
@@ -265,6 +336,20 @@ func (m *MockWindow) SetContent(arg0 browserapi.Handler) error {
 func (mr *MockWindowMockRecorder) SetContent(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetContent", reflect.TypeOf((*MockWindow)(nil).SetContent), arg0)
+}
+
+// Unminimize mocks base method.
+func (m *MockWindow) Unminimize() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Unminimize")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// Unminimize indicates an expected call of Unminimize.
+func (mr *MockWindowMockRecorder) Unminimize() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Unminimize", reflect.TypeOf((*MockWindow)(nil).Unminimize))
 }
 
 // WindowID mocks base method.

@@ -27,6 +27,7 @@ import (
 	"errors"
 
 	"unstable.build/go-tui/api/browserapi"
+	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/handler"
 )
 
@@ -69,6 +70,30 @@ func (w *browserWindow) SetContent(h browserapi.Handler) error {
 		return errors.New("window is closing")
 	}
 	return w.parent.tryUpdateWindowContent(w, h)
+}
+
+func (w *browserWindow) IsMinimized() (component.Alignment, bool) {
+	return w.win.IsMinimized()
+}
+
+func (w *browserWindow) MinimizeUp(padding int) bool {
+	return w.win.MinimizeUp(padding)
+}
+
+func (w *browserWindow) MinimizeDown(padding int) bool {
+	return w.win.MinimizeDown(padding)
+}
+
+func (w *browserWindow) MinimizeLeft(padding int) bool {
+	return w.win.MinimizeLeft(padding)
+}
+
+func (w *browserWindow) MinimizeRight(padding int) bool {
+	return w.win.MinimizeRight(padding)
+}
+
+func (w *browserWindow) Unminimize() bool {
+	return w.win.Unminimize()
 }
 
 func (w *browserWindow) Close() error {

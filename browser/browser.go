@@ -66,6 +66,28 @@ type Window interface {
 	// IsFloating returns true if window is a floating window,
 	// or false if window is a tiled window.
 	IsFloating() bool
+
+	// IsMinimized returns true if this is a floating window and it's minimized.
+	IsMinimized() (component.Alignment, bool)
+
+	// MinimizeUp minimizes this window and displays it above the window manager,
+	// if this window is a floating window.
+	MinimizeUp(padding int) bool
+
+	// MinimizeDown minimizes this window and displays it below the window manager,
+	// if this window is a floating window.
+	MinimizeDown(padding int) bool
+
+	// MinimizeLeft minimizes this window and displays it left of the window manager,
+	// if this window is a floating window.
+	MinimizeLeft(padding int) bool
+
+	// MinimizeRight minimizes this window and displays it left of the window manager,
+	// if this window is a floating window.
+	MinimizeRight(padding int) bool
+
+	// Unminimize un-minimizes this window and displays it at the back at the front.
+	Unminimize() bool
 }
 
 // WindowManager is the interface that groups window and tab management methods.

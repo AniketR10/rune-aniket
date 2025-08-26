@@ -27,6 +27,7 @@ package browsertest
 import (
 	"unstable.build/go-tui/api/browserapi"
 	"unstable.build/go-tui/browser"
+	"unstable.build/go-tui/component"
 )
 
 // WindowToAPIWindow is a convenience method to work
@@ -91,4 +92,40 @@ func (w WindowFromAPIWindow) Closed() bool {
 
 func (w WindowFromAPIWindow) IsFloating() bool {
 	return w.Win.(interface{ IsFloating() bool }).IsFloating()
+}
+
+// IsMinimized returns true if this is a floating window and it's minimized.
+func (w WindowFromAPIWindow) IsMinimized() (component.Alignment, bool) {
+	return w.Win.(interface {
+		IsMinimized() (component.Alignment, bool)
+	}).IsMinimized()
+}
+
+// MinimizeUp minimizes this window and displays it above the window manager,
+// if this window is a floating window.
+func (w WindowFromAPIWindow) MinimizeUp(padding int) bool {
+	return w.Win.(interface{ MinimizeUp(int) bool }).MinimizeUp(padding)
+}
+
+// MinimizeDown minimizes this window and displays it below the window manager,
+// if this window is a floating window.
+func (w WindowFromAPIWindow) MinimizeDown(padding int) bool {
+	return w.Win.(interface{ MinimizeDown(int) bool }).MinimizeDown(padding)
+}
+
+// MinimizeLeft minimizes this window and displays it left of the window manager,
+// if this window is a floating window.
+func (w WindowFromAPIWindow) MinimizeLeft(padding int) bool {
+	return w.Win.(interface{ MinimizeLeft(int) bool }).MinimizeLeft(padding)
+}
+
+// MinimizeRight minimizes this window and displays it left of the window manager,
+// if this window is a floating window.
+func (w WindowFromAPIWindow) MinimizeRight(padding int) bool {
+	return w.Win.(interface{ MinimizeRight(int) bool }).MinimizeRight(padding)
+}
+
+// Unminimize un-minimizes this window and displays it at the back at the front.
+func (w WindowFromAPIWindow) Unminimize() bool {
+	return w.Win.(interface{ Unminimize() bool }).Unminimize()
 }
