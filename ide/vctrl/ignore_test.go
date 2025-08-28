@@ -26,6 +26,7 @@ package vctrl
 import (
 	"context"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -37,6 +38,7 @@ import (
 	"unstable.build/go-tui/api/schemeapi"
 	"unstable.build/go-tui/api/schemeapi/schemetest"
 	"unstable.build/go-tui/api/workspaceapi"
+	"unstable.build/go-tui/api/workspaceapi/workspacetest"
 	"unstable.build/go-tui/workspace"
 )
 
@@ -97,7 +99,16 @@ func TestLoadGitignore(t *testing.T) {
 	t.Run("uri returns error is bubbled up", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		mock := schemetest.NewMockScheme(ctrl)
+		f := workspacetest.NewMockFile(ctrl)
 
+		f.EXPECT().Read(gomock.Any()).Return(0, io.EOF).AnyTimes()
+		f.EXPECT().Close().Return(nil).AnyTimes()
+		mock.EXPECT().Open(gomock.Any(), gomock.Any(), gomock.Any()).
+			Return(f, nil).
+			AnyTimes()
+		mock.EXPECT().ReadDir(gomock.Any()).
+			Return(nil, nil).
+			AnyTimes()
 		mock.EXPECT().URI(gomock.Any()).Return(workspaceapi.URI{}, errors.New("boom"))
 		_, err := LoadGitignore(mock)
 		require.Error(t, err)
@@ -111,13 +122,13 @@ func TestLoadGitignore(t *testing.T) {
 		uri, err := workspaceapi.ParseURI("memory:///tmp")
 		require.NoError(t, err)
 
-		mock.EXPECT().URI(gomock.Any()).Return(uri, nil)
 		mock.EXPECT().Open(gomock.Any(), gomock.Any(), gomock.Any()).
 			Return(nil, &workspaceapi.Error{Err: errors.New("boom"), IsPermission: true}).
 			Times(2) // .git/info/exclude
 		mock.EXPECT().ReadDir(gomock.Any()).
 			Return(nil, nil).
 			Times(1)
+		mock.EXPECT().URI(gomock.Any()).Return(uri, nil)
 		_, err = LoadGitignore(mock)
 		require.NoError(t, err)
 	})

@@ -57,22 +57,14 @@ var commonExcludes = []gitignore.Pattern{
 }
 
 // LoadGitignore load all workspaces' .gitignore files recursively
-// and returns a Matcher that matches against all loaded patterns.
+// and returns a Matcher that matches against all loaded patterns,
+// plus adds some common excludes like .swp files or .git/** directory.
 func LoadGitignore(cwd schemeapi.Scheme) (Matcher, error) {
-	cwduri, err := cwd.URI(".")
-	if err != nil {
-		return nil, fmt.Errorf("get workspace uri: %w", err)
-	}
-
 	excludes, err := loadGitignoreRecursively(cwd, nil)
 	if err != nil {
 		return nil, err
 	}
-
-	return uriMatcher{
-		cwduri:  cwduri,
-		matcher: gitignore.NewMatcher(append(excludes, commonExcludes...)),
-	}, nil
+	return MatcherFromPatterns(cwd, append(excludes, commonExcludes...)...)
 }
 
 func loadGitignoreRecursively(cwd schemeapi.Scheme, path []string) (

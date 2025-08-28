@@ -24,16 +24,32 @@
 package vctrl
 
 import (
+	"fmt"
 	"path/filepath"
 	"strings"
 
 	"github.com/go-git/go-git/v6/plumbing/format/gitignore"
+	"unstable.build/go-tui/api/schemeapi"
 	"unstable.build/go-tui/api/workspaceapi"
 )
 
 // Matcher abstracts the ability to match files against glob patterns.
 type Matcher interface {
 	Match(file workspaceapi.URI, isDir bool) bool
+}
+
+// MatcherFromPatterns returns a matcher that matches files with the given patterns.
+func MatcherFromPatterns(
+	cwd schemeapi.Scheme, patterns ...gitignore.Pattern,
+) (Matcher, error) {
+	cwduri, err := cwd.URI(".")
+	if err != nil {
+		return nil, fmt.Errorf("get workspace uri: %w", err)
+	}
+	return uriMatcher{
+		cwduri:  cwduri,
+		matcher: gitignore.NewMatcher(patterns),
+	}, nil
 }
 
 // NopMatcher returns a Matcher that never matches.
