@@ -29,6 +29,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/component/comptest"
 	"unstable.build/go-tui/term"
@@ -1359,4 +1360,20 @@ func TestFixedSizeWindows(t *testing.T) {
 
 	w := term.NewStringWriter(20, 8)
 	comptest.TestComponent(t, wm, w, tests)
+}
+
+func TestSetFrameAttr(t *testing.T) {
+	h1 := &TestComponent{Ch: '1'}
+	cfg := DefaultWindowManagerConfig()
+	wm, w1 := NewWindowManager(h1, cfg)
+	wm.Resize(20, 8)
+
+	newAttr := term.Attributes{Fg: tcell.ColorGreen, Bg: tcell.ColorBlue}
+	prev, ok := w1.SetFrameAttr(newAttr)
+	assert.True(t, ok)
+	assert.Equal(t, cfg.FrameAttr, prev)
+
+	actualAttr, ok := w1.SetFrameAttr(prev)
+	assert.True(t, ok)
+	assert.Equal(t, newAttr, actualAttr)
 }

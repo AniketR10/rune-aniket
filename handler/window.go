@@ -215,3 +215,10 @@ func (w Window) Close() error {
 func (w Window) Closed() bool {
 	return w.wm == nil || w.Window.Closed()
 }
+
+// SetFrameAttr sets a Window's FrameCharSet default attributes.
+// Any Window's frame attributes can be reset by calling SetDefaultAttr
+// which sets the default attributes for all windows.
+func (w Window) SetFrameAttr(attr term.Attributes) (term.Attributes, bool) {
+	return w.Window.SetFrameAttr(attr)
+}

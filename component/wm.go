@@ -445,22 +445,27 @@ func (wm *WindowManager) drawMinimizedContent(
 func (wm *WindowManager) drawMinimizedTop(
 	w term.Writer, f *floatingNode, pos term.Coordinates, length int,
 ) {
+	frameAttr := wm.config.FrameAttr
+	if attr, ok := f.content.C.(WithAttributes); ok {
+		frameAttr = attr.SetAttr(term.Attributes{})
+		attr.SetAttr(frameAttr)
+	}
 	w.SetCell(pos, term.Cell{
 		Width:      1,
 		Ch:         wm.config.TopLeft,
-		Attributes: wm.config.FrameAttr,
+		Attributes: frameAttr,
 	})
 	for x := 1; x < length-1; x++ {
 		w.SetCell(term.Coordinates{X: x, Y: pos.Y}, term.Cell{
 			Width:      1,
 			Ch:         wm.config.HorizontalTop,
-			Attributes: wm.config.FrameAttr,
+			Attributes: frameAttr,
 		})
 	}
 	w.SetCell(term.Coordinates{X: length - 1, Y: pos.Y}, term.Cell{
 		Width:      1,
 		Ch:         wm.config.TopRight,
-		Attributes: wm.config.FrameAttr,
+		Attributes: frameAttr,
 	})
 	if f.minimizedPadding == 0 {
 		return
@@ -469,12 +474,12 @@ func (wm *WindowManager) drawMinimizedTop(
 		w.SetCell(term.Coordinates{X: length - 1, Y: y}, term.Cell{
 			Width:      1,
 			Ch:         wm.config.VerticalRight,
-			Attributes: wm.config.FrameAttr,
+			Attributes: frameAttr,
 		})
 		w.SetCell(term.Coordinates{X: pos.X, Y: y}, term.Cell{
 			Width:      1,
 			Ch:         wm.config.VerticalLeft,
-			Attributes: wm.config.FrameAttr,
+			Attributes: frameAttr,
 		})
 	}
 	at := pos
@@ -488,23 +493,28 @@ func (wm *WindowManager) drawMinimizedTop(
 func (wm *WindowManager) drawMinimizedBottom(
 	w term.Writer, f *floatingNode, pos term.Coordinates, length int,
 ) {
+	frameAttr := wm.config.FrameAttr
+	if attr, ok := f.content.C.(WithAttributes); ok {
+		frameAttr = attr.SetAttr(term.Attributes{})
+		attr.SetAttr(frameAttr)
+	}
 	bottomFramePos := pos.Y + f.minimizedPadding
 	w.SetCell(term.Coordinates{X: pos.X, Y: bottomFramePos}, term.Cell{
 		Width:      1,
 		Ch:         wm.config.BottomLeft,
-		Attributes: wm.config.FrameAttr,
+		Attributes: frameAttr,
 	})
 	for x := 1; x < length-1; x++ {
 		w.SetCell(term.Coordinates{X: x, Y: bottomFramePos}, term.Cell{
 			Width:      1,
 			Ch:         wm.config.HorizontalBottom,
-			Attributes: wm.config.FrameAttr,
+			Attributes: frameAttr,
 		})
 	}
 	w.SetCell(term.Coordinates{X: length - 1, Y: bottomFramePos}, term.Cell{
 		Width:      1,
 		Ch:         wm.config.BottomRight,
-		Attributes: wm.config.FrameAttr,
+		Attributes: frameAttr,
 	})
 	if f.minimizedPadding == 0 {
 		return
@@ -513,12 +523,12 @@ func (wm *WindowManager) drawMinimizedBottom(
 		w.SetCell(term.Coordinates{X: length - 1, Y: y}, term.Cell{
 			Width:      1,
 			Ch:         wm.config.VerticalRight,
-			Attributes: wm.config.FrameAttr,
+			Attributes: frameAttr,
 		})
 		w.SetCell(term.Coordinates{X: pos.X, Y: y}, term.Cell{
 			Width:      1,
 			Ch:         wm.config.VerticalLeft,
-			Attributes: wm.config.FrameAttr,
+			Attributes: frameAttr,
 		})
 	}
 	at := pos
@@ -533,23 +543,28 @@ func (wm *WindowManager) drawMinimizedBottom(
 func (wm *WindowManager) drawMinimizedLeft(
 	w term.Writer, f *floatingNode, pos term.Coordinates, length int,
 ) {
+	frameAttr := wm.config.FrameAttr
+	if attr, ok := f.content.C.(WithAttributes); ok {
+		frameAttr = attr.SetAttr(term.Attributes{})
+		attr.SetAttr(frameAttr)
+	}
 	yOffset := wm.minimizedOffset.Y
 	w.SetCell(pos, term.Cell{
 		Width:      1,
 		Ch:         wm.config.TopLeft,
-		Attributes: wm.config.FrameAttr,
+		Attributes: frameAttr,
 	})
 	for y := 1 + yOffset; y < yOffset+length-1; y++ {
 		w.SetCell(term.Coordinates{X: pos.X, Y: y}, term.Cell{
 			Width:      1,
 			Ch:         wm.config.VerticalLeft,
-			Attributes: wm.config.FrameAttr,
+			Attributes: frameAttr,
 		})
 	}
 	w.SetCell(term.Coordinates{X: pos.X, Y: yOffset + length - 1}, term.Cell{
 		Width:      1,
 		Ch:         wm.config.BottomLeft,
-		Attributes: wm.config.FrameAttr,
+		Attributes: frameAttr,
 	})
 	if f.minimizedPadding == 0 {
 		return
@@ -558,12 +573,12 @@ func (wm *WindowManager) drawMinimizedLeft(
 		w.SetCell(term.Coordinates{X: x, Y: pos.Y}, term.Cell{
 			Width:      1,
 			Ch:         wm.config.HorizontalTop,
-			Attributes: wm.config.FrameAttr,
+			Attributes: frameAttr,
 		})
 		w.SetCell(term.Coordinates{X: x, Y: yOffset + length - 1}, term.Cell{
 			Width:      1,
 			Ch:         wm.config.HorizontalBottom,
-			Attributes: wm.config.FrameAttr,
+			Attributes: frameAttr,
 		})
 	}
 	at := pos
@@ -577,25 +592,30 @@ func (wm *WindowManager) drawMinimizedLeft(
 func (wm *WindowManager) drawMinimizedRight(
 	w term.Writer, f *floatingNode, pos term.Coordinates, length int,
 ) {
+	frameAttr := wm.config.FrameAttr
+	if attr, ok := f.content.C.(WithAttributes); ok {
+		frameAttr = attr.SetAttr(term.Attributes{})
+		attr.SetAttr(frameAttr)
+	}
 	yOffset := wm.minimizedOffset.Y
 	rightFramePos := pos.X + f.minimizedPadding
 	w.SetCell(term.Coordinates{X: rightFramePos, Y: pos.Y}, term.Cell{
 		Width:      1,
 		Ch:         wm.config.TopRight,
-		Attributes: wm.config.FrameAttr,
+		Attributes: frameAttr,
 	})
 	for y := 1 + yOffset; y < yOffset+length-1; y++ {
 		w.SetCell(term.Coordinates{X: rightFramePos, Y: y}, term.Cell{
 			Width:      1,
 			Ch:         wm.config.VerticalRight,
-			Attributes: wm.config.FrameAttr,
+			Attributes: frameAttr,
 		})
 	}
 	w.SetCell(term.Coordinates{X: rightFramePos, Y: yOffset + length - 1},
 		term.Cell{
 			Width:      1,
 			Ch:         wm.config.BottomRight,
-			Attributes: wm.config.FrameAttr,
+			Attributes: frameAttr,
 		})
 	if f.minimizedPadding == 0 {
 		return
@@ -604,12 +624,12 @@ func (wm *WindowManager) drawMinimizedRight(
 		w.SetCell(term.Coordinates{X: x, Y: pos.Y}, term.Cell{
 			Width:      1,
 			Ch:         wm.config.HorizontalTop,
-			Attributes: wm.config.FrameAttr,
+			Attributes: frameAttr,
 		})
 		w.SetCell(term.Coordinates{X: x, Y: yOffset + length - 1}, term.Cell{
 			Width:      1,
 			Ch:         wm.config.HorizontalBottom,
-			Attributes: wm.config.FrameAttr,
+			Attributes: frameAttr,
 		})
 	}
 	at := pos

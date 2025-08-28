@@ -29,6 +29,7 @@ import (
 	"unstable.build/go-tui/api/browserapi"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/handler"
+	"unstable.build/go-tui/term"
 )
 
 type browserWindow struct {
@@ -94,6 +95,10 @@ func (w *browserWindow) MinimizeRight(padding int) bool {
 
 func (w *browserWindow) Unminimize() bool {
 	return w.win.Unminimize()
+}
+
+func (w *browserWindow) SetFrameAttr(attr term.Attributes) (term.Attributes, bool) {
+	return w.win.SetFrameAttr(attr)
 }
 
 func (w *browserWindow) Close() error {

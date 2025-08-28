@@ -100,6 +100,9 @@ type Window interface {
 
 	// Unminimize un-minimizes this window and displays it at the back at the front.
 	Unminimize() bool
+
+	// SetFrameAttr sets a Window's FrameCharSet default attributes.
+	SetFrameAttr(attr term.Attributes) (term.Attributes, bool)
 }
 
 // WindowManager is the interface that groups window and tab management methods.

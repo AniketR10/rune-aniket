@@ -204,15 +204,17 @@ func (w Window) SetContentResize(content tui.Component, resize bool) (
 // SetFrameAttr sets a Window's FrameCharSet default attributes.
 // Any Window's frame attributes can be reset by calling SetDefaultAttr
 // which sets the default attributes for all windows.
-func (w Window) SetFrameAttr(attr term.Attributes) bool {
+func (w Window) SetFrameAttr(attr term.Attributes) (term.Attributes, bool) {
 	if w.wm == nil {
 		panic(errCalledZeroValuedWin)
 	}
 	if !w.wm.config.Frame {
-		return false
+		return term.Attributes{}, false
 	}
-	w.node.Content().(*Frame).Attributes = attr
-	return true
+	f := w.node.Content().(*Frame)
+	ret := f.Attributes
+	f.Attributes = attr
+	return ret, true
 }
 
 // SetFrameCharSet sets a Window's Frame attributes. This can be reset by calling
