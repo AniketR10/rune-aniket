@@ -315,15 +315,25 @@ func TestFrameResponsive(t *testing.T) {
 }
 
 func TestFrameWithAttributes(t *testing.T) {
-	f := NewFrame(WithAttrSetter(&TestComponent{Ch: 'a'}))
-	f.SetAttr(term.Attributes{Fg: tcell.ColorRed, Bg: tcell.ColorGreen})
+	t.Run("component satisfies WithAttributes", func(t *testing.T) {
+		f := NewFrame(WithAttrSetter(&TestComponent{Ch: 'a'}))
+		f.SetAttr(term.Attributes{Fg: tcell.ColorRed, Bg: tcell.ColorGreen})
 
-	assert.Equal(t, tcell.ColorGreen, f.Attributes.Bg)
-	assert.Equal(t, tcell.ColorRed, f.Attributes.Fg)
+		assert.Equal(t, tcell.ColorGreen, f.Attributes.Bg)
+		assert.Equal(t, tcell.ColorRed, f.Attributes.Fg)
 
-	prev := f.Content().(WithAttributes).SetAttr(term.Attributes{})
-	assert.Equal(t, tcell.ColorGreen, prev.Bg)
-	assert.Equal(t, tcell.ColorRed, prev.Fg)
+		prev := f.Content().(WithAttributes).SetAttr(term.Attributes{})
+		assert.Equal(t, tcell.ColorGreen, prev.Bg)
+		assert.Equal(t, tcell.ColorRed, prev.Fg)
+	})
+
+	t.Run("component does not WithAttributes", func(t *testing.T) {
+		f := NewFrame(&TestComponent{Ch: 'a'})
+		f.SetAttr(term.Attributes{Fg: tcell.ColorRed, Bg: tcell.ColorGreen})
+
+		assert.Equal(t, tcell.ColorGreen, f.Attributes.Bg)
+		assert.Equal(t, tcell.ColorRed, f.Attributes.Fg)
+	})
 }
 
 func TestFrameScrollbarCalculate(t *testing.T) {
