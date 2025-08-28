@@ -37,6 +37,20 @@ type Floating interface {
 	component.Floating
 }
 
+// Scrollable is a tui.Handler that is capable of scrolling content.
+// See component.Scrollable for more details.
+type Scrollable interface {
+	tui.Handler
+	component.Scrollable
+}
+
+// ScrollableFloating is a Floating that is capable of scrolling content.
+// See component.Scrollable for more details.
+type ScrollableFloating interface {
+	Floating
+	component.Scrollable
+}
+
 // StaticFloating wraps a tui.Handler and returns a Floating that always
 // return the same Dimensions values.
 func StaticFloating(h tui.Handler, width, height int) Floating {
@@ -52,7 +66,19 @@ func PaddedFloating(f Floating, padx, pady int) Floating {
 // NopFloatingHandler wraps a component.Floating and returns a Floating that does
 // nothing when any of the tui.Handler methods are called.
 func NopFloatingHandler(h component.Floating) Floating {
-	return nopFloating{Floating: h}
+	return nopScrollableFloating{Floating: h}
+}
+
+// NopScrollable wraps a component.Scrollable and returns a Scrollable that does
+// nothing when any of the tui.Handler methods are called.
+func NopScrollable(h component.Scrollable) Scrollable {
+	return nopScrollableFloating{Scrollable: h}
+}
+
+// NopScrollableFloating wraps a component.ScrollableFloating and returns a
+// ScrollableFloating that does nothing when any of the tui.Handler methods are called.
+func NopScrollableFloating(h component.ScrollableFloating) ScrollableFloating {
+	return nopScrollableFloating{Scrollable: h, Floating: h}
 }
 
 type staticFloating struct {
@@ -76,22 +102,23 @@ func (p paddedFloating) Dimensions() (width, height int) {
 	return
 }
 
-type nopFloating struct {
+type nopScrollableFloating struct {
 	component.Floating
+	component.Scrollable
 }
 
-func (n nopFloating) Handle(term.Event) (bool, bool) {
+func (n nopScrollableFloating) Handle(term.Event) (bool, bool) {
 	return false, false
 }
 
-func (n nopFloating) Cursor() (term.Coordinates, term.CursorStyle, bool) {
+func (n nopScrollableFloating) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 	return term.Coordinates{}, term.CursorStyleDefault, false
 }
 
-func (n nopFloating) Selection() (string, bool) {
+func (n nopScrollableFloating) Selection() (string, bool) {
 	return "", false
 }
 
-func (n nopFloating) Man() tui.Manual {
+func (n nopScrollableFloating) Man() tui.Manual {
 	return tui.Manual{}
 }

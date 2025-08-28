@@ -42,6 +42,18 @@ type Floating interface {
 	handler.Floating
 }
 
+// Scrollable is a Handler that can scroll content up and down.
+type Scrollable interface {
+	browserapi.Handler
+	component.Scrollable
+}
+
+// ScrollableFloating is a Floating that can scroll content up and down.
+type ScrollableFloating interface {
+	browserapi.Floating
+	component.Scrollable
+}
+
 // Window is the interface that represents
 // a closeable window in a WindowManager.
 type Window interface {
@@ -188,6 +200,12 @@ func FuncFloatingHandler(h handler.Floating, closeFn func() error) Floating {
 	return funcFloatingHandler{Floating: h, fn: closeFn}
 }
 
+// NopScrollableFloatingHandler wraps a handler.ScrollableFloating and returns a
+// ScrollableFloating that does nothing when Close is called.
+func NopScrollableFloatingHandler(h handler.ScrollableFloating) ScrollableFloating {
+	return nopScrollableFloating{ScrollableFloating: h}
+}
+
 // FuncFloating wraps a Handler and returns a Floating that
 // calls dimFn when Dimensions is called.
 func FuncFloating(h browserapi.Handler, dimFn func() (int, int)) Floating {
@@ -235,5 +253,13 @@ type nopFloating struct {
 }
 
 func (n nopFloating) Close() error {
+	return nil
+}
+
+type nopScrollableFloating struct {
+	handler.ScrollableFloating
+}
+
+func (n nopScrollableFloating) Close() error {
 	return nil
 }

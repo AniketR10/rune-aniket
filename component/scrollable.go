@@ -23,6 +23,8 @@
 
 package component
 
+import "unstable.build/go-tui/term"
+
 // Scrollable abstracts a component that can scroll up or down.
 type Scrollable interface {
 	SeekUp() bool
@@ -30,3 +32,29 @@ type Scrollable interface {
 	SeekOffset() int
 	MaxSeekOffset() int
 }
+
+// ScrollableFloating combines a Scrollable with Floating.
+type ScrollableFloating interface {
+	Scrollable
+	Floating
+}
+
+// NopScrollable returns a Scrollable that does nothing.
+func NopScrollable() Scrollable {
+	return nopScrollableFloating{}
+}
+
+// NopScrollableFloating returns a ScrollableFloating that does nothing.
+func NopScrollableFloating() ScrollableFloating {
+	return nopScrollableFloating{}
+}
+
+type nopScrollableFloating struct{}
+
+func (n nopScrollableFloating) SeekUp() bool                        { return false }
+func (n nopScrollableFloating) SeekDown() bool                      { return false }
+func (n nopScrollableFloating) SeekOffset() int                     { return 0 }
+func (n nopScrollableFloating) MaxSeekOffset() int                  { return 0 }
+func (n nopScrollableFloating) Dimensions() (width int, height int) { return }
+func (n nopScrollableFloating) Resize(width, height int)            {}
+func (n nopScrollableFloating) Draw(w term.Writer)                  {}
