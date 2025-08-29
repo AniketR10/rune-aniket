@@ -158,6 +158,375 @@ func (mr *MockFloatingMockRecorder) Selection() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Selection", reflect.TypeOf((*MockFloating)(nil).Selection))
 }
 
+// MockScrollable is a mock of Scrollable interface.
+type MockScrollable struct {
+	ctrl     *gomock.Controller
+	recorder *MockScrollableMockRecorder
+}
+
+// MockScrollableMockRecorder is the mock recorder for MockScrollable.
+type MockScrollableMockRecorder struct {
+	mock *MockScrollable
+}
+
+// NewMockScrollable creates a new mock instance.
+func NewMockScrollable(ctrl *gomock.Controller) *MockScrollable {
+	mock := &MockScrollable{ctrl: ctrl}
+	mock.recorder = &MockScrollableMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockScrollable) EXPECT() *MockScrollableMockRecorder {
+	return m.recorder
+}
+
+// Close mocks base method.
+func (m *MockScrollable) Close() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Close")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Close indicates an expected call of Close.
+func (mr *MockScrollableMockRecorder) Close() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockScrollable)(nil).Close))
+}
+
+// Cursor mocks base method.
+func (m *MockScrollable) Cursor() (term.Coordinates, term.CursorStyle, bool) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Cursor")
+	ret0, _ := ret[0].(term.Coordinates)
+	ret1, _ := ret[1].(term.CursorStyle)
+	ret2, _ := ret[2].(bool)
+	return ret0, ret1, ret2
+}
+
+// Cursor indicates an expected call of Cursor.
+func (mr *MockScrollableMockRecorder) Cursor() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Cursor", reflect.TypeOf((*MockScrollable)(nil).Cursor))
+}
+
+// Draw mocks base method.
+func (m *MockScrollable) Draw(arg0 term.Writer) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Draw", arg0)
+}
+
+// Draw indicates an expected call of Draw.
+func (mr *MockScrollableMockRecorder) Draw(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Draw", reflect.TypeOf((*MockScrollable)(nil).Draw), arg0)
+}
+
+// Handle mocks base method.
+func (m *MockScrollable) Handle(arg0 term.Event) (bool, bool) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Handle", arg0)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
+}
+
+// Handle indicates an expected call of Handle.
+func (mr *MockScrollableMockRecorder) Handle(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Handle", reflect.TypeOf((*MockScrollable)(nil).Handle), arg0)
+}
+
+// Man mocks base method.
+func (m *MockScrollable) Man() tui.Manual {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Man")
+	ret0, _ := ret[0].(tui.Manual)
+	return ret0
+}
+
+// Man indicates an expected call of Man.
+func (mr *MockScrollableMockRecorder) Man() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Man", reflect.TypeOf((*MockScrollable)(nil).Man))
+}
+
+// MaxSeekOffset mocks base method.
+func (m *MockScrollable) MaxSeekOffset() int {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MaxSeekOffset")
+	ret0, _ := ret[0].(int)
+	return ret0
+}
+
+// MaxSeekOffset indicates an expected call of MaxSeekOffset.
+func (mr *MockScrollableMockRecorder) MaxSeekOffset() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MaxSeekOffset", reflect.TypeOf((*MockScrollable)(nil).MaxSeekOffset))
+}
+
+// Resize mocks base method.
+func (m *MockScrollable) Resize(width, height int) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Resize", width, height)
+}
+
+// Resize indicates an expected call of Resize.
+func (mr *MockScrollableMockRecorder) Resize(width, height any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Resize", reflect.TypeOf((*MockScrollable)(nil).Resize), width, height)
+}
+
+// SeekDown mocks base method.
+func (m *MockScrollable) SeekDown() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SeekDown")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// SeekDown indicates an expected call of SeekDown.
+func (mr *MockScrollableMockRecorder) SeekDown() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SeekDown", reflect.TypeOf((*MockScrollable)(nil).SeekDown))
+}
+
+// SeekOffset mocks base method.
+func (m *MockScrollable) SeekOffset() int {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SeekOffset")
+	ret0, _ := ret[0].(int)
+	return ret0
+}
+
+// SeekOffset indicates an expected call of SeekOffset.
+func (mr *MockScrollableMockRecorder) SeekOffset() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SeekOffset", reflect.TypeOf((*MockScrollable)(nil).SeekOffset))
+}
+
+// SeekUp mocks base method.
+func (m *MockScrollable) SeekUp() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SeekUp")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// SeekUp indicates an expected call of SeekUp.
+func (mr *MockScrollableMockRecorder) SeekUp() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SeekUp", reflect.TypeOf((*MockScrollable)(nil).SeekUp))
+}
+
+// Selection mocks base method.
+func (m *MockScrollable) Selection() (string, bool) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Selection")
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
+}
+
+// Selection indicates an expected call of Selection.
+func (mr *MockScrollableMockRecorder) Selection() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Selection", reflect.TypeOf((*MockScrollable)(nil).Selection))
+}
+
+// MockScrollableFloating is a mock of ScrollableFloating interface.
+type MockScrollableFloating struct {
+	ctrl     *gomock.Controller
+	recorder *MockScrollableFloatingMockRecorder
+}
+
+// MockScrollableFloatingMockRecorder is the mock recorder for MockScrollableFloating.
+type MockScrollableFloatingMockRecorder struct {
+	mock *MockScrollableFloating
+}
+
+// NewMockScrollableFloating creates a new mock instance.
+func NewMockScrollableFloating(ctrl *gomock.Controller) *MockScrollableFloating {
+	mock := &MockScrollableFloating{ctrl: ctrl}
+	mock.recorder = &MockScrollableFloatingMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockScrollableFloating) EXPECT() *MockScrollableFloatingMockRecorder {
+	return m.recorder
+}
+
+// Close mocks base method.
+func (m *MockScrollableFloating) Close() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Close")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Close indicates an expected call of Close.
+func (mr *MockScrollableFloatingMockRecorder) Close() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockScrollableFloating)(nil).Close))
+}
+
+// Cursor mocks base method.
+func (m *MockScrollableFloating) Cursor() (term.Coordinates, term.CursorStyle, bool) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Cursor")
+	ret0, _ := ret[0].(term.Coordinates)
+	ret1, _ := ret[1].(term.CursorStyle)
+	ret2, _ := ret[2].(bool)
+	return ret0, ret1, ret2
+}
+
+// Cursor indicates an expected call of Cursor.
+func (mr *MockScrollableFloatingMockRecorder) Cursor() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Cursor", reflect.TypeOf((*MockScrollableFloating)(nil).Cursor))
+}
+
+// Dimensions mocks base method.
+func (m *MockScrollableFloating) Dimensions() (int, int) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Dimensions")
+	ret0, _ := ret[0].(int)
+	ret1, _ := ret[1].(int)
+	return ret0, ret1
+}
+
+// Dimensions indicates an expected call of Dimensions.
+func (mr *MockScrollableFloatingMockRecorder) Dimensions() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Dimensions", reflect.TypeOf((*MockScrollableFloating)(nil).Dimensions))
+}
+
+// Draw mocks base method.
+func (m *MockScrollableFloating) Draw(arg0 term.Writer) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Draw", arg0)
+}
+
+// Draw indicates an expected call of Draw.
+func (mr *MockScrollableFloatingMockRecorder) Draw(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Draw", reflect.TypeOf((*MockScrollableFloating)(nil).Draw), arg0)
+}
+
+// Handle mocks base method.
+func (m *MockScrollableFloating) Handle(arg0 term.Event) (bool, bool) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Handle", arg0)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
+}
+
+// Handle indicates an expected call of Handle.
+func (mr *MockScrollableFloatingMockRecorder) Handle(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Handle", reflect.TypeOf((*MockScrollableFloating)(nil).Handle), arg0)
+}
+
+// Man mocks base method.
+func (m *MockScrollableFloating) Man() tui.Manual {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Man")
+	ret0, _ := ret[0].(tui.Manual)
+	return ret0
+}
+
+// Man indicates an expected call of Man.
+func (mr *MockScrollableFloatingMockRecorder) Man() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Man", reflect.TypeOf((*MockScrollableFloating)(nil).Man))
+}
+
+// MaxSeekOffset mocks base method.
+func (m *MockScrollableFloating) MaxSeekOffset() int {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MaxSeekOffset")
+	ret0, _ := ret[0].(int)
+	return ret0
+}
+
+// MaxSeekOffset indicates an expected call of MaxSeekOffset.
+func (mr *MockScrollableFloatingMockRecorder) MaxSeekOffset() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MaxSeekOffset", reflect.TypeOf((*MockScrollableFloating)(nil).MaxSeekOffset))
+}
+
+// Resize mocks base method.
+func (m *MockScrollableFloating) Resize(width, height int) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Resize", width, height)
+}
+
+// Resize indicates an expected call of Resize.
+func (mr *MockScrollableFloatingMockRecorder) Resize(width, height any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Resize", reflect.TypeOf((*MockScrollableFloating)(nil).Resize), width, height)
+}
+
+// SeekDown mocks base method.
+func (m *MockScrollableFloating) SeekDown() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SeekDown")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// SeekDown indicates an expected call of SeekDown.
+func (mr *MockScrollableFloatingMockRecorder) SeekDown() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SeekDown", reflect.TypeOf((*MockScrollableFloating)(nil).SeekDown))
+}
+
+// SeekOffset mocks base method.
+func (m *MockScrollableFloating) SeekOffset() int {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SeekOffset")
+	ret0, _ := ret[0].(int)
+	return ret0
+}
+
+// SeekOffset indicates an expected call of SeekOffset.
+func (mr *MockScrollableFloatingMockRecorder) SeekOffset() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SeekOffset", reflect.TypeOf((*MockScrollableFloating)(nil).SeekOffset))
+}
+
+// SeekUp mocks base method.
+func (m *MockScrollableFloating) SeekUp() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SeekUp")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// SeekUp indicates an expected call of SeekUp.
+func (mr *MockScrollableFloatingMockRecorder) SeekUp() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SeekUp", reflect.TypeOf((*MockScrollableFloating)(nil).SeekUp))
+}
+
+// Selection mocks base method.
+func (m *MockScrollableFloating) Selection() (string, bool) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Selection")
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
+}
+
+// Selection indicates an expected call of Selection.
+func (mr *MockScrollableFloatingMockRecorder) Selection() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Selection", reflect.TypeOf((*MockScrollableFloating)(nil).Selection))
+}
+
 // MockWindow is a mock of Window interface.
 type MockWindow struct {
 	ctrl     *gomock.Controller
@@ -338,6 +707,21 @@ func (mr *MockWindowMockRecorder) SetContent(arg0 any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetContent", reflect.TypeOf((*MockWindow)(nil).SetContent), arg0)
 }
 
+// SetFrameAttr mocks base method.
+func (m *MockWindow) SetFrameAttr(attr term.Attributes) (term.Attributes, bool) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SetFrameAttr", attr)
+	ret0, _ := ret[0].(term.Attributes)
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
+}
+
+// SetFrameAttr indicates an expected call of SetFrameAttr.
+func (mr *MockWindowMockRecorder) SetFrameAttr(attr any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetFrameAttr", reflect.TypeOf((*MockWindow)(nil).SetFrameAttr), attr)
+}
+
 // Unminimize mocks base method.
 func (m *MockWindow) Unminimize() bool {
 	m.ctrl.T.Helper()
@@ -431,6 +815,21 @@ func (m *MockWindowManager) Focus() (browser.Window, error) {
 func (mr *MockWindowManagerMockRecorder) Focus() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Focus", reflect.TypeOf((*MockWindowManager)(nil).Focus))
+}
+
+// SetFocus mocks base method.
+func (m *MockWindowManager) SetFocus(win browser.Window) (browser.Window, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SetFocus", win)
+	ret0, _ := ret[0].(browser.Window)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SetFocus indicates an expected call of SetFocus.
+func (mr *MockWindowManagerMockRecorder) SetFocus(win any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetFocus", reflect.TypeOf((*MockWindowManager)(nil).SetFocus), win)
 }
 
 // SetTabName mocks base method.
@@ -856,6 +1255,21 @@ func (m *MockBrowser) Resource(arg0 workspaceapi.URI) (browserapi.Handler, bool)
 func (mr *MockBrowserMockRecorder) Resource(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Resource", reflect.TypeOf((*MockBrowser)(nil).Resource), arg0)
+}
+
+// SetFocus mocks base method.
+func (m *MockBrowser) SetFocus(win browser.Window) (browser.Window, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SetFocus", win)
+	ret0, _ := ret[0].(browser.Window)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SetFocus indicates an expected call of SetFocus.
+func (mr *MockBrowserMockRecorder) SetFocus(win any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetFocus", reflect.TypeOf((*MockBrowser)(nil).SetFocus), win)
 }
 
 // SetTabName mocks base method.

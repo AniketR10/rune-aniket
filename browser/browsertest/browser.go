@@ -25,6 +25,7 @@ package browsertest
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"unstable.build/go-tui"
@@ -56,6 +57,10 @@ func (b toBrowser) Focus() (browser.Window, error) {
 
 func (b toBrowser) SetTabName(uri workspaceapi.URI, name string, attr term.Attributes) error {
 	return nil
+}
+
+func (b toBrowser) SetFocus(browser.Window) (browser.Window, error) {
+	return nil, errors.New("unimplemented")
 }
 
 func (b toBrowser) Split(

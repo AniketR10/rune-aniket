@@ -28,6 +28,7 @@ import (
 	"unstable.build/go-tui/api/browserapi"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/term"
 )
 
 // WindowToAPIWindow is a convenience method to work
@@ -92,6 +93,12 @@ func (w WindowFromAPIWindow) Closed() bool {
 
 func (w WindowFromAPIWindow) IsFloating() bool {
 	return w.Win.(interface{ IsFloating() bool }).IsFloating()
+}
+
+func (w WindowFromAPIWindow) SetFrameAttr(t term.Attributes) (term.Attributes, bool) {
+	return w.Win.(interface {
+		SetFrameAttr(t term.Attributes) (term.Attributes, bool)
+	}).SetFrameAttr(t)
 }
 
 // IsMinimized returns true if this is a floating window and it's minimized.

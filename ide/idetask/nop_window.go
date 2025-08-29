@@ -21,58 +21,29 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package vctrl
+package idetask
 
 import (
-	"fmt"
-	"path/filepath"
-	"strings"
-
-	"github.com/go-git/go-git/v6/plumbing/format/gitignore"
-	"unstable.build/go-tui/api/schemeapi"
-	"unstable.build/go-tui/api/workspaceapi"
+	"unstable.build/go-tui/api/browserapi"
+	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/term"
 )
 
-// Matcher abstracts the ability to match files against glob patterns.
-type Matcher interface {
-	Match(file workspaceapi.URI, isDir bool) bool
-}
+type noopWindow struct{}
 
-// MatcherFromPatterns returns a matcher that matches files with the given patterns.
-func MatcherFromPatterns(
-	cwd schemeapi.Scheme, patterns ...gitignore.Pattern,
-) (Matcher, error) {
-	cwduri, err := cwd.URI(".")
-	if err != nil {
-		return nil, fmt.Errorf("get workspace uri: %w", err)
-	}
-	return uriMatcher{
-		cwduri:  cwduri,
-		matcher: gitignore.NewMatcher(patterns),
-	}, nil
-}
-
-// NopMatcher returns a Matcher that either always or never matches.
-func NopMatcher(match bool) Matcher {
-	return nopMatcher{match: match}
-}
-
-type uriMatcher struct {
-	cwduri  workspaceapi.URI
-	matcher gitignore.Matcher
-}
-
-func (u uriMatcher) Match(uri workspaceapi.URI, isDir bool) (match bool) {
-	relpath := workspaceapi.RelPath(u.cwduri, uri)
-	pathcomps := strings.Split(relpath, string(filepath.Separator))
-	match = u.matcher.Match(pathcomps, isDir)
-	return
-}
-
-type nopMatcher struct {
-	match bool
-}
-
-func (n nopMatcher) Match(uri workspaceapi.URI, isDir bool) bool {
-	return n.match
+func (w noopWindow) Content() (browserapi.Handler, error)     { return nil, nil }
+func (w noopWindow) SetContent(h browserapi.Handler) error    { return nil }
+func (w noopWindow) Close() error                             { return nil }
+func (w noopWindow) WindowID() uint64                         { return 0 }
+func (w noopWindow) Focus() (bool, error)                     { return false, nil }
+func (w noopWindow) Closed() bool                             { return false }
+func (w noopWindow) IsFloating() bool                         { return false }
+func (w noopWindow) IsMinimized() (component.Alignment, bool) { return 0, false }
+func (w noopWindow) MinimizeUp(padding int) bool              { return false }
+func (w noopWindow) MinimizeDown(padding int) bool            { return false }
+func (w noopWindow) MinimizeLeft(padding int) bool            { return false }
+func (w noopWindow) MinimizeRight(padding int) bool           { return false }
+func (w noopWindow) Unminimize() bool                         { return false }
+func (w noopWindow) SetFrameAttr(term.Attributes) (term.Attributes, bool) {
+	return term.Attributes{}, false
 }

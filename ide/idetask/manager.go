@@ -1,0 +1,255 @@
+// Unstable Build LLC ("COMPANY") CONFIDENTIAL
+//
+// Unpublished Copyright (c) 2017-2024 Unstable Build, All Rights Reserved.
+//
+// NOTICE: All information contained herein is, and remains the property of COMPANY.
+// The intellectual and technical concepts contained herein are proprietary to
+// COMPANY and may be covered by U.S. and Foreign Patents, patents in process,
+// and are protected by trade secret or copyright law. Dissemination of this information
+// or reproduction of this material is strictly forbidden unless prior written permission
+// is obtained from COMPANY. Access to the source code contained herein is hereby
+// forbidden to anyone except current COMPANY employees, managers or contractors who
+// have executed Confidentiality and Non-disclosure agreements explicitly covering such access.
+//
+// The copyright notice above does not evidence any actual or intended publication or
+// disclosure of this source code, which includes information that is confidential and/or
+// proprietary, and is a trade secret, of COMPANY. ANY REPRODUCTION, MODIFICATION,
+// DISTRIBUTION, PUBLIC  PERFORMANCE, OR PUBLIC DISPLAY OF OR THROUGH USE OF THIS SOURCE CODE
+// WITHOUT  THE EXPRESS WRITTEN CONSENT OF COMPANY IS STRICTLY PROHIBITED, AND IN
+// VIOLATION OF APPLICABLE LAWS AND INTERNATIONAL TREATIES. THE RECEIPT OR POSSESSION OF
+// THIS SOURCE CODE AND/OR RELATED INFORMATION DOES NOT CONVEY OR IMPLY ANY RIGHTS TO
+// REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
+// ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
+
+package idetask
+
+import (
+	"bytes"
+	"context"
+	"errors"
+	"fmt"
+	"strings"
+	"sync"
+
+	"github.com/ernestrc/logd-go/logging"
+	"github.com/go-git/go-git/v6/plumbing/format/gitignore"
+	log "github.com/sirupsen/logrus"
+	"github.com/unstablebuild/blue/cli/cliformat"
+	"github.com/unstablebuild/blue/iterator"
+	"unstable.build/go-tui/api/schemeapi"
+	"unstable.build/go-tui/api/workspaceapi"
+	"unstable.build/go-tui/browser"
+	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/handler"
+	"unstable.build/go-tui/ide/plugin"
+	"unstable.build/go-tui/ide/vctrl"
+)
+
+// Manager runs and manages tasks, which are processes that
+// run in response to changes in the workspace. See Task for more details.
+type Manager struct {
+	b          browser.Browser
+	scheme     schemeapi.Scheme
+	pluginOpts []plugin.Option
+	ctx        context.Context
+	cancelCtx  func()
+	tasks      sync.Map
+	width      int
+	height     int
+	newPlugin  pluginBuilder
+}
+
+// NewManager allocates storage for a new Manager and initializes it.
+func NewManager(
+	b browser.Browser, scheme schemeapi.Scheme, opts ...plugin.Option,
+) *Manager {
+	m := new(Manager)
+	m.Init(b, scheme, opts...)
+	return m
+}
+
+// Init initializes this Manager with the given browser, scheme and options.
+func (m *Manager) Init(b browser.Browser, scheme schemeapi.Scheme, opts ...plugin.Option) {
+	m.b = b
+	m.scheme = scheme
+	m.pluginOpts = opts
+	m.ctx, m.cancelCtx = context.WithCancel(context.Background())
+	m.newPlugin = func(
+		publisher browser.EventPublisher, notifications browser.Notifications,
+		e schemeapi.Executor, t schemeapi.Terminal, tm browser.TabManager,
+		cmdAndArgs string, maxWidth int, opts ...plugin.Option,
+	) (browser.ScrollableFloating, error) {
+		return plugin.New(publisher, notifications, e, t, tm, cmdAndArgs, maxWidth, opts...)
+	}
+}
+
+// SetMaxWidth is used to ensure that a task's initial VTE is resized
+// to an approppiate initial width.
+func (m *Manager) SetMaxWidthHeight(width, height int) {
+	m.width = width
+	m.height = height
+	m.tasks.Range(func(k, v any) bool {
+		v.(*Task).setMaxWidthHeight(width, height)
+		return true
+	})
+}
+
+// RunTask runs a task in the background and creates a minimized floating window
+// that displays the status of the task. When a Task's window is un-minimized,
+// the full stdout and stderr of the task can be visualized.
+func (m *Manager) RunTask(t Task) error {
+	validateTask(t)
+	if _, loaded := m.tasks.LoadOrStore(t.Name, &t); loaded {
+		return fmt.Errorf("task with name %s already exists", t.Name)
+	}
+	ch := make(chan workspaceapi.EventInfo)
+	id, err := m.scheme.Watch("./...", ch, workspaceapi.AllEvents()...)
+	if err != nil {
+		m.tasks.Delete(t.Name)
+		return fmt.Errorf("workspace watch: %w", err)
+	}
+	ctx, cancel, err := t.init(id, m.ctx, m.b, m.scheme,
+		m.newPlugin, m.width, m.height, m.pluginOpts...)
+	if err != nil {
+		_ = m.scheme.StopWatch(id)
+		m.tasks.Delete(t.Name)
+		return fmt.Errorf("init task: %w", err)
+	}
+
+	go func() {
+		defer m.scheme.StopWatch(id) //nolint:errcheck
+		defer cancel()
+		ignore, err := vctrl.LoadGitignore(m.scheme)
+		if err != nil {
+			m.log(log.ErrorLevel, "load gitignore: %v", err)
+			ignore = vctrl.NopMatcher(false)
+		}
+		matcher := vctrl.NopMatcher(true)
+		var filters []gitignore.Pattern
+		if t.Filter != "" {
+			filtersStr := strings.Split(t.Filter, ",")
+			filters = make([]gitignore.Pattern, len(filtersStr))
+			for i, filter := range filtersStr {
+				filters[i] = gitignore.ParsePattern(filter, nil)
+			}
+			matcher, err = vctrl.MatcherFromPatterns(m.scheme, filters...)
+			if err != nil {
+				matcher = vctrl.NopMatcher(true)
+				m.log(log.ErrorLevel, "new matcher: %v", err)
+			}
+		}
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case ev := <-ch:
+				isDir, _ := ev.IsDir()
+				if ignore.Match(ev.URI(), isDir) {
+					m.log(log.TraceLevel, "ignoring %s due to gitignore", ev.URI().Path())
+					continue
+				}
+
+				if !matcher.Match(ev.URI(), isDir) {
+					m.log(log.TraceLevel, "ignoring %s due to not matching filters: %v", ev.URI().Path(), filters)
+					continue
+				}
+
+				m.log(log.TraceLevel, "running file due to file %s change", ev.URI().Path())
+				t.tryRunning(m.b, m.scheme)
+			}
+		}
+	}()
+
+	return nil
+}
+
+// ListTasks creates a floating window that displays
+// all the running tasks and its status details.
+func (m *Manager) ListTasks() (ret []TaskInfo) {
+	m.tasks.Range(func(k, v any) bool {
+		ret = append(ret, v.(*Task).Info())
+		return true
+	})
+	return
+}
+
+// Top displays sorted information about tasks on a floating window.
+func (m *Manager) Top() error {
+	tasks := m.ListTasks()
+	it := iterator.FromSlice(tasks)
+	itfmt := cliformat.Table[TaskInfo]([]string{})
+
+	var buf bytes.Buffer
+	err := itfmt.Format(context.Background(), &buf, it)
+	if err != nil {
+		return fmt.Errorf("format: %w", err)
+	}
+
+	less := handler.NewLess(handler.DefaultLessConfig())
+	_, _ = less.Buffer().Write(buf.Bytes())
+	floating := handler.StaticFloating(less,
+		strings.IndexRune(buf.String(), '\n'), len(tasks))
+	_, err = m.b.Floating(browser.NopFloatingHandler(floating), component.FloatingConfig{
+		Alignment: component.SpanAlignmentCentered,
+	})
+	if err != nil {
+		return fmt.Errorf("floating: %w", err)
+	}
+	return nil
+}
+
+// StopTask stops the task with the given name or returns
+// an error if the task doesn't exist or there was an error stopping
+// it.
+func (m *Manager) StopTask(name string) error {
+	info, ok := m.tasks.LoadAndDelete(name)
+	if !ok {
+		return errors.New("task with this name does not exist")
+	}
+	info.(*Task).cancelCtx()
+	<-info.(*Task).doneWaitCh
+	return nil
+}
+
+// OnFocus satisfies handler.WindowSubscriber.
+func (m *Manager) OnFocus(prevFocus, newFocus handler.Window) {
+	m.onFocus(prevFocus, newFocus)
+}
+
+// Close stops all tasks and closes this Manager's resources.
+func (m *Manager) Close() error {
+	m.cancelCtx()
+	return nil
+}
+
+// allows calling it directly in tests with fake windows
+func (m *Manager) onFocus(prevFocus, newFocus interface{ ID() uint64 }) {
+	m.tasks.Range(func(k, v any) bool {
+		task := v.(*Task)
+		winID := task.win.WindowID()
+		if winID == prevFocus.ID() {
+			task.onUnfocus()
+		} else if winID == newFocus.ID() {
+			task.onFocus()
+		}
+		return true
+	})
+}
+
+func (m *Manager) log(level log.Level, msg string, args ...interface{}) {
+	if !log.IsLevelEnabled(level) {
+		return
+	}
+	log.WithFields(log.Fields{
+		logging.KeyClass: "idetask.Manager",
+	}).Logf(level, msg, args...)
+}
+
+func validateTask(t Task) {
+	if t.Cmd == "" {
+		panic("task command must not be empty")
+	}
+	if t.Name == "" {
+		panic("task name must not be empty")
+	}
+}

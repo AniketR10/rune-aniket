@@ -128,6 +128,10 @@ type WindowManager interface {
 	// Window returns a window with the given window ID or returns false
 	// if now window with that ID exists.
 	Window(uint64) (Window, bool)
+
+	// SetFocus sets the window in focus and returns the previous window in focus.
+	// It satisfies browser.Browser.
+	SetFocus(win Window) (Window, error)
 }
 
 // TabManager is the interface that groups tab management methods.
@@ -206,7 +210,13 @@ func FuncFloatingHandler(h handler.Floating, closeFn func() error) Floating {
 // NopScrollableFloatingHandler wraps a handler.ScrollableFloating and returns a
 // ScrollableFloating that does nothing when Close is called.
 func NopScrollableFloatingHandler(h handler.ScrollableFloating) ScrollableFloating {
-	return nopScrollableFloating{ScrollableFloating: h}
+	return funcScrollableFloating{ScrollableFloating: h}
+}
+
+// FuncScrollableFloatingHandler wraps a handler.ScrollableFloating and returns a
+// ScrollableFloating that does nothing when Close is called.
+func FuncScrollableFloatingHandler(h handler.ScrollableFloating, fn func() error) ScrollableFloating {
+	return funcScrollableFloating{ScrollableFloating: h, fn: fn}
 }
 
 // FuncFloating wraps a Handler and returns a Floating that
@@ -259,10 +269,14 @@ func (n nopFloating) Close() error {
 	return nil
 }
 
-type nopScrollableFloating struct {
+type funcScrollableFloating struct {
 	handler.ScrollableFloating
+	fn func() error
 }
 
-func (n nopScrollableFloating) Close() error {
+func (n funcScrollableFloating) Close() error {
+	if n.fn != nil {
+		return n.fn()
+	}
 	return nil
 }

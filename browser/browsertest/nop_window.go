@@ -27,6 +27,7 @@ import (
 	"unstable.build/go-tui/api/browserapi"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/term"
 )
 
 type noopWindow struct {
@@ -53,6 +54,9 @@ func (w *noopWindow) MinimizeDown(padding int) bool            { return false }
 func (w *noopWindow) MinimizeLeft(padding int) bool            { return false }
 func (w *noopWindow) MinimizeRight(padding int) bool           { return false }
 func (w *noopWindow) Unminimize() bool                         { return false }
+func (w *noopWindow) SetFrameAttr(term.Attributes) (term.Attributes, bool) {
+	return term.Attributes{}, false
+}
 
 // NopWindow returns a window that does nothing.
 func NopWindow() browser.Window {

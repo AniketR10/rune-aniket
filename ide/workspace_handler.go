@@ -1126,7 +1126,7 @@ func dispatchFilesystemEvents(
 	ignores, err := vctrl.LoadGitignore(cwd)
 	if err != nil {
 		ex.log(log.ErrorLevel, "load excludes for filesystem event matching: %v", err)
-		ignores = vctrl.NopMatcher()
+		ignores = vctrl.NopMatcher(false)
 	}
 	for {
 		select {
