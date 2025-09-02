@@ -112,33 +112,15 @@ type ResponsiveString struct {
 }
 
 var _ WithAttributes = (*ResponsiveString)(nil)
+var _ Scrollable = (*ResponsiveString)(nil)
 var _ Responsive = (*ResponsiveString)(nil)
+var _ Floating = (*ResponsiveString)(nil)
 var _ fmt.Stringer = (*ResponsiveString)(nil)
 
 var _ WithAttributes = (*respBuf)(nil)
+var _ Scrollable = (*respBuf)(nil)
 var _ Responsive = (*respBuf)(nil)
 var _ fmt.Stringer = (*respBuf)(nil)
-
-type respBuf struct {
-	ResponsiveString
-	buf           *cell.Buffer
-	width, height int
-}
-
-func (b *respBuf) Height(width int) int {
-	b.ResponsiveString.in = b.buf.RawCells()
-	return b.ResponsiveString.Height(width)
-}
-
-func (b *respBuf) Resize(width, height int) {
-	b.width, b.height = width, height
-}
-
-func (b *respBuf) Draw(w term.Writer) {
-	b.ResponsiveString.in = b.buf.RawCells()
-	b.ResponsiveString.Resize(b.width, b.height)
-	b.ResponsiveString.Draw(w)
-}
 
 // Height satisfies Responsive.
 func (s *ResponsiveString) Height(width int) int {
@@ -151,6 +133,11 @@ func (s *ResponsiveString) Height(width int) int {
 		height += 2
 	}
 	return height
+}
+
+// Dimensions returns the optimal width and height.
+func (s *ResponsiveString) Dimensions() (width, height int) {
+	return s.out.Dimensions()
 }
 
 // Resize satisfies tui.Component.
@@ -175,6 +162,31 @@ func (s *ResponsiveString) SetAttr(attr term.Attributes) term.Attributes {
 	// do not set s.cfg.BackgroundAttributes
 	// as this is not what the user most likely intends.
 	return s.out.SetAttr(attr)
+}
+
+// SeekUp always returns false.
+func (s *ResponsiveString) SeekUp() bool {
+	return false
+}
+
+// SeekDown always returns false.
+func (s *ResponsiveString) SeekDown() bool {
+	return false
+}
+
+// SeekOffset always returns 0.
+func (s *ResponsiveString) SeekOffset() int {
+	return 0
+}
+
+// MaxSeekOffset always returns 0.
+func (s *ResponsiveString) MaxSeekOffset() int {
+	return 0
+}
+
+// String satisfies fmt.Stringer.
+func (s *ResponsiveString) String() string {
+	return s.out.String()
 }
 
 func (s *ResponsiveString) massageInput(width int) [][]term.Cell {
@@ -212,7 +224,23 @@ func (s *ResponsiveString) massageInput(width int) [][]term.Cell {
 	return outRaw
 }
 
-// String satisfies fmt.Stringer.
-func (s *ResponsiveString) String() string {
-	return s.out.String()
+type respBuf struct {
+	ResponsiveString
+	buf           *cell.Buffer
+	width, height int
+}
+
+func (b *respBuf) Height(width int) int {
+	b.ResponsiveString.in = b.buf.RawCells()
+	return b.ResponsiveString.Height(width)
+}
+
+func (b *respBuf) Resize(width, height int) {
+	b.width, b.height = width, height
+}
+
+func (b *respBuf) Draw(w term.Writer) {
+	b.ResponsiveString.in = b.buf.RawCells()
+	b.ResponsiveString.Resize(b.width, b.height)
+	b.ResponsiveString.Draw(w)
 }
