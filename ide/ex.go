@@ -27,7 +27,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -41,7 +40,6 @@ import (
 	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/api/browserapi"
-	"unstable.build/go-tui/api/schemeapi"
 	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/browser"
@@ -50,12 +48,12 @@ import (
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/command"
+	"unstable.build/go-tui/ide/idetask"
 	"unstable.build/go-tui/ide/plugin"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/term/vte"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/workspace"
-	"unstable.build/go-tui/workspace/walkdir"
 )
 
 const (
@@ -68,14 +66,6 @@ var (
 	errEventStreamNotReady = errors.New("event stream not ready to publish")
 	errInvalidTab          = errors.New("expected exactly one argument with the tab position")
 )
-
-type workspaceLoader interface {
-	workspace.Loader
-	walkdir.Reader
-	schemeapi.Terminal
-	schemeapi.Executor
-	MkdirAll(string, os.FileMode) error
-}
 
 type vteHandler interface {
 	browserapi.Handler
@@ -103,7 +93,8 @@ type ex struct {
 	emulatorConfig       vte.Config
 	newEmulatorHandler   func(string, vte.Config) (vteHandler, error)
 	newPluginHandler     func(...string) (pluginHandler, error)
-	workspace            workspaceLoader
+	workspace            workspace.Workspace
+	tasks                *idetask.Manager
 	filepathCompleter    command.Completer
 	sequencer            handler.Sequencer
 	publishEvent         func(term.Event) bool
@@ -129,7 +120,7 @@ type ex struct {
 }
 
 func newEx(
-	ed text.Editor, m workspaceLoader,
+	ed text.Editor, m workspace.Workspace,
 	storage document.Service,
 	emulatorConfig vte.Config,
 	publishEvent func(term.Event) bool,
@@ -148,7 +139,7 @@ func newEx(
 // It returns an error if an initial filepath was given through WithFilePath option
 // and the file failed to be opened.
 func (e *ex) init(
-	ed text.Editor, m workspaceLoader,
+	ed text.Editor, m workspace.Workspace,
 	storage document.Service,
 	emulatorConfig vte.Config,
 	publishEvent func(term.Event) bool,
@@ -184,6 +175,8 @@ func (e *ex) init(
 			e.Browser(), strings.Join(args, " "), e.width, pluginOpts...)
 	}
 	e.filepathCompleter = command.FilePathCompleter(e.workspace)
+	e.tasks = idetask.NewManager(e.Browser(), m, pluginOpts...)
+	e.comp.SubscribeWindow(e.tasks)
 	return
 }
 
@@ -235,7 +228,7 @@ func (e *ex) Interrupt(ctx context.Context) error {
 }
 
 func (e *ex) doInit(
-	ed text.Editor, m workspaceLoader,
+	ed text.Editor, m workspace.Workspace,
 	storage document.Service,
 	emulatorConfig vte.Config,
 	publishEvent func(term.Event) bool,
@@ -917,6 +910,73 @@ func (e *ex) executePlugin(args ...string) error {
 	return nil
 }
 
+func (e *ex) newTask(args ...string) error {
+	const errExpect = "command expects at least four arguments: " +
+		"name, alignment, a separator '--' and the command to run"
+	if len(args) < 3 {
+		return errors.New(errExpect)
+	}
+	sysArgs, cmdAndArgs, found := strings.Cut(strings.Join(args, " "), "--")
+	if !found {
+		return errors.New(errExpect)
+	}
+
+	sysArgv := strings.Split(sysArgs, " ")
+	cmdAndArgv := strings.Split(cmdAndArgs, " ")
+
+	// cleanup splitting via --
+	cmdAndArgv = cmdAndArgv[1:]
+	sysArgv = sysArgv[:len(sysArgv)-1]
+
+	if len(sysArgv) < 2 || len(cmdAndArgv) == 0 {
+		return errors.New(errExpect)
+	}
+
+	e.log(log.DebugLevel, "newtask called with args %+v, sysArgs: %+v, cmdAndArgv: %+v",
+		args, sysArgv, cmdAndArgv)
+
+	t := idetask.Task{
+		Name: sysArgv[0],
+		Cmd:  cmdAndArgv[0],
+		Args: cmdAndArgv[1:],
+	}
+	if len(sysArgv) > 2 {
+		t.Filter = sysArgv[2]
+	}
+	switch sysArgv[1] {
+	case "right":
+		t.MinimizeAlignment = component.SpanAlignmentRight
+	case "left":
+		t.MinimizeAlignment = component.SpanAlignmentLeft
+	default:
+		return fmt.Errorf("invalid orientation argument %q", args[0])
+	}
+
+	return e.tasks.RunTask(t)
+}
+
+func (e *ex) stopTask(args ...string) error {
+	if len(args) != 1 {
+		return errors.New("expected one argument with the name of the task to stop")
+	}
+
+	return e.tasks.StopTask(args[0])
+}
+
+func (e *ex) completeTasks(
+	ctx context.Context, cmd string, args []string,
+) (iterator.Iterator[string], string, error) {
+	tasks := e.tasks.ListTasks()
+	names := make([]string, len(tasks))
+	for i, task := range tasks {
+		names[i] = task.Name
+	}
+	// ensure that order is deterministic
+	sort.Strings(names)
+
+	return iterator.FromSlice(names), "", nil
+}
+
 func (e *ex) toggleCompanionTerminal() error {
 	// if window is open and shell didn't exit, then close. If shell exited
 	// then most likely what the user really wants is to open a new one
@@ -1356,6 +1416,7 @@ func (e *ex) Man() tui.Manual {
 func (e *ex) Resize(width, height int) {
 	e.height = height
 	e.width = width
+	e.tasks.SetMaxWidthHeight(width, height)
 	e.comp.Resize(width, height)
 	// if a top bar is added we don't reposition
 	// command window until the next resize, but that's

@@ -315,7 +315,7 @@ func (p *fileScheme) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (
 	err = stdcmd.Start()
 	if err != nil {
 		cancelFn()
-		return 0, fmt.Errorf("start: %w", err)
+		return 0, err
 	}
 
 	pid := workspaceapi.Pid(stdcmd.Process.Pid)

@@ -35,6 +35,7 @@ import (
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/term"
+	"unstable.build/go-tui/workspace"
 )
 
 const (
@@ -189,7 +190,7 @@ func (h *createWorkspaceHandler) OnSelect(
 	switch option {
 	case yesOpt:
 		path := h.uri.Path()
-		// NOTE: if we just use the default workspaceLoader, we might
+		// NOTE: if we just use the default workspace, we might
 		// be using the wrong scheme (or on the wrong host). Recursively,
 		// attempt to create a workspace on some parent directory of path,
 		// and then proceed to MkdirAll from that root.
@@ -224,7 +225,9 @@ func (h *createWorkspaceHandler) OnClose() error {
 	return nil
 }
 
-func (h *createWorkspaceHandler) createParentWorkspace(uri workspaceapi.URI) (workspaceLoader, error) {
+func (h *createWorkspaceHandler) createParentWorkspace(
+	uri workspaceapi.URI,
+) (workspace.Workspace, error) {
 	parent := workspaceapi.Dir(uri)
 	if parent.Equal(uri) {
 		return nil, errors.New("reached root dir")

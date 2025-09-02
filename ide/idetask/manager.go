@@ -83,8 +83,8 @@ func (m *Manager) Init(b browser.Browser, scheme schemeapi.Scheme, opts ...plugi
 	}
 }
 
-// SetMaxWidth is used to ensure that a task's initial VTE is resized
-// to an approppiate initial width.
+// SetMaxWidthHeight is used to ensure that a task's initial VTE is resized
+// to an approppiate initial width and height.
 func (m *Manager) SetMaxWidthHeight(width, height int) {
 	m.width = width
 	m.height = height
@@ -109,7 +109,9 @@ func (m *Manager) RunTask(t Task) error {
 		return fmt.Errorf("workspace watch: %w", err)
 	}
 	ctx, cancel, err := t.init(id, m.ctx, m.b, m.scheme,
-		m.newPlugin, m.width, m.height, m.pluginOpts...)
+		m.newPlugin, m.width, m.height, func() {
+			m.tasks.Delete(t.Name)
+		}, m.pluginOpts...)
 	if err != nil {
 		_ = m.scheme.StopWatch(id)
 		m.tasks.Delete(t.Name)
@@ -206,7 +208,7 @@ func (m *Manager) StopTask(name string) error {
 	if !ok {
 		return errors.New("task with this name does not exist")
 	}
-	info.(*Task).cancelCtx()
+	info.(*Task).doClose()
 	<-info.(*Task).doneWaitCh
 	return nil
 }

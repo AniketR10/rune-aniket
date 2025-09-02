@@ -421,6 +421,33 @@ var (
 				return e.completeReadFile(ctx, args)
 			},
 		},
+		"tasknew": {
+			man: textapi.CommandManual{
+				Summary: "Create a task which runs the given command in response to changes " +
+					"in the workspce. The filter argument can be used to " +
+					"pass a glob pattern used to watch the matching files only. " +
+					"A task can be minimized by pressinc <esc>, 'alignment' determines " +
+					"the side used to visualize the minized task." +
+					"The name argument will appear in 'tasklist' to manage the running tasks.",
+				Synopsis: "<name> <alignment> [filter] -- <cmd> [<args>]",
+			},
+			handler: (*ex).newTask,
+			completer: func(e *ex, ctx context.Context, cmd string, args []string,
+			) (iterator.Iterator[string], string, error) {
+				if len(args) == 2 {
+					return iterator.FromSlice([]string{"left", "right"}), "", nil
+				}
+				return iterator.FromSlice[string](nil), "", nil
+			},
+		},
+		"taskstop": {
+			man: textapi.CommandManual{
+				Summary:  "Stop a task previously created via tasknew.",
+				Synopsis: "<name>",
+			},
+			handler:   (*ex).stopTask,
+			completer: (*ex).completeTasks,
+		},
 	}
 
 	manSplitWindow = commandAll{

@@ -80,6 +80,7 @@ type Task struct {
 	watchID     int
 	ctx         context.Context
 	cancelCtx   func()
+	closeHook   func()
 	doneWaitCh  chan struct{}
 	mu          *sync.Mutex
 	win         browser.Window
@@ -222,15 +223,8 @@ func (t *Task) Man() tui.Manual {
 
 // Close satisfies browserapi.Handler.
 func (t *Task) Close() error {
-	if t.closed {
-		return nil
-	}
-	t.cancelCtx()
-	t.closed = true
-	if t.handler != nil {
-		return t.handler.Close()
-	}
-	return nil
+	t.closeHook()
+	return t.doClose()
 }
 
 func calcMinSize(width, height int) (int, int) {
@@ -243,11 +237,24 @@ func calcMinSize(width, height int) (int, int) {
 		int(math.Max(float64(height/factor), minHeight))
 }
 
+func (t *Task) doClose() error {
+	if t.closed {
+		return nil
+	}
+	t.cancelCtx()
+	t.closed = true
+	if t.handler != nil {
+		return t.handler.Close()
+	}
+	return nil
+}
+
 func (t *Task) init(
 	watchID int, ctx context.Context, b browser.Browser,
 	scheme schemeapi.Scheme, newPlugin pluginBuilder,
-	maxWidth, maxHeight int, pluginOpts ...plugin.Option,
+	maxWidth, maxHeight int, closeHook func(), pluginOpts ...plugin.Option,
 ) (context.Context, func(), error) {
+	t.closeHook = closeHook
 	t.watchID = watchID
 	t.maxWidth = maxWidth
 	t.minWidth, t.minHeight = calcMinSize(maxWidth, maxHeight)

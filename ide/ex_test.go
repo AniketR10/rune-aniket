@@ -148,6 +148,32 @@ func (w *testLoader) SetPtySize(p workspaceapi.Pty, width, height int) error {
 	panic("unimplemented")
 }
 
+func (w *testLoader) NewFile(fd uintptr, name string) workspaceapi.File {
+	panic("unimplemented")
+}
+
+func (w *testLoader) Rename(old, new string) error {
+	panic("unimplemented")
+}
+
+func (w *testLoader) Lstat(path string) (os.FileInfo, error) {
+	panic("unimplemented")
+}
+
+func (w *testLoader) ReadLink(path string) (string, error) {
+	panic("unimplemented")
+}
+
+func (w *testLoader) Watch(
+	path string, c chan<- workspaceapi.EventInfo, events ...workspaceapi.Event,
+) (int, error) {
+	return 0, nil
+}
+
+func (w *testLoader) StopWatch(int) error {
+	return nil
+}
+
 type testFileInfo struct {
 	name string
 }
@@ -1090,7 +1116,7 @@ func defCommandKeyBindings() (opts []text.Option) {
 }
 
 func newExForTestingTerminal(
-	t *testing.T, workspace workspaceLoader,
+	t *testing.T, workspace workspace.Workspace,
 	ed text.Editor,
 	emulatorCfg vte.Config,
 	publishEvent func(term.Event) bool,
@@ -1107,7 +1133,7 @@ func newExForTestingTerminal(
 }
 
 func newExForTestingWithWorkspace(
-	t *testing.T, workspace workspaceLoader,
+	t *testing.T, workspace workspace.Workspace,
 	ed text.Editor,
 	emulatorCfg vte.Config,
 	publishEvent func(term.Event) bool,
@@ -1400,6 +1426,9 @@ func TestIntegrationEphemeralTerminal(t *testing.T) {
 
 	tempDir, err := os.MkdirTemp("", "")
 	require.NoError(t, err)
+	t.Cleanup(func() {
+		_ = os.RemoveAll(tempDir)
+	})
 	uri, err := workspaceapi.ParseURI(filepath.Join("file://", tempDir))
 	require.NoError(t, err)
 	ctx := context.Background()
@@ -1493,6 +1522,9 @@ func TestIntegrationCompanionTerminal(t *testing.T) {
 
 	tempDir, err := os.MkdirTemp("", "")
 	require.NoError(t, err)
+	t.Cleanup(func() {
+		_ = os.RemoveAll(tempDir)
+	})
 	uri, err := workspaceapi.ParseURI(filepath.Join("file://", tempDir))
 	require.NoError(t, err)
 	ctx := context.Background()
@@ -1553,6 +1585,9 @@ func TestFullScreen(t *testing.T) {
 
 	tempDir, err := os.MkdirTemp("", "")
 	require.NoError(t, err)
+	t.Cleanup(func() {
+		_ = os.RemoveAll(tempDir)
+	})
 	uri, err := workspaceapi.ParseURI(filepath.Join("file://", tempDir))
 	require.NoError(t, err)
 	ctx := context.Background()
@@ -1640,6 +1675,9 @@ func TestMoveWindowContent(t *testing.T) {
 
 	tempDir, err := os.MkdirTemp("", "")
 	require.NoError(t, err)
+	t.Cleanup(func() {
+		_ = os.RemoveAll(tempDir)
+	})
 	uri, err := workspaceapi.ParseURI(filepath.Join("file://", tempDir))
 	require.NoError(t, err)
 	ctx := context.Background()
@@ -1751,6 +1789,9 @@ func TestResizeWindows(t *testing.T) {
 
 	tempDir, err := os.MkdirTemp("", "")
 	require.NoError(t, err)
+	t.Cleanup(func() {
+		_ = os.RemoveAll(tempDir)
+	})
 	uri, err := workspaceapi.ParseURI(filepath.Join("file://", tempDir))
 	require.NoError(t, err)
 	ctx := context.Background()
@@ -2338,6 +2379,152 @@ func TestSwitchToTab(t *testing.T) {
 	handlertest.TestHandlerSequence(t, b, 30, 15, cases)
 }
 
+func TestRunStopTasks(t *testing.T) {
+	t.Run("newtask is called with incorrect number of args returns error", func(t *testing.T) {
+		b, cleanup := newExForTestingTasks(t)
+		defer cleanup()
+
+		require.Error(t, b.newTask("up", "--", "make"))
+		require.Error(t, b.newTask("newTask", "left", "make"))
+		require.Error(t, b.newTask("--", "make", "test", "things"))
+		require.Error(t, b.newTask("up", ".go,.md", "--", "make", "test"))
+	})
+
+	t.Run("newtask is called with correct number of args returns no error", func(t *testing.T) {
+		b, cleanup := newExForTestingTasks(t)
+		defer cleanup()
+
+		require.NoError(t, b.newTask("myTask", "left", "--", "make"))
+		require.NoError(t, b.newTask("myTask2", "right", "--", "make", "test", "things"))
+		require.NoError(t, b.newTask("myTask3", "left", ".go,.md", "--", "make", "test"))
+		require.NoError(t, b.newTask("myTask4", "right", ".go,.md", "--", "make", "test"))
+	})
+
+	// left/right alignment combined with up/down is ugly; stick to left/right only
+	t.Run("newtask is called with left or right alignment is error", func(t *testing.T) {
+		b, cleanup := newExForTestingTasks(t)
+		defer cleanup()
+
+		require.Error(t, b.newTask("myTask", "up", "--", "make"))
+		require.Error(t, b.newTask("myTask2", "down", "--", "make", "test", "things"))
+		require.Error(t, b.newTask("myTask3", "up", ".go,.md", "--", "make", "test"))
+		require.Error(t, b.newTask("myTask4", "down", ".go,.md", "--", "make", "test"))
+	})
+
+	t.Run("newtask called twice with same task name fails second time", func(t *testing.T) {
+		b, cleanup := newExForTestingTasks(t)
+		defer cleanup()
+
+		require.NoError(t, b.newTask("myTask", "left", "--", "make"))
+		require.Error(t, b.newTask("myTask", "right", "--", "make", "test", "things"))
+	})
+
+	t.Run("integration", func(t *testing.T) {
+		cases := []handlertest.SequenceTestCase{
+			{":tasknew test right .go -- go test ./...>",
+				`┌────────────────────────────┐
+│                            │
+├───────────────────────────┐┤
+│                           ││
+│                           ││
+│                           ││
+│                           ││
+│                           ││
+│                           ││
+│                           ││
+│                           ││
+│                           ││
+│                           ││
+│                           ││
+└───────────────────────────┘┘`},
+			{":tasknew build left -- go build ./...>:tasknew assets left -- npm run buildAssets>:tasknew validateAssets right .html,.js,.css,.ts -- npm run validate>",
+				`┌────────────────────────────┐
+│                            │
+├┌┌────────────────────────┐┐┤
+│││                        │││
+│││                        │││
+│││                        │││
+│││                        │││
+│││                        │││
+│││                        │││
+│││                        │││
+│││                        │││
+│││                        │││
+│││                        │││
+│││                        │││
+└└└────────────────────────┘┘┘`},
+			{":taskstop ",
+				`┌────────────────────────────┐
+│                            │
+├┌┌────────────────────────┐┐┤
+│││                        │││
+│││                        │││
+│││                        │││
+│││                        │││
+┌────────────────────────────┐
+│taskstop ▐                  │
+│assets                      │
+│build                       │
+│test                        │
+│validateAssets              │
+└────────────────────────────┘
+└└└────────────────────────┘┘┘`},
+			{" assets>:taskstop test>:taskstop ",
+				`┌────────────────────────────┐
+│                            │
+├┌──────────────────────────┐┤
+││                          ││
+││                          ││
+││                          ││
+││                          ││
+┌────────────────────────────┐
+│taskstop ▐                  │
+│build                       │
+│validateAssets              │
+└────────────────────────────┘
+││                          ││
+││                          ││
+└└──────────────────────────┘┘`},
+			{"<:windowfocus right>",
+				`┌────────────────────────────┐
+│                            │
+├┌───────────────────────────┤
+││                           │
+││                  ┌────────┐
+││                  │new     │
+││                  │vte:    │
+││                  │start   │
+││                  │command:│
+││                  │ context│
+││                  │ cancele│
+││                  │d       │
+││                  └────────┘
+││                           │
+└└───────────────────────────┘`},
+			{":windowclose>:tasknew validateAssets right -- npm validateAssets>", // recreate after close
+				`┌────────────────────────────┐
+│                            │
+├┌──────────────────────────┐┤
+││                          ││
+││                          ││
+││                          ││
+││                          ││
+││                          ││
+││                          ││
+││                          ││
+││                          ││
+││                          ││
+││                          ││
+││                          ││
+└└──────────────────────────┘┘`},
+		}
+
+		e, cleanup := newExForTestingTasks(t)
+		defer cleanup()
+		handlertest.TestHandlerSequence(t, e, 30, 15, cases)
+	})
+}
+
 func TestEcho(t *testing.T) {
 	cases := []handlertest.SequenceTestCase{
 		{`:edit hello.go>:echo 01234>`,
@@ -2652,4 +2839,27 @@ func (v *testVte) URI() workspaceapi.URI {
 
 func (v *testVte) Title() string {
 	return v.title
+}
+
+func newExForTestingTasks(t *testing.T) (testEx, func()) {
+	opts := []text.Option{
+		text.WithCommandKey(testCommandKey),
+	}
+	tempDir, err := os.MkdirTemp("", "")
+	t.Cleanup(func() {
+		_ = os.RemoveAll(tempDir)
+	})
+	require.NoError(t, err)
+	uri, err := workspaceapi.ParseURI(filepath.Join("file://", tempDir))
+	require.NoError(t, err)
+	ctx := context.Background()
+	fileScheme, err := workspace.NewFileScheme(ctx, config.NopConfig(), uri)
+	require.NoError(t, err)
+	defer fileScheme.Close()
+	workspace := workspace.NewSchemeWorkspace(uri, fileScheme)
+	e := newExForTestingTerminal(t, workspace, texttest.NopEditor(),
+		vte.DefaultConfig(), nopPublishEvent, opts...)
+	return e, func() {
+		require.NoError(t, e.Close())
+	}
 }
