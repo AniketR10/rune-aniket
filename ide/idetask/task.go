@@ -29,8 +29,10 @@ import (
 	"math"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
+	"github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui"
@@ -103,7 +105,9 @@ type Task struct {
 	lastStart       time.Time
 	lastDuration    time.Duration
 	handler         browser.ScrollableFloating
-	closed          bool
+	// don't use mu to check if closed, so StopTask, followed by
+	// browser close handler doesn't deadlock
+	closed *atomic.Bool
 }
 
 // TaskInfo is an immutable snapshot of the status of a task.
@@ -237,16 +241,24 @@ func calcMinSize(width, height int) (int, int) {
 		int(math.Max(float64(height/factor), minHeight))
 }
 
-func (t *Task) doClose() error {
-	if t.closed {
-		return nil
+func (t *Task) doClose() (ret error) {
+	if !t.closed.CompareAndSwap(false, true) {
+		return
+	}
+
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	if !t.win.Closed() {
+		ret = t.win.Close()
 	}
 	t.cancelCtx()
-	t.closed = true
 	if t.handler != nil {
-		return t.handler.Close()
+		if err := t.handler.Close(); err != nil {
+			ret = multierror.Append(ret, err)
+		}
 	}
-	return nil
+	return
 }
 
 func (t *Task) init(
@@ -266,6 +278,7 @@ func (t *Task) init(
 	t.pluginOpts = append(t.pluginOpts, plugin.WithProcessWatcher(
 		workspaceapi.ChanProcessWatcher(t.donech),
 	))
+	t.closed = new(atomic.Bool)
 	t.doneWaitCh = make(chan struct{})
 	t.cmdAndArgs = strings.Join(append([]string{t.Cmd}, t.Args...), " ")
 	t.bar = component.WithAttrSetter(component.NewString(""))
@@ -304,12 +317,7 @@ func (t *Task) init(
 
 	// process exit errors
 	go func() {
-		defer func() {
-			if !t.win.Closed() {
-				t.win.Close()
-			}
-			close(t.doneWaitCh)
-		}()
+		defer close(t.doneWaitCh)
 		for {
 			select {
 			case err := <-t.donech:
@@ -454,7 +462,7 @@ func (t *Task) onFocus() {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	if t.closed {
+	if t.closed.Load() {
 		return
 	}
 	t.unminimize()
@@ -464,7 +472,7 @@ func (t *Task) onUnfocus() {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	if t.closed || t.win.Closed() {
+	if t.closed.Load() || t.win.Closed() {
 		return
 	}
 	t.minimize()
