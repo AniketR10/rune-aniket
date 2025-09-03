@@ -217,6 +217,42 @@ func (c *Component) Tabs() (ret []*Tab) {
 	return
 }
 
+// MoveTabLeft moves the tab in the given window to the left
+// of the tabs list.
+func (c *Component) MoveTabLeft(win Window) error {
+	bWin := win.(*browserWindow)
+	t, ok := browserTabAtWindow(bWin)
+	if !ok {
+		return errors.New("window content is not a tab")
+	}
+	idx := c.findTabID(t)
+	if idx == 0 {
+		return errors.New("tab is already at the start of the list")
+	}
+	c.doRemoveTab(idx)
+	c.doInsertTab(idx-1, t)
+	c.tabs.MoveLeft(idx)
+	return nil
+}
+
+// MoveTabRight moves the tab in the given window to the right
+// of the tabs list.
+func (c *Component) MoveTabRight(win Window) error {
+	bWin := win.(*browserWindow)
+	t, ok := browserTabAtWindow(bWin)
+	if !ok {
+		return errors.New("window content is not a tab")
+	}
+	idx := c.findTabID(t)
+	if idx == c.tabs.Size()-1 {
+		return errors.New("tab is already at the end of the list")
+	}
+	c.doRemoveTab(idx)
+	c.doInsertTab(idx+1, t)
+	c.tabs.MoveRight(idx)
+	return nil
+}
+
 // PreviousTab updates win with the tab before the current tab.
 func (c *Component) PreviousTab(win Window) bool {
 	bWin := win.(*browserWindow)
@@ -294,7 +330,7 @@ func (c *Component) RemoveInactiveTabs() (removed bool) {
 			// used by a window
 			continue
 		}
-		c.doRemoveTab(tab)
+		c.removeTab(tab)
 		removed = true
 	}
 	return
@@ -316,7 +352,7 @@ func (c *Component) RemoveWindowContent(win Window) bool {
 	oldComponent := c.updateWindowContent(win.(*browserWindow), t)
 	oldTab, ok := oldComponent.(*Tab)
 	if ok {
-		c.doRemoveTab(oldTab)
+		c.removeTab(oldTab)
 	}
 	return isNotStartHandler
 }
@@ -777,18 +813,27 @@ func (c *Component) closeTab(t *Tab) {
 	}
 }
 
-func (c *Component) doRemoveTab(t *Tab) {
-	id := c.findTabID(t)
+func (c *Component) removeTab(t *Tab) {
 	if !t.free {
 		panic("trying to remove tab that is still attached to a window")
 	}
 	c.closeTab(t)
-
-	c.buffers = append(c.buffers[:id], c.buffers[id+1:]...)
+	id := c.findTabID(t)
+	c.doRemoveTab(id)
 	ok := c.tabs.Remove(id)
 	if !ok {
 		panic(fmt.Sprintf("corrupted tabs: could not find tab with id %v", id))
 	}
+}
+
+func (c *Component) doRemoveTab(idx int) {
+	c.buffers = append(c.buffers[:idx], c.buffers[idx+1:]...)
+}
+
+func (c *Component) doInsertTab(idx int, t *Tab) {
+	c.buffers = append(c.buffers, nil)
+	copy(c.buffers[idx+1:], c.buffers[idx:])
+	c.buffers[idx] = t
 }
 
 func (c *Component) findTabID(t *Tab) int {

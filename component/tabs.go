@@ -273,7 +273,31 @@ func (t *Tabs) Add(icon rune, name string) int {
 
 // Remove removes the tab with idx.
 func (t *Tabs) Remove(idx int) bool {
-	t.tabs = append(t.tabs[:idx], t.tabs[idx+1:]...)
+	t.doRemoveTab(idx)
+	t.dirty = true
+	return true
+}
+
+// MoveRight moves the tab at idx to the right.
+func (t *Tabs) MoveRight(idx int) bool {
+	if idx >= len(t.tabs)-1 {
+		return false
+	}
+	tt := t.doRemoveTab(idx)
+	idx++
+	t.doInsertTab(idx, tt)
+	t.dirty = true
+	return true
+}
+
+// MoveLeft moves the tab at idx to the left.
+func (t *Tabs) MoveLeft(idx int) bool {
+	if idx <= 0 {
+		return false
+	}
+	tt := t.doRemoveTab(idx)
+	idx--
+	t.doInsertTab(idx, tt)
 	t.dirty = true
 	return true
 }
@@ -385,4 +409,16 @@ func (t *Tabs) prepareFileList() {
 		t.fileListBuf.TruncateRowFrom(from)
 		t.fileListBuf.InsertStringWithAttr(from, "..", t.nonFocusAttr)
 	}
+}
+
+func (t *Tabs) doRemoveTab(idx int) *tab {
+	ret := t.tabs[idx]
+	t.tabs = append(t.tabs[:idx], t.tabs[idx+1:]...)
+	return ret
+}
+
+func (t *Tabs) doInsertTab(idx int, tt *tab) {
+	t.tabs = append(t.tabs, nil)
+	copy(t.tabs[idx+1:], t.tabs[idx:])
+	t.tabs[idx] = tt
 }

@@ -126,6 +126,20 @@ var (
 			},
 			handler: (*ex).tabcloseinactive,
 		},
+		"tabmove": {
+			man: textapi.CommandManual{
+				Summary:  "Moves the tab in focus in the given direction in the tabs list.",
+				Synopsis: "(right|left)",
+			},
+			handler: (*ex).moveTab,
+			completer: func(e *ex, ctx context.Context, cmd string, args []string,
+			) (iterator.Iterator[string], string, error) {
+				if len(args) <= 1 {
+					return iterator.FromSlice([]string{"left", "right"}), "", nil
+				}
+				return iterator.FromSlice[string](nil), "", nil
+			},
+		},
 		"windowclose": {
 			man: textapi.CommandManual{
 				Summary: "Closes the current active window and switches focus " +

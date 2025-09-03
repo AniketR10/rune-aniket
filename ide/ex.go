@@ -671,6 +671,23 @@ func (e *ex) moveWindow(args ...string) error {
 	return nil
 }
 
+func (e *ex) moveTab(args ...string) error {
+	if len(args) == 0 {
+		return errors.New("command expects at least one argument")
+	}
+
+	var err error
+	switch args[0] {
+	case "right":
+		err = e.comp.Browser().MoveTabRight(e.invokeWindow())
+	case "left":
+		err = e.comp.Browser().MoveTabLeft(e.invokeWindow())
+	default:
+		err = fmt.Errorf("invalid argument %q", args[0])
+	}
+	return err
+}
+
 func (e *ex) windowresize(args ...string) error {
 	if (len(args) == 1 && args[0] != "reset") || len(args) == 0 {
 		return errors.New("invalid arguments")

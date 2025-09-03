@@ -239,21 +239,43 @@ func TestRemoveInactiveTabs(t *testing.T) {
 		}
 	}
 
-	tabNames := make([]string, 0)
-	for _, tab := range b.Tabs() {
-		tabName, _, _ := b.TabName(tab.URI())
-		tabNames = append(tabNames, tabName)
-	}
-	assert.Equal(t, []string{"a", "b", "c", "d"}, tabNames)
-
+	assertTabNames(t, b, []string{"a", "b", "c", "d"})
 	b.RemoveInactiveTabs()
-	tabNames = tabNames[:0]
+	assertTabNames(t, b, []string{"b", "c"})
+}
 
-	for _, tab := range b.Tabs() {
-		tabName, _, _ := b.TabName(tab.URI())
-		tabNames = append(tabNames, tabName)
+func TestMoveTabs(t *testing.T) {
+	b := NewComponent(DefaultConfig())
+
+	tabs := []string{"A", "b", "C", "d"}
+	for i, name := range tabs {
+		uri, err := workspaceapi.ParseURI("file:///" + name)
+		require.NoError(t, err)
+		h := newTestHandler()
+		tab := b.NewTab(uri, 'o', name, h, h)
+		if i%2 == 0 {
+			b.Split(browserapi.OrientationRight, b.Focus(), tab)
+		}
 	}
-	assert.Equal(t, []string{"b", "c"}, tabNames)
+
+	tab, ok := b.FocusTab()
+	require.True(t, ok)
+	assert.Equal(t, "file:///C", tab.URI().String())
+
+	assert.NoError(t, b.MoveTabLeft(b.Focus()))
+	assertTabNames(t, b, []string{"A", "C", "b", "d"})
+	assert.NoError(t, b.MoveTabLeft(b.Focus()))
+	assertTabNames(t, b, []string{"C", "A", "b", "d"})
+	assert.Error(t, b.MoveTabLeft(b.Focus()))
+	assertTabNames(t, b, []string{"C", "A", "b", "d"})
+	assert.NoError(t, b.MoveTabRight(b.Focus()))
+	assertTabNames(t, b, []string{"A", "C", "b", "d"})
+	assert.NoError(t, b.MoveTabRight(b.Focus()))
+	assertTabNames(t, b, []string{"A", "b", "C", "d"})
+	assert.NoError(t, b.MoveTabRight(b.Focus()))
+	assertTabNames(t, b, []string{"A", "b", "d", "C"})
+	assert.Error(t, b.MoveTabRight(b.Focus()))
+	assertTabNames(t, b, []string{"A", "b", "d", "C"})
 }
 
 var _ component.Scrollable = (*nopScrollableHandler)(nil)
@@ -296,4 +318,13 @@ func (n nopHandler) Close() error {
 
 func newTestHandler() *nopHandler {
 	return &nopHandler{}
+}
+
+func assertTabNames(t *testing.T, b *Component, expected []string) {
+	var actual []string
+	for _, tab := range b.Tabs() {
+		tabName, _, _ := b.TabName(tab.URI())
+		actual = append(actual, tabName)
+	}
+	assert.Equal(t, expected, actual)
 }
