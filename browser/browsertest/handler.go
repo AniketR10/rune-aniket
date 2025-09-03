@@ -24,6 +24,7 @@
 package browsertest
 
 import (
+	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/handler"
 )
 
@@ -48,22 +49,21 @@ func (t *TestHandler) Close() error {
 	return nil
 }
 
+var _ browser.Floating = (*TestFloating)(nil)
+
 // TestFloating is a testing Handler.
 type TestFloating struct {
-	TestHandler
-	width, height int
+	handler.TestFloating
 }
 
 // NewTestFloating allocates storage for a new TestHandler and initializes it.
 func NewTestFloating(width, height int) *TestFloating {
 	ret := new(TestFloating)
-	ret.TestHandler = *NewTestHandler()
-	ret.width = width
-	ret.height = height
+	ret.TestFloating = *handler.NewTestFloating(width, height)
 	return ret
 }
 
-// Dimensions returns the floating component dimensions.
-func (t *TestFloating) Dimensions() (width, height int) {
-	return t.width, t.height
+// Close satisfies browser.Floating.
+func (t *TestFloating) Close() error {
+	return nil
 }

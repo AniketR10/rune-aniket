@@ -588,12 +588,15 @@ func (wm *WindowManager) switchFocus(tileFn func(Window) (Window, bool)) bool {
 }
 
 func (wm *WindowManager) swapContent(tileFn func(Window) (Window, bool)) bool {
-	tile, ok := tileFn(wm.focus)
+	win, ok := tileFn(wm.focus)
 	if !ok {
 		return false
 	}
+	if win.IsFloating() || wm.focus.IsFloating() {
+		return false
+	}
 	focusContent := wm.focus.Content()
-	swapContent := tile.SetContent(focusContent)
+	swapContent := win.SetContent(focusContent)
 	wm.focus.SetContent(swapContent)
 	return true
 }

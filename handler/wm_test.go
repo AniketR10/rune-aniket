@@ -172,6 +172,127 @@ func TestWindowFocusInitSplitVertical(t *testing.T) {
 	assert.Equal(t, leftHandler, m.Focus().Content())
 }
 
+func TestSwapContent(t *testing.T) {
+	t.Run("swaps content left", func(t *testing.T) {
+		leftHandler := &TestHandler{TestComponent: component.TestComponent{Ch: '1'}}
+		width, height := 12, 4
+		_, m := prepareTest(width, height, true, leftHandler)
+
+		w1 := m.Focus()
+
+		w2, ok := m.SplitVertical(w1,
+			&TestHandler{TestComponent: component.TestComponent{Ch: '2'}})
+		require.True(t, ok)
+
+		m.SetFocus(w2)
+
+		assert.True(t, m.SwapContentLeft())
+
+		assert.Equal(t, '1', w2.Content().(*TestHandler).Ch)
+		assert.Equal(t, '2', w1.Content().(*TestHandler).Ch)
+
+		assert.True(t, m.SwapContentLeft())
+
+		assert.Equal(t, '2', w2.Content().(*TestHandler).Ch)
+		assert.Equal(t, '1', w1.Content().(*TestHandler).Ch)
+	})
+
+	t.Run("swaps content right", func(t *testing.T) {
+		leftHandler := &TestHandler{TestComponent: component.TestComponent{Ch: '1'}}
+		width, height := 12, 4
+		_, m := prepareTest(width, height, true, leftHandler)
+
+		w1 := m.Focus()
+
+		w2, ok := m.SplitVertical(w1,
+			&TestHandler{TestComponent: component.TestComponent{Ch: '2'}})
+		require.True(t, ok)
+
+		assert.True(t, m.SwapContentRight())
+
+		assert.Equal(t, '1', w2.Content().(*TestHandler).Ch)
+		assert.Equal(t, '2', w1.Content().(*TestHandler).Ch)
+
+		assert.True(t, m.SwapContentRight())
+
+		assert.Equal(t, '2', w2.Content().(*TestHandler).Ch)
+		assert.Equal(t, '1', w1.Content().(*TestHandler).Ch)
+	})
+
+	t.Run("swaps content down", func(t *testing.T) {
+		leftHandler := &TestHandler{TestComponent: component.TestComponent{Ch: '1'}}
+		width, height := 12, 4
+		_, m := prepareTest(width, height, true, leftHandler)
+
+		w1 := m.Focus()
+
+		w2, ok := m.SplitHorizontal(w1,
+			&TestHandler{TestComponent: component.TestComponent{Ch: '2'}})
+		require.True(t, ok)
+
+		assert.True(t, m.SwapContentDown())
+
+		assert.Equal(t, '1', w2.Content().(*TestHandler).Ch)
+		assert.Equal(t, '2', w1.Content().(*TestHandler).Ch)
+
+		assert.True(t, m.SwapContentDown())
+
+		assert.Equal(t, '2', w2.Content().(*TestHandler).Ch)
+		assert.Equal(t, '1', w1.Content().(*TestHandler).Ch)
+	})
+
+	t.Run("swaps content up", func(t *testing.T) {
+		leftHandler := &TestHandler{TestComponent: component.TestComponent{Ch: '1'}}
+		width, height := 12, 4
+		_, m := prepareTest(width, height, true, leftHandler)
+
+		w1 := m.Focus()
+
+		w2, ok := m.SplitHorizontal(w1,
+			&TestHandler{TestComponent: component.TestComponent{Ch: '2'}})
+		require.True(t, ok)
+
+		m.SetFocus(w2)
+
+		assert.True(t, m.SwapContentUp())
+
+		assert.Equal(t, '1', w2.Content().(*TestHandler).Ch)
+		assert.Equal(t, '2', w1.Content().(*TestHandler).Ch)
+
+		assert.True(t, m.SwapContentUp())
+
+		assert.Equal(t, '2', w2.Content().(*TestHandler).Ch)
+		assert.Equal(t, '1', w1.Content().(*TestHandler).Ch)
+	})
+
+	t.Run("does not swap floating window content", func(t *testing.T) {
+		leftHandler := &TestHandler{TestComponent: component.TestComponent{Ch: '1'}}
+		width, height := 12, 4
+		_, m := prepareTest(width, height, true, leftHandler)
+
+		w2 := m.FloatingWindow(NewTestFloating(0, 0), component.FloatingConfig{})
+		m.SetFocus(w2)
+
+		assert.False(t, m.SwapContentUp())
+		assert.False(t, m.SwapContentDown())
+		assert.False(t, m.SwapContentLeft())
+		assert.False(t, m.SwapContentRight())
+	})
+
+	t.Run("does not tile content into floating window", func(t *testing.T) {
+		leftHandler := &TestHandler{TestComponent: component.TestComponent{Ch: '1'}}
+		width, height := 12, 4
+		_, m := prepareTest(width, height, true, leftHandler)
+
+		_ = m.FloatingWindow(NewTestFloating(0, 0), component.FloatingConfig{})
+
+		assert.False(t, m.SwapContentUp())
+		assert.False(t, m.SwapContentDown())
+		assert.False(t, m.SwapContentLeft())
+		assert.False(t, m.SwapContentRight())
+	})
+}
+
 func TestWindowShiftFocusFocusPrev(t *testing.T) {
 	leftHandler := NewTestHandler()
 	width, height := 12, 4

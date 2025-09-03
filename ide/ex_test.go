@@ -1666,6 +1666,18 @@ func TestMoveWindowContent(t *testing.T) {
 │AAAAAAAA││        │
 └────────┘└────────┘`,
 		},
+		{":terminalnew>:! sh>:windowmove left>:windowmove right>",
+			`┌──────────────────┐
+│cannot move       │
+│window in this    │
+│direct▐on         │
+└──────────────────┘
+│   │          │───┘
+│   │          │───┐
+│   │          │   │
+│   │          │   │
+└───└──────────┘───┘`,
+		},
 	}
 
 	opts := []text.Option{

@@ -75,3 +75,23 @@ func (t *TestHandler) Selection() (string, bool) {
 func (t *TestHandler) Man() tui.Manual {
 	return t.Manual
 }
+
+// TestFloating is a testing Handler.
+type TestFloating struct {
+	TestHandler
+	width, height int
+}
+
+// NewTestFloating allocates storage for a new TestHandler and initializes it.
+func NewTestFloating(width, height int) *TestFloating {
+	ret := new(TestFloating)
+	ret.TestHandler = *NewTestHandler()
+	ret.width = width
+	ret.height = height
+	return ret
+}
+
+// Dimensions returns the floating component dimensions.
+func (t *TestFloating) Dimensions() (width, height int) {
+	return t.width, t.height
+}
