@@ -25,6 +25,8 @@ package ide
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"strconv"
 
 	log "github.com/sirupsen/logrus"
@@ -461,6 +463,32 @@ var (
 			},
 			handler:   (*ex).stopTask,
 			completer: (*ex).completeTasks,
+		},
+		"loglevel": {
+			man: textapi.CommandManual{
+				Summary:  "Update the log level, overriding the level set in config.",
+				Synopsis: "<(info|debug|trace|warn|error|panic|fatal)>",
+			},
+			handler: func(e *ex, args ...string) error {
+				if len(args) != 1 {
+					return errors.New("expected exactly one argument with the log level")
+				}
+				level, err := log.ParseLevel(args[0])
+				if err != nil {
+					return fmt.Errorf("parse level: %w", err)
+				}
+				log.SetLevel(level)
+				return nil
+			},
+			completer: func(e *ex, ctx context.Context, cmd string, args []string,
+			) (iterator.Iterator[string], string, error) {
+				if len(args) <= 1 {
+					return iterator.FromSlice([]string{
+						"info", "debug", "trace", "warn", "error", "panic", "fatal",
+					}), "", nil
+				}
+				return iterator.FromSlice[string](nil), "", nil
+			},
 		},
 	}
 
