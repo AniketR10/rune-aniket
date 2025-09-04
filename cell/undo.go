@@ -122,9 +122,3 @@ func (u *undoer) Edit(ctx context.Context, start, end term.Coordinates, str stri
 	u.resetRedoTimeline()
 	return
 }
-
-func (u *undoer) reset() {
-	u.resetRedoTimeline()
-	u.undoTimeline = u.undoTimeline[:0]
-	u.version = 0
-}

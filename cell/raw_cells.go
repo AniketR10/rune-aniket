@@ -176,7 +176,7 @@ func (c *rawCells) insertAt(pos term.Coordinates, r []rune, width int) (
 		if c.zwjPos == pos {
 			str := c.String()
 			c.reset()
-			_, _ = c.ReadFrom(strings.NewReader(str))
+			_, _ = c.readFromWithView(strings.NewReader(str), c)
 			next = term.Coordinates{X: pos.X, Y: pos.Y}
 		}
 		c.zwj = false
@@ -469,7 +469,11 @@ func (c *rawCells) Cell(pos term.Coordinates) (
 }
 
 func (c *rawCells) ReadFrom(r io.Reader) (int64, error) {
-	rowY := nextWrite(c).Y
+	return c.readFromWithView(r, c)
+}
+
+func (c *rawCells) readFromWithView(r io.Reader, view View) (int64, error) {
+	rowY := nextWrite(view).Y
 	reader := bufio.NewReader(r)
 	n := int64(0)
 	for {

@@ -242,13 +242,7 @@ func (b *Buffer) TruncateFrom(from term.Coordinates) (ok bool) {
 func (b *Buffer) TruncateFromContext(
 	ctx context.Context, from term.Coordinates,
 ) (ok bool) {
-	to := term.Coordinates{Y: b.view.Rows()}
-	from, to, ok = fromToInBounds(b.view, from, to)
-	if !ok {
-		return
-	}
-	b.editor.Edit(ctx, from, to, "")
-	return
+	return b.truncateFromContextView(ctx, from, b.view)
 }
 
 // Replace is equivalent to calling ReplaceContext with
@@ -461,12 +455,12 @@ func (b *Buffer) DeleteBlockContext(
 }
 
 // Reset resets the contents of this Buffer.
+// When the the buffer's view has not been updated via WithView, then
+// Reset is equivalent to TruncateFrom(term.Coordinates{}). On the other
+// hand, when the view has been updated, Reset differs from TruncateFrom
+// in that it provides a guarantee that all of the content is removed.
 func (b *Buffer) Reset() {
-	// make sure that reset is propagated to subscribers.
-	b.TruncateFrom(term.Coordinates{})
-	if b.undoer != nil {
-		b.undoer.reset()
-	}
+	b.truncateFromContextView(context.Background(), term.Coordinates{}, b.cells)
 }
 
 // Version returns the version of this buffer.
@@ -478,10 +472,10 @@ func (b *Buffer) Version() int {
 // the buffer as needed. The return value n is the number of bytes read. Any
 // error except io.EOF encountered during the read is also returned.
 func (b *Buffer) ReadFrom(r io.Reader) (int64, error) {
-	return b.cells.ReadFrom(r)
+	return b.cells.readFromWithView(r, b.view)
 }
 
-// io.Editor
+// Write satisfies io.Writer.
 func (b *Buffer) Write(p []byte) (int, error) {
 	nextWrite := nextWrite(b.view)
 	b.editor.Edit(context.Background(), nextWrite, nextWrite, string(p))
@@ -696,4 +690,16 @@ func (b *Buffer) initPerformanceWithCells(cells *rawCells) {
 
 	b.setEditor(b.cells)
 	b.setView(b.cells)
+}
+
+func (b *Buffer) truncateFromContextView(
+	ctx context.Context, from term.Coordinates, view View,
+) (ok bool) {
+	to := term.Coordinates{Y: view.Rows()}
+	from, to, ok = fromToInBounds(view, from, to)
+	if !ok {
+		return
+	}
+	b.editor.Edit(ctx, from, to, "")
+	return
 }

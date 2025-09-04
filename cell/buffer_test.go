@@ -301,7 +301,6 @@ func TestBufferTruncateFrom(t *testing.T) {
 }
 
 func TestBufferTruncateFromWithUnixView(t *testing.T) {
-
 	tsuite := []struct {
 		contents               string
 		input                  term.Coordinates
@@ -446,7 +445,7 @@ func TestBufferReset(t *testing.T) {
 		assert.Equal(t, 3, sub.onWillEdit)
 	})
 
-	t.Run("does reset undo", func(t *testing.T) {
+	t.Run("does not reset undo", func(t *testing.T) {
 		b := NewBuffer()
 		sub := testSubscriber{}
 		b.Subscribe(&sub)
@@ -455,7 +454,61 @@ func TestBufferReset(t *testing.T) {
 		b.Reset()
 
 		ok, _ := b.Undo()
-		assert.False(t, ok)
+		assert.True(t, ok)
+
+		assert.Equal(t, "\n", b.String())
+	})
+
+	t.Run("reads reader content into buffer after reset", func(t *testing.T) {
+		b := NewBuffer()
+		content := "bla\nbleh"
+
+		_, err := b.ReadFrom(strings.NewReader(content))
+		require.NoError(t, err)
+
+		for i := 0; i < 2; i++ {
+			b.Reset()
+			_, err = b.ReadFrom(strings.NewReader(content))
+			require.NoError(t, err)
+
+			assert.Equal(t, content, b.String())
+		}
+	})
+
+	t.Run("inserts reader content into buffer after reset", func(t *testing.T) {
+		b := NewBuffer()
+		content := "bla\nbleh"
+
+		_, err := b.ReadFrom(strings.NewReader(content))
+		require.NoError(t, err)
+
+		for i := 0; i < 2; i++ {
+			b.Reset()
+			b.InsertString(term.Coordinates{}, content)
+			require.NoError(t, err)
+
+			assert.Equal(t, content, b.String())
+		}
+	})
+
+	t.Run("underlying content is always erased", func(t *testing.T) {
+		tsuite := []struct {
+			contents string
+		}{
+			{"hello\nworld"},
+			{"hello\nworld\n"},
+			{"hello\nworld\n\n"},
+		}
+
+		for i, tcase := range tsuite {
+			t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+				buf := newBufferWithContent(t, tcase.contents)
+				buf.WithView(&testView{reader: buf.View()})
+
+				buf.Reset()
+				assert.Equal(t, "", buf.cells.String())
+			})
+		}
 	})
 }
 
@@ -837,7 +890,7 @@ func TestBufferVersion(t *testing.T) {
 	assert.Equal(t, 2, b.Version())
 
 	b.Reset()
-	assert.Equal(t, 0, b.Version())
+	assert.Equal(t, 3, b.Version())
 }
 
 func TestBufferWriteStringRawCells(t *testing.T) {
