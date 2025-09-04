@@ -697,12 +697,12 @@ func (c *Component) CellEditor(h Handler) CellEditor {
 	return c.ed.CellEditor(h)
 }
 
-// Flush flushes the contents of the buffer at win, if this buffer
-// was created with a FlusherCloser. See cell.NewBuffer.
+// Flush flushes the contents of the tab at the given window,
+// if there's one.
 func (c *Component) Flush(win browser.Window) error {
 	content, err := win.Content()
 	if err != nil {
-		return fmt.Errorf("editor.Component.Flush: win.Content: %v", err)
+		return fmt.Errorf("get window content: %w", err)
 	}
 	t, ok := content.(*browser.Tab)
 	if !ok || t.Closer() == nil {
@@ -712,7 +712,7 @@ func (c *Component) Flush(win browser.Window) error {
 	fc := t.Closer().(workspace.FlusherCloser)
 	err = fc.Flush()
 	if err != nil {
-		return fmt.Errorf("editor.Component.Flush: %v", err)
+		return fmt.Errorf("flush: %w", err)
 	}
 	return nil
 }
@@ -1051,6 +1051,8 @@ func (c *Component) newTab(
 	return t
 }
 
+var _ workspace.FlusherCloser = (*editorFlusherCloser)(nil)
+
 // used to intercept calls to Close and Flush to dispatch
 // corresponding events to subscribers.
 type editorFlusherCloser struct {
@@ -1080,6 +1082,10 @@ func (e *editorFlusherCloser) Flush() error {
 	}
 	e.lastFlush = content
 	return e.fc.Flush()
+}
+
+func (e *editorFlusherCloser) Reload() error {
+	return e.fc.Reload()
 }
 
 func (e *editorFlusherCloser) Close() error {

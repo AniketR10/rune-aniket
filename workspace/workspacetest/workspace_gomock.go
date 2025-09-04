@@ -561,3 +561,17 @@ func (mr *MockFlusherCloserMockRecorder) Flush() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Flush", reflect.TypeOf((*MockFlusherCloser)(nil).Flush))
 }
+
+// Reload mocks base method.
+func (m *MockFlusherCloser) Reload() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Reload")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Reload indicates an expected call of Reload.
+func (mr *MockFlusherCloserMockRecorder) Reload() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Reload", reflect.TypeOf((*MockFlusherCloser)(nil).Reload))
+}

@@ -65,5 +65,6 @@ type WorkspaceManager interface {
 // in conjunction with a cell.Buffer as file buffer abstractions.
 type FlusherCloser interface {
 	Flush() error
+	Reload() error
 	io.Closer
 }

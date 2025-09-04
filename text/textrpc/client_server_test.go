@@ -865,6 +865,9 @@ func (t *testFlusherCloser) Close() error {
 	}
 	return nil
 }
+func (t *testFlusherCloser) Reload() error {
+	return nil
+}
 func (t *testFlusherCloser) Flush() error {
 	if t.flushFn != nil {
 		return t.flushFn()

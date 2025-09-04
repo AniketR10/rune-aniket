@@ -70,13 +70,18 @@ var testCommandKey = term.KeyComb{Ch: '\\', Mod: term.ModCtrl}
 type browserConstructor func(ed text.Editor, opts ...text.Option) (tui.Handler, browser.Browser, error)
 
 type testFileBuffer struct {
-	flushErr error
-	closeErr error
-	closed   bool
+	flushErr  error
+	reloadErr error
+	closeErr  error
+	closed    bool
 }
 
 func (t *testFileBuffer) Flush() error {
 	return t.flushErr
+}
+
+func (t *testFileBuffer) Reload() error {
+	return t.reloadErr
 }
 
 func (t *testFileBuffer) Close() error {
@@ -754,8 +759,8 @@ func TestWriteExclamationNoQuit(t *testing.T) {
 	cases := []handlertest.SequenceTestCase{
 		{":w!>",
 			`┌──────────────────┐
-│cannot save       │
-│this buffer       │
+│cannot flush      │
+│this content      │
 └──────────────────┘
 │                  │
 │                  │

@@ -77,6 +77,10 @@ func (t *testFlusherCloser) Flush() error {
 	return nil
 }
 
+func (t *testFlusherCloser) Reload() error {
+	return nil
+}
+
 type testLoader struct {
 	content       string
 	flusherCloser *testFlusherCloser

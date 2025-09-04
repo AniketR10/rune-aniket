@@ -58,6 +58,8 @@ type file struct {
 	scheme  schemeapi.Scheme
 
 	buf             *cell.Buffer
+	view            UnixFileView
+	reloading       bool
 	swapDir         string
 	swapFileName    string
 	fileName        string
@@ -265,6 +267,7 @@ func (f *file) initBuffer(buf *cell.Buffer, file workspaceapi.File) (err error) 
 	buf.WithView(view)
 
 	f.buf = buf
+	f.view = view
 
 	return
 }
@@ -420,6 +423,10 @@ func (f *file) OnWillEdit(ctx context.Context, start, end term.Coordinates, str 
 }
 
 func (f *file) OnDidEdit(ctx context.Context, from, to term.Coordinates, old string) {
+	if f.reloading {
+		f.wg.Done()
+		return
+	}
 	// store the latest version of the buffer so the last
 	// copyFlushSwap to run uses the up-to-date version.
 	f.mu.Lock()
@@ -451,6 +458,53 @@ func (f *file) touchFile() (isExist bool) {
 // all edits have been processed.
 func (f *file) Flush() error {
 	return f.flush(false)
+}
+
+// Reload reloads the contents of the buffer from disk.
+func (f *file) Reload() error {
+	if f.orig == nil {
+		return errors.New("cannot reload a file that doesn't exist on disk")
+	}
+
+	// stop worker and copy swap while we're reloading swap
+	f.reloading = true
+	defer func() {
+		f.reloading = false
+	}()
+
+	f.wg.Wait()
+
+	// re-init files, if any of these error, we either
+	// don't care or it'll cause an error in initFiles
+	_ = f.orig.Close()
+	_ = f.swap.Close()
+	_ = f.scheme.Remove(f.swapFileName)
+
+	err := f.initFiles(f.fileName, f.swapDir, f.readOnly)
+	if err != nil {
+		return err
+	}
+
+	// read from file into buffer
+	data, err := io.ReadAll(f.orig)
+	if err != nil {
+		_, _ = f.orig.Seek(0, 0) // avoid partially read file
+		return fmt.Errorf("read from file: %w", err)
+	}
+	// ensure that data is erased regardless of view installed
+	f.buf.Reset()
+	f.buf.InsertString(term.Coordinates{}, string(data))
+
+	if !f.view.EndsWithEOL() {
+		f.buf.WriteString("\n")
+	}
+
+	_, err = f.orig.Seek(0, 0)
+	if err != nil {
+		return fmt.Errorf("seek: %w", err)
+	}
+
+	return nil
 }
 
 func (f *file) flush(force bool) error {

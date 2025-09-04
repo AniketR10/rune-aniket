@@ -81,7 +81,7 @@ diff_buf_adjust(win_T *win)
 // INTEGRATION TESTS
 
 func newIntegrationTestCase(t *testing.T, endsInEOL bool) (
-	*cell.Buffer, *os.File, func(),
+	*cell.Buffer, *os.File,
 ) {
 	buffer := cell.NewBuffer()
 	file, err := os.CreateTemp("", "frctl_file_test")
@@ -94,11 +94,11 @@ func newIntegrationTestCase(t *testing.T, endsInEOL bool) (
 		_, err = file.Write([]byte{'\n'})
 		require.NoError(t, err)
 	}
-
-	return buffer, file, func() {
-		file.Close()
-		os.Remove(file.Name())
-	}
+	t.Cleanup(func() {
+		_ = file.Close()
+		_ = os.Remove(file.Name())
+	})
+	return buffer, file
 }
 
 // refactor shim
@@ -327,8 +327,8 @@ func testFileBufferIntegration(t *testing.T, endsInEOL bool) {
 
 	t.Run("if file does not exist, if there are errors upon creation, it bubbles up on Flush", func(t *testing.T) {
 		buf := cell.NewBuffer()
-		rand.Seed(int64(time.Now().Nanosecond()))
-		filename := fmt.Sprintf("/tmp/mpo/tmp/tmp/tmp/tmp/%d.go", rand.Int())
+		rgen := rand.New(rand.NewSource(int64(time.Now().Nanosecond())))
+		filename := fmt.Sprintf("/tmp/mpo/tmp/tmp/tmp/tmp/%d.go", rgen.Int())
 
 		f, err := openFile(filename, buf, os.TempDir(), false)
 		require.NoError(t, err)
@@ -340,9 +340,23 @@ func testFileBufferIntegration(t *testing.T, endsInEOL bool) {
 		require.Error(t, f.Flush())
 	})
 
+	t.Run("if file does not exist, Reload errors", func(t *testing.T) {
+		buf := cell.NewBuffer()
+		rgen := rand.New(rand.NewSource(int64(time.Now().Nanosecond())))
+		filename := fmt.Sprintf("/tmp/%d.go", rgen.Int())
+
+		f, err := openFile(filename, buf, os.TempDir(), false)
+		require.NoError(t, err)
+		defer f.Close()
+
+		_, err = os.Stat(filename)
+		require.Error(t, err)
+
+		require.Error(t, f.Reload())
+	})
+
 	t.Run("no swap file is open, creates one; removes on close", func(t *testing.T) {
-		b, file, cleanup := newIntegrationTestCase(t, endsInEOL)
-		defer cleanup()
+		b, file := newIntegrationTestCase(t, endsInEOL)
 
 		swapDir, err := os.MkdirTemp("", "")
 		require.NoError(t, err)
@@ -365,37 +379,39 @@ func testFileBufferIntegration(t *testing.T, endsInEOL bool) {
 	})
 
 	t.Run("fsyncs swap upon update", func(t *testing.T) {
-		b, file, cleanup := newIntegrationTestCase(t, endsInEOL)
-		defer cleanup()
+		for _, reload := range []bool{false, true} {
+			b, file := newIntegrationTestCase(t, endsInEOL)
 
-		f, err := openFile(file.Name(), b, "", false)
-		require.NoError(t, err)
+			f, err := openFile(file.Name(), b, "", false)
+			require.NoError(t, err)
 
-		defer f.Close()
+			if reload {
+				require.NoError(t, f.Reload())
+			}
 
-		buf, err := os.ReadFile(f.swap.Name())
-		require.NoError(t, err)
-		content := sampleSnippet
-		if endsInEOL {
-			content += "\n"
+			buf, err := os.ReadFile(f.swap.Name())
+			require.NoError(t, err)
+			content := sampleSnippet
+			if endsInEOL {
+				content += "\n"
+			}
+			assert.Equal(t, content, string(buf))
+
+			const writeStr = "XXXXXX"
+			b.InsertString(term.Coordinates{}, writeStr)
+
+			// wait for updates
+			f.wg.Wait()
+
+			buf, err = os.ReadFile(f.swap.Name())
+			require.NoError(t, err)
+
+			assert.Equal(t, writeStr+sampleSnippet+"\n", string(buf))
 		}
-		assert.Equal(t, content, string(buf))
-
-		const writeStr = "XXXXXX"
-		b.InsertString(term.Coordinates{}, writeStr)
-
-		// wait for updates
-		f.wg.Wait()
-
-		buf, err = os.ReadFile(f.swap.Name())
-		require.NoError(t, err)
-
-		assert.Equal(t, writeStr+sampleSnippet+"\n", string(buf))
 	})
 
 	t.Run("fsyncs file upon Flush", func(t *testing.T) {
-		b, file, cleanup := newIntegrationTestCase(t, endsInEOL)
-		defer cleanup()
+		b, file := newIntegrationTestCase(t, endsInEOL)
 
 		f, err := openFile(file.Name(), b, "", false)
 		require.NoError(t, err)
@@ -412,8 +428,7 @@ func testFileBufferIntegration(t *testing.T, endsInEOL bool) {
 	})
 
 	t.Run("returns error if swap is already open", func(t *testing.T) {
-		b, file, cleanup := newIntegrationTestCase(t, endsInEOL)
-		defer cleanup()
+		b, file := newIntegrationTestCase(t, endsInEOL)
 
 		swapDir, err := os.MkdirTemp("", "")
 		require.NoError(t, err)
@@ -425,6 +440,92 @@ func testFileBufferIntegration(t *testing.T, endsInEOL bool) {
 		_, err = openFile(file.Name(), b, swapDir, false)
 		assert.Equal(t, workspaceapi.ErrFileAlreadyOpen, err)
 	})
+
+	t.Run("Reload reloads file as it was originally on disk", func(t *testing.T) {
+		b, file := newIntegrationTestCase(t, endsInEOL)
+
+		f, err := openFile(file.Name(), b, "", false)
+		require.NoError(t, err)
+
+		const writeStr = "XXXXXX"
+		b.InsertString(term.Coordinates{}, writeStr)
+
+		require.NoError(t, f.Reload())
+		assertFileAndBufferOnDisk(t, b, file.Name(), sampleSnippet, endsInEOL)
+		require.NoError(t, f.Close())
+	})
+
+	t.Run("Reload reloads file as it was on disk, after Flush", func(t *testing.T) {
+		b, file := newIntegrationTestCase(t, endsInEOL)
+
+		f, err := openFile(file.Name(), b, "", false)
+		require.NoError(t, err)
+
+		const writeStr = "XXXXXX"
+		b.InsertString(term.Coordinates{}, writeStr)
+
+		require.NoError(t, f.Flush())
+		assertFileAndBufferOnDisk(t, b, file.Name(), writeStr+sampleSnippet, true)
+
+		require.NoError(t, f.Reload())
+		assertFileAndBufferOnDisk(t, b, file.Name(), writeStr+sampleSnippet, true)
+
+		b.InsertString(term.Coordinates{}, writeStr)
+		require.NoError(t, f.Reload())
+		assertFileAndBufferOnDisk(t, b, file.Name(), writeStr+sampleSnippet, true)
+	})
+
+	t.Run("Reload integration with cell subscribers", func(t *testing.T) {
+		b, file := newIntegrationTestCase(t, endsInEOL)
+
+		f, err := openFile(file.Name(), b, "", false)
+		require.NoError(t, err)
+
+		buf := cell.NewBuffer()
+		b.Subscribe(&testCellSubscriber{buf: buf})
+
+		const writeStr = "XXXXXX"
+		b.InsertString(term.Coordinates{}, writeStr)
+
+		require.NoError(t, f.Reload())
+		assertFileAndBufferOnDisk(t, b, file.Name(), sampleSnippet, endsInEOL)
+		assert.Equal(t, sampleSnippet+"\n", buf.String()) // buf doesn't have unix view
+
+		require.NoError(t, f.Close())
+	})
+}
+
+type testCellSubscriber struct {
+	buf *cell.Buffer
+}
+
+func (t *testCellSubscriber) OnWillEdit(
+	ctx context.Context, start, end term.Coordinates, str string,
+) {
+	t.buf.Edit(ctx, start, end, str)
+}
+
+func (t *testCellSubscriber) OnDidEdit(
+	ctx context.Context, from, to term.Coordinates, old string,
+) {
+}
+
+func assertFileAndBufferOnDisk(
+	t *testing.T, b *cell.Buffer, name, expected string,
+	expectedLastEOL bool,
+) {
+	t.Helper()
+
+	assert.Equal(t, expected, b.String())
+
+	data, err := os.ReadFile(name)
+	require.NoError(t, err)
+
+	expectedOnDisk := expected
+	if expectedLastEOL {
+		expectedOnDisk += "\n"
+	}
+	assert.Equal(t, expectedOnDisk, string(data))
 }
 
 func TestFileBufferIntegrationEOL(t *testing.T) {
@@ -448,23 +549,18 @@ func assertRecoverFromSwapFile(t *testing.T, filename, swapname string, b *cell.
 }
 
 func newRecoveryIntegrationCase(t *testing.T) (
-	*cell.Buffer, *os.File, *os.File, func(),
+	*cell.Buffer, *os.File, *os.File,
 ) {
-	_, file, cleanupFile := newIntegrationTestCase(t, true)
+	_, file := newIntegrationTestCase(t, true)
 	require.NoError(t, file.Truncate(0))
 
-	b, swap, cleanupSwap := newIntegrationTestCase(t, true)
-
-	return b, file, swap, func() {
-		cleanupSwap()
-		cleanupFile()
-	}
+	b, swap := newIntegrationTestCase(t, true)
+	return b, file, swap
 }
 
 func TestFileBufferRecover(t *testing.T) {
 	t.Run("recovers file from swap", func(t *testing.T) {
-		b, file, swap, cleanup := newRecoveryIntegrationCase(t)
-		defer cleanup()
+		b, file, swap := newRecoveryIntegrationCase(t)
 
 		filepath, swapFilepath := file.Name(), swap.Name()
 		f, err := recoverFile(filepath, swapFilepath, b, false)
@@ -475,8 +571,7 @@ func TestFileBufferRecover(t *testing.T) {
 	})
 
 	t.Run("recovers file from swap even if file does not exist", func(t *testing.T) {
-		b, swap, cleanup := newIntegrationTestCase(t, true)
-		defer cleanup()
+		b, swap := newIntegrationTestCase(t, true)
 
 		swapFilepath := swap.Name()
 		swapFileName := path.Base(swapFilepath)
@@ -489,8 +584,7 @@ func TestFileBufferRecover(t *testing.T) {
 	})
 
 	t.Run("returns error if file was modified after swap and does not remove swap", func(t *testing.T) {
-		b, file, swap, cleanup := newRecoveryIntegrationCase(t)
-		defer cleanup()
+		b, file, swap := newRecoveryIntegrationCase(t)
 
 		filepath, swapFilepath := file.Name(), swap.Name()
 
@@ -507,8 +601,7 @@ func TestFileBufferRecover(t *testing.T) {
 	})
 
 	t.Run("recovers if file was modified after swap and recover was called with force=true", func(t *testing.T) {
-		b, file, swap, cleanup := newRecoveryIntegrationCase(t)
-		defer cleanup()
+		b, file, swap := newRecoveryIntegrationCase(t)
 
 		filepath, swapFilepath := file.Name(), swap.Name()
 
@@ -524,8 +617,7 @@ func TestFileBufferRecover(t *testing.T) {
 	})
 
 	t.Run("recovers file and updates it with swap contents if swap is ahead", func(t *testing.T) {
-		b, file, swap, cleanup := newRecoveryIntegrationCase(t)
-		defer cleanup()
+		b, file, swap := newRecoveryIntegrationCase(t)
 
 		filepath, swapFilepath := file.Name(), swap.Name()
 
@@ -546,8 +638,7 @@ func TestFileBufferRecover(t *testing.T) {
 	})
 
 	t.Run("if a recover buffer takes over swap, it should now allow for other NewFileBuffer to open it", func(t *testing.T) {
-		b, file, _, cleanup := newRecoveryIntegrationCase(t)
-		defer cleanup()
+		b, file, _ := newRecoveryIntegrationCase(t)
 
 		swapDir := filepath.Dir(file.Name())
 
@@ -1277,8 +1368,7 @@ func TestRecoverFileBufferInsert(t *testing.T) {
 }
 
 func TestFileMissingLastCopySwap(t *testing.T) {
-	buf, file, clean := newIntegrationTestCase(t, true)
-	defer clean()
+	buf, file := newIntegrationTestCase(t, true)
 
 	f, err := openFile(file.Name(), buf, "", false)
 	require.NoError(t, err)

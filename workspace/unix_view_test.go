@@ -130,3 +130,44 @@ func TestUnixFile(t *testing.T) {
 		}
 	}
 }
+
+func TestBufferViewIntegration(t *testing.T) {
+	const snippet = "If you accept Hawking radiation and accept " +
+		"that black holes radiate away all the information stored inside, eventually, " +
+		"if you reverse the arrow of time, you'll find that the start of the universe " +
+		"is actually information being injected into black holes, which eventually " +
+		"start to spit out particles, stars, galaxies and even life."
+
+	suite := []struct {
+		desc    string
+		content string
+	}{
+		{"reads reader content into buffer after reset", snippet},
+		{"reads reader content into buffer after reset, with last EOL", snippet + "\n"},
+	}
+
+	for _, test := range suite {
+		t.Run(test.desc, func(t *testing.T) {
+			b := cell.NewBuffer()
+			view := NewUnixFileView(b.View())
+			b.WithView(view)
+
+			_, err := b.ReadFrom(strings.NewReader(test.content))
+			require.NoError(t, err)
+			if !view.EndsWithEOL() {
+				b.WriteString("\n")
+			}
+			require.Equal(t, snippet, b.String())
+
+			for i := 0; i < 2; i++ {
+				b.Reset()
+				_, err = b.ReadFrom(strings.NewReader(test.content))
+				require.NoError(t, err)
+				if !view.EndsWithEOL() {
+					b.WriteString("\n")
+				}
+				assert.Equal(t, snippet, b.String(), i)
+			}
+		})
+	}
+}
