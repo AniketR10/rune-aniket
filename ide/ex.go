@@ -562,15 +562,8 @@ func (e *ex) tabcopypath(args ...string) error {
 }
 
 func (e *ex) reloadfile(args ...string) error {
-	b := e.comp.Browser()
 	focus := e.invokeWindow()
-	uri, _, ok := e.handlerInFocus()
-	if !ok {
-		return errors.New("not a file")
-	}
-	b.RemoveWindowContent(focus)
-	_, err := e.editFileURI(uri, e.invokeWindow())
-	return err
+	return e.comp.Reload(focus)
 }
 
 func (e *ex) splitDirectionChange(args ...string) error {

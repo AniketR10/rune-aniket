@@ -330,6 +330,35 @@ func (c *Component) OpenFileTab(file workspaceapi.URI, readOnly bool) (
 	return c.openFileTab(file, workspaceapi.URI{}, readOnly, false)
 }
 
+// Reload reloads the content of the tab at the given window. If the content
+// is not a tab, then this method returns an error.
+func (c *Component) Reload(win browser.Window) error {
+	content, err := win.Content()
+	if err != nil {
+		return fmt.Errorf("get window content: %w", err)
+	}
+	t, ok := content.(*browser.Tab)
+	if !ok {
+		return textapi.ErrInvalidReload
+	}
+
+	return c.ReloadTab(t)
+}
+
+// ReloadTab reloads the given tab.
+func (c *Component) ReloadTab(t *browser.Tab) error {
+	if t.Closer() == nil {
+		return textapi.ErrInvalidReload
+	}
+
+	fc := t.Closer().(workspace.FlusherCloser)
+	err := fc.Reload()
+	if err != nil {
+		return fmt.Errorf("reload: %w", err)
+	}
+	return nil
+}
+
 // RecoverFileTab recovers the file at filename by using the file at recoverFilename
 // and opens a tab it like OpenFileTab. See OpenFileTab for more details.
 func (c *Component) RecoverFileTab(

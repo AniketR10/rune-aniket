@@ -32,6 +32,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/blue/document"
@@ -45,6 +46,7 @@ import (
 	"unstable.build/go-tui/browser/browsertest"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component/comptest"
+	"unstable.build/go-tui/extension/extutil"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/command"
 	"unstable.build/go-tui/handler/handlertest"
@@ -60,8 +62,11 @@ var (
 )
 
 type testFlusherCloser struct {
-	closeFn func() error
-	flushFn func() error
+	buf      *cell.Buffer
+	closeFn  func() error
+	flushFn  func() error
+	reloadFn func() error
+	content  string
 }
 
 func (t *testFlusherCloser) Close() error {
@@ -78,6 +83,12 @@ func (t *testFlusherCloser) Flush() error {
 }
 
 func (t *testFlusherCloser) Reload() error {
+	if t.reloadFn != nil {
+		return t.reloadFn()
+	}
+	if t.content != "" {
+		t.buf.Replace(t.content)
+	}
 	return nil
 }
 
@@ -103,7 +114,7 @@ func (t *testLoader) Load(
 	if t.content != "" {
 		buf.WriteString(t.content)
 	}
-	return &testFlusherCloser{}, nil
+	return &testFlusherCloser{buf: buf, content: t.content}, nil
 }
 
 func (t *testLoader) Recover(
@@ -1571,6 +1582,128 @@ func TestFlush(t *testing.T) {
 		require.NoError(t, err)
 
 		require.Equal(t, textapi.ErrInvalidSave, c.Flush(win))
+	})
+}
+
+func TestReload(t *testing.T) {
+	resource1, err := workspaceapi.ParseURI("file:///a")
+	require.NoError(t, err)
+
+	t.Run("calls underlying closer Flush", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		mock := NewMockHandler(ctrl)
+		mockEditor := NewMockEditor(ctrl)
+		mockWorkspace := NewMockWorkspace(ctrl)
+		mockFlusherCloser := workspacetest.NewMockFlusherCloser(ctrl)
+
+		c, err := text.NewComponent(mockEditor, document.NewInMemoryService(), mockWorkspace, text.DefaultConfig())
+		require.NoError(t, err)
+
+		win, err := c.Focus()
+		require.NoError(t, err)
+
+		mockWorkspace.EXPECT().Load(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+			Return(mockFlusherCloser, nil).Times(1)
+		mock.EXPECT().Resize(gomock.Any(), gomock.Any()).Times(1)
+		mockEditor.EXPECT().Cursor(gomock.Any()).
+			Return(term.Coordinates{}, nil).Times(1)
+		mockEditor.EXPECT().Edit(gomock.Any(), gomock.Any()).Return(mock, nil)
+
+		h, err := c.OpenFileTab(resource1, true)
+		require.NoError(t, win.SetContent(h))
+
+		mockFlusherCloser.EXPECT().Reload().Times(1)
+		require.NoError(t, c.Reload(win))
+	})
+
+	t.Run("returns ErrInvalidSave if called on tab with nil closer handle", func(t *testing.T) {
+		mock := browsertest.NewTestHandler()
+		c, _ := newTestComponent(t, nil)
+		win, err := c.Focus()
+		require.NoError(t, err)
+
+		h, err := c.Tab(resource1, 'x', "Rupi Kaur", mock)
+		require.NoError(t, win.SetContent(h))
+
+		require.Equal(t, textapi.ErrInvalidReload, c.Reload(win))
+	})
+
+	t.Run("returns ErrInvalidReload if called on non-tab", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		mock := NewMockHandler(ctrl)
+		c, _ := newTestComponent(t, nil)
+		win, err := c.Focus()
+		require.NoError(t, err)
+
+		mock.EXPECT().Resize(gomock.Any(), gomock.Any()).AnyTimes()
+		_, err = c.Split(browserapi.OrientationTop, win, mock)
+		require.NoError(t, err)
+
+		require.Equal(t, textapi.ErrInvalidReload, c.Reload(win))
+	})
+
+	t.Run("bubbles up file reload errors", func(t *testing.T) {
+		c, testLoader := newTestComponent(t, NopEditor())
+		win, err := c.Focus()
+		require.NoError(t, err)
+
+		testLoader.flusherCloser = &testFlusherCloser{
+			reloadFn: func() error { return errors.New("boom") },
+		}
+
+		h, err := c.OpenFileTab(resource1, true)
+		require.NoError(t, err)
+		require.NoError(t, win.SetContent(h))
+
+		err = c.Reload(win)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "boom")
+	})
+
+	t.Run("integration with event dispatching", func(t *testing.T) {
+		ctx := context.Background()
+		c, testLoader := newTestComponent(t, NopEditor())
+		win, err := c.Focus()
+		require.NoError(t, err)
+
+		const content = "abc\ndef\n"
+		testLoader.content = content
+
+		h, err := c.OpenFileTab(resource1, true)
+		require.NoError(t, err)
+		require.NoError(t, win.SetContent(h))
+
+		cfg := text.DefaultConfig()
+		tracker := extutil.NewResourceTracker(cfg.Tabspaces, false)
+		err = c.SubscribeEvents(textapi.AllEvents(), tracker)
+		require.NoError(t, err)
+
+		ed, err := c.Editor(resource1)
+		require.NoError(t, err)
+
+		ced := c.CellEditor(ed)
+		_, _, _, err = ced.Edit(ctx, term.Coordinates{}, term.Coordinates{}, "ABC")
+		require.NoError(t, err)
+
+		assertContent := func(t *testing.T, expected string) {
+			t.Helper()
+			cview := c.CellView(ed)
+			cells, err := cview.RawCells()
+			require.NoError(t, err)
+			assert.Equal(t, expected, cell.CellsToString(cells))
+
+			res, ok := tracker.Resource(resource1)
+			require.True(t, ok)
+			assert.Equal(t, expected, res.Buffer().String())
+		}
+
+		assertContent(t, "ABC"+content)
+
+		logrus.SetLevel(logrus.TraceLevel)
+		require.NoError(t, c.Reload(win))
+
+		assertContent(t, content)
+		logrus.SetLevel(logrus.PanicLevel)
 	})
 }
 

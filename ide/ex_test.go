@@ -578,14 +578,14 @@ EEEE`},
 └──────────────────┘`},
 		{":e!>", // test reload non file
 			`┌────┌─────────────┐
-│o o.│ not a file  │
-├────└─────────────┘
-│┌───┌─────────────┐
-││AAA│ wasup: Z    │
+│o o.│ cannot      │
+├────│ reload      │
+│┌───│ this        │
+││AAA│ content     │
 ││AAA└─────────────┘
-│└────┘BBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
+│└───┌─────────────┐
+│BBBB│ wasup: Z    │
+│BBBB└─────────────┘
 └──────────────────┘`},
 	}
 
@@ -596,14 +596,14 @@ EEEE`},
 	cases = []handlertest.SequenceTestCase{
 		{"",
 			`┌────┌─────────────┐
-│o o.│ not a file  │
-├────└─────────────┘
+│o o.│ cannot      │
+├────│ reload      │
+│BBBB│ this        │
+│BBBB│ content     │
+│BBBB└─────────────┘
 │BBBB┌─────────────┐
 │BBBB│ wasup: Z    │
 │BBBB└─────────────┘
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
 └──────────────────┘`},
 	}
 	handlertest.TestHandlerSequence(t, bh, 20, 10, cases)
@@ -621,14 +621,14 @@ EEEE`},
 	cases = []handlertest.SequenceTestCase{
 		{":edit ait^^^aix^^^^ airsoft.map>",
 			`┌──────────────────────────────────┌─────────────┐
-│o o.go  o bugz  o airsoft.map     │ not a file  │
-├──────────────────────────────────└─────────────┘
-│0000000000000000000000000000000000┌─────────────┐
-├─┬────────────────────────────────│ wasup: Z    │
+│o o.go  o bugz  o airsoft.map     │ cannot      │
+├──────────────────────────────────│ reload      │
+│0000000000000000000000000000000000│ this        │
+├─┬────────────────────────────────│ content     │
 │2│AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA└─────────────┘
-│2│AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA│3│
-├─┴────────────────────────────────────────────┴─┤
-│111111111111111111111111111111111111111111111111│
+│2│AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA┌─────────────┐
+├─┴────────────────────────────────│ wasup: Z    │
+│1111111111111111111111111111111111└─────────────┘
 └────────────────────────────────────────────────┘`},
 	}
 	handlertest.TestHandlerSequence(t, bh, 50, 10, cases)
@@ -724,14 +724,14 @@ func TestMultipleFilesStartup(t *testing.T) {
 └──────────────────┘`},
 		{"#:reloadfile>",
 			`┌──────────────────┐
-│o wi.go  o a.go   │
+│o a.go  o wi.go   │
 ├──────────────────┤
-│AAAAAAAAAAAAAAAAAA│
-│AAAAAAAAAAAAAAAAAA│
-│AAAAAAAAAAAAAAAAAA│
-│AAAAAAAAAAAAAAAAAA│
-│AAAAAAAAAAAAAAAAAA│
-│AAAAAAAAAAAAAAAAAA│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
 └──────────────────┘`},
 	}
 

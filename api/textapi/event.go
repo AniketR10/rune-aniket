@@ -97,6 +97,17 @@ const (
 	EventTypeSelection
 )
 
+// AllEvents returns all types of textapi.EventType in a slice.
+func AllEvents() []EventType {
+	return []EventType{
+		EventTypeOpen, EventTypeClose, EventTypeFlush,
+		EventTypeCreate, EventTypeChange, EventTypeRemove,
+		EventTypeRename, EventTypeEdit, EventTypeScroll,
+		EventTypeFocus, EventTypeUnfocus, EventTypeCursor,
+		EventTypeSelection,
+	}
+}
+
 // Event encapsulates eventual information about a particular editor resource.
 type Event struct {
 	Type     EventType
