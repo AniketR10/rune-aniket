@@ -189,6 +189,9 @@ func (t *Task) Dimensions() (width int, height int) {
 
 // Resize satisfies tui.Component.
 func (t *Task) Resize(width, height int) {
+	if t.closed.Load() {
+		return
+	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
