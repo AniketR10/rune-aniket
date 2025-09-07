@@ -36,7 +36,6 @@ import (
 	"unstable.build/go-tui/api/browserapi"
 	browserapitest "unstable.build/go-tui/api/browserapi/browsertest"
 	"unstable.build/go-tui/api/config"
-	"unstable.build/go-tui/api/extensionapi"
 	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/browser/browsertest"
 	"unstable.build/go-tui/extension"
@@ -123,31 +122,63 @@ func TestCommandSplitHandlerOpenWindow(t *testing.T) {
 			SplitOrientation: browserapi.OrientationLeft,
 		}
 
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
-
-		grants := extension.Grant{
-			Token:      "1555",
-			Permission: extensionapi.Permission(extensionapi.PermissionEditor),
-			Context:    ctx,
-		}
-		testSplitWindow(t, config, grants, func(h *cmdSplitHandler) {
+		testSplitWindow(t, config, func(h *cmdSplitHandler) {
 			err := h.HandleCommand(context.Background(), textapi.Command{Name: cmdName})
 			require.NoError(t, err)
 		})
+	})
+
+	t.Run("calls Redispatch if command received subsequently", func(t *testing.T) {
+		cmdName := "blah"
+		var called int
+		rh := FuncRedispatchHandler(browsertest.NewTestHandler(),
+			func(ctx context.Context, cmd textapi.Command) error {
+				called++
+				return nil
+			})
+		config := CommandSplitHandlerConfig{
+			Command:          testCommand(cmdName),
+			SplitOrientation: browserapi.OrientationLeft,
+			Handler: func(_ context.Context, _ textapi.Command, grants []extension.Grant, broker rpc.MuxBroker,
+				focus browserapi.Window, c config.Config) (RedispatchHandler, error) {
+				return rh, nil
+			},
+		}
+
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		mockWm := browserapitest.NewMockWindowManager(ctrl)
+		mockWm.EXPECT().
+			Split(gomock.Eq(config.SplitOrientation), gomock.Any(), gomock.Any()).
+			Return(browserapitest.NewMockWindow(ctrl), nil)
+		h := &cmdSplitHandler{config: config, wm: mockWm}
+
+		// once splits
+		err := h.HandleCommand(context.Background(), textapi.Command{Name: cmdName})
+		require.NoError(t, err)
+
+		// second calls redispatch
+		err = h.HandleCommand(context.Background(), textapi.Command{Name: cmdName})
+		require.NoError(t, err)
+		assert.Equal(t, 1, called)
+
+		err = h.HandleCommand(context.Background(), textapi.Command{Name: cmdName})
+		require.NoError(t, err)
+		assert.Equal(t, 2, called)
 	})
 }
 
 func testSplitWindow(
 	t *testing.T, cfg CommandSplitHandlerConfig,
-	grant extension.Grant, action func(*cmdSplitHandler),
+	action func(*cmdSplitHandler),
 ) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	cfg.Handler = func(_ context.Context, _ textapi.Command, grants []extension.Grant, broker rpc.MuxBroker,
-		focus browserapi.Window, c config.Config) (browserapi.Handler, error) {
-		return browsertest.NewTestHandler(), nil
+		focus browserapi.Window, c config.Config) (RedispatchHandler, error) {
+		return NopRedispatchHandler(browsertest.NewTestHandler()), nil
 	}
 	mockWm := browserapitest.NewMockWindowManager(ctrl)
 	h := &cmdSplitHandler{config: cfg, wm: mockWm}

@@ -46,8 +46,8 @@ func Grantee() (extension.Grantee, []extensionapi.Permission) {
 		SplitOrientation: browserapi.OrientationRight,
 		Handler: func(ctx context.Context, _ textapi.Command,
 			grants []extension.Grant, broker rpc.MuxBroker,
-			invokeWindow browserapi.Window, config config.Config) (browserapi.Handler, error) {
-			return new(colorPaletteHandler), nil
+			invokeWindow browserapi.Window, config config.Config) (extutil.RedispatchHandler, error) {
+			return extutil.NopRedispatchHandler(new(colorPaletteHandler)), nil
 		},
 		Command: colorPaletteCmd,
 	})

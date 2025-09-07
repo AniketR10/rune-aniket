@@ -57,7 +57,7 @@ func Grantee() (extension.Grantee, []extensionapi.Permission) {
 		Handler: func(ctx context.Context, cmd textapi.Command,
 			grants []extension.Grant, broker rpc.MuxBroker,
 			invokeWindow browserapi.Window, pconfig config.Config,
-		) (browserapi.Handler, error) {
+		) (extutil.RedispatchHandler, error) {
 			var publisher term.Interrupter
 			for _, grant := range grants {
 				if grant.Permission == extensionapi.PermissionInterrupt {
@@ -115,7 +115,8 @@ func Grantee() (extension.Grantee, []extensionapi.Permission) {
 			if err != nil {
 				return nil, fmt.Errorf("new device: %v", err)
 			}
-			return browserapi.FuncHandler(handler.Nop(component.Sync(new(sync.Mutex), device)), device.Close), nil
+			return extutil.NopRedispatchHandler(browserapi.FuncHandler(
+				handler.Nop(component.Sync(new(sync.Mutex), device)), device.Close)), nil
 		},
 		Command: textapi.CommandManual{
 			Name: "rtcgetusermedia",
@@ -128,7 +129,7 @@ func Grantee() (extension.Grantee, []extensionapi.Permission) {
 		SplitOrientation: browserapi.OrientationRight,
 		Handler: func(ctx context.Context, cmd textapi.Command,
 			grants []extension.Grant, broker rpc.MuxBroker,
-			invokeWindow browserapi.Window, config config.Config) (browserapi.Handler, error) {
+			invokeWindow browserapi.Window, config config.Config) (extutil.RedispatchHandler, error) {
 			if len(cmd.Args) < 1 {
 				return nil, errors.New("expected first argument to be a JPEG image URI")
 			}
@@ -141,7 +142,7 @@ func Grantee() (extension.Grantee, []extensionapi.Permission) {
 			cfg.MaintainAspectRatio = true
 			h := browserapi.NopHandler(handler.Nop(
 				component.Sync(new(sync.Mutex), asciiart.NewComponent(img, cfg))))
-			return h, nil
+			return extutil.NopRedispatchHandler(h), nil
 		},
 		Command: textapi.CommandManual{
 			Name: "rtcconvertimage",

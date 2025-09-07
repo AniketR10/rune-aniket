@@ -163,7 +163,7 @@ func newHandler(
 	ctx context.Context, cmd textapi.Command,
 	grants []extension.Grant, broker rpc.MuxBroker,
 	invokeWindow browserapi.Window, c config.Config,
-) (browserapi.Handler, error) {
+) (extutil.RedispatchHandler, error) {
 	noHistoryKey := term.KeyComb{}
 
 	tabspaces := -1

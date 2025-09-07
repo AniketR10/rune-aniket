@@ -50,6 +50,7 @@ import (
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/extension"
+	"unstable.build/go-tui/extension/extutil"
 	"unstable.build/go-tui/handler/search"
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term"
@@ -74,6 +75,69 @@ func Permissions() []extensionapi.Permission {
 		extensionapi.Permission(extensionapi.PermissionFileSystem),
 		extensionapi.Permission(extensionapi.PermissionExecute),
 	}
+}
+
+// New returns a tui.Handler that employs a search.List
+// to interactively search the command's stdout lines.
+//
+// The given context is passed back to the fallback
+// function along with any values stored with it.
+func New(
+	ctx context.Context, grants []extension.Grant, broker rpc.MuxBroker,
+	invokeWindow browserapi.Window, cfg config.Config,
+	historyKey term.KeyComb, historyDocumentID string, command string,
+	fallback func(workspaceapi.FileSystem, context.Context) (iterator.Iterator[string], error),
+	getResource func(exec workspaceapi.FileSystem, line string) (workspaceapi.URI, term.Coordinates),
+) (extutil.RedispatchHandler, error) {
+	h := new(fuzzyFinderHandler)
+	maxHistory, err := cfg.GetInt("history")
+	if err != nil {
+		if err != config.ErrNotFound {
+			log.Errorf("failed to load 'history' from config: %v", err)
+		}
+		maxHistory = defaultMaxHistory
+	} else {
+		log.Tracef("loaded 'history' from config: %v", maxHistory)
+	}
+	err = h.initGrants(ctx, broker, grants, historyDocumentID, maxHistory)
+	if err != nil {
+		return nil, err
+	}
+
+	h.invokeWindow = invokeWindow
+	h.historyKey = historyKey
+	h.getResource = getResource
+	h.cmdStr = command
+	h.useWorkspaceFallback = command == ""
+	h.workspaceFallback = fallback
+
+	h.ctx, h.cancelCtx = context.WithCancel(context.Background())
+	h.waitChan = make(chan error)
+
+	listConfig := h.getListConfig(cfg)
+	h.list.Init(listConfig)
+	clipboard := clipboard.NewInMemory()
+	attr := term.Attributes{} // does not matter for Handler's purpose
+	ed, _ := text.NewSimpleEditor(clipboard, true, true, attr, attr, attr).
+		Edit(workspaceapi.RandomURI("search"), h.list.Buffer())
+	h.listHandler = search.Handler(&h.list, ed, func(item string) {
+		searchQuery := h.list.Buffer().String()
+		h.openResource(searchQuery, item)
+		h.addSearchHistory(searchQuery)
+	})
+
+	var defCell term.Cell
+	if listConfig.ElementAttr != nil {
+		defCell.Bg = listConfig.ElementAttr.Bg
+		defCell.Fg = listConfig.ElementAttr.Fg
+	}
+	h.background = component.WithBackground(h.listHandler, defCell)
+
+	log.Debugf("useWorkspaceFallback set to %v", h.useWorkspaceFallback)
+
+	go h.scanData()
+
+	return h, nil
 }
 
 type fuzzyFinderHandler struct {
@@ -391,69 +455,6 @@ func (h *fuzzyFinderHandler) initGrants(
 	return
 }
 
-// New returns a tui.Handler that employs a search.List
-// to interactively search the command's stdout lines.
-//
-// The given context is passed back to the fallback
-// function along with any values stored with it.
-func New(
-	ctx context.Context, grants []extension.Grant, broker rpc.MuxBroker,
-	invokeWindow browserapi.Window, cfg config.Config,
-	historyKey term.KeyComb, historyDocumentID string, command string,
-	fallback func(workspaceapi.FileSystem, context.Context) (iterator.Iterator[string], error),
-	getResource func(exec workspaceapi.FileSystem, line string) (workspaceapi.URI, term.Coordinates),
-) (browserapi.Handler, error) {
-	h := new(fuzzyFinderHandler)
-	maxHistory, err := cfg.GetInt("history")
-	if err != nil {
-		if err != config.ErrNotFound {
-			log.Errorf("failed to load 'history' from config: %v", err)
-		}
-		maxHistory = defaultMaxHistory
-	} else {
-		log.Tracef("loaded 'history' from config: %v", maxHistory)
-	}
-	err = h.initGrants(ctx, broker, grants, historyDocumentID, maxHistory)
-	if err != nil {
-		return nil, err
-	}
-
-	h.invokeWindow = invokeWindow
-	h.historyKey = historyKey
-	h.getResource = getResource
-	h.cmdStr = command
-	h.useWorkspaceFallback = command == ""
-	h.workspaceFallback = fallback
-
-	h.ctx, h.cancelCtx = context.WithCancel(context.Background())
-	h.waitChan = make(chan error)
-
-	listConfig := h.getListConfig(cfg)
-	h.list.Init(listConfig)
-	clipboard := clipboard.NewInMemory()
-	attr := term.Attributes{} // does not matter for Handler's purpose
-	ed, _ := text.NewSimpleEditor(clipboard, true, true, attr, attr, attr).
-		Edit(workspaceapi.RandomURI("search"), h.list.Buffer())
-	h.listHandler = search.Handler(&h.list, ed, func(item string) {
-		searchQuery := h.list.Buffer().String()
-		h.openResource(searchQuery, item)
-		h.addSearchHistory(searchQuery)
-	})
-
-	var defCell term.Cell
-	if listConfig.ElementAttr != nil {
-		defCell.Bg = listConfig.ElementAttr.Bg
-		defCell.Fg = listConfig.ElementAttr.Fg
-	}
-	h.background = component.WithBackground(h.listHandler, defCell)
-
-	log.Debugf("useWorkspaceFallback set to %v", h.useWorkspaceFallback)
-
-	go h.scanData()
-
-	return h, nil
-}
-
 func (h *fuzzyFinderHandler) getListConfig(c config.Config) search.ListConfig {
 	caseSensitive, err := c.GetBool("case_sensitive")
 	if err != nil {
@@ -544,6 +545,11 @@ func (h *fuzzyFinderHandler) writeLastSearchQuery() {
 	}
 	h.list.Buffer().Reset()
 	h.list.Buffer().WriteString(search)
+}
+
+func (h *fuzzyFinderHandler) Redispatch(ctx context.Context, cmd textapi.Command) error {
+	h.writeLastSearchQuery()
+	return nil
 }
 
 func (h *fuzzyFinderHandler) Handle(ev term.Event) (exit, handled bool) {
