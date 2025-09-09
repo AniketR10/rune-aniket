@@ -53,7 +53,6 @@ require (
 
 require (
 	github.com/go-git/go-git/v6 v6.0.0-20250819122726-39261590f7f3
-	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.3.2
 	github.com/unstablebuild/notify v0.10.1
 	github.com/unstablebuild/pty v1.3.1
 	go.uber.org/mock v0.4.0
@@ -71,6 +70,7 @@ require (
 	github.com/go-git/go-billy/v6 v6.0.0-20250817172114-3a9ca963b728 // indirect
 	github.com/go-jose/go-jose/v4 v4.1.2 // indirect
 	github.com/kr/text v0.2.0 // indirect
+	github.com/olekukonko/tablewriter v0.0.5 // indirect
 	github.com/pion/datachannel v1.5.6 // indirect
 	github.com/pion/dtls/v2 v2.2.10 // indirect
 	github.com/pion/ice/v2 v2.3.14 // indirect
