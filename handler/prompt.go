@@ -124,9 +124,10 @@ func (f *Prompt) highlightOption() {
 
 // Handle satisfies tui.Handler.
 func (f *Prompt) Handle(ev term.Event) (exit, handled bool) {
-	if ev.Type != term.EventKey || ev.Mod != 0 {
+	if ev.Type != term.EventKey {
 		return
 	}
+
 	if i, ok := f.bindings[ev.KeyComb()]; ok {
 		f.cfg.OnSelect(i, f.cfg.Options[i])
 		exit = true
@@ -134,19 +135,27 @@ func (f *Prompt) Handle(ev term.Event) (exit, handled bool) {
 		return
 	}
 
+	if ev.Mod == term.ModCtrl {
+		switch ev.Ch {
+		case 'h':
+			handled = f.optionLeft()
+		case 'l':
+			handled = f.optionRight()
+		}
+		if handled {
+			return
+		}
+	}
+
+	if ev.Mod != 0 {
+		return
+	}
+
 	switch ev.Key {
 	case term.KeyArrowLeft:
-		if f.hi > 0 {
-			f.hi--
-			handled = true
-			f.highlightOption()
-		}
+		handled = f.optionLeft()
 	case term.KeyArrowRight:
-		if f.hi < len(f.cfg.Options)-1 {
-			f.hi++
-			handled = true
-			f.highlightOption()
-		}
+		handled = f.optionRight()
 	case term.KeyEnter:
 		f.cfg.OnSelect(f.hi, f.cfg.Options[f.hi])
 		exit = true
@@ -154,6 +163,24 @@ func (f *Prompt) Handle(ev term.Event) (exit, handled bool) {
 	case term.KeyEsc:
 		exit = true
 		handled = true
+	}
+	return
+}
+
+func (f *Prompt) optionRight() (handled bool) {
+	if f.hi < len(f.cfg.Options)-1 {
+		f.hi++
+		handled = true
+		f.highlightOption()
+	}
+	return
+}
+
+func (f *Prompt) optionLeft() (handled bool) {
+	if f.hi > 0 {
+		f.hi--
+		handled = true
+		f.highlightOption()
 	}
 	return
 }

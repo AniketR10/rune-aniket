@@ -74,7 +74,7 @@ func TestPromptHandle(t *testing.T) {
 		OptionBindings: []term.KeyComb{
 
 			{Ch: 'W'},
-			{Ch: 'Y'},
+			{Mod: term.ModAlt, Ch: 'Y'},
 		},
 	}
 
@@ -121,6 +121,23 @@ func TestPromptHandle(t *testing.T) {
 		assert.Equal(t, opt1, calledOpt)
 	})
 
+	t.Run("key ctrl l allow for moving right", func(t *testing.T) {
+		defer resetStub()
+
+		exit, handled := h.Handle(term.Event{
+			Type: term.EventKey, Mod: term.ModCtrl, Ch: 'l'})
+		assert.False(t, exit)
+		assert.True(t, handled)
+
+		exit, handled = h.Handle(term.Event{
+			Type: term.EventKey, Key: term.KeyEnter})
+		assert.True(t, exit)
+		assert.True(t, handled)
+
+		assert.Equal(t, 1, calledI)
+		assert.Equal(t, opt1, calledOpt)
+	})
+
 	t.Run("arrow key left allow for moving left", func(t *testing.T) {
 		defer resetStub()
 
@@ -148,11 +165,33 @@ func TestPromptHandle(t *testing.T) {
 		assert.Equal(t, opt0, calledOpt)
 	})
 
+	t.Run("ctrl h allow for moving left", func(t *testing.T) {
+		defer resetStub()
+
+		exit, handled := h.Handle(term.Event{
+			Type: term.EventKey, Key: term.KeyArrowRight})
+		assert.False(t, exit)
+		assert.True(t, handled)
+
+		exit, handled = h.Handle(term.Event{
+			Type: term.EventKey, Mod: term.ModCtrl, Ch: 'h'})
+		assert.False(t, exit)
+		assert.True(t, handled)
+
+		exit, handled = h.Handle(term.Event{
+			Type: term.EventKey, Key: term.KeyEnter})
+		assert.True(t, exit)
+		assert.True(t, handled)
+
+		assert.Equal(t, 0, calledI)
+		assert.Equal(t, opt0, calledOpt)
+	})
+
 	t.Run("valid auto key binding no conflict", func(t *testing.T) {
 		defer resetStub()
 
 		exit, handled := h.Handle(term.Event{
-			Type: term.EventKey, Ch: 'Y'})
+			Type: term.EventKey, Mod: term.ModAlt, Ch: 'Y'})
 		assert.True(t, exit)
 		assert.True(t, handled)
 
