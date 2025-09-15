@@ -835,7 +835,7 @@ func testWorkspaceSchemeStats(
 		// assert.Equal(t, fs.FileMode(0644), finfo.Mode())
 	})
 
-	t.Run("returns os.ErrNotExist error if file is not found", func(t *testing.T) {
+	t.Run("scheme Stat returns os.ErrNotExist error if file is not found", func(t *testing.T) {
 		scheme := schemeFn(t)
 		defer scheme.Close()
 		_, err := method(scheme, "file")

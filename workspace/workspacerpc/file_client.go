@@ -159,6 +159,9 @@ func (c *FileClient) Stat() (os.FileInfo, error) {
 	if err != nil {
 		return nil, err
 	}
+	if werr, ok := isTypedError(resp); ok {
+		return nil, werr.ToError()
+	}
 	return &fileClientInfo{StatResponse: *resp}, nil // nolint:govet
 }
 
