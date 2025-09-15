@@ -14,6 +14,7 @@ import (
 	os "os"
 	reflect "reflect"
 	syscall "syscall"
+	time "time"
 
 	gomock "go.uber.org/mock/gomock"
 	schemeapi "unstable.build/go-tui/api/schemeapi"
@@ -560,6 +561,34 @@ func (m *MockFlusherCloser) Flush() error {
 func (mr *MockFlusherCloserMockRecorder) Flush() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Flush", reflect.TypeOf((*MockFlusherCloser)(nil).Flush))
+}
+
+// ForceFlush mocks base method.
+func (m *MockFlusherCloser) ForceFlush() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ForceFlush")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ForceFlush indicates an expected call of ForceFlush.
+func (mr *MockFlusherCloserMockRecorder) ForceFlush() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ForceFlush", reflect.TypeOf((*MockFlusherCloser)(nil).ForceFlush))
+}
+
+// LastFlush mocks base method.
+func (m *MockFlusherCloser) LastFlush() time.Time {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "LastFlush")
+	ret0, _ := ret[0].(time.Time)
+	return ret0
+}
+
+// LastFlush indicates an expected call of LastFlush.
+func (mr *MockFlusherCloserMockRecorder) LastFlush() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LastFlush", reflect.TypeOf((*MockFlusherCloser)(nil).LastFlush))
 }
 
 // Reload mocks base method.

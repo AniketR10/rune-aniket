@@ -74,14 +74,26 @@ type testFileBuffer struct {
 	reloadErr error
 	closeErr  error
 	closed    bool
+	lastFlush time.Time
 }
 
 func (t *testFileBuffer) Flush() error {
+	t.lastFlush = time.Now()
 	return t.flushErr
 }
 
 func (t *testFileBuffer) Reload() error {
+	t.lastFlush = time.Now()
 	return t.reloadErr
+}
+
+func (t *testFileBuffer) ForceFlush() error {
+	t.lastFlush = time.Now()
+	return t.flushErr
+}
+
+func (t *testFileBuffer) LastFlush() time.Time {
+	return t.lastFlush
 }
 
 func (t *testFileBuffer) Close() error {

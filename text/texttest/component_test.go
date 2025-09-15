@@ -31,8 +31,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/blue/document"
@@ -62,11 +62,12 @@ var (
 )
 
 type testFlusherCloser struct {
-	buf      *cell.Buffer
-	closeFn  func() error
-	flushFn  func() error
-	reloadFn func() error
-	content  string
+	buf       *cell.Buffer
+	closeFn   func() error
+	flushFn   func() error
+	reloadFn  func() error
+	content   string
+	lastFlush time.Time
 }
 
 func (t *testFlusherCloser) Close() error {
@@ -80,6 +81,17 @@ func (t *testFlusherCloser) Flush() error {
 		return t.flushFn()
 	}
 	return nil
+}
+
+func (t *testFlusherCloser) ForceFlush() error {
+	if t.flushFn != nil {
+		return t.flushFn()
+	}
+	return nil
+}
+
+func (t *testFlusherCloser) LastFlush() time.Time {
+	return t.lastFlush
 }
 
 func (t *testFlusherCloser) Reload() error {
@@ -1612,6 +1624,9 @@ func TestReload(t *testing.T) {
 		h, err := c.OpenFileTab(resource1, true)
 		require.NoError(t, win.SetContent(h))
 
+		mockEditor.EXPECT().CellView(gomock.Any()).
+			Return(text.NewCellView(cell.NewBuffer().View())).Times(1)
+
 		mockFlusherCloser.EXPECT().Reload().Times(1)
 		require.NoError(t, c.Reload(win))
 	})
@@ -1699,11 +1714,119 @@ func TestReload(t *testing.T) {
 
 		assertContent(t, "ABC"+content)
 
-		logrus.SetLevel(logrus.TraceLevel)
 		require.NoError(t, c.Reload(win))
 
 		assertContent(t, content)
-		logrus.SetLevel(logrus.PanicLevel)
+	})
+
+	t.Run("integration with IsDirty", func(t *testing.T) {
+		ctx := context.Background()
+		c, testLoader := newTestComponent(t, NopEditor())
+		win, err := c.Focus()
+		require.NoError(t, err)
+
+		const content = "abc\ndef\n"
+		testLoader.content = content
+
+		h, err := c.OpenFileTab(resource1, true)
+		require.NoError(t, err)
+		require.NoError(t, win.SetContent(h))
+
+		ed, err := c.Editor(resource1)
+		require.NoError(t, err)
+
+		ced := c.CellEditor(ed)
+		_, _, _, err = ced.Edit(ctx, term.Coordinates{}, term.Coordinates{}, "ABC")
+		require.NoError(t, err)
+
+		isDirty, ok := c.IsDirty(resource1)
+		require.True(t, ok)
+		assert.True(t, isDirty)
+
+		require.NoError(t, c.Reload(win))
+
+		isDirty, ok = c.IsDirty(resource1)
+		require.True(t, ok)
+		assert.False(t, isDirty)
+	})
+}
+
+func TestOverwrite(t *testing.T) {
+	resource1, err := workspaceapi.ParseURI("file:///a")
+	require.NoError(t, err)
+
+	t.Run("integration with event dispatching", func(t *testing.T) {
+		ctx := context.Background()
+		c, testLoader := newTestComponent(t, NopEditor())
+		win, err := c.Focus()
+		require.NoError(t, err)
+
+		const content = "abc\ndef\n"
+		testLoader.content = content
+
+		h, err := c.OpenFileTab(resource1, true)
+		require.NoError(t, err)
+		require.NoError(t, win.SetContent(h))
+
+		cfg := text.DefaultConfig()
+		tracker := extutil.NewResourceTracker(cfg.Tabspaces, false)
+		err = c.SubscribeEvents([]textapi.EventType{
+			textapi.EventTypeFlush, textapi.EventTypeOpen,
+		}, tracker)
+		require.NoError(t, err)
+
+		ed, err := c.Editor(resource1)
+		require.NoError(t, err)
+
+		ced := c.CellEditor(ed)
+		_, _, _, err = ced.Edit(ctx, term.Coordinates{}, term.Coordinates{}, "ABC")
+		require.NoError(t, err)
+
+		assertContent := func(t *testing.T, expected string) {
+			t.Helper()
+			cview := c.CellView(ed)
+			cells, err := cview.RawCells()
+			require.NoError(t, err)
+			assert.Equal(t, expected, cell.CellsToString(cells))
+
+			res, ok := tracker.Resource(resource1)
+			require.True(t, ok)
+			assert.Equal(t, expected, res.Buffer().String())
+		}
+
+		require.NoError(t, c.Overwrite(win))
+		assertContent(t, "ABC"+content)
+	})
+
+	t.Run("integration with IsDirty", func(t *testing.T) {
+		ctx := context.Background()
+		c, testLoader := newTestComponent(t, NopEditor())
+		win, err := c.Focus()
+		require.NoError(t, err)
+
+		const content = "abc\ndef\n"
+		testLoader.content = content
+
+		h, err := c.OpenFileTab(resource1, true)
+		require.NoError(t, err)
+		require.NoError(t, win.SetContent(h))
+
+		ed, err := c.Editor(resource1)
+		require.NoError(t, err)
+
+		ced := c.CellEditor(ed)
+		_, _, _, err = ced.Edit(ctx, term.Coordinates{}, term.Coordinates{}, "ABC")
+		require.NoError(t, err)
+
+		isDirty, ok := c.IsDirty(resource1)
+		require.True(t, ok)
+		assert.True(t, isDirty)
+
+		require.NoError(t, c.Overwrite(win))
+
+		isDirty, ok = c.IsDirty(resource1)
+		require.True(t, ok)
+		assert.False(t, isDirty)
 	})
 }
 

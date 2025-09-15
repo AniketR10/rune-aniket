@@ -47,6 +47,8 @@ const (
 	defaultFileMode os.FileMode = 0644
 )
 
+var _ FlusherCloser = (*file)(nil)
+
 // file implements the sync (swap file) logic
 type file struct {
 	// used by Flush, Close and worker only
@@ -70,6 +72,7 @@ type file struct {
 	orig, swap      workspaceapi.File
 	delayedError    error
 	unflushed       bool
+	lastFlush       time.Time
 }
 
 func newFile(p schemeapi.Scheme, path string, buf *cell.Buffer, swapDir string, readOnly bool) (
@@ -105,7 +108,7 @@ func swapFileName(swapDir, filePath string) (string, string) {
 	return swapDir, path.Join(swapDir, fmt.Sprintf(".%s.swp", filepath.Base(filePath)))
 }
 
-func (f *file) initSwap(orig workspaceapi.File, origPerms os.FileMode) (workspaceapi.File, error) {
+func (f *file) initSwapFile(orig workspaceapi.File, origPerms os.FileMode) (workspaceapi.File, error) {
 	swap, osErr := f.scheme.Open(f.swapFileName, os.O_RDWR|os.O_CREATE|os.O_EXCL, origPerms)
 	if osErr != nil {
 		if osErr.IsExist {
@@ -170,7 +173,7 @@ func validateFileType(file workspaceapi.File) (os.FileInfo, error) {
 func (f *file) openFile(filePath string, flag int) (
 	workspaceapi.File, os.FileInfo, error,
 ) {
-	file, err := f.scheme.Open(filePath, flag, 0000)
+	file, err := f.scheme.Open(filePath, flag, 0666)
 	if err != nil {
 		return nil, nil, err.ToError()
 	}
@@ -205,28 +208,10 @@ func (f *file) initFiles(filePath, swapDir string, readOnly bool) error {
 	}
 
 	if !readOnly {
-		swapDir, swapFileName := swapFileName(swapDir, filePath)
-		if f.swapFileName == "" {
-			f.swapFileName = swapFileName
-		}
-
-		mode := os.FileMode(defaultFileMode)
-		if fileInfo != nil {
-			mode = fileInfo.Mode()
-		}
-		swap, err := f.initSwap(file, mode)
+		err := f.initSwap(swapDir, filePath, file, fileInfo)
 		if err != nil {
 			return err
 		}
-		// store swapInfo so we can check update times at Flush
-		swapInfo, err := f.scheme.Stat(f.swapFileName)
-		if err != nil {
-			_ = f.scheme.Remove(f.swapFileName)
-			return err
-		}
-		f.swap = swap
-		f.swapInfoModTime = swapInfo.ModTime()
-		f.swapDir = swapDir
 	}
 
 	f.orig = file
@@ -235,6 +220,35 @@ func (f *file) initFiles(filePath, swapDir string, readOnly bool) error {
 	}
 	f.fileName = filePath
 	f.readOnly = readOnly
+
+	return nil
+}
+
+func (f *file) initSwap(
+	swapDir, filePath string, orig workspaceapi.File, fileInfo os.FileInfo,
+) error {
+	swapDir, swapFileName := swapFileName(swapDir, filePath)
+	if f.swapFileName == "" {
+		f.swapFileName = swapFileName
+	}
+
+	mode := os.FileMode(defaultFileMode)
+	if fileInfo != nil {
+		mode = fileInfo.Mode()
+	}
+	swap, err := f.initSwapFile(orig, mode)
+	if err != nil {
+		return err
+	}
+	// store swapInfo so we can check update times at Flush
+	swapInfo, err := f.scheme.Stat(f.swapFileName)
+	if err != nil {
+		_ = f.scheme.Remove(f.swapFileName)
+		return err
+	}
+	f.swap = swap
+	f.swapInfoModTime = swapInfo.ModTime()
+	f.swapDir = swapDir
 
 	return nil
 }
@@ -275,7 +289,7 @@ func (f *file) initBuffer(buf *cell.Buffer, file workspaceapi.File) (err error) 
 
 func (f *file) initRecover(filePath, swapFilePath string, buf *cell.Buffer, force bool) error {
 	orig, info, err := f.openFile(filePath, os.O_RDWR)
-	if err == os.ErrNotExist {
+	if os.IsNotExist(err) {
 		err = nil
 	}
 	if err != nil {
@@ -462,6 +476,19 @@ func (f *file) Flush() error {
 	return f.flush(false)
 }
 
+// ForceFlush forces saving the contents of the buffer to disk, overwritting
+// any changes if a file was modified by another process. ForceFlush blocks until
+// all edits have been processed.
+func (f *file) ForceFlush() error {
+	return f.flush(true)
+}
+
+// LastFlush returns the last time this file was flushed or a zero value time
+// if this file has not been flushed yet.
+func (f *file) LastFlush() time.Time {
+	return f.lastFlush
+}
+
 // Reload reloads the contents of the buffer from disk.
 func (f *file) Reload() error {
 	if f.orig == nil {
@@ -505,14 +532,14 @@ func (f *file) Reload() error {
 	if err != nil {
 		return fmt.Errorf("seek: %w", err)
 	}
-
+	f.lastFlush = f.infoModTime
 	return nil
 }
 
 func (f *file) flush(force bool) error {
 	f.wg.Wait()
 
-	if f.swap == nil {
+	if f.swap == nil && !force {
 		return workspaceapi.ErrFileIsNotWritable
 	}
 
@@ -527,38 +554,63 @@ func (f *file) flush(force bool) error {
 	// used to override with symlink target if applicable
 	origTarget := f.fileName
 
+	var newFileInfo os.FileInfo
+
 	// create file if it didn't exist before
 	if f.orig == nil {
 		isExist := f.touchFile()
 		if isExist {
 			return workspaceapi.ErrStaleData
 		}
+	} else if f.readOnly && force {
+		// if it exists, but created readonly and want to force flush
+		// overwrite f.orig with correct flags
+		f.orig, newFileInfo, err = f.openFile(f.fileName, os.O_CREATE|os.O_RDWR)
+		if err != nil {
+			return err
+		}
 	} else {
-		newFileInfo, err := f.scheme.Stat(f.fileName)
-		if err != nil {
-			return err
-		}
-		if !force && (newFileInfo.ModTime().After(f.swapInfoModTime) ||
-			newFileInfo.ModTime().After(f.infoModTime)) {
-			return workspaceapi.ErrStaleData
-		}
-
-		newFileInfo, err = f.scheme.Lstat(f.fileName)
-		if err != nil {
-			return err
-		}
-		if newFileInfo.Mode()&os.ModeSymlink != 0 {
-			origTarget, err = f.scheme.ReadLink(origTarget)
+		newFileInfo, err = f.scheme.Stat(f.fileName)
+		if err != nil && force && os.IsNotExist(err) {
+			// file was might have been removed, create it if in force mode
+			f.orig, newFileInfo, err = f.openFile(f.fileName, os.O_CREATE|os.O_RDWR)
 			if err != nil {
 				return err
+			}
+		} else if err != nil {
+			return err
+		} else {
+			if !force && (newFileInfo.ModTime().After(f.swapInfoModTime) ||
+				newFileInfo.ModTime().After(f.infoModTime)) {
+				return workspaceapi.ErrStaleData
+			}
+
+			newFileInfo, err = f.scheme.Lstat(f.fileName)
+			if err != nil {
+				return err
+			}
+			if newFileInfo.Mode()&os.ModeSymlink != 0 {
+				origTarget, err = f.scheme.ReadLink(origTarget)
+				if err != nil {
+					return err
+				}
 			}
 		}
 	}
 
 	newSwapInfo, err := f.scheme.Stat(f.swapFileName)
-	if err != nil {
+	if (err != nil && force) || f.swap == nil {
+		// FIXME initialized swap does not have latest contents
+		err := f.initSwap(f.swapDir, f.fileName, f.orig, newFileInfo)
+		if err != nil {
+			return err
+		}
+		// write happens in the default goroutine so there's no need to sync
+		f.copyFlushSwapFile(f.content)
+	} else if err != nil {
 		return err
 	}
+
 	if !force && newSwapInfo.ModTime().After(f.swapInfoModTime) {
 		return workspaceapi.ErrStaleData
 	}
@@ -573,12 +625,17 @@ func (f *file) flush(force bool) error {
 		return err
 	}
 
-	err = f.initFiles(f.fileName, f.swapDir, f.readOnly)
+	readOnly := f.readOnly
+	if readOnly && force {
+		readOnly = false
+	}
+	err = f.initFiles(f.fileName, f.swapDir, readOnly)
 	if err != nil {
 		return err
 	}
 
 	f.unflushed = false
+	f.lastFlush = f.infoModTime
 
 	return nil
 }

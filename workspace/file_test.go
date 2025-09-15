@@ -663,6 +663,105 @@ func TestFileBufferRecover(t *testing.T) {
 	})
 }
 
+func TestForceFlush(t *testing.T) {
+	t.Run("flushes to disk", func(t *testing.T) {
+		b, file := newIntegrationTestCase(t, true)
+
+		f, err := openFile(file.Name(), b, "", false)
+		require.NoError(t, err)
+
+		const writeStr = "XXXXXX"
+		b.InsertString(term.Coordinates{}, writeStr)
+
+		require.NoError(t, f.ForceFlush())
+		assertFileAndBufferOnDisk(t, b, file.Name(), writeStr+sampleSnippet, true)
+	})
+
+	t.Run("flushes to disk after a reload", func(t *testing.T) {
+		b, file := newIntegrationTestCase(t, true)
+
+		f, err := openFile(file.Name(), b, "", false)
+		require.NoError(t, err)
+
+		const writeStr = "XXXXXX"
+		b.InsertString(term.Coordinates{}, writeStr)
+
+		require.NoError(t, f.Reload())
+		require.NoError(t, f.ForceFlush())
+		assertFileAndBufferOnDisk(t, b, file.Name(), sampleSnippet, true)
+	})
+
+	t.Run("is able to overwrite when a file was modified oob", func(t *testing.T) {
+		b, file := newIntegrationTestCase(t, true)
+
+		f, err := openFile(file.Name(), b, "", false)
+		require.NoError(t, err)
+
+		const writeStr = "XXXXXX"
+		b.InsertString(term.Coordinates{}, writeStr)
+
+		require.NoError(t, f.Flush())
+		assertFileAndBufferOnDisk(t, b, file.Name(), writeStr+sampleSnippet, true)
+
+		require.NoError(t, os.WriteFile(file.Name(), []byte("abv"), 0))
+		data, err := os.ReadFile(file.Name())
+		require.NoError(t, err)
+		assert.Equal(t, "abv", string(data))
+
+		require.NoError(t, f.ForceFlush())
+		assertFileAndBufferOnDisk(t, b, file.Name(), writeStr+sampleSnippet, true)
+	})
+
+	t.Run("creates file if file is removed oob", func(t *testing.T) {
+		b, file := newIntegrationTestCase(t, true)
+
+		f, err := openFile(file.Name(), b, "", false)
+		require.NoError(t, err)
+
+		const writeStr = "XXXXXX"
+		b.InsertString(term.Coordinates{}, writeStr)
+
+		require.NoError(t, f.Flush())
+		assertFileAndBufferOnDisk(t, b, file.Name(), writeStr+sampleSnippet, true)
+
+		require.NoError(t, os.Remove(file.Name()))
+
+		require.NoError(t, f.ForceFlush())
+		assertFileAndBufferOnDisk(t, b, file.Name(), writeStr+sampleSnippet, true)
+	})
+
+	t.Run("overwrites read-only", func(t *testing.T) {
+		b, file := newIntegrationTestCase(t, true)
+
+		f, err := openFile(file.Name(), b, "", true)
+		require.NoError(t, err)
+
+		const writeStr = "XXXXXX"
+		b.InsertString(term.Coordinates{}, writeStr)
+
+		require.NoError(t, f.ForceFlush())
+		assertFileAndBufferOnDisk(t, b, file.Name(), writeStr+sampleSnippet, true)
+	})
+
+	t.Run("Flush after ForceFlush a readonly should not error", func(t *testing.T) {
+		b, file := newIntegrationTestCase(t, true)
+
+		f, err := openFile(file.Name(), b, "", true)
+		require.NoError(t, err)
+
+		const writeStr = "XXXXXX"
+		b.InsertString(term.Coordinates{}, writeStr)
+
+		require.NoError(t, f.ForceFlush())
+		assertFileAndBufferOnDisk(t, b, file.Name(), writeStr+sampleSnippet, true)
+
+		b.InsertString(term.Coordinates{}, writeStr)
+
+		require.NoError(t, f.Flush())
+		assertFileAndBufferOnDisk(t, b, file.Name(), writeStr+writeStr+sampleSnippet, true)
+	})
+}
+
 // UNIT TESTS
 
 // returns an un-initialized (but dep injected) FileBuffer along with the mocked OsFile

@@ -28,10 +28,10 @@ import (
 	"errors"
 	"fmt"
 	"hash/fnv"
-	"io"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
@@ -186,7 +186,7 @@ func (c *Component) Init(
 		if len(c.config.Filepaths) != 1 {
 			return errors.New("only one file expected if recovery file is passed")
 		}
-		h, err := c.RecoverFileTab(c.config.Filepaths[0],
+		h, err := c.recoverOpenFileTab(c.config.Filepaths[0],
 			c.config.RecoveryFilepath, false)
 		if err != nil {
 			return err
@@ -345,13 +345,22 @@ func (c *Component) Reload(win browser.Window) error {
 	return c.ReloadTab(t)
 }
 
-// ReloadTab reloads the given tab.
-func (c *Component) ReloadTab(t *browser.Tab) error {
+// ReloadTab reloads the given handler, if it is a tab,
+// and if it can be reloaded.
+func (c *Component) ReloadTab(h browserapi.Handler) error {
+	t, ok := h.(*browser.Tab)
+	if !ok {
+		return textapi.ErrInvalidReload
+	}
+
 	if t.Closer() == nil {
 		return textapi.ErrInvalidReload
 	}
 
-	fc := t.Closer().(workspace.FlusherCloser)
+	fc, ok := t.Closer().(workspace.FlusherCloser)
+	if !ok {
+		return textapi.ErrInvalidReload
+	}
 	err := fc.Reload()
 	if err != nil {
 		return fmt.Errorf("reload: %w", err)
@@ -359,9 +368,54 @@ func (c *Component) ReloadTab(t *browser.Tab) error {
 	return nil
 }
 
-// RecoverFileTab recovers the file at filename by using the file at recoverFilename
+// RemoveTab removes the given handler, if it is a tab,
+// and if it can be removed.
+func (c *Component) RemoveTab(h browserapi.Handler) error {
+	ok := c.comp.RemoveTab(h)
+	if !ok {
+		return errors.New("content is not a tab")
+	}
+	return nil
+}
+
+// Overwrite overwrites the content of the tab at the given window. If the content
+// is not a tab, then this method returns an error.
+func (c *Component) Overwrite(win browser.Window) error {
+	content, err := win.Content()
+	if err != nil {
+		return fmt.Errorf("get window content: %w", err)
+	}
+	t, ok := content.(*browser.Tab)
+	if !ok {
+		return textapi.ErrInvalidReload
+	}
+
+	return c.OverwriteTab(t)
+}
+
+// OverwriteTab overwrites the given handler from persistence, if it is a tab,
+// and if it can be overwritten.
+func (c *Component) OverwriteTab(h browserapi.Handler) error {
+	t, ok := h.(*browser.Tab)
+	if !ok {
+		return textapi.ErrInvalidOverwrite
+	}
+
+	if t.Closer() == nil {
+		return textapi.ErrInvalidOverwrite
+	}
+
+	fc, ok := t.Closer().(workspace.FlusherCloser)
+	if !ok {
+		return textapi.ErrInvalidOverwrite
+	}
+
+	return fc.ForceFlush()
+}
+
+// recoverOpenFileTab recovers the file at filename by using the file at recoverFilename
 // and opens a tab it like OpenFileTab. See OpenFileTab for more details.
-func (c *Component) RecoverFileTab(
+func (c *Component) recoverOpenFileTab(
 	file workspaceapi.URI, recoveryFilename workspaceapi.URI, readOnly bool,
 ) (browserapi.Handler, error) {
 	if file == (workspaceapi.URI{}) || recoveryFilename == (workspaceapi.URI{}) {
@@ -733,17 +787,43 @@ func (c *Component) Flush(win browser.Window) error {
 	if err != nil {
 		return fmt.Errorf("get window content: %w", err)
 	}
-	t, ok := content.(*browser.Tab)
+	return c.FlushTab(content)
+}
+
+// FlushTab flushes the contents of the given handler, if it is a tab.
+func (c *Component) FlushTab(h browserapi.Handler) error {
+	t, ok := h.(*browser.Tab)
 	if !ok || t.Closer() == nil {
 		return textapi.ErrInvalidSave
 	}
 
-	fc := t.Closer().(workspace.FlusherCloser)
-	err = fc.Flush()
+	fc, ok := t.Closer().(workspace.FlusherCloser)
+	if !ok {
+		return textapi.ErrInvalidSave
+	}
+
+	err := fc.Flush()
 	if err != nil {
 		return fmt.Errorf("flush: %w", err)
 	}
 	return nil
+}
+
+// LastFlush returns the last time this handler was flushed, if it is a valid
+// tab that can be flushed. If the tab has not yet been flushed, then
+// the returned time will be a zero time.Time value.
+func (c *Component) LastFlush(h browserapi.Handler) (time.Time, error) {
+	t, ok := h.(*browser.Tab)
+	if !ok || t.Closer() == nil {
+		return time.Time{}, errors.New("content is not a tab")
+	}
+
+	fc, ok := t.Closer().(workspace.FlusherCloser)
+	if !ok {
+		return time.Time{}, errors.New("content is not a tab that can be flushed")
+	}
+
+	return fc.LastFlush(), nil
 }
 
 func (c *Component) getContent(h Handler) (string, error) {
@@ -1007,6 +1087,17 @@ func (c *Component) Resource(uri workspaceapi.URI) (browserapi.Handler, bool) {
 	return c.comp.Tab(uri)
 }
 
+// IsDirty returns whether the given tab has unflushed changes.
+func (c *Component) IsDirty(uri workspaceapi.URI) (dirty bool, ok bool) {
+	attrs, ok := c.comp.TabAttrs(uri)
+	if !ok {
+		return
+	}
+	dirty = attrs == c.config.DirtyTabAttr
+	ok = true
+	return
+}
+
 // Window returns the window with the given id and true or nil and false if no
 // window with the given id could be found in the underlying browser.
 func (c *Component) Window(id uint64) (browser.Window, bool) {
@@ -1073,7 +1164,7 @@ func (c *Component) Close() error {
 
 func (c *Component) newTab(
 	resource workspaceapi.URI, icon rune, name string,
-	h browserapi.Handler, closer io.Closer,
+	h browserapi.Handler, closer workspace.FlusherCloser,
 ) *browser.Tab {
 	t := c.comp.NewTab(resource, icon, name, h, closer)
 	t.Subscribe(&compTabSubscriber{parent: c})
@@ -1104,17 +1195,39 @@ func (c editorFlusherCloser) OnDidEdit(
 	c.parent.setDirtyFileAttr(c.uri, c.buf, c.lastFlush)
 }
 
+func (e *editorFlusherCloser) ForceFlush() error {
+	if err := e.dispatchFlush(); err != nil {
+		return err
+	}
+	return e.fc.ForceFlush()
+}
+
+func (e *editorFlusherCloser) LastFlush() time.Time {
+	return e.fc.LastFlush()
+}
+
 func (e *editorFlusherCloser) Flush() error {
+	if err := e.dispatchFlush(); err != nil {
+		return err
+	}
+	return e.fc.Flush()
+}
+
+func (e *editorFlusherCloser) Reload() error {
+	err := e.fc.Reload()
+	if err != nil {
+		return err
+	}
+	return e.dispatchFlush()
+}
+
+func (e *editorFlusherCloser) dispatchFlush() error {
 	content, err := e.parent.dispatchFlush(e.uri, e.h)
 	if err != nil {
 		return err
 	}
 	e.lastFlush = content
-	return e.fc.Flush()
-}
-
-func (e *editorFlusherCloser) Reload() error {
-	return e.fc.Reload()
+	return nil
 }
 
 func (e *editorFlusherCloser) Close() error {

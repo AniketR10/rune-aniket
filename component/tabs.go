@@ -179,73 +179,91 @@ func (t *Tabs) ResetFocus() {
 	t.dirty = true
 }
 
-// SetFocus sets the focus to tab with idx. If tab with idx does not exist,
+// SetFocus sets the focus to the tab at idx. If the tab at idx does not exist,
 // this method will panic.
 func (t *Tabs) SetFocus(idx int) {
 	t.tabs[idx].focus = true
 	t.dirty = true
 }
 
-// SetTabAttr sets the attributes of tab with idx. If tab with idx does not exist,
+// SetTabAttr sets the attributes of the tab at idx. If the tab at idx does not exist,
 // this method will panic.
 func (t *Tabs) SetTabAttr(idx int, attr term.Attributes) {
 	t.tabs[idx].attr = attr
 	t.dirty = true
 }
 
-// SetTabDefaultAttr sets the default attributes of tab with idx. Calls to ResetTabAttr
+// TabAttr returns the attributes of the tab at idx. If the tab at idx does not exist,
+// this method will panic.
+func (t *Tabs) TabAttr(idx int) term.Attributes {
+	return t.tabs[idx].attr
+}
+
+// TabDefaultAttr returns the default attributes of the tab at idx.
+// If the tab at idx does not exist, this method will panic.
+func (t *Tabs) TabDefaultAttr(idx int) term.Attributes {
+	return t.tabs[idx].defAttr
+}
+
+// TabIcon returns the icon of the tab at idx.
+// If the tab at idx does not exist, this method will panic.
+func (t *Tabs) TabIcon(idx int) rune {
+	return t.tabs[idx].icon
+}
+
+// SetTabDefaultAttr sets the default attributes of the tab at idx. Calls to ResetTabAttr
 // will reset the tab attributes to the given attributes.
-// If tab with idx does not exist, this method will panic.
+// If the tab at idx does not exist, this method will panic.
 func (t *Tabs) SetTabDefaultAttr(idx int, attr term.Attributes) {
 	t.tabs[idx].defAttr = attr
 	t.dirty = true
 }
 
-// ResetTabAttr resets the attributes of tab with idx. If tab with idx does not exist,
+// ResetTabAttr resets the attributes of the tab at idx. If the tab at idx does not exist,
 // this method will panic.
 func (t *Tabs) ResetTabAttr(idx int) {
 	t.tabs[idx].attr = t.tabs[idx].defAttr
 	t.dirty = true
 }
 
-// SetTabName sets the name of tab with idx. If tab with idx does not exist,
+// SetTabName sets the name of the tab at idx. If the tab at idx does not exist,
 // this method will panic.
 func (t *Tabs) SetTabName(idx int, name string) {
 	t.tabs[idx].name = name
 	t.dirty = true
 }
 
-// SetTabIcon sets the icon of tab with idx. If tab with idx does not exist,
+// SetTabIcon sets the icon of the tab at idx. If the tab at idx does not exist,
 // this method will panic.
 func (t *Tabs) SetTabIcon(idx int, icon rune) {
 	t.tabs[idx].icon = icon
 	t.dirty = true
 }
 
-// SetTabDefaultName sets the default name of tab with idx. Calls to ResetTabName
-// will reset the tab name to the given name. If tab with idx does not exist,
+// SetTabDefaultName sets the default name of the tab at idx. Calls to ResetTabName
+// will reset the tab name to the given name. If the tab at idx does not exist,
 // this method will panic.
 func (t *Tabs) SetTabDefaultName(idx int, name string) {
 	t.tabs[idx].defName = name
 	t.dirty = true
 }
 
-// ResetTabName resets the name of tab with idx to either the initial name
+// ResetTabName resets the name of the tab at idx to either the initial name
 // given to this tab or the last name set via SetDefaultTabName.
-// If tab with idx does not exist, this method will panic.
+// If the tab at idx does not exist, this method will panic.
 func (t *Tabs) ResetTabName(idx int) {
 	t.tabs[idx].name = t.tabs[idx].defName
 	t.dirty = true
 }
 
-// TabName returns the name of the tab with idx.
-// If tab with idx does not exist, this method will panic.
+// TabName returns the name of the tab at idx.
+// If the tab at idx does not exist, this method will panic.
 func (t *Tabs) TabName(idx int) string {
 	return t.tabs[idx].name
 }
 
-// DefaultTabName returns the default name of the tab with idx.
-// If tab with idx does not exist, this method will panic.
+// DefaultTabName returns the default name of the tab at idx.
+// If the tab at idx does not exist, this method will panic.
 func (t *Tabs) DefaultTabName(idx int) string {
 	return t.tabs[idx].defName
 }
@@ -271,7 +289,7 @@ func (t *Tabs) Add(icon rune, name string) int {
 	return idx
 }
 
-// Remove removes the tab with idx.
+// Remove removes the tab at idx.
 func (t *Tabs) Remove(idx int) bool {
 	t.doRemoveTab(idx)
 	t.dirty = true

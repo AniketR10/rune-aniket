@@ -36,4 +36,8 @@ var (
 
 	// ErrInvalidSplit is returned when attempting to split over a floating window.
 	ErrInvalidSplit = errors.New("cannot split this window")
+
+	// ErrInvalidOverwrite is returned when trying to overwrite a tab that it's not a file
+	// in the file system.
+	ErrInvalidOverwrite = errors.New("cannot overwrite this content")
 )

@@ -29,6 +29,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/api/browserapi"
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/component"
@@ -242,6 +243,65 @@ func TestRemoveInactiveTabs(t *testing.T) {
 	assertTabNames(t, b, []string{"a", "b", "c", "d"})
 	b.RemoveInactiveTabs()
 	assertTabNames(t, b, []string{"b", "c"})
+}
+
+func TestRemoveTab(t *testing.T) {
+	b := NewComponent(DefaultConfig())
+
+	tabDefs := []struct {
+		name  string
+		split bool
+	}{
+		{"a", false}, {"b", true}, {"c", true}, {"d", false}}
+
+	tabs := make([]*Tab, 0)
+	for _, tabDef := range tabDefs {
+		uri, err := workspaceapi.ParseURI("file:///" + tabDef.name)
+		require.NoError(t, err)
+		h := newTestHandler()
+		tab := b.NewTab(uri, 'o', tabDef.name, h, h)
+		if tabDef.split {
+			b.Split(browserapi.OrientationRight, b.Focus(), tab)
+		}
+		tabs = append(tabs, tab)
+	}
+
+	assertTabNames(t, b, []string{"a", "b", "c", "d"})
+	assert.True(t, b.RemoveTab(tabs[0]))
+	assert.True(t, b.RemoveTab(tabs[1]))
+	assert.True(t, b.RemoveTab(tabs[3]))
+	assertTabNames(t, b, []string{"c"})
+}
+
+func TestTabAttrs(t *testing.T) {
+	b := NewComponent(DefaultConfig())
+
+	tabDefs := []struct {
+		name string
+	}{
+		{"a"}, {"b"},
+	}
+
+	expectedAttr := term.Attributes{Fg: tcell.ColorYellow, Bg: tcell.ColorGreen}
+	uris := make([]workspaceapi.URI, 0)
+	for i, tabDef := range tabDefs {
+		uri, err := workspaceapi.ParseURI("file:///" + tabDef.name)
+		require.NoError(t, err)
+		h := newTestHandler()
+		_ = b.NewTab(uri, 'o', tabDef.name, h, h)
+		if i%2 == 0 {
+			b.SetTabNameAndAttrs(uri, "NAME", expectedAttr)
+		}
+		uris = append(uris, uri)
+	}
+
+	actualAttr, ok := b.TabAttrs(uris[0])
+	require.True(t, ok)
+	assert.Equal(t, expectedAttr, actualAttr)
+
+	actualAttr, ok = b.TabAttrs(uris[1])
+	require.True(t, ok)
+	assert.Equal(t, term.Attributes{}, actualAttr)
 }
 
 func TestMoveTabs(t *testing.T) {

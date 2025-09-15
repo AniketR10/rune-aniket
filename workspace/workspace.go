@@ -27,6 +27,7 @@ package workspace
 import (
 	"context"
 	"io"
+	"time"
 
 	"unstable.build/go-tui/api/schemeapi"
 	"unstable.build/go-tui/api/workspaceapi"
@@ -61,10 +62,11 @@ type WorkspaceManager interface {
 	AddWorkspace(context.Context, workspaceapi.URI) (Workspace, error)
 }
 
-// FlusherCloser wraps Flush and Close methods to be used
-// in conjunction with a cell.Buffer as file buffer abstractions.
+// FlusherCloser wraps methods to manipulate a cell.Buffer's persistence.
 type FlusherCloser interface {
 	Flush() error
+	LastFlush() time.Time
+	ForceFlush() error
 	Reload() error
 	io.Closer
 }

@@ -166,6 +166,17 @@ func (c *Component) TabName(uri workspaceapi.URI) (string, string, bool) {
 	return "", "", false
 }
 
+// TabAttrs returns the attributes of the tab with the given uri or false
+// if there's no tab with the given uri.
+func (c *Component) TabAttrs(uri workspaceapi.URI) (term.Attributes, bool) {
+	for i, t := range c.buffers {
+		if t.uri.String() == uri.String() {
+			return c.tabs.TabAttr(i), true
+		}
+	}
+	return term.Attributes{}, false
+}
+
 // SetTabNameAndAttrs overrides the name and attributes of the tab with the given uri.
 // It returns false if there's no tab with id.
 func (c *Component) SetTabNameAndAttrs(
@@ -355,6 +366,22 @@ func (c *Component) RemoveWindowContent(win Window) bool {
 		c.removeTab(oldTab)
 	}
 	return isNotStartHandler
+}
+
+// RemoveTab removes the given tab. If the given handler is not
+// a tab, this method returns false. If the tab has already been removed, this
+// method will panic.
+func (c *Component) RemoveTab(h browserapi.Handler) bool {
+	t, ok := h.(*Tab)
+	if !ok {
+		return false
+	}
+	if !t.free {
+		_ = c.RemoveWindowContent(t.win)
+		return true
+	}
+	c.removeTab(t)
+	return true
 }
 
 // SetDefaultSplit sets the default split to be used when Split

@@ -116,7 +116,7 @@ func (c *Component) openRecoveryPrompt(file workspaceapi.URI) {
 					if err == nil {
 						swapFile, err = workspace.DefaultSwapFile(swapDir, file)
 						if err == nil {
-							h, err = c.RecoverFileTab(file, swapFile, false)
+							h, err = c.recoverOpenFileTab(file, swapFile, false)
 							if err == workspaceapi.ErrStaleData {
 								c.openAreYouSurePrompt(file)
 								return

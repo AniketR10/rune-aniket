@@ -855,8 +855,9 @@ type testLoader struct {
 }
 
 type testFlusherCloser struct {
-	closeFn func() error
-	flushFn func() error
+	closeFn   func() error
+	flushFn   func() error
+	lastFlush time.Time
 }
 
 func (t *testFlusherCloser) Close() error {
@@ -869,10 +870,19 @@ func (t *testFlusherCloser) Reload() error {
 	return nil
 }
 func (t *testFlusherCloser) Flush() error {
+	t.lastFlush = time.Now()
 	if t.flushFn != nil {
 		return t.flushFn()
 	}
 	return nil
+}
+
+func (t *testFlusherCloser) ForceFlush() error {
+	panic("unimplemented")
+}
+
+func (t *testFlusherCloser) LastFlush() time.Time {
+	return t.lastFlush
 }
 
 func (t *testLoader) Remove(string) error {
