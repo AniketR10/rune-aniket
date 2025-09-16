@@ -491,10 +491,6 @@ func (f *file) LastFlush() time.Time {
 
 // Reload reloads the contents of the buffer from disk.
 func (f *file) Reload() error {
-	if f.orig == nil {
-		return errors.New("cannot reload a file that doesn't exist on disk")
-	}
-
 	// stop worker and copy swap while we're reloading swap
 	f.reloading = true
 	defer func() {
@@ -505,13 +501,21 @@ func (f *file) Reload() error {
 
 	// re-init files, if any of these error, we either
 	// don't care or it'll cause an error in initFiles
-	_ = f.orig.Close()
-	_ = f.swap.Close()
-	_ = f.scheme.Remove(f.swapFileName)
+	if f.orig != nil {
+		_ = f.orig.Close()
+	}
+	if f.swap != nil {
+		_ = f.swap.Close()
+		_ = f.scheme.Remove(f.swapFileName)
+	}
 
 	err := f.initFiles(f.fileName, f.swapDir, f.readOnly)
 	if err != nil {
 		return err
+	}
+
+	if f.orig == nil {
+		return errors.New("cannot reload a file that doesn't exist on disk")
 	}
 
 	// read from file into buffer

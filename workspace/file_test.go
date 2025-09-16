@@ -475,6 +475,20 @@ func testFileBufferIntegration(t *testing.T, endsInEOL bool) {
 		assertFileAndBufferOnDisk(t, b, file.Name(), writeStr+sampleSnippet, true)
 	})
 
+	t.Run("Reload reloads originally uncreated file", func(t *testing.T) {
+		b, file := newIntegrationTestCase(t, endsInEOL)
+		require.NoError(t, file.Close())
+		require.NoError(t, os.Remove(file.Name()))
+
+		f, err := openFile(file.Name(), b, "", false)
+		require.NoError(t, err)
+
+		require.NoError(t, os.WriteFile(file.Name(), []byte("deep purple\n"), 0666))
+
+		require.NoError(t, f.Reload())
+		assertFileAndBufferOnDisk(t, b, file.Name(), "deep purple", true)
+	})
+
 	t.Run("Reload integration with cell subscribers", func(t *testing.T) {
 		b, file := newIntegrationTestCase(t, endsInEOL)
 
