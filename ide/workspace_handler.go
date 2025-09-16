@@ -744,7 +744,7 @@ func (h *workspaceManagerHandler) openPrevSessionFiles(
 			log.Warnf("parse uri from previous session file: %v", uerr)
 			continue
 		}
-		t, ferr := ex.editFileURI(uri, invokeWindow)
+		t, ferr := ex.editFileURI(uri, invokeWindow, false)
 		if ferr != nil {
 			err = multierror.Append(err, ferr)
 			continue

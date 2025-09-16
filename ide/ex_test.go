@@ -70,6 +70,7 @@ var testCommandKey = term.KeyComb{Ch: '\\', Mod: term.ModCtrl}
 type browserConstructor func(ed text.Editor, opts ...text.Option) (tui.Handler, browser.Browser, error)
 
 type testFileBuffer struct {
+	readOnly  bool
 	flushErr  error
 	reloadErr error
 	closeErr  error
@@ -78,6 +79,9 @@ type testFileBuffer struct {
 }
 
 func (t *testFileBuffer) Flush() error {
+	if t.readOnly {
+		return workspaceapi.ErrFileIsNotWritable
+	}
 	t.lastFlush = time.Now()
 	return t.flushErr
 }
@@ -88,6 +92,9 @@ func (t *testFileBuffer) Reload() error {
 }
 
 func (t *testFileBuffer) ForceFlush() error {
+	if t.readOnly {
+		t.readOnly = false
+	}
 	t.lastFlush = time.Now()
 	return t.flushErr
 }
@@ -134,7 +141,7 @@ func (w *testLoader) Load(
 	if w.buf != nil {
 		return w.buf, nil
 	}
-	return &testFileBuffer{}, nil
+	return &testFileBuffer{readOnly: readOnly}, nil
 }
 
 func (w *testLoader) Recover(
@@ -238,7 +245,7 @@ func TestComponentOpenEditorIntegration(t *testing.T) {
 	uri, err := workspaceapi.ParseURI("file:///bugz")
 	require.NoError(t, err)
 
-	tab, err := b.editFileURI(uri, b.invokeWindow())
+	tab, err := b.editFileURI(uri, b.invokeWindow(), false)
 	require.NoError(t, err)
 	assert.NotPanics(t, func() {
 		_ = tab.Handler().(text.Handler)
@@ -2726,6 +2733,84 @@ func TestMoveTabs(t *testing.T) {
 │BBBBBBBBBBBBB││AAAAAAAAAAAAA│
 │BBBBBBBBBBBBB││AAAAAAAAAAAAA│
 └─────────────┘└─────────────┘`},
+	}
+
+	opts := []text.Option{
+		text.WithCommandKey(testCommandKey),
+	}
+	e := newExForTestingWithWorkspace(t, &testLoader{},
+		texttest.NopEditor(), vte.DefaultConfig(),
+		nopPublishEvent, clipboard.NewInMemory(), opts...)
+	defer e.Close()
+	handlertest.TestHandlerSequence(t, e, 30, 15, cases)
+}
+
+func TestViewForceWrite(t *testing.T) {
+	cases := []handlertest.SequenceTestCase{
+		{":view caliu.go>b",
+			`┌────────────────────────────┐
+│o caliu.go                  │
+├────────────────────────────┤
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+└────────────────────────────┘`},
+		{":write>",
+			`┌────────────────────────────┐
+│flush: file is not          │
+│writable                    │
+└────────────────────────────┘
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+└────────────────────────────┘`},
+		{":notificationCloseAll>:write!>",
+			`┌────────────────────────────┐
+│o caliu.go                  │
+├────────────────────────────┤
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+└────────────────────────────┘`},
+		{":write>",
+			`┌────────────────────────────┐
+│o caliu.go                  │
+├────────────────────────────┤
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+└────────────────────────────┘`},
 	}
 
 	opts := []text.Option{

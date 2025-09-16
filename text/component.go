@@ -465,6 +465,15 @@ func (c *Component) Open(file workspaceapi.URI) (browserapi.Handler, error) {
 	return h, err
 }
 
+// OpenReadOnly is like Open but opens the file in read-only mode (cannot be saved).
+func (c *Component) OpenReadOnly(file workspaceapi.URI) (browserapi.Handler, error) {
+	h, err := c.OpenFileTab(file, true)
+	if err != nil && err == workspaceapi.ErrFileAlreadyOpen {
+		c.openRecoveryPrompt(file)
+	}
+	return h, err
+}
+
 // ReadFile injects the contents of the desired file and writes it under the cursor.
 func (c *Component) ReadFile(file workspaceapi.URI, h Handler) error {
 	if ed, ok := h.(wrapEditor); ok {
@@ -790,6 +799,17 @@ func (c *Component) Flush(win browser.Window) error {
 	return c.FlushTab(content)
 }
 
+// ForceFlush flushes the contents of the tab at the given window,
+// if there's one, overriding read-only mode, and ignoring
+// stale data errors and others.
+func (c *Component) ForceFlush(win browser.Window) error {
+	content, err := win.Content()
+	if err != nil {
+		return fmt.Errorf("get window content: %w", err)
+	}
+	return c.ForceFlushTab(content)
+}
+
 // FlushTab flushes the contents of the given handler, if it is a tab.
 func (c *Component) FlushTab(h browserapi.Handler) error {
 	t, ok := h.(*browser.Tab)
@@ -803,6 +823,26 @@ func (c *Component) FlushTab(h browserapi.Handler) error {
 	}
 
 	err := fc.Flush()
+	if err != nil {
+		return fmt.Errorf("flush: %w", err)
+	}
+	return nil
+}
+
+// ForceFlushTab force-flushes the contents of the given handler, if it is a tab,
+// overriding read-only mode, and ignoring stale data errors and others.
+func (c *Component) ForceFlushTab(h browserapi.Handler) error {
+	t, ok := h.(*browser.Tab)
+	if !ok || t.Closer() == nil {
+		return textapi.ErrInvalidSave
+	}
+
+	fc, ok := t.Closer().(workspace.FlusherCloser)
+	if !ok {
+		return textapi.ErrInvalidSave
+	}
+
+	err := fc.ForceFlush()
 	if err != nil {
 		return fmt.Errorf("flush: %w", err)
 	}

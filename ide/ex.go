@@ -431,8 +431,12 @@ func (e *ex) flushClose(args ...string) error {
 	return e.comp.Flush(e.invokeWindow())
 }
 
-func (e *ex) forceFlush(args ...string) error {
+func (e *ex) flush(args ...string) error {
 	return e.comp.Flush(e.invokeWindow())
+}
+
+func (e *ex) forceFlush(args ...string) error {
+	return e.comp.ForceFlush(e.invokeWindow())
 }
 
 func (e *ex) forcequit(args ...string) error {
@@ -480,10 +484,16 @@ func (e *ex) dispatchCommand(cmd string, args ...string) (err error) {
 	return
 }
 
-func (e *ex) editFileURI(uri workspaceapi.URI, win browser.Window) (*browser.Tab, error) {
-	e.log(log.DebugLevel, "edit: %s", uri.String())
-
-	h, err := e.comp.Open(uri)
+func (e *ex) editFileURI(uri workspaceapi.URI, win browser.Window, readOnly bool) (
+	*browser.Tab, error,
+) {
+	var h browserapi.Handler
+	var err error
+	if readOnly {
+		h, err = e.comp.OpenReadOnly(uri)
+	} else {
+		h, err = e.comp.Open(uri)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -499,7 +509,6 @@ func (e *ex) editFileURI(uri workspaceapi.URI, win browser.Window) (*browser.Tab
 
 func (e *ex) parseURIOrWorkspaceURI(path string) (workspaceapi.URI, error) {
 	uri, err := workspaceapi.ParseURI(path)
-	e.log(log.TraceLevel, "parse uri (%s): %s, %v", path, uri.String(), err)
 	if err != nil {
 		uri, err = e.workspace.URI(path)
 		e.log(log.TraceLevel, "URI (%s): %s, %v", path, uri.String(), err)
@@ -508,6 +517,14 @@ func (e *ex) parseURIOrWorkspaceURI(path string) (workspaceapi.URI, error) {
 }
 
 func (e *ex) editFiles(args ...string) error {
+	return e.editFilesReadOnly(false, args...)
+}
+
+func (e *ex) viewFiles(args ...string) error {
+	return e.editFilesReadOnly(true, args...)
+}
+
+func (e *ex) editFilesReadOnly(readOnly bool, args ...string) error {
 	if len(args) == 0 {
 		return errors.New("expected at least one file name")
 	}
@@ -524,7 +541,7 @@ func (e *ex) editFiles(args ...string) error {
 		if err != nil {
 			return err
 		}
-		_, err = e.editFileURI(uri, e.invokeWindow())
+		_, err = e.editFileURI(uri, e.invokeWindow(), readOnly)
 		if err != nil {
 			return err
 		}

@@ -171,11 +171,18 @@ var (
 			},
 			handler: (*ex).flushCloseIgnoreNonFlushed,
 		},
-		"write!": {
+		"write": {
 			man: textapi.CommandManual{
 				Summary: "Write the current file to disk with any pending changes along with it. " +
 					"This is the standard way to save changes to a file. It fails if file was " +
 					"open read-only or when there is another reason why the file can't be written.",
+			},
+			handler: (*ex).flush,
+		},
+		"write!": {
+			man: textapi.CommandManual{
+				Summary: "Like 'write' but forcefully write when a file is open in read-only mode, " +
+					"or there's another reason why the file can't be written.",
 			},
 			handler: (*ex).forceFlush,
 		},
@@ -365,6 +372,18 @@ var (
 				return e.filepathCompleter.Complete(ctx, args)
 			},
 		},
+		"view": {
+			man: textapi.CommandManual{
+				Summary:  "Like 'edit' but opens the file in read-only mode.",
+				Synopsis: "[scheme:][//[userinfo@]host][/]filepath",
+			},
+			handler: (*ex).viewFiles,
+			completer: func(
+				e *ex, ctx context.Context, cmd string, args []string,
+			) (iterator.Iterator[string], string, error) {
+				return e.filepathCompleter.Complete(ctx, args)
+			},
+		},
 		"tabcopypath": {
 			man: textapi.CommandManual{
 				Summary:  "Copies the path of the file in focus.",
@@ -497,7 +516,7 @@ var (
 			Summary: "Splits the current active window vertically or horizontally in two, " +
 				"changing the window focus to it. " +
 				"If no orientation is passed, the default split orientation is used. " +
-				"Check windowdefaultsplit for more details on how changing the " +
+				"See 'windowdefaultsplit' for more details on how changing the " +
 				"default orientation works.",
 			Synopsis: "[right|left|up|down]",
 		},

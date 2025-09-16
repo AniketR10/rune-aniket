@@ -186,7 +186,7 @@ func (i *IDE) Open(file workspaceapi.URI) error {
 	defer i.workspaceHandler.mu.Unlock()
 
 	ex := i.workspaceHandler.exHandler(i.workspaceHandler.focusHandler())
-	_, err := ex.editFileURI(file, ex.invokeWindow())
+	_, err := ex.editFileURI(file, ex.invokeWindow(), false)
 	if err != nil {
 		return err
 	}
