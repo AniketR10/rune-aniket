@@ -35,6 +35,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
@@ -601,27 +602,6 @@ func (h *workspaceManagerHandler) addWorkspace(
 		return fmt.Errorf("new editor: %w", err)
 	}
 
-	// to preserve the order of events we don't want to spawn
-	// multiple workers so make the buffer sufficiently large
-	// so we don't block the fs subsystem, even in large
-	// monorepos with large git operations
-	ch := make(chan workspaceapi.EventInfo, 8192)
-	watchPath := filepath.Join(uri.Path(), "...")
-	watchID, err := cwd.Watch(watchPath, ch,
-		workspaceapi.Create, workspaceapi.Write,
-		workspaceapi.Remove, workspaceapi.Rename)
-	if err != nil {
-		log.Warnf("create FS event watcher: %v, "+
-			"using internal dispatching which doesn't monitor non open files", err)
-	}
-
-	// drain events until ready. This is only relevant for non-buffering
-	// scheme event dispatching implementations (i.e. memory scheme)
-	ready := make(chan struct{})
-	go debug.CapturePanicReport(func() {
-		drainFileSystemEvents(ch, ready)
-	})
-
 	// workspace capable of opening URIs other than the workspaceapi.URI
 	multicwd := workspace.Multi(ctx, h.workspace, cwd, uri)
 	ex, err := newEx(ed, multicwd, h.storage, cfg.terminalConfig(),
@@ -635,9 +615,32 @@ func (h *workspaceManagerHandler) addWorkspace(
 		return err
 	}
 
-	close(ready)
 	go debug.CapturePanicReport(func() {
-		dispatchFilesystemEvents(ctx, h.mu, cwd, watchID, ch, ex)
+		start := time.Now()
+		// to preserve the order of events we don't want to spawn
+		// multiple workers so make the buffer sufficiently large
+		// so we don't block the fs subsystem, even in large
+		// monorepos with large git operations
+		ch := make(chan workspaceapi.EventInfo, 8192)
+		watchPath := filepath.Join(uri.Path(), "...")
+		watchID, err := cwd.Watch(watchPath, ch,
+			workspaceapi.Create, workspaceapi.Write,
+			workspaceapi.Remove, workspaceapi.Rename)
+		if err != nil {
+			ex.log(log.WarnLevel, "oob file monitoring: create FS event watcher: %v", err)
+			return
+		}
+		defer cwd.StopWatch(watchID) //nolint:errcheck
+
+		ex.log(log.InfoLevel, "created FS event watcher in %s", time.Since(start))
+
+		ignores, err := vctrl.LoadGitignore(cwd)
+		if err != nil {
+			ex.log(log.ErrorLevel, "load excludes for filesystem event matching: %v", err)
+			ignores = vctrl.NopMatcher(false)
+		}
+
+		dispatchFilesystemEvents(ctx, ex, h.mu, ch, ignores)
 	})
 
 	wh := &workspaceHandler{
@@ -1112,60 +1115,4 @@ func (h *workspaceManagerHandler) exHandler(focus tui.Handler) *ex {
 
 	panic("unknown focus handler")
 
-}
-
-func drainFileSystemEvents(ch chan workspaceapi.EventInfo, ready chan struct{}) {
-	for {
-		select {
-		case <-ch:
-		case <-ready:
-			return
-		}
-	}
-}
-
-func dispatchFilesystemEvents(
-	ctx context.Context, mu sync.Locker, cwd workspace.Workspace,
-	watchID int, ch chan workspaceapi.EventInfo,
-	ex *ex,
-) {
-	defer cwd.StopWatch(watchID) //nolint:errcheck
-
-	ignores, err := vctrl.LoadGitignore(cwd)
-	if err != nil {
-		ex.log(log.ErrorLevel, "load excludes for filesystem event matching: %v", err)
-		ignores = vctrl.NopMatcher(false)
-	}
-	for {
-		select {
-		case fsev := <-ch:
-			uri := fsev.URI()
-			flag := fsev.Event()
-			ex.log(log.TraceLevel, "received filesystem event %s for %s", flag, uri)
-
-			isDir, _ := fsev.IsDir()
-			if ignores.Match(uri, isDir) {
-				continue
-			}
-			ex.log(log.DebugLevel, "dispatching filesystem event %s for %s", flag, uri)
-			ev := textapi.Event{
-				URI: uri,
-			}
-			switch flag {
-			case workspaceapi.Create:
-				ev.Type = textapi.EventTypeCreate
-			case workspaceapi.Write:
-				ev.Type = textapi.EventTypeChange
-			case workspaceapi.Rename:
-				ev.Type = textapi.EventTypeRename
-			case workspaceapi.Remove:
-				ev.Type = textapi.EventTypeRemove
-			}
-			mu.Lock()
-			ex.comp.DispatchEvent(ev)
-			mu.Unlock()
-		case <-ctx.Done():
-			return
-		}
-	}
 }

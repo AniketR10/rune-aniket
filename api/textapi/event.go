@@ -97,6 +97,40 @@ const (
 	EventTypeSelection
 )
 
+// String implements fmt.Stringer interface.
+func (e EventType) String() string {
+	switch e {
+	case EventTypeOpen:
+		return "open"
+	case EventTypeClose:
+		return "close"
+	case EventTypeFlush:
+		return "flush"
+	case EventTypeCreate:
+		return "create"
+	case EventTypeChange:
+		return "change"
+	case EventTypeRemove:
+		return "remove"
+	case EventTypeRename:
+		return "rename"
+	case EventTypeEdit:
+		return "edit"
+	case EventTypeScroll:
+		return "scroll"
+	case EventTypeFocus:
+		return "focus"
+	case EventTypeUnfocus:
+		return "unfocus"
+	case EventTypeCursor:
+		return "cursor"
+	case EventTypeSelection:
+		return "selection"
+	default:
+		panic("uknown event")
+	}
+}
+
 // AllEvents returns all types of textapi.EventType in a slice.
 func AllEvents() []EventType {
 	return []EventType{

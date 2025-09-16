@@ -1,0 +1,184 @@
+// Unstable Build LLC ("COMPANY") CONFIDENTIAL
+//
+// Unpublished Copyright (c) 2017-2024 Unstable Build, All Rights Reserved.
+//
+// NOTICE: All information contained herein is, and remains the property of COMPANY.
+// The intellectual and technical concepts contained herein are proprietary to
+// COMPANY and may be covered by U.S. and Foreign Patents, patents in process,
+// and are protected by trade secret or copyright law. Dissemination of this information
+// or reproduction of this material is strictly forbidden unless prior written permission
+// is obtained from COMPANY. Access to the source code contained herein is hereby
+// forbidden to anyone except current COMPANY employees, managers or contractors who
+// have executed Confidentiality and Non-disclosure agreements explicitly covering such access.
+//
+// The copyright notice above does not evidence any actual or intended publication or
+// disclosure of this source code, which includes information that is confidential and/or
+// proprietary, and is a trade secret, of COMPANY. ANY REPRODUCTION, MODIFICATION,
+// DISTRIBUTION, PUBLIC  PERFORMANCE, OR PUBLIC DISPLAY OF OR THROUGH USE OF THIS SOURCE CODE
+// WITHOUT  THE EXPRESS WRITTEN CONSENT OF COMPANY IS STRICTLY PROHIBITED, AND IN
+// VIOLATION OF APPLICABLE LAWS AND INTERNATIONAL TREATIES. THE RECEIPT OR POSSESSION OF
+// THIS SOURCE CODE AND/OR RELATED INFORMATION DOES NOT CONVEY OR IMPLY ANY RIGHTS TO
+// REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
+// ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
+
+package ide
+
+import (
+	"context"
+	"os"
+	"sync"
+	"time"
+
+	log "github.com/sirupsen/logrus"
+	"unstable.build/go-tui/api/textapi"
+	"unstable.build/go-tui/api/workspaceapi"
+	"unstable.build/go-tui/component/notifications"
+	"unstable.build/go-tui/ide/vctrl"
+)
+
+func dispatchFilesystemEvents(
+	ctx context.Context, ex *ex, mu sync.Locker,
+	ch chan workspaceapi.EventInfo, ignores vctrl.Matcher,
+) {
+	for {
+		select {
+		case fsev := <-ch:
+			dispatchFilesystemEvent(ex, mu, ignores, fsev)
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+func dispatchFilesystemEvent(
+	ex *ex, mu sync.Locker, ignores vctrl.Matcher, fsev workspaceapi.EventInfo,
+) {
+	uri := fsev.URI()
+	flag := fsev.Event()
+
+	ex.log(log.TraceLevel, "received filesystem event %s for %s", flag, uri)
+
+	isDir, _ := fsev.IsDir()
+	if ignores.Match(uri, isDir) {
+		return
+	}
+
+	ex.log(log.DebugLevel, "dispatching filesystem event %s for %s", flag, uri)
+
+	ev := textapi.Event{
+		URI: uri,
+	}
+	switch flag {
+	case workspaceapi.Create:
+		ev.Type = textapi.EventTypeCreate
+	case workspaceapi.Write:
+		ev.Type = textapi.EventTypeChange
+	case workspaceapi.Rename:
+		ev.Type = textapi.EventTypeRename
+	case workspaceapi.Remove:
+		ev.Type = textapi.EventTypeRemove
+	default:
+		ex.log(log.WarnLevel, "extraneous filesystem event %s for %s", flag, uri)
+		return
+	}
+
+	mu.Lock()
+	handleFSChange(ex, flag, uri)
+	ex.comp.DispatchEvent(ev)
+	mu.Unlock()
+}
+
+func handleFSChange(ex *ex, flag workspaceapi.Event, uri workspaceapi.URI) {
+	t, open := ex.comp.Resource(uri)
+	dirty, _ := ex.comp.IsDirty(uri)
+	ex.log(log.DebugLevel, "handling event %d for file %s, open=%t dirty=%t",
+		flag, uri.Name(), open, dirty)
+	if !open {
+		return
+	}
+
+	var modTime time.Time
+	lastFlush, _ := ex.comp.LastFlush(t)
+	info, err := ex.workspace.Stat(uri.Path())
+	if err != nil && !os.IsNotExist(err) {
+		if os.IsPermission(err) {
+			return
+		}
+		ex.log(log.WarnLevel, "could not stat file to "+
+			"dispatch fs change prompt: %v", err)
+		return
+	} else if err == nil {
+		modTime = info.ModTime()
+	}
+	if lastFlush.Equal(modTime) && !modTime.IsZero() { // both zero might be a removed file
+		ex.log(log.TraceLevel, "ignoring fs %d event: user flushed file", flag)
+		return
+	}
+
+	ex.log(log.TraceLevel, "continuing processing with fs %d event: "+
+		"last flush %s is before mod time %s",
+		flag, lastFlush, modTime)
+
+	if dirty {
+		switch flag {
+		case workspaceapi.Create:
+			ex.openFileChangedPrompt(uri, t, "created on", true)
+		case workspaceapi.Write:
+			ex.openFileChangedPrompt(uri, t, "changed on", true)
+		case workspaceapi.Rename:
+			_, err := ex.workspace.Stat(uri.Path())
+			if err == nil {
+				ex.openFileChangedPrompt(uri, t, "renamed into", true)
+			} else if os.IsNotExist(err) {
+				ex.openFileChangedPrompt(uri, t, "renamed on", false)
+			} else {
+				_ = ex.comp.Notify(notifications.LevelError,
+					"Failed to reload renamed file %s: stat: %v", uri.Path(), err)
+			}
+		case workspaceapi.Remove:
+			ex.openFileChangedPrompt(uri, t, "removed from", false)
+		}
+		return
+	}
+
+	switch flag {
+	case workspaceapi.Create, workspaceapi.Write:
+		err := ex.comp.ReloadTab(t)
+		if err != nil {
+			_ = ex.comp.Notify(notifications.LevelError,
+				"Failed to reload file %s: %v", uri.Name(), err)
+		} else {
+			_ = ex.comp.Notify(notifications.LevelInfo,
+				"File '%s' changed on disk and does not have unflushed changes "+
+					"so it was reload it", uri.Name())
+		}
+
+	case workspaceapi.Rename:
+		_, err := ex.workspace.Stat(uri.Path())
+		if err == nil {
+			err := ex.comp.ReloadTab(t)
+			if err == nil {
+				_ = ex.comp.Notify(notifications.LevelInfo,
+					"File '%s' was renamed on disk and does not have unflushed changes "+
+						"so it was reload it", uri.Name())
+				return
+			}
+			_ = ex.comp.Notify(notifications.LevelError,
+				"Failed to reload renamed file %s: %v", uri.Name(), err)
+			return
+		}
+		if os.IsNotExist(err) {
+			if err := ex.comp.RemoveTab(t); err == nil {
+				_ = ex.comp.Notify(notifications.LevelInfo,
+					"File '%s' was renamed on disk and does not have unflushed changes "+
+						"so it was closed", uri.Name())
+			}
+			return
+		}
+		_ = ex.comp.Notify(notifications.LevelError,
+			"Failed to reload renamed file %s: stat: %v", uri.Name(), err)
+
+		// don't manage workspaceapi.Remove: it's sometimes dispatched
+		// in conjunction with other events so it's not useful.
+	}
+}

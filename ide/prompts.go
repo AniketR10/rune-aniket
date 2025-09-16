@@ -30,6 +30,7 @@ import (
 	"os"
 
 	log "github.com/sirupsen/logrus"
+	"unstable.build/go-tui/api/browserapi"
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component/notifications"
@@ -238,4 +239,139 @@ func (h *createWorkspaceHandler) createParentWorkspace(
 		return h.createParentWorkspace(parent)
 	}
 	return cwd, err
+}
+
+const (
+	overwrite = "Overwrite file"
+	discard   = "Discard your changes"
+)
+
+var (
+	overwriteDiscardKeyComb = []term.KeyComb{{Ch: 'o'}, {Ch: 'd'}}
+)
+
+func (ex *ex) openFileChangedPrompt(
+	file workspaceapi.URI, h browserapi.Handler, op string, reload bool,
+) {
+	promptHandler := &fileChangedPrompt{
+		uri:    file,
+		ex:     ex,
+		h:      h,
+		op:     op,
+		reload: reload,
+	}
+	_ = ex.comp.Prompt(
+		fmt.Sprintf("You have unflushed changes on file '%s', "+
+			"and file was just %s disk. What do you want to do "+
+			"with your changes?", file.Name(), op),
+		[]string{overwrite, discard},
+		overwriteDiscardKeyComb,
+		promptHandler,
+	)
+}
+
+func (ex *ex) openSurePrompt(
+	file workspaceapi.URI, h browserapi.Handler, op string, reload bool,
+) {
+	promptHandler := &areYouSurePrompt{
+		uri:    file,
+		ex:     ex,
+		h:      h,
+		op:     op,
+		reload: reload,
+	}
+	_ = ex.comp.Prompt(
+		fmt.Sprintf("Are you sure you want to discard your changes to %s?", file.Name()),
+		[]string{yesOpt, noOpt},
+		yesNoKeyCombs,
+		promptHandler,
+	)
+}
+
+type fileChangedPrompt struct {
+	ex     *ex
+	uri    workspaceapi.URI
+	h      browserapi.Handler
+	reload bool
+	op     string
+
+	selected bool
+}
+
+func (h *fileChangedPrompt) OnSelect(
+	idx int, option string,
+) {
+	switch option {
+	case overwrite:
+		h.overwrite()
+	case discard:
+		h.discard()
+	}
+}
+
+func (h *fileChangedPrompt) OnClose() error {
+	if h.selected {
+		return nil
+	}
+	h.ex.openSurePrompt(h.uri, h.h, h.op, h.reload)
+	return nil
+}
+
+func (h *fileChangedPrompt) discard() {
+	h.selected = true
+	h.ex.openSurePrompt(h.uri, h.h, h.op, h.reload)
+}
+
+func (h *fileChangedPrompt) overwrite() {
+	h.selected = true
+	if err := h.ex.comp.OverwriteTab(h.h); err != nil {
+		_ = h.ex.comp.Notify(notifications.LevelError, "failed to overwrite tab: %v", err)
+	}
+}
+
+type areYouSurePrompt struct {
+	ex     *ex
+	h      browserapi.Handler
+	reload bool
+	uri    workspaceapi.URI
+	op     string
+
+	selected bool
+}
+
+func (h *areYouSurePrompt) OnSelect(
+	idx int, option string,
+) {
+	switch option {
+	case yesOpt:
+		h.discard()
+	case noOpt:
+		h.reopen()
+	}
+}
+
+func (h *areYouSurePrompt) OnClose() error {
+	if h.selected {
+		return nil
+	}
+	h.ex.openFileChangedPrompt(h.uri, h.h, h.op, h.reload)
+	return nil
+}
+
+func (h *areYouSurePrompt) reopen() {
+	h.selected = true
+	h.ex.openFileChangedPrompt(h.uri, h.h, h.op, h.reload)
+}
+
+func (h *areYouSurePrompt) discard() {
+	h.selected = true
+	if h.reload {
+		if err := h.ex.comp.ReloadTab(h.h); err != nil {
+			_ = h.ex.comp.Notify(notifications.LevelError, "failed to reload tab: %v", err)
+		}
+	} else {
+		if err := h.ex.comp.RemoveTab(h.h); err != nil {
+			_ = h.ex.comp.Notify(notifications.LevelError, "failed to remove tab: %v", err)
+		}
+	}
 }

@@ -182,6 +182,9 @@ func (i *IDE) Size() (width, height int) {
 
 // Open opens the given file, in the currently active workspace.
 func (i *IDE) Open(file workspaceapi.URI) error {
+	i.workspaceHandler.mu.Lock()
+	defer i.workspaceHandler.mu.Unlock()
+
 	ex := i.workspaceHandler.exHandler(i.workspaceHandler.focusHandler())
 	_, err := ex.editFileURI(file, ex.invokeWindow())
 	if err != nil {
