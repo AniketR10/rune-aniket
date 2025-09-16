@@ -44,7 +44,7 @@ require (
 	golang.org/x/mod v0.27.0 // indirect
 	golang.org/x/net v0.43.0 // indirect
 	golang.org/x/sync v0.16.0 // indirect
-	golang.org/x/sys v0.35.0 // indirect
+	golang.org/x/sys v0.36.0 // indirect
 	golang.org/x/text v0.28.0 // indirect
 	golang.org/x/tools v0.36.0 // indirect
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2 // indirect
@@ -53,7 +53,7 @@ require (
 
 require (
 	github.com/go-git/go-git/v6 v6.0.0-20250819122726-39261590f7f3
-	github.com/unstablebuild/notify v0.10.1
+	github.com/unstablebuild/notify v0.10.2
 	github.com/unstablebuild/pty v1.3.1
 	go.uber.org/mock v0.4.0
 	go.uber.org/multierr v1.4.0
