@@ -604,12 +604,12 @@ func (f *file) flush(force bool) error {
 
 	newSwapInfo, err := f.scheme.Stat(f.swapFileName)
 	if (err != nil && force) || f.swap == nil {
-		// FIXME initialized swap does not have latest contents
 		err := f.initSwap(f.swapDir, f.fileName, f.orig, newFileInfo)
 		if err != nil {
 			return err
 		}
 		// write happens in the default goroutine so there's no need to sync
+		f.content = f.buf.String()
 		f.copyFlushSwapFile(f.content)
 	} else if err != nil {
 		return err

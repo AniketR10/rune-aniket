@@ -757,6 +757,16 @@ func TestForceFlush(t *testing.T) {
 		assertFileAndBufferOnDisk(t, b, file.Name(), writeStr+sampleSnippet, true)
 	})
 
+	t.Run("overwrites read-only no changes, respects original contents", func(t *testing.T) {
+		b, file := newIntegrationTestCase(t, true)
+
+		f, err := openFile(file.Name(), b, "", true)
+		require.NoError(t, err)
+
+		require.NoError(t, f.ForceFlush())
+		assertFileAndBufferOnDisk(t, b, file.Name(), sampleSnippet, true)
+	})
+
 	t.Run("Flush after ForceFlush a readonly should not error", func(t *testing.T) {
 		b, file := newIntegrationTestCase(t, true)
 
