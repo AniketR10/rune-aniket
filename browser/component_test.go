@@ -141,7 +141,7 @@ func TestBrowserScrollable(t *testing.T) {
 		content, err := win.Content()
 		require.NoError(t, err)
 
-		_, ok = content.(component.Scrollable)
+		_, ok = content.(*nopScrollableHandler)
 		assert.True(t, ok)
 		assert.NoError(t, win.Close())
 	})
@@ -176,6 +176,56 @@ func TestBrowserScrollable(t *testing.T) {
 		_, ok := content.(component.Scrollable)
 		assert.True(t, ok)
 	})
+}
+
+func TestBrowserFloating(t *testing.T) {
+	t.Run("create floating window", func(t *testing.T) {
+		b := NewComponent(DefaultConfig())
+		h := newTestHandler()
+
+		win := b.Floating(h, component.FloatingConfig{})
+		content, err := win.Content()
+		require.NoError(t, err)
+
+		_, ok := content.(*nopHandler)
+		assert.True(t, ok)
+		assert.NoError(t, win.Close())
+	})
+
+	t.Run("update content of floating window with non floating uses static dimensions",
+		func(t *testing.T) {
+			b := NewComponent(DefaultConfig())
+			var h Floating
+			h = newTestHandler()
+			win := b.Floating(h, component.FloatingConfig{})
+
+			notFloating := browserapi.NopHandler(handler.NewTestHandler())
+			err := win.SetContent(notFloating)
+			require.NoError(t, err)
+		})
+
+	t.Run("floating and scrollable maintains interfaces",
+		func(t *testing.T) {
+			b := NewComponent(DefaultConfig())
+			var h Floating
+			h = newTestScrollableHandler()
+			win := b.Floating(h, component.FloatingConfig{})
+
+			content, err := win.Content()
+			require.NoError(t, err)
+			_, fok := content.(Floating)
+			assert.True(t, fok)
+			_, sok := content.(Scrollable)
+			assert.True(t, sok)
+
+			// also internally
+			internal := win.(*browserWindow).win.Content()
+
+			_, fok = internal.(Floating)
+			assert.True(t, fok)
+			_, sok = internal.(Scrollable)
+			assert.True(t, sok)
+		})
 }
 
 func TestComponentCloseOtherWindows(t *testing.T) {

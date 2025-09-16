@@ -61,6 +61,14 @@ func (w *browserWindow) Content() (browserapi.Handler, error) {
 		if ok {
 			return bc.Handler, nil
 		}
+		fsc, ok := h.(*browserFloatingScrollableContent)
+		if ok {
+			return fsc.Handler, nil
+		}
+		fc, ok := h.(*browserFloatingContent)
+		if ok {
+			return fc.Handler, nil
+		}
 		return h.(*browserScrollableContent).Handler, nil
 	}
 	return t, nil

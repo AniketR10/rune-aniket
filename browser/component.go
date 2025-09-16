@@ -431,7 +431,7 @@ func (c *Component) Floating(
 	if h == nil {
 		panic("nil Floating handler")
 	}
-	h = c.newBrowserContent(h)
+	h = c.newBrowserContent(h).(Floating)
 	win := c.newWindow(c.wm.FloatingWindow(h, cfg))
 	c.wm.SetFocus(win.win)
 	return win
@@ -936,7 +936,9 @@ func (c *Component) updateWindowContent(
 	} else {
 		_, sok := content.(*browserScrollableContent)
 		_, bok := content.(*browserContent)
-		if !sok && !bok {
+		_, fok := content.(*browserFloatingContent)
+		_, fsok := content.(*browserFloatingScrollableContent)
+		if !sok && !bok && !fok && !fsok {
 			content = c.newBrowserContent(content)
 		}
 	}
@@ -1186,11 +1188,17 @@ func (c *Component) wallpaper() browserapi.Handler {
 	}
 }
 
-// returns either a browserScrollableContent or browserContent so
-// type assertions on component.Scrollable are not masked.
-func (c *Component) newBrowserContent(content browserapi.Handler) Floating {
+func (c *Component) newBrowserContent(content browserapi.Handler) browserapi.Handler {
 	bc := browserContent{c: c, Handler: content}
-	if _, ok := content.(component.Scrollable); ok {
+	_, fok := content.(component.Floating)
+	_, sok := content.(component.Scrollable)
+	if sok && fok {
+		return &browserFloatingScrollableContent{browserContent: bc}
+	}
+	if fok {
+		return &browserFloatingContent{browserContent: bc}
+	}
+	if sok {
 		return &browserScrollableContent{browserContent: bc}
 	}
 	return &bc
@@ -1203,10 +1211,6 @@ type browserContent struct {
 	browserapi.Handler
 	closed bool
 	c      *Component
-}
-
-func (c *browserContent) Dimensions() (int, int) {
-	return c.Handler.(Floating).Dimensions()
 }
 
 // allow for advanced use of content
@@ -1242,6 +1246,45 @@ func (c *browserContent) Close() error {
 	c.closed = true
 	return c.Handler.Close()
 }
+
+var _ Floating = (*browserFloatingContent)(nil)
+
+type browserFloatingContent struct {
+	browserContent
+}
+
+func (c *browserFloatingContent) Dimensions() (int, int) {
+	return c.Handler.(Floating).Dimensions()
+}
+
+var _ Floating = (*browserFloatingScrollableContent)(nil)
+var _ Scrollable = (*browserFloatingScrollableContent)(nil)
+
+type browserFloatingScrollableContent struct {
+	browserContent
+}
+
+func (c *browserFloatingScrollableContent) Dimensions() (int, int) {
+	return c.Handler.(Floating).Dimensions()
+}
+
+func (c *browserFloatingScrollableContent) SeekUp() bool {
+	return c.Handler.(component.Scrollable).SeekUp()
+}
+
+func (c *browserFloatingScrollableContent) SeekDown() bool {
+	return c.Handler.(component.Scrollable).SeekDown()
+}
+
+func (c *browserFloatingScrollableContent) SeekOffset() int {
+	return c.Handler.(component.Scrollable).SeekOffset()
+}
+
+func (c *browserFloatingScrollableContent) MaxSeekOffset() int {
+	return c.Handler.(component.Scrollable).MaxSeekOffset()
+}
+
+var _ Scrollable = (*browserScrollableContent)(nil)
 
 type browserScrollableContent struct {
 	browserContent
