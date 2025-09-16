@@ -179,12 +179,24 @@ var (
 			},
 			handler: (*ex).flush,
 		},
+		"writeall": {
+			man: textapi.CommandManual{
+				Summary: "Like 'write' but applies to all open tabs",
+			},
+			handler: (*ex).flushAll,
+		},
 		"write!": {
 			man: textapi.CommandManual{
 				Summary: "Like 'write' but forcefully write when a file is open in read-only mode, " +
 					"or there's another reason why the file can't be written.",
 			},
 			handler: (*ex).forceFlush,
+		},
+		"writeall!": {
+			man: textapi.CommandManual{
+				Summary: "Like 'write!' but applies to all open tabs",
+			},
+			handler: (*ex).forceFlushAll,
 		},
 		"forcequit!": {
 			man: textapi.CommandManual{

@@ -2823,6 +2823,84 @@ func TestViewForceWrite(t *testing.T) {
 	handlertest.TestHandlerSequence(t, e, 30, 15, cases)
 }
 
+func TestViewForceWriteAll(t *testing.T) {
+	cases := []handlertest.SequenceTestCase{
+		{":view caliu.go>:view boira.go>b",
+			`┌────────────────────────────┐
+│o caliu.go  o boira.go      │
+├────────────────────────────┤
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+└────────────────────────────┘`},
+		{":writeall>",
+			`┌────────────────────────────┐
+│2 errors occurred: flush:   │
+│file is not writable;       │
+│flush: file is not          │
+│writable                    │
+└────────────────────────────┘
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+└────────────────────────────┘`},
+		{":notificationCloseAll>:writeall!>",
+			`┌────────────────────────────┐
+│o caliu.go  o boira.go      │
+├────────────────────────────┤
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+└────────────────────────────┘`},
+		{":writeall>",
+			`┌────────────────────────────┐
+│o caliu.go  o boira.go      │
+├────────────────────────────┤
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+└────────────────────────────┘`},
+	}
+
+	opts := []text.Option{
+		text.WithCommandKey(testCommandKey),
+	}
+	e := newExForTestingWithWorkspace(t, &testLoader{},
+		texttest.NopEditor(), vte.DefaultConfig(),
+		nopPublishEvent, clipboard.NewInMemory(), opts...)
+	defer e.Close()
+	handlertest.TestHandlerSequence(t, e, 30, 15, cases)
+}
+
 func TestCopyPath(t *testing.T) {
 	tsuite := []struct {
 		name   string

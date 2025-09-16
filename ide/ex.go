@@ -32,7 +32,7 @@ import (
 	"strings"
 	"time"
 
-	multierr "github.com/ernestrc/go-multierror"
+	"github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/iterator"
@@ -200,7 +200,7 @@ func (e *ex) subscribeCommands() error {
 				return man.completer(e, ctx, cmd, args)
 			}))
 		if err != nil {
-			ret = multierr.Append(ret, fmt.Errorf("subscribe command: %w", err))
+			ret = multierror.Append(ret, fmt.Errorf("subscribe command: %w", err))
 		}
 	}
 	return ret
@@ -437,6 +437,24 @@ func (e *ex) flush(args ...string) error {
 
 func (e *ex) forceFlush(args ...string) error {
 	return e.comp.ForceFlush(e.invokeWindow())
+}
+
+func (e *ex) flushAll(args ...string) (ret error) {
+	for _, t := range e.comp.Tabs() {
+		if err := e.comp.FlushTab(t); err != nil {
+			ret = multierror.Append(ret, err)
+		}
+	}
+	return
+}
+
+func (e *ex) forceFlushAll(args ...string) (ret error) {
+	for _, t := range e.comp.Tabs() {
+		if err := e.comp.ForceFlushTab(t); err != nil {
+			ret = multierror.Append(ret, err)
+		}
+	}
+	return
 }
 
 func (e *ex) forcequit(args ...string) error {
@@ -1500,7 +1518,7 @@ func (e *ex) Browser() browser.Browser {
 func (e *ex) Close() (ret error) {
 	e.sequencer.Reset()
 	if err := e.comp.Close(); err != nil {
-		ret = multierr.Append(ret, err)
+		ret = multierror.Append(ret, err)
 	}
 	if e.cancelPartialReissue != nil {
 		e.cancelPartialReissue()
@@ -1513,7 +1531,7 @@ func (e *ex) Close() (ret error) {
 	}
 	if e.cmd != nil {
 		if err := e.cmd.Close(); err != nil {
-			ret = multierr.Append(ret, err)
+			ret = multierror.Append(ret, err)
 		}
 	}
 	return
