@@ -40,6 +40,8 @@ type notificationComp struct {
 	width                  int
 	height                 int
 	duration               time.Duration
+	manualProgress         int64
+	manualProgressTotal    int64
 	end                    time.Time
 	pausedAt               time.Time
 	progressCellStart      term.Cell
@@ -138,10 +140,14 @@ func (n *notificationComp) Draw(w term.Writer) {
 	if !n.pausedAt.IsZero() {
 		remaining = n.end.Sub(n.pausedAt)
 	}
-	total := n.duration
-	current := n.duration - remaining
+	total := int64(n.duration)
+	current := total - int64(remaining)
 	size := n.width
 
+	if n.manualProgressTotal != 0 {
+		current = n.manualProgress
+		total = n.manualProgressTotal
+	}
 	currCount := int(math.Ceil(
 		float64(current) / float64(total) * float64(size),
 	))
@@ -153,14 +159,14 @@ func (n *notificationComp) Draw(w term.Writer) {
 	start := term.Coordinates{X: 0, Y: n.height - 1}
 	w.SetCell(start, n.progressCellStart)
 
-	if remaCount > 0 && currCount > 0 {
-		for x := 1; x < currCount-1; x++ {
-			pos := term.Coordinates{X: x, Y: n.height - 1}
-			w.SetCell(pos, n.progressCellCurrent)
-		}
+	for x := 1; x < currCount; x++ {
+		pos := term.Coordinates{X: x, Y: n.height - 1}
+		w.SetCell(pos, n.progressCellCurrent)
 	}
-	tip := term.Coordinates{X: currCount, Y: n.height - 1}
-	w.SetCell(tip, n.progressCellCurrentTip)
+	if currCount != 0 {
+		tip := term.Coordinates{X: currCount, Y: n.height - 1}
+		w.SetCell(tip, n.progressCellCurrentTip)
+	}
 
 	for x := currCount + 1; x < currCount+remaCount-1; x++ {
 		pos := term.Coordinates{X: x, Y: n.height - 1}

@@ -93,11 +93,11 @@ type Config struct {
 
 // ProgressRunes contains the runes used by a Container to render progress.
 type ProgressRunes struct {
-	Start    rune
-	Current  rune
+	Start      rune
+	Current    rune
 	CurrentTip rune
-	Remain   rune
-	End      rune
+	Remain     rune
+	End        rune
 }
 
 // Container renders an inner tui.Component and overlays any notifications that were
@@ -215,24 +215,64 @@ func (n *Container) Notify(level Level, msg string) string {
 
 	ctx, cancel := context.WithTimeout(n.ctx, duration)
 	comp := newNotification(level, msg, n.cfg, duration, cancel)
+	id := n.ID(level, msg)
 
 	n.mu.Lock()
 	defer n.mu.Unlock()
 
 	// clear out current notification, based on message equality, if it exists
-	if ticket, exists := n.notifications[msg]; exists {
+	if ticket, exists := n.notifications[id]; exists {
 		ticket.cancelCtx()
 		n.list.Remove(&ticket.el)
-		delete(n.notifications, msg)
+		delete(n.notifications, id)
 	}
 
 	// add a new notification
 	el := n.list.PushFront(comp)
-	n.notifications[msg] = &notificationTicket{el: el, cancelCtx: cancel}
+	n.notifications[id] = &notificationTicket{el: el, cancelCtx: cancel}
 
-	n.startAutoClose(ctx, cancel, el, msg)
+	n.startAutoClose(ctx, cancel, el, id)
 
-	return n.ID(level, msg)
+	return id
+}
+
+// UpdateProgress updates the progress of a notification,
+// overriding the default time-based progress.
+//
+// After calling this once, caller is responsible for updating it
+// until progress == total.
+//
+// The message argument can be empty, in which case the previous
+// message passed to UpdateProgress is used, or the original
+// message when creating the notification.
+func (c *Container) UpdateProgress(id, message string, progress, total int64) bool {
+	if progress > total || total == 0 {
+		panic("invalid arguments: progress must be smaller than " +
+			"total and total must not be zero")
+	}
+	ticket, ok := c.notifications[id]
+	if !ok {
+		return false
+	}
+
+	// cancel auto progress
+	c.pauseNotification(ticket.el)
+
+	// close if progress == total
+	if progress == total {
+		c.closeNotification(ticket.el)
+		delete(c.notifications, id)
+		return true
+	}
+
+	comp := ticket.el.Value().(*notificationComp)
+	comp.manualProgress = progress
+	comp.manualProgressTotal = total
+	if message != "" {
+		comp.Responsive = newString(comp.cfg, message)
+		comp.Responsive.Resize(comp.width, comp.height)
+	}
+	return true
 }
 
 // CloseAll closes all open notifications.
@@ -265,8 +305,8 @@ func (n *Container) ResumeAll() {
 	n.resumeAll()
 }
 func (n *Container) resumeAll() {
-	for msg, ticket := range n.notifications {
-		n.resumeNotification(ticket, msg)
+	for id, ticket := range n.notifications {
+		n.resumeNotification(ticket, id)
 	}
 }
 
@@ -323,7 +363,7 @@ func (n *Container) closeNotification(el component.ListNode) {
 func (n *Container) pauseNotification(el component.ListNode) {
 	comp := el.Value().(*notificationComp)
 	if comp.pausedAt != (time.Time{}) {
-		return // resume is idempotent
+		return // pause is idempotent
 	}
 	// this prevents element from being removed
 	// and cancels fps interrupt goroutine.
@@ -332,7 +372,7 @@ func (n *Container) pauseNotification(el component.ListNode) {
 
 }
 
-func (n *Container) resumeNotification(t *notificationTicket, msg string) {
+func (n *Container) resumeNotification(t *notificationTicket, id string) {
 	comp := t.el.Value().(*notificationComp)
 	if comp.pausedAt.Equal(time.Time{}) {
 		return // resume is idempotent
@@ -346,12 +386,12 @@ func (n *Container) resumeNotification(t *notificationTicket, msg string) {
 	comp.pausedAt = time.Time{}
 	comp.cancel = cancelCtx
 
-	n.startAutoClose(ctx, cancelCtx, t.el, msg)
+	n.startAutoClose(ctx, cancelCtx, t.el, id)
 }
 
 func (n *Container) startAutoClose(
 	ctx context.Context, cancel func(),
-	el component.ListNode, msg string,
+	el component.ListNode, id string,
 ) {
 	go debug.CapturePanicReport(func() {
 		defer cancel()
@@ -365,7 +405,7 @@ func (n *Container) startAutoClose(
 		// no need to ensure that while we were trying to acquire a lock, no one
 		// removed it already as Remove is itempotent. See Go std's list.List.
 		n.list.Remove(&el)
-		delete(n.notifications, msg)
+		delete(n.notifications, id)
 		n.mu.Unlock()
 
 		if n.cfg.Interrupter != nil {
