@@ -247,12 +247,12 @@ func (h *Handler) initState(
 	topBar := new(pluginHandlerBar)
 	topBar.startTime = time.Now()
 	topBar.leftMsgRunning = component.NewStringWithConfig(" ", templateCfg)
-	topBar.leftMsgError = component.NewStringWithConfig(" ◎ ", errStrCfg)
-	topBar.leftMsgSuccess = component.NewStringWithConfig(" ◎ ", successStrCfg)
+	topBar.leftMsgError = component.NewStringWithConfig(" ▀ ", errStrCfg)
+	topBar.leftMsgSuccess = component.NewStringWithConfig(" ▀ ", successStrCfg)
 	topBar.centerMsg = component.NewStringWithConfig(cmdAndArgs, centerStrCfg)
 	topBar.frameAttr = config.frameAttr
 	topBar.attr = config.barAttr
-	frames, seq := component.SpinningAnimationFrames()
+	frames, seq := component.SpinningSquareAnimationFrames()
 	topBar.animation = component.NewAnimation(interrupter, frames, seq, 10)
 	h.nonInteractiveMinWidth = nonInteractiveMinWidth
 	h.nonInteractiveMinHeight = nonInteractiveMinHeight

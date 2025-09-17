@@ -50,11 +50,27 @@ func ProgressAnimationFrames() ([]string, []int) {
 			36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56}
 }
 
-// SpinningAnimationFrames returns the frames and sequence numbers of the default
+// SpinningCircleAnimationFrames returns the frames and sequence numbers of the default
 // progress animation. It only needs 2 term.Cells in terms of width and 1 cell in height.
-func SpinningAnimationFrames() ([]string, []int) {
+func SpinningCircleAnimationFrames() ([]string, []int) {
 	return []string{"◦", "◯", "◴", "◵", "◶", "◷", "◌", "◎"},
 		[]int{0, 1, 2, 3, 4, 5, 6, 7}
+}
+
+// SpinningSquareAnimationFrames returns the frames and sequence numbers of a fun
+// progress animation. It only needs 2 term.Cells in terms of width and 1 cell in height.
+func SpinningSquareAnimationFrames() ([]string, []int) {
+	return []string{"▀", "▐", "▄", "▌"},
+		[]int{0, 1, 2, 3}
+}
+
+// BellowAnimationFrames returns the frames and sequence numbers of a
+// bellow animation. It only needs 2 term.Cells in terms of width and 1 cell in height.
+func BellowAnimationFrames() ([]string, []int) {
+	return []string{"▏", "▎", "▍", "▌", "▋", "▊", "▉", "█", "█", "▉", "▊", "▋", "▌", "▍", "▎", "▏"},
+		[]int{0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 5, 5,
+			6, 6, 7, 8, 9, 9, 10, 10, 11, 11, 12, 12, 12, 13, 13, 13, 14, 14, 14, 14,
+			15, 15, 15, 15, 15, 15, 15, 15}
 }
 
 // CursorAnimationFrames returns the frames and sequence numbers of the default

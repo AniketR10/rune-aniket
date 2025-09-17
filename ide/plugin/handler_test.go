@@ -87,7 +87,7 @@ func TestPluginHandler(t *testing.T) {
 			maxWidth:    4,
 			waitProcess: false,
 			drawnComponent: `
- ◦     sh   0s
+ ▀     sh   0s
 $             
               
               
@@ -100,7 +100,7 @@ $
 			maxWidth:    4,
 			waitProcess: true,
 			drawnComponent: `
- ◦  sleep 2 0s
+ ▀  sleep 2 0s
               
               
               
@@ -113,7 +113,7 @@ $
 			maxWidth:    0,
 			waitProcess: true,
 			drawnComponent: `
- ◦  sleep 2 0s
+ ▀  sleep 2 0s
               
               
               
