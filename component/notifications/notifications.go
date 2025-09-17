@@ -24,6 +24,7 @@
 package notifications
 
 import (
+	"math"
 	"time"
 
 	"unstable.build/go-tui/component"
@@ -34,14 +35,18 @@ var _ component.Responsive = (*notificationComp)(nil)
 
 type notificationComp struct {
 	component.Responsive
-	cfg          Config
-	cancel       func()
-	width        int
-	height       int
-	duration     time.Duration
-	end          time.Time
-	pausedAt     time.Time
-	progressCell term.Cell
+	cfg                    Config
+	cancel                 func()
+	width                  int
+	height                 int
+	duration               time.Duration
+	end                    time.Time
+	pausedAt               time.Time
+	progressCellStart      term.Cell
+	progressCellEnd        term.Cell
+	progressCellCurrent    term.Cell
+	progressCellCurrentTip term.Cell
+	progressCellRemain     term.Cell
 }
 
 func newString(cfg Config, msg string) component.Responsive {
@@ -65,9 +70,8 @@ func newNotification(
 	cancel func(),
 ) *notificationComp {
 
+	// template for each progress rune
 	var progressCell term.Cell
-	progressCell.Ch = cfg.FrameCharSet.HorizontalBottom
-
 	switch level {
 	case LevelInfo:
 		progressCell.Attrs = cfg.ColorInfo.Attrs
@@ -88,18 +92,32 @@ func newNotification(
 	default:
 		panic("unknown level")
 	}
-
 	progressCell.Width = 1
+
+	progressCellStart := progressCell
+	progressCellStart.Ch = cfg.ProgressRunes.Start
+	progressCellEnd := progressCell
+	progressCellEnd.Ch = cfg.ProgressRunes.End
+	progressCellRemain := progressCell
+	progressCellRemain.Ch = cfg.ProgressRunes.Remain
+	progressCellCurrent := progressCell
+	progressCellCurrent.Ch = cfg.ProgressRunes.Current
+	progressCellCurrentTip := progressCell
+	progressCellCurrentTip.Ch = cfg.ProgressRunes.CurrentTip
 
 	start := time.Now()
 	end := start.Add(duration)
 	return &notificationComp{
-		Responsive:   newString(cfg, msg),
-		cfg:          cfg,
-		cancel:       cancel,
-		duration:     duration,
-		end:          end,
-		progressCell: progressCell,
+		Responsive:             newString(cfg, msg),
+		cfg:                    cfg,
+		cancel:                 cancel,
+		duration:               duration,
+		end:                    end,
+		progressCellStart:      progressCellStart,
+		progressCellEnd:        progressCellEnd,
+		progressCellRemain:     progressCellRemain,
+		progressCellCurrent:    progressCellCurrent,
+		progressCellCurrentTip: progressCellCurrentTip,
 	}
 }
 
@@ -112,7 +130,7 @@ func (n *notificationComp) Resize(width, height int) {
 func (n *notificationComp) Draw(w term.Writer) {
 	n.Responsive.Draw(w)
 
-	if !n.cfg.ProgressBar || n.width < 4 {
+	if !n.cfg.ProgressBar {
 		return
 	}
 
@@ -120,13 +138,35 @@ func (n *notificationComp) Draw(w term.Writer) {
 	if !n.pausedAt.IsZero() {
 		remaining = n.end.Sub(n.pausedAt)
 	}
+	total := n.duration
+	current := n.duration - remaining
+	size := n.width
 
-	remainingRatio := float64(remaining) / float64(n.duration)
-
-	progressWidth := int(float64(n.width) * remainingRatio)
-	progressOffset := n.width - progressWidth
-	for i := 1; i < progressWidth; i++ {
-		pos := term.Coordinates{X: progressOffset + i - 1, Y: n.height - 1}
-		w.SetCell(pos, n.progressCell)
+	currCount := int(math.Ceil(
+		float64(current) / float64(total) * float64(size),
+	))
+	if size < currCount {
+		return
 	}
+	remaCount := size - currCount
+
+	start := term.Coordinates{X: 0, Y: n.height - 1}
+	w.SetCell(start, n.progressCellStart)
+
+	if remaCount > 0 && currCount > 0 {
+		for x := 1; x < currCount-1; x++ {
+			pos := term.Coordinates{X: x, Y: n.height - 1}
+			w.SetCell(pos, n.progressCellCurrent)
+		}
+	}
+	tip := term.Coordinates{X: currCount, Y: n.height - 1}
+	w.SetCell(tip, n.progressCellCurrentTip)
+
+	for x := currCount + 1; x < currCount+remaCount-1; x++ {
+		pos := term.Coordinates{X: x, Y: n.height - 1}
+		w.SetCell(pos, n.progressCellRemain)
+	}
+
+	end := term.Coordinates{X: size - 1, Y: n.height - 1}
+	w.SetCell(end, n.progressCellEnd)
 }

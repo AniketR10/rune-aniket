@@ -73,6 +73,10 @@ type Config struct {
 	// Interrupt is needed to asynchronously update the UI. This is optional.
 	Interrupter term.Interrupter
 
+	// ProgressRunes determines the runes used to render progress.
+	// If not set, the corresponding characters in FrameCharSet are used.
+	ProgressRunes ProgressRunes
+
 	// ColorInfo determines the style of the progress bar for info notifications.
 	// By default, the default color along with a bold foreground is used.
 	ColorInfo term.Attributes
@@ -85,6 +89,15 @@ type Config struct {
 	// ColorError determines the style of the progress bar for error notifications.
 	// By default, tcell.ColorRed is used.
 	ColorError term.Attributes
+}
+
+// ProgressRunes contains the runes used by a Container to render progress.
+type ProgressRunes struct {
+	Start    rune
+	Current  rune
+	CurrentTip rune
+	Remain   rune
+	End      rune
 }
 
 // Container renders an inner tui.Component and overlays any notifications that were
@@ -140,6 +153,13 @@ func (n *Container) Init(inner tui.Component, cfg Config) {
 		cfg.ColorError.Attrs = cfg.BackgroundAttributes.Attrs
 		cfg.ColorError.Attrs |= tcell.AttrBold
 		cfg.ColorError.Fg = tcell.ColorRed
+	}
+	if cfg.ProgressRunes == (ProgressRunes{}) {
+		cfg.ProgressRunes.Start = cfg.FrameCharSet.BottomLeft
+		cfg.ProgressRunes.Current = cfg.FrameCharSet.HorizontalBottom
+		cfg.ProgressRunes.CurrentTip = cfg.FrameCharSet.HorizontalBottom
+		cfg.ProgressRunes.Remain = cfg.FrameCharSet.HorizontalBottom
+		cfg.ProgressRunes.End = cfg.FrameCharSet.BottomRight
 	}
 	n.inner = inner
 	n.cfg = cfg
