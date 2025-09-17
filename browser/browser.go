@@ -154,6 +154,7 @@ type TabManager interface {
 type Notifications interface {
 	Notify(level notifications.Level, msg string, args ...interface{}) (string, error)
 	NotifyOnce(level notifications.Level, msg string, args ...interface{}) (string, error)
+	UpdateNotificationProgress(id, message string, progress, total int64) error
 }
 
 // ResourceOpener is the interface that wraps the method Open.

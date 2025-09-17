@@ -52,3 +52,11 @@ func (n *protectedNotifications) NotifyOnce(
 	defer n.locker.Unlock()
 	return n.notifications.NotifyOnce(level, msg, args...)
 }
+
+func (n *protectedNotifications) UpdateNotificationProgress(
+	id, message string, progress, total int64,
+) error {
+	n.locker.Lock()
+	defer n.locker.Unlock()
+	return n.notifications.UpdateNotificationProgress(id, message, progress, total)
+}

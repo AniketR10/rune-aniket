@@ -269,3 +269,9 @@ func (nopNotifications) NotifyOnce(
 ) (string, error) {
 	return "", nil
 }
+
+func (n nopNotifications) UpdateNotificationProgress(
+	id, message string, progress, total int64,
+) error {
+	return nil
+}

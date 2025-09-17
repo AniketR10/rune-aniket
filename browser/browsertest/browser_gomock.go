@@ -1006,6 +1006,20 @@ func (mr *MockNotificationsMockRecorder) NotifyOnce(level, msg any, args ...any)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyOnce", reflect.TypeOf((*MockNotifications)(nil).NotifyOnce), varargs...)
 }
 
+// UpdateNotificationProgress mocks base method.
+func (m *MockNotifications) UpdateNotificationProgress(id, message string, progress, total int64) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateNotificationProgress", id, message, progress, total)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateNotificationProgress indicates an expected call of UpdateNotificationProgress.
+func (mr *MockNotificationsMockRecorder) UpdateNotificationProgress(id, message, progress, total any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateNotificationProgress", reflect.TypeOf((*MockNotifications)(nil).UpdateNotificationProgress), id, message, progress, total)
+}
+
 // MockResourceOpener is a mock of ResourceOpener interface.
 type MockResourceOpener struct {
 	ctrl     *gomock.Controller
@@ -1318,6 +1332,20 @@ func (m *MockBrowser) Tab(uri workspaceapi.URI, icon rune, name string, h browse
 func (mr *MockBrowserMockRecorder) Tab(uri, icon, name, h any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Tab", reflect.TypeOf((*MockBrowser)(nil).Tab), uri, icon, name, h)
+}
+
+// UpdateNotificationProgress mocks base method.
+func (m *MockBrowser) UpdateNotificationProgress(id, message string, progress, total int64) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateNotificationProgress", id, message, progress, total)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateNotificationProgress indicates an expected call of UpdateNotificationProgress.
+func (mr *MockBrowserMockRecorder) UpdateNotificationProgress(id, message, progress, total any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateNotificationProgress", reflect.TypeOf((*MockBrowser)(nil).UpdateNotificationProgress), id, message, progress, total)
 }
 
 // Window mocks base method.

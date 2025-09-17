@@ -115,6 +115,12 @@ func (b toBrowser) NotifyOnce(
 	return b.b.NotifyOnce(level, msg, args...)
 }
 
+func (b toBrowser) UpdateNotificationProgress(
+	id, message string, progress, total int64,
+) error {
+	return b.b.UpdateNotificationProgress(id, message, progress, total)
+}
+
 func (b toBrowser) Open(resource workspaceapi.URI) (browserapi.Handler, error) {
 	return b.b.Open(resource)
 }

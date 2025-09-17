@@ -104,6 +104,15 @@ func (s *interruptBrowser) Notify(
 	return res, err
 }
 
+// UpdateNotificationProgress satisfies browserrpc.BrowserServer
+func (s *interruptBrowser) UpdateNotificationProgress(
+	ctx context.Context, req *browserrpc.UpdateNotificationProgressRequest,
+) (*browserrpc.UpdateNotificationProgressResponse, error) {
+	res, err := s.browserServer.UpdateNotificationProgress(ctx, req)
+	s.interruptDraw()
+	return res, err
+}
+
 // Open satisfies browserrpc.BrowserServer
 func (s *interruptBrowser) Open(
 	ctx context.Context, req *browserrpc.OpenResourceRequest,

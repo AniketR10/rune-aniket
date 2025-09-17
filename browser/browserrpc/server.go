@@ -216,6 +216,32 @@ func (s *Server) NotifyOnce(
 	return s.notify(ctx, req, true)
 }
 
+// UpdateNotificationProgress satisfies BrowserServer
+func (s *Server) UpdateNotificationProgress(
+	ctx context.Context, req *UpdateNotificationProgressRequest,
+) (*UpdateNotificationProgressResponse, error) {
+	id := req.GetId()
+	total := req.GetTotal()
+	progress := req.GetProgress()
+	message := req.GetMsg()
+
+	if id == "" || total == 0 || progress > total {
+		return nil, status.Errorf(codes.InvalidArgument,
+			"id must not be empty, total must not be zero and progress "+
+				"must not be larger than total")
+	}
+
+	s.browser.Lock()
+	defer s.browser.Unlock()
+
+	err := s.browser.UpdateNotificationProgress(id, message, progress, total)
+	if err != nil {
+		return nil, err
+	}
+
+	return &UpdateNotificationProgressResponse{}, nil
+}
+
 // Open satisfies BrowserServer
 func (s *Server) Open(
 	ctx context.Context, req *OpenResourceRequest,

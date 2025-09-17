@@ -473,6 +473,14 @@ func (c *Component) Notify(level notifications.Level, msg string, args ...interf
 	return c.container.Notify(level, fmt.Sprintf(msg, args...))
 }
 
+// UpdateNotificationProgress updates the progress of a notification, overriding
+// the automatic configured time-based progress.
+func (c *Component) UpdateNotificationProgress(
+	id, message string, progress, total int64,
+) bool {
+	return c.container.UpdateProgress(id, message, progress, total)
+}
+
 // NotificationID returns the unique ID of a given notification.
 func (c *Component) NotificationID(
 	level notifications.Level, msg string, args ...interface{},

@@ -63,6 +63,12 @@ func (n *testNotifications) NotifyOnce(
 	return n.Notify(level, msg, args...)
 }
 
+func (n *testNotifications) UpdateNotificationProgress(
+	id, message string, progress, total int64,
+) error {
+	return nil
+}
+
 func assertNoti(
 	t *testing.T, noti notiRecord, level notifications.Level, text string,
 ) {

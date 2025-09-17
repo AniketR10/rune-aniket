@@ -669,6 +669,18 @@ func (c *Component) NotifyOnce(level notifications.Level, msg string, args ...in
 	return c.notifier.Notify(level, msg, args...), nil
 }
 
+// UpdateNotificationProgress satisfies browser.Notifications.
+func (c *Component) UpdateNotificationProgress(
+	id, message string, progress, total int64,
+) error {
+	ok := c.notifier.UpdateNotificationProgress(id, message, progress, total)
+	if !ok {
+		return errors.New("could not find notification with the " +
+			"given id, or it already expired")
+	}
+	return nil
+}
+
 // CloseNotifications closes all open notifications.
 func (c *Component) CloseNotifications() {
 	c.comp.CloseNotifications()
@@ -1308,6 +1320,7 @@ func (w wrapEditor) Handle(ev term.Event) (exit, handled bool) {
 type notifier interface {
 	Notify(level notifications.Level, msg string, args ...interface{}) string
 	NotificationID(level notifications.Level, msg string, args ...interface{}) string
+	UpdateNotificationProgress(id, message string, progress, total int64) bool
 }
 
 // stand-in type for NotifyOnce

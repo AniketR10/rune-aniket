@@ -133,6 +133,20 @@ type Notifications interface {
 	// NotifyOnce delivers the given notification once, and never again. A notification
 	// is identified as the hash of the final message (with arguments).
 	NotifyOnce(level notifications.Level, msg string, args ...interface{}) (string, error)
+
+	// UpdateNotificationProgress updates the progress of a notification,
+	// overriding the default timing and progress bar settings.
+	//
+	// After calling this once, caller is responsible for updating it
+	// until progress == total.
+	//
+	// It's expected for progress to be smaller than or equal than total,
+	// and total must never be 0. An error is returned if any of these conditions
+	// are not met.
+	//
+	// The message argument can be empty, in which case the previous message
+	// is used.
+	UpdateNotificationProgress(id, message string, progress, total int64) error
 }
 
 // ResourceOpener is the interface that wraps the method Open.

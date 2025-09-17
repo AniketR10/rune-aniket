@@ -127,3 +127,9 @@ func (t *testNotifier) NotificationID(
 	h.Write([]byte(fmt.Sprintf(msg, args...)))
 	return strconv.FormatUint(h.Sum64(), 10)
 }
+
+func (t *testNotifier) UpdateNotificationProgress(
+	id, message string, progress, total int64,
+) bool {
+	return false
+}

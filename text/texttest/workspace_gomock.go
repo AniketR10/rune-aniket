@@ -207,3 +207,17 @@ func (mr *MocknotifierMockRecorder) Notify(level, msg any, args ...any) *gomock.
 	varargs := append([]any{level, msg}, args...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Notify", reflect.TypeOf((*Mocknotifier)(nil).Notify), varargs...)
 }
+
+// UpdateNotificationProgress mocks base method.
+func (m *Mocknotifier) UpdateNotificationProgress(id, message string, progress, total int64) bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateNotificationProgress", id, message, progress, total)
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// UpdateNotificationProgress indicates an expected call of UpdateNotificationProgress.
+func (mr *MocknotifierMockRecorder) UpdateNotificationProgress(id, message, progress, total any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateNotificationProgress", reflect.TypeOf((*Mocknotifier)(nil).UpdateNotificationProgress), id, message, progress, total)
+}

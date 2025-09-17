@@ -122,8 +122,9 @@ var ResourceOpener_ServiceDesc = grpc.ServiceDesc{
 }
 
 const (
-	Notifications_Notify_FullMethodName     = "/browser.Notifications/Notify"
-	Notifications_NotifyOnce_FullMethodName = "/browser.Notifications/NotifyOnce"
+	Notifications_Notify_FullMethodName                     = "/browser.Notifications/Notify"
+	Notifications_NotifyOnce_FullMethodName                 = "/browser.Notifications/NotifyOnce"
+	Notifications_UpdateNotificationProgress_FullMethodName = "/browser.Notifications/UpdateNotificationProgress"
 )
 
 // NotificationsClient is the client API for Notifications service.
@@ -132,6 +133,7 @@ const (
 type NotificationsClient interface {
 	Notify(ctx context.Context, in *NotifyRequest, opts ...grpc.CallOption) (*NotifyResponse, error)
 	NotifyOnce(ctx context.Context, in *NotifyRequest, opts ...grpc.CallOption) (*NotifyResponse, error)
+	UpdateNotificationProgress(ctx context.Context, in *UpdateNotificationProgressRequest, opts ...grpc.CallOption) (*UpdateNotificationProgressResponse, error)
 }
 
 type notificationsClient struct {
@@ -162,12 +164,23 @@ func (c *notificationsClient) NotifyOnce(ctx context.Context, in *NotifyRequest,
 	return out, nil
 }
 
+func (c *notificationsClient) UpdateNotificationProgress(ctx context.Context, in *UpdateNotificationProgressRequest, opts ...grpc.CallOption) (*UpdateNotificationProgressResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UpdateNotificationProgressResponse)
+	err := c.cc.Invoke(ctx, Notifications_UpdateNotificationProgress_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // NotificationsServer is the server API for Notifications service.
 // All implementations must embed UnimplementedNotificationsServer
 // for forward compatibility.
 type NotificationsServer interface {
 	Notify(context.Context, *NotifyRequest) (*NotifyResponse, error)
 	NotifyOnce(context.Context, *NotifyRequest) (*NotifyResponse, error)
+	UpdateNotificationProgress(context.Context, *UpdateNotificationProgressRequest) (*UpdateNotificationProgressResponse, error)
 	mustEmbedUnimplementedNotificationsServer()
 }
 
@@ -183,6 +196,9 @@ func (UnimplementedNotificationsServer) Notify(context.Context, *NotifyRequest) 
 }
 func (UnimplementedNotificationsServer) NotifyOnce(context.Context, *NotifyRequest) (*NotifyResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method NotifyOnce not implemented")
+}
+func (UnimplementedNotificationsServer) UpdateNotificationProgress(context.Context, *UpdateNotificationProgressRequest) (*UpdateNotificationProgressResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateNotificationProgress not implemented")
 }
 func (UnimplementedNotificationsServer) mustEmbedUnimplementedNotificationsServer() {}
 func (UnimplementedNotificationsServer) testEmbeddedByValue()                       {}
@@ -241,6 +257,24 @@ func _Notifications_NotifyOnce_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Notifications_UpdateNotificationProgress_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateNotificationProgressRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NotificationsServer).UpdateNotificationProgress(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Notifications_UpdateNotificationProgress_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NotificationsServer).UpdateNotificationProgress(ctx, req.(*UpdateNotificationProgressRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Notifications_ServiceDesc is the grpc.ServiceDesc for Notifications service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -255,6 +289,10 @@ var Notifications_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "NotifyOnce",
 			Handler:    _Notifications_NotifyOnce_Handler,
+		},
+		{
+			MethodName: "UpdateNotificationProgress",
+			Handler:    _Notifications_UpdateNotificationProgress_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

@@ -249,6 +249,22 @@ func (c *Client) NotifyOnce(level notifications.Level, msg string, args ...inter
 	return resp.GetId(), err
 }
 
+// UpdateNotificationProgress satisfies Browser.
+func (c *Client) UpdateNotificationProgress(
+	id, message string, progress, total int64,
+) error {
+	ctx := context.Background()
+	req := UpdateNotificationProgressRequest{
+		Id:       id,
+		Msg:      message,
+		Progress: progress,
+		Total:    total,
+	}
+
+	_, err := c.msg.UpdateNotificationProgress(ctx, &req)
+	return err
+}
+
 // Open satisfies Browser.
 func (c *Client) Open(resource workspaceapi.URI) (browserapi.Handler, error) {
 	ctx := context.Background()

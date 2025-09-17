@@ -214,3 +214,9 @@ func (n nopBrowser) Tab(
 func (n nopBrowser) SetTabName(workspaceapi.URI, string, term.Attributes) error {
 	panic("should not be called")
 }
+
+func (n nopBrowser) UpdateNotificationProgress(
+	id, message string, progress, total int64,
+) error {
+	return nil
+}

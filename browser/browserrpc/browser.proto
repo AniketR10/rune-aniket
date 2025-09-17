@@ -24,6 +24,16 @@ message NotifyResponse {
 	string id = 1;
 }
 
+message UpdateNotificationProgressRequest{
+	string id = 1;
+	string msg = 2;
+	int64 progress = 3;
+	int64 total = 4;
+}
+
+message UpdateNotificationProgressResponse{
+}
+
 message Mapping {
 	term.Event from = 1;
 	term.Event to = 2;
@@ -86,6 +96,7 @@ service ResourceOpener {
 service Notifications {
 	rpc Notify(NotifyRequest) returns (NotifyResponse);
 	rpc NotifyOnce(NotifyRequest) returns (NotifyResponse);
+	rpc UpdateNotificationProgress(UpdateNotificationProgressRequest) returns (UpdateNotificationProgressResponse);
 }
 
 service EventPublisher {
