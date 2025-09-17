@@ -511,7 +511,8 @@ EEEE`},
 	}
 	handlertest.TestHandlerSequence(t, bh, 4, 4, cases)
 
-	require.NoError(t, b.Notify(notifications.LevelInfo, "wasup: %s", "Z"))
+	_, err = b.Notify(notifications.LevelInfo, "wasup: %s", "Z")
+	require.NoError(t, err)
 	cases = []handlertest.SequenceTestCase{
 		{"",
 			`┌────┌─────────────┐

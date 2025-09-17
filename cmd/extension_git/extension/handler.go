@@ -178,7 +178,7 @@ func newGitHandler(
 
 	if err != nil {
 		ret.log(log.ErrorLevel, "setup copyRemoteURL command: %v", err)
-		_ = ret.m.Notify(notifications.LevelError,
+		_, _ = ret.m.Notify(notifications.LevelError,
 			"could not install copyRemoteURL command: %v", err)
 	}
 

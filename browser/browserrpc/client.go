@@ -224,25 +224,29 @@ func (c *Client) Bar(config browserapi.BarConfig, h tui.Handler) error {
 }
 
 // Notify satisfies Browser.
-func (c *Client) Notify(level notifications.Level, msg string, args ...interface{}) error {
+func (c *Client) Notify(level notifications.Level, msg string, args ...interface{}) (
+	string, error,
+) {
 	msg = fmt.Sprintf(msg, args...)
 
 	ctx := context.Background()
 	req := NotifyRequest{Level: uint32(level), Msg: msg}
 
-	_, err := c.msg.Notify(ctx, &req)
-	return err
+	resp, err := c.msg.Notify(ctx, &req)
+	return resp.GetId(), err
 }
 
 // NotifyOnce satisfies Browser.
-func (c *Client) NotifyOnce(level notifications.Level, msg string, args ...interface{}) error {
+func (c *Client) NotifyOnce(level notifications.Level, msg string, args ...interface{}) (
+	string, error,
+) {
 	msg = fmt.Sprintf(msg, args...)
 
 	ctx := context.Background()
 	req := NotifyRequest{Level: uint32(level), Msg: msg}
 
-	_, err := c.msg.NotifyOnce(ctx, &req)
-	return err
+	resp, err := c.msg.NotifyOnce(ctx, &req)
+	return resp.GetId(), err
 }
 
 // Open satisfies Browser.

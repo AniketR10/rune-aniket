@@ -20,7 +20,9 @@ message NotifyRequest {
 	uint32 level = 2;
 }
 
-message NotifyResponse {}
+message NotifyResponse {
+	string id = 1;
+}
 
 message Mapping {
 	term.Event from = 1;

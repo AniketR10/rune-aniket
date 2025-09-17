@@ -788,7 +788,7 @@ func (h *workspaceManagerHandler) logNonFatalErrs(
 	}
 	if all != nil {
 		log.Warn(all)
-		_ = browser.Notify(notifications.LevelError, "Config decode error: %v", all)
+		_, _ = browser.Notify(notifications.LevelError, "Config decode error: %v", all)
 	}
 }
 

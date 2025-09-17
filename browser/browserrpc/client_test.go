@@ -34,6 +34,7 @@ import (
 	"go.uber.org/goleak"
 	gomock "go.uber.org/mock/gomock"
 	"unstable.build/go-tui/api/workspaceapi"
+	grpc "google.golang.org/grpc"
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term"
@@ -105,17 +106,27 @@ func TestClientNotify(t *testing.T) {
 		client, mockCC := newMockedClient(ctrl)
 
 		myMsg, arg1, arg2 := "oh la la: %s %d", "obla di obla da", 5
-		in := &NotifyRequest{Level: uint32(notifications.LevelWarn), Msg: fmt.Sprintf(myMsg, arg1, arg2)}
+		in := &NotifyRequest{
+			Level: uint32(notifications.LevelWarn),
+			Msg:   fmt.Sprintf(myMsg, arg1, arg2),
+		}
 		out := new(NotifyResponse)
 
 		mockCC.EXPECT().
 			Invoke(gomock.Any(),
 				gomock.Eq("/browser.Notifications/Notify"),
 				gomock.Eq(in), gomock.Eq(out), gomock.Any()).
-			Times(1)
+			Times(1).
+			DoAndReturn(func(
+				ctx context.Context, method string, in any, out any, opts ...grpc.CallOption,
+			) error {
+				out.(*NotifyResponse).Id = "1234"
+				return nil
+			})
 
-		err := client.Notify(notifications.LevelWarn, myMsg, arg1, arg2)
+		str, err := client.Notify(notifications.LevelWarn, myMsg, arg1, arg2)
 		require.NoError(t, err)
+		require.Equal(t, "1234", str)
 	})
 	t.Run("bubbles up rpc error", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
@@ -125,7 +136,7 @@ func TestClientNotify(t *testing.T) {
 
 		expectInvokeError(mockCC)
 
-		err := client.Notify(notifications.LevelSuccess, "")
+		_, err := client.Notify(notifications.LevelSuccess, "")
 		assertInvokeError(t, err)
 	})
 }

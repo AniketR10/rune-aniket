@@ -292,7 +292,8 @@ func (h *fuzzyFinderHandler) notifyError(msg string, args ...interface{}) error 
 		return nil
 	}
 
-	return h.m.Notify(notifications.LevelError, msg, args...)
+	_, err := h.m.Notify(notifications.LevelError, msg, args...)
+	return err
 }
 
 func (h *fuzzyFinderHandler) openResource(searchQuery, data string) {

@@ -967,15 +967,16 @@ func (m *MockNotifications) EXPECT() *MockNotificationsMockRecorder {
 }
 
 // Notify mocks base method.
-func (m *MockNotifications) Notify(level notifications.Level, msg string, args ...any) error {
+func (m *MockNotifications) Notify(level notifications.Level, msg string, args ...any) (string, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{level, msg}
 	for _, a := range args {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "Notify", varargs...)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // Notify indicates an expected call of Notify.
@@ -986,15 +987,16 @@ func (mr *MockNotificationsMockRecorder) Notify(level, msg any, args ...any) *go
 }
 
 // NotifyOnce mocks base method.
-func (m *MockNotifications) NotifyOnce(level notifications.Level, msg string, args ...any) error {
+func (m *MockNotifications) NotifyOnce(level notifications.Level, msg string, args ...any) (string, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{level, msg}
 	for _, a := range args {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "NotifyOnce", varargs...)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // NotifyOnce indicates an expected call of NotifyOnce.
@@ -1176,15 +1178,16 @@ func (mr *MockBrowserMockRecorder) Focus() *gomock.Call {
 }
 
 // Notify mocks base method.
-func (m *MockBrowser) Notify(level notifications.Level, msg string, args ...any) error {
+func (m *MockBrowser) Notify(level notifications.Level, msg string, args ...any) (string, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{level, msg}
 	for _, a := range args {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "Notify", varargs...)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // Notify indicates an expected call of Notify.
@@ -1195,15 +1198,16 @@ func (mr *MockBrowserMockRecorder) Notify(level, msg any, args ...any) *gomock.C
 }
 
 // NotifyOnce mocks base method.
-func (m *MockBrowser) NotifyOnce(level notifications.Level, msg string, args ...any) error {
+func (m *MockBrowser) NotifyOnce(level notifications.Level, msg string, args ...any) (string, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{level, msg}
 	for _, a := range args {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "NotifyOnce", varargs...)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // NotifyOnce indicates an expected call of NotifyOnce.

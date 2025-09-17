@@ -27,9 +27,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"hash/fnv"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -647,26 +645,28 @@ func (c *Component) DispatchEvent(ev textapi.Event) (handled bool) {
 }
 
 // Notify formats the given msg and args and displays it on next Draw.
-func (c *Component) Notify(level notifications.Level, msg string, args ...interface{}) error {
-	c.notifier.Notify(level, msg, args...)
-	return nil
+func (c *Component) Notify(level notifications.Level, msg string, args ...interface{}) (
+	string, error,
+) {
+	return c.notifier.Notify(level, msg, args...), nil
 }
 
 // NotifyOnce behaves like Notify, but only sends this notification once.
-func (c *Component) NotifyOnce(level notifications.Level, msg string, args ...interface{}) error {
+func (c *Component) NotifyOnce(level notifications.Level, msg string, args ...interface{}) (
+	string, error,
+) {
 	ctx := context.Background()
-	id := nonCryptoHashString(fmt.Sprintf("__notify_once_%q", fmt.Sprintf(msg, args...)))
+	id := c.notifier.NotificationID(level, msg, args)
 	var value storedNotification
 	value.ID = id
 	err := c.storage.Create(ctx, id, value)
 	if err == document.ErrAlreadyExists {
-		return nil
+		return "", nil
 	}
 	if err != nil {
-		return fmt.Errorf("storage create: %v", err)
+		return "", fmt.Errorf("storage create: %v", err)
 	}
-	c.notifier.Notify(level, msg, args...)
-	return nil
+	return c.notifier.Notify(level, msg, args...), nil
 }
 
 // CloseNotifications closes all open notifications.
@@ -1306,13 +1306,8 @@ func (w wrapEditor) Handle(ev term.Event) (exit, handled bool) {
 }
 
 type notifier interface {
-	Notify(level notifications.Level, msg string, args ...interface{})
-}
-
-func nonCryptoHashString(s string) string {
-	h := fnv.New64a()
-	h.Write([]byte(s))
-	return strconv.FormatUint(h.Sum64(), 10)
+	Notify(level notifications.Level, msg string, args ...interface{}) string
+	NotificationID(level notifications.Level, msg string, args ...interface{}) string
 }
 
 // stand-in type for NotifyOnce

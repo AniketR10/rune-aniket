@@ -27,7 +27,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"math"
+	"strconv"
 	"sync"
 	"time"
 
@@ -175,8 +177,14 @@ func (n *Container) Resize(width, height int) {
 	n.vlist.Resize(effectiveWidth, height)
 }
 
+// ID returns the ID of a given notification, as it would be
+// returned by Notify.
+func (n *Container) ID(level Level, msg string) string {
+	return nonCryptoHashString(fmt.Sprintf("noti_%q", msg))
+}
+
 // Notify creates a new notification with the given msg and level.
-func (n *Container) Notify(level Level, msg string) {
+func (n *Container) Notify(level Level, msg string) string {
 	const baselineChars = len("this is a simple notification.")
 	duration := n.cfg.AutoClose
 	if len(msg) > baselineChars {
@@ -203,6 +211,8 @@ func (n *Container) Notify(level Level, msg string) {
 	n.notifications[msg] = &notificationTicket{el: el, cancelCtx: cancel}
 
 	n.startAutoClose(ctx, cancel, el, msg)
+
+	return n.ID(level, msg)
 }
 
 // CloseAll closes all open notifications.
@@ -357,4 +367,10 @@ func (n *Container) startAutoClose(
 type notificationTicket struct {
 	cancelCtx func()
 	el        component.ListNode
+}
+
+func nonCryptoHashString(s string) string {
+	h := fnv.New64a()
+	h.Write([]byte(s))
+	return strconv.FormatUint(h.Sum64(), 10)
 }

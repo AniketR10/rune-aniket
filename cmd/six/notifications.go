@@ -39,7 +39,7 @@ type protectedNotifications struct {
 
 func (n *protectedNotifications) Notify(
 	level notifications.Level, msg string, args ...interface{},
-) error {
+) (string, error) {
 	n.locker.Lock()
 	defer n.locker.Unlock()
 	return n.notifications.Notify(level, msg, args...)
@@ -47,7 +47,7 @@ func (n *protectedNotifications) Notify(
 
 func (n *protectedNotifications) NotifyOnce(
 	level notifications.Level, msg string, args ...interface{},
-) error {
+) (string, error) {
 	n.locker.Lock()
 	defer n.locker.Unlock()
 	return n.notifications.NotifyOnce(level, msg, args...)

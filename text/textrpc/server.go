@@ -185,7 +185,7 @@ func (s *Server) SubscribeCommand(srv Editor_SubscribeCommandServer) error {
 			case errMsg := <-clientStream.handleCommand:
 				if errMsg != "" {
 					s.editor.Lock()
-					err := s.editor.Notify(notifications.LevelError, errMsg)
+					_, err := s.editor.Notify(notifications.LevelError, errMsg)
 					if err != nil {
 						s.log(log.ErrorLevel, "%s", errMsg)
 						s.log(log.WarnLevel, "notify: %v", err)

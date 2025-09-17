@@ -103,11 +103,15 @@ func (b toBrowser) Window(id uint64) (browser.Window, bool) {
 	return NopWindow(), true
 }
 
-func (b toBrowser) Notify(level notifications.Level, msg string, args ...interface{}) error {
+func (b toBrowser) Notify(level notifications.Level, msg string, args ...interface{}) (
+	string, error,
+) {
 	return b.b.Notify(level, msg, args...)
 }
 
-func (b toBrowser) NotifyOnce(level notifications.Level, msg string, args ...interface{}) error {
+func (b toBrowser) NotifyOnce(
+	level notifications.Level, msg string, args ...interface{},
+) (string, error) {
 	return b.b.NotifyOnce(level, msg, args...)
 }
 

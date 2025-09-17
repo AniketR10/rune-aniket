@@ -195,12 +195,12 @@ func (n nopBrowser) PublishEvent(ev term.Event) error {
 	return nil
 }
 
-func (n nopBrowser) Notify(notifications.Level, string, ...interface{}) error {
-	return nil
+func (n nopBrowser) Notify(notifications.Level, string, ...interface{}) (string, error) {
+	return "", nil
 }
 
-func (n nopBrowser) NotifyOnce(notifications.Level, string, ...interface{}) error {
-	return nil
+func (n nopBrowser) NotifyOnce(notifications.Level, string, ...interface{}) (string, error) {
+	return "", nil
 }
 
 func (n nopBrowser) Tab(

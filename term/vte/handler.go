@@ -141,7 +141,8 @@ func (e *Handler) Init(
 		}
 		if logErr != nil && !errors.Is(logErr, io.EOF) && !errors.Is(logErr, context.Canceled) {
 			e.log(log.ErrorLevel, "terminal run: %v", logErr)
-			_ = e.notifications.Notify(notifications.LevelError, "terminal run: %v", logErr)
+			_, _ = e.notifications.Notify(notifications.LevelError,
+				"terminal run: %v", logErr)
 		}
 	})
 
@@ -201,7 +202,8 @@ func (e *Handler) Resize(width, height int) {
 		e.log(log.ErrorLevel, "terminal set size: %s", err)
 		// do not notify if already closed
 		if !e.exit.Load() {
-			_ = e.notifications.Notify(notifications.LevelError, "terminal set size: %v", err)
+			_, _ = e.notifications.Notify(notifications.LevelError,
+				"terminal set size: %v", err)
 		}
 		return
 	}
@@ -454,7 +456,7 @@ func (e *Handler) log(level log.Level, msg string, args ...any) {
 }
 
 func (e *Handler) notify(level notifications.Level, msg string, args ...any) {
-	if err := e.notifications.Notify(level, msg, args...); err != nil {
+	if _, err := e.notifications.Notify(level, msg, args...); err != nil {
 		e.log(log.ErrorLevel, "notify: %v", err)
 	}
 }

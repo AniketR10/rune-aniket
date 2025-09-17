@@ -25,6 +25,8 @@ package text
 
 import (
 	"fmt"
+	"hash/fnv"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -41,10 +43,12 @@ func TestNotifyOnce(t *testing.T) {
 		mock := newTestNotify()
 		b.notifier = mock
 
-		require.NoError(t, b.NotifyOnce(notifications.LevelError, "a"))
+		_, err = b.NotifyOnce(notifications.LevelError, "a")
+		require.NoError(t, err)
 		assert.Equal(t, 1, mock.messages["a"])
 
-		require.NoError(t, b.NotifyOnce(notifications.LevelError, "a"), fmt.Sprintf("%+v", svc))
+		_, err = b.NotifyOnce(notifications.LevelError, "a", fmt.Sprintf("%+v", svc))
+		require.NoError(t, err)
 		assert.Equal(t, 1, mock.messages["a"])
 	})
 
@@ -54,10 +58,12 @@ func TestNotifyOnce(t *testing.T) {
 		mock := newTestNotify()
 		b.notifier = mock
 
-		require.NoError(t, b.NotifyOnce(notifications.LevelError, "a %d", 0))
+		_, err = b.NotifyOnce(notifications.LevelError, "a %d", 0)
+		require.NoError(t, err)
 		assert.Equal(t, 1, mock.messages["a 0"])
 
-		require.NoError(t, b.NotifyOnce(notifications.LevelError, "a %d", 1))
+		_, err = b.NotifyOnce(notifications.LevelError, "a %d", 1)
+		require.NoError(t, err)
 		assert.Equal(t, 1, mock.messages["a 1"])
 		assert.Equal(t, 1, mock.messages["a 0"])
 	})
@@ -68,10 +74,12 @@ func TestNotifyOnce(t *testing.T) {
 		mock := newTestNotify()
 		b.notifier = mock
 
-		require.NoError(t, b.NotifyOnce(notifications.LevelError, "a %d", 0))
+		_, err = b.NotifyOnce(notifications.LevelError, "a %d", 0)
+		require.NoError(t, err)
 		assert.Equal(t, 1, mock.messages["a 0"])
 
-		require.NoError(t, b.NotifyOnce(notifications.LevelError, "a %d", 0))
+		_, err = b.NotifyOnce(notifications.LevelError, "a %d", 0)
+		require.NoError(t, err)
 		assert.Equal(t, 1, mock.messages["a 0"])
 	})
 
@@ -81,13 +89,15 @@ func TestNotifyOnce(t *testing.T) {
 		mock := newTestNotify()
 		b.notifier = mock
 
-		require.NoError(t, b.NotifyOnce(notifications.LevelError, "a"))
+		_, err = b.NotifyOnce(notifications.LevelError, "a")
+		require.NoError(t, err)
 		assert.Equal(t, 1, mock.messages["a"])
 
 		b.Notify(notifications.LevelError, "a")
 		assert.Equal(t, 2, mock.messages["a"])
 
-		require.NoError(t, b.NotifyOnce(notifications.LevelError, "a"))
+		_, err = b.NotifyOnce(notifications.LevelError, "a")
+		require.NoError(t, err)
 		assert.Equal(t, 2, mock.messages["a"])
 	})
 }
@@ -102,8 +112,18 @@ func newTestNotify() *testNotifier {
 	return ret
 }
 
-func (t *testNotifier) Notify(level notifications.Level, msg string, args ...interface{}) {
+func (t *testNotifier) Notify(
+	level notifications.Level, msg string, args ...interface{},
+) string {
 	formatted := fmt.Sprintf(msg, args...)
 	t.messages[formatted] = t.messages[formatted] + 1
-	return
+	return t.NotificationID(level, msg, args...)
+}
+
+func (t *testNotifier) NotificationID(
+	level notifications.Level, msg string, args ...interface{},
+) string {
+	h := fnv.New64a()
+	h.Write([]byte(fmt.Sprintf(msg, args...)))
+	return strconv.FormatUint(h.Sum64(), 10)
 }

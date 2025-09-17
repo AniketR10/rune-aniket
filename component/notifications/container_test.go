@@ -27,6 +27,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/comptest"
 	"unstable.build/go-tui/term"
@@ -207,4 +208,15 @@ XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX`,
 	}
 
 	comptest.TestComponent(t, c, w, tests)
+}
+
+func TestNotificationID(t *testing.T) {
+	t.Run("two notifications with the same message have the same ID", func(t *testing.T) {
+		c := New(&component.TestComponent{}, Config{Width: 10, AutoClose: 10 * time.Second})
+		assert.Equal(t, c.ID(LevelError, "test: 1"), c.ID(LevelWarn, "test: 1"))
+	})
+	t.Run("two notifications with different messages have different IDs", func(t *testing.T) {
+		c := New(&component.TestComponent{}, Config{Width: 10, AutoClose: 10 * time.Second})
+		assert.NotEqual(t, c.ID(LevelError, "test: 1"), c.ID(LevelError, "test: 2"))
+	})
 }

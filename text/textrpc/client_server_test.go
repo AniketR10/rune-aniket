@@ -554,9 +554,9 @@ func TestClientServerIntegration(t *testing.T) {
 		wg.Add(1)
 		noti.EXPECT().Notify(gomock.Any(), gomock.Any(), gomock.Any()).
 			Times(1).
-			DoAndReturn(func(notifications.Level, string, ...any) error {
+			DoAndReturn(func(notifications.Level, string, ...any) (string, error) {
 				wg.Done()
-				return nil
+				return "", nil
 			})
 		s.editor.Lock()
 		err = subscribedClient.HandleCommand(context.Background(), command)
@@ -987,11 +987,11 @@ type nopNotifications struct{}
 
 func (n nopNotifications) Notify(
 	level notifications.Level, msg string, args ...interface{},
-) error {
-	return nil
+) (string, error) {
+	return "", nil
 }
 func (n nopNotifications) NotifyOnce(
 	level notifications.Level, msg string, args ...interface{},
-) error {
-	return nil
+) (string, error) {
+	return "", nil
 }

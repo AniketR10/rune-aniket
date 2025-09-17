@@ -26,6 +26,7 @@ package extension
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -48,17 +49,17 @@ type testNotifications struct {
 
 func (n *testNotifications) Notify(
 	level notifications.Level, msg string, args ...interface{},
-) error {
+) (string, error) {
 	n.msg = append(n.msg, notiRecord{
 		level: level,
 		text:  fmt.Sprintf(msg, args...)},
 	)
-	return nil
+	return strconv.Itoa(len(n.msg)), nil
 }
 
 func (n *testNotifications) NotifyOnce(
 	level notifications.Level, msg string, args ...interface{},
-) error {
+) (string, error) {
 	return n.Notify(level, msg, args...)
 }
 

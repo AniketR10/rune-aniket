@@ -269,6 +269,7 @@ func (x *NotifyRequest) GetLevel() uint32 {
 
 type NotifyResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -301,6 +302,13 @@ func (x *NotifyResponse) ProtoReflect() protoreflect.Message {
 // Deprecated: Use NotifyResponse.ProtoReflect.Descriptor instead.
 func (*NotifyResponse) Descriptor() ([]byte, []int) {
 	return file_browserrpc_browser_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *NotifyResponse) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
 }
 
 type Mapping struct {
@@ -1518,8 +1526,9 @@ const file_browserrpc_browser_proto_rawDesc = "" +
 	"\x03uri\x18\x01 \x01(\tR\x03uri\"7\n" +
 	"\rNotifyRequest\x12\x10\n" +
 	"\x03msg\x18\x01 \x01(\tR\x03msg\x12\x14\n" +
-	"\x05level\x18\x02 \x01(\rR\x05level\"\x10\n" +
-	"\x0eNotifyResponse\"G\n" +
+	"\x05level\x18\x02 \x01(\rR\x05level\" \n" +
+	"\x0eNotifyResponse\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"G\n" +
 	"\aMapping\x12\x1f\n" +
 	"\x04from\x18\x01 \x01(\v2\v.term.EventR\x04from\x12\x1b\n" +
 	"\x02to\x18\x02 \x01(\v2\v.term.EventR\x02to\"u\n" +

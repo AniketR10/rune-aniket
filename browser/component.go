@@ -469,8 +469,15 @@ func (c *Component) Bar(cfg browserapi.BarConfig, h tui.Handler) {
 }
 
 // Notify formats the given msg and args and displays it on next Draw.
-func (c *Component) Notify(level notifications.Level, msg string, args ...interface{}) {
-	c.container.Notify(level, fmt.Sprintf(msg, args...))
+func (c *Component) Notify(level notifications.Level, msg string, args ...interface{}) string {
+	return c.container.Notify(level, fmt.Sprintf(msg, args...))
+}
+
+// NotificationID returns the unique ID of a given notification.
+func (c *Component) NotificationID(
+	level notifications.Level, msg string, args ...interface{},
+) string {
+	return c.container.ID(level, fmt.Sprintf(msg, args...))
 }
 
 // Resize satisfies tui.Component

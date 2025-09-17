@@ -170,14 +170,35 @@ func (m *Mocknotifier) EXPECT() *MocknotifierMockRecorder {
 	return m.recorder
 }
 
-// Notify mocks base method.
-func (m *Mocknotifier) Notify(level notifications.Level, msg string, args ...any) {
+// NotificationID mocks base method.
+func (m *Mocknotifier) NotificationID(level notifications.Level, msg string, args ...any) string {
 	m.ctrl.T.Helper()
 	varargs := []any{level, msg}
 	for _, a := range args {
 		varargs = append(varargs, a)
 	}
-	m.ctrl.Call(m, "Notify", varargs...)
+	ret := m.ctrl.Call(m, "NotificationID", varargs...)
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// NotificationID indicates an expected call of NotificationID.
+func (mr *MocknotifierMockRecorder) NotificationID(level, msg any, args ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{level, msg}, args...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotificationID", reflect.TypeOf((*Mocknotifier)(nil).NotificationID), varargs...)
+}
+
+// Notify mocks base method.
+func (m *Mocknotifier) Notify(level notifications.Level, msg string, args ...any) string {
+	m.ctrl.T.Helper()
+	varargs := []any{level, msg}
+	for _, a := range args {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "Notify", varargs...)
+	ret0, _ := ret[0].(string)
+	return ret0
 }
 
 // Notify indicates an expected call of Notify.

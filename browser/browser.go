@@ -152,8 +152,8 @@ type TabManager interface {
 // Notifications is the interface that wraps methods to display
 // messages to the user.
 type Notifications interface {
-	Notify(level notifications.Level, msg string, args ...interface{}) error
-	NotifyOnce(level notifications.Level, msg string, args ...interface{}) error
+	Notify(level notifications.Level, msg string, args ...interface{}) (string, error)
+	NotifyOnce(level notifications.Level, msg string, args ...interface{}) (string, error)
 }
 
 // ResourceOpener is the interface that wraps the method Open.

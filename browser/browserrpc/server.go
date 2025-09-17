@@ -524,7 +524,7 @@ func (s *Server) getResourceHandler(uriStr string) (browserapi.Handler, error) {
 
 func (s *Server) setBrowserMessage(
 	level notifications.Level, msg string, once bool,
-) error {
+) (string, error) {
 	s.browser.Lock()
 	defer s.browser.Unlock()
 
@@ -547,11 +547,13 @@ func (s *Server) notify(
 	default:
 		return nil, status.Error(codes.InvalidArgument, "invalid level")
 	}
-	err := s.setBrowserMessage(level, msg, once)
+	id, err := s.setBrowserMessage(level, msg, once)
 	if err != nil {
 		return nil, err
 	}
-	return new(NotifyResponse), nil
+	resp := new(NotifyResponse)
+	resp.Id = id
+	return resp, nil
 }
 
 func protoToModelOrientation(p Orientation) (o browserapi.Orientation) {

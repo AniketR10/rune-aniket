@@ -679,7 +679,7 @@ func (h *aiEditorHandler) wrapDialogueHandler(
 			mu.Unlock()
 			if cancelFn != nil {
 				cancelFn()
-				_ = comp.h.n.Notify(notifications.LevelInfo, "canceled completion request")
+				_, _ = comp.h.n.Notify(notifications.LevelInfo, "canceled completion request")
 			}
 			handled = true
 			return
@@ -719,7 +719,7 @@ func drawMessage(
 	}
 	if it.Err() != nil {
 		if !errors.Is(it.Err(), context.Canceled) {
-			err := noti.Notify(notifications.LevelError, "stream completion: %v", it.Err())
+			_, err := noti.Notify(notifications.LevelError, "stream completion: %v", it.Err())
 			if err != nil {
 				log.Errorf("notify: %v", err)
 			}
@@ -808,7 +808,7 @@ func createCompletions(
 				// then the next iteration will handle it
 				continue
 			}
-			err := noti.Notify(notifications.LevelError,
+			_, err := noti.Notify(notifications.LevelError,
 				"dialogue manager create completion: %v", err)
 			if err != nil {
 				log.Errorf("notify: %v", err)

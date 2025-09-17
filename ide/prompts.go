@@ -113,7 +113,7 @@ func (h *openRestorePromptHandler) OnSelect(idx int, option string) {
 	}
 
 	if err != nil {
-		_ = h.wm.empty.Browser().Notify(notifications.LevelError, err.Error())
+		_, _ = h.wm.empty.Browser().Notify(notifications.LevelError, err.Error())
 	}
 }
 
@@ -197,14 +197,14 @@ func (h *createWorkspaceHandler) OnSelect(
 		// and then proceed to MkdirAll from that root.
 		parent, err := h.createParentWorkspace(h.uri)
 		if err != nil {
-			_ = h.ex.Browser().Notify(notifications.LevelError,
+			_, _ = h.ex.Browser().Notify(notifications.LevelError,
 				"create parent workspace: %v", err.Error())
 			log.Errorf("create parent to mkdirall of %s: %v", path, err)
 			return
 		}
 		err = parent.MkdirAll(path, 0755)
 		if err != nil {
-			_ = h.ex.Browser().Notify(notifications.LevelError, "mkdirall: %v", err)
+			_, _ = h.ex.Browser().Notify(notifications.LevelError, "mkdirall: %v", err)
 			log.Errorf("mkdirall %s: %v", path, err)
 			return
 		}
@@ -213,7 +213,7 @@ func (h *createWorkspaceHandler) OnSelect(
 
 		err = h.wm.addWorkspace(h.uri, "", nil, true, true, -1)
 		if err != nil {
-			_ = h.ex.Browser().Notify(notifications.LevelError, err.Error())
+			_, _ = h.ex.Browser().Notify(notifications.LevelError, err.Error())
 			log.Errorf("add workspace %s: %v", h.uri, err)
 			return
 		}
@@ -325,7 +325,7 @@ func (h *fileChangedPrompt) discard() {
 func (h *fileChangedPrompt) overwrite() {
 	h.selected = true
 	if err := h.ex.comp.OverwriteTab(h.h); err != nil {
-		_ = h.ex.comp.Notify(notifications.LevelError, "failed to overwrite tab: %v", err)
+		_, _ = h.ex.comp.Notify(notifications.LevelError, "failed to overwrite tab: %v", err)
 	}
 }
 
@@ -367,11 +367,11 @@ func (h *areYouSurePrompt) discard() {
 	h.selected = true
 	if h.reload {
 		if err := h.ex.comp.ReloadTab(h.h); err != nil {
-			_ = h.ex.comp.Notify(notifications.LevelError, "failed to reload tab: %v", err)
+			_, _ = h.ex.comp.Notify(notifications.LevelError, "failed to reload tab: %v", err)
 		}
 	} else {
 		if err := h.ex.comp.RemoveTab(h.h); err != nil {
-			_ = h.ex.comp.Notify(notifications.LevelError, "failed to remove tab: %v", err)
+			_, _ = h.ex.comp.Notify(notifications.LevelError, "failed to remove tab: %v", err)
 		}
 	}
 }

@@ -1838,7 +1838,7 @@ func (h *lspEditorHandler) browseLocations(
 
 		err := h.goToLocation(win, textToLocation[text])
 		if err != nil {
-			_ = h.m.Notify(notifications.LevelError, "go to location: %s", err)
+			_, _ = h.m.Notify(notifications.LevelError, "go to location: %s", err)
 		}
 	})
 

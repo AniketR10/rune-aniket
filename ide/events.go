@@ -132,7 +132,7 @@ func handleFSChange(ex *ex, flag workspaceapi.Event, uri workspaceapi.URI) {
 			} else if os.IsNotExist(err) {
 				ex.openFileChangedPrompt(uri, t, "renamed on", false)
 			} else {
-				_ = ex.comp.Notify(notifications.LevelError,
+				_, _ = ex.comp.Notify(notifications.LevelError,
 					"Failed to reload renamed file %s: stat: %v", uri.Path(), err)
 			}
 		case workspaceapi.Remove:
@@ -145,10 +145,10 @@ func handleFSChange(ex *ex, flag workspaceapi.Event, uri workspaceapi.URI) {
 	case workspaceapi.Create, workspaceapi.Write:
 		err := ex.comp.ReloadTab(t)
 		if err != nil {
-			_ = ex.comp.Notify(notifications.LevelError,
+			_, _ = ex.comp.Notify(notifications.LevelError,
 				"Failed to reload file %s: %v", uri.Name(), err)
 		} else {
-			_ = ex.comp.Notify(notifications.LevelInfo,
+			_, _ = ex.comp.Notify(notifications.LevelInfo,
 				"File '%s' changed on disk and does not have unflushed changes "+
 					"so it was reload it", uri.Name())
 		}
@@ -158,24 +158,24 @@ func handleFSChange(ex *ex, flag workspaceapi.Event, uri workspaceapi.URI) {
 		if err == nil {
 			err := ex.comp.ReloadTab(t)
 			if err == nil {
-				_ = ex.comp.Notify(notifications.LevelInfo,
+				_, _ = ex.comp.Notify(notifications.LevelInfo,
 					"File '%s' was renamed on disk and does not have unflushed changes "+
 						"so it was reload it", uri.Name())
 				return
 			}
-			_ = ex.comp.Notify(notifications.LevelError,
+			_, _ = ex.comp.Notify(notifications.LevelError,
 				"Failed to reload renamed file %s: %v", uri.Name(), err)
 			return
 		}
 		if os.IsNotExist(err) {
 			if err := ex.comp.RemoveTab(t); err == nil {
-				_ = ex.comp.Notify(notifications.LevelInfo,
+				_, _ = ex.comp.Notify(notifications.LevelInfo,
 					"File '%s' was renamed on disk and does not have unflushed changes "+
 						"so it was closed", uri.Name())
 			}
 			return
 		}
-		_ = ex.comp.Notify(notifications.LevelError,
+		_, _ = ex.comp.Notify(notifications.LevelError,
 			"Failed to reload renamed file %s: stat: %v", uri.Name(), err)
 
 		// don't manage workspaceapi.Remove: it's sometimes dispatched

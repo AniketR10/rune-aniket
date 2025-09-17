@@ -71,7 +71,7 @@ and lose all the new updates?`, file)
 				}
 				if err != nil {
 					c.log(log.ErrorLevel, "recovery prompt: %v", err)
-					_ = c.Notify(notifications.LevelError, "%v", err)
+					_, _ = c.Notify(notifications.LevelError, "%v", err)
 					return
 				}
 			},
@@ -147,7 +147,7 @@ func (c *Component) openRecoveryPrompt(file workspaceapi.URI) {
 				}
 				if err != nil {
 					c.log(log.ErrorLevel, "recovery prompt: %v", err)
-					_ = c.Notify(notifications.LevelError, "%v", err)
+					_, _ = c.Notify(notifications.LevelError, "%v", err)
 				}
 			},
 			func() error { return nil }))

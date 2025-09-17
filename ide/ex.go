@@ -780,28 +780,32 @@ func (e *ex) sendNotificationInfo(args ...string) error {
 	if len(args) == 0 {
 		return errors.New("command expects at least one argument")
 	}
-	return e.comp.Notify(notifications.LevelInfo, strings.Join(args, " "))
+	_, err := e.comp.Notify(notifications.LevelInfo, strings.Join(args, " "))
+	return err
 }
 
 func (e *ex) sendNotificationSuccess(args ...string) error {
 	if len(args) == 0 {
 		return errors.New("command expects at least one argument")
 	}
-	return e.comp.Notify(notifications.LevelSuccess, strings.Join(args, " "))
+	_, err := e.comp.Notify(notifications.LevelSuccess, strings.Join(args, " "))
+	return err
 }
 
 func (e *ex) sendNotificationWarning(args ...string) error {
 	if len(args) == 0 {
 		return errors.New("command expects at least one argument")
 	}
-	return e.comp.Notify(notifications.LevelWarn, strings.Join(args, " "))
+	_, err := e.comp.Notify(notifications.LevelWarn, strings.Join(args, " "))
+	return err
 }
 
 func (e *ex) sendNotificationError(args ...string) error {
 	if len(args) == 0 {
 		return errors.New("command expects at least one argument")
 	}
-	return e.comp.Notify(notifications.LevelError, strings.Join(args, " "))
+	_, err := e.comp.Notify(notifications.LevelError, strings.Join(args, " "))
+	return err
 }
 
 func (e *ex) windowtogglemaximize(args ...string) error {
@@ -834,7 +838,7 @@ func (e *ex) pasteFromClipboard(args ...string) error {
 		return fmt.Errorf("clipboard paste: %w", err)
 	}
 	if len(data.Text) == 0 {
-		_ = e.Browser().Notify(notifications.LevelInfo, "nothing to paste")
+		_, _ = e.Browser().Notify(notifications.LevelInfo, "nothing to paste")
 		return nil
 	}
 
@@ -859,17 +863,17 @@ func (e *ex) copyToClipboard(args ...string) error {
 	handler := e.focusHandler()
 	data, ok := handler.Selection()
 	if !ok {
-		_ = e.Browser().Notify(notifications.LevelInfo, "nothing to copy")
+		_, _ = e.Browser().Notify(notifications.LevelInfo, "nothing to copy")
 		return nil
 	}
 	err := e.clip.Copy(clipboard.DefaultRegisterID, clipboard.Data{Text: data})
 	if err != nil {
-		_ = e.Browser().Notify(notifications.LevelError,
+		_, _ = e.Browser().Notify(notifications.LevelError,
 			"failed to copy to clipboard: %v", err)
 		err = fmt.Errorf("clipboard copy: %w", err)
 		return err
 	}
-	_ = e.Browser().Notify(notifications.LevelSuccess, "copied to clipboard")
+	_, _ = e.Browser().Notify(notifications.LevelSuccess, "copied to clipboard")
 	return nil
 }
 
@@ -1420,7 +1424,7 @@ func (e *ex) handlePrompt(ev term.Event) (exit, handled bool) {
 	if ok && len(cmdsAndArgs[0]) == 1 && cmdsAndArgs[0][0] == cmdClipboardPaste {
 		err := e.pasteFromClipboard()
 		if err != nil {
-			_ = e.Browser().Notify(notifications.LevelError, "%v", err)
+			_, _ = e.Browser().Notify(notifications.LevelError, "%v", err)
 		}
 		return
 	}

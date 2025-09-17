@@ -508,7 +508,7 @@ func (h *syntaxHandler) browseNodes(
 
 		err := h.goToLocation(win, uri, textToLocation[text])
 		if err != nil {
-			_ = h.m.Notify(notifications.LevelError, "go to location: %v", err)
+			_, _ = h.m.Notify(notifications.LevelError, "go to location: %v", err)
 		}
 	})
 

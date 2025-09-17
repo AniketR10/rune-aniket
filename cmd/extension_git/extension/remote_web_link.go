@@ -190,7 +190,7 @@ func (c *copyRemoteURL) clipboardCopy(text string) error {
 func (c *copyRemoteURL) notify(
 	level notifications.Level, msg string, args ...interface{},
 ) {
-	_ = c.noti.Notify(level, msg, args...)
+	_, _ = c.noti.Notify(level, msg, args...)
 }
 
 // expand rewrites s to replace {k} with match[k] for each key k in match. All

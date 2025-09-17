@@ -69,12 +69,15 @@ func TestServerNotify(t *testing.T) {
 		defer ctrl.Finish()
 		s, mock := newServerWithNoBroker(ctrl)
 
-		mock.EXPECT().Notify(gomock.Eq(notifications.LevelSuccess), gomock.Eq("blah")).Return(nil)
+		mock.EXPECT().
+			Notify(gomock.Eq(notifications.LevelSuccess), gomock.Eq("blah")).
+			Return("1234", nil)
 
 		req := NotifyRequest{Level: uint32(notifications.LevelSuccess), Msg: "blah"}
 		res, err := s.Notify(ctx, &req)
 		require.NoError(t, err)
 		assert.NotNil(t, res)
+		assert.Equal(t, "1234", res.GetId())
 	})
 
 	t.Run("bubbles up Notify Browser error", func(t *testing.T) {
@@ -82,7 +85,7 @@ func TestServerNotify(t *testing.T) {
 		defer ctrl.Finish()
 		s, mock := newServerWithNoBroker(ctrl)
 
-		mock.EXPECT().Notify(gomock.Any(), gomock.Any()).Return(errors.New("oopsie daisy"))
+		mock.EXPECT().Notify(gomock.Any(), gomock.Any()).Return("", errors.New("oopsie daisy"))
 
 		_, err := s.Notify(ctx, new(NotifyRequest))
 		require.Error(t, err)
