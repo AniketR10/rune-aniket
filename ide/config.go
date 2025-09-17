@@ -609,6 +609,58 @@ func (c ideConfig) notificationsCharset(def component.FrameCharSet) (
 	return
 }
 
+func (c ideConfig) notificationsProgressRunes(def notifications.ProgressRunes) (
+	cs notifications.ProgressRunes,
+) {
+	cs = def
+	cfg, ok := c.notifications()
+	if !ok {
+		return
+	}
+	cfgCs, err := getProgressRunes(cfg, cs)
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors[fmt.Sprintf("notifications.%s", "progress_format")] = err
+		}
+		return
+	}
+	cs = cfgCs
+
+	return
+}
+
+func getProgressRunes(c config.Config, def notifications.ProgressRunes) (
+	notifications.ProgressRunes, error,
+) {
+	cfg, err := c.GetConfig("progress_format")
+	if err != nil {
+		return def, err
+	}
+
+	ret := def
+	r, err := cfg.GetRune("current")
+	if err == nil {
+		ret.Current = r
+	}
+	r, err = cfg.GetRune("remain")
+	if err == nil {
+		ret.Remain = r
+	}
+	r, err = cfg.GetRune("current_tip")
+	if err == nil {
+		ret.CurrentTip = r
+	}
+	r, err = cfg.GetRune("end")
+	if err == nil {
+		ret.End = r
+	}
+	r, err = cfg.GetRune("start")
+	if err == nil {
+		ret.Start = r
+	}
+	return ret, nil
+}
+
 func (c ideConfig) notificationsBool(key string, def bool) (ret bool) {
 	ret = def
 	cfg, ok := c.notifications()
@@ -650,6 +702,7 @@ func (c ideConfig) notificationsConfig() notifications.Config {
 	ret.FrameCharSet = c.notificationsCharset(ret.FrameCharSet)
 	ret.ProgressBar = c.notificationsBool("progress_bar", ret.ProgressBar)
 	ret.AutoClose = c.notificationsDuration("auto_close", ret.AutoClose)
+	ret.ProgressRunes = c.notificationsProgressRunes(ret.ProgressRunes)
 	return ret
 }
 

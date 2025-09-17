@@ -38,6 +38,7 @@ import (
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/command"
 	"unstable.build/go-tui/term"
@@ -138,6 +139,12 @@ command:
 notifications:
     auto_close: 1s
     progress_bar: false
+    progress_format:
+        start: "{"
+        current: "-"
+        current_tip: ">"
+        remain: "_"
+        end: "}"
     attr:
         bg: red
         fg: "#f0f0f0"
@@ -409,14 +416,21 @@ func TestConfigSetting(t *testing.T) {
 	expectedFUCs.Bottom = '┫'
 	assert.Equal(t, expectedFUCs, cfg.frameUnionCharset())
 
-	notifications := cfg.notificationsConfig()
-	assert.False(t, notifications.ProgressBar)
-	assert.Equal(t, 1*time.Second, notifications.AutoClose)
-	assert.Equal(t, component.FrameCharSetHighlight(), notifications.FrameCharSet)
+	noti := cfg.notificationsConfig()
+	assert.Equal(t, notifications.ProgressRunes{
+		Start:      '{',
+		Current:    '-',
+		CurrentTip: '>',
+		Remain:     '_',
+		End:        '}',
+	}, noti.ProgressRunes)
+	assert.False(t, noti.ProgressBar)
+	assert.Equal(t, 1*time.Second, noti.AutoClose)
+	assert.Equal(t, component.FrameCharSetHighlight(), noti.FrameCharSet)
 	assert.Equal(t, term.Attributes{Fg: tcell.GetColor("#f0f0f0"), Bg: tcell.ColorRed},
-		notifications.Attributes)
+		noti.Attributes)
 	assert.Equal(t, term.Attributes{Fg: tcell.GetColor("#f0f0f0"), Bg: tcell.ColorRed},
-		notifications.BackgroundAttributes)
+		noti.BackgroundAttributes)
 
 	assert.Equal(t, term.Attributes{Fg: tcell.GetColor("#f0f0f0")}, cfg.focusTabAttr())
 	assert.Equal(t, term.Attributes{Fg: tcell.ColorWhite}, cfg.nonFocusTabAttr())
