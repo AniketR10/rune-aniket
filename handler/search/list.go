@@ -174,8 +174,9 @@ func (l *List) Push(ctx context.Context) chan<- []byte {
 	ctx, l.cancelPush = context.WithCancel(l.waitPushCtx)
 
 	datachan := make(chan []byte)
+	quitChan := l.quitChan
 	go debug.CapturePanicReport(func() {
-		l.consumeAsyncElements(ctx, cancelWait, datachan, l.quitChan)
+		l.consumeAsyncElements(ctx, cancelWait, datachan, quitChan)
 	})
 	return datachan
 }
