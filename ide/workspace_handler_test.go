@@ -550,11 +550,10 @@ func TestWorkspaceManagerClosePromptIntegration(t *testing.T) {
 		handlertest.TestHandlerSequence(t, h, 20, 10, cases)
 
 		m.mu.Lock()
-		defer m.mu.Unlock()
-
 		exit, handled := m.Handle(term.Event{Type: term.EventKey, Ch: 'y'})
 		assert.True(t, exit)
 		assert.True(t, handled)
+		m.mu.Unlock()
 
 		require.NoError(t, m.Close())
 	})
@@ -680,11 +679,10 @@ func TestWorkspaceManagerClosePromptIntegration(t *testing.T) {
 		handlertest.TestHandlerSequence(t, h, 20, 10, cases)
 
 		m.mu.Lock()
-		defer m.mu.Unlock()
-
 		exit, handled := m.Handle(term.Event{Type: term.EventKey, Ch: 'y'})
 		assert.True(t, exit)
 		assert.True(t, handled)
+		m.mu.Unlock()
 
 		require.NoError(t, m.Close())
 	})
@@ -724,7 +722,6 @@ func TestWorkspaceManagerClosePromptIntegration(t *testing.T) {
 		handlertest.TestHandlerSequence(t, h, 20, 10, cases)
 
 		m.mu.Lock()
-		defer m.mu.Unlock()
 
 		exit, handled := m.Handle(term.Event{Type: term.EventKey, Ch: 'n'})
 		assert.False(t, exit)
@@ -733,6 +730,8 @@ func TestWorkspaceManagerClosePromptIntegration(t *testing.T) {
 		exit, handled = m.Handle(term.Event{Type: term.EventNone})
 		assert.False(t, exit)
 		assert.True(t, handled)
+
+		m.mu.Unlock()
 
 		require.NoError(t, m.Close())
 	})
@@ -763,7 +762,6 @@ func TestWorkspaceManagerClosePromptIntegration(t *testing.T) {
 			handlertest.TestHandlerSequence(t, h, 20, 10, cases)
 
 			m.mu.Lock()
-			defer m.mu.Unlock()
 			exit, handled := m.Handle(term.Event{
 				Ch:  testCommandKey.Ch,
 				Mod: testCommandKey.Mod,
@@ -782,6 +780,8 @@ func TestWorkspaceManagerClosePromptIntegration(t *testing.T) {
 			exit, handled = m.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
 			assert.True(t, exit)
 			assert.True(t, handled)
+
+			m.mu.Unlock()
 
 			require.NoError(t, m.Close())
 		})
@@ -835,13 +835,14 @@ func TestWorkspaceManagerClosePromptIntegration(t *testing.T) {
 			mockShutdownShader.called = false
 
 			m.mu.Lock()
-			defer m.mu.Unlock()
 
 			// Cancel shader when answering "No" to exit prompt.
 			exit, handled := m.Handle(term.Event{Type: term.EventKey, Ch: 'n'})
 			assert.False(t, exit)
 			assert.True(t, handled)
 			assert.False(t, mockShutdownShader.called)
+
+			m.mu.Unlock()
 
 			require.NoError(t, m.Close())
 		})
@@ -1364,7 +1365,6 @@ func TestComponentOnTabsClickIntegration(t *testing.T) {
 	require.Equal(t, 0, called)
 
 	m.mu.Lock()
-	defer m.mu.Unlock()
 
 	_, handled := m.Handle(term.Event{Type: term.EventMouse, Key: term.MouseLeft})
 	assert.True(t, handled)
@@ -1373,6 +1373,8 @@ func TestComponentOnTabsClickIntegration(t *testing.T) {
 	_, handled = m.Handle(term.Event{Type: term.EventMouse, Key: term.MouseLeft, MouseY: 7})
 	assert.False(t, handled)
 	assert.Equal(t, 1, called)
+
+	m.mu.Unlock()
 
 	require.NoError(t, m.Close())
 }
@@ -1573,6 +1575,14 @@ func newTestWorkspaceManagerHandler(
 // deterministic usage of search list
 type testWorkspaceManagerHandler struct {
 	*workspaceManagerHandler
+}
+
+// mimic ide.IDE
+func (t *testWorkspaceManagerHandler) Close() error {
+	t.workspaceManagerHandler.mu.Lock()
+	defer t.workspaceManagerHandler.mu.Unlock()
+
+	return t.workspaceManagerHandler.Close()
 }
 
 func (t *testWorkspaceManagerHandler) Handle(ev term.Event) (bool, bool) {
