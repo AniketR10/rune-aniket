@@ -609,6 +609,23 @@ func (c ideConfig) notificationsCharset(def component.FrameCharSet) (
 	return
 }
 
+func (c ideConfig) notificationsPadding(def int) (ret int) {
+	ret = def
+	cfg, ok := c.notifications()
+	if !ok {
+		return
+	}
+	i, err := cfg.GetInt("padding")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors[fmt.Sprintf("notifications.%s", "padding")] = err
+		}
+		return
+	}
+	ret = i
+	return
+}
+
 func (c ideConfig) notificationsProgressRunes(def notifications.ProgressRunes) (
 	cs notifications.ProgressRunes,
 ) {
@@ -703,6 +720,7 @@ func (c ideConfig) notificationsConfig() notifications.Config {
 	ret.ProgressBar = c.notificationsBool("progress_bar", ret.ProgressBar)
 	ret.AutoClose = c.notificationsDuration("auto_close", ret.AutoClose)
 	ret.ProgressRunes = c.notificationsProgressRunes(ret.ProgressRunes)
+	ret.Padding = c.notificationsPadding(ret.Padding)
 	return ret
 }
 

@@ -138,6 +138,7 @@ command:
 
 notifications:
     auto_close: 1s
+    padding: 1
     progress_bar: false
     progress_format:
         start: "{"
@@ -417,6 +418,7 @@ func TestConfigSetting(t *testing.T) {
 	assert.Equal(t, expectedFUCs, cfg.frameUnionCharset())
 
 	noti := cfg.notificationsConfig()
+	assert.Equal(t, 1, noti.Padding)
 	assert.Equal(t, notifications.ProgressRunes{
 		Start:      '{',
 		Current:    '-',

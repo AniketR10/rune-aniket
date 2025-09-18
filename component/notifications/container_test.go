@@ -266,7 +266,7 @@ XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX`,
 			func() {
 				id := c.Notify(LevelInfo, "hello world")
 				c.UpdateProgress(id, "hola mon", 0, 10)
-				
+
 			}, `
 XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX┌────────┐
 XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX│ hola   │
@@ -287,7 +287,7 @@ XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX`,
 			func() {
 				id := c.Notify(LevelInfo, "hello world")
 				c.UpdateProgress(id, "hola mon", 1, 10)
-				
+
 			}, `
 XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX┌────────┐
 XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX│ hola   │
@@ -308,7 +308,7 @@ XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX`,
 			func() {
 				id := c.Notify(LevelInfo, "hello world")
 				c.UpdateProgress(id, "hola mon", 8, 10)
-				
+
 			}, `
 XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX┌────────┐
 XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX│ hola   │
@@ -330,7 +330,7 @@ XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX`,
 				id := c.Notify(LevelInfo, "hello world")
 				c.UpdateProgress(id, "h0l4 m0n", 1, 10)
 				c.UpdateProgress(id, "hola mon", 5, 10)
-				
+
 			}, `
 XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX┌────────┐
 XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX│ hola   │
@@ -344,6 +344,118 @@ XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX`,
+		},
+	}
+
+	comptest.TestComponent(t, c, w, tests)
+}
+
+func TestComponentDrawWithPadding(t *testing.T) {
+	inner := &component.TestComponent{Ch: 'X'}
+
+	c := New(inner, Config{
+		AutoClose:   1 * time.Hour,
+		ProgressBar: true,
+		Width:       10,
+		Padding:     1,
+		ProgressRunes: ProgressRunes{
+			Start:      '{',
+			Current:    '-',
+			CurrentTip: '>',
+			Remain:     ' ',
+			End:        '}',
+		},
+	})
+	c.Resize(40, 15)
+
+	w := term.NewStringWriter(40, 15)
+
+	tests := []comptest.TestCase{
+		{
+			func() { c.Notify(LevelInfo, "hello world") }, `
+XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+XXXXXXXXXXXXXXXXXXXXXXXXXXXXX┌────────┐X
+XXXXXXXXXXXXXXXXXXXXXXXXXXXXX│ hello  │X
+XXXXXXXXXXXXXXXXXXXXXXXXXXXXX│ world  │X
+XXXXXXXXXXXXXXXXXXXXXXXXXXXXX{>       }X
+XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX`,
+		}, {
+			func() { c.Resize(2, 15) }, `
+XX                                      
+                                        
+he                                      
+ll                                      
+o                                       
+wo                                      
+rl                                      
+d                                       
+{}                                      
+XX                                      
+XX                                      
+XX                                      
+XX                                      
+XX                                      
+XX                                      `,
+		}, {
+			func() { c.Resize(4, 15) }, `
+XXXX                                    
+┌──┐                                    
+│he│                                    
+│ll│                                    
+│o │                                    
+│wo│                                    
+│rl│                                    
+│d │                                    
+{> }                                    
+XXXX                                    
+XXXX                                    
+XXXX                                    
+XXXX                                    
+XXXX                                    
+XXXX                                    `,
+		}, {
+			func() { c.Resize(40, 15) }, `
+XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+XXXXXXXXXXXXXXXXXXXXXXXXXXXXX┌────────┐X
+XXXXXXXXXXXXXXXXXXXXXXXXXXXXX│ hello  │X
+XXXXXXXXXXXXXXXXXXXXXXXXXXXXX│ world  │X
+XXXXXXXXXXXXXXXXXXXXXXXXXXXXX{>       }X
+XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX`,
+		}, {
+			func() { c.Notify(LevelInfo, "Does not fit I think") }, `
+XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+XXXXXXXXXXXXXXXXXXXXXXXXXXXXX┌────────┐X
+XXXXXXXXXXXXXXXXXXXXXXXXXXXXX│ Does   │X
+XXXXXXXXXXXXXXXXXXXXXXXXXXXXX│ not    │X
+XXXXXXXXXXXXXXXXXXXXXXXXXXXXX│ fit I  │X
+XXXXXXXXXXXXXXXXXXXXXXXXXXXXX│ think  │X
+XXXXXXXXXXXXXXXXXXXXXXXXXXXXX{>       }X
+XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+XXXXXXXXXXXXXXXXXXXXXXXXXXXXX┌────────┐X
+XXXXXXXXXXXXXXXXXXXXXXXXXXXXX│ hello  │X
+XXXXXXXXXXXXXXXXXXXXXXXXXXXXX│ world  │X
+XXXXXXXXXXXXXXXXXXXXXXXXXXXXX{>       }X
 XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX`,

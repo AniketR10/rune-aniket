@@ -73,6 +73,10 @@ type Config struct {
 	// Interrupt is needed to asynchronously update the UI. This is optional.
 	Interrupter term.Interrupter
 
+	// Padding adds top and right padding in number of cells from the margins
+	// and between notifications if there's more than one being displayed.
+	Padding int
+
 	// ProgressRunes determines the runes used to render progress.
 	// If not set, the corresponding characters in FrameCharSet are used.
 	ProgressRunes ProgressRunes
@@ -186,15 +190,20 @@ func (n *Container) Resize(width, height int) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 
+	padding := n.cfg.Padding
+
 	effectiveWidth := n.cfg.Width
-	offset := width - n.cfg.Width
+	offset := width - n.cfg.Width - padding
 	if offset < 0 {
 		offset = 0
 		effectiveWidth = width
 	}
+	if height <= padding {
+		padding = 0
+	}
 
-	n.vlist.Move(term.Coordinates{X: offset, Y: 0})
-	n.vlist.Resize(effectiveWidth, height)
+	n.vlist.Move(term.Coordinates{X: offset, Y: padding})
+	n.vlist.Resize(effectiveWidth, height-padding)
 }
 
 // ID returns the ID of a given notification, as it would be
@@ -227,6 +236,10 @@ func (n *Container) Notify(level Level, msg string) string {
 		delete(n.notifications, id)
 	}
 
+	comp = component.NewSpan(comp, component.SpanConfig{
+		PadVertical:      n.cfg.Padding,
+		ContentAlignment: component.SpanAlignmentTop,
+	})
 	// add a new notification
 	el := n.list.PushFront(comp)
 	n.notifications[id] = &notificationTicket{el: el, cancelCtx: cancel}
@@ -265,7 +278,7 @@ func (c *Container) UpdateProgress(id, message string, progress, total int64) bo
 		return true
 	}
 
-	comp := ticket.el.Value().(*notificationComp)
+	comp := ticket.el.Value().(*component.Span).Content().(*notificationComp)
 	comp.manualProgress = progress
 	comp.manualProgressTotal = total
 	if message != "" {
@@ -356,12 +369,12 @@ func (n *Container) Close() error {
 }
 
 func (n *Container) closeNotification(el component.ListNode) {
-	el.Value().(*notificationComp).cancel()
+	el.Value().(*component.Span).Content().(*notificationComp).cancel()
 	n.list.Remove(&el)
 }
 
 func (n *Container) pauseNotification(el component.ListNode) {
-	comp := el.Value().(*notificationComp)
+	comp := el.Value().(*component.Span).Content().(*notificationComp)
 	if comp.pausedAt != (time.Time{}) {
 		return // pause is idempotent
 	}
@@ -373,7 +386,7 @@ func (n *Container) pauseNotification(el component.ListNode) {
 }
 
 func (n *Container) resumeNotification(t *notificationTicket, id string) {
-	comp := t.el.Value().(*notificationComp)
+	comp := t.el.Value().(*component.Span).Content().(*notificationComp)
 	if comp.pausedAt.Equal(time.Time{}) {
 		return // resume is idempotent
 	}
