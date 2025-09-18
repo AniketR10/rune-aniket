@@ -317,33 +317,7 @@ func (f *Frame) Draw(w term.Writer) {
 		return
 	}
 	limitX, limitY := f.width-1, f.height-1
-
-	for i := 0; i < limitX; i++ {
-		w.SetCell(term.Coordinates{X: i, Y: 0},
-			term.Cell{Width: 1, Ch: f.HorizontalTop, Attributes: f.Attributes})
-		w.SetCell(term.Coordinates{X: i, Y: limitY},
-			term.Cell{Width: 1, Ch: f.HorizontalBottom, Attributes: f.Attributes})
-	}
-
-	for i := 0; i < limitY; i++ {
-		w.SetCell(term.Coordinates{X: 0, Y: i},
-			term.Cell{Width: 1, Ch: f.VerticalLeft, Attributes: f.Attributes})
-		w.SetCell(term.Coordinates{X: limitX, Y: i},
-			term.Cell{Width: 1, Ch: f.VerticalRight, Attributes: f.Attributes})
-	}
-
-	w.SetCell(term.Coordinates{X: 0, Y: 0},
-		term.Cell{Width: 1, Ch: f.TopLeft, Attributes: f.Attributes})
-
-	w.SetCell(term.Coordinates{X: limitX, Y: 0},
-		term.Cell{Width: 1, Ch: f.TopRight, Attributes: f.Attributes})
-
-	w.SetCell(term.Coordinates{X: 0, Y: limitY},
-		term.Cell{Width: 1, Ch: f.BottomLeft, Attributes: f.Attributes})
-
-	w.SetCell(term.Coordinates{X: limitX, Y: limitY},
-		term.Cell{Width: 1, Ch: f.BottomRight, Attributes: f.Attributes})
-
+	DrawFrame(w, f.FrameCharSet, f.Attributes, limitX, limitY)
 	f.content.Draw(w)
 
 	offset, height, ok := f.ScrollBar()
@@ -403,4 +377,35 @@ func calculateScrollBar(offset, maxOffset, height int) (
 	proportionalHeight = int(math.Max(1,
 		math.Ceil(float64(effectiveHeight*effectiveHeight)/float64(rows))))
 	return
+}
+
+// DrawFrame draws a frame at 0, 0, limitX, limitY, with the given FrameCharSet.
+func DrawFrame(
+	w term.Writer, f FrameCharSet, attrs term.Attributes, limitX, limitY int,
+) {
+	for i := 0; i < limitX; i++ {
+		w.SetCell(term.Coordinates{X: i, Y: 0},
+			term.Cell{Width: 1, Ch: f.HorizontalTop, Attributes: attrs})
+		w.SetCell(term.Coordinates{X: i, Y: limitY},
+			term.Cell{Width: 1, Ch: f.HorizontalBottom, Attributes: attrs})
+	}
+
+	for i := 0; i < limitY; i++ {
+		w.SetCell(term.Coordinates{X: 0, Y: i},
+			term.Cell{Width: 1, Ch: f.VerticalLeft, Attributes: attrs})
+		w.SetCell(term.Coordinates{X: limitX, Y: i},
+			term.Cell{Width: 1, Ch: f.VerticalRight, Attributes: attrs})
+	}
+
+	w.SetCell(term.Coordinates{X: 0, Y: 0},
+		term.Cell{Width: 1, Ch: f.TopLeft, Attributes: attrs})
+
+	w.SetCell(term.Coordinates{X: limitX, Y: 0},
+		term.Cell{Width: 1, Ch: f.TopRight, Attributes: attrs})
+
+	w.SetCell(term.Coordinates{X: 0, Y: limitY},
+		term.Cell{Width: 1, Ch: f.BottomLeft, Attributes: attrs})
+
+	w.SetCell(term.Coordinates{X: limitX, Y: limitY},
+		term.Cell{Width: 1, Ch: f.BottomRight, Attributes: attrs})
 }

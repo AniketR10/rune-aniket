@@ -70,7 +70,7 @@ func newString(cfg Config, msg string) component.Responsive {
 func newNotification(
 	level Level, msg string, cfg Config, duration time.Duration,
 	cancel func(),
-) *notificationComp {
+) component.Responsive {
 
 	// template for each progress rune
 	var progressCell term.Cell
@@ -134,6 +134,15 @@ func (n *notificationComp) Draw(w term.Writer) {
 
 	if !n.cfg.ProgressBar {
 		return
+	}
+
+	if n.width > 3 && n.height > 3 {
+		attrs := term.Attributes{
+			Attrs: n.progressCellStart.Attrs,
+			Fg:    n.progressCellStart.Fg,
+			Bg:    n.progressCellStart.Bg,
+		}
+		component.DrawFrame(w, n.cfg.FrameCharSet, attrs, n.width-1, n.height-1)
 	}
 
 	remaining := time.Until(n.end)
