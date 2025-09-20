@@ -136,7 +136,7 @@ func (n *notificationComp) Draw(w term.Writer) {
 		return
 	}
 
-	if n.width > 3 && n.height > 3 {
+	if n.width >= 3 && n.height >= 3 {
 		attrs := term.Attributes{
 			Attrs: n.progressCellStart.Attrs,
 			Fg:    n.progressCellStart.Fg,
