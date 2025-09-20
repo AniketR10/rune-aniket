@@ -76,6 +76,7 @@ type workspaceManagerHandler struct {
 	mu                 sync.Locker
 	exitPromptOpen     bool
 	confirmedForceExit bool
+	notifications      *notifications.Container
 	storage            document.Service
 	workspace          workspace.WorkspaceManager
 	publishEvent       func(term.Event) bool
@@ -114,34 +115,6 @@ type workspaceManagerHandler struct {
 	shaderRunner     *shaderRunner
 }
 
-func newWorkspaceManagerHandler(
-	initial *workspaceapi.URI, homeDirUri workspaceapi.URI,
-	manager workspace.WorkspaceManager,
-	cfg ideConfig, recfilename string, filenames []string,
-	sixDir string, publishEvent func(term.Event) bool,
-	extensionRunner ExtensionsRunner, locker sync.Locker,
-	builtinExtensions map[string]Extension,
-	reloadConfig func() (ideConfig, error), workspaceConfigFilename string,
-	tabBarOffset, tabBarHeight int, workspacesIcon rune,
-	workspacesBarHeight, workspacesBarOffset int, workspacesBarFrame bool,
-	tabsClickCallback func(int) bool,
-	shaderRunner *shaderRunner,
-) (*workspaceManagerHandler, error) {
-	ret := new(workspaceManagerHandler)
-
-	err := ret.init(initial, homeDirUri, manager,
-		cfg, recfilename, filenames, sixDir,
-		publishEvent, extensionRunner, locker, builtinExtensions,
-		reloadConfig, workspaceConfigFilename,
-		tabBarOffset, tabBarHeight, workspacesIcon,
-		workspacesBarHeight, workspacesBarOffset, workspacesBarFrame, tabsClickCallback,
-		shaderRunner)
-	if err != nil {
-		return nil, err
-	}
-	return ret, nil
-}
-
 func (h *workspaceManagerHandler) newEditor(cfg ideConfig) (text.Editor, error) {
 	switch cfg.editorMode() {
 	case editorModeModal:
@@ -174,6 +147,7 @@ func (h *workspaceManagerHandler) newBuiltinModelessEditor(cfg ideConfig) text.E
 func (h *workspaceManagerHandler) init(
 	cwd *workspaceapi.URI, homeDirUri workspaceapi.URI,
 	manager workspace.WorkspaceManager,
+	notifications *notifications.Container,
 	cfg ideConfig, recfilename string, filenames []string,
 	sixDir string, publishEvent func(term.Event) bool,
 	extensionRunner ExtensionsRunner, locker sync.Locker,
@@ -185,6 +159,7 @@ func (h *workspaceManagerHandler) init(
 ) (err error) {
 	ctx := context.Background()
 
+	h.notifications = notifications
 	h.shaderRunner = shaderRunner
 	h.mu = locker
 	h.externalCommands = make(map[string]externalCommand)
@@ -216,7 +191,7 @@ func (h *workspaceManagerHandler) init(
 	}
 
 	h.homeWorkspace = homeWorkspace
-	h.empty, err = newEx(ed, homeWorkspace, h.storage,
+	h.empty, err = newEx(ed, homeWorkspace, h.storage, h.notifications,
 		cfg.terminalConfig(), h.publishEvent, cfg.clipboard(),
 		globalOpts...)
 	if err != nil {
@@ -499,16 +474,7 @@ func (h *workspaceManagerHandler) initExtensions(manager extension.Runner, cfg i
 }
 
 func (h *workspaceManagerHandler) textOpts(cfg ideConfig) []text.Option {
-	notificationsCfg := cfg.notificationsConfig()
-	interrupter := term.FuncInterrupter(func(ctx context.Context) error {
-		payload, _ := term.PayloadFromContext(ctx)
-		if !h.publishEvent(term.Event{Type: term.EventInterrupt, Raw: payload}) {
-			return errEventStreamNotReady
-		}
-		return nil
-	})
-	notificationsCfg.Interrupter = interrupter
-
+	notifications := newWorkspaceNotifications(h.storage, h.notifications)
 	ret := []text.Option{
 		text.WithTabspaces(cfg.editorTabspaces()),
 		text.WithWindowManagerConfig(cfg.windowManagerConfig()),
@@ -517,7 +483,7 @@ func (h *workspaceManagerHandler) textOpts(cfg ideConfig) []text.Option {
 		text.WithTabsClickCallback(h.tabsClickCallback),
 		text.WithCommandKey(cfg.commandKey()),
 		text.WithCommandMaxHistory(cfg.commandMaxHistory()),
-		text.WithNotificationsConfig(notificationsCfg),
+		text.WithNotifications(notifications),
 		text.WithFocusTabAttr(cfg.focusTabAttr()),
 		text.WithNonFocusTabAttr(cfg.nonFocusTabAttr()),
 		text.WithWallpaper(cfg.wallpaper()),
@@ -604,8 +570,8 @@ func (h *workspaceManagerHandler) addWorkspace(
 
 	// workspace capable of opening URIs other than the workspaceapi.URI
 	multicwd := workspace.Multi(ctx, h.workspace, cwd, uri)
-	ex, err := newEx(ed, multicwd, h.storage, cfg.terminalConfig(),
-		h.publishEvent, cfg.clipboard(), textOpts...)
+	ex, err := newEx(ed, multicwd, h.storage, h.notifications,
+		cfg.terminalConfig(), h.publishEvent, cfg.clipboard(), textOpts...)
 	if err != nil {
 		cancel()
 		return fmt.Errorf("new multi workspace: %w", err)
@@ -901,6 +867,9 @@ func (h *workspaceManagerHandler) Close() (ret error) {
 		}
 	}
 	if err := h.empty.Close(); err != nil {
+		ret = multierror.Append(ret, err)
+	}
+	if err := h.notifications.Close(); err != nil {
 		ret = multierror.Append(ret, err)
 	}
 	if runner := h.homeRunner.Load(); runner != nil {

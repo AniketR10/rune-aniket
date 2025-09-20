@@ -21,10 +21,9 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package text
+package ide
 
 import (
-	"fmt"
 	"hash/fnv"
 	"strconv"
 	"testing"
@@ -35,30 +34,33 @@ import (
 	"unstable.build/go-tui/component/notifications"
 )
 
+func newTestNotifications(t *testing.T) (*testNotifier, *workspaceNotifications) {
+	mock := newTestNotify()
+	b := &workspaceNotifications{
+		notifier: mock,
+		storage:  document.NewInMemoryService(),
+	}
+	return mock, b
+}
+
 func TestNotifyOnce(t *testing.T) {
 	t.Run("delivers notifications only the first time it's invoked", func(t *testing.T) {
 		svc := document.NewInMemoryService()
-		b, err := NewComponent(nil, svc, nil, DefaultConfig())
-		require.NoError(t, err)
-		mock := newTestNotify()
-		b.notifier = mock
+		mock, b := newTestNotifications(t)
 
-		_, err = b.NotifyOnce(notifications.LevelError, "a")
+		_, err := b.NotifyOnce(notifications.LevelError, "a")
 		require.NoError(t, err)
 		assert.Equal(t, 1, mock.messages["a"])
 
-		_, err = b.NotifyOnce(notifications.LevelError, "a", fmt.Sprintf("%+v", svc))
+		_, err = b.NotifyOnce(notifications.LevelError, "%v", svc)
 		require.NoError(t, err)
 		assert.Equal(t, 1, mock.messages["a"])
 	})
 
 	t.Run("delivers notifications with different args multiple times, if args are different", func(t *testing.T) {
-		b, err := NewComponent(nil, document.NewInMemoryService(), nil, DefaultConfig())
-		require.NoError(t, err)
-		mock := newTestNotify()
-		b.notifier = mock
+		mock, b := newTestNotifications(t)
 
-		_, err = b.NotifyOnce(notifications.LevelError, "a %d", 0)
+		_, err := b.NotifyOnce(notifications.LevelError, "a %d", 0)
 		require.NoError(t, err)
 		assert.Equal(t, 1, mock.messages["a 0"])
 
@@ -69,12 +71,9 @@ func TestNotifyOnce(t *testing.T) {
 	})
 
 	t.Run("delivers notifications with different args only once if args are the same", func(t *testing.T) {
-		b, err := NewComponent(nil, document.NewInMemoryService(), nil, DefaultConfig())
-		require.NoError(t, err)
-		mock := newTestNotify()
-		b.notifier = mock
+		mock, b := newTestNotifications(t)
 
-		_, err = b.NotifyOnce(notifications.LevelError, "a %d", 0)
+		_, err := b.NotifyOnce(notifications.LevelError, "a %d", 0)
 		require.NoError(t, err)
 		assert.Equal(t, 1, mock.messages["a 0"])
 
@@ -84,12 +83,9 @@ func TestNotifyOnce(t *testing.T) {
 	})
 
 	t.Run("delivers notifications multiple times if subsequent uses Notify rather than NotifyOnce", func(t *testing.T) {
-		b, err := NewComponent(nil, document.NewInMemoryService(), nil, DefaultConfig())
-		require.NoError(t, err)
-		mock := newTestNotify()
-		b.notifier = mock
+		mock, b := newTestNotifications(t)
 
-		_, err = b.NotifyOnce(notifications.LevelError, "a")
+		_, err := b.NotifyOnce(notifications.LevelError, "a")
 		require.NoError(t, err)
 		assert.Equal(t, 1, mock.messages["a"])
 
@@ -113,23 +109,29 @@ func newTestNotify() *testNotifier {
 }
 
 func (t *testNotifier) Notify(
-	level notifications.Level, msg string, args ...interface{},
+	level notifications.Level, msg string,
 ) string {
-	formatted := fmt.Sprintf(msg, args...)
-	t.messages[formatted] = t.messages[formatted] + 1
-	return t.NotificationID(level, msg, args...)
+	t.messages[msg] = t.messages[msg] + 1
+	return t.ID(level, msg)
 }
 
-func (t *testNotifier) NotificationID(
-	level notifications.Level, msg string, args ...interface{},
+func (t *testNotifier) ID(
+	level notifications.Level, msg string,
 ) string {
 	h := fnv.New64a()
-	h.Write([]byte(fmt.Sprintf(msg, args...)))
+	h.Write([]byte(msg))
 	return strconv.FormatUint(h.Sum64(), 10)
 }
 
-func (t *testNotifier) UpdateNotificationProgress(
+func (t *testNotifier) UpdateProgress(
 	id, message string, progress, total int64,
 ) bool {
 	return false
+}
+
+func (t testNotifier) CloseAll() {
+}
+func (t testNotifier) ResumeAll() {
+}
+func (t testNotifier) PauseAll() {
 }

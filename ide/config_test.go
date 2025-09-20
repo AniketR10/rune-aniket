@@ -247,7 +247,7 @@ func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
 	assert.Equal(t, workspaceBarKindNumbers, cfg.workspaceBarKind())
 
 	actualNotifications := cfg.notificationsConfig()
-	expectedNotifications := browser.DefaultConfig().Notifications
+	expectedNotifications := defaultNotificationsConfig()
 	assert.NotNil(t, actualNotifications.Interrupter)
 	actualNotifications.Interrupter = nil
 	expectedNotifications.Interrupter = nil

@@ -41,6 +41,8 @@ import (
 	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/browser"
+	"unstable.build/go-tui/component/notifications"
+	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/workspace"
@@ -320,21 +322,32 @@ func (i *IDE) init(
 		cwdURI = &uri
 	}
 
-	workspaceHandler, err := newWorkspaceManagerHandler(cwdURI, homeDirURI,
-		workspaceManager, i.ideConfig, recfilename, filenames,
+	i.workspaceHandler = new(workspaceManagerHandler)
+	notificationsCfg := i.ideConfig.notificationsConfig()
+	interrupter := term.FuncInterrupter(func(ctx context.Context) error {
+		payload, _ := term.PayloadFromContext(ctx)
+		if !i.publishEvent(term.Event{Type: term.EventInterrupt, Raw: payload}) {
+			return errEventStreamNotReady
+		}
+		return nil
+	})
+	notificationsCfg.Interrupter = interrupter
+	notifications := notifications.New(i.workspaceHandler, notificationsCfg)
+	err = i.workspaceHandler.init(cwdURI, homeDirURI, workspaceManager,
+		notifications, i.ideConfig, recfilename, filenames,
 		dataDir, i.publishEvent, op.extensionRunner, i.locker, op.extensions,
 		func() (ideConfig, error) {
 			return reloadConfig(cfgfilename,
 				op.defaultWallpaper, op.defaultConfig, op.bell, op.scheduleFn)
 		}, op.workspaceConfig, op.tabBarOffset,
 		op.tabBarHeight, op.workspacesIcon, op.workspacesBarHeight,
-		op.workspacesBarOffset, op.workspacesBarFrame, op.tabsClickCallback, &i.root)
+		op.workspacesBarOffset, op.workspacesBarFrame, op.tabsClickCallback,
+		&i.root)
 	if err != nil {
 		return fmt.Errorf("new workspace manager: %w", err)
 	}
 	i.workspaceManager = workspaceManager
-	i.workspaceHandler = workspaceHandler
-	workspaceHandler.logNonFatalErrs(workspaceHandler.focusBrowser(),
+	i.workspaceHandler.logNonFatalErrs(i.workspaceHandler.focusBrowser(),
 		configErr, i.ideConfig.errors)
 
 	shutdownShaderCfg := nopShutdownShaderConfig()
@@ -345,8 +358,8 @@ func (i *IDE) init(
 			duration: op.shutdownShaderDuration,
 		}
 	}
-
-	i.root.init(workspaceHandler, i, i.ideConfig.defaultAttr(), shutdownShaderCfg)
+	handler := handler.WithComponent(i.workspaceHandler, notifications)
+	i.root.init(handler, i, i.ideConfig.defaultAttr(), shutdownShaderCfg)
 	return i.workspaceHandler.subscribeCommand(runShaderCmdManual, &i.root)
 }
 

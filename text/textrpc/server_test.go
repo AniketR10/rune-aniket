@@ -38,7 +38,6 @@ import (
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/cell"
-	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/term"
 	termrpc "unstable.build/go-tui/term/termrpc"
 	"unstable.build/go-tui/text"
@@ -183,10 +182,6 @@ func TestServerSetLocationList(t *testing.T) {
 		c, err := text.NewComponent(ed, document.NewInMemoryService(), &testLoader{}, text.Config{
 			Config: browser.Config{
 				Wallpaper: browser.NopWallpaper(),
-				Notifications: notifications.Config{
-					Width:     10,
-					AutoClose: 30 * time.Minute,
-				},
 			},
 		})
 		require.NoError(t, err)

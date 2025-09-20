@@ -91,6 +91,7 @@ type ex struct {
 	clip                 clipboard.Register
 	ed                   text.Editor
 	storage              document.Service
+	notifications        *notifications.Container
 	emulatorConfig       vte.Config
 	newEmulatorHandler   func(string, vte.Config) (vteHandler, error)
 	newPluginHandler     func(...string) (pluginHandler, error)
@@ -123,13 +124,15 @@ type ex struct {
 func newEx(
 	ed text.Editor, m workspace.Workspace,
 	storage document.Service,
+	notifications *notifications.Container,
 	emulatorConfig vte.Config,
 	publishEvent func(term.Event) bool,
 	clip clipboard.Register,
 	opts ...text.Option,
 ) (e *ex, err error) {
 	e = new(ex)
-	err = e.init(ed, m, storage, emulatorConfig, publishEvent, clip, opts...)
+	err = e.init(ed, m, storage, notifications,
+		emulatorConfig, publishEvent, clip, opts...)
 	if err != nil {
 		return
 	}
@@ -142,12 +145,14 @@ func newEx(
 func (e *ex) init(
 	ed text.Editor, m workspace.Workspace,
 	storage document.Service,
+	notifications *notifications.Container,
 	emulatorConfig vte.Config,
 	publishEvent func(term.Event) bool,
 	clip clipboard.Register,
 	opts ...text.Option,
 ) (err error) {
-	err = e.doInit(ed, m, storage, emulatorConfig, publishEvent, clip, opts...)
+	err = e.doInit(ed, m, storage, notifications,
+		emulatorConfig, publishEvent, clip, opts...)
 	if err != nil {
 		return
 	}
@@ -231,6 +236,7 @@ func (e *ex) Interrupt(ctx context.Context) error {
 func (e *ex) doInit(
 	ed text.Editor, m workspace.Workspace,
 	storage document.Service,
+	n *notifications.Container,
 	emulatorConfig vte.Config,
 	publishEvent func(term.Event) bool,
 	clip clipboard.Register,
@@ -238,6 +244,7 @@ func (e *ex) doInit(
 ) (err error) {
 	e.clip = clip
 	e.workspace = m
+	e.notifications = n
 	e.publishEvent = publishEvent
 	e.storage = storage
 	e.emulatorConfig = emulatorConfig
@@ -591,7 +598,7 @@ func (e *ex) tabcopypath(args ...string) error {
 		return fmt.Errorf("clipboard copy: %v", err)
 	}
 
-	e.comp.Browser().Notify(notifications.LevelSuccess,
+	e.notifications.Notify(notifications.LevelSuccess,
 		"file path copied to clipboard")
 
 	return nil
@@ -611,10 +618,10 @@ func (e *ex) splitDirectionChange(args ...string) error {
 	switch args[0] {
 	case "horizontal", "h":
 		b.SetDefaultSplit(browserapi.OrientationBottom)
-		b.Notify(notifications.LevelInfo, "changed split direction to horizontal")
+		e.notifications.Notify(notifications.LevelInfo, "changed split direction to horizontal")
 	case "vertical", "v":
 		b.SetDefaultSplit(browserapi.OrientationRight)
-		b.Notify(notifications.LevelInfo, "changed split direction to vertical")
+		e.notifications.Notify(notifications.LevelInfo, "changed split direction to vertical")
 	}
 	return nil
 }
@@ -771,41 +778,36 @@ func (e *ex) windowresize(args ...string) error {
 	return nil
 }
 
-func (e *ex) closeNotifications(args ...string) error {
-	e.comp.CloseNotifications()
-	return nil
-}
-
 func (e *ex) sendNotificationInfo(args ...string) error {
 	if len(args) == 0 {
 		return errors.New("command expects at least one argument")
 	}
-	_, err := e.comp.Notify(notifications.LevelInfo, strings.Join(args, " "))
-	return err
+	e.notifications.Notify(notifications.LevelInfo, strings.Join(args, " "))
+	return nil
 }
 
 func (e *ex) sendNotificationSuccess(args ...string) error {
 	if len(args) == 0 {
 		return errors.New("command expects at least one argument")
 	}
-	_, err := e.comp.Notify(notifications.LevelSuccess, strings.Join(args, " "))
-	return err
+	e.notifications.Notify(notifications.LevelSuccess, strings.Join(args, " "))
+	return nil
 }
 
 func (e *ex) sendNotificationWarning(args ...string) error {
 	if len(args) == 0 {
 		return errors.New("command expects at least one argument")
 	}
-	_, err := e.comp.Notify(notifications.LevelWarn, strings.Join(args, " "))
-	return err
+	e.notifications.Notify(notifications.LevelWarn, strings.Join(args, " "))
+	return nil
 }
 
 func (e *ex) sendNotificationError(args ...string) error {
 	if len(args) == 0 {
 		return errors.New("command expects at least one argument")
 	}
-	_, err := e.comp.Notify(notifications.LevelError, strings.Join(args, " "))
-	return err
+	e.notifications.Notify(notifications.LevelError, strings.Join(args, " "))
+	return nil
 }
 
 func (e *ex) windowtogglemaximize(args ...string) error {
@@ -821,13 +823,18 @@ func (e *ex) windowtogglemaximize(args ...string) error {
 	return nil
 }
 
+func (e *ex) closeNotifications(args ...string) error {
+	e.notifications.CloseAll()
+	return nil
+}
+
 func (e *ex) pauseNotifications(args ...string) error {
-	e.comp.PauseNotifications()
+	e.notifications.PauseAll()
 	return nil
 }
 
 func (e *ex) resumeNotifications(args ...string) error {
-	e.comp.ResumeNotifications()
+	e.notifications.ResumeAll()
 	return nil
 }
 
@@ -1220,7 +1227,7 @@ func (e *ex) runCommand(cmd string, args []string) (quit bool, err error) {
 }
 
 func (e *ex) setError(err error) {
-	e.comp.Browser().Notify(notifications.LevelError, "%s", err)
+	e.notifications.Notify(notifications.LevelError, fmt.Sprintf("%s", err))
 }
 
 func (e *ex) handleCommandEvent(ev term.Event) bool {

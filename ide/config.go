@@ -713,7 +713,7 @@ func (c ideConfig) notificationsDuration(key string, def time.Duration) (ret tim
 }
 
 func (c ideConfig) notificationsConfig() notifications.Config {
-	ret := browser.DefaultConfig().Notifications
+	ret := defaultNotificationsConfig()
 	ret.Attributes = c.getConfigAttr("notifications", "attr", ret.Attributes)
 	ret.BackgroundAttributes = c.getConfigAttr("notifications", "background_attr", ret.BackgroundAttributes)
 	ret.FrameCharSet = c.notificationsCharset(ret.FrameCharSet)
@@ -1700,4 +1700,16 @@ func loadFileConfig(c *ideConfig, configpath string) (err error) {
 
 func filepathCompleter(c *text.Component) command.Completer {
 	return command.FilePathCompleter(c.Workspace())
+}
+
+func defaultNotificationsConfig() notifications.Config {
+	return notifications.Config{
+		AutoClose:            5 * time.Second,
+		ProgressBar:          true,
+		Width:                50,
+		Attributes:           term.Attributes{},
+		BackgroundAttributes: term.Attributes{},
+		FrameCharSet:         component.FrameCharSetDefault(),
+		Interrupter:          term.NopInterrupter(),
+	}
 }

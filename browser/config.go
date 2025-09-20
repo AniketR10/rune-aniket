@@ -24,8 +24,8 @@
 package browser
 
 import (
-	"time"
-
+	log "github.com/sirupsen/logrus"
+	"github.com/unstablebuild/blue/logging"
 	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/component"
@@ -49,15 +49,7 @@ func DefaultConfig() Config {
 			BackgroundAttr: term.Attributes{},
 			MinWidth:       60,
 		},
-		Notifications: notifications.Config{
-			AutoClose:            5 * time.Second,
-			ProgressBar:          true,
-			Width:                50,
-			Attributes:           term.Attributes{},
-			BackgroundAttributes: term.Attributes{},
-			FrameCharSet:         component.FrameCharSetDefault(),
-			Interrupter:          term.NopInterrupter(),
-		},
+		Notifications: logNotifications{},
 	}
 }
 
@@ -88,6 +80,7 @@ func NopWallpaper() Wallpaper {
 
 // Config holds configuration for an browser.Component.
 type Config struct {
+	Notifications
 	Wallpaper Wallpaper
 
 	FocusTabAttr     term.Attributes
@@ -102,5 +95,37 @@ type Config struct {
 
 	component.FrameUnionCharSet
 	handler.WindowManagerConfig
-	Notifications notifications.Config
+}
+
+type logNotifications struct {
+}
+
+func (n logNotifications) Notify(
+	level notifications.Level, msg string, args ...interface{},
+) (string, error) {
+	var l log.Level
+	switch level {
+	case notifications.LevelWarn:
+		l = log.WarnLevel
+	case notifications.LevelError:
+		l = log.ErrorLevel
+	case notifications.LevelInfo:
+		l = log.InfoLevel
+	case notifications.LevelSuccess:
+		l = log.InfoLevel
+	}
+	log.WithField(logging.KeyClass, "notifications").Logf(l, msg, args...)
+	return "", nil
+}
+
+func (n logNotifications) NotifyOnce(
+	level notifications.Level, msg string, args ...interface{},
+) (string, error) {
+	return n.Notify(level, msg, args...)
+}
+
+func (n logNotifications) UpdateNotificationProgress(
+	id, message string, progress, total int64,
+) error {
+	return nil
 }

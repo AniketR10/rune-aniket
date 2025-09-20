@@ -402,7 +402,6 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 	bh, b, err := constructor(texttest.NopEditor(),
 		text.WithCommandKey(testCommandKey),
 		text.WithCommandKeyBinding(term.KeyComb{Ch: '4'}, [][]string{{"windowclose"}}),
-		text.WithNotificationsConfig(notificationsConfig()),
 	)
 	require.NoError(t, err)
 
@@ -778,11 +777,11 @@ func TestMultipleFilesStartup(t *testing.T) {
 func TestWriteExclamationNoQuit(t *testing.T) {
 	cases := []handlertest.SequenceTestCase{
 		{":w!>",
-			`┌──────────────────┐
-│cannot flush      │
-│this content      │
-└──────────────────┘
-│                  │
+			`┌────┌─────────────┐
+│    │ cannot      │
+├────│ flush this  │
+│    │ content     │
+│    └─────────────┘
 │                  │
 │                  │
 │                  │
@@ -806,12 +805,12 @@ func TestWriteExclamationNoQuit(t *testing.T) {
 func TestBrowserCloseLastWindow(t *testing.T) {
 	cases := []handlertest.SequenceTestCase{
 		{":windowclose>",
-			`┌──────────────────┐
-│cannot close      │
-│last tiled        │
-│window            │
-└──────────────────┘
-│                  │
+			`┌────┌─────────────┐
+│    │ cannot      │
+├────│ close last  │
+│    │ tiled       │
+│    │ window      │
+│    └─────────────┘
 │                  │
 │                  │
 │                  │
@@ -970,8 +969,10 @@ func TestExKeySequence(t *testing.T) {
 			text.WithCommandOverlayConfig(testCommandOverlayConfig()),
 		}
 		ex := new(ex)
+		n := notifications.New(ex, notificationsConfig())
 		ex.syncCommandPrompt = true
-		require.NoError(t, ex.init(texttest.NopEditor(), &testLoader{}, document.NewInMemoryService(),
+		require.NoError(t, ex.init(texttest.NopEditor(), &testLoader{},
+			document.NewInMemoryService(), n,
 			vte.DefaultConfig(), func(ev term.Event) bool {
 				// do not confuse interrupt from list with sequence re-issue commands
 				if ev.Type == term.EventInterrupt {
@@ -983,7 +984,7 @@ func TestExKeySequence(t *testing.T) {
 				return true
 			}, clipboard.NewInMemory(), opts...))
 		ex.subscribeCommands()
-		b := testEx{ex}
+		b := testEx{Component: n, ex: ex}
 		closeFns = append(closeFns, func() error {
 			mu.Lock()
 			defer mu.Unlock()
@@ -1121,7 +1122,16 @@ func TestExExit(t *testing.T) {
 
 // remove non-determinism of search.List async search
 type testEx struct {
+	tui.Component
 	*ex
+}
+
+func (t testEx) Draw(w term.Writer) {
+	t.Component.Draw(w)
+}
+
+func (t testEx) Resize(width, height int) {
+	t.Component.Resize(width, height)
 }
 
 func (t testEx) Handle(ev term.Event) (bool, bool) {
@@ -1149,12 +1159,17 @@ func newExForTestingTerminal(
 ) testEx {
 	ex := new(ex)
 	ex.syncCommandPrompt = true
+	svc := document.NewInMemoryService()
+	container := notifications.New(ex, notificationsConfig())
+	notifications := newWorkspaceNotifications(svc, container)
+	opts = append(opts, text.WithNotifications(notifications))
 	opts = append(opts, text.WithCommandOverlayConfig(testCommandOverlayConfig()))
 	opts = append(opts, defCommandKeyBindings()...)
-	require.NoError(t, ex.init(ed, workspace, document.NewInMemoryService(),
-		emulatorCfg, publishEvent, clipboard.NewInMemory(), opts...))
+	require.NoError(t, ex.init(ed, workspace, svc,
+		container, emulatorCfg, publishEvent,
+		clipboard.NewInMemory(), opts...))
 	ex.subscribeCommands()
-	return testEx{ex}
+	return testEx{Component: container, ex: ex}
 }
 
 func newExForTestingWithWorkspace(
@@ -1171,8 +1186,14 @@ func newExForTestingWithWorkspace(
 	finalOpts := defCommandKeyBindings()
 	finalOpts = append(finalOpts, text.WithCommandOverlayConfig(testCommandOverlayConfig()))
 	finalOpts = append(finalOpts, opts...)
-	require.NoError(t, ex.init(ed, workspace, document.NewInMemoryService(),
-		emulatorCfg, publishEvent, clip, finalOpts...))
+
+	svc := document.NewInMemoryService()
+	container := notifications.New(ex, notificationsConfig())
+	notifications := newWorkspaceNotifications(svc, container)
+	finalOpts = append(finalOpts, text.WithNotifications(notifications))
+
+	require.NoError(t, ex.init(ed, workspace, svc,
+		container, emulatorCfg, publishEvent, clip, finalOpts...))
 	ex.subscribeCommands()
 	ex.newEmulatorHandler = func(initialCmd string, cfg vte.Config) (vteHandler, error) {
 		return newTestVteWithConfig(initialCmd, cfg), nil
@@ -1180,7 +1201,7 @@ func newExForTestingWithWorkspace(
 	ex.newPluginHandler = func(args ...string) (pluginHandler, error) {
 		return newTestVteWithConfig(strings.Join(args, " "), emulatorCfg), nil
 	}
-	return testEx{ex}
+	return testEx{Component: container, ex: ex}
 }
 
 func newExForTesting(t *testing.T, ed text.Editor, opts ...text.Option) testEx {
@@ -1198,46 +1219,31 @@ func newExForTestingClipboard(
 func TestNewWindow(t *testing.T) {
 	cases := []handlertest.SequenceTestCase{
 		{":windownew>:windowdefaultsplit h>:windownew>",
-			`┌──────────────────┐
-│ changed split    │
-│ direction to     │
-│ horizontal       │
-└──────────────────┘
-│        │└────────┘
-│        │┌────────┐
+			`┌────┌─────────────┐
+│    │ changed     │
+├────│ split       │
+│    │ direction   │
+│    │ to          │
+│    │ horizontal  │
+│    └─────────────┘
 │        ││        │
 │        ││        │
 └────────┘└────────┘`},
 		{":winclose>:winclose>aaaaaaa",
-			`┌──────────────────┐
-│ changed split    │
-│ direction to     │
-│ horizontal       │
-└──────────────────┘
-│                  │
-│                  │
-│                  │
-│                  │
-└──────────────────┘`},
-		{":noticloseall>",
-			`┌──────────────────┐
-│                  │
-├──────────────────┤
-│                  │
-│                  │
-│                  │
-│                  │
+			`┌────┌─────────────┐
+│    │ changed     │
+├────│ split       │
+│    │ direction   │
+│    │ to          │
+│    │ horizontal  │
+│    └─────────────┘
 │                  │
 │                  │
 └──────────────────┘`},
 	}
 
-	notifications := browser.DefaultConfig().Notifications
-	notifications.ProgressBar = false // deterministic tests
-	notifications.Width = 20
 	opts := []text.Option{
 		text.WithCommandKey(testCommandKey),
-		text.WithNotificationsConfig(notifications),
 	}
 	b := newExForTesting(t, texttest.NopEditor(), opts...)
 	defer b.Close()
@@ -1430,12 +1436,12 @@ func TestIntegrationEphemeralTerminal(t *testing.T) {
 └└────────────────┘┘`,
 		},
 		{":windowcloseall>",
-			`┌──────────────────┐
-│cannot close      │
-│all tiled         │
-│windows           │
-└──────────────────┘
-││▐               ││
+			`┌────┌─────────────┐
+│    │ cannot      │
+├┌───│ close all   │
+││ ▐ │ tiled       │
+││───│ windows     │
+││▐  └─────────────┘
 ││                ││
 ││                ││
 ││                ││
@@ -1692,13 +1698,13 @@ func TestMoveWindowContent(t *testing.T) {
 └────────┘└────────┘`,
 		},
 		{":terminalnew>:! sh>:windowmove left>:windowmove right>",
-			`┌──────────────────┐
-│cannot move       │
-│window in this    │
-│direct▐on         │
-└──────────────────┘
-│   │          │───┘
-│   │          │───┐
+			`┌────┌─────────────┐
+│o aa│ cannot      │
+├───┌│ move        │
+│   ││ ▐indow in   │
+│   ││ this        │
+│   ││ direction   │
+│   │└─────────────┘
 │   │          │   │
 │   │          │   │
 └───└──────────┘───┘`,
@@ -1846,13 +1852,9 @@ func TestResizeWindows(t *testing.T) {
 }
 
 func TestExposedRootNodeIssue(t *testing.T) {
-	notifications := browser.DefaultConfig().Notifications
-	notifications.ProgressBar = false // deterministic tests
-	notifications.Width = 20
 	opts := []text.Option{
 		text.WithCommandOverlayConfig(testCommandOverlayConfig()),
 		text.WithCommandKey(testCommandKey),
-		text.WithNotificationsConfig(notifications),
 		text.WithCommandAliases(map[string]text.CommandAlias{
 			"boom": text.CommandAlias{
 				Commands: []string{
@@ -1869,16 +1871,16 @@ func TestExposedRootNodeIssue(t *testing.T) {
 	}
 	cases := []handlertest.SequenceTestCase{
 		{":boom>",
-			`┌──────────────────┐
-│ changed split    │
-┌ direction to     │
-│ vertical         │
-└──────────────────┘
-┌──────────────────┐
-│ changed split    │
-│ direction to     │
-│ horizontal       │
-└──────────────────┘`,
+			`┌────┌─────────────┐
+│    │ changed     │
+┌────│ split       │
+│    │ direction   │
+│    │ to vertical │
+│    └─────────────┘
+│    ┌─────────────┐
+│    │ changed     │
+│    │ split       │
+└────│ direction   │`,
 		},
 	}
 
@@ -2390,10 +2392,10 @@ func TestSwitchToTab(t *testing.T) {
 │bbbbbbbbbbbbbbbbbbbbbbbbbbbb│
 └────────────────────────────┘`},
 		{":tabfocus 0>",
-			`┌────────────────────────────┐
-│the first tab is 1          │
-└────────────────────────────┘
-│bbbbbbbbbbbbbbbbbbbbbbbbbbbb│
+			`┌──────────────┌─────────────┐
+│o hello.go  o │ the first   │
+├──────────────│ tab is 1    │
+│bbbbbbbbbbbbbb└─────────────┘
 │bbbbbbbbbbbbbbbbbbbbbbbbbbbb│
 │bbbbbbbbbbbbbbbbbbbbbbbbbbbb│
 │bbbbbbbbbbbbbbbbbbbbbbbbbbbb│
@@ -2639,12 +2641,12 @@ func TestMoveTabs(t *testing.T) {
 │BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
 └────────────────────────────┘`},
 		{":tabmove left>",
-			`┌────────────────────────────┐
-│tab is already at the       │
-│start of the list           │
-└────────────────────────────┘
-│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+			`┌──────────────┌─────────────┐
+│o boira.go  o │ tab is      │
+├──────────────│ already at  │
+│BBBBBBBBBBBBBB│ the start   │
+│BBBBBBBBBBBBBB│ of the list │
+│BBBBBBBBBBBBBB└─────────────┘
 │BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
@@ -2671,12 +2673,12 @@ func TestMoveTabs(t *testing.T) {
 │BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
 └────────────────────────────┘`},
 		{":tabmove right>",
-			`┌────────────────────────────┐
-│tab is already at the end   │
-│of the list                 │
-└────────────────────────────┘
-│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+			`┌──────────────┌─────────────┐
+│o caliu.go  o │ tab is      │
+├──────────────│ already at  │
+│BBBBBBBBBBBBBB│ the end of  │
+│BBBBBBBBBBBBBB│ the list    │
+│BBBBBBBBBBBBBB└─────────────┘
 │BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
@@ -2765,12 +2767,12 @@ func TestViewForceWrite(t *testing.T) {
 │BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
 └────────────────────────────┘`},
 		{":write>",
-			`┌────────────────────────────┐
-│flush: file is not          │
-│writable                    │
-└────────────────────────────┘
-│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+			`┌──────────────┌─────────────┐
+│o caliu.go    │ flush:      │
+├──────────────│ file is     │
+│BBBBBBBBBBBBBB│ not         │
+│BBBBBBBBBBBBBB│ writable    │
+│BBBBBBBBBBBBBB└─────────────┘
 │BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
@@ -2843,18 +2845,18 @@ func TestViewForceWriteAll(t *testing.T) {
 │BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
 └────────────────────────────┘`},
 		{":writeall>",
-			`┌────────────────────────────┐
-│2 errors occurred: flush:   │
-│file is not writable;       │
-│flush: file is not          │
-│writable                    │
-└────────────────────────────┘
-│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+			`┌──────────────┌─────────────┐
+│o caliu.go  o │ 2 errors    │
+├──────────────│ occurred:   │
+│BBBBBBBBBBBBBB│ flush:      │
+│BBBBBBBBBBBBBB│ file is     │
+│BBBBBBBBBBBBBB│ not         │
+│BBBBBBBBBBBBBB│ writable;   │
+│BBBBBBBBBBBBBB│ flush:      │
+│BBBBBBBBBBBBBB│ file is     │
+│BBBBBBBBBBBBBB│ not         │
+│BBBBBBBBBBBBBB│ writable    │
+│BBBBBBBBBBBBBB└─────────────┘
 │BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
 └────────────────────────────┘`},
@@ -2927,11 +2929,11 @@ func TestCopyPath(t *testing.T) {
 		t.Run(tcase.name, func(t *testing.T) {
 			cases := []handlertest.SequenceTestCase{
 				{fmt.Sprintf(":edit hello.go>%s>", tcase.cmd),
-					`┌──────────────────┐
-│file path         │
-│copied to         │
-│clipboard         │
-└──────────────────┘
+					`┌────┌─────────────┐
+│o he│ file path   │
+├────│ copied to   │
+│AAAA│ clipboard   │
+│AAAA└─────────────┘
 │AAAAAAAAAAAAAAAAAA│
 │AAAAAAAAAAAAAAAAAA│
 │AAAAAAAAAAAAAAAAAA│
@@ -2985,10 +2987,10 @@ func testCopyToClipboard(
 │AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
 └────────────────────────────┘`},
 		{":clipboardpaste>",
-			`┌────────────────────────────┐
-│nothing to paste            │
-└────────────────────────────┘
-│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+			`┌──────────────┌─────────────┐
+│o hello.go    │ nothing to  │
+├──────────────│ paste       │
+│AAAAAAAAAAAAAA└─────────────┘
 │AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
 │AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
 │AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
@@ -3001,10 +3003,10 @@ func testCopyToClipboard(
 │AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
 └────────────────────────────┘`},
 		{":noticloseall>:clipboardcopy>",
-			`┌────────────────────────────┐
-│copied to clipboard         │
-└────────────────────────────┘
-│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+			`┌──────────────┌─────────────┐
+│o hello.go    │ copied to   │
+├──────────────│ clipboard   │
+│AAAAAAAAAAAAAA└─────────────┘
 │AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
 │AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
 │AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
@@ -3066,7 +3068,7 @@ func testCopyToClipboard(
 }
 
 func notificationsConfig() notifications.Config {
-	ret := browser.DefaultConfig().Notifications
+	ret := defaultNotificationsConfig()
 	ret.Width = 15
 	ret.ProgressBar = false // deterministic tests
 	return ret

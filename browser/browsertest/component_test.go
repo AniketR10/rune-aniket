@@ -25,7 +25,6 @@ package browsertest
 
 import (
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -35,7 +34,6 @@ import (
 	browser "unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/comptest"
-	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/term"
 )
@@ -540,35 +538,6 @@ X──────────────────┐
 	comptest.TestComponent(t, c, w, tests)
 }
 
-func TestComponentNotify(t *testing.T) {
-	w := term.NewStringWriter(24, 8)
-	cfg := browser.DefaultConfig()
-	cfg.Notifications.AutoClose = 1 * time.Minute
-	cfg.Notifications.Width = 15
-	cfg.Notifications.ProgressBar = false
-	c := browser.NewComponent(cfg)
-	c.Resize(20, 8)
-
-	c.Notify(notifications.LevelInfo, "wasup: %s", "holaaaaaaaaaaaaaaaaaaaaaaaaa")
-	c.Notify(notifications.LevelSuccess, "wasup: %s", "hola")
-
-	tests := []comptest.TestCase{
-		{
-			nil, `
-┌────┌─────────────┐    
-│    │ wasup: hola │    
-├────└─────────────┘    
-│    ┌─────────────┐    
-│    │ wasup:      │    
-│    │ holaaaaaaaa │    
-│    │ aaaaaaaaaaa │    
-└────│ aaaaaa      │    `,
-		},
-	}
-
-	comptest.TestComponent(t, c, w, tests)
-}
-
 func TestComponentPrompt(t *testing.T) {
 	t.Run("panics if options are zero in length", func(t *testing.T) {
 		c := browser.NewComponent(browser.DefaultConfig())
@@ -955,11 +924,5 @@ func (c *contentSwapper) Close() error {
 }
 
 func browserConfig() browser.Config {
-	return browser.Config{
-		Notifications: notifications.Config{
-			AutoClose:   1 * time.Minute,
-			Width:       1,
-			ProgressBar: false, // determiistic tests
-		},
-	}
+	return browser.Config{}
 }

@@ -47,6 +47,7 @@ import (
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/component/shader"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/handler"
@@ -117,12 +118,13 @@ func TestWorkspaceConfig(t *testing.T) {
 
 		m := new(testWorkspaceManagerHandler)
 		m.workspaceManagerHandler = new(workspaceManagerHandler)
+		n := notifications.New(m, notificationsConfig())
 
 		shRunner := new(shaderRunner)
 		shRunner.init(
 			handler.Nop(component.Nop()), term.NopInterrupter(), term.Attributes{},
 			nopShutdownShaderConfig())
-		err = m.workspaceManagerHandler.init(&uri, homeURI, manager, cfg, "", nil,
+		err = m.workspaceManagerHandler.init(&uri, homeURI, manager, n, cfg, "", nil,
 			dir, func(term.Event) bool {
 				return true
 			}, runner, new(sync.Mutex), nil,
@@ -135,18 +137,18 @@ func TestWorkspaceConfig(t *testing.T) {
 
 		cases := []handlertest.SequenceTestCase{
 			{"",
-				`┌──────────────────┐
-│Config decode     │
-│error: boom       │
-└──────────────────┘
-│                  │
+				`┌────┌─────────────┐
+│    │ Config      │
+├────│ decode      │
+│    │ error: boom │
+│    └─────────────┘
 │workspaceWallpaper│
 │                  │
 │                  │
 │                  │
 └──────────────────┘`},
 		}
-		h := &safeHandler{Handler: m, mu: m.mu}
+		h := &safeHandler{Component: n, Handler: m, mu: m.mu}
 		handlertest.TestHandlerSequence(t, h, 20, 10, cases)
 	})
 
@@ -287,7 +289,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 	fn := func(t *testing.T) tui.Handler {
 		m := newTestWorkspaceManagerHandler(t, defaultCfg(), nil, nopShutdownShaderConfig())
 		t.Cleanup(func() { m.Close() })
-		h := &safeHandler{Handler: m, mu: m.mu}
+		h := &safeHandler{Component: m.notifications, Handler: m, mu: m.mu}
 		return h
 	}
 
@@ -358,7 +360,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 │                  │
 │            NORMAL│
 └──────────────────┘`},
-		{":woc>:wonew memory\\:///tmp2>:edit 12345aZZ>:w>:woc>:wonew  memory\\:///tmp2>", // prompt
+		{":woc>:wonew memory\\:///tmp2>:edit 12345aZZ>:w>:woc>:wonew  memory\\:///tmp2>:noticloseall>", // prompt
 			`┌──────────────────┐
 │                  │
 ├──────────────────┤
@@ -371,7 +373,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 └──────────────────┘`},
 		// prompt resets cache (use file scheme to avoid needing
 		// to use ':' to indicate memory scheme)
-		{":woc>:wonew memory\\:///tmp2>:edit 12345aZZ>:w>:woc>:wonew  memory\\:///tmp2>y",
+		{":woc>:wonew memory\\:///tmp2>:edit 12345aZZ>:w>:woc>:wonew  memory\\:///tmp2>y:noticloseall>",
 			`┌──────────────────┐
 │o 12345aZZ        │
 ├──────────────────┤
@@ -382,7 +384,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 │                  │
 │            NORMAL│
 └──────────────────┘`},
-		{":woc>:wonew memory\\:///tmp2>edit 12345aZZ>:w>:woc>:wonew  memory\\:///tmp2>n:woc>:wonew  memory\\:///tmp2>", // prompt no: resets cache
+		{":woc>:wonew memory\\:///tmp2>edit 12345aZZ>:w>:woc>:wonew  memory\\:///tmp2>n:woc>:wonew  memory\\:///tmp2>:noticloseall>", // prompt no: resets cache
 			`┌──────────────────┐
 │                  │
 ├──────────────────┤
@@ -427,24 +429,24 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 │                  │
 └──────────────────┘`},
 		{":woc>:woc>",
-			`┌──────────────────┐
-│workspace tab     │
-│is empty          │
-└──────────────────┘
-│workspaceWallpaper│
+			`┌────┌─────────────┐
+│    │ workspace   │
+├────│ tab is      │
+│    │ empty       │
+│work└─────────────┘
 │                  │
 │                  │
 ├──────────────────┤
 │1                 │
 └──────────────────┘`},
 		{":wofo 100>",
-			`┌──────────────────┐
-│invalid           │
-│workspace:        │
-│there's only 10   │
-│workspaces        │
-└──────────────────┘
-│                  │
+			`┌────┌─────────────┐
+│    │ invalid     │
+├────│ workspace:  │
+│    │ there's     │
+│    │ only 10     │
+│work│ workspaces  │
+│    └─────────────┘
 │                  │
 │                  │
 └──────────────────┘`},
@@ -482,15 +484,15 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 │1 1  2 2          │
 └──────────────────┘`},
 		{"2:wofo>",
-			`┌──────────────────┐
-│invalid           │
-│arguments.        │
-│Expecting 1       │
-│argument with     │
-│workspace number  │
-└──────────────────┘
-├──────────────────┤
-│1 1  2            │
+			`┌────┌─────────────┐
+│    │ invalid     │
+├────│ arguments.  │
+│    │ Expecting   │
+│work│ 1 argument  │
+│    │ with        │
+│    │ workspace   │
+├────│ number      │
+│1 1 └─────────────┘
 └──────────────────┘`},
 		{":wofo 3>:addBlaBla>",
 			`┌──────────────────┐
@@ -546,7 +548,7 @@ func TestWorkspaceManagerClosePromptIntegration(t *testing.T) {
 │                  │
 └──────────────────┘`},
 		}
-		h := &safeHandler{Handler: m, mu: m.mu}
+		h := &safeHandler{Component: m.notifications, Handler: m, mu: m.mu}
 		handlertest.TestHandlerSequence(t, h, 20, 10, cases)
 
 		m.mu.Lock()
@@ -596,7 +598,7 @@ func TestWorkspaceManagerClosePromptIntegration(t *testing.T) {
 │                  │
 └──────────────────┘`},
 		}
-		h := &safeHandler{Handler: m, mu: m.mu}
+		h := &safeHandler{Component: m.notifications, Handler: m, mu: m.mu}
 		handlertest.TestHandlerSequence(t, h, 20, 10, cases)
 		require.NoError(t, m.Close())
 	})
@@ -639,7 +641,7 @@ func TestWorkspaceManagerClosePromptIntegration(t *testing.T) {
 │                  │
 └──────────────────┘`},
 		}
-		h := &safeHandler{Handler: m, mu: m.mu}
+		h := &safeHandler{Component: m.notifications, Handler: m, mu: m.mu}
 		handlertest.TestHandlerSequence(t, h, 20, 10, cases)
 		require.NoError(t, m.Close())
 	})
@@ -675,7 +677,7 @@ func TestWorkspaceManagerClosePromptIntegration(t *testing.T) {
 │  you sure you    │
 └──────────────────┘`},
 		}
-		h := &safeHandler{Handler: m, mu: m.mu}
+		h := &safeHandler{Component: m.notifications, Handler: m, mu: m.mu}
 		handlertest.TestHandlerSequence(t, h, 20, 10, cases)
 
 		m.mu.Lock()
@@ -718,7 +720,7 @@ func TestWorkspaceManagerClosePromptIntegration(t *testing.T) {
 │  you sure you    │
 └──────────────────┘`},
 		}
-		h := &safeHandler{Handler: m, mu: m.mu}
+		h := &safeHandler{Component: m.notifications, Handler: m, mu: m.mu}
 		handlertest.TestHandlerSequence(t, h, 20, 10, cases)
 
 		m.mu.Lock()
@@ -758,7 +760,7 @@ func TestWorkspaceManagerClosePromptIntegration(t *testing.T) {
 └──────────────────┘`},
 			}
 
-			h := &safeHandler{Handler: m, mu: m.mu}
+			h := &safeHandler{Component: m.notifications, Handler: m, mu: m.mu}
 			handlertest.TestHandlerSequence(t, h, 20, 10, cases)
 
 			m.mu.Lock()
@@ -823,7 +825,7 @@ func TestWorkspaceManagerClosePromptIntegration(t *testing.T) {
 			}
 
 			// Runs the shader when invoking the prompt.
-			h := &safeHandler{Handler: m, mu: m.mu}
+			h := &safeHandler{Component: m.notifications, Handler: m, mu: m.mu}
 			handlertest.TestHandlerSequence(t, h, 20, 10, cases)
 
 			// m.shaderRunner.shader.Draw will use the shutdown shader only if the quit
@@ -875,7 +877,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 │            NORMAL│
 └──────────────────┘`},
 				}
-				h := &safeHandler{Handler: m, mu: m.mu}
+				h := &safeHandler{Component: m.notifications, Handler: m, mu: m.mu}
 				handlertest.TestHandlerSequence(t, h, 20, 10, cases)
 
 				require.NoError(t, m.Close())
@@ -909,7 +911,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 │            NORMAL│
 └──────────────────┘`},
 				}
-				h := &safeHandler{Handler: m, mu: m.mu}
+				h := &safeHandler{Component: m.notifications, Handler: m, mu: m.mu}
 				handlertest.TestHandlerSequence(t, h, 20, 10, cases)
 				require.NoError(t, m.Close())
 			})
@@ -932,7 +934,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 │            NORMAL│
 └──────────────────┘`},
 				}
-				h := &safeHandler{Handler: m, mu: m.mu}
+				h := &safeHandler{Component: m.notifications, Handler: m, mu: m.mu}
 				handlertest.TestHandlerSequence(t, h, 20, 10, cases)
 				require.NoError(t, m.Close())
 			})
@@ -971,7 +973,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 │            NORMAL│
 └──────────────────┘`},
 				}
-				h := &safeHandler{Handler: m1, mu: m1.mu}
+				h := &safeHandler{Component: m1.notifications, Handler: m1, mu: m1.mu}
 				handlertest.TestHandlerSequence(t, h, 20, 10, cases)
 				require.NoError(t, m1.Close())
 
@@ -1002,7 +1004,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 │            NORMAL│
 └──────────────────┘`},
 				}
-				h2 := &safeHandler{Handler: m2, mu: m2.mu}
+				h2 := &safeHandler{Component: m2.notifications, Handler: m2, mu: m2.mu}
 				handlertest.TestHandlerSequence(t, h2, 20, 10, cases)
 				require.NoError(t, m2.Close())
 
@@ -1022,7 +1024,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 │            NORMAL│
 └──────────────────┘`},
 				}
-				h3 := &safeHandler{Handler: m3, mu: m3.mu}
+				h3 := &safeHandler{Component: m3.notifications, Handler: m3, mu: m3.mu}
 				handlertest.TestHandlerSequence(t, h3, 20, 10, cases)
 				require.NoError(t, m3.Close())
 			})
@@ -1078,7 +1080,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 │            NORMAL│
 └──────────────────┘`},
 				}
-				h := &safeHandler{Handler: m, mu: m.mu}
+				h := &safeHandler{Component: m.notifications, Handler: m, mu: m.mu}
 				handlertest.TestHandlerSequence(t, h, 20, 10, cases)
 				require.NoError(t, m.Close())
 			})
@@ -1103,7 +1105,7 @@ func TestInitializeNoCwd(t *testing.T) {
 │1                 │
 └──────────────────┘`},
 	}
-	h := &safeHandler{Handler: m, mu: m.mu}
+	h := &safeHandler{Component: m.notifications, Handler: m, mu: m.mu}
 	handlertest.TestHandlerSequence(t, h, 20, 10, cases)
 
 	require.NoError(t, m.Close())
@@ -1139,7 +1141,7 @@ func TestNoBar(t *testing.T) {
 │                  │
 └──────────────────┘`},
 	}
-	h := &safeHandler{Handler: m, mu: m.mu}
+	h := &safeHandler{Component: m.notifications, Handler: m, mu: m.mu}
 	handlertest.TestHandlerSequence(t, h, 20, 10, cases)
 
 	require.NoError(t, m.Close())
@@ -1178,7 +1180,7 @@ func TestSwitchToWorkspaceComplete(t *testing.T) {
 │9                                     │
 └──────────────────────────────────────┘`},
 	}
-	h := &safeHandler{Handler: m, mu: m.mu}
+	h := &safeHandler{Component: m.notifications, Handler: m, mu: m.mu}
 	handlertest.TestHandlerSequence(t, h, 40, 20, cases)
 
 	require.NoError(t, m.Close())
@@ -1265,7 +1267,7 @@ func TestExternalCommands(t *testing.T) {
 │                            │
 └────────────────────────────┘`},
 		}
-		h := &safeHandler{Handler: m, mu: m.mu}
+		h := &safeHandler{Component: m.notifications, Handler: m, mu: m.mu}
 		handlertest.TestHandlerSequence(t, h, 30, 15, cases)
 
 		require.NoError(t, m.Close())
@@ -1325,7 +1327,7 @@ func TestExternalCommands(t *testing.T) {
 │                            │
 └────────────────────────────┘`},
 		}
-		h := &safeHandler{Handler: m, mu: m.mu}
+		h := &safeHandler{Component: m.notifications, Handler: m, mu: m.mu}
 		handlertest.TestHandlerSequence(t, h, 30, 15, cases)
 
 		require.NoError(t, m.Close())
@@ -1488,7 +1490,7 @@ func TestWorkspaceManagerCreateWorkspace(t *testing.T) {
 └────────────────────────────┘`},
 	}
 
-	h := &safeHandler{Handler: m, mu: m.mu}
+	h := &safeHandler{Component: m.notifications, Handler: m, mu: m.mu}
 	handlertest.TestHandlerSequence(t, h, 30, 20, cases)
 
 	// test that they indeed exist
@@ -1521,6 +1523,7 @@ func newTestWorkspaceManagerHandlerWithManagerAndExtensions(
 	require.NoError(t, err)
 
 	m := new(testWorkspaceManagerHandler)
+	n := notifications.New(m, notificationsConfig())
 	m.workspaceManagerHandler = new(workspaceManagerHandler)
 	// ensure that command manual is never shown
 	cfg.cfg["command"] = defaultCfg().cfg["command"]
@@ -1529,7 +1532,7 @@ func newTestWorkspaceManagerHandlerWithManagerAndExtensions(
 	shRunner.init(handler.Nop(component.Nop()), term.NopInterrupter(), term.Attributes{},
 		shutdownShaderCfg)
 
-	err = m.workspaceManagerHandler.init(uri, homeURI, manager, cfg, "", files,
+	err = m.workspaceManagerHandler.init(uri, homeURI, manager, n, cfg, "", files,
 		dir, func(term.Event) bool {
 			return true
 		}, runner, new(sync.Mutex), extensions,
@@ -1616,7 +1619,7 @@ func defaultCfg() ideConfig {
 			},
 			"aliases": map[string]interface{}{
 				"addBlaBla": "workspacenew memory:///blabla",
-				"w": "write!",
+				"w":         "write!",
 			},
 		},
 		"workspace": map[string]interface{}{

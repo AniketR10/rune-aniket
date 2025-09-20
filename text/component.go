@@ -65,7 +65,6 @@ type Workspace interface {
 // It also satisfies tui.Component, and text.Editor.
 type Component struct {
 	comp           browser.Component
-	notifier       notifier
 	storage        document.Service
 	workspace      Workspace
 	ed             Editor
@@ -168,7 +167,6 @@ func (c *Component) Init(
 	c.config = config
 
 	c.comp.Init(c.config.Config)
-	c.notifier = &c.comp
 	c.storage = storage
 	c.comp.Subscribe((*handlerWindowSubscriber)(c))
 
@@ -644,56 +642,25 @@ func (c *Component) DispatchEvent(ev textapi.Event) (handled bool) {
 	return
 }
 
-// Notify formats the given msg and args and displays it on next Draw.
+// Notify satisfies browser.Browser.
 func (c *Component) Notify(level notifications.Level, msg string, args ...interface{}) (
 	string, error,
 ) {
-	return c.notifier.Notify(level, msg, args...), nil
+	return c.config.Notify(level, fmt.Sprintf(msg, args...))
 }
 
-// NotifyOnce behaves like Notify, but only sends this notification once.
+// NotifyOnce satisfies browser.Browser.
 func (c *Component) NotifyOnce(level notifications.Level, msg string, args ...interface{}) (
 	string, error,
 ) {
-	ctx := context.Background()
-	id := c.notifier.NotificationID(level, msg, args)
-	var value storedNotification
-	value.ID = id
-	err := c.storage.Create(ctx, id, value)
-	if err == document.ErrAlreadyExists {
-		return "", nil
-	}
-	if err != nil {
-		return "", fmt.Errorf("storage create: %v", err)
-	}
-	return c.notifier.Notify(level, msg, args...), nil
+	return c.config.NotifyOnce(level, msg, args...)
 }
 
-// UpdateNotificationProgress satisfies browser.Notifications.
+// UpdateNotificationProgress satisfies browser.Browser.
 func (c *Component) UpdateNotificationProgress(
 	id, message string, progress, total int64,
 ) error {
-	ok := c.notifier.UpdateNotificationProgress(id, message, progress, total)
-	if !ok {
-		return errors.New("could not find notification with the " +
-			"given id, or it already expired")
-	}
-	return nil
-}
-
-// CloseNotifications closes all open notifications.
-func (c *Component) CloseNotifications() {
-	c.comp.CloseNotifications()
-}
-
-// PauseNotifications pauses auto-close on all open notifications.
-func (c *Component) PauseNotifications() {
-	c.comp.PauseNotifications()
-}
-
-// ResumeNotifications resumes auto-close on all open notifications.
-func (c *Component) ResumeNotifications() {
-	c.comp.ResumeNotifications()
+	return c.config.UpdateNotificationProgress(id, message, progress, total)
 }
 
 // Split satisfies browser.WindowManager.
@@ -1315,17 +1282,6 @@ func (w wrapEditor) Handle(ev term.Event) (exit, handled bool) {
 		delete(w.parent.editors, w.Resource().String())
 	}
 	return
-}
-
-type notifier interface {
-	Notify(level notifications.Level, msg string, args ...interface{}) string
-	NotificationID(level notifications.Level, msg string, args ...interface{}) string
-	UpdateNotificationProgress(id, message string, progress, total int64) bool
-}
-
-// stand-in type for NotifyOnce
-type storedNotification struct {
-	ID string
 }
 
 type handlerWindowSubscriber = Component

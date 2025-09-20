@@ -31,7 +31,6 @@ import (
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component"
-	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/command"
 	"unstable.build/go-tui/term"
@@ -217,11 +216,11 @@ func WithWindowManagerConfig(config handler.WindowManagerConfig) Option {
 	}
 }
 
-// WithNotificationsConfig returns an Option that configures
+// WithNotifications returns an Option that configures
 // a Component's notifications.
-func WithNotificationsConfig(c notifications.Config) Option {
+func WithNotifications(n browser.Notifications) Option {
 	return func(cfg *Config) {
-		cfg.Notifications = c
+		cfg.Notifications = n
 	}
 }
 

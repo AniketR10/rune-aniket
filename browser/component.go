@@ -57,7 +57,6 @@ type Component struct {
 	width     int
 	height    int
 	nextSplit browserapi.Orientation
-	container notifications.Container
 
 	dirtyTabs   bool
 	focusWindow handler.Window
@@ -129,8 +128,6 @@ func (c *Component) Init(config Config) {
 	if config.TabNameSeparator != "" {
 		c.tabs.SetNameSeparator(config.TabNameSeparator)
 	}
-
-	c.container.Init(&c.union, config.Notifications)
 }
 
 // NewTab adds a new tab to the list of tabs on this Component.
@@ -468,30 +465,14 @@ func (c *Component) Bar(cfg browserapi.BarConfig, h tui.Handler) {
 	}
 }
 
-// Notify formats the given msg and args and displays it on next Draw.
-func (c *Component) Notify(level notifications.Level, msg string, args ...interface{}) string {
-	return c.container.Notify(level, fmt.Sprintf(msg, args...))
-}
-
-// UpdateNotificationProgress updates the progress of a notification, overriding
-// the automatic configured time-based progress.
-func (c *Component) UpdateNotificationProgress(
-	id, message string, progress, total int64,
-) bool {
-	return c.container.UpdateProgress(id, message, progress, total)
-}
-
-// NotificationID returns the unique ID of a given notification.
-func (c *Component) NotificationID(
-	level notifications.Level, msg string, args ...interface{},
-) string {
-	return c.container.ID(level, fmt.Sprintf(msg, args...))
+func (c *Component) notify(level notifications.Level, msg string, args ...interface{}) {
+	_, _ = c.config.Notifications.Notify(level, fmt.Sprintf(msg, args...))
 }
 
 // Resize satisfies tui.Component
 func (c *Component) Resize(width, height int) {
 	c.width, c.height = width, height
-	c.container.Resize(width, height)
+	c.union.Resize(width, height)
 }
 
 // Draw satisfies tui.Component
@@ -506,7 +487,7 @@ func (c *Component) Draw(w term.Writer) {
 		c.dirtyTabs = false
 	}
 
-	c.container.Draw(w)
+	c.union.Draw(w)
 
 	// set correct attributes for focus window union charset
 	c.overwriteFocusWindowUnion(w)
@@ -690,12 +671,6 @@ func (c *Component) SetFocus(win Window) Window {
 
 // Handle proxies events to either the underlying Tabs or WindowManager.
 func (c *Component) Handle(ev term.Event) (exit, handled bool) {
-	// container Handles only mouse events so it's not a full tui.Handler.
-	// try to handle first and if it doesn't fallback handling to union.
-	_, handled = c.container.Handle(ev)
-	if handled {
-		return
-	}
 	return c.union.Handle(ev)
 }
 
@@ -796,9 +771,6 @@ func (c *Component) Close() (ret error) {
 			ret = err
 		}
 	}
-	if err := c.container.Close(); err != nil {
-		ret = multierror.Append(ret, err)
-	}
 	c.buffers = c.buffers[:0]
 	c.wm.UnsubscribeAll()
 
@@ -814,21 +786,6 @@ func (c *Component) Man() tui.Manual {
 	panic("TODO")
 }
 
-// CloseNotifications closes all open notifications.
-func (c *Component) CloseNotifications() {
-	c.container.CloseAll()
-}
-
-// PauseNotifications pauses auto-close on all open notifications.
-func (c *Component) PauseNotifications() {
-	c.container.PauseAll()
-}
-
-// ResumeNotifications resumes auto-close on all open notifications.
-func (c *Component) ResumeNotifications() {
-	c.container.ResumeAll()
-}
-
 func (c *Component) log(level log.Level, msg string, args ...interface{}) {
 	if !log.IsLevelEnabled(level) {
 		return
@@ -837,7 +794,7 @@ func (c *Component) log(level log.Level, msg string, args ...interface{}) {
 }
 
 func (c *Component) setError(err error) {
-	c.Notify(notifications.LevelError, "%s", err)
+	c.notify(notifications.LevelError, "%s", err)
 }
 
 func (c *Component) focus() *browserWindow {

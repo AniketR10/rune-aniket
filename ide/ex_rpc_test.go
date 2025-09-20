@@ -41,6 +41,7 @@ import (
 	"unstable.build/go-tui/browser/browserrpc"
 	"unstable.build/go-tui/browser/browsertest"
 	"unstable.build/go-tui/clipboard"
+	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/term/vte"
 	"unstable.build/go-tui/text"
@@ -66,19 +67,20 @@ func (h *groupEventHandler) Handle(ev term.Event) (handled bool) {
 
 // used to emulate term event loop synchronization
 type safeHandler struct {
-	mu      sync.Locker
-	Handler browserapi.Handler
+	mu        sync.Locker
+	Handler   browserapi.Handler
+	Component tui.Component
 }
 
 func (h *safeHandler) Resize(width, height int) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.Handler.Resize(width, height)
+	h.Component.Resize(width, height)
 }
 func (h *safeHandler) Draw(w term.Writer) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.Handler.Draw(w)
+	h.Component.Draw(w)
 }
 func (h *safeHandler) Handle(ev term.Event) (exit, handled bool) {
 	h.mu.Lock()
@@ -120,6 +122,11 @@ func newTestRPCBrowser(t *testing.T,
 	return func(ed text.Editor, opts ...text.Option) (
 		tui.Handler, browser.Browser, error,
 	) {
+		ex := new(ex)
+		svc := document.NewInMemoryService()
+		container := notifications.New(ex, notificationsConfig())
+		notifications := newWorkspaceNotifications(svc, container)
+		opts = append(opts, text.WithNotifications(notifications))
 		opts = append(opts, text.WithCommandOverlayConfig(testCommandOverlayConfig()))
 		opts = append(opts, text.WithCommandKeyBinding(term.KeyComb{Ch: 'w', Mod: term.ModCtrl},
 			[][]string{{"tabclose"}}))
@@ -128,9 +135,8 @@ func newTestRPCBrowser(t *testing.T,
 		opts = append(opts, text.WithCommandKeyBinding(term.KeyComb{Ch: 'h', Mod: term.ModCtrl},
 			[][]string{{"tabprevious"}}))
 		opts = append(opts, otherOpts...)
-		ex := new(ex)
 		ex.syncCommandPrompt = true
-		err := ex.init(ed, &testLoader{}, document.NewInMemoryService(),
+		err := ex.init(ed, &testLoader{}, svc, container,
 			vte.DefaultConfig(), nopPublishEvent, clip, opts...)
 		if err != nil {
 			return nil, nil, err
@@ -153,7 +159,7 @@ func newTestRPCBrowser(t *testing.T,
 		require.NoError(t, err)
 
 		bc := browserrpc.NewClient(context.Background(), conn)
-		h := &safeHandler{Handler: ex, mu: &serverMutex}
+		h := &safeHandler{Component: container, Handler: ex, mu: &serverMutex}
 		*destructor = func() {
 			serverMutex.Lock()
 			defer serverMutex.Unlock()
