@@ -94,6 +94,8 @@ func (a authorizer) Authorize(
 		perm = extensionapi.PermissionNotifications
 	case "/browser.Notifications/NotifyOnce":
 		perm = extensionapi.PermissionNotifications
+	case "/browser.Notifications/UpdateNotificationProgress":
+		perm = extensionapi.PermissionNotifications
 	case "/browser.EventPublisher/Publish":
 		perm = extensionapi.PermissionInterrupt
 	case "/browser.WindowManager/Focus":
