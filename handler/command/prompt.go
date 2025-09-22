@@ -751,19 +751,27 @@ func (h *Prompt) setCompletionList(
 		}
 	}
 
-	it, isEmpty := iterator.IsEmpty(ctx, it)
-	if isEmpty {
-		it = h.manualCompleter(ctx, cmdAndArgs[0], cmdAndArgs[1:]...)
-	}
-
 	if sync {
+		it, isEmpty := iterator.IsEmpty(ctx, it)
+		if isEmpty {
+			it = h.manualCompleter(ctx, cmdAndArgs[0], cmdAndArgs[1:]...)
+		}
 		h.list.Wait()
 		h.list.DataReset()
 		h.pushCompletionListSync(ctx, cancel, cmdAndArgs, it)
 	} else {
 		ch := h.list.Push(ctx)
 		h.list.DataReset()
+		mode := h.mode
+		commandsBackup := h.commandsBackup
+		// IsEmpty could be performing I/O under the hood
+		// via Next, so do not block
 		go debug.CapturePanicReport(func() {
+			it, isEmpty := iterator.IsEmpty(ctx, it)
+			if isEmpty {
+				it = manualCompleter(ctx, commandsBackup, mode,
+					cmdAndArgs[0], cmdAndArgs[1:]...)
+			}
 			h.pushCompletionList(ctx, ch, cancel, cmdAndArgs, it)
 		})
 	}
@@ -1167,44 +1175,13 @@ func (h *Prompt) getManualFromFocus() (man Manual, ok bool) {
 }
 
 func (h *Prompt) getManualForCommand(cmd string) (Manual, bool) {
-	for _, man := range h.commandsBackup {
-		if man.Name == cmd {
-			return man, true
-		}
-	}
-	return Manual{}, false
+	return getManualForCommand(cmd, h.commandsBackup)
 }
+
 func (h *Prompt) manualCompleter(
 	ctx context.Context, cmd string, args ...string,
 ) iterator.Iterator[string] {
-	man, ok := h.getManualForCommand(cmd)
-	if !ok || cmd == "" {
-		return iterator.FromSlice[string](nil)
-	}
-
-	args = strings.Split(strings.TrimSpace(strings.Join(args, " ")), " ")
-	// return iterator with submcommands,
-	// if first command hasn't been fully typed yet
-	if len(args) == 0 || (len(args) == 1 && h.mode < 2) {
-		return iterator.Map(iterator.FromSlice(man.Commands), manualToName)
-	}
-
-	// use mode to know if user has already completed
-	// last arg or not.
-	cmdAndArgsLen := len(args) + 1
-	if int(h.mode) < cmdAndArgsLen {
-		// trim last argument, since it hasn't been completed yet
-		args = args[:len(args)-1]
-	}
-
-	// if we find the last argument's subcommand manual,
-	// then use that as the completion args, otherwise just
-	// do not return any completion args.
-	lastArg := args[len(args)-1]
-	if man, ok := getSubcommandManual(man, args); ok && man.Name == lastArg {
-		return iterator.Map(iterator.FromSlice(man.Commands), manualToName)
-	}
-	return iterator.FromSlice[string](nil)
+	return manualCompleter(ctx, h.commandsBackup, h.mode, cmd, args...)
 }
 
 func (h *Prompt) getSeparatorHeight() int {
@@ -1217,4 +1194,49 @@ func (h *Prompt) getSeparatorHeight() int {
 func newNopAnimation(cfg Config) tui.Component {
 	return component.WithBackground(component.Nop(),
 		term.Cell{Attributes: cfg.ElementAttr})
+}
+
+func getManualForCommand(cmd string, commandsBackup []Manual) (Manual, bool) {
+	for _, man := range commandsBackup {
+		if man.Name == cmd {
+			return man, true
+		}
+	}
+	return Manual{}, false
+}
+
+// keep Prompt state as arguments, so we can
+// better manage concurrent access to them
+func manualCompleter(
+	ctx context.Context, commandsBackup []Manual,
+	mode commandPromptMode, cmd string, args ...string,
+) iterator.Iterator[string] {
+	man, ok := getManualForCommand(cmd, commandsBackup)
+	if !ok || cmd == "" {
+		return iterator.FromSlice[string](nil)
+	}
+
+	args = strings.Split(strings.TrimSpace(strings.Join(args, " ")), " ")
+	// return iterator with submcommands,
+	// if first command hasn't been fully typed yet
+	if len(args) == 0 || (len(args) == 1 && mode < 2) {
+		return iterator.Map(iterator.FromSlice(man.Commands), manualToName)
+	}
+
+	// use mode to know if user has already completed
+	// last arg or not.
+	cmdAndArgsLen := len(args) + 1
+	if int(mode) < cmdAndArgsLen {
+		// trim last argument, since it hasn't been completed yet
+		args = args[:len(args)-1]
+	}
+
+	// if we find the last argument's subcommand manual,
+	// then use that as the completion args, otherwise just
+	// do not return any completion args.
+	lastArg := args[len(args)-1]
+	if man, ok := getSubcommandManual(man, args); ok && man.Name == lastArg {
+		return iterator.Map(iterator.FromSlice(man.Commands), manualToName)
+	}
+	return iterator.FromSlice[string](nil)
 }
