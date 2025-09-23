@@ -300,7 +300,8 @@ func (p *fileScheme) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (
 		stdcmd.Dir = p.workspace.Path()
 	}
 
-	stdcmd.Env = cmd.Env
+	stdcmd.Env = stdcmd.Environ()
+	stdcmd.Env = append(stdcmd.Env, cmd.Env...)
 	stdcmd.SysProcAttr = cmd.SysProcAttr
 
 	// unwrap os.File if Stdout is a fileSchemeFile
