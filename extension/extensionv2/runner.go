@@ -42,6 +42,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/auth"
 	"github.com/unstablebuild/blue/auth/grpcauth"
+	"github.com/unstablebuild/blue/logging"
 	"github.com/unstablebuild/blue/retry"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -117,11 +118,25 @@ func (r *runner) WorkspaceExtensionsRunner(
 	}
 	socket := listener.Addr().String()
 
-	var cert, key []byte
-	opts := []grpc.ServerOption{
-		grpc.ChainStreamInterceptor(rpc.StreamReportRecoveryInterceptor()),
-		grpc.ChainUnaryInterceptor(rpc.UnaryReportRecoveryInterceptor()),
+	streamInterceptors := []grpc.StreamServerInterceptor{
+		rpc.StreamReportRecoveryInterceptor(),
 	}
+	unaryInterceptors := []grpc.UnaryServerInterceptor{
+		rpc.UnaryReportRecoveryInterceptor(),
+	}
+	if log.IsLevelEnabled(log.DebugLevel) {
+		fields := []logging.Field{
+			{Key: logging.KeyClass, Value: "grpc.Server"},
+			{Key: "workspace", Value: uri.String()},
+		}
+		streamInterceptors = append(streamInterceptors, rpc.StreamLoggingInterceptor(fields))
+		unaryInterceptors = append(unaryInterceptors, rpc.UnaryLoggingInterceptor(fields))
+	}
+	opts := []grpc.ServerOption{
+		grpc.ChainStreamInterceptor(streamInterceptors...),
+		grpc.ChainUnaryInterceptor(unaryInterceptors...),
+	}
+	var cert, key []byte
 	if r.cfg.insecureTransport && !r.cfg.insecureAuth {
 		opts = append(opts, grpcauth.GRPCServerWithInsecureOauth2(r.keys, r.authorizer)...)
 	} else if !r.cfg.insecureTransport {
