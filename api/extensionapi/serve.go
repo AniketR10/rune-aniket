@@ -115,8 +115,6 @@ func serveWorkspaceExtension(
 
 	scanner := bufio.NewScanner(in)
 	ok := scanner.Scan()
-	// ensure that nothing can read secrets from stdin beyond this point
-	cleanStdin(in)
 	if !ok {
 		return fmt.Errorf("scan protocol exchange: %w", scanner.Err())
 	}
@@ -170,12 +168,6 @@ func serveWorkspaceExtension(
 			return nil
 		}
 	}
-}
-
-func cleanStdin(in io.ReadCloser) {
-	_ = in.Close()
-	devNull, _ := os.Open("/dev/null")
-	_ = syscall.Dup2(int(devNull.Fd()), 0)
 }
 
 type fnWorkspaceExtension struct {
