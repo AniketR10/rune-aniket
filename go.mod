@@ -19,7 +19,7 @@ require (
 	github.com/smacker/go-tree-sitter v0.0.0-20230501083651-a7d92773b3aa
 	github.com/sourcegraph/go-diff v0.6.1
 	github.com/stretchr/testify v1.10.0
-	github.com/unstablebuild/blue v1.59.1
+	github.com/unstablebuild/blue v1.59.4
 	github.com/unstablebuild/golang-internal-tools v0.0.2
 	github.com/unstablebuild/tcell/v3 v3.5.1
 	go.uber.org/goleak v1.2.0
