@@ -30,6 +30,8 @@ import (
 	"io"
 	"strings"
 
+	log "github.com/sirupsen/logrus"
+	"github.com/unstablebuild/blue/logging"
 	"google.golang.org/grpc"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/api/browserapi"
@@ -71,6 +73,7 @@ func (c *Client) Init(ctx context.Context, cc grpc.ClientConnInterface) {
 	c.f = NewResourceOpenerClient(cc)
 	c.p = NewEventPublisherClient(cc)
 	c.clientCtx, c.clientCancelCtx = context.WithCancel(ctx)
+	c.log(log.TraceLevel, "client initialized")
 }
 
 // CloseWindow satisfies browserapi.Browser.
@@ -175,6 +178,7 @@ func (c *Client) Split(
 		stream, h, func() *SplitWindowMessage {
 			return new(SplitWindowMessage)
 		})
+	c.log(log.TraceLevel, "client created server stream %p", server)
 	go debug.CapturePanicReport(server.ReceiveMessages)
 
 	return newWindowClient(uint64(windowID)), nil
@@ -418,7 +422,18 @@ func (c *Client) Close() (err error) {
 		c.clientCancelCtx()
 		c.clientCancelCtx = nil
 	}
+	c.log(log.TraceLevel, "client was closed so all contexts were canceled")
 	return
+}
+
+func (c *Client) log(level log.Level, msg string, args ...interface{}) {
+	if !log.IsLevelEnabled(level) {
+		return
+	}
+	log.WithFields(log.Fields{
+		logging.KeyClass: "browserrpc.Client",
+		"instance":       fmt.Sprintf("%p", c),
+	}).Logf(level, msg, args...)
 }
 
 func toProtoOrientation(o browserapi.Orientation) Orientation {

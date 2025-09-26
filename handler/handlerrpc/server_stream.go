@@ -26,6 +26,7 @@ package handlerrpc
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 	"sync/atomic"
@@ -77,15 +78,16 @@ func (c *ServerStream[T]) ReceiveMessages() {
 	defer func() {
 		// ensure that client doesn't block in case of panic
 		err := c.stream.CloseSend()
-		c.log(log.TraceLevel, "closing connection send: %v", err)
+		c.log(log.TraceLevel, "done streaming, closed connection send: %v", err)
 	}()
+	c.log(log.TraceLevel, "streaming messages")
 	for {
 		var recvMsg ServerMessage
 		err := c.stream.RecvMsg(&recvMsg)
 		if err != nil {
 			if strings.Contains(err.Error(), io.EOF.Error()) ||
 				status.Code(err) == codes.Canceled {
-				c.log(log.DebugLevel, "stream is closing")
+				c.log(log.DebugLevel, "stream is closing: %v", err)
 			} else {
 				c.log(log.ErrorLevel, "stream receive: %v", err)
 			}
@@ -191,7 +193,12 @@ func (c *ServerStream[T]) ReceiveMessages() {
 		}
 		if err != nil {
 			if !errors.Is(err, io.EOF) {
-				c.log(log.ErrorLevel, "%s", err.Error())
+				c.log(log.DebugLevel, "stream: %s", err.Error())
+			} else {
+				// io.EOF indicates that stream status should be discovered
+				// through RecvMsg. See SendMsg documentation.
+				err = c.stream.RecvMsg(&recvMsg)
+				c.log(log.DebugLevel, "stream EOF: %v", err)
 			}
 			return
 		}
@@ -199,5 +206,11 @@ func (c *ServerStream[T]) ReceiveMessages() {
 }
 
 func (s *ServerStream[T]) log(level log.Level, msg string, args ...interface{}) {
-	log.WithField(logging.KeyClass, "handlerrpc.ServerStream").Logf(level, msg, args...)
+	if !log.IsLevelEnabled(level) {
+		return
+	}
+	log.WithFields(log.Fields{
+		logging.KeyClass: "handlerrpc.ServerStream",
+		"instance":       fmt.Sprintf("%p", s),
+	}).Logf(level, msg, args...)
 }

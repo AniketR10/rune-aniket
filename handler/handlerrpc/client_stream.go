@@ -137,16 +137,23 @@ func NewClientStream[T StreamMessage](
 
 // ReceiveMessages blocks until all messages have been received and the stream
 // is ready to be closed.
-func (s *ClientStream[T]) ReceiveMessages() error {
+func (s *ClientStream[T]) ReceiveMessages() (ret error) {
+	defer func() {
+		s.log(log.DebugLevel, "receive messages returned: error: %v", ret)
+	}()
+
 	go debug.CapturePanicReport(func() {
+		s.log(log.TraceLevel, "streaming messages")
 		s.closeStream(s.receiveMessages())
 	})
 
 	select {
 	case err := <-s.closeChan:
-		return err
+		ret = err
+		return
 	case <-s.ctx.Done():
-		return s.ctx.Err()
+		ret = fmt.Errorf("context is done: %w", s.ctx.Err())
+		return
 	}
 }
 
@@ -280,6 +287,7 @@ func (s *ClientStream[T]) Draw(w term.Writer) {
 		} else if s.scheduleDrawRequest(ctx, reqIsTick) {
 			s.drawPending(w)
 		} else {
+			s.log(log.TraceLevel, "could not schedule draw request")
 			s.drawError(w)
 		}
 	case stateAsyncPending:
@@ -295,9 +303,11 @@ func (s *ClientStream[T]) Draw(w term.Writer) {
 		} else if s.scheduleDrawRequest(ctx, reqIsTick) {
 			s.drawPending(w)
 		} else {
+			s.log(log.TraceLevel, "could not schedule draw request")
 			s.drawError(w)
 		}
 	case stateAsyncCircuitBreak:
+		s.log(log.TraceLevel, "received draw but state is circuit break")
 		s.drawError(w)
 	default:
 		panic("unknown state")
@@ -309,6 +319,7 @@ func (s *ClientStream[T]) Close() error {
 	if s.closed.Load() {
 		return nil
 	}
+	s.log(log.TraceLevel, "Close")
 	var req CloseStreamRequest
 	msg := ServerMessage{Type: MessageType_Close, Close: &req}
 	err := s.stream.SendMsg(&msg)
@@ -426,9 +437,12 @@ func (s *ClientStream[T]) processDraw(resp *DrawStreamResponse) {
 	s.state = stateAsyncIdle
 }
 
-func (s *ClientStream[T]) receiveMessages() error {
+func (s *ClientStream[T]) receiveMessages() (ret error) {
 	defer func() {
 		s.cancel()
+		if ret != nil {
+			s.log(log.TraceLevel, "done receiving messages: error: %v", ret)
+		}
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		s.state = stateAsyncCircuitBreak
@@ -437,20 +451,22 @@ func (s *ClientStream[T]) receiveMessages() error {
 	for {
 		recvMsg := s.newT()
 		if err := s.stream.RecvMsg(recvMsg); err != nil {
-			return fmt.Errorf("stream receive message: %w", err)
+			ret = fmt.Errorf("stream receive message: %w", err)
+			return
 		}
 
 		switch recvMsg.GetType() {
 		case MessageType_Draw:
 			draw := recvMsg.GetDraw()
 			if draw == nil {
-				return fmt.Errorf("receive draw message: missing data")
+				ret = fmt.Errorf("receive draw message: missing data")
 			}
 			s.processDraw(draw)
 		case MessageType_Man:
 			man := recvMsg.GetMan()
 			if man == nil || man.GetMan() == nil {
-				return fmt.Errorf("receive man message: missing data")
+				ret = fmt.Errorf("receive man message: missing data")
+				return
 			}
 			s.mu.Lock()
 			s.man = man
@@ -458,7 +474,8 @@ func (s *ClientStream[T]) receiveMessages() error {
 		case MessageType_Cursor:
 			cursor := recvMsg.GetCursor()
 			if cursor == nil {
-				return fmt.Errorf("receive cursor message: missing data")
+				ret = fmt.Errorf("receive cursor message: missing data")
+				return
 			}
 			s.mu.Lock()
 			s.cursor = cursor
@@ -466,7 +483,8 @@ func (s *ClientStream[T]) receiveMessages() error {
 		case MessageType_Selection:
 			selection := recvMsg.GetSelection()
 			if selection == nil {
-				return fmt.Errorf("receive selection message: missing data")
+				ret = fmt.Errorf("receive selection message: missing data")
+				return
 			}
 			s.mu.Lock()
 			s.selection = selection
@@ -474,7 +492,8 @@ func (s *ClientStream[T]) receiveMessages() error {
 		case MessageType_Dimensions:
 			dimensions := recvMsg.GetDimensions()
 			if dimensions == nil {
-				return fmt.Errorf("receive dimensions message: missing data")
+				ret = fmt.Errorf("receive dimensions message: missing data")
+				return
 			}
 			s.mu.Lock()
 			s.dimensions = dimensions
@@ -491,7 +510,8 @@ func (s *ClientStream[T]) receiveMessages() error {
 				// then Handle will retur exit. This should generally not happen.
 				err := s.publisher(term.Event{Type: term.EventNone})
 				if err != nil {
-					return fmt.Errorf("publish event none: %w", err)
+					ret = fmt.Errorf("publish event none: %w", err)
+					return
 
 				}
 				// do not return here, allow Close to be
@@ -500,10 +520,12 @@ func (s *ClientStream[T]) receiveMessages() error {
 		case MessageType_Resize:
 			/* nothing to do*/
 		case MessageType_Close:
-			return nil
+			s.log(log.TraceLevel, "received close message")
+			return
 		default:
 			/* case MessageType_Request, MessageType_Response: */
-			return fmt.Errorf("received extraneous message type: %d", recvMsg.GetType())
+			ret = fmt.Errorf("received extraneous message type: %d", recvMsg.GetType())
+			return
 		}
 	}
 }
@@ -551,7 +573,13 @@ func (s *ClientStream[T]) drawReady(w term.Writer) {
 }
 
 func (s *ClientStream[T]) log(level log.Level, msg string, args ...interface{}) {
-	log.WithField(logging.KeyClass, "handlerrpc.ClientStream").Logf(level, msg, args...)
+	if !log.IsLevelEnabled(level) {
+		return
+	}
+	log.WithFields(log.Fields{
+		logging.KeyClass: "handlerrpc.ClientStream",
+		"instance":       fmt.Sprintf("%p", s),
+	}).Logf(level, msg, args...)
 }
 
 func (s *ClientStream[T]) contextPayloadIsSelf(ctx context.Context) bool {

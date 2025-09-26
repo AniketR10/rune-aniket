@@ -529,6 +529,7 @@ func (s *Server) Stop() (err error) {
 		s.serverCancelCtx()
 		s.serverCancelCtx = nil
 	}
+	s.log(log.TraceLevel, "stopping server along with all handlerrpc clients")
 	return nil
 }
 
