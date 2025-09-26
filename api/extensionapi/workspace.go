@@ -54,6 +54,7 @@ type Workspace struct {
 	conn   grpc.ClientConnInterface
 	editor *textrpc.Client
 	config config.Config
+	meta   Metadata
 }
 
 // WindowManager returns the workspace's window manager, which can be used
@@ -115,7 +116,7 @@ func (w *Workspace) RegisterCommand(
 func (w *Workspace) Storage(ctx context.Context) document.Service {
 	c := new(docrpc.Client)
 	c.Init(w.conn, doctoml.Marshaler())
-	return c
+	return document.WithPartition(c, w.meta.ExtensionID)
 }
 
 // Interrupter returns the workspace's event loop interrupter, which
@@ -145,7 +146,7 @@ func (w *Workspace) RawConn() grpc.ClientConnInterface {
 // NewWorkspace returns a new Workspace. Extensions should use
 // ServeWorkspaceExtension, which performs the stdin/stdout exchange
 // necessary to receive a valid Config.
-func NewWorkspace(ctx context.Context, req Config) (*Workspace, error) {
+func NewWorkspace(req Config, meta Metadata) (*Workspace, error) {
 	ret := new(Workspace)
 	opts := []grpc.DialOption{
 		grpc.WithContextDialer(
@@ -184,6 +185,7 @@ func NewWorkspace(ctx context.Context, req Config) (*Workspace, error) {
 		return nil, fmt.Errorf("dial: %w", err)
 	}
 	ret.conn = conn
+	ret.meta = meta
 	return ret, nil
 }
 

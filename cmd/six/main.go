@@ -333,6 +333,12 @@ func run() int {
 		return 1
 	}
 
+	reportsDir := debug.ReportsDir
+	if reportsDir == "" {
+		reportsDir = os.TempDir()
+	}
+	log.Debugf("panic reports will be saved to %s", reportsDir)
+
 	var ret error
 	if err := i.Run(); err != nil {
 		ret = multierr.Append(ret, err)

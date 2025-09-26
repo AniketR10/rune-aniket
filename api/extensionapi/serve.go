@@ -33,6 +33,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/oauth2"
@@ -129,13 +130,14 @@ func serveWorkspaceExtension(
 			" in request")
 	}
 
+	start := time.Now()
 	errchan := make(chan error, 1)
 	cfg := config.MapConfig(req.Config)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	go debug.CapturePanicReport(func() {
-		workspace, err := NewWorkspace(ctx, req)
+		workspace, err := NewWorkspace(req, meta)
 		if err != nil {
 			errchan <- err
 			return
@@ -151,22 +153,22 @@ func serveWorkspaceExtension(
 			panic(fmt.Sprintf("capture panic report: error capturing: %v", captureErr))
 		}
 		panicErr := fmt.Errorf("extension panic: report saved %s", reportname)
-		log.Error(panicErr.Error())
 		// ensure log is delivered
 		_ = os.Stderr.Sync()
 		errchan <- panicErr
 	})
 
-	for {
-		select {
-		case err := <-errchan:
-			if err != nil {
-				log.Errorf("extension is exiting: %v", err)
-				return err
-			}
-		case <-sigchan:
-			return nil
+	select {
+	case err := <-errchan:
+		if err != nil {
+			log.Errorf("extension is exiting: %v", err)
+			return err
 		}
+		log.Debugf("extension was setup correctly in %s", time.Since(start))
+		<-sigchan
+		return nil
+	case <-sigchan:
+		return nil
 	}
 }
 
