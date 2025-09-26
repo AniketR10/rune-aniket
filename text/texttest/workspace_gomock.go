@@ -16,7 +16,6 @@ import (
 	gomock "go.uber.org/mock/gomock"
 	workspaceapi "unstable.build/go-tui/api/workspaceapi"
 	cell "unstable.build/go-tui/cell"
-	notifications "unstable.build/go-tui/component/notifications"
 	workspace "unstable.build/go-tui/workspace"
 )
 
@@ -145,79 +144,4 @@ func (m *MockWorkspace) URI(arg0 string) (workspaceapi.URI, error) {
 func (mr *MockWorkspaceMockRecorder) URI(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "URI", reflect.TypeOf((*MockWorkspace)(nil).URI), arg0)
-}
-
-// Mocknotifier is a mock of notifier interface.
-type Mocknotifier struct {
-	ctrl     *gomock.Controller
-	recorder *MocknotifierMockRecorder
-}
-
-// MocknotifierMockRecorder is the mock recorder for Mocknotifier.
-type MocknotifierMockRecorder struct {
-	mock *Mocknotifier
-}
-
-// NewMocknotifier creates a new mock instance.
-func NewMocknotifier(ctrl *gomock.Controller) *Mocknotifier {
-	mock := &Mocknotifier{ctrl: ctrl}
-	mock.recorder = &MocknotifierMockRecorder{mock}
-	return mock
-}
-
-// EXPECT returns an object that allows the caller to indicate expected use.
-func (m *Mocknotifier) EXPECT() *MocknotifierMockRecorder {
-	return m.recorder
-}
-
-// NotificationID mocks base method.
-func (m *Mocknotifier) NotificationID(level notifications.Level, msg string, args ...any) string {
-	m.ctrl.T.Helper()
-	varargs := []any{level, msg}
-	for _, a := range args {
-		varargs = append(varargs, a)
-	}
-	ret := m.ctrl.Call(m, "NotificationID", varargs...)
-	ret0, _ := ret[0].(string)
-	return ret0
-}
-
-// NotificationID indicates an expected call of NotificationID.
-func (mr *MocknotifierMockRecorder) NotificationID(level, msg any, args ...any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{level, msg}, args...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotificationID", reflect.TypeOf((*Mocknotifier)(nil).NotificationID), varargs...)
-}
-
-// Notify mocks base method.
-func (m *Mocknotifier) Notify(level notifications.Level, msg string, args ...any) string {
-	m.ctrl.T.Helper()
-	varargs := []any{level, msg}
-	for _, a := range args {
-		varargs = append(varargs, a)
-	}
-	ret := m.ctrl.Call(m, "Notify", varargs...)
-	ret0, _ := ret[0].(string)
-	return ret0
-}
-
-// Notify indicates an expected call of Notify.
-func (mr *MocknotifierMockRecorder) Notify(level, msg any, args ...any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{level, msg}, args...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Notify", reflect.TypeOf((*Mocknotifier)(nil).Notify), varargs...)
-}
-
-// UpdateNotificationProgress mocks base method.
-func (m *Mocknotifier) UpdateNotificationProgress(id, message string, progress, total int64) bool {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateNotificationProgress", id, message, progress, total)
-	ret0, _ := ret[0].(bool)
-	return ret0
-}
-
-// UpdateNotificationProgress indicates an expected call of UpdateNotificationProgress.
-func (mr *MocknotifierMockRecorder) UpdateNotificationProgress(id, message, progress, total any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateNotificationProgress", reflect.TypeOf((*Mocknotifier)(nil).UpdateNotificationProgress), id, message, progress, total)
 }
