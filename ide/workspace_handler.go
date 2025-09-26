@@ -677,7 +677,7 @@ func (h *workspaceManagerHandler) buildExtensions(
 	res = extension.MergeResourceMap(res,
 		extension.ConfigResources(config.MapConfig(cleanedExtensionConfig(cfg.cfg))))
 
-	dataDir := filepath.Join(h.sixDir, ".extension")
+	dataDir := h.sixDir
 	if err := os.MkdirAll(dataDir, 0777); err != nil {
 		return nil, fmt.Errorf("mkdir .extension: %v", err)
 	}
