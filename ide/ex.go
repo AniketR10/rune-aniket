@@ -91,7 +91,7 @@ type ex struct {
 	clip                 clipboard.Register
 	ed                   text.Editor
 	storage              document.Service
-	notifications        *notifications.Container
+	notifications        notifier
 	emulatorConfig       vte.Config
 	newEmulatorHandler   func(string, vte.Config) (vteHandler, error)
 	newPluginHandler     func(...string) (pluginHandler, error)
@@ -124,7 +124,7 @@ type ex struct {
 func newEx(
 	ed text.Editor, m workspace.Workspace,
 	storage document.Service,
-	notifications *notifications.Container,
+	notifications notifier,
 	emulatorConfig vte.Config,
 	publishEvent func(term.Event) bool,
 	clip clipboard.Register,
@@ -145,7 +145,7 @@ func newEx(
 func (e *ex) init(
 	ed text.Editor, m workspace.Workspace,
 	storage document.Service,
-	notifications *notifications.Container,
+	notifications notifier,
 	emulatorConfig vte.Config,
 	publishEvent func(term.Event) bool,
 	clip clipboard.Register,
@@ -156,7 +156,7 @@ func (e *ex) init(
 	if err != nil {
 		return
 	}
-	err = e.comp.Init(ed, storage, m, e.config)
+	err = e.comp.Init(ed, m, e.config)
 	if err != nil {
 		return
 	}
@@ -236,7 +236,7 @@ func (e *ex) Interrupt(ctx context.Context) error {
 func (e *ex) doInit(
 	ed text.Editor, m workspace.Workspace,
 	storage document.Service,
-	n *notifications.Container,
+	n notifier,
 	emulatorConfig vte.Config,
 	publishEvent func(term.Event) bool,
 	clip clipboard.Register,
@@ -1392,7 +1392,8 @@ func (e *ex) openCommandPrompt() {
 	commandCfg.FrameAttr = e.config.FrameAttr
 	commandCfg.ShowManualAfter = e.config.CommandOverlay.ShowManualAfter
 	commandCfg.Sync = e.syncCommandPrompt
-	cmd := command.NewPrompt(e.storage, e, e, e, []command.Manual{}, commandCfg)
+	promptStorage := document.WithPartition(e.storage, "cprompt")
+	cmd := command.NewPrompt(promptStorage, e, e, e, []command.Manual{}, commandCfg)
 
 	commandHandler := browser.FuncFloating(
 		browser.FuncHandler(

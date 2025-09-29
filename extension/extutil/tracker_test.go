@@ -29,7 +29,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/unstablebuild/blue/document"
 	"unstable.build/go-tui/api/browserapi"
 	"unstable.build/go-tui/api/config"
 	"unstable.build/go-tui/api/textapi"
@@ -68,7 +67,7 @@ func TestResourceTrackerIntegration(t *testing.T) {
 			require.NoError(t, err)
 			loader := workspace.NewSchemeWorkspace(cwd, scheme)
 
-			ed, err := text.NewComponent(simpleEd, document.NewInMemoryService(), loader, cfg)
+			ed, err := text.NewComponent(simpleEd, loader, cfg)
 			require.NoError(t, err)
 
 			tracker := NewResourceTracker(tabspaces, wrap)

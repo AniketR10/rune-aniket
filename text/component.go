@@ -33,7 +33,6 @@ import (
 
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
-	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/logging"
 	"unstable.build/go-tui"
@@ -65,7 +64,6 @@ type Workspace interface {
 // It also satisfies tui.Component, and text.Editor.
 type Component struct {
 	comp           browser.Component
-	storage        document.Service
 	workspace      Workspace
 	ed             Editor
 	config         Config
@@ -76,11 +74,11 @@ type Component struct {
 }
 
 // NewComponent allocates storage for a new Component and initializes it.
-func NewComponent(ed Editor, storage document.Service, w Workspace, config Config) (
+func NewComponent(ed Editor, w Workspace, config Config) (
 	c *Component, err error,
 ) {
 	c = new(Component)
-	err = c.Init(ed, storage, w, config)
+	err = c.Init(ed, w, config)
 	if err != nil {
 		return
 	}
@@ -161,13 +159,11 @@ func (c *Component) newFileBuffer(
 // It returns an error if an initial filepath was given through WithFilePath option
 // and the file failed to be opened.
 func (c *Component) Init(
-	ed Editor, storage document.Service,
-	w Workspace, config Config,
+	ed Editor, w Workspace, config Config,
 ) error {
 	c.config = config
 
 	c.comp.Init(c.config.Config)
-	c.storage = storage
 	c.comp.Subscribe((*handlerWindowSubscriber)(c))
 
 	c.ed = ed

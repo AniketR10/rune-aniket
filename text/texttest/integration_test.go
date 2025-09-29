@@ -37,7 +37,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/unstablebuild/blue/document"
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/workspace"
 )
@@ -167,7 +166,7 @@ func TestReadFile(t *testing.T) {
 			workspace := workspace.NewSchemeWorkspace(workspaceURI, scheme)
 
 			c, err := text.NewComponent(
-				NopEditor(), document.NewInMemoryService(), workspace, text.DefaultConfig(),
+				NopEditor(), workspace, text.DefaultConfig(),
 			)
 			require.NoError(t, err)
 

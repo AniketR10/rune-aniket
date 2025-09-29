@@ -27,6 +27,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 
 	"github.com/unstablebuild/blue/document"
 	"unstable.build/go-tui/browser"
@@ -96,6 +97,13 @@ func (c *workspaceNotifications) UpdateNotificationProgress(
 	if !ok {
 		return errors.New("could not find notification with the " +
 			"given id, or it already expired")
+	}
+	return nil
+}
+
+func (c *workspaceNotifications) Close() error {
+	if closer, ok := c.notifier.(io.Closer); ok {
+		return closer.Close()
 	}
 	return nil
 }

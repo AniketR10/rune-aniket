@@ -32,7 +32,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/unstablebuild/blue/document"
 	gomock "go.uber.org/mock/gomock"
 	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/api/workspaceapi"
@@ -179,7 +178,7 @@ func TestServerSetLocationList(t *testing.T) {
 		defer ctrl.Finish()
 
 		ed := texttest.NopEditor()
-		c, err := text.NewComponent(ed, document.NewInMemoryService(), &testLoader{}, text.Config{
+		c, err := text.NewComponent(ed, &testLoader{}, text.Config{
 			Config: browser.Config{
 				Wallpaper: browser.NopWallpaper(),
 			},

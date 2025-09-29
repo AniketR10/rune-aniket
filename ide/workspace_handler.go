@@ -76,7 +76,7 @@ type workspaceManagerHandler struct {
 	mu                 sync.Locker
 	exitPromptOpen     bool
 	confirmedForceExit bool
-	notifications      *notifications.Container
+	notifications      *workspaceNotifications
 	storage            document.Service
 	workspace          workspace.WorkspaceManager
 	publishEvent       func(term.Event) bool
@@ -155,11 +155,13 @@ func (h *workspaceManagerHandler) init(
 	reloadConfig func() (ideConfig, error), workspaceConfigFilename string,
 	tabBarOffset, tabBarHeight int, workspacesIcon rune,
 	workspacesBarHeight, workspacesBarOffset int, workspacesBarFrame bool,
-	tabsClickCallback func(int) bool, shaderRunner *shaderRunner,
+	tabsClickCallback func(int) bool,
+	shaderRunner *shaderRunner,
 ) (err error) {
 	ctx := context.Background()
 
-	h.notifications = notifications
+	notiStorage := document.WithPartition(h.storage, "noti")
+	h.notifications = newWorkspaceNotifications(notiStorage, notifications)
 	h.shaderRunner = shaderRunner
 	h.mu = locker
 	h.externalCommands = make(map[string]externalCommand)
@@ -191,7 +193,7 @@ func (h *workspaceManagerHandler) init(
 	}
 
 	h.homeWorkspace = homeWorkspace
-	h.empty, err = newEx(ed, homeWorkspace, h.storage, h.notifications,
+	h.empty, err = newEx(ed, homeWorkspace, h.storage, notifications,
 		cfg.terminalConfig(), h.publishEvent, cfg.clipboard(),
 		globalOpts...)
 	if err != nil {
@@ -229,7 +231,8 @@ func (h *workspaceManagerHandler) init(
 	h.union.Top = charset.Top
 	h.union.Bottom = charset.Bottom
 	h.workspaceBarKind = cfg.workspaceBarKind()
-	h.history = newHistory(h.storage)
+	historyStorge := document.WithPartition(h.storage, "history")
+	h.history = newHistory(historyStorge)
 
 	// best effort
 	user, err := user.Current()
@@ -474,7 +477,6 @@ func (h *workspaceManagerHandler) initExtensions(manager extension.Runner, cfg i
 }
 
 func (h *workspaceManagerHandler) textOpts(cfg ideConfig) []text.Option {
-	notifications := newWorkspaceNotifications(h.storage, h.notifications)
 	ret := []text.Option{
 		text.WithTabspaces(cfg.editorTabspaces()),
 		text.WithWindowManagerConfig(cfg.windowManagerConfig()),
@@ -483,7 +485,7 @@ func (h *workspaceManagerHandler) textOpts(cfg ideConfig) []text.Option {
 		text.WithTabsClickCallback(h.tabsClickCallback),
 		text.WithCommandKey(cfg.commandKey()),
 		text.WithCommandMaxHistory(cfg.commandMaxHistory()),
-		text.WithNotifications(notifications),
+		text.WithNotifications(h.notifications),
 		text.WithFocusTabAttr(cfg.focusTabAttr()),
 		text.WithNonFocusTabAttr(cfg.nonFocusTabAttr()),
 		text.WithWallpaper(cfg.wallpaper()),
@@ -570,7 +572,7 @@ func (h *workspaceManagerHandler) addWorkspace(
 
 	// workspace capable of opening URIs other than the workspaceapi.URI
 	multicwd := workspace.Multi(ctx, h.workspace, cwd, uri)
-	ex, err := newEx(ed, multicwd, h.storage, h.notifications,
+	ex, err := newEx(ed, multicwd, h.storage, h.notifications.notifier,
 		cfg.terminalConfig(), h.publishEvent, cfg.clipboard(), textOpts...)
 	if err != nil {
 		cancel()

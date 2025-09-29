@@ -36,7 +36,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/tcell/v3"
 	gomock "go.uber.org/mock/gomock"
@@ -929,7 +928,7 @@ func (t *testLoader) ReadDir(name string) ([]os.DirEntry, error) {
 
 func newTestComponentErr(ed text.Editor) (*text.Component, error) {
 	cfg := text.DefaultConfig()
-	c, err := text.NewComponent(ed, document.NewInMemoryService(), &testLoader{}, cfg)
+	c, err := text.NewComponent(ed, &testLoader{}, cfg)
 	if err != nil {
 		return nil, err
 	}

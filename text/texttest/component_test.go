@@ -35,7 +35,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/iterator"
 	gomock "go.uber.org/mock/gomock"
 	"unstable.build/go-tui"
@@ -155,7 +154,7 @@ func (t *testLoader) ReadDir(name string) ([]os.DirEntry, error) {
 
 func newTestComponentErr(ed text.Editor, cfg text.Config) (*text.Component, *testLoader, error) {
 	loader := &testLoader{}
-	c, err := text.NewComponent(ed, document.NewInMemoryService(), loader, cfg)
+	c, err := text.NewComponent(ed, loader, cfg)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -176,7 +175,7 @@ func newTestComponentConfig(t *testing.T, ed text.Editor, cfg text.Config) (
 
 func TestComponentInterfaces(t *testing.T) {
 	// this test is just a compile-time test
-	c, err := text.NewComponent(NopEditor(), document.NewInMemoryService(), &testLoader{}, text.DefaultConfig())
+	c, err := text.NewComponent(NopEditor(), &testLoader{}, text.DefaultConfig())
 	require.NoError(t, err)
 
 	var ed text.Editor
@@ -1176,7 +1175,7 @@ func TestDispatchCommand(t *testing.T) {
 			"blah": text.CommandAlias{Commands: []string{"bleh"}},
 			"bleh": text.CommandAlias{Commands: []string{"blah"}},
 		}
-		_, err := text.NewComponent(NopEditor(), document.NewInMemoryService(), &testLoader{}, cfg)
+		_, err := text.NewComponent(NopEditor(), &testLoader{}, cfg)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "cycle detected")
 	})
@@ -1187,7 +1186,7 @@ func TestDispatchCommand(t *testing.T) {
 			"blah": text.CommandAlias{Commands: []string{"bleh"}},
 			"bleh": text.CommandAlias{Commands: []string{"bloh"}},
 		}
-		_, err := text.NewComponent(NopEditor(), document.NewInMemoryService(), &testLoader{}, cfg)
+		_, err := text.NewComponent(NopEditor(), &testLoader{}, cfg)
 		require.NoError(t, err)
 	})
 
@@ -1198,7 +1197,7 @@ func TestDispatchCommand(t *testing.T) {
 			"bleh": text.CommandAlias{Commands: []string{"bloh"}},
 			"bloh": text.CommandAlias{Commands: []string{"bluh", "blah"}},
 		}
-		_, err := text.NewComponent(NopEditor(), document.NewInMemoryService(), &testLoader{}, cfg)
+		_, err := text.NewComponent(NopEditor(), &testLoader{}, cfg)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "cycle detected")
 	})
@@ -1210,7 +1209,7 @@ func TestDispatchCommand(t *testing.T) {
 			"bleh": text.CommandAlias{Commands: []string{"bloh"}},
 			"bloh": text.CommandAlias{Commands: []string{"bluh", "otherThing"}},
 		}
-		_, err := text.NewComponent(NopEditor(), document.NewInMemoryService(), &testLoader{}, cfg)
+		_, err := text.NewComponent(NopEditor(), &testLoader{}, cfg)
 		require.NoError(t, err)
 	})
 }
@@ -1227,7 +1226,7 @@ func TestCompleteCommand(t *testing.T) {
 		cfg.CommandAliases = map[string]text.CommandAlias{
 			"blah": text.CommandAlias{Commands: []string{"bleh"}, Completer: completer},
 		}
-		c, err := text.NewComponent(NopEditor(), document.NewInMemoryService(), &testLoader{}, cfg)
+		c, err := text.NewComponent(NopEditor(), &testLoader{}, cfg)
 		require.NoError(t, err)
 
 		it, arg, err := c.CompleteCommand(context.Background(), "blah")
@@ -1252,7 +1251,7 @@ func TestCompleteCommand(t *testing.T) {
 		cfg.CommandAliases = map[string]text.CommandAlias{
 			"blah": text.CommandAlias{Commands: []string{"bleh"}, Completer: completer},
 		}
-		c, err := text.NewComponent(NopEditor(), document.NewInMemoryService(), &testLoader{}, cfg)
+		c, err := text.NewComponent(NopEditor(), &testLoader{}, cfg)
 		require.NoError(t, err)
 
 		_, _, err = c.CompleteCommand(context.Background(), "blah")
@@ -1386,7 +1385,7 @@ func TestComponentCommands(t *testing.T) {
 		cfg.CommandAliases = map[string]text.CommandAlias{
 			"blah": text.CommandAlias{Commands: []string{"myCmd"}},
 		}
-		c, err := text.NewComponent(NopEditor(), document.NewInMemoryService(), &testLoader{}, cfg)
+		c, err := text.NewComponent(NopEditor(), &testLoader{}, cfg)
 		require.NoError(t, err)
 		cmds := c.Commands()
 		require.Len(t, cmds, 1)
@@ -1448,7 +1447,7 @@ func TestUnregisterCommand(t *testing.T) {
 	require.NoError(t, err)
 	myArgs := []string{"a", "bbbbbbbbbbbbbbbbbbbbb"}
 	myCmd := "BUY"
-	c, err := text.NewComponent(NopEditor(), document.NewInMemoryService(), &testLoader{}, text.DefaultConfig())
+	c, err := text.NewComponent(NopEditor(), &testLoader{}, text.DefaultConfig())
 	require.NoError(t, err)
 
 	win, _ := c.Focus()
@@ -1548,7 +1547,7 @@ func TestFlush(t *testing.T) {
 		mockWorkspace := NewMockWorkspace(ctrl)
 		mockFlusherCloser := workspacetest.NewMockFlusherCloser(ctrl)
 
-		c, err := text.NewComponent(mockEditor, document.NewInMemoryService(), mockWorkspace, text.DefaultConfig())
+		c, err := text.NewComponent(mockEditor, mockWorkspace, text.DefaultConfig())
 		require.NoError(t, err)
 
 		win, err := c.Focus()
@@ -1608,7 +1607,7 @@ func TestReload(t *testing.T) {
 		mockWorkspace := NewMockWorkspace(ctrl)
 		mockFlusherCloser := workspacetest.NewMockFlusherCloser(ctrl)
 
-		c, err := text.NewComponent(mockEditor, document.NewInMemoryService(), mockWorkspace, text.DefaultConfig())
+		c, err := text.NewComponent(mockEditor, mockWorkspace, text.DefaultConfig())
 		require.NoError(t, err)
 
 		win, err := c.Focus()
