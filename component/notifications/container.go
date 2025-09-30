@@ -259,6 +259,9 @@ func (n *Container) Notify(level Level, msg string) string {
 // message passed to UpdateProgress is used, or the original
 // message when creating the notification.
 func (c *Container) UpdateProgress(id, message string, progress, total int64) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	if progress > total || total == 0 {
 		panic("invalid arguments: progress must be smaller than " +
 			"total and total must not be zero")
