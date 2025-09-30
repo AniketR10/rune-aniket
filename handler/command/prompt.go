@@ -28,6 +28,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -784,22 +785,22 @@ func (h *Prompt) pushCompletionListSync(
 	it iterator.Iterator[string],
 ) {
 	defer cancel()
-	var i int
-	push := func(it iterator.Iterator[string]) {
-		for ; ; i++ {
-			next, ok := it.Next(ctx)
-			if !ok {
-				break
+	push := func(it iterator.Iterator[string]) bool {
+		els, err := iterator.ToSlice(ctx, it)
+		if err != nil {
+			if err := it.Err(); err != nil && !errors.Is(err, context.Canceled) {
+				h.log(log.ErrorLevel, "completion iterator error: %v", err)
 			}
-			h.list.PushSync([]byte(next))
+			_ = it.Close()
 		}
-		if err := it.Err(); err != nil && !errors.Is(err, context.Canceled) {
-			h.log(log.ErrorLevel, "completion iterator error: %v", err)
+		sort.Strings(els)
+		for _, el := range els {
+			h.list.PushSync([]byte(el))
 		}
-		_ = it.Close()
+		return len(els) != 0
 	}
-	push(it)
-	if i != 0 {
+
+	if push(it) {
 		return
 	}
 	// push args history if default completion iterator is empty

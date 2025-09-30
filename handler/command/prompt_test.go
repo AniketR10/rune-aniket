@@ -741,10 +741,10 @@ rori myArg oro ▐
 			nopComplete,
 			expectDispatch("rori", "myArg", "5"), `
 rori my▐            
-myArg 5             
-myArg 3             
-myArg 2             
 myArg 1             
+myArg 3             
+myArg 4             
+myArg 5             
                     
                     
                     
@@ -779,8 +779,8 @@ rori m▐
 				}),
 			nopDispatch, `
 rori myArg  or▐     
-oregano             
 oregani             
+oregano             
                     
                     
                     
@@ -795,11 +795,11 @@ oregani
 			nopComplete,
 			expectDispatch("rori", "myArg", "5"), `
 rori m▐             
-myArg 5             
-myArg 4             
-myArg 3             
-myArg 2             
 myArg 1             
+myArg 2             
+myArg 3             
+myArg 4             
+myArg 5             
                     
                     
                     
@@ -935,17 +935,12 @@ func TestCommandHandlerHistory(t *testing.T) {
 		b.completingWithHistory = true
 
 		// mock an async iterator we can feed elements to using a channel
-		it := testFeederIterator{feeder: make(chan string)}
-
+		var slice []string
 		ctx, cancel := context.WithCancel(b.ctx)
-
-		// feed the iterator so it can be consumed from `pushCompletionListSync`
-		go func() {
-			defer close(it.feeder)
-			for i := 0; i < 10; i++ {
-				it.feeder <- fmt.Sprintf("! echo xyz_%d", i)
-			}
-		}()
+		for i := 0; i < 10; i++ {
+			slice = append(slice, fmt.Sprintf("! echo xyz_%d", i))
+		}
+		it := iterator.FromSlice(slice)
 		b.pushCompletionListSync(ctx, cancel, []string{"! echo"}, it)
 
 		require.Equal(t, 10, b.list.TotalCount())
