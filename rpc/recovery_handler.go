@@ -47,8 +47,7 @@ func UnaryReportRecoveryInterceptor() grpc.UnaryServerInterceptor {
 		if captureErr != nil {
 			panic(fmt.Sprintf("capture panic report: error capturing: %v", captureErr))
 		}
-		err = fmt.Errorf("grpc goroutine panic: report: %s", reportname)
-		log.Panicf("%v", err)
+		log.Panicf("grpc goroutine panic: report: %s", reportname)
 		return
 	}
 }
@@ -68,8 +67,7 @@ func StreamReportRecoveryInterceptor() grpc.StreamServerInterceptor {
 		if captureErr != nil {
 			panic(fmt.Sprintf("capture panic report: error capturing: %v", captureErr))
 		}
-		err = fmt.Errorf("grpc goroutine panic: report: %s", reportname)
-		log.Panicf("%v", err)
+		log.Panicf("grpc goroutine panic: report: %s", reportname)
 		return
 	}
 }
