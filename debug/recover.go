@@ -52,6 +52,7 @@ func CapturePanicReportWith(dir, pkg, version string, run func()) (bool, string,
 	if _, err := f.Write(data); err != nil {
 		return false, "", fmt.Errorf("%w: write %v", err, report)
 	}
+	log.Infof("saved crash report file://%v", f.Name())
 	return false, f.Name(), nil
 }
 
