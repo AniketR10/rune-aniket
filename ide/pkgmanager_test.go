@@ -373,6 +373,66 @@ func TestPackageManagerIntegration(t *testing.T) {
 	require.NoError(t, m.Close())
 }
 
+func TestSetReleaseManager(t *testing.T) {
+	rm := idepkgtest.NewReleaseManager(idepkgtest.MakePackages(), idepkgtest.MakeBundles())
+	m := newTestWorkspaceManagerHandlerForPkgManager(t, rm)
+
+	cases := []handlertest.SequenceTestCase{
+		{":pkginstall ",
+			`┌──────────────────────────────────────┐
+│                                      │
+├──────────────────────────────────────┤
+│                                      │
+│                                      │
+│                                      │
+┌──────────────────────────────────────┐
+│pkginstall ▐                          │
+│                                      │
+│                                      │
+└──────────────────────────────────────┘
+│                                      │
+├──────────────────────────────────────┤
+│1                                     │
+└──────────────────────────────────────┘`},
+	}
+	h := newSafeHandler(m)
+	handlertest.TestHandlerSequence(t, h, 40, 15, cases)
+
+	pkgs := idepkgtest.MakePackages(
+		release.Package{Name: "go"},
+	)
+	bundles := idepkgtest.MakeBundles(
+		[]release.Bundle{
+			{Package: "go", Version: "3"},
+		},
+	)
+	rm2 := idepkgtest.NewReleaseManager(pkgs, bundles)
+	rm2.SetMissProgressComplete(true)
+	m.setReleaseManager(rm2)
+
+	cases = []handlertest.SequenceTestCase{
+		{"<:pkginstall ",
+			`┌──────────────────────────────────────┐
+│                                      │
+├──────────────────────────────────────┤
+│                                      │
+│                                      │
+│                                      │
+┌──────────────────────────────────────┐
+│pkginstall ▐                          │
+│go                                    │
+│                                      │
+└──────────────────────────────────────┘
+│                                      │
+├──────────────────────────────────────┤
+│1                                     │
+└──────────────────────────────────────┘`},
+	}
+	handlertest.TestHandlerSequence(t, h, 40, 15, cases)
+
+	require.NoError(t, m.Close())
+}
+
 func newTestWorkspaceManagerHandlerForPkgManager(
 	t *testing.T, releaseManager release.Manager,
 ) *testWorkspaceManagerHandler {

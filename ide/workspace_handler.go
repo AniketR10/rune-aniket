@@ -191,8 +191,7 @@ func (h *workspaceManagerHandler) init(
 		return fmt.Errorf("new editor: %v", err)
 	}
 
-	pkgStorage := document.WithPartition(h.storage, "idepkg")
-	h.pkgmanager = newPackageManager(h.notifications, releaseManager, pkgStorage, sixDir)
+	h.setReleaseManager(releaseManager)
 
 	homeWorkspace, err := h.workspace.AddWorkspace(ctx, homeDirUri)
 	if err != nil {
@@ -1154,4 +1153,12 @@ func (h *workspaceManagerHandler) exHandler(focus tui.Handler) *ex {
 
 	panic("unknown focus handler")
 
+}
+
+func (h *workspaceManagerHandler) setReleaseManager(releaseManager release.Manager) {
+	pkgStorage := document.WithPartition(h.storage, "idepkg")
+	if h.pkgmanager == nil {
+		h.pkgmanager = new(pkgManager)
+	}
+	h.pkgmanager.init(h.notifications, releaseManager, pkgStorage, h.sixDir)
 }

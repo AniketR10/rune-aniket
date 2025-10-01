@@ -91,14 +91,12 @@ type pkgManager struct {
 	n   browserapi.Notifications
 }
 
-func newPackageManager(
-	n browserapi.Notifications, m release.Manager,
+func (m *pkgManager) init(
+	n browserapi.Notifications, rm release.Manager,
 	storage document.Service, dataDir string,
-) *pkgManager {
-	ret := new(pkgManager)
-	ret.pkg = idepkg.NewManager(n, m, storage, dataDir)
-	ret.n = n
-	return ret
+) {
+	m.pkg = idepkg.NewManager(n, rm, storage, dataDir)
+	m.n = n
 }
 
 func (m *pkgManager) HandleCommand(ctx context.Context, cmd textapi.Command) error {
