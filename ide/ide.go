@@ -99,11 +99,7 @@ func NewRecovery(
 
 // Interrupt satisfies term.Interrupter
 func (i *IDE) Interrupt(ctx context.Context) error {
-	payload, _ := term.PayloadFromContext(ctx)
-	if !i.publishEvent(term.Event{Type: term.EventInterrupt, Raw: payload}) {
-		return errEventStreamNotReady
-	}
-	return nil
+	return i.workspaceHandler.Interrupt(ctx)
 }
 
 // Run initialzes the underlying terminal environment and runs

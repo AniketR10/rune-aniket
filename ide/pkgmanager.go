@@ -38,6 +38,7 @@ import (
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/ide/idepkg"
+	"unstable.build/go-tui/term"
 )
 
 const (
@@ -94,8 +95,9 @@ type pkgManager struct {
 func (m *pkgManager) init(
 	n browserapi.Notifications, rm release.Manager,
 	storage document.Service, dataDir string,
+	interrupt term.Interrupter,
 ) {
-	m.pkg = idepkg.NewManager(n, rm, storage, dataDir)
+	m.pkg = idepkg.NewManager(n, rm, storage, dataDir, interrupt)
 	m.n = n
 }
 

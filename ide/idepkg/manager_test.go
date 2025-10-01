@@ -40,6 +40,7 @@ import (
 	"unstable.build/go-tui/api/config"
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/ide/idepkg/idepkgtest"
+	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/workspace"
 	"unstable.build/go-tui/workspace/walkdir"
 )
@@ -744,6 +745,7 @@ func newTestManager(
 	})
 	n := idepkgtest.NewNotifications(t)
 	m := idepkgtest.NewReleaseManager(packages, versions)
-	manager := NewManager(n, m, document.NewInMemoryService(), temp)
+	manager := NewManager(n, m, document.NewInMemoryService(),
+		temp, term.NopInterrupter())
 	return manager, n, m, temp
 }

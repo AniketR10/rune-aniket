@@ -21,7 +21,6 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 package idepkg
 
 import (
@@ -48,6 +47,7 @@ import (
 	"unstable.build/go-tui/api/browserapi"
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/debug"
+	"unstable.build/go-tui/term"
 )
 
 // NewManager allocates storage for a new Manager and initializes it.
@@ -56,6 +56,7 @@ import (
 func NewManager(
 	n browserapi.Notifications, m release.Manager,
 	storage document.Service, dataDir string,
+	interrupter term.Interrupter,
 ) *Manager {
 	if dataDir == "" {
 		panic("data directory must not be empty")
@@ -63,12 +64,13 @@ func NewManager(
 	binDir := makeBinDirname(dataDir)
 	libDir := makeLibDirname(dataDir)
 	return &Manager{
-		dataDir: dataDir,
-		binDir:  binDir,
-		libDir:  libDir,
-		n:       n,
-		m:       m,
-		storage: storage,
+		dataDir:     dataDir,
+		binDir:      binDir,
+		interrupter: interrupter,
+		libDir:      libDir,
+		n:           n,
+		m:           m,
+		storage:     storage,
 	}
 }
 
@@ -78,12 +80,13 @@ func NewManager(
 // Note that OS/system is managed by having a separate Manager that points
 // to a different underlying release.Manager.
 type Manager struct {
-	n       browserapi.Notifications
-	m       release.Manager
-	storage document.Service
-	dataDir string
-	binDir  string
-	libDir  string
+	n           browserapi.Notifications
+	m           release.Manager
+	interrupter term.Interrupter
+	storage     document.Service
+	dataDir     string
+	binDir      string
+	libDir      string
 }
 
 // DescribePackage fetches a Package manifest.
@@ -472,8 +475,14 @@ func (m *Manager) download(
 		_ = m.n.UpdateNotificationProgress(notificationID,
 			"downloaded version of package", 1, 1)
 	}
-	_, _ = m.n.Notify(notifications.LevelSuccess,
+	_, err = m.n.Notify(notifications.LevelSuccess,
 		"downdloaded version %s of package %s", version, pkgID)
+	if err != nil {
+		m.log(log.WarnLevel, "notify: %v", err)
+	}
+	if err := m.interrupter.Interrupt(ctx); err != nil {
+		m.log(log.WarnLevel, "interrupt: %v", err)
+	}
 }
 
 func (m *Manager) abortDownload(
@@ -501,6 +510,9 @@ func (m *Manager) notifyError(
 	}
 	if err := m.n.UpdateNotificationProgress(notificationID, newMsg, 1, 1); err != nil {
 		m.log(log.WarnLevel, "update notification progress: %v", err)
+	}
+	if err := m.interrupter.Interrupt(context.Background()); err != nil {
+		m.log(log.WarnLevel, "interrupt: %v", err)
 	}
 }
 
@@ -596,6 +608,9 @@ func (w *notificationsProgressWriter) Progress(progress, total int64, units stri
 		w.m.log(log.WarnLevel, "could not update notification progress: %v", err)
 	}
 	w.completeProgress = total == progress
+	if err := w.m.interrupter.Interrupt(context.Background()); err != nil {
+		w.m.log(log.WarnLevel, "interrupt: %v", err)
+	}
 }
 
 func isExecutable(info fs.FileInfo) bool {

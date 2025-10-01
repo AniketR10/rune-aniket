@@ -1155,10 +1155,18 @@ func (h *workspaceManagerHandler) exHandler(focus tui.Handler) *ex {
 
 }
 
+func (h *workspaceManagerHandler) Interrupt(ctx context.Context) error {
+	payload, _ := term.PayloadFromContext(ctx)
+	if !h.publishEvent(term.Event{Type: term.EventInterrupt, Raw: payload}) {
+		return errEventStreamNotReady
+	}
+	return nil
+}
+
 func (h *workspaceManagerHandler) setReleaseManager(releaseManager release.Manager) {
 	pkgStorage := document.WithPartition(h.storage, "idepkg")
 	if h.pkgmanager == nil {
 		h.pkgmanager = new(pkgManager)
 	}
-	h.pkgmanager.init(h.notifications, releaseManager, pkgStorage, h.sixDir)
+	h.pkgmanager.init(h.notifications, releaseManager, pkgStorage, h.sixDir, h)
 }
