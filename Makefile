@@ -2,7 +2,7 @@ GO=go
 CI ?= false
 GOTESTFLAGS ?= -race -timeout 120s
 GOTESTFLAGSNORACE = -timeout 120s
-GOFLAGS=-ldflags="-X debug.Tag=$$(git describe --tags) -X debug.Commit=$$(git rev-parse --short HEAD) -X debug.Package=six"
+GOFLAGS=-ldflags="-X unstable.build/go-tui/debug.Tag=$$(git describe --tags) -X unstable.build/go-tui/debug.Commit=$$(git rev-parse --short HEAD) -X unstable.build/go-tui/debug.Package=six"
 UNAME := $(shell uname)
 
 BIN=bin
@@ -100,10 +100,10 @@ $(EXAMPLE_WASM_BLOB): $(WASM_EXAMPLE) $(LIBSRC) $(WASM_EXAMPLE_TARGET)
 	$(CGO_ENABLED) GOOS=js GOARCH=wasm $(GO) build -o $(EXAMPLE_WASM_BLOB) $(WASM_EXAMPLE)
 
 $(EXAMPLES_NON_WASM): $(EXAMPLESRC) $(LIBSRC) $(BIN)
-	@cd $(patsubst bin/example_%,examples/%,$@) && $(CGO_ENABLED) $(GO) build -o ../../$@ $(GOFLAGS)
+	@cd $(patsubst bin/example_%,examples/%,$@) && $(CGO_ENABLED) $(GO) build $(GOFLAGS) -o ../../$@
 
 $(EXECS): $(EXECSRC) $(LIBSRC) $(BIN)
-	@cd $(patsubst bin/%,cmd/%,$@) && $(CGO_ENABLED) $(GO) build -o ../../$@ $(GOFLAGS)
+	cd $(patsubst bin/%,cmd/%,$@) && $(CGO_ENABLED) $(GO) build $(GOFLAGS) -o ../../$@
 
 make_release: CGO_ENABLED=CGO_ENABLED=1
 make_release:
