@@ -768,6 +768,20 @@ func (h *Prompt) setCompletionList(
 		// IsEmpty could be performing I/O under the hood
 		// via Next, so do not block
 		go debug.CapturePanicReport(func() {
+			// draw progress animation while iterator is still returning results
+			frames, seq := component.ProgressAnimationFrames()
+			animation := component.NewAnimation(h.interrupter, frames, seq, 10)
+			defer func() {
+				_ = animation.Close()
+				h.mu.Lock()
+				h.animation.C = newNopAnimation(h.config)
+				h.mu.Unlock()
+			}()
+
+			h.mu.Lock()
+			h.animation.C = animation
+			h.mu.Unlock()
+
 			it, isEmpty := iterator.IsEmpty(ctx, it)
 			if isEmpty {
 				it = manualCompleter(ctx, commandsBackup, mode,
@@ -787,11 +801,11 @@ func (h *Prompt) pushCompletionListSync(
 	defer cancel()
 	push := func(it iterator.Iterator[string]) bool {
 		els, err := iterator.ToSlice(ctx, it)
+		_ = it.Close()
 		if err != nil {
 			if err := it.Err(); err != nil && !errors.Is(err, context.Canceled) {
 				h.log(log.ErrorLevel, "completion iterator error: %v", err)
 			}
-			_ = it.Close()
 		}
 		sort.Strings(els)
 		for _, el := range els {
@@ -866,22 +880,11 @@ func (h *Prompt) pushCompletionList(
 	defer close(ch)
 	defer cancel()
 
-	// draw progress animation while iterator is still returning results
-	frames, seq := component.ProgressAnimationFrames()
-	animation := component.NewAnimation(h.interrupter, frames, seq, 10)
-	defer func() {
-		_ = animation.Close()
-		h.mu.Lock()
-		h.animation.C = newNopAnimation(h.config)
-		h.mu.Unlock()
-	}()
-
-	h.mu.Lock()
-	h.animation.C = animation
-	h.mu.Unlock()
-
 	var i int
 	push := func(it iterator.Iterator[string]) {
+		defer func() {
+			_ = it.Close()
+		}()
 		for ; ; i++ {
 			next, ok := it.Next(ctx)
 			if !ok {
@@ -900,7 +903,6 @@ func (h *Prompt) pushCompletionList(
 		if err != nil && !errors.Is(err, context.Canceled) {
 			h.log(log.ErrorLevel, "completion iterator error: %v", err)
 		}
-		_ = it.Close()
 	}
 
 	push(it)
