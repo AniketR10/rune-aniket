@@ -62,12 +62,10 @@ func NewManager(
 		panic("data directory must not be empty")
 	}
 	binDir := makeBinDirname(dataDir)
-	libDir := makeLibDirname(dataDir)
 	return &Manager{
 		dataDir:     dataDir,
 		binDir:      binDir,
 		interrupter: interrupter,
-		libDir:      libDir,
 		n:           n,
 		m:           m,
 		storage:     storage,
@@ -86,7 +84,6 @@ type Manager struct {
 	storage     document.Service
 	dataDir     string
 	binDir      string
-	libDir      string
 }
 
 // DescribePackage fetches a Package manifest.
@@ -134,7 +131,7 @@ func (m *Manager) InstallPackageVersion(
 	if err != nil {
 		if errors.Is(err, document.ErrAlreadyExists) {
 			return fmt.Errorf("version %s of package %s has "+
-				"already been installed", version, pkgID)
+				"already been installed: %w", version, pkgID, err)
 		}
 		m.cleanupFile(tarfile)
 		return fmt.Errorf("store package version: %w", err)
@@ -641,6 +638,15 @@ func untar(dst string, r io.Reader) ([]*tar.Header, error) {
 			if err := os.MkdirAll(target, hdr.FileInfo().Mode()); err != nil {
 				return nil, fmt.Errorf("make dir %s: %w", target, err)
 			}
+		case tar.TypeSymlink:
+			if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
+				return nil, fmt.Errorf("make parent dirs for symlink %s: %w", target, err)
+			}
+			if err := os.Symlink(hdr.Linkname, target); err != nil {
+				return nil, fmt.Errorf("symlink %s -> %s: %w", target, hdr.Linkname, err)
+			}
+		case tar.TypeLink:
+			/* hard links are ignored */
 		case tar.TypeReg:
 			if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
 				return nil, fmt.Errorf("make parent dirs: %w", err)
