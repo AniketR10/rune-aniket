@@ -1375,12 +1375,27 @@ func TestExternalEvents(t *testing.T) {
 			os.RemoveAll(dir2)
 		})
 
-		var i atomic.Int64
+		evsk := []textapi.EventType{
+			textapi.EventTypeOpen,
+			textapi.EventTypeFlush,
+			textapi.EventTypeEdit,
+			textapi.EventTypeClose,
+		}
+		var open, flush, edit, close atomic.Int64
 		m := newTestWorkspaceManagerHandlerWithDir(t, defaultConfigWithWrap(false), nil, dir,
 			nopShutdownShaderConfig())
-		err = m.subscribeEventHandler([]textapi.EventType{textapi.EventTypeOpen},
-			text.FuncEventHandler(func(context.Context, textapi.Event) bool {
-				i.Add(1)
+		err = m.subscribeEventHandler(evsk,
+			text.FuncEventHandler(func(_ context.Context, ev textapi.Event) bool {
+				switch ev.Type {
+				case textapi.EventTypeOpen:
+					open.Add(1)
+				case textapi.EventTypeFlush:
+					flush.Add(1)
+				case textapi.EventTypeEdit:
+					edit.Add(1)
+				case textapi.EventTypeClose:
+					close.Add(1)
+				}
 				return false
 			}))
 		require.NoError(t, err)
@@ -1402,6 +1417,38 @@ func TestExternalEvents(t *testing.T) {
 │                            │
 │                      NORMAL│
 └────────────────────────────┘`},
+			{"iabc<:write>", // edit + flush
+				`┌────────────────────────────┐
+│o a                         │
+├────────────────────────────┤
+│ab▐                         │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                      NORMAL│
+└────────────────────────────┘`},
+			{":tabclose>", // close
+				`┌────────────────────────────┐
+│                            │
+├────────────────────────────┤
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│     workspaceWallpaper     │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+└────────────────────────────┘`},
 			{fmt.Sprintf(":workspacenew %s>:edit b>", dir2), // new workspace
 				`┌────────────────────────────┐
 │o b                         │
@@ -1415,6 +1462,38 @@ func TestExternalEvents(t *testing.T) {
 │                            │
 │                            │
 │                      NORMAL│
+├────────────────────────────┤
+│1 1  2 2                    │
+└────────────────────────────┘`},
+			{"iabc<:write>", // edit + flush
+				`┌────────────────────────────┐
+│o b                         │
+├────────────────────────────┤
+│ab▐                         │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                      NORMAL│
+├────────────────────────────┤
+│1 1  2 2                    │
+└────────────────────────────┘`},
+			{":tabclose>", // close
+				`┌────────────────────────────┐
+│                            │
+├────────────────────────────┤
+│                            │
+│                            │
+│                            │
+│                            │
+│     workspaceWallpaper     │
+│                            │
+│                            │
+│                            │
+│                            │
 ├────────────────────────────┤
 │1 1  2 2                    │
 └────────────────────────────┘`},
@@ -1434,11 +1513,46 @@ func TestExternalEvents(t *testing.T) {
 ├────────────────────────────┤
 │1 1  2 2  8                 │
 └────────────────────────────┘`},
+			{"iabc<:write>", // edit + flush
+				`┌────────────────────────────┐
+│o c                         │
+├────────────────────────────┤
+│ab▐                         │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                      NORMAL│
+├────────────────────────────┤
+│1 1  2 2  8                 │
+└────────────────────────────┘`},
+			{":tabclose>", // close
+				`┌────────────────────────────┐
+│                            │
+├────────────────────────────┤
+│                            │
+│                            │
+│                            │
+│                            │
+│     workspaceWallpaper     │
+│                            │
+│                            │
+│                            │
+│                            │
+├────────────────────────────┤
+│1 1  2 2  8                 │
+└────────────────────────────┘`},
 		}
 		h := newSafeHandler(m)
 		handlertest.TestHandlerSequence(t, h, 30, 15, cases)
 
-		assert.Equal(t, 3, int(i.Load()))
+		assert.Equal(t, 3, int(open.Load()))
+		assert.Equal(t, 3, int(flush.Load()))
+		assert.Equal(t, 9, int(edit.Load()))
+		assert.Equal(t, 3, int(close.Load()))
 
 		require.NoError(t, m.Close())
 	})
