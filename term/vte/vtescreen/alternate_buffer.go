@@ -133,7 +133,7 @@ func (b *AltBuffer) Write(c rune, width int, charset vteparser.CharsetIndex) {
 	}
 	cell.Ch = c
 	cell.Attributes = b.cursor.attr
-	cell.Width = width
+	cell.Width = uint8(width)
 }
 
 // ResetCells erases all the cells from start to end, on the current

@@ -782,13 +782,13 @@ func TestBufferInsertWithAttr(t *testing.T) {
 
 	buf.InsertWithAttr(term.Coordinates{}, 'A', attr)
 	cell := buf.RawCells()[0][0]
-	assert.Equal(t, term.Cell{Ch: 'A', Attributes: attr, Width: 1}, cell)
+	assert.Equal(t, term.Cell{Ch: 'A', Attributes: attr, Bytes: 1, Width: 1}, cell)
 
 	buf.InsertWithAttr(term.Coordinates{X: 1}, '\n', attr)
 
 	buf.InsertWithAttr(term.Coordinates{Y: 1}, 'E', attr)
 	cell = buf.RawCells()[1][0]
-	assert.Equal(t, term.Cell{Ch: 'E', Attributes: attr, Width: 1}, cell)
+	assert.Equal(t, term.Cell{Ch: 'E', Attributes: attr, Bytes: 1, Width: 1}, cell)
 }
 
 func TestBufferInsertStringWithAttr(t *testing.T) {
@@ -798,10 +798,10 @@ func TestBufferInsertStringWithAttr(t *testing.T) {
 		buf.InsertStringWithAttr(term.Coordinates{}, "Atza", attr)
 		row := buf.RawCells()[0]
 		assert.Equal(t, []term.Cell{
-			{Ch: 'A', Attributes: attr, Width: 1},
-			{Ch: 't', Attributes: attr, Width: 1},
-			{Ch: 'z', Attributes: attr, Width: 1},
-			{Ch: 'a', Attributes: attr, Width: 1},
+			{Ch: 'A', Attributes: attr, Bytes: 1, Width: 1},
+			{Ch: 't', Attributes: attr, Bytes: 1, Width: 1},
+			{Ch: 'z', Attributes: attr, Bytes: 1, Width: 1},
+			{Ch: 'a', Attributes: attr, Bytes: 1, Width: 1},
 		}, row)
 	})
 	t.Run("insert multi line string", func(t *testing.T) {
@@ -810,19 +810,19 @@ func TestBufferInsertStringWithAttr(t *testing.T) {
 		cells := buf.RawCells()
 		assert.Equal(t, [][]term.Cell{
 			{
-				{Ch: 'L', Attributes: attr, Width: 1},
-				{Ch: 'o', Attributes: attr, Width: 1},
-				{Ch: 'l', Attributes: attr, Width: 1},
-				{Ch: 'a', Attributes: attr, Width: 1},
+				{Ch: 'L', Attributes: attr, Bytes: 1, Width: 1},
+				{Ch: 'o', Attributes: attr, Bytes: 1, Width: 1},
+				{Ch: 'l', Attributes: attr, Bytes: 1, Width: 1},
+				{Ch: 'a', Attributes: attr, Bytes: 1, Width: 1},
 			},
 			{
-				{Ch: 'G', Attributes: attr, Width: 1},
-				{Ch: 'r', Attributes: attr, Width: 1},
-				{Ch: 'a', Attributes: attr, Width: 1},
-				{Ch: 'n', Attributes: attr, Width: 1},
-				{Ch: 'o', Attributes: attr, Width: 1},
-				{Ch: 'l', Attributes: attr, Width: 1},
-				{Ch: 'a', Attributes: attr, Width: 1},
+				{Ch: 'G', Attributes: attr, Bytes: 1, Width: 1},
+				{Ch: 'r', Attributes: attr, Bytes: 1, Width: 1},
+				{Ch: 'a', Attributes: attr, Bytes: 1, Width: 1},
+				{Ch: 'n', Attributes: attr, Bytes: 1, Width: 1},
+				{Ch: 'o', Attributes: attr, Bytes: 1, Width: 1},
+				{Ch: 'l', Attributes: attr, Bytes: 1, Width: 1},
+				{Ch: 'a', Attributes: attr, Bytes: 1, Width: 1},
 			},
 		}, cells)
 	})
@@ -896,10 +896,25 @@ func TestBufferVersion(t *testing.T) {
 func TestBufferWriteStringRawCells(t *testing.T) {
 	b := NewBuffer()
 	b.WriteString("a\nb\nc")
-	assert.Equal(t, [][]term.Cell{{{Ch: 'a', Width: 1}}, {{Ch: 'b', Width: 1}}, {{Ch: 'c', Width: 1}}}, b.RawCells())
+	expected := [][]term.Cell{
+		{{Ch: 'a', Bytes: 1, Width: 1}},
+		{{Ch: 'b', Bytes: 1, Width: 1}},
+		{{Ch: 'c', Bytes: 1, Width: 1}},
+	}
+	assert.Equal(t, expected, b.RawCells())
 
 	b.WriteString("xyz")
-	assert.Equal(t, [][]term.Cell{{{Ch: 'a', Width: 1}}, {{Ch: 'b', Width: 1}}, {{Ch: 'c', Width: 1}, {Ch: 'x', Width: 1}, {Ch: 'y', Width: 1}, {Ch: 'z', Width: 1}}}, b.RawCells())
+	expected = [][]term.Cell{
+		{{Ch: 'a', Bytes: 1, Width: 1}},
+		{{Ch: 'b', Bytes: 1, Width: 1}},
+		{
+			{Ch: 'c', Bytes: 1, Width: 1},
+			{Ch: 'x', Bytes: 1, Width: 1},
+			{Ch: 'y', Bytes: 1, Width: 1},
+			{Ch: 'z', Bytes: 1, Width: 1},
+		},
+	}
+	assert.Equal(t, expected, b.RawCells())
 }
 
 func TestBufferInsertRowAt(t *testing.T) {

@@ -116,7 +116,7 @@ func (c *rawCells) insertNewRow(pos term.Coordinates) {
 	}
 }
 
-func (c *rawCells) doInsertAt(pos term.Coordinates, r []rune, width int) {
+func (c *rawCells) doInsertAt(pos term.Coordinates, r []rune, width, byteCount uint8) {
 	// make sure we have enough capacity
 	c.cells[pos.Y] = append(c.cells[pos.Y], term.Cell{})
 	copy(c.cells[pos.Y][pos.X+1:], c.cells[pos.Y][pos.X:])
@@ -124,11 +124,11 @@ func (c *rawCells) doInsertAt(pos term.Coordinates, r []rune, width int) {
 	if len(r) > 1 {
 		combining = r[1:]
 	}
-	cell := term.Cell{Ch: r[0], Combining: combining, Width: width}
+	cell := term.Cell{Ch: r[0], Combining: combining, Width: width, Bytes: byteCount}
 	c.cells[pos.Y][pos.X] = cell
 }
 
-func (c *rawCells) insertAt(pos term.Coordinates, r []rune, width int) (
+func (c *rawCells) insertAt(pos term.Coordinates, r []rune, width uint8, byteCount uint8) (
 	next term.Coordinates,
 ) {
 	switch r[0] {
@@ -149,7 +149,7 @@ func (c *rawCells) insertAt(pos term.Coordinates, r []rune, width int) (
 			c.deleteRowRange(&nop, pos.Y, pos.X, next.X)
 		}
 		c.zwj = true
-		c.doInsertAt(pos, r, width)
+		c.doInsertAt(pos, r, width, byteCount)
 		c.zwjPos = next
 		return
 	case '\n':
@@ -164,10 +164,10 @@ func (c *rawCells) insertAt(pos term.Coordinates, r []rune, width int) (
 		fallthrough
 	default:
 		pos := pos // need unmodified pos below
-		c.doInsertAt(pos, r, width)
-		for i := 1; i < width; i++ {
+		c.doInsertAt(pos, r, width, byteCount)
+		for i := uint8(1); i < width; i++ {
 			pos.X++
-			c.doInsertAt(pos, nullCluster[:], 0)
+			c.doInsertAt(pos, nullCluster[:], 0, 0)
 		}
 		next = term.Coordinates{X: pos.X + 1, Y: pos.Y}
 	}
@@ -189,9 +189,9 @@ func (c *rawCells) insertAt(pos term.Coordinates, r []rune, width int) (
 func (c *rawCells) insertTabSpaces(pos term.Coordinates) {
 	n := term.Coordinates{X: pos.X, Y: pos.Y}
 	for i := 1; i < c.tabspaces; i++ {
-		n = c.insertAt(n, nullCluster[:], 0)
+		n = c.insertAt(n, nullCluster[:], 0, 0)
 	}
-	c.doInsertAt(n, tabCluster[:], 0)
+	c.doInsertAt(n, tabCluster[:], 0, 1)
 }
 
 func (c *rawCells) fillInRows(y int) (n int) {
@@ -253,11 +253,11 @@ func (c *rawCells) insert(at term.Coordinates, str string) (
 	next := to
 	state := -1
 	var cluster string
-	var width int
+	var width uint8
 	for len(str) > 0 {
 		cluster, str, width, state = graphemecluster.StepString(str, state)
 		to = next
-		next = c.insertAt(next, []rune(cluster), width)
+		next = c.insertAt(next, []rune(cluster), width, uint8(len([]byte(cluster))))
 		if padding := next.X - to.X - 1; padding > 0 {
 			to.X += padding
 		}
@@ -276,6 +276,7 @@ func copyToBuilder(builder *strings.Builder, cells [][]term.Cell) {
 }
 
 func copyRowToBuilder(builder *strings.Builder, cells []term.Cell) {
+	builder.Grow(len(cells)) // almost every time this is exact
 	for _, c := range cells {
 		if c.Ch != '\x00' {
 			builder.WriteRune(c.Ch)
@@ -322,7 +323,7 @@ func (c *rawCells) skipPadding(start, end term.Coordinates) (
 		to.X--
 		if to.X < endLastIdx {
 			if width := c.cells[to.Y][to.X].Width; width > 1 {
-				to.X += width - 1
+				to.X += int(width) - 1
 			} else {
 				// do not skip if this is a width right-padding
 				// only if it's a tabspace left-padding.
@@ -362,7 +363,7 @@ func (c *rawCells) skipPadding(start, end term.Coordinates) (
 		// except if width > 1, in which case, the pad is a width pad
 		// in that case, skip to right
 		if width := c.cells[from.Y][from.X].Width; width > 1 {
-			from.X += width
+			from.X += int(width)
 		} else {
 			from.X++
 		}
@@ -480,7 +481,7 @@ func (c *rawCells) readFromWithView(r io.Reader, view View) (int64, error) {
 		str, err := reader.ReadString('\n')
 		state := -1
 		var cluster string
-		var width int
+		var width, byteCount uint8
 		n += int64(len([]byte(str)))
 		for len(str) > 0 {
 			// NOTE: this is significantly slower than, just ignoring grapheme clusters
@@ -488,6 +489,7 @@ func (c *rawCells) readFromWithView(r io.Reader, view View) (int64, error) {
 			// is front loaded, it should amortize over long interactions on a particular file.
 			cluster, str, width, state = graphemecluster.StepString(str, state)
 			r := []rune(cluster)
+			byteCount = uint8(len([]byte(cluster)))
 			switch r[0] {
 			case '\n':
 				c.cells = append(c.cells, makeNewRow(0, c.columnCap))
@@ -502,9 +504,14 @@ func (c *rawCells) readFromWithView(r io.Reader, view View) (int64, error) {
 				if len(r) > 1 {
 					combining = r[1:]
 				}
-				cell := term.Cell{Ch: r[0], Width: width, Combining: combining}
+				cell := term.Cell{
+					Ch:        r[0],
+					Width:     width,
+					Combining: combining,
+					Bytes:     byteCount,
+				}
 				c.cells[rowY] = append(c.cells[rowY], cell)
-				for i := 1; i < width; i++ {
+				for i := uint8(1); i < width; i++ {
 					c.cells[rowY] = append(c.cells[rowY], term.Cell{})
 				}
 			}

@@ -30,7 +30,7 @@ import "github.com/rivo/uniseg"
 //
 // See uniseg.StepString for more details.
 func StepString(str string, state int) (
-	cluster, rest string, width, newState int,
+	cluster, rest string, width uint8, newState int,
 ) {
 	var boundaries int
 	cluster, rest, boundaries, newState = uniseg.StepString(str, state)
@@ -42,18 +42,18 @@ func StepString(str string, state int) (
 // number of same-size cells to be occupied by the string.
 func StringWidth(s string) (width int) {
 	state := -1
-	var w int
+	var w uint8
 	for len(s) > 0 {
 		_, s, w, state = StepString(s, state)
-		width += w
+		width += int(w)
 	}
 	return
 }
 
-func graphemeClusterWidth(cluster string, boundaries int) int {
+func graphemeClusterWidth(cluster string, boundaries int) uint8 {
 	unisegWidth := boundaries >> uniseg.ShiftWidth
 	if unisegWidth == 0 || unisegWidth > 1 || len(cluster) == 0 /* don't trust uniseg */ {
-		return unisegWidth
+		return uint8(unisegWidth)
 	}
 
 	switch cluster {
@@ -65,6 +65,6 @@ func graphemeClusterWidth(cluster string, boundaries int) int {
 		"󱫆", "", "", "":
 		return 2
 	default:
-		return unisegWidth
+		return uint8(unisegWidth)
 	}
 }

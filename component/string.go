@@ -194,6 +194,7 @@ func (s *stringComp) Draw(w term.Writer) {
 					Ch:         c.Ch,
 					Combining:  c.Combining,
 					Width:      c.Width,
+					Bytes:      c.Bytes,
 				})
 		}
 	}

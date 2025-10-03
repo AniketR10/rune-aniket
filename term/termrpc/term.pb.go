@@ -389,6 +389,7 @@ type Cell struct {
 	Combining     []uint32               `protobuf:"varint,4,rep,packed,name=Combining,proto3" json:"Combining,omitempty"`
 	Width         uint32                 `protobuf:"varint,5,opt,name=Width,proto3" json:"Width,omitempty"`
 	Attrs         int64                  `protobuf:"varint,6,opt,name=Attrs,proto3" json:"Attrs,omitempty"`
+	Bytes         uint32                 `protobuf:"varint,7,opt,name=Bytes,proto3" json:"Bytes,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -461,6 +462,13 @@ func (x *Cell) GetWidth() uint32 {
 func (x *Cell) GetAttrs() int64 {
 	if x != nil {
 		return x.Attrs
+	}
+	return 0
+}
+
+func (x *Cell) GetBytes() uint32 {
+	if x != nil {
+		return x.Bytes
 	}
 	return 0
 }
@@ -794,7 +802,7 @@ const file_termrpc_term_proto_rawDesc = "" +
 	"\n" +
 	"Background\x18\x03 \x01(\x04R\n" +
 	"Background\x12\x14\n" +
-	"\x05Attrs\x18\x04 \x01(\x03R\x05Attrs\"\xae\x01\n" +
+	"\x05Attrs\x18\x04 \x01(\x03R\x05Attrs\"\xc4\x01\n" +
 	"\x04Cell\x12\x1c\n" +
 	"\tCharacter\x18\x01 \x01(\rR\tCharacter\x12\x1e\n" +
 	"\n" +
@@ -805,7 +813,8 @@ const file_termrpc_term_proto_rawDesc = "" +
 	"Background\x12\x1c\n" +
 	"\tCombining\x18\x04 \x03(\rR\tCombining\x12\x14\n" +
 	"\x05Width\x18\x05 \x01(\rR\x05Width\x12\x14\n" +
-	"\x05Attrs\x18\x06 \x01(\x03R\x05Attrs\"+\n" +
+	"\x05Attrs\x18\x06 \x01(\x03R\x05Attrs\x12\x14\n" +
+	"\x05Bytes\x18\a \x01(\rR\x05Bytes\"+\n" +
 	"\aCellRow\x12 \n" +
 	"\x05cells\x18\x01 \x03(\v2\n" +
 	".term.CellR\x05cells\"\xee\a\n" +

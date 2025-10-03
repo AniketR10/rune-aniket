@@ -403,7 +403,8 @@ func (c *Cell) ToModel() term.Cell {
 		},
 		Ch:        rune(c.Character),
 		Combining: combining,
-		Width:     int(c.Width),
+		Width:     uint8(c.Width),
+		Bytes:     uint8(c.Bytes),
 	}
 }
 
@@ -430,6 +431,7 @@ func (c *Cell) FromModel(cc term.Cell) {
 	c.Attrs = int64(cc.Attrs)
 	c.Character = uint32(cc.Ch)
 	c.Width = uint32(c.Width)
+	c.Bytes = uint32(c.Bytes)
 	var combining []uint32
 	if cc.Combining != nil {
 		combining = make([]uint32, len(cc.Combining))

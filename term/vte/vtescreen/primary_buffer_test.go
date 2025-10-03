@@ -70,14 +70,16 @@ func TestPrimarySelection(t *testing.T) {
 
 		b.Select(term.Coordinates{Y: 6})
 		b.SelectEnd(term.Coordinates{Y: 7})
-		cells, ok := b.Selection()
+		actual, ok := b.Selection()
 		require.True(t, ok)
-		assert.Equal(t, [][]term.Cell{{{Ch: '6', Width: 1}}, {{Ch: '7', Width: 1}}}, cells)
+		expected := [][]term.Cell{{{Ch: '6', Width: 1, Bytes: 1}}, {{Ch: '7', Width: 1, Bytes: 1}}}
+		assert.Equal(t, expected, actual)
 
 		b.SetOffset(term.Coordinates{Y: 5})
-		cells, ok = b.Selection()
+		actual, ok = b.Selection()
 		require.True(t, ok)
-		assert.Equal(t, [][]term.Cell{{{Ch: '6', Width: 1}}, {{Ch: '7', Width: 1}}}, cells)
+		expected = [][]term.Cell{{{Ch: '6', Bytes: 1, Width: 1}}, {{Ch: '7', Bytes: 1, Width: 1}}}
+		assert.Equal(t, expected, actual)
 	})
 	t.Run("word selection with scrollback history", func(t *testing.T) {
 		b := makePrimaryBufferForTesting(2, 10)
@@ -85,9 +87,10 @@ func TestPrimarySelection(t *testing.T) {
 
 		b.SetOffset(term.Coordinates{Y: 2})
 		b.SelectWordAt(term.Coordinates{})
-		cells, ok := b.Selection()
+		actual, ok := b.Selection()
 		require.True(t, ok)
-		assert.Equal(t, [][]term.Cell{{{Ch: '2', Width: 1}, {Ch: '2', Width: 1}}}, cells)
+		expected := [][]term.Cell{{{Ch: '2', Width: 1}, {Ch: '2', Width: 1}}}
+		assert.Equal(t, expected, actual)
 	})
 
 	t.Run("coordinates with scroll", func(t *testing.T) {

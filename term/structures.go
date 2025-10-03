@@ -48,11 +48,18 @@ type Attributes tcell.Style
 // and background attributes respectively. Unicode graphene clusters
 // should be processed accordingly and stored into Ch and Combining fields.
 type Cell struct {
-	Ch rune
 	Attributes
+	// Ch is the main character held by this cell.
+	// If character cannot fit in the storage provided by the
+	// builtin 'rune', then Width() returns > 1 and Cell.Combining
+	// contains the rest of data.
+	Ch rune
+	// Combining are the remaining data that does not fin in Ch.
 	Combining []rune
-	// Width is the monospace width
-	Width int
+	// Width returns the monospace width of this Cell.
+	Width uint8
+	// Bytes is the number of bytes consumed by this Cell.
+	Bytes uint8
 }
 
 // Event represents a terminal event. The 'Mod', 'Key' and 'Ch' fields are

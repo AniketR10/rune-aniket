@@ -51,13 +51,6 @@ func TestRawCellsInsertMiddlePadding(t *testing.T) {
 	c
 }
 `
-	fixtureCells := [][]term.Cell{
-		{{Ch: '{', Width: 1}},
-		{{}, {}, {}, {Ch: '\t'}, {Ch: 'b', Width: 1}},
-		{{}, {}, {}, {Ch: '\t'}, {Ch: 'c', Width: 1}},
-		{{Ch: '}', Width: 1}},
-		{},
-	}
 	var c rawCells
 	c.init(4)
 	c.ReadFrom(strings.NewReader(fixture))
@@ -84,7 +77,15 @@ func TestRawCellsInsertMiddlePadding(t *testing.T) {
 	from, to, _ = c.Edit(context.Background(), at, at, "\tb\n")
 	assert.Equal(t, term.Coordinates{X: 0, Y: 1}, from)
 	assert.Equal(t, term.Coordinates{Y: 2}, to)
-	assert.Equal(t, fixtureCells, c.RawCells())
+
+	expected := [][]term.Cell{
+		{{Ch: '{', Bytes: 1, Width: 1}},
+		{{}, {}, {}, {Bytes: 1, Ch: '\t'}, {Ch: 'b', Bytes: 1, Width: 1}},
+		{{}, {}, {}, {Bytes: 1, Ch: '\t'}, {Ch: 'c', Bytes: 1, Width: 1}},
+		{{Ch: '}', Bytes: 1, Width: 1}},
+		{},
+	}
+	assert.Equal(t, expected, c.RawCells())
 }
 
 func TestRawCellsPanicsNegativeCoordinates(t *testing.T) {
@@ -202,22 +203,22 @@ func TestRawCellsStringReadFrom(t *testing.T) {
 	}{
 		{"", [][]term.Cell{{}}},
 		{"\n", [][]term.Cell{{}, {}}},
-		{"\t\n", [][]term.Cell{{{}, {}, {}, {Ch: '\t'}}, {}}},
-		{"\t", [][]term.Cell{{{}, {}, {}, {Ch: '\t'}}}},
-		{"a", [][]term.Cell{{{Ch: 'a', Width: 1}}}},
-		{"\nb", [][]term.Cell{{}, {{Ch: 'b', Width: 1}}}},
-		{"c\n", [][]term.Cell{{{Ch: 'c', Width: 1}}, {}}},
+		{"\t\n", [][]term.Cell{{{}, {}, {}, {Bytes: 1, Ch: '\t'}}, {}}},
+		{"\t", [][]term.Cell{{{}, {}, {}, {Bytes: 1, Ch: '\t'}}}},
+		{"a", [][]term.Cell{{{Ch: 'a', Bytes: 1, Width: 1}}}},
+		{"\nb", [][]term.Cell{{}, {{Ch: 'b', Bytes: 1, Width: 1}}}},
+		{"c\n", [][]term.Cell{{{Ch: 'c', Bytes: 1, Width: 1}}, {}}},
 		{"\n\n\n", [][]term.Cell{{}, {}, {}, {}}},
-		{"\n\n\na", [][]term.Cell{{}, {}, {}, {{Ch: 'a', Width: 1}}}},
+		{"\n\n\na", [][]term.Cell{{}, {}, {}, {{Ch: 'a', Bytes: 1, Width: 1}}}},
 		// a null cell is placed after 2 width rune, to make sure next rune
 		// is drawn with enough space.
-		{"💥", [][]term.Cell{{{Ch: '💥', Width: 2}, {}}}},
+		{"💥", [][]term.Cell{{{Ch: '💥', Width: 2, Bytes: 4}, {}}}},
 		{"👨‍👧‍👦", [][]term.Cell{{{Ch: '👨', Combining: []rune{
 			rune(8205),
 			rune(128103),
 			rune(8205),
 			rune(128102),
-		}, Width: 2}, {}}}},
+		}, Width: 2, Bytes: 18}, {}}}},
 	}
 
 	for i, _tcase := range tsuite {
@@ -433,7 +434,7 @@ func TestRawCellsInsertGraphemeCluster(t *testing.T) {
 			rune(128103),
 			rune(8205),
 			rune(128102),
-		}, Width: 2}, {}},
+		}, Bytes: 18, Width: 2}, {}},
 	}, c.RawCells())
 }
 
@@ -807,20 +808,6 @@ Love isn't love 'til you give it away.
 	}
 }
 
-// in last line, delete can use Y:y+1, X:0 but insert might return
-// the equivalent of that which is Y:y, X: len(insert)
-// that's because delete til last character can be expressed both by
-// deleting til past last line or til past las character of last line
-func assertEquivalentEnd(
-	t *testing.T, c *rawCells, expectedEnd, end term.Coordinates,
-) {
-	if end.Y == c.Rows()-1 && end.X == c.Columns(end.Y) && expectedEnd != end {
-		end.Y++
-		end.X = 0
-	}
-	assert.Equal(t, expectedEnd, end)
-}
-
 func TestRawCellsCell(t *testing.T) {
 	var c rawCells
 	c.init(DefaultTabspaces)
@@ -834,11 +821,11 @@ func TestRawCellsCell(t *testing.T) {
 
 	cell, ok = c.Cell(term.Coordinates{Y: 1, X: 16})
 	assert.True(t, ok)
-	assert.Equal(t, term.Cell{Ch: 'L', Width: 1}, cell)
+	assert.Equal(t, term.Cell{Ch: 'L', Bytes: 1, Width: 1}, cell)
 
 	cell, ok = c.Cell(term.Coordinates{Y: 3, X: 37})
 	assert.True(t, ok)
-	assert.Equal(t, term.Cell{Ch: '中', Width: 2}, cell)
+	assert.Equal(t, term.Cell{Ch: '中', Bytes: 3, Width: 2}, cell)
 
 	cell, ok = c.Cell(term.Coordinates{Y: 666})
 	assert.False(t, ok)
