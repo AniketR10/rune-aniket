@@ -234,13 +234,13 @@ func convertStartEndPoints(
 ) (from, to term.Coordinates, err error) {
 	c := buf.RawCells()
 	start, end := n.StartPoint(), n.EndPoint()
-	from, ok := cell.ConvertRuneCoordinates(c, int(start.Row), int(start.Column))
+	from, ok := cell.ConvertRunePosToCoordinates(c, int(start.Row), int(start.Column))
 	if !ok {
 		err = fmt.Errorf("convert points: failed to convert sitter 'start point "+
 			" to term 'from' coordinates: point: %v", start)
 		return
 	}
-	to, ok = cell.ConvertRuneCoordinates(c, int(end.Row), int(end.Column))
+	to, ok = cell.ConvertRunePosToCoordinates(c, int(end.Row), int(end.Column))
 	if !ok {
 		err = fmt.Errorf("convert points: failed to convert sitter 'end' point "+
 			" to term 'to' coordinates: point: %v", end)

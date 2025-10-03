@@ -25,6 +25,7 @@ package cell
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -33,7 +34,98 @@ import (
 	"unstable.build/go-tui/term"
 )
 
-func TestConvertCoordinates(t *testing.T) {
+func TestConvertByteOffset(t *testing.T) {
+	tsuite := []struct {
+		cells    [][]term.Cell
+		offset   int
+		expected term.Coordinates
+		ok       bool
+	}{
+		{nil, 0, term.Coordinates{}, false},
+		{[][]term.Cell{}, 0, term.Coordinates{}, false},
+		{[][]term.Cell{{}}, 0, term.Coordinates{}, true},
+		{[][]term.Cell{{{Ch: 'a'}}}, 0, term.Coordinates{}, true},
+		{[][]term.Cell{{{Ch: 'a'}}}, 1, term.Coordinates{X: 1}, true},
+		{[][]term.Cell{{{Ch: 'a'}}, {{Ch: 'b'}}}, 2, term.Coordinates{Y: 1, X: 0}, true},
+		{[][]term.Cell{{{Ch: 'a'}}, {{Ch: 'b'}}}, 3, term.Coordinates{Y: 1, X: 1}, true},
+		{[][]term.Cell{{{Ch: 'a'}}, {{Ch: 'b'}}}, 4, term.Coordinates{Y: 2}, false},
+		{[][]term.Cell{{{Ch: 0}, {Ch: 0}, {Ch: 0}, {Ch: '\t'}, {Ch: 'a'}}}, 1, term.Coordinates{X: 4}, true},
+		{[][]term.Cell{{}, {{Ch: 0}, {Ch: 0}, {Ch: 0}, {Ch: '\t'}, {Ch: 'a'}, {Ch: 0}}}, 2, term.Coordinates{Y: 1, X: 4}, true},
+		{[][]term.Cell{{}, {{Ch: 0}, {Ch: 0}, {Ch: 0}, {Ch: '\t'}, {Ch: 'a'}, {Ch: 0}}}, 3, term.Coordinates{Y: 1, X: 5}, true},
+		{[][]term.Cell{{}, {{Ch: 0}, {Ch: 0}, {Ch: 0}, {Ch: '\t'}, {Ch: 'a'}, {Ch: 0}}}, 1, term.Coordinates{Y: 1, X: 0}, true},
+		{[][]term.Cell{{}, {{Ch: 0}, {Ch: 0}, {Ch: 0}, {Ch: '\t'}, {Ch: 'a'}, {Ch: 0}}}, 4, term.Coordinates{Y: 2}, false},
+		{
+			[][]term.Cell{{{Ch: '💥'}, {Ch: 0}, {Ch: 'a'}}},
+			4, term.Coordinates{Y: 0, X: 1}, true,
+		},
+		{
+			[][]term.Cell{{{Ch: '💥'}, {Ch: 0}, {Ch: 'a'}}},
+			len([]byte(string('💥'))), term.Coordinates{Y: 0, X: 1}, true,
+		},
+		{
+			[][]term.Cell{{{Ch: '💥'}, {Ch: 0}, {Ch: 'a'}}},
+			0, term.Coordinates{Y: 0, X: 0}, true,
+		},
+		{
+			[][]term.Cell{{{Ch: '👨', Combining: []rune{
+				rune(8205),
+				rune(128103),
+				rune(8205),
+				rune(128102),
+			}, Width: 2, Bytes: 18}, {Ch: 0}, {Ch: 'a'}}},
+			18, term.Coordinates{Y: 0, X: 1}, true,
+		},
+		{
+			[][]term.Cell{{{Ch: '👨', Combining: []rune{
+				rune(8205),
+				rune(128103),
+				rune(8205),
+				rune(128102),
+			}, Width: 2, Bytes: 18}, {Ch: 0}, {Ch: 'a'}}},
+			19, term.Coordinates{Y: 0, X: 3}, true,
+		},
+	}
+
+	for i, tcase := range tsuite {
+		t.Run(fmt.Sprintf("ConvertByteOffsetToCoordinates, test case %d", i),
+			func(t *testing.T) {
+				// use cells coming from buffer, rather than fixture cells
+				// so Bytes is calculcated for us, but don't do it for the cases
+				// where raw cells is un-initialized or nil, we also want to test those
+				cells := tcase.cells
+				if len(cells) != 0 {
+					buf := NewBuffer()
+					str := CellsToString(tcase.cells)
+					_, err := buf.ReadFrom(strings.NewReader(str))
+					require.NoError(t, err)
+					cells = buf.RawCells()
+				}
+				actual, ok := ConvertByteOffsetToCoordinates(cells, tcase.offset)
+				require.Equal(t, tcase.ok, ok, i)
+				if ok {
+					assert.Equal(t, tcase.expected, actual, i)
+				}
+			})
+		t.Run(fmt.Sprintf("ConvertCoordinatesToByteOffset, test case %d", i),
+			func(t *testing.T) {
+				cells := tcase.cells
+				if len(cells) != 0 {
+					buf := NewBuffer()
+					str := CellsToString(tcase.cells)
+					_, err := buf.ReadFrom(strings.NewReader(str))
+					require.NoError(t, err)
+					cells = buf.RawCells()
+				}
+				actual, ok := ConvertCoordinatesToByteOffset(cells, tcase.expected)
+				require.Equal(t, tcase.ok, ok, i)
+				if ok {
+					assert.Equal(t, tcase.offset, actual, i)
+				}
+			})
+	}
+}
+
+func TestConvertCoordinatesToRunePos(t *testing.T) {
 	tsuite := []struct {
 		cells [][]term.Cell
 		y, x  int
@@ -58,15 +150,15 @@ func TestConvertCoordinates(t *testing.T) {
 	}
 
 	for i, tcase := range tsuite {
-		t.Run("ConvertRuneCoordinates", func(t *testing.T) {
-			out, ok := ConvertRuneCoordinates(tcase.cells, tcase.y, tcase.x)
+		t.Run("ConvertRunePosToCoordinates", func(t *testing.T) {
+			out, ok := ConvertRunePosToCoordinates(tcase.cells, tcase.y, tcase.x)
 			require.Equal(t, tcase.ok, ok, i)
 			assert.Equal(t, tcase.out, out, i)
 		})
 	}
 	for i, tcase := range tsuite {
-		t.Run("ConvertTermCoordinates", func(t *testing.T) {
-			y, x, ok := ConvertTermCoordinates(tcase.cells, tcase.out)
+		t.Run("ConvertCoordinatesToRunePos", func(t *testing.T) {
+			y, x, ok := ConvertCoordinatesToRunePos(tcase.cells, tcase.out)
 			require.Equal(t, tcase.ok, ok, i)
 			assert.Equal(t, tcase.x, x, i)
 			assert.Equal(t, tcase.y, y, i)

@@ -78,10 +78,10 @@ func CellsToBuffer(c [][]term.Cell, tabspaces int) *Buffer {
 	return ret
 }
 
-// ConvertRuneCoordinates converts x and y, which use the buffer runes as offsets
+// ConvertRunePosToCoordinates converts x and y, which use the buffer runes as offsets
 // into term.Coordinates, which account for tab expansion. It returns false if y is out
 // of bounds.
-func ConvertRuneCoordinates(cells [][]term.Cell, y, x int) (
+func ConvertRunePosToCoordinates(cells [][]term.Cell, y, x int) (
 	ret term.Coordinates, ok bool,
 ) {
 	if y > len(cells) || len(cells) == 0 {
@@ -118,10 +118,12 @@ func ConvertRuneCoordinates(cells [][]term.Cell, y, x int) (
 	return
 }
 
-// ConvertTermCoordinates converts c, which use the terminal system of coordinates, which
-// account for tab expansion, into rune offsets. It returns false if y is out
-// of bounds.
-func ConvertTermCoordinates(cells [][]term.Cell, c term.Coordinates) (y, x int, ok bool) {
+// ConvertCoordinatesToRunePos converts c, which use the terminal
+// system of coordinates, which account for tab expansion, into rune
+// offsets. It returns false if y is out of bounds.
+func ConvertCoordinatesToRunePos(cells [][]term.Cell, c term.Coordinates) (
+	y, x int, ok bool,
+) {
 	if c.Y > len(cells) || len(cells) == 0 {
 		return
 	}
@@ -147,6 +149,65 @@ func ConvertTermCoordinates(cells [][]term.Cell, c term.Coordinates) (y, x int, 
 
 	ok = true
 	return
+}
+
+// ConvertByteOffsetToCoordinates converts the given byte offsets to term.Coordinates.
+// It returns false if it's out of bounds.
+func ConvertByteOffsetToCoordinates(cells [][]term.Cell, offset int) (
+	ret term.Coordinates, ok bool,
+) {
+	if offset < 0 || len(cells) == 0 {
+		return term.Coordinates{}, false
+	}
+	pos := 0
+	for y, row := range cells {
+		if pos >= offset {
+			return term.Coordinates{X: 0, Y: y}, true
+		}
+		for x, cell := range row {
+			pos += int(cell.Bytes)
+			if pos >= offset {
+				return term.Coordinates{X: x + 1, Y: y}, true
+			}
+		}
+		if pos >= offset {
+			return term.Coordinates{X: len(row), Y: y}, true
+		}
+		if y+1 < len(cells) {
+			pos++
+		}
+	}
+	if offset == pos {
+		return term.Coordinates{X: 0, Y: len(cells)}, true
+	}
+	return term.Coordinates{}, false
+}
+
+// ConvertCoordinatesToByteOffset converts the given coordinates to a byte offset.
+// It returns false if it's out of bounds.
+func ConvertCoordinatesToByteOffset(cells [][]term.Cell, c term.Coordinates) (
+	offset int, ok bool,
+) {
+	if c == (term.Coordinates{}) {
+		return 0, len(cells) >= 1
+	}
+	if c.Y < 0 || c.Y >= len(cells) || c.X < 0 {
+		return 0, false
+	}
+	row := cells[c.Y]
+	if c.X > len(row) {
+		return 0, false
+	}
+	for y := 0; y < c.Y; y++ {
+		for _, cell := range cells[y] {
+			offset += int(cell.Bytes)
+		}
+		offset++ // \n
+	}
+	for x := 0; x < c.X; x++ {
+		offset += int(row[x].Bytes)
+	}
+	return offset, true
 }
 
 func nextWrite(c View) term.Coordinates {

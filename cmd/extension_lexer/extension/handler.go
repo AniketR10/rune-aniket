@@ -328,7 +328,7 @@ func (h *syntaxHandler) convertStartEndPoints(
 ) (from, to term.Coordinates, err error) {
 	c := buf.RawCells()
 	start, end := n.StartPoint(), n.EndPoint()
-	from, ok := cell.ConvertRuneCoordinates(c, int(start.Row), int(start.Column))
+	from, ok := cell.ConvertRunePosToCoordinates(c, int(start.Row), int(start.Column))
 	if !ok {
 		err = fmt.Errorf("convert points: failed to convert sitter 'start point "+
 			" to term 'from' coordinates: point: %v", start)
@@ -337,7 +337,7 @@ func (h *syntaxHandler) convertStartEndPoints(
 	log.Tracef("convert points: converted sitter 'start' point "+
 		" to term 'from' coordinates: point: %v, result: %v", start, from)
 
-	to, ok = cell.ConvertRuneCoordinates(c, int(end.Row), int(end.Column))
+	to, ok = cell.ConvertRunePosToCoordinates(c, int(end.Row), int(end.Column))
 	if !ok {
 		err = fmt.Errorf("convert points: failed to convert sitter 'end' point "+
 			" to term 'to' coordinates: point: %v", end)
@@ -662,9 +662,9 @@ func (h *syntaxHandler) setChromaTokenPositions(f *file, it chroma.Iterator) err
 	for y, row := range lines {
 		for _, token := range row {
 			str := token.Value
-			from, ok1 := cell.ConvertRuneCoordinates(cells, y, x)
+			from, ok1 := cell.ConvertRunePosToCoordinates(cells, y, x)
 			x += len(str)
-			to, ok2 := cell.ConvertRuneCoordinates(cells, y, x)
+			to, ok2 := cell.ConvertRunePosToCoordinates(cells, y, x)
 			if !ok1 || !ok2 {
 				log.Warnf("Failed to convert coordinates for file %s "+
 					"at line %d col %d", f.uri, y, x)

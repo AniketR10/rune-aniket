@@ -582,7 +582,7 @@ func convertRange(
 
 	startLine := spn.Start().Line() - 1
 	startChar := spn.Start().Column() - 1
-	from, ok = cell.ConvertRuneCoordinates(cells, startLine, startChar)
+	from, ok = cell.ConvertRunePosToCoordinates(cells, startLine, startChar)
 	if !ok {
 		log.Errorf("lspEditorHandler.convertRange: failed to convert lsp Start coordinates"+
 			" to term From coordinates: rng: (y=%d,x=%d) -> spn: %#v -> from:%#v",
@@ -596,7 +596,7 @@ func convertRange(
 
 	endLine := spn.End().Line() - 1
 	endChar := spn.End().Column() - 1
-	to, ok = cell.ConvertRuneCoordinates(cells, endLine, endChar)
+	to, ok = cell.ConvertRunePosToCoordinates(cells, endLine, endChar)
 	if !ok {
 		log.Errorf("lspEditorHandler.convertRange: failed to convert lsp End coordinates to "+
 			"term From coordinates: rng: (y=%d,x=%d) -> spn: %#v -> to:%#v",
@@ -1102,11 +1102,11 @@ func makeProtocolRange(
 	oldCells [][]term.Cell, from, to term.Coordinates,
 ) protocol.Range {
 	from, to = term.CoordinatesSort(from, to)
-	starty, startx, ok := cell.ConvertTermCoordinates(oldCells, from)
+	starty, startx, ok := cell.ConvertCoordinatesToRunePos(oldCells, from)
 	if !ok {
 		panic("coordinates out of sync")
 	}
-	endy, endx, ok := cell.ConvertTermCoordinates(oldCells, to)
+	endy, endx, ok := cell.ConvertCoordinatesToRunePos(oldCells, to)
 	if !ok {
 		panic("coordinates out of sync")
 	}
@@ -1590,7 +1590,7 @@ func (h *lspEditorHandler) getFilePosition(cursor term.Coordinates, uri workspac
 		return
 	}
 
-	line, column, ok := cell.ConvertTermCoordinates(h.getCells(f), cursor)
+	line, column, ok := cell.ConvertCoordinatesToRunePos(h.getCells(f), cursor)
 	if !ok {
 		return
 	}
