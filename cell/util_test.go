@@ -137,28 +137,66 @@ func TestConvertCoordinatesToRunePos(t *testing.T) {
 		{[][]term.Cell{{{Ch: 'a'}}}, 0, 0, term.Coordinates{}, true},
 		{[][]term.Cell{{{Ch: 0}, {Ch: 0}, {Ch: 0}, {Ch: '\t'}, {Ch: 'a'}}}, 0, 1, term.Coordinates{X: 4}, true},
 		{[][]term.Cell{{}, {{Ch: 0}, {Ch: 0}, {Ch: 0}, {Ch: '\t'}, {Ch: 'a'}, {Ch: 0}}}, 1, 1, term.Coordinates{Y: 1, X: 4}, true},
-		{[][]term.Cell{{}, {{Ch: 0}, {Ch: 0}, {Ch: 0}, {Ch: '\t'}, {Ch: 'a'}, {Ch: 0}}}, 1, 0, term.Coordinates{Y: 1, X: 3}, true},
+		{[][]term.Cell{{}, {{Ch: 0}, {Ch: 0}, {Ch: 0}, {Ch: '\t'}, {Ch: 'a'}, {Ch: 0}}}, 1, 0, term.Coordinates{Y: 1, X: 0}, true},
 		{[][]term.Cell{{}, {{Ch: 0}, {Ch: 0}, {Ch: 0}, {Ch: '\t'}, {Ch: 'a'}, {Ch: 0}}}, 1, 2, term.Coordinates{Y: 1, X: 5}, true},
 		{
 			[][]term.Cell{{{Ch: '💥'}, {Ch: 0}, {Ch: 'a'}}},
-			0, 1, term.Coordinates{Y: 0, X: 2}, true,
+			0, len([]byte(string('💥'))), term.Coordinates{Y: 0, X: 1}, true,
+		},
+		{
+			[][]term.Cell{{{Ch: '💥'}, {Ch: 0}, {Ch: 'a'}}},
+			0, len([]byte(string('💥')))+1, term.Coordinates{Y: 0, X: 3}, true,
 		},
 		{
 			[][]term.Cell{{{Ch: '💥'}, {Ch: 0}, {Ch: 'a'}}},
 			0, 0, term.Coordinates{Y: 0, X: 0}, true,
 		},
+		{
+			[][]term.Cell{{{Ch: '👨', Combining: []rune{
+				rune(8205),
+				rune(128103),
+				rune(8205),
+				rune(128102),
+			}, Width: 2, Bytes: 18}, {Ch: 0}, {Ch: 'a'}}},
+			0, 18, term.Coordinates{Y: 0, X: 1}, true,
+		},
+		{
+			[][]term.Cell{{{Ch: '👨', Combining: []rune{
+				rune(8205),
+				rune(128103),
+				rune(8205),
+				rune(128102),
+			}, Width: 2, Bytes: 18}, {Ch: 0}, {Ch: 'a'}}},
+			0, 19, term.Coordinates{Y: 0, X: 3}, true,
+		},
 	}
 
 	for i, tcase := range tsuite {
 		t.Run("ConvertRunePosToCoordinates", func(t *testing.T) {
-			out, ok := ConvertRunePosToCoordinates(tcase.cells, tcase.y, tcase.x)
+			cells := tcase.cells
+			if len(cells) != 0 {
+				buf := NewBuffer()
+				str := CellsToString(tcase.cells)
+				_, err := buf.ReadFrom(strings.NewReader(str))
+				require.NoError(t, err)
+				cells = buf.RawCells()
+			}
+			out, ok := ConvertRunePosToCoordinates(cells, tcase.y, tcase.x)
 			require.Equal(t, tcase.ok, ok, i)
 			assert.Equal(t, tcase.out, out, i)
 		})
 	}
 	for i, tcase := range tsuite {
 		t.Run("ConvertCoordinatesToRunePos", func(t *testing.T) {
-			y, x, ok := ConvertCoordinatesToRunePos(tcase.cells, tcase.out)
+			cells := tcase.cells
+			if len(cells) != 0 {
+				buf := NewBuffer()
+				str := CellsToString(tcase.cells)
+				_, err := buf.ReadFrom(strings.NewReader(str))
+				require.NoError(t, err)
+				cells = buf.RawCells()
+			}
+			y, x, ok := ConvertCoordinatesToRunePos(cells, tcase.out)
 			require.Equal(t, tcase.ok, ok, i)
 			assert.Equal(t, tcase.x, x, i)
 			assert.Equal(t, tcase.y, y, i)

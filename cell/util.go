@@ -78,9 +78,8 @@ func CellsToBuffer(c [][]term.Cell, tabspaces int) *Buffer {
 	return ret
 }
 
-// ConvertRunePosToCoordinates converts x and y, which use the buffer runes as offsets
-// into term.Coordinates, which account for tab expansion. It returns false if y is out
-// of bounds.
+// ConvertRunePosToCoordinates converts the given column and row position in number of
+// bytes, into code-point coordinates.
 func ConvertRunePosToCoordinates(cells [][]term.Cell, y, x int) (
 	ret term.Coordinates, ok bool,
 ) {
@@ -88,39 +87,25 @@ func ConvertRunePosToCoordinates(cells [][]term.Cell, y, x int) (
 		return
 	}
 
-	ret = term.Coordinates{Y: y, X: x}
-
+	ret.Y = y
 	if ret.Y == len(cells) {
-		ok = ret.X == 0
+		ok = x == 0
 		return
 	}
 
 	line := cells[ret.Y]
-
-	// lines ending in null, could derail assumptions below
-	// better to just abort conversion of nulls
-	lastSane := term.Coordinates{}
-	for xi, c := range line {
-		if c.Ch == 0 {
-			ret.X++
-			if xi == len(line)-1 {
-				ret = lastSane
-			}
-		} else {
-			lastSane = ret
-		}
-		if xi == ret.X {
-			break
-		}
+	cellView := [][]term.Cell{line}
+	var bret term.Coordinates
+	bret, ok = ConvertByteOffsetToCoordinates(cellView, x)
+	if !ok {
+		return
 	}
-
-	ok = true
+	ret.X = bret.X
 	return
 }
 
-// ConvertCoordinatesToRunePos converts c, which use the terminal
-// system of coordinates, which account for tab expansion, into rune
-// offsets. It returns false if y is out of bounds.
+// ConvertCoordinatesToRunePos converts the given coordinates, which
+// represent code point coordinates into row, column position in numbers of bytes.
 func ConvertCoordinatesToRunePos(cells [][]term.Cell, c term.Coordinates) (
 	y, x int, ok bool,
 ) {
@@ -129,25 +114,19 @@ func ConvertCoordinatesToRunePos(cells [][]term.Cell, c term.Coordinates) (
 	}
 
 	y = c.Y
-	x = c.X
-
 	if c.Y == len(cells) {
-		ok = c.X == 0
+		ok = x == 0
 		return
 	}
 
 	line := cells[c.Y]
-
-	for xi, cell := range line {
-		if xi == c.X {
-			break
-		}
-		if cell.Ch == 0 {
-			x--
-		}
+	cellView := [][]term.Cell{line}
+	var bretX int
+	bretX, ok = ConvertCoordinatesToByteOffset(cellView, term.Coordinates{X: c.X})
+	if !ok {
+		return
 	}
-
-	ok = true
+	x = bretX
 	return
 }
 
