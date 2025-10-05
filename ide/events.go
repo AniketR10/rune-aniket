@@ -150,7 +150,7 @@ func handleFSChange(ex *ex, flag workspaceapi.Event, uri workspaceapi.URI) {
 		} else {
 			_, _ = ex.comp.Notify(notifications.LevelInfo,
 				"File '%s' changed on disk and does not have unflushed changes "+
-					"so it was reload it", uri.Name())
+					"so it was reloaded", uri.Name())
 		}
 
 	case workspaceapi.Rename:
@@ -160,7 +160,7 @@ func handleFSChange(ex *ex, flag workspaceapi.Event, uri workspaceapi.URI) {
 			if err == nil {
 				_, _ = ex.comp.Notify(notifications.LevelInfo,
 					"File '%s' was renamed on disk and does not have unflushed changes "+
-						"so it was reload it", uri.Name())
+						"so it was reloaded", uri.Name())
 				return
 			}
 			_, _ = ex.comp.Notify(notifications.LevelError,

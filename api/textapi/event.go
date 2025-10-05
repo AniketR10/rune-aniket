@@ -43,9 +43,6 @@ const (
 
 	// EventTypeFlush is dispatched when an editor buffer is Flushed.
 	// Content represents the file content that was flushed.
-	// An EventTypeOpen event doesn't need to preceed an EventTypeFlush;
-	// the editor might not have opened a resource, and yet the resource
-	// might have been modified via other processes (i.e. git).
 	EventTypeFlush
 
 	// EventTypeCreate is dispatched when a watched resource is created out-of-band
