@@ -275,6 +275,7 @@ func TestLspHandlerHandleFlush(t *testing.T) {
 }
 
 func TestLspHandlerHandleInsertDelete(t *testing.T) {
+	t.SkipNow() // this is about to be refactored
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 

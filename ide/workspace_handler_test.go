@@ -193,7 +193,8 @@ func TestWorkspaceConfig(t *testing.T) {
 
 func TestWorkspaceExtensions(t *testing.T) {
 	t.Run("calls extension runner with user extensions", func(t *testing.T) {
-		cfg := ideConfig{cfg: map[string]interface{}{
+		cfg := defaultCfg()
+		cfg.cfg = map[string]interface{}{
 			"command":           map[string]interface{}{},
 			"show_manual_after": "1h",
 			"extensions": map[string]interface{}{
@@ -204,7 +205,7 @@ func TestWorkspaceExtensions(t *testing.T) {
 					},
 				},
 			},
-		}}
+		}
 		manager := workspace.NewManager(cfg.workspace())
 
 		manager.RegisterScheme(workspace.MemoryScheme, workspace.NewMemoryScheme)
@@ -252,7 +253,8 @@ func TestWorkspaceExtensions(t *testing.T) {
 		t.Cleanup(func() {
 			_ = os.RemoveAll(dir)
 		})
-		cfg := ideConfig{cfg: map[string]interface{}{}}
+		cfg := defaultCfg()
+		cfg.cfg = map[string]interface{}{}
 		manager := workspace.NewManager(cfg.workspace())
 
 		manager.RegisterScheme(workspace.MemoryScheme, workspace.NewMemoryScheme)
@@ -1868,7 +1870,12 @@ func defaultCfg() ideConfig {
 		"notifications": map[string]interface{}{
 			"progress_bar": false,
 		},
-	}}
+	},
+		scheduleNextTick: func(fn func()) bool {
+			fn()
+			return true
+		},
+	}
 }
 
 func defaultConfigWithWrap(wrap bool) ideConfig {

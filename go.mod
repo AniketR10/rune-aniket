@@ -5,7 +5,6 @@ go 1.25.0
 toolchain go1.25.1
 
 require (
-	github.com/alecthomas/chroma v0.10.0
 	github.com/atotto/clipboard v0.1.2
 	github.com/disintegration/imaging v1.6.2
 	github.com/ernestrc/dom v0.2.5-0.20201125033726-789c946aa938
@@ -16,7 +15,6 @@ require (
 	github.com/pion/mediadevices v0.6.2
 	github.com/pion/webrtc/v3 v3.2.37
 	github.com/sirupsen/logrus v1.9.3
-	github.com/smacker/go-tree-sitter v0.0.0-20230501083651-a7d92773b3aa
 	github.com/sourcegraph/go-diff v0.6.1
 	github.com/stretchr/testify v1.10.0
 	github.com/unstablebuild/blue v1.59.4
@@ -52,7 +50,9 @@ require (
 )
 
 require (
+	github.com/ebitengine/purego v0.9.0
 	github.com/go-git/go-git/v6 v6.0.0-20250819122726-39261590f7f3
+	github.com/tree-sitter/go-tree-sitter v0.25.0
 	github.com/unstablebuild/notify v0.10.2
 	github.com/unstablebuild/pty v1.3.1
 	go.uber.org/mock v0.4.0
@@ -70,6 +70,7 @@ require (
 	github.com/go-git/go-billy/v6 v6.0.0-20250817172114-3a9ca963b728 // indirect
 	github.com/go-jose/go-jose/v4 v4.1.2 // indirect
 	github.com/kr/text v0.2.0 // indirect
+	github.com/mattn/go-pointer v0.0.1 // indirect
 	github.com/olekukonko/tablewriter v0.0.5 // indirect
 	github.com/pion/datachannel v1.5.6 // indirect
 	github.com/pion/dtls/v2 v2.2.10 // indirect

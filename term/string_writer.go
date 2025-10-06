@@ -38,6 +38,8 @@ type StringWriter struct {
 	width, height int
 	CursorCh      rune
 	SetContext    context.Context
+	BackgroundCh  rune
+	ForegroundCh  rune
 }
 
 // NewStringWriter allocates storage for a new StringWriter and
@@ -106,6 +108,12 @@ func (w *StringWriter) Flush() (err error) {
 		switch ch {
 		case '\t', '\n', 0:
 			ch = ' '
+		}
+		if w.BackgroundCh != 0 && c.Bg != 0 {
+			ch = w.BackgroundCh
+		}
+		if w.ForegroundCh != 0 && c.Fg != 0 {
+			ch = w.ForegroundCh
 		}
 		w.buffer.WriteRune(ch)
 	}

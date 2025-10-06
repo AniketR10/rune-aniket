@@ -41,6 +41,7 @@ import (
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/command"
+	"unstable.build/go-tui/ide/syntax"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/term/vte"
 	"unstable.build/go-tui/text"
@@ -88,6 +89,10 @@ editor:
         selection_attr:
             bg: green
             fg: "#f3f3f3"
+    highlights:
+        function:
+            fg: green
+            bg: yellow
     icons:
         default: x
         terminal: '&'
@@ -279,9 +284,15 @@ func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
 		cfg.modelessResultAttr())
 	assert.Equal(t, term.Attributes{}, cfg.modelessAttr())
 	assert.Equal(t, term.Attributes{}, cfg.modalAttr())
-	assert.False(t, cfg.modelessWrap())
 	assert.True(t, cfg.autoRestore())
 	assert.Equal(t, "  ", cfg.tabNameSeparator())
+
+	expectedSyntaxConfig := syntax.DefaultConfig()
+	syntaxConfig := cfg.syntaxConfig()
+	assert.NotNil(t, syntaxConfig.ScheduleNextTick)
+	syntaxConfig.ScheduleNextTick = nil
+	expectedSyntaxConfig.ScheduleNextTick = nil
+	assert.Equal(t, expectedSyntaxConfig, syntaxConfig)
 
 	assert.Equal(t, "modal", cfg.editorMode())
 	os.Setenv("SHELL", "fish")
@@ -469,7 +480,15 @@ func TestConfigSetting(t *testing.T) {
 
 	assert.Equal(t, term.Attributes{Bg: tcell.ColorRed,
 		Fg: tcell.GetColor("#f1f1f1")}, cfg.modelessResultAttr())
-	assert.False(t, cfg.modelessWrap())
+
+	expectedSyntaxConfig := syntax.DefaultConfig()
+	expectedSyntaxConfig.CaptureNamesAttributes["function"] = term.Attributes{
+		Fg: tcell.ColorGreen, Bg: tcell.ColorYellow}
+	syntaxConfig := cfg.syntaxConfig()
+	assert.NotNil(t, syntaxConfig.ScheduleNextTick)
+	syntaxConfig.ScheduleNextTick = nil
+	expectedSyntaxConfig.ScheduleNextTick = nil
+	assert.Equal(t, expectedSyntaxConfig, syntaxConfig)
 
 	assert.Equal(t, term.Attributes{Bg: tcell.ColorGreen,
 		Fg: tcell.GetColor("#f9f9f9")}, cfg.modelessAttr())

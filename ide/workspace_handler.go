@@ -52,6 +52,7 @@ import (
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/handler"
+	"unstable.build/go-tui/ide/syntax"
 	"unstable.build/go-tui/ide/vctrl"
 	"unstable.build/go-tui/localstorage"
 	"unstable.build/go-tui/term"
@@ -142,7 +143,7 @@ func (h *workspaceManagerHandler) newBuiltinModalEditor(cfg ideConfig) text.Edit
 
 func (h *workspaceManagerHandler) newBuiltinModelessEditor(cfg ideConfig) text.Editor {
 	return text.NewSimpleEditor(
-		cfg.clipboard(), cfg.modelessWrap(), true,
+		cfg.clipboard(), false, true,
 		cfg.modelessAttr(),
 		cfg.modelessResultAttr(), cfg.modelessBarAttr())
 }
@@ -191,14 +192,14 @@ func (h *workspaceManagerHandler) init(
 		return fmt.Errorf("new editor: %v", err)
 	}
 
-	h.setReleaseManager(releaseManager)
-
 	homeWorkspace, err := h.workspace.AddWorkspace(ctx, homeDirUri)
 	if err != nil {
 		return fmt.Errorf("add home workspace: %v", err)
 	}
 
 	h.homeWorkspace = homeWorkspace
+	h.setReleaseManager(releaseManager)
+
 	h.empty, err = newEx(ed, homeWorkspace, h.storage, notifications,
 		cfg.terminalConfig(), h.publishEvent, cfg.clipboard(),
 		globalOpts...)
@@ -596,6 +597,16 @@ func (h *workspaceManagerHandler) addWorkspace(
 		return err
 	}
 
+	// setup syntax tree parsing
+	delegate, events := syntax.NewDelegate(
+		h.pkgmanager.pkg, h.notifications,
+		ed, h, cfg.syntaxConfig(),
+	)
+	if err := ex.comp.SubscribeEvents(events, delegate); err != nil {
+		cancel()
+		return fmt.Errorf("subscribe events: %w", err)
+	}
+
 	go debug.CapturePanicReport(func() {
 		start := time.Now()
 		// to preserve the order of events we don't want to spawn
@@ -628,6 +639,7 @@ func (h *workspaceManagerHandler) addWorkspace(
 		cancelCtx: cancel,
 		uri:       uri,
 		ex:        ex,
+		delegate:  delegate,
 	}
 
 	// load async to speed up workspace initialization
@@ -905,10 +917,14 @@ type workspaceHandler struct {
 	cancelCtx  func()
 	uri        workspaceapi.URI
 	Extensions atomic.Value
+	delegate   *syntax.Delegate
 }
 
 func (hm *workspaceHandler) Close() (ret error) {
 	if err := hm.ex.Close(); err != nil {
+		ret = multierror.Append(ret, err)
+	}
+	if err := hm.delegate.Close(); err != nil {
 		ret = multierror.Append(ret, err)
 	}
 	if runner := hm.Extensions.Load(); runner != nil {
@@ -1168,5 +1184,6 @@ func (h *workspaceManagerHandler) setReleaseManager(releaseManager release.Manag
 	if h.pkgmanager == nil {
 		h.pkgmanager = new(pkgManager)
 	}
-	h.pkgmanager.init(h.notifications, releaseManager, pkgStorage, h.sixDir, h)
+	h.pkgmanager.init(h.notifications, releaseManager,
+		pkgStorage, h.homeWorkspace, h.sixDir, h)
 }

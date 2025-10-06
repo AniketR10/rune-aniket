@@ -34,6 +34,7 @@ import (
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/release"
 	"unstable.build/go-tui/api/browserapi"
+	"unstable.build/go-tui/api/schemeapi"
 	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/debug"
@@ -94,10 +95,10 @@ type pkgManager struct {
 
 func (m *pkgManager) init(
 	n browserapi.Notifications, rm release.Manager,
-	storage document.Service, dataDir string,
+	storage document.Service, scheme schemeapi.Scheme, dataDir string,
 	interrupt term.Interrupter,
 ) {
-	m.pkg = idepkg.NewManager(n, rm, storage, dataDir, interrupt)
+	m.pkg = idepkg.NewManager(n, rm, storage, scheme, dataDir, interrupt)
 	m.n = n
 }
 

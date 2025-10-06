@@ -45,6 +45,52 @@ import (
 	"unstable.build/go-tui/workspace/walkdir"
 )
 
+func TestLibDir(t *testing.T) {
+	t.Run("returns installed files", func(t *testing.T) {
+		pkgs := idepkgtest.MakePackages()
+		versions := idepkgtest.MakeBundles([]release.Bundle{{Package: "go", Version: "1"}})
+		m, n, _, _ := newTestManager(t, pkgs, versions)
+
+		n.Wg = new(sync.WaitGroup)
+		n.Wg.Add(1)
+		err := m.InstallPackageVersion(context.Background(), "go", "1")
+		require.NoError(t, err)
+		n.Wg.Wait()
+
+		it := m.LibDir(context.Background(), "go")
+		installed, err := iterator.ToSlice(context.Background(), it)
+		require.NoError(t, err)
+
+		// test that paths are absolute
+		actual := make([]string, 0)
+		for _, path := range installed {
+			require.True(t, filepath.IsAbs(path))
+			actual = append(actual, filepath.Base(path))
+		}
+		expected := []string{
+			"highlights.scm",
+			"tags.scm",
+			"tree-sitter.so",
+			"go",
+			"gofmt",
+			"goimports",
+			"gopls",
+		}
+		assert.ElementsMatch(t, expected, actual)
+	})
+	t.Run("returns error if package is not installed", func(t *testing.T) {
+		pkgs := idepkgtest.MakePackages()
+		versions := idepkgtest.MakeBundles()
+		m, _, _, _ := newTestManager(t, pkgs, versions)
+
+		it := m.LibDir(context.Background(), "go")
+
+		installed, err := iterator.ToSlice(context.Background(), it)
+		require.Error(t, err)
+		assert.Empty(t, installed)
+	})
+}
+
 func TestDescribePackage(t *testing.T) {
 	t.Run("no packages", func(t *testing.T) {
 		pkgs := idepkgtest.MakePackages()
@@ -188,7 +234,7 @@ func TestInstallPackageVersion(t *testing.T) {
 		n.RequireNoErrorNotification()
 
 		assertDataDirExists(t, datadir, "go")
-		assertExecutables(t, datadir, "go", "gofmt")
+		assertExecutables(t, datadir, goTarExpectedExecutables...)
 	})
 
 	t.Run("install a package and version already installed fails", func(t *testing.T) {
@@ -246,7 +292,7 @@ func TestInstallPackageVersion(t *testing.T) {
 		n.RequireNoErrorNotification()
 
 		assertDataDirExists(t, datadir, "go")
-		assertExecutables(t, datadir, "go", "gofmt")
+		assertExecutables(t, datadir, goTarExpectedExecutables...)
 	})
 	t.Run("notification progress is completed, even if writer doesn't", func(t *testing.T) {
 		pkgs := idepkgtest.MakePackages()
@@ -263,7 +309,7 @@ func TestInstallPackageVersion(t *testing.T) {
 		assert.Len(t, n.Active(), 1)
 
 		assertDataDirExists(t, datadir, "go")
-		assertExecutables(t, datadir, "go", "gofmt")
+		assertExecutables(t, datadir, goTarExpectedExecutables...)
 	})
 }
 
@@ -476,7 +522,7 @@ func TestUsePackageVersion(t *testing.T) {
 		require.NoError(t, err)
 
 		assertDataDirExists(t, datadir, "go")
-		assertExecutables(t, datadir, "go", "gofmt")
+		assertExecutables(t, datadir, goTarExpectedExecutables...)
 	})
 	t.Run("returns error if version already in use", func(t *testing.T) {
 		pkgs := idepkgtest.MakePackages()
@@ -575,7 +621,7 @@ func TestDeletePackageVersion(t *testing.T) {
 		require.NoError(t, err)
 
 		assertDataDirExists(t, datadir, "go")
-		assertExecutables(t, datadir, "gofmt", "go")
+		assertExecutables(t, datadir, goTarExpectedExecutables...)
 	})
 	t.Run("returns ErrNotInstalled if package and version is not installed", func(t *testing.T) {
 		pkgs := idepkgtest.MakePackages()
@@ -595,7 +641,7 @@ func TestDeletePackageVersion(t *testing.T) {
 		require.Equal(t, ErrNotInstalled, err)
 
 		assertDataDirExists(t, datadir, "go")
-		assertExecutables(t, datadir, "go", "gofmt")
+		assertExecutables(t, datadir, goTarExpectedExecutables...)
 	})
 	t.Run("returns ErrVersionInUse if package version is in use and force is false", func(t *testing.T) {
 		pkgs := idepkgtest.MakePackages()
@@ -621,7 +667,7 @@ func TestDeletePackageVersion(t *testing.T) {
 		require.Equal(t, err, ErrVersionInUse)
 
 		assertDataDirExists(t, datadir, "go")
-		assertExecutables(t, datadir, "go", "gofmt")
+		assertExecutables(t, datadir, goTarExpectedExecutables...)
 	})
 	t.Run("removes lib+executables if package version is in use and force is true", func(t *testing.T) {
 		pkgs := idepkgtest.MakePackages()
@@ -652,7 +698,7 @@ func TestDeletePackageVersion(t *testing.T) {
 		err = m.UsePackageVersion(context.Background(), "go", "1")
 		require.NoError(t, err)
 		assertDataDirExists(t, datadir, "go")
-		assertExecutables(t, datadir, "gofmt", "go")
+		assertExecutables(t, datadir, goTarExpectedExecutables...)
 	})
 }
 
@@ -706,6 +752,10 @@ func assertDataDirNotExists(t *testing.T, datadir string, pkgs ...string) {
 	}
 }
 
+var goTarExpectedExecutables = []string{
+	"go", "gofmt", "goimports", "gopls", "tree-sitter.so",
+}
+
 func assertExecutables(t *testing.T, datadir string, expected ...string) {
 	t.Helper()
 
@@ -738,6 +788,7 @@ func newTestManager(
 	packages map[string]release.Package,
 	versions map[string][]release.Bundle,
 ) (*Manager, *idepkgtest.Notifications, *idepkgtest.ReleaseManager, string) {
+	ctx := context.Background()
 	temp, err := os.MkdirTemp("", "")
 	require.NoError(t, err)
 	t.Cleanup(func() {
@@ -745,7 +796,11 @@ func newTestManager(
 	})
 	n := idepkgtest.NewNotifications(t)
 	m := idepkgtest.NewReleaseManager(packages, versions)
+	tempURI, err := workspaceapi.ParseURI("file://" + temp)
+	require.NoError(t, err)
+	fileScheme, err := workspace.NewFileScheme(ctx, config.NopConfig(), tempURI)
+	require.NoError(t, err)
 	manager := NewManager(n, m, document.NewInMemoryService(),
-		temp, term.NopInterrupter())
+		fileScheme, temp, term.NopInterrupter())
 	return manager, n, m, temp
 }

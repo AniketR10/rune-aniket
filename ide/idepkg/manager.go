@@ -45,9 +45,12 @@ import (
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/release"
 	"unstable.build/go-tui/api/browserapi"
+	"unstable.build/go-tui/api/schemeapi"
+	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/term"
+	"unstable.build/go-tui/workspace/walkdir"
 )
 
 // NewManager allocates storage for a new Manager and initializes it.
@@ -55,16 +58,19 @@ import (
 // and manage executables.
 func NewManager(
 	n browserapi.Notifications, m release.Manager,
-	storage document.Service, dataDir string,
+	storage document.Service, scheme schemeapi.Scheme, dataDir string,
 	interrupter term.Interrupter,
 ) *Manager {
 	if dataDir == "" {
 		panic("data directory must not be empty")
 	}
+	schemeURI, _ := scheme.URI(".")
 	binDir := makeBinDirname(dataDir)
 	return &Manager{
 		dataDir:     dataDir,
+		scheme:      scheme,
 		binDir:      binDir,
+		schemeURI:   schemeURI,
 		interrupter: interrupter,
 		n:           n,
 		m:           m,
@@ -83,7 +89,29 @@ type Manager struct {
 	interrupter term.Interrupter
 	storage     document.Service
 	dataDir     string
+	scheme      schemeapi.Scheme
+	schemeURI   workspaceapi.URI
 	binDir      string
+}
+
+// LibDir returns an iterator to the lib directory of the given package.
+// The paths returned by the iterator are always absolute.
+func (m *Manager) LibDir(ctx context.Context, pkgID string) iterator.Iterator[string] {
+	libDir := makePackageLibDirname(m.dataDir, pkgID)
+	_, err := os.Stat(libDir)
+	if err != nil {
+		return iterator.Error[string](errors.New("package not installed"))
+	}
+
+	it, err := walkdir.ListFiles(ctx, m.scheme, libDir)
+	if err != nil {
+		return iterator.Error[string](fmt.Errorf("list files: %v", err))
+	}
+	// make paths absolute
+	return iterator.Map(it, func(filename string) string {
+		path, _ := workspaceapi.ExpandPathWithURI(filename, m.schemeURI)
+		return path
+	})
 }
 
 // DescribePackage fetches a Package manifest.
@@ -131,7 +159,7 @@ func (m *Manager) InstallPackageVersion(
 	if err != nil {
 		if errors.Is(err, document.ErrAlreadyExists) {
 			return fmt.Errorf("version %s of package %s has "+
-				"already been installed: %w", version, pkgID, err)
+				"already been installed", version, pkgID)
 		}
 		m.cleanupFile(tarfile)
 		return fmt.Errorf("store package version: %w", err)
@@ -473,7 +501,7 @@ func (m *Manager) download(
 			"downloaded version of package", 1, 1)
 	}
 	_, err = m.n.Notify(notifications.LevelSuccess,
-		"downdloaded version %s of package %s", version, pkgID)
+		"downloaded version %s of package %s", version, pkgID)
 	if err != nil {
 		m.log(log.WarnLevel, "notify: %v", err)
 	}

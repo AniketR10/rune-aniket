@@ -109,10 +109,10 @@ func TestPackageManagerIntegration(t *testing.T) {
 ├──────────────────────────────────────┤
 │1                                     │
 └──────────────────────────────────────┘`},
-		{":noticlose>________________:pkgcurrent ",
+		{":noticlose>__________________:pkgcurrent ",
 `┌────────────────────────┌─────────────┐
-│                        │ downdloaded │
-├────────────────────────│  version 1  │
+│                        │ downloaded  │
+├────────────────────────│ version 1   │
 │                        │ of package  │
 │                        │ six         │
 │                        └─────────────┘
@@ -133,8 +133,8 @@ func TestPackageManagerIntegration(t *testing.T) {
 │                        │ use         │
 │                        └─────────────┘
 │                        ┌─────────────┐
-│          workspaceWallp│ downdloaded │
-│                        │  version 1  │
+│          workspaceWallp│ downloaded  │
+│                        │ version 1   │
 │                        │ of package  │
 │                        │ six         │
 │                        └─────────────┘
@@ -157,10 +157,10 @@ func TestPackageManagerIntegration(t *testing.T) {
 ├──────────────────────────────────────┤
 │1                                     │
 └──────────────────────────────────────┘`},
-		{":noticlose>:pkginstall go 1>___________",
+		{":noticlose>:pkginstall go 1>_____________________________________",
 			`┌────────────────────────┌─────────────┐
-│                        │ downdloaded │
-├────────────────────────│  version 1  │
+│                        │ downloaded  │
+├────────────────────────│ version 1   │
 │                        │ of package  │
 │                        │ go          │
 │                        └─────────────┘
@@ -173,10 +173,10 @@ func TestPackageManagerIntegration(t *testing.T) {
 ├──────────────────────────────────────┤
 │1                                     │
 └──────────────────────────────────────┘`},
-		{":noticlose>:pkgupgradeall>_____________",
+		{":noticlose>:pkgupgradeall>_________________",
 			`┌────────────────────────┌─────────────┐
-│                        │ downdloaded │
-├────────────────────────│  version 2  │
+│                        │ downloaded  │
+├────────────────────────│ version 2   │
 │                        │ of package  │
 │                        │ six         │
 │                        └─────────────┘

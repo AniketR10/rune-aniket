@@ -51,6 +51,7 @@ import (
 	"unstable.build/go-tui/extension/extutil"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/command"
+	"unstable.build/go-tui/ide/syntax"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/term/vte"
 	"unstable.build/go-tui/text"
@@ -1218,22 +1219,30 @@ func (c ideConfig) modelessAttr() (attr term.Attributes) {
 	return attr
 }
 
-func (c ideConfig) modelessWrap() (ret bool) {
-	return c.modelessBool("wrap")
-}
-
-func (c ideConfig) modelessBool(name string) (ret bool) {
-	cfg, ok := c.modeless()
+func (c ideConfig) syntaxConfig() (ret syntax.Config) {
+	ret = syntax.DefaultConfig()
+	ret.ScheduleNextTick = c.scheduleNextTick
+	cfg, ok := c.editor()
 	if !ok {
 		return
 	}
-	ret, err := cfg.GetBool(name)
+	cfgHighlights, err := cfg.GetMap("highlights")
 	if err != nil {
 		if err != config.ErrNotFound {
-			c.errors["editor.modeless."+name] = err
+			c.errors["editor.highlights"] = err
+		}
+		return
+	}
+	cfg = config.MapConfig(cfgHighlights)
+	for key := range cfgHighlights {
+		cfgAttr, err := config.GetAttributes(cfg, key)
+		if err != nil {
+			c.errors["editor.highlights."+key] = err
+		} else {
+			ret.CaptureNamesAttributes[key] = cfgAttr
 		}
 	}
-	return ret
+	return
 }
 
 func (c ideConfig) editorTabspaces() (tabs int) {
