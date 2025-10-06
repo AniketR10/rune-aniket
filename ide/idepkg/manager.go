@@ -66,7 +66,7 @@ func NewManager(
 	}
 	schemeURI, _ := scheme.URI(".")
 	binDir := makeBinDirname(dataDir)
-	return &Manager{
+	ret := &Manager{
 		dataDir:     dataDir,
 		scheme:      scheme,
 		binDir:      binDir,
@@ -76,6 +76,8 @@ func NewManager(
 		m:           m,
 		storage:     storage,
 	}
+	ret.iterators.m = make(map[string]*libDirIterator)
+	return ret
 }
 
 // Manager implements ManagerInterface and adds SetPathEnv, which can be used
@@ -92,26 +94,31 @@ type Manager struct {
 	scheme      schemeapi.Scheme
 	schemeURI   workspaceapi.URI
 	binDir      string
+
+	iterators struct {
+		sync.Mutex
+		m map[string]*libDirIterator
+	}
 }
 
 // LibDir returns an iterator to the lib directory of the given package.
 // The paths returned by the iterator are always absolute.
 func (m *Manager) LibDir(ctx context.Context, pkgID string) iterator.Iterator[string] {
+	m.iterators.Lock()
+	defer m.iterators.Unlock()
+
+	pending, ok := m.iterators.m[pkgID]
+	if ok {
+		return pending
+	}
+
 	libDir := makePackageLibDirname(m.dataDir, pkgID)
 	_, err := os.Stat(libDir)
 	if err != nil {
 		return iterator.Error[string](errors.New("package not installed"))
 	}
 
-	it, err := walkdir.ListFiles(ctx, m.scheme, libDir)
-	if err != nil {
-		return iterator.Error[string](fmt.Errorf("list files: %v", err))
-	}
-	// make paths absolute
-	return iterator.Map(it, func(filename string) string {
-		path, _ := workspaceapi.ExpandPathWithURI(filename, m.schemeURI)
-		return path
-	})
+	return m.newIterator(ctx, libDir)
 }
 
 // DescribePackage fetches a Package manifest.
@@ -149,6 +156,14 @@ func (m *Manager) InstallPackageVersion(
 	pkgID = escapeString(pkgID)
 	version = release.Version(escapeString(string(version)))
 
+	m.iterators.Lock()
+	defer m.iterators.Unlock()
+
+	_, ok := m.iterators.m[pkgID]
+	if ok {
+		return errors.New("there's another version of this package being installed")
+	}
+
 	tarfile, err := os.CreateTemp("", "")
 	if err != nil {
 		return fmt.Errorf("create temp: %w", err)
@@ -173,8 +188,16 @@ func (m *Manager) InstallPackageVersion(
 		return fmt.Errorf("notify: %w", err)
 	}
 
+	mu := new(sync.Mutex)
+	m.iterators.m[pkgID] = &libDirIterator{
+		ready:   mu,
+		pkgID:   pkgID,
+		version: version,
+	}
+
+	mu.Lock() // block calls to iterator
 	go debug.CapturePanicReport(func() {
-		m.download(ctx, pkgID, version, tarfile, notificationID, key)
+		m.download(pkgID, version, tarfile, notificationID, key)
 	})
 
 	return err
@@ -446,9 +469,10 @@ func (m *Manager) makeDownloadKey(pkgID string, version release.Version) string 
 }
 
 func (m *Manager) download(
-	ctx context.Context, pkgID string, version release.Version, tarfile *os.File,
+	pkgID string, version release.Version, tarfile *os.File,
 	notificationID string, key string,
 ) {
+	ctx := context.Background()
 	defer m.cleanupFile(tarfile)
 
 	if err := makePkgDirs(m.dataDir); err != nil {
@@ -474,7 +498,7 @@ func (m *Manager) download(
 	m.log(log.TraceLevel, "extracting package %s version %s", pkgID, version)
 	// copy to pkg/<pkgID>/<version> for managing versions
 	pkgVersionDirname := makePackageVersionDirname(m.dataDir, pkgID, version)
-	executables, err := m.untar(pkgID, version, notificationID, tarfile, pkgVersionDirname)
+	executables, err := m.untar(tarfile, pkgVersionDirname)
 	if err != nil {
 		m.abortDownload(err, pkgID, version, notificationID)
 		return
@@ -505,6 +529,20 @@ func (m *Manager) download(
 	if err != nil {
 		m.log(log.WarnLevel, "notify: %v", err)
 	}
+
+	m.iterators.Lock()
+	defer m.iterators.Unlock()
+
+	it, ok := m.iterators.m[pkgID]
+	if !ok {
+		panic("iterator for package not found")
+	}
+	delete(m.iterators.m, pkgID)
+
+	libDir := makePackageLibDirname(m.dataDir, pkgID)
+	it.it = m.newIterator(ctx, libDir)
+	it.ready.Unlock()
+
 	if err := m.interrupter.Interrupt(ctx); err != nil {
 		m.log(log.WarnLevel, "interrupt: %v", err)
 	}
@@ -522,6 +560,18 @@ func (m *Manager) abortDownload(
 			"lock key (%s): %v", pkgID, version, key, err)
 	}
 	m.notifyError(err, pkgID, version, notificationID)
+
+	m.iterators.Lock()
+	defer m.iterators.Unlock()
+
+	it, ok := m.iterators.m[pkgID]
+	if !ok {
+		panic("iterator for package not found")
+	}
+	delete(m.iterators.m, pkgID)
+
+	it.it = iterator.Error[string](err)
+	it.ready.Unlock()
 }
 
 func (m *Manager) notifyError(
@@ -570,7 +620,6 @@ func (m *Manager) linkLibCopyBin(
 }
 
 func (m *Manager) untar(
-	pkgID string, version release.Version, notificationID string,
 	tarfile *os.File, dirname string,
 ) ([]*tar.Header, error) {
 	if err := os.MkdirAll(dirname, 0777); err != nil {
@@ -599,7 +648,19 @@ func (m *Manager) untar(
 	return executables, nil
 }
 
-func (m *Manager) log(level log.Level, msg string, args ...interface{}) {
+func (m *Manager) newIterator(ctx context.Context, libDir string) iterator.Iterator[string] {
+	it, err := walkdir.ListFiles(ctx, m.scheme, libDir)
+	if err != nil {
+		return iterator.Error[string](fmt.Errorf("list files: %v", err))
+	}
+	// make paths absolute
+	return iterator.Map(it, func(filename string) string {
+		path, _ := workspaceapi.ExpandPathWithURI(filename, m.schemeURI)
+		return path
+	})
+}
+
+func (m *Manager) log(level log.Level, msg string, args ...any) {
 	if !log.IsLevelEnabled(level) {
 		return
 	}
@@ -783,4 +844,29 @@ func escapeString(val string) string {
 	val = url.PathEscape(val)
 	val = strings.ReplaceAll(val, ":", "_")
 	return val
+}
+
+type libDirIterator struct {
+	pkgID   string
+	version release.Version
+	ready   *sync.Mutex
+	it      iterator.Iterator[string]
+}
+
+func (l *libDirIterator) Next(ctx context.Context) (string, bool) {
+	l.ready.Lock()
+	defer l.ready.Unlock()
+	return l.it.Next(ctx)
+}
+
+func (l *libDirIterator) Err() error {
+	l.ready.Lock()
+	defer l.ready.Unlock()
+	return l.it.Err()
+}
+
+func (l *libDirIterator) Close() error {
+	l.ready.Lock()
+	defer l.ready.Unlock()
+	return l.it.Close()
 }

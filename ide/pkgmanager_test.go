@@ -24,12 +24,14 @@
 package ide
 
 import (
+	"context"
 	"os"
 	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/blue/release"
+	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/notifications"
@@ -37,6 +39,7 @@ import (
 	"unstable.build/go-tui/handler/handlertest"
 	"unstable.build/go-tui/ide/idepkg/idepkgtest"
 	"unstable.build/go-tui/term"
+	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/workspace"
 )
 
@@ -109,8 +112,8 @@ func TestPackageManagerIntegration(t *testing.T) {
 ├──────────────────────────────────────┤
 │1                                     │
 └──────────────────────────────────────┘`},
-		{":noticlose>__________________:pkgcurrent ",
-`┌────────────────────────┌─────────────┐
+		{":noticlose>:pkgwait six>:pkgcurrent ",
+			`┌────────────────────────┌─────────────┐
 │                        │ downloaded  │
 ├────────────────────────│ version 1   │
 │                        │ of package  │
@@ -157,7 +160,7 @@ func TestPackageManagerIntegration(t *testing.T) {
 ├──────────────────────────────────────┤
 │1                                     │
 └──────────────────────────────────────┘`},
-		{":noticlose>:pkginstall go 1>_____________________________________",
+		{":noticlose>:pkginstall go 1>:pkgwait go>",
 			`┌────────────────────────┌─────────────┐
 │                        │ downloaded  │
 ├────────────────────────│ version 1   │
@@ -173,7 +176,7 @@ func TestPackageManagerIntegration(t *testing.T) {
 ├──────────────────────────────────────┤
 │1                                     │
 └──────────────────────────────────────┘`},
-		{":noticlose>:pkgupgradeall>_________________",
+		{":noticlose>:pkgupgradeall>:pkgwait six>",
 			`┌────────────────────────┌─────────────┐
 │                        │ downloaded  │
 ├────────────────────────│ version 2   │
@@ -449,6 +452,15 @@ func newTestWorkspaceManagerHandlerForPkgManager(
 		nopShutdownShaderConfig(), releaseManager)
 	// only home workspace has a sync command prompt
 	ret.empty.syncCommandPrompt = true
+	// this allows blocking until packages are installed, for testing
+	ret.subscribeCommand(textapi.CommandManual{Name: "pkgwait"}, text.FuncCommandHandler(
+		func(ctx context.Context, cmd textapi.Command) error {
+			require.Len(t, cmd.Args, 1)
+			it := ret.pkgmanager.pkg.LibDir(ctx, cmd.Args[0])
+			it.Next(ctx)
+			it.Close()
+			return nil
+		}, nil))
 	return ret
 }
 

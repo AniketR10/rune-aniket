@@ -78,6 +78,19 @@ func TestLibDir(t *testing.T) {
 		}
 		assert.ElementsMatch(t, expected, actual)
 	})
+	t.Run("if install started, returned iterator blocks until package is done installing", func(t *testing.T) {
+		pkgs := idepkgtest.MakePackages()
+		versions := idepkgtest.MakeBundles([]release.Bundle{{Package: "go", Version: "1"}})
+		m, _, _, _ := newTestManager(t, pkgs, versions)
+
+		err := m.InstallPackageVersion(context.Background(), "go", "1")
+		require.NoError(t, err)
+
+		it := m.LibDir(context.Background(), "go")
+		actual, err := iterator.ToSlice(context.Background(), it)
+		require.NoError(t, err)
+		assert.NotEmpty(t, actual)
+	})
 	t.Run("returns error if package is not installed", func(t *testing.T) {
 		pkgs := idepkgtest.MakePackages()
 		versions := idepkgtest.MakeBundles()
