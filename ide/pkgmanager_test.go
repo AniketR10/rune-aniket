@@ -47,6 +47,7 @@ import (
 )
 
 func TestPackageManagerIntegration(t *testing.T) {
+	t.Parallel()
 	pkgs := idepkgtest.MakePackages(
 		release.Package{Name: "go"},
 		release.Package{Name: "six", Latest: "2"},
@@ -380,6 +381,7 @@ func TestPackageManagerIntegration(t *testing.T) {
 }
 
 func TestPackageManagerLibDir(t *testing.T) {
+	t.Parallel()
 	pkgs := idepkgtest.MakePackages(
 		release.Package{Name: "go", Latest: "3"},
 		release.Package{Name: "six", Latest: "2"},
@@ -635,6 +637,7 @@ func TestPackageManagerLibDir(t *testing.T) {
 }
 
 func TestSetReleaseManager(t *testing.T) {
+	t.Parallel()
 	rm := idepkgtest.NewReleaseManager(idepkgtest.MakePackages(), idepkgtest.MakeBundles())
 	m := newTestWorkspaceManagerHandlerForPkgManager(t, rm)
 

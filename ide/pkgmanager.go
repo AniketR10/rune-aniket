@@ -96,6 +96,7 @@ type pkgManager struct {
 	n       browserapi.Notifications
 	wh      *workspaceManagerHandler
 	storage document.Service
+	pending map[string]*sync.Mutex
 }
 
 type installStorageValue struct {
@@ -111,6 +112,7 @@ func (m *pkgManager) init(
 	m.n = n
 	m.wh = wh
 	m.storage = storage
+	m.pending = make(map[string]*sync.Mutex)
 }
 
 // LibDir installs package via prompt if not installed yet
@@ -129,6 +131,12 @@ func (m *pkgManager) LibDir(ctx context.Context, pkgID string) (
 		}
 		return nil, fmt.Errorf("get latest version: %w", err)
 	}
+
+	ready, ok := m.pending[pkgID]
+	if ok {
+		return newPendingIterator(m.pkg, pkgID, ready), nil
+	}
+
 	var val installStorageValue
 	if err := m.storage.Get(ctx, installStorageKey, &val); err != nil {
 		return m.openInstallPrompt(pkgID, version)
@@ -415,7 +423,7 @@ func (m *pkgManager) openInstallPrompt(pkgID string, version release.Version) (
 	msg := fmt.Sprintf("Do you want to install package %q?", pkgID)
 
 	ready := new(sync.Mutex)
-	it := &pkgManagerIterator{pkgID: pkgID, version: version, ready: ready}
+	it := newPendingIterator(m.pkg, pkgID, ready)
 
 	ctx := context.Background()
 	ready.Lock()
@@ -441,41 +449,76 @@ func (m *pkgManager) openInstallPrompt(pkgID string, version release.Version) (
 					err = document.ErrNotFound
 				}
 				if err != nil {
-					it.it = iterator.Error[string](err)
+					it.err = err
 				}
 			},
 			func() error {
-				if it.it == nil {
-					it.it = iterator.Error[string](document.ErrNotFound)
+				if it.it == nil && it.err == nil {
+					it.err = document.ErrNotFound
 					ready.Unlock()
 				}
+				delete(m.pending, pkgID)
 				return nil
 			}))
 
+	m.pending[pkgID] = ready
 	return it, nil
 }
 
 type pkgManagerIterator struct {
-	pkgID   string
-	version release.Version
-	ready   *sync.Mutex
-	it      iterator.Iterator[string]
+	pkgID string
+	ready *sync.Mutex
+	pkg   *idepkg.Manager
+
+	err error
+	it  iterator.Iterator[string]
+}
+
+func newPendingIterator(
+	pkg *idepkg.Manager, pkgID string, ready *sync.Mutex,
+) *pkgManagerIterator {
+	return &pkgManagerIterator{
+		pkgID: pkgID,
+		ready: ready,
+		pkg:   pkg,
+	}
 }
 
 func (l *pkgManagerIterator) Next(ctx context.Context) (string, bool) {
 	l.ready.Lock()
 	defer l.ready.Unlock()
+	if l.err != nil {
+		return "", false
+	}
+	if l.it == nil {
+		l.it, l.err = l.pkg.LibDir(context.Background(), l.pkgID)
+	}
+	if l.err != nil {
+		return "", false
+	}
 	return l.it.Next(ctx)
 }
 
 func (l *pkgManagerIterator) Err() error {
 	l.ready.Lock()
 	defer l.ready.Unlock()
+	if l.err != nil {
+		return l.err
+	}
+	if l.it == nil {
+		l.it, l.err = l.pkg.LibDir(context.Background(), l.pkgID)
+	}
+	if l.err != nil {
+		return l.err
+	}
 	return l.it.Err()
 }
 
 func (l *pkgManagerIterator) Close() error {
 	l.ready.Lock()
 	defer l.ready.Unlock()
+	if l.it == nil {
+		return nil
+	}
 	return l.it.Close()
 }
