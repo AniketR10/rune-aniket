@@ -40,6 +40,7 @@ import (
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/ide/plugin"
 	"unstable.build/go-tui/ide/vctrl"
@@ -118,7 +119,7 @@ func (m *Manager) RunTask(t Task) error {
 		return fmt.Errorf("init task: %w", err)
 	}
 
-	go func() {
+	go debug.CapturePanicReport(func() {
 		defer m.scheme.StopWatch(id) //nolint:errcheck
 		defer cancel()
 		ignore, err := vctrl.LoadGitignore(m.scheme)
@@ -160,7 +161,7 @@ func (m *Manager) RunTask(t Task) error {
 				t.tryRunning(m.b, m.scheme)
 			}
 		}
-	}()
+	})
 
 	return nil
 }
