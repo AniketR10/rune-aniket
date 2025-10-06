@@ -57,7 +57,8 @@ func TestLibDir(t *testing.T) {
 		require.NoError(t, err)
 		n.Wg.Wait()
 
-		it := m.LibDir(context.Background(), "go")
+		it, err := m.LibDir(context.Background(), "go")
+		require.NoError(t, err)
 		installed, err := iterator.ToSlice(context.Background(), it)
 		require.NoError(t, err)
 
@@ -86,7 +87,8 @@ func TestLibDir(t *testing.T) {
 		err := m.InstallPackageVersion(context.Background(), "go", "1")
 		require.NoError(t, err)
 
-		it := m.LibDir(context.Background(), "go")
+		it, err := m.LibDir(context.Background(), "go")
+		require.NoError(t, err)
 		actual, err := iterator.ToSlice(context.Background(), it)
 		require.NoError(t, err)
 		assert.NotEmpty(t, actual)
@@ -96,11 +98,8 @@ func TestLibDir(t *testing.T) {
 		versions := idepkgtest.MakeBundles()
 		m, _, _, _ := newTestManager(t, pkgs, versions)
 
-		it := m.LibDir(context.Background(), "go")
-
-		installed, err := iterator.ToSlice(context.Background(), it)
-		require.Error(t, err)
-		assert.Empty(t, installed)
+		_, err := m.LibDir(context.Background(), "go")
+		require.Equal(t, ErrNotInstalled, err)
 	})
 }
 

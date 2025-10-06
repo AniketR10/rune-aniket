@@ -29,7 +29,10 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/blue/document"
+	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/release"
 	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/api/workspaceapi"
@@ -376,6 +379,261 @@ func TestPackageManagerIntegration(t *testing.T) {
 	require.NoError(t, m.Close())
 }
 
+func TestPackageManagerLibDir(t *testing.T) {
+	pkgs := idepkgtest.MakePackages(
+		release.Package{Name: "go", Latest: "3"},
+		release.Package{Name: "six", Latest: "2"},
+	)
+	bundles := idepkgtest.MakeBundles(
+		[]release.Bundle{
+			{Package: "go", Version: "1"},
+			{Package: "go", Version: "2"},
+			{Package: "go", Version: "3"},
+		},
+		[]release.Bundle{
+			{Package: "six", Version: "1"},
+			{Package: "six", Version: "2"},
+		},
+	)
+	t.Run("prompt, no install", func(t *testing.T) {
+		rm := idepkgtest.NewReleaseManager(pkgs, bundles)
+		m := newTestWorkspaceManagerHandlerForPkgManager(t, rm)
+
+		it, err := m.pkgmanager.LibDir(context.Background(), "go")
+		require.NoError(t, err)
+
+		cases := []handlertest.SequenceTestCase{
+			{"",
+				`┌──────────────────────────────────────┐
+│                                      │
+├──────────────────────────────────────┤
+│                                      │
+│                                      │
+│   Do you want to install package     │
+│   "go"?                              │
+│                                      │
+│                                      │
+│ ┌─────┐ ┌───────┐ ┌────┐  ┌───────┐  │
+│ │ Yes │ │ Yes,  │ │ No │  │ No,   │  │
+│ └─────┘ └───────┘ └────┘  └───────┘  │
+├──────────────────────────────────────┤
+│1                                     │
+└──────────────────────────────────────┘`},
+			{"N",
+				`┌──────────────────────────────────────┐
+│                                      │
+├──────────────────────────────────────┤
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│          workspaceWallpaper          │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+├──────────────────────────────────────┤
+│1                                     │
+└──────────────────────────────────────┘`},
+		}
+
+		handlertest.TestHandlerSequence(t, m, 40, 15, cases)
+
+		_, err = iterator.ToSlice(context.Background(), it)
+		require.Equal(t, document.ErrNotFound, err)
+
+		require.NoError(t, m.Close())
+	})
+	t.Run("prompt, user key ESC", func(t *testing.T) {
+		rm := idepkgtest.NewReleaseManager(pkgs, bundles)
+		m := newTestWorkspaceManagerHandlerForPkgManager(t, rm)
+
+		it, err := m.pkgmanager.LibDir(context.Background(), "go")
+		require.NoError(t, err)
+
+		cases := []handlertest.SequenceTestCase{
+			{"<",
+				`┌──────────────────────────────────────┐
+│                                      │
+├──────────────────────────────────────┤
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│          workspaceWallpaper          │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+├──────────────────────────────────────┤
+│1                                     │
+└──────────────────────────────────────┘`},
+		}
+
+		handlertest.TestHandlerSequence(t, m, 40, 15, cases)
+
+		_, err = iterator.ToSlice(context.Background(), it)
+		require.Equal(t, document.ErrNotFound, err)
+
+		require.NoError(t, m.Close())
+	})
+
+	t.Run("prompt, yes install", func(t *testing.T) {
+		rm := idepkgtest.NewReleaseManager(pkgs, bundles)
+		m := newTestWorkspaceManagerHandlerForPkgManager(t, rm)
+
+		it, err := m.pkgmanager.LibDir(context.Background(), "go")
+		require.NoError(t, err)
+
+		cases := []handlertest.SequenceTestCase{
+			{"Y",
+				`┌──────────────────────────────────────┐
+│                                      │
+├──────────────────────────────────────┤
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│          workspaceWallpaper          │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+├──────────────────────────────────────┤
+│1                                     │
+└──────────────────────────────────────┘`},
+		}
+
+		handlertest.TestHandlerSequence(t, m, 40, 15, cases)
+
+		slice, err := iterator.ToSlice(context.Background(), it)
+		require.NoError(t, err)
+		assert.NotEmpty(t, slice)
+		require.NoError(t, m.Close())
+	})
+
+	t.Run("prompt, yes, always install", func(t *testing.T) {
+		rm := idepkgtest.NewReleaseManager(pkgs, bundles)
+		m := newTestWorkspaceManagerHandlerForPkgManager(t, rm)
+
+		it, err := m.pkgmanager.LibDir(context.Background(), "go")
+		require.NoError(t, err)
+
+		cases := []handlertest.SequenceTestCase{
+			{"A",
+				`┌──────────────────────────────────────┐
+│                                      │
+├──────────────────────────────────────┤
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│          workspaceWallpaper          │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+├──────────────────────────────────────┤
+│1                                     │
+└──────────────────────────────────────┘`},
+		}
+
+		handlertest.TestHandlerSequence(t, m, 40, 15, cases)
+
+		slice, err := iterator.ToSlice(context.Background(), it)
+		require.NoError(t, err)
+		assert.NotEmpty(t, slice)
+
+		it, err = m.pkgmanager.LibDir(context.Background(), "six")
+		require.NoError(t, err)
+
+		slice, err = iterator.ToSlice(context.Background(), it)
+		require.NoError(t, err)
+		assert.NotEmpty(t, slice)
+
+		require.NoError(t, m.Close())
+	})
+
+	t.Run("prompt, no never install", func(t *testing.T) {
+		rm := idepkgtest.NewReleaseManager(pkgs, bundles)
+		m := newTestWorkspaceManagerHandlerForPkgManager(t, rm)
+
+		it, err := m.pkgmanager.LibDir(context.Background(), "go")
+		require.NoError(t, err)
+
+		cases := []handlertest.SequenceTestCase{
+			{"V",
+				`┌──────────────────────────────────────┐
+│                                      │
+├──────────────────────────────────────┤
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│          workspaceWallpaper          │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+├──────────────────────────────────────┤
+│1                                     │
+└──────────────────────────────────────┘`},
+		}
+
+		handlertest.TestHandlerSequence(t, m, 40, 15, cases)
+
+		_, err = iterator.ToSlice(context.Background(), it)
+		require.Equal(t, document.ErrNotFound, err)
+
+		_, err = m.pkgmanager.LibDir(context.Background(), "six")
+		require.Equal(t, document.ErrNotFound, err)
+
+		require.NoError(t, m.Close())
+	})
+
+	t.Run("prompt, yes install, simultaneous calls to LibDir", func(t *testing.T) {
+		rm := idepkgtest.NewReleaseManager(pkgs, bundles)
+		m := newTestWorkspaceManagerHandlerForPkgManager(t, rm)
+
+		it1, err := m.pkgmanager.LibDir(context.Background(), "go")
+		require.NoError(t, err)
+
+		it2, err := m.pkgmanager.LibDir(context.Background(), "go")
+		require.NoError(t, err)
+
+		it3, err := m.pkgmanager.LibDir(context.Background(), "go")
+		require.NoError(t, err)
+
+		cases := []handlertest.SequenceTestCase{
+			{"Y",
+				`┌──────────────────────────────────────┐
+│                                      │
+├──────────────────────────────────────┤
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│          workspaceWallpaper          │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+├──────────────────────────────────────┤
+│1                                     │
+└──────────────────────────────────────┘`},
+		}
+
+		handlertest.TestHandlerSequence(t, m, 40, 15, cases)
+
+		for _, it := range []iterator.Iterator[string]{it1, it2, it3} {
+			slice, err := iterator.ToSlice(context.Background(), it)
+			require.NoError(t, err)
+			assert.NotEmpty(t, slice)
+			require.NoError(t, m.Close())
+		}
+	})
+}
+
 func TestSetReleaseManager(t *testing.T) {
 	rm := idepkgtest.NewReleaseManager(idepkgtest.MakePackages(), idepkgtest.MakeBundles())
 	m := newTestWorkspaceManagerHandlerForPkgManager(t, rm)
@@ -446,7 +704,7 @@ func newTestWorkspaceManagerHandlerForPkgManager(
 	})
 	cfg := defaultCfg()
 	manager := workspace.NewManager(cfg.workspace())
-	manager.RegisterScheme(workspace.MemoryScheme, workspace.NewMemoryScheme)
+	manager.RegisterScheme(workspace.FileScheme, workspace.NewFileScheme)
 	ret := newTestWorkspaceManagerHandlerWithReleaseManager(t, manager,
 		cfg, FuncExtensionsRunner(testRunnerFn), nil, nil, dir, nil,
 		nopShutdownShaderConfig(), releaseManager)
@@ -456,7 +714,8 @@ func newTestWorkspaceManagerHandlerForPkgManager(
 	ret.subscribeCommand(textapi.CommandManual{Name: "pkgwait"}, text.FuncCommandHandler(
 		func(ctx context.Context, cmd textapi.Command) error {
 			require.Len(t, cmd.Args, 1)
-			it := ret.pkgmanager.pkg.LibDir(ctx, cmd.Args[0])
+			it, err := ret.pkgmanager.pkg.LibDir(ctx, cmd.Args[0])
+			require.NoError(t, err)
 			it.Next(ctx)
 			it.Close()
 			return nil
@@ -472,7 +731,7 @@ func newTestWorkspaceManagerHandlerWithReleaseManager(
 	shutdownShaderCfg shutdownShaderConfig,
 	releaseManager release.Manager,
 ) *testWorkspaceManagerHandler {
-	homeURI, err := workspaceapi.ParseURI("memory:///home")
+	homeURI, err := workspaceapi.ParseURI("file:///tmp")
 	require.NoError(t, err)
 
 	m := new(testWorkspaceManagerHandler)

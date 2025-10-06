@@ -82,7 +82,7 @@ func NewDelegate(
 
 // PkgManager abstracts a subset of idepkg.Manager for a Delegate.
 type PkgManager interface {
-	LibDir(ctx context.Context, pkgID string) iterator.Iterator[string]
+	LibDir(ctx context.Context, pkgID string) (iterator.Iterator[string], error)
 }
 
 // Handle satisfies text.EventHandler.

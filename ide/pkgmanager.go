@@ -38,6 +38,7 @@ import (
 	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/debug"
+	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/ide/idepkg"
 	"unstable.build/go-tui/term"
 )
@@ -48,6 +49,8 @@ const (
 	cmdPkgUse        = "pkguse"
 	cmdPkgCurrent    = "pkgcurrent"
 	cmdPkgUpgradeAll = "pkgupgradeall"
+
+	installStorageKey = "autoInstallPrompt"
 )
 
 var (
@@ -89,17 +92,56 @@ var (
 )
 
 type pkgManager struct {
-	pkg *idepkg.Manager
-	n   browserapi.Notifications
+	pkg     *idepkg.Manager
+	n       browserapi.Notifications
+	wh      *workspaceManagerHandler
+	storage document.Service
+}
+
+type installStorageValue struct {
+	Value bool // true => always, false => never
 }
 
 func (m *pkgManager) init(
 	n browserapi.Notifications, rm release.Manager,
 	storage document.Service, scheme schemeapi.Scheme, dataDir string,
-	interrupt term.Interrupter,
+	interrupt term.Interrupter, wh *workspaceManagerHandler,
 ) {
 	m.pkg = idepkg.NewManager(n, rm, storage, scheme, dataDir, interrupt)
 	m.n = n
+	m.wh = wh
+	m.storage = storage
+}
+
+// LibDir installs package via prompt if not installed yet
+func (m *pkgManager) LibDir(ctx context.Context, pkgID string) (
+	iterator.Iterator[string], error,
+) {
+	it, err := m.pkg.LibDir(ctx, pkgID)
+	if err == nil || !errors.Is(err, idepkg.ErrNotInstalled) {
+		return it, err
+	}
+
+	version, err := m.getLatestVersion(ctx, pkgID)
+	if err != nil {
+		if errors.Is(err, document.ErrNotFound) {
+			return nil, document.ErrNotFound
+		}
+		return nil, fmt.Errorf("get latest version: %w", err)
+	}
+	var val installStorageValue
+	if err := m.storage.Get(ctx, installStorageKey, &val); err != nil {
+		return m.openInstallPrompt(pkgID, version)
+	}
+	if !val.Value {
+		// signals that package does not exist, which
+		// should prevent further attempts or errors being logged.
+		return nil, document.ErrNotFound
+	}
+	if err := m.pkg.InstallPackageVersion(ctx, pkgID, version); err != nil {
+		return nil, fmt.Errorf("install latest version: %w", err)
+	}
+	return m.pkg.LibDir(ctx, pkgID)
 }
 
 func (m *pkgManager) HandleCommand(ctx context.Context, cmd textapi.Command) error {
@@ -358,4 +400,82 @@ func (m *pkgManager) getLatestVersion(
 
 	}
 	return p.Latest, nil
+}
+
+func (m *pkgManager) openInstallPrompt(pkgID string, version release.Version) (
+	iterator.Iterator[string], error,
+) {
+	const (
+		yes       = "Yes"
+		yesAlways = "Yes, Always"
+		no        = "No"
+		noNever   = "No, Never"
+	)
+
+	msg := fmt.Sprintf("Do you want to install package %q?", pkgID)
+
+	ready := new(sync.Mutex)
+	it := &pkgManagerIterator{pkgID: pkgID, version: version, ready: ready}
+
+	ctx := context.Background()
+	ready.Lock()
+	m.wh.focusEx().comp.Prompt(msg, []string{yes, yesAlways, no, noNever},
+		[]term.KeyComb{{Ch: 'Y'}, {Ch: 'A'}, {Ch: 'N'}, {Ch: 'V'}},
+		handler.FuncPromptHandler(
+			func(i int, opt string) {
+				defer ready.Unlock()
+				var err error
+				switch opt {
+				case yesAlways:
+					_ = m.storage.Set(ctx, installStorageKey, installStorageValue{Value: true})
+					fallthrough
+				case yes:
+					err = m.pkg.InstallPackageVersion(ctx, pkgID, version)
+					if err == nil {
+						it.it, err = m.pkg.LibDir(ctx, pkgID)
+					}
+				case noNever:
+					_ = m.storage.Set(ctx, installStorageKey, installStorageValue{Value: false})
+					fallthrough
+				case no:
+					err = document.ErrNotFound
+				}
+				if err != nil {
+					it.it = iterator.Error[string](err)
+				}
+			},
+			func() error {
+				if it.it == nil {
+					it.it = iterator.Error[string](document.ErrNotFound)
+					ready.Unlock()
+				}
+				return nil
+			}))
+
+	return it, nil
+}
+
+type pkgManagerIterator struct {
+	pkgID   string
+	version release.Version
+	ready   *sync.Mutex
+	it      iterator.Iterator[string]
+}
+
+func (l *pkgManagerIterator) Next(ctx context.Context) (string, bool) {
+	l.ready.Lock()
+	defer l.ready.Unlock()
+	return l.it.Next(ctx)
+}
+
+func (l *pkgManagerIterator) Err() error {
+	l.ready.Lock()
+	defer l.ready.Unlock()
+	return l.it.Err()
+}
+
+func (l *pkgManagerIterator) Close() error {
+	l.ready.Lock()
+	defer l.ready.Unlock()
+	return l.it.Close()
 }

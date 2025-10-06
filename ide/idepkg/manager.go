@@ -103,22 +103,22 @@ type Manager struct {
 
 // LibDir returns an iterator to the lib directory of the given package.
 // The paths returned by the iterator are always absolute.
-func (m *Manager) LibDir(ctx context.Context, pkgID string) iterator.Iterator[string] {
+func (m *Manager) LibDir(ctx context.Context, pkgID string) (iterator.Iterator[string], error) {
 	m.iterators.Lock()
 	defer m.iterators.Unlock()
 
 	pending, ok := m.iterators.m[pkgID]
 	if ok {
-		return pending
+		return pending, nil
 	}
 
 	libDir := makePackageLibDirname(m.dataDir, pkgID)
 	_, err := os.Stat(libDir)
 	if err != nil {
-		return iterator.Error[string](errors.New("package not installed"))
+		return nil, ErrNotInstalled
 	}
 
-	return m.newIterator(ctx, libDir)
+	return m.newIterator(ctx, libDir), nil
 }
 
 // DescribePackage fetches a Package manifest.

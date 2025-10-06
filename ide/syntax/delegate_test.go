@@ -323,8 +323,8 @@ type mockPkgManager struct {
 	ret iterator.Iterator[string]
 }
 
-func (m mockPkgManager) LibDir(ctx context.Context, pkg string) iterator.Iterator[string] {
-	return m.ret
+func (m mockPkgManager) LibDir(ctx context.Context, pkg string) (iterator.Iterator[string], error) {
+	return m.ret, nil
 }
 
 var i int

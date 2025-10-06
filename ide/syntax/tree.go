@@ -25,6 +25,7 @@ package syntax
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -35,6 +36,7 @@ import (
 	"github.com/ernestrc/logd-go/logging"
 	log "github.com/sirupsen/logrus"
 	tree_sitter "github.com/tree-sitter/go-tree-sitter"
+	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/iterator"
 	"unstable.build/go-tui/api/browserapi"
 	"unstable.build/go-tui/api/textapi"
@@ -81,7 +83,17 @@ func (t *tree) downloadFiles(ctx context.Context) {
 	if !ok {
 		id = ext[1:]
 	}
-	files := t.pkg.LibDir(ctx, id)
+	files, err := t.pkg.LibDir(ctx, id)
+	if err != nil {
+		if errors.Is(err, document.ErrNotFound) {
+			t.log(log.DebugLevel, "aborting syntax parsing: package for language "+
+				"%q does not exist or it's not installed.", id)
+			return
+		}
+		t.log(log.ErrorLevel, "aborting syntax parsing: %v", err)
+		t.notifyNotAvail(ext)
+		return
+	}
 	defer files.Close()
 	allFiles, err := iterator.ToSlice(ctx, files)
 	if err != nil {

@@ -302,6 +302,13 @@ func (h *workspaceManagerHandler) focusBrowser() browser.Browser {
 	return h.empty.Browser()
 }
 
+func (h *workspaceManagerHandler) focusEx() *ex {
+	if handler := h.workspaces[h.focus]; handler != nil {
+		return handler.ex
+	}
+	return h.empty
+}
+
 func (h *workspaceManagerHandler) drawBar() bool {
 	return (h.workspaceCount > 1 || h.focusHandler() == h.empty) &&
 		h.workspaceBarKind != workspaceBarKindDisabled
@@ -599,7 +606,7 @@ func (h *workspaceManagerHandler) addWorkspace(
 
 	// setup syntax tree parsing
 	delegate, events := syntax.NewDelegate(
-		h.pkgmanager.pkg, h.notifications,
+		h.pkgmanager, h.notifications,
 		ed, h, cfg.syntaxConfig(),
 	)
 	if err := ex.comp.SubscribeEvents(events, delegate); err != nil {
@@ -1185,5 +1192,5 @@ func (h *workspaceManagerHandler) setReleaseManager(releaseManager release.Manag
 		h.pkgmanager = new(pkgManager)
 	}
 	h.pkgmanager.init(h.notifications, releaseManager,
-		pkgStorage, h.homeWorkspace, h.sixDir, h)
+		pkgStorage, h.homeWorkspace, h.sixDir, h, h)
 }
