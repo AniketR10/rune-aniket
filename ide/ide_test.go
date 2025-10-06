@@ -30,7 +30,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"unstable.build/go-tui/api/config"
@@ -43,7 +42,6 @@ import (
 )
 
 func TestIDEInitializationIntegration(t *testing.T) {
-	logrus.SetLevel(logrus.TraceLevel)
 	t.Run("does not panic with sample config", func(t *testing.T) {
 		configFile, file1 := makeTestFiles(t)
 		file2, err := os.CreateTemp("", "six_ide_test")
@@ -256,6 +254,9 @@ func TestOpen(t *testing.T) {
 		uri, err := workspaceapi.CurrentUserHostURI(file.Name())
 		require.NoError(t, err)
 
+		i.workspaceHandler.mu.Lock()
+		defer i.workspaceHandler.mu.Unlock()
+
 		require.NoError(t, i.Open(uri))
 		assertURI(t, i, uri)
 	})
@@ -266,6 +267,9 @@ func TestOpen(t *testing.T) {
 		file, _ := makeTestFiles(t)
 		uri, err := workspaceapi.CurrentUserHostURI(file.Name())
 		require.NoError(t, err)
+
+		i.workspaceHandler.mu.Lock()
+		defer i.workspaceHandler.mu.Unlock()
 
 		require.NoError(t, i.Open(uri))
 		assertURI(t, i, uri)
