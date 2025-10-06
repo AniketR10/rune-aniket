@@ -335,7 +335,7 @@ func (t *tree) log(level log.Level, msg string, args ...any) {
 		return
 	}
 	log.WithFields(log.Fields{
-		logging.KeyClass: "stree.tree",
+		logging.KeyClass: "syntax.tree",
 		"uri":            t.uri,
 	}).Logf(level, msg, args...)
 }

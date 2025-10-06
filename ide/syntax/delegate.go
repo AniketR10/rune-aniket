@@ -149,5 +149,5 @@ func (t *Delegate) log(level log.Level, msg string, args ...any) {
 	if !log.IsLevelEnabled(level) {
 		return
 	}
-	log.WithField(logging.KeyClass, "stree.Delegate").Logf(level, msg, args...)
+	log.WithField(logging.KeyClass, "syntax.Delegate").Logf(level, msg, args...)
 }
