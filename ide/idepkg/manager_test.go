@@ -96,6 +96,39 @@ func TestLibDir(t *testing.T) {
 		require.NoError(t, err)
 		assert.NotEmpty(t, actual)
 	})
+	t.Run("multiple cals to LibDir while installing return complete iterators", func(t *testing.T) {
+		t.Parallel()
+		pkgs := idepkgtest.MakePackages()
+		versions := idepkgtest.MakeBundles([]release.Bundle{{Package: "go", Version: "1"}})
+		m, _, _, _ := newTestManager(t, pkgs, versions)
+
+		err := m.InstallPackageVersion(context.Background(), "go", "1")
+		require.NoError(t, err)
+
+		it1, err := m.LibDir(context.Background(), "go")
+		require.NoError(t, err)
+
+		it2, err := m.LibDir(context.Background(), "go")
+		require.NoError(t, err)
+
+		it3, err := m.LibDir(context.Background(), "go")
+		require.NoError(t, err)
+
+		for _, it := range []iterator.Iterator[string]{it1, it2, it3} {
+			files, err := iterator.ToSlice(context.Background(), it)
+			require.NoError(t, err)
+			var actual []string
+			for _, file := range files {
+				actual = append(actual, filepath.Base(file))
+			}
+			expected := []string{
+				"highlights.scm", "tags.scm",
+				"tree-sitter.so", "go",
+				"gofmt", "goimports", "gopls",
+			}
+			assert.ElementsMatch(t, expected, actual)
+		}
+	})
 	t.Run("returns error if package is not installed", func(t *testing.T) {
 		t.Parallel()
 		pkgs := idepkgtest.MakePackages()

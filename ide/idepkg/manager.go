@@ -76,7 +76,7 @@ func NewManager(
 		m:           m,
 		storage:     storage,
 	}
-	ret.iterators.m = make(map[string]*libDirIterator)
+	ret.iterators.m = make(map[string]*sync.Mutex)
 	return ret
 }
 
@@ -97,7 +97,7 @@ type Manager struct {
 
 	iterators struct {
 		sync.Mutex
-		m map[string]*libDirIterator
+		m map[string]*sync.Mutex
 	}
 }
 
@@ -107,18 +107,18 @@ func (m *Manager) LibDir(ctx context.Context, pkgID string) (iterator.Iterator[s
 	m.iterators.Lock()
 	defer m.iterators.Unlock()
 
-	pending, ok := m.iterators.m[pkgID]
+	libDir := makePackageLibDirname(m.dataDir, pkgID)
+	ready, ok := m.iterators.m[pkgID]
 	if ok {
-		return pending, nil
+		return newPendingIterator(ready, m.scheme, m.schemeURI, libDir), nil
 	}
 
-	libDir := makePackageLibDirname(m.dataDir, pkgID)
 	_, err := os.Stat(libDir)
 	if err != nil {
 		return nil, ErrNotInstalled
 	}
 
-	return m.newIterator(ctx, libDir), nil
+	return newReadyIterator(ctx, m.scheme, m.schemeURI, libDir), nil
 }
 
 // DescribePackage fetches a Package manifest.
@@ -189,11 +189,7 @@ func (m *Manager) InstallPackageVersion(
 	}
 
 	mu := new(sync.Mutex)
-	m.iterators.m[pkgID] = &libDirIterator{
-		ready:   mu,
-		pkgID:   pkgID,
-		version: version,
-	}
+	m.iterators.m[pkgID] = mu
 
 	mu.Lock() // block calls to iterator
 	go debug.CapturePanicReport(func() {
@@ -533,15 +529,13 @@ func (m *Manager) download(
 	m.iterators.Lock()
 	defer m.iterators.Unlock()
 
-	it, ok := m.iterators.m[pkgID]
+	ready, ok := m.iterators.m[pkgID]
 	if !ok {
 		panic("iterator for package not found")
 	}
 	delete(m.iterators.m, pkgID)
 
-	libDir := makePackageLibDirname(m.dataDir, pkgID)
-	it.it = m.newIterator(ctx, libDir)
-	it.ready.Unlock()
+	ready.Unlock()
 
 	if err := m.interrupter.Interrupt(ctx); err != nil {
 		m.log(log.WarnLevel, "interrupt: %v", err)
@@ -564,14 +558,13 @@ func (m *Manager) abortDownload(
 	m.iterators.Lock()
 	defer m.iterators.Unlock()
 
-	it, ok := m.iterators.m[pkgID]
+	ready, ok := m.iterators.m[pkgID]
 	if !ok {
 		panic("iterator for package not found")
 	}
 	delete(m.iterators.m, pkgID)
 
-	it.it = iterator.Error[string](err)
-	it.ready.Unlock()
+	ready.Unlock()
 }
 
 func (m *Manager) notifyError(
@@ -648,14 +641,17 @@ func (m *Manager) untar(
 	return executables, nil
 }
 
-func (m *Manager) newIterator(ctx context.Context, libDir string) iterator.Iterator[string] {
-	it, err := walkdir.ListFiles(ctx, m.scheme, libDir)
+func newReadyIterator(
+	ctx context.Context, scheme schemeapi.Scheme,
+	schemeURI workspaceapi.URI, libDir string,
+) iterator.Iterator[string] {
+	it, err := walkdir.ListFiles(ctx, scheme, libDir)
 	if err != nil {
 		return iterator.Error[string](fmt.Errorf("list files: %v", err))
 	}
 	// make paths absolute
 	return iterator.Map(it, func(filename string) string {
-		path, _ := workspaceapi.ExpandPathWithURI(filename, m.schemeURI)
+		path, _ := workspaceapi.ExpandPathWithURI(filename, schemeURI)
 		return path
 	})
 }
@@ -847,26 +843,48 @@ func escapeString(val string) string {
 }
 
 type libDirIterator struct {
-	pkgID   string
-	version release.Version
-	ready   *sync.Mutex
-	it      iterator.Iterator[string]
+	ready     *sync.Mutex
+	it        iterator.Iterator[string]
+	scheme    schemeapi.Scheme
+	schemeURI workspaceapi.URI
+	libDir    string
+}
+
+func newPendingIterator(
+	mu *sync.Mutex, scheme schemeapi.Scheme,
+	schemeURI workspaceapi.URI, libDir string,
+) *libDirIterator {
+	return &libDirIterator{
+		ready:     mu,
+		scheme:    scheme,
+		schemeURI: schemeURI,
+		libDir:    libDir,
+	}
 }
 
 func (l *libDirIterator) Next(ctx context.Context) (string, bool) {
 	l.ready.Lock()
 	defer l.ready.Unlock()
+	if l.it == nil {
+		l.it = newReadyIterator(context.Background(), l.scheme, l.schemeURI, l.libDir)
+	}
 	return l.it.Next(ctx)
 }
 
 func (l *libDirIterator) Err() error {
 	l.ready.Lock()
 	defer l.ready.Unlock()
+	if l.it == nil {
+		l.it = newReadyIterator(context.Background(), l.scheme, l.schemeURI, l.libDir)
+	}
 	return l.it.Err()
 }
 
 func (l *libDirIterator) Close() error {
 	l.ready.Lock()
 	defer l.ready.Unlock()
+	if l.it == nil {
+		return nil
+	}
 	return l.it.Close()
 }
