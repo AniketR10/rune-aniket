@@ -29,6 +29,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/debug"
+	"github.com/unstablebuild/blue/issue"
 	"gopkg.in/yaml.v3"
 )
 
@@ -36,24 +37,32 @@ import (
 // a yaml report. The boolean value returned indicates if fn run with no panics.
 // If the value is false, the returned string indicates the fs location of the report.
 // An error is returned if there was a panic but the report couldn't be stored.
-func CapturePanicReportWith(dir, pkg, version string, run func()) (bool, string, error) {
-	ok, report := debug.CapturePanic(log.StandardLogger(), pkg, version, run)
+func CapturePanicReportWith(dir, pkg, version string, run func()) (
+	panicValue any, err error, ok bool,
+) {
+	var report issue.Report
+	report, panicValue, ok = debug.CapturePanic(log.StandardLogger(), pkg, version, run)
 	if ok {
-		return ok, "", nil
+		return
 	}
-	data, err := yaml.Marshal(report)
+	var data []byte
+	data, err = yaml.Marshal(report)
 	if err != nil {
-		return false, "", fmt.Errorf("%w: marshal %v", err, report)
+		err = fmt.Errorf("yaml %v: %w", report, err)
+		return
 	}
-	f, err := os.CreateTemp(ReportsDir, fmt.Sprintf("%s_crash_report_", Package))
+	var f *os.File
+	f, err = os.CreateTemp(ReportsDir, fmt.Sprintf("%s_crash_report_", Package))
 	if err != nil {
-		return false, "", fmt.Errorf("%w: temp file %v", err, report)
+		err = fmt.Errorf("temp file: %w", err)
+		return
 	}
-	if _, err := f.Write(data); err != nil {
-		return false, "", fmt.Errorf("%w: write %v", err, report)
+	if _, err = f.Write(data); err != nil {
+		err = fmt.Errorf("write to report %q: %w", f.Name(), err)
+		return
 	}
-	log.Infof("saved crash report file://%v", f.Name())
-	return false, f.Name(), nil
+	log.Warnf("saved crash report file://%v", f.Name())
+	return
 }
 
 // CapturePanicReport captures a panic with CapturePanicReportWith,
@@ -61,12 +70,12 @@ func CapturePanicReportWith(dir, pkg, version string, run func()) (bool, string,
 // the compile-time variables Tag, Package and ReportsDir, so make
 // sure they're injected at compile-time when using this helper.
 func CapturePanicReport(fn func()) {
-	ok, path, err := CapturePanicReportWith(ReportsDir, Package, Tag, fn)
+	panicValue, err, ok := CapturePanicReportWith(ReportsDir, Package, Tag, fn)
 	if ok {
 		return
 	}
 	if err != nil {
-		log.Fatalf("failed to capture crash report: %v", err)
+		log.Errorf("failed to capture crash report: %v", err)
 	}
-	log.Fatalf("saved crash report file://%v", path)
+	panic(panicValue)
 }

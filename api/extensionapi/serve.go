@@ -142,7 +142,7 @@ func serveWorkspaceExtension(
 			errchan <- err
 			return
 		}
-		ok, reportname, captureErr := debug.CapturePanicReportWith(req.DataDir,
+		panicValue, captureErr, ok := debug.CapturePanicReportWith(req.DataDir,
 			meta.ExtensionID, meta.ExtensionVersion, func() {
 				errchan <- extension.ExtendWorkspace(ctx, workspace, cfg)
 			})
@@ -150,9 +150,10 @@ func serveWorkspaceExtension(
 			return
 		}
 		if captureErr != nil {
-			panic(fmt.Sprintf("capture panic report: error capturing: %v", captureErr))
+			panic(fmt.Sprintf("capture panic report: "+
+				"error capturing: %v: original panic: %v", captureErr, panicValue))
 		}
-		panicErr := fmt.Errorf("extension panic: report saved %s", reportname)
+		panicErr := fmt.Errorf("extension panic: %v", panicValue)
 		// ensure log is delivered
 		_ = os.Stderr.Sync()
 		errchan <- panicErr

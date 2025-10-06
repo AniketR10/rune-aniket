@@ -230,7 +230,7 @@ func main() {
 	}
 
 	var code int
-	ok, path, err := debug.CapturePanicReportWith(
+	_, err, ok := debug.CapturePanicReportWith(
 		debug.ReportsDir, debug.Package, debug.Tag, func() {
 			code = run()
 		})
@@ -240,7 +240,6 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Printf("Saved crash report file://%v\n", path)
 	os.Exit(4)
 }
 
