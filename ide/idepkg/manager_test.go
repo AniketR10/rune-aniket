@@ -46,7 +46,9 @@ import (
 )
 
 func TestLibDir(t *testing.T) {
+	t.Parallel()
 	t.Run("returns installed files", func(t *testing.T) {
+		t.Parallel()
 		pkgs := idepkgtest.MakePackages()
 		versions := idepkgtest.MakeBundles([]release.Bundle{{Package: "go", Version: "1"}})
 		m, n, _, _ := newTestManager(t, pkgs, versions)
@@ -80,6 +82,7 @@ func TestLibDir(t *testing.T) {
 		assert.ElementsMatch(t, expected, actual)
 	})
 	t.Run("if install started, returned iterator blocks until package is done installing", func(t *testing.T) {
+		t.Parallel()
 		pkgs := idepkgtest.MakePackages()
 		versions := idepkgtest.MakeBundles([]release.Bundle{{Package: "go", Version: "1"}})
 		m, _, _, _ := newTestManager(t, pkgs, versions)
@@ -94,6 +97,7 @@ func TestLibDir(t *testing.T) {
 		assert.NotEmpty(t, actual)
 	})
 	t.Run("returns error if package is not installed", func(t *testing.T) {
+		t.Parallel()
 		pkgs := idepkgtest.MakePackages()
 		versions := idepkgtest.MakeBundles()
 		m, _, _, _ := newTestManager(t, pkgs, versions)
@@ -104,7 +108,9 @@ func TestLibDir(t *testing.T) {
 }
 
 func TestDescribePackage(t *testing.T) {
+	t.Parallel()
 	t.Run("no packages", func(t *testing.T) {
+		t.Parallel()
 		pkgs := idepkgtest.MakePackages()
 		versions := idepkgtest.MakeBundles()
 		m, _, _, _ := newTestManager(t, pkgs, versions)
@@ -113,6 +119,7 @@ func TestDescribePackage(t *testing.T) {
 		assert.EqualError(t, err, "not found")
 	})
 	t.Run("returns error if package id is empty", func(t *testing.T) {
+		t.Parallel()
 		pkgs := idepkgtest.MakePackages(release.Package{Name: "go"})
 		versions := idepkgtest.MakeBundles()
 		m, _, _, _ := newTestManager(t, pkgs, versions)
@@ -121,6 +128,7 @@ func TestDescribePackage(t *testing.T) {
 		require.Error(t, err)
 	})
 	t.Run("returns package", func(t *testing.T) {
+		t.Parallel()
 		pkgs := idepkgtest.MakePackages(release.Package{Name: "go"})
 		versions := idepkgtest.MakeBundles()
 		m, _, _, _ := newTestManager(t, pkgs, versions)
@@ -130,6 +138,7 @@ func TestDescribePackage(t *testing.T) {
 		assert.Equal(t, release.Package{Name: "go"}, pkg)
 	})
 	t.Run("bubbles up release manager error", func(t *testing.T) {
+		t.Parallel()
 		pkgs := idepkgtest.MakePackages(release.Package{Name: "go"})
 		versions := idepkgtest.MakeBundles()
 		m, _, r, _ := newTestManager(t, pkgs, versions)
@@ -141,7 +150,9 @@ func TestDescribePackage(t *testing.T) {
 }
 
 func TestListPackages(t *testing.T) {
+	t.Parallel()
 	t.Run("no packages", func(t *testing.T) {
+		t.Parallel()
 		pkgs := idepkgtest.MakePackages()
 		versions := idepkgtest.MakeBundles()
 		m, _, _, _ := newTestManager(t, pkgs, versions)
@@ -153,6 +164,7 @@ func TestListPackages(t *testing.T) {
 		assert.True(t, empty)
 	})
 	t.Run("returns packages", func(t *testing.T) {
+		t.Parallel()
 		pkgs := idepkgtest.MakePackages(release.Package{Name: "go"}, release.Package{Name: "ox"})
 		versions := idepkgtest.MakeBundles()
 		m, _, _, _ := newTestManager(t, pkgs, versions)
@@ -165,6 +177,7 @@ func TestListPackages(t *testing.T) {
 		assert.ElementsMatch(t, []release.Package{{Name: "go"}, {Name: "ox"}}, actual)
 	})
 	t.Run("bubbles up release manager error", func(t *testing.T) {
+		t.Parallel()
 		pkgs := idepkgtest.MakePackages(release.Package{Name: "go"})
 		versions := idepkgtest.MakeBundles()
 		m, _, r, _ := newTestManager(t, pkgs, versions)
@@ -176,7 +189,9 @@ func TestListPackages(t *testing.T) {
 }
 
 func TestListPackageVersions(t *testing.T) {
+	t.Parallel()
 	t.Run("no packages", func(t *testing.T) {
+		t.Parallel()
 		pkgs := idepkgtest.MakePackages()
 		versions := idepkgtest.MakeBundles()
 		m, _, _, _ := newTestManager(t, pkgs, versions)
@@ -186,6 +201,7 @@ func TestListPackageVersions(t *testing.T) {
 		assert.EqualError(t, err, "not found")
 	})
 	t.Run("returns error if package id is empty", func(t *testing.T) {
+		t.Parallel()
 		pkgs := idepkgtest.MakePackages(release.Package{Name: "go"})
 		versions := idepkgtest.MakeBundles()
 		m, _, _, _ := newTestManager(t, pkgs, versions)
@@ -194,6 +210,7 @@ func TestListPackageVersions(t *testing.T) {
 		require.Error(t, err)
 	})
 	t.Run("returns packages", func(t *testing.T) {
+		t.Parallel()
 		pkgs := idepkgtest.MakePackages(release.Package{Name: "go"})
 		versions := idepkgtest.MakeBundles([]release.Bundle{{Package: "go", Version: "1"}})
 		m, _, _, _ := newTestManager(t, pkgs, versions)
@@ -206,6 +223,7 @@ func TestListPackageVersions(t *testing.T) {
 		assert.ElementsMatch(t, []release.Bundle{{Package: "go", Version: "1"}}, actual)
 	})
 	t.Run("bubbles up release manager error", func(t *testing.T) {
+		t.Parallel()
 		pkgs := idepkgtest.MakePackages(release.Package{Name: "go"})
 		versions := idepkgtest.MakeBundles()
 		m, _, r, _ := newTestManager(t, pkgs, versions)
@@ -217,7 +235,9 @@ func TestListPackageVersions(t *testing.T) {
 }
 
 func TestInstallPackageVersion(t *testing.T) {
+	t.Parallel()
 	t.Run("returns error if pkg is empty", func(t *testing.T) {
+		t.Parallel()
 		pkgs := idepkgtest.MakePackages()
 		versions := idepkgtest.MakeBundles()
 		m, _, _, _ := newTestManager(t, pkgs, versions)
@@ -226,6 +246,7 @@ func TestInstallPackageVersion(t *testing.T) {
 	})
 
 	t.Run("returns error if version is empty", func(t *testing.T) {
+		t.Parallel()
 		pkgs := idepkgtest.MakePackages()
 		versions := idepkgtest.MakeBundles([]release.Bundle{{Package: "go", Version: "1"}})
 		m, _, _, _ := newTestManager(t, pkgs, versions)
@@ -234,6 +255,7 @@ func TestInstallPackageVersion(t *testing.T) {
 	})
 
 	t.Run("installs a package with executables", func(t *testing.T) {
+		t.Parallel()
 		pkgs := idepkgtest.MakePackages()
 		versions := idepkgtest.MakeBundles([]release.Bundle{{Package: "go", Version: "1"}})
 		m, n, _, datadir := newTestManager(t, pkgs, versions)
@@ -250,6 +272,7 @@ func TestInstallPackageVersion(t *testing.T) {
 	})
 
 	t.Run("install a package and version already installed fails", func(t *testing.T) {
+		t.Parallel()
 		pkgs := idepkgtest.MakePackages()
 		versions := idepkgtest.MakeBundles([]release.Bundle{{Package: "go", Version: "1"}})
 		m, n, _, _ := newTestManager(t, pkgs, versions)
@@ -266,6 +289,7 @@ func TestInstallPackageVersion(t *testing.T) {
 	})
 
 	t.Run("installs a package without executables", func(t *testing.T) {
+		t.Parallel()
 		pkgs := idepkgtest.MakePackages()
 		versions := idepkgtest.MakeBundles([]release.Bundle{{Package: "testpkg", Version: "1"}})
 		m, n, _, datadir := newTestManager(t, pkgs, versions)
@@ -282,6 +306,7 @@ func TestInstallPackageVersion(t *testing.T) {
 	})
 
 	t.Run("install errors are retryable", func(t *testing.T) {
+		t.Parallel()
 		pkgs := idepkgtest.MakePackages()
 		versions := idepkgtest.MakeBundles([]release.Bundle{{Package: "go", Version: "1"}})
 		m, n, r, datadir := newTestManager(t, pkgs, versions)
@@ -307,6 +332,7 @@ func TestInstallPackageVersion(t *testing.T) {
 		assertExecutables(t, datadir, goTarExpectedExecutables...)
 	})
 	t.Run("notification progress is completed, even if writer doesn't", func(t *testing.T) {
+		t.Parallel()
 		pkgs := idepkgtest.MakePackages()
 		versions := idepkgtest.MakeBundles([]release.Bundle{{Package: "go", Version: "1"}})
 		m, n, r, datadir := newTestManager(t, pkgs, versions)
@@ -326,7 +352,9 @@ func TestInstallPackageVersion(t *testing.T) {
 }
 
 func TestListInstalledPackageVersions(t *testing.T) {
+	t.Parallel()
 	t.Run("returns installed packages", func(t *testing.T) {
+		t.Parallel()
 		pkgs := idepkgtest.MakePackages()
 		versions := idepkgtest.MakeBundles([]release.Bundle{{Package: "go", Version: "1"}})
 		m, n, _, _ := newTestManager(t, pkgs, versions)
@@ -346,6 +374,7 @@ func TestListInstalledPackageVersions(t *testing.T) {
 		assert.ElementsMatch(t, []string{"go"}, installed)
 	})
 	t.Run("returns nothing if there are no packages installed", func(t *testing.T) {
+		t.Parallel()
 		pkgs := idepkgtest.MakePackages()
 		versions := idepkgtest.MakeBundles()
 		m, _, _, _ := newTestManager(t, pkgs, versions)
@@ -360,7 +389,9 @@ func TestListInstalledPackageVersions(t *testing.T) {
 }
 
 func TestListInstalledPackages(t *testing.T) {
+	t.Parallel()
 	t.Run("returns installed packages", func(t *testing.T) {
+		t.Parallel()
 		pkgs := idepkgtest.MakePackages()
 		versions := idepkgtest.MakeBundles([]release.Bundle{{Package: "go", Version: "1"}})
 		m, n, _, _ := newTestManager(t, pkgs, versions)
@@ -380,6 +411,7 @@ func TestListInstalledPackages(t *testing.T) {
 		assert.ElementsMatch(t, []release.Version{"1"}, installed)
 	})
 	t.Run("returns nothing if there are no packages installed", func(t *testing.T) {
+		t.Parallel()
 		pkgs := idepkgtest.MakePackages()
 		versions := idepkgtest.MakeBundles()
 		m, _, _, _ := newTestManager(t, pkgs, versions)
@@ -394,7 +426,9 @@ func TestListInstalledPackages(t *testing.T) {
 }
 
 func TestPackageVersionInUse(t *testing.T) {
+	t.Parallel()
 	t.Run("returns installed package version in use", func(t *testing.T) {
+		t.Parallel()
 		pkgs := idepkgtest.MakePackages()
 		versions := idepkgtest.MakeBundles([]release.Bundle{{Package: "go", Version: "1"}})
 		m, n, _, _ := newTestManager(t, pkgs, versions)
@@ -412,6 +446,7 @@ func TestPackageVersionInUse(t *testing.T) {
 	})
 
 	t.Run("returns latest installed package version", func(t *testing.T) {
+		t.Parallel()
 		pkgs := idepkgtest.MakePackages()
 		versions := idepkgtest.MakeBundles([]release.Bundle{
 			{Package: "go", Version: "1"},
@@ -438,6 +473,7 @@ func TestPackageVersionInUse(t *testing.T) {
 	})
 
 	t.Run("returns package version in use, after UsePackageVersion", func(t *testing.T) {
+		t.Parallel()
 		pkgs := idepkgtest.MakePackages()
 		versions := idepkgtest.MakeBundles([]release.Bundle{
 			{Package: "go", Version: "1"},
@@ -467,6 +503,7 @@ func TestPackageVersionInUse(t *testing.T) {
 	})
 
 	t.Run("returns error if package is not installed", func(t *testing.T) {
+		t.Parallel()
 		pkgs := idepkgtest.MakePackages()
 		versions := idepkgtest.MakeBundles([]release.Bundle{{Package: "go", Version: "1"}})
 		m, _, _, _ := newTestManager(t, pkgs, versions)
@@ -477,7 +514,9 @@ func TestPackageVersionInUse(t *testing.T) {
 }
 
 func TestUsePackageVersion(t *testing.T) {
+	t.Parallel()
 	t.Run("returns error if package is not installed", func(t *testing.T) {
+		t.Parallel()
 		pkgs := idepkgtest.MakePackages()
 		versions := idepkgtest.MakeBundles([]release.Bundle{
 			{Package: "go", Version: "1"},
@@ -490,6 +529,7 @@ func TestUsePackageVersion(t *testing.T) {
 	})
 
 	t.Run("returns error if version is not installed", func(t *testing.T) {
+		t.Parallel()
 		pkgs := idepkgtest.MakePackages()
 		versions := idepkgtest.MakeBundles([]release.Bundle{
 			{Package: "go", Version: "1"},
@@ -508,6 +548,7 @@ func TestUsePackageVersion(t *testing.T) {
 	})
 
 	t.Run("relinks executables and lib", func(t *testing.T) {
+		t.Parallel()
 		pkgs := idepkgtest.MakePackages()
 		versions := idepkgtest.MakeBundles([]release.Bundle{
 			{Package: "go", Version: "1"},
@@ -537,6 +578,7 @@ func TestUsePackageVersion(t *testing.T) {
 		assertExecutables(t, datadir, goTarExpectedExecutables...)
 	})
 	t.Run("returns error if version already in use", func(t *testing.T) {
+		t.Parallel()
 		pkgs := idepkgtest.MakePackages()
 		versions := idepkgtest.MakeBundles([]release.Bundle{
 			{Package: "go", Version: "1"},
@@ -562,7 +604,9 @@ func TestUsePackageVersion(t *testing.T) {
 }
 
 func TestDeletePackage(t *testing.T) {
+	t.Parallel()
 	t.Run("deletes all versions of an installed package", func(t *testing.T) {
+		t.Parallel()
 		pkgs := idepkgtest.MakePackages()
 		versions := idepkgtest.MakeBundles([]release.Bundle{
 			{Package: "go", Version: "1"},
@@ -590,6 +634,7 @@ func TestDeletePackage(t *testing.T) {
 	})
 
 	t.Run("returns ErrNotInstalled if package is not installed", func(t *testing.T) {
+		t.Parallel()
 		pkgs := idepkgtest.MakePackages()
 		versions := idepkgtest.MakeBundles([]release.Bundle{
 			{Package: "go", Version: "1"},
@@ -609,7 +654,9 @@ func TestDeletePackage(t *testing.T) {
 }
 
 func TestDeletePackageVersion(t *testing.T) {
+	t.Parallel()
 	t.Run("deletes a version of an installed package", func(t *testing.T) {
+		t.Parallel()
 		pkgs := idepkgtest.MakePackages()
 		versions := idepkgtest.MakeBundles([]release.Bundle{
 			{Package: "go", Version: "1"},
@@ -636,6 +683,7 @@ func TestDeletePackageVersion(t *testing.T) {
 		assertExecutables(t, datadir, goTarExpectedExecutables...)
 	})
 	t.Run("returns ErrNotInstalled if package and version is not installed", func(t *testing.T) {
+		t.Parallel()
 		pkgs := idepkgtest.MakePackages()
 		versions := idepkgtest.MakeBundles([]release.Bundle{
 			{Package: "go", Version: "1"},
@@ -656,6 +704,7 @@ func TestDeletePackageVersion(t *testing.T) {
 		assertExecutables(t, datadir, goTarExpectedExecutables...)
 	})
 	t.Run("returns ErrVersionInUse if package version is in use and force is false", func(t *testing.T) {
+		t.Parallel()
 		pkgs := idepkgtest.MakePackages()
 		versions := idepkgtest.MakeBundles([]release.Bundle{
 			{Package: "go", Version: "1"},
@@ -682,6 +731,7 @@ func TestDeletePackageVersion(t *testing.T) {
 		assertExecutables(t, datadir, goTarExpectedExecutables...)
 	})
 	t.Run("removes lib+executables if package version is in use and force is true", func(t *testing.T) {
+		t.Parallel()
 		pkgs := idepkgtest.MakePackages()
 		versions := idepkgtest.MakeBundles([]release.Bundle{
 			{Package: "go", Version: "1"},
