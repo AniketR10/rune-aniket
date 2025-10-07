@@ -31,7 +31,6 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/blue/iterator"
 	"go.uber.org/goleak"
@@ -273,19 +272,14 @@ func TestDelegateIntegration(t *testing.T) {
 	}
 	handlertest.TestHandler(t, comp.Browser(), cases, w)
 
-	logrus.SetLevel(logrus.TraceLevel)
-	logrus.Infof("START")
-	defer logrus.Infof("END")
-
 	start = term.Coordinates{Y: 7, X: 0}
 	end = term.Coordinates{Y: 8, X: 0}
 	_, _, _, err = ed.Edit(context.Background(), start, end, "")
 	require.NoError(t, err)
 
-	cases = []handlertest.SingleTestCase{
+	sequenceCases := []handlertest.SequenceTestCase{
 		{
-			term.Event{}, `
-┌────────────────────────────┐
+			"", `┌────────────────────────────┐
 │o #####                     │
 ├────────────────────────────┤
 │####### main                │
@@ -301,8 +295,101 @@ func TestDelegateIntegration(t *testing.T) {
 │                      NORMAL│
 └────────────────────────────┘`,
 		},
+		{
+			"uu", `┌────────────────────────────┐
+│o #####                     │
+├────────────────────────────┤
+│####### main                │
+│                            │
+│###### (                    │
+│    #####                   │
+│                            │
+│    ########################│
+│)                           │
+│                            │
+│#### main() {               │
+│▐   fmt.Sprintf(####, ##)   │
+│                      NORMAL│
+└────────────────────────────┘`,
+		},
+		{
+			"G", `┌────────────────────────────┐
+│o #####                     │
+├────────────────────────────┤
+│    }                       │
+│}                           │
+│                            │
+│##### fileContent = ########│
+│    ############+           │
+│    ###########+            │
+│    ####+                   │
+│    ########################│
+│    ###                     │
+│▐                           │
+│                      NORMAL│
+└────────────────────────────┘`,
+		},
+		{
+			"VkkkkkkduVkkkkkkkkkkkkkkkkkkdugg", `┌────────────────────────────┐
+│o #####                     │
+├────────────────────────────┤
+│####### main                │
+│                            │
+│###### (                    │
+│    #####                   │
+│                            │
+│    ########################│
+│)                           │
+│                            │
+│#### main() {               │
+│    fmt.Sprintf(####, ##)   │
+│                      NORMAL│
+└────────────────────────────┘`,
+		},
+		{
+			"ggjjjjjjjjjwi/* <$i*/<", `┌────────────────────────────┐
+│o #####                     │
+├────────────────────────────┤
+│####### main                │
+│                            │
+│###### (                    │
+│    #####                   │
+│                            │
+│    ########################│
+│)                           │
+│                            │
+│#### main() {               │
+│    #### fmt.Sprintf(####, #│
+│                      NORMAL│
+└────────────────────────────┘`,
+		},
 	}
-	handlertest.TestHandler(t, comp.Browser(), cases, w)
+	handlertest.TestHandlerSequenceWriter(t, w, comp.Browser(), width, height, sequenceCases)
+
+	// after flush it should be the same
+	win, err := comp.Focus()
+	require.NoError(t, err)
+	require.NoError(t, comp.Flush(win))
+	sequenceCases = []handlertest.SequenceTestCase{
+		{
+			"", `┌────────────────────────────┐
+│o ####                      │
+├────────────────────────────┤
+│####### main                │
+│                            │
+│###### (                    │
+│    #####                   │
+│                            │
+│    ########################│
+│)                           │
+│                            │
+│#### main() {               │
+│    #### fmt.Sprintf(####, #│
+│                      NORMAL│
+└────────────────────────────┘`,
+		},
+	}
+	handlertest.TestHandlerSequenceWriter(t, w, comp.Browser(), width, height, sequenceCases)
 
 	cleanup()
 	goleak.VerifyNone(t)
@@ -444,4 +531,11 @@ func main() {
 		fmt.Println("%d", i)
 	}
 }
+
+const fileContent = "package main\n" +
+	"import (\n"+
+	"\"fmt\"\n"+
+	"\n"+
+	"\"github.com/unstablebuild/blue/cli\"\n"
+	")"
 `

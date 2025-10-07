@@ -83,13 +83,17 @@ func CellsToBuffer(c [][]term.Cell, tabspaces int) *Buffer {
 func ConvertRunePosToCoordinates(cells [][]term.Cell, y, x int) (
 	ret term.Coordinates, ok bool,
 ) {
-	if y > len(cells) || len(cells) == 0 {
+	if len(cells) == 0 {
 		return
+	}
+
+	if y > len(cells) {
+		y = len(cells)
 	}
 
 	ret.Y = y
 	if ret.Y == len(cells) {
-		ok = x == 0
+		ok = true
 		return
 	}
 
@@ -109,17 +113,26 @@ func ConvertRunePosToCoordinates(cells [][]term.Cell, y, x int) (
 func ConvertCoordinatesToRunePos(cells [][]term.Cell, c term.Coordinates) (
 	y, x int, ok bool,
 ) {
-	if c.Y > len(cells) || len(cells) == 0 {
+	if c.Y < 0 || c.X < 0 {
+		panic("negative coordinates")
+	}
+	if len(cells) == 0 {
 		return
 	}
 
+	if c.Y > len(cells) {
+		c.Y = len(cells)
+	}
 	y = c.Y
 	if c.Y == len(cells) {
-		ok = x == 0
+		ok = true
 		return
 	}
 
 	line := cells[c.Y]
+	if c.X > len(line) {
+		c.X = len(line)
+	}
 	cellView := [][]term.Cell{line}
 	var bretX int
 	bretX, ok = ConvertCoordinatesToByteOffset(cellView, term.Coordinates{X: c.X})
@@ -135,7 +148,10 @@ func ConvertCoordinatesToRunePos(cells [][]term.Cell, c term.Coordinates) (
 func ConvertByteOffsetToCoordinates(cells [][]term.Cell, offset int) (
 	ret term.Coordinates, ok bool,
 ) {
-	if offset < 0 || len(cells) == 0 {
+	if offset < 0 {
+		panic("negative offset")
+	}
+	if len(cells) == 0 {
 		return term.Coordinates{}, false
 	}
 	pos := 0
@@ -149,17 +165,14 @@ func ConvertByteOffsetToCoordinates(cells [][]term.Cell, offset int) (
 				return term.Coordinates{X: x + 1, Y: y}, true
 			}
 		}
-		if pos >= offset {
+		if pos == offset {
 			return term.Coordinates{X: len(row), Y: y}, true
 		}
 		if y+1 < len(cells) {
 			pos++
 		}
 	}
-	if offset == pos {
-		return term.Coordinates{X: 0, Y: len(cells)}, true
-	}
-	return term.Coordinates{}, false
+	return term.Coordinates{X: 0, Y: len(cells)}, true
 }
 
 // ConvertCoordinatesToByteOffset converts the given coordinates to a byte offset.
@@ -167,15 +180,20 @@ func ConvertByteOffsetToCoordinates(cells [][]term.Cell, offset int) (
 func ConvertCoordinatesToByteOffset(cells [][]term.Cell, c term.Coordinates) (
 	offset int, ok bool,
 ) {
+	if c.Y < 0 || c.X < 0 {
+		panic("negative coordinates")
+	}
 	if c == (term.Coordinates{}) {
 		return 0, len(cells) >= 1
 	}
-	if c.Y < 0 || c.Y >= len(cells) || c.X < 0 {
-		return 0, false
+	var row []term.Cell
+	if c.Y >= len(cells) {
+		c.Y = len(cells)
+	} else {
+		row = cells[c.Y]
 	}
-	row := cells[c.Y]
 	if c.X > len(row) {
-		return 0, false
+		c.X = len(row)
 	}
 	for y := 0; y < c.Y; y++ {
 		for _, cell := range cells[y] {

@@ -145,18 +145,26 @@ func TestHandlerIsolated(
 	}
 }
 
-// TestHandlerSequence is a helper function that drives
-// a set of SequenceTestCase and its results.
-//
-// Certain key events are encoded in characters. For instance, a '>' character
-// signals term.KeyEnter and '<' character signals term.KeyEsc.
+// TestHandlerSequence is akin to calling TestHandlerSequenceWriter
+// with a default term.StringWriter.
 func TestHandlerSequence(
 	t *testing.T, handler tui.Handler, width, height int,
 	cases []SequenceTestCase,
 ) {
 	writer := term.NewStringWriter(width, height)
-	handler.Resize(width, height)
+	TestHandlerSequenceWriter(t, writer, handler, width, height, cases)
+}
 
+// TestHandlerSequenceWriter is a helper function that drives
+// a set of SequenceTestCase and its results.
+//
+// Certain key events are encoded in characters. For instance, a '>' character
+// signals term.KeyEnter and '<' character signals term.KeyEsc.
+func TestHandlerSequenceWriter(
+	t *testing.T, writer *term.StringWriter, handler tui.Handler, width, height int,
+	cases []SequenceTestCase,
+) {
+	handler.Resize(width, height)
 	for i, tcase := range cases {
 		handleTestCase(t, i, writer, handler, tcase, width, height)
 	}

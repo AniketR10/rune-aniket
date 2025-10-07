@@ -387,6 +387,9 @@ func textapiEditToTreeSitterEdit(cells [][]term.Cell, ev textapi.Event) (tree_si
 	newEndPos := tree_sitter.Point{Row: uint(y), Column: uint(x)}
 
 	if !sok || !eok || !spok || !epok || !tpok {
+		/*logrus.Errorf("convert edit to tree-sitter coordinates failed: "+
+			"sok=%t, eok=%t, spok=%t, epok=%t, tpok=%t",
+			sok, eok, spok, epok, tpok) */
 		return tree_sitter.InputEdit{}, false
 	}
 
