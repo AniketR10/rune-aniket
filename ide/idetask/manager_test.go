@@ -368,29 +368,6 @@ func TestManager(t *testing.T) {
 				}
 				assert.True(t, info.LastSuccess)
 				assert.Equal(t, 2, info.Runs)
-				assert.False(t, info.Scheduled)
-				assert.NotZero(t, info.LastDuration)
-				return true
-			})
-
-	})
-
-	t.Run("if files change on workspace, task is re-run after running", func(t *testing.T) {
-		wm := newFakeBrowser()
-		exec := newFakeScheme()
-		m := newTestManager(wm, exec)
-
-		require.NoError(t, m.RunTask(Task{Name: "task", Cmd: "runtask"}))
-
-		sendEvent(t, m, exec, "task", "temp")
-
-		assertTaskRunsWithin(t, m, 1*time.Second, "task", nil,
-			func(info TaskInfo) bool {
-				if info.Runs != 2 {
-					return false
-				}
-				assert.True(t, info.LastSuccess)
-				assert.False(t, info.Scheduled)
 				assert.NotZero(t, info.LastDuration)
 				return true
 			})

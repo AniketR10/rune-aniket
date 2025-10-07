@@ -78,11 +78,6 @@ type Task struct {
 	// Runs represents the number of times this task has been run.
 	runs int
 
-	// stale is true when a file has changed and the task should
-	// be scheduled at soon as it's done with the current run.
-	stale       bool
-	staleReason string
-
 	watchID     int
 	ctx         context.Context
 	cancelCtx   func()
@@ -125,9 +120,6 @@ type TaskInfo struct {
 	LastSuccess bool
 	// Runs represents the number of times this task has been run.
 	Runs int
-	// Scheduled is true when a file has changed and the task should
-	// be scheduled at soon as it's done with the current run.
-	Scheduled    bool
 	LastDuration time.Duration
 }
 
@@ -143,7 +135,6 @@ func (t *Task) Info() TaskInfo {
 		Args:         t.Args,
 		Running:      t.running,
 		Runs:         t.runs,
-		Scheduled:    t.stale,
 		LastSuccess:  t.lastExit == nil,
 		LastDuration: t.lastDuration,
 	}
@@ -330,8 +321,6 @@ func (t *Task) init(
 			select {
 			case err := <-t.donech:
 				t.mu.Lock()
-				stale := t.stale // do not skip state changes
-				staleReason := t.staleReason
 				paused := t.paused
 				t.mu.Unlock()
 				if err != nil {
@@ -339,9 +328,7 @@ func (t *Task) init(
 				} else {
 					t.setSuccess()
 				}
-				if stale {
-					t.tryRunning(b, scheme, staleReason)
-				} else if paused {
+				if paused {
 					t.setPause()
 				}
 			case <-t.ctx.Done():
@@ -368,7 +355,6 @@ func (t *Task) tryRunning(b browser.Browser, scheme schemeapi.Scheme, reason str
 	t.log(log.TraceLevel, "attempt to run task, reason: %s", reason)
 
 	if t.running {
-		t.setStale(reason)
 		return false
 	}
 
@@ -395,19 +381,12 @@ func (t *Task) tryRunning(b browser.Browser, scheme schemeapi.Scheme, reason str
 	return true
 }
 
-func (t *Task) setStale(reason string) {
-	t.stale = true
-	t.staleReason = reason
-	t.log(log.TraceLevel, "task set as stale with run attempt reason: %s", reason)
-}
-
 func (t *Task) setRunning(h browser.ScrollableFloating) {
 	_ = t.handler.Close()
 	isFirst := t.runs == 0
 	t.runs++
 	t.lastStart = time.Now()
 	t.running = true
-	t.stale = false
 	t.paused = false
 	t.handler = h
 	t.handler.Resize(t.width, t.height)
