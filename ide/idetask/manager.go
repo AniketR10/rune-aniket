@@ -24,7 +24,6 @@
 package idetask
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -34,12 +33,9 @@ import (
 	"github.com/ernestrc/logd-go/logging"
 	"github.com/go-git/go-git/v6/plumbing/format/gitignore"
 	log "github.com/sirupsen/logrus"
-	"github.com/unstablebuild/blue/cli/cliformat"
-	"github.com/unstablebuild/blue/iterator"
 	"unstable.build/go-tui/api/schemeapi"
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/browser"
-	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/ide/plugin"
@@ -157,8 +153,19 @@ func (m *Manager) RunTask(t Task) error {
 					continue
 				}
 
-				m.log(log.TraceLevel, "running file due to file %s change", ev.URI().Path())
-				t.tryRunning(m.b, m.scheme)
+				var icon string
+				switch ev.Event() {
+				case workspaceapi.Create:
+					icon = " "
+				case workspaceapi.Rename:
+					fallthrough // files are flushed by means of renaming them
+				case workspaceapi.Write:
+					icon = " "
+				case workspaceapi.Remove:
+					icon = " "
+				}
+
+				t.tryRunning(m.b, m.scheme, icon+ev.URI().Name())
 			}
 		}
 	})
@@ -174,31 +181,6 @@ func (m *Manager) ListTasks() (ret []TaskInfo) {
 		return true
 	})
 	return
-}
-
-// Top displays sorted information about tasks on a floating window.
-func (m *Manager) Top() error {
-	tasks := m.ListTasks()
-	it := iterator.FromSlice(tasks)
-	itfmt := cliformat.Table[TaskInfo]([]string{})
-
-	var buf bytes.Buffer
-	err := itfmt.Format(context.Background(), &buf, it)
-	if err != nil {
-		return fmt.Errorf("format: %w", err)
-	}
-
-	less := handler.NewLess(handler.DefaultLessConfig())
-	_, _ = less.Buffer().Write(buf.Bytes())
-	floating := handler.StaticFloating(less,
-		strings.IndexRune(buf.String(), '\n'), len(tasks))
-	_, err = m.b.Floating(browser.NopFloatingHandler(floating), component.FloatingConfig{
-		Alignment: component.SpanAlignmentCentered,
-	})
-	if err != nil {
-		return fmt.Errorf("floating: %w", err)
-	}
-	return nil
 }
 
 // StopTask stops the task with the given name or returns

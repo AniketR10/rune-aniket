@@ -71,6 +71,16 @@ func WithFrame(frame bool) Option {
 	}
 }
 
+// WithTitle returns an option that sets the title of the
+// plugin handler, situated in the top bar. Passing an empty
+// title, or not passing this option defaults to using
+// the command and arguments as title.
+func WithTitle(title string) Option {
+	return func(cfg *handlerConfig) {
+		cfg.title = title
+	}
+}
+
 // WithFrameCharSet returns an option that configures
 // Handler to use the given character set to draw
 // a divider between the top bar and the vte. It's a no-op
@@ -103,6 +113,7 @@ type handlerConfig struct {
 	frameCharSet component.FrameCharSet
 	frameAttr    term.Attributes
 	barAttr      term.Attributes
+	title        string
 }
 
 func defaultConfig() handlerConfig {

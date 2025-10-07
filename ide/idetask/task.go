@@ -33,6 +33,7 @@ import (
 	"time"
 
 	"github.com/ernestrc/go-multierror"
+	"github.com/ernestrc/logd-go/logging"
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui"
@@ -79,7 +80,8 @@ type Task struct {
 
 	// stale is true when a file has changed and the task should
 	// be scheduled at soon as it's done with the current run.
-	stale bool
+	stale       bool
+	staleReason string
 
 	watchID     int
 	ctx         context.Context
@@ -329,6 +331,7 @@ func (t *Task) init(
 			case err := <-t.donech:
 				t.mu.Lock()
 				stale := t.stale // do not skip state changes
+				staleReason := t.staleReason
 				paused := t.paused
 				t.mu.Unlock()
 				if err != nil {
@@ -337,7 +340,7 @@ func (t *Task) init(
 					t.setSuccess()
 				}
 				if stale {
-					t.tryRunning(b, scheme)
+					t.tryRunning(b, scheme, staleReason)
 				} else if paused {
 					t.setPause()
 				}
@@ -348,7 +351,7 @@ func (t *Task) init(
 		}
 	})
 
-	t.tryRunning(b, scheme)
+	t.tryRunning(b, scheme, "")
 	t.minimize()
 	_, err = b.SetFocus(prev)
 	if err != nil {
@@ -358,17 +361,31 @@ func (t *Task) init(
 	return ctx, cancel, nil
 }
 
-func (t *Task) tryRunning(b browser.Browser, scheme schemeapi.Scheme) bool {
+func (t *Task) tryRunning(b browser.Browser, scheme schemeapi.Scheme, reason string) bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
+	t.log(log.TraceLevel, "attempt to run task, reason: %s", reason)
+
 	if t.running {
-		t.setStale()
+		t.setStale(reason)
 		return false
 	}
 
+	var title strings.Builder
+	if reason != "" {
+		title.WriteString(reason)
+		title.WriteString("  ")
+	}
+	title.WriteString(t.Cmd)
+	for _, arg := range t.Args {
+		title.WriteString(" ")
+		title.WriteString(arg)
+	}
+	opts := append([]plugin.Option{}, t.pluginOpts...)
+	opts = append(opts, plugin.WithTitle(title.String()))
 	handler, err := t.newPlugin(b, b, scheme, scheme, b,
-		t.cmdAndArgs, t.maxWidth, t.pluginOpts...)
+		t.cmdAndArgs, t.maxWidth, opts...)
 	if err != nil {
 		t.doSetError(err)
 		return false
@@ -378,8 +395,10 @@ func (t *Task) tryRunning(b browser.Browser, scheme schemeapi.Scheme) bool {
 	return true
 }
 
-func (t *Task) setStale() {
+func (t *Task) setStale(reason string) {
 	t.stale = true
+	t.staleReason = reason
+	t.log(log.TraceLevel, "task set as stale with run attempt reason: %s", reason)
 }
 
 func (t *Task) setRunning(h browser.ScrollableFloating) {
@@ -522,6 +541,19 @@ func (t *Task) minimize() {
 		t.win.MinimizeRight(minimizePadding)
 	}
 	t.setBarColor(t.barColor)
+}
+
+func (t *Task) log(level log.Level, msg string, args ...interface{}) {
+	if !log.IsLevelEnabled(level) {
+		return
+	}
+	log.WithFields(log.Fields{
+		logging.KeyClass: "idetask.task",
+		"name":           t.Name,
+		"cmd":            t.Cmd,
+		"args":           strings.Join(t.Args, " "),
+		"filter":         t.Filter,
+	}).Logf(level, msg, args...)
 }
 
 type pluginBuilder func(

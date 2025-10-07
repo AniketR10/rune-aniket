@@ -249,7 +249,11 @@ func (h *Handler) initState(
 	topBar.leftMsgRunning = component.NewStringWithConfig(" ", templateCfg)
 	topBar.leftMsgError = component.NewStringWithConfig(" ▀ ", errStrCfg)
 	topBar.leftMsgSuccess = component.NewStringWithConfig(" ▀ ", successStrCfg)
-	topBar.centerMsg = component.NewStringWithConfig(cmdAndArgs, centerStrCfg)
+	title := config.title
+	if config.title == "" {
+		title = cmdAndArgs
+	}
+	topBar.centerMsg = component.NewStringWithConfig(title, centerStrCfg)
 	topBar.frameAttr = config.frameAttr
 	topBar.attr = config.barAttr
 	frames, seq := component.SpinningSquareAnimationFrames()
