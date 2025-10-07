@@ -225,12 +225,16 @@ func (t *tree) notifyNotAvail(ext string) {
 	}
 }
 
-func (t *tree) flush(ev textapi.Event) {
+func (t *tree) flush() {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 	if !t.ready {
 		return
 	}
+	t.doFlush()
+}
+
+func (t *tree) doFlush() {
 	t.log(log.TraceLevel, "reparsing tree after flush")
 	t.tree.Close() // dealloc previous tree
 	t.persistCells()
@@ -249,7 +253,11 @@ func (t *tree) edit(ev textapi.Event) {
 	// use old cells to convert coordinates
 	edit, ok := textapiEditToTreeSitterEdit(t.cells, ev)
 	if !ok {
-		t.log(log.ErrorLevel, "convert edit to tree-sitter coordinates failed")
+		t.log(log.WarnLevel, "convert edit to tree-sitter coordinates failed, "+
+			"re-parsing enabled: %t", t.config.ReparseOnErrors)
+		if t.config.ReparseOnErrors {
+			t.doFlush()
+		}
 		return
 	}
 	t.log(log.TraceLevel, "converted edit(start=%v,end=%v,from=%v,to=%v,content=%s)  "+
@@ -388,8 +396,8 @@ func textapiEditToTreeSitterEdit(cells [][]term.Cell, ev textapi.Event) (tree_si
 
 	if !sok || !eok || !spok || !epok || !tpok {
 		/*logrus.Errorf("convert edit to tree-sitter coordinates failed: "+
-			"sok=%t, eok=%t, spok=%t, epok=%t, tpok=%t",
-			sok, eok, spok, epok, tpok) */
+		"sok=%t, eok=%t, spok=%t, epok=%t, tpok=%t",
+		sok, eok, spok, epok, tpok) */
 		return tree_sitter.InputEdit{}, false
 	}
 

@@ -106,7 +106,7 @@ func (t *Delegate) Handle(ctx context.Context, ev textapi.Event) (exit bool) {
 			t.log(log.WarnLevel, "tree for file %q not found", uri)
 			return
 		}
-		tree.flush(ev)
+		tree.flush()
 	case textapi.EventTypeEdit:
 		tree, ok := t.trees[uri]
 		if !ok {

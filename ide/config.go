@@ -1226,6 +1226,14 @@ func (c ideConfig) syntaxConfig() (ret syntax.Config) {
 	if !ok {
 		return
 	}
+	reparse, err := cfg.GetBool("reparse_syntax_errors")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["editor.reparse_syntax_errors"] = err
+		}
+	} else {
+		ret.ReparseOnErrors = reparse
+	}
 	cfgHighlights, err := cfg.GetMap("highlights")
 	if err != nil {
 		if err != config.ErrNotFound {

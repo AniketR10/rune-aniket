@@ -37,6 +37,11 @@ type Config struct {
 	// ScheduleNextTick schedules an arbitrary function to be run
 	// in the next event-loop tick.
 	ScheduleNextTick func(func()) bool
+
+	// ReparseOnErrors forces tree to re-parse the entire file
+	// if there are failures to keep tree sitter's tree and the file contents
+	// in sync.
+	ReparseOnErrors bool
 }
 
 // DefaultConfig returns a sane configuration for a TreeManager.
@@ -44,6 +49,7 @@ func DefaultConfig() Config {
 	return Config{
 		CaptureNamesAttributes: defaultCaptureNamesAttributes,
 		ScheduleNextTick:       func(cb func()) bool { cb(); return true },
+		ReparseOnErrors:        true,
 	}
 }
 
