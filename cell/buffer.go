@@ -122,20 +122,6 @@ func (b *Buffer) Init() {
 	b.InitWithTabspaces(DefaultTabspaces)
 }
 
-// InsertRowAt is equivalent to calling InsertRowAtContext
-// with context.Background.
-func (b *Buffer) InsertRowAt(y int) {
-	b.InsertRowAtContext(context.Background(), y)
-}
-
-// InsertRowAtContext inserts a new row at given position. If pos is out of bounds,
-// this method does not panic; instead, it will fill in the necessary
-// rows such that the new row is the last row in the buffer.
-func (b *Buffer) InsertRowAtContext(ctx context.Context, y int) {
-	at := term.Coordinates{Y: y}
-	b.editor.Edit(ctx, at, at, "\n")
-}
-
 // Insert is equivalent to calling InsertContext with context.Background.
 func (b *Buffer) Insert(pos term.Coordinates, r rune) (next term.Coordinates) {
 	return b.InsertContext(context.Background(), pos, r)

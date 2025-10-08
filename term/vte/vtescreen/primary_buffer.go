@@ -25,6 +25,7 @@ package vtescreen
 
 import (
 	"math"
+	"strings"
 
 	"unstable.build/go-tui/term"
 )
@@ -150,9 +151,13 @@ func (b *PrimaryBuffer) BottomScrollableRegion() int {
 
 // InsertLines inserts blank lines on the cursor's position.
 func (b *PrimaryBuffer) InsertLines(count int) {
-	for i := 0; i < count; i++ {
-		b.Cells.InsertRowAtContext(b.ctx, b.cursor.position.Y)
+	var builder strings.Builder
+	for range count {
+		_ = builder.WriteByte('\n')
 	}
+	pos := b.cursor.position
+	pos.X = b.Cells.Columns(pos.Y)
+	b.Cells.Edit(b.ctx, pos, pos, builder.String())
 }
 
 // DeleteLines deletes lines on the cursor's position.

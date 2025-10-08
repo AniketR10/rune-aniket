@@ -813,11 +813,12 @@ func (c *Cursor) InsertLineAbove() {
 	c.setSelection()
 
 	cursorAtScroll := c.cursorAtScroll()
-	c.buffer().InsertRowAt(cursorAtScroll.Y)
+	pos := cursorAtScroll
+	pos.X = 0
+	c.buffer().Edit(context.Background(), pos, pos, "\n")
 	c.selection.mode = mode
 	c.setSelection()
-	c.scroll.RecalculateWraps()
-	c.MoveStartLine()
+	c.setCursorAfterUpdate(pos)
 }
 
 // InsertLineBelow inserts a row below the current row and moves the cursor down.
@@ -829,8 +830,7 @@ func (c *Cursor) InsertLineBelow() {
 	pos := c.cursorAtScroll()
 	pos.Y++
 	pos.X = 0
-
-	c.buffer().InsertRowAt(pos.Y)
+	c.buffer().Edit(context.Background(), pos, pos, "\n")
 	c.selection.mode = mode
 	c.setSelection()
 	c.setCursorAfterUpdate(pos)

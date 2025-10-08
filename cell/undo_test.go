@@ -78,7 +78,7 @@ func TestUndo(t *testing.T) {
 			b.Insert(term.Coordinates{X: 0, Y: 2}, '\t')
 		}},
 		{"InsertRowAt", func(b *Buffer) {
-			b.InsertRowAt(1)
+			insertRowAt(b, 1)
 		}},
 		{"DeleteCell", func(b *Buffer) {
 			b.DeleteCell(term.Coordinates{X: 4, Y: 2})
@@ -217,7 +217,7 @@ public class Rotor {
 		initialString := buf.String()
 		initialCells := buf.RawCells()
 
-		buf.InsertRowAt(1)
+		insertRowAt(buf, 1)
 		newString := buf.String()
 		newCells := buf.RawCells()
 		assert.Equal(t, "a\n\n", newString)

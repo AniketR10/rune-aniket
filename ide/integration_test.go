@@ -100,7 +100,8 @@ func TestLastEOLUndoFileIntegration(t *testing.T) {
 	assert.Equal(t,
 		[][]term.Cell{{{Ch: 'a', Bytes: 1, Width: 1}}}, initialCells)
 
-	buf.InsertRowAt(1)
+	at := term.Coordinates{Y: 1}
+	buf.Edit(context.Background(), at, at, "\n")
 	newString := buf.String()
 	newCells := buf.RawCells()
 	assert.Equal(t, "a\n", newString)
@@ -114,7 +115,7 @@ func TestLastEOLUndoFileIntegration(t *testing.T) {
 	assert.Equal(t, initialString, newString2)
 	assert.Equal(t, initialCells, newCells2)
 
-	buf.InsertRowAt(1)
+	buf.Edit(context.Background(), at, at, "\n")
 	newString = buf.String()
 	newCells = buf.RawCells()
 	assert.Equal(t, "a\n", newString)

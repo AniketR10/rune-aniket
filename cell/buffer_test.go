@@ -438,7 +438,7 @@ func TestBufferReset(t *testing.T) {
 		b.Subscribe(&sub)
 
 		b.Reset()
-		b.InsertRowAt(0)
+		insertRowAt(b, 0)
 		b.DeleteRow(0)
 		// 1 reset + 1 delete + 1 insert
 		assert.Equal(t, 3, sub.onDidEdit)
@@ -450,7 +450,7 @@ func TestBufferReset(t *testing.T) {
 		sub := testSubscriber{}
 		b.Subscribe(&sub)
 
-		b.InsertRowAt(0)
+		insertRowAt(b, 0)
 		b.Reset()
 
 		ok, _ := b.Undo()
@@ -937,7 +937,7 @@ func TestBufferInsertRowAt(t *testing.T) {
 			b := NewBuffer()
 			b.WriteString(tcase.inStr)
 
-			b.InsertRowAt(tcase.inY)
+			insertRowAt(b, tcase.inY)
 			assert.Equal(t, tcase.wantOut, b.String())
 		})
 	}
@@ -1019,7 +1019,7 @@ func TestBufferInsertRowAtWithUnixView(t *testing.T) {
 			b.WithView(&testView{reader: b.View()})
 			b.WriteString(tcase.inStr)
 
-			b.InsertRowAt(tcase.inY)
+			insertRowAt(b, tcase.inY)
 			assert.Equal(t, tcase.wantOut, b.String())
 		})
 
@@ -1028,7 +1028,7 @@ func TestBufferInsertRowAtWithUnixView(t *testing.T) {
 			b.WithView(&testView{reader: b.View()})
 			b.ReadFrom(strings.NewReader(tcase.inStr))
 
-			b.InsertRowAt(tcase.inY)
+			insertRowAt(b, tcase.inY)
 			assert.Equal(t, tcase.wantOut, b.String())
 		})
 	}
@@ -1060,4 +1060,9 @@ func TestBufferReplaceAll(t *testing.T) {
 		})
 	}
 
+}
+
+func insertRowAt(b *Buffer, y int) {
+	at := term.Coordinates{Y: y}
+	b.editor.Edit(context.Background(), at, at, "\n")
 }

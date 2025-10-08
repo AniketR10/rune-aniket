@@ -126,7 +126,8 @@ func TestCursorSearch(t *testing.T) {
 			2,
 			"NULL",
 			func(t *testing.T, e *Cursor) {
-				e.buffer().InsertRowAt(0)
+				var at term.Coordinates
+				e.buffer().Edit(context.Background(), at, at, "\n")
 				assert.True(t, e.MoveToNextMatch())
 			},
 			term.Coordinates{X: 14, Y: 19},
