@@ -827,13 +827,13 @@ func (c *Cursor) InsertLineBelow() {
 	c.selection.mode = NoSelection
 	c.setSelection()
 
+	buf := c.buffer()
 	pos := c.cursorAtScroll()
-	pos.Y++
-	pos.X = 0
-	c.buffer().Edit(context.Background(), pos, pos, "\n")
+	pos.X = buf.Columns(pos.Y)
+	_, to, _ := buf.Edit(context.Background(), pos, pos, "\n")
 	c.selection.mode = mode
 	c.setSelection()
-	c.setCursorAfterUpdate(pos)
+	c.setCursorAfterUpdate(to)
 }
 
 // Insert is equivalent to InsertContext with context.Background.
