@@ -356,21 +356,33 @@ func (e *Handler) Man() tui.Manual {
 
 // SeekUp satisfies component.Scrollable.
 func (e *Handler) SeekUp() bool {
+	if e.viMode {
+		return e.vi.SeekUp()
+	}
 	return e.comp.ScrollUp(1)
 }
 
 // SeekDown satisfies component.Scrollable.
 func (e *Handler) SeekDown() bool {
+	if e.viMode {
+		return e.vi.SeekDown()
+	}
 	return e.comp.ScrollDown(1)
 }
 
 // SeekOffset satisfies component.Scrollable.
 func (e *Handler) SeekOffset() int {
+	if e.viMode {
+		return e.vi.SeekOffset()
+	}
 	return e.comp.ScrollOffset()
 }
 
 // MaxSeekOffset satisfies component.Scrollable.
 func (e *Handler) MaxSeekOffset() int {
+	if e.viMode {
+		return e.vi.MaxSeekOffset()
+	}
 	return e.comp.MaxScrollOffset()
 }
 

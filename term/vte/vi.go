@@ -158,6 +158,38 @@ func (v *viHandler) Handle(ev term.Event) (exit, handled bool) {
 	return
 }
 
+// SeekUp satisfies component.Scrollable.
+func (v *viHandler) SeekUp() bool {
+	v.sync.mu.Lock()
+	defer v.sync.mu.Unlock()
+
+	return v.sync.vi.SeekUp()
+}
+
+// SeekDown satisfies component.Scrollable.
+func (v *viHandler) SeekDown() bool {
+	v.sync.mu.Lock()
+	defer v.sync.mu.Unlock()
+
+	return v.sync.vi.SeekUp()
+}
+
+// SeekOffset satisfies component.Scrollable.
+func (v *viHandler) SeekOffset() int {
+	v.sync.mu.Lock()
+	defer v.sync.mu.Unlock()
+
+	return v.sync.vi.SeekOffset()
+}
+
+// MaxSeekOffset satisfies component.Scrollable.
+func (v *viHandler) MaxSeekOffset() int {
+	v.sync.mu.Lock()
+	defer v.sync.mu.Unlock()
+
+	return v.sync.vi.MaxSeekOffset()
+}
+
 func (v *viHandler) systemCanDispatchBell(callback func(error)) {
 	const systemCanDispatchBellTimeout = 3 * time.Second
 	ctx := context.Background()
