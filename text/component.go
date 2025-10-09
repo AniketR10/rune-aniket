@@ -45,6 +45,7 @@ import (
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/command"
+	"unstable.build/go-tui/ide/syntax"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/workspace"
 	"unstable.build/go-tui/workspace/walkdir"
@@ -63,6 +64,8 @@ type Workspace interface {
 // Component is an implementation of browser.Browser for file editing.
 // It also satisfies tui.Component, and text.Editor.
 type Component struct {
+	ctx            context.Context
+	cancelCtx      func()
 	comp           browser.Component
 	workspace      Workspace
 	ed             Editor
@@ -124,7 +127,7 @@ func (c *Component) getSwapDir(file workspaceapi.URI) (workspaceapi.URI, error) 
 func (c *Component) newFileBuffer(
 	file, recSwapFile workspaceapi.URI, buf *cell.Buffer,
 	readOnly, forceRecover bool,
-) (ret *editorFlusherCloser, err error) {
+) (handler Handler, ret *editorFlusherCloser, err error) {
 	var fc workspace.FlusherCloser
 	if recSwapFile != (workspaceapi.URI{}) {
 		fc, err = c.workspace.Recover(file, recSwapFile, buf, forceRecover)
@@ -135,10 +138,22 @@ func (c *Component) newFileBuffer(
 			fc, err = c.workspace.Load(file, buf, swapDir, readOnly)
 		}
 	}
-
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
+
+	handler, err = c.ed.Edit(file, buf)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	interrupter := browser.EventPublisherInterrupter(c)
+	locs := syntax.FuncLocationSetter(func(ll textapi.LocationList) error {
+		return c.ed.SetLocationList(handler, textapi.LocationPriorityInfo, "syntax", ll)
+	})
+
+	fc = syntax.WithTree(c.ctx, c.config, interrupter,
+		c.config.PkgManager, locs, file, buf, fc, c.config.Syntax)
 
 	efc := &editorFlusherCloser{
 		parent:    c,
@@ -146,13 +161,14 @@ func (c *Component) newFileBuffer(
 		uri:       file,
 		buf:       buf,
 		lastFlush: buf.String(),
+		h:         handler,
 	}
 
 	// no need to unsubscribe upon Close since the assumption
 	// is that a Component always outlives a cell.Buffer
 	buf.Subscribe(efc)
 
-	return efc, nil
+	return handler, efc, nil
 }
 
 // Init initializes this Component with the given editor and Options.
@@ -162,6 +178,7 @@ func (c *Component) Init(
 	ed Editor, w Workspace, config Config,
 ) error {
 	c.config = config
+	c.ctx, c.cancelCtx = context.WithCancel(context.Background())
 
 	c.comp.Init(c.config.Config)
 	c.comp.Subscribe((*handlerWindowSubscriber)(c))
@@ -426,23 +443,17 @@ func (c *Component) openFileTab(
 	}
 
 	buf := c.newCellBuffer()
-	fc, err := c.newFileBuffer(file, recoveryFilename, buf, readOnly, forceRecover)
+	handler, fc, err := c.newFileBuffer(file, recoveryFilename, buf, readOnly, forceRecover)
 	if err != nil {
 		return nil, err
 	}
-
-	editor, err := c.ed.Edit(file, buf)
-	if err != nil {
-		return nil, err
-	}
-	fc.h = editor
 
 	ext := filepath.Ext(file.Name())
 	icon, ok := c.config.Icons.Extensions[ext]
 	if !ok {
 		icon = c.config.Icons.Default
 	}
-	t = c.newTab(file, icon, file.Name(), editor, fc)
+	t = c.newTab(file, icon, file.Name(), handler, fc)
 	return t, nil
 }
 
@@ -1168,6 +1179,7 @@ func (c *Component) Workspace() Workspace {
 func (c *Component) Close() error {
 	// avoid dispatching close events on flusherCloser callbacks
 	c.edSubscribers = make(map[textapi.EventType][]EventHandler)
+	c.cancelCtx()
 
 	err := c.comp.Close()
 	if err != nil {

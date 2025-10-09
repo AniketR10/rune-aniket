@@ -24,15 +24,19 @@
 package text
 
 import (
+	"context"
 	"fmt"
 	"time"
 
+	"github.com/unstablebuild/blue/document"
+	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/command"
+	"unstable.build/go-tui/ide/syntax"
 	"unstable.build/go-tui/term"
 )
 
@@ -59,6 +63,8 @@ type Config struct {
 	SequencerTimeout        time.Duration
 	DirtyTabAttr            term.Attributes
 	Icons                   IconSet
+	Syntax                  syntax.Config
+	PkgManager              syntax.PkgManager
 
 	EventPublisher func(term.Event) bool
 
@@ -107,6 +113,8 @@ func DefaultConfig() Config {
 		SequencerTimeout:        400 * time.Millisecond,
 		CommandOverlay:          DefaultCommandOverlayConfig(),
 		EventPublisher:          func(term.Event) bool { return false },
+		Syntax:                  syntax.DefaultConfig(),
+		PkgManager:              nopPkgManager{},
 		Icons: IconSet{
 			Extensions: map[string]rune{},
 			Default:    'o',
@@ -140,6 +148,21 @@ func WithRecoveryFile(swapFilePath workspaceapi.URI) Option {
 func WithFile(file workspaceapi.URI) Option {
 	return func(cfg *Config) {
 		cfg.Filepaths = append(cfg.Filepaths, file)
+	}
+}
+
+// WithSyntaxConfig returns an Option that sets syntax configuration.
+func WithSyntaxConfig(syntax syntax.Config) Option {
+	return func(cfg *Config) {
+		cfg.Syntax = syntax
+	}
+}
+
+// WithPackageManager returns an Option that sets the package manager
+// for the syntax tree parser.
+func WithPackageManager(pkg syntax.PkgManager) Option {
+	return func(cfg *Config) {
+		cfg.PkgManager = pkg
 	}
 }
 
@@ -358,4 +381,11 @@ func exploreAlias(
 		}
 	}
 	return false
+}
+
+type nopPkgManager struct {
+}
+
+func (t nopPkgManager) LibDir(ctx context.Context, id string) (iterator.Iterator[string], error) {
+	return nil, document.ErrNotFound
 }

@@ -765,15 +765,37 @@ func TestBufferUnsubscribe(t *testing.T) {
 }
 
 func TestBufferSubscribe(t *testing.T) {
-	buf := NewBuffer()
-	one := &testSubscriber{}
-	two := &testSubscriber{}
-	buf.Subscribe(one)
-	buf.Subscribe(two)
+	t.Run("dispatches events", func(t *testing.T) {
+		buf := NewBuffer()
+		one := &testSubscriber{}
+		two := &testSubscriber{}
+		buf.Subscribe(one)
+		buf.Subscribe(two)
 
-	buf.WriteString("\n")
-	assert.Equal(t, 1, one.onWillEdit)
-	assert.Equal(t, 1, one.onDidEdit)
+		buf.WriteString("\n")
+		assert.Equal(t, 1, one.onWillEdit)
+		assert.Equal(t, 1, one.onDidEdit)
+		assert.Equal(t, 1, two.onWillEdit)
+		assert.Equal(t, 1, two.onDidEdit)
+	})
+	t.Run("dispatches events with custom editor via WithEditor", func(t *testing.T) {
+		buf := NewBuffer()
+
+		one := &testSubscriber{}
+		buf.Subscribe(one)
+
+		ed := &testEditor{}
+		ed.Editor = buf.WithEditor(ed)
+
+		two := &testSubscriber{}
+		buf.Subscribe(two)
+
+		buf.WriteString("\n")
+		assert.Equal(t, 1, one.onWillEdit)
+		assert.Equal(t, 1, one.onDidEdit)
+		assert.Equal(t, 1, two.onWillEdit)
+		assert.Equal(t, 1, two.onDidEdit)
+	})
 }
 
 func TestBufferInsertWithAttr(t *testing.T) {
@@ -1065,4 +1087,16 @@ func TestBufferReplaceAll(t *testing.T) {
 func insertRowAt(b *Buffer, y int) {
 	at := term.Coordinates{Y: y}
 	b.editor.Edit(context.Background(), at, at, "\n")
+}
+
+type testEditor struct {
+	Editor
+	edited int
+}
+
+func (e *testEditor) Edit(ctx context.Context, start, end term.Coordinates, str string) (
+	from, to term.Coordinates, old string,
+) {
+	e.edited++
+	return e.Editor.Edit(ctx, start, end, str)
 }
