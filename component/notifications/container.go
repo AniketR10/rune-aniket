@@ -281,12 +281,16 @@ func (c *Container) UpdateProgress(id, message string, progress, total int64) bo
 		return true
 	}
 
-	comp := ticket.el.Value().(*component.Span).Content().(*notificationComp)
+	span := ticket.el.Value().(*component.Span)
+	comp := span.Content().(*notificationComp)
 	comp.manualProgress = progress
 	comp.manualProgressTotal = total
 	if message != "" {
 		comp.Responsive = newString(comp.cfg, message)
 		comp.Responsive.Resize(comp.width, comp.height)
+		// force responsive list to "dirty" state, so if message
+		// size changed, we re-evaluate sizes.
+		ticket.el.SetValue(span)
 	}
 	return true
 }
