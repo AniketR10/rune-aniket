@@ -823,6 +823,7 @@ func (c *Cursor) InsertLineAbove() {
 
 // InsertLineBelow inserts a row below the current row and moves the cursor down.
 func (c *Cursor) InsertLineBelow() {
+	ctx := context.Background()
 	mode := c.selection.mode
 	c.selection.mode = NoSelection
 	c.setSelection()
@@ -830,7 +831,9 @@ func (c *Cursor) InsertLineBelow() {
 	buf := c.buffer()
 	pos := c.cursorAtScroll()
 	pos.X = buf.Columns(pos.Y)
-	_, to, _ := buf.Edit(context.Background(), pos, pos, "\n")
+	_, to, _ := buf.Edit(ctx, pos, pos, "\n")
+	to = c.addIndentationAt(ctx, to)
+
 	c.selection.mode = mode
 	c.setSelection()
 	c.setCursorAfterUpdate(to)
@@ -849,6 +852,9 @@ func (c *Cursor) InsertContext(ctx context.Context, r rune) {
 
 	insertAt := c.cursorAtScroll()
 	pos := c.buffer().InsertContext(ctx, insertAt, r)
+	if r == '\n' {
+		pos = c.addIndentationAt(ctx, pos)
+	}
 	c.selection.mode = mode
 	c.setSelection()
 	c.setCursorAfterUpdate(pos)
@@ -863,6 +869,9 @@ func (c *Cursor) InsertWithAttr(r rune, attr term.Attributes) {
 
 	insertAt := c.cursorAtScroll()
 	pos := c.buffer().InsertWithAttr(insertAt, r, attr)
+	if r == '\n' {
+		pos = c.addIndentationAt(context.Background(), pos)
+	}
 	c.selection.mode = mode
 	c.setSelection()
 	c.setCursorAfterUpdate(pos)
@@ -1718,4 +1727,28 @@ func (c *Cursor) setCursorAfterUpdate(atScroll term.Coordinates) {
 		res.X++
 	}
 	c.setCursor(res, c.shouldSeek)
+}
+
+func (c *Cursor) addIndentationAt(ctx context.Context, to term.Coordinates) term.Coordinates {
+	buf := c.buffer()
+	svc := c.getIndentService()
+	indentation, ok := svc.IndentationAt(to.Y)
+	if ok {
+		var builder strings.Builder
+		for range indentation {
+			builder.WriteByte('\t')
+		}
+		tabs := builder.String()
+		_, _, _ = buf.Edit(ctx, to, to, tabs)
+		to.X += (indentation * buf.Tabspaces())
+	}
+	return to
+}
+
+func (c *Cursor) getIndentService() indentService {
+	svc, ok := c.buffer().View().(indentService)
+	if ok {
+		return svc
+	}
+	return nopIndentService{}
 }

@@ -57,7 +57,7 @@ func newCaptures() captures {
 	}
 }
 
-func (t *tree) queryIndentCaptures() (ret captures) {
+func (t *Tree) queryIndentCaptures() (ret captures) {
 	ret = newCaptures()
 	root := t.tree.RootNode()
 
@@ -104,7 +104,7 @@ func (t *tree) queryIndentCaptures() (ret captures) {
 	return
 }
 
-func (t *tree) getIndentation(line uint) (ret int) {
+func (t *Tree) getIndentation(line uint) (ret int) {
 	captures := t.queryIndentCaptures()
 	isEmptyLine := t.buf.Columns(int(line)) == 0
 	var node *tree_sitter.Node
@@ -279,7 +279,7 @@ func (t *tree) getIndentation(line uint) (ret int) {
 	return indent
 }
 
-func (t *tree) findDelimiter(node *tree_sitter.Node, del string) (
+func (t *Tree) findDelimiter(node *tree_sitter.Node, del string) (
 	ret *tree_sitter.Node, isLastLine bool,
 ) {
 	cursor := t.tree.Walk()
@@ -297,7 +297,7 @@ func (t *tree) findDelimiter(node *tree_sitter.Node, del string) (
 	return nil, false
 }
 
-func (t *tree) getPreviousNonBlankLine(line uint) (ret uint) {
+func (t *Tree) getPreviousNonBlankLine(line uint) (ret uint) {
 	if line == 0 {
 		return 0
 	}
@@ -310,7 +310,7 @@ func (t *tree) getPreviousNonBlankLine(line uint) (ret uint) {
 	return
 }
 
-func (t *tree) getFirstNodeAtLine(line uint) *tree_sitter.Node {
+func (t *Tree) getFirstNodeAtLine(line uint) *tree_sitter.Node {
 	root := t.tree.RootNode()
 	col := t.getCurrentIndent(line)
 	start := tree_sitter.Point{Row: line, Column: uint(col)}
@@ -318,7 +318,7 @@ func (t *tree) getFirstNodeAtLine(line uint) *tree_sitter.Node {
 	return root.DescendantForPointRange(start, end)
 }
 
-func (t *tree) getLastNodeAtLine(line uint) *tree_sitter.Node {
+func (t *Tree) getLastNodeAtLine(line uint) *tree_sitter.Node {
 	indentCols := t.getCurrentIndent(line)
 	col := max(indentCols + t.buf.Columns(int(line)) -1, 0)
 	root := t.tree.RootNode()
@@ -327,7 +327,7 @@ func (t *tree) getLastNodeAtLine(line uint) *tree_sitter.Node {
 	return root.DescendantForPointRange(start, end)
 }
 
-func (t *tree) getCurrentIndent(line uint) (ret int) {
+func (t *Tree) getCurrentIndent(line uint) (ret int) {
 	cells := t.buf.RawCells()
 	if line >= uint(len(cells)) {
 		return 0

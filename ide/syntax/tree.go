@@ -29,7 +29,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 	"unsafe"
@@ -59,6 +58,7 @@ const (
 
 // WithTree installs a tree parser into the given buffer via cell.Buffer.WithEditor,
 // and wraps the given FlusherCloser to provide re-parse on reload and flush.
+// A cell.Buffer's View method can be used to retrieve this Tree in other contexts.
 func WithTree(
 	ctx context.Context,
 	n browserapi.Notifications, interrupter term.Interrupter,
@@ -66,15 +66,16 @@ func WithTree(
 	uri workspaceapi.URI, buf *cell.Buffer,
 	fc workspace.FlusherCloser,
 	config Config,
-) workspace.FlusherCloser {
+) *Tree {
 	if config.ScheduleNextTick == nil {
 		panic("invalid config")
 	}
-	ret := new(tree)
+	ret := new(Tree)
 	ret.config = config
 	ret.buf = buf
 	ret.uri = uri
 	ret.ced = ret.buf.WithEditor(ret)
+	ret.cview = ret.buf.WithView(ret)
 	ret.n = n
 	ret.interrupter = interrupter
 	ret.pkg = pkg
@@ -87,50 +88,8 @@ func WithTree(
 	return ret
 }
 
-func (t *tree) Edit(ctx context.Context, start, end term.Coordinates, str string) (
-	from, to term.Coordinates, old string,
-) {
-	from, to, old = t.ced.Edit(ctx, start, end, str)
-	t.incrementalParse(start, end, from, to, str)
-	if start == end && str == "\n" && t.indents != nil {
-		var builder strings.Builder
-		indentation := t.getIndentation(uint(to.Y))
-		for range indentation {
-			builder.WriteByte('\t')
-		}
-		indents := builder.String()
-		t.log(log.TraceLevel, "indentation at line %d should be: %d", to.Y, indentation)
-		ifrom, ito, _ := t.ced.Edit(ctx, to, to, indents)
-		t.incrementalParse(to, to, ifrom, ito, indents)
-		to.X += (indentation * t.buf.Tabspaces())
-	}
-	return
-}
-
-func (t *tree) Flush() error {
-	ret := t.fc.Flush()
-	t.reparse()
-	return ret
-}
-
-func (t *tree) Reload() error {
-	ret := t.fc.Reload()
-	t.reparse()
-	return ret
-}
-
-func (t *tree) ForceFlush() error {
-	ret := t.fc.ForceFlush()
-	t.reparse()
-	return ret
-}
-
-func (t *tree) LastFlush() time.Time {
-	return t.fc.LastFlush()
-}
-
-// tree represents a file's syntax tree powered by tree-sitter.
-type tree struct {
+// Tree represents a file's syntax tree powered by tree-sitter.
+type Tree struct {
 	n           browserapi.Notifications
 	interrupter term.Interrupter
 	pkg         PkgManager
@@ -140,6 +99,7 @@ type tree struct {
 	uri         workspaceapi.URI
 	buf         *cell.Buffer
 	ced         cell.Editor
+	cview       cell.View
 
 	ready      bool
 	closed     bool
@@ -153,7 +113,92 @@ type tree struct {
 	indents    *tree_sitter.Query
 }
 
-func (t *tree) downloadFiles(ctx context.Context) {
+// IndentationAt returns the indentation that should correspond to a node placed
+// at the given line.
+func (t *Tree) IndentationAt(line int) (int, bool) {
+	if line >= t.buf.Rows() || line < 0 {
+		return 0, false
+	}
+	return t.getIndentation(uint(line)), true
+}
+
+// Close closes all resources associated with this Tree.
+func (t *Tree) Close() (ret error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	if t.closed {
+		return nil
+	}
+	t.closed = true
+	if err := t.fc.Close(); err != nil {
+		ret = multierror.Append(ret, err)
+	}
+	if !t.ready {
+		return nil
+	}
+	t.tree.Close()
+	t.parser.Close()
+	t.highlights.Close()
+	if err := purego.Dlclose(t.lib); err != nil {
+		ret = multierror.Append(ret, err)
+	}
+	return
+}
+
+type internalTree = Tree
+
+func (t *internalTree) Rows() int {
+	return t.cview.Rows()
+}
+
+func (t *internalTree) Columns(row int) int {
+	return t.cview.Columns(row)
+}
+
+func (t *internalTree) Cell(at term.Coordinates) (term.Cell, bool) {
+	return t.cview.Cell(at)
+}
+
+func (t *internalTree) RawCells() [][]term.Cell {
+	return t.cview.RawCells()
+}
+
+func (t *internalTree) String() string {
+	return t.cview.String()
+}
+
+func (t *internalTree) Edit(ctx context.Context, start, end term.Coordinates, str string) (
+	from, to term.Coordinates, old string,
+) {
+	from, to, old = t.ced.Edit(ctx, start, end, str)
+	t.incrementalParse(start, end, from, to, str)
+	return
+}
+
+func (t *internalTree) Flush() error {
+	ret := t.fc.Flush()
+	t.reparse()
+	return ret
+}
+
+func (t *internalTree) Reload() error {
+	ret := t.fc.Reload()
+	t.reparse()
+	return ret
+}
+
+func (t *internalTree) ForceFlush() error {
+	ret := t.fc.ForceFlush()
+	t.reparse()
+	return ret
+}
+
+func (t *internalTree) LastFlush() time.Time {
+	return t.fc.LastFlush()
+}
+
+func (t *Tree) downloadFiles(ctx context.Context) {
 	ext := filepath.Ext(t.uri.String())
 	if ext == "" {
 		t.log(log.DebugLevel, "aborting syntax parsing: file does not have an extension")
@@ -192,7 +237,7 @@ func (t *tree) downloadFiles(ctx context.Context) {
 	}
 }
 
-func (t *tree) initParserFromFiles(
+func (t *Tree) initParserFromFiles(
 	ctx context.Context, ext, langID string, allFiles []string,
 ) {
 	var langFile, highlightsFile, indentsFile string
@@ -221,7 +266,7 @@ func (t *tree) initParserFromFiles(
 	}
 }
 
-func (t *tree) initParser(
+func (t *Tree) initParser(
 	ctx context.Context, langID,
 	langfile, highlightsfile, indentsFile string,
 ) error {
@@ -322,7 +367,7 @@ func (t *tree) initParser(
 	return nil
 }
 
-func (t *tree) notifyNotAvail(ext string) {
+func (t *Tree) notifyNotAvail(ext string) {
 	_, _ = t.n.Notify(notifications.LevelWarn,
 		"syntax tree parser for language (%q) is not available", ext)
 	if err := t.interrupter.Interrupt(context.Background()); err != nil {
@@ -330,7 +375,7 @@ func (t *tree) notifyNotAvail(ext string) {
 	}
 }
 
-func (t *tree) reparse() {
+func (t *Tree) reparse() {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 	if !t.ready {
@@ -339,7 +384,7 @@ func (t *tree) reparse() {
 	t.doReparse()
 }
 
-func (t *tree) doReparse() {
+func (t *Tree) doReparse() {
 	t.log(log.TraceLevel, "reparsing tree after flush")
 	t.tree.Close() // dealloc previous tree
 	t.persistCells()
@@ -349,7 +394,7 @@ func (t *tree) doReparse() {
 	}
 }
 
-func (t *tree) incrementalParse(start, end, from, to term.Coordinates, content string) {
+func (t *Tree) incrementalParse(start, end, from, to term.Coordinates, content string) {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 	if !t.ready {
@@ -379,13 +424,13 @@ func (t *tree) incrementalParse(start, end, from, to term.Coordinates, content s
 	}
 }
 
-func (t *tree) persistCells() {
+func (t *Tree) persistCells() {
 	t.cells = t.buf.RawCells()
 	t.cells = cell.CloneCells(t.cells)
 	t.content = []byte(cell.CellsToString(t.cells))
 }
 
-func (t *tree) highlight() error {
+func (t *Tree) highlight() error {
 	if t.highlights == nil {
 		return nil
 	}
@@ -400,7 +445,7 @@ func (t *tree) highlight() error {
 	return nil
 }
 
-func (t *tree) getHighlights(cells [][]term.Cell, content []byte) []textapi.Location {
+func (t *Tree) getHighlights(cells [][]term.Cell, content []byte) []textapi.Location {
 	root := t.tree.RootNode()
 
 	cur := tree_sitter.NewQueryCursor()
@@ -442,7 +487,7 @@ func (t *tree) getHighlights(cells [][]term.Cell, content []byte) []textapi.Loca
 	return locations
 }
 
-func (t *tree) log(level log.Level, msg string, args ...any) {
+func (t *Tree) log(level log.Level, msg string, args ...any) {
 	if !log.IsLevelEnabled(level) {
 		return
 	}
@@ -450,28 +495,6 @@ func (t *tree) log(level log.Level, msg string, args ...any) {
 		logging.KeyClass: "syntax.tree",
 		"uri":            t.uri,
 	}).Logf(level, msg, args...)
-}
-
-func (t *tree) Close() (ret error) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	if t.closed {
-		return nil
-	}
-	t.closed = true
-	if err := t.fc.Close(); err != nil {
-		ret = multierror.Append(ret, err)
-	}
-	if !t.ready {
-		return nil
-	}
-	t.tree.Close()
-	t.parser.Close()
-	t.highlights.Close()
-	if err := purego.Dlclose(t.lib); err != nil {
-		ret = multierror.Append(ret, err)
-	}
-	return
 }
 
 func convertRangeToCoordinates(cells [][]term.Cell, n tree_sitter.Range) (
