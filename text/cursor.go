@@ -808,6 +808,7 @@ func (c *Cursor) MoveToMatchingRune() bool {
 
 // InsertLineAbove inserts a row above the current row and moves the cursor up.
 func (c *Cursor) InsertLineAbove() {
+	ctx := context.Background()
 	mode := c.selection.mode
 	c.selection.mode = NoSelection
 	c.setSelection()
@@ -815,7 +816,8 @@ func (c *Cursor) InsertLineAbove() {
 	cursorAtScroll := c.cursorAtScroll()
 	pos := cursorAtScroll
 	pos.X = 0
-	c.buffer().Edit(context.Background(), pos, pos, "\n")
+	c.buffer().Edit(ctx, pos, pos, "\n")
+	pos = c.addIndentationAt(ctx, pos)
 	c.selection.mode = mode
 	c.setSelection()
 	c.setCursorAfterUpdate(pos)
