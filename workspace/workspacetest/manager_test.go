@@ -201,7 +201,7 @@ func TestManager(t *testing.T) {
 			assert.Zero(t, value)
 
 			called = true
-			return &testScheme{}, nil
+			return &NopScheme{}, nil
 		})
 		require.NoError(t, err)
 

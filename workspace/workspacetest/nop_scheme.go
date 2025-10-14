@@ -26,10 +26,12 @@ package workspacetest
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 
 	"unstable.build/go-tui/api/config"
 	"unstable.build/go-tui/api/schemeapi"
@@ -39,110 +41,218 @@ import (
 // NewNopScheme returns a scheme that does nothing and workspace.Executor API panics.
 func NewNopScheme(scheme string) schemeapi.SchemeFunc {
 	return func(ctx context.Context, cfg config.Config, uri workspaceapi.URI) (schemeapi.Scheme, error) {
-		scheme := &testScheme{scheme: scheme}
-		scheme.openFunc = func(name string, flag int, perm os.FileMode) (
+		scheme := &NopScheme{scheme: scheme}
+		scheme.OpenFunc = func(name string, flag int, perm os.FileMode) (
 			workspaceapi.File, *workspaceapi.Error,
 		) {
 			return &File{}, nil
 		}
-		scheme.removeFunc = func(name string) error {
+		scheme.RemoveFunc = func(name string) error {
 			return nil
 		}
-		scheme.renameFunc = func(oldName, newName string) error {
+		scheme.RenameFunc = func(oldName, newName string) error {
 			return nil
 		}
-		scheme.statFunc = func(name string) (os.FileInfo, error) {
+		scheme.StatFunc = func(name string) (os.FileInfo, error) {
 			// best effort
 			return FileInfo{FileIsDir: !strings.Contains(name, ".")}, nil
 		}
-		scheme.lstatFunc = func(name string) (os.FileInfo, error) {
+		scheme.LstatFunc = func(name string) (os.FileInfo, error) {
 			return FileInfo{}, nil
+		}
+		scheme.NewPtyFunc = func(ctx context.Context) (workspaceapi.Pty, error) {
+			return workspaceapi.Pty{
+				Master: nopFile{},
+				Slave:  nopFile{},
+			}, nil
+		}
+		scheme.StartCommandFunc = func(context.Context, workspaceapi.Cmd) (workspaceapi.Pid, error) {
+			return 0, nil
 		}
 		return scheme, nil
 	}
 }
 
-type testScheme struct {
-	scheme     string
-	openFunc   func(name string, flag int, perm os.FileMode) (workspaceapi.File, *workspaceapi.Error)
-	removeFunc func(name string) error
-	renameFunc func(oldName, newName string) error
-	statFunc   func(name string) (os.FileInfo, error)
-	lstatFunc  func(name string) (os.FileInfo, error)
+// NopScheme is a scheme for testing.
+type NopScheme struct {
+	scheme           string
+	OpenFunc         func(name string, flag int, perm os.FileMode) (workspaceapi.File, *workspaceapi.Error)
+	RemoveFunc       func(name string) error
+	RenameFunc       func(oldName, newName string) error
+	StatFunc         func(name string) (os.FileInfo, error)
+	LstatFunc        func(name string) (os.FileInfo, error)
+	NewPtyFunc       func(context.Context) (workspaceapi.Pty, error)
+	StartCommandFunc func(context.Context, workspaceapi.Cmd) (workspaceapi.Pid, error)
 }
 
-func (t *testScheme) Command(ctx context.Context, name string, arg ...string) (workspaceapi.Pid, error) {
-	panic("unimplemented")
+// Command satisfies schemeapi.Scheme
+func (t *NopScheme) Command(ctx context.Context, name string, arg ...string) (workspaceapi.Pid, error) {
+	return t.StartCommandFunc(ctx, workspaceapi.Cmd{Path: name, Args: arg})
 }
-func (t *testScheme) StartCommand(context.Context, workspaceapi.Cmd) (
+
+// StartCommand satisfies schemeapi.Scheme
+func (t *NopScheme) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (
 	workspaceapi.Pid, error,
 ) {
-	panic("unimplemented")
-}
-func (t *testScheme) Signal(workspaceapi.Pid, syscall.Signal) error {
-	panic("unimplemented")
+	return t.StartCommandFunc(ctx, cmd)
 }
 
-func (t *testScheme) NewFile(fd uintptr, name string) workspaceapi.File {
-	panic("unimplemented")
+// Signal satisfies schemeapi.Scheme
+func (t *NopScheme) Signal(workspaceapi.Pid, syscall.Signal) error {
+	return nil
 }
 
-func (t *testScheme) URI(path string) (workspaceapi.URI, error) {
+// NewFile satisfies schemeapi.Scheme
+func (t *NopScheme) NewFile(fd uintptr, name string) workspaceapi.File {
+	return nopFile{}
+}
+
+// URI satisfies schemeapi.Scheme
+func (t *NopScheme) URI(path string) (workspaceapi.URI, error) {
 	return workspaceapi.ParseURI(fmt.Sprintf("%s://%s", t.scheme, filepath.Join("/", path)))
 }
 
-func (t *testScheme) Open(path string, flag int, perm os.FileMode) (workspaceapi.File, *workspaceapi.Error) {
-	return t.openFunc(path, flag, perm)
+// Open satisfies schemeapi.Scheme
+func (t *NopScheme) Open(path string, flag int, perm os.FileMode) (workspaceapi.File, *workspaceapi.Error) {
+	return t.OpenFunc(path, flag, perm)
 }
 
-func (t *testScheme) Remove(path string) error {
-	return t.removeFunc(path)
+// Remove satisfies schemeapi.Scheme
+func (t *NopScheme) Remove(path string) error {
+	return t.RemoveFunc(path)
 }
 
-func (t *testScheme) Rename(old, new string) error {
-	return t.renameFunc(old, new)
+// Rename satisfies schemeapi.Scheme
+func (t *NopScheme) Rename(old, new string) error {
+	return t.RenameFunc(old, new)
 }
 
-func (t *testScheme) Stat(path string) (os.FileInfo, error) {
-	return t.statFunc(path)
+// Stat satisfies schemeapi.Scheme
+func (t *NopScheme) Stat(path string) (os.FileInfo, error) {
+	return t.StatFunc(path)
 }
 
-func (t *testScheme) NewPty(context.Context) (ret workspaceapi.Pty, err error) {
-	panic("unimplemented")
+// NewPty satisfies schemeapi.Scheme
+func (t *NopScheme) NewPty(ctx context.Context) (ret workspaceapi.Pty, err error) {
+	return t.NewPtyFunc(ctx)
 }
 
-func (t *testScheme) SetPtySize(p workspaceapi.Pty, width, height int) (err error) {
-	panic("unimplemented")
+// SetPtySize satisfies schemeapi.Scheme
+func (t *NopScheme) SetPtySize(p workspaceapi.Pty, width, height int) (err error) {
+	return nil
 }
 
-func (t *testScheme) Lstat(path string) (os.FileInfo, error) {
-	return t.lstatFunc(path)
+// Lstat satisfies schemeapi.Scheme
+func (t *NopScheme) Lstat(path string) (os.FileInfo, error) {
+	return t.LstatFunc(path)
 }
 
-func (t *testScheme) ReadLink(path string) (string, error) {
+// ReadLink satisfies schemeapi.Scheme
+func (t *NopScheme) ReadLink(path string) (string, error) {
 	return path, nil
 }
 
-func (t *testScheme) ReadDir(string) (
+// ReadDir satisfies schemeapi.Scheme
+func (t *NopScheme) ReadDir(string) (
 	[]os.DirEntry, error,
 ) {
 	panic("unimplemented")
 }
 
-func (t *testScheme) MkdirAll(path string, perm os.FileMode) error {
+// MkdirAll satisfies schemeapi.Scheme
+func (t *NopScheme) MkdirAll(path string, perm os.FileMode) error {
 	panic("unimplemented")
 }
 
-func (t *testScheme) Watch(
+// Watch satisfies schemeapi.Scheme
+func (t *NopScheme) Watch(
 	path string, c chan<- workspaceapi.EventInfo, events ...workspaceapi.Event,
 ) (int, error) {
 	panic("unimplemented")
 }
 
-func (t *testScheme) StopWatch(ID int) error {
+// StopWatch satisfies schemeapi.Scheme
+func (t *NopScheme) StopWatch(ID int) error {
 	panic("unimplemented")
 }
 
-func (t *testScheme) Close() error {
+// Close satisfies schemeapi.Scheme
+func (t *NopScheme) Close() error {
+	return nil
+}
+
+// NewFile returns a workspaceapi.File that does nothing.
+func NewFile() workspaceapi.File {
+	return nopFile{}
+}
+
+type nopFile struct {
+}
+
+func (t nopFile) Name() string {
+	return ""
+}
+
+func (t nopFile) Stat() (os.FileInfo, error) {
+	return nopFileInfo{}, nil
+}
+
+func (t nopFile) Sync() error {
+	return nil
+}
+
+func (t nopFile) Fd() uintptr {
+	return 0
+}
+
+func (t nopFile) Truncate(size int64) error {
+	return nil
+}
+
+func (t nopFile) Seek(x int64, y int) (int64, error) {
+	return 0, nil
+}
+
+func (t nopFile) Read(b []byte) (int, error) {
+	return 0, io.EOF
+}
+
+func (t nopFile) Write(b []byte) (int, error) {
+	return 0, nil
+}
+
+func (t nopFile) Close() error {
+	return nil
+}
+
+// implements os.FileInfo
+type nopFileInfo struct {
+	name    string
+	isDir   bool
+	modTime time.Time
+	size    int64
+	mode    os.FileMode
+}
+
+func (t nopFileInfo) Name() string {
+	return t.name
+}
+func (t nopFileInfo) Size() int64 {
+	return t.size
+}
+
+func (t nopFileInfo) Mode() os.FileMode {
+	return t.mode
+}
+
+func (t nopFileInfo) ModTime() time.Time {
+	return t.modTime
+}
+
+func (t nopFileInfo) IsDir() bool {
+	return t.isDir
+}
+
+func (t nopFileInfo) Sys() any {
 	return nil
 }

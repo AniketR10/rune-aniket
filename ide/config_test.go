@@ -222,6 +222,7 @@ terminal:
     shell: sh
     modal: true
     dynamic_tab_name: true
+    initial_reservoir: 0
     attr:
         fg: white
         bg: yellow
@@ -263,6 +264,9 @@ func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
 	assert.Equal(t, term.Attributes{}, cfg.workspaceWallpaperAttr())
 	assert.Equal(t, term.Attributes{}, cfg.workspaceWallpaperBackgroundAttr())
 	selectAttr := term.Attributes{Attrs: tcell.AttrReverse}
+
+	reservoir := cfg.initialTerminalCapacity()
+	assert.Equal(t, 1, reservoir)
 
 	vteConfig := cfg.terminalConfig()
 	assert.NotNil(t, vteConfig.RingBell)
@@ -449,6 +453,9 @@ func TestConfigSetting(t *testing.T) {
 	assert.Equal(t, term.Attributes{Fg: tcell.ColorWhite}, cfg.nonFocusTabAttr())
 	assert.Equal(t, term.Attributes{Fg: tcell.ColorYellow, Bg: tcell.ColorWhite}, cfg.workspaceWallpaperAttr())
 	assert.Equal(t, term.Attributes{Bg: tcell.ColorWhite}, cfg.workspaceWallpaperBackgroundAttr())
+
+	reservoir := cfg.initialTerminalCapacity()
+	assert.Equal(t, 0, reservoir)
 
 	vteConfig := cfg.terminalConfig()
 	assert.NotNil(t, vteConfig.ScheduleNextTick)

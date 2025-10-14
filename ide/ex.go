@@ -53,6 +53,7 @@ import (
 	"unstable.build/go-tui/ide/plugin"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/term/vte"
+	"unstable.build/go-tui/term/vte/vtereservoir"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/workspace"
 )
@@ -68,16 +69,6 @@ var (
 	errInvalidTab          = errors.New("expected exactly one argument with the tab position")
 )
 
-type vteHandler interface {
-	browserapi.Handler
-	component.Scrollable
-	OnFocusChange(bool)
-	SetDefaultAttributes(term.Attributes)
-	IsComplete() bool
-	URI() workspaceapi.URI
-	Title() string
-}
-
 type pluginHandler interface {
 	browserapi.Floating
 	OnFocusChange(bool)
@@ -91,9 +82,10 @@ type ex struct {
 	clip                 clipboard.Register
 	ed                   text.Editor
 	storage              document.Service
+	reservoir            *vtereservoir.Facility
 	notifications        notifier
 	emulatorConfig       vte.Config
-	newEmulatorHandler   func(string, vte.Config) (vteHandler, error)
+	newEmulatorHandler   func(string) (vtereservoir.VTE, error)
 	newPluginHandler     func(...string) (pluginHandler, error)
 	workspace            workspace.Workspace
 	tasks                *idetask.Manager
@@ -117,7 +109,7 @@ type ex struct {
 	width            int
 	isPromptDispatch bool
 
-	companionTerminal    vteHandler
+	companionTerminal    vtereservoir.VTE
 	companionTerminalWin browser.Window
 }
 
@@ -127,12 +119,13 @@ func newEx(
 	notifications notifier,
 	emulatorConfig vte.Config,
 	publishEvent func(term.Event) bool,
+	initialVTECapacity int,
 	clip clipboard.Register,
 	opts ...text.Option,
 ) (e *ex, err error) {
 	e = new(ex)
 	err = e.init(ed, m, storage, notifications,
-		emulatorConfig, publishEvent, clip, opts...)
+		emulatorConfig, publishEvent, initialVTECapacity, clip, opts...)
 	if err != nil {
 		return
 	}
@@ -148,6 +141,7 @@ func (e *ex) init(
 	notifications notifier,
 	emulatorConfig vte.Config,
 	publishEvent func(term.Event) bool,
+	initialVTECapacity int,
 	clip clipboard.Register,
 	opts ...text.Option,
 ) (err error) {
@@ -161,9 +155,17 @@ func (e *ex) init(
 		return
 	}
 	e.comp.SubscribeWindow((*windowSubscriber)(e))
-	e.newEmulatorHandler = func(initialCmd string, cfg vte.Config) (vteHandler, error) {
+	if initialVTECapacity != 0 {
+		e.reservoir = vtereservoir.New(e.Browser(), e.Browser(),
+			e.workspace, e.workspace, e.Browser(), e.emulatorConfig, initialVTECapacity)
+	}
+	e.newEmulatorHandler = func(initialCmd string) (vtereservoir.VTE, error) {
+		if initialCmd == "" && e.reservoir != nil {
+			e.log(log.TraceLevel, "getting vte instance from reservoir")
+			return e.reservoir.Get()
+		}
 		v, err := vte.NewHandler(e.Browser(), e.Browser(),
-			e.workspace, e.workspace, e.Browser(), cfg, initialCmd)
+			e.workspace, e.workspace, e.Browser(), e.emulatorConfig, initialCmd)
 		if err != nil {
 			return nil, err
 		}
@@ -905,7 +907,7 @@ func (e *ex) defaultcolors(args ...string) error {
 	if ok {
 		return e.comp.SetDefaultAttributes(th, attrs)
 	}
-	emh, ok := t.Handler().(vteHandler)
+	emh, ok := t.Handler().(vtereservoir.VTE)
 	if ok {
 		emh.SetDefaultAttributes(attrs)
 		return nil
@@ -1055,10 +1057,7 @@ func (e *ex) toggleCompanionTerminal() error {
 			_ = e.companionTerminal.Close()
 		}
 		var err error
-		cfg := e.emulatorConfig
-		cfg.WidthHint = width
-		cfg.HeightHint = width
-		e.companionTerminal, err = e.newEmulatorHandler("", cfg)
+		e.companionTerminal, err = e.newEmulatorHandler("")
 		if err != nil {
 			return err
 		}
@@ -1084,8 +1083,7 @@ func (e *ex) terminalnewtab(args ...string) error {
 	if len(args) > 0 {
 		initialCmd = args[0]
 	}
-	cfg := e.emulatorConfig
-	h, err := e.newEmulatorHandler(initialCmd, cfg)
+	h, err := e.newEmulatorHandler(initialCmd)
 	if err != nil {
 		return err
 	}
@@ -1117,8 +1115,7 @@ func (e *ex) terminalnew(args ...string) error {
 	if len(args) > 0 {
 		initialCmd = args[0]
 	}
-	cfg := e.emulatorConfig
-	h, err := e.newEmulatorHandler(initialCmd, cfg)
+	h, err := e.newEmulatorHandler(initialCmd)
 	if err != nil {
 		return err
 	}
@@ -1136,13 +1133,13 @@ func (e *ex) terminalneworsplit(args ...string) error {
 	if len(args) > 0 {
 		initialCmd = args[0]
 	}
-	t, err := e.newEmulatorHandler(initialCmd, e.emulatorConfig)
+	t, err := e.newEmulatorHandler(initialCmd)
 	if err != nil {
 		return err
 	}
 	win := e.invokeWindow()
 	content, _ := win.Content()
-	_, vok := content.(vteHandler)
+	_, vok := content.(vtereservoir.VTE)
 	_, tok := content.(*browser.Tab)
 	if !vok && !tok {
 		err = win.SetContent(t)
@@ -1477,6 +1474,9 @@ func (e *ex) Resize(width, height int) {
 	e.height = height
 	e.width = width
 	e.tasks.SetMaxWidthHeight(width, height)
+	if e.reservoir != nil {
+		e.reservoir.Resize(width, height)
+	}
 	e.comp.Resize(width, height)
 	// if a top bar is added we don't reposition
 	// command window until the next resize, but that's
@@ -1531,6 +1531,11 @@ func (e *ex) Close() (ret error) {
 	e.sequencer.Reset()
 	if err := e.comp.Close(); err != nil {
 		ret = multierror.Append(ret, err)
+	}
+	if e.reservoir != nil {
+		if err := e.reservoir.Close(); err != nil {
+			ret = multierror.Append(ret, err)
+		}
 	}
 	if e.cancelPartialReissue != nil {
 		e.cancelPartialReissue()
@@ -1633,7 +1638,7 @@ func onFocusChangeHandler(handler tui.Handler, isInFocus bool) {
 }
 
 func onFocusChangeTab(t *browser.Tab, isInFocus bool) {
-	emulator, ok := t.Handler().(vteHandler)
+	emulator, ok := t.Handler().(vtereservoir.VTE)
 	if !ok {
 		return
 	}
@@ -1642,7 +1647,7 @@ func onFocusChangeTab(t *browser.Tab, isInFocus bool) {
 
 var _ component.Scrollable = vteAdapter{}
 
-// adapts vte.Handler to vteHandler
+// adapts vte.Handler to vtereservoir.VTE
 type vteAdapter struct {
 	*vte.Handler
 }
@@ -1663,6 +1668,10 @@ func (v vteAdapter) Title() string {
 	return v.Component().Title()
 }
 
+func (v vteAdapter) UsedAlternateBuffer() bool {
+	return v.Component().UsedAlternateBuffer()
+}
+
 var _ component.Scrollable = companionTerminalHandler{}
 
 // Aids in ensure that Close is not called when window is closed:
@@ -1671,7 +1680,7 @@ var _ component.Scrollable = companionTerminalHandler{}
 // change to deliver on focus calls to underlying vte.Handler
 type companionTerminalHandler struct {
 	browser.Floating
-	vth vteHandler
+	vth vtereservoir.VTE
 }
 
 // SeekUp satisfies component.Scrollable.

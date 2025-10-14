@@ -97,6 +97,7 @@ type workspaceManagerHandler struct {
 	workspacesIcon          rune
 	externalCommands        map[string]externalCommand
 	externalEvents          []externalEvents
+	initialVTECapacity      int
 	// NOTE: if user changes frame config, then mouse calculations
 	// for resize might be off.
 	frame        bool
@@ -161,6 +162,7 @@ func (h *workspaceManagerHandler) init(
 	tabsClickCallback func(int) bool,
 	releaseManager release.Manager,
 	shaderRunner *shaderRunner,
+	initialVTECapacity int,
 ) (err error) {
 	ctx := context.Background()
 
@@ -179,6 +181,7 @@ func (h *workspaceManagerHandler) init(
 	h.extensionRunner = extensionRunner
 	h.builtinExtensions = builtinExtensions
 	h.storage = localstorage.New(ctx, sixDir, doctoml.Marshaler())
+	h.initialVTECapacity = initialVTECapacity
 
 	h.workspacesIcon = workspacesIcon
 	h.tabBarOffset = tabBarOffset
@@ -200,7 +203,7 @@ func (h *workspaceManagerHandler) init(
 	h.setReleaseManager(releaseManager)
 
 	h.empty, err = newEx(ed, homeWorkspace, h.storage, notifications,
-		cfg.terminalConfig(), h.publishEvent, cfg.clipboard(),
+		cfg.terminalConfig(), h.publishEvent, h.initialVTECapacity, cfg.clipboard(),
 		globalOpts...)
 	if err != nil {
 		return fmt.Errorf("new ex: %w", err)
@@ -591,7 +594,8 @@ func (h *workspaceManagerHandler) addWorkspace(
 
 	multicwd := workspace.Multi(ctx, h.workspace, cwd, uri)
 	ex, err := newEx(ed, multicwd, h.storage, h.notifications.notifier,
-		cfg.terminalConfig(), h.publishEvent, cfg.clipboard(), textOpts...)
+		cfg.terminalConfig(), h.publishEvent, h.initialVTECapacity,
+		cfg.clipboard(), textOpts...)
 	if err != nil {
 		cancel()
 		return fmt.Errorf("new ex: %w", err)

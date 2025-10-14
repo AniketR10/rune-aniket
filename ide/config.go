@@ -1567,6 +1567,22 @@ func (c ideConfig) terminalShell() (ret string) {
 	}
 	return ret
 }
+
+func (c ideConfig) initialTerminalCapacity() (ret int) {
+	ret = 1
+	cfg, ok := c.terminal()
+	if !ok {
+		return
+	}
+	res, err := cfg.GetInt("initial_reservoir")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["terminal.initial_reservoir"] = err
+		}
+		return
+	}
+	return res
+}
 func (c ideConfig) terminalBool(key string) (ret bool) {
 	cfg, ok := c.terminal()
 	if !ok {

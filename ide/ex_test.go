@@ -58,9 +58,11 @@ import (
 	"unstable.build/go-tui/handler/handlertest"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/term/vte"
+	"unstable.build/go-tui/term/vte/vtereservoir"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/text/texttest"
 	"unstable.build/go-tui/workspace"
+	"unstable.build/go-tui/workspace/workspacetest"
 )
 
 // handlertest.TestHandlerSequence maps ':' characters to the following event
@@ -125,11 +127,11 @@ func (w *testLoader) Close() error {
 }
 
 func (w *testLoader) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (workspaceapi.Pid, error) {
-	panic("unimplemented")
+	return 0, nil
 }
 
 func (w *testLoader) Signal(workspaceapi.Pid, syscall.Signal) error {
-	panic("unimplemented")
+	return nil
 }
 
 func (w *testLoader) Load(
@@ -165,11 +167,14 @@ func (w *testLoader) Open(
 	panic("unimplemented")
 }
 func (w *testLoader) NewPty(context.Context) (workspaceapi.Pty, error) {
-	panic("unimplemented")
+	return workspaceapi.Pty{
+		Master: workspacetest.NewFile(),
+		Slave:  workspacetest.NewFile(),
+	}, nil
 }
 
 func (w *testLoader) SetPtySize(p workspaceapi.Pty, width, height int) error {
-	panic("unimplemented")
+	return nil
 }
 
 func (w *testLoader) NewFile(fd uintptr, name string) workspaceapi.File {
@@ -982,7 +987,7 @@ func TestExKeySequence(t *testing.T) {
 				defer mu.Unlock()
 				ex.Handle(ev)
 				return true
-			}, clipboard.NewInMemory(), opts...))
+			}, 0, clipboard.NewInMemory(), opts...))
 		ex.subscribeCommands()
 		b := testEx{Component: n, ex: ex}
 		closeFns = append(closeFns, func() error {
@@ -1167,7 +1172,7 @@ func newExForTestingTerminal(
 	opts = append(opts, defCommandKeyBindings()...)
 	require.NoError(t, ex.init(ed, workspace, svc,
 		container, emulatorCfg, publishEvent,
-		clipboard.NewInMemory(), opts...))
+		0, clipboard.NewInMemory(), opts...))
 	ex.subscribeCommands()
 	return testEx{Component: container, ex: ex}
 }
@@ -1193,13 +1198,13 @@ func newExForTestingWithWorkspace(
 	finalOpts = append(finalOpts, text.WithNotifications(notifications))
 
 	require.NoError(t, ex.init(ed, workspace, svc,
-		container, emulatorCfg, publishEvent, clip, finalOpts...))
+		container, emulatorCfg, publishEvent, 0, clip, finalOpts...))
 	ex.subscribeCommands()
-	ex.newEmulatorHandler = func(initialCmd string, cfg vte.Config) (vteHandler, error) {
-		return newTestVteWithConfig(initialCmd, cfg), nil
+	ex.newEmulatorHandler = func(initialCmd string) (vtereservoir.VTE, error) {
+		return newTestVteWithConfig(initialCmd), nil
 	}
 	ex.newPluginHandler = func(args ...string) (pluginHandler, error) {
-		return newTestVteWithConfig(strings.Join(args, " "), emulatorCfg), nil
+		return newTestVteWithConfig(strings.Join(args, " ")), nil
 	}
 	return testEx{Component: container, ex: ex}
 }
@@ -2114,16 +2119,8 @@ func TestTerminalOnFocus(t *testing.T) {
 		ex := newExForTestingWithWorkspace(t, workspace.NewSchemeWorkspace(uri, scheme),
 			texttest.NopEditor(), testConfig, nopPublishEvent, clipboard.NewInMemory())
 		tvte := newTestVte()
-		ex.newEmulatorHandler = func(initialCmd string, cfg vte.Config) (vteHandler, error) {
+		ex.newEmulatorHandler = func(initialCmd string) (vtereservoir.VTE, error) {
 			assert.Equal(t, "echo bla", initialCmd)
-			assert.NotNil(t, cfg.ScheduleNextTick)
-			assert.NotNil(t, cfg.RingBell)
-			cfg.RingBell = nil
-			cfg.ScheduleNextTick = nil
-			expected := testConfig
-			expected.RingBell = nil
-			expected.ScheduleNextTick = nil
-			assert.Equal(t, expected, cfg)
 			return tvte, nil
 		}
 		t.Cleanup(func() { _ = ex.Close() })
@@ -2177,17 +2174,7 @@ func TestTerminalOnFocus(t *testing.T) {
 		ex := newExForTestingWithWorkspace(t, workspace.NewSchemeWorkspace(uri, scheme),
 			texttest.NopEditor(), testConfig, nopPublishEvent, clipboard.NewInMemory())
 		tvte := newTestVte()
-		ex.newEmulatorHandler = func(initialCmd string, cfg vte.Config) (vteHandler, error) {
-			testConfig := testConfig
-			testConfig.WidthHint = 80
-			testConfig.HeightHint = 80
-			assert.NotNil(t, cfg.ScheduleNextTick)
-			assert.NotNil(t, cfg.RingBell)
-			cfg.ScheduleNextTick = nil
-			cfg.RingBell = nil
-			testConfig.ScheduleNextTick = nil
-			testConfig.RingBell = nil
-			assert.Equal(t, testConfig, cfg)
+		ex.newEmulatorHandler = func(initialCmd string) (vtereservoir.VTE, error) {
 			return tvte, nil
 		}
 		t.Cleanup(func() { _ = ex.Close() })
@@ -3089,7 +3076,6 @@ func testCommandOverlayConfig() text.CommandOverlayConfig {
 type testVte struct {
 	component.String
 	initialCmd string
-	cfg        vte.Config
 
 	calledClose   bool
 	defAttr       term.Attributes
@@ -3101,13 +3087,12 @@ type testVte struct {
 }
 
 func newTestVte() *testVte {
-	return newTestVteWithConfig("", vte.DefaultConfig())
+	return newTestVteWithConfig("")
 }
 
-func newTestVteWithConfig(initialCmd string, cfg vte.Config) *testVte {
+func newTestVteWithConfig(initialCmd string) *testVte {
 	ret := new(testVte)
 	ret.initialCmd = initialCmd
-	ret.cfg = cfg
 	ret.String = component.NewString(initialCmd)
 	return ret
 }
@@ -3130,6 +3115,10 @@ func (t *testVte) SeekOffset() int {
 
 func (t *testVte) MaxSeekOffset() int {
 	return 0
+}
+
+func (v *testVte) UsedAlternateBuffer() bool {
+	return false
 }
 
 func (t *testVte) Cursor() (ret term.Coordinates, style term.CursorStyle, show bool) {
