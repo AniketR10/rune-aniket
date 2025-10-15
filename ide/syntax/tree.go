@@ -116,6 +116,13 @@ type Tree struct {
 // IndentationAt returns the indentation that should correspond to a node placed
 // at the given line.
 func (t *Tree) IndentationAt(line int) (int, bool) {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+
+	if !t.ready || t.closed {
+		return 0, false
+	}
+
 	if line >= t.buf.Rows() || line < 0 {
 		return 0, false
 	}
