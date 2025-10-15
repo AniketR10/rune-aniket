@@ -817,7 +817,7 @@ func (c *Cursor) InsertLineAbove() {
 	pos := cursorAtScroll
 	pos.X = 0
 	c.buffer().Edit(ctx, pos, pos, "\n")
-	pos = c.addIndentationAt(ctx, pos)
+	pos = c.tryIndent(ctx, pos)
 	c.selection.mode = mode
 	c.setSelection()
 	c.setCursorAfterUpdate(pos)
@@ -834,7 +834,7 @@ func (c *Cursor) InsertLineBelow() {
 	pos := c.cursorAtScroll()
 	pos.X = buf.Columns(pos.Y)
 	_, to, _ := buf.Edit(ctx, pos, pos, "\n")
-	to = c.addIndentationAt(ctx, to)
+	to = c.tryIndent(ctx, to)
 
 	c.selection.mode = mode
 	c.setSelection()
@@ -854,8 +854,11 @@ func (c *Cursor) InsertContext(ctx context.Context, r rune) {
 
 	insertAt := c.cursorAtScroll()
 	pos := c.buffer().InsertContext(ctx, insertAt, r)
-	if r == '\n' {
-		pos = c.addIndentationAt(ctx, pos)
+	switch r {
+	case '\n':
+		pos = c.tryIndent(ctx, pos)
+	case '}', ']', ')':
+		pos = c.tryDedent(ctx, pos)
 	}
 	c.selection.mode = mode
 	c.setSelection()
@@ -871,8 +874,11 @@ func (c *Cursor) InsertWithAttr(r rune, attr term.Attributes) {
 
 	insertAt := c.cursorAtScroll()
 	pos := c.buffer().InsertWithAttr(insertAt, r, attr)
-	if r == '\n' {
-		pos = c.addIndentationAt(context.Background(), pos)
+	switch r {
+	case '\n':
+		pos = c.tryIndent(context.Background(), pos)
+	case '}', ']', ')':
+		pos = c.tryDedent(context.Background(), pos)
 	}
 	c.selection.mode = mode
 	c.setSelection()
@@ -1731,20 +1737,58 @@ func (c *Cursor) setCursorAfterUpdate(atScroll term.Coordinates) {
 	c.setCursor(res, c.shouldSeek)
 }
 
-func (c *Cursor) addIndentationAt(ctx context.Context, to term.Coordinates) term.Coordinates {
-	buf := c.buffer()
+func (c *Cursor) getIndentation(pos term.Coordinates) (ret int) {
+	cells := c.buffer().RawCells()
+	if pos.Y >= len(cells) {
+		return 0
+	}
+	for _, cell := range cells[pos.Y] {
+		switch cell.Ch {
+		case '\t':
+			ret++
+		case '\x00':
+		default:
+			return
+		}
+	}
+	return
+}
+
+func (c *Cursor) tryIndent(ctx context.Context, to term.Coordinates) term.Coordinates {
 	svc := c.getIndentService()
 	indentation, ok := svc.IndentationAt(to.Y)
-	if ok {
-		var builder strings.Builder
-		for range indentation {
-			builder.WriteByte('\t')
-		}
-		tabs := builder.String()
-		_, _, _ = buf.Edit(ctx, to, to, tabs)
-		to.X += (indentation * buf.Tabspaces())
+	if !ok {
+		return to
 	}
+
+	var builder strings.Builder
+	for range indentation {
+		builder.WriteByte('\t')
+	}
+	buf := c.buffer()
+	tabs := builder.String()
+	_, _, _ = buf.Edit(ctx, to, to, tabs)
+	to.X += (indentation * buf.Tabspaces())
 	return to
+}
+
+func (c *Cursor) tryDedent(ctx context.Context, pos term.Coordinates) term.Coordinates {
+	svc := c.getIndentService()
+	indentation, ok := svc.IndentationAt(pos.Y)
+	if !ok {
+		return pos
+	}
+	buf := c.buffer()
+	current := c.getIndentation(pos)
+	diff := current - indentation
+	from := term.Coordinates{X: (pos.X - diff*buf.Tabspaces()), Y: pos.Y}
+	to := term.Coordinates{X: pos.X - 1, Y: pos.Y}
+	if diff > 0 && from.X > 0 && to.X > 0 {
+		_, to, _ = buf.Edit(ctx, from, to, "")
+		to.X++
+		return to
+	}
+	return pos
 }
 
 func (c *Cursor) getIndentService() indentService {
