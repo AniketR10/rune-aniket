@@ -561,6 +561,21 @@ func (t *Component) UsedAlternateBuffer() bool {
 	return t.parserHandler.usedAlternate()
 }
 
+// ClearPrimaryBuffer clears the primary buffer of this Component.
+// If this Component is using the alternate buffer,
+// this method returns false.
+func (t *Component) ClearPrimaryBuffer() (ok bool) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	if t.parserHandler.useAlt {
+		return
+	}
+
+	t.parserHandler.clearPrimaryView()
+	return true
+}
+
 // Close assumes lock has been acquired by caller
 func (t *Component) Close() (ret error) {
 	defer t.cancelCtx()

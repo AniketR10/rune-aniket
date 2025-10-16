@@ -1672,6 +1672,10 @@ func (v vteAdapter) UsedAlternateBuffer() bool {
 	return v.Component().UsedAlternateBuffer()
 }
 
+func (v vteAdapter) ClearPrimaryBuffer() bool {
+	return v.Component().ClearPrimaryBuffer()
+}
+
 var _ component.Scrollable = companionTerminalHandler{}
 
 // Aids in ensure that Close is not called when window is closed:

@@ -159,6 +159,23 @@ func TestFacility(t *testing.T) {
 		assert.Equal(t, 2, called)
 	})
 
+	t.Run("VTE.Close clears the primary buffer when put back into pool", func(t *testing.T) {
+		t.Parallel()
+		var tvte *testVte
+		f := newTestFacility(1, func(f *Facility) (VTE, error) {
+			tvte = newTestVte(f)
+			return tvte, nil
+		})
+
+		vte, err := f.Get()
+		require.NoError(t, err)
+
+		require.NoError(t, vte.Close())
+
+		require.NotNil(t, 2, tvte)
+		assert.True(t, tvte.clearedPrimary)
+	})
+
 	t.Run("Resize after new doesn't block waiting for all vtes to be created", func(t *testing.T) {
 		t.Parallel()
 		b := nopBrowser{}
@@ -226,9 +243,10 @@ var _ VTE = (*testVte)(nil)
 
 type testVte struct {
 	component.String
-	initialCmd string
-	f          *Facility
-	usedAlt    bool
+	initialCmd     string
+	f              *Facility
+	usedAlt        bool
+	clearedPrimary bool
 
 	calledClose bool
 }
@@ -314,4 +332,9 @@ func (t *testVte) Title() string {
 
 func (v *testVte) UsedAlternateBuffer() bool {
 	return v.usedAlt
+}
+
+func (v *testVte) ClearPrimaryBuffer() bool {
+	v.clearedPrimary = true
+	return true
 }

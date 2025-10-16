@@ -3121,6 +3121,10 @@ func (v *testVte) UsedAlternateBuffer() bool {
 	return false
 }
 
+func (v *testVte) ClearPrimaryBuffer() bool {
+	return true
+}
+
 func (t *testVte) Cursor() (ret term.Coordinates, style term.CursorStyle, show bool) {
 	show = true
 	ret = term.Coordinates{X: len(t.initialCmd)}

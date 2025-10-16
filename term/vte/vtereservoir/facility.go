@@ -49,6 +49,7 @@ type VTE interface {
 	URI() workspaceapi.URI
 	Title() string
 	UsedAlternateBuffer() bool
+	ClearPrimaryBuffer() bool
 }
 
 // Facility is a pool of vte instances.It only caches vte instances
@@ -163,6 +164,8 @@ func (f *Facility) put(v VTE) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
+	v.ClearPrimaryBuffer()
+
 	f.pool = append(f.pool, v)
 	return nil
 }
@@ -200,6 +203,10 @@ func (v *vteAdapter) Title() string {
 
 func (v *vteAdapter) UsedAlternateBuffer() bool {
 	return v.Component().UsedAlternateBuffer()
+}
+
+func (v *vteAdapter) ClearPrimaryBuffer() bool {
+	return v.Component().ClearPrimaryBuffer()
 }
 
 func (v *vteAdapter) Handle(ev term.Event) (exit, handled bool) {
