@@ -151,7 +151,12 @@ func (f *Facility) initCap(initialCapacity int) {
 
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.pool = pool
+
+	for _, vte := range pool {
+		if vte != nil {
+			f.pool = append(f.pool, vte)
+		}
+	}
 }
 
 func (f *Facility) put(v VTE) error {
