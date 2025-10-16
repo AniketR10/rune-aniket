@@ -89,6 +89,7 @@ editor:
         selection_attr:
             bg: green
             fg: "#f3f3f3"
+    autoindent: false
     highlights:
         function:
             fg: green
@@ -489,6 +490,7 @@ func TestConfigSetting(t *testing.T) {
 		Fg: tcell.GetColor("#f1f1f1")}, cfg.modelessResultAttr())
 
 	expectedSyntaxConfig := syntax.DefaultConfig()
+	expectedSyntaxConfig.Autoindent = false
 	expectedSyntaxConfig.CaptureNamesAttributes["function"] = term.Attributes{
 		Fg: tcell.ColorGreen, Bg: tcell.ColorYellow}
 	syntaxConfig := cfg.syntaxConfig()

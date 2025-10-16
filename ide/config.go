@@ -1234,6 +1234,14 @@ func (c ideConfig) syntaxConfig() (ret syntax.Config) {
 	} else {
 		ret.ReparseOnErrors = reparse
 	}
+	autoindent, err := cfg.GetBool("autoindent")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["editor.autoindent"] = err
+		}
+	} else {
+		ret.Autoindent = autoindent
+	}
 	cfgHighlights, err := cfg.GetMap("highlights")
 	if err != nil {
 		if err != config.ErrNotFound {

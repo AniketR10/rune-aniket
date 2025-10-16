@@ -46,6 +46,10 @@ type Config struct {
 	// if there are failures to keep tree sitter's tree and the file contents
 	// in sync.
 	ReparseOnErrors bool
+
+	// Autoindent enables or disables indentation features. In practice,
+	// if disabled, IndentationAt always returns 0, false.
+	Autoindent bool
 }
 
 // PkgManager abstracts a subset of idepkg.Manager for a tree parser.
@@ -70,6 +74,7 @@ func DefaultConfig() Config {
 		CaptureNamesAttributes: defaultCaptureNamesAttributes,
 		ScheduleNextTick:       func(cb func()) bool { cb(); return true },
 		ReparseOnErrors:        true,
+		Autoindent:             true,
 	}
 }
 

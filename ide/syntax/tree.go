@@ -123,6 +123,10 @@ func (t *Tree) IndentationAt(line int) (int, bool) {
 		return 0, false
 	}
 
+	if !t.config.Autoindent {
+		return 0, false
+	}
+
 	if line >= t.buf.Rows() || line < 0 {
 		return 0, false
 	}
