@@ -52,6 +52,7 @@ func init() {
 }
 
 func TestHandlerIntegration(t *testing.T) {
+	t.Parallel()
 	cases := []vtetest.Case{
 		{"",
 			`$ ▐                 
@@ -119,6 +120,7 @@ $ ▐
 }
 
 func TestHandlerCloseExit(t *testing.T) {
+	t.Parallel()
 	cases := []vtetest.Case{
 		{"exit>",
 			`$ exit              
@@ -145,6 +147,7 @@ exit
 }
 
 func TestHandlerResizeViIntegration(t *testing.T) {
+	t.Parallel()
 	cases := []vtetest.Case{
 		{"echo 'a\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk'",
 			`> b                 

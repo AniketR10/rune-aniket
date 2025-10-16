@@ -32,6 +32,7 @@ import (
 )
 
 func TestLastPromptLine(t *testing.T) {
+	t.Parallel()
 	suite := []struct {
 		description    string
 		content        string
@@ -192,6 +193,7 @@ $ aaaaaaaa`,
 
 	for _, test := range suite {
 		t.Run(test.description, func(t *testing.T) {
+			t.Parallel()
 			buf := cell.NewBuffer()
 			// do not use ReadFrom or InsertString as null characters
 			// will be elided.

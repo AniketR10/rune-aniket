@@ -34,7 +34,9 @@ import (
 )
 
 func TestWaitParserHandler(t *testing.T) {
+	t.Parallel()
 	t.Run("schedules a callback", func(t *testing.T) {
+		t.Parallel()
 		mock := newMockBellHandler()
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
@@ -54,6 +56,7 @@ func TestWaitParserHandler(t *testing.T) {
 	})
 
 	t.Run("schedules multiple callbacks, preserving order", func(t *testing.T) {
+		t.Parallel()
 		mock := newMockBellHandler()
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
@@ -92,6 +95,7 @@ func TestWaitParserHandler(t *testing.T) {
 	})
 
 	t.Run("is goroutine safe", func(t *testing.T) {
+		t.Parallel()
 		mock := newMockBellHandler()
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()

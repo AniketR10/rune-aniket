@@ -44,7 +44,9 @@ import (
 )
 
 func TestHandlerViIntegration(t *testing.T) {
+	t.Parallel()
 	t.Run("search", func(t *testing.T) {
+		t.Parallel()
 		cases := []vtetest.Case{
 			{"echo bla></bla",
 				`$ echo bla          
@@ -108,6 +110,7 @@ $
 	})
 
 	t.Run("edit/movement", func(t *testing.T) {
+		t.Parallel()
 		cases := []vtetest.Case{
 			{"echo bla>",
 				`$ echo bla          
@@ -392,6 +395,7 @@ $ ▐
 	})
 
 	t.Run("dollar key with multiline prompt line", func(t *testing.T) {
+		t.Parallel()
 		cases := []vtetest.Case{
 			{"echo blaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 				`$ echo blaaaaaaaaaaa
@@ -433,6 +437,7 @@ aaaaaaaaaaaaaaa▐
 	})
 
 	t.Run("multiline go up before prompt start", func(t *testing.T) {
+		t.Parallel()
 		cases := []vtetest.Case{
 			{"echo blaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 				`$ echo blaaaaaaaaaaa
@@ -474,6 +479,7 @@ aaaaaaaaaaaaaaaa
 	})
 
 	t.Run("multiline paste", func(t *testing.T) {
+		t.Parallel()
 		cases := []vtetest.Case{
 			{"echo blaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa>",
 				`$ echo blaaaaaaaaaaa
@@ -493,6 +499,7 @@ $ ▐
 	})
 
 	t.Run("last line wrap around", func(t *testing.T) {
+		t.Parallel()
 		cases := []vtetest.Case{
 			{">>>>>>>>>>",
 				`$                   
@@ -523,6 +530,7 @@ bcde▐         INSERT`},
 	})
 
 	t.Run("go to start of buffer, go to end of buffer", func(t *testing.T) {
+		t.Parallel()
 		cases := []vtetest.Case{
 			{"echo a>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>echo<",
 				`$                   
@@ -565,6 +573,7 @@ $ ▐cho        NORMAL`},
 }
 
 func TestZshEdgeCases(t *testing.T) {
+	t.Parallel()
 	// only run this if zsh is present in system running test harness
 	zshPath, err := find.Executable("zsh")
 	if err != nil {
@@ -611,7 +620,9 @@ aaaaaaaaaaaaaaaa▐
 }
 
 func TestViEditUnit(t *testing.T) {
+	t.Parallel()
 	t.Run("screen context bypasses Edit", func(t *testing.T) {
+		t.Parallel()
 		comp := newTestParentComponent("a\nb", term.Coordinates{})
 		var vi viHandler
 		vi.doInit(comp, DefaultConfig())
@@ -1143,6 +1154,7 @@ aaaaaaaooaaaa
 
 	for _, test := range suite {
 		t.Run(test.description, func(t *testing.T) {
+			t.Parallel()
 			comp := newTestParentComponent(test.initialContent, test.promptStart)
 			var vi viHandler
 			cfg := DefaultConfig()

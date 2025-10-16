@@ -45,6 +45,7 @@ import (
 )
 
 func TestIntegrationParserHandler(t *testing.T) {
+	t.Parallel()
 	testURI, err := workspaceapi.ParseURI("memory:///radical")
 	require.NoError(t, err)
 
@@ -853,6 +854,7 @@ func TestIntegrationParserHandler(t *testing.T) {
 
 	for _, test := range suite {
 		t.Run(test.desc, func(t *testing.T) {
+			t.Parallel()
 			mockPtyFile := workspacetest.File{}
 			tm := mockTabManager{}
 			attrs := DefaultConfig().NeedsAttentionAttributes
