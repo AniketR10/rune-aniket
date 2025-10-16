@@ -26,18 +26,22 @@ package ide
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/blue/release"
 	"unstable.build/go-tui/api/config"
 	"unstable.build/go-tui/api/extensionapi"
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component/shader"
 	"unstable.build/go-tui/extension"
+	"unstable.build/go-tui/ide/idepkg/idepkgtest"
 	"unstable.build/go-tui/term"
 )
 
@@ -220,9 +224,10 @@ func TestIDEInitializationIntegration(t *testing.T) {
 	})
 
 	t.Run("init shader is run when passed WithInitShader option", func(t *testing.T) {
+		_, config := makeTestFiles(t)
 		initShader := new(mockShader)
 		i := new(IDE)
-		err := i.init("", "", "", "datadir", []string{""},
+		err := i.init("", "", "", filepath.Dir(config.Name()), []string{""},
 			WithInitShader(
 				func(_ term.Attributes) shader.Shader {
 					return initShader
@@ -240,6 +245,7 @@ func TestIDEInitializationIntegration(t *testing.T) {
 }
 
 func TestOpen(t *testing.T) {
+	t.Parallel()
 	assertURI := func(t *testing.T, i *IDE, expected workspaceapi.URI) {
 		ex := i.workspaceHandler.exHandler(i.workspaceHandler.focusHandler())
 		uri, _, ok := ex.handlerInFocus()
@@ -248,9 +254,10 @@ func TestOpen(t *testing.T) {
 	}
 
 	t.Run("empty workspace", func(t *testing.T) {
-		i, err := New("", "", "datadir", nil)
+		t.Parallel()
+		file, config := makeTestFiles(t)
+		i, err := New("", config.Name(), filepath.Dir(config.Name()), nil)
 		require.NoError(t, err)
-		file, _ := makeTestFiles(t)
 		uri, err := workspaceapi.CurrentUserHostURI(file.Name())
 		require.NoError(t, err)
 
@@ -262,9 +269,10 @@ func TestOpen(t *testing.T) {
 	})
 
 	t.Run("a workspace", func(t *testing.T) {
-		i, err := New(os.TempDir(), "", "datadir", nil)
+		t.Parallel()
+		file, config := makeTestFiles(t)
+		i, err := New(os.TempDir(), config.Name(), filepath.Dir(config.Name()), nil)
 		require.NoError(t, err)
-		file, _ := makeTestFiles(t)
 		uri, err := workspaceapi.CurrentUserHostURI(file.Name())
 		require.NoError(t, err)
 
@@ -273,6 +281,35 @@ func TestOpen(t *testing.T) {
 
 		require.NoError(t, i.Open(uri))
 		assertURI(t, i, uri)
+	})
+
+	t.Run("syntax enabled, empty workspace", func(t *testing.T) {
+		t.Parallel()
+		pkgs := idepkgtest.MakePackages(
+			release.Package{Name: "go", Latest: "3"},
+		)
+		bundles := idepkgtest.MakeBundles(
+			[]release.Bundle{
+				{Package: "go", Version: "3"},
+			},
+		)
+		file, config := makeTestFiles(t)
+		rm := idepkgtest.NewReleaseManager(pkgs, bundles)
+		i, err := New("", config.Name(), filepath.Dir(config.Name()), nil, WithReleaseManager(rm))
+		require.NoError(t, err)
+		uri, err := workspaceapi.CurrentUserHostURI(file.Name())
+		require.NoError(t, err)
+
+		logrus.SetLevel(logrus.TraceLevel)
+
+		i.workspaceHandler.mu.Lock()
+		defer i.workspaceHandler.mu.Unlock()
+
+		require.NoError(t, i.Open(uri))
+		assertURI(t, i, uri)
+
+		// allow for syntax to unpack things
+		time.Sleep(200 * time.Millisecond)
 	})
 }
 
@@ -287,11 +324,15 @@ func (s *mockShader) Shade(frame, total int, in [][]term.Cell) {
 }
 
 func makeTestFiles(t *testing.T) (*os.File, *os.File) {
-	configFile, err := os.CreateTemp("", "six_ide_test")
+	configFile, err := os.CreateTemp("", "six_ide_test.*.yaml")
 	require.NoError(t, err)
+
+	_, err = configFile.WriteString("{}")
+	require.NoError(t, err)
+
 	require.NoError(t, configFile.Close())
 
-	file, err := os.CreateTemp("", "six_ide_test")
+	file, err := os.CreateTemp("", "six_ide_test.*.go")
 	require.NoError(t, err)
 	require.NoError(t, file.Close())
 

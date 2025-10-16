@@ -186,13 +186,6 @@ func (h *workspaceManagerHandler) init(
 	h.workspacesIcon = workspacesIcon
 	h.tabBarOffset = tabBarOffset
 	h.tabBarHeight = tabBarHeight
-	// don't install a fs watcher for the home workspace, to prevent unecessary
-	// resource consumption and so we also don't disable the internal flush dispatching
-	globalOpts := h.textOpts(cfg)
-	ed, err := h.newEditor(cfg)
-	if err != nil {
-		return fmt.Errorf("new editor: %v", err)
-	}
 
 	homeWorkspace, err := h.workspace.AddWorkspace(ctx, homeDirUri)
 	if err != nil {
@@ -201,6 +194,14 @@ func (h *workspaceManagerHandler) init(
 
 	h.homeWorkspace = homeWorkspace
 	h.setReleaseManager(releaseManager)
+
+	// don't install a fs watcher for the home workspace,
+	// to prevent unecessary resource consumption
+	globalOpts := h.textOpts(cfg)
+	ed, err := h.newEditor(cfg)
+	if err != nil {
+		return fmt.Errorf("new editor: %v", err)
+	}
 
 	h.empty, err = newEx(ed, homeWorkspace, h.storage, notifications,
 		cfg.terminalConfig(), h.publishEvent, h.initialVTECapacity, cfg.clipboard(),
