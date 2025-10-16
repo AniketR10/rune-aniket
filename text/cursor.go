@@ -1783,12 +1783,24 @@ func (c *Cursor) tryDedent(ctx context.Context, pos term.Coordinates) term.Coord
 	diff := current - indentation
 	from := term.Coordinates{X: (pos.X - diff*buf.Tabspaces()), Y: pos.Y}
 	to := term.Coordinates{X: pos.X - 1, Y: pos.Y}
-	if diff > 0 && from.X > 0 && to.X > 0 {
+	cells, _, ok := buf.Select(from, to)
+	if ok && len(cells) != 0 && isEmpty(cells[0]) && diff > 0 && from.X > 0 && to.X > 0 {
 		_, to, _ = buf.Edit(ctx, from, to, "")
 		to.X++
 		return to
 	}
 	return pos
+}
+
+func isEmpty(cells []term.Cell) bool {
+	for _, cell := range cells {
+		switch cell.Ch {
+		case '\x00', ' ', '\t':
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 func (c *Cursor) getIndentService() indentService {

@@ -24,9 +24,12 @@
 package syntax
 
 import (
+	"fmt"
 	"strconv"
 
+	log "github.com/sirupsen/logrus"
 	tree_sitter "github.com/tree-sitter/go-tree-sitter"
+	"unstable.build/go-tui/cell"
 )
 
 /* NOTE: this is a port of nvim-treesitter's indents implementation,
@@ -104,22 +107,28 @@ func (t *Tree) queryIndentCaptures() (ret captures) {
 	return
 }
 
-func (t *Tree) getIndentation(line uint) (ret int) {
+func (t *Tree) getIndentation(line uint) int {
 	captures := t.queryIndentCaptures()
-	isEmptyLine := t.buf.Columns(int(line)) == 0
+	isEmptyLine := isEmptyLine(t.buf, int(line))
 	var node *tree_sitter.Node
 	if isEmptyLine {
-		prevLine := t.getPreviousNonBlankLine(line)
+		prevLine := getPreviousNonBlankLine(t.buf, line)
 		node = t.getLastNodeAtLine(prevLine)
-		// TODO if node is a comment...
-		if _, ok := captures.end[node.Id()]; ok {
-			node = t.getFirstNodeAtLine(line)
+		if node != nil {
+			if _, ok := captures.end[node.Id()]; ok {
+				node = t.getFirstNodeAtLine(line)
+			}
 		}
 	} else {
 		node = t.getFirstNodeAtLine(line)
 	}
+	if node == nil {
+		t.log(log.DebugLevel, "get indentation aborted: nil node")
+		return 0
+	}
 
 	if _, ok := captures.zero[node.Id()]; ok {
+		t.log(log.DebugLevel, "get indentation aborted: node has zero property")
 		return 0
 	}
 
@@ -136,7 +145,6 @@ func (t *Tree) getIndentation(line uint) (ret int) {
 		startRow := rng.StartPoint.Row
 		endRow := rng.EndPoint.Row
 
-		// do autoindent if not marked with @indent
 		if !isBegin && !isAlign && isAuto &&
 			startRow < line &&
 			line <= endRow {
@@ -150,22 +158,22 @@ func (t *Tree) getIndentation(line uint) (ret int) {
 			return 0
 		}
 
+		shouldProcess := !isProcessedByRow[startRow]
 		var isProcessed bool
-		if !isProcessedByRow[startRow] &&
+		if shouldProcess &&
 			((isBranch && startRow == line) || (isDedent && startRow == line)) {
 			indent--
 			isProcessed = true
 		}
 
-		shouldProcess := !isProcessedByRow[startRow]
 		isInErr := false
-
 		if shouldProcess {
 			parent := node.Parent()
 			if parent != nil {
 				isInErr = parent.HasError()
 			}
 		}
+
 		_, beginHasImmediate := beginMetadata["indent.immediate"]
 		_, beginHasStartAtSameLine := beginMetadata["indent.start_at_same_line"]
 		if shouldProcess && isBegin &&
@@ -178,12 +186,13 @@ func (t *Tree) getIndentation(line uint) (ret int) {
 		if isInErr && !isAlign {
 			// only when the node is in error, promote the
 			// first child's aligned indent to the error node
-			cursor := t.tree.Walk()
+			cursor := node.Walk()
 			defer cursor.Close()
 			for _, child := range node.Children(cursor) {
 				childAlignMetadata, childIsAlign := captures.align[child.Id()]
 				if childIsAlign {
-					alignMetadata, isAlign = childAlignMetadata, childIsAlign
+					captures.align[node.Id()] = childAlignMetadata
+					break
 				}
 			}
 		}
@@ -262,7 +271,7 @@ func (t *Tree) getIndentation(line uint) (ret int) {
 			}
 
 			if avoidLastMatchingNext {
-				if indent <= t.getCurrentIndent(osRow+1)+1 {
+				if indent <= getCurrentIndent(t.buf, osRow+1)+1 {
 					indent++
 				}
 			}
@@ -282,7 +291,7 @@ func (t *Tree) getIndentation(line uint) (ret int) {
 func (t *Tree) findDelimiter(node *tree_sitter.Node, del string) (
 	ret *tree_sitter.Node, isLastLine bool,
 ) {
-	cursor := t.tree.Walk()
+	cursor := node.Walk()
 	defer cursor.Close()
 	for _, child := range node.Children(cursor) {
 		if child.Kind() != del {
@@ -297,38 +306,46 @@ func (t *Tree) findDelimiter(node *tree_sitter.Node, del string) (
 	return nil, false
 }
 
-func (t *Tree) getPreviousNonBlankLine(line uint) (ret uint) {
-	if line == 0 {
-		return 0
-	}
-
-	for ret = line - 1; ret >= 1; ret-- {
-		if t.buf.Columns(int(ret)) != 0 {
-			return ret
-		}
-	}
-	return
-}
-
 func (t *Tree) getFirstNodeAtLine(line uint) *tree_sitter.Node {
 	root := t.tree.RootNode()
-	col := t.getCurrentIndent(line)
+	// we don't multiply by tabspaces because tree sitter point ranges
+	// are based on byte columns.
+	col := getCurrentIndent(t.buf, line)
 	start := tree_sitter.Point{Row: line, Column: uint(col)}
 	end := tree_sitter.Point{Row: line, Column: uint(col + 1)}
 	return root.DescendantForPointRange(start, end)
 }
 
 func (t *Tree) getLastNodeAtLine(line uint) *tree_sitter.Node {
-	indentCols := t.getCurrentIndent(line)
-	col := max(indentCols + t.buf.Columns(int(line)) -1, 0)
+	indentCols := getCurrentIndent(t.buf, line)
+	col := max(indentCols+nonEmptyColumns(t.buf, int(line))-1, 0)
 	root := t.tree.RootNode()
 	start := tree_sitter.Point{Row: line, Column: uint(col)}
 	end := tree_sitter.Point{Row: line, Column: uint(col + 1)}
 	return root.DescendantForPointRange(start, end)
 }
 
-func (t *Tree) getCurrentIndent(line uint) (ret int) {
-	cells := t.buf.RawCells()
+// same semantics as vim's prevnonblank:
+// return the line number of the first line at or above {lnum}
+// that is not blank. A small difference:
+// lnum is one-indexed, and line is zero-indexed.
+func getPreviousNonBlankLine(buf *cell.Buffer, line uint) uint {
+	if line == 0 || line >= uint(buf.Rows()) {
+		return 0
+	}
+
+	for i := int(line); i >= 0; i-- {
+		if !isEmptyLine(buf, i) {
+			return uint(i)
+		}
+	}
+
+	// if there's none, return current line
+	return line
+}
+
+func getCurrentIndent(buf *cell.Buffer, line uint) (ret int) {
+	cells := buf.RawCells()
 	if line >= uint(len(cells)) {
 		return 0
 	}
@@ -342,4 +359,81 @@ func (t *Tree) getCurrentIndent(line uint) (ret int) {
 		}
 	}
 	return
+}
+
+func nonEmptyColumns(buf *cell.Buffer, line int) (ret int) {
+	cells := buf.RawCells()
+	if line >= len(cells) {
+		return 0
+	}
+
+	// trim start
+	firstNonEmpty := -1
+	for i, cell := range cells[line] {
+		switch cell.Ch {
+		case '\x00', ' ', '\t':
+			continue
+		}
+		firstNonEmpty = i
+		break
+	}
+	if firstNonEmpty < 0 {
+		return 0
+	}
+
+	// count middle
+	lastNonEmpty := -1
+	for i, cell := range cells[line][firstNonEmpty:] {
+		// do not count \x00; tree-sitter's columns are content byte offsets
+		switch cell.Ch {
+		case '\x00':
+		case ' ', '\t':
+			ret++
+		default:
+			ret++
+			lastNonEmpty = i
+		}
+	}
+	lastNonEmpty += firstNonEmpty
+	if lastNonEmpty < 0 {
+		return ret
+	}
+
+	// trim end
+	for _, cell := range cells[line][lastNonEmpty:] {
+		switch cell.Ch {
+		// do not subtract \x00; tree-sitter's columns are content byte offsets
+		case ' ', '\t':
+			ret--
+		}
+	}
+
+	return
+}
+
+func isEmptyLine(buf *cell.Buffer, line int) bool {
+	cells := buf.RawCells()
+	if line >= len(cells) {
+		return false
+	}
+
+	for _, cell := range cells[line] {
+		switch cell.Ch {
+		case '\x00', ' ', '\t':
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+//nolint:unused
+func nodeToString(buf *cell.Buffer, node *tree_sitter.Node) string {
+	if node == nil {
+		return "<nil>"
+	}
+	from, to := node.ByteRange()
+	b := []byte(buf.String())
+	return fmt.Sprintf("[%d,%d]: %s",
+		node.Range().StartPoint, node.Range().EndPoint, string(b[from:to]))
 }

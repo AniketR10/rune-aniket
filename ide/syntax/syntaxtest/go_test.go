@@ -31,6 +31,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/blue/iterator"
 	"go.uber.org/goleak"
@@ -211,7 +212,7 @@ func TestTreeIndentsIntegration(t *testing.T) {
 │                            │
 │#### main() {               │
 │    ## debug(####() {       │
-│        fmt.Println(##)     │
+│    fmt.Println(##)         │
 │    }    )▐                 │
 │                      INSERT│
 └────────────────────────────┘`,
@@ -228,7 +229,7 @@ func TestTreeIndentsIntegration(t *testing.T) {
 │                            │
 │#### main() {               │
 │    ## debug(####() {       │
-│        fmt.Println(##)     │
+│    fmt.Println(##)         │
 │}    )▐                     │
 │                      INSERT│
 └────────────────────────────┘`,
@@ -442,6 +443,98 @@ func TestTreeIndentsIntegration(t *testing.T) {
 
 	cleanup()
 	goleak.VerifyNone(t)
+}
+
+func TestEdgeCaseIndents(t *testing.T) {
+	/* the parser parses nodes incorrectly so there's not much
+	   we can do without a big refactor in the logic. The following
+	   are the logs that we gathered from the first test case:
+	START(10)"
+	shouldProcess: true && isBegin: false && (isInErr: true || startRow: 9 != endRow: 9) && (startRow: 9 != line 10) -> NODE: [{9 17},{9 18}]: {"
+	shouldProcess: true && isBegin: true && (isInErr: true || startRow: 9 != endRow: 15) && (startRow: 9 != line 10) -> NODE: [{9 17},{15 1}]: {\n\n\tfmt.Println(\"%+v\", cli.NewCLI)\n\tfor i := 0; i < 10; i++ {\n\t\tfmt.Println(\"%d\", i)\n\t}\n}"
+	BINGO, new indent: 1"
+	shouldProcess: false && isBegin: true && (isInErr: false || startRow: 9 != endRow: 15) && (startRow: 9 != line 10) -> NODE: [{9 10},{15 1}]: func() {\n\n\tfmt.Println(\"%+v\", cli.NewCLI)\n\tfor i := 0; i < 10; i++ {\n\t\tfmt.Println(\"%d\", i)\n\t}\n}"
+	shouldProcess: false && isBegin: false && (isInErr: false || startRow: 9 != endRow: 17) && (startRow: 9 != line 10) -> NODE: [{9 10},{17 19}]: func() {\n\n\tfmt.Println(\"%+v\", cli.NewCLI)\n\tfor i := 0; i < 10; i++ {\n\t\tfmt.Println(\"%d\", i)\n\t}\n}\n\nconst fileContent ="
+	shouldProcess: true && isBegin: false && (isInErr: true || startRow: 8 != endRow: 22) && (startRow: 8 != line 10) -> NODE: [{8 12},{22 4}]: {\n\tgo debug(func() {\n\n\tfmt.Println(\"%+v\", cli.NewCLI)\n\tfor i := 0; i < 10; i++ {\n\t\tfmt.Println(\"%d\", i)\n\t}\n}\n\nconst fileContent = \"package main\\n\" +\n\t\"import (\\n\"+\n\t\"\\\"fmt\\\"\\n\"+\n\t\"\\n\"+\n\t\"\\\"github.com/unstablebuild/blue/cli\\\"\\n\"\n\t\")\""
+	shouldProcess: true && isBegin: false && (isInErr: false || startRow: 0 != endRow: 23) && (startRow: 0 != line 10) -> NODE: [{0 0},{23 0}]: package main\n\nimport (\n\t\"fmt\"\n\n\t\"github.com/unstablebuild/blue/cli\"\n)\n\nfunc main() {\n\tgo debug(func() {\n\n\tfmt.Println(\"%+v\", cli.NewCLI)\n\tfor i := 0; i < 10; i++ {\n\t\tfmt.Println(\"%d\", i)\n\t}\n}\n\nconst fileContent = \"package main\\n\" +\n\t\"import (\\n\"+\n\t\"\\\"fmt\\\"\\n\"+\n\t\"\\n\"+\n\t\"\\\"github.com/unstablebuild/blue/cli\\\"\\n\"\n\t\")\"                                      \n"
+	END(10)"
+
+	vs for example, if we were to close "go debug(func()" with "(" instead of "{":
+	START(10)"
+	shouldProcess: true && isBegin: false && (isInErr: true || startRow: 9 != endRow: 9) && (startRow: 9 != line 10) -> NODE: [{9 17},{9 18}]: ("
+	shouldProcess: true && isBegin: true && (isInErr: true || startRow: 9 != endRow: 11) && (startRow: 9 != line 10) -> NODE: [{9 17},{11 12}]: (\n\n\tfmt.Println"
+	BINGO, new indent: 1"
+	shouldProcess: false && isBegin: false && (isInErr: false || startRow: 9 != endRow: 11) && (startRow: 9 != line 10) -> NODE: [{9 10},{11 12}]: func() (\n\n\tfmt.Println"
+	shouldProcess: false && isBegin: false && (isInErr: false || startRow: 9 != endRow: 11) && (startRow: 9 != line 10) -> NODE: [{9 10},{11 31}]: func() (\n\n\tfmt.Println(\"%+v\", cli.NewCLI)"
+	shouldProcess: false && isBegin: false && (isInErr: false || startRow: 9 != endRow: 12) && (startRow: 9 != line 10) -> NODE: [{9 9},{12 11}]: (func() (\n\n\tfmt.Println(\"%+v\", cli.NewCLI)\n\tfor i := 0"
+	shouldProcess: false && isBegin: false && (isInErr: false || startRow: 9 != endRow: 12) && (startRow: 9 != line 10) -> NODE: [{9 1},{12 24}]: go debug(func() (\n\n\tfmt.Println(\"%+v\", cli.NewCLI)\n\tfor i := 0; i < 10; i++"
+	shouldProcess: false && isBegin: false && (isInErr: false || startRow: 9 != endRow: 12) && (startRow: 9 != line 10) -> NODE: [{9 1},{12 24}]: go debug(func() (\n\n\tfmt.Println(\"%+v\", cli.NewCLI)\n\tfor i := 0; i < 10; i++"
+	shouldProcess: true && isBegin: true && (isInErr: true || startRow: 8 != endRow: 15) && (startRow: 8 != line 10) -> NODE: [{8 12},{15 1}]: {\n\tgo debug(func() (\n\n\tfmt.Println(\"%+v\", cli.NewCLI)\n\tfor i := 0; i < 10; i++ {\n\t\tfmt.Println(\"%d\", i)\n\t}\n}"
+	BINGO, new indent: 2"
+	shouldProcess: false && isBegin: false && (isInErr: false || startRow: 8 != endRow: 15) && (startRow: 8 != line 10) -> NODE: [{8 0},{15 1}]: func main() {\n\tgo debug(func() (\n\n\tfmt.Println(\"%+v\", cli.NewCLI)\n\tfor i := 0; i < 10; i++ {\n\t\tfmt.Println(\"%d\", i)\n\t}\n}"
+	shouldProcess: true && isBegin: false && (isInErr: false || startRow: 0 != endRow: 23) && (startRow: 0 != line 10) -> NODE: [{0 0},{23 0}]: package main\n\nimport (\n\t\"fmt\"\n\n\t\"github.com/unstablebuild/blue/cli\"\n)\n\nfunc main() {\n\tgo debug(func() (\n\n\tfmt.Println(\"%+v\", cli.NewCLI)\n\tfor i := 0; i < 10; i++ {\n\t\tfmt.Println(\"%d\", i)\n\t}\n}\n\nconst fileContent = \"package main\\n\" +\n\t\"import (\\n\"+\n\t\"\\\"fmt\\\"\\n\"+\n\t\"\\n\"+\n\t\"\\\"github.com/unstablebuild/blue/cli\\\"\\n\"\n\t\")\"                                      \n"
+	END(10)"
+	*/
+	t.SkipNow()
+
+	var wg sync.WaitGroup
+	ready := func(context.Context) error {
+		wg.Done()
+		return nil
+	}
+	const width, height = 30, 15
+	pkgs := newInstalledPkgManager(t)
+	mu, comp, cleanup := newTestCase(t, pkgs, width, height, ready)
+	defer cleanup()
+	w := newWriter(width, height)
+
+	wg.Add(1)
+	mu.Lock()
+	newEditFile(t, comp, fileContent)
+	mu.Unlock()
+	wg.Wait()
+
+	logrus.SetLevel(logrus.TraceLevel)
+	defer logrus.SetLevel(logrus.InfoLevel)
+
+	sequenceCases := []handlertest.SequenceTestCase{
+		{
+			"jjjjjjjjogo debug(func() {\nfmt", `┌────────────────────────────┐
+│o #####                     │
+├────────────────────────────┤
+│                            │
+│###### (                    │
+│    #####                   │
+│                            │
+│    ########################│
+│)                           │
+│                            │
+│#### main() {               │
+│    ## debug(####() {       │
+│        fmt▐                │
+│                      INSERT│
+└────────────────────────────┘`,
+		},
+		{
+			".Println(\"\")\nif true {\n// nothing \n} else {\nif true {\ngo debug.CapturePanic(func(){\n", `┌────────────────────────────┐
+│o #####                     │
+├────────────────────────────┤
+│                            │
+│#### main() {               │
+│    ## debug(####() {       │
+│        fmt.Println(##)     │
+│        ## true {           │
+│            ###########     │
+│        } #### {            │
+│            ## true {       │
+│                ## debug(###│
+│                    ▐       │
+│                      INSERT│
+└────────────────────────────┘`,
+		},
+	}
+
+	handlertest.TestHandlerSequenceWriter(t, w, comp.Browser(), width, height, sequenceCases)
 }
 
 func TestTreeHighlightsIntegration(t *testing.T) {
@@ -793,7 +886,7 @@ func TestTreeHighlightsIntegration(t *testing.T) {
 
 	sequenceCases = []handlertest.SequenceTestCase{
 		{
-			"Gofunc helloWorld(){\n\tfmt.Println(\"hello world\")\n^}", `┌────────────────────────────┐
+			"Gofunc helloWorld(){\n\tfmt.Println(\"hello world\")\n}", `┌────────────────────────────┐
 │o #####                     │
 ├────────────────────────────┤
 │##### fileContent = ########│
@@ -964,5 +1057,5 @@ const fileContent = "package main\n" +
 	"\"fmt\"\n"+
 	"\n"+
 	"\"github.com/unstablebuild/blue/cli\"\n"
-	")"
+	")"                                      
 `

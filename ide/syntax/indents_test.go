@@ -149,6 +149,33 @@ func TestIsEmptyLine(t *testing.T) {
 	}
 }
 
+func TestEdgeCaseIndentCopy2(t *testing.T) {
+	t.Run("isEmptyLine", func(t *testing.T) {
+		buf := cell.NewBuffer()
+		_, _ = buf.ReadFrom(strings.NewReader(copy2))
+		actual := isEmptyLine(buf, 10)
+		assert.Equal(t, true, actual)
+	})
+	t.Run("getCurrentIndent", func(t *testing.T) {
+		buf := cell.NewBuffer()
+		_, _ = buf.ReadFrom(strings.NewReader(copy2))
+		actual := getCurrentIndent(buf, 10)
+		assert.Equal(t, 0, actual)
+	})
+	t.Run("nonEmptyColumns", func(t *testing.T) {
+		buf := cell.NewBuffer()
+		_, _ = buf.ReadFrom(strings.NewReader(copy2))
+		actual := nonEmptyColumns(buf, 9)
+		assert.Equal(t, 17, actual)
+	})
+	t.Run("getPreviousNonBlankLine", func(t *testing.T) {
+		buf := cell.NewBuffer()
+		_, _ = buf.ReadFrom(strings.NewReader(copy2))
+		actual := getPreviousNonBlankLine(buf, 10)
+		assert.Equal(t, uint(9), actual)
+	})
+}
+
 const copy = `package main
 
 import (
@@ -170,4 +197,22 @@ const fileContent = "package main\n" +
 	"\n"+
 	"\"github.com/unstablebuild/blue/cli\"\n"
 	")"
+`
+
+const copy2 = `package main
+
+import (
+	"fmt"
+
+	"github.com/unstablebuild/blue/cli"
+)
+
+func main() {
+	go debug(func() {
+
+	fmt.Println("%+v", cli.NewCLI)
+	for i := 0; i < 10; i++ {
+		fmt.Println("%d", i)
+	}
+}
 `

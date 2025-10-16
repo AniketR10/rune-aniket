@@ -127,7 +127,7 @@ func (t *Tree) IndentationAt(line int) (int, bool) {
 		return 0, false
 	}
 	ret := t.getIndentation(uint(line))
-	return ret, true
+	return ret, ret >= 0
 }
 
 // Close closes all resources associated with this Tree.
