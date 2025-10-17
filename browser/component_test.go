@@ -388,6 +388,188 @@ func TestMoveTabs(t *testing.T) {
 	assertTabNames(t, b, []string{"A", "b", "d", "C"})
 }
 
+func TestFocusLastFocusOnCloseTab(t *testing.T) {
+	t.Run("RemoveWindowContent", func(t *testing.T) {
+		b := NewComponent(DefaultConfig())
+
+		tabs := []string{"A", "b", "C", "d"}
+		for i, name := range tabs {
+			uri, err := workspaceapi.ParseURI("file:///" + name)
+			require.NoError(t, err)
+			h := newTestHandler()
+			tab := b.NewTab(uri, 'o', name, h, h)
+			if i == len(tabs)-1 {
+				b.Focus().SetContent(tab)
+			}
+		}
+
+		tab, ok := b.FocusTab()
+		require.True(t, ok)
+		assert.Equal(t, "file:///d", tab.URI().String())
+
+		assert.True(t, b.PreviousTab(b.Focus()))
+		tab, ok = b.FocusTab()
+		require.True(t, ok)
+		assert.Equal(t, "file:///C", tab.URI().String())
+
+		assert.True(t, b.PreviousTab(b.Focus()))
+		tab, ok = b.FocusTab()
+		require.True(t, ok)
+		assert.Equal(t, "file:///b", tab.URI().String())
+
+		require.True(t, b.RemoveWindowContent(b.Focus()))
+
+		tab, ok = b.FocusTab()
+		require.True(t, ok)
+		assert.Equal(t, "file:///C", tab.URI().String())
+
+		require.True(t, b.RemoveWindowContent(b.Focus()))
+
+		tab, ok = b.FocusTab()
+		require.True(t, ok)
+		assert.Equal(t, "file:///d", tab.URI().String())
+
+		require.True(t, b.RemoveWindowContent(b.Focus()))
+
+		tab, ok = b.FocusTab()
+		require.True(t, ok)
+		assert.Equal(t, "file:///A", tab.URI().String())
+
+		require.False(t, b.RemoveWindowContent(b.Focus()))
+
+		tab, ok = b.FocusTab()
+		require.False(t, ok)
+	})
+
+	t.Run("RemoveTab", func(t *testing.T) {
+		b := NewComponent(DefaultConfig())
+
+		tabs := []string{"A", "b", "C", "d"}
+		for i, name := range tabs {
+			uri, err := workspaceapi.ParseURI("file:///" + name)
+			require.NoError(t, err)
+			h := newTestHandler()
+			tab := b.NewTab(uri, 'o', name, h, h)
+			if i == len(tabs)-1 {
+				b.Focus().SetContent(tab)
+			}
+		}
+
+		tab, ok := b.FocusTab()
+		require.True(t, ok)
+		assert.Equal(t, "file:///d", tab.URI().String())
+
+		assert.True(t, b.PreviousTab(b.Focus()))
+		tab, ok = b.FocusTab()
+		require.True(t, ok)
+		assert.Equal(t, "file:///C", tab.URI().String())
+
+		assert.True(t, b.PreviousTab(b.Focus()))
+
+		assert.True(t, b.RemoveTab(tab))
+
+		require.True(t, b.RemoveWindowContent(b.Focus()))
+
+		tab, ok = b.FocusTab()
+		require.True(t, ok)
+		assert.Equal(t, "file:///A", tab.URI().String())
+
+		assert.True(t, b.RemoveTab(tab))
+	})
+
+	t.Run("SetContentToTab", func(t *testing.T) {
+		b := NewComponent(DefaultConfig())
+
+		tabs := []string{"A", "b", "C", "d"}
+		for i, name := range tabs {
+			uri, err := workspaceapi.ParseURI("file:///" + name)
+			require.NoError(t, err)
+			h := newTestHandler()
+			tab := b.NewTab(uri, 'o', name, h, h)
+			if i == len(tabs)-1 {
+				b.Focus().SetContent(tab)
+			}
+		}
+
+		assert.False(t, b.SetContentToTab(b.Focus(), 3)) // already at d
+		tab, ok := b.FocusTab()
+		require.True(t, ok)
+		assert.Equal(t, "file:///d", tab.URI().String())
+
+		assert.True(t, b.SetContentToTab(b.Focus(), 2))
+		tab, ok = b.FocusTab()
+		require.True(t, ok)
+		assert.Equal(t, "file:///C", tab.URI().String())
+
+		assert.True(t, b.SetContentToTab(b.Focus(), 1))
+		tab, ok = b.FocusTab()
+		require.True(t, ok)
+		assert.Equal(t, "file:///b", tab.URI().String())
+
+		require.True(t, b.RemoveWindowContent(b.Focus()))
+
+		tab, ok = b.FocusTab()
+		require.True(t, ok)
+		assert.Equal(t, "file:///C", tab.URI().String())
+
+		require.True(t, b.RemoveWindowContent(b.Focus()))
+
+		tab, ok = b.FocusTab()
+		require.True(t, ok)
+		assert.Equal(t, "file:///d", tab.URI().String())
+
+		require.True(t, b.RemoveWindowContent(b.Focus()))
+
+		tab, ok = b.FocusTab()
+		require.True(t, ok)
+		assert.Equal(t, "file:///A", tab.URI().String())
+
+		require.False(t, b.RemoveWindowContent(b.Focus()))
+
+		tab, ok = b.FocusTab()
+		require.False(t, ok)
+	})
+
+	t.Run("multiple windows", func(t *testing.T) {
+		b := NewComponent(DefaultConfig())
+
+		tabs := []string{"A", "b", "C", "d"}
+		for i, name := range tabs {
+			uri, err := workspaceapi.ParseURI("file:///" + name)
+			require.NoError(t, err)
+			h := newTestHandler()
+			tab := b.NewTab(uri, 'o', name, h, h)
+			if i%2 == 0 {
+				b.Split(browserapi.OrientationRight, b.Focus(), tab)
+			}
+		}
+
+		// window 0 has nothing
+		// window 1 has A
+		// window 2 has C
+
+		assert.True(t, b.SetContentToTab(b.Focus(), 3))
+		tab, ok := b.FocusTab()
+		require.True(t, ok)
+		assert.Equal(t, "file:///d", tab.URI().String())
+
+		// move to window 0, set C as content, so d.prev is invalid
+		require.True(t, b.FocusLeft())
+		require.True(t, b.FocusLeft())
+
+		assert.True(t, b.SetContentToTab(b.Focus(), 2))
+		tab, ok = b.FocusTab()
+		require.True(t, ok)
+		assert.Equal(t, "file:///C", tab.URI().String())
+
+		require.True(t, b.RemoveWindowContent(b.Focus()))
+
+		tab, ok = b.FocusTab()
+		require.True(t, ok)
+		assert.Equal(t, "file:///b", tab.URI().String())
+	})
+}
+
 var _ component.Scrollable = (*nopScrollableHandler)(nil)
 
 type nopScrollableHandler struct {

@@ -78,7 +78,7 @@ func (w *browserWindow) SetContent(h browserapi.Handler) error {
 	if w.parent == nil {
 		return errors.New("window is closing")
 	}
-	return w.parent.tryUpdateWindowContent(w, h)
+	return w.parent.tryUpdateWindowContent(w, h, w.win.Content().(browserapi.Handler))
 }
 
 func (w *browserWindow) IsMinimized() (component.Alignment, bool) {

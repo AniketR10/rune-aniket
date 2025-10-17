@@ -27,6 +27,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 
 	"github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
@@ -88,7 +89,8 @@ func (c *Component) Init(config Config) {
 			return ret
 		}
 		t := c.buffers[id]
-		err := c.tryUpdateWindowContent(c.Focus().(*browserWindow), t)
+		bwin := c.Focus().(*browserWindow)
+		err := c.tryUpdateWindowContent(bwin, t, bwin.win.Content().(browserapi.Handler))
 		if err != nil && err != browserapi.ErrTabNotFree {
 			c.setError(err)
 		}
@@ -268,9 +270,10 @@ func (c *Component) PreviousTab(win Window) bool {
 	if bWin.parent == nil {
 		return false
 	}
+	prev := bWin.win.Content().(browserapi.Handler)
 	t, id := c.browserTabID(bWin)
 	if t == nil {
-		return c.updateWithNextFreeTab(win)
+		return c.updateWithNextFreeTab(win, prev)
 	}
 	for i := 0; i < len(c.buffers); i++ {
 		if id == 0 {
@@ -278,7 +281,7 @@ func (c *Component) PreviousTab(win Window) bool {
 		} else {
 			id--
 		}
-		if c.updateWindowTab(bWin, id) {
+		if c.updateWindowTab(bWin, id, prev) {
 			return true
 		}
 	}
@@ -292,16 +295,17 @@ func (c *Component) NextTab(win Window) bool {
 	if bWin.parent == nil {
 		return false
 	}
+	prev := bWin.win.Content().(browserapi.Handler)
 	t, id := c.browserTabID(bWin)
 	if t == nil {
-		return c.updateWithNextFreeTab(win)
+		return c.updateWithNextFreeTab(win, prev)
 	}
 	for i := 0; i < len(c.buffers); i++ {
 		id++
 		if id == len(c.buffers) {
 			id = 0
 		}
-		if c.updateWindowTab(bWin, id) {
+		if c.updateWindowTab(bWin, id, prev) {
 			return true
 		}
 	}
@@ -314,8 +318,12 @@ func (c *Component) SetContentToTab(win Window, tabIdx int) bool {
 	if tabIdx < 0 {
 		panic("negative tab index")
 	}
-	return tabIdx < len(c.buffers) &&
-		bWin.parent != nil && c.updateWindowTab(bWin, tabIdx)
+	if tabIdx >= len(c.buffers) ||
+		bWin.parent == nil {
+		return false
+	}
+	prev := bWin.win.Content().(browserapi.Handler)
+	return c.updateWindowTab(bWin, tabIdx, prev)
 }
 
 // RemoveAllTabs removes all tabs but the last one.
@@ -356,8 +364,10 @@ func (c *Component) Window(id uint64) (Window, bool) {
 // if content was replaced with start handler because the content at win
 // was the last content in this Component.
 func (c *Component) RemoveWindowContent(win Window) bool {
-	t, isNotStartHandler := c.getFreeTab()
-	oldComponent := c.updateWindowContent(win.(*browserWindow), t)
+	bwin := win.(*browserWindow)
+	oldComponent := bwin.win.Content().(browserapi.Handler)
+	t, isNotStartHandler := c.getFreeTab(oldComponent)
+	oldComponent = c.updateWindowContent(bwin, t, nil /* don't store prev here */)
 	oldTab, ok := oldComponent.(*Tab)
 	if ok {
 		c.removeTab(oldTab)
@@ -854,22 +864,24 @@ func (c *Component) browserTabID(win *browserWindow) (
 	return t, c.findTabID(t)
 }
 
-func (c *Component) updateWindowTab(win *browserWindow, tabID int) bool {
+func (c *Component) updateWindowTab(
+	win *browserWindow, tabID int, prev browserapi.Handler,
+) bool {
 	if tabID >= len(c.buffers) {
 		panic(fmt.Sprintf("invalid tab at index: %d", tabID))
 	}
 	t := c.buffers[tabID]
 	if t.free {
-		c.updateWindowContent(win, t)
+		c.updateWindowContent(win, t, prev)
 		return true
 	}
 	return false
 }
 
-func (c *Component) updateWithNextFreeTab(win Window) bool {
+func (c *Component) updateWithNextFreeTab(win Window, prev browserapi.Handler) bool {
 	freeBufs := c.freeTabs()
 	if len(freeBufs) != 0 {
-		c.updateWindowContent(win.(*browserWindow), c.buffers[freeBufs[0]])
+		c.updateWindowContent(win.(*browserWindow), c.buffers[freeBufs[0]], prev)
 		return true
 	}
 
@@ -885,26 +897,27 @@ func (c *Component) closeHandler(h browserapi.Handler) {
 }
 
 func (c *Component) tryUpdateWindowContent(
-	win *browserWindow, content browserapi.Handler,
+	win *browserWindow, content browserapi.Handler, prev browserapi.Handler,
 ) error {
 	if b, ok := content.(*Tab); ok {
 		if !b.free {
 			return browserapi.ErrTabNotFree
 		}
 	}
-	c.updateWindowContent(win, content)
+	c.updateWindowContent(win, content, prev)
 	return nil
 }
 
 func (c *Component) updateWindowContent(
-	win *browserWindow, content browserapi.Handler,
+	win *browserWindow, content browserapi.Handler, prev browserapi.Handler,
 ) browserapi.Handler {
 	tab, ok := content.(*Tab)
 	if ok {
 		id := c.findTabID(tab)
 		c.tabs.SetFocus(id)
 		c.dirtyTabs = true
-		tab.setWindow(win)
+		prevt, _ := prev.(*Tab)
+		tab.setWindow(prevt, win)
 	} else {
 		_, sok := content.(*browserScrollableContent)
 		_, bok := content.(*browserContent)
@@ -950,7 +963,11 @@ func (c *Component) freeTabs() []int {
 }
 
 // returns the next free tab or an empty Handler
-func (c *Component) getFreeTab() (browserapi.Handler, bool) {
+func (c *Component) getFreeTab(hint tui.Handler) (browserapi.Handler, bool) {
+	t, ok := hint.(*Tab)
+	if ok && t.prev != nil && t.prev.free && slices.Contains(c.buffers, t.prev) {
+		return t.prev, true
+	}
 	freeBufs := c.freeTabs()
 	if len(freeBufs) == 0 {
 		return c.wallpaper(), false
@@ -1032,7 +1049,7 @@ func (c *Component) split(
 	ret := c.newWindow(win)
 	if isTab {
 		c.dirtyTabs = true
-		h.(*Tab).setWindow(ret)
+		h.(*Tab).setWindow(nil, ret)
 		h.(*Tab).callOnFocus()
 	}
 	return ret

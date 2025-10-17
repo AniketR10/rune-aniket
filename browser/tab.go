@@ -50,6 +50,7 @@ type Tab struct {
 	free        bool
 	win         Window
 	subscribers []TabSubscriber
+	prev        *Tab
 }
 
 // Resize satisfies tui.Component
@@ -197,9 +198,14 @@ func (b *Tab) callOnFocus() {
 	}
 }
 
-func (b *Tab) setWindow(win Window) {
+// if prev is nil, then it means that we don't want
+// to record it.
+func (b *Tab) setWindow(prev *Tab, win Window) {
 	b.free = false
 	b.win = win
+	if prev != nil {
+		b.prev = prev
+	}
 }
 
 func (b *Tab) setFree() {
