@@ -275,7 +275,18 @@ func (w Window) TileDown() (ret Window, ok bool) {
 	if w.wm.minimizedDirty {
 		w.wm.Resize(w.wm.width, w.wm.height)
 	}
+	// when floating is "pinned" to the top
+	// check top most tile
 	pos := w.Position()
+	_, isFloating := w.node.(*floatingNode)
+	if isFloating && !w.isMinimized() {
+		topMost := w.wm.topMostTile()
+		bottomMost := w.wm.bottomMostTile()
+		if topMost.ID() != w.ID() && pos.Y == topMost.Position().Y &&
+			pos.Y+w.Height() != bottomMost.Position().Y+bottomMost.Height() {
+			return topMost, true
+		}
+	}
 	pos.Y += w.Height()
 	pos.X += w.Width() / 2
 	ret, ok = w.wm.WindowAt(pos)
@@ -303,7 +314,19 @@ func (w Window) TileLeft() (ret Window, ok bool) {
 	if w.wm.minimizedDirty {
 		w.wm.Resize(w.wm.width, w.wm.height)
 	}
+	// when floating is "pinned" to the right
+	// check right most tile
 	pos := w.Position()
+	_, isFloating := w.node.(*floatingNode)
+	if isFloating && !w.isMinimized() {
+		rightMost := w.wm.rightMostTile()
+		leftMost := w.wm.leftMostTile()
+		if rightMost.ID() != w.ID() &&
+			pos.X+w.Width() == rightMost.Position().X+rightMost.Width() &&
+			pos.X != leftMost.Position().X {
+			return rightMost, true
+		}
+	}
 	pos.X--
 	pos.Y += w.Height() / 2
 	ret, ok = w.wm.WindowAt(pos)
@@ -331,7 +354,18 @@ func (w Window) TileRight() (ret Window, ok bool) {
 	if w.wm.minimizedDirty {
 		w.wm.Resize(w.wm.width, w.wm.height)
 	}
+	// when floating is "pinned" to the left
+	// check left most tile
 	pos := w.Position()
+	_, isFloating := w.node.(*floatingNode)
+	if isFloating && !w.isMinimized() {
+		leftMost := w.wm.leftMostTile()
+		rightMost := w.wm.rightMostTile()
+		if leftMost.ID() != w.ID() && pos.X == leftMost.Position().X &&
+			pos.X+w.Width() != rightMost.Position().X+rightMost.Width() {
+			return leftMost, true
+		}
+	}
 	pos.X += w.Width()
 	pos.Y += w.Height() / 2
 	ret, ok = w.wm.WindowAt(pos)
@@ -359,7 +393,19 @@ func (w Window) TileUp() (ret Window, ok bool) {
 	if w.wm.minimizedDirty {
 		w.wm.Resize(w.wm.width, w.wm.height)
 	}
+	// when floating is "pinned" to the bottom
+	// check bottom most tile
 	pos := w.Position()
+	_, isFloating := w.node.(*floatingNode)
+	if isFloating && !w.isMinimized() {
+		bottomMost := w.wm.bottomMostTile()
+		topMost := w.wm.topMostTile()
+		if bottomMost.ID() != w.ID() &&
+			pos.Y+w.Height() == bottomMost.Position().Y+bottomMost.Height() &&
+			pos.Y != topMost.Position().Y {
+			return bottomMost, true
+		}
+	}
 	pos.Y--
 	pos.X += w.Width() / 2
 	ret, ok = w.wm.WindowAt(pos)
@@ -517,4 +563,9 @@ func (w Window) unminimizeViaSize() (ok bool) {
 		w.wm.minimizedDirty = true
 	}
 	return
+}
+
+func (w Window) isMinimized() bool {
+	fn, ok := w.node.(*floatingNode)
+	return ok && fn.minimized != 0
 }

@@ -641,6 +641,22 @@ func (wm *WindowManager) drawMinimizedRight(
 	wm.drawMinimizedContent(w, f, at)
 }
 
+func (wm *WindowManager) topMostTile() Window {
+	return wm.nodeToWindow(wm.tree.root.leftMostChild())
+}
+
+func (wm *WindowManager) bottomMostTile() Window {
+	return wm.nodeToWindow(wm.tree.root.rightMostChild())
+}
+
+func (wm *WindowManager) rightMostTile() Window {
+	return wm.nodeToWindow(wm.tree.root.rightMostChild())
+}
+
+func (wm *WindowManager) leftMostTile() Window {
+	return wm.nodeToWindow(wm.tree.root.leftMostChild())
+}
+
 // post-draw helper to find where minimized windows are positioned
 type windowPos struct {
 	win Window
