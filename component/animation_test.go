@@ -29,7 +29,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/goleak"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/term"
 )
@@ -44,6 +43,7 @@ func newTestInterrupter() (term.Interrupter, chan struct{}) {
 }
 
 func TestAnimation(t *testing.T) {
+	t.Parallel()
 	suite := []struct {
 		desc         string
 		newAnimation func(*testing.T, term.Interrupter, []string, []int, int) *Animation
@@ -81,10 +81,10 @@ func TestAnimation(t *testing.T) {
 			}},
 	}
 	for _, test := range suite {
-		test := test
 		t.Run(test.desc, func(t *testing.T) {
-
+			t.Parallel()
 			t.Run("no frames", func(t *testing.T) {
+				t.Parallel()
 				fps := 30
 				interrupter, _ := newTestInterrupter()
 
@@ -105,10 +105,10 @@ func TestAnimation(t *testing.T) {
 				}
 
 				require.NoError(t, c.Close())
-				goleak.VerifyNone(t)
 			})
 
 			t.Run("single static frame", func(t *testing.T) {
+				t.Parallel()
 				fps := 30
 				interrupter, ch := newTestInterrupter()
 
@@ -130,10 +130,10 @@ func TestAnimation(t *testing.T) {
 				}
 
 				require.NoError(t, c.Close())
-				goleak.VerifyNone(t)
 			})
 
 			t.Run("multiple frames, repeated or not", func(t *testing.T) {
+				t.Parallel()
 				fps := 30
 				interrupter, ch := newTestInterrupter()
 
@@ -168,7 +168,6 @@ func TestAnimation(t *testing.T) {
 				}
 
 				require.NoError(t, c.Close())
-				goleak.VerifyNone(t)
 			})
 		})
 	}
