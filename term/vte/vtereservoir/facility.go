@@ -206,7 +206,7 @@ func (v *vteAdapter) UsedAlternateBuffer() bool {
 }
 
 func (v *vteAdapter) ClearPrimaryBuffer() bool {
-	return v.Component().ClearPrimaryBuffer()
+	return v.Handler.ClearPrimaryBuffer()
 }
 
 func (v *vteAdapter) Handle(ev term.Event) (exit, handled bool) {

@@ -34,6 +34,51 @@ import (
 	"unstable.build/go-tui/text"
 )
 
+func TestPrimaryReset(t *testing.T) {
+	t.Run("exactly screen height compared to amount of rows", func(t *testing.T) {
+		b := NewPrimaryBuffer()
+		b.Resize(5, 5)
+		resetPrimaryBuffer(t, b, "0\n1\n2\n3\n4")
+
+		assert.Equal(t, 5, b.Rows())
+		assert.Equal(t, 5, b.Columns(0))
+		assert.Equal(t, 5, b.Columns(1))
+		assert.Equal(t, 5, b.Columns(2))
+		assert.Equal(t, 5, b.Columns(3))
+		assert.Equal(t, 5, b.Columns(4))
+		assert.Equal(t, 0, b.Columns(5))
+
+		b.Reset()
+		assert.Equal(t, 5, b.Rows())
+		assert.Equal(t, 5, b.Columns(0))
+		assert.Equal(t, 5, b.Columns(1))
+		assert.Equal(t, 5, b.Columns(2))
+		assert.Equal(t, 5, b.Columns(3))
+		assert.Equal(t, 5, b.Columns(4))
+		assert.Equal(t, 0, b.Columns(5))
+	})
+
+	t.Run("smaller screen height compared to amount of rows", func(t *testing.T) {
+		b := NewPrimaryBuffer()
+		b.Resize(5, 2)
+		resetPrimaryBuffer(t, b, "0\n1\n2\n3\n4")
+
+		assert.Equal(t, 5, b.Rows())
+		assert.Equal(t, 5, b.Columns(0))
+		assert.Equal(t, 5, b.Columns(1))
+		assert.Equal(t, 1, b.Columns(2))
+		assert.Equal(t, 1, b.Columns(3))
+		assert.Equal(t, 1, b.Columns(4))
+		assert.Equal(t, 0, b.Columns(5))
+
+		b.Reset()
+		assert.Equal(t, 2, b.Rows())
+		assert.Equal(t, 5, b.Columns(0))
+		assert.Equal(t, 5, b.Columns(1))
+		assert.Equal(t, 0, b.Columns(2))
+	})
+}
+
 func TestPrimaryCoordinates(t *testing.T) {
 	b := NewPrimaryBuffer()
 	assert.Equal(t, term.Coordinates{}, b.CursorAtScroll())

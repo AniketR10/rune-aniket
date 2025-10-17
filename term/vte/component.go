@@ -572,7 +572,8 @@ func (t *Component) ClearPrimaryBuffer() (ok bool) {
 		return
 	}
 
-	t.parserHandler.clearPrimaryView()
+	t.parserHandler.sync.primBuf.Reset()
+	_ = t.WriteToPty([]byte("\n"))
 	return true
 }
 

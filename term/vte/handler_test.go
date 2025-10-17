@@ -146,6 +146,86 @@ exit
 	assert.False(t, show)
 }
 
+func TestResetPrimaryBuffer(t *testing.T) {
+	t.Parallel()
+	t.Run("non modal", func(t *testing.T) {
+		t.Parallel()
+		cases := []vtetest.Case{
+			{"echo bla>echo bla>",
+				`$ echo bla          
+bla                 
+$ echo bla          
+bla                 
+$ ▐                 
+                    
+                    
+                    
+                    
+                    `},
+		}
+		cfg := DefaultConfig()
+		handler, ch := testSequence(t, cfg, defaultWaitForIdleVte, cases)
+
+		handler.ClearPrimaryBuffer()
+		time.Sleep(defaultWaitForIdleVte)
+
+		cases = []vtetest.Case{
+			{"echo XXX>",
+				`                    
+$ echo XXX          
+XXX                 
+$ ▐                 
+                    
+                    
+                    
+                    
+                    
+                    `},
+		}
+
+		vtetest.TestSequence(t, handler, 20, 10, defaultWaitForIdleVte, ch, cases)
+	})
+	
+	t.Run("on modal mode", func(t *testing.T) {
+		t.Parallel()
+		cases := []vtetest.Case{
+			{"echo bla>echo bla><",
+				`$ echo bla          
+bla                 
+$ echo bla          
+bla                 
+$ ▐                 
+                    
+                    
+                    
+                    
+              NORMAL`},
+		}
+		cfg := DefaultConfig()
+		cfg.Modal = true
+		handler, ch := testSequence(t, cfg, defaultWaitForIdleVte, cases)
+
+		handler.ClearPrimaryBuffer()
+		time.Sleep(defaultWaitForIdleVte)
+
+		cases = []vtetest.Case{
+			{"echo XXX><kv0yjP",
+				`                    
+$ echo XXX          
+XXX                 
+$ ▐XX               
+                    
+                    
+                    
+                    
+                    
+              NORMAL`},
+		}
+
+		vtetest.TestSequence(t, handler, 20, 10, defaultWaitForIdleVte, ch, cases)
+	})
+}
+
 func TestHandlerResizeViIntegration(t *testing.T) {
 	t.Parallel()
 	cases := []vtetest.Case{

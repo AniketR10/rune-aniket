@@ -160,12 +160,42 @@ func (b *PrimaryBuffer) InsertLines(count int) {
 	b.Cells.Edit(b.ctx, pos, pos, builder.String())
 }
 
-// DeleteLines deletes lines on the cursor's position.
-func (b *PrimaryBuffer) DeleteLines(count int) {
+// DeleteLinesCursor deletes lines on the cursor's position.
+func (b *PrimaryBuffer) DeleteLinesCursor(count int) {
 	from := b.cursor.position
 	to := from
 	to.Y += count
 	b.Cells.DeleteLineContext(b.ctx, from, to)
+}
+
+// DeleteLines deletes the lines from start to end, inclusively.
+func (b *PrimaryBuffer) DeleteLines(start, end int) {
+	if start >= end {
+		return
+	}
+	rowcount := b.Cells.Rows()
+	if end > rowcount {
+		end = rowcount
+	}
+	orig := b.CursorAtScreen()
+
+	from := term.Coordinates{Y: start}
+	to := term.Coordinates{Y: end, X: b.Cells.Columns(end)}
+	b.Cells.DeleteLineContext(b.ctx, from, to)
+
+	orig.Y -= end - start + 1
+	if orig.Y > 0 {
+		orig.Y = 0
+	}
+	b.SetCursorAtScreen(orig, false)
+}
+
+// Reset clears the screen and removes history, effectively
+// leaving the content as blank and the cursor position at the top.
+func (b *PrimaryBuffer) Reset() {
+	b.resetLinesTrim(0, b.height, true, b.defaultChar)
+	b.scroll.SetOffset(term.Coordinates{})
+	b.SetCursorAtScroll(term.Coordinates{}, false)
 }
 
 // SetCursorAtScroll sets the cursor at the content/scroll position c.

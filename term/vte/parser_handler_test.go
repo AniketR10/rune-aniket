@@ -454,10 +454,10 @@ func TestIntegrationParserHandler(t *testing.T) {
 				p.ClearScreen(vteparser.ClearModeSaved)
 				assertEqualBuf(t, p, "d    \ne    \n$ .  \nout  \n$    ")
 
-				assert.True(t, p.scrollDown(1, true))
-				assertEqualBuf(t, p, "     \nd    \ne    \n$ .  \nout  ")
+				assert.False(t, p.scrollDown(1, true))
+				assertEqualBuf(t, p, "d    \ne    \n$ .  \nout  \n$    ")
 
-				assert.True(t, p.scrollUp(1, true))
+				assert.False(t, p.scrollUp(1, true))
 				assertEqualBuf(t, p, "d    \ne    \n$ .  \nout  \n$    ")
 			},
 		},
@@ -505,10 +505,10 @@ func TestIntegrationParserHandler(t *testing.T) {
 				p.ClearScreen(vteparser.ClearModeSaved)
 				assertEqualBuf(t, p, "     \n     \n     \n     \n     ")
 
-				assert.True(t, p.scrollDown(1, true))
+				assert.False(t, p.scrollDown(1, true))
 				assertEqualBuf(t, p, "     \n     \n     \n     \n     ")
 
-				assert.True(t, p.scrollUp(2, true))
+				assert.False(t, p.scrollUp(2, true))
 				assertEqualBuf(t, p, "     \n     \n     \n     \n     ")
 			},
 		},

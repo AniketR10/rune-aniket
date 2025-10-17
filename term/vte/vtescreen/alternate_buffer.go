@@ -520,7 +520,8 @@ func (b *AltBuffer) resetLinesTrim(start, end int, trim bool, with rune) {
 	if end > b.Cells.Rows() {
 		b.Cells.InsertContext(b.ctx, term.Coordinates{Y: end - 1}, with)
 	} else if end < b.Cells.Rows() && trim {
-		b.Cells.TruncateFromContext(b.ctx, term.Coordinates{Y: end - 1})
+		from := term.Coordinates{Y: end - 1, X: b.Cells.Columns(end - 1)}
+		b.Cells.TruncateFromContext(b.ctx, from)
 	}
 
 	for y := start; y < end; y++ {

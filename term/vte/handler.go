@@ -170,6 +170,23 @@ func (e *Handler) Component() *Component {
 	return e.comp
 }
 
+// ClearPrimaryBuffer resets the primary buffer.
+func (e *Handler) ClearPrimaryBuffer() (ok bool) {
+	if e.comp.IsAltBuffer() {
+		return
+	}
+	e.comp.Unselect()
+	ok = e.comp.ClearPrimaryBuffer()
+	if !ok {
+		return
+	}
+	if e.viMode {
+		// re-entering vi mode will reset cursor/offset for vi handler
+		e.exitViMode()
+	}
+	return
+}
+
 // SetDefaultAttributes sets the background and foreground attributes
 // of the underlying buffer.
 func (e *Handler) SetDefaultAttributes(attr term.Attributes) {

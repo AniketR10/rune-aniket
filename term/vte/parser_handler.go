@@ -553,7 +553,7 @@ func (t *parserHandler) DeleteLines(count int) {
 		count = int(math.Min(float64(count), float64(t.height-start)))
 		t.scrollUpAltRelative(start, count)
 	} else if !t.useAlt {
-		t.sync.primBuf.DeleteLines(count)
+		t.sync.primBuf.DeleteLinesCursor(count)
 	}
 }
 
@@ -678,8 +678,7 @@ func (t *parserHandler) ClearScreen(mode vteparser.ClearMode) {
 		if t.useAlt {
 			return
 		}
-		pos := t.sync.primBuf.Offset()
-		t.sync.buf.ResetLines(0, pos.Y)
+		t.clearPrimaryViewHistory()
 	default:
 		t.log(log.WarnLevel, "unknown clear screen mode: %v", mode)
 	}
@@ -1439,6 +1438,15 @@ func (t *parserHandler) wrapLine() {
 func (t *parserHandler) setCursorAtScreen(pos term.Coordinates, relative bool) {
 	t.sync.buf.SetCursorAtScreen(pos, relative)
 	t.shouldWrap = false
+}
+
+func (t *parserHandler) clearPrimaryViewHistory() {
+	pos := t.sync.primBuf.Offset()
+	if pos.Y == 0 {
+		return
+	}
+	t.sync.primBuf.DeleteLines(0, pos.Y-1)
+	t.sync.primBuf.ResetOffset()
 }
 
 func (t *parserHandler) clearPrimaryView() {
