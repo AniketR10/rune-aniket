@@ -23,9 +23,17 @@
 
 package term
 
-// Coordinates represent a point in a 2-D space.
+import "sort"
+
+// Coordinates represent a point in a 2D space.
 type Coordinates struct {
 	X, Y int
+}
+
+// Range is represents a selection in a 2D space.
+type Range struct {
+	Start Coordinates
+	End   Coordinates
 }
 
 // CoordinatesBlockSort sorts a pair of coordinates (from/to) such that:
@@ -154,4 +162,88 @@ func CoordinatesIntersection(
 // within the given right-exclusive bounds.
 func CoordinatesInBounds(pos Coordinates, bounds Coordinates) bool {
 	return pos.X >= 0 && pos.Y >= 0 && pos.X < bounds.X && pos.Y < bounds.Y
+}
+
+// MergeRanges combines the given range slice, such that
+// it returns the smallest set of ranges that is equivalent to
+// the given set of ranges, by merging all intersecting ranges.
+func MergeRanges(ranges []Range) []Range {
+	if len(ranges) == 0 {
+		return []Range{}
+	}
+
+	// Normalize and sort ranges by their start position in file order
+	sorted := make([]Range, len(ranges))
+	for i, r := range ranges{
+		sorted[i] = normalizeRange(r)
+	}
+	
+	sort.Slice(sorted, func(i, j int) bool {
+		return compareCoords(sorted[i].Start, sorted[j].Start) < 0
+	})
+
+	result := []Range{sorted[0]}
+
+	for i := 1; i < len(sorted); i++ {
+		current := sorted[i]
+		lastIdx := len(result) - 1
+		
+		// Check if current range overlaps or is adjacent to the last merged range
+		if rangesOverlapOrAdjacent(result[lastIdx], current) {
+			result[lastIdx] = mergeRanges(result[lastIdx], current)
+		} else {
+			result = append(result, current)
+		}
+	}
+	return result
+}
+
+// compareCoords compares two coordinates in file order
+// Returns: -1 if c1 < c2, 0 if c1 == c2, 1 if c1 > c2
+func compareCoords(c1, c2 Coordinates) int {
+	if c1.Y != c2.Y {
+		if c1.Y < c2.Y {
+			return -1
+		}
+		return 1
+	}
+	if c1.X != c2.X {
+		if c1.X < c2.X {
+			return -1
+		}
+		return 1
+	}
+	return 0
+}
+
+// rangesOverlapOrAdjacent checks if two ranges overlap or are adjacent in file space
+func rangesOverlapOrAdjacent(r1, r2 Range) bool {
+	// r1 and r2 are already normalized and r1.start <= r2.start (due to sorting)
+	
+	// If r2 starts before or at the position where r1 ends, they overlap or are adjacent
+	// We use <= because adjacent ranges should be merged
+	return compareCoords(r2.Start, r1.End) <= 0
+}
+
+// mergeRanges combines two ranges by taking the earliest start and latest end
+func mergeRanges(r1, r2 Range) Range{
+	start := r1.Start
+	if compareCoords(r2.Start, start) < 0 {
+		start = r2.Start
+	}
+	
+	end := r1.End
+	if compareCoords(r2.End, end) > 0 {
+		end = r2.End
+	}
+	
+	return Range{Start: start, End: end}
+}
+
+// normalizeRange ensures start comes before end in file order
+func normalizeRange(r Range) Range{
+	if compareCoords(r.Start, r.End) > 0 {
+		return Range{Start: r.End, End: r.Start}
+	}
+	return r
 }
