@@ -380,6 +380,8 @@ func (vi *viHandlerImpl) handleNormal(ev term.Event) (quit, handled bool) {
 	case 0:
 		handled = true
 		switch ev.Ch {
+		case 'z':
+			vi.cursor.ToggleHide()
 		case 'R':
 			vi.setReplaceMode()
 		case 'r':
@@ -693,6 +695,9 @@ func (vi *viHandlerImpl) handleVisual(ev term.Event) (quit, handled bool) {
 	switch ev.Mod {
 	case 0:
 		switch ev.Ch {
+		case 'z':
+			vi.cursor.HideSelection()
+			vi.setNormalMode()
 		case '>':
 			vi.cursor.ShiftSelectionRight()
 		case '<':

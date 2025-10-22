@@ -62,7 +62,7 @@ func graphemeClusterWidth(cluster string, boundaries int) uint8 {
 	// width width > 1.
 	case "", "", "", "", "", "", "", "", "", "", "", "",
 		"", "", "", "", "", "", "", "", "", "", " ",
-		"󱫆", "", "", "", "", "", "", "", "", "", "":
+		"󱫆", "", "", "", "", "", "", "", "", "", "", "":
 		return 2
 	default:
 		return uint8(unisegWidth)

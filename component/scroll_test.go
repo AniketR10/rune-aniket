@@ -24,6 +24,7 @@
 package component
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"strings"
@@ -36,48 +37,266 @@ import (
 	"unstable.build/go-tui/term"
 )
 
-const (
-	fortune = `Love in your heart wasn't put there to stay.
-Love isn't love 'til you give it away.
-		-- Oscar Hammerstein ⌘⌘`
-	wrapCopy = `module github.com/unstablebuild/blue
-
-go 1.14
-
-require (
-	cloud.google.com/go v0.63.0 // indirect
-	cloud.google.com/go/firestore v1.2.0
-	github.com/adrianmo/go-nmea v1.2.0
-	github.com/ernestrc/go-multierror v1.1.2 // indirect
-	github.com/ernestrc/logd-go v0.0.0-20180509171507-65871c1d5504
-	github.com/ernestrc/sensible v0.0.0-20170704153812-102a955adfdf
-	github.com/golang/mock v1.4.4
-	github.com/golang/protobuf v1.4.2
-	github.com/google/uuid v1.1.1
-	github.com/jacobsa/go-serial v0.0.0-20180131005756-15cf729a72d4
-)`
-)
-
-var fortunewidth = 44
-
-func newScroll(tabspaces int, wrap bool, width, height int) (scroll *Scroll) {
-	buf := cell.NewBuffer()
-	buf.InitWithTabspaces(tabspaces)
-	scroll = NewScroll(buf)
-	scroll.Wrap = wrap
-	scroll.Resize(width, height)
-	return
+func TestInitPerfWithHidden(t *testing.T) {
+	s := new(Scroll)
+	s.InitPerformance(cell.NewBuffer())
+	s.Buffer().WriteString("abc\n")
+	assert.NotPanics(t, func() {
+		assert.False(t, s.MarkHidden(0, 3))
+		assert.False(t, s.MarkVisible(0))
+		s.Draw(term.NewStringWriter(10, 10))
+		s.ScrollToWindowCoordinates(term.Coordinates{})
+		s.WindowToScrollCoordinates(term.Coordinates{})
+	})
 }
 
-func newScrollWrapTestCase(t *testing.T, width, height int) (*Scroll, *term.StringWriter) {
-	tabspaces := 4
-	wrap := true
-	scroll := newScroll(tabspaces, wrap, width, height)
-	_, err := scroll.Buffer().ReadFrom(strings.NewReader(wrapCopy))
+func TestScrollDrawHidden(t *testing.T) {
+	scroll := newScroll(4, false, 24, 9)
+	_, err := scroll.Buffer().ReadFrom(strings.NewReader(hiddenCopy))
 	require.NoError(t, err)
 
-	w := term.NewStringWriter(width, height)
-	return scroll, w
+	w := term.NewStringWriter(24, 9)
+
+	tests := []comptest.TestCase{
+		{
+			nil, `
+module github.com/unstab
+                        
+go 1.14                 
+                        
+require (               
+    cloud.google.com/go 
+    cloud.google.com/go/
+    github.com/adrianmo/
+    github.com/ernestrc/`,
+		},
+		{
+			func() {
+				assert.False(t, scroll.MarkHidden(2, 2))
+			}, `
+module github.com/unstab
+                        
+go 1.14                 
+                        
+require (               
+    cloud.google.com/go 
+    cloud.google.com/go/
+    github.com/adrianmo/
+    github.com/ernestrc/`,
+		},
+		{
+			func() {
+				assert.False(t, scroll.MarkVisible(2))
+			}, `
+module github.com/unstab
+                        
+go 1.14                 
+                        
+require (               
+    cloud.google.com/go 
+    cloud.google.com/go/
+    github.com/adrianmo/
+    github.com/ernestrc/`,
+		},
+		{
+			func() {
+				assert.True(t, scroll.MarkHidden(1, 2))
+			}, `
+module github.com/unstab
+   [2 lines] go 1.14   
+                        
+require (               
+    cloud.google.com/go 
+    cloud.google.com/go/
+    github.com/adrianmo/
+    github.com/ernestrc/
+    github.com/ernestrc/`,
+		},
+		{
+			func() {
+				assert.True(t, scroll.MarkVisible(1))
+				assert.False(t, scroll.MarkVisible(1))
+			}, `
+module github.com/unstab
+                        
+go 1.14                 
+                        
+require (               
+    cloud.google.com/go 
+    cloud.google.com/go/
+    github.com/adrianmo/
+    github.com/ernestrc/`,
+		},
+		{
+			func() {
+				assert.True(t, scroll.MarkHidden(4, 15))
+			}, `
+module github.com/unstab
+                        
+go 1.14                 
+                        
+require (   [12 lines] 
+                        
+replace this => that    
+                        
+                        `,
+		},
+		{
+			func() {
+				assert.True(t, scroll.SeekRight())
+				assert.True(t, scroll.SeekRight())
+			}, `
+dule github.com/unstable
+                        
+ 1.14                   
+                        
+quire (   [12 lines] ) 
+                        
+place this => that      
+                        
+                        `,
+		},
+		{
+			func() {
+				for range 8 {
+					assert.True(t, scroll.SeekRight())
+				}
+			}, `
+hub.com/unstablebuild/bl
+                        
+                        
+                        
+  [12 lines] )         
+                        
+is => that              
+                        
+                        `,
+		},
+		{
+			func() {
+				for range 4 {
+					assert.True(t, scroll.SeekRight())
+				}
+			}, `
+com/unstablebuild/blue  
+                        
+                        
+                        
+12 lines] )             
+                        
+> that                  
+                        
+                        `,
+		},
+		{
+			func() {
+				for range 10 {
+					assert.True(t, scroll.SeekRight())
+				}
+			}, `
+lebuild/blue            
+                        
+                        
+                        
+)                       
+                        
+                        
+                        
+                        `,
+		},
+		{
+			func() {
+				for scroll.SeekRight() {
+				}
+			}, `
+                        
+                        
+                        
+                        
+                        
+                        
+                        
+                        
+                        `,
+		},
+		{
+			func() {
+				require.True(t, scroll.SeekStartLine())
+				for range 4 {
+					require.True(t, scroll.SeekDown())
+				}
+			}, `
+require (   [12 lines] 
+                        
+replace this => that    
+                        
+                        
+                        
+                        
+                        
+                        `,
+		},
+		{
+			func() {
+				require.True(t, scroll.SeekDown())
+			}, `
+                        
+replace this => that    
+                        
+                        
+                        
+                        
+                        
+                        
+                        `,
+		},
+		{
+			func() {
+				require.True(t, scroll.SeekDown())
+			}, `
+replace this => that    
+                        
+                        
+                        
+                        
+                        
+                        
+                        
+                        `,
+		},
+		{
+			func() {
+				require.True(t, scroll.SeekDown())
+			}, `
+                        
+                        
+                        
+                        
+                        
+                        
+                        
+                        
+                        `,
+		},
+		{
+			/* trimming of start of line */
+			func() {
+				require.True(t, scroll.SeekStartFile())
+				require.True(t, scroll.MarkVisible(4))
+				require.True(t, scroll.MarkHidden(2, 5))
+			}, `
+module github.com/unstab
+                        
+go 1.14   [4 lines]  cl
+    cloud.google.com/go/
+    github.com/adrianmo/
+    github.com/ernestrc/
+    github.com/ernestrc/
+    github.com/ernestrc/
+    github.com/golang/mo`,
+		},
+	}
+	comptest.TestComponent(t, scroll, w, tests)
 }
 
 func TestScrollNew(t *testing.T) {
@@ -733,6 +952,94 @@ func TestScrollToWindowCoordinates(t *testing.T) {
 			makeScroll(true, 10, 3, 3, 0), term.Coordinates{Y: 0, X: 0}, term.Coordinates{Y: -3, X: 0}},
 		{"3rd wrap, halfway through line offset, negative window pos",
 			makeScroll(true, 10, 3, 2, 0), term.Coordinates{Y: 0, X: 10}, term.Coordinates{Y: -1, X: 0}},
+		{"hidden lines, no offset, position before hidden lines",
+			makeScrollWithHiddenLines(false, 10, 3, 0, 0, startEndBlock{0, 1}, startEndBlock{4, 5}),
+			term.Coordinates{Y: 0, X: 0}, term.Coordinates{Y: 0, X: 0}},
+		{"hidden lines, no offset, position inside hidden block",
+			makeScrollWithHiddenLines(false, 10, 3, 0, 0, startEndBlock{4, 15}),
+			term.Coordinates{Y: 5, X: 5}, term.Coordinates{Y: 4, X: 5}},
+		{"hidden lines, no offset, position after hidden blocks",
+			makeScrollWithHiddenLines(false, 10, 3, 0, 0, startEndBlock{4, 15}),
+			term.Coordinates{Y: 16, X: 5}, term.Coordinates{Y: 5, X: 5}},
+		{"hidden lines, with offset, position after hidden blocks",
+			makeScrollWithHiddenLines(false, 10, 3, 1, 1, startEndBlock{4, 15}),
+			term.Coordinates{Y: 16, X: 5}, term.Coordinates{Y: 4, X: 4}},
+		{"hidden lines, with offset, position after multiple hidden blocks",
+			makeScrollWithHiddenLines(false, 10, 3, 1, 1, startEndBlock{4, 10}, startEndBlock{11, 15}),
+			term.Coordinates{Y: 16, X: 5}, term.Coordinates{Y: 5, X: 4}},
+		{"hidden lines, no offset, position after hidden block, after insert line above",
+			func(t *testing.T) *Scroll {
+				fn := makeScrollWithHiddenLines(false, 10, 3, 0, 0, startEndBlock{4, 15})
+				scroll := fn(t)
+				scroll.Buffer().Insert(term.Coordinates{}, '\n')
+				return scroll
+			},
+			term.Coordinates{Y: 5, X: 5}, term.Coordinates{Y: 5, X: 5},
+		},
+		{"hidden lines, no offset, position after hidden block, after insert line above",
+			func(t *testing.T) *Scroll {
+				fn := makeScrollWithHiddenLines(false, 10, 3, 0, 0, startEndBlock{4, 15})
+				scroll := fn(t)
+				scroll.Buffer().Insert(term.Coordinates{}, '\n')
+				return scroll
+			},
+			term.Coordinates{Y: 17, X: 5}, term.Coordinates{Y: 6, X: 5},
+		},
+		{"hidden lines, no offset, position after hidden block, after insert line below",
+			func(t *testing.T) *Scroll {
+				fn := makeScrollWithHiddenLines(false, 10, 3, 0, 0, startEndBlock{4, 15})
+				scroll := fn(t)
+				scroll.Buffer().Insert(term.Coordinates{Y: 17}, '\n')
+				return scroll
+			},
+			term.Coordinates{Y: 16, X: 5}, term.Coordinates{Y: 5, X: 5},
+		},
+		{"hidden lines, no offset, position after hidden block, after remove line above",
+			func(t *testing.T) *Scroll {
+				fn := makeScrollWithHiddenLines(false, 10, 3, 0, 0, startEndBlock{4, 15})
+				scroll := fn(t)
+				scroll.Buffer().DeleteLine(term.Coordinates{}, term.Coordinates{})
+				return scroll
+			},
+			term.Coordinates{Y: 15, X: 5}, term.Coordinates{Y: 4, X: 5},
+		},
+		{"hidden lines, no offset, position after hidden block, after remove line below",
+			func(t *testing.T) *Scroll {
+				fn := makeScrollWithHiddenLines(false, 10, 3, 0, 0, startEndBlock{4, 15})
+				scroll := fn(t)
+				scroll.Buffer().DeleteLine(term.Coordinates{Y: 17}, term.Coordinates{Y: 17})
+				return scroll
+			},
+			term.Coordinates{Y: 16, X: 5}, term.Coordinates{Y: 5, X: 5},
+		},
+		{"hidden lines, no offset, position after hidden block, remove start of hidden block clears it",
+			func(t *testing.T) *Scroll {
+				fn := makeScrollWithHiddenLines(false, 10, 3, 0, 0, startEndBlock{4, 15})
+				scroll := fn(t)
+				scroll.Buffer().DeleteLine(term.Coordinates{Y: 4}, term.Coordinates{Y: 4})
+				return scroll
+			},
+			term.Coordinates{Y: 16, X: 5}, term.Coordinates{Y: 16, X: 5},
+		},
+		{"hidden lines, no offset, position after hidden block, remove end of hidden block clears it",
+			func(t *testing.T) *Scroll {
+				fn := makeScrollWithHiddenLines(false, 10, 3, 0, 0, startEndBlock{4, 15})
+				scroll := fn(t)
+				scroll.Buffer().DeleteLine(term.Coordinates{Y: 12}, term.Coordinates{Y: 15})
+				return scroll
+			},
+			term.Coordinates{Y: 16, X: 5}, term.Coordinates{Y: 16, X: 5},
+		},
+		{"hidden lines, no offset, position after hidden block, replace before hidden block",
+			func(t *testing.T) *Scroll {
+				fn := makeScrollWithHiddenLines(false, 10, 3, 0, 0, startEndBlock{4, 15})
+				scroll := fn(t)
+				scroll.Buffer().Edit(context.Background(),
+					term.Coordinates{Y: 0}, term.Coordinates{Y: 2}, "\n\n")
+				return scroll
+			},
+			term.Coordinates{Y: 16, X: 5}, term.Coordinates{Y: 5, X: 5},
+		},
 	}
 
 	for _, test := range suite {
@@ -742,7 +1049,8 @@ func TestScrollToWindowCoordinates(t *testing.T) {
 			// resulting position is ambiguous, this should not happen
 			// in a real case scaneario anyway
 			if strings.Contains(test.description, "past end of one line") ||
-				strings.Contains(test.description, "past end of file") {
+				strings.Contains(test.description, "past end of file") ||
+				strings.Contains(test.description, "inside hidden block") {
 				return
 			}
 			assert.Equal(t, test.scroll,
@@ -884,6 +1192,55 @@ func TestWindowCoordinatesPanicDeleteRow(t *testing.T) {
 	})
 }
 
+func BenchmarkScrollWrapDraw10(b *testing.B) {
+	benchmarkScrollWrapDraw(b, 10, 0)
+}
+func BenchmarkScrollWrapDraw100(b *testing.B) {
+	benchmarkScrollWrapDraw(b, 100, 0)
+}
+func BenchmarkScrollWrapDraw1000(b *testing.B) {
+	benchmarkScrollWrapDraw(b, 1000, 0)
+}
+func BenchmarkScrollWrapDrawBigOffset1000(b *testing.B) {
+	benchmarkScrollWrapDraw(b, 1000, 0.7)
+}
+
+func BenchmarkScrollDraw10(b *testing.B) {
+	benchmarkScrollDraw(b, 10, 0)
+}
+func BenchmarkScrollDraw100(b *testing.B) {
+	benchmarkScrollDraw(b, 100, 0)
+}
+func BenchmarkScrollDraw1000(b *testing.B) {
+	benchmarkScrollDraw(b, 1000, 0)
+}
+func BenchmarkScrollDrawBigOffset1000(b *testing.B) {
+	benchmarkScrollDraw(b, 1000, 0.7)
+}
+
+func BenchmarkScrollHiddenDraw10(b *testing.B) {
+	benchmarkScrollHiddenDraw(b, 10, 0, 2)
+}
+func BenchmarkScrollHiddenDraw100(b *testing.B) {
+	benchmarkScrollHiddenDraw(b, 100, 0, 2)
+}
+func BenchmarkScrollHiddenDraw100ManyHidden(b *testing.B) {
+	benchmarkScrollHiddenDraw(b, 100, 0, 20)
+}
+func BenchmarkScrollHiddenDraw1000(b *testing.B) {
+	benchmarkScrollHiddenDraw(b, 1000, 0, 2)
+}
+func BenchmarkScrollHiddenDrawBigOffset1000(b *testing.B) {
+	benchmarkScrollHiddenDraw(b, 1000, 0.7, 2)
+}
+
+func BenchmarkScrollDraw100MB(b *testing.B) {
+	benchmarkScrollDraw(b, 1000000, 0)
+}
+func BenchmarkScrollWrapDraw100MB(b *testing.B) {
+	benchmarkScrollDraw(b, 1000000, 0)
+}
+
 func makeScroll(wrap bool, width, height, offsetY, offsetX int) func(t *testing.T) *Scroll {
 	const content = `AAAAAAAAAAAAA
 BBBBBBB
@@ -891,6 +1248,17 @@ CCCCCCCCCCCCCC
 DDDDDDD
 EEEEEEEEEEEEEE`
 	return makeScrollContent(wrap, width, height, offsetY, offsetX, content)
+}
+
+func makeScrollWithHiddenLines(wrap bool, width, height, offsetY, offsetX int, hidden ...startEndBlock) func(t *testing.T) *Scroll {
+	fn := makeScrollContent(wrap, width, height, offsetY, offsetX, wrapCopy)
+	return func(t *testing.T) *Scroll {
+		scroll := fn(t)
+		for _, block := range hidden {
+			require.True(t, scroll.MarkHidden(block.start, block.end))
+		}
+		return scroll
+	}
 }
 
 func makeScrollContent(wrap bool, width, height, offsetY, offsetX int, content string) func(t *testing.T) *Scroll {
@@ -933,6 +1301,20 @@ func benchmarkScrollDraw(b *testing.B, fortunes int, offset float32) {
 	// b.Logf("benchmark draw using payload of %d bytes\n", fortunes*len(fortune))
 }
 
+func benchmarkScrollHiddenDraw(b *testing.B, fortunes int, offset float32, hidden int) {
+	scroll := newBigScroll(fortunes)
+	seekPercRows(scroll, offset)
+	for i := range hidden {
+		scroll.MarkHidden(i, i+1)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		scroll.Draw(term.NoopWriter{})
+	}
+	// b.Logf("benchmark draw using payload of %d bytes\n", fortunes*len(fortune))
+}
+
 func seekPercRows(scroll *Scroll, offset float32) {
 	offsetRows := int(float32(scroll.Buffer().Rows()) * offset)
 	for i := 0; i < offsetRows; i++ {
@@ -950,39 +1332,6 @@ func benchmarkScrollWrapDraw(b *testing.B, fortunes int, offset float32) {
 		scroll.Draw(term.NoopWriter{})
 	}
 	// b.Logf("benchmark draw using payload of %d bytes\n", fortunes*len(fortune))
-}
-
-func BenchmarkScrollWrapDraw10(b *testing.B) {
-	benchmarkScrollWrapDraw(b, 10, 0)
-}
-func BenchmarkScrollWrapDraw100(b *testing.B) {
-	benchmarkScrollWrapDraw(b, 100, 0)
-}
-func BenchmarkScrollWrapDraw1000(b *testing.B) {
-	benchmarkScrollWrapDraw(b, 1000, 0)
-}
-func BenchmarkScrollWrapDrawBigOffset1000(b *testing.B) {
-	benchmarkScrollWrapDraw(b, 1000, 0.7)
-}
-
-func BenchmarkScrollDraw10(b *testing.B) {
-	benchmarkScrollDraw(b, 10, 0)
-}
-func BenchmarkScrollDraw100(b *testing.B) {
-	benchmarkScrollDraw(b, 100, 0)
-}
-func BenchmarkScrollDraw1000(b *testing.B) {
-	benchmarkScrollDraw(b, 1000, 0)
-}
-func BenchmarkScrollDrawBigOffset1000(b *testing.B) {
-	benchmarkScrollDraw(b, 1000, 0.7)
-}
-
-func BenchmarkScrollDraw100MB(b *testing.B) {
-	benchmarkScrollDraw(b, 1000000, 0)
-}
-func BenchmarkScrollWrapDraw100MB(b *testing.B) {
-	benchmarkScrollDraw(b, 1000000, 0)
 }
 
 type subscriber struct {
@@ -1019,4 +1368,66 @@ func (s searchResultsWriter) UnionAttributes(pos term.Coordinates, attr term.Att
 	}
 
 	s.StringWriter.SetCell(pos, c)
+}
+
+const (
+	fortune = `Love in your heart wasn't put there to stay.
+Love isn't love 'til you give it away.
+		-- Oscar Hammerstein ⌘⌘`
+
+	wrapCopy = `module github.com/unstablebuild/blue
+
+go 1.14
+
+require (
+	cloud.google.com/go v0.63.0 // indirect
+	cloud.google.com/go/firestore v1.2.0
+	github.com/adrianmo/go-nmea v1.2.0
+	github.com/ernestrc/go-multierror v1.1.2 // indirect
+	github.com/ernestrc/logd-go v0.0.0-20180509171507-65871c1d5504
+	github.com/ernestrc/sensible v0.0.0-20170704153812-102a955adfdf
+	github.com/golang/mock v1.4.4
+	github.com/golang/protobuf v1.4.2
+	github.com/google/uuid v1.1.1
+	github.com/jacobsa/go-serial v0.0.0-20180131005756-15cf729a72d4
+)`
+	hiddenCopy = `module github.com/unstablebuild/blue
+
+go 1.14
+
+require (
+	cloud.google.com/go v0.63.0 // indirect
+	cloud.google.com/go/firestore v1.2.0
+	github.com/adrianmo/go-nmea v1.2.0
+	github.com/ernestrc/go-multierror v1.1.2 // indirect
+	github.com/ernestrc/logd-go v0.0.0-20180509171507-65871c1d5504
+	github.com/ernestrc/sensible v0.0.0-20170704153812-102a955adfdf
+	github.com/golang/mock v1.4.4
+	github.com/golang/protobuf v1.4.2
+	github.com/google/uuid v1.1.1
+	github.com/jacobsa/go-serial v0.0.0-20180131005756-15cf729a72d4
+)
+	
+replace this => that
+`
+)
+
+func newScroll(tabspaces int, wrap bool, width, height int) (scroll *Scroll) {
+	buf := cell.NewBuffer()
+	buf.InitWithTabspaces(tabspaces)
+	scroll = NewScroll(buf)
+	scroll.Wrap = wrap
+	scroll.Resize(width, height)
+	return
+}
+
+func newScrollWrapTestCase(t *testing.T, width, height int) (*Scroll, *term.StringWriter) {
+	tabspaces := 4
+	wrap := true
+	scroll := newScroll(tabspaces, wrap, width, height)
+	_, err := scroll.Buffer().ReadFrom(strings.NewReader(wrapCopy))
+	require.NoError(t, err)
+
+	w := term.NewStringWriter(width, height)
+	return scroll, w
 }

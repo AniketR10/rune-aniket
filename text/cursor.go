@@ -1289,6 +1289,49 @@ func (c *Cursor) DeleteSelection() (ok bool) {
 	return
 }
 
+// ToggleHide either unhides the hidden block at cursor,
+// or hides the current selection.
+func (c *Cursor) ToggleHide() (ok bool) {
+	if c.Unhide() {
+		return true
+	}
+	return c.HideSelection()
+}
+
+// HideSelection hides the current text under selection and returns true
+// or does nothing and returns false.
+func (c *Cursor) HideSelection() (ok bool) {
+	if c.selection.mode == NoSelection {
+		return
+	}
+
+	from := c.selection.scrollFrom
+	to, ok := c.cursorAtScrollBounds()
+	c.Unselect()
+	// this means that content was modified after Select started
+	// and now there's no content to select, so we are done.
+	if !ok {
+		return
+	}
+
+	from, to = term.CoordinatesSort(from, to)
+	ok = c.scroll.MarkHidden(from.Y, to.Y)
+	if ok {
+		c.setCursorAfterUpdate(from)
+	}
+	return
+}
+
+// Unhide un-hides the block of hidden lines starting at the cursor position.
+func (c *Cursor) Unhide() (ok bool) {
+	at, ok := c.cursorAtScrollBounds()
+	if !ok {
+		return
+	}
+	ok = c.scroll.MarkVisible(at.Y)
+	return
+}
+
 // CopySelection copies the current text under selection and returns true
 // or does nothing and returns false.
 func (c *Cursor) CopySelection(registerID string, clip clipboard.Register) (ok bool, err error) {
