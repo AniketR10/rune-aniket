@@ -48,6 +48,19 @@ func newBufferWithContent(t *testing.T, str string) *Buffer {
 	return b
 }
 
+func TestBufferInitPerformance(t *testing.T) {
+	c := new(Buffer)
+	c.InitPerformance(1, 10, 10, '\x00')
+
+	assert.NotPanics(t, func() {
+		c.Undo()
+		c.Redo()
+		c.Version()
+		c.GroupUndo()
+		c.MarkStartUndo()
+	})
+}
+
 func TestBufferInsert(t *testing.T) {
 	buf := NewBuffer()
 	var next term.Coordinates

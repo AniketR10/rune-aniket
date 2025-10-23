@@ -105,7 +105,7 @@ func (b *Buffer) InitWithTabspaces(tabspaces int) {
 
 // InitPerformance initializes this Buffer without Undo, Redo,
 // SubscribeUsage, UnsubscribeUsage, Subscribe or Unsubscribe functionality.
-// Calling any of these methods will cause the calling goroutine to panic.
+// Calling any of the subscribe methods will cause the calling goroutine to panic.
 func (b *Buffer) InitPerformance(tabspaces int, rowCapacity, columnCapacity int, fillInChar rune) {
 	cells := new(rawCells)
 	cells.initWithCap(tabspaces, rowCapacity, columnCapacity, fillInChar)
@@ -451,6 +451,9 @@ func (b *Buffer) Reset() {
 
 // Version returns the version of this buffer.
 func (b *Buffer) Version() int {
+	if b.undoer == nil {
+		return 0
+	}
 	return b.undoer.version
 }
 
@@ -489,6 +492,9 @@ func (b *Buffer) WriteStringWithAttr(str string, attr term.Attributes) {
 // Undo reverses the last update to the Buffer.
 // Redo can be used to reverse Undo.
 func (b *Buffer) Undo() (bool, term.Coordinates) {
+	if b.undoer == nil {
+		return false, term.Coordinates{}
+	}
 	return b.undoer.undo()
 }
 
@@ -512,6 +518,9 @@ func (b *Buffer) GroupUndo() bool {
 
 // Redo reverses the previously reversed update to the Buffer.
 func (b *Buffer) Redo() (bool, term.Coordinates) {
+	if b.undoer == nil {
+		return false, term.Coordinates{}
+	}
 	return b.undoer.redo()
 }
 
