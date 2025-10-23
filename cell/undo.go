@@ -40,7 +40,8 @@ type undoer struct {
 }
 
 type op struct {
-	at   term.Coordinates
+	from term.Coordinates
+	to   term.Coordinates
 	do   func()
 	undo func()
 }
@@ -78,7 +79,7 @@ func (u *undoer) endMergeUndo() bool {
 		return false
 	}
 	grouped := op{
-		at:   u.undoTimeline[u.mergeGroupStart].at,
+		from: u.undoTimeline[u.mergeGroupStart].from,
 		do:   func() {},
 		undo: func() {},
 	}
@@ -94,6 +95,7 @@ func (u *undoer) endMergeUndo() bool {
 			op.undo()
 			undo()
 		}
+		grouped.to = op.to
 	}
 
 	u.undoTimeline = u.undoTimeline[:u.mergeGroupStart]
@@ -111,7 +113,7 @@ func (u *undoer) redo() (bool, term.Coordinates) {
 	u.redoTimeline = redoTimeline
 	op.do()
 	u.pushUndo(op)
-	return ok, op.at
+	return ok, op.to
 }
 
 func (u *undoer) undo() (bool, term.Coordinates) {
@@ -123,7 +125,7 @@ func (u *undoer) undo() (bool, term.Coordinates) {
 	u.undoTimeline = undoTimeline
 	op.undo()
 	u.pushRedo(op)
-	return ok, op.at
+	return ok, op.from
 }
 
 func (u *undoer) pushUndo(cmd op) {
@@ -142,7 +144,6 @@ func (u *undoer) Edit(ctx context.Context, start, end term.Coordinates, str stri
 	from, to term.Coordinates, old string,
 ) {
 	op := op{
-		at: start,
 		do: func() {
 			from, to, old = u.w.Edit(ctx, start, end, str)
 		},
@@ -152,6 +153,8 @@ func (u *undoer) Edit(ctx context.Context, start, end term.Coordinates, str stri
 	}
 
 	op.do()
+	op.from = start
+	op.to = to
 	u.version++
 	u.pushUndo(op)
 	u.resetRedoTimeline()

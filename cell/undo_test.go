@@ -30,6 +30,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"unstable.build/go-tui/term"
 )
 
@@ -168,17 +169,23 @@ func TestUndo(t *testing.T) {
 
 		middle := buf.String()
 
-		undoer.undo()
+		ok, at := undoer.undo()
+		require.True(t, ok)
+		assert.Equal(t, term.Coordinates{Y: 2}, at)
 
 		after := buf.String()
 		assert.Equal(t, prev, after)
 
-		undoer.redo()
+		ok, at = undoer.redo()
+		require.True(t, ok)
+		assert.Equal(t, term.Coordinates{}, at)
 
 		afterRedo := buf.String()
 		assert.Equal(t, middle, afterRedo)
 
-		undoer.undo()
+		ok, at = undoer.undo()
+		require.True(t, ok)
+		assert.Equal(t, term.Coordinates{Y: 2}, at)
 
 		after = buf.String()
 		assert.Equal(t, prev, after)
