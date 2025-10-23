@@ -155,6 +155,112 @@ func TestUndo(t *testing.T) {
 		after = buf.String()
 		assert.Equal(t, prev, after)
 	})
+
+	t.Run("undo/redo a series of updates all via grouped undo", func(t *testing.T) {
+		undoer, buf := initUndoTestBuffer(t)
+		prev := buf.String()
+
+		undoer.startMergeUndo()
+		for _, tcase := range suite {
+			tcase.cmd(buf)
+		}
+		undoer.endMergeUndo()
+
+		middle := buf.String()
+
+		undoer.undo()
+
+		after := buf.String()
+		assert.Equal(t, prev, after)
+
+		undoer.redo()
+
+		afterRedo := buf.String()
+		assert.Equal(t, middle, afterRedo)
+
+		undoer.undo()
+
+		after = buf.String()
+		assert.Equal(t, prev, after)
+	})
+
+	t.Run("undo/redo a series of updates partially via grouped undo (after)", func(t *testing.T) {
+		undoer, buf := initUndoTestBuffer(t)
+		prev := buf.String()
+
+		for i, tcase := range suite {
+			if i == 4 {
+				undoer.startMergeUndo()
+			}
+			tcase.cmd(buf)
+		}
+		undoer.endMergeUndo()
+
+		middle := buf.String()
+
+		undoer.undo()
+		for range 4 {
+			undoer.undo()
+		}
+
+		after := buf.String()
+		assert.Equal(t, prev, after)
+
+		for range 4 {
+			undoer.redo()
+		}
+		undoer.redo()
+
+		afterRedo := buf.String()
+		assert.Equal(t, middle, afterRedo)
+
+		undoer.undo()
+		for range 4 {
+			undoer.undo()
+		}
+
+		after = buf.String()
+		assert.Equal(t, prev, after)
+	})
+
+	t.Run("undo/redo a series of updates partially via grouped undo (before)", func(t *testing.T) {
+		undoer, buf := initUndoTestBuffer(t)
+		prev := buf.String()
+
+		undoer.startMergeUndo()
+		for i, tcase := range suite {
+			if i == 4 {
+				undoer.endMergeUndo()
+			}
+			tcase.cmd(buf)
+		}
+
+		middle := buf.String()
+
+		for range 5 {
+			undoer.undo()
+		}
+		undoer.undo()
+
+		after := buf.String()
+		assert.Equal(t, prev, after)
+
+		undoer.redo()
+		for range 5 {
+			undoer.redo()
+		}
+
+		afterRedo := buf.String()
+		assert.Equal(t, middle, afterRedo)
+
+		for range 5 {
+			undoer.undo()
+		}
+		undoer.undo()
+
+		after = buf.String()
+		assert.Equal(t, prev, after)
+	})
 }
 
 func TestUndoEOL(t *testing.T) {

@@ -32,10 +32,11 @@ import (
 // undoer adds undo and redo methods to a otherwise, irreversible cell.writer.
 // It satifies the cell.writer interface and it should be used as a replacement.
 type undoer struct {
-	version      int
-	w            Editor
-	undoTimeline []op
-	redoTimeline []op
+	version         int
+	w               Editor
+	undoTimeline    []op
+	redoTimeline    []op
+	mergeGroupStart int
 }
 
 type op struct {
@@ -65,6 +66,40 @@ func popLastOp(timeline []op) ([]op, op, bool) {
 	}
 	op := timeline[lastCmd]
 	return timeline[:lastCmd], op, true
+}
+
+func (u *undoer) startMergeUndo() bool {
+	u.mergeGroupStart = len(u.undoTimeline)
+	return true
+}
+
+func (u *undoer) endMergeUndo() bool {
+	if u.mergeGroupStart >= len(u.undoTimeline) {
+		return false
+	}
+	grouped := op{
+		at:   u.undoTimeline[u.mergeGroupStart].at,
+		do:   func() {},
+		undo: func() {},
+	}
+	for i := u.mergeGroupStart; i < len(u.undoTimeline); i++ {
+		op := u.undoTimeline[i]
+		do := grouped.do
+		undo := grouped.undo
+		grouped.do = func() {
+			do()
+			op.do()
+		}
+		grouped.undo = func() {
+			op.undo()
+			undo()
+		}
+	}
+
+	u.undoTimeline = u.undoTimeline[:u.mergeGroupStart]
+	u.undoTimeline = append(u.undoTimeline, grouped)
+
+	return true
 }
 
 func (u *undoer) redo() (bool, term.Coordinates) {

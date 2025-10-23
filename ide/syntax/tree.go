@@ -74,8 +74,11 @@ func WithTree(
 	ret.config = config
 	ret.buf = buf
 	ret.uri = uri
-	ret.ced = ret.buf.WithEditor(ret)
+	// NOTE: this shouldn't be removed as the buffer's view
+	// is how we share this tree's capabilities with
+	// other parts of the codebase via interface assertion.
 	ret.cview = ret.buf.WithView(ret)
+	ret.buf.Subscribe(ret)
 	ret.n = n
 	ret.interrupter = interrupter
 	ret.pkg = pkg
@@ -98,7 +101,6 @@ type Tree struct {
 	fc          workspace.FlusherCloser
 	uri         workspaceapi.URI
 	buf         *cell.Buffer
-	ced         cell.Editor
 	cview       cell.View
 
 	ready      bool
@@ -111,6 +113,10 @@ type Tree struct {
 	tree       *tree_sitter.Tree
 	highlights *tree_sitter.Query
 	indents    *tree_sitter.Query
+
+	onWillEditStart term.Coordinates
+	onWillEditEnd   term.Coordinates
+	onWillEditStr   string
 }
 
 // IndentationAt returns the indentation that should correspond to a node placed
@@ -180,12 +186,14 @@ func (t *internalTree) String() string {
 	return t.cview.String()
 }
 
-func (t *internalTree) Edit(ctx context.Context, start, end term.Coordinates, str string) (
-	from, to term.Coordinates, old string,
-) {
-	from, to, old = t.ced.Edit(ctx, start, end, str)
-	t.incrementalParse(start, end, from, to, str)
-	return
+func (t *internalTree) OnWillEdit(ctx context.Context, start, end term.Coordinates, str string) {
+	t.onWillEditStart = start
+	t.onWillEditEnd = end
+	t.onWillEditStr = str
+}
+
+func (t *internalTree) OnDidEdit(ctx context.Context, from, to term.Coordinates, old string) {
+	t.incrementalParse(t.onWillEditStart, t.onWillEditEnd, from, to, t.onWillEditStr)
 }
 
 func (t *internalTree) Flush() error {

@@ -492,6 +492,24 @@ func (b *Buffer) Undo() (bool, term.Coordinates) {
 	return b.undoer.undo()
 }
 
+// MarkStartUndo marks the current undo version as the start of the next
+// group created by GroupUndo.
+func (b *Buffer) MarkStartUndo() bool {
+	if b.undoer == nil {
+		return false
+	}
+	return b.undoer.startMergeUndo()
+}
+
+// GroupUndo merges all the undos since the last MarkStartUndo was called,
+// or all undos currently available.
+func (b *Buffer) GroupUndo() bool {
+	if b.undoer == nil {
+		return false
+	}
+	return b.undoer.endMergeUndo()
+}
+
 // Redo reverses the previously reversed update to the Buffer.
 func (b *Buffer) Redo() (bool, term.Coordinates) {
 	return b.undoer.redo()

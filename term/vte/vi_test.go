@@ -145,7 +145,7 @@ $ echo ▐la
                     
                     
               NORMAL`},
-			{"u", // single line undo
+			{"ved",
 				`$ echo bla          
 bla                 
 $ echo▐             
@@ -178,11 +178,11 @@ $ echo bla1234567890
                     
                     
               NORMAL`},
-			{"u", // 2 line undo
+			{"u", // undo doesn' panic
 				`$ echo bla          
 bla                 
 $ echo bla1234567890
-123456789▐          
+123456o89▐          
                     
                     
                     
@@ -193,7 +193,7 @@ $ echo bla1234567890
 				`$ echo bla          
 bla                 
 $ echo bla1234567890
-1234567890aaaaaaaaaa
+123456o890aaaaaaaaaa
 aaaaaaaaaaaaaa▐     
                     
                     
@@ -204,19 +204,8 @@ aaaaaaaaaaaaaa▐
 				`$ echo bla          
 bla                 
 $ echo bla1234567890
-1234567890aaaaaaaaaa
+123456o890aaaaaaaaaa
 aaaaaaaaaaaaaX▐     
-                    
-                    
-                    
-                    
-              INSERT`},
-			{"<ua", // multiline undo
-				`$ echo bla          
-bla                 
-$ echo bla1234567890
-1234567890aaaaaaaaaa
-aaaaaaaaaaaaaa▐     
                     
                     
                     
@@ -225,22 +214,22 @@ aaaaaaaaaaaaaa▐
 			{"<>>>", // ensure that attr bar doesn't occlude last line in shell mode
 				`bla                 
 $ echo bla1234567890
-1234567890aaaaaaaaaa
-aaaaaaaaaaaaaa      
-bla12345678901234567
+123456o890aaaaaaaaaa
+aaaaaaaaaaaaaX      
+bla1234567890123456o
 890aaaaaaaaaaaaaaaaa
-aaaaaaa             
+aaaaaaX             
 $                   
 $                   
 $ ▐                 `},
 			{"<", // ensure that attr bar doesn't occlude last line in vi mode
 				`bla                 
 $ echo bla1234567890
-1234567890aaaaaaaaaa
-aaaaaaaaaaaaaa      
-bla12345678901234567
+123456o890aaaaaaaaaa
+aaaaaaaaaaaaaX      
+bla1234567890123456o
 890aaaaaaaaaaaaaaaaa
-aaaaaaa             
+aaaaaaX             
 $                   
 $                   
 $ ▐           NORMAL`},

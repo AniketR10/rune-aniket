@@ -40,15 +40,6 @@ import (
 
 var _ text.Handler = (*Vi)(nil)
 
-type snapshot struct {
-	content string
-	cursor  term.Coordinates
-}
-
-func (s snapshot) String() string {
-	return fmt.Sprintf("Snapshot{%q:%v}", s.content, s.cursor)
-}
-
 // Vi implements a basic vi-like text editor which satisfies tui.Handler
 type Vi struct {
 	resource  workspaceapi.URI
@@ -59,18 +50,15 @@ type Vi struct {
 	less      *handler.Less
 	clipboard clipboard.Register
 
-	repeating    int
-	currEdited   bool
-	evEdited     bool
-	oob          bool // out-of-band edits (i.e. via CellEditor)
-	oobEdited    bool
-	currSnapshot snapshot
-	currEdits    []term.Event
-	repeatEdits  []term.Event
+	repeating   int
+	currEdited  bool
+	evEdited    bool
+	oob         bool // out-of-band edits (i.e. via CellEditor)
+	oobEdited   bool
+	currEdits   []term.Event
+	repeatEdits []term.Event
 
-	resetting    bool
-	undoTimeline []snapshot
-	redoTimeline []snapshot
+	resetting bool
 }
 
 // New allocates storage for a new Vi handler, initializes it and returns it.
@@ -115,8 +103,6 @@ func (vi *Vi) init(viHandler *viHandlerImpl, buf *cell.Buffer, resource workspac
 
 	vi.repeatEdits = make([]term.Event, 0)
 	vi.currEdits = make([]term.Event, 0)
-	vi.undoTimeline = make([]snapshot, 0)
-	vi.redoTimeline = make([]snapshot, 0)
 	vi.oob = true
 
 	vi.snapshotContent()
@@ -169,10 +155,6 @@ func (vi *Vi) copyRepeat() {
 	}
 	vi.repeatEdits = vi.repeatEdits[:0]
 	vi.repeatEdits = append(vi.repeatEdits, vi.currEdits...)
-}
-
-func (vi *Vi) pushNewSnapshot() {
-	vi.pushUndo(vi.currSnapshot)
 }
 
 // Paste satisfies text.Clipboard. See Copy.
@@ -407,66 +389,34 @@ func (vi *Vi) repeat() (handled bool) {
 	return
 }
 
-func popSnapshot(timeline []snapshot) ([]snapshot, snapshot, bool) {
-	lastCmd := len(timeline) - 1
-	if lastCmd < 0 {
-		return timeline, snapshot{}, false
-	}
-	snap := timeline[lastCmd]
-	return timeline[:lastCmd], snap, true
-}
-
 func (vi *Vi) redo() bool {
-	redoTimeline, snapshot, ok := popSnapshot(vi.redoTimeline)
-	if !ok {
-		return false
+	if vi.resetToSnapshot(vi.buf.Redo) {
+		vi.handler.moveToBounds()
+		return true
 	}
-	vi.redoTimeline = redoTimeline
-
-	current := vi.currSnapshot
-	vi.resetToSnapshot(snapshot)
-	vi.pushUndo(current)
-	vi.handler.moveToBounds()
-	return ok
+	return false
 }
 
 func (vi *Vi) undo() bool {
-	undoTimeline, snapshot, ok := popSnapshot(vi.undoTimeline)
-	if !ok {
-		return false
+	if vi.resetToSnapshot(vi.buf.Undo) {
+		vi.handler.moveToBounds()
+		return true
 	}
-	vi.undoTimeline = undoTimeline
+	return false
+}
 
-	current := vi.currSnapshot
-	vi.resetToSnapshot(snapshot)
-	vi.pushRedo(current)
-	vi.handler.moveToBounds()
+func (vi *Vi) resetToSnapshot(op func() (bool, term.Coordinates)) bool {
+	vi.resetting = true
+	ok, at := op()
+	if ok {
+		vi.handler.setCursorAtScroll(at)
+	}
+	vi.resetting = false
 	return ok
 }
 
-func (vi *Vi) resetToSnapshot(s snapshot) {
-	from, to := term.Coordinates{}, term.Coordinates{Y: vi.buf.Rows()}
-	vi.resetting = true
-	vi.buf.Edit(context.Background(), from, to, s.content)
-	vi.handler.setCursorAtScroll(s.cursor)
-	vi.currSnapshot = s
-	vi.resetting = false
-}
-
 func (vi *Vi) snapshotContent() {
-	vi.currSnapshot.content = vi.buf.String()
-}
-func (vi *Vi) pushUndo(content snapshot) {
-	// TODO pop last op if exceed mem limit
-	vi.undoTimeline = append(vi.undoTimeline, content)
-}
-
-func (vi *Vi) pushRedo(content snapshot) {
-	vi.redoTimeline = append(vi.redoTimeline, content)
-}
-
-func (vi *Vi) resetRedoTimeline() {
-	vi.redoTimeline = vi.redoTimeline[:0]
+	vi.buf.GroupUndo()
 }
 
 type cellSubscriber = Vi
@@ -476,10 +426,7 @@ func (vi *cellSubscriber) OnWillEdit(
 	ctx context.Context, from, to term.Coordinates, str string,
 ) {
 	if (!vi.oob && vi.oobEdited) || (!vi.currEdited && !vi.resetting) {
-		pubVi := (*Vi)(vi)
-		pubVi.currSnapshot.cursor = from
-		pubVi.pushNewSnapshot()
-		pubVi.resetRedoTimeline()
+		vi.buf.MarkStartUndo()
 	}
 }
 
