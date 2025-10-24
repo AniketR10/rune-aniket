@@ -369,6 +369,10 @@ func (s *Scroll) MarkHidden(start, end int) bool {
 		return false
 	}
 
+	// update offset subscribers when there's a change in hidden lines
+	dispatch := s.dispatchSubscribers()
+	defer dispatch()
+
 	s.hiddenblocks[start] = end
 	s.rebuildHiddenLines()
 	return true
@@ -380,8 +384,12 @@ func (s *Scroll) MarkVisible(start int) bool {
 		return false
 	}
 	_, ok := s.hiddenblocks[start]
-	delete(s.hiddenblocks, start)
-	s.rebuildHiddenLines()
+	if ok {
+		dispatch := s.dispatchSubscribers()
+		defer dispatch()
+		delete(s.hiddenblocks, start)
+		s.rebuildHiddenLines()
+	}
 	return ok
 }
 

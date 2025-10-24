@@ -55,6 +55,13 @@ func TestScrollDrawHidden(t *testing.T) {
 	_, err := scroll.Buffer().ReadFrom(strings.NewReader(hiddenCopy))
 	require.NoError(t, err)
 
+	var called int
+	scroll.Subscribe(FuncScrollSubscriber(func(from, to term.Coordinates) {
+		if from == to { // only for hidden they're the same
+			called++
+		}
+	}))
+
 	w := term.NewStringWriter(24, 9)
 
 	tests := []comptest.TestCase{
@@ -297,6 +304,7 @@ go 1.14   [4 lines]  cl
 		},
 	}
 	comptest.TestComponent(t, scroll, w, tests)
+	assert.Equal(t, 5, called)
 }
 
 func TestScrollNew(t *testing.T) {
