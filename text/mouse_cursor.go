@@ -89,8 +89,8 @@ func (d mouseDelegate) SelectWordAt(pos term.Coordinates) {
 	if word == "" {
 		return
 	}
-	start = d.cursor.WindowCoordinates(start)
-	end = d.cursor.WindowCoordinates(end)
+	start, _ = d.cursor.WindowCoordinates(start)
+	end, _ = d.cursor.WindowCoordinates(end)
 	d.SetSelectionStart(start)
 	d.SetSelectionEnd(end)
 }

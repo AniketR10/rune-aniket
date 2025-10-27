@@ -131,9 +131,11 @@ func TestResourceTrackerIntegration(t *testing.T) {
 					assert.Equal(t, "abcdefghi\n1234\nXXXX\nX\nX\nX\nX\nX\nX",
 						res.Scroll.Buffer().String())
 
+					winpos, ok := res.WindowCoordinates(term.Coordinates{})
+					require.True(t, ok)
 					assert.NotPanics(t, func() {
 						assert.Equal(t, term.Coordinates{}, res.ContentCoordinates(term.Coordinates{}))
-						assert.Equal(t, term.Coordinates{}, res.WindowCoordinates(term.Coordinates{}))
+						assert.Equal(t, term.Coordinates{}, winpos)
 					})
 				})
 			}
@@ -149,9 +151,11 @@ func TestResourceTrackerIntegration(t *testing.T) {
 					res, ok := tracker.Resource(res1)
 					require.True(t, ok)
 
+					winPos, ok := res.WindowCoordinates(term.Coordinates{})
+					require.True(t, ok)
 					assert.Equal(t, term.Coordinates{Y: 6}, res.Offset())
 					assert.Equal(t, term.Coordinates{Y: 5}, res.ContentCoordinates(term.Coordinates{}))
-					assert.Equal(t, term.Coordinates{Y: -6}, res.WindowCoordinates(term.Coordinates{}))
+					assert.Equal(t, term.Coordinates{Y: -6}, winPos)
 					assert.NotPanics(t, func() {
 						_ = res.Cursor()
 					})

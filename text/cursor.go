@@ -238,7 +238,7 @@ func (c *Cursor) moveToScroll(pos term.Coordinates) {
 		// best effort, assume no wrap when width is 0
 		windowPos = term.CoordinatesDiff(pos, c.scroll.Offset())
 	} else {
-		windowPos = c.scroll.ScrollToWindowCoordinates(pos)
+		windowPos, _ = c.scroll.ScrollToWindowCoordinates(pos)
 	}
 	c.setCursor(windowPos, c.shouldSeek)
 }
@@ -349,8 +349,9 @@ func (c *Cursor) MoveStartLineNonBlank() bool {
 	defer enable()
 
 	initialScrollPos := c.cursorAtScroll()
-	c.setCursor(c.scroll.ScrollToWindowCoordinates(
-		term.Coordinates{X: 0, Y: initialScrollPos.Y}), false)
+	pos, _ := c.scroll.ScrollToWindowCoordinates(
+		term.Coordinates{X: 0, Y: initialScrollPos.Y})
+	c.setCursor(pos, false)
 	cells := c.view().RawCells()
 
 	x := 0
@@ -367,8 +368,9 @@ func (c *Cursor) MoveStartLineNonBlank() bool {
 		if !isBlank {
 			return true
 		}
-		c.setCursor(c.scroll.ScrollToWindowCoordinates(
-			term.Coordinates{X: x, Y: initialScrollPos.Y}), false)
+		at, _ := c.scroll.ScrollToWindowCoordinates(
+			term.Coordinates{X: x, Y: initialScrollPos.Y})
+		c.setCursor(at, false)
 		x++
 	}
 
@@ -1672,10 +1674,10 @@ func (c *Cursor) ScrollCoordinates(pos term.Coordinates) term.Coordinates {
 }
 
 // WindowCoordinates translates scroll coordinates to the window coordinates system.
-func (c *Cursor) WindowCoordinates(pos term.Coordinates) term.Coordinates {
+func (c *Cursor) WindowCoordinates(pos term.Coordinates) (term.Coordinates, bool) {
 	if c.scroll.Width() == 0 && c.scroll.Wrap {
 		// best effort conversion, if scroll width is 0 assume no wrap
-		return term.CoordinatesDiff(pos, c.scroll.Offset())
+		return term.CoordinatesDiff(pos, c.scroll.Offset()), true
 	}
 	return c.scroll.ScrollToWindowCoordinates(pos)
 }
@@ -1773,7 +1775,7 @@ func (c *Cursor) setCursorAfterUpdate(atScroll term.Coordinates) {
 		atScroll.X--
 		done = true
 	}
-	res := c.scroll.ScrollToWindowCoordinates(atScroll)
+	res, _ := c.scroll.ScrollToWindowCoordinates(atScroll)
 	if done {
 		res.X++
 	}

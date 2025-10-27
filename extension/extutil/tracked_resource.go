@@ -66,9 +66,11 @@ func (t *TrackedResource) Cursor() term.Coordinates {
 // offset (and wraps offset given width, height in wrap mode).
 // Using this requires ResourceTracker to be subscribed
 // to EventTypeCursor, EventTypeScroll and EventTypeFocus events.
-func (t *TrackedResource) WindowCoordinates(pos term.Coordinates) term.Coordinates {
+// The second returned value is used to indicate that the given
+// position is inside a hidden block (false), or not (true).
+func (t *TrackedResource) WindowCoordinates(pos term.Coordinates) (term.Coordinates, bool) {
 	if t.Scroll.Width() == 0 && t.Scroll.Wrap {
-		return term.CoordinatesDiff(pos, t.Scroll.Offset())
+		return term.CoordinatesDiff(pos, t.Scroll.Offset()), true
 	}
 	return t.Scroll.ScrollToWindowCoordinates(pos)
 }

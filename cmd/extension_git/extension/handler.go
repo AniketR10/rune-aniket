@@ -599,7 +599,7 @@ func contentCoordinatesWithWraps(
 	res *extutil.TrackedResource, at term.Coordinates,
 ) term.Coordinates {
 	// window coordiantes subtracts offset, adds wraps
-	at = res.WindowCoordinates(at)
+	at, _ = res.WindowCoordinates(at)
 	// add offset and we should have conent coordinates
 	// with wraps.
 	at = term.CoordinatesSum(at, res.Offset())

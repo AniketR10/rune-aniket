@@ -142,15 +142,11 @@ func DrawLocations(locations []textapi.Location, scroll *component.Scroll, w ter
 	height := scroll.SizeHeight()
 	buffer := scroll.Buffer()
 
-	var wraps int
-	for _, count := range scroll.Wraps() {
-		wraps += count
-	}
 	// this might add some extra calls to UnionAttributes that are noop but
 	// it's way more efficient that calculating screen coordinates on every
 	// location.
-	minY := offset.Y - wraps
-	maxY := offset.Y + height
+	minY := offset.Y
+	maxY := offset.Y + height + scroll.HiddenLineCount()
 	for _, loc := range locations {
 		fromAtScroll := loc.From
 		toAtScroll := loc.To
@@ -163,11 +159,11 @@ func DrawLocations(locations []textapi.Location, scroll *component.Scroll, w ter
 		for y := fromAtScroll.Y; y < toAtScroll.Y; y++ {
 			toX := buffer.Columns(y)
 			for x := fromAtScrollX; x < toX; x++ {
-				posAtScreen := scroll.ScrollToWindowCoordinates(term.Coordinates{Y: y, X: x})
+				posAtScreen, ok := scroll.ScrollToWindowCoordinates(term.Coordinates{Y: y, X: x})
 				if posAtScreen.X >= scroll.Width() {
 					break
 				}
-				if posAtScreen.X < 0 {
+				if !ok || posAtScreen.X < 0 {
 					continue
 				}
 				w.UnionAttributes(posAtScreen, loc.Attr)
@@ -177,11 +173,11 @@ func DrawLocations(locations []textapi.Location, scroll *component.Scroll, w ter
 
 		toX := toAtScroll.X
 		for x := fromAtScrollX; x < toX; x++ {
-			posAtScreen := scroll.ScrollToWindowCoordinates(term.Coordinates{Y: toAtScroll.Y, X: x})
+			posAtScreen, ok := scroll.ScrollToWindowCoordinates(term.Coordinates{Y: toAtScroll.Y, X: x})
 			if posAtScreen.X >= scroll.Width() {
 				break
 			}
-			if posAtScreen.X < 0 {
+			if !ok || posAtScreen.X < 0 {
 				continue
 			}
 			w.UnionAttributes(posAtScreen, loc.Attr)

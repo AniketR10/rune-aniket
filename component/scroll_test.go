@@ -891,82 +891,83 @@ func TestScrollToWindowCoordinates(t *testing.T) {
 		inScroll    func(t *testing.T) *Scroll
 		scroll      term.Coordinates
 		window      term.Coordinates
+		expectOk    bool
 	}{
 		{"no wrap, no offset, within view bounds, start of file",
-			makeScroll(false, 100, 100, 0, 0), term.Coordinates{}, term.Coordinates{}},
+			makeScroll(false, 100, 100, 0, 0), term.Coordinates{}, term.Coordinates{}, true},
 		{"no wrap, no offset, within view bounds, end of file",
-			makeScroll(false, 100, 100, 0, 0), term.Coordinates{Y: 4, X: 13}, term.Coordinates{Y: 4, X: 13}},
+			makeScroll(false, 100, 100, 0, 0), term.Coordinates{Y: 4, X: 13}, term.Coordinates{Y: 4, X: 13}, true},
 		{"no wrap, no offset, within view bounds, past end of file",
-			makeScroll(false, 100, 100, 0, 0), term.Coordinates{Y: 5, X: 1}, term.Coordinates{Y: 5, X: 1}},
+			makeScroll(false, 100, 100, 0, 0), term.Coordinates{Y: 5, X: 1}, term.Coordinates{Y: 5, X: 1}, true},
 		{"no wrap, no offset, within view bounds, past end of one line",
-			makeScroll(false, 100, 100, 0, 0), term.Coordinates{Y: 0, X: 100}, term.Coordinates{Y: 0, X: 100}},
+			makeScroll(false, 100, 100, 0, 0), term.Coordinates{Y: 0, X: 100}, term.Coordinates{Y: 0, X: 100}, true},
 		{"no wrap, no offset, outside view bounds, end of file",
-			makeScroll(false, 10, 3, 0, 0), term.Coordinates{Y: 4, X: 13}, term.Coordinates{Y: 4, X: 13}},
+			makeScroll(false, 10, 3, 0, 0), term.Coordinates{Y: 4, X: 13}, term.Coordinates{Y: 4, X: 13}, true},
 		{"no wrap, no offset, outside view bounds, past end of file",
-			makeScroll(false, 10, 3, 0, 0), term.Coordinates{Y: 5, X: 1}, term.Coordinates{Y: 5, X: 1}},
+			makeScroll(false, 10, 3, 0, 0), term.Coordinates{Y: 5, X: 1}, term.Coordinates{Y: 5, X: 1}, true},
 		{"no wrap, no offset, outside view bounds, past end of one line",
-			makeScroll(false, 10, 3, 0, 0), term.Coordinates{Y: 0, X: 100}, term.Coordinates{Y: 0, X: 100}},
+			makeScroll(false, 10, 3, 0, 0), term.Coordinates{Y: 0, X: 100}, term.Coordinates{Y: 0, X: 100}, true},
 		{"no wrap, with offset, outside view bounds, end of file",
-			makeScroll(false, 10, 3, 1, 1), term.Coordinates{Y: 4, X: 13}, term.Coordinates{Y: 3, X: 12}},
+			makeScroll(false, 10, 3, 1, 1), term.Coordinates{Y: 4, X: 13}, term.Coordinates{Y: 3, X: 12}, true},
 		{"no wrap, with offset, outside view bounds, past end of file",
-			makeScroll(false, 10, 3, 1, 1), term.Coordinates{Y: 5, X: 1}, term.Coordinates{Y: 4, X: 0}},
+			makeScroll(false, 10, 3, 1, 1), term.Coordinates{Y: 5, X: 1}, term.Coordinates{Y: 4, X: 0}, true},
 		{"no wrap, with offset, outside view bounds, past end of one line",
-			makeScroll(false, 10, 3, 1, 1), term.Coordinates{Y: 0, X: 100}, term.Coordinates{Y: -1, X: 99}},
+			makeScroll(false, 10, 3, 1, 1), term.Coordinates{Y: 0, X: 100}, term.Coordinates{Y: -1, X: 99}, true},
 
 		{"wrap, no offset, within view bounds, start of file",
-			makeScroll(true, 100, 100, 0, 0), term.Coordinates{}, term.Coordinates{}},
+			makeScroll(true, 100, 100, 0, 0), term.Coordinates{}, term.Coordinates{}, true},
 		{"wrap, no offset, within view bounds, end of file",
-			makeScroll(true, 100, 100, 0, 0), term.Coordinates{Y: 4, X: 13}, term.Coordinates{Y: 4, X: 13}},
+			makeScroll(true, 100, 100, 0, 0), term.Coordinates{Y: 4, X: 13}, term.Coordinates{Y: 4, X: 13}, true},
 		{"wrap, no offset, within view bounds, past end of file",
-			makeScroll(true, 100, 100, 0, 0), term.Coordinates{Y: 5, X: 1}, term.Coordinates{Y: 5, X: 1}},
+			makeScroll(true, 100, 100, 0, 0), term.Coordinates{Y: 5, X: 1}, term.Coordinates{Y: 5, X: 1}, true},
 		{"wrap, no offset, within view bounds, past end of one line",
-			makeScroll(true, 100, 100, 0, 0), term.Coordinates{Y: 0, X: 100}, term.Coordinates{Y: 1, X: 0}},
+			makeScroll(true, 100, 100, 0, 0), term.Coordinates{Y: 0, X: 100}, term.Coordinates{Y: 1, X: 0}, true},
 
 		{"wrap, no offset, outside view bounds, end of file",
-			makeScroll(true, 10, 3, 0, 0), term.Coordinates{Y: 4, X: 13}, term.Coordinates{Y: 7, X: 3}},
+			makeScroll(true, 10, 3, 0, 0), term.Coordinates{Y: 4, X: 13}, term.Coordinates{Y: 7, X: 3}, true},
 		{"wrap, no offset, outside view bounds, past end of file",
-			makeScroll(true, 10, 3, 0, 0), term.Coordinates{Y: 5, X: 1}, term.Coordinates{Y: 8, X: 1}},
+			makeScroll(true, 10, 3, 0, 0), term.Coordinates{Y: 5, X: 1}, term.Coordinates{Y: 8, X: 1}, true},
 		{"wrap, no offset, outside view bounds, past end of one line",
-			makeScroll(true, 10, 3, 0, 0), term.Coordinates{Y: 0, X: 100}, term.Coordinates{Y: 10, X: 0}},
+			makeScroll(true, 10, 3, 0, 0), term.Coordinates{Y: 0, X: 100}, term.Coordinates{Y: 10, X: 0}, true},
 
 		{"wrap, with offset, outside view bounds, end of file",
-			makeScroll(true, 10, 3, 1, 1), term.Coordinates{Y: 4, X: 13}, term.Coordinates{Y: 6, X: 2}},
+			makeScroll(true, 10, 3, 1, 1), term.Coordinates{Y: 4, X: 13}, term.Coordinates{Y: 6, X: 2}, true},
 		{"wrap, with offset, outside view bounds, past end of file",
-			makeScroll(true, 10, 3, 1, 1), term.Coordinates{Y: 5, X: 1}, term.Coordinates{Y: 7, X: 0}},
+			makeScroll(true, 10, 3, 1, 1), term.Coordinates{Y: 5, X: 1}, term.Coordinates{Y: 7, X: 0}, true},
 		{"wrap, with offset, outside view bounds, past end of one line",
-			makeScroll(true, 10, 3, 1, 1), term.Coordinates{Y: 0, X: 100}, term.Coordinates{Y: 9, X: -1}},
+			makeScroll(true, 10, 3, 1, 1), term.Coordinates{Y: 0, X: 100}, term.Coordinates{Y: 9, X: -1}, true},
 
 		{"wrap, no offset, outside view bounds, line in the middle, at the end of line",
-			makeScroll(true, 10, 3, 0, 0), term.Coordinates{Y: 2, X: 13}, term.Coordinates{Y: 4, X: 3}},
+			makeScroll(true, 10, 3, 0, 0), term.Coordinates{Y: 2, X: 13}, term.Coordinates{Y: 4, X: 3}, true},
 		{"wrap, no offset, outside view bounds, line in the middle, past the end of file, would wrap, past end of one line",
-			makeScroll(true, 10, 3, 0, 0), term.Coordinates{Y: 5, X: 13}, term.Coordinates{Y: 9, X: 3}},
+			makeScroll(true, 10, 3, 0, 0), term.Coordinates{Y: 5, X: 13}, term.Coordinates{Y: 9, X: 3}, true},
 		{"no wrap, end of file offset, first line",
-			makeScroll(false, 10, 3, 2, 0), term.Coordinates{Y: 0, X: 0}, term.Coordinates{Y: -2, X: 0}},
+			makeScroll(false, 10, 3, 2, 0), term.Coordinates{Y: 0, X: 0}, term.Coordinates{Y: -2, X: 0}, true},
 		{"wrap, end of file offset, first line",
-			makeScroll(true, 10, 3, 5, 0), term.Coordinates{Y: 0, X: 0}, term.Coordinates{Y: -5, X: 0}},
+			makeScroll(true, 10, 3, 5, 0), term.Coordinates{Y: 0, X: 0}, term.Coordinates{Y: -5, X: 0}, true},
 		{"wrap, past end of file offset, first line",
-			makeScroll(true, 10, 3, 6, 1), term.Coordinates{Y: 0, X: 0}, term.Coordinates{Y: -6, X: -1}},
+			makeScroll(true, 10, 3, 6, 1), term.Coordinates{Y: 0, X: 0}, term.Coordinates{Y: -6, X: -1}, true},
 		{"wrap, halfway through line offset, first line",
-			makeScroll(true, 10, 3, 4, 0), term.Coordinates{Y: 0, X: 0}, term.Coordinates{Y: -4, X: 0}},
+			makeScroll(true, 10, 3, 4, 0), term.Coordinates{Y: 0, X: 0}, term.Coordinates{Y: -4, X: 0}, true},
 		{"wrap, (2nd) halfway through line offset, first line",
-			makeScroll(true, 10, 3, 3, 0), term.Coordinates{Y: 0, X: 0}, term.Coordinates{Y: -3, X: 0}},
+			makeScroll(true, 10, 3, 3, 0), term.Coordinates{Y: 0, X: 0}, term.Coordinates{Y: -3, X: 0}, true},
 		{"3rd wrap, halfway through line offset, negative window pos",
-			makeScroll(true, 10, 3, 2, 0), term.Coordinates{Y: 0, X: 10}, term.Coordinates{Y: -1, X: 0}},
+			makeScroll(true, 10, 3, 2, 0), term.Coordinates{Y: 0, X: 10}, term.Coordinates{Y: -1, X: 0}, true},
 		{"hidden lines, no offset, position before hidden lines",
 			makeScrollWithHiddenLines(false, 10, 3, 0, 0, startEndBlock{0, 1}, startEndBlock{4, 5}),
-			term.Coordinates{Y: 0, X: 0}, term.Coordinates{Y: 0, X: 0}},
+			term.Coordinates{Y: 0, X: 0}, term.Coordinates{Y: 0, X: 0}, true},
 		{"hidden lines, no offset, position inside hidden block",
 			makeScrollWithHiddenLines(false, 10, 3, 0, 0, startEndBlock{4, 15}),
-			term.Coordinates{Y: 5, X: 5}, term.Coordinates{Y: 4, X: 5}},
+			term.Coordinates{Y: 5, X: 5}, term.Coordinates{Y: 4, X: 5}, false},
 		{"hidden lines, no offset, position after hidden blocks",
 			makeScrollWithHiddenLines(false, 10, 3, 0, 0, startEndBlock{4, 15}),
-			term.Coordinates{Y: 16, X: 5}, term.Coordinates{Y: 5, X: 5}},
+			term.Coordinates{Y: 16, X: 5}, term.Coordinates{Y: 5, X: 5}, true},
 		{"hidden lines, with offset, position after hidden blocks",
 			makeScrollWithHiddenLines(false, 10, 3, 1, 1, startEndBlock{4, 15}),
-			term.Coordinates{Y: 16, X: 5}, term.Coordinates{Y: 4, X: 4}},
+			term.Coordinates{Y: 16, X: 5}, term.Coordinates{Y: 4, X: 4}, true},
 		{"hidden lines, with offset, position after multiple hidden blocks",
 			makeScrollWithHiddenLines(false, 10, 3, 1, 1, startEndBlock{4, 10}, startEndBlock{11, 15}),
-			term.Coordinates{Y: 16, X: 5}, term.Coordinates{Y: 5, X: 4}},
+			term.Coordinates{Y: 16, X: 5}, term.Coordinates{Y: 5, X: 4}, true},
 		{"hidden lines, no offset, position after hidden block, after insert line above",
 			func(t *testing.T) *Scroll {
 				fn := makeScrollWithHiddenLines(false, 10, 3, 0, 0, startEndBlock{4, 15})
@@ -974,7 +975,7 @@ func TestScrollToWindowCoordinates(t *testing.T) {
 				scroll.Buffer().Insert(term.Coordinates{}, '\n')
 				return scroll
 			},
-			term.Coordinates{Y: 5, X: 5}, term.Coordinates{Y: 5, X: 5},
+			term.Coordinates{Y: 5, X: 5}, term.Coordinates{Y: 5, X: 5}, true,
 		},
 		{"hidden lines, no offset, position after hidden block, after insert line above",
 			func(t *testing.T) *Scroll {
@@ -983,7 +984,7 @@ func TestScrollToWindowCoordinates(t *testing.T) {
 				scroll.Buffer().Insert(term.Coordinates{}, '\n')
 				return scroll
 			},
-			term.Coordinates{Y: 17, X: 5}, term.Coordinates{Y: 6, X: 5},
+			term.Coordinates{Y: 17, X: 5}, term.Coordinates{Y: 6, X: 5}, true,
 		},
 		{"hidden lines, no offset, position after hidden block, after insert line below",
 			func(t *testing.T) *Scroll {
@@ -992,7 +993,7 @@ func TestScrollToWindowCoordinates(t *testing.T) {
 				scroll.Buffer().Insert(term.Coordinates{Y: 17}, '\n')
 				return scroll
 			},
-			term.Coordinates{Y: 16, X: 5}, term.Coordinates{Y: 5, X: 5},
+			term.Coordinates{Y: 16, X: 5}, term.Coordinates{Y: 5, X: 5}, true,
 		},
 		{"hidden lines, no offset, position after hidden block, after remove line above",
 			func(t *testing.T) *Scroll {
@@ -1001,7 +1002,7 @@ func TestScrollToWindowCoordinates(t *testing.T) {
 				scroll.Buffer().DeleteLine(term.Coordinates{}, term.Coordinates{})
 				return scroll
 			},
-			term.Coordinates{Y: 15, X: 5}, term.Coordinates{Y: 4, X: 5},
+			term.Coordinates{Y: 15, X: 5}, term.Coordinates{Y: 4, X: 5}, true,
 		},
 		{"hidden lines, no offset, position after hidden block, after remove line below",
 			func(t *testing.T) *Scroll {
@@ -1010,7 +1011,7 @@ func TestScrollToWindowCoordinates(t *testing.T) {
 				scroll.Buffer().DeleteLine(term.Coordinates{Y: 17}, term.Coordinates{Y: 17})
 				return scroll
 			},
-			term.Coordinates{Y: 16, X: 5}, term.Coordinates{Y: 5, X: 5},
+			term.Coordinates{Y: 16, X: 5}, term.Coordinates{Y: 5, X: 5}, true,
 		},
 		{"hidden lines, no offset, position after hidden block, remove start of hidden block clears it",
 			func(t *testing.T) *Scroll {
@@ -1019,7 +1020,7 @@ func TestScrollToWindowCoordinates(t *testing.T) {
 				scroll.Buffer().DeleteLine(term.Coordinates{Y: 4}, term.Coordinates{Y: 4})
 				return scroll
 			},
-			term.Coordinates{Y: 16, X: 5}, term.Coordinates{Y: 16, X: 5},
+			term.Coordinates{Y: 16, X: 5}, term.Coordinates{Y: 16, X: 5}, true,
 		},
 		{"hidden lines, no offset, position after hidden block, remove end of hidden block clears it",
 			func(t *testing.T) *Scroll {
@@ -1028,7 +1029,7 @@ func TestScrollToWindowCoordinates(t *testing.T) {
 				scroll.Buffer().DeleteLine(term.Coordinates{Y: 12}, term.Coordinates{Y: 15})
 				return scroll
 			},
-			term.Coordinates{Y: 16, X: 5}, term.Coordinates{Y: 16, X: 5},
+			term.Coordinates{Y: 16, X: 5}, term.Coordinates{Y: 16, X: 5}, true,
 		},
 		{"hidden lines, no offset, position after hidden block, replace before hidden block",
 			func(t *testing.T) *Scroll {
@@ -1038,14 +1039,15 @@ func TestScrollToWindowCoordinates(t *testing.T) {
 					term.Coordinates{Y: 0}, term.Coordinates{Y: 2}, "\n\n")
 				return scroll
 			},
-			term.Coordinates{Y: 16, X: 5}, term.Coordinates{Y: 5, X: 5},
+			term.Coordinates{Y: 16, X: 5}, term.Coordinates{Y: 5, X: 5}, true,
 		},
 	}
 
 	for _, test := range suite {
 		t.Run(test.description, func(t *testing.T) {
-			require.Equal(t, test.window,
-				test.inScroll(t).ScrollToWindowCoordinates(test.scroll), "scroll to window")
+			actual, actualOk := test.inScroll(t).ScrollToWindowCoordinates(test.scroll)
+			require.Equal(t, test.expectOk, actualOk)
+			require.Equal(t, test.window, actual, "scroll to window")
 			// resulting position is ambiguous, this should not happen
 			// in a real case scaneario anyway
 			if strings.Contains(test.description, "past end of one line") ||

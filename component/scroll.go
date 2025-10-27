@@ -348,6 +348,11 @@ func (s *Scroll) SeekPrevResult() bool {
 	return s.seekTo(pos, len(s.searchText), -1)
 }
 
+// HiddenLineCount returns the total number of hidden lines.
+func (s *Scroll) HiddenLineCount() int {
+	return len(s.hiddenlines)
+}
+
 // MarkHidden marks the inner rows of the given row range as hidden,
 // so next call to Draw will not display them, and instead display an icon to indicate
 // that there are hidden rows.
@@ -884,11 +889,15 @@ func FuncScrollSubscriber(fn func(from, to term.Coordinates)) ScrollSubscriber {
 }
 
 // ScrollToWindowCoordinates translates scroll content Coordinates to window Coordinates,
-// taking into consideration scroll offsets and wrapped rows.
-func (s *Scroll) ScrollToWindowCoordinates(pos term.Coordinates) term.Coordinates {
+// taking into consideration scroll offsets and wrapped rows. The second boolean return
+// value is used to indicate that the given position is inside a hidden block (false), or
+// not hidden (true). A valid set of coordinates is returned in either case, but when the
+// coordinates would fall inside a hidden block, the start of the hidden block is returned.
+func (s *Scroll) ScrollToWindowCoordinates(pos term.Coordinates) (term.Coordinates, bool) {
 	offset := s.Offset()
 	ret := term.CoordinatesDiff(pos, offset)
 	if !s.Wrap {
+		var hidden bool
 		if len(s.hiddensorted) != 0 {
 			for _, block := range s.hiddensorted {
 				if block.start > pos.Y {
@@ -897,10 +906,11 @@ func (s *Scroll) ScrollToWindowCoordinates(pos term.Coordinates) term.Coordinate
 				if pos.Y > block.start {
 					// min in case pos is inside block
 					ret.Y -= min(block.end, pos.Y) - block.start
+					hidden = hidden || pos.Y <= block.end
 				}
 			}
 		}
-		return ret
+		return ret, !hidden
 	}
 	wraps := s.Wraps()
 	for y, count := range wraps {
@@ -912,7 +922,7 @@ func (s *Scroll) ScrollToWindowCoordinates(pos term.Coordinates) term.Coordinate
 	diff := pos.X / s.Width()
 	ret.X = pos.X%s.Width() - offset.X
 	ret.Y += diff
-	return ret
+	return ret, true
 }
 
 // WindowToScrollCoordinates translates window Coordinates to scroll content Coordinates,
@@ -956,15 +966,15 @@ func wordMatcher(r rune) bool {
 func (s *Scroll) drawSearchResults(w term.Writer) {
 	slen := len(s.searchText)
 	for _, posAtScroll := range s.matches {
-		posAtScreen := s.ScrollToWindowCoordinates(posAtScroll)
-		if posAtScreen.Y >= s.height || posAtScreen.Y < 0 {
+		posAtScreen, ok := s.ScrollToWindowCoordinates(posAtScroll)
+		if !ok || posAtScreen.Y >= s.height || posAtScreen.Y < 0 {
 			continue
 		}
 
 		toX := posAtScroll.X + slen
 		for x := posAtScroll.X; x < toX; x++ {
-			posAtScreen := s.ScrollToWindowCoordinates(term.Coordinates{Y: posAtScroll.Y, X: x})
-			if posAtScreen.X >= s.width || posAtScreen.X < 0 {
+			posAtScreen, ok := s.ScrollToWindowCoordinates(term.Coordinates{Y: posAtScroll.Y, X: x})
+			if !ok || posAtScreen.X >= s.width || posAtScreen.X < 0 {
 				continue
 			}
 			w.UnionAttributes(posAtScreen, s.ResultsAttr)

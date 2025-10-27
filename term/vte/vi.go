@@ -811,7 +811,7 @@ func (v *viHandler) drawPromptLine(w term.Writer) {
 		xStart, xEnd := 0, v.sync.selector.Columns(y)
 		for x := xStart; x < xEnd; x++ {
 			pos := term.Coordinates{X: x, Y: y}
-			posAtScreen := v.sync.scroll.ScrollToWindowCoordinates(pos)
+			posAtScreen, _ := v.sync.scroll.ScrollToWindowCoordinates(pos)
 			if posAtScreen.Y < 0 || posAtScreen.Y >= v.height ||
 				posAtScreen.X < 0 || posAtScreen.X >= v.width {
 				continue

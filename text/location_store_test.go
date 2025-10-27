@@ -385,4 +385,45 @@ func TestCursorDrawLocationListsIntegration(t *testing.T) {
 		DrawLocations(c.SortedLocations(), c.scroll, w)
 		assert.Equal(t, expected, w.RawCells())
 	})
+
+	t.Run("sets full height worth of locations when there are hidden lines", func(t *testing.T) {
+		c := setupCursorContent(t, 1, 5, "\na\nb\nc\n", false)
+
+		require.True(t, c.scroll.MarkHidden(1, 3))
+
+		locations := []textapi.Location{
+			{
+				From:    term.Coordinates{Y: 1},
+				To:      term.Coordinates{Y: 1, X: 1},
+				Attr:    term.Attributes{Bg: tcell.ColorRed},
+				Message: "blabla",
+			},
+			{
+				From: term.Coordinates{Y: 2},
+				To:   term.Coordinates{Y: 2, X: 1},
+				Attr: term.Attributes{Bg: tcell.ColorOrange},
+			},
+			{
+				From: term.Coordinates{Y: 3},
+				To:   term.Coordinates{Y: 3, X: 1},
+				Attr: term.Attributes{Bg: tcell.ColorYellow},
+			},
+		}
+
+		expected := [][]term.Cell{
+			{{}, {}},
+			{{Attributes: term.Attributes{Bg: tcell.ColorRed}},
+				{Attributes: term.Attributes{Bg: 0}}},
+			{{}, {}},
+			{{}, {}},
+			{{}, {}},
+		}
+		abcList := LocationSlice(locations)
+
+		assert.Nil(t, c.SetLocationList(textapi.LocationPriorityInfo, locID, abcList))
+
+		w := cell.NewBufferWriter(context.Background(), 2, 5)
+		DrawLocations(c.SortedLocations(), c.scroll, w)
+		assert.Equal(t, expected, w.RawCells())
+	})
 }
