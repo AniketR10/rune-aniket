@@ -96,7 +96,7 @@ func eventToTermboxEvent(ev Event) (tev termbox.Event) {
 		/* these modifiers can't be published; drop modifier */
 		ev.Mod = 0
 	case ModCtrlAlt:
-		ev.Mod = ModAlt
+		tev.Mod = termbox.ModAlt
 		fallthrough
 	case ModCtrl:
 		switch ev.Ch {
@@ -183,14 +183,11 @@ func eventToTermboxEvent(ev Event) (tev termbox.Event) {
 		default:
 			tev.Ch = ev.Ch
 		}
-		if ev.Mod == ModCtrl {
-			ev.Mod = 0
-		}
-		// set for both ModCtrlAlt and ModCtrl
-		tev.Mod = termbox.Modifier(ev.Mod)
 	default: /* ModAlt or zero Mod */
 		tev.Key = termbox.Key(ev.Key)
-		tev.Mod = termbox.Modifier(ev.Mod)
+		if ev.Mod == ModAlt {
+			tev.Mod = termbox.ModAlt
+		}
 		tev.Ch = ev.Ch
 	}
 	tev.Type = termbox.EventType(ev.Type)
@@ -447,7 +444,9 @@ func termboxEventToEvent(tev termbox.Event) (ev Event) {
 	} else {
 		ev.Ch = tev.Ch
 		ev.Key = Key(tev.Key)
-		ev.Mod = Modifier(tev.Mod)
+		if tev.Mod == termbox.ModAlt {
+			ev.Mod = ModAlt
+		}
 	}
 	ev.Type = EventType(tev.Type)
 	ev.Width = tev.Width

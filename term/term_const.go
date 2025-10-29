@@ -91,18 +91,19 @@ const (
 
 // Alt modifier constant, see Event.Mod field and SetInputMode function.
 const (
-	ModAlt           Modifier = Modifier(termbox.ModAlt)
-	ModShift                  = Modifier(0x10)
-	ModMeta                   = Modifier(0x12)
-	ModCtrl                   = Modifier(0x11)
-	ModCtrlShift              = Modifier(0x91)
-	ModCtrlAlt                = Modifier(0x92)
-	ModCtrlMeta               = Modifier(0x93)
-	ModCtrlShiftAlt           = Modifier(0x95)
-	ModCtrlShiftMeta          = Modifier(0x94)
-	ModCtrlAltMeta            = Modifier(0x97)
-	ModShiftMeta              = Modifier(0x81)
-	ModAltMeta                = Modifier(0x82)
-	ModAltShiftMeta           = Modifier(0x83)
-	ModAltShift               = Modifier(0x71)
+	ModAlt Modifier = 1 << iota
+	ModShift
+	ModMeta
+	ModCtrl
+
+	ModCtrlShift     = ModShift | ModCtrl
+	ModCtrlAlt       = ModCtrl | ModAlt
+	ModCtrlMeta      = ModCtrl | ModMeta
+	ModCtrlShiftAlt  = ModShift | ModAlt | ModCtrl
+	ModCtrlShiftMeta = ModCtrl | ModShift | ModMeta
+	ModCtrlAltMeta   = ModCtrl | ModAlt | ModMeta
+	ModShiftMeta     = ModShift | ModMeta
+	ModAltMeta       = ModAlt | ModMeta
+	ModAltShiftMeta  = ModAlt | ModShift | ModMeta
+	ModAltShift      = ModAlt | ModShift
 )

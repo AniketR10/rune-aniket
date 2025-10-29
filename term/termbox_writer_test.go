@@ -39,6 +39,7 @@ func TestTermboxEventConvert(t *testing.T) {
 			tev termbox.Event
 		}{
 			{KeyComb{Ch: 'a'}, termbox.Event{Ch: 'a'}},
+			{KeyComb{Ch: 'a', Mod: ModAlt}, termbox.Event{Mod: termbox.ModAlt, Ch: 'a'}},
 			{KeyComb{Ch: 'A'}, termbox.Event{Ch: 'A'}},
 			{KeyComb{Ch: '1'}, termbox.Event{Ch: '1'}},
 			{KeyComb{Ch: '!'}, termbox.Event{Ch: '!'}},
@@ -70,6 +71,7 @@ func TestTermboxEventConvert(t *testing.T) {
 			{KeyComb{Key: KeyArrowRight}, termbox.Event{Key: termbox.KeyArrowRight}},
 			{KeyComb{Key: KeyArrowLeft}, termbox.Event{Key: termbox.KeyArrowLeft}},
 			{KeyComb{Mod: ModCtrl, Ch: 'a'}, termbox.Event{Key: termbox.KeyCtrlA}},
+			{KeyComb{Mod: ModCtrlAlt, Ch: 'a'}, termbox.Event{Mod: termbox.ModAlt, Key: termbox.KeyCtrlA}},
 			{KeyComb{Mod: ModCtrl, Ch: 'b'}, termbox.Event{Key: termbox.KeyCtrlB}},
 			{KeyComb{Mod: ModCtrl, Ch: 'c'}, termbox.Event{Key: termbox.KeyCtrlC}},
 			{KeyComb{Mod: ModCtrl, Ch: 'd'}, termbox.Event{Key: termbox.KeyCtrlD}},
@@ -99,6 +101,7 @@ func TestTermboxEventConvert(t *testing.T) {
 			{KeyComb{Key: KeyPgdn}, termbox.Event{Key: termbox.KeyPgdn}},
 			{KeyComb{Key: KeyPgup}, termbox.Event{Key: termbox.KeyPgup}},
 			{KeyComb{Key: KeySpace}, termbox.Event{Key: termbox.KeySpace}},
+			{KeyComb{Mod: ModAlt, Key: KeySpace}, termbox.Event{Mod: termbox.ModAlt, Key: termbox.KeySpace}},
 			{KeyComb{Key: KeySpace, Mod: ModCtrl}, termbox.Event{Key: termbox.KeyCtrlSpace}},
 			{KeyComb{Key: MouseLeft}, termbox.Event{Key: termbox.MouseLeft}},
 			{KeyComb{Key: MouseRight}, termbox.Event{Key: termbox.MouseRight}},
