@@ -107,44 +107,72 @@ func (h *simpleEditorHandler) Handle(ev term.Event) (exit, handled bool) {
 		return h.mouse.Handle(ev)
 	}
 
+	var shift bool
+	if ev.Mod&term.ModShift != 0 {
+		if _, ok := h.cursor.SelectionMode(); !ok {
+			h.cursor.Select()
+		}
+		ev.Mod = ev.Mod &^ term.ModShift
+		shift = true
+	}
+
+	cursorAt := h.cursor.CursorAtScroll()
 	switch ev.Mod {
+	case term.ModAlt:
+		switch ev.Key {
+		case term.KeyArrowLeft:
+			handled = h.cursor.MoveLeftStartWord()
+		case term.KeyArrowRight:
+			handled = h.cursor.MoveRightStartWord()
+		}
 	case 0:
 		switch ev.Key {
 		case term.KeyArrowLeft:
-			if ev.Mod == term.ModAlt {
-				handled = h.cursor.MoveLeftStartWord()
-			} else {
-				handled = h.cursor.MoveLeft()
-			}
+			handled = h.cursor.MoveLeft()
 		case term.KeyArrowRight:
-			if ev.Mod == term.ModAlt {
-				handled = h.cursor.MoveRightStartWord()
-			} else {
-				handled = h.cursor.MoveRight()
-			}
+			handled = h.cursor.MoveRight()
 		case term.KeyArrowUp:
 			handled = h.cursor.MoveUp()
 		case term.KeyArrowDown:
 			handled = h.cursor.MoveDown()
 		case term.KeyEnter:
+			if _, ok := h.cursor.SelectionMode(); ok {
+				h.cursor.DeleteSelection()
+				h.cursor.Unselect()
+			}
 			h.cursor.Insert('\n')
 			handled = true
 		case term.KeySpace:
+			if _, ok := h.cursor.SelectionMode(); ok {
+				h.cursor.DeleteSelection()
+				h.cursor.Unselect()
+			}
 			h.cursor.Insert(' ')
 			handled = true
 		case term.KeyTab:
-			h.cursor.Insert('\t')
+			if _, ok := h.cursor.SelectionMode(); ok {
+				h.cursor.ShiftSelectionRight()
+				h.cursor.Unselect()
+			} else {
+				h.cursor.Insert('\t')
+			}
 			handled = true
 		case term.KeyBackspace:
-			if h.cursor.Selection() != "" {
+			if _, ok := h.cursor.SelectionMode(); ok {
 				handled = h.cursor.DeleteSelection()
+				h.cursor.Unselect()
 			} else {
 				handled = h.cursor.Backspace()
 			}
 		default:
 			if ev.Ch != 0 {
-				h.cursor.Insert(ev.Ch)
-				handled = true
+				if _, ok := h.cursor.SelectionMode(); ok {
+					handled = h.cursor.DeleteSelection()
+					h.cursor.Unselect()
+				} else {
+					h.cursor.Insert(ev.Ch)
+					handled = true
+				}
 			}
 		}
 	case term.ModCtrl:
@@ -177,6 +205,20 @@ func (h *simpleEditorHandler) Handle(ev term.Event) (exit, handled bool) {
 			ev.Ch = '/'
 			_, handled = h.less.Handle(ev)
 		}
+	case term.ModCtrlAlt:
+		switch ev.Ch {
+		case 'h':
+			handled = h.cursor.HideSelection()
+			h.cursor.Unselect()
+		case 'v':
+			handled = h.cursor.Unhide()
+			h.cursor.Unselect()
+		}
+	}
+
+	// if moved and shift is not pressed
+	if cursorAt != h.cursor.CursorAtScroll() && !shift {
+		h.cursor.Unselect()
 	}
 	return
 }
