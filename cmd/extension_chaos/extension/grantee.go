@@ -71,6 +71,8 @@ var (
 		textapi.EventTypeEdit,
 		textapi.EventTypeFlush,
 		textapi.EventTypeScroll,
+		textapi.EventTypeHidden,
+		textapi.EventTypeVisible,
 		textapi.EventTypeFocus,
 		textapi.EventTypeUnfocus,
 		textapi.EventTypeCursor,

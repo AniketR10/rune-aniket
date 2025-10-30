@@ -946,7 +946,8 @@ func (c *Component) SubscribeEvents(evs []textapi.EventType, h EventHandler) err
 		// delegate certain event dispatching to underlying editor.
 		case textapi.EventTypeOpen, textapi.EventTypeEdit,
 			textapi.EventTypeScroll, textapi.EventTypeCursor,
-			textapi.EventTypeSelection:
+			textapi.EventTypeSelection, textapi.EventTypeHidden,
+			textapi.EventTypeVisible:
 			delegated = append(delegated, ev)
 		default:
 			if _, ok := c.edSubscribers[ev]; !ok {

@@ -370,11 +370,10 @@ func (s *Scroll) MarkHidden(start, end int) bool {
 	}
 
 	// update offset subscribers when there's a change in hidden lines
-	dispatch := s.dispatchSubscribers()
-	defer dispatch()
-
 	s.hiddenblocks[start] = end
 	s.rebuildHiddenLines()
+
+	s.dispatchHiddenToSubscribers(start, end)
 	return true
 }
 
@@ -385,10 +384,9 @@ func (s *Scroll) MarkVisible(start int) bool {
 	}
 	_, ok := s.hiddenblocks[start]
 	if ok {
-		dispatch := s.dispatchSubscribers()
-		defer dispatch()
 		delete(s.hiddenblocks, start)
 		s.rebuildHiddenLines()
+		s.dispatchVisibleToSubscribers(start)
 	}
 	return ok
 }
@@ -807,11 +805,25 @@ type ScrollSubscriber interface {
 	OnWillSeek(from term.Coordinates)
 	// OnDidSeek is dispatched after a scroll has changed its offset.
 	OnDidSeek(from, to term.Coordinates)
+
+	// OnHide is dispatched when a scroll has hidden a block of lines.
+	OnHide(start, end int)
+	// OnVisible is dispatched when a scroll has made visible a block of lines,
+	// that was previously hidden.
+	OnVisible(start int)
 }
 
 type fnSubscriber func(term.Coordinates, term.Coordinates)
 
 func (s fnSubscriber) OnWillSeek(from term.Coordinates) {
+	/* no-op */
+}
+
+func (s fnSubscriber) OnHide(start, end int) {
+	/* no-op */
+}
+
+func (s fnSubscriber) OnVisible(start int) {
 	/* no-op */
 }
 
@@ -840,6 +852,24 @@ func (s *Scroll) dispatchSubscribers() func() {
 			sub.OnDidSeek(from, to)
 		}
 		s.lastPublishedOffset = to
+	}
+}
+
+func (s *Scroll) dispatchVisibleToSubscribers(start int) {
+	if s.disablePublishing {
+		return
+	}
+	for _, sub := range s.subs {
+		sub.OnVisible(start)
+	}
+}
+
+func (s *Scroll) dispatchHiddenToSubscribers(start, end int) {
+	if s.disablePublishing {
+		return
+	}
+	for _, sub := range s.subs {
+		sub.OnHide(start, end)
 	}
 }
 
@@ -891,7 +921,8 @@ func (s *Scroll) PublishingEnabled() bool {
 	return !s.disablePublishing
 }
 
-// FuncScrollSubscriber wraps fn to satisfy ScrollSubscriber.
+// FuncScrollSubscriber wraps fn to satisfy ScrollSubscriber, which is called
+// every time the offset changes. Changes to line visibility will be ignored.
 func FuncScrollSubscriber(fn func(from, to term.Coordinates)) ScrollSubscriber {
 	return fnSubscriber(fn)
 }

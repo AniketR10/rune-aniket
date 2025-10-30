@@ -33,6 +33,20 @@ import (
 	"unstable.build/go-tui/term"
 )
 
+// ScrollSubscriber returns a component.ScrollSubscriber which forwarsd Scroll events to evHandler
+func ScrollSubscriber(
+	resource workspaceapi.URI, h Handler, evHandler EventHandler,
+) component.ScrollSubscriber {
+	return scrollSubscriber{uri: resource, h: h, eh: evHandler}
+}
+
+// CellSubscriber returns a cell.Subscriber which forwards Insert/Delete events to evHandler
+func CellSubscriber(
+	uri workspaceapi.URI, h Handler, evHandler EventHandler,
+) cell.Subscriber {
+	return &cellSubscriber{uri: uri, h: h, eh: evHandler}
+}
+
 type cellSubscriber struct {
 	uri workspaceapi.URI
 	h   Handler
@@ -66,11 +80,6 @@ func (s *cellSubscriber) OnDidEdit(
 	})
 }
 
-// CellSubscriber returns a cell.Subscriber which forwards Insert/Delete events to evHandler
-func CellSubscriber(uri workspaceapi.URI, h Handler, evHandler EventHandler) cell.Subscriber {
-	return &cellSubscriber{uri: uri, h: h, eh: evHandler}
-}
-
 type scrollSubscriber struct {
 	uri workspaceapi.URI
 	h   Handler
@@ -91,7 +100,25 @@ func (s scrollSubscriber) OnDidSeek(from, to term.Coordinates) {
 	})
 }
 
-// ScrollSubscriber returns a component.ScrollSubscriber which forwarsd Scroll events to evHandler
-func ScrollSubscriber(resource workspaceapi.URI, h Handler, evHandler EventHandler) component.ScrollSubscriber {
-	return scrollSubscriber{uri: resource, h: h, eh: evHandler}
+func (s scrollSubscriber) OnHide(
+	start, end int,
+) {
+	s.eh.Handle(context.Background(), textapi.Event{
+		Type:     textapi.EventTypeHidden,
+		Resource: s.h,
+		URI:      s.uri,
+		Start:    term.Coordinates{Y: start},
+		End:      term.Coordinates{Y: end},
+	})
+}
+
+func (s scrollSubscriber) OnVisible(
+	start int,
+) {
+	s.eh.Handle(context.Background(), textapi.Event{
+		Type:     textapi.EventTypeVisible,
+		Resource: s.h,
+		URI:      s.uri,
+		Start:    term.Coordinates{Y: start},
+	})
 }

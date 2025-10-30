@@ -33,6 +33,8 @@ message EditorEvent {
 	TypeSelection = 9;
 	TypeRename = 10;
 	TypeRemove = 11;
+	TypeHidden = 14;
+	TypeVisible = 15;
   }
 
   Type type = 1;

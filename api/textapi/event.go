@@ -67,10 +67,20 @@ const (
 	// more details.
 	EventTypeEdit
 
-	// EventTypeScroll is dispatched when content is scroll to a new offset.
+	// EventTypeScroll is dispatched when content is scrolled to a new offset.
 	// Start represents the new scroll offset, whereas From represents the
 	// last offset position.
 	EventTypeScroll
+
+	// EventTypeHidden is dispatched when some content is hidden.
+	// Start represents the start of the hidden block of lines, whereas End
+	// represents the end of the hidden block.
+	EventTypeHidden
+
+	// EventTypeVisible is dispatched when some content is hidden.
+	// Start represents the start of the hidden block of lines, whereas End
+	// represents the end of the hidden block.
+	EventTypeVisible
 
 	// EventTypeFocus is dispatched when an editor handler is on browser.Focus.
 	// Start contains the width (X) and height (Y) of the content in focus.
@@ -123,6 +133,10 @@ func (e EventType) String() string {
 		return "cursor"
 	case EventTypeSelection:
 		return "selection"
+	case EventTypeHidden:
+		return "hidden"
+	case EventTypeVisible:
+		return "visible"
 	default:
 		panic("uknown event")
 	}
@@ -135,7 +149,7 @@ func AllEvents() []EventType {
 		EventTypeCreate, EventTypeChange, EventTypeRemove,
 		EventTypeRename, EventTypeEdit, EventTypeScroll,
 		EventTypeFocus, EventTypeUnfocus, EventTypeCursor,
-		EventTypeSelection,
+		EventTypeSelection, EventTypeHidden, EventTypeVisible,
 	}
 }
 

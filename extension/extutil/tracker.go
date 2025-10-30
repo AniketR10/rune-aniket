@@ -69,6 +69,8 @@ func ResourceTrackerEventsComplete() []textapi.EventType {
 		textapi.EventTypeEdit,
 		textapi.EventTypeScroll,
 		textapi.EventTypeCursor,
+		textapi.EventTypeVisible,
+		textapi.EventTypeHidden,
 	}
 }
 
@@ -153,6 +155,10 @@ func (h *ResourceTracker) Handle(_ context.Context, ev textapi.Event) (exit bool
 		ok = h.handleResourceScroll(ev)
 	case textapi.EventTypeCursor:
 		ok = h.handleResourceCursor(ev)
+	case textapi.EventTypeHidden:
+		ok = h.handleResourceHidden(ev)
+	case textapi.EventTypeVisible:
+		ok = h.handleResourceVisible(ev)
 	default:
 		ok = true // ignore the rest of event types
 	}
@@ -228,6 +234,22 @@ func (h *ResourceTracker) handleResourceScroll(ev textapi.Event) bool {
 		return true
 	}
 	return res.Scroll.SetOffset(ev.Start)
+}
+
+func (h *ResourceTracker) handleResourceHidden(ev textapi.Event) bool {
+	res, ok := h.resources[ev.URI.String()]
+	if !ok {
+		return false
+	}
+	return res.Scroll.MarkHidden(ev.Start.Y, ev.End.Y)
+}
+
+func (h *ResourceTracker) handleResourceVisible(ev textapi.Event) bool {
+	res, ok := h.resources[ev.URI.String()]
+	if !ok {
+		return false
+	}
+	return res.Scroll.MarkVisible(ev.Start.Y)
 }
 
 func (h *ResourceTracker) handleResourceCursor(ev textapi.Event) bool {

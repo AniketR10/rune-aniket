@@ -52,10 +52,9 @@ func TestResourceTrackerIntegration(t *testing.T) {
 	for _, test := range suite {
 		t.Run(test.description, func(t *testing.T) {
 			clipboard := clipboard.NewInMemory()
-			wrap := true
 			tabspaces := 4
 
-			simpleEd := text.NewSimpleEditor(clipboard, wrap, true, /* command bar */
+			simpleEd := text.NewSimpleEditor(clipboard, false, true, /* command bar */
 				term.Attributes{}, term.Attributes{}, term.Attributes{})
 
 			cfg := text.DefaultConfig()
@@ -70,7 +69,7 @@ func TestResourceTrackerIntegration(t *testing.T) {
 			ed, err := text.NewComponent(simpleEd, loader, cfg)
 			require.NoError(t, err)
 
-			tracker := NewResourceTracker(tabspaces, wrap)
+			tracker := NewResourceTracker(tabspaces, false)
 			require.NoError(t, ed.SubscribeEvents(test.evs, tracker))
 
 			ed.Resize(8, 8)
@@ -87,7 +86,7 @@ func TestResourceTrackerIntegration(t *testing.T) {
 				res, ok := tracker.Resource(res1)
 				require.True(t, ok)
 
-				assert.Equal(t, wrap, res.Scroll.Wrap)
+				assert.Equal(t, false, res.Scroll.Wrap)
 				assert.Equal(t, tabspaces, res.Scroll.Buffer().Tabspaces())
 
 				edh, err = ed.Editor(res1)
@@ -154,7 +153,7 @@ func TestResourceTrackerIntegration(t *testing.T) {
 					winPos, ok := res.WindowCoordinates(term.Coordinates{})
 					require.True(t, ok)
 					assert.Equal(t, term.Coordinates{Y: 6}, res.Offset())
-					assert.Equal(t, term.Coordinates{Y: 5}, res.ContentCoordinates(term.Coordinates{}))
+					assert.Equal(t, term.Coordinates{Y: 6}, res.ContentCoordinates(term.Coordinates{}))
 					assert.Equal(t, term.Coordinates{Y: -6}, winPos)
 					assert.NotPanics(t, func() {
 						_ = res.Cursor()
@@ -176,6 +175,47 @@ func TestResourceTrackerIntegration(t *testing.T) {
 
 					require.NoError(t, ed.SetCursor(edh, term.Coordinates{Y: 2}))
 					assert.Equal(t, term.Coordinates{Y: 2}, res.Cursor())
+				})
+
+			}
+
+			if setHasType(textapi.EventTypeHidden, test.evs) {
+				t.Run("marking lines hidden/visible is replicated", func(t *testing.T) {
+					// reset
+					handled := true
+					for handled {
+						_, handled = bh.Handle(term.Event{
+							Type: term.EventKey, Key: term.KeyArrowUp})
+					}
+					_, handled = bh.Handle(term.Event{
+						Type: term.EventKey, Mod: term.ModCtrl, Ch: 'a'})
+					
+					// mark line as hidden
+					for range 3 {
+						bh.Handle(term.Event{Type: term.EventKey, Mod: term.ModShift, Key: term.KeyArrowDown})
+					}
+					bh.Handle(term.Event{
+						Type: term.EventKey,
+						Ch:   'h',
+						Mod:  term.ModCtrlAlt,
+					})
+
+					res, ok := tracker.Resource(res1)
+					require.True(t, ok)
+
+					winPos := res.ContentCoordinates(term.Coordinates{Y: 1})
+					require.True(t, ok)
+					assert.Equal(t, term.Coordinates{Y: 4}, winPos)
+
+					// mark line as visible
+					bh.Handle(term.Event{
+						Type: term.EventKey,
+						Ch:   'v',
+						Mod:  term.ModCtrlAlt,
+					})
+					winPos = res.ContentCoordinates(term.Coordinates{Y: 1})
+					require.True(t, ok)
+					assert.Equal(t, term.Coordinates{Y: 1}, winPos)
 				})
 			}
 		})

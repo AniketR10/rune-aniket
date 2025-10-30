@@ -215,6 +215,28 @@ func TestEventProto(t *testing.T) {
 		},
 		{
 			in: textapi.Event{
+				Type:  textapi.EventTypeHidden,
+				Start: term.Coordinates{Y: 8},
+				End:   term.Coordinates{Y: 9},
+			},
+			out: EditorEvent{
+				Type:  EditorEvent_TypeHidden,
+				Start: &termrpc.Coordinates{Y: 8},
+				End:   &termrpc.Coordinates{Y: 9},
+			},
+		},
+		{
+			in: textapi.Event{
+				Type:  textapi.EventTypeVisible,
+				Start: term.Coordinates{Y: 8},
+			},
+			out: EditorEvent{
+				Type:  EditorEvent_TypeVisible,
+				Start: &termrpc.Coordinates{Y: 8},
+			},
+		},
+		{
+			in: textapi.Event{
 				Type: textapi.EventTypeFocus,
 				URI:  uri,
 				Resource: Token{

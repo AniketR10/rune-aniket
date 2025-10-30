@@ -101,6 +101,8 @@ var (
 		textapi.EventTypeEdit,
 		textapi.EventTypeFlush,
 		textapi.EventTypeScroll,
+		textapi.EventTypeVisible,
+		textapi.EventTypeHidden,
 		textapi.EventTypeFocus,
 		textapi.EventTypeUnfocus,
 	}

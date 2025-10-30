@@ -55,12 +55,15 @@ func TestScrollDrawHidden(t *testing.T) {
 	_, err := scroll.Buffer().ReadFrom(strings.NewReader(hiddenCopy))
 	require.NoError(t, err)
 
-	var called int
-	scroll.Subscribe(FuncScrollSubscriber(func(from, to term.Coordinates) {
-		if from == to { // only for hidden they're the same
-			called++
-		}
-	}))
+	var calledOnHide, calledOnVisible int
+	scroll.Subscribe(subscriber{
+		expectOnHide: func(start, end int) {
+			calledOnHide++
+		},
+		expectOnVisible: func(start int) {
+			calledOnVisible++
+		},
+	})
 
 	w := term.NewStringWriter(24, 9)
 
@@ -304,7 +307,8 @@ go 1.14   [4 lines]  cl
 		},
 	}
 	comptest.TestComponent(t, scroll, w, tests)
-	assert.Equal(t, 5, called)
+	assert.Equal(t, 3, calledOnHide)
+	assert.Equal(t, 2, calledOnVisible)
 }
 
 func TestScrollNew(t *testing.T) {
@@ -1345,15 +1349,31 @@ func benchmarkScrollWrapDraw(b *testing.B, fortunes int, offset float32) {
 }
 
 type subscriber struct {
-	expectWillSeek func(term.Coordinates)
-	expectDidSeek  func(from, to term.Coordinates)
+	expectWillSeek  func(term.Coordinates)
+	expectDidSeek   func(from, to term.Coordinates)
+	expectOnHide    func(start, end int)
+	expectOnVisible func(start int)
 }
 
 func (s subscriber) OnWillSeek(from term.Coordinates) {
-	s.expectWillSeek(from)
+	if s.expectWillSeek != nil {
+		s.expectWillSeek(from)
+	}
+}
+func (s subscriber) OnHide(start, end int) {
+	if s.expectOnHide != nil {
+		s.expectOnHide(start, end)
+	}
+}
+func (s subscriber) OnVisible(start int) {
+	if s.expectOnVisible != nil {
+		s.expectOnVisible(start)
+	}
 }
 func (s subscriber) OnDidSeek(from, to term.Coordinates) {
-	s.expectDidSeek(from, to)
+	if s.expectDidSeek != nil {
+		s.expectDidSeek(from, to)
+	}
 }
 
 type resultDrawer struct {
