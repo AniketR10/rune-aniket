@@ -54,6 +54,7 @@ const (
 	parserFilename     = "tree-sitter.so"
 	highlightsFilename = "highlights.scm"
 	indentsFilename    = "indents.scm"
+	foldsFilename      = "folds.scm"
 )
 
 // WithTree installs a tree parser into the given buffer via cell.Buffer.WithEditor,
@@ -106,26 +107,28 @@ type Tree struct {
 	ready      bool
 	closed     bool
 	lib        uintptr
-	mu         sync.RWMutex
+	mu         sync.Mutex
 	cells      [][]term.Cell
 	content    []byte
 	parser     *tree_sitter.Parser
 	tree       *tree_sitter.Tree
 	highlights *tree_sitter.Query
 	indents    *tree_sitter.Query
+	folds      *tree_sitter.Query
 
 	onWillEditStart term.Coordinates
 	onWillEditEnd   term.Coordinates
 	onWillEditStr   string
+	waitingFolds    []chan struct{}
 }
 
 // IndentationAt returns the indentation that should correspond to a node placed
 // at the given line.
 func (t *Tree) IndentationAt(line int) (int, bool) {
-	t.mu.RLock()
-	defer t.mu.RUnlock()
+	t.mu.Lock()
+	defer t.mu.Unlock()
 
-	if !t.ready || t.closed {
+	if !t.ready || t.closed || t.tree == nil {
 		return 0, false
 	}
 
@@ -138,6 +141,51 @@ func (t *Tree) IndentationAt(line int) (int, bool) {
 	}
 	ret := t.getIndentation(uint(line))
 	return ret, ret >= 0
+}
+
+// Folds returns all the folds captured by the parser.
+func (t *Tree) Folds() (iterator.Iterator[term.Range], bool) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	if t.closed {
+		return nil, false
+	}
+
+	if !t.ready {
+		ch := make(chan struct{})
+		t.waitingFolds = append(t.waitingFolds, ch)
+		return &foldsIterator{tree: t, ready: ch}, true
+	}
+
+	if t.folds == nil || t.tree == nil {
+		return nil, false
+	}
+
+	return iterator.FromSlice(t.getFolds(false)), true
+}
+
+// InitialFolds returns the folds captured by the parser that should be folded
+// when file is initialized.
+func (t *Tree) InitialFolds() (iterator.Iterator[term.Range], bool) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	if t.closed {
+		return nil, false
+	}
+
+	if !t.ready {
+		ch := make(chan struct{})
+		t.waitingFolds = append(t.waitingFolds, ch)
+		return &foldsIterator{initial: true, tree: t, ready: ch}, true
+	}
+
+	if t.folds == nil || t.tree == nil {
+		return nil, false
+	}
+
+	return iterator.FromSlice(t.getFolds(true)), true
 }
 
 // Close closes all resources associated with this Tree.
@@ -155,7 +203,9 @@ func (t *Tree) Close() (ret error) {
 	if !t.ready {
 		return nil
 	}
-	t.tree.Close()
+	if t.tree != nil {
+		t.tree.Close()
+	}
 	t.parser.Close()
 	t.highlights.Close()
 	if err := purego.Dlclose(t.lib); err != nil {
@@ -251,6 +301,9 @@ func (t *Tree) downloadFiles(ctx context.Context) {
 	// schedule calls on the next tick iteration
 	if !t.config.ScheduleNextTick(func() {
 		t.initParserFromFiles(ctx, ext, id, allFiles)
+		for _, folds := range t.waitingFolds {
+			close(folds)
+		}
 	}) {
 		t.log(log.ErrorLevel, "could not schedule language %q initialization through event-loop", id)
 		t.notifyNotAvail(ext)
@@ -260,7 +313,7 @@ func (t *Tree) downloadFiles(ctx context.Context) {
 func (t *Tree) initParserFromFiles(
 	ctx context.Context, ext, langID string, allFiles []string,
 ) {
-	var langFile, highlightsFile, indentsFile string
+	var langFile, highlightsFile, indentsFile, foldsFile string
 	for _, file := range allFiles {
 		switch filepath.Base(file) {
 		case parserFilename:
@@ -269,6 +322,8 @@ func (t *Tree) initParserFromFiles(
 			highlightsFile = file
 		case indentsFilename:
 			indentsFile = file
+		case foldsFilename:
+			foldsFile = file
 		}
 	}
 	if langFile == "" {
@@ -277,7 +332,8 @@ func (t *Tree) initParserFromFiles(
 		t.notifyNotAvail(ext)
 		return
 	}
-	err := t.initParser(ctx, langID, langFile, highlightsFile, indentsFile)
+	err := t.initParser(ctx, langID, langFile,
+		highlightsFile, indentsFile, foldsFile)
 	if err != nil {
 		t.log(log.ErrorLevel, "initialize language %s: %v", langID, err)
 		t.notifyNotAvail(ext)
@@ -288,7 +344,7 @@ func (t *Tree) initParserFromFiles(
 
 func (t *Tree) initParser(
 	ctx context.Context, langID,
-	langfile, highlightsfile, indentsFile string,
+	langfile, highlightsfile, indentsFile, foldsFile string,
 ) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -323,57 +379,54 @@ func (t *Tree) initParser(
 	}
 
 	if highlightsfile != "" {
-		data, err := os.ReadFile(highlightsfile)
-		if err != nil {
+		if err := t.initHighlights(language, highlightsfile); err != nil {
 			_ = purego.Dlclose(t.lib)
 			t.parser.Close()
-			return fmt.Errorf("read highlights file: %v", err)
+			return fmt.Errorf("initialize highlights: %w", err)
 		}
-
-		// compile the highlights query for this language.
-		highlights, qerr := tree_sitter.NewQuery(language, string(data))
-		if qerr != nil {
-			_ = purego.Dlclose(t.lib)
-			t.parser.Close()
-			return fmt.Errorf("compile query: %v", qerr)
-		}
-		t.highlights = highlights
-		t.log(log.DebugLevel, "highlights initialized")
 	} else {
 		t.log(log.InfoLevel, "highlights file not found, some features will be disabled")
 	}
 
 	if indentsFile != "" {
-		data, err := os.ReadFile(indentsFile)
-		if err != nil {
+		if err := t.initIndents(language, indentsFile); err != nil {
 			_ = purego.Dlclose(t.lib)
 			t.parser.Close()
 			if t.highlights != nil {
 				t.highlights.Close()
 			}
-			return fmt.Errorf("read highlights file: %v", err)
+			return fmt.Errorf("initialize indents: %w", err)
 		}
-
-		// compile the highlights query for this language.
-		indents, qerr := tree_sitter.NewQuery(language, string(data))
-		if qerr != nil {
-			_ = purego.Dlclose(t.lib)
-			t.parser.Close()
-			if t.highlights != nil {
-				t.highlights.Close()
-			}
-			return fmt.Errorf("compile query: %v", qerr)
-		}
-		t.indents = indents
-		t.log(log.DebugLevel, "indents initialized")
 	} else {
 		t.log(log.InfoLevel, "indents file not found, some features will be disabled")
+	}
+
+	if foldsFile != "" {
+		if err := t.initFolds(language, foldsFile); err != nil {
+			_ = purego.Dlclose(t.lib)
+			t.parser.Close()
+			if t.highlights != nil {
+				t.highlights.Close()
+			}
+			if t.indents != nil {
+				t.indents.Close()
+			}
+			return fmt.Errorf("initialize folds: %w", err)
+		}
+	} else {
+		t.log(log.InfoLevel, "folds file not found, some features will be disabled")
 	}
 
 	// build the syntax tree
 	t.persistCells()
 	t.tree = t.parser.Parse(t.content, nil)
+	// set ready to true, even if tree is nil
 	t.ready = true
+
+	if t.tree == nil {
+		t.log(log.ErrorLevel, "parsing failed: nil tree")
+		return nil
+	}
 
 	if err := t.highlight(); err != nil {
 		t.log(log.ErrorLevel, "highlight: %v", err)
@@ -387,6 +440,60 @@ func (t *Tree) initParser(
 	return nil
 }
 
+func (t *Tree) initHighlights(
+	language *tree_sitter.Language, highlightsfile string,
+) error {
+	data, err := os.ReadFile(highlightsfile)
+	if err != nil {
+		return fmt.Errorf("read highlights file: %v", err)
+	}
+
+	// compile the highlights query for this language.
+	highlights, qerr := tree_sitter.NewQuery(language, string(data))
+	if qerr != nil {
+		return fmt.Errorf("compile query: %v", qerr)
+	}
+	t.highlights = highlights
+	t.log(log.DebugLevel, "highlights initialized")
+	return nil
+}
+
+func (t *Tree) initIndents(
+	language *tree_sitter.Language, indentsFile string,
+) error {
+	data, err := os.ReadFile(indentsFile)
+	if err != nil {
+		return fmt.Errorf("read indents file: %v", err)
+	}
+
+	indents, qerr := tree_sitter.NewQuery(language, string(data))
+	if qerr != nil {
+		return fmt.Errorf("compile query: %v", qerr)
+	}
+
+	t.indents = indents
+	t.log(log.DebugLevel, "indents initialized")
+	return nil
+}
+
+func (t *Tree) initFolds(
+	language *tree_sitter.Language, foldsFile string,
+) error {
+	data, err := os.ReadFile(foldsFile)
+	if err != nil {
+		return fmt.Errorf("read folds file: %v", err)
+	}
+
+	folds, qerr := tree_sitter.NewQuery(language, string(data))
+	if qerr != nil {
+		return fmt.Errorf("compile query: %v", qerr)
+	}
+
+	t.folds = folds
+	t.log(log.DebugLevel, "folds initialized")
+	return nil
+}
+
 func (t *Tree) notifyNotAvail(ext string) {
 	_, _ = t.n.Notify(notifications.LevelWarn,
 		"syntax tree parser for language (%q) is not available", ext)
@@ -396,8 +503,8 @@ func (t *Tree) notifyNotAvail(ext string) {
 }
 
 func (t *Tree) reparse() {
-	t.mu.RLock()
-	defer t.mu.RUnlock()
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	if !t.ready {
 		return
 	}
@@ -406,18 +513,24 @@ func (t *Tree) reparse() {
 
 func (t *Tree) doReparse() {
 	t.log(log.TraceLevel, "reparsing tree after flush")
-	t.tree.Close() // dealloc previous tree
+	if t.tree != nil {
+		t.tree.Close() // dealloc previous tree
+	}
 	t.persistCells()
 	t.tree = t.parser.Parse(t.content, nil)
+	if t.tree == nil {
+		t.log(log.ErrorLevel, "parse failed: nil tree")
+		return
+	}
 	if err := t.highlight(); err != nil {
 		t.log(log.ErrorLevel, "highlight: %v", err)
 	}
 }
 
 func (t *Tree) incrementalParse(start, end, from, to term.Coordinates, content string) {
-	t.mu.RLock()
-	defer t.mu.RUnlock()
-	if !t.ready {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if !t.ready || t.tree == nil {
 		return
 	}
 	// use old cells to convert coordinates

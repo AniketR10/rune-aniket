@@ -36,7 +36,7 @@ import (
    Licensed under Apache 2.0. Ported to Go, on October 2025.
 */
 
-type captures struct {
+type indentCaptures struct {
 	begin  map[uintptr]map[string]*string
 	end    map[uintptr]map[string]*string
 	branch map[uintptr]map[string]*string
@@ -47,8 +47,8 @@ type captures struct {
 	auto   map[uintptr]map[string]*string
 }
 
-func newCaptures() captures {
-	return captures{
+func newIndentCaptures() indentCaptures {
+	return indentCaptures{
 		begin:  map[uintptr]map[string]*string{},
 		end:    map[uintptr]map[string]*string{},
 		branch: map[uintptr]map[string]*string{},
@@ -60,8 +60,8 @@ func newCaptures() captures {
 	}
 }
 
-func (t *Tree) queryIndentCaptures() (ret captures) {
-	ret = newCaptures()
+func (t *Tree) queryIndentCaptures() (ret indentCaptures) {
+	ret = newIndentCaptures()
 	root := t.tree.RootNode()
 
 	cur := tree_sitter.NewQueryCursor()

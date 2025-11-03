@@ -142,18 +142,20 @@ func (c *Component) newFileBuffer(
 		return nil, nil, err
 	}
 
-	handler, err = c.ed.Edit(file, buf)
-	if err != nil {
-		return nil, nil, err
-	}
-
 	interrupter := browser.EventPublisherInterrupter(c)
 	locs := syntax.FuncLocationSetter(func(ll textapi.LocationList) error {
 		return c.ed.SetLocationList(handler, textapi.LocationPriorityInfo, "syntax", ll)
 	})
 
+	// install tree in Buffer first so editor can use
+	// its capabilities while initializing
 	fc = syntax.WithTree(c.ctx, c.config, interrupter,
 		c.config.PkgManager, locs, file, buf, fc, c.config.Syntax)
+
+	handler, err = c.ed.Edit(file, buf)
+	if err != nil {
+		return nil, nil, err
+	}
 
 	efc := &editorFlusherCloser{
 		parent:    c,

@@ -32,6 +32,7 @@ import (
 	"testing"
 
 	"github.com/sirupsen/logrus"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/blue/iterator"
 	"go.uber.org/goleak"
@@ -45,6 +46,72 @@ import (
 	"unstable.build/go-tui/text/vi"
 	"unstable.build/go-tui/workspace"
 )
+
+func TestTreeFoldsIntegration(t *testing.T) {
+	t.Run("first call to Folds waits for language and parser to be initialized", func(t *testing.T) {
+		tree, cleanup := newTree(t)
+
+		it, ok := tree.Folds()
+		require.True(t, ok)
+
+		actual, err := iterator.ToSlice(context.Background(), it)
+		require.NoError(t, err)
+
+		expected := []term.Range{
+			{
+				Start: term.Coordinates{Y: 2},
+				End:   term.Coordinates{X: 1, Y: 6},
+			},
+			{
+				Start: term.Coordinates{Y: 2},
+				End:   term.Coordinates{X: 1, Y: 6},
+			},
+			{
+				Start: term.Coordinates{Y: 8},
+				End:   term.Coordinates{X: 1, Y: 13},
+			},
+			{
+				Start: term.Coordinates{X: 12, Y: 8},
+				End:   term.Coordinates{X: 1, Y: 13},
+			},
+			{
+				Start: term.Coordinates{X: 4, Y: 10},
+				End:   term.Coordinates{X: 5, Y: 12},
+			},
+			{
+				Start: term.Coordinates{X: 28, Y: 10},
+				End:   term.Coordinates{X: 5, Y: 12},
+			},
+			{
+				Start: term.Coordinates{X: 0, Y: 15},
+				End:   term.Coordinates{X: 45, Y: 19},
+			},
+		}
+		assert.ElementsMatch(t, expected, actual)
+
+		cleanup()
+	})
+
+	t.Run("first call to InitialFolds waits for language and parser to be initialized", func(t *testing.T) {
+		tree, cleanup := newTree(t)
+
+		it, ok := tree.InitialFolds()
+		require.True(t, ok)
+
+		actual, err := iterator.ToSlice(context.Background(), it)
+		require.NoError(t, err)
+
+		expected := []term.Range{
+			{
+				Start: term.Coordinates{Y: 2},
+				End:   term.Coordinates{X: 1, Y: 6},
+			},
+		}
+		assert.ElementsMatch(t, expected, actual)
+
+		cleanup()
+	})
+}
 
 func TestTreeIndentsIntegration(t *testing.T) {
 	var wg sync.WaitGroup
@@ -917,6 +984,7 @@ func newInstalledPkgManager(t *testing.T) syntax.PkgManager {
 			filepath.Join(wd, "go/tree-sitter.so"),
 			filepath.Join(wd, "go/highlights.scm"),
 			filepath.Join(wd, "go/indents.scm"),
+			filepath.Join(wd, "go/folds.scm"),
 		}),
 	}
 }
@@ -932,7 +1000,7 @@ func (m mockPkgManager) LibDir(ctx context.Context, pkg string) (iterator.Iterat
 var i int
 
 func newEditFile(t *testing.T, comp *text.Component, content string) (
-	text.CellEditor, text.CellView,
+	text.CellEditor, text.Handler,
 ) {
 	i++
 	uri, err := workspaceapi.ParseURI("memory:///" + strconv.Itoa(i) + ".go")
@@ -946,7 +1014,6 @@ func newEditFile(t *testing.T, comp *text.Component, content string) (
 
 	start := term.Coordinates{}
 	ed := comp.CellEditor(h)
-	view := comp.CellView(h)
 	_, _, _, err = ed.Edit(context.Background(), start, start, content)
 	require.NoError(t, err)
 
@@ -955,7 +1022,7 @@ func newEditFile(t *testing.T, comp *text.Component, content string) (
 	err = comp.Browser().Focus().SetContent(tab)
 	require.NoError(t, err)
 
-	return ed, view
+	return ed, h
 }
 
 func newWriter(width, height int) *term.StringWriter {
@@ -1035,6 +1102,30 @@ func (n nopNotifications) UpdateNotificationProgress(
 	id, message string, progress, total int64,
 ) error {
 	return nil
+}
+
+func newTree(t *testing.T) (*syntax.Tree, func()) {
+	var wg sync.WaitGroup
+	ready := func(context.Context) error {
+		wg.Done()
+		return nil
+	}
+	const width, height = 30, 15
+	pkgs := newInstalledPkgManager(t)
+	mu, comp, cleanup := newTestCase(t, pkgs, width, height, ready)
+
+	wg.Add(1)
+	mu.Lock()
+	_, h := newEditFile(t, comp, fileContent)
+	mu.Unlock()
+	wg.Wait()
+	cref, ok := h.(interface{ CursorReference() *text.Cursor })
+	require.True(t, ok)
+
+	tree, ok := cref.CursorReference().View().(*syntax.Tree)
+	require.True(t, ok)
+
+	return tree, cleanup
 }
 
 const fileContent = `package main

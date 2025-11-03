@@ -143,6 +143,11 @@ func (c *Cursor) Coordinates() term.Coordinates {
 	return c.cursor
 }
 
+// View returns the underlying cell.Buffer view.
+func (c *Cursor) View() cell.View {
+	return c.view()
+}
+
 func (c *Cursor) view() cell.View {
 	return c.buffer().View()
 }
