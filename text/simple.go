@@ -37,19 +37,28 @@ import (
 // DefaultSimpleEditor returns a simple to use Editor implementation.
 func DefaultSimpleEditor(clipboard clipboard.Register) Editor {
 	searchAttr := term.Attributes{Attrs: tcell.AttrReverse}
-	return NewSimpleEditor(clipboard, false, true,
-		term.Attributes{}, searchAttr, term.Attributes{})
+	return NewSimpleEditor(clipboard, false, true, false, false,
+		term.Attributes{}, searchAttr, term.Attributes{},
+		func(fn func()) bool { fn(); return true })
 }
 
 // NewSimpleEditor allocates storage for a new Editor and initializes it.
+// The scheduleNextTick parameter can be nil if auxBar is false.
 func NewSimpleEditor(
 	clipboard clipboard.Register,
-	wrap, commandBar bool,
+	wrap, commandBar, auxBar, auxBarFolds bool,
 	attr, searchAttr, barAttr term.Attributes,
+	scheduleNextTick func(func()) bool,
 ) Editor {
+	if auxBar && scheduleNextTick == nil {
+		panic("nil schedule function")
+	}
 	ret := new(simpleEditor)
 	ret.wrap = wrap
 	ret.commandBar = commandBar
+	ret.auxBar = auxBar
+	ret.auxBarFolds = auxBarFolds
+	ret.scheduleNextTick = scheduleNextTick
 	ret.resAttr = searchAttr
 	ret.barAttr = barAttr
 	ret.attr = attr
@@ -59,20 +68,27 @@ func NewSimpleEditor(
 }
 
 type simpleEditor struct {
-	pub        Publisher
-	wrap       bool
-	commandBar bool
-	attr       term.Attributes
-	resAttr    term.Attributes
-	barAttr    term.Attributes
-	clipboard  clipboard.Register
+	pub              Publisher
+	wrap             bool
+	commandBar       bool
+	auxBar           bool
+	auxBarFolds      bool
+	attr             term.Attributes
+	resAttr          term.Attributes
+	barAttr          term.Attributes
+	clipboard        clipboard.Register
+	scheduleNextTick func(func()) bool
 }
 
 func (e *simpleEditor) Edit(file workspaceapi.URI, buf *cell.Buffer) (Handler, error) {
 	rootIfc := NewSimpleHandler(e.clipboard, buf, file, e.wrap,
 		e.commandBar, e.attr, e.resAttr, e.barAttr)
 	root := rootIfc.(*simpleEditorHandler)
-	return e.pub.PublishEdit(file, buf, root, &root.cursor), nil
+	ret := e.pub.PublishEdit(file, buf, root, &root.cursor)
+	if e.auxBar {
+		ret = WithAuxBar(buf, root.less.Scroll(), ret, e.auxBarFolds, e.scheduleNextTick)
+	}
+	return ret, nil
 }
 
 func (e *simpleEditor) SubscribeCommand(cmd textapi.CommandManual, h CommandHandler) error {
@@ -100,44 +116,56 @@ func (e *simpleEditor) UnsubscribeEvents(sub EventHandler) (bool, error) {
 func (e simpleEditor) SetLocationList(
 	h Handler, pri textapi.LocationPriority, ID string, loc LocationList,
 ) error {
-	e.pub.Handler(h).(*simpleEditorHandler).cursor.SetLocationList(pri, ID, loc)
+	e.unwrapHandler(h).cursor.SetLocationList(pri, ID, loc)
 	return nil
 }
 
 func (e *simpleEditor) MoveToNextLocation(h Handler, ID string) error {
-	dispatch := e.pub.RecordCursorChange(h)
+	hh := h
+	if e.auxBar {
+		hh = UnwrapAuxBar(h)
+	}
+	dispatch := e.pub.RecordCursorChange(hh)
 	defer dispatch()
 
-	e.pub.Handler(h).(*simpleEditorHandler).cursor.MoveToNextLocation(ID)
+	e.unwrapHandler(h).cursor.MoveToNextLocation(ID)
 	return nil
 }
 
 func (e *simpleEditor) MoveToPrevLocation(h Handler, ID string) error {
-	dispatch := e.pub.RecordCursorChange(h)
+	hh := h
+	if e.auxBar {
+		hh = UnwrapAuxBar(h)
+	}
+	dispatch := e.pub.RecordCursorChange(hh)
 	defer dispatch()
 
-	e.pub.Handler(h).(*simpleEditorHandler).cursor.MoveToPrevLocation(ID)
+	e.unwrapHandler(h).cursor.MoveToPrevLocation(ID)
 	return nil
 }
 
 func (e *simpleEditor) CellView(h Handler) CellView {
-	return NewCellView(e.pub.Handler(h).(*simpleEditorHandler).buf.View())
+	return NewCellView(e.unwrapHandler(h).buf.View())
 }
 
 func (e *simpleEditor) CellEditor(h Handler) CellEditor {
-	return NewCellEditor(e.pub.Handler(h).(*simpleEditorHandler).buf.Editor())
+	return NewCellEditor(e.unwrapHandler(h).buf.Editor())
 }
 
 func (e *simpleEditor) SetDefaultAttributes(h Handler, attr term.Attributes) error {
-	e.pub.Handler(h).(*simpleEditorHandler).less.Scroll().Attributes = attr
+	e.unwrapHandler(h).less.Scroll().Attributes = attr
 	return nil
 }
 
 func (e *simpleEditor) SetCursor(h Handler, pos term.Coordinates) error {
-	dispatch := e.pub.RecordCursorChange(h)
+	hh := h
+	if e.auxBar {
+		hh = UnwrapAuxBar(h)
+	}
+	dispatch := e.pub.RecordCursorChange(hh)
 	defer dispatch()
 
-	ok := e.pub.Handler(h).(*simpleEditorHandler).SetCursorAtScroll(pos)
+	ok := e.unwrapHandler(h).SetCursorAtScroll(pos)
 	if !ok {
 		return errors.New("move to scroll: invalid cursor position")
 	}
@@ -145,6 +173,13 @@ func (e *simpleEditor) SetCursor(h Handler, pos term.Coordinates) error {
 }
 
 func (e *simpleEditor) Cursor(h Handler) (term.Coordinates, error) {
-	pos := e.pub.Handler(h).(*simpleEditorHandler).cursor.CursorAtScroll()
+	pos := e.unwrapHandler(h).cursor.CursorAtScroll()
 	return pos, nil
+}
+
+func (e *simpleEditor) unwrapHandler(h Handler) *simpleEditorHandler {
+	if !e.auxBar {
+		return e.pub.UnwrapHandler(h).(*simpleEditorHandler)
+	}
+	return e.pub.UnwrapHandler(UnwrapAuxBar(h)).(*simpleEditorHandler)
 }

@@ -35,13 +35,17 @@ import (
 
 type viEditor struct {
 	text.Publisher
-	opts []Option
+	config viConfig
+	opts   []Option
 }
 
 // Editor returns a Vi text.Editor.
 func Editor(opts ...Option) text.Editor {
 	ret := &viEditor{opts: opts}
 	ret.Publisher.Init()
+	for _, o := range opts {
+		o(&ret.config)
+	}
 	return ret
 }
 
@@ -49,7 +53,12 @@ func (e *viEditor) Edit(file workspaceapi.URI, buf *cell.Buffer) (text.Handler, 
 	root := New(buf, file, e.opts...)
 	// publisher does not mutate cursor and it should never do so
 	cursor := root.cursor
-	return e.Publisher.PublishEdit(file, buf, root, cursor), nil
+	ret := e.Publisher.PublishEdit(file, buf, root, cursor)
+	if e.config.enableAuxBar {
+		ret = text.WithAuxBar(buf, root.less.Scroll(), ret,
+			e.config.enableAuxBarFolds, e.config.scheduleNextTick)
+	}
+	return ret, nil
 }
 
 // SubscribeCommand is not supported.
@@ -82,45 +91,57 @@ func (e *viEditor) UnsubscribeEvents(sub text.EventHandler) (bool, error) {
 }
 
 func (e *viEditor) SetDefaultAttributes(h text.Handler, attrs term.Attributes) error {
-	return e.Publisher.Handler(h).(*Vi).SetDefaultAttributes(attrs)
+	return e.unwrapHandler(h).SetDefaultAttributes(attrs)
 }
 
 func (e viEditor) SetLocationList(
 	h text.Handler, pri textapi.LocationPriority, ID string, loc text.LocationList,
 ) error {
-	e.Publisher.Handler(h).(*Vi).SetLocationList(pri, ID, loc)
+	e.unwrapHandler(h).SetLocationList(pri, ID, loc)
 	return nil
 }
 
 func (e *viEditor) MoveToNextLocation(h text.Handler, ID string) error {
-	dispatch := e.Publisher.RecordCursorChange(h)
+	hh := h
+	if e.config.enableAuxBar {
+		hh = text.UnwrapAuxBar(h)
+	}
+	dispatch := e.Publisher.RecordCursorChange(hh)
 	defer dispatch()
 
-	e.Publisher.Handler(h).(*Vi).MoveToNextLocation(ID)
+	e.unwrapHandler(h).MoveToNextLocation(ID)
 	return nil
 }
 
 func (e *viEditor) MoveToPrevLocation(h text.Handler, ID string) error {
-	dispatch := e.Publisher.RecordCursorChange(h)
+	hh := h
+	if e.config.enableAuxBar {
+		hh = text.UnwrapAuxBar(h)
+	}
+	dispatch := e.Publisher.RecordCursorChange(hh)
 	defer dispatch()
 
-	e.Publisher.Handler(h).(*Vi).MoveToPrevLocation(ID)
+	e.unwrapHandler(h).MoveToPrevLocation(ID)
 	return nil
 }
 
 func (e *viEditor) CellView(h text.Handler) text.CellView {
-	return text.NewCellView(e.Publisher.Handler(h).(*Vi).CellView())
+	return text.NewCellView(e.unwrapHandler(h).CellView())
 }
 
 func (e *viEditor) CellEditor(h text.Handler) text.CellEditor {
-	return text.NewCellEditor(e.Publisher.Handler(h).(*Vi).CellEditor())
+	return text.NewCellEditor(e.unwrapHandler(h).CellEditor())
 }
 
 func (e *viEditor) SetCursor(h text.Handler, pos term.Coordinates) error {
-	dispatch := e.Publisher.RecordCursorChange(h)
+	hh := h
+	if e.config.enableAuxBar {
+		hh = text.UnwrapAuxBar(h)
+	}
+	dispatch := e.Publisher.RecordCursorChange(hh)
 	defer dispatch()
 
-	vi := e.Publisher.Handler(h).(*Vi)
+	vi := e.unwrapHandler(h)
 	ok := vi.SetCursorAtScroll(pos)
 	if !ok {
 		if vi.CursorAtScroll() == pos {
@@ -133,6 +154,13 @@ func (e *viEditor) SetCursor(h text.Handler, pos term.Coordinates) error {
 }
 
 func (e *viEditor) Cursor(h text.Handler) (term.Coordinates, error) {
-	pos := e.Publisher.Handler(h).(*Vi).CursorAtScroll()
+	pos := e.unwrapHandler(h).CursorAtScroll()
 	return pos, nil
+}
+
+func (e *viEditor) unwrapHandler(h text.Handler) *Vi {
+	if !e.config.enableAuxBar {
+		return e.Publisher.UnwrapHandler(h).(*Vi)
+	}
+	return e.Publisher.UnwrapHandler(text.UnwrapAuxBar(h)).(*Vi)
 }

@@ -105,8 +105,8 @@ func (p *Publisher) PublishEdit(
 	return h
 }
 
-// Handler returns the underlying handler passed to PublishEdit.
-func (p *Publisher) Handler(h Handler) Handler {
+// UnwrapHandler unwraps the underlying handler passed to PublishEdit.
+func (p *Publisher) UnwrapHandler(h Handler) Handler {
 	return h.(*cursorPublisher).Handler
 }
 

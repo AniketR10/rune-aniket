@@ -35,6 +35,7 @@ type viConfig struct {
 	resAttr              term.Attributes
 	barAttr              term.Attributes
 	clipboard            clipboard.Register
+	scheduleNextTick     func(func()) bool
 	defaultRegister      string
 	superimposedMessages bool
 	debug                bool
@@ -42,6 +43,9 @@ type viConfig struct {
 	cursorCorrections    bool
 	barHidden            bool
 	skipNulls            bool
+	enableInitialFolds   bool
+	enableAuxBar         bool
+	enableAuxBarFolds    bool
 }
 
 // defaultviHandlerImplConfig is a sane configuration defaults for viHandlerImpl.
@@ -50,7 +54,11 @@ func defaultviHandlerImplConfig() viConfig {
 		resAttr: term.Attributes{
 			Attrs: tcell.AttrReverse,
 		},
-		clipboard:         clipboard.NewInMemory(),
+		clipboard: clipboard.NewInMemory(),
+		scheduleNextTick: func(fn func()) bool {
+			fn()
+			return true
+		},
 		defaultRegister:   clipboard.DefaultRegisterID,
 		skipNulls:         true,
 		cursorCorrections: true,
@@ -64,6 +72,27 @@ type Option func(*viConfig)
 func WithResAttr(attr term.Attributes) Option {
 	return func(cfg *viConfig) {
 		cfg.resAttr = attr
+	}
+}
+
+// WithScheduleNextTick defines the function to schedule and serializes asynchronous work.
+func WithScheduleNextTick(fn func(func()) bool) Option {
+	return func(cfg *viConfig) {
+		cfg.scheduleNextTick = fn
+	}
+}
+
+// WithAuxiliaryBar determines whether to draw an auxiliary bar on the left or not.
+func WithAuxiliaryBar(enabled bool) Option {
+	return func(cfg *viConfig) {
+		cfg.enableAuxBar = enabled
+	}
+}
+
+// WithAuxiliaryBarFolds determines whether to draw folds at the auxiliary.
+func WithAuxiliaryBarFolds(enabled bool) Option {
+	return func(cfg *viConfig) {
+		cfg.enableAuxBarFolds = enabled
 	}
 }
 
@@ -140,5 +169,13 @@ func WithCursorCorrections(enabled bool) Option {
 func WithAutoSkipNullCells(skip bool) Option {
 	return func(cfg *viConfig) {
 		cfg.skipNulls = skip
+	}
+}
+
+// WithHideInitialFolds determines whether to hide the initial folds
+// determined by the language query.
+func WithHideInitialFolds(enabled bool) Option {
+	return func(cfg *viConfig) {
+		cfg.enableInitialFolds = enabled
 	}
 }

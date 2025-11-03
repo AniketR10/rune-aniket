@@ -27,13 +27,16 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/unstablebuild/blue/iterator"
 	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/clipboard"
+	"unstable.build/go-tui/component/comptest"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/text/texttest"
@@ -47,6 +50,44 @@ func init() {
 	if err != nil {
 		panic(err)
 	}
+}
+
+func TestInitialFoldsIntegration(t *testing.T) {
+	buf := cell.NewBuffer()
+	buf.WriteString(snippet)
+	fs := &testFoldsService{}
+	fs.view = buf.WithView(fs)
+	var wg sync.WaitGroup
+	cb := func(fn func()) bool {
+		fn()
+		wg.Done()
+		return true
+	}
+	wg.Add(1)
+	vi := New(buf, uri,
+		WithHideInitialFolds(true),
+		WithScheduleNextTick(cb),
+	)
+	vi.Resize(20, 10)
+
+	tests := []comptest.TestCase{
+		{Expected: `
+   [4 lines] * diff
+ */                 
+    void            
+diff_buf_adjust(win_
+{                   
+    win_T    *wp;   
+    int             
+                    
+    if (!win->w_p_di
+              NORMAL`,
+		},
+	}
+
+	wg.Wait()
+	w := term.NewStringWriter(20, 10)
+	comptest.TestComponent(t, vi, w, tests)
 }
 
 type mockHandler struct {
@@ -499,4 +540,40 @@ func TestCopyDelete(t *testing.T) {
 			assert.Equal(t, tcase.wantCopy, mock.data.Text)
 		})
 	}
+}
+
+var _ = (foldsService)(testFoldsService{})
+
+type testFoldsService struct {
+	view cell.View
+}
+
+func (f testFoldsService) Rows() int {
+	return f.view.Rows()
+}
+
+func (f testFoldsService) Columns(row int) int {
+	return f.view.Columns(row)
+}
+
+func (f testFoldsService) Cell(at term.Coordinates) (term.Cell, bool) {
+	return f.view.Cell(at)
+}
+
+func (f testFoldsService) RawCells() [][]term.Cell {
+	return f.view.RawCells()
+}
+
+func (f testFoldsService) String() string {
+	return f.view.String()
+}
+
+func (f testFoldsService) Folds() (iterator.Iterator[term.Range], bool) {
+	return nil, false
+}
+
+func (f testFoldsService) InitialFolds() (iterator.Iterator[term.Range], bool) {
+	return iterator.FromSlice([]term.Range{
+		{Start: term.Coordinates{Y: 0, X: 0}, End: term.Coordinates{Y: 3}},
+	}), true
 }

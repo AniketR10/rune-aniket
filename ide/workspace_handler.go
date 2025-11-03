@@ -134,7 +134,11 @@ func (h *workspaceManagerHandler) newBuiltinModalEditor(cfg ideConfig) text.Edit
 	viOpts := append([]vi.Option{},
 		vi.WithBarAttr(cfg.modalBarAttr()),
 		vi.WithResAttr(cfg.modalResultAttr()),
+		vi.WithScheduleNextTick(cfg.scheduleNextTick),
 		vi.WithAttr(cfg.modalAttr()),
+		vi.WithAuxiliaryBar(cfg.auxiliaryBarEnabled()),
+		vi.WithAuxiliaryBarFolds(cfg.auxiliaryBarFolds()),
+		vi.WithHideInitialFolds(cfg.initialFolds()),
 		vi.WithDebug(cfg.modalDebug()),
 		vi.WithClipboard(cfg.clipboard()),
 	)
@@ -143,9 +147,9 @@ func (h *workspaceManagerHandler) newBuiltinModalEditor(cfg ideConfig) text.Edit
 
 func (h *workspaceManagerHandler) newBuiltinModelessEditor(cfg ideConfig) text.Editor {
 	return text.NewSimpleEditor(
-		cfg.clipboard(), false, true,
-		cfg.modelessAttr(),
-		cfg.modelessResultAttr(), cfg.modelessBarAttr())
+		cfg.clipboard(), false, true, cfg.auxiliaryBarEnabled(), cfg.auxiliaryBarFolds(),
+		cfg.modelessAttr(), cfg.modelessResultAttr(), cfg.modelessBarAttr(),
+		cfg.scheduleNextTick)
 }
 
 func (h *workspaceManagerHandler) init(

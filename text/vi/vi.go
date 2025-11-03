@@ -27,12 +27,16 @@ import (
 	"context"
 	"fmt"
 
+	log "github.com/sirupsen/logrus"
+	"github.com/unstablebuild/blue/iterator"
+	"github.com/unstablebuild/blue/logging"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
@@ -49,6 +53,8 @@ type Vi struct {
 	mouse     *text.Mouse
 	less      *handler.Less
 	clipboard clipboard.Register
+
+	scheduleNextTick func(func()) bool
 
 	repeating   int
 	currEdited  bool
@@ -73,7 +79,7 @@ func (vi *Vi) Init(buf *cell.Buffer, resource workspaceapi.URI, opts ...Option) 
 	viHandler := new(viHandlerImpl)
 	viHandler.init(buf, opts...)
 
-	vi.init(viHandler, buf, resource, opts...)
+	vi.init(viHandler, buf, resource)
 
 	text.WithCopyDelete(viHandler.config.defaultRegister,
 		vi, vi.cursor, buf)
@@ -89,10 +95,13 @@ func (vi *Vi) InitWithScroll(scroll *component.Scroll, resource workspaceapi.URI
 	viHandler := new(viHandlerImpl)
 	viHandler.initWithScroll(scroll, opts...)
 
-	vi.init(viHandler, scroll.Buffer(), resource, opts...)
+	vi.init(viHandler, scroll.Buffer(), resource)
 }
 
-func (vi *Vi) init(viHandler *viHandlerImpl, buf *cell.Buffer, resource workspaceapi.URI, opts ...Option) {
+func (vi *Vi) init(
+	viHandler *viHandlerImpl, buf *cell.Buffer,
+	resource workspaceapi.URI,
+) {
 	vi.resource = resource
 	vi.handler = viHandler
 	vi.buf = buf
@@ -100,12 +109,16 @@ func (vi *Vi) init(viHandler *viHandlerImpl, buf *cell.Buffer, resource workspac
 	vi.cursor = &viHandler.cursor
 	vi.mouse = text.NewMouse(newMouseDelegate(viHandler))
 	vi.clipboard = viHandler.config.clipboard
+	vi.scheduleNextTick = viHandler.config.scheduleNextTick
 
 	vi.repeatEdits = make([]term.Event, 0)
 	vi.currEdits = make([]term.Event, 0)
 	vi.oob = true
 
 	vi.snapshotContent()
+	if viHandler.config.enableInitialFolds {
+		vi.hideInitialFolds()
+	}
 }
 
 // Selection returns the text currently selected by Vi's visual mode,
@@ -439,4 +452,52 @@ func (vi *cellSubscriber) OnDidEdit(
 		vi.currEdited = true
 	}
 	vi.oobEdited = vi.oob
+}
+
+type foldsService interface {
+	Folds() (iterator.Iterator[term.Range], bool)
+	InitialFolds() (iterator.Iterator[term.Range], bool)
+}
+
+func (vi *Vi) hideInitialFolds() {
+	svc, ok := vi.less.Buffer().View().(foldsService)
+	if !ok {
+		vi.log(log.DebugLevel, "folds service not available for resource: %s", vi.resource)
+		return
+	}
+	folds, ok := svc.InitialFolds()
+	if !ok {
+		vi.log(log.DebugLevel, "initial folds returned false")
+		return
+	}
+
+	scroll := vi.less.Scroll()
+
+	go debug.CapturePanicReport(func() {
+		folds, isEmpty := iterator.IsEmpty(context.Background(), folds)
+		if isEmpty {
+			folds.Close()
+			return
+		}
+		vi.scheduleNextTick(func() {
+			defer folds.Close()
+			for {
+				fold, ok := folds.Next(context.Background())
+				if !ok {
+					break
+				}
+				scroll.MarkHidden(fold.Start.Y, fold.End.Y)
+			}
+			if err := folds.Err(); err != nil {
+				vi.log(log.ErrorLevel, "error hiding initial folds: %v", err)
+			}
+		})
+	})
+}
+
+func (e *Vi) log(level log.Level, msg string, args ...any) {
+	if !log.IsLevelEnabled(level) {
+		return
+	}
+	log.WithField(logging.KeyClass, "vi.Vi").Logf(level, msg, args...)
 }

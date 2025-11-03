@@ -1825,7 +1825,8 @@ func (h *lspEditorHandler) browseLocations(
 
 	clipboard := clipboard.NewInMemory()
 	attr := term.Attributes{} // does not matter for Handler's purpose
-	sed, _ := text.NewSimpleEditor(clipboard, true, true, attr, attr, attr).
+	sed, _ := text.NewSimpleEditor(clipboard, true, true, false,
+		false, attr, attr, attr, nil).
 		Edit(workspaceapi.RandomURI("search"), list.Buffer())
 	sh := search.Handler(list, sed, func(text string) {
 		h.mu.Lock()

@@ -1145,6 +1145,63 @@ func (c ideConfig) modalAttr() (attr term.Attributes) {
 	return attr
 }
 
+func (c ideConfig) initialFolds() bool {
+	cfg, ok := c.editor()
+	if !ok {
+		return false
+	}
+	enabled, err := cfg.GetBool("initial_folds")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["editor.initial_folds"] = err
+		}
+	}
+	return enabled
+}
+
+func (c ideConfig) auxiliaryBar() (config.Config, bool) {
+	cfg, ok := c.editor()
+	if !ok {
+		return nil, false
+	}
+	cfg, err := cfg.GetConfig("aux_bar")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["editor.aux_bar"] = err
+		}
+		return nil, false
+	}
+	return cfg, true
+}
+
+func (c ideConfig) auxiliaryBarEnabled() bool {
+	cfg, ok := c.auxiliaryBar()
+	if !ok {
+		return false
+	}
+	enabled, err := cfg.GetBool("enabled")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["editor.aux_bar.enabled"] = err
+		}
+	}
+	return enabled
+}
+
+func (c ideConfig) auxiliaryBarFolds() bool {
+	cfg, ok := c.auxiliaryBar()
+	if !ok {
+		return false
+	}
+	enabled, err := cfg.GetBool("folds")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["editor.aux_bar.folds"] = err
+		}
+	}
+	return enabled
+}
+
 func (c ideConfig) modalDebug() (ret bool) {
 	return c.modalBool("debug")
 }

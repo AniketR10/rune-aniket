@@ -62,6 +62,9 @@ default_attr:
     fg: "#f2f2f2"
 
 editor:
+    aux_bar:
+        enabled: true
+        folds: true
     mode: modal
     modal:
         attr:
@@ -253,6 +256,12 @@ func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
 
 	assert.Equal(t, workspaceBarKindNumbers, cfg.workspaceBarKind())
 
+	auxBar := cfg.auxiliaryBarEnabled()
+	assert.False(t, auxBar)
+
+	folds := cfg.auxiliaryBarFolds()
+	assert.False(t, folds)
+
 	actualNotifications := cfg.notificationsConfig()
 	expectedNotifications := defaultNotificationsConfig()
 	assert.NotNil(t, actualNotifications.Interrupter)
@@ -432,6 +441,12 @@ func TestConfigSetting(t *testing.T) {
 	expectedFUCs.Top = '┫'
 	expectedFUCs.Bottom = '┫'
 	assert.Equal(t, expectedFUCs, cfg.frameUnionCharset())
+
+	auxBar := cfg.auxiliaryBarEnabled()
+	assert.True(t, auxBar)
+
+	folds := cfg.auxiliaryBarFolds()
+	assert.True(t, folds)
 
 	noti := cfg.notificationsConfig()
 	assert.Equal(t, 1, noti.Padding)
