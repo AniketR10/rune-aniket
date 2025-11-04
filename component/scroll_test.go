@@ -297,7 +297,7 @@ replace this => that
 			}, `
 module github.com/unstab
                         
-go 1.14 [4 lines]  cloud
+go 1.14 [4 lines] cloud.
     cloud.google.com/go/
     github.com/adrianmo/
     github.com/ernestrc/

@@ -1129,7 +1129,7 @@ func (s *Scroll) drawWithHidden(writer term.Writer) {
 				if targetx >= s.width {
 					break
 				}
-				if c.Ch == 0 || targetx < 0 || (trim && c.Ch == ' ') {
+				if c.Ch == 0 || targetx < 0 || (trim && (c.Ch == ' ' || c.Ch == '\t')) {
 					continue
 				}
 				if c.Bg == 0 {
