@@ -89,6 +89,81 @@ func TestTreeFoldsIntegration(t *testing.T) {
 		}
 		assert.ElementsMatch(t, expected, actual)
 
+		require.NoError(t, tree.Close())
+		cleanup()
+	})
+
+	t.Run("if folds.scm file is not found and tree is NOT ready, the iterators are eventually empty", func(t *testing.T) {
+		rootPkgs := newInstalledPkgManagerWithFiles(t,
+			"go/tree-sitter.so",
+			"go/highlights.scm",
+			"go/indents.scm",
+		)
+		var mu sync.Mutex
+		libDirIt := iterator.FromFunc(
+			func(ctx context.Context) (string, bool, error) {
+				mu.Lock()
+				defer mu.Unlock()
+				val, ok := rootPkgs.ret.Next(ctx)
+				return val, ok, nil
+			},
+			func() error {
+				return nil
+			},
+		)
+
+		pkgs := &mockPkgManager{ret: libDirIt}
+		ready := func(context.Context) error {
+			return nil
+		}
+		const width, height = 30, 15
+		tmu, comp, cleanup := newTestCase(t, pkgs, width, height, ready)
+
+		// prevent tree from becoming ready, so we can test not ready path
+		mu.Lock()
+
+		tmu.Lock()
+		_, h := newEditFile(t, comp, fileContent)
+		tmu.Unlock()
+
+		cref, ok := h.(interface{ CursorReference() *text.Cursor })
+		tree, ok := cref.CursorReference().View().(*syntax.Tree)
+		require.True(t, ok)
+
+		it, ok := tree.Folds()
+		require.True(t, ok)
+
+		it2, ok := tree.InitialFolds()
+		require.True(t, ok)
+
+		// syntax tree becomes ready
+		mu.Unlock()
+
+		// this should block until initialization is complete
+		actual, err := iterator.ToSlice(context.Background(), it)
+		require.NoError(t, err)
+		assert.Empty(t, actual)
+
+		actual, err = iterator.ToSlice(context.Background(), it2)
+		require.NoError(t, err)
+		assert.Empty(t, actual)
+
+		require.NoError(t, tree.Close())
+		cleanup()
+	})
+
+	t.Run("if folds.scm file is not found and tree is ready Folds returns false", func(t *testing.T) {
+		pkgs := newInstalledPkgManagerWithFiles(t,
+			"go/tree-sitter.so",
+			"go/highlights.scm",
+			"go/indents.scm",
+		)
+		tree, cleanup := newTreeWithPkgManager(t, pkgs)
+
+		_, ok := tree.Folds()
+		require.False(t, ok)
+
+		require.NoError(t, tree.Close())
 		cleanup()
 	})
 
@@ -604,6 +679,29 @@ func TestEdgeCaseIndents(t *testing.T) {
 	handlertest.TestHandlerSequenceWriter(t, w, comp.Browser(), width, height, sequenceCases)
 }
 
+func TestTreeHighlightsMissingHighlightsFile(t *testing.T) {
+	ready := func(context.Context) error {
+		return nil
+	}
+	const width, height = 30, 15
+	pkgs := newInstalledPkgManagerWithFiles(t,
+		"go/tree-sitter.so",
+	)
+	mu, comp, cleanup := newTestCase(t, pkgs, width, height, ready)
+
+	mu.Lock()
+	_, h := newEditFile(t, comp, fileContent)
+	mu.Unlock()
+	cref, ok := h.(interface{ CursorReference() *text.Cursor })
+	require.True(t, ok)
+	tree, ok := cref.CursorReference().View().(*syntax.Tree)
+	require.True(t, ok)
+
+	require.NoError(t, tree.Close())
+	cleanup()
+	goleak.VerifyNone(t)
+}
+
 func TestTreeHighlightsIntegration(t *testing.T) {
 	var wg sync.WaitGroup
 	ready := func(context.Context) error {
@@ -976,16 +1074,24 @@ func TestTreeHighlightsIntegration(t *testing.T) {
 	goleak.VerifyNone(t)
 }
 
-func newInstalledPkgManager(t *testing.T) syntax.PkgManager {
+func newInstalledPkgManager(t *testing.T) mockPkgManager {
+	return newInstalledPkgManagerWithFiles(t,
+		"go/tree-sitter.so",
+		"go/highlights.scm",
+		"go/indents.scm",
+		"go/folds.scm",
+	)
+}
+
+func newInstalledPkgManagerWithFiles(t *testing.T, files ...string) mockPkgManager {
 	wd, err := os.Getwd()
 	require.NoError(t, err)
+	var fullPathFiles []string
+	for _, file := range files {
+		fullPathFiles = append(fullPathFiles, filepath.Join(wd, file))
+	}
 	return mockPkgManager{
-		ret: iterator.FromSlice([]string{
-			filepath.Join(wd, "go/tree-sitter.so"),
-			filepath.Join(wd, "go/highlights.scm"),
-			filepath.Join(wd, "go/indents.scm"),
-			filepath.Join(wd, "go/folds.scm"),
-		}),
+		ret: iterator.FromSlice(fullPathFiles),
 	}
 }
 
@@ -1105,13 +1211,17 @@ func (n nopNotifications) UpdateNotificationProgress(
 }
 
 func newTree(t *testing.T) (*syntax.Tree, func()) {
+	pkgs := newInstalledPkgManager(t)
+	return newTreeWithPkgManager(t, pkgs)
+}
+
+func newTreeWithPkgManager(t *testing.T, pkgs syntax.PkgManager) (*syntax.Tree, func()) {
 	var wg sync.WaitGroup
 	ready := func(context.Context) error {
 		wg.Done()
 		return nil
 	}
 	const width, height = 30, 15
-	pkgs := newInstalledPkgManager(t)
 	mu, comp, cleanup := newTestCase(t, pkgs, width, height, ready)
 
 	wg.Add(1)

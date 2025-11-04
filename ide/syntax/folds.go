@@ -87,7 +87,7 @@ type foldsIterator struct {
 func (f *foldsIterator) Next(ctx context.Context) (term.Range, bool) {
 	<-f.ready
 	if f.slice == nil {
-		if f.tree.tree == nil {
+		if f.tree.tree == nil || f.tree.folds == nil {
 			return term.Range{}, false
 		}
 		f.slice = iterator.FromSlice(f.tree.getFolds(f.initial))
@@ -98,7 +98,7 @@ func (f *foldsIterator) Next(ctx context.Context) (term.Range, bool) {
 func (f foldsIterator) Err() error {
 	<-f.ready
 	if f.slice == nil {
-		if f.tree.tree == nil {
+		if f.tree.tree == nil || f.tree.folds == nil {
 			return nil
 		}
 		f.slice = iterator.FromSlice(f.tree.getFolds(f.initial))

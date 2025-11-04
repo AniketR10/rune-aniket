@@ -128,7 +128,7 @@ func (t *Tree) IndentationAt(line int) (int, bool) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	if !t.ready || t.closed || t.tree == nil {
+	if !t.ready || t.closed || t.tree == nil || t.indents == nil {
 		return 0, false
 	}
 
@@ -207,7 +207,15 @@ func (t *Tree) Close() (ret error) {
 		t.tree.Close()
 	}
 	t.parser.Close()
-	t.highlights.Close()
+	if t.highlights != nil {
+		t.highlights.Close()
+	}
+	if t.folds != nil {
+		t.folds.Close()
+	}
+	if t.indents != nil {
+		t.indents.Close()
+	}
 	if err := purego.Dlclose(t.lib); err != nil {
 		ret = multierror.Append(ret, err)
 	}
@@ -552,6 +560,10 @@ func (t *Tree) incrementalParse(start, end, from, to term.Coordinates, content s
 	// get new cells to re-parse
 	t.persistCells()
 	t.tree = t.parser.Parse(t.content, t.tree)
+	if t.tree == nil {
+		t.log(log.ErrorLevel, "parsing failed: nil tree")
+		return
+	}
 	if err := t.highlight(); err != nil {
 		t.log(log.ErrorLevel, "highlight: %v", err)
 	}
