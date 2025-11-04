@@ -1660,6 +1660,7 @@ func TestNoModeHandlesNonCtrlModifiers(t *testing.T) {
 		insertMode,
 		deleteMode,
 		gMode,
+		foldMode,
 		yankMode,
 		visualMode,
 		visualLineMode,

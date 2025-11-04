@@ -58,7 +58,7 @@ func makeEventIntegrationCase(content string) (in, out *cell.Buffer, cursor *tex
 	in, out = cell.NewBuffer(), cell.NewBuffer()
 	scroll := component.NewScroll(in)
 	scroll.Resize(100, 100)
-	cursor = text.NewCursor(scroll)
+	cursor = text.NewCursor(scroll, nil)
 	in.WriteString(content)
 	out.WriteString(content)
 	return

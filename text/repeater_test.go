@@ -36,7 +36,7 @@ func TestRepeater(t *testing.T) {
 	buf := cell.NewBuffer()
 	scroll := component.NewScroll(buf)
 	scroll.Resize(10, 10)
-	cursor := NewCursor(scroll)
+	cursor := NewCursor(scroll, nil)
 	repeater := NewRepeater(cursor, buf)
 
 	cursor.InsertString("helloworld")

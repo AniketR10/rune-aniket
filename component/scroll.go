@@ -369,12 +369,45 @@ func (s *Scroll) MarkHidden(start, end int) bool {
 		return false
 	}
 
+	// do not process if new fold is inside a current fold
+	for bstart, bend := range s.hiddenblocks {
+		if start >= bstart && start <= bend && end >= bstart && end <= bend {
+			return false
+		}
+	}
+
+	// remove any folds that intersect with the new fold:
+	// this avoids problems calculating coordinates
+	for bstart, bend := range s.hiddenblocks {
+		if (bstart >= start && bstart <= end) || (bend <= end && bend >= start) {
+			delete(s.hiddenblocks, bstart)
+			s.dispatchVisibleToSubscribers(bstart)
+		}
+	}
+
 	// update offset subscribers when there's a change in hidden lines
 	s.hiddenblocks[start] = end
 	s.rebuildHiddenLines()
 
 	s.dispatchHiddenToSubscribers(start, end)
 	return true
+}
+
+// HiddenBlockAt returns the hidden block starting at line, or false
+// if there's no hidden block.
+func (s *Scroll) HiddenBlockAt(line int) (ret term.Range, ok bool) {
+	if s.hiddenblocks == nil {
+		return
+	}
+	end, ok := s.hiddenblocks[line]
+	if !ok {
+		return
+	}
+	ret = term.Range{
+		Start: term.Coordinates{Y: line},
+		End:   term.Coordinates{Y: end},
+	}
+	return ret, ok
 }
 
 // MarkVisible reverses MarkHidden for the given row block start.

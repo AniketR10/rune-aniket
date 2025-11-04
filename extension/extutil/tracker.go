@@ -262,7 +262,7 @@ func (h *ResourceTracker) handleResourceCursor(ev textapi.Event) bool {
 	// keeps it obvious for the rest of impl that cursor might
 	// not be useful.
 	if res.cursor == nil {
-		res.cursor = text.NewCursor(&res.Scroll)
+		res.cursor = text.NewCursor(&res.Scroll, nil)
 	}
 	_, _ = res.cursor.MoveToScroll(ev.From)
 	// do not use the return of MoveToScroll, as SetOffset might have

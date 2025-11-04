@@ -31,6 +31,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/blue/iterator"
 	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/api/workspaceapi"
@@ -52,28 +53,38 @@ func init() {
 	}
 }
 
-func TestInitialFoldsIntegration(t *testing.T) {
-	buf := cell.NewBuffer()
-	buf.WriteString(snippet)
-	fs := &testFoldsService{}
-	fs.view = buf.WithView(fs)
-	var wg sync.WaitGroup
-	cb := func(fn func()) bool {
-		fn()
-		wg.Done()
-		return true
-	}
-	wg.Add(1)
-	vi := New(buf, uri,
-		WithHideInitialFolds(true),
-		WithScheduleNextTick(cb),
-	)
-	vi.Resize(20, 10)
+func TestFoldsIntegration(t *testing.T) {
+	t.Run("initial folds", func(t *testing.T) {
+		buf := cell.NewBuffer()
+		buf.WriteString(snippet)
+		fs := &testFoldsService{}
+		fs.view = buf.WithView(fs)
+		var wg sync.WaitGroup
+		var mu sync.Mutex
+		cb := func(fn func()) bool {
+			// run async to guarantee we can lock below:
+			// sometimes this cb can run in the main goroutine
+			go func() {
+				defer wg.Done()
+				mu.Lock()
+				defer mu.Unlock()
+				fn()
+			}()
+			return true
+		}
+		wg.Add(2)
+		mu.Lock()
+		vi := New(buf, uri,
+			WithHideInitialFolds(true),
+			WithScheduleNextTick(cb),
+		)
+		vi.Resize(20, 10)
+		mu.Unlock()
 
-	tests := []comptest.TestCase{
-		{Expected: `
-   [4 lines] * diff
- */                 
+		tests := []comptest.TestCase{
+			{Expected: `
+                    
+/*   [4 lines] */  
     void            
 diff_buf_adjust(win_
 {                   
@@ -82,12 +93,136 @@ diff_buf_adjust(win_
                     
     if (!win->w_p_di
               NORMAL`,
-		},
-	}
+			},
+		}
 
-	wg.Wait()
-	w := term.NewStringWriter(20, 10)
-	comptest.TestComponent(t, vi, w, tests)
+		wg.Wait()
+		w := term.NewStringWriter(20, 10)
+
+		mu.Lock()
+		defer mu.Unlock()
+
+		comptest.TestComponent(t, vi, w, tests)
+	})
+
+	t.Run("fold operations with auxiliary bar", func(t *testing.T) {
+		buf := cell.NewBuffer()
+		buf.WriteString(snippet)
+		fs := &testFoldsService{}
+		fs.view = buf.WithView(fs)
+		var wg sync.WaitGroup
+		var mu sync.Mutex
+		cb := func(fn func()) bool {
+			go func() {
+				defer wg.Done()
+				mu.Lock()
+				fn()
+				mu.Unlock()
+			}()
+			return true
+		}
+		ed := Editor(
+			WithScheduleNextTick(cb),
+			WithAuxiliaryBar(true),
+			WithAuxiliaryBarFolds(true),
+		)
+		wg.Add(1)
+		vi, err := ed.Edit(uri, buf)
+		require.NoError(t, err)
+		vi.Resize(50, 10)
+		wg.Wait() // wait for bar
+
+		t.Run("zA", func(t *testing.T) {
+			tests := []comptest.TestCase{
+				{Expected: `
+ {   [25 lines] }                               
+                                                  
+                                                  
+                                                  
+                                                  
+                                                  
+                                                  
+                                                  
+                                                  
+                                            NORMAL`,
+				},
+			}
+
+			wg.Add(6)
+			for _, ch := range "GzAkklhj" {
+				mu.Lock()
+				_, handled := vi.Handle(term.Event{Type: term.EventKey, Ch: ch})
+				mu.Unlock()
+				require.True(t, handled)
+			}
+			wg.Wait()
+			w := term.NewStringWriter(50, 10)
+			mu.Lock()
+			comptest.TestComponent(t, vi, w, tests)
+			mu.Unlock()
+		})
+
+		t.Run("zo", func(t *testing.T) {
+			tests := []comptest.TestCase{
+				{Expected: `
+                                                  
+ /*                                              
+  * Check if the current buffer should be added t
+   * diff buffers.                                
+   */                                             
+      void                                        
+  diff_buf_adjust(win_T *win)                     
+ {   [25 lines] }                               
+                                                  
+                                            NORMAL`,
+				},
+			}
+
+			wg.Add(2)
+			for _, ch := range "ggjzo" {
+				mu.Lock()
+				_, handled := vi.Handle(term.Event{Type: term.EventKey, Ch: ch})
+				mu.Unlock()
+				require.True(t, handled)
+			}
+			wg.Wait()
+			w := term.NewStringWriter(50, 10)
+			mu.Lock()
+			comptest.TestComponent(t, vi, w, tests)
+			mu.Unlock()
+		})
+
+		t.Run("moving up and down after hidding/making visible", func(t *testing.T) {
+			t.SkipNow()
+			tests := []comptest.TestCase{
+				{Expected: `
+                                                  
+ /*                                              
+  * Check if the current buffer should be added t
+   * diff buffers.                                
+   */                                             
+      void                                        
+  diff_buf_adjust(win_T *win)                     
+ {                                               
+      win_T    *wp;                               
+                                            NORMAL`,
+				},
+			}
+
+			wg.Add(10)
+			for _, ch := range "jjjjzAkzo" { // goes and stays at "void" line, move up again and unfold
+				mu.Lock()
+				_, handled := vi.Handle(term.Event{Type: term.EventKey, Ch: ch})
+				mu.Unlock()
+				require.True(t, handled)
+			}
+			wg.Wait()
+			w := term.NewStringWriter(50, 10)
+			mu.Lock()
+			comptest.TestComponent(t, vi, w, tests)
+			mu.Unlock()
+		})
+	})
 }
 
 type mockHandler struct {
@@ -569,11 +704,19 @@ func (f testFoldsService) String() string {
 }
 
 func (f testFoldsService) Folds() (iterator.Iterator[term.Range], bool) {
-	return nil, false
+	return iterator.FromSlice([]term.Range{
+		{Start: term.Coordinates{Y: 1, X: 0}, End: term.Coordinates{Y: 4}},
+		{Start: term.Coordinates{Y: 2, X: 3}, End: term.Coordinates{Y: 3, X: 15}},
+		{Start: term.Coordinates{Y: 7, X: 0}, End: term.Coordinates{Y: 31, X: 0}},
+		{Start: term.Coordinates{Y: 12, X: 3}, End: term.Coordinates{Y: 28, X: 3}},
+		{Start: term.Coordinates{Y: 19, X: 6}, End: term.Coordinates{Y: 27, X: 6}},
+		{Start: term.Coordinates{Y: 22, X: 6}, End: term.Coordinates{Y: 26, X: 9}},
+		{Start: term.Coordinates{Y: 29, X: 3}, End: term.Coordinates{Y: 30, X: 3}},
+	}), true
 }
 
 func (f testFoldsService) InitialFolds() (iterator.Iterator[term.Range], bool) {
 	return iterator.FromSlice([]term.Range{
-		{Start: term.Coordinates{Y: 0, X: 0}, End: term.Coordinates{Y: 3}},
+		{Start: term.Coordinates{Y: 1, X: 0}, End: term.Coordinates{Y: 4}},
 	}), true
 }

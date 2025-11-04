@@ -42,7 +42,7 @@ func newEdit(content string) (*cell.Buffer, *component.Scroll, *text.Cursor) {
 	buf := cell.NewBuffer()
 	buf.WriteString(content)
 	scroll := component.NewScroll(buf)
-	cursor := text.NewCursor(scroll)
+	cursor := text.NewCursor(scroll, nil)
 	return buf, scroll, cursor
 }
 

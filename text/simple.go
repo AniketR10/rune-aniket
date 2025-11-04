@@ -82,7 +82,7 @@ type simpleEditor struct {
 
 func (e *simpleEditor) Edit(file workspaceapi.URI, buf *cell.Buffer) (Handler, error) {
 	rootIfc := NewSimpleHandler(e.clipboard, buf, file, e.wrap,
-		e.commandBar, e.attr, e.resAttr, e.barAttr)
+		e.commandBar, e.attr, e.resAttr, e.barAttr, e.scheduleNextTick)
 	root := rootIfc.(*simpleEditorHandler)
 	ret := e.pub.PublishEdit(file, buf, root, &root.cursor)
 	if e.auxBar {

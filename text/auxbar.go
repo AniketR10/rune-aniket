@@ -210,6 +210,13 @@ func (b *auxBar) rebuildFolds(ctx context.Context) {
 					continue
 				}
 
+				// avoid ambiguity at bar
+				fold.Start.X = 0
+				if end, exists := b.folds[fold.Start]; exists && end.Y > fold.End.Y {
+					continue
+				}
+				b.folds[fold.Start] = fold.End
+
 				// convert folds which are scroll coordinates
 				// to window coordinates
 				foldStart, startOk := b.scroll.ScrollToWindowCoordinates(fold.Start)
@@ -219,18 +226,15 @@ func (b *auxBar) rebuildFolds(ctx context.Context) {
 					continue
 				}
 
-				// avoid ambiguity at bar
-				fold.Start.X = 0
-				if _, exists := b.folds[fold.Start]; exists {
-					continue
-				}
-				b.folds[fold.Start] = fold.End
-
 				// convert to a scroll coordinates with hidden lines taken into account
 				offset := b.scroll.Offset()
 				foldStart.Y += offset.Y
 				foldEnd.Y += offset.Y
 				foldStart.X = 0
+
+				if foldStart.Y < 0 {
+					panic("invalid aux bar coordinates after conversion")
+				}
 
 				var icon rune
 				if foldStart.Y == foldEnd.Y {

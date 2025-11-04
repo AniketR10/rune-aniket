@@ -39,7 +39,7 @@ func TestDeleteClipboard(t *testing.T) {
 	clip := clipboard.NewInMemory()
 	var scroll component.Scroll
 	scroll.Init(buf)
-	c := NewCursor(&scroll)
+	c := NewCursor(&scroll, nil)
 	WithCopyDelete("", clip, c, buf)
 
 	content := "my whatever"

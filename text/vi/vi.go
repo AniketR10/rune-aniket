@@ -139,7 +139,7 @@ func (vi *Vi) Draw(w term.Writer) {
 
 func isEditMode(mode viMode) bool {
 	switch mode {
-	case normalMode, gMode, yankMode, searchMode,
+	case normalMode, foldMode, gMode, yankMode, searchMode,
 		visualMode, visualLineMode, visualBlockMode:
 		return false
 	case insertMode, deleteMode, replaceMode, replaceOneMode:

@@ -390,7 +390,7 @@ func (e *Handler) initializeDoneHandler() {
 		)
 	} else {
 		main = text.NewSimpleHandler(e.cfg.Clipboard, buf, uri, false, true,
-			e.cfg.Attributes, e.cfg.SelectionAttributes, e.bar.frameAttr)
+			e.cfg.Attributes, e.cfg.SelectionAttributes, e.bar.frameAttr, nil)
 	}
 
 	e.doneHandler = e.newUnion(main)

@@ -24,6 +24,8 @@
 package text
 
 import (
+	"context"
+
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/api/workspaceapi"
@@ -53,9 +55,11 @@ func NewSimpleHandler(
 	buf *cell.Buffer, resource workspaceapi.URI,
 	wrap, commandBar bool,
 	attr, resAttr, barAttr term.Attributes,
+	scheduleNextTick func(func()) bool,
 ) Handler {
 	ret := new(simpleEditorHandler)
-	ret.Init(clipboard, buf, resource, wrap, commandBar, attr, resAttr, barAttr)
+	ret.Init(clipboard, buf, resource, wrap, commandBar,
+		attr, resAttr, barAttr, scheduleNextTick)
 	return ret
 }
 
@@ -64,6 +68,7 @@ func (h *simpleEditorHandler) Init(
 	buf *cell.Buffer, resource workspaceapi.URI,
 	wrap, commandBar bool,
 	attr, resAttr, barAttr term.Attributes,
+	scheduleNextTick func(func()) bool,
 ) {
 	h.buf = buf
 	h.resource = resource
@@ -74,7 +79,7 @@ func (h *simpleEditorHandler) Init(
 		ResAttr:    resAttr,
 		Attributes: attr,
 	})
-	h.cursor.Init(h.less.Scroll())
+	h.cursor.Init(h.less.Scroll(), scheduleNextTick)
 	h.mouse = NewMouse(CursorMouseDelegate(&h.cursor))
 	h.clipboard = clipboard
 }
@@ -100,6 +105,8 @@ func (h *simpleEditorHandler) Draw(w term.Writer) {
 }
 
 func (h *simpleEditorHandler) Handle(ev term.Event) (exit, handled bool) {
+	ctx := context.Background()
+
 	// only a user event clears a pending set cursor
 	h.pendingSetCursor = nil
 
@@ -198,6 +205,10 @@ func (h *simpleEditorHandler) Handle(ev term.Event) (exit, handled bool) {
 			handled = h.cursor.MoveEndLine()
 		case 'z':
 			handled = h.cursor.Undo()
+		case 'Z':
+			handled = h.cursor.ToggleFold(ctx)
+		case 'A':
+			handled = h.cursor.ToggleAllFolds(ctx)
 		case 'r':
 			handled = h.cursor.Redo()
 		case 'f':

@@ -1053,6 +1053,28 @@ func TestScrollToWindowCoordinates(t *testing.T) {
 			},
 			term.Coordinates{Y: 16, X: 5}, term.Coordinates{Y: 5, X: 5}, true,
 		},
+		{"nested hidden lines cancel out, latest one sticks, no offset, position after hidden block",
+			func(t *testing.T) *Scroll {
+				fn := makeScrollWithHiddenLines(false, 10, 3, 0, 0,
+					startEndBlock{6, 10},
+					startEndBlock{8, 9},
+					startEndBlock{4, 15},
+				)
+				return fn(t)
+			},
+			term.Coordinates{Y: 16, X: 5}, term.Coordinates{Y: 5, X: 5}, true,
+		},
+		{"nested hidden lines cancel out, biggest one sticks, no offset, position after hidden block",
+			func(t *testing.T) *Scroll {
+				fn := makeScrollWithHiddenLines(false, 10, 3, 0, 0,
+					startEndBlock{4, 15},
+					startEndBlock{6, 10},
+					startEndBlock{8, 9},
+				)
+				return fn(t)
+			},
+			term.Coordinates{Y: 16, X: 5}, term.Coordinates{Y: 5, X: 5}, true,
+		},
 	}
 
 	for _, test := range suite {
@@ -1269,7 +1291,7 @@ func makeScrollWithHiddenLines(wrap bool, width, height, offsetY, offsetX int, h
 	return func(t *testing.T) *Scroll {
 		scroll := fn(t)
 		for _, block := range hidden {
-			require.True(t, scroll.MarkHidden(block.start, block.end))
+			scroll.MarkHidden(block.start, block.end)
 		}
 		return scroll
 	}

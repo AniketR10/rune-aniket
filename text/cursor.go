@@ -26,13 +26,19 @@ package text
 import (
 	"bufio"
 	"context"
+	"maps"
+	"sort"
 	"strings"
 
+	log "github.com/sirupsen/logrus"
+	"github.com/unstablebuild/blue/iterator"
+	"github.com/unstablebuild/blue/logging"
 	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/term"
 )
 
@@ -87,6 +93,8 @@ type Cursor struct {
 	cursor     term.Coordinates
 	shouldSeek bool
 
+	scheduleNextTick func(func()) bool
+
 	locationStore LocationStore
 
 	selection struct {
@@ -99,9 +107,9 @@ type Cursor struct {
 
 // NewCursor allocates storage for a new cursor,
 // initializes it with an empty Scroll, and returns it.
-func NewCursor(scroll *component.Scroll) *Cursor {
+func NewCursor(scroll *component.Scroll, scheduleNextTick func(func()) bool) *Cursor {
 	c := new(Cursor)
-	c.Init(scroll)
+	c.Init(scroll, scheduleNextTick)
 	return c
 }
 
@@ -110,15 +118,17 @@ func NewCursor(scroll *component.Scroll) *Cursor {
 // via Scroll.SetBuffer, consider re-initializing this cursor with the
 // updated scroll, unless it's a temporary swap.
 // Also, once initialized this cursor MUST NOT be copied.
-func (c *Cursor) Init(scroll *component.Scroll) {
+func (c *Cursor) Init(scroll *component.Scroll, scheduleNextTick func(func()) bool) {
 	c.InitPerformance(scroll)
 	c.scroll.Buffer().Subscribe(&c.subscriber)
 	c.shouldSeek = true
+	c.scheduleNextTick = scheduleNextTick
 }
 
 // InitPerformance initializes this Cursor with a Scroll
 // that was initialized with InitPerformance. It also
 // disables automatic scrolling of content for the client.
+// It also disables all fold-related methods.
 func (c *Cursor) InitPerformance(scroll *component.Scroll) {
 	c.cursor = term.Coordinates{}
 	c.scroll = scroll
@@ -1708,6 +1718,161 @@ func (c *Cursor) MoveLineUp() bool {
 	return ok
 }
 
+// FoldAt runs the given callback if a fold is found at or around the
+// current cursor position or returns false if folds are not enabled.
+func (c *Cursor) FoldAt(ctx context.Context, cb func(term.Range, bool)) bool {
+	if c.scheduleNextTick == nil {
+		return false
+	}
+
+	if block, ok := c.scroll.HiddenBlockAt(c.cursorAtScroll().Y); ok {
+		cb(block, ok)
+		return true
+	}
+
+	return c.opFolds(ctx, func(folds []term.Range) {
+		pos := c.cursorAtScroll()
+
+		var ok bool
+		var found term.Range
+		for _, fold := range folds {
+			if pos.Y < fold.Start.Y || pos.Y > fold.End.Y {
+				continue
+			}
+			if !ok || (fold.Start.Y > found.Start.Y || fold.End.Y < found.End.Y) {
+				found = fold
+				ok = true
+			}
+		}
+		cb(found, ok)
+	})
+}
+
+// CollapseFold collapses the fold at the current cursor position,
+// or returns false if folds are not enabled.
+func (c *Cursor) CollapseFold(ctx context.Context) bool {
+	if c.scheduleNextTick == nil {
+		return false
+	}
+	return c.FoldAt(ctx, func(fold term.Range, ok bool) {
+		if !ok {
+			return
+		}
+		pos := c.cursorAtScroll()
+		if c.scroll.MarkHidden(fold.Start.Y, fold.End.Y) {
+			c.MoveToScroll(pos)
+		}
+	})
+}
+
+// ExpandFold expands the fold at the current cursor position,
+// or returns false if folds are not enabled.
+func (c *Cursor) ExpandFold(ctx context.Context) bool {
+	if c.scheduleNextTick == nil {
+		return false
+	}
+	return c.FoldAt(ctx, func(fold term.Range, ok bool) {
+		if !ok {
+			return
+		}
+		pos := c.cursorAtScroll()
+		if c.scroll.MarkVisible(fold.Start.Y) {
+			c.MoveToScroll(pos)
+		}
+	})
+}
+
+// ToggleFold toggles the fold at the current cursor position,
+// or returns false if folds are not enabled.
+func (c *Cursor) ToggleFold(ctx context.Context) bool {
+	if c.scheduleNextTick == nil {
+		return false
+	}
+	return c.FoldAt(ctx, func(fold term.Range, ok bool) {
+		if !ok {
+			return
+		}
+		pos := c.cursorAtScroll()
+		var handled bool
+		if hidden, ok := c.isFoldHidden(fold.Start, fold.End); hidden || !ok {
+			handled = c.scroll.MarkVisible(fold.Start.Y)
+		} else if ok {
+			handled = c.scroll.MarkHidden(fold.Start.Y, fold.End.Y)
+		}
+		if handled {
+			c.MoveToScroll(pos)
+		}
+	})
+}
+
+// CollapseAllFolds collapses all the folds available in the file,
+// or returns false if folds are not enabled.
+func (c *Cursor) CollapseAllFolds(ctx context.Context) bool {
+	if c.scheduleNextTick == nil {
+		return false
+	}
+	return c.opFolds(ctx, func(folds []term.Range) {
+		pos := c.cursorAtScroll()
+		var handled bool
+		for _, fold := range folds {
+			handled = c.scroll.MarkHidden(fold.Start.Y, fold.End.Y) || handled
+		}
+		if handled {
+			c.MoveToScroll(pos)
+		}
+	})
+}
+
+// ExpandAllFolds expands all the folds available in the file,
+// or returns false if folds are not enabled.
+func (c *Cursor) ExpandAllFolds(ctx context.Context) bool {
+	if c.scheduleNextTick == nil {
+		return false
+	}
+	return c.opFolds(ctx, func(folds []term.Range) {
+		pos := c.cursorAtScroll()
+		var handled bool
+		for _, fold := range folds {
+			handled = c.scroll.MarkVisible(fold.Start.Y) || handled
+		}
+		if handled {
+			c.MoveToScroll(pos)
+		}
+	})
+}
+
+// ToggleAllFolds toggles all the folds available in the file,
+// or returns false if folds are not enabled.
+func (c *Cursor) ToggleAllFolds(ctx context.Context) bool {
+	if c.scheduleNextTick == nil {
+		return false
+	}
+	return c.opFolds(ctx, func(folds []term.Range) {
+		pos := c.cursorAtScroll()
+		var handled bool
+		// first determine if they're currently hidden or visible:
+		// if we start toggling as we're iterating, nested folds
+		// will be incorrectly categorized.
+		var visible, hidden []term.Range
+		for _, fold := range folds {
+			if isHidden, ok := c.isFoldHidden(fold.Start, fold.End); isHidden || !ok {
+				visible = append(visible, fold)
+			} else if ok {
+				hidden = append(hidden, fold)
+			}
+		}
+		for _, fold := range visible {
+			handled = c.scroll.MarkVisible(fold.Start.Y) || handled
+		}
+		for _, fold := range hidden {
+			handled = c.scroll.MarkHidden(fold.Start.Y, fold.End.Y) || handled
+		}
+		if handled {
+			c.MoveToScroll(pos)
+		}
+	})
+}
+
 func (c *Cursor) disablePublishing() func() {
 	if !c.scroll.PublishingEnabled() {
 		return func() {}
@@ -1859,4 +2024,78 @@ func (c *Cursor) getIndentService() indentService {
 		return svc
 	}
 	return nopIndentService{}
+}
+
+// either op is invoked or this function returns false
+func (c *Cursor) opFolds(ctx context.Context, op func([]term.Range)) bool {
+	svc, ok := c.buffer().View().(foldsService)
+	if !ok {
+		return false
+	}
+
+	folds, ok := svc.Folds()
+	if !ok {
+		return false
+	}
+
+	go debug.CapturePanicReport(func() {
+		folds, isEmpty := iterator.IsEmpty(ctx, folds)
+		defer folds.Close()
+		if isEmpty {
+			op(nil)
+			return
+		}
+		c.scheduleNextTick(func() {
+			// this needs to roughly follow the same algorithm used by aux_bar
+			m := make(map[term.Coordinates]term.Coordinates)
+			for {
+				fold, ok := folds.Next(ctx)
+				if !ok {
+					break
+				}
+				if fold.Start.Y >= fold.End.Y {
+					continue
+				}
+				fold.Start.X = 0 // avoid ambiguity
+				if end, exists := m[fold.Start]; exists && end.Y > fold.End.Y {
+					continue
+				}
+				m[fold.Start] = fold.End
+			}
+			if err := folds.Err(); err != nil {
+				c.log(log.ErrorLevel, "error getting folds: %v", err)
+				op(nil)
+				return
+			}
+			seq := maps.All(m)
+			slice := make([]term.Range, 0, len(m))
+			for a, b := range seq {
+				slice = append(slice, term.Range{Start: a, End: b})
+			}
+			sort.Slice(slice, func(i, j int) bool {
+				return slice[i].Start.Y < slice[j].Start.Y
+			})
+			op(slice)
+		})
+	})
+
+	return true
+}
+
+func (c *Cursor) isFoldHidden(start, end term.Coordinates) (bool, bool) {
+	// convert folds which are scroll coordinates to window coordinates
+	foldStart, startOk := c.scroll.ScrollToWindowCoordinates(start)
+	foldEnd, endOk := c.scroll.ScrollToWindowCoordinates(end)
+	if foldStart.Y != foldEnd.Y && (!startOk || !endOk) {
+		// inside hidden block
+		return false, false
+	}
+	return foldStart.Y == foldEnd.Y, true
+}
+
+func (c *Cursor) log(level log.Level, msg string, args ...any) {
+	if !log.IsLevelEnabled(level) {
+		return
+	}
+	log.WithField(logging.KeyClass, "text.Cursor").Logf(level, msg, args...)
 }
