@@ -61,13 +61,13 @@ func TestAuxBarDraw(t *testing.T) {
 		{Expected: `
   package main      
                     
- import (          
+ import (          
       "fmt"         
                     
       "github.com/un
   )                 
                     
- func main() {     
+ func main() {     
       fmt.Println("%`,
 		},
 	}
@@ -79,13 +79,13 @@ func TestAuxBarDraw(t *testing.T) {
 	tests = []comptest.TestCase{
 		{Expected: `
                     
- import (          
+ import (          
       "fmt"         
                     
       "github.com/un
   )                 
                     
- func main() {     
+ func main() {     
       fmt.Println("%
       for i := 0; i `,
 		},
@@ -100,9 +100,9 @@ func TestAuxBarDraw(t *testing.T) {
 	tests = []comptest.TestCase{
 		{Expected: `
                     
- import (   [5 lin
+ import ( [5 lines]
                     
- func main() {     
+ func main() {     
       fmt.Println("%
       for i := 0; i 
           fmt.Printl
@@ -123,9 +123,9 @@ func TestAuxBarDraw(t *testing.T) {
 	tests = []comptest.TestCase{
 		{Expected: `
                     
- import (   [5 lin
+ import ( [5 lines]
                     
- func main() {   [
+ func main() { [6 l
                     
   const fileContent 
       "import (\n"+ 
@@ -146,13 +146,13 @@ func TestAuxBarDraw(t *testing.T) {
 	tests = []comptest.TestCase{
 		{Expected: `
                     
- import (          
+ import (          
       "fmt"         
                     
       "github.com/un
   )                 
                     
- func main() {   [
+ func main() { [6 l
                     
   const fileContent `,
 		},
@@ -169,13 +169,13 @@ func TestAuxBarDraw(t *testing.T) {
 	tests = []comptest.TestCase{
 		{Expected: `
                     
- import (          
+ import (          
       "fmt"         
                     
       "github.com/un
   )                 
                     
- func main() {   [
+ func main() { [6 l
                     
   const fileContent `,
 		},

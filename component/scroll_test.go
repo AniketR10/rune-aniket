@@ -113,7 +113,7 @@ require (
 				assert.True(t, scroll.MarkHidden(1, 2))
 			}, `
 module github.com/unstab
-   [2 lines] go 1.14   
+ [2 lines] go 1.14      
                         
 require (               
     cloud.google.com/go 
@@ -145,7 +145,7 @@ module github.com/unstab
                         
 go 1.14                 
                         
-require (   [12 lines] 
+require ( [12 lines] )  
                         
 replace this => that    
                         
@@ -160,7 +160,7 @@ dule github.com/unstable
                         
  1.14                   
                         
-quire (   [12 lines] ) 
+quire ( [12 lines] )    
                         
 place this => that      
                         
@@ -176,7 +176,7 @@ hub.com/unstablebuild/bl
                         
                         
                         
-  [12 lines] )         
+[12 lines] )            
                         
 is => that              
                         
@@ -192,7 +192,7 @@ com/unstablebuild/blue
                         
                         
                         
-12 lines] )             
+lines] )                
                         
 > that                  
                         
@@ -208,7 +208,7 @@ lebuild/blue
                         
                         
                         
-)                       
+                        
                         
                         
                         
@@ -236,7 +236,7 @@ lebuild/blue
 					require.True(t, scroll.SeekDown())
 				}
 			}, `
-require (   [12 lines] 
+require ( [12 lines] )  
                         
 replace this => that    
                         
@@ -297,7 +297,7 @@ replace this => that
 			}, `
 module github.com/unstab
                         
-go 1.14   [4 lines]  cl
+go 1.14 [4 lines]  cloud
     cloud.google.com/go/
     github.com/adrianmo/
     github.com/ernestrc/

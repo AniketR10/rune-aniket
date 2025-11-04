@@ -77,8 +77,8 @@ func UnwrapAuxBar(h Handler) Handler {
 }
 
 const (
-	hiddenFoldIcon  = ''
-	visibleFoldIcon = ''
+	hiddenFoldIcon  = ''
+	visibleFoldIcon = ''
 )
 
 type auxBar struct {

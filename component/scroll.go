@@ -53,7 +53,6 @@ type Scroll struct {
 	hiddenlines   map[int]int
 	hiddenmeta    map[int]string
 	hiddensorted  []startEndBlock
-	hideCell      term.Cell
 
 	onWillEditFrom term.Coordinates
 	onWillEditTo   term.Coordinates
@@ -74,11 +73,6 @@ type Scroll struct {
 	// are rendered in the next row if Wrap is set to true.
 	// Wrap invalidates Debug.
 	Wrap bool
-
-	// HiddenIcon determines the icon used as an indicator
-	// that some rows have been hidden with MarkHidden.
-	// Chaning this property has no effect once Scroll has been initialized.
-	HideIcon rune
 
 	// HideAttr determines the attributes used to mark hidden rows.
 	HideAttr term.Attributes
@@ -106,14 +100,10 @@ func (s *Scroll) Init(buf *cell.Buffer) {
 	s.hiddenblocks = make(map[int]int)
 	s.hiddenlines = make(map[int]int)
 	s.hiddenmeta = make(map[int]string)
-	if s.HideIcon == 0 {
-		s.HideIcon = ''
-	}
 	if s.HideAttr == (term.Attributes{}) {
 		s.HideAttr = s.Attributes
 		s.HideAttr.Fg = tcell.ColorGray
 	}
-	s.hideCell = term.Cell{Ch: s.HideIcon, Width: 1, Attributes: s.HideAttr}
 }
 
 // InitPerformance initializes this scroll with limited search functionality:
@@ -1184,12 +1174,9 @@ func (s *Scroll) drawWithHidden(writer term.Writer) {
 			// save allocations during Draw by pre-computing this, which doesn't change
 			// unless hidden blocks are altered.
 			hideLineStr := s.hiddenmeta[scrollY]
-			hideLineIconOffset = s.Buffer().Columns(scrollY) + 1 - s.offset.X
+			hideLineIconOffset = s.Buffer().Columns(scrollY) - s.offset.X - 1
 			if hideLineIconOffset >= s.width {
 				continue
-			}
-			if hideLineIconOffset >= 0 {
-				writer.SetCell(term.Coordinates{X: hideLineIconOffset, Y: targety}, s.hideCell)
 			}
 			hideLineIconOffset++
 			for _, r := range hideLineStr {
@@ -1200,7 +1187,7 @@ func (s *Scroll) drawWithHidden(writer term.Writer) {
 				if hideLineIconOffset == s.width {
 					break
 				}
-				cell := term.Cell{Width: 1, Ch: r, Attributes: s.hideCell.Attributes}
+				cell := term.Cell{Width: 1, Ch: r, Attributes: s.HideAttr}
 				writer.SetCell(term.Coordinates{X: hideLineIconOffset, Y: targety}, cell)
 				hideLineIconOffset++
 			}
@@ -1222,7 +1209,7 @@ func (s *Scroll) rebuildHiddenLines() {
 	for start, end := range s.hiddenblocks {
 		s.hiddensorted = append(s.hiddensorted, startEndBlock{start, end})
 		i++
-		s.hiddenmeta[start] = fmt.Sprintf("  [%d lines] ", end-start+1)
+		s.hiddenmeta[start] = fmt.Sprintf(" [%d lines] ", end-start+1)
 	}
 	sort.Slice(s.hiddensorted, func(i, j int) bool {
 		return s.hiddensorted[i].start < s.hiddensorted[j].start

@@ -84,7 +84,7 @@ func TestFoldsIntegration(t *testing.T) {
 		tests := []comptest.TestCase{
 			{Expected: `
                     
-/*   [4 lines] */  
+/* [4 lines] */     
     void            
 diff_buf_adjust(win_
 {                   
@@ -135,7 +135,7 @@ diff_buf_adjust(win_
 		t.Run("zA", func(t *testing.T) {
 			tests := []comptest.TestCase{
 				{Expected: `
- {   [25 lines] }                               
+ { [25 lines] }                                  
                                                   
                                                   
                                                   
@@ -166,13 +166,13 @@ diff_buf_adjust(win_
 			tests := []comptest.TestCase{
 				{Expected: `
                                                   
- /*                                              
-  * Check if the current buffer should be added t
+ /*                                              
+  * Check if the current buffer should be added t
    * diff buffers.                                
    */                                             
       void                                        
   diff_buf_adjust(win_T *win)                     
- {   [25 lines] }                               
+ { [25 lines] }                                  
                                                   
                                             NORMAL`,
 				},
@@ -197,13 +197,13 @@ diff_buf_adjust(win_
 			tests := []comptest.TestCase{
 				{Expected: `
                                                   
- /*                                              
-  * Check if the current buffer should be added t
+ /*                                              
+  * Check if the current buffer should be added t
    * diff buffers.                                
    */                                             
       void                                        
   diff_buf_adjust(win_T *win)                     
- {                                               
+ {                                               
       win_T    *wp;                               
                                             NORMAL`,
 				},
