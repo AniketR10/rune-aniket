@@ -1782,6 +1782,23 @@ func (c *Cursor) ExpandFold(ctx context.Context) bool {
 	})
 }
 
+// SelectFold selects the fold at the current cursor position,
+// or returns false if folds are not enabled.
+func (c *Cursor) SelectFold(ctx context.Context) bool {
+	if c.scheduleNextTick == nil {
+		return false
+	}
+	return c.FoldAt(ctx, func(fold term.Range, ok bool) {
+		if !ok {
+			return
+		}
+		c.MoveToScroll(fold.End)
+		c.selection.scrollFrom = fold.Start
+		c.selection.mode = StandardSelection
+		c.setSelection()
+	})
+}
+
 // ToggleFold toggles the fold at the current cursor position,
 // or returns false if folds are not enabled.
 func (c *Cursor) ToggleFold(ctx context.Context) bool {

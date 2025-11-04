@@ -114,7 +114,6 @@ func setupCursorForFolds(t *testing.T, width, height int, wg *sync.WaitGroup) (e
 	return
 }
 
-// TODO add tests for edge cases
 func TestCursorFolds(t *testing.T) {
 	ctx := context.Background()
 	tsuite := []struct {
@@ -124,6 +123,29 @@ func TestCursorFolds(t *testing.T) {
 		expectOnVisible int
 		cursor          term.Coordinates
 	}{
+		{
+			"SelectFold selects nothing if cursor is not at fold",
+			func(t *testing.T, c *Cursor, wg *sync.WaitGroup) {
+				wg.Add(1)
+				assert.True(t, c.SelectFold(ctx))
+				assert.Zero(t, c.Selection())
+			}, 0, 0, term.Coordinates{},
+		},
+		{
+			"SelectFold selects fold at cursor",
+			func(t *testing.T, c *Cursor, wg *sync.WaitGroup) {
+				wg.Add(1)
+				assert.True(t, c.MoveDown())
+				assert.True(t, c.SelectFold(ctx))
+				wg.Wait()
+				expectedSelection := `/*
+ * Ch@ek if the current buffer should be added to or removed from the list of
+ * diff buffers.
+ `
+				assert.Equal(t, expectedSelection, c.Selection())
+				assert.True(t, c.DeleteSelection())
+			}, 0, 0, term.Coordinates{Y: 1},
+		},
 		{
 			"CollapseFold collapses nothing if cursor is not at fold",
 			func(t *testing.T, c *Cursor, wg *sync.WaitGroup) {

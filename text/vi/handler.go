@@ -1113,14 +1113,18 @@ func (vi *viHandlerImpl) unselect() bool {
 }
 
 func (vi *viHandlerImpl) handleFold(ev term.Event) (quit, handled bool) {
-	defer vi.setNormalMode()
 	defer vi.cursor.SetLocationList(
 		textapi.LocationPriorityInfo, foldHighlightLocationListID, nil)
 
 	ctx := context.Background()
+	var visual bool
 	switch ev.Mod {
 	case 0:
 		switch ev.Ch {
+		case 'v', 'V':
+			handled = vi.cursor.SelectFold(ctx)
+			visual = true
+			vi.setVisualMode()
 		case 'c':
 			handled = vi.cursor.CollapseFold(ctx)
 		case 'o':
@@ -1135,6 +1139,9 @@ func (vi *viHandlerImpl) handleFold(ev term.Event) (quit, handled bool) {
 			handled = vi.cursor.ToggleAllFolds(ctx)
 		default:
 		}
+	}
+	if !visual {
+		vi.setNormalMode()
 	}
 	return
 }
