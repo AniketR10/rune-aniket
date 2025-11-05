@@ -653,16 +653,6 @@ func (s *burning) drawFlames(
 
 	outBg = vecToCol(col)
 
-	// Fade out to original background towards the end of animation.
-	if progress >= s.StartFadeOut {
-		outBg = shaderutils.InterpolateColor(
-			smoothstep(s.StartFadeOut, 1.0, progress),
-			vecToCol(col),
-			originalBg,
-			s.defaultAttr.Bg,
-		)
-	}
-
 	return
 }
 
