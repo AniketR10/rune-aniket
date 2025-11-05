@@ -33,6 +33,7 @@ import (
 	"github.com/unstablebuild/blue/iterator"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/api/textapi"
+	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/shader"
 	"unstable.build/go-tui/component/shader/glslshader"
 	"unstable.build/go-tui/component/shader/timeshader"
@@ -64,6 +65,7 @@ type shaderRunner struct {
 	interrupter       term.Interrupter
 	shader            *shader.Component
 	defAttr           term.Attributes
+	fc                component.FrameCharSet
 	width, height     int
 	shutdownShaderCfg shutdownShaderConfig
 }
@@ -178,17 +180,17 @@ func (r *shaderRunner) HandleCommand(ctx context.Context, cmd textapi.Command) (
 			r.defAttr,
 		)
 	case "burningOnlyRedFlamesLightsOn":
-		params := glslshader.BurningPresetGentleOnlyFlames(false)
+		params := glslshader.BurningPresetGentleOnlyFlames(false, r.fc)
 		s = glslshader.Burning(params, r.defAttr, d, float64(fps))
 	case "burningOnlyRedFlamesLightsOff":
-		params := glslshader.BurningPresetGentleOnlyFlames(true)
+		params := glslshader.BurningPresetGentleOnlyFlames(true, r.fc)
 		s = glslshader.Burning(params, r.defAttr, d, float64(fps))
 	case "burningOnlyBlueFlamesLightsOn":
-		params := glslshader.BurningPresetGentleOnlyFlames(false)
+		params := glslshader.BurningPresetGentleOnlyFlames(false, r.fc)
 		params.Colors.SwapRedBlue = true
 		s = glslshader.Burning(params, r.defAttr, d, float64(fps))
 	case "burningOnlyBlueFlamesLightsOff":
-		params := glslshader.BurningPresetGentleOnlyFlames(true)
+		params := glslshader.BurningPresetGentleOnlyFlames(true, r.fc)
 		params.Colors.SwapRedBlue = true
 		s = glslshader.Burning(params, r.defAttr, d, float64(fps))
 	case "noise":
@@ -257,11 +259,13 @@ func (r *shaderRunner) init(
 	interrupter term.Interrupter,
 	defAttr term.Attributes,
 	shutdownShaderCfg shutdownShaderConfig,
+	fc component.FrameCharSet,
 ) {
 	r.Handler = root
 	r.interrupter = interrupter
 	r.defAttr = defAttr
 	r.shutdownShaderCfg = shutdownShaderCfg
+	r.fc = fc
 
 	// Initialize zero shader so we can treat field always as non-nil.
 	//

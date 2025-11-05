@@ -745,7 +745,7 @@ func newTestWorkspaceManagerHandlerWithReleaseManager(
 
 	shRunner := new(shaderRunner)
 	shRunner.init(handler.Nop(component.Nop()), term.NopInterrupter(), term.Attributes{},
-		shutdownShaderCfg)
+		shutdownShaderCfg, component.FrameCharSetDefault())
 
 	err = m.workspaceManagerHandler.init(nil, homeURI, manager, n, cfg, "", files,
 		dir, func(term.Event) bool {

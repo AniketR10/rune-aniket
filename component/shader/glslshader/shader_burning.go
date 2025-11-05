@@ -35,6 +35,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/asciiart"
 	"unstable.build/go-tui/component/shader"
 	"unstable.build/go-tui/component/shader/shaderutils"
@@ -178,6 +179,8 @@ type LogoParams struct {
 	//
 	// Usually the caller would prepare use [png.Decode] and feed here its output.
 	Image image.Image
+	// FrameCharSet is used to detect a prompt in front of the shader.
+	FrameCharSet component.FrameCharSet
 	// WallpaperInvisibleChar specifies which character is used to analize the
 	// boundaries of the wallpaper. Check the documentation on
 	// [Burning] for details on why it's done like that.
@@ -295,8 +298,10 @@ type burning struct {
 // on top of with parameter overrides.
 //
 // Must receive the same wallpaper image that's being used as wallpaper.
-func DefaultBurningParams(wallpaperImage image.Image) BurningParams {
-	return BurningPresetGentle(wallpaperImage, true)
+func DefaultBurningParams(
+	wallpaperImage image.Image, fc component.FrameCharSet,
+) BurningParams {
+	return BurningPresetGentle(wallpaperImage, true, fc)
 }
 
 // BurningPresetGentle shows rapid fire in large clumps that lick the logo
@@ -307,6 +312,7 @@ func DefaultBurningParams(wallpaperImage image.Image) BurningParams {
 // scene.
 func BurningPresetGentle(
 	wallpaperImage image.Image, switchLightsOff bool,
+	frameCharSet component.FrameCharSet,
 ) BurningParams {
 	params := BurningParams{
 		SwitchLightsOff: switchLightsOff,
@@ -346,6 +352,7 @@ func BurningPresetGentle(
 	if wallpaperImage != nil {
 		params.Logo = LogoParams{
 			Image:                        wallpaperImage,
+			FrameCharSet:                 frameCharSet,
 			WallpaperInvisibleChar:       '\u2009',
 			HeatBrushFlow:                1.22,
 			HeatDissipation:              1.3,
@@ -374,8 +381,10 @@ func BurningPresetGentle(
 //
 // Turning lights off gives more visual artifacts and higher contrast, and
 // the color can be changed from natural looking colors to blue as well.
-func BurningPresetGentleOnlyFlames(switchLightsOff bool) BurningParams {
-	params := BurningPresetGentle(nil, false)
+func BurningPresetGentleOnlyFlames(
+	switchLightsOff bool, fc component.FrameCharSet,
+) BurningParams {
+	params := BurningPresetGentle(nil, false, fc)
 	params.SwitchLightsOff = switchLightsOff
 	params.HideLogo = true
 	return params
@@ -384,8 +393,10 @@ func BurningPresetGentleOnlyFlames(switchLightsOff bool) BurningParams {
 // BurningPresetGentleOnlyLogo will hide the flames in the background and
 // only will show them contained within the logo. This will mask the original
 // wallpaper too.
-func BurningPresetGentleOnlyLogo(wallpaperImage image.Image) BurningParams {
-	params := BurningPresetGentle(wallpaperImage, false)
+func BurningPresetGentleOnlyLogo(
+	wallpaperImage image.Image, fc component.FrameCharSet,
+) BurningParams {
+	params := BurningPresetGentle(wallpaperImage, false, fc)
 	params.HideLogo = false
 	params.HideBackgroundFlames = true
 	return params
@@ -1048,7 +1059,28 @@ func (s *burning) processLogoFromWallpaper(in [][]term.Cell) {
 	}
 }
 
-// isMaskeableWallpaper will rely on the assumption that our asciiart density
+func (s *burning) isMaskeableWallpaper(in [][]term.Cell) bool {
+	return s.hasExpectedWallpaper(in) && !s.hasPrompt(in)
+}
+
+// this checks if there's a frame somewhere between the middle
+// and until a quarter of the available space. Is not perfect
+// but it works for most initial width/heights.
+func (s *burning) hasPrompt(in [][]term.Cell) bool {
+	w := float64(len(in[0]))
+	h := float64(len(in))
+	midx, midy := int(w/2), h/2
+	quartery := int(midy / 2)
+	for y := int(midy); y > quartery; y-- {
+		char := in[y][midx].Ch
+		if char == s.Logo.FrameCharSet.HorizontalTop {
+			return true
+		}
+	}
+	return false
+}
+
+// hasExpectedWallpaper will rely on the assumption that our asciiart density
 // characters use the special invisible character (configured in
 // BurningParams.Logo.WallpaperInvisibleChar, e.g. unicode's thin space) as the
 // lowest density, so any wallpaper rendered will (unnoticingly to the user)
@@ -1056,7 +1088,7 @@ func (s *burning) processLogoFromWallpaper(in [][]term.Cell) {
 //
 // NOTE: Turn on DebugWallpaperBounds in [BurningParams] to view the wallpaper
 // bounds and top left and bottom right corner.
-func (s *burning) isMaskeableWallpaper(in [][]term.Cell) bool {
+func (s *burning) hasExpectedWallpaper(in [][]term.Cell) bool {
 	w := float(len(in[0]))
 	h := float(len(in))
 	mid := vec2(float(w)/2.0, float(h)/2.0)

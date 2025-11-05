@@ -297,9 +297,9 @@ func run() int {
 	opts := []ide.Option{
 		ide.WithExtensionsRunner(runner),
 		ide.WithInitShader(
-			func(defaultAttr term.Attributes) shader.Shader {
+			func(defaultAttr term.Attributes, fc component.FrameCharSet) shader.Shader {
 				return glslshader.Burning(
-					glslshader.BurningPresetGentle(unstableBuildLogo, true),
+					glslshader.BurningPresetGentle(unstableBuildLogo, true, fc),
 					defaultAttr,
 					10*time.Second, 60,
 				)

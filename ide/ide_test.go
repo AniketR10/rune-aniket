@@ -39,6 +39,7 @@ import (
 	"unstable.build/go-tui/api/extensionapi"
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/browser"
+	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/shader"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/ide/idepkg/idepkgtest"
@@ -229,7 +230,7 @@ func TestIDEInitializationIntegration(t *testing.T) {
 		i := new(IDE)
 		err := i.init("", "", "", filepath.Dir(config.Name()), []string{""},
 			WithInitShader(
-				func(_ term.Attributes) shader.Shader {
+				func(_ term.Attributes, _ component.FrameCharSet) shader.Shader {
 					return initShader
 				},
 				30, 1*time.Second,

@@ -377,7 +377,8 @@ func (i *IDE) init(
 		}
 	}
 	handler := handler.WithComponent(i.workspaceHandler, notifications)
-	i.root.init(handler, i, i.ideConfig.defaultAttr(), shutdownShaderCfg)
+	i.root.init(handler, i, i.ideConfig.defaultAttr(), shutdownShaderCfg,
+		i.ideConfig.windowFrameCharset())
 	return i.workspaceHandler.subscribeCommand(runShaderCmdManual, &i.root)
 }
 
@@ -399,7 +400,7 @@ func (i *IDE) initRunning() {
 		// protect access to root, simulating a std loop iteration
 		i.locker.Lock()
 		defer i.locker.Unlock()
-		i.root.runShader(i.options.initShaderFn(i.root.defAttr),
+		i.root.runShader(i.options.initShaderFn(i.root.defAttr, i.ideConfig.windowFrameCharset()),
 			i.options.initShaderFPS, i.options.initShaderDuration)
 	}
 }

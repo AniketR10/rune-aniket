@@ -36,6 +36,7 @@ import (
 	"unstable.build/go-tui/api/extensionapi"
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/browser"
+	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/shader"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/term"
@@ -142,7 +143,7 @@ func WithScheduleNextTick(scheduleFn func(func()) bool) Option {
 // WithInitShader configures the IDE to initialize with the
 // given Shader animation.
 func WithInitShader(
-	shaderFn func(defaultAttr term.Attributes) shader.Shader,
+	shaderFn func(term.Attributes, component.FrameCharSet) shader.Shader,
 	fps int, duration time.Duration,
 ) Option {
 	return func(opts *options) {
@@ -240,7 +241,7 @@ type options struct {
 	bell                func()
 	scheduleFn          func(func()) bool
 
-	initShaderFn           func(term.Attributes) shader.Shader
+	initShaderFn           func(term.Attributes, component.FrameCharSet) shader.Shader
 	initShaderDuration     time.Duration
 	initShaderFPS          int
 	shutdownShaderFn       func(term.Attributes) shader.Shader

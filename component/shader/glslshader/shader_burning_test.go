@@ -31,6 +31,7 @@ import (
 	"image/png"
 	"testing"
 
+	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/shader/shadertest"
 	"unstable.build/go-tui/term"
 )
@@ -47,7 +48,7 @@ func openTestLogo() image.Image {
 }
 func TestBurning(t *testing.T) {
 	sh := Burning(
-		DefaultBurningParams(openTestLogo()),
+		DefaultBurningParams(openTestLogo(), component.FrameCharSetDefault()),
 		term.Attributes{},
 		4.0, 30,
 	)

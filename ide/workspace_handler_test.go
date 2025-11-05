@@ -129,7 +129,7 @@ func TestWorkspaceConfig(t *testing.T) {
 		shRunner := new(shaderRunner)
 		shRunner.init(
 			handler.Nop(component.Nop()), term.NopInterrupter(), term.Attributes{},
-			nopShutdownShaderConfig())
+			nopShutdownShaderConfig(), component.FrameCharSetDefault())
 		err = m.workspaceManagerHandler.init(&uri, homeURI, manager, n, cfg, "", nil,
 			dir, func(term.Event) bool {
 				return true
@@ -1756,7 +1756,7 @@ func newTestWorkspaceManagerHandlerWithManagerAndExtensions(
 
 	shRunner := new(shaderRunner)
 	shRunner.init(handler.Nop(component.Nop()), term.NopInterrupter(), term.Attributes{},
-		shutdownShaderCfg)
+		shutdownShaderCfg, component.FrameCharSetDefault())
 
 	releaseManager := docrelease.NewManager(document.NewInMemoryService())
 	err = m.workspaceManagerHandler.init(uri, homeURI, manager, n, cfg, "", files,
