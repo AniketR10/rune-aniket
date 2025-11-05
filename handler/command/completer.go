@@ -106,6 +106,9 @@ func FilePathCompleter(reader walkdir.Reader) Completer {
 		if err != nil {
 			return nil, "", err
 		}
+		it = iterator.Filter(it, func(val string) bool {
+			return !strings.HasSuffix(val, ".swp")
+		})
 		return it, modifiedLast, nil
 	})
 }
