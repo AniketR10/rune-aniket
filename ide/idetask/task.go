@@ -389,7 +389,6 @@ func (t *Task) setRunning(h browser.ScrollableFloating) {
 	t.running = true
 	t.paused = false
 	t.handler = h
-	t.handler.Resize(t.width, t.height)
 	t.barColor = colorRunning
 	prev := t.setBarColor(t.barColor)
 	if isFirst {
