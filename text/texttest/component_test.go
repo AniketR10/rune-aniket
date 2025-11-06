@@ -1109,6 +1109,52 @@ func TestDispatchCommand(t *testing.T) {
 		assert.True(t, editCalled)
 	})
 
+	t.Run("replaces aliases positional commands with dispatched cmds", func(t *testing.T) {
+		config := text.DefaultConfig()
+		config.CommandAliases = map[string]text.CommandAlias{
+			"yeti": {
+				Commands: []string{"newWindow wasup $2 $name $$1", "edit $1 hellagood"},
+			},
+		}
+		c, _ := newTestComponentConfig(t, NopEditor(), config)
+		win, _ := c.Focus()
+
+		var newWindowCalled, editCalled int
+
+		const n = 100
+		for range n {
+			c.SubscribeCommand(testCommand("newWindow", "", ""),
+				text.FuncCommandHandler(func(ctx context.Context, cmd textapi.Command) error {
+					newWindowCalled++
+					assert.Equal(t, "newWindow", cmd.Name)
+					assert.Equal(t, []string{"wasup", "arg2", "$name", "$1"}, cmd.Args)
+					return nil
+				}, nil))
+
+			c.SubscribeCommand(testCommand("edit", "", ""),
+				text.FuncCommandHandler(func(ctx context.Context, cmd textapi.Command) error {
+					editCalled++
+					assert.Equal(t, "edit", cmd.Name)
+					assert.Equal(t, []string{"arg1", "hellagood"}, cmd.Args)
+					return nil
+				}, nil))
+
+			cmd := textapi.Command{
+				Resource: NewTestHandler(),
+				URI:      uri,
+				Name:     "yeti",
+				Args:     []string{"arg1", "arg2"},
+				Window:   win,
+			}
+			ok, err := c.DispatchCommand(cmd)
+			assert.True(t, ok)
+			require.NoError(t, err)
+		}
+
+		assert.Equal(t, n, newWindowCalled)
+		assert.Equal(t, n, editCalled)
+	})
+
 	t.Run("bubbles up HandleCommand errors", func(t *testing.T) {
 		c, _ := newTestComponent(t, NopEditor())
 		win, _ := c.Focus()

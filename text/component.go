@@ -28,6 +28,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -573,6 +574,59 @@ func (c *Component) CompleteCommand(ctx context.Context, cmd string, args ...str
 	return man.handler.Complete(ctx, cmd, args)
 }
 
+func (c *Component) replacePositionalArgs(
+	alias CommandAlias, dispatched textapi.Command,
+) (CommandAlias, textapi.Command, error) {
+	// clone so we don't mess with originals
+	cmds := alias.Commands
+	alias.Commands = make([]string, len(cmds))
+	copy(alias.Commands, cmds)
+	var replaced int
+	for i, cmd := range alias.Commands {
+		cmdAndArgs := strings.Split(cmd, " ")
+		var builder strings.Builder
+		builder.WriteString(cmdAndArgs[0])
+		cmdAndArgsReplaced := make(map[int]struct{})
+		for _, arg := range cmdAndArgs[1:] {
+			builder.WriteString(" ")
+			if len(arg) == 0 {
+				builder.WriteString(arg)
+				continue
+			}
+			if arg[0] != '$' {
+				builder.WriteString(arg)
+				continue
+			}
+			// escaped $
+			if arg[1] == '$' {
+				builder.WriteString(arg[1:])
+				continue
+			}
+			replace, _ := strconv.Atoi(arg[1:])
+			if replace <= 0 {
+				builder.WriteString(arg)
+				continue
+			}
+			replace-- // arg0 is command
+			if replace >= len(dispatched.Args) {
+				return alias, dispatched, fmt.Errorf("alias expected argument at position %d", replace)
+			}
+			builder.WriteString(dispatched.Args[replace])
+			cmdAndArgsReplaced[replace] = struct{}{}
+			replaced++
+		}
+		reworked := make([]string, 0, len(dispatched.Args))
+		for i, arg := range dispatched.Args {
+			if _, ok := cmdAndArgsReplaced[i]; !ok {
+				reworked = append(reworked, arg)
+			}
+		}
+		dispatched.Args = reworked
+		alias.Commands[i] = builder.String()
+	}
+	return alias, dispatched, nil
+}
+
 // DispatchCommand dispatches a EventTypeCommand with cmd to subscribers
 // subscribed via SubscribeEvents.
 func (c *Component) DispatchCommand(cmd textapi.Command) (handled bool, err error) {
@@ -582,6 +636,11 @@ func (c *Component) DispatchCommand(cmd textapi.Command) (handled bool, err erro
 	targets, ok := c.config.CommandAliases[cmd.Name]
 	if ok {
 		c.log(log.DebugLevel, "Dispatching alias %s: %#v", cmd.Name, targets)
+		targets, cmd, err = c.replacePositionalArgs(targets, cmd)
+		if err != nil {
+			return
+		}
+		c.log(log.InfoLevel, "replaced positional args: %#v, cmd: %#v", targets, cmd)
 		for _, target := range targets.Commands {
 			argv := strings.Split(target, " ")
 			targetCmd := textapi.Command{
