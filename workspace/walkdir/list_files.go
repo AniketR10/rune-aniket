@@ -158,7 +158,8 @@ func dirTraversal(
 	var ret error
 	for _, info := range dirNames {
 		path := filepath.Join(dirname, info.Name())
-		if !info.IsDir() {
+		tpe := info.Type()
+		if tpe.IsRegular() {
 			// ensure dirTraversal returns
 			select {
 			case <-ctx.Done():
@@ -166,6 +167,9 @@ func dirTraversal(
 			case iterCh <- path:
 				continue
 			}
+		}
+		if !tpe.IsDir() {
+			continue
 		}
 
 		wg.Add(1)

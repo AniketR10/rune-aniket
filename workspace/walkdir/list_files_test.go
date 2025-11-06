@@ -25,6 +25,7 @@ package walkdir
 
 import (
 	"context"
+	"net"
 	"strconv"
 
 	"os"
@@ -67,6 +68,9 @@ func TestListFiles(t *testing.T) {
 
 		dir, err := os.MkdirTemp("", "")
 		require.NoError(t, err)
+		t.Cleanup(func() {
+			_ = os.RemoveAll(dir)
+		})
 		for _, path := range []string{".", dir} {
 			t.Run(path, func(t *testing.T) {
 				uri, err := workspaceapi.CurrentUserHostURI(dir)
@@ -89,11 +93,45 @@ func TestListFiles(t *testing.T) {
 		}
 	})
 
+	t.Run("lists only regular files", func(t *testing.T) {
+		defer goleak.VerifyNone(t)
+
+		dir, err := os.MkdirTemp("", "")
+		require.NoError(t, err)
+		t.Cleanup(func() {
+			_ = os.RemoveAll(dir)
+		})
+		for _, path := range []string{".", dir} {
+			t.Run(path, func(t *testing.T) {
+				uri, err := workspaceapi.CurrentUserHostURI(dir)
+				require.NoError(t, err)
+
+				_, err = os.OpenFile(filepath.Join(dir, "a"), os.O_CREATE, 0666)
+				require.NoError(t, err)
+
+				l, err := net.Listen("unix", filepath.Join(dir, "b"))
+				require.NoError(t, err)
+				defer l.Close()
+
+				scheme, err := workspace.NewFileScheme(context.Background(), config.NopConfig(), uri)
+				require.NoError(t, err)
+
+				it, err := ListFiles(context.Background(), scheme, path)
+				assertIteratorEqual(t, []string{"a"}, it)
+
+				require.NoError(t, scheme.Close())
+			})
+		}
+	})
+
 	t.Run("Close before scanning all should abort", func(t *testing.T) {
 		defer goleak.VerifyNone(t)
 
 		dir, err := os.MkdirTemp("", "")
 		require.NoError(t, err)
+		t.Cleanup(func() {
+			_ = os.RemoveAll(dir)
+		})
 		uri, err := workspaceapi.CurrentUserHostURI(dir)
 		require.NoError(t, err)
 
@@ -119,6 +157,9 @@ func TestListFiles(t *testing.T) {
 
 		workspaceDir, err := os.MkdirTemp("", "")
 		require.NoError(t, err)
+		t.Cleanup(func() {
+			_ = os.RemoveAll(workspaceDir)
+		})
 
 		dir, err := os.MkdirTemp("", "")
 		require.NoError(t, err)
@@ -235,6 +276,9 @@ func setupTestDirectory(
 ) (workspaceapi.URI, func()) {
 	dir, err := os.MkdirTemp("", "list_files_test")
 	require.NoError(t, err)
+	t.Cleanup(func() {
+		_ = os.RemoveAll(dir)
+	})
 
 	workspaceURI, err := workspaceapi.ParseURI("file://" + dir)
 	require.NoError(t, err)
@@ -253,13 +297,19 @@ func setupTestDirectory(
 
 		for i := 0; i < emptyDirsPerFile; i++ {
 			// create more dirs than workers
-			_, err = os.MkdirTemp(dir, "emptydir")
+			d, err := os.MkdirTemp(dir, "emptydir")
 			require.NoError(t, err)
+			t.Cleanup(func() {
+				_ = os.RemoveAll(d)
+			})
 		}
 		if i%nestEvery == 0 {
 			// nest next temp file created
 			dir, err = os.MkdirTemp(dir, "nested")
 			require.NoError(t, err)
+			t.Cleanup(func() {
+				_ = os.RemoveAll(dir)
+			})
 		}
 		closeFns = append(closeFns, func() { os.Remove(f.Name()) })
 	}
