@@ -83,10 +83,10 @@ func workspaceListFiles(cwd workspaceapi.FileSystem, ctx context.Context) (
 }
 
 func getResource(workspace workspaceapi.FileSystem, file string) (
-	workspaceapi.URI, term.Coordinates,
+	workspaceapi.URI, term.Coordinates, bool,
 ) {
-	uri, _ := workspace.URI(file)
-	return uri, term.Coordinates{}
+	uri, err := workspace.URI(file)
+	return uri, term.Coordinates{}, err == nil
 }
 
 func newHandler(

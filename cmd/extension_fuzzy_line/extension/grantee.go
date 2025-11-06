@@ -89,15 +89,18 @@ func readfiles(cwd workspaceapi.FileSystem, ctx context.Context) (
 }
 
 func parseLine(workspace workspaceapi.FileSystem, data string) (
-	workspaceapi.URI, term.Coordinates,
+	workspaceapi.URI, term.Coordinates, bool,
 ) {
 	// NOTE: if ag breaks this or there's an edge case that it's not covered
 	// let it panic so we catch it early and fix it
 	chunks := strings.Split(data, ":")
+	if len(chunks) < 2 {
+		return workspaceapi.URI{}, term.Coordinates{}, false
+	}
 	y, _ := strconv.Atoi(chunks[1])
 	name := chunks[0]
-	uri, _ := workspace.URI(name)
-	return uri, term.Coordinates{Y: y - 1}
+	uri, err := workspace.URI(name)
+	return uri, term.Coordinates{Y: y - 1}, err == nil
 }
 
 func newHandler(

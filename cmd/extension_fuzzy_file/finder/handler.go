@@ -87,7 +87,7 @@ func New(
 	invokeWindow browserapi.Window, cfg config.Config,
 	historyKey term.KeyComb, historyDocumentID string, command string,
 	fallback func(workspaceapi.FileSystem, context.Context) (iterator.Iterator[string], error),
-	getResource func(exec workspaceapi.FileSystem, line string) (workspaceapi.URI, term.Coordinates),
+	getResource func(exec workspaceapi.FileSystem, line string) (workspaceapi.URI, term.Coordinates, bool),
 ) (extutil.RedispatchHandler, error) {
 	h := new(fuzzyFinderHandler)
 	maxHistory, err := cfg.GetInt("history")
@@ -154,7 +154,7 @@ type fuzzyFinderHandler struct {
 	historyKey           term.KeyComb
 	mu                   sync.Mutex
 	cmdStr               string
-	getResource          func(workspaceapi.FileSystem, string) (workspaceapi.URI, term.Coordinates)
+	getResource          func(workspaceapi.FileSystem, string) (workspaceapi.URI, term.Coordinates, bool)
 	workspaceFallback    func(workspaceapi.FileSystem, context.Context) (iterator.Iterator[string], error)
 	pid                  workspaceapi.Pid
 	ctx                  context.Context
@@ -298,7 +298,15 @@ func (h *fuzzyFinderHandler) notifyError(msg string, args ...interface{}) error 
 }
 
 func (h *fuzzyFinderHandler) openResource(searchQuery, data string) {
-	resource, pos := h.getResource(h.fs, data)
+	resource, pos, ok := h.getResource(h.fs, data)
+	if !ok {
+		_ = h.notifyError("line does not conform to file:location format")
+		return
+	}
+	if resource == (workspaceapi.URI{}) {
+		log.Warnf("trying to open a line with a parse error")
+		return
+	}
 	handler, err := h.open(resource)
 	if err != nil {
 		merr := h.notifyError("Open: %v", err)
