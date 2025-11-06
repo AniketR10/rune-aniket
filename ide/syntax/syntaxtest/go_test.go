@@ -580,6 +580,23 @@ func TestTreeIndentsIntegration(t *testing.T) {
 │                      INSERT│
 └────────────────────────────┘`,
 		},
+		{
+			"<kcc", `┌────────────────────────────┐
+│o #####                     │
+├────────────────────────────┤
+│    }                       │
+│}                           │
+│                            │
+│##### fileContent = ########│
+│    ############+           │
+│    ###########+            │
+│    ####+                   │
+│    ########################│
+│    ▐                       │
+│                            │
+│                      INSERT│
+└────────────────────────────┘`,
+		},
 	}
 	handlertest.TestHandlerSequenceWriter(t, w, comp.Browser(), width, height, sequenceCases)
 

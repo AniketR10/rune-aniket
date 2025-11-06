@@ -977,6 +977,7 @@ func (vi *viHandlerImpl) handleDelete(ev term.Event) (quit, handled bool) {
 		if vi.cursor.Select() {
 			vi.cursor.MoveEndLine()
 			vi.cursor.DeleteSelection()
+			vi.cursor.TryIndent()
 		}
 		vi.setInsertMode()
 		handled = true

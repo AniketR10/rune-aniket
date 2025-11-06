@@ -1306,6 +1306,17 @@ func (c *Cursor) DeleteSelection() (ok bool) {
 	return
 }
 
+// TryIndent attempts to indent the cursor if an indent service is available.
+func (c *Cursor) TryIndent() bool {
+	pos := c.cursorAtScroll()
+	end := c.tryIndent(context.Background(), pos)
+	if pos == end {
+		return false
+	}
+	c.setCursorAfterUpdate(end)
+	return true
+}
+
 // ToggleHide either unhides the hidden block at cursor,
 // or hides the current selection.
 func (c *Cursor) ToggleHide() (ok bool) {
