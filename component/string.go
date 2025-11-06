@@ -142,6 +142,7 @@ func (l *LazyBytes) build() {
 	for _, t := range l.Tokens {
 		l.cells[t].Bg |= l.TokenAttributes.Bg
 		l.cells[t].Fg |= l.TokenAttributes.Fg
+		l.cells[t].Attrs |= l.TokenAttributes.Attrs
 	}
 }
 

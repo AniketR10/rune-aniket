@@ -109,6 +109,7 @@ func (s *Background) Dimensions() (width, height int) {
 func (s *Background) SetAttr(attr term.Attributes) term.Attributes {
 	s.cell.Bg = attr.Bg
 	s.cell.Fg = attr.Fg
+	s.cell.Attrs = attr.Attrs
 	return s.root.(WithAttributes).SetAttr(attr)
 }
 
