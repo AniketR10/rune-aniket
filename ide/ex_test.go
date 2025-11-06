@@ -1452,6 +1452,30 @@ func TestIntegrationEphemeralTerminal(t *testing.T) {
 ││                ││
 └└────────────────┘┘`,
 		},
+		{":noticloseall>:! echo %>",
+			`┌──────────────────┐
+│                  │
+├┌────────────────┐┤
+││ ▀    echo %  0s││
+││────────────────││
+││▐               ││
+││                ││
+││                ││
+││                ││
+└└────────────────┘┘`,
+		},
+		{":windowclose>:windowclose>:edit a>:! echo %>",
+			`┌──────────────────┐
+│o a               │
+├┌────────────────┐┤
+││ ▀  echo /var/0s││
+││────────────────││
+││▐               ││
+││                ││
+││                ││
+││                ││
+└└────────────────┘┘`,
+		},
 	}
 
 	opts := []text.Option{
@@ -1474,7 +1498,8 @@ func TestIntegrationEphemeralTerminal(t *testing.T) {
 
 	workspace := workspace.NewSchemeWorkspace(uri, fileScheme)
 	b := newExForTestingTerminal(t, workspace,
-		texttest.NopEditor(), vte.DefaultConfig(), nopPublishEvent, opts...)
+		text.DefaultSimpleEditor(clipboard.NewInMemory()),
+		vte.DefaultConfig(), nopPublishEvent, opts...)
 	defer b.Close()
 
 	handlertest.TestHandlerSequence(t, b, 20, 10, cases)

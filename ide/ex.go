@@ -946,6 +946,17 @@ func (e *ex) executePlugin(args ...string) error {
 	if len(args) == 0 {
 		return e.toggleCompanionTerminal()
 	}
+	for i, arg := range args {
+		if arg != "%" {
+			continue
+		}
+		content, _ := e.invokeWindow().Content()
+		th, ok := content.(*browser.Tab)
+		if !ok {
+			continue
+		}
+		args[i] = th.URI().Path()
+	}
 	h, err := e.newPluginHandler(args...)
 	if err != nil {
 		return err
