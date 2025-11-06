@@ -429,7 +429,7 @@ func (h *workspaceManagerHandler) Handle(ev term.Event) (exit, handled bool) {
 	}
 
 	exHandler := h.exHandler(focus)
-	if exHandler.forceExit || h.confirmedForceExit {
+	if exHandler.forceExit || h.confirmedForceExit || (exHandler.exit && h.exitPromptOpen) {
 		return true, true
 	}
 

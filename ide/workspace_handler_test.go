@@ -600,20 +600,11 @@ func TestWorkspaceManagerClosePromptIntegration(t *testing.T) {
 │                  │
 │                  │
 └──────────────────┘`},
-			{"n",
-				`┌──────────────────┐
-│                  │
-├──────────────────┤
-│                  │
-│                  │
-│workspaceWallpaper│
-│                  │
-│                  │
-│                  │
-└──────────────────┘`},
 		}
 		h := newSafeHandler(m)
 		handlertest.TestHandlerSequence(t, h, 20, 10, cases)
+		exit, _ := h.Handle(term.Event{Type: term.EventKey, Ch: '3'})
+		assert.True(t, exit)
 		require.NoError(t, m.Close())
 	})
 
