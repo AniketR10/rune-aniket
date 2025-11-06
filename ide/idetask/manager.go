@@ -97,7 +97,7 @@ func (m *Manager) SetMaxWidthHeight(width, height int) {
 func (m *Manager) RunTask(t Task) error {
 	validateTask(t)
 	if _, loaded := m.tasks.LoadOrStore(t.Name, &t); loaded {
-		return fmt.Errorf("task with name %s already exists", t.Name)
+		return ErrTaskExists
 	}
 	ch := make(chan workspaceapi.EventInfo)
 	id, err := m.scheme.Watch("./...", ch, workspaceapi.AllEvents()...)

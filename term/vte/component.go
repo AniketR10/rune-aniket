@@ -634,9 +634,9 @@ func (t *Component) createPty(cfg Config) error {
 
 	_, retErr := t.executor.StartCommand(t.ctx, cmd)
 	if retErr != nil {
-		retErr = fmt.Errorf("start command: %v", retErr)
+		retErr = fmt.Errorf("start command: %w", retErr)
 		if err := pty.Master.Close(); err != nil {
-			err = fmt.Errorf("close pty: %v", err)
+			err = fmt.Errorf("close pty: %w", err)
 			retErr = multierr.Append(retErr, err)
 		}
 	}

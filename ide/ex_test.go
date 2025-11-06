@@ -2462,12 +2462,14 @@ func TestRunStopTasks(t *testing.T) {
 		require.Error(t, b.newTask("myTask4", "down", ".go,.md", "--", "make", "test"))
 	})
 
-	t.Run("newtask called twice with same task name fails second time", func(t *testing.T) {
+	t.Run("newtask called twice with same task name opens a prompt", func(t *testing.T) {
 		b, cleanup := newExForTestingTasks(t)
 		defer cleanup()
 
 		require.NoError(t, b.newTask("myTask", "left", "--", "make"))
-		require.Error(t, b.newTask("myTask", "right", "--", "make", "test", "things"))
+		require.NoError(t, b.newTask("myTask", "right", "--", "make", "test", "things"))
+		_, handled := b.Handle(term.Event{Type: term.EventKey, Ch: 'y'})
+		assert.True(t, handled)
 	})
 
 	t.Run("integration", func(t *testing.T) {
@@ -2488,7 +2490,7 @@ func TestRunStopTasks(t *testing.T) {
 │                           ││
 │                           ││
 └───────────────────────────┘┘`},
-			{":tasknew build left -- go build ./...>:tasknew assets left -- npm run buildAssets>:tasknew validateAssets right .html,.js,.css,.ts -- npm run validate>",
+			{":tasknew build left -- go build ./...>:tasknew assets left -- echo a>:tasknew validateAssets right .html,.js,.css,.ts -- echo b>",
 				`┌────────────────────────────┐
 │                            │
 ├┌┌────────────────────────┐┐┤
@@ -2552,7 +2554,7 @@ func TestRunStopTasks(t *testing.T) {
 ││                  └────────┘
 ││                           │
 └└───────────────────────────┘`},
-			{":windowclose>:tasknew validateAssets right -- npm validateAssets>", // recreate after close
+			{":windowclose>:tasknew validateAssets right -- echo a>", // recreate after close
 				`┌────────────────────────────┐
 │                            │
 ├┌──────────────────────────┐┤
@@ -2568,6 +2570,38 @@ func TestRunStopTasks(t *testing.T) {
 ││                          ││
 ││                          ││
 └└──────────────────────────┘┘`},
+			{":tasknew validateAssets right -- echo b>", // prompt to replace
+				`┌────────────────────────────┐
+│                            │
+├┌──────────────────────────┐┤
+││                          ││
+││                          ││
+││  A task with the name    ││
+││  "validateAssets"        ││
+││  already exists. Do      ││
+││  you want to replace     ││
+││  it?                     ││
+││                          ││
+││                          ││
+││     Yes          No      ││
+││                          ││
+└└──────────────────────────┘┘`},
+			{"y",
+				`┌────────────────────────────┐
+│                            │
+├┌───────────────────────────┤
+││                           │
+││                  ┌────────┐
+││                  │new     │
+││                  │vte:    │
+││                  │start   │
+││                  │command:│
+││                  │ context│
+││                  │ cancele│
+││                  │d       │
+││                  └────────┘
+││                           │
+└└───────────────────────────┘`},
 		}
 
 		e, cleanup := newExForTestingTasks(t)

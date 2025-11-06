@@ -297,7 +297,7 @@ func (e *Handler) initEmulator(
 		tm, e.cfg, initialCmd)
 	if err != nil {
 		cancel()
-		return fmt.Errorf("new vte: %v", err)
+		return fmt.Errorf("new vte: %w", err)
 	}
 	e.emulator = vteh
 	e.liveHandler = e.newUnion(e.emulator)

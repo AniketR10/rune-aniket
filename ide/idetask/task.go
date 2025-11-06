@@ -119,7 +119,7 @@ type TaskInfo struct {
 	Running     bool
 	LastSuccess bool
 	// Runs represents the number of times this task has been run.
-	Runs int
+	Runs         int
 	LastDuration time.Duration
 }
 

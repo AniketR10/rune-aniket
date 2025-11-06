@@ -35,6 +35,7 @@ import (
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/handler"
+	"unstable.build/go-tui/ide/idetask"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/workspace"
 )
@@ -374,4 +375,44 @@ func (h *areYouSurePrompt) discard() {
 			_, _ = h.ex.comp.Notify(notifications.LevelError, "failed to remove tab: %v", err)
 		}
 	}
+}
+
+type replaceTaskHandler struct {
+	ex *ex
+	t  idetask.Task
+}
+
+func (h *replaceTaskHandler) OnSelect(
+	idx int, option string,
+) {
+	switch option {
+	case yesOpt:
+		if err := h.ex.tasks.StopTask(h.t.Name); err != nil {
+			_, _ = h.ex.comp.Notify(notifications.LevelError, "stop task: %v", err)
+			return
+		}
+		if err := h.ex.tasks.RunTask(h.t); err != nil {
+			_, _ = h.ex.comp.Notify(notifications.LevelError, "run task: %v", err)
+			return
+		}
+	case noOpt:
+	}
+}
+
+func (h *replaceTaskHandler) OnClose() error {
+	return nil
+}
+
+func (e *ex) openReplaceTaskPrompt(t idetask.Task) error {
+	promptText := fmt.Sprintf(
+		"A task with the name %q already exists. Do you want to replace it?", t.Name)
+
+	promptHandler := &replaceTaskHandler{ex: e, t: t}
+	e.comp.Prompt(
+		promptText,
+		[]string{yesOpt, noOpt},
+		yesNoKeyCombs,
+		promptHandler,
+	)
+	return nil
 }

@@ -1022,7 +1022,11 @@ func (e *ex) newTask(args ...string) error {
 		return fmt.Errorf("invalid orientation argument %q", args[0])
 	}
 
-	return e.tasks.RunTask(t)
+	err := e.tasks.RunTask(t)
+	if errors.Is(err, idetask.ErrTaskExists) {
+		return e.openReplaceTaskPrompt(t)
+	}
+	return err
 }
 
 func (e *ex) stopTask(args ...string) error {
