@@ -380,6 +380,65 @@ func (vi *viHandlerImpl) pasteClipboard(registerID string, after bool) bool {
 	return true
 }
 
+const matchingLocID = "_matchingMark"
+
+func (vi *viHandlerImpl) markMatchingBrace() {
+	vi.cursor.SetLocationList(textapi.LocationPriorityInfo, matchingLocID, nil)
+	c, ok := vi.cursor.Cell()
+	if !ok {
+		return
+	}
+	var matching rune
+	var end bool
+	switch c.Ch {
+	case '{':
+		matching = '}'
+	case '(':
+		matching = ')'
+	case '[':
+		matching = ']'
+	case '<':
+		matching = '>'
+	case '}':
+		matching = '{'
+		end = true
+	case ')':
+		matching = '('
+		end = true
+	case ']':
+		matching = '['
+		end = true
+	case '>':
+		matching = '<'
+		end = true
+	default:
+		return
+	}
+
+	vi.markMatchingBraceViaCursor(c.Ch, matching, end)
+}
+
+func (vi *viHandlerImpl) markMatchingBraceViaCursor(target, match rune, end bool) {
+	var pos term.Coordinates
+	var ok bool
+	if end {
+		pos, ok = vi.cursor.FindMatchingRuneBackward(target, match)
+	} else {
+		pos, ok = vi.cursor.FindMatchingRuneForward(target, match)
+	}
+	if !ok {
+		return
+	}
+	selectEnd := pos
+	selectEnd.X++
+	vi.cursor.SetLocationList(textapi.LocationPriorityInfo,
+		matchingLocID, textapi.LocationSlice([]textapi.Location{
+			{From: pos, To: selectEnd, Attr: term.Attributes{
+				Attrs: tcell.AttrReverse,
+			}},
+		}))
+}
+
 func (vi *viHandlerImpl) handleNormal(ev term.Event) (quit, handled bool) {
 	doResetCount := true
 	defer func() {
@@ -556,7 +615,13 @@ func (vi *viHandlerImpl) handleNormal(ev term.Event) (quit, handled bool) {
 			vi.searchMode = moveToNext
 			vi.less.Handle(ev)
 		case '%':
-			handled = vi.cursor.MoveToMatchingRune()
+			cell, _ := vi.cursor.Cell()
+			switch cell.Ch {
+			case '[', '{', '(':
+				handled = vi.cursor.MoveToNextLocation(matchingLocID)
+			case ']', '}', ')':
+				handled = vi.cursor.MoveToPrevLocation(matchingLocID)
+			}
 		case '#':
 			vi.searchMode = moveToPrev
 			vi.search(vi.cursor.Word())
@@ -965,10 +1030,11 @@ func (vi *viHandlerImpl) Handle(ev term.Event) (quit, handled bool) {
 	// only a user event clears a pending set cursor
 	vi.pendingSetCursor = nil
 
-	moveToBounds := vi.prepareHandle()
+	mode := vi.mode()
+	moveToBounds := vi.prepareHandle(mode)
 	defer moveToBounds()
 
-	switch vi.mode() {
+	switch mode {
 	case searchMode:
 		quit, handled = vi.handleSearch(ev)
 	case normalMode:
@@ -997,10 +1063,13 @@ func (vi *viHandlerImpl) Handle(ev term.Event) (quit, handled bool) {
 	return
 }
 
-func (vi *viHandlerImpl) prepareHandle() func() {
+func (vi *viHandlerImpl) prepareHandle(mode viMode) func() {
 	prev := vi.cursor.Mark()
 	return func() {
 		vi.doMoveToBounds(prev)
+		if mode == normalMode {
+			vi.markMatchingBrace()
+		}
 	}
 }
 
@@ -1063,28 +1132,28 @@ func (c *viHandlerImpl) OnVisible(start int) {
 	})
 }
 
-// MoveToNextLocation moves the cursor to the next location
+// moveToNextLocation moves the cursor to the next location
 // in the location list identified by ID.
 func (vi *viHandlerImpl) moveToNextLocation(ID string) {
 	vi.cursor.MoveToNextLocation(ID)
 	vi.free = vi.cursor.Mark()
 }
 
-// MoveToPrevLocation moves the cursor to the previous location
+// moveToPrevLocation moves the cursor to the previous location
 // in the location list identified by ID.
 func (vi *viHandlerImpl) moveToPrevLocation(ID string) {
 	vi.cursor.MoveToPrevLocation(ID)
 	vi.free = vi.cursor.Mark()
 }
 
-// SetLocationList sets a location list of this handler. See Cursor.SetLocationList
+// setLocationList sets a location list of this handler. See Cursor.SetLocationList
 func (vi *viHandlerImpl) setLocationList(
 	pri textapi.LocationPriority, ID string, l text.LocationList,
 ) {
 	_ = vi.cursor.SetLocationList(pri, ID, l)
 }
 
-// SetCursorAtScroll sets the cursor of this viHandlerImpl handler at content pos.
+// setCursorAtScroll sets the cursor of this viHandlerImpl handler at content pos.
 func (vi *viHandlerImpl) setCursorAtScroll(pos term.Coordinates) bool {
 	// setCursorAtScroll should be robust against resizes, etc.
 	// only the first client interaction should clear this position
@@ -1093,6 +1162,7 @@ func (vi *viHandlerImpl) setCursorAtScroll(pos term.Coordinates) bool {
 
 	_, ok := vi.cursor.MoveToScroll(pos)
 	vi.free = vi.cursor.Mark()
+	vi.markMatchingBrace()
 	return ok
 }
 

@@ -1668,6 +1668,12 @@ func (c *Cursor) MoveToPrevLocation(ID string) bool {
 		(LocationList).Next, isPastCursor)
 }
 
+// LocationList returns the location list identified by ID, set previously via SetLocationList,
+// or nil and false, if no location list is currently set with the given ID.
+func (c *Cursor) LocationList(ID string) (LocationList, bool) {
+	return c.locationStore.LocationList(ID)
+}
+
 // Word returns the word under the cursor or an empty string if
 // the token under cursor is not a word.
 func (c *Cursor) Word() string {
@@ -1890,6 +1896,20 @@ func (c *Cursor) ToggleAllFolds(ctx context.Context) bool {
 	})
 }
 
+// FindMatchingRuneForward tries to find the target's matching rune by scrolling
+// through cells forward, until either a match is found or until the end of the file,
+// in which case false is returned.
+func (c *Cursor) FindMatchingRuneForward(target, match rune) (term.Coordinates, bool) {
+	return c.findMatchRune(target, match, c.matchRuneForward)
+}
+
+// FindMatchingRuneBackward tries to find the target's matching rune by scrolling
+// through cells backward, until either a match is found or until the end of the file,
+// in which case false is returned.
+func (c *Cursor) FindMatchingRuneBackward(target, match rune) (term.Coordinates, bool) {
+	return c.findMatchRune(target, match, c.matchRuneBackward)
+}
+
 func (c *Cursor) disablePublishing() func() {
 	if !c.scroll.PublishingEnabled() {
 		return func() {}
@@ -1901,22 +1921,38 @@ func (c *Cursor) disablePublishing() func() {
 	}
 }
 
-func (c *Cursor) moveMatchRuneForward(target, match rune) bool {
+func (c *Cursor) matchRuneForward(pos *term.Coordinates) bool {
 	lastRow := c.rows() - 1
-	return c.moveMatchRune(target, match, func(pos *term.Coordinates) bool {
-		pos.X++
-		for pos.Y <= lastRow && pos.X >= c.view().Columns(pos.Y) {
-			pos.Y++
-			pos.X = 0
-		}
-		return pos.Y <= lastRow || (pos.Y == lastRow && pos.X < c.view().Columns(pos.Y))
-	})
+	pos.X++
+	for pos.Y <= lastRow && pos.X >= c.view().Columns(pos.Y) {
+		pos.Y++
+		pos.X = 0
+	}
+	return pos.Y <= lastRow || (pos.Y == lastRow && pos.X < c.view().Columns(pos.Y))
 }
 
-func (c *Cursor) moveMatchRune(
+func (c *Cursor) matchRuneBackward(pos *term.Coordinates) bool {
+	pos.X--
+	for pos.Y > 0 && pos.X < 0 {
+		pos.Y--
+		pos.X = c.view().Columns(pos.Y) - 1
+	}
+	return pos.Y >= 0 && pos.X >= 0
+}
+
+func (c *Cursor) moveMatchRuneForward(target, match rune) bool {
+	pos, ok := c.findMatchRune(target, match, c.matchRuneForward)
+	if !ok {
+		return false
+	}
+	_, ok = c.MoveToScroll(pos)
+	return ok
+}
+
+func (c *Cursor) findMatchRune(
 	target, match rune,
 	advance func(*term.Coordinates) bool,
-) bool {
+) (term.Coordinates, bool) {
 	cells := c.view().RawCells()
 	pos := c.cursorAtScroll()
 	pending := 1
@@ -1930,21 +1966,18 @@ func (c *Cursor) moveMatchRune(
 	}
 
 	if pending == 0 {
-		c.MoveToScroll(pos)
-		return true
+		return pos, true
 	}
-	return false
+	return term.Coordinates{}, false
 }
 
 func (c *Cursor) moveMatchRuneBackward(target, match rune) bool {
-	return c.moveMatchRune(target, match, func(pos *term.Coordinates) bool {
-		pos.X--
-		for pos.Y > 0 && pos.X < 0 {
-			pos.Y--
-			pos.X = c.view().Columns(pos.Y) - 1
-		}
-		return pos.Y >= 0 && pos.X >= 0
-	})
+	pos, ok := c.findMatchRune(target, match, c.matchRuneBackward)
+	if !ok {
+		return false
+	}
+	_, ok = c.MoveToScroll(pos)
+	return ok
 }
 
 func (c *Cursor) setCursorAfterUpdate(atScroll term.Coordinates) {

@@ -272,6 +272,8 @@ func (h *mockHandler) moveToNextLocation(ID string) {
 }
 func (h *mockHandler) moveToPrevLocation(ID string) {
 }
+func (h *mockHandler) markMatchingBrace() {
+}
 func (h *mockHandler) setLocationList(pri textapi.LocationPriority, ID string, l text.LocationList) {
 }
 func (h *mockHandler) moveToBounds() {

@@ -32,6 +32,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
@@ -108,6 +109,30 @@ func TestCellAtCursor(t *testing.T) {
 			assert.Equal(t, tcase.cell, c.Ch)
 		}
 	}
+}
+
+func TestMatchingRuneHighlight(t *testing.T) {
+	width, height := 20, 10
+
+	vi := setupVi(t, snippet, 2)
+	vi.Resize(width, height)
+
+	for _, r := range "jjjjjjj" {
+		_, handled := vi.Handle(term.Event{Type: term.EventKey, Ch: r})
+		require.True(t, handled)
+	}
+
+	c, ok := vi.cursor.Cell()
+	assert.True(t, ok)
+	require.Equal(t, '{', c.Ch)
+
+	list, ok := vi.cursor.LocationList(matchingLocID)
+	require.True(t, ok)
+	loc, ok := list.Current()
+	require.True(t, ok)
+	assert.Equal(t, tcell.AttrReverse, loc.Attr.Attrs)
+	assert.Equal(t, term.Coordinates{Y: 31}, loc.From)
+	assert.Equal(t, term.Coordinates{Y: 31, X: 1}, loc.To)
 }
 
 func TestViIntegrationSequence(t *testing.T) {
@@ -1033,7 +1058,7 @@ func TestIntegrationScrollEvent(t *testing.T) {
 		cursorPos term.Coordinates
 		ev        term.Event
 	}{
-		{"MoveToMatchingRune", term.Coordinates{Y: 7}, term.Event{Type: term.EventKey, Ch: '%'}},
+		{"move to matching rune", term.Coordinates{Y: 7}, term.Event{Type: term.EventKey, Ch: '%'}},
 		{"MoveEndLine", term.Coordinates{Y: 2}, term.Event{Type: term.EventKey, Ch: '$'}},
 		{"MoveRightStartWord", term.Coordinates{X: 4, Y: 9}, term.Event{Type: term.EventKey, Ch: 'w'}},
 		{"MoveLeftStartWord", term.Coordinates{X: 21, Y: 9}, term.Event{Type: term.EventKey, Ch: 'b'}},
