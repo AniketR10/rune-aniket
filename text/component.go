@@ -640,7 +640,7 @@ func (c *Component) DispatchCommand(cmd textapi.Command) (handled bool, err erro
 		if err != nil {
 			return
 		}
-		c.log(log.InfoLevel, "replaced positional args: %#v, cmd: %#v", targets, cmd)
+		c.log(log.TraceLevel, "replaced positional args: %#v, cmd: %#v", targets, cmd)
 		for _, target := range targets.Commands {
 			argv := strings.Split(target, " ")
 			targetCmd := textapi.Command{
