@@ -53,6 +53,7 @@ func TestComponent(
 	t *testing.T, m tui.Component,
 	w StringerWriter, cases []TestCase,
 ) {
+	t.Helper()
 	var err error
 
 	for i, tcase := range cases {

@@ -131,6 +131,7 @@ func (h *workspaceManagerHandler) newEditor(cfg ideConfig) (text.Editor, error) 
 }
 
 func (h *workspaceManagerHandler) newBuiltinModalEditor(cfg ideConfig) text.Editor {
+	auxBarLinesEnabled, auxBarLinesAbsolute := cfg.auxiliaryBarLines()
 	viOpts := append([]vi.Option{},
 		vi.WithBarAttr(cfg.modalBarAttr()),
 		vi.WithResAttr(cfg.modalResultAttr()),
@@ -138,6 +139,8 @@ func (h *workspaceManagerHandler) newBuiltinModalEditor(cfg ideConfig) text.Edit
 		vi.WithAttr(cfg.modalAttr()),
 		vi.WithAuxiliaryBar(cfg.auxiliaryBarEnabled()),
 		vi.WithAuxiliaryBarFolds(cfg.auxiliaryBarFolds()),
+		vi.WithAuxiliaryBarLines(auxBarLinesEnabled, auxBarLinesAbsolute),
+		vi.WithAuxiliaryBarHighlightCursor(cfg.auxiliaryBarHighlightCursor()),
 		vi.WithHideInitialFolds(cfg.initialFolds()),
 		vi.WithDebug(cfg.modalDebug()),
 		vi.WithClipboard(cfg.clipboard()),

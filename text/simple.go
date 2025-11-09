@@ -86,7 +86,8 @@ func (e *simpleEditor) Edit(file workspaceapi.URI, buf *cell.Buffer) (Handler, e
 	root := rootIfc.(*simpleEditorHandler)
 	ret := e.pub.PublishEdit(file, buf, root, &root.cursor)
 	if e.auxBar {
-		ret = WithAuxBar(buf, root.less.Scroll(), ret, e.auxBarFolds, e.scheduleNextTick)
+		ret = WithAuxBar(ret, buf, root.less.Scroll(),
+			e.auxBarFolds, true, true, true, e.scheduleNextTick)
 	}
 	return ret, nil
 }

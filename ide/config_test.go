@@ -65,6 +65,8 @@ editor:
     aux_bar:
         enabled: true
         folds: true
+        lines: relative
+        highlight_cursor: false
     mode: modal
     modal:
         attr:
@@ -262,6 +264,13 @@ func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
 	folds := cfg.auxiliaryBarFolds()
 	assert.False(t, folds)
 
+	enabled, absolute := cfg.auxiliaryBarLines()
+	assert.True(t, enabled)
+	assert.True(t, absolute)
+
+	cursor := cfg.auxiliaryBarHighlightCursor()
+	assert.True(t, cursor)
+
 	actualNotifications := cfg.notificationsConfig()
 	expectedNotifications := defaultNotificationsConfig()
 	assert.NotNil(t, actualNotifications.Interrupter)
@@ -447,6 +456,13 @@ func TestConfigSetting(t *testing.T) {
 
 	folds := cfg.auxiliaryBarFolds()
 	assert.True(t, folds)
+
+	cursor := cfg.auxiliaryBarHighlightCursor()
+	assert.False(t, cursor)
+
+	enabled, absolute := cfg.auxiliaryBarLines()
+	assert.True(t, enabled)
+	assert.False(t, absolute)
 
 	noti := cfg.notificationsConfig()
 	assert.Equal(t, 1, noti.Padding)

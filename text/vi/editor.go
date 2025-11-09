@@ -55,8 +55,11 @@ func (e *viEditor) Edit(file workspaceapi.URI, buf *cell.Buffer) (text.Handler, 
 	cursor := root.cursor
 	ret := e.Publisher.PublishEdit(file, buf, root, cursor)
 	if e.config.enableAuxBar {
-		ret = text.WithAuxBar(buf, root.less.Scroll(), ret,
-			e.config.enableAuxBarFolds, e.config.scheduleNextTick)
+		ret = text.WithAuxBar(ret, buf, root.less.Scroll(),
+			e.config.enableAuxBarFolds,
+			e.config.enableAuxBarLines, e.config.auxBarAbsolute,
+			e.config.enableAuxBarHighlightCursor,
+			e.config.scheduleNextTick)
 	}
 	return ret, nil
 }

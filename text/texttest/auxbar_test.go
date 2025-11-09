@@ -38,7 +38,107 @@ import (
 	"unstable.build/go-tui/text"
 )
 
-func TestAuxBarDraw(t *testing.T) {
+func TestAuxBarDrawLinesRelative(t *testing.T) {
+	buf := cell.NewBuffer()
+	buf.WriteString(copy)
+	fs := &testFoldsService{}
+	fs.view = buf.WithView(fs)
+	scroll := component.NewScroll(buf)
+	h := newtestHandler(scroll)
+	cb := func(fn func()) bool {
+		fn()
+		return true
+	}
+
+	bar := text.WithAuxBar(h, buf, scroll,
+		false, true, false /* relative lines */, false, cb)
+	bar.Resize(20, 10)
+	w := term.NewStringWriter(20, 10)
+
+	tests := []comptest.TestCase{
+		{Expected: `
+0  package main     
+1                   
+2  import (         
+3      "fmt"        
+4                   
+5      "github.com/u
+6  )                
+7                   
+8  func main() {    
+9      fmt.Println("`,
+		},
+		{
+			Action: func() {
+				require.True(t, scroll.SeekDown())
+			},
+			Expected: `
+0                   
+1  import (         
+2      "fmt"        
+3                   
+4      "github.com/u
+5  )                
+6                   
+7  func main() {    
+8      fmt.Println("
+9      for i := 0; i`,
+		},
+	}
+	comptest.TestComponent(t, bar, w, tests)
+}
+
+func TestAuxBarDrawLinesAbsolute(t *testing.T) {
+	buf := cell.NewBuffer()
+	buf.WriteString(copy)
+	fs := &testFoldsService{}
+	fs.view = buf.WithView(fs)
+	scroll := component.NewScroll(buf)
+	h := newtestHandler(scroll)
+	cb := func(fn func()) bool {
+		fn()
+		return true
+	}
+
+	bar := text.WithAuxBar(h, buf, scroll,
+		false, true, true /* absolute lines */, false, cb)
+	bar.Resize(20, 10)
+	w := term.NewStringWriter(20, 10)
+
+	tests := []comptest.TestCase{
+		{Expected: `
+1  package main     
+2                   
+3  import (         
+4      "fmt"        
+5                   
+6      "github.com/u
+7  )                
+8                   
+9  func main() {    
+10     fmt.Println("`,
+		},
+		{
+			Action: func() {
+				require.True(t, scroll.SeekDown())
+			},
+			Expected: `
+2                   
+3  import (         
+4      "fmt"        
+5                   
+6      "github.com/u
+7  )                
+8                   
+9  func main() {    
+10     fmt.Println("
+11     for i := 0; i`,
+		},
+	}
+	comptest.TestComponent(t, bar, w, tests)
+}
+
+func TestAuxBarDrawFolds(t *testing.T) {
 	buf := cell.NewBuffer()
 	buf.WriteString(copy)
 	fs := &testFoldsService{}
@@ -53,7 +153,8 @@ func TestAuxBarDraw(t *testing.T) {
 	}
 
 	wg.Add(1)
-	bar := text.WithAuxBar(buf, scroll, h, true /*folds enabled*/, cb)
+	bar := text.WithAuxBar(h, buf, scroll,
+		true /*folds enabled*/, false, false, false, cb)
 	bar.Resize(20, 10)
 	w := term.NewStringWriter(20, 10)
 
@@ -137,7 +238,7 @@ func TestAuxBarDraw(t *testing.T) {
 
 	wg.Wait()
 	comptest.TestComponent(t, bar, w, tests)
-	
+
 	wg.Add(1)
 	_, handled = bar.Handle(
 		term.Event{Type: term.EventMouse, Key: term.MouseLeft, MouseX: 0, MouseY: 1})
@@ -160,10 +261,10 @@ func TestAuxBarDraw(t *testing.T) {
 
 	wg.Wait()
 	comptest.TestComponent(t, bar, w, tests)
-	
+
 	// nothing happens if we click outside of line
 	_, handled = bar.Handle(
-		term.Event{Type: term.EventMouse, Key: term.MouseLeft, MouseX: 1, MouseY: 1})
+		term.Event{Type: term.EventMouse, Key: term.MouseLeft, MouseX: 2, MouseY: 1})
 	require.True(t, handled)
 
 	tests = []comptest.TestCase{
@@ -183,6 +284,58 @@ func TestAuxBarDraw(t *testing.T) {
 
 	wg.Wait()
 	comptest.TestComponent(t, bar, w, tests)
+}
+
+func BenchmarkAuxBarAbsoluteSmall(b *testing.B) {
+	benchmarkAuxBar(b, 10, 10, true)
+}
+
+func BenchmarkAuxBarAbsoluteMedium(b *testing.B) {
+	benchmarkAuxBar(b, 100, 100, true)
+}
+
+func BenchmarkAuxBarAbsoluteLarge(b *testing.B) {
+	benchmarkAuxBar(b, 1000, 1000, true)
+}
+
+func BenchmarkAuxBarRelativeSmall(b *testing.B) {
+	benchmarkAuxBar(b, 10, 10, false)
+}
+
+func BenchmarkAuxBarRelativeMedium(b *testing.B) {
+	benchmarkAuxBar(b, 100, 100, false)
+}
+
+func BenchmarkAuxBarRelativeLarge(b *testing.B) {
+	benchmarkAuxBar(b, 1000, 1000, false)
+}
+
+func benchmarkAuxBar(b *testing.B, width, height int, absolute bool) {
+	buf := cell.NewBuffer()
+	for buf.Rows() < height {
+		buf.WriteString(copy)
+	}
+	fs := &testFoldsService{}
+	fs.view = buf.WithView(fs)
+	scroll := component.NewScroll(buf)
+	h := newtestHandler(scroll)
+	var wg sync.WaitGroup
+	cb := func(fn func()) bool {
+		fn()
+		wg.Done()
+		return true
+	}
+
+	wg.Add(1)
+	bar := text.WithAuxBar(h, buf, scroll,
+		true, true, absolute, true, cb)
+	bar.Resize(width, height)
+	wg.Wait()
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		bar.Draw(term.NoopWriter{})
+	}
 }
 
 var _ = (foldsService)(testFoldsService{})

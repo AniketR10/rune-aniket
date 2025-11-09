@@ -1202,6 +1202,52 @@ func (c ideConfig) auxiliaryBarFolds() bool {
 	return enabled
 }
 
+func (c ideConfig) auxiliaryBarHighlightCursor() (ret bool) {
+	ret = true
+	cfg, ok := c.auxiliaryBar()
+	if !ok {
+		return
+	}
+	enabled, err := cfg.GetBool("highlight_cursor")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["editor.aux_bar.highlight_cursor"] = err
+		}
+		return
+	}
+	return enabled
+}
+
+func (c ideConfig) auxiliaryBarLines() (bool, bool) {
+	cfg, ok := c.auxiliaryBar()
+	if !ok {
+		return true, true
+	}
+	enabled, err := cfg.GetBool("lines")
+	if err == nil {
+		// default is absolute
+		return enabled, true
+	}
+	lines, err := cfg.GetString("lines")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["editor.aux_bar.lines"] = err
+		}
+		// defaults is absolute and enabled
+		return true, true
+	}
+	switch lines {
+	case "disabled":
+		return false, false
+	case "absolute":
+		return true, true
+	case "relative":
+		return true, false
+	default:
+		return true, true
+	}
+}
+
 func (c ideConfig) modalDebug() (ret bool) {
 	return c.modalBool("debug")
 }

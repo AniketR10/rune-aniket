@@ -25,6 +25,8 @@ package text
 
 import (
 	"context"
+	"math"
+	"strconv"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/iterator"
@@ -43,17 +45,22 @@ import (
 // one column of the available space, to draw an auxiliary bar. The given buffer,
 // and scroll should correspond to the buffer and scroll used by the given editor.
 func WithAuxBar(
-	buf *cell.Buffer, scroll *component.Scroll, editor Handler,
-	foldsEnabled bool, scheduleNextTick func(func()) bool,
+	handler Handler, buf *cell.Buffer, scroll *component.Scroll,
+	foldsEnabled, linesEnabled, absoluteLines, highlightCursor bool,
+	scheduleNextTick func(func()) bool,
 ) Handler {
 	ret := new(auxBar)
 	ret.buf = buf
 	ret.scroll = scroll
-	ret.editor = editor
-	ret.vhandler.C = editor
+	ret.editor = handler
+	ret.vhandler.C = handler
 	ret.scheduleNextTick = scheduleNextTick
 	ret.foldsEnabled = foldsEnabled
+	ret.linesEnabled = linesEnabled
+	ret.absoluteLines = absoluteLines
+	ret.highlightCursor = highlightCursor
 	ret.folds = make(map[term.Coordinates]term.Coordinates)
+	ret.setLinesWidth(10 /* good height for calculating width of lines */)
 
 	b := new(cell.Buffer)
 	b.InitPerformance(1, 1, 2, ' ')
@@ -65,9 +72,14 @@ func WithAuxBar(
 	scroll.Subscribe(ret)
 	buf.Subscribe(ret)
 
-	ret.rebuildBar(context.Background())
+	ret.rebuildBar(context.Background(), term.Coordinates{})
 	return ret
 }
+
+var (
+	fgAttr = term.Attributes{Fg: tcell.ColorGray}
+	bgAttr = term.Attributes{Fg: tcell.ColorWhite, Bg: tcell.ColorGray}
+)
 
 // UnwrapAuxBar unwraps the underlying handler from
 // a Handler returned by WithAuxBar. This function
@@ -84,14 +96,21 @@ const (
 type auxBar struct {
 	scheduleNextTick func(func()) bool
 	foldsEnabled     bool
+	linesEnabled     bool
+	absoluteLines    bool
+	highlightCursor  bool
 
 	buf    *cell.Buffer
 	scroll *component.Scroll
 	editor Handler
 
-	vhandler handler.Virtual
-	bar      *component.Scroll
-	folds    map[term.Coordinates]term.Coordinates
+	vhandler   handler.Virtual
+	bar        *component.Scroll
+	folds      map[term.Coordinates]term.Coordinates
+	linesWidth int
+	height     int
+	barWidth   int
+	prevCursor term.Coordinates
 }
 
 func (b *auxBar) Selection() (string, bool) {
@@ -103,8 +122,18 @@ func (b *auxBar) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 }
 
 func (b *auxBar) Draw(w term.Writer) {
+	cursor, _, _ := b.vhandler.Cursor()
+	if b.linesEnabled && cursor.Y != b.prevCursor.Y {
+		b.rebuildBar(w.Context(), cursor)
+	}
 	b.vhandler.Draw(w)
 	b.bar.Draw(w)
+	if b.highlightCursor {
+		y := b.prevCursor.Y
+		for x := range b.barWidth {
+			w.UnionAttributes(term.Coordinates{Y: y, X: x}, bgAttr)
+		}
+	}
 }
 
 func (b *auxBar) Man() tui.Manual {
@@ -112,14 +141,14 @@ func (b *auxBar) Man() tui.Manual {
 }
 
 func (b *auxBar) Handle(ev term.Event) (quit, handled bool) {
-	fold := b.foldsEnabled && ev.Type == term.EventMouse &&
-		ev.MouseX == 0 && ev.Key == term.MouseLeft
+	fold := b.foldsEnabled && ev.Type == term.EventMouse && ev.Key == term.MouseLeft &&
+		ev.MouseX >= b.linesWidth && ev.MouseX < b.linesWidth+2
 	if !fold {
 		return b.vhandler.Handle(ev)
 	}
 
 	posAtWindow := term.Coordinates{Y: ev.MouseY}
-	posAtBar := b.bar.WindowToScrollCoordinates(posAtWindow)
+	posAtBar := b.windowToBarCoordinates(posAtWindow)
 	posAtScroll := b.scroll.WindowToScrollCoordinates(posAtWindow)
 	folded, ok := b.foldAt(posAtBar)
 	b.log(log.TraceLevel, "received mouse click at bar,"+
@@ -139,13 +168,18 @@ func (b *auxBar) Handle(ev term.Event) (quit, handled bool) {
 }
 
 func (b *auxBar) Resize(width, height int) {
-	barWidth := 2
-	if width < 4 {
-		barWidth = 0
+	b.height = height
+	b.setLinesWidth(b.height)
+	b.barWidth = b.linesWidth
+	if b.foldsEnabled {
+		b.barWidth += 2
 	}
-	b.bar.Resize(barWidth, height)
-	b.vhandler.Move(term.Coordinates{X: barWidth})
-	b.vhandler.Resize(width-barWidth, height)
+	if width < 2+b.barWidth {
+		b.barWidth = 0
+	}
+	b.bar.Resize(b.barWidth, height)
+	b.vhandler.Move(term.Coordinates{X: b.barWidth})
+	b.vhandler.Resize(width-b.barWidth, height)
 }
 
 func (b *auxBar) Close() error {
@@ -171,10 +205,41 @@ func (b *auxBar) foldAt(pos term.Coordinates) (folded, ok bool) {
 	return
 }
 
-func (b *auxBar) rebuildBar(ctx context.Context) {
+func (b *auxBar) rebuildBar(ctx context.Context, cursor term.Coordinates) {
+	b.prevCursor = cursor
 	b.bar.Buffer().Reset()
+	if b.linesEnabled && b.absoluteLines {
+		b.rebuildLinesAbsolute()
+	} else if b.linesEnabled {
+		b.rebuildLinesRelative()
+	}
 	if b.foldsEnabled {
 		b.rebuildFolds(ctx)
+	}
+}
+
+func (b *auxBar) rebuildLinesAbsolute() {
+	for y := range b.buf.View().Rows() {
+		// TODO optimize
+		str := strconv.Itoa(y + 1)
+		from := term.Coordinates{Y: y}
+		for _, ch := range str {
+			b.bar.Buffer().InsertWithAttr(from, ch, fgAttr)
+			from.X++
+		}
+	}
+}
+
+func (b *auxBar) rebuildLinesRelative() {
+	cursorAtWindow := b.windowToBarCoordinates(b.prevCursor)
+	for y := range b.buf.View().Rows() {
+		from := term.Coordinates{Y: y}
+		number := strconv.Itoa(int(math.Abs(float64(cursorAtWindow.Y - y))))
+		// TODO optimize
+		for _, ch := range number {
+			b.bar.Buffer().InsertWithAttr(from, ch, fgAttr)
+			from.X++
+		}
 	}
 }
 
@@ -243,10 +308,11 @@ func (b *auxBar) rebuildFolds(ctx context.Context) {
 					icon = visibleFoldIcon
 				}
 				from := foldStart
-				to := foldStart
+				from.X += b.linesWidth
+				to := from
 				to.X++ // replace
 				b.bar.Buffer().Edit(ctx, from, to, "")
-				b.bar.Buffer().InsertWithAttr(from, icon, term.Attributes{Fg: tcell.ColorGray})
+				b.bar.Buffer().InsertWithAttr(from, icon, fgAttr)
 			}
 			if err := folds.Err(); err != nil {
 				b.log(log.ErrorLevel, "error rebuilding auxiliary bar: %v", err)
@@ -257,17 +323,23 @@ func (b *auxBar) rebuildFolds(ctx context.Context) {
 
 func (b *auxBar) OnDidSeek(_, to term.Coordinates) {
 	b.bar.SetOffset(to)
+	if b.linesEnabled {
+		cursor, _, _ := b.vhandler.Cursor()
+		b.rebuildBar(context.Background(), cursor)
+	}
 }
 
 func (b *auxBar) OnWillSeek(_ term.Coordinates) {
 }
 
 func (b *auxBar) OnHide(start, end int) {
-	b.rebuildBar(context.Background())
+	cursor, _, _ := b.vhandler.Cursor()
+	b.rebuildBar(context.Background(), cursor)
 }
 
 func (b *auxBar) OnVisible(start int) {
-	b.rebuildBar(context.Background())
+	cursor, _, _ := b.vhandler.Cursor()
+	b.rebuildBar(context.Background(), cursor)
 }
 
 func (b *auxBar) OnWillEdit(
@@ -278,7 +350,24 @@ func (b *auxBar) OnWillEdit(
 func (b *auxBar) OnDidEdit(
 	ctx context.Context, start, end term.Coordinates, old string,
 ) {
-	b.rebuildBar(ctx)
+	b.setLinesWidth(b.height)
+	cursor, _, _ := b.vhandler.Cursor()
+	b.rebuildBar(ctx, cursor)
+}
+
+func (b *auxBar) setLinesWidth(height int) {
+	if b.linesEnabled && b.absoluteLines {
+		b.linesWidth = len(strconv.Itoa(b.buf.View().Rows())) + 1
+	} else if b.linesEnabled {
+		b.linesWidth = len(strconv.Itoa(height)) + 1
+	} else {
+		b.linesWidth = 0
+	}
+}
+
+func (b *auxBar) windowToBarCoordinates(pos term.Coordinates) term.Coordinates {
+	pos.Y += b.scroll.Offset().Y
+	return pos
 }
 
 func (b *auxBar) SeekUp() bool {

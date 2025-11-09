@@ -31,21 +31,24 @@ import (
 
 // viConfig holds configuration for Vi.
 type viConfig struct {
-	attr                 term.Attributes
-	resAttr              term.Attributes
-	barAttr              term.Attributes
-	clipboard            clipboard.Register
-	scheduleNextTick     func(func()) bool
-	defaultRegister      string
-	superimposedMessages bool
-	debug                bool
-	wrap                 bool
-	cursorCorrections    bool
-	barHidden            bool
-	skipNulls            bool
-	enableInitialFolds   bool
-	enableAuxBar         bool
-	enableAuxBarFolds    bool
+	attr                        term.Attributes
+	resAttr                     term.Attributes
+	barAttr                     term.Attributes
+	clipboard                   clipboard.Register
+	scheduleNextTick            func(func()) bool
+	defaultRegister             string
+	superimposedMessages        bool
+	debug                       bool
+	wrap                        bool
+	cursorCorrections           bool
+	barHidden                   bool
+	skipNulls                   bool
+	enableInitialFolds          bool
+	enableAuxBar                bool
+	enableAuxBarFolds           bool
+	enableAuxBarLines           bool
+	auxBarAbsolute              bool
+	enableAuxBarHighlightCursor bool
 }
 
 // defaultviHandlerImplConfig is a sane configuration defaults for viHandlerImpl.
@@ -89,10 +92,26 @@ func WithAuxiliaryBar(enabled bool) Option {
 	}
 }
 
-// WithAuxiliaryBarFolds determines whether to draw folds at the auxiliary.
+// WithAuxiliaryBarFolds determines whether to draw folds at the auxiliary bar.
 func WithAuxiliaryBarFolds(enabled bool) Option {
 	return func(cfg *viConfig) {
 		cfg.enableAuxBarFolds = enabled
+	}
+}
+
+// WithAuxiliaryBarLines determines whether to draw lines at the auxiliary bar.
+func WithAuxiliaryBarLines(enabled, absolute bool) Option {
+	return func(cfg *viConfig) {
+		cfg.enableAuxBarLines = enabled
+		cfg.auxBarAbsolute = absolute
+	}
+}
+
+// WithAuxiliaryBarHighlightCursor determines whether to highlight cursor
+// at auxiliary bar.
+func WithAuxiliaryBarHighlightCursor(enabled bool) Option {
+	return func(cfg *viConfig) {
+		cfg.enableAuxBarHighlightCursor= enabled
 	}
 }
 
