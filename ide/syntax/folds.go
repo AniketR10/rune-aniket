@@ -84,6 +84,14 @@ type foldsIterator struct {
 	slice   iterator.Iterator[term.Range]
 }
 
+func newFoldsIterator(initial bool, t *Tree, ch chan struct{}) *foldsIterator {
+	return &foldsIterator{
+		tree:    t,
+		ready:   ch,
+		initial: initial,
+	}
+}
+
 func (f *foldsIterator) Next(ctx context.Context) (term.Range, bool) {
 	<-f.ready
 	if f.slice == nil {

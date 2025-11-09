@@ -88,6 +88,11 @@ func WithTree(
 
 	go debug.CapturePanicReport(func() {
 		ret.downloadFiles(ctx)
+		config.ScheduleNextTick(func() {
+			for _, folds := range ret.waitingFolds {
+				close(folds)
+			}
+		})
 	})
 	return ret
 }
@@ -155,7 +160,7 @@ func (t *Tree) Folds() (iterator.Iterator[term.Range], bool) {
 	if !t.ready {
 		ch := make(chan struct{})
 		t.waitingFolds = append(t.waitingFolds, ch)
-		return &foldsIterator{tree: t, ready: ch}, true
+		return newFoldsIterator(false, t, ch), true
 	}
 
 	if t.folds == nil || t.tree == nil {
@@ -178,7 +183,7 @@ func (t *Tree) InitialFolds() (iterator.Iterator[term.Range], bool) {
 	if !t.ready {
 		ch := make(chan struct{})
 		t.waitingFolds = append(t.waitingFolds, ch)
-		return &foldsIterator{initial: true, tree: t, ready: ch}, true
+		return newFoldsIterator(true, t, ch), true
 	}
 
 	if t.folds == nil || t.tree == nil {
@@ -309,9 +314,6 @@ func (t *Tree) downloadFiles(ctx context.Context) {
 	// schedule calls on the next tick iteration
 	if !t.config.ScheduleNextTick(func() {
 		t.initParserFromFiles(ctx, ext, id, allFiles)
-		for _, folds := range t.waitingFolds {
-			close(folds)
-		}
 	}) {
 		t.log(log.ErrorLevel, "could not schedule language %q initialization through event-loop", id)
 		t.notifyNotAvail(ext)

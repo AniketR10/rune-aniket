@@ -25,6 +25,7 @@ package syntaxtest
 
 import (
 	"context"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -135,6 +136,66 @@ func TestTreeFoldsIntegration(t *testing.T) {
 
 		it2, ok := tree.InitialFolds()
 		require.True(t, ok)
+
+		// syntax tree becomes ready
+		mu.Unlock()
+
+		// this should block until initialization is complete
+		actual, err := iterator.ToSlice(context.Background(), it)
+		require.NoError(t, err)
+		assert.Empty(t, actual)
+
+		actual, err = iterator.ToSlice(context.Background(), it2)
+		require.NoError(t, err)
+		assert.Empty(t, actual)
+
+		require.NoError(t, tree.Close())
+		cleanup()
+	})
+
+	t.Run("if file has no extension or no language package, the iterators are eventually empty", func(t *testing.T) {
+		rootPkgs := newInstalledPkgManagerWithFiles(t,
+			"go/tree-sitter.so",
+			"go/highlights.scm",
+			"go/indents.scm",
+			"go/folds.scm",
+		)
+		var mu sync.Mutex
+		libDirIt := iterator.FromFunc(
+			func(ctx context.Context) (string, bool, error) {
+				mu.Lock()
+				defer mu.Unlock()
+				val, ok := rootPkgs.ret.Next(ctx)
+				return val, ok, nil
+			},
+			func() error {
+				return nil
+			},
+		)
+
+		pkgs := &mockPkgManager{ret: libDirIt}
+		ready := func(context.Context) error {
+			return nil
+		}
+		const width, height = 30, 15
+		tmu, comp, cleanup := newTestCase(t, pkgs, width, height, ready)
+
+		// prevent tree from becoming ready, so we can test not ready path
+		mu.Lock()
+
+		tmu.Lock()
+		_, h := newEditFileName(t, comp, "abc", strconv.Itoa(int(rand.Int())))
+
+		cref, ok := h.(interface{ CursorReference() *text.Cursor })
+		tree, ok := cref.CursorReference().View().(*syntax.Tree)
+		require.True(t, ok)
+
+		it, ok := tree.Folds()
+		require.True(t, ok)
+
+		it2, ok := tree.InitialFolds()
+		require.True(t, ok)
+		tmu.Unlock()
 
 		// syntax tree becomes ready
 		mu.Unlock()
@@ -1126,7 +1187,13 @@ func newEditFile(t *testing.T, comp *text.Component, content string) (
 	text.CellEditor, text.Handler,
 ) {
 	i++
-	uri, err := workspaceapi.ParseURI("memory:///" + strconv.Itoa(i) + ".go")
+	return newEditFileName(t, comp, content, strconv.Itoa(i)+".go")
+}
+
+func newEditFileName(t *testing.T, comp *text.Component, content string, filename string) (
+	text.CellEditor, text.Handler,
+) {
+	uri, err := workspaceapi.ParseURI("memory:///" + filename)
 	require.NoError(t, err)
 
 	tab, err := comp.OpenFileTab(uri, false)
