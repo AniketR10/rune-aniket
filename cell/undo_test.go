@@ -178,7 +178,7 @@ func TestUndo(t *testing.T) {
 
 		ok, at = undoer.redo()
 		require.True(t, ok)
-		assert.Equal(t, term.Coordinates{}, at)
+		assert.Equal(t, term.Coordinates{X: 4, Y: 1}, at)
 
 		afterRedo := buf.String()
 		assert.Equal(t, middle, afterRedo)

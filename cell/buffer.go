@@ -79,11 +79,17 @@ func (s safeEditor) Edit(ctx context.Context, start, end term.Coordinates, str s
 	// only check in case of delete range
 	if start != end {
 		var ok bool
-		start, end, ok = fromToInBounds(s.view, start, end)
-		if !ok {
-			from = start
-			to = start
+		s, e, ok := fromToInBounds(s.view, start, end)
+		// if it's replace, proceed with insert
+		if !ok && str == "" {
+			from = s
+			to = s
 			return
+		} else if !ok {
+			end = start
+		} else {
+			start = s
+			end = e
 		}
 	}
 	return s.editor.Edit(ctx, start, end, str)
@@ -133,21 +139,28 @@ func (b *Buffer) InsertContext(ctx context.Context, pos term.Coordinates, r rune
 	return
 }
 
+// EditWithAttr replaces the contents of the buffer within those coordinates
+// replaces it for str and applies the given term.Attributes.
+func (b *Buffer) EditWithAttr(
+	ctx context.Context, start, end term.Coordinates, str string, attr term.Attributes,
+) (from, to term.Coordinates, old string) {
+	from, to, old = b.safew.Edit(ctx, start, end, str)
+	cells, _, _ := b.Select(from, to)
+	for y, row := range cells {
+		for x := range row {
+			cells[y][x].Bg = attr.Bg
+			cells[y][x].Fg = attr.Fg
+			cells[y][x].Attrs = attr.Attrs
+		}
+	}
+	return
+}
+
 // InsertWithAttr writes str and gives it attr term.Attributes.
 func (b *Buffer) InsertWithAttr(
 	pos term.Coordinates, r rune, attr term.Attributes,
 ) (next term.Coordinates) {
-	next = b.Insert(pos, r)
-
-	switch r {
-	case '\n', '\t':
-		return
-	}
-	cells := b.RawCells()
-	cells[pos.Y][pos.X].Bg = attr.Bg
-	cells[pos.Y][pos.X].Fg = attr.Fg
-	cells[pos.Y][pos.X].Attrs = attr.Attrs
-
+	_, next, _ = b.EditWithAttr(context.Background(), pos, pos, string(r), attr)
 	return
 }
 
@@ -156,15 +169,7 @@ func (b *Buffer) InsertWithAttr(
 func (b *Buffer) InsertStringWithAttr(
 	at term.Coordinates, str string, attr term.Attributes,
 ) (from, until term.Coordinates) {
-	from, until = b.InsertString(at, str)
-	cells, _, _ := b.Select(from, until)
-	for y, row := range cells {
-		for x := range row {
-			cells[y][x].Bg = attr.Bg
-			cells[y][x].Fg = attr.Fg
-			cells[y][x].Attrs = attr.Attrs
-		}
-	}
+	from, until, _ = b.EditWithAttr(context.Background(), at, at, str, attr)
 	return
 }
 
