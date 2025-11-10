@@ -291,6 +291,92 @@ func TestAuxBarDrawFolds(t *testing.T) {
 	comptest.TestComponent(t, bar, w, tests)
 }
 
+func TestAuxBarDrawFoldsWithLines(t *testing.T) {
+	buf := cell.NewBuffer()
+	buf.WriteString(copy)
+	fs := &testFoldsService{}
+	fs.view = buf.WithView(fs)
+	scroll := component.NewScroll(buf)
+	h := newtestHandler(scroll)
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	cb := func(fn func()) bool {
+		mu.Lock()
+		defer mu.Unlock()
+		fn()
+		wg.Done()
+		return true
+	}
+
+	wg.Add(1)
+	mu.Lock()
+	bar := text.WithAuxBar(h, buf, scroll,
+		true, true, true, true, cb) /* all enabled */
+	bar.Resize(20, 10)
+	mu.Unlock()
+	w := term.NewStringWriter(20, 10)
+
+	tests := []comptest.TestCase{
+		{Expected: `
+1    package main   
+2                   
+3   import (       
+4        "fmt"      
+5                   
+6        "github.com
+7    )              
+8                   
+9   func main() {  
+10       fmt.Println`,
+		},
+	}
+	wg.Wait()
+	comptest.TestComponent(t, bar, w, tests)
+
+	wg.Add(1)
+	require.True(t, scroll.SeekDown())
+
+	tests = []comptest.TestCase{
+		{Expected: `
+2                   
+3   import (       
+4        "fmt"      
+5                   
+6        "github.com
+7    )              
+8                   
+9   func main() {  
+10       fmt.Println
+11       for i := 0;`,
+		},
+	}
+	wg.Wait()
+	comptest.TestComponent(t, bar, w, tests)
+
+	wg.Add(1)
+	_, handled := bar.Handle(
+		term.Event{Type: term.EventMouse, Key: term.MouseLeft, MouseX: 3, MouseY: 1})
+	require.True(t, handled)
+
+	tests = []comptest.TestCase{
+		{Expected: `
+2                   
+3   import ( [5 lin
+4                   
+5   func main() {  
+6        fmt.Println
+7        for i := 0;
+8            fmt.Pri
+9        }          
+10   }              
+11                  `,
+		},
+	}
+
+	wg.Wait()
+	comptest.TestComponent(t, bar, w, tests)
+}
+
 func BenchmarkAuxBarAbsoluteSmall(b *testing.B) {
 	benchmarkAuxBar(b, 10, 10, true, false)
 }

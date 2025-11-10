@@ -63,7 +63,7 @@ func WithAuxBar(
 	ret.setLinesWidth(10 /* good height for calculating width of lines */)
 
 	b := new(cell.Buffer)
-	b.InitPerformance(1, 1, 2, ' ')
+	b.InitPerformance(1, buf.Rows(), foldsWidth+ret.linesWidth, ' ')
 
 	ret.bar = new(component.Scroll)
 	ret.bar.InitPerformance(b)
@@ -75,6 +75,8 @@ func WithAuxBar(
 	ret.rebuildBar(context.Background(), term.Coordinates{})
 	return ret
 }
+
+const foldsWidth = 2
 
 var (
 	fgAttr = term.Attributes{Fg: tcell.ColorGray}
@@ -142,7 +144,7 @@ func (b *auxBar) Man() tui.Manual {
 
 func (b *auxBar) Handle(ev term.Event) (quit, handled bool) {
 	fold := b.foldsEnabled && ev.Type == term.EventMouse && ev.Key == term.MouseLeft &&
-		ev.MouseX >= b.linesWidth && ev.MouseX < b.linesWidth+2
+		ev.MouseX >= b.linesWidth && ev.MouseX < b.linesWidth+foldsWidth
 	if !fold {
 		return b.vhandler.Handle(ev)
 	}
@@ -172,9 +174,10 @@ func (b *auxBar) Resize(width, height int) {
 	b.setLinesWidth(b.height)
 	b.barWidth = b.linesWidth
 	if b.foldsEnabled {
-		b.barWidth += 2
+		b.barWidth += foldsWidth
 	}
-	if width < 2+b.barWidth {
+	const padding = 2
+	if width < padding+b.barWidth {
 		b.barWidth = 0
 	}
 	b.bar.Resize(b.barWidth, height)
@@ -194,7 +197,7 @@ func (b *auxBar) foldAt(pos term.Coordinates) (folded, ok bool) {
 	if len(cells[pos.Y]) == 0 {
 		return
 	}
-	switch cells[pos.Y][0].Ch {
+	switch cells[pos.Y][b.linesWidth].Ch {
 	case hiddenFoldIcon:
 		ok = true
 		folded = true
@@ -321,7 +324,8 @@ func (b *auxBar) rebuildFolds(ctx context.Context) {
 				from.X += b.linesWidth
 				to := from
 				to.X++ // replace
-				b.bar.Buffer().EditWithAttr(ctx, from, to, string(icon), fgAttr)
+				b.bar.Buffer().Edit(ctx, from, to, "")
+				b.bar.Buffer().InsertWithAttr(from, icon, fgAttr)
 			}
 			if err := folds.Err(); err != nil {
 				b.log(log.ErrorLevel, "error rebuilding auxiliary bar: %v", err)
