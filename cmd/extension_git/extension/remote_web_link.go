@@ -36,20 +36,21 @@ import (
 	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/component/notifications"
+	"unstable.build/go-tui/ide/vctrl"
 )
 
 // extracts protocol, domain, owner and repo name from a git remote URL.
 var gitRemoteRegex = regexp.MustCompile(`^(?:(https)://|(git)\@)([^/:]+)[:/]([^/]+)/([\w-]+)(?:\.git)?$`)
 
 type copyRemoteURL struct {
-	git              gitService
+	git              vctrl.Service
 	clip             clipboard.Register
 	noti             browserapi.Notifications
 	providerResolver providerResolver
 }
 
 func newCopyRemoteURL(
-	git gitService, clip clipboard.Register, noti browserapi.Notifications,
+	git vctrl.Service, clip clipboard.Register, noti browserapi.Notifications,
 ) *copyRemoteURL {
 	ret := new(copyRemoteURL)
 	ret.git = git
@@ -115,12 +116,12 @@ func (r remoteURLParts) ToMap() map[string]string {
 func (c *copyRemoteURL) generate(
 	ctx context.Context, workPath string, remoteName string, line int,
 ) (string, error) {
-	fileRelPath, err := c.git.relPath(ctx, workPath)
+	fileRelPath, err := c.git.RelPath(ctx, workPath)
 	if err != nil {
 		return "", err
 	}
 
-	remoteURL, err := c.git.remoteURL(ctx, workPath, remoteName)
+	remoteURL, err := c.git.RemoteURL(ctx, workPath, remoteName)
 	if err != nil {
 		return "", fmt.Errorf("git remote url: %w", err)
 	}
@@ -133,7 +134,7 @@ func (c *copyRemoteURL) generate(
 		return "", fmt.Errorf("git parse remote url: %w", err)
 	}
 
-	currentCommit, err := c.git.currentCommit(ctx, workPath)
+	currentCommit, err := c.git.CurrentCommit(ctx, workPath)
 	if err != nil {
 		return "", fmt.Errorf("git current commit: %w", err)
 	}

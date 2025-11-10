@@ -26,16 +26,24 @@ package extension
 import (
 	"context"
 	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strconv"
+	"syscall"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"unstable.build/go-tui/api/config"
+	"unstable.build/go-tui/api/schemeapi"
 	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/component/notifications"
+	"unstable.build/go-tui/ide/vctrl"
 	"unstable.build/go-tui/term"
+	"unstable.build/go-tui/workspace"
 )
 
 type notiRecord struct {
@@ -81,7 +89,7 @@ func setupCommandHandler(t *testing.T) (
 	h *copyRemoteURL,
 	reposPath string,
 	fileURI workspaceapi.URI,
-	git *cmdGitService,
+	git vctrl.Service,
 	noti *testNotifications,
 ) {
 	reposPath = setupGitRepos(t)
@@ -340,4 +348,79 @@ func TestExpand(t *testing.T) {
 			assert.Equal(t, tcase.expect, res)
 		})
 	}
+}
+
+type gitTestExecutor struct {
+	schemeExecutor schemeapi.Executor
+}
+
+func (e *gitTestExecutor) Start(ctx context.Context, cmd workspaceapi.Cmd) (workspaceapi.Pid, error) {
+	return e.schemeExecutor.StartCommand(ctx, cmd)
+}
+
+func (e *gitTestExecutor) Signal(pid workspaceapi.Pid, signal syscall.Signal) error {
+	return nil
+}
+
+func (e *gitTestExecutor) Close() error {
+	return nil
+}
+
+func tearDownGitRepos(reposFolderPath string) {
+	os.RemoveAll(reposFolderPath)
+}
+
+func setupGitService(t *testing.T, cwd workspaceapi.URI) vctrl.Service {
+	scheme, err := workspace.NewFileScheme(
+		context.Background(), config.NopConfig(), cwd,
+	)
+	require.NoError(t, err)
+
+	// gitCliExecutor runs git commands on real repos extracted from tarballs
+	gitCliExecutor := new(gitTestExecutor)
+	gitCliExecutor.schemeExecutor = scheme
+
+	return vctrl.NewGitCommand(cwd, gitCliExecutor, scheme)
+}
+
+func setupGitRepos(t *testing.T) (reposPath string) {
+	tmpDir, err := os.MkdirTemp("", "")
+	require.NoError(t, err)
+
+	// make tmpDir a canonical path, since usually on macOS is
+	// `/var/folders/...` but when you get the repo path using the git cli it
+	// returns canonical `/private/var/folders`, so we need to eval symlinks
+	tmpDir, err = filepath.EvalSymlinks(tmpDir)
+	require.NoError(t, err)
+
+	reposTarball := "testdata/repos.tar"
+
+	cmd := exec.Command("tar", "-xf", reposTarball, "-C", tmpDir)
+	err = cmd.Run()
+	require.NoError(t, err)
+
+	reposPath = tmpDir + "/repos"
+
+	// mark all projects under tree as safe so git commands work on CI.
+	// do it only in the case of CI since locally it works and we don't
+	// want to clump our ~/.gitconfig file with many entries to ephemeral
+	// directories, if running locally would fail because of that then
+	// we would do `git config --global --unset safe.directory ...` in
+	// the deferred cleanup step tear down function.
+	if os.Getenv("CI") == "true" {
+		files, err := os.ReadDir(reposPath)
+		require.NoError(t, err)
+		for _, file := range files {
+			if file.IsDir() {
+				cmd = exec.Command(
+					"git", "config", "--global", "--add", "safe.directory",
+					filepath.Join(reposPath, file.Name()),
+				)
+				err = cmd.Run()
+				require.NoError(t, err)
+			}
+		}
+	}
+
+	return
 }

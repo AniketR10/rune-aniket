@@ -53,6 +53,7 @@ import (
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/extension/extutil"
 	"unstable.build/go-tui/handler"
+	"unstable.build/go-tui/ide/vctrl"
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text/textrpc"
@@ -137,7 +138,7 @@ type gitEditorHandler struct {
 		sync.Mutex
 		scroll component.Scroll
 	}
-	git           gitService
+	git           vctrl.Service
 	gitDiffListID string
 	delAttr       term.Attributes
 	addAttr       term.Attributes
@@ -169,7 +170,7 @@ func newGitHandler(
 
 	ret.initializeConfigValues(pconfig)
 
-	ret.git = newCmdGitService(ret.exec, cwd, fs)
+	ret.git = vctrl.NewGitCommand(cwd, ret.exec, fs)
 
 	clip, err := sysclip.NewRegister()
 	if err != nil {
@@ -304,7 +305,6 @@ func (h *gitEditorHandler) initializeConfigValues(pconfig config.Config) {
 func (h *gitEditorHandler) setupCopyRemoteURL(
 	clip clipboard.Register, cwd workspaceapi.URI, fs workspaceapi.FileSystem,
 ) (err error) {
-	h.git = newCmdGitService(h.exec, cwd, fs)
 	h.clip = clip
 	// TODO refactor to use workspace API
 	err = h.ed.(*textrpc.Client).SubscribeCommand(
@@ -417,12 +417,12 @@ func (h *gitEditorHandler) runDiff(ctx context.Context, ev textapi.Event) {
 
 	h.initBar(ev)
 
-	diff, err := h.git.diff(ctx, ev.URI.Path())
+	diff, err := h.git.Diff(ctx, ev.URI.Path())
 	if err != nil {
 		h.resetBar()
 		h.interrupt(ctx)
 	}
-	if errors.Is(err, errDiffNoChanges) {
+	if errors.Is(err, vctrl.ErrDiffNoChanges) {
 		h.log(log.TraceLevel, "reset git bar because no diff changes: %v", err)
 		err = nil
 	} else if err != nil {

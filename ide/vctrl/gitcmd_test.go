@@ -21,7 +21,7 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package extension
+package vctrl
 
 import (
 	"context"
@@ -96,23 +96,6 @@ func setupGitRepos(t *testing.T) (reposPath string) {
 	}
 
 	return
-}
-
-func tearDownGitRepos(reposFolderPath string) {
-	os.RemoveAll(reposFolderPath)
-}
-
-func setupGitService(t *testing.T, cwd workspaceapi.URI) *cmdGitService {
-	scheme, err := workspace.NewFileScheme(
-		context.Background(), config.NopConfig(), cwd,
-	)
-	require.NoError(t, err)
-
-	// gitCliExecutor runs git commands on real repos extracted from tarballs
-	gitCliExecutor := new(gitTestExecutor)
-	gitCliExecutor.schemeExecutor = scheme
-
-	return newCmdGitService(gitCliExecutor, cwd, scheme)
 }
 
 func TestCmdDiff(t *testing.T) {
@@ -252,8 +235,8 @@ func TestCmdDiff(t *testing.T) {
 		t.Run(tcase.name, func(t *testing.T) {
 			testServiceFunction(t,
 				tcase.workspaceCwd,
-				func(git *cmdGitService) (res *diff.FileDiff, err error) {
-					return git.diff(context.Background(), tcase.workPath)
+				func(git Service) (res *diff.FileDiff, err error) {
+					return git.Diff(context.Background(), tcase.workPath)
 				},
 				tcase.expectErr, tcase.assertions)
 		})
@@ -321,8 +304,8 @@ func TestCmdGitCurrentCommit(t *testing.T) {
 		t.Run(tcase.name, func(t *testing.T) {
 			testServiceFunction(t,
 				tcase.workspaceCwd,
-				func(git *cmdGitService) (res string, err error) {
-					return git.currentCommit(context.Background(), tcase.workPath)
+				func(git Service) (res string, err error) {
+					return git.CurrentCommit(context.Background(), tcase.workPath)
 				},
 				tcase.expectErr,
 				func(t *testing.T, res string) {
@@ -383,8 +366,8 @@ func TestCmdGitRemoteURL(t *testing.T) {
 		t.Run(tcase.name, func(t *testing.T) {
 			testServiceFunction(t,
 				tcase.workspaceCwd,
-				func(git *cmdGitService) (res string, err error) {
-					return git.remoteURL(context.Background(), tcase.workPath, tcase.remoteName)
+				func(git Service) (res string, err error) {
+					return git.RemoteURL(context.Background(), tcase.workPath, tcase.remoteName)
 				},
 				tcase.expectErr,
 				func(t *testing.T, res string) {
@@ -474,8 +457,8 @@ func TestCmdRepoPath(t *testing.T) {
 		t.Run(tcase.name, func(t *testing.T) {
 			testServiceFunction(t,
 				tcase.workspaceCwd,
-				func(git *cmdGitService) (res string, err error) {
-					return git.repoPath(context.Background(), tcase.file)
+				func(git Service) (res string, err error) {
+					return git.(*cmdGitService).repoPath(context.Background(), tcase.file)
 				},
 				tcase.expectErr,
 				func(t *testing.T, res string) {
@@ -565,8 +548,8 @@ func TestCmdRelPath(t *testing.T) {
 		t.Run(tcase.name, func(t *testing.T) {
 			testServiceFunction(t,
 				tcase.workspaceCwd,
-				func(git *cmdGitService) (res string, err error) {
-					return git.relPath(context.Background(), tcase.file)
+				func(git Service) (res string, err error) {
+					return git.RelPath(context.Background(), tcase.file)
 				},
 				tcase.expectErr,
 				func(t *testing.T, res string) {
@@ -576,9 +559,26 @@ func TestCmdRelPath(t *testing.T) {
 	}
 }
 
+func tearDownGitRepos(reposFolderPath string) {
+	os.RemoveAll(reposFolderPath)
+}
+
+func setupGitService(t *testing.T, cwd workspaceapi.URI) Service {
+	scheme, err := workspace.NewFileScheme(
+		context.Background(), config.NopConfig(), cwd,
+	)
+	require.NoError(t, err)
+
+	// gitCliExecutor runs git commands on real repos extracted from tarballs
+	gitCliExecutor := new(gitTestExecutor)
+	gitCliExecutor.schemeExecutor = scheme
+
+	return NewGitCommand(cwd, gitCliExecutor, scheme)
+}
+
 func testServiceFunction[T any](
 	t *testing.T, workspaceCwd string,
-	serviceFn func(git *cmdGitService) (res T, err error),
+	serviceFn func(git Service) (res T, err error),
 	expectErr bool,
 	assertions func(t *testing.T, res T),
 ) {

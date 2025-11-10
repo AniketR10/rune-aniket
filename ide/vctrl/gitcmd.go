@@ -21,7 +21,7 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package extension
+package vctrl
 
 import (
 	"bytes"
@@ -36,30 +36,11 @@ import (
 	"unstable.build/go-tui/api/workspaceapi"
 )
 
-var _ gitService = (*cmdGitService)(nil)
-
-// gitService is an interface that wraps methods to perform Git operations.
-type gitService interface {
-	// diff returns the file diff for the given file.
-	diff(ctx context.Context, workPath string) (*diff.FileDiff, error)
-
-	// currentCommit returns the current commit hash.
-	currentCommit(ctx context.Context, workPath string) (string, error)
-
-	// remoteURL returns the remote URL given a remote name.
-	remoteURL(ctx context.Context, workPath string, remoteName string) (string, error)
-
-	// relPath extracts the path relative to the repository.
-	relPath(ctx context.Context, workPath string) (string, error)
-}
-
-type cmdGitService struct {
-	exec workspaceapi.Executor
-	cwd  workspaceapi.URI
-	fs   workspaceapi.FileSystem
-}
-
-func newCmdGitService(exec workspaceapi.Executor, cwd workspaceapi.URI, fs workspaceapi.FileSystem) *cmdGitService {
+// NewGitCommand returns a Service powered by the local git installation,
+// using the local git CLI.
+func NewGitCommand(
+	cwd workspaceapi.URI, exec workspaceapi.Executor, fs workspaceapi.FileSystem,
+) Service {
 	c := new(cmdGitService)
 	c.exec = exec
 	c.cwd = cwd
@@ -67,9 +48,13 @@ func newCmdGitService(exec workspaceapi.Executor, cwd workspaceapi.URI, fs works
 	return c
 }
 
-var (
-	errDiffNoChanges = errors.New("diff no changes")
-)
+var _ Service = (*cmdGitService)(nil)
+
+type cmdGitService struct {
+	exec workspaceapi.Executor
+	cwd  workspaceapi.URI
+	fs   workspaceapi.FileSystem
+}
 
 type gitExecError struct {
 	exit   error
@@ -80,6 +65,94 @@ func (e *gitExecError) Error() string {
 	return fmt.Sprintf(
 		"process exit with non-zero status (%s) %v", e.exit.Error(), e.stderr,
 	)
+}
+
+func (c *cmdGitService) Diff(ctx context.Context, workPath string) (*diff.FileDiff, error) {
+	relFile, err := c.RelPath(ctx, workPath)
+	if err != nil {
+		return nil, fmt.Errorf("rel path: %w", err)
+	}
+
+	repoPath, err := c.repoPath(ctx, workPath)
+	if err != nil {
+		return nil, fmt.Errorf("repo path: %w", err)
+	}
+
+	// reminder: the `relFile` must exist relative to `repoPath` for the `git
+	// diff` to work. It could be `dir1/file1.sh` and `/a/b/c/my-repo`
+	// respectively or `/a/b/c/my-repo/dir` and `file1.sh`. At the moment we
+	// relativize around repo root path, so it's the former.
+	out, err := c.git(ctx, repoPath, []string{"diff", "-U0", "--no-ext-diff", relFile})
+	if err != nil {
+		return nil, fmt.Errorf("git cmd: %w", err)
+	}
+
+	if out == "" {
+		return nil, ErrDiffNoChanges
+	}
+
+	r := diff.NewFileDiffReader(bytes.NewBufferString(out))
+	diff, err := r.Read()
+	if err != nil {
+		return nil, fmt.Errorf("file diff reader: %w", err)
+	}
+	if diff == nil {
+		return nil, errors.New("parse nil diff")
+	}
+
+	return diff, nil
+}
+
+func (c *cmdGitService) CurrentCommit(
+	ctx context.Context, workPath string,
+) (string, error) {
+	_, err := c.RelPath(ctx, workPath)
+	if err != nil {
+		return "", fmt.Errorf("rel path: %w", err)
+	}
+	out, err := c.git(ctx, workPath, []string{"rev-parse", "HEAD"})
+	if err != nil {
+		return "", err
+	}
+	return out, err
+}
+
+func (c *cmdGitService) RemoteURL(
+	ctx context.Context, workDir string, remoteName string,
+) (string, error) {
+	if remoteName == "" {
+		return "", errors.New("must pass remote name")
+	}
+	out, err := c.git(ctx, workDir, []string{"remote", "get-url", remoteName})
+	if err != nil {
+		return "", err
+	}
+	return out, err
+}
+
+func (c *cmdGitService) RelPath(ctx context.Context, workPath string) (
+	relFile string, err error,
+) {
+	repo, err := c.repoPath(ctx, workPath)
+	if err != nil {
+		return relFile, fmt.Errorf("repo path: %w", err)
+	}
+
+	if !filepath.IsAbs(workPath) {
+		workPath = path.Join(c.cwd.Path(), workPath)
+	}
+
+	// process file path since usually on macOS temp folders on
+	// `/var/folders/...` are living really under `/private/var/folders/...`
+	// (the former is symlinked).
+	workPath = filepath.Clean(workPath)
+
+	relFile, err = filepath.Rel(repo, workPath)
+	if err != nil {
+		return relFile, fmt.Errorf("file path rel: %w", err)
+	}
+
+	return relFile, nil
 }
 
 // git executes commands using the Git CLI.
@@ -138,72 +211,6 @@ func (c *cmdGitService) repoPath(ctx context.Context, workPath string) (string, 
 	return p, err
 }
 
-// diff satisfies gitService.
-func (c *cmdGitService) diff(ctx context.Context, workPath string) (*diff.FileDiff, error) {
-	relFile, err := c.relPath(ctx, workPath)
-	if err != nil {
-		return nil, fmt.Errorf("rel path: %w", err)
-	}
-
-	repoPath, err := c.repoPath(ctx, workPath)
-	if err != nil {
-		return nil, fmt.Errorf("repo path: %w", err)
-	}
-
-	// reminder: the `relFile` must exist relative to `repoPath` for the `git
-	// diff` to work. It could be `dir1/file1.sh` and `/a/b/c/my-repo`
-	// respectively or `/a/b/c/my-repo/dir` and `file1.sh`. At the moment we
-	// relativize around repo root path, so it's the former.
-	out, err := c.git(ctx, repoPath, []string{"diff", "-U0", "--no-ext-diff", relFile})
-	if err != nil {
-		return nil, fmt.Errorf("git cmd: %w", err)
-	}
-
-	if out == "" {
-		return nil, errDiffNoChanges
-	}
-
-	r := diff.NewFileDiffReader(bytes.NewBufferString(out))
-	diff, err := r.Read()
-	if err != nil {
-		return nil, fmt.Errorf("file diff reader: %w", err)
-	}
-	if diff == nil {
-		return nil, errors.New("parse nil diff")
-	}
-
-	return diff, nil
-}
-
-// currentCommit satisfies gitService.
-func (c *cmdGitService) currentCommit(
-	ctx context.Context, workPath string,
-) (string, error) {
-	_, err := c.relPath(ctx, workPath)
-	if err != nil {
-		return "", fmt.Errorf("rel path: %w", err)
-	}
-	out, err := c.git(ctx, workPath, []string{"rev-parse", "HEAD"})
-	if err != nil {
-		return "", err
-	}
-	return out, err
-}
-
-// remoteURL satisfies gitService.
-func (c *cmdGitService) remoteURL(
-	ctx context.Context, workDir string, remoteName string,
-) (string, error) {
-	if remoteName == "" {
-		return "", errors.New("must pass remote name")
-	}
-	out, err := c.git(ctx, workDir, []string{"remote", "get-url", remoteName})
-	if err != nil {
-		return "", err
-	}
-	return out, err
-}
-
 // isDir detects if the passed file is a directory or not in the file system.
 func (c *cmdGitService) isDir(file string) (bool, error) {
 	info, err := c.fs.Stat(file)
@@ -211,30 +218,4 @@ func (c *cmdGitService) isDir(file string) (bool, error) {
 		return false, err
 	}
 	return info.IsDir(), err
-}
-
-// relPath satisfies gitService
-func (c *cmdGitService) relPath(ctx context.Context, workPath string) (
-	relFile string, err error,
-) {
-	repo, err := c.repoPath(ctx, workPath)
-	if err != nil {
-		return relFile, fmt.Errorf("repo path: %w", err)
-	}
-
-	if !filepath.IsAbs(workPath) {
-		workPath = path.Join(c.cwd.Path(), workPath)
-	}
-
-	// process file path since usually on macOS temp folders on
-	// `/var/folders/...` are living really under `/private/var/folders/...`
-	// (the former is symlinked).
-	workPath = filepath.Clean(workPath)
-
-	relFile, err = filepath.Rel(repo, workPath)
-	if err != nil {
-		return relFile, fmt.Errorf("file path rel: %w", err)
-	}
-
-	return relFile, nil
 }
