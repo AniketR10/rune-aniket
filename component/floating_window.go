@@ -43,7 +43,7 @@ type floatingNode struct {
 	realOffset            term.Coordinates // calculated offset with alignment
 
 	wm      *WindowManager
-	content Virtual
+	content Virtual[Floating]
 }
 
 func newFloatingNode(
@@ -140,7 +140,7 @@ func (w *floatingNode) SetContentResize(c tui.Component, resize bool) (
 	if f, ok := prev.(prevNodeFloating); ok {
 		prev = f.Component // unwrap
 	}
-	w.content.C = c
+	w.content.C = c.(Floating)
 	if resize {
 		w.updateDesiredDimensions()
 		w.resize()
@@ -170,7 +170,7 @@ func (w *floatingNode) Position() term.Coordinates {
 }
 
 func (w *floatingNode) compDimensions() (int, int) {
-	return w.content.C.(Floating).Dimensions()
+	return w.content.C.Dimensions()
 }
 
 func (w *floatingNode) setWidth(width int) bool {

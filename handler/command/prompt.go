@@ -90,7 +90,7 @@ type Prompt struct {
 
 	inputString atomic.Value
 	mu          sync.Mutex
-	animation   component.Virtual
+	animation   component.Virtual[tui.Component]
 
 	shownWidth            int
 	manualComponent       component.Responsive
@@ -237,7 +237,7 @@ func (h *Prompt) Draw(w term.Writer) {
 			}
 			separator := handler.Nop(&comp)
 			separator.Resize(h.width, separatorHeight)
-			separator.Draw(separatorWriter)
+			separator.Draw(&separatorWriter)
 		}
 
 		if manHeight != 0 {
@@ -249,7 +249,7 @@ func (h *Prompt) Draw(w term.Writer) {
 				Width:  h.width,
 			}
 			h.manualComponent.Resize(h.width, manHeight)
-			h.manualComponent.Draw(manWriter)
+			h.manualComponent.Draw(&manWriter)
 		}
 	}
 

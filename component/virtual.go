@@ -34,15 +34,15 @@ import (
 // provide virtual coordinates and write bound checking.
 // It exposes Move which can be used to move the inner component
 // in the virtual coordinate space.
-type Virtual struct {
-	C             tui.Component
+type Virtual[T tui.Component] struct {
+	C             T
 	pos           term.Coordinates
 	height, width int
 }
 
 // Resize resizes the underlying component and stores size
 // to perform bound checking on Draw.
-func (c *Virtual) Resize(width, height int) {
+func (c *Virtual[T]) Resize(width, height int) {
 	c.width = width
 	c.height = height
 	c.C.Resize(width, height)
@@ -50,38 +50,39 @@ func (c *Virtual) Resize(width, height int) {
 
 // Draw uses a virtual writer to perform bound checking and
 // if successful draw the inner component in the virtual coordinate space.
-func (c *Virtual) Draw(writer term.Writer) {
-	c.C.Draw(VirtualWriter{
+func (c *Virtual[T]) Draw(writer term.Writer) {
+	vw := VirtualWriter{
 		Writer: writer,
 		Offset: c.pos,
 		Height: c.height,
 		Width:  c.width,
-	})
+	}
+	c.C.Draw(&vw)
 }
 
 // Move changes the position of this virtual component
 // in the virtual coordinate space.
-func (c *Virtual) Move(pos term.Coordinates) {
+func (c *Virtual[T]) Move(pos term.Coordinates) {
 	c.pos = pos
 }
 
 // Width returns the width set in last Resize.
-func (c *Virtual) Width() int {
+func (c *Virtual[T]) Width() int {
 	return c.width
 }
 
 // Height returns the height set in last Resize.
-func (c *Virtual) Height() int {
+func (c *Virtual[T]) Height() int {
 	return c.height
 }
 
 // Position returns this virtual component's position
 // in the virtual coordinate space.
-func (c *Virtual) Position() term.Coordinates {
+func (c *Virtual[T]) Position() term.Coordinates {
 	return c.pos
 }
 
-var _ term.Writer = VirtualWriter{}
+var _ term.Writer = (*VirtualWriter)(nil)
 
 // VirtualWriter wraps the given w with a writer that applies an
 // offset and SetCell clipping according to offset, height and width.
@@ -92,7 +93,7 @@ type VirtualWriter struct {
 }
 
 // SetCell satisfies term.Writer.
-func (w VirtualWriter) SetCell(pos term.Coordinates, c term.Cell) {
+func (w *VirtualWriter) SetCell(pos term.Coordinates, c term.Cell) {
 	if pos.X >= w.Width || pos.Y >= w.Height || pos.Y < 0 || pos.X < 0 {
 		return
 	}
@@ -101,7 +102,7 @@ func (w VirtualWriter) SetCell(pos term.Coordinates, c term.Cell) {
 }
 
 // UnionAttributes satisfies term.Writer.
-func (w VirtualWriter) UnionAttributes(pos term.Coordinates, attr term.Attributes) {
+func (w *VirtualWriter) UnionAttributes(pos term.Coordinates, attr term.Attributes) {
 	if pos.X >= w.Width || pos.Y >= w.Height || pos.Y < 0 || pos.X < 0 {
 		return
 	}
@@ -110,6 +111,6 @@ func (w VirtualWriter) UnionAttributes(pos term.Coordinates, attr term.Attribute
 }
 
 // Context satisfies term.Writer.
-func (w VirtualWriter) Context() context.Context {
+func (w *VirtualWriter) Context() context.Context {
 	return w.Writer.Context()
 }

@@ -72,7 +72,7 @@ type Component struct {
 	box          input.Box
 	container    component.Container
 	inputRow     *component.Row
-	inputCol     *component.Virtual
+	inputCol     *component.Virtual[component.Responsive]
 	height       int
 	width        int
 

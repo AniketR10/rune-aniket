@@ -119,7 +119,7 @@ func (c *Component) Init(config Config) {
 	// if tab bar offset is set, the remove frame from tabs
 	// and install via union and no frame unioning.
 	if config.TabBarOffset > 0 {
-		vtabs := &handler.Virtual{Virtual: component.Virtual{C: &c.tabs}}
+		vtabs := &handler.Virtual[*handler.Tabs]{Virtual: component.Virtual[*handler.Tabs]{C: &c.tabs}}
 		vtabs.Move(term.Coordinates{X: config.TabBarOffset})
 		c.tabs.SetBorder(false)
 		c.union.UnionTopFrame(vtabs, c.tabsSize(), false)
@@ -531,7 +531,7 @@ func (c *Component) DrawWindow(target Window, w term.Writer) {
 		Height: height,
 		Width:  width,
 	}
-	c.wm.DrawWindow(target.(*browserWindow).win, vw)
+	c.wm.DrawWindow(target.(*browserWindow).win, &vw)
 }
 
 // ShiftFocus calls the underlying WindowManager.ShiftFocus.

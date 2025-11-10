@@ -114,8 +114,7 @@ type Container struct {
 	cancelCtx func()
 
 	mu    sync.RWMutex
-	list  component.ResponsiveList
-	vlist component.Virtual
+	vlist component.Virtual[*component.ResponsiveList]
 
 	notifications map[string]*notificationTicket
 }
@@ -167,8 +166,7 @@ func (n *Container) Init(inner tui.Component, cfg Config) {
 	}
 	n.inner = inner
 	n.cfg = cfg
-	n.list.Init()
-	n.vlist.C = &n.list
+	n.vlist.C = component.NewResponsiveList()
 	n.ctx, n.cancelCtx = context.WithCancel(context.Background())
 	n.notifications = make(map[string]*notificationTicket)
 }
@@ -232,7 +230,7 @@ func (n *Container) Notify(level Level, msg string) string {
 	// clear out current notification, based on message equality, if it exists
 	if ticket, exists := n.notifications[id]; exists {
 		ticket.cancelCtx()
-		n.list.Remove(&ticket.el)
+		n.vlist.C.Remove(&ticket.el)
 		delete(n.notifications, id)
 	}
 
@@ -241,7 +239,7 @@ func (n *Container) Notify(level Level, msg string) string {
 		ContentAlignment: component.SpanAlignmentTop,
 	})
 	// add a new notification
-	el := n.list.PushFront(comp)
+	el := n.vlist.C.PushFront(comp)
 	n.notifications[id] = &notificationTicket{el: el, cancelCtx: cancel}
 
 	n.startAutoClose(ctx, cancel, el, id)
@@ -350,7 +348,7 @@ func (n *Container) Handle(ev term.Event) (exit, handled bool) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 
-	el, ok := n.list.ElementAt(term.Coordinates{X: ev.MouseX - pos.X, Y: ev.MouseY - pos.Y})
+	el, ok := n.vlist.C.ElementAt(term.Coordinates{X: ev.MouseX - pos.X, Y: ev.MouseY - pos.Y})
 	if !ok {
 		n.resumeAll()
 		return
@@ -377,7 +375,7 @@ func (n *Container) Close() error {
 
 func (n *Container) closeNotification(el component.ListNode) {
 	el.Value().(*component.Span).Content().(*notificationComp).cancel()
-	n.list.Remove(&el)
+	n.vlist.C.Remove(&el)
 }
 
 func (n *Container) pauseNotification(el component.ListNode) {
@@ -424,7 +422,7 @@ func (n *Container) startAutoClose(
 		n.mu.Lock()
 		// no need to ensure that while we were trying to acquire a lock, no one
 		// removed it already as Remove is itempotent. See Go std's list.List.
-		n.list.Remove(&el)
+		n.vlist.C.Remove(&el)
 		delete(n.notifications, id)
 		n.mu.Unlock()
 

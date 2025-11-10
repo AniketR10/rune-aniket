@@ -58,7 +58,7 @@ func DefaultFrameUnionCharSet() (ret FrameUnionCharSet) {
 // The API uses Virtual instead of tui.Component to determine what's the desired
 // height or width.
 type FrameUnion struct {
-	main          Virtual
+	main          Virtual[tui.Component]
 	top, bottom   []*frameVirtual
 	left, right   []*frameVirtual
 	height, width int
@@ -103,7 +103,7 @@ func (u *FrameUnion) UnionTopFrame(top tui.Component, height int, frame bool) {
 		panic("invalid componen.Virtual")
 	}
 	u.top = append(u.top, &frameVirtual{
-		Virtual: Virtual{C: top},
+		Virtual: Virtual[tui.Component]{C: top},
 		size:    height,
 		frame:   frame,
 	})
@@ -125,7 +125,7 @@ func (u *FrameUnion) UnionBottomFrame(bottom tui.Component, height int, frame bo
 		panic("invalid componen.Virtual")
 	}
 	head := []*frameVirtual{{
-		Virtual: Virtual{C: bottom},
+		Virtual: Virtual[tui.Component]{C: bottom},
 		size:    height,
 		frame:   frame,
 	}}
@@ -148,7 +148,7 @@ func (u *FrameUnion) UnionLeftFrame(left tui.Component, width int, frame bool) {
 		panic("invalid componen.Virtual")
 	}
 	u.left = append(u.left, &frameVirtual{
-		Virtual: Virtual{C: left},
+		Virtual: Virtual[tui.Component]{C: left},
 		size:    width,
 		frame:   frame,
 	})
@@ -170,7 +170,7 @@ func (u *FrameUnion) UnionRightFrame(right tui.Component, width int, frame bool)
 		panic("invalid componen.Virtual")
 	}
 	head := []*frameVirtual{{
-		Virtual: Virtual{C: right},
+		Virtual: Virtual[tui.Component]{C: right},
 		frame:   frame,
 		size:    width,
 	}}
@@ -179,7 +179,7 @@ func (u *FrameUnion) UnionRightFrame(right tui.Component, width int, frame bool)
 }
 
 // ComponentAt returns the component at pos or false if there's no component at pos.
-func (u *FrameUnion) ComponentAt(pos term.Coordinates) (Virtual, bool) {
+func (u *FrameUnion) ComponentAt(pos term.Coordinates) (Virtual[tui.Component], bool) {
 	frameVirtualMain := frameVirtual{Virtual: u.main}
 	main := [1]*frameVirtual{&frameVirtualMain}
 	c, ok := u.componentAt(main[:], pos)
@@ -253,7 +253,7 @@ func (u *FrameUnion) Draw(w term.Writer) {
 
 type frameVirtual struct {
 	size int
-	Virtual
+	Virtual[tui.Component]
 	frame bool
 }
 
@@ -340,7 +340,7 @@ func (u *FrameUnion) setVerticalUnionFrameCells(
 
 func (u *FrameUnion) componentAt(
 	components []*frameVirtual, pos term.Coordinates,
-) (Virtual, bool) {
+) (Virtual[tui.Component], bool) {
 	for _, t := range components {
 		tpos := t.Position()
 		twidth := t.Width()
@@ -349,7 +349,7 @@ func (u *FrameUnion) componentAt(
 			return t.Virtual, true
 		}
 	}
-	return Virtual{}, false
+	return Virtual[tui.Component]{}, false
 }
 
 func (u *FrameUnion) setHorizontalUnionFrameCells(

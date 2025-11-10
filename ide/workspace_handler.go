@@ -953,7 +953,7 @@ func (h *workspaceManagerHandler) initTabs(
 	h.bar.SetNameSeparator(cfg.tabNameSeparator())
 	var bar tui.Handler = &h.bar
 	if workspacesBarOffset != 0 {
-		v := new(handler.Virtual)
+		v := new(handler.Virtual[*handler.Tabs])
 		v.C = &h.bar
 		v.Move(term.Coordinates{X: workspacesBarOffset})
 		bar = v

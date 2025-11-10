@@ -223,7 +223,7 @@ type Frame struct {
 	ScrollBarAttributes term.Attributes
 	ScrollBarChar       rune
 
-	content         Virtual
+	content         Virtual[tui.Component]
 	bwidth, bheight int
 	width, height   int
 }

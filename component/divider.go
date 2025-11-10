@@ -26,6 +26,7 @@ package component
 import (
 	"strings"
 
+	"unstable.build/go-tui"
 	"unstable.build/go-tui/term"
 )
 
@@ -38,7 +39,7 @@ func Divider(perc float64, cfg StringConfig) Responsive {
 type divider struct {
 	perc float64
 	cfg  StringConfig
-	comp Virtual
+	comp Virtual[tui.Component]
 }
 
 func (d *divider) Resize(width, height int) {

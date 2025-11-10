@@ -54,7 +54,7 @@ type List struct {
 
 	searchBar struct {
 		component.Responsive
-		component.Virtual
+		component.Virtual[component.Responsive]
 		minInputHeight int
 
 		syncBuffer *cell.Buffer
@@ -68,7 +68,7 @@ type List struct {
 
 	matchCountBar matchCounter
 	list          struct {
-		component.Virtual
+		component.Virtual[*component.FocusList]
 		component.FocusList
 	}
 }
@@ -715,7 +715,7 @@ type matchCounter struct {
 	width int
 	cell.Buffer
 	component.Scroll
-	component.Virtual
+	component.Virtual[*component.Scroll]
 }
 
 func (b *matchCounter) init() {

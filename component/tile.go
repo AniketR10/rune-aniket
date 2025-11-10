@@ -49,7 +49,7 @@ type TileNode struct {
 	tree          *TileTree
 	width, height int
 	content       tui.Component
-	children      []*Virtual
+	children      []*Virtual[*TileNode]
 	childSplit    splitDir
 	parent        *TileNode
 	fixedSize     int
@@ -60,7 +60,7 @@ type TileNode struct {
 func (t *TileTree) Init(content tui.Component) (n *TileNode) {
 	n = new(TileNode)
 	t.root.childSplit = vertical
-	t.root.children = []*Virtual{{C: n}}
+	t.root.children = []*Virtual[*TileNode]{{C: n}}
 	t.root.tree = t
 	n.initNode(content, &t.root)
 	return
@@ -91,7 +91,7 @@ func (t *TileTree) DrawTile(node *TileNode, w term.Writer) {
 
 func (t *TileNode) initNode(content tui.Component, parent *TileNode) {
 	t.content = content
-	t.children = []*Virtual{}
+	t.children = []*Virtual[*TileNode]{}
 	t.parent = parent
 	t.tree = parent.tree
 }
@@ -154,7 +154,7 @@ func (t *TileNode) drawTile(node *TileNode, w term.Writer) bool {
 		// call drawTile and use Virtual's position, width, height
 		// to emulate Virtual.Draw via VirtualWriter
 		vwriter := VirtualWriter{w, ti.Position(), ti.Height(), ti.Width()}
-		if ok := ti.C.(*TileNode).drawTile(node, vwriter); ok {
+		if ok := ti.C.drawTile(node, &vwriter); ok {
 			return true
 		}
 	}
@@ -179,7 +179,7 @@ func (t *TileNode) addChildAtIdx(
 			idx, len(t.children)))
 	}
 
-	v := &Virtual{C: child}
+	v := &Virtual[*TileNode]{C: child}
 
 	// transfer content to child at index 0 but do it in a way such that it
 	// maintains mapping of content to TileNode.
@@ -190,10 +190,10 @@ func (t *TileNode) addChildAtIdx(
 		proxyNode.initNode(nil, t.parent)
 		proxyNode.childSplit = direction
 		proxyNode.fixedSize = t.fixedSize
-		proxyNode.children = append(proxyNode.children, &Virtual{C: t}, v)
+		proxyNode.children = append(proxyNode.children, &Virtual[*TileNode]{C: t}, v)
 
 		idx := t.parent.childIdx(t)
-		t.parent.children[idx] = &Virtual{C: proxyNode}
+		t.parent.children[idx] = &Virtual[*TileNode]{C: proxyNode}
 
 		child.initNode(content, proxyNode)
 		t.initNode(t.content, proxyNode)
@@ -254,8 +254,8 @@ func removeChild(parent, child *TileNode) {
 		idx := proxyNode.parent.childIdx(proxyNode)
 		proxyNode.parent.children[idx] = lastNode
 
-		lastNode.C.(*TileNode).parent = proxyNode.parent
-		lastNode.C.(*TileNode).fixedSize = 0
+		lastNode.C.parent = proxyNode.parent
+		lastNode.C.fixedSize = 0
 
 		proxyNode.parent.Resize(proxyNode.parent.width, proxyNode.parent.height)
 
@@ -315,7 +315,7 @@ func (t *TileTree) SplitHorizontal(
 // leftMostChild will return the left-most tile in the node
 // if node's split is horizontal, or the top-most tile if the node's split is vertical
 func (t *TileNode) leftMostChild() *TileNode {
-	node := t.children[0].C.(*TileNode)
+	node := t.children[0].C
 	if len(node.children) == 0 {
 		return node
 	}
@@ -326,7 +326,7 @@ func (t *TileNode) leftMostChild() *TileNode {
 // rightMostChild will return the right-most tile in the node
 // if node's split is horizontal, or the bottom-most tile if the node's split is vertical
 func (t *TileNode) rightMostChild() *TileNode {
-	node := t.children[len(t.children)-1].C.(*TileNode)
+	node := t.children[len(t.children)-1].C
 	if len(node.children) == 0 {
 		return node
 	}
@@ -352,7 +352,7 @@ func tileLeftDir(node *TileNode, direction splitDir) *TileNode {
 		return tileLeftDir(parent, direction)
 	}
 
-	link := parent.children[i-1].C.(*TileNode)
+	link := parent.children[i-1].C
 	if len(link.children) == 0 {
 		return link
 	}
@@ -369,7 +369,7 @@ func tileRightDir(node *TileNode, direction splitDir) *TileNode {
 		return tileRightDir(parent, direction)
 	}
 
-	link := parent.children[i+1].C.(*TileNode)
+	link := parent.children[i+1].C
 	if len(link.children) == 0 {
 		return link
 	}
@@ -408,7 +408,7 @@ func (t *TileNode) Size() (size int) {
 	}
 
 	for _, c := range t.children {
-		size += c.C.(*TileNode).Size()
+		size += c.C.Size()
 	}
 
 	return
@@ -439,7 +439,7 @@ func (t *TileNode) tileAt(tileOffset, pos term.Coordinates) *TileNode {
 			childPos.X += tileOffset.X
 			childPos.Y += tileOffset.Y
 			if pos.X >= childPos.X && pos.X < childPos.X+child.Width() {
-				return child.C.(*TileNode).tileAt(childPos, pos)
+				return child.C.tileAt(childPos, pos)
 			}
 		}
 	case horizontal:
@@ -448,7 +448,7 @@ func (t *TileNode) tileAt(tileOffset, pos term.Coordinates) *TileNode {
 			childPos.X += tileOffset.X
 			childPos.Y += tileOffset.Y
 			if pos.Y >= childPos.Y && pos.Y < childPos.Y+child.Height() {
-				return child.C.(*TileNode).tileAt(childPos, pos)
+				return child.C.tileAt(childPos, pos)
 			}
 		}
 	}
@@ -473,7 +473,7 @@ func (t *TileNode) tilePosition(child *TileNode, currOffset term.Coordinates) (
 			return
 		}
 
-		offset, ok = c.C.(*TileNode).tilePosition(child, offset)
+		offset, ok = c.C.tilePosition(child, offset)
 		if ok {
 			return
 		}
@@ -616,7 +616,7 @@ func (t *TileNode) iterate(op func(*TileNode)) {
 	}
 
 	for _, ti := range t.children {
-		ti.C.(*TileNode).iterate(op)
+		ti.C.iterate(op)
 	}
 }
 
@@ -632,7 +632,7 @@ func (t *TileNode) Closed() bool {
 
 func (t *TileNode) fixedSizeNodes() (totalFixedSize, fixedSizeNodes int) {
 	for _, ti := range t.children {
-		fixedSize := ti.C.(*TileNode).fixedSize
+		fixedSize := ti.C.fixedSize
 		if fixedSize != 0 {
 			totalFixedSize += fixedSize
 			fixedSizeNodes++
@@ -652,7 +652,7 @@ func (t *TileNode) resizeHorizontal(width, height int) {
 
 	var offset int
 	for i, ti := range t.children {
-		fixedSize := ti.C.(*TileNode).fixedSize
+		fixedSize := ti.C.fixedSize
 		ti.Move(term.Coordinates{Y: offset})
 		if fixedSize != 0 {
 			ti.Resize(width, fixedSize)
@@ -679,7 +679,7 @@ func (t *TileNode) resizeVertical(width, height int) {
 
 	var offset int
 	for i, ti := range t.children {
-		fixedSize := ti.C.(*TileNode).fixedSize
+		fixedSize := ti.C.fixedSize
 		ti.Move(term.Coordinates{X: offset})
 		if fixedSize != 0 {
 			ti.Resize(fixedSize, height)
@@ -705,6 +705,6 @@ func (t *TileNode) canSetFixedSize(avail, fixedSize int) bool {
 
 func (t *TileNode) resetFixedSizes() {
 	for _, c := range t.children {
-		c.C.(*TileNode).fixedSize = 0
+		c.C.fixedSize = 0
 	}
 }

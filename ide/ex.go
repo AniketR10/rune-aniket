@@ -99,8 +99,7 @@ type ex struct {
 	syncCommandPrompt    bool
 	// use floating windows functionality without having to work around focus commands
 	// and how to se cmd.Window correctly.
-	cmdBrowser       browser.Component
-	cmdV             handler.Virtual
+	cmdV             handler.Virtual[*browser.Component]
 	cmdWin           browser.Window
 	fullscreenID     uint64
 	exit             bool
@@ -266,8 +265,7 @@ func (e *ex) doInit(
 
 	e.ed = ed
 	e.cleanPartialReissueState()
-	e.cmdBrowser.Init(e.config.Config)
-	e.cmdV.C = &e.cmdBrowser
+	e.cmdV.C = browser.NewComponent(e.config.Config)
 	return
 }
 
@@ -1423,7 +1421,7 @@ func (e *ex) openCommandPrompt() {
 	)
 	e.resetCommandList(cmd)
 
-	e.cmdWin = e.cmdBrowser.Floating(commandHandler,
+	e.cmdWin = e.cmdV.C.Floating(commandHandler,
 		component.FloatingConfig{
 			Offset:    term.Coordinates{Y: int(float64(e.height) * 0.2)},
 			Alignment: component.SpanAlignmentHorizontallyCentered,
@@ -1525,7 +1523,7 @@ func (e *ex) Draw(w term.Writer) {
 			Height: e.cmdV.Height(),
 			Width:  e.cmdV.Width(),
 		}
-		e.cmdBrowser.DrawWindow(e.cmdWin, vw)
+		e.cmdV.C.DrawWindow(e.cmdWin, &vw)
 	} else {
 		e.comp.Draw(w)
 	}

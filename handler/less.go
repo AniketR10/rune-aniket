@@ -66,11 +66,9 @@ func DefaultLessConfig() LessConfig {
 // the Handler and Component interfaces.
 type Less struct {
 	scroll            *component.Scroll
-	searchScroll      component.Scroll
-	searchScrollVirt  component.Virtual
+	searchScrollVirt  component.Virtual[*component.Scroll]
 	msgStr            string
-	msg               component.Responsive
-	msgVirt           component.Virtual
+	msgVirt           component.Virtual[*component.ResponsiveString]
 	mode              LessMode
 	moveMode          LessMoveMode
 	usedMsgBarAttr    term.Attributes
@@ -149,13 +147,13 @@ func (l *Less) InitWithScroll(scroll *component.Scroll, cfg LessConfig) {
 // SetNormalMode sets the mode to normal.
 func (l *Less) SetNormalMode() {
 	l.cursorOffset = 1
-	l.searchScroll.Buffer().Reset()
+	l.searchScrollVirt.C.Buffer().Reset()
 	l.mode = LessNormalMode
 }
 
 // SetSearchMode sets the mode to search mode.
 func (l *Less) SetSearchMode(moveMode LessMoveMode) {
-	buf := l.searchScroll.Buffer()
+	buf := l.searchScrollVirt.C.Buffer()
 	buf.Reset()
 
 	switch moveMode {
@@ -177,7 +175,7 @@ func (l *Less) SetSearchMode(moveMode LessMoveMode) {
 
 // SearchText returns the contents of the search buffer.
 func (l *Less) SearchText() string {
-	str := l.searchScroll.Buffer().String()
+	str := l.searchScrollVirt.C.Buffer().String()
 	bytes := []byte(str)[1:]
 	return string(bytes)
 }
@@ -341,7 +339,7 @@ func (l *Less) searchHandleEvent(ev term.Event) (bool, bool) {
 	case term.KeyBackspace:
 		if l.cursorOffset > 1 {
 			l.cursorOffset--
-			l.searchScroll.Buffer().
+			l.searchScrollVirt.C.Buffer().
 				DeleteCell(term.Coordinates{X: l.cursorOffset, Y: 0})
 			_, cmdBarHeight := l.cmdBarHeight()
 			l.resizeSearchScroll(cmdBarHeight)
@@ -367,7 +365,7 @@ func (l *Less) searchHandleEvent(ev term.Event) (bool, bool) {
 
 	default:
 		l.cursorOffset++
-		l.searchScroll.Buffer().WriteString(string(ev.Ch))
+		l.searchScrollVirt.C.Buffer().WriteString(string(ev.Ch))
 		_, cmdBarHeight := l.cmdBarHeight()
 		l.resizeSearchScroll(cmdBarHeight)
 	}
@@ -380,7 +378,7 @@ func (l *Less) searchHandleEvent(ev term.Event) (bool, bool) {
 
 func (l *Less) updateSearchBarAttr() {
 	l.usedSearchBarAttr = l.scroll.Attributes
-	l.searchScroll.Attributes = l.usedSearchBarAttr
+	l.searchScrollVirt.C.Attributes = l.usedSearchBarAttr
 }
 
 func (l *Less) normalHandleEvent(ev term.Event) (exit, handled bool) {
@@ -457,13 +455,12 @@ func (l *Less) setMessage(msg string) bool {
 			BackgroundAttributes: attr,
 		},
 	})
-	shouldResize := l.msg == nil ||
-		l.msg.Height(l.width) != newMsg.Height(l.width) ||
+	shouldResize := l.msgVirt.C == nil ||
+		l.msgVirt.C.Height(l.width) != newMsg.Height(l.width) ||
 		l.usedMsgBarAttr != attr
 
 	l.usedMsgBarAttr = attr
-	l.msg = newMsg
-	l.msgVirt.C = l.msg
+	l.msgVirt.C = newMsg
 	l.msgStr = msg
 	return shouldResize
 }
@@ -474,7 +471,7 @@ func (l *Less) cmdBarHeight() (cmdBarWidth, cmdBarHeight int) {
 		if l.config.SuperimposeMessage {
 			cmdBarWidth = int(math.Min(float64(l.width), float64(len(l.msgStr))))
 		}
-		cmdBarHeight = l.msg.Height(cmdBarWidth)
+		cmdBarHeight = l.msgVirt.C.Height(cmdBarWidth)
 		if l.height <= cmdBarHeight {
 			cmdBarHeight = 1
 		}
@@ -522,14 +519,13 @@ func (l *Less) initWithBuffer(buf *cell.Buffer, cfg LessConfig) {
 	}
 
 	l.config = cfg
-	l.searchScroll.Init(cell.NewBuffer())
-	l.searchScrollVirt.C = &l.searchScroll
+	l.searchScrollVirt.C = component.NewScroll(cell.NewBuffer())
 
 	// initialize message comps
 	l.setMessage("")
 
 	searchBarAttr := l.config.BarAttr
-	l.setupScroll(&l.searchScroll, searchBarAttr)
+	l.setupScroll(l.searchScrollVirt.C, searchBarAttr)
 	l.setupScroll(l.scroll, l.config.Attributes)
 	if l.config.SuperimposeMessage {
 		l.updateSearchBarAttr()

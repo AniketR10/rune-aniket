@@ -24,6 +24,7 @@
 package component
 
 import (
+	"unstable.build/go-tui"
 	"unstable.build/go-tui/term"
 )
 
@@ -47,12 +48,12 @@ type Row struct {
 	content       []*rowComp
 	height, width int
 	dirty         bool
-	Virtual
+	Virtual[tui.Component]
 }
 
 type rowComp struct {
 	cols int
-	*Virtual
+	*Virtual[Responsive]
 }
 
 // NewRow allocates storage for a new Row and initializes it.
@@ -63,8 +64,8 @@ func NewRow() *Row {
 
 // AddComponent adds a component to this Row with the given columns
 // over MaxCols as the pre-defined width.
-func (r *Row) AddComponent(c Responsive, cols int) *Virtual {
-	virt := new(Virtual)
+func (r *Row) AddComponent(c Responsive, cols int) *Virtual[Responsive] {
+	virt := new(Virtual[Responsive])
 	virt.C = c
 	r.content = append(r.content, &rowComp{
 		cols:    cols,
@@ -81,9 +82,9 @@ func (r *Row) Draw(w term.Writer) {
 	}
 
 	// use Virtual position, set by Container
-	w = VirtualWriter{w, r.Position(), r.height, r.width}
+	vw := VirtualWriter{w, r.Position(), r.height, r.width}
 	for _, comp := range r.content {
-		comp.Virtual.Draw(w)
+		comp.Virtual.Draw(&vw)
 	}
 }
 
@@ -113,7 +114,7 @@ func (r *Row) Height(width int) (ret int) {
 	colWidth := rowColWidth(width)
 	for _, content := range r.content {
 		compWidth := rowCompWidth(colWidth, content)
-		height := content.Virtual.C.(Responsive).Height(compWidth)
+		height := content.Virtual.C.Height(compWidth)
 		if height > ret {
 			ret = height
 		}

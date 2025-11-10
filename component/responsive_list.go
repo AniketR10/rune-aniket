@@ -194,7 +194,7 @@ func (l *ResponsiveList) Resize(width, height int) {
 
 	l.list.width, l.list.height = width, height
 	for el, ok := l.list.Front(); ok; el, ok = el.Next() {
-		comp := el.el.Value.(*Virtual)
+		comp := el.el.Value.(*Virtual[tui.Component])
 		height := comp.C.(Responsive).Height(l.list.width)
 		comp.Resize(l.list.width, height)
 	}
@@ -303,7 +303,7 @@ func (l *ResponsiveList) calculateTotalHeight() {
 	l.totalHeight = 0
 
 	for el, ok := l.list.Front(); ok; el, ok = el.Next() {
-		comp := el.el.Value.(*Virtual)
+		comp := el.el.Value.(*Virtual[tui.Component])
 		l.totalHeight += comp.C.(Responsive).Height(l.list.width)
 	}
 }
@@ -322,7 +322,7 @@ func (l *ResponsiveList) doDraw(w term.Writer, pos term.Coordinates) {
 	// elements could be partially drawn outside bounds
 	w = term.BoundsCheckWriter(l.list.width, l.list.height, w)
 	for el, ok := l.list.Front(); ok; el, ok = el.Next() {
-		comp := el.el.Value.(*Virtual)
+		comp := el.el.Value.(*Virtual[tui.Component])
 		height := comp.C.(Responsive).Height(l.list.width)
 		nextY := pos.Y + height
 		if nextY < 0 {
@@ -350,7 +350,7 @@ func (l *ResponsiveList) elementAtBottom(target term.Coordinates) (ListNode, boo
 
 func (l *ResponsiveList) doElementAt(pos, target term.Coordinates) (ListNode, bool) {
 	for el, ok := l.list.Front(); ok; el, ok = el.Next() {
-		comp := el.el.Value.(*Virtual)
+		comp := el.el.Value.(*Virtual[tui.Component])
 		height := comp.C.(Responsive).Height(l.list.width)
 		pos.Y += height
 		if pos.Y > target.Y {

@@ -44,7 +44,7 @@ func (g *grid) Resize(width, height int) {
 }
 
 func (g *grid) Draw(w term.Writer) {
-	var v Virtual
+	var v Virtual[tui.Component]
 
 	if len(g.matrix) == 0 {
 		return

@@ -75,7 +75,7 @@ type SpanConfig struct {
 // Span is a component that takes another component and handles padding and
 // alignment.
 type Span struct {
-	content       Virtual
+	content       Virtual[tui.Component]
 	width, height int
 	cfg           SpanConfig
 }
@@ -128,7 +128,7 @@ func calculateContentOffset(
 }
 
 func alignContent(
-	content *Virtual,
+	content *Virtual[tui.Component],
 	width, height int,
 	horizontalPadding, verticalPadding int,
 	flags Alignment) {

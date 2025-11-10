@@ -30,23 +30,23 @@ import (
 )
 
 // Virtual wraps another tui.Handler to provide cursor event coordinates.
-type Virtual struct {
-	component.Virtual
+type Virtual[T tui.Handler] struct {
+	component.Virtual[T]
 }
 
 // Handle satisfies tui.Handler.
-func (v *Virtual) Handle(ev term.Event) (bool, bool) {
+func (v *Virtual[T]) Handle(ev term.Event) (bool, bool) {
 	if ev.Type == term.EventMouse {
 		offset := v.Position()
 		ev.MouseX -= offset.X
 		ev.MouseY -= offset.Y
 	}
-	return v.C.(tui.Handler).Handle(ev)
+	return v.C.Handle(ev)
 }
 
 // Cursor satisfies tui.Handler.
-func (v *Virtual) Cursor() (pos term.Coordinates, style term.CursorStyle, show bool) {
-	pos, style, show = v.C.(tui.Handler).Cursor()
+func (v *Virtual[T]) Cursor() (pos term.Coordinates, style term.CursorStyle, show bool) {
+	pos, style, show = v.C.Cursor()
 	offset := v.Position()
 	pos.X += offset.X
 	pos.Y += offset.Y
@@ -54,11 +54,11 @@ func (v *Virtual) Cursor() (pos term.Coordinates, style term.CursorStyle, show b
 }
 
 // Selection satisfies tui.Handler.
-func (v *Virtual) Selection() (string, bool) {
-	return v.C.(tui.Handler).Selection()
+func (v *Virtual[T]) Selection() (string, bool) {
+	return v.C.Selection()
 }
 
 // Man satisfies tui.Handler.
-func (v *Virtual) Man() tui.Manual {
-	return v.C.(tui.Handler).Man()
+func (v *Virtual[T]) Man() tui.Manual {
+	return v.C.Man()
 }

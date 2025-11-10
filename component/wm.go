@@ -91,12 +91,12 @@ func (wm *WindowManager) DrawWindow(win Window, w term.Writer) {
 
 	f, ok := win.node.(*floatingNode)
 	if !ok {
-		wm.tree.DrawTile(win.node.(*TileNode), nonMinimizedW)
+		wm.tree.DrawTile(win.node.(*TileNode), &nonMinimizedW)
 		return
 	}
 
 	if f.minimized == 0 {
-		f.Draw(nonMinimizedW)
+		f.Draw(&nonMinimizedW)
 		return
 	}
 
@@ -433,13 +433,13 @@ func (wm *WindowManager) calculateMinimizedOffsets() {
 func (wm *WindowManager) drawMinimizedContent(
 	w term.Writer, f *floatingNode, at term.Coordinates,
 ) {
-	w = VirtualWriter{
+	vw := VirtualWriter{
 		Writer: w,
 		Offset: at,
 		Height: wm.height,
 		Width:  wm.width,
 	}
-	f.Content().Draw(w)
+	f.Content().Draw(&vw)
 }
 
 func (wm *WindowManager) drawMinimizedTop(

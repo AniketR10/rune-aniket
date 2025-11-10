@@ -104,7 +104,7 @@ type auxBar struct {
 	scroll *component.Scroll
 	editor Handler
 
-	vhandler   handler.Virtual
+	vhandler   handler.Virtual[Handler]
 	bar        *component.Scroll
 	folds      map[term.Coordinates]term.Coordinates
 	linesWidth int
@@ -183,7 +183,7 @@ func (b *auxBar) Resize(width, height int) {
 }
 
 func (b *auxBar) Close() error {
-	return b.vhandler.C.(Handler).Close()
+	return b.vhandler.C.Close()
 }
 
 func (b *auxBar) foldAt(pos term.Coordinates) (folded, ok bool) {

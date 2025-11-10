@@ -228,7 +228,7 @@ func (l *List) Resize(width, height int) {
 	l.width, l.height = width, height
 	lastVisible := l.height/l.elementHeight + l.offset.value
 	for i, el := l.offset.value, l.offset.head.el; i < lastVisible && el != nil; el, i = el.Next(), i+1 {
-		comp := el.Value.(*Virtual)
+		comp := el.Value.(*Virtual[tui.Component])
 		comp.Resize(l.width, l.elementHeight)
 		ypos := (i - l.offset.value) * l.elementHeight
 		comp.Move(term.Coordinates{X: 0, Y: ypos})
@@ -244,7 +244,7 @@ func (l *List) Draw(w term.Writer) {
 
 	lastVisible := l.height/l.elementHeight + l.offset.value
 	for i, el := l.offset.value, l.offset.head.el; i < lastVisible && el != nil; i, el = i+1, el.Next() {
-		el.Value.(*Virtual).Draw(w)
+		el.Value.(*Virtual[tui.Component]).Draw(w)
 	}
 }
 
@@ -306,7 +306,7 @@ func (l *List) InsertAfter(c tui.Component, mark ListNode) ListNode {
 	if mark.l != l {
 		panic("node to insert not belonging to this list")
 	}
-	v := &Virtual{C: c}
+	v := &Virtual[tui.Component]{C: c}
 	l.dirty = true
 	l.fixOffsetAdd(mark)
 	return l.listNode(l.list.InsertAfter(v, mark.el))
@@ -319,7 +319,7 @@ func (l *List) InsertBefore(c tui.Component, mark ListNode) ListNode {
 	if mark.l != l {
 		panic("node to insert not belonging to this list")
 	}
-	v := &Virtual{C: c}
+	v := &Virtual[tui.Component]{C: c}
 	l.dirty = true
 	l.fixOffsetAdd(mark)
 	return l.listNode(l.list.InsertBefore(v, mark.el))
@@ -328,7 +328,7 @@ func (l *List) InsertBefore(c tui.Component, mark ListNode) ListNode {
 // PushBack inserts a new element c at the back of list l and
 // returns the linked node.
 func (l *List) PushBack(c tui.Component) ListNode {
-	v := &Virtual{C: c}
+	v := &Virtual[tui.Component]{C: c}
 	l.dirty = true
 	ret := l.listNode(l.list.PushBack(v))
 	if l.Len() == 1 {
@@ -341,7 +341,7 @@ func (l *List) PushBack(c tui.Component) ListNode {
 // PushFront inserts a new element c at the front of list l and
 // returns the linked node.
 func (l *List) PushFront(c tui.Component) ListNode {
-	v := &Virtual{C: c}
+	v := &Virtual[tui.Component]{C: c}
 	l.dirty = true
 	ret := l.listNode(l.list.PushFront(v))
 	if l.Len() == 1 {
@@ -361,7 +361,7 @@ func (l *List) Remove(e *ListNode) tui.Component {
 	}
 	l.dirty = true
 	nextAfterOffsetHead, _ := l.offset.head.Next()
-	ret := l.list.Remove(e.el).(*Virtual).C
+	ret := l.list.Remove(e.el).(*Virtual[tui.Component]).C
 	if l.Len() == 0 {
 		l.offset.value = 0
 		l.offset.head = ListNode{}
@@ -377,7 +377,7 @@ func (e ListNode) SetValue(c tui.Component) {
 	if e.el == nil || e.el.Value == nil {
 		panic("trying to SetValue on an un-linked ListNode")
 	}
-	v := e.el.Value.(*Virtual)
+	v := e.el.Value.(*Virtual[tui.Component])
 	v.C = c
 	// C needs resize
 	e.l.dirty = true
@@ -388,7 +388,7 @@ func (e ListNode) Value() tui.Component {
 	if e.el == nil || e.el.Value == nil {
 		return nil
 	}
-	return e.el.Value.(*Virtual).C
+	return e.el.Value.(*Virtual[tui.Component]).C
 }
 
 // Prev gets the previous linked node in the list before e.
