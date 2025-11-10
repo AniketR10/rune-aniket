@@ -121,6 +121,7 @@ diff_buf_adjust(win_
 			}()
 			return true
 		}
+		mu.Lock()
 		ed := Editor(
 			WithScheduleNextTick(cb),
 			WithAuxiliaryBar(true),
@@ -130,6 +131,7 @@ diff_buf_adjust(win_
 		vi, err := ed.Edit(uri, buf)
 		require.NoError(t, err)
 		vi.Resize(50, 10)
+		mu.Unlock()
 		wg.Wait() // wait for bar
 
 		t.Run("zA", func(t *testing.T) {

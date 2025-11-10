@@ -146,16 +146,21 @@ func TestAuxBarDrawFolds(t *testing.T) {
 	scroll := component.NewScroll(buf)
 	h := newtestHandler(scroll)
 	var wg sync.WaitGroup
+	var mu sync.Mutex
 	cb := func(fn func()) bool {
+		mu.Lock()
+		defer mu.Unlock()
 		fn()
 		wg.Done()
 		return true
 	}
 
 	wg.Add(1)
+	mu.Lock()
 	bar := text.WithAuxBar(h, buf, scroll,
 		true /*folds enabled*/, false, false, false, cb)
 	bar.Resize(20, 10)
+	mu.Unlock()
 	w := term.NewStringWriter(20, 10)
 
 	tests := []comptest.TestCase{
@@ -287,30 +292,54 @@ func TestAuxBarDrawFolds(t *testing.T) {
 }
 
 func BenchmarkAuxBarAbsoluteSmall(b *testing.B) {
-	benchmarkAuxBar(b, 10, 10, true)
+	benchmarkAuxBar(b, 10, 10, true, false)
 }
 
 func BenchmarkAuxBarAbsoluteMedium(b *testing.B) {
-	benchmarkAuxBar(b, 100, 100, true)
+	benchmarkAuxBar(b, 100, 100, true, false)
 }
 
 func BenchmarkAuxBarAbsoluteLarge(b *testing.B) {
-	benchmarkAuxBar(b, 1000, 1000, true)
+	benchmarkAuxBar(b, 1000, 1000, true, false)
 }
 
 func BenchmarkAuxBarRelativeSmall(b *testing.B) {
-	benchmarkAuxBar(b, 10, 10, false)
+	benchmarkAuxBar(b, 10, 10, false, false)
 }
 
 func BenchmarkAuxBarRelativeMedium(b *testing.B) {
-	benchmarkAuxBar(b, 100, 100, false)
+	benchmarkAuxBar(b, 100, 100, false, false)
 }
 
 func BenchmarkAuxBarRelativeLarge(b *testing.B) {
-	benchmarkAuxBar(b, 1000, 1000, false)
+	benchmarkAuxBar(b, 1000, 1000, false, false)
 }
 
-func benchmarkAuxBar(b *testing.B, width, height int, absolute bool) {
+func BenchmarkAuxBarAbsoluteMoveCursorSmall(b *testing.B) {
+	benchmarkAuxBar(b, 10, 10, true, true)
+}
+
+func BenchmarkAuxBarAbsoluteMoveCursorMedium(b *testing.B) {
+	benchmarkAuxBar(b, 100, 100, true, true)
+}
+
+func BenchmarkAuxBarAbsoluteMoveCursorLarge(b *testing.B) {
+	benchmarkAuxBar(b, 1000, 1000, true, true)
+}
+
+func BenchmarkAuxBarRelativeMoveCursorSmall(b *testing.B) {
+	benchmarkAuxBar(b, 10, 10, false, true)
+}
+
+func BenchmarkAuxBarRelativeMoveCursorMedium(b *testing.B) {
+	benchmarkAuxBar(b, 100, 100, false, true)
+}
+
+func BenchmarkAuxBarRelativeMoveCursorLarge(b *testing.B) {
+	benchmarkAuxBar(b, 1000, 1000, false, true)
+}
+
+func benchmarkAuxBar(b *testing.B, width, height int, absolute, moveCursor bool) {
 	buf := cell.NewBuffer()
 	for buf.Rows() < height {
 		buf.WriteString(copy)
@@ -326,14 +355,24 @@ func benchmarkAuxBar(b *testing.B, width, height int, absolute bool) {
 		return true
 	}
 
-	wg.Add(1)
+	foldsEnabled := true
+	moveCursorModulo := 1
+	if moveCursor {
+		moveCursorModulo = 2
+		foldsEnabled = false
+	} else {
+		wg.Add(1)
+	}
+
 	bar := text.WithAuxBar(h, buf, scroll,
-		true, true, absolute, true, cb)
+		foldsEnabled, true, absolute, true, cb)
 	bar.Resize(width, height)
+	bar.Draw(term.NoopWriter{})
 	wg.Wait()
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
+		h.cursor = i % moveCursorModulo
 		bar.Draw(term.NoopWriter{})
 	}
 }
@@ -378,7 +417,8 @@ func (f testFoldsService) Folds() (iterator.Iterator[term.Range], bool) {
 
 type testHandler struct {
 	*component.Scroll
-	URI workspaceapi.URI
+	cursor int
+	URI    workspaceapi.URI
 }
 
 func newtestHandler(scroll *component.Scroll) (t *testHandler) {
@@ -426,7 +466,7 @@ func (t *testHandler) Handle(ev term.Event) (bool, bool) {
 }
 
 func (t *testHandler) Cursor() (term.Coordinates, term.CursorStyle, bool) {
-	return term.Coordinates{}, 0, false
+	return term.Coordinates{Y: t.cursor}, 0, false
 }
 
 func (t *testHandler) Selection() (string, bool) {

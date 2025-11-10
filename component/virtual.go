@@ -35,51 +35,49 @@ import (
 // It exposes Move which can be used to move the inner component
 // in the virtual coordinate space.
 type Virtual[T tui.Component] struct {
-	C             T
-	pos           term.Coordinates
-	height, width int
+	C  T
+	vw VirtualWriter
+	w  term.Writer // prebox, save allocs
 }
 
 // Resize resizes the underlying component and stores size
 // to perform bound checking on Draw.
 func (c *Virtual[T]) Resize(width, height int) {
-	c.width = width
-	c.height = height
 	c.C.Resize(width, height)
+	c.vw.Height = height
+	c.vw.Width = width
 }
 
 // Draw uses a virtual writer to perform bound checking and
 // if successful draw the inner component in the virtual coordinate space.
 func (c *Virtual[T]) Draw(writer term.Writer) {
-	vw := VirtualWriter{
-		Writer: writer,
-		Offset: c.pos,
-		Height: c.height,
-		Width:  c.width,
+	if c.w == nil {
+		c.w = &c.vw
 	}
-	c.C.Draw(&vw)
+	c.vw.Writer = writer
+	c.C.Draw(c.w)
 }
 
 // Move changes the position of this virtual component
 // in the virtual coordinate space.
 func (c *Virtual[T]) Move(pos term.Coordinates) {
-	c.pos = pos
+	c.vw.Offset = pos
 }
 
 // Width returns the width set in last Resize.
 func (c *Virtual[T]) Width() int {
-	return c.width
+	return c.vw.Width
 }
 
 // Height returns the height set in last Resize.
 func (c *Virtual[T]) Height() int {
-	return c.height
+	return c.vw.Height
 }
 
 // Position returns this virtual component's position
 // in the virtual coordinate space.
 func (c *Virtual[T]) Position() term.Coordinates {
-	return c.pos
+	return c.vw.Offset
 }
 
 var _ term.Writer = (*VirtualWriter)(nil)

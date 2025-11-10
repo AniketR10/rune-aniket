@@ -163,13 +163,77 @@ func (c *rawCells) insertAt(pos term.Coordinates, r []rune, width uint8, byteCou
 		}
 		fallthrough
 	default:
-		pos := pos // need unmodified pos below
-		c.doInsertAt(pos, r, width, byteCount)
+		at := pos
+		c.doInsertAt(at, r, width, byteCount)
 		for i := uint8(1); i < width; i++ {
-			pos.X++
-			c.doInsertAt(pos, nullCluster[:], 0, 0)
+			at.X++
+			c.doInsertAt(at, nullCluster[:], 0, 0)
 		}
+		next = term.Coordinates{X: at.X + 1, Y: at.Y}
+	}
+
+	if c.zwj {
+		if c.zwjPos == pos {
+			str := c.String()
+			c.reset()
+			_, _ = c.readFromWithView(strings.NewReader(str), c)
+			next = term.Coordinates{X: pos.X, Y: pos.Y}
+		}
+		c.zwj = false
+		c.zwjPos = term.Coordinates{}
+	}
+
+	return
+}
+
+// specialized, most common case for perf improvement
+func (c *rawCells) doInsertAtPerf(pos term.Coordinates, r rune, width, byteCount uint8) {
+	// make sure we have enough capacity
+	c.cells[pos.Y] = append(c.cells[pos.Y], term.Cell{})
+	copy(c.cells[pos.Y][pos.X+1:], c.cells[pos.Y][pos.X:])
+	cell := term.Cell{Ch: r, Width: width, Bytes: byteCount}
+	c.cells[pos.Y][pos.X] = cell
+}
+
+// specialized, most common case for perf improvements
+func (c *rawCells) insertAtPerf(pos term.Coordinates, r rune, width uint8, byteCount uint8) (
+	next term.Coordinates,
+) {
+	switch r {
+	case '\u200d':
 		next = term.Coordinates{X: pos.X + 1, Y: pos.Y}
+		// remove any previous null cells added to ensure that ith cell matches
+		// ith user visual cell, for wide characters
+		for pos.Y < len(c.cells) && pos.X > 0 &&
+			pos.X-1 < len(c.cells[pos.Y]) &&
+			c.cells[pos.Y][pos.X-1].Ch == '\x00' {
+			pos.X--
+			next.X--
+			var nop strings.Builder
+			c.deleteRowRange(&nop, pos.Y, pos.X, next.X)
+		}
+		c.zwj = true
+		c.doInsertAtPerf(pos, r, width, byteCount)
+		c.zwjPos = next
+		return
+	case '\n':
+		c.insertNewRow(pos)
+		next = term.Coordinates{X: 0, Y: pos.Y + 1}
+	case '\t':
+		if c.tabspaces > 0 {
+			c.insertTabSpaces(pos)
+			next = term.Coordinates{X: pos.X + c.tabspaces, Y: pos.Y}
+			break
+		}
+		fallthrough
+	default:
+		at := pos
+		c.doInsertAtPerf(at, r, width, byteCount)
+		for i := uint8(1); i < width; i++ {
+			at.X++
+			c.doInsertAt(at, nullCluster[:], 0, 0)
+		}
+		next = term.Coordinates{X: at.X + 1, Y: at.Y}
 	}
 
 	if c.zwj {
@@ -257,7 +321,14 @@ func (c *rawCells) insert(at term.Coordinates, str string) (
 	for len(str) > 0 {
 		cluster, str, width, state = graphemecluster.StepString(str, state)
 		to = next
-		next = c.insertAt(next, []rune(cluster), width, uint8(len([]byte(cluster))))
+		bytecount := uint8(len([]byte(cluster)))
+		if bytecount == 1 { // specialized perf case for ASCII, avoids allocs
+			for _, r := range cluster { // extract rune with no allocs
+				next = c.insertAtPerf(next, r, width, bytecount)
+			}
+		} else {
+			next = c.insertAt(next, []rune(cluster), width, bytecount)
+		}
 		if padding := next.X - to.X - 1; padding > 0 {
 			to.X += padding
 		}

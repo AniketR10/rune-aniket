@@ -453,6 +453,15 @@ func (b *Buffer) Reset() {
 	b.truncateFromContextView(context.Background(), term.Coordinates{}, b.cells)
 }
 
+// ResetPerformance resets the underlying cells, without discarding their capacity.
+// This shopuld only be used when buffer has been initialized with InitPerformance,
+// as subscribers won't be notified of this change, and it will break undo correctness.
+func (b *Buffer) ResetPerformance() {
+	for y, row := range b.cells.cells {
+		b.cells.cells[y] = row[:0]
+	}
+}
+
 // Version returns the version of this buffer.
 func (b *Buffer) Version() int {
 	if b.undoer == nil {

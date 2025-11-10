@@ -207,39 +207,45 @@ func (b *auxBar) foldAt(pos term.Coordinates) (folded, ok bool) {
 
 func (b *auxBar) rebuildBar(ctx context.Context, cursor term.Coordinates) {
 	b.prevCursor = cursor
-	b.bar.Buffer().Reset()
+	b.bar.Buffer().ResetPerformance()
 	if b.linesEnabled && b.absoluteLines {
-		b.rebuildLinesAbsolute()
+		b.rebuildLinesAbsolute(ctx)
 	} else if b.linesEnabled {
-		b.rebuildLinesRelative()
+		b.rebuildLinesRelative(ctx)
 	}
 	if b.foldsEnabled {
 		b.rebuildFolds(ctx)
 	}
 }
 
-func (b *auxBar) rebuildLinesAbsolute() {
+func (b *auxBar) rebuildLinesAbsolute(ctx context.Context) {
 	for y := range b.buf.View().Rows() {
-		// TODO optimize
-		str := strconv.Itoa(y + 1)
+		number := strconv.Itoa(y + 1)
 		from := term.Coordinates{Y: y}
-		for _, ch := range str {
-			b.bar.Buffer().InsertWithAttr(from, ch, fgAttr)
-			from.X++
+		to := term.Coordinates{Y: y}
+		if y < b.bar.Buffer().Rows() {
+			cols := b.bar.Buffer().Columns(y)
+			if cols > 0 {
+				to.X = cols - 1
+			}
 		}
+		b.bar.Buffer().EditWithAttr(ctx, from, to, number, fgAttr)
 	}
 }
 
-func (b *auxBar) rebuildLinesRelative() {
+func (b *auxBar) rebuildLinesRelative(ctx context.Context) {
 	cursorAtWindow := b.windowToBarCoordinates(b.prevCursor)
 	for y := range b.buf.View().Rows() {
-		from := term.Coordinates{Y: y}
 		number := strconv.Itoa(int(math.Abs(float64(cursorAtWindow.Y - y))))
-		// TODO optimize
-		for _, ch := range number {
-			b.bar.Buffer().InsertWithAttr(from, ch, fgAttr)
-			from.X++
+		from := term.Coordinates{Y: y}
+		to := term.Coordinates{Y: y}
+		if y < b.bar.Buffer().Rows() {
+			cols := b.bar.Buffer().Columns(y)
+			if cols > 0 {
+				to.X = cols - 1
+			}
 		}
+		b.bar.Buffer().EditWithAttr(ctx, from, to, number, fgAttr)
 	}
 }
 
@@ -311,8 +317,7 @@ func (b *auxBar) rebuildFolds(ctx context.Context) {
 				from.X += b.linesWidth
 				to := from
 				to.X++ // replace
-				b.bar.Buffer().Edit(ctx, from, to, "")
-				b.bar.Buffer().InsertWithAttr(from, icon, fgAttr)
+				b.bar.Buffer().EditWithAttr(ctx, from, to, string(icon), fgAttr)
 			}
 			if err := folds.Err(); err != nil {
 				b.log(log.ErrorLevel, "error rebuilding auxiliary bar: %v", err)
