@@ -57,7 +57,7 @@ func TestAuxBarDrawLinesRelative(t *testing.T) {
 
 	tests := []comptest.TestCase{
 		{Expected: `
-0  package main     
+1  package main     
 1                   
 2  import (         
 3      "fmt"        
@@ -73,7 +73,7 @@ func TestAuxBarDrawLinesRelative(t *testing.T) {
 				require.True(t, scroll.SeekDown())
 			},
 			Expected: `
-0                   
+2                   
 1  import (         
 2      "fmt"        
 3                   

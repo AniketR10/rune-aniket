@@ -237,6 +237,10 @@ func (b *auxBar) rebuildLinesRelative(ctx context.Context) {
 	cursorAtWindow := b.windowToBarCoordinates(b.prevCursor)
 	for y := range b.buf.View().Rows() {
 		number := strconv.Itoa(int(math.Abs(float64(cursorAtWindow.Y - y))))
+		if number == "0" {
+			cursorAtScroll := b.scroll.WindowToScrollCoordinates(b.prevCursor)
+			number = strconv.Itoa(cursorAtScroll.Y + 1)
+		}
 		from := term.Coordinates{Y: y}
 		to := term.Coordinates{Y: y}
 		if y < b.bar.Buffer().Rows() {
