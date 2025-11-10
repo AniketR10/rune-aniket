@@ -41,19 +41,31 @@ type selector struct {
 	view View
 }
 
+type iterateFunc func(int, term.Coordinates, term.Coordinates, []term.Cell)
+
 func (s *selector) selectCells(from term.Coordinates, to term.Coordinates) (
 	res [][]term.Cell, sels []Selection,
 ) {
+	res = make([][]term.Cell, 0)
+	s.iterateCells(from, to, func(i int, from, to term.Coordinates, cells []term.Cell) {
+		res = append(res, cells)
+		sels = append(sels, Selection{From: from, To: to})
+	})
+	return
+}
+
+func (s *selector) iterateCells(from term.Coordinates, to term.Coordinates, op iterateFunc) {
 	from, to = term.CoordinatesSort(from, to)
 	cells := s.view.RawCells()
 
+	var i int
 	for from.Y < to.Y && from.Y < len(cells) {
 		x := int(math.Min(float64(from.X), float64(len(cells[from.Y]))))
-		res = append(res, cells[from.Y][x:])
-		sels = append(sels, Selection{
-			From: term.Coordinates{Y: from.Y, X: x},
-			To:   term.Coordinates{Y: from.Y, X: len(cells[from.Y])},
-		})
+		op(i,
+			term.Coordinates{Y: from.Y, X: x},
+			term.Coordinates{Y: from.Y, X: len(cells[from.Y])},
+			cells[from.Y][x:])
+		i++
 		from.X = 0
 		from.Y++
 	}
@@ -64,40 +76,45 @@ func (s *selector) selectCells(from term.Coordinates, to term.Coordinates) (
 
 	fromX := int(math.Min(float64(from.X), float64(len(cells[from.Y]))))
 	toX := int(math.Min(float64(to.X), float64(len(cells[from.Y]))))
-	res = append(res, cells[from.Y][fromX:toX])
-	sels = append(sels, Selection{
-		From: term.Coordinates{Y: from.Y, X: fromX},
-		To:   term.Coordinates{Y: from.Y, X: toX},
-	})
-
-	return
+	op(i,
+		term.Coordinates{Y: from.Y, X: fromX},
+		term.Coordinates{Y: from.Y, X: toX},
+		cells[from.Y][fromX:toX],
+	)
 }
 
 func (s *selector) selectLine(from term.Coordinates, to term.Coordinates) (
 	res [][]term.Cell, sels []Selection,
 ) {
-	from, to = term.CoordinatesSort(from, to)
-	cells := s.view.RawCells()
-
-	for from.Y <= to.Y && from.Y < len(cells) {
-		line := cells[from.Y][:]
-		res = append(res, line)
-		sels = append(sels, Selection{
-			From: term.Coordinates{Y: from.Y, X: 0},
-			To:   term.Coordinates{Y: from.Y, X: len(line)},
-		})
-		from.Y++
-	}
-
+	res = make([][]term.Cell, 0)
+	s.iterateLine(from, to, func(i int, from, to term.Coordinates, cells []term.Cell) {
+		res = append(res, cells)
+		sels = append(sels, Selection{From: from, To: to})
+	})
+	// NOTE: adding a line at the end should be moved to paste line
 	res = append(res, make([]term.Cell, 0))
-
 	return
 }
 
-type iterateBlockFunc func(int, term.Coordinates, term.Coordinates, []term.Cell)
+func (s *selector) iterateLine(from term.Coordinates, to term.Coordinates, op iterateFunc) {
+	from, to = term.CoordinatesSort(from, to)
+	cells := s.view.RawCells()
+
+	i := 0
+	for from.Y <= to.Y && from.Y < len(cells) {
+		line := cells[from.Y][:]
+		op(i,
+			term.Coordinates{Y: from.Y, X: 0},
+			term.Coordinates{Y: from.Y, X: len(line)},
+			line,
+		)
+		i++
+		from.Y++
+	}
+}
 
 func (s *selector) iterateBlocks(
-	from term.Coordinates, to term.Coordinates, op iterateBlockFunc,
+	from term.Coordinates, to term.Coordinates, op iterateFunc,
 ) {
 	from, to = term.CoordinatesBlockSort(from, to)
 	cells := s.view.RawCells()

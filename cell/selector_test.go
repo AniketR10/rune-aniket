@@ -334,6 +334,7 @@ func assertReturnedCoordinatesSelectSame(
 	coords []Selection, expected [][]term.Cell,
 	isLine bool,
 ) {
+	t.Helper()
 	var selectedSelection [][]term.Cell
 	for _, coords := range coords {
 		cells, actualCoords := selector.selectCells(coords.From, coords.To)

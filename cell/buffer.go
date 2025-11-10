@@ -145,14 +145,13 @@ func (b *Buffer) EditWithAttr(
 	ctx context.Context, start, end term.Coordinates, str string, attr term.Attributes,
 ) (from, to term.Coordinates, old string) {
 	from, to, old = b.safew.Edit(ctx, start, end, str)
-	cells, _, _ := b.Select(from, to)
-	for y, row := range cells {
-		for x := range row {
-			cells[y][x].Bg = attr.Bg
-			cells[y][x].Fg = attr.Fg
-			cells[y][x].Attrs = attr.Attrs
+	b.selector.iterateCells(from, to, func(i int, from, to term.Coordinates, cells []term.Cell) {
+		for x := range cells {
+			cells[x].Bg = attr.Bg
+			cells[x].Fg = attr.Fg
+			cells[x].Attrs = attr.Attrs
 		}
-	}
+	})
 	return
 }
 
