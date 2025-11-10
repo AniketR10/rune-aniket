@@ -151,7 +151,7 @@ func (e *viEditor) SetCursor(h text.Handler, pos term.Coordinates) error {
 			// already set at position
 			return nil
 		}
-		return errors.New("SetCursor: invalid cursor position")
+		return errors.New("invalid cursor position")
 	}
 	return nil
 }

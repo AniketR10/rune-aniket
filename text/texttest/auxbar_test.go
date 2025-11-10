@@ -333,7 +333,6 @@ func TestAuxBarDrawFoldsWithLines(t *testing.T) {
 	wg.Wait()
 	comptest.TestComponent(t, bar, w, tests)
 
-	wg.Add(1)
 	require.True(t, scroll.SeekDown())
 
 	tests = []comptest.TestCase{
@@ -350,7 +349,6 @@ func TestAuxBarDrawFoldsWithLines(t *testing.T) {
 11       for i := 0;`,
 		},
 	}
-	wg.Wait()
 	comptest.TestComponent(t, bar, w, tests)
 
 	wg.Add(1)
@@ -362,14 +360,14 @@ func TestAuxBarDrawFoldsWithLines(t *testing.T) {
 		{Expected: `
 2                   
 3   import ( [5 lin
-4                   
-5   func main() {  
-6        fmt.Println
-7        for i := 0;
-8            fmt.Pri
-9        }          
-10   }              
-11                  `,
+8                   
+9   func main() {  
+10       fmt.Println
+11       for i := 0;
+12           fmt.Pri
+13       }          
+14   }              
+15                  `,
 		},
 	}
 

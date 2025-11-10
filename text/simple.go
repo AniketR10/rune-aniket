@@ -168,7 +168,7 @@ func (e *simpleEditor) SetCursor(h Handler, pos term.Coordinates) error {
 
 	ok := e.unwrapHandler(h).SetCursorAtScroll(pos)
 	if !ok {
-		return errors.New("move to scroll: invalid cursor position")
+		return errors.New("invalid cursor position")
 	}
 	return nil
 }

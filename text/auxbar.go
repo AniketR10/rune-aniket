@@ -149,9 +149,10 @@ func (b *auxBar) Handle(ev term.Event) (quit, handled bool) {
 		return b.vhandler.Handle(ev)
 	}
 
-	posAtWindow := term.Coordinates{Y: ev.MouseY}
+	posAtWindow := term.Coordinates{Y: ev.MouseY, X: ev.MouseX}
 	posAtBar := b.windowToBarCoordinates(posAtWindow)
 	posAtScroll := b.scroll.WindowToScrollCoordinates(posAtWindow)
+	posAtScroll.X = 0
 	folded, ok := b.foldAt(posAtBar)
 	b.log(log.TraceLevel, "received mouse click at bar,"+
 		" win pos: %+v, bar pos: %+v, scroll pos: %+v, folded: %t, ok: %t",
@@ -194,10 +195,10 @@ func (b *auxBar) foldAt(pos term.Coordinates) (folded, ok bool) {
 	if pos.Y >= len(cells) {
 		return
 	}
-	if len(cells[pos.Y]) == 0 {
+	if pos.X >= len(cells[pos.Y]) {
 		return
 	}
-	switch cells[pos.Y][b.linesWidth].Ch {
+	switch cells[pos.Y][pos.X].Ch {
 	case hiddenFoldIcon:
 		ok = true
 		folded = true
@@ -224,8 +225,12 @@ func (b *auxBar) rebuildBar(ctx context.Context, cursor term.Coordinates) {
 func (b *auxBar) rebuildLinesAbsolute(ctx context.Context) {
 	for y := range b.buf.View().Rows() {
 		number := strconv.Itoa(y + 1)
-		from := term.Coordinates{Y: y}
-		to := term.Coordinates{Y: y}
+		from, ok := b.scrollToBarCoordinates(term.Coordinates{Y: y})
+		if !ok {
+			// inside hidden block
+			continue
+		}
+		to := from
 		if y < b.bar.Buffer().Rows() {
 			cols := b.bar.Buffer().Columns(y)
 			if cols > 0 {
@@ -239,10 +244,13 @@ func (b *auxBar) rebuildLinesAbsolute(ctx context.Context) {
 func (b *auxBar) rebuildLinesRelative(ctx context.Context) {
 	cursorAtWindow := b.windowToBarCoordinates(b.prevCursor)
 	for y := range b.buf.View().Rows() {
-		number := strconv.Itoa(int(math.Abs(float64(cursorAtWindow.Y - y))))
-		if number == "0" {
+		n := int(math.Abs(float64(cursorAtWindow.Y - y)))
+		var number string
+		if n == 0 {
 			cursorAtScroll := b.scroll.WindowToScrollCoordinates(b.prevCursor)
 			number = strconv.Itoa(cursorAtScroll.Y + 1)
+		} else {
+			number = strconv.Itoa(n)
 		}
 		from := term.Coordinates{Y: y}
 		to := term.Coordinates{Y: y}
@@ -336,7 +344,7 @@ func (b *auxBar) rebuildFolds(ctx context.Context) {
 
 func (b *auxBar) OnDidSeek(_, to term.Coordinates) {
 	b.bar.SetOffset(to)
-	if b.linesEnabled {
+	if b.linesEnabled && !b.absoluteLines {
 		cursor, _, _ := b.vhandler.Cursor()
 		b.rebuildBar(context.Background(), cursor)
 	}
@@ -381,6 +389,16 @@ func (b *auxBar) setLinesWidth(height int) {
 func (b *auxBar) windowToBarCoordinates(pos term.Coordinates) term.Coordinates {
 	pos.Y += b.scroll.Offset().Y
 	return pos
+}
+
+func (b *auxBar) scrollToBarCoordinates(pos term.Coordinates) (ret term.Coordinates, ok bool) {
+	pos, ok = b.scroll.ScrollToWindowCoordinates(pos)
+	if !ok {
+		return
+	}
+	ret = pos
+	ret.Y += b.scroll.Offset().Y
+	return
 }
 
 func (b *auxBar) SeekUp() bool {
