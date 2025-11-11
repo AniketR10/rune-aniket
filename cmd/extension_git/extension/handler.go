@@ -63,6 +63,7 @@ const (
 	defaultGitDiffListID = "git_diff"
 	commandNextChange    = "gitnextchange"
 	commandPrevChange    = "gitprevchange"
+	commandToggleOverlay = "gittoggleoverlay"
 	commandCopyRemoteURL = "gitcopyremoteurl"
 )
 
@@ -89,11 +90,16 @@ var (
 		Name:    commandPrevChange,
 		Summary: "Moves cursor to the previous diff hunk emitted by git.",
 	}
+	commandToggleOverlayManual = textapi.CommandManual{
+		Name:    commandToggleOverlay,
+		Summary: "Shows or hides the git diff hunks overlay.",
+	}
 	// GitHandlerCommands returns the commands that this extension is
 	// interested in registering.
 	GitHandlerCommands = []textapi.CommandManual{
 		commandNextChangeManual,
 		commandPrevChangeManual,
+		commandToggleOverlayManual,
 	}
 	// GitHandlerEvents returns the events that this extension is
 	// interested in subscribing to.
@@ -123,6 +129,8 @@ var (
 	defaultScrollAttr = term.Attributes{Fg: tcell.ColorBlack}
 	defaultAddAttr    = term.Attributes{Bg: tcell.ColorGreen}
 	defaultDelAttr    = term.Attributes{Bg: tcell.ColorRed}
+	defaultAddLocAttr = term.Attributes{Bg: tcell.ColorDarkSlateGray}
+	defaultDelLocAttr = term.Attributes{Bg: tcell.ColorDarkRed}
 )
 
 type gitEditorHandler struct {
@@ -134,6 +142,7 @@ type gitEditorHandler struct {
 	tracker extutil.ResourceTracker
 	exit    atomic.Uint32
 	ch      chan textapi.Event
+	pconfig config.Config
 	scroll  struct {
 		sync.Mutex
 		scroll component.Scroll
@@ -142,6 +151,8 @@ type gitEditorHandler struct {
 	gitDiffListID string
 	delAttr       term.Attributes
 	addAttr       term.Attributes
+	delLocAttr    term.Attributes
+	addLocAttr    term.Attributes
 	clip          clipboard.Register
 }
 
@@ -275,6 +286,7 @@ func (h *gitEditorHandler) processGrants(
 }
 
 func (h *gitEditorHandler) initializeConfigValues(pconfig config.Config) {
+	h.pconfig = pconfig
 	var err error
 
 	h.gitDiffListID, err = pconfig.GetString("git_diff_list_id")
@@ -299,6 +311,25 @@ func (h *gitEditorHandler) initializeConfigValues(pconfig config.Config) {
 			h.log(log.WarnLevel, "failed to get 'del_attr' from config: %v", err)
 		}
 		h.delAttr = defaultDelAttr
+	}
+}
+
+func (h *gitEditorHandler) loadLocAttr() {
+	var err error
+	h.addLocAttr, err = config.GetAttributes(h.pconfig, "add_loc_attr")
+	if err != nil {
+		if err != config.ErrNotFound {
+			h.log(log.WarnLevel, "failed to get 'add_attr' from config: %v", err)
+		}
+		h.addLocAttr = defaultAddLocAttr
+	}
+
+	h.delLocAttr, err = config.GetAttributes(h.pconfig, "del_loc_attr")
+	if err != nil {
+		if err != config.ErrNotFound {
+			h.log(log.WarnLevel, "failed to get 'del_attr' from config: %v", err)
+		}
+		h.delLocAttr = defaultDelLocAttr
 	}
 }
 
@@ -343,6 +374,14 @@ func (h *gitEditorHandler) HandleCommand(ctx context.Context, cmd textapi.Comman
 		if err != nil {
 			err = fmt.Errorf("move to prev location: %v", err)
 		}
+	case commandToggleOverlay:
+		if h.delLocAttr == (term.Attributes{}) {
+			h.loadLocAttr()
+		} else {
+			h.delLocAttr = term.Attributes{}
+			h.addLocAttr = term.Attributes{}
+		}
+		h.runDiff(ctx, cmd.URI, cmd.Resource)
 	}
 	return
 }
@@ -385,6 +424,7 @@ func (h *gitEditorHandler) parseDiff(
 			locs = append(locs, textapi.Location{
 				From: term.Coordinates{Y: at.Y - 1, X: 0},
 				To:   term.Coordinates{Y: at.Y - 1, X: 1},
+				Attr: h.delLocAttr,
 			})
 			at, ok := contentCoordinatesWithWraps(res, at)
 			if !ok { // hidden
@@ -401,6 +441,7 @@ func (h *gitEditorHandler) parseDiff(
 		locs = append(locs, textapi.Location{
 			From: term.Coordinates{Y: from.Y - 1},
 			To:   term.Coordinates{Y: to.Y - 1},
+			Attr: h.addLocAttr,
 		})
 
 		for y := from.Y; y < to.Y; y++ {
@@ -417,15 +458,17 @@ func (h *gitEditorHandler) parseDiff(
 	return locs
 }
 
-func (h *gitEditorHandler) runDiff(ctx context.Context, ev textapi.Event) {
-	res, ok := h.getResource(ev)
+func (h *gitEditorHandler) runDiff(
+	ctx context.Context, uri workspaceapi.URI, resource textapi.Handler,
+) {
+	res, ok := h.getResource(uri)
 	if !ok {
 		return
 	}
 
-	h.initBar(ev)
+	h.initBar(uri)
 
-	diff, err := h.git.Diff(ctx, ev.URI.Path())
+	diff, err := h.git.Diff(ctx, uri.Path())
 	if err != nil {
 		h.resetBar()
 		h.interrupt(ctx)
@@ -441,14 +484,14 @@ func (h *gitEditorHandler) runDiff(ctx context.Context, ev textapi.Event) {
 		if err != nil {
 			h.log(log.ErrorLevel, "%s", err.Error())
 		}
-		h.setLocationList(ev, nil)
+		h.setLocationList(resource, nil)
 		return
 	}
 
 	locs := h.parseDiff(res, diff)
 	res.Metadata.(*metadata).locations = locs
 
-	h.setLocationList(ev, locs)
+	h.setLocationList(resource, locs)
 }
 
 func (h *gitEditorHandler) resetBar() {
@@ -460,7 +503,7 @@ func (h *gitEditorHandler) resetBar() {
 
 // allow scroll to seek to same positions as editor buffer
 func (h *gitEditorHandler) setLastLocationList(ev textapi.Event) {
-	res, ok := h.getResource(ev)
+	res, ok := h.getResource(ev.URI)
 	if !ok {
 		return
 	}
@@ -471,11 +514,11 @@ func (h *gitEditorHandler) setLastLocationList(ev textapi.Event) {
 	}
 
 	h.log(log.TraceLevel, "set location list: %s: locations found: %#v", ev.URI, locs)
-	h.setLocationList(ev, locs)
+	h.setLocationList(ev.Resource, locs)
 }
 
-func (h *gitEditorHandler) setLocationList(ev textapi.Event, locs []textapi.Location) {
-	err := h.ed.SetLocationList(ev.Resource, textapi.LocationPriorityInfo,
+func (h *gitEditorHandler) setLocationList(resource textapi.Handler, locs []textapi.Location) {
+	err := h.ed.SetLocationList(resource, textapi.LocationPriorityInfo,
 		h.gitDiffListID, textapi.LocationSlice(locs))
 	if err != nil {
 		h.log(log.ErrorLevel, "set location list: %v", err)
@@ -501,9 +544,9 @@ func (h *gitEditorHandler) handleEvents(cwd workspaceapi.URI) {
 			res.Metadata = new(metadata)
 			h.setBarOffset(ev)
 		case textapi.EventTypeFlush:
-			h.runDiff(ctx, ev)
+			h.runDiff(ctx, ev.URI, ev.Resource)
 		case textapi.EventTypeFocus:
-			h.runDiff(ctx, ev)
+			h.runDiff(ctx, ev.URI, ev.Resource)
 		case textapi.EventTypeUnfocus:
 			h.resetBar()
 			h.interrupt(ctx)
@@ -522,7 +565,7 @@ func (h *gitEditorHandler) setBarOffset(ev textapi.Event) bool {
 	h.scroll.Lock()
 	defer h.scroll.Unlock()
 
-	res, ok := h.getResource(ev)
+	res, ok := h.getResource(ev.URI)
 	if !ok {
 		return false
 	}
@@ -553,13 +596,13 @@ func (h *gitEditorHandler) interrupt(ctx context.Context) {
 	}
 }
 
-func (h *gitEditorHandler) getResource(ev textapi.Event) (
+func (h *gitEditorHandler) getResource(uri workspaceapi.URI) (
 	*extutil.TrackedResource, bool,
 ) {
-	res, ok := h.tracker.Resource(ev.URI)
+	res, ok := h.tracker.Resource(uri)
 	if !ok {
 		h.log(log.ErrorLevel, "resource with uri %q not found in tracker",
-			ev.URI.String())
+			uri.String())
 	}
 	return res, ok
 }
@@ -574,13 +617,13 @@ type metadata struct {
 	locations []textapi.Location
 }
 
-func (h *gitEditorHandler) initBar(ev textapi.Event) {
+func (h *gitEditorHandler) initBar(uri workspaceapi.URI) {
 	h.scroll.Lock()
 	defer h.scroll.Unlock()
 
 	h.scroll.scroll.Init(cell.NewBuffer())
 
-	res, ok := h.getResource(ev)
+	res, ok := h.getResource(uri)
 	if !ok {
 		return
 	}
@@ -593,16 +636,16 @@ func (h *gitEditorHandler) initBar(ev textapi.Event) {
 	offset := res.Offset()
 	if offset == h.scroll.scroll.Offset() {
 		h.log(log.TraceLevel, "init bar: %s: rows=%d; offset=%+v: already at offset",
-			ev.URI, rows, offset)
+			uri, rows, offset)
 		return
 	}
 
 	if ok := h.scroll.scroll.SetOffset(offset); !ok {
 		h.log(log.WarnLevel, "init bar: %s: rows=%d; set offset %+v not ok",
-			ev.URI, rows, offset)
+			uri, rows, offset)
 	} else {
 		h.log(log.DebugLevel, "init bar: %s: rows=%d; offset=%+v",
-			ev.URI, rows, offset)
+			uri, rows, offset)
 	}
 }
 
