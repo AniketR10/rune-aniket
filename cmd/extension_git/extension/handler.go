@@ -234,7 +234,7 @@ func (h *gitEditorHandler) processGrants(
 
 			syncComp := component.Sync(&h.scroll, component.WithLogging(&h.scroll.scroll, log.Tracef))
 			cfg := browserapi.BarConfig{
-				Frame:       browserapi.BarFrameDefault,
+				Frame:       browserapi.BarFrameNever,
 				Size:        1,
 				Orientation: browserapi.OrientationLeft,
 			}
@@ -378,16 +378,18 @@ func (h *gitEditorHandler) parseDiff(
 	var locs []textapi.Location
 	for _, hunk := range diff.Hunks {
 		h.log(log.TraceLevel, "read file diff hunk: %#v", hunk)
-		y := int(math.Max(0, float64(hunk.NewStartLine-1)))
+		y := int(math.Max(0, float64(hunk.NewStartLine)))
 		if hunk.NewLines == 0 {
 			// convert coordinates into content coordinates with wraps
 			at := term.Coordinates{Y: y}
 			locs = append(locs, textapi.Location{
-				From: at,
-				To:   term.Coordinates{Y: at.Y, X: 1},
-				// Attr: deleteAttr,
+				From: term.Coordinates{Y: at.Y - 1, X: 0},
+				To:   term.Coordinates{Y: at.Y - 1, X: 1},
 			})
-			at = contentCoordinatesWithWraps(res, at)
+			at, ok := contentCoordinatesWithWraps(res, at)
+			if !ok { // hidden
+				continue
+			}
 			h.log(log.TraceLevel, "adding deletion at %+v", at)
 			h.scroll.scroll.Buffer().DeleteCell(at)
 			h.scroll.scroll.Buffer().InsertStringWithAttr(at, "-", h.delAttr)
@@ -395,11 +397,17 @@ func (h *gitEditorHandler) parseDiff(
 		}
 
 		from := term.Coordinates{Y: y}
-		to := term.Coordinates{Y: int(hunk.NewStartLine - 1 + hunk.NewLines)}
-		locs = append(locs, textapi.Location{From: from, To: to})
+		to := term.Coordinates{Y: int(hunk.NewStartLine + hunk.NewLines)}
+		locs = append(locs, textapi.Location{
+			From: term.Coordinates{Y: from.Y - 1},
+			To:   term.Coordinates{Y: to.Y - 1},
+		})
 
 		for y := from.Y; y < to.Y; y++ {
-			at := contentCoordinatesWithWraps(res, term.Coordinates{Y: y})
+			at, ok := contentCoordinatesWithWraps(res, term.Coordinates{Y: y})
+			if !ok { // hidden
+				continue
+			}
 			h.log(log.TraceLevel, "adding addition at %+v", at)
 			h.scroll.scroll.Buffer().DeleteCell(at)
 			h.scroll.scroll.Buffer().InsertStringWithAttr(at, "+", h.addAttr)
@@ -433,6 +441,7 @@ func (h *gitEditorHandler) runDiff(ctx context.Context, ev textapi.Event) {
 		if err != nil {
 			h.log(log.ErrorLevel, "%s", err.Error())
 		}
+		h.setLocationList(ev, nil)
 		return
 	}
 
@@ -598,12 +607,15 @@ func (h *gitEditorHandler) initBar(ev textapi.Event) {
 }
 
 func contentCoordinatesWithWraps(
-	res *extutil.TrackedResource, at term.Coordinates,
-) term.Coordinates {
+	res *extutil.TrackedResource, pos term.Coordinates,
+) (at term.Coordinates, ok bool) {
 	// window coordiantes subtracts offset, adds wraps
-	at, _ = res.WindowCoordinates(at)
+	at, ok = res.WindowCoordinates(pos)
+	if !ok {
+		return
+	}
 	// add offset and we should have conent coordinates
 	// with wraps.
 	at = term.CoordinatesSum(at, res.Offset())
-	return at
+	return
 }
