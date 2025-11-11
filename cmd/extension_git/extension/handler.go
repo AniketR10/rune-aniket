@@ -450,8 +450,12 @@ func (h *gitEditorHandler) parseDiff(
 				continue
 			}
 			h.log(log.TraceLevel, "adding addition at %+v", at)
+			icon := "+"
 			h.scroll.scroll.Buffer().DeleteCell(at)
-			h.scroll.scroll.Buffer().InsertStringWithAttr(at, "+", h.addAttr)
+			if hunk.OrigLines != 0 {
+				icon = "󰦒"
+			}
+			h.scroll.scroll.Buffer().InsertStringWithAttr(at, icon, h.addAttr)
 		}
 	}
 
