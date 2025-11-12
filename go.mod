@@ -90,6 +90,7 @@ require (
 	github.com/pkoukk/tiktoken-go v0.1.7 // indirect
 	github.com/pkoukk/tiktoken-go-loader v0.0.1 // indirect
 	github.com/sashabaranov/go-openai v1.39.0 // indirect
+	github.com/sergi/go-diff v1.4.0 // indirect
 	go.uber.org/atomic v1.5.0 // indirect
 	go.uber.org/tools v0.0.0-20190618225709-2cfd321de3ee // indirect
 	golang.org/x/exp/typeparams v0.0.0-20220722155223-a9213eeb770e // indirect
