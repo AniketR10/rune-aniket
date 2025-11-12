@@ -34,6 +34,7 @@ import (
 	"github.com/unstablebuild/blue/iterator"
 	"unstable.build/go-tui/api/browserapi"
 	"unstable.build/go-tui/api/textapi"
+	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/ide/vctrl"
@@ -70,9 +71,8 @@ func (c *copyRemoteURL) HandleCommand(ctx context.Context, cmd textapi.Command) 
 	}
 
 	line := cmd.Cursor.Content.Y + 1
-	workPath := cmd.URI.Path()
 
-	weblink, err := c.generate(ctx, workPath, remoteName, line)
+	weblink, err := c.generate(ctx, cmd.URI, remoteName, line)
 	if err != nil {
 		return
 	}
@@ -114,14 +114,14 @@ func (r remoteURLParts) ToMap() map[string]string {
 }
 
 func (c *copyRemoteURL) generate(
-	ctx context.Context, workPath string, remoteName string, line int,
+	ctx context.Context, file workspaceapi.URI, remoteName string, line int,
 ) (string, error) {
-	fileRelPath, err := c.git.RelPath(ctx, workPath)
+	fileRelPath, err := c.git.RelPath(ctx, file.Path())
 	if err != nil {
 		return "", err
 	}
 
-	remoteURL, err := c.git.RemoteURL(ctx, workPath, remoteName)
+	remoteURL, err := c.git.RemoteURL(ctx, file, remoteName)
 	if err != nil {
 		return "", fmt.Errorf("git remote url: %w", err)
 	}
@@ -134,7 +134,7 @@ func (c *copyRemoteURL) generate(
 		return "", fmt.Errorf("git parse remote url: %w", err)
 	}
 
-	currentCommit, err := c.git.CurrentCommit(ctx, workPath)
+	currentCommit, err := c.git.CurrentCommit(ctx, file)
 	if err != nil {
 		return "", fmt.Errorf("git current commit: %w", err)
 	}

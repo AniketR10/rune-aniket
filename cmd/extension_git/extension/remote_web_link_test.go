@@ -177,15 +177,6 @@ func TestWeblinkGenerator(t *testing.T) {
 				"/src/commit/b0c7a3e628f4bfb0cb60f2ee048b7e47017c57e7/recipes/chile-colorado.md#L8",
 		},
 		{
-			name:         "relative file from repo on other tree not in cwd",
-			workspaceCwd: reposPath + "/gitproj6_two-remotes",
-			remoteName:   "origin",
-			inputFile:    "../gitproj5_one-remote/recipes/chile-colorado.md",
-			inputLine:    8,
-			expect: "https://git.unstable.build/unstablebuild/gitproj5" +
-				"/src/commit/b0c7a3e628f4bfb0cb60f2ee048b7e47017c57e7/recipes/chile-colorado.md#L8",
-		},
-		{
 			name:         "remote name is honored",
 			workspaceCwd: reposPath + "/gitproj6_two-remotes",
 			remoteName:   "private-mirror",
@@ -234,8 +225,10 @@ func TestWeblinkGenerator(t *testing.T) {
 			git := setupGitService(t, workspaceCwdURI)
 			c.git = git
 
+			uri, err := workspaceapi.ParseURI("file://" + tcase.inputFile)
+			require.NoError(t, err)
 			res, err := c.generate(context.Background(),
-				tcase.inputFile, tcase.remoteName, tcase.inputLine)
+				uri, tcase.remoteName, tcase.inputLine)
 			if tcase.mustError {
 				require.Error(t, err)
 			} else {

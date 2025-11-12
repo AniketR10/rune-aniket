@@ -31,63 +31,159 @@ import (
 
 	"github.com/sergi/go-diff/diffmatchpatch"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/cell"
 )
 
-func TestApplyDiff(t *testing.T) {
+func TestDiffUtils(t *testing.T) {
 	suite := []struct {
-		src, dst string
-		exp      []diffmatchpatch.Diff
+		src, dst    string
+		expChanges  []diffmatchpatch.Diff
+		expFileDiff FileDiff
 	}{
 		{
-			src: "",
-			dst: "",
-			exp: []diffmatchpatch.Diff{},
+			src:         "",
+			dst:         "",
+			expChanges:  []diffmatchpatch.Diff{},
+			expFileDiff: FileDiff{},
 		},
 		{
 			src: "a",
 			dst: "a",
-			exp: []diffmatchpatch.Diff{
+			expChanges: []diffmatchpatch.Diff{
 				{
 					Type: 0,
 					Text: "a",
 				},
 			},
+			expFileDiff: FileDiff{
+				Hunks: nil,
+			},
 		},
 		{
 			src: "",
 			dst: "abc\ncba",
-			exp: []diffmatchpatch.Diff{
+			expChanges: []diffmatchpatch.Diff{
 				{
 					Type: 1,
 					Text: "abc\ncba",
+				},
+			},
+			expFileDiff: FileDiff{
+				Hunks: []Hunk{
+					{
+						NewStartLine:  1,
+						OrigStartLine: 1,
+						OrigLines:     0,
+						NewLines:      2,
+						Body:          "+abc\n+cba",
+					},
+				},
+			},
+		},
+		{
+			src: "",
+			dst: "abc\n\ncba",
+			expChanges: []diffmatchpatch.Diff{
+				{
+					Type: 1,
+					Text: "abc\n\ncba",
+				},
+			},
+			expFileDiff: FileDiff{
+				Hunks: []Hunk{
+					{
+						NewStartLine:  1,
+						OrigStartLine: 1,
+						OrigLines:     0,
+						NewLines:      3,
+						Body:          "+abc\n+\n+cba",
+					},
 				},
 			},
 		},
 		{
 			src: "abc\ncba",
 			dst: "",
-			exp: []diffmatchpatch.Diff{
+			expChanges: []diffmatchpatch.Diff{
 				{
 					Type: -1,
 					Text: "abc\ncba",
+				},
+			},
+			expFileDiff: FileDiff{
+				Hunks: []Hunk{
+					{
+						NewStartLine:  1,
+						OrigStartLine: 1,
+						OrigLines:     2,
+						NewLines:      0,
+						Body:          "-abc\n-cba",
+					},
+				},
+			},
+		},
+		{
+			src: "abc\n\ncba",
+			dst: "",
+			expChanges: []diffmatchpatch.Diff{
+				{
+					Type: -1,
+					Text: "abc\n\ncba",
+				},
+			},
+			expFileDiff: FileDiff{
+				Hunks: []Hunk{
+					{
+						NewStartLine:  1,
+						OrigStartLine: 1,
+						OrigLines:     3,
+						NewLines:      0,
+						Body:          "-abc\n-\n-cba",
+					},
 				},
 			},
 		},
 		{
 			src: "abc\nbcd\ncde",
 			dst: "000\nabc\n111\nBCD\n",
-			exp: []diffmatchpatch.Diff{
+			expChanges: []diffmatchpatch.Diff{
 				{Type: 1, Text: "000\n"},
 				{Type: 0, Text: "abc\n"},
 				{Type: -1, Text: "bcd\ncde"},
 				{Type: 1, Text: "111\nBCD\n"},
 			},
+			expFileDiff: FileDiff{
+				Hunks: []Hunk{
+					{
+						OrigStartLine: 1,
+						OrigLines:     0,
+						NewStartLine:  1,
+						NewLines:      1,
+						Body:          "+000\n",
+					},
+					{
+						OrigStartLine: 3,
+						OrigLines:     2,
+						NewStartLine:  3,
+						NewLines:      0,
+						Body:          "-bcd\n-cde",
+					},
+					{
+						OrigStartLine: 3,
+						OrigLines:     0,
+						NewStartLine:  3,
+						NewLines:      2,
+						Body:          "+111\n+BCD\n",
+					},
+				},
+			},
 		},
 		{
 			src: "A\nB\nC\nD\nE\nF\nG\nH\nI\nJ\nK\nL\nM\nN\nÑ\nO\nP\nQ\nR\nS\nT\nU\nV\nW\nX\nY\nZ",
 			dst: "B\nC\nD\nE\nF\nG\nI\nJ\nK\nL\nM\nN\nO\nP\nQ\nR\nS\nT\nV\nW\nX\nY\nZ",
-			exp: []diffmatchpatch.Diff{
+			expChanges: []diffmatchpatch.Diff{
 				{Type: -1, Text: "A\n"},
 				{Type: 0, Text: "B\nC\nD\nE\nF\nG\n"},
 				{Type: -1, Text: "H\n"},
@@ -97,39 +193,114 @@ func TestApplyDiff(t *testing.T) {
 				{Type: -1, Text: "U\n"},
 				{Type: 0, Text: "V\nW\nX\nY\nZ"},
 			},
+			expFileDiff: FileDiff{
+				Hunks: []Hunk{
+					{
+						OrigStartLine: 1,
+						OrigLines:     1,
+						NewStartLine:  1,
+						NewLines:      0,
+						Body:          "-A\n",
+					},
+					{
+						OrigStartLine: 7,
+						OrigLines:     1,
+						NewStartLine:  7,
+						NewLines:      0,
+						Body:          "-H\n",
+					},
+					{
+						OrigStartLine: 13,
+						OrigLines:     1,
+						NewStartLine:  13,
+						NewLines:      0,
+						Body:          "-Ñ\n",
+					},
+					{
+						OrigStartLine: 19,
+						OrigLines:     1,
+						NewStartLine:  19,
+						NewLines:      0,
+						Body:          "-U\n",
+					},
+				},
+			},
 		},
 		{
 			src: "B\nC\nD\nE\nF\nG\nI\nJ\nK\nL\nM\nN\nO\nP\nQ\nR\nS\nT\nV\nW\nX\nY\nZ",
 			dst: "B\nC\nD\nE\nF\nG\nI\nJ\nK\nL\nM\nN\nO\nP\nQ\nR\nS\nT\nV\nW\nX\nY\n",
-			exp: []diffmatchpatch.Diff{
+			expChanges: []diffmatchpatch.Diff{
 				{Type: 0, Text: "B\nC\nD\nE\nF\nG\nI\nJ\nK\nL\nM\nN\nO\nP\nQ\nR\nS\nT\nV\nW\nX\nY\n"},
 				{Type: -1, Text: "Z"},
+			},
+			expFileDiff: FileDiff{
+				Hunks: []Hunk{
+					{
+						OrigStartLine: 23,
+						OrigLines:     1,
+						NewStartLine:  23,
+						NewLines:      0,
+						Body:          "-Z",
+					},
+				},
 			},
 		},
 		{
 			src: "B\nC\nD\nE\nF\nG\nI\nJ\nK\nL\nM\nN\nO\nP\nQ\nR\nS\nT\nV\nW\nX\nY\nZ",
 			dst: "B\nC\nD\nE\nF\nG\nI\nJ\nK\nL\nM\nN\nO\nP\nQ\nR\nS\nT\nV\nW\nX\nY",
-			exp: []diffmatchpatch.Diff{
+			expChanges: []diffmatchpatch.Diff{
 				{Type: 0, Text: "B\nC\nD\nE\nF\nG\nI\nJ\nK\nL\nM\nN\nO\nP\nQ\nR\nS\nT\nV\nW\nX\n"},
 				{Type: -1, Text: "Y\nZ"},
 				{Type: 1, Text: "Y"},
+			},
+			expFileDiff: FileDiff{
+				Hunks: []Hunk{
+					{
+						OrigStartLine: 22,
+						OrigLines:     2,
+						NewStartLine:  22,
+						NewLines:      0,
+						Body:          "-Y\n-Z",
+					},
+					{
+						OrigStartLine: 22,
+						OrigLines:     0,
+						NewStartLine:  22,
+						NewLines:      1,
+						Body:          "+Y",
+					},
+				},
 			},
 		},
 	}
 
 	for i, test := range suite {
 		t.Run(fmt.Sprintf("test case %d", i), func(t *testing.T) {
+			uri, err := workspaceapi.ParseURI("file:///tmp")
+			require.NoError(t, err)
+
 			a := cell.NewBuffer()
 			a.ReadFrom(strings.NewReader(test.src))
 			b := cell.NewBuffer()
 			b.ReadFrom(strings.NewReader(test.dst))
 
 			ctx := context.Background()
-			diff := Diff(ctx, a.String(), b.String())
-			assert.Equal(t, test.exp, diff)
+			changes := Diff(ctx, a.String(), b.String())
+			assert.Equal(t, test.expChanges, changes)
 
-			ApplyDiff(ctx, a, diff)
-			assert.Equal(t, b.String(), a.String())
+			t.Run("ApplyChanges", func(t *testing.T) {
+				ApplyChanges(ctx, a, changes)
+				assert.Equal(t, b.String(), a.String())
+			})
+
+			t.Run("ConvertChangesToFileDiff", func(t *testing.T) {
+				diff := ConvertChangesToFileDiff(uri, changes)
+				assert.Equal(t, "/tmp", diff.OrigName)
+				assert.Equal(t, "/tmp", diff.NewName)
+				diff.OrigName = ""
+				diff.NewName = ""
+				assert.Equal(t, test.expFileDiff, diff)
+			})
 		})
 	}
 }

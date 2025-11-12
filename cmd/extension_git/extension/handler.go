@@ -27,13 +27,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	log "github.com/sirupsen/logrus"
-	"github.com/sourcegraph/go-diff/diff"
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/logging"
 	"github.com/unstablebuild/tcell/v3"
@@ -409,7 +407,7 @@ func (h *gitEditorHandler) Close() error {
 }
 
 func (h *gitEditorHandler) parseDiff(
-	res *extutil.TrackedResource, diff *diff.FileDiff,
+	res *extutil.TrackedResource, diff vctrl.FileDiff,
 ) []textapi.Location {
 	h.scroll.Lock()
 	defer h.scroll.Unlock()
@@ -417,7 +415,7 @@ func (h *gitEditorHandler) parseDiff(
 	var locs []textapi.Location
 	for _, hunk := range diff.Hunks {
 		h.log(log.TraceLevel, "read file diff hunk: %#v", hunk)
-		y := int(math.Max(0, float64(hunk.NewStartLine)))
+		y := int(hunk.NewStartLine)
 		if hunk.NewLines == 0 {
 			// convert coordinates into content coordinates with wraps
 			at := term.Coordinates{Y: y}
@@ -472,7 +470,7 @@ func (h *gitEditorHandler) runDiff(
 
 	h.initBar(uri)
 
-	diff, err := h.git.Diff(ctx, uri.Path())
+	diff, err := h.git.Diff(ctx, uri)
 	if err != nil {
 		h.resetBar()
 		h.interrupt(ctx)
@@ -484,10 +482,8 @@ func (h *gitEditorHandler) runDiff(
 		err = fmt.Errorf("git service diff: %w", err)
 	}
 
-	if diff == nil {
-		if err != nil {
-			h.log(log.ErrorLevel, "%s", err.Error())
-		}
+	if err != nil {
+		h.log(log.ErrorLevel, "%s", err.Error())
 		h.setLocationList(resource, nil)
 		return
 	}

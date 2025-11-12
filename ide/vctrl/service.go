@@ -27,22 +27,51 @@ import (
 	"context"
 	"errors"
 
-	"github.com/sourcegraph/go-diff/diff"
+	"unstable.build/go-tui/api/workspaceapi"
 )
 
-// Service is an interface that wraps methods to perform Git operations.
+// Differ abstracts the ability to diff a file.
+type Differ interface {
+	Diff(ctx context.Context, file workspaceapi.URI) (FileDiff, error)
+}
+
+// A FileDiff represents a unified diff for a single file.
+type FileDiff struct {
+	// the original name of the file
+	OrigName string
+	// the new name of the file (often same as OrigName)
+	NewName string
+	// hunks that were changed from orig to new
+	Hunks []Hunk
+}
+
+// A Hunk represents a series of changes (additions or deletions) in a file's
+// unified diff.
+type Hunk struct {
+	// starting line number in original file
+	OrigStartLine int32
+	// number of lines the hunk applies to in the original file
+	OrigLines int32
+	// starting line number in new file
+	NewStartLine int32
+	// number of lines the hunk applies to in the new file
+	NewLines int32
+	// hunk body (lines prefixed with '-', '+', or ' ')
+	Body string
+}
+
+// Service abstracts methods to perform Git operations.
 type Service interface {
-	// Diff returns the file diff for the given file.
-	Diff(ctx context.Context, workPath string) (*diff.FileDiff, error)
+	Differ
 
 	// CurrentCommit returns the current commit hash.
-	CurrentCommit(ctx context.Context, workPath string) (string, error)
+	CurrentCommit(ctx context.Context, file workspaceapi.URI) (string, error)
 
 	// RemoteURL returns the remote URL given a remote name.
-	RemoteURL(ctx context.Context, workPath string, remoteName string) (string, error)
+	RemoteURL(ctx context.Context, file workspaceapi.URI, remoteName string) (string, error)
 
-	// RelPath extracts the path relative to the repository.
-	RelPath(ctx context.Context, workPath string) (string, error)
+	// RelPath extracts the path relative to the git repository.
+	RelPath(ctx context.Context, file string) (string, error)
 }
 
 var (

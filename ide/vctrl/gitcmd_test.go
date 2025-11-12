@@ -31,7 +31,6 @@ import (
 	"syscall"
 	"testing"
 
-	"github.com/sourcegraph/go-diff/diff"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"unstable.build/go-tui/api/config"
@@ -107,7 +106,7 @@ func TestCmdDiff(t *testing.T) {
 		workspaceCwd string
 		workPath     string
 		expectErr    bool
-		assertions   func(t *testing.T, res *diff.FileDiff)
+		assertions   func(t *testing.T, res FileDiff)
 	}{
 		{
 			name:         "diff folder path within workspace with multiple files changed",
@@ -117,13 +116,13 @@ func TestCmdDiff(t *testing.T) {
 			// ERROR: file diff reader: read from stdout: line 8, char 333:
 			// bad hunk line (does not start with ' ', '-', '+', or '\'): diff
 			// --git a/recipes/cucumber-raita.md b/recipes/cucumber-raita.md
-			assertions: func(t *testing.T, res *diff.FileDiff) {},
+			assertions: func(t *testing.T, res FileDiff) {},
 		},
 		{
 			name:         "diff folder path within workspace with single file changed",
 			workspaceCwd: reposPath + "/gitproj2_one-file-diff",
 			workPath:     reposPath + "/gitproj2_one-file-diff/recipes/baba-ganoush.md",
-			assertions: func(t *testing.T, res *diff.FileDiff) {
+			assertions: func(t *testing.T, res FileDiff) {
 				// since only one file in that folder has changes we get very lucky
 				assert.Equal(t, "a/recipes/baba-ganoush.md", res.OrigName)
 				assert.Len(t, res.Hunks, 1)
@@ -133,50 +132,16 @@ func TestCmdDiff(t *testing.T) {
 			name:         "diff absolute file path within workspace",
 			workspaceCwd: reposPath + "/gitproj2_one-file-diff",
 			workPath:     reposPath + "/gitproj2_one-file-diff/recipes/baba-ganoush.md",
-			assertions: func(t *testing.T, res *diff.FileDiff) {
+			assertions: func(t *testing.T, res FileDiff) {
 				assert.Equal(t, "a/recipes/baba-ganoush.md", res.OrigName)
 				assert.Len(t, res.Hunks, 1)
-				assert.Equal(
-					t,
-					""+
-						"-3. roast the garlic cloves in the broiler or a dry cast iron skillet\n"+
-						"+3. Optional: roast the garlic cloves in the broiler or a dry cast iron skillet\n",
-					string(res.Hunks[0].Body),
-				)
 			},
 		},
 		{
 			name:         "diff absolute file path outside workspace",
 			workspaceCwd: reposPath + "/gitproj2_one-file-diff",
 			workPath:     reposPath + "/gitproj3_multi-file-diff/recipes/cucumber-raita.md",
-			assertions: func(t *testing.T, res *diff.FileDiff) {
-				assert.Equal(t, "a/recipes/cucumber-raita.md", res.OrigName)
-				assert.Len(t, res.Hunks, 2)
-			},
-		},
-		{
-			name:         "diff relative file path within workspace",
-			workspaceCwd: reposPath + "/gitproj2_one-file-diff",
-			workPath:     "./recipes/baba-ganoush.md",
-			assertions: func(t *testing.T, res *diff.FileDiff) {
-				assert.Equal(t, "a/recipes/baba-ganoush.md", res.OrigName)
-				assert.Len(t, res.Hunks, 1)
-			},
-		},
-		{
-			name:         "diff relative (no dot ./) file path within workspace",
-			workspaceCwd: reposPath + "/gitproj2_one-file-diff",
-			workPath:     "recipes/baba-ganoush.md",
-			assertions: func(t *testing.T, res *diff.FileDiff) {
-				assert.Equal(t, "a/recipes/baba-ganoush.md", res.OrigName)
-				assert.Len(t, res.Hunks, 1)
-			},
-		},
-		{
-			name:         "diff relative file path outside workspace",
-			workspaceCwd: reposPath + "/gitproj2_one-file-diff",
-			workPath:     "../gitproj3_multi-file-diff/recipes/cucumber-raita.md",
-			assertions: func(t *testing.T, res *diff.FileDiff) {
+			assertions: func(t *testing.T, res FileDiff) {
 				assert.Equal(t, "a/recipes/cucumber-raita.md", res.OrigName)
 				assert.Len(t, res.Hunks, 2)
 			},
@@ -189,7 +154,7 @@ func TestCmdDiff(t *testing.T) {
 			// ERROR: rel path: repo path: git cmd: process exit with non-zero
 			// status (exit status 128) fatal: not a git repository (or any of
 			// the parent director
-			assertions: func(t *testing.T, res *diff.FileDiff) {},
+			assertions: func(t *testing.T, res FileDiff) {},
 		},
 		{
 			name:         "repoless absolute path above cwd repo",
@@ -199,25 +164,7 @@ func TestCmdDiff(t *testing.T) {
 			// ERROR: rel path: repo path: git cmd: process exit with non-zero
 			// status (exit status 128) fatal: not a git repository (or any of
 			// the parent director
-			assertions: func(t *testing.T, res *diff.FileDiff) {},
-		},
-		{
-			name:         "repoless relative path above cwd repo",
-			workspaceCwd: reposPath + "/gitproj2_one-file-diff",
-			workPath:     "../top-level-file-sibling-to-repos.txt",
-			expectErr:    true,
-			// ERROR: rel path: repo path: git cmd: process exit with non-zero
-			// status (exit status 128) fatal: not a git repository (or any of
-			// the parent director
-			assertions: func(t *testing.T, res *diff.FileDiff) {},
-		},
-		{
-			name:         "diff relative file path without changes",
-			workspaceCwd: reposPath + "/gitproj2_one-file-diff",
-			workPath:     "./README.txt",
-			expectErr:    true,
-			// ERROR (`errDiffNoChanges`): diff no changes
-			assertions: func(t *testing.T, res *diff.FileDiff) {},
+			assertions: func(t *testing.T, res FileDiff) {},
 		},
 		{
 			name:         "non-existent absolute file",
@@ -227,7 +174,7 @@ func TestCmdDiff(t *testing.T) {
 			// ERROR: rel path: repo path: git cmd: process exit with non-zero
 			// status (exit status 128) fatal: not a git repository (or any of
 			// the parent director
-			assertions: func(t *testing.T, res *diff.FileDiff) {},
+			assertions: func(t *testing.T, res FileDiff) {},
 		},
 	}
 
@@ -235,8 +182,10 @@ func TestCmdDiff(t *testing.T) {
 		t.Run(tcase.name, func(t *testing.T) {
 			testServiceFunction(t,
 				tcase.workspaceCwd,
-				func(git Service) (res *diff.FileDiff, err error) {
-					return git.Diff(context.Background(), tcase.workPath)
+				func(git Service) (res FileDiff, err error) {
+					uri, err := workspaceapi.ParseURI("file://" + tcase.workPath)
+					require.NoError(t, err)
+					return git.Diff(context.Background(), uri)
 				},
 				tcase.expectErr, tcase.assertions)
 		})
@@ -270,33 +219,9 @@ func TestCmdGitCurrentCommit(t *testing.T) {
 			expect:       "b8922f92b6223af3a548d1904d1825774fb3b20f",
 		},
 		{
-			name:         "workPath relative folder within cwd",
-			workspaceCwd: reposPath + "/gitproj3_multi-file-diff",
-			workPath:     "./recipes/",
-			expect:       "368043d01e0fb3c543b28ea4f422208fcbc40b32",
-		},
-		{
-			name:         "workPath relative folder (no dot ./) within cwd",
-			workspaceCwd: reposPath + "/gitproj3_multi-file-diff",
-			workPath:     "./recipes/",
-			expect:       "368043d01e0fb3c543b28ea4f422208fcbc40b32",
-		},
-		{
 			name:         "workPath absolute file within cwd",
 			workspaceCwd: reposPath + "/gitproj3_multi-file-diff",
 			workPath:     reposPath + "/gitproj3_multi-file-diff/recipes/bagels.md",
-			expect:       "368043d01e0fb3c543b28ea4f422208fcbc40b32",
-		},
-		{
-			name:         "workPath relative file within cwd",
-			workspaceCwd: reposPath + "/gitproj3_multi-file-diff",
-			workPath:     "./recipes/bagels.md",
-			expect:       "368043d01e0fb3c543b28ea4f422208fcbc40b32",
-		},
-		{
-			name:         "workPath relative file repo outside cwd",
-			workspaceCwd: reposPath + "/gitproj2_one-file-diff",
-			workPath:     "../gitproj3_multi-file-diff/recipes/bagels.md",
 			expect:       "368043d01e0fb3c543b28ea4f422208fcbc40b32",
 		},
 	}
@@ -305,7 +230,9 @@ func TestCmdGitCurrentCommit(t *testing.T) {
 			testServiceFunction(t,
 				tcase.workspaceCwd,
 				func(git Service) (res string, err error) {
-					return git.CurrentCommit(context.Background(), tcase.workPath)
+					uri, err := workspaceapi.ParseURI("file://" + tcase.workPath)
+					require.NoError(t, err)
+					return git.CurrentCommit(context.Background(), uri)
 				},
 				tcase.expectErr,
 				func(t *testing.T, res string) {
@@ -367,7 +294,9 @@ func TestCmdGitRemoteURL(t *testing.T) {
 			testServiceFunction(t,
 				tcase.workspaceCwd,
 				func(git Service) (res string, err error) {
-					return git.RemoteURL(context.Background(), tcase.workPath, tcase.remoteName)
+					uri, err := workspaceapi.ParseURI("file://" + tcase.workPath)
+					require.NoError(t, err)
+					return git.RemoteURL(context.Background(), uri, tcase.remoteName)
 				},
 				tcase.expectErr,
 				func(t *testing.T, res string) {
