@@ -926,6 +926,9 @@ func TestBufferVersion(t *testing.T) {
 
 	b.Reset()
 	assert.Equal(t, 3, b.Version())
+
+	b.Insert(term.Coordinates{}, 'a')
+	assert.Equal(t, 4, b.Version())
 }
 
 func TestBufferWriteStringRawCells(t *testing.T) {

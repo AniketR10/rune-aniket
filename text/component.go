@@ -106,12 +106,10 @@ func (c *Component) resetTabProperties(file workspaceapi.URI) {
 	c.comp.ResetTabNameAndAttrs(file)
 }
 
-// TODO this is a very inefficient way of checking if a file was changed.
-// We should instead collect edits and check for undos by comparing arguments
-// and return values.
-func (c *Component) setDirtyFileAttr(file workspaceapi.URI, buf *cell.Buffer, lastFlush string) {
-	content := buf.String()
-	if content == lastFlush {
+func (c *Component) setDirtyFileAttr(file workspaceapi.URI, buf *cell.Buffer, lastFlush int) {
+	v := buf.Version()
+	c.log(log.TraceLevel, "edited, snapshot is %d, buffer version is %d", lastFlush, v)
+	if v == lastFlush {
 		c.resetTabProperties(file)
 		return
 	}
@@ -163,7 +161,7 @@ func (c *Component) newFileBuffer(
 		fc:        fc,
 		uri:       file,
 		buf:       buf,
-		lastFlush: buf.String(),
+		lastFlush: buf.Version(),
 		h:         handler,
 	}
 
@@ -672,10 +670,10 @@ func (c *Component) DispatchCommand(cmd textapi.Command) (handled bool, err erro
 	return true, nil
 }
 
-func (c *Component) dispatchFlush(file workspaceapi.URI, h Handler) (string, error) {
+func (c *Component) dispatchFlush(file workspaceapi.URI, h Handler) error {
 	content, err := c.getContent(h)
 	if err != nil {
-		return "", err
+		return err
 	}
 
 	// clear dirty/flushed attributes
@@ -688,7 +686,7 @@ func (c *Component) dispatchFlush(file workspaceapi.URI, h Handler) (string, err
 		Content:  content,
 	}
 	c.DispatchEvent(ev)
-	return content, nil
+	return nil
 }
 
 // DispatchEvent dispatches the given event to subscribers.
@@ -1270,7 +1268,7 @@ type editorFlusherCloser struct {
 	h         Handler
 	uri       workspaceapi.URI
 	buf       *cell.Buffer
-	lastFlush string
+	lastFlush int
 }
 
 func (c editorFlusherCloser) OnWillEdit(
@@ -1311,12 +1309,9 @@ func (e *editorFlusherCloser) Reload() error {
 }
 
 func (e *editorFlusherCloser) dispatchFlush() error {
-	content, err := e.parent.dispatchFlush(e.uri, e.h)
-	if err != nil {
-		return err
-	}
-	e.lastFlush = content
-	return nil
+	e.lastFlush = e.buf.Version()
+	e.parent.log(log.TraceLevel, "flushed, new snapshot is at %d", e.lastFlush)
+	return e.parent.dispatchFlush(e.uri, e.h)
 }
 
 func (e *editorFlusherCloser) Close() error {

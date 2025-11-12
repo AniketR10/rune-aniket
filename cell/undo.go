@@ -109,7 +109,6 @@ func (u *undoer) redo() (bool, term.Coordinates) {
 	if !ok {
 		return false, term.Coordinates{}
 	}
-	u.version++
 	u.redoTimeline = redoTimeline
 	op.do()
 	u.pushUndo(op)
@@ -121,7 +120,6 @@ func (u *undoer) undo() (bool, term.Coordinates) {
 	if !ok {
 		return false, term.Coordinates{}
 	}
-	u.version--
 	u.undoTimeline = undoTimeline
 	op.undo()
 	u.pushRedo(op)
@@ -145,9 +143,11 @@ func (u *undoer) Edit(ctx context.Context, start, end term.Coordinates, str stri
 ) {
 	op := op{
 		do: func() {
+			u.version++
 			from, to, old = u.w.Edit(ctx, start, end, str)
 		},
 		undo: func() {
+			u.version--
 			u.w.Edit(ctx, from, to, old)
 		},
 	}
@@ -155,7 +155,6 @@ func (u *undoer) Edit(ctx context.Context, start, end term.Coordinates, str stri
 	op.do()
 	op.from = start
 	op.to = to
-	u.version++
 	u.pushUndo(op)
 	u.resetRedoTimeline()
 	return
