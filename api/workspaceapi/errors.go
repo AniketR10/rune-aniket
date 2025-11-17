@@ -25,7 +25,6 @@ package workspaceapi
 
 import (
 	"errors"
-	"os"
 )
 
 var (
@@ -41,43 +40,3 @@ var (
 	// ErrStaleData is returned when a file was modified by some other application.
 	ErrStaleData = errors.New("file was modified by another process since reading it")
 )
-
-// Error is used to abstract os.Is(.*) functions
-type Error struct {
-	Err          error
-	IsPermission bool
-	IsExist      bool
-	IsNotExist   bool
-}
-
-// String returns the string representation of the underlying error.
-func (e *Error) String() string {
-	if e == nil {
-		return "<nil>"
-	}
-
-	return e.ToError().Error()
-}
-
-// ToError returns a os error or the underlying
-// error.
-func (e Error) ToError() error {
-	if e.IsPermission {
-		return os.ErrPermission
-	}
-	if e.IsNotExist {
-		return os.ErrNotExist
-	}
-	if e.IsExist {
-		return os.ErrExist
-	}
-	if e.Err != nil {
-		return e.Err
-	}
-	panic("workspaceapi.Error with nil Error")
-}
-
-// NopError returns an Error that simply wraps err.
-func NopError(err error) *Error {
-	return &Error{Err: err}
-}

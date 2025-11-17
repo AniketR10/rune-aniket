@@ -78,7 +78,7 @@ func TestReadLines(t *testing.T) {
 			workspace := workspace.NewSchemeWorkspace(uri, scheme)
 
 			for _, file := range tcase.inFiles {
-				f, werr := scheme.Open(file.fullPath, os.O_CREATE, 0)
+				f, werr := scheme.OpenFile(file.fullPath, os.O_CREATE, 0)
 				require.Nil(t, werr)
 				_, err = f.Write([]byte(file.content))
 				require.NoError(t, err)

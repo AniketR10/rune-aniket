@@ -185,7 +185,7 @@ $ ▐
 
 		vtetest.TestSequence(t, handler, 20, 10, defaultWaitForIdleVte, ch, cases)
 	})
-	
+
 	t.Run("on modal mode", func(t *testing.T) {
 		t.Parallel()
 		cases := []vtetest.Case{

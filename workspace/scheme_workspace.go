@@ -24,11 +24,9 @@
 package workspace
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"os"
-	"syscall"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/logging"
@@ -40,7 +38,7 @@ import (
 // simple Scheme-backed Workspace implementation.
 type schemeWorkspace struct {
 	w workspaceapi.URI
-	p schemeapi.Scheme
+	schemeapi.Scheme
 }
 
 // NewSchemeWorkspace wraps a schemeapi.Scheme and implements a workspace.Loader,
@@ -53,7 +51,7 @@ func NewSchemeWorkspace(w workspaceapi.URI, p schemeapi.Scheme) Workspace {
 
 func (w *schemeWorkspace) Init(uri workspaceapi.URI, p schemeapi.Scheme) {
 	w.w = uri
-	w.p = p
+	w.Scheme = p
 }
 
 func (w *schemeWorkspace) log(msg string, args ...interface{}) {
@@ -93,7 +91,7 @@ func (w *schemeWorkspace) Recover(
 	path := workspaceapi.RelPath(w.w, uri)
 	swapPath := workspaceapi.RelPath(w.w, swapURI)
 
-	ret, err = newFileRecover(w.p, path, swapPath, buf, force)
+	ret, err = newFileRecover(w.Scheme, path, swapPath, buf, force)
 	return
 }
 
@@ -129,7 +127,7 @@ func (w *schemeWorkspace) Load(
 	path := workspaceapi.RelPath(w.w, uri)
 	swapDirPath := workspaceapi.RelPath(w.w, swapDir)
 
-	ret, err = newFile(w.p, path, buf, swapDirPath, readOnly)
+	ret, err = newFile(w.Scheme, path, buf, swapDirPath, readOnly)
 	if err == os.ErrNotExist {
 		if readOnly {
 			err = errors.New("cannot open file that doesn't exist in read-only")
@@ -138,79 +136,4 @@ func (w *schemeWorkspace) Load(
 		}
 	}
 	return
-}
-
-func (w *schemeWorkspace) ReadDir(name string) (
-	[]os.DirEntry, error,
-) {
-	return w.p.ReadDir(name)
-}
-
-func (w *schemeWorkspace) Open(path string, flag int, mode os.FileMode) (
-	workspaceapi.File, *workspaceapi.Error,
-) {
-	return w.p.Open(path, flag, mode)
-}
-
-func (w *schemeWorkspace) NewFile(fd uintptr, name string) workspaceapi.File {
-	return w.p.NewFile(fd, name)
-}
-
-func (w *schemeWorkspace) Stat(path string) (os.FileInfo, error) {
-	return w.p.Stat(path)
-}
-
-func (w *schemeWorkspace) Lstat(path string) (os.FileInfo, error) {
-	return w.p.Lstat(path)
-}
-
-func (w *schemeWorkspace) ReadLink(path string) (string, error) {
-	return w.p.ReadLink(path)
-}
-
-func (w *schemeWorkspace) Remove(path string) error {
-	return w.p.Remove(path)
-}
-
-func (w *schemeWorkspace) Rename(old, new string) error {
-	return w.p.Rename(old, new)
-}
-
-func (w *schemeWorkspace) URI(path string) (workspaceapi.URI, error) {
-	return w.p.URI(path)
-}
-
-func (w *schemeWorkspace) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (
-	pid workspaceapi.Pid, err error,
-) {
-	return w.p.StartCommand(ctx, cmd)
-}
-
-func (m *schemeWorkspace) Signal(pid workspaceapi.Pid, sig syscall.Signal) (err error) {
-	return m.p.Signal(pid, sig)
-}
-
-func (m *schemeWorkspace) NewPty(ctx context.Context) (workspaceapi.Pty, error) {
-	return m.p.NewPty(ctx)
-}
-
-func (m *schemeWorkspace) SetPtySize(p workspaceapi.Pty, width, height int) error {
-	return m.p.SetPtySize(p, width, height)
-}
-
-func (m *schemeWorkspace) MkdirAll(path string, perm os.FileMode) error {
-	return m.p.MkdirAll(path, perm)
-}
-func (m *schemeWorkspace) Watch(
-	path string, c chan<- workspaceapi.EventInfo, events ...workspaceapi.Event,
-) (int, error) {
-	return m.p.Watch(path, c, events...)
-}
-
-func (m *schemeWorkspace) StopWatch(ID int) error {
-	return m.p.StopWatch(ID)
-}
-
-func (m *schemeWorkspace) Close() error {
-	return m.p.Close()
 }

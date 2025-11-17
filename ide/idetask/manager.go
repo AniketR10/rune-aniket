@@ -34,7 +34,6 @@ import (
 	"github.com/go-git/go-git/v6/plumbing/format/gitignore"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui/api/schemeapi"
-	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/handler"
@@ -99,8 +98,8 @@ func (m *Manager) RunTask(t Task) error {
 	if _, loaded := m.tasks.LoadOrStore(t.Name, &t); loaded {
 		return ErrTaskExists
 	}
-	ch := make(chan workspaceapi.EventInfo)
-	id, err := m.scheme.Watch("./...", ch, workspaceapi.AllEvents()...)
+	ch := make(chan schemeapi.EventInfo)
+	id, err := m.scheme.Watch("./...", ch, schemeapi.AllEvents()...)
 	if err != nil {
 		m.tasks.Delete(t.Name)
 		return fmt.Errorf("workspace watch: %w", err)
@@ -155,13 +154,13 @@ func (m *Manager) RunTask(t Task) error {
 
 				var icon string
 				switch ev.Event() {
-				case workspaceapi.Create:
+				case schemeapi.Create:
 					icon = " "
-				case workspaceapi.Rename:
+				case schemeapi.Rename:
 					fallthrough // files are flushed by means of renaming them
-				case workspaceapi.Write:
+				case schemeapi.Write:
 					icon = " "
-				case workspaceapi.Remove:
+				case schemeapi.Remove:
 					icon = " "
 				}
 

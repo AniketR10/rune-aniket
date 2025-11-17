@@ -148,7 +148,7 @@ func TestConvertCoordinatesToRunePos(t *testing.T) {
 		},
 		{
 			[][]term.Cell{{{Ch: '💥'}, {Ch: 0}, {Ch: 'a'}}},
-			0, len([]byte(string('💥')))+1, term.Coordinates{Y: 0, X: 3}, true,
+			0, len([]byte(string('💥'))) + 1, term.Coordinates{Y: 0, X: 3}, true,
 		},
 		{
 			[][]term.Cell{{{Ch: '💥'}, {Ch: 0}, {Ch: 'a'}}},

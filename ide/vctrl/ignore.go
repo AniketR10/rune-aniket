@@ -25,6 +25,7 @@ package vctrl
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -106,11 +107,11 @@ func readIgnoreFile(cwd schemeapi.Scheme, paths []string, file string) (
 	patterns []gitignore.Pattern, err error,
 ) {
 	path := filepath.Join(paths...)
-	f, werr := cwd.Open(filepath.Join(path, file), os.O_RDONLY, 0)
-	if werr != nil && !werr.IsNotExist {
-		return nil, fmt.Errorf("open %s: %w", file, werr.ToError())
+	f, err := cwd.OpenFile(filepath.Join(path, file), os.O_RDONLY, 0)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return nil, fmt.Errorf("open %s: %w", file, err)
 	}
-	if werr != nil {
+	if err != nil {
 		return
 	}
 

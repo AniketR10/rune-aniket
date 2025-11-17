@@ -29,6 +29,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -51,7 +52,7 @@ var _ workspaceapi.Terminal = (*Client)(nil)
 // for scheme registry-side
 var _ schemeapi.Scheme = (*Client)(nil)
 
-// Client is a workspace and scheme client.
+// Client is a scheme client.
 type Client struct {
 	cc        grpc.ClientConnInterface
 	exec      ExecutorClient
@@ -59,12 +60,13 @@ type Client struct {
 	files     FilesClient
 	term      TerminalClient
 	ctx       context.Context
+	root      string // different root than cc's root
 	cancelCtx func()
 }
 
-// NewClient allocates storage for a new workspace.Client and
-// initializes it with cc. Client satisfies workspaceapi.Workspace
-// by connecting to a Server via the given rpc connection.
+// NewClient allocates storage for a new Client and
+// initializes it with the given connection. Client satisfies schemeapi.Scheme
+// by connecting to a Server via the given the given rpc connection.
 func NewClient(ctx context.Context, cc grpc.ClientConnInterface) *Client {
 	ret := new(Client)
 	ret.Init(ctx, cc)
@@ -81,12 +83,12 @@ func (c *Client) Init(ctx context.Context, cc grpc.ClientConnInterface) {
 	c.ctx, c.cancelCtx = context.WithCancel(ctx)
 }
 
-// URI satisfies workspaceapi.Workspace.
+// URI satisfies schemeapi.Scheme.
 func (c *Client) URI(path string) (workspaceapi.URI, error) {
 	ctx, cleanup := ctxWithTimeout(c.ctx)
 	defer cleanup()
 
-	req := URIRequest{Path: path}
+	req := URIRequest{Root: c.root, Path: path}
 	resp, err := c.scheme.URI(ctx, &req)
 	if err != nil {
 		return workspaceapi.URI{}, err
@@ -98,29 +100,100 @@ func (c *Client) URI(path string) (workspaceapi.URI, error) {
 	return uri, nil
 }
 
-// Open satisfies workspace.Workspace.
-func (c *Client) Open(path string, flag int, mode os.FileMode) (
-	workspaceapi.File, *workspaceapi.Error,
-) {
-	return c.OpenFile(path, flag, mode)
+// Chroot satisfies schemeapi.Scheme.
+func (c *Client) Chroot(path string) (schemeapi.Scheme, error) {
+	uri, err := c.URI(path)
+	if err != nil {
+		return nil, err
+	}
+	ret := NewClient(context.Background(), c.cc)
+	// force root to be absolute
+	ret.root = uri.Path()
+	return ret, nil
 }
 
-// OpenFile satisfies workspaceapi.Workspace.
+// Root satisfies schemeapi.Scheme.
+func (c *Client) Root() string {
+	if c.root != "" {
+		return c.root
+	}
+	ctx, cleanup := ctxWithTimeout(c.ctx)
+	defer cleanup()
+
+	req := RootRequest{}
+	resp, err := c.scheme.Root(ctx, &req)
+	if err != nil {
+		// valid, not useful; best effort
+		return "."
+	}
+	return resp.GetPath()
+}
+
+// Symlink satisfies schemeapi.Scheme.
+func (c *Client) Symlink(target, link string) error {
+	ctx, cleanup := ctxWithTimeout(c.ctx)
+	defer cleanup()
+
+	req := SymlinkRequest{Root: c.root, Target: target, Link: link}
+	_, err := c.scheme.Symlink(ctx, &req)
+	return err
+}
+
+// TempFile satisfies schemeapi.Scheme.
+func (c *Client) TempFile(dir, prefix string) (workspaceapi.File, error) {
+	ctx, cleanup := ctxWithTimeout(c.ctx)
+	defer cleanup()
+
+	req := TempFileRequest{Root: c.root, Dir: dir, Prefix: prefix}
+	resp, err := c.scheme.TempFile(ctx, &req)
+	if err != nil {
+		return nil, err
+	}
+	ret := newFileClient(c.root, c.ctx, c, c.cc,
+		resp.GetFilename(), uintptr(resp.GetFd()))
+	return ret, nil
+}
+
+// Join satisfies schemeapi.Scheme.
+func (c *Client) Join(elem ...string) string {
+	ctx, cleanup := ctxWithTimeout(c.ctx)
+	defer cleanup()
+
+	req := JoinRequest{Elem: elem}
+	resp, err := c.scheme.Join(ctx, &req)
+	if err != nil {
+		// best effort
+		return filepath.Join(elem...)
+	}
+	return resp.GetFilename()
+}
+
+// Create satisfies schemeapi.Scheme.
+func (c *Client) Create(filename string) (workspaceapi.File, error) {
+	return c.OpenFile(filename, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
+}
+
+// Open satisfies schemeapi.Scheme.
+func (c *Client) Open(filename string) (workspaceapi.File, error) {
+	return c.OpenFile(filename, os.O_RDONLY, 0)
+}
+
+// OpenFile satisfies schemeapi.Scheme.
 func (c *Client) OpenFile(path string, flag int, mode os.FileMode) (
-	workspaceapi.File, *workspaceapi.Error,
+	workspaceapi.File, error,
 ) {
 	ctx, cleanup := ctxWithTimeout(c.ctx)
 	defer cleanup()
 
-	req := makeOpenRequest(path, flag, mode)
+	req := makeOpenRequest(c.root, path, flag, mode)
 	resp, err := c.scheme.Open(ctx, req)
 	if err != nil {
-		return nil, &workspaceapi.Error{Err: err}
+		return nil, err
 	}
 	if werr, ok := isTypedError(resp); ok {
 		return nil, werr
 	}
-	ret := newFileClient(c.ctx, c, c.cc,
+	ret := newFileClient(c.root, c.ctx, c, c.cc,
 		resp.GetFilename(), uintptr(resp.GetFd()))
 	return ret, nil
 }
@@ -130,13 +203,13 @@ func (c *Client) Stat(name string) (os.FileInfo, error) {
 	ctx, cleanup := ctxWithTimeout(c.ctx)
 	defer cleanup()
 
-	req := StatRequest{Filename: name}
+	req := StatRequest{Root: c.root, Filename: name}
 	resp, err := c.scheme.Stat(ctx, &req)
 	if err != nil {
 		return nil, err
 	}
 	if werr, ok := isTypedError(resp); ok {
-		return nil, werr.ToError()
+		return nil, werr
 	}
 	return &fileClientInfo{StatResponse: *resp}, nil // nolint:govet
 }
@@ -146,13 +219,13 @@ func (c *Client) ReadDir(name string) ([]os.DirEntry, error) {
 	ctx, cleanup := ctxWithTimeout(c.ctx)
 	defer cleanup()
 
-	req := ReadDirRequest{Root: name}
+	req := ReadDirRequest{Dir: name, Root: c.root}
 	resp, err := c.scheme.ReadDir(ctx, &req)
 	if err != nil {
 		return nil, err
 	}
 	if werr, ok := isTypedError(resp); ok {
-		return nil, werr.ToError()
+		return nil, werr
 	}
 	respp := resp.GetPath()
 	ret := make([]os.DirEntry, 0, len(respp))
@@ -168,60 +241,60 @@ func (c *Client) ReadDir(name string) ([]os.DirEntry, error) {
 	return ret, nil
 }
 
-// Remove satisfies workspaceapi.Workspace.
+// Remove satisfies schemeapi.Scheme.
 func (c *Client) Remove(path string) error {
 	ctx, cleanup := ctxWithTimeout(c.ctx)
 	defer cleanup()
 
-	req := RemoveRequest{Filename: path}
+	req := RemoveRequest{Root: c.root, Filename: path}
 	resp, err := c.scheme.Remove(ctx, &req)
 	if err != nil {
 		return err
 	}
 	if werr, ok := isTypedError(resp); ok {
-		return werr.ToError()
+		return werr
 	}
 	return nil
 }
 
-// Rename satisfies workspaceapi.Workspace.
+// Rename satisfies schemeapi.Scheme.
 func (c *Client) Rename(oldpath, newpath string) error {
 	ctx, cleanup := ctxWithTimeout(c.ctx)
 	defer cleanup()
 
-	req := RenameRequest{Filename: oldpath, Newfilename: newpath}
+	req := RenameRequest{Root: c.root, Filename: oldpath, Newfilename: newpath}
 	resp, err := c.scheme.Rename(ctx, &req)
 	if err != nil {
 		return err
 	}
 	if werr, ok := isTypedError(resp); ok {
-		return werr.ToError()
+		return werr
 	}
 	return nil
 }
 
-// Lstat satisfies workspaceapi.Workspace.
+// Lstat satisfies schemeapi.Scheme.
 func (c *Client) Lstat(name string) (os.FileInfo, error) {
 	ctx, cleanup := ctxWithTimeout(c.ctx)
 	defer cleanup()
 
-	req := StatRequest{Filename: name, Lstat: true}
+	req := StatRequest{Root: c.root, Filename: name, Lstat: true}
 	resp, err := c.scheme.Stat(ctx, &req)
 	if err != nil {
 		return nil, err
 	}
 	if werr, ok := isTypedError(resp); ok {
-		return nil, werr.ToError()
+		return nil, werr
 	}
 	return &fileClientInfo{StatResponse: *resp}, nil // nolint:govet
 }
 
-// ReadLink satisfies workspaceapi.Workspace.
-func (c *Client) ReadLink(filename string) (string, error) {
+// Readlink satisfies schemeapi.Scheme.
+func (c *Client) Readlink(filename string) (string, error) {
 	ctx, cleanup := ctxWithTimeout(c.ctx)
 	defer cleanup()
 
-	req := ReadLinkRequest{Filename: filename}
+	req := ReadLinkRequest{Root: c.root, Filename: filename}
 	resp, err := c.scheme.ReadLink(ctx, &req)
 	if err != nil {
 		return "", err
@@ -229,23 +302,23 @@ func (c *Client) ReadLink(filename string) (string, error) {
 	return resp.GetFilename(), nil
 }
 
-// MkdirAll satisfies workspaceapi.Workspace.
+// MkdirAll satisfies schemeapi.Scheme.
 func (c *Client) MkdirAll(path string, perm os.FileMode) error {
 	ctx, cleanup := ctxWithTimeout(c.ctx)
 	defer cleanup()
 
-	req := MkdirAllRequest{Path: path, Mode: int32(perm)}
+	req := MkdirAllRequest{Root: c.root, Path: path, Mode: int32(perm)}
 	resp, err := c.scheme.MkdirAll(ctx, &req)
 	if err != nil {
 		return err
 	}
 	if werr, ok := isTypedError(resp); ok {
-		return werr.ToError()
+		return werr
 	}
 	return nil
 }
 
-// Start satisfies workspaceapi.Workspace
+// Start satisfies schemeapi.Scheme
 func (c *Client) Start(ctx context.Context, cmd workspaceapi.Cmd) (workspaceapi.Pid, error) {
 	return c.StartCommand(ctx, cmd)
 }
@@ -354,7 +427,7 @@ func (c *Client) Signal(p workspaceapi.Pid, s syscall.Signal) error {
 	return nil
 }
 
-// StartPty satisfies workspaceapi.Workspace
+// StartPty satisfies schemeapi.Scheme
 func (c *Client) StartPty() (workspaceapi.Pty, error) {
 	return c.NewPty(context.Background())
 }
@@ -370,9 +443,9 @@ func (c *Client) NewPty(ctx context.Context) (workspaceapi.Pty, error) {
 	if err != nil {
 		return workspaceapi.Pty{}, err
 	}
-	master := newFileClient(c.ctx, c, c.cc,
+	master := newFileClient(c.root, c.ctx, c, c.cc,
 		resp.GetMaster(), uintptr(resp.GetMasterFd()))
-	slave := newFileClient(c.ctx, c, c.cc,
+	slave := newFileClient(c.root, c.ctx, c, c.cc,
 		resp.GetSlave(), uintptr(resp.GetSlaveFd()))
 	ret := workspaceapi.Pty{
 		Master: master,
@@ -402,18 +475,18 @@ func (c *Client) SetPtySize(p workspaceapi.Pty, width, height int) error {
 
 // NewFile satisfies schemeapi.Scheme.
 func (c *Client) NewFile(fd uintptr, filename string) workspaceapi.File {
-	return newFileClient(c.ctx, c, c.cc, filename, fd)
+	return newFileClient(c.root, c.ctx, c, c.cc, filename, fd)
 }
 
 // Watch satisfies schemeapi.Scheme.
 func (c *Client) Watch(
-	path string, ch chan<- workspaceapi.EventInfo, events ...workspaceapi.Event,
+	path string, ch chan<- schemeapi.EventInfo, events ...schemeapi.Event,
 ) (int, error) {
 	var pbEvents []Event
 	for _, ev := range events {
 		pbEvents = append(pbEvents, Event(ev))
 	}
-	req := WatchRequest{Path: path, Events: pbEvents}
+	req := WatchRequest{Root: c.root, Path: path, Events: pbEvents}
 	stream, err := c.scheme.Watch(c.ctx, &req)
 	if err != nil {
 		return 0, err
@@ -448,16 +521,16 @@ func (c *Client) Watch(
 				log.Errorf("could not parse URI response from server: %v", err)
 				break
 			}
-			var ev workspaceapi.Event
+			var ev schemeapi.Event
 			switch data.GetEvent() {
 			case Event_Create:
-				ev = workspaceapi.Create
+				ev = schemeapi.Create
 			case Event_Write:
-				ev = workspaceapi.Write
+				ev = schemeapi.Write
 			case Event_Rename:
-				ev = workspaceapi.Rename
+				ev = schemeapi.Rename
 			case Event_Remove:
-				ev = workspaceapi.Remove
+				ev = schemeapi.Remove
 			}
 			fi := watchFileInfo{
 				event: ev,
@@ -481,7 +554,8 @@ func (c *Client) StopWatch(id int) error {
 	defer cleanup()
 
 	req := StopWatchRequest{
-		Id: int64(id),
+		Root: c.root,
+		Id:   int64(id),
 	}
 	_, err := c.scheme.StopWatch(ctx, &req)
 	return err
@@ -552,8 +626,9 @@ func (e dirEntry) Info() (os.FileInfo, error) {
 	return e.c.Stat(e.Name())
 }
 
-func makeOpenRequest(name string, flag int, perm os.FileMode) *OpenRequest {
+func makeOpenRequest(root, name string, flag int, perm os.FileMode) *OpenRequest {
 	return &OpenRequest{
+		Root:     root,
 		Filename: name,
 		Mode:     int32(perm),
 		O_RDONLY: flag&^(os.O_APPEND|os.O_CREATE|os.O_EXCL|os.O_SYNC|os.O_TRUNC) == os.O_RDONLY,
@@ -572,15 +647,17 @@ type errResponse interface {
 	GetIsPermissionErr() bool
 }
 
-func isTypedError(resp errResponse) (*workspaceapi.Error, bool) {
-	if resp.GetIsExistErr() || resp.GetIsNotExistErr() || resp.GetIsPermissionErr() {
-		return &workspaceapi.Error{
-			IsExist:      resp.GetIsExistErr(),
-			IsNotExist:   resp.GetIsNotExistErr(),
-			IsPermission: resp.GetIsPermissionErr(),
-		}, true
+func isTypedError(resp errResponse) (error, bool) {
+	switch {
+	case resp.GetIsExistErr():
+		return os.ErrExist, true
+	case resp.GetIsNotExistErr():
+		return os.ErrNotExist, true
+	case resp.GetIsPermissionErr():
+		return os.ErrPermission, true
+	default:
+		return nil, false
 	}
-	return nil, false
 }
 
 func ctxWithTimeout(resourceCtx context.Context) (context.Context, func()) {
@@ -598,12 +675,12 @@ func tryUnwrapFile(ifc interface{}) (uint32, string) {
 }
 
 type watchFileInfo struct {
-	event workspaceapi.Event
+	event schemeapi.Event
 	uri   workspaceapi.URI
 	isDir bool
 }
 
-func (w watchFileInfo) Event() workspaceapi.Event {
+func (w watchFileInfo) Event() schemeapi.Event {
 	return w.event
 }
 

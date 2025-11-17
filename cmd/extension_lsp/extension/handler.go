@@ -1785,7 +1785,7 @@ func (h *lspEditorHandler) browseLocations(
 	renderFile := func(l protocol.Location) {
 		uri := l.URI.SpanURI()
 		// Open assumes path in current workspace
-		f, oerr := h.fs.Open(uri.Filename(), os.O_RDONLY, 0)
+		f, oerr := h.fs.OpenFile(uri.Filename(), os.O_RDONLY, 0)
 		if oerr != nil {
 			log.Errorf("could not render preview file: Open: %v", oerr)
 			return

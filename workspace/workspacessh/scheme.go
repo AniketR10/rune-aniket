@@ -400,46 +400,6 @@ func (s *scheme) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (worksp
 	return pid, err
 }
 
-func (s *scheme) Open(path string, flag int, perm os.FileMode) (workspaceapi.File, *workspaceapi.Error) {
-	return s.Scheme.Open(path, flag, perm)
-}
-
-func (s *scheme) Remove(path string) error {
-	return s.Scheme.Remove(path)
-}
-
-func (s *scheme) Rename(oldpath, newpath string) error {
-	return s.Scheme.Rename(oldpath, newpath)
-}
-
-func (s *scheme) Stat(path string) (os.FileInfo, error) {
-	return s.Scheme.Stat(path)
-}
-
-func (s *scheme) Lstat(path string) (os.FileInfo, error) {
-	return s.Scheme.Lstat(path)
-}
-
-func (s *scheme) ReadLink(path string) (string, error) {
-	return s.Scheme.ReadLink(path)
-}
-
-func (s *scheme) NewPty(ctx context.Context) (workspaceapi.Pty, error) {
-	return s.Scheme.NewPty(ctx)
-}
-
-func (s *scheme) SetPtySize(pty workspaceapi.Pty, width, height int) error {
-	return s.Scheme.SetPtySize(pty, width, height)
-}
-
-func (s *scheme) NewFile(fd uintptr, name string) workspaceapi.File {
-	return s.Scheme.NewFile(fd, name)
-}
-
-func (s *scheme) MkdirAll(path string, perm os.FileMode) error {
-	return s.Scheme.MkdirAll(path, perm)
-}
-
 func (s *scheme) URI(path string) (workspaceapi.URI, error) {
 	absPath, err := s.expandPath(path)
 	if err != nil {

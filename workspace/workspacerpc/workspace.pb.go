@@ -235,6 +235,7 @@ type OpenRequest struct {
 	O_EXCL        bool                   `protobuf:"varint,8,opt,name=O_EXCL,json=OEXCL,proto3" json:"O_EXCL,omitempty"`
 	O_SYNC        bool                   `protobuf:"varint,9,opt,name=O_SYNC,json=OSYNC,proto3" json:"O_SYNC,omitempty"`
 	O_TRUNC       bool                   `protobuf:"varint,10,opt,name=O_TRUNC,json=OTRUNC,proto3" json:"O_TRUNC,omitempty"`
+	Root          string                 `protobuf:"bytes,11,opt,name=root,proto3" json:"root,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -332,6 +333,13 @@ func (x *OpenRequest) GetO_TRUNC() bool {
 	return false
 }
 
+func (x *OpenRequest) GetRoot() string {
+	if x != nil {
+		return x.Root
+	}
+	return ""
+}
+
 type OpenResponse struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	IsExistErr      bool                   `protobuf:"varint,2,opt,name=is_exist_err,json=isExistErr,proto3" json:"is_exist_err,omitempty"`
@@ -411,6 +419,7 @@ func (x *OpenResponse) GetFd() uint32 {
 type RemoveRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Filename      string                 `protobuf:"bytes,1,opt,name=filename,proto3" json:"filename,omitempty"`
+	Root          string                 `protobuf:"bytes,2,opt,name=root,proto3" json:"root,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -448,6 +457,13 @@ func (*RemoveRequest) Descriptor() ([]byte, []int) {
 func (x *RemoveRequest) GetFilename() string {
 	if x != nil {
 		return x.Filename
+	}
+	return ""
+}
+
+func (x *RemoveRequest) GetRoot() string {
+	if x != nil {
+		return x.Root
 	}
 	return ""
 }
@@ -516,6 +532,7 @@ type RenameRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Filename      string                 `protobuf:"bytes,1,opt,name=filename,proto3" json:"filename,omitempty"`
 	Newfilename   string                 `protobuf:"bytes,2,opt,name=newfilename,proto3" json:"newfilename,omitempty"`
+	Root          string                 `protobuf:"bytes,3,opt,name=root,proto3" json:"root,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -560,6 +577,13 @@ func (x *RenameRequest) GetFilename() string {
 func (x *RenameRequest) GetNewfilename() string {
 	if x != nil {
 		return x.Newfilename
+	}
+	return ""
+}
+
+func (x *RenameRequest) GetRoot() string {
+	if x != nil {
+		return x.Root
 	}
 	return ""
 }
@@ -628,6 +652,7 @@ type StatRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Filename      string                 `protobuf:"bytes,1,opt,name=filename,proto3" json:"filename,omitempty"`
 	Lstat         bool                   `protobuf:"varint,2,opt,name=lstat,proto3" json:"lstat,omitempty"`
+	Root          string                 `protobuf:"bytes,3,opt,name=root,proto3" json:"root,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -674,6 +699,13 @@ func (x *StatRequest) GetLstat() bool {
 		return x.Lstat
 	}
 	return false
+}
+
+func (x *StatRequest) GetRoot() string {
+	if x != nil {
+		return x.Root
+	}
+	return ""
 }
 
 type StatResponse struct {
@@ -780,6 +812,7 @@ type SyncRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Filename      string                 `protobuf:"bytes,1,opt,name=filename,proto3" json:"filename,omitempty"`
 	Fd            uint32                 `protobuf:"varint,2,opt,name=fd,proto3" json:"fd,omitempty"`
+	Root          string                 `protobuf:"bytes,3,opt,name=root,proto3" json:"root,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -828,6 +861,13 @@ func (x *SyncRequest) GetFd() uint32 {
 	return 0
 }
 
+func (x *SyncRequest) GetRoot() string {
+	if x != nil {
+		return x.Root
+	}
+	return ""
+}
+
 type SyncResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -869,6 +909,7 @@ type TruncateRequest struct {
 	Filename      string                 `protobuf:"bytes,1,opt,name=filename,proto3" json:"filename,omitempty"`
 	Fd            uint32                 `protobuf:"varint,2,opt,name=fd,proto3" json:"fd,omitempty"`
 	Size          int64                  `protobuf:"varint,3,opt,name=size,proto3" json:"size,omitempty"`
+	Root          string                 `protobuf:"bytes,4,opt,name=root,proto3" json:"root,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -924,6 +965,13 @@ func (x *TruncateRequest) GetSize() int64 {
 	return 0
 }
 
+func (x *TruncateRequest) GetRoot() string {
+	if x != nil {
+		return x.Root
+	}
+	return ""
+}
+
 type TruncateResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -964,6 +1012,7 @@ type CloseFileRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Filename      string                 `protobuf:"bytes,1,opt,name=filename,proto3" json:"filename,omitempty"`
 	Fd            uint32                 `protobuf:"varint,2,opt,name=fd,proto3" json:"fd,omitempty"`
+	Root          string                 `protobuf:"bytes,3,opt,name=root,proto3" json:"root,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1012,6 +1061,13 @@ func (x *CloseFileRequest) GetFd() uint32 {
 	return 0
 }
 
+func (x *CloseFileRequest) GetRoot() string {
+	if x != nil {
+		return x.Root
+	}
+	return ""
+}
+
 type CloseFileResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -1054,6 +1110,7 @@ type SeekRequest struct {
 	Fd            uint32                 `protobuf:"varint,2,opt,name=fd,proto3" json:"fd,omitempty"`
 	Offset        int64                  `protobuf:"varint,3,opt,name=offset,proto3" json:"offset,omitempty"`
 	Whence        int64                  `protobuf:"varint,4,opt,name=whence,proto3" json:"whence,omitempty"`
+	Root          string                 `protobuf:"bytes,5,opt,name=root,proto3" json:"root,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1116,6 +1173,13 @@ func (x *SeekRequest) GetWhence() int64 {
 	return 0
 }
 
+func (x *SeekRequest) GetRoot() string {
+	if x != nil {
+		return x.Root
+	}
+	return ""
+}
+
 type SeekResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	NewOffset     int64                  `protobuf:"varint,1,opt,name=new_offset,json=newOffset,proto3" json:"new_offset,omitempty"`
@@ -1165,6 +1229,8 @@ type ReadRequest struct {
 	Filename      string                 `protobuf:"bytes,1,opt,name=filename,proto3" json:"filename,omitempty"`
 	Fd            uint32                 `protobuf:"varint,2,opt,name=fd,proto3" json:"fd,omitempty"`
 	N             int64                  `protobuf:"varint,3,opt,name=n,proto3" json:"n,omitempty"`
+	Offset        int64                  `protobuf:"varint,4,opt,name=offset,proto3" json:"offset,omitempty"`
+	Root          string                 `protobuf:"bytes,5,opt,name=root,proto3" json:"root,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1218,6 +1284,20 @@ func (x *ReadRequest) GetN() int64 {
 		return x.N
 	}
 	return 0
+}
+
+func (x *ReadRequest) GetOffset() int64 {
+	if x != nil {
+		return x.Offset
+	}
+	return 0
+}
+
+func (x *ReadRequest) GetRoot() string {
+	if x != nil {
+		return x.Root
+	}
+	return ""
 }
 
 type ReadResponse struct {
@@ -1285,6 +1365,7 @@ type WriteRequest struct {
 	Filename      string                 `protobuf:"bytes,1,opt,name=filename,proto3" json:"filename,omitempty"`
 	Fd            uint32                 `protobuf:"varint,2,opt,name=fd,proto3" json:"fd,omitempty"`
 	Data          []byte                 `protobuf:"bytes,3,opt,name=data,proto3" json:"data,omitempty"`
+	Root          string                 `protobuf:"bytes,4,opt,name=root,proto3" json:"root,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1340,6 +1421,13 @@ func (x *WriteRequest) GetData() []byte {
 	return nil
 }
 
+func (x *WriteRequest) GetRoot() string {
+	if x != nil {
+		return x.Root
+	}
+	return ""
+}
+
 type WriteResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	N             int64                  `protobuf:"varint,1,opt,name=n,proto3" json:"n,omitempty"`
@@ -1387,6 +1475,7 @@ func (x *WriteResponse) GetN() int64 {
 type ReadLinkRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Filename      string                 `protobuf:"bytes,1,opt,name=filename,proto3" json:"filename,omitempty"`
+	Root          string                 `protobuf:"bytes,2,opt,name=root,proto3" json:"root,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1424,6 +1513,13 @@ func (*ReadLinkRequest) Descriptor() ([]byte, []int) {
 func (x *ReadLinkRequest) GetFilename() string {
 	if x != nil {
 		return x.Filename
+	}
+	return ""
+}
+
+func (x *ReadLinkRequest) GetRoot() string {
+	if x != nil {
+		return x.Root
 	}
 	return ""
 }
@@ -1719,6 +1815,7 @@ func (*SignalResponse) Descriptor() ([]byte, []int) {
 type URIRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Path          string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
+	Root          string                 `protobuf:"bytes,2,opt,name=root,proto3" json:"root,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1756,6 +1853,13 @@ func (*URIRequest) Descriptor() ([]byte, []int) {
 func (x *URIRequest) GetPath() string {
 	if x != nil {
 		return x.Path
+	}
+	return ""
+}
+
+func (x *URIRequest) GetRoot() string {
+	if x != nil {
+		return x.Root
 	}
 	return ""
 }
@@ -2214,7 +2318,8 @@ func (*SetPtySizeResponse) Descriptor() ([]byte, []int) {
 
 type ReadDirRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Root          string                 `protobuf:"bytes,1,opt,name=root,proto3" json:"root,omitempty"`
+	Dir           string                 `protobuf:"bytes,1,opt,name=dir,proto3" json:"dir,omitempty"`
+	Root          string                 `protobuf:"bytes,2,opt,name=root,proto3" json:"root,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2247,6 +2352,13 @@ func (x *ReadDirRequest) ProtoReflect() protoreflect.Message {
 // Deprecated: Use ReadDirRequest.ProtoReflect.Descriptor instead.
 func (*ReadDirRequest) Descriptor() ([]byte, []int) {
 	return file_workspacerpc_workspace_proto_rawDescGZIP(), []int{35}
+}
+
+func (x *ReadDirRequest) GetDir() string {
+	if x != nil {
+		return x.Dir
+	}
+	return ""
 }
 
 func (x *ReadDirRequest) GetRoot() string {
@@ -2472,6 +2584,7 @@ type MkdirAllRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Path          string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
 	Mode          int32                  `protobuf:"varint,2,opt,name=mode,proto3" json:"mode,omitempty"`
+	Root          string                 `protobuf:"bytes,3,opt,name=root,proto3" json:"root,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2518,6 +2631,13 @@ func (x *MkdirAllRequest) GetMode() int32 {
 		return x.Mode
 	}
 	return 0
+}
+
+func (x *MkdirAllRequest) GetRoot() string {
+	if x != nil {
+		return x.Root
+	}
+	return ""
 }
 
 type MkdirAllResponse struct {
@@ -2584,6 +2704,7 @@ type WatchRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Path          string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
 	Events        []Event                `protobuf:"varint,2,rep,packed,name=events,proto3,enum=workspace.Event" json:"events,omitempty"`
+	Root          string                 `protobuf:"bytes,3,opt,name=root,proto3" json:"root,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2630,6 +2751,13 @@ func (x *WatchRequest) GetEvents() []Event {
 		return x.Events
 	}
 	return nil
+}
+
+func (x *WatchRequest) GetRoot() string {
+	if x != nil {
+		return x.Root
+	}
+	return ""
 }
 
 type WatchResponse struct {
@@ -2799,6 +2927,7 @@ func (x *WatchMessage) GetData() *WatchData {
 type StopWatchRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            int64                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	Root          string                 `protobuf:"bytes,2,opt,name=root,proto3" json:"root,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2840,6 +2969,13 @@ func (x *StopWatchRequest) GetId() int64 {
 	return 0
 }
 
+func (x *StopWatchRequest) GetRoot() string {
+	if x != nil {
+		return x.Root
+	}
+	return ""
+}
+
 type StopWatchResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -2876,6 +3012,382 @@ func (*StopWatchResponse) Descriptor() ([]byte, []int) {
 	return file_workspacerpc_workspace_proto_rawDescGZIP(), []int{46}
 }
 
+type RootRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RootRequest) Reset() {
+	*x = RootRequest{}
+	mi := &file_workspacerpc_workspace_proto_msgTypes[47]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RootRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RootRequest) ProtoMessage() {}
+
+func (x *RootRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_workspacerpc_workspace_proto_msgTypes[47]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RootRequest.ProtoReflect.Descriptor instead.
+func (*RootRequest) Descriptor() ([]byte, []int) {
+	return file_workspacerpc_workspace_proto_rawDescGZIP(), []int{47}
+}
+
+type RootResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Path          string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RootResponse) Reset() {
+	*x = RootResponse{}
+	mi := &file_workspacerpc_workspace_proto_msgTypes[48]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RootResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RootResponse) ProtoMessage() {}
+
+func (x *RootResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_workspacerpc_workspace_proto_msgTypes[48]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RootResponse.ProtoReflect.Descriptor instead.
+func (*RootResponse) Descriptor() ([]byte, []int) {
+	return file_workspacerpc_workspace_proto_rawDescGZIP(), []int{48}
+}
+
+func (x *RootResponse) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+type SymlinkRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Target        string                 `protobuf:"bytes,1,opt,name=target,proto3" json:"target,omitempty"`
+	Link          string                 `protobuf:"bytes,2,opt,name=link,proto3" json:"link,omitempty"`
+	Root          string                 `protobuf:"bytes,3,opt,name=root,proto3" json:"root,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SymlinkRequest) Reset() {
+	*x = SymlinkRequest{}
+	mi := &file_workspacerpc_workspace_proto_msgTypes[49]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SymlinkRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SymlinkRequest) ProtoMessage() {}
+
+func (x *SymlinkRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_workspacerpc_workspace_proto_msgTypes[49]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SymlinkRequest.ProtoReflect.Descriptor instead.
+func (*SymlinkRequest) Descriptor() ([]byte, []int) {
+	return file_workspacerpc_workspace_proto_rawDescGZIP(), []int{49}
+}
+
+func (x *SymlinkRequest) GetTarget() string {
+	if x != nil {
+		return x.Target
+	}
+	return ""
+}
+
+func (x *SymlinkRequest) GetLink() string {
+	if x != nil {
+		return x.Link
+	}
+	return ""
+}
+
+func (x *SymlinkRequest) GetRoot() string {
+	if x != nil {
+		return x.Root
+	}
+	return ""
+}
+
+type SymlinkResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SymlinkResponse) Reset() {
+	*x = SymlinkResponse{}
+	mi := &file_workspacerpc_workspace_proto_msgTypes[50]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SymlinkResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SymlinkResponse) ProtoMessage() {}
+
+func (x *SymlinkResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_workspacerpc_workspace_proto_msgTypes[50]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SymlinkResponse.ProtoReflect.Descriptor instead.
+func (*SymlinkResponse) Descriptor() ([]byte, []int) {
+	return file_workspacerpc_workspace_proto_rawDescGZIP(), []int{50}
+}
+
+type TempFileRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Dir           string                 `protobuf:"bytes,1,opt,name=dir,proto3" json:"dir,omitempty"`
+	Prefix        string                 `protobuf:"bytes,2,opt,name=prefix,proto3" json:"prefix,omitempty"`
+	Root          string                 `protobuf:"bytes,3,opt,name=root,proto3" json:"root,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TempFileRequest) Reset() {
+	*x = TempFileRequest{}
+	mi := &file_workspacerpc_workspace_proto_msgTypes[51]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TempFileRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TempFileRequest) ProtoMessage() {}
+
+func (x *TempFileRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_workspacerpc_workspace_proto_msgTypes[51]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TempFileRequest.ProtoReflect.Descriptor instead.
+func (*TempFileRequest) Descriptor() ([]byte, []int) {
+	return file_workspacerpc_workspace_proto_rawDescGZIP(), []int{51}
+}
+
+func (x *TempFileRequest) GetDir() string {
+	if x != nil {
+		return x.Dir
+	}
+	return ""
+}
+
+func (x *TempFileRequest) GetPrefix() string {
+	if x != nil {
+		return x.Prefix
+	}
+	return ""
+}
+
+func (x *TempFileRequest) GetRoot() string {
+	if x != nil {
+		return x.Root
+	}
+	return ""
+}
+
+type TempFileResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Filename      string                 `protobuf:"bytes,1,opt,name=filename,proto3" json:"filename,omitempty"`
+	Fd            uint32                 `protobuf:"varint,2,opt,name=fd,proto3" json:"fd,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TempFileResponse) Reset() {
+	*x = TempFileResponse{}
+	mi := &file_workspacerpc_workspace_proto_msgTypes[52]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TempFileResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TempFileResponse) ProtoMessage() {}
+
+func (x *TempFileResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_workspacerpc_workspace_proto_msgTypes[52]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TempFileResponse.ProtoReflect.Descriptor instead.
+func (*TempFileResponse) Descriptor() ([]byte, []int) {
+	return file_workspacerpc_workspace_proto_rawDescGZIP(), []int{52}
+}
+
+func (x *TempFileResponse) GetFilename() string {
+	if x != nil {
+		return x.Filename
+	}
+	return ""
+}
+
+func (x *TempFileResponse) GetFd() uint32 {
+	if x != nil {
+		return x.Fd
+	}
+	return 0
+}
+
+type JoinRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Elem          []string               `protobuf:"bytes,1,rep,name=elem,proto3" json:"elem,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *JoinRequest) Reset() {
+	*x = JoinRequest{}
+	mi := &file_workspacerpc_workspace_proto_msgTypes[53]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *JoinRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*JoinRequest) ProtoMessage() {}
+
+func (x *JoinRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_workspacerpc_workspace_proto_msgTypes[53]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use JoinRequest.ProtoReflect.Descriptor instead.
+func (*JoinRequest) Descriptor() ([]byte, []int) {
+	return file_workspacerpc_workspace_proto_rawDescGZIP(), []int{53}
+}
+
+func (x *JoinRequest) GetElem() []string {
+	if x != nil {
+		return x.Elem
+	}
+	return nil
+}
+
+type JoinResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Filename      string                 `protobuf:"bytes,1,opt,name=filename,proto3" json:"filename,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *JoinResponse) Reset() {
+	*x = JoinResponse{}
+	mi := &file_workspacerpc_workspace_proto_msgTypes[54]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *JoinResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*JoinResponse) ProtoMessage() {}
+
+func (x *JoinResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_workspacerpc_workspace_proto_msgTypes[54]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use JoinResponse.ProtoReflect.Descriptor instead.
+func (*JoinResponse) Descriptor() ([]byte, []int) {
+	return file_workspacerpc_workspace_proto_rawDescGZIP(), []int{54}
+}
+
+func (x *JoinResponse) GetFilename() string {
+	if x != nil {
+		return x.Filename
+	}
+	return ""
+}
+
 type CommandPayload_Done struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	ExitError     string                 `protobuf:"bytes,1,opt,name=exit_error,json=exitError,proto3" json:"exit_error,omitempty"`
@@ -2885,7 +3397,7 @@ type CommandPayload_Done struct {
 
 func (x *CommandPayload_Done) Reset() {
 	*x = CommandPayload_Done{}
-	mi := &file_workspacerpc_workspace_proto_msgTypes[47]
+	mi := &file_workspacerpc_workspace_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2897,7 +3409,7 @@ func (x *CommandPayload_Done) String() string {
 func (*CommandPayload_Done) ProtoMessage() {}
 
 func (x *CommandPayload_Done) ProtoReflect() protoreflect.Message {
-	mi := &file_workspacerpc_workspace_proto_msgTypes[47]
+	mi := &file_workspacerpc_workspace_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2929,7 +3441,7 @@ type CommandPayload_Started struct {
 
 func (x *CommandPayload_Started) Reset() {
 	*x = CommandPayload_Started{}
-	mi := &file_workspacerpc_workspace_proto_msgTypes[48]
+	mi := &file_workspacerpc_workspace_proto_msgTypes[56]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2941,7 +3453,7 @@ func (x *CommandPayload_Started) String() string {
 func (*CommandPayload_Started) ProtoMessage() {}
 
 func (x *CommandPayload_Started) ProtoReflect() protoreflect.Message {
-	mi := &file_workspacerpc_workspace_proto_msgTypes[48]
+	mi := &file_workspacerpc_workspace_proto_msgTypes[56]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2974,7 +3486,7 @@ type CommandPayload_IO struct {
 
 func (x *CommandPayload_IO) Reset() {
 	*x = CommandPayload_IO{}
-	mi := &file_workspacerpc_workspace_proto_msgTypes[49]
+	mi := &file_workspacerpc_workspace_proto_msgTypes[57]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2986,7 +3498,7 @@ func (x *CommandPayload_IO) String() string {
 func (*CommandPayload_IO) ProtoMessage() {}
 
 func (x *CommandPayload_IO) ProtoReflect() protoreflect.Message {
-	mi := &file_workspacerpc_workspace_proto_msgTypes[49]
+	mi := &file_workspacerpc_workspace_proto_msgTypes[57]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3020,7 +3532,7 @@ var File_workspacerpc_workspace_proto protoreflect.FileDescriptor
 
 const file_workspacerpc_workspace_proto_rawDesc = "" +
 	"\n" +
-	"\x1cworkspacerpc/workspace.proto\x12\tworkspace\x1a\x1fgoogle/protobuf/timestamp.proto\"\xf0\x01\n" +
+	"\x1cworkspacerpc/workspace.proto\x12\tworkspace\x1a\x1fgoogle/protobuf/timestamp.proto\"\x84\x02\n" +
 	"\vOpenRequest\x12\x1a\n" +
 	"\bfilename\x18\x01 \x01(\tR\bfilename\x12\x12\n" +
 	"\x04mode\x18\x02 \x01(\x05R\x04mode\x12\x19\n" +
@@ -3031,32 +3543,36 @@ const file_workspacerpc_workspace_proto_rawDesc = "" +
 	"\x06O_EXCL\x18\b \x01(\bR\x05OEXCL\x12\x15\n" +
 	"\x06O_SYNC\x18\t \x01(\bR\x05OSYNC\x12\x17\n" +
 	"\aO_TRUNC\x18\n" +
-	" \x01(\bR\x06OTRUNC\"\xb1\x01\n" +
+	" \x01(\bR\x06OTRUNC\x12\x12\n" +
+	"\x04root\x18\v \x01(\tR\x04root\"\xb1\x01\n" +
 	"\fOpenResponse\x12 \n" +
 	"\fis_exist_err\x18\x02 \x01(\bR\n" +
 	"isExistErr\x12'\n" +
 	"\x10is_not_exist_err\x18\x03 \x01(\bR\risNotExistErr\x12*\n" +
 	"\x11is_permission_err\x18\x04 \x01(\bR\x0fisPermissionErr\x12\x1a\n" +
 	"\bfilename\x18\x05 \x01(\tR\bfilename\x12\x0e\n" +
-	"\x02fd\x18\x06 \x01(\rR\x02fd\"+\n" +
+	"\x02fd\x18\x06 \x01(\rR\x02fd\"?\n" +
 	"\rRemoveRequest\x12\x1a\n" +
-	"\bfilename\x18\x01 \x01(\tR\bfilename\"\x87\x01\n" +
+	"\bfilename\x18\x01 \x01(\tR\bfilename\x12\x12\n" +
+	"\x04root\x18\x02 \x01(\tR\x04root\"\x87\x01\n" +
 	"\x0eRemoveResponse\x12 \n" +
 	"\fis_exist_err\x18\x01 \x01(\bR\n" +
 	"isExistErr\x12'\n" +
 	"\x10is_not_exist_err\x18\x02 \x01(\bR\risNotExistErr\x12*\n" +
-	"\x11is_permission_err\x18\x03 \x01(\bR\x0fisPermissionErr\"M\n" +
+	"\x11is_permission_err\x18\x03 \x01(\bR\x0fisPermissionErr\"a\n" +
 	"\rRenameRequest\x12\x1a\n" +
 	"\bfilename\x18\x01 \x01(\tR\bfilename\x12 \n" +
-	"\vnewfilename\x18\x02 \x01(\tR\vnewfilename\"\x87\x01\n" +
+	"\vnewfilename\x18\x02 \x01(\tR\vnewfilename\x12\x12\n" +
+	"\x04root\x18\x03 \x01(\tR\x04root\"\x87\x01\n" +
 	"\x0eRenameResponse\x12 \n" +
 	"\fis_exist_err\x18\x01 \x01(\bR\n" +
 	"isExistErr\x12'\n" +
 	"\x10is_not_exist_err\x18\x02 \x01(\bR\risNotExistErr\x12*\n" +
-	"\x11is_permission_err\x18\x03 \x01(\bR\x0fisPermissionErr\"?\n" +
+	"\x11is_permission_err\x18\x03 \x01(\bR\x0fisPermissionErr\"S\n" +
 	"\vStatRequest\x12\x1a\n" +
 	"\bfilename\x18\x01 \x01(\tR\bfilename\x12\x14\n" +
-	"\x05lstat\x18\x02 \x01(\bR\x05lstat\"\x8f\x02\n" +
+	"\x05lstat\x18\x02 \x01(\bR\x05lstat\x12\x12\n" +
+	"\x04root\x18\x03 \x01(\tR\x04root\"\x8f\x02\n" +
 	"\fStatResponse\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
 	"\x04size\x18\x02 \x01(\x03R\x04size\x12\x12\n" +
@@ -3066,44 +3582,52 @@ const file_workspacerpc_workspace_proto_rawDesc = "" +
 	"\fis_exist_err\x18\x06 \x01(\bR\n" +
 	"isExistErr\x12'\n" +
 	"\x10is_not_exist_err\x18\a \x01(\bR\risNotExistErr\x12*\n" +
-	"\x11is_permission_err\x18\b \x01(\bR\x0fisPermissionErr\"9\n" +
+	"\x11is_permission_err\x18\b \x01(\bR\x0fisPermissionErr\"M\n" +
 	"\vSyncRequest\x12\x1a\n" +
 	"\bfilename\x18\x01 \x01(\tR\bfilename\x12\x0e\n" +
-	"\x02fd\x18\x02 \x01(\rR\x02fd\"\x0e\n" +
-	"\fSyncResponse\"Q\n" +
+	"\x02fd\x18\x02 \x01(\rR\x02fd\x12\x12\n" +
+	"\x04root\x18\x03 \x01(\tR\x04root\"\x0e\n" +
+	"\fSyncResponse\"e\n" +
 	"\x0fTruncateRequest\x12\x1a\n" +
 	"\bfilename\x18\x01 \x01(\tR\bfilename\x12\x0e\n" +
 	"\x02fd\x18\x02 \x01(\rR\x02fd\x12\x12\n" +
-	"\x04size\x18\x03 \x01(\x03R\x04size\"\x12\n" +
-	"\x10TruncateResponse\">\n" +
+	"\x04size\x18\x03 \x01(\x03R\x04size\x12\x12\n" +
+	"\x04root\x18\x04 \x01(\tR\x04root\"\x12\n" +
+	"\x10TruncateResponse\"R\n" +
 	"\x10CloseFileRequest\x12\x1a\n" +
 	"\bfilename\x18\x01 \x01(\tR\bfilename\x12\x0e\n" +
-	"\x02fd\x18\x02 \x01(\rR\x02fd\"\x13\n" +
-	"\x11CloseFileResponse\"i\n" +
+	"\x02fd\x18\x02 \x01(\rR\x02fd\x12\x12\n" +
+	"\x04root\x18\x03 \x01(\tR\x04root\"\x13\n" +
+	"\x11CloseFileResponse\"}\n" +
 	"\vSeekRequest\x12\x1a\n" +
 	"\bfilename\x18\x01 \x01(\tR\bfilename\x12\x0e\n" +
 	"\x02fd\x18\x02 \x01(\rR\x02fd\x12\x16\n" +
 	"\x06offset\x18\x03 \x01(\x03R\x06offset\x12\x16\n" +
-	"\x06whence\x18\x04 \x01(\x03R\x06whence\"-\n" +
+	"\x06whence\x18\x04 \x01(\x03R\x06whence\x12\x12\n" +
+	"\x04root\x18\x05 \x01(\tR\x04root\"-\n" +
 	"\fSeekResponse\x12\x1d\n" +
 	"\n" +
-	"new_offset\x18\x01 \x01(\x03R\tnewOffset\"G\n" +
+	"new_offset\x18\x01 \x01(\x03R\tnewOffset\"s\n" +
 	"\vReadRequest\x12\x1a\n" +
 	"\bfilename\x18\x01 \x01(\tR\bfilename\x12\x0e\n" +
 	"\x02fd\x18\x02 \x01(\rR\x02fd\x12\f\n" +
-	"\x01n\x18\x03 \x01(\x03R\x01n\"G\n" +
+	"\x01n\x18\x03 \x01(\x03R\x01n\x12\x16\n" +
+	"\x06offset\x18\x04 \x01(\x03R\x06offset\x12\x12\n" +
+	"\x04root\x18\x05 \x01(\tR\x04root\"G\n" +
 	"\fReadResponse\x12\f\n" +
 	"\x01n\x18\x01 \x01(\x03R\x01n\x12\x12\n" +
 	"\x04data\x18\x02 \x01(\fR\x04data\x12\x15\n" +
-	"\x06is_eof\x18\x03 \x01(\bR\x05isEof\"N\n" +
+	"\x06is_eof\x18\x03 \x01(\bR\x05isEof\"b\n" +
 	"\fWriteRequest\x12\x1a\n" +
 	"\bfilename\x18\x01 \x01(\tR\bfilename\x12\x0e\n" +
 	"\x02fd\x18\x02 \x01(\rR\x02fd\x12\x12\n" +
-	"\x04data\x18\x03 \x01(\fR\x04data\"\x1d\n" +
+	"\x04data\x18\x03 \x01(\fR\x04data\x12\x12\n" +
+	"\x04root\x18\x04 \x01(\tR\x04root\"\x1d\n" +
 	"\rWriteResponse\x12\f\n" +
-	"\x01n\x18\x01 \x01(\x03R\x01n\"-\n" +
+	"\x01n\x18\x01 \x01(\x03R\x01n\"A\n" +
 	"\x0fReadLinkRequest\x12\x1a\n" +
-	"\bfilename\x18\x01 \x01(\tR\bfilename\".\n" +
+	"\bfilename\x18\x01 \x01(\tR\bfilename\x12\x12\n" +
+	"\x04root\x18\x02 \x01(\tR\x04root\".\n" +
 	"\x10ReadLinkResponse\x12\x1a\n" +
 	"\bfilename\x18\x01 \x01(\tR\bfilename\"\x8f\x03\n" +
 	"\x13StartCommandRequest\x12\x12\n" +
@@ -3129,10 +3653,11 @@ const file_workspacerpc_workspace_proto_rawDesc = "" +
 	"\rSignalRequest\x12\x10\n" +
 	"\x03pid\x18\x01 \x01(\x03R\x03pid\x12\x10\n" +
 	"\x03sig\x18\x02 \x01(\x05R\x03sig\"\x10\n" +
-	"\x0eSignalResponse\" \n" +
+	"\x0eSignalResponse\"4\n" +
 	"\n" +
 	"URIRequest\x12\x12\n" +
-	"\x04path\x18\x01 \x01(\tR\x04path\"\x1f\n" +
+	"\x04path\x18\x01 \x01(\tR\x04path\x12\x12\n" +
+	"\x04root\x18\x02 \x01(\tR\x04root\"\x1f\n" +
 	"\vURIResponse\x12\x10\n" +
 	"\x03uri\x18\x01 \x01(\tR\x03uri\"J\n" +
 	"\x15RegisterSchemeRequest\x12\x19\n" +
@@ -3158,9 +3683,10 @@ const file_workspacerpc_workspace_proto_rawDesc = "" +
 	"\bslave_fd\x18\x04 \x01(\rR\aslaveFd\x12\x16\n" +
 	"\x06height\x18\x05 \x01(\x05R\x06height\x12\x14\n" +
 	"\x05width\x18\x06 \x01(\x05R\x05width\"\x14\n" +
-	"\x12SetPtySizeResponse\"$\n" +
-	"\x0eReadDirRequest\x12\x12\n" +
-	"\x04root\x18\x01 \x01(\tR\x04root\"I\n" +
+	"\x12SetPtySizeResponse\"6\n" +
+	"\x0eReadDirRequest\x12\x10\n" +
+	"\x03dir\x18\x01 \x01(\tR\x03dir\x12\x12\n" +
+	"\x04root\x18\x02 \x01(\tR\x04root\"I\n" +
 	"\bDirEntry\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x15\n" +
 	"\x06is_dir\x18\x02 \x01(\bR\x05isDir\x12\x12\n" +
@@ -3198,18 +3724,20 @@ const file_workspacerpc_workspace_proto_rawDesc = "" +
 	"\vTypeStarted\x10\x02\x12\n" +
 	"\n" +
 	"\x06TypeIO\x10\x03\x12\r\n" +
-	"\tTypeError\x10\x04\"9\n" +
+	"\tTypeError\x10\x04\"M\n" +
 	"\x0fMkdirAllRequest\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x12\n" +
-	"\x04mode\x18\x02 \x01(\x05R\x04mode\"\x89\x01\n" +
+	"\x04mode\x18\x02 \x01(\x05R\x04mode\x12\x12\n" +
+	"\x04root\x18\x03 \x01(\tR\x04root\"\x89\x01\n" +
 	"\x10MkdirAllResponse\x12 \n" +
 	"\fis_exist_err\x18\x02 \x01(\bR\n" +
 	"isExistErr\x12'\n" +
 	"\x10is_not_exist_err\x18\x03 \x01(\bR\risNotExistErr\x12*\n" +
-	"\x11is_permission_err\x18\x04 \x01(\bR\x0fisPermissionErr\"L\n" +
+	"\x11is_permission_err\x18\x04 \x01(\bR\x0fisPermissionErr\"`\n" +
 	"\fWatchRequest\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12(\n" +
-	"\x06events\x18\x02 \x03(\x0e2\x10.workspace.EventR\x06events\"\x1f\n" +
+	"\x06events\x18\x02 \x03(\x0e2\x10.workspace.EventR\x06events\x12\x12\n" +
+	"\x04root\x18\x03 \x01(\tR\x04root\"\x1f\n" +
 	"\rWatchResponse\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x03R\x02id\"\\\n" +
 	"\tWatchData\x12&\n" +
@@ -3222,10 +3750,30 @@ const file_workspacerpc_workspace_proto_rawDesc = "" +
 	"\x04data\x18\x03 \x01(\v2\x14.workspace.WatchDataR\x04data\"&\n" +
 	"\x04Type\x12\x10\n" +
 	"\fTypeResponse\x10\x00\x12\f\n" +
-	"\bTypeData\x10\x01\"\"\n" +
+	"\bTypeData\x10\x01\"6\n" +
 	"\x10StopWatchRequest\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\x03R\x02id\"\x13\n" +
-	"\x11StopWatchResponse*6\n" +
+	"\x02id\x18\x01 \x01(\x03R\x02id\x12\x12\n" +
+	"\x04root\x18\x02 \x01(\tR\x04root\"\x13\n" +
+	"\x11StopWatchResponse\"\r\n" +
+	"\vRootRequest\"\"\n" +
+	"\fRootResponse\x12\x12\n" +
+	"\x04path\x18\x01 \x01(\tR\x04path\"P\n" +
+	"\x0eSymlinkRequest\x12\x16\n" +
+	"\x06target\x18\x01 \x01(\tR\x06target\x12\x12\n" +
+	"\x04link\x18\x02 \x01(\tR\x04link\x12\x12\n" +
+	"\x04root\x18\x03 \x01(\tR\x04root\"\x11\n" +
+	"\x0fSymlinkResponse\"O\n" +
+	"\x0fTempFileRequest\x12\x10\n" +
+	"\x03dir\x18\x01 \x01(\tR\x03dir\x12\x16\n" +
+	"\x06prefix\x18\x02 \x01(\tR\x06prefix\x12\x12\n" +
+	"\x04root\x18\x03 \x01(\tR\x04root\">\n" +
+	"\x10TempFileResponse\x12\x1a\n" +
+	"\bfilename\x18\x01 \x01(\tR\bfilename\x12\x0e\n" +
+	"\x02fd\x18\x02 \x01(\rR\x02fd\"!\n" +
+	"\vJoinRequest\x12\x12\n" +
+	"\x04elem\x18\x01 \x03(\tR\x04elem\"*\n" +
+	"\fJoinResponse\x12\x1a\n" +
+	"\bfilename\x18\x01 \x01(\tR\bfilename*6\n" +
 	"\x05Event\x12\n" +
 	"\n" +
 	"\x06Create\x10\x00\x12\n" +
@@ -3237,7 +3785,7 @@ const file_workspacerpc_workspace_proto_rawDesc = "" +
 	"\bTerminal\x12=\n" +
 	"\x06NewPty\x12\x18.workspace.NewPtyRequest\x1a\x19.workspace.NewPtyResponse\x12I\n" +
 	"\n" +
-	"SetPtySize\x12\x1c.workspace.SetPtySizeRequest\x1a\x1d.workspace.SetPtySizeResponse2\x81\x05\n" +
+	"SetPtySize\x12\x1c.workspace.SetPtySizeRequest\x1a\x1d.workspace.SetPtySizeResponse2\xfa\x06\n" +
 	"\x06Scheme\x124\n" +
 	"\x03URI\x12\x15.workspace.URIRequest\x1a\x16.workspace.URIResponse\x127\n" +
 	"\x04Open\x12\x16.workspace.OpenRequest\x1a\x17.workspace.OpenResponse\x12=\n" +
@@ -3248,16 +3796,21 @@ const file_workspacerpc_workspace_proto_rawDesc = "" +
 	"\aReadDir\x12\x19.workspace.ReadDirRequest\x1a\x1a.workspace.ReadDirResponse\x12C\n" +
 	"\bMkdirAll\x12\x1a.workspace.MkdirAllRequest\x1a\x1b.workspace.MkdirAllResponse\x12=\n" +
 	"\x05Watch\x12\x17.workspace.WatchRequest\x1a\x17.workspace.WatchMessage\"\x000\x01\x12F\n" +
-	"\tStopWatch\x12\x1b.workspace.StopWatchRequest\x1a\x1c.workspace.StopWatchResponse2\x95\x01\n" +
+	"\tStopWatch\x12\x1b.workspace.StopWatchRequest\x1a\x1c.workspace.StopWatchResponse\x127\n" +
+	"\x04Root\x12\x16.workspace.RootRequest\x1a\x17.workspace.RootResponse\x12@\n" +
+	"\aSymlink\x12\x19.workspace.SymlinkRequest\x1a\x1a.workspace.SymlinkResponse\x12C\n" +
+	"\bTempFile\x12\x1a.workspace.TempFileRequest\x1a\x1b.workspace.TempFileResponse\x127\n" +
+	"\x04Join\x12\x16.workspace.JoinRequest\x1a\x17.workspace.JoinResponse2\x95\x01\n" +
 	"\bExecutor\x12J\n" +
 	"\fStartCommand\x12\x19.workspace.CommandPayload\x1a\x19.workspace.CommandPayload\"\x00(\x010\x01\x12=\n" +
-	"\x06Signal\x12\x18.workspace.SignalRequest\x1a\x19.workspace.SignalResponse2\xb0\x03\n" +
+	"\x06Signal\x12\x18.workspace.SignalRequest\x1a\x19.workspace.SignalResponse2\xeb\x03\n" +
 	"\x05Files\x127\n" +
 	"\x04Sync\x12\x16.workspace.SyncRequest\x1a\x17.workspace.SyncResponse\x12C\n" +
 	"\bTruncate\x12\x1a.workspace.TruncateRequest\x1a\x1b.workspace.TruncateResponse\x127\n" +
 	"\x04Seek\x12\x16.workspace.SeekRequest\x1a\x17.workspace.SeekResponse\x12B\n" +
 	"\x05Close\x12\x1b.workspace.CloseFileRequest\x1a\x1c.workspace.CloseFileResponse\x127\n" +
-	"\x04Read\x12\x16.workspace.ReadRequest\x1a\x17.workspace.ReadResponse\x12:\n" +
+	"\x04Read\x12\x16.workspace.ReadRequest\x1a\x17.workspace.ReadResponse\x129\n" +
+	"\x06ReadAt\x12\x16.workspace.ReadRequest\x1a\x17.workspace.ReadResponse\x12:\n" +
 	"\x05Write\x12\x17.workspace.WriteRequest\x1a\x18.workspace.WriteResponse\x127\n" +
 	"\x04Stat\x12\x16.workspace.StatRequest\x1a\x17.workspace.StatResponse2g\n" +
 	"\vProxyScheme\x12X\n" +
@@ -3278,7 +3831,7 @@ func file_workspacerpc_workspace_proto_rawDescGZIP() []byte {
 }
 
 var file_workspacerpc_workspace_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_workspacerpc_workspace_proto_msgTypes = make([]protoimpl.MessageInfo, 50)
+var file_workspacerpc_workspace_proto_msgTypes = make([]protoimpl.MessageInfo, 58)
 var file_workspacerpc_workspace_proto_goTypes = []any{
 	(Event)(0),                      // 0: workspace.Event
 	(CommandPayload_Type)(0),        // 1: workspace.CommandPayload.Type
@@ -3331,19 +3884,27 @@ var file_workspacerpc_workspace_proto_goTypes = []any{
 	(*WatchMessage)(nil),            // 48: workspace.WatchMessage
 	(*StopWatchRequest)(nil),        // 49: workspace.StopWatchRequest
 	(*StopWatchResponse)(nil),       // 50: workspace.StopWatchResponse
-	(*CommandPayload_Done)(nil),     // 51: workspace.CommandPayload.Done
-	(*CommandPayload_Started)(nil),  // 52: workspace.CommandPayload.Started
-	(*CommandPayload_IO)(nil),       // 53: workspace.CommandPayload.IO
-	(*timestamppb.Timestamp)(nil),   // 54: google.protobuf.Timestamp
+	(*RootRequest)(nil),             // 51: workspace.RootRequest
+	(*RootResponse)(nil),            // 52: workspace.RootResponse
+	(*SymlinkRequest)(nil),          // 53: workspace.SymlinkRequest
+	(*SymlinkResponse)(nil),         // 54: workspace.SymlinkResponse
+	(*TempFileRequest)(nil),         // 55: workspace.TempFileRequest
+	(*TempFileResponse)(nil),        // 56: workspace.TempFileResponse
+	(*JoinRequest)(nil),             // 57: workspace.JoinRequest
+	(*JoinResponse)(nil),            // 58: workspace.JoinResponse
+	(*CommandPayload_Done)(nil),     // 59: workspace.CommandPayload.Done
+	(*CommandPayload_Started)(nil),  // 60: workspace.CommandPayload.Started
+	(*CommandPayload_IO)(nil),       // 61: workspace.CommandPayload.IO
+	(*timestamppb.Timestamp)(nil),   // 62: google.protobuf.Timestamp
 }
 var file_workspacerpc_workspace_proto_depIdxs = []int32{
-	54, // 0: workspace.StatResponse.mod_time:type_name -> google.protobuf.Timestamp
+	62, // 0: workspace.StatResponse.mod_time:type_name -> google.protobuf.Timestamp
 	40, // 1: workspace.ReadDirResponse.path:type_name -> workspace.DirEntry
 	1,  // 2: workspace.CommandPayload.type:type_name -> workspace.CommandPayload.Type
 	26, // 3: workspace.CommandPayload.start:type_name -> workspace.StartCommandRequest
-	51, // 4: workspace.CommandPayload.done:type_name -> workspace.CommandPayload.Done
-	52, // 5: workspace.CommandPayload.started:type_name -> workspace.CommandPayload.Started
-	53, // 6: workspace.CommandPayload.io:type_name -> workspace.CommandPayload.IO
+	59, // 4: workspace.CommandPayload.done:type_name -> workspace.CommandPayload.Done
+	60, // 5: workspace.CommandPayload.started:type_name -> workspace.CommandPayload.Started
+	61, // 6: workspace.CommandPayload.io:type_name -> workspace.CommandPayload.IO
 	0,  // 7: workspace.WatchRequest.events:type_name -> workspace.Event
 	0,  // 8: workspace.WatchData.event:type_name -> workspace.Event
 	3,  // 9: workspace.WatchMessage.type:type_name -> workspace.WatchMessage.Type
@@ -3362,42 +3923,52 @@ var file_workspacerpc_workspace_proto_depIdxs = []int32{
 	43, // 22: workspace.Scheme.MkdirAll:input_type -> workspace.MkdirAllRequest
 	45, // 23: workspace.Scheme.Watch:input_type -> workspace.WatchRequest
 	49, // 24: workspace.Scheme.StopWatch:input_type -> workspace.StopWatchRequest
-	42, // 25: workspace.Executor.StartCommand:input_type -> workspace.CommandPayload
-	27, // 26: workspace.Executor.Signal:input_type -> workspace.SignalRequest
-	12, // 27: workspace.Files.Sync:input_type -> workspace.SyncRequest
-	14, // 28: workspace.Files.Truncate:input_type -> workspace.TruncateRequest
-	18, // 29: workspace.Files.Seek:input_type -> workspace.SeekRequest
-	16, // 30: workspace.Files.Close:input_type -> workspace.CloseFileRequest
-	20, // 31: workspace.Files.Read:input_type -> workspace.ReadRequest
-	22, // 32: workspace.Files.Write:input_type -> workspace.WriteRequest
-	10, // 33: workspace.Files.Stat:input_type -> workspace.StatRequest
-	33, // 34: workspace.ProxyScheme.InitializeProxy:input_type -> workspace.InitializeProxyRequest
-	31, // 35: workspace.Manager.RegisterScheme:input_type -> workspace.RegisterSchemeRequest
-	36, // 36: workspace.Terminal.NewPty:output_type -> workspace.NewPtyResponse
-	38, // 37: workspace.Terminal.SetPtySize:output_type -> workspace.SetPtySizeResponse
-	30, // 38: workspace.Scheme.URI:output_type -> workspace.URIResponse
-	5,  // 39: workspace.Scheme.Open:output_type -> workspace.OpenResponse
-	7,  // 40: workspace.Scheme.Remove:output_type -> workspace.RemoveResponse
-	9,  // 41: workspace.Scheme.Rename:output_type -> workspace.RenameResponse
-	11, // 42: workspace.Scheme.Stat:output_type -> workspace.StatResponse
-	25, // 43: workspace.Scheme.ReadLink:output_type -> workspace.ReadLinkResponse
-	41, // 44: workspace.Scheme.ReadDir:output_type -> workspace.ReadDirResponse
-	44, // 45: workspace.Scheme.MkdirAll:output_type -> workspace.MkdirAllResponse
-	48, // 46: workspace.Scheme.Watch:output_type -> workspace.WatchMessage
-	50, // 47: workspace.Scheme.StopWatch:output_type -> workspace.StopWatchResponse
-	42, // 48: workspace.Executor.StartCommand:output_type -> workspace.CommandPayload
-	28, // 49: workspace.Executor.Signal:output_type -> workspace.SignalResponse
-	13, // 50: workspace.Files.Sync:output_type -> workspace.SyncResponse
-	15, // 51: workspace.Files.Truncate:output_type -> workspace.TruncateResponse
-	19, // 52: workspace.Files.Seek:output_type -> workspace.SeekResponse
-	17, // 53: workspace.Files.Close:output_type -> workspace.CloseFileResponse
-	21, // 54: workspace.Files.Read:output_type -> workspace.ReadResponse
-	23, // 55: workspace.Files.Write:output_type -> workspace.WriteResponse
-	11, // 56: workspace.Files.Stat:output_type -> workspace.StatResponse
-	34, // 57: workspace.ProxyScheme.InitializeProxy:output_type -> workspace.InitializeProxyResponse
-	32, // 58: workspace.Manager.RegisterScheme:output_type -> workspace.RegisterSchemeResponse
-	36, // [36:59] is the sub-list for method output_type
-	13, // [13:36] is the sub-list for method input_type
+	51, // 25: workspace.Scheme.Root:input_type -> workspace.RootRequest
+	53, // 26: workspace.Scheme.Symlink:input_type -> workspace.SymlinkRequest
+	55, // 27: workspace.Scheme.TempFile:input_type -> workspace.TempFileRequest
+	57, // 28: workspace.Scheme.Join:input_type -> workspace.JoinRequest
+	42, // 29: workspace.Executor.StartCommand:input_type -> workspace.CommandPayload
+	27, // 30: workspace.Executor.Signal:input_type -> workspace.SignalRequest
+	12, // 31: workspace.Files.Sync:input_type -> workspace.SyncRequest
+	14, // 32: workspace.Files.Truncate:input_type -> workspace.TruncateRequest
+	18, // 33: workspace.Files.Seek:input_type -> workspace.SeekRequest
+	16, // 34: workspace.Files.Close:input_type -> workspace.CloseFileRequest
+	20, // 35: workspace.Files.Read:input_type -> workspace.ReadRequest
+	20, // 36: workspace.Files.ReadAt:input_type -> workspace.ReadRequest
+	22, // 37: workspace.Files.Write:input_type -> workspace.WriteRequest
+	10, // 38: workspace.Files.Stat:input_type -> workspace.StatRequest
+	33, // 39: workspace.ProxyScheme.InitializeProxy:input_type -> workspace.InitializeProxyRequest
+	31, // 40: workspace.Manager.RegisterScheme:input_type -> workspace.RegisterSchemeRequest
+	36, // 41: workspace.Terminal.NewPty:output_type -> workspace.NewPtyResponse
+	38, // 42: workspace.Terminal.SetPtySize:output_type -> workspace.SetPtySizeResponse
+	30, // 43: workspace.Scheme.URI:output_type -> workspace.URIResponse
+	5,  // 44: workspace.Scheme.Open:output_type -> workspace.OpenResponse
+	7,  // 45: workspace.Scheme.Remove:output_type -> workspace.RemoveResponse
+	9,  // 46: workspace.Scheme.Rename:output_type -> workspace.RenameResponse
+	11, // 47: workspace.Scheme.Stat:output_type -> workspace.StatResponse
+	25, // 48: workspace.Scheme.ReadLink:output_type -> workspace.ReadLinkResponse
+	41, // 49: workspace.Scheme.ReadDir:output_type -> workspace.ReadDirResponse
+	44, // 50: workspace.Scheme.MkdirAll:output_type -> workspace.MkdirAllResponse
+	48, // 51: workspace.Scheme.Watch:output_type -> workspace.WatchMessage
+	50, // 52: workspace.Scheme.StopWatch:output_type -> workspace.StopWatchResponse
+	52, // 53: workspace.Scheme.Root:output_type -> workspace.RootResponse
+	54, // 54: workspace.Scheme.Symlink:output_type -> workspace.SymlinkResponse
+	56, // 55: workspace.Scheme.TempFile:output_type -> workspace.TempFileResponse
+	58, // 56: workspace.Scheme.Join:output_type -> workspace.JoinResponse
+	42, // 57: workspace.Executor.StartCommand:output_type -> workspace.CommandPayload
+	28, // 58: workspace.Executor.Signal:output_type -> workspace.SignalResponse
+	13, // 59: workspace.Files.Sync:output_type -> workspace.SyncResponse
+	15, // 60: workspace.Files.Truncate:output_type -> workspace.TruncateResponse
+	19, // 61: workspace.Files.Seek:output_type -> workspace.SeekResponse
+	17, // 62: workspace.Files.Close:output_type -> workspace.CloseFileResponse
+	21, // 63: workspace.Files.Read:output_type -> workspace.ReadResponse
+	21, // 64: workspace.Files.ReadAt:output_type -> workspace.ReadResponse
+	23, // 65: workspace.Files.Write:output_type -> workspace.WriteResponse
+	11, // 66: workspace.Files.Stat:output_type -> workspace.StatResponse
+	34, // 67: workspace.ProxyScheme.InitializeProxy:output_type -> workspace.InitializeProxyResponse
+	32, // 68: workspace.Manager.RegisterScheme:output_type -> workspace.RegisterSchemeResponse
+	41, // [41:69] is the sub-list for method output_type
+	13, // [13:41] is the sub-list for method input_type
 	13, // [13:13] is the sub-list for extension type_name
 	13, // [13:13] is the sub-list for extension extendee
 	0,  // [0:13] is the sub-list for field type_name
@@ -3414,7 +3985,7 @@ func file_workspacerpc_workspace_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_workspacerpc_workspace_proto_rawDesc), len(file_workspacerpc_workspace_proto_rawDesc)),
 			NumEnums:      4,
-			NumMessages:   50,
+			NumMessages:   58,
 			NumExtensions: 0,
 			NumServices:   6,
 		},

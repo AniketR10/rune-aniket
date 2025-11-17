@@ -28,6 +28,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -59,6 +60,7 @@ type state struct {
 // intermitent connection failures
 type remoteScheme struct {
 	closeChan chan struct{}
+	uri       workspaceapi.URI
 	ctx       context.Context
 	cancelCtx func()
 	currState atomic.Value
@@ -156,6 +158,7 @@ func newRemoteScheme(
 	ctx context.Context, connect connectSchemeFn, uri workspaceapi.URI,
 ) schemeapi.Scheme {
 	ret := &remoteScheme{
+		uri:       uri,
 		closeChan: make(chan struct{}),
 	}
 	ret.currState.Store(state{lastSessionError: errors.New("not connected yet")})
@@ -182,17 +185,16 @@ func (s *remoteScheme) state() (err error, scheme schemeapi.Scheme) { //nolint:s
 	return
 }
 
-func (s *remoteScheme) Open(path string, flag int, perm os.FileMode) (
-	workspaceapi.File, *workspaceapi.Error,
+func (s *remoteScheme) OpenFile(path string, flag int, perm os.FileMode) (
+	workspaceapi.File, error,
 ) {
 	err, scheme := s.state()
 	if err != nil {
-		werr := workspaceapi.NopError(err)
-		return nil, werr
+		return nil, err
 	}
-	f, werr := scheme.Open(path, flag, perm)
-	if werr != nil {
-		return nil, werr
+	f, err := scheme.OpenFile(path, flag, perm)
+	if err != nil {
+		return nil, err
 	}
 	// clear workspace client finalizer
 	// so we can manage lifecycle manually,
@@ -202,6 +204,62 @@ func (s *remoteScheme) Open(path string, flag int, perm os.FileMode) (
 	rf := newRemoteFile(s, f.Fd(), f.Name())
 	s.files.Store(rf.Fd(), rf)
 	return rf, nil
+}
+
+func (s *remoteScheme) Chroot(path string) (schemeapi.Scheme, error) {
+	err, scheme := s.state()
+	if err != nil {
+		return nil, err
+	}
+	return scheme.Chroot(path)
+}
+
+func (s *remoteScheme) Root() string {
+	err, scheme := s.state()
+	if err != nil {
+		// best effort
+		return s.uri.Path()
+	}
+	return scheme.Root()
+}
+
+func (s *remoteScheme) Symlink(target, link string) error {
+	err, scheme := s.state()
+	if err != nil {
+		return err
+	}
+	return scheme.Symlink(target, link)
+}
+
+func (s *remoteScheme) TempFile(dir, prefix string) (workspaceapi.File, error) {
+	err, scheme := s.state()
+	if err != nil {
+		return nil, err
+	}
+	return scheme.TempFile(dir, prefix)
+}
+
+func (s *remoteScheme) Join(elem ...string) string {
+	err, scheme := s.state()
+	if err != nil {
+		return filepath.Join(elem...)
+	}
+	return scheme.Join(elem...)
+}
+
+func (s *remoteScheme) Create(filename string) (workspaceapi.File, error) {
+	err, scheme := s.state()
+	if err != nil {
+		return nil, err
+	}
+	return scheme.Create(filename)
+}
+func (s *remoteScheme) Open(filename string) (workspaceapi.File, error) {
+	err, scheme := s.state()
+	if err != nil {
+		return nil, err
+	}
+	return scheme.Open(filename)
 }
 
 func (s *remoteScheme) NewFile(fd uintptr, filename string) workspaceapi.File {
@@ -244,12 +302,12 @@ func (s *remoteScheme) Lstat(path string) (os.FileInfo, error) {
 	return scheme.Lstat(path)
 }
 
-func (s *remoteScheme) ReadLink(path string) (string, error) {
+func (s *remoteScheme) Readlink(path string) (string, error) {
 	err, scheme := s.state()
 	if err != nil {
 		return "", err
 	}
-	return scheme.ReadLink(path)
+	return scheme.Readlink(path)
 }
 
 func (s *remoteScheme) URI(path string) (workspaceapi.URI, error) {
@@ -337,7 +395,7 @@ func (s *remoteScheme) MkdirAll(path string, perm os.FileMode) error {
 }
 
 func (s *remoteScheme) Watch(
-	path string, c chan<- workspaceapi.EventInfo, events ...workspaceapi.Event,
+	path string, c chan<- schemeapi.EventInfo, events ...schemeapi.Event,
 ) (int, error) {
 	err, scheme := s.state()
 	if err != nil {

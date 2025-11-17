@@ -74,6 +74,14 @@ func (c *remoteFile) Read(p []byte) (n int, err error) {
 	return f.Read(p)
 }
 
+func (c *remoteFile) ReadAt(p []byte, offset int64) (n int, err error) {
+	f, err := c.newFile()
+	if err != nil {
+		return 0, err
+	}
+	return f.ReadAt(p, offset)
+}
+
 func (c *remoteFile) Write(p []byte) (n int, err error) {
 	f, err := c.newFile()
 	if err != nil {

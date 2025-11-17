@@ -109,12 +109,12 @@ func swapFileName(swapDir, filePath string) (string, string) {
 }
 
 func (f *file) initSwapFile(orig workspaceapi.File, origPerms os.FileMode) (workspaceapi.File, error) {
-	swap, osErr := f.scheme.Open(f.swapFileName, os.O_RDWR|os.O_CREATE|os.O_EXCL, origPerms)
+	swap, osErr := f.scheme.OpenFile(f.swapFileName, os.O_RDWR|os.O_CREATE|os.O_EXCL, origPerms)
 	if osErr != nil {
-		if osErr.IsExist {
+		if os.IsExist(osErr) {
 			return nil, workspaceapi.ErrFileAlreadyOpen
 		}
-		return nil, osErr.ToError()
+		return nil, osErr
 	}
 
 	if orig == nil {
@@ -173,9 +173,9 @@ func validateFileType(file workspaceapi.File) (os.FileInfo, error) {
 func (f *file) openFile(filePath string, flag int) (
 	workspaceapi.File, os.FileInfo, error,
 ) {
-	file, err := f.scheme.Open(filePath, flag, 0666)
+	file, err := f.scheme.OpenFile(filePath, flag, 0666)
 	if err != nil {
-		return nil, nil, err.ToError()
+		return nil, nil, err
 	}
 
 	fileInfo, verr := validateFileType(file)
@@ -192,13 +192,13 @@ func (f *file) initFiles(filePath, swapDir string, readOnly bool) error {
 		flag = os.O_RDONLY
 	}
 	file, fileInfo, err := f.openFile(filePath, flag)
-	switch err {
-	case os.ErrNotExist:
+	switch {
+	case os.IsNotExist(err):
 		// create unless read-only mode
 		if !readOnly {
 			err = nil
 		}
-	case os.ErrPermission:
+	case os.IsPermission(err):
 		// delegate write error to Flush
 		file, fileInfo, err = f.openFile(filePath, os.O_RDONLY)
 		readOnly = true
@@ -456,12 +456,12 @@ func (f *file) OnDidEdit(ctx context.Context, from, to term.Coordinates, old str
 }
 
 func (f *file) touchFile() (isExist bool) {
-	var err *workspaceapi.Error
-	f.orig, err = f.scheme.Open(f.fileName, os.O_RDWR|os.O_CREATE|os.O_EXCL, defaultFileMode)
+	var err error
+	f.orig, err = f.scheme.OpenFile(f.fileName, os.O_RDWR|os.O_CREATE|os.O_EXCL, defaultFileMode)
 	if err != nil {
 		// file was not created when instantiating this file, but now
 		// file seems to be there so file must be stale.
-		if err.IsExist {
+		if os.IsExist(err) {
 			return true
 		}
 		// ignore other errors
@@ -594,7 +594,7 @@ func (f *file) flush(force bool) error {
 				return err
 			}
 			if newFileInfo.Mode()&os.ModeSymlink != 0 {
-				origTarget, err = f.scheme.ReadLink(origTarget)
+				origTarget, err = f.scheme.Readlink(origTarget)
 				if err != nil {
 					return err
 				}

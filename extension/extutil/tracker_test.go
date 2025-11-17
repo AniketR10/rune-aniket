@@ -189,7 +189,7 @@ func TestResourceTrackerIntegration(t *testing.T) {
 					}
 					_, handled = bh.Handle(term.Event{
 						Type: term.EventKey, Mod: term.ModCtrl, Ch: 'a'})
-					
+
 					// mark line as hidden
 					for range 3 {
 						bh.Handle(term.Event{Type: term.EventKey, Mod: term.ModShift, Key: term.KeyArrowDown})

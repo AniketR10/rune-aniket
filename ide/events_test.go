@@ -35,6 +35,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"unstable.build/go-tui/api/config"
+	"unstable.build/go-tui/api/schemeapi"
 	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/cell"
@@ -60,13 +61,13 @@ func TestEventDispatching(t *testing.T) {
 
 	t.Run("dispatches", func(t *testing.T) {
 		suite := []struct {
-			in  workspaceapi.Event
+			in  schemeapi.Event
 			out textapi.EventType
 		}{
-			{workspaceapi.Create, textapi.EventTypeCreate},
-			{workspaceapi.Remove, textapi.EventTypeRemove},
-			{workspaceapi.Write, textapi.EventTypeChange},
-			{workspaceapi.Rename, textapi.EventTypeRename},
+			{schemeapi.Create, textapi.EventTypeCreate},
+			{schemeapi.Remove, textapi.EventTypeRemove},
+			{schemeapi.Write, textapi.EventTypeChange},
+			{schemeapi.Rename, textapi.EventTypeRename},
 		}
 		for _, test := range suite {
 			desc := fmt.Sprintf("%s event when %s event is received", test.out, test.in)
@@ -94,13 +95,13 @@ func TestEventDispatching(t *testing.T) {
 
 	t.Run("ignores if matcher matches file", func(t *testing.T) {
 		suite := []struct {
-			in  workspaceapi.Event
+			in  schemeapi.Event
 			out textapi.EventType
 		}{
-			{workspaceapi.Create, textapi.EventTypeCreate},
-			{workspaceapi.Remove, textapi.EventTypeRemove},
-			{workspaceapi.Write, textapi.EventTypeChange},
-			{workspaceapi.Rename, textapi.EventTypeRename},
+			{schemeapi.Create, textapi.EventTypeCreate},
+			{schemeapi.Remove, textapi.EventTypeRemove},
+			{schemeapi.Write, textapi.EventTypeChange},
+			{schemeapi.Rename, textapi.EventTypeRename},
 		}
 		for _, test := range suite {
 			desc := fmt.Sprintf("when %s event is received", test.in)
@@ -129,18 +130,18 @@ func TestEventDispatching(t *testing.T) {
 
 	t.Run("ignores if user just flushed file", func(t *testing.T) {
 		suite := []struct {
-			in    workspaceapi.Event
+			in    schemeapi.Event
 			dirty bool
 		}{
-			{workspaceapi.Create, true},
-			{workspaceapi.Remove, true},
-			{workspaceapi.Write, true},
-			{workspaceapi.Rename, true},
+			{schemeapi.Create, true},
+			{schemeapi.Remove, true},
+			{schemeapi.Write, true},
+			{schemeapi.Rename, true},
 
-			{workspaceapi.Create, false},
-			{workspaceapi.Remove, false},
-			{workspaceapi.Write, false},
-			{workspaceapi.Rename, false},
+			{schemeapi.Create, false},
+			{schemeapi.Remove, false},
+			{schemeapi.Write, false},
+			{schemeapi.Rename, false},
 		}
 		for _, test := range suite {
 			desc := fmt.Sprintf("when %s event is received, dirty=%t", test.in, test.dirty)
@@ -196,7 +197,7 @@ func TestEventDispatching(t *testing.T) {
 
 		createOpenWriteFile(t, x, testURI, "abc")
 
-		fsev := testEventInfo{e: workspaceapi.Write, u: testURI}
+		fsev := testEventInfo{e: schemeapi.Write, u: testURI}
 
 		n := 1000
 		var wg sync.WaitGroup
@@ -227,7 +228,7 @@ func TestEventDispatching(t *testing.T) {
 
 		createOpenWriteFile(t, x, testURI, "abc")
 
-		fsev := testEventInfo{e: workspaceapi.Write, u: testURI}
+		fsev := testEventInfo{e: schemeapi.Write, u: testURI}
 		dispatchFilesystemEvent(x, &mu, ignores, fsev)
 
 		assertBufferContent(t, x, testURI, "abc")
@@ -243,7 +244,7 @@ func TestEventDispatching(t *testing.T) {
 
 		openWriteUncreatedFile(t, x, testURI, "abc")
 
-		fsev := testEventInfo{e: workspaceapi.Write, u: testURI}
+		fsev := testEventInfo{e: schemeapi.Write, u: testURI}
 		dispatchFilesystemEvent(x, &mu, ignores, fsev)
 
 		assertBufferContent(t, x, testURI, "abc")
@@ -261,7 +262,7 @@ func TestEventDispatching(t *testing.T) {
 
 		editBuffer(t, x, testURI, "ABC")
 
-		fsev := testEventInfo{e: workspaceapi.Write, u: testURI}
+		fsev := testEventInfo{e: schemeapi.Write, u: testURI}
 		dispatchFilesystemEvent(x, &mu, ignores, fsev)
 
 		userPromptDiscards(t, x)
@@ -282,7 +283,7 @@ func TestEventDispatching(t *testing.T) {
 		createOpenWriteFile(t, x, testURI, "abc")
 		editBuffer(t, x, testURI, "ABC")
 
-		fsev := testEventInfo{e: workspaceapi.Write, u: testURI}
+		fsev := testEventInfo{e: schemeapi.Write, u: testURI}
 		dispatchFilesystemEvent(x, &mu, ignores, fsev)
 
 		userPromptOverwrites(t, x)
@@ -303,7 +304,7 @@ func TestEventDispatching(t *testing.T) {
 
 		openWriteUncreatedFile(t, x, testURI, "abc")
 
-		fsev := testEventInfo{e: workspaceapi.Create, u: testURI}
+		fsev := testEventInfo{e: schemeapi.Create, u: testURI}
 		dispatchFilesystemEvent(x, &mu, ignores, fsev)
 
 		assertBufferContent(t, x, testURI, "abc")
@@ -319,7 +320,7 @@ func TestEventDispatching(t *testing.T) {
 
 		createOpenWriteFile(t, x, testURI, "abc")
 
-		fsev := testEventInfo{e: workspaceapi.Create, u: testURI}
+		fsev := testEventInfo{e: schemeapi.Create, u: testURI}
 		dispatchFilesystemEvent(x, &mu, ignores, fsev)
 
 		assertBufferContent(t, x, testURI, "abc")
@@ -338,7 +339,7 @@ func TestEventDispatching(t *testing.T) {
 
 		editBuffer(t, x, testURI, "ABC")
 
-		fsev := testEventInfo{e: workspaceapi.Create, u: testURI}
+		fsev := testEventInfo{e: schemeapi.Create, u: testURI}
 		dispatchFilesystemEvent(x, &mu, ignores, fsev)
 
 		userPromptDiscards(t, x)
@@ -359,7 +360,7 @@ func TestEventDispatching(t *testing.T) {
 
 		editBuffer(t, x, testURI, "ABC")
 
-		fsev := testEventInfo{e: workspaceapi.Create, u: testURI}
+		fsev := testEventInfo{e: schemeapi.Create, u: testURI}
 		dispatchFilesystemEvent(x, &mu, ignores, fsev)
 
 		userPromptOverwrites(t, x)
@@ -379,7 +380,7 @@ func TestEventDispatching(t *testing.T) {
 
 		require.NoError(t, x.editFiles(testURI.String()))
 
-		fsev := testEventInfo{e: workspaceapi.Remove, u: testURI}
+		fsev := testEventInfo{e: schemeapi.Remove, u: testURI}
 		dispatchFilesystemEvent(x, &mu, ignores, fsev)
 
 		assertNoPrompt(t, x)
@@ -402,7 +403,7 @@ func TestEventDispatching(t *testing.T) {
 		require.True(t, ok)
 		require.True(t, dirty)
 
-		fsev := testEventInfo{e: workspaceapi.Remove, u: testURI}
+		fsev := testEventInfo{e: schemeapi.Remove, u: testURI}
 		dispatchFilesystemEvent(x, &mu, ignores, fsev)
 
 		userPromptDiscards(t, x)
@@ -423,7 +424,7 @@ func TestEventDispatching(t *testing.T) {
 
 		editBuffer(t, x, testURI, "ABC")
 
-		fsev := testEventInfo{e: workspaceapi.Remove, u: testURI}
+		fsev := testEventInfo{e: schemeapi.Remove, u: testURI}
 		dispatchFilesystemEvent(x, &mu, ignores, fsev)
 
 		userPromptOverwrites(t, x)
@@ -443,7 +444,7 @@ func TestEventDispatching(t *testing.T) {
 
 		createOpenRemoveFile(t, x, testURI, "")
 
-		fsev := testEventInfo{e: workspaceapi.Rename, u: testURI}
+		fsev := testEventInfo{e: schemeapi.Rename, u: testURI}
 		dispatchFilesystemEvent(x, &mu, ignores, fsev)
 
 		assertTabRemoved(t, x, testURI)
@@ -466,7 +467,7 @@ func TestEventDispatching(t *testing.T) {
 		flush, err := x.comp.LastFlush(res)
 		require.NoError(t, err)
 
-		fsev := testEventInfo{e: workspaceapi.Rename, u: testURI}
+		fsev := testEventInfo{e: schemeapi.Rename, u: testURI}
 		dispatchFilesystemEvent(x, &mu, ignores, fsev)
 
 		lastFlush, err := x.comp.LastFlush(res)
@@ -489,7 +490,7 @@ func TestEventDispatching(t *testing.T) {
 
 		editBuffer(t, x, testURI, "ABC")
 
-		fsev := testEventInfo{e: workspaceapi.Rename, u: testURI}
+		fsev := testEventInfo{e: schemeapi.Rename, u: testURI}
 		dispatchFilesystemEvent(x, &mu, ignores, fsev)
 
 		userPromptDiscards(t, x)
@@ -510,7 +511,7 @@ func TestEventDispatching(t *testing.T) {
 
 		editBuffer(t, x, testURI, "ABC")
 
-		fsev := testEventInfo{e: workspaceapi.Rename, u: testURI}
+		fsev := testEventInfo{e: schemeapi.Rename, u: testURI}
 		dispatchFilesystemEvent(x, &mu, ignores, fsev)
 
 		userPromptDiscards(t, x)
@@ -531,7 +532,7 @@ func TestEventDispatching(t *testing.T) {
 
 		editBuffer(t, x, testURI, "ABC")
 
-		fsev := testEventInfo{e: workspaceapi.Rename, u: testURI}
+		fsev := testEventInfo{e: schemeapi.Rename, u: testURI}
 		dispatchFilesystemEvent(x, &mu, ignores, fsev)
 
 		userPromptOverwrites(t, x)
@@ -605,12 +606,12 @@ func newExForEventTesting(t *testing.T) *ex {
 }
 
 type testEventInfo struct {
-	e workspaceapi.Event
+	e schemeapi.Event
 	u workspaceapi.URI
 	d bool
 }
 
-func (t testEventInfo) Event() workspaceapi.Event {
+func (t testEventInfo) Event() schemeapi.Event {
 	return t.e
 }
 

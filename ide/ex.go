@@ -1017,7 +1017,7 @@ func (e *ex) newTask(args ...string) error {
 	case "left":
 		t.MinimizeAlignment = component.SpanAlignmentLeft
 	default:
-		return fmt.Errorf("invalid orientation argument %q", args[0])
+		return fmt.Errorf("invalid orientation argument %q", sysArgv[1])
 	}
 
 	err := e.tasks.RunTask(t)

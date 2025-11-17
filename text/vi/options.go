@@ -111,7 +111,7 @@ func WithAuxiliaryBarLines(enabled, absolute bool) Option {
 // at auxiliary bar.
 func WithAuxiliaryBarHighlightCursor(enabled bool) Option {
 	return func(cfg *viConfig) {
-		cfg.enableAuxBarHighlightCursor= enabled
+		cfg.enableAuxBarHighlightCursor = enabled
 	}
 }
 

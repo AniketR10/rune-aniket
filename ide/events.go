@@ -30,6 +30,7 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
+	"unstable.build/go-tui/api/schemeapi"
 	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/component/notifications"
@@ -38,7 +39,7 @@ import (
 
 func dispatchFilesystemEvents(
 	ctx context.Context, ex *ex, mu sync.Locker,
-	ch chan workspaceapi.EventInfo, ignores vctrl.Matcher,
+	ch chan schemeapi.EventInfo, ignores vctrl.Matcher,
 ) {
 	for {
 		select {
@@ -51,7 +52,7 @@ func dispatchFilesystemEvents(
 }
 
 func dispatchFilesystemEvent(
-	ex *ex, mu sync.Locker, ignores vctrl.Matcher, fsev workspaceapi.EventInfo,
+	ex *ex, mu sync.Locker, ignores vctrl.Matcher, fsev schemeapi.EventInfo,
 ) {
 	uri := fsev.URI()
 	flag := fsev.Event()
@@ -69,13 +70,13 @@ func dispatchFilesystemEvent(
 		URI: uri,
 	}
 	switch flag {
-	case workspaceapi.Create:
+	case schemeapi.Create:
 		ev.Type = textapi.EventTypeCreate
-	case workspaceapi.Write:
+	case schemeapi.Write:
 		ev.Type = textapi.EventTypeChange
-	case workspaceapi.Rename:
+	case schemeapi.Rename:
 		ev.Type = textapi.EventTypeRename
-	case workspaceapi.Remove:
+	case schemeapi.Remove:
 		ev.Type = textapi.EventTypeRemove
 	default:
 		ex.log(log.WarnLevel, "extraneous filesystem event %s for %s", flag, uri)
@@ -88,7 +89,7 @@ func dispatchFilesystemEvent(
 	mu.Unlock()
 }
 
-func handleFSChange(ex *ex, flag workspaceapi.Event, uri workspaceapi.URI) {
+func handleFSChange(ex *ex, flag schemeapi.Event, uri workspaceapi.URI) {
 	t, open := ex.comp.Resource(uri)
 	dirty, _ := ex.comp.IsDirty(uri)
 	ex.log(log.DebugLevel, "handling event %d for file %s, open=%t dirty=%t",
@@ -121,11 +122,11 @@ func handleFSChange(ex *ex, flag workspaceapi.Event, uri workspaceapi.URI) {
 
 	if dirty {
 		switch flag {
-		case workspaceapi.Create:
+		case schemeapi.Create:
 			ex.openFileChangedPrompt(uri, t, "created on", true)
-		case workspaceapi.Write:
+		case schemeapi.Write:
 			ex.openFileChangedPrompt(uri, t, "changed on", true)
-		case workspaceapi.Rename:
+		case schemeapi.Rename:
 			_, err := ex.workspace.Stat(uri.Path())
 			if err == nil {
 				ex.openFileChangedPrompt(uri, t, "renamed into", true)
@@ -135,14 +136,14 @@ func handleFSChange(ex *ex, flag workspaceapi.Event, uri workspaceapi.URI) {
 				_, _ = ex.comp.Notify(notifications.LevelError,
 					"Failed to reload renamed file %s: stat: %v", uri.Path(), err)
 			}
-		case workspaceapi.Remove:
+		case schemeapi.Remove:
 			ex.openFileChangedPrompt(uri, t, "removed from", false)
 		}
 		return
 	}
 
 	switch flag {
-	case workspaceapi.Create, workspaceapi.Write:
+	case schemeapi.Create, schemeapi.Write:
 		err := ex.comp.ReloadTab(t)
 		if err != nil {
 			_, _ = ex.comp.Notify(notifications.LevelError,
@@ -153,7 +154,7 @@ func handleFSChange(ex *ex, flag workspaceapi.Event, uri workspaceapi.URI) {
 					"so it was reloaded", uri.Name())
 		}
 
-	case workspaceapi.Rename:
+	case schemeapi.Rename:
 		_, err := ex.workspace.Stat(uri.Path())
 		if err == nil {
 			err := ex.comp.ReloadTab(t)
@@ -178,7 +179,7 @@ func handleFSChange(ex *ex, flag workspaceapi.Event, uri workspaceapi.URI) {
 		_, _ = ex.comp.Notify(notifications.LevelError,
 			"Failed to reload renamed file %s: stat: %v", uri.Name(), err)
 
-		// don't manage workspaceapi.Remove: it's sometimes dispatched
+		// don't manage schemeapi.Remove: it's sometimes dispatched
 		// in conjunction with other events so it's not useful.
 	}
 }

@@ -56,7 +56,11 @@ func (a authorizer) Authorize(
 		perm = extensionapi.PermissionTerminal
 	case "/workspace.Scheme/URI":
 		perm = extensionapi.PermissionFileSystem
+	case "/workspace.Scheme/OpenFile":
+		perm = extensionapi.PermissionFileSystem
 	case "/workspace.Scheme/Open":
+		perm = extensionapi.PermissionFileSystem
+	case "/workspace.Scheme/Create":
 		perm = extensionapi.PermissionFileSystem
 	case "/workspace.Scheme/Remove":
 		perm = extensionapi.PermissionFileSystem
@@ -64,9 +68,19 @@ func (a authorizer) Authorize(
 		perm = extensionapi.PermissionFileSystem
 	case "/workspace.Scheme/Stat":
 		perm = extensionapi.PermissionFileSystem
-	case "/workspace.Scheme/ReadLink":
+	case "/workspace.Scheme/ReadLink": // in .proto is defined as ReadLink, not Readlink
 		perm = extensionapi.PermissionFileSystem
 	case "/workspace.Scheme/ReadDir":
+		perm = extensionapi.PermissionFileSystem
+	case "/workspace.Scheme/Root":
+		perm = extensionapi.PermissionFileSystem
+	case "/workspace.Scheme/Join":
+		perm = extensionapi.PermissionFileSystem
+	case "/workspace.Scheme/TempFile":
+		perm = extensionapi.PermissionFileSystem
+	case "/workspace.Scheme/Symlink":
+		perm = extensionapi.PermissionFileSystem
+	case "/workspace.Scheme/Chroot":
 		perm = extensionapi.PermissionFileSystem
 	case "/workspace.Scheme/MkdirAll":
 		perm = extensionapi.PermissionFileSystem

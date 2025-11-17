@@ -85,6 +85,55 @@ func (t loggingScheme) Signal(p workspaceapi.Pid, s syscall.Signal) (err error) 
 	return
 }
 
+func (t loggingScheme) Chroot(path string) (schemeapi.Scheme, error) {
+	t.trace("Chroot(%s)", path)
+	fs, err := t.other.Chroot(path)
+	t.trace("Chroot(%s): err: %v", path, err)
+	return fs, err
+}
+
+func (t loggingScheme) Root() string {
+	t.trace("Root()")
+	root := t.other.Root()
+	t.trace("Root(): %s", root)
+	return root
+}
+
+func (t loggingScheme) Symlink(target, link string) error {
+	t.trace("Symlink(%s, %s)", target, link)
+	err := t.other.Symlink(target, link)
+	t.trace("Symlink(%s, %s): %v", target, link, err)
+	return err
+}
+
+func (t loggingScheme) TempFile(dir, prefix string) (workspaceapi.File, error) {
+	t.trace("TempFile(%s, %s)", dir, prefix)
+	fs, err := t.other.TempFile(dir, prefix)
+	t.trace("TempFile(%s, %s): %v", dir, prefix, err)
+	return fs, err
+}
+
+func (t loggingScheme) Join(elem ...string) string {
+	t.trace("Join(%v)", elem)
+	ret := t.other.Join(elem...)
+	t.trace("Join(%v)", elem)
+	return ret
+}
+
+func (t loggingScheme) Create(filename string) (workspaceapi.File, error) {
+	t.trace("Create(%q)", filename)
+	ret, err := t.other.Create(filename)
+	t.trace("Create(%q): %v", filename, err)
+	return ret, err
+}
+
+func (t loggingScheme) Open(filename string) (workspaceapi.File, error) {
+	t.trace("Open(%q)", filename)
+	ret, err := t.other.Open(filename)
+	t.trace("Open(%q): %v", filename, err)
+	return ret, err
+}
+
 func (t loggingScheme) URI(path string) (ret workspaceapi.URI, err error) {
 	t.trace("URI(%q)", path)
 	ret, err = t.other.URI(path)
@@ -92,12 +141,12 @@ func (t loggingScheme) URI(path string) (ret workspaceapi.URI, err error) {
 	return
 }
 
-func (t loggingScheme) Open(path string, flag int, perm os.FileMode) (
-	ret workspaceapi.File, err *workspaceapi.Error,
+func (t loggingScheme) OpenFile(path string, flag int, perm os.FileMode) (
+	ret workspaceapi.File, err error,
 ) {
-	t.trace("Open(%q, %d, %d)", path, flag, perm)
-	ret, err = t.other.Open(path, flag, perm)
-	t.trace("Open(%q, %d, %d): %#v, %#v", path, flag, perm, ret, err)
+	t.trace("OpenFile(%q, %d, %d)", path, flag, perm)
+	ret, err = t.other.OpenFile(path, flag, perm)
+	t.trace("OpenFile(%q, %d, %d): %#v, %#v", path, flag, perm, ret, err)
 	return
 }
 
@@ -138,9 +187,9 @@ func (t loggingScheme) Lstat(path string) (ret os.FileInfo, err error) {
 	return
 }
 
-func (t loggingScheme) ReadLink(path string) (ret string, err error) {
+func (t loggingScheme) Readlink(path string) (ret string, err error) {
 	t.trace("ReadLink(%q)", path)
-	ret, err = t.other.ReadLink(path)
+	ret, err = t.other.Readlink(path)
 	t.trace("ReadLink(%q): %q, %v", path, ret, err)
 	return
 }
@@ -175,7 +224,7 @@ func (t loggingScheme) MkdirAll(path string, perm os.FileMode) error {
 }
 
 func (t loggingScheme) Watch(
-	path string, c chan<- workspaceapi.EventInfo, events ...workspaceapi.Event,
+	path string, c chan<- schemeapi.EventInfo, events ...schemeapi.Event,
 ) (int, error) {
 	t.trace("Watch(%s, %v)", path, events)
 	id, err := t.other.Watch(path, c, events...)

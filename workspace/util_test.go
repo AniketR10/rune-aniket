@@ -41,7 +41,7 @@ import (
 func newTestScheme(scheme string) schemeapi.SchemeFunc {
 	return func(_ context.Context, cfg config.Config, uri workspaceapi.URI) (schemeapi.Scheme, error) {
 		scheme := &testScheme{scheme: scheme}
-		scheme.openFunc = func(name string, flag int, perm os.FileMode) (workspaceapi.File, *workspaceapi.Error) {
+		scheme.openFunc = func(name string, flag int, perm os.FileMode) (workspaceapi.File, error) {
 			return testFile{}, nil
 		}
 		scheme.removeFunc = func(name string) error {
@@ -92,6 +92,10 @@ func (t testFile) Read(b []byte) (int, error) {
 	return 0, io.EOF
 }
 
+func (t testFile) ReadAt(b []byte, offset int64) (int, error) {
+	return 0, io.EOF
+}
+
 func (t testFile) Write(b []byte) (int, error) {
 	return 0, nil
 }
@@ -134,7 +138,7 @@ func (t testFileInfo) Sys() interface{} {
 
 type testScheme struct {
 	scheme     string
-	openFunc   func(name string, flag int, perm os.FileMode) (workspaceapi.File, *workspaceapi.Error)
+	openFunc   func(name string, flag int, perm os.FileMode) (workspaceapi.File, error)
 	removeFunc func(name string) error
 	renameFunc func(oldName, newName string) error
 	statFunc   func(name string) (os.FileInfo, error)
@@ -158,7 +162,9 @@ func (t *testScheme) URI(path string) (workspaceapi.URI, error) {
 	return workspaceapi.ParseURI(fmt.Sprintf("%s://%s", t.scheme, filepath.Join("/", path)))
 }
 
-func (t *testScheme) Open(path string, flag int, perm os.FileMode) (workspaceapi.File, *workspaceapi.Error) {
+func (t *testScheme) OpenFile(path string, flag int, perm os.FileMode) (
+	workspaceapi.File, error,
+) {
 	return t.openFunc(path, flag, perm)
 }
 
@@ -190,7 +196,7 @@ func (t *testScheme) Lstat(path string) (os.FileInfo, error) {
 	return t.lstatFunc(path)
 }
 
-func (t *testScheme) ReadLink(path string) (string, error) {
+func (t *testScheme) Readlink(path string) (string, error) {
 	return path, nil
 }
 
@@ -201,12 +207,40 @@ func (t *testScheme) ReadDir(string) (
 }
 
 func (t *testScheme) Watch(
-	path string, c chan<- workspaceapi.EventInfo, events ...workspaceapi.Event,
+	path string, c chan<- schemeapi.EventInfo, events ...schemeapi.Event,
 ) (int, error) {
 	panic("unimplemented")
 }
 
 func (t *testScheme) StopWatch(ID int) error {
+	panic("unimplemented")
+}
+
+func (t testScheme) Chroot(path string) (schemeapi.Scheme, error) {
+	panic("unimplemented")
+}
+
+func (t testScheme) Root() string {
+	panic("unimplemented")
+}
+
+func (t testScheme) Symlink(target, link string) error {
+	panic("unimplemented")
+}
+
+func (t testScheme) TempFile(dir, prefix string) (workspaceapi.File, error) {
+	panic("unimplemented")
+}
+
+func (t testScheme) Join(elem ...string) string {
+	panic("unimplemented")
+}
+
+func (t testScheme) Create(filename string) (workspaceapi.File, error) {
+	panic("unimplemented")
+}
+
+func (t testScheme) Open(filename string) (workspaceapi.File, error) {
 	panic("unimplemented")
 }
 

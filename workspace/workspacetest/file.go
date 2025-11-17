@@ -68,6 +68,10 @@ func (t *File) Read(b []byte) (int, error) {
 	return len(b), nil
 }
 
+func (t *File) ReadAt(b []byte, offset int64) (int, error) {
+	return 0, io.EOF
+}
+
 func (t *File) Write(b []byte) (int, error) {
 	n := make([]byte, len(b))
 	copy(n, b)

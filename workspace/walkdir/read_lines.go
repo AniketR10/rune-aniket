@@ -101,9 +101,9 @@ func ReadLines(ctx context.Context, w Reader, paths iterator.Iterator[string]) (
 }
 
 func readFile(w Reader, buffer []byte, file string, lines chan string) error {
-	f, werr := w.Open(file, os.O_RDONLY, 0)
-	if werr != nil {
-		return werr.ToError()
+	f, err := w.OpenFile(file, os.O_RDONLY, 0)
+	if err != nil {
+		return err
 	}
 	r := bufio.NewScanner(f)
 	r.Buffer(buffer, len(buffer))

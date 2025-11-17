@@ -45,6 +45,7 @@ import (
 	"github.com/unstablebuild/blue/release"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/api/config"
+	"unstable.build/go-tui/api/schemeapi"
 	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/browser"
@@ -623,11 +624,11 @@ func (h *workspaceManagerHandler) addWorkspace(
 		// multiple workers so make the buffer sufficiently large
 		// so we don't block the fs subsystem, even in large
 		// monorepos with large git operations
-		ch := make(chan workspaceapi.EventInfo, 8192)
+		ch := make(chan schemeapi.EventInfo, 8192)
 		watchPath := filepath.Join(uri.Path(), "...")
 		watchID, err := cwd.Watch(watchPath, ch,
-			workspaceapi.Create, workspaceapi.Write,
-			workspaceapi.Remove, workspaceapi.Rename)
+			schemeapi.Create, schemeapi.Write,
+			schemeapi.Remove, schemeapi.Rename)
 		if err != nil {
 			ex.log(log.WarnLevel, "oob file monitoring: create FS event watcher: %v", err)
 			return

@@ -28,7 +28,7 @@ import (
 	"context"
 	"errors"
 	"io"
-	"os"
+	"io/fs"
 	"syscall"
 
 	"unstable.build/go-tui/api/config"
@@ -43,23 +43,120 @@ var (
 
 // Scheme abstracts internal workspace scheme implementations.
 type Scheme interface {
+	FileSystem
 	Executor
 	Terminal
 
 	URI(path string) (workspaceapi.URI, error)
-
 	NewFile(fd uintptr, name string) workspaceapi.File
-	Open(path string, flag int, perm os.FileMode) (workspaceapi.File, *workspaceapi.Error)
-	Remove(path string) error
-	Rename(old, new string) error
-	Stat(path string) (os.FileInfo, error)
-	Lstat(path string) (os.FileInfo, error)
-	ReadLink(path string) (string, error)
-	ReadDir(string) ([]os.DirEntry, error)
-	MkdirAll(string, os.FileMode) error
+	// Chroot returns a new filesystem from the same type where the new root is
+	// the given path.
+	Chroot(path string) (Scheme, error)
+	// Root returns the root path of the filesystem.
+	Root() string
 
-	Watch(path string, c chan<- workspaceapi.EventInfo, events ...workspaceapi.Event) (int, error)
+	Watch(path string, c chan<- EventInfo, events ...Event) (int, error)
 	StopWatch(int) error
+}
+
+// FileSystem abstracts the ability to manipulate the file system.
+type FileSystem interface {
+	// Create creates the named file with mode 0666 (before umask), truncating
+	// it if it already exists. If successful, methods on the returned File can
+	// be used for I/O; the associated file descriptor has mode O_RDWR.
+	Create(filename string) (workspaceapi.File, error)
+	// Open opens the named file for reading. If successful, methods on the
+	// returned file can be used for reading; the associated file descriptor has
+	// mode O_RDONLY.
+	Open(filename string) (workspaceapi.File, error)
+	// OpenFile is the generalized open call; most users will use Open or Create
+	// instead. It opens the named file with specified flag (O_RDONLY etc.) and
+	// perm, (0666 etc.) if applicable. If successful, methods on the returned
+	// File can be used for I/O.
+	OpenFile(filename string, flag int, perm fs.FileMode) (workspaceapi.File, error)
+	// Stat returns a FileInfo describing the named file.
+	Stat(filename string) (fs.FileInfo, error)
+	// Rename renames (moves) oldpath to newpath. If newpath already exists and
+	// is not a directory, Rename replaces it. OS-specific restrictions may
+	// apply when oldpath and newpath are in different directories.
+	Rename(oldpath, newpath string) error
+	// Remove removes the named file or directory.
+	Remove(filename string) error
+	// Join joins any number of path elements into a single path, adding a
+	// Separator if necessary. Join calls filepath.Clean on the result; in
+	// particular, all empty strings are ignored. On Windows, the result is a
+	// UNC path if and only if the first path element is a UNC path.
+	Join(elem ...string) string
+	// TempFile creates a new temporary file in the directory dir with a name
+	// beginning with prefix, opens the file for reading and writing, and
+	// returns the resulting File. If dir is the empty string, TempFile
+	// uses the default directory for temporary files (see os.TempDir).
+	// Multiple programs calling TempFile simultaneously will not choose the
+	// same file. The caller can use f.Name() to find the pathname of the file.
+	// It is the caller's responsibility to remove the file when no longer
+	// needed.
+	TempFile(dir, prefix string) (workspaceapi.File, error)
+	// Lstat returns a FileInfo describing the named file. If the file is a
+	// symbolic link, the returned FileInfo describes the symbolic link. Lstat
+	// makes no attempt to follow the link.
+	Lstat(filename string) (fs.FileInfo, error)
+	// Symlink creates a symbolic-link from link to target. target may be an
+	// absolute or relative path, and need not refer to an existing node.
+	// Parent directories of link are created as necessary.
+	Symlink(oldname, newname string) error
+	// Readlink returns the target path of link.
+	Readlink(link string) (string, error)
+	// ReadDir reads the directory named by dirname and returns a list of
+	// directory entries sorted by filename.
+	ReadDir(path string) ([]fs.DirEntry, error)
+	// MkdirAll creates a directory named path, along with any necessary
+	// parents, and returns nil, or else returns an error. The permission bits
+	// perm are used for all directories that MkdirAll creates. If path is/
+	// already a directory, MkdirAll does nothing and returns nil.
+	MkdirAll(filename string, perm fs.FileMode) error
+}
+
+// Event represents the type of filesystem action.
+type Event uint32
+
+// Create, Remove, Write and Rename are the only event values guaranteed to be
+// present on all platforms.
+const (
+	Create Event = iota
+	Remove
+	Write
+	Rename
+)
+
+// AllEvents returns a slice with all permutations of Event.
+func AllEvents() []Event {
+	return []Event{Create, Remove, Write, Rename}
+}
+
+// String implements fmt.Stringer interface.
+func (e Event) String() string {
+	switch e {
+	case Create:
+		return "create"
+	case Remove:
+		return "remove"
+	case Write:
+		return "write"
+	case Rename:
+		return "rename"
+	default:
+		panic("uknown event")
+	}
+}
+
+// EventInfo describes an event reported by Scheme.Watch.
+type EventInfo interface {
+	// Event is one of the reported events.
+	Event() Event
+	// URI is the uri of the resource.
+	URI() workspaceapi.URI
+	// IsDir returns true if event is from a directory.
+	IsDir() (bool, error)
 }
 
 // Terminal abstracts the ability to manage pseudoterminals.

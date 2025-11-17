@@ -43,9 +43,9 @@ func NewNopScheme(scheme string) schemeapi.SchemeFunc {
 	return func(ctx context.Context, cfg config.Config, uri workspaceapi.URI) (schemeapi.Scheme, error) {
 		scheme := &NopScheme{scheme: scheme}
 		scheme.OpenFunc = func(name string, flag int, perm os.FileMode) (
-			workspaceapi.File, *workspaceapi.Error,
+			workspaceapi.File, error,
 		) {
-			return &File{}, nil
+			return nopFile{}, nil
 		}
 		scheme.RemoveFunc = func(name string) error {
 			return nil
@@ -76,7 +76,7 @@ func NewNopScheme(scheme string) schemeapi.SchemeFunc {
 // NopScheme is a scheme for testing.
 type NopScheme struct {
 	scheme           string
-	OpenFunc         func(name string, flag int, perm os.FileMode) (workspaceapi.File, *workspaceapi.Error)
+	OpenFunc         func(name string, flag int, perm os.FileMode) (workspaceapi.File, error)
 	RemoveFunc       func(name string) error
 	RenameFunc       func(oldName, newName string) error
 	StatFunc         func(name string) (os.FileInfo, error)
@@ -112,9 +112,44 @@ func (t *NopScheme) URI(path string) (workspaceapi.URI, error) {
 	return workspaceapi.ParseURI(fmt.Sprintf("%s://%s", t.scheme, filepath.Join("/", path)))
 }
 
-// Open satisfies schemeapi.Scheme
-func (t *NopScheme) Open(path string, flag int, perm os.FileMode) (workspaceapi.File, *workspaceapi.Error) {
+// OpenFile satisfies schemeapi.Scheme
+func (t *NopScheme) OpenFile(path string, flag int, perm os.FileMode) (workspaceapi.File, error) {
 	return t.OpenFunc(path, flag, perm)
+}
+
+// Create satisfies schemeapi.Scheme
+func (t *NopScheme) Create(filename string) (workspaceapi.File, error) {
+	return t.OpenFunc(filename, os.O_CREATE|os.O_EXCL, 0)
+}
+
+// Open satisfies schemeapi.Scheme
+func (t *NopScheme) Open(filename string) (workspaceapi.File, error) {
+	return t.OpenFunc(filename, os.O_RDONLY, 0)
+}
+
+// Chroot satisfies schemeapi.Scheme
+func (t *NopScheme) Chroot(path string) (schemeapi.Scheme, error) {
+	return new(NopScheme), nil
+}
+
+// Root satisfies schemeapi.Scheme
+func (t *NopScheme) Root() string {
+	return ""
+}
+
+// Symlink satisfies schemeapi.Scheme
+func (t *NopScheme) Symlink(target, link string) error {
+	panic("unimplemented")
+}
+
+// TempFile satisfies schemeapi.Scheme
+func (t *NopScheme) TempFile(dir, prefix string) (workspaceapi.File, error) {
+	panic("unimplemented")
+}
+
+// Join satisfies schemeapi.Scheme
+func (t *NopScheme) Join(elem ...string) string {
+	return filepath.Join(elem...)
 }
 
 // Remove satisfies schemeapi.Scheme
@@ -147,8 +182,8 @@ func (t *NopScheme) Lstat(path string) (os.FileInfo, error) {
 	return t.LstatFunc(path)
 }
 
-// ReadLink satisfies schemeapi.Scheme
-func (t *NopScheme) ReadLink(path string) (string, error) {
+// Readlink satisfies schemeapi.Scheme
+func (t *NopScheme) Readlink(path string) (string, error) {
 	return path, nil
 }
 
@@ -166,7 +201,7 @@ func (t *NopScheme) MkdirAll(path string, perm os.FileMode) error {
 
 // Watch satisfies schemeapi.Scheme
 func (t *NopScheme) Watch(
-	path string, c chan<- workspaceapi.EventInfo, events ...workspaceapi.Event,
+	path string, c chan<- schemeapi.EventInfo, events ...schemeapi.Event,
 ) (int, error) {
 	panic("unimplemented")
 }
@@ -195,6 +230,10 @@ func (t nopFile) Name() string {
 
 func (t nopFile) Stat() (os.FileInfo, error) {
 	return nopFileInfo{}, nil
+}
+
+func (t nopFile) ReadAt(b []byte, off int64) (int, error) {
+	panic("unimplemented")
 }
 
 func (t nopFile) Sync() error {

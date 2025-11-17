@@ -1768,15 +1768,15 @@ func reloadConfig(
 func loadWorkspaceConfig(
 	filename string, cwd workspace.Workspace, uri workspaceapi.URI, c *ideConfig,
 ) (isConfigErr bool, err error) {
-	f, werr := cwd.Open(filename, os.O_RDONLY, 0)
-	if werr != nil {
-		if werr.IsNotExist {
+	f, err := cwd.OpenFile(filename, os.O_RDONLY, 0)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
 			return false, nil
 		}
-		if werr.IsPermission {
+		if errors.Is(err, os.ErrPermission) {
 			return false, nil
 		}
-		return false, fmt.Errorf("failed to open local '%s': %v", filename, werr.ToError())
+		return false, fmt.Errorf("failed to open local '%s': %v", filename, err)
 	}
 	defer f.Close()
 

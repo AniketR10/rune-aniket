@@ -36,6 +36,7 @@ import (
 	"syscall"
 	"testing"
 
+	"github.com/go-git/go-billy/v6"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	gomock "go.uber.org/mock/gomock"
@@ -249,21 +250,21 @@ func TestClientServer(t *testing.T) {
 		}},
 		{"Open happy path", func(t *testing.T, mock *workspaceapitest.MockFile, c *Client, s *Server) {
 			s.s.(*workspacetest.MockWorkspace).EXPECT().
-				Open(gomock.Eq("/tmp/hello_world.go"), gomock.Eq(os.O_RDWR|os.O_CREATE|os.O_EXCL|os.O_APPEND|os.O_SYNC|os.O_TRUNC), gomock.Eq(os.FileMode(0666))).
+				OpenFile(gomock.Eq("/tmp/hello_world.go"), gomock.Eq(os.O_RDWR|os.O_CREATE|os.O_EXCL|os.O_APPEND|os.O_SYNC|os.O_TRUNC), gomock.Eq(os.FileMode(0666))).
 				Return(testFile{}, nil)
 
-			f, err := c.Open("/tmp/hello_world.go", os.O_RDWR|os.O_CREATE|os.O_EXCL|os.O_APPEND|os.O_SYNC|os.O_TRUNC, 0666)
+			f, err := c.OpenFile("/tmp/hello_world.go", os.O_RDWR|os.O_CREATE|os.O_EXCL|os.O_APPEND|os.O_SYNC|os.O_TRUNC, 0666)
 			assert.Nil(t, err)
 			assert.NotNil(t, f)
 		}},
 		{"Open error", func(t *testing.T, mock *workspaceapitest.MockFile, c *Client, s *Server) {
 			s.s.(*workspacetest.MockWorkspace).EXPECT().
-				Open(gomock.Eq("/tmp/hello_world.go"), gomock.Eq(os.O_RDONLY), gomock.Eq(os.FileMode(2))).
-				Return(nil, &workspaceapi.Error{Err: errors.New("pow")})
+				OpenFile(gomock.Eq("/tmp/hello_world.go"), gomock.Eq(os.O_RDONLY), gomock.Eq(os.FileMode(2))).
+				Return(nil, errors.New("pow"))
 
-			f, err := c.Open("/tmp/hello_world.go", os.O_RDONLY, 2)
+			f, err := c.OpenFile("/tmp/hello_world.go", os.O_RDONLY, 2)
 			require.NotNil(t, err)
-			assert.True(t, strings.Contains(err.Err.Error(), "pow"))
+			assert.True(t, strings.Contains(err.Error(), "pow"))
 			assert.Nil(t, f)
 		}},
 		{"NewPty happy path", func(t *testing.T, mock *workspaceapitest.MockFile, c *Client, s *Server) {
@@ -285,7 +286,7 @@ func TestClientServer(t *testing.T) {
 			mockFileForRead.EXPECT().Name().Return("bla").AnyTimes()
 			mockFileForRead.EXPECT().Fd().Return(uintptr(99)).AnyTimes()
 			mockFileForRead.EXPECT().Close().Return(nil).
-				AnyTimes( /* Close runs in runtime.Finalizer */ )
+				AnyTimes()
 			s.s.(*workspacetest.MockWorkspace).EXPECT().
 				NewFile(gomock.Any(), gomock.Any()).
 				Return(mockFileForRead).AnyTimes()
@@ -450,6 +451,8 @@ func TestSchemeIntegration(t *testing.T) {
 	})
 }
 
+var _ billy.File = testFile{}
+
 type testFile struct {
 }
 
@@ -473,6 +476,10 @@ func (t testFile) Seek(x int64, y int) (int64, error) {
 }
 
 func (t testFile) Read(b []byte) (int, error) {
+	return 0, io.EOF
+}
+
+func (t testFile) ReadAt(b []byte, offset int64) (int, error) {
 	return 0, io.EOF
 }
 

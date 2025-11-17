@@ -58,8 +58,8 @@ func expectSchemeAPISuccess(
 	f := workspaceapitest.NewMockFile(ctrl)
 	f.EXPECT().Fd().AnyTimes()
 	f.EXPECT().Name().AnyTimes()
-	mock.EXPECT().Open(gomock.Any(), gomock.Any(), gomock.Any()).Return(f, nil).Times(1)
-	_, osErr := scheme.Open("", 0, 0)
+	mock.EXPECT().OpenFile(gomock.Any(), gomock.Any(), gomock.Any()).Return(f, nil).Times(1)
+	_, osErr := scheme.OpenFile("", 0, 0)
 	require.Nil(t, osErr)
 
 	mock.EXPECT().Remove(gomock.Any()).Return(nil).Times(1)
@@ -78,8 +78,8 @@ func expectSchemeAPISuccess(
 	_, err = scheme.Lstat("")
 	require.NoError(t, err)
 
-	mock.EXPECT().ReadLink(gomock.Any()).Return("", nil).Times(1)
-	_, err = scheme.ReadLink("")
+	mock.EXPECT().Readlink(gomock.Any()).Return("", nil).Times(1)
+	_, err = scheme.Readlink("")
 	require.NoError(t, err)
 
 	mock.EXPECT().StartCommand(gomock.Any(), gomock.Any()).

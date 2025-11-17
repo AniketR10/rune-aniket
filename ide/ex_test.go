@@ -161,9 +161,9 @@ func (w *testLoader) Stat(name string) (os.FileInfo, error) {
 	return testFileInfo{name: name}, nil
 }
 
-func (w *testLoader) Open(
+func (w *testLoader) OpenFile(
 	path string, flag int, perm os.FileMode,
-) (workspaceapi.File, *workspaceapi.Error) {
+) (workspaceapi.File, error) {
 	panic("unimplemented")
 }
 func (w *testLoader) NewPty(context.Context) (workspaceapi.Pty, error) {
@@ -189,18 +189,46 @@ func (w *testLoader) Lstat(path string) (os.FileInfo, error) {
 	panic("unimplemented")
 }
 
-func (w *testLoader) ReadLink(path string) (string, error) {
+func (w *testLoader) Readlink(path string) (string, error) {
 	panic("unimplemented")
 }
 
 func (w *testLoader) Watch(
-	path string, c chan<- workspaceapi.EventInfo, events ...workspaceapi.Event,
+	path string, c chan<- schemeapi.EventInfo, events ...schemeapi.Event,
 ) (int, error) {
 	return 0, nil
 }
 
 func (w *testLoader) StopWatch(int) error {
 	return nil
+}
+
+func (t testLoader) Chroot(path string) (schemeapi.Scheme, error) {
+	panic("unimplemented")
+}
+
+func (t testLoader) Root() string {
+	panic("unimplemented")
+}
+
+func (t testLoader) Symlink(target, link string) error {
+	panic("unimplemented")
+}
+
+func (t testLoader) TempFile(dir, prefix string) (workspaceapi.File, error) {
+	panic("unimplemented")
+}
+
+func (t testLoader) Join(elem ...string) string {
+	panic("unimplemented")
+}
+
+func (t testLoader) Create(filename string) (workspaceapi.File, error) {
+	panic("unimplemented")
+}
+
+func (t testLoader) Open(filename string) (workspaceapi.File, error) {
+	panic("unimplemented")
 }
 
 type testFileInfo struct {
@@ -3121,7 +3149,7 @@ func notificationsConfig() notifications.Config {
 }
 
 func touchTestFile(t *testing.T, scheme schemeapi.Scheme, name string) {
-	f, werr := scheme.Open(name, os.O_CREATE, 0666)
+	f, werr := scheme.OpenFile(name, os.O_CREATE, 0666)
 	require.Nil(t, werr)
 	require.NoError(t, f.Sync())
 }

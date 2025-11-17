@@ -169,6 +169,10 @@ const (
 	Scheme_MkdirAll_FullMethodName  = "/workspace.Scheme/MkdirAll"
 	Scheme_Watch_FullMethodName     = "/workspace.Scheme/Watch"
 	Scheme_StopWatch_FullMethodName = "/workspace.Scheme/StopWatch"
+	Scheme_Root_FullMethodName      = "/workspace.Scheme/Root"
+	Scheme_Symlink_FullMethodName   = "/workspace.Scheme/Symlink"
+	Scheme_TempFile_FullMethodName  = "/workspace.Scheme/TempFile"
+	Scheme_Join_FullMethodName      = "/workspace.Scheme/Join"
 )
 
 // SchemeClient is the client API for Scheme service.
@@ -185,6 +189,10 @@ type SchemeClient interface {
 	MkdirAll(ctx context.Context, in *MkdirAllRequest, opts ...grpc.CallOption) (*MkdirAllResponse, error)
 	Watch(ctx context.Context, in *WatchRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[WatchMessage], error)
 	StopWatch(ctx context.Context, in *StopWatchRequest, opts ...grpc.CallOption) (*StopWatchResponse, error)
+	Root(ctx context.Context, in *RootRequest, opts ...grpc.CallOption) (*RootResponse, error)
+	Symlink(ctx context.Context, in *SymlinkRequest, opts ...grpc.CallOption) (*SymlinkResponse, error)
+	TempFile(ctx context.Context, in *TempFileRequest, opts ...grpc.CallOption) (*TempFileResponse, error)
+	Join(ctx context.Context, in *JoinRequest, opts ...grpc.CallOption) (*JoinResponse, error)
 }
 
 type schemeClient struct {
@@ -304,6 +312,46 @@ func (c *schemeClient) StopWatch(ctx context.Context, in *StopWatchRequest, opts
 	return out, nil
 }
 
+func (c *schemeClient) Root(ctx context.Context, in *RootRequest, opts ...grpc.CallOption) (*RootResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RootResponse)
+	err := c.cc.Invoke(ctx, Scheme_Root_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *schemeClient) Symlink(ctx context.Context, in *SymlinkRequest, opts ...grpc.CallOption) (*SymlinkResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SymlinkResponse)
+	err := c.cc.Invoke(ctx, Scheme_Symlink_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *schemeClient) TempFile(ctx context.Context, in *TempFileRequest, opts ...grpc.CallOption) (*TempFileResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(TempFileResponse)
+	err := c.cc.Invoke(ctx, Scheme_TempFile_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *schemeClient) Join(ctx context.Context, in *JoinRequest, opts ...grpc.CallOption) (*JoinResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(JoinResponse)
+	err := c.cc.Invoke(ctx, Scheme_Join_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // SchemeServer is the server API for Scheme service.
 // All implementations must embed UnimplementedSchemeServer
 // for forward compatibility.
@@ -318,6 +366,10 @@ type SchemeServer interface {
 	MkdirAll(context.Context, *MkdirAllRequest) (*MkdirAllResponse, error)
 	Watch(*WatchRequest, grpc.ServerStreamingServer[WatchMessage]) error
 	StopWatch(context.Context, *StopWatchRequest) (*StopWatchResponse, error)
+	Root(context.Context, *RootRequest) (*RootResponse, error)
+	Symlink(context.Context, *SymlinkRequest) (*SymlinkResponse, error)
+	TempFile(context.Context, *TempFileRequest) (*TempFileResponse, error)
+	Join(context.Context, *JoinRequest) (*JoinResponse, error)
 	mustEmbedUnimplementedSchemeServer()
 }
 
@@ -357,6 +409,18 @@ func (UnimplementedSchemeServer) Watch(*WatchRequest, grpc.ServerStreamingServer
 }
 func (UnimplementedSchemeServer) StopWatch(context.Context, *StopWatchRequest) (*StopWatchResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method StopWatch not implemented")
+}
+func (UnimplementedSchemeServer) Root(context.Context, *RootRequest) (*RootResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Root not implemented")
+}
+func (UnimplementedSchemeServer) Symlink(context.Context, *SymlinkRequest) (*SymlinkResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Symlink not implemented")
+}
+func (UnimplementedSchemeServer) TempFile(context.Context, *TempFileRequest) (*TempFileResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method TempFile not implemented")
+}
+func (UnimplementedSchemeServer) Join(context.Context, *JoinRequest) (*JoinResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Join not implemented")
 }
 func (UnimplementedSchemeServer) mustEmbedUnimplementedSchemeServer() {}
 func (UnimplementedSchemeServer) testEmbeddedByValue()                {}
@@ -552,6 +616,78 @@ func _Scheme_StopWatch_Handler(srv interface{}, ctx context.Context, dec func(in
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Scheme_Root_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RootRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SchemeServer).Root(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Scheme_Root_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SchemeServer).Root(ctx, req.(*RootRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Scheme_Symlink_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SymlinkRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SchemeServer).Symlink(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Scheme_Symlink_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SchemeServer).Symlink(ctx, req.(*SymlinkRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Scheme_TempFile_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(TempFileRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SchemeServer).TempFile(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Scheme_TempFile_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SchemeServer).TempFile(ctx, req.(*TempFileRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Scheme_Join_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(JoinRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SchemeServer).Join(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Scheme_Join_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SchemeServer).Join(ctx, req.(*JoinRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Scheme_ServiceDesc is the grpc.ServiceDesc for Scheme service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -594,6 +730,22 @@ var Scheme_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "StopWatch",
 			Handler:    _Scheme_StopWatch_Handler,
+		},
+		{
+			MethodName: "Root",
+			Handler:    _Scheme_Root_Handler,
+		},
+		{
+			MethodName: "Symlink",
+			Handler:    _Scheme_Symlink_Handler,
+		},
+		{
+			MethodName: "TempFile",
+			Handler:    _Scheme_TempFile_Handler,
+		},
+		{
+			MethodName: "Join",
+			Handler:    _Scheme_Join_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{
@@ -747,6 +899,7 @@ const (
 	Files_Seek_FullMethodName     = "/workspace.Files/Seek"
 	Files_Close_FullMethodName    = "/workspace.Files/Close"
 	Files_Read_FullMethodName     = "/workspace.Files/Read"
+	Files_ReadAt_FullMethodName   = "/workspace.Files/ReadAt"
 	Files_Write_FullMethodName    = "/workspace.Files/Write"
 	Files_Stat_FullMethodName     = "/workspace.Files/Stat"
 )
@@ -760,6 +913,7 @@ type FilesClient interface {
 	Seek(ctx context.Context, in *SeekRequest, opts ...grpc.CallOption) (*SeekResponse, error)
 	Close(ctx context.Context, in *CloseFileRequest, opts ...grpc.CallOption) (*CloseFileResponse, error)
 	Read(ctx context.Context, in *ReadRequest, opts ...grpc.CallOption) (*ReadResponse, error)
+	ReadAt(ctx context.Context, in *ReadRequest, opts ...grpc.CallOption) (*ReadResponse, error)
 	Write(ctx context.Context, in *WriteRequest, opts ...grpc.CallOption) (*WriteResponse, error)
 	Stat(ctx context.Context, in *StatRequest, opts ...grpc.CallOption) (*StatResponse, error)
 }
@@ -822,6 +976,16 @@ func (c *filesClient) Read(ctx context.Context, in *ReadRequest, opts ...grpc.Ca
 	return out, nil
 }
 
+func (c *filesClient) ReadAt(ctx context.Context, in *ReadRequest, opts ...grpc.CallOption) (*ReadResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ReadResponse)
+	err := c.cc.Invoke(ctx, Files_ReadAt_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *filesClient) Write(ctx context.Context, in *WriteRequest, opts ...grpc.CallOption) (*WriteResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(WriteResponse)
@@ -851,6 +1015,7 @@ type FilesServer interface {
 	Seek(context.Context, *SeekRequest) (*SeekResponse, error)
 	Close(context.Context, *CloseFileRequest) (*CloseFileResponse, error)
 	Read(context.Context, *ReadRequest) (*ReadResponse, error)
+	ReadAt(context.Context, *ReadRequest) (*ReadResponse, error)
 	Write(context.Context, *WriteRequest) (*WriteResponse, error)
 	Stat(context.Context, *StatRequest) (*StatResponse, error)
 	mustEmbedUnimplementedFilesServer()
@@ -877,6 +1042,9 @@ func (UnimplementedFilesServer) Close(context.Context, *CloseFileRequest) (*Clos
 }
 func (UnimplementedFilesServer) Read(context.Context, *ReadRequest) (*ReadResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Read not implemented")
+}
+func (UnimplementedFilesServer) ReadAt(context.Context, *ReadRequest) (*ReadResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ReadAt not implemented")
 }
 func (UnimplementedFilesServer) Write(context.Context, *WriteRequest) (*WriteResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Write not implemented")
@@ -995,6 +1163,24 @@ func _Files_Read_Handler(srv interface{}, ctx context.Context, dec func(interfac
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Files_ReadAt_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ReadRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FilesServer).ReadAt(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Files_ReadAt_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FilesServer).ReadAt(ctx, req.(*ReadRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Files_Write_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(WriteRequest)
 	if err := dec(in); err != nil {
@@ -1057,6 +1243,10 @@ var Files_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Read",
 			Handler:    _Files_Read_Handler,
+		},
+		{
+			MethodName: "ReadAt",
+			Handler:    _Files_ReadAt_Handler,
 		},
 		{
 			MethodName: "Write",

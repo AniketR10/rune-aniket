@@ -793,7 +793,7 @@ func newTestFileBuffer(ctrl *gomock.Controller) (*file, *workspaceapitest.MockFi
 	schemeIfc, _ := newTestScheme("test")(context.Background(), nil, workspaceapi.URI{})
 	scheme := schemeIfc.(*testScheme)
 	mock := workspaceapitest.NewMockFile(ctrl)
-	scheme.openFunc = func(name string, flag int, perm os.FileMode) (workspaceapi.File, *workspaceapi.Error) {
+	scheme.openFunc = func(name string, flag int, perm os.FileMode) (workspaceapi.File, error) {
 		return mock, nil
 	}
 	f := new(file)
@@ -926,8 +926,8 @@ func TestFileBufferInit(t *testing.T) {
 		accessDeniedErr := errors.New("access denied")
 		f := new(file)
 		f.scheme = &testScheme{}
-		f.scheme.(*testScheme).openFunc = func(name string, flag int, perm os.FileMode) (workspaceapi.File, *workspaceapi.Error) {
-			return nil, workspaceapi.NopError(accessDeniedErr)
+		f.scheme.(*testScheme).openFunc = func(name string, flag int, perm os.FileMode) (workspaceapi.File, error) {
+			return nil, accessDeniedErr
 		}
 		assert.Equal(t, accessDeniedErr, f.init("fjkelw", cell.NewBuffer(), "", false))
 	})
@@ -941,12 +941,12 @@ func TestFileBufferInit(t *testing.T) {
 		f := new(file)
 		f.scheme = &testScheme{}
 		i := 0
-		f.scheme.(*testScheme).openFunc = func(name string, flag int, perm os.FileMode) (workspaceapi.File, *workspaceapi.Error) {
+		f.scheme.(*testScheme).openFunc = func(name string, flag int, perm os.FileMode) (workspaceapi.File, error) {
 			i++
 			if i == 1 {
 				return origFileMock, nil
 			}
-			return nil, workspaceapi.NopError(accessDeniedErr)
+			return nil, accessDeniedErr
 		}
 
 		fileName := "fjklewjflk"
@@ -1081,13 +1081,13 @@ func newUninitializedTestFileBuffer(t *testing.T, ctrl *gomock.Controller) (
 	*file, *workspaceapitest.MockFile, *cell.Buffer,
 ) {
 	f, mock := newTestFileBuffer(ctrl)
-	f.scheme.(*testScheme).openFunc = func(name string, flag int, perm os.FileMode) (workspaceapi.File, *workspaceapi.Error) {
+	f.scheme.(*testScheme).openFunc = func(name string, flag int, perm os.FileMode) (workspaceapi.File, error) {
 		if flag&os.O_CREATE != 0 {
 			mock.EXPECT().Read(gomock.Any()).Return(0, io.EOF).Times(1)
 			mock.EXPECT().Seek(gomock.Any(), gomock.Any()).Return(int64(0), nil).Times(1)
 			return mock, nil
 		}
-		return nil, &workspaceapi.Error{IsNotExist: true}
+		return nil, os.ErrNotExist
 	}
 
 	mock.EXPECT().Name().Return(defaultFileName).AnyTimes()
@@ -1101,9 +1101,9 @@ func newReadOnlyTestFileBuffer(t *testing.T, ctrl *gomock.Controller) (
 	*file, *workspaceapitest.MockFile, *cell.Buffer,
 ) {
 	f, mock := newTestFileBuffer(ctrl)
-	f.scheme.(*testScheme).openFunc = func(name string, flag int, perm os.FileMode) (workspaceapi.File, *workspaceapi.Error) {
+	f.scheme.(*testScheme).openFunc = func(name string, flag int, perm os.FileMode) (workspaceapi.File, error) {
 		if flag&os.O_RDWR != 0 || flag&os.O_CREATE != 0 {
-			return nil, &workspaceapi.Error{IsPermission: true}
+			return nil, os.ErrPermission
 		}
 		return mock, nil
 	}
@@ -1292,9 +1292,9 @@ func TestNewFileBufferFlush(t *testing.T) {
 		f, _, _ := newUninitializedTestFileBuffer(t, ctrl)
 		require.Nil(t, f.orig)
 
-		f.scheme.(*testScheme).openFunc = func(name string, flag int, perm os.FileMode) (workspaceapi.File, *workspaceapi.Error) {
+		f.scheme.(*testScheme).openFunc = func(name string, flag int, perm os.FileMode) (workspaceapi.File, error) {
 			assert.NotZero(t, flag&os.O_CREATE)
-			return nil, &workspaceapi.Error{IsExist: true}
+			return nil, os.ErrExist
 		}
 		assert.Equal(t, workspaceapi.ErrStaleData, f.Flush())
 	})

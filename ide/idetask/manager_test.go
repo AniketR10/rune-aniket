@@ -545,7 +545,7 @@ type fakeScheme struct {
 	procs     map[workspaceapi.Pid]*procState
 	startErr  error                      // if set, StartCommand will return this error
 	startHook func(cmd workspaceapi.Cmd) // optional test hook
-	tasks     map[int]chan<- workspaceapi.EventInfo
+	tasks     map[int]chan<- schemeapi.EventInfo
 	next      int
 }
 
@@ -561,7 +561,7 @@ type procState struct {
 func newFakeScheme() *fakeScheme {
 	return &fakeScheme{
 		procs: make(map[workspaceapi.Pid]*procState),
-		tasks: make(map[int]chan<- workspaceapi.EventInfo),
+		tasks: make(map[int]chan<- schemeapi.EventInfo),
 	}
 }
 
@@ -573,7 +573,7 @@ func (f *fakeScheme) StopWatch(id int) error {
 }
 
 func (f *fakeScheme) Watch(
-	path string, c chan<- workspaceapi.EventInfo, events ...workspaceapi.Event,
+	path string, c chan<- schemeapi.EventInfo, events ...schemeapi.Event,
 ) (int, error) {
 	f.mu.Lock()
 	f.next++
@@ -590,10 +590,10 @@ func (f *fakeScheme) URI(path string) (workspaceapi.URI, error) {
 	return workspaceapi.ParseURI(filepath.Join("memory://", path))
 }
 
-func (f *fakeScheme) Open(path string, flag int, perm os.FileMode) (
-	workspaceapi.File, *workspaceapi.Error,
+func (f *fakeScheme) OpenFile(path string, flag int, perm os.FileMode) (
+	workspaceapi.File, error,
 ) {
-	return nil, &workspaceapi.Error{IsNotExist: true}
+	return nil, os.ErrNotExist
 }
 
 func (f *fakeScheme) StartCommand(
@@ -822,7 +822,7 @@ type testEventInfo struct {
 	uri workspaceapi.URI
 }
 
-func (t testEventInfo) Event() workspaceapi.Event {
+func (t testEventInfo) Event() schemeapi.Event {
 	return 0
 }
 

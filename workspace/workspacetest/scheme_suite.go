@@ -30,6 +30,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	fs "io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -229,8 +230,11 @@ func TestWorkspaceSchemeFiles(
 	t.Run("Lstat", func(t *testing.T) {
 		TestWorkspaceSchemeLstat(t, schemeFn, defaultCreateTestFile)
 	})
-	t.Run("Link", func(t *testing.T) {
+	t.Run("Readlink", func(t *testing.T) {
 		TestWorkspaceSchemeReadLink(t, schemeFn, defaultCreateTestFile)
+	})
+	t.Run("Symlink", func(t *testing.T) {
+		TestWorkspaceSchemeSymlink(t, schemeFn, defaultCreateTestFile)
 	})
 	t.Run("ReadDir", func(t *testing.T) {
 		TestWorkspaceSchemeReadDir(t, schemeFn, defaultCreateTestFile)
@@ -247,6 +251,59 @@ func TestWorkspaceSchemeFiles(
 	t.Run("workspace.Load integration", func(t *testing.T) {
 		TestWorkspaceLoadIntegration(t, schemeFn, defaultCreateTestFile,
 			readAllExceptLastEOL, (*cell.Buffer).Write)
+	})
+	t.Run("Chroot/Open", func(t *testing.T) {
+		TestWorkspaceSchemeOpen(t, func(t *testing.T) schemeapi.Scheme {
+			scheme := schemeFn(t)
+			err := scheme.MkdirAll("./abc", 0777)
+			require.NoError(t, err)
+			scheme, err = scheme.Chroot("./abc")
+			require.NoError(t, err)
+			return scheme
+		}, defaultCreateTestFile,
+			io.ReadAll, (workspaceapi.File).Write, true)
+	})
+	t.Run("Chroot/Stat", func(t *testing.T) {
+		TestWorkspaceSchemeStat(t, func(t *testing.T) schemeapi.Scheme {
+			scheme := schemeFn(t)
+			err := scheme.MkdirAll("./abc", 0777)
+			require.NoError(t, err)
+			scheme, err = scheme.Chroot("./abc")
+			require.NoError(t, err)
+			return scheme
+		}, defaultCreateTestFile)
+	})
+	t.Run("Root", func(t *testing.T) {
+		t.Run("chroot", func(t *testing.T) {
+			scheme := schemeFn(t)
+			err := scheme.MkdirAll("./abc", 0777)
+			require.NoError(t, err)
+			scheme, err = scheme.Chroot("./abc")
+			require.NoError(t, err)
+			assert.True(t, strings.Contains(scheme.Root(), "abc"))
+			
+			uri, err := scheme.URI(".")
+			require.NoError(t, err)
+			assert.Equal(t, scheme.Root(), uri.Path())
+		})
+		t.Run("non chroot", func(t *testing.T) {
+			scheme := schemeFn(t)
+			uri, err := scheme.URI(".")
+			require.NoError(t, err)
+			assert.Equal(t, scheme.Root(), uri.Path())
+		})
+
+	})
+	t.Run("TempFile", func(t *testing.T) {
+		scheme := schemeFn(t)
+		for i := range 1000 {
+			f, err := scheme.TempFile("", "prefix_*_suffix")
+			require.NoError(t, err, strconv.Itoa(i))
+			require.NoError(t, f.Close())
+			t.Cleanup(func() {
+				_ = scheme.Remove(f.Name())
+			})
+		}
 	})
 }
 
@@ -285,7 +342,7 @@ func TestWorkspaceLoadIntegration(
 
 		require.NoError(t, fc.Flush())
 
-		f, werr := scheme.Open("myFile", os.O_RDONLY, 0)
+		f, werr := scheme.Open("myFile")
 		require.Nil(t, werr)
 		data, err := readAll(f)
 		require.NoError(t, err)
@@ -312,7 +369,7 @@ func TestWorkspaceLoadIntegration(
 
 		require.NoError(t, fc.Flush())
 
-		f, werr := scheme.Open("myExistingFile", os.O_RDONLY, 0)
+		f, werr := scheme.Open("myExistingFile")
 		require.Nil(t, werr)
 		data, err := readAll(f)
 		require.NoError(t, err)
@@ -340,7 +397,7 @@ func TestWorkspaceLoadIntegration(
 
 		require.NoError(t, fc.Close())
 
-		f, werr := scheme.Open("file", os.O_RDONLY, 0)
+		f, werr := scheme.OpenFile("file", os.O_RDONLY, 0)
 		require.Nil(t, werr)
 		data, err := readAll(f)
 		require.NoError(t, err)
@@ -365,7 +422,7 @@ func TestWorkspaceLoadIntegration(
 
 		require.NoError(t, fc.Close())
 
-		f, werr := scheme.Open("file", os.O_RDONLY, 0)
+		f, werr := scheme.OpenFile("file", os.O_RDONLY, 0)
 		require.Nil(t, werr)
 		data, err := readAll(f)
 		require.NoError(t, err)
@@ -398,7 +455,7 @@ func TestWorkspaceLoadIntegration(
 
 		require.NoError(t, fc.Flush())
 
-		f, werr := scheme.Open("myCloseTest", os.O_RDONLY, 0)
+		f, werr := scheme.OpenFile("myCloseTest", os.O_RDONLY, 0)
 		require.Nil(t, werr)
 		data, err := readAll(f)
 		require.NoError(t, err)
@@ -429,7 +486,7 @@ func TestWorkspaceLoadIntegration(
 		require.NoError(t, err)
 		require.NoError(t, fc2.Flush())
 
-		f, werr := scheme.Open("dataAtRestTest", os.O_RDONLY, 0)
+		f, werr := scheme.OpenFile("dataAtRestTest", os.O_RDONLY, 0)
 		require.Nil(t, werr)
 		data, err := readAll(f)
 		require.NoError(t, err)
@@ -462,7 +519,7 @@ func TestWorkspaceLoadIntegration(
 
 		require.NoError(t, fc.Flush())
 
-		f, werr := scheme.Open("myCloseTest", os.O_RDONLY, 0)
+		f, werr := scheme.OpenFile("myCloseTest", os.O_RDONLY, 0)
 		require.Nil(t, werr)
 		data, err := readAll(f)
 		require.NoError(t, err)
@@ -471,8 +528,8 @@ func TestWorkspaceLoadIntegration(
 }
 
 func defaultCreateTestFile(t *testing.T, s schemeapi.Scheme, filename, content string) (workspaceapi.File, func()) {
-	file, werr := s.Open(filename, os.O_CREATE|os.O_EXCL|os.O_RDWR, 0644)
-	require.Nil(t, werr, werr.String())
+	file, werr := s.Create(filename)
+	require.NoError(t, werr)
 	_, err := file.Write([]byte(content))
 	require.NoError(t, err)
 	require.NoError(t, file.Sync())
@@ -540,6 +597,13 @@ func testFile(
 		assert.Equal(t, "1234567890", string(data))
 	})
 
+	t.Run("ReadAt", func(t *testing.T) {
+		var buf [10]byte
+		_, err := f.ReadAt(buf[:], 0)
+		require.NoError(t, err)
+		assert.Equal(t, "1234567890", string(buf[:]))
+	})
+
 	t.Run("Truncate", func(t *testing.T) {
 		err := f.Truncate(0)
 		require.NoError(t, err)
@@ -548,7 +612,7 @@ func testFile(
 	t.Run("Read after truncate", func(t *testing.T) {
 		var buf [10]byte
 		n, err := f.Read(buf[:])
-		require.Equal(t, io.EOF, err)
+		require.True(t, errors.Is(err, io.EOF))
 		assert.Equal(t, 0, n)
 	})
 
@@ -567,8 +631,8 @@ func TestWorkspaceSchemeNewFile(
 	t.Run("returns a working File if Open succeeds", func(t *testing.T) {
 		scheme := schemeFn(t)
 		defer scheme.Close()
-		f, err := scheme.Open("file", os.O_CREATE|os.O_RDWR, 0644)
-		require.Nil(t, err, err.String())
+		f, err := scheme.OpenFile("file", os.O_CREATE|os.O_RDWR, 0644)
+		require.NoError(t, err)
 		f = scheme.NewFile(f.Fd(), f.Name())
 		testFile(t, f, readAll, writeFile)
 	})
@@ -576,11 +640,11 @@ func TestWorkspaceSchemeNewFile(
 	t.Run("file offsets are kept across instances of NewFile", func(t *testing.T) {
 		scheme := schemeFn(t)
 		defer scheme.Close()
-		f, werr := scheme.Open("file", os.O_CREATE|os.O_RDWR, 0644)
-		require.Nil(t, werr, werr.String())
+		f, err := scheme.OpenFile("file", os.O_CREATE|os.O_RDWR, 0644)
+		require.NoError(t, err)
 		f = scheme.NewFile(f.Fd(), f.Name())
 
-		_, err := writeFile(f, []byte("1234567890"))
+		_, err = writeFile(f, []byte("1234567890"))
 		require.NoError(t, err)
 
 		require.NoError(t, f.Sync())
@@ -616,9 +680,9 @@ func TestWorkspaceSchemeOpen(
 	t.Run("returns error if O_CREATE flag is not passed and file doesn't exist", func(t *testing.T) {
 		scheme := schemeFn(t)
 		defer scheme.Close()
-		_, err := scheme.Open("file", 0, 0644)
+		_, err := scheme.OpenFile("file", 0, 0644)
 		require.NotNil(t, err)
-		assert.True(t, err.IsNotExist)
+		assert.True(t, errors.Is(err, os.ErrNotExist))
 	})
 
 	t.Run("truncates file if O_TRUNC is passed if file stored has data", func(t *testing.T) {
@@ -627,8 +691,8 @@ func TestWorkspaceSchemeOpen(
 		_, cleanup := createTestFile(t, scheme, "file", "1234")
 		defer cleanup()
 
-		d, werr := scheme.Open("file", os.O_RDWR|os.O_TRUNC, 0)
-		require.Nil(t, werr, werr.String())
+		d, werr := scheme.OpenFile("file", os.O_RDWR|os.O_TRUNC, 0)
+		require.NoError(t, werr)
 
 		_, err := writeFile(d, []byte("zz"))
 		require.NoError(t, err)
@@ -645,8 +709,8 @@ func TestWorkspaceSchemeOpen(
 	t.Run("truncates file if O_TRUNC is passed if it's a new file", func(t *testing.T) {
 		scheme := schemeFn(t)
 		defer scheme.Close()
-		d, werr := scheme.Open("file", os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666)
-		require.Nil(t, werr, werr.String())
+		d, werr := scheme.OpenFile("file", os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666)
+		require.NoError(t, werr)
 
 		_, err := writeFile(d, []byte("zz"))
 		require.NoError(t, err)
@@ -669,15 +733,16 @@ func TestWorkspaceSchemeOpen(
 			cwd, err := scheme.URI(".")
 			require.NoError(t, err)
 
-			d, werr := scheme.Open("file", os.O_RDONLY, 0)
-			require.Nil(t, werr, werr.String())
+			d, werr := scheme.OpenFile("file", os.O_RDONLY, 0)
+			require.NoError(t, werr)
 
 			data, err := readAll(d)
 			require.NoError(t, err)
 			assert.Equal(t, "1234", string(data))
 
-			d, werr = scheme.Open(filepath.Join(cwd.Path(), "file"), os.O_RDONLY, 0)
-			require.Nil(t, werr, werr.String())
+			absfile := filepath.Join(cwd.Path(), "file")
+			d, werr = scheme.OpenFile(absfile, os.O_RDONLY, 0)
+			require.NoError(t, werr, absfile)
 
 			data, err = readAll(d)
 			require.NoError(t, err)
@@ -687,8 +752,8 @@ func TestWorkspaceSchemeOpen(
 		t.Run("if a relative path is passed then that should be relative to the workspace cwd", func(t *testing.T) {
 			scheme := schemeFn(t)
 			defer scheme.Close()
-			f, werr := scheme.Open("file", os.O_CREATE, 0644)
-			require.Nil(t, werr, werr.String())
+			f, werr := scheme.OpenFile("file", os.O_CREATE, 0644)
+			require.NoError(t, werr)
 
 			cwdURI, err := scheme.URI(".")
 			require.NoError(t, err)
@@ -699,8 +764,8 @@ func TestWorkspaceSchemeOpen(
 		t.Run("if an absolute path is passed then it should access even outside of cwd", func(t *testing.T) {
 			scheme := schemeFn(t)
 			defer scheme.Close()
-			f, err := scheme.Open("/tmp/file", os.O_CREATE, 0644)
-			require.Nil(t, err, err.String())
+			f, err := scheme.OpenFile("/tmp/file", os.O_CREATE, 0644)
+			require.NoError(t, err)
 			assert.Equal(t, "/tmp/file", f.Name())
 		})
 	}
@@ -710,16 +775,16 @@ func TestWorkspaceSchemeOpen(
 		defer scheme.Close()
 		_, cleanup := createTestFile(t, scheme, "file", "")
 		defer cleanup()
-		_, err := scheme.Open("file", os.O_EXCL|os.O_CREATE, 0644)
-		require.NotNil(t, err, err.String())
-		assert.True(t, err.IsExist)
+		_, err := scheme.OpenFile("file", os.O_EXCL|os.O_CREATE, 0644)
+		require.Error(t, err)
+		assert.True(t, errors.Is(err, os.ErrExist))
 	})
 
 	t.Run("returns a working File if Open succeeds", func(t *testing.T) {
 		scheme := schemeFn(t)
 		defer scheme.Close()
-		f, err := scheme.Open("file", os.O_CREATE|os.O_RDWR, 0644)
-		require.Nil(t, err, err.String())
+		f, err := scheme.OpenFile("file", os.O_CREATE|os.O_RDWR, 0644)
+		require.NoError(t, err)
 
 		testFile(t, f, readAll, writeFile)
 	})
@@ -769,16 +834,16 @@ func TestWorkspaceSchemeRename(
 		defer cleanup()
 
 		require.NoError(t, scheme.Rename("file", "foile"))
-		f, werr := scheme.Open("foile", 0, 0)
-		require.Nil(t, werr, werr.String())
+		f, werr := scheme.OpenFile("foile", 0, 0)
+		require.NoError(t, werr)
 
 		data, err := readAll(f)
 		require.NoError(t, err)
 		assert.Equal(t, "bla", string(data))
 
-		_, werr = scheme.Open("file", 0, 0)
-		require.NotNil(t, werr, werr.String())
-		assert.True(t, werr.IsNotExist)
+		_, werr = scheme.OpenFile("file", 0, 0)
+		require.Error(t, werr)
+		assert.True(t, errors.Is(werr, os.ErrNotExist))
 	})
 
 	t.Run("renames a file, overriding the target when it exists", func(t *testing.T) {
@@ -790,16 +855,16 @@ func TestWorkspaceSchemeRename(
 		defer cleanup2()
 
 		require.NoError(t, scheme.Rename("file", "foile"))
-		f, werr := scheme.Open("foile", 0, 0)
-		require.Nil(t, werr, werr.String())
+		f, werr := scheme.OpenFile("foile", 0, 0)
+		require.NoError(t, werr)
 
 		data, err := readAll(f)
 		require.NoError(t, err)
 		assert.Equal(t, "bla", string(data))
 
-		_, werr = scheme.Open("file", 0, 0)
-		require.NotNil(t, werr, werr.String())
-		assert.True(t, werr.IsNotExist)
+		_, werr = scheme.OpenFile("file", 0, 0)
+		require.Error(t, werr)
+		assert.True(t, errors.Is(werr, os.ErrNotExist))
 	})
 
 	t.Run("returns error if original file does not exist", func(t *testing.T) {
@@ -850,6 +915,21 @@ func TestWorkspaceSchemeStat(
 	createTestFile func(*testing.T, schemeapi.Scheme, string, string) (workspaceapi.File, func()),
 ) {
 	testWorkspaceSchemeStats(t, schemeFn, (schemeapi.Scheme).Stat, createTestFile)
+
+	t.Run("returns a valid os.FileInfo of a symlink file, follows link", func(t *testing.T) {
+		scheme := schemeFn(t)
+		defer scheme.Close()
+		_, cleanup := createTestFile(t, scheme, "file", "bla")
+		defer cleanup()
+
+		require.NoError(t, scheme.Symlink("file", "foile"))
+
+		finfo, err := scheme.Stat("foile")
+		require.NoError(t, err)
+
+		require.Equal(t, "foile", finfo.Name())
+		require.Equal(t, fs.FileMode(0o644), finfo.Mode())
+	})
 }
 
 func TestWorkspaceSchemeLstat(
@@ -857,9 +937,22 @@ func TestWorkspaceSchemeLstat(
 	schemeFn func(t *testing.T) schemeapi.Scheme,
 	createTestFile func(*testing.T, schemeapi.Scheme, string, string) (workspaceapi.File, func()),
 ) {
-	// clients do not use or need symlinks atm, so implementations
-	// that do not support creating symlinks should not care about this.
 	testWorkspaceSchemeStats(t, schemeFn, (schemeapi.Scheme).Lstat, createTestFile)
+
+	t.Run("returns a valid os.FileInfo of a symlink file, without following link", func(t *testing.T) {
+		scheme := schemeFn(t)
+		defer scheme.Close()
+		_, cleanup := createTestFile(t, scheme, "file", "bla")
+		defer cleanup()
+
+		require.NoError(t, scheme.Symlink("file", "foile"))
+
+		finfo, err := scheme.Lstat("foile")
+		require.NoError(t, err)
+
+		require.Equal(t, "foile", finfo.Name())
+		require.Equal(t, fs.FileMode(0o755|os.ModeSymlink), finfo.Mode())
+	})
 }
 
 func TestWorkspaceSchemeReadLink(
@@ -874,8 +967,82 @@ func TestWorkspaceSchemeReadLink(
 		_, cleanup := createTestFile(t, scheme, "file", "")
 		defer cleanup()
 
-		_, err := scheme.ReadLink("file")
+		_, err := scheme.Readlink("file")
 		require.Error(t, err)
+	})
+
+	t.Run("should return link if file is a symlink", func(t *testing.T) {
+		scheme := schemeFn(t)
+		defer scheme.Close()
+
+		f, cleanup := createTestFile(t, scheme, "file", "")
+		defer cleanup()
+
+		require.NoError(t, scheme.Symlink(f.Name(), "otherFile"))
+
+		actual, err := scheme.Readlink("otherFile")
+		require.NoError(t, err)
+		assert.Equal(t, "file", filepath.Base(actual), actual)
+	})
+}
+
+func TestWorkspaceSchemeSymlink(
+	t *testing.T,
+	schemeFn func(t *testing.T) schemeapi.Scheme,
+	createTestFile func(*testing.T, schemeapi.Scheme, string, string) (workspaceapi.File, func()),
+) {
+	t.Run("should return error if newname exists", func(t *testing.T) {
+		scheme := schemeFn(t)
+		defer scheme.Close()
+
+		_, cleanup := createTestFile(t, scheme, "file", "")
+		defer cleanup()
+
+		_, cleanup = createTestFile(t, scheme, "file2", "")
+		defer cleanup()
+
+		require.Error(t, scheme.Symlink("file", "file2"))
+	})
+
+	t.Run("a write to a symlink's newname should be propagated to original file", func(t *testing.T) {
+		scheme := schemeFn(t)
+		defer scheme.Close()
+
+		f, cleanup := createTestFile(t, scheme, "file", "")
+		defer cleanup()
+
+		require.NoError(t, scheme.Symlink(f.Name(), "otherFile"))
+
+		link, err := scheme.OpenFile("otherFile", os.O_RDWR, 0)
+		require.NoError(t, err)
+
+		_, err = link.Write([]byte("abc"))
+		require.NoError(t, err)
+
+		data, err := io.ReadAll(f)
+		require.NoError(t, err)
+		assert.Equal(t, "abc", string(data))
+		require.NoError(t, link.Close())
+	})
+
+	t.Run("a write to a symlink's oldname should be propagated to the link file", func(t *testing.T) {
+		scheme := schemeFn(t)
+		defer scheme.Close()
+
+		f, cleanup := createTestFile(t, scheme, "file", "")
+		defer cleanup()
+
+		require.NoError(t, scheme.Symlink(f.Name(), "otherFile"))
+
+		_, err := f.Write([]byte("abc"))
+		require.NoError(t, err)
+
+		link, err := scheme.Open("otherFile")
+		require.NoError(t, err)
+		data, err := io.ReadAll(link)
+		require.NoError(t, err)
+		assert.Equal(t, "abc", string(data))
+		require.NoError(t, link.Close())
 	})
 }
 
@@ -1111,7 +1278,7 @@ func TestWorkspaceSchemeMkdirAll(
 		_, cleanup := createTestFile(t, scheme, "./file", "")
 		defer cleanup()
 
-		f, werr := scheme.Open("./file", os.O_RDONLY, 0)
+		f, werr := scheme.OpenFile("./file", os.O_RDONLY, 0)
 		require.Nil(t, werr)
 		require.NoError(t, f.Close())
 
@@ -1134,13 +1301,13 @@ func TestWorkspaceSchemeMkdirAll(
 		err := scheme.MkdirAll("./nested/directory/very/nested", 0700)
 		require.NoError(t, err)
 
-		file, werr := scheme.Open("./nested/directory/very/nested/file", os.O_CREATE, 0666)
-		require.Nil(t, werr, werr.String())
+		file, werr := scheme.OpenFile("./nested/directory/very/nested/file", os.O_CREATE, 0666)
+		require.NoError(t, werr)
 		require.NoError(t, file.Close())
 	})
 }
 
-func expectNoMoreEvents(t *testing.T, ch chan workspaceapi.EventInfo) {
+func expectNoMoreEvents(t *testing.T, ch chan schemeapi.EventInfo) {
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
@@ -1157,7 +1324,7 @@ func TestWorkspaceSchemeWatch(
 	schemeFn func(t *testing.T) schemeapi.Scheme,
 	createTestFile func(*testing.T, schemeapi.Scheme, string, string) (workspaceapi.File, func()),
 ) {
-	t.Run("workspaceapi.Create watches for file created events", func(t *testing.T) {
+	t.Run("schemeapi.Create watches for file created events", func(t *testing.T) {
 		scheme := schemeFn(t)
 		defer scheme.Close()
 
@@ -1165,8 +1332,8 @@ func TestWorkspaceSchemeWatch(
 		// unless padding is added here.
 		time.Sleep(100 * time.Millisecond)
 
-		ch := make(chan workspaceapi.EventInfo, 2)
-		id, err := scheme.Watch(".", ch, workspaceapi.Create)
+		ch := make(chan schemeapi.EventInfo, 2)
+		id, err := scheme.Watch(".", ch, schemeapi.Create)
 		require.NoError(t, err)
 
 		f, cleanup := createTestFile(t, scheme, "sza", "")
@@ -1178,22 +1345,22 @@ func TestWorkspaceSchemeWatch(
 		// folder used in most harnesses contains symlinks
 		// and event subsystem will resolve them, whereas schemes don't.
 		assert.Equal(t, filepath.Base(f.Name()), filepath.Base(ei.URI().Path()), ei.URI().Path())
-		assert.Equal(t, workspaceapi.Create, ei.Event())
+		assert.Equal(t, schemeapi.Create, ei.Event())
 
 		expectNoMoreEvents(t, ch)
 
 		require.NoError(t, scheme.StopWatch(id))
 	})
 
-	t.Run("workspaceapi.Write watches for file sync events", func(t *testing.T) {
+	t.Run("schemeapi.Write watches for file sync events", func(t *testing.T) {
 		scheme := schemeFn(t)
 		defer scheme.Close()
 
 		f, cleanup := createTestFile(t, scheme, "sza", "")
 		defer cleanup()
 
-		ch := make(chan workspaceapi.EventInfo, 2)
-		id, err := scheme.Watch(".", ch, workspaceapi.Write)
+		ch := make(chan schemeapi.EventInfo, 2)
+		id, err := scheme.Watch(".", ch, schemeapi.Write)
 		require.NoError(t, err)
 
 		_, err = f.Write([]byte("1234"))
@@ -1208,22 +1375,22 @@ func TestWorkspaceSchemeWatch(
 		ei := <-ch
 		require.NoError(t, err)
 		assert.Equal(t, filepath.Base(f.Name()), filepath.Base(ei.URI().Path()), ei.URI().Path())
-		assert.Equal(t, workspaceapi.Write, ei.Event())
+		assert.Equal(t, schemeapi.Write, ei.Event())
 
 		expectNoMoreEvents(t, ch)
 
 		require.NoError(t, scheme.StopWatch(id))
 	})
 
-	t.Run("workspaceapi.Rename watches for file rename events", func(t *testing.T) {
+	t.Run("schemeapi.Rename watches for file rename events", func(t *testing.T) {
 		scheme := schemeFn(t)
 		defer scheme.Close()
 
 		f, cleanup := createTestFile(t, scheme, "sza", "")
 		defer cleanup()
 
-		ch := make(chan workspaceapi.EventInfo, 3)
-		id, err := scheme.Watch(".", ch, workspaceapi.Rename)
+		ch := make(chan schemeapi.EventInfo, 3)
+		id, err := scheme.Watch(".", ch, schemeapi.Rename)
 		require.NoError(t, err)
 
 		require.NoError(t, scheme.Rename(f.Name(), "SZA"))
@@ -1234,7 +1401,7 @@ func TestWorkspaceSchemeWatch(
 			timer := time.NewTimer(1 * time.Second)
 			select {
 			case ei := <-ch:
-				assert.Equal(t, workspaceapi.Rename, ei.Event())
+				assert.Equal(t, schemeapi.Rename, ei.Event())
 				files = append(files, filepath.Base(ei.URI().Path()))
 			case <-timer.C:
 				t.Log("failed to receive event in time")
@@ -1251,15 +1418,15 @@ func TestWorkspaceSchemeWatch(
 		require.NoError(t, scheme.StopWatch(id))
 	})
 
-	t.Run("workspaceapi.Remove watches for file remove events", func(t *testing.T) {
+	t.Run("schemeapi.Remove watches for file remove events", func(t *testing.T) {
 		scheme := schemeFn(t)
 		defer scheme.Close()
 
 		f, cleanup := createTestFile(t, scheme, "sza", "")
 		defer cleanup()
 
-		ch := make(chan workspaceapi.EventInfo, 2)
-		id, err := scheme.Watch(".", ch, workspaceapi.Remove)
+		ch := make(chan schemeapi.EventInfo, 2)
+		id, err := scheme.Watch(".", ch, schemeapi.Remove)
 		require.NoError(t, err)
 
 		require.NoError(t, scheme.Remove(f.Name()))
@@ -1267,7 +1434,7 @@ func TestWorkspaceSchemeWatch(
 		ei := <-ch
 		require.NoError(t, err)
 		assert.Equal(t, filepath.Base(f.Name()), filepath.Base(ei.URI().Path()), ei.URI().Path())
-		assert.Equal(t, workspaceapi.Remove, ei.Event())
+		assert.Equal(t, schemeapi.Remove, ei.Event())
 
 		expectNoMoreEvents(t, ch)
 

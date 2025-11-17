@@ -46,6 +46,10 @@ func (c *invalidFile) Read(p []byte) (n int, err error) {
 	return 0, c.err
 }
 
+func (c *invalidFile) ReadAt(p []byte, offset int64) (n int, err error) {
+	return 0, c.err
+}
+
 func (c *invalidFile) Write(p []byte) (n int, err error) {
 	return 0, c.err
 }

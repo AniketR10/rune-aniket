@@ -24,7 +24,7 @@
 package workspace
 
 import (
-	"bytes"
+	"errors"
 	"io"
 	"io/fs"
 	"os"
@@ -32,6 +32,7 @@ import (
 	"sync"
 	"time"
 
+	"unstable.build/go-tui/api/schemeapi"
 	"unstable.build/go-tui/api/workspaceapi"
 )
 
@@ -39,13 +40,14 @@ import (
 type memFile struct {
 	locker   sync.Locker
 	m        *memoryScheme
-	reader   *bytes.Reader
-	data     []byte
+	reader   memReader
+	data     *[]byte // shared amongst symlinks
 	filename string
 	fd       uintptr
 	modTime  time.Time
 	mode     os.FileMode
 	offset   int64
+	link     string
 }
 
 // MemoryFileSys is returned in calls to a memory file's os.FileInfo's Sys.
@@ -56,15 +58,17 @@ type MemoryFileSys struct {
 // NewMemoryFile allocates storage for a new file and initializes it
 // with the given filename, file descriptor, mode and initial data.
 func NewMemoryFile(
-	filename string, fd uintptr, mode fs.FileMode, data []byte,
-	locker sync.Locker,
+	filename string, fd uintptr, mode fs.FileMode,
+	data []byte, locker sync.Locker,
 ) workspaceapi.File {
+	ptr := new([]byte)
+	*ptr = data
 	return &memFile{
 		filename: filename,
 		fd:       fd,
 		mode:     mode,
-		data:     data,
-		reader:   bytes.NewReader(data),
+		data:     ptr,
+		reader:   memReader{s: ptr},
 		locker:   locker,
 	}
 }
@@ -72,7 +76,11 @@ func NewMemoryFile(
 // Read satisfies workspaceapi.File.
 func (c *memFile) Read(p []byte) (n int, err error) {
 	// read could lock indefinetly, do not lock
-	return c.reader.Read(p)
+	return c.reader.read(p)
+}
+
+func (c *memFile) ReadAt(p []byte, offset int64) (n int, err error) {
+	return c.reader.readAt(p, offset)
 }
 
 // Write satisfies workspaceapi.File.
@@ -80,17 +88,17 @@ func (c *memFile) Write(p []byte) (n int, err error) {
 	c.locker.Lock()
 	defer c.locker.Unlock()
 
-	if c.offset+int64(len(p)) > int64(len(c.data)) {
-		diff := c.offset + int64(len(p)) - int64(len(c.data))
-		c.data = append(c.data, make([]byte, diff)...)
-		copy(c.data[diff:], c.data)
+	if c.offset+int64(len(p)) > int64(len(*c.data)) {
+		diff := c.offset + int64(len(p)) - int64(len(*c.data))
+		*c.data = append(*c.data, make([]byte, diff)...)
+		copy((*c.data)[diff:], *c.data)
 	}
-	copy(c.data[c.offset:], p)
+	copy((*c.data)[c.offset:], p)
 	n = len(p)
 	c.offset += int64(n)
 
-	c.reader.Reset(c.data)
-	_, err = c.reader.Seek(c.offset, io.SeekStart)
+	c.reader.i = 0
+	_, err = c.reader.seek(c.offset, io.SeekStart)
 	return
 }
 
@@ -108,7 +116,7 @@ func (c *memFile) Stat() (os.FileInfo, error) {
 	defer c.locker.Unlock()
 
 	finfo := memFileInfo{
-		bufLen:   int64(len(c.data)),
+		bufLen:   int64(len(*c.data)),
 		filename: filepath.Base(c.filename),
 		modTime:  c.modTime,
 		mode:     c.mode,
@@ -127,16 +135,16 @@ func (c *memFile) Sync() error {
 		return nil
 	}
 
-	watchpoints := c.m.watchpoints[workspaceapi.Write]
+	watchpoints := c.m.watchpoints[schemeapi.Write]
 	uri, _ := c.m.URI(c.filename)
-	copied := make([]chan<- workspaceapi.EventInfo, len(watchpoints))
+	copied := make([]chan<- schemeapi.EventInfo, len(watchpoints))
 	copy(copied, watchpoints)
 	c.locker.Unlock()
 
 	for _, wp := range copied {
 		fi := watchFileInfo{
-			event:   workspaceapi.Write,
-			uri:     uri,
+			event: schemeapi.Write,
+			uri:   uri,
 		}
 		wp <- fi
 	}
@@ -148,12 +156,12 @@ func (c *memFile) Truncate(size int64) error {
 	c.locker.Lock()
 	defer c.locker.Unlock()
 
-	if size < 0 || size > int64(len(c.data)) {
+	if size < 0 || size > int64(len(*c.data)) {
 		panic("invalid truncate size")
 	}
-	c.data = c.data[:size]
+	*c.data = (*c.data)[:size]
 	c.offset = 0
-	c.reader.Reset(c.data)
+	c.reader.i = 0
 	return nil
 }
 
@@ -171,7 +179,7 @@ func (c *memFile) Seek(offset int64, whence int) (int64, error) {
 	defer c.locker.Unlock()
 
 	var err error
-	c.offset, err = c.reader.Seek(offset, whence)
+	c.offset, err = c.reader.seek(offset, whence)
 	if err != nil {
 		return 0, err
 	}
@@ -232,4 +240,51 @@ func (t memFileInfo) Type() os.FileMode {
 // Info satisfies os.FileInfo.
 func (t memFileInfo) Info() (os.FileInfo, error) {
 	return t, nil
+}
+
+type memReader struct {
+	s *[]byte // shared amongst linked files
+	i int64   // current reading index
+}
+
+func (r *memReader) read(b []byte) (n int, err error) {
+	if r.i >= int64(len(*r.s)) {
+		return 0, io.EOF
+	}
+	n = copy(b, (*r.s)[r.i:])
+	r.i += int64(n)
+	return
+}
+
+func (r *memReader) readAt(b []byte, off int64) (n int, err error) {
+	if off < 0 {
+		return 0, errors.New("negative offset")
+	}
+	if off >= int64(len(*r.s)) {
+		return 0, io.EOF
+	}
+	n = copy(b, (*r.s)[off:])
+	if n < len(b) {
+		err = io.EOF
+	}
+	return
+}
+
+func (r *memReader) seek(offset int64, whence int) (int64, error) {
+	var abs int64
+	switch whence {
+	case io.SeekStart:
+		abs = offset
+	case io.SeekCurrent:
+		abs = r.i + offset
+	case io.SeekEnd:
+		abs = int64(len(*r.s)) + offset
+	default:
+		return 0, errors.New("invalid whence")
+	}
+	if abs < 0 {
+		return 0, errors.New("negative position")
+	}
+	r.i = abs
+	return abs, nil
 }

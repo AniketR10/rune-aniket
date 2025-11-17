@@ -56,19 +56,19 @@ func (mr *MockFileSystemMockRecorder) MkdirAll(path, perm any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MkdirAll", reflect.TypeOf((*MockFileSystem)(nil).MkdirAll), path, perm)
 }
 
-// Open mocks base method.
-func (m *MockFileSystem) Open(path string, flag int, mode os.FileMode) (workspaceapi.File, *workspaceapi.Error) {
+// OpenFile mocks base method.
+func (m *MockFileSystem) OpenFile(path string, flag int, mode os.FileMode) (workspaceapi.File, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Open", path, flag, mode)
+	ret := m.ctrl.Call(m, "OpenFile", path, flag, mode)
 	ret0, _ := ret[0].(workspaceapi.File)
-	ret1, _ := ret[1].(*workspaceapi.Error)
+	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// Open indicates an expected call of Open.
-func (mr *MockFileSystemMockRecorder) Open(path, flag, mode any) *gomock.Call {
+// OpenFile indicates an expected call of OpenFile.
+func (mr *MockFileSystemMockRecorder) OpenFile(path, flag, mode any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Open", reflect.TypeOf((*MockFileSystem)(nil).Open), path, flag, mode)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OpenFile", reflect.TypeOf((*MockFileSystem)(nil).OpenFile), path, flag, mode)
 }
 
 // ReadDir mocks base method.
@@ -115,20 +115,6 @@ func (mr *MockFileSystemMockRecorder) Stat(path any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stat", reflect.TypeOf((*MockFileSystem)(nil).Stat), path)
 }
 
-// StopWatch mocks base method.
-func (m *MockFileSystem) StopWatch(ID int) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "StopWatch", ID)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// StopWatch indicates an expected call of StopWatch.
-func (mr *MockFileSystemMockRecorder) StopWatch(ID any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StopWatch", reflect.TypeOf((*MockFileSystem)(nil).StopWatch), ID)
-}
-
 // URI mocks base method.
 func (m *MockFileSystem) URI(path string) (workspaceapi.URI, error) {
 	m.ctrl.T.Helper()
@@ -142,92 +128,6 @@ func (m *MockFileSystem) URI(path string) (workspaceapi.URI, error) {
 func (mr *MockFileSystemMockRecorder) URI(path any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "URI", reflect.TypeOf((*MockFileSystem)(nil).URI), path)
-}
-
-// Watch mocks base method.
-func (m *MockFileSystem) Watch(path string, ch chan<- workspaceapi.EventInfo, events ...workspaceapi.Event) (int, error) {
-	m.ctrl.T.Helper()
-	varargs := []any{path, ch}
-	for _, a := range events {
-		varargs = append(varargs, a)
-	}
-	ret := m.ctrl.Call(m, "Watch", varargs...)
-	ret0, _ := ret[0].(int)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// Watch indicates an expected call of Watch.
-func (mr *MockFileSystemMockRecorder) Watch(path, ch any, events ...any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{path, ch}, events...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Watch", reflect.TypeOf((*MockFileSystem)(nil).Watch), varargs...)
-}
-
-// MockEventInfo is a mock of EventInfo interface.
-type MockEventInfo struct {
-	ctrl     *gomock.Controller
-	recorder *MockEventInfoMockRecorder
-}
-
-// MockEventInfoMockRecorder is the mock recorder for MockEventInfo.
-type MockEventInfoMockRecorder struct {
-	mock *MockEventInfo
-}
-
-// NewMockEventInfo creates a new mock instance.
-func NewMockEventInfo(ctrl *gomock.Controller) *MockEventInfo {
-	mock := &MockEventInfo{ctrl: ctrl}
-	mock.recorder = &MockEventInfoMockRecorder{mock}
-	return mock
-}
-
-// EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockEventInfo) EXPECT() *MockEventInfoMockRecorder {
-	return m.recorder
-}
-
-// Event mocks base method.
-func (m *MockEventInfo) Event() workspaceapi.Event {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Event")
-	ret0, _ := ret[0].(workspaceapi.Event)
-	return ret0
-}
-
-// Event indicates an expected call of Event.
-func (mr *MockEventInfoMockRecorder) Event() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Event", reflect.TypeOf((*MockEventInfo)(nil).Event))
-}
-
-// IsDir mocks base method.
-func (m *MockEventInfo) IsDir() (bool, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "IsDir")
-	ret0, _ := ret[0].(bool)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// IsDir indicates an expected call of IsDir.
-func (mr *MockEventInfoMockRecorder) IsDir() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsDir", reflect.TypeOf((*MockEventInfo)(nil).IsDir))
-}
-
-// URI mocks base method.
-func (m *MockEventInfo) URI() workspaceapi.URI {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "URI")
-	ret0, _ := ret[0].(workspaceapi.URI)
-	return ret0
-}
-
-// URI indicates an expected call of URI.
-func (mr *MockEventInfoMockRecorder) URI() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "URI", reflect.TypeOf((*MockEventInfo)(nil).URI))
 }
 
 // MockProcessWatcher is a mock of ProcessWatcher interface.
@@ -463,6 +363,21 @@ func (m *MockFile) Read(p []byte) (int, error) {
 func (mr *MockFileMockRecorder) Read(p any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Read", reflect.TypeOf((*MockFile)(nil).Read), p)
+}
+
+// ReadAt mocks base method.
+func (m *MockFile) ReadAt(p []byte, off int64) (int, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ReadAt", p, off)
+	ret0, _ := ret[0].(int)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ReadAt indicates an expected call of ReadAt.
+func (mr *MockFileMockRecorder) ReadAt(p, off any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReadAt", reflect.TypeOf((*MockFile)(nil).ReadAt), p, off)
 }
 
 // Seek mocks base method.

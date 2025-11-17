@@ -912,8 +912,8 @@ func (t *testLoader) URI(path string) (workspaceapi.URI, error) {
 	panic("unused")
 }
 
-func (t *testLoader) Open(path string, flag int, perm os.FileMode) (
-	workspaceapi.File, *workspaceapi.Error,
+func (t *testLoader) OpenFile(path string, flag int, perm os.FileMode) (
+	workspaceapi.File, error,
 ) {
 	panic("unused")
 }

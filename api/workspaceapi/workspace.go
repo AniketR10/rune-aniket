@@ -38,8 +38,8 @@ type Pid int
 type FileSystem interface {
 	URI(path string) (URI, error)
 
-	// Open opens a file at path with the given flag and mode.
-	Open(path string, flag int, mode os.FileMode) (File, *Error)
+	// OpenFile opens a file at path with the given flag and mode.
+	OpenFile(path string, flag int, mode os.FileMode) (File, error)
 
 	// Remove removes the file at path.
 	Remove(path string) error
@@ -55,63 +55,6 @@ type FileSystem interface {
 	// umask) are used for all directories that MkdirAll creates. If path is
 	// already a directory, MkdirAll does nothing and returns nil.
 	MkdirAll(path string, perm os.FileMode) error
-
-	// Watch sets up a watchpoint on path listening for events given
-	// by the events argument. If the path is relative, it will be
-	// relative to the workspace URI. To setup a recursive watcher, path needs
-	// to end with the following suffix: "...". This must be implemented
-	// by a scheme, whether a recursive watcher is supported by the underlying
-	// platform or not. It returns an ID of the watchpoint,
-	// which can be used to later stop watching.
-	//
-	// All paths reported via ch are absolute and clean.
-	Watch(path string, ch chan<- EventInfo, events ...Event) (int, error)
-
-	// Stop stops the given watchpoint.
-	StopWatch(ID int) error
-}
-
-// Event represents the type of filesystem action.
-type Event uint32
-
-// Create, Remove, Write and Rename are the only event values guaranteed to be
-// present on all platforms.
-const (
-	Create Event = iota
-	Remove
-	Write
-	Rename
-)
-
-// AllEvents returns a slice with all permutations of Event.
-func AllEvents() []Event {
-	return []Event{Create, Remove, Write, Rename}
-}
-
-// String implements fmt.Stringer interface.
-func (e Event) String() string {
-	switch e {
-	case Create:
-		return "create"
-	case Remove:
-		return "remove"
-	case Write:
-		return "write"
-	case Rename:
-		return "rename"
-	default:
-		panic("uknown event")
-	}
-}
-
-// EventInfo describes an event reported by Scheme.Watch.
-type EventInfo interface {
-	// Event is one of the reported events.
-	Event() Event
-	// URI is the uri of the resource.
-	URI() URI
-	// IsDir returns true if event is from a directory.
-	IsDir() (bool, error)
 }
 
 // Cmd represents an external command being prepared to run. See exec.Cmd for
@@ -172,7 +115,7 @@ type Pty struct {
 	Slave File
 }
 
-// File abstracts a subset of os.File
+// File abstracts a subset of os.File.
 type File interface {
 	Name() string
 	Stat() (os.FileInfo, error)
@@ -184,4 +127,5 @@ type File interface {
 	io.Reader
 	io.Closer
 	io.Writer
+	io.ReaderAt
 }

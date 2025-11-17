@@ -26,13 +26,13 @@ package workspace
 import (
 	"context"
 	"errors"
-	"fmt"
 	"os"
 	"os/user"
 	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 
 	"unstable.build/go-tui/api/config"
@@ -66,12 +66,12 @@ func NewMemoryScheme(
 
 type memoryScheme struct {
 	workspace      workspaceapi.URI
-	mu             sync.Mutex
+	mu             sync.Locker
 	files          map[string]*memFile
-	fd             uintptr // next fd
-	watchpoints    map[workspaceapi.Event][]chan<- workspaceapi.EventInfo
-	watchpointIDs  map[int]chan<- workspaceapi.EventInfo
-	nextWatchpoint int
+	fd             *atomic.Uint64 // next fd
+	watchpoints    map[schemeapi.Event][]chan<- schemeapi.EventInfo
+	watchpointIDs  map[int64]chan<- schemeapi.EventInfo
+	nextWatchpoint *atomic.Int64
 }
 
 func (m *memoryScheme) init(workspace workspaceapi.URI) error {
@@ -79,9 +79,12 @@ func (m *memoryScheme) init(workspace workspaceapi.URI) error {
 		return errors.New("invalid memory URI")
 	}
 	m.workspace = workspace
-	m.watchpoints = make(map[workspaceapi.Event][]chan<- workspaceapi.EventInfo)
-	m.watchpointIDs = make(map[int]chan<- workspaceapi.EventInfo)
+	m.watchpoints = make(map[schemeapi.Event][]chan<- schemeapi.EventInfo)
+	m.watchpointIDs = make(map[int64]chan<- schemeapi.EventInfo)
 	m.files = make(map[string]*memFile)
+	m.mu = new(sync.Mutex)
+	m.nextWatchpoint = new(atomic.Int64)
+	m.fd = new(atomic.Uint64)
 	return nil
 }
 
@@ -98,17 +101,21 @@ func (m *memoryScheme) NewFile(fd uintptr, filename string) workspaceapi.File {
 	return InvalidFile(fd, filename, errors.New("invalid file descriptor"))
 }
 
-func (m *memoryScheme) Open(path string, flag int, mode os.FileMode) (
-	workspaceapi.File, *workspaceapi.Error,
+func getUserError() (*user.User, error) {
+	return nil, errors.New("cannot determine user in memory scheme")
+}
+
+func (m *memoryScheme) OpenFile(path string, flag int, mode os.FileMode) (
+	workspaceapi.File, error,
 ) {
 	path = filepath.Clean(path)
 	if path == "" {
-		return nil, workspaceapi.NopError(fmt.Errorf("invalid file %q", path))
+		return nil, errors.New("invalid file")
 	}
 
 	uri, err := m.URI(path)
 	if err != nil {
-		return nil, workspaceapi.NopError(err)
+		return nil, err
 	}
 	uriStr := uri.String()
 
@@ -116,16 +123,16 @@ func (m *memoryScheme) Open(path string, flag int, mode os.FileMode) (
 	f, ok := m.files[uriStr]
 	m.mu.Unlock()
 	if !ok && flag&os.O_CREATE == 0 {
-		return nil, &workspaceapi.Error{IsNotExist: true}
+		return nil, os.ErrNotExist
 	}
 	if ok && flag&os.O_CREATE != 0 && flag&os.O_EXCL != 0 {
-		return nil, &workspaceapi.Error{IsExist: true}
+		return nil, os.ErrExist
 	}
 	if ok && flag&os.O_TRUNC != 0 {
 		ok = false // force re-create
 	}
 	if flag&os.O_APPEND != 0 || flag&os.O_SYNC != 0 {
-		return nil, workspaceapi.NopError(errors.New("unsupported Open flag"))
+		return nil, errors.New("unsupported Open flag")
 	}
 
 	if !ok {
@@ -137,19 +144,19 @@ func (m *memoryScheme) Open(path string, flag int, mode os.FileMode) (
 		} else {
 			filename = filepath.Join(m.workspace.Path(), rel)
 		}
-		m.fd++
-		f = NewMemoryFile(filename, m.fd, mode, data, &m.mu).(*memFile)
+		fd := m.fd.Add(1)
+		f = NewMemoryFile(filename, uintptr(fd), mode, data, m.mu).(*memFile)
 		f.m = m
 		m.mu.Lock()
 		m.files[uriStr] = f
-		watchpoints := m.watchpoints[workspaceapi.Create]
-		copied := make([]chan<- workspaceapi.EventInfo, len(watchpoints))
+		watchpoints := m.watchpoints[schemeapi.Create]
+		copied := make([]chan<- schemeapi.EventInfo, len(watchpoints))
 		copy(copied, watchpoints)
 		m.mu.Unlock()
 		for _, wp := range copied {
 			fi := watchFileInfo{
-				event:   workspaceapi.Create,
-				uri:     uri,
+				event: schemeapi.Create,
+				uri:   uri,
 			}
 			wp <- fi
 		}
@@ -172,19 +179,19 @@ func (m *memoryScheme) Remove(path string) error {
 	_, ok := m.files[uriStr]
 	if !ok {
 		m.mu.Unlock()
-		return workspaceapi.Error{IsNotExist: true}.ToError()
+		return os.ErrNotExist
 	}
 
 	delete(m.files, uriStr)
-	watchpoints := m.watchpoints[workspaceapi.Remove]
-	copied := make([]chan<- workspaceapi.EventInfo, len(watchpoints))
+	watchpoints := m.watchpoints[schemeapi.Remove]
+	copied := make([]chan<- schemeapi.EventInfo, len(watchpoints))
 	copy(copied, watchpoints)
 	m.mu.Unlock()
 
 	for _, wp := range copied {
 		fi := watchFileInfo{
-			event:   workspaceapi.Remove,
-			uri:     uri,
+			event: schemeapi.Remove,
+			uri:   uri,
 		}
 		wp <- fi
 	}
@@ -208,25 +215,25 @@ func (m *memoryScheme) Rename(old, new string) error {
 	f, ok := m.files[oldURIStr]
 	if !ok {
 		m.mu.Unlock()
-		return workspaceapi.Error{IsNotExist: true}.ToError()
+		return os.ErrNotExist
 	}
 	delete(m.files, oldURIStr)
 	f.filename = filepath.Base(new)
 	m.files[newURIStr] = f
-	watchpoints := m.watchpoints[workspaceapi.Rename]
-	copied := make([]chan<- workspaceapi.EventInfo, len(watchpoints))
+	watchpoints := m.watchpoints[schemeapi.Rename]
+	copied := make([]chan<- schemeapi.EventInfo, len(watchpoints))
 	copy(copied, watchpoints)
 	m.mu.Unlock()
 
 	for _, wp := range copied {
 		fis := []watchFileInfo{
 			{
-				event:   workspaceapi.Rename,
-				uri:     oldURI,
+				event: schemeapi.Rename,
+				uri:   oldURI,
 			},
 			{
-				event:   workspaceapi.Rename,
-				uri:     newURI,
+				event: schemeapi.Rename,
+				uri:   newURI,
 			},
 		}
 		for _, fi := range fis {
@@ -236,7 +243,7 @@ func (m *memoryScheme) Rename(old, new string) error {
 	return nil
 }
 
-func (m *memoryScheme) Stat(path string) (os.FileInfo, error) {
+func (m *memoryScheme) Lstat(path string) (os.FileInfo, error) {
 	uri, err := m.URI(path)
 	if err != nil {
 		return nil, err
@@ -262,26 +269,49 @@ func (m *memoryScheme) Stat(path string) (os.FileInfo, error) {
 	f, ok := m.files[uriStr]
 	m.mu.Unlock()
 	if !ok {
-		return nil, workspaceapi.Error{IsNotExist: true}.ToError()
+		return nil, os.ErrNotExist
 	}
 
 	return f.Stat()
 }
 
-func (m *memoryScheme) Lstat(path string) (os.FileInfo, error) {
-	return m.Stat(path)
+func (m *memoryScheme) Stat(path string) (os.FileInfo, error) {
+	target, err := m.Readlink(path)
+	if err != nil {
+		return m.Lstat(path)
+	}
+	finfo, err := m.Lstat(target)
+	if err != nil {
+		return nil, err
+	}
+	mfi := finfo.(memFileInfo)
+	mfi.filename = path
+	return mfi, nil
 }
 
-func (m *memoryScheme) ReadLink(path string) (string, error) {
-	return "", errors.New("path is not a link")
-}
+func (m *memoryScheme) Readlink(path string) (string, error) {
+	uri, err := m.URI(path)
+	if err != nil {
+		return "", err
+	}
 
-func (m *memoryScheme) nopUser() (*user.User, error) {
-	return &user.User{}, nil
+	m.mu.Lock()
+	uriStr := uri.String()
+	f, ok := m.files[uriStr]
+	if !ok {
+		m.mu.Unlock()
+		return "", os.ErrNotExist
+	}
+	link := f.link
+	m.mu.Unlock()
+	if link == "" {
+		return path, os.ErrInvalid
+	}
+	return link, nil
 }
 
 func (m *memoryScheme) URI(path string) (workspaceapi.URI, error) {
-	absPath, err := workspaceapi.ExpandPath(path, m.nopUser, func() (string, error) {
+	absPath, err := workspaceapi.ExpandPath(path, getUserError, func() (string, error) {
 		return m.workspace.Path(), nil
 	})
 	if err != nil {
@@ -307,6 +337,92 @@ func (m *memoryScheme) NewPty(ctx context.Context) (workspaceapi.Pty, error) {
 
 func (m *memoryScheme) SetPtySize(p workspaceapi.Pty, width, height int) error {
 	return errExecute
+}
+
+func (m *memoryScheme) Chroot(path string) (schemeapi.Scheme, error) {
+	uri, err := m.URI(path)
+	if err != nil {
+		return nil, err
+	}
+	nm := new(memoryScheme)
+	err = nm.init(uri)
+	if err != nil {
+		return nil, err
+	}
+	// share locker, fds, files, watchpoints, etc.
+	nm.mu = m.mu
+	nm.fd = m.fd
+	nm.files = m.files
+	return nm, nil
+}
+
+func (m *memoryScheme) Root() string {
+	return m.workspace.Path()
+}
+
+func (m *memoryScheme) Symlink(oldname, newname string) error {
+	olduri, err := m.URI(oldname)
+	if err != nil {
+		return err
+	}
+	newuri, err := m.URI(newname)
+	if err != nil {
+		return err
+	}
+
+	m.mu.Lock()
+	oldfile, ok := m.files[olduri.String()]
+	if !ok {
+		m.mu.Unlock()
+		return os.ErrNotExist
+	}
+	_, ok = m.files[newuri.String()]
+	if ok {
+		m.mu.Unlock()
+		return os.ErrExist
+	}
+	fd := m.fd.Add(1)
+	const mode = 0755 | os.ModeSymlink
+	mf := &memFile{
+		filename: newname,
+		fd:       uintptr(fd),
+		mode:     mode,
+		// share the pointer to the slice, and the locker
+		data:   oldfile.data,
+		reader: memReader{s: oldfile.data},
+		locker: oldfile.locker,
+		link:   oldname,
+		m:      m,
+	}
+	m.files[newuri.String()] = mf
+	watchpoints := m.watchpoints[schemeapi.Create]
+	copied := make([]chan<- schemeapi.EventInfo, len(watchpoints))
+	copy(copied, watchpoints)
+	m.mu.Unlock()
+	for _, wp := range copied {
+		fi := watchFileInfo{
+			event: schemeapi.Create,
+			uri:   newuri,
+		}
+		wp <- fi
+	}
+	return err
+}
+
+func (m *memoryScheme) TempFile(dir, prefix string) (workspaceapi.File, error) {
+	return CreateTemp(m, dir, prefix)
+}
+
+func (m *memoryScheme) Join(elem ...string) string {
+	return filepath.Join(elem...)
+}
+
+func (m *memoryScheme) Create(filename string) (workspaceapi.File, error) {
+	return m.OpenFile(filename, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
+}
+
+func (m *memoryScheme) Open(filename string) (workspaceapi.File, error) {
+	return m.OpenFile(filename, os.O_RDONLY, 0)
 }
 
 func (m *memoryScheme) ReadDir(name string) (
@@ -358,29 +474,28 @@ func (m *memoryScheme) MkdirAll(path string, perm os.FileMode) error {
 }
 
 func (m *memoryScheme) Watch(
-	path string, c chan<- workspaceapi.EventInfo, events ...workspaceapi.Event,
+	path string, c chan<- schemeapi.EventInfo, events ...schemeapi.Event,
 ) (int, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	m.nextWatchpoint++
-	id := m.nextWatchpoint
-	m.watchpointIDs[id] = c
+	next := m.nextWatchpoint.Add(1)
+	m.watchpointIDs[next] = c
 	for _, event := range events {
 		m.watchpoints[event] = append(m.watchpoints[event], c)
 	}
-	return id, nil
+	return int(next), nil
 }
 
 func (m *memoryScheme) StopWatch(id int) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	c, ok := m.watchpointIDs[id]
+	c, ok := m.watchpointIDs[int64(id)]
 	if !ok {
 		return errors.New("watchpoint not found")
 	}
-	delete(m.watchpointIDs, id)
+	delete(m.watchpointIDs, int64(id))
 
 	for event, chs := range m.watchpoints {
 		for i, ch := range chs {
@@ -413,11 +528,11 @@ func (m *memoryScheme) Close() error {
 }
 
 type watchFileInfo struct {
-	event   workspaceapi.Event
-	uri     workspaceapi.URI
+	event schemeapi.Event
+	uri   workspaceapi.URI
 }
 
-func (w watchFileInfo) Event() workspaceapi.Event {
+func (w watchFileInfo) Event() schemeapi.Event {
 	return w.event
 }
 
@@ -425,7 +540,7 @@ func (w watchFileInfo) URI() workspaceapi.URI {
 	return w.uri
 }
 
-func (w watchFileInfo) Sys() interface{} {
+func (w watchFileInfo) Sys() any {
 	return nil
 }
 

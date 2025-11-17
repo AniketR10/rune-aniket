@@ -67,8 +67,8 @@ func NewFileScheme(
 ) (schemeapi.Scheme, error) {
 	ret := new(fileScheme)
 	ret.getUser = user.Current
-	ret.lookupUser = user.Lookup
 	ret.osStat = os.Stat
+	ret.lookupUser = user.Lookup
 	err := ret.init(cfg, workspace)
 	if err != nil {
 		return nil, err
@@ -86,9 +86,9 @@ func OpenFile(filename string, flag int, perm os.FileMode) (workspaceapi.File, e
 		return nil, fmt.Errorf("file scheme: %v", err)
 	}
 	defer fs.Close() // nolint:errcheck
-	f, werr := fs.Open(filename, flag, perm)
-	if werr != nil {
-		return nil, werr.ToError()
+	f, err := fs.OpenFile(filename, flag, perm)
+	if err != nil {
+		return nil, err
 	}
 	return f, nil
 }
@@ -104,8 +104,8 @@ func ReadFile(filename string) ([]byte, error) {
 }
 
 type fileScheme struct {
-	osStat     func(path string) (os.FileInfo, error)
 	getUser    func() (*user.User, error)
+	osStat     func(string) (os.FileInfo, error)
 	lookupUser func(string) (*user.User, error)
 	workspace  workspaceapi.URI
 	ctx        context.Context
@@ -125,7 +125,9 @@ type fileScheme struct {
 	files sync.Map // map[uintptr]workspaceapi.File
 }
 
-func (p *fileScheme) init(cfg config.Config, workspace workspaceapi.URI) error {
+func (p *fileScheme) init(
+	cfg config.Config, workspace workspaceapi.URI,
+) error {
 	if workspace.Host() != "" || workspace.User() != "" || workspace.Scheme() != FileScheme {
 		return errors.New("invalid file URI")
 	}
@@ -143,22 +145,77 @@ func (p *fileScheme) init(cfg config.Config, workspace workspaceapi.URI) error {
 	return nil
 }
 
-func (p *fileScheme) Open(path string, flag int, perm os.FileMode) (workspaceapi.File, *workspaceapi.Error) {
+func (p *fileScheme) Root() string {
+	return p.workspace.Path()
+}
+
+func (p *fileScheme) OpenFile(path string, flag int, perm os.FileMode) (workspaceapi.File, error) {
 	var err error
 	path, err = workspaceapi.ExpandPath(path, p.getUserOrLookup, func() (string, error) {
 		return p.workspace.Path(), nil
 	})
 	if err != nil {
-		return nil, workspaceapi.NopError(err)
+		return nil, err
 	}
 	f, err := os.OpenFile(path, flag, perm)
 	if err != nil {
-		return nil, &workspaceapi.Error{
-			Err:          err,
-			IsPermission: os.IsPermission(err),
-			IsExist:      os.IsExist(err),
-			IsNotExist:   os.IsNotExist(err),
-		}
+		return nil, err
+	}
+
+	ret := &fileSchemeFile{File: f, p: p, fd: f.Fd()}
+	p.files.Store(f.Fd(), ret)
+
+	return ret, nil
+}
+
+func (p *fileScheme) Symlink(target, link string) error {
+	var err error
+	target, err = workspaceapi.ExpandPath(target, p.getUserOrLookup, func() (string, error) {
+		return p.workspace.Path(), nil
+	})
+	if err != nil {
+		return err
+	}
+	link, err = workspaceapi.ExpandPath(link, p.getUserOrLookup, func() (string, error) {
+		return p.workspace.Path(), nil
+	})
+	if err != nil {
+		return err
+	}
+	return os.Symlink(target, link)
+}
+
+func (p *fileScheme) Join(elems ...string) string {
+	return filepath.Join(elems...)
+}
+
+func (p *fileScheme) TempFile(dir, prefix string) (workspaceapi.File, error) {
+	f, err := os.CreateTemp(dir, prefix)
+	if err != nil {
+		return nil, err
+	}
+
+	ret := &fileSchemeFile{File: f, p: p, fd: f.Fd()}
+	p.files.Store(f.Fd(), ret)
+
+	return ret, nil
+}
+
+func (p *fileScheme) Create(filename string) (workspaceapi.File, error) {
+	return p.OpenFile(filename, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
+}
+
+func (p *fileScheme) Open(filename string) (workspaceapi.File, error) {
+	var err error
+	filename, err = workspaceapi.ExpandPath(filename, p.getUserOrLookup, func() (string, error) {
+		return p.workspace.Path(), nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	f, err := os.Open(filename)
+	if err != nil {
+		return nil, err
 	}
 
 	ret := &fileSchemeFile{File: f, p: p, fd: f.Fd()}
@@ -172,7 +229,7 @@ func (p *fileScheme) NewFile(fd uintptr, filename string) workspaceapi.File {
 	if !ok {
 		return nil
 	}
-	return f.(workspaceapi.File)
+	return f.(*fileSchemeFile)
 }
 
 func (p *fileScheme) Remove(path string) error {
@@ -236,7 +293,7 @@ func (p *fileScheme) Lstat(path string) (os.FileInfo, error) {
 	return os.Lstat(path)
 }
 
-func (p *fileScheme) ReadLink(path string) (string, error) {
+func (p *fileScheme) Readlink(path string) (string, error) {
 	var err error
 	path, err = workspaceapi.ExpandPath(path, p.getUserOrLookup, func() (string, error) {
 		return p.workspace.Path(), nil
@@ -361,6 +418,15 @@ func (p *fileScheme) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (
 	return pid, nil
 }
 
+func (p *fileScheme) Chroot(path string) (schemeapi.Scheme, error) {
+	uri, err := p.URI(path)
+	if err != nil {
+		return nil, err
+	}
+	ctx := context.Background()
+	return NewFileScheme(ctx, config.NopConfig(), uri)
+}
+
 func (p *fileScheme) Signal(pid workspaceapi.Pid, signal syscall.Signal) error {
 	_, ok := p.cmds.Load(pid)
 	if !ok {
@@ -421,7 +487,7 @@ func (p *fileScheme) MkdirAll(path string, perm os.FileMode) error {
 }
 
 func (p *fileScheme) Watch(
-	path string, c chan<- workspaceapi.EventInfo, events ...workspaceapi.Event,
+	path string, c chan<- schemeapi.EventInfo, events ...schemeapi.Event,
 ) (int, error) {
 	path, err := workspaceapi.ExpandPath(path, p.getUserOrLookup, func() (string, error) {
 		return p.workspace.Path(), nil
@@ -436,13 +502,13 @@ func (p *fileScheme) Watch(
 	for _, ev := range events {
 		var nev notify.Event
 		switch ev {
-		case workspaceapi.Create:
+		case schemeapi.Create:
 			nev = notify.Create
-		case workspaceapi.Write:
+		case schemeapi.Write:
 			nev = notify.Write
-		case workspaceapi.Rename:
+		case schemeapi.Rename:
 			nev = notify.Rename
-		case workspaceapi.Remove:
+		case schemeapi.Remove:
 			nev = notify.Remove
 		}
 		notifyEvents = append(notifyEvents, nev)
@@ -502,7 +568,7 @@ func (p *fileScheme) Close() (ret error) {
 
 // enables overriding Close to delete from map.
 type fileSchemeFile struct {
-	*os.File
+	workspaceapi.File
 	p *fileScheme
 	// cache fd so pty.SetSize doesn't cause races on fd destroy (on reads)
 	fd uintptr
@@ -538,11 +604,11 @@ func tryUnwrapFileReader(f io.Reader) io.Reader {
 
 type eventInfo struct {
 	uri workspaceapi.URI
-	e   workspaceapi.Event
+	e   schemeapi.Event
 	d   bool
 }
 
-func (e eventInfo) Event() workspaceapi.Event {
+func (e eventInfo) Event() schemeapi.Event {
 	return e.e
 }
 
@@ -555,16 +621,16 @@ func (e eventInfo) IsDir() (bool, error) {
 }
 
 func newEventInfo(ei notify.EventInfo, uri workspaceapi.URI) eventInfo {
-	var nev workspaceapi.Event
+	var nev schemeapi.Event
 	switch ei.Event() {
 	case notify.Create:
-		nev = workspaceapi.Create
+		nev = schemeapi.Create
 	case notify.Write:
-		nev = workspaceapi.Write
+		nev = schemeapi.Write
 	case notify.Rename:
-		nev = workspaceapi.Rename
+		nev = schemeapi.Rename
 	case notify.Remove:
-		nev = workspaceapi.Remove
+		nev = schemeapi.Remove
 	}
 	// this can be an error only in windows
 	isDir, _ := ei.IsDir()

@@ -88,19 +88,19 @@ func (s *service) Update(
 		return errors.New("invalid ID: empty")
 	}
 	origFileName := s.getFileName(ID)
-	orig, werr := s.scheme.Open(origFileName, os.O_RDONLY, 0)
-	if werr != nil {
-		if werr.IsNotExist {
+	orig, err := s.scheme.OpenFile(origFileName, os.O_RDONLY, 0)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
 			return document.ErrNotFound
 		}
-		if werr.IsPermission {
+		if errors.Is(err, os.ErrPermission) {
 			return document.ErrPermissionDenied
 		}
-		return fmt.Errorf("scheme open: %v", werr.ToError())
+		return fmt.Errorf("scheme open: %w", err)
 	}
 
 	proto := make(map[string]interface{})
-	err := s.read(orig, &proto)
+	err = s.read(orig, &proto)
 	if cerr := orig.Close(); cerr != nil {
 		err = multierr.Append(err, cerr)
 	}
@@ -118,12 +118,13 @@ func (s *service) Update(
 	}
 
 	targetFileName := s.getFileName(ID) + ".swp"
-	target, werr := s.scheme.Open(targetFileName, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)
-	if werr != nil {
-		if werr.IsPermission {
+	flag := os.O_WRONLY | os.O_CREATE | os.O_TRUNC
+	target, err := s.scheme.OpenFile(targetFileName, flag, 0666)
+	if err != nil {
+		if errors.Is(err, os.ErrPermission) {
 			return document.ErrPermissionDenied
 		}
-		return fmt.Errorf("scheme open: %v", werr.ToError())
+		return fmt.Errorf("scheme open: %w", err)
 	}
 
 	err = s.write(target, proto)
@@ -152,15 +153,15 @@ func (s *service) Get(ctx context.Context, ID string, doc interface{}) error {
 	if !document.IsEncodeable(doc) {
 		return errors.New("invalid document argument")
 	}
-	f, werr := s.scheme.Open(s.getFileName(ID), os.O_RDONLY, 0)
-	if werr != nil {
-		if werr.IsNotExist {
+	f, err := s.scheme.OpenFile(s.getFileName(ID), os.O_RDONLY, 0)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
 			return document.ErrNotFound
 		}
-		if werr.IsPermission {
+		if errors.Is(err, os.ErrPermission) {
 			return document.ErrPermissionDenied
 		}
-		return fmt.Errorf("scheme open: %v", werr.ToError())
+		return fmt.Errorf("scheme open: %w", err)
 	}
 	defer f.Close()
 
@@ -244,15 +245,15 @@ func (s *service) create(ctx context.Context, ID string, doc interface{}, openFl
 	if err != nil {
 		return err
 	}
-	f, werr := s.scheme.Open(s.getFileName(ID), openFlags, 0666)
-	if werr != nil {
-		if werr.IsExist {
+	f, err := s.scheme.OpenFile(s.getFileName(ID), openFlags, 0666)
+	if err != nil {
+		if errors.Is(err, os.ErrExist) {
 			return document.ErrAlreadyExists
 		}
-		if werr.IsPermission {
+		if errors.Is(err, os.ErrPermission) {
 			return document.ErrPermissionDenied
 		}
-		return fmt.Errorf("scheme open: %v", werr.ToError())
+		return fmt.Errorf("scheme open: %w", err)
 	}
 
 	doc = document.UpdateCreatedAtField(s.marshaler, doc)
@@ -305,21 +306,21 @@ func (d *docIter) HasNext() (ok bool) {
 			d.doneErr = d.it.Err()
 			return false
 		}
-		f, werr := d.svc.scheme.Open(d.svc.getFileName(nextFile), os.O_RDONLY, 0)
-		if werr != nil {
-			if werr.IsNotExist {
+		f, err := d.svc.scheme.OpenFile(d.svc.getFileName(nextFile), os.O_RDONLY, 0)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
 				continue // should not happend but let's be resilient
 			}
-			if werr.IsPermission {
+			if errors.Is(err, os.ErrPermission) {
 				d.doneErr = document.ErrPermissionDenied
 				return true
 			}
-			d.doneErr = werr.ToError()
+			d.doneErr = err
 			return true
 		}
 
 		proto := make(map[string]interface{})
-		err := d.svc.read(f, &proto)
+		err = d.svc.read(f, &proto)
 		if err != nil {
 			if cerr := f.Close(); cerr != nil {
 				d.doneErr = multierr.Append(err, cerr)

@@ -136,10 +136,20 @@ func (s *Server) Signal(ctx context.Context, req *SignalRequest) (*SignalRespons
 func (s *Server) URI(ctx context.Context, req *URIRequest) (
 	*URIResponse, error,
 ) {
+	root := req.GetRoot()
+	
 	s.locker.Lock()
 	defer s.locker.Unlock()
 
-	uri, err := s.s.URI(req.GetPath())
+	fs := s.s
+	if root != "" {
+		var err error
+		fs, err = s.s.Chroot(root)
+		if err != nil {
+			return nil, err
+		}
+	}
+	uri, err := fs.URI(req.GetPath())
 	if err != nil {
 		return nil, err
 	}
@@ -152,11 +162,21 @@ func (s *Server) URI(ctx context.Context, req *URIRequest) (
 func (s *Server) ReadDir(ctx context.Context, req *ReadDirRequest) (
 	*ReadDirResponse, error,
 ) {
+	dir := req.GetDir()
 	root := req.GetRoot()
 	s.locker.Lock()
 	defer s.locker.Unlock()
 
-	entries, err := s.s.ReadDir(root)
+	fs := s.s
+	if root != "" {
+		var err error
+		fs, err = s.s.Chroot(root)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	entries, err := fs.ReadDir(dir)
 	if err != nil {
 		isExist := errors.Is(err, os.ErrExist)
 		isNotExist := errors.Is(err, os.ErrNotExist)
@@ -193,7 +213,16 @@ func (s *Server) MkdirAll(ctx context.Context, req *MkdirAllRequest) (
 	s.locker.Lock()
 	defer s.locker.Unlock()
 
-	err := s.s.MkdirAll(path, fs.FileMode(mode))
+	bfs := s.s
+	if root := req.GetRoot(); root != "" {
+		var err error
+		bfs, err = s.s.Chroot(root)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	err := bfs.MkdirAll(path, fs.FileMode(mode))
 	if err != nil {
 		isPermission := errors.Is(err, os.ErrPermission)
 		if isPermission {
@@ -216,16 +245,28 @@ func (s *Server) Open(ctx context.Context, req *OpenRequest) (
 	s.locker.Lock()
 	defer s.locker.Unlock()
 
-	f, werr := s.s.Open(filename, getOpenRequestFlag(req), os.FileMode(req.GetMode()))
-	if werr != nil {
-		if werr.IsExist || werr.IsNotExist || werr.IsPermission {
+	bfs := s.s
+	if root := req.GetRoot(); root != "" {
+		var err error
+		bfs, err = s.s.Chroot(root)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	f, err := bfs.OpenFile(filename, getOpenRequestFlag(req), os.FileMode(req.GetMode()))
+	if err != nil {
+		isExist := errors.Is(err, os.ErrExist)
+		isNotExist := errors.Is(err, os.ErrNotExist)
+		isPerm := errors.Is(err, os.ErrPermission)
+		if isExist || isNotExist || isPerm {
 			resp := new(OpenResponse)
-			resp.IsExistErr = werr.IsExist
-			resp.IsNotExistErr = werr.IsNotExist
-			resp.IsPermissionErr = werr.IsPermission
+			resp.IsExistErr = isExist
+			resp.IsNotExistErr = isNotExist
+			resp.IsPermissionErr = isPerm
 			return resp, nil
 		}
-		return nil, werr.ToError()
+		return nil, err
 	}
 
 	resp := new(OpenResponse)
@@ -242,7 +283,16 @@ func (s *Server) Remove(ctx context.Context, req *RemoveRequest) (
 	s.locker.Lock()
 	defer s.locker.Unlock()
 
-	err := s.s.Remove(filename)
+	bfs := s.s
+	if root := req.GetRoot(); root != "" {
+		var err error
+		bfs, err = s.s.Chroot(root)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	err := bfs.Remove(filename)
 	if err != nil {
 		isExist := errors.Is(err, os.ErrExist)
 		isNotExist := errors.Is(err, os.ErrNotExist)
@@ -268,7 +318,16 @@ func (s *Server) Rename(ctx context.Context, req *RenameRequest) (
 	s.locker.Lock()
 	defer s.locker.Unlock()
 
-	err := s.s.Rename(filename, req.GetNewfilename())
+	bfs := s.s
+	if root := req.GetRoot(); root != "" {
+		var err error
+		bfs, err = s.s.Chroot(root)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	err := bfs.Rename(filename, req.GetNewfilename())
 	if err != nil {
 		isExist := errors.Is(err, os.ErrExist)
 		isNotExist := errors.Is(err, os.ErrNotExist)
@@ -294,7 +353,16 @@ func (s *Server) ReadLink(ctx context.Context, req *ReadLinkRequest) (
 	s.locker.Lock()
 	defer s.locker.Unlock()
 
-	fil, err := s.s.ReadLink(filename)
+	bfs := s.s
+	if root := req.GetRoot(); root != "" {
+		var err error
+		bfs, err = s.s.Chroot(root)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	fil, err := bfs.Readlink(filename)
 	if err != nil {
 		return nil, err
 	}
@@ -355,7 +423,15 @@ func (s *Server) Stop() error {
 // Read satisfies FilesServer
 func (s *Server) Read(ctx context.Context, req *ReadRequest) (*ReadResponse, error) {
 	s.locker.Lock()
-	f := s.s.NewFile(uintptr(req.GetFd()), req.GetFilename())
+	bfs := s.s
+	if root := req.GetRoot(); root != "" {
+		var err error
+		bfs, err = s.s.Chroot(root)
+		if err != nil {
+			return nil, err
+		}
+	}
+	f := bfs.NewFile(uintptr(req.GetFd()), req.GetFilename())
 	s.locker.Unlock()
 	if f == nil {
 		return nil, errInvalidFd
@@ -373,10 +449,47 @@ func (s *Server) Read(ctx context.Context, req *ReadRequest) (*ReadResponse, err
 	return resp, nil
 }
 
+// ReadAt satisfies FilesServer
+func (s *Server) ReadAt(ctx context.Context, req *ReadRequest) (*ReadResponse, error) {
+	s.locker.Lock()
+	bfs := s.s
+	if root := req.GetRoot(); root != "" {
+		var err error
+		bfs, err = s.s.Chroot(root)
+		if err != nil {
+			return nil, err
+		}
+	}
+	f := bfs.NewFile(uintptr(req.GetFd()), req.GetFilename())
+	s.locker.Unlock()
+	if f == nil {
+		return nil, errInvalidFd
+	}
+	buf := make([]byte, req.GetN())
+	n, err := f.ReadAt(buf, req.GetOffset())
+	if err != nil && err != io.EOF {
+		return nil, fmt.Errorf("read error: %s", err)
+	}
+	resp := new(ReadResponse)
+	resp.Data = buf[:n]
+	resp.N = int64(n)
+	resp.IsEof = err == io.EOF
+	s.log(log.TraceLevel, "file server read: req=%#v, resp: %#v", req, resp)
+	return resp, nil
+}
+
 // Write satisfies FilesServer
 func (s *Server) Write(ctx context.Context, req *WriteRequest) (*WriteResponse, error) {
 	s.locker.Lock()
-	f := s.s.NewFile(uintptr(req.GetFd()), req.GetFilename())
+	bfs := s.s
+	if root := req.GetRoot(); root != "" {
+		var err error
+		bfs, err = s.s.Chroot(root)
+		if err != nil {
+			return nil, err
+		}
+	}
+	f := bfs.NewFile(uintptr(req.GetFd()), req.GetFilename())
 	s.locker.Unlock()
 	if f == nil {
 		return nil, errInvalidFd
@@ -393,8 +506,16 @@ func (s *Server) Write(ctx context.Context, req *WriteRequest) (*WriteResponse, 
 // Close satisfies FilesServer
 func (s *Server) Close(ctx context.Context, req *CloseFileRequest) (*CloseFileResponse, error) {
 	s.locker.Lock()
+	bfs := s.s
+	if root := req.GetRoot(); root != "" {
+		var err error
+		bfs, err = s.s.Chroot(root)
+		if err != nil {
+			return nil, err
+		}
+	}
 	fd := uintptr(req.GetFd())
-	f := s.s.NewFile(fd, req.GetFilename())
+	f := bfs.NewFile(fd, req.GetFilename())
 	if f == nil {
 		// idempotent close
 		s.locker.Unlock()
@@ -415,7 +536,15 @@ func (s *Server) Sync(ctx context.Context, req *SyncRequest) (
 	*SyncResponse, error,
 ) {
 	s.locker.Lock()
-	f := s.s.NewFile(uintptr(req.GetFd()), req.GetFilename())
+	bfs := s.s
+	if root := req.GetRoot(); root != "" {
+		var err error
+		bfs, err = s.s.Chroot(root)
+		if err != nil {
+			return nil, err
+		}
+	}
+	f := bfs.NewFile(uintptr(req.GetFd()), req.GetFilename())
 	s.locker.Unlock()
 	if f == nil {
 		return nil, errInvalidFd
@@ -432,7 +561,15 @@ func (s *Server) Truncate(ctx context.Context, req *TruncateRequest) (
 	*TruncateResponse, error,
 ) {
 	s.locker.Lock()
-	f := s.s.NewFile(uintptr(req.GetFd()), req.GetFilename())
+	bfs := s.s
+	if root := req.GetRoot(); root != "" {
+		var err error
+		bfs, err = s.s.Chroot(root)
+		if err != nil {
+			return nil, err
+		}
+	}
+	f := bfs.NewFile(uintptr(req.GetFd()), req.GetFilename())
 	s.locker.Unlock()
 	if f == nil {
 		return nil, errInvalidFd
@@ -449,7 +586,15 @@ func (s *Server) Seek(ctx context.Context, req *SeekRequest) (
 	*SeekResponse, error,
 ) {
 	s.locker.Lock()
-	f := s.s.NewFile(uintptr(req.GetFd()), req.GetFilename())
+	bfs := s.s
+	if root := req.GetRoot(); root != "" {
+		var err error
+		bfs, err = s.s.Chroot(root)
+		if err != nil {
+			return nil, err
+		}
+	}
+	f := bfs.NewFile(uintptr(req.GetFd()), req.GetFilename())
 	s.locker.Unlock()
 	if f == nil {
 		return nil, errInvalidFd
@@ -470,16 +615,19 @@ func (s *Server) Stat(ctx context.Context, req *StatRequest) (
 	var err error
 	var fs os.FileInfo
 	s.locker.Lock()
-	if req.GetLstat() {
-		if lstater, ok := s.s.(interface {
-			Lstat(string) (os.FileInfo, error)
-		}); ok {
-			fs, err = lstater.Lstat(req.GetFilename())
-		} else {
-			err = errors.New("Lstat is not implemented")
+
+	bfs := s.s
+	if root := req.GetRoot(); root != "" {
+		var err error
+		bfs, err = s.s.Chroot(root)
+		if err != nil {
+			return nil, err
 		}
+	}
+	if req.GetLstat() {
+		fs, err = bfs.Lstat(req.GetFilename())
 	} else {
-		fs, err = s.s.Stat(req.GetFilename())
+		fs, err = bfs.Stat(req.GetFilename())
 	}
 	s.locker.Unlock()
 	if err != nil {
@@ -517,16 +665,25 @@ func (s *Server) Watch(
 		return errors.New("events cannot be empty")
 	}
 
-	var events []workspaceapi.Event
+	var events []schemeapi.Event
 	for _, ev := range req.GetEvents() {
-		events = append(events, workspaceapi.Event(ev))
+		events = append(events, schemeapi.Event(ev))
 	}
 
-	ch := make(chan workspaceapi.EventInfo)
+	ch := make(chan schemeapi.EventInfo)
 	ctx, cancel := context.WithCancel(stream.Context())
 	defer cancel()
 	s.locker.Lock()
-	id, err := s.s.Watch(req.GetPath(), ch, events...)
+
+	bfs := s.s
+	if root := req.GetRoot(); root != "" {
+		var err error
+		bfs, err = s.s.Chroot(root)
+		if err != nil {
+			return err
+		}
+	}
+	id, err := bfs.Watch(req.GetPath(), ch, events...)
 	s.watchpoints[id] = cancel
 	s.locker.Unlock()
 	if err != nil {
@@ -536,7 +693,7 @@ func (s *Server) Watch(
 	defer func() {
 		s.locker.Lock()
 		defer s.locker.Unlock()
-		_ = s.s.StopWatch(id)
+		_ = bfs.StopWatch(id)
 	}()
 
 	resp := WatchMessage{
@@ -559,13 +716,13 @@ func (s *Server) Watch(
 
 			var protoEv Event
 			switch ev.Event() {
-			case workspaceapi.Create:
+			case schemeapi.Create:
 				protoEv = Event_Create
-			case workspaceapi.Write:
+			case schemeapi.Write:
 				protoEv = Event_Write
-			case workspaceapi.Rename:
+			case schemeapi.Rename:
 				protoEv = Event_Rename
-			case workspaceapi.Remove:
+			case schemeapi.Remove:
 				protoEv = Event_Remove
 			}
 			// this can be an error only in windows
@@ -600,6 +757,67 @@ func (s *Server) StopWatch(ctx context.Context, req *StopWatchRequest) (
 	delete(s.watchpoints, id)
 
 	return new(StopWatchResponse), nil
+}
+
+// Root satisfies SchemeServer.
+func (s *Server) Root(ctx context.Context, req *RootRequest) (*RootResponse, error) {
+	s.locker.Lock()
+	defer s.locker.Unlock()
+	root := s.s.Root()
+	return &RootResponse{Path: root}, nil
+}
+
+// Symlink satisfies SchemeServer.
+func (s *Server) Symlink(ctx context.Context, req *SymlinkRequest) (*SymlinkResponse, error) {
+	s.locker.Lock()
+	defer s.locker.Unlock()
+
+	bfs := s.s
+	if root := req.GetRoot(); root != "" {
+		var err error
+		bfs, err = s.s.Chroot(root)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	err := bfs.Symlink(req.GetTarget(), req.GetLink())
+	if err != nil {
+		return nil, err
+	}
+	return new(SymlinkResponse), nil
+}
+
+// TempFile satisfies SchemeServer.
+func (s *Server) TempFile(ctx context.Context, req *TempFileRequest) (*TempFileResponse, error) {
+	s.locker.Lock()
+	defer s.locker.Unlock()
+
+	bfs := s.s
+	if root := req.GetRoot(); root != "" {
+		var err error
+		bfs, err = s.s.Chroot(root)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	f, err := bfs.TempFile(req.GetDir(), req.GetPrefix())
+	if err != nil {
+		return nil, err
+	}
+	resp := new(TempFileResponse)
+	resp.Fd = uint32(f.Fd())
+	resp.Filename = f.Name()
+	return resp, nil
+}
+
+// Join satisfies SchemeServer.
+func (s *Server) Join(ctx context.Context, req *JoinRequest) (*JoinResponse, error) {
+	s.locker.Lock()
+	defer s.locker.Unlock()
+	res := s.s.Join(req.GetElem()...)
+	return &JoinResponse{Filename: res}, nil
 }
 
 func (s *Server) log(

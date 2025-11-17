@@ -16,6 +16,7 @@ message OpenRequest {
 	bool O_EXCL = 8;
 	bool O_SYNC = 9; 
 	bool O_TRUNC = 10;
+	string root = 11;
 }
 
 message OpenResponse {
@@ -28,6 +29,7 @@ message OpenResponse {
 
 message RemoveRequest {
 	string filename = 1;
+	string root = 2;
 }
 
 message RemoveResponse {
@@ -39,6 +41,7 @@ message RemoveResponse {
 message RenameRequest {
 	string filename = 1;
 	string newfilename = 2;
+	string root = 3;
 }
 
 message RenameResponse {
@@ -50,6 +53,7 @@ message RenameResponse {
 message StatRequest {
 	string filename = 1;
 	bool lstat = 2;
+	string root = 3;
 }
 
 message StatResponse {
@@ -67,6 +71,7 @@ message StatResponse {
 message SyncRequest {
 	string filename = 1;
 	uint32 fd = 2;
+	string root = 3;
 }
 
 message SyncResponse {
@@ -76,6 +81,7 @@ message TruncateRequest {
 	string filename = 1;
 	uint32 fd = 2;
 	int64 size = 3;
+	string root = 4;
 }
 
 message TruncateResponse {
@@ -84,6 +90,7 @@ message TruncateResponse {
 message CloseFileRequest {
 	string filename = 1;
 	uint32 fd = 2;
+	string root = 3;
 }
 
 message CloseFileResponse {
@@ -94,6 +101,7 @@ message SeekRequest {
 	uint32 fd = 2;
 	int64 offset = 3;
 	int64 whence = 4;
+	string root = 5;
 }
 
 message SeekResponse {
@@ -104,6 +112,8 @@ message ReadRequest {
 	string filename = 1;
 	uint32 fd = 2;
 	int64 n = 3;
+	int64 offset = 4;
+	string root = 5;
 }
 
 message ReadResponse {
@@ -116,6 +126,7 @@ message WriteRequest {
 	string filename = 1;
 	uint32 fd = 2;
 	bytes data = 3;
+	string root = 4;
 }
 
 message WriteResponse {
@@ -125,6 +136,7 @@ message WriteResponse {
 
 message ReadLinkRequest {
 	string filename = 1;
+	string root = 2;
 }
 
 message ReadLinkResponse {
@@ -159,6 +171,7 @@ message SignalResponse {
 
 message URIRequest {
 	string path = 1;
+	string root = 2;
 }
 
 message URIResponse {
@@ -205,7 +218,8 @@ message SetPtySizeResponse {
 }
 
 message ReadDirRequest {
-	string root = 1;
+	string dir = 1;
+	string root = 2;
 }
 
 message DirEntry {
@@ -255,6 +269,7 @@ message CommandPayload {
 message MkdirAllRequest {
 	string path = 1;
 	int32 mode = 2;
+	string root = 3;
 }
 
 message MkdirAllResponse {
@@ -273,6 +288,7 @@ enum Event {
 message WatchRequest {
 	string path = 1;
 	repeated Event events = 2;
+	string root = 3;
 }
 
 message WatchResponse {
@@ -297,9 +313,45 @@ message WatchMessage {
 
 message StopWatchRequest {
 	int64 id = 1;
+	string root = 2;
 }
 
 message StopWatchResponse {}
+
+message RootRequest {
+}
+
+message RootResponse {
+	string path = 1;
+}
+
+message SymlinkRequest {
+	string target = 1;
+	string link = 2;
+	string root = 3;
+}
+
+message SymlinkResponse {
+}
+
+message TempFileRequest {
+	string dir = 1;
+	string prefix = 2;
+	string root = 3;
+}
+
+message TempFileResponse {
+	string filename = 1;
+	uint32 fd = 2;
+}
+
+message JoinRequest {
+	repeated string elem = 1;
+}
+
+message JoinResponse {
+	string filename = 1;
+}
 
 service Terminal {
 	rpc NewPty(NewPtyRequest) returns (NewPtyResponse);
@@ -317,6 +369,10 @@ service Scheme {
 	rpc MkdirAll(MkdirAllRequest) returns (MkdirAllResponse);
 	rpc Watch(WatchRequest) returns (stream WatchMessage) {};
 	rpc StopWatch(StopWatchRequest) returns (StopWatchResponse);
+	rpc Root(RootRequest) returns (RootResponse);
+	rpc Symlink(SymlinkRequest) returns (SymlinkResponse);
+	rpc TempFile(TempFileRequest) returns (TempFileResponse);
+	rpc Join(JoinRequest) returns (JoinResponse);
 }
 
 service Executor {
@@ -330,6 +386,7 @@ service Files {
 	rpc Seek(SeekRequest) returns (SeekResponse);
 	rpc Close(CloseFileRequest) returns (CloseFileResponse);
 	rpc Read(ReadRequest) returns (ReadResponse);
+	rpc ReadAt(ReadRequest) returns (ReadResponse);
 	rpc Write(WriteRequest) returns (WriteResponse);
 	rpc Stat(StatRequest) returns (StatResponse);
 }

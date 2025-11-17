@@ -103,7 +103,7 @@ func TestLoadGitignore(t *testing.T) {
 
 		f.EXPECT().Read(gomock.Any()).Return(0, io.EOF).AnyTimes()
 		f.EXPECT().Close().Return(nil).AnyTimes()
-		mock.EXPECT().Open(gomock.Any(), gomock.Any(), gomock.Any()).
+		mock.EXPECT().OpenFile(gomock.Any(), gomock.Any(), gomock.Any()).
 			Return(f, nil).
 			AnyTimes()
 		mock.EXPECT().ReadDir(gomock.Any()).
@@ -122,8 +122,8 @@ func TestLoadGitignore(t *testing.T) {
 		uri, err := workspaceapi.ParseURI("memory:///tmp")
 		require.NoError(t, err)
 
-		mock.EXPECT().Open(gomock.Any(), gomock.Any(), gomock.Any()).
-			Return(nil, &workspaceapi.Error{Err: errors.New("boom"), IsPermission: true}).
+		mock.EXPECT().OpenFile(gomock.Any(), gomock.Any(), gomock.Any()).
+			Return(nil, os.ErrPermission).
 			Times(2) // .git/info/exclude
 		mock.EXPECT().ReadDir(gomock.Any()).
 			Return(nil, nil).
@@ -172,7 +172,7 @@ func touchGitignore(t *testing.T, cwd schemeapi.Scheme, content string) {
 
 func touchGitignoreAt(t *testing.T, cwd schemeapi.Scheme, content, at string) {
 	require.NoError(t, cwd.MkdirAll(filepath.Dir(at), 0777))
-	file, werr := cwd.Open(at, os.O_CREATE|os.O_RDWR, 0666)
+	file, werr := cwd.OpenFile(at, os.O_CREATE|os.O_RDWR, 0666)
 	require.Nil(t, werr)
 
 	_, err := file.Write([]byte(content))

@@ -42,6 +42,7 @@ var _ io.WriteCloser = (*FileClient)(nil)
 
 // FileClient is a client to a remote file.
 type FileClient struct {
+	root   string
 	closed bool
 	// used to ensure that as long as there's a FileClient
 	// Client's finalizer doesnot run.
@@ -54,19 +55,27 @@ type FileClient struct {
 }
 
 func newFileClient(
-	ctx context.Context, c *Client,
+	root string, ctx context.Context, c *Client,
 	conn grpc.ClientConnInterface, filename string, fd uintptr,
 ) workspaceapi.File {
+	client := NewFilesClient(conn)
 	ret := &FileClient{
+		root:     root,
 		c:        c,
-		client:   NewFilesClient(conn),
+		client:   client,
 		filename: filename,
 		fd:       fd,
 		ctx:      ctx,
 	}
 	c.log(log.TraceLevel, "new file client: name=%s, fd=%d", filename, fd)
 	runtime.SetFinalizer(ret, func(f *FileClient) {
-		f.Close()
+		if f.closed {
+			return
+		}
+		// user should be calling Close, so this is best effort
+		// to not leak a fd in the server. If extension is shutting down
+		// there's a risk this might not complete before program exits
+		go sendCloseRequest(ctx, client, root, fd, filename) //nolint:errcheck
 	})
 	return ret
 }
@@ -77,8 +86,46 @@ func (c *FileClient) Read(p []byte) (n int, err error) {
 	// if data is not available yet.
 	ctx := c.ctx
 
-	req := ReadRequest{N: int64(len(p)), Fd: uint32(c.fd), Filename: c.filename}
+	req := ReadRequest{
+		Root:     c.root,
+		N:        int64(len(p)),
+		Fd:       uint32(c.fd),
+		Filename: c.filename,
+	}
 	resp, err := c.client.Read(ctx, &req)
+	c.log(log.TraceLevel, "file client read: req:%#v, respN:%d, err=%v",
+		&req, resp.GetN(), err)
+	runtime.KeepAlive(c)
+	if err != nil {
+		return 0, err
+	}
+	data := resp.GetData()
+	if len(data) > len(p) || int64(len(data)) != resp.GetN() {
+		return 0, errors.New("server returned invalid data")
+	}
+	copy(p, []byte(data))
+	if resp.IsEof {
+		err = io.EOF
+	} else {
+		err = nil
+	}
+	return int(resp.GetN()), err
+}
+
+// ReadAt satisfies io.ReaderAt.
+func (c *FileClient) ReadAt(p []byte, offset int64) (n int, err error) {
+	// Read should not ever timeout as it is expected to block
+	// if data is not available yet.
+	ctx := c.ctx
+
+	req := ReadRequest{
+		Root:     c.root,
+		Offset:   offset,
+		N:        int64(len(p)),
+		Fd:       uint32(c.fd),
+		Filename: c.filename,
+	}
+	resp, err := c.client.ReadAt(ctx, &req)
 	c.log(log.TraceLevel, "file client read: req:%#v, respN:%d, err=%v",
 		&req, resp.GetN(), err)
 	runtime.KeepAlive(c)
@@ -104,7 +151,7 @@ func (c *FileClient) Write(p []byte) (n int, err error) {
 	// until deadline is met or we are able to write.
 	ctx := c.ctx
 
-	req := WriteRequest{Data: p, Fd: uint32(c.fd), Filename: c.filename}
+	req := WriteRequest{Root: c.root, Data: p, Fd: uint32(c.fd), Filename: c.filename}
 	resp, err := c.client.Write(ctx, &req)
 	runtime.KeepAlive(c)
 	if err != nil {
@@ -120,18 +167,25 @@ func (c *FileClient) Close() error {
 	}
 
 	c.closed = true
+	err := sendCloseRequest(c.ctx, c.client, c.root, c.fd, c.filename)
+	runtime.KeepAlive(c)
+	return err
+}
 
-	ctx, cleanup := ctxWithTimeout(c.ctx)
+func sendCloseRequest(
+	ctx context.Context, client FilesClient,
+	root string, fd uintptr, filename string,
+) error {
+	ctx, cleanup := ctxWithTimeout(ctx)
 	defer cleanup()
 
-	req := CloseFileRequest{Fd: uint32(c.fd), Filename: c.filename}
-	_, err := c.client.Close(ctx, &req)
-	runtime.KeepAlive(c)
+	req := CloseFileRequest{Root: root, Fd: uint32(fd), Filename: filename}
+	_, err := client.Close(ctx, &req)
 	if err != nil {
 		return err
 	}
 
-	c.log(log.TraceLevel, "close called for fd %d and name %s", c.fd, c.filename)
+	log.Tracef("close called for fd %d and name %s", fd, filename)
 	return nil
 }
 
@@ -153,14 +207,14 @@ func (c *FileClient) Stat() (os.FileInfo, error) {
 	ctx, cleanup := ctxWithTimeout(c.ctx)
 	defer cleanup()
 
-	req := StatRequest{Filename: c.filename}
+	req := StatRequest{Root: c.root, Filename: c.filename}
 	resp, err := c.client.Stat(ctx, &req)
 	runtime.KeepAlive(c)
 	if err != nil {
 		return nil, err
 	}
 	if werr, ok := isTypedError(resp); ok {
-		return nil, werr.ToError()
+		return nil, werr
 	}
 	return &fileClientInfo{StatResponse: *resp}, nil // nolint:govet
 }
@@ -170,7 +224,7 @@ func (c *FileClient) Sync() error {
 	ctx, cleanup := ctxWithTimeout(c.ctx)
 	defer cleanup()
 
-	req := SyncRequest{Fd: uint32(c.fd), Filename: c.filename}
+	req := SyncRequest{Root: c.root, Fd: uint32(c.fd), Filename: c.filename}
 	_, err := c.client.Sync(ctx, &req)
 	runtime.KeepAlive(c)
 	if err != nil {
@@ -184,7 +238,7 @@ func (c *FileClient) Truncate(size int64) error {
 	ctx, cleanup := ctxWithTimeout(c.ctx)
 	defer cleanup()
 
-	req := TruncateRequest{Fd: uint32(c.fd), Filename: c.filename, Size: size}
+	req := TruncateRequest{Root: c.root, Fd: uint32(c.fd), Filename: c.filename, Size: size}
 	_, err := c.client.Truncate(ctx, &req)
 	runtime.KeepAlive(c)
 	if err != nil {
@@ -199,6 +253,7 @@ func (c *FileClient) Seek(offset int64, whence int) (int64, error) {
 	defer cleanup()
 
 	req := SeekRequest{
+		Root:     c.root,
 		Fd:       uint32(c.fd),
 		Filename: c.filename,
 		Offset:   offset,
