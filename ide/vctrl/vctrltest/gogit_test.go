@@ -21,46 +21,51 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package text
+package vctrltest
 
 import (
-	"fmt"
+	"context"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"unstable.build/go-tui/api/config"
 	"unstable.build/go-tui/api/workspaceapi"
-	"unstable.build/go-tui/cell"
-	"unstable.build/go-tui/clipboard"
-	"unstable.build/go-tui/term"
+	"unstable.build/go-tui/ide/vctrl"
+	"unstable.build/go-tui/ide/vctrl/gogit"
+	"unstable.build/go-tui/workspace"
 )
 
-func TestNoHandlesNonCtrlModifiers(t *testing.T) {
-	h := newTestSimpleEditor(t, 4, 4)
-
-	modifiers := []term.Modifier{
-		term.ModAlt, term.ModShift, term.ModMeta,
-		term.ModCtrlShift, term.ModCtrlAlt, term.ModCtrlMeta,
-		term.ModCtrlShiftAlt, term.ModCtrlShiftMeta, term.ModCtrlAltMeta,
-		term.ModShiftMeta, term.ModAltMeta, term.ModAltShiftMeta,
-		term.ModAltShift,
-	}
-
-	for _, mod := range modifiers {
-		t.Run(fmt.Sprintf("handle %v", mod), func(t *testing.T) {
-			exit, handled := h.Handle(term.Event{Type: term.EventKey, Mod: mod, Ch: 'a'})
-			assert.False(t, exit)
-			assert.False(t, handled)
-		})
-	}
+func TestGogitDiff(t *testing.T) {
+	t.Run("dotgit is at workspace root", func(t *testing.T) {
+		testGitDiff(t, setupGogitService)
+	})
 }
 
-func newTestSimpleEditor(t *testing.T, width, height int) Handler {
-	defAttr := term.Attributes{}
-	editor := NewSimpleEditor(clipboard.NewInMemory(), false, false, false, false,
-		defAttr, defAttr, defAttr, AuxBarConfig{}, GitBarConfig{}, nil)
-	h, err := editor.Edit(workspaceapi.URI{}, cell.NewBuffer())
+func TestGogitGitCurrentCommit(t *testing.T) {
+	t.Run("dotgit is at workspace root", func(t *testing.T) {
+		testGitCurrentCommit(t, setupGogitService)
+	})
+}
+
+func TestGogitGitRemoteURL(t *testing.T) {
+	t.Run("dotgit is at workspace root", func(t *testing.T) {
+		testGitRemoteURL(t, setupGogitService)
+	})
+}
+
+func TestGogitRelPath(t *testing.T) {
+	t.Run("dotgit is at workspace root", func(t *testing.T) {
+		testRelPath(t, setupGogitService)
+	})
+}
+
+func setupGogitService(t *testing.T, cwd workspaceapi.URI) vctrl.Service {
+	scheme, err := workspace.NewFileScheme(
+		context.Background(), config.NopConfig(), cwd,
+	)
 	require.NoError(t, err)
-	h.Resize(width, height)
-	return h
+
+	svc, err := gogit.NewService(cwd, scheme)
+	require.NoError(t, err)
+	return svc
 }

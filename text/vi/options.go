@@ -27,28 +27,28 @@ import (
 	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/term"
+	"unstable.build/go-tui/text"
 )
 
 // viConfig holds configuration for Vi.
 type viConfig struct {
-	attr                        term.Attributes
-	resAttr                     term.Attributes
-	barAttr                     term.Attributes
-	clipboard                   clipboard.Register
-	scheduleNextTick            func(func()) bool
-	defaultRegister             string
-	superimposedMessages        bool
-	debug                       bool
-	wrap                        bool
-	cursorCorrections           bool
-	barHidden                   bool
-	skipNulls                   bool
-	enableInitialFolds          bool
-	enableAuxBar                bool
-	enableAuxBarFolds           bool
-	enableAuxBarLines           bool
-	auxBarAbsolute              bool
-	enableAuxBarHighlightCursor bool
+	attr                 term.Attributes
+	resAttr              term.Attributes
+	barAttr              term.Attributes
+	clipboard            clipboard.Register
+	scheduleNextTick     func(func()) bool
+	defaultRegister      string
+	superimposedMessages bool
+	debug                bool
+	wrap                 bool
+	cursorCorrections    bool
+	barHidden            bool
+	skipNulls            bool
+	enableInitialFolds   bool
+	enableAuxBar         bool
+	auxBarConfig         text.AuxBarConfig
+	gitBarConfig         text.GitBarConfig
+	enableGitBar         bool
 }
 
 // defaultviHandlerImplConfig is a sane configuration defaults for viHandlerImpl.
@@ -86,32 +86,19 @@ func WithScheduleNextTick(fn func(func()) bool) Option {
 }
 
 // WithAuxiliaryBar determines whether to draw an auxiliary bar on the left or not.
-func WithAuxiliaryBar(enabled bool) Option {
+func WithAuxiliaryBar(enabled bool, config text.AuxBarConfig) Option {
 	return func(cfg *viConfig) {
 		cfg.enableAuxBar = enabled
+		cfg.auxBarConfig = config
 	}
 }
 
-// WithAuxiliaryBarFolds determines whether to draw folds at the auxiliary bar.
-func WithAuxiliaryBarFolds(enabled bool) Option {
+// WithGitBar determines whether to render the changes between the
+// open file's worktree and HEAD.
+func WithGitBar(enabled bool, config text.GitBarConfig) Option {
 	return func(cfg *viConfig) {
-		cfg.enableAuxBarFolds = enabled
-	}
-}
-
-// WithAuxiliaryBarLines determines whether to draw lines at the auxiliary bar.
-func WithAuxiliaryBarLines(enabled, absolute bool) Option {
-	return func(cfg *viConfig) {
-		cfg.enableAuxBarLines = enabled
-		cfg.auxBarAbsolute = absolute
-	}
-}
-
-// WithAuxiliaryBarHighlightCursor determines whether to highlight cursor
-// at auxiliary bar.
-func WithAuxiliaryBarHighlightCursor(enabled bool) Option {
-	return func(cfg *viConfig) {
-		cfg.enableAuxBarHighlightCursor = enabled
+		cfg.enableGitBar = enabled
+		cfg.gitBarConfig = config
 	}
 }
 

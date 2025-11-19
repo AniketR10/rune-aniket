@@ -142,7 +142,16 @@ func (c *IDE) SubscribeCommand(
 func (c *IDE) SubscribeEvents(
 	events []textapi.EventType, handler text.EventHandler,
 ) error {
-	return c.workspaceHandler.subscribeEventHandler(events, handler)
+	c.workspaceHandler.mu.Lock()
+	defer c.workspaceHandler.mu.Unlock()
+	return c.workspaceHandler.SubscribeEvents(events, handler)
+}
+
+// UnsubscribeEvents unsubscribes the given handler to all the events.
+func (c *IDE) UnsubscribeEvents(handler text.EventHandler) (bool, error) {
+	c.workspaceHandler.mu.Lock()
+	defer c.workspaceHandler.mu.Unlock()
+	return c.workspaceHandler.UnsubscribeEvents(handler)
 }
 
 // DefaultAttributes return the default attributes to be used to fill the screen.

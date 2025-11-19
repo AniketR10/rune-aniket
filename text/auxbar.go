@@ -25,42 +25,98 @@ package text
 
 import (
 	"context"
+	"errors"
 	"math"
 	"strconv"
 
+	"github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/logging"
 	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui"
+	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/handler"
+	"unstable.build/go-tui/ide/vctrl"
 	"unstable.build/go-tui/term"
 )
 
-// WithAuxBar wraps the given editor with an auxiliary bar, which uses exactly
-// one column of the available space, to draw an auxiliary bar. The given buffer,
+// AuxBarConfig holds configuration for the auxiliary bar created
+// by WithAuxBar.
+type AuxBarConfig struct {
+	GitEnabled          bool
+	LinesEnabled        bool
+	FoldsEnabled        bool
+	AbsoluteLines       bool
+	HighlightCursor     bool
+	ScheduleNextTick    func(func()) bool
+	DelAttr             term.Attributes
+	AddAttr             term.Attributes
+	DelOverlayAttr      term.Attributes
+	AddOverlayAttr      term.Attributes
+	HighlightCursorAttr term.Attributes
+	LineNumberAttr      term.Attributes
+	// Publisher is used to subscribe to EventTypeFlush events.
+	// It's optional if git is disabled by setting GitEnabled to false.
+	Publisher EventPublisher
+	// Service is used to calculate diffs. It's optional if git is
+	// disabled by setting GitEnabled to false.
+	Service vctrl.Service
+}
+
+// WithAuxBar wraps the given editor with an auxiliary bar. The given buffer,
 // and scroll should correspond to the buffer and scroll used by the given editor.
 func WithAuxBar(
-	handler Handler, buf *cell.Buffer, scroll *component.Scroll,
-	foldsEnabled, linesEnabled, absoluteLines, highlightCursor bool,
-	scheduleNextTick func(func()) bool,
+	ed Editor, handler Handler, buf *cell.Buffer,
+	scroll *component.Scroll, config AuxBarConfig,
 ) Handler {
 	ret := new(auxBar)
+	ret.ed = ed
+	ret.pub = config.Publisher
 	ret.buf = buf
+	ret.file = handler.Resource()
 	ret.scroll = scroll
-	ret.editor = handler
+	ret.handler = handler
 	ret.vhandler.C = handler
-	ret.scheduleNextTick = scheduleNextTick
-	ret.foldsEnabled = foldsEnabled
-	ret.linesEnabled = linesEnabled
-	ret.absoluteLines = absoluteLines
-	ret.highlightCursor = highlightCursor
+	ret.scheduleNextTick = config.ScheduleNextTick
+	ret.foldsEnabled = config.FoldsEnabled
+	ret.gitEnabled = config.GitEnabled
+	ret.linesEnabled = config.LinesEnabled
+	ret.absoluteLines = config.AbsoluteLines
+	ret.highlightCursor = config.HighlightCursor
 	ret.folds = make(map[term.Coordinates]term.Coordinates)
 	ret.setLinesWidth(10 /* good height for calculating width of lines */)
+	ret.svc = config.Service
+	if config.DelAttr == (term.Attributes{}) {
+		config.DelAttr = term.Attributes{Fg: tcell.ColorMaroon}
+	}
+	if config.AddAttr == (term.Attributes{}) {
+		config.AddAttr = term.Attributes{Fg: tcell.ColorGreen}
+	}
+	ret.delAttr = config.DelAttr
+	ret.addAttr = config.AddAttr
+	if config.DelOverlayAttr == (term.Attributes{}) {
+		config.DelOverlayAttr = term.Attributes{Bg: tcell.ColorMaroon}
+	}
+	if config.AddOverlayAttr == (term.Attributes{}) {
+		config.AddOverlayAttr = term.Attributes{Bg: tcell.ColorGreen}
+	}
+	if config.HighlightCursorAttr == (term.Attributes{}) {
+		config.HighlightCursorAttr = term.Attributes{
+			Fg:    tcell.ColorWhite,
+			Bg:    tcell.ColorGray,
+			Attrs: tcell.AttrBold,
+		}
+	}
+	ret.cursorAttr = config.HighlightCursorAttr
+	if config.LineNumberAttr == (term.Attributes{}) {
+		config.LineNumberAttr = term.Attributes{Fg: tcell.ColorGray}
+	}
+	ret.barLineAttr = config.LineNumberAttr
 
 	b := new(cell.Buffer)
 	b.InitPerformance(1, buf.Rows(), foldsWidth+ret.linesWidth, ' ')
@@ -68,26 +124,28 @@ func WithAuxBar(
 	ret.bar = new(component.Scroll)
 	ret.bar.InitPerformance(b)
 	ret.bar.SetOffset(scroll.Offset())
+	ret.bar.Attributes.Bg = ret.barLineAttr.Bg
+	ret.bar.Attributes.Fg = ret.barLineAttr.Fg
 
 	scroll.Subscribe(ret)
 	buf.Subscribe(ret)
 
-	ret.rebuildBar(context.Background(), term.Coordinates{})
+	evs := []textapi.EventType{textapi.EventTypeFlush}
+	if ret.gitEnabled {
+		_ = ret.pub.SubscribeEvents(evs, (*auxBarSubscriber)(ret))
+	}
+
+	ret.rebuildBar(context.Background())
 	return ret
 }
 
 const foldsWidth = 2
 
-var (
-	fgAttr = term.Attributes{Fg: tcell.ColorGray}
-	bgAttr = term.Attributes{Fg: tcell.ColorWhite, Bg: tcell.ColorGray}
-)
-
 // UnwrapAuxBar unwraps the underlying handler from
 // a Handler returned by WithAuxBar. This function
 // panics if the given handler was not returned by WithAuxBar.
 func UnwrapAuxBar(h Handler) Handler {
-	return h.(*auxBar).editor
+	return h.(*auxBar).handler
 }
 
 const (
@@ -96,23 +154,34 @@ const (
 )
 
 type auxBar struct {
+	ed               Editor
+	pub              EventPublisher
 	scheduleNextTick func(func()) bool
+	file             workspaceapi.URI
+	svc              vctrl.Service
 	foldsEnabled     bool
 	linesEnabled     bool
+	gitEnabled       bool
 	absoluteLines    bool
 	highlightCursor  bool
 
-	buf    *cell.Buffer
-	scroll *component.Scroll
-	editor Handler
+	buf     *cell.Buffer
+	scroll  *component.Scroll
+	handler Handler
 
-	vhandler   handler.Virtual[Handler]
-	bar        *component.Scroll
-	folds      map[term.Coordinates]term.Coordinates
-	linesWidth int
-	height     int
-	barWidth   int
-	prevCursor term.Coordinates
+	vhandler    handler.Virtual[Handler]
+	bar         *component.Scroll
+	folds       map[term.Coordinates]term.Coordinates
+	linesWidth  int
+	height      int
+	barWidth    int
+	prevCursor  term.Coordinates
+	delLocAttr  term.Attributes
+	addLocAttr  term.Attributes
+	delAttr     term.Attributes
+	addAttr     term.Attributes
+	cursorAttr  term.Attributes
+	barLineAttr term.Attributes
 }
 
 func (b *auxBar) Selection() (string, bool) {
@@ -124,16 +193,12 @@ func (b *auxBar) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 }
 
 func (b *auxBar) Draw(w term.Writer) {
-	cursor, _, _ := b.vhandler.Cursor()
-	if b.linesEnabled && cursor.Y != b.prevCursor.Y {
-		b.rebuildBar(w.Context(), cursor)
-	}
 	b.vhandler.Draw(w)
 	b.bar.Draw(w)
 	if b.highlightCursor {
 		y := b.prevCursor.Y
 		for x := range b.barWidth {
-			w.UnionAttributes(term.Coordinates{Y: y, X: x}, bgAttr)
+			w.UnionAttributes(term.Coordinates{Y: y, X: x}, b.cursorAttr)
 		}
 	}
 }
@@ -146,7 +211,16 @@ func (b *auxBar) Handle(ev term.Event) (quit, handled bool) {
 	fold := b.foldsEnabled && ev.Type == term.EventMouse && ev.Key == term.MouseLeft &&
 		ev.MouseX >= b.linesWidth && ev.MouseX < b.linesWidth+foldsWidth
 	if !fold {
-		return b.vhandler.Handle(ev)
+		quit, handled = b.vhandler.Handle(ev)
+		if !handled {
+			return
+		}
+		prevCursor := b.prevCursor
+		b.prevCursor, _, _ = b.vhandler.Cursor()
+		if b.linesEnabled && !b.absoluteLines && prevCursor.Y != b.prevCursor.Y {
+			b.rebuildBar(context.Background())
+		}
+		return
 	}
 
 	posAtWindow := term.Coordinates{Y: ev.MouseY, X: ev.MouseX}
@@ -186,8 +260,30 @@ func (b *auxBar) Resize(width, height int) {
 	b.vhandler.Resize(width-b.barWidth, height)
 }
 
-func (b *auxBar) Close() error {
-	return b.vhandler.C.Close()
+func (b *auxBar) Close() (ret error) {
+	if b.gitEnabled {
+		ok, err := b.pub.UnsubscribeEvents((*auxBarSubscriber)(b))
+		if err != nil {
+			ret = multierror.Append(ret, err)
+		} else if !ok {
+			ret = multierror.Append(ret, errors.New("could not unsubscribe auxiliary bar"))
+		}
+	}
+	if err := b.vhandler.C.Close(); err != nil {
+		ret = multierror.Append(ret, err)
+	}
+	return
+}
+
+type auxBarSubscriber auxBar
+
+func (b *auxBarSubscriber) Handle(ctx context.Context, ev textapi.Event) bool {
+	if !ev.URI.Equal(b.file) || ev.Type != textapi.EventTypeFlush {
+		return false
+	}
+	(*auxBar)(b).log(log.TraceLevel, "received event: %s", ev.Type.String())
+	(*auxBar)(b).rebuildBar(ctx)
+	return false
 }
 
 func (b *auxBar) foldAt(pos term.Coordinates) (folded, ok bool) {
@@ -209,17 +305,73 @@ func (b *auxBar) foldAt(pos term.Coordinates) (folded, ok bool) {
 	return
 }
 
-func (b *auxBar) rebuildBar(ctx context.Context, cursor term.Coordinates) {
-	b.prevCursor = cursor
+func (b *auxBar) rebuildBar(ctx context.Context) {
 	b.bar.Buffer().ResetPerformance()
 	if b.linesEnabled && b.absoluteLines {
 		b.rebuildLinesAbsolute(ctx)
 	} else if b.linesEnabled {
 		b.rebuildLinesRelative(ctx)
 	}
+	if b.linesEnabled && b.gitEnabled {
+		b.rebuildGit(ctx)
+	}
 	if b.foldsEnabled {
 		b.rebuildFolds(ctx)
 	}
+}
+
+func (b *auxBar) rebuildGit(ctx context.Context) {
+	uri := b.handler.Resource()
+	go debug.CapturePanicReport(func() {
+		// perform diff in a separate gouroutine in case
+		// scheme is remote and diff performs network I/O.
+		filediff, err := b.svc.Diff(ctx, uri)
+		if err != nil {
+			b.log(log.ErrorLevel, "compute diff: %v", err)
+			return
+		}
+		b.log(log.TraceLevel, "computed diff: %v", filediff)
+
+		ll := filediff.LocationList(b.delLocAttr, b.addLocAttr)
+
+		// serialize back into event loop
+		b.scheduleNextTick(func() {
+			cells := b.bar.Buffer().RawCells()
+			for loc, ok := ll.Current(); ok; loc, ok = ll.Next() {
+				from := term.Coordinates{Y: loc.From.Y}
+				to := term.Coordinates{Y: loc.To.Y}
+				if from == to {
+					at, ok := b.scrollToBarCoordinates(from)
+					if !ok { // hidden
+						continue
+					}
+					for x := 0; x < b.linesWidth; x++ {
+						if x >= len(cells[at.Y]) {
+							break
+						}
+						cells[at.Y][x].Attributes = term.AttributesUnion(
+							cells[at.Y][x].Attributes, b.delAttr)
+					}
+					continue
+				}
+
+				for y := from.Y; y < to.Y; y++ {
+					at, ok := b.scrollToBarCoordinates(term.Coordinates{Y: y})
+					if !ok { // hidden
+						continue
+					}
+					for x := 0; x < b.linesWidth; x++ {
+						if x >= len(cells[at.Y]) {
+							break
+						}
+						cells[at.Y][x].Attributes = term.AttributesUnion(
+							cells[at.Y][x].Attributes, b.addAttr)
+					}
+				}
+			}
+			_ = b.ed.SetLocationList(b, textapi.LocationPriorityInfo, gitLocationsID, ll)
+		})
+	})
 }
 
 func (b *auxBar) rebuildLinesAbsolute(ctx context.Context) {
@@ -237,7 +389,7 @@ func (b *auxBar) rebuildLinesAbsolute(ctx context.Context) {
 				to.X = cols - 1
 			}
 		}
-		b.bar.Buffer().EditWithAttr(ctx, from, to, number, fgAttr)
+		b.bar.Buffer().EditWithAttr(ctx, from, to, number, b.barLineAttr)
 	}
 }
 
@@ -260,7 +412,7 @@ func (b *auxBar) rebuildLinesRelative(ctx context.Context) {
 				to.X = cols - 1
 			}
 		}
-		b.bar.Buffer().EditWithAttr(ctx, from, to, number, fgAttr)
+		b.bar.Buffer().EditWithAttr(ctx, from, to, number, b.barLineAttr)
 	}
 }
 
@@ -333,7 +485,7 @@ func (b *auxBar) rebuildFolds(ctx context.Context) {
 				to := from
 				to.X++ // replace
 				b.bar.Buffer().Edit(ctx, from, to, "")
-				b.bar.Buffer().InsertWithAttr(from, icon, fgAttr)
+				b.bar.Buffer().InsertWithAttr(from, icon, b.barLineAttr)
 			}
 			if err := folds.Err(); err != nil {
 				b.log(log.ErrorLevel, "error rebuilding auxiliary bar: %v", err)
@@ -345,8 +497,7 @@ func (b *auxBar) rebuildFolds(ctx context.Context) {
 func (b *auxBar) OnDidSeek(_, to term.Coordinates) {
 	b.bar.SetOffset(to)
 	if b.linesEnabled && !b.absoluteLines {
-		cursor, _, _ := b.vhandler.Cursor()
-		b.rebuildBar(context.Background(), cursor)
+		b.rebuildBar(context.Background())
 	}
 }
 
@@ -354,13 +505,11 @@ func (b *auxBar) OnWillSeek(_ term.Coordinates) {
 }
 
 func (b *auxBar) OnHide(start, end int) {
-	cursor, _, _ := b.vhandler.Cursor()
-	b.rebuildBar(context.Background(), cursor)
+	b.rebuildBar(context.Background())
 }
 
 func (b *auxBar) OnVisible(start int) {
-	cursor, _, _ := b.vhandler.Cursor()
-	b.rebuildBar(context.Background(), cursor)
+	b.rebuildBar(context.Background())
 }
 
 func (b *auxBar) OnWillEdit(
@@ -372,8 +521,7 @@ func (b *auxBar) OnDidEdit(
 	ctx context.Context, start, end term.Coordinates, old string,
 ) {
 	b.setLinesWidth(b.height)
-	cursor, _, _ := b.vhandler.Cursor()
-	b.rebuildBar(ctx, cursor)
+	b.rebuildBar(ctx)
 }
 
 func (b *auxBar) setLinesWidth(height int) {
@@ -402,35 +550,35 @@ func (b *auxBar) scrollToBarCoordinates(pos term.Coordinates) (ret term.Coordina
 }
 
 func (b *auxBar) SeekUp() bool {
-	return b.editor.SeekUp()
+	return b.handler.SeekUp()
 }
 
 func (b *auxBar) SeekDown() bool {
-	return b.editor.SeekDown()
+	return b.handler.SeekDown()
 }
 
 func (b *auxBar) SeekOffset() int {
-	return b.editor.SeekOffset()
+	return b.handler.SeekOffset()
 }
 
 func (b *auxBar) MaxSeekOffset() int {
-	return b.editor.MaxSeekOffset()
+	return b.handler.MaxSeekOffset()
 }
 
 func (b *auxBar) Resource() workspaceapi.URI {
-	return b.editor.Resource()
+	return b.handler.Resource()
 }
 
 func (b *auxBar) SetWrap(wrap bool) {
-	b.editor.SetWrap(wrap)
+	b.handler.SetWrap(wrap)
 }
 
 func (b *auxBar) ShowCommandBar(show bool) {
-	b.editor.ShowCommandBar(show)
+	b.handler.ShowCommandBar(show)
 }
 
 func (b *auxBar) SetCursorAtScroll(pos term.Coordinates) bool {
-	return b.editor.SetCursorAtScroll(pos)
+	return b.handler.SetCursorAtScroll(pos)
 }
 
 func (b *auxBar) log(level log.Level, msg string, args ...any) {

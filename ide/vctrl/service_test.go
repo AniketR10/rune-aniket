@@ -21,46 +21,62 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package text
+package vctrl
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	"unstable.build/go-tui/api/workspaceapi"
-	"unstable.build/go-tui/cell"
-	"unstable.build/go-tui/clipboard"
+	"github.com/unstablebuild/tcell/v3"
+	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/term"
 )
 
-func TestNoHandlesNonCtrlModifiers(t *testing.T) {
-	h := newTestSimpleEditor(t, 4, 4)
-
-	modifiers := []term.Modifier{
-		term.ModAlt, term.ModShift, term.ModMeta,
-		term.ModCtrlShift, term.ModCtrlAlt, term.ModCtrlMeta,
-		term.ModCtrlShiftAlt, term.ModCtrlShiftMeta, term.ModCtrlAltMeta,
-		term.ModShiftMeta, term.ModAltMeta, term.ModAltShiftMeta,
-		term.ModAltShift,
+func TestDiffToLocationList(t *testing.T) {
+	suite := []struct {
+		description string
+		diff        FileDiff
+		expected    []textapi.Location
+	}{
+		{"empty FileDiff returns empty locations", FileDiff{}, []textapi.Location{}},
+		{"converts an add operation", FileDiff{Hunks: []Hunk{
+			{NewStartLine: 1, NewLines: 1},
+		}}, []textapi.Location{
+			{
+				From: term.Coordinates{},
+				To:   term.Coordinates{Y: 1},
+				Attr: term.Attributes{Fg: tcell.ColorGreen},
+			},
+		}},
+		{"converts a delete operation", FileDiff{Hunks: []Hunk{
+			{OrigStartLine: 1, OrigLines: 1},
+		}}, []textapi.Location{
+			{
+				From: term.Coordinates{},
+				To:   term.Coordinates{Y: 0, X: 1},
+				Attr: term.Attributes{Fg: tcell.ColorRed},
+			},
+		}},
+		{"converts a replace operation into an add", FileDiff{Hunks: []Hunk{
+			{OrigStartLine: 1, OrigLines: 1, NewStartLine: 1, NewLines: 1},
+		}}, []textapi.Location{
+			{
+				From: term.Coordinates{},
+				To:   term.Coordinates{Y: 1},
+				Attr: term.Attributes{Fg: tcell.ColorGreen},
+			},
+		}},
 	}
 
-	for _, mod := range modifiers {
-		t.Run(fmt.Sprintf("handle %v", mod), func(t *testing.T) {
-			exit, handled := h.Handle(term.Event{Type: term.EventKey, Mod: mod, Ch: 'a'})
-			assert.False(t, exit)
-			assert.False(t, handled)
+	for _, test := range suite {
+		t.Run(test.description, func(t *testing.T) {
+			actual := test.diff.LocationList(
+				term.Attributes{Fg: tcell.ColorRed}, term.Attributes{Fg: tcell.ColorGreen})
+			locs := make([]textapi.Location, 0)
+			for loc, ok := actual.Current(); ok; loc, ok = actual.Next() {
+				locs = append(locs, loc)
+			}
+			assert.Equal(t, test.expected, locs)
 		})
 	}
-}
-
-func newTestSimpleEditor(t *testing.T, width, height int) Handler {
-	defAttr := term.Attributes{}
-	editor := NewSimpleEditor(clipboard.NewInMemory(), false, false, false, false,
-		defAttr, defAttr, defAttr, AuxBarConfig{}, GitBarConfig{}, nil)
-	h, err := editor.Edit(workspaceapi.URI{}, cell.NewBuffer())
-	require.NoError(t, err)
-	h.Resize(width, height)
-	return h
 }

@@ -24,16 +24,21 @@
 package texttest
 
 import (
+	"context"
 	"sync"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/blue/iterator"
+	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui"
+	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/comptest"
+	"unstable.build/go-tui/ide/vctrl"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
 )
@@ -50,8 +55,8 @@ func TestAuxBarDrawLinesRelative(t *testing.T) {
 		return true
 	}
 
-	bar := text.WithAuxBar(h, buf, scroll,
-		false, true, false /* relative lines */, false, cb)
+	cfg := text.AuxBarConfig{LinesEnabled: true, ScheduleNextTick: cb}
+	bar := text.WithAuxBar(&TestEditor{}, h, buf, scroll, cfg)
 	bar.Resize(20, 10)
 	w := term.NewStringWriter(20, 10)
 
@@ -100,8 +105,8 @@ func TestAuxBarDrawLinesAbsolute(t *testing.T) {
 		return true
 	}
 
-	bar := text.WithAuxBar(h, buf, scroll,
-		false, true, true /* absolute lines */, false, cb)
+	cfg := text.AuxBarConfig{LinesEnabled: true, AbsoluteLines: true, ScheduleNextTick: cb}
+	bar := text.WithAuxBar(&TestEditor{}, h, buf, scroll, cfg)
 	bar.Resize(20, 10)
 	w := term.NewStringWriter(20, 10)
 
@@ -157,8 +162,8 @@ func TestAuxBarDrawFolds(t *testing.T) {
 
 	wg.Add(1)
 	mu.Lock()
-	bar := text.WithAuxBar(h, buf, scroll,
-		true /*folds enabled*/, false, false, false, cb)
+	cfg := text.AuxBarConfig{FoldsEnabled: true, ScheduleNextTick: cb}
+	bar := text.WithAuxBar(&TestEditor{}, h, buf, scroll, cfg)
 	bar.Resize(20, 10)
 	mu.Unlock()
 	w := term.NewStringWriter(20, 10)
@@ -178,8 +183,10 @@ func TestAuxBarDrawFolds(t *testing.T) {
 		},
 	}
 	wg.Wait()
-	comptest.TestComponent(t, bar, w, tests)
 
+	mu.Lock()
+	comptest.TestComponent(t, bar, w, tests)
+	mu.Unlock()
 	require.True(t, scroll.SeekDown())
 
 	tests = []comptest.TestCase{
@@ -196,7 +203,9 @@ func TestAuxBarDrawFolds(t *testing.T) {
       for i := 0; i `,
 		},
 	}
+	mu.Lock()
 	comptest.TestComponent(t, bar, w, tests)
+	mu.Unlock()
 
 	wg.Add(1)
 	_, handled := bar.Handle(
@@ -219,7 +228,9 @@ func TestAuxBarDrawFolds(t *testing.T) {
 	}
 
 	wg.Wait()
+	mu.Lock()
 	comptest.TestComponent(t, bar, w, tests)
+	mu.Unlock()
 
 	wg.Add(1)
 	_, handled = bar.Handle(
@@ -242,7 +253,9 @@ func TestAuxBarDrawFolds(t *testing.T) {
 	}
 
 	wg.Wait()
+	mu.Lock()
 	comptest.TestComponent(t, bar, w, tests)
+	mu.Unlock()
 
 	wg.Add(1)
 	_, handled = bar.Handle(
@@ -265,7 +278,9 @@ func TestAuxBarDrawFolds(t *testing.T) {
 	}
 
 	wg.Wait()
+	mu.Lock()
 	comptest.TestComponent(t, bar, w, tests)
+	mu.Unlock()
 
 	// nothing happens if we click outside of line
 	_, handled = bar.Handle(
@@ -288,10 +303,12 @@ func TestAuxBarDrawFolds(t *testing.T) {
 	}
 
 	wg.Wait()
+	mu.Lock()
 	comptest.TestComponent(t, bar, w, tests)
+	mu.Unlock()
 }
 
-func TestAuxBarDrawFoldsWithLines(t *testing.T) {
+func TestGitBarWithAuxBarIntegration(t *testing.T) {
 	buf := cell.NewBuffer()
 	buf.WriteString(copy)
 	fs := &testFoldsService{}
@@ -308,71 +325,101 @@ func TestAuxBarDrawFoldsWithLines(t *testing.T) {
 		return true
 	}
 
-	wg.Add(1)
+	ed := &TestEditor{}
+	mockSvc := &differ{}
+	wg.Add(3)
+	acfg := text.AuxBarConfig{
+		LinesEnabled:        true,
+		FoldsEnabled:        true,
+		AbsoluteLines:       true,
+		HighlightCursor:     true,
+		GitEnabled:          true,
+		ScheduleNextTick:    cb,
+		Publisher:           ed,
+		HighlightCursorAttr: term.Attributes{Bg: tcell.ColorGray}, // just not fg
+		LineNumberAttr:      term.Attributes{Bg: tcell.ColorGray}, // just not fg
+		Service:             mockSvc,
+	}
+	gcfg := text.GitBarConfig{
+		ScheduleNextTick: cb,
+		Publisher:        ed,
+	}
 	mu.Lock()
-	bar := text.WithAuxBar(h, buf, scroll,
-		true, true, true, true, cb) /* all enabled */
+	bar := text.WithAuxBar(ed, h, buf, scroll, acfg)
+	bar = text.WithGitBar(ed, mockSvc, bar, buf, scroll, gcfg)
 	bar.Resize(20, 10)
 	mu.Unlock()
 	w := term.NewStringWriter(20, 10)
+	w.ForegroundCh = '#'
 
 	tests := []comptest.TestCase{
 		{Expected: `
-1    package main   
-2                   
-3   import (       
-4        "fmt"      
-5                   
-6        "github.com
-7    )              
-8                   
-9   func main() {  
-10       fmt.Println`,
+  1    package main 
+  2                 
+  3   import (     
+  4        "fmt"    
+# #                 
+# #        "github.c
+  7    )            
+  8                 
+  9   func main() {
+# ##       fmt.Print`,
 		},
 	}
 	wg.Wait()
+	mu.Lock()
 	comptest.TestComponent(t, bar, w, tests)
-
 	require.True(t, scroll.SeekDown())
+	mu.Unlock()
 
 	tests = []comptest.TestCase{
 		{Expected: `
-2                   
-3   import (       
-4        "fmt"      
-5                   
-6        "github.com
-7    )              
-8                   
-9   func main() {  
-10       fmt.Println
-11       for i := 0;`,
+  2                 
+  3   import (     
+  4        "fmt"    
+# #                 
+# #        "github.c
+  7    )            
+  8                 
+  9   func main() {
+# ##       fmt.Print
+  11       for i := `,
 		},
 	}
+	mu.Lock()
 	comptest.TestComponent(t, bar, w, tests)
+	mu.Unlock()
 
-	wg.Add(1)
+	wg.Add(3)
 	_, handled := bar.Handle(
-		term.Event{Type: term.EventMouse, Key: term.MouseLeft, MouseX: 3, MouseY: 1})
+		term.Event{Type: term.EventMouse, Key: term.MouseLeft, MouseX: 5, MouseY: 1})
 	require.True(t, handled)
 
 	tests = []comptest.TestCase{
 		{Expected: `
-2                   
-3   import ( [5 lin
-8                   
-9   func main() {  
-10       fmt.Println
-11       for i := 0;
-12           fmt.Pri
-13       }          
-14   }              
-15                  `,
+  2                 
+  3   import (#####
+  8                 
+  9   func main() {
+# ##       fmt.Print
+  11       for i := 
+  12           fmt.P
+  13       }        
+  14   }            
+  15                `,
 		},
 	}
 
 	wg.Wait()
+	mu.Lock()
 	comptest.TestComponent(t, bar, w, tests)
+	mu.Unlock()
+
+	require.NoError(t, bar.Close())
+
+	// unsubscribes
+	require.Equal(t, 1, len(ed.subs))
+	assert.Equal(t, 0, len(ed.subs[textapi.EventTypeFlush]))
 }
 
 func BenchmarkAuxBarAbsoluteSmall(b *testing.B) {
@@ -448,8 +495,14 @@ func benchmarkAuxBar(b *testing.B, width, height int, absolute, moveCursor bool)
 		wg.Add(1)
 	}
 
-	bar := text.WithAuxBar(h, buf, scroll,
-		foldsEnabled, true, absolute, true, cb)
+	cfg := text.AuxBarConfig{
+		FoldsEnabled:     foldsEnabled,
+		LinesEnabled:     true,
+		AbsoluteLines:    absolute,
+		HighlightCursor:  true,
+		ScheduleNextTick: cb,
+	}
+	bar := text.WithAuxBar(&TestEditor{}, h, buf, scroll, cfg)
 	bar.Resize(width, height)
 	bar.Draw(term.NoopWriter{})
 	wg.Wait()
@@ -583,3 +636,22 @@ const fileContent = "package main\n" +
 	"\"github.com/unstablebuild/blue/cli\"\n"
 	")"
 `
+
+type differ struct {
+}
+
+func (d differ) Diff(ctx context.Context, file workspaceapi.URI) (vctrl.FileDiff, error) {
+	return vctrl.FileDiff{Hunks: []vctrl.Hunk{{NewLines: 2, NewStartLine: 5}, {OrigStartLine: 10, OrigLines: 2}}}, nil
+}
+
+func (d differ) CurrentCommit(ctx context.Context, file workspaceapi.URI) (string, error) {
+	panic("unimplemented")
+}
+
+func (d differ) RemoteURL(ctx context.Context, file workspaceapi.URI, remoteName string) (string, error) {
+	panic("unimplemented")
+}
+
+func (d differ) RelPath(ctx context.Context, file string) (string, error) {
+	panic("Unimplemented")
+}

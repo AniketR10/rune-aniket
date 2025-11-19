@@ -21,46 +21,42 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package text
+package gogit
 
 import (
-	"fmt"
-	"testing"
+	"io/fs"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	"unstable.build/go-tui/api/workspaceapi"
-	"unstable.build/go-tui/cell"
-	"unstable.build/go-tui/clipboard"
-	"unstable.build/go-tui/term"
+	"github.com/go-git/go-billy/v6"
+	"unstable.build/go-tui/api/schemeapi"
 )
 
-func TestNoHandlesNonCtrlModifiers(t *testing.T) {
-	h := newTestSimpleEditor(t, 4, 4)
+var _ billy.Filesystem = billyScheme{}
 
-	modifiers := []term.Modifier{
-		term.ModAlt, term.ModShift, term.ModMeta,
-		term.ModCtrlShift, term.ModCtrlAlt, term.ModCtrlMeta,
-		term.ModCtrlShiftAlt, term.ModCtrlShiftMeta, term.ModCtrlAltMeta,
-		term.ModShiftMeta, term.ModAltMeta, term.ModAltShiftMeta,
-		term.ModAltShift,
-	}
-
-	for _, mod := range modifiers {
-		t.Run(fmt.Sprintf("handle %v", mod), func(t *testing.T) {
-			exit, handled := h.Handle(term.Event{Type: term.EventKey, Mod: mod, Ch: 'a'})
-			assert.False(t, exit)
-			assert.False(t, handled)
-		})
-	}
+type billyScheme struct {
+	schemeapi.Scheme
 }
 
-func newTestSimpleEditor(t *testing.T, width, height int) Handler {
-	defAttr := term.Attributes{}
-	editor := NewSimpleEditor(clipboard.NewInMemory(), false, false, false, false,
-		defAttr, defAttr, defAttr, AuxBarConfig{}, GitBarConfig{}, nil)
-	h, err := editor.Edit(workspaceapi.URI{}, cell.NewBuffer())
-	require.NoError(t, err)
-	h.Resize(width, height)
-	return h
+// only need to override methods returning workspaceapi.File or schemeapi.Scheme
+func (b billyScheme) Chroot(path string) (billy.Filesystem, error) {
+	s, err := b.Scheme.Chroot(path)
+	if err != nil {
+		return nil, err
+	}
+	return billyScheme{Scheme: s}, nil
+}
+
+func (b billyScheme) Create(filename string) (billy.File, error) {
+	return b.Scheme.Create(filename)
+}
+
+func (b billyScheme) Open(filename string) (billy.File, error) {
+	return b.Scheme.Open(filename)
+}
+
+func (b billyScheme) OpenFile(filename string, flag int, perm fs.FileMode) (billy.File, error) {
+	return b.Scheme.OpenFile(filename, flag, perm)
+}
+
+func (b billyScheme) TempFile(dir, prefix string) (billy.File, error) {
+	return b.Scheme.TempFile(dir, prefix)
 }

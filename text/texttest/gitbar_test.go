@@ -21,46 +21,90 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package text
+package texttest
 
 import (
-	"fmt"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"unstable.build/go-tui/api/workspaceapi"
+	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/cell"
-	"unstable.build/go-tui/clipboard"
+	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/component/comptest"
 	"unstable.build/go-tui/term"
+	"unstable.build/go-tui/text"
 )
 
-func TestNoHandlesNonCtrlModifiers(t *testing.T) {
-	h := newTestSimpleEditor(t, 4, 4)
-
-	modifiers := []term.Modifier{
-		term.ModAlt, term.ModShift, term.ModMeta,
-		term.ModCtrlShift, term.ModCtrlAlt, term.ModCtrlMeta,
-		term.ModCtrlShiftAlt, term.ModCtrlShiftMeta, term.ModCtrlAltMeta,
-		term.ModShiftMeta, term.ModAltMeta, term.ModAltShiftMeta,
-		term.ModAltShift,
+func TestGitBarDraw(t *testing.T) {
+	buf := cell.NewBuffer()
+	buf.WriteString(copy)
+	fs := &testFoldsService{}
+	fs.view = buf.WithView(fs)
+	scroll := component.NewScroll(buf)
+	h := newtestHandler(scroll)
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	cb := func(fn func()) bool {
+		mu.Lock()
+		defer mu.Unlock()
+		fn()
+		wg.Done()
+		return true
 	}
 
-	for _, mod := range modifiers {
-		t.Run(fmt.Sprintf("handle %v", mod), func(t *testing.T) {
-			exit, handled := h.Handle(term.Event{Type: term.EventKey, Mod: mod, Ch: 'a'})
-			assert.False(t, exit)
-			assert.False(t, handled)
-		})
-	}
-}
+	ed := &TestEditor{}
+	mockSvc := &differ{}
+	wg.Add(1)
+	mu.Lock()
+	cfg := text.GitBarConfig{ScheduleNextTick: cb, Publisher: ed}
+	bar := text.WithGitBar(ed, mockSvc, h, buf, scroll, cfg)
+	bar.Resize(15, 10)
+	mu.Unlock()
+	w := term.NewStringWriter(15, 10)
 
-func newTestSimpleEditor(t *testing.T, width, height int) Handler {
-	defAttr := term.Attributes{}
-	editor := NewSimpleEditor(clipboard.NewInMemory(), false, false, false, false,
-		defAttr, defAttr, defAttr, AuxBarConfig{}, GitBarConfig{}, nil)
-	h, err := editor.Edit(workspaceapi.URI{}, cell.NewBuffer())
-	require.NoError(t, err)
-	h.Resize(width, height)
-	return h
+	tests := []comptest.TestCase{
+		{Expected: `
+  package main 
+               
+  import (     
+      "fmt"    
++              
++     "github.c
+  )            
+               
+  func main() {
+-     fmt.Print`,
+		},
+	}
+	wg.Wait()
+	mu.Lock()
+	comptest.TestComponent(t, bar, w, tests)
+	require.True(t, scroll.SeekDown())
+	mu.Unlock()
+
+	tests = []comptest.TestCase{
+		{Expected: `
+               
+  import (     
+      "fmt"    
++              
++     "github.c
+  )            
+               
+  func main() {
+-     fmt.Print
+      for i := `,
+		},
+	}
+	mu.Lock()
+	comptest.TestComponent(t, bar, w, tests)
+	mu.Unlock()
+
+	require.NoError(t, bar.Close())
+
+	// unsubscribes
+	require.Equal(t, 1, len(ed.subs))
+	assert.Equal(t, 0, len(ed.subs[textapi.EventTypeFlush]))
 }

@@ -52,6 +52,7 @@ import (
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/command"
 	"unstable.build/go-tui/ide/syntax"
+	"unstable.build/go-tui/ide/vctrl"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/term/vte"
 	"unstable.build/go-tui/text"
@@ -1188,6 +1189,35 @@ func (c ideConfig) auxiliaryBarEnabled() bool {
 	return enabled
 }
 
+func (c ideConfig) auxiliaryBarConfig(svc vctrl.Service) text.AuxBarConfig {
+	auxBarLinesEnabled, auxBarLinesAbsolute := c.auxiliaryBarLines()
+	return text.AuxBarConfig{
+		GitEnabled:          c.auxiliaryBarGit(),
+		LinesEnabled:        auxBarLinesEnabled,
+		FoldsEnabled:        c.auxiliaryBarFolds(),
+		AbsoluteLines:       auxBarLinesAbsolute,
+		HighlightCursor:     c.auxiliaryBarHighlightCursor(),
+		Service:             svc,
+		ScheduleNextTick:    c.scheduleNextTick,
+		DelAttr:             c.auxiliaryBarAttr("git_del_inline_attr"),
+		AddAttr:             c.auxiliaryBarAttr("git_add_inline_attr"),
+		DelOverlayAttr:      c.auxiliaryBarAttr("git_del_locations_attr"),
+		AddOverlayAttr:      c.auxiliaryBarAttr("git_add_locations_attr"),
+		HighlightCursorAttr: c.auxiliaryBarAttr("highlight_cursor_attr"),
+		LineNumberAttr:      c.auxiliaryBarAttr("line_number_attr"),
+	}
+}
+
+func (c ideConfig) gitBarConfig(svc vctrl.Service) text.GitBarConfig {
+	return text.GitBarConfig{
+		ScheduleNextTick:    c.scheduleNextTick,
+		DelAttr:             c.auxiliaryBarAttr("git_del_inline_attr"),
+		AddAttr:             c.auxiliaryBarAttr("git_add_inline_attr"),
+		DelOverlayAttr:      c.auxiliaryBarAttr("git_del_locations_attr"),
+		AddOverlayAttr:      c.auxiliaryBarAttr("git_add_locations_attr"),
+	}
+}
+
 func (c ideConfig) auxiliaryBarFolds() bool {
 	cfg, ok := c.auxiliaryBar()
 	if !ok {
@@ -1200,6 +1230,48 @@ func (c ideConfig) auxiliaryBarFolds() bool {
 		}
 	}
 	return enabled
+}
+
+func (c ideConfig) auxiliaryBarAttr(key string) term.Attributes {
+	cfg, ok := c.auxiliaryBar()
+	if !ok {
+		return term.Attributes{}
+	}
+	attrs, err := config.GetAttributes(cfg, key)
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors[fmt.Sprintf("editor.aux_bar.%s", key)] = err
+		}
+	}
+	return attrs
+}
+
+func (c ideConfig) auxiliaryBarGit() bool {
+	cfg, ok := c.auxiliaryBar()
+	if !ok {
+		return false
+	}
+	enabled, err := cfg.GetString("git")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["editor.aux_bar.git"] = err
+		}
+	}
+	return enabled == "all" || enabled == "inline"
+}
+
+func (c ideConfig) gitBarEnabled() bool {
+	cfg, ok := c.auxiliaryBar()
+	if !ok {
+		return false
+	}
+	enabled, err := cfg.GetString("git")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["editor.aux_bar.git"] = err
+		}
+	}
+	return enabled == "all" || enabled == "bar"
 }
 
 func (c ideConfig) auxiliaryBarHighlightCursor() (ret bool) {

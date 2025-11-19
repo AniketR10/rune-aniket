@@ -67,6 +67,26 @@ editor:
         folds: true
         lines: relative
         highlight_cursor: false
+        git: all
+        git_del_inline_attr:
+            fg: maroon
+            flags: bold
+        git_add_inline_attr:
+            fg: green
+            flags: bold
+        git_del_locations_attr:
+            bg: maroon
+            flags: dim
+        git_add_locations_attr:
+            bg: green
+            flags: dim
+        line_number_attr:
+            fg: gray
+            bg: default
+        highlight_cursor_attr:
+            fg: white
+            bg: gray
+            flags: bold
     mode: modal
     modal:
         attr:
@@ -264,6 +284,12 @@ func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
 	folds := cfg.auxiliaryBarFolds()
 	assert.False(t, folds)
 
+	git := cfg.auxiliaryBarGit()
+	assert.False(t, git)
+
+	gitBar := cfg.gitBarEnabled()
+	assert.False(t, gitBar)
+
 	enabled, absolute := cfg.auxiliaryBarLines()
 	assert.True(t, enabled)
 	assert.True(t, absolute)
@@ -456,6 +482,12 @@ func TestConfigSetting(t *testing.T) {
 
 	folds := cfg.auxiliaryBarFolds()
 	assert.True(t, folds)
+
+	git := cfg.auxiliaryBarGit()
+	assert.True(t, git)
+
+	gitBar := cfg.gitBarEnabled()
+	assert.True(t, gitBar)
 
 	cursor := cfg.auxiliaryBarHighlightCursor()
 	assert.False(t, cursor)

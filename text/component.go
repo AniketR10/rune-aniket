@@ -32,7 +32,7 @@ import (
 	"strings"
 	"time"
 
-	multierr "github.com/ernestrc/go-multierror"
+	"github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/logging"
@@ -932,7 +932,7 @@ func (c *Component) dispatchOpenUponSubscribe(h EventHandler) (error, bool) {
 		}
 		str, err := c.getContent(resHandler)
 		if err != nil {
-			ret = multierr.Append(ret, err)
+			ret = multierror.Append(ret, err)
 			continue
 		}
 		exit := h.Handle(ctx, textapi.Event{
@@ -1283,10 +1283,11 @@ func (c editorFlusherCloser) OnDidEdit(
 }
 
 func (e *editorFlusherCloser) ForceFlush() error {
-	if err := e.dispatchFlush(); err != nil {
-		return err
+	err := e.fc.ForceFlush()
+	if derr := e.dispatchFlush(); derr != nil {
+		return multierror.Append(err, derr)
 	}
-	return e.fc.ForceFlush()
+	return err
 }
 
 func (e *editorFlusherCloser) LastFlush() time.Time {
@@ -1294,10 +1295,11 @@ func (e *editorFlusherCloser) LastFlush() time.Time {
 }
 
 func (e *editorFlusherCloser) Flush() error {
-	if err := e.dispatchFlush(); err != nil {
-		return err
+	err := e.fc.Flush()
+	if derr := e.dispatchFlush(); derr != nil {
+		return multierror.Append(err, derr)
 	}
-	return e.fc.Flush()
+	return err
 }
 
 func (e *editorFlusherCloser) Reload() error {

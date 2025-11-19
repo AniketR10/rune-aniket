@@ -54,6 +54,7 @@ import (
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/ide/vctrl"
+	"unstable.build/go-tui/ide/vctrl/gogit"
 	"unstable.build/go-tui/localstorage"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
@@ -73,6 +74,8 @@ var (
 	defaultModalCommandKey    = term.KeyComb{Ch: ':'}
 	defaultModelessCommandKey = term.KeyComb{Key: term.KeySpace, Mod: term.ModCtrl}
 )
+
+var _ text.EventPublisher = (*workspaceManagerHandler)(nil)
 
 type workspaceManagerHandler struct {
 	mu                 sync.Locker
@@ -120,28 +123,33 @@ type workspaceManagerHandler struct {
 	shaderRunner     *shaderRunner
 }
 
-func (h *workspaceManagerHandler) newEditor(cfg ideConfig) (text.Editor, error) {
+func (h *workspaceManagerHandler) newEditor(cfg ideConfig, svc vctrl.Service) (
+	text.Editor, error,
+) {
 	switch cfg.editorMode() {
 	case editorModeModal:
-		return h.newBuiltinModalEditor(cfg), nil
+		return h.newBuiltinModalEditor(cfg, svc), nil
 	case editorModeModeless:
-		return h.newBuiltinModelessEditor(cfg), nil
+		return h.newBuiltinModelessEditor(cfg, svc), nil
 	default:
 		panic("invalid editor mode")
 	}
 }
 
-func (h *workspaceManagerHandler) newBuiltinModalEditor(cfg ideConfig) text.Editor {
-	auxBarLinesEnabled, auxBarLinesAbsolute := cfg.auxiliaryBarLines()
+func (h *workspaceManagerHandler) newBuiltinModalEditor(
+	cfg ideConfig, svc vctrl.Service,
+) text.Editor {
+	auxBarConfig := cfg.auxiliaryBarConfig(svc)
+	auxBarConfig.Publisher = h
+	gitBarConfig := cfg.gitBarConfig(svc)
+	gitBarConfig.Publisher = h
 	viOpts := append([]vi.Option{},
 		vi.WithBarAttr(cfg.modalBarAttr()),
 		vi.WithResAttr(cfg.modalResultAttr()),
 		vi.WithScheduleNextTick(cfg.scheduleNextTick),
 		vi.WithAttr(cfg.modalAttr()),
-		vi.WithAuxiliaryBar(cfg.auxiliaryBarEnabled()),
-		vi.WithAuxiliaryBarFolds(cfg.auxiliaryBarFolds()),
-		vi.WithAuxiliaryBarLines(auxBarLinesEnabled, auxBarLinesAbsolute),
-		vi.WithAuxiliaryBarHighlightCursor(cfg.auxiliaryBarHighlightCursor()),
+		vi.WithAuxiliaryBar(cfg.auxiliaryBarEnabled(), auxBarConfig),
+		vi.WithGitBar(cfg.gitBarEnabled(), gitBarConfig),
 		vi.WithHideInitialFolds(cfg.initialFolds()),
 		vi.WithDebug(cfg.modalDebug()),
 		vi.WithClipboard(cfg.clipboard()),
@@ -149,11 +157,18 @@ func (h *workspaceManagerHandler) newBuiltinModalEditor(cfg ideConfig) text.Edit
 	return vi.Editor(viOpts...)
 }
 
-func (h *workspaceManagerHandler) newBuiltinModelessEditor(cfg ideConfig) text.Editor {
+func (h *workspaceManagerHandler) newBuiltinModelessEditor(
+	cfg ideConfig, svc vctrl.Service,
+) text.Editor {
+	auxBarConfig := cfg.auxiliaryBarConfig(svc)
+	auxBarConfig.Publisher = h
+	gitBarConfig := cfg.gitBarConfig(svc)
+	gitBarConfig.Publisher = h
 	return text.NewSimpleEditor(
-		cfg.clipboard(), false, true, cfg.auxiliaryBarEnabled(), cfg.auxiliaryBarFolds(),
+		cfg.clipboard(), false, true, cfg.auxiliaryBarEnabled(),
+		cfg.gitBarEnabled(),
 		cfg.modelessAttr(), cfg.modelessResultAttr(), cfg.modelessBarAttr(),
-		cfg.scheduleNextTick)
+		auxBarConfig, gitBarConfig, cfg.scheduleNextTick)
 }
 
 func (h *workspaceManagerHandler) init(
@@ -206,7 +221,8 @@ func (h *workspaceManagerHandler) init(
 	// don't install a fs watcher for the home workspace,
 	// to prevent unecessary resource consumption
 	globalOpts := h.textOpts(cfg)
-	ed, err := h.newEditor(cfg)
+	// do not pass a real version control for home workspace
+	ed, err := h.newEditor(cfg, vctrl.NopService())
 	if err != nil {
 		return fmt.Errorf("new editor: %v", err)
 	}
@@ -590,17 +606,27 @@ func (h *workspaceManagerHandler) addWorkspace(
 		textOpts = append(textOpts, text.WithRecoveryFile(recFile))
 	}
 
-	for _, uri := range filenames {
-		textOpts = append(textOpts, text.WithFile(uri))
+	for _, file := range filenames {
+		textOpts = append(textOpts, text.WithFile(file))
 	}
 
-	// workspace capable of opening URIs other than the workspaceapi.URI
-	ed, err := h.newEditor(cfg)
+	vctrlService := vctrl.NopService()
+	if cfg.auxiliaryBarGit() || cfg.gitBarEnabled() {
+		vctrlService, err = gogit.NewService(uri, cwd)
+		if err != nil {
+			h.empty.log(log.ErrorLevel, "new git service for workspace %q: %v",
+				uri.Path(), err)
+			vctrlService = vctrl.NopService()
+		}
+	}
+
+	ed, err := h.newEditor(cfg, vctrlService)
 	if err != nil {
 		cancel()
 		return fmt.Errorf("new editor: %w", err)
 	}
 
+	// workspace capable of opening URIs other than the workspaceapi.URI
 	multicwd := workspace.Multi(ctx, h.workspace, cwd, uri)
 	ex, err := newEx(ed, multicwd, h.storage, h.notifications.notifier,
 		cfg.terminalConfig(), h.publishEvent, h.initialVTECapacity,
@@ -647,9 +673,10 @@ func (h *workspaceManagerHandler) addWorkspace(
 	})
 
 	wh := &workspaceHandler{
-		cancelCtx: cancel,
-		uri:       uri,
-		ex:        ex,
+		vctrlService: vctrlService,
+		cancelCtx:    cancel,
+		uri:          uri,
+		ex:           ex,
 	}
 
 	// load async to speed up workspace initialization
@@ -924,9 +951,10 @@ func (h *workspaceManagerHandler) Close() (ret error) {
 
 type workspaceHandler struct {
 	*ex
-	cancelCtx  func()
-	uri        workspaceapi.URI
-	Extensions atomic.Value
+	vctrlService vctrl.Service
+	cancelCtx    func()
+	uri          workspaceapi.URI
+	Extensions   atomic.Value
 }
 
 func (hm *workspaceHandler) Close() (ret error) {
@@ -935,6 +963,11 @@ func (hm *workspaceHandler) Close() (ret error) {
 	}
 	if runner := hm.Extensions.Load(); runner != nil {
 		if err := runner.(io.Closer).Close(); err != nil {
+			ret = multierror.Append(ret, err)
+		}
+	}
+	if closer, ok := hm.vctrlService.(io.Closer); ok {
+		if err := closer.Close(); err != nil {
 			ret = multierror.Append(ret, err)
 		}
 	}
@@ -1138,12 +1171,9 @@ func (h *workspaceManagerHandler) subscribeAllEvents(ex *ex) error {
 	return h.subscribeExternalEvents(ex, h.externalEvents...)
 }
 
-func (h *workspaceManagerHandler) subscribeEventHandler(
+func (h *workspaceManagerHandler) SubscribeEvents(
 	events []textapi.EventType, handler text.EventHandler,
 ) error {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
 	extEvt := externalEvents{events: events, handler: handler}
 
 	// subscribe in current workspaces
@@ -1163,6 +1193,36 @@ func (h *workspaceManagerHandler) subscribeEventHandler(
 	// store for future workspaces
 	h.externalEvents = append(h.externalEvents, extEvt)
 	return nil
+}
+
+func (h *workspaceManagerHandler) UnsubscribeEvents(
+	handler text.EventHandler,
+) (ok bool, ret error) {
+	ok, err := h.empty.comp.UnsubscribeEvents(handler)
+	if err != nil {
+		ret = multierror.Append(ret, err)
+	}
+	for _, w := range h.workspaces {
+		if w == nil {
+			continue
+		}
+		if exOk, err := w.ex.comp.UnsubscribeEvents(handler); err != nil {
+			ret = multierror.Append(ret, err)
+		} else if !exOk {
+			ok = false
+		}
+	}
+
+	// remove for future workspaces
+	for i, extEvt := range h.externalEvents {
+		if extEvt.handler == handler {
+			h.externalEvents[i] = h.externalEvents[len(h.externalEvents)-1]
+			h.externalEvents = h.externalEvents[:len(h.externalEvents)-1]
+			return
+		}
+	}
+	ok = false
+	return
 }
 
 func (h *workspaceManagerHandler) exHandler(focus tui.Handler) *ex {

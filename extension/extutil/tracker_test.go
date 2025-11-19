@@ -54,8 +54,9 @@ func TestResourceTrackerIntegration(t *testing.T) {
 			clipboard := clipboard.NewInMemory()
 			tabspaces := 4
 
-			simpleEd := text.NewSimpleEditor(clipboard, false, true, /* command bar */
-				false, false, term.Attributes{}, term.Attributes{}, term.Attributes{}, nil)
+			attr := term.Attributes{}
+			simpleEd := text.NewSimpleEditor(clipboard, false, true, false, false,
+				attr, attr, attr, text.AuxBarConfig{}, text.GitBarConfig{}, nil)
 
 			cfg := text.DefaultConfig()
 			cfg.Tabspaces = tabspaces

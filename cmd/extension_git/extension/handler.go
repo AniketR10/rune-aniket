@@ -50,7 +50,6 @@ import (
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/extension/extutil"
-	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/ide/vctrl"
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term"
@@ -241,16 +240,16 @@ func (h *gitEditorHandler) processGrants(
 				return
 			}
 
-			syncComp := component.Sync(&h.scroll, component.WithLogging(&h.scroll.scroll, log.Tracef))
-			cfg := browserapi.BarConfig{
-				Frame:       browserapi.BarFrameNever,
-				Size:        1,
-				Orientation: browserapi.OrientationLeft,
-			}
-			err = h.wm.Bar(cfg, handler.Nop(syncComp))
-			if err != nil {
-				return
-			}
+			//syncComp := component.Sync(&h.scroll, component.WithLogging(&h.scroll.scroll, log.Tracef))
+//			cfg := browserapi.BarConfig{
+						//Frame:       browserapi.BarFrameNever,
+			//Size:        1,
+			//Orientation: browserapi.OrientationLeft,
+			//}
+			//err = h.wm.Bar(cfg, handler.Nop(syncComp))
+			//if err != nil {
+			//return
+			//}
 		case extensionapi.PermissionConfig:
 			var config config.Config
 			config, err = configextension.FetchConfig(ctx, grant, broker)

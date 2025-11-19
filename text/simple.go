@@ -38,27 +38,31 @@ import (
 func DefaultSimpleEditor(clipboard clipboard.Register) Editor {
 	searchAttr := term.Attributes{Attrs: tcell.AttrReverse}
 	return NewSimpleEditor(clipboard, false, true, false, false,
-		term.Attributes{}, searchAttr, term.Attributes{},
-		func(fn func()) bool { fn(); return true })
+		term.Attributes{}, searchAttr, term.Attributes{}, AuxBarConfig{},
+		GitBarConfig{}, func(fn func()) bool { fn(); return true })
 }
 
 // NewSimpleEditor allocates storage for a new Editor and initializes it.
 // The scheduleNextTick parameter can be nil if auxBar is false.
 func NewSimpleEditor(
 	clipboard clipboard.Register,
-	wrap, commandBar, auxBar, auxBarFolds bool,
+	wrap, commandBar, auxBar, gitBar bool,
 	attr, searchAttr, barAttr term.Attributes,
+	auxBarConfig AuxBarConfig,
+	gitBarConfig GitBarConfig,
 	scheduleNextTick func(func()) bool,
 ) Editor {
 	if auxBar && scheduleNextTick == nil {
 		panic("nil schedule function")
 	}
 	ret := new(simpleEditor)
+	ret.scheduleNextTick = scheduleNextTick
 	ret.wrap = wrap
 	ret.commandBar = commandBar
 	ret.auxBar = auxBar
-	ret.auxBarFolds = auxBarFolds
-	ret.scheduleNextTick = scheduleNextTick
+	ret.auxBarConfig = auxBarConfig
+	ret.gitBarConfig = gitBarConfig
+	ret.gitBar = gitBar
 	ret.resAttr = searchAttr
 	ret.barAttr = barAttr
 	ret.attr = attr
@@ -68,16 +72,18 @@ func NewSimpleEditor(
 }
 
 type simpleEditor struct {
+	scheduleNextTick func(func()) bool
 	pub              Publisher
 	wrap             bool
 	commandBar       bool
 	auxBar           bool
-	auxBarFolds      bool
+	gitBar           bool
+	auxBarConfig     AuxBarConfig
+	gitBarConfig     GitBarConfig
 	attr             term.Attributes
 	resAttr          term.Attributes
 	barAttr          term.Attributes
 	clipboard        clipboard.Register
-	scheduleNextTick func(func()) bool
 }
 
 func (e *simpleEditor) Edit(file workspaceapi.URI, buf *cell.Buffer) (Handler, error) {
@@ -86,8 +92,11 @@ func (e *simpleEditor) Edit(file workspaceapi.URI, buf *cell.Buffer) (Handler, e
 	root := rootIfc.(*simpleEditorHandler)
 	ret := e.pub.PublishEdit(file, buf, root, &root.cursor)
 	if e.auxBar {
-		ret = WithAuxBar(ret, buf, root.less.Scroll(),
-			e.auxBarFolds, true, true, true, e.scheduleNextTick)
+		ret = WithAuxBar(e, ret, buf, root.less.Scroll(), e.auxBarConfig)
+		if e.gitBar {
+			ret = WithGitBar(e, e.auxBarConfig.Service, ret, buf,
+				root.less.Scroll(), e.gitBarConfig)
+		}
 	}
 	return ret, nil
 }
@@ -124,7 +133,10 @@ func (e simpleEditor) SetLocationList(
 func (e *simpleEditor) MoveToNextLocation(h Handler, ID string) error {
 	hh := h
 	if e.auxBar {
-		hh = UnwrapAuxBar(h)
+		if e.gitBar {
+			hh = UnwrapGitBar(hh)
+		}
+		hh = UnwrapAuxBar(hh)
 	}
 	dispatch := e.pub.RecordCursorChange(hh)
 	defer dispatch()
@@ -136,7 +148,10 @@ func (e *simpleEditor) MoveToNextLocation(h Handler, ID string) error {
 func (e *simpleEditor) MoveToPrevLocation(h Handler, ID string) error {
 	hh := h
 	if e.auxBar {
-		hh = UnwrapAuxBar(h)
+		if e.gitBar {
+			hh = UnwrapGitBar(h)
+		}
+		hh = UnwrapAuxBar(hh)
 	}
 	dispatch := e.pub.RecordCursorChange(hh)
 	defer dispatch()
@@ -161,7 +176,10 @@ func (e *simpleEditor) SetDefaultAttributes(h Handler, attr term.Attributes) err
 func (e *simpleEditor) SetCursor(h Handler, pos term.Coordinates) error {
 	hh := h
 	if e.auxBar {
-		hh = UnwrapAuxBar(h)
+		if e.gitBar {
+			hh = UnwrapGitBar(hh)
+		}
+		hh = UnwrapAuxBar(hh)
 	}
 	dispatch := e.pub.RecordCursorChange(hh)
 	defer dispatch()
@@ -182,5 +200,8 @@ func (e *simpleEditor) unwrapHandler(h Handler) *simpleEditorHandler {
 	if !e.auxBar {
 		return e.pub.UnwrapHandler(h).(*simpleEditorHandler)
 	}
-	return e.pub.UnwrapHandler(UnwrapAuxBar(h)).(*simpleEditorHandler)
+	if !e.gitBar {
+		return e.pub.UnwrapHandler(UnwrapAuxBar(h)).(*simpleEditorHandler)
+	}
+	return e.pub.UnwrapHandler(UnwrapAuxBar(UnwrapGitBar(h))).(*simpleEditorHandler)
 }

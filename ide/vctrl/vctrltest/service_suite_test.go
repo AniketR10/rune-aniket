@@ -21,92 +21,32 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package vctrl
+package vctrltest
 
 import (
 	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"syscall"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"unstable.build/go-tui/api/config"
-	"unstable.build/go-tui/api/schemeapi"
 	"unstable.build/go-tui/api/workspaceapi"
-	"unstable.build/go-tui/workspace"
+	"unstable.build/go-tui/ide/vctrl"
 )
 
-type gitTestExecutor struct {
-	schemeExecutor schemeapi.Executor
-}
-
-func (e *gitTestExecutor) Start(ctx context.Context, cmd workspaceapi.Cmd) (workspaceapi.Pid, error) {
-	return e.schemeExecutor.StartCommand(ctx, cmd)
-}
-
-func (e *gitTestExecutor) Signal(pid workspaceapi.Pid, signal syscall.Signal) error {
-	return nil
-}
-
-func (e *gitTestExecutor) Close() error {
-	return nil
-}
-
-func setupGitRepos(t *testing.T) (reposPath string) {
-	tmpDir, err := os.MkdirTemp("", "")
-	require.NoError(t, err)
-
-	// make tmpDir a canonical path, since usually on macOS is
-	// `/var/folders/...` but when you get the repo path using the git cli it
-	// returns canonical `/private/var/folders`, so we need to eval symlinks
-	tmpDir, err = filepath.EvalSymlinks(tmpDir)
-	require.NoError(t, err)
-
-	reposTarball := "testdata/repos.tar"
-
-	cmd := exec.Command("tar", "-xf", reposTarball, "-C", tmpDir)
-	err = cmd.Run()
-	require.NoError(t, err)
-
-	reposPath = tmpDir + "/repos"
-
-	// mark all projects under tree as safe so git commands work on CI.
-	// do it only in the case of CI since locally it works and we don't
-	// want to clump our ~/.gitconfig file with many entries to ephemeral
-	// directories, if running locally would fail because of that then
-	// we would do `git config --global --unset safe.directory ...` in
-	// the deferred cleanup step tear down function.
-	if os.Getenv("CI") == "true" {
-		files, err := os.ReadDir(reposPath)
-		require.NoError(t, err)
-		for _, file := range files {
-			if file.IsDir() {
-				cmd = exec.Command(
-					"git", "config", "--global", "--add", "safe.directory",
-					filepath.Join(reposPath, file.Name()),
-				)
-				err = cmd.Run()
-				require.NoError(t, err)
-			}
-		}
-	}
-
-	return
-}
-
-func TestCmdDiff(t *testing.T) {
+func testGitDiff(
+	t *testing.T, setupGitService func(t *testing.T, cwd workspaceapi.URI) vctrl.Service,
+) {
 	reposPath := setupGitRepos(t)
-	defer tearDownGitRepos(reposPath)
 
 	tsuite := []struct {
 		name         string
 		workspaceCwd string
 		workPath     string
 		expectErr    bool
-		assertions   func(t *testing.T, res FileDiff)
+		assertions   func(t *testing.T, res vctrl.FileDiff)
 	}{
 		{
 			name:         "diff folder path within workspace with multiple files changed",
@@ -116,34 +56,34 @@ func TestCmdDiff(t *testing.T) {
 			// ERROR: file diff reader: read from stdout: line 8, char 333:
 			// bad hunk line (does not start with ' ', '-', '+', or '\'): diff
 			// --git a/recipes/cucumber-raita.md b/recipes/cucumber-raita.md
-			assertions: func(t *testing.T, res FileDiff) {},
+			assertions: func(t *testing.T, res vctrl.FileDiff) {},
 		},
 		{
 			name:         "diff folder path within workspace with single file changed",
 			workspaceCwd: reposPath + "/gitproj2_one-file-diff",
 			workPath:     reposPath + "/gitproj2_one-file-diff/recipes/baba-ganoush.md",
-			assertions: func(t *testing.T, res FileDiff) {
+			assertions: func(t *testing.T, res vctrl.FileDiff) {
 				// since only one file in that folder has changes we get very lucky
-				assert.Equal(t, "a/recipes/baba-ganoush.md", res.OrigName)
-				assert.Len(t, res.Hunks, 1)
+				assert.Equal(t, "baba-ganoush.md", filepath.Base(res.OrigName))
+				assert.NotZero(t, res.Hunks)
 			},
 		},
 		{
 			name:         "diff absolute file path within workspace",
 			workspaceCwd: reposPath + "/gitproj2_one-file-diff",
 			workPath:     reposPath + "/gitproj2_one-file-diff/recipes/baba-ganoush.md",
-			assertions: func(t *testing.T, res FileDiff) {
-				assert.Equal(t, "a/recipes/baba-ganoush.md", res.OrigName)
-				assert.Len(t, res.Hunks, 1)
+			assertions: func(t *testing.T, res vctrl.FileDiff) {
+				assert.Equal(t, "baba-ganoush.md", filepath.Base(res.OrigName))
+				assert.NotZero(t, res.Hunks)
 			},
 		},
 		{
 			name:         "diff absolute file path outside workspace",
 			workspaceCwd: reposPath + "/gitproj2_one-file-diff",
 			workPath:     reposPath + "/gitproj3_multi-file-diff/recipes/cucumber-raita.md",
-			assertions: func(t *testing.T, res FileDiff) {
-				assert.Equal(t, "a/recipes/cucumber-raita.md", res.OrigName)
-				assert.Len(t, res.Hunks, 2)
+			assertions: func(t *testing.T, res vctrl.FileDiff) {
+				assert.Equal(t, "cucumber-raita.md", filepath.Base(res.OrigName))
+				assert.NotZero(t, res.Hunks)
 			},
 		},
 		{
@@ -154,7 +94,7 @@ func TestCmdDiff(t *testing.T) {
 			// ERROR: rel path: repo path: git cmd: process exit with non-zero
 			// status (exit status 128) fatal: not a git repository (or any of
 			// the parent director
-			assertions: func(t *testing.T, res FileDiff) {},
+			assertions: func(t *testing.T, res vctrl.FileDiff) {},
 		},
 		{
 			name:         "repoless absolute path above cwd repo",
@@ -164,7 +104,7 @@ func TestCmdDiff(t *testing.T) {
 			// ERROR: rel path: repo path: git cmd: process exit with non-zero
 			// status (exit status 128) fatal: not a git repository (or any of
 			// the parent director
-			assertions: func(t *testing.T, res FileDiff) {},
+			assertions: func(t *testing.T, res vctrl.FileDiff) {},
 		},
 		{
 			name:         "non-existent absolute file",
@@ -174,27 +114,35 @@ func TestCmdDiff(t *testing.T) {
 			// ERROR: rel path: repo path: git cmd: process exit with non-zero
 			// status (exit status 128) fatal: not a git repository (or any of
 			// the parent director
-			assertions: func(t *testing.T, res FileDiff) {},
+			assertions: func(t *testing.T, res vctrl.FileDiff) {},
 		},
 	}
 
 	for _, tcase := range tsuite {
 		t.Run(tcase.name, func(t *testing.T) {
-			testServiceFunction(t,
-				tcase.workspaceCwd,
-				func(git Service) (res FileDiff, err error) {
-					uri, err := workspaceapi.ParseURI("file://" + tcase.workPath)
-					require.NoError(t, err)
-					return git.Diff(context.Background(), uri)
-				},
-				tcase.expectErr, tcase.assertions)
+			workspaceCwdURI, err := workspaceapi.ParseURI("file://" + tcase.workspaceCwd)
+			require.NoError(t, err)
+
+			git := setupGitService(t, workspaceCwdURI)
+
+			uri, err := workspaceapi.ParseURI("file://" + tcase.workPath)
+			require.NoError(t, err)
+			res, err := git.Diff(context.Background(), uri)
+			if tcase.expectErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+
+			tcase.assertions(t, res)
 		})
 	}
 }
 
-func TestCmdGitCurrentCommit(t *testing.T) {
+func testGitCurrentCommit(
+	t *testing.T, setupGitService func(t *testing.T, cwd workspaceapi.URI) vctrl.Service,
+) {
 	reposPath := setupGitRepos(t)
-	defer tearDownGitRepos(reposPath)
 
 	tsuite := []struct {
 		name         string
@@ -227,24 +175,29 @@ func TestCmdGitCurrentCommit(t *testing.T) {
 	}
 	for _, tcase := range tsuite {
 		t.Run(tcase.name, func(t *testing.T) {
-			testServiceFunction(t,
-				tcase.workspaceCwd,
-				func(git Service) (res string, err error) {
-					uri, err := workspaceapi.ParseURI("file://" + tcase.workPath)
-					require.NoError(t, err)
-					return git.CurrentCommit(context.Background(), uri)
-				},
-				tcase.expectErr,
-				func(t *testing.T, res string) {
-					assert.Equal(t, tcase.expect, res)
-				})
+			workspaceCwdURI, err := workspaceapi.ParseURI("file://" + tcase.workspaceCwd)
+			require.NoError(t, err)
+
+			git := setupGitService(t, workspaceCwdURI)
+
+			uri, err := workspaceapi.ParseURI("file://" + tcase.workPath)
+			require.NoError(t, err)
+			res, err := git.CurrentCommit(context.Background(), uri)
+			if tcase.expectErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+
+			assert.Equal(t, tcase.expect, res)
 		})
 	}
 }
 
-func TestCmdGitRemoteURL(t *testing.T) {
+func testGitRemoteURL(
+	t *testing.T, setupGitService func(t *testing.T, cwd workspaceapi.URI) vctrl.Service,
+) {
 	reposPath := setupGitRepos(t)
-	defer tearDownGitRepos(reposPath)
 
 	tsuite := []struct {
 		name         string
@@ -291,115 +244,29 @@ func TestCmdGitRemoteURL(t *testing.T) {
 
 	for _, tcase := range tsuite {
 		t.Run(tcase.name, func(t *testing.T) {
-			testServiceFunction(t,
-				tcase.workspaceCwd,
-				func(git Service) (res string, err error) {
-					uri, err := workspaceapi.ParseURI("file://" + tcase.workPath)
-					require.NoError(t, err)
-					return git.RemoteURL(context.Background(), uri, tcase.remoteName)
-				},
-				tcase.expectErr,
-				func(t *testing.T, res string) {
-					assert.Equal(t, tcase.expect, res)
-				})
+			workspaceCwdURI, err := workspaceapi.ParseURI("file://" + tcase.workspaceCwd)
+			require.NoError(t, err)
+
+			git := setupGitService(t, workspaceCwdURI)
+
+			uri, err := workspaceapi.ParseURI("file://" + tcase.workPath)
+			require.NoError(t, err)
+			res, err := git.RemoteURL(context.Background(), uri, tcase.remoteName)
+			if tcase.expectErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+
+			assert.Equal(t, tcase.expect, res)
 		})
 	}
 }
 
-func TestCmdRepoPath(t *testing.T) {
+func testRelPath(
+	t *testing.T, setupGitService func(t *testing.T, cwd workspaceapi.URI) vctrl.Service,
+) {
 	reposPath := setupGitRepos(t)
-	defer tearDownGitRepos(reposPath)
-
-	tsuite := []struct {
-		name         string
-		workspaceCwd string
-		file         string
-		expectErr    bool
-		expect       string
-	}{
-		{
-			name:         "absolute file not a repo",
-			workspaceCwd: reposPath,
-			file:         reposPath + "/top-level-file-sibling-to-repos.txt",
-			expectErr:    true,
-			// ERROR: repo path: git cmd: process exit with non-zero status
-			// (exit status 128) fatal: not a git repository (or any of the
-			// parent directories): .git
-		},
-		{
-			name:         "absolute file within repo same cwd",
-			workspaceCwd: reposPath + "/gitproj2_one-file-diff",
-			file:         reposPath + "/gitproj2_one-file-diff/recipes/baba-ganoush.md",
-			expect:       reposPath + "/gitproj2_one-file-diff",
-		},
-		{
-			name:         "absolute file in other repo not below cwd",
-			workspaceCwd: reposPath + "/gitproj2_one-file-diff",
-			file:         reposPath + "/gitproj3_multi-file-diff/recipes/cucumber-raita.md",
-			expect:       reposPath + "/gitproj3_multi-file-diff",
-		},
-		{
-			name:         "absolute file within repo below cwd",
-			workspaceCwd: reposPath,
-			file:         reposPath + "/gitproj2_one-file-diff/recipes/baba-ganoush.md",
-			expect:       reposPath + "/gitproj2_one-file-diff",
-		},
-		{
-			name:         "absolute file within repo above cwd",
-			workspaceCwd: reposPath + "/gitproj2_one-file-diff/recipes",
-			file:         reposPath + "/gitproj2_one-file-diff/recipes/baba-ganoush.md",
-			expect:       reposPath + "/gitproj2_one-file-diff",
-		},
-		{
-			name:         "relative file within repo same level cwd",
-			workspaceCwd: reposPath + "/gitproj2_one-file-diff",
-			file:         "./recipes/baba-ganoush.md",
-			expect:       reposPath + "/gitproj2_one-file-diff",
-		},
-		{
-			name:         "relative file (no dot ./) within repo same level cwd",
-			workspaceCwd: reposPath + "/gitproj2_one-file-diff",
-			file:         "recipes/baba-ganoush.md",
-			expect:       reposPath + "/gitproj2_one-file-diff",
-		},
-		{
-			name:         "relative file within repo below cwd",
-			workspaceCwd: reposPath,
-			file:         "./gitproj2_one-file-diff/recipes/baba-ganoush.md",
-			expect:       reposPath + "/gitproj2_one-file-diff",
-		},
-		{
-			name:         "relative file within repo above cwd",
-			workspaceCwd: reposPath + "/gitproj2_one-file-diff/recipes",
-			file:         "../README.txt",
-			expect:       reposPath + "/gitproj2_one-file-diff",
-		},
-		{
-			name:         "relative file in other repo sibling to cwd",
-			workspaceCwd: reposPath + "/gitproj2_one-file-diff/recipes",
-			file:         "../../gitproj3_multi-file-diff/recipes/cucumber-raita.md",
-			expect:       reposPath + "/gitproj3_multi-file-diff",
-		},
-	}
-
-	for _, tcase := range tsuite {
-		t.Run(tcase.name, func(t *testing.T) {
-			testServiceFunction(t,
-				tcase.workspaceCwd,
-				func(git Service) (res string, err error) {
-					return git.(*cmdGitService).repoPath(context.Background(), tcase.file)
-				},
-				tcase.expectErr,
-				func(t *testing.T, res string) {
-					assert.Equal(t, tcase.expect, res)
-				})
-		})
-	}
-}
-
-func TestCmdRelPath(t *testing.T) {
-	reposPath := setupGitRepos(t)
-	defer tearDownGitRepos(reposPath)
 
 	tsuite := []struct {
 		name         string
@@ -475,53 +342,63 @@ func TestCmdRelPath(t *testing.T) {
 
 	for _, tcase := range tsuite {
 		t.Run(tcase.name, func(t *testing.T) {
-			testServiceFunction(t,
-				tcase.workspaceCwd,
-				func(git Service) (res string, err error) {
-					return git.RelPath(context.Background(), tcase.file)
-				},
-				tcase.expectErr,
-				func(t *testing.T, res string) {
-					assert.Equal(t, tcase.expect, res)
-				})
+			workspaceCwdURI, err := workspaceapi.ParseURI("file://" + tcase.workspaceCwd)
+			require.NoError(t, err)
+
+			git := setupGitService(t, workspaceCwdURI)
+
+			res, err := git.RelPath(context.Background(), tcase.file)
+			if tcase.expectErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+
+			assert.Equal(t, tcase.expect, res)
 		})
 	}
 }
 
-func tearDownGitRepos(reposFolderPath string) {
-	os.RemoveAll(reposFolderPath)
-}
-
-func setupGitService(t *testing.T, cwd workspaceapi.URI) Service {
-	scheme, err := workspace.NewFileScheme(
-		context.Background(), config.NopConfig(), cwd,
-	)
+func setupGitRepos(t *testing.T) (reposPath string) {
+	tmpDir, err := os.MkdirTemp("", "")
 	require.NoError(t, err)
 
-	// gitCliExecutor runs git commands on real repos extracted from tarballs
-	gitCliExecutor := new(gitTestExecutor)
-	gitCliExecutor.schemeExecutor = scheme
-
-	return NewGitCommand(cwd, gitCliExecutor, scheme)
-}
-
-func testServiceFunction[T any](
-	t *testing.T, workspaceCwd string,
-	serviceFn func(git Service) (res T, err error),
-	expectErr bool,
-	assertions func(t *testing.T, res T),
-) {
-	workspaceCwdURI, err := workspaceapi.ParseURI("file://" + workspaceCwd)
+	// make tmpDir a canonical path, since usually on macOS is
+	// `/var/folders/...` but when you get the repo path using the git cli it
+	// returns canonical `/private/var/folders`, so we need to eval symlinks
+	tmpDir, err = filepath.EvalSymlinks(tmpDir)
 	require.NoError(t, err)
 
-	git := setupGitService(t, workspaceCwdURI)
+	reposTarball := "testdata/repos.tar"
 
-	res, err := serviceFn(git)
-	if expectErr {
-		require.Error(t, err)
-	} else {
+	cmd := exec.Command("tar", "-xf", reposTarball, "-C", tmpDir)
+	err = cmd.Run()
+	require.NoError(t, err)
+
+	reposPath = tmpDir + "/repos"
+
+	// mark all projects under tree as safe so git commands work on CI.
+	// do it only in the case of CI since locally it works and we don't
+	// want to clump our ~/.gitconfig file with many entries to ephemeral
+	// directories, if running locally would fail because of that then
+	// we would do `git config --global --unset safe.directory ...` in
+	// the deferred cleanup step tear down function.
+	if os.Getenv("CI") == "true" {
+		files, err := os.ReadDir(reposPath)
 		require.NoError(t, err)
+		for _, file := range files {
+			if file.IsDir() {
+				cmd = exec.Command(
+					"git", "config", "--global", "--add", "safe.directory",
+					filepath.Join(reposPath, file.Name()),
+				)
+				err = cmd.Run()
+				require.NoError(t, err)
+			}
+		}
 	}
-
-	assertions(t, res)
+	t.Cleanup(func() {
+		os.RemoveAll(reposPath)
+	})
+	return
 }

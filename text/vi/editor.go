@@ -55,11 +55,11 @@ func (e *viEditor) Edit(file workspaceapi.URI, buf *cell.Buffer) (text.Handler, 
 	cursor := root.cursor
 	ret := e.Publisher.PublishEdit(file, buf, root, cursor)
 	if e.config.enableAuxBar {
-		ret = text.WithAuxBar(ret, buf, root.less.Scroll(),
-			e.config.enableAuxBarFolds,
-			e.config.enableAuxBarLines, e.config.auxBarAbsolute,
-			e.config.enableAuxBarHighlightCursor,
-			e.config.scheduleNextTick)
+		ret = text.WithAuxBar(e, ret, buf, root.less.Scroll(), e.config.auxBarConfig)
+		if e.config.enableGitBar {
+			ret = text.WithGitBar(e, e.config.auxBarConfig.Service, ret, buf,
+				root.less.Scroll(), e.config.gitBarConfig)
+		}
 	}
 	return ret, nil
 }
@@ -107,7 +107,10 @@ func (e viEditor) SetLocationList(
 func (e *viEditor) MoveToNextLocation(h text.Handler, ID string) error {
 	hh := h
 	if e.config.enableAuxBar {
-		hh = text.UnwrapAuxBar(h)
+		if e.config.enableGitBar {
+			hh = text.UnwrapGitBar(hh)
+		}
+		hh = text.UnwrapAuxBar(hh)
 	}
 	dispatch := e.Publisher.RecordCursorChange(hh)
 	defer dispatch()
@@ -119,7 +122,10 @@ func (e *viEditor) MoveToNextLocation(h text.Handler, ID string) error {
 func (e *viEditor) MoveToPrevLocation(h text.Handler, ID string) error {
 	hh := h
 	if e.config.enableAuxBar {
-		hh = text.UnwrapAuxBar(h)
+		if e.config.enableGitBar {
+			hh = text.UnwrapGitBar(hh)
+		}
+		hh = text.UnwrapAuxBar(hh)
 	}
 	dispatch := e.Publisher.RecordCursorChange(hh)
 	defer dispatch()
@@ -139,7 +145,10 @@ func (e *viEditor) CellEditor(h text.Handler) text.CellEditor {
 func (e *viEditor) SetCursor(h text.Handler, pos term.Coordinates) error {
 	hh := h
 	if e.config.enableAuxBar {
-		hh = text.UnwrapAuxBar(h)
+		if e.config.enableGitBar {
+			hh = text.UnwrapGitBar(hh)
+		}
+		hh = text.UnwrapAuxBar(hh)
 	}
 	dispatch := e.Publisher.RecordCursorChange(hh)
 	defer dispatch()
@@ -165,5 +174,9 @@ func (e *viEditor) unwrapHandler(h text.Handler) *Vi {
 	if !e.config.enableAuxBar {
 		return e.Publisher.UnwrapHandler(h).(*Vi)
 	}
-	return e.Publisher.UnwrapHandler(text.UnwrapAuxBar(h)).(*Vi)
+	if !e.config.enableGitBar {
+		return e.Publisher.UnwrapHandler(text.UnwrapAuxBar(h)).(*Vi)
+	}
+	return e.Publisher.UnwrapHandler(
+		text.UnwrapAuxBar(text.UnwrapGitBar(h))).(*Vi)
 }

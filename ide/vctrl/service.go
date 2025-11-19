@@ -27,12 +27,24 @@ import (
 	"context"
 	"errors"
 
+	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/api/workspaceapi"
+	"unstable.build/go-tui/term"
 )
 
-// Differ abstracts the ability to diff a file.
-type Differ interface {
+// Service abstracts methods to perform Git operations.
+type Service interface {
+	// Diff returns the differences between the given file in the worktree and HEAD.
 	Diff(ctx context.Context, file workspaceapi.URI) (FileDiff, error)
+
+	// CurrentCommit returns the current commit hash.
+	CurrentCommit(ctx context.Context, file workspaceapi.URI) (string, error)
+
+	// RemoteURL returns the remote URL given a remote name.
+	RemoteURL(ctx context.Context, file workspaceapi.URI, remoteName string) (string, error)
+
+	// RelPath extracts the path relative to the git repository.
+	RelPath(ctx context.Context, file string) (string, error)
 }
 
 // A FileDiff represents a unified diff for a single file.
@@ -43,6 +55,32 @@ type FileDiff struct {
 	NewName string
 	// hunks that were changed from orig to new
 	Hunks []Hunk
+}
+
+// LocationList converts this FileDiff's hunks into a LocationList.
+func (d FileDiff) LocationList(
+	delLocAttr, addLocAttr term.Attributes,
+) textapi.LocationList {
+	var locs []textapi.Location
+	for _, hunk := range d.Hunks {
+		if hunk.NewLines == 0 {
+			from := term.Coordinates{Y: int(hunk.OrigStartLine) - 1}
+			locs = append(locs, textapi.Location{
+				From: from,
+				To:   term.Coordinates{Y: from.Y, X: 1},
+				Attr: delLocAttr,
+			})
+			continue
+		}
+		from := term.Coordinates{Y: int(hunk.NewStartLine) - 1}
+		to := term.Coordinates{Y: int(hunk.NewStartLine+hunk.NewLines) - 1}
+		locs = append(locs, textapi.Location{
+			From: term.Coordinates{Y: from.Y},
+			To:   term.Coordinates{Y: to.Y},
+			Attr: addLocAttr,
+		})
+	}
+	return textapi.LocationSlice(locs)
 }
 
 // A Hunk represents a series of changes (additions or deletions) in a file's
@@ -60,21 +98,33 @@ type Hunk struct {
 	Body string
 }
 
-// Service abstracts methods to perform Git operations.
-type Service interface {
-	Differ
-
-	// CurrentCommit returns the current commit hash.
-	CurrentCommit(ctx context.Context, file workspaceapi.URI) (string, error)
-
-	// RemoteURL returns the remote URL given a remote name.
-	RemoteURL(ctx context.Context, file workspaceapi.URI, remoteName string) (string, error)
-
-	// RelPath extracts the path relative to the git repository.
-	RelPath(ctx context.Context, file string) (string, error)
-}
-
 var (
 	// ErrDiffNoChanges is returned when diff is run and returns no changes.
 	ErrDiffNoChanges = errors.New("diff no changes")
 )
+
+// NopService returns an implementation of Service that does nothing.
+func NopService() Service {
+	return nopService{}
+}
+
+type nopService struct {
+}
+
+func (n nopService) Diff(ctx context.Context, file workspaceapi.URI) (FileDiff, error) {
+	return FileDiff{}, nil
+}
+
+func (n nopService) CurrentCommit(ctx context.Context, file workspaceapi.URI) (string, error) {
+	return "", nil
+}
+
+func (n nopService) RemoteURL(
+	ctx context.Context, file workspaceapi.URI, remoteName string,
+) (string, error) {
+	return "", nil
+}
+
+func (n nopService) RelPath(ctx context.Context, file string) (string, error) {
+	return file, nil
+}

@@ -21,46 +21,62 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package text
+package vctrltest
 
 import (
-	"fmt"
+	"context"
+	"syscall"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"unstable.build/go-tui/api/config"
+	"unstable.build/go-tui/api/schemeapi"
 	"unstable.build/go-tui/api/workspaceapi"
-	"unstable.build/go-tui/cell"
-	"unstable.build/go-tui/clipboard"
-	"unstable.build/go-tui/term"
+	"unstable.build/go-tui/ide/vctrl"
+	"unstable.build/go-tui/workspace"
 )
 
-func TestNoHandlesNonCtrlModifiers(t *testing.T) {
-	h := newTestSimpleEditor(t, 4, 4)
-
-	modifiers := []term.Modifier{
-		term.ModAlt, term.ModShift, term.ModMeta,
-		term.ModCtrlShift, term.ModCtrlAlt, term.ModCtrlMeta,
-		term.ModCtrlShiftAlt, term.ModCtrlShiftMeta, term.ModCtrlAltMeta,
-		term.ModShiftMeta, term.ModAltMeta, term.ModAltShiftMeta,
-		term.ModAltShift,
-	}
-
-	for _, mod := range modifiers {
-		t.Run(fmt.Sprintf("handle %v", mod), func(t *testing.T) {
-			exit, handled := h.Handle(term.Event{Type: term.EventKey, Mod: mod, Ch: 'a'})
-			assert.False(t, exit)
-			assert.False(t, handled)
-		})
-	}
+func TestCmdDiff(t *testing.T) {
+	testGitDiff(t, setupGitCmdService)
 }
 
-func newTestSimpleEditor(t *testing.T, width, height int) Handler {
-	defAttr := term.Attributes{}
-	editor := NewSimpleEditor(clipboard.NewInMemory(), false, false, false, false,
-		defAttr, defAttr, defAttr, AuxBarConfig{}, GitBarConfig{}, nil)
-	h, err := editor.Edit(workspaceapi.URI{}, cell.NewBuffer())
+func TestCmdGitCurrentCommit(t *testing.T) {
+	testGitCurrentCommit(t, setupGitCmdService)
+}
+
+func TestCmdGitRemoteURL(t *testing.T) {
+	testGitRemoteURL(t, setupGitCmdService)
+}
+
+func TestCmdRelPath(t *testing.T) {
+	testRelPath(t, setupGitCmdService)
+}
+
+func setupGitCmdService(t *testing.T, cwd workspaceapi.URI) vctrl.Service {
+	scheme, err := workspace.NewFileScheme(
+		context.Background(), config.NopConfig(), cwd,
+	)
 	require.NoError(t, err)
-	h.Resize(width, height)
-	return h
+
+	// gitCliExecutor runs git commands on real repos extracted from tarballs
+	gitCliExecutor := new(gitTestExecutor)
+	gitCliExecutor.schemeExecutor = scheme
+
+	return vctrl.NewGitCommand(cwd, gitCliExecutor, scheme)
+}
+
+type gitTestExecutor struct {
+	schemeExecutor schemeapi.Executor
+}
+
+func (e *gitTestExecutor) Start(ctx context.Context, cmd workspaceapi.Cmd) (workspaceapi.Pid, error) {
+	return e.schemeExecutor.StartCommand(ctx, cmd)
+}
+
+func (e *gitTestExecutor) Signal(pid workspaceapi.Pid, signal syscall.Signal) error {
+	return nil
+}
+
+func (e *gitTestExecutor) Close() error {
+	return nil
 }

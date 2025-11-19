@@ -147,7 +147,9 @@ func (e *TestEditor) Edit(resource workspaceapi.URI, buf *cell.Buffer) (text.Han
 func (e *TestEditor) SetLocationList(
 	h text.Handler, pri textapi.LocationPriority, id string, loc text.LocationList,
 ) error {
-	h.(*TestEditorHandler).LocationList = loc
+	if t, ok := h.(*TestEditorHandler); ok {
+		t.LocationList = loc
+	}
 	return nil
 }
 
@@ -232,10 +234,10 @@ func (e *TestEditor) UnsubscribeEvents(
 func (e *TestEditor) SubscribeEvents(
 	evs []textapi.EventType, sub text.EventHandler,
 ) error {
+	if e.subs == nil {
+		e.subs = make(map[textapi.EventType][]text.EventHandler)
+	}
 	for _, ev := range evs {
-		if e.subs == nil {
-			e.subs = make(map[textapi.EventType][]text.EventHandler)
-		}
 		if _, ok := e.subs[ev]; !ok {
 			e.subs[ev] = []text.EventHandler{sub}
 		} else {

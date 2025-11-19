@@ -1377,20 +1377,20 @@ func TestExternalEvents(t *testing.T) {
 		var open, flush, edit, close atomic.Int64
 		m := newTestWorkspaceManagerHandlerWithDir(t, defaultConfigWithWrap(false), nil, dir,
 			nopShutdownShaderConfig())
-		err = m.subscribeEventHandler(evsk,
-			text.FuncEventHandler(func(_ context.Context, ev textapi.Event) bool {
-				switch ev.Type {
-				case textapi.EventTypeOpen:
-					open.Add(1)
-				case textapi.EventTypeFlush:
-					flush.Add(1)
-				case textapi.EventTypeEdit:
-					edit.Add(1)
-				case textapi.EventTypeClose:
-					close.Add(1)
-				}
-				return false
-			}))
+		sub := text.FuncEventHandler(func(_ context.Context, ev textapi.Event) bool {
+			switch ev.Type {
+			case textapi.EventTypeOpen:
+				open.Add(1)
+			case textapi.EventTypeFlush:
+				flush.Add(1)
+			case textapi.EventTypeEdit:
+				edit.Add(1)
+			case textapi.EventTypeClose:
+				close.Add(1)
+			}
+			return false
+		})
+		err = m.SubscribeEvents(evsk, sub)
 		require.NoError(t, err)
 
 		cases := []handlertest.SequenceTestCase{
@@ -1542,6 +1542,179 @@ func TestExternalEvents(t *testing.T) {
 		h := newSafeHandler(m)
 		handlertest.TestHandlerSequence(t, h, 30, 15, cases)
 
+		assert.Equal(t, 3, int(open.Load()))
+		assert.Equal(t, 3, int(flush.Load()))
+		assert.Equal(t, 9, int(edit.Load()))
+		assert.Equal(t, 3, int(close.Load()))
+
+		ok, err := m.UnsubscribeEvents(sub)
+		require.NoError(t, err)
+		require.True(t, ok)
+
+		cases = []handlertest.SequenceTestCase{
+			{":wofo 2>:woc>:wofo 1>",
+				`┌────────────────────────────┐
+│                            │
+├────────────────────────────┤
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│     workspaceWallpaper     │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+└────────────────────────────┘`},
+			{":edit a>",
+				`┌────────────────────────────┐
+│o a                         │
+├────────────────────────────┤
+│▐bc                         │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                      NORMAL│
+└────────────────────────────┘`},
+			{"iabc<:write>",
+				`┌────────────────────────────┐
+│o a                         │
+├────────────────────────────┤
+│ab▐abc                      │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                      NORMAL│
+└────────────────────────────┘`},
+			{":tabclose>",
+				`┌────────────────────────────┐
+│                            │
+├────────────────────────────┤
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│     workspaceWallpaper     │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+└────────────────────────────┘`},
+			{fmt.Sprintf(":workspacenew %s>:edit b>", dir2), // new workspace
+				`┌────────────────────────────┐
+│o b                         │
+├────────────────────────────┤
+│▐bc                         │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                      NORMAL│
+├────────────────────────────┤
+│1 1  2 2                    │
+└────────────────────────────┘`},
+			{"iabc<:write>",
+				`┌────────────────────────────┐
+│o b                         │
+├────────────────────────────┤
+│ab▐abc                      │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                      NORMAL│
+├────────────────────────────┤
+│1 1  2 2                    │
+└────────────────────────────┘`},
+			{":tabclose>",
+				`┌────────────────────────────┐
+│                            │
+├────────────────────────────┤
+│                            │
+│                            │
+│                            │
+│                            │
+│     workspaceWallpaper     │
+│                            │
+│                            │
+│                            │
+│                            │
+├────────────────────────────┤
+│1 1  2 2                    │
+└────────────────────────────┘`},
+			{":wofo 8>:edit c>",
+				`┌────────────────────────────┐
+│o c                         │
+├────────────────────────────┤
+│▐bc                         │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                      NORMAL│
+├────────────────────────────┤
+│1 1  2 2  8                 │
+└────────────────────────────┘`},
+			{"iabc<:write>",
+				`┌────────────────────────────┐
+│o c                         │
+├────────────────────────────┤
+│ab▐abc                      │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                      NORMAL│
+├────────────────────────────┤
+│1 1  2 2  8                 │
+└────────────────────────────┘`},
+			{":tabclose>",
+				`┌────────────────────────────┐
+│                            │
+├────────────────────────────┤
+│                            │
+│                            │
+│                            │
+│                            │
+│     workspaceWallpaper     │
+│                            │
+│                            │
+│                            │
+│                            │
+├────────────────────────────┤
+│1 1  2 2  8                 │
+└────────────────────────────┘`},
+		}
+
+		handlertest.TestHandlerSequence(t, h, 30, 15, cases)
 		assert.Equal(t, 3, int(open.Load()))
 		assert.Equal(t, 3, int(flush.Load()))
 		assert.Equal(t, 9, int(edit.Load()))

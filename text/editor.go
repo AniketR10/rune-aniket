@@ -70,18 +70,22 @@ type CellView interface {
 	RawCells() ([][]term.Cell, error)
 }
 
-// Editor is the interface that wraps an API to manage a text editor.
-type Editor interface {
-	// Edit opens a file and returns an editor.Handler to edit it or an error
-	// if there was an error opening it.
-	Edit(file workspaceapi.URI, buf *cell.Buffer) (Handler, error)
-
+// EventPublisher wraps subscribing and unsubscribing to file events.
+type EventPublisher interface {
 	// SubscribeEvents subscribes EventHandler to events of type EventType.
 	SubscribeEvents([]textapi.EventType, EventHandler) error
 
 	// UnsubscribeEvents unsubscribes the given event handler from
 	// all events.
 	UnsubscribeEvents(EventHandler) (bool, error)
+}
+
+// Editor is the interface that wraps an API to manage a text editor.
+type Editor interface {
+	EventPublisher
+	// Edit opens a file and returns an editor.Handler to edit it or an error
+	// if there was an error opening it.
+	Edit(file workspaceapi.URI, buf *cell.Buffer) (Handler, error)
 
 	// Editor returns the editor.Handler with name or returns
 	// an error if no editor with name is open via Edit.
