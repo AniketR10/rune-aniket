@@ -1724,6 +1724,242 @@ func TestExternalEvents(t *testing.T) {
 	})
 }
 
+func TestWorkspaceCommands(t *testing.T) {
+	dir, err := os.MkdirTemp("", "")
+	require.NoError(t, err)
+	dir2, err := os.MkdirTemp("", "")
+	require.NoError(t, err)
+	dir3, err := os.MkdirTemp("", "")
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		os.RemoveAll(dir)
+		os.RemoveAll(dir2)
+		os.RemoveAll(dir3)
+	})
+
+	uri1, err := workspaceapi.ParseURI("memory://" + dir)
+	require.NoError(t, err)
+	uri2, err := workspaceapi.ParseURI("file://" + dir2)
+	require.NoError(t, err)
+	uri3, err := workspaceapi.ParseURI("file://" + dir3)
+	require.NoError(t, err)
+
+	abcCmd := textapi.CommandManual{Name: "tttt"}
+	xyzCmd := textapi.CommandManual{Name: "xyz"}
+
+	var abc, xyz atomic.Int64
+	m := newTestWorkspaceManagerHandlerWithDir(t, defaultConfigWithWrap(false), nil, dir,
+		nopShutdownShaderConfig())
+	sub := text.FuncCommandHandler(func(_ context.Context, cmd textapi.Command) error {
+		switch cmd.Name {
+		case "tttt":
+			abc.Add(1)
+		case "xyz":
+			xyz.Add(1)
+		default:
+			return errors.New("not cool, man")
+		}
+		return nil
+	}, func(ctx context.Context, cmd textapi.Command) (
+		iterator.Iterator[string], string, error,
+	) {
+		return iterator.Empty[string](), "", nil
+	})
+	
+	err = m.SubscribeCommandForWorkspace(uri1, xyzCmd, sub)
+	require.NoError(t, err)
+	err = m.SubscribeCommandForWorkspace(uri1, abcCmd, sub)
+	require.NoError(t, err)
+	
+	require.NoError(t, m.addOrCreateWorkspace(uri2))
+	require.NoError(t, m.addOrCreateWorkspace(uri3))
+	
+	err = m.SubscribeCommandForWorkspace(uri2, xyzCmd, sub)
+	require.NoError(t, err)
+	err = m.SubscribeCommandForWorkspace(uri2, abcCmd, sub)
+	require.NoError(t, err)
+
+	cases := []handlertest.SequenceTestCase{
+		{":workspacefocus 1>:xyz>:tttt>",
+			`┌────────────────────────────┐
+│                            │
+├────────────────────────────┤
+│                            │
+│                            │
+│                            │
+│                            │
+│     workspaceWallpaper     │
+│                            │
+│                            │
+│                            │
+│                            │
+├────────────────────────────┤
+│1 1  2 2  3 3               │
+└────────────────────────────┘`},
+		{":workspacefocus 2>:tttt>:xyz>",
+			`┌────────────────────────────┐
+│                            │
+├────────────────────────────┤
+│                            │
+│                            │
+│                            │
+│                            │
+│     workspaceWallpaper     │
+│                            │
+│                            │
+│                            │
+│                            │
+├────────────────────────────┤
+│1 1  2 2  3 3               │
+└────────────────────────────┘`},
+		{":workspacefocus 3>:tttt>:xyz>",
+        	            	`┌──────────────┌─────────────┐
+│              │ unknown     │
+├──────────────│ command or  │
+│              │ command     │
+│              │ alias "xyz" │
+│              └─────────────┘
+│              ┌─────────────┐
+│     workspace│ unknown     │
+│              │ command or  │
+│              │ command     │
+│              │ alias       │
+│              │ "tttt"      │
+├──────────────└─────────────┘
+│1 1  2 2  3 3               │
+└────────────────────────────┘`},
+	}
+	h := newSafeHandler(m)
+	handlertest.TestHandlerSequence(t, h, 30, 15, cases)
+	
+	assert.Equal(t, 2, int(xyz.Load()))
+	assert.Equal(t, 2, int(abc.Load()))
+
+	err = m.UnsubscribeCommandForWorkspace(uri1, "tttt")
+	require.NoError(t, err)
+
+	err = m.UnsubscribeCommandForWorkspace(uri2, "xyz")
+	require.NoError(t, err)
+	
+	cases = []handlertest.SequenceTestCase{
+		{":noticloseall>:workspacefocus 1>:xyz>:tttt>",
+        	            	`┌──────────────┌─────────────┐
+│              │ unknown     │
+├──────────────│ command or  │
+│              │ command     │
+│              │ alias       │
+│              │ "tttt"      │
+│              └─────────────┘
+│     workspaceWallpaper     │
+│                            │
+│                            │
+│                            │
+│                            │
+├────────────────────────────┤
+│1 1  2 2  3 3               │
+└────────────────────────────┘`},
+		{":noticloseall>:workspacefocus 2>:tttt>:xyz>",
+        	            	`┌──────────────┌─────────────┐
+│              │ unknown     │
+├──────────────│ command or  │
+│              │ command     │
+│              │ alias "xyz" │
+│              └─────────────┘
+│                            │
+│     workspaceWallpaper     │
+│                            │
+│                            │
+│                            │
+│                            │
+├────────────────────────────┤
+│1 1  2 2  3 3               │
+└────────────────────────────┘`},
+		{":noticloseall>:workspacefocus 3>:tttt>:xyz>",
+        	            	`┌──────────────┌─────────────┐
+│              │ unknown     │
+├──────────────│ command or  │
+│              │ command     │
+│              │ alias "xyz" │
+│              └─────────────┘
+│              ┌─────────────┐
+│     workspace│ unknown     │
+│              │ command or  │
+│              │ command     │
+│              │ alias       │
+│              │ "tttt"      │
+├──────────────└─────────────┘
+│1 1  2 2  3 3               │
+└────────────────────────────┘`},
+	}
+
+	handlertest.TestHandlerSequence(t, h, 30, 15, cases)
+	assert.Equal(t, 3, int(xyz.Load()))
+	assert.Equal(t, 3, int(abc.Load()))
+
+	err = m.UnsubscribeCommandForWorkspace(uri2, "tttt")
+	require.NoError(t, err)
+
+	err = m.UnsubscribeCommandForWorkspace(uri1, "xyz")
+	require.NoError(t, err)
+	
+	cases = []handlertest.SequenceTestCase{
+		{":noticloseall>:workspacefocus 1>:xyz>:tttt>",
+        	            	`┌──────────────┌─────────────┐
+│              │ unknown     │
+├──────────────│ command or  │
+│              │ command     │
+│              │ alias       │
+│              │ "tttt"      │
+│              └─────────────┘
+│     workspace┌─────────────┐
+│              │ unknown     │
+│              │ command or  │
+│              │ command     │
+│              │ alias "xyz" │
+├──────────────└─────────────┘
+│1 1  2 2  3 3               │
+└────────────────────────────┘`},
+		{":noticloseall>:workspacefocus 2>:tttt>:xyz>",
+        	            	`┌──────────────┌─────────────┐
+│              │ unknown     │
+├──────────────│ command or  │
+│              │ command     │
+│              │ alias "xyz" │
+│              └─────────────┘
+│              ┌─────────────┐
+│     workspace│ unknown     │
+│              │ command or  │
+│              │ command     │
+│              │ alias       │
+│              │ "tttt"      │
+├──────────────└─────────────┘
+│1 1  2 2  3 3               │
+└────────────────────────────┘`},
+		{":noticloseall>:workspacefocus 3>:tttt>:xyz>",
+        	            	`┌──────────────┌─────────────┐
+│              │ unknown     │
+├──────────────│ command or  │
+│              │ command     │
+│              │ alias "xyz" │
+│              └─────────────┘
+│              ┌─────────────┐
+│     workspace│ unknown     │
+│              │ command or  │
+│              │ command     │
+│              │ alias       │
+│              │ "tttt"      │
+├──────────────└─────────────┘
+│1 1  2 2  3 3               │
+└────────────────────────────┘`},
+	}
+
+	handlertest.TestHandlerSequence(t, h, 30, 15, cases)
+	assert.Equal(t, 3, int(xyz.Load()))
+	assert.Equal(t, 3, int(abc.Load()))
+
+	require.NoError(t, m.Close())
+}
+
 func TestComponentOnTabsClickIntegration(t *testing.T) {
 	// setup
 	dir, err := os.MkdirTemp("", "")

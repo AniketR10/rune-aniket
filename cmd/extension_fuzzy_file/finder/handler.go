@@ -118,8 +118,8 @@ func New(
 	h.list.Init(listConfig)
 	clipboard := clipboard.NewInMemory()
 	attr := term.Attributes{} // does not matter for Handler's purpose
-	ed, _ := text.NewSimpleEditor(clipboard, true, true, false, false,
-		attr, attr, attr, text.AuxBarConfig{}, text.GitBarConfig{}, nil).
+	ed, _ := text.NewSimpleEditor(workspaceapi.URI{}, clipboard, true, true, false, false,
+		attr, attr, attr, text.AuxBarConfig{}, text.GitBarConfig{}, nil, nil).
 		Edit(workspaceapi.RandomURI("search"), h.list.Buffer())
 	h.listHandler = search.Handler(&h.list, ed, func(item string) {
 		searchQuery := h.list.Buffer().String()

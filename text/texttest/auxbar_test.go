@@ -325,6 +325,11 @@ func TestGitBarWithAuxBarIntegration(t *testing.T) {
 		return true
 	}
 
+	uri, err := workspaceapi.ParseURI("memory:///")
+	require.NoError(t, err)
+
+	registry := text.NewFileCommandRegistry(uri, newWorkspaceRegistry())
+
 	ed := &TestEditor{}
 	mockSvc := &differ{}
 	wg.Add(3)
@@ -335,6 +340,7 @@ func TestGitBarWithAuxBarIntegration(t *testing.T) {
 		HighlightCursor:     true,
 		GitEnabled:          true,
 		ScheduleNextTick:    cb,
+		CommandRegistry:     registry,
 		Publisher:           ed,
 		HighlightCursorAttr: term.Attributes{Bg: tcell.ColorGray}, // just not fg
 		LineNumberAttr:      term.Attributes{Bg: tcell.ColorGray}, // just not fg
@@ -343,6 +349,7 @@ func TestGitBarWithAuxBarIntegration(t *testing.T) {
 	gcfg := text.GitBarConfig{
 		ScheduleNextTick: cb,
 		Publisher:        ed,
+		CommandRegistry:  registry,
 	}
 	mu.Lock()
 	bar := text.WithAuxBar(ed, h, buf, scroll, acfg)

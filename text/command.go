@@ -28,6 +28,7 @@ import (
 
 	"github.com/unstablebuild/blue/iterator"
 	"unstable.build/go-tui/api/textapi"
+	"unstable.build/go-tui/api/workspaceapi"
 )
 
 // CommandHandler wraps the basic methods HandleCommand and Complete.
@@ -41,6 +42,22 @@ type CommandHandler interface {
 	Complete(ctx context.Context, cmd textapi.Command) (
 		iterator.Iterator[string], string, error,
 	)
+}
+
+// WorkspaceCommandRegistry abstracts the ability to subscribe to commands
+// for a particular workspace.
+type WorkspaceCommandRegistry interface {
+	SubscribeCommandForWorkspace(
+		workspace workspaceapi.URI, cmd textapi.CommandManual, handler CommandHandler) error
+	UnsubscribeCommandForWorkspace(workspace workspaceapi.URI, name string) error
+}
+
+// FileCommandRegistry abstracts the ability to subscribe to commands
+// for a particular file.
+type FileCommandRegistry interface {
+	SubscribeCommandForFile(
+		file workspaceapi.URI, cmd textapi.CommandManual, handler CommandHandler) error
+	UnsubscribeCommandForFile(file workspaceapi.URI, name string) error
 }
 
 // FuncCommandHandler returns an CommandHandler that calls fn

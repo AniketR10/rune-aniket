@@ -25,6 +25,7 @@ package vi
 
 import (
 	"github.com/unstablebuild/tcell/v3"
+	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
@@ -38,6 +39,7 @@ type viConfig struct {
 	clipboard            clipboard.Register
 	scheduleNextTick     func(func()) bool
 	defaultRegister      string
+	registry             text.WorkspaceCommandRegistry
 	superimposedMessages bool
 	debug                bool
 	wrap                 bool
@@ -48,6 +50,7 @@ type viConfig struct {
 	enableAuxBar         bool
 	auxBarConfig         text.AuxBarConfig
 	gitBarConfig         text.GitBarConfig
+	workspace            workspaceapi.URI
 	enableGitBar         bool
 }
 
@@ -75,6 +78,17 @@ type Option func(*viConfig)
 func WithResAttr(attr term.Attributes) Option {
 	return func(cfg *viConfig) {
 		cfg.resAttr = attr
+	}
+}
+
+// WithWorkspaceCommandRegistry sets the command registry to register workspace-level
+// commands.
+func WithWorkspaceCommandRegistry(
+	cwd workspaceapi.URI, registry text.WorkspaceCommandRegistry,
+) Option {
+	return func(cfg *viConfig) {
+		cfg.registry = registry
+		cfg.workspace = cwd
 	}
 }
 

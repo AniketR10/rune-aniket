@@ -123,21 +123,23 @@ type workspaceManagerHandler struct {
 	shaderRunner     *shaderRunner
 }
 
-func (h *workspaceManagerHandler) newEditor(cfg ideConfig, svc vctrl.Service) (
+func (h *workspaceManagerHandler) newEditor(
+	cwd workspaceapi.URI, cfg ideConfig, svc vctrl.Service,
+) (
 	text.Editor, error,
 ) {
 	switch cfg.editorMode() {
 	case editorModeModal:
-		return h.newBuiltinModalEditor(cfg, svc), nil
+		return h.newBuiltinModalEditor(cwd, cfg, svc), nil
 	case editorModeModeless:
-		return h.newBuiltinModelessEditor(cfg, svc), nil
+		return h.newBuiltinModelessEditor(cwd, cfg, svc), nil
 	default:
 		panic("invalid editor mode")
 	}
 }
 
 func (h *workspaceManagerHandler) newBuiltinModalEditor(
-	cfg ideConfig, svc vctrl.Service,
+	cwd workspaceapi.URI, cfg ideConfig, svc vctrl.Service,
 ) text.Editor {
 	auxBarConfig := cfg.auxiliaryBarConfig(svc)
 	auxBarConfig.Publisher = h
@@ -153,22 +155,23 @@ func (h *workspaceManagerHandler) newBuiltinModalEditor(
 		vi.WithHideInitialFolds(cfg.initialFolds()),
 		vi.WithDebug(cfg.modalDebug()),
 		vi.WithClipboard(cfg.clipboard()),
+		vi.WithWorkspaceCommandRegistry(cwd, h),
 	)
 	return vi.Editor(viOpts...)
 }
 
 func (h *workspaceManagerHandler) newBuiltinModelessEditor(
-	cfg ideConfig, svc vctrl.Service,
+	cwd workspaceapi.URI, cfg ideConfig, svc vctrl.Service,
 ) text.Editor {
 	auxBarConfig := cfg.auxiliaryBarConfig(svc)
 	auxBarConfig.Publisher = h
 	gitBarConfig := cfg.gitBarConfig(svc)
 	gitBarConfig.Publisher = h
 	return text.NewSimpleEditor(
-		cfg.clipboard(), false, true, cfg.auxiliaryBarEnabled(),
+		cwd, cfg.clipboard(), false, true, cfg.auxiliaryBarEnabled(),
 		cfg.gitBarEnabled(),
 		cfg.modelessAttr(), cfg.modelessResultAttr(), cfg.modelessBarAttr(),
-		auxBarConfig, gitBarConfig, cfg.scheduleNextTick)
+		auxBarConfig, gitBarConfig, h, cfg.scheduleNextTick)
 }
 
 func (h *workspaceManagerHandler) init(
@@ -222,7 +225,7 @@ func (h *workspaceManagerHandler) init(
 	// to prevent unecessary resource consumption
 	globalOpts := h.textOpts(cfg)
 	// do not pass a real version control for home workspace
-	ed, err := h.newEditor(cfg, vctrl.NopService())
+	ed, err := h.newEditor(homeDirUri, cfg, vctrl.NopService())
 	if err != nil {
 		return fmt.Errorf("new editor: %v", err)
 	}
@@ -620,7 +623,7 @@ func (h *workspaceManagerHandler) addWorkspace(
 		}
 	}
 
-	ed, err := h.newEditor(cfg, vctrlService)
+	ed, err := h.newEditor(uri, cfg, vctrlService)
 	if err != nil {
 		cancel()
 		return fmt.Errorf("new editor: %w", err)
@@ -1117,6 +1120,31 @@ func (h *workspaceManagerHandler) subscribeExternalCommands(
 type externalCommand struct {
 	cmd     textapi.CommandManual
 	handler text.CommandHandler
+}
+
+func (h *workspaceManagerHandler) SubscribeCommandForWorkspace(
+	uri workspaceapi.URI, cmd textapi.CommandManual, handler text.CommandHandler,
+) error {
+	extCmd := externalCommand{cmd: cmd, handler: handler}
+	for _, w := range h.workspaces {
+		if w == nil || w.uri.String() != uri.String() {
+			continue
+		}
+		return h.subscribeExternalCommands(w.ex, extCmd)
+	}
+	return errors.New("workspace with given uri not found")
+}
+
+func (h *workspaceManagerHandler) UnsubscribeCommandForWorkspace(
+	uri workspaceapi.URI, name string,
+) error {
+	for _, w := range h.workspaces {
+		if w == nil || w.uri.String() != uri.String() {
+			continue
+		}
+		return w.ex.comp.UnsubscribeCommand(name)
+	}
+	return errors.New("command is not registered")
 }
 
 func (h *workspaceManagerHandler) subscribeCommand(

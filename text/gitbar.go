@@ -29,6 +29,7 @@ import (
 
 	"github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
+	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/logging"
 	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui"
@@ -51,6 +52,7 @@ type GitBarConfig struct {
 	DelOverlayAttr   term.Attributes
 	AddOverlayAttr   term.Attributes
 	Publisher        EventPublisher
+	CommandRegistry  FileCommandRegistry
 }
 
 // WithGitBar wraps the given editor with an git bar. The given buffer,
@@ -60,6 +62,9 @@ func WithGitBar(
 	buf *cell.Buffer, scroll *component.Scroll,
 	cfg GitBarConfig,
 ) Handler {
+	if cfg.CommandRegistry == nil || cfg.Publisher == nil || cfg.ScheduleNextTick == nil {
+		panic("gitbar configuration is missing key dependencies")
+	}
 	ret := new(gitBar)
 	ret.buf = buf
 	ret.ed = ed
@@ -92,18 +97,21 @@ func WithGitBar(
 	ret.bar.SetOffset(scroll.Offset())
 	ret.file = handler.Resource()
 	ret.pub = cfg.Publisher
+	ret.registry = cfg.CommandRegistry
+	ret.config = cfg
 
 	scroll.Subscribe(ret)
 	buf.Subscribe(ret)
 	evs := []textapi.EventType{textapi.EventTypeFlush}
 	_ = ret.pub.SubscribeEvents(evs, (*gitBarSubscriber)(ret))
+	for _, cmd := range gitCommands {
+		// could return error if auxbar is enabled
+		_ = ret.registry.SubscribeCommandForFile(ret.file, cmd, ret)
+	}
 
 	ret.rebuildBar(context.Background())
 	return ret
 }
-
-// shared amongst bars
-const gitLocationsID = "_gitLocID"
 
 // UnwrapGitBar unwraps the underlying handler from
 // a Handler returned by WithGitBar. This function
@@ -118,15 +126,38 @@ func UnwrapGitBar(h Handler) Handler {
 }
 
 const (
-	addIcon = "+"
-	delIcon = "-"
+	// shared amongst bars
+	gitLocationsID       = "_gitLocID"
+	addIcon              = "+"
+	delIcon              = "-"
+	commandToggleOverlay = "gittoggleoverlay"
 )
 
+var (
+	commandToggleOverlayManual = textapi.CommandManual{
+		Name:    commandToggleOverlay,
+		Summary: "Shows or hides the git diff hunks overlay.",
+	}
+	gitCommands = []textapi.CommandManual{
+		commandToggleOverlayManual,
+	}
+)
+
+// need a per-file subscription mechanism.
+// OK here's a solution:
+// - Add a SubscribeCommandForWorkspace ifc + impl at workspace_handler.go
+// - pass this to vi/simple as an option/config.
+// - Update bar configs CommandRegistry to point to self editor at vi/simple.
+// - implement subscribe command at vi/simple level, calling this workspace subscribe.
+// - or implmement subscribe command at per file level in vi/simple
+// - expose this new ifc to git/aux bars so they can subscribe.
 type gitBar struct {
 	ed               Editor
 	svc              vctrl.Service
 	scheduleNextTick func(func()) bool
 	pub              EventPublisher
+	registry         FileCommandRegistry
+	config           GitBarConfig
 
 	file    workspaceapi.URI
 	buf     *cell.Buffer
@@ -135,6 +166,7 @@ type gitBar struct {
 	delAttr term.Attributes
 	addAttr term.Attributes
 
+	closed     bool
 	vhandler   handler.Virtual[Handler]
 	bar        *component.Scroll
 	addLocAttr term.Attributes
@@ -176,12 +208,46 @@ func (b *gitBar) Resize(width, height int) {
 	b.vhandler.Resize(width-barWidth, height)
 }
 
+func (b *gitBar) HandleCommand(ctx context.Context, cmd textapi.Command) error {
+	switch cmd.Name {
+	case commandToggleOverlay:
+		if b.addLocAttr == (term.Attributes{}) {
+			b.addLocAttr = b.config.AddOverlayAttr
+		} else {
+			b.addLocAttr = term.Attributes{}
+		}
+		if b.delLocAttr == (term.Attributes{}) {
+			b.delLocAttr = b.config.DelOverlayAttr
+		} else {
+			b.delLocAttr = term.Attributes{}
+		}
+		b.rebuildBar(ctx)
+		return nil
+	default:
+		return nil
+	}
+}
+
+func (b *gitBar) Complete(ctx context.Context, cmd textapi.Command) (
+	iterator.Iterator[string], string, error,
+) {
+	return iterator.Empty[string](), "", nil
+}
+
 func (b *gitBar) Close() (ret error) {
+	if b.closed {
+		return nil
+	}
+	b.closed = true
 	ok, err := b.pub.UnsubscribeEvents((*gitBarSubscriber)(b))
 	if err != nil {
 		ret = multierror.Append(ret, err)
 	} else if !ok {
 		ret = multierror.Append(ret, errors.New("could not unsubscribe auxiliary bar"))
+	}
+	for _, cmd := range gitCommands {
+		// could return error if auxbar is enabled
+		_ = b.registry.UnsubscribeCommandForFile(b.file, cmd.Name)
 	}
 	if err := b.vhandler.C.Close(); err != nil {
 		ret = multierror.Append(ret, err)

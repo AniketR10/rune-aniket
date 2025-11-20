@@ -30,6 +30,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"unstable.build/go-tui/api/textapi"
+	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/comptest"
@@ -53,12 +54,15 @@ func TestGitBarDraw(t *testing.T) {
 		wg.Done()
 		return true
 	}
+	uri, err := workspaceapi.ParseURI("memory:///")
+	require.NoError(t, err)
 
+	registry := text.NewFileCommandRegistry(uri, newWorkspaceRegistry())
 	ed := &TestEditor{}
 	mockSvc := &differ{}
 	wg.Add(1)
 	mu.Lock()
-	cfg := text.GitBarConfig{ScheduleNextTick: cb, Publisher: ed}
+	cfg := text.GitBarConfig{CommandRegistry: registry, ScheduleNextTick: cb, Publisher: ed}
 	bar := text.WithGitBar(ed, mockSvc, h, buf, scroll, cfg)
 	bar.Resize(15, 10)
 	mu.Unlock()

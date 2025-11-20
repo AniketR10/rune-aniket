@@ -35,17 +35,19 @@ import (
 
 type viEditor struct {
 	text.Publisher
-	config viConfig
-	opts   []Option
+	config   viConfig
+	registry text.FileCommandRegistry
+	opts     []Option
 }
 
 // Editor returns a Vi text.Editor.
 func Editor(opts ...Option) text.Editor {
 	ret := &viEditor{opts: opts}
-	ret.Publisher.Init()
 	for _, o := range opts {
 		o(&ret.config)
 	}
+	ret.Publisher.Init()
+	ret.registry = text.NewFileCommandRegistry(ret.config.workspace, ret.config.registry)
 	return ret
 }
 
@@ -54,11 +56,15 @@ func (e *viEditor) Edit(file workspaceapi.URI, buf *cell.Buffer) (text.Handler, 
 	// publisher does not mutate cursor and it should never do so
 	cursor := root.cursor
 	ret := e.Publisher.PublishEdit(file, buf, root, cursor)
+	auxBarConfig := e.config.auxBarConfig
+	auxBarConfig.CommandRegistry = e.registry
+	gitBarConfig := e.config.gitBarConfig
+	gitBarConfig.CommandRegistry = e.registry
 	if e.config.enableAuxBar {
-		ret = text.WithAuxBar(e, ret, buf, root.less.Scroll(), e.config.auxBarConfig)
+		ret = text.WithAuxBar(e, ret, buf, root.less.Scroll(), auxBarConfig)
 		if e.config.enableGitBar {
 			ret = text.WithGitBar(e, e.config.auxBarConfig.Service, ret, buf,
-				root.less.Scroll(), e.config.gitBarConfig)
+				root.less.Scroll(), gitBarConfig)
 		}
 	}
 	return ret, nil

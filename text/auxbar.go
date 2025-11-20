@@ -63,6 +63,9 @@ type AuxBarConfig struct {
 	// Publisher is used to subscribe to EventTypeFlush events.
 	// It's optional if git is disabled by setting GitEnabled to false.
 	Publisher EventPublisher
+	// CommandRegistry is used to register commands to the parent workspace.
+	// It's optional if git is disabled by setting GitEnabled to false.
+	CommandRegistry FileCommandRegistry
 	// Service is used to calculate diffs. It's optional if git is
 	// disabled by setting GitEnabled to false.
 	Service vctrl.Service
@@ -74,6 +77,10 @@ func WithAuxBar(
 	ed Editor, handler Handler, buf *cell.Buffer,
 	scroll *component.Scroll, config AuxBarConfig,
 ) Handler {
+	if config.ScheduleNextTick == nil ||
+		(config.GitEnabled && (config.Publisher == nil || config.CommandRegistry == nil)) {
+		panic("auxbar configuration is missing key dependencies")
+	}
 	ret := new(auxBar)
 	ret.ed = ed
 	ret.pub = config.Publisher
@@ -82,6 +89,7 @@ func WithAuxBar(
 	ret.scroll = scroll
 	ret.handler = handler
 	ret.vhandler.C = handler
+	ret.registry = config.CommandRegistry
 	ret.scheduleNextTick = config.ScheduleNextTick
 	ret.foldsEnabled = config.FoldsEnabled
 	ret.gitEnabled = config.GitEnabled
@@ -117,6 +125,7 @@ func WithAuxBar(
 		config.LineNumberAttr = term.Attributes{Fg: tcell.ColorGray}
 	}
 	ret.barLineAttr = config.LineNumberAttr
+	ret.config = config
 
 	b := new(cell.Buffer)
 	b.InitPerformance(1, buf.Rows(), foldsWidth+ret.linesWidth, ' ')
@@ -133,6 +142,10 @@ func WithAuxBar(
 	evs := []textapi.EventType{textapi.EventTypeFlush}
 	if ret.gitEnabled {
 		_ = ret.pub.SubscribeEvents(evs, (*auxBarSubscriber)(ret))
+		for _, cmd := range gitCommands {
+			// this could fail if gitbar is also enabled
+			_ = ret.registry.SubscribeCommandForFile(ret.file, cmd, ret)
+		}
 	}
 
 	ret.rebuildBar(context.Background())
@@ -159,16 +172,19 @@ type auxBar struct {
 	scheduleNextTick func(func()) bool
 	file             workspaceapi.URI
 	svc              vctrl.Service
+	registry         FileCommandRegistry
 	foldsEnabled     bool
 	linesEnabled     bool
 	gitEnabled       bool
 	absoluteLines    bool
 	highlightCursor  bool
+	config           AuxBarConfig
 
 	buf     *cell.Buffer
 	scroll  *component.Scroll
 	handler Handler
 
+	closed      bool
 	vhandler    handler.Virtual[Handler]
 	bar         *component.Scroll
 	folds       map[term.Coordinates]term.Coordinates
@@ -260,13 +276,47 @@ func (b *auxBar) Resize(width, height int) {
 	b.vhandler.Resize(width-b.barWidth, height)
 }
 
+func (b *auxBar) HandleCommand(ctx context.Context, cmd textapi.Command) error {
+	switch cmd.Name {
+	case commandToggleOverlay:
+		if b.addLocAttr == (term.Attributes{}) {
+			b.addLocAttr = b.config.AddOverlayAttr
+		} else {
+			b.addLocAttr = term.Attributes{}
+		}
+		if b.delLocAttr == (term.Attributes{}) {
+			b.delLocAttr = b.config.DelOverlayAttr
+		} else {
+			b.delLocAttr = term.Attributes{}
+		}
+		b.rebuildBar(ctx)
+		return nil
+	default:
+		return nil
+	}
+}
+
+func (b *auxBar) Complete(ctx context.Context, cmd textapi.Command) (
+	iterator.Iterator[string], string, error,
+) {
+	return iterator.Empty[string](), "", nil
+}
+
 func (b *auxBar) Close() (ret error) {
+	if b.closed {
+		return nil
+	}
+	b.closed = true
 	if b.gitEnabled {
 		ok, err := b.pub.UnsubscribeEvents((*auxBarSubscriber)(b))
 		if err != nil {
 			ret = multierror.Append(ret, err)
 		} else if !ok {
 			ret = multierror.Append(ret, errors.New("could not unsubscribe auxiliary bar"))
+		}
+		for _, cmd := range gitCommands {
+			// could return error if git bar is enabled
+			_ = b.registry.UnsubscribeCommandForFile(b.file, cmd.Name)
 		}
 	}
 	if err := b.vhandler.C.Close(); err != nil {
