@@ -388,6 +388,11 @@ func (vi *Vi) MaxSeekOffset() int {
 	return vi.less.Scroll().MaxSeekOffset()
 }
 
+// LocationLists satisfies text.Handler.
+func (h *Vi) LocationLists() []text.LocationSet {
+	return h.cursor.LocationLists()
+}
+
 func (vi *Vi) repeat() (handled bool) {
 	vi.repeating++
 	for _, ev := range vi.repeatEdits {

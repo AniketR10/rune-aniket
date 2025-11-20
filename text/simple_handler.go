@@ -329,3 +329,7 @@ func (e *simpleEditorHandler) SetDefaultAttributes(attr term.Attributes) {
 func (h *simpleEditorHandler) CursorAtScroll() term.Coordinates {
 	return h.cursor.CursorAtScroll()
 }
+
+func (h *simpleEditorHandler) LocationLists() []LocationSet {
+	return h.cursor.LocationLists()
+}

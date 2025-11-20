@@ -35,9 +35,9 @@ import (
 // LocationStore manages LocationLists and priorities and provides
 // convenience methods to set, retrieve and sort locations.
 type LocationStore struct {
-	locs          map[string]LocationList          // used by cursor moves
-	drawLocations map[string]*priorityLocationList // used to draw
-	locsSliceTemp []*priorityLocationList
+	locs          map[string]LocationList // used by cursor moves
+	drawLocations map[string]*LocationSet // used to draw
+	locsSliceTemp []*LocationSet
 	locsSlice     []textapi.Location
 	messages      map[term.Coordinates][]message
 }
@@ -52,7 +52,7 @@ func NewLocationStore() *LocationStore {
 // Init initializes this LocationStore.
 func (c *LocationStore) Init() {
 	c.locs = make(map[string]LocationList)
-	c.drawLocations = make(map[string]*priorityLocationList)
+	c.drawLocations = make(map[string]*LocationSet)
 	c.messages = make(map[term.Coordinates][]message)
 }
 
@@ -75,16 +75,33 @@ func (c *LocationStore) SortedLocations() []textapi.Location {
 	}
 
 	sort.Slice(c.locsSliceTemp, func(i, j int) bool {
-		return c.locsSliceTemp[i].priority <
-			c.locsSliceTemp[j].priority ||
-			(c.locsSliceTemp[i].priority == c.locsSliceTemp[j].priority &&
+		return c.locsSliceTemp[i].Priority <
+			c.locsSliceTemp[j].Priority ||
+			(c.locsSliceTemp[i].Priority == c.locsSliceTemp[j].Priority &&
 				c.locsSliceTemp[i].ID < c.locsSliceTemp[j].ID)
 	})
 
 	for _, list := range c.locsSliceTemp {
-		c.locsSlice = append(c.locsSlice, list.locations...)
+		c.locsSlice = append(c.locsSlice, list.Locations...)
 	}
 	return c.locsSlice
+}
+
+// LocationLists returns a map of location list IDs to their
+// respective locations.
+func (c *LocationStore) LocationLists() (ret []LocationSet) {
+	for _, list := range c.drawLocations {
+		set := *list
+		// clone slice
+		set.Locations = make([]textapi.Location, len(list.Locations))
+		copy(set.Locations, list.Locations)
+		ret = append(ret, set)
+	}
+	sort.Slice(ret, func(i, j int) bool {
+		return ret[i].Priority < ret[j].Priority ||
+			(ret[i].Priority == ret[j].Priority && ret[i].ID < ret[j].ID)
+	})
+	return
 }
 
 // SetLocationList sets a location list on this cursor. It substitutes and returns
@@ -96,10 +113,10 @@ func (c *LocationStore) SetLocationList(
 	prev, ok := c.locs[ID]
 	if ok {
 		c.clearMessages(ID)
-		c.drawLocations[ID].locations = c.drawLocations[ID].locations[:0]
-		c.drawLocations[ID].priority = pri
+		c.drawLocations[ID].Locations = c.drawLocations[ID].Locations[:0]
+		c.drawLocations[ID].Priority = pri
 	} else {
-		c.drawLocations[ID] = &priorityLocationList{ID: ID, priority: pri}
+		c.drawLocations[ID] = &LocationSet{ID: ID, Priority: pri}
 	}
 
 	if l == nil {
@@ -185,6 +202,13 @@ func DrawLocations(locations []textapi.Location, scroll *component.Scroll, w ter
 	}
 }
 
+// LocationSet is a static view over a textapi.LocationList.
+type LocationSet struct {
+	ID        string
+	Priority  textapi.LocationPriority
+	Locations []textapi.Location
+}
+
 func (c *LocationStore) clearMessages(ID string) {
 	for from, msgs := range c.messages {
 		var stay []message
@@ -201,7 +225,7 @@ func (c *LocationStore) clearMessages(ID string) {
 func (c *LocationStore) processList(ID string, l LocationList) {
 	scrollStartList(l)
 	for n, ok := l.Current(); ok; n, ok = l.Next() {
-		c.drawLocations[ID].locations = append(c.drawLocations[ID].locations, n)
+		c.drawLocations[ID].Locations = append(c.drawLocations[ID].Locations, n)
 		if n.Message == "" {
 			continue
 		}
@@ -228,12 +252,6 @@ func (c *LocationStore) processList(ID string, l LocationList) {
 			from.X = 0
 		}
 	}
-}
-
-type priorityLocationList struct {
-	locations []textapi.Location
-	ID        string
-	priority  textapi.LocationPriority
 }
 
 func scrollStartList(l LocationList) {

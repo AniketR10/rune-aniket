@@ -71,6 +71,11 @@ func (t *TestHandler) Close() error {
 	return nil
 }
 
+// LocationLists satisfies text.Handler.
+func (h *TestHandler) LocationLists() []text.LocationSet {
+	return nil
+}
+
 // SeekUp satisfies component.Scrollable.
 func (t *TestHandler) SeekUp() bool {
 	return false

@@ -143,6 +143,20 @@ func (mr *MockHandlerMockRecorder) Handle(arg0 any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Handle", reflect.TypeOf((*MockHandler)(nil).Handle), arg0)
 }
 
+// LocationLists mocks base method.
+func (m *MockHandler) LocationLists() []text.LocationSet {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "LocationLists")
+	ret0, _ := ret[0].([]text.LocationSet)
+	return ret0
+}
+
+// LocationLists indicates an expected call of LocationLists.
+func (mr *MockHandlerMockRecorder) LocationLists() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LocationLists", reflect.TypeOf((*MockHandler)(nil).LocationLists))
+}
+
 // Man mocks base method.
 func (m *MockHandler) Man() tui.Manual {
 	m.ctrl.T.Helper()

@@ -1604,6 +1604,12 @@ func (c *Cursor) SetLocationList(
 	return c.locationStore.SetLocationList(pri, ID, l)
 }
 
+// LocationLists returns a map of location list IDs to their
+// respective locations.
+func (c *Cursor) LocationLists() []LocationSet {
+	return c.locationStore.LocationLists()
+}
+
 func (c *Cursor) endOfLocationList(
 	l LocationList, op func(LocationList) (textapi.Location, bool),
 ) (term.Coordinates, bool) {

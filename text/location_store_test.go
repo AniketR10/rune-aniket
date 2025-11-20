@@ -158,6 +158,71 @@ func TestLocationStoreCursorIntegrationSortedLocations(t *testing.T) {
 	})
 }
 
+func TestLocationStoreCursorIntegrationLocationLists(t *testing.T) {
+	c := setupCursorContent(t, 10, 10, "\na\nb\nc\n", false)
+	infoList := LocationSlice([]textapi.Location{
+		{
+			From:    term.Coordinates{Y: 1},
+			To:      term.Coordinates{Y: 1, X: 1},
+			Attr:    abcAttr,
+			Message: "info",
+		},
+		{
+			From:    term.Coordinates{Y: 11},
+			To:      term.Coordinates{Y: 11, X: 11},
+			Attr:    abcAttr,
+			Message: "info1",
+		},
+	})
+	infoList2 := LocationSlice([]textapi.Location{
+		{
+			From:    term.Coordinates{Y: 2},
+			To:      term.Coordinates{Y: 2, X: 2},
+			Attr:    abcAttr,
+			Message: "info2",
+		},
+	})
+	assert.Nil(t, c.SetLocationList(textapi.LocationPriorityInfo, "infoList2", infoList2))
+	assert.Nil(t, c.SetLocationList(textapi.LocationPriorityInfo, "infoList", infoList))
+
+	expected := []LocationSet{
+		{
+			ID:       "infoList2",
+			Priority: 0,
+			Locations: []textapi.Location{
+				{
+					From:    term.Coordinates{X: 0, Y: 2},
+					To:      term.Coordinates{X: 2, Y: 2},
+					Attr:    abcAttr,
+					Message: "info2",
+				},
+			},
+		},
+		{
+			ID:       "infoList",
+			Priority: 0,
+			Locations: []textapi.Location{
+				{
+					From:    term.Coordinates{X: 0, Y: 1},
+					To:      term.Coordinates{X: 1, Y: 1},
+					Attr:    abcAttr,
+					Message: "info",
+				},
+				{
+					From:    term.Coordinates{X: 0, Y: 11},
+					To:      term.Coordinates{X: 11, Y: 11},
+					Attr:    abcAttr,
+					Message: "info1",
+				},
+			},
+		},
+	}
+
+	actual := c.LocationLists()
+	require.Len(t, actual, 2)
+	assert.ElementsMatch(t, expected, actual)
+}
+
 func TestLocationStoreCursorIntegrationSetLocationListMessages(t *testing.T) {
 	content := "\naaa\nbbb\nccc\n"
 	messageLocations := []textapi.Location{

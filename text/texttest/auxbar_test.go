@@ -610,6 +610,10 @@ func (h *testHandler) SetLocationList(
 ) {
 }
 
+func (h *testHandler) LocationLists() []text.LocationSet {
+	return nil
+}
+
 func (h *testHandler) MoveToNextLocation(ID string) {
 }
 

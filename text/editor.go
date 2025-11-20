@@ -68,6 +68,10 @@ type Handler interface {
 	// every update. Check cell.Buffer.Subscribe for more details.
 	SetLocationList(textapi.LocationPriority, string, LocationList)
 
+	// LocationLists returns a map of location list IDs to their
+	// respective locations.
+	LocationLists() []LocationSet
+
 	// MoveToNextLocation cursor to the next location on list with ID.
 	MoveToNextLocation(ID string)
 

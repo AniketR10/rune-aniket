@@ -198,6 +198,10 @@ func (e *TestEditor) UnsubscribeCommand(cmd string) error {
 	return nil
 }
 
+func (h *TestEditorHandler) LocationLists() []text.LocationSet {
+	return nil
+}
+
 func (t *TestEditorHandler) SetDefaultAttributes(attr term.Attributes) {
 	t.Attributes.Fg = attr.Fg
 	t.Attributes.Bg = attr.Bg
