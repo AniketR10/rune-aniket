@@ -170,17 +170,17 @@ func (m *pkgManager) HandleCommand(ctx context.Context, cmd textapi.Command) err
 }
 
 func (m *pkgManager) Complete(
-	ctx context.Context, cmd string, args []string,
+	ctx context.Context, cmd textapi.Command,
 ) (iterator.Iterator[string], string, error) {
-	switch cmd {
+	switch cmd.Name {
 	case cmdPkgInstall:
-		return m.completePkgInstall(ctx, cmd, args)
+		return m.completePkgInstall(ctx, cmd.Name, cmd.Args)
 	case cmdPkgRemove:
-		return m.completePkgInstalled(ctx, cmd, args, true)
+		return m.completePkgInstalled(ctx, cmd.Name, cmd.Args, true)
 	case cmdPkgUse:
-		return m.completePkgInstalled(ctx, cmd, args, true)
+		return m.completePkgInstalled(ctx, cmd.Name, cmd.Args, true)
 	case cmdPkgCurrent:
-		return m.completePkgInstalled(ctx, cmd, args, false)
+		return m.completePkgInstalled(ctx, cmd.Name, cmd.Args, false)
 	case cmdPkgUpgradeAll:
 		return iterator.FromSlice[string](nil), "", nil
 	default:

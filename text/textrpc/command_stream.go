@@ -170,7 +170,7 @@ func (c *commandClientStream) HandleCommand(
 	return nil
 }
 
-func (c *commandClientStream) Complete(ctx context.Context, cmd string, args []string) (
+func (c *commandClientStream) Complete(ctx context.Context, cmd textapi.Command) (
 	iterator.Iterator[string], string, error,
 ) {
 	c.counter++ // start with 1, so 0 is a missing ID error
@@ -178,8 +178,10 @@ func (c *commandClientStream) Complete(ctx context.Context, cmd string, args []s
 
 	var req CompleteCommandRequest
 	req.Id = id
-	req.Name = cmd
-	req.Args = args
+	req.Name = cmd.Name
+	req.Args = cmd.Args
+	// the rest of fields are not propagated, since textapi.CommandHandler
+	// doesn't have he same signature as text.CommandHandler.
 
 	var reqMsg ServerCommandMessage
 	reqMsg.Type = ServerCommandMessage_Complete

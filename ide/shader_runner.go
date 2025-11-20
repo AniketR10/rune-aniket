@@ -222,10 +222,10 @@ func (r *shaderRunner) HandleCommand(ctx context.Context, cmd textapi.Command) (
 	return
 }
 
-func (r *shaderRunner) Complete(ctx context.Context, name string, args []string) (
+func (r *shaderRunner) Complete(ctx context.Context, cmd textapi.Command) (
 	iterator.Iterator[string], string, error,
 ) {
-	if len(args) <= 1 {
+	if len(cmd.Args) <= 1 {
 		return iterator.FromSlice([]string{
 			// TODO: Review and leave only useful shaders. This at the moment is a review showroom!
 			"blaze",

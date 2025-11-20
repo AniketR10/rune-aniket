@@ -148,6 +148,6 @@ type APICommandHandlerFromCommandHandler struct {
 func (c APICommandHandlerFromCommandHandler) Complete(ctx context.Context, name string, args []string) (
 	iterator.Iterator[string], error,
 ) {
-	it, _, err := c.CommandHandler.Complete(ctx, name, args)
+	it, _, err := c.CommandHandler.Complete(ctx, textapi.Command{Name: name, Args: args})
 	return it, err
 }

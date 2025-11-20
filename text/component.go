@@ -552,24 +552,24 @@ func (c *Component) CommandKeyBinding(key term.KeyComb) ([][]string, bool) {
 
 // CompleteCommand calls the command's completer with the given args and returns
 // an interator with the possible argument completions.
-func (c *Component) CompleteCommand(ctx context.Context, cmd string, args ...string) (
+func (c *Component) CompleteCommand(ctx context.Context, cmd textapi.Command) (
 	iterator.Iterator[string], string, error,
 ) {
-	if a, ok := c.config.CommandAliases[cmd]; ok {
+	if a, ok := c.config.CommandAliases[cmd.Name]; ok {
 		if a.Completer == nil {
 			return iterator.FromSlice[string](nil), "", nil
 		}
 		return a.Completer(c).
-			Complete(ctx, append([]string{cmd}, args...))
+			Complete(ctx, append([]string{cmd.Name}, cmd.Args...))
 	}
 
-	man, ok := c.cmdSubscribers[cmd]
+	man, ok := c.cmdSubscribers[cmd.Name]
 	if !ok {
 		c.log(log.DebugLevel, "complete command %q: no subscribers", cmd)
 		return iterator.FromSlice[string](nil), "", nil
 	}
 
-	return man.handler.Complete(ctx, cmd, args)
+	return man.handler.Complete(ctx, cmd)
 }
 
 func (c *Component) replacePositionalArgs(

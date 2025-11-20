@@ -42,7 +42,7 @@ const (
 type commandAll struct {
 	man       textapi.CommandManual
 	handler   func(*ex, ...string) error
-	completer func(e *ex, ctx context.Context, cmd string, args []string,
+	completer func(e *ex, ctx context.Context, cmd textapi.Command,
 	) (iterator.Iterator[string], string, error)
 }
 
@@ -99,9 +99,9 @@ var (
 				Synopsis: "[position]",
 			},
 			handler: (*ex).tabfocus,
-			completer: func(e *ex, ctx context.Context, cmd string, args []string,
+			completer: func(e *ex, ctx context.Context, cmd textapi.Command,
 			) (iterator.Iterator[string], string, error) {
-				if len(args) <= 1 {
+				if len(cmd.Args) <= 1 {
 					var tabNames []string
 					for i, tab := range e.comp.Browser().Tabs() {
 						pretty := strconv.Itoa(i + 1)
@@ -134,9 +134,9 @@ var (
 				Synopsis: "(right|left)",
 			},
 			handler: (*ex).moveTab,
-			completer: func(e *ex, ctx context.Context, cmd string, args []string,
+			completer: func(e *ex, ctx context.Context, cmd textapi.Command,
 			) (iterator.Iterator[string], string, error) {
-				if len(args) <= 1 {
+				if len(cmd.Args) <= 1 {
 					return iterator.FromSlice([]string{"left", "right"}), "", nil
 				}
 				return iterator.FromSlice[string](nil), "", nil
@@ -226,9 +226,9 @@ var (
 				Synopsis: "(horizontal|vertical)",
 			},
 			handler: (*ex).splitDirectionChange,
-			completer: func(e *ex, ctx context.Context, cmd string, args []string,
+			completer: func(e *ex, ctx context.Context, cmd textapi.Command,
 			) (iterator.Iterator[string], string, error) {
-				if len(args) <= 1 {
+				if len(cmd.Args) <= 1 {
 					return iterator.FromSlice([]string{"horizontal", "vertical"}), "", nil
 				}
 				return iterator.FromSlice[string](nil), "", nil
@@ -258,12 +258,12 @@ var (
 				Synopsis: "(increase|decrease|max|min|reset) (height|width)",
 			},
 			handler: (*ex).windowresize,
-			completer: func(e *ex, ctx context.Context, cmd string, args []string,
+			completer: func(e *ex, ctx context.Context, cmd textapi.Command,
 			) (iterator.Iterator[string], string, error) {
-				if len(args) == 1 {
+				if len(cmd.Args) == 1 {
 					return iterator.FromSlice([]string{"increase", "decrease", "reset", "max", "min"}), "", nil
 				}
-				if len(args) == 2 {
+				if len(cmd.Args) == 2 {
 					return iterator.FromSlice([]string{"width", "height"}), "", nil
 				}
 				return iterator.FromSlice[string](nil), "", nil
@@ -378,10 +378,10 @@ var (
 			},
 			handler: (*ex).editFiles,
 			completer: func(
-				e *ex, ctx context.Context, cmd string, args []string,
+				e *ex, ctx context.Context, cmd textapi.Command,
 			) (iterator.Iterator[string], string, error) {
-				e.log(log.DebugLevel, "complete command: %s %v", cmd, args)
-				return e.filepathCompleter.Complete(ctx, args)
+				e.log(log.DebugLevel, "complete command: %v", cmd)
+				return e.filepathCompleter.Complete(ctx, cmd.Args)
 			},
 		},
 		"view": {
@@ -391,9 +391,9 @@ var (
 			},
 			handler: (*ex).viewFiles,
 			completer: func(
-				e *ex, ctx context.Context, cmd string, args []string,
+				e *ex, ctx context.Context, cmd textapi.Command,
 			) (iterator.Iterator[string], string, error) {
-				return e.filepathCompleter.Complete(ctx, args)
+				return e.filepathCompleter.Complete(ctx, cmd.Args)
 			},
 		},
 		"tabcopypath": {
@@ -403,9 +403,9 @@ var (
 			},
 			handler: (*ex).tabcopypath,
 			completer: func(
-				e *ex, ctx context.Context, cmd string, args []string,
+				e *ex, ctx context.Context, cmd textapi.Command,
 			) (iterator.Iterator[string], string, error) {
-				if len(args) <= 1 {
+				if len(cmd.Args) <= 1 {
 					return iterator.FromSlice([]string{"absolute"}), "", nil
 				}
 				return iterator.FromSlice[string](nil), "", nil
@@ -447,7 +447,7 @@ var (
 				Synopsis: "background [foreground]",
 			},
 			handler: (*ex).defaultcolors,
-			completer: func(e *ex, ctx context.Context, cmd string, args []string,
+			completer: func(e *ex, ctx context.Context, cmd textapi.Command,
 			) (iterator.Iterator[string], string, error) {
 				var colorNames []string
 				for name := range tcell.ColorNames {
@@ -463,9 +463,9 @@ var (
 				Synopsis: "[scheme:][//[userinfo@]host][/]filepath",
 			},
 			handler: (*ex).readfile,
-			completer: func(e *ex, ctx context.Context, cmd string, args []string,
+			completer: func(e *ex, ctx context.Context, cmd textapi.Command,
 			) (iterator.Iterator[string], string, error) {
-				return e.completeReadFile(ctx, args)
+				return e.completeReadFile(ctx, cmd.Args)
 			},
 		},
 		"tasknew": {
@@ -479,9 +479,9 @@ var (
 				Synopsis: "<name> <alignment> [filter] -- <cmd> [<args>]",
 			},
 			handler: (*ex).newTask,
-			completer: func(e *ex, ctx context.Context, cmd string, args []string,
+			completer: func(e *ex, ctx context.Context, cmd textapi.Command,
 			) (iterator.Iterator[string], string, error) {
-				if len(args) == 2 {
+				if len(cmd.Args) == 2 {
 					return iterator.FromSlice([]string{"left", "right"}), "", nil
 				}
 				return iterator.FromSlice[string](nil), "", nil
@@ -511,9 +511,9 @@ var (
 				log.SetLevel(level)
 				return nil
 			},
-			completer: func(e *ex, ctx context.Context, cmd string, args []string,
+			completer: func(e *ex, ctx context.Context, cmd textapi.Command,
 			) (iterator.Iterator[string], string, error) {
-				if len(args) <= 1 {
+				if len(cmd.Args) <= 1 {
 					return iterator.FromSlice([]string{
 						"info", "debug", "trace", "warn", "error", "panic", "fatal",
 					}), "", nil
@@ -545,9 +545,9 @@ var (
 )
 
 func completeWithArrows(e *ex,
-	ctx context.Context, cmd string, args []string,
+	ctx context.Context, cmd textapi.Command,
 ) (iterator.Iterator[string], string, error) {
-	if len(args) <= 1 {
+	if len(cmd.Args) <= 1 {
 		return iterator.FromSlice([]string{"right", "left", "up", "down"}), "", nil
 	}
 	return iterator.FromSlice[string](nil), "", nil

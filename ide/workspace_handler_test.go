@@ -1231,7 +1231,7 @@ func TestExternalCommands(t *testing.T) {
 		err = m.subscribeCommand(textapi.CommandManual{Name: "ramon"},
 			text.FuncCommandHandler(func(context.Context, textapi.Command) error {
 				return nil
-			}, func(ctx context.Context, name string, args []string) (
+			}, func(ctx context.Context, cmd textapi.Command) (
 				iterator.Iterator[string], string, error,
 			) {
 				return iterator.FromSlice([]string{"wasup", "wasep"}), "", nil
@@ -1320,7 +1320,7 @@ func TestExternalCommands(t *testing.T) {
 				errs[i] = m.subscribeCommand(textapi.CommandManual{Name: "cmd" + strconv.Itoa(i)},
 					text.FuncCommandHandler(func(context.Context, textapi.Command) error {
 						return nil
-					}, func(ctx context.Context, name string, args []string) (
+					}, func(ctx context.Context, cmd textapi.Command) (
 						iterator.Iterator[string], string, error,
 					) {
 						return iterator.FromSlice([]string{strconv.Itoa(i), strconv.Itoa(i + 1000)}), "", nil

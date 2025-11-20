@@ -197,13 +197,13 @@ func (e *ex) subscribeCommands() error {
 		err := e.comp.SubscribeCommand(man.man, text.FuncCommandHandler(
 			func(ctx context.Context, cmd textapi.Command) error {
 				return man.handler(e, cmd.Args...)
-			}, func(ctx context.Context, cmd string, args []string) (
+			}, func(ctx context.Context, cmd textapi.Command) (
 				iterator.Iterator[string], string, error,
 			) {
 				if man.completer == nil {
 					return iterator.FromSlice[string](nil), "", nil
 				}
-				return man.completer(e, ctx, cmd, args)
+				return man.completer(e, ctx, cmd)
 			}))
 		if err != nil {
 			ret = multierror.Append(ret, fmt.Errorf("subscribe command: %w", err))
@@ -282,7 +282,19 @@ func (e *ex) Complete(ctx context.Context, args []string) (
 	if len(args) == 0 {
 		return nil, "", errors.New("missing command")
 	}
-	it, newArg, err := e.comp.CompleteCommand(ctx, args[0], args[1:]...)
+	uri, h, ok := e.handlerInFocus()
+	scmd := textapi.Command{
+		Name:     args[0],
+		Args:     args[1:],
+		Resource: h,
+		URI:      uri,
+		Window:   e.invokeWindow(),
+	}
+	if ok {
+		scmd.Cursor.Content, _ = e.ed.Cursor(h)
+		scmd.Cursor.Window, _, _ = h.Cursor()
+	}
+	it, newArg, err := e.comp.CompleteCommand(ctx, scmd)
 	if err != nil {
 		e.setError(fmt.Errorf("complete command: %v", err))
 	}
@@ -1036,8 +1048,11 @@ func (e *ex) stopTask(args ...string) error {
 }
 
 func (e *ex) completeTasks(
-	ctx context.Context, cmd string, args []string,
+	ctx context.Context, cmd textapi.Command,
 ) (iterator.Iterator[string], string, error) {
+	if len(cmd.Args) > 1 {
+		return iterator.FromSlice[string](nil), "", nil
+	}
 	tasks := e.tasks.ListTasks()
 	names := make([]string, len(tasks))
 	for i, task := range tasks {

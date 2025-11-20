@@ -38,7 +38,7 @@ type CommandHandler interface {
 	// Complete takes command args and returns a list of expanded options for them.
 	// It also returns a expanded version of the last arg, or an empty string
 	// if the last arg could/should not be automatically expanded.
-	Complete(ctx context.Context, name string, args []string) (
+	Complete(ctx context.Context, cmd textapi.Command) (
 		iterator.Iterator[string], string, error,
 	)
 }
@@ -48,7 +48,9 @@ type CommandHandler interface {
 // then it is called when Complete is invoked.
 func FuncCommandHandler(
 	fn func(context.Context, textapi.Command) error,
-	completeFn func(context.Context, string, []string) (iterator.Iterator[string], string, error),
+	completeFn func(context.Context, textapi.Command) (
+		iterator.Iterator[string], string, error,
+	),
 ) CommandHandler {
 	return fnCommandHandler{
 		cb:         fn,
@@ -58,18 +60,20 @@ func FuncCommandHandler(
 
 type fnCommandHandler struct {
 	cb         func(context.Context, textapi.Command) error
-	completeFn func(context.Context, string, []string) (iterator.Iterator[string], string, error)
+	completeFn func(context.Context, textapi.Command) (
+		iterator.Iterator[string], string, error,
+	)
 }
 
 func (f fnCommandHandler) HandleCommand(ctx context.Context, c textapi.Command) error {
 	return f.cb(ctx, c)
 }
 
-func (f fnCommandHandler) Complete(ctx context.Context, name string, args []string) (
+func (f fnCommandHandler) Complete(ctx context.Context, cmd textapi.Command) (
 	iterator.Iterator[string], string, error,
 ) {
 	if f.completeFn != nil {
-		return f.completeFn(ctx, name, args)
+		return f.completeFn(ctx, cmd)
 	}
 	return iterator.FromSlice[string](nil), "", nil
 }

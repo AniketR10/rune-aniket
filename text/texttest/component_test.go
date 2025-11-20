@@ -1275,7 +1275,7 @@ func TestCompleteCommand(t *testing.T) {
 		c, err := text.NewComponent(NopEditor(), &testLoader{}, cfg)
 		require.NoError(t, err)
 
-		it, arg, err := c.CompleteCommand(context.Background(), "blah")
+		it, arg, err := c.CompleteCommand(context.Background(), textapi.Command{Name: "blah"})
 		require.NoError(t, err)
 
 		slice, err := iterator.ToSlice(context.Background(), it)
@@ -1300,14 +1300,14 @@ func TestCompleteCommand(t *testing.T) {
 		c, err := text.NewComponent(NopEditor(), &testLoader{}, cfg)
 		require.NoError(t, err)
 
-		_, _, err = c.CompleteCommand(context.Background(), "blah")
+		_, _, err = c.CompleteCommand(context.Background(), textapi.Command{Name: "blah"})
 		require.EqualError(t, err, "kaboom")
 	})
 
 	t.Run("returns empty iterator if there's no registered handler", func(t *testing.T) {
 		c, _ := newTestComponent(t, NopEditor())
 
-		it, _, err := c.CompleteCommand(context.Background(), "blabla")
+		it, _, err := c.CompleteCommand(context.Background(), textapi.Command{Name: "blabla"})
 		require.NoError(t, err)
 		assertIteratorLen(t, 0, it)
 	})
@@ -1324,7 +1324,7 @@ func TestCompleteCommand(t *testing.T) {
 		}
 		c, _ := newTestComponentConfig(t, NopEditor(), cfg)
 
-		it, _, err := c.CompleteCommand(context.Background(), "workstation_layout")
+		it, _, err := c.CompleteCommand(context.Background(), textapi.Command{Name: "workstation_layout"})
 		require.NoError(t, err)
 		assertIteratorLen(t, 0, it)
 	})
@@ -1335,12 +1335,12 @@ func TestCompleteCommand(t *testing.T) {
 		c.SubscribeCommand(testCommand("edit", "", ""),
 			text.FuncCommandHandler(func(ctx context.Context, cmd textapi.Command) error {
 				return nil
-			}, func(ctx context.Context, name string, args []string) (iterator.Iterator[string], string, error) {
-				assert.Equal(t, []string{"letter", "number"}, args)
+			}, func(ctx context.Context, cmd textapi.Command) (iterator.Iterator[string], string, error) {
+				assert.Equal(t, []string{"letter", "number"}, cmd.Args)
 				return iterator.FromSlice([]string{"one", "two"}), "2", nil
 			}))
 
-		it, newLastArg, err := c.CompleteCommand(context.Background(), "edit", "letter", "number")
+		it, newLastArg, err := c.CompleteCommand(context.Background(), textapi.Command{Name: "edit", Args: []string{"letter", "number"}})
 		require.NoError(t, err)
 		options := assertIteratorLen(t, 2, it)
 		assert.Equal(t, []string{"one", "two"}, options)

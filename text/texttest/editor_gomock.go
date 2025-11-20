@@ -329,6 +329,58 @@ func (mr *MockCellViewMockRecorder) RawCells() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RawCells", reflect.TypeOf((*MockCellView)(nil).RawCells))
 }
 
+// MockEventPublisher is a mock of EventPublisher interface.
+type MockEventPublisher struct {
+	ctrl     *gomock.Controller
+	recorder *MockEventPublisherMockRecorder
+}
+
+// MockEventPublisherMockRecorder is the mock recorder for MockEventPublisher.
+type MockEventPublisherMockRecorder struct {
+	mock *MockEventPublisher
+}
+
+// NewMockEventPublisher creates a new mock instance.
+func NewMockEventPublisher(ctrl *gomock.Controller) *MockEventPublisher {
+	mock := &MockEventPublisher{ctrl: ctrl}
+	mock.recorder = &MockEventPublisherMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockEventPublisher) EXPECT() *MockEventPublisherMockRecorder {
+	return m.recorder
+}
+
+// SubscribeEvents mocks base method.
+func (m *MockEventPublisher) SubscribeEvents(arg0 []textapi.EventType, arg1 text.EventHandler) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SubscribeEvents", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SubscribeEvents indicates an expected call of SubscribeEvents.
+func (mr *MockEventPublisherMockRecorder) SubscribeEvents(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubscribeEvents", reflect.TypeOf((*MockEventPublisher)(nil).SubscribeEvents), arg0, arg1)
+}
+
+// UnsubscribeEvents mocks base method.
+func (m *MockEventPublisher) UnsubscribeEvents(arg0 text.EventHandler) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UnsubscribeEvents", arg0)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UnsubscribeEvents indicates an expected call of UnsubscribeEvents.
+func (mr *MockEventPublisherMockRecorder) UnsubscribeEvents(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnsubscribeEvents", reflect.TypeOf((*MockEventPublisher)(nil).UnsubscribeEvents), arg0)
+}
+
 // MockEditor is a mock of Editor interface.
 type MockEditor struct {
 	ctrl     *gomock.Controller

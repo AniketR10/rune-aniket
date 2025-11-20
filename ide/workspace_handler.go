@@ -1066,10 +1066,10 @@ func (h *workspaceManagerHandler) subscribeInternalCommands(
 		err := ex.comp.SubscribeCommand(man.man, text.FuncCommandHandler(
 			func(ctx context.Context, cmd textapi.Command) error {
 				return man.handler(h, cmd.Args...)
-			}, func(ctx context.Context, name string, args []string) (
+			}, func(ctx context.Context, cmd textapi.Command) (
 				iterator.Iterator[string], string, error,
 			) {
-				return h.completeCommand(ctx, name, args)
+				return h.completeCommand(ctx, cmd)
 			}))
 		if err != nil {
 			ret = multierror.Append(ret, fmt.Errorf("subscribe command '%s': %w", cmd, err))
@@ -1079,11 +1079,11 @@ func (h *workspaceManagerHandler) subscribeInternalCommands(
 }
 
 func (h *workspaceManagerHandler) completeCommand(
-	ctx context.Context, cmd string, args []string,
+	ctx context.Context, cmd textapi.Command,
 ) (iterator.Iterator[string], string, error) {
-	switch cmd {
+	switch cmd.Name {
 	case cmdSwitchToWorkspace:
-		if len(args) <= 1 {
+		if len(cmd.Args) <= 1 {
 			nums := [10]string{"1", "2", "3", "4", "5", "6", "7", "8", "9", "10"}
 			return iterator.FromSlice(nums[:]), "", nil
 		}

@@ -628,7 +628,7 @@ func TestClientServerIntegration(t *testing.T) {
 
 		// complete
 		s.editor.Lock()
-		it, _, err := subscribedClient.Complete(context.Background(), "bla", []string{"ble"})
+		it, _, err := subscribedClient.Complete(context.Background(), textapi.Command{Name: "bla", Args: []string{"ble"}})
 		s.editor.Unlock()
 		require.NoError(t, err)
 
@@ -677,7 +677,8 @@ func TestClientServerIntegration(t *testing.T) {
 		require.NotNil(t, subscribedClient)
 
 		s.editor.Lock()
-		it, _, err := subscribedClient.Complete(context.Background(), "bla", []string{"ble"})
+		it, _, err := subscribedClient.Complete(context.Background(),
+			textapi.Command{Name: "bla", Args: []string{"ble"}})
 		s.editor.Unlock()
 		require.NoError(t, err)
 
@@ -721,7 +722,8 @@ func TestClientServerIntegration(t *testing.T) {
 		require.NotNil(t, subscribedClient)
 
 		s.editor.Lock()
-		it, _, err := subscribedClient.Complete(context.Background(), "bla", []string{"ble"})
+		it, _, err := subscribedClient.Complete(context.Background(),
+			textapi.Command{Name: "bla", Args: []string{"ble"}})
 		s.editor.Unlock()
 		require.NoError(t, err)
 
