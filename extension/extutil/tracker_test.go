@@ -125,7 +125,7 @@ func TestResourceTrackerIntegration(t *testing.T) {
 					res, ok := tracker.Resource(res1)
 					require.True(t, ok)
 
-					ed.CellEditor(edh).
+					edh.CellEditor().
 						Edit(context.Background(), term.Coordinates{}, term.Coordinates{},
 							"abcdefghi\n1234\nXXXX\nX\nX\nX\nX\nX\nX")
 
@@ -170,12 +170,12 @@ func TestResourceTrackerIntegration(t *testing.T) {
 					res, ok := tracker.Resource(res1)
 					require.True(t, ok)
 
-					cur, err := ed.Cursor(edh)
+					cur := edh.CursorAtScroll()
 					require.NoError(t, err)
 					assert.Equal(t, term.Coordinates{Y: 8}, cur)
 					assert.Equal(t, term.Coordinates{Y: 8}, res.Cursor())
 
-					require.NoError(t, ed.SetCursor(edh, term.Coordinates{Y: 2}))
+					edh.SetCursorAtScroll(term.Coordinates{Y: 2})
 					assert.Equal(t, term.Coordinates{Y: 2}, res.Cursor())
 				})
 

@@ -783,10 +783,7 @@ func (h *workspaceManagerHandler) openPrevSessionFiles(
 			continue
 		}
 		ed := t.Handler().(text.Handler)
-		if serr := ex.Editor().SetCursor(ed, f.Cursor); serr != nil {
-			log.Warnf("set cursor %v: %v", f.Cursor, serr)
-			continue
-		}
+		ed.SetCursorAtScroll(f.Cursor)
 	}
 	return err
 }

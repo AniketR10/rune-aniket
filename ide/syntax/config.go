@@ -59,12 +59,12 @@ type PkgManager interface {
 
 // LocationSetter abstracts the ability to visualize locations.
 type LocationSetter interface {
-	SetLocationList(textapi.LocationList) error
+	SetLocationList(textapi.LocationList)
 }
 
 // FuncLocationSetter returns a LocationSetter that uses the given fn to
 // set locations.
-func FuncLocationSetter(fn func(textapi.LocationList) error) LocationSetter {
+func FuncLocationSetter(fn func(textapi.LocationList)) LocationSetter {
 	return fnLocationList{fn: fn}
 }
 
@@ -95,9 +95,9 @@ var defaultCaptureNamesAttributes = map[string]term.Attributes{
 }
 
 type fnLocationList struct {
-	fn func(textapi.LocationList) error
+	fn func(textapi.LocationList)
 }
 
-func (f fnLocationList) SetLocationList(list textapi.LocationList) error {
-	return f.fn(list)
+func (f fnLocationList) SetLocationList(list textapi.LocationList) {
+	f.fn(list)
 }

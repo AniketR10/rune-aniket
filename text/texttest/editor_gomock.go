@@ -10,7 +10,6 @@
 package texttest
 
 import (
-	context "context"
 	reflect "reflect"
 
 	gomock "go.uber.org/mock/gomock"
@@ -45,6 +44,34 @@ func (m *MockHandler) EXPECT() *MockHandlerMockRecorder {
 	return m.recorder
 }
 
+// CellEditor mocks base method.
+func (m *MockHandler) CellEditor() cell.Editor {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CellEditor")
+	ret0, _ := ret[0].(cell.Editor)
+	return ret0
+}
+
+// CellEditor indicates an expected call of CellEditor.
+func (mr *MockHandlerMockRecorder) CellEditor() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CellEditor", reflect.TypeOf((*MockHandler)(nil).CellEditor))
+}
+
+// CellView mocks base method.
+func (m *MockHandler) CellView() cell.View {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CellView")
+	ret0, _ := ret[0].(cell.View)
+	return ret0
+}
+
+// CellView indicates an expected call of CellView.
+func (mr *MockHandlerMockRecorder) CellView() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CellView", reflect.TypeOf((*MockHandler)(nil).CellView))
+}
+
 // Close mocks base method.
 func (m *MockHandler) Close() error {
 	m.ctrl.T.Helper()
@@ -73,6 +100,20 @@ func (m *MockHandler) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 func (mr *MockHandlerMockRecorder) Cursor() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Cursor", reflect.TypeOf((*MockHandler)(nil).Cursor))
+}
+
+// CursorAtScroll mocks base method.
+func (m *MockHandler) CursorAtScroll() term.Coordinates {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CursorAtScroll")
+	ret0, _ := ret[0].(term.Coordinates)
+	return ret0
+}
+
+// CursorAtScroll indicates an expected call of CursorAtScroll.
+func (mr *MockHandlerMockRecorder) CursorAtScroll() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CursorAtScroll", reflect.TypeOf((*MockHandler)(nil).CursorAtScroll))
 }
 
 // Draw mocks base method.
@@ -128,6 +169,30 @@ func (m *MockHandler) MaxSeekOffset() int {
 func (mr *MockHandlerMockRecorder) MaxSeekOffset() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MaxSeekOffset", reflect.TypeOf((*MockHandler)(nil).MaxSeekOffset))
+}
+
+// MoveToNextLocation mocks base method.
+func (m *MockHandler) MoveToNextLocation(ID string) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "MoveToNextLocation", ID)
+}
+
+// MoveToNextLocation indicates an expected call of MoveToNextLocation.
+func (mr *MockHandlerMockRecorder) MoveToNextLocation(ID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MoveToNextLocation", reflect.TypeOf((*MockHandler)(nil).MoveToNextLocation), ID)
+}
+
+// MoveToPrevLocation mocks base method.
+func (m *MockHandler) MoveToPrevLocation(ID string) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "MoveToPrevLocation", ID)
+}
+
+// MoveToPrevLocation indicates an expected call of MoveToPrevLocation.
+func (mr *MockHandlerMockRecorder) MoveToPrevLocation(ID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MoveToPrevLocation", reflect.TypeOf((*MockHandler)(nil).MoveToPrevLocation), ID)
 }
 
 // Resize mocks base method.
@@ -227,6 +292,30 @@ func (mr *MockHandlerMockRecorder) SetCursorAtScroll(pos any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetCursorAtScroll", reflect.TypeOf((*MockHandler)(nil).SetCursorAtScroll), pos)
 }
 
+// SetDefaultAttributes mocks base method.
+func (m *MockHandler) SetDefaultAttributes(arg0 term.Attributes) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetDefaultAttributes", arg0)
+}
+
+// SetDefaultAttributes indicates an expected call of SetDefaultAttributes.
+func (mr *MockHandlerMockRecorder) SetDefaultAttributes(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetDefaultAttributes", reflect.TypeOf((*MockHandler)(nil).SetDefaultAttributes), arg0)
+}
+
+// SetLocationList mocks base method.
+func (m *MockHandler) SetLocationList(arg0 textapi.LocationPriority, arg1 string, arg2 text.LocationList) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetLocationList", arg0, arg1, arg2)
+}
+
+// SetLocationList indicates an expected call of SetLocationList.
+func (mr *MockHandlerMockRecorder) SetLocationList(arg0, arg1, arg2 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetLocationList", reflect.TypeOf((*MockHandler)(nil).SetLocationList), arg0, arg1, arg2)
+}
+
 // SetWrap mocks base method.
 func (m *MockHandler) SetWrap(wrap bool) {
 	m.ctrl.T.Helper()
@@ -249,84 +338,6 @@ func (m *MockHandler) ShowCommandBar(show bool) {
 func (mr *MockHandlerMockRecorder) ShowCommandBar(show any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ShowCommandBar", reflect.TypeOf((*MockHandler)(nil).ShowCommandBar), show)
-}
-
-// MockCellEditor is a mock of CellEditor interface.
-type MockCellEditor struct {
-	ctrl     *gomock.Controller
-	recorder *MockCellEditorMockRecorder
-}
-
-// MockCellEditorMockRecorder is the mock recorder for MockCellEditor.
-type MockCellEditorMockRecorder struct {
-	mock *MockCellEditor
-}
-
-// NewMockCellEditor creates a new mock instance.
-func NewMockCellEditor(ctrl *gomock.Controller) *MockCellEditor {
-	mock := &MockCellEditor{ctrl: ctrl}
-	mock.recorder = &MockCellEditorMockRecorder{mock}
-	return mock
-}
-
-// EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockCellEditor) EXPECT() *MockCellEditorMockRecorder {
-	return m.recorder
-}
-
-// Edit mocks base method.
-func (m *MockCellEditor) Edit(ctx context.Context, start, end term.Coordinates, str string) (term.Coordinates, term.Coordinates, string, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Edit", ctx, start, end, str)
-	ret0, _ := ret[0].(term.Coordinates)
-	ret1, _ := ret[1].(term.Coordinates)
-	ret2, _ := ret[2].(string)
-	ret3, _ := ret[3].(error)
-	return ret0, ret1, ret2, ret3
-}
-
-// Edit indicates an expected call of Edit.
-func (mr *MockCellEditorMockRecorder) Edit(ctx, start, end, str any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Edit", reflect.TypeOf((*MockCellEditor)(nil).Edit), ctx, start, end, str)
-}
-
-// MockCellView is a mock of CellView interface.
-type MockCellView struct {
-	ctrl     *gomock.Controller
-	recorder *MockCellViewMockRecorder
-}
-
-// MockCellViewMockRecorder is the mock recorder for MockCellView.
-type MockCellViewMockRecorder struct {
-	mock *MockCellView
-}
-
-// NewMockCellView creates a new mock instance.
-func NewMockCellView(ctrl *gomock.Controller) *MockCellView {
-	mock := &MockCellView{ctrl: ctrl}
-	mock.recorder = &MockCellViewMockRecorder{mock}
-	return mock
-}
-
-// EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockCellView) EXPECT() *MockCellViewMockRecorder {
-	return m.recorder
-}
-
-// RawCells mocks base method.
-func (m *MockCellView) RawCells() ([][]term.Cell, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RawCells")
-	ret0, _ := ret[0].([][]term.Cell)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// RawCells indicates an expected call of RawCells.
-func (mr *MockCellViewMockRecorder) RawCells() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RawCells", reflect.TypeOf((*MockCellView)(nil).RawCells))
 }
 
 // MockEventPublisher is a mock of EventPublisher interface.
@@ -404,49 +415,6 @@ func (m *MockEditor) EXPECT() *MockEditorMockRecorder {
 	return m.recorder
 }
 
-// CellEditor mocks base method.
-func (m *MockEditor) CellEditor(arg0 text.Handler) text.CellEditor {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CellEditor", arg0)
-	ret0, _ := ret[0].(text.CellEditor)
-	return ret0
-}
-
-// CellEditor indicates an expected call of CellEditor.
-func (mr *MockEditorMockRecorder) CellEditor(arg0 any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CellEditor", reflect.TypeOf((*MockEditor)(nil).CellEditor), arg0)
-}
-
-// CellView mocks base method.
-func (m *MockEditor) CellView(arg0 text.Handler) text.CellView {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CellView", arg0)
-	ret0, _ := ret[0].(text.CellView)
-	return ret0
-}
-
-// CellView indicates an expected call of CellView.
-func (mr *MockEditorMockRecorder) CellView(arg0 any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CellView", reflect.TypeOf((*MockEditor)(nil).CellView), arg0)
-}
-
-// Cursor mocks base method.
-func (m *MockEditor) Cursor(arg0 text.Handler) (term.Coordinates, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Cursor", arg0)
-	ret0, _ := ret[0].(term.Coordinates)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// Cursor indicates an expected call of Cursor.
-func (mr *MockEditorMockRecorder) Cursor(arg0 any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Cursor", reflect.TypeOf((*MockEditor)(nil).Cursor), arg0)
-}
-
 // Edit mocks base method.
 func (m *MockEditor) Edit(file workspaceapi.URI, buf *cell.Buffer) (text.Handler, error) {
 	m.ctrl.T.Helper()
@@ -475,76 +443,6 @@ func (m *MockEditor) Editor(arg0 workspaceapi.URI) (text.Handler, error) {
 func (mr *MockEditorMockRecorder) Editor(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Editor", reflect.TypeOf((*MockEditor)(nil).Editor), arg0)
-}
-
-// MoveToNextLocation mocks base method.
-func (m *MockEditor) MoveToNextLocation(h text.Handler, ID string) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "MoveToNextLocation", h, ID)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// MoveToNextLocation indicates an expected call of MoveToNextLocation.
-func (mr *MockEditorMockRecorder) MoveToNextLocation(h, ID any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MoveToNextLocation", reflect.TypeOf((*MockEditor)(nil).MoveToNextLocation), h, ID)
-}
-
-// MoveToPrevLocation mocks base method.
-func (m *MockEditor) MoveToPrevLocation(h text.Handler, ID string) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "MoveToPrevLocation", h, ID)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// MoveToPrevLocation indicates an expected call of MoveToPrevLocation.
-func (mr *MockEditorMockRecorder) MoveToPrevLocation(h, ID any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MoveToPrevLocation", reflect.TypeOf((*MockEditor)(nil).MoveToPrevLocation), h, ID)
-}
-
-// SetCursor mocks base method.
-func (m *MockEditor) SetCursor(arg0 text.Handler, arg1 term.Coordinates) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SetCursor", arg0, arg1)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// SetCursor indicates an expected call of SetCursor.
-func (mr *MockEditorMockRecorder) SetCursor(arg0, arg1 any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetCursor", reflect.TypeOf((*MockEditor)(nil).SetCursor), arg0, arg1)
-}
-
-// SetDefaultAttributes mocks base method.
-func (m *MockEditor) SetDefaultAttributes(arg0 text.Handler, arg1 term.Attributes) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SetDefaultAttributes", arg0, arg1)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// SetDefaultAttributes indicates an expected call of SetDefaultAttributes.
-func (mr *MockEditorMockRecorder) SetDefaultAttributes(arg0, arg1 any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetDefaultAttributes", reflect.TypeOf((*MockEditor)(nil).SetDefaultAttributes), arg0, arg1)
-}
-
-// SetLocationList mocks base method.
-func (m *MockEditor) SetLocationList(arg0 text.Handler, arg1 textapi.LocationPriority, arg2 string, arg3 text.LocationList) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SetLocationList", arg0, arg1, arg2, arg3)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// SetLocationList indicates an expected call of SetLocationList.
-func (mr *MockEditorMockRecorder) SetLocationList(arg0, arg1, arg2, arg3 any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetLocationList", reflect.TypeOf((*MockEditor)(nil).SetLocationList), arg0, arg1, arg2, arg3)
 }
 
 // SubscribeCommand mocks base method.

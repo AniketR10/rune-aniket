@@ -1602,10 +1602,10 @@ func TestFlush(t *testing.T) {
 		mockWorkspace.EXPECT().Load(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 			Return(mockFlusherCloser, nil).Times(1)
 		mock.EXPECT().Resize(gomock.Any(), gomock.Any()).Times(1)
-		mockEditor.EXPECT().Cursor(gomock.Any()).
-			Return(term.Coordinates{}, nil).Times(1)
-		mockEditor.EXPECT().CellView(gomock.Any()).
-			Return(text.NewCellView(cell.NewBuffer().View())).Times(1)
+		mock.EXPECT().CursorAtScroll().
+			Return(term.Coordinates{}).Times(1)
+		mock.EXPECT().CellView().
+			Return(cell.NewBuffer().View()).Times(1)
 		mockEditor.EXPECT().Edit(gomock.Any(), gomock.Any()).Return(mock, nil)
 
 		h, err := c.OpenFileTab(resource1, true)
@@ -1662,15 +1662,15 @@ func TestReload(t *testing.T) {
 		mockWorkspace.EXPECT().Load(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 			Return(mockFlusherCloser, nil).Times(1)
 		mock.EXPECT().Resize(gomock.Any(), gomock.Any()).Times(1)
-		mockEditor.EXPECT().Cursor(gomock.Any()).
-			Return(term.Coordinates{}, nil).Times(1)
+		mock.EXPECT().CursorAtScroll().
+			Return(term.Coordinates{}).Times(1)
 		mockEditor.EXPECT().Edit(gomock.Any(), gomock.Any()).Return(mock, nil)
 
 		h, err := c.OpenFileTab(resource1, true)
 		require.NoError(t, win.SetContent(h))
 
-		mockEditor.EXPECT().CellView(gomock.Any()).
-			Return(text.NewCellView(cell.NewBuffer().View())).Times(1)
+		mock.EXPECT().CellView().
+			Return(cell.NewBuffer().View()).Times(1)
 
 		mockFlusherCloser.EXPECT().Reload().Times(1)
 		require.NoError(t, c.Reload(win))
@@ -1741,14 +1741,13 @@ func TestReload(t *testing.T) {
 		ed, err := c.Editor(resource1)
 		require.NoError(t, err)
 
-		ced := c.CellEditor(ed)
-		_, _, _, err = ced.Edit(ctx, term.Coordinates{}, term.Coordinates{}, "ABC")
-		require.NoError(t, err)
+		ced := ed.CellEditor()
+		_, _, _ = ced.Edit(ctx, term.Coordinates{}, term.Coordinates{}, "ABC")
 
 		assertContent := func(t *testing.T, expected string) {
 			t.Helper()
-			cview := c.CellView(ed)
-			cells, err := cview.RawCells()
+			cview := ed.CellView()
+			cells := cview.RawCells()
 			require.NoError(t, err)
 			assert.Equal(t, expected, cell.CellsToString(cells))
 
@@ -1780,9 +1779,8 @@ func TestReload(t *testing.T) {
 		ed, err := c.Editor(resource1)
 		require.NoError(t, err)
 
-		ced := c.CellEditor(ed)
-		_, _, _, err = ced.Edit(ctx, term.Coordinates{}, term.Coordinates{}, "ABC")
-		require.NoError(t, err)
+		ced := ed.CellEditor()
+		_, _, _ = ced.Edit(ctx, term.Coordinates{}, term.Coordinates{}, "ABC")
 
 		isDirty, ok := c.IsDirty(resource1)
 		require.True(t, ok)
@@ -1823,15 +1821,13 @@ func TestOverwrite(t *testing.T) {
 		ed, err := c.Editor(resource1)
 		require.NoError(t, err)
 
-		ced := c.CellEditor(ed)
-		_, _, _, err = ced.Edit(ctx, term.Coordinates{}, term.Coordinates{}, "ABC")
-		require.NoError(t, err)
+		ced := ed.CellEditor()
+		_, _, _ = ced.Edit(ctx, term.Coordinates{}, term.Coordinates{}, "ABC")
 
 		assertContent := func(t *testing.T, expected string) {
 			t.Helper()
-			cview := c.CellView(ed)
-			cells, err := cview.RawCells()
-			require.NoError(t, err)
+			cview := ed.CellView()
+			cells := cview.RawCells()
 			assert.Equal(t, expected, cell.CellsToString(cells))
 
 			res, ok := tracker.Resource(resource1)
@@ -1859,8 +1855,8 @@ func TestOverwrite(t *testing.T) {
 		ed, err := c.Editor(resource1)
 		require.NoError(t, err)
 
-		ced := c.CellEditor(ed)
-		_, _, _, err = ced.Edit(ctx, term.Coordinates{}, term.Coordinates{}, "ABC")
+		ced := ed.CellEditor()
+		_, _, _ = ced.Edit(ctx, term.Coordinates{}, term.Coordinates{}, "ABC")
 		require.NoError(t, err)
 
 		isDirty, ok := c.IsDirty(resource1)

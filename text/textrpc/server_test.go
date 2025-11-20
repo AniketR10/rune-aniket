@@ -66,12 +66,17 @@ func expectEdit(t *testing.T, mock *texttest.MockEditor, resource workspaceapi.U
 		})
 }
 
-func expectEditor(t *testing.T, mock *texttest.MockEditor, resource workspaceapi.URI) {
+func expectEditor(
+	t *testing.T, ctrl *gomock.Controller,
+	mock *texttest.MockEditor, resource workspaceapi.URI,
+) *texttest.MockHandler {
+	ret := texttest.NewMockHandler(ctrl)
 	mock.EXPECT().Editor(gomock.Any()).AnyTimes().
 		DoAndReturn(func(_uri workspaceapi.URI) (text.Handler, error) {
 			assert.Equal(t, resource, _uri)
-			return texttest.NewTestHandler(), nil
+			return ret, nil
 		})
+	return ret
 }
 
 func callServerEdit(
@@ -157,13 +162,12 @@ func TestServerSetLocationList(t *testing.T) {
 		callServerEdit(t, ctx, s, resource, content)
 
 		locs := text.LocationSlice([]textapi.Location{{Message: "wsb: hold AMC", To: term.Coordinates{X: 3}}})
-		expectEditor(t, mock, resource)
-		mock.EXPECT().SetLocationList(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		h := expectEditor(t, ctrl, mock, resource)
+		h.EXPECT().SetLocationList(gomock.Any(), gomock.Any(), gomock.Any()).
 			Times(1).
-			DoAndReturn(func(h text.Handler, pri textapi.LocationPriority, ID string, l text.LocationList) error {
+			DoAndReturn(func(pri textapi.LocationPriority, ID string, l text.LocationList) {
 				assert.Equal(t, textapi.LocationPriorityInfo, pri)
 				assert.Equal(t, locID, ID)
-				return nil
 			})
 
 		req := makeLocationListRequest(resource, textapi.LocationPriorityInfo, locID, locs)
@@ -233,8 +237,8 @@ func TestServerSetCursor(t *testing.T) {
 		callServerEdit(t, ctx, s, resource, content)
 
 		pos := term.Coordinates{X: 4, Y: 5}
-		expectEditor(t, mock, resource)
-		mock.EXPECT().SetCursor(gomock.Any(), gomock.Eq(pos)).Return(nil).Times(1)
+		h := expectEditor(t, ctrl, mock, resource)
+		h.EXPECT().SetCursorAtScroll(gomock.Eq(pos)).Times(1)
 
 		var protoPos termrpc.Coordinates
 		protoPos.FromModel(pos)
@@ -260,8 +264,8 @@ func TestServerCursor(t *testing.T) {
 		callServerEdit(t, ctx, s, resource, "")
 
 		pos := term.Coordinates{X: 4, Y: 5}
-		expectEditor(t, mock, resource)
-		mock.EXPECT().Cursor(gomock.Any()).Return(pos, nil).Times(1)
+		h := expectEditor(t, ctrl, mock, resource)
+		h.EXPECT().CursorAtScroll().Return(pos).Times(1)
 
 		req := CursorRequest{ResourceName: NewURI(resource)}
 		res, err := s.Cursor(ctx, &req)

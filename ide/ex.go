@@ -291,7 +291,7 @@ func (e *ex) Complete(ctx context.Context, args []string) (
 		Window:   e.invokeWindow(),
 	}
 	if ok {
-		scmd.Cursor.Content, _ = e.ed.Cursor(h)
+		scmd.Cursor.Content = h.CursorAtScroll()
 		scmd.Cursor.Window, _, _ = h.Cursor()
 	}
 	it, newArg, err := e.comp.CompleteCommand(ctx, scmd)
@@ -336,7 +336,11 @@ func (e *ex) moveFocusCursor(line int) error {
 	if line < 0 {
 		line = 0
 	}
-	return e.comp.SetCursor(h, term.Coordinates{Y: line})
+	ok = h.SetCursorAtScroll(term.Coordinates{Y: line})
+	if !ok {
+		return errors.New("could not set cursor to position")
+	}
+	return nil
 }
 
 func (e *ex) tabrename(args ...string) error {
@@ -497,7 +501,7 @@ func (e *ex) dispatchCommand(cmd string, args ...string) (err error) {
 		Window:   e.invokeWindow(),
 	}
 	if ok {
-		scmd.Cursor.Content, _ = e.ed.Cursor(h)
+		scmd.Cursor.Content = h.CursorAtScroll()
 		scmd.Cursor.Window, _, _ = h.Cursor()
 	}
 	var handled bool
@@ -915,7 +919,8 @@ func (e *ex) defaultcolors(args ...string) error {
 	}
 	th, ok := t.Handler().(text.Handler)
 	if ok {
-		return e.comp.SetDefaultAttributes(th, attrs)
+		th.SetDefaultAttributes(attrs)
+		return nil
 	}
 	emh, ok := t.Handler().(vtereservoir.VTE)
 	if ok {

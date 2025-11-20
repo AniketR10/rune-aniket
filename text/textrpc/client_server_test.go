@@ -318,15 +318,14 @@ func TestClientServerIntegration(t *testing.T) {
 
 		l := text.LocationSlice([]textapi.Location{loc2})
 
-		expectEditor(t, ed, uri)
-		ed.EXPECT().SetLocationList(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-			DoAndReturn(func(h text.Handler, pri textapi.LocationPriority, id string, ll text.LocationList) error {
+		mock := expectEditor(t, ctrl, ed, uri)
+		mock.EXPECT().SetLocationList(gomock.Any(), gomock.Any(), gomock.Any()).
+			DoAndReturn(func(pri textapi.LocationPriority, id string, ll text.LocationList) {
 				defer wg.Done()
 				assertLocation(t, ll, 0, loc2)
 				assert.Equal(t, locID, id)
 				assertLocationListLen(t, ll, 1)
 				assert.Equal(t, textapi.LocationPriorityError, pri)
-				return nil
 			}).Times(1)
 
 		wg.Add(1)
@@ -356,12 +355,11 @@ func TestClientServerIntegration(t *testing.T) {
 			Bg:    tcell.ColorNavy,
 		}
 
-		expectEditor(t, ed, uri)
-		ed.EXPECT().SetDefaultAttributes(gomock.Any(), gomock.Any()).
-			DoAndReturn(func(h text.Handler, attrs term.Attributes) error {
+		mock := expectEditor(t, ctrl, ed, uri)
+		mock.EXPECT().SetDefaultAttributes(gomock.Any()).
+			DoAndReturn(func(attrs term.Attributes) {
 				defer wg.Done()
 				assert.Equal(t, expectedAttrs, attrs)
-				return nil
 			}).Times(1)
 
 		wg.Add(1)
@@ -388,8 +386,8 @@ func TestClientServerIntegration(t *testing.T) {
 		w := client.CellEditor(h)
 		at := term.Coordinates{X: 1}
 
-		expectEditor(t, ed, uri)
-		ed.EXPECT().CellEditor(gomock.Any()).Return(text.NewCellEditor(buf.Editor())).Times(1)
+		mock := expectEditor(t, ctrl, ed, uri)
+		mock.EXPECT().CellEditor().Return(buf.Editor()).Times(1)
 		from, to, _, err := w.Edit(context.Background(), at, at, "el\nAridio")
 
 		require.NoError(t, err)
@@ -397,8 +395,7 @@ func TestClientServerIntegration(t *testing.T) {
 		require.Equal(t, term.Coordinates{X: 6, Y: 1}, to)
 		require.Equal(t, " el\nAridio", buf.String())
 
-		expectEditor(t, ed, uri)
-		ed.EXPECT().CellEditor(gomock.Any()).Return(text.NewCellEditor(buf.Editor())).Times(1)
+		mock.EXPECT().CellEditor().Return(buf.Editor()).Times(1)
 		start, end, str, err := w.Edit(
 			context.Background(), term.Coordinates{}, term.Coordinates{Y: 1}, "")
 
@@ -424,8 +421,8 @@ func TestClientServerIntegration(t *testing.T) {
 		h, err := client.Edit(uri, buf)
 		require.NoError(t, err)
 
-		expectEditor(t, ed, uri)
-		ed.EXPECT().CellView(gomock.Any()).Return(text.NewCellView(buf.View())).Times(2)
+		mock := expectEditor(t, ctrl, ed, uri)
+		mock.EXPECT().CellView().Return(buf.View()).Times(2)
 
 		r := client.CellView(h)
 		cells, err := r.RawCells()

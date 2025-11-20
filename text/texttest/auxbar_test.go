@@ -49,14 +49,14 @@ func TestAuxBarDrawLinesRelative(t *testing.T) {
 	fs := &testFoldsService{}
 	fs.view = buf.WithView(fs)
 	scroll := component.NewScroll(buf)
-	h := newtestHandler(scroll)
+	h := newTestHandler(scroll)
 	cb := func(fn func()) bool {
 		fn()
 		return true
 	}
 
 	cfg := text.AuxBarConfig{LinesEnabled: true, ScheduleNextTick: cb}
-	bar := text.WithAuxBar(&TestEditor{}, h, buf, scroll, cfg)
+	bar := text.WithAuxBar(h, buf, scroll, cfg)
 	bar.Resize(20, 10)
 	w := term.NewStringWriter(20, 10)
 
@@ -99,14 +99,14 @@ func TestAuxBarDrawLinesAbsolute(t *testing.T) {
 	fs := &testFoldsService{}
 	fs.view = buf.WithView(fs)
 	scroll := component.NewScroll(buf)
-	h := newtestHandler(scroll)
+	h := newTestHandler(scroll)
 	cb := func(fn func()) bool {
 		fn()
 		return true
 	}
 
 	cfg := text.AuxBarConfig{LinesEnabled: true, AbsoluteLines: true, ScheduleNextTick: cb}
-	bar := text.WithAuxBar(&TestEditor{}, h, buf, scroll, cfg)
+	bar := text.WithAuxBar(h, buf, scroll, cfg)
 	bar.Resize(20, 10)
 	w := term.NewStringWriter(20, 10)
 
@@ -149,7 +149,7 @@ func TestAuxBarDrawFolds(t *testing.T) {
 	fs := &testFoldsService{}
 	fs.view = buf.WithView(fs)
 	scroll := component.NewScroll(buf)
-	h := newtestHandler(scroll)
+	h := newTestHandler(scroll)
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	cb := func(fn func()) bool {
@@ -163,7 +163,7 @@ func TestAuxBarDrawFolds(t *testing.T) {
 	wg.Add(1)
 	mu.Lock()
 	cfg := text.AuxBarConfig{FoldsEnabled: true, ScheduleNextTick: cb}
-	bar := text.WithAuxBar(&TestEditor{}, h, buf, scroll, cfg)
+	bar := text.WithAuxBar(h, buf, scroll, cfg)
 	bar.Resize(20, 10)
 	mu.Unlock()
 	w := term.NewStringWriter(20, 10)
@@ -314,7 +314,7 @@ func TestGitBarWithAuxBarIntegration(t *testing.T) {
 	fs := &testFoldsService{}
 	fs.view = buf.WithView(fs)
 	scroll := component.NewScroll(buf)
-	h := newtestHandler(scroll)
+	h := newTestHandler(scroll)
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	cb := func(fn func()) bool {
@@ -352,8 +352,8 @@ func TestGitBarWithAuxBarIntegration(t *testing.T) {
 		CommandRegistry:  registry,
 	}
 	mu.Lock()
-	bar := text.WithAuxBar(ed, h, buf, scroll, acfg)
-	bar = text.WithGitBar(ed, mockSvc, bar, buf, scroll, gcfg)
+	bar := text.WithAuxBar(h, buf, scroll, acfg)
+	bar = text.WithGitBar(mockSvc, bar, buf, scroll, gcfg)
 	bar.Resize(20, 10)
 	mu.Unlock()
 	w := term.NewStringWriter(20, 10)
@@ -485,7 +485,7 @@ func benchmarkAuxBar(b *testing.B, width, height int, absolute, moveCursor bool)
 	fs := &testFoldsService{}
 	fs.view = buf.WithView(fs)
 	scroll := component.NewScroll(buf)
-	h := newtestHandler(scroll)
+	h := newTestHandler(scroll)
 	var wg sync.WaitGroup
 	cb := func(fn func()) bool {
 		fn()
@@ -509,7 +509,7 @@ func benchmarkAuxBar(b *testing.B, width, height int, absolute, moveCursor bool)
 		HighlightCursor:  true,
 		ScheduleNextTick: cb,
 	}
-	bar := text.WithAuxBar(&TestEditor{}, h, buf, scroll, cfg)
+	bar := text.WithAuxBar(h, buf, scroll, cfg)
 	bar.Resize(width, height)
 	bar.Draw(term.NoopWriter{})
 	wg.Wait()
@@ -565,7 +565,7 @@ type testHandler struct {
 	URI    workspaceapi.URI
 }
 
-func newtestHandler(scroll *component.Scroll) (t *testHandler) {
+func newTestHandler(scroll *component.Scroll) (t *testHandler) {
 	t = new(testHandler)
 	t.Scroll = scroll
 	return t
@@ -603,6 +603,32 @@ func (t *testHandler) SeekOffset() int {
 
 func (t *testHandler) MaxSeekOffset() int {
 	return 0
+}
+
+func (h *testHandler) SetLocationList(
+	pri textapi.LocationPriority, ID string, loc text.LocationList,
+) {
+}
+
+func (h *testHandler) MoveToNextLocation(ID string) {
+}
+
+func (h *testHandler) MoveToPrevLocation(ID string) {
+}
+
+func (h *testHandler) CellView() cell.View {
+	return nil
+}
+
+func (h *testHandler) CellEditor() cell.Editor {
+	return nil
+}
+
+func (e *testHandler) SetDefaultAttributes(attr term.Attributes) {
+}
+
+func (h *testHandler) CursorAtScroll() term.Coordinates {
+	return term.Coordinates{}
 }
 
 func (t *testHandler) Handle(ev term.Event) (bool, bool) {

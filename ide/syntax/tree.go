@@ -583,9 +583,7 @@ func (t *Tree) highlight() error {
 	}
 	highlights := t.getHighlights(t.cells, t.content)
 	ll := textapi.LocationSlice(highlights)
-	if err := t.loc.SetLocationList(ll); err != nil {
-		return fmt.Errorf("set location list: %w", err)
-	}
+	t.loc.SetLocationList(ll)
 
 	t.log(log.TraceLevel, "set %d highlights", len(highlights))
 

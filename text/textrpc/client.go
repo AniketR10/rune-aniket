@@ -37,14 +37,13 @@ import (
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/term"
 	termrpc "unstable.build/go-tui/term/termrpc"
-	"unstable.build/go-tui/text"
 )
 
 const (
 	defaultTimeout = 4 * time.Second
 )
 
-var _ text.Handler = Token{}
+var _ textapi.Handler = Token{}
 
 // Token wraps a browser.Token to satisfy editor.Handler.
 type Token struct {

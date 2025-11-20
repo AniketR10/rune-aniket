@@ -239,12 +239,8 @@ func (s *Server) SetLocationList(ctx context.Context, in *SetLocationListRequest
 		return nil, errHandlerNotFound
 	}
 
-	err := s.editor.SetLocationList(h, textapi.LocationPriority(pri),
+	h.SetLocationList(textapi.LocationPriority(pri),
 		id, text.LocationSlice(getLocations(locs)))
-	if err != nil {
-		return nil, err
-	}
-
 	return new(SetLocationListResponse), nil
 }
 
@@ -276,11 +272,7 @@ func (s *Server) SetDefaultAttributes(ctx context.Context, in *SetDefaultAttribu
 		return nil, errHandlerNotFound
 	}
 
-	err := s.editor.SetDefaultAttributes(h, attrs.ToModel())
-	if err != nil {
-		return nil, err
-	}
-
+	h.SetDefaultAttributes(attrs.ToModel())
 	return new(SetDefaultAttributesResponse), nil
 }
 
@@ -293,16 +285,12 @@ func (s *Server) SetCursor(ctx context.Context, in *SetCursorRequest) (
 	s.editor.Lock()
 	defer s.editor.Unlock()
 
-	h, ok := s.getHandler("SetCursor", in.GetResourceName())
+	h, ok := s.getHandler("SetCursorAtScroll", in.GetResourceName())
 	if !ok {
 		return nil, errHandlerNotFound
 	}
 
-	err := s.editor.SetCursor(h, pos.ToModel())
-	if err != nil {
-		return nil, err
-	}
-
+	h.SetCursorAtScroll(pos.ToModel())
 	return new(SetCursorResponse), nil
 }
 
@@ -318,11 +306,7 @@ func (s *Server) Cursor(ctx context.Context, in *CursorRequest) (
 		return nil, errHandlerNotFound
 	}
 
-	pos, err := s.editor.Cursor(h)
-	if err != nil {
-		return nil, err
-	}
-
+	pos := h.CursorAtScroll()
 	var protoPos termrpc.Coordinates
 	protoPos.FromModel(pos)
 
@@ -345,11 +329,7 @@ func (s *Server) EditCell(ctx context.Context, in *EditCellRequest) (
 		return nil, errHandlerNotFound
 	}
 
-	from, to, old, err := s.editor.CellEditor(h).Edit(ctx, start, end, str)
-	if err != nil {
-		return nil, err
-	}
-
+	from, to, old := h.CellEditor().Edit(ctx, start, end, str)
 	var protoFrom, protoTo termrpc.Coordinates
 	protoFrom.FromModel(from)
 	protoTo.FromModel(to)
@@ -374,11 +354,7 @@ func (s *Server) RawCells(ctx context.Context, in *RawCellsRequest) (
 		return nil, errHandlerNotFound
 	}
 
-	cells, err := s.editor.CellView(h).RawCells()
-	if err != nil {
-		return nil, err
-	}
-
+	cells := h.CellView().RawCells()
 	return NewRawCellsResponse(cells), nil
 }
 
@@ -445,13 +421,9 @@ func (s *Server) moveToLocation(
 	}
 
 	if next {
-		err = s.editor.MoveToNextLocation(h, id)
+		h.MoveToNextLocation(id)
 	} else {
-		err = s.editor.MoveToPrevLocation(h, id)
-	}
-
-	if err != nil {
-		return nil, err
+		h.MoveToPrevLocation(id)
 	}
 
 	res = new(MoveToLocationResponse)

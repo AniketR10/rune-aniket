@@ -161,9 +161,8 @@ func TestEventDispatching(t *testing.T) {
 				// still useful to make sure that it's integrated correctly
 				if test.dirty {
 					ctx := context.Background()
-					_, _, _, err = x.comp.CellEditor(ed).
+					_, _, _ = ed.CellEditor().
 						Edit(ctx, term.Coordinates{}, term.Coordinates{}, "ABC")
-					require.NoError(t, err)
 				}
 				win, err := x.comp.Focus()
 				require.NoError(t, err)
@@ -553,8 +552,7 @@ func assertBufferContent(t *testing.T, x *ex, file workspaceapi.URI, content str
 	t.Helper()
 	ed, err := x.comp.Editor(file)
 	require.NoError(t, err)
-	cells, err := x.comp.CellView(ed).RawCells()
-	require.NoError(t, err)
+	cells := ed.CellView().RawCells()
 	assert.Equal(t, content, cell.CellsToString(cells))
 }
 
@@ -669,9 +667,8 @@ func editBuffer(t *testing.T, x *ex, file workspaceapi.URI, content string) {
 	require.NoError(t, err)
 
 	ctx := context.Background()
-	_, _, _, err = x.comp.CellEditor(h).
+	_, _, _ = h.CellEditor().
 		Edit(ctx, term.Coordinates{}, term.Coordinates{}, "ABC")
-	require.NoError(t, err)
 
 	dirty, ok := x.comp.IsDirty(file)
 	require.True(t, ok)

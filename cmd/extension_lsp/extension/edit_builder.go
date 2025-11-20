@@ -31,20 +31,20 @@ import (
 
 	multierr "github.com/ernestrc/go-multierror"
 	"github.com/unstablebuild/golang-internal-tools/lsp/protocol"
+	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/term"
-	"unstable.build/go-tui/text"
 )
 
 type editBuilder struct {
 	f        *file
-	w        text.CellEditor
+	w        textapi.CellEditor
 	original *cell.Buffer
 	buf      *cell.Buffer
 	colmap   protocol.ColumnMapper
 }
 
-func (b *editBuilder) init(tabspaces int, f *file, w text.CellEditor, cells [][]term.Cell) {
+func (b *editBuilder) init(tabspaces int, f *file, w textapi.CellEditor, cells [][]term.Cell) {
 	b.f = f
 	b.w = w
 	b.original = cell.CellsToBuffer(cells, tabspaces)

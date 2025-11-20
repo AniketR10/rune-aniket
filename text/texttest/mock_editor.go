@@ -93,10 +93,6 @@ func (e *TestEditorHandler) Resource() workspaceapi.URI {
 	return e.uri
 }
 
-func (e *TestEditorHandler) SetCursorAtScroll(term.Coordinates) bool {
-	return false
-}
-
 func (e *TestEditorHandler) SetWrap(wrap bool) {
 }
 
@@ -144,13 +140,10 @@ func (e *TestEditor) Edit(resource workspaceapi.URI, buf *cell.Buffer) (text.Han
 	return h, nil
 }
 
-func (e *TestEditor) SetLocationList(
-	h text.Handler, pri textapi.LocationPriority, id string, loc text.LocationList,
-) error {
-	if t, ok := h.(*TestEditorHandler); ok {
-		t.LocationList = loc
-	}
-	return nil
+func (t *TestEditorHandler) SetLocationList(
+	pri textapi.LocationPriority, id string, loc text.LocationList,
+) {
+	t.LocationList = loc
 }
 
 func (e *TestEditorHandler) Handle(ev term.Event) (bool, bool) {
@@ -174,29 +167,27 @@ func (e *TestEditorHandler) Resize(width, height int) {
 	e.TestHandler.Resize(width, height)
 }
 
-func (e *TestEditor) MoveToNextLocation(h text.Handler, ID string) error {
-	return nil
+func (e *TestEditorHandler) MoveToNextLocation(ID string) {
 }
 
-func (e *TestEditor) MoveToPrevLocation(h text.Handler, ID string) error {
-	return nil
+func (e *TestEditorHandler) MoveToPrevLocation(ID string) {
 }
 
-func (e *TestEditor) SetCursor(h text.Handler, pos term.Coordinates) error {
-	h.(*TestEditorHandler).CursorPos = pos
-	return nil
+func (t *TestEditorHandler) SetCursorAtScroll(pos term.Coordinates) bool {
+	t.CursorPos = pos
+	return true
 }
 
-func (e *TestEditor) Cursor(h text.Handler) (term.Coordinates, error) {
-	return h.(*TestEditorHandler).CursorPos, nil
+func (t *TestEditorHandler) CursorAtScroll() term.Coordinates {
+	return t.CursorPos
 }
 
-func (e *TestEditor) CellEditor(h text.Handler) text.CellEditor {
-	return text.NewCellEditor(e.buf.Editor())
+func (t *TestEditorHandler) CellEditor() cell.Editor {
+	return t.parent.buf.Editor()
 }
 
-func (e *TestEditor) CellView(h text.Handler) text.CellView {
-	return text.NewCellView(e.buf.View())
+func (t *TestEditorHandler) CellView() cell.View {
+	return t.parent.buf.View()
 }
 
 func (e *TestEditor) SubscribeCommand(cmd textapi.CommandManual, h text.CommandHandler) error {
@@ -207,10 +198,9 @@ func (e *TestEditor) UnsubscribeCommand(cmd string) error {
 	return nil
 }
 
-func (e *TestEditor) SetDefaultAttributes(h text.Handler, attr term.Attributes) error {
-	h.(*TestEditorHandler).Attributes.Fg = attr.Fg
-	h.(*TestEditorHandler).Attributes.Bg = attr.Bg
-	return nil
+func (t *TestEditorHandler) SetDefaultAttributes(attr term.Attributes) {
+	t.Attributes.Fg = attr.Fg
+	t.Attributes.Bg = attr.Bg
 }
 
 func (e *TestEditor) UnsubscribeEvents(

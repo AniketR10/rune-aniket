@@ -24,7 +24,9 @@
 package texttest
 
 import (
+	textapi "unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/api/workspaceapi"
+	cell "unstable.build/go-tui/cell"
 	"unstable.build/go-tui/handler"
 	term "unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
@@ -87,4 +89,37 @@ func (t *TestHandler) SeekOffset() int {
 // MaxSeekOffset satisfies component.Scrollable.
 func (t *TestHandler) MaxSeekOffset() int {
 	return 0
+}
+
+// SetLocationList satisfies text.Handler.
+func (t *TestHandler) SetLocationList(
+	pri textapi.LocationPriority, ID string, loc text.LocationList,
+) {
+}
+
+// MoveToNextLocation satisfies text.Handler.
+func (t *TestHandler) MoveToNextLocation(ID string) {
+}
+
+// MoveToPrevLocation satisfies text.Handler.
+func (t *TestHandler) MoveToPrevLocation(ID string) {
+}
+
+// CellView satisfies text.Handler.
+func (t *TestHandler) CellView() cell.View {
+	return nil
+}
+
+// CellEditor satisfies text.Handler.
+func (t *TestHandler) CellEditor() cell.Editor {
+	return nil
+}
+
+// SetDefaultAttributes satisfies text.Handler.
+func (t *TestHandler) SetDefaultAttributes(attr term.Attributes) {
+}
+
+// CursorAtScroll satisfies text.Handler.
+func (t *TestHandler) CursorAtScroll() term.Coordinates {
+	return term.Coordinates{}
 }

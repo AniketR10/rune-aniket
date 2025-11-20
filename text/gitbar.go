@@ -58,7 +58,7 @@ type GitBarConfig struct {
 // WithGitBar wraps the given editor with an git bar. The given buffer,
 // and scroll should correspond to the buffer and scroll used by the given editor.
 func WithGitBar(
-	ed Editor, svc vctrl.Service, handler Handler,
+	svc vctrl.Service, handler Handler,
 	buf *cell.Buffer, scroll *component.Scroll,
 	cfg GitBarConfig,
 ) Handler {
@@ -67,9 +67,8 @@ func WithGitBar(
 	}
 	ret := new(gitBar)
 	ret.buf = buf
-	ret.ed = ed
 	ret.scroll = scroll
-	ret.handler = handler
+	ret.Handler = handler
 	ret.vhandler.C = handler
 	ret.scheduleNextTick = cfg.ScheduleNextTick
 	ret.svc = svc
@@ -113,18 +112,6 @@ func WithGitBar(
 	return ret
 }
 
-// UnwrapGitBar unwraps the underlying handler from
-// a Handler returned by WithGitBar. This function
-// panics if the given handler was not returned by WithAuxBar.
-func UnwrapGitBar(h Handler) Handler {
-	// if auxBar passed itself without wrapping to SetLocationList
-	// then editor assumes incorrectly that handler will be a git bar.
-	if ret, ok := h.(*gitBar); ok {
-		return ret.handler
-	}
-	return h
-}
-
 const (
 	// shared amongst bars
 	gitLocationsID       = "_gitLocID"
@@ -143,16 +130,8 @@ var (
 	}
 )
 
-// need a per-file subscription mechanism.
-// OK here's a solution:
-// - Add a SubscribeCommandForWorkspace ifc + impl at workspace_handler.go
-// - pass this to vi/simple as an option/config.
-// - Update bar configs CommandRegistry to point to self editor at vi/simple.
-// - implement subscribe command at vi/simple level, calling this workspace subscribe.
-// - or implmement subscribe command at per file level in vi/simple
-// - expose this new ifc to git/aux bars so they can subscribe.
 type gitBar struct {
-	ed               Editor
+	Handler
 	svc              vctrl.Service
 	scheduleNextTick func(func()) bool
 	pub              EventPublisher
@@ -162,7 +141,6 @@ type gitBar struct {
 	file    workspaceapi.URI
 	buf     *cell.Buffer
 	scroll  *component.Scroll
-	handler Handler
 	delAttr term.Attributes
 	addAttr term.Attributes
 
@@ -257,7 +235,7 @@ func (b *gitBar) Close() (ret error) {
 
 func (b *gitBar) rebuildBar(ctx context.Context) {
 	b.bar.Buffer().ResetPerformance()
-	uri := b.handler.Resource()
+	uri := b.Handler.Resource()
 
 	go debug.CapturePanicReport(func() {
 		filediff, err := b.svc.Diff(ctx, uri)
@@ -292,7 +270,7 @@ func (b *gitBar) rebuildBar(ctx context.Context) {
 					b.bar.Buffer().InsertStringWithAttr(at, icon, b.addAttr)
 				}
 			}
-			_ = b.ed.SetLocationList(b, textapi.LocationPriorityInfo, gitLocationsID, ll)
+			b.Handler.SetLocationList(textapi.LocationPriorityInfo, gitLocationsID, ll)
 		})
 	})
 }
@@ -341,38 +319,6 @@ func (b *gitBar) scrollToBarCoordinates(pos term.Coordinates) (ret term.Coordina
 	ret = pos
 	ret.Y += b.scroll.Offset().Y
 	return
-}
-
-func (b *gitBar) SeekUp() bool {
-	return b.handler.SeekUp()
-}
-
-func (b *gitBar) SeekDown() bool {
-	return b.handler.SeekDown()
-}
-
-func (b *gitBar) SeekOffset() int {
-	return b.handler.SeekOffset()
-}
-
-func (b *gitBar) MaxSeekOffset() int {
-	return b.handler.MaxSeekOffset()
-}
-
-func (b *gitBar) Resource() workspaceapi.URI {
-	return b.handler.Resource()
-}
-
-func (b *gitBar) SetWrap(wrap bool) {
-	b.handler.SetWrap(wrap)
-}
-
-func (b *gitBar) ShowCommandBar(show bool) {
-	b.handler.ShowCommandBar(show)
-}
-
-func (b *gitBar) SetCursorAtScroll(pos term.Coordinates) bool {
-	return b.handler.SetCursorAtScroll(pos)
 }
 
 func (b *gitBar) log(level log.Level, msg string, args ...any) {

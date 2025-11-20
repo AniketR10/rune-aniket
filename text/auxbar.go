@@ -74,7 +74,7 @@ type AuxBarConfig struct {
 // WithAuxBar wraps the given editor with an auxiliary bar. The given buffer,
 // and scroll should correspond to the buffer and scroll used by the given editor.
 func WithAuxBar(
-	ed Editor, handler Handler, buf *cell.Buffer,
+	handler Handler, buf *cell.Buffer,
 	scroll *component.Scroll, config AuxBarConfig,
 ) Handler {
 	if config.ScheduleNextTick == nil ||
@@ -82,12 +82,11 @@ func WithAuxBar(
 		panic("auxbar configuration is missing key dependencies")
 	}
 	ret := new(auxBar)
-	ret.ed = ed
 	ret.pub = config.Publisher
 	ret.buf = buf
 	ret.file = handler.Resource()
 	ret.scroll = scroll
-	ret.handler = handler
+	ret.Handler = handler
 	ret.vhandler.C = handler
 	ret.registry = config.CommandRegistry
 	ret.scheduleNextTick = config.ScheduleNextTick
@@ -154,20 +153,13 @@ func WithAuxBar(
 
 const foldsWidth = 2
 
-// UnwrapAuxBar unwraps the underlying handler from
-// a Handler returned by WithAuxBar. This function
-// panics if the given handler was not returned by WithAuxBar.
-func UnwrapAuxBar(h Handler) Handler {
-	return h.(*auxBar).handler
-}
-
 const (
 	hiddenFoldIcon  = ''
 	visibleFoldIcon = ''
 )
 
 type auxBar struct {
-	ed               Editor
+	Handler
 	pub              EventPublisher
 	scheduleNextTick func(func()) bool
 	file             workspaceapi.URI
@@ -180,9 +172,8 @@ type auxBar struct {
 	highlightCursor  bool
 	config           AuxBarConfig
 
-	buf     *cell.Buffer
-	scroll  *component.Scroll
-	handler Handler
+	buf    *cell.Buffer
+	scroll *component.Scroll
 
 	closed      bool
 	vhandler    handler.Virtual[Handler]
@@ -371,7 +362,7 @@ func (b *auxBar) rebuildBar(ctx context.Context) {
 }
 
 func (b *auxBar) rebuildGit(ctx context.Context) {
-	uri := b.handler.Resource()
+	uri := b.Handler.Resource()
 	go debug.CapturePanicReport(func() {
 		// perform diff in a separate gouroutine in case
 		// scheme is remote and diff performs network I/O.
@@ -419,7 +410,7 @@ func (b *auxBar) rebuildGit(ctx context.Context) {
 					}
 				}
 			}
-			_ = b.ed.SetLocationList(b, textapi.LocationPriorityInfo, gitLocationsID, ll)
+			b.Handler.SetLocationList(textapi.LocationPriorityInfo, gitLocationsID, ll)
 		})
 	})
 }
@@ -597,38 +588,6 @@ func (b *auxBar) scrollToBarCoordinates(pos term.Coordinates) (ret term.Coordina
 	ret = pos
 	ret.Y += b.scroll.Offset().Y
 	return
-}
-
-func (b *auxBar) SeekUp() bool {
-	return b.handler.SeekUp()
-}
-
-func (b *auxBar) SeekDown() bool {
-	return b.handler.SeekDown()
-}
-
-func (b *auxBar) SeekOffset() int {
-	return b.handler.SeekOffset()
-}
-
-func (b *auxBar) MaxSeekOffset() int {
-	return b.handler.MaxSeekOffset()
-}
-
-func (b *auxBar) Resource() workspaceapi.URI {
-	return b.handler.Resource()
-}
-
-func (b *auxBar) SetWrap(wrap bool) {
-	b.handler.SetWrap(wrap)
-}
-
-func (b *auxBar) ShowCommandBar(show bool) {
-	b.handler.ShowCommandBar(show)
-}
-
-func (b *auxBar) SetCursorAtScroll(pos term.Coordinates) bool {
-	return b.handler.SetCursorAtScroll(pos)
 }
 
 func (b *auxBar) log(level log.Level, msg string, args ...any) {

@@ -97,7 +97,7 @@ func (i *Box) Init(buf *cell.Buffer, ed text.Editor, cfg BoxConfig) {
 	// command bar
 	edh.ShowCommandBar(false)
 
-	_ = ed.SetDefaultAttributes(edh, cfg.ContentConfig)
+	edh.SetDefaultAttributes(cfg.ContentConfig)
 
 	frame := handler.NewFrame(edh)
 	frame.Attributes = cfg.DefaultFrameAttr
@@ -134,7 +134,7 @@ func (r *Box) Buffer() *cell.Buffer {
 
 // Reset resets this input box to its initial state.
 func (r *Box) Reset() {
-	_ = r.editor.SetCursor(r.handler, term.Coordinates{})
+	_ = r.handler.SetCursorAtScroll(term.Coordinates{})
 	r.buf.Reset()
 }
 

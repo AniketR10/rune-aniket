@@ -359,9 +359,8 @@ func (vi *Vi) Unselect() bool {
 }
 
 // SetDefaultAttributes sets the underlying's Scroll's default Attributes.
-func (vi *Vi) SetDefaultAttributes(attrs term.Attributes) error {
+func (vi *Vi) SetDefaultAttributes(attrs term.Attributes) {
 	vi.less.Scroll().Attributes = attrs
-	return nil
 }
 
 // Close satisfies editor.Handler.

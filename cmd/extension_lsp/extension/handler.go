@@ -1798,7 +1798,7 @@ func (h *lspEditorHandler) browseLocations(
 		}
 		content := string(data)
 
-		_ = ed.SetCursor(edh, term.Coordinates{})
+		_ = edh.SetCursorAtScroll(term.Coordinates{})
 		buf.Reset()
 		buf.WriteString(content)
 
@@ -1812,15 +1812,9 @@ func (h *lspEditorHandler) browseLocations(
 
 		attrs := term.Attributes{Attrs: tcell.AttrReverse}
 		loc := textapi.Location{From: from, To: to, Attr: attrs}
-		if err := ed.SetLocationList(edh, textapi.LocationPriorityInfo,
-			locID, textapi.LocationSlice([]textapi.Location{loc})); err != nil {
-			log.Errorf("editor set location list: %v", err)
-			return
-		}
-		if err := ed.MoveToPrevLocation(edh, locID); err != nil {
-			log.Errorf("editor move to prev location: %v", err)
-			return
-		}
+		edh.SetLocationList(textapi.LocationPriorityInfo,
+			locID, textapi.LocationSlice([]textapi.Location{loc}))
+		edh.MoveToPrevLocation(locID)
 	}
 
 	clipboard := clipboard.NewInMemory()

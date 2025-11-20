@@ -44,7 +44,7 @@ func TestGitBarDraw(t *testing.T) {
 	fs := &testFoldsService{}
 	fs.view = buf.WithView(fs)
 	scroll := component.NewScroll(buf)
-	h := newtestHandler(scroll)
+	h := newTestHandler(scroll)
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	cb := func(fn func()) bool {
@@ -63,7 +63,7 @@ func TestGitBarDraw(t *testing.T) {
 	wg.Add(1)
 	mu.Lock()
 	cfg := text.GitBarConfig{CommandRegistry: registry, ScheduleNextTick: cb, Publisher: ed}
-	bar := text.WithGitBar(ed, mockSvc, h, buf, scroll, cfg)
+	bar := text.WithGitBar(mockSvc, h, buf, scroll, cfg)
 	bar.Resize(15, 10)
 	mu.Unlock()
 	w := term.NewStringWriter(15, 10)

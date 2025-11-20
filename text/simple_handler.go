@@ -28,6 +28,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
+	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/clipboard"
@@ -277,6 +278,9 @@ func (h *simpleEditorHandler) SetCursorAtScroll(pos term.Coordinates) bool {
 	*h.pendingSetCursor = pos
 
 	_, ok := h.cursor.MoveToScroll(pos)
+	if !ok && h.CursorAtScroll() == pos {
+		return true // idempotent
+	}
 	return ok
 }
 
@@ -294,4 +298,34 @@ func (h *simpleEditorHandler) SeekOffset() int {
 
 func (h *simpleEditorHandler) MaxSeekOffset() int {
 	return h.less.Scroll().MaxSeekOffset()
+}
+
+func (h simpleEditorHandler) SetLocationList(
+	pri textapi.LocationPriority, ID string, loc LocationList,
+) {
+	h.cursor.SetLocationList(pri, ID, loc)
+}
+
+func (h *simpleEditorHandler) MoveToNextLocation(ID string) {
+	h.cursor.MoveToNextLocation(ID)
+}
+
+func (h *simpleEditorHandler) MoveToPrevLocation(ID string) {
+	h.cursor.MoveToPrevLocation(ID)
+}
+
+func (h *simpleEditorHandler) CellView() cell.View {
+	return h.buf.View()
+}
+
+func (h *simpleEditorHandler) CellEditor() cell.Editor {
+	return h.buf.Editor()
+}
+
+func (e *simpleEditorHandler) SetDefaultAttributes(attr term.Attributes) {
+	e.less.Scroll().Attributes = attr
+}
+
+func (h *simpleEditorHandler) CursorAtScroll() term.Coordinates {
+	return h.cursor.CursorAtScroll()
 }

@@ -105,11 +105,6 @@ func (p *Publisher) PublishEdit(
 	return h
 }
 
-// UnwrapHandler unwraps the underlying handler passed to PublishEdit.
-func (p *Publisher) UnwrapHandler(h Handler) Handler {
-	return h.(*cursorPublisher).Handler
-}
-
 // SubscribeEvents subsribes sub to ev.
 func (p *Publisher) SubscribeEvents(evs []textapi.EventType, sub EventHandler) {
 	for _, ev := range evs {
@@ -229,6 +224,27 @@ func (p *cursorPublisher) Handle(ev term.Event) (bool, bool) {
 // helper for internal tests
 func (p *cursorPublisher) CursorReference() *Cursor {
 	return p.cursor
+}
+
+func (p *cursorPublisher) SetCursorAtScroll(pos term.Coordinates) bool {
+	dispatch := p.parent.RecordCursorChange(p)
+	defer dispatch()
+
+	return p.Handler.SetCursorAtScroll(pos)
+}
+
+func (p *cursorPublisher) MoveToNextLocation(ID string) {
+	dispatch := p.parent.RecordCursorChange(p)
+	defer dispatch()
+
+	p.Handler.MoveToNextLocation(ID)
+}
+
+func (p *cursorPublisher) MoveToPrevLocation(ID string) {
+	dispatch := p.parent.RecordCursorChange(p)
+	defer dispatch()
+
+	p.Handler.MoveToPrevLocation(ID)
 }
 
 func (p *Publisher) log(level log.Level, msg string, args ...any) {

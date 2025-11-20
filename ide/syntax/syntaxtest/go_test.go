@@ -39,6 +39,7 @@ import (
 	"go.uber.org/goleak"
 	"unstable.build/go-tui/api/config"
 	"unstable.build/go-tui/api/workspaceapi"
+	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/handler/handlertest"
 	"unstable.build/go-tui/ide/syntax"
@@ -821,8 +822,7 @@ func TestTreeHighlightsIntegration(t *testing.T) {
 
 	start := term.Coordinates{Y: 8}
 	end := term.Coordinates{Y: 8, X: 1}
-	_, _, _, err := ed.Edit(context.Background(), start, end, "")
-	require.NoError(t, err)
+	_, _, _ = ed.Edit(context.Background(), start, end, "")
 
 	cases = []handlertest.SingleTestCase{
 		{
@@ -848,8 +848,7 @@ func TestTreeHighlightsIntegration(t *testing.T) {
 
 	start = term.Coordinates{Y: 9}
 	end = term.Coordinates{Y: 9, X: 1}
-	_, _, _, err = ed.Edit(context.Background(), start, end, "")
-	require.NoError(t, err)
+	ed.Edit(context.Background(), start, end, "")
 
 	cases = []handlertest.SingleTestCase{
 		{
@@ -875,8 +874,7 @@ func TestTreeHighlightsIntegration(t *testing.T) {
 
 	start = term.Coordinates{Y: 9}
 	end = term.Coordinates{Y: 9}
-	_, _, _, err = ed.Edit(context.Background(), start, end, "\t")
-	require.NoError(t, err)
+	ed.Edit(context.Background(), start, end, "\t")
 
 	cases = []handlertest.SingleTestCase{
 		{
@@ -902,8 +900,7 @@ func TestTreeHighlightsIntegration(t *testing.T) {
 
 	start = term.Coordinates{Y: 8}
 	end = term.Coordinates{Y: 10}
-	_, _, _, err = ed.Edit(context.Background(), start, end, "func main() {\n\tfmt.Sprintf(\"%s\", \"\")\n")
-	require.NoError(t, err)
+	ed.Edit(context.Background(), start, end, "func main() {\n\tfmt.Sprintf(\"%s\", \"\")\n")
 
 	cases = []handlertest.SingleTestCase{
 		{
@@ -929,8 +926,7 @@ func TestTreeHighlightsIntegration(t *testing.T) {
 
 	start = term.Coordinates{Y: 9, X: 17}
 	end = start
-	_, _, _, err = ed.Edit(context.Background(), start, end, "🔥")
-	require.NoError(t, err)
+	ed.Edit(context.Background(), start, end, "🔥")
 
 	cases = []handlertest.SingleTestCase{
 		{
@@ -956,8 +952,7 @@ func TestTreeHighlightsIntegration(t *testing.T) {
 
 	start = term.Coordinates{Y: 9, X: 17}
 	end = term.Coordinates{Y: 9, X: 18}
-	_, _, _, err = ed.Edit(context.Background(), start, end, "")
-	require.NoError(t, err)
+	ed.Edit(context.Background(), start, end, "")
 
 	cases = []handlertest.SingleTestCase{
 		{
@@ -983,9 +978,8 @@ func TestTreeHighlightsIntegration(t *testing.T) {
 
 	start = term.Coordinates{Y: 9, X: 0}
 	end = term.Coordinates{Y: 10, X: 0}
-	_, _, _, err = ed.Edit(context.Background(), start, end, "")
-	require.NoError(t, err)
-
+	ed.Edit(context.Background(), start, end, "")
+	
 	cases = []handlertest.SingleTestCase{
 		{
 			term.Event{}, `
@@ -1010,8 +1004,7 @@ func TestTreeHighlightsIntegration(t *testing.T) {
 
 	start = term.Coordinates{Y: 7, X: 0}
 	end = term.Coordinates{Y: 8, X: 0}
-	_, _, _, err = ed.Edit(context.Background(), start, end, "")
-	require.NoError(t, err)
+	_, _, _ = ed.Edit(context.Background(), start, end, "")
 
 	sequenceCases := []handlertest.SequenceTestCase{
 		{
@@ -1184,14 +1177,14 @@ func (m mockPkgManager) LibDir(ctx context.Context, pkg string) (iterator.Iterat
 var i int
 
 func newEditFile(t *testing.T, comp *text.Component, content string) (
-	text.CellEditor, text.Handler,
+	cell.Editor, text.Handler,
 ) {
 	i++
 	return newEditFileName(t, comp, content, strconv.Itoa(i)+".go")
 }
 
 func newEditFileName(t *testing.T, comp *text.Component, content string, filename string) (
-	text.CellEditor, text.Handler,
+	cell.Editor, text.Handler,
 ) {
 	uri, err := workspaceapi.ParseURI("memory:///" + filename)
 	require.NoError(t, err)
@@ -1203,9 +1196,8 @@ func newEditFileName(t *testing.T, comp *text.Component, content string, filenam
 	require.NoError(t, err)
 
 	start := term.Coordinates{}
-	ed := comp.CellEditor(h)
-	_, _, _, err = ed.Edit(context.Background(), start, start, content)
-	require.NoError(t, err)
+	ed := h.CellEditor()
+	_, _, _ = ed.Edit(context.Background(), start, start, content)
 
 	require.NoError(t, comp.FlushTab(tab))
 

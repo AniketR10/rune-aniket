@@ -142,8 +142,8 @@ func (c *Component) newFileBuffer(
 	}
 
 	interrupter := browser.EventPublisherInterrupter(c)
-	locs := syntax.FuncLocationSetter(func(ll textapi.LocationList) error {
-		return c.ed.SetLocationList(handler, textapi.LocationPriorityInfo, "syntax", ll)
+	locs := syntax.FuncLocationSetter(func(ll textapi.LocationList) {
+		handler.SetLocationList(textapi.LocationPriorityInfo, "syntax", ll)
 	})
 
 	// install tree in Buffer first so editor can use
@@ -236,7 +236,7 @@ func (c *Component) tryDispatchEventFocus(win handler.Window) {
 	if !ok {
 		return
 	}
-	cursor, _ := c.ed.Cursor(res)
+	cursor := res.CursorAtScroll()
 	(*Component)(c).DispatchEvent(textapi.Event{
 		Type:     textapi.EventTypeFocus,
 		URI:      t.URI(),
@@ -295,7 +295,7 @@ func (s *compTabSubscriber) OnFocus(t *browser.Tab) {
 		return
 	}
 	dimensions := s.parent.getContentDimensions(s.parent.focus)
-	cursor, _ := s.parent.ed.Cursor(res)
+	cursor := res.CursorAtScroll()
 	s.parent.DispatchEvent(textapi.Event{
 		Type:     textapi.EventTypeFocus,
 		URI:      t.URI(),
@@ -499,24 +499,17 @@ func (c *Component) ReadFile(file workspaceapi.URI, h Handler) error {
 	}
 
 	// get the current cursor position to insert to, which will be the line below
-	coords, err := c.ed.Cursor(h)
+	coords := h.CursorAtScroll()
 	coords.X = 0
 	coords.Y += 1
-	if err != nil {
-		return err
-	}
 
 	// inject the file contents surrounded by newlines to emulate vim's behaviour
 	// we don't prefix with \n because we already moved the cursor at a point that
 	// follows a \n (coords.X = 0; coords.Y += 1).
-	cellEditor := c.ed.CellEditor(h)
-	_, _, _, err = cellEditor.Edit(
+	cellEditor := h.CellEditor()
+	_, _, _ = cellEditor.Edit(
 		context.Background(), coords, coords, fmt.Sprintf("%s\n", buf),
 	)
-	if err != nil {
-		return err
-	}
-
 	return err
 }
 
@@ -671,10 +664,7 @@ func (c *Component) DispatchCommand(cmd textapi.Command) (handled bool, err erro
 }
 
 func (c *Component) dispatchFlush(file workspaceapi.URI, h Handler) error {
-	content, err := c.getContent(h)
-	if err != nil {
-		return err
-	}
+	content := c.getContent(h)
 
 	// clear dirty/flushed attributes
 	c.resetTabProperties(file)
@@ -792,48 +782,6 @@ func (c *Component) Edit(file workspaceapi.URI, buf *cell.Buffer) (Handler, erro
 	return editor, nil
 }
 
-// SetLocationList satisfies text.Editor.
-func (c *Component) SetLocationList(
-	h Handler, pri textapi.LocationPriority, ID string, loc LocationList,
-) error {
-	if ed, ok := h.(wrapEditor); ok {
-		h = ed.Handler
-	}
-	return c.ed.SetLocationList(h, pri, ID, loc)
-}
-
-// MoveToNextLocation satisfies text.Editor.
-func (c *Component) MoveToNextLocation(h Handler, ID string) error {
-	if ed, ok := h.(wrapEditor); ok {
-		h = ed.Handler
-	}
-	return c.ed.MoveToNextLocation(h, ID)
-}
-
-// MoveToPrevLocation satisfies text.Editor.
-func (c *Component) MoveToPrevLocation(h Handler, ID string) error {
-	if ed, ok := h.(wrapEditor); ok {
-		h = ed.Handler
-	}
-	return c.ed.MoveToPrevLocation(h, ID)
-}
-
-// CellView satisfies text.Editor.
-func (c *Component) CellView(h Handler) CellView {
-	if ed, ok := h.(wrapEditor); ok {
-		h = ed.Handler
-	}
-	return c.ed.CellView(h)
-}
-
-// CellEditor satisfies text.Editor.
-func (c *Component) CellEditor(h Handler) CellEditor {
-	if ed, ok := h.(wrapEditor); ok {
-		h = ed.Handler
-	}
-	return c.ed.CellEditor(h)
-}
-
 // Flush flushes the contents of the tab at the given window,
 // if there's one.
 func (c *Component) Flush(win browser.Window) error {
@@ -911,30 +859,22 @@ func (c *Component) LastFlush(h browserapi.Handler) (time.Time, error) {
 	return fc.LastFlush(), nil
 }
 
-func (c *Component) getContent(h Handler) (string, error) {
-	cells, err := c.ed.CellView(h).RawCells()
-	if err != nil {
-		return "", fmt.Errorf("CellView.RawCells: %v", err)
-	}
-	return cell.CellsToString(cells), nil
+func (c *Component) getContent(h Handler) string {
+	cells := h.CellView().RawCells()
+	return cell.CellsToString(cells)
 }
 
-func (c *Component) dispatchOpenUponSubscribe(h EventHandler) (error, bool) {
+func (c *Component) dispatchOpenUponSubscribe(h EventHandler) (bool) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	var ret error
 	for _, tab := range c.comp.Tabs() {
 		resHandler, ok := tab.Handler().(Handler)
 		if !ok {
 			// tab handler does not implement Handler
 			continue
 		}
-		str, err := c.getContent(resHandler)
-		if err != nil {
-			ret = multierror.Append(ret, err)
-			continue
-		}
+		str := c.getContent(resHandler)
 		exit := h.Handle(ctx, textapi.Event{
 			Type:     textapi.EventTypeOpen,
 			URI:      tab.URI(),
@@ -942,10 +882,10 @@ func (c *Component) dispatchOpenUponSubscribe(h EventHandler) (error, bool) {
 			Content:  str,
 		})
 		if exit {
-			return ret, true
+			return true
 		}
 	}
-	return ret, false
+	return false
 }
 
 func (c *Component) dispatchFocusUponSubscribe(h EventHandler) bool {
@@ -956,7 +896,7 @@ func (c *Component) dispatchFocusUponSubscribe(h EventHandler) bool {
 	if ok {
 		dimensions := c.getContentDimensions(c.focus)
 		resHandler, ok := t.Handler().(Handler)
-		cursor, _ := c.ed.Cursor(resHandler)
+		cursor := resHandler.CursorAtScroll()
 		if ok {
 			ev := textapi.Event{
 				Type:     textapi.EventTypeFocus,
@@ -980,10 +920,7 @@ func (c *Component) SubscribeEvents(evs []textapi.EventType, h EventHandler) err
 	for _, ev := range evs {
 		switch ev {
 		case textapi.EventTypeOpen:
-			err, exit := c.dispatchOpenUponSubscribe(h)
-			if err != nil {
-				return err
-			}
+			exit := c.dispatchOpenUponSubscribe(h)
 			if exit {
 				c.log(log.DebugLevel, "not subscribe sub=%p: open: exit=true", h)
 				return nil
@@ -1123,22 +1060,6 @@ func (c *Component) WindowManagerSize() (width, height int) {
 	return c.comp.WindowManagerSize()
 }
 
-// SetCursor satisfies text.Editor
-func (c *Component) SetCursor(h Handler, pos term.Coordinates) error {
-	if ed, ok := h.(wrapEditor); ok {
-		h = ed.Handler
-	}
-	return c.ed.SetCursor(h, pos)
-}
-
-// Cursor satisfies text.Editor
-func (c *Component) Cursor(h Handler) (term.Coordinates, error) {
-	if ed, ok := h.(wrapEditor); ok {
-		h = ed.Handler
-	}
-	return c.ed.Cursor(h)
-}
-
 // Floating satisfies browser.WindowManager.
 func (c *Component) Floating(
 	h browser.Floating, cfg component.FloatingConfig,
@@ -1188,14 +1109,6 @@ func (c *Component) IsDirty(uri workspaceapi.URI) (dirty bool, ok bool) {
 // window with the given id could be found in the underlying browser.
 func (c *Component) Window(id uint64) (browser.Window, bool) {
 	return c.comp.Window(id)
-}
-
-// SetDefaultAttributes satisfies text.Editor.
-func (c *Component) SetDefaultAttributes(h Handler, attr term.Attributes) error {
-	if ed, ok := h.(wrapEditor); ok {
-		h = ed.Handler
-	}
-	return c.ed.SetDefaultAttributes(h, attr)
 }
 
 // Tabs returns the tabs open in this browser.Component.

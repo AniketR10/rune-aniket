@@ -191,13 +191,13 @@ func TestReadFile(t *testing.T) {
 			h, err := c.Edit(currentURI, buffer)
 			require.NoError(t, err)
 
-			err = c.SetCursor(h, tcase.cursorPosition)
+			h.SetCursorAtScroll(tcase.cursorPosition)
 			require.NoError(t, err)
 
 			err = c.ReadFile(fileToReadURI, h)
 			require.NoError(t, err)
 
-			cells, err := c.CellView(h).RawCells()
+			cells := h.CellView().RawCells()
 			require.NoError(t, err)
 			assert.Equal(t, tcase.expectedResult, cell.CellsToString(cells))
 		})

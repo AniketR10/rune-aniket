@@ -24,9 +24,6 @@
 package text
 
 import (
-	"context"
-	"fmt"
-
 	"unstable.build/go-tui/api/browserapi"
 	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/api/workspaceapi"
@@ -56,18 +53,37 @@ type Handler interface {
 	// SetCursorAtScroll sets the cursor of this handler at scroll coordinates
 	// determined by pos.
 	SetCursorAtScroll(pos term.Coordinates) bool
-}
 
-// CellEditor is a cell.Editor that can fail.
-type CellEditor interface {
-	Edit(ctx context.Context, start, end term.Coordinates, str string) (
-		from, to term.Coordinates, old string, err error,
-	)
-}
+	// CursorAtScroll gets the position of Handler's cursor in the underlying
+	// content buffer.
+	CursorAtScroll() term.Coordinates
 
-// CellView wraps a subset of cell.View behaviour with an API that can fail.
-type CellView interface {
-	RawCells() ([][]term.Cell, error)
+	// SetLocationList sets the Handler's location list for users to
+	// navigate the code. See LocationList for more details.
+	// In order to remove a location list, SetLocationList must be called
+	// with an empty (or nil) LocationList.
+	// Locations are removed if underlying buffer is updated. It is the
+	// responsibility of the caller to recompute the list of locations
+	// and call SetLocationList with the new list of locations after
+	// every update. Check cell.Buffer.Subscribe for more details.
+	SetLocationList(textapi.LocationPriority, string, LocationList)
+
+	// MoveToNextLocation cursor to the next location on list with ID.
+	MoveToNextLocation(ID string)
+
+	// MoveToPrevLocation cursor to the previous location on list with ID.
+	MoveToPrevLocation(ID string)
+
+	// CellView returns a cell.View which allows to read the editor's internal buffer.
+	CellView() cell.View
+
+	// CellEditor returns a cell.Editor which allows for direct write access
+	// to the editor's internal buffer.
+	CellEditor() cell.Editor
+
+	// SetDefaultAttributes sets the default attributes of the given Handler
+	// before any LocationList overwrites.
+	SetDefaultAttributes(term.Attributes)
 }
 
 // EventPublisher wraps subscribing and unsubscribing to file events.
@@ -96,72 +112,4 @@ type Editor interface {
 
 	// UnsubscribeCommand un-registers command.
 	UnsubscribeCommand(string) error
-
-	// SetLocationList sets the Handler's location list for users to
-	// navigate the code. See LocationList for more details.
-	// In order to remove a location list, SetLocationList must be called
-	// with an empty (or nil) LocationList.
-	// Locations are removed if underlying buffer is updated. It is the
-	// responsibility of the caller to recompute the list of locations
-	// and call SetLocationList with the new list of locations after
-	// every update. Check cell.Buffer.Subscribe for more details.
-	SetLocationList(Handler, textapi.LocationPriority, string, LocationList) error
-
-	// Moves cursor to the next location on list with ID.
-	MoveToNextLocation(h Handler, ID string) error
-
-	// Moves cursor to the previous location on list with ID.
-	MoveToPrevLocation(h Handler, ID string) error
-
-	// Cursor gets the position of Handler's cursor in the underlying
-	// content buffer.
-	Cursor(Handler) (term.Coordinates, error)
-
-	// SetCursor sets the cursor of Handler to the given Coordinates.
-	SetCursor(Handler, term.Coordinates) error
-
-	// CellView returns a CellView which allows to read the editor's internal buffer.
-	CellView(Handler) CellView
-
-	// CellEditor returns a CellEditor which allows for direct write access
-	// to the editor's internal buffer.
-	CellEditor(Handler) CellEditor
-
-	// SetDefaultAttributes sets the default attributes of the given Handler
-	// before any LocationList overwrites.
-	SetDefaultAttributes(Handler, term.Attributes) error
-}
-
-type cellEditor struct {
-	c cell.Editor
-}
-
-type cellView struct {
-	c cell.View
-}
-
-func (w cellEditor) Edit(
-	ctx context.Context, start, end term.Coordinates, str string,
-) (from, to term.Coordinates, old string, err error) {
-	if start.Y < 0 || end.Y < 0 || start.X < 0 || end.X < 0 {
-		err = fmt.Errorf("invalid coordinates: start=%v; end=%v", start, end)
-		return
-	}
-	from, to, old = w.c.Edit(ctx, start, end, str)
-	return
-}
-
-func (r cellView) RawCells() ([][]term.Cell, error) {
-	return r.c.RawCells(), nil
-}
-
-// NewCellEditor wraps a cell.Editor with a CellEditor that detects invalid input calls
-// and returns the corresponding errors.
-func NewCellEditor(c cell.Editor) CellEditor {
-	return cellEditor{c}
-}
-
-// NewCellView wraps a cell.Reder with a Reader that returns no errors.
-func NewCellView(c cell.View) CellView {
-	return cellView{c}
 }

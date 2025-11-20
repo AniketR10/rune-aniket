@@ -102,9 +102,9 @@ func (e *simpleEditor) Edit(file workspaceapi.URI, buf *cell.Buffer) (Handler, e
 	gitBarConfig := e.gitBarConfig
 	gitBarConfig.CommandRegistry = e.fileRegistry
 	if e.auxBar {
-		ret = WithAuxBar(e, ret, buf, root.less.Scroll(), auxBarConfig)
+		ret = WithAuxBar(ret, buf, root.less.Scroll(), auxBarConfig)
 		if e.gitBar {
-			ret = WithGitBar(e, e.auxBarConfig.Service, ret, buf,
+			ret = WithGitBar(e.auxBarConfig.Service, ret, buf,
 				root.less.Scroll(), gitBarConfig)
 		}
 	}
@@ -131,87 +131,4 @@ func (e *simpleEditor) SubscribeEvents(evs []textapi.EventType, sub EventHandler
 func (e *simpleEditor) UnsubscribeEvents(sub EventHandler) (bool, error) {
 	ok := e.pub.UnsubscribeEvents(sub)
 	return ok, nil
-}
-
-func (e simpleEditor) SetLocationList(
-	h Handler, pri textapi.LocationPriority, ID string, loc LocationList,
-) error {
-	e.unwrapHandler(h).cursor.SetLocationList(pri, ID, loc)
-	return nil
-}
-
-func (e *simpleEditor) MoveToNextLocation(h Handler, ID string) error {
-	hh := h
-	if e.auxBar {
-		if e.gitBar {
-			hh = UnwrapGitBar(hh)
-		}
-		hh = UnwrapAuxBar(hh)
-	}
-	dispatch := e.pub.RecordCursorChange(hh)
-	defer dispatch()
-
-	e.unwrapHandler(h).cursor.MoveToNextLocation(ID)
-	return nil
-}
-
-func (e *simpleEditor) MoveToPrevLocation(h Handler, ID string) error {
-	hh := h
-	if e.auxBar {
-		if e.gitBar {
-			hh = UnwrapGitBar(h)
-		}
-		hh = UnwrapAuxBar(hh)
-	}
-	dispatch := e.pub.RecordCursorChange(hh)
-	defer dispatch()
-
-	e.unwrapHandler(h).cursor.MoveToPrevLocation(ID)
-	return nil
-}
-
-func (e *simpleEditor) CellView(h Handler) CellView {
-	return NewCellView(e.unwrapHandler(h).buf.View())
-}
-
-func (e *simpleEditor) CellEditor(h Handler) CellEditor {
-	return NewCellEditor(e.unwrapHandler(h).buf.Editor())
-}
-
-func (e *simpleEditor) SetDefaultAttributes(h Handler, attr term.Attributes) error {
-	e.unwrapHandler(h).less.Scroll().Attributes = attr
-	return nil
-}
-
-func (e *simpleEditor) SetCursor(h Handler, pos term.Coordinates) error {
-	hh := h
-	if e.auxBar {
-		if e.gitBar {
-			hh = UnwrapGitBar(hh)
-		}
-		hh = UnwrapAuxBar(hh)
-	}
-	dispatch := e.pub.RecordCursorChange(hh)
-	defer dispatch()
-
-	ok := e.unwrapHandler(h).SetCursorAtScroll(pos)
-	if !ok {
-		return errors.New("invalid cursor position")
-	}
-	return nil
-}
-
-func (e *simpleEditor) Cursor(h Handler) (term.Coordinates, error) {
-	pos := e.unwrapHandler(h).cursor.CursorAtScroll()
-	return pos, nil
-}
-
-func (e *simpleEditor) unwrapHandler(h Handler) *simpleEditorHandler {
-	if !e.auxBar {
-		return e.pub.UnwrapHandler(h).(*simpleEditorHandler)
-	}
-	if !e.gitBar {
-		return e.pub.UnwrapHandler(UnwrapAuxBar(h)).(*simpleEditorHandler)
-	}
-	return e.pub.UnwrapHandler(UnwrapAuxBar(UnwrapGitBar(h))).(*simpleEditorHandler)
 }

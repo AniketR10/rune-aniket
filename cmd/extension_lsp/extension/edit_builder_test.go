@@ -31,7 +31,6 @@ import (
 	"github.com/unstablebuild/golang-internal-tools/span"
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/cell"
-	"unstable.build/go-tui/text"
 )
 
 const (
@@ -126,7 +125,7 @@ func TestApplyEdits(t *testing.T) {
 		out.WriteString(tcase.input)
 
 		var b editBuilder
-		b.init(4, makeFile(), text.NewCellEditor(out.Editor()), cell.StringToCells(tcase.input, 4))
+		b.init(4, makeFile(), wrapEditor{out.Editor()}, cell.StringToCells(tcase.input, 4))
 		edits := make([]protocol.TextEdit, len(tcase.ed))
 		copy(edits, tcase.ed)
 		b.applyEdits(edits)

@@ -29,7 +29,6 @@ import (
 	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/cell"
-	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
 )
 
@@ -61,9 +60,9 @@ func (e *viEditor) Edit(file workspaceapi.URI, buf *cell.Buffer) (text.Handler, 
 	gitBarConfig := e.config.gitBarConfig
 	gitBarConfig.CommandRegistry = e.registry
 	if e.config.enableAuxBar {
-		ret = text.WithAuxBar(e, ret, buf, root.less.Scroll(), auxBarConfig)
+		ret = text.WithAuxBar(ret, buf, root.less.Scroll(), auxBarConfig)
 		if e.config.enableGitBar {
-			ret = text.WithGitBar(e, e.config.auxBarConfig.Service, ret, buf,
+			ret = text.WithGitBar(e.config.auxBarConfig.Service, ret, buf,
 				root.less.Scroll(), gitBarConfig)
 		}
 	}
@@ -97,92 +96,4 @@ func (e *viEditor) SubscribeEvents(
 func (e *viEditor) UnsubscribeEvents(sub text.EventHandler) (bool, error) {
 	ok := e.Publisher.UnsubscribeEvents(sub)
 	return ok, nil
-}
-
-func (e *viEditor) SetDefaultAttributes(h text.Handler, attrs term.Attributes) error {
-	return e.unwrapHandler(h).SetDefaultAttributes(attrs)
-}
-
-func (e viEditor) SetLocationList(
-	h text.Handler, pri textapi.LocationPriority, ID string, loc text.LocationList,
-) error {
-	e.unwrapHandler(h).SetLocationList(pri, ID, loc)
-	return nil
-}
-
-func (e *viEditor) MoveToNextLocation(h text.Handler, ID string) error {
-	hh := h
-	if e.config.enableAuxBar {
-		if e.config.enableGitBar {
-			hh = text.UnwrapGitBar(hh)
-		}
-		hh = text.UnwrapAuxBar(hh)
-	}
-	dispatch := e.Publisher.RecordCursorChange(hh)
-	defer dispatch()
-
-	e.unwrapHandler(h).MoveToNextLocation(ID)
-	return nil
-}
-
-func (e *viEditor) MoveToPrevLocation(h text.Handler, ID string) error {
-	hh := h
-	if e.config.enableAuxBar {
-		if e.config.enableGitBar {
-			hh = text.UnwrapGitBar(hh)
-		}
-		hh = text.UnwrapAuxBar(hh)
-	}
-	dispatch := e.Publisher.RecordCursorChange(hh)
-	defer dispatch()
-
-	e.unwrapHandler(h).MoveToPrevLocation(ID)
-	return nil
-}
-
-func (e *viEditor) CellView(h text.Handler) text.CellView {
-	return text.NewCellView(e.unwrapHandler(h).CellView())
-}
-
-func (e *viEditor) CellEditor(h text.Handler) text.CellEditor {
-	return text.NewCellEditor(e.unwrapHandler(h).CellEditor())
-}
-
-func (e *viEditor) SetCursor(h text.Handler, pos term.Coordinates) error {
-	hh := h
-	if e.config.enableAuxBar {
-		if e.config.enableGitBar {
-			hh = text.UnwrapGitBar(hh)
-		}
-		hh = text.UnwrapAuxBar(hh)
-	}
-	dispatch := e.Publisher.RecordCursorChange(hh)
-	defer dispatch()
-
-	vi := e.unwrapHandler(h)
-	ok := vi.SetCursorAtScroll(pos)
-	if !ok {
-		if vi.CursorAtScroll() == pos {
-			// already set at position
-			return nil
-		}
-		return errors.New("invalid cursor position")
-	}
-	return nil
-}
-
-func (e *viEditor) Cursor(h text.Handler) (term.Coordinates, error) {
-	pos := e.unwrapHandler(h).CursorAtScroll()
-	return pos, nil
-}
-
-func (e *viEditor) unwrapHandler(h text.Handler) *Vi {
-	if !e.config.enableAuxBar {
-		return e.Publisher.UnwrapHandler(h).(*Vi)
-	}
-	if !e.config.enableGitBar {
-		return e.Publisher.UnwrapHandler(text.UnwrapAuxBar(h)).(*Vi)
-	}
-	return e.Publisher.UnwrapHandler(
-		text.UnwrapAuxBar(text.UnwrapGitBar(h))).(*Vi)
 }

@@ -24,6 +24,7 @@
 package extension
 
 import (
+	"context"
 	"embed"
 	"encoding/json"
 	"fmt"
@@ -36,7 +37,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/golang-internal-tools/lsp/protocol"
 	"unstable.build/go-tui/cell"
-	"unstable.build/go-tui/text"
+	"unstable.build/go-tui/term"
 )
 
 //go:embed test/*.in
@@ -76,9 +77,21 @@ func TestLSPFormatting(t *testing.T) {
 			require.NoError(t, err)
 
 			var b editBuilder
-			b.init(4, makeFile(), text.NewCellEditor(buffer.Editor()), cell.StringToCells(buffer.String(), 4))
+			b.init(4, makeFile(), wrapEditor{buffer.Editor()},
+				cell.StringToCells(buffer.String(), 4))
 			b.applyEdits(edits)
 			assert.Equal(t, string(want), b.buf.String())
 		})
 	}
+}
+
+type wrapEditor struct {
+	ed cell.Editor
+}
+
+func (w wrapEditor) Edit(ctx context.Context, start, end term.Coordinates, new string) (
+	from, to term.Coordinates, old string, err error,
+) {
+	from, to, old = w.ed.Edit(ctx, start, end, new)
+	return
 }

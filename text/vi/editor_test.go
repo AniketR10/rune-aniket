@@ -160,21 +160,21 @@ func TestEditorDispatchCursor(t *testing.T) {
 				return false
 			}))
 
-		require.NoError(t, ed.SetCursor(h, term.Coordinates{Y: 1}))
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{Y: 1}))
 		assert.Equal(t, term.Coordinates{Y: 0}, windowCursor)
 		assert.Equal(t, term.Coordinates{Y: 1}, scrollCursor)
 
 		windowCursor = term.Coordinates{X: -1}
 		scrollCursor = term.Coordinates{X: -1}
-		ed.SetLocationList(h, textapi.LocationPriorityInfo, "id",
+		h.SetLocationList(textapi.LocationPriorityInfo, "id",
 			textapi.LocationSlice([]textapi.Location{{}, {From: term.Coordinates{Y: 1}}}))
-		require.NoError(t, ed.MoveToNextLocation(h, "id"))
+		h.MoveToNextLocation("id")
 		assert.Equal(t, term.Coordinates{Y: 0}, windowCursor)
 		assert.Equal(t, term.Coordinates{Y: 0}, scrollCursor)
 
 		windowCursor = term.Coordinates{X: -1}
 		scrollCursor = term.Coordinates{X: -1}
-		require.NoError(t, ed.MoveToPrevLocation(h, "id"))
+		h.MoveToPrevLocation("id")
 		assert.Equal(t, term.Coordinates{Y: 0}, windowCursor)
 		assert.Equal(t, term.Coordinates{Y: 1}, scrollCursor)
 	})
@@ -194,8 +194,7 @@ func TestEditorSetCursor(t *testing.T) {
 					h.Resize(1, 1) // just not 0, 0
 				}
 
-				err = ed.SetCursor(h, term.Coordinates{})
-				require.NoError(t, err)
+				h.SetCursorAtScroll(term.Coordinates{})
 			})
 
 		t.Run(fmt.Sprintf("wrap: %v, sets cursor at position", wrap),
@@ -209,9 +208,8 @@ func TestEditorSetCursor(t *testing.T) {
 					h.Resize(1, 1) // just not 0, 0
 				}
 
-				err = ed.SetCursor(h, term.Coordinates{X: 1})
-				require.NoError(t, err)
-				pos, err := ed.Cursor(h)
+				h.SetCursorAtScroll(term.Coordinates{X: 1})
+				pos := h.CursorAtScroll()
 				require.NoError(t, err)
 				if wrap {
 					// in wrap mode position is ambiguous
@@ -230,34 +228,33 @@ func TestEditorSetCursor(t *testing.T) {
 				require.NoError(t, err)
 				cursor := h.(interface{ CursorReference() *text.Cursor }).CursorReference()
 
-				err = ed.SetCursor(h, term.Coordinates{Y: 3})
-				require.NoError(t, err)
+				h.SetCursorAtScroll(term.Coordinates{Y: 3})
 
-				pos, err := ed.Cursor(h)
+				pos := h.CursorAtScroll()
 				require.NoError(t, err)
 				assert.Equal(t, term.Coordinates{Y: 3}, pos)
 				assert.Equal(t, term.Coordinates{}, cursor.Coordinates())
 				assert.Equal(t, term.Coordinates{Y: 3}, cursor.CursorAtScroll())
 
 				h.Resize(1, 1)
-				pos, err = ed.Cursor(h)
+				pos = h.CursorAtScroll()
 				require.NoError(t, err)
 				assert.Equal(t, term.Coordinates{Y: 3}, pos)
 				assert.Equal(t, term.Coordinates{}, cursor.Coordinates())
 				assert.Equal(t, term.Coordinates{Y: 3}, cursor.CursorAtScroll())
 
-				err = ed.SetCursor(h, term.Coordinates{Y: 4})
+				h.SetCursorAtScroll(term.Coordinates{Y: 4})
 				require.NoError(t, err)
 
 				h.Resize(10, 10)
-				pos, err = ed.Cursor(h)
+				pos = h.CursorAtScroll()
 				require.NoError(t, err)
 				assert.Equal(t, term.Coordinates{Y: 4}, pos)
 				assert.Equal(t, term.Coordinates{}, cursor.Coordinates())
 				assert.Equal(t, term.Coordinates{Y: 4}, cursor.CursorAtScroll())
 
 				h.Resize(2, 2)
-				pos, err = ed.Cursor(h)
+				pos = h.CursorAtScroll()
 				require.NoError(t, err)
 				assert.Equal(t, term.Coordinates{Y: 4}, pos)
 				assert.Equal(t, term.Coordinates{}, cursor.Coordinates())
