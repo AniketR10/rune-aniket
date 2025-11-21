@@ -140,6 +140,12 @@ func (c *cmdGitService) RemoteURL(
 	return out, err
 }
 
+func (c *cmdGitService) ListRemotes(
+	ctx context.Context, path workspaceapi.URI,
+) ([]string, error) {
+	return nil, errors.New("unimplemented")
+}
+
 func (c *cmdGitService) RelPath(ctx context.Context, file string) (
 	relFile string, err error,
 ) {

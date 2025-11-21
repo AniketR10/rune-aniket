@@ -86,8 +86,14 @@ func (c *copyRemoteURL) HandleCommand(ctx context.Context, cmd textapi.Command) 
 func (c *copyRemoteURL) Complete(ctx context.Context, cmd textapi.Command) (
 	iterator.Iterator[string], string, error,
 ) {
-	// TODO list repos here
-	return iterator.Empty[string](), "", nil
+	if cmd.URI == (workspaceapi.URI{}) {
+		return iterator.Empty[string](), "", nil
+	}
+	remotes, err := c.git.ListRemotes(ctx, cmd.URI)
+	if err != nil {
+		return nil, "", err
+	}
+	return iterator.FromSlice(remotes), "", nil
 }
 
 type remoteURLParts struct {

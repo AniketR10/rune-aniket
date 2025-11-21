@@ -680,6 +680,10 @@ const fileContent = "package main\n" +
 type differ struct {
 }
 
+func (d differ) ListRemotes(_ context.Context, file workspaceapi.URI) ([]string, error) {
+	return nil, nil
+}
+
 func (d differ) Diff(ctx context.Context, file workspaceapi.URI) (vctrl.FileDiff, error) {
 	return vctrl.FileDiff{Hunks: []vctrl.Hunk{{NewLines: 2, NewStartLine: 5}, {OrigStartLine: 10, OrigLines: 2}}}, nil
 }

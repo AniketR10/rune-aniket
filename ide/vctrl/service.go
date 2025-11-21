@@ -43,6 +43,9 @@ type Service interface {
 	// RemoteURL returns the remote URL given a remote name.
 	RemoteURL(ctx context.Context, file workspaceapi.URI, remoteName string) (string, error)
 
+	// ListRemotes returns a list of remote servers.
+	ListRemotes(ctx context.Context, file workspaceapi.URI) ([]string, error)
+
 	// RelPath extracts the path relative to the git repository.
 	RelPath(ctx context.Context, file string) (string, error)
 }
@@ -109,6 +112,12 @@ func NopService() Service {
 }
 
 type nopService struct {
+}
+
+func (c nopService) ListRemotes(
+	ctx context.Context, path workspaceapi.URI,
+) ([]string, error) {
+	return []string{}, nil
 }
 
 func (n nopService) Diff(ctx context.Context, file workspaceapi.URI) (FileDiff, error) {

@@ -98,6 +98,25 @@ type svc struct {
 	repo      *git.Repository
 }
 
+func (s svc) ListRemotes(ctx context.Context, path workspaceapi.URI) ([]string, error) {
+	// never use assumed repo here, as it might or might
+	// not contain the given file, and we wouldn't know that
+	repo, err := s.getRepo(path)
+	if err != nil {
+		return nil, err
+	}
+	remotes, err := repo.Remotes()
+	if err != nil {
+		return nil, fmt.Errorf("repository remotes: %w", err)
+	}
+
+	var ret []string
+	for _, remote := range remotes {
+		ret = append(ret, remote.Config().Name)
+	}
+	return ret, nil
+}
+
 func (s svc) Diff(ctx context.Context, file workspaceapi.URI) (
 	diff vctrl.FileDiff, err error,
 ) {
