@@ -71,7 +71,9 @@ func NewSimpleEditor(
 	ret.attr = attr
 	ret.clipboard = clipboard
 	ret.pub.Init()
-	ret.fileRegistry = NewFileCommandRegistry(cwd, ret.registry)
+	if ret.registry != nil {
+		ret.fileRegistry = NewFileCommandRegistry(cwd, ret.registry)
+	}
 	return ret
 }
 
@@ -95,17 +97,25 @@ type simpleEditor struct {
 func (e *simpleEditor) Edit(file workspaceapi.URI, buf *cell.Buffer) (Handler, error) {
 	rootIfc := NewSimpleHandler(e.clipboard, buf, file, e.wrap,
 		e.commandBar, e.attr, e.resAttr, e.barAttr, e.scheduleNextTick)
-	root := rootIfc.(*simpleEditorHandler)
-	ret := e.pub.PublishEdit(file, buf, root, &root.cursor)
+	if e.fileRegistry != nil {
+		var err error
+		rootIfc, err = SubscribeLocationCommands(file, e.fileRegistry, rootIfc)
+		if err != nil {
+			return nil, err
+		}
+	}
+	cursor := &rootIfc.(*simpleEditorHandler).cursor
+	scroll := rootIfc.(*simpleEditorHandler).less.Scroll()
+	ret := e.pub.PublishEdit(file, buf, rootIfc, cursor)
 	auxBarConfig := e.auxBarConfig
 	auxBarConfig.CommandRegistry = e.fileRegistry
 	gitBarConfig := e.gitBarConfig
 	gitBarConfig.CommandRegistry = e.fileRegistry
 	if e.auxBar {
-		ret = WithAuxBar(ret, buf, root.less.Scroll(), auxBarConfig)
+		ret = WithAuxBar(ret, buf, scroll, auxBarConfig)
 		if e.gitBar {
 			ret = WithGitBar(e.auxBarConfig.Service, ret, buf,
-				root.less.Scroll(), gitBarConfig)
+				scroll, gitBarConfig)
 		}
 	}
 	return ret, nil

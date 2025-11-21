@@ -114,7 +114,7 @@ func WithGitBar(
 
 const (
 	// shared amongst bars
-	gitLocationsID       = "_gitLocID"
+	gitLocationsID       = "gitchange"
 	addIcon              = "+"
 	delIcon              = "-"
 	commandToggleOverlay = "gittoggleoverlay"

@@ -73,8 +73,8 @@ type viHandler interface {
 	tui.Handler
 
 	mode() viMode
-	moveToNextLocation(ID string)
-	moveToPrevLocation(ID string)
+	moveToNextLocation(ID string) bool
+	moveToPrevLocation(ID string) bool
 	setLocationList(pri textapi.LocationPriority, ID string, l text.LocationList)
 	setCursorAtScroll(pos term.Coordinates) bool
 	setNormalMode() bool
@@ -1135,16 +1135,18 @@ func (c *viHandlerImpl) OnVisible(start int) {
 
 // moveToNextLocation moves the cursor to the next location
 // in the location list identified by ID.
-func (vi *viHandlerImpl) moveToNextLocation(ID string) {
-	vi.cursor.MoveToNextLocation(ID)
+func (vi *viHandlerImpl) moveToNextLocation(ID string) bool {
+	ok := vi.cursor.MoveToNextLocation(ID)
 	vi.free = vi.cursor.Mark()
+	return ok
 }
 
 // moveToPrevLocation moves the cursor to the previous location
 // in the location list identified by ID.
-func (vi *viHandlerImpl) moveToPrevLocation(ID string) {
-	vi.cursor.MoveToPrevLocation(ID)
+func (vi *viHandlerImpl) moveToPrevLocation(ID string) bool {
+	ok := vi.cursor.MoveToPrevLocation(ID)
 	vi.free = vi.cursor.Mark()
+	return ok
 }
 
 // setLocationList sets a location list of this handler. See Cursor.SetLocationList

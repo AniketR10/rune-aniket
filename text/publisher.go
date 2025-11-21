@@ -233,18 +233,18 @@ func (p *cursorPublisher) SetCursorAtScroll(pos term.Coordinates) bool {
 	return p.Handler.SetCursorAtScroll(pos)
 }
 
-func (p *cursorPublisher) MoveToNextLocation(ID string) {
+func (p *cursorPublisher) MoveToNextLocation(ID string) bool {
 	dispatch := p.parent.RecordCursorChange(p)
 	defer dispatch()
 
-	p.Handler.MoveToNextLocation(ID)
+	return p.Handler.MoveToNextLocation(ID)
 }
 
-func (p *cursorPublisher) MoveToPrevLocation(ID string) {
+func (p *cursorPublisher) MoveToPrevLocation(ID string) bool {
 	dispatch := p.parent.RecordCursorChange(p)
 	defer dispatch()
 
-	p.Handler.MoveToPrevLocation(ID)
+	return p.Handler.MoveToPrevLocation(ID)
 }
 
 func (p *Publisher) log(level log.Level, msg string, args ...any) {

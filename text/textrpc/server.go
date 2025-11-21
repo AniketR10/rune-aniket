@@ -421,9 +421,13 @@ func (s *Server) moveToLocation(
 	}
 
 	if next {
-		h.MoveToNextLocation(id)
+		ok = h.MoveToNextLocation(id)
 	} else {
-		h.MoveToPrevLocation(id)
+		ok = h.MoveToPrevLocation(id)
+	}
+	if !ok {
+		err = errors.New("could not move to location")
+		return
 	}
 
 	res = new(MoveToLocationResponse)

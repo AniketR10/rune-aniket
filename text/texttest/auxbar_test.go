@@ -614,10 +614,12 @@ func (h *testHandler) LocationLists() []text.LocationSet {
 	return nil
 }
 
-func (h *testHandler) MoveToNextLocation(ID string) {
+func (h *testHandler) MoveToNextLocation(ID string) bool {
+	return false
 }
 
-func (h *testHandler) MoveToPrevLocation(ID string) {
+func (h *testHandler) MoveToPrevLocation(ID string) bool {
+	return false
 }
 
 func (h *testHandler) CellView() cell.View {

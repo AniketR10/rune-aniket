@@ -269,9 +269,11 @@ func (h *mockHandler) Handle(ev term.Event) (bool, bool) {
 func (h *mockHandler) mode() viMode {
 	return h.h.mode()
 }
-func (h *mockHandler) moveToNextLocation(ID string) {
+func (h *mockHandler) moveToNextLocation(ID string) bool {
+	return false
 }
-func (h *mockHandler) moveToPrevLocation(ID string) {
+func (h *mockHandler) moveToPrevLocation(ID string) bool {
+	return false
 }
 func (h *mockHandler) markMatchingBrace() {
 }

@@ -46,7 +46,9 @@ func Editor(opts ...Option) text.Editor {
 		o(&ret.config)
 	}
 	ret.Publisher.Init()
-	ret.registry = text.NewFileCommandRegistry(ret.config.workspace, ret.config.registry)
+	if ret.config.registry != nil {
+		ret.registry = text.NewFileCommandRegistry(ret.config.workspace, ret.config.registry)
+	}
 	return ret
 }
 
@@ -54,7 +56,15 @@ func (e *viEditor) Edit(file workspaceapi.URI, buf *cell.Buffer) (text.Handler, 
 	root := New(buf, file, e.opts...)
 	// publisher does not mutate cursor and it should never do so
 	cursor := root.cursor
-	ret := e.Publisher.PublishEdit(file, buf, root, cursor)
+	var ret text.Handler = root
+	if e.registry != nil {
+		var err error
+		ret, err = text.SubscribeLocationCommands(file, e.registry, ret)
+		if err != nil {
+			return nil, err
+		}
+	}
+	ret = e.Publisher.PublishEdit(file, buf, ret, cursor)
 	auxBarConfig := e.config.auxBarConfig
 	auxBarConfig.CommandRegistry = e.registry
 	gitBarConfig := e.config.gitBarConfig

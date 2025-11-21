@@ -46,8 +46,7 @@ type Handler interface {
 	// available width into the next line or simply truncate them in the view.
 	SetWrap(wrap bool)
 
-	// ShowCommandBar defines wheter editor handler should display command
-	// bar or not.
+	// ShowCommandBar hides or shows the editor's command bar.
 	ShowCommandBar(show bool)
 
 	// SetCursorAtScroll sets the cursor of this handler at scroll coordinates
@@ -73,10 +72,10 @@ type Handler interface {
 	LocationLists() []LocationSet
 
 	// MoveToNextLocation cursor to the next location on list with ID.
-	MoveToNextLocation(ID string)
+	MoveToNextLocation(ID string) bool
 
 	// MoveToPrevLocation cursor to the previous location on list with ID.
-	MoveToPrevLocation(ID string)
+	MoveToPrevLocation(ID string) bool
 
 	// CellView returns a cell.View which allows to read the editor's internal buffer.
 	CellView() cell.View

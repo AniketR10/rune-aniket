@@ -279,14 +279,14 @@ func (vi *Vi) Resize(width, height int) {
 
 // MoveToNextLocation moves the cursor to the next location
 // in the location list identified by ID.
-func (vi *Vi) MoveToNextLocation(ID string) {
-	vi.handler.moveToNextLocation(ID)
+func (vi *Vi) MoveToNextLocation(ID string) bool {
+	return vi.handler.moveToNextLocation(ID)
 }
 
 // MoveToPrevLocation moves the cursor to the previous location
 // in the location list identified by ID.
-func (vi *Vi) MoveToPrevLocation(ID string) {
-	vi.handler.moveToPrevLocation(ID)
+func (vi *Vi) MoveToPrevLocation(ID string) bool {
+	return vi.handler.moveToPrevLocation(ID)
 }
 
 // SetLocationList sets a location list of this handler. See Cursor.SetLocationList

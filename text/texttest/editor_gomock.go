@@ -186,9 +186,11 @@ func (mr *MockHandlerMockRecorder) MaxSeekOffset() *gomock.Call {
 }
 
 // MoveToNextLocation mocks base method.
-func (m *MockHandler) MoveToNextLocation(ID string) {
+func (m *MockHandler) MoveToNextLocation(ID string) bool {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "MoveToNextLocation", ID)
+	ret := m.ctrl.Call(m, "MoveToNextLocation", ID)
+	ret0, _ := ret[0].(bool)
+	return ret0
 }
 
 // MoveToNextLocation indicates an expected call of MoveToNextLocation.
@@ -198,9 +200,11 @@ func (mr *MockHandlerMockRecorder) MoveToNextLocation(ID any) *gomock.Call {
 }
 
 // MoveToPrevLocation mocks base method.
-func (m *MockHandler) MoveToPrevLocation(ID string) {
+func (m *MockHandler) MoveToPrevLocation(ID string) bool {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "MoveToPrevLocation", ID)
+	ret := m.ctrl.Call(m, "MoveToPrevLocation", ID)
+	ret0, _ := ret[0].(bool)
+	return ret0
 }
 
 // MoveToPrevLocation indicates an expected call of MoveToPrevLocation.

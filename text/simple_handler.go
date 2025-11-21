@@ -306,12 +306,12 @@ func (h simpleEditorHandler) SetLocationList(
 	h.cursor.SetLocationList(pri, ID, loc)
 }
 
-func (h *simpleEditorHandler) MoveToNextLocation(ID string) {
-	h.cursor.MoveToNextLocation(ID)
+func (h *simpleEditorHandler) MoveToNextLocation(ID string) bool {
+	return h.cursor.MoveToNextLocation(ID)
 }
 
-func (h *simpleEditorHandler) MoveToPrevLocation(ID string) {
-	h.cursor.MoveToPrevLocation(ID)
+func (h *simpleEditorHandler) MoveToPrevLocation(ID string) bool {
+	return h.cursor.MoveToPrevLocation(ID)
 }
 
 func (h *simpleEditorHandler) CellView() cell.View {

@@ -103,11 +103,13 @@ func (t *TestHandler) SetLocationList(
 }
 
 // MoveToNextLocation satisfies text.Handler.
-func (t *TestHandler) MoveToNextLocation(ID string) {
+func (t *TestHandler) MoveToNextLocation(ID string) bool {
+	return false
 }
 
 // MoveToPrevLocation satisfies text.Handler.
-func (t *TestHandler) MoveToPrevLocation(ID string) {
+func (t *TestHandler) MoveToPrevLocation(ID string) bool {
+	return false
 }
 
 // CellView satisfies text.Handler.

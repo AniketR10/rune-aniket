@@ -167,10 +167,12 @@ func (e *TestEditorHandler) Resize(width, height int) {
 	e.TestHandler.Resize(width, height)
 }
 
-func (e *TestEditorHandler) MoveToNextLocation(ID string) {
+func (e *TestEditorHandler) MoveToNextLocation(ID string) bool {
+	return false
 }
 
-func (e *TestEditorHandler) MoveToPrevLocation(ID string) {
+func (e *TestEditorHandler) MoveToPrevLocation(ID string) bool {
+	return false
 }
 
 func (t *TestEditorHandler) SetCursorAtScroll(pos term.Coordinates) bool {
