@@ -1527,7 +1527,7 @@ func TestIntegrationEphemeralTerminal(t *testing.T) {
 
 	workspace := workspace.NewSchemeWorkspace(uri, fileScheme)
 	b := newExForTestingTerminal(t, workspace,
-		modeless.DefaultEditor(clipboard.NewInMemory()),
+		modeless.Editor(),
 		vte.DefaultConfig(), nopPublishEvent, opts...)
 	defer b.Close()
 

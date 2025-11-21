@@ -38,9 +38,9 @@ import (
 	"unstable.build/go-tui/text"
 )
 
-var _ component.Scrollable = (*simpleEditorHandler)(nil)
+var _ component.Scrollable = (*editorHandler)(nil)
 
-type simpleEditorHandler struct {
+type editorHandler struct {
 	buf              *cell.Buffer
 	less             handler.Less
 	resource         workspaceapi.URI
@@ -59,13 +59,13 @@ func NewHandler(
 	attr, resAttr, barAttr term.Attributes,
 	scheduleNextTick func(func()) bool,
 ) text.Handler {
-	ret := new(simpleEditorHandler)
+	ret := new(editorHandler)
 	ret.Init(clipboard, buf, resource, wrap, commandBar,
 		attr, resAttr, barAttr, scheduleNextTick)
 	return ret
 }
 
-func (h *simpleEditorHandler) Init(
+func (h *editorHandler) Init(
 	clipboard clipboard.Register,
 	buf *cell.Buffer, resource workspaceapi.URI,
 	wrap, commandBar bool,
@@ -87,7 +87,7 @@ func (h *simpleEditorHandler) Init(
 }
 
 // Resize satisfies tui.Component
-func (h *simpleEditorHandler) Resize(width, height int) {
+func (h *editorHandler) Resize(width, height int) {
 	h.height = height
 	h.less.Resize(width, height)
 	if h.pendingSetCursor != nil {
@@ -96,7 +96,7 @@ func (h *simpleEditorHandler) Resize(width, height int) {
 }
 
 // Draw satisfies tui.Component
-func (h *simpleEditorHandler) Draw(w term.Writer) {
+func (h *editorHandler) Draw(w term.Writer) {
 	locs, _ := h.cursor.LocationsAtCursor()
 	for _, loc := range locs {
 		h.less.SetMessage("%s", loc.Message)
@@ -106,7 +106,7 @@ func (h *simpleEditorHandler) Draw(w term.Writer) {
 	text.DrawLocations(h.cursor.SortedLocations(), h.less.Scroll(), w)
 }
 
-func (h *simpleEditorHandler) Handle(ev term.Event) (exit, handled bool) {
+func (h *editorHandler) Handle(ev term.Event) (exit, handled bool) {
 	ctx := context.Background()
 
 	// only a user event clears a pending set cursor
@@ -237,42 +237,42 @@ func (h *simpleEditorHandler) Handle(ev term.Event) (exit, handled bool) {
 }
 
 // Cursor satisfies tui.Handler
-func (h *simpleEditorHandler) Cursor() (
+func (h *editorHandler) Cursor() (
 	pos term.Coordinates, style term.CursorStyle, show bool,
 ) {
 	return h.cursor.Coordinates(), term.CursorStyleSteadyBar, true
 }
 
 // Selection satisfies tui.Handler.
-func (h *simpleEditorHandler) Selection() (string, bool) {
+func (h *editorHandler) Selection() (string, bool) {
 	text := h.cursor.Selection()
 	return text, text != ""
 }
 
 // Man satisfies tui.Handler
-func (h *simpleEditorHandler) Man() tui.Manual {
+func (h *editorHandler) Man() tui.Manual {
 	return tui.Manual{}
 }
 
 // Close satisfies editor.Handler.
-func (h *simpleEditorHandler) Close() error {
+func (h *editorHandler) Close() error {
 	return nil
 }
 
 // Resource satisfies editor.Handler.
-func (h *simpleEditorHandler) Resource() workspaceapi.URI {
+func (h *editorHandler) Resource() workspaceapi.URI {
 	return h.resource
 }
 
 // SetWrap satisfies editor.Handler.
-func (h *simpleEditorHandler) SetWrap(wrap bool) {
+func (h *editorHandler) SetWrap(wrap bool) {
 	h.less.Scroll().Wrap = wrap
 }
-func (t *simpleEditorHandler) ShowCommandBar(show bool) {
+func (t *editorHandler) ShowCommandBar(show bool) {
 	t.less.ShowCommandBar(show)
 }
 
-func (h *simpleEditorHandler) SetCursorAtScroll(pos term.Coordinates) bool {
+func (h *editorHandler) SetCursorAtScroll(pos term.Coordinates) bool {
 	// setCursor should be robust against resizes, etc.
 	// only the first client interaction should clear this position
 	h.pendingSetCursor = new(term.Coordinates)
@@ -285,52 +285,52 @@ func (h *simpleEditorHandler) SetCursorAtScroll(pos term.Coordinates) bool {
 	return ok
 }
 
-func (h *simpleEditorHandler) SeekUp() bool {
+func (h *editorHandler) SeekUp() bool {
 	return h.less.Scroll().SeekUp()
 }
 
-func (h *simpleEditorHandler) SeekDown() bool {
+func (h *editorHandler) SeekDown() bool {
 	return h.less.Scroll().SeekDown()
 }
 
-func (h *simpleEditorHandler) SeekOffset() int {
+func (h *editorHandler) SeekOffset() int {
 	return h.less.Scroll().SeekOffset()
 }
 
-func (h *simpleEditorHandler) MaxSeekOffset() int {
+func (h *editorHandler) MaxSeekOffset() int {
 	return h.less.Scroll().MaxSeekOffset()
 }
 
-func (h simpleEditorHandler) SetLocationList(
+func (h editorHandler) SetLocationList(
 	pri textapi.LocationPriority, ID string, loc text.LocationList,
 ) {
 	h.cursor.SetLocationList(pri, ID, loc)
 }
 
-func (h *simpleEditorHandler) MoveToNextLocation(ID string) bool {
+func (h *editorHandler) MoveToNextLocation(ID string) bool {
 	return h.cursor.MoveToNextLocation(ID)
 }
 
-func (h *simpleEditorHandler) MoveToPrevLocation(ID string) bool {
+func (h *editorHandler) MoveToPrevLocation(ID string) bool {
 	return h.cursor.MoveToPrevLocation(ID)
 }
 
-func (h *simpleEditorHandler) CellView() cell.View {
+func (h *editorHandler) CellView() cell.View {
 	return h.buf.View()
 }
 
-func (h *simpleEditorHandler) CellEditor() cell.Editor {
+func (h *editorHandler) CellEditor() cell.Editor {
 	return h.buf.Editor()
 }
 
-func (e *simpleEditorHandler) SetDefaultAttributes(attr term.Attributes) {
+func (e *editorHandler) SetDefaultAttributes(attr term.Attributes) {
 	e.less.Scroll().Attributes = attr
 }
 
-func (h *simpleEditorHandler) CursorAtScroll() term.Coordinates {
+func (h *editorHandler) CursorAtScroll() term.Coordinates {
 	return h.cursor.CursorAtScroll()
 }
 
-func (h *simpleEditorHandler) LocationLists() []text.LocationSet {
+func (h *editorHandler) LocationLists() []text.LocationSet {
 	return h.cursor.LocationLists()
 }

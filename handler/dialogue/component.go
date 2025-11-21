@@ -30,7 +30,6 @@ import (
 
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/cell"
-	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/handler/input"
 	"unstable.build/go-tui/term"
@@ -100,7 +99,7 @@ func (c *Component) Init(cfg ComponentConfig) {
 		panic(fmt.Sprintf("InputRowColumns must be > 0 and <= %d", component.MaxCols))
 	}
 	if cfg.InputEditor == nil {
-		cfg.InputEditor = modeless.DefaultEditor(clipboard.NewInMemory())
+		cfg.InputEditor = modeless.Editor()
 	}
 	c.cfg = cfg
 

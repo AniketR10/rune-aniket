@@ -31,7 +31,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/cell"
-	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
 )
@@ -57,10 +56,7 @@ func TestNoHandlesNonCtrlModifiers(t *testing.T) {
 }
 
 func newTestSimpleEditor(t *testing.T, width, height int) text.Handler {
-	defAttr := term.Attributes{}
-	editor := NewEditor(workspaceapi.URI{},
-		clipboard.NewInMemory(), false, false, false, false,
-		defAttr, defAttr, defAttr, text.AuxBarConfig{}, text.GitBarConfig{}, nil, nil)
+	editor := Editor(WithCommandBar(false))
 	h, err := editor.Edit(workspaceapi.URI{}, cell.NewBuffer())
 	require.NoError(t, err)
 	h.Resize(width, height)

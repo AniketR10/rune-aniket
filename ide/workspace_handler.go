@@ -168,11 +168,18 @@ func (h *workspaceManagerHandler) newBuiltinModelessEditor(
 	auxBarConfig.Publisher = h
 	gitBarConfig := cfg.gitBarConfig(svc)
 	gitBarConfig.Publisher = h
-	return modeless.NewEditor(
-		cwd, cfg.clipboard(), false, true, cfg.auxiliaryBarEnabled(),
-		cfg.gitBarEnabled(),
-		cfg.modelessAttr(), cfg.modelessResultAttr(), cfg.modelessBarAttr(),
-		auxBarConfig, gitBarConfig, h, cfg.scheduleNextTick)
+	return modeless.Editor(
+		modeless.WithBarAttr(cfg.modelessBarAttr()),
+		modeless.WithCommandBar(true),
+		modeless.WithResAttr(cfg.modelessResultAttr()),
+		modeless.WithScheduleNextTick(cfg.scheduleNextTick),
+		modeless.WithAttr(cfg.modelessAttr()),
+		modeless.WithAuxiliaryBar(cfg.auxiliaryBarEnabled(), auxBarConfig),
+		modeless.WithGitBar(cfg.gitBarEnabled(), gitBarConfig),
+		modeless.WithHideInitialFolds(cfg.initialFolds()),
+		modeless.WithClipboard(cfg.clipboard()),
+		modeless.WithWorkspaceCommandRegistry(cwd, h),
+	)
 }
 
 func (h *workspaceManagerHandler) init(

@@ -55,7 +55,6 @@ import (
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/api/workspaceapi/workspaceext"
 	"unstable.build/go-tui/cell"
-	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/extension"
@@ -64,7 +63,6 @@ import (
 	"unstable.build/go-tui/handler/search"
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term"
-	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/text/modeless"
 	"unstable.build/go-tui/text/vi"
 )
@@ -1805,11 +1803,7 @@ func (h *lspEditorHandler) browseLocations(
 			locID, textapi.LocationSlice([]textapi.Location{loc}))
 		edh.MoveToPrevLocation(locID)
 	}
-
-	clipboard := clipboard.NewInMemory()
-	attr := term.Attributes{} // does not matter for Handler's purpose
-	sed, _ := modeless.NewEditor(workspaceapi.URI{}, clipboard, true, true, false, false,
-		attr, attr, attr, text.AuxBarConfig{}, text.GitBarConfig{}, nil, nil).
+	sed, _ := modeless.Editor(modeless.WithWrap(true)).
 		Edit(workspaceapi.RandomURI("search"), list.Buffer())
 	sh := search.Handler(list, sed, func(text string) {
 		h.mu.Lock()

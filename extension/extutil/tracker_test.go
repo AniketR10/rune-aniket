@@ -33,7 +33,6 @@ import (
 	"unstable.build/go-tui/api/config"
 	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/api/workspaceapi"
-	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/text/modeless"
@@ -52,13 +51,8 @@ func TestResourceTrackerIntegration(t *testing.T) {
 	}
 	for _, test := range suite {
 		t.Run(test.description, func(t *testing.T) {
-			clipboard := clipboard.NewInMemory()
 			tabspaces := 4
-
-			attr := term.Attributes{}
-			simpleEd := modeless.NewEditor(workspaceapi.URI{}, clipboard, false,
-				true, false, false, attr, attr, attr,
-				text.AuxBarConfig{}, text.GitBarConfig{}, nil, nil)
+			simpleEd := modeless.Editor()
 
 			cfg := text.DefaultConfig()
 			cfg.Tabspaces = tabspaces

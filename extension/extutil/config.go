@@ -126,7 +126,7 @@ func Editor(clipboard clipboard.Register, cfg config.Config) (text.Editor, error
 	case "modal":
 		return vi.Editor(vi.WithClipboard(clipboard)), nil
 	default:
-		return modeless.DefaultEditor(clipboard), nil
+		return modeless.Editor(modeless.WithClipboard(clipboard)), nil
 	}
 }
 

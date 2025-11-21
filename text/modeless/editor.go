@@ -26,76 +26,34 @@ package modeless
 import (
 	"errors"
 
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/cell"
-	"unstable.build/go-tui/clipboard"
-	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
 )
 
-// DefaultEditor returns a simple to use Editor implementation.
-func DefaultEditor(clipboard clipboard.Register) text.Editor {
-	searchAttr := term.Attributes{Attrs: tcell.AttrReverse}
-	return NewEditor(workspaceapi.URI{}, clipboard, false, true, false, false,
-		term.Attributes{}, searchAttr, term.Attributes{}, text.AuxBarConfig{},
-		text.GitBarConfig{}, nil, func(fn func()) bool { fn(); return true })
-}
-
-// NewEditor allocates storage for a new Editor and initializes it.
-// The scheduleNextTick parameter can be nil if auxBar is false.
-func NewEditor(
-	cwd workspaceapi.URI,
-	clipboard clipboard.Register,
-	wrap, commandBar, auxBar, gitBar bool,
-	attr, searchAttr, barAttr term.Attributes,
-	auxBarConfig text.AuxBarConfig,
-	gitBarConfig text.GitBarConfig,
-	registry text.WorkspaceCommandRegistry,
-	scheduleNextTick func(func()) bool,
-) text.Editor {
-	if auxBar && scheduleNextTick == nil {
-		panic("nil schedule function")
+// Editor allocates storage for a new Editor and initializes it.
+func Editor(opts ...Option) text.Editor {
+	ret := new(editor)
+	ret.modelessConfig = defaultConfig()
+	for _, o := range opts {
+		o(&ret.modelessConfig)
 	}
-	ret := new(simpleEditor)
-	ret.scheduleNextTick = scheduleNextTick
-	ret.wrap = wrap
-	ret.registry = registry
-	ret.commandBar = commandBar
-	ret.auxBar = auxBar
-	ret.auxBarConfig = auxBarConfig
-	ret.gitBarConfig = gitBarConfig
-	ret.gitBar = gitBar
-	ret.resAttr = searchAttr
-	ret.barAttr = barAttr
-	ret.attr = attr
-	ret.clipboard = clipboard
 	ret.pub.Init()
-	if ret.registry != nil {
-		ret.fileRegistry = text.NewFileCommandRegistry(cwd, ret.registry)
+	if ret.modelessConfig.registry != nil {
+		ret.fileRegistry = text.NewFileCommandRegistry(
+			ret.modelessConfig.workspace, ret.modelessConfig.registry)
 	}
 	return ret
 }
 
-type simpleEditor struct {
-	scheduleNextTick func(func()) bool
-	registry         text.WorkspaceCommandRegistry
-	fileRegistry     text.FileCommandRegistry
-	pub              text.Publisher
-	wrap             bool
-	commandBar       bool
-	auxBar           bool
-	gitBar           bool
-	auxBarConfig     text.AuxBarConfig
-	gitBarConfig     text.GitBarConfig
-	attr             term.Attributes
-	resAttr          term.Attributes
-	barAttr          term.Attributes
-	clipboard        clipboard.Register
+type editor struct {
+	modelessConfig
+	fileRegistry text.FileCommandRegistry
+	pub          text.Publisher
 }
 
-func (e *simpleEditor) Edit(file workspaceapi.URI, buf *cell.Buffer) (text.Handler, error) {
+func (e *editor) Edit(file workspaceapi.URI, buf *cell.Buffer) (text.Handler, error) {
 	rootIfc := NewHandler(e.clipboard, buf, file, e.wrap,
 		e.commandBar, e.attr, e.resAttr, e.barAttr, e.scheduleNextTick)
 	if e.fileRegistry != nil {
@@ -105,16 +63,16 @@ func (e *simpleEditor) Edit(file workspaceapi.URI, buf *cell.Buffer) (text.Handl
 			return nil, err
 		}
 	}
-	cursor := &rootIfc.(*simpleEditorHandler).cursor
-	scroll := rootIfc.(*simpleEditorHandler).less.Scroll()
+	cursor := &rootIfc.(*editorHandler).cursor
+	scroll := rootIfc.(*editorHandler).less.Scroll()
 	ret := e.pub.PublishEdit(file, buf, rootIfc, cursor)
 	auxBarConfig := e.auxBarConfig
 	auxBarConfig.CommandRegistry = e.fileRegistry
 	gitBarConfig := e.gitBarConfig
 	gitBarConfig.CommandRegistry = e.fileRegistry
-	if e.auxBar {
+	if e.enableAuxBar {
 		ret = text.WithAuxBar(ret, buf, scroll, auxBarConfig)
-		if e.gitBar {
+		if e.enableGitBar {
 			ret = text.WithGitBar(e.auxBarConfig.Service, ret, buf,
 				scroll, gitBarConfig)
 		}
@@ -122,24 +80,24 @@ func (e *simpleEditor) Edit(file workspaceapi.URI, buf *cell.Buffer) (text.Handl
 	return ret, nil
 }
 
-func (e *simpleEditor) SubscribeCommand(cmd textapi.CommandManual, h text.CommandHandler) error {
+func (e *editor) SubscribeCommand(cmd textapi.CommandManual, h text.CommandHandler) error {
 	return errors.New("not supported")
 }
 
-func (c *simpleEditor) UnsubscribeCommand(cmd string) error {
+func (c *editor) UnsubscribeCommand(cmd string) error {
 	return errors.New("not supported")
 }
 
-func (e *simpleEditor) Editor(file workspaceapi.URI) (text.Handler, error) {
+func (e *editor) Editor(file workspaceapi.URI) (text.Handler, error) {
 	return nil, errors.New("not supported")
 }
 
-func (e *simpleEditor) SubscribeEvents(evs []textapi.EventType, sub text.EventHandler) error {
+func (e *editor) SubscribeEvents(evs []textapi.EventType, sub text.EventHandler) error {
 	e.pub.SubscribeEvents(evs, sub)
 	return nil
 }
 
-func (e *simpleEditor) UnsubscribeEvents(sub text.EventHandler) (bool, error) {
+func (e *editor) UnsubscribeEvents(sub text.EventHandler) (bool, error) {
 	ok := e.pub.UnsubscribeEvents(sub)
 	return ok, nil
 }

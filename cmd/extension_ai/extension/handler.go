@@ -281,7 +281,7 @@ func CommandEventHandler(
 			}
 			ret.editor, err = extutil.Editor(ret.clip, config)
 			if err != nil {
-				ret.editor = modeless.DefaultEditor(ret.clip)
+				ret.editor = modeless.Editor(modeless.WithClipboard(ret.clip))
 				ret.log(log.WarnLevel, "Could not get editor.mode from config: "+
 					"%s.. Using 'modeless' editor.", err)
 			}

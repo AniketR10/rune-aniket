@@ -46,7 +46,6 @@ import (
 	"unstable.build/go-tui/api/textapi/textext"
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/api/workspaceapi/workspaceext"
-	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/extension"
@@ -54,7 +53,6 @@ import (
 	"unstable.build/go-tui/handler/search"
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term"
-	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/text/modeless"
 )
 
@@ -117,10 +115,7 @@ func New(
 
 	listConfig := h.getListConfig(cfg)
 	h.list.Init(listConfig)
-	clipboard := clipboard.NewInMemory()
-	attr := term.Attributes{} // does not matter for Handler's purpose
-	ed, _ := modeless.NewEditor(workspaceapi.URI{}, clipboard, true, true, false, false,
-		attr, attr, attr, text.AuxBarConfig{}, text.GitBarConfig{}, nil, nil).
+	ed, _ := modeless.Editor(modeless.WithWrap(true)).
 		Edit(workspaceapi.RandomURI("search"), h.list.Buffer())
 	h.listHandler = search.Handler(&h.list, ed, func(item string) {
 		searchQuery := h.list.Buffer().String()

@@ -30,14 +30,13 @@ import (
 	"github.com/stretchr/testify/require"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/cell"
-	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/component/comptest"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text/modeless"
 )
 
 func TestBox(t *testing.T) {
-	ed := modeless.DefaultEditor(clipboard.NewInMemory())
+	ed := modeless.Editor()
 	t.Run("min and max height passed are coherent or else it panics", func(t *testing.T) {
 		// ok
 		NewBox(cell.NewBuffer(), ed, BoxConfig{})
@@ -490,7 +489,7 @@ RE
 }
 
 func TestInsertIntegration(t *testing.T) {
-	ed := modeless.DefaultEditor(clipboard.NewInMemory())
+	ed := modeless.Editor()
 	buf := cell.NewBuffer()
 	b := NewBox(buf, ed, BoxConfig{MinHeight: 4, MaxHeight: 5, Placeholder: "HERE..."})
 	b.Resize(3, 3)
