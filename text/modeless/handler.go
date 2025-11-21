@@ -21,7 +21,7 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package text
+package modeless
 
 import (
 	"context"
@@ -35,6 +35,7 @@ import (
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/term"
+	"unstable.build/go-tui/text"
 )
 
 var _ component.Scrollable = (*simpleEditorHandler)(nil)
@@ -43,21 +44,21 @@ type simpleEditorHandler struct {
 	buf              *cell.Buffer
 	less             handler.Less
 	resource         workspaceapi.URI
-	cursor           Cursor
+	cursor           text.Cursor
 	height           int
-	mouse            *Mouse
+	mouse            *text.Mouse
 	clipboard        clipboard.Register
 	pendingSetCursor *term.Coordinates
 }
 
-// NewSimpleHandler returns a modeless, simple-to-use text.Handler.
-func NewSimpleHandler(
+// NewHandler returns a modeless, simple-to-use text.Handler.
+func NewHandler(
 	clipboard clipboard.Register,
 	buf *cell.Buffer, resource workspaceapi.URI,
 	wrap, commandBar bool,
 	attr, resAttr, barAttr term.Attributes,
 	scheduleNextTick func(func()) bool,
-) Handler {
+) text.Handler {
 	ret := new(simpleEditorHandler)
 	ret.Init(clipboard, buf, resource, wrap, commandBar,
 		attr, resAttr, barAttr, scheduleNextTick)
@@ -81,7 +82,7 @@ func (h *simpleEditorHandler) Init(
 		Attributes: attr,
 	})
 	h.cursor.Init(h.less.Scroll(), scheduleNextTick)
-	h.mouse = NewMouse(CursorMouseDelegate(&h.cursor))
+	h.mouse = text.NewMouse(text.CursorMouseDelegate(&h.cursor))
 	h.clipboard = clipboard
 }
 
@@ -102,7 +103,7 @@ func (h *simpleEditorHandler) Draw(w term.Writer) {
 		return
 	}
 	h.less.Draw(w)
-	DrawLocations(h.cursor.SortedLocations(), h.less.Scroll(), w)
+	text.DrawLocations(h.cursor.SortedLocations(), h.less.Scroll(), w)
 }
 
 func (h *simpleEditorHandler) Handle(ev term.Event) (exit, handled bool) {
@@ -197,7 +198,7 @@ func (h *simpleEditorHandler) Handle(ev term.Event) (exit, handled bool) {
 				log.Errorf("clipboard paste: %v", err)
 			} else {
 				str := paste.Text
-				h.cursor.Paste(str, StandardSelection, false)
+				h.cursor.Paste(str, text.StandardSelection, false)
 			}
 			handled = true
 		case 'a':
@@ -301,7 +302,7 @@ func (h *simpleEditorHandler) MaxSeekOffset() int {
 }
 
 func (h simpleEditorHandler) SetLocationList(
-	pri textapi.LocationPriority, ID string, loc LocationList,
+	pri textapi.LocationPriority, ID string, loc text.LocationList,
 ) {
 	h.cursor.SetLocationList(pri, ID, loc)
 }
@@ -330,6 +331,6 @@ func (h *simpleEditorHandler) CursorAtScroll() term.Coordinates {
 	return h.cursor.CursorAtScroll()
 }
 
-func (h *simpleEditorHandler) LocationLists() []LocationSet {
+func (h *simpleEditorHandler) LocationLists() []text.LocationSet {
 	return h.cursor.LocationLists()
 }

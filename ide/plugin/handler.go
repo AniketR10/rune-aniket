@@ -43,6 +43,7 @@ import (
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/term/vte"
 	"unstable.build/go-tui/text"
+	"unstable.build/go-tui/text/modeless"
 	"unstable.build/go-tui/text/vi"
 )
 
@@ -389,7 +390,7 @@ func (e *Handler) initializeDoneHandler() {
 			vi.WithClipboard(e.cfg.Clipboard),
 		)
 	} else {
-		main = text.NewSimpleHandler(e.cfg.Clipboard, buf, uri, false, true,
+		main = modeless.NewHandler(e.cfg.Clipboard, buf, uri, false, true,
 			e.cfg.Attributes, e.cfg.SelectionAttributes, e.bar.frameAttr, nil)
 	}
 

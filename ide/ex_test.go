@@ -60,6 +60,7 @@ import (
 	"unstable.build/go-tui/term/vte"
 	"unstable.build/go-tui/term/vte/vtereservoir"
 	"unstable.build/go-tui/text"
+	"unstable.build/go-tui/text/modeless"
 	"unstable.build/go-tui/text/texttest"
 	"unstable.build/go-tui/workspace"
 	"unstable.build/go-tui/workspace/workspacetest"
@@ -1526,7 +1527,7 @@ func TestIntegrationEphemeralTerminal(t *testing.T) {
 
 	workspace := workspace.NewSchemeWorkspace(uri, fileScheme)
 	b := newExForTestingTerminal(t, workspace,
-		text.DefaultSimpleEditor(clipboard.NewInMemory()),
+		modeless.DefaultEditor(clipboard.NewInMemory()),
 		vte.DefaultConfig(), nopPublishEvent, opts...)
 	defer b.Close()
 

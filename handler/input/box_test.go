@@ -33,11 +33,11 @@ import (
 	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/component/comptest"
 	"unstable.build/go-tui/term"
-	"unstable.build/go-tui/text"
+	"unstable.build/go-tui/text/modeless"
 )
 
 func TestBox(t *testing.T) {
-	ed := text.DefaultSimpleEditor(clipboard.NewInMemory())
+	ed := modeless.DefaultEditor(clipboard.NewInMemory())
 	t.Run("min and max height passed are coherent or else it panics", func(t *testing.T) {
 		// ok
 		NewBox(cell.NewBuffer(), ed, BoxConfig{})
@@ -490,7 +490,7 @@ RE
 }
 
 func TestInsertIntegration(t *testing.T) {
-	ed := text.DefaultSimpleEditor(clipboard.NewInMemory())
+	ed := modeless.DefaultEditor(clipboard.NewInMemory())
 	buf := cell.NewBuffer()
 	b := NewBox(buf, ed, BoxConfig{MinHeight: 4, MaxHeight: 5, Placeholder: "HERE..."})
 	b.Resize(3, 3)

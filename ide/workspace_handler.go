@@ -58,6 +58,7 @@ import (
 	"unstable.build/go-tui/localstorage"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
+	"unstable.build/go-tui/text/modeless"
 	"unstable.build/go-tui/text/vi"
 	"unstable.build/go-tui/workspace"
 )
@@ -167,7 +168,7 @@ func (h *workspaceManagerHandler) newBuiltinModelessEditor(
 	auxBarConfig.Publisher = h
 	gitBarConfig := cfg.gitBarConfig(svc)
 	gitBarConfig.Publisher = h
-	return text.NewSimpleEditor(
+	return modeless.NewEditor(
 		cwd, cfg.clipboard(), false, true, cfg.auxiliaryBarEnabled(),
 		cfg.gitBarEnabled(),
 		cfg.modelessAttr(), cfg.modelessResultAttr(), cfg.modelessBarAttr(),

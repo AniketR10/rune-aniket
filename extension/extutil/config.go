@@ -33,6 +33,7 @@ import (
 	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/clipboard/sysclip"
 	"unstable.build/go-tui/text"
+	"unstable.build/go-tui/text/modeless"
 	"unstable.build/go-tui/text/vi"
 )
 
@@ -125,7 +126,7 @@ func Editor(clipboard clipboard.Register, cfg config.Config) (text.Editor, error
 	case "modal":
 		return vi.Editor(vi.WithClipboard(clipboard)), nil
 	default:
-		return text.DefaultSimpleEditor(clipboard), nil
+		return modeless.DefaultEditor(clipboard), nil
 	}
 }
 

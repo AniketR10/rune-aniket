@@ -62,6 +62,7 @@ import (
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
+	"unstable.build/go-tui/text/modeless"
 )
 
 const (
@@ -280,7 +281,7 @@ func CommandEventHandler(
 			}
 			ret.editor, err = extutil.Editor(ret.clip, config)
 			if err != nil {
-				ret.editor = text.DefaultSimpleEditor(ret.clip)
+				ret.editor = modeless.DefaultEditor(ret.clip)
 				ret.log(log.WarnLevel, "Could not get editor.mode from config: "+
 					"%s.. Using 'modeless' editor.", err)
 			}

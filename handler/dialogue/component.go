@@ -35,6 +35,7 @@ import (
 	"unstable.build/go-tui/handler/input"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
+	"unstable.build/go-tui/text/modeless"
 )
 
 // ComponentConfig holds configuration options for dialogue.Component.
@@ -99,7 +100,7 @@ func (c *Component) Init(cfg ComponentConfig) {
 		panic(fmt.Sprintf("InputRowColumns must be > 0 and <= %d", component.MaxCols))
 	}
 	if cfg.InputEditor == nil {
-		cfg.InputEditor = text.DefaultSimpleEditor(clipboard.NewInMemory())
+		cfg.InputEditor = modeless.DefaultEditor(clipboard.NewInMemory())
 	}
 	c.cfg = cfg
 

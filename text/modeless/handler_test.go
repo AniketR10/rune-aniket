@@ -21,7 +21,7 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package text
+package modeless
 
 import (
 	"fmt"
@@ -33,6 +33,7 @@ import (
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/term"
+	"unstable.build/go-tui/text"
 )
 
 func TestNoHandlesNonCtrlModifiers(t *testing.T) {
@@ -55,11 +56,11 @@ func TestNoHandlesNonCtrlModifiers(t *testing.T) {
 	}
 }
 
-func newTestSimpleEditor(t *testing.T, width, height int) Handler {
+func newTestSimpleEditor(t *testing.T, width, height int) text.Handler {
 	defAttr := term.Attributes{}
-	editor := NewSimpleEditor(workspaceapi.URI{},
+	editor := NewEditor(workspaceapi.URI{},
 		clipboard.NewInMemory(), false, false, false, false,
-		defAttr, defAttr, defAttr, AuxBarConfig{}, GitBarConfig{}, nil, nil)
+		defAttr, defAttr, defAttr, text.AuxBarConfig{}, text.GitBarConfig{}, nil, nil)
 	h, err := editor.Edit(workspaceapi.URI{}, cell.NewBuffer())
 	require.NoError(t, err)
 	h.Resize(width, height)
