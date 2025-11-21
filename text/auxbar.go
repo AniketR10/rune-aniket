@@ -147,6 +147,7 @@ func WithAuxBar(
 		}
 	}
 
+	ret.cancelBuild = func() {}
 	ret.rebuildBar(context.Background())
 	return ret
 }
@@ -176,6 +177,7 @@ type auxBar struct {
 	scroll *component.Scroll
 
 	closed      bool
+	cancelBuild func()
 	vhandler    handler.Virtual[Handler]
 	bar         *component.Scroll
 	folds       map[term.Coordinates]term.Coordinates
@@ -347,6 +349,8 @@ func (b *auxBar) foldAt(pos term.Coordinates) (folded, ok bool) {
 }
 
 func (b *auxBar) rebuildBar(ctx context.Context) {
+	b.cancelBuild()
+	ctx, b.cancelBuild = context.WithCancel(ctx)
 	b.bar.Buffer().ResetPerformance()
 	if b.linesEnabled && b.absoluteLines {
 		b.rebuildLinesAbsolute(ctx)
@@ -377,6 +381,11 @@ func (b *auxBar) rebuildGit(ctx context.Context) {
 
 		// serialize back into event loop
 		b.scheduleNextTick(func() {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
 			cells := b.bar.Buffer().RawCells()
 			for loc, ok := ll.Current(); ok; loc, ok = ll.Next() {
 				from := term.Coordinates{Y: loc.From.Y}
@@ -471,7 +480,7 @@ func (b *auxBar) rebuildFolds(ctx context.Context) {
 	}
 
 	go debug.CapturePanicReport(func() {
-		folds, isEmpty := iterator.IsEmpty(context.Background(), folds)
+		folds, isEmpty := iterator.IsEmpty(ctx, folds)
 		defer folds.Close()
 		if isEmpty {
 			return
@@ -479,6 +488,11 @@ func (b *auxBar) rebuildFolds(ctx context.Context) {
 		// once first fold has been returned, this should not block on I/O anymore
 		// run on next loop tick, so we don't need to worry about synchronization
 		b.scheduleNextTick(func() {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
 			clear(b.folds)
 			for {
 				fold, ok := folds.Next(ctx)

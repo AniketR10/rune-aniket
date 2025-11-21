@@ -108,6 +108,7 @@ func WithGitBar(
 		_ = ret.registry.SubscribeCommandForFile(ret.file, cmd, ret)
 	}
 
+	ret.cancelBuild = func() {}
 	ret.rebuildBar(context.Background())
 	return ret
 }
@@ -144,11 +145,12 @@ type gitBar struct {
 	delAttr term.Attributes
 	addAttr term.Attributes
 
-	closed     bool
-	vhandler   handler.Virtual[Handler]
-	bar        *component.Scroll
-	addLocAttr term.Attributes
-	delLocAttr term.Attributes
+	cancelBuild func()
+	closed      bool
+	vhandler    handler.Virtual[Handler]
+	bar         *component.Scroll
+	addLocAttr  term.Attributes
+	delLocAttr  term.Attributes
 }
 
 func (b *gitBar) Selection() (string, bool) {
@@ -234,19 +236,28 @@ func (b *gitBar) Close() (ret error) {
 }
 
 func (b *gitBar) rebuildBar(ctx context.Context) {
+	b.cancelBuild()
+	ctx, b.cancelBuild = context.WithCancel(ctx)
 	b.bar.Buffer().ResetPerformance()
 	uri := b.Handler.Resource()
 
 	go debug.CapturePanicReport(func() {
 		filediff, err := b.svc.Diff(ctx, uri)
 		if err != nil {
-			b.log(log.ErrorLevel, "compute diff: %v", err)
+			if !errors.Is(err, context.Canceled) {
+				b.log(log.ErrorLevel, "compute diff: %v", err)
+			}
 			return
 		}
 		b.log(log.TraceLevel, "computed diff: %v", filediff)
 
 		ll := filediff.LocationList(b.delLocAttr, b.addLocAttr)
 		b.scheduleNextTick(func() {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
 			for loc, ok := ll.Current(); ok; loc, ok = ll.Next() {
 				from := term.Coordinates{Y: loc.From.Y}
 				to := term.Coordinates{Y: loc.To.Y}
