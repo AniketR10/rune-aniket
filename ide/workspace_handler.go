@@ -157,6 +157,7 @@ func (h *workspaceManagerHandler) newBuiltinModalEditor(
 		vi.WithDebug(cfg.modalDebug()),
 		vi.WithClipboard(cfg.clipboard()),
 		vi.WithWorkspaceCommandRegistry(cwd, h),
+		vi.WithNotifications(h.notifications),
 	)
 	return vi.Editor(viOpts...)
 }
@@ -179,6 +180,7 @@ func (h *workspaceManagerHandler) newBuiltinModelessEditor(
 		modeless.WithHideInitialFolds(cfg.initialFolds()),
 		modeless.WithClipboard(cfg.clipboard()),
 		modeless.WithWorkspaceCommandRegistry(cwd, h),
+		modeless.WithNotifications(h.notifications),
 	)
 }
 

@@ -25,6 +25,7 @@ package modeless
 
 import (
 	"github.com/unstablebuild/tcell/v3"
+	"unstable.build/go-tui/api/browserapi"
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/term"
@@ -46,6 +47,7 @@ type modelessConfig struct {
 	gitBarConfig       text.GitBarConfig
 	workspace          workspaceapi.URI
 	clipboard          clipboard.Register
+	notifications      browserapi.Notifications
 	scheduleNextTick   func(fn func()) bool
 }
 
@@ -89,6 +91,13 @@ func WithWorkspaceCommandRegistry(
 func WithScheduleNextTick(fn func(func()) bool) Option {
 	return func(cfg *modelessConfig) {
 		cfg.scheduleNextTick = fn
+	}
+}
+
+// WithNotifications defines the notifications mechanism to use by Editor.
+func WithNotifications(noti browserapi.Notifications) Option {
+	return func(cfg *modelessConfig) {
+		cfg.notifications = noti
 	}
 }
 

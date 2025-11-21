@@ -21,7 +21,7 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package extension
+package vctrlcmd
 
 import (
 	"context"
@@ -117,7 +117,7 @@ func TestCommandHandler(t *testing.T) {
 		defer tearDownGitRepos(reposPath)
 
 		err := h.HandleCommand(context.Background(), textapi.Command{
-			Name: commandCopyRemoteURL,
+			Name: commandGitLink,
 			Args: []string{}, // without args uses "origin"
 			URI:  fileURI,
 			Cursor: struct {
@@ -386,7 +386,7 @@ func setupGitRepos(t *testing.T) (reposPath string) {
 	tmpDir, err = filepath.EvalSymlinks(tmpDir)
 	require.NoError(t, err)
 
-	reposTarball := "testdata/repos.tar"
+	reposTarball := "../vctrltest/testdata/repos.tar"
 
 	cmd := exec.Command("tar", "-xf", reposTarball, "-C", tmpDir)
 	err = cmd.Run()

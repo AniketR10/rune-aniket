@@ -21,7 +21,7 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package extension
+package vctrlcmd
 
 import (
 	"context"
@@ -41,7 +41,8 @@ import (
 )
 
 // extracts protocol, domain, owner and repo name from a git remote URL.
-var gitRemoteRegex = regexp.MustCompile(`^(?:(https)://|(git)\@)([^/:]+)[:/]([^/]+)/([\w-]+)(?:\.git)?$`)
+var gitRemoteRegex = regexp.MustCompile(
+	`^(?:(https)://|(git)\@)([^/:]+)[:/]([^/]+)/([\w-]+)(?:\.git)?$`)
 
 type copyRemoteURL struct {
 	git              vctrl.Service
@@ -57,7 +58,7 @@ func newCopyRemoteURL(
 	ret.git = git
 	ret.clip = clip
 	ret.noti = noti
-	ret.providerResolver = &stringsContainsResolver{}
+	ret.providerResolver = stringsContainsResolver{}
 	return ret
 }
 
@@ -78,18 +79,15 @@ func (c *copyRemoteURL) HandleCommand(ctx context.Context, cmd textapi.Command) 
 	}
 
 	err = c.clipboardCopy(weblink)
-	if err != nil {
-		return
-	}
-
 	return
 }
 
 // satisfy apitext.CommandHandler
-func (c *copyRemoteURL) Complete(ctx context.Context, cmd string, args []string) (
-	iterator.Iterator[string], error,
+func (c *copyRemoteURL) Complete(ctx context.Context, cmd textapi.Command) (
+	iterator.Iterator[string], string, error,
 ) {
-	return iterator.Empty[string](), nil
+	// TODO list repos here
+	return iterator.Empty[string](), "", nil
 }
 
 type remoteURLParts struct {
@@ -183,15 +181,14 @@ func (c *copyRemoteURL) clipboardCopy(text string) error {
 		return fmt.Errorf("copy web URL: %w", err)
 	}
 
-	c.notify(notifications.LevelSuccess, "web url copied to clipboard")
-
-	return nil
+	return c.notify(notifications.LevelSuccess, "web url copied to clipboard")
 }
 
 func (c *copyRemoteURL) notify(
 	level notifications.Level, msg string, args ...interface{},
-) {
-	_, _ = c.noti.Notify(level, msg, args...)
+) error {
+	_, err := c.noti.Notify(level, msg, args...)
+	return err
 }
 
 // expand rewrites s to replace {k} with match[k] for each key k in match. All

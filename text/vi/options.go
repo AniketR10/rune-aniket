@@ -25,6 +25,7 @@ package vi
 
 import (
 	"github.com/unstablebuild/tcell/v3"
+	"unstable.build/go-tui/api/browserapi"
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/term"
@@ -52,6 +53,7 @@ type viConfig struct {
 	gitBarConfig         text.GitBarConfig
 	workspace            workspaceapi.URI
 	enableGitBar         bool
+	notifications        browserapi.Notifications
 }
 
 // defaultviHandlerImplConfig is a sane configuration defaults for viHandlerImpl.
@@ -78,6 +80,13 @@ type Option func(*viConfig)
 func WithResAttr(attr term.Attributes) Option {
 	return func(cfg *viConfig) {
 		cfg.resAttr = attr
+	}
+}
+
+// WithNotifications defines the notifications mechanism to use by Editor.
+func WithNotifications(noti browserapi.Notifications) Option {
+	return func(cfg *viConfig) {
+		cfg.notifications = noti
 	}
 }
 

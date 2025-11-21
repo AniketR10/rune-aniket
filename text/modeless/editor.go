@@ -29,6 +29,7 @@ import (
 	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/ide/vctrl/vctrlcmd"
 	"unstable.build/go-tui/text"
 )
 
@@ -59,6 +60,11 @@ func (e *editor) Edit(file workspaceapi.URI, buf *cell.Buffer) (text.Handler, er
 	if e.fileRegistry != nil {
 		var err error
 		rootIfc, err = text.SubscribeLocationCommands(file, e.fileRegistry, rootIfc)
+		if err != nil {
+			return nil, err
+		}
+		rootIfc, err = vctrlcmd.SubscribeGitCommands(file, e.fileRegistry,
+			rootIfc, e.auxBarConfig.Service, e.clipboard, e.notifications)
 		if err != nil {
 			return nil, err
 		}
