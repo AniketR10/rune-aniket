@@ -93,7 +93,7 @@ func WithGitBar(
 
 	ret.bar = new(component.Scroll)
 	ret.bar.InitPerformance(b)
-	ret.bar.SetOffset(scroll.Offset())
+	ret.bar.SetOffset(term.Coordinates{Y: scroll.Offset().Y})
 	ret.file = handler.Resource()
 	ret.pub = cfg.Publisher
 	ret.registry = cfg.CommandRegistry
@@ -287,7 +287,7 @@ func (b *gitBarSubscriber) Handle(ctx context.Context, ev textapi.Event) bool {
 }
 
 func (b *gitBar) OnDidSeek(_, to term.Coordinates) {
-	b.bar.SetOffset(to)
+	b.bar.SetOffset(term.Coordinates{Y: to.Y})
 }
 
 func (b *gitBar) OnWillSeek(_ term.Coordinates) {
@@ -318,6 +318,7 @@ func (b *gitBar) scrollToBarCoordinates(pos term.Coordinates) (ret term.Coordina
 	}
 	ret = pos
 	ret.Y += b.scroll.Offset().Y
+	ret.X += b.scroll.Offset().X
 	return
 }
 

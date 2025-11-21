@@ -398,6 +398,7 @@ func TestGitBarWithAuxBarIntegration(t *testing.T) {
 	mu.Unlock()
 
 	wg.Add(3)
+	assert.True(t, scroll.SetOffset(term.Coordinates{Y: 1, X: 4}))
 	_, handled := bar.Handle(
 		term.Event{Type: term.EventMouse, Key: term.MouseLeft, MouseX: 5, MouseY: 1})
 	require.True(t, handled)
@@ -405,14 +406,14 @@ func TestGitBarWithAuxBarIntegration(t *testing.T) {
 	tests = []comptest.TestCase{
 		{Expected: `
   2                 
-  3   import (#####
+  3   rt (#########
   8                 
-  9   func main() {
-# ##       fmt.Print
-  11       for i := 
-  12           fmt.P
-  13       }        
-  14   }            
+  9    main() {    
+# ##   fmt.Println("
+  11   for i := 0; i
+  12       fmt.Print
+  13   }            
+  14                
   15                `,
 		},
 	}

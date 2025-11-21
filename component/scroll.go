@@ -959,7 +959,6 @@ func (s *Scroll) ScrollToWindowCoordinates(pos term.Coordinates) (term.Coordinat
 	offset := s.Offset()
 	ret := term.CoordinatesDiff(pos, offset)
 	if !s.Wrap {
-		var hidden bool
 		if len(s.hiddensorted) != 0 {
 			for _, block := range s.hiddensorted {
 				if block.start > pos.Y {
@@ -968,11 +967,13 @@ func (s *Scroll) ScrollToWindowCoordinates(pos term.Coordinates) (term.Coordinat
 				if pos.Y > block.start {
 					// min in case pos is inside block
 					ret.Y -= min(block.end, pos.Y) - block.start
-					hidden = hidden || pos.Y <= block.end
+					if pos.Y <= block.end {
+						return ret, false
+					}
 				}
 			}
 		}
-		return ret, !hidden
+		return ret, true
 	}
 	wraps := s.Wraps()
 	for y, count := range wraps {

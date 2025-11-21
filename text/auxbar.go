@@ -131,7 +131,7 @@ func WithAuxBar(
 
 	ret.bar = new(component.Scroll)
 	ret.bar.InitPerformance(b)
-	ret.bar.SetOffset(scroll.Offset())
+	ret.bar.SetOffset(term.Coordinates{Y: scroll.Offset().Y})
 	ret.bar.Attributes.Bg = ret.barLineAttr.Bg
 	ret.bar.Attributes.Fg = ret.barLineAttr.Fg
 
@@ -383,7 +383,8 @@ func (b *auxBar) rebuildGit(ctx context.Context) {
 				to := term.Coordinates{Y: loc.To.Y}
 				if from == to {
 					at, ok := b.scrollToBarCoordinates(from)
-					if !ok { // hidden
+					// hidden || lines removed between ticks
+					if !ok || at.Y >= len(cells) {
 						continue
 					}
 					for x := 0; x < b.linesWidth; x++ {
@@ -398,7 +399,8 @@ func (b *auxBar) rebuildGit(ctx context.Context) {
 
 				for y := from.Y; y < to.Y; y++ {
 					at, ok := b.scrollToBarCoordinates(term.Coordinates{Y: y})
-					if !ok { // hidden
+					// hidden || lines removed between ticks
+					if !ok || at.Y >= len(cells) {
 						continue
 					}
 					for x := 0; x < b.linesWidth; x++ {
@@ -417,7 +419,6 @@ func (b *auxBar) rebuildGit(ctx context.Context) {
 
 func (b *auxBar) rebuildLinesAbsolute(ctx context.Context) {
 	for y := range b.buf.View().Rows() {
-		number := strconv.Itoa(y + 1)
 		from, ok := b.scrollToBarCoordinates(term.Coordinates{Y: y})
 		if !ok {
 			// inside hidden block
@@ -430,6 +431,7 @@ func (b *auxBar) rebuildLinesAbsolute(ctx context.Context) {
 				to.X = cols - 1
 			}
 		}
+		number := strconv.Itoa(y + 1)
 		b.bar.Buffer().EditWithAttr(ctx, from, to, number, b.barLineAttr)
 	}
 }
@@ -536,7 +538,7 @@ func (b *auxBar) rebuildFolds(ctx context.Context) {
 }
 
 func (b *auxBar) OnDidSeek(_, to term.Coordinates) {
-	b.bar.SetOffset(to)
+	b.bar.SetOffset(term.Coordinates{Y: to.Y})
 	if b.linesEnabled && !b.absoluteLines {
 		b.rebuildBar(context.Background())
 	}
@@ -577,6 +579,11 @@ func (b *auxBar) setLinesWidth(height int) {
 
 func (b *auxBar) windowToBarCoordinates(pos term.Coordinates) term.Coordinates {
 	pos.Y += b.scroll.Offset().Y
+	// this method is used for cursor coordinates,
+	// which hovers across both bar and content
+	if pos.X >= b.barWidth {
+		pos.X += b.scroll.Offset().X
+	}
 	return pos
 }
 
@@ -587,6 +594,7 @@ func (b *auxBar) scrollToBarCoordinates(pos term.Coordinates) (ret term.Coordina
 	}
 	ret = pos
 	ret.Y += b.scroll.Offset().Y
+	ret.X += b.scroll.Offset().X
 	return
 }
 
