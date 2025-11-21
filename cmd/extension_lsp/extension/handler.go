@@ -74,8 +74,6 @@ const (
 	defaultConnectTimeout       = 10 * time.Second
 	defaultDisconnectTimeout    = 300 * time.Millisecond
 	firstFileVersion            = 1
-	commandNextDiagnostic       = "lspnext"
-	commandPrevDiagnostic       = "lspprev"
 	commandHover                = "lsphover"
 	commandGoToDef              = "lspgotodef"
 	commandFormat               = "lspformat"
@@ -83,8 +81,8 @@ const (
 	commandReferences           = "lspref"
 	referencesWindowWidth       = 50
 	referencesWindowHeight      = 15
-	defaultSemanticTokensListID = "lsp_syntax_highlighting"
-	defaultDiagnosticListID     = "lsp_diagnostic"
+	defaultSemanticTokensListID = "_lspsyntax"
+	defaultDiagnosticListID     = "lspdiagnostic"
 )
 
 // Grantee returns this extension's Grantee and the permissions required to run it.
@@ -98,16 +96,6 @@ var (
 	// LSPHandlerCommands returns the commands that this extension is
 	// interested in registering.
 	LSPHandlerCommands = []textapi.CommandManual{
-		{
-			Name: commandNextDiagnostic,
-			Summary: "Moves cursor to the next compiler error or warning emitted by " +
-				"the LSP server configured for the file's programming language.",
-		},
-		{
-			Name: commandPrevDiagnostic,
-			Summary: "Moves cursor to the previous compiler error or warning emitted by " +
-				"the LSP server configured for the file's programming language.",
-		},
 		{
 			Name: commandHover,
 			Summary: "Opens a tooltip with the documentation of the symbol whose name " +
@@ -2040,16 +2028,6 @@ func (h *lspEditorHandler) HandleCommand(
 	}
 
 	switch cmd.Name {
-	case commandNextDiagnostic:
-		err = h.ed.MoveToNextLocation(cmd.Resource, h.diagnosticListID)
-		if err != nil {
-			err = fmt.Errorf("MoveToNextLocation(%s): %v", cmd.Name, err)
-		}
-	case commandPrevDiagnostic:
-		err = h.ed.MoveToPrevLocation(cmd.Resource, h.diagnosticListID)
-		if err != nil {
-			err = fmt.Errorf("MoveToPrevLocation(%s): %v", cmd.Name, err)
-		}
 	case commandHover:
 		err = h.handleHover(cmd.Cursor.Content, cmd.Cursor.Window, cmd.Resource, cmd.URI)
 	case commandGoToDef:
