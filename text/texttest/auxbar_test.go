@@ -50,15 +50,19 @@ func TestAuxBarDrawLinesRelative(t *testing.T) {
 	fs.view = buf.WithView(fs)
 	scroll := component.NewScroll(buf)
 	h := newTestHandler(scroll)
+	var wg sync.WaitGroup
 	cb := func(fn func()) bool {
+		defer wg.Done()
 		fn()
 		return true
 	}
 
+	wg.Add(1)
 	cfg := text.AuxBarConfig{LinesEnabled: true, ScheduleNextTick: cb}
 	bar := text.WithAuxBar(h, buf, scroll, cfg)
 	bar.Resize(20, 10)
 	w := term.NewStringWriter(20, 10)
+	wg.Wait()
 
 	tests := []comptest.TestCase{
 		{Expected: `
@@ -75,7 +79,9 @@ func TestAuxBarDrawLinesRelative(t *testing.T) {
 		},
 		{
 			Action: func() {
+				wg.Add(1)
 				require.True(t, scroll.SeekDown())
+				wg.Wait()
 			},
 			Expected: `
 2                   
@@ -100,15 +106,19 @@ func TestAuxBarDrawLinesAbsolute(t *testing.T) {
 	fs.view = buf.WithView(fs)
 	scroll := component.NewScroll(buf)
 	h := newTestHandler(scroll)
+	var wg sync.WaitGroup
 	cb := func(fn func()) bool {
+		defer wg.Done()
 		fn()
 		return true
 	}
 
+	wg.Add(1)
 	cfg := text.AuxBarConfig{LinesEnabled: true, AbsoluteLines: true, ScheduleNextTick: cb}
 	bar := text.WithAuxBar(h, buf, scroll, cfg)
 	bar.Resize(20, 10)
 	w := term.NewStringWriter(20, 10)
+	wg.Wait()
 
 	tests := []comptest.TestCase{
 		{Expected: `
@@ -332,7 +342,7 @@ func TestGitBarWithAuxBarIntegration(t *testing.T) {
 
 	ed := &TestEditor{}
 	mockSvc := &differ{}
-	wg.Add(3)
+	wg.Add(2)
 	acfg := text.AuxBarConfig{
 		LinesEnabled:        true,
 		FoldsEnabled:        true,
@@ -397,7 +407,7 @@ func TestGitBarWithAuxBarIntegration(t *testing.T) {
 	comptest.TestComponent(t, bar, w, tests)
 	mu.Unlock()
 
-	wg.Add(3)
+	wg.Add(2)
 	assert.True(t, scroll.SetOffset(term.Coordinates{Y: 1, X: 4}))
 	_, handled := bar.Handle(
 		term.Event{Type: term.EventMouse, Key: term.MouseLeft, MouseX: 5, MouseY: 1})

@@ -238,9 +238,7 @@ func (b *gitBar) Close() (ret error) {
 func (b *gitBar) rebuildBar(ctx context.Context) {
 	b.cancelBuild()
 	ctx, b.cancelBuild = context.WithCancel(ctx)
-	b.bar.Buffer().ResetPerformance()
 	uri := b.Handler.Resource()
-
 	go debug.CapturePanicReport(func() {
 		filediff, err := b.svc.Diff(ctx, uri)
 		if err != nil {
@@ -258,6 +256,7 @@ func (b *gitBar) rebuildBar(ctx context.Context) {
 				return
 			default:
 			}
+			b.bar.Buffer().ResetPerformance()
 			for loc, ok := ll.Current(); ok; loc, ok = ll.Next() {
 				from := term.Coordinates{Y: loc.From.Y}
 				to := term.Coordinates{Y: loc.To.Y}

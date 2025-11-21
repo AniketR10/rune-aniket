@@ -28,6 +28,7 @@ import (
 	"errors"
 	"math"
 	"strconv"
+	"sync"
 
 	"github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
@@ -351,79 +352,108 @@ func (b *auxBar) foldAt(pos term.Coordinates) (folded, ok bool) {
 func (b *auxBar) rebuildBar(ctx context.Context) {
 	b.cancelBuild()
 	ctx, b.cancelBuild = context.WithCancel(ctx)
-	b.bar.Buffer().ResetPerformance()
-	if b.linesEnabled && b.absoluteLines {
-		b.rebuildLinesAbsolute(ctx)
-	} else if b.linesEnabled {
-		b.rebuildLinesRelative(ctx)
-	}
-	if b.linesEnabled && b.gitEnabled {
-		b.rebuildGit(ctx)
-	}
-	if b.foldsEnabled {
-		b.rebuildFolds(ctx)
-	}
-}
-
-func (b *auxBar) rebuildGit(ctx context.Context) {
 	uri := b.Handler.Resource()
-	go debug.CapturePanicReport(func() {
-		// perform diff in a separate gouroutine in case
-		// scheme is remote and diff performs network I/O.
-		filediff, err := b.svc.Diff(ctx, uri)
-		if err != nil {
-			b.log(log.ErrorLevel, "compute diff: %v", err)
-			return
+
+	var diff textapi.LocationList
+	var foldsIterator iterator.Iterator[term.Range]
+	var wg sync.WaitGroup
+	if b.linesEnabled && b.gitEnabled {
+		wg.Add(1)
+		go debug.CapturePanicReport(func() {
+			defer wg.Done()
+			// perform diff in a separate gouroutine in case
+			// scheme is remote and diff performs network I/O.
+			filediff, err := b.svc.Diff(ctx, uri)
+			if err != nil {
+				b.log(log.ErrorLevel, "compute diff: %v", err)
+				return
+			}
+			b.log(log.TraceLevel, "computed diff: %v", filediff)
+			diff = filediff.LocationList(b.delLocAttr, b.addLocAttr)
+		})
+	}
+
+	svc, ok := b.buf.View().(foldsService)
+	if b.foldsEnabled && ok {
+		folds, ok := svc.Folds()
+		if ok {
+			wg.Add(1)
+			go debug.CapturePanicReport(func() {
+				defer wg.Done()
+				folds, isEmpty := iterator.IsEmpty(ctx, folds)
+				defer folds.Close()
+				if isEmpty {
+					return
+				}
+				// once first fold has been returned, this should not block on I/O anymore
+				// run on next loop tick, so we don't need to worry about synchronization
+				foldsIterator = folds
+			})
 		}
-		b.log(log.TraceLevel, "computed diff: %v", filediff)
+	}
 
-		ll := filediff.LocationList(b.delLocAttr, b.addLocAttr)
-
-		// serialize back into event loop
+	go debug.CapturePanicReport(func() {
+		wg.Wait()
 		b.scheduleNextTick(func() {
 			select {
 			case <-ctx.Done():
 				return
 			default:
 			}
-			cells := b.bar.Buffer().RawCells()
-			for loc, ok := ll.Current(); ok; loc, ok = ll.Next() {
-				from := term.Coordinates{Y: loc.From.Y}
-				to := term.Coordinates{Y: loc.To.Y}
-				if from == to {
-					at, ok := b.scrollToBarCoordinates(from)
-					// hidden || lines removed between ticks
-					if !ok || at.Y >= len(cells) {
-						continue
-					}
-					for x := 0; x < b.linesWidth; x++ {
-						if x >= len(cells[at.Y]) {
-							break
-						}
-						cells[at.Y][x].Attributes = term.AttributesUnion(
-							cells[at.Y][x].Attributes, b.delAttr)
-					}
-					continue
-				}
 
-				for y := from.Y; y < to.Y; y++ {
-					at, ok := b.scrollToBarCoordinates(term.Coordinates{Y: y})
-					// hidden || lines removed between ticks
-					if !ok || at.Y >= len(cells) {
-						continue
-					}
-					for x := 0; x < b.linesWidth; x++ {
-						if x >= len(cells[at.Y]) {
-							break
-						}
-						cells[at.Y][x].Attributes = term.AttributesUnion(
-							cells[at.Y][x].Attributes, b.addAttr)
-					}
-				}
+			b.bar.Buffer().ResetPerformance()
+			if b.linesEnabled && b.absoluteLines {
+				b.rebuildLinesAbsolute(ctx)
+			} else if b.linesEnabled {
+				b.rebuildLinesRelative(ctx)
 			}
-			b.Handler.SetLocationList(textapi.LocationPriorityInfo, gitLocationsID, ll)
+			if b.linesEnabled && b.gitEnabled {
+				b.rebuildGit(diff)
+			}
+			if foldsIterator != nil {
+				b.rebuildFolds(ctx, foldsIterator)
+			}
 		})
 	})
+}
+
+func (b *auxBar) rebuildGit(ll textapi.LocationList) {
+	cells := b.bar.Buffer().RawCells()
+	for loc, ok := ll.Current(); ok; loc, ok = ll.Next() {
+		from := term.Coordinates{Y: loc.From.Y}
+		to := term.Coordinates{Y: loc.To.Y}
+		if from == to {
+			at, ok := b.scrollToBarCoordinates(from)
+			// hidden || lines removed between ticks
+			if !ok || at.Y >= len(cells) {
+				continue
+			}
+			for x := 0; x < b.linesWidth; x++ {
+				if x >= len(cells[at.Y]) {
+					break
+				}
+				cells[at.Y][x].Attributes = term.AttributesUnion(
+					cells[at.Y][x].Attributes, b.delAttr)
+			}
+			continue
+		}
+
+		for y := from.Y; y < to.Y; y++ {
+			at, ok := b.scrollToBarCoordinates(term.Coordinates{Y: y})
+			// hidden || lines removed between ticks
+			if !ok || at.Y >= len(cells) {
+				continue
+			}
+			for x := 0; x < b.linesWidth; x++ {
+				if x >= len(cells[at.Y]) {
+					break
+				}
+				cells[at.Y][x].Attributes = term.AttributesUnion(
+					cells[at.Y][x].Attributes, b.addAttr)
+			}
+		}
+	}
+	b.Handler.SetLocationList(textapi.LocationPriorityInfo, gitLocationsID, ll)
 }
 
 func (b *auxBar) rebuildLinesAbsolute(ctx context.Context) {
@@ -468,87 +498,61 @@ func (b *auxBar) rebuildLinesRelative(ctx context.Context) {
 	}
 }
 
-func (b *auxBar) rebuildFolds(ctx context.Context) {
-	svc, ok := b.buf.View().(foldsService)
-	if !ok {
-		return
-	}
-
-	folds, ok := svc.Folds()
-	if !ok {
-		return
-	}
-
-	go debug.CapturePanicReport(func() {
-		folds, isEmpty := iterator.IsEmpty(ctx, folds)
-		defer folds.Close()
-		if isEmpty {
-			return
+func (b *auxBar) rebuildFolds(ctx context.Context, folds iterator.Iterator[term.Range]) {
+	clear(b.folds)
+	for {
+		fold, ok := folds.Next(ctx)
+		if !ok {
+			break
 		}
-		// once first fold has been returned, this should not block on I/O anymore
-		// run on next loop tick, so we don't need to worry about synchronization
-		b.scheduleNextTick(func() {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-			}
-			clear(b.folds)
-			for {
-				fold, ok := folds.Next(ctx)
-				if !ok {
-					break
-				}
 
-				// we're not interested in these
-				if fold.Start.Y >= fold.End.Y {
-					continue
-				}
+		// we're not interested in these
+		if fold.Start.Y >= fold.End.Y {
+			continue
+		}
 
-				// avoid ambiguity at bar
-				fold.Start.X = 0
-				if end, exists := b.folds[fold.Start]; exists && end.Y > fold.End.Y {
-					continue
-				}
-				b.folds[fold.Start] = fold.End
+		// avoid ambiguity at bar
+		fold.Start.X = 0
+		if end, exists := b.folds[fold.Start]; exists && end.Y > fold.End.Y {
+			continue
+		}
+		b.folds[fold.Start] = fold.End
 
-				// convert folds which are scroll coordinates
-				// to window coordinates
-				foldStart, startOk := b.scroll.ScrollToWindowCoordinates(fold.Start)
-				foldEnd, endOk := b.scroll.ScrollToWindowCoordinates(fold.End)
-				if foldStart.Y != foldEnd.Y && (!startOk || !endOk) {
-					// inside hidden block
-					continue
-				}
+		// convert folds which are scroll coordinates
+		// to window coordinates
+		foldStart, startOk := b.scroll.ScrollToWindowCoordinates(fold.Start)
+		foldEnd, endOk := b.scroll.ScrollToWindowCoordinates(fold.End)
+		if foldStart.Y != foldEnd.Y && (!startOk || !endOk) {
+			// inside hidden block
+			continue
+		}
 
-				// convert to a scroll coordinates with hidden lines taken into account
-				offset := b.scroll.Offset()
-				foldStart.Y += offset.Y
-				foldEnd.Y += offset.Y
-				foldStart.X = 0
+		// convert to a scroll coordinates with hidden lines taken into account
+		offset := b.scroll.Offset()
+		foldStart.Y += offset.Y
+		foldEnd.Y += offset.Y
+		foldStart.X = 0
 
-				if foldStart.Y < 0 {
-					panic("invalid aux bar coordinates after conversion")
-				}
+		if foldStart.Y < 0 {
+			panic("invalid aux bar coordinates after conversion")
+		}
 
-				var icon rune
-				if foldStart.Y == foldEnd.Y {
-					icon = hiddenFoldIcon
-				} else {
-					icon = visibleFoldIcon
-				}
-				from := foldStart
-				from.X += b.linesWidth
-				to := from
-				to.X++ // replace
-				b.bar.Buffer().Edit(ctx, from, to, "")
-				b.bar.Buffer().InsertWithAttr(from, icon, b.barLineAttr)
-			}
-			if err := folds.Err(); err != nil {
-				b.log(log.ErrorLevel, "error rebuilding auxiliary bar: %v", err)
-			}
-		})
-	})
+		var icon rune
+		if foldStart.Y == foldEnd.Y {
+			icon = hiddenFoldIcon
+		} else {
+			icon = visibleFoldIcon
+		}
+		from := foldStart
+		from.X += b.linesWidth
+		to := from
+		to.X++ // replace
+		b.bar.Buffer().Edit(ctx, from, to, "")
+		b.bar.Buffer().InsertWithAttr(from, icon, b.barLineAttr)
+	}
+	if err := folds.Err(); err != nil {
+		b.log(log.ErrorLevel, "error rebuilding auxiliary bar: %v", err)
+	}
 }
 
 func (b *auxBar) OnDidSeek(_, to term.Coordinates) {
