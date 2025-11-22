@@ -624,17 +624,40 @@ Love isn't love 'til you give it away.
 	})
 }
 
-type mockClip struct {
-	data clipboard.Data
-}
+func TestMoveAfterClick(t *testing.T) {
+	width, height := 20, 10
 
-func (m *mockClip) Paste(registerID string) (clipboard.Data, error) {
-	return m.data, nil
-}
+	buf := cell.NewBuffer()
+	buf.ReadFrom(strings.NewReader(snippet))
+	vi := New(buf, uri)
+	vi.Resize(width, height)
 
-func (m *mockClip) Copy(registerID string, data clipboard.Data) error {
-	m.data = data
-	return nil
+	for _, r := range "jjjjjjj" {
+		_, handled := vi.Handle(term.Event{Type: term.EventKey, Ch: r})
+		require.True(t, handled)
+	}
+	pos, _, ok := vi.Cursor()
+	require.True(t, ok)
+	assert.Equal(t, term.Coordinates{Y: 7}, pos)
+
+	_, handled := vi.Handle(term.Event{
+		Type:   term.EventMouse,
+		Key:    term.MouseLeft,
+		MouseY: 2,
+		MouseX: 0,
+	})
+	pos, _, ok = vi.Cursor()
+	require.True(t, ok)
+	require.Equal(t, term.Coordinates{Y: 2, X: 0}, pos)
+	require.True(t, handled)
+
+	for _, r := range "jk" {
+		_, handled := vi.Handle(term.Event{Type: term.EventKey, Ch: r})
+		require.True(t, handled)
+	}
+	pos, _, ok = vi.Cursor()
+	require.True(t, ok)
+	assert.Equal(t, term.Coordinates{Y: 2, X: 0}, pos)
 }
 
 func TestCopyDelete(t *testing.T) {
@@ -724,4 +747,17 @@ func (f testFoldsService) InitialFolds() (iterator.Iterator[term.Range], bool) {
 	return iterator.FromSlice([]term.Range{
 		{Start: term.Coordinates{Y: 1, X: 0}, End: term.Coordinates{Y: 4}},
 	}), true
+}
+
+type mockClip struct {
+	data clipboard.Data
+}
+
+func (m *mockClip) Paste(registerID string) (clipboard.Data, error) {
+	return m.data, nil
+}
+
+func (m *mockClip) Copy(registerID string, data clipboard.Data) error {
+	m.data = data
+	return nil
 }
