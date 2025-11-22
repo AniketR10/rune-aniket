@@ -1068,7 +1068,7 @@ func (vi *viHandlerImpl) prepareHandle(mode viMode) func() {
 	prev := vi.cursor.Mark()
 	return func() {
 		vi.doMoveToBounds(prev)
-		if mode == normalMode {
+		if mode == normalMode || mode == visualMode /* clicks */ {
 			vi.markMatchingBrace()
 		}
 	}

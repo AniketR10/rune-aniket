@@ -660,6 +660,35 @@ func TestMoveAfterClick(t *testing.T) {
 	assert.Equal(t, term.Coordinates{Y: 2, X: 0}, pos)
 }
 
+func TestMatchBraceAfterClick(t *testing.T) {
+	width, height := 20, 10
+
+	buf := cell.NewBuffer()
+	buf.ReadFrom(strings.NewReader(snippet))
+	vi := New(buf, uri)
+	vi.Resize(width, height)
+
+	_, handled := vi.Handle(term.Event{
+		Type:   term.EventMouse,
+		Key:    term.MouseLeft,
+		MouseY: 7,
+		MouseX: 0,
+	})
+	pos := vi.CursorAtScroll()
+	require.Equal(t, term.Coordinates{Y: 7, X: 0}, pos)
+	require.True(t, handled)
+
+	_, handled = vi.Handle(term.Event{Type: term.EventKey, Ch: '%'})
+	require.True(t, handled)
+	pos = vi.CursorAtScroll()
+	assert.Equal(t, term.Coordinates{Y: 31, X: 0}, pos)
+
+	_, handled = vi.Handle(term.Event{Type: term.EventKey, Ch: '%'})
+	require.True(t, handled)
+	pos = vi.CursorAtScroll()
+	assert.Equal(t, term.Coordinates{Y: 7, X: 0}, pos)
+}
+
 func TestCopyDelete(t *testing.T) {
 	tsuite := []struct {
 		desc     string

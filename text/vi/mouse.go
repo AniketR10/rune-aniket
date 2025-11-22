@@ -42,6 +42,7 @@ func (d mouseDelegate) SetSelectionStart(pos term.Coordinates) {
 	d.MouseDelegate.SetSelectionStart(pos)
 	d.vi.setVisualMode()
 	d.vi.free = d.vi.cursor.Mark()
+	d.vi.markMatchingBrace()
 }
 
 func (d mouseDelegate) ClearSelection() {
