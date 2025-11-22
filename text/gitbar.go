@@ -261,20 +261,14 @@ func (b *gitBar) rebuildBar(ctx context.Context) {
 				from := term.Coordinates{Y: loc.From.Y}
 				to := term.Coordinates{Y: loc.To.Y}
 				if from == to {
-					at, ok := b.scrollToBarCoordinates(from)
-					if !ok { // hidden
-						continue
-					}
+					at, _ := b.scrollToBarCoordinates(from)
 					b.bar.Buffer().DeleteCell(at)
 					b.bar.Buffer().InsertStringWithAttr(at, delIcon, b.delAttr)
 					continue
 				}
 
 				for y := from.Y; y < to.Y; y++ {
-					at, ok := b.scrollToBarCoordinates(term.Coordinates{Y: y})
-					if !ok { // hidden
-						continue
-					}
+					at, _ := b.scrollToBarCoordinates(term.Coordinates{Y: y})
 					icon := addIcon
 					b.bar.Buffer().DeleteCell(at)
 					b.bar.Buffer().InsertStringWithAttr(at, icon, b.addAttr)
@@ -323,9 +317,6 @@ func (b *gitBar) OnDidEdit(
 
 func (b *gitBar) scrollToBarCoordinates(pos term.Coordinates) (ret term.Coordinates, ok bool) {
 	pos, ok = b.scroll.ScrollToWindowCoordinates(pos)
-	if !ok {
-		return
-	}
 	ret = pos
 	ret.Y += b.scroll.Offset().Y
 	ret.X += b.scroll.Offset().X

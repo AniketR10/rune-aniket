@@ -416,7 +416,7 @@ func TestGitBarWithAuxBarIntegration(t *testing.T) {
 	tests = []comptest.TestCase{
 		{Expected: `
   2                 
-  3   rt (#########
+# #   rt (#########
   8                 
   9    main() {    
 # ##   fmt.Println("

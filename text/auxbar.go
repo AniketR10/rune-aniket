@@ -423,9 +423,9 @@ func (b *auxBar) rebuildGit(ll textapi.LocationList) {
 		from := term.Coordinates{Y: loc.From.Y}
 		to := term.Coordinates{Y: loc.To.Y}
 		if from == to {
-			at, ok := b.scrollToBarCoordinates(from)
+			at, _ := b.scrollToBarCoordinates(from)
 			// hidden || lines removed between ticks
-			if !ok || at.Y >= len(cells) {
+			if at.Y >= len(cells) {
 				continue
 			}
 			for x := 0; x < b.linesWidth; x++ {
@@ -439,9 +439,9 @@ func (b *auxBar) rebuildGit(ll textapi.LocationList) {
 		}
 
 		for y := from.Y; y < to.Y; y++ {
-			at, ok := b.scrollToBarCoordinates(term.Coordinates{Y: y})
+			at, _ := b.scrollToBarCoordinates(term.Coordinates{Y: y})
 			// hidden || lines removed between ticks
-			if !ok || at.Y >= len(cells) {
+			if at.Y >= len(cells) {
 				continue
 			}
 			for x := 0; x < b.linesWidth; x++ {
@@ -607,9 +607,6 @@ func (b *auxBar) windowToBarCoordinates(pos term.Coordinates) term.Coordinates {
 
 func (b *auxBar) scrollToBarCoordinates(pos term.Coordinates) (ret term.Coordinates, ok bool) {
 	pos, ok = b.scroll.ScrollToWindowCoordinates(pos)
-	if !ok {
-		return
-	}
 	ret = pos
 	ret.Y += b.scroll.Offset().Y
 	ret.X += b.scroll.Offset().X
