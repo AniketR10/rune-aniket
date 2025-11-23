@@ -206,7 +206,8 @@ func (b *auxBar) Draw(w term.Writer) {
 	b.vhandler.Draw(w)
 	b.bar.Draw(w)
 	if b.highlightCursor {
-		y := b.prevCursor.Y
+		cursor, _, _ := b.vhandler.Cursor()
+		y := cursor.Y
 		for x := range b.barWidth {
 			w.UnionAttributes(term.Coordinates{Y: y, X: x}, b.cursorAttr)
 		}
@@ -407,7 +408,7 @@ func (b *auxBar) rebuildBar(ctx context.Context) {
 			} else if b.linesEnabled {
 				b.rebuildLinesRelative(ctx)
 			}
-			if b.linesEnabled && b.gitEnabled {
+			if diff != nil {
 				b.rebuildGit(diff)
 			}
 			if foldsIterator != nil {
@@ -476,12 +477,13 @@ func (b *auxBar) rebuildLinesAbsolute(ctx context.Context) {
 }
 
 func (b *auxBar) rebuildLinesRelative(ctx context.Context) {
-	cursorAtWindow := b.windowToBarCoordinates(b.prevCursor)
+	cursor, _, _ := b.vhandler.Cursor()
+	cursorAtWindow := b.windowToBarCoordinates(cursor)
 	for y := range b.buf.View().Rows() {
 		n := int(math.Abs(float64(cursorAtWindow.Y - y)))
 		var number string
 		if n == 0 {
-			cursorAtScroll := b.scroll.WindowToScrollCoordinates(b.prevCursor)
+			cursorAtScroll := b.scroll.WindowToScrollCoordinates(cursor)
 			number = strconv.Itoa(cursorAtScroll.Y + 1)
 		} else {
 			number = strconv.Itoa(n)
