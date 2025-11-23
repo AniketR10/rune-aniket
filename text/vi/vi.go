@@ -485,6 +485,7 @@ func (vi *Vi) hideInitialFolds() {
 		}
 		vi.scheduleNextTick(func() {
 			defer folds.Close()
+			cursor := vi.handler.cursorAtScroll()
 			for {
 				fold, ok := folds.Next(context.Background())
 				if !ok {
@@ -495,6 +496,7 @@ func (vi *Vi) hideInitialFolds() {
 			if err := folds.Err(); err != nil {
 				vi.log(log.ErrorLevel, "error hiding initial folds: %v", err)
 			}
+			vi.handler.setCursorAtScroll(cursor)
 		})
 	})
 }

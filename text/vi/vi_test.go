@@ -224,6 +224,59 @@ diff_buf_adjust(win_
 			mu.Unlock()
 		})
 	})
+	t.Run("initial folds with initial cursor position", func(t *testing.T) {
+		buf := cell.NewBuffer()
+		buf.WriteString(snippet)
+		fs := &testFoldsService{}
+		fs.view = buf.WithView(fs)
+		var wg sync.WaitGroup
+		var mu sync.Mutex
+		cb := func(fn func()) bool {
+			// run async to guarantee we can lock below:
+			// sometimes this cb can run in the main goroutine
+			go func() {
+				defer wg.Done()
+				mu.Lock()
+				defer mu.Unlock()
+				fn()
+			}()
+			return true
+		}
+		wg.Add(2)
+		mu.Lock()
+		vi := New(buf, uri,
+			WithHideInitialFolds(true),
+			WithScheduleNextTick(cb),
+		)
+		vi.Resize(20, 10)
+		require.True(t, vi.SetCursorAtScroll(term.Coordinates{Y: 7}))
+		mu.Unlock()
+
+		tests := []comptest.TestCase{
+			{Expected: `
+                    
+/* [4 lines] */     
+    void            
+diff_buf_adjust(win_
+{                   
+    win_T    *wp;   
+    int             
+                    
+    if (!win->w_p_di
+              NORMAL`,
+			},
+		}
+
+		wg.Wait()
+		w := term.NewStringWriter(20, 10)
+
+		mu.Lock()
+		defer mu.Unlock()
+
+		comptest.TestComponent(t, vi, w, tests)
+		pos := vi.CursorAtScroll()
+		assert.Equal(t, pos, term.Coordinates{Y: 7})
+	})
 }
 
 type mockHandler struct {
