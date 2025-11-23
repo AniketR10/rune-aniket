@@ -2422,6 +2422,22 @@ func TestCursorMoveLocationList(t *testing.T) {
 		pos := c.Coordinates()
 		assert.Equal(t, term.Coordinates{Y: 1}, pos)
 	})
+
+	t.Run("MoveToNextLocation should go to next location if current location is hidden", func(t *testing.T) {
+		c := setupCursorContent(t, 10, 10, "\na\nb\nc \n", false)
+		require.True(t, c.Select())
+		require.True(t, c.MoveDown())
+		require.True(t, c.MoveDown())
+		require.True(t, c.HideSelection())
+		require.False(t, c.MoveFirstLine())
+
+		assert.Equal(t, term.Coordinates{Y: 0}, c.Coordinates())
+
+		assert.Nil(t, c.SetLocationList(textapi.LocationPriorityInfo, locID, LocationSlice(abcLocations)))
+		assert.True(t, c.MoveToNextLocation(locID))
+
+		assert.Equal(t, term.Coordinates{Y: 1}, c.Coordinates())
+	})
 }
 
 func TestCursorMoveToScroll(t *testing.T) {

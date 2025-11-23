@@ -332,11 +332,17 @@ func (c *Cursor) Search(text string) int {
 	return n
 }
 
-func isBeforeCursor(cursor, pos term.Coordinates) bool {
-	return pos.Y < cursor.Y || (pos.Y == cursor.Y && pos.X <= cursor.X)
+func isBeforeCursorOrInsideHiddenBlock(c *Cursor, cursor, pos term.Coordinates) bool {
+	return pos.Y < cursor.Y || (pos.Y == cursor.Y && pos.X <= cursor.X) ||
+		isInsideHiddenBlock(c, cursor, pos)
 }
 
-func isPastCursor(cursor, pos term.Coordinates) bool {
+func isInsideHiddenBlock(c *Cursor, cursor, pos term.Coordinates) bool {
+	at, ok := c.scroll.ScrollToWindowCoordinates(pos)
+	return !ok && at.Y == cursor.Y
+}
+
+func isPastCursor(c *Cursor, cursor, pos term.Coordinates) bool {
 	return pos.Y > cursor.Y || (pos.Y == cursor.Y && pos.X >= cursor.X)
 }
 
@@ -1628,7 +1634,7 @@ func (c *Cursor) endOfLocationList(
 
 func (c *Cursor) movePastCursor(
 	l LocationList, op, reverse func(LocationList) (textapi.Location, bool),
-	continueIf func(term.Coordinates, term.Coordinates) bool,
+	continueIf func(*Cursor, term.Coordinates, term.Coordinates) bool,
 ) bool {
 	enable := c.disablePublishing()
 	defer enable()
@@ -1641,7 +1647,7 @@ func (c *Cursor) movePastCursor(
 	cursor := c.cursorAtScroll()
 	for {
 		pos, _ := l.Current()
-		if !continueIf(cursor, pos.From) {
+		if !continueIf(c, cursor, pos.From) {
 			c.moveToScroll(pos.From)
 			break
 		}
@@ -1669,7 +1675,7 @@ func (c *Cursor) MoveToNextLocation(ID string) bool {
 	}
 
 	return c.movePastCursor(l, (LocationList).Next,
-		(LocationList).Prev, isBeforeCursor)
+		(LocationList).Prev, isBeforeCursorOrInsideHiddenBlock)
 }
 
 // MoveToPrevLocation moves the cursor to the previous position returned by the
