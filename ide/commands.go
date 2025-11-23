@@ -439,7 +439,7 @@ var (
 			},
 			handler: (*ex).pasteFromClipboard,
 		},
-		"colordefault": {
+		"setcolor": {
 			man: textapi.CommandManual{
 				Summary: "Changes the default background and optionally foreground colors of " +
 					"the content in focus. The color can be a named color or an RGB value " +

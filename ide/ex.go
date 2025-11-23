@@ -913,6 +913,11 @@ func (e *ex) defaultcolors(args ...string) error {
 	}
 
 	content, _ := e.invokeWindow().Content()
+	emh, ok := content.(vtereservoir.VTE)
+	if ok {
+		emh.SetDefaultAttributes(attrs)
+		return nil
+	}
 	t, ok := content.(*browser.Tab)
 	if !ok {
 		return errors.New("cannot change colors of this window")
@@ -922,7 +927,7 @@ func (e *ex) defaultcolors(args ...string) error {
 		th.SetDefaultAttributes(attrs)
 		return nil
 	}
-	emh, ok := t.Handler().(vtereservoir.VTE)
+	emh, ok = t.Handler().(vtereservoir.VTE)
 	if ok {
 		emh.SetDefaultAttributes(attrs)
 		return nil
