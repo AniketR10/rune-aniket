@@ -169,29 +169,52 @@ func (c *Cursor) buffer() *cell.Buffer {
 // CursorMark is used with Mark and MoveToMark to
 // move the cursor to previously marked positions.
 type CursorMark struct {
-	// this allows to keep cursor position semantics hidden from clients
-	internal term.Coordinates
-	offset   term.Coordinates
+	// keep it private so cursor position semantics are hidden from clients
+	scroll term.Coordinates
+	window term.Coordinates
 }
 
 // Before returns true if other is before CursorMark.
 func (c CursorMark) Before(other term.Coordinates) bool {
-	res := term.CoordinatesDiff(c.internal, other)
+	res := term.CoordinatesDiff(c.window, other)
 	return res.Y < 0 || res.Y == 0 && res.X < 0
 }
 
 // Mark returns the current cursor position as a CursorMark
 // to later be used in calls to MoveToMark.
 func (c *Cursor) Mark() CursorMark {
-	return CursorMark{internal: c.cursor, offset: c.scroll.Offset()}
+	return CursorMark{
+		scroll: c.cursorAtScroll(),
+		window: c.cursor,
+	}
 }
 
 // MoveToMark moves the cursor to the position represented by mark.
 func (c *Cursor) MoveToMark(mark CursorMark) CursorMark {
-	ret := c.cursor
-	c.setCursor(mark.internal, false)
-	c.scroll.SetOffset(mark.offset)
-	return CursorMark{internal: ret}
+	ret := CursorMark{window: c.cursor, scroll: c.cursorAtScroll()}
+	win, ok := c.scroll.ScrollToWindowCoordinates(mark.scroll)
+	if !ok {
+		win = c.cursor
+	}
+	// try to keep cursor at the same window position, if possible
+	c.setCursor(win, false)
+	if !ok {
+		return ret
+	}
+	if c.cursor.Y > mark.window.Y {
+		diff := c.cursor.Y - mark.window.Y
+		for diff > 0 && c.cursor.Y > 0 && c.scroll.SeekDown() {
+			c.cursor.Y--
+			diff--
+		}
+	} else if c.cursor.Y < mark.window.Y {
+		diff := mark.window.Y - c.cursor.Y
+		for diff > 0 && c.cursor.Y < c.scroll.SizeHeight() && c.scroll.SeekUp() {
+			c.cursor.Y++
+			diff--
+		}
+	}
+	return ret
 }
 
 func (c *Cursor) rows() int {
@@ -1787,9 +1810,9 @@ func (c *Cursor) CollapseFold(ctx context.Context) bool {
 		if !ok {
 			return
 		}
-		pos := c.cursorAtScroll()
+		mark := c.Mark()
 		if c.scroll.MarkHidden(fold.Start.Y, fold.End.Y) {
-			c.MoveToScroll(pos)
+			c.MoveToMark(mark)
 		}
 	})
 }
@@ -1804,9 +1827,9 @@ func (c *Cursor) ExpandFold(ctx context.Context) bool {
 		if !ok {
 			return
 		}
-		pos := c.cursorAtScroll()
+		mark := c.Mark()
 		if c.scroll.MarkVisible(fold.Start.Y) {
-			c.MoveToScroll(pos)
+			c.MoveToMark(mark)
 		}
 	})
 }
@@ -1838,7 +1861,7 @@ func (c *Cursor) ToggleFold(ctx context.Context) bool {
 		if !ok {
 			return
 		}
-		pos := c.cursorAtScroll()
+		mark := c.Mark()
 		var handled bool
 		if hidden, ok := c.isFoldHidden(fold.Start, fold.End); hidden || !ok {
 			handled = c.scroll.MarkVisible(fold.Start.Y)
@@ -1846,7 +1869,7 @@ func (c *Cursor) ToggleFold(ctx context.Context) bool {
 			handled = c.scroll.MarkHidden(fold.Start.Y, fold.End.Y)
 		}
 		if handled {
-			c.MoveToScroll(pos)
+			c.MoveToMark(mark)
 		}
 	})
 }
@@ -1858,13 +1881,13 @@ func (c *Cursor) CollapseAllFolds(ctx context.Context) bool {
 		return false
 	}
 	return c.opFolds(ctx, func(folds []term.Range) {
-		pos := c.cursorAtScroll()
+		mark := c.Mark()
 		var handled bool
 		for _, fold := range folds {
 			handled = c.scroll.MarkHidden(fold.Start.Y, fold.End.Y) || handled
 		}
 		if handled {
-			c.MoveToScroll(pos)
+			c.MoveToMark(mark)
 		}
 	})
 }
@@ -1876,13 +1899,13 @@ func (c *Cursor) ExpandAllFolds(ctx context.Context) bool {
 		return false
 	}
 	return c.opFolds(ctx, func(folds []term.Range) {
-		pos := c.cursorAtScroll()
+		mark := c.Mark()
 		var handled bool
 		for _, fold := range folds {
 			handled = c.scroll.MarkVisible(fold.Start.Y) || handled
 		}
 		if handled {
-			c.MoveToScroll(pos)
+			c.MoveToMark(mark)
 		}
 	})
 }
@@ -1894,7 +1917,7 @@ func (c *Cursor) ToggleAllFolds(ctx context.Context) bool {
 		return false
 	}
 	return c.opFolds(ctx, func(folds []term.Range) {
-		pos := c.cursorAtScroll()
+		mark := c.Mark()
 		var handled bool
 		// first determine if they're currently hidden or visible:
 		// if we start toggling as we're iterating, nested folds
@@ -1914,7 +1937,7 @@ func (c *Cursor) ToggleAllFolds(ctx context.Context) bool {
 			handled = c.scroll.MarkHidden(fold.Start.Y, fold.End.Y) || handled
 		}
 		if handled {
-			c.MoveToScroll(pos)
+			c.MoveToMark(mark)
 		}
 	})
 }

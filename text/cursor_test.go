@@ -31,7 +31,6 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/blue/iterator"
@@ -122,6 +121,7 @@ func TestCursorFolds(t *testing.T) {
 		expectOnHide    int
 		expectOnVisible int
 		cursor          term.Coordinates
+		width, height   int
 	}{
 		{
 			"SelectFold selects nothing if cursor is not at fold",
@@ -129,7 +129,7 @@ func TestCursorFolds(t *testing.T) {
 				wg.Add(1)
 				assert.True(t, c.SelectFold(ctx))
 				assert.Zero(t, c.Selection())
-			}, 0, 0, term.Coordinates{},
+			}, 0, 0, term.Coordinates{}, 100, 100,
 		},
 		{
 			"SelectFold selects fold at cursor",
@@ -144,14 +144,14 @@ func TestCursorFolds(t *testing.T) {
  `
 				assert.Equal(t, expectedSelection, c.Selection())
 				assert.True(t, c.DeleteSelection())
-			}, 0, 0, term.Coordinates{Y: 1},
+			}, 0, 0, term.Coordinates{Y: 1}, 100, 100,
 		},
 		{
 			"CollapseFold collapses nothing if cursor is not at fold",
 			func(t *testing.T, c *Cursor, wg *sync.WaitGroup) {
 				wg.Add(1)
 				assert.True(t, c.CollapseFold(ctx))
-			}, 0, 0, term.Coordinates{},
+			}, 0, 0, term.Coordinates{}, 100, 100,
 		},
 		{
 			"CollapseFold collapses fold at cursor",
@@ -159,7 +159,7 @@ func TestCursorFolds(t *testing.T) {
 				wg.Add(1)
 				assert.True(t, c.MoveDown())
 				assert.True(t, c.CollapseFold(ctx))
-			}, 1, 0, term.Coordinates{Y: 1},
+			}, 1, 0, term.Coordinates{Y: 1}, 100, 100,
 		},
 		{
 			"CollapseFold collapses inner fold at cursor",
@@ -168,7 +168,7 @@ func TestCursorFolds(t *testing.T) {
 				assert.True(t, c.MoveDown())
 				assert.True(t, c.MoveDown())
 				assert.True(t, c.CollapseFold(ctx))
-			}, 1, 0, term.Coordinates{Y: 2},
+			}, 1, 0, term.Coordinates{Y: 2}, 100, 100,
 		},
 		{
 			"ToggleFold toggles fold at cursor",
@@ -176,7 +176,7 @@ func TestCursorFolds(t *testing.T) {
 				wg.Add(1)
 				assert.True(t, c.MoveDown())
 				assert.True(t, c.ToggleFold(ctx))
-			}, 1, 0, term.Coordinates{Y: 1},
+			}, 1, 0, term.Coordinates{Y: 1}, 100, 100,
 		},
 		{
 			"ToggleFold toggles inner fold at cursor",
@@ -185,7 +185,7 @@ func TestCursorFolds(t *testing.T) {
 				assert.True(t, c.MoveDown())
 				assert.True(t, c.MoveDown())
 				assert.True(t, c.ToggleFold(ctx))
-			}, 1, 0, term.Coordinates{Y: 2},
+			}, 1, 0, term.Coordinates{Y: 2}, 100, 100,
 		},
 		{
 			"ExpandFold does nothing if there's no folded fold at cursor",
@@ -193,7 +193,7 @@ func TestCursorFolds(t *testing.T) {
 				wg.Add(1)
 				assert.True(t, c.MoveDown())
 				assert.True(t, c.ExpandFold(ctx))
-			}, 0, 0, term.Coordinates{Y: 1},
+			}, 0, 0, term.Coordinates{Y: 1}, 100, 100,
 		},
 		{
 			"ExpandFold expands fold at cursor",
@@ -203,7 +203,7 @@ func TestCursorFolds(t *testing.T) {
 				assert.True(t, c.CollapseFold(ctx))
 				wg.Wait()
 				assert.True(t, c.ExpandFold(ctx))
-			}, 1, 1, term.Coordinates{Y: 1},
+			}, 1, 1, term.Coordinates{Y: 1}, 100, 100,
 		},
 		{
 			"ExpandFold expands inner fold at cursor",
@@ -214,7 +214,7 @@ func TestCursorFolds(t *testing.T) {
 				assert.True(t, c.CollapseFold(ctx))
 				wg.Wait()
 				assert.True(t, c.ExpandFold(ctx))
-			}, 1, 1, term.Coordinates{Y: 2},
+			}, 1, 1, term.Coordinates{Y: 2}, 100, 100,
 		},
 		{
 			"ToggleFold expands folded fold at cursor",
@@ -224,7 +224,7 @@ func TestCursorFolds(t *testing.T) {
 				assert.True(t, c.ToggleFold(ctx))
 				wg.Wait()
 				assert.True(t, c.ToggleFold(ctx))
-			}, 1, 1, term.Coordinates{Y: 1},
+			}, 1, 1, term.Coordinates{Y: 1}, 100, 100,
 		},
 		{
 			"ToggleAllFolds collapses all outer folds",
@@ -233,7 +233,7 @@ func TestCursorFolds(t *testing.T) {
 				_, ok := c.MoveToScroll(term.Coordinates{Y: 7})
 				require.True(t, ok)
 				assert.True(t, c.ToggleAllFolds(ctx))
-			}, 2, 0, term.Coordinates{Y: 4},
+			}, 2, 0, term.Coordinates{Y: 4}, 100, 100,
 		},
 		{
 			"ToggleAllFolds expands all folded folds",
@@ -244,19 +244,17 @@ func TestCursorFolds(t *testing.T) {
 				assert.True(t, c.ToggleAllFolds(ctx))
 				wg.Wait()
 				wg.Add(1)
-				logrus.SetLevel(logrus.TraceLevel)
 				assert.True(t, c.ToggleAllFolds(ctx))
-			}, 2, 2, term.Coordinates{Y: 7},
+			}, 2, 2, term.Coordinates{Y: 7}, 100, 100,
 		},
 		{
 			"CollapseAllFolds collapses all outer folds",
 			func(t *testing.T, c *Cursor, wg *sync.WaitGroup) {
-				logrus.SetLevel(logrus.InfoLevel)
 				wg.Add(1)
 				_, ok := c.MoveToScroll(term.Coordinates{Y: 7})
 				require.True(t, ok)
 				assert.True(t, c.CollapseAllFolds(ctx))
-			}, 2, 0, term.Coordinates{Y: 4},
+			}, 2, 0, term.Coordinates{Y: 4}, 100, 100,
 		},
 		{
 			"ExpandAllFolds expands nothing if nothing is folded",
@@ -265,7 +263,46 @@ func TestCursorFolds(t *testing.T) {
 				_, ok := c.MoveToScroll(term.Coordinates{Y: 7})
 				require.True(t, ok)
 				assert.True(t, c.ExpandAllFolds(ctx))
-			}, 0, 0, term.Coordinates{Y: 7},
+			}, 0, 0, term.Coordinates{Y: 7}, 100, 100,
+		},
+		{
+			"ToggleAllFolds collapses all outer folds, maintains window position",
+			func(t *testing.T, c *Cursor, wg *sync.WaitGroup) {
+				wg.Add(1)
+				_, ok := c.MoveToScroll(term.Coordinates{Y: 7})
+				require.True(t, ok)
+				assert.True(t, c.ToggleAllFolds(ctx))
+			}, 2, 0, term.Coordinates{Y: 4}, 100, 5,
+		},
+		{
+			"ToggleAllFolds expands all folded folds, maintains window position",
+			func(t *testing.T, c *Cursor, wg *sync.WaitGroup) {
+				wg.Add(1)
+				_, ok := c.MoveToScroll(term.Coordinates{Y: 7})
+				require.True(t, ok)
+				assert.True(t, c.ToggleAllFolds(ctx))
+				wg.Wait()
+				wg.Add(1)
+				assert.True(t, c.ToggleAllFolds(ctx))
+			}, 2, 2, term.Coordinates{Y: 4}, 100, 5,
+		},
+		{
+			"CollapseAllFolds collapses all outer folds, maintains window position",
+			func(t *testing.T, c *Cursor, wg *sync.WaitGroup) {
+				wg.Add(1)
+				_, ok := c.MoveToScroll(term.Coordinates{Y: 7})
+				require.True(t, ok)
+				assert.True(t, c.CollapseAllFolds(ctx))
+			}, 2, 0, term.Coordinates{Y: 4}, 100, 5,
+		},
+		{
+			"ExpandAllFolds expands nothing if nothing is folde, maintains window positiond",
+			func(t *testing.T, c *Cursor, wg *sync.WaitGroup) {
+				wg.Add(1)
+				_, ok := c.MoveToScroll(term.Coordinates{Y: 7})
+				require.True(t, ok)
+				assert.True(t, c.ExpandAllFolds(ctx))
+			}, 0, 0, term.Coordinates{Y: 4}, 100, 5,
 		},
 	}
 
@@ -274,7 +311,7 @@ func TestCursorFolds(t *testing.T) {
 
 		t.Run(tcase.desc, func(t *testing.T) {
 			var wg sync.WaitGroup
-			e := setupCursorForFolds(t, 100, 100, &wg)
+			e := setupCursorForFolds(t, tcase.width, tcase.height, &wg)
 			sub := &testScrollSubscriber{}
 			e.scroll.Subscribe(sub)
 
@@ -3018,7 +3055,7 @@ func benchmarkCursorMoveMatchingRune(b *testing.B, width, height int, wrap bool)
 	s := newBenchmarkScroll(width, height, 1)
 	s.Wrap = wrap
 	cursor := NewCursor(s, nil)
-	cursor.MoveToMark(CursorMark{term.Coordinates{Y: 7}, term.Coordinates{}})
+	cursor.MoveToMark(CursorMark{scroll: term.Coordinates{Y: 7}})
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -3054,7 +3091,7 @@ func benchmarkCursorMoveToRune(b *testing.B, width, height int, wrap bool) {
 	s := newBenchmarkScroll(width, height, 100)
 	s.Wrap = wrap
 	cursor := NewCursor(s, nil)
-	cursor.MoveToMark(CursorMark{term.Coordinates{Y: 7}, term.Coordinates{}})
+	cursor.MoveToMark(CursorMark{scroll: term.Coordinates{Y: 7}})
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
