@@ -29,6 +29,7 @@ import (
 	"strings"
 
 	"github.com/ernestrc/go-multierror"
+	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/iterator"
 	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/api/workspaceapi"
@@ -128,10 +129,16 @@ func (u locationCommandHandler) handleLocationJump(cmd textapi.Command) error {
 		}
 		switch cmd.Args[0] {
 		case "next":
-			u.Handler.MoveToNextLocation(cmd.Args[1])
+			ok := u.Handler.MoveToNextLocation(cmd.Args[1])
+			if !ok {
+				log.Debugf("reached end of location list")
+			}
 			return nil
 		case "previous":
-			u.Handler.MoveToPrevLocation(cmd.Args[1])
+			ok := u.Handler.MoveToPrevLocation(cmd.Args[1])
+			if !ok {
+				log.Debugf("reached start of location list")
+			}
 			return nil
 		}
 		return errors.New("only 'next' or 'previous' is accepted")
