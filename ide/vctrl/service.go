@@ -26,6 +26,7 @@ package vctrl
 import (
 	"context"
 	"errors"
+	"sync"
 
 	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/api/workspaceapi"
@@ -111,6 +112,11 @@ func NopService() Service {
 	return nopService{}
 }
 
+// SyncService wraps a service to enable access from multiple goroutines.
+func SyncService(root Service, mu sync.Locker) Service {
+	return syncService{root: root, mu: mu}
+}
+
 type nopService struct {
 }
 
@@ -136,4 +142,43 @@ func (n nopService) RemoteURL(
 
 func (n nopService) RelPath(ctx context.Context, file string) (string, error) {
 	return file, nil
+}
+
+type syncService struct {
+	root Service
+	mu   sync.Locker
+}
+
+func (s syncService) ListRemotes(
+	ctx context.Context, path workspaceapi.URI,
+) ([]string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.root.ListRemotes(ctx, path)
+}
+
+func (s syncService) Diff(ctx context.Context, file workspaceapi.URI) (FileDiff, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.root.Diff(ctx, file)
+}
+
+func (s syncService) CurrentCommit(ctx context.Context, file workspaceapi.URI) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.root.CurrentCommit(ctx, file)
+}
+
+func (s syncService) RemoteURL(
+	ctx context.Context, file workspaceapi.URI, remoteName string,
+) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.root.RemoteURL(ctx, file, remoteName)
+}
+
+func (s syncService) RelPath(ctx context.Context, file string) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.root.RelPath(ctx, file)
 }

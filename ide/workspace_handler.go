@@ -630,6 +630,8 @@ func (h *workspaceManagerHandler) addWorkspace(
 			h.empty.log(log.ErrorLevel, "new git service for workspace %q: %v",
 				uri.Path(), err)
 			vctrlService = vctrl.NopService()
+		} else {
+			vctrlService = vctrl.SyncService(vctrlService, new(sync.Mutex))
 		}
 	}
 
