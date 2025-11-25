@@ -79,7 +79,8 @@ func WithAuxBar(
 	scroll *component.Scroll, config AuxBarConfig,
 ) Handler {
 	if config.ScheduleNextTick == nil ||
-		(config.GitEnabled && (config.Publisher == nil || config.CommandRegistry == nil)) {
+		((config.GitEnabled && config.LinesEnabled) &&
+			(config.Publisher == nil || config.CommandRegistry == nil)) {
 		panic("auxbar configuration is missing key dependencies")
 	}
 	ret := new(auxBar)
@@ -92,7 +93,7 @@ func WithAuxBar(
 	ret.registry = config.CommandRegistry
 	ret.scheduleNextTick = config.ScheduleNextTick
 	ret.foldsEnabled = config.FoldsEnabled
-	ret.gitEnabled = config.GitEnabled
+	ret.gitEnabled = config.GitEnabled && config.LinesEnabled
 	ret.linesEnabled = config.LinesEnabled
 	ret.absoluteLines = config.AbsoluteLines
 	ret.highlightCursor = config.HighlightCursor
@@ -132,7 +133,9 @@ func WithAuxBar(
 
 	ret.bar = new(component.Scroll)
 	ret.bar.InitPerformance(b)
-	ret.bar.SetOffset(term.Coordinates{Y: scroll.Offset().Y})
+	if !ret.linesEnabled || ret.absoluteLines {
+		ret.bar.SetOffset(term.Coordinates{Y: scroll.Offset().Y})
+	}
 	ret.bar.Attributes.Bg = ret.barLineAttr.Bg
 	ret.bar.Attributes.Fg = ret.barLineAttr.Fg
 
@@ -140,7 +143,7 @@ func WithAuxBar(
 	buf.Subscribe(ret)
 
 	evs := []textapi.EventType{textapi.EventTypeFlush}
-	if ret.gitEnabled {
+	if ret.linesEnabled && ret.gitEnabled {
 		_ = ret.pub.SubscribeEvents(evs, (*auxBarSubscriber)(ret))
 		for _, cmd := range gitCommands {
 			// this could fail if gitbar is also enabled
@@ -186,6 +189,7 @@ type auxBar struct {
 	height      int
 	barWidth    int
 	prevCursor  term.Coordinates
+	prevOffset  term.Coordinates
 	delLocAttr  term.Attributes
 	addLocAttr  term.Attributes
 	delAttr     term.Attributes
@@ -223,25 +227,24 @@ func (b *auxBar) Handle(ev term.Event) (quit, handled bool) {
 		ev.MouseX >= b.linesWidth && ev.MouseX < b.linesWidth+foldsWidth
 	if !fold {
 		quit, handled = b.vhandler.Handle(ev)
-		if !handled {
-			return
-		}
 		prevCursor := b.prevCursor
+		prevOffset := b.prevOffset
+		b.prevOffset = b.scroll.Offset()
 		b.prevCursor, _, _ = b.vhandler.Cursor()
-		if b.linesEnabled && !b.absoluteLines && prevCursor.Y != b.prevCursor.Y {
+		if b.linesEnabled && !b.absoluteLines &&
+			(prevCursor.Y != b.prevCursor.Y || prevOffset.Y != b.prevOffset.Y) {
 			b.rebuildBar(context.Background())
 		}
 		return
 	}
 
 	posAtWindow := term.Coordinates{Y: ev.MouseY, X: ev.MouseX}
-	posAtBar := b.windowToBarCoordinates(posAtWindow)
 	posAtScroll := b.scroll.WindowToScrollCoordinates(posAtWindow)
 	posAtScroll.X = 0
-	folded, ok := b.foldAt(posAtBar)
+	folded, ok := b.foldAt(posAtWindow)
 	b.log(log.TraceLevel, "received mouse click at bar,"+
-		" win pos: %+v, bar pos: %+v, scroll pos: %+v, folded: %t, ok: %t",
-		posAtWindow, posAtBar, posAtScroll, folded, ok)
+		" win pos: %+v, scroll pos: %+v, folded: %t, ok: %t",
+		posAtWindow, posAtScroll, folded, ok)
 	if ok && folded {
 		handled = b.scroll.MarkVisible(posAtScroll.Y)
 	} else if ok {
@@ -256,6 +259,7 @@ func (b *auxBar) Handle(ev term.Event) (quit, handled bool) {
 }
 
 func (b *auxBar) Resize(width, height int) {
+	rebuild := b.height != height && b.linesEnabled && !b.absoluteLines
 	b.height = height
 	b.setLinesWidth(b.height)
 	b.barWidth = b.linesWidth
@@ -269,6 +273,9 @@ func (b *auxBar) Resize(width, height int) {
 	b.bar.Resize(b.barWidth, height)
 	b.vhandler.Move(term.Coordinates{X: b.barWidth})
 	b.vhandler.Resize(width-b.barWidth, height)
+	if rebuild {
+		b.rebuildBar(context.Background())
+	}
 }
 
 func (b *auxBar) HandleCommand(ctx context.Context, cmd textapi.Command) error {
@@ -320,6 +327,25 @@ func (b *auxBar) Close() (ret error) {
 	return
 }
 
+func (b *auxBar) SetCursorAtScroll(pos term.Coordinates) bool {
+	ok := b.Handler.SetCursorAtScroll(pos)
+	b.rebuildBar(context.Background())
+	b.prevCursor, _, _ = b.vhandler.Cursor()
+	return ok
+}
+
+func (b *auxBar) MoveToNextLocation(ID string) bool {
+	ok := b.Handler.MoveToNextLocation(ID)
+	b.rebuildBar(context.Background())
+	return ok
+}
+
+func (b *auxBar) MoveToPrevLocation(ID string) bool {
+	ok := b.Handler.MoveToPrevLocation(ID)
+	b.rebuildBar(context.Background())
+	return ok
+}
+
 type auxBarSubscriber auxBar
 
 func (b *auxBarSubscriber) Handle(ctx context.Context, ev textapi.Event) bool {
@@ -331,15 +357,19 @@ func (b *auxBarSubscriber) Handle(ctx context.Context, ev textapi.Event) bool {
 	return false
 }
 
-func (b *auxBar) foldAt(pos term.Coordinates) (folded, ok bool) {
+func (b *auxBar) foldAt(posAtWindow term.Coordinates) (folded, ok bool) {
+	posAtBar := posAtWindow
+	if !b.linesEnabled || b.absoluteLines {
+		posAtBar = b.windowToBarCoordinates(posAtWindow)
+	}
 	cells := b.bar.Buffer().RawCells()
-	if pos.Y >= len(cells) {
+	if posAtBar.Y >= len(cells) {
 		return
 	}
-	if pos.X >= len(cells[pos.Y]) {
+	if posAtBar.X >= len(cells[posAtBar.Y]) {
 		return
 	}
-	switch cells[pos.Y][pos.X].Ch {
+	switch cells[posAtBar.Y][posAtBar.X].Ch {
 	case hiddenFoldIcon:
 		ok = true
 		folded = true
@@ -358,7 +388,7 @@ func (b *auxBar) rebuildBar(ctx context.Context) {
 	var diff textapi.LocationList
 	var foldsIterator iterator.Iterator[term.Range]
 	var wg sync.WaitGroup
-	if b.linesEnabled && b.gitEnabled {
+	if b.gitEnabled {
 		wg.Add(1)
 		go debug.CapturePanicReport(func() {
 			defer wg.Done()
@@ -382,7 +412,6 @@ func (b *auxBar) rebuildBar(ctx context.Context) {
 			go debug.CapturePanicReport(func() {
 				defer wg.Done()
 				folds, isEmpty := iterator.IsEmpty(ctx, folds)
-				defer folds.Close()
 				if isEmpty {
 					return
 				}
@@ -393,43 +422,90 @@ func (b *auxBar) rebuildBar(ctx context.Context) {
 		}
 	}
 
-	// do it synchronously if there's no pending work
-	if (b.foldsEnabled && ok) || (b.linesEnabled && b.gitEnabled) {
-		go debug.CapturePanicReport(func() {
-			wg.Wait()
-			b.scheduleNextTick(func() {
-				select {
-				case <-ctx.Done():
-					return
-				default:
-				}
-
-				b.bar.Buffer().ResetPerformance()
-				if b.linesEnabled && b.absoluteLines {
-					b.rebuildLinesAbsolute(ctx)
-				} else if b.linesEnabled {
-					b.rebuildLinesRelative(ctx)
-				}
-				if diff != nil {
-					b.rebuildGit(diff)
-				}
-				if foldsIterator != nil {
-					b.rebuildFolds(ctx, foldsIterator)
-				}
-			})
-		})
+	// rebuild it synchronously if there's no pending work
+	pendingWork := (b.foldsEnabled && ok) || b.gitEnabled
+	if !pendingWork {
+		b.bar.Buffer().ResetPerformance()
+		if b.linesEnabled && b.absoluteLines {
+			b.rebuildLinesAbsolute(ctx)
+		} else if b.linesEnabled {
+			b.rebuildLinesRelative(ctx)
+		}
 		return
 	}
 
-	b.bar.Buffer().ResetPerformance()
-	if b.linesEnabled && b.absoluteLines {
-		b.rebuildLinesAbsolute(ctx)
-	} else if b.linesEnabled {
-		b.rebuildLinesRelative(ctx)
-	}
+	go debug.CapturePanicReport(func() {
+		wg.Wait()
+		b.scheduleNextTick(func() {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+
+			b.bar.Buffer().ResetPerformance()
+			if b.linesEnabled && b.absoluteLines {
+				b.rebuildLinesAbsolute(ctx)
+			} else if b.linesEnabled {
+				b.rebuildLinesRelative(ctx)
+			}
+			if diff != nil {
+				if b.linesEnabled && !b.absoluteLines {
+					b.rebuildGitRelative(diff)
+				} else {
+					b.rebuildGitAbsolute(diff)
+				}
+			}
+			if foldsIterator != nil {
+				defer foldsIterator.Close()
+				if b.linesEnabled && !b.absoluteLines {
+					b.rebuildFoldsRelative(ctx, foldsIterator)
+				} else {
+					b.rebuildFoldsAbsolute(ctx, foldsIterator)
+				}
+			}
+		})
+	})
 }
 
-func (b *auxBar) rebuildGit(ll textapi.LocationList) {
+func (b *auxBar) rebuildGitRelative(ll textapi.LocationList) {
+	cells := b.bar.Buffer().RawCells()
+	for loc, ok := ll.Current(); ok; loc, ok = ll.Next() {
+		from := term.Coordinates{Y: loc.From.Y}
+		to := term.Coordinates{Y: loc.To.Y}
+		if from == to {
+			at, ok := b.scroll.ScrollToWindowCoordinates(from)
+			if !ok || at.Y < 0 || at.Y >= b.height || at.Y >= len(cells) {
+				continue
+			}
+			for x := 0; x < b.linesWidth; x++ {
+				if x >= len(cells[at.Y]) {
+					break
+				}
+				cells[at.Y][x].Attributes = term.AttributesUnion(
+					cells[at.Y][x].Attributes, b.delAttr)
+			}
+			continue
+		}
+
+		for y := from.Y; y < to.Y; y++ {
+			at, _ := b.scroll.ScrollToWindowCoordinates(term.Coordinates{Y: y})
+			if !ok || at.Y < 0 || at.Y >= b.height || at.Y >= len(cells) {
+				continue
+			}
+			for x := 0; x < b.linesWidth; x++ {
+				if x >= len(cells[at.Y]) {
+					break
+				}
+				cells[at.Y][x].Attributes = term.AttributesUnion(
+					cells[at.Y][x].Attributes, b.addAttr)
+			}
+		}
+	}
+	b.Handler.SetLocationList(textapi.LocationPriorityInfo, gitLocationsID, ll)
+}
+
+func (b *auxBar) rebuildGitAbsolute(ll textapi.LocationList) {
 	cells := b.bar.Buffer().RawCells()
 	for loc, ok := ll.Current(); ok; loc, ok = ll.Next() {
 		from := term.Coordinates{Y: loc.From.Y}
@@ -488,13 +564,12 @@ func (b *auxBar) rebuildLinesAbsolute(ctx context.Context) {
 }
 
 func (b *auxBar) rebuildLinesRelative(ctx context.Context) {
-	cursor, _, _ := b.vhandler.Cursor()
-	cursorAtWindow := b.windowToBarCoordinates(cursor)
-	for y := range b.buf.View().Rows() {
+	cursorAtWindow, _, _ := b.vhandler.Cursor()
+	for y := range b.height {
 		n := int(math.Abs(float64(cursorAtWindow.Y - y)))
 		var number string
 		if n == 0 {
-			cursorAtScroll := b.scroll.WindowToScrollCoordinates(cursor)
+			cursorAtScroll := b.scroll.WindowToScrollCoordinates(cursorAtWindow)
 			number = strconv.Itoa(cursorAtScroll.Y + 1)
 		} else {
 			number = strconv.Itoa(n)
@@ -511,7 +586,64 @@ func (b *auxBar) rebuildLinesRelative(ctx context.Context) {
 	}
 }
 
-func (b *auxBar) rebuildFolds(ctx context.Context, folds iterator.Iterator[term.Range]) {
+func (b *auxBar) rebuildFoldsRelative(
+	ctx context.Context, folds iterator.Iterator[term.Range],
+) {
+	clear(b.folds)
+	for {
+		fold, ok := folds.Next(ctx)
+		if !ok {
+			break
+		}
+
+		// we're not interested in these
+		if fold.Start.Y >= fold.End.Y {
+			continue
+		}
+
+		// avoid ambiguity at bar
+		fold.Start.X = 0
+		if end, exists := b.folds[fold.Start]; exists && end.Y > fold.End.Y {
+			continue
+		}
+		b.folds[fold.Start] = fold.End
+
+		// convert folds which are scroll coordinates
+		// to window coordinates
+		foldStart, startOk := b.scroll.ScrollToWindowCoordinates(fold.Start)
+		foldEnd, endOk := b.scroll.ScrollToWindowCoordinates(fold.End)
+		if foldStart.Y != foldEnd.Y && (!startOk || !endOk) {
+			// inside hidden block
+			continue
+		}
+
+		if foldStart.Y < 0 {
+			continue
+		}
+		if foldStart.Y >= b.height {
+			break
+		}
+		foldStart.X = 0
+
+		var icon rune
+		if foldStart.Y == foldEnd.Y {
+			icon = hiddenFoldIcon
+		} else {
+			icon = visibleFoldIcon
+		}
+		from := foldStart
+		from.X += b.linesWidth
+		to := from
+		to.X++ // replace
+		b.bar.Buffer().Edit(ctx, from, to, "")
+		b.bar.Buffer().InsertWithAttr(from, icon, b.barLineAttr)
+	}
+	if err := folds.Err(); err != nil {
+		b.log(log.ErrorLevel, "error rebuilding auxiliary bar: %v", err)
+	}
+}
+
+func (b *auxBar) rebuildFoldsAbsolute(ctx context.Context, folds iterator.Iterator[term.Range]) {
 	clear(b.folds)
 	for {
 		fold, ok := folds.Next(ctx)
@@ -568,11 +700,15 @@ func (b *auxBar) rebuildFolds(ctx context.Context, folds iterator.Iterator[term.
 	}
 }
 
-func (b *auxBar) OnDidSeek(_, to term.Coordinates) {
-	b.bar.SetOffset(term.Coordinates{Y: to.Y})
-	if b.linesEnabled && !b.absoluteLines {
-		b.rebuildBar(context.Background())
+func (b *auxBar) OnDidSeek(from, to term.Coordinates) {
+	if !b.linesEnabled || b.absoluteLines {
+		b.bar.SetOffset(term.Coordinates{Y: to.Y})
+		return
 	}
+	if from.Y == to.Y {
+		return
+	}
+	b.rebuildBar(context.Background())
 }
 
 func (b *auxBar) OnWillSeek(_ term.Coordinates) {

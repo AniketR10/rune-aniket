@@ -162,7 +162,11 @@ func TestAuxBarDrawFolds(t *testing.T) {
 
 	wg.Add(1)
 	mu.Lock()
-	cfg := text.AuxBarConfig{FoldsEnabled: true, ScheduleNextTick: cb}
+	cfg := text.AuxBarConfig{
+		GitEnabled:       true, // test that if no lines => disabled
+		FoldsEnabled:     true,
+		ScheduleNextTick: cb,
+	}
 	bar := text.WithAuxBar(h, buf, scroll, cfg)
 	bar.Resize(20, 10)
 	mu.Unlock()
@@ -308,7 +312,133 @@ func TestAuxBarDrawFolds(t *testing.T) {
 	mu.Unlock()
 }
 
-func TestGitBarWithAuxBarIntegration(t *testing.T) {
+func TestGitBarWithAuxBarRelativeIntegration(t *testing.T) {
+	buf := cell.NewBuffer()
+	buf.WriteString(copy)
+	fs := &testFoldsService{}
+	fs.view = buf.WithView(fs)
+	scroll := component.NewScroll(buf)
+	h := newTestHandler(scroll)
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	cb := func(fn func()) bool {
+		mu.Lock()
+		defer mu.Unlock()
+		fn()
+		wg.Done()
+		return true
+	}
+
+	uri, err := workspaceapi.ParseURI("memory:///")
+	require.NoError(t, err)
+
+	registry := text.NewFileCommandRegistry(uri, newWorkspaceRegistry())
+
+	ed := &TestEditor{}
+	mockSvc := &differ{}
+	wg.Add(3) // 2 bars + auxbar resize
+	acfg := text.AuxBarConfig{
+		LinesEnabled:        true,
+		FoldsEnabled:        true,
+		AbsoluteLines:       false,
+		HighlightCursor:     true,
+		GitEnabled:          true,
+		ScheduleNextTick:    cb,
+		CommandRegistry:     registry,
+		Publisher:           ed,
+		HighlightCursorAttr: term.Attributes{Bg: tcell.ColorGray}, // just not fg
+		LineNumberAttr:      term.Attributes{Bg: tcell.ColorGray}, // just not fg
+		Service:             mockSvc,
+	}
+	gcfg := text.GitBarConfig{
+		ScheduleNextTick: cb,
+		Publisher:        ed,
+		CommandRegistry:  registry,
+	}
+	mu.Lock()
+	bar := text.WithAuxBar(h, buf, scroll, acfg)
+	bar = text.WithGitBar(mockSvc, bar, buf, scroll, gcfg)
+	bar.Resize(20, 10)
+	mu.Unlock()
+	w := term.NewStringWriter(20, 10)
+	w.ForegroundCh = '#'
+
+	tests := []comptest.TestCase{
+		{Expected: `
+  1    package main 
+  1                 
+  2   import (     
+  3        "fmt"    
+# #                 
+# #        "github.c
+  6    )            
+  7                 
+  8   func main() {
+# #        fmt.Print`,
+		},
+	}
+	wg.Wait()
+	mu.Lock()
+	comptest.TestComponent(t, bar, w, tests)
+	wg.Add(1)
+	require.True(t, scroll.SeekDown())
+	mu.Unlock()
+
+	tests = []comptest.TestCase{
+		{Expected: `
+  2                 
+  1   import (     
+  2        "fmt"    
+# #                 
+# #        "github.c
+  5    )            
+  6                 
+  7   func main() {
+# #        fmt.Print
+  9        for i := `,
+		},
+	}
+	wg.Wait()
+	mu.Lock()
+	comptest.TestComponent(t, bar, w, tests)
+	mu.Unlock()
+
+	wg.Add(2)
+	mu.Lock()
+	assert.True(t, scroll.SetOffset(term.Coordinates{Y: 1, X: 4}))
+	_, handled := bar.Handle(
+		term.Event{Type: term.EventMouse, Key: term.MouseLeft, MouseX: 5, MouseY: 1})
+	require.True(t, handled)
+	mu.Unlock()
+
+	tests = []comptest.TestCase{
+		{Expected: `
+  2                 
+# #   rt (#########
+  2                 
+  3    main() {    
+# #    fmt.Println("
+  5    for i := 0; i
+  6        fmt.Print
+  7    }            
+  8                 
+  9                 `,
+		},
+	}
+
+	wg.Wait()
+	mu.Lock()
+	comptest.TestComponent(t, bar, w, tests)
+	mu.Unlock()
+
+	require.NoError(t, bar.Close())
+
+	// unsubscribes
+	require.Equal(t, 1, len(ed.subs))
+	assert.Equal(t, 0, len(ed.subs[textapi.EventTypeFlush]))
+}
+
+func TestGitBarWithAuxBarAbsoluteIntegration(t *testing.T) {
 	buf := cell.NewBuffer()
 	buf.WriteString(copy)
 	fs := &testFoldsService{}
@@ -503,6 +633,9 @@ func benchmarkAuxBar(b *testing.B, width, height int, absolute, moveCursor bool)
 
 	if foldsEnabled {
 		wg.Add(1)
+		if !absolute { // resize
+			wg.Add(1)
+		}
 	}
 
 	cfg := text.AuxBarConfig{
