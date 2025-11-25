@@ -393,29 +393,40 @@ func (b *auxBar) rebuildBar(ctx context.Context) {
 		}
 	}
 
-	go debug.CapturePanicReport(func() {
-		wg.Wait()
-		b.scheduleNextTick(func() {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-			}
+	// do it synchronously if there's no pending work
+	if (b.foldsEnabled && ok) || (b.linesEnabled && b.gitEnabled) {
+		go debug.CapturePanicReport(func() {
+			wg.Wait()
+			b.scheduleNextTick(func() {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+				}
 
-			b.bar.Buffer().ResetPerformance()
-			if b.linesEnabled && b.absoluteLines {
-				b.rebuildLinesAbsolute(ctx)
-			} else if b.linesEnabled {
-				b.rebuildLinesRelative(ctx)
-			}
-			if diff != nil {
-				b.rebuildGit(diff)
-			}
-			if foldsIterator != nil {
-				b.rebuildFolds(ctx, foldsIterator)
-			}
+				b.bar.Buffer().ResetPerformance()
+				if b.linesEnabled && b.absoluteLines {
+					b.rebuildLinesAbsolute(ctx)
+				} else if b.linesEnabled {
+					b.rebuildLinesRelative(ctx)
+				}
+				if diff != nil {
+					b.rebuildGit(diff)
+				}
+				if foldsIterator != nil {
+					b.rebuildFolds(ctx, foldsIterator)
+				}
+			})
 		})
-	})
+		return
+	}
+
+	b.bar.Buffer().ResetPerformance()
+	if b.linesEnabled && b.absoluteLines {
+		b.rebuildLinesAbsolute(ctx)
+	} else if b.linesEnabled {
+		b.rebuildLinesRelative(ctx)
+	}
 }
 
 func (b *auxBar) rebuildGit(ll textapi.LocationList) {
