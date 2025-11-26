@@ -2136,12 +2136,12 @@ func (c *Cursor) opFolds(ctx context.Context, op func([]term.Range)) bool {
 
 	go debug.CapturePanicReport(func() {
 		folds, isEmpty := iterator.IsEmpty(ctx, folds)
-		defer folds.Close()
 		if isEmpty {
 			op(nil)
 			return
 		}
 		c.scheduleNextTick(func() {
+			defer folds.Close()
 			// this needs to roughly follow the same algorithm used by aux_bar
 			m := make(map[term.Coordinates]term.Coordinates)
 			for {
