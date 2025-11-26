@@ -45,8 +45,8 @@ func (t *Tree) getFolds(initial bool) []term.Range {
 	captureNames := t.folds.CaptureNames()
 	matches := cur.Matches(t.folds, root, []byte(t.buf.String()))
 	for {
-		m := matches.Next()
-		if m == nil {
+		m, ok := matches.Next()
+		if !ok {
 			break
 		}
 		for _, cap := range m.Captures {
@@ -54,6 +54,36 @@ func (t *Tree) getFolds(initial bool) []term.Range {
 			if initial && captureNames[cap.Index] != captureNameFoldsInitial {
 				continue
 			}
+			rng, ok := t.treeSitterRangeToTerm(n.Range())
+			if !ok {
+				t.log(log.DebugLevel, "could not convert tree sitter range %+v to term",
+					n.Range())
+				continue
+			}
+			ret = append(ret, rng)
+		}
+	}
+	return ret
+}
+
+func (t *Tree) getFoldsFrom(from term.Coordinates) []term.Range {
+	ret := make([]term.Range, 0)
+
+	from.X = 0 // ignore x offsets to make things easier
+	byteOffset, sok := cell.ConvertCoordinatesToByteOffset(t.cells, from)
+	if !sok {
+		return nil
+	}
+	cur := tree_sitter.NewQueryCursor()
+	matches := cur.Matches(t.folds, t.tree.RootNode(), t.content)
+	cur.SetByteRange(uint(byteOffset), uint(len(t.content)))
+	for {
+		m, ok := matches.Next()
+		if !ok {
+			break
+		}
+		for _, cap := range m.Captures {
+			n := cap.Node
 			rng, ok := t.treeSitterRangeToTerm(n.Range())
 			if !ok {
 				t.log(log.DebugLevel, "could not convert tree sitter range %+v to term",
@@ -81,6 +111,7 @@ type foldsIterator struct {
 	initial bool
 	ready   chan struct{}
 	tree    *Tree
+	from    term.Coordinates
 	slice   iterator.Iterator[term.Range]
 }
 
@@ -92,13 +123,25 @@ func newFoldsIterator(initial bool, t *Tree, ch chan struct{}) *foldsIterator {
 	}
 }
 
+func newFoldsFromIterator(from term.Coordinates, t *Tree, ch chan struct{}) *foldsIterator {
+	return &foldsIterator{
+		tree:  t,
+		ready: ch,
+		from:  from,
+	}
+}
+
 func (f *foldsIterator) Next(ctx context.Context) (term.Range, bool) {
 	<-f.ready
 	if f.slice == nil {
 		if f.tree.tree == nil || f.tree.folds == nil {
 			return term.Range{}, false
 		}
-		f.slice = iterator.FromSlice(f.tree.getFolds(f.initial))
+		if f.from == (term.Coordinates{}) {
+			f.slice = iterator.FromSlice(f.tree.getFolds(f.initial))
+		} else {
+			f.slice = iterator.FromSlice(f.tree.getFoldsFrom(f.from))
+		}
 	}
 	return f.slice.Next(ctx)
 }
@@ -109,7 +152,11 @@ func (f foldsIterator) Err() error {
 		if f.tree.tree == nil || f.tree.folds == nil {
 			return nil
 		}
-		f.slice = iterator.FromSlice(f.tree.getFolds(f.initial))
+		if f.from == (term.Coordinates{}) {
+			f.slice = iterator.FromSlice(f.tree.getFolds(f.initial))
+		} else {
+			f.slice = iterator.FromSlice(f.tree.getFoldsFrom(f.from))
+		}
 	}
 	return f.slice.Err()
 }

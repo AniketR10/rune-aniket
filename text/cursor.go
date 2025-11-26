@@ -1782,7 +1782,7 @@ func (c *Cursor) FoldAt(ctx context.Context, cb func(term.Range, bool)) bool {
 		return true
 	}
 
-	return c.opFolds(ctx, func(folds []term.Range) {
+	return c.opFoldsFrom(ctx, c.scroll.Offset(), func(folds []term.Range) {
 		pos := c.cursorAtScroll()
 
 		var ok bool
@@ -2133,7 +2133,27 @@ func (c *Cursor) opFolds(ctx context.Context, op func([]term.Range)) bool {
 	if !ok {
 		return false
 	}
+	return c.opFoldsIter(ctx, op, folds)
+}
 
+func (c *Cursor) opFoldsFrom(
+	ctx context.Context, from term.Coordinates, op func([]term.Range),
+) bool {
+	svc, ok := c.buffer().View().(foldsService)
+	if !ok {
+		return false
+	}
+
+	folds, ok := svc.FoldsFrom(from)
+	if !ok {
+		return false
+	}
+	return c.opFoldsIter(ctx, op, folds)
+}
+
+func (c *Cursor) opFoldsIter(
+	ctx context.Context, op func([]term.Range), folds iterator.Iterator[term.Range],
+) bool {
 	go debug.CapturePanicReport(func() {
 		folds, isEmpty := iterator.IsEmpty(ctx, folds)
 		if isEmpty {

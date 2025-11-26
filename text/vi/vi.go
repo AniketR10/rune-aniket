@@ -459,6 +459,7 @@ func (vi *cellSubscriber) OnDidEdit(
 }
 
 type foldsService interface {
+	FoldsFrom(pos term.Coordinates) (iterator.Iterator[term.Range], bool)
 	Folds() (iterator.Iterator[term.Range], bool)
 	InitialFolds() (iterator.Iterator[term.Range], bool)
 }

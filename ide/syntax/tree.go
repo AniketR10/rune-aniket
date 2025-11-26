@@ -170,6 +170,28 @@ func (t *Tree) Folds() (iterator.Iterator[term.Range], bool) {
 	return iterator.FromSlice(t.getFolds(false)), true
 }
 
+// FoldsFrom returns all the folds captured after the given position.
+func (t *Tree) FoldsFrom(pos term.Coordinates) (iterator.Iterator[term.Range], bool) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	if t.closed {
+		return nil, false
+	}
+
+	if !t.ready {
+		ch := make(chan struct{})
+		t.waitingFolds = append(t.waitingFolds, ch)
+		return newFoldsFromIterator(pos, t, ch), true
+	}
+
+	if t.folds == nil || t.tree == nil {
+		return nil, false
+	}
+
+	return iterator.FromSlice(t.getFoldsFrom(pos)), true
+}
+
 // InitialFolds returns the folds captured by the parser that should be folded
 // when file is initialized.
 func (t *Tree) InitialFolds() (iterator.Iterator[term.Range], bool) {
@@ -600,8 +622,8 @@ func (t *Tree) getHighlights(cells [][]term.Cell, content []byte) []textapi.Loca
 	matches := cur.Matches(t.highlights, root, content)
 	var locations []textapi.Location
 	for {
-		m := matches.Next()
-		if m == nil {
+		m, ok := matches.Next()
+		if !ok {
 			break
 		}
 		for _, cap := range m.Captures {

@@ -98,7 +98,8 @@ func WithAuxBar(
 	ret.absoluteLines = config.AbsoluteLines
 	ret.highlightCursor = config.HighlightCursor
 	ret.folds = make(map[term.Coordinates]term.Coordinates)
-	ret.setLinesWidth(10 /* good height for calculating width of lines */)
+	ret.prevRows = buf.View().Rows()
+	ret.setLinesWidth()
 	ret.svc = config.Service
 	if config.DelAttr == (term.Attributes{}) {
 		config.DelAttr = term.Attributes{Fg: tcell.ColorMaroon}
@@ -190,6 +191,7 @@ type auxBar struct {
 	barWidth    int
 	prevCursor  term.Coordinates
 	prevOffset  term.Coordinates
+	prevRows    int
 	delLocAttr  term.Attributes
 	addLocAttr  term.Attributes
 	delAttr     term.Attributes
@@ -261,7 +263,7 @@ func (b *auxBar) Handle(ev term.Event) (quit, handled bool) {
 func (b *auxBar) Resize(width, height int) {
 	rebuild := b.height != height && b.linesEnabled && !b.absoluteLines
 	b.height = height
-	b.setLinesWidth(b.height)
+	b.setLinesWidth()
 	b.barWidth = b.linesWidth
 	if b.foldsEnabled {
 		b.barWidth += foldsWidth
@@ -406,20 +408,31 @@ func (b *auxBar) rebuildBar(ctx context.Context) {
 
 	svc, ok := b.buf.View().(foldsService)
 	if b.foldsEnabled && ok {
-		folds, ok := svc.Folds()
-		if ok {
-			wg.Add(1)
-			go debug.CapturePanicReport(func() {
-				defer wg.Done()
-				folds, isEmpty := iterator.IsEmpty(ctx, folds)
-				if isEmpty {
-					return
-				}
-				// once first fold has been returned, this should not block on I/O anymore
-				// run on next loop tick, so we don't need to worry about synchronization
-				foldsIterator = folds
-			})
-		}
+		wg.Add(1)
+		go debug.CapturePanicReport(func() {
+			defer wg.Done()
+			var folds iterator.Iterator[term.Range]
+			var ok bool
+			if !b.linesEnabled || b.absoluteLines {
+				folds, ok = svc.Folds()
+			} else {
+				// relative bar doesn't need folds above current view,
+				// and it ignores the folds below current view.
+				// This makes recalculating on every cursor change much
+				// more efficient.
+				folds, ok = svc.FoldsFrom(b.scroll.Offset())
+			}
+			if !ok {
+				return
+			}
+			folds, isEmpty := iterator.IsEmpty(ctx, folds)
+			if isEmpty {
+				return
+			}
+			// once first fold has been returned, this should not block on I/O anymore
+			// run on next loop tick, so we don't need to worry about synchronization
+			foldsIterator = folds
+		})
 	}
 
 	// rebuild it synchronously if there's no pending work
@@ -590,11 +603,13 @@ func (b *auxBar) rebuildFoldsRelative(
 	ctx context.Context, folds iterator.Iterator[term.Range],
 ) {
 	clear(b.folds)
+	var i int
 	for {
 		fold, ok := folds.Next(ctx)
 		if !ok {
 			break
 		}
+		i++
 
 		// we're not interested in these
 		if fold.Start.Y >= fold.End.Y {
@@ -641,9 +656,12 @@ func (b *auxBar) rebuildFoldsRelative(
 	if err := folds.Err(); err != nil {
 		b.log(log.ErrorLevel, "error rebuilding auxiliary bar: %v", err)
 	}
+	b.log(log.TraceLevel, "got %d folds", i)
 }
 
-func (b *auxBar) rebuildFoldsAbsolute(ctx context.Context, folds iterator.Iterator[term.Range]) {
+func (b *auxBar) rebuildFoldsAbsolute(
+	ctx context.Context, folds iterator.Iterator[term.Range],
+) {
 	clear(b.folds)
 	for {
 		fold, ok := folds.Next(ctx)
@@ -730,15 +748,17 @@ func (b *auxBar) OnWillEdit(
 func (b *auxBar) OnDidEdit(
 	ctx context.Context, start, end term.Coordinates, old string,
 ) {
-	b.setLinesWidth(b.height)
-	b.rebuildBar(ctx)
+	prevRows := b.prevRows
+	b.prevRows = b.buf.View().Rows()
+	if prevRows != b.prevRows {
+		b.setLinesWidth()
+		b.rebuildBar(ctx)
+	}
 }
 
-func (b *auxBar) setLinesWidth(height int) {
-	if b.linesEnabled && b.absoluteLines {
+func (b *auxBar) setLinesWidth() {
+	if b.linesEnabled {
 		b.linesWidth = len(strconv.Itoa(b.buf.View().Rows())) + 1
-	} else if b.linesEnabled {
-		b.linesWidth = len(strconv.Itoa(height)) + 1
 	} else {
 		b.linesWidth = 0
 	}
@@ -771,4 +791,5 @@ func (b *auxBar) log(level log.Level, msg string, args ...any) {
 
 type foldsService interface {
 	Folds() (iterator.Iterator[term.Range], bool)
+	FoldsFrom(from term.Coordinates) (iterator.Iterator[term.Range], bool)
 }

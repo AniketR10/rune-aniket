@@ -30,6 +30,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/sirupsen/logrus"
@@ -979,7 +980,7 @@ func TestTreeHighlightsIntegration(t *testing.T) {
 	start = term.Coordinates{Y: 9, X: 0}
 	end = term.Coordinates{Y: 10, X: 0}
 	ed.Edit(context.Background(), start, end, "")
-	
+
 	cases = []handlertest.SingleTestCase{
 		{
 			term.Event{}, `
@@ -1174,13 +1175,13 @@ func (m mockPkgManager) LibDir(ctx context.Context, pkg string) (iterator.Iterat
 	return m.ret, nil
 }
 
-var i int
+var i atomic.Int32
 
 func newEditFile(t *testing.T, comp *text.Component, content string) (
 	cell.Editor, text.Handler,
 ) {
-	i++
-	return newEditFileName(t, comp, content, strconv.Itoa(i)+".go")
+	i := i.Add(1)
+	return newEditFileName(t, comp, content, strconv.Itoa(int(i))+".go")
 }
 
 func newEditFileName(t *testing.T, comp *text.Component, content string, filename string) (

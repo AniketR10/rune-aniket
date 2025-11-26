@@ -70,8 +70,8 @@ func (t *Tree) queryIndentCaptures() (ret indentCaptures) {
 	captureNames := t.indents.CaptureNames()
 	matches := cur.Matches(t.indents, root, []byte(t.buf.String()))
 	for {
-		m := matches.Next()
-		if m == nil {
+		m, ok := matches.Next()
+		if !ok {
 			break
 		}
 		props := t.indents.PropertySettings(m.PatternIndex)

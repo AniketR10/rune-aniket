@@ -813,6 +813,18 @@ func (f testFoldsService) String() string {
 	return f.view.String()
 }
 
+func (f testFoldsService) FoldsFrom(pos term.Coordinates) (
+	iterator.Iterator[term.Range], bool,
+) {
+	folds, ok := f.Folds()
+	if !ok {
+		return nil, false
+	}
+	return iterator.Filter(folds, func(rng term.Range) bool {
+		return rng.End.Y > pos.Y || (rng.Start.Y == pos.Y && rng.End.X > pos.X)
+	}), true
+}
+
 func (f testFoldsService) Folds() (iterator.Iterator[term.Range], bool) {
 	return iterator.FromSlice([]term.Range{
 		{Start: term.Coordinates{Y: 1, X: 0}, End: term.Coordinates{Y: 4}},
