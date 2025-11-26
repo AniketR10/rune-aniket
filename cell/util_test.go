@@ -24,6 +24,7 @@
 package cell
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"strings"
@@ -113,7 +114,9 @@ func TestConvertByteOffset(t *testing.T) {
 				cells := tcase.cells
 				if len(cells) != 0 {
 					buf := NewBuffer()
-					str := CellsToString(tcase.cells)
+					var bbuf bytes.Buffer
+					CellsToBytesBuffer(&bbuf, tcase.cells)
+					str := bbuf.String()
 					_, err := buf.ReadFrom(strings.NewReader(str))
 					require.NoError(t, err)
 					cells = buf.RawCells()
@@ -206,6 +209,59 @@ func TestConvertCoordinatesToRunePos(t *testing.T) {
 		})
 	}
 }
+
+func TestCopyCloneCells(t *testing.T) {
+	reversible := []string{
+		"",
+		"a",
+		"",
+		"a\n",
+		"a",
+		"\n\n",
+		"\n",
+		"a\nb\nc\nd",
+		"a\nb\nc\n",
+		"",
+		"a",
+		"\ta",
+		"a\n",
+	}
+
+	nonReversible := []struct {
+		in, out string
+	}{
+		{"\x00", ""},
+		{"\x00a", "a"},
+		{"a\x00", "a"},
+		{"\t\x00", "\t"},
+		{"\x00\t", "\t"},
+		{"\n\x00", "\n"},
+		{"\x00\n", "\n"},
+	}
+
+	t.Run("CopyCells", func(t *testing.T) {
+		var dst [][]term.Cell
+		for i, test := range reversible {
+			dst = CopyCells(dst, StringToCells(test, 4))
+			require.Equal(t, test, CellsToString(dst), i)
+		}
+		for i, test := range nonReversible {
+			dst = CopyCells(dst, StringToCells(test.in, 4))
+			require.Equal(t, test.out, CellsToString(dst), i)
+		}
+	})
+	t.Run("CloneCells", func(t *testing.T) {
+		for i, test := range reversible {
+			dst := CloneCells(StringToCells(test, 4))
+			require.Equal(t, test, CellsToString(dst), i)
+		}
+		for i, test := range nonReversible {
+			dst := CloneCells(StringToCells(test.in, 4))
+			require.Equal(t, test.out, CellsToString(dst), i)
+		}
+	})
+}
+
 func TestCellsToBufferZero(t *testing.T) {
 	t.Run("returned buffer should always have at least one row", func(t *testing.T) {
 		buf := CellsToBuffer(nil, 1)

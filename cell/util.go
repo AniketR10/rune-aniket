@@ -24,6 +24,7 @@
 package cell
 
 import (
+	"bytes"
 	"strings"
 
 	"unstable.build/go-tui/term"
@@ -32,8 +33,24 @@ import (
 // CellsToString returns the string representation of the given cell matrix.
 func CellsToString(cells [][]term.Cell) string {
 	builder := strings.Builder{}
-	copyToBuilder(&builder, cells)
+	CellsToStringBuilder(&builder, cells)
 	return builder.String()
+}
+
+// CellsToStringBuilder copies the string representation of the given cell matrix
+// to th supplied builder.
+//
+// Caller is responsible for resetting builder prior to this call if necessary.
+func CellsToStringBuilder(builder *strings.Builder, cells [][]term.Cell) {
+	copyToBuilder(builder, cells)
+}
+
+// CellsToBytesBuffer copies the bytes representation of the given cell matrix
+// to the supplied buffer.
+//
+// Caller is responsible for resetting buffer prior to this call if necessary.
+func CellsToBytesBuffer(buffer *bytes.Buffer, cells [][]term.Cell) {
+	copyToBuffer(buffer, cells)
 }
 
 // StringToCells returns the cell matrix representation of the given string.
@@ -54,6 +71,29 @@ func CloneCells(in [][]term.Cell) [][]term.Cell {
 	return ret
 }
 
+// CopyCells copies src into dst, re-using dst's capacity when possible.
+func CopyCells(dst [][]term.Cell, src [][]term.Cell) [][]term.Cell {
+	if len(dst) > len(src) {
+		dst = dst[:len(src)]
+	} else if len(dst) < len(src) {
+		for i := len(dst); i < len(src); i++ {
+			dst = append(dst, nil) // will be replaced with a proper row below
+		}
+	}
+
+	for i := range len(src) {
+		if cap(dst[i]) < len(src[i]) {
+			dst[i] = make([]term.Cell, len(src[i]))
+		} else if dst[i] == nil { // cap=0, len=0; set to nil above
+			dst[i] = make([]term.Cell, 0)
+		} else {
+			dst[i] = dst[i][:len(src[i])]
+		}
+		copy(dst[i], src[i])
+	}
+	return dst
+}
+
 // CellsToBuffer efficienty returns a Buffer that uses c as the
 // underlying matrix of cells.
 //
@@ -66,7 +106,7 @@ func CellsToBuffer(c [][]term.Cell, tabspaces int) *Buffer {
 	cells := new(rawCells)
 
 	cells.init(tabspaces)
-	cells.cells = CloneCells(c)
+	cells.cells = CopyCells(cells.cells, c)
 
 	// rawCells hasthe property that there's always at least one row
 	if cells.Rows() == 0 {

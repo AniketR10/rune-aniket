@@ -25,6 +25,7 @@ package cell
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -347,6 +348,27 @@ func copyToBuilder(builder *strings.Builder, cells [][]term.Cell) {
 }
 
 func copyRowToBuilder(builder *strings.Builder, cells []term.Cell) {
+	builder.Grow(len(cells)) // almost every time this is exact
+	for _, c := range cells {
+		if c.Ch != '\x00' {
+			builder.WriteRune(c.Ch)
+			for _, comb := range c.Combining {
+				builder.WriteRune(comb)
+			}
+		}
+	}
+}
+
+func copyToBuffer(builder *bytes.Buffer, cells [][]term.Cell) {
+	for i, r := range cells {
+		if i != 0 {
+			builder.WriteByte('\n')
+		}
+		copyRowToBuffer(builder, r)
+	}
+}
+
+func copyRowToBuffer(builder *bytes.Buffer, cells []term.Cell) {
 	builder.Grow(len(cells)) // almost every time this is exact
 	for _, c := range cells {
 		if c.Ch != '\x00' {
