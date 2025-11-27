@@ -44,6 +44,10 @@ func TestCmdGitCurrentCommit(t *testing.T) {
 	testGitCurrentCommit(t, setupGitCmdService)
 }
 
+func TestCmdGitShortRef(t *testing.T) {
+	testGitShortRef(t, setupGitCmdService)
+}
+
 func TestCmdGitRemoteURL(t *testing.T) {
 	testGitRemoteURL(t, setupGitCmdService)
 }

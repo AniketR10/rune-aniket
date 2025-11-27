@@ -194,6 +194,61 @@ func testGitCurrentCommit(
 	}
 }
 
+func testGitShortRef(
+	t *testing.T, setupGitService func(t *testing.T, cwd workspaceapi.URI) vctrl.Service,
+) {
+	reposPath := setupGitRepos(t)
+
+	tsuite := []struct {
+		name         string
+		workspaceCwd string
+		workPath     string
+		expectErr    bool
+		expect       string
+	}{
+		{
+			name:         "repoless workPath",
+			workspaceCwd: reposPath + "/proj4_no-git",
+			workPath:     reposPath + "/proj4_no-git",
+			expectErr:    true,
+			// ERROR: rel path: repo path: git cmd: process exit with non-zero status
+			// (exit status 128) fatal: not a git repository (or any of the parent
+			// directories): .git
+		},
+		{
+			name:         "workPath absolute folder within cwd",
+			workspaceCwd: reposPath + "/gitproj1_work-dir-clean",
+			workPath:     reposPath + "/gitproj1_work-dir-clean",
+			expect:       "main",
+		},
+		{
+			name:         "workPath absolute file within cwd",
+			workspaceCwd: reposPath + "/gitproj3_multi-file-diff",
+			workPath:     reposPath + "/gitproj3_multi-file-diff/recipes/bagels.md",
+			expect:       "main",
+		},
+	}
+	for _, tcase := range tsuite {
+		t.Run(tcase.name, func(t *testing.T) {
+			workspaceCwdURI, err := workspaceapi.ParseURI("file://" + tcase.workspaceCwd)
+			require.NoError(t, err)
+
+			git := setupGitService(t, workspaceCwdURI)
+
+			uri, err := workspaceapi.ParseURI("file://" + tcase.workPath)
+			require.NoError(t, err)
+			res, err := git.ShortRef(context.Background(), uri)
+			if tcase.expectErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+
+			assert.Equal(t, tcase.expect, res)
+		})
+	}
+}
+
 func testGitRemoteURL(
 	t *testing.T, setupGitService func(t *testing.T, cwd workspaceapi.URI) vctrl.Service,
 ) {

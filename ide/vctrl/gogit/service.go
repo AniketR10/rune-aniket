@@ -224,6 +224,30 @@ func (s svc) currentCommit(repo *git.Repository) (ret string, err error) {
 	return
 }
 
+func (s svc) ShortRef(ctx context.Context, path workspaceapi.URI) (
+	ret string, err error,
+) {
+	repo, err := s.getRepo(path)
+	if err != nil {
+		return
+	}
+	ret, err = s.shortRef(repo)
+	if err == nil || s.repo == nil {
+		return
+	}
+	return s.currentCommit(s.repo)
+}
+
+func (s svc) shortRef(repo *git.Repository) (ret string, err error) {
+	headRef, err := repo.Head()
+	if err != nil {
+		return
+	}
+	name := headRef.Name()
+	ret = name.Short()
+	return
+}
+
 func (s svc) RemoteURL(
 	ctx context.Context, path workspaceapi.URI, remoteName string,
 ) (ret string, err error) {

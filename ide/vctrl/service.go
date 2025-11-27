@@ -41,6 +41,9 @@ type Service interface {
 	// CurrentCommit returns the current commit hash.
 	CurrentCommit(ctx context.Context, file workspaceapi.URI) (string, error)
 
+	// ShortRef returns the current branch or short reference that HEAD points to.
+	ShortRef(ctx context.Context, file workspaceapi.URI) (string, error)
+
 	// RemoteURL returns the remote URL given a remote name.
 	RemoteURL(ctx context.Context, file workspaceapi.URI, remoteName string) (string, error)
 
@@ -134,6 +137,10 @@ func (n nopService) CurrentCommit(ctx context.Context, file workspaceapi.URI) (s
 	return "", nil
 }
 
+func (n nopService) ShortRef(ctx context.Context, file workspaceapi.URI) (string, error) {
+	return "", nil
+}
+
 func (n nopService) RemoteURL(
 	ctx context.Context, file workspaceapi.URI, remoteName string,
 ) (string, error) {
@@ -167,6 +174,12 @@ func (s syncService) CurrentCommit(ctx context.Context, file workspaceapi.URI) (
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.root.CurrentCommit(ctx, file)
+}
+
+func (s syncService) ShortRef(ctx context.Context, file workspaceapi.URI) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.root.ShortRef(ctx, file)
 }
 
 func (s syncService) RemoteURL(

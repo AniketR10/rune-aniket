@@ -127,6 +127,20 @@ func (c *cmdGitService) CurrentCommit(
 	return out, err
 }
 
+func (c *cmdGitService) ShortRef(
+	ctx context.Context, file workspaceapi.URI,
+) (string, error) {
+	_, err := c.RelPath(ctx, file.Path())
+	if err != nil {
+		return "", fmt.Errorf("rel path: %w", err)
+	}
+	out, err := c.git(ctx, file.Path(), []string{"rev-parse", "--abbrev-ref", "HEAD"})
+	if err != nil {
+		return "", err
+	}
+	return out, err
+}
+
 func (c *cmdGitService) RemoteURL(
 	ctx context.Context, file workspaceapi.URI, remoteName string,
 ) (string, error) {

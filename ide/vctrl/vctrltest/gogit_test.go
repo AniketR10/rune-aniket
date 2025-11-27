@@ -36,27 +36,23 @@ import (
 )
 
 func TestGogitDiff(t *testing.T) {
-	t.Run("dotgit is at workspace root", func(t *testing.T) {
-		testGitDiff(t, setupGogitService)
-	})
+	testGitDiff(t, setupGogitService)
 }
 
 func TestGogitGitCurrentCommit(t *testing.T) {
-	t.Run("dotgit is at workspace root", func(t *testing.T) {
-		testGitCurrentCommit(t, setupGogitService)
-	})
+	testGitCurrentCommit(t, setupGogitService)
+}
+
+func TestGogitGitShortRef(t *testing.T) {
+	testGitShortRef(t, setupGogitService)
 }
 
 func TestGogitGitRemoteURL(t *testing.T) {
-	t.Run("dotgit is at workspace root", func(t *testing.T) {
-		testGitRemoteURL(t, setupGogitService)
-	})
+	testGitRemoteURL(t, setupGogitService)
 }
 
 func TestGogitRelPath(t *testing.T) {
-	t.Run("dotgit is at workspace root", func(t *testing.T) {
-		testRelPath(t, setupGogitService)
-	})
+	testRelPath(t, setupGogitService)
 }
 
 func setupGogitService(t *testing.T, cwd workspaceapi.URI) vctrl.Service {
