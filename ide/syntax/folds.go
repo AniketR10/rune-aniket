@@ -111,6 +111,7 @@ type foldsIterator struct {
 	initial bool
 	ready   chan struct{}
 	tree    *Tree
+	err     error
 	from    term.Coordinates
 	slice   iterator.Iterator[term.Range]
 }
@@ -132,8 +133,13 @@ func newFoldsFromIterator(from term.Coordinates, t *Tree, ch chan struct{}) *fol
 }
 
 func (f *foldsIterator) Next(ctx context.Context) (term.Range, bool) {
-	<-f.ready
 	if f.slice == nil {
+		select {
+		case <-f.ready:
+		case <-ctx.Done():
+			f.err = ctx.Err()
+			return term.Range{}, false
+		}
 		if f.tree.tree == nil || f.tree.folds == nil {
 			return term.Range{}, false
 		}
@@ -146,21 +152,16 @@ func (f *foldsIterator) Next(ctx context.Context) (term.Range, bool) {
 	return f.slice.Next(ctx)
 }
 
-func (f foldsIterator) Err() error {
-	<-f.ready
+func (f *foldsIterator) Err() error {
+	if f.err != nil {
+		return f.err
+	}
 	if f.slice == nil {
-		if f.tree.tree == nil || f.tree.folds == nil {
-			return nil
-		}
-		if f.from == (term.Coordinates{}) {
-			f.slice = iterator.FromSlice(f.tree.getFolds(f.initial))
-		} else {
-			f.slice = iterator.FromSlice(f.tree.getFoldsFrom(f.from))
-		}
+		return nil
 	}
 	return f.slice.Err()
 }
 
-func (f foldsIterator) Close() error {
+func (f *foldsIterator) Close() error {
 	return nil
 }
