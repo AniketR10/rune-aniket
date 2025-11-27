@@ -73,3 +73,31 @@ func (r *Reference) Draw(w term.Writer) {
 	}
 	r.component.Draw(w)
 }
+
+// FloatingReference can be used to dynamically swap a component.Floating.
+// If the underlying component.Floating is nil, then methods do nothing.
+type FloatingReference struct {
+	Reference
+}
+
+// NewFloatingReference allocates storage for a new FloatingReference and
+// initializes it with ref.
+func NewFloatingReference(ref Floating) *FloatingReference {
+	ret := new(FloatingReference)
+	ret.Init(ref)
+	return ret
+}
+
+// Init initializes this reference with ref.
+// It can be used subsequently to override the underlying tui.Component reference.
+func (r *FloatingReference) Init(ref Floating) {
+	r.Reference.Init(ref)
+}
+
+// Dimensions satisfies Floating.
+func (r *FloatingReference) Dimensions() (width, height int) {
+	if _, ok := r.component.(Floating); !ok {
+		return
+	}
+	return r.Reference.component.(Floating).Dimensions()
+}
