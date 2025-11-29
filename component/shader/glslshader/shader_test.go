@@ -58,6 +58,11 @@ func TestShadeGLSL(t *testing.T) {
 		cells := shadertest.MakeCellMatrix(4, 3)
 		sh.Shade(20, 100, cells)
 		assert.Len(t, sh.cr.coordsExecuted, 4*3)
+		for _, row := range cells {
+			for _, cell := range row {
+				assert.Equal(t, uint8(1), cell.Width)
+			}
+		}
 	})
 
 	t.Run("adjusts vertical resolution considering the cell aspect ratio", func(t *testing.T) {

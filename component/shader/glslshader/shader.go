@@ -157,6 +157,7 @@ func shadeRow(
 			in[y][x].Ch, in[y][x].Fg, in[y][x].Bg,
 		)
 		in[y][x].Ch = char
+		in[y][x].Width = 1
 		in[y][x].Fg = fg
 		in[y][x].Bg = bg
 	}
