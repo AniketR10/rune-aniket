@@ -23,49 +23,16 @@
 
 package graphemecluster
 
-import "github.com/rivo/uniseg"
-
-// StepString returns the first grapheme cluster (user-perceived character) found in
-// the given string. It also returns the monospace width of the cluster.
-//
-// See uniseg.StepString for more details.
-func StepString(str string, state int) (
-	cluster, rest string, width uint8, newState int,
-) {
-	var boundaries int
-	cluster, rest, boundaries, newState = uniseg.StepString(str, state)
-	width = graphemeClusterWidth(cluster, boundaries)
-	return
-}
-
-// StringWidth returns the monospace width for the given string, that is, the
-// number of same-size cells to be occupied by the string.
-func StringWidth(s string) (width int) {
-	state := -1
-	var w uint8
-	for len(s) > 0 {
-		_, s, w, state = StepString(s, state)
-		width += int(w)
-	}
-	return
-}
-
-func graphemeClusterWidth(cluster string, boundaries int) uint8 {
-	unisegWidth := boundaries >> uniseg.ShiftWidth
-	if unisegWidth == 0 || unisegWidth > 1 || len(cluster) == 0 /* don't trust uniseg */ {
-		return uint8(unisegWidth)
-	}
-
-	switch cluster {
-	// NOTE: this is just the icons that we're interested in
-	// but we should add the full list of nerd font icons
-	// width width > 1.
-	case "", "", "", "", "", "", "", "", "", "", "", "",
-		"", "", "", "", "", "", "", "", "", "", " ",
-		"󱫆", "", "", "", "", "", "", "", "", "", "", "",
-		"", "󰌾", "󰗻", "󱄋":
-		return 2
+// IsBackground returns whether rune should be treated for as background
+// for rendering purposes.
+func IsBackground(r rune) bool {
+	switch r {
+	case '', '', '', '', '', '', '', '', '',
+		'', '', '', '', '', '', '', '', '', '', '',
+		'', '', '', '', '░', '▒', '▓', '█', '▞', '▇', '▆',
+		'▅', '▄', '▃', '▂', '\U00100005', '▐', '▉':
+		return true
 	default:
-		return uint8(unisegWidth)
+		return false
 	}
 }

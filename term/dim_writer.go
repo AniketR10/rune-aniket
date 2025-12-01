@@ -27,6 +27,7 @@ import (
 	"context"
 
 	"github.com/unstablebuild/tcell/v3"
+	"unstable.build/go-tui/cell/graphemecluster"
 )
 
 type dimWriter struct {
@@ -40,14 +41,13 @@ func DimWriter(w Writer) Writer {
 }
 
 func (w dimWriter) SetCell(pos Coordinates, c Cell) {
-	c.Attributes.Attrs |= tcell.AttrDim
-	c.Attributes.Attrs &^= tcell.AttrBold
+	if !graphemecluster.IsBackground(c.Ch) {
+		c.Attributes.Attrs |= tcell.AttrDim
+	}
 	w.w.SetCell(pos, c)
 }
 
 func (w dimWriter) UnionAttributes(pos Coordinates, attr Attributes) {
-	attr.Attrs |= tcell.AttrDim
-	attr.Attrs &^= tcell.AttrBold
 	w.w.UnionAttributes(pos, attr)
 }
 
