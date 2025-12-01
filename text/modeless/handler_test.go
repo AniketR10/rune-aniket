@@ -57,7 +57,7 @@ func TestNoHandlesNonCtrlModifiers(t *testing.T) {
 
 func newTestSimpleEditor(t *testing.T, width, height int) text.Handler {
 	editor := Editor(WithCommandBar(false))
-	h, err := editor.Edit(workspaceapi.URI{}, cell.NewBuffer())
+	h, err := editor.Edit(workspaceapi.URI{}, cell.NewBuffer(), false, false)
 	require.NoError(t, err)
 	h.Resize(width, height)
 	return h

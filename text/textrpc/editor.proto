@@ -13,6 +13,8 @@ message URI {
 message EditRequest {
 	URI resource_name = 1;
 	repeated term.CellRow buffer = 2;
+	bool read_only = 3;
+	bool recovered = 4;
 }
 
 message EditResponse {

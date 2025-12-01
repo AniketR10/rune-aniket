@@ -188,7 +188,7 @@ func TestComponentInterfaces(t *testing.T) {
 	comp = c
 
 	// use so compiler does not complain
-	ed.Edit(workspaceapi.URI{}, cell.NewBuffer())
+	ed.Edit(workspaceapi.URI{}, cell.NewBuffer(), false, false)
 	_, _ = b.Focus()
 	comp.Resize(0, 0)
 }
@@ -554,7 +554,7 @@ func TestComponentEditorSubscriber(t *testing.T) {
 			func(t *testing.T, c *text.Component, resource workspaceapi.URI) {
 				buf := cell.NewBuffer()
 				buf.WriteString(content)
-				_, err := c.Edit(resource, buf)
+				_, err := c.Edit(resource, buf, false, false)
 				assert.NoError(t, err)
 			},
 			nil,
@@ -614,7 +614,7 @@ func TestComponentEditorSubscriber(t *testing.T) {
 			textapi.EventTypeEdit,
 			func(t *testing.T, c *text.Component, resource workspaceapi.URI) {
 				buf := cell.NewBuffer()
-				_, err := c.Edit(resource, buf)
+				_, err := c.Edit(resource, buf, false, false)
 				assert.NoError(t, err)
 
 				buf.WriteString("wasup")
@@ -627,7 +627,7 @@ func TestComponentEditorSubscriber(t *testing.T) {
 			func(t *testing.T, c *text.Component, resource workspaceapi.URI) {
 				buf := cell.NewBuffer()
 				buf.WriteString("wasup")
-				_, err := c.Edit(resource, buf)
+				_, err := c.Edit(resource, buf, false, false)
 				assert.NoError(t, err)
 
 				buf.DeleteRow(0)
@@ -722,7 +722,7 @@ func TestComponentEditorSubscriber(t *testing.T) {
 			func(t *testing.T, c *text.Component, resource workspaceapi.URI) {
 				buf := cell.NewBuffer()
 				buf.WriteString(content)
-				h, err := c.Edit(resource, buf)
+				h, err := c.Edit(resource, buf, false, false)
 				assert.NoError(t, err)
 				h.Handle(term.Event{Ch: 'l'})
 			},
@@ -734,7 +734,7 @@ func TestComponentEditorSubscriber(t *testing.T) {
 			func(t *testing.T, c *text.Component, resource workspaceapi.URI) {
 				buf := cell.NewBuffer()
 				buf.WriteString(content)
-				h, err := c.Edit(resource, buf)
+				h, err := c.Edit(resource, buf, false, false)
 				assert.NoError(t, err)
 				h.Handle(term.Event{Ch: 'v'})
 			},
@@ -1377,7 +1377,7 @@ func TestComponentEditor(t *testing.T) {
 		require.NoError(t, err)
 		c, _ := newTestComponent(t, NopEditor())
 
-		h1, err := c.Edit(myName, cell.NewBuffer())
+		h1, err := c.Edit(myName, cell.NewBuffer(), false, false)
 		assert.NoError(t, err)
 
 		actualH1, err := c.Editor(myName)
@@ -1390,7 +1390,7 @@ func TestComponentEditor(t *testing.T) {
 		require.NoError(t, err)
 		c, _ := newTestComponent(t, NopEditor())
 
-		h1, err := c.Edit(myName, cell.NewBuffer())
+		h1, err := c.Edit(myName, cell.NewBuffer(), false, false)
 		assert.NoError(t, err)
 
 		require.NoError(t, h1.Close())
@@ -1453,7 +1453,7 @@ func testRegister(t *testing.T,
 
 		mu.Lock()
 		win, _ := c.Focus()
-		h1, err := c.Edit(resource1, cell.NewBuffer())
+		h1, err := c.Edit(resource1, cell.NewBuffer(), false, false)
 		mu.Unlock()
 		require.NoError(t, err)
 
@@ -1497,7 +1497,7 @@ func TestUnregisterCommand(t *testing.T) {
 	require.NoError(t, err)
 
 	win, _ := c.Focus()
-	h1, err := c.Edit(resource1, cell.NewBuffer())
+	h1, err := c.Edit(resource1, cell.NewBuffer(), false, false)
 	require.NoError(t, err)
 
 	var called int
@@ -1606,7 +1606,7 @@ func TestFlush(t *testing.T) {
 			Return(term.Coordinates{}).Times(1)
 		mock.EXPECT().CellView().
 			Return(cell.NewBuffer().View()).Times(1)
-		mockEditor.EXPECT().Edit(gomock.Any(), gomock.Any()).Return(mock, nil)
+		mockEditor.EXPECT().Edit(gomock.Any(), gomock.Any(), gomock.Eq(true), gomock.Any()).Return(mock, nil)
 
 		h, err := c.OpenFileTab(resource1, true)
 		require.NoError(t, win.SetContent(h))
@@ -1664,7 +1664,7 @@ func TestReload(t *testing.T) {
 		mock.EXPECT().Resize(gomock.Any(), gomock.Any()).Times(1)
 		mock.EXPECT().CursorAtScroll().
 			Return(term.Coordinates{}).Times(1)
-		mockEditor.EXPECT().Edit(gomock.Any(), gomock.Any()).Return(mock, nil)
+		mockEditor.EXPECT().Edit(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(mock, nil)
 
 		h, err := c.OpenFileTab(resource1, true)
 		require.NoError(t, win.SetContent(h))

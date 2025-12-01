@@ -54,7 +54,9 @@ type editor struct {
 	pub          text.Publisher
 }
 
-func (e *editor) Edit(file workspaceapi.URI, buf *cell.Buffer) (text.Handler, error) {
+func (e *editor) Edit(
+	file workspaceapi.URI, buf *cell.Buffer, readOnly, recovered bool,
+) (text.Handler, error) {
 	rootIfc := NewHandler(e.clipboard, buf, file, e.wrap,
 		e.commandBar, e.attr, e.resAttr, e.barAttr, e.scheduleNextTick)
 	if e.fileRegistry != nil {

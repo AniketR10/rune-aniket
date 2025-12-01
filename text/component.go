@@ -127,8 +127,9 @@ func (c *Component) newFileBuffer(
 	file, recSwapFile workspaceapi.URI, buf *cell.Buffer,
 	readOnly, forceRecover bool,
 ) (handler Handler, ret *editorFlusherCloser, err error) {
+	recover := recSwapFile != (workspaceapi.URI{})
 	var fc workspace.FlusherCloser
-	if recSwapFile != (workspaceapi.URI{}) {
+	if recover {
 		fc, err = c.workspace.Recover(file, recSwapFile, buf, forceRecover)
 	} else {
 		var swapDir workspaceapi.URI
@@ -151,7 +152,7 @@ func (c *Component) newFileBuffer(
 	fc = syntax.WithTree(c.ctx, c.config, interrupter,
 		c.config.PkgManager, locs, file, buf, fc, c.config.Syntax)
 
-	handler, err = c.ed.Edit(file, buf)
+	handler, err = c.ed.Edit(file, buf, readOnly, recover)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -772,8 +773,10 @@ func (c *Component) SetFocus(win browser.Window) (browser.Window, error) {
 // NOTE: Returned Handler has no EventTypeFocus support.
 //
 // Deprecated: Use OpenFileTab instead.
-func (c *Component) Edit(file workspaceapi.URI, buf *cell.Buffer) (Handler, error) {
-	editor, err := c.ed.Edit(file, buf)
+func (c *Component) Edit(
+	file workspaceapi.URI, buf *cell.Buffer, readOnly, recover bool,
+) (Handler, error) {
+	editor, err := c.ed.Edit(file, buf, readOnly, recover)
 	if err != nil {
 		return nil, err
 	}
@@ -864,7 +867,7 @@ func (c *Component) getContent(h Handler) string {
 	return cell.CellsToString(cells)
 }
 
-func (c *Component) dispatchOpenUponSubscribe(h EventHandler) (bool) {
+func (c *Component) dispatchOpenUponSubscribe(h EventHandler) bool {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 

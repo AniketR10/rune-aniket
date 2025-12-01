@@ -104,7 +104,9 @@ type Editor interface {
 	EventPublisher
 	// Edit opens a file and returns an editor.Handler to edit it or an error
 	// if there was an error opening it.
-	Edit(file workspaceapi.URI, buf *cell.Buffer) (Handler, error)
+	Edit(
+		file workspaceapi.URI, buf *cell.Buffer, readOnly, recovered bool,
+	) (Handler, error)
 
 	// Editor returns the editor.Handler with name or returns
 	// an error if no editor with name is open via Edit.

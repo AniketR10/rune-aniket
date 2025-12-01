@@ -116,11 +116,13 @@ func (c *Client) Init(ctx context.Context, cc grpc.ClientConnInterface) {
 }
 
 // Edit requests editor server to edit buf.
-func (c *Client) Edit(file workspaceapi.URI, buf *cell.Buffer) (textapi.Handler, error) {
+func (c *Client) Edit(
+	file workspaceapi.URI, buf *cell.Buffer, readOnly, recovered bool,
+) (textapi.Handler, error) {
 	ctx, cancel := c.ctxWithTimeout()
 	defer cancel()
 
-	req := NewEditRequest(file, buf)
+	req := NewEditRequest(file, buf, readOnly, recovered)
 
 	_, err := c.ed.Edit(ctx, &req)
 	if err != nil {

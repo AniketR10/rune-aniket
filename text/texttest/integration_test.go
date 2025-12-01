@@ -188,7 +188,7 @@ func TestReadFile(t *testing.T) {
 			buffer := cell.NewBuffer()
 			buffer.Write([]byte(tcase.contentsToReadTo))
 
-			h, err := c.Edit(currentURI, buffer)
+			h, err := c.Edit(currentURI, buffer, false, false)
 			require.NoError(t, err)
 
 			h.SetCursorAtScroll(tcase.cursorPosition)

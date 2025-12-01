@@ -1734,7 +1734,7 @@ func (h *lspEditorHandler) browseLocations(
 	textToLocation := make(map[string]protocol.Location)
 	buf := cell.NewBuffer()
 	ed := vi.Editor(vi.WithAttr(h.refWindowAttr))
-	edh, err := ed.Edit(workspaceapi.RandomURI("lsp"), buf)
+	edh, err := ed.Edit(workspaceapi.RandomURI("lsp"), buf, false, false)
 	if err != nil {
 		err = fmt.Errorf("ed.Edit: %s", err)
 		return err
@@ -1804,7 +1804,7 @@ func (h *lspEditorHandler) browseLocations(
 		edh.MoveToPrevLocation(locID)
 	}
 	sed, _ := modeless.Editor(modeless.WithWrap(true)).
-		Edit(workspaceapi.RandomURI("search"), list.Buffer())
+		Edit(workspaceapi.RandomURI("search"), list.Buffer(), false, false)
 	sh := search.Handler(list, sed, func(text string) {
 		h.mu.Lock()
 		done = true

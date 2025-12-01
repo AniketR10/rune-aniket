@@ -62,7 +62,7 @@ func TestBufferEditRequest(t *testing.T) {
 	for _, tcase := range tsuite {
 		buf := cell.NewBuffer()
 		buf.WriteString(tcase.in)
-		out := NewEditRequest(workspaceapi.URI{}, buf)
+		out := NewEditRequest(workspaceapi.URI{}, buf, false, false)
 		assert.Equal(t, tcase.out, out)
 
 		outbuf := EditRequestToBuffer(&out)
@@ -81,7 +81,7 @@ func benchmarkEditRequest(b *testing.B, width, height int) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = NewEditRequest(workspaceapi.URI{}, buf)
+		_ = NewEditRequest(workspaceapi.URI{}, buf, false, false)
 	}
 }
 

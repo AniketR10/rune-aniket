@@ -57,11 +57,13 @@ func newTestServer(t *testing.T, ctrl *gomock.Controller) (*texttest.MockEditor,
 	return ed, s
 }
 
-func expectEdit(t *testing.T, mock *texttest.MockEditor, resource workspaceapi.URI, content string) {
-	mock.EXPECT().Edit(gomock.Any(), gomock.Any()).Times(1).
-		DoAndReturn(func(_uri workspaceapi.URI, buf *cell.Buffer) (text.Handler, error) {
+func expectEdit(t *testing.T, mock *texttest.MockEditor, resource workspaceapi.URI, content string, readOnly, recovered bool) {
+	mock.EXPECT().Edit(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(1).
+		DoAndReturn(func(_uri workspaceapi.URI, buf *cell.Buffer, _readOnly, _recovered bool) (text.Handler, error) {
 			assert.Equal(t, resource, _uri)
 			assert.Equal(t, content, buf.String())
+			assert.Equal(t, readOnly, _readOnly)
+			assert.Equal(t, recovered, _recovered)
 			return texttest.NewTestHandler(), nil
 		})
 }
@@ -82,10 +84,11 @@ func expectEditor(
 func callServerEdit(
 	t *testing.T, ctx context.Context,
 	s *Server, uri workspaceapi.URI, content string,
+	readOnly, recovered bool,
 ) {
 	buf := cell.NewBuffer()
 	buf.WriteString(content)
-	req := NewEditRequest(uri, buf)
+	req := NewEditRequest(uri, buf, readOnly, recovered)
 
 	res, err := s.Edit(ctx, &req)
 	require.NoError(t, err)
@@ -101,27 +104,27 @@ func TestServerEdit(t *testing.T) {
 	t.Run("Edit is propagated to underlying Editor", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		mock, s := newTestServer(t, ctrl)
-		expectEdit(t, mock, resource, bufContent1)
-		callServerEdit(t, ctx, s, resource, bufContent1)
+		expectEdit(t, mock, resource, bufContent1, false, false)
+		callServerEdit(t, ctx, s, resource, bufContent1, false, false)
 	})
 
 	t.Run("relative path is converted to absolute", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		mock, s := newTestServer(t, ctrl)
 		require.NoError(t, err)
-		expectEdit(t, mock, resource, bufContent1)
-		callServerEdit(t, ctx, s, resource, bufContent1)
+		expectEdit(t, mock, resource, bufContent1, false, false)
+		callServerEdit(t, ctx, s, resource, bufContent1, false, false)
 	})
 
 	t.Run("bubbles up underlying's Editor Edit errors", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		mock, s := newTestServer(t, ctrl)
 
-		mock.EXPECT().Edit(gomock.Any(), gomock.Any()).
+		mock.EXPECT().Edit(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 			Return(nil, errors.New("NOLINUX")).
 			Times(1)
 
-		req := NewEditRequest(resource, cell.NewBuffer())
+		req := NewEditRequest(resource, cell.NewBuffer(), false, false)
 
 		res, err := s.Edit(ctx, &req)
 		require.Error(t, err)
@@ -158,8 +161,8 @@ func TestServerSetLocationList(t *testing.T) {
 		mock, s := newTestServer(t, ctrl)
 
 		content := "main"
-		expectEdit(t, mock, resource, content)
-		callServerEdit(t, ctx, s, resource, content)
+		expectEdit(t, mock, resource, content, false, false)
+		callServerEdit(t, ctx, s, resource, content, false, false)
 
 		locs := text.LocationSlice([]textapi.Location{{Message: "wsb: hold AMC", To: term.Coordinates{X: 3}}})
 		h := expectEditor(t, ctrl, mock, resource)
@@ -191,7 +194,7 @@ func TestServerSetLocationList(t *testing.T) {
 		s := NewServer(nopNotifications{}, c, new(sync.Mutex))
 
 		content := "main"
-		callServerEdit(t, ctx, s, resource, content)
+		callServerEdit(t, ctx, s, resource, content, false, false)
 
 		locs := []textapi.Location{
 			{From: term.Coordinates{X: 0, Y: 0}, To: term.Coordinates{X: 3, Y: 0}},
@@ -233,8 +236,8 @@ func TestServerSetCursor(t *testing.T) {
 		resource, err := workspaceapi.ParseURI("file:///SetCursorer")
 		require.NoError(t, err)
 		content := "Oh my"
-		expectEdit(t, mock, resource, content)
-		callServerEdit(t, ctx, s, resource, content)
+		expectEdit(t, mock, resource, content, true, true)
+		callServerEdit(t, ctx, s, resource, content, true, true)
 
 		pos := term.Coordinates{X: 4, Y: 5}
 		h := expectEditor(t, ctrl, mock, resource)
@@ -260,8 +263,8 @@ func TestServerCursor(t *testing.T) {
 
 		resource, err := workspaceapi.ParseURI("file:///Cursorer")
 		require.NoError(t, err)
-		expectEdit(t, mock, resource, "")
-		callServerEdit(t, ctx, s, resource, "")
+		expectEdit(t, mock, resource, "", false, false)
+		callServerEdit(t, ctx, s, resource, "", false, false)
 
 		pos := term.Coordinates{X: 4, Y: 5}
 		h := expectEditor(t, ctrl, mock, resource)

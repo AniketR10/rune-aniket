@@ -434,18 +434,18 @@ func (m *MockEditor) EXPECT() *MockEditorMockRecorder {
 }
 
 // Edit mocks base method.
-func (m *MockEditor) Edit(file workspaceapi.URI, buf *cell.Buffer) (text.Handler, error) {
+func (m *MockEditor) Edit(file workspaceapi.URI, buf *cell.Buffer, readOnly, recovered bool) (text.Handler, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Edit", file, buf)
+	ret := m.ctrl.Call(m, "Edit", file, buf, readOnly, recovered)
 	ret0, _ := ret[0].(text.Handler)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Edit indicates an expected call of Edit.
-func (mr *MockEditorMockRecorder) Edit(file, buf any) *gomock.Call {
+func (mr *MockEditorMockRecorder) Edit(file, buf, readOnly, recovered any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Edit", reflect.TypeOf((*MockEditor)(nil).Edit), file, buf)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Edit", reflect.TypeOf((*MockEditor)(nil).Edit), file, buf, readOnly, recovered)
 }
 
 // Editor mocks base method.

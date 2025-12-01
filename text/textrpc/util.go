@@ -33,10 +33,14 @@ import (
 )
 
 // NewEditRequest converts a buf into an EditRequest.
-func NewEditRequest(file workspaceapi.URI, buf *cell.Buffer) EditRequest {
+func NewEditRequest(
+	file workspaceapi.URI, buf *cell.Buffer, readOnly, recovered bool,
+) EditRequest {
 	return EditRequest{
 		Buffer:       rawCellsToProtoCells(buf.RawCells()),
 		ResourceName: NewURI(file),
+		ReadOnly:     readOnly,
+		Recovered:    recovered,
 	}
 }
 

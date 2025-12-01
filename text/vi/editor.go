@@ -53,7 +53,9 @@ func Editor(opts ...Option) text.Editor {
 	return ret
 }
 
-func (e *viEditor) Edit(file workspaceapi.URI, buf *cell.Buffer) (text.Handler, error) {
+func (e *viEditor) Edit(
+	file workspaceapi.URI, buf *cell.Buffer, readOnly, recovered bool,
+) (text.Handler, error) {
 	root := New(buf, file, e.opts...)
 	// publisher does not mutate cursor and it should never do so
 	cursor := root.cursor

@@ -56,7 +56,7 @@ func TestClientEdit(t *testing.T) {
 
 		expectClientEdit(t, cc, bufContent1, uri)
 
-		h, err := c.Edit(uri, buf)
+		h, err := c.Edit(uri, buf, false, false)
 		require.NoError(t, err)
 		require.NotNil(t, h)
 	})
@@ -73,7 +73,7 @@ func TestClientEdit(t *testing.T) {
 			Times(1).
 			Return(errors.New("Would be a change of plan"))
 
-		h, err := c.Edit(workspaceapi.URI{}, cell.NewBuffer())
+		h, err := c.Edit(workspaceapi.URI{}, cell.NewBuffer(), false, false)
 		require.Error(t, err)
 		require.Nil(t, h)
 	})

@@ -70,7 +70,7 @@ func TestHistory(t *testing.T) {
 				ed := texttest.NopEditor()
 				h.recordAddWorkspace(uri1, ed, true)
 
-				ed.Edit(testuri, cell.NewBuffer())
+				ed.Edit(testuri, cell.NewBuffer(), false, false)
 
 				assertFilesInCache(t, h, uri1, 1)
 			},
@@ -83,7 +83,7 @@ func TestHistory(t *testing.T) {
 
 				ed := texttest.NopEditor()
 				h.recordAddWorkspace(uri1, ed, true)
-				ed.Edit(testuri, cell.NewBuffer())
+				ed.Edit(testuri, cell.NewBuffer(), false, false)
 				h.recordCloseWorkspace(uri1)
 				assert.Len(t, h.recordAddWorkspace(uri1, ed, false), 0)
 
@@ -99,7 +99,7 @@ func TestHistory(t *testing.T) {
 				ed := texttest.NopEditor()
 				h.recordAddWorkspace(uri1, ed, true)
 
-				ed.Edit(testuri, cell.NewBuffer())
+				ed.Edit(testuri, cell.NewBuffer(), false, false)
 
 				assertFilesInCache(t, h, uri1, 1)
 			},
@@ -113,7 +113,7 @@ func TestHistory(t *testing.T) {
 
 				ed := texttest.NopEditor()
 				h.recordAddWorkspace(uri1, ed, true)
-				ed.Edit(testuri, cell.NewBuffer())
+				ed.Edit(testuri, cell.NewBuffer(), false, false)
 				h.recordCloseWorkspace(uri1)
 
 				assertFilesInStorage(t, h, uri1, 1)
@@ -129,7 +129,7 @@ func TestHistory(t *testing.T) {
 				ed := texttest.NopEditor()
 
 				h.recordAddWorkspace(uri1, ed, true)
-				ed.Edit(testuri, cell.NewBuffer())
+				ed.Edit(testuri, cell.NewBuffer(), false, false)
 				h.recordCloseWorkspace(uri1)
 				assert.Len(t, h.recordAddWorkspace(uri1, ed, true), 1)
 			},
@@ -159,7 +159,7 @@ func TestHistory(t *testing.T) {
 		h := newHistory(svc)
 		assert.NotPanics(t, func() {
 			h.recordAddWorkspace(uri, ed, true)
-			ed.Edit(testuri, cell.NewBuffer())
+			ed.Edit(testuri, cell.NewBuffer(), false, false)
 		})
 	})
 

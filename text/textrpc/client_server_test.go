@@ -68,11 +68,27 @@ func TestClientServerIntegration(t *testing.T) {
 		client, closeFn := setupIntTest(t, s)
 		defer closeFn()
 
-		expectEdit(t, ed, uri, "hero")
+		expectEdit(t, ed, uri, "hero", false, false)
 		buf := cell.NewBuffer()
 		buf.WriteString("hero")
 
-		_, err := client.Edit(uri, buf)
+		_, err := client.Edit(uri, buf, false, false)
+		require.NoError(t, err)
+	})
+
+	t.Run("client passes readOnly and recover params", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		ed := texttest.NewMockEditor(ctrl)
+		s := NewServer(nopNotifications{}, ed, nopLocker{})
+
+		client, closeFn := setupIntTest(t, s)
+		defer closeFn()
+
+		expectEdit(t, ed, uri, "hero", true, true)
+		buf := cell.NewBuffer()
+		buf.WriteString("hero")
+		_, err := client.Edit(uri, buf, true, true)
 		require.NoError(t, err)
 	})
 
@@ -103,11 +119,11 @@ func TestClientServerIntegration(t *testing.T) {
 		client, closeFn := setupIntTest(t, s)
 		defer closeFn()
 
-		ed.EXPECT().Edit(gomock.Any(), gomock.Any()).
+		ed.EXPECT().Edit(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 			Return(nil, errors.New("The Upsetter")).
 			Times(1)
 
-		_, err := client.Edit(uri, cell.NewBuffer())
+		_, err := client.Edit(uri, cell.NewBuffer(), false, false)
 		require.Error(t, err)
 		assert.True(t, strings.Contains(err.Error(), "The Upsetter"))
 	})
@@ -125,14 +141,14 @@ func TestClientServerIntegration(t *testing.T) {
 				"Edit->EventTypeOpen",
 				textapi.EventTypeOpen,
 				func(t *testing.T, resourceName string, ed text.Editor, buf *cell.Buffer) {
-					ed.Edit(uri, buf)
+					ed.Edit(uri, buf, false, false)
 				}, nil, nil, nil,
 			},
 			{
 				"Edit->EventTypeEdit",
 				textapi.EventTypeEdit,
 				func(t *testing.T, resourceName string, ed text.Editor, buf *cell.Buffer) {
-					ed.Edit(uri, buf)
+					ed.Edit(uri, buf, false, false)
 					buf.WriteString(str1)
 				}, &term.Coordinates{}, &term.Coordinates{}, &str1,
 			},
@@ -141,7 +157,7 @@ func TestClientServerIntegration(t *testing.T) {
 				textapi.EventTypeEdit,
 				func(t *testing.T, resourceName string, ed text.Editor, buf *cell.Buffer) {
 					buf.WriteString(str1)
-					ed.Edit(uri, buf)
+					ed.Edit(uri, buf, false, false)
 					buf.DeleteRow(0)
 				}, &term.Coordinates{}, &term.Coordinates{Y: 1}, nil,
 			},
@@ -150,7 +166,7 @@ func TestClientServerIntegration(t *testing.T) {
 				textapi.EventTypeCursor,
 				func(t *testing.T, resourceName string, ed text.Editor, buf *cell.Buffer) {
 					buf.WriteString(str1)
-					h, err := ed.Edit(uri, buf)
+					h, err := ed.Edit(uri, buf, false, false)
 					assert.NoError(t, err)
 					h.Handle(term.Event{Ch: 'l'})
 				}, &term.Coordinates{}, &term.Coordinates{}, nil,
@@ -160,7 +176,7 @@ func TestClientServerIntegration(t *testing.T) {
 				textapi.EventTypeSelection,
 				func(t *testing.T, resourceName string, ed text.Editor, buf *cell.Buffer) {
 					buf.WriteString(str1)
-					h, err := ed.Edit(uri, buf)
+					h, err := ed.Edit(uri, buf, false, false)
 					assert.NoError(t, err)
 					h.Handle(term.Event{Ch: 'v'})
 				}, &term.Coordinates{}, &term.Coordinates{}, nil,
@@ -232,7 +248,7 @@ func TestClientServerIntegration(t *testing.T) {
 		wg.Wait()
 
 		// proceed to trigger
-		ed.Edit(uri, cell.NewBuffer())
+		ed.Edit(uri, cell.NewBuffer(), false, false)
 
 		// wg panics if Done called but not added
 		wg.Wait()
@@ -312,8 +328,8 @@ func TestClientServerIntegration(t *testing.T) {
 		client, closeFn := setupIntTest(t, s)
 		defer closeFn()
 
-		expectEdit(t, ed, uri, "")
-		h, err := client.Edit(uri, cell.NewBuffer())
+		expectEdit(t, ed, uri, "", false, false)
+		h, err := client.Edit(uri, cell.NewBuffer(), false, false)
 		require.NoError(t, err)
 
 		l := text.LocationSlice([]textapi.Location{loc2})
@@ -345,8 +361,8 @@ func TestClientServerIntegration(t *testing.T) {
 		client, closeFn := setupIntTest(t, s)
 		defer closeFn()
 
-		expectEdit(t, ed, uri, "")
-		h, err := client.Edit(uri, cell.NewBuffer())
+		expectEdit(t, ed, uri, "", false, false)
+		h, err := client.Edit(uri, cell.NewBuffer(), false, false)
 		require.NoError(t, err)
 
 		expectedAttrs := term.Attributes{
@@ -379,8 +395,8 @@ func TestClientServerIntegration(t *testing.T) {
 		defer closeFn()
 
 		buf := cell.NewBuffer()
-		expectEdit(t, ed, uri, "")
-		h, err := client.Edit(uri, buf)
+		expectEdit(t, ed, uri, "", false, false)
+		h, err := client.Edit(uri, buf, false, false)
 		require.NoError(t, err)
 
 		w := client.CellEditor(h)
@@ -417,8 +433,8 @@ func TestClientServerIntegration(t *testing.T) {
 
 		buf := cell.NewBuffer()
 		buf.WriteString("guacamole")
-		expectEdit(t, ed, uri, "guacamole")
-		h, err := client.Edit(uri, buf)
+		expectEdit(t, ed, uri, "guacamole", false, false)
+		h, err := client.Edit(uri, buf, false, false)
 		require.NoError(t, err)
 
 		mock := expectEditor(t, ctrl, ed, uri)

@@ -127,7 +127,7 @@ diff_buf_adjust(win_
 			WithAuxiliaryBar(true, text.AuxBarConfig{FoldsEnabled: true, ScheduleNextTick: cb}),
 		)
 		wg.Add(1)
-		vi, err := ed.Edit(uri, buf)
+		vi, err := ed.Edit(uri, buf, false, false)
 		require.NoError(t, err)
 		vi.Resize(50, 10)
 		mu.Unlock()

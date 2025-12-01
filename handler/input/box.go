@@ -82,7 +82,7 @@ func (i *Box) Init(buf *cell.Buffer, ed text.Editor, cfg BoxConfig) {
 	}
 
 	uri := workspaceapi.RandomURI("inputbox")
-	edh, err := ed.Edit(uri, buf)
+	edh, err := ed.Edit(uri, buf, false, false)
 	if err != nil {
 		// this should not really happen, as editor implementations
 		// passed to an input box should all be internal, and so

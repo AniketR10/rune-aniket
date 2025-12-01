@@ -256,6 +256,8 @@ type EditRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	ResourceName  *URI                   `protobuf:"bytes,1,opt,name=resource_name,json=resourceName,proto3" json:"resource_name,omitempty"`
 	Buffer        []*termrpc.CellRow     `protobuf:"bytes,2,rep,name=buffer,proto3" json:"buffer,omitempty"`
+	ReadOnly      bool                   `protobuf:"varint,3,opt,name=read_only,json=readOnly,proto3" json:"read_only,omitempty"`
+	Recovered     bool                   `protobuf:"varint,4,opt,name=recovered,proto3" json:"recovered,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -302,6 +304,20 @@ func (x *EditRequest) GetBuffer() []*termrpc.CellRow {
 		return x.Buffer
 	}
 	return nil
+}
+
+func (x *EditRequest) GetReadOnly() bool {
+	if x != nil {
+		return x.ReadOnly
+	}
+	return false
+}
+
+func (x *EditRequest) GetRecovered() bool {
+	if x != nil {
+		return x.Recovered
+	}
+	return false
 }
 
 type EditResponse struct {
@@ -1894,10 +1910,12 @@ const file_textrpc_editor_proto_rawDesc = "" +
 	"\n" +
 	"\x14textrpc/editor.proto\x12\x04text\x1a\x17term/termrpc/term.proto\"\x17\n" +
 	"\x03URI\x12\x10\n" +
-	"\x03uri\x18\x01 \x01(\tR\x03uri\"d\n" +
+	"\x03uri\x18\x01 \x01(\tR\x03uri\"\x9f\x01\n" +
 	"\vEditRequest\x12.\n" +
 	"\rresource_name\x18\x01 \x01(\v2\t.text.URIR\fresourceName\x12%\n" +
-	"\x06buffer\x18\x02 \x03(\v2\r.term.CellRowR\x06buffer\"\x0e\n" +
+	"\x06buffer\x18\x02 \x03(\v2\r.term.CellRowR\x06buffer\x12\x1b\n" +
+	"\tread_only\x18\x03 \x01(\bR\breadOnly\x12\x1c\n" +
+	"\trecovered\x18\x04 \x01(\bR\trecovered\"\x0e\n" +
 	"\fEditResponse\"\x92\x04\n" +
 	"\vEditorEvent\x12*\n" +
 	"\x04type\x18\x01 \x01(\x0e2\x16.text.EditorEvent.TypeR\x04type\x12.\n" +
