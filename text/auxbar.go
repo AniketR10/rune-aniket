@@ -218,6 +218,14 @@ func (b *auxBar) Draw(w term.Writer) {
 			w.UnionAttributes(term.Coordinates{Y: y, X: x}, b.cursorAttr)
 		}
 	}
+	if b.bar.Width() != 0 {
+		bg := term.Attributes{Bg: b.scroll.Attributes.Bg}
+		for y := range b.bar.SizeHeight() {
+			for x := range b.bar.Width() {
+				w.UnionAttributes(term.Coordinates{Y: y, X: x}, bg)
+			}
+		}
+	}
 }
 
 func (b *auxBar) Man() tui.Manual {
@@ -398,7 +406,7 @@ func (b *auxBar) rebuildBar(ctx context.Context) {
 			// scheme is remote and diff performs network I/O.
 			filediff, err := b.svc.Diff(ctx, uri)
 			if err != nil {
-				b.log(log.ErrorLevel, "compute diff: %v", err)
+				b.log(log.DebugLevel, "compute diff: %v", err)
 				return
 			}
 			b.log(log.TraceLevel, "computed diff: %v", filediff)

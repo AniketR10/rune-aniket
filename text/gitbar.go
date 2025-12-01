@@ -164,6 +164,13 @@ func (b *gitBar) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 func (b *gitBar) Draw(w term.Writer) {
 	b.vhandler.Draw(w)
 	b.bar.Draw(w)
+	if b.bar.Width() != 0 {
+		bg := term.Attributes{Bg: b.scroll.Attributes.Bg}
+		for y := range b.bar.SizeHeight() {
+			w.UnionAttributes(term.Coordinates{Y: y, X: 0}, bg)
+			w.UnionAttributes(term.Coordinates{Y: y, X: 1}, bg)
+		}
+	}
 }
 
 func (b *gitBar) Man() tui.Manual {

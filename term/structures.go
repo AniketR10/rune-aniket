@@ -43,6 +43,12 @@ type (
 // Attributes represents a cell background and foreground attributes.
 type Attributes tcell.Style
 
+const (
+	// AttrVerticalRenderOffset instructs the renderer to render
+	// the cell with an offset equal to half the height of the cell.
+	AttrVerticalRenderOffset tcell.AttrMask = tcell.AttrInvalid << 1
+)
+
 // Cell represents a location with content on a terminal screen.
 // 'Ch' is a unicode character, 'Fg' and 'Bg' are foreground
 // and background attributes respectively. Unicode graphene clusters
