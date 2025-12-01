@@ -35,6 +35,15 @@ func Nop() tui.Component {
 	return nop{}
 }
 
+// NopFloating returns a Floating that does nothing.
+func NopFloating() Floating {
+	return nop{}
+}
+
+func (n nop) Dimensions() (width, height int) {
+	return
+}
+
 func (n nop) Resize(width, height int) {
 }
 
