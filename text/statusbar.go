@@ -526,7 +526,7 @@ func (b *StatusBar) rebuildFilename(filename string) {
 	flushed := b.buf.Version() == b.lastFlush
 	switch {
 	case !b.recovered && flushed && !b.readOnly:
-		path = fmt.Sprintf("%s  ", filename)
+		path = fmt.Sprintf("%s   ", filename)
 	case b.recovered && flushed && !b.readOnly:
 		path = fmt.Sprintf("%s 󱄋", filename)
 	case flushed && b.readOnly:

@@ -149,6 +149,10 @@ func TestStatusBarFilepath(t *testing.T) {
 				Attributes: term.Attributes{Fg: tcell.ColorYellow, Bg: tcell.ColorRed},
 				Template:   "  %s",
 			},
+			{
+				Type:       text.StatusBarStatus,
+				Template:   " %s",
+			},
 		},
 	}
 	buf := cell.NewBuffer()
@@ -164,6 +168,7 @@ func TestStatusBarFilepath(t *testing.T) {
 	bar.Resize(20, 10)
 	w := term.NewStringWriter(20, 10)
 
+	bar.SetStatus("X", term.Attributes{})
 	tests := []comptest.TestCase{
 		{Expected: `
 package main        
@@ -175,7 +180,7 @@ import (
 )                   
                     
 func main() {       
-  relpath.go        `,
+  relpath.go    X   `,
 		},
 	}
 	comptest.TestComponent(t, bar, w, tests)
@@ -199,7 +204,7 @@ import (
 )                   
                     
 func main() {       
-  relpath.go       `,
+  relpath.go   X   `,
 		},
 	}
 	comptest.TestComponent(t, bar, w, tests)
@@ -224,7 +229,7 @@ import (
 )                   
                     
 func main() {       
-  relpath.go        `,
+  relpath.go    X   `,
 		},
 	}
 	comptest.TestComponent(t, bar, w, tests)
@@ -249,7 +254,7 @@ import (
 )                   
                     
 func main() {       
-  relpath.go       `,
+  relpath.go   X   `,
 		},
 	}
 	comptest.TestComponent(t, bar, w, tests)
@@ -276,7 +281,7 @@ import (
 )                   
                     
 func main() {       
-  relpath.go        `,
+  relpath.go    X   `,
 		},
 	}
 	comptest.TestComponent(t, bar, w, tests)
