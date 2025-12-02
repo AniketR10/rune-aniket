@@ -212,7 +212,7 @@ func main() {
 	cells = w.Cells()
 	require.Len(t, cells, 10*20)
 	for i := 180; i < 180+len("relpath.go"); i++ {
-		assert.Equal(t, tcell.ColorMaroon, cells[i].Fg)
+		assert.Equal(t, tcell.ColorOlive, cells[i].Fg)
 		assert.Equal(t, tcell.ColorRed, cells[i].Bg)
 	}
 
@@ -262,7 +262,7 @@ func main() {
 	cells = w.Cells()
 	require.Len(t, cells, 10*20)
 	for i := 180; i < 180+len("relpath.go"); i++ {
-		assert.Equal(t, tcell.ColorMaroon, cells[i].Fg)
+		assert.Equal(t, tcell.ColorOlive, cells[i].Fg)
 		assert.Equal(t, tcell.ColorRed, cells[i].Bg)
 	}
 

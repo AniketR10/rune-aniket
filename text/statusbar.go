@@ -533,15 +533,15 @@ func (b *StatusBar) rebuildFilename(filename string) {
 		path = fmt.Sprintf("%s 󰌾", filename)
 	case !flushed && !b.readOnly:
 		path = fmt.Sprintf("%s ", filename)
-		attrs.Fg = tcell.ColorRed
-		if attrs.Bg == tcell.ColorRed {
-			attrs.Fg = tcell.ColorMaroon
-		}
-	case !flushed && b.readOnly:
-		path = fmt.Sprintf("%s 󰗻", filename)
 		attrs.Fg = tcell.ColorOlive
 		if attrs.Bg == tcell.ColorOlive {
 			attrs.Fg = tcell.ColorYellow
+		}
+	case !flushed && b.readOnly:
+		path = fmt.Sprintf("%s 󰗻", filename)
+		attrs.Fg = tcell.ColorRed
+		if attrs.Bg == tcell.ColorRed {
+			attrs.Fg = tcell.ColorOlive
 		}
 	}
 	components := b.processTemplate(b.relpathTemplate.Template,
