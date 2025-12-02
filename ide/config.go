@@ -1117,21 +1117,6 @@ func (c ideConfig) modalResultAttr() (attr term.Attributes) {
 	return attr
 }
 
-func (c ideConfig) modalBarAttr() (attr term.Attributes) {
-	attr = term.Attributes{}
-	cfg, ok := c.modal()
-	if !ok {
-		return
-	}
-	attr, err := config.GetAttributes(cfg, "bar_attr")
-	if err != nil {
-		if err != config.ErrNotFound {
-			c.errors["editor.modal.bar_attr"] = err
-		}
-	}
-	return attr
-}
-
 func (c ideConfig) modalAttr() (attr term.Attributes) {
 	cfg, ok := c.modal()
 	if !ok {
@@ -1175,6 +1160,21 @@ func (c ideConfig) auxiliaryBar() (config.Config, bool) {
 	return cfg, true
 }
 
+func (c ideConfig) statusBar() (config.Config, bool) {
+	cfg, ok := c.editor()
+	if !ok {
+		return nil, false
+	}
+	cfg, err := cfg.GetConfig("status_bar")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["editor.status_bar"] = err
+		}
+		return nil, false
+	}
+	return cfg, true
+}
+
 func (c ideConfig) auxiliaryBarEnabled() bool {
 	cfg, ok := c.auxiliaryBar()
 	if !ok {
@@ -1189,7 +1189,24 @@ func (c ideConfig) auxiliaryBarEnabled() bool {
 	return enabled
 }
 
-func (c ideConfig) auxiliaryBarConfig(svc vctrl.Service) text.AuxBarConfig {
+func (c ideConfig) statusBarEnabled() bool {
+	cfg, ok := c.statusBar()
+	if !ok {
+		return true
+	}
+	enabled, err := cfg.GetBool("enabled")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["editor.status_bar.enabled"] = err
+		}
+		return true
+	}
+	return enabled
+}
+
+func (c ideConfig) auxiliaryBarConfig(
+	pub text.EventPublisher, svc vctrl.Service,
+) text.AuxBarConfig {
 	auxBarLinesEnabled, auxBarLinesAbsolute := c.auxiliaryBarLines()
 	return text.AuxBarConfig{
 		GitEnabled:          c.auxiliaryBarGit(),
@@ -1198,6 +1215,7 @@ func (c ideConfig) auxiliaryBarConfig(svc vctrl.Service) text.AuxBarConfig {
 		AbsoluteLines:       auxBarLinesAbsolute,
 		HighlightCursor:     c.auxiliaryBarHighlightCursor(),
 		Service:             svc,
+		Publisher:           pub,
 		ScheduleNextTick:    c.scheduleNextTick,
 		DelAttr:             c.auxiliaryBarAttr("git_del_inline_attr"),
 		AddAttr:             c.auxiliaryBarAttr("git_add_inline_attr"),
@@ -1208,13 +1226,27 @@ func (c ideConfig) auxiliaryBarConfig(svc vctrl.Service) text.AuxBarConfig {
 	}
 }
 
-func (c ideConfig) gitBarConfig(svc vctrl.Service) text.GitBarConfig {
+func (c ideConfig) gitBarConfig(pub text.EventPublisher) text.GitBarConfig {
 	return text.GitBarConfig{
-		ScheduleNextTick:    c.scheduleNextTick,
-		DelAttr:             c.auxiliaryBarAttr("git_del_inline_attr"),
-		AddAttr:             c.auxiliaryBarAttr("git_add_inline_attr"),
-		DelOverlayAttr:      c.auxiliaryBarAttr("git_del_locations_attr"),
-		AddOverlayAttr:      c.auxiliaryBarAttr("git_add_locations_attr"),
+		ScheduleNextTick: c.scheduleNextTick,
+		Publisher:        pub,
+		DelAttr:          c.auxiliaryBarAttr("git_del_inline_attr"),
+		AddAttr:          c.auxiliaryBarAttr("git_add_inline_attr"),
+		DelOverlayAttr:   c.auxiliaryBarAttr("git_del_locations_attr"),
+		AddOverlayAttr:   c.auxiliaryBarAttr("git_add_locations_attr"),
+	}
+}
+
+func (c ideConfig) statusBarConfig(
+	cwd workspaceapi.URI, pub text.EventPublisher, svc vctrl.Service,
+) text.StatusBarConfig {
+	return text.StatusBarConfig{
+		Workspace:        cwd,
+		ScheduleNextTick: c.scheduleNextTick,
+		Publisher:        pub,
+		BackgroundColor:  c.statusBarAttr("background_attr", term.Attributes{}).Bg,
+		GitService:       svc,
+		Layout:           c.statusBarLayout(),
 	}
 }
 
@@ -1244,6 +1276,46 @@ func (c ideConfig) auxiliaryBarAttr(key string) term.Attributes {
 		}
 	}
 	return attrs
+}
+
+func (c ideConfig) statusBarAttr(key string, def term.Attributes) (ret term.Attributes) {
+	ret = def
+	cfg, ok := c.statusBar()
+	if !ok {
+		return
+	}
+	attrs, err := config.GetAttributes(cfg, key)
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors[fmt.Sprintf("editor.status_bar.%s", key)] = err
+		}
+	} else {
+		ret = attrs
+	}
+	return
+}
+
+func (c ideConfig) statusBarLayout() (ret []text.StatusBarComponent) {
+	ret = nil // nil delegates default config to StatusBar
+	cfg, ok := c.statusBar()
+	if !ok {
+		return
+	}
+	val, err := cfg.GetString("layout")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["editor.status_bar.layout"] = err
+		}
+		return
+	}
+	ret, err = statusBarLayout(val)
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["editor.status_bar.layout"] = err
+		}
+		return
+	}
+	return
 }
 
 func (c ideConfig) auxiliaryBarGit() bool {
@@ -1360,21 +1432,6 @@ func (c ideConfig) modelessResultAttr() (attr term.Attributes) {
 	if err != nil {
 		if err != config.ErrNotFound {
 			c.errors["editor.modeless.search_attr"] = err
-		}
-	}
-	return attr
-}
-
-func (c ideConfig) modelessBarAttr() (attr term.Attributes) {
-	attr = term.Attributes{}
-	cfg, ok := c.modeless()
-	if !ok {
-		return
-	}
-	attr, err := config.GetAttributes(cfg, "bar_attr")
-	if err != nil {
-		if err != config.ErrNotFound {
-			c.errors["editor.modeless.bar_attr"] = err
 		}
 	}
 	return attr

@@ -58,7 +58,7 @@ $
                     
                     
                     
-/bla▐         NORMAL`},
+/bla▐               `},
 			{">",
 				`$ echo ▐la          
 bla                 
@@ -133,7 +133,7 @@ $ ▐
                     
                     
                     
-              NORMAL`},
+                    `},
 			{"k0veyj\\$iecho <p", // copy and paste
 				`$ echo bla          
 bla                 
@@ -144,7 +144,7 @@ $ echo ▐la
                     
                     
                     
-              NORMAL`},
+                    `},
 			{"ved",
 				`$ echo bla          
 bla                 
@@ -155,7 +155,7 @@ $ echo▐
                     
                     
                     
-              NORMAL`},
+                    `},
 			{"0Cecho bla12345678901234567890", // delete line and insert wrap around
 				`$ echo bla          
 bla                 
@@ -166,7 +166,7 @@ $ echo bla1234567890
                     
                     
                     
-              INSERT`},
+                    `},
 			{"<hhhrolll", // replace
 				`$ echo bla          
 bla                 
@@ -177,7 +177,7 @@ $ echo bla1234567890
                     
                     
                     
-              NORMAL`},
+                    `},
 			{"u", // undo doesn' panic
 				`$ echo bla          
 bla                 
@@ -188,7 +188,7 @@ $ echo bla1234567890
                     
                     
                     
-              NORMAL`},
+                    `},
 			{"aaaaaaaaaaaaaaaaaaaaaaaaa",
 				`$ echo bla          
 bla                 
@@ -199,7 +199,7 @@ aaaaaaaaaaaaaa▐
                     
                     
                     
-              INSERT`},
+                    `},
 			{"<rXa",
 				`$ echo bla          
 bla                 
@@ -210,7 +210,7 @@ aaaaaaaaaaaaaX▐
                     
                     
                     
-              INSERT`},
+                    `},
 			{"<>>>", // ensure that attr bar doesn't occlude last line in shell mode
 				`bla                 
 $ echo bla1234567890
@@ -232,7 +232,7 @@ bla1234567890123456o
 aaaaaaX             
 $                   
 $                   
-$ ▐           NORMAL`},
+$ ▐                 `},
 			{"iclear>",
 				`$ ▐                 
                     
@@ -309,7 +309,7 @@ bla
 $ ▐ZX               
                     
                     
-              NORMAL`},
+                    `},
 			{"⬆⬆", // position after scroll up through history
 				`$ echo bla          
 bla                 
@@ -320,7 +320,7 @@ bla
 $ echo bl▐          
                     
                     
-              NORMAL`},
+                    `},
 			{"\\$", // $ after scroll through history
 				`$ echo bla          
 bla                 
@@ -331,7 +331,7 @@ bla
 $ echo bl▐          
                     
                     
-              NORMAL`},
+                    `},
 			{"kkkk#a", // ctrl-c exits vi mode, no matter where cursor is
 				`$ echo bla          
 bla                 
@@ -353,7 +353,7 @@ bla
 $ ▐                 
                     
                     
-              NORMAL`},
+                    `},
 			{"iecho '.i\\$'>", // is able to use special characters in shell mode
 				`$ echo bla          
 bla                 
@@ -375,7 +375,7 @@ bla
 $ echo '.i$'        
 .i$                 
 $ ▐                 
-              NORMAL`},
+                    `},
 		}
 
 		cfg := DefaultConfig()
@@ -407,7 +407,7 @@ aaaaaaaaaaaaaaaaaaaa
                     
                     
                     
-              NORMAL`},
+                    `},
 			{"\\$\\$",
 				`$ echo blaaaaaaaaaaa
 aaaaaaaaaaaaaaaaaaaa
@@ -418,7 +418,7 @@ aaaaaaaaaaaaaaa▐
                     
                     
                     
-              NORMAL`},
+                    `},
 		}
 		cfg := DefaultConfig()
 		cfg.Modal = true
@@ -449,7 +449,7 @@ aaaaaaaaaaaaaaaa
                     
                     
                     
-              NORMAL`},
+                    `},
 			{"\\$\\$0",
 				`$ ▐cho blaaaaaaaaaaa
 aaaaaaaaaaaaaaaaaaaa
@@ -460,7 +460,7 @@ aaaaaaaaaaaaaaaa
                     
                     
                     
-              NORMAL`},
+                    `},
 		}
 		cfg := DefaultConfig()
 		cfg.Modal = true
@@ -511,7 +511,7 @@ $
 $                   
 $                   
 $ echo aaaaaaaaaaaaa
-bcde▐         INSERT`},
+bcde▐               `},
 		}
 		cfg := DefaultConfig()
 		cfg.Modal = true
@@ -531,7 +531,7 @@ $
 $                   
 $                   
 $                   
-$ ech▐        NORMAL`},
+$ ech▐              `},
 			{"gg",
 				`▐ echo a            
 a                   
@@ -542,7 +542,7 @@ $
 $                   
 $                   
 $                   
-$             NORMAL`},
+$                   `},
 			{"G",
 				`$                   
 $                   
@@ -553,7 +553,7 @@ $
 $                   
 $                   
 $                   
-$ ▐cho        NORMAL`},
+$ ▐cho              `},
 		}
 		cfg := DefaultConfig()
 		cfg.Modal = true
@@ -600,7 +600,7 @@ aaaaaaaaaaaaaaaa▐
                     
                     
                     
-              INSERT`},
+                    `},
 		}
 		cfg := DefaultConfig()
 		cfg.Modal = true

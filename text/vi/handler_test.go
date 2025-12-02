@@ -28,6 +28,7 @@ import (
 	"math"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -39,6 +40,8 @@ import (
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/handlertest"
 	"unstable.build/go-tui/term"
+	"unstable.build/go-tui/text"
+	"unstable.build/go-tui/text/texttest"
 )
 
 const snippet = `
@@ -168,8 +171,8 @@ diff_buf_adjust(win_
     curtab->tp_diffb
     curtab->tp_diff_
     diff_redraw(TRUE
-    }               
-    searching 'NULL'`},
+    searching 'NULL'
+              NORMAL`},
 		{"Ahello",
 			`f (wp == NULL)hello▐
                     
@@ -322,8 +325,8 @@ diff_buf_adjust(win_
     {               
     curtab->tp_diffb
     curtab->tp_diff_
-    diff_redraw(TRUE
-     searching 'i ='`},
+     searching 'i ='
+              NORMAL`},
 		{"dd",
 			`  if (wp == NULL]   
   if (wp == NULL]   
@@ -708,8 +711,8 @@ pabcdeff_add(win->w_
                     
                     
                     
-                    
-    searching 'diff'`},
+    searching 'diff'
+              NORMAL`},
 		{"n",
 			`{                   
 curtab->tp_▐iff_inva
@@ -719,8 +722,8 @@ pabcdeff_add(win->w_
                     
                     
                     
-                    
-    searching 'diff'`},
+    searching 'diff'
+              NORMAL`},
 		{"N",
 			`{                   
 curtab->tp_diff_inva
@@ -730,8 +733,8 @@ pabcdeff_add(win->w_
                     
                     
                     
-                    
-    searching 'diff'`},
+    searching 'diff'
+              NORMAL`},
 	}
 
 	vi := setupViIntegration(t, snippet, 2)
@@ -784,7 +787,7 @@ func TestVidd(t *testing.T) {
 			events:           "2dd",
 			expectContent:    "0000\n1111\n5555\n",
 			expectCoords:     term.Coordinates{Y: 2},
-			expectCoordsWrap: term.Coordinates{Y: 2},
+			expectCoordsWrap: term.Coordinates{Y: 4},
 		},
 		{
 			name: "3dd from last line",
@@ -795,7 +798,7 @@ func TestVidd(t *testing.T) {
 			events:           "3dd",
 			expectContent:    "0000\n1111\n2222\n3333\n4444\n5555\n",
 			expectCoords:     term.Coordinates{Y: 6},
-			expectCoordsWrap: term.Coordinates{Y: 6},
+			expectCoordsWrap: term.Coordinates{Y: 8},
 		},
 		{
 			name: "4dd from second to last line",
@@ -807,7 +810,7 @@ func TestVidd(t *testing.T) {
 			events:           "3dd",
 			expectContent:    "0000\n1111\n2222\n3333\n4444\n",
 			expectCoords:     term.Coordinates{Y: 5},
-			expectCoordsWrap: term.Coordinates{Y: 4},
+			expectCoordsWrap: term.Coordinates{Y: 6},
 		},
 		{
 			name:             "10dd from first line wipes all content",
@@ -836,9 +839,9 @@ func TestVidd(t *testing.T) {
 			t.Run(name, func(t *testing.T) {
 				vi := setupVi(t, tcase.content, 2, WithWrap(wrap))
 				if wrap {
-					vi.Resize(2, 10)
+					vi.Resize(2, 9)
 				} else {
-					vi.Resize(10, 10)
+					vi.Resize(10, 9)
 				}
 				vi.Draw(term.NoopWriter{})
 				if tcase.moveCursorFn != nil {
@@ -888,7 +891,7 @@ diff_buf_adjust(win_
 	}
 
 	newVi := func(t *testing.T) tui.Handler {
-		return setupVi(t, snippet, 2)
+		return setupViIntegration(t, snippet, 2)
 	}
 	handlertest.TestHandlerIsolated(t, newVi, 20, 10, cases)
 }
@@ -988,7 +991,7 @@ diff_buf_adjust(win_
 	}
 
 	newVi := func(t *testing.T) tui.Handler {
-		return setupVi(t, snippet, 2)
+		return setupViIntegration(t, snippet, 2)
 	}
 	handlertest.TestHandlerIsolated(t, newVi, 20, 10, cases)
 }
@@ -1481,7 +1484,7 @@ func TestVigg(t *testing.T) {
 				vi.cursor.MoveRightColumns(2)
 			},
 			events:      "6gg",
-			expectCoord: term.Coordinates{X: 0, Y: 7}, // lonely 6 in `code`
+			expectCoord: term.Coordinates{X: 0, Y: 8}, // lonely 6 in `code`
 		},
 		{
 			name:       "6gg from middle of wrapped line",
@@ -1492,7 +1495,7 @@ func TestVigg(t *testing.T) {
 				vi.cursor.MoveRightColumns(2)
 			},
 			events:      "6gg",
-			expectCoord: term.Coordinates{X: 0, Y: 7}, // lonely 6 in `code`
+			expectCoord: term.Coordinates{X: 0, Y: 8}, // lonely 6 in `code`
 		},
 		{
 			name:       "6gg from end of wrapped line",
@@ -1503,7 +1506,7 @@ func TestVigg(t *testing.T) {
 				vi.cursor.MoveEndLine()
 			},
 			events:      "6gg",
-			expectCoord: term.Coordinates{X: 0, Y: 7}, // lonely 6 in `code`
+			expectCoord: term.Coordinates{X: 0, Y: 8}, // lonely 6 in `code`
 		},
 		{
 			name:       "gg to same line called from wrapped lines below brings cursor to start of line",
@@ -1597,7 +1600,7 @@ func TestVigg(t *testing.T) {
 			if tcase.narrowWrap {
 				scrollWidth = 4
 			}
-			vi.Resize(scrollWidth, 10)
+			vi.Resize(scrollWidth, 9)
 			vi.Draw(term.NoopWriter{})
 			if tcase.moveCursorFn != nil {
 				tcase.moveCursorFn(vi)
@@ -1837,16 +1840,29 @@ func setupViWithScroll(
 }
 
 func setupViIntegration(
-	t *testing.T, text string, tabspaces int, opts ...Option,
+	t *testing.T, copy string, tabspaces int, opts ...Option,
 ) tui.Handler {
 	buf := cell.NewBuffer()
 	buf.InitWithTabspaces(tabspaces)
-	_, err := buf.ReadFrom(strings.NewReader(text))
+	_, err := buf.ReadFrom(strings.NewReader(copy))
 	require.NoError(t, err)
 
+	var mu sync.Mutex
+	cfg := text.StatusBarConfig{
+		Publisher: &texttest.TestEditor{},
+		ScheduleNextTick: func(cb func()) bool {
+			mu.Lock()
+			defer mu.Unlock()
+			cb()
+			return true
+		},
+	}
 	vi := New(buf, uri, opts...)
+	bar := text.WithStatusBar(vi, buf, vi.less.Scroll(),
+		false, false, cfg)
+	vi.setStatusBar(bar)
 
-	return vi
+	return handler.Sync(&mu, bar)
 }
 
 func TestPasteVisualMode(t *testing.T) {

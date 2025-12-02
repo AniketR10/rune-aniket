@@ -381,17 +381,15 @@ func (e *Handler) initializeDoneHandler() {
 	var main text.Handler
 	if e.cfg.Modal {
 		main = vi.New(buf, uri,
-			// vi.WithBarAttr(e.cfg.modalBarAttr()),
 			vi.WithResAttr(e.cfg.SelectionAttributes),
 			vi.WithAttr(e.cfg.Attributes),
-			vi.WithBarAttr(e.bar.frameAttr),
 			vi.WithDebug(false),
 			vi.WithWrap(false),
 			vi.WithClipboard(e.cfg.Clipboard),
 		)
 	} else {
 		main = modeless.NewHandler(e.cfg.Clipboard, buf, uri, false, true,
-			e.cfg.Attributes, e.cfg.SelectionAttributes, e.bar.frameAttr, nil)
+			e.cfg.Attributes, e.cfg.SelectionAttributes, nil)
 	}
 
 	e.doneHandler = e.newUnion(main)

@@ -199,7 +199,7 @@ $ ▐
                     
                     
                     
-              NORMAL`},
+                    `},
 		}
 		cfg := DefaultConfig()
 		cfg.Modal = true
@@ -219,7 +219,7 @@ $ ▐XX
                     
                     
                     
-              NORMAL`},
+                    `},
 		}
 
 		vtetest.TestSequence(t, handler, 20, 10, defaultWaitForIdleVte, ch, cases)

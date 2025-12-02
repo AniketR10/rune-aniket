@@ -38,6 +38,7 @@ import (
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/handler"
+	"unstable.build/go-tui/ide/syntax"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
 )
@@ -328,7 +329,12 @@ func (vi *Vi) SetWrap(wrap bool) {
 
 // ShowCommandBar satisfies editor.Handler.
 func (vi *Vi) ShowCommandBar(show bool) {
-	vi.less.ShowCommandBar(show)
+	/* handled by StatusBar */
+}
+
+// SetMessage sets a message on the status bar.
+func (vi *Vi) SetMessage(msg string) {
+	/* handled by StatusBar */
 }
 
 // IsEditMode returns whether the current mode is one of
@@ -432,6 +438,10 @@ func (vi *Vi) resetToSnapshot(op func() (bool, term.Coordinates)) bool {
 	return ok
 }
 
+func (vi *Vi) setStatusBar(bar statusBar) {
+	vi.handler.setStatusBar(bar)
+}
+
 func (vi *Vi) snapshotContent() {
 	vi.buf.GroupUndo()
 }
@@ -457,6 +467,8 @@ func (vi *cellSubscriber) OnDidEdit(
 	}
 	vi.oobEdited = vi.oob
 }
+
+var _ foldsService = (*syntax.Tree)(nil)
 
 type foldsService interface {
 	FoldsFrom(pos term.Coordinates) (iterator.Iterator[term.Range], bool)

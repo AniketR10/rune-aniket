@@ -78,7 +78,18 @@ func TestFoldsIntegration(t *testing.T) {
 			WithHideInitialFolds(true),
 			WithScheduleNextTick(cb),
 		)
-		vi.Resize(20, 10)
+		cfg := text.StatusBarConfig{
+			Publisher: &texttest.TestEditor{},
+			ScheduleNextTick: func(cb func()) bool {
+				mu.Lock()
+				defer mu.Unlock()
+				cb()
+				return true
+			},
+		}
+		bar := text.WithStatusBar(vi, buf, vi.less.Scroll(),
+			false, false, cfg)
+		bar.Resize(20, 10)
 		mu.Unlock()
 
 		tests := []comptest.TestCase{
@@ -92,7 +103,7 @@ diff_buf_adjust(win_
     int             
                     
     if (!win->w_p_di
-              NORMAL`,
+                    `,
 			},
 		}
 
@@ -102,7 +113,7 @@ diff_buf_adjust(win_
 		mu.Lock()
 		defer mu.Unlock()
 
-		comptest.TestComponent(t, vi, w, tests)
+		comptest.TestComponent(t, bar, w, tests)
 	})
 
 	t.Run("fold operations with auxiliary bar", func(t *testing.T) {
@@ -122,9 +133,17 @@ diff_buf_adjust(win_
 			return true
 		}
 		mu.Lock()
+		cfg := text.StatusBarConfig{
+			Publisher: &texttest.TestEditor{},
+			ScheduleNextTick: func(cb func()) bool {
+				cb()
+				return true
+			},
+		}
 		ed := Editor(
 			WithScheduleNextTick(cb),
 			WithAuxiliaryBar(true, text.AuxBarConfig{FoldsEnabled: true, ScheduleNextTick: cb}),
+			WithStatusBarConfig(true, cfg),
 		)
 		wg.Add(1)
 		vi, err := ed.Edit(uri, buf, false, false)
@@ -206,7 +225,7 @@ diff_buf_adjust(win_
   diff_buf_adjust(win_T *win)                     
  {                                               
       win_T    *wp;                               
-                                            NORMAL`,
+                                                  `,
 				},
 			}
 
@@ -244,11 +263,20 @@ diff_buf_adjust(win_
 		}
 		wg.Add(2)
 		mu.Lock()
+		cfg := text.StatusBarConfig{
+			Publisher: &texttest.TestEditor{},
+			ScheduleNextTick: func(cb func()) bool {
+				cb()
+				return true
+			},
+		}
 		vi := New(buf, uri,
 			WithHideInitialFolds(true),
 			WithScheduleNextTick(cb),
 		)
-		vi.Resize(20, 10)
+		bar := text.WithStatusBar(vi, buf, vi.less.Scroll(),
+			false, false, cfg)
+		bar.Resize(20, 10)
 		require.True(t, vi.SetCursorAtScroll(term.Coordinates{Y: 7}))
 		mu.Unlock()
 
@@ -263,7 +291,7 @@ diff_buf_adjust(win_
     int             
                     
     if (!win->w_p_di
-              NORMAL`,
+                    `,
 			},
 		}
 
@@ -273,7 +301,7 @@ diff_buf_adjust(win_
 		mu.Lock()
 		defer mu.Unlock()
 
-		comptest.TestComponent(t, vi, w, tests)
+		comptest.TestComponent(t, bar, w, tests)
 		pos := vi.CursorAtScroll()
 		assert.Equal(t, pos, term.Coordinates{Y: 7})
 	})
@@ -290,6 +318,9 @@ func newMockHandler(buf *cell.Buffer) (ret *mockHandler) {
 	ret = new(mockHandler)
 	ret.h.init(buf)
 	return ret
+}
+
+func (h *mockHandler) setStatusBar(bar statusBar) {
 }
 
 func (h *mockHandler) Resize(width, height int) {
@@ -342,15 +373,15 @@ func (h *mockHandler) cursorAtScroll() term.Coordinates {
 }
 
 func TestViHandle100(t *testing.T) {
-	testViHandleSize(t, 100, 100)
+	testViHandleSize(t, 100, 99)
 }
 
 func TestViHandle10(t *testing.T) {
-	testViHandleSize(t, 10, 10)
+	testViHandleSize(t, 10, 9)
 }
 
 func TestViHandle5(t *testing.T) {
-	testViHandleSize(t, 5, 5)
+	testViHandleSize(t, 5, 4)
 }
 
 func testViHandleSize(t *testing.T, width, height int) {
@@ -477,13 +508,13 @@ func testViHandleSize(t *testing.T, width, height int) {
 }
 
 func TestUndo100(t *testing.T) {
-	testUndoSize(t, 100, 100)
+	testUndoSize(t, 100, 99)
 }
 func TestUndo10(t *testing.T) {
-	testUndoSize(t, 10, 10)
+	testUndoSize(t, 10, 9)
 }
 func TestUndo5(t *testing.T) {
-	testUndoSize(t, 5, 5)
+	testUndoSize(t, 5, 4)
 }
 
 func testUndoSize(t *testing.T, width, height int) {

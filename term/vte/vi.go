@@ -100,8 +100,6 @@ func (v *viHandler) init(comp *Component, config Config) {
 
 func (v *viHandler) doInit(comp parentComponent, config Config) {
 	opts := []vi.Option{
-		// ensure bar doesn't occlude last prompt line
-		vi.WithSuperimposedMessages(true),
 		vi.WithResAttr(config.SelectionAttributes),
 		vi.WithAttr(config.Attributes),
 		vi.WithWrap(false),

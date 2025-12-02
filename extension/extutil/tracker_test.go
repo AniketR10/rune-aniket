@@ -69,7 +69,7 @@ func TestResourceTrackerIntegration(t *testing.T) {
 			tracker := NewResourceTracker(tabspaces, false)
 			require.NoError(t, ed.SubscribeEvents(test.evs, tracker))
 
-			ed.Resize(8, 8)
+			ed.Resize(8, 7)
 
 			res1 := makeURI(t, "memory:///1")
 
@@ -105,7 +105,7 @@ func TestResourceTrackerIntegration(t *testing.T) {
 				require.True(t, ok)
 
 				assert.Equal(t, 6, res.Scroll.Width())
-				assert.Equal(t, 4, res.Scroll.SizeHeight())
+				assert.Equal(t, 3, res.Scroll.SizeHeight())
 			})
 
 			t.Run("Focus returns last resource in focus", func(t *testing.T) {

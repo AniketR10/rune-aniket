@@ -783,7 +783,7 @@ func (e *testHandler) SetDefaultAttributes(attr term.Attributes) {
 }
 
 func (h *testHandler) CursorAtScroll() term.Coordinates {
-	return term.Coordinates{}
+	return term.Coordinates{Y: h.cursor}
 }
 
 func (t *testHandler) Handle(ev term.Event) (bool, bool) {
@@ -833,7 +833,7 @@ func (d differ) ListRemotes(_ context.Context, file workspaceapi.URI) ([]string,
 }
 
 func (d differ) ShortRef(ctx context.Context, file workspaceapi.URI) (string, error) {
-	panic("unimplemented")
+	return "main", nil
 }
 
 func (d differ) Diff(ctx context.Context, file workspaceapi.URI) (vctrl.FileDiff, error) {

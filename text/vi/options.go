@@ -24,6 +24,7 @@
 package vi
 
 import (
+	"github.com/sirupsen/logrus"
 	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/api/browserapi"
 	"unstable.build/go-tui/api/workspaceapi"
@@ -34,26 +35,25 @@ import (
 
 // viConfig holds configuration for Vi.
 type viConfig struct {
-	attr                 term.Attributes
-	resAttr              term.Attributes
-	barAttr              term.Attributes
-	clipboard            clipboard.Register
-	scheduleNextTick     func(func()) bool
-	defaultRegister      string
-	registry             text.WorkspaceCommandRegistry
-	superimposedMessages bool
-	debug                bool
-	wrap                 bool
-	cursorCorrections    bool
-	barHidden            bool
-	skipNulls            bool
-	enableInitialFolds   bool
-	enableAuxBar         bool
-	auxBarConfig         text.AuxBarConfig
-	gitBarConfig         text.GitBarConfig
-	workspace            workspaceapi.URI
-	enableGitBar         bool
-	notifications        browserapi.Notifications
+	attr               term.Attributes
+	resAttr            term.Attributes
+	clipboard          clipboard.Register
+	scheduleNextTick   func(func()) bool
+	defaultRegister    string
+	registry           text.WorkspaceCommandRegistry
+	debug              bool
+	wrap               bool
+	cursorCorrections  bool
+	skipNulls          bool
+	enableInitialFolds bool
+	enableAuxBar       bool
+	auxBarConfig       text.AuxBarConfig
+	statusBarConfig    text.StatusBarConfig
+	statusBarEnabled   bool
+	gitBarConfig       text.GitBarConfig
+	workspace          workspaceapi.URI
+	enableGitBar       bool
+	notifications      browserapi.Notifications
 }
 
 // defaultviHandlerImplConfig is a sane configuration defaults for viHandlerImpl.
@@ -116,37 +116,20 @@ func WithAuxiliaryBar(enabled bool, config text.AuxBarConfig) Option {
 	}
 }
 
+// WithStatusBarConfig configures the status bar.
+func WithStatusBarConfig(enabled bool, config text.StatusBarConfig) Option {
+	return func(cfg *viConfig) {
+		cfg.statusBarConfig = config
+		cfg.statusBarEnabled = enabled
+	}
+}
+
 // WithGitBar determines whether to render the changes between the
 // open file's worktree and HEAD.
 func WithGitBar(enabled bool, config text.GitBarConfig) Option {
 	return func(cfg *viConfig) {
 		cfg.enableGitBar = enabled
 		cfg.gitBarConfig = config
-	}
-}
-
-// WithBarAttr sets the command bar cell attributes to be rendered.
-func WithBarAttr(attr term.Attributes) Option {
-	return func(cfg *viConfig) {
-		cfg.barAttr = attr
-	}
-}
-
-// WithBarHidden sets the command bar to be hidden.
-func WithBarHidden(hide bool) Option {
-	return func(cfg *viConfig) {
-		cfg.barHidden = hide
-	}
-}
-
-// WithSuperimposedMessages changes the behaviour to instead of drawing
-// a bottom bar permanently on which messages are written,
-// messages are superimposed on the last row of the scroll content.
-//
-// The default value is false, so a full bar is drawn.
-func WithSuperimposedMessages(value bool) Option {
-	return func(cfg *viConfig) {
-		cfg.superimposedMessages = value
 	}
 }
 
@@ -207,4 +190,14 @@ func WithHideInitialFolds(enabled bool) Option {
 	return func(cfg *viConfig) {
 		cfg.enableInitialFolds = enabled
 	}
+}
+
+type nopBar struct {
+}
+
+func (n nopBar) SetStatus(status string, _ term.Attributes) {
+	logrus.Debugf("vi handler status: %s", status)
+}
+
+func (n nopBar) ShowBar(bool) {
 }

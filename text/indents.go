@@ -23,6 +23,10 @@
 
 package text
 
+import "unstable.build/go-tui/ide/syntax"
+
+var _ indentService = (*syntax.Tree)(nil)
+
 type indentService interface {
 	IndentationAt(line int) (int, bool)
 }

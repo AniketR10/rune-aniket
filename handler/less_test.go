@@ -90,7 +90,7 @@ func TestLessDrawSuperimposedBar(t *testing.T) {
 				b.Buffer().WriteString("hello world")
 				b.Resize(20, 1)
 			}, `
-hello world    P1Nav
+               P1Nav
                     
                     
                     

@@ -82,13 +82,15 @@ type viHandler interface {
 	search(string)
 	moveToBounds()
 	unselect() bool
+	setStatusBar(bar statusBar)
 }
 
 // viHandlerImpl implements a basic vi-like text editor which satisfies tui.Handler
 // and tui.Component.
 type viHandlerImpl struct {
 	config       viConfig
-	less         handler.Less // used for message bar and text search capabilities
+	less         handler.Less // used for search capabilities
+	statusBar    statusBar
 	free         text.CursorMark
 	cursor       text.Cursor
 	repeater     text.Repeater // used for block repeat only
@@ -107,20 +109,23 @@ type viHandlerImpl struct {
 	count            int
 }
 
+type statusBar interface {
+	SetStatus(string, term.Attributes)
+}
+
 func (vi *viHandlerImpl) init(buf *cell.Buffer, opts ...Option) {
 	vi.config = defaultviHandlerImplConfig()
 	for _, o := range opts {
 		o(&vi.config)
 	}
 
+	vi.statusBar = nopBar{}
 	vi.less.InitWithBuffer(buf, handler.LessConfig{
 		Wrap:               vi.config.wrap,
 		Debug:              vi.config.debug,
 		ResAttr:            vi.config.resAttr,
-		BarAttr:            vi.config.barAttr,
-		SuperimposeMessage: vi.config.superimposedMessages,
+		SuperimposeMessage: true,
 		Attributes:         vi.config.attr,
-		NoBar:              vi.config.barHidden,
 	})
 	scroll := vi.less.Scroll()
 	scroll.Attributes = vi.config.attr
@@ -141,14 +146,13 @@ func (vi *viHandlerImpl) initWithScroll(scroll *component.Scroll, opts ...Option
 		o(&vi.config)
 	}
 
+	vi.statusBar = nopBar{}
 	vi.less.InitWithScroll(scroll, handler.LessConfig{
 		Wrap:               vi.config.wrap,
 		Debug:              vi.config.debug,
 		ResAttr:            vi.config.resAttr,
-		BarAttr:            vi.config.barAttr,
-		SuperimposeMessage: vi.config.superimposedMessages,
+		SuperimposeMessage: true,
 		Attributes:         vi.config.attr,
-		NoBar:              vi.config.barHidden,
 	})
 	// do not initialize repeater, as we don't know if scroll
 	// was initialized with subscription functionality.
@@ -157,6 +161,11 @@ func (vi *viHandlerImpl) initWithScroll(scroll *component.Scroll, opts ...Option
 	vi.free = vi.cursor.Mark()
 	vi.setMode(normalMode)
 	vi.resetCount()
+}
+
+func (vi *viHandlerImpl) setStatusBar(msg statusBar) {
+	vi.statusBar = msg
+	vi.setMode(vi.mode())
 }
 
 // Resize satisfies tui.Component
@@ -173,9 +182,12 @@ func (vi *viHandlerImpl) setActiveLocationListMessage(locs map[string]textapi.Lo
 	// in current cursor position, then there's no guarantee of which one
 	// is going to be rendered.
 	for _, loc := range locs {
-		vi.less.SetMessage("%s", loc.Message)
+		if loc.Message != "" {
+			vi.less.SetMessage("%s", loc.Message)
+		}
 		return
 	}
+	vi.less.SetMessage("")
 }
 
 // Draw satisfies tui.Component
@@ -218,35 +230,41 @@ func (vi *viHandlerImpl) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 
 func (vi *viHandlerImpl) setMode(mode viMode) {
 	var text string
+	var attrs term.Attributes
 	switch mode {
-	case normalMode:
-		text = "NORMAL"
+	case normalMode, gMode, replaceOneMode:
+		text = " NORMAL"
 	case insertMode:
-		text = "INSERT"
+		text = " INSERT"
+		attrs = term.Attributes{Bg: tcell.ColorGreen, Fg: tcell.ColorBlack}
 	case deleteMode:
-		text = "DELETE"
-	case gMode:
-		text = "NORMAL"
+		text = " DELETE"
+		attrs = term.Attributes{Bg: tcell.ColorRed, Fg: tcell.ColorBlack}
 	case foldMode:
-		text = "FOLD"
+		text = "  FOLD "
+		attrs = term.Attributes{Bg: tcell.ColorTeal, Fg: tcell.ColorBlack}
 	case yankMode:
-		text = "YANK"
+		text = "  YANK "
+		attrs = term.Attributes{Bg: tcell.ColorFuchsia, Fg: tcell.ColorBlack}
 	case visualMode:
-		text = "VISUAL"
+		text = " VISUAL"
+		attrs = term.Attributes{Bg: tcell.ColorBlue, Fg: tcell.ColorBlack}
 	case visualLineMode:
-		text = "V-LINE"
+		text = " V-LINE"
+		attrs = term.Attributes{Bg: tcell.ColorTeal, Fg: tcell.ColorBlack}
 	case visualBlockMode:
 		text = "V-BLOCK"
+		attrs = term.Attributes{Bg: tcell.ColorAqua, Fg: tcell.ColorBlack}
 	case replaceMode:
 		text = "REPLACE"
+		attrs = term.Attributes{Bg: tcell.ColorYellow, Fg: tcell.ColorBlack}
 	case searchMode:
-		text = "SEARCH"
-	case replaceOneMode:
-		text = "NORMAL"
+		text = " SEARCH"
+		attrs = term.Attributes{Bg: tcell.ColorSilver, Fg: tcell.ColorBlack}
 	default:
 		panic(fmt.Sprintf("unknown mode: %v", mode))
 	}
-	vi.less.SetMessage("%s", text)
+	vi.statusBar.SetStatus(text, attrs)
 	vi.currMode = mode
 }
 
@@ -265,11 +283,13 @@ func (vi *viHandlerImpl) setInsertMode() {
 	vi.blockRepeat.From = term.Coordinates{}
 	vi.blockRepeat.To = term.Coordinates{}
 	vi.setMode(insertMode)
+	vi.less.SetMessage("")
 }
 
 func (vi *viHandlerImpl) setDeleteMode(thenInsert bool) {
 	vi.setMode(deleteMode)
 	vi.deleteInsert = thenInsert
+	vi.less.SetMessage("")
 }
 
 func (vi *viHandlerImpl) setGMode() {
@@ -327,10 +347,6 @@ func (vi *viHandlerImpl) setReplaceOneMode() {
 	vi.setMode(replaceOneMode)
 }
 
-// we delegate search buffer Component to Less but delegate cursor position
-// and results seeking to Editor so this function makes sure that we only
-// perform the search once, at the same time we delegate the right logic to
-// Editor and Less.
 func (vi *viHandlerImpl) handleSearch(ev term.Event) (bool, bool) {
 	switch ev.Mod {
 	case 0:
@@ -339,7 +355,7 @@ func (vi *viHandlerImpl) handleSearch(ev term.Event) (bool, bool) {
 			text := vi.less.SearchText()
 			vi.less.SetNormalMode()
 			if text == "" {
-				vi.setMode(normalMode) // force set message
+				vi.less.SetMessage("")
 			} else {
 				vi.less.SetMessage("searching '%s'", text)
 			}

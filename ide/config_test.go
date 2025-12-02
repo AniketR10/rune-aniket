@@ -35,6 +35,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/tcell/v3"
+	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/component"
@@ -62,6 +63,11 @@ default_attr:
     fg: "#f2f2f2"
 
 editor:
+    status_bar:
+        enabled: true
+        background_attr:
+            bg: maroon
+        layout: '█{{ .Status | bg "red" | fg "black" | bold }}█▓▒░  {{ .Filepath }}   {{ .GitShortRef }}   {{ .GitDiffAdd | fg "green" }}   {{ .GitDiffDel | fg "red" }} {{ .ShiftRight }}{{ .CursorColumn }}:{{ .CursorLine }}  {{ .TotalLines }} lines  {{ .Language | bold }}  '
     aux_bar:
         enabled: true
         folds: true
@@ -290,6 +296,9 @@ func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
 	gitBar := cfg.gitBarEnabled()
 	assert.False(t, gitBar)
 
+	statusBar := cfg.statusBarEnabled()
+	assert.True(t, statusBar)
+
 	enabled, absolute := cfg.auxiliaryBarLines()
 	assert.True(t, enabled)
 	assert.True(t, absolute)
@@ -476,6 +485,49 @@ func TestConfigSetting(t *testing.T) {
 	expectedFUCs.Top = '┫'
 	expectedFUCs.Bottom = '┫'
 	assert.Equal(t, expectedFUCs, cfg.frameUnionCharset())
+
+	statusBar := cfg.statusBarEnabled()
+	assert.True(t, statusBar)
+
+	statusBarCfg := cfg.statusBarConfig(workspaceapi.URI{}, nil, nil)
+	assert.NotNil(t, statusBarCfg.ScheduleNextTick)
+	statusBarCfg.ScheduleNextTick = nil
+	assert.Equal(t, text.StatusBarConfig{
+		BackgroundColor: tcell.ColorMaroon,
+		Layout: []text.StatusBarComponent{
+			{
+				Template: "█%s█▓▒░",
+				Type:     text.StatusBarStatus,
+				Attributes: term.Attributes{
+					Bg:    tcell.ColorRed,
+					Fg:    tcell.ColorBlack,
+					Attrs: tcell.AttrBold,
+				},
+			},
+			{Template: "  %s", Type: text.StatusBarFilePath},
+			{Template: "   %s", Type: text.StatusBarGitShortRef},
+			{
+				Template:   "   %d",
+				Type:       text.StatusBarGitDiffAdded,
+				Attributes: term.Attributes{Fg: tcell.ColorGreen},
+			},
+			{
+				Template:   "   %d ",
+				Type:       text.StatusBarGitDiffDeleted,
+				Attributes: term.Attributes{Fg: tcell.ColorRed},
+			},
+			{Type: text.StatusBarVoid},
+			{Template: "%d:", Type: text.StatusBarCoordinatesCursorX},
+			{Template: "%d", Type: text.StatusBarCoordinatesCursorY},
+			{Template: "  %d lines", Type: text.StatusBarTotalLines},
+			{
+				Template:   "  %s  ",
+				Type:       text.StatusBarLanguage,
+				Attributes: term.Attributes{Attrs: tcell.AttrBold},
+			},
+		},
+		GitService: nil,
+	}, statusBarCfg)
 
 	auxBar := cfg.auxiliaryBarEnabled()
 	assert.True(t, auxBar)

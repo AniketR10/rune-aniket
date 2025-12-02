@@ -142,16 +142,15 @@ func (h *workspaceManagerHandler) newEditor(
 func (h *workspaceManagerHandler) newBuiltinModalEditor(
 	cwd workspaceapi.URI, cfg ideConfig, svc vctrl.Service,
 ) text.Editor {
-	auxBarConfig := cfg.auxiliaryBarConfig(svc)
-	auxBarConfig.Publisher = h
-	gitBarConfig := cfg.gitBarConfig(svc)
-	gitBarConfig.Publisher = h
+	auxBarConfig := cfg.auxiliaryBarConfig(h, svc)
+	gitBarConfig := cfg.gitBarConfig(h)
+	statusBarConfig := cfg.statusBarConfig(cwd, h, svc)
 	viOpts := append([]vi.Option{},
-		vi.WithBarAttr(cfg.modalBarAttr()),
 		vi.WithResAttr(cfg.modalResultAttr()),
 		vi.WithScheduleNextTick(cfg.scheduleNextTick),
 		vi.WithAttr(cfg.modalAttr()),
 		vi.WithAuxiliaryBar(cfg.auxiliaryBarEnabled(), auxBarConfig),
+		vi.WithStatusBarConfig(cfg.statusBarEnabled(), statusBarConfig),
 		vi.WithGitBar(cfg.gitBarEnabled(), gitBarConfig),
 		vi.WithHideInitialFolds(cfg.initialFolds()),
 		vi.WithDebug(cfg.modalDebug()),
@@ -165,12 +164,10 @@ func (h *workspaceManagerHandler) newBuiltinModalEditor(
 func (h *workspaceManagerHandler) newBuiltinModelessEditor(
 	cwd workspaceapi.URI, cfg ideConfig, svc vctrl.Service,
 ) text.Editor {
-	auxBarConfig := cfg.auxiliaryBarConfig(svc)
-	auxBarConfig.Publisher = h
-	gitBarConfig := cfg.gitBarConfig(svc)
-	gitBarConfig.Publisher = h
+	auxBarConfig := cfg.auxiliaryBarConfig(h, svc)
+	gitBarConfig := cfg.gitBarConfig(h)
+	statusBarConfig := cfg.statusBarConfig(cwd, h, svc)
 	return modeless.Editor(
-		modeless.WithBarAttr(cfg.modelessBarAttr()),
 		modeless.WithCommandBar(true),
 		modeless.WithResAttr(cfg.modelessResultAttr()),
 		modeless.WithScheduleNextTick(cfg.scheduleNextTick),
@@ -179,6 +176,7 @@ func (h *workspaceManagerHandler) newBuiltinModelessEditor(
 		modeless.WithGitBar(cfg.gitBarEnabled(), gitBarConfig),
 		modeless.WithHideInitialFolds(cfg.initialFolds()),
 		modeless.WithClipboard(cfg.clipboard()),
+		modeless.WithStatusBarConfig(cfg.statusBarEnabled(), statusBarConfig),
 		modeless.WithWorkspaceCommandRegistry(cwd, h),
 		modeless.WithNotifications(h.notifications),
 	)

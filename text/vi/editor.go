@@ -59,6 +59,7 @@ func (e *viEditor) Edit(
 	root := New(buf, file, e.opts...)
 	// publisher does not mutate cursor and it should never do so
 	cursor := root.cursor
+	scroll := root.less.Scroll()
 	var ret text.Handler = root
 	if e.registry != nil {
 		var err error
@@ -79,13 +80,19 @@ func (e *viEditor) Edit(
 	gitBarConfig := e.config.gitBarConfig
 	gitBarConfig.CommandRegistry = e.registry
 	if e.config.enableAuxBar {
-		ret = text.WithAuxBar(ret, buf, root.less.Scroll(), auxBarConfig)
+		ret = text.WithAuxBar(ret, buf, scroll, auxBarConfig)
 		if e.config.enableGitBar {
 			ret = text.WithGitBar(e.config.auxBarConfig.Service, ret, buf,
-				root.less.Scroll(), gitBarConfig)
+				scroll, gitBarConfig)
 		}
 	}
-	return ret, nil
+	if !e.config.statusBarEnabled {
+		return ret, nil
+	}
+	bar := text.WithStatusBar(ret, buf, scroll,
+		readOnly, recovered, e.config.statusBarConfig)
+	root.setStatusBar(bar)
+	return bar, nil
 }
 
 // SubscribeCommand is not supported.

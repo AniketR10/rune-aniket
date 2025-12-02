@@ -43,6 +43,7 @@ var _ component.Scrollable = (*editorHandler)(nil)
 type editorHandler struct {
 	buf              *cell.Buffer
 	less             handler.Less
+	statusBar        statusBar
 	resource         workspaceapi.URI
 	cursor           text.Cursor
 	height           int
@@ -56,12 +57,12 @@ func NewHandler(
 	clipboard clipboard.Register,
 	buf *cell.Buffer, resource workspaceapi.URI,
 	wrap, commandBar bool,
-	attr, resAttr, barAttr term.Attributes,
+	attr, resAttr term.Attributes,
 	scheduleNextTick func(func()) bool,
 ) text.Handler {
 	ret := new(editorHandler)
 	ret.Init(clipboard, buf, resource, wrap, commandBar,
-		attr, resAttr, barAttr, scheduleNextTick)
+		attr, resAttr, scheduleNextTick)
 	return ret
 }
 
@@ -69,21 +70,22 @@ func (h *editorHandler) Init(
 	clipboard clipboard.Register,
 	buf *cell.Buffer, resource workspaceapi.URI,
 	wrap, commandBar bool,
-	attr, resAttr, barAttr term.Attributes,
+	attr, resAttr term.Attributes,
 	scheduleNextTick func(func()) bool,
 ) {
 	h.buf = buf
 	h.resource = resource
 	h.less.InitWithBuffer(buf, handler.LessConfig{
-		Wrap:       wrap,
-		NoBar:      !commandBar,
-		BarAttr:    barAttr,
-		ResAttr:    resAttr,
-		Attributes: attr,
+		Wrap:               wrap,
+		NoBar:              !commandBar,
+		SuperimposeMessage: true,
+		ResAttr:            resAttr,
+		Attributes:         attr,
 	})
 	h.cursor.Init(h.less.Scroll(), scheduleNextTick)
 	h.mouse = text.NewMouse(text.CursorMouseDelegate(&h.cursor))
 	h.clipboard = clipboard
+	h.statusBar = nopBar{}
 }
 
 // Resize satisfies tui.Component
@@ -100,7 +102,7 @@ func (h *editorHandler) Draw(w term.Writer) {
 	locs, _ := h.cursor.LocationsAtCursor()
 	for _, loc := range locs {
 		h.less.SetMessage("%s", loc.Message)
-		return
+		break
 	}
 	h.less.Draw(w)
 	text.DrawLocations(h.cursor.SortedLocations(), h.less.Scroll(), w)
@@ -333,4 +335,8 @@ func (h *editorHandler) CursorAtScroll() term.Coordinates {
 
 func (h *editorHandler) LocationLists() []text.LocationSet {
 	return h.cursor.LocationLists()
+}
+
+func (h *editorHandler) setStatusBar(bar statusBar) {
+	h.statusBar = bar
 }

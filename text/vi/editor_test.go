@@ -35,6 +35,7 @@ import (
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
+	"unstable.build/go-tui/text/texttest"
 )
 
 func TestEditorDispatchFocus(t *testing.T) {
@@ -72,7 +73,14 @@ func TestEditorDispatchFocus(t *testing.T) {
 }
 
 func TestEditorDispatchScroll(t *testing.T) {
-	ed := Editor()
+	cfg := text.StatusBarConfig{
+		Publisher: &texttest.TestEditor{},
+		ScheduleNextTick: func(cb func()) bool {
+			cb()
+			return true
+		},
+	}
+	ed := Editor(WithStatusBarConfig(true, cfg))
 	buf := cell.NewBuffer()
 	buf.WriteString("Daworg\nSurinach")
 	h, err := ed.Edit(workspaceapi.URI{}, buf, false, false)
@@ -111,7 +119,7 @@ func TestEditorDispatchCursor(t *testing.T) {
 		require.NoError(t, err)
 
 		// should scroll as well, but changes in cursorAtScroll is what we are expecting
-		h.Resize(2, 2)
+		h.Resize(2, 1)
 
 		windowCursor := term.Coordinates{X: -1}
 		scrollCursor := term.Coordinates{X: -1}
@@ -147,7 +155,7 @@ func TestEditorDispatchCursor(t *testing.T) {
 		buf.WriteString("Matias\nGiordano\n")
 		h, err := ed.Edit(uri, buf, false, false)
 		require.NoError(t, err)
-		h.Resize(2, 2)
+		h.Resize(2, 1)
 
 		windowCursor := term.Coordinates{X: -1}
 		scrollCursor := term.Coordinates{X: -1}

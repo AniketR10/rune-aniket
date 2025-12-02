@@ -42,6 +42,7 @@ import (
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/handler"
+	"unstable.build/go-tui/ide/syntax"
 	"unstable.build/go-tui/ide/vctrl"
 	"unstable.build/go-tui/term"
 )
@@ -240,7 +241,7 @@ func (b *auxBar) Handle(ev term.Event) (quit, handled bool) {
 		prevCursor := b.prevCursor
 		prevOffset := b.prevOffset
 		b.prevOffset = b.scroll.Offset()
-		b.prevCursor, _, _ = b.vhandler.Cursor()
+		b.prevCursor, _, _ = b.vhandler.C.Cursor()
 		if b.linesEnabled && !b.absoluteLines &&
 			(prevCursor.Y != b.prevCursor.Y || prevOffset.Y != b.prevOffset.Y) {
 			b.rebuildBar(context.Background())
@@ -796,6 +797,8 @@ func (b *auxBar) log(level log.Level, msg string, args ...any) {
 	}
 	log.WithField(logging.KeyClass, "text.auxBar").Logf(level, msg, args...)
 }
+
+var _ foldsService = (*syntax.Tree)(nil)
 
 type foldsService interface {
 	Folds() (iterator.Iterator[term.Range], bool)

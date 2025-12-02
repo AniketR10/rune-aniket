@@ -25,7 +25,6 @@ package handler
 
 import (
 	"fmt"
-	"math"
 
 	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui"
@@ -169,8 +168,7 @@ func (l *Less) SetSearchMode(moveMode LessMoveMode) {
 	if l.config.SuperimposeMessage && l.scroll.Attributes != l.usedSearchBarAttr {
 		l.updateSearchBarAttr()
 	}
-	_, cmdBarHeight := l.cmdBarHeight()
-	l.resizeSearchScroll(cmdBarHeight)
+	l.resize()
 }
 
 // SearchText returns the contents of the search buffer.
@@ -181,13 +179,9 @@ func (l *Less) SearchText() string {
 }
 
 // SetMessage sets a message to be displayed on the bottom right corner.
-func (l *Less) SetMessage(text string, args ...interface{}) {
-	if (len(args) == 0 && l.setMessage(text)) || l.setMessage(fmt.Sprintf(text, args...)) {
-		l.resize()
-	} else {
-		cmdBarWidth, cmdBarHeight := l.cmdBarHeight()
-		l.resizeMoveMessage(cmdBarWidth, cmdBarHeight)
-	}
+func (l *Less) SetMessage(text string, args ...any) {
+	l.setMessage(fmt.Sprintf(text, args...))
+	l.resize()
 }
 
 // Mode returns the current LessMode.
@@ -341,8 +335,6 @@ func (l *Less) searchHandleEvent(ev term.Event) (bool, bool) {
 			l.cursorOffset--
 			l.searchScrollVirt.C.Buffer().
 				DeleteCell(term.Coordinates{X: l.cursorOffset, Y: 0})
-			_, cmdBarHeight := l.cmdBarHeight()
-			l.resizeSearchScroll(cmdBarHeight)
 		}
 	case term.KeyEnter:
 		l.search = l.SearchText()
@@ -366,10 +358,9 @@ func (l *Less) searchHandleEvent(ev term.Event) (bool, bool) {
 	default:
 		l.cursorOffset++
 		l.searchScrollVirt.C.Buffer().WriteString(string(ev.Ch))
-		_, cmdBarHeight := l.cmdBarHeight()
-		l.resizeSearchScroll(cmdBarHeight)
 	}
 
+	l.resize()
 	if l.config.SuperimposeMessage && l.scroll.Attributes != l.usedSearchBarAttr {
 		l.updateSearchBarAttr()
 	}
@@ -466,21 +457,20 @@ func (l *Less) setMessage(msg string) bool {
 }
 
 func (l *Less) cmdBarHeight() (cmdBarWidth, cmdBarHeight int) {
-	if !l.config.NoBar {
-		cmdBarWidth = l.width
-		if l.config.SuperimposeMessage {
-			cmdBarWidth = int(math.Min(float64(l.width), float64(len(l.msgStr))))
-		}
-		cmdBarHeight = l.msgVirt.C.Height(cmdBarWidth)
-		if l.height <= cmdBarHeight {
-			cmdBarHeight = 1
-		}
+	if l.config.NoBar {
+		return
+	}
+	cmdBarWidth = l.width
+	if l.config.SuperimposeMessage {
+		msgslen := len(l.msgStr) + len(l.searchScrollVirt.C.Buffer().String())
+		cmdBarWidth = min(l.width, msgslen)
+	}
+	cmdBarHeight = max(l.msgVirt.C.Height(cmdBarWidth),
+		l.searchScrollVirt.C.Height(cmdBarWidth))
+	if l.height <= cmdBarHeight {
+		cmdBarHeight = 1
 	}
 	return
-}
-
-func (l *Less) resizeSearchScroll(cmdBarHeight int) {
-	l.searchScrollVirt.Resize(l.width-len(l.msgStr), cmdBarHeight)
 }
 
 func (l *Less) resize() {
@@ -488,13 +478,16 @@ func (l *Less) resize() {
 	contentHeight := l.height - cmdBarHeight
 
 	// allow content to be superimposed on bar
-	if cmdBarWidth != l.width {
+	if cmdBarWidth == 0 {
 		contentHeight = l.height
 	}
-	l.scroll.Resize(l.width, contentHeight)
+
+	if l.scroll.SizeHeight() != contentHeight || l.scroll.Width() != l.width {
+		l.scroll.Resize(l.width, contentHeight)
+	}
 
 	l.searchScrollVirt.Move(term.Coordinates{X: 0, Y: l.height - cmdBarHeight})
-	l.resizeSearchScroll(cmdBarHeight)
+	l.searchScrollVirt.Resize(l.width-len(l.msgStr), cmdBarHeight)
 
 	l.resizeMoveMessage(cmdBarWidth, cmdBarHeight)
 }

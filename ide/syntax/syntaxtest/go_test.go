@@ -46,6 +46,7 @@ import (
 	"unstable.build/go-tui/ide/syntax"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
+	"unstable.build/go-tui/text/texttest"
 	"unstable.build/go-tui/text/vi"
 	"unstable.build/go-tui/workspace"
 )
@@ -129,8 +130,8 @@ func TestTreeFoldsIntegration(t *testing.T) {
 		_, h := newEditFile(t, comp, fileContent)
 		tmu.Unlock()
 
-		cref, ok := h.(interface{ CursorReference() *text.Cursor })
-		tree, ok := cref.CursorReference().View().(*syntax.Tree)
+		cref, ok := h.(*text.StatusBar)
+		tree, ok := cref.Buffer().View().(*syntax.Tree)
 		require.True(t, ok)
 
 		it, ok := tree.Folds()
@@ -188,8 +189,8 @@ func TestTreeFoldsIntegration(t *testing.T) {
 		_, h := newEditFile(t, comp, fileContent)
 		tmu.Unlock()
 
-		cref, ok := h.(interface{ CursorReference() *text.Cursor })
-		tree, ok := cref.CursorReference().View().(*syntax.Tree)
+		cref, ok := h.(*text.StatusBar)
+		tree, ok := cref.Buffer().View().(*syntax.Tree)
 		require.True(t, ok)
 
 		it, ok := tree.Folds()
@@ -247,8 +248,8 @@ func TestTreeFoldsIntegration(t *testing.T) {
 		tmu.Lock()
 		_, h := newEditFileName(t, comp, "abc", strconv.Itoa(int(rand.Int())))
 
-		cref, ok := h.(interface{ CursorReference() *text.Cursor })
-		tree, ok := cref.CursorReference().View().(*syntax.Tree)
+		cref, ok := h.(*text.StatusBar)
+		tree, ok := cref.Buffer().View().(*syntax.Tree)
 		require.True(t, ok)
 
 		it, ok := tree.Folds()
@@ -273,7 +274,6 @@ func TestTreeFoldsIntegration(t *testing.T) {
 		require.NoError(t, tree.Close())
 		cleanup()
 	})
-	
 
 	t.Run("if folds.scm file is not found and tree is ready Folds returns false", func(t *testing.T) {
 		pkgs := newInstalledPkgManagerWithFiles(t,
@@ -343,7 +343,7 @@ func TestTreeIndentsIntegration(t *testing.T) {
 │)                           │
 │                            │
 │#### main() {               │
-│                      INSERT│
+│                     #######│
 └────────────────────────────┘`,
 		},
 		{
@@ -360,7 +360,7 @@ func TestTreeIndentsIntegration(t *testing.T) {
 │    ########################│
 │)                           │
 │                            │
-│                      INSERT│
+│                     #######│
 └────────────────────────────┘`,
 		},
 		{
@@ -377,7 +377,7 @@ func TestTreeIndentsIntegration(t *testing.T) {
 │)                           │
 │                            │
 │#### main() {               │
-│                      INSERT│
+│                     #######│
 └────────────────────────────┘`,
 		},
 		{
@@ -394,7 +394,7 @@ func TestTreeIndentsIntegration(t *testing.T) {
 │)                           │
 │                            │
 │#### main() {               │
-│                      INSERT│
+│                     #######│
 └────────────────────────────┘`,
 		},
 		{
@@ -411,7 +411,7 @@ func TestTreeIndentsIntegration(t *testing.T) {
 │)                           │
 │                            │
 │#### main() {               │
-│                      INSERT│
+│                     #######│
 └────────────────────────────┘`,
 		},
 		{
@@ -428,7 +428,7 @@ func TestTreeIndentsIntegration(t *testing.T) {
 │)                           │
 │                            │
 │#### main() {               │
-│                      INSERT│
+│                     #######│
 └────────────────────────────┘`,
 		},
 		{
@@ -445,7 +445,7 @@ func TestTreeIndentsIntegration(t *testing.T) {
 │)                           │
 │                            │
 │#### main() {               │
-│                      INSERT│
+│                     #######│
 └────────────────────────────┘`,
 		},
 		{
@@ -462,7 +462,7 @@ func TestTreeIndentsIntegration(t *testing.T) {
 │#### hello() {              │
 │    fmt.Println(##)         │
 │}▐                          │
-│                      INSERT│
+│                     #######│
 └────────────────────────────┘`,
 		},
 		{
@@ -479,7 +479,7 @@ func TestTreeIndentsIntegration(t *testing.T) {
 │    ## debug(####() {       │
 │    fmt.Println(##)         │
 │    }    )▐                 │
-│                      INSERT│
+│                     #######│
 └────────────────────────────┘`,
 		},
 		{
@@ -496,7 +496,7 @@ func TestTreeIndentsIntegration(t *testing.T) {
 │    ## debug(####() {       │
 │    fmt.Println(##)         │
 │}    )▐                     │
-│                      INSERT│
+│                     #######│
 └────────────────────────────┘`,
 		},
 		{
@@ -513,7 +513,7 @@ func TestTreeIndentsIntegration(t *testing.T) {
 │                            │
 │▐                           │
 │#### main() {               │
-│                      INSERT│
+│                     #######│
 └────────────────────────────┘`,
 		},
 		{
@@ -530,7 +530,7 @@ func TestTreeIndentsIntegration(t *testing.T) {
 │                            │
 │#### main() {               │
 │    ▐                       │
-│                      INSERT│
+│                     #######│
 └────────────────────────────┘`,
 		},
 		{
@@ -547,7 +547,7 @@ func TestTreeIndentsIntegration(t *testing.T) {
 │#### main() {               │
 │    fmt.Println(#####, cli.N│
 │    ▐                       │
-│                      INSERT│
+│                     #######│
 └────────────────────────────┘`,
 		},
 		{
@@ -564,7 +564,7 @@ func TestTreeIndentsIntegration(t *testing.T) {
 │    fmt.Println(#####, cli.N│
 │    ### i := #; i < ##; i++ │
 │        ▐                   │
-│                      INSERT│
+│                     #######│
 └────────────────────────────┘`,
 		},
 		{
@@ -581,7 +581,7 @@ func TestTreeIndentsIntegration(t *testing.T) {
 │    ### i := #; i < ##; i++ │
 │        fmt.Println(####, i)│
 │        ▐                   │
-│                      INSERT│
+│                     #######│
 └────────────────────────────┘`,
 		},
 		{
@@ -598,7 +598,7 @@ func TestTreeIndentsIntegration(t *testing.T) {
 │        fmt.Println(####, i)│
 │    }                       │
 │    ▐                       │
-│                      INSERT│
+│                     #######│
 └────────────────────────────┘`,
 		},
 		{
@@ -615,7 +615,7 @@ func TestTreeIndentsIntegration(t *testing.T) {
 │    }                       │
 │}                           │
 │▐                           │
-│                      INSERT│
+│                     #######│
 └────────────────────────────┘`,
 		},
 		{
@@ -632,7 +632,7 @@ func TestTreeIndentsIntegration(t *testing.T) {
 │    ########################│
 │    ###                     │
 │▐                           │
-│                      INSERT│
+│                     #######│
 └────────────────────────────┘`,
 		},
 		{
@@ -649,7 +649,7 @@ func TestTreeIndentsIntegration(t *testing.T) {
 │    ###                     │
 │                            │
 │▐                           │
-│                      INSERT│
+│                     #######│
 └────────────────────────────┘`,
 		},
 		{
@@ -666,7 +666,7 @@ func TestTreeIndentsIntegration(t *testing.T) {
 │)                           │
 │                            │
 │#### main() {               │
-│                      INSERT│
+│                     #######│
 └────────────────────────────┘`,
 		},
 		{
@@ -683,7 +683,7 @@ func TestTreeIndentsIntegration(t *testing.T) {
 │)                           │
 │                            │
 │#### main() {               │
-│                      INSERT│
+│                     #######│
 └────────────────────────────┘`,
 		},
 		{
@@ -700,7 +700,7 @@ func TestTreeIndentsIntegration(t *testing.T) {
 │    ########################│
 │    ###                     │
 │▐                           │
-│                      INSERT│
+│                     #######│
 └────────────────────────────┘`,
 		},
 		{
@@ -717,7 +717,7 @@ func TestTreeIndentsIntegration(t *testing.T) {
 │    ########################│
 │    ▐                       │
 │                            │
-│                      INSERT│
+│                     #######│
 └────────────────────────────┘`,
 		},
 	}
@@ -794,7 +794,7 @@ func TestEdgeCaseIndents(t *testing.T) {
 │#### main() {               │
 │    ## debug(####() {       │
 │        fmt▐                │
-│                      INSERT│
+│                     #######│
 └────────────────────────────┘`,
 		},
 		{
@@ -811,7 +811,7 @@ func TestEdgeCaseIndents(t *testing.T) {
 │            ## true {       │
 │                ## debug(###│
 │                    ▐       │
-│                      INSERT│
+│                     #######│
 └────────────────────────────┘`,
 		},
 	}
@@ -832,9 +832,9 @@ func TestTreeHighlightsMissingHighlightsFile(t *testing.T) {
 	mu.Lock()
 	_, h := newEditFile(t, comp, fileContent)
 	mu.Unlock()
-	cref, ok := h.(interface{ CursorReference() *text.Cursor })
+	cref, ok := h.(*text.StatusBar)
 	require.True(t, ok)
-	tree, ok := cref.CursorReference().View().(*syntax.Tree)
+	tree, ok := cref.Buffer().View().(*syntax.Tree)
 	require.True(t, ok)
 
 	require.NoError(t, tree.Close())
@@ -1196,7 +1196,7 @@ func TestTreeHighlightsIntegration(t *testing.T) {
 │#### helloWorld(){          │
 │    fmt.Println(############│
 │}▐                          │
-│                      INSERT│
+│                     #######│
 └────────────────────────────┘`,
 		},
 	}
@@ -1259,8 +1259,8 @@ func TestTreeStateIntegration(t *testing.T) {
 		_, h := newEditFile(t, comp, fileContent)
 		tmu.Unlock()
 
-		cref, ok := h.(interface{ CursorReference() *text.Cursor })
-		tree, ok := cref.CursorReference().View().(*syntax.Tree)
+		cref, ok := h.(*text.StatusBar)
+		tree, ok := cref.Buffer().View().(*syntax.Tree)
 		require.True(t, ok)
 
 		it := tree.State()
@@ -1316,8 +1316,8 @@ func TestTreeStateIntegration(t *testing.T) {
 		tmu.Lock()
 		_, h := newEditFileName(t, comp, "abc", strconv.Itoa(int(rand.Int())))
 
-		cref, ok := h.(interface{ CursorReference() *text.Cursor })
-		tree, ok := cref.CursorReference().View().(*syntax.Tree)
+		cref, ok := h.(*text.StatusBar)
+		tree, ok := cref.Buffer().View().(*syntax.Tree)
 		require.True(t, ok)
 
 		it := tree.State()
@@ -1393,14 +1393,14 @@ func TestTreeStateIntegration(t *testing.T) {
 		assert.False(t, ok)
 
 		wg.Wait() // async also closes
-		
+
 		after := tree.State()
 		state, ok := after.Next(ctx)
 		assert.True(t, ok)
 		assert.True(t, state.Closed)
 		_, ok = after.Next(ctx)
 		assert.False(t, ok)
-		
+
 		cleanup()
 	})
 
@@ -1411,9 +1411,9 @@ func TestTreeStateIntegration(t *testing.T) {
 			"go/indents.scm",
 			"go/folds.scm",
 		)
-		cursor, tree, cleanup := newTreeWithPkgManager(t, pkgs)
+		buffer, tree, cleanup := newTreeWithPkgManager(t, pkgs)
 
-		cursor.InsertString("/* */")
+		buffer.InsertString(term.Coordinates{}, "/* */")
 
 		it := tree.State()
 		actual, ok := it.Next(context.Background())
@@ -1426,7 +1426,7 @@ func TestTreeStateIntegration(t *testing.T) {
 			Highlights: true,
 		}, actual)
 
-		cursor.InsertString("}}}}}}}}}}}}}}}}(*&^%$#@!*&^%$#@!")
+		buffer.InsertString(term.Coordinates{}, "}}}}}}}}}}}}}}}}(*&^%$#@!*&^%$#@!")
 
 		actual, ok = it.Next(context.Background())
 		require.True(t, ok)
@@ -1535,7 +1535,10 @@ func newTestCase(
 		return true
 	}
 
-	ed := vi.Editor()
+	ed := vi.Editor(vi.WithStatusBarConfig(true, text.StatusBarConfig{
+		Publisher:        texttest.NopEditor(),
+		ScheduleNextTick: cfg.ScheduleNextTick,
+	}))
 	w := workspace.NewSchemeWorkspace(uri, scheme)
 	tcfg := text.DefaultConfig()
 	tcfg.Syntax = cfg
@@ -1592,7 +1595,7 @@ func newTree(t *testing.T) (*syntax.Tree, func()) {
 }
 
 func newTreeWithPkgManager(t *testing.T, pkgs syntax.PkgManager) (
-	*text.Cursor, *syntax.Tree, func(),
+	*cell.Buffer, *syntax.Tree, func(),
 ) {
 	var wg sync.WaitGroup
 	ready := func(context.Context) error {
@@ -1607,13 +1610,13 @@ func newTreeWithPkgManager(t *testing.T, pkgs syntax.PkgManager) (
 	_, h := newEditFile(t, comp, fileContent)
 	mu.Unlock()
 	wg.Wait()
-	cref, ok := h.(interface{ CursorReference() *text.Cursor })
+	cref, ok := h.(*text.StatusBar)
 	require.True(t, ok)
 
-	tree, ok := cref.CursorReference().View().(*syntax.Tree)
+	tree, ok := cref.Buffer().View().(*syntax.Tree)
 	require.True(t, ok)
 
-	return cref.CursorReference(), tree, cleanup
+	return cref.Buffer(), tree, cleanup
 }
 
 const fileContent = `package main

@@ -24,6 +24,7 @@
 package modeless
 
 import (
+	"github.com/sirupsen/logrus"
 	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/api/browserapi"
 	"unstable.build/go-tui/api/workspaceapi"
@@ -36,7 +37,6 @@ import (
 type modelessConfig struct {
 	attr               term.Attributes
 	resAttr            term.Attributes
-	barAttr            term.Attributes
 	registry           text.WorkspaceCommandRegistry
 	wrap               bool
 	enableInitialFolds bool
@@ -48,7 +48,13 @@ type modelessConfig struct {
 	workspace          workspaceapi.URI
 	clipboard          clipboard.Register
 	notifications      browserapi.Notifications
+	statusBarConfig    text.StatusBarConfig
+	statusBarEnabled   bool
 	scheduleNextTick   func(fn func()) bool
+}
+
+type statusBar interface {
+	SetStatus(string, term.Attributes)
 }
 
 // defaultmodelessHandlerImplConfig is a sane configuration defaults for modelessHandlerImpl.
@@ -118,13 +124,6 @@ func WithGitBar(enabled bool, config text.GitBarConfig) Option {
 	}
 }
 
-// WithBarAttr sets the command bar cell attributes to be rendered.
-func WithBarAttr(attr term.Attributes) Option {
-	return func(cfg *modelessConfig) {
-		cfg.barAttr = attr
-	}
-}
-
 // WithCommandBar enables or disables the command bar.
 func WithCommandBar(enabled bool) Option {
 	return func(cfg *modelessConfig) {
@@ -159,4 +158,22 @@ func WithHideInitialFolds(enabled bool) Option {
 	return func(cfg *modelessConfig) {
 		cfg.enableInitialFolds = enabled
 	}
+}
+
+// WithStatusBarConfig configures the status bar.
+func WithStatusBarConfig(enabled bool, config text.StatusBarConfig) Option {
+	return func(cfg *modelessConfig) {
+		cfg.statusBarConfig = config
+		cfg.statusBarEnabled = enabled
+	}
+}
+
+type nopBar struct {
+}
+
+func (n nopBar) SetStatus(status string, _ term.Attributes) {
+	logrus.Infof("modeless handler status: %s", status)
+}
+
+func (n nopBar) ShowBar(bool) {
 }

@@ -58,7 +58,7 @@ func (e *editor) Edit(
 	file workspaceapi.URI, buf *cell.Buffer, readOnly, recovered bool,
 ) (text.Handler, error) {
 	rootIfc := NewHandler(e.clipboard, buf, file, e.wrap,
-		e.commandBar, e.attr, e.resAttr, e.barAttr, e.scheduleNextTick)
+		e.commandBar, e.attr, e.resAttr, e.scheduleNextTick)
 	if e.fileRegistry != nil {
 		var err error
 		rootIfc, err = text.SubscribeLocationCommands(file, e.fileRegistry, rootIfc)
@@ -85,7 +85,15 @@ func (e *editor) Edit(
 				scroll, gitBarConfig)
 		}
 	}
-	return ret, nil
+	if !e.statusBarEnabled {
+		return ret, nil
+	}
+	bar := text.WithStatusBar(ret, buf, scroll, readOnly, recovered, e.statusBarConfig)
+	rootIfc.(*editorHandler).setStatusBar(bar)
+	if !e.commandBar {
+		bar.ShowCommandBar(false)
+	}
+	return bar, nil
 }
 
 func (e *editor) SubscribeCommand(cmd textapi.CommandManual, h text.CommandHandler) error {
