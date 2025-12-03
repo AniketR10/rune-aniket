@@ -25,6 +25,7 @@ package vctrl
 
 import (
 	"context"
+	"sync"
 
 	"unstable.build/go-tui/api/workspaceapi"
 )
@@ -34,6 +35,7 @@ var _ Service = (*Cache)(nil)
 // Cache is a Service that adds the ability
 // to cache the first response to methods of the given Service, until Purge is called.
 type Cache struct {
+	mu       sync.Mutex
 	root     Service
 	diffs    map[workspaceapi.URI]FileDiff
 	commits  map[workspaceapi.URI]string
@@ -64,6 +66,8 @@ func (c *Cache) Init(root Service) {
 
 // Purge purges all contents of the cache.
 func (c *Cache) Purge() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	clear(c.diffs)
 	clear(c.commits)
 	clear(c.refs)
@@ -74,6 +78,8 @@ func (c *Cache) Purge() {
 
 // Diff returns the differences between the given file in the worktree and HEAD.
 func (c *Cache) Diff(ctx context.Context, file workspaceapi.URI) (FileDiff, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	diff, ok := c.diffs[file]
 	if ok {
 		return diff, nil
@@ -85,6 +91,8 @@ func (c *Cache) Diff(ctx context.Context, file workspaceapi.URI) (FileDiff, erro
 
 // CurrentCommit returns the current commit hash.
 func (c *Cache) CurrentCommit(ctx context.Context, file workspaceapi.URI) (string, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	commit, ok := c.commits[file]
 	if ok {
 		return commit, nil
@@ -96,6 +104,8 @@ func (c *Cache) CurrentCommit(ctx context.Context, file workspaceapi.URI) (strin
 
 // ShortRef returns the current branch or short reference that HEAD points to.
 func (c *Cache) ShortRef(ctx context.Context, file workspaceapi.URI) (string, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	ref, ok := c.refs[file]
 	if ok {
 		return ref, nil
@@ -107,6 +117,8 @@ func (c *Cache) ShortRef(ctx context.Context, file workspaceapi.URI) (string, er
 
 // RemoteURL returns the remote URL given a remote name.
 func (c *Cache) RemoteURL(ctx context.Context, file workspaceapi.URI, remoteName string) (string, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	url, ok := c.urls[remoteName]
 	if ok {
 		return url, nil
@@ -118,6 +130,8 @@ func (c *Cache) RemoteURL(ctx context.Context, file workspaceapi.URI, remoteName
 
 // ListRemotes returns a list of remote servers.
 func (c *Cache) ListRemotes(ctx context.Context, file workspaceapi.URI) ([]string, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	remotes, ok := c.remotes[file]
 	if ok {
 		return remotes, nil
@@ -129,6 +143,8 @@ func (c *Cache) ListRemotes(ctx context.Context, file workspaceapi.URI) ([]strin
 
 // RelPath extracts the path relative to the git repository.
 func (c *Cache) RelPath(ctx context.Context, file string) (string, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	path, ok := c.relpaths[file]
 	if ok {
 		return path, nil
