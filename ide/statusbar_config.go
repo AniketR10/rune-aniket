@@ -64,16 +64,30 @@ func statusBarLayout(layoutStr string) (ret []text.StatusBarComponent, err error
 	}
 
 	var template string
+	var shiftRight bool
 	for _, node := range root.Nodes {
 		switch n := node.(type) {
 		case *parse.TextNode:
 			// suffix attributes
 			if len(n.Text) != 0 && len(ret) > 0 {
 				all := strings.Split(string(n.Text), "  ")
-				ret[len(ret)-1].Template += all[0]
-				for _, chunk := range all[1:] {
-					template += "  "
-					template += chunk
+				if shiftRight {
+					ret[len(ret)-1].Template += all[0]
+					if len(all) > 1 {
+						ret[len(ret)-1].Template += "  "
+					}
+					for i, chunk := range all[1:] {
+						template += chunk
+						if i < len(all[1:])-1 {
+							template += "  "
+						}
+					}
+				} else {
+					ret[len(ret)-1].Template += all[0]
+					for _, chunk := range all[1:] {
+						template += "  "
+						template += chunk
+					}
 				}
 			} else {
 				template += string(n.Text)
@@ -124,6 +138,7 @@ func statusBarLayout(layoutStr string) (ret []text.StatusBarComponent, err error
 				compType = text.StatusBarTotalLines
 				template += "%d"
 			case "ShiftRight":
+				shiftRight = true
 				ret = append(ret, text.StatusBarComponent{
 					Type: text.StatusBarVoid,
 				})

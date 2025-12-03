@@ -518,10 +518,10 @@ func TestConfigSetting(t *testing.T) {
 			},
 			{Type: text.StatusBarVoid},
 			{Template: "%d:", Type: text.StatusBarCoordinatesCursorX},
-			{Template: "%d", Type: text.StatusBarCoordinatesCursorY},
-			{Template: "  %d lines", Type: text.StatusBarTotalLines},
+			{Template: "%d  ", Type: text.StatusBarCoordinatesCursorY},
+			{Template: "%d lines  ", Type: text.StatusBarTotalLines},
 			{
-				Template:   "  %s  ",
+				Template:   "%s  ",
 				Type:       text.StatusBarLanguage,
 				Attributes: term.Attributes{Attrs: tcell.AttrBold},
 			},

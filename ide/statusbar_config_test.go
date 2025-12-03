@@ -212,7 +212,7 @@ func TestStatusBarLayout(t *testing.T) {
 			},
 		},
 		{
-			name:  "component with prefix and attributes and suffix, attrs are grouped until blank space",
+			name:  "blank lines should be grouped with the succeeding compoent, before shift right",
 			input: `█{{ .Status | bg "red" | bold }}█▓▒░  {{ .GitDiffDel }}`,
 			wantComps: []text.StatusBarComponent{
 				{
@@ -326,6 +326,35 @@ func TestStatusBarLayout(t *testing.T) {
 			input:      `{{ .Status | fg "#gggggg" }}`,
 			wantErr:    true,
 			wantErrSub: "error is not a hex color starting with #, nor a known named W3C color in lowercase",
+		},
+		{
+			name:  "blank lines should be grouped with the preceding component, after shiftright",
+			input: `{{ .ShiftRight }}{{ .CursorColumn }}:{{ .CursorLine }}  {{ .TotalLines }} lines   {{ .Language | bg "navy" | bold }} `,
+			wantComps: []text.StatusBarComponent{
+				{
+					Type:     text.StatusBarVoid,
+					Template: "",
+				},
+				{
+					Type:     text.StatusBarCoordinatesCursorX,
+					Template: "%d:",
+				},
+				{
+					Type:       text.StatusBarCoordinatesCursorY,
+					Template:   "%d  ",
+					Attributes: term.Attributes{Fg: tcell.ColorDefault},
+				},
+				{
+					Type:       text.StatusBarTotalLines,
+					Template:   "%d lines  ",
+					Attributes: term.Attributes{Fg: tcell.ColorDefault},
+				},
+				{
+					Type:       text.StatusBarLanguage,
+					Template:   " %s ",
+					Attributes: term.Attributes{Bg: tcell.ColorNavy, Attrs: tcell.AttrBold},
+				},
+			},
 		},
 	}
 
