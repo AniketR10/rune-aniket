@@ -1308,7 +1308,7 @@ func (c ideConfig) statusBarLayout() (ret []text.StatusBarComponent) {
 		}
 		return
 	}
-	ret, err = statusBarLayout(val)
+	ret, err = text.ParseStatusBarLayout(val)
 	if err != nil {
 		if err != config.ErrNotFound {
 			c.errors["editor.status_bar.layout"] = err

@@ -21,7 +21,7 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package ide
+package text
 
 import (
 	"errors"
@@ -32,7 +32,6 @@ import (
 
 	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/term"
-	"unstable.build/go-tui/text"
 )
 
 var errInvalidColor = errors.New("error is not a hex color starting with #, " +
@@ -50,7 +49,34 @@ var allowedFuncs = map[string]any{
 	"strikethrough": func() string { return "" },
 }
 
-func statusBarLayout(layoutStr string) (ret []text.StatusBarComponent, err error) {
+// ParseStatusBarLayout parses the given layout string into a set of
+// text.StatusBarComponent. The expected format is Go templates.
+//
+// The following ActionNode's are available:
+//   - Status: the status message determined by the editor.
+//   - Filepath: the path of the file being edited, relative to the workspace.
+//   - GitShortRef: the git reference pointed at by HEAD.
+//   - GitDiffAdd: the number of lines added.
+//   - GitDiffDel: the number of lines deleted.
+//   - ShiftRight: up until this component, all components are aligned left.
+//   - CursorColumn: cursor column
+//   - CursorLine: cursor line
+//   - TotalLines: total number of lines in the file
+//   - Language: language parser status indicator
+//
+// Each component can have custom attributes via a pipe operator "|".
+//
+// The supported functions are the following:
+//   - bg <color>: set the background color as a hex value or a W3C named color.
+//   - fg <color>: set the foreground color as a hex value or a W3C named color.
+//   - bold: set the text style as bold
+//   - italic: set the text style as italic
+//   - underline: set the text style as underline
+//   - reverse: reverse the text foreground and background
+//   - dim: dim the foreground color
+func ParseStatusBarLayout(layoutStr string) (
+	ret []StatusBarComponent, err error,
+) {
 	ret = nil
 	tree, err := parse.Parse("status_bar.layout", layoutStr, "{{", "}}", allowedFuncs)
 	if err != nil {
@@ -99,55 +125,55 @@ func statusBarLayout(layoutStr string) (ret []text.StatusBarComponent, err error
 				return nil, err
 			}
 
-			var compType text.StatusBarComponentType
+			var compType StatusBarComponentType
 			switch fieldName {
 			case "Status":
-				compType = text.StatusBarStatus
+				compType = StatusBarStatus
 				template += "%s"
 			case "Filepath":
-				compType = text.StatusBarFilePath
+				compType = StatusBarFilePath
 				template += "%s"
 			case "GitShortRef":
-				compType = text.StatusBarGitShortRef
+				compType = StatusBarGitShortRef
 				template += "%s"
 			case "GitDiffAdd":
-				compType = text.StatusBarGitDiffAdded
+				compType = StatusBarGitDiffAdded
 				template += "%d"
 			case "GitDiffDel":
-				compType = text.StatusBarGitDiffDeleted
+				compType = StatusBarGitDiffDeleted
 				template += "%d"
 			case "DiagError":
-				compType = text.StatusBarDiagnosticsError
+				compType = StatusBarDiagnosticsError
 				template += "%d"
 			case "DiagWarn":
-				compType = text.StatusBarDiagnosticsWarning
+				compType = StatusBarDiagnosticsWarning
 				template += "%d"
 			case "DiagInfo":
-				compType = text.StatusBarDiagnosticsInfo
+				compType = StatusBarDiagnosticsInfo
 				template += "%d"
 			case "Language":
-				compType = text.StatusBarLanguage
+				compType = StatusBarLanguage
 				template += "%s"
 			case "CursorColumn":
-				compType = text.StatusBarCoordinatesCursorX
+				compType = StatusBarCoordinatesCursorX
 				template += "%d"
 			case "CursorLine":
-				compType = text.StatusBarCoordinatesCursorY
+				compType = StatusBarCoordinatesCursorY
 				template += "%d"
 			case "TotalLines":
-				compType = text.StatusBarTotalLines
+				compType = StatusBarTotalLines
 				template += "%d"
 			case "ShiftRight":
 				shiftRight = true
-				ret = append(ret, text.StatusBarComponent{
-					Type: text.StatusBarVoid,
+				ret = append(ret, StatusBarComponent{
+					Type: StatusBarVoid,
 				})
 				continue
 			default:
 				err = fmt.Errorf("unknown status bar component: %q", fieldName)
 				return nil, err
 			}
-			ret = append(ret, text.StatusBarComponent{
+			ret = append(ret, StatusBarComponent{
 				Type:       compType,
 				Template:   template,
 				Attributes: attrs,

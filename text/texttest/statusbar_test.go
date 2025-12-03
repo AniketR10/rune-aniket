@@ -150,8 +150,8 @@ func TestStatusBarFilepath(t *testing.T) {
 				Template:   "  %s",
 			},
 			{
-				Type:       text.StatusBarStatus,
-				Template:   " %s",
+				Type:     text.StatusBarStatus,
+				Template: " %s",
 			},
 		},
 	}
@@ -621,4 +621,80 @@ func (s testSyntax) RawCells() [][]term.Cell {
 
 func (s testSyntax) String() string {
 	return s.view.String()
+}
+
+func BenchmarkStatusBarMoveCursorSmall(b *testing.B) {
+	benchmarkStatusBar(b, 10, 10, true)
+}
+
+func BenchmarkStatusBarMoveCursorMedium(b *testing.B) {
+	benchmarkStatusBar(b, 100, 100, true)
+}
+
+func BenchmarkStatusBarMoveCursorLarge(b *testing.B) {
+	benchmarkStatusBar(b, 1000, 1000, true)
+}
+
+func BenchmarkStatusBarRenderAllSmall(b *testing.B) {
+	benchmarkStatusBar(b, 10, 10, false)
+}
+
+func BenchmarkStatusBarRenderAllMedium(b *testing.B) {
+	benchmarkStatusBar(b, 100, 100, false)
+}
+
+func BenchmarkStatusBarRenderAllLarge(b *testing.B) {
+	benchmarkStatusBar(b, 1000, 1000, false)
+}
+
+func benchmarkStatusBar(b *testing.B, width, height int, moveCursor bool) {
+	buf := cell.NewBuffer()
+	buf.WriteString(copy)
+	fs := &testFoldsService{}
+	fs.view = buf.WithView(fs)
+	scroll := component.NewScroll(buf)
+	h := newTestHandler(scroll)
+	var wg sync.WaitGroup
+
+	uri, err := workspaceapi.ParseURI("memory:///tmp/my_workspace")
+	require.NoError(b, err)
+
+	cfg := text.StatusBarConfig{
+		Workspace: uri,
+		ScheduleNextTick: func(fn func()) bool {
+			fn()
+			wg.Done()
+			return true
+		},
+		Publisher:  &TestEditor{},
+		GitService: &differ{},
+	}
+
+	// do not perform async ops on every draw:
+	// if we move cursor before every draw, this would require wg.Add, wg.Wait
+	// on every iteration, hiding some of the ops we want to analyze
+	moveCursorModulo := 1
+	var layout string
+	if moveCursor {
+		moveCursorModulo = 2
+		layout = `█{{ .Status | bg "red" | fg "black" | bold }}█▓▒░  {{ .Filepath }}   {{ .ShiftRight }} {{ .CursorColumn }}:{{ .CursorLine }}  {{ .TotalLines }}  {{ .Language | bold }}  `
+	} else {
+		wg.Add(1)
+		layout = `█{{ .Status | bg "red" | fg "black" | bold }}█▓▒░  {{ .Filepath }}   {{ .GitShortRef | italic }}   {{ .GitDiffAdd | fg "green" }}   {{ .GitDiffDel | fg "red" }} {{ .ShiftRight }} {{ .CursorColumn }}:{{ .CursorLine }}  {{ .TotalLines }}  {{ .Language | bold }}  `
+	}
+	cfg.Layout, err = text.ParseStatusBarLayout(layout)
+	require.NoError(b, err)
+
+	bar := text.WithStatusBar(h, buf, scroll, false, false, cfg)
+	bar.SetStatus(" NORMAL", term.Attributes{})
+	bar.Resize(width, height)
+	bar.Draw(term.NoopWriter{})
+	wg.Wait()
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		h.cursor = i % moveCursorModulo
+		bar.Handle(term.Event{})
+		bar.Draw(term.NoopWriter{})
+	}
 }

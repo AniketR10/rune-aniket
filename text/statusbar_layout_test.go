@@ -21,7 +21,7 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package ide
+package text
 
 import (
 	"testing"
@@ -30,53 +30,52 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/term"
-	"unstable.build/go-tui/text"
 )
 
 func TestStatusBarLayout(t *testing.T) {
 	tests := []struct {
 		name       string
 		input      string
-		wantComps  []text.StatusBarComponent
+		wantComps  []StatusBarComponent
 		wantErr    bool
 		wantErrSub string // substring to look for in error
 	}{
 		{
 			name:  "single component - language",
 			input: `{{ .Language }}`,
-			wantComps: []text.StatusBarComponent{
-				{Type: text.StatusBarLanguage, Template: "%s"},
+			wantComps: []StatusBarComponent{
+				{Type: StatusBarLanguage, Template: "%s"},
 			},
 		},
 		{
-			name:  "prefix text before component",
+			name:  "prefix before component",
 			input: `⚑{{ .Status }}`,
-			wantComps: []text.StatusBarComponent{
-				{Type: text.StatusBarStatus, Template: "⚑%s"},
+			wantComps: []StatusBarComponent{
+				{Type: StatusBarStatus, Template: "⚑%s"},
 			},
 		},
 		{
 			name:  "multiple components with separator",
 			input: `{{ .GitDiffAdd }}+{{ .GitDiffDel }}`,
-			wantComps: []text.StatusBarComponent{
-				{Type: text.StatusBarGitDiffAdded, Template: "%d+"},
-				{Type: text.StatusBarGitDiffDeleted, Template: "%d"},
+			wantComps: []StatusBarComponent{
+				{Type: StatusBarGitDiffAdded, Template: "%d+"},
+				{Type: StatusBarGitDiffDeleted, Template: "%d"},
 			},
 		},
 		{
 			name:  "trailing padding appended to last component",
 			input: `{{ .Language }}  `,
-			wantComps: []text.StatusBarComponent{
-				{Type: text.StatusBarLanguage, Template: "%s  "},
+			wantComps: []StatusBarComponent{
+				{Type: StatusBarLanguage, Template: "%s  "},
 			},
 		},
 		{
-			name:  "prefix/mid/trailing text is parsed into templates",
+			name:  "prefix/mid/trailing is parsed into templates",
 			input: `pre {{ .CursorColumn }} mid {{ .CursorLine }} post`,
-			wantComps: []text.StatusBarComponent{
-				{Type: text.StatusBarCoordinatesCursorX, Template: "pre %d mid "},
+			wantComps: []StatusBarComponent{
+				{Type: StatusBarCoordinatesCursorX, Template: "pre %d mid "},
 				// second receives " mid " during parsing, plus trailing " post" appended after loop
-				{Type: text.StatusBarCoordinatesCursorY, Template: "%d post"},
+				{Type: StatusBarCoordinatesCursorY, Template: "%d post"},
 			},
 		},
 		{
@@ -100,9 +99,9 @@ func TestStatusBarLayout(t *testing.T) {
 		{
 			name:  "fg color - quoted",
 			input: `{{ .Status | fg "red" }}`,
-			wantComps: []text.StatusBarComponent{
+			wantComps: []StatusBarComponent{
 				{
-					Type:       text.StatusBarStatus,
+					Type:       StatusBarStatus,
 					Template:   "%s",
 					Attributes: term.Attributes{Fg: tcell.ColorRed},
 				},
@@ -111,9 +110,9 @@ func TestStatusBarLayout(t *testing.T) {
 		{
 			name:  "bg color - quoted",
 			input: `{{ .Status | bg "blue" }}`,
-			wantComps: []text.StatusBarComponent{
+			wantComps: []StatusBarComponent{
 				{
-					Type:       text.StatusBarStatus,
+					Type:       StatusBarStatus,
 					Template:   "%s",
 					Attributes: term.Attributes{Bg: tcell.ColorBlue},
 				},
@@ -122,9 +121,9 @@ func TestStatusBarLayout(t *testing.T) {
 		{
 			name:  "fg and bg together",
 			input: `{{ .Status | fg "black" | bg "red" }}`,
-			wantComps: []text.StatusBarComponent{
+			wantComps: []StatusBarComponent{
 				{
-					Type:       text.StatusBarStatus,
+					Type:       StatusBarStatus,
 					Template:   "%s",
 					Attributes: term.Attributes{Fg: tcell.ColorBlack, Bg: tcell.ColorRed},
 				},
@@ -133,9 +132,9 @@ func TestStatusBarLayout(t *testing.T) {
 		{
 			name:  "bold style",
 			input: `{{ .Language | bold }}`,
-			wantComps: []text.StatusBarComponent{
+			wantComps: []StatusBarComponent{
 				{
-					Type:       text.StatusBarLanguage,
+					Type:       StatusBarLanguage,
 					Template:   "%s",
 					Attributes: term.Attributes{Attrs: tcell.AttrBold},
 				},
@@ -144,9 +143,9 @@ func TestStatusBarLayout(t *testing.T) {
 		{
 			name:  "italic style",
 			input: `{{ .Filepath | italic }}`,
-			wantComps: []text.StatusBarComponent{
+			wantComps: []StatusBarComponent{
 				{
-					Type:       text.StatusBarFilePath,
+					Type:       StatusBarFilePath,
 					Template:   "%s",
 					Attributes: term.Attributes{Attrs: tcell.AttrItalic},
 				},
@@ -155,9 +154,9 @@ func TestStatusBarLayout(t *testing.T) {
 		{
 			name:  "multiple style attributes combined",
 			input: `{{ .Status | bold | underline }}`,
-			wantComps: []text.StatusBarComponent{
+			wantComps: []StatusBarComponent{
 				{
-					Type:       text.StatusBarStatus,
+					Type:       StatusBarStatus,
 					Template:   "%s",
 					Attributes: term.Attributes{Attrs: tcell.AttrBold | tcell.AttrUnderline},
 				},
@@ -166,9 +165,9 @@ func TestStatusBarLayout(t *testing.T) {
 		{
 			name:  "full styling - colors and attributes",
 			input: `{{ .Status | bg "red" | fg "black" | bold }}`,
-			wantComps: []text.StatusBarComponent{
+			wantComps: []StatusBarComponent{
 				{
-					Type:     text.StatusBarStatus,
+					Type:     StatusBarStatus,
 					Template: "%s",
 					Attributes: term.Attributes{
 						Bg:    tcell.ColorRed,
@@ -181,9 +180,9 @@ func TestStatusBarLayout(t *testing.T) {
 		{
 			name:  "hex color - with hash",
 			input: `{{ .Status | fg "#ff5500" }}`,
-			wantComps: []text.StatusBarComponent{
+			wantComps: []StatusBarComponent{
 				{
-					Type:       text.StatusBarStatus,
+					Type:       StatusBarStatus,
 					Template:   "%s",
 					Attributes: term.Attributes{Fg: tcell.NewRGBColor(0xff, 0x55, 0x00)},
 				},
@@ -198,14 +197,14 @@ func TestStatusBarLayout(t *testing.T) {
 		{
 			name:  "multiple components with different attributes",
 			input: `{{ .GitDiffAdd | fg "green" }}  {{ .GitDiffDel | fg "red" }}`,
-			wantComps: []text.StatusBarComponent{
+			wantComps: []StatusBarComponent{
 				{
-					Type:       text.StatusBarGitDiffAdded,
+					Type:       StatusBarGitDiffAdded,
 					Template:   "%d",
 					Attributes: term.Attributes{Fg: tcell.ColorGreen},
 				},
 				{
-					Type:       text.StatusBarGitDiffDeleted,
+					Type:       StatusBarGitDiffDeleted,
 					Template:   "  %d",
 					Attributes: term.Attributes{Fg: tcell.ColorRed},
 				},
@@ -214,9 +213,9 @@ func TestStatusBarLayout(t *testing.T) {
 		{
 			name:  "blank lines should be grouped with the succeeding compoent, before shift right",
 			input: `█{{ .Status | bg "red" | bold }}█▓▒░  {{ .GitDiffDel }}`,
-			wantComps: []text.StatusBarComponent{
+			wantComps: []StatusBarComponent{
 				{
-					Type:     text.StatusBarStatus,
+					Type:     StatusBarStatus,
 					Template: "█%s█▓▒░",
 					Attributes: term.Attributes{
 						Bg:    tcell.ColorRed,
@@ -224,7 +223,7 @@ func TestStatusBarLayout(t *testing.T) {
 					},
 				},
 				{
-					Type:       text.StatusBarGitDiffDeleted,
+					Type:       StatusBarGitDiffDeleted,
 					Template:   "  %d",
 					Attributes: term.Attributes{},
 				},
@@ -233,26 +232,26 @@ func TestStatusBarLayout(t *testing.T) {
 		{
 			name:  "components are grouped by double blank space",
 			input: `█{{ .Status }}█▓▒░  {{ .TotalLines | bg "red" }} lines  {{ .GitDiffDel }} {{ .GitDiffAdd }}`,
-			wantComps: []text.StatusBarComponent{
+			wantComps: []StatusBarComponent{
 				{
-					Type:       text.StatusBarStatus,
+					Type:       StatusBarStatus,
 					Template:   "█%s█▓▒░",
 					Attributes: term.Attributes{},
 				},
 				{
-					Type:     text.StatusBarTotalLines,
+					Type:     StatusBarTotalLines,
 					Template: "  %d lines",
 					Attributes: term.Attributes{
 						Bg: tcell.ColorRed,
 					},
 				},
 				{
-					Type:       text.StatusBarGitDiffDeleted,
+					Type:       StatusBarGitDiffDeleted,
 					Template:   "  %d ",
 					Attributes: term.Attributes{},
 				},
 				{
-					Type:       text.StatusBarGitDiffAdded,
+					Type:       StatusBarGitDiffAdded,
 					Template:   "%d",
 					Attributes: term.Attributes{},
 				},
@@ -261,9 +260,9 @@ func TestStatusBarLayout(t *testing.T) {
 		{
 			name:  "all style attributes",
 			input: `{{ .Status | bold | italic | underline | dim | reverse | strikethrough | blink }}`,
-			wantComps: []text.StatusBarComponent{
+			wantComps: []StatusBarComponent{
 				{
-					Type:     text.StatusBarStatus,
+					Type:     StatusBarStatus,
 					Template: "%s",
 					Attributes: term.Attributes{
 						Attrs: tcell.AttrBold | tcell.AttrItalic | tcell.AttrUnderline |
@@ -275,16 +274,16 @@ func TestStatusBarLayout(t *testing.T) {
 		{
 			name:  "void component with attributes ignored",
 			input: `{{ .ShiftRight }}`,
-			wantComps: []text.StatusBarComponent{
-				{Type: text.StatusBarVoid, Template: ""},
+			wantComps: []StatusBarComponent{
+				{Type: StatusBarVoid, Template: ""},
 			},
 		},
 		{
 			name:  "default color",
 			input: `{{ .Status | fg "default" }}`,
-			wantComps: []text.StatusBarComponent{
+			wantComps: []StatusBarComponent{
 				{
-					Type:       text.StatusBarStatus,
+					Type:       StatusBarStatus,
 					Template:   "%s",
 					Attributes: term.Attributes{Fg: tcell.ColorDefault},
 				},
@@ -330,27 +329,27 @@ func TestStatusBarLayout(t *testing.T) {
 		{
 			name:  "blank lines should be grouped with the preceding component, after shiftright",
 			input: `{{ .ShiftRight }}{{ .CursorColumn }}:{{ .CursorLine }}  {{ .TotalLines }} lines   {{ .Language | bg "navy" | bold }} `,
-			wantComps: []text.StatusBarComponent{
+			wantComps: []StatusBarComponent{
 				{
-					Type:     text.StatusBarVoid,
+					Type:     StatusBarVoid,
 					Template: "",
 				},
 				{
-					Type:     text.StatusBarCoordinatesCursorX,
+					Type:     StatusBarCoordinatesCursorX,
 					Template: "%d:",
 				},
 				{
-					Type:       text.StatusBarCoordinatesCursorY,
+					Type:       StatusBarCoordinatesCursorY,
 					Template:   "%d  ",
 					Attributes: term.Attributes{Fg: tcell.ColorDefault},
 				},
 				{
-					Type:       text.StatusBarTotalLines,
+					Type:       StatusBarTotalLines,
 					Template:   "%d lines  ",
 					Attributes: term.Attributes{Fg: tcell.ColorDefault},
 				},
 				{
-					Type:       text.StatusBarLanguage,
+					Type:       StatusBarLanguage,
 					Template:   " %s ",
 					Attributes: term.Attributes{Bg: tcell.ColorNavy, Attrs: tcell.AttrBold},
 				},
@@ -360,7 +359,7 @@ func TestStatusBarLayout(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := statusBarLayout(tt.input)
+			got, err := ParseStatusBarLayout(tt.input)
 
 			if tt.wantErr {
 				require.Error(t, err)
