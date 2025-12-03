@@ -101,7 +101,7 @@ func WithAuxBar(
 	ret.folds = make(map[term.Coordinates]term.Coordinates)
 	ret.prevRows = buf.View().Rows()
 	ret.setLinesWidth()
-	ret.svc = config.Service
+	ret.svc = vctrl.NewCache(config.Service)
 	if config.DelAttr == (term.Attributes{}) {
 		config.DelAttr = term.Attributes{Fg: tcell.ColorMaroon}
 	}
@@ -170,7 +170,7 @@ type auxBar struct {
 	pub              EventPublisher
 	scheduleNextTick func(func()) bool
 	file             workspaceapi.URI
-	svc              vctrl.Service
+	svc              *vctrl.Cache
 	registry         FileCommandRegistry
 	foldsEnabled     bool
 	linesEnabled     bool
@@ -363,6 +363,7 @@ func (b *auxBarSubscriber) Handle(ctx context.Context, ev textapi.Event) bool {
 	if !ev.URI.Equal(b.file) || ev.Type != textapi.EventTypeFlush {
 		return false
 	}
+	b.svc.Purge()
 	(*auxBar)(b).log(log.TraceLevel, "received event: %s", ev.Type.String())
 	(*auxBar)(b).rebuildBar(ctx)
 	return false
@@ -735,7 +736,11 @@ func (b *auxBar) OnDidSeek(from, to term.Coordinates) {
 	if from.Y == to.Y {
 		return
 	}
-	b.rebuildBar(context.Background())
+	prevOffset := b.prevOffset
+	b.prevOffset = b.scroll.Offset()
+	if prevOffset.Y != b.prevOffset.Y {
+		b.rebuildBar(context.Background())
+	}
 }
 
 func (b *auxBar) OnWillSeek(_ term.Coordinates) {
