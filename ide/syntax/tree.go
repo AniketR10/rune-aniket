@@ -610,6 +610,8 @@ func (t *Tree) incrementalParse(start, end, from, to term.Coordinates, content s
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if !t.ready || t.tree == nil || t.closed {
+		t.log(log.TraceLevel, "incremental parse aborted: ready: %t, nil tree: %t, closed: %t",
+			t.ready, t.tree == nil, t.closed)
 		return
 	}
 	// use old cells to convert coordinates
