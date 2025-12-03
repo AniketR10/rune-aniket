@@ -480,11 +480,11 @@ func (b *StatusBar) rebuildBarFlush(ctx context.Context) {
 		var err error
 		diff, err := b.svc.Diff(ctx, b.file)
 		if err != nil {
-			b.log(log.WarnLevel, "compute diff: %v", err)
+			b.log(log.DebugLevel, "compute diff: %v", err)
 		}
 		shortRef, err := b.svc.ShortRef(ctx, b.file)
 		if err != nil {
-			b.log(log.WarnLevel, "get short ref: %v", err)
+			b.log(log.DebugLevel, "get short ref: %v", err)
 		}
 		added, deleted := calculateGitStats(diff)
 		messages := calculateMessagesStats(b.Handler.LocationLists())
@@ -496,7 +496,11 @@ func (b *StatusBar) rebuildBarFlush(ctx context.Context) {
 			}
 			b.rebuildFilename(workspaceapi.RelPath(b.config.Workspace, b.file))
 			b.buildMessages(messages)
-			b.buildGit(shortRef, added, deleted)
+			if err != nil {
+				b.buildGitError()
+			} else {
+				b.buildGit(shortRef, added, deleted)
+			}
 			b.doRebuildBar()
 		})
 	})
@@ -518,6 +522,12 @@ func (b *StatusBar) buildGit(shortRef string, added, deleted int) {
 	components = b.processTemplate(b.gitDelTemplate.Template, deleted,
 		term.Attributes{}, b.gitDelTemplate.Attributes)
 	b.gitDel.Init(component.Inline(components, component.SpanAlignmentLeft))
+}
+
+func (b *StatusBar) buildGitError() {
+	components := b.processTemplate(b.gitShortRefTemplate.Template, "untracked",
+		term.Attributes{Fg: tcell.ColorYellow}, b.gitShortRefTemplate.Attributes)
+	b.gitShortRef.Init(component.Inline(components, component.SpanAlignmentLeft))
 }
 
 func (b *StatusBar) rebuildFilename(filename string) {
