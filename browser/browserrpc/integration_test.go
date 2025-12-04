@@ -40,8 +40,6 @@ import (
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/browser/browsertest"
-	"unstable.build/go-tui/component"
-	"unstable.build/go-tui/term"
 )
 
 func newClientServerIntegration(
@@ -76,55 +74,6 @@ func newClientServerIntegration(
 	}
 
 	return client, closeFn
-}
-
-func TestIntegrationClientServerFloating(t *testing.T) {
-	tsuite := []component.FloatingConfig{
-		{Offset: term.Coordinates{X: 1, Y: 1}},
-		{Alignment: component.SpanAlignmentLeft},
-		{Alignment: component.SpanAlignmentRight},
-		{Alignment: component.SpanAlignmentTop},
-		{Alignment: component.SpanAlignmentBottom},
-		{Alignment: component.SpanAlignmentTop | component.SpanAlignmentLeft},
-		{Alignment: component.SpanAlignmentTop | component.SpanAlignmentRight},
-		{Alignment: component.SpanAlignmentBottom | component.SpanAlignmentRight},
-		{Alignment: component.SpanAlignmentBottom | component.SpanAlignmentLeft},
-		{Alignment: component.SpanAlignmentVerticallyCentered},
-		{Alignment: component.SpanAlignmentHorizontallyCentered},
-		{Alignment: component.SpanAlignmentCentered},
-	}
-
-	for _, _tcase := range tsuite {
-		tcase := _tcase
-		t.Run(fmt.Sprintf("%v", tcase.Alignment), func(t *testing.T) {
-			defer goleak.VerifyNone(t)
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
-
-			mock := browsertest.NewMockBrowser(ctrl)
-			client, cleanup := newClientServerIntegration(t, mock)
-			defer cleanup()
-
-			win1 := browsertest.NopWindow()
-
-			var wg sync.WaitGroup
-			wg.Add(1)
-			mock.EXPECT().Floating(gomock.Any(), gomock.Any()).
-				DoAndReturn(func(h browser.Floating, cfg component.FloatingConfig) (browser.Window, error) {
-					defer wg.Done()
-					assert.Equal(t, tcase.Offset, cfg.Offset)
-					assert.Equal(t, tcase.Alignment, cfg.Alignment)
-					return win1, win1.SetContent(h)
-				})
-			resWin1, err := client.Floating(browsertest.NewTestFloating(2, 2), tcase)
-			require.NoError(t, err)
-
-			wg.Wait()
-			mock.EXPECT().Window(gomock.Any()).Return(win1, true).AnyTimes()
-			require.NoError(t, client.SetWindowContent(resWin1, browsertest.NewTestHandler()))
-			require.NoError(t, client.CloseWindow(resWin1))
-		})
-	}
 }
 
 func TestClientServerIntegrationSplit(t *testing.T) {

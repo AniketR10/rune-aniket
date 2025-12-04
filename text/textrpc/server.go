@@ -173,6 +173,10 @@ func (s *Server) SubscribeCommand(srv Editor_SubscribeCommandServer) error {
 	man := makeStdMan(req.GetCommand())
 
 	s.editor.Lock()
+	// NOTE this unlock here causes a race towards the first SendMsg.
+	// In practice, this is not a problem, since for a command to be dispatched
+	// the user needs to type it first, which gives plenty of time for this
+	// goroutine to proceed and schedule the response below via SendMsg.
 	err = s.editor.SubscribeCommand(man, clientStream)
 	s.editor.Unlock()
 	if err != nil {

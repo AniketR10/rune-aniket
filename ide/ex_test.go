@@ -607,6 +607,27 @@ EEEE`},
 	}
 	handlertest.TestHandlerSequence(t, bh, 20, 10, cases)
 
+	// calls from a browser client will block until the first
+	// "use" of the installed handler. Client and server
+	// are tipically running in different goroutines so
+	// this is not a problem elsewhere.
+	testCh := make(chan struct{})
+	defer close(testCh)
+	go func() {
+		for {
+			select {
+			case _, ok := <-testCh:
+				if !ok {
+					return
+				}
+			default:
+				if sh, ok := bh.(*safeHandler); ok {
+					sh.Draw(term.NewStringWriter(209, 100))
+				}
+			}
+		}
+	}()
+
 	floating1, err := b.Floating(browsertest.NewTestFloating(4, 2),
 		component.FloatingConfig{Offset: term.Coordinates{X: 1, Y: 1}})
 	require.NoError(t, err)

@@ -93,6 +93,9 @@ type ClientStream[T StreamMessage] struct {
 	closed    atomic.Bool
 	newT      func() T
 
+	respPending    atomic.Bool
+	respPendingMsg *ServerMessage
+
 	// these are all cached when client calls Draw
 	mu             sync.Mutex
 	contextPayload string
@@ -135,6 +138,17 @@ func NewClientStream[T StreamMessage](
 	return s
 }
 
+// ScheduleResponse schedules the install response to be sent
+// on the next tui.Handler method call to this ClientStream.
+//
+// This method must only be called once.
+func (s *ClientStream[T]) ScheduleResponse(resp *ServerMessage) {
+	if !s.respPending.CompareAndSwap(false, true) {
+		panic("cannot call ScheduleResponse twice")
+	}
+	s.respPendingMsg = resp
+}
+
 // ReceiveMessages blocks until all messages have been received and the stream
 // is ready to be closed.
 func (s *ClientStream[T]) ReceiveMessages() (ret error) {
@@ -166,11 +180,18 @@ func (s *ClientStream[T]) Handle(ev term.Event) (exit, handled bool) {
 	if s.closed.Load() {
 		return
 	}
+	pending := s.respPending.CompareAndSwap(true, false)
+	if pending {
+		if err := s.stream.SendMsg(s.respPendingMsg); err != nil {
+			s.closeStream(fmt.Errorf("send install response: %w", err))
+			return
+		}
+	}
 	var tev termrpc.Event
 	err := tev.FromModel(ev)
 	if err != nil {
 		s.closeStream(fmt.Errorf("convert ev to proto ev: %w", err))
-		return false, false
+		return
 	}
 	req := HandleStreamRequest{Event: &tev}
 	sendMsg := ServerMessage{Type: MessageType_Handle, Handle: &req}
@@ -240,6 +261,14 @@ func (s *ClientStream[T]) Resize(width, height int) {
 		return
 	}
 
+	pending := s.respPending.CompareAndSwap(true, false)
+	if pending {
+		if err := s.stream.SendMsg(s.respPendingMsg); err != nil {
+			s.closeStream(fmt.Errorf("send install response: %w", err))
+			return
+		}
+	}
+
 	var req ResizeStreamRequest
 	req.Width = int32(width)
 	req.Height = int32(height)
@@ -266,6 +295,13 @@ func (s *ClientStream[T]) Dimensions() (width int, height int) {
 
 // Draw satisfies Handler.
 func (s *ClientStream[T]) Draw(w term.Writer) {
+	pending := s.respPending.CompareAndSwap(true, false)
+	if pending {
+		if err := s.stream.SendMsg(s.respPendingMsg); err != nil {
+			s.closeStream(fmt.Errorf("send install response: %w", err))
+			return
+		}
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

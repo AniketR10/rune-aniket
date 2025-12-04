@@ -53,6 +53,9 @@ type SyncClientStream[T StreamMessage] struct {
 	height    atomic.Int32
 	width     atomic.Int32
 	newT      func() T
+
+	respPending    atomic.Bool
+	respPendingMsg *ServerMessage
 }
 
 // NewSyncClientStream allocates storage for a new SyncClientStream and initializes it
@@ -70,6 +73,17 @@ func NewSyncClientStream[T StreamMessage](
 	}
 }
 
+// ScheduleResponse schedules the install response to be sent
+// on the next tui.Handler method call to this ClientStream.
+//
+// This method must only be called once.
+func (s *SyncClientStream[T]) ScheduleResponse(resp *ServerMessage) {
+	if !s.respPending.CompareAndSwap(false, true) {
+		panic("cannot call ScheduleResponse twice")
+	}
+	s.respPendingMsg = resp
+}
+
 // ReceiveMessages blocks until all messages have been received and the stream
 // is ready to be closed.
 func (s *SyncClientStream[T]) ReceiveMessages() error {
@@ -83,6 +97,13 @@ func (s *SyncClientStream[T]) ReceiveMessages() error {
 
 // Handle satisfies Handler.
 func (s *SyncClientStream[T]) Handle(ev term.Event) (exit, handled bool) {
+	pending := s.respPending.CompareAndSwap(true, false)
+	if pending {
+		if err := s.stream.SendMsg(s.respPendingMsg); err != nil {
+			s.closeStream(fmt.Errorf("send install response: %w", err))
+			return
+		}
+	}
 	var tev termrpc.Event
 	err := tev.FromModel(ev)
 	if err != nil {
@@ -116,6 +137,13 @@ func (s *SyncClientStream[T]) Handle(ev term.Event) (exit, handled bool) {
 
 // Cursor satisfies Handler.
 func (s *SyncClientStream[T]) Cursor() (c term.Coordinates, cs term.CursorStyle, show bool) {
+	pending := s.respPending.CompareAndSwap(true, false)
+	if pending {
+		if err := s.stream.SendMsg(s.respPendingMsg); err != nil {
+			s.closeStream(fmt.Errorf("send install response: %w", err))
+			return
+		}
+	}
 	var req CursorStreamRequest
 	sendMsg := ServerMessage{Type: MessageType_Cursor, Cursor: &req}
 	err := s.stream.SendMsg(&sendMsg)
@@ -150,6 +178,13 @@ func (s *SyncClientStream[T]) Cursor() (c term.Coordinates, cs term.CursorStyle,
 
 // Selection satisfies Handler.
 func (s *SyncClientStream[T]) Selection() (string, bool) {
+	pending := s.respPending.CompareAndSwap(true, false)
+	if pending {
+		if err := s.stream.SendMsg(s.respPendingMsg); err != nil {
+			s.closeStream(fmt.Errorf("send install response: %w", err))
+			return "", false
+		}
+	}
 	var req SelectionStreamRequest
 	sendMsg := ServerMessage{Type: MessageType_Selection, Selection: &req}
 	err := s.stream.SendMsg(&sendMsg)
@@ -177,6 +212,13 @@ func (s *SyncClientStream[T]) Selection() (string, bool) {
 
 // Man satisfies Handler.
 func (s *SyncClientStream[T]) Man() tui.Manual {
+	pending := s.respPending.CompareAndSwap(true, false)
+	if pending {
+		if err := s.stream.SendMsg(s.respPendingMsg); err != nil {
+			s.closeStream(fmt.Errorf("send install response: %w", err))
+			return tui.Manual{}
+		}
+	}
 	var req ManStreamRequest
 	sendMsg := ServerMessage{Type: MessageType_Man, Man: &req}
 	err := s.stream.SendMsg(&sendMsg)
@@ -209,6 +251,13 @@ func (s *SyncClientStream[T]) Man() tui.Manual {
 
 // Resize satisfies Handler.
 func (s *SyncClientStream[T]) Resize(width, height int) {
+	pending := s.respPending.CompareAndSwap(true, false)
+	if pending {
+		if err := s.stream.SendMsg(s.respPendingMsg); err != nil {
+			s.closeStream(fmt.Errorf("send install response: %w", err))
+			return
+		}
+	}
 	// store for error displaying
 	s.height.Store(int32(height))
 	s.width.Store(int32(width))
@@ -237,6 +286,13 @@ func (s *SyncClientStream[T]) Draw(w term.Writer) {
 		doDraw(w, draw.GetRows())
 		return
 	}
+	pending := s.respPending.CompareAndSwap(true, false)
+	if pending {
+		if err := s.stream.SendMsg(s.respPendingMsg); err != nil {
+			s.closeStream(fmt.Errorf("send install response: %w", err))
+			return
+		}
+	}
 	var req DrawStreamRequest
 	sendMsg := ServerMessage{Type: MessageType_Draw, Draw: &req}
 	err := s.stream.SendMsg(&sendMsg)
@@ -263,6 +319,13 @@ func (s *SyncClientStream[T]) Draw(w term.Writer) {
 
 // Dimensions satisfies Handler.
 func (s *SyncClientStream[T]) Dimensions() (width int, height int) {
+	pending := s.respPending.CompareAndSwap(true, false)
+	if pending {
+		if err := s.stream.SendMsg(s.respPendingMsg); err != nil {
+			s.closeStream(fmt.Errorf("send install response: %w", err))
+			return
+		}
+	}
 	var req DimensionsStreamRequest
 	sendMsg := ServerMessage{Type: MessageType_Dimensions, Dimensions: &req}
 	err := s.stream.SendMsg(&sendMsg)

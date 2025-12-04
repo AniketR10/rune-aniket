@@ -33,6 +33,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/logging"
+	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
 	"unstable.build/go-tui/api/browserapi"
@@ -82,7 +83,7 @@ func (s *Server) SetSyncMode() {
 	s.syncMode = true
 }
 
-func (s *Server) log(level log.Level, msg string, args ...interface{}) {
+func (s *Server) log(level log.Level, msg string, args ...any) {
 	if !log.IsLevelEnabled(level) {
 		return
 	}
@@ -137,23 +138,15 @@ func (s *Server) Split(srv WindowManager_SplitServer) error {
 	}
 
 	outWin, err := s.browser.Split(orientation, inWin, handler)
-	s.browser.Unlock()
 	if err != nil {
+		s.browser.Unlock()
 		return fmt.Errorf("new split window: %w", err)
 	}
-
 	id := outWin.WindowID()
 	resp := handlerrpc.InstallResourceResponse{WindowId: id}
 	respMsg := handlerrpc.ServerMessage{Type: handlerrpc.MessageType_Response, Response: &resp}
-	if err := srv.SendMsg(&respMsg); err != nil {
-		return fmt.Errorf("send install response: %w", err)
-	}
 
-	if client == nil {
-		return nil
-	}
-	handler.(*streamHandler).doneSetup()
-	return client.ReceiveMessages()
+	return s.scheduleOrRespond(handler, client, srv, &respMsg)
 }
 
 // Bar satisfies BrowserServer
@@ -188,18 +181,13 @@ func (s *Server) Bar(srv WindowManager_BarServer) error {
 
 	s.browser.Lock()
 	err = s.browser.Bar(cfg, streamHandler)
-	s.browser.Unlock()
 	if err != nil {
+		s.browser.Unlock()
 		return err
 	}
 	resp := handlerrpc.InstallResourceResponse{}
 	respMsg := handlerrpc.ServerMessage{Type: handlerrpc.MessageType_Response, Response: &resp}
-	if err := srv.SendMsg(&respMsg); err != nil {
-		return fmt.Errorf("send bar install response: %w", err)
-	}
-
-	streamHandler.doneSetup()
-	return client.ReceiveMessages()
+	return s.scheduleOrRespond(streamHandler, client, srv, &respMsg)
 }
 
 // Notify satisfies BrowserServer
@@ -347,7 +335,7 @@ func (s *Server) Floating(srv WindowManager_FloatingServer) error {
 				return new(SplitWindowMessage)
 			})
 	} else {
-		client = handlerrpc.NewClientStream[*FloatingWindowMessage](s.serverCtx, srv,
+		client = handlerrpc.NewClientStream(s.serverCtx, srv,
 			func() *FloatingWindowMessage {
 				return new(FloatingWindowMessage)
 			}, s.browser.PublishEvent)
@@ -364,22 +352,14 @@ func (s *Server) Floating(srv WindowManager_FloatingServer) error {
 
 	s.browser.Lock()
 	win, err := s.browser.Floating(streamHandler, cfg)
-	s.browser.Unlock()
 	if err != nil {
+		s.browser.Unlock()
 		return fmt.Errorf("new floating window: %w", err)
 	}
-
 	id := win.WindowID()
 	resp := handlerrpc.InstallResourceResponse{WindowId: id}
 	respMsg := handlerrpc.ServerMessage{Type: handlerrpc.MessageType_Response, Response: &resp}
-	if err := srv.SendMsg(&respMsg); err != nil {
-		// don't close window, let next call to client stream tui.Handler
-		// to error out and bubble up to user accordingly.
-		return fmt.Errorf("send install response: %w", err)
-	}
-
-	streamHandler.setup.Store(true)
-	return client.ReceiveMessages()
+	return s.scheduleOrRespond(streamHandler, client, srv, &respMsg)
 }
 
 // Tab satisfies BrowserServer
@@ -485,22 +465,14 @@ func (s *Server) SetContent(srv WindowManager_SetContentServer) error {
 	}
 
 	err = inWin.SetContent(handler)
-	s.browser.Unlock()
 	if err != nil {
+		s.browser.Unlock()
 		return fmt.Errorf("window set content: %w", err)
 	}
 
 	resp := handlerrpc.InstallResourceResponse{WindowId: inWin.WindowID()}
 	respMsg := handlerrpc.ServerMessage{Type: handlerrpc.MessageType_Response, Response: &resp}
-	if err := srv.SendMsg(&respMsg); err != nil {
-		return fmt.Errorf("send install response: %w", err)
-	}
-
-	if client == nil {
-		return nil
-	}
-	handler.(*streamHandler).doneSetup()
-	return client.ReceiveMessages()
+	return s.scheduleOrRespond(handler, client, srv, &respMsg)
 }
 
 // Close satisfies BrowserServer.
@@ -547,6 +519,34 @@ func (s *Server) getResourceHandler(uriStr string) (browserapi.Handler, error) {
 	}
 
 	return h, nil
+}
+
+// assumes we're holding the browser mutex
+func (s *Server) scheduleOrRespond(
+	handler browserapi.Handler, client clientIfc,
+	srv grpc.ServerStream, respMsg *handlerrpc.ServerMessage,
+) error {
+	// if it not a client, it's safe to response immediately
+	// since nothing else will be sending messages on the stream.
+	if client != nil {
+		client.ScheduleResponse(respMsg)
+		s.browser.Unlock()
+		if h, ok := handler.(*streamHandler); ok {
+			h.doneSetup()
+		}
+		if h, ok := handler.(*floatingStreamHandler); ok {
+			h.setup.Store(true)
+		}
+		return client.ReceiveMessages()
+	}
+	s.browser.Unlock()
+	if err := srv.SendMsg(respMsg); err != nil {
+		return fmt.Errorf("send install response: %w", err)
+	}
+	if h, ok := handler.(*floatingStreamHandler); ok {
+		h.setup.Store(true)
+	}
+	return nil
 }
 
 func (s *Server) setBrowserMessage(
@@ -670,4 +670,5 @@ func (f *floatingStreamHandler) Resize(width, height int) {
 type clientIfc interface {
 	browserapi.Floating
 	ReceiveMessages() error
+	ScheduleResponse(*handlerrpc.ServerMessage)
 }
