@@ -1466,6 +1466,14 @@ func (c ideConfig) syntaxConfig() (ret syntax.Config) {
 	} else {
 		ret.ReparseOnErrors = reparse
 	}
+	strictErrors, err := cfg.GetBool("strict_errors")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["editor.reparse_strict_errors"] = err
+		}
+	} else {
+		ret.StrictErrors = strictErrors
+	}
 	autoindent, err := cfg.GetBool("autoindent")
 	if err != nil {
 		if err != config.ErrNotFound {

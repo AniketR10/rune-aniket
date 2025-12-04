@@ -634,13 +634,22 @@ func (t *Tree) incrementalParse(start, end, from, to term.Coordinates, content s
 	t.persistCells()
 	t.parseTree(t.tree, "incremental parse error")
 	t.streamState()
-	if t.tree == nil || t.currState.ParserError != "" {
-		t.log(log.DebugLevel, "incremental parsing failed: re-parse on errors: %t",
-			t.config.ReparseOnErrors)
+	if t.tree == nil {
+		t.log(log.DebugLevel, "incremental parsing failed: "+
+			"nil tree, re-parse on errors: %t", t.config.ReparseOnErrors)
 		if t.config.ReparseOnErrors {
 			t.doReparse()
 		}
 		return
+	}
+	if t.currState.ParserError != "" {
+		t.log(log.DebugLevel, "%s, re-parse on errors: %t",
+			t.currState.ParserError, t.config.ReparseOnErrors)
+		if t.config.ReparseOnErrors {
+			t.doReparse()
+			return
+		}
+		// best effort continue
 	}
 	if err := t.highlight(); err != nil {
 		t.log(log.ErrorLevel, "highlight: %v", err)
@@ -733,7 +742,8 @@ func (t *Tree) parseTree(prev *tree_sitter.Tree, errorMsg string) {
 		}
 		return []byte{}
 	}, prev, &opts)
-	if hasError || (t.tree != nil && t.tree.RootNode().HasError()) {
+	if hasError || (t.tree != nil &&
+		t.tree.RootNode().HasError() && t.config.StrictErrors) {
 		t.currState.ParserError = errorMsg
 	} else {
 		t.currState.ParserError = ""
@@ -776,11 +786,11 @@ func editToTreesitterEdit(
 	startByte, sok := cell.ConvertCoordinatesToByteOffset(before, start)
 	oldEndByte, eok := cell.ConvertCoordinatesToByteOffset(before, end)
 
-	x, y, spok := cell.ConvertCoordinatesToRunePos(before, start)
+	y, x, spok := cell.ConvertCoordinatesToRunePos(before, start)
 	startPos := tree_sitter.Point{Row: uint(y), Column: uint(x)}
-	x, y, epok := cell.ConvertCoordinatesToRunePos(before, end)
+	y, x, epok := cell.ConvertCoordinatesToRunePos(before, end)
 	oldEndPos := tree_sitter.Point{Row: uint(y), Column: uint(x)}
-	x, y, tpok := cell.ConvertCoordinatesToRunePos(after, to)
+	y, x, tpok := cell.ConvertCoordinatesToRunePos(after, to)
 	newEndPos := tree_sitter.Point{Row: uint(y), Column: uint(x)}
 
 	if !sok || !eok || !spok || !epok || !tpok {

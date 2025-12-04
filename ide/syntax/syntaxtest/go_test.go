@@ -1534,6 +1534,8 @@ func newTestCase(
 		fn()
 		return true
 	}
+	cfg.ReparseOnErrors = false
+	cfg.StrictErrors= true
 
 	ed := vi.Editor(vi.WithStatusBarConfig(true, text.StatusBarConfig{
 		Publisher:        texttest.NopEditor(),
@@ -1597,6 +1599,12 @@ func newTree(t *testing.T) (*syntax.Tree, func()) {
 func newTreeWithPkgManager(t *testing.T, pkgs syntax.PkgManager) (
 	*cell.Buffer, *syntax.Tree, func(),
 ) {
+	return newTreeWithPkgManagerContent(t, pkgs, fileContent)
+}
+
+func newTreeWithPkgManagerContent(
+	t *testing.T, pkgs syntax.PkgManager, content string,
+) (*cell.Buffer, *syntax.Tree, func()) {
 	var wg sync.WaitGroup
 	ready := func(context.Context) error {
 		wg.Done()
@@ -1607,7 +1615,7 @@ func newTreeWithPkgManager(t *testing.T, pkgs syntax.PkgManager) (
 
 	wg.Add(1)
 	mu.Lock()
-	_, h := newEditFile(t, comp, fileContent)
+	_, h := newEditFile(t, comp, content)
 	mu.Unlock()
 	wg.Wait()
 	cref, ok := h.(*text.StatusBar)

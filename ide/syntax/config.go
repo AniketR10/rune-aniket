@@ -47,6 +47,10 @@ type Config struct {
 	// in sync.
 	ReparseOnErrors bool
 
+	// StrictErrors enables showing when the parser reports an error
+	// but incremental parsing overall didn't fail.
+	StrictErrors bool
+
 	// Autoindent enables or disables indentation features. In practice,
 	// if disabled, IndentationAt always returns 0, false.
 	Autoindent bool
@@ -74,6 +78,7 @@ func DefaultConfig() Config {
 		CaptureNamesAttributes: defaultCaptureNamesAttributes,
 		ScheduleNextTick:       func(cb func()) bool { cb(); return true },
 		ReparseOnErrors:        true,
+		StrictErrors:           false,
 		Autoindent:             true,
 	}
 }
