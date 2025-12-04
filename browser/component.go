@@ -64,6 +64,7 @@ type Component struct {
 	config      Config
 	buffers     []*Tab
 	windows     map[uint64]*browserWindow
+	prompts     map[string]Window
 }
 
 // NewComponent allocates storage for a new Component and initializes it.
@@ -79,6 +80,7 @@ func (c *Component) Init(config Config) {
 	c.windows = make(map[uint64]*browserWindow)
 
 	c.nextSplit = browserapi.OrientationRight
+	c.prompts = make(map[string]Window)
 
 	c.tabs.Init()
 	c.tabs.OnClick = func(id int) (ret bool) {
@@ -700,6 +702,9 @@ func (c *Component) Selection() (string, bool) {
 // must be zero in length, meaning no key bindings are provided to user.
 // Callers must ensure that there's coherence between options and bindings, otherwise
 // this method panics.
+//
+// Prompt uses message to de-duplicate prompts. If a prompt is already open
+// then this method returns the window used to display that prompt.
 func (c *Component) Prompt(
 	message string, options []string,
 	bindings []term.KeyComb,
@@ -707,6 +712,14 @@ func (c *Component) Prompt(
 ) Window {
 	if len(options) == 0 || (len(bindings) != 0 && len(options) != len(bindings)) {
 		panic("Prompt given invalid options and/or bindings")
+	}
+	if win, ok := c.prompts[message]; ok {
+		return win
+	}
+	promptHandler = clearOnClosePromptHandler{
+		root:    promptHandler,
+		c:       c,
+		message: message,
 	}
 	promptConfig := handler.PromptConfig{
 		PromptConfig: component.PromptConfig{
@@ -730,7 +743,9 @@ func (c *Component) Prompt(
 		Alignment: component.SpanAlignmentCentered,
 	}
 
-	return c.Floating(prompt, floatingConfig)
+	win := c.Floating(prompt, floatingConfig)
+	c.prompts[message] = win
+	return win
 }
 
 // Subscribe subscribes sub to window focus events.
@@ -1191,6 +1206,23 @@ func (c *Component) newBrowserContent(content browserapi.Handler) browserapi.Han
 		return &browserScrollableContent{browserContent: bc}
 	}
 	return &bc
+}
+
+type clearOnClosePromptHandler struct {
+	c       *Component
+	message string
+	root    handler.PromptHandler
+}
+
+func (c clearOnClosePromptHandler) OnSelect(idx int, option string) {
+	c.root.OnSelect(idx, option)
+	delete(c.c.prompts, c.message)
+}
+
+func (c clearOnClosePromptHandler) OnClose() error {
+	err := c.root.OnClose()
+	delete(c.c.prompts, c.message)
+	return err
 }
 
 // component.WindowManager sinchronously removes tui.Handlers

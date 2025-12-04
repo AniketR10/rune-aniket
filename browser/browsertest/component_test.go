@@ -747,6 +747,105 @@ func TestComponentPrompt(t *testing.T) {
 
 		comptest.TestComponent(t, c, w, tests)
 	})
+
+	t.Run("does not open a prompt twice", func(t *testing.T) {
+		w := term.NewStringWriter(24, 12)
+
+		cfg := browser.DefaultConfig()
+		c := browser.NewComponent(cfg)
+		c.Resize(20, 12)
+		uri, err := workspaceapi.ParseURI("file:///Music")
+		require.NoError(t, err)
+
+		h := NewTestHandler()
+		h.Ch = '8'
+		tab := c.NewTab(uri, 'x', "music", h, nil)
+		require.NoError(t, c.Focus().SetContent(tab))
+
+		tests := []comptest.TestCase{
+			{
+				nil, `
+┌──────────────────┐    
+│x music           │    
+├──────────────────┤    
+│888888888888888888│    
+│888888888888888888│    
+│888888888888888888│    
+│888888888888888888│    
+│888888888888888888│    
+│888888888888888888│    
+│888888888888888888│    
+│888888888888888888│    
+└──────────────────┘    `,
+			}, {func() {
+				c.Prompt("Twitch Streaming?", []string{"Yes", "No"}, nil, handler.NopPromptHandler())
+				c.Prompt("Twitch Streaming?", []string{"Yes", "No"}, nil, handler.NopPromptHandler())
+				c.Prompt("Twitch Streaming?", []string{"Yes", "No"}, nil, handler.NopPromptHandler())
+			}, `
+┌──────────────────┐    
+│x music           │    
+├──────────────────┤    
+│                  │    
+│                  │    
+│    Twitch        │    
+│    Streaming?    │    
+│                  │    
+│                  │    
+│   Yes      No    │    
+│                  │    
+└──────────────────┘    `,
+			}, {func() {
+				c.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+			}, `
+┌──────────────────┐    
+│x music           │    
+├──────────────────┤    
+│888888888888888888│    
+│888888888888888888│    
+│888888888888888888│    
+│888888888888888888│    
+│888888888888888888│    
+│888888888888888888│    
+│888888888888888888│    
+│888888888888888888│    
+└──────────────────┘    `,
+			}, {func() {
+				c.Prompt("Twitch Streaming?", []string{"Yes", "No"}, nil, handler.NopPromptHandler())
+				c.Prompt("Twitch Streaming?", []string{"Yes", "No"}, nil, handler.NopPromptHandler())
+				c.Prompt("Twitch Streaming?", []string{"Yes", "No"}, nil, handler.NopPromptHandler())
+			}, `
+┌──────────────────┐    
+│x music           │    
+├──────────────────┤    
+│                  │    
+│                  │    
+│    Twitch        │    
+│    Streaming?    │    
+│                  │    
+│                  │    
+│   Yes      No    │    
+│                  │    
+└──────────────────┘    `,
+			}, {func() {
+				c.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+			}, `
+┌──────────────────┐    
+│x music           │    
+├──────────────────┤    
+│888888888888888888│    
+│888888888888888888│    
+│888888888888888888│    
+│888888888888888888│    
+│888888888888888888│    
+│888888888888888888│    
+│888888888888888888│    
+│888888888888888888│    
+└──────────────────┘    `,
+			},
+		}
+
+		comptest.TestComponent(t, c, w, tests)
+	})
 }
 
 func TestComponentSetFocus(t *testing.T) {
