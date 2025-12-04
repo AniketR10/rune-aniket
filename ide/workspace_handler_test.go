@@ -1390,7 +1390,9 @@ func TestExternalEvents(t *testing.T) {
 			}
 			return false
 		})
+		m.mu.Lock()
 		err = m.SubscribeEvents(evsk, sub)
+		m.mu.Unlock()
 		require.NoError(t, err)
 
 		cases := []handlertest.SequenceTestCase{
@@ -1547,7 +1549,9 @@ func TestExternalEvents(t *testing.T) {
 		assert.Equal(t, 9, int(edit.Load()))
 		assert.Equal(t, 3, int(close.Load()))
 
+		m.mu.Lock()
 		ok, err := m.UnsubscribeEvents(sub)
+		m.mu.Unlock()
 		require.NoError(t, err)
 		require.True(t, ok)
 
