@@ -24,6 +24,7 @@
 package ide
 
 import (
+	"strings"
 	"sync"
 	"time"
 
@@ -31,6 +32,7 @@ import (
 	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/release"
 	"github.com/unstablebuild/blue/release/docrelease"
+	yaml "gopkg.in/yaml.v3"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/api/config"
 	"unstable.build/go-tui/api/extensionapi"
@@ -119,9 +121,31 @@ func WithDefaultWallpaper(wallpaper browser.Wallpaper) Option {
 }
 
 // WithDefaultConfigYAML sets the default baseline config.
-func WithDefaultConfigYAML(configYaml string) Option {
+func WithDefaultConfigYAML(base string, overrides ...string) Option {
 	return func(opts *options) {
-		opts.defaultConfig = configYaml
+		if len(overrides) == 0 {
+			opts.defaultConfig = base
+			return
+		}
+		// NOTE: once we add the ability to choose between modal or modeless config,
+		// this should be a compile-time operation
+		ret := make(map[string]any)
+		for _, cfg := range append([]string{base}, overrides...) {
+			d := yaml.NewDecoder(strings.NewReader(cfg))
+			mcfg := make(map[string]any)
+			err := d.Decode(mcfg)
+			if err != nil {
+				panic("error decoding default config")
+			}
+			overrideConfig(ret, mcfg)
+		}
+		var buf strings.Builder
+		d := yaml.NewEncoder(&buf)
+		err := d.Encode(ret)
+		if err != nil {
+			panic("error decoding default config")
+		}
+		opts.defaultConfig = buf.String()
 	}
 }
 
