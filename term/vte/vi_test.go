@@ -277,11 +277,11 @@ $ ▐
                     
                     
                     `},
-			{"echo \"<0klllvk0yG0llllllpi\"", // multiline paste
+			{"echo \"<0klllvk0yG0lllllpeeeea\"", // multiline paste
 				`$ echo bla          
 bla                 
-$ echo "$ echo bla  
-> bla"▐             
+$ echo "$ echo blabl
+a"▐                 
                     
                     
                     
@@ -291,90 +291,90 @@ $ echo "$ echo bla
 			{">", // execute paste
 				`$ echo bla          
 bla                 
-$ echo "$ echo bla  
-> bla"              
-$ echo bla          
-bla                 
+$ echo "$ echo blabl
+a"                  
+$ echo blabla       
 $ ▐                 
+                    
                     
                     
                     `},
 			{"1Z<0\\$aX<0", // a after $
 				`$ echo bla          
 bla                 
-$ echo "$ echo bla  
-> bla"              
-$ echo bla          
-bla                 
+$ echo "$ echo blabl
+a"                  
+$ echo blabla       
 $ ▐ZX               
+                    
                     
                     
                     `},
 			{"⬆⬆", // position after scroll up through history
 				`$ echo bla          
 bla                 
-$ echo "$ echo bla  
-> bla"              
-$ echo bla          
-bla                 
+$ echo "$ echo blabl
+a"                  
+$ echo blabla       
 $ echo bl▐          
+                    
                     
                     
                     `},
 			{"\\$", // $ after scroll through history
 				`$ echo bla          
 bla                 
-$ echo "$ echo bla  
-> bla"              
-$ echo bla          
-bla                 
+$ echo "$ echo blabl
+a"                  
+$ echo blabla       
 $ echo bl▐          
+                    
                     
                     
                     `},
 			{"kkkk#a", // ctrl-c exits vi mode, no matter where cursor is
 				`$ echo bla          
 bla                 
-$ echo "$ echo bla  
-> bla"              
-$ echo bla          
-bla                 
+$ echo "$ echo blabl
+a"                  
+$ echo blabla       
 $ echo blaa▐        
+                    
                     
                     
                     `},
 			{"<0D\\$", // $ end of line if only prompt stays at prompt
 				`$ echo bla          
 bla                 
-$ echo "$ echo bla  
-> bla"              
-$ echo bla          
-bla                 
+$ echo "$ echo blabl
+a"                  
+$ echo blabla       
 $ ▐                 
+                    
                     
                     
                     `},
 			{"iecho '.i\\$'>", // is able to use special characters in shell mode
 				`$ echo bla          
 bla                 
-$ echo "$ echo bla  
-> bla"              
-$ echo bla          
-bla                 
+$ echo "$ echo blabl
+a"                  
+$ echo blabla       
 $ echo '.i$'        
 .i$                 
 $ ▐                 
+                    
                     `},
 			{"<⬇⬇⬇⬇", // position after scroll down through history to the start
 				`$ echo bla          
 bla                 
-$ echo "$ echo bla  
-> bla"              
-$ echo bla          
-bla                 
+$ echo "$ echo blabl
+a"                  
+$ echo blabla       
 $ echo '.i$'        
 .i$                 
 $ ▐                 
+                    
                     `},
 		}
 

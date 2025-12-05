@@ -91,6 +91,9 @@ func (e *Handler) Init(
 	termapi schemeapi.Terminal, executor schemeapi.Executor,
 	tm browser.TabManager, config Config, initialCmd string,
 ) error {
+	// wrap clipboard to provide stitch newlines on paste
+	// depending on the copy mode.
+	config.Clipboard = stitchingClipboard{root: config.Clipboard}
 	e.publisher = publisher
 	e.notifications = n
 	e.handleTimer = time.NewTimer(handleTimeout)
