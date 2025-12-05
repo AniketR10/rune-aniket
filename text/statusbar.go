@@ -654,7 +654,7 @@ func (b *StatusBar) streamSyntaxState() {
 				b.rebuildBarSyntax(state)
 			})
 		}
-		if err := iter.Err(); err != nil {
+		if err := iter.Err(); err != nil && !errors.Is(err, context.Canceled) {
 			b.log(log.WarnLevel, "syntax state iter error: %v", err)
 		}
 	})
