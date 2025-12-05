@@ -39,7 +39,12 @@ import (
 )
 
 func TestEditorDispatchFocus(t *testing.T) {
-	ed := Editor()
+	cwd, err := workspaceapi.ParseURI("file:///")
+	require.NoError(t, err)
+	ed := Editor(
+		// test wrapping/unwrapping of ifcs
+		WithWorkspaceCommandRegistry(cwd, texttest.NopWorkspaceRegistry()),
+	)
 	content := "Clement"
 	uri, err := workspaceapi.ParseURI("file:///Jolie")
 	require.NoError(t, err)

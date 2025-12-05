@@ -56,24 +56,25 @@ type editor struct {
 
 func (e *editor) Edit(
 	file workspaceapi.URI, buf *cell.Buffer, readOnly, recovered bool,
-) (text.Handler, error) {
-	rootIfc := NewHandler(e.clipboard, buf, file, e.wrap,
+) (ret text.Handler, err error) {
+	handler := NewHandler(e.clipboard, buf, file, e.wrap,
 		e.commandBar, e.attr, e.resAttr, e.scheduleNextTick)
+	ret = handler
 	if e.fileRegistry != nil {
 		var err error
-		rootIfc, err = text.SubscribeLocationCommands(file, e.fileRegistry, rootIfc)
+		ret, err = text.SubscribeLocationCommands(file, e.fileRegistry, ret)
 		if err != nil {
 			return nil, err
 		}
-		rootIfc, err = vctrlcmd.SubscribeGitCommands(file, e.fileRegistry,
-			rootIfc, e.auxBarConfig.Service, e.clipboard, e.notifications)
+		ret, err = vctrlcmd.SubscribeGitCommands(file, e.fileRegistry,
+			ret, e.auxBarConfig.Service, e.clipboard, e.notifications)
 		if err != nil {
 			return nil, err
 		}
 	}
-	cursor := &rootIfc.(*editorHandler).cursor
-	scroll := rootIfc.(*editorHandler).less.Scroll()
-	ret := e.pub.PublishEdit(file, buf, rootIfc, cursor)
+	cursor := &handler.(*editorHandler).cursor
+	scroll := handler.(*editorHandler).less.Scroll()
+	ret = e.pub.PublishEdit(file, buf, ret, cursor)
 	auxBarConfig := e.auxBarConfig
 	auxBarConfig.CommandRegistry = e.fileRegistry
 	gitBarConfig := e.gitBarConfig
@@ -89,7 +90,7 @@ func (e *editor) Edit(
 		return ret, nil
 	}
 	bar := text.WithStatusBar(ret, buf, scroll, readOnly, recovered, e.statusBarConfig)
-	rootIfc.(*editorHandler).setStatusBar(bar)
+	handler.(*editorHandler).setStatusBar(bar)
 	if !e.commandBar {
 		bar.ShowCommandBar(false)
 	}
