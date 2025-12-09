@@ -1245,6 +1245,7 @@ func (c ideConfig) statusBarConfig(
 		ScheduleNextTick: c.scheduleNextTick,
 		Publisher:        pub,
 		BackgroundColor:  c.statusBarAttr("background_attr", term.Attributes{}).Bg,
+		ErrorColor:       c.statusBarAttr("foreground_error_attr", term.Attributes{}).Fg,
 		GitService:       svc,
 		Layout:           c.statusBarLayout(),
 	}

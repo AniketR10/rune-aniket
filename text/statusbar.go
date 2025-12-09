@@ -99,6 +99,7 @@ type StatusBarConfig struct {
 
 	Layout          []StatusBarComponent
 	BackgroundColor tcell.Color
+	ErrorColor      tcell.Color
 	GitService      vctrl.Service
 }
 
@@ -451,9 +452,12 @@ func (b *StatusBar) rebuildBarSyntax(state syntax.State) {
 	}
 	attrs := b.syntaxTemplate.Attributes
 	if state.ParserError != "" {
-		attrs.Fg = tcell.ColorRed
-		if b.syntaxTemplate.Attributes.Bg == tcell.ColorRed {
-			attrs.Fg = tcell.ColorMaroon
+		attrs.Fg = b.config.ErrorColor
+		if b.syntaxTemplate.Attributes.Bg == b.config.ErrorColor {
+			attrs.Fg = tcell.ColorRed
+			if b.syntaxTemplate.Attributes.Bg == tcell.ColorRed {
+				attrs.Fg = tcell.ColorYellow
+			}
 		}
 	}
 	components := b.processTemplate(b.syntaxTemplate.Template, state.LangID,

@@ -476,6 +476,7 @@ func TestStatusBarSyntax(t *testing.T) {
 		Workspace:        testURI,
 		Publisher:        &ed,
 		GitService:       mockGit,
+		ErrorColor:       tcell.ColorMaroon,
 		Layout: []text.StatusBarComponent{
 			{Type: text.StatusBarVoid},
 			{
