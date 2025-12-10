@@ -24,6 +24,7 @@
 package ide
 
 import (
+	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -146,7 +147,7 @@ func WithDefaultConfigYAML(base string, overrides ...string) Option {
 			mcfg := make(map[string]any)
 			err := d.Decode(mcfg)
 			if err != nil {
-				panic("error decoding default config")
+				panic(fmt.Sprintf("error decoding default config: %v", err))
 			}
 			overrideConfig(ret, mcfg)
 		}
