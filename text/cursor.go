@@ -113,6 +113,30 @@ func NewCursor(scroll *component.Scroll, scheduleNextTick func(func()) bool) *Cu
 	return c
 }
 
+// Center centers the cursor at the scroll such that the cursor
+// occupies the line at the center of the view.
+func (c *Cursor) Center() (handled bool) {
+	seeked := c.scroll.RepositionLineCenter(c.cursorAtScroll().Y)
+	c.cursor.Y -= seeked
+	return seeked != 0
+}
+
+// RepositionTop repositions the cursor at the scroll such that the cursor
+// occupies the line at the top of the view.
+func (c *Cursor) RepositionTop() (handled bool) {
+	seeked := c.scroll.RepositionLineTop(c.cursorAtScroll().Y)
+	c.cursor.Y -= seeked
+	return seeked != 0
+}
+
+// RepositionBottom repositions the cursor at the scroll such that the cursor
+// occupies the line at the bottom of the view.
+func (c *Cursor) RepositionBottom() (handled bool) {
+	seeked := c.scroll.RepositionLineBottom(c.cursorAtScroll().Y)
+	c.cursor.Y -= seeked
+	return seeked != 0
+}
+
 // Init initializes this cursor with the given scroll and subscribes
 // to changes to the scroll's buffer. If buffer is swapped
 // via Scroll.SetBuffer, consider re-initializing this cursor with the
@@ -190,17 +214,14 @@ func (c *Cursor) Mark() CursorMark {
 }
 
 // MoveToMark moves the cursor to the position represented by mark.
+// It attempts to keep cursor in the same window position as it was
+// when the given mark was created.
 func (c *Cursor) MoveToMark(mark CursorMark) CursorMark {
 	ret := CursorMark{window: c.cursor, scroll: c.cursorAtScroll()}
-	win, ok := c.scroll.ScrollToWindowCoordinates(mark.scroll)
-	if !ok {
-		win = c.cursor
-	}
-	// try to keep cursor at the same window position, if possible
+	win, _ := c.scroll.ScrollToWindowCoordinates(mark.scroll)
+	// if inside hidden block, we still want to make the best out of it
 	c.setCursor(win, false)
-	if !ok {
-		return ret
-	}
+	// try to keep cursor at the same window position, if possible
 	if c.cursor.Y > mark.window.Y {
 		diff := c.cursor.Y - mark.window.Y
 		for diff > 0 && c.cursor.Y > 0 && c.scroll.SeekDown() {
@@ -225,6 +246,14 @@ func (c *Cursor) rows() int {
 // to the scroll coorindates.
 func (c *Cursor) CursorAtScroll() term.Coordinates {
 	return c.cursorAtScroll()
+}
+
+// SetCursorAtScroll moves the cursor to the given scroll position.
+func (c *Cursor) SetCursorAtScroll(pos term.Coordinates) term.Coordinates {
+	prev := c.scroll.WindowToScrollCoordinates(c.cursor)
+	win, _ := c.scroll.ScrollToWindowCoordinates(pos)
+	c.setCursor(win, false)
+	return prev
 }
 
 // SelectionFrom returns the position of the current selection,
@@ -1410,6 +1439,27 @@ func (c *Cursor) CopySelection(registerID string, clip clipboard.Register) (ok b
 	return
 }
 
+// CopySelectionNoUnselect copies the current text under selection and returns true
+// or does nothing and returns false, but as opposed to CopySelection,
+// it keeps selection selected.
+func (c *Cursor) CopySelectionNoUnselect(
+	registerID string, clip clipboard.Register,
+) (ok bool, err error) {
+	if c.selection.mode == NoSelection {
+		return
+	}
+
+	enable := c.disablePublishing()
+	defer enable()
+
+	selection := c.Selection()
+	mode := c.selection.mode
+
+	ok = true
+	err = clip.Copy(registerID, clipboard.Data{Text: selection, Metadata: mode})
+	return
+}
+
 // MoveToBounds moves the cursor up and to the left until it is in a row
 // with content and it is 'padding' cells away from the last column in the row.
 // If cursor is already in a row and/or in a column with content, then this method
@@ -2133,7 +2183,8 @@ func (c *Cursor) opFolds(ctx context.Context, op func([]term.Range)) bool {
 	if !ok {
 		return false
 	}
-	return c.opFoldsIter(ctx, op, folds)
+	c.opFoldsIter(ctx, op, folds)
+	return true
 }
 
 func (c *Cursor) opFoldsFrom(
@@ -2148,12 +2199,13 @@ func (c *Cursor) opFoldsFrom(
 	if !ok {
 		return false
 	}
-	return c.opFoldsIter(ctx, op, folds)
+	c.opFoldsIter(ctx, op, folds)
+	return true
 }
 
 func (c *Cursor) opFoldsIter(
 	ctx context.Context, op func([]term.Range), folds iterator.Iterator[term.Range],
-) bool {
+) {
 	go debug.CapturePanicReport(func() {
 		folds, isEmpty := iterator.IsEmpty(ctx, folds)
 		if isEmpty {
@@ -2194,8 +2246,6 @@ func (c *Cursor) opFoldsIter(
 			op(slice)
 		})
 	})
-
-	return true
 }
 
 func (c *Cursor) isFoldHidden(start, end term.Coordinates) (bool, bool) {

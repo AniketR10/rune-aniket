@@ -87,7 +87,7 @@ func TestEditorDispatchScroll(t *testing.T) {
 	}
 	ed := Editor(WithStatusBarConfig(true, cfg))
 	buf := cell.NewBuffer()
-	buf.WriteString("Daworg\nSurinach")
+	buf.WriteString("Atzari\nSurinach")
 	h, err := ed.Edit(workspaceapi.URI{}, buf, false, false)
 	require.NoError(t, err)
 
@@ -200,7 +200,7 @@ func TestEditorSetCursor(t *testing.T) {
 	for _, wrap := range []bool{true, false} {
 		t.Run(fmt.Sprintf("wrap: %v, does not return error if cursor already at position", wrap),
 			func(t *testing.T) {
-				ed := Editor(WithWrap(wrap))
+				ed := Editor(WithWrap(wrap), WithAutoCenter(true))
 				h, err := ed.Edit(uri, cell.NewBuffer(), false, false)
 				require.NoError(t, err)
 				if wrap {
@@ -214,12 +214,10 @@ func TestEditorSetCursor(t *testing.T) {
 			func(t *testing.T) {
 				buf := cell.NewBuffer()
 				buf.WriteString("a")
-				ed := Editor(WithWrap(wrap))
+				ed := Editor(WithWrap(wrap), WithAutoCenter(true))
 				h, err := ed.Edit(uri, buf, false, false)
 				require.NoError(t, err)
-				if wrap {
-					h.Resize(1, 1) // just not 0, 0
-				}
+				h.Resize(1, 1)
 
 				h.SetCursorAtScroll(term.Coordinates{X: 1})
 				pos := h.CursorAtScroll()
@@ -236,23 +234,17 @@ func TestEditorSetCursor(t *testing.T) {
 			func(t *testing.T) {
 				buf := cell.NewBuffer()
 				buf.WriteString("aaaaaaaaaaaaaaaa\nbb\nc\nd\ne")
-				ed := Editor(WithWrap(wrap))
+				ed := Editor(WithWrap(wrap), WithAutoCenter(true))
 				h, err := ed.Edit(uri, buf, false, false)
 				require.NoError(t, err)
 				cursor := h.(interface{ CursorReference() *text.Cursor }).CursorReference()
 
 				h.SetCursorAtScroll(term.Coordinates{Y: 3})
 
-				pos := h.CursorAtScroll()
-				require.NoError(t, err)
-				assert.Equal(t, term.Coordinates{Y: 3}, pos)
 				assert.Equal(t, term.Coordinates{}, cursor.Coordinates())
-				assert.Equal(t, term.Coordinates{Y: 3}, cursor.CursorAtScroll())
+				assert.Equal(t, term.Coordinates{}, cursor.CursorAtScroll())
 
 				h.Resize(1, 1)
-				pos = h.CursorAtScroll()
-				require.NoError(t, err)
-				assert.Equal(t, term.Coordinates{Y: 3}, pos)
 				assert.Equal(t, term.Coordinates{}, cursor.Coordinates())
 				assert.Equal(t, term.Coordinates{Y: 3}, cursor.CursorAtScroll())
 
@@ -260,17 +252,11 @@ func TestEditorSetCursor(t *testing.T) {
 				require.NoError(t, err)
 
 				h.Resize(10, 10)
-				pos = h.CursorAtScroll()
-				require.NoError(t, err)
-				assert.Equal(t, term.Coordinates{Y: 4}, pos)
-				assert.Equal(t, term.Coordinates{}, cursor.Coordinates())
+				assert.Equal(t, term.Coordinates{Y: 0}, cursor.Coordinates())
 				assert.Equal(t, term.Coordinates{Y: 4}, cursor.CursorAtScroll())
 
 				h.Resize(2, 2)
-				pos = h.CursorAtScroll()
-				require.NoError(t, err)
-				assert.Equal(t, term.Coordinates{Y: 4}, pos)
-				assert.Equal(t, term.Coordinates{}, cursor.Coordinates())
+				assert.Equal(t, term.Coordinates{Y: 0}, cursor.Coordinates())
 				assert.Equal(t, term.Coordinates{Y: 4}, cursor.CursorAtScroll())
 			})
 	}

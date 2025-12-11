@@ -45,6 +45,7 @@ type viConfig struct {
 	wrap               bool
 	cursorCorrections  bool
 	skipNulls          bool
+	autoCenter         bool
 	enableInitialFolds bool
 	enableAuxBar       bool
 	auxBarConfig       text.AuxBarConfig
@@ -181,6 +182,14 @@ func WithCursorCorrections(enabled bool) Option {
 func WithAutoSkipNullCells(skip bool) Option {
 	return func(cfg *viConfig) {
 		cfg.skipNulls = skip
+	}
+}
+
+// WithAutoCenter determines whether vi should automatically
+// center the cursor after SetCursorAtScroll.
+func WithAutoCenter(enabled bool) Option {
+	return func(cfg *viConfig) {
+		cfg.autoCenter = enabled
 	}
 }
 

@@ -54,6 +54,7 @@ type Vi struct {
 	mouse     *text.Mouse
 	less      *handler.Less
 	clipboard clipboard.Register
+	config    viConfig
 
 	scheduleNextTick func(func()) bool
 
@@ -77,8 +78,12 @@ func New(buf *cell.Buffer, resource workspaceapi.URI, opts ...Option) *Vi {
 
 // Init initialies this vi handle with the given cell.Buffer.
 func (vi *Vi) Init(buf *cell.Buffer, resource workspaceapi.URI, opts ...Option) {
+	vi.config = defaultviHandlerImplConfig()
+	for _, o := range opts {
+		o(&vi.config)
+	}
 	viHandler := new(viHandlerImpl)
-	viHandler.init(buf, opts...)
+	viHandler.init(buf, vi.config)
 
 	vi.init(viHandler, buf, resource)
 
@@ -140,7 +145,7 @@ func (vi *Vi) Draw(w term.Writer) {
 
 func isEditMode(mode viMode) bool {
 	switch mode {
-	case normalMode, foldMode, gMode, yankMode, searchMode,
+	case normalMode, zMode, gMode, yankMode, searchMode,
 		visualMode, visualLineMode, visualBlockMode:
 		return false
 	case insertMode, deleteMode, replaceMode, replaceOneMode:
@@ -299,7 +304,11 @@ func (vi *Vi) SetLocationList(
 
 // SetCursorAtScroll sets the cursor of this Vi handler at content pos.
 func (vi *Vi) SetCursorAtScroll(pos term.Coordinates) bool {
-	return vi.handler.setCursorAtScroll(pos)
+	ok := vi.handler.setCursorAtScroll(pos)
+	if ok && vi.config.autoCenter {
+		vi.cursor.Center()
+	}
+	return ok
 }
 
 // CursorAtScroll sets the cursor of this Vi handler at content pos.

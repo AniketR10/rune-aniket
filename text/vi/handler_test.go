@@ -1069,10 +1069,8 @@ func TestIntegrationScrollEvent(t *testing.T) {
 	}
 
 	for _, tcase := range tsuite {
-		tcase := tcase
 		t.Run(tcase.desc, func(t *testing.T) {
-			vi := setupVi(t, snippet, 2)
-			vi.cursor.Insert('a')
+			vi := setupVi(t, snippet, 4)
 			vi.setCursorAtScroll(tcase.cursorPos)
 			vi.Resize(4, 4)
 
@@ -1688,7 +1686,7 @@ func TestNoModeHandlesNonCtrlModifiers(t *testing.T) {
 		insertMode,
 		deleteMode,
 		gMode,
-		foldMode,
+		zMode,
 		yankMode,
 		visualMode,
 		visualLineMode,
@@ -1817,8 +1815,13 @@ func setupVi(
 	_, err := buf.ReadFrom(strings.NewReader(text))
 	require.NoError(t, err)
 
+	config := defaultviHandlerImplConfig()
+	for _, o := range opts {
+		o(&config)
+	}
+
 	vi := new(viHandlerImpl)
-	vi.init(buf, opts...)
+	vi.init(buf, config)
 
 	return vi
 }
@@ -2089,6 +2092,149 @@ func TestVisualBlockInsert(t *testing.T) {
 			vi.Handle(term.Event{Type: term.EventKey, Key: term.KeyEsc})
 			assert.Equal(t, tcase.expect,
 				vi.less.Buffer().String())
+
+		})
+	}
+}
+
+func TestNormalPageScrolls(t *testing.T) {
+	fileContent := "a\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"
+
+	suite := []struct {
+		name          string
+		setCursor     term.Coordinates
+		inputSequence term.Event
+		expect        string
+	}{
+		{
+			name:          "ctrl-e scrolls down, keeps cursor fixed",
+			setCursor:     term.Coordinates{Y: 2},
+			inputSequence: term.Event{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'e'},
+			expect:        "b\nX\nd\ne",
+		},
+		{
+			name:          "ctrl-e scrolls down, moves cursor if oob",
+			setCursor:     term.Coordinates{},
+			inputSequence: term.Event{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'e'},
+			expect:        "X\nc\nd\ne",
+		},
+		{
+			name:          "ctrl-y scrolls up, moves cursor if oob",
+			setCursor:     term.Coordinates{Y: 5},
+			inputSequence: term.Event{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'y'},
+			expect:        "b\nc\nd\nX",
+		},
+		{
+			name:          "ctrl-b move screen up one page, cursor to last line",
+			setCursor:     term.Coordinates{Y: 7},
+			inputSequence: term.Event{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'b'},
+			expect:        "a\nb\nc\nX",
+		},
+		{
+			name:          "ctrl-f move screen down one page, cursor to first line",
+			setCursor:     term.Coordinates{Y: 1},
+			inputSequence: term.Event{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'f'},
+			expect:        "X\ng\nh\ni",
+		},
+		{
+			name:          "ctrl-u move screen up half page, cursor to last line",
+			setCursor:     term.Coordinates{Y: 7},
+			inputSequence: term.Event{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'u'},
+			expect:        "c\nd\ne\nX",
+		},
+		{
+			name:          "ctrl-d move screen down half page, cursor to first line",
+			setCursor:     term.Coordinates{Y: 1},
+			inputSequence: term.Event{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'd'},
+			expect:        "X\ne\nf\ng",
+		},
+	}
+
+	for _, tcase := range suite {
+		t.Run(tcase.name, func(t *testing.T) {
+			vi := setupVi(t, fileContent, 2)
+			vi.Resize(1, 4)
+
+			vi.setCursorAtScroll(tcase.setCursor)
+			_, ok := vi.Handle(tcase.inputSequence)
+			require.True(t, ok)
+
+			w := term.NewStringWriter(1, 4)
+			vi.Draw(w)
+			c, _, ok := vi.Cursor()
+			require.True(t, ok)
+			w.SetCell(c, term.Cell{Width: 1, Ch: 'X'})
+			w.Flush()
+			assert.Equal(t, tcase.expect, w.String())
+
+		})
+	}
+}
+
+func TestCentering(t *testing.T) {
+	fileContent := "a\nb\nc\nd\ne\n	f\ng\nh\ni\nj\nk"
+
+	suite := []struct {
+		name          string
+		setCursor     term.Coordinates
+		inputSequence string
+		expect        string
+	}{
+		{
+			name:          "zz centers the view around the cursor if there's enough offset available",
+			setCursor:     term.Coordinates{Y: 5},
+			inputSequence: "zz",
+			expect:        "d   \ne   \nX f \ng   ",
+		},
+		{
+			name:          "zz does nothing with last line",
+			setCursor:     term.Coordinates{Y: 10},
+			inputSequence: "zz",
+			expect:        "h   \ni   \nj   \nX   ",
+		},
+		{
+			name:          "zz does nothing with first line",
+			setCursor:     term.Coordinates{},
+			inputSequence: "zz",
+			expect:        "X   \nb   \nc   \nd   ",
+		},
+		{
+			name:          "z. centers the view around the cursor and moves to first non blank",
+			setCursor:     term.Coordinates{Y: 5},
+			inputSequence: "z.",
+			expect:        "d   \ne   \n  X \ng   ",
+		},
+		{
+			name:          "zt repositions cursor at the top of the view",
+			setCursor:     term.Coordinates{Y: 5},
+			inputSequence: "zt",
+			expect:        "X f \ng   \nh   \ni   ",
+		},
+		{
+			name:          "zb repositions cursor at the bottom of the view",
+			setCursor:     term.Coordinates{Y: 5},
+			inputSequence: "zb",
+			expect:        "c   \nd   \ne   \nX f ",
+		},
+	}
+
+	for _, tcase := range suite {
+		t.Run(tcase.name, func(t *testing.T) {
+			vi := setupVi(t, fileContent, 2)
+			vi.Resize(4, 4)
+
+			vi.setCursorAtScroll(tcase.setCursor)
+			for _, ch := range tcase.inputSequence {
+				vi.Handle(term.Event{Type: term.EventKey, Ch: ch})
+			}
+
+			w := term.NewStringWriter(4, 4)
+			vi.Draw(w)
+			c, _, ok := vi.Cursor()
+			require.True(t, ok)
+			w.SetCell(c, term.Cell{Width: 1, Ch: 'X'})
+			w.Flush()
+			assert.Equal(t, tcase.expect, w.String())
 
 		})
 	}

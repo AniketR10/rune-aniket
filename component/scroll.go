@@ -123,6 +123,32 @@ func (s *Scroll) InitPerformance(buf *cell.Buffer) {
 	s.wraps = make([]int, 0)
 }
 
+// RepositionLineCenter centers the scroll's view around the given position,
+// scrolling up or down as needed. It returns how many lines
+// it seeked. A negative seek value indicates it seeked up,
+// whereas a positive seek value indicates it seeked down.
+func (s *Scroll) RepositionLineCenter(y int) (seek int) {
+	return s.repositionLine(s.height/2, y)
+}
+
+// RepositionLineTop repositions the scroll's view such that
+// the given position is at the top of the view,
+// scrolling up or down as needed. It returns how many lines
+// it seeked. A negative seek value indicates it seeked up,
+// whereas a positive seek value indicates it seeked down.
+func (s *Scroll) RepositionLineTop(y int) (seek int) {
+	return s.repositionLine(0, y)
+}
+
+// RepositionLineBottom repositions the scroll's view such that
+// the given position is at the bottom of the view,
+// scrolling up or down as needed. It returns how many lines
+// it seeked. A negative seek value indicates it seeked up,
+// whereas a positive seek value indicates it seeked down.
+func (s *Scroll) RepositionLineBottom(y int) (seek int) {
+	return s.repositionLine(s.height-1, y)
+}
+
 // CanSeekUp returns true if SeekUp would seek one row up.
 func (s *Scroll) CanSeekUp() bool {
 	return s.offset.Y > 0
@@ -251,6 +277,16 @@ func (s *Scroll) SeekEndFile() bool {
 // SeekStartFile shifts the contents of this scroll to the minimum y offset.
 func (s *Scroll) SeekStartFile() bool {
 	return s.SeekVertical(0)
+}
+
+// SeekDownPage seeks down a full page worth of lines.
+func (s *Scroll) SeekDownPage() bool {
+	return s.SeekVertical(min(s.offset.Y+s.height, s.getMaxYOffset()))
+}
+
+// SeekUpPage seeks up a full page worth of lines.
+func (s *Scroll) SeekUpPage() bool {
+	return s.SeekVertical(max(s.offset.Y-s.height, 0))
 }
 
 func (s *Scroll) seekTo(pos term.Coordinates, xpadding, ypadding int) bool {
@@ -698,6 +734,8 @@ func (s *Scroll) Draw(writer term.Writer) {
 
 // WordAt returns the word at the given position or an empty string if token
 // at the given position is not a word. See TokenAt for more details.
+// The returned start and end coordinates follow left inclusive, right exclusive semantics,
+// so they're ready to be used for selection.
 func (s *Scroll) WordAt(pos term.Coordinates) (
 	term.Coordinates, term.Coordinates, string,
 ) {
@@ -1215,4 +1253,22 @@ func (s *Scroll) rebuildHiddenLines() {
 	sort.Slice(s.hiddensorted, func(i, j int) bool {
 		return s.hiddensorted[i].start < s.hiddensorted[j].start
 	})
+}
+
+func (s *Scroll) repositionLine(target, y int) (seek int) {
+	if s.height == 0 || s.width == 0 {
+		return
+	}
+	// ignore bool return value; we don't care if it's inside a hidden block
+	pos, _ := s.ScrollToWindowCoordinates(term.Coordinates{Y: y})
+	y = pos.Y
+	for y > target && s.SeekDown() {
+		y--
+		seek++
+	}
+	for y < target && s.SeekUp() {
+		y++
+		seek--
+	}
+	return
 }

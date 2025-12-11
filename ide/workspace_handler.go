@@ -158,6 +158,7 @@ func (h *workspaceManagerHandler) newBuiltinModalEditor(
 		vi.WithClipboard(cfg.clipboard()),
 		vi.WithWorkspaceCommandRegistry(cwd, h),
 		vi.WithNotifications(h.notifications),
+		vi.WithAutoCenter(true),
 	)
 	return vi.Editor(viOpts...)
 }
@@ -180,6 +181,7 @@ func (h *workspaceManagerHandler) newBuiltinModelessEditor(
 		modeless.WithStatusBarConfig(cfg.statusBarEnabled(), statusBarConfig),
 		modeless.WithWorkspaceCommandRegistry(cwd, h),
 		modeless.WithNotifications(h.notifications),
+		modeless.WithAutoCenter(true),
 	)
 }
 

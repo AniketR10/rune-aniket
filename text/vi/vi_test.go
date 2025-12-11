@@ -77,6 +77,7 @@ func TestFoldsIntegration(t *testing.T) {
 		vi := New(buf, uri,
 			WithHideInitialFolds(true),
 			WithScheduleNextTick(cb),
+			WithAutoCenter(true),
 		)
 		cfg := text.StatusBarConfig{
 			Publisher: &texttest.TestEditor{},
@@ -155,11 +156,11 @@ diff_buf_adjust(win_
 		t.Run("zA", func(t *testing.T) {
 			tests := []comptest.TestCase{
 				{Expected: `
+                                                  
+ /* [4 lines] */                                 
+      void                                        
+  diff_buf_adjust(win_T *win)                     
  { [25 lines] }                                  
-                                                  
-                                                  
-                                                  
-                                                  
                                                   
                                                   
                                                   
@@ -272,6 +273,7 @@ diff_buf_adjust(win_
 		}
 		vi := New(buf, uri,
 			WithHideInitialFolds(true),
+			WithAutoCenter(true),
 			WithScheduleNextTick(cb),
 		)
 		bar := text.WithStatusBar(vi, buf, vi.less.Scroll(),
@@ -282,15 +284,15 @@ diff_buf_adjust(win_
 
 		tests := []comptest.TestCase{
 			{Expected: `
-                    
-/* [4 lines] */     
-    void            
 diff_buf_adjust(win_
 {                   
     win_T    *wp;   
     int             
                     
     if (!win->w_p_di
+    {               
+    /* When there is
+     * it from the d
                     `,
 			},
 		}
@@ -316,7 +318,8 @@ type mockHandler struct {
 
 func newMockHandler(buf *cell.Buffer) (ret *mockHandler) {
 	ret = new(mockHandler)
-	ret.h.init(buf)
+	config := defaultviHandlerImplConfig()
+	ret.h.init(buf, config)
 	return ret
 }
 
@@ -358,8 +361,6 @@ func (h *mockHandler) moveToNextLocation(ID string) bool {
 }
 func (h *mockHandler) moveToPrevLocation(ID string) bool {
 	return false
-}
-func (h *mockHandler) markMatchingBrace() {
 }
 func (h *mockHandler) setLocationList(pri textapi.LocationPriority, ID string, l text.LocationList) {
 }

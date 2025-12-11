@@ -50,6 +50,101 @@ func TestInitPerfWithHidden(t *testing.T) {
 	})
 }
 
+func TestScrollCenterAt(t *testing.T) {
+	scroll := newScroll(4, false, 24, 9)
+	_, err := scroll.Buffer().ReadFrom(strings.NewReader(hiddenCopy))
+	require.NoError(t, err)
+
+	w := term.NewStringWriter(24, 9)
+
+	tests := []comptest.TestCase{
+		{
+			nil, `
+module github.com/unstab
+                        
+go 1.14                 
+                        
+require (               
+    cloud.google.com/go 
+    cloud.google.com/go/
+    github.com/adrianmo/
+    github.com/ernestrc/`,
+		},
+		{
+			func() {
+				assert.Equal(t, 0, scroll.RepositionLineCenter(0))
+			}, `
+module github.com/unstab
+                        
+go 1.14                 
+                        
+require (               
+    cloud.google.com/go 
+    cloud.google.com/go/
+    github.com/adrianmo/
+    github.com/ernestrc/`,
+		},
+		{
+			func() {
+				assert.Equal(t, 6, scroll.RepositionLineCenter(10))
+			}, `    cloud.google.com/go/
+    github.com/adrianmo/
+    github.com/ernestrc/
+    github.com/ernestrc/
+    github.com/ernestrc/
+    github.com/golang/mo
+    github.com/golang/pr
+    github.com/google/uu
+    github.com/jacobsa/g`,
+		},
+		{
+			func() {
+				assert.Equal(t, -1, scroll.RepositionLineCenter(9))
+				assert.Equal(t, -5, scroll.RepositionLineCenter(0))
+				assert.Equal(t, 0, scroll.RepositionLineCenter(0))
+			}, `
+module github.com/unstab
+                        
+go 1.14                 
+                        
+require (               
+    cloud.google.com/go 
+    cloud.google.com/go/
+    github.com/adrianmo/
+    github.com/ernestrc/`,
+		},
+		{
+			func() {
+				assert.Equal(t, 10, scroll.RepositionLineCenter(99))
+			}, `
+    github.com/ernestrc/
+    github.com/golang/mo
+    github.com/golang/pr
+    github.com/google/uu
+    github.com/jacobsa/g
+)                       
+                        
+replace this => that    
+                        `,
+		},
+		{
+			func() {
+				assert.Equal(t, -10, scroll.RepositionLineCenter(-1 /* invalid but legal */))
+			}, `
+module github.com/unstab
+                        
+go 1.14                 
+                        
+require (               
+    cloud.google.com/go 
+    cloud.google.com/go/
+    github.com/adrianmo/
+    github.com/ernestrc/`,
+		},
+	}
+	comptest.TestComponent(t, scroll, w, tests)
+}
+
 func TestScrollDrawHidden(t *testing.T) {
 	scroll := newScroll(4, false, 24, 9)
 	_, err := scroll.Buffer().ReadFrom(strings.NewReader(hiddenCopy))

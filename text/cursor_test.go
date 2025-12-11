@@ -45,72 +45,142 @@ import (
 	"unstable.build/go-tui/workspace"
 )
 
-const locID = "errors"
-const sampleSnippet = `
-/*
- * Ch@ek if the current buffer should be added to or removed from the list of
- * diff buffers.
- */
-	void
-diff_buf_adjust(win_T *win)
-{
-	win_T	*wp;
-	int		i;
+func TestCursorCenter(t *testing.T) {
+	suite := []struct {
+		width, height             int
+		setCursorAtScroll         term.Coordinates
+		expectedHandled           bool
+		expectedWindowCoordinates term.Coordinates
+	}{
+		{10, 10, term.Coordinates{Y: 0}, false, term.Coordinates{Y: 0}},
+		{10, 10, term.Coordinates{Y: 2}, false, term.Coordinates{Y: 2}},
+		{10, 10, term.Coordinates{Y: 5}, false, term.Coordinates{Y: 5}},
+		{10, 10, term.Coordinates{Y: 6}, true, term.Coordinates{Y: 5}},
+		{10, 10, term.Coordinates{Y: 7}, true, term.Coordinates{Y: 5}},
+		{10, 10, term.Coordinates{Y: 8}, true, term.Coordinates{Y: 5}},
+		{10, 10, term.Coordinates{Y: 9}, true, term.Coordinates{Y: 5}},
+		{10, 10, term.Coordinates{Y: 10}, true, term.Coordinates{Y: 5}},
+		{10, 10, term.Coordinates{Y: 20}, true, term.Coordinates{Y: 5}},
+		{10, 10, term.Coordinates{Y: 22}, true, term.Coordinates{Y: 5}},
+		{10, 10, term.Coordinates{Y: 27}, true, term.Coordinates{Y: 5}},
+		{10, 10, term.Coordinates{Y: 28}, true, term.Coordinates{Y: 6}},
+		{10, 10, term.Coordinates{Y: 30}, true, term.Coordinates{Y: 8}},
+		{10, 10, term.Coordinates{Y: 31}, false, term.Coordinates{Y: 9}},
+		{100, 100, term.Coordinates{Y: 0}, false, term.Coordinates{Y: 0}},
+		{100, 100, term.Coordinates{Y: 31}, false, term.Coordinates{Y: 31}},
+	}
 
-	if (!win->w_p_diff)
-	{
-	/* When there is no window showing a diff for this buffer, remove
-	 * it from the diffs. */
-	FOR_ALL_WINDOWS(wp)
-		if (wp->w_buffer == win->w_buffer && wp->w_p_diff)
-		break;
-	if (wp == NULL)
-	{
-		i = diff_buf_idx(win->w_buffer);
-		if (i != DB_COUNT)
-		{X
-		curtab->tp_diffbuf[i] = NULL;
-		curtab->tp_diff_invalid = TRUE;
-		diff_redraw(TRUE);
-		}
-	}
-	}
-	else
-	diff_buf_add(win->w_buffer);
-} /* { */ `
+	for i, test := range suite {
+		t.Run(fmt.Sprintf("test case %d", i), func(t *testing.T) {
+			c := setupCursor(t, test.width, test.height, false)
+			sub := &testScrollSubscriber{}
+			c.scroll.Subscribe(sub)
 
-func setupCursorContent(t *testing.T, width, height int, cont string, wrap bool) (e *Cursor) {
-	scroll := component.NewScroll(cell.NewBuffer())
-	e = NewCursor(scroll, nil)
-	scroll.Wrap = wrap
-	scroll.Buffer().ReadFrom(strings.NewReader(cont))
-	scroll.Resize(width, height)
-	require.Equal(t, e.scroll.Buffer(), scroll.Buffer())
-	if wrap {
-		// needed for wraps to be accounted for
-		e.scroll.RecalculateWraps()
+			c.MoveToScroll(test.setCursorAtScroll)
+			handled := c.Center()
+			require.Equal(t, test.expectedHandled, handled)
+
+			cursor := c.CursorAtScroll()
+			assert.Equal(t, test.setCursorAtScroll, cursor)
+			assert.Equal(t, test.expectedWindowCoordinates, c.Coordinates())
+			if test.expectedHandled {
+				assert.NotZero(t, sub.seek)
+			}
+		})
 	}
-	return
 }
 
-func setupCursor(t *testing.T, width, height int, wrap bool) *Cursor {
-	return setupCursorContent(t, width, height, sampleSnippet, wrap)
+func TestCursorRepositionTop(t *testing.T) {
+	suite := []struct {
+		width, height             int
+		setCursorAtScroll         term.Coordinates
+		expectedHandled           bool
+		expectedWindowCoordinates term.Coordinates
+	}{
+		{10, 10, term.Coordinates{Y: 0}, false, term.Coordinates{Y: 0}},
+		{10, 10, term.Coordinates{Y: 2}, true, term.Coordinates{Y: 0}},
+		{10, 10, term.Coordinates{Y: 5}, true, term.Coordinates{Y: 0}},
+		{10, 10, term.Coordinates{Y: 6}, true, term.Coordinates{Y: 0}},
+		{10, 10, term.Coordinates{Y: 7}, true, term.Coordinates{Y: 0}},
+		{10, 10, term.Coordinates{Y: 8}, true, term.Coordinates{Y: 0}},
+		{10, 10, term.Coordinates{Y: 9}, true, term.Coordinates{Y: 0}},
+		{10, 10, term.Coordinates{Y: 10}, true, term.Coordinates{Y: 0}},
+		{10, 10, term.Coordinates{Y: 20}, true, term.Coordinates{Y: 0}},
+		{10, 10, term.Coordinates{Y: 22}, true, term.Coordinates{Y: 0}},
+		{10, 10, term.Coordinates{Y: 24}, true, term.Coordinates{Y: 2}},
+		{10, 10, term.Coordinates{Y: 27}, true, term.Coordinates{Y: 5}},
+		{10, 10, term.Coordinates{Y: 28}, true, term.Coordinates{Y: 6}},
+		{10, 10, term.Coordinates{Y: 30}, true, term.Coordinates{Y: 8}},
+		{10, 10, term.Coordinates{Y: 31}, false, term.Coordinates{Y: 9}},
+		{100, 100, term.Coordinates{Y: 0}, false, term.Coordinates{Y: 0}},
+		{100, 100, term.Coordinates{Y: 31}, false, term.Coordinates{Y: 31}},
+	}
+
+	for i, test := range suite {
+		t.Run(fmt.Sprintf("test case %d", i), func(t *testing.T) {
+			c := setupCursor(t, test.width, test.height, false)
+			sub := &testScrollSubscriber{}
+			c.scroll.Subscribe(sub)
+
+			c.MoveToScroll(test.setCursorAtScroll)
+			handled := c.RepositionTop()
+			require.Equal(t, test.expectedHandled, handled)
+
+			cursor := c.CursorAtScroll()
+			assert.Equal(t, test.setCursorAtScroll, cursor)
+			assert.Equal(t, test.expectedWindowCoordinates, c.Coordinates())
+			if test.expectedHandled {
+				assert.NotZero(t, sub.seek)
+			}
+		})
+	}
 }
 
-func setupCursorForFolds(t *testing.T, width, height int, wg *sync.WaitGroup) (e *Cursor) {
-	buf := cell.NewBuffer()
-	fs := &testFoldsService{}
-	fs.view = buf.WithView(fs)
-	scroll := component.NewScroll(buf)
-	e = NewCursor(scroll, func(fn func()) bool {
-		defer wg.Done()
-		fn()
-		return true
-	})
-	scroll.Buffer().ReadFrom(strings.NewReader(sampleSnippet))
-	scroll.Resize(width, height)
-	require.Equal(t, e.scroll.Buffer(), scroll.Buffer())
-	return
+func TestCursorRepositionBottom(t *testing.T) {
+	suite := []struct {
+		width, height             int
+		setCursorAtScroll         term.Coordinates
+		expectedHandled           bool
+		expectedWindowCoordinates term.Coordinates
+	}{
+		{10, 10, term.Coordinates{Y: 0}, false, term.Coordinates{Y: 0}},
+		{10, 10, term.Coordinates{Y: 2}, true, term.Coordinates{Y: 2}},
+		{10, 10, term.Coordinates{Y: 5}, true, term.Coordinates{Y: 5}},
+		{10, 10, term.Coordinates{Y: 6}, true, term.Coordinates{Y: 6}},
+		{10, 10, term.Coordinates{Y: 9}, true, term.Coordinates{Y: 9}},
+		{10, 10, term.Coordinates{Y: 10}, true, term.Coordinates{Y: 9}},
+		{10, 10, term.Coordinates{Y: 11}, true, term.Coordinates{Y: 9}},
+		{10, 10, term.Coordinates{Y: 20}, true, term.Coordinates{Y: 9}},
+		{10, 10, term.Coordinates{Y: 22}, true, term.Coordinates{Y: 9}},
+		{10, 10, term.Coordinates{Y: 27}, true, term.Coordinates{Y: 9}},
+		{10, 10, term.Coordinates{Y: 28}, true, term.Coordinates{Y: 9}},
+		{10, 10, term.Coordinates{Y: 30}, true, term.Coordinates{Y: 9}},
+		{10, 10, term.Coordinates{Y: 31}, false, term.Coordinates{Y: 9}},
+		{100, 100, term.Coordinates{Y: 0}, false, term.Coordinates{Y: 0}},
+		{100, 100, term.Coordinates{Y: 31}, false, term.Coordinates{Y: 31}},
+	}
+
+	for i, test := range suite {
+		t.Run(fmt.Sprintf("test case %d", i), func(t *testing.T) {
+			c := setupCursor(t, test.width, test.height, false)
+			sub := &testScrollSubscriber{}
+			c.scroll.Subscribe(sub)
+
+			// otherwise it's already at the bottom after MoveToScroll
+			// since the cursor starts at the top after initializing it
+			c.MoveLastLine()
+			c.MoveToScroll(test.setCursorAtScroll)
+			handled := c.RepositionBottom()
+			require.Equal(t, test.expectedHandled, handled)
+
+			cursor := c.CursorAtScroll()
+			assert.Equal(t, test.setCursorAtScroll, cursor)
+			assert.Equal(t, test.expectedWindowCoordinates, c.Coordinates())
+			if test.expectedHandled {
+				assert.NotZero(t, sub.seek)
+			}
+		})
+	}
 }
 
 func TestCursorFolds(t *testing.T) {
@@ -3133,4 +3203,72 @@ func BenchmarkCursorMoveToRuneSmallWrap(b *testing.B) {
 }
 func BenchmarkCursorMoveToRuneSmallNoWrap(b *testing.B) {
 	benchmarkCursorMoveToRune(b, 10, 10, false)
+}
+
+const locID = "errors"
+const sampleSnippet = `
+/*
+ * Ch@ek if the current buffer should be added to or removed from the list of
+ * diff buffers.
+ */
+	void
+diff_buf_adjust(win_T *win)
+{
+	win_T	*wp;
+	int		i;
+
+	if (!win->w_p_diff)
+	{
+	/* When there is no window showing a diff for this buffer, remove
+	 * it from the diffs. */
+	FOR_ALL_WINDOWS(wp)
+		if (wp->w_buffer == win->w_buffer && wp->w_p_diff)
+		break;
+	if (wp == NULL)
+	{
+		i = diff_buf_idx(win->w_buffer);
+		if (i != DB_COUNT)
+		{X
+		curtab->tp_diffbuf[i] = NULL;
+		curtab->tp_diff_invalid = TRUE;
+		diff_redraw(TRUE);
+		}
+	}
+	}
+	else
+	diff_buf_add(win->w_buffer);
+} /* { */ `
+
+func setupCursorContent(t *testing.T, width, height int, cont string, wrap bool) (e *Cursor) {
+	scroll := component.NewScroll(cell.NewBuffer())
+	e = NewCursor(scroll, nil)
+	scroll.Wrap = wrap
+	scroll.Buffer().ReadFrom(strings.NewReader(cont))
+	scroll.Resize(width, height)
+	require.Equal(t, e.scroll.Buffer(), scroll.Buffer())
+	if wrap {
+		// needed for wraps to be accounted for
+		e.scroll.RecalculateWraps()
+	}
+	return
+}
+
+func setupCursor(t *testing.T, width, height int, wrap bool) *Cursor {
+	return setupCursorContent(t, width, height, sampleSnippet, wrap)
+}
+
+func setupCursorForFolds(t *testing.T, width, height int, wg *sync.WaitGroup) (e *Cursor) {
+	buf := cell.NewBuffer()
+	fs := &testFoldsService{}
+	fs.view = buf.WithView(fs)
+	scroll := component.NewScroll(buf)
+	e = NewCursor(scroll, func(fn func()) bool {
+		defer wg.Done()
+		fn()
+		return true
+	})
+	scroll.Buffer().ReadFrom(strings.NewReader(sampleSnippet))
+	scroll.Resize(width, height)
+	require.Equal(t, e.scroll.Buffer(), scroll.Buffer())
+	return
 }

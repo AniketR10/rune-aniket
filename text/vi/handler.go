@@ -51,7 +51,7 @@ const (
 	insertMode
 	deleteMode
 	gMode
-	foldMode
+	zMode
 	yankMode
 	visualMode
 	visualLineMode
@@ -113,12 +113,8 @@ type statusBar interface {
 	SetStatus(string, term.Attributes)
 }
 
-func (vi *viHandlerImpl) init(buf *cell.Buffer, opts ...Option) {
-	vi.config = defaultviHandlerImplConfig()
-	for _, o := range opts {
-		o(&vi.config)
-	}
-
+func (vi *viHandlerImpl) init(buf *cell.Buffer, cfg viConfig) {
+	vi.config = cfg
 	vi.statusBar = nopBar{}
 	vi.less.InitWithBuffer(buf, handler.LessConfig{
 		Wrap:               vi.config.wrap,
@@ -174,6 +170,7 @@ func (vi *viHandlerImpl) Resize(width, height int) {
 	if vi.pendingSetCursor != nil {
 		pos := *vi.pendingSetCursor
 		vi.setCursorAtScroll(pos)
+		vi.pendingSetCursor = nil
 	}
 }
 
@@ -218,7 +215,7 @@ func (vi *viHandlerImpl) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 		return vi.less.Cursor()
 	case insertMode:
 		style = term.CursorStyleSteadyBar
-	case foldMode, gMode, yankMode, deleteMode, replaceMode, replaceOneMode:
+	case zMode, gMode, yankMode, deleteMode, replaceMode, replaceOneMode:
 		style = term.CursorStyleSteadyUnderline
 	case normalMode, visualMode, visualLineMode, visualBlockMode:
 		style = term.CursorStyleDefault
@@ -232,7 +229,7 @@ func (vi *viHandlerImpl) setMode(mode viMode) {
 	var text string
 	var attrs term.Attributes
 	switch mode {
-	case normalMode, gMode, replaceOneMode:
+	case normalMode, gMode, replaceOneMode, zMode:
 		text = " NORMAL"
 	case insertMode:
 		text = " INSERT"
@@ -240,9 +237,6 @@ func (vi *viHandlerImpl) setMode(mode viMode) {
 	case deleteMode:
 		text = " DELETE"
 		attrs = term.Attributes{Bg: tcell.ColorRed, Fg: tcell.ColorBlack}
-	case foldMode:
-		text = "  FOLD "
-		attrs = term.Attributes{Bg: tcell.ColorTeal, Fg: tcell.ColorBlack}
 	case yankMode:
 		text = "  YANK "
 		attrs = term.Attributes{Bg: tcell.ColorFuchsia, Fg: tcell.ColorBlack}
@@ -298,8 +292,8 @@ func (vi *viHandlerImpl) setGMode() {
 
 const foldHighlightLocationListID = "_foldHighlightID"
 
-func (vi *viHandlerImpl) setFoldMode() {
-	vi.setMode(foldMode)
+func (vi *viHandlerImpl) setZMode() {
+	vi.setMode(zMode)
 	vi.cursor.FoldAt(context.Background(), func(fold term.Range, ok bool) {
 		foldHighlightAttr := term.Attributes{Bg: tcell.ColorGray}
 		if !ok {
@@ -471,6 +465,42 @@ func (vi *viHandlerImpl) handleNormal(ev term.Event) (quit, handled bool) {
 	switch ev.Mod {
 	case term.ModCtrl:
 		switch ev.Ch {
+		case 'e':
+			pos := vi.cursor.CursorAtScroll()
+			if handled = vi.less.Scroll().SeekDown(); handled {
+				win, _ := vi.cursor.WindowCoordinates(pos)
+				if win.Y >= 0 {
+					vi.cursor.SetCursorAtScroll(pos)
+				}
+			}
+		case 'y':
+			pos := vi.cursor.CursorAtScroll()
+			if handled = vi.less.Scroll().SeekUp(); handled {
+				win, _ := vi.cursor.WindowCoordinates(pos)
+				if win.Y < vi.less.Scroll().SizeHeight() {
+					vi.cursor.SetCursorAtScroll(pos)
+				}
+			}
+		case 'f':
+			handled = vi.cursor.MoveDownLines(vi.less.Scroll().SizeHeight())
+			if handled {
+				vi.cursor.RepositionTop()
+			}
+		case 'b':
+			handled = vi.cursor.MoveUpLines(vi.less.Scroll().SizeHeight())
+			if handled {
+				vi.cursor.RepositionBottom()
+			}
+		case 'd':
+			handled = vi.cursor.MoveDownLines(vi.less.Scroll().SizeHeight() / 2)
+			if handled {
+				vi.cursor.RepositionTop()
+			}
+		case 'u':
+			handled = vi.cursor.MoveUpLines(vi.less.Scroll().SizeHeight() / 2)
+			if handled {
+				vi.cursor.RepositionBottom()
+			}
 		case 'v':
 			vi.setVisualBlockMode()
 			handled = true
@@ -500,7 +530,7 @@ func (vi *viHandlerImpl) handleNormal(ev term.Event) (quit, handled bool) {
 			vi.setGMode()
 			doResetCount = false
 		case 'z':
-			vi.setFoldMode()
+			vi.setZMode()
 			doResetCount = false
 		case 'd':
 			vi.setDeleteMode(false)
@@ -1060,8 +1090,8 @@ func (vi *viHandlerImpl) Handle(ev term.Event) (quit, handled bool) {
 		quit, handled = vi.handleInsert(ev)
 	case gMode:
 		quit, handled = vi.handleGo(ev)
-	case foldMode:
-		quit, handled = vi.handleFold(ev)
+	case zMode:
+		quit, handled = vi.handleZ(ev)
 	case yankMode:
 		quit, handled = vi.handleYank(ev)
 	case deleteMode:
@@ -1104,7 +1134,7 @@ func (vi *viHandlerImpl) doMoveToBounds(prev text.CursorMark) {
 	}
 
 	switch vi.mode() {
-	case normalMode, yankMode, searchMode, foldMode, gMode, deleteMode:
+	case normalMode, yankMode, searchMode, zMode, gMode, deleteMode:
 		if !vi.config.debug && vi.config.cursorCorrections {
 			prevCoords := vi.cursor.Coordinates()
 			vi.cursor.MoveToBounds(0)
@@ -1176,8 +1206,11 @@ func (vi *viHandlerImpl) setLocationList(
 func (vi *viHandlerImpl) setCursorAtScroll(pos term.Coordinates) bool {
 	// setCursorAtScroll should be robust against resizes, etc.
 	// only the first client interaction should clear this position
-	vi.pendingSetCursor = new(term.Coordinates)
-	*vi.pendingSetCursor = pos
+	if vi.less.Scroll().Width() == 0 || vi.less.Scroll().SizeHeight() == 0 {
+		vi.pendingSetCursor = new(term.Coordinates)
+		*vi.pendingSetCursor = pos
+		return false
+	}
 
 	_, ok := vi.cursor.MoveToScroll(pos)
 	vi.free = vi.cursor.Mark()
@@ -1201,7 +1234,7 @@ func (vi *viHandlerImpl) unselect() bool {
 	return vi.cursor.Unselect()
 }
 
-func (vi *viHandlerImpl) handleFold(ev term.Event) (quit, handled bool) {
+func (vi *viHandlerImpl) handleZ(ev term.Event) (quit, handled bool) {
 	defer vi.cursor.SetLocationList(
 		textapi.LocationPriorityInfo, foldHighlightLocationListID, nil)
 
@@ -1210,10 +1243,21 @@ func (vi *viHandlerImpl) handleFold(ev term.Event) (quit, handled bool) {
 	switch ev.Mod {
 	case 0:
 		switch ev.Ch {
+		case '.':
+			handled = vi.cursor.Center()
+			if handled {
+				vi.cursor.MoveStartLineNonBlank()
+			}
+		case 'z':
+			handled = vi.cursor.Center()
 		case 'v', 'V':
 			handled = vi.cursor.SelectFold(ctx)
 			visual = true
 			vi.setVisualMode()
+		case 't':
+			handled = vi.cursor.RepositionTop()
+		case 'b':
+			handled = vi.cursor.RepositionBottom()
 		case 'c':
 			handled = vi.cursor.CollapseFold(ctx)
 		case 'o':

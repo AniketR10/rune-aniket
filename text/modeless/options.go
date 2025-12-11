@@ -48,6 +48,7 @@ type modelessConfig struct {
 	workspace          workspaceapi.URI
 	clipboard          clipboard.Register
 	notifications      browserapi.Notifications
+	autoCenter         bool
 	statusBarConfig    text.StatusBarConfig
 	statusBarEnabled   bool
 	scheduleNextTick   func(fn func()) bool
@@ -104,6 +105,14 @@ func WithScheduleNextTick(fn func(func()) bool) Option {
 func WithNotifications(noti browserapi.Notifications) Option {
 	return func(cfg *modelessConfig) {
 		cfg.notifications = noti
+	}
+}
+
+// WithAutoCenter determines whether the editor should automatically
+// center the cursor after SetCursorAtScroll.
+func WithAutoCenter(enabled bool) Option {
+	return func(cfg *modelessConfig) {
+		cfg.autoCenter = enabled
 	}
 }
 
