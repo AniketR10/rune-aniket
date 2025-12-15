@@ -271,9 +271,9 @@ var (
 		},
 		"windowtogglemaximize": {
 			man: textapi.CommandManual{
-				Summary: "This is a toggle version of 'resizeWindow max height+width'." +
+				Summary: "This is a toggle version of 'windowresize max height+width'." +
 					"A subsequent invocation of this command will effectively reset the " +
-					"window size via 'resizeWindow reset'. Shifting the focus to another " +
+					"window size via 'windowresize reset'. Shifting the focus to another " +
 					"window also resets the size of the current window in fullscreen.",
 			},
 			handler: (*ex).windowtogglemaximize,
@@ -344,7 +344,7 @@ var (
 				Summary: "Opens a new terminal emulator and attaches it to the current " +
 					"active window. The terminal created by this command is automatically " +
 					"closed when the content of the window is updated for example by " +
-					"'nextTab' or 'previousTab'. If 'shell' is not set in " +
+					"'tabnext' or 'tabprevious'. If 'shell' is not set in " +
 					"terminal config, then the default system shell defined via SHELL " +
 					"environment variable is used.",
 			},
@@ -357,7 +357,7 @@ var (
 					"the window is not empty. The terminal created by this " +
 					"command is automatically closed when the content of the " +
 					"window is updated for example by " +
-					"'nextTab' or 'previousTab'. If 'shell' is not set in " +
+					"'tabnext' or 'tabprevious'. If 'shell' is not set in " +
 					"terminal config, then the default system shell defined via SHELL " +
 					"environment variable is used.",
 			},
