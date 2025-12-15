@@ -34,7 +34,7 @@ import (
 )
 
 // Flames cross the screen from bottom to top.
-func Flames(params FlamesParams, fps float) shader.Shader {
+func Flames(params FlamesParams, defaultAttr term.Attributes, fps float) shader.Shader {
 	// Change normalized parameters to suitable ranges.
 	params.Fuel *= 7.0       // from 0..1 to 0..7
 	params.JitteryBirth *= 3 // from 0..1 to 0..3
@@ -43,6 +43,7 @@ func Flames(params FlamesParams, fps float) shader.Shader {
 	params.ClumpHeight *= 10 // from 0..1 to 0..10
 
 	return &flames{
+		defaultAttr:  defaultAttr,
 		FlamesParams: params,
 		flamesOptimization: flamesOptimization{
 			prevFrame: flamesUnset,
@@ -346,14 +347,14 @@ func (s *flames) processCell(x, y int, frame, total int, cells [][]term.Cell) {
 				fadingTail,
 				cells[y][x].Bg,
 				s.sampleFlamesGradient(factor),
-				s.defaultAttr.Fg,
+				s.defaultAttr.Bg,
 			)
 		} else {
 			fg = shaderutils.InterpolateColor(
 				fadingTail,
-				cells[y][x].Fg,
+				cells[y][x].Bg,
 				s.sampleFlamesGradient(factor),
-				s.defaultAttr.Fg,
+				s.defaultAttr.Bg,
 			)
 		}
 
@@ -385,7 +386,7 @@ func (s *flames) processCell(x, y int, frame, total int, cells [][]term.Cell) {
 			s.defaultAttr.Bg,
 		)
 
-		// If the flame animation char is the fullblock we can do something
+		// If the flame animation char is not the fullblock (is fading) we can do something
 		// more interesting than rendering a full cell. We replace it with the
 		// original character it is covering and that character we give it a
 		// color from the same gradient but mirroring across the middle, that
@@ -393,11 +394,7 @@ func (s *flames) processCell(x, y int, frame, total int, cells [][]term.Cell) {
 		// out more. And we darken it afterwards to avoid the ending of the
 		// animation showing super bright foregrounds, since it should be
 		// something ashy and burnt, that's why we dress it with a black fade.
-		//
-		// One extra note: at the very beginning of the animation if it's a
-		// full block we show the original char on its original foreground and
-		// transition it smoothly to the aforementioned logic for a softer look.
-		if char == '█' {
+		if char != blockChar {
 			char = cells[y][x].Ch
 			bg = fg
 			const (
@@ -558,62 +555,63 @@ func (s *flames) wouldRenderNothing() bool {
 	return true
 }
 
+const blockChar = '█'
+
 func defaultFlamesChars() []rune {
 	return []rune{
-		'\'',
-		'.',
-		'.',
-		'.',
-		'.',
-		'.',
-		'▐',
-		'▟',
-		'█',
-		'█',
-		'█',
-		'█',
-		'█',
-		'█',
-		'█',
-		'█',
-		'█',
-		'█',
-		'█',
-		'█',
-		'█',
-		'█',
-		'█',
-		'█',
-		'█',
-		'█',
-		'█',
-		'█',
-		'█',
-		'█',
-		'█',
-		'█',
-		'█',
-		'█',
-		'█',
-		'█',
-		'█',
-		'█',
-		'█',
-		'█',
-		'O',
-		'O',
-		'O',
-		'o',
-		'o',
-		'o',
-		'o',
-		'o',
-		'.',
-		'.',
-		'.',
-		'.',
-		'.',
-		'.',
+		'░',
+		'░',
+		'▒',
+		'▒',
+		'▒',
+		'▓',
+		'▓',
+		'▓',
+		'▓',
+		blockChar,
+		blockChar,
+		blockChar,
+		blockChar,
+		blockChar,
+		blockChar,
+		blockChar,
+		blockChar,
+		blockChar,
+		blockChar,
+		blockChar,
+		blockChar,
+		blockChar,
+		blockChar,
+		blockChar,
+		blockChar,
+		blockChar,
+		blockChar,
+		blockChar,
+		blockChar,
+		blockChar,
+		blockChar,
+		blockChar,
+		blockChar,
+		blockChar,
+		blockChar,
+		blockChar,
+		blockChar,
+		blockChar,
+		blockChar,
+		blockChar,
+		blockChar,
+		blockChar,
+		blockChar,
+		blockChar,
+		'▓',
+		'▓',
+		'▓',
+		'▓',
+		'▒',
+		'▒',
+		'▒',
+		'░',
+		'░',
 	}
 }
 
@@ -630,45 +628,43 @@ func blockierFlames() []rune {
 		'.',
 		'▖',
 		'▙',
-		'█',
-		'█',
-		'█',
-		'█',
-		'█',
-		'█',
-		'█',
-		'█',
-		'█',
-		'█',
-		'█',
-		'█',
-		'█',
-		'█',
-		'█',
-		'█',
-		'█',
-		'█',
-		'█',
-		'█',
-		'█',
-		'█',
-		'█',
-		'█',
-		'█',
-		'█',
-		'█',
-		'█',
-		'█',
-		'█',
-		'█',
-		'█',
-		'█',
-		'█',
-		'█',
-		'█',
-		'█',
-		'█',
-		'█',
+		blockChar,
+		blockChar,
+		blockChar,
+		blockChar,
+		blockChar,
+		blockChar,
+		blockChar,
+		blockChar,
+		blockChar,
+		blockChar,
+		blockChar,
+		blockChar,
+		blockChar,
+		blockChar,
+		blockChar,
+		blockChar,
+		blockChar,
+		blockChar,
+		blockChar,
+		blockChar,
+		blockChar,
+		blockChar,
+		blockChar,
+		blockChar,
+		blockChar,
+		blockChar,
+		blockChar,
+		blockChar,
+		blockChar,
+		blockChar,
+		blockChar,
+		blockChar,
+		blockChar,
+		blockChar,
+		blockChar,
+		blockChar,
+		blockChar,
 		'▜',
 		'▀',
 		'▝',

@@ -40,7 +40,7 @@ import (
 func Incendium(
 	params IncendiumParams, defaultAttr term.Attributes, fps float,
 ) shader.Shader {
-	shFlames := Flames(params.Flames, fps).(*flames)
+	shFlames := Flames(params.Flames, defaultAttr, fps).(*flames)
 	shEmbers := Embers(params.Embers, defaultAttr, fps).(*embers)
 	shRisingChars := RisingChars(params.RisingChars, defaultAttr).(*risingChars)
 	return &incendium{

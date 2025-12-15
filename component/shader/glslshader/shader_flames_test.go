@@ -27,9 +27,10 @@ import (
 	"testing"
 
 	"unstable.build/go-tui/component/shader/shadertest"
+	"unstable.build/go-tui/term"
 )
 
 func TestFlames(t *testing.T) {
-	sh := Flames(DefaultFlamesParams(), 30)
+	sh := Flames(DefaultFlamesParams(), term.Attributes{}, 30)
 	shadertest.TestShader(t, sh)
 }

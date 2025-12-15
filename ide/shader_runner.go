@@ -149,19 +149,19 @@ func (r *shaderRunner) HandleCommand(ctx context.Context, cmd textapi.Command) (
 		)
 	case "flames":
 		s = wrapShaderCrossFadeInOut(
-			glslshader.Flames(glslshader.DefaultFlamesParams(), float64(fps)),
+			glslshader.Flames(glslshader.DefaultFlamesParams(), r.defAttr, float64(fps)),
 			0.0, fadeOutPerc,
 			r.defAttr,
 		)
 	case "flamesA":
 		s = wrapShaderCrossFadeInOut(
-			glslshader.Flames(glslshader.FlamesPresetAShape(), float64(fps)),
+			glslshader.Flames(glslshader.FlamesPresetAShape(), r.defAttr, float64(fps)),
 			0.0, fadeOutPerc,
 			r.defAttr,
 		)
 	case "flamesV":
 		s = wrapShaderCrossFadeInOut(
-			glslshader.Flames(glslshader.FlamesPresetVShape(), float64(fps)),
+			glslshader.Flames(glslshader.FlamesPresetVShape(), r.defAttr, float64(fps)),
 			0.0, fadeOutPerc,
 			r.defAttr,
 		)
