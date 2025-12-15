@@ -46,19 +46,21 @@ func Bomb(params BombParams, defaultAttrs term.Attributes) Shader {
 
 // BombParams defines the parameters used by the Bomb shader.
 type BombParams struct {
-	RingCol       tcell.Color
-	RingStart     float64
-	RingEnd       float64
-	CharBandwidth float64
+	RingCol         tcell.Color
+	RingStart       float64
+	RingEnd         float64
+	CharBandwidth   float64
+	ShiftCharacters bool
 }
 
 // DefaultBombParams return a set of sane BombParams.
 func DefaultBombParams() BombParams {
 	return BombParams{
-		RingCol:       tcell.NewRGBColor(255, 0, 0),
-		RingStart:     0.5,
-		RingEnd:       0.8,
-		CharBandwidth: 0.3,
+		RingCol:         tcell.NewRGBColor(255, 0, 0),
+		RingStart:       0.5,
+		RingEnd:         0.8,
+		CharBandwidth:   0.3,
+		ShiftCharacters: true,
 	}
 }
 
@@ -108,7 +110,7 @@ func (s *bomb) Shade(epoch, total int, cells [][]term.Cell) {
 				cells[y][x].Bg = bg
 
 				// show text in the inner circle from certain threshold
-				if vl >= (rl * (t - s.CharBandwidth)) {
+				if s.ShiftCharacters && vl >= (rl*(t-s.CharBandwidth)) {
 					i := int(wh + vx)
 					j := int(hh + vy)
 
