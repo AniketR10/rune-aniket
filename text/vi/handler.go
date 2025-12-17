@@ -128,6 +128,7 @@ func (vi *viHandlerImpl) init(buf *cell.Buffer, cfg viConfig) {
 	scroll.ResultsAttr = vi.config.resAttr
 	scroll.Subscribe(vi)
 	vi.cursor.Init(vi.less.Scroll(), vi.config.scheduleNextTick)
+	vi.cursor.RightInclusiveSemantics = true
 	vi.repeater.Init(&vi.cursor, buf)
 
 	vi.free = vi.cursor.Mark()
@@ -154,6 +155,7 @@ func (vi *viHandlerImpl) initWithScroll(scroll *component.Scroll, opts ...Option
 	// was initialized with subscription functionality.
 	// vi.repeater.Init(&vi.cursor, scroll.Buffer())
 	vi.cursor.InitPerformance(vi.less.Scroll())
+	vi.cursor.RightInclusiveSemantics = true
 	vi.free = vi.cursor.Mark()
 	vi.setMode(normalMode)
 	vi.resetCount()
@@ -670,10 +672,10 @@ func (vi *viHandlerImpl) handleNormal(ev term.Event) (quit, handled bool) {
 			}
 		case '#':
 			vi.searchMode = moveToPrev
-			vi.search(vi.cursor.Word())
+			vi.searchWord(vi.cursor.Word())
 		case '*':
 			vi.searchMode = moveToNext
-			vi.search(vi.cursor.Word())
+			vi.searchWord(vi.cursor.Word())
 		default:
 			switch ev.Key {
 			case term.KeyEsc:
@@ -725,6 +727,17 @@ func (vi *viHandlerImpl) resetCount() {
 
 func (vi *viHandlerImpl) search(text string) {
 	vi.cursor.Search(text)
+	switch vi.searchMode {
+	case moveToNext:
+		vi.cursor.MoveToNextMatch()
+	case moveToPrev:
+		vi.cursor.MoveToPrevMatch()
+	default:
+	}
+}
+
+func (vi *viHandlerImpl) searchWord(text string) {
+	vi.cursor.SearchWord(text)
 	switch vi.searchMode {
 	case moveToNext:
 		vi.cursor.MoveToNextMatch()
@@ -846,6 +859,10 @@ func (vi *viHandlerImpl) handleVisual(ev term.Event) (quit, handled bool) {
 		case 's', 'c':
 			vi.cursor.DeleteSelection()
 			vi.setInsertMode()
+		case 'u':
+			vi.cursor.LowercaseSelection()
+		case 'U':
+			vi.cursor.UppercaseSelection()
 		case 'I':
 			switch vi.mode() {
 			case visualBlockMode:
@@ -1051,6 +1068,8 @@ func (vi *viHandlerImpl) handleGo(ev term.Event) (quit, handled bool) {
 	switch ev.Mod {
 	case 0:
 		switch ev.Ch {
+		// lowercase case 'u':
+		// uppercase case 'U':
 		case 'g':
 			vi.cursor.MoveToMark(vi.free)
 			if vi.count == 1 {

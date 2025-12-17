@@ -305,10 +305,19 @@ func (vi *Vi) SetLocationList(
 // SetCursorAtScroll sets the cursor of this Vi handler at content pos.
 func (vi *Vi) SetCursorAtScroll(pos term.Coordinates) bool {
 	ok := vi.handler.setCursorAtScroll(pos)
-	if ok && vi.config.autoCenter {
-		vi.cursor.Center()
+	if !ok || !vi.config.autoCenter {
+		return ok
 	}
-	return ok
+	if !vi.cursor.Center() {
+		return true
+	}
+	// after calling center, the free cursor (used for repositioning
+	// after out of bounds repositioning when moving up/down),
+	// needs to be reset
+	if vh, ok := vi.handler.(*viHandlerImpl); ok {
+		vh.free = vi.cursor.Mark()
+	}
+	return true
 }
 
 // CursorAtScroll sets the cursor of this Vi handler at content pos.

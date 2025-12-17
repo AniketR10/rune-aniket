@@ -38,6 +38,7 @@ import (
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/component/comptest"
+	"unstable.build/go-tui/handler/handlertest"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/text/texttest"
@@ -307,6 +308,43 @@ diff_buf_adjust(win_
 		pos := vi.CursorAtScroll()
 		assert.Equal(t, pos, term.Coordinates{Y: 7})
 	})
+}
+
+func TestSetCursorAtScrollCenter(t *testing.T) {
+	buf := cell.NewBuffer()
+	buf.WriteString(snippet)
+	vi := New(buf, uri,
+		WithAutoCenter(true),
+	)
+	vi.Resize(20, 10)
+	vi.SetCursorAtScroll(term.Coordinates{Y: 10, X: 5})
+
+	cases := []handlertest.SequenceTestCase{
+		{"",
+			`    void            
+diff_buf_adjust(win_
+{                   
+    win_T    *wp;   
+    int             
+▐                   
+    if (!win->w_p_di
+    {               
+    /* When there is
+     * it from the d`},
+		{"j", // free mark works after SetCursorAtScroll
+			`    void            
+diff_buf_adjust(win_
+{                   
+    win_T    *wp;   
+    int             
+                    
+   ▐if (!win->w_p_di
+    {               
+    /* When there is
+     * it from the d`},
+	}
+
+	handlertest.TestHandlerSequence(t, vi, 20, 10, cases)
 }
 
 type mockHandler struct {

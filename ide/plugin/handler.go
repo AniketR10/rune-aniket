@@ -388,8 +388,13 @@ func (e *Handler) initializeDoneHandler() {
 			vi.WithClipboard(e.cfg.Clipboard),
 		)
 	} else {
-		main = modeless.NewHandler(e.cfg.Clipboard, buf, uri, false, true,
-			e.cfg.Attributes, e.cfg.SelectionAttributes, nil)
+		main = modeless.NewHandler(buf, uri,
+			modeless.WithResAttr(e.cfg.SelectionAttributes),
+			modeless.WithAttr(e.cfg.Attributes),
+			modeless.WithWrap(false),
+			modeless.WithCommandBar(true),
+			modeless.WithClipboard(e.cfg.Clipboard),
+		)
 	}
 
 	e.doneHandler = e.newUnion(main)

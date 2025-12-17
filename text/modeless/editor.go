@@ -45,6 +45,7 @@ func Editor(opts ...Option) text.Editor {
 		ret.fileRegistry = text.NewFileCommandRegistry(
 			ret.modelessConfig.workspace, ret.modelessConfig.registry)
 	}
+	ret.opts = opts
 	return ret
 }
 
@@ -52,13 +53,13 @@ type editor struct {
 	modelessConfig
 	fileRegistry text.FileCommandRegistry
 	pub          text.Publisher
+	opts         []Option
 }
 
 func (e *editor) Edit(
 	file workspaceapi.URI, buf *cell.Buffer, readOnly, recovered bool,
 ) (ret text.Handler, err error) {
-	handler := NewHandler(e.clipboard, buf, file, e.wrap,
-		e.commandBar, e.attr, e.resAttr, e.scheduleNextTick)
+	handler := NewHandler(buf, file, e.opts...)
 	ret = handler
 	if e.fileRegistry != nil {
 		var err error

@@ -1385,6 +1385,12 @@ func (e *ex) handleEvent(ev term.Event) (
 		cmdsAndArgs, _ = e.comp.CommandKeyBinding(keyComb)
 	}
 
+	// if match is a single "" command, then this is effectively unsetting
+	// a key binding.
+	if len(cmdsAndArgs) == 1 && len(cmdsAndArgs[0]) == 1 && cmdsAndArgs[0][0] == "" {
+		cmdsAndArgs = nil
+	}
+
 	// dispatch command or sequence of commands
 	for _, cmdAndArgs := range cmdsAndArgs {
 		quit, err := e.runCommand(cmdAndArgs[0], cmdAndArgs[1:])

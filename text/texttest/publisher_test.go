@@ -43,6 +43,7 @@ func newEdit(content string) (*cell.Buffer, *component.Scroll, *text.Cursor) {
 	buf.WriteString(content)
 	scroll := component.NewScroll(buf)
 	cursor := text.NewCursor(scroll, nil)
+	cursor.RightInclusiveSemantics = true
 	return buf, scroll, cursor
 }
 

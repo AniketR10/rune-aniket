@@ -37,6 +37,7 @@ func TestRepeater(t *testing.T) {
 	scroll := component.NewScroll(buf)
 	scroll.Resize(10, 10)
 	cursor := NewCursor(scroll, nil)
+	cursor.RightInclusiveSemantics = true
 	repeater := NewRepeater(cursor, buf)
 
 	cursor.InsertString("helloworld")

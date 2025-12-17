@@ -88,10 +88,15 @@ type message struct {
 
 // Cursor is a helper structure which manages a cursor over a Scroll.
 type Cursor struct {
+	// RightInclusiveSemantics changes the cursor selection behaviour to
+	// add the current cursor position to the selection.
+	RightInclusiveSemantics bool
+
 	scroll     *component.Scroll
 	search     string
 	cursor     term.Coordinates
 	shouldSeek bool
+	searchAttr term.Attributes
 
 	scheduleNextTick func(func()) bool
 
@@ -159,6 +164,11 @@ func (c *Cursor) InitPerformance(scroll *component.Scroll) {
 	c.selection.mode = NoSelection
 	c.subscriber.c = c
 	c.locationStore.Init()
+
+	// zero-out scroll attributes so we can better control
+	// what gets highlighted upon search/search word, etc.
+	c.searchAttr = scroll.ResultsAttr
+	scroll.ResultsAttr = term.Attributes{}
 }
 
 func (c *curSubscriber) OnWillEdit(
@@ -169,7 +179,7 @@ func (c *curSubscriber) OnWillEdit(
 func (c *curSubscriber) OnDidEdit(
 	ctx context.Context, from, to term.Coordinates, old string,
 ) {
-	c.c.setSearchLocationList(c.c.search)
+	c.c.setSearchLocationList(c.c.search, false)
 }
 
 // Coordinates returns the current position of the cursor.
@@ -311,6 +321,9 @@ func (c *Cursor) moveToScroll(pos term.Coordinates) {
 }
 
 func (c *Cursor) seekToScrollCoordinates() {
+	if c.scroll.Width() == 0 || c.scroll.SizeHeight() == 0 {
+		return
+	}
 	pos := c.cursor
 	// scroll can return some coordinates that are be outside
 	// of the bounds of the current window.
@@ -356,31 +369,17 @@ func (c *Cursor) setCursor(pos term.Coordinates, seek bool) {
 	}
 }
 
-func (c *Cursor) setSearchLocationList(text string) int {
-	c.search = text
-	n := c.scroll.Search(text)
-
-	searchLoc := make([]textapi.Location, n)
-	for i := 0; i < n; i++ {
-		res, ok := c.scroll.NextResult()
-		if !ok {
-			panic("invalid scroll search results")
-		}
-		searchLoc[i] = textapi.Location{
-			From: res,
-			To:   term.Coordinates{Y: res.Y, X: res.X + len(text) - 1},
-			Attr: c.scroll.ResultsAttr,
-		}
-	}
-
-	c.SetLocationList(internalLocationListPriority, searchLocationListID, LocationSlice(searchLoc))
-	return n
-}
-
 // Search searches text string in the underlying cell buffer. It returns
 // the number of occurrences found.
 func (c *Cursor) Search(text string) int {
-	n := c.setSearchLocationList(text)
+	n := c.setSearchLocationList(text, false /* word */)
+	return n
+}
+
+// SearchWord searches the given word in the underlying cell buffer. It returns
+// the number of occurrences found.
+func (c *Cursor) SearchWord(text string) int {
+	n := c.setSearchLocationList(text, true /* word */)
 	return n
 }
 
@@ -454,7 +453,10 @@ func (c *Cursor) MoveStartLineNonBlank() bool {
 // to the end of the line if required.
 func (c *Cursor) MoveEndLine() (ok bool) {
 	y := c.cursorAtScroll().Y
-	x := c.view().Columns(y) - 1
+	x := c.view().Columns(y)
+	if x > 0 && c.RightInclusiveSemantics {
+		x--
+	}
 	_, ok = c.MoveToScroll(term.Coordinates{Y: y, X: x})
 	return
 }
@@ -469,9 +471,8 @@ func (c *Cursor) MoveFirstLine() (ok bool) {
 // MoveLastLine moves the cursor to the last line, scrolling the content
 // if required.
 func (c *Cursor) MoveLastLine() (ok bool) {
-	height := c.scroll.SizeHeight()
 	max := c.rows()
-	if height == 0 || max == 0 {
+	if max == 0 {
 		return
 	}
 	_, ok = c.MoveToScroll(term.Coordinates{Y: max - 1})
@@ -494,7 +495,8 @@ func (c *Cursor) MoveDown() (ok bool) {
 		return
 	}
 	ok = true
-	c.setCursor(term.Coordinates{X: c.cursor.X, Y: c.cursor.Y + 1}, false)
+	at := term.Coordinates{X: c.cursor.X, Y: c.cursor.Y + 1}
+	c.setCursor(at, false)
 	return
 }
 
@@ -578,8 +580,11 @@ func (c *Cursor) MoveLeftColumns(n int) (ok bool) {
 // of the content is reached.
 func (c *Cursor) MoveRight() (ok bool) {
 	atScroll := c.cursorAtScroll()
-	if (atScroll.Y < c.rows() && atScroll.X+1 > c.view().Columns(atScroll.Y)) ||
-		atScroll.Y >= c.rows() {
+	if atScroll.Y >= c.rows() {
+		return
+	}
+	max := c.view().Columns(atScroll.Y)
+	if atScroll.Y < c.rows() && atScroll.X+1 > max {
 		return
 	}
 	if c.scroll.Wrap {
@@ -587,11 +592,9 @@ func (c *Cursor) MoveRight() (ok bool) {
 		return
 	}
 	if c.cursor.X+1 >= c.scroll.Width() {
-		if !c.scroll.Wrap {
-			ok = c.scroll.SeekRight()
-			if ok {
-				c.setCursor(c.cursor, false)
-			}
+		ok = c.scroll.SeekRight()
+		if ok {
+			c.setCursor(c.cursor, false)
 		}
 		return
 	}
@@ -622,19 +625,23 @@ func (c *Cursor) MoveLeftWrap() bool {
 		c.MoveEndLine()
 		return true
 	}
+
 	pos := c.cursorAtScroll()
+	if c.scroll.Width() == 0 || pos.Y >= c.view().Rows() {
+		return false
+	}
 	i := pos.X / c.scroll.Width()
-	after := term.Coordinates{X: (i+1)*c.scroll.Width() - 1, Y: pos.Y}
-	_, ok = c.MoveToScroll(after)
-	return ok
+	after := term.Coordinates{
+		X: max(0, min(c.view().Columns(pos.Y)-1, (i+1)*c.scroll.Width()-1)),
+		Y: pos.Y,
+	}
+	c.MoveToScroll(after)
+	return true // MoveUp succeeded above
 }
 
 // MoveRightWrap will move the cursor to the right or wrap to beginning
 // of next line if cursor is at X=EOL
 func (c *Cursor) MoveRightWrap() bool {
-	if c.scroll.Width() == 0 && c.scroll.Wrap {
-		return false
-	}
 	ok := c.MoveRight()
 	if ok {
 		return true
@@ -648,9 +655,19 @@ func (c *Cursor) MoveRightWrap() bool {
 		return true
 	}
 	pos := c.cursorAtScroll()
+	if c.scroll.Width() == 0 || pos.Y >= c.view().Rows() {
+		return false
+	}
 	i := pos.X / c.scroll.Width()
-	_, ok = c.MoveToScroll(term.Coordinates{X: (i * c.scroll.Width()), Y: pos.Y})
-	return ok
+	if i == 0 {
+		return true
+	}
+	to := term.Coordinates{
+		X: max(0, min(c.view().Columns(pos.Y)-1, (i-1)*c.scroll.Width()+1)),
+		Y: pos.Y,
+	}
+	c.MoveToScroll(to)
+	return true // MoveDown succeeded above
 }
 
 func (c *Cursor) multiplyMove(n int, move func() bool) (ok bool) {
@@ -820,37 +837,107 @@ func (c *Cursor) MoveRightStartWordGroup() bool {
 
 // MoveLeftStartWordGroup moves the cursor left to the start of the previous word.
 func (c *Cursor) MoveLeftStartWordGroup() bool {
-	return c.moveBeforeRune(budgetFindWord, skipCharacters, skipCharacters, c.MoveLeftWrap)
+	return c.moveBeforeRune(budgetFindWord, skipCharacters,
+		skipCharacters, c.MoveLeftWrap)
 }
 
 // MoveRightEndWordGroup moves the cursor right to the end of the next or current word.
 func (c *Cursor) MoveRightEndWordGroup() bool {
-	return c.moveBeforeRune(budgetFindWord, skipCharacters, skipCharacters, c.MoveRightWrap)
+	ok := c.moveBeforeRune(budgetFindWord, skipCharacters,
+		skipCharacters, c.MoveRightWrap)
+	if !ok || c.RightInclusiveSemantics {
+		return false
+	}
+	c.MoveRight()
+	return true
 }
 
 // MoveLeftEndWordGroup moves the cursor left to the end of the previous word.
 func (c *Cursor) MoveLeftEndWordGroup() bool {
-	return c.moveAfterRune(budgetFindWord, skipCharacters, skipCharacters, c.MoveLeftWrap)
+	ok := c.moveAfterRune(budgetFindWord, skipCharacters,
+		skipCharacters, c.MoveLeftWrap)
+	if !ok || c.RightInclusiveSemantics {
+		return false
+	}
+	c.MoveRight()
+	return true
 }
 
 // MoveRightStartWord moves the cursor right to the start of the next word.
 func (c *Cursor) MoveRightStartWord() bool {
-	return c.moveAfterRune(budgetFindWord, skipCharacters, allSpecialCharacters, c.MoveRightWrap)
+	return c.moveAfterRune(budgetFindWord, skipCharacters,
+		allSpecialCharacters, c.MoveRightWrap)
 }
 
 // MoveLeftStartWord moves the cursor left to the start of the previous word.
 func (c *Cursor) MoveLeftStartWord() bool {
-	return c.moveBeforeRune(budgetFindWord, skipCharacters, allSpecialCharacters, c.MoveLeftWrap)
+	return c.moveBeforeRune(budgetFindWord, skipCharacters,
+		allSpecialCharacters, c.MoveLeftWrap)
+}
+
+// MoveLeftStartWordNoWrap moves the cursor left to the start of the previous word,
+// but as opposed to MoveLeftStartWord, it doesn't continue on the previous line after exhausting
+// results on the current line.
+func (c *Cursor) MoveLeftStartWordNoWrap() bool {
+	return c.moveBeforeRune(budgetFindWord, skipCharacters,
+		allSpecialCharacters, c.MoveLeft)
 }
 
 // MoveRightEndWord moves the cursor right to the end of the next or current word.
 func (c *Cursor) MoveRightEndWord() bool {
-	return c.moveBeforeRune(budgetFindWord, skipCharacters, allSpecialCharacters, c.MoveRightWrap)
+	ok := c.moveBeforeRune(budgetFindWord, skipCharacters,
+		allSpecialCharacters, c.MoveRightWrap)
+	if !ok || c.RightInclusiveSemantics {
+		return ok
+	}
+	c.MoveRight()
+	return true
+}
+
+// MoveRightEndWordNoWrap moves the cursor right to the end of the next or current word,
+// but as opposed to MoveRightEndWord, it doesn't continue on the next line after exhausting
+// results on the current line.
+func (c *Cursor) MoveRightEndWordNoWrap() bool {
+	ok := c.moveBeforeRune(budgetFindWord, skipCharacters,
+		allSpecialCharacters, c.MoveRight)
+	if !ok || c.RightInclusiveSemantics {
+		return ok
+	}
+	c.MoveRight()
+	return true
 }
 
 // MoveLeftEndWord moves the cursor left to the end of the previous word.
 func (c *Cursor) MoveLeftEndWord() bool {
-	return c.moveAfterRune(budgetFindWord, skipCharacters, allSpecialCharacters, c.MoveLeftWrap)
+	ok := c.moveAfterRune(budgetFindWord, skipCharacters,
+		allSpecialCharacters, c.MoveLeftWrap)
+	if !ok || c.RightInclusiveSemantics {
+		return ok
+	}
+	c.MoveRight()
+	return true
+}
+
+// IsStartWord returns true if cursor is at the start of a word.
+func (c *Cursor) IsStartWord() bool {
+	pos := c.cursorAtScroll()
+	start, _, word := c.scroll.WordAt(pos)
+	return word != "" && start == pos
+}
+
+// IsEndWord returns true if cursor is at the start of a word.
+func (c *Cursor) IsEndWord() bool {
+	pos := c.cursorAtScroll()
+	if pos.X > 0 && !c.RightInclusiveSemantics {
+		pos.X--
+	}
+	_, end, word := c.scroll.WordAt(pos)
+	if end.X > 0 && c.RightInclusiveSemantics {
+		end.X--
+	} else {
+		pos.X++
+	}
+	return word != "" && end == pos
 }
 
 // MoveToMatchingRune moves the cursor to the balanced matching rune of the rune at
@@ -892,7 +979,7 @@ func (c *Cursor) InsertLineAbove() {
 	pos := cursorAtScroll
 	pos.X = 0
 	c.buffer().Edit(ctx, pos, pos, "\n")
-	pos = c.tryIndent(ctx, pos)
+	pos, _ = c.tryIndent(ctx, pos)
 	c.selection.mode = mode
 	c.setSelection()
 	c.setCursorAfterUpdate(pos)
@@ -909,7 +996,7 @@ func (c *Cursor) InsertLineBelow() {
 	pos := c.cursorAtScroll()
 	pos.X = buf.Columns(pos.Y)
 	_, to, _ := buf.Edit(ctx, pos, pos, "\n")
-	to = c.tryIndent(ctx, to)
+	to, _ = c.tryIndent(ctx, to)
 
 	c.selection.mode = mode
 	c.setSelection()
@@ -931,9 +1018,13 @@ func (c *Cursor) InsertContext(ctx context.Context, r rune) {
 	pos := c.buffer().InsertContext(ctx, insertAt, r)
 	switch r {
 	case '\n':
-		pos = c.tryIndent(ctx, pos)
+		pos, _ = c.tryIndent(ctx, pos)
 	case '}', ']', ')':
-		pos = c.tryDedent(ctx, pos)
+		var ok bool
+		pos, ok = c.tryDedent(ctx, pos)
+		if ok {
+			pos.X++
+		}
 	}
 	c.selection.mode = mode
 	c.setSelection()
@@ -951,9 +1042,13 @@ func (c *Cursor) InsertWithAttr(r rune, attr term.Attributes) {
 	pos := c.buffer().InsertWithAttr(insertAt, r, attr)
 	switch r {
 	case '\n':
-		pos = c.tryIndent(context.Background(), pos)
+		pos, _ = c.tryIndent(context.Background(), pos)
 	case '}', ']', ')':
-		pos = c.tryDedent(context.Background(), pos)
+		var ok bool
+		pos, ok = c.tryDedent(context.Background(), pos)
+		if ok {
+			pos.X++
+		}
 	}
 	c.selection.mode = mode
 	c.setSelection()
@@ -1146,7 +1241,9 @@ func (c *Cursor) setSelection() (ok bool) {
 	to := c.cursorAtScroll()
 
 	from, to = term.CoordinatesSort(from, to)
-	to.X++
+	if c.RightInclusiveSemantics {
+		to.X++
+	}
 
 	var sels []cell.Selection
 	switch c.selection.mode {
@@ -1192,9 +1289,9 @@ func (c *Cursor) cursorAtScrollBounds() (pos term.Coordinates, ok bool) {
 		return
 	}
 
-	cols := c.view().Columns(pos.Y)
-	if pos.X > cols {
-		pos.X = cols
+	max = c.view().Columns(pos.Y)
+	if pos.X > max {
+		pos.X = max
 	}
 
 	return
@@ -1346,7 +1443,9 @@ func (c *Cursor) DeleteSelection() (ok bool) {
 
 	// buffer delete uses right exclusive semantics
 	from, to = term.CoordinatesSort(from, to)
-	to.X++
+	if c.RightInclusiveSemantics {
+		to.X++
+	}
 
 	var start term.Coordinates
 	var str string
@@ -1364,15 +1463,41 @@ func (c *Cursor) DeleteSelection() (ok bool) {
 	return
 }
 
+// UppercaseSelection updates the current text under selection to upper case
+// or does nothing and returns false.
+func (c *Cursor) UppercaseSelection() (ok bool) {
+	return c.selectionOp(func(cells string) string {
+		return strings.ToUpper(cells)
+	})
+}
+
+// LowercaseSelection updates the current text under selection to upper case
+// or does nothing and returns false.
+func (c *Cursor) LowercaseSelection() (ok bool) {
+	return c.selectionOp(func(cells string) string {
+		return strings.ToLower(cells)
+	})
+}
+
 // TryIndent attempts to indent the cursor if an indent service is available.
 func (c *Cursor) TryIndent() bool {
 	pos := c.cursorAtScroll()
-	end := c.tryIndent(context.Background(), pos)
-	if pos == end {
+	svc := c.getIndentService()
+	target, ok := svc.IndentationAt(pos.Y)
+	if !ok {
 		return false
 	}
-	c.setCursorAfterUpdate(end)
-	return true
+	after, ok := c.doTryIndent(context.Background(), pos, target)
+	if ok {
+		c.setCursorAfterUpdate(after)
+		return true
+	}
+	after, ok = c.doTryDedent(context.Background(), pos, target)
+	if ok {
+		c.setCursorAfterUpdate(after)
+		return true
+	}
+	return false
 }
 
 // ToggleHide either unhides the hidden block at cursor,
@@ -1401,6 +1526,9 @@ func (c *Cursor) HideSelection() (ok bool) {
 	}
 
 	from, to = term.CoordinatesSort(from, to)
+	if c.RightInclusiveSemantics {
+		to.X++
+	}
 	ok = c.scroll.MarkHidden(from.Y, to.Y)
 	if ok {
 		c.setCursorAfterUpdate(from)
@@ -2098,59 +2226,93 @@ func (c *Cursor) setCursorAfterUpdate(atScroll term.Coordinates) {
 	c.setCursor(res, c.shouldSeek)
 }
 
-func (c *Cursor) getIndentation(pos term.Coordinates) (ret int) {
+func (c *Cursor) getIndentation(pos term.Coordinates) (ret int, ok bool) {
 	cells := c.buffer().RawCells()
 	if pos.Y >= len(cells) {
-		return 0
+		return
 	}
-	for _, cell := range cells[pos.Y] {
+	for x, cell := range cells[pos.Y] {
 		switch cell.Ch {
 		case '\t':
 			ret++
 		case '\x00':
 		default:
+			ok = x == pos.X
 			return
 		}
 	}
 	return
 }
 
-func (c *Cursor) tryIndent(ctx context.Context, to term.Coordinates) term.Coordinates {
+func (c *Cursor) tryIndent(ctx context.Context, to term.Coordinates) (term.Coordinates, bool) {
 	svc := c.getIndentService()
 	indentation, ok := svc.IndentationAt(to.Y)
 	if !ok {
-		return to
+		return to, false
+	}
+	return c.doTryIndent(ctx, to, indentation)
+}
+
+func (c *Cursor) doTryIndent(ctx context.Context, to term.Coordinates, target int) (term.Coordinates, bool) {
+	current, _ := c.getIndentation(to)
+	diff := target - current
+	if diff <= 0 {
+		c.log(log.DebugLevel, "try indent: already equal or more than correct indentation: %d", target)
+		return to, false
 	}
 
 	var builder strings.Builder
-	for range indentation {
+	for range diff {
 		builder.WriteByte('\t')
 	}
 	buf := c.buffer()
 	tabs := builder.String()
+	// even if given position to indent is not at the start of the line
+	// to "indent" we must resolve to start of line
+	to.X = 0
 	_, _, _ = buf.Edit(ctx, to, to, tabs)
-	to.X += (indentation * buf.Tabspaces())
-	return to
+	to.X += (diff * buf.Tabspaces())
+	return to, true
 }
 
-func (c *Cursor) tryDedent(ctx context.Context, pos term.Coordinates) term.Coordinates {
+func (c *Cursor) tryDedent(ctx context.Context, pos term.Coordinates) (
+	term.Coordinates, bool,
+) {
 	svc := c.getIndentService()
 	indentation, ok := svc.IndentationAt(pos.Y)
 	if !ok {
-		return pos
+		return pos, false
 	}
+	return c.doTryDedent(ctx, pos, indentation)
+}
+
+func (c *Cursor) doTryDedent(ctx context.Context, pos term.Coordinates, target int) (
+	term.Coordinates, bool,
+) {
 	buf := c.buffer()
-	current := c.getIndentation(pos)
-	diff := current - indentation
+	current, _ := c.getIndentation(pos)
+	diff := current - target
+	if diff <= 0 {
+		c.log(log.TraceLevel, "try dedent: already equal or less than correct indentation: %d", target)
+		return pos, false
+	}
+	// start of edit should be at the end of starting tabs block
+	pos.X = current * buf.Tabspaces()
 	from := term.Coordinates{X: (pos.X - diff*buf.Tabspaces()), Y: pos.Y}
 	to := term.Coordinates{X: pos.X - 1, Y: pos.Y}
-	cells, _, ok := buf.Select(from, to)
-	if ok && len(cells) != 0 && isEmpty(cells[0]) && diff > 0 && from.X > 0 && to.X > 0 {
-		_, to, _ = buf.Edit(ctx, from, to, "")
-		to.X++
-		return to
+	if diff <= 0 || from.X < 0 || to.X < 0 {
+		c.log(log.TraceLevel, "try dedent: could not dedent at (%v), current: %d, "+
+			"should be: %d, from: %v, to: %v", pos, current, target, from, to)
+		return pos, false
 	}
-	return pos
+	cells, _, ok := buf.Select(from, to)
+	if ok && len(cells) != 0 && isEmpty(cells[0]) {
+		_, to, _ = buf.Edit(ctx, from, to, "")
+		return to, true
+	}
+	c.log(log.TraceLevel, "try dedent: could not dedent at (%v), cells: %#v, from: %#v, to: %#v ",
+		pos, isEmpty(cells[0]), from, to)
+	return pos, false
 }
 
 func isEmpty(cells []term.Cell) bool {
@@ -2257,6 +2419,87 @@ func (c *Cursor) isFoldHidden(start, end term.Coordinates) (bool, bool) {
 		return false, false
 	}
 	return foldStart.Y == foldEnd.Y, true
+}
+
+func (c *Cursor) selectionOp(fn func(string) string) (ok bool) {
+	if c.selection.mode == NoSelection {
+		return
+	}
+
+	mode := c.selection.mode
+	from := c.selection.scrollFrom
+	to, ok := c.cursorAtScrollBounds()
+	c.Unselect()
+	c.selection.mode = mode
+	if !ok {
+		return
+	}
+
+	// buffer delete uses right exclusive semantics
+	from, to = term.CoordinatesSort(from, to)
+	if c.RightInclusiveSemantics {
+		to.X++
+	}
+
+	var cells [][]term.Cell
+	switch mode {
+	case StandardSelection:
+		cells, _, ok = c.buffer().Select(from, to)
+		if ok {
+			str := cell.CellsToString(cells)
+			c.log(log.TraceLevel, "selectionOp: replace with cells: %#v, from: %v, to: %v", cells, from, to)
+			c.buffer().Edit(context.Background(), from, to, fn(str))
+		}
+	case LineSelection:
+		cells, _, ok = c.buffer().SelectLine(from, to)
+		if ok {
+			c.buffer().Edit(context.Background(), from, to, fn(cell.CellsToString(cells)))
+		}
+	case BlockSelection:
+		ok = false
+		return
+		/* not supported at the moment
+		cells, _, ok = c.buffer().SelectBlock(from, to)
+		if ok {
+			_, str := c.buffer().DeleteBlock(from, to)
+			c.InsertBlock(fn(str))
+		}
+		*/
+	}
+	if !ok {
+		return
+	}
+	c.selection.mode = NoSelection
+	return
+}
+
+func (c *Cursor) setSearchLocationList(text string, word bool) int {
+	c.search = text
+	n := c.scroll.Search(text)
+
+	searchLoc := make([]textapi.Location, 0, n)
+	for range n {
+		res, ok := c.scroll.NextResult()
+		if !ok {
+			panic("invalid scroll search results")
+		}
+		if word {
+			_, _, wordAtPos := c.scroll.WordAt(res)
+			// in word mode, if word doesn't match exactly
+			// continue with the next result
+			if text != wordAtPos {
+				continue
+			}
+		}
+		searchLoc = append(searchLoc, textapi.Location{
+			From: res,
+			To:   term.Coordinates{Y: res.Y, X: res.X + len(text)},
+			Attr: c.searchAttr,
+		})
+	}
+
+	c.SetLocationList(internalLocationListPriority, searchLocationListID, LocationSlice(searchLoc))
+	return len(searchLoc)
 }
 
 func (c *Cursor) log(level log.Level, msg string, args ...any) {

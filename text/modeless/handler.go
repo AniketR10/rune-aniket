@@ -25,15 +25,20 @@ package modeless
 
 import (
 	"context"
+	"strings"
 
+	"github.com/ernestrc/logd-go/logging"
 	log "github.com/sirupsen/logrus"
+	"github.com/unstablebuild/blue/iterator"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/handler"
+	"unstable.build/go-tui/ide/syntax"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
 )
@@ -41,51 +46,57 @@ import (
 var _ component.Scrollable = (*editorHandler)(nil)
 
 type editorHandler struct {
+	cfg              modelessConfig
 	buf              *cell.Buffer
 	less             handler.Less
 	statusBar        statusBar
+	pasteBuf         strings.Builder
+	pasteStarted     bool
 	resource         workspaceapi.URI
 	cursor           text.Cursor
 	height           int
 	mouse            *text.Mouse
 	clipboard        clipboard.Register
 	pendingSetCursor *term.Coordinates
+	lastIterateWord  term.Coordinates
+	metaK            bool
 }
 
 // NewHandler returns a modeless, simple-to-use text.Handler.
 func NewHandler(
-	clipboard clipboard.Register,
 	buf *cell.Buffer, resource workspaceapi.URI,
-	wrap, commandBar bool,
-	attr, resAttr term.Attributes,
-	scheduleNextTick func(func()) bool,
+	opts ...Option,
 ) text.Handler {
 	ret := new(editorHandler)
-	ret.Init(clipboard, buf, resource, wrap, commandBar,
-		attr, resAttr, scheduleNextTick)
+	ret.Init(buf, resource, opts...)
 	return ret
 }
 
 func (h *editorHandler) Init(
-	clipboard clipboard.Register,
 	buf *cell.Buffer, resource workspaceapi.URI,
-	wrap, commandBar bool,
-	attr, resAttr term.Attributes,
-	scheduleNextTick func(func()) bool,
+	opts ...Option,
 ) {
+	h.cfg = defaultConfig()
+	for _, o := range opts {
+		o(&h.cfg)
+	}
 	h.buf = buf
 	h.resource = resource
 	h.less.InitWithBuffer(buf, handler.LessConfig{
-		Wrap:               wrap,
-		NoBar:              !commandBar,
+		Wrap:               h.cfg.wrap,
+		NoBar:              !h.cfg.commandBar,
 		SuperimposeMessage: true,
-		ResAttr:            resAttr,
-		Attributes:         attr,
+		ResAttr:            h.cfg.resAttr,
+		Attributes:         h.cfg.attr,
 	})
-	h.cursor.Init(h.less.Scroll(), scheduleNextTick)
+	h.cursor.Init(h.less.Scroll(), h.cfg.scheduleNextTick)
 	h.mouse = text.NewMouse(text.CursorMouseDelegate(&h.cursor))
-	h.clipboard = clipboard
+	h.clipboard = h.cfg.clipboard
 	h.statusBar = nopBar{}
+	h.lastIterateWord.X = -1
+	if h.cfg.enableInitialFolds {
+		h.hideInitialFolds()
+	}
 }
 
 // Resize satisfies tui.Component
@@ -94,6 +105,7 @@ func (h *editorHandler) Resize(width, height int) {
 	h.less.Resize(width, height)
 	if h.pendingSetCursor != nil {
 		h.SetCursorAtScroll(*h.pendingSetCursor)
+		h.pendingSetCursor = nil
 	}
 }
 
@@ -108,14 +120,89 @@ func (h *editorHandler) Draw(w term.Writer) {
 	text.DrawLocations(h.cursor.SortedLocations(), h.less.Scroll(), w)
 }
 
+func (h *editorHandler) handleMetaK(ev term.Event) (handled bool) {
+	h.log(log.TraceLevel, "handle metak, event: %#v", ev)
+	if ev.Mod != term.ModMeta {
+		return
+	}
+	switch ev.Key {
+	case term.KeyBackspace:
+		if h.cursor.Select() {
+			h.cursor.MoveStartLine()
+			handled = h.cursor.DeleteSelection()
+		}
+	}
+	if handled {
+		return
+	}
+	switch ev.Ch {
+	case 'u':
+		handled = h.cursor.UppercaseSelection()
+	case 'l':
+		handled = h.cursor.LowercaseSelection()
+	case 'k':
+		if h.cursor.Select() {
+			h.cursor.MoveEndLine()
+			handled = h.cursor.DeleteSelection()
+		}
+	case 'j':
+		handled = h.cursor.ExpandAllFolds(context.Background())
+	case '1':
+		handled = h.cursor.CollapseAllFolds(context.Background())
+	}
+	return
+}
+
 func (h *editorHandler) Handle(ev term.Event) (exit, handled bool) {
 	ctx := context.Background()
 
 	// only a user event clears a pending set cursor
 	h.pendingSetCursor = nil
 
-	if ev.Type == term.EventMouse {
+	switch ev.Type {
+	case term.EventMouse:
 		return h.mouse.Handle(ev)
+	case term.EventPasteStart:
+		h.pasteBuf.Reset()
+		h.pasteStarted = true
+		handled = true
+		return
+	case term.EventPasteEnd:
+		str := h.pasteBuf.String()
+		if _, ok := h.cursor.SelectionMode(); ok {
+			handled = h.cursor.DeleteSelection()
+			h.cursor.Unselect()
+		} else {
+			h.cursor.InsertString(str)
+			handled = true
+		}
+		h.pasteStarted = false
+		return
+	case term.EventKey:
+	default:
+		return
+	}
+
+	if h.pasteStarted {
+		if ev.Ch != 0 {
+			h.pasteBuf.WriteRune(ev.Ch)
+			handled = true
+		}
+		return
+	}
+
+	if ev.Mod == term.ModShift {
+		switch ev.Key {
+		case term.KeyTab:
+			if _, ok := h.cursor.SelectionMode(); ok {
+				h.cursor.ShiftSelectionLeft()
+				h.cursor.Unselect()
+			} else {
+				h.cursor.ShiftLineLeft()
+			}
+			handled = true
+			return
+		}
 	}
 
 	var shift bool
@@ -127,17 +214,182 @@ func (h *editorHandler) Handle(ev term.Event) (exit, handled bool) {
 		shift = true
 	}
 
+	// if only Mod is pressed, then user might be
+	// preparing to fire next key/ch.
+	if h.metaK && (ev.Key != 0 || ev.Ch != 0) {
+		h.metaK = false
+		handled = h.handleMetaK(ev)
+		if handled {
+			return
+		}
+	}
+
 	cursorAt := h.cursor.CursorAtScroll()
 	switch ev.Mod {
+	case term.ModAltShift:
+		switch ev.Key {
+		case term.KeyArrowDown:
+			handled = h.duplicateLine(false /* down */)
+		case term.KeyArrowUp:
+			handled = h.duplicateLine(true /* up */)
+		}
+	case term.ModAltMeta:
+		switch ev.Key {
+		case 0:
+			switch ev.Ch {
+			case '[':
+				handled = h.cursor.CollapseFold(context.Background())
+			case ']':
+				handled = h.cursor.ExpandFold(context.Background())
+			}
+		}
+	case term.ModCtrlMeta:
+		switch ev.Key {
+		case term.KeyArrowDown:
+			handled = h.moveLine(false /* down */)
+		case term.KeyArrowUp:
+			handled = h.moveLine(true /* up */)
+		}
 	case term.ModAlt:
 		switch ev.Key {
+		case term.KeyArrowDown:
+			handled = h.moveLine(false /* down */)
+		case term.KeyArrowUp:
+			handled = h.moveLine(true /* up */)
 		case term.KeyArrowLeft:
 			handled = h.cursor.MoveLeftStartWord()
 		case term.KeyArrowRight:
-			handled = h.cursor.MoveRightStartWord()
+			handled = h.cursor.MoveRightEndWord()
+		case term.KeyBackspace:
+			h.cursor.Select()
+			h.cursor.MoveRightStartWord()
+			h.cursor.DeleteSelection()
+		case term.KeyDelete:
+			h.cursor.Select()
+			h.cursor.MoveLeftStartWord()
+			h.cursor.DeleteSelection()
+		case 0:
+			switch ev.Ch {
+			case '{':
+				handled = h.cursor.CollapseFold(context.Background())
+			case '}':
+				handled = h.cursor.ExpandFold(context.Background())
+			}
 		}
+	case term.ModMeta:
+		switch ev.Key {
+		case term.KeyArrowLeft:
+			handled = h.cursor.MoveStartLineNonBlank()
+		case term.KeyArrowRight:
+			handled = h.cursor.MoveEndLine()
+		case term.KeyArrowUp:
+			handled = h.cursor.MoveFirstLine()
+		case term.KeyArrowDown:
+			handled = h.cursor.MoveLastLine()
+		case term.KeyDelete:
+			if ok := h.cursor.Select(); ok {
+				h.cursor.MoveEndLine()
+				handled = h.cursor.DeleteSelection()
+			}
+		case 0:
+			switch ev.Ch {
+			case 'k':
+				h.log(log.TraceLevel, "waiting for metaK event")
+				h.metaK = true
+				handled = true
+			case 'j':
+				handled = h.cursor.Conflate()
+			case ']':
+				handled = h.cursor.TryIndent()
+			case '[':
+				handled = h.cursor.TryIndent()
+			case 'l':
+				if mode, ok := h.cursor.SelectionMode(); ok && mode == text.LineSelection {
+					handled = h.cursor.MoveDown()
+				} else {
+					handled = h.cursor.SelectLine()
+				}
+				// avoid unselect due to not shift
+				return
+			case 'D':
+				handled = h.duplicateLine(false /* down */)
+			case 'd':
+				handled = h.selectNextWordAtCursor()
+				return
+			case 'x':
+				if _, ok := h.cursor.SelectionMode(); !ok {
+					h.cursor.SelectLine()
+				}
+				_, err := h.cursor.CopySelectionNoUnselect(
+					clipboard.DefaultRegisterID, h.clipboard)
+				if err != nil {
+					h.log(log.ErrorLevel, "cursor copy selection: %v", err)
+				} else {
+					handled = h.cursor.DeleteSelection()
+				}
+			case 'f':
+				ev.Key = 0
+				ev.Ch = '/'
+				_, handled = h.less.Handle(ev)
+			case 'a':
+				if _, ok := h.cursor.SelectionMode(); ok {
+					h.cursor.Unselect()
+				}
+				h.cursor.MoveFirstLine()
+				if h.cursor.SelectLine() {
+					h.cursor.MoveLastLine()
+					h.cursor.MoveRight()
+					handled = true
+				}
+				return
+			// the following two are defined here in case we're not capturing them at the command level
+			case 'c':
+				_, err := h.cursor.CopySelection(clipboard.DefaultRegisterID, h.clipboard)
+				if err != nil {
+					h.log(log.ErrorLevel, "cursor copy selection: %v", err)
+				} else {
+					handled = true
+				}
+			case 'v':
+				paste, err := h.clipboard.Paste(clipboard.DefaultRegisterID)
+				if err != nil {
+					h.log(log.ErrorLevel, "clipboard paste: %v", err)
+				} else {
+					str := paste.Text
+					mode, _ := paste.Metadata.(text.SelectMode)
+					h.cursor.Paste(str, mode, true)
+					handled = true
+				}
+			case 'z':
+				handled = h.cursor.Undo()
+			case 'Z':
+				handled = h.cursor.Redo()
+			case 'K':
+				if h.cursor.SelectLine() {
+					handled = h.cursor.DeleteSelection()
+				}
+			}
+		}
+	// no modifier
 	case 0:
 		switch ev.Key {
+		case term.KeyEsc:
+			handled = h.cursor.Unselect()
+			h.cursor.Search("")
+		case term.KeyEnd:
+			handled = h.cursor.MoveEndLine()
+		case term.KeyHome:
+			handled = h.cursor.MoveStartLine()
+		case term.KeyPgup:
+			handled = h.cursor.MoveUpLines(h.less.Scroll().SizeHeight())
+			if handled {
+				h.cursor.RepositionBottom()
+			}
+		case term.KeyPgdn:
+			handled = h.cursor.MoveDownLines(h.less.Scroll().SizeHeight())
+			if handled {
+				h.cursor.RepositionTop()
+			}
 		case term.KeyArrowLeft:
 			handled = h.cursor.MoveLeft()
 		case term.KeyArrowRight:
@@ -175,6 +427,13 @@ func (h *editorHandler) Handle(ev term.Event) (exit, handled bool) {
 			} else {
 				handled = h.cursor.Backspace()
 			}
+		case term.KeyDelete:
+			if _, ok := h.cursor.SelectionMode(); ok {
+				handled = h.cursor.DeleteSelection()
+				h.cursor.Unselect()
+			} else {
+				handled = h.cursor.Delete()
+			}
 		default:
 			if ev.Ch != 0 {
 				if _, ok := h.cursor.SelectionMode(); ok {
@@ -188,23 +447,28 @@ func (h *editorHandler) Handle(ev term.Event) (exit, handled bool) {
 		}
 	case term.ModCtrl:
 		switch ev.Ch {
-		case 'c':
+		case 'y', 'c':
 			_, err := h.cursor.CopySelection(clipboard.DefaultRegisterID, h.clipboard)
 			if err != nil {
-				log.Errorf("cursor copy selection: %v", err)
+				h.log(log.ErrorLevel, "cursor copy selection: %v", err)
 			}
 			handled = true
+		case 'l':
+			handled = h.cursor.Center()
 		case 'v':
-			paste, err := h.clipboard.Paste(clipboard.DefaultRegisterID)
-			if err != nil {
-				log.Errorf("clipboard paste: %v", err)
-			} else {
-				str := paste.Text
-				h.cursor.Paste(str, text.StandardSelection, false)
-			}
-			handled = true
+			handled = h.less.Scroll().SeekDownPage()
+		case 'm':
+			handled = h.cursor.MoveToMatchingRune()
+		case 'd':
+			handled = h.cursor.Delete()
+		case 'h':
+			handled = h.cursor.Backspace()
 		case 'a':
 			handled = h.cursor.MoveStartLine()
+		case 'p':
+			handled = h.cursor.MoveUp()
+		case 'n':
+			handled = h.cursor.MoveDown()
 		case 'e':
 			handled = h.cursor.MoveEndLine()
 		case 'z':
@@ -213,27 +477,72 @@ func (h *editorHandler) Handle(ev term.Event) (exit, handled bool) {
 			handled = h.cursor.ToggleFold(ctx)
 		case 'A':
 			handled = h.cursor.ToggleAllFolds(ctx)
-		case 'r':
-			handled = h.cursor.Redo()
 		case 'f':
-			ev.Key = 0
-			ev.Ch = '/'
-			_, handled = h.less.Handle(ev)
+			handled = h.cursor.MoveRight()
+		case 'b':
+			handled = h.cursor.MoveLeft()
+		case 'k':
+			h.cursor.Select()
+			h.cursor.MoveEndLine()
+			handled = h.cursor.DeleteSelection()
+		case '-':
+			handled = h.cursor.MoveToNextMatch()
+		case '_':
+			handled = h.cursor.MoveToPrevMatch()
+		case 't':
+			if h.cursor.Select() {
+				handled, _ = h.cursor.CopySelectionNoUnselect(
+					clipboard.DefaultRegisterID, h.clipboard)
+				if handled {
+					h.cursor.DeleteSelection()
+					paste, err := h.clipboard.Paste(clipboard.DefaultRegisterID)
+					if err != nil {
+						h.log(log.ErrorLevel, "clipboard paste: %v", err)
+					} else {
+						str := paste.Text
+						h.cursor.Paste(str, text.StandardSelection, false)
+					}
+				}
+			}
+		case 'K':
+			if h.cursor.SelectLine() {
+				handled = h.cursor.DeleteSelection()
+			}
 		}
 	case term.ModCtrlAlt:
-		switch ev.Ch {
-		case 'h':
-			handled = h.cursor.HideSelection()
-			h.cursor.Unselect()
-		case 'v':
-			handled = h.cursor.Unhide()
-			h.cursor.Unselect()
+		switch ev.Key {
+		case term.KeyArrowUp:
+			pos := h.cursor.CursorAtScroll()
+			if handled = h.less.Scroll().SeekUp(); handled {
+				win, ok := h.cursor.WindowCoordinates(pos)
+				if ok && win.Y >= 0 {
+					h.cursor.MoveToScroll(pos)
+				}
+			}
+		case term.KeyArrowDown:
+			pos := h.cursor.CursorAtScroll()
+			if handled = h.less.Scroll().SeekDown(); handled {
+				win, ok := h.cursor.WindowCoordinates(pos)
+				if ok && win.Y >= 0 {
+					h.cursor.MoveToScroll(pos)
+				}
+			}
+		case 0:
+			switch ev.Ch {
+			case 'h':
+				handled = h.cursor.HideSelection()
+				h.cursor.Unselect()
+			case 'v':
+				handled = h.cursor.Unhide()
+				h.cursor.Unselect()
+			}
 		}
 	}
 
 	// if moved and shift is not pressed
 	if cursorAt != h.cursor.CursorAtScroll() && !shift {
 		h.cursor.Unselect()
+		h.cursor.Search("")
 	}
 	return
 }
@@ -277,14 +586,18 @@ func (t *editorHandler) ShowCommandBar(show bool) {
 func (h *editorHandler) SetCursorAtScroll(pos term.Coordinates) bool {
 	// setCursor should be robust against resizes, etc.
 	// only the first client interaction should clear this position
-	h.pendingSetCursor = new(term.Coordinates)
-	*h.pendingSetCursor = pos
+	if h.less.Scroll().Width() == 0 || h.less.Scroll().SizeHeight() == 0 {
+		h.pendingSetCursor = new(term.Coordinates)
+		*h.pendingSetCursor = pos
+		return false
+	}
 
 	_, ok := h.cursor.MoveToScroll(pos)
-	if !ok && h.CursorAtScroll() == pos {
-		return true // idempotent
+	if !ok || !h.cfg.autoCenter {
+		return ok
 	}
-	return ok
+	h.cursor.Center()
+	return true
 }
 
 func (h *editorHandler) SeekUp() bool {
@@ -337,6 +650,131 @@ func (h *editorHandler) LocationLists() []text.LocationSet {
 	return h.cursor.LocationLists()
 }
 
+func (h *editorHandler) moveLine(up bool) (handled bool) {
+	if _, ok := h.cursor.SelectionMode(); !ok {
+		if !h.cursor.SelectLine() {
+			return
+		}
+	}
+	handled, _ = h.cursor.CopySelectionNoUnselect(
+		clipboard.DefaultRegisterID, h.clipboard)
+	if !handled {
+		return
+	}
+	h.cursor.DeleteSelection()
+	if up {
+		h.cursor.MoveUp()
+	} else {
+		h.cursor.MoveDown()
+	}
+	h.cursor.MoveStartLine()
+	paste, err := h.clipboard.Paste(clipboard.DefaultRegisterID)
+	if err != nil {
+		h.log(log.ErrorLevel, "clipboard paste: %v", err)
+	} else {
+		str := paste.Text
+		h.cursor.Paste(str, text.StandardSelection, false)
+	}
+	return
+}
+
+func (h *editorHandler) duplicateLine(up bool) (handled bool) {
+	if _, ok := h.cursor.SelectionMode(); !ok {
+		if !h.cursor.SelectLine() {
+			return
+		}
+	}
+	handled, _ = h.cursor.CopySelection(
+		clipboard.DefaultRegisterID, h.clipboard)
+	if !handled {
+		return
+	}
+	if !up {
+		h.cursor.MoveDown()
+	}
+	h.cursor.MoveStartLine()
+	paste, err := h.clipboard.Paste(clipboard.DefaultRegisterID)
+	if err != nil {
+		h.log(log.ErrorLevel, "clipboard paste: %v", err)
+	} else {
+		str := paste.Text
+		h.cursor.Paste(str, text.StandardSelection, false)
+	}
+	return
+}
+
 func (h *editorHandler) setStatusBar(bar statusBar) {
 	h.statusBar = bar
+}
+
+func (h *editorHandler) log(level log.Level, msg string, args ...any) {
+	if !log.IsLevelEnabled(level) {
+		return
+	}
+	log.WithField(logging.KeyClass, "modeless.handler").Logf(level, msg, args...)
+}
+
+var _ foldsService = (*syntax.Tree)(nil)
+
+type foldsService interface {
+	FoldsFrom(pos term.Coordinates) (iterator.Iterator[term.Range], bool)
+	Folds() (iterator.Iterator[term.Range], bool)
+	InitialFolds() (iterator.Iterator[term.Range], bool)
+}
+
+func (h *editorHandler) hideInitialFolds() {
+	svc, ok := h.less.Buffer().View().(foldsService)
+	if !ok {
+		h.log(log.DebugLevel, "folds service not available for resource: %s", h.resource)
+		return
+	}
+	folds, ok := svc.InitialFolds()
+	if !ok {
+		h.log(log.DebugLevel, "initial folds returned false")
+		return
+	}
+
+	scroll := h.less.Scroll()
+
+	go debug.CapturePanicReport(func() {
+		folds, isEmpty := iterator.IsEmpty(context.Background(), folds)
+		if isEmpty {
+			folds.Close()
+			return
+		}
+		h.cfg.scheduleNextTick(func() {
+			defer folds.Close()
+			cursor := h.CursorAtScroll()
+			for {
+				fold, ok := folds.Next(context.Background())
+				if !ok {
+					break
+				}
+				scroll.MarkHidden(fold.Start.Y, fold.End.Y)
+			}
+			if err := folds.Err(); err != nil {
+				h.log(log.ErrorLevel, "error hiding initial folds: %v", err)
+			}
+			h.SetCursorAtScroll(cursor)
+		})
+	})
+}
+
+func (h *editorHandler) selectNextWordAtCursor() bool {
+	h.cursor.Unselect()
+	if h.cursor.IsEndWord() && !h.cursor.IsStartWord() {
+		h.cursor.MoveLeft()
+		word := h.cursor.Word()
+		h.cursor.SearchWord(word)
+		h.cursor.MoveToNextMatch()
+	} else {
+		word := h.cursor.Word()
+		h.cursor.SearchWord(word)
+	}
+	if !h.cursor.IsStartWord() {
+		h.cursor.MoveLeftStartWordNoWrap()
+	}
+	h.cursor.Select()
+	h.cursor.MoveRightEndWordNoWrap()
+	return true
 }

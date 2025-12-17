@@ -27,6 +27,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -44,6 +45,245 @@ import (
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/workspace"
 )
+
+func TestCursorStartEndWord(t *testing.T) {
+	suite := []struct {
+		setCursorAtScroll       term.Coordinates
+		expectStartWord         bool
+		expectEndWord           bool
+		rightInclusiveSemantics bool
+	}{
+		{term.Coordinates{}, false, false, true},
+		{term.Coordinates{Y: 1}, false, false, true},
+		{term.Coordinates{Y: 1, X: 1}, false, false, true},
+		{term.Coordinates{Y: 2, X: 3}, true, false, true},
+		{term.Coordinates{Y: 2, X: 4}, false, true, true},
+		{term.Coordinates{Y: 2, X: 75}, true, false, true},
+		{term.Coordinates{Y: 2, X: 76}, false, true, true},
+		{term.Coordinates{Y: 5, X: 4}, true, false, true},
+		{term.Coordinates{Y: 5, X: 3}, false, false, true},
+		{term.Coordinates{Y: 18, X: 14}, true, false, true},
+		{term.Coordinates{Y: 18, X: 17}, false, true, true},
+		{term.Coordinates{Y: 18, X: 18}, false, false, true},
+		{term.Coordinates{Y: 9, X: 15}, true, true, true},
+		{term.Coordinates{}, false, false, false},
+		{term.Coordinates{Y: 1, X: 1}, false, false, false},
+		{term.Coordinates{Y: 1, X: 2}, false, false, false},
+		{term.Coordinates{Y: 2, X: 3}, true, false, false},
+		{term.Coordinates{Y: 2, X: 4}, false, false, false},
+		{term.Coordinates{Y: 2, X: 5}, false, true, false},
+		{term.Coordinates{Y: 2, X: 75}, true, false, false},
+		{term.Coordinates{Y: 2, X: 76}, false, false, false},
+		{term.Coordinates{Y: 2, X: 77}, false, true, false},
+		{term.Coordinates{Y: 5, X: 4}, true, false, false},
+		{term.Coordinates{Y: 5, X: 3}, false, false, false},
+		{term.Coordinates{Y: 18, X: 14}, true, false, false},
+		{term.Coordinates{Y: 18, X: 17}, false, false, false},
+		{term.Coordinates{Y: 18, X: 18}, false, true, false},
+		{term.Coordinates{Y: 9, X: 15}, true, false, false},
+		{term.Coordinates{Y: 9, X: 16}, false, true, false},
+	}
+
+	for i, test := range suite {
+		t.Run(fmt.Sprintf("test case %d", i), func(t *testing.T) {
+			c := setupCursor(t, 10, 10, false)
+			c.RightInclusiveSemantics = test.rightInclusiveSemantics
+
+			c.MoveToScroll(test.setCursorAtScroll)
+			actualStartWord := c.IsStartWord()
+			actualEndWord := c.IsEndWord()
+
+			word := c.Word()
+			assert.Equal(t, test.expectStartWord, actualStartWord, "IsStartWord is incorrect: %q", word)
+			assert.Equal(t, test.expectEndWord, actualEndWord, "IsEndWord is incorrect: %q", word)
+		})
+	}
+}
+
+func TestCursorUpperLowercase(t *testing.T) {
+	suite := []struct {
+		from, to     term.Coordinates
+		inputBuffer  string
+		outputBuffer string
+		op           func(t *testing.T, c *Cursor)
+	}{
+		{
+			from:         term.Coordinates{},
+			to:           term.Coordinates{},
+			inputBuffer:  "a",
+			outputBuffer: "A",
+			op: func(t *testing.T, c *Cursor) {
+				assert.True(t, c.UppercaseSelection())
+			},
+		},
+		{
+			from:         term.Coordinates{},
+			to:           term.Coordinates{},
+			inputBuffer:  "\ta",
+			outputBuffer: "\ta",
+			op: func(t *testing.T, c *Cursor) {
+				assert.True(t, c.UppercaseSelection())
+			},
+		},
+		{
+			from:         term.Coordinates{},
+			to:           term.Coordinates{X: 4},
+			inputBuffer:  "\ta",
+			outputBuffer: "\tA",
+			op: func(t *testing.T, c *Cursor) {
+				assert.True(t, c.UppercaseSelection())
+			},
+		},
+		{
+			from:         term.Coordinates{},
+			to:           term.Coordinates{X: 4},
+			inputBuffer:  "\tA",
+			outputBuffer: "\ta",
+			op: func(t *testing.T, c *Cursor) {
+				assert.True(t, c.LowercaseSelection())
+			},
+		},
+		{
+			from:         term.Coordinates{},
+			to:           term.Coordinates{X: 8},
+			inputBuffer:  "\t\ta",
+			outputBuffer: "\t\tA",
+			op: func(t *testing.T, c *Cursor) {
+				assert.True(t, c.UppercaseSelection())
+			},
+		},
+		{
+			from:         term.Coordinates{},
+			to:           term.Coordinates{Y: 2, X: 1},
+			inputBuffer:  "\t\n\ta\nb",
+			outputBuffer: "\t\n\tA\nB",
+			op: func(t *testing.T, c *Cursor) {
+				assert.True(t, c.UppercaseSelection())
+			},
+		},
+		{
+			from:         term.Coordinates{},
+			to:           term.Coordinates{X: 1},
+			inputBuffer:  "\x00a",
+			outputBuffer: "A", // CellsToString remove null characters it
+			op: func(t *testing.T, c *Cursor) {
+				assert.True(t, c.UppercaseSelection())
+			},
+		},
+		{
+			from:         term.Coordinates{Y: 1, X: 5},
+			to:           term.Coordinates{Y: 3, X: 1},
+			inputBuffer:  "func\n\ta word something else\nb\nhello",
+			outputBuffer: "func\n\ta WORD SOMETHING ELSE\nB\nHEllo",
+			op: func(t *testing.T, c *Cursor) {
+				assert.True(t, c.UppercaseSelection())
+				assert.True(t, c.Undo())
+				assert.True(t, c.Redo())
+			},
+		},
+	}
+
+	for i, test := range suite {
+		t.Run(fmt.Sprintf("test case %d", i), func(t *testing.T) {
+			c := setupCursorContent(t, 10, 10, test.inputBuffer, false)
+			c.RightInclusiveSemantics = true
+
+			c.MoveToScroll(test.from)
+			c.Select()
+			c.MoveToScroll(test.to)
+
+			// sut
+			test.op(t, c)
+
+			assert.Equal(t, test.outputBuffer, cell.CellsToString(c.view().RawCells()))
+		})
+	}
+}
+
+func TestIndent(t *testing.T) {
+	suite := []struct {
+		inputBuffer         string
+		expectIndentationAt int
+		expectIndent        bool
+		cursorAtScroll      term.Coordinates
+		outputBuffer        string
+	}{
+		{
+			inputBuffer:         "",
+			expectIndentationAt: 0,
+			expectIndent:        false,
+			cursorAtScroll:      term.Coordinates{},
+			outputBuffer:        "",
+		},
+		{
+			inputBuffer:         "a",
+			expectIndentationAt: 1,
+			expectIndent:        true,
+			cursorAtScroll:      term.Coordinates{},
+			outputBuffer:        "\ta",
+		},
+		{
+			inputBuffer:         "\ta",
+			expectIndentationAt: 1,
+			expectIndent:        false,
+			cursorAtScroll:      term.Coordinates{},
+			outputBuffer:        "\ta",
+		},
+		{
+			inputBuffer:         "\ta",
+			expectIndentationAt: 2,
+			expectIndent:        true,
+			cursorAtScroll:      term.Coordinates{X: 4},
+			outputBuffer:        "\t\ta",
+		},
+		{
+			inputBuffer:         "\ta",
+			expectIndentationAt: 0,
+			expectIndent:        true,
+			cursorAtScroll:      term.Coordinates{X: 4},
+			outputBuffer:        "a",
+		},
+		{
+			inputBuffer:         "\t\ta",
+			expectIndentationAt: 0,
+			expectIndent:        true,
+			cursorAtScroll:      term.Coordinates{X: 8},
+			outputBuffer:        "a",
+		},
+		{
+			inputBuffer:         "a\ta",
+			expectIndentationAt: 0,
+			expectIndent:        false,
+			cursorAtScroll:      term.Coordinates{X: 5},
+			outputBuffer:        "a\ta",
+		},
+		{
+			inputBuffer:         "a\ta",
+			expectIndentationAt: 1,
+			expectIndent:        true,
+			cursorAtScroll:      term.Coordinates{X: 5},
+			outputBuffer:        "\ta\ta",
+		},
+		{
+			inputBuffer:         "\t\ta\ta",
+			expectIndentationAt: 1,
+			expectIndent:        true,
+			cursorAtScroll:      term.Coordinates{X: 7},
+			outputBuffer:        "\ta\ta",
+		},
+	}
+
+	for i, test := range suite {
+		t.Run(fmt.Sprintf("test case %d", i), func(t *testing.T) {
+			c := setupCursorContent(t, 10, 10, test.inputBuffer, false)
+			mock := &mockIndentService{returnIndentationAt: test.expectIndentationAt}
+			mock.View = c.buffer().WithView(mock)
+			c.MoveToScroll(test.cursorAtScroll)
+			assert.Equal(t, test.expectIndent, c.TryIndent())
+			assert.Equal(t, test.outputBuffer, cell.CellsToString(c.view().RawCells()))
+		})
+	}
+}
 
 func TestCursorCenter(t *testing.T) {
 	suite := []struct {
@@ -484,6 +724,24 @@ func TestCursorSearch(t *testing.T) {
 				assert.True(t, e.MoveToNextMatch())
 			}, term.Coordinates{X: 32, Y: 9},
 		},
+		{
+			"returns partial word results",
+			100, 10,
+			2,
+			"NU",
+			func(t *testing.T, e *Cursor) {
+				assert.True(t, e.MoveToNextMatch())
+			}, term.Coordinates{X: 32, Y: 9},
+		},
+		{
+			"returns partial and complete word results",
+			100, 10,
+			38,
+			"i",
+			func(t *testing.T, e *Cursor) {
+				assert.True(t, e.MoveToNextMatch())
+			}, term.Coordinates{X: 71, Y: 2},
+		},
 	}
 
 	for _, _tcase := range tsuite {
@@ -523,6 +781,142 @@ func TestCursorSearch(t *testing.T) {
 		assert.Equal(t, term.Coordinates{X: 14, Y: 18}, cursor)
 
 		require.Equal(t, 0, e.Search(""))
+		e.MoveToNextMatch()
+
+		cursor = e.Coordinates()
+		assert.Equal(t, term.Coordinates{X: 14, Y: 18}, cursor)
+	})
+}
+
+func TestCursorSearchWord(t *testing.T) {
+	tsuite := []struct {
+		desc          string
+		width, height int
+		results       int
+		searchstring  string
+		assertions    func(*testing.T, *Cursor)
+		cursor        term.Coordinates
+	}{
+		{
+			"does nothing if search text is not found",
+			1000, 1000,
+			0,
+			"nothing",
+			func(t *testing.T, e *Cursor) {
+				assert.False(t, e.MoveToNextMatch())
+			}, term.Coordinates{},
+		},
+		{
+			"moves to the first result if search text is found",
+			1000, 1000,
+			2,
+			"NULL",
+			nil, term.Coordinates{X: 14, Y: 18},
+		},
+		{
+			"tolerates inserts to buffer by updating locations",
+			1000, 1000,
+			2,
+			"NULL",
+			func(t *testing.T, e *Cursor) {
+				var at term.Coordinates
+				e.buffer().Edit(context.Background(), at, at, "\n")
+				assert.True(t, e.MoveToNextMatch())
+			},
+			term.Coordinates{X: 14, Y: 19},
+		},
+		{
+			"MoveToNextMatch does nothing if only one result is found",
+			1000, 1000,
+			1,
+			"else",
+			func(t *testing.T, e *Cursor) {
+				assert.False(t, e.MoveToNextMatch())
+			}, term.Coordinates{X: 4, Y: 29},
+		},
+		{
+			"Seeks to first result if not in window",
+			100, 10,
+			1,
+			"When",
+			nil,
+			term.Coordinates{X: 7, Y: 9},
+		},
+		{
+			"Seeks to last result upon MoveToPrevMatch",
+			1000, 1000,
+			2,
+			"NULL",
+			func(t *testing.T, e *Cursor) {
+				assert.True(t, e.MoveToPrevMatch())
+			}, term.Coordinates{X: 32, Y: 23},
+		},
+		{
+			"Seeks if MoveToNextMatch result is not in window",
+			100, 10,
+			2,
+			"NULL",
+			func(t *testing.T, e *Cursor) {
+				assert.True(t, e.MoveToNextMatch())
+			}, term.Coordinates{X: 32, Y: 9},
+		},
+		{
+			"ignores non complete words",
+			100, 10,
+			0,
+			"NU",
+			func(t *testing.T, e *Cursor) {
+				assert.False(t, e.MoveToNextMatch())
+			}, term.Coordinates{},
+		},
+		{
+			"returns only complete word results",
+			100, 10,
+			4,
+			"i",
+			func(t *testing.T, e *Cursor) {
+				assert.True(t, e.MoveToNextMatch())
+			}, term.Coordinates{X: 8, Y: 9},
+		},
+	}
+
+	for _, _tcase := range tsuite {
+		tcase := _tcase
+
+		t.Run(tcase.desc, func(t *testing.T) {
+			e := setupCursor(t, tcase.width, tcase.height, false)
+
+			require.Equal(t, tcase.results, e.SearchWord(tcase.searchstring))
+			e.MoveToNextMatch() // backwards compat
+			if tcase.assertions != nil {
+				tcase.assertions(t, e)
+			}
+
+			cursor := e.Coordinates()
+			assert.Equal(t, tcase.cursor, cursor)
+
+			if tcase.results == 0 {
+				return
+			}
+
+			require.True(t, e.Select())
+			for i := 1; i < len(tcase.searchstring); i++ {
+				e.MoveRight()
+			}
+			assert.Equal(t, tcase.searchstring, e.Selection())
+		})
+	}
+
+	t.Run("clears results if search text is empty", func(t *testing.T) {
+		e := setupCursor(t, 100, 100, false)
+
+		require.Equal(t, 2, e.SearchWord("NULL"))
+		e.MoveToNextMatch()
+
+		cursor := e.Coordinates()
+		assert.Equal(t, term.Coordinates{X: 14, Y: 18}, cursor)
+
+		require.Equal(t, 0, e.SearchWord(""))
 		e.MoveToNextMatch()
 
 		cursor = e.Coordinates()
@@ -1208,6 +1602,86 @@ func TestCursorMove(t *testing.T) {
 			term.Coordinates{X: 10, Y: 2},
 		},
 		{
+			"MoveRightEndWord should wrap around until end of file",
+			10, 10,
+			func(t *testing.T, e *Cursor) {
+				if !e.scroll.Wrap { // ambiguous wrap position has diff result
+					t.SkipNow()
+				}
+				for e.MoveRightEndWord() {
+				}
+			},
+			term.Coordinates{X: 0, Y: 32},
+		},
+		{
+			"MoveRightEndWord should wrap around until end of file",
+			10, 10,
+			func(t *testing.T, e *Cursor) {
+				if e.scroll.Wrap {
+					t.SkipNow()
+				}
+				for e.MoveRightEndWord() {
+				}
+			},
+			term.Coordinates{X: 10, Y: 31},
+		},
+		{
+			"MoveLeftEndWord should wrap around until start of file",
+			10, 10,
+			func(t *testing.T, e *Cursor) {
+				require.True(t, e.MoveLastLine())
+				for e.MoveLeftEndWord() {
+				}
+			},
+			term.Coordinates{Y: 1},
+		},
+		{
+			"MoveLeftEndWord should move to end of previous word (right inclusive)",
+			10, 10,
+			func(t *testing.T, e *Cursor) {
+				e.cursor.X = 9
+				e.cursor.Y = 2
+				assert.True(t, e.MoveLeftEndWord())
+			},
+			term.Coordinates{X: 7, Y: 2},
+		},
+		{
+			"MoveLeftEndWord should move to end of previous word (right exclusive)",
+			10, 10,
+			func(t *testing.T, e *Cursor) {
+				e.RightInclusiveSemantics = false
+				e.cursor.X = 9
+				e.cursor.Y = 2
+				assert.True(t, e.MoveLeftEndWord())
+			},
+			term.Coordinates{X: 8, Y: 2},
+		},
+		{
+			"MoveLeftStartWord should wrap around until start of file",
+			10, 10,
+			func(t *testing.T, e *Cursor) {
+				require.True(t, e.MoveLastLine())
+				for e.MoveLeftStartWord() {
+				}
+			},
+			term.Coordinates{},
+		},
+		{
+			"MoveRightEndWord should move to the end of the current word (right exclusive)",
+			10, 10,
+			func(t *testing.T, e *Cursor) {
+				e.RightInclusiveSemantics = false
+				e.cursor.Y = 2
+				e.cursor.X = 9
+
+				e.MoveRightStartWord()
+				e.MoveLeftStartWord()
+
+				assert.True(t, e.MoveRightEndWord())
+			},
+			term.Coordinates{X: 11, Y: 2},
+		},
+		{
 			"MoveRightEndWord should stop on special symbols such as the at-symbol @",
 			10, 10,
 			func(t *testing.T, e *Cursor) {
@@ -1220,6 +1694,18 @@ func TestCursorMove(t *testing.T) {
 				assert.Equal(t, '@', c.Ch)
 			},
 			term.Coordinates{X: 5, Y: 2},
+		},
+		{
+			"MoveRightEndWord should stop on special symbols such as the at-symbol @",
+			10, 10,
+			func(t *testing.T, e *Cursor) {
+				e.cursor.Y = 2
+				e.cursor.X = 4
+				e.RightInclusiveSemantics = false
+
+				assert.True(t, e.MoveRightEndWord())
+			},
+			term.Coordinates{X: 6, Y: 2},
 		},
 		{
 			"MoveToMatchingRune should do nothing if rune is not {,[,(,},],)",
@@ -2017,39 +2503,50 @@ func TestCursorUndoRedo100Backwards(t *testing.T) {
 
 func testCursorDeleteSelection(t *testing.T, width, height int, typeSelect SelectMode) {
 	tsuite := []struct {
-		initialBuf  string
-		initialPos  func(*Cursor)
-		selected    bool
-		finalPos    func(*Cursor)
-		deleted     bool
-		finalBuf    string
-		skipForMode []SelectMode
+		initialBuf              string
+		initialPos              func(*Cursor)
+		finalPos                func(*Cursor)
+		deleted                 bool
+		finalBuf                string
+		skipForMode             []SelectMode
+		rightInclusiveSemantics bool
 	}{
 		{
-			initialBuf: "",
-			selected:   true, // technically select is in bounds, which is what bool return means
-			finalPos:   func(*Cursor) {},
-			deleted:    false,
-			finalBuf:   "",
+			initialBuf:  "",
+			finalPos:    func(*Cursor) {},
+			deleted:     false,
+			finalBuf:    "",
+			skipForMode: []SelectMode{LineSelection},
+		},
+		{
+			initialBuf:  "a",
+			finalPos:    func(*Cursor) {},
+			deleted:     false,
+			finalBuf:    "a",
+			skipForMode: []SelectMode{LineSelection},
 		},
 		{
 			initialBuf: "a",
-			selected:   true,
-			finalPos:   func(*Cursor) {},
+			finalPos:   func(c *Cursor) { c.MoveRight() },
 			deleted:    true,
 			finalBuf:   "",
 		},
 		{
 			initialBuf:  "\n",
-			selected:    true,
 			finalPos:    func(*Cursor) {},
+			deleted:     false,
+			finalBuf:    "\n",
+			skipForMode: []SelectMode{BlockSelection, LineSelection},
+		},
+		{
+			initialBuf:  "\n",
+			finalPos:    func(c *Cursor) { c.MoveDown() },
 			deleted:     true,
 			finalBuf:    "",
-			skipForMode: []SelectMode{StandardSelection, BlockSelection},
+			skipForMode: []SelectMode{BlockSelection},
 		},
 		{
 			initialBuf:  "a\nb",
-			selected:    true,
 			finalPos:    func(c *Cursor) { c.MoveRight() },
 			deleted:     true,
 			finalBuf:    "\nb",
@@ -2057,28 +2554,28 @@ func testCursorDeleteSelection(t *testing.T, width, height int, typeSelect Selec
 		},
 		{
 			initialBuf:  "a\nb",
-			selected:    true,
 			finalPos:    func(c *Cursor) { c.MoveDown() },
-			finalBuf:    "",
+			finalBuf:    "b",
 			deleted:     true,
 			skipForMode: []SelectMode{LineSelection, BlockSelection},
 		},
 		{
 			initialBuf: "a\nb",
 			initialPos: func(c *Cursor) {
-				for i := 0; i < 3; i++ {
+				for range 3 {
 					c.MoveRight()
 				}
 			},
-			finalPos:    func(c *Cursor) { c.MoveDown() },
-			selected:    true,
+			finalPos: func(c *Cursor) {
+				c.MoveDown()
+				c.MoveRight()
+			},
 			deleted:     true,
 			finalBuf:    "a",
 			skipForMode: []SelectMode{LineSelection, BlockSelection},
 		},
 		{
 			initialBuf: "a\nb\nc\nd",
-			selected:   true,
 			finalPos: func(c *Cursor) {
 				for i := 0; i < 100; i++ {
 					c.MoveDown()
@@ -2096,14 +2593,12 @@ func testCursorDeleteSelection(t *testing.T, width, height int, typeSelect Selec
 				}
 			},
 			finalPos:    func(*Cursor) {},
-			selected:    false,
 			deleted:     false,
 			finalBuf:    "a\nb",
 			skipForMode: []SelectMode{LineSelection},
 		},
 		{
 			initialBuf: "a\nb\nc\nd",
-			selected:   true,
 			finalPos: func(c *Cursor) {
 				c.MoveLastLine()
 				c.MoveEndLine()
@@ -2114,7 +2609,6 @@ func testCursorDeleteSelection(t *testing.T, width, height int, typeSelect Selec
 		},
 		{
 			initialBuf: "type Writer {\n\ta int\n\tb int\n}\n",
-			selected:   true,
 			initialPos: func(c *Cursor) {
 				c.MoveLastLine()
 			},
@@ -2125,22 +2619,118 @@ func testCursorDeleteSelection(t *testing.T, width, height int, typeSelect Selec
 			finalBuf:    "",
 			skipForMode: []SelectMode{StandardSelection, BlockSelection},
 		},
+		{
+			initialBuf:              "",
+			finalPos:                func(*Cursor) {},
+			deleted:                 false,
+			finalBuf:                "",
+			rightInclusiveSemantics: true,
+		},
+		{
+			initialBuf:              "a",
+			finalPos:                func(*Cursor) {},
+			deleted:                 true,
+			finalBuf:                "",
+			rightInclusiveSemantics: true,
+		},
+		{
+			initialBuf:              "\n",
+			finalPos:                func(*Cursor) {},
+			deleted:                 true,
+			finalBuf:                "",
+			skipForMode:             []SelectMode{StandardSelection, BlockSelection},
+			rightInclusiveSemantics: true,
+		},
+		{
+			initialBuf:              "a\nb",
+			finalPos:                func(c *Cursor) { c.MoveRight() },
+			deleted:                 true,
+			finalBuf:                "\nb",
+			skipForMode:             []SelectMode{LineSelection, BlockSelection},
+			rightInclusiveSemantics: true,
+		},
+		{
+			initialBuf:              "a\nb",
+			finalPos:                func(c *Cursor) { c.MoveDown() },
+			finalBuf:                "",
+			deleted:                 true,
+			skipForMode:             []SelectMode{LineSelection, BlockSelection},
+			rightInclusiveSemantics: true,
+		},
+		{
+			initialBuf: "a\nb",
+			initialPos: func(c *Cursor) {
+				for range 3 {
+					c.MoveRight()
+				}
+			},
+			finalPos:                func(c *Cursor) { c.MoveDown() },
+			deleted:                 true,
+			finalBuf:                "a",
+			skipForMode:             []SelectMode{LineSelection, BlockSelection},
+			rightInclusiveSemantics: true,
+		},
+		{
+			initialBuf: "a\nb\nc\nd",
+			finalPos: func(c *Cursor) {
+				for i := 0; i < 100; i++ {
+					c.MoveDown()
+				}
+			},
+			deleted:                 true,
+			finalBuf:                "",
+			skipForMode:             []SelectMode{BlockSelection},
+			rightInclusiveSemantics: true,
+		},
+		{
+			initialBuf: "a\nb",
+			initialPos: func(c *Cursor) {
+				for i := 0; i < 100; i++ {
+					c.MoveDown()
+				}
+			},
+			finalPos:                func(*Cursor) {},
+			deleted:                 false,
+			finalBuf:                "a\nb",
+			skipForMode:             []SelectMode{LineSelection},
+			rightInclusiveSemantics: true,
+		},
+		{
+			initialBuf: "a\nb\nc\nd",
+			finalPos: func(c *Cursor) {
+				c.MoveLastLine()
+				c.MoveEndLine()
+			},
+			deleted:                 true,
+			finalBuf:                "",
+			skipForMode:             []SelectMode{BlockSelection},
+			rightInclusiveSemantics: true,
+		},
+		{
+			initialBuf: "type Writer {\n\ta int\n\tb int\n}\n",
+			initialPos: func(c *Cursor) {
+				c.MoveLastLine()
+			},
+			finalPos: func(c *Cursor) {
+				c.MoveFirstLine()
+			},
+			deleted:                 true,
+			finalBuf:                "",
+			skipForMode:             []SelectMode{StandardSelection, BlockSelection},
+			rightInclusiveSemantics: true,
+		},
 	}
 
 	for i, tcase := range tsuite {
-		t.Run(fmt.Sprintf("select %v test case %d", typeSelect, i), func(t *testing.T) {
-			var skip bool
-			for _, mode := range tcase.skipForMode {
-				if mode == typeSelect {
-					skip = true
-					break
-				}
-			}
-			if skip {
+		desc := fmt.Sprintf("select %v test case %d, right inclusive semantics: %t",
+			typeSelect, i, tcase.rightInclusiveSemantics)
+		t.Run(desc, func(t *testing.T) {
+			if slices.Contains(tcase.skipForMode, typeSelect) {
 				return
 			}
 
 			c := setupCursorContent(t, width, height, tcase.initialBuf, false)
+			c.RightInclusiveSemantics = tcase.rightInclusiveSemantics
 			if tcase.initialPos != nil {
 				tcase.initialPos(c)
 			}
@@ -2148,17 +2738,14 @@ func testCursorDeleteSelection(t *testing.T, width, height int, typeSelect Selec
 			case NoSelection:
 				panic("hmm...")
 			case BlockSelection:
-				require.Equal(t, tcase.selected, c.SelectBlock())
+				c.SelectBlock()
 			case LineSelection:
-				require.Equal(t, tcase.selected, c.SelectLine())
+				c.SelectLine()
 			case StandardSelection:
-				require.Equal(t, tcase.selected, c.Select())
-			}
-			if !tcase.selected {
-				return
+				c.Select()
 			}
 			tcase.finalPos(c)
-			require.Equal(t, tcase.deleted, c.DeleteSelection())
+			require.Equal(t, tcase.deleted, c.DeleteSelection(), "deleted ok")
 			if !tcase.deleted {
 				return
 			}
@@ -3242,6 +3829,7 @@ diff_buf_adjust(win_T *win)
 func setupCursorContent(t *testing.T, width, height int, cont string, wrap bool) (e *Cursor) {
 	scroll := component.NewScroll(cell.NewBuffer())
 	e = NewCursor(scroll, nil)
+	e.RightInclusiveSemantics = true
 	scroll.Wrap = wrap
 	scroll.Buffer().ReadFrom(strings.NewReader(cont))
 	scroll.Resize(width, height)
@@ -3267,8 +3855,18 @@ func setupCursorForFolds(t *testing.T, width, height int, wg *sync.WaitGroup) (e
 		fn()
 		return true
 	})
+	e.RightInclusiveSemantics = true
 	scroll.Buffer().ReadFrom(strings.NewReader(sampleSnippet))
 	scroll.Resize(width, height)
 	require.Equal(t, e.scroll.Buffer(), scroll.Buffer())
 	return
+}
+
+type mockIndentService struct {
+	cell.View
+	returnIndentationAt int
+}
+
+func (m *mockIndentService) IndentationAt(line int) (int, bool) {
+	return m.returnIndentationAt, true
 }
