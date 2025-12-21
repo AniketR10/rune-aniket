@@ -226,9 +226,12 @@ func (c *Cursor) Mark() CursorMark {
 // MoveToMark moves the cursor to the position represented by mark.
 // It attempts to keep cursor in the same window position as it was
 // when the given mark was created.
-func (c *Cursor) MoveToMark(mark CursorMark) CursorMark {
+func (c *Cursor) MoveToMark(mark CursorMark) (CursorMark, bool) {
 	ret := CursorMark{window: c.cursor, scroll: c.cursorAtScroll()}
-	win, _ := c.scroll.ScrollToWindowCoordinates(mark.scroll)
+	pos := mark.scroll
+	pos.Y = max(0, min(pos.Y, c.rows()-1))
+	pos.X = max(0, min(pos.X, c.view().Columns(pos.Y)))
+	win, _ := c.scroll.ScrollToWindowCoordinates(pos)
 	// if inside hidden block, we still want to make the best out of it
 	c.setCursor(win, false)
 	// try to keep cursor at the same window position, if possible
@@ -245,7 +248,7 @@ func (c *Cursor) MoveToMark(mark CursorMark) CursorMark {
 			diff--
 		}
 	}
-	return ret
+	return ret, c.cursorAtScroll() != ret.scroll
 }
 
 func (c *Cursor) rows() int {
@@ -284,23 +287,8 @@ func (c *Cursor) MoveToScroll(pos term.Coordinates) (
 	enable := c.disablePublishing()
 	defer enable()
 
-	if pos.Y < 0 {
-		pos.Y = 0
-	}
-	if pos.X < 0 {
-		pos.X = 0
-	}
-	if pos.Y > 0 && pos.Y > c.rows() {
-		pos.Y = c.rows()
-	}
-	if pos.Y < c.rows() {
-		columns := c.view().Columns(pos.Y)
-		if pos.X > 0 && pos.X > columns {
-			pos.X = columns
-		}
-	} else if pos.Y == c.rows() {
-		pos.X = 0
-	}
+	pos.Y = max(0, pos.Y)
+	pos.X = max(0, pos.X)
 	ret = c.cursorAtScroll()
 	c.moveToScroll(pos)
 	ok = ret != c.cursorAtScroll()
@@ -452,19 +440,19 @@ func (c *Cursor) MoveStartLineNonBlank() bool {
 // MoveEndLine moves the cursor at the end of the current line, scrolling
 // to the end of the line if required.
 func (c *Cursor) MoveEndLine() (ok bool) {
-	y := c.cursorAtScroll().Y
-	x := c.view().Columns(y)
-	if x > 0 && c.RightInclusiveSemantics {
-		x--
+	curr := c.cursorAtScroll()
+	if curr.Y >= c.rows() {
+		return
 	}
-	_, ok = c.MoveToScroll(term.Coordinates{Y: y, X: x})
+	x := c.view().Columns(curr.Y)
+	_, ok = c.MoveToScroll(term.Coordinates{Y: curr.Y, X: x})
 	return
 }
 
 // MoveFirstLine moves the cursor to the first line, scrolling the content
 // if appplicable.
 func (c *Cursor) MoveFirstLine() (ok bool) {
-	_, ok = c.MoveToScroll(term.Coordinates{})
+	_, ok = c.MoveToScroll(term.Coordinates{X: c.cursorAtScroll().X})
 	return
 }
 
@@ -475,7 +463,7 @@ func (c *Cursor) MoveLastLine() (ok bool) {
 	if max == 0 {
 		return
 	}
-	_, ok = c.MoveToScroll(term.Coordinates{Y: max - 1})
+	_, ok = c.MoveToScroll(term.Coordinates{X: c.cursorAtScroll().X, Y: max - 1})
 	return ok
 }
 
@@ -483,21 +471,21 @@ func (c *Cursor) MoveLastLine() (ok bool) {
 // the content if required. It returns false and does nothing when the end
 // of the content is reached.
 func (c *Cursor) MoveDown() (ok bool) {
-	pos := c.cursor
-	if pos.Y+1 >= c.scroll.SizeHeight() {
-		ok = c.scroll.SeekDown()
-		if ok {
-			c.setCursor(c.cursor, false)
+	atScroll := c.cursorAtScroll()
+	if atScroll.Y >= c.rows()-1 {
+		if c.scroll.Wrap && c.scroll.SeekDown() {
+			// last line is longer than the entire height x width
+			// allow user to scroll down by moving up and down the window axis
+			return c.tryMoveDownWindowRow()
 		}
 		return
 	}
-	if c.cursorAtScroll().Y+1 > c.rows() {
-		return
+	atScroll.Y++
+	_, ok = c.MoveToScroll(atScroll)
+	if !ok {
+		return c.tryMoveDownWindowRow()
 	}
-	ok = true
-	at := term.Coordinates{X: c.cursor.X, Y: c.cursor.Y + 1}
-	c.setCursor(at, false)
-	return
+	return ok
 }
 
 // MoveDownLines moves the cursor "n" lines below the current line, scrolling
@@ -511,22 +499,23 @@ func (c *Cursor) MoveDownLines(n int) (ok bool) {
 // the content if required. It returns false and does nothing when the end
 // of the content is reached.
 func (c *Cursor) MoveUp() (ok bool) {
-	cursor := c.cursor
-	if cursor.Y < 0 {
-		cursor.Y = 0
-		c.setCursor(cursor, false)
-		ok = true
-		return
-	}
-	if cursor.Y == 0 {
-		ok = c.scroll.SeekUp()
-		if ok {
-			c.setCursor(cursor, false)
+	atScroll := c.cursorAtScroll()
+	if atScroll.Y <= 0 {
+		// first line is longer than the entire height x width
+		// allow user to scroll up by moving up and down the window axis
+		if c.scroll.Wrap && c.scroll.SeekUp() {
+			var win term.Coordinates
+			win, ok = c.scroll.ScrollToWindowCoordinates(atScroll)
+			if !ok {
+				return ok
+			}
+			win.Y--
+			_, ok = c.MoveToScroll(c.scroll.WindowToScrollCoordinates(win))
 		}
 		return
 	}
-	ok = true
-	c.setCursor(term.Coordinates{X: cursor.X, Y: cursor.Y - 1}, false)
+	atScroll.Y--
+	_, ok = c.MoveToScroll(atScroll)
 	return
 }
 
@@ -541,30 +530,12 @@ func (c *Cursor) MoveUpLines(n int) (ok bool) {
 // the content if required. It returns false and does nothing when the end
 // of the content is reached.
 func (c *Cursor) MoveLeft() (ok bool) {
-	cursor := c.cursor
-	if cursor.X < 0 {
-		cursor.X = 0
-		ok = true
-		c.setCursor(cursor, false)
+	atScroll := c.cursorAtScroll()
+	if atScroll.X <= 0 {
 		return
 	}
-	if c.scroll.Wrap {
-		atScroll := c.cursorAtScroll()
-		if atScroll.X == 0 {
-			return
-		}
-		_, ok = c.MoveToScroll(term.Coordinates{X: atScroll.X - 1, Y: atScroll.Y})
-		return
-	}
-	if cursor.X == 0 {
-		ok = c.scroll.SeekLeft()
-		if ok {
-			c.setCursor(cursor, false)
-		}
-		return
-	}
-	ok = true
-	c.setCursor(term.Coordinates{X: cursor.X - 1, Y: cursor.Y}, false)
+	atScroll.X--
+	_, ok = c.MoveToScroll(atScroll)
 	return
 }
 
@@ -580,26 +551,11 @@ func (c *Cursor) MoveLeftColumns(n int) (ok bool) {
 // of the content is reached.
 func (c *Cursor) MoveRight() (ok bool) {
 	atScroll := c.cursorAtScroll()
-	if atScroll.Y >= c.rows() {
+	if atScroll.Y >= c.rows() || atScroll.X >= c.view().Columns(atScroll.Y) {
 		return
 	}
-	max := c.view().Columns(atScroll.Y)
-	if atScroll.Y < c.rows() && atScroll.X+1 > max {
-		return
-	}
-	if c.scroll.Wrap {
-		_, ok = c.MoveToScroll(term.Coordinates{X: atScroll.X + 1, Y: atScroll.Y})
-		return
-	}
-	if c.cursor.X+1 >= c.scroll.Width() {
-		ok = c.scroll.SeekRight()
-		if ok {
-			c.setCursor(c.cursor, false)
-		}
-		return
-	}
-	ok = true
-	c.setCursor(term.Coordinates{X: c.cursor.X + 1, Y: c.cursor.Y}, false)
+	atScroll.X++
+	_, ok = c.MoveToScroll(atScroll)
 	return
 }
 
@@ -621,22 +577,8 @@ func (c *Cursor) MoveLeftWrap() bool {
 	if !ok {
 		return false
 	}
-	if !c.scroll.Wrap {
-		c.MoveEndLine()
-		return true
-	}
-
-	pos := c.cursorAtScroll()
-	if c.scroll.Width() == 0 || pos.Y >= c.view().Rows() {
-		return false
-	}
-	i := pos.X / c.scroll.Width()
-	after := term.Coordinates{
-		X: max(0, min(c.view().Columns(pos.Y)-1, (i+1)*c.scroll.Width()-1)),
-		Y: pos.Y,
-	}
-	c.MoveToScroll(after)
-	return true // MoveUp succeeded above
+	c.MoveEndLine()
+	return true
 }
 
 // MoveRightWrap will move the cursor to the right or wrap to beginning
@@ -650,24 +592,8 @@ func (c *Cursor) MoveRightWrap() bool {
 	if !ok {
 		return false
 	}
-	if !c.scroll.Wrap {
-		c.MoveStartLine()
-		return true
-	}
-	pos := c.cursorAtScroll()
-	if c.scroll.Width() == 0 || pos.Y >= c.view().Rows() {
-		return false
-	}
-	i := pos.X / c.scroll.Width()
-	if i == 0 {
-		return true
-	}
-	to := term.Coordinates{
-		X: max(0, min(c.view().Columns(pos.Y)-1, (i-1)*c.scroll.Width()+1)),
-		Y: pos.Y,
-	}
-	c.MoveToScroll(to)
-	return true // MoveDown succeeded above
+	c.MoveStartLine()
+	return true
 }
 
 func (c *Cursor) multiplyMove(n int, move func() bool) (ok bool) {
@@ -779,7 +705,9 @@ func (c *Cursor) moveBeforeRune(budget int, skip, all map[rune]struct{}, move fu
 	initialScrollPos := c.cursorAtScroll()
 	mark := c.Mark()
 
+	var moved bool
 	for i := 0; i < budget && move(); i++ {
+		moved = true
 		cell, cOk := c.cellAtCursor()
 		if !cOk {
 			continue
@@ -810,6 +738,9 @@ func (c *Cursor) moveBeforeRune(budget int, skip, all map[rune]struct{}, move fu
 		mark = c.Mark()
 	}
 
+	if !moved {
+		return
+	}
 	if state == done {
 		ok = true
 		c.MoveToMark(mark)
@@ -987,6 +918,14 @@ func (c *Cursor) InsertLineAbove() {
 
 // InsertLineBelow inserts a row below the current row and moves the cursor down.
 func (c *Cursor) InsertLineBelow() {
+	if _, ok := c.scroll.HiddenBlockAt(c.cursorAtScroll().Y); ok {
+		c.MoveDown()
+		c.MoveStartLine()
+		c.Insert('\n')
+		c.MoveUp()
+		c.MoveEndLine()
+		return
+	}
 	ctx := context.Background()
 	mode := c.selection.mode
 	c.selection.mode = NoSelection
@@ -1078,19 +1017,23 @@ func (c *Cursor) InsertBlock(str string) {
 		if err == nil && len(str) > 0 {
 			str = str[:len(str)-1]
 		}
-		cur := c.Mark()
+		cur := c.CursorAtScroll()
 		c.InsertString(str)
 		if err != nil {
 			break
 		}
-		c.MoveToMark(cur)
-		c.MoveLineDown()
+		cur.Y++
+		c.MoveToScroll(cur)
 	}
 }
 
 // Paste pastes the given string on the underlying scroll at the current
 // cursor position.
 func (c *Cursor) Paste(str string, mode SelectMode, after bool) {
+	// disable seeking while performing combined move
+	prev := c.shouldSeek
+	c.shouldSeek = false
+
 	if mode == NoSelection {
 		// this is how vim behaves when using a system clipboard
 		if strings.HasSuffix(str, "\n") {
@@ -1112,47 +1055,48 @@ func (c *Cursor) Paste(str string, mode SelectMode, after bool) {
 	case StandardSelection:
 		if after {
 			c.MoveRight()
-			cur := c.Mark()
+			cur := c.CursorAtScroll()
 			c.InsertString(str)
-			c.MoveToMark(cur)
+			c.MoveToScroll(cur)
 		} else {
-			cur := c.Mark()
+			cur := c.CursorAtScroll()
 			c.InsertString(str)
-			c.MoveToMark(cur)
+			c.MoveToScroll(cur)
 		}
 	case LineSelection:
 		if after {
 			movedDown := c.MoveLineDown()
-			var cur CursorMark
+			var cur term.Coordinates
 			if !movedDown {
 				// force set cursor past last line
-				cur = c.Mark()
+				cur = c.CursorAtScroll()
 				c.setCursor(term.Coordinates{X: 0, Y: c.cursor.Y + 1}, false)
 			} else {
 				c.MoveStartLine()
-				cur = c.Mark()
+				cur = c.CursorAtScroll()
 			}
 			c.InsertString(str)
-			c.MoveToMark(cur)
+			c.MoveToScroll(cur)
 		} else {
-			cur := c.Mark()
+			cur := c.CursorAtScroll()
 			c.MoveStartLine()
 			c.InsertString(str)
-			c.MoveToMark(cur)
+			c.MoveToScroll(cur)
 			c.MoveStartLine()
 		}
 	case BlockSelection:
 		if after {
 			c.MoveRight()
-			cur := c.Mark()
+			cur := c.CursorAtScroll()
 			c.InsertBlock(str)
-			c.MoveToMark(cur)
+			c.MoveToScroll(cur)
 		} else {
-			cur := c.Mark()
+			cur := c.CursorAtScroll()
 			c.InsertBlock(str)
-			c.MoveToMark(cur)
+			c.MoveToScroll(cur)
 		}
 	}
+	c.shouldSeek = prev
 }
 
 // Replace is equivalent to ReplaceContext with context.Background. It returns the
@@ -1195,7 +1139,7 @@ func (c *Cursor) DeleteContext(ctx context.Context) (ok bool) {
 
 // Backspace is a special form of Delete, named after the keyboard key backspace.
 func (c *Cursor) Backspace() (ok bool) {
-	if c.cursor.X > 0 || c.scroll.Offset().X > 0 || c.cursorAtScroll().X > 0 {
+	if c.cursorAtScroll().X > 0 {
 		if c.MoveLeft() {
 			ok = c.Delete()
 		}
@@ -1203,7 +1147,7 @@ func (c *Cursor) Backspace() (ok bool) {
 	}
 
 	if ok = c.MoveLineUp(); ok {
-		c.Conflate()
+		ok = c.Conflate()
 	}
 	return
 }
@@ -1224,15 +1168,15 @@ func (c *Cursor) ConflateContext(ctx context.Context) (ok bool) {
 		return
 	}
 
-	ok = true
-
 	length := c.view().Columns(pos.Y)
 	if length == 0 {
-		c.buffer().DeleteRowContext(ctx, pos.Y)
+		ok = c.buffer().DeleteRowContext(ctx, pos.Y)
 		return
 	}
-	c.buffer().ConflateRowContext(ctx, pos.Y)
-	c.setCursorAfterUpdate(term.Coordinates{Y: pos.Y, X: length})
+	ok = c.buffer().ConflateRowContext(ctx, pos.Y)
+	if ok {
+		c.setCursorAfterUpdate(term.Coordinates{Y: pos.Y, X: length})
+	}
 	return
 }
 
@@ -1274,8 +1218,8 @@ func (c *Cursor) setSelection() (ok bool) {
 
 // returns ok=false if there's no content to select in buffer
 func (c *Cursor) cursorAtScrollBounds() (pos term.Coordinates, ok bool) {
-	max := c.rows()
-	if max == 0 {
+	rows := c.rows()
+	if rows == 0 {
 		pos = term.Coordinates{}
 		return
 	}
@@ -1283,17 +1227,13 @@ func (c *Cursor) cursorAtScrollBounds() (pos term.Coordinates, ok bool) {
 	pos = c.cursorAtScroll()
 	ok = true
 
-	if pos.Y >= max {
-		pos.Y = max
+	if pos.Y >= rows {
+		pos.Y = rows
 		pos.X = 0
 		return
 	}
 
-	max = c.view().Columns(pos.Y)
-	if pos.X > max {
-		pos.X = max
-	}
-
+	pos.X = min(pos.X, c.view().Columns(pos.Y))
 	return
 }
 
@@ -1605,61 +1545,7 @@ func (c *Cursor) MoveToBounds(padding int) {
 	for c.Column() < 0 && c.MoveRight() {
 	}
 
-	for c.Column() >= c.view().Columns(c.Line())+padding && c.MoveLeft() {
-	}
-}
-
-// MoveToNextNonNull will move the cursor to the right until it finds
-// a cell with a non-null character. If the current cell is already a cell with
-// a non-null character, then this method does nothing.
-func (c *Cursor) MoveToNextNonNull() {
-	enable := c.disablePublishing()
-	defer enable()
-
-	for cell, ok := c.Cell(); ; cell, ok = c.Cell() {
-		if !ok {
-			if !c.MoveLeft() {
-				break
-			}
-			// if line ends in null, stop here
-			// otherwise this continues until the end of time.
-			cell, ok := c.Cell()
-			if !ok || cell.Ch != '\x00' {
-				continue
-			}
-			break
-		}
-		if cell.Ch == '\x00' {
-			if !c.MoveRight() {
-				break
-			}
-			continue
-		}
-		break
-	}
-}
-
-// MoveToPrevNonNull will move the cursor to the left until it finds
-// a cell with a non-null character. If the current cell is already a cell with
-// a non-null character, then this method does nothing.
-func (c *Cursor) MoveToPrevNonNull() {
-	enable := c.disablePublishing()
-	defer enable()
-
-	for cell, ok := c.Cell(); ; cell, ok = c.Cell() {
-		if !ok {
-			if !c.MoveLeft() {
-				break
-			}
-			continue
-		}
-		if cell.Ch == '\x00' {
-			if !c.MoveLeft() {
-				break
-			}
-			continue
-		}
-		break
+	for c.Line() < c.rows() && c.Column() >= c.view().Columns(c.Line())+padding && c.MoveLeft() {
 	}
 }
 
@@ -1670,6 +1556,9 @@ func (c *Cursor) moveToChar(
 	defer enable()
 
 	cursor := c.cursorAtScroll()
+	if cursor.Y >= c.rows() {
+		return false
+	}
 	lastPos := c.view().Columns(cursor.Y)
 	start := term.Coordinates{Y: cursor.Y}
 	end := term.Coordinates{Y: cursor.Y, X: lastPos}
@@ -1679,7 +1568,7 @@ func (c *Cursor) moveToChar(
 		return false
 	}
 
-	view := cell.NewView(cells, c.buffer().Tabspaces())
+	view := cell.NewView(cells)
 
 	searcher := cell.NewSimpleSearcher(view)
 	n := searcher.Search(string(ch))
@@ -1730,8 +1619,8 @@ func (c *Cursor) MoveToPrevChar(ch rune) bool {
 // ShiftLineRight shifts the current cursor's line one tab to the right.
 func (c *Cursor) ShiftLineRight() {
 	cursor := c.cursorAtScroll()
-	n := c.buffer().ShiftRowRight(cursor.Y)
-	cursor.X += n
+	c.buffer().ShiftRowRight(cursor.Y)
+	cursor.X++
 	c.setCursorAfterUpdate(cursor)
 }
 
@@ -1739,11 +1628,11 @@ func (c *Cursor) ShiftLineRight() {
 // false if line's start of content is already at the start of the line.
 func (c *Cursor) ShiftLineLeft() bool {
 	cursor := c.cursorAtScroll()
-	n := c.buffer().ShiftRowLeft(cursor.Y)
-	if n == 0 {
+	ok := c.buffer().ShiftRowLeft(cursor.Y)
+	if !ok {
 		return false
 	}
-	cursor.X -= n
+	cursor.X--
 	if cursor.X < 0 {
 		cursor.X = 0
 	}
@@ -1781,8 +1670,8 @@ func (c *Cursor) ShiftSelectionLeft() (ok bool) {
 	c.Unselect()
 
 	for y := from.Y; y <= to.Y; y++ {
-		n := c.buffer().ShiftRowLeft(y)
-		if n != 0 {
+		sok := c.buffer().ShiftRowLeft(y)
+		if sok {
 			ok = true
 		}
 	}
@@ -1932,6 +1821,9 @@ func (c *Cursor) WindowCoordinates(pos term.Coordinates) (term.Coordinates, bool
 func (c *Cursor) MoveLineDown() bool {
 	pos := c.cursorAtScroll()
 	pos.Y++
+	if pos.Y >= c.rows() {
+		return false
+	}
 	_, ok := c.MoveToScroll(pos)
 	return ok
 }
@@ -2210,19 +2102,7 @@ func (c *Cursor) setCursorAfterUpdate(atScroll term.Coordinates) {
 		return
 	}
 	c.scroll.RecalculateWraps()
-	var done bool
-	// the next position might be beyond the width of the current row
-	// in which case ScrollToWidnowCoordiantes would wrap around it
-	if c.scroll.Wrap && atScroll.Y < c.scroll.Buffer().Rows() &&
-		atScroll.X > 0 &&
-		atScroll.X == c.scroll.Buffer().Columns(atScroll.Y) {
-		atScroll.X--
-		done = true
-	}
 	res, _ := c.scroll.ScrollToWindowCoordinates(atScroll)
-	if done {
-		res.X++
-	}
 	c.setCursor(res, c.shouldSeek)
 }
 
@@ -2235,7 +2115,6 @@ func (c *Cursor) getIndentation(pos term.Coordinates) (ret int, ok bool) {
 		switch cell.Ch {
 		case '\t':
 			ret++
-		case '\x00':
 		default:
 			ok = x == pos.X
 			return
@@ -2271,7 +2150,7 @@ func (c *Cursor) doTryIndent(ctx context.Context, to term.Coordinates, target in
 	// to "indent" we must resolve to start of line
 	to.X = 0
 	_, _, _ = buf.Edit(ctx, to, to, tabs)
-	to.X += (diff * buf.Tabspaces())
+	to.X += diff
 	return to, true
 }
 
@@ -2297,9 +2176,9 @@ func (c *Cursor) doTryDedent(ctx context.Context, pos term.Coordinates, target i
 		return pos, false
 	}
 	// start of edit should be at the end of starting tabs block
-	pos.X = current * buf.Tabspaces()
-	from := term.Coordinates{X: (pos.X - diff*buf.Tabspaces()), Y: pos.Y}
-	to := term.Coordinates{X: pos.X - 1, Y: pos.Y}
+	pos.X = current
+	from := term.Coordinates{X: (pos.X - diff), Y: pos.Y}
+	to := term.Coordinates{X: pos.X, Y: pos.Y}
 	if diff <= 0 || from.X < 0 || to.X < 0 {
 		c.log(log.TraceLevel, "try dedent: could not dedent at (%v), current: %d, "+
 			"should be: %d, from: %v, to: %v", pos, current, target, from, to)
@@ -2318,7 +2197,7 @@ func (c *Cursor) doTryDedent(ctx context.Context, pos term.Coordinates, target i
 func isEmpty(cells []term.Cell) bool {
 	for _, cell := range cells {
 		switch cell.Ch {
-		case '\x00', ' ', '\t':
+		case ' ', '\t':
 			continue
 		}
 		return false
@@ -2500,6 +2379,18 @@ func (c *Cursor) setSearchLocationList(text string, word bool) int {
 
 	c.SetLocationList(internalLocationListPriority, searchLocationListID, LocationSlice(searchLoc))
 	return len(searchLoc)
+}
+
+func (c *Cursor) tryMoveDownWindowRow() bool {
+	atScroll := c.cursorAtScroll()
+	win, _ := c.scroll.ScrollToWindowCoordinates(atScroll)
+	win.Y++
+	atScroll = c.scroll.WindowToScrollCoordinates(win)
+	if atScroll.Y >= c.rows() {
+		return false
+	}
+	_, ok := c.MoveToScroll(atScroll)
+	return ok
 }
 
 func (c *Cursor) log(level log.Level, msg string, args ...any) {

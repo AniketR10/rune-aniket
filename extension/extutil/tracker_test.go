@@ -84,7 +84,7 @@ func TestResourceTrackerIntegration(t *testing.T) {
 				require.True(t, ok)
 
 				assert.Equal(t, false, res.Scroll.Wrap)
-				assert.Equal(t, tabspaces, res.Scroll.Buffer().Tabspaces())
+				assert.Equal(t, tabspaces, res.Scroll.Tabspaces())
 
 				edh, err = ed.Editor(res1)
 				require.NoError(t, err)

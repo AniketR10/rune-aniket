@@ -374,7 +374,7 @@ func (e *Handler) initializeDoneHandler() {
 	orig := e.emulator.Component().PrimaryScroll().Buffer()
 	// clone buffer; vte buffer is initialized with InitPerformance
 	// which doesn't provide the facilities needed by less
-	buf := cell.CellsToBuffer(orig.RawCells(), orig.Tabspaces())
+	buf := cell.CellsToBuffer(orig.RawCells())
 
 	uri := e.emulator.Component().URI()
 

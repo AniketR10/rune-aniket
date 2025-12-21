@@ -860,7 +860,7 @@ func (h *lspEditorHandler) newFile(
 			URI: protocol.URIFromSpanURI(spanURI),
 		},
 		uri:        uri,
-		_cells:     cell.StringToCells(content, h.tabspaces),
+		_cells:     cell.StringToCells(content),
 		languageID: languageID,
 	}
 
@@ -930,7 +930,7 @@ func getColumnMapper(uri span.URI, buf *cell.Buffer) protocol.ColumnMapper {
 
 func (h *lspEditorHandler) handleGoTo(f *file, rs protocol.Range) error {
 	cells := h.getCells(f)
-	buf := cell.CellsToBuffer(cells, h.tabspaces)
+	buf := cell.CellsToBuffer(cells)
 	spanURI := workspaceURIToSpan(f.uri)
 	colmap := getColumnMapper(spanURI, buf)
 	pos, _, ok := convertRange(rs, cells, colmap)
@@ -1241,7 +1241,7 @@ func (h *lspEditorHandler) handleFileFlush(ev textapi.Event) error {
 	if err != nil {
 		return err
 	}
-	h.setCells(f, cell.StringToCells(ev.Content, h.tabspaces))
+	h.setCells(f, cell.StringToCells(ev.Content))
 	ctx = h.newSemanticTokensCtx()
 	return h.semanticTokensFull(ctx, srv, f, h.getCells(f), ev.Content)
 }
@@ -1296,7 +1296,7 @@ func (h *lspEditorHandler) handleFileEdit(ev textapi.Event) error {
 	}
 
 	oldCells := h.getCells(f)
-	buf := cell.CellsToBuffer(oldCells, h.tabspaces)
+	buf := cell.CellsToBuffer(oldCells)
 	buf.Edit(ctx, ev.Start, ev.End, ev.Content)
 	newCells := buf.RawCells()
 	if _, err := h.sendIncrementalEdit(ctx, srv, f, newCells, oldCells,
@@ -1416,7 +1416,7 @@ func (h *lspEditorHandler) parseDiagnostics(
 	f *file, d []protocol.Diagnostic,
 ) []textapi.Location {
 	cells := h.getCells(f)
-	buf := cell.CellsToBuffer(cells, h.tabspaces)
+	buf := cell.CellsToBuffer(cells)
 	spanURI := workspaceURIToSpan(f.uri)
 	colmap := getColumnMapper(spanURI, buf)
 

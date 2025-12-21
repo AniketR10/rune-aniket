@@ -29,6 +29,7 @@ import (
 	"unstable.build/go-tui/api/browserapi"
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/clipboard"
+	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
 )
@@ -38,13 +39,13 @@ type viConfig struct {
 	attr               term.Attributes
 	resAttr            term.Attributes
 	clipboard          clipboard.Register
+	tabspaces          int
 	scheduleNextTick   func(func()) bool
 	defaultRegister    string
 	registry           text.WorkspaceCommandRegistry
 	debug              bool
 	wrap               bool
 	cursorCorrections  bool
-	skipNulls          bool
 	autoCenter         bool
 	enableInitialFolds bool
 	enableAuxBar       bool
@@ -60,6 +61,7 @@ type viConfig struct {
 // defaultviHandlerImplConfig is a sane configuration defaults for viHandlerImpl.
 func defaultviHandlerImplConfig() viConfig {
 	return viConfig{
+		tabspaces: component.DefaultTabspaces,
 		resAttr: term.Attributes{
 			Attrs: tcell.AttrReverse,
 		},
@@ -69,13 +71,19 @@ func defaultviHandlerImplConfig() viConfig {
 			return true
 		},
 		defaultRegister:   clipboard.DefaultRegisterID,
-		skipNulls:         true,
 		cursorCorrections: true,
 	}
 }
 
 // Option represents a Vi handler configuration option.
 type Option func(*viConfig)
+
+// WithTabspaces sets the tabspaces value.
+func WithTabspaces(tabspaces int) Option {
+	return func(cfg *viConfig) {
+		cfg.tabspaces = tabspaces
+	}
+}
 
 // WithResAttr sets the search result cell attributes to be rendered.
 func WithResAttr(attr term.Attributes) Option {
@@ -170,18 +178,6 @@ func WithWrap(wrap bool) Option {
 func WithCursorCorrections(enabled bool) Option {
 	return func(cfg *viConfig) {
 		cfg.cursorCorrections = enabled
-	}
-}
-
-// WithAutoSkipNullCells determines whether vi should automatically
-// shift the cursor on top a null cell (no content) in
-// normal, yank, search, g and delete modes. Default is on.
-//
-// This behaviour is force disabled if WithDebug Option is used,
-// or if WithCursorCorrections disables cursor corrections.
-func WithAutoSkipNullCells(skip bool) Option {
-	return func(cfg *viConfig) {
-		cfg.skipNulls = skip
 	}
 }
 

@@ -97,8 +97,17 @@ func (w *BufferWriter) SetCursor(pos term.Coordinates) {
 // ToBuffer copies the underlying cells to b.
 func (w *BufferWriter) ToBuffer(b *Buffer) {
 	cells := new(rawCells)
+	// trim starting at the first null column
+	// of each row
+	for y, row := range w.cells {
+		for x, cell := range row {
+			if cell.Ch == 0 {
+				w.cells[y] = w.cells[y][:x]
+				break
+			}
+		}
+	}
 	cells.cells = w.cells
-	cells.tabspaces = 1
 	cells.fillInChar = ' '
 	cells.columnCap = defColumnCap
 	cells.rowCap = defRowCap

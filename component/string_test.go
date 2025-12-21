@@ -115,6 +115,11 @@ func TestStringWithConfigDimensions(t *testing.T) {
 			expectedWidth:  10,
 			expectedHeight: 4,
 		},
+		{
+			in:             "  2",
+			expectedWidth:  5,
+			expectedHeight: 1,
+		},
 	}
 
 	for i, tcase := range tcases {

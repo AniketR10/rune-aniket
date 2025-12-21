@@ -39,7 +39,6 @@ type StringConfig struct {
 	FrameCharSet
 	BackgroundAttributes term.Attributes
 	BackgroundRune       rune
-	Tabspaces            int
 	PaddingVertical      int
 	PaddingHorizontal    int
 	MinWidth             int
@@ -62,7 +61,7 @@ var _ fmt.Stringer = String{}
 // all configurable through cfg. The returned component is significantly
 // slower to Draw and Resize than the component returned by String.
 func NewStringWithConfig(str string, cfg StringConfig) String {
-	cells := cell.StringToCells(str, cfg.Tabspaces)
+	cells := cell.StringToCells(str)
 	comp := newStringComp(cells, cfg.Attributes, cfg.BackgroundRune,
 		cfg.BackgroundAttributes, cfg.FrameCharSet,
 		cfg.PaddingHorizontal, cfg.PaddingVertical, cfg.Alignment, cfg.MinWidth)
@@ -182,14 +181,16 @@ func (s *stringComp) Draw(w term.Writer) {
 		if y >= s.height {
 			break
 		}
+		var offset int
 		for x, c := range r {
-			if x >= s.width {
+			xi := x + offset
+			if c.Width > 1 {
+				offset += int(c.Width) - 1
+			}
+			if xi >= s.width {
 				break
 			}
-			if c.Ch == 0 {
-				continue
-			}
-			w.SetCell(term.Coordinates{X: x, Y: y},
+			w.SetCell(term.Coordinates{X: xi, Y: y},
 				term.Cell{
 					Attributes: s.attr,
 					Ch:         c.Ch,
@@ -209,11 +210,7 @@ func (s *stringComp) SetAttr(attr term.Attributes) (ret term.Attributes) {
 
 func (s *stringComp) Dimensions() (width, height int) {
 	height = len(s.cells)
-	for _, row := range s.cells {
-		if col := len(row); col > width {
-			width = col
-		}
-	}
+	width = cell.CalculateOptimalWidth(s.cells)
 	return
 }
 
@@ -269,17 +266,12 @@ func newStringComp(
 	shouldFrame := frameCharSet != (FrameCharSet{})
 
 	var height int
-	width := minWidth
 	if shouldFrame {
-		width -= (2 + padWidth)
+		minWidth -= (2 + padWidth)
 	}
-	for _, row := range cells {
-		if len(row) > width {
-			width = len(row)
-		}
-	}
+	width := max(minWidth, cell.CalculateOptimalWidth(cells))
 
-	background := term.Cell{Ch: c, Attributes: battr}
+	background := term.Cell{Width: 1, Ch: c, Attributes: battr}
 	height = len(cells)
 	shouldPad := padWidth != 0 || padHeight != 0
 
@@ -288,7 +280,7 @@ func newStringComp(
 		if shouldPad {
 			// background of inner padding looks better if it's the same attr
 			// as the text.
-			background := term.Cell{Ch: c, Attributes: attr}
+			background := term.Cell{Width: 1, Ch: c, Attributes: attr}
 			comp = withBackgroundWrapper(comp, height, width, background, false, false, alg)
 		}
 		width += 2 + padWidth

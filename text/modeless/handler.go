@@ -89,6 +89,7 @@ func (h *editorHandler) Init(
 		ResAttr:            h.cfg.resAttr,
 		Attributes:         h.cfg.attr,
 	})
+	h.less.Scroll().SetTabspaces(h.cfg.tabspaces) 
 	h.cursor.Init(h.less.Scroll(), h.cfg.scheduleNextTick)
 	h.mouse = text.NewMouse(text.CursorMouseDelegate(&h.cursor))
 	h.clipboard = h.cfg.clipboard

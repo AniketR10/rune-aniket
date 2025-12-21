@@ -103,7 +103,7 @@ func (t *Tabs) Init() {
 	t.nonFocusAttr = defaultNonFocusAttr
 	t.frameBorders = FrameCharSetDefault()
 	t.fileListBuf = new(cell.Buffer)
-	t.fileListBuf.InitPerformance(cell.DefaultTabspaces, 1, 10, ' ')
+	t.fileListBuf.InitPerformance(1, 10, ' ')
 	t.fileListFrame = newListFrame(
 		defaultScrollAttr, defaultFrameAttr, t.fileListBuf,
 		t.border, t.frameBorders)

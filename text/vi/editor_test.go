@@ -222,12 +222,7 @@ func TestEditorSetCursor(t *testing.T) {
 				h.SetCursorAtScroll(term.Coordinates{X: 1})
 				pos := h.CursorAtScroll()
 				require.NoError(t, err)
-				if wrap {
-					// in wrap mode position is ambiguous
-					assert.Equal(t, term.Coordinates{Y: 1}, pos)
-				} else {
-					assert.Equal(t, term.Coordinates{X: 1}, pos)
-				}
+				assert.Equal(t, term.Coordinates{X: 1}, pos)
 			})
 
 		t.Run(fmt.Sprintf("wrap: %v, should be robust against Resize", wrap),

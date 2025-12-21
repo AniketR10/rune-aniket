@@ -87,7 +87,7 @@ func (b *AltBuffer) Init() {
 	b.cursor = CursorState{
 		Charsets: make(map[vteparser.CharsetIndex]vteparser.StandardCharset),
 	}
-	b.Cells.InitPerformance(cell.DefaultTabspaces, 120, 80, b.defaultChar)
+	b.Cells.InitPerformance(120, 80, b.defaultChar)
 	b.resetLinesTrim(0, b.height, true, b.defaultChar)
 	b.scroll.InitPerformance(&b.Cells)
 	b.ctx = NewContext(context.Background())

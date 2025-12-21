@@ -162,7 +162,7 @@ diff_buf_adjust(win_
 {                   
   win_T  *wp;       
               NORMAL`},
-		{"/NULL>jjjjjjjjkkkkkkkk",
+		{"/NULL>jjjjjjjjkkkkkkkk", // test vi.free anchoring
 			`  if (wp == ▐ULL)   
   {                 
     i = diff_buf_idx
@@ -305,7 +305,7 @@ diff_buf_adjust(win_
  diff_redraw(TRUE); 
  }                  
               NORMAL`},
-		{"Vyp",
+		{"Vypzhzh",
 			`  if (wp == NULL]   
  ▐if (wp == NULL]   
   {                 
@@ -331,7 +331,7 @@ diff_buf_adjust(win_
 			`  if (wp == NULL]   
   if (wp == NULL]   
   {                 
-▐   if (i != DB_COUN
+ ▐  if (i != DB_COUN
     {               
     curtab->tp_diffb
     curtab->tp_diff_
@@ -342,7 +342,7 @@ diff_buf_adjust(win_
 			`  if (wp == NULL]   
   if (wp == NULL]   
   {                 
-▐   if (i != DB_COUN
+ ▐  if (i != DB_COUN
     {               
     curtab->tp_diffb
     curtab->tp_diff_
@@ -353,7 +353,7 @@ diff_buf_adjust(win_
 			`  if (wp == NULL]   
   if (wp == NULL]   
   {                 
-▐   if (i != DB_COUN
+ ▐  if (i != DB_COUN
     {               
     curtab->tp_diffb
     curtab->tp_diff_
@@ -526,7 +526,7 @@ diff_buf▐adjust(win_
 {                   
               NORMAL`},
 		// 10j means move 10 rows down; not go to start of line (0) and move 1 row down
-		{"10j",
+		{"10jhh",
 			`  win_T  *wp;       
   int        i;     
                     
@@ -537,7 +537,7 @@ diff_buf▐adjust(win_
   FOR_ALL_WINDOWS(wp
     if (▐p->w_buffer
               NORMAL`},
-		{"2k",
+		{"2kl",
 			`  win_T  *wp;       
   int        i;     
                     
@@ -643,7 +643,7 @@ dicurtab->tp_diff_in
     }               
   }                 
   }                 
-▐ else              
+ ▐else              
   diff_buf_add(win->
 }                   
               NORMAL`},
@@ -651,14 +651,14 @@ dicurtab->tp_diff_in
 			`  {                 
 dicurtab->tp_diff_in
     diff_redraw(TRUE
-▐ diff_buf_add(win->
+ ▐diff_buf_add(win->
 }                   
                     
                     
                     
                     
               NORMAL`},
-		{"\\$",
+		{"\\$zh",
 			`                    
 tp_diff_invalid = TR
 edraw(TRUE);        
@@ -758,7 +758,7 @@ func TestViCount(t *testing.T) {
 				case 'h':
 					assert.Equal(t, vi.cursor.Coordinates(), term.Coordinates{X: 0, Y: 3})
 				case 'j':
-					assert.Equal(t, vi.cursor.Coordinates(), term.Coordinates{X: 3, Y: 23})
+					assert.Equal(t, vi.cursor.Coordinates(), term.Coordinates{X: 5, Y: 23})
 				case 'k':
 					assert.Equal(t, vi.cursor.Coordinates(), term.Coordinates{X: 0, Y: 0})
 				case 'l':
@@ -907,15 +907,14 @@ tuvxy
 33333
 44444
 55555
-66666
-`
+66666`
 	vi := setupVi(t, sample, 2, WithWrap(true))
 	vi.Resize(3, 20)
 	vi.Draw(term.NoopWriter{})
 	for _, eventChar := range "jjjjjjjjjjjjjjjjjjjjj" {
 		vi.Handle(term.Event{Type: term.EventKey, Ch: eventChar})
 	}
-	assert.Equal(t, term.Coordinates{X: 3, Y: 10}, vi.cursor.ScrollCoordinates(vi.cursor.Coordinates()))
+	assert.Equal(t, term.Coordinates{X: 3, Y: 10}, vi.cursor.CursorAtScroll())
 	vi.cursor.SelectLine()
 	assert.Equal(t, "66666\n", vi.cursor.Selection())
 }
@@ -1064,8 +1063,8 @@ func TestIntegrationScrollEvent(t *testing.T) {
 		{"move to matching rune", term.Coordinates{Y: 7}, term.Event{Type: term.EventKey, Ch: '%'}},
 		{"MoveEndLine", term.Coordinates{Y: 2}, term.Event{Type: term.EventKey, Ch: '$'}},
 		{"MoveRightStartWord", term.Coordinates{X: 4, Y: 9}, term.Event{Type: term.EventKey, Ch: 'w'}},
-		{"MoveLeftStartWord", term.Coordinates{X: 21, Y: 9}, term.Event{Type: term.EventKey, Ch: 'b'}},
-		{"MoveLeftStartWordGroup", term.Coordinates{X: 21, Y: 9}, term.Event{Type: term.EventKey, Ch: 'B'}},
+		{"MoveLeftStartWord", term.Coordinates{X: 8, Y: 9}, term.Event{Type: term.EventKey, Ch: 'b'}},
+		{"MoveLeftStartWordGroup", term.Coordinates{X: 8, Y: 9}, term.Event{Type: term.EventKey, Ch: 'B'}},
 	}
 
 	for _, tcase := range tsuite {
@@ -1271,9 +1270,9 @@ func TestViCountChangeToVisualMode(t *testing.T) {
 			countDigits: []rune{'1', '5'},
 			selection:   "cdefghij", // does not beyond code line
 			// cursor will be at last char if it doesn't have room rightwards (last char index: 9)
-			expectScrollCoords:     term.Coordinates{X: 9, Y: 0},
+			expectScrollCoords:     term.Coordinates{X: 10, Y: 0},
 			expectScrollCoordsWrap: term.Coordinates{X: 10, Y: 0},
-			expectWindowCoords:     term.Coordinates{X: 3, Y: 0},
+			expectWindowCoords:     term.Coordinates{X: 4, Y: 0},
 			expectWindowCoordsWrap: term.Coordinates{X: 2, Y: 2},
 		},
 		{
@@ -1306,9 +1305,9 @@ func TestViCountChangeToVisualMode(t *testing.T) {
 			countDigits: []rune{'9', '9', '9', '9', '9', '9', '9', '9', '9', '9', '9', '9', '9', '9', '9', '9', '9', '9', '9', '9'},
 			selection:   "defghij",
 			// cursor will be at last char if it doesn't have room rightwards (last char index: 9)
-			expectScrollCoords:     term.Coordinates{X: 9, Y: 0},
+			expectScrollCoords:     term.Coordinates{X: 10, Y: 0},
 			expectScrollCoordsWrap: term.Coordinates{X: 10, Y: 0},
-			expectWindowCoords:     term.Coordinates{X: 3, Y: 0},
+			expectWindowCoords:     term.Coordinates{X: 4, Y: 0},
 			expectWindowCoordsWrap: term.Coordinates{X: 2, Y: 2},
 		},
 		{
@@ -1471,7 +1470,7 @@ func TestVigg(t *testing.T) {
 			narrowWrap:   true,
 			moveCursorFn: func(vi *viHandlerImpl) { vi.cursor.MoveRight() },
 			events:       "gg",
-			expectCoord:  term.Coordinates{X: 0, Y: 0},
+			expectCoord:  term.Coordinates{X: 1, Y: 0},
 		},
 		{
 			name:       "6gg from start of wrapped line",
@@ -1513,7 +1512,7 @@ func TestVigg(t *testing.T) {
 			events:     "3gg",
 			moveCursorFn: func(vi *viHandlerImpl) {
 				// Move to wrapped line of 333s in `code`.
-				vi.cursor.MoveDownLines(7)
+				vi.cursor.MoveDownLines(3)
 				vi.cursor.MoveRightColumns(2)
 			},
 			expectCoord: term.Coordinates{X: 0, Y: 5}, // beginning of 333s
@@ -1634,7 +1633,7 @@ func TestSetCursorAtScrollBounds(t *testing.T) {
 
 	t.Run("vertical bounds", func(t *testing.T) {
 		vi.setCursorAtScroll(term.Coordinates{X: 0, Y: 999})
-		assert.Equal(t, term.Coordinates{X: 0, Y: 4}, vi.cursor.Coordinates())
+		assert.Equal(t, term.Coordinates{X: 0, Y: 3}, vi.cursor.Coordinates())
 	})
 }
 
@@ -1741,11 +1740,11 @@ func TestCursorOutOfBounds(t *testing.T) {
 				require.True(t, ok)
 
 				scrollCoords := vi.cursor.ScrollCoordinates(vi.cursor.Coordinates())
-				assert.Equal(t, term.Coordinates{X: 0, Y: 5}, scrollCoords)
+				assert.Equal(t, term.Coordinates{X: 0, Y: 4}, scrollCoords)
 
 				vi.Handle(term.Event{Type: term.EventKey, Ch: 'k'})
 				scrollCoords = vi.cursor.ScrollCoordinates(vi.cursor.Coordinates())
-				assert.Equal(t, term.Coordinates{X: 0, Y: 4}, scrollCoords,
+				assert.Equal(t, term.Coordinates{X: 0, Y: 3}, scrollCoords,
 					"the cursor is trapped at the last line")
 			})
 		}
@@ -1811,11 +1810,12 @@ func setupVi(
 	t *testing.T, text string, tabspaces int, opts ...Option,
 ) *viHandlerImpl {
 	buf := cell.NewBuffer()
-	buf.InitWithTabspaces(tabspaces)
+	buf.Init()
 	_, err := buf.ReadFrom(strings.NewReader(text))
 	require.NoError(t, err)
 
 	config := defaultviHandlerImplConfig()
+	config.tabspaces = tabspaces
 	for _, o := range opts {
 		o(&config)
 	}
@@ -1830,11 +1830,12 @@ func setupViWithScroll(
 	t *testing.T, text string, tabspaces int, opts ...Option,
 ) *viHandlerImpl {
 	buf := cell.NewBuffer()
-	buf.InitWithTabspaces(tabspaces)
+	buf.Init()
 	_, err := buf.ReadFrom(strings.NewReader(text))
 	require.NoError(t, err)
 
 	scroll := component.NewScroll(buf)
+	scroll.SetTabspaces(tabspaces)
 
 	vi := new(viHandlerImpl)
 	vi.initWithScroll(scroll, opts...)
@@ -1846,9 +1847,11 @@ func setupViIntegration(
 	t *testing.T, copy string, tabspaces int, opts ...Option,
 ) tui.Handler {
 	buf := cell.NewBuffer()
-	buf.InitWithTabspaces(tabspaces)
+	buf.Init()
 	_, err := buf.ReadFrom(strings.NewReader(copy))
 	require.NoError(t, err)
+
+	opts = append(opts, WithTabspaces(tabspaces))
 
 	var mu sync.Mutex
 	cfg := text.StatusBarConfig{
@@ -2184,7 +2187,7 @@ func TestCentering(t *testing.T) {
 			name:          "zz centers the view around the cursor if there's enough offset available",
 			setCursor:     term.Coordinates{Y: 5},
 			inputSequence: "zz",
-			expect:        "d   \ne   \nX f \ng   ",
+			expect:        "d   \ne   \n Xf \ng   ",
 		},
 		{
 			name:          "zz does nothing with last line",
@@ -2208,13 +2211,13 @@ func TestCentering(t *testing.T) {
 			name:          "zt repositions cursor at the top of the view",
 			setCursor:     term.Coordinates{Y: 5},
 			inputSequence: "zt",
-			expect:        "X f \ng   \nh   \ni   ",
+			expect:        " Xf \ng   \nh   \ni   ",
 		},
 		{
 			name:          "zb repositions cursor at the bottom of the view",
 			setCursor:     term.Coordinates{Y: 5},
 			inputSequence: "zb",
-			expect:        "c   \nd   \ne   \nX f ",
+			expect:        "c   \nd   \ne   \n Xf ",
 		},
 	}
 

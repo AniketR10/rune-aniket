@@ -334,8 +334,8 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 			`┌──────────────────┐
 │o 12345aZZ*       │
 ├──────────────────┤
+│hell▐             │
 │hello             │
-│▐ello             │
 │                  │
 │                  │
 │                  │
@@ -345,8 +345,8 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 			`┌──────────────────┐
 │o 12345aZZ        │
 ├──────────────────┤
-│                  │
 │▐                 │
+│                  │
 │                  │
 │                  │
 │                  │
@@ -356,8 +356,8 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 			`┌──────────────────┐
 │o 12345aZZ        │
 ├──────────────────┤
+│hell▐             │
 │hello             │
-│▐ello             │
 │                  │
 │                  │
 │                  │
@@ -367,8 +367,8 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 			`┌──────────────────┐
 │o 12345aZZ        │
 ├──────────────────┤
+│hell▐             │
 │hello             │
-│▐ello             │
 │                  │
 │                  │
 │                  │

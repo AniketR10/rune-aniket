@@ -79,16 +79,16 @@ func TestTreeFoldsIntegration(t *testing.T) {
 				End:   term.Coordinates{X: 1, Y: 13},
 			},
 			{
-				Start: term.Coordinates{X: 4, Y: 10},
-				End:   term.Coordinates{X: 5, Y: 12},
+				Start: term.Coordinates{X: 1, Y: 10},
+				End:   term.Coordinates{X: 2, Y: 12},
 			},
 			{
-				Start: term.Coordinates{X: 28, Y: 10},
-				End:   term.Coordinates{X: 5, Y: 12},
+				Start: term.Coordinates{X: 25, Y: 10},
+				End:   term.Coordinates{X: 2, Y: 12},
 			},
 			{
 				Start: term.Coordinates{X: 0, Y: 15},
-				End:   term.Coordinates{X: 45, Y: 19},
+				End:   term.Coordinates{X: 42, Y: 19},
 			},
 		}
 		assert.ElementsMatch(t, expected, actual)
@@ -381,7 +381,7 @@ func TestTreeIndentsIntegration(t *testing.T) {
 └────────────────────────────┘`,
 		},
 		{
-			"<uggjjjo", `┌────────────────────────────┐
+			"<ugg0jjjo", `┌────────────────────────────┐
 │o #####                     │
 ├────────────────────────────┤
 │####### main                │
@@ -398,7 +398,7 @@ func TestTreeIndentsIntegration(t *testing.T) {
 └────────────────────────────┘`,
 		},
 		{
-			"<uggjjo", `┌────────────────────────────┐
+			"<ugg0jjo", `┌────────────────────────────┐
 │o #####                     │
 ├────────────────────────────┤
 │####### main                │
@@ -415,7 +415,7 @@ func TestTreeIndentsIntegration(t *testing.T) {
 └────────────────────────────┘`,
 		},
 		{
-			"<uggjjjjo", `┌────────────────────────────┐
+			"<ugg0jjjjo", `┌────────────────────────────┐
 │o #####                     │
 ├────────────────────────────┤
 │####### main                │
@@ -432,7 +432,7 @@ func TestTreeIndentsIntegration(t *testing.T) {
 └────────────────────────────┘`,
 		},
 		{
-			"<uggjjjjjo", `┌────────────────────────────┐
+			"<ugg0jjjjjo", `┌────────────────────────────┐
 │o #####                     │
 ├────────────────────────────┤
 │####### main                │
@@ -449,7 +449,7 @@ func TestTreeIndentsIntegration(t *testing.T) {
 └────────────────────────────┘`,
 		},
 		{
-			"<uggjjjjjjofunc hello() {\nfmt.Println(\"\")\n\t}", `┌────────────────────────────┐
+			"<ugg0jjjjjjofunc hello() {\nfmt.Println(\"\")\n\t}", `┌────────────────────────────┐
 │o #####                     │
 ├────────────────────────────┤
 │####### main                │
@@ -466,7 +466,7 @@ func TestTreeIndentsIntegration(t *testing.T) {
 └────────────────────────────┘`,
 		},
 		{
-			"<uggjjjjjjjjogo debug(func() {\nfmt.Println(\"\")\n}\t)", `┌────────────────────────────┐
+			"<ugg0jjjjjjjjogo debug(func() {\nfmt.Println(\"\")\n}\t)", `┌────────────────────────────┐
 │o #####                     │
 ├────────────────────────────┤
 │###### (                    │
@@ -483,7 +483,7 @@ func TestTreeIndentsIntegration(t *testing.T) {
 └────────────────────────────┘`,
 		},
 		{
-			"<uggjjjjjjjjogo debug(func() {\nfmt.Println(\"\")\n^}\t)", `┌────────────────────────────┐
+			"<ugg0jjjjjjjjogo debug(func() {\nfmt.Println(\"\")\n^}\t)", `┌────────────────────────────┐
 │o #####                     │
 ├────────────────────────────┤
 │###### (                    │
@@ -500,7 +500,7 @@ func TestTreeIndentsIntegration(t *testing.T) {
 └────────────────────────────┘`,
 		},
 		{
-			"<uggjjjjjjjo", `┌────────────────────────────┐
+			"<ugg0jjjjjjjo", `┌────────────────────────────┐
 │o #####                     │
 ├────────────────────────────┤
 │####### main                │
@@ -517,7 +517,7 @@ func TestTreeIndentsIntegration(t *testing.T) {
 └────────────────────────────┘`,
 		},
 		{
-			"<uggjjjjjjjjo", `┌────────────────────────────┐
+			"<ugg0jjjjjjjjo", `┌────────────────────────────┐
 │o #####                     │
 ├────────────────────────────┤
 │####### main                │
@@ -534,7 +534,7 @@ func TestTreeIndentsIntegration(t *testing.T) {
 └────────────────────────────┘`,
 		},
 		{
-			"<uggjjjjjjjjjo", `┌────────────────────────────┐
+			"<ugg0jjjjjjjjjo", `┌────────────────────────────┐
 │o #####                     │
 ├────────────────────────────┤
 │                            │
@@ -551,7 +551,7 @@ func TestTreeIndentsIntegration(t *testing.T) {
 └────────────────────────────┘`,
 		},
 		{
-			"<uggjjjjjjjjjjo", `┌────────────────────────────┐
+			"<ugg0jjjjjjjjjjo", `┌────────────────────────────┐
 │o #####                     │
 ├────────────────────────────┤
 │###### (                    │
@@ -568,7 +568,7 @@ func TestTreeIndentsIntegration(t *testing.T) {
 └────────────────────────────┘`,
 		},
 		{
-			"<uggjjjjjjjjjjjo", `┌────────────────────────────┐
+			"<ugg0jjjjjjjjjjjo", `┌────────────────────────────┐
 │o #####                     │
 ├────────────────────────────┤
 │    #####                   │
@@ -585,7 +585,7 @@ func TestTreeIndentsIntegration(t *testing.T) {
 └────────────────────────────┘`,
 		},
 		{
-			"<uggjjjjjjjjjjjjo", `┌────────────────────────────┐
+			"<ugg0jjjjjjjjjjjjo", `┌────────────────────────────┐
 │o #####                     │
 ├────────────────────────────┤
 │                            │
@@ -602,7 +602,7 @@ func TestTreeIndentsIntegration(t *testing.T) {
 └────────────────────────────┘`,
 		},
 		{
-			"<uggjjjjjjjjjjjjjo", `┌────────────────────────────┐
+			"<ugg0jjjjjjjjjjjjjo", `┌────────────────────────────┐
 │o #####                     │
 ├────────────────────────────┤
 │    ########################│
@@ -985,7 +985,7 @@ func TestTreeHighlightsIntegration(t *testing.T) {
 	}
 	handlertest.TestHandler(t, comp.Browser(), cases, w)
 
-	start = term.Coordinates{Y: 9, X: 17}
+	start = term.Coordinates{Y: 9, X: 16}
 	end = start
 	ed.Edit(context.Background(), start, end, "🔥")
 
@@ -1004,15 +1004,15 @@ func TestTreeHighlightsIntegration(t *testing.T) {
 │)                           │
 │                            │
 │#### main() {               │
-│    fmt.Sprintf(######, ##) │
+│    fmt.Sprintf(#### #, ##) │
 │                      NORMAL│
 └────────────────────────────┘`,
 		},
 	}
 	handlertest.TestHandler(t, comp.Browser(), cases, w)
 
-	start = term.Coordinates{Y: 9, X: 17}
-	end = term.Coordinates{Y: 9, X: 18}
+	start = term.Coordinates{Y: 9, X: 16}
+	end = term.Coordinates{Y: 9, X: 17}
 	ed.Edit(context.Background(), start, end, "")
 
 	cases = []handlertest.SingleTestCase{
@@ -1098,7 +1098,7 @@ func TestTreeHighlightsIntegration(t *testing.T) {
 │)                           │
 │                            │
 │#### main() {               │
-│▐   fmt.Sprintf(####, ##)   │
+│   ▐fmt.Sprintf(####, ##)   │
 │                      NORMAL│
 └────────────────────────────┘`,
 		},

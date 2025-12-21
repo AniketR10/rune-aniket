@@ -148,6 +148,7 @@ func (h *workspaceManagerHandler) newBuiltinModalEditor(
 	statusBarConfig := cfg.statusBarConfig(cwd, h, svc)
 	viOpts := append([]vi.Option{},
 		vi.WithResAttr(cfg.modalResultAttr()),
+		vi.WithTabspaces(cfg.editorTabspaces()),
 		vi.WithScheduleNextTick(cfg.scheduleNextTick),
 		vi.WithAttr(cfg.modalAttr()),
 		vi.WithAuxiliaryBar(cfg.auxiliaryBarEnabled(), auxBarConfig),
@@ -172,6 +173,7 @@ func (h *workspaceManagerHandler) newBuiltinModelessEditor(
 	return modeless.Editor(
 		modeless.WithCommandBar(true),
 		modeless.WithResAttr(cfg.modelessResultAttr()),
+		modeless.WithTabspaces(cfg.editorTabspaces()),
 		modeless.WithScheduleNextTick(cfg.scheduleNextTick),
 		modeless.WithAttr(cfg.modelessAttr()),
 		modeless.WithAuxiliaryBar(cfg.auxiliaryBarEnabled(), auxBarConfig),

@@ -127,7 +127,7 @@ func WithStatusBar(
 	ret.recovered = recovered
 
 	b := new(cell.Buffer)
-	b.InitPerformance(1, 1, 200, ' ')
+	b.InitPerformance(1, 200, ' ')
 
 	ret.status = component.NewFloatingReference(nil)
 

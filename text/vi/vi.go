@@ -315,7 +315,7 @@ func (vi *Vi) SetCursorAtScroll(pos term.Coordinates) bool {
 	// after out of bounds repositioning when moving up/down),
 	// needs to be reset
 	if vh, ok := vi.handler.(*viHandlerImpl); ok {
-		vh.free = vi.cursor.Mark()
+		vh.anchor = vi.handler.cursorAtScroll()
 	}
 	return true
 }

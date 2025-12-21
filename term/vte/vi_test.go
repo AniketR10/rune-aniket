@@ -533,7 +533,7 @@ $
 $                   
 $ ech▐              `},
 			{"gg",
-				`▐ echo a            
+				`$ ech▐ a            
 a                   
 $                   
 $                   
@@ -553,7 +553,7 @@ $
 $                   
 $                   
 $                   
-$ ▐cho              `},
+$ ech▐              `},
 		}
 		cfg := DefaultConfig()
 		cfg.Modal = true
@@ -1180,7 +1180,7 @@ type testParentComponent struct {
 
 func newTestParentComponent(content string, cursorAtScroll term.Coordinates) *testParentComponent {
 	buf := new(cell.Buffer)
-	buf.InitPerformance(cell.DefaultTabspaces, 1, 1, vtescreen.DefaultChar)
+	buf.InitPerformance(1, 1, vtescreen.DefaultChar)
 
 	scroll := new(component.Scroll)
 	scroll.InitPerformance(buf)

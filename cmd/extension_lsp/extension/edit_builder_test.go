@@ -125,7 +125,7 @@ func TestApplyEdits(t *testing.T) {
 		out.WriteString(tcase.input)
 
 		var b editBuilder
-		b.init(4, makeFile(), wrapEditor{out.Editor()}, cell.StringToCells(tcase.input, 4))
+		b.init(4, makeFile(), wrapEditor{out.Editor()}, cell.StringToCells(tcase.input))
 		edits := make([]protocol.TextEdit, len(tcase.ed))
 		copy(edits, tcase.ed)
 		b.applyEdits(edits)

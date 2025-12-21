@@ -308,6 +308,9 @@ func (t *Component) MaxWidth() int {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
+	// NOTE: using a cell.Buffer's MaxColumns is not exact
+	// when there are multi-width characters. As long as
+	// MaxWidth is used for hinting, it should be ok.
 	if t.parserHandler.useAlt {
 		return t.parserHandler.sync.altBuf.MaxColumns()
 	}

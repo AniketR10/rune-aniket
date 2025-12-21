@@ -105,10 +105,9 @@ func (v *viHandler) doInit(comp parentComponent, config Config) {
 		vi.WithWrap(false),
 		vi.WithCursorCorrections(false),
 		vi.WithClipboard(config.Clipboard),
-		vi.WithAutoSkipNullCells(false),
 	}
 	copyBuffer := new(cell.Buffer)
-	copyBuffer.InitPerformance(cell.DefaultTabspaces, 120, 80, vtescreen.DefaultChar)
+	copyBuffer.InitPerformance(120, 80, vtescreen.DefaultChar)
 	copyScroll := new(component.Scroll)
 	copyScroll.InitPerformance(copyBuffer)
 	v.copy.vi = new(vi.Vi)

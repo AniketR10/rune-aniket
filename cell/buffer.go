@@ -102,19 +102,12 @@ func NewBuffer() (b *Buffer) {
 	return b
 }
 
-// InitWithTabspaces initializes this Buffer with the given tabspaces.
-func (b *Buffer) InitWithTabspaces(tabspaces int) {
-	cells := new(rawCells)
-	cells.init(tabspaces)
-	b.initWithCells(cells)
-}
-
 // InitPerformance initializes this Buffer without Undo, Redo,
 // SubscribeUsage, UnsubscribeUsage, Subscribe or Unsubscribe functionality.
 // Calling any of the subscribe methods will cause the calling goroutine to panic.
-func (b *Buffer) InitPerformance(tabspaces int, rowCapacity, columnCapacity int, fillInChar rune) {
+func (b *Buffer) InitPerformance(rowCapacity, columnCapacity int, fillInChar rune) {
 	cells := new(rawCells)
-	cells.initWithCap(tabspaces, rowCapacity, columnCapacity, fillInChar)
+	cells.initWithCap(rowCapacity, columnCapacity, fillInChar)
 	b.initPerformanceWithCells(cells)
 }
 
@@ -125,7 +118,9 @@ func (b *Buffer) ResetCapacity(capacity int) {
 
 // Init initializes this Buffer with the default configuration.
 func (b *Buffer) Init() {
-	b.InitWithTabspaces(DefaultTabspaces)
+	cells := new(rawCells)
+	cells.init()
+	b.initWithCells(cells)
 }
 
 // Insert is equivalent to calling InsertContext with context.Background.
@@ -276,7 +271,7 @@ func (b *Buffer) DeleteCell(pos term.Coordinates) (term.Coordinates, rune, bool)
 }
 
 // DeleteCellContext removes the cell at the given position.
-// It returns the position at which the current cell (width padding) started,
+// It returns the position at which the current cell started,
 // if the width was > 1.
 func (b *Buffer) DeleteCellContext(
 	ctx context.Context, pos term.Coordinates,
@@ -355,7 +350,7 @@ func (b *Buffer) Delete(from, to term.Coordinates) (start term.Coordinates, str 
 
 // DeleteContext removes cells in left-inclusive right-exclusive range
 // and returns the corresponding string representation of the cells removed,
-// along with the true start of the range, which accounts for padding.
+// along with the true start of the range.
 func (b *Buffer) DeleteContext(ctx context.Context, from, to term.Coordinates) (
 	start term.Coordinates, str string,
 ) {
@@ -365,8 +360,7 @@ func (b *Buffer) DeleteContext(ctx context.Context, from, to term.Coordinates) (
 
 // Edit removes cells in left-inclusive right-exclusive range (start, end) and
 // inserts s at the start of the range. It returns the corresponding string
-// representation of the content removed and the true from, to range, which
-// accounts for possible padding added or removed.
+// representation of the content removed and the true from, to range.
 //
 // As opposed to cell.Editor.Edit, this method does not panic if range
 // is out of bounds. Instead, it trims the coordinates to be in-bounds or
@@ -580,41 +574,31 @@ func (b *Buffer) String() string {
 	return b.view.String()
 }
 
-// Tabspaces returns the number of tabspaces uses to initialized this Buffer.
-func (b *Buffer) Tabspaces() int {
-	return b.cells.tabspaces
-}
-
 // ShiftRowRight shifts row one tab to the right. It returns
 // the number of cells that the line was shifted.
-func (b *Buffer) ShiftRowRight(row int) int {
+func (b *Buffer) ShiftRowRight(row int) {
 	b.Insert(term.Coordinates{Y: row}, '\t')
-	return b.Tabspaces()
 }
 
 // ShiftRowLeft shifts row one tab to the left. It returns
 // the number of cells that the line was shifted.
-func (b *Buffer) ShiftRowLeft(row int) (chars int) {
+func (b *Buffer) ShiftRowLeft(row int) bool {
 	from, to := term.Coordinates{Y: row}, term.Coordinates{Y: row, X: 1}
 	from, to, ok := fromToInBounds(b.view, from, to)
 	if !ok {
-		return
+		return false
 	}
-	origLen := b.Columns(row)
-	for chars < b.Tabspaces() {
-		c, ok := b.view.Cell(from)
-		if !ok {
-			return
-		}
-		switch c.Ch {
-		case '\t', '\x00', ' ':
-			b.Delete(from, to)
-			chars = origLen - b.Columns(row)
-		default:
-			return
-		}
+	c, ok := b.view.Cell(from)
+	if !ok {
+		return false
 	}
-	return
+	switch c.Ch {
+	case '\t', ' ':
+		b.Delete(from, to)
+		return true
+	default:
+		return false
+	}
 }
 
 // Subscribe subscribes s to all updates to the underlying buffer.

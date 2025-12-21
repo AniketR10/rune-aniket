@@ -59,7 +59,7 @@ func TestSublimeKeyBindingsMacOS(t *testing.T) {
 		// {"Soft undo (undo cursor movement without undoing edit)", "<right><right><meta-u>", nil, term.Coordinates{Y: 0, X: 0}},
 		// {"Soft redo", "<right><right><meta-u><shift-meta-u>", nil, term.Coordinates{Y: 0, X: 1}},
 		// {"Trigger auto-complete", "<ctrl-space>", nil, term.Coordinates{}},
-		{"Insert completion/snippet or indent", "<tab>", sp("\ta\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 4}, nil},
+		{"Insert completion/snippet or indent", "<tab>", sp("\ta\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 1}, nil},
 		{"Previous snippet field or unindent", "<tab><shift-tab>", sp("a\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 0}, nil},
 
 		// Line manipulation

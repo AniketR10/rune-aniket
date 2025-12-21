@@ -172,12 +172,13 @@ func (h *ResourceTracker) Handle(_ context.Context, ev textapi.Event) (exit bool
 
 func (h *ResourceTracker) handleResourceOpen(ev textapi.Event) {
 	buf := new(cell.Buffer)
-	buf.InitWithTabspaces(h.tabspaces)
+	buf.Init()
 	buf.WriteString(ev.Content)
 	trackedResource := new(TrackedResource)
 	trackedResource.uri = ev.URI
 	trackedResource.Scroll.Init(buf)
 	trackedResource.Scroll.Wrap = h.wrap
+	trackedResource.Scroll.SetTabspaces(h.tabspaces)
 
 	h.resources[ev.URI.String()] = trackedResource
 }

@@ -41,7 +41,7 @@ func newMouseDelegate(vi *viHandlerImpl) text.MouseDelegate {
 func (d mouseDelegate) SetSelectionStart(pos term.Coordinates) {
 	d.MouseDelegate.SetSelectionStart(pos)
 	d.vi.setVisualMode()
-	d.vi.free = d.vi.cursor.Mark()
+	d.vi.anchor = d.vi.cursorAtScroll()
 	d.vi.markMatchingBrace()
 }
 

@@ -50,7 +50,7 @@ func newBufferWithContent(t *testing.T, str string) *Buffer {
 
 func TestBufferInitPerformance(t *testing.T) {
 	c := new(Buffer)
-	c.InitPerformance(1, 10, 10, '\x00')
+	c.InitPerformance(1, 10, 10)
 
 	assert.NotPanics(t, func() {
 		c.Undo()
@@ -95,7 +95,7 @@ func TestBufferInsert(t *testing.T) {
 	assert.Equal(t, term.Coordinates{Y: 1}, next)
 
 	next = buf.Insert(term.Coordinates{Y: 1}, '\t')
-	assert.Equal(t, term.Coordinates{Y: 1, X: 4}, next)
+	assert.Equal(t, term.Coordinates{Y: 1, X: 1}, next)
 }
 
 func TestBufferInsertMultiWidth(t *testing.T) {
@@ -111,9 +111,9 @@ func TestBufferInsertMultiWidth(t *testing.T) {
 
 		assert.Equal(t, 1, buf.Rows())
 		cols := buf.Columns(0)
-		assert.Equal(t, 6, cols)
+		assert.Equal(t, 5, cols)
 		assert.Equal(t, "hell国", buf.String())
-		assert.Equal(t, term.Coordinates{X: 6}, next)
+		assert.Equal(t, term.Coordinates{X: 5}, next)
 	})
 
 	t.Run("insert in the middle of row should shift the width of the rune", func(t *testing.T) {
@@ -128,9 +128,9 @@ func TestBufferInsertMultiWidth(t *testing.T) {
 
 		assert.Equal(t, 1, buf.Rows())
 		cols := buf.Columns(0)
-		assert.Equal(t, 6, cols)
+		assert.Equal(t, 5, cols)
 		assert.Equal(t, "h国ell", buf.String())
-		assert.Equal(t, term.Coordinates{X: 3}, next)
+		assert.Equal(t, term.Coordinates{X: 2}, next)
 	})
 }
 
@@ -196,38 +196,10 @@ func TestBufferDeleteCell(t *testing.T) {
 			"a\nb", term.Coordinates{Y: 1}, true, 'b', term.Coordinates{Y: 1}},
 		{"delete first cell of buffer",
 			"a\nb", term.Coordinates{}, true, 'a', term.Coordinates{}},
-		{"delete start of the line tab at tab",
-			"\ta", term.Coordinates{X: 3}, true, '\t', term.Coordinates{}},
-		{"delete start of the line tab at null 0",
-			"\ta", term.Coordinates{}, true, '\t', term.Coordinates{}},
-		{"delete start of the line tab at null 1",
-			"\ta", term.Coordinates{X: 1}, true, '\t', term.Coordinates{}},
-		{"delete start of the line tab at null 2",
-			"\ta", term.Coordinates{X: 2}, true, '\t', term.Coordinates{}},
-		{"delete end of the line tab at tab",
-			"a\t", term.Coordinates{X: 4}, true, '\t', term.Coordinates{X: 1}},
-		{"delete end of the line tab at null 0",
-			"a\t", term.Coordinates{X: 1}, true, '\t', term.Coordinates{X: 1}},
-		{"delete end of the line tab at null 1",
-			"a\t", term.Coordinates{X: 2}, true, '\t', term.Coordinates{X: 1}},
-		{"delete end of the line tab at null 2",
-			"a\t", term.Coordinates{X: 3}, true, '\t', term.Coordinates{X: 1}},
-		{"handle ending null with no tab (by silently cleaning up nulls)",
-			"a\x00\x00", term.Coordinates{X: 1}, false, 0, term.Coordinates{}},
-		{"delete next character if starting null not part of tab expansion (and nulls)",
-			"\x00\x00a", term.Coordinates{X: 1}, false, 0, term.Coordinates{}},
-		{"delete start and end of the line tab at tab",
-			"\t", term.Coordinates{X: 3}, true, '\t', term.Coordinates{X: 0}},
-		{"delete start and end of the line tab at null 0",
-			"\t", term.Coordinates{X: 0}, true, '\t', term.Coordinates{X: 0}},
-		{"delete start and end of the line tab at null 1",
-			"\t", term.Coordinates{X: 1}, true, '\t', term.Coordinates{X: 0}},
-		{"delete start and end of the line tab at null 2",
-			"\t", term.Coordinates{X: 2}, true, '\t', term.Coordinates{X: 0}},
 		{"delete >1 width character before >1 width character",
 			"💥💥", term.Coordinates{X: 0}, true, '💥', term.Coordinates{}},
 		{"delete >1 width character after >1 width character",
-			"💥💥", term.Coordinates{X: 2}, true, '💥', term.Coordinates{X: 2}},
+			"💥💥", term.Coordinates{X: 1}, true, '💥', term.Coordinates{X: 1}},
 	}
 
 	for _, tcase := range tsuite {
@@ -241,51 +213,10 @@ func TestBufferDeleteCell(t *testing.T) {
 	}
 }
 
-func TestBufferDeleteCellAtTab(t *testing.T) {
-	str := "!\t\t!\t"
-	buf := newBufferWithContent(t, str)
-	require.Equal(t, 14, buf.Columns(0))
-
-	start, r, ok := buf.DeleteCell(term.Coordinates{X: 3, Y: 0})
-	assert.True(t, ok)
-	assert.Equal(t, term.Coordinates{X: 1}, start)
-	assert.Equal(t, "!\t!\t", buf.String())
-	assert.Equal(t, 10, buf.Columns(0))
-	assert.Equal(t, '\t', r)
-
-	start, r, ok = buf.DeleteCell(term.Coordinates{X: 2, Y: 0})
-	assert.True(t, ok)
-	assert.Equal(t, term.Coordinates{X: 1}, start)
-	assert.Equal(t, "!!\t", buf.String())
-	assert.Equal(t, 6, buf.Columns(0))
-	assert.Equal(t, '\t', r)
-
-	start, r, ok = buf.DeleteCell(term.Coordinates{X: 2, Y: 0})
-	assert.True(t, ok)
-	assert.Equal(t, term.Coordinates{X: 2}, start)
-	assert.Equal(t, "!!", buf.String())
-	assert.Equal(t, 2, buf.Columns(0))
-	assert.Equal(t, '\t', r)
-
-	str = "\t\t>>>>"
-	buf = newBufferWithContent(t, str)
-	start, r, ok = buf.DeleteCell(term.Coordinates{X: 3, Y: 0})
-	assert.True(t, ok)
-	assert.Equal(t, term.Coordinates{X: 0}, start)
-	assert.Equal(t, "\t>>>>", buf.String())
-	assert.Equal(t, 8, buf.Columns(0))
-	assert.Equal(t, '\t', r)
-}
-
 type selectCase struct {
 	from     term.Coordinates
 	to       term.Coordinates
 	expected [][]term.Cell
-}
-
-func assertCellProperties(t *testing.T, cell term.Cell, attr term.Attributes) {
-	assert.Equal(t, attr.Fg, cell.Fg)
-	assert.Equal(t, attr.Bg, cell.Bg)
 }
 
 func TestBufferTruncateFrom(t *testing.T) {
@@ -435,14 +366,13 @@ func (t *testSubscriber) OnDidEdit(
 func TestBufferReset(t *testing.T) {
 	t.Run("resets the contents of the buffer", func(t *testing.T) {
 		var b Buffer
-		b.InitWithTabspaces(4)
+		b.Init()
 		b.ReadFrom(strings.NewReader("a\tb"))
 
 		assert.Equal(t, "a\tb", b.String())
 
 		b.Reset()
 		assert.Equal(t, "", b.String())
-		assert.Equal(t, 4, b.Tabspaces())
 	})
 
 	t.Run("does not reset subscribers", func(t *testing.T) {
@@ -663,38 +593,7 @@ diff_buf_adjust(win_T *win)
 	})
 
 	t.Run("does not OOB for lines that are shorter than from", func(t *testing.T) {
-		expected := `/
- 
- 
- 
-
-d
-{
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-}`
-
+		expected := "/\n \n \n \n\t\nd\n{\n\t\n\t\n\n\t\n\t\n\t\n\t\n\t\n\t\n\t\n\t\n\t\n\t\n\t\n\t\n\t\n\t\n\t\n\t\n\t\n\t\n\t\n\t\n}"
 		b := NewBuffer()
 		b.WriteString(str)
 
@@ -714,16 +613,13 @@ func TestBufferShiftRowTabs(t *testing.T) {
 	buf := NewBuffer()
 	buf.ReadFrom(strings.NewReader(origString))
 
-	shifted := buf.ShiftRowLeft(0)
-	assert.Equal(t, 4, shifted)
+	buf.ShiftRowLeft(0)
 	assert.Equal(t, stringNoTab, buf.String())
 
-	shifted = buf.ShiftRowLeft(0)
-	assert.Equal(t, 0, shifted)
+	buf.ShiftRowLeft(0)
 	assert.Equal(t, stringNoTab, buf.String())
 
-	shifted = buf.ShiftRowRight(0)
-	assert.Equal(t, 4, shifted)
+	buf.ShiftRowRight(0)
 	assert.Equal(t, origString, buf.String())
 }
 
@@ -733,30 +629,25 @@ func TestBufferShiftRowTabsWithMultiWidthChar(t *testing.T) {
 	buf := NewBuffer()
 	buf.ReadFrom(strings.NewReader(origString))
 
-	shifted := buf.ShiftRowLeft(0)
-	assert.Equal(t, 4, shifted)
+	buf.ShiftRowLeft(0)
 	assert.Equal(t, stringNoTab, buf.String())
 
-	shifted = buf.ShiftRowLeft(0)
-	assert.Equal(t, 0, shifted)
+	buf.ShiftRowLeft(0)
 	assert.Equal(t, stringNoTab, buf.String())
 
-	shifted = buf.ShiftRowRight(0)
-	assert.Equal(t, 4, shifted)
+	buf.ShiftRowRight(0)
 	assert.Equal(t, origString, buf.String())
 }
 
 func TestBufferShiftRowSpaces(t *testing.T) {
-	origString := "     "
+	origString := " \t"
 	buf := NewBuffer()
 	buf.ReadFrom(strings.NewReader(origString))
 
-	shifted := buf.ShiftRowLeft(0)
-	assert.Equal(t, 4, shifted)
-	assert.Equal(t, " ", buf.String())
+	buf.ShiftRowLeft(0)
+	assert.Equal(t, "\t", buf.String())
 
-	shifted = buf.ShiftRowLeft(0)
-	assert.Equal(t, 1, shifted)
+	buf.ShiftRowLeft(0)
 	assert.Equal(t, "", buf.String())
 }
 
@@ -871,12 +762,11 @@ func TestBufferHeightWidth(t *testing.T) {
 }
 
 func TestBufferMaxColumns(t *testing.T) {
-	const str = "hello\n\tworld\n"
 	buf := newBufferWithContent(t, longStr)
 	assert.Equal(t, buf.MaxColumns(), 44)
 
-	buf = newBufferWithContent(t, str)
-	assert.Equal(t, buf.MaxColumns(), 9)
+	buf = newBufferWithContent(t, "hello\n\tworld\n")
+	assert.Equal(t, buf.MaxColumns(), 6)
 }
 
 func testBufferSelect(t *testing.T, fn func(b *Buffer, from, to term.Coordinates) ([][]term.Cell, []Selection, bool)) {

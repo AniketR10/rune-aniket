@@ -58,8 +58,8 @@ func TestUndoRawEdit(t *testing.T) {
 	undoer, buf := initUndoTestBuffer(t)
 	prev := buf.String()
 
-	buf.Edit(context.Background(), term.Coordinates{Y: 2, X: 1},
-		term.Coordinates{Y: 2, X: 5}, "")
+	buf.Edit(context.Background(), term.Coordinates{Y: 2, X: 0},
+		term.Coordinates{Y: 2, X: 2}, "")
 	noTabs := "Love in your heart wasn't put there to stay.\nLove isn't " +
 		"love 'til you give it away.\n-- Oscar Hammerstein 中国"
 	assert.Equal(t, noTabs, buf.String())
@@ -178,7 +178,7 @@ func TestUndo(t *testing.T) {
 
 		ok, at = undoer.redo()
 		require.True(t, ok)
-		assert.Equal(t, term.Coordinates{X: 4, Y: 1}, at)
+		assert.Equal(t, term.Coordinates{X: 1, Y: 1}, at)
 
 		afterRedo := buf.String()
 		assert.Equal(t, middle, afterRedo)
@@ -335,7 +335,8 @@ public class Rotor {
 		newCells := buf.RawCells()
 		assert.Equal(t, "a\n\n", newString)
 		assert.Equal(t,
-			[][]term.Cell{{{Ch: 'a', Bytes: 1, Width: 1}}, {}, {}}, newCells)
+			[][]term.Cell{{{Ch: 'a', Combining: []rune{}, Bytes: 1, Width: 1}}, {}, {}},
+			newCells)
 
 		ok, _ := buf.Undo()
 		assert.True(t, ok)

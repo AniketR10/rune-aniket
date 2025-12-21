@@ -98,7 +98,7 @@ func (c *Component) log(level log.Level, msg string, args ...interface{}) {
 
 func (c *Component) newCellBuffer() *cell.Buffer {
 	buf := cell.NewBuffer()
-	buf.InitWithTabspaces(c.config.Tabspaces)
+	buf.Init()
 	return buf
 }
 

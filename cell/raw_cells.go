@@ -37,15 +37,8 @@ import (
 )
 
 const (
-	// DefaultTabspaces is the default number of tabspaces used by this package.
-	DefaultTabspaces int = 4
-	defColumnCap     int = 64
-	defRowCap        int = 64
-)
-
-var (
-	nullCluster = [1]rune{'\x00'}
-	tabCluster  = [1]rune{'\t'}
+	defColumnCap int = 64
+	defRowCap    int = 64
 )
 
 // rawCells is a matrix of term.Cell.
@@ -53,21 +46,18 @@ type rawCells struct {
 	columnCap  int
 	rowCap     int
 	cells      [][]term.Cell
-	tabspaces  int
 	fillInChar rune
 	zwj        bool
 	zwjPos     term.Coordinates
 }
 
 // init initializes this rawCells with the given tabspaces config and resets its contents.
-func (c *rawCells) init(tabspaces int) {
-	c.tabspaces = tabspaces
+func (c *rawCells) init() {
 	c.fillInChar = ' '
 	c.reset()
 }
 
-func (c *rawCells) initWithCap(tabspaces, rowCap, columnCap int, fillInChar rune) {
-	c.tabspaces = tabspaces
+func (c *rawCells) initWithCap(rowCap, columnCap int, fillInChar rune) {
 	c.fillInChar = fillInChar
 	c.resetWithCap(rowCap, columnCap)
 }
@@ -138,38 +128,17 @@ func (c *rawCells) insertAt(pos term.Coordinates, r []rune, width uint8, byteCou
 	// This assumes that a zwj and the runes of the grapheme cluster it belongs to
 	// are inserted sequentially
 	case '\u200d':
-		next = term.Coordinates{X: pos.X + 1, Y: pos.Y}
-		// remove any previous null cells added to ensure that ith cell matches
-		// ith user visual cell, for wide characters
-		for pos.Y < len(c.cells) && pos.X > 0 &&
-			pos.X-1 < len(c.cells[pos.Y]) &&
-			c.cells[pos.Y][pos.X-1].Ch == '\x00' {
-			pos.X--
-			next.X--
-			var nop strings.Builder
-			c.deleteRowRange(&nop, pos.Y, pos.X, next.X)
-		}
 		c.zwj = true
 		c.doInsertAt(pos, r, width, byteCount)
+		next = term.Coordinates{X: pos.X + 1, Y: pos.Y}
 		c.zwjPos = next
 		return
 	case '\n':
 		c.insertNewRow(pos)
 		next = term.Coordinates{X: 0, Y: pos.Y + 1}
-	case '\t':
-		if c.tabspaces > 0 {
-			c.insertTabSpaces(pos)
-			next = term.Coordinates{X: pos.X + c.tabspaces, Y: pos.Y}
-			break
-		}
-		fallthrough
 	default:
 		at := pos
 		c.doInsertAt(at, r, width, byteCount)
-		for i := uint8(1); i < width; i++ {
-			at.X++
-			c.doInsertAt(at, nullCluster[:], 0, 0)
-		}
 		next = term.Coordinates{X: at.X + 1, Y: at.Y}
 	}
 
@@ -178,7 +147,8 @@ func (c *rawCells) insertAt(pos term.Coordinates, r []rune, width uint8, byteCou
 			str := c.String()
 			c.reset()
 			_, _ = c.readFromWithView(strings.NewReader(str), c)
-			next = term.Coordinates{X: pos.X, Y: pos.Y}
+			next = pos
+			next.X-- // cells were combined and \u200d removed
 		}
 		c.zwj = false
 		c.zwjPos = term.Coordinates{}
@@ -203,16 +173,6 @@ func (c *rawCells) insertAtPerf(pos term.Coordinates, r rune, width uint8, byteC
 	switch r {
 	case '\u200d':
 		next = term.Coordinates{X: pos.X + 1, Y: pos.Y}
-		// remove any previous null cells added to ensure that ith cell matches
-		// ith user visual cell, for wide characters
-		for pos.Y < len(c.cells) && pos.X > 0 &&
-			pos.X-1 < len(c.cells[pos.Y]) &&
-			c.cells[pos.Y][pos.X-1].Ch == '\x00' {
-			pos.X--
-			next.X--
-			var nop strings.Builder
-			c.deleteRowRange(&nop, pos.Y, pos.X, next.X)
-		}
 		c.zwj = true
 		c.doInsertAtPerf(pos, r, width, byteCount)
 		c.zwjPos = next
@@ -220,20 +180,9 @@ func (c *rawCells) insertAtPerf(pos term.Coordinates, r rune, width uint8, byteC
 	case '\n':
 		c.insertNewRow(pos)
 		next = term.Coordinates{X: 0, Y: pos.Y + 1}
-	case '\t':
-		if c.tabspaces > 0 {
-			c.insertTabSpaces(pos)
-			next = term.Coordinates{X: pos.X + c.tabspaces, Y: pos.Y}
-			break
-		}
-		fallthrough
 	default:
 		at := pos
 		c.doInsertAtPerf(at, r, width, byteCount)
-		for i := uint8(1); i < width; i++ {
-			at.X++
-			c.doInsertAt(at, nullCluster[:], 0, 0)
-		}
 		next = term.Coordinates{X: at.X + 1, Y: at.Y}
 	}
 
@@ -249,14 +198,6 @@ func (c *rawCells) insertAtPerf(pos term.Coordinates, r rune, width uint8, byteC
 	}
 
 	return
-}
-
-func (c *rawCells) insertTabSpaces(pos term.Coordinates) {
-	n := term.Coordinates{X: pos.X, Y: pos.Y}
-	for i := 1; i < c.tabspaces; i++ {
-		n = c.insertAt(n, nullCluster[:], 0, 0)
-	}
-	c.doInsertAt(n, tabCluster[:], 0, 1)
 }
 
 func (c *rawCells) fillInRows(y int) (n int) {
@@ -310,18 +251,12 @@ func (c *rawCells) insert(at term.Coordinates, str string) (
 		}
 		str = str[i:]
 	}
-	// avoid breaking padding blocks in half
-	if from == at {
-		from, _ = c.skipPadding(at, at)
-		to = from
-	}
 	next := to
 	state := -1
 	var cluster string
 	var width uint8
 	for len(str) > 0 {
 		cluster, str, width, state = graphemecluster.StepString(str, state)
-		to = next
 		bytecount := uint8(len([]byte(cluster)))
 		if bytecount == 1 { // specialized perf case for ASCII, avoids allocs
 			for _, r := range cluster { // extract rune with no allocs
@@ -329,9 +264,6 @@ func (c *rawCells) insert(at term.Coordinates, str string) (
 			}
 		} else {
 			next = c.insertAt(next, []rune(cluster), width, bytecount)
-		}
-		if padding := next.X - to.X - 1; padding > 0 {
-			to.X += padding
 		}
 	}
 	to = next
@@ -350,11 +282,9 @@ func copyToBuilder(builder *strings.Builder, cells [][]term.Cell) {
 func copyRowToBuilder(builder *strings.Builder, cells []term.Cell) {
 	builder.Grow(len(cells)) // almost every time this is exact
 	for _, c := range cells {
-		if c.Ch != '\x00' {
-			builder.WriteRune(c.Ch)
-			for _, comb := range c.Combining {
-				builder.WriteRune(comb)
-			}
+		builder.WriteRune(c.Ch)
+		for _, comb := range c.Combining {
+			builder.WriteRune(comb)
 		}
 	}
 }
@@ -371,11 +301,9 @@ func copyToBuffer(builder *bytes.Buffer, cells [][]term.Cell) {
 func copyRowToBuffer(builder *bytes.Buffer, cells []term.Cell) {
 	builder.Grow(len(cells)) // almost every time this is exact
 	for _, c := range cells {
-		if c.Ch != '\x00' {
-			builder.WriteRune(c.Ch)
-			for _, comb := range c.Combining {
-				builder.WriteRune(comb)
-			}
+		builder.WriteRune(c.Ch)
+		for _, comb := range c.Combining {
+			builder.WriteRune(comb)
 		}
 	}
 }
@@ -403,74 +331,12 @@ func (c *rawCells) deleteRowRange(
 	c.cells[row] = c.cells[row][:len(c.cells[row])-diff]
 }
 
-func (c *rawCells) skipPadding(start, end term.Coordinates) (
-	from term.Coordinates, to term.Coordinates,
-) {
-	from, to = start, end
-	// to is right exclusive
-	if to.X > 0 {
-		// to.Y == len(c.cells) should never occur here since the only
-		// correct way for clients to pass that is if to.X == 0,
-		// which we are checking above
-		endLastIdx := len(c.cells[to.Y])
-		to.X--
-		if to.X < endLastIdx {
-			if width := c.cells[to.Y][to.X].Width; width > 1 {
-				to.X += int(width) - 1
-			} else {
-				// do not skip if this is a width right-padding
-				// only if it's a tabspace left-padding.
-				tokens := c.tabspaces - 1
-				revertTo := to
-				for tokens > 0 && to.X < endLastIdx && c.cells[to.Y][to.X].Ch == 0 {
-					to.X++
-					tokens--
-				}
-				if to.X < endLastIdx && c.cells[to.Y][to.X].Ch != '\t' {
-					to = revertTo
-				}
-			}
-		}
-		to.X++
-		// handle unexpected nulls at the end of line
-		if to.X > endLastIdx {
-			to.X = end.X
-		}
-	}
-
-	startLastIdx := len(c.cells[from.Y]) - 1
-	if from.X > 0 && from.X <= startLastIdx &&
-		c.cells[from.Y][from.X].Ch == '\t' {
-		from.X--
-	}
-
-	var done bool
-	for from.X > 0 && from.X <= startLastIdx && c.cells[from.Y][from.X].Ch == 0 {
-		from.X--
-		done = true
-	}
-
-	// we need the last pad's position, but on the left there's no \t delimiter,
-	// so we need to rollback one cell
-	if done && c.cells[from.Y][from.X].Ch != 0 {
-		// except if width > 1, in which case, the pad is a width pad
-		// in that case, skip to right
-		if width := c.cells[from.Y][from.X].Width; width > 1 {
-			from.X += int(width)
-		} else {
-			from.X++
-		}
-	}
-	return from, to
-}
-
 func (c *rawCells) delete(from, to term.Coordinates) (
 	start, end term.Coordinates, str string,
 ) {
 	assertValidCoords(from)
 	assertValidCoords(to)
 	start, end = term.CoordinatesSort(from, to)
-	start, end = c.skipPadding(start, end)
 
 	builder := strings.Builder{}
 
@@ -543,7 +409,7 @@ func (c *rawCells) Rows() int {
 }
 
 func (c *rawCells) String() string {
-	return CellsToString(c.RawCells())
+	return CellsToString(c.cells)
 }
 
 func (c *rawCells) RawCells() [][]term.Cell {
@@ -587,26 +453,14 @@ func (c *rawCells) readFromWithView(r io.Reader, view View) (int64, error) {
 			case '\n':
 				c.cells = append(c.cells, makeNewRow(0, c.columnCap))
 				rowY++
-			case '\t':
-				for i := 1; r[0] == '\t' && i < c.tabspaces; i++ {
-					c.cells[rowY] = append(c.cells[rowY], term.Cell{})
-				}
-				fallthrough
 			default:
-				var combining []rune
-				if len(r) > 1 {
-					combining = r[1:]
-				}
 				cell := term.Cell{
 					Ch:        r[0],
 					Width:     width,
-					Combining: combining,
+					Combining: r[1:],
 					Bytes:     byteCount,
 				}
 				c.cells[rowY] = append(c.cells[rowY], cell)
-				for i := uint8(1); i < width; i++ {
-					c.cells[rowY] = append(c.cells[rowY], term.Cell{})
-				}
 			}
 		}
 		if err != nil {

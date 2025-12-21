@@ -91,7 +91,7 @@ type viHandlerImpl struct {
 	config       viConfig
 	less         handler.Less // used for search capabilities
 	statusBar    statusBar
-	free         text.CursorMark
+	anchor       term.Coordinates
 	cursor       text.Cursor
 	repeater     text.Repeater // used for block repeat only
 	currMode     viMode
@@ -123,6 +123,7 @@ func (vi *viHandlerImpl) init(buf *cell.Buffer, cfg viConfig) {
 		SuperimposeMessage: true,
 		Attributes:         vi.config.attr,
 	})
+	vi.less.Scroll().SetTabspaces(vi.config.tabspaces)
 	scroll := vi.less.Scroll()
 	scroll.Attributes = vi.config.attr
 	scroll.ResultsAttr = vi.config.resAttr
@@ -131,7 +132,7 @@ func (vi *viHandlerImpl) init(buf *cell.Buffer, cfg viConfig) {
 	vi.cursor.RightInclusiveSemantics = true
 	vi.repeater.Init(&vi.cursor, buf)
 
-	vi.free = vi.cursor.Mark()
+	vi.anchor = vi.cursorAtScroll()
 
 	vi.setMode(normalMode)
 	vi.resetCount()
@@ -156,7 +157,7 @@ func (vi *viHandlerImpl) initWithScroll(scroll *component.Scroll, opts ...Option
 	// vi.repeater.Init(&vi.cursor, scroll.Buffer())
 	vi.cursor.InitPerformance(vi.less.Scroll())
 	vi.cursor.RightInclusiveSemantics = true
-	vi.free = vi.cursor.Mark()
+	vi.anchor = vi.cursorAtScroll()
 	vi.setMode(normalMode)
 	vi.resetCount()
 }
@@ -269,6 +270,7 @@ func (vi *viHandlerImpl) setNormalMode() bool {
 		vi.less.SetNormalMode()
 	}
 
+	vi.resetCount()
 	vi.setMode(normalMode)
 	vi.moveMode = moveNone
 	return true
@@ -280,6 +282,7 @@ func (vi *viHandlerImpl) setInsertMode() {
 	vi.blockRepeat.To = term.Coordinates{}
 	vi.setMode(insertMode)
 	vi.less.SetMessage("")
+	vi.resetCount()
 }
 
 func (vi *viHandlerImpl) setDeleteMode(thenInsert bool) {
@@ -573,14 +576,14 @@ func (vi *viHandlerImpl) handleNormal(ev term.Event) (quit, handled bool) {
 		case 'G':
 			vi.cursor.MoveLastLine()
 		case 'j':
-			vi.cursor.MoveToMark(vi.free)
+			vi.cursor.MoveToScroll(vi.anchor)
 			if vi.count == 1 {
 				vi.cursor.MoveDown()
 			} else {
 				vi.cursor.MoveDownLines(vi.count)
 			}
 		case 'k':
-			vi.cursor.MoveToMark(vi.free)
+			vi.cursor.MoveToScroll(vi.anchor)
 			if vi.count == 1 {
 				vi.cursor.MoveUp()
 			} else {
@@ -682,16 +685,16 @@ func (vi *viHandlerImpl) handleNormal(ev term.Event) (quit, handled bool) {
 				handled = vi.setNormalMode()
 				vi.cursor.Unselect()
 			case term.KeyArrowUp:
-				vi.cursor.MoveToMark(vi.free)
+				vi.cursor.MoveToScroll(vi.anchor)
 				vi.cursor.MoveUp()
 			case term.KeyArrowRight:
-				vi.cursor.MoveToMark(vi.free)
+				vi.cursor.MoveToScroll(vi.anchor)
 				vi.cursor.MoveRight()
 			case term.KeyArrowDown:
-				vi.cursor.MoveToMark(vi.free)
+				vi.cursor.MoveToScroll(vi.anchor)
 				vi.cursor.MoveDown()
 			case term.KeyArrowLeft:
-				vi.cursor.MoveToMark(vi.free)
+				vi.cursor.MoveToScroll(vi.anchor)
 				vi.cursor.MoveLeft()
 			default:
 				if ev.Ch == '0' && vi.countDigits == "" {
@@ -773,19 +776,19 @@ func (vi *viHandlerImpl) handleInsert(ev term.Event) (quit, handled bool) {
 			vi.exitInsert()
 			handled = true
 		case term.KeyArrowUp:
-			vi.cursor.MoveToMark(vi.free)
+			vi.cursor.MoveToScroll(vi.anchor)
 			vi.cursor.MoveUp()
 			handled = true
 		case term.KeyArrowRight:
-			vi.cursor.MoveToMark(vi.free)
+			vi.cursor.MoveToScroll(vi.anchor)
 			vi.cursor.MoveRight()
 			handled = true
 		case term.KeyArrowDown:
-			vi.cursor.MoveToMark(vi.free)
+			vi.cursor.MoveToScroll(vi.anchor)
 			vi.cursor.MoveDown()
 			handled = true
 		case term.KeyArrowLeft:
-			vi.cursor.MoveToMark(vi.free)
+			vi.cursor.MoveToScroll(vi.anchor)
 			vi.cursor.MoveLeft()
 			handled = true
 		default:
@@ -1020,16 +1023,14 @@ func (vi *viHandlerImpl) handleYank(ev term.Event) (quit, handled bool) {
 
 func (vi *viHandlerImpl) handleDelete(ev term.Event) (quit, handled bool) {
 	if !vi.deleteInsert && vi.moveMode == moveNone && ev.Ch == 'd' && ev.Mod == 0 {
-		if vi.cursor.SelectLine() {
-			if vi.count > 1 {
-				for i := 0; i < vi.count; i++ {
-					if !vi.cursor.MoveLineDown() {
-						break
-					}
-				}
-			}
-			vi.cursor.DeleteSelection()
+		if !vi.cursor.SelectLine() {
+			return
 		}
+		if vi.count > 1 {
+			for i := 0; i < vi.count && vi.cursor.MoveLineDown(); i++ {
+			}
+		}
+		vi.cursor.DeleteSelection()
 		vi.setNormalMode()
 		handled = true
 		return
@@ -1071,11 +1072,12 @@ func (vi *viHandlerImpl) handleGo(ev term.Event) (quit, handled bool) {
 		// lowercase case 'u':
 		// uppercase case 'U':
 		case 'g':
-			vi.cursor.MoveToMark(vi.free)
+			vi.cursor.MoveToScroll(vi.anchor)
 			if vi.count == 1 {
 				vi.cursor.MoveFirstLine()
 			} else {
-				vi.setCursorAtScroll(term.Coordinates{Y: vi.count - 1})
+				target := max(0, min(vi.count-1, vi.less.Buffer().Rows()-1))
+				vi.setCursorAtScroll(term.Coordinates{Y: target})
 			}
 			vi.resetCount()
 			handled = true
@@ -1097,8 +1099,7 @@ func (vi *viHandlerImpl) Handle(ev term.Event) (quit, handled bool) {
 	vi.pendingSetCursor = nil
 
 	mode := vi.mode()
-	moveToBounds := vi.prepareHandle(mode)
-	defer moveToBounds()
+	defer vi.doneHandle(mode)
 
 	switch mode {
 	case searchMode:
@@ -1129,27 +1130,20 @@ func (vi *viHandlerImpl) Handle(ev term.Event) (quit, handled bool) {
 	return
 }
 
-func (vi *viHandlerImpl) prepareHandle(mode viMode) func() {
-	prev := vi.cursor.Mark()
-	return func() {
-		vi.doMoveToBounds(prev)
-		if mode == normalMode || mode == visualMode /* clicks */ {
-			vi.markMatchingBrace()
-		}
+func (vi *viHandlerImpl) doneHandle(mode viMode) {
+	vi.doMoveToBounds()
+	if mode == normalMode || mode == visualMode /* clicks */ {
+		vi.markMatchingBrace()
 	}
 }
 
 func (vi *viHandlerImpl) moveToBounds() {
-	vi.doMoveToBounds(vi.free)
+	vi.doMoveToBounds()
 }
 
-func (vi *viHandlerImpl) doMoveToBounds(prev text.CursorMark) {
-	// copy the cursor to maintain original cursor for next vertcial move
-	// except when moving the cursor beyond last line
-	after := !prev.Before(vi.cursor.Coordinates())
-
+func (vi *viHandlerImpl) doMoveToBounds() {
 	if vi.cursor.CursorAtScroll().Y < vi.less.Buffer().Rows() {
-		vi.free = vi.cursor.Mark()
+		vi.anchor = vi.cursorAtScroll()
 	}
 
 	switch vi.mode() {
@@ -1161,14 +1155,7 @@ func (vi *viHandlerImpl) doMoveToBounds(prev text.CursorMark) {
 			// down with `j` or `k` from middle columns the cursor will start snapping
 			// to shorter column indices as it comes across shorter text lines.
 			if vi.cursor.Coordinates().Y != prevCoords.Y {
-				vi.free = vi.cursor.Mark()
-			}
-			if vi.config.skipNulls {
-				if after {
-					vi.cursor.MoveToPrevNonNull()
-				} else {
-					vi.cursor.MoveToNextNonNull()
-				}
+				vi.anchor = vi.cursorAtScroll()
 			}
 		}
 	case insertMode, replaceMode, replaceOneMode,
@@ -1181,20 +1168,20 @@ func (vi *viHandlerImpl) doMoveToBounds(prev text.CursorMark) {
 	}
 }
 
-func (c *viHandlerImpl) OnWillSeek(from term.Coordinates) {}
+func (vi *viHandlerImpl) OnWillSeek(from term.Coordinates) {}
 
-func (c *viHandlerImpl) OnDidSeek(from, to term.Coordinates) {}
+func (vi *viHandlerImpl) OnDidSeek(from, to term.Coordinates) {}
 
-func (c *viHandlerImpl) OnHide(start, end int) {
+func (vi *viHandlerImpl) OnHide(start, end int) {
 	// next tick because this callback is called before cursor calls MoveToScroll
-	c.config.scheduleNextTick(func() {
-		c.free = c.cursor.Mark()
+	vi.config.scheduleNextTick(func() {
+		vi.anchor = vi.cursorAtScroll()
 	})
 }
 
-func (c *viHandlerImpl) OnVisible(start int) {
-	c.config.scheduleNextTick(func() {
-		c.free = c.cursor.Mark()
+func (vi *viHandlerImpl) OnVisible(start int) {
+	vi.config.scheduleNextTick(func() {
+		vi.anchor = vi.cursorAtScroll()
 	})
 }
 
@@ -1202,7 +1189,7 @@ func (c *viHandlerImpl) OnVisible(start int) {
 // in the location list identified by ID.
 func (vi *viHandlerImpl) moveToNextLocation(ID string) bool {
 	ok := vi.cursor.MoveToNextLocation(ID)
-	vi.free = vi.cursor.Mark()
+	vi.anchor = vi.cursorAtScroll()
 	return ok
 }
 
@@ -1210,7 +1197,7 @@ func (vi *viHandlerImpl) moveToNextLocation(ID string) bool {
 // in the location list identified by ID.
 func (vi *viHandlerImpl) moveToPrevLocation(ID string) bool {
 	ok := vi.cursor.MoveToPrevLocation(ID)
-	vi.free = vi.cursor.Mark()
+	vi.anchor = vi.cursorAtScroll()
 	return ok
 }
 
@@ -1223,6 +1210,8 @@ func (vi *viHandlerImpl) setLocationList(
 
 // setCursorAtScroll sets the cursor of this viHandlerImpl handler at content pos.
 func (vi *viHandlerImpl) setCursorAtScroll(pos term.Coordinates) bool {
+	pos.Y = max(0, min(pos.Y, vi.less.Buffer().Rows()-1))
+	pos.X = max(0, min(pos.X, vi.less.Buffer().Columns(pos.Y)))
 	// setCursorAtScroll should be robust against resizes, etc.
 	// only the first client interaction should clear this position
 	if vi.less.Scroll().Width() == 0 || vi.less.Scroll().SizeHeight() == 0 {
@@ -1232,7 +1221,7 @@ func (vi *viHandlerImpl) setCursorAtScroll(pos term.Coordinates) bool {
 	}
 
 	_, ok := vi.cursor.MoveToScroll(pos)
-	vi.free = vi.cursor.Mark()
+	vi.anchor = vi.cursorAtScroll()
 	vi.markMatchingBrace()
 	return ok
 }
@@ -1273,6 +1262,45 @@ func (vi *viHandlerImpl) handleZ(ev term.Event) (quit, handled bool) {
 			handled = vi.cursor.SelectFold(ctx)
 			visual = true
 			vi.setVisualMode()
+		case 'h':
+			pos := vi.cursor.CursorAtScroll()
+			if handled = vi.less.Scroll().SeekLeft(); handled {
+				win, _ := vi.cursor.WindowCoordinates(pos)
+				if win.X >= 0 {
+					vi.cursor.SetCursorAtScroll(pos)
+				}
+			}
+		case 'l':
+			pos := vi.cursor.CursorAtScroll()
+			if handled = vi.less.Scroll().SeekRight(); handled {
+				win, _ := vi.cursor.WindowCoordinates(pos)
+				if win.X < vi.less.Scroll().Width() {
+					vi.cursor.SetCursorAtScroll(pos)
+				}
+			}
+		case 'H':
+			pos := vi.cursor.CursorAtScroll()
+			for range vi.less.Scroll().Width() / 2 {
+				if !vi.less.Scroll().SeekLeft() {
+					break
+				}
+			}
+			win, _ := vi.cursor.WindowCoordinates(pos)
+			if win.X >= 0 {
+				vi.cursor.SetCursorAtScroll(pos)
+			}
+		case 'L':
+			pos := vi.cursor.CursorAtScroll()
+			width := vi.less.Scroll().Width()
+			for range vi.less.Scroll().Width() / 2 {
+				if !vi.less.Scroll().SeekRight() {
+					break
+				}
+			}
+			win, _ := vi.cursor.WindowCoordinates(pos)
+			if win.X < width {
+				vi.cursor.SetCursorAtScroll(pos)
+			}
 		case 't':
 			handled = vi.cursor.RepositionTop()
 		case 'b':

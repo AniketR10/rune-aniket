@@ -40,7 +40,7 @@ type floatingBuffer struct {
 }
 
 func (f floatingBuffer) Dimensions() (width, height int) {
-	width = f.buffer.MaxColumns()
+	width = cell.CalculateOptimalWidth(f.buffer.RawCells())
 	height = f.buffer.Rows()
 	return
 }

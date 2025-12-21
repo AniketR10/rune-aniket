@@ -165,7 +165,7 @@ func (m multiKeys) Verify(ctx context.Context) (ret []Key, err error) {
 	scroll := component.NewScroll(cell.NewBuffer())
 	scroll.Wrap = wrap
 	scroll.Resize(width, height)
-	_, err := scroll.ReadFrom(strings.NewReader(file))
+	_, err := scroll.Buffer().ReadFrom(strings.NewReader(file))
 	require.NoError(b, err)
 
 	locations := []textapi.Location{

@@ -89,7 +89,7 @@ func WithGitBar(
 	ret.addAttr = cfg.AddAttr
 
 	b := new(cell.Buffer)
-	b.InitPerformance(1, buf.Rows(), 1, ' ')
+	b.InitPerformance(buf.Rows(), 1, ' ')
 
 	ret.bar = new(component.Scroll)
 	ret.bar.InitPerformance(b)
@@ -269,6 +269,7 @@ func (b *gitBar) rebuildBar(ctx context.Context) {
 				to := term.Coordinates{Y: loc.To.Y}
 				if from == to {
 					at, _ := b.scrollToBarCoordinates(from)
+					at.X = 0
 					b.bar.Buffer().DeleteCell(at)
 					b.bar.Buffer().InsertStringWithAttr(at, delIcon, b.delAttr)
 					continue
@@ -276,6 +277,7 @@ func (b *gitBar) rebuildBar(ctx context.Context) {
 
 				for y := from.Y; y < to.Y; y++ {
 					at, _ := b.scrollToBarCoordinates(term.Coordinates{Y: y})
+					at.X = 0
 					icon := addIcon
 					b.bar.Buffer().DeleteCell(at)
 					b.bar.Buffer().InsertStringWithAttr(at, icon, b.addAttr)

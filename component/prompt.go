@@ -25,7 +25,6 @@ package component
 
 import (
 	"unstable.build/go-tui"
-	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/term"
 )
 
@@ -62,7 +61,6 @@ func (p *Prompt) Init(cfg PromptConfig) {
 		return NewResponsiveString(msg, StringResponsiveConfig{
 			NoSplitWords: true,
 			StringConfig: StringConfig{
-				Tabspaces:            cell.DefaultTabspaces,
 				Alignment:            SpanAlignmentCentered,
 				FrameCharSet:         cfg.Frame,
 				BackgroundAttributes: p.cfg.BackgroundAttributes,

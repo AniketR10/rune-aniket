@@ -29,9 +29,9 @@ import (
 
 	"unstable.build/go-tui/api/config"
 	"unstable.build/go-tui/browser"
-	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/clipboard/sysclip"
+	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/text/modeless"
 	"unstable.build/go-tui/text/vi"
@@ -45,7 +45,7 @@ func Tabspaces(cfg config.Config) (int, error) {
 			err = fmt.Errorf("failed to get 'editor' from config: %v", err)
 			return 0, err
 		}
-		return cell.DefaultTabspaces, nil
+		return component.DefaultTabspaces, nil
 	}
 
 	ret, err := editorConfig.GetInt("tabspaces")
@@ -54,7 +54,7 @@ func Tabspaces(cfg config.Config) (int, error) {
 			err = fmt.Errorf("failed to get 'tabspaces' from config: %v", err)
 			return 0, err
 		}
-		ret = cell.DefaultTabspaces
+		ret = component.DefaultTabspaces
 	}
 	return ret, nil
 }

@@ -39,7 +39,7 @@ func TestIntegrationScroll(t *testing.T) {
 	virtualScroll := Virtual[*Scroll]{C: newScroll(tabspaces, wrap, width, height)}
 	virtualScroll.Resize(width, height)
 	str := "AAAAAAAAAAAA\nBBBBBBBBBBBB\nCCCCCCCCCCCC\nDDDDDDDDDDDD"
-	_, err := virtualScroll.C.ReadFrom(strings.NewReader(str))
+	_, err := virtualScroll.C.Buffer().ReadFrom(strings.NewReader(str))
 	require.NoError(t, err)
 
 	w := term.NewStringWriter(12, height)

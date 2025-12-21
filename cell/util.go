@@ -54,9 +54,9 @@ func CellsToBytesBuffer(buffer *bytes.Buffer, cells [][]term.Cell) {
 }
 
 // StringToCells returns the cell matrix representation of the given string.
-func StringToCells(str string, tabspaces int) (cells [][]term.Cell) {
+func StringToCells(str string) (cells [][]term.Cell) {
 	var builder rawCells
-	builder.init(tabspaces)
+	builder.init()
 	_, _ = builder.ReadFrom(strings.NewReader(str))
 	return builder.RawCells()
 }
@@ -102,10 +102,10 @@ func CopyCells(dst [][]term.Cell, src [][]term.Cell) [][]term.Cell {
 //
 // Furthermore, it won't treat the last EOL as mandatory so it can be used
 // as an in-memory buffer.
-func CellsToBuffer(c [][]term.Cell, tabspaces int) *Buffer {
+func CellsToBuffer(c [][]term.Cell) *Buffer {
 	cells := new(rawCells)
 
-	cells.init(tabspaces)
+	cells.init()
 	cells.cells = CopyCells(cells.cells, c)
 
 	// rawCells hasthe property that there's always at least one row
@@ -138,9 +138,9 @@ func ConvertRunePosToCoordinates(cells [][]term.Cell, y, x int) (
 	}
 
 	line := cells[ret.Y]
-	cellView := [][]term.Cell{line}
+	cellView := [1][]term.Cell{line}
 	var bret term.Coordinates
-	bret, ok = ConvertByteOffsetToCoordinates(cellView, x)
+	bret, ok = ConvertByteOffsetToCoordinates(cellView[:], x)
 	if !ok {
 		return
 	}
@@ -173,9 +173,9 @@ func ConvertCoordinatesToRunePos(cells [][]term.Cell, c term.Coordinates) (
 	if c.X > len(line) {
 		c.X = len(line)
 	}
-	cellView := [][]term.Cell{line}
+	cellView := [1][]term.Cell{line}
 	var bretX int
-	bretX, ok = ConvertCoordinatesToByteOffset(cellView, term.Coordinates{X: c.X})
+	bretX, ok = ConvertCoordinatesToByteOffset(cellView[:], term.Coordinates{X: c.X})
 	if !ok {
 		return
 	}
@@ -245,6 +245,21 @@ func ConvertCoordinatesToByteOffset(cells [][]term.Cell, c term.Coordinates) (
 		offset += int(row[x].Bytes)
 	}
 	return offset, true
+}
+
+// CalculateOptimalWidth calculates the width of this cells,
+// such that nothing is truncated if rendered.
+func CalculateOptimalWidth(cells [][]term.Cell) (max int) {
+	for _, row := range cells {
+		var rowcount int
+		for _, c := range row {
+			rowcount += int(c.Width)
+		}
+		if rowcount > max {
+			max = rowcount
+		}
+	}
+	return
 }
 
 func nextWrite(c View) term.Coordinates {

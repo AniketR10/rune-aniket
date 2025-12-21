@@ -29,12 +29,14 @@ import (
 	"unstable.build/go-tui/api/browserapi"
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/clipboard"
+	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
 )
 
 // modelessConfig holds configuration for Editor.
 type modelessConfig struct {
+	tabspaces          int
 	attr               term.Attributes
 	resAttr            term.Attributes
 	registry           text.WorkspaceCommandRegistry
@@ -61,6 +63,7 @@ type statusBar interface {
 // defaultmodelessHandlerImplConfig is a sane configuration defaults for modelessHandlerImpl.
 func defaultConfig() modelessConfig {
 	return modelessConfig{
+		tabspaces: component.DefaultTabspaces,
 		resAttr: term.Attributes{
 			Attrs: tcell.AttrReverse,
 		},
@@ -80,6 +83,13 @@ type Option func(*modelessConfig)
 func WithResAttr(attr term.Attributes) Option {
 	return func(cfg *modelessConfig) {
 		cfg.resAttr = attr
+	}
+}
+
+// WithTabspaces sets the tabspaces value.
+func WithTabspaces(tabspaces int) Option {
+	return func(cfg *modelessConfig) {
+		cfg.tabspaces = tabspaces
 	}
 }
 

@@ -55,7 +55,7 @@ type StringResponsiveConfig struct {
 
 // NewResponsiveString allocates storage for a new ResponsiveString based on str and cfg.
 func NewResponsiveString(str string, cfg StringResponsiveConfig) *ResponsiveString {
-	return NewResponsiveStringFromCells(cell.StringToCells(str, cfg.Tabspaces), cfg)
+	return NewResponsiveStringFromCells(cell.StringToCells(str), cfg)
 }
 
 // NewResponsiveStringFromCells returns a Responsive implementation for a matrix of cells.
@@ -145,7 +145,7 @@ func (s *ResponsiveString) Resize(width, height int) {
 	s.width = width
 	s.height = height
 	outRaw := s.massageInput(width)
-	s.out = newStringComp(outRaw, s.cfg.Attributes, 0,
+	s.out = newStringComp(outRaw, s.cfg.Attributes, ' ',
 		s.cfg.BackgroundAttributes, s.cfg.FrameCharSet,
 		s.cfg.PaddingHorizontal, s.cfg.PaddingVertical, s.cfg.Alignment, s.cfg.MinWidth)
 	s.out.Resize(width, height)

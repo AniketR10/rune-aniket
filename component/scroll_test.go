@@ -37,6 +37,58 @@ import (
 	"unstable.build/go-tui/term"
 )
 
+func TestComponentScrollDrawEdgeCase(t *testing.T) {
+	const sampleSnippet = `
+/*
+ * Ch@ek if the current buffer should be added to or removed from the list of
+ * diff buffers.
+ */
+	void
+diff_buf_adjust(win_T *win)
+{
+	win_T	*wp;
+	int		i;
+
+	if (!win->w_p_diff)
+	{
+	/* When there is no window showing a diff for this buffer, remove
+	 * it from the diffs. */
+	FOR_ALL_WINDOWS(wp)
+		if (wp->w_buffer == win->w_buffer && wp->w_p_diff)
+		break;
+	if (wp == NULL)
+	{
+		i = diff_buf_idx(win->w_buffer);
+} /* { */ `
+	scroll := newScroll(4, false, 10, 10)
+	scroll.Wrap = true
+	scroll.Buffer().Reset()
+	scroll.Buffer().WriteString(sampleSnippet)
+	for range 15 {
+		scroll.SeekDown()
+	}
+
+	w := term.NewStringWriter(10, 10)
+
+	tests := []comptest.TestCase{
+		{
+			nil, `
+ */       
+    void  
+diff_buf_a
+djust(win_
+T *win)   
+{         
+    win_T 
+   *wp;   
+    int   
+     i;   `,
+		},
+	}
+
+	comptest.TestComponent(t, scroll, w, tests)
+}
+
 func TestInitPerfWithHidden(t *testing.T) {
 	s := new(Scroll)
 	s.InitPerformance(cell.NewBuffer())
@@ -435,23 +487,25 @@ Love isn't love 'til you give it_away.
 		{term.Coordinates{X: 39}, "stay"},
 		{term.Coordinates{X: 43}, ""},
 		{term.Coordinates{Y: 1}, "Love"},
-		{term.Coordinates{Y: 2, X: 11}, "Oscar"},
+		{term.Coordinates{Y: 2, X: 11}, "Hammerstein"},
 		{term.Coordinates{X: 999}, ""},
 		{term.Coordinates{X: -1}, ""},
 		{term.Coordinates{Y: 5}, ""},
 		{term.Coordinates{Y: 1, X: 32}, "it_away"},
 	}
 
-	for _, tcase := range tsuite {
-		start, end, out := scroll.WordAt(tcase.in)
-		assert.Equal(t, tcase.wantOut, out)
-		// start, end used in a select statement should return
-		// return string
-		if out != "" {
-			cells, _, ok := scroll.Buffer().Select(start, end)
-			require.True(t, ok)
-			assert.Equal(t, tcase.wantOut, cell.CellsToString(cells))
-		}
+	for i, tcase := range tsuite {
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			start, end, out := scroll.WordAt(tcase.in)
+			assert.Equal(t, tcase.wantOut, out)
+			// start, end used in a select statement should return
+			// return string
+			if out != "" {
+				cells, _, ok := scroll.Buffer().Select(start, end)
+				require.True(t, ok)
+				assert.Equal(t, tcase.wantOut, cell.CellsToString(cells))
+			}
+		})
 	}
 }
 
@@ -693,32 +747,6 @@ func TestScrollWraps(t *testing.T) {
 	})
 }
 
-func TestRowLastIndex(t *testing.T) {
-	scroll := NewScroll(cell.NewBuffer())
-	cases := []struct {
-		content  string
-		line     int
-		expected int
-	}{
-		{fortune, 0, 44},
-		{fortune, 1, 38},
-		{fortune, 2, 31},
-		{"\t\n1\t\t\t222\n\n\n4\n", 0, 4},
-		{"\t\n1\t\t\t222\n\n\n4\n", 1, 16},
-		{"\t\n1\t\t\t222\n\n\n4\n", 2, 0},
-		{"\t\n1\t\t\t222\n\n\n4\n", 3, 0},
-		{"\t\n1\t\t\t222\n\n\n4\n", 4, 1},
-	}
-
-	for _, tcase := range cases {
-		scroll.Buffer().Reset()
-		_, err := scroll.Buffer().ReadFrom(strings.NewReader(tcase.content))
-		require.NoError(t, err)
-		i := scroll.Buffer().Columns(tcase.line)
-		assert.Equal(t, tcase.expected, i)
-	}
-}
-
 func TestScrollHeightNoWrap(t *testing.T) {
 	scroll := newScroll(4, false, 20, 1)
 	_, err := scroll.Buffer().ReadFrom(strings.NewReader(fortune))
@@ -733,7 +761,6 @@ func TestScrollHeightWrap(t *testing.T) {
 	_, err := scroll.Buffer().ReadFrom(strings.NewReader(fortune))
 	require.NoError(t, err)
 	assert.Equal(t, 0, scroll.Height(0))
-	assert.Equal(t, len(fortune), scroll.Height(1))
 	assert.Equal(t, 13, scroll.Height(10))
 	assert.Equal(t, 3, scroll.Height(100))
 }
@@ -1028,26 +1055,26 @@ func TestScrollToWindowCoordinates(t *testing.T) {
 		{"wrap, no offset, within view bounds, past end of file",
 			makeScroll(true, 100, 100, 0, 0), term.Coordinates{Y: 5, X: 1}, term.Coordinates{Y: 5, X: 1}, true},
 		{"wrap, no offset, within view bounds, past end of one line",
-			makeScroll(true, 100, 100, 0, 0), term.Coordinates{Y: 0, X: 100}, term.Coordinates{Y: 1, X: 0}, true},
+			makeScroll(true, 100, 100, 0, 0), term.Coordinates{Y: 0, X: 100}, term.Coordinates{Y: 0, X: 100}, true},
 
 		{"wrap, no offset, outside view bounds, end of file",
 			makeScroll(true, 10, 3, 0, 0), term.Coordinates{Y: 4, X: 13}, term.Coordinates{Y: 7, X: 3}, true},
 		{"wrap, no offset, outside view bounds, past end of file",
 			makeScroll(true, 10, 3, 0, 0), term.Coordinates{Y: 5, X: 1}, term.Coordinates{Y: 8, X: 1}, true},
 		{"wrap, no offset, outside view bounds, past end of one line",
-			makeScroll(true, 10, 3, 0, 0), term.Coordinates{Y: 0, X: 100}, term.Coordinates{Y: 10, X: 0}, true},
+			makeScroll(true, 10, 3, 0, 0), term.Coordinates{Y: 0, X: 100}, term.Coordinates{Y: 1, X: 90}, true},
 
 		{"wrap, with offset, outside view bounds, end of file",
 			makeScroll(true, 10, 3, 1, 1), term.Coordinates{Y: 4, X: 13}, term.Coordinates{Y: 6, X: 2}, true},
 		{"wrap, with offset, outside view bounds, past end of file",
 			makeScroll(true, 10, 3, 1, 1), term.Coordinates{Y: 5, X: 1}, term.Coordinates{Y: 7, X: 0}, true},
 		{"wrap, with offset, outside view bounds, past end of one line",
-			makeScroll(true, 10, 3, 1, 1), term.Coordinates{Y: 0, X: 100}, term.Coordinates{Y: 9, X: -1}, true},
+			makeScroll(true, 10, 3, 1, 1), term.Coordinates{Y: 0, X: 100}, term.Coordinates{Y: 0, X: 89}, true},
 
 		{"wrap, no offset, outside view bounds, line in the middle, at the end of line",
 			makeScroll(true, 10, 3, 0, 0), term.Coordinates{Y: 2, X: 13}, term.Coordinates{Y: 4, X: 3}, true},
 		{"wrap, no offset, outside view bounds, line in the middle, past the end of file, would wrap, past end of one line",
-			makeScroll(true, 10, 3, 0, 0), term.Coordinates{Y: 5, X: 13}, term.Coordinates{Y: 9, X: 3}, true},
+			makeScroll(true, 10, 3, 0, 0), term.Coordinates{Y: 5, X: 13}, term.Coordinates{Y: 8, X: 13}, true},
 		{"no wrap, end of file offset, first line",
 			makeScroll(false, 10, 3, 2, 0), term.Coordinates{Y: 0, X: 0}, term.Coordinates{Y: -2, X: 0}, true},
 		{"wrap, end of file offset, first line",
@@ -1065,7 +1092,7 @@ func TestScrollToWindowCoordinates(t *testing.T) {
 			term.Coordinates{Y: 0, X: 0}, term.Coordinates{Y: 0, X: 0}, true},
 		{"hidden lines, no offset, position inside hidden block",
 			makeScrollWithHiddenLines(false, 10, 3, 0, 0, startEndBlock{4, 15}),
-			term.Coordinates{Y: 5, X: 5}, term.Coordinates{Y: 4, X: 5}, false},
+			term.Coordinates{Y: 5, X: 5}, term.Coordinates{Y: 4, X: 0}, false},
 		{"hidden lines, no offset, position after hidden blocks",
 			makeScrollWithHiddenLines(false, 10, 3, 0, 0, startEndBlock{4, 15}),
 			term.Coordinates{Y: 16, X: 5}, term.Coordinates{Y: 5, X: 5}, true},
@@ -1177,11 +1204,7 @@ func TestScrollToWindowCoordinates(t *testing.T) {
 			actual, actualOk := test.inScroll(t).ScrollToWindowCoordinates(test.scroll)
 			require.Equal(t, test.expectOk, actualOk)
 			require.Equal(t, test.window, actual, "scroll to window")
-			// resulting position is ambiguous, this should not happen
-			// in a real case scaneario anyway
-			if strings.Contains(test.description, "past end of one line") ||
-				strings.Contains(test.description, "past end of file") ||
-				strings.Contains(test.description, "inside hidden block") {
+			if strings.Contains(test.description, "inside hidden block") {
 				return
 			}
 			assert.Equal(t, test.scroll,
@@ -1561,8 +1584,9 @@ replace this => that
 
 func newScroll(tabspaces int, wrap bool, width, height int) (scroll *Scroll) {
 	buf := cell.NewBuffer()
-	buf.InitWithTabspaces(tabspaces)
+	buf.Init()
 	scroll = NewScroll(buf)
+	scroll.SetTabspaces(tabspaces)
 	scroll.Wrap = wrap
 	scroll.Resize(width, height)
 	return

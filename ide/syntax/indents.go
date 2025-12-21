@@ -350,13 +350,10 @@ func getCurrentIndent(buf *cell.Buffer, line uint) (ret int) {
 		return 0
 	}
 	for _, cell := range cells[line] {
-		if cell.Ch == '\t' {
-			ret++
-			continue
-		}
-		if cell.Ch != 0 {
+		if cell.Ch != '\t' {
 			break
 		}
+		ret++
 	}
 	return
 }
@@ -371,7 +368,7 @@ func nonEmptyColumns(buf *cell.Buffer, line int) (ret int) {
 	firstNonEmpty := -1
 	for i, cell := range cells[line] {
 		switch cell.Ch {
-		case '\x00', ' ', '\t':
+		case ' ', '\t':
 			continue
 		}
 		firstNonEmpty = i
@@ -384,9 +381,7 @@ func nonEmptyColumns(buf *cell.Buffer, line int) (ret int) {
 	// count middle
 	lastNonEmpty := -1
 	for i, cell := range cells[line][firstNonEmpty:] {
-		// do not count \x00; tree-sitter's columns are content byte offsets
 		switch cell.Ch {
-		case '\x00':
 		case ' ', '\t':
 			ret++
 		default:
@@ -402,7 +397,6 @@ func nonEmptyColumns(buf *cell.Buffer, line int) (ret int) {
 	// trim end
 	for _, cell := range cells[line][lastNonEmpty:] {
 		switch cell.Ch {
-		// do not subtract \x00; tree-sitter's columns are content byte offsets
 		case ' ', '\t':
 			ret--
 		}
@@ -419,7 +413,7 @@ func isEmptyLine(buf *cell.Buffer, line int) bool {
 
 	for _, cell := range cells[line] {
 		switch cell.Ch {
-		case '\x00', ' ', '\t':
+		case ' ', '\t':
 			continue
 		}
 		return false

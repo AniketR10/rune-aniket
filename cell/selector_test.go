@@ -52,7 +52,7 @@ itsme`
 			to:   term.Coordinates{X: 2, Y: 1},
 			expected: [][]term.Cell{
 				{{Ch: 'l'}, {Ch: 'l'}, {Ch: 'o'}},
-				{{}, {}},
+				{{Ch: '\t'}, {Ch: 'w'}},
 			},
 		},
 		{
@@ -66,7 +66,7 @@ itsme`
 			from: term.Coordinates{X: 0, Y: 1},
 			to:   term.Coordinates{X: 9, Y: 1},
 			expected: [][]term.Cell{
-				{{}, {}, {}, {Ch: '\t'}, {Ch: 'w'}, {Ch: 'o'}, {Ch: 'r'}, {Ch: 'l'}, {Ch: 'd'}},
+				{{Ch: '\t'}, {Ch: 'w'}, {Ch: 'o'}, {Ch: 'r'}, {Ch: 'l'}, {Ch: 'd'}},
 			},
 		},
 		{
@@ -81,7 +81,7 @@ itsme`
 			to:   term.Coordinates{X: 8, Y: 1},
 			expected: [][]term.Cell{
 				{{Ch: 'l'}, {Ch: 'l'}, {Ch: 'o'}},
-				{{}, {}, {}, {Ch: '\t'}, {Ch: 'w'}, {Ch: 'o'}, {Ch: 'r'}, {Ch: 'l'}},
+				{{Ch: '\t'}, {Ch: 'w'}, {Ch: 'o'}, {Ch: 'r'}, {Ch: 'l'}, {Ch: 'd'}},
 			},
 		},
 		{
@@ -89,7 +89,7 @@ itsme`
 			to:   term.Coordinates{X: 2, Y: 0},
 			expected: [][]term.Cell{
 				{{Ch: 'l'}, {Ch: 'l'}, {Ch: 'o'}},
-				{{}, {}, {}, {Ch: '\t'}, {Ch: 'w'}, {Ch: 'o'}, {Ch: 'r'}, {Ch: 'l'}},
+				{{Ch: '\t'}, {Ch: 'w'}, {Ch: 'o'}, {Ch: 'r'}, {Ch: 'l'}, {Ch: 'd'}},
 			},
 		},
 		{
@@ -97,7 +97,7 @@ itsme`
 			to:   term.Coordinates{X: 5, Y: 3},
 			expected: [][]term.Cell{
 				{{Ch: 'o'}},
-				{{}, {}, {}, {Ch: '\t'}, {Ch: 'w'}, {Ch: 'o'}, {Ch: 'r'}, {Ch: 'l'}, {Ch: 'd'}},
+				{{Ch: '\t'}, {Ch: 'w'}, {Ch: 'o'}, {Ch: 'r'}, {Ch: 'l'}, {Ch: 'd'}},
 				{},
 				{{Ch: 'i'}, {Ch: 't'}, {Ch: 's'}, {Ch: 'm'}, {Ch: 'e'}},
 			},
@@ -185,7 +185,7 @@ func TestSelectLine(t *testing.T) {
 			to:   term.Coordinates{X: 7, Y: 1},
 			expected: [][]term.Cell{
 				{{Ch: 'h'}, {Ch: 'e'}, {Ch: 'l'}, {Ch: 'l'}, {Ch: 'o'}},
-				{{}, {}, {}, {Ch: '\t'}, {Ch: 'w'}, {Ch: 'o'}, {Ch: 'r'}, {Ch: 'l'}, {Ch: 'd'}},
+				{{Ch: '\t'}, {Ch: 'w'}, {Ch: 'o'}, {Ch: 'r'}, {Ch: 'l'}, {Ch: 'd'}},
 				{},
 			},
 		},
@@ -194,7 +194,7 @@ func TestSelectLine(t *testing.T) {
 			to:   term.Coordinates{X: 2, Y: 0},
 			expected: [][]term.Cell{
 				{{Ch: 'h'}, {Ch: 'e'}, {Ch: 'l'}, {Ch: 'l'}, {Ch: 'o'}},
-				{{}, {}, {}, {Ch: '\t'}, {Ch: 'w'}, {Ch: 'o'}, {Ch: 'r'}, {Ch: 'l'}, {Ch: 'd'}},
+				{{Ch: '\t'}, {Ch: 'w'}, {Ch: 'o'}, {Ch: 'r'}, {Ch: 'l'}, {Ch: 'd'}},
 				{},
 				{},
 			},
@@ -204,7 +204,7 @@ func TestSelectLine(t *testing.T) {
 			from: term.Coordinates{X: 10, Y: 2},
 			expected: [][]term.Cell{
 				{{Ch: 'h'}, {Ch: 'e'}, {Ch: 'l'}, {Ch: 'l'}, {Ch: 'o'}},
-				{{}, {}, {}, {Ch: '\t'}, {Ch: 'w'}, {Ch: 'o'}, {Ch: 'r'}, {Ch: 'l'}, {Ch: 'd'}},
+				{{Ch: '\t'}, {Ch: 'w'}, {Ch: 'o'}, {Ch: 'r'}, {Ch: 'l'}, {Ch: 'd'}},
 				{},
 				{},
 			},
@@ -214,7 +214,7 @@ func TestSelectLine(t *testing.T) {
 			from: term.Coordinates{X: 0, Y: 10},
 			expected: [][]term.Cell{
 				{{Ch: 'h'}, {Ch: 'e'}, {Ch: 'l'}, {Ch: 'l'}, {Ch: 'o'}},
-				{{}, {}, {}, {Ch: '\t'}, {Ch: 'w'}, {Ch: 'o'}, {Ch: 'r'}, {Ch: 'l'}, {Ch: 'd'}},
+				{{Ch: '\t'}, {Ch: 'w'}, {Ch: 'o'}, {Ch: 'r'}, {Ch: 'l'}, {Ch: 'd'}},
 				{},
 				{{Ch: 'i'}, {Ch: 't'}, {Ch: 's'}, {Ch: 'm'}, {Ch: 'e'}},
 				{},
@@ -224,7 +224,7 @@ func TestSelectLine(t *testing.T) {
 			from: term.Coordinates{X: 0, Y: 1},
 			to:   term.Coordinates{X: 0, Y: 1},
 			expected: [][]term.Cell{
-				{{}, {}, {}, {Ch: '\t'}, {Ch: 'w'}, {Ch: 'o'}, {Ch: 'r'}, {Ch: 'l'}, {Ch: 'd'}},
+				{{Ch: '\t'}, {Ch: 'w'}, {Ch: 'o'}, {Ch: 'r'}, {Ch: 'l'}, {Ch: 'd'}},
 				{},
 			},
 		},
@@ -279,7 +279,7 @@ func TestSelectBlock(t *testing.T) {
 			to:   term.Coordinates{X: 4, Y: 1},
 			expected: [][]term.Cell{
 				{{Ch: 'h'}, {Ch: 'e'}, {Ch: 'l'}, {Ch: 'l'}},
-				{{}, {}, {}, {Ch: '\t'}},
+				{{Ch: '\t'}, {Ch: 'w'}, {Ch: 'o'}, {Ch: 'r'}},
 			},
 		},
 		{
@@ -287,7 +287,7 @@ func TestSelectBlock(t *testing.T) {
 			to:   term.Coordinates{X: 0, Y: 0},
 			expected: [][]term.Cell{
 				{{Ch: 'h'}, {Ch: 'e'}, {Ch: 'l'}, {Ch: 'l'}},
-				{{}, {}, {}, {Ch: '\t'}},
+				{{Ch: '\t'}, {Ch: 'w'}, {Ch: 'o'}, {Ch: 'r'}},
 			},
 		},
 		{
@@ -295,7 +295,7 @@ func TestSelectBlock(t *testing.T) {
 			to:   term.Coordinates{X: 0, Y: 0},
 			expected: [][]term.Cell{
 				{{Ch: 'h'}, {Ch: 'e'}, {Ch: 'l'}, {Ch: 'l'}},
-				{{}, {}, {}, {Ch: '\t'}},
+				{{Ch: '\t'}, {Ch: 'w'}, {Ch: 'o'}, {Ch: 'r'}},
 				{},
 				{{Ch: 'i'}, {Ch: 't'}, {Ch: 's'}, {Ch: 'm'}},
 			},
@@ -305,7 +305,7 @@ func TestSelectBlock(t *testing.T) {
 			to:   term.Coordinates{X: 2, Y: 6},
 			expected: [][]term.Cell{
 				{{Ch: 'l'}, {Ch: 'l'}, {Ch: 'o'}},
-				{{}, {Ch: '\t'}, {Ch: 'w'}},
+				{{Ch: 'o'}, {Ch: 'r'}, {Ch: 'l'}},
 				{},
 				{{Ch: 's'}, {Ch: 'm'}, {Ch: 'e'}},
 				{},
@@ -315,17 +315,19 @@ func TestSelectBlock(t *testing.T) {
 		},
 	}
 
-	for _, tcase := range testCases {
-		selector := selector{view: buf.view}
-		selection, coords := selector.selectBlock(tcase.from, tcase.to)
-		// we do not care about width; makes defining tests easier
-		for y, row := range selection {
-			for x := range row {
-				selection[y][x].Width = 0
+	for i, tcase := range testCases {
+		t.Run(fmt.Sprintf("test case %d", i), func(t *testing.T) {
+			selector := selector{view: buf.view}
+			selection, coords := selector.selectBlock(tcase.from, tcase.to)
+			// we do not care about width; makes defining tests easier
+			for y, row := range selection {
+				for x := range row {
+					selection[y][x].Width = 0
+				}
 			}
-		}
-		require.Equal(t, CellsToString(tcase.expected), CellsToString(selection))
-		assertReturnedCoordinatesSelectSame(t, selector, coords, tcase.expected, false)
+			require.Equal(t, CellsToString(tcase.expected), CellsToString(selection), i)
+			assertReturnedCoordinatesSelectSame(t, selector, coords, tcase.expected, false)
+		})
 	}
 }
 

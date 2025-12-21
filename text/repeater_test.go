@@ -76,6 +76,7 @@ func TestRepeater(t *testing.T) {
 
 	cursor.MoveLeft()
 	cursor.MoveLeft()
+	cursor.MoveLeft()
 	require.True(t, repeater.Repeat())
 	assert.Equal(t, "1122001122helloworldhelloworl", buf.String())
 }

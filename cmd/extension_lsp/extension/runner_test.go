@@ -78,7 +78,7 @@ func TestLSPFormatting(t *testing.T) {
 
 			var b editBuilder
 			b.init(4, makeFile(), wrapEditor{buffer.Editor()},
-				cell.StringToCells(buffer.String(), 4))
+				cell.StringToCells(buffer.String()))
 			b.applyEdits(edits)
 			assert.Equal(t, string(want), b.buf.String())
 		})

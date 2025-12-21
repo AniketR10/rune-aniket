@@ -92,8 +92,8 @@ func main() {
 }`, out.String())
 
 	require.True(t, cursor.MoveLastLine())
+	require.True(t, cursor.MoveEndLine())
 
-	require.True(t, cursor.MoveRight())
 	cursor.Insert('\n')
 	cursor.Insert('\n')
 	cursor.Insert('i')

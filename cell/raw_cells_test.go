@@ -45,53 +45,10 @@ Love isn't love 'til you give it away.
 	graphemeCluster = "👨‍👧‍👦"
 )
 
-func TestRawCellsInsertMiddlePadding(t *testing.T) {
-	fixture := `{
-	b
-	c
-}
-`
-	var c rawCells
-	c.init(4)
-	c.ReadFrom(strings.NewReader(fixture))
-
-	from := term.Coordinates{X: 0, Y: 1}
-	to := term.Coordinates{Y: 2}
-	start, end, str := c.Edit(context.Background(), from, to, "")
-	assert.Equal(t, from, start)
-	assert.Equal(t, from, end)
-	assert.Equal(t, "\tb\n", str)
-	require.Equal(t, "{\n\tc\n}\n", c.String())
-
-	at := term.Coordinates{X: 1, Y: 1}
-	from, to, _ = c.Edit(context.Background(), at, at, "\tb\n")
-	assert.Equal(t, term.Coordinates{X: 0, Y: 1}, from)
-	assert.Equal(t, term.Coordinates{X: 0, Y: 2}, to)
-
-	start, end, str = c.Edit(context.Background(), from, to, "")
-	assert.Equal(t, term.Coordinates{X: 0, Y: 1}, start)
-	assert.Equal(t, term.Coordinates{Y: 1, X: 0}, end)
-	assert.Equal(t, "\tb\n", str)
-
-	at = term.Coordinates{X: 0, Y: 1}
-	from, to, _ = c.Edit(context.Background(), at, at, "\tb\n")
-	assert.Equal(t, term.Coordinates{X: 0, Y: 1}, from)
-	assert.Equal(t, term.Coordinates{Y: 2}, to)
-
-	expected := [][]term.Cell{
-		{{Ch: '{', Bytes: 1, Width: 1}},
-		{{}, {}, {}, {Bytes: 1, Ch: '\t'}, {Ch: 'b', Bytes: 1, Width: 1}},
-		{{}, {}, {}, {Bytes: 1, Ch: '\t'}, {Ch: 'c', Bytes: 1, Width: 1}},
-		{{Ch: '}', Bytes: 1, Width: 1}},
-		{},
-	}
-	assert.Equal(t, expected, c.RawCells())
-}
-
 func TestRawCellsPanicsNegativeCoordinates(t *testing.T) {
 
 	var c rawCells
-	c.init(4)
+	c.init()
 	negativeCoords := []term.Coordinates{
 		{X: -1, Y: 0},
 		{X: 0, Y: -1},
@@ -185,7 +142,7 @@ func TestRawCellsReadFrom(t *testing.T) {
 
 	for i, tcase := range tsuite {
 		var c rawCells
-		c.init(DefaultTabspaces)
+		c.init()
 		reads := tcase.reads
 		n, err := c.ReadFrom(&tcase)
 		assert.Equal(t, tcase.expectedErr, err, "tcase %d", i)
@@ -203,29 +160,27 @@ func TestRawCellsStringReadFrom(t *testing.T) {
 	}{
 		{"", [][]term.Cell{{}}},
 		{"\n", [][]term.Cell{{}, {}}},
-		{"\t\n", [][]term.Cell{{{}, {}, {}, {Bytes: 1, Ch: '\t'}}, {}}},
-		{"\t", [][]term.Cell{{{}, {}, {}, {Bytes: 1, Ch: '\t'}}}},
-		{"a", [][]term.Cell{{{Ch: 'a', Bytes: 1, Width: 1}}}},
-		{"\nb", [][]term.Cell{{}, {{Ch: 'b', Bytes: 1, Width: 1}}}},
-		{"c\n", [][]term.Cell{{{Ch: 'c', Bytes: 1, Width: 1}}, {}}},
+		{"\t\n", [][]term.Cell{{{Combining: []rune{}, Bytes: 1, Ch: '\t'}}, {}}},
+		{"\t", [][]term.Cell{{{Combining: []rune{}, Bytes: 1, Ch: '\t'}}}},
+		{"a", [][]term.Cell{{{Ch: 'a', Combining: []rune{}, Bytes: 1, Width: 1}}}},
+		{"\nb", [][]term.Cell{{}, {{Ch: 'b', Combining: []rune{}, Bytes: 1, Width: 1}}}},
+		{"c\n", [][]term.Cell{{{Ch: 'c', Combining: []rune{}, Bytes: 1, Width: 1}}, {}}},
 		{"\n\n\n", [][]term.Cell{{}, {}, {}, {}}},
-		{"\n\n\na", [][]term.Cell{{}, {}, {}, {{Ch: 'a', Bytes: 1, Width: 1}}}},
-		// a null cell is placed after 2 width rune, to make sure next rune
-		// is drawn with enough space.
-		{"💥", [][]term.Cell{{{Ch: '💥', Width: 2, Bytes: 4}, {}}}},
+		{"\n\n\na", [][]term.Cell{{}, {}, {}, {{Ch: 'a', Combining: []rune{}, Bytes: 1, Width: 1}}}},
+		{"💥", [][]term.Cell{{{Ch: '💥', Width: 2, Combining: []rune{}, Bytes: 4}}}},
 		{"👨‍👧‍👦", [][]term.Cell{{{Ch: '👨', Combining: []rune{
 			rune(8205),
 			rune(128103),
 			rune(8205),
 			rune(128102),
-		}, Width: 2, Bytes: 18}, {}}}},
+		}, Width: 2, Bytes: 18}}}},
 	}
 
 	for i, _tcase := range tsuite {
 		tcase := _tcase
 		t.Run(fmt.Sprintf("test case %d", i), func(t *testing.T) {
 			var c rawCells
-			c.init(DefaultTabspaces)
+			c.init()
 			n, err := c.ReadFrom(strings.NewReader(tcase.in))
 			assert.NoError(t, err)
 			assert.Equal(t, int64(len([]byte(tcase.in))), n)
@@ -302,7 +257,7 @@ Love isn't love 'til you give it away.
 			inputAt:              term.Coordinates{Y: 2},
 			inputStr:             "\t",
 			expectedFrom:         term.Coordinates{Y: 2},
-			expectedTo:           term.Coordinates{X: 4, Y: 2},
+			expectedTo:           term.Coordinates{X: 1, Y: 2},
 		},
 		{
 			overrideBaseRawCells: &emptyString,
@@ -341,15 +296,15 @@ Love isn't love 'til you give it away.
 			inputAt:              term.Coordinates{X: 0},
 			inputStr:             "💥",
 			expectedFrom:         term.Coordinates{X: 0},
-			expectedTo:           term.Coordinates{X: 2},
+			expectedTo:           term.Coordinates{X: 1},
 			expectedRawCells:     "💥",
 		},
 		{
 			overrideBaseRawCells: &widthString,
 			inputAt:              term.Coordinates{X: 1},
 			inputStr:             "123",
-			expectedFrom:         term.Coordinates{X: 2},
-			expectedTo:           term.Coordinates{X: 5},
+			expectedFrom:         term.Coordinates{X: 1},
+			expectedTo:           term.Coordinates{X: 4},
 			expectedRawCells:     "💥123",
 		},
 		{
@@ -357,7 +312,7 @@ Love isn't love 'til you give it away.
 			inputAt:              term.Coordinates{X: 0},
 			inputStr:             "🤘",
 			expectedFrom:         term.Coordinates{X: 0},
-			expectedTo:           term.Coordinates{X: 2},
+			expectedTo:           term.Coordinates{X: 1},
 			expectedRawCells:     "🤘💥",
 		},
 		{
@@ -365,7 +320,7 @@ Love isn't love 'til you give it away.
 			inputAt:              term.Coordinates{X: 0},
 			inputStr:             "👨‍👧‍👦",
 			expectedFrom:         term.Coordinates{X: 0},
-			expectedTo:           term.Coordinates{X: 2},
+			expectedTo:           term.Coordinates{X: 1},
 			expectedRawCells:     "👨‍👧‍👦",
 		},
 		{
@@ -373,7 +328,7 @@ Love isn't love 'til you give it away.
 			inputAt:              term.Coordinates{X: 0},
 			inputStr:             "👨‍👧‍👦",
 			expectedFrom:         term.Coordinates{X: 0},
-			expectedTo:           term.Coordinates{X: 2},
+			expectedTo:           term.Coordinates{X: 1},
 			expectedRawCells:     "👨‍👧‍👦💥",
 		},
 		{
@@ -381,7 +336,7 @@ Love isn't love 'til you give it away.
 			inputAt:              term.Coordinates{X: 0},
 			inputStr:             "💥",
 			expectedFrom:         term.Coordinates{X: 0},
-			expectedTo:           term.Coordinates{X: 2},
+			expectedTo:           term.Coordinates{X: 1},
 			expectedRawCells:     "💥👨‍👧‍👦",
 		},
 	}
@@ -389,7 +344,7 @@ Love isn't love 'til you give it away.
 	for i, tcase := range tsuite {
 		t.Run(fmt.Sprintf("test case %d", i), func(t *testing.T) {
 			var c rawCells
-			c.init(DefaultTabspaces)
+			c.init()
 			var input string
 			if tcase.overrideBaseRawCells != nil {
 				input = *tcase.overrideBaseRawCells
@@ -421,7 +376,7 @@ Love isn't love 'til you give it away.
 
 func TestRawCellsInsertGraphemeCluster(t *testing.T) {
 	var c rawCells
-	c.init(DefaultTabspaces)
+	c.init()
 	_, next := c.insert(term.Coordinates{}, "👨")
 	_, next = c.insert(next, "\u200d")
 	_, next = c.insert(next, "👧")
@@ -434,7 +389,7 @@ func TestRawCellsInsertGraphemeCluster(t *testing.T) {
 			rune(128103),
 			rune(8205),
 			rune(128102),
-		}, Bytes: 18, Width: 2}, {}},
+		}, Bytes: 18, Width: 2}},
 	}, c.RawCells())
 }
 
@@ -598,7 +553,7 @@ Love isn't love 'til you give it away.
 			expectedStr:          "a\t",
 			expectedRawCells:     "b",
 			inputFrom:            term.Coordinates{},
-			inputTo:              term.Coordinates{X: 5},
+			inputTo:              term.Coordinates{X: 2},
 		},
 		{
 			overrideBaseRawCells: "a\tb",
@@ -611,8 +566,8 @@ Love isn't love 'til you give it away.
 			overrideBaseRawCells: "aa\tb",
 			expectedStr:          "\t",
 			expectedRawCells:     "aab",
-			inputFrom:            term.Coordinates{X: 3},
-			inputTo:              term.Coordinates{X: 4},
+			inputFrom:            term.Coordinates{X: 2},
+			inputTo:              term.Coordinates{X: 3},
 			expectedStart:        &term.Coordinates{X: 2},
 			expectedEnd:          &term.Coordinates{X: 2},
 		},
@@ -621,14 +576,14 @@ Love isn't love 'til you give it away.
 			expectedStr:          "a\n\t",
 			expectedRawCells:     "b",
 			inputFrom:            term.Coordinates{},
-			inputTo:              term.Coordinates{Y: 1, X: 2},
+			inputTo:              term.Coordinates{Y: 1, X: 1},
 		},
 		{
 			overrideBaseRawCells: "a\n\tb\n\tc",
 			expectedStr:          "\tb\n\t",
 			expectedRawCells:     "a\nc",
-			inputFrom:            term.Coordinates{Y: 1, X: 2},
-			inputTo:              term.Coordinates{Y: 2, X: 3},
+			inputFrom:            term.Coordinates{Y: 1, X: 0},
+			inputTo:              term.Coordinates{Y: 2, X: 1},
 			expectedStart:        &term.Coordinates{Y: 1, X: 0},
 			expectedEnd:          &term.Coordinates{Y: 1, X: 0},
 		},
@@ -636,28 +591,12 @@ Love isn't love 'til you give it away.
 			overrideBaseRawCells: "\t\t\ta",
 			expectedStr:          "\t",
 			expectedRawCells:     "\t\ta",
-			inputFrom:            term.Coordinates{X: 5},
-			inputTo:              term.Coordinates{X: 6},
-			expectedStart:        &term.Coordinates{X: 4},
-			expectedEnd:          &term.Coordinates{X: 4},
+			inputFrom:            term.Coordinates{X: 1},
+			inputTo:              term.Coordinates{X: 2},
+			expectedStart:        &term.Coordinates{X: 1},
+			expectedEnd:          &term.Coordinates{X: 1},
 		},
 		{
-			overrideBaseRawCells: "\t\t\ta",
-			expectedStr:          "\t",
-			expectedRawCells:     "\t\ta",
-			inputFrom:            term.Coordinates{X: 3},
-			inputTo:              term.Coordinates{X: 4},
-			expectedStart:        &term.Coordinates{X: 0},
-			expectedEnd:          &term.Coordinates{X: 0},
-		},
-		{
-			overrideBaseRawCells: "\t\t\ta",
-			expectedStr:          "\t\t",
-			expectedRawCells:     "\ta",
-			inputFrom:            term.Coordinates{X: 0},
-			inputTo:              term.Coordinates{X: 8},
-		},
-		{ // 24
 			overrideBaseRawCells: "a\nb\n\nc\n\n\nd",
 			expectedStr:          "a\nb\n\nc\n",
 			expectedRawCells:     "\n\nd",
@@ -738,7 +677,7 @@ Love isn't love 'til you give it away.
 			expectedStr:          "💥",
 			expectedRawCells:     " hello world",
 			inputFrom:            term.Coordinates{},
-			inputTo:              term.Coordinates{X: 2},
+			inputTo:              term.Coordinates{X: 1},
 		},
 		{
 			// mult-width cells, delete falls on padding, >1 string
@@ -754,7 +693,7 @@ Love isn't love 'til you give it away.
 			expectedStr:          "💥 hello ",
 			expectedRawCells:     "world",
 			inputFrom:            term.Coordinates{},
-			inputTo:              term.Coordinates{X: 9},
+			inputTo:              term.Coordinates{X: 8},
 		},
 		{
 			// two >1 width runes
@@ -762,14 +701,14 @@ Love isn't love 'til you give it away.
 			expectedStr:          "💥",
 			expectedRawCells:     "🚀",
 			inputFrom:            term.Coordinates{},
-			inputTo:              term.Coordinates{X: 2},
+			inputTo:              term.Coordinates{X: 1},
 		},
 	}
 
 	for i, tcase := range tsuite {
 		t.Run(fmt.Sprintf("test case %d", i), func(t *testing.T) {
 			var c rawCells
-			c.init(DefaultTabspaces)
+			c.init()
 			base := baseRawCells
 			if tcase.overrideBaseRawCells != "" {
 				base = tcase.overrideBaseRawCells
@@ -810,7 +749,7 @@ Love isn't love 'til you give it away.
 
 func TestRawCellsCell(t *testing.T) {
 	var c rawCells
-	c.init(DefaultTabspaces)
+	c.init()
 	c.ReadFrom(strings.NewReader(benchmarkFortune))
 
 	cell, ok := c.Cell(term.Coordinates{})
@@ -819,13 +758,13 @@ func TestRawCellsCell(t *testing.T) {
 	cell, ok = c.Cell(term.Coordinates{X: 1})
 	assert.False(t, ok)
 
-	cell, ok = c.Cell(term.Coordinates{Y: 1, X: 16})
+	cell, ok = c.Cell(term.Coordinates{Y: 1, X: 4})
 	assert.True(t, ok)
-	assert.Equal(t, term.Cell{Ch: 'L', Bytes: 1, Width: 1}, cell)
+	assert.Equal(t, term.Cell{Ch: 'L', Bytes: 1, Combining: []rune{}, Width: 1}, cell)
 
-	cell, ok = c.Cell(term.Coordinates{Y: 3, X: 37})
+	cell, ok = c.Cell(term.Coordinates{Y: 3, X: 25})
 	assert.True(t, ok)
-	assert.Equal(t, term.Cell{Ch: '中', Bytes: 3, Width: 2}, cell)
+	assert.Equal(t, term.Cell{Ch: '中', Combining: []rune{}, Bytes: 3, Width: 2}, cell)
 
 	cell, ok = c.Cell(term.Coordinates{Y: 666})
 	assert.False(t, ok)
@@ -833,14 +772,14 @@ func TestRawCellsCell(t *testing.T) {
 
 func TestRawCellsEditSymmetryBug(t *testing.T) {
 	b := newBufferWithContent(t, longStr)
-	from := term.Coordinates{X: 4, Y: 2}
+	from := term.Coordinates{X: 1, Y: 2}
 	to := term.Coordinates{X: from.X + 1, Y: from.Y}
 	from, to, ok := fromToInBounds(b.cells, from, to)
 	require.True(t, ok)
 	start, end, str := b.editor.Edit(context.Background(), from, to, "")
 	require.NotZero(t, str)
-	assert.Equal(t, term.Coordinates{X: 4, Y: 2}, start)
-	assert.Equal(t, term.Coordinates{X: 4, Y: 2}, end)
+	assert.Equal(t, term.Coordinates{X: 1, Y: 2}, start)
+	assert.Equal(t, term.Coordinates{X: 1, Y: 2}, end)
 
 	expectedStr := `Love in your heart wasn't put there to stay.
 Love isn't love 'til you give it away.
@@ -849,8 +788,8 @@ Love isn't love 'til you give it away.
 
 	from, to, old := b.editor.Edit(context.Background(), start, start, str)
 	assert.Zero(t, old)
-	assert.Equal(t, term.Coordinates{X: 4, Y: 2}, start)
-	assert.Equal(t, term.Coordinates{X: 4, Y: 2}, end)
+	assert.Equal(t, term.Coordinates{X: 1, Y: 2}, start)
+	assert.Equal(t, term.Coordinates{X: 1, Y: 2}, end)
 	assert.Equal(t, longStr, b.String())
 }
 
@@ -863,7 +802,7 @@ func TestRawCellsFillBufferNoLine(t *testing.T) {
 	str := builder.String()
 
 	var cells rawCells
-	cells.init(DefaultTabspaces)
+	cells.init()
 
 	n, err := cells.ReadFrom(strings.NewReader(str))
 	require.NoError(t, err)
@@ -872,7 +811,7 @@ func TestRawCellsFillBufferNoLine(t *testing.T) {
 
 func newBenchmarkRawCells(fortunes int) (*rawCells, string) {
 	cells := new(rawCells)
-	cells.init(DefaultTabspaces)
+	cells.init()
 	payload := ""
 	for i := 0; i < fortunes; i++ {
 		payload = payload + benchmarkFortune

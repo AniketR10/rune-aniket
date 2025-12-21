@@ -131,7 +131,7 @@ func WithAuxBar(
 	ret.config = config
 
 	b := new(cell.Buffer)
-	b.InitPerformance(1, buf.Rows(), foldsWidth+ret.linesWidth, ' ')
+	b.InitPerformance(buf.Rows(), foldsWidth+ret.linesWidth, ' ')
 
 	ret.bar = new(component.Scroll)
 	ret.bar.InitPerformance(b)
@@ -574,13 +574,8 @@ func (b *auxBar) rebuildLinesAbsolute(ctx context.Context) {
 			// inside hidden block
 			continue
 		}
+		from.X = 0
 		to := from
-		if y < b.bar.Buffer().Rows() {
-			cols := b.bar.Buffer().Columns(y)
-			if cols > 0 {
-				to.X = cols - 1
-			}
-		}
 		number := strconv.Itoa(y + 1)
 		b.bar.Buffer().EditWithAttr(ctx, from, to, number, b.barLineAttr)
 	}
@@ -598,14 +593,7 @@ func (b *auxBar) rebuildLinesRelative(ctx context.Context) {
 			number = strconv.Itoa(n)
 		}
 		from := term.Coordinates{Y: y}
-		to := term.Coordinates{Y: y}
-		if y < b.bar.Buffer().Rows() {
-			cols := b.bar.Buffer().Columns(y)
-			if cols > 0 {
-				to.X = cols - 1
-			}
-		}
-		b.bar.Buffer().EditWithAttr(ctx, from, to, number, b.barLineAttr)
+		b.bar.Buffer().EditWithAttr(ctx, from, from, number, b.barLineAttr)
 	}
 }
 

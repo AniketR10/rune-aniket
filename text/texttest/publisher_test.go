@@ -298,7 +298,7 @@ func TestPublisher(t *testing.T) {
 				assert.Equal(t, term.Coordinates{Y: 2}, ev.Start, "Start")
 				assert.Equal(t, term.Coordinates{Y: 2}, ev.End, "End")
 				assert.Equal(t, term.Coordinates{Y: 2}, ev.From, "From")
-				assert.Equal(t, term.Coordinates{Y: 2, X: 12}, ev.To, "To")
+				assert.Equal(t, term.Coordinates{Y: 2, X: 9}, ev.To, "To")
 				assert.Equal(t, uri, ev.URI)
 				assert.Equal(t, h, ev.Resource)
 				assert.Equal(t, "blah\tbleh", ev.Content)

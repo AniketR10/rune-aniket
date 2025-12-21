@@ -41,7 +41,7 @@ func testSearch(t *testing.T, constructor func(*Buffer) Searcher) {
 
 		res, ok := s.NextResult()
 		require.True(t, ok)
-		assert.Equal(t, term.Coordinates{X: 4}, res)
+		assert.Equal(t, term.Coordinates{X: 1}, res)
 	})
 
 	t.Run("searches for occurrences of a >1 width rune", func(t *testing.T) {
@@ -52,7 +52,7 @@ func testSearch(t *testing.T, constructor func(*Buffer) Searcher) {
 
 		res, ok := s.NextResult()
 		require.True(t, ok)
-		assert.Equal(t, term.Coordinates{X: 2, Y: 2}, res)
+		assert.Equal(t, term.Coordinates{X: 1, Y: 2}, res)
 	})
 
 	t.Run("searches for occurrences with multiple words", func(t *testing.T) {
@@ -74,7 +74,7 @@ func testSearch(t *testing.T, constructor func(*Buffer) Searcher) {
 
 		res, ok := s.NextResult()
 		require.True(t, ok)
-		assert.Equal(t, term.Coordinates{X: 4, Y: 1}, res)
+		assert.Equal(t, term.Coordinates{X: 1, Y: 1}, res)
 	})
 
 	t.Run("returns 0 if there are no matches", func(t *testing.T) {

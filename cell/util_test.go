@@ -52,11 +52,11 @@ func TestConvertByteOffset(t *testing.T) {
 		{[][]term.Cell{{{Ch: 'a'}}, {{Ch: 'b'}}}, 2, term.Coordinates{Y: 1, X: 0}, true},
 		{[][]term.Cell{{{Ch: 'a'}}, {{Ch: 'b'}}}, 3, term.Coordinates{Y: 1, X: 1}, true},
 		{[][]term.Cell{{{Ch: 'a'}}, {{Ch: 'b'}}}, 4, term.Coordinates{Y: 2}, true},
-		{[][]term.Cell{{{Ch: 0}, {Ch: 0}, {Ch: 0}, {Ch: '\t'}, {Ch: 'a'}}}, 1, term.Coordinates{X: 4}, true},
-		{[][]term.Cell{{}, {{Ch: 0}, {Ch: 0}, {Ch: 0}, {Ch: '\t'}, {Ch: 'a'}, {Ch: 0}}}, 2, term.Coordinates{Y: 1, X: 4}, true},
-		{[][]term.Cell{{}, {{Ch: 0}, {Ch: 0}, {Ch: 0}, {Ch: '\t'}, {Ch: 'a'}, {Ch: 0}}}, 3, term.Coordinates{Y: 1, X: 5}, true},
-		{[][]term.Cell{{}, {{Ch: 0}, {Ch: 0}, {Ch: 0}, {Ch: '\t'}, {Ch: 'a'}, {Ch: 0}}}, 1, term.Coordinates{Y: 1, X: 0}, true},
-		{[][]term.Cell{{}, {{Ch: 0}, {Ch: 0}, {Ch: 0}, {Ch: '\t'}, {Ch: 'a'}, {Ch: 0}}}, 4, term.Coordinates{Y: 2}, true},
+		{[][]term.Cell{{{Ch: '\t'}, {Ch: 'a'}}}, 1, term.Coordinates{X: 1}, true},
+		{[][]term.Cell{{}, {{Ch: '\t'}, {Ch: 'a'}}}, 2, term.Coordinates{Y: 1, X: 1}, true},
+		{[][]term.Cell{{}, {{Ch: '\t'}, {Ch: 'a'}}}, 3, term.Coordinates{Y: 1, X: 2}, true},
+		{[][]term.Cell{{}, {{Ch: '\t'}, {Ch: 'a'}}}, 1, term.Coordinates{Y: 1, X: 0}, true},
+		{[][]term.Cell{{}, {{Ch: '\t'}, {Ch: 'a'}}}, 4, term.Coordinates{Y: 2}, true},
 		{
 			[][]term.Cell{{{Ch: '💥'}, {Ch: 0}, {Ch: 'a'}}},
 			4, term.Coordinates{Y: 0, X: 1}, true,
@@ -84,8 +84,8 @@ func TestConvertByteOffset(t *testing.T) {
 				rune(128103),
 				rune(8205),
 				rune(128102),
-			}, Width: 2, Bytes: 18}, {Ch: 0}, {Ch: 'a'}}},
-			19, term.Coordinates{Y: 0, X: 3}, true,
+			}, Width: 2, Bytes: 18}, {Ch: 'a'}}},
+			19, term.Coordinates{Y: 0, X: 2}, true,
 		},
 	}
 
@@ -141,20 +141,20 @@ func TestConvertCoordinatesToRunePos(t *testing.T) {
 		{[][]term.Cell{}, 0, 0, term.Coordinates{}, false},
 		{[][]term.Cell{{{Ch: 'a'}}}, 0, 0, term.Coordinates{}, true},
 		{[][]term.Cell{{{Ch: 'a'}}}, 1, 0, term.Coordinates{Y: 1}, true},
-		{[][]term.Cell{{{Ch: 0}, {Ch: 0}, {Ch: 0}, {Ch: '\t'}, {Ch: 'a'}}}, 0, 1, term.Coordinates{X: 4}, true},
-		{[][]term.Cell{{}, {{Ch: 0}, {Ch: 0}, {Ch: 0}, {Ch: '\t'}, {Ch: 'a'}, {Ch: 0}}}, 1, 1, term.Coordinates{Y: 1, X: 4}, true},
-		{[][]term.Cell{{}, {{Ch: 0}, {Ch: 0}, {Ch: 0}, {Ch: '\t'}, {Ch: 'a'}, {Ch: 0}}}, 1, 0, term.Coordinates{Y: 1, X: 0}, true},
-		{[][]term.Cell{{}, {{Ch: 0}, {Ch: 0}, {Ch: 0}, {Ch: '\t'}, {Ch: 'a'}, {Ch: 0}}}, 1, 2, term.Coordinates{Y: 1, X: 5}, true},
+		{[][]term.Cell{{{Ch: '\t'}, {Ch: 'a'}}}, 0, 1, term.Coordinates{X: 1}, true},
+		{[][]term.Cell{{}, {{Ch: '\t'}, {Ch: 'a'}, {Ch: 0}}}, 1, 1, term.Coordinates{Y: 1, X: 1}, true},
+		{[][]term.Cell{{}, {{Ch: '\t'}, {Ch: 'a'}, {Ch: 0}}}, 1, 0, term.Coordinates{Y: 1, X: 0}, true},
+		{[][]term.Cell{{}, {{Ch: '\t'}, {Ch: 'a'}, {Ch: 0}}}, 1, 2, term.Coordinates{Y: 1, X: 2}, true},
 		{
 			[][]term.Cell{{{Ch: '💥'}, {Ch: 0}, {Ch: 'a'}}},
 			0, len([]byte(string('💥'))), term.Coordinates{Y: 0, X: 1}, true,
 		},
 		{
-			[][]term.Cell{{{Ch: '💥'}, {Ch: 0}, {Ch: 'a'}}},
-			0, len([]byte(string('💥'))) + 1, term.Coordinates{Y: 0, X: 3}, true,
+			[][]term.Cell{{{Ch: '💥'}, {Ch: 'a'}}},
+			0, len([]byte(string('💥'))) + 1, term.Coordinates{Y: 0, X: 2}, true,
 		},
 		{
-			[][]term.Cell{{{Ch: '💥'}, {Ch: 0}, {Ch: 'a'}}},
+			[][]term.Cell{{{Ch: '💥'}, {Ch: 'a'}}},
 			0, 0, term.Coordinates{Y: 0, X: 0}, true,
 		},
 		{
@@ -163,7 +163,7 @@ func TestConvertCoordinatesToRunePos(t *testing.T) {
 				rune(128103),
 				rune(8205),
 				rune(128102),
-			}, Width: 2, Bytes: 18}, {Ch: 0}, {Ch: 'a'}}},
+			}, Width: 2, Bytes: 18}, {Ch: 'a'}}},
 			0, 18, term.Coordinates{Y: 0, X: 1}, true,
 		},
 		{
@@ -172,8 +172,8 @@ func TestConvertCoordinatesToRunePos(t *testing.T) {
 				rune(128103),
 				rune(8205),
 				rune(128102),
-			}, Width: 2, Bytes: 18}, {Ch: 0}, {Ch: 'a'}}},
-			0, 19, term.Coordinates{Y: 0, X: 3}, true,
+			}, Width: 2, Bytes: 18}, {Ch: 'a'}}},
+			0, 19, term.Coordinates{Y: 0, X: 2}, true,
 		},
 	}
 
@@ -225,46 +225,33 @@ func TestCopyCloneCells(t *testing.T) {
 		"a",
 		"\ta",
 		"a\n",
-	}
-
-	nonReversible := []struct {
-		in, out string
-	}{
-		{"\x00", ""},
-		{"\x00a", "a"},
-		{"a\x00", "a"},
-		{"\t\x00", "\t"},
-		{"\x00\t", "\t"},
-		{"\n\x00", "\n"},
-		{"\x00\n", "\n"},
+		"\x00",
+		"\x00a",
+		"a\x00",
+		"\t\x00",
+		"\x00\t",
+		"\n\x00",
+		"\x00\n",
 	}
 
 	t.Run("CopyCells", func(t *testing.T) {
 		var dst [][]term.Cell
 		for i, test := range reversible {
-			dst = CopyCells(dst, StringToCells(test, 4))
-			require.Equal(t, test, CellsToString(dst), i)
-		}
-		for i, test := range nonReversible {
-			dst = CopyCells(dst, StringToCells(test.in, 4))
-			require.Equal(t, test.out, CellsToString(dst), i)
+			dst = CopyCells(dst, StringToCells(test))
+			assert.Equal(t, test, CellsToString(dst), i)
 		}
 	})
 	t.Run("CloneCells", func(t *testing.T) {
 		for i, test := range reversible {
-			dst := CloneCells(StringToCells(test, 4))
-			require.Equal(t, test, CellsToString(dst), i)
-		}
-		for i, test := range nonReversible {
-			dst := CloneCells(StringToCells(test.in, 4))
-			require.Equal(t, test.out, CellsToString(dst), i)
+			dst := CloneCells(StringToCells(test))
+			assert.Equal(t, test, CellsToString(dst), i)
 		}
 	})
 }
 
 func TestCellsToBufferZero(t *testing.T) {
 	t.Run("returned buffer should always have at least one row", func(t *testing.T) {
-		buf := CellsToBuffer(nil, 1)
+		buf := CellsToBuffer(nil)
 		require.Equal(t, 1, buf.Rows())
 		assert.Equal(t, 0, buf.Columns(0))
 	})
@@ -288,7 +275,7 @@ public class Rotor {
 	astr0 := abuf.String()
 	arcells0 := abuf.RawCells()
 
-	bbuf := CellsToBuffer(arcells0, DefaultTabspaces)
+	bbuf := CellsToBuffer(arcells0)
 	bstr0 := bbuf.String()
 	brcells0 := bbuf.RawCells()
 	require.Equal(t, arcells0, brcells0)
@@ -327,7 +314,7 @@ func benchmarkCellToBuffer(b *testing.B, n int) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = CellsToBuffer(c, DefaultTabspaces)
+		_ = CellsToBuffer(c)
 	}
 }
 

@@ -54,10 +54,9 @@ type Editor interface {
 }
 
 // NewView returns a new Reader which reads from cells and uses tabspaces.
-func NewView(cells [][]term.Cell, tabspaces int) View {
+func NewView(cells [][]term.Cell) View {
 	r := &rawCells{
 		cells:      cells,
-		tabspaces:  tabspaces,
 		fillInChar: ' ',
 		columnCap:  defColumnCap,
 		rowCap:     defRowCap,

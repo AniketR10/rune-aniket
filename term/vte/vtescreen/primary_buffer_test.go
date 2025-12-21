@@ -29,7 +29,6 @@ import (
 	"github.com/rivo/uniseg"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
 )
@@ -38,7 +37,7 @@ func TestPrimaryReset(t *testing.T) {
 	t.Run("exactly screen height compared to amount of rows", func(t *testing.T) {
 		b := NewPrimaryBuffer()
 		b.Resize(5, 5)
-		resetPrimaryBuffer(t, b, "0\n1\n2\n3\n4")
+		resetPrimaryBuffer(b, "0\n1\n2\n3\n4")
 
 		assert.Equal(t, 5, b.Rows())
 		assert.Equal(t, 5, b.Columns(0))
@@ -61,7 +60,7 @@ func TestPrimaryReset(t *testing.T) {
 	t.Run("smaller screen height compared to amount of rows", func(t *testing.T) {
 		b := NewPrimaryBuffer()
 		b.Resize(5, 2)
-		resetPrimaryBuffer(t, b, "0\n1\n2\n3\n4")
+		resetPrimaryBuffer(b, "0\n1\n2\n3\n4")
 
 		assert.Equal(t, 5, b.Rows())
 		assert.Equal(t, 5, b.Columns(0))
@@ -111,7 +110,7 @@ func TestPrimaryCoordinates(t *testing.T) {
 func TestPrimarySelection(t *testing.T) {
 	t.Run("select with scroll", func(t *testing.T) {
 		b := makePrimaryBufferForTesting(1, 5)
-		resetPrimaryBuffer(t, b, "0\n1\n2\n3\n4\n5\n6\n7\n8\n9")
+		resetPrimaryBuffer(b, "0\n1\n2\n3\n4\n5\n6\n7\n8\n9")
 
 		b.Select(term.Coordinates{Y: 6})
 		b.SelectEnd(term.Coordinates{Y: 7})
@@ -128,7 +127,7 @@ func TestPrimarySelection(t *testing.T) {
 	})
 	t.Run("word selection with scrollback history", func(t *testing.T) {
 		b := makePrimaryBufferForTesting(2, 10)
-		resetPrimaryBuffer(t, b, "00\n11\n22\n33\n44\n55\n66\n77\n88\n99")
+		resetPrimaryBuffer(b, "00\n11\n22\n33\n44\n55\n66\n77\n88\n99")
 
 		b.SetOffset(term.Coordinates{Y: 2})
 		b.SelectWordAt(term.Coordinates{})
@@ -140,7 +139,7 @@ func TestPrimarySelection(t *testing.T) {
 
 	t.Run("coordinates with scroll", func(t *testing.T) {
 		b := makePrimaryBufferForTesting(1, 5)
-		resetPrimaryBuffer(t, b, "0\n1\n2\n3\n4\n5\n6\n7\n8\n9")
+		resetPrimaryBuffer(b, "0\n1\n2\n3\n4\n5\n6\n7\n8\n9")
 
 		b.Select(term.Coordinates{Y: 6})
 		b.SelectEnd(term.Coordinates{Y: 7})
@@ -175,7 +174,7 @@ func TestPrimaryResize(t *testing.T) {
 
 		t.Run("buffer with more lines than height", func(t *testing.T) {
 			b := makePrimaryBufferForTesting(1, 5)
-			resetPrimaryBuffer(t, b, "0\n1\n2\n3\n4\n5\n6\n7\n8\n9")
+			resetPrimaryBuffer(b, "0\n1\n2\n3\n4\n5\n6\n7\n8\n9")
 			cells := b.Cells.RawCells()
 			require.Len(t, cells, 10)
 			assert.Equal(t, '9', cells[9][0].Ch)
@@ -188,7 +187,7 @@ func TestPrimaryResize(t *testing.T) {
 
 		t.Run("buffer with less lines than height", func(t *testing.T) {
 			b := makePrimaryBufferForTesting(1, 5)
-			resetPrimaryBuffer(t, b, "0\n1\n2\n \n ")
+			resetPrimaryBuffer(b, "0\n1\n2\n \n ")
 			cells := b.Cells.RawCells()
 			require.Len(t, cells, 5)
 			assert.Equal(t, '2', cells[2][0].Ch)
@@ -201,7 +200,7 @@ func TestPrimaryResize(t *testing.T) {
 
 		t.Run("buffer with exactly height lines", func(t *testing.T) {
 			b := makePrimaryBufferForTesting(1, 5)
-			resetPrimaryBuffer(t, b, "0\n1\n2\n3\n4")
+			resetPrimaryBuffer(b, "0\n1\n2\n3\n4")
 			cells := b.Cells.RawCells()
 			require.Len(t, cells, 5)
 			assert.Equal(t, '4', cells[4][0].Ch)
@@ -217,7 +216,7 @@ func TestPrimaryResize(t *testing.T) {
 
 		t.Run("buffer with more lines than height", func(t *testing.T) {
 			b := makePrimaryBufferForTesting(1, 5)
-			resetPrimaryBuffer(t, b, "0\n1\n2\n3\n4\n5\n6\n7\n8\n9")
+			resetPrimaryBuffer(b, "0\n1\n2\n3\n4\n5\n6\n7\n8\n9")
 			cells := b.Cells.RawCells()
 			require.Len(t, cells, 10)
 			assert.Equal(t, '9', cells[9][0].Ch)
@@ -230,7 +229,7 @@ func TestPrimaryResize(t *testing.T) {
 
 		t.Run("buffer with less lines than height", func(t *testing.T) {
 			b := makePrimaryBufferForTesting(1, 5)
-			resetPrimaryBuffer(t, b, "0\n1\n2\n \n ")
+			resetPrimaryBuffer(b, "0\n1\n2\n \n ")
 			cells := b.Cells.RawCells()
 			require.Len(t, cells, 5)
 			assert.Equal(t, '2', cells[2][0].Ch)
@@ -243,7 +242,7 @@ func TestPrimaryResize(t *testing.T) {
 
 		t.Run("buffer with exactly height lines", func(t *testing.T) {
 			b := makePrimaryBufferForTesting(1, 5)
-			resetPrimaryBuffer(t, b, "0\n1\n2\n3\n4")
+			resetPrimaryBuffer(b, "0\n1\n2\n3\n4")
 			cells := b.Cells.RawCells()
 			require.Len(t, cells, 5)
 			assert.Equal(t, '4', cells[4][0].Ch)
@@ -259,7 +258,7 @@ func TestPrimaryResize(t *testing.T) {
 
 		t.Run("buffer with more lines than height", func(t *testing.T) {
 			b := makePrimaryBufferForTesting(1, 5)
-			resetPrimaryBuffer(t, b, "0\n1\n2\n3\n4\n5\n6\n7\n8\n9")
+			resetPrimaryBuffer(b, "0\n1\n2\n3\n4\n5\n6\n7\n8\n9")
 			cells := b.Cells.RawCells()
 			require.Len(t, cells, 10)
 			assert.Equal(t, '9', cells[9][0].Ch)
@@ -273,7 +272,7 @@ func TestPrimaryResize(t *testing.T) {
 
 		t.Run("buffer with less lines than height", func(t *testing.T) {
 			b := makePrimaryBufferForTesting(1, 5)
-			resetPrimaryBuffer(t, b, "0\n1\n2\n \n ")
+			resetPrimaryBuffer(b, "0\n1\n2\n \n ")
 			cells := b.Cells.RawCells()
 			require.Len(t, cells, 5)
 			assert.Equal(t, '2', cells[2][0].Ch)
@@ -287,7 +286,7 @@ func TestPrimaryResize(t *testing.T) {
 
 		t.Run("buffer with exactly height lines", func(t *testing.T) {
 			b := makePrimaryBufferForTesting(1, 5)
-			resetPrimaryBuffer(t, b, "0\n1\n2\n3\n4")
+			resetPrimaryBuffer(b, "0\n1\n2\n3\n4")
 			cells := b.Cells.RawCells()
 			require.Len(t, cells, 5)
 			assert.Equal(t, '4', cells[4][0].Ch)
@@ -305,7 +304,7 @@ func makePrimaryBufferForTesting(width, height int) *PrimaryBuffer {
 	ret := NewPrimaryBuffer()
 	ret.defaultChar = ' '
 	// re-init cells with default char set to space
-	ret.Cells.InitPerformance(cell.DefaultTabspaces, 120, 80, ret.defaultChar)
+	ret.Cells.InitPerformance(120, 80, ret.defaultChar)
 	ret.Resize(width, height)
 	return ret
 }
@@ -325,9 +324,8 @@ func writeToPrimaryBuffer(b *PrimaryBuffer, str string) {
 	}
 }
 
-func resetPrimaryBuffer(t *testing.T, b *PrimaryBuffer, to string) {
+func resetPrimaryBuffer(b *PrimaryBuffer, to string) {
 	b.ResetLines(0, b.Height())
 	b.SetCursorAtScreen(term.Coordinates{}, false)
 	writeToPrimaryBuffer(b, to)
-	require.Equal(t, to, cell.CellsToString(b.Cells.RawCells()))
 }

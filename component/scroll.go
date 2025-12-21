@@ -26,7 +26,6 @@ package component
 import (
 	"context"
 	"fmt"
-	"io"
 	"sort"
 	"strings"
 	"unicode"
@@ -36,9 +35,15 @@ import (
 	"unstable.build/go-tui/term"
 )
 
+const (
+	// DefaultTabspaces is the default number of tabspaces used by this package.
+	DefaultTabspaces int = 4
+)
+
 // Scroll adds Draw to a Buffer along with
 // scrolling, searching and wrap-around capabilities.
 type Scroll struct {
+	tabspaces     int
 	buf           *cell.Buffer
 	searcher      cell.Searcher
 	matches       []term.Coordinates
@@ -96,6 +101,7 @@ func (s *Scroll) initBuffer(buf *cell.Buffer) {
 // Init initializes this scroll with buf.
 func (s *Scroll) Init(buf *cell.Buffer) {
 	s.InitPerformance(buf)
+	s.SetTabspaces(DefaultTabspaces)
 	s.buf.Subscribe((*scrollSubscriber)(s))
 	s.hiddenblocks = make(map[int]int)
 	s.hiddenlines = make(map[int]int)
@@ -120,7 +126,19 @@ func (s *Scroll) InitPerformance(buf *cell.Buffer) {
 		s.ResultsAttr.Attrs = tcell.AttrReverse
 	}
 	s.initBuffer(buf)
-	s.wraps = make([]int, 0)
+}
+
+// SetTabspaces updates the initial tabspaces value.
+func (s *Scroll) SetTabspaces(tabspaces int) {
+	if tabspaces <= 0 {
+		tabspaces = 1 // 0, disabled, effectively is equivalent to 1
+	}
+	s.tabspaces = tabspaces
+}
+
+// Tabspaces returns the tabspaces value.
+func (s *Scroll) Tabspaces() int {
+	return s.tabspaces
 }
 
 // RepositionLineCenter centers the scroll's view around the given position,
@@ -290,6 +308,7 @@ func (s *Scroll) SeekUpPage() bool {
 }
 
 func (s *Scroll) seekTo(pos term.Coordinates, xpadding, ypadding int) bool {
+	pos = s.expandCoordinatesWidth(pos)
 	var yok, xok bool
 	if max := s.getMaxXOffset(); xpadding > max {
 		xpadding = max
@@ -520,11 +539,19 @@ func (s *Scroll) drawNoAttr(writer term.Writer) {
 		if y >= ywindow {
 			break
 		}
+		var offset int
 		for x, c := range r {
+			if c.Ch == '\t' {
+				offset += s.tabspaces - 1
+			}
+			x += offset
+			if c.Width > 1 {
+				offset += int(c.Width) - 1
+			}
 			if x >= xwindow {
 				break
 			}
-			if c.Ch == 0 || x < s.offset.X {
+			if x < s.offset.X {
 				continue
 			}
 			xi := x - s.offset.X
@@ -540,11 +567,19 @@ func (s *Scroll) draw(writer term.Writer) {
 		if y >= ywindow {
 			break
 		}
+		var offset int
 		for x, c := range r {
+			if c.Ch == '\t' {
+				offset += s.tabspaces - 1
+			}
+			x += offset
+			if c.Width > 1 {
+				offset += int(c.Width) - 1
+			}
 			if x >= xwindow {
 				break
 			}
-			if c.Ch == 0 || x < s.offset.X {
+			if x < s.offset.X {
 				continue
 			}
 			xi := x - s.offset.X
@@ -568,7 +603,15 @@ func (s *Scroll) drawDebug(writer term.Writer) {
 		}
 		var x int
 		var c term.Cell
+		var offset int
 		for x, c = range r {
+			if c.Ch == '\t' {
+				offset += s.tabspaces - 1
+			}
+			x += offset
+			if c.Width > 1 {
+				offset += int(c.Width) - 1
+			}
 			if x >= xwindow {
 				break
 			}
@@ -599,37 +642,43 @@ func (s *Scroll) drawDebug(writer term.Writer) {
 }
 
 func (s *Scroll) wrapdrawNoAttr(writer term.Writer) {
-	s.wraps, s.wrapsLen = doWrapdrawNoAttr(writer, s.buf, s.width, s.height, s.offset)
+	s.wraps, s.wrapsLen = doWrapdrawNoAttr(s.tabspaces, writer, s.buf, s.width, s.height, s.offset)
 }
 
 func doWrapdrawNoAttr(
-	writer term.Writer, buf *cell.Buffer,
+	tabspaces int, writer term.Writer, buf *cell.Buffer,
 	width, height int, offset term.Coordinates,
-) (wraps []int, wrapsLen int) {
+) (wraps []int, totalWrapCount int) {
 	xwindow := width
 	ywindow := height
 	wraps = make([]int, 0)
-	wrapsLen = 0
+	totalWrapCount = 0
 	for y, r := range buf.RawCells() {
-		var count int
+		var xoffset int
+		var lineWrapCount int
 		// cannot skip any row until all wraps are accounted for
 		for x, c := range r {
-			xi := x
+			if c.Ch == '\t' {
+				xoffset += tabspaces - 1
+			}
+			xi := x + xoffset
+			if c.Width > 1 {
+				xoffset += int(c.Width) - 1
+			}
 			if xi >= xwindow {
-				for xi >= xwindow {
-					xi -= xwindow
-				}
-				if xi == 0 {
-					count++
-					wrapsLen++
+				charWrapCount := xi / xwindow
+				xi = xi % xwindow
+				if charWrapCount > lineWrapCount {
+					lineWrapCount++
+					totalWrapCount++
 				}
 			}
-			yi := y + wrapsLen - offset.Y
-			if yi >= 0 && yi < ywindow && c.Ch != 0 {
+			yi := y + totalWrapCount - offset.Y
+			if yi >= 0 && yi < ywindow {
 				writer.SetCell(term.Coordinates{X: xi, Y: yi}, c)
 			}
 		}
-		wraps = append(wraps, count)
+		wraps = append(wraps, lineWrapCount)
 	}
 	return
 }
@@ -640,21 +689,27 @@ func (s *Scroll) wrapdraw(writer term.Writer) {
 	s.wraps = make([]int, 0)
 	s.wrapsLen = 0
 	for y, r := range s.buf.RawCells() {
-		var count int
+		var lineWrapCount int
+		var xoffset int
 		// cannot skip any row until wraps are accounted for
 		for x, c := range r {
-			xi := x
+			if c.Ch == '\t' {
+				xoffset += s.tabspaces - 1
+			}
+			xi := x + xoffset
+			if c.Width > 1 {
+				xoffset += int(c.Width) - 1
+			}
 			if xi >= xwindow {
-				for xi >= xwindow {
-					xi -= xwindow
-				}
-				if xi == 0 {
-					count++
+				charWrapCount := xi / xwindow
+				xi = xi % xwindow
+				if charWrapCount > lineWrapCount {
+					lineWrapCount++
 					s.wrapsLen++
 				}
 			}
 			yi := y + s.wrapsLen - s.offset.Y
-			if yi >= 0 && yi < ywindow && c.Ch != 0 {
+			if yi >= 0 && yi < ywindow {
 				if c.Bg == 0 {
 					c.Bg = s.Attributes.Bg
 				}
@@ -664,7 +719,7 @@ func (s *Scroll) wrapdraw(writer term.Writer) {
 				writer.SetCell(term.Coordinates{X: xi, Y: yi}, c)
 			}
 		}
-		s.wraps = append(s.wraps, count)
+		s.wraps = append(s.wraps, lineWrapCount)
 	}
 }
 
@@ -837,7 +892,7 @@ func (s *Scroll) Height(width int) int {
 	}
 	// NOTE: Height shouldn't rely on any internal mutable state
 	// except for the buffer.
-	_, wrapsLen := doWrapdrawNoAttr(term.NoopWriter{}, s.buf,
+	_, wrapsLen := doWrapdrawNoAttr(s.tabspaces, term.NoopWriter{}, s.buf,
 		width, 0, term.Coordinates{})
 	return rows + wrapsLen
 }
@@ -853,11 +908,6 @@ func (s *Scroll) Wraps() []int {
 // Buffer returns s internal Buffer.
 func (s *Scroll) Buffer() *cell.Buffer {
 	return s.buf
-}
-
-// ReadFrom see cell.Buffer.ReadFrom.
-func (s *Scroll) ReadFrom(r io.Reader) (n int64, err error) {
-	return s.buf.ReadFrom(r)
 }
 
 // ScrollSubscriber is a subscriber of seek operations in a scroll.
@@ -995,6 +1045,7 @@ func FuncScrollSubscriber(fn func(from, to term.Coordinates)) ScrollSubscriber {
 // coordinates would fall inside a hidden block, the start of the hidden block is returned.
 func (s *Scroll) ScrollToWindowCoordinates(pos term.Coordinates) (term.Coordinates, bool) {
 	offset := s.Offset()
+	pos = s.expandCoordinatesWidth(pos)
 	ret := term.CoordinatesDiff(pos, offset)
 	if !s.Wrap {
 		if len(s.hiddensorted) != 0 {
@@ -1006,12 +1057,16 @@ func (s *Scroll) ScrollToWindowCoordinates(pos term.Coordinates) (term.Coordinat
 					// min in case pos is inside block
 					ret.Y -= min(block.end, pos.Y) - block.start
 					if pos.Y <= block.end {
+						ret.X = 0
 						return ret, false
 					}
 				}
 			}
 		}
 		return ret, true
+	}
+	if s.Width() == 0 {
+		return term.Coordinates{}, false
 	}
 	wraps := s.Wraps()
 	for y, count := range wraps {
@@ -1020,8 +1075,20 @@ func (s *Scroll) ScrollToWindowCoordinates(pos term.Coordinates) (term.Coordinat
 		}
 		ret.Y += count
 	}
+	// resolve amgiuity of converting positions past the last column by
+	// assuming that the intent is to reference the same line, with an offset
+	// over the last cell in the row, rather than the next row.
+	var maxx int
+	if pos.Y < s.buf.Rows() {
+		maxx = max(0, min(pos.X, s.buf.Columns(pos.Y)-1))
+	}
+	var pastmax int
+	if pos.X > maxx {
+		pastmax = pos.X - maxx
+		pos.X = maxx
+	}
 	diff := pos.X / s.Width()
-	ret.X = pos.X%s.Width() - offset.X
+	ret.X = pos.X%s.Width() - offset.X + pastmax
 	ret.Y += diff
 	return ret, true
 }
@@ -1042,7 +1109,7 @@ func (s *Scroll) WindowToScrollCoordinates(pos term.Coordinates) term.Coordinate
 				}
 			}
 		}
-		return ret
+		return s.contractCoordinatesWidth(ret)
 	}
 	wraps := s.Wraps()
 	var sum, count int
@@ -1057,7 +1124,7 @@ func (s *Scroll) WindowToScrollCoordinates(pos term.Coordinates) term.Coordinate
 		ret.Y -= diff
 		break
 	}
-	return ret
+	return s.contractCoordinatesWidth(ret)
 }
 
 func wordMatcher(r rune) bool {
@@ -1168,7 +1235,7 @@ func (s *Scroll) drawWithHidden(writer term.Writer) {
 				if targetx >= s.width {
 					break
 				}
-				if c.Ch == 0 || targetx < 0 || (trim && (c.Ch == ' ' || c.Ch == '\t')) {
+				if targetx < 0 || (trim && (c.Ch == ' ' || c.Ch == '\t')) {
 					continue
 				}
 				if c.Bg == 0 {
@@ -1192,11 +1259,19 @@ func (s *Scroll) drawWithHidden(writer term.Writer) {
 			y = end + s.offset.Y + 1 + hiddenOffset
 			continue
 		}
+		var xoffset int
 		for x, c := range r {
+			if c.Ch == '\t' {
+				xoffset += s.tabspaces - 1
+			}
+			x += xoffset
+			if c.Width > 1 {
+				xoffset += int(c.Width) - 1
+			}
 			if x >= xwindow {
 				break
 			}
-			if c.Ch == 0 || x < s.offset.X {
+			if x < s.offset.X {
 				continue
 			}
 			xi := x - s.offset.X
@@ -1269,6 +1344,50 @@ func (s *Scroll) repositionLine(target, y int) (seek int) {
 	for y < target && s.SeekUp() {
 		y++
 		seek--
+	}
+	return
+}
+
+func (s *Scroll) expandCoordinatesWidth(scrollPos term.Coordinates) (ret term.Coordinates) {
+	ret = scrollPos
+	cells := s.buf.RawCells()
+	if scrollPos.Y < 0 || scrollPos.Y >= len(cells) {
+		return
+	}
+	posx := max(0, min(scrollPos.X, len(cells[scrollPos.Y])))
+	for _, c := range cells[scrollPos.Y][:posx] {
+		if c.Ch == '\t' {
+			ret.X += s.tabspaces - 1
+		} else if c.Width > 1 {
+			ret.X += int(c.Width) - 1
+		}
+	}
+	if scrollPos.X < len(cells[scrollPos.Y]) &&
+		cells[scrollPos.Y][scrollPos.X].Ch == '\t' {
+		ret.X += s.tabspaces - 1
+	}
+
+	return
+}
+
+func (s *Scroll) contractCoordinatesWidth(pos term.Coordinates) (ret term.Coordinates) {
+	ret = pos
+	cells := s.buf.RawCells()
+	if pos.Y < 0 || pos.Y >= len(cells) {
+		return
+	}
+	for x, c := range cells[pos.Y] {
+		if x >= ret.X {
+			break
+		}
+		if c.Ch == '\t' {
+			ret.X -= s.tabspaces - 1
+		} else if c.Width > 1 {
+			ret.X -= int(c.Width) - 1
+		}
+	}
+	if ret.X < 0 {
+		ret.X = 0
 	}
 	return
 }
