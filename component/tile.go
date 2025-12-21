@@ -518,6 +518,9 @@ func (t *TileNode) SetFixedHeight(height int) bool {
 	if t.parent == nil {
 		panic("corrupted tile tree: exposed root node")
 	}
+	if height != 0 && (t.height == height || t.fixedSize == height) {
+		return true
+	}
 	if t.parent.childSplit == horizontal {
 		if !t.parent.canSetFixedSize(t.parent.height, height) {
 			return false
@@ -542,6 +545,9 @@ func (t *TileNode) SetFixedHeight(height int) bool {
 func (t *TileNode) SetFixedWidth(width int) bool {
 	if t.parent == nil {
 		panic("corrupted tile tree: exposed root node")
+	}
+	if width != 0 && (t.width == width || t.fixedSize == width) {
+		return true
 	}
 	if t.parent.childSplit == vertical {
 		if !t.parent.canSetFixedSize(t.parent.width, width) {

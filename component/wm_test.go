@@ -35,6 +35,55 @@ import (
 	"unstable.build/go-tui/term"
 )
 
+func TestSetWidthHeight(t *testing.T) {
+	w := term.NewStringWriter(20, 8)
+
+	h1 := TestComponent{Ch: 'A'}
+	wm, win1 := NewWindowManager(&h1, DefaultWindowManagerConfig())
+	wm.Resize(20, 8)
+
+	var win2, win3 Window
+	tests := []comptest.TestCase{
+		{
+			Action: func() {
+				var ok bool
+				win2, ok = wm.SplitVertical(win1, &TestComponent{Ch: 'B'})
+				require.True(t, ok)
+				win3, ok = wm.SplitHorizontal(win1, &TestComponent{Ch: 'C'})
+				require.True(t, ok)
+			}, Expected: `
+┌────────┐┌────────┐
+│AAAAAAAA││BBBBBBBB│
+│AAAAAAAA││BBBBBBBB│
+└────────┘│BBBBBBBB│
+┌────────┐│BBBBBBBB│
+│CCCCCCCC││BBBBBBBB│
+│CCCCCCCC││BBBBBBBB│
+└────────┘└────────┘`,
+		},
+		{
+			Action: func() {
+				assert.True(t, wm.SetHeight(win1, win1.MaxHeight()))
+				assert.True(t, wm.SetWidth(win1, win1.MaxWidth()))
+				assert.True(t, wm.SetHeight(win2, win2.MaxHeight()))
+				assert.True(t, wm.SetWidth(win2, win2.MaxWidth()))
+				assert.True(t, wm.SetHeight(win3, win3.MaxHeight()))
+				assert.True(t, wm.SetWidth(win3, win3.MaxWidth()))
+			}, Expected: `
+┌───────────────┐┌─┐
+│AAAAAAAAAAAAAAA││B│
+└───────────────┘│B│
+┌───────────────┐│B│
+│CCCCCCCCCCCCCCC││B│
+│CCCCCCCCCCCCCCC││B│
+│CCCCCCCCCCCCCCC││B│
+└───────────────┘└─┘`,
+		},
+	}
+
+	comptest.TestComponent(t, wm, w, tests)
+}
+
 func TestComponentWindowZeroValue(t *testing.T) {
 	t.Run("Close", func(t *testing.T) {
 		var win Window
@@ -797,7 +846,7 @@ func TestWindowManagerMinimize(t *testing.T) {
 			require.True(t, ok)
 			assert.Equal(t, 'A', win.Content().(*TestComponent).Ch)
 
-			assert.False(t, win.MinimizeUp(0))
+			assert.True(t, win.MinimizeUp(0))
 			_, ok = wm.SplitVertical(win, &TestComponent{Ch: 'a'})
 			require.True(t, ok)
 
