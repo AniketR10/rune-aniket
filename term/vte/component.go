@@ -25,10 +25,12 @@ package vte
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -53,12 +55,16 @@ type Component struct {
 	terminal  schemeapi.Terminal
 	executor  schemeapi.Executor
 	clipboard clipboard.Register
+	cfg       Config
 	pty       workspaceapi.Pty
 	shell     string
 	watcher   workspaceapi.ProcessWatcher
 	ctx       context.Context
 	cancelCtx func()
 	uri       workspaceapi.URI
+	remote    remote
+	writech   chan []byte
+	writeErr  atomic.Value
 
 	width, height     int
 	parserHandler     parserHandler
@@ -94,9 +100,11 @@ func (t *Component) Init(
 	t.selectionAttr = cfg.SelectionAttributes
 	t.terminal = term
 	t.executor = e
+	t.writech = make(chan []byte, 64)
+	t.cfg = cfg
 
 	t.ctx, t.cancelCtx = context.WithCancel(context.Background())
-	err := t.createPty(cfg)
+	err := t.createPty()
 	if err != nil {
 		return err
 	}
@@ -114,11 +122,22 @@ func (t *Component) Init(
 	if log.IsLevelEnabled(log.TraceLevel) {
 		h = vteparser.HandlerWithLogging("vte.parserHandler", h)
 	}
+
+	t.remote = ptyWriterRemote(t, cfg.ScheduleNextTick)
 	t.waitParserHandler = newWaitParserHandler(t.ctx, h)
 	h = t.waitParserHandler
+	t.waitParserHandler.useTrigger(t.triggerBell)
+
 	t.parser.Init(h, new(vteparser.StdTimeout))
 	t.SetDefaultAttributes(t.defAttr)
 	return err
+}
+
+func (t *Component) triggerBell() {
+	err := t.remote.triggerBell()
+	if err != nil {
+		t.log(log.WarnLevel, "trigger bell: %v", err)
+	}
 }
 
 // Run must be called in a separate goroutine to start processing incoming
@@ -154,6 +173,21 @@ func (t *Component) Run(updateChan chan struct{}) error {
 			}
 		}
 	})
+	go debug.CapturePanicReport(func() {
+		for {
+			select {
+			case data := <-t.writech:
+				_, err := t.pty.Master.Write(data)
+				if err != nil {
+					t.log(log.ErrorLevel, "write to pty: %v", err)
+					t.writeErr.Store(err)
+					return
+				}
+			case <-t.ctx.Done():
+				return
+			}
+		}
+	})
 
 	return t.run(ch)
 }
@@ -173,9 +207,17 @@ func (t *Component) URI() workspaceapi.URI {
 
 // WriteToPty writes the given data to the underlying pty master.
 func (t *Component) WriteToPty(data []byte) error {
+	if err := t.writeErr.Load(); err != nil {
+		return err.(error)
+	}
 	// t.log(log.TraceLevel, "WriteToPty: %s", string(data))
-	_, err := t.pty.Master.Write(data)
-	return err
+	select {
+	case t.writech <- data:
+		t.log(log.TraceLevel, "written %d byte(s) to the pty", len(data))
+	default:
+		return errors.New("pty write queue is full")
+	}
+	return nil
 }
 
 // Resize resizes this component and returns an error if
@@ -602,7 +644,7 @@ func (t *Component) log(level log.Level, line string, params ...interface{}) {
 		Logf(level, line, params...)
 }
 
-func (t *Component) createPty(cfg Config) error {
+func (t *Component) createPty() error {
 	pty, err := t.terminal.NewPty(t.ctx)
 	if err != nil {
 		return fmt.Errorf("new pty: %v", err)
@@ -706,6 +748,28 @@ func (t *Component) cursorAtScroll() term.Coordinates {
 
 func (t *Component) scheduleBellCallback(callback func()) (ok bool) {
 	return t.waitParserHandler.scheduleBellCallback(callback)
+}
+
+func (t *Component) systemCanDispatchBell(callback func(error)) {
+	const systemCanDispatchBellTimeout = 3 * time.Second
+	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(ctx, systemCanDispatchBellTimeout)
+
+	var called atomic.Bool
+	t.waitParserHandler.scheduleBellCallback(func() {
+		if called.CompareAndSwap(false, true) {
+			cancel()
+			callback(nil)
+		}
+	})
+
+	go debug.CapturePanicReport(func() {
+		defer cancel()
+		<-ctx.Done()
+		if called.CompareAndSwap(false, true) {
+			callback(fmt.Errorf("timeout waiting for bell: %w", ctx.Err()))
+		}
+	})
 }
 
 func (t *Component) pendingCallbacks() int {

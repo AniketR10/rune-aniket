@@ -24,6 +24,7 @@
 package vte
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -63,12 +64,14 @@ type Handler struct {
 	mouse           *text.Mouse
 	mouseDriver     *mouseDriver
 
-	bracketedPaste bool
-	closed         atomic.Bool // whether Close has been called
-	exit           atomic.Bool // whether running shell/program has exited
-	width, height  int
-	updateCh       chan struct{}
-	sema           chan struct{}
+	bracketedPaste    bool
+	bracketedPasteBuf bytes.Buffer
+
+	closed        atomic.Bool // whether Close has been called
+	exit          atomic.Bool // whether running shell/program has exited
+	width, height int
+	updateCh      chan struct{}
+	sema          chan struct{}
 }
 
 // NewHandler allocates storage for a new Handler and initializes it.
@@ -137,7 +140,6 @@ func (e *Handler) Init(
 	go debug.CapturePanicReport(func() {
 		logErr := e.comp.Run(e.updateCh)
 		e.exit.Store(true)
-		_ = e.publisher.PublishEvent(term.Event{Type: term.EventNone})
 		if e.closed.Load() {
 			e.log(log.DebugLevel, "terminal run: ok")
 			return
@@ -166,6 +168,13 @@ func (e *Handler) Init(
 	})
 
 	return nil
+}
+
+// SystemCanDispatchBell tests whether the underlying vte is able
+// to dispatch a bell by calling the given callback with an error,
+// if there was one. There's a fixed timeout of 3 seconds.
+func (e *Handler) SystemCanDispatchBell(callback func(error)) {
+	e.comp.systemCanDispatchBell(callback)
 }
 
 // Component returns the underlying vte.Component.
@@ -265,7 +274,7 @@ func (e *Handler) Handle(ev term.Event) (exit, handled bool) {
 			return
 		}
 		e.checkSystemBell = false
-		e.vi.systemCanDispatchBell(func(err error) {
+		e.comp.systemCanDispatchBell(func(err error) {
 			if err == nil {
 				return
 			}
@@ -284,15 +293,13 @@ func (e *Handler) Handle(ev term.Event) (exit, handled bool) {
 		return
 	}
 
-	if !e.bracketedPaste {
-		select {
-		case e.sema <- struct{}{}:
-		case <-e.ctx.Done():
-			exit = true
-			return
-		}
-		defer func() { <-e.sema }()
+	select {
+	case e.sema <- struct{}{}:
+	case <-e.ctx.Done():
+		exit = true
+		return
 	}
+	defer func() { <-e.sema }()
 
 	err := e.comp.WriteToPty(raw)
 	if err != nil {
@@ -301,26 +308,23 @@ func (e *Handler) Handle(ev term.Event) (exit, handled bool) {
 		return
 	}
 
-	if !e.bracketedPaste {
-		// do not scroll to bottom in all cases or it could
-		// interfere with interactive program that uses primary buffer
-		if ev.Type == term.EventKey && ev.Ch == 'c' && ev.Mod == term.ModCtrl {
-			e.comp.ScrollBottom()
-		}
-		e.handleTimer.Reset(handleTimeout)
-		select {
-		case <-e.handleTimer.C:
-			e.handleTimer.Stop()
-		case <-e.ctx.Done():
-			exit = true
-		case <-e.updateCh:
-			handled = true
-			if !e.handleTimer.Stop() {
-				<-e.handleTimer.C
-			}
-		}
-	} else {
+	// do not scroll to bottom in all cases or it could
+	// interfere with interactive program that uses primary buffer
+	if ev.Type == term.EventKey && ev.Ch == 'c' && ev.Mod == term.ModCtrl {
+		e.comp.ScrollBottom()
+		e.log(log.TraceLevel, "written cltr-c to pty: %q", raw)
+	}
+	e.handleTimer.Reset(handleTimeout)
+	select {
+	case <-e.handleTimer.C:
+		e.handleTimer.Stop()
+	case <-e.ctx.Done():
+		exit = true
+	case <-e.updateCh:
 		handled = true
+		if !e.handleTimer.Stop() {
+			<-e.handleTimer.C
+		}
 	}
 	return
 }
@@ -432,18 +436,44 @@ func (e *Handler) Close() error {
 }
 
 func (e *Handler) handleInput(ev term.Event) (handled bool, raw []byte) {
+	if (ev.Type == term.EventKey || ev.Type == term.EventRaw) && e.bracketedPaste {
+		e.bracketedPasteBuf.Write(ev.Raw)
+		handled = true
+		return
+	}
 	if isStart := ev.Type == term.EventPasteStart; isStart || ev.Type == term.EventPasteEnd {
 		e.bracketedPaste = isStart
 		programBracketedMode := e.comp.ModeBracketedPaste()
 		e.log(log.DebugLevel, "handled bracketed paste start=%t,"+
 			" programBracketedMode : %v", isStart, programBracketedMode)
-		// if bracketed paste mode is not set, then we are done
-		// otherwise, write bracket start via ev.Raw
+		if isStart {
+			if programBracketedMode {
+				raw = append(raw, ev.Raw...)
+			} else {
+				// handle bracketed paste when we receive EventPasteEnd
+				handled = true
+			}
+			return
+		}
+
+		defer e.bracketedPasteBuf.Reset()
 		if programBracketedMode {
-			raw = ev.Raw
+			raw = e.bracketedPasteBuf.Bytes()
+			// remove `\x1b` (escape sequence) and `\x03` (ctrl-c) to ensure it's
+			// impossible for the pasted text to control the shell's behavior in any way
+			raw = bytes.ReplaceAll(raw, []byte("\x1b"), nil)
+			raw = bytes.ReplaceAll(raw, []byte("\x03"), nil)
+			// start of paste sequence was written upon term.EventPasteStart
+			// so append term.EventPasteEnd or end of paste sequence.
+			raw = append(raw, ev.Raw...)
 		} else {
-			// nothing else to do
-			handled = true
+			// replace line breaks with a single carriage, to reproduce
+			// the enter key as much as possible.
+			raw = bytes.ReplaceAll(raw, []byte("\r\n"), []byte("\r"))
+			raw = bytes.ReplaceAll(raw, []byte("\n"), []byte("\r"))
+		}
+		if !e.comp.IsAltBuffer() {
+			e.comp.ScrollBottom()
 		}
 		return
 	}

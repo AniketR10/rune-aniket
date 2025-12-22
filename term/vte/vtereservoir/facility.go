@@ -160,14 +160,13 @@ func (f *Facility) initCap(initialCapacity int) {
 	}
 }
 
-func (f *Facility) put(v VTE) error {
+func (f *Facility) put(v VTE) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
 	v.ClearPrimaryBuffer()
 
 	f.pool = append(f.pool, v)
-	return nil
 }
 
 func (e *Facility) log(level log.Level, msg string, args ...any) {
@@ -216,9 +215,15 @@ func (v *vteAdapter) Handle(ev term.Event) (exit, handled bool) {
 }
 
 func (v *vteAdapter) Close() error {
-	v.f.log(log.TraceLevel, "Close called on vte %+v", v)
+	v.f.log(log.TraceLevel, "Close called on vte %p", v)
 	if v.exit || v.f.pool == nil || v.UsedAlternateBuffer() {
 		return v.Handler.Close()
 	}
-	return v.f.put(v)
+	v.Handler.SystemCanDispatchBell(func(err error) {
+		if err == nil {
+			v.f.log(log.TraceLevel, "we were able to schedule a callback, caching VTE %p", v)
+			v.f.put(v)
+		}
+	})
+	return nil
 }

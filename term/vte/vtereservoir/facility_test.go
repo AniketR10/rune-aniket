@@ -309,7 +309,8 @@ func (t *testVte) Close() error {
 		t.calledClose = true
 		return nil
 	}
-	return t.f.put(t)
+	t.f.put(t)
+	return nil
 }
 
 func (t *testVte) OnFocusChange(inFocus bool) {

@@ -25,12 +25,9 @@ package vte
 
 import (
 	"context"
-	"fmt"
 	"math"
 	"strings"
 	"sync"
-	"sync/atomic"
-	"time"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/logging"
@@ -40,7 +37,6 @@ import (
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/component"
-	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/term/vte/vtescreen"
 	"unstable.build/go-tui/text/vi"
@@ -95,7 +91,6 @@ func (v *viHandler) init(comp *Component, config Config) {
 	if log.IsLevelEnabled(log.TraceLevel) {
 		v.remote = newLoggingRemote(v.remote)
 	}
-	comp.waitParserHandler.useTrigger(v.triggerBell)
 }
 
 func (v *viHandler) doInit(comp parentComponent, config Config) {
@@ -185,28 +180,6 @@ func (v *viHandler) MaxSeekOffset() int {
 	defer v.sync.mu.Unlock()
 
 	return v.sync.vi.MaxSeekOffset()
-}
-
-func (v *viHandler) systemCanDispatchBell(callback func(error)) {
-	const systemCanDispatchBellTimeout = 3 * time.Second
-	ctx := context.Background()
-	ctx, cancel := context.WithTimeout(ctx, systemCanDispatchBellTimeout)
-
-	var called atomic.Bool
-	v.scheduleAfterBell(true, func() {
-		if called.CompareAndSwap(false, true) {
-			cancel()
-			callback(nil)
-		}
-	})
-
-	go debug.CapturePanicReport(func() {
-		defer cancel()
-		<-ctx.Done()
-		if called.CompareAndSwap(false, true) {
-			callback(fmt.Errorf("timeout waiting for bell: %w", ctx.Err()))
-		}
-	})
 }
 
 func (v *viHandler) Resize(width, height int) {
@@ -645,13 +618,6 @@ func (v *viHandler) scheduleAfterBell(forceSchedule bool, cb func()) {
 	})
 	if !ok {
 		v.log(log.WarnLevel, "could not schedule sync trigger: too many events")
-	}
-}
-
-func (v *viHandler) triggerBell() {
-	err := v.remote.triggerBell()
-	if err != nil {
-		v.log(log.WarnLevel, "trigger bell: %v", err)
 	}
 }
 
