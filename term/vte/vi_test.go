@@ -518,6 +518,26 @@ bcde▐               `},
 		testSequence(t, cfg, defaultWaitForIdleVte, cases)
 	})
 
+	t.Run("tab", func(t *testing.T) {
+		t.Parallel()
+		cases := []vtetest.Case{
+			{"echo<0Cecho \ta",
+				`$ echo  ▐           
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    `},
+		}
+		cfg := DefaultConfig()
+		cfg.Modal = true
+		testSequence(t, cfg, defaultWaitForIdleVte, cases)
+	})
+
 	t.Run("go to start of buffer, go to end of buffer", func(t *testing.T) {
 		t.Parallel()
 		cases := []vtetest.Case{

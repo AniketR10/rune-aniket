@@ -50,6 +50,19 @@ func TestNewAltBuffer(t *testing.T) {
 	assert.Equal(t, [][]term.Cell{
 		{{Ch: DefaultChar, Width: 1}},
 	}, b.Cells.RawCells())
+
+	// rendering corresponds to stored cells
+	// this is important so writes to buffer are correct
+
+	b.Resize(4, 4)
+	b.Insert('\t', 1, 0)
+	b.SetCursorAtScroll(term.Coordinates{X: 1}, false)
+	b.Insert('a', 1, 0)
+	w := term.NewStringWriter(4, 4)
+	b.Draw(w)
+	w.Flush()
+
+	assert.Equal(t, " a  \n    \n    \n    ", w.String())
 }
 
 func TestResize(t *testing.T) {

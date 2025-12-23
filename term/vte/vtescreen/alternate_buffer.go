@@ -90,6 +90,7 @@ func (b *AltBuffer) Init() {
 	b.Cells.InitPerformance(120, 80, b.defaultChar)
 	b.resetLinesTrim(0, b.height, true, b.defaultChar)
 	b.scroll.InitPerformance(&b.Cells)
+	b.scroll.SetTabspaces(1)
 	b.ctx = NewContext(context.Background())
 }
 
@@ -524,6 +525,10 @@ func (b *AltBuffer) resetLinesTrim(start, end int, trim bool, with rune) {
 		b.Cells.TruncateFromContext(b.ctx, from)
 	}
 
+	b.trimColumns(start, end, with, true)
+}
+
+func (b *AltBuffer) trimColumns(start, end int, with rune, reset bool) {
 	for y := start; y < end; y++ {
 		columns := b.Cells.Columns(y)
 		if columns > b.width {
@@ -531,6 +536,8 @@ func (b *AltBuffer) resetLinesTrim(start, end int, trim bool, with rune) {
 			to := term.Coordinates{Y: y, X: columns}
 			b.Cells.DeleteContext(b.ctx, from, to)
 		}
-		b.resetCellsAt(y, 0, b.width, with)
+		if reset {
+			b.resetCellsAt(y, 0, b.width, with)
+		}
 	}
 }

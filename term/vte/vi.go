@@ -105,6 +105,7 @@ func (v *viHandler) doInit(comp parentComponent, config Config) {
 	copyBuffer.InitPerformance(120, 80, vtescreen.DefaultChar)
 	copyScroll := new(component.Scroll)
 	copyScroll.InitPerformance(copyBuffer)
+	copyScroll.SetTabspaces(1)
 	v.copy.vi = new(vi.Vi)
 	v.copy.vi.InitWithScroll(copyScroll, comp.URI(), opts...)
 	v.copy.editor = copyScroll.Buffer().WithEditor(copyEditor{v: v})
@@ -116,6 +117,7 @@ func (v *viHandler) doInit(comp parentComponent, config Config) {
 	v.sync.scroll = new(component.Scroll)
 	v.sync.vteScroll = comp.PrimaryScroll()
 	v.sync.scroll.InitPerformance(v.sync.vteScroll.Buffer())
+	v.sync.scroll.SetTabspaces(1)
 	vi.InitWithScroll(v.sync.scroll, comp.URI(), opts...)
 	v.sync.vi = vi
 	v.sync.selector = v.sync.scroll.Buffer()
