@@ -36,6 +36,7 @@ import (
 	"unstable.build/go-tui/api/browserapi"
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/term/vte/vtescreen"
@@ -536,6 +537,33 @@ bcde▐               `},
 		cfg := DefaultConfig()
 		cfg.Modal = true
 		testSequence(t, cfg, defaultWaitForIdleVte, cases)
+	})
+
+	t.Run("copy/paste", func(t *testing.T) {
+		t.Parallel()
+		cases := []vtetest.Case{
+			{"printf 'abc\\\\x00\\\\n'><k0velllyjj0iecho '<p",
+				`$ printf 'abc\x00\n'
+abc                 
+$ echo '▐bc         
+                    
+                    
+                    
+                    
+                    
+                    
+                    `},
+		}
+		cfg := DefaultConfig()
+		clip := clipboard.NewInMemory()
+		cfg.Clipboard = clip
+		cfg.Modal = true
+		testSequence(t, cfg, defaultWaitForIdleVte, cases)
+
+		// assert data that leaks outside of handler via clipboard
+		data, err := clip.Paste(clipboard.DefaultRegisterID)
+		require.NoError(t, err)
+		assert.Equal(t, "abc", data.Text)
 	})
 
 	t.Run("go to start of buffer, go to end of buffer", func(t *testing.T) {
