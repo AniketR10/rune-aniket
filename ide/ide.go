@@ -169,19 +169,13 @@ func (i *IDE) Config() config.Config {
 	return config.MapConfig(i.ideConfig.cfg)
 }
 
-// Handler returns the root Handler of this IDE, and
-// a cleanup function when this IDE is no longer in use.
-// This can be used insteaf of Run and Close, which
+// Handler returns the root Handler of this IDE.
+// Close must be called when this IDE is no longer in use.
+// This can be used insteaf of Run, which
 // install this IDE on a TUI system.
-func (i *IDE) Handler() (tui.Handler, func()) {
+func (i *IDE) Handler() tui.Handler {
 	i.initRunning()
-	return &i.root, func() {
-		running := atomic.CompareAndSwapInt32(&i.running, 1, 0)
-		if !running {
-			return
-		}
-		_ = i.closeResources()
-	}
+	return &i.root
 }
 
 // Browser returns the current browser in focus.
