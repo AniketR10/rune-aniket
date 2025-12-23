@@ -245,22 +245,45 @@ func (b *Buffer) ReplaceContext(ctx context.Context, str string) {
 
 // ConflateRow is equivalent to calling ConflateRowContext
 // with context.Background.
-func (b *Buffer) ConflateRow(y int) (ok bool) {
+func (b *Buffer) ConflateRow(y int) (x int, ok bool) {
 	return b.ConflateRowContext(context.Background(), y)
 }
 
 // ConflateRowContext will conflate row at index i with the next row
+// It's the opposite operation as WrapRowContext.
 func (b *Buffer) ConflateRowContext(
 	ctx context.Context, y int,
-) (ok bool) {
+) (x int, ok bool) {
 	from := term.Coordinates{Y: y}
 	to := term.Coordinates{Y: y + 1}
 	from, to, ok = fromToInBounds(b.view, from, to)
-	if !ok {
+	if !ok || b.Rows() <= 1 || y == b.Rows()-1 {
+		ok = false
 		return
 	}
 	from.X = b.view.Columns(from.Y)
 	b.editor.Edit(ctx, from, to, "")
+	x = from.X
+	return
+}
+
+// WrapRow is equivalent to calling WrapRowContext
+// with context.Background.
+func (b *Buffer) WrapRow(y, at int) (ok bool) {
+	return b.WrapRowContext(context.Background(), y, at)
+}
+
+// WrapRowContext will wraps the row at index i at the given column.
+// It's the opposite operation as ConflateRowContext.
+func (b *Buffer) WrapRowContext(
+	ctx context.Context, y, at int,
+) (ok bool) {
+	if y >= b.Rows() || at > b.Columns(y) {
+		return
+	}
+	pos := term.Coordinates{Y: y, X: at}
+	b.editor.Edit(ctx, pos, pos, "\n")
+	ok = true
 	return
 }
 

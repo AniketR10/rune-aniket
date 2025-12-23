@@ -1168,14 +1168,13 @@ func (c *Cursor) ConflateContext(ctx context.Context) (ok bool) {
 		return
 	}
 
-	length := c.view().Columns(pos.Y)
-	if length == 0 {
+	if c.view().Columns(pos.Y) == 0 {
 		ok = c.buffer().DeleteRowContext(ctx, pos.Y)
 		return
 	}
-	ok = c.buffer().ConflateRowContext(ctx, pos.Y)
+	x, ok := c.buffer().ConflateRowContext(ctx, pos.Y)
 	if ok {
-		c.setCursorAfterUpdate(term.Coordinates{Y: pos.Y, X: length})
+		c.setCursorAfterUpdate(term.Coordinates{Y: pos.Y, X: x})
 	}
 	return
 }

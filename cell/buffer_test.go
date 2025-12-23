@@ -61,6 +61,79 @@ func TestBufferInitPerformance(t *testing.T) {
 	})
 }
 
+func TestBufferConflateWrap(t *testing.T) {
+	suite := []struct {
+		in       string
+		after    string
+		at       int
+		expectOk bool
+	}{
+		{
+			in:       "",
+			after:    "",
+			at:       0,
+			expectOk: false,
+		},
+		{
+			in:       "a",
+			after:    "",
+			at:       0,
+			expectOk: false,
+		},
+		{
+			in:       "a\n",
+			after:    "a",
+			at:       0,
+			expectOk: true,
+		},
+		{
+			in:       "a\nb",
+			after:    "ab",
+			at:       0,
+			expectOk: true,
+		},
+		{
+			in:       "a\nb\nc",
+			after:    "a\nbc",
+			at:       1,
+			expectOk: true,
+		},
+		{
+			in:       "a\nb\n\tc",
+			after:    "a\nb\tc",
+			at:       1,
+			expectOk: true,
+		},
+		{
+			in:       "a\nb\n\t",
+			after:    "a\nb\t",
+			at:       1,
+			expectOk: true,
+		},
+		{
+			in:       "a\nb\n\t",
+			after:    "a\nb\n\t",
+			at:       2,
+			expectOk: false,
+		},
+	}
+
+	for _, test := range suite {
+		buf := NewBuffer()
+		buf.Write([]byte(test.in))
+		x, actualOk := buf.ConflateRow(test.at)
+		require.Equal(t, test.expectOk, actualOk)
+		if test.expectOk {
+			assert.Equal(t, test.after, buf.String())
+			require.True(t, buf.WrapRow(test.at, x), x)
+		}
+		assert.Equal(t, test.in, buf.String())
+		assert.NotPanics(t, func() {
+			buf.Write([]byte("a\n"))
+		})
+	}
+}
+
 func TestBufferInsert(t *testing.T) {
 	buf := NewBuffer()
 	var next term.Coordinates

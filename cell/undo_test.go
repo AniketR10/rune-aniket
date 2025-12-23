@@ -87,6 +87,9 @@ func TestUndo(t *testing.T) {
 		{"ConflateRow", func(b *Buffer) {
 			b.ConflateRow(1)
 		}},
+		{"WrapRow", func(b *Buffer) {
+			assert.True(t, b.WrapRow(1, 5))
+		}},
 		{"TruncateRowFrom", func(b *Buffer) {
 			b.TruncateRowFrom(term.Coordinates{X: 0, Y: 1})
 		}},
@@ -206,14 +209,14 @@ func TestUndo(t *testing.T) {
 		middle := buf.String()
 
 		undoer.undo()
-		for range 4 {
+		for range 6 {
 			undoer.undo()
 		}
 
 		after := buf.String()
 		assert.Equal(t, prev, after)
 
-		for range 4 {
+		for range 6 {
 			undoer.redo()
 		}
 		undoer.redo()
@@ -222,7 +225,7 @@ func TestUndo(t *testing.T) {
 		assert.Equal(t, middle, afterRedo)
 
 		undoer.undo()
-		for range 4 {
+		for range 6 {
 			undoer.undo()
 		}
 
@@ -244,7 +247,7 @@ func TestUndo(t *testing.T) {
 
 		middle := buf.String()
 
-		for range 5 {
+		for range 6 {
 			undoer.undo()
 		}
 		undoer.undo()
@@ -253,14 +256,14 @@ func TestUndo(t *testing.T) {
 		assert.Equal(t, prev, after)
 
 		undoer.redo()
-		for range 5 {
+		for range 6 {
 			undoer.redo()
 		}
 
 		afterRedo := buf.String()
 		assert.Equal(t, middle, afterRedo)
 
-		for range 5 {
+		for range 6 {
 			undoer.undo()
 		}
 		undoer.undo()
