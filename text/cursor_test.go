@@ -226,11 +226,12 @@ func TestCursorUpperLowercase(t *testing.T) {
 
 func TestIndent(t *testing.T) {
 	suite := []struct {
-		inputBuffer         string
-		expectIndentationAt int
-		expectIndent        bool
-		cursorAtScroll      term.Coordinates
-		outputBuffer        string
+		inputBuffer          string
+		expectIndentationAt  int
+		expectIndent         bool
+		cursorAtScroll       term.Coordinates
+		outputBuffer         string
+		expectCursorAtScroll term.Coordinates
 	}{
 		{
 			inputBuffer:         "",
@@ -240,11 +241,12 @@ func TestIndent(t *testing.T) {
 			outputBuffer:        "",
 		},
 		{
-			inputBuffer:         "a",
-			expectIndentationAt: 1,
-			expectIndent:        true,
-			cursorAtScroll:      term.Coordinates{},
-			outputBuffer:        "\ta",
+			inputBuffer:          "a",
+			expectIndentationAt:  1,
+			expectIndent:         true,
+			cursorAtScroll:       term.Coordinates{},
+			outputBuffer:         "\ta",
+			expectCursorAtScroll: term.Coordinates{X: 1},
 		},
 		{
 			inputBuffer:         "\ta",
@@ -254,25 +256,28 @@ func TestIndent(t *testing.T) {
 			outputBuffer:        "\ta",
 		},
 		{
-			inputBuffer:         "\ta",
-			expectIndentationAt: 2,
-			expectIndent:        true,
-			cursorAtScroll:      term.Coordinates{X: 1},
-			outputBuffer:        "\t\ta",
+			inputBuffer:          "\ta",
+			expectIndentationAt:  2,
+			expectIndent:         true,
+			cursorAtScroll:       term.Coordinates{X: 1},
+			outputBuffer:         "\t\ta",
+			expectCursorAtScroll: term.Coordinates{X: 2},
 		},
 		{
-			inputBuffer:         "\ta",
-			expectIndentationAt: 0,
-			expectIndent:        true,
-			cursorAtScroll:      term.Coordinates{X: 1},
-			outputBuffer:        "a",
+			inputBuffer:          "\ta",
+			expectIndentationAt:  0,
+			expectIndent:         true,
+			cursorAtScroll:       term.Coordinates{X: 1},
+			outputBuffer:         "a",
+			expectCursorAtScroll: term.Coordinates{},
 		},
 		{
-			inputBuffer:         "\t\ta",
-			expectIndentationAt: 0,
-			expectIndent:        true,
-			cursorAtScroll:      term.Coordinates{X: 2},
-			outputBuffer:        "a",
+			inputBuffer:          "\t\ta",
+			expectIndentationAt:  0,
+			expectIndent:         true,
+			cursorAtScroll:       term.Coordinates{X: 2},
+			outputBuffer:         "a",
+			expectCursorAtScroll: term.Coordinates{},
 		},
 		{
 			inputBuffer:         "a\ta",
@@ -282,18 +287,36 @@ func TestIndent(t *testing.T) {
 			outputBuffer:        "a\ta",
 		},
 		{
-			inputBuffer:         "a\ta",
-			expectIndentationAt: 1,
-			expectIndent:        true,
-			cursorAtScroll:      term.Coordinates{X: 2},
-			outputBuffer:        "\ta\ta",
+			inputBuffer:          "a\ta",
+			expectIndentationAt:  1,
+			expectIndent:         true,
+			cursorAtScroll:       term.Coordinates{X: 2},
+			outputBuffer:         "\ta\ta",
+			expectCursorAtScroll: term.Coordinates{X: 3},
 		},
 		{
-			inputBuffer:         "\t\ta\ta",
-			expectIndentationAt: 1,
-			expectIndent:        true,
-			cursorAtScroll:      term.Coordinates{X: 2},
-			outputBuffer:        "\ta\ta",
+			inputBuffer:          "\t\ta\ta",
+			expectIndentationAt:  1,
+			expectIndent:         true,
+			cursorAtScroll:       term.Coordinates{X: 2},
+			outputBuffer:         "\ta\ta",
+			expectCursorAtScroll: term.Coordinates{X: 1},
+		},
+		{
+			inputBuffer:          "\taX",
+			expectIndentationAt:  2,
+			expectIndent:         true,
+			cursorAtScroll:       term.Coordinates{X: 2},
+			outputBuffer:         "\t\taX",
+			expectCursorAtScroll: term.Coordinates{X: 3},
+		},
+		{
+			inputBuffer:          "\t\taX",
+			expectIndentationAt:  1,
+			expectIndent:         true,
+			cursorAtScroll:       term.Coordinates{X: 3},
+			outputBuffer:         "\taX",
+			expectCursorAtScroll: term.Coordinates{X: 2},
 		},
 	}
 
@@ -305,6 +328,9 @@ func TestIndent(t *testing.T) {
 			c.MoveToScroll(test.cursorAtScroll)
 			assert.Equal(t, test.expectIndent, c.TryIndent())
 			assert.Equal(t, test.outputBuffer, cell.CellsToString(c.view().RawCells()))
+			if test.expectIndent {
+				assert.Equal(t, test.expectCursorAtScroll, c.CursorAtScroll())
+			}
 		})
 	}
 }

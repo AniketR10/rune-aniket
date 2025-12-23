@@ -2148,8 +2148,8 @@ func (c *Cursor) doTryIndent(ctx context.Context, to term.Coordinates, target in
 	tabs := builder.String()
 	// even if given position to indent is not at the start of the line
 	// to "indent" we must resolve to start of line
-	to.X = 0
-	_, _, _ = buf.Edit(ctx, to, to, tabs)
+	at := term.Coordinates{Y: to.Y}
+	_, _, _ = buf.Edit(ctx, at, at, tabs)
 	to.X += diff
 	return to, true
 }
@@ -2176,21 +2176,22 @@ func (c *Cursor) doTryDedent(ctx context.Context, pos term.Coordinates, target i
 		return pos, false
 	}
 	// start of edit should be at the end of starting tabs block
-	pos.X = current
-	from := term.Coordinates{X: (pos.X - diff), Y: pos.Y}
-	to := term.Coordinates{X: pos.X, Y: pos.Y}
+	from := term.Coordinates{X: (current - diff), Y: pos.Y}
+	to := term.Coordinates{X: current, Y: pos.Y}
 	if diff <= 0 || from.X < 0 || to.X < 0 {
 		c.log(log.TraceLevel, "try dedent: could not dedent at (%v), current: %d, "+
 			"should be: %d, from: %v, to: %v", pos, current, target, from, to)
 		return pos, false
 	}
 	cells, _, ok := buf.Select(from, to)
-	if ok && len(cells) != 0 && isEmpty(cells[0]) {
-		_, to, _ = buf.Edit(ctx, from, to, "")
-		return to, true
+	empty := isEmpty(cells[0])
+	if ok && len(cells) != 0 && empty {
+		buf.Edit(ctx, from, to, "")
+		pos.X -= diff
+		return pos, true
 	}
 	c.log(log.TraceLevel, "try dedent: could not dedent at (%v), cells: %#v, from: %#v, to: %#v ",
-		pos, isEmpty(cells[0]), from, to)
+		pos, empty, from, to)
 	return pos, false
 }
 
