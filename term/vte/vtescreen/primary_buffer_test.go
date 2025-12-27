@@ -24,6 +24,7 @@
 package vtescreen
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/rivo/uniseg"
@@ -107,6 +108,7 @@ func TestPrimaryCoordinates(t *testing.T) {
 	assert.Equal(t, term.Coordinates{Y: 5, X: 5}, b.CursorAtScroll())
 	assert.Equal(t, term.Coordinates{Y: 5, X: 5}, b.CursorAtScreen())
 }
+
 func TestPrimarySelection(t *testing.T) {
 	t.Run("select with scroll", func(t *testing.T) {
 		b := makePrimaryBufferForTesting(1, 5)
@@ -229,7 +231,7 @@ func TestPrimaryResize(t *testing.T) {
 
 		t.Run("buffer with less lines than height", func(t *testing.T) {
 			b := makePrimaryBufferForTesting(1, 5)
-			resetPrimaryBuffer(b, "0\n1\n2\n \n ")
+			resetPrimaryBuffer(b, "0\n1\n2")
 			cells := b.Cells.RawCells()
 			require.Len(t, cells, 5)
 			assert.Equal(t, '2', cells[2][0].Ch)
@@ -297,6 +299,57 @@ func TestPrimaryResize(t *testing.T) {
 			assert.Equal(t, '4', cells[4][0].Ch)
 			assert.Equal(t, ' ', cells[10][0].Ch)
 		})
+	})
+
+	t.Run("wraps rows", func(t *testing.T) {
+		suite := []struct {
+			initialWidth     int
+			initialHeight    int
+			finalWidth       int
+			finalHeight      int
+			input            string
+			expectedOutput   string
+			expectedCursorAt term.Coordinates
+		}{
+			{0, 0, 5, 5, "", "     \n     \n     \n     \n     ", term.Coordinates{}},
+			{2, 2, 5, 5, "a\nb", "a    \nb    \n     \n     \n     ", term.Coordinates{Y: 1, X: 1}},
+			{10, 5, 5, 5, "aaaaaa\nbbb", "aaaaa\na    \nbbb  \n     \n     ", term.Coordinates{Y: 2, X: 3}},
+			{10, 5, 9, 5, "aaaaaa\nbbb", "aaaaaa   \nbbb      \n         \n         \n         ", term.Coordinates{Y: 1, X: 3}},
+			{10, 10, 5, 5, "aaaaaa\nbbb", "aaaaa\na    \nbbb  \n     \n     ", term.Coordinates{Y: 2, X: 3}},
+			{10, 5, 2, 5, "aaaaaa\nbbb\n$", "aa\naa\nbb\nb \n$ ", term.Coordinates{Y: 5, X: 1}},
+			{10, 5, 2, 2, "aaaaaa\nbbb\n$", "b \n$ ", term.Coordinates{Y: 5, X: 1}},
+			{10, 5, 2, 8, "aaaaaa\nbbb\n$", "aa\naa\naa\nbb\nb \n$ \n  \n  ", term.Coordinates{Y: 5, X: 1}},
+			{5, 5, 10, 2, "aaaa\nbbb\n$", "bbb       \n$         ", term.Coordinates{Y: 2, X: 1}},
+			{5, 5, 0, 0, "aaaa\nbbb\n$", "", term.Coordinates{Y: 2, X: 1}},
+		}
+
+		for i, test := range suite {
+			t.Run(fmt.Sprintf("test case %d", i), func(t *testing.T) {
+				b := NewPrimaryBuffer()
+				b.Resize(test.initialWidth, test.initialHeight)
+				writeToPrimaryBuffer(b, test.input)
+
+				writer := term.NewStringWriter(test.initialWidth, test.initialHeight)
+				b.Draw(writer)
+				writer.Flush()
+				initialContent := writer.String()
+				initialCursor := b.cursor.position
+
+				b.Resize(test.finalWidth, test.finalHeight)
+				writer = term.NewStringWriter(test.finalWidth, test.finalHeight)
+				b.Draw(writer)
+				writer.Flush()
+				assert.Equal(t, test.expectedOutput, writer.String(), "%q", b.Cells.String())
+				assert.Equal(t, test.expectedCursorAt, b.cursor.position)
+
+				b.Resize(test.initialWidth, test.initialHeight)
+				writer = term.NewStringWriter(test.initialWidth, test.initialHeight)
+				b.Draw(writer)
+				writer.Flush()
+				assert.Equal(t, initialContent, writer.String(), "%q", b.Cells.String())
+				assert.Equal(t, initialCursor, b.cursor.position)
+			})
+		}
 	})
 }
 

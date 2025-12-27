@@ -264,8 +264,7 @@ func (t *parserHandler) Input(c rune) {
 func (t *parserHandler) Goto(line int, col int) {
 	t.sync.mu.Lock()
 	defer t.sync.mu.Unlock()
-
-	t.setCursorAtScreen(term.Coordinates{Y: line, X: col}, t.modeOrigin)
+	t.goTo(line, col)
 }
 
 // Set cursor to specific row.
@@ -273,11 +272,7 @@ func (t *parserHandler) GotoLine(line int) {
 	t.sync.mu.Lock()
 	defer t.sync.mu.Unlock()
 
-	position := term.Coordinates{
-		Y: line,
-		X: t.sync.buf.CursorAtScreen().X,
-	}
-	t.setCursorAtScreen(position, t.modeOrigin)
+	t.goTo(line, t.sync.buf.CursorAtScreen().X)
 }
 
 // Set cursor to specific column.
@@ -285,11 +280,7 @@ func (t *parserHandler) GotoCol(col int) {
 	t.sync.mu.Lock()
 	defer t.sync.mu.Unlock()
 
-	position := term.Coordinates{
-		X: col,
-		Y: t.sync.buf.CursorAtScreen().Y,
-	}
-	t.setCursorAtScreen(position, t.modeOrigin)
+	t.goTo(t.sync.buf.CursorAtScreen().Y, col)
 }
 
 // Insert blank characters in current line starting from cursor.
@@ -361,6 +352,7 @@ func (t *parserHandler) MoveForward(cols int) {
 	defer t.sync.mu.Unlock()
 
 	t.moveRight(cols)
+	t.shouldWrap = false
 }
 
 // Move cursor backward `cols`.
@@ -369,6 +361,7 @@ func (t *parserHandler) MoveBackward(cols int) {
 	defer t.sync.mu.Unlock()
 
 	t.moveLeft(cols)
+	t.shouldWrap = false
 }
 
 // Move cursor down `rows` and set to column 1.
@@ -376,8 +369,9 @@ func (t *parserHandler) MoveDownAndCR(rows int) {
 	t.sync.mu.Lock()
 	defer t.sync.mu.Unlock()
 
-	t.moveDown(rows)
-	t.carriageReturn()
+	pos := t.sync.buf.CursorAtScreen()
+	pos.Y += rows
+	t.goTo(pos.Y, 0)
 }
 
 // Move cursor up `rows` and set to column 1.
@@ -385,8 +379,9 @@ func (t *parserHandler) MoveUpAndCR(rows int) {
 	t.sync.mu.Lock()
 	defer t.sync.mu.Unlock()
 
-	t.moveUp(rows)
-	t.carriageReturn()
+	pos := t.sync.buf.CursorAtScreen()
+	pos.Y -= rows
+	t.goTo(pos.Y, 0)
 }
 
 // Put a tab.
@@ -423,14 +418,15 @@ func (t *parserHandler) PutTab() {
 
 	// move cursor until next tab stop
 	for {
-		pos := t.sync.buf.CursorAtScroll()
-		if pos.X+1 >= t.width {
+		pos := t.sync.buf.CursorAtScreen()
+		pos.X++
+		if pos.X == t.width {
 			break
 		}
 
-		t.moveRight(1)
+		t.sync.buf.SetCursorAtScreen(pos, false)
 
-		if t.tabs.get(t.sync.buf.CursorAtScroll().X) {
+		if t.tabs.get(pos.X) {
 			break
 		}
 	}
@@ -445,6 +441,7 @@ func (t *parserHandler) Backspace() {
 		return
 	}
 	t.moveLeft(1)
+	t.shouldWrap = false
 }
 
 // Carriage return.
@@ -453,6 +450,7 @@ func (t *parserHandler) CarriageReturn() {
 	defer t.sync.mu.Unlock()
 
 	t.carriageReturn()
+	t.shouldWrap = false
 }
 
 // Linefeed
@@ -464,7 +462,7 @@ func (t *parserHandler) Linefeed() {
 	pos := buf.CursorAtScreen()
 	pos.Y++
 
-	if pos.Y >= buf.BottomScrollableRegion() {
+	if pos.Y == buf.BottomScrollableRegion() {
 		t.scrollUp(1, false)
 	} else if pos.Y < t.height {
 		t.setCursorAtScreen(pos, t.modeOrigin)
@@ -549,11 +547,10 @@ func (t *parserHandler) DeleteLines(count int) {
 	}
 
 	start := t.sync.buf.CursorAtScreen().Y
-	if t.useAlt && start >= t.sync.buf.TopScrollableRegion() && start < t.sync.buf.BottomScrollableRegion() {
-		count = int(math.Min(float64(count), float64(t.height-start)))
+	if start >= t.sync.buf.TopScrollableRegion() &&
+		start < t.sync.buf.BottomScrollableRegion() {
+		count = min(count, t.height-start)
 		t.scrollUpAltRelative(start, count)
-	} else if !t.useAlt {
-		t.sync.primBuf.DeleteLinesCursor(count)
 	}
 }
 
@@ -567,7 +564,7 @@ func (t *parserHandler) EraseChars(count int) {
 
 	pos := t.sync.buf.CursorAtScroll()
 	start := pos.X
-	end := int(math.Min(float64(start+count), float64(t.endOfLine(pos.Y))))
+	end := min(start+count, t.endOfLine(pos.Y))
 
 	t.sync.buf.ResetCells(start, end)
 }
@@ -664,7 +661,7 @@ func (t *parserHandler) ClearScreen(mode vteparser.ClearMode) {
 			t.sync.buf.ResetLines(0, pos.Y)
 		}
 		start := 0
-		end := int(math.Min(float64(pos.X+1), float64(columns)))
+		end := min(pos.X+1, columns)
 		t.sync.buf.ResetCells(start, end)
 
 	case vteparser.ClearModeAll:
@@ -711,7 +708,7 @@ func (t *parserHandler) ReverseIndex() {
 	defer t.sync.mu.Unlock()
 
 	pos := t.sync.buf.CursorAtScreen()
-	if pos.Y <= t.sync.buf.TopScrollableRegion() {
+	if pos.Y == t.sync.buf.TopScrollableRegion() {
 		t.scrollDown(1, false)
 	} else {
 		t.moveUp(1)
@@ -1268,7 +1265,7 @@ func (t *parserHandler) scrollDown(rows int, userScroll bool) bool {
 	t.shouldWrap = false
 
 	if userScroll {
-		newOffset := int(math.Max(float64(offset.Y-rows), 0))
+		newOffset := max(offset.Y-rows, 0)
 		if offset.Y != newOffset {
 			buf.MoveToOffset(term.Coordinates{Y: newOffset})
 			return true
@@ -1280,8 +1277,8 @@ func (t *parserHandler) scrollDown(rows int, userScroll bool) bool {
 	// use bottom and top of scrollable region.
 	start := buf.Rows() - t.height
 	end := buf.Rows()
-	count := int(math.Min(float64(rows), float64(end-start)))
-	if count != 0 {
+	count := max(0, min(rows, end-start))
+	if count > 0 {
 		buf.AltBuffer.ScrollDown(start, end, count)
 		return true
 	}
@@ -1298,7 +1295,7 @@ func (t *parserHandler) scrollUp(rows int, userScroll bool) bool {
 	t.shouldWrap = false
 
 	if userScroll {
-		newOffset := int(math.Min(float64(offset.Y+rows), float64(buf.MaxOffset())))
+		newOffset := min(offset.Y+rows, buf.MaxOffset())
 		if offset.Y != newOffset {
 			buf.MoveToOffset(term.Coordinates{Y: newOffset})
 			return true
@@ -1327,10 +1324,7 @@ func (t *parserHandler) scrollUpAltRelative(start int, count int) bool {
 	if t.sync.buf != t.sync.altBuf {
 		panic("called scroll up relative on non alternate buffer")
 	}
-	count = int(math.Min(
-		float64(count),
-		float64(t.sync.buf.BottomScrollableRegion()-t.sync.buf.TopScrollableRegion()),
-	))
+	count = min(count, t.sync.buf.BottomScrollableRegion()-t.sync.buf.TopScrollableRegion())
 	end := t.sync.altBuf.BottomScrollableRegion()
 	ok := count != 0
 	if ok {
@@ -1343,14 +1337,14 @@ func (t *parserHandler) scrollDownAltRelative(start int, count int) bool {
 	if t.sync.buf != t.sync.altBuf {
 		panic("called scroll down relative on non alternate buffer")
 	}
-	count = int(math.Min(
-		float64(count),
-		float64(t.sync.buf.BottomScrollableRegion()-t.sync.buf.TopScrollableRegion()),
-	))
-	count = int(math.Min(
-		float64(count),
-		float64(t.sync.buf.BottomScrollableRegion()-start),
-	))
+	count = min(
+		count,
+		t.sync.buf.BottomScrollableRegion()-t.sync.buf.TopScrollableRegion(),
+	)
+	count = min(
+		count,
+		t.sync.buf.BottomScrollableRegion()-start,
+	)
 
 	end := t.sync.altBuf.BottomScrollableRegion()
 	ok := count != 0
@@ -1364,28 +1358,28 @@ func (t *parserHandler) scrollDownAltRelative(start int, count int) bool {
 func (t *parserHandler) moveUp(delta int) {
 	pos := t.sync.buf.CursorAtScreen()
 	pos.Y -= delta
-	t.setCursorAtScreen(pos, t.modeOrigin)
+	t.goTo(pos.Y, pos.X)
 }
 
 // moveDown moves the cursor down delta lines.
 func (t *parserHandler) moveDown(delta int) {
 	pos := t.sync.buf.CursorAtScreen()
 	pos.Y += delta
-	t.setCursorAtScreen(pos, t.modeOrigin)
+	t.goTo(pos.Y, pos.X)
 }
 
 // moveRight moves the cursor right delta cells.
 func (t *parserHandler) moveRight(delta int) {
 	pos := t.sync.buf.CursorAtScreen()
 	pos.X += delta
-	t.setCursorAtScreen(pos, t.modeOrigin)
+	t.goTo(pos.Y, pos.X)
 }
 
 // moveLeft moves the cursor left delta cells.
 func (t *parserHandler) moveLeft(delta int) {
 	pos := t.sync.buf.CursorAtScreen()
 	pos.X -= delta
-	t.setCursorAtScreen(pos, t.modeOrigin)
+	t.goTo(pos.Y, pos.X)
 }
 
 func (t *parserHandler) setCursorShape(shape vteparser.CursorShape) {
@@ -1437,16 +1431,16 @@ func (t *parserHandler) wrapLine() {
 
 func (t *parserHandler) setCursorAtScreen(pos term.Coordinates, relative bool) {
 	t.sync.buf.SetCursorAtScreen(pos, relative)
-	t.shouldWrap = false
 }
 
 func (t *parserHandler) clearPrimaryViewHistory() {
-	pos := t.sync.primBuf.Offset()
+	buf := t.sync.primBuf
+	pos := buf.Offset()
 	if pos.Y == 0 {
 		return
 	}
-	t.sync.primBuf.DeleteLines(0, pos.Y-1)
-	t.sync.primBuf.ResetOffset()
+	buf.DeleteLines(0, pos.Y-1)
+	buf.SetOffset(term.Coordinates{Y: 0})
 }
 
 func (t *parserHandler) clearPrimaryView() {
@@ -1470,11 +1464,11 @@ func (t *parserHandler) clearPrimaryView() {
 }
 
 func (t *parserHandler) endOfLine(y int) int {
-	return int(math.Max(float64(t.sync.buf.Columns(y)), float64(t.width)))
+	return max(t.sync.buf.Columns(y), t.width)
 }
 
 func (t *parserHandler) maxRows() int {
-	return int(math.Max(float64(t.height), float64(t.sync.buf.Rows())))
+	return max(t.height, t.sync.buf.Rows())
 }
 
 func (t *parserHandler) clearNeedsAttention() {
@@ -1527,4 +1521,20 @@ func (t *parserHandler) updateTabName(title string) {
 
 func (t *parserHandler) usedAlternate() bool {
 	return t.usedAlt
+}
+
+func (t *parserHandler) goTo(line int, col int) {
+	var yoffset, maxy int
+	if t.modeOrigin {
+		yoffset = t.sync.buf.TopScrollableRegion()
+		maxy = t.sync.buf.BottomScrollableRegion() - 1
+	} else {
+		maxy = t.maxRows() - 1
+	}
+	pos := term.Coordinates{
+		Y: max(0, min(line+yoffset, maxy)),
+		X: max(0, min(col, t.width-1)),
+	}
+	t.setCursorAtScreen(pos, t.modeOrigin)
+	t.shouldWrap = false
 }

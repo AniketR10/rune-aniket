@@ -116,22 +116,52 @@ func TestBufferConflateWrap(t *testing.T) {
 			at:       2,
 			expectOk: false,
 		},
+		{
+			in:       "aaaa\naa\nbb",
+			after:    "aaaaaa\nbb",
+			at:       0,
+			expectOk: true,
+		},
 	}
 
-	for _, test := range suite {
+	for i, test := range suite {
 		buf := NewBuffer()
 		buf.Write([]byte(test.in))
 		x, actualOk := buf.ConflateRow(test.at)
 		require.Equal(t, test.expectOk, actualOk)
 		if test.expectOk {
 			assert.Equal(t, test.after, buf.String())
-			require.True(t, buf.WrapRow(test.at, x), x)
+			require.True(t, buf.WrapRow(test.at, x), i)
 		}
 		assert.Equal(t, test.in, buf.String())
 		assert.NotPanics(t, func() {
 			buf.Write([]byte("a\n"))
 		})
 	}
+
+	t.Run("wrap row multiple times", func(t *testing.T) {
+		in := "aaaaaa\nbbb"
+		expected := "aa\naa\naa\nbb\nb"
+		buf := NewBuffer()
+		buf.Write([]byte(in))
+		width := 2
+		at := 2
+		var wraps int
+		for y := 0; y < at && y < buf.Rows(); y++ {
+			cols := buf.Columns(y)
+			times := cols / width
+			remainder := cols % width
+			if remainder == 0 {
+				times--
+			}
+			for i := times; i > 0 && buf.WrapRow(y, width*i); i-- {
+				wraps++
+				at++
+			}
+		}
+		assert.Equal(t, expected, buf.String())
+		assert.Equal(t, 3, wraps)
+	})
 }
 
 func TestBufferInsert(t *testing.T) {

@@ -29,13 +29,6 @@ type tabstops struct {
 	tabs []bool
 }
 
-func (t *tabstops) init(columns int) {
-	t.tabs = make([]bool, columns)
-	for i := range t.tabs {
-		t.tabs[i] = i%initialTabstops == 0
-	}
-}
-
 func (t *tabstops) clearAll() {
 	for i := range t.tabs {
 		t.tabs[i] = false

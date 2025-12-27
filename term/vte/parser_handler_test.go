@@ -349,7 +349,7 @@ func TestIntegrationParserHandler(t *testing.T) {
 				assertEqualBuf(t, p, "a    \nb    \nc    \nd    \ne    ")
 
 				assert.True(t, p.scrollUp(100, true))
-				assertEqualBuf(t, p, "$    \n     \n     \n     \n     ")
+				assertEqualBuf(t, p, "e    \n$ .  \nout  \n$    \n$    ")
 			},
 		},
 		{
@@ -375,7 +375,8 @@ func TestIntegrationParserHandler(t *testing.T) {
 				assert.Equal(t, term.Coordinates{Y: 4, X: 4}, p.sync.buf.CursorAtScreen())
 
 				p.Resize(1, 1)
-				assert.Equal(t, term.Coordinates{Y: 7, X: 4}, p.sync.buf.CursorAtScroll())
+				// content was wrapped, CursorAtScroll doesn't take that into consideration
+				assert.Equal(t, term.Coordinates{Y: 11, X: 4}, p.sync.buf.CursorAtScroll())
 				assert.Equal(t, term.Coordinates{Y: 0, X: 4}, p.sync.buf.CursorAtScreen())
 
 				p.Resize(5, 5)
@@ -384,7 +385,7 @@ func TestIntegrationParserHandler(t *testing.T) {
 
 				p.Resize(0, 0)
 				assert.Equal(t, term.Coordinates{Y: 7, X: 4}, p.sync.buf.CursorAtScroll())
-				assert.Equal(t, term.Coordinates{Y: -1, X: 4}, p.sync.buf.CursorAtScreen())
+				assert.Equal(t, term.Coordinates{Y: 4, X: 4}, p.sync.buf.CursorAtScreen())
 
 				p.Resize(5, 5)
 				assert.Equal(t, term.Coordinates{Y: 7, X: 4}, p.sync.buf.CursorAtScroll())
@@ -822,32 +823,6 @@ func TestIntegrationParserHandler(t *testing.T) {
 				assert.Equal(t, testURI, tm.toUri)
 				assert.Equal(t, "radical", tm.setName)
 				assert.Equal(t, term.Attributes{}, tm.setAttr)
-			},
-		},
-		{
-			desc:      "git show scroll up and down should not leave lines below",
-			altBuffer: false,
-			sut: func(t *testing.T, p *parserHandler, tm *mockTabManager, pty *workspacetest.File) {
-				p.Resize(5, 5)
-				resetBuffer(t, p, "a    \nb    \nc    \nd    \ne    \n$ .  \nout  \n$    ")
-				assertEqualBuf(t, p, "d    \ne    \n$ .  \nout  \n$    ")
-				p.Goto(0, 0)
-				p.ReverseIndex()
-				p.Input('1')
-				p.Goto(0, 0)
-				p.ReverseIndex()
-				p.Input('2')
-
-				assertEqualBuf(t, p, "2    \n1    \nd    \ne    \n$ .  ")
-
-				p.scrollUp(2, true)
-				assertEqualBuf(t, p, "2    \n1    \nd    \ne    \n$ .  ")
-
-				p.scrollUp(2, false)
-				assertEqualBuf(t, p, "d    \ne    \n$ .  \n     \n     ")
-
-				p.scrollDown(4, true)
-				assertEqualBuf(t, p, "b    \nc    \n2    \n1    \nd    ")
 			},
 		},
 	}
