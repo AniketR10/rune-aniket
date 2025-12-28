@@ -60,6 +60,7 @@ require (
 	go.uber.org/mock v0.4.0
 	go.uber.org/multierr v1.4.0
 	golang.org/x/oauth2 v0.30.0
+	mvdan.cc/sh/v3 v3.12.0
 )
 
 require (
@@ -78,7 +79,6 @@ require (
 	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
 	github.com/kevinburke/ssh_config v1.4.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
-	github.com/kr/text v0.2.0 // indirect
 	github.com/mattn/go-pointer v0.0.1 // indirect
 	github.com/pion/datachannel v1.5.6 // indirect
 	github.com/pion/dtls/v2 v2.2.10 // indirect

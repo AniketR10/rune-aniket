@@ -28,11 +28,12 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
+
+	"mvdan.cc/sh/v3/shell"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/logging"
@@ -620,12 +621,12 @@ func (t *Component) createPty() error {
 	if err != nil {
 		return fmt.Errorf("new pty: %v", err)
 	}
-	shell := t.shell
-	if shell == "" {
-		shell = os.Getenv("SHELL")
+	cmdAndArgsStr := t.shell
+	if cmdAndArgsStr == "" {
+		cmdAndArgsStr = os.Getenv("SHELL")
 	}
-	if shell == "" {
-		shell = "sh"
+	if cmdAndArgsStr == "" {
+		cmdAndArgsStr = "sh"
 	}
 
 	t.uri, err = workspaceapi.CurrentUserHostURI(pty.Slave.Name())
@@ -633,7 +634,10 @@ func (t *Component) createPty() error {
 		return fmt.Errorf("pty URI: %v", err)
 	}
 
-	cmdAndArgs := strings.Split(shell, " ")
+	cmdAndArgs, err := shell.Fields(cmdAndArgsStr, nil)
+	if err != nil {
+		return fmt.Errorf("expand shell arguments: %w", err)
+	}
 	cmd := workspaceapi.Cmd{
 		Path: cmdAndArgs[0],
 		Args: cmdAndArgs[1:],
