@@ -58,11 +58,10 @@ type Handler struct {
 	ctx           context.Context
 	cancelCtx     func()
 
-	checkSystemBell bool
-	modalEnabled    bool
-	viMode          bool
-	mouse           *text.Mouse
-	mouseDriver     *mouseDriver
+	modalEnabled bool
+	viMode       bool
+	mouse        *text.Mouse
+	mouseDriver  *mouseDriver
 
 	bracketedPaste    bool
 	bracketedPasteBuf bytes.Buffer
@@ -100,9 +99,6 @@ func (e *Handler) Init(
 	e.publisher = publisher
 	e.notifications = n
 	e.handleTimer = time.NewTimer(handleTimeout)
-	// by default we want to check if system bell works
-	// when modal mode is enabled
-	e.checkSystemBell = true
 	// leave in idle state so we can call Reset directly in handle
 	if !e.handleTimer.Stop() {
 		<-e.handleTimer.C
@@ -268,22 +264,21 @@ func (e *Handler) Handle(ev term.Event) (exit, handled bool) {
 
 	if e.modalEnabled && !e.comp.IsAltBuffer() && ev.Key == term.KeyEsc && ev.Mod == 0 {
 		handled = true
-		e.enterViMode()
-
-		if !e.checkSystemBell {
-			return
-		}
-		e.checkSystemBell = false
+		cursor := e.comp.CursorAtScroll()
 		e.comp.systemCanDispatchBell(func(err error) {
 			if err == nil {
+				e.enterViMode(cursor)
 				return
 			}
-			e.log(log.WarnLevel, "bell dispatch check failed: %v", err)
-			e.notify(notifications.LevelWarn,
-				"VTE modal (vi) mode enabled but system "+
-					"has no audible bell configured. "+
-					"You need to enable your system's "+
-					"audible bell for this feature to work correctly.")
+			msg := "You pressed <esc>, which would enable modal (vi) mode, " +
+				"but it cannot be enabled because the shell's " +
+				"audible bell is currently unavailable. " +
+				"Ensure that the shell's audible bell is configured and " +
+				"working correctly. You can test it in your terminal with `printf '\\a'`."
+			e.log(log.WarnLevel, "%s: %v", msg, err)
+			if _, err := e.notifications.NotifyOnce(notifications.LevelWarn, msg); err != nil {
+				e.log(log.ErrorLevel, "notify: %v", err)
+			}
 		})
 		return
 	}
@@ -523,10 +518,10 @@ func (e *Handler) notify(level notifications.Level, msg string, args ...any) {
 	}
 }
 
-func (e *Handler) enterViMode() {
+func (e *Handler) enterViMode(cursor term.Coordinates) {
 	e.viMode = true
 	e.comp.Unselect()
-	e.vi.enterViMode(e.comp.CursorAtScroll())
+	e.vi.enterViMode(cursor)
 }
 
 func (e *Handler) exitViMode() {

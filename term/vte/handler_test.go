@@ -308,7 +308,6 @@ func testSequenceShell(t *testing.T, cfg Config, timeout time.Duration, shell st
 	handler, err := NewHandler(chanEventPublisher{ch}, nopNotifications{},
 		scheme, scheme, nopTabManager{}, cfg, "")
 	require.NoError(t, err)
-	handler.checkSystemBell = false
 
 	if ci := os.Getenv("CI"); ci == "true" {
 		// the version of sh running on the CI docker containers
