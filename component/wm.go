@@ -37,6 +37,7 @@ type WindowManagerConfig struct {
 	ScrollBarAttr term.Attributes
 	ScrollBarChar rune
 	FrameCharSet
+	NoMaxSize bool
 }
 
 // WindowManager wraps a TileTree to provide an easier API.
@@ -344,6 +345,7 @@ func DefaultWindowManagerConfig() WindowManagerConfig {
 		Frame:         true,
 		FrameAttr:     term.Attributes{},
 		FrameCharSet:  charset,
+		NoMaxSize:     true,
 		ScrollBarAttr: term.Attributes{Attrs: tcell.AttrBold},
 	}
 }

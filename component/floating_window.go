@@ -193,14 +193,13 @@ func (w *floatingNode) setHeight(height int) bool {
 
 func (w *floatingNode) updateDesiredDimensions() {
 	w.desiredWidth, w.desiredHeight = w.compDimensions()
-	if w.userWidth > w.desiredWidth {
-		w.desiredWidth = w.userWidth
+	if w.wm.config.NoMaxSize {
+		w.desiredHeight = min(w.maxHeight-2, max(w.userHeight, w.desiredHeight))
+		w.desiredWidth = min(w.maxWidth-2, max(w.userWidth, w.desiredWidth))
+	} else {
+		w.desiredHeight = max(w.userHeight, w.desiredHeight)
+		w.desiredWidth = max(w.userWidth, w.desiredWidth)
 	}
-	if w.userHeight > w.desiredHeight {
-		w.desiredHeight = w.userHeight
-	}
-	w.desiredHeight = min(w.maxHeight-2, w.desiredHeight)
-	w.desiredWidth = min(w.maxWidth-2, w.desiredWidth)
 }
 
 func (w *floatingNode) resize() {

@@ -39,7 +39,7 @@ func TestSetWidthHeight(t *testing.T) {
 	w := term.NewStringWriter(20, 8)
 
 	h1 := TestComponent{Ch: 'A'}
-	wm, win1 := NewWindowManager(&h1, DefaultWindowManagerConfig())
+	wm, win1 := NewWindowManager(&h1, testWindowManagerConfig())
 	wm.Resize(20, 8)
 
 	var win2, win3 Window
@@ -121,7 +121,7 @@ func TestWindowManagerSplit(t *testing.T) {
 	w := term.NewStringWriter(20, 8)
 
 	h1 := TestComponent{Ch: 'A'}
-	wm, w1 := NewWindowManager(&h1, DefaultWindowManagerConfig())
+	wm, w1 := NewWindowManager(&h1, testWindowManagerConfig())
 	wm.Resize(20, 8)
 
 	var w2, w3 Window
@@ -522,7 +522,7 @@ func TestWindowManagerMinimize(t *testing.T) {
 	w := term.NewStringWriter(20, 8)
 
 	h1 := TestComponent{Ch: 'A'}
-	wm, _ := NewWindowManager(&h1, DefaultWindowManagerConfig())
+	wm, _ := NewWindowManager(&h1, testWindowManagerConfig())
 	wm.Resize(20, 8)
 
 	var fwin Window
@@ -926,7 +926,7 @@ func TestWindowManagerMinimize(t *testing.T) {
 
 func TestExposedRootTileAt(t *testing.T) {
 	h1 := TestComponent{Ch: 'A'}
-	wm, w1 := NewWindowManager(&h1, DefaultWindowManagerConfig())
+	wm, w1 := NewWindowManager(&h1, testWindowManagerConfig())
 	wm.Resize(20, 8)
 
 	_, found := w1.TileUp()
@@ -960,7 +960,7 @@ func TestExposedRootTileAt(t *testing.T) {
 func TestWindowManagerTileFocusFloating(t *testing.T) {
 	w := term.NewStringWriter(20, 8)
 
-	wm, w1 := NewWindowManager(&TestComponent{Ch: 'A'}, DefaultWindowManagerConfig())
+	wm, w1 := NewWindowManager(&TestComponent{Ch: 'A'}, testWindowManagerConfig())
 	wm.Resize(20, 8)
 
 	_, ok := w1.TileUp()
@@ -1114,7 +1114,7 @@ func TestWindowManagerTileFocusFloating(t *testing.T) {
 
 func TestComponentWindowAt(t *testing.T) {
 	h1 := &TestComponent{Ch: '1'}
-	wm, w1 := NewWindowManager(h1, DefaultWindowManagerConfig())
+	wm, w1 := NewWindowManager(h1, testWindowManagerConfig())
 	wm.Resize(20, 8)
 
 	h2 := &TestComponent{Ch: '2'}
@@ -1328,7 +1328,7 @@ func TestComponentWindowAt(t *testing.T) {
 
 func TestFixedSizeWindows(t *testing.T) {
 	h1 := &TestComponent{Ch: '1'}
-	wm, w1 := NewWindowManager(h1, DefaultWindowManagerConfig())
+	wm, w1 := NewWindowManager(h1, testWindowManagerConfig())
 	wm.Resize(20, 8)
 
 	var w2, w3, w4, wf, wF Window
@@ -1568,7 +1568,7 @@ func TestFixedSizeWindows(t *testing.T) {
 
 func TestSetFrameAttr(t *testing.T) {
 	h1 := &TestComponent{Ch: '1'}
-	cfg := DefaultWindowManagerConfig()
+	cfg := testWindowManagerConfig()
 	wm, w1 := NewWindowManager(h1, cfg)
 	wm.Resize(20, 8)
 
@@ -1590,4 +1590,10 @@ func assertEqualTile(t *testing.T, win Window, expected rune) {
 		assert.Equal(t, string(expected), string(win.Content().(*TestComponent).Ch))
 	}
 
+}
+
+func testWindowManagerConfig() WindowManagerConfig {
+	ret := DefaultWindowManagerConfig()
+	ret.NoMaxSize = true
+	return ret
 }

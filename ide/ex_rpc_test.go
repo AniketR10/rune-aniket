@@ -185,6 +185,7 @@ func TestIntegrationCopyToClipboard(t *testing.T) {
 	constructor := newTestRPCBrowser(t, &destructor, clip,
 		text.WithCommandKeyBinding(
 			term.KeyComb{Ch: 'h', Mod: term.ModCtrl}, [][]string{{cmdClipboardPaste}}),
+		text.WithFloatingNoMaxSize(false),
 	)
 	testCopyToClipboard(t, clip, constructor)
 	destructor()

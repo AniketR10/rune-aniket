@@ -2294,6 +2294,9 @@ func defaultCfg() ideConfig {
 		},
 		"browser": map[string]interface{}{
 			"workspace_bar": "number",
+			"window_manager": map[string]interface{}{
+				"no_max_size": false,
+			},
 		},
 		"notifications": map[string]interface{}{
 			"progress_bar": false,

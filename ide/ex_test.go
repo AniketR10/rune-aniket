@@ -1320,6 +1320,7 @@ func newExForTestingWithWorkspace(
 	// user opts override default test opts
 	finalOpts := defCommandKeyBindings()
 	finalOpts = append(finalOpts, text.WithCommandOverlayConfig(testCommandOverlayConfig()))
+	finalOpts = append(finalOpts, text.WithFloatingNoMaxSize(false))
 	finalOpts = append(finalOpts, opts...)
 
 	svc := document.NewInMemoryService()
@@ -1353,6 +1354,7 @@ func newExForTestingCommandsPreview(
 	// user opts override default test opts
 	finalOpts := defCommandKeyBindings()
 	finalOpts = append(finalOpts, text.WithCommandOverlayConfig(testCommandOverlayConfig()))
+	finalOpts = append(finalOpts, text.WithFloatingNoMaxSize(false))
 	finalOpts = append(finalOpts, opts...)
 
 	svc := document.NewInMemoryService()
@@ -1645,6 +1647,7 @@ func TestIntegrationEphemeralTerminal(t *testing.T) {
 		text.WithCommandKey(testCommandKey),
 		text.WithCommandOverlayConfig(testCommandOverlayConfig()),
 		text.WithEventPublisher(nopPublishEvent),
+		text.WithFloatingNoMaxSize(false),
 	}
 
 	tempDir, err := os.MkdirTemp("", "")
@@ -1742,6 +1745,7 @@ func TestIntegrationCompanionTerminal(t *testing.T) {
 		text.WithCommandKeyBinding(term.KeyComb{Mod: term.ModCtrl, Ch: 'v'},
 			[][]string{{"tabclose"}}),
 		text.WithCommandOverlayConfig(testCommandOverlayConfig()),
+		text.WithFloatingNoMaxSize(false),
 	}
 
 	tempDir, err := os.MkdirTemp("", "")
@@ -3396,6 +3400,7 @@ func (v *testVte) Title() string {
 func newExForTestingTasks(t *testing.T) (testEx, func()) {
 	opts := []text.Option{
 		text.WithCommandKey(testCommandKey),
+		text.WithFloatingNoMaxSize(false),
 	}
 	tempDir, err := os.MkdirTemp("", "")
 	t.Cleanup(func() {

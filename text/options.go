@@ -321,6 +321,13 @@ func WithCommandOverlayConfig(c CommandOverlayConfig) Option {
 	}
 }
 
+// Deprecated: this should not be used other than in tests.
+func WithFloatingNoMaxSize(val bool) Option { //nolint:revive
+	return func(cfg *Config) {
+		cfg.NoMaxSize = val
+	}
+}
+
 // WithCommandAliases defines command aliases.
 func WithCommandAliases(aliases map[string]CommandAlias) Option {
 	return func(cfg *Config) {

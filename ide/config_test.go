@@ -410,6 +410,7 @@ func TestConfigSetting(t *testing.T) {
 			FrameCharSet:  component.FrameCharSetHighlight(),
 			ScrollBarAttr: term.Attributes{Fg: tcell.GetColor("#f0f0f0")},
 			ScrollBarChar: '|',
+			NoMaxSize:     true,
 		},
 		Dim:                false,
 		ScrollBarHoverChar: 'X',

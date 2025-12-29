@@ -576,6 +576,7 @@ func TestComponentPrompt(t *testing.T) {
 		w := term.NewStringWriter(24, 12)
 
 		cfg := browser.DefaultConfig()
+		cfg.WindowManagerConfig.NoMaxSize = false
 		c := browser.NewComponent(cfg)
 		c.Resize(20, 12)
 		uri, err := workspaceapi.ParseURI("file:///Music")
@@ -752,6 +753,7 @@ func TestComponentPrompt(t *testing.T) {
 		w := term.NewStringWriter(24, 12)
 
 		cfg := browser.DefaultConfig()
+		cfg.NoMaxSize = false
 		c := browser.NewComponent(cfg)
 		c.Resize(20, 12)
 		uri, err := workspaceapi.ParseURI("file:///Music")

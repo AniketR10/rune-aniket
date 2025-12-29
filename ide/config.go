@@ -819,6 +819,19 @@ func (c ideConfig) windowScrollBarHoverChar() (ch rune) {
 	return
 }
 
+func (c ideConfig) windowNoMaxSize() (ret bool) {
+	ret = true
+	cfg, ok := c.windowManager()
+	if !ok {
+		return
+	}
+	val, err := cfg.GetBool("no_max_size")
+	if err == nil {
+		ret = val
+	}
+	return
+}
+
 func (c ideConfig) windowFocusFrameCharset() (cs component.FrameCharSet) {
 	return c.windowCharset("focus_frame_charset",
 		defaultWindowManagerConfig.FocusFrameCharSet)
@@ -948,6 +961,7 @@ func (c ideConfig) windowManagerConfig() handler.WindowManagerConfig {
 		FocusFrameCharSet:  c.windowFocusFrameCharset(),
 		ScrollBarHoverChar: c.windowScrollBarHoverChar(),
 		WindowManagerConfig: component.WindowManagerConfig{
+			NoMaxSize:     c.windowNoMaxSize(),
 			Frame:         c.frame(),
 			FrameAttr:     c.windowFrameAttr(),
 			FrameCharSet:  c.windowFrameCharset(),

@@ -168,6 +168,7 @@ func newTestComponent(t *testing.T, ed text.Editor) (*text.Component, *testLoade
 func newTestComponentConfig(t *testing.T, ed text.Editor, cfg text.Config) (
 	*text.Component, *testLoader,
 ) {
+	cfg.NoMaxSize = false
 	c, loader, err := newTestComponentErr(ed, cfg)
 	require.NoError(t, err)
 	return c, loader
