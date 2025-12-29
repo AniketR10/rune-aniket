@@ -462,7 +462,7 @@ func (t *parserHandler) Linefeed() {
 	pos := buf.CursorAtScreen()
 	pos.Y++
 
-	if pos.Y == buf.BottomScrollableRegion() {
+	if pos.Y >= buf.BottomScrollableRegion() {
 		t.scrollUp(1, false)
 	} else if pos.Y < t.height {
 		t.setCursorAtScreen(pos, t.modeOrigin)
@@ -708,7 +708,7 @@ func (t *parserHandler) ReverseIndex() {
 	defer t.sync.mu.Unlock()
 
 	pos := t.sync.buf.CursorAtScreen()
-	if pos.Y == t.sync.buf.TopScrollableRegion() {
+	if pos.Y <= t.sync.buf.TopScrollableRegion() {
 		t.scrollDown(1, false)
 	} else {
 		t.moveUp(1)

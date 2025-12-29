@@ -67,6 +67,26 @@ func TestIntegrationParserHandler(t *testing.T) {
 			},
 		},
 		{
+			desc:      "primary input mixed with user scrolls",
+			altBuffer: false,
+			sut: func(t *testing.T, p *parserHandler, tm *mockTabManager, pty *workspacetest.File) {
+				p.Resize(5, 5)
+				for range 6 {
+					p.Input('a')
+					p.CarriageReturn()
+					p.Linefeed()
+				}
+				require.True(t, p.scrollDown(1, true))
+				p.Input('b')
+				require.True(t, p.scrollDown(1, true))
+				p.CarriageReturn()
+				p.Linefeed()
+				require.True(t, p.scrollDown(1, true))
+				p.scrollUp(3, true)
+				assertEqualBuf(t, p, "a    \na    \na    \nb    \n     ")
+			},
+		},
+		{
 			desc:      "alt input after carriage return and line feed",
 			altBuffer: true,
 			sut: func(t *testing.T, p *parserHandler, tm *mockTabManager, pty *workspacetest.File) {
@@ -648,7 +668,9 @@ func TestIntegrationParserHandler(t *testing.T) {
 				p.CarriageReturn()
 				p.ClearLine(0)
 				p.Goto(0, 0)
+				require.True(t, p.scrollDown(1, true))
 				p.ReverseIndex()
+				require.True(t, p.scrollUp(1, true))
 				p.Input('X')
 				p.CarriageReturn()
 				p.Linefeed()

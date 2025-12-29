@@ -56,11 +56,7 @@ func (b *PrimaryBuffer) Init() {
 
 // Resize resizes this Buffer and resets the vertical margins.
 func (b *PrimaryBuffer) Resize(width, height int) {
-	b.log(log.TraceLevel, "resize %d %d, cursor: %#v", width, height, b.cursor.position)
-	defer func() {
-		b.log(log.TraceLevel, "resize DONE, cursor: %#v", b.cursor.position)
-	}()
-	isMaxOffset := b.scroll.Offset().Y == b.maxOffset(b.height)
+	isMaxOffset := b.scroll.Offset().Y >= b.maxOffset(b.height)
 	var wraps int
 	if width != 0 && width > b.width {
 		wraps = b.growColumns(width, height)
