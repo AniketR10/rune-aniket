@@ -445,7 +445,7 @@ func (s *Server) Read(ctx context.Context, req *ReadRequest) (*ReadResponse, err
 	resp.Data = buf[:n]
 	resp.N = int64(n)
 	resp.IsEof = err == io.EOF
-	s.log(log.TraceLevel, "file server read: req=%#v, resp: %#v", req, resp)
+	//s.log(log.TraceLevel, "file server read: req=%#v, resp: %#v", req, resp)
 	return resp, nil
 }
 
@@ -474,7 +474,7 @@ func (s *Server) ReadAt(ctx context.Context, req *ReadRequest) (*ReadResponse, e
 	resp.Data = buf[:n]
 	resp.N = int64(n)
 	resp.IsEof = err == io.EOF
-	s.log(log.TraceLevel, "file server read: req=%#v, resp: %#v", req, resp)
+	//s.log(log.TraceLevel, "file server read: req=%#v, resp: %#v", req, resp)
 	return resp, nil
 }
 
