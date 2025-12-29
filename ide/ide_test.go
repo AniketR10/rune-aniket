@@ -137,43 +137,6 @@ func TestIDEInitializationIntegration(t *testing.T) {
 		assert.NoError(t, i.closeResources())
 	})
 
-	t.Run("does not publish an event before run is called", func(t *testing.T) {
-		configFile, file1 := makeTestFiles(t)
-		file2, err := os.CreateTemp("", "six_ide_test")
-		require.NoError(t, err)
-		require.NoError(t, file2.Close())
-
-		err = os.WriteFile(configFile.Name(), []byte(sampleConfig), 0666)
-		require.NoError(t, err)
-
-		cwdURI, err := workspaceapi.CurrentUserHostURI(".")
-		require.NoError(t, err)
-
-		dir, err := os.MkdirTemp("", "")
-		require.NoError(t, err)
-
-		t.Cleanup(func() {
-			_ = os.RemoveAll(dir)
-		})
-
-		var published bool
-		i := new(IDE)
-		err = i.init(cwdURI.String(), configFile.Name(), "",
-			dir, []string{file1.Name(), file2.Name()},
-			WithPublishEvent(func(ev term.Event) bool {
-				published = true
-				return false
-			}),
-			WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
-			WithLocker(new(sync.Mutex)))
-		require.NoError(t, err)
-
-		assert.False(t, i.publishEvent(term.Event{}))
-		assert.False(t, published)
-
-		assert.NoError(t, i.closeResources())
-	})
-
 	t.Run("creates non-existing directories for log file", func(t *testing.T) {
 		configFile, file1 := makeTestFiles(t)
 

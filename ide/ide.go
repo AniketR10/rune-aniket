@@ -30,7 +30,6 @@ import (
 	"os"
 	"path"
 	"sync"
-	"sync/atomic"
 
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
@@ -59,7 +58,6 @@ type IDE struct {
 	workspaceManager *workspace.Manager
 	workspaceHandler *workspaceManagerHandler
 	root             shaderRunner
-	running          int32
 	publishEventFn   EventPublisher
 }
 
@@ -102,26 +100,6 @@ func (i *IDE) Interrupt(ctx context.Context) error {
 	return i.workspaceHandler.Interrupt(ctx)
 }
 
-// Run initialzes the underlying terminal environment and runs
-// it with a workspace handler
-func (i *IDE) Run() error {
-	err := tui.Init()
-	if err != nil {
-		return fmt.Errorf("tui init: %w", err)
-	}
-
-	term.SetAttr(i.DefaultAttributes())
-	term.SetInputMode(i.ideConfig.inputMode())
-
-	i.initRunning()
-	err = tui.RunWithLocker(&i.root, i.locker)
-	if err != nil {
-		return fmt.Errorf("tui run: %w", err)
-	}
-
-	return nil
-}
-
 // SubscribeCommand subscribes the given handler in calls to the given cmd,
 // or returns an error if there's already a CommandHandler
 // installed for this command.
@@ -159,6 +137,11 @@ func (i *IDE) DefaultAttributes() term.Attributes {
 	return i.root.defAttr
 }
 
+// InputMode return the configured tui input mode.
+func (i *IDE) InputMode() term.InputMode {
+	return i.ideConfig.inputMode()
+}
+
 // SetDefaultAttributes sets the default attributes to be used to fill the screen.
 func (i *IDE) SetDefaultAttributes(defAttr term.Attributes) {
 	i.root.defAttr = defAttr
@@ -169,11 +152,10 @@ func (i *IDE) Config() config.Config {
 	return config.MapConfig(i.ideConfig.cfg)
 }
 
-// Handler returns the root Handler of this IDE.
+// Ready returns the root Handler of this IDE,
+// and marks this IDE as ready to run.
 // Close must be called when this IDE is no longer in use.
-// This can be used insteaf of Run, which
-// install this IDE on a TUI system.
-func (i *IDE) Handler() tui.Handler {
+func (i *IDE) Ready() tui.Handler {
 	i.initRunning()
 	return &i.root
 }
@@ -219,13 +201,7 @@ func (i *IDE) Notifications() browserapi.Notifications {
 // Close satisfies io.Closer by closing this all ide's resources, including
 // the terminal state.
 func (i *IDE) Close() error {
-	running := atomic.CompareAndSwapInt32(&i.running, 1, 0)
-	if !running {
-		return nil
-	}
-	err := i.closeResources()
-	tui.Close()
-	return err
+	return i.closeResources()
 }
 
 func (i *IDE) closeResources() (ret error) {
@@ -385,20 +361,7 @@ func (i *IDE) init(
 	return i.workspaceHandler.subscribeCommand(runShaderCmdManual, &i.root)
 }
 
-func (i *IDE) publishEvent(ev term.Event) bool {
-	// avoid termbox' screen panicking because
-	// some component wants to publish interrupt
-	// before we are fully initialized
-	running := atomic.LoadInt32(&i.running)
-	if running != 1 {
-		return false
-	}
-
-	return i.publishEventFn(ev)
-}
-
 func (i *IDE) initRunning() {
-	atomic.StoreInt32(&i.running, 1)
 	if i.options.initShaderFn != nil {
 		// protect access to root, simulating a std loop iteration
 		i.locker.Lock()
