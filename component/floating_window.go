@@ -199,18 +199,13 @@ func (w *floatingNode) updateDesiredDimensions() {
 	if w.userHeight > w.desiredHeight {
 		w.desiredHeight = w.userHeight
 	}
+	w.desiredHeight = min(w.maxHeight-2, w.desiredHeight)
+	w.desiredWidth = min(w.maxWidth-2, w.desiredWidth)
 }
 
 func (w *floatingNode) resize() {
-	verticalDiff := w.maxHeight - w.desiredHeight
-	horizontalDiff := w.maxWidth - w.desiredWidth
-
-	if verticalDiff < 0 {
-		verticalDiff = 0
-	}
-	if horizontalDiff < 0 {
-		horizontalDiff = 0
-	}
+	verticalDiff := max(0, w.maxHeight-w.desiredHeight)
+	horizontalDiff := max(0, w.maxWidth-w.desiredWidth)
 
 	var offset term.Coordinates
 	if w.alignment&SpanAlignmentVerticallyCentered != 0 {
@@ -231,28 +226,16 @@ func (w *floatingNode) resize() {
 		offset.X += w.desiredOffset.X
 	}
 
-	w.realOffset = offset
-	if w.realOffset.X < 0 {
-		w.realOffset.X = 0
-	}
-	if w.realOffset.Y < 0 {
-		w.realOffset.Y = 0
-	}
+	w.realOffset.X = max(0, offset.X)
+	w.realOffset.Y = max(0, offset.Y)
 
-	w.realWidth, w.realHeight = w.desiredWidth, w.desiredHeight
+	w.realWidth = w.desiredWidth
+	w.realHeight = w.desiredHeight
 	if w.realOffset.Y+w.realHeight >= w.maxHeight {
-		w.realHeight = w.maxHeight - w.realOffset.Y
+		w.realHeight = max(0, w.maxHeight-w.realOffset.Y)
 	}
 	if w.realOffset.X+w.realWidth >= w.maxWidth {
-		w.realWidth = w.maxWidth - w.realOffset.X
-	}
-
-	if w.realWidth < 0 {
-		w.realWidth = 0
-	}
-
-	if w.realHeight < 0 {
-		w.realHeight = 0
+		w.realWidth = max(0, w.maxWidth-w.realOffset.X)
 	}
 
 	if w.realOffset.Y >= w.maxHeight || w.realOffset.X >= w.maxWidth {

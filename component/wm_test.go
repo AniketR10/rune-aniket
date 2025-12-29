@@ -753,8 +753,8 @@ func TestWindowManagerMinimize(t *testing.T) {
 		}, Expected: `
 ┌──────────────────┐
 │UUUUUUUUUUUUUUUUUU│
-┌┌─┌────┌──┐────┐─┐┐
-││L│AAAA│DD│AAAA│R││
+┌┌─┌────────────┐─┐┐
+││L│AAAA┌──┐AAAA│R││
 ││L│AAAA│DD│AAAA│R││
 ││L│AAAA└──┘AAAA│R││
 └└─└────────────┘─┘┘
@@ -776,9 +776,9 @@ func TestWindowManagerMinimize(t *testing.T) {
 		}, Expected: `
 ┌──────────────────┐
 │UUUUUUUUUUUUUUUUUU│
-┌┌─┌─┌───────┐──┐─┐┐
-││L│A│XXXXXXX│AA│R││
-└└─└─└───────┘──┘─┘┘
+┌┌─┌────────────┐─┐┐
+││L│AXXXXXXXXXAA│R││
+└└─└────────────┘─┘┘
 │DDDDDDDDDDDDDDDDDD│
 └──────────────────┘
 └──────────────────┘`,
@@ -795,19 +795,19 @@ func TestWindowManagerMinimize(t *testing.T) {
 			)
 			wof, ok := w.TileRight()
 			require.True(t, ok)
-			assertEqualTile(t, wof, 'R')
+			assertEqualTile(t, wof, 'A')
 
 			wof, ok = w.TileLeft()
 			require.True(t, ok)
-			assertEqualTile(t, wof, 'L')
+			assertEqualTile(t, wof, 'A')
 
 			wof, ok = w.TileUp()
 			require.True(t, ok)
-			assertEqualTile(t, wof, 'U')
+			assertEqualTile(t, wof, 'A')
 
 			wof, ok = w.TileDown()
 			require.True(t, ok)
-			assertEqualTile(t, wof, 'D')
+			assertEqualTile(t, wof, 'A')
 		}, Expected: `
 ┌──────────────────┐
 │UUUUUUUUUUUUUUUUUU│
@@ -829,8 +829,8 @@ func TestWindowManagerMinimize(t *testing.T) {
 
                     
                     
-   ┌─               
-   │X               
+                    
+    X               
                     
                     
                     
@@ -1257,7 +1257,7 @@ func TestComponentWindowAt(t *testing.T) {
 		expectedNotFound bool
 	}{
 		{
-			at:          term.Coordinates{X: 10, Y: 3},
+			at:          term.Coordinates{X: 10, Y: 4},
 			expectedOut: wF,
 		},
 		{
@@ -1309,11 +1309,11 @@ func TestComponentWindowAt(t *testing.T) {
 			expectedOut: w4,
 		},
 		{
-			at:          term.Coordinates{X: 9, Y: 3},
+			at:          term.Coordinates{X: 9, Y: 4},
 			expectedOut: wF,
 		},
 		{
-			at:          term.Coordinates{X: 12, Y: 5},
+			at:          term.Coordinates{X: 12, Y: 4},
 			expectedOut: wF,
 		},
 	}
@@ -1507,8 +1507,8 @@ func TestFixedSizeWindows(t *testing.T) {
 				assert.Equal(t, 6, wF.MaxHeight())
 				assert.Equal(t, 20, wF.MaxWidth())
 			}, Expected: `
-┌───┐┌─┌───┐───────┐
-│111││2│FFF│2222222│
+┌───┐┌─────────────┐
+│111││2┌───┐2222222│
 │111│└─│FFF│───────┘
 │111│┌─│FFF│───────┐
 │111││3└───┘4444444│
