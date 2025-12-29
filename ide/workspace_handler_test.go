@@ -1134,6 +1134,30 @@ func TestInitializeNoCwd(t *testing.T) {
 	require.NoError(t, m.Close())
 }
 
+func TestInitializeNotifications(t *testing.T) {
+	m := newTestWorkspaceManagerHandlerWithDir(t,
+		defaultConfigWithWrap(false), []string{"ignored"}, "", nopShutdownShaderConfig())
+
+	cases := []handlertest.SequenceTestCase{
+		{"",
+			`┌────┌─────────────┐
+│    │ 6:14am      │
+├────└─────────────┘
+│                  │
+│workspaceWallpaper│
+│                  │
+│                  │
+├──────────────────┤
+│1                 │
+└──────────────────┘`},
+	}
+	h := newSafeHandler(m)
+	m.notifications.NotifyOnce(notifications.LevelWarn, "6:14am")
+	handlertest.TestHandlerSequence(t, h, 20, 10, cases)
+
+	require.NoError(t, m.Close())
+}
+
 func TestNoBar(t *testing.T) {
 	cfg := defaultConfigWithWrap(false)
 	cfg.cfg["browser"] = map[string]any{"workspace_bar": false}
@@ -1769,15 +1793,15 @@ func TestWorkspaceCommands(t *testing.T) {
 	) {
 		return iterator.Empty[string](), "", nil
 	})
-	
+
 	err = m.SubscribeCommandForWorkspace(uri1, xyzCmd, sub)
 	require.NoError(t, err)
 	err = m.SubscribeCommandForWorkspace(uri1, abcCmd, sub)
 	require.NoError(t, err)
-	
+
 	require.NoError(t, m.addOrCreateWorkspace(uri2))
 	require.NoError(t, m.addOrCreateWorkspace(uri3))
-	
+
 	err = m.SubscribeCommandForWorkspace(uri2, xyzCmd, sub)
 	require.NoError(t, err)
 	err = m.SubscribeCommandForWorkspace(uri2, abcCmd, sub)
@@ -1817,7 +1841,7 @@ func TestWorkspaceCommands(t *testing.T) {
 │1 1  2 2  3 3               │
 └────────────────────────────┘`},
 		{":workspacefocus 3>:tttt>:xyz>",
-        	            	`┌──────────────┌─────────────┐
+			`┌──────────────┌─────────────┐
 │              │ unknown     │
 ├──────────────│ command or  │
 │              │ command     │
@@ -1835,7 +1859,7 @@ func TestWorkspaceCommands(t *testing.T) {
 	}
 	h := newSafeHandler(m)
 	handlertest.TestHandlerSequence(t, h, 30, 15, cases)
-	
+
 	assert.Equal(t, 2, int(xyz.Load()))
 	assert.Equal(t, 2, int(abc.Load()))
 
@@ -1844,10 +1868,10 @@ func TestWorkspaceCommands(t *testing.T) {
 
 	err = m.UnsubscribeCommandForWorkspace(uri2, "xyz")
 	require.NoError(t, err)
-	
+
 	cases = []handlertest.SequenceTestCase{
 		{":noticloseall>:workspacefocus 1>:xyz>:tttt>",
-        	            	`┌──────────────┌─────────────┐
+			`┌──────────────┌─────────────┐
 │              │ unknown     │
 ├──────────────│ command or  │
 │              │ command     │
@@ -1863,7 +1887,7 @@ func TestWorkspaceCommands(t *testing.T) {
 │1 1  2 2  3 3               │
 └────────────────────────────┘`},
 		{":noticloseall>:workspacefocus 2>:tttt>:xyz>",
-        	            	`┌──────────────┌─────────────┐
+			`┌──────────────┌─────────────┐
 │              │ unknown     │
 ├──────────────│ command or  │
 │              │ command     │
@@ -1879,7 +1903,7 @@ func TestWorkspaceCommands(t *testing.T) {
 │1 1  2 2  3 3               │
 └────────────────────────────┘`},
 		{":noticloseall>:workspacefocus 3>:tttt>:xyz>",
-        	            	`┌──────────────┌─────────────┐
+			`┌──────────────┌─────────────┐
 │              │ unknown     │
 ├──────────────│ command or  │
 │              │ command     │
@@ -1905,10 +1929,10 @@ func TestWorkspaceCommands(t *testing.T) {
 
 	err = m.UnsubscribeCommandForWorkspace(uri1, "xyz")
 	require.NoError(t, err)
-	
+
 	cases = []handlertest.SequenceTestCase{
 		{":noticloseall>:workspacefocus 1>:xyz>:tttt>",
-        	            	`┌──────────────┌─────────────┐
+			`┌──────────────┌─────────────┐
 │              │ unknown     │
 ├──────────────│ command or  │
 │              │ command     │
@@ -1924,7 +1948,7 @@ func TestWorkspaceCommands(t *testing.T) {
 │1 1  2 2  3 3               │
 └────────────────────────────┘`},
 		{":noticloseall>:workspacefocus 2>:tttt>:xyz>",
-        	            	`┌──────────────┌─────────────┐
+			`┌──────────────┌─────────────┐
 │              │ unknown     │
 ├──────────────│ command or  │
 │              │ command     │
@@ -1940,7 +1964,7 @@ func TestWorkspaceCommands(t *testing.T) {
 │1 1  2 2  3 3               │
 └────────────────────────────┘`},
 		{":noticloseall>:workspacefocus 3>:tttt>:xyz>",
-        	            	`┌──────────────┌─────────────┐
+			`┌──────────────┌─────────────┐
 │              │ unknown     │
 ├──────────────│ command or  │
 │              │ command     │

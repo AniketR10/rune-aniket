@@ -206,6 +206,7 @@ func (h *workspaceManagerHandler) init(
 ) (err error) {
 	ctx := context.Background()
 
+	h.storage = localstorage.New(ctx, sixDir, doctoml.Marshaler())
 	notiStorage := document.WithPartition(h.storage, "noti")
 	h.notifications = newWorkspaceNotifications(notiStorage, notifications)
 	h.shaderRunner = shaderRunner
@@ -220,7 +221,6 @@ func (h *workspaceManagerHandler) init(
 	h.sixDir = sixDir
 	h.extensionRunner = extensionRunner
 	h.builtinExtensions = builtinExtensions
-	h.storage = localstorage.New(ctx, sixDir, doctoml.Marshaler())
 	h.initialVTECapacity = initialVTECapacity
 	h.dispatchOnPreview = dispatchOnPreview
 
