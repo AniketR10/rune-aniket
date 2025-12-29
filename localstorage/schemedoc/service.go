@@ -343,7 +343,7 @@ func (d *docIter) HasNext() (ok bool) {
 		/* continue */
 	}
 
-	return true
+	return d.doneErr == nil
 }
 
 func (d *docIter) NextTo(doc interface{}) error {
