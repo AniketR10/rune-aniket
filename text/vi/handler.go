@@ -118,7 +118,6 @@ func (vi *viHandlerImpl) init(buf *cell.Buffer, cfg viConfig) {
 	vi.statusBar = nopBar{}
 	vi.less.InitWithBuffer(buf, handler.LessConfig{
 		Wrap:               vi.config.wrap,
-		Debug:              vi.config.debug,
 		ResAttr:            vi.config.resAttr,
 		SuperimposeMessage: true,
 		Attributes:         vi.config.attr,
@@ -147,7 +146,6 @@ func (vi *viHandlerImpl) initWithScroll(scroll *component.Scroll, opts ...Option
 	vi.statusBar = nopBar{}
 	vi.less.InitWithScroll(scroll, handler.LessConfig{
 		Wrap:               vi.config.wrap,
-		Debug:              vi.config.debug,
 		ResAttr:            vi.config.resAttr,
 		SuperimposeMessage: true,
 		Attributes:         vi.config.attr,
@@ -1148,7 +1146,7 @@ func (vi *viHandlerImpl) doMoveToBounds() {
 
 	switch vi.mode() {
 	case normalMode, yankMode, searchMode, zMode, gMode, deleteMode:
-		if !vi.config.debug && vi.config.cursorCorrections {
+		if vi.config.cursorCorrections {
 			prevCoords := vi.cursor.Coordinates()
 			vi.cursor.MoveToBounds(0)
 			// Only vertical marking. Not horizontal because otherwise when scrolling
@@ -1160,7 +1158,7 @@ func (vi *viHandlerImpl) doMoveToBounds() {
 		}
 	case insertMode, replaceMode, replaceOneMode,
 		visualMode, visualLineMode, visualBlockMode:
-		if !vi.config.debug && vi.config.cursorCorrections {
+		if vi.config.cursorCorrections {
 			vi.cursor.MoveToBounds(1)
 		}
 	default:

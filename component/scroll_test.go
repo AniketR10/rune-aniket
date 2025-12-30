@@ -379,66 +379,35 @@ lebuild/blue
 		{
 			func() {
 				require.True(t, scroll.SeekStartLine())
-				for range 4 {
-					require.True(t, scroll.SeekDown())
-				}
 			}, `
+module github.com/unstab
+                        
+go 1.14                 
+                        
 require ( [12 lines] )  
                         
 replace this => that    
                         
-                        
-                        
-                        
-                        
                         `,
 		},
 		{
 			func() {
-				require.True(t, scroll.SeekDown())
+				require.False(t, scroll.SeekDown())
 			}, `
+module github.com/unstab
+                        
+go 1.14                 
+                        
+require ( [12 lines] )  
                         
 replace this => that    
-                        
-                        
-                        
-                        
-                        
-                        
-                        `,
-		},
-		{
-			func() {
-				require.True(t, scroll.SeekDown())
-			}, `
-replace this => that    
-                        
-                        
-                        
-                        
-                        
-                        
-                        
-                        `,
-		},
-		{
-			func() {
-				require.True(t, scroll.SeekDown())
-			}, `
-                        
-                        
-                        
-                        
-                        
-                        
-                        
                         
                         `,
 		},
 		{
 			/* trimming of start of line */
 			func() {
-				require.True(t, scroll.SeekStartFile())
+				require.False(t, scroll.SeekStartFile())
 				require.True(t, scroll.MarkVisible(4))
 				require.True(t, scroll.MarkHidden(2, 5))
 			}, `
@@ -452,10 +421,137 @@ go 1.14 [4 lines] cloud.
     github.com/ernestrc/
     github.com/golang/mo`,
 		},
+		{
+			/* max offset is reduced while at max offset */
+			func() {
+				require.True(t, scroll.SeekEndFile())
+				require.True(t, scroll.MarkHidden(15, 18))
+			}, `
+    github.com/ernestrc/
+    github.com/golang/mo
+    github.com/golang/pr
+    github.com/google/uu
+    github.com/jacobsa/g
+) [4 lines]             
+                        
+                        
+                        `,
+		},
+		{
+			func() {
+				require.True(t, scroll.SeekEndFile())
+			}, `
+    github.com/adrianmo/
+    github.com/ernestrc/
+    github.com/ernestrc/
+    github.com/ernestrc/
+    github.com/golang/mo
+    github.com/golang/pr
+    github.com/google/uu
+    github.com/jacobsa/g
+) [4 lines]             `,
+		},
 	}
 	comptest.TestComponent(t, scroll, w, tests)
-	assert.Equal(t, 3, calledOnHide)
+	assert.Equal(t, 4, calledOnHide)
 	assert.Equal(t, 2, calledOnVisible)
+}
+
+func TestScrollInverse(t *testing.T) {
+	scroll := newScroll(4, false, 24, 9)
+	_, err := scroll.Buffer().ReadFrom(strings.NewReader(hiddenCopy))
+	require.NoError(t, err)
+	scroll.InvertOffset = true
+
+	w := term.NewStringWriter(24, 9)
+
+	tests := []comptest.TestCase{
+		{
+			nil, `
+    github.com/ernestrc/
+    github.com/golang/mo
+    github.com/golang/pr
+    github.com/google/uu
+    github.com/jacobsa/g
+)                       
+                        
+replace this => that    
+                        `,
+		},
+		{
+			func() {
+				assert.True(t, scroll.MarkHidden(2, 4))
+			}, `
+    github.com/ernestrc/
+    github.com/golang/mo
+    github.com/golang/pr
+    github.com/google/uu
+    github.com/jacobsa/g
+)                       
+                        
+replace this => that    
+                        `,
+		},
+		{
+			func() {
+				assert.True(t, scroll.SeekRight())
+				assert.True(t, scroll.SeekRight())
+			}, `
+  github.com/ernestrc/se
+  github.com/golang/mock
+  github.com/golang/prot
+  github.com/google/uuid
+  github.com/jacobsa/go-
+                        
+                        
+place this => that      
+                        `,
+		},
+		{
+			func() {
+				assert.True(t, scroll.SeekStartLine())
+				assert.True(t, scroll.SeekEndFile())
+			}, `
+module github.com/unstab
+                        
+go 1.14 [3 lines] requir
+    cloud.google.com/go 
+    cloud.google.com/go/
+    github.com/adrianmo/
+    github.com/ernestrc/
+    github.com/ernestrc/
+    github.com/ernestrc/`,
+		},
+		{
+			func() {
+				assert.True(t, scroll.MarkHidden(10, 18))
+			}, `
+module github.com/unstab
+                        
+go 1.14 [3 lines] requir
+    cloud.google.com/go 
+    cloud.google.com/go/
+    github.com/adrianmo/
+    github.com/ernestrc/
+    github.com/ernestrc/
+    github.com/ernestrc/`,
+		},
+		{
+			func() {
+				assert.True(t, scroll.SeekEndFile())
+			}, `
+module github.com/unstab
+                        
+go 1.14 [3 lines] requir
+    cloud.google.com/go 
+    cloud.google.com/go/
+    github.com/adrianmo/
+    github.com/ernestrc/
+    github.com/ernestrc/
+    github.com/ernestrc/`,
+		},
+	}
+	comptest.TestComponent(t, scroll, w, tests)
 }
 
 func TestScrollNew(t *testing.T) {

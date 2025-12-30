@@ -1407,10 +1407,6 @@ func (c ideConfig) auxiliaryBarLines() (bool, bool) {
 	}
 }
 
-func (c ideConfig) modalDebug() (ret bool) {
-	return c.modalBool("debug")
-}
-
 func (c ideConfig) clipboard() clipboard.Register {
 	cfg := config.MapConfig(c.cfg)
 	ret, err := extutil.Clipboard(cfg)
@@ -1419,20 +1415,6 @@ func (c ideConfig) clipboard() clipboard.Register {
 			c.errors["clipboard"] = err
 		}
 		ret = clipboard.NewInMemory()
-	}
-	return ret
-}
-
-func (c ideConfig) modalBool(name string) (ret bool) {
-	cfg, ok := c.modal()
-	if !ok {
-		return
-	}
-	ret, err := cfg.GetBool(name)
-	if err != nil {
-		if err != config.ErrNotFound {
-			c.errors["editor.modal."+name] = err
-		}
 	}
 	return ret
 }

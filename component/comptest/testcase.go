@@ -57,22 +57,24 @@ func TestComponent(
 	var err error
 
 	for i, tcase := range cases {
-		if err = w.Clear(term.Attributes{}); err != nil {
-			t.Fatal(err)
-		}
+		t.Run(fmt.Sprintf("test case %d", i), func(t *testing.T) {
+			if err = w.Clear(term.Attributes{}); err != nil {
+				t.Fatal(err)
+			}
 
-		if tcase.Action != nil {
-			tcase.Action()
-		}
+			if tcase.Action != nil {
+				tcase.Action()
+			}
 
-		m.Draw(w)
+			m.Draw(w)
 
-		if err := w.Flush(); err != nil {
-			t.Fatal(err)
-		}
+			if err := w.Flush(); err != nil {
+				t.Fatal(err)
+			}
 
-		// for readability, we expected strings are written starting with \n
-		expected := strings.TrimLeft(tcase.Expected, "\n")
-		assert.Equal(t, expected, w.String(), "testcase %d failed", i)
+			// for readability, we expected strings are written starting with \n
+			expected := strings.TrimLeft(tcase.Expected, "\n")
+			assert.Equal(t, expected, w.String(), "testcase %d failed", i)
+		})
 	}
 }

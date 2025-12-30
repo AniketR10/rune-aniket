@@ -54,6 +54,7 @@ type Scroll struct {
 	searchTextStr string
 	offset        term.Coordinates
 	subs          []ScrollSubscriber
+	hidden        int
 	hiddenblocks  map[int]int
 	hiddenlines   map[int]int
 	hiddenmeta    map[int]string
@@ -71,16 +72,17 @@ type Scroll struct {
 	// Attributes determines the attributes for regular cells.
 	Attributes term.Attributes
 
-	// Debug enables seeing visualizing term cells.
-	Debug bool
-
 	// rows longer than the width of the scroll wrap around and
 	// are rendered in the next row if Wrap is set to true.
-	// Wrap invalidates Debug.
+	// If Wrap is set to true, then InvertOffset is ignored (default is false).
 	Wrap bool
 
 	// HideAttr determines the attributes used to mark hidden rows.
 	HideAttr term.Attributes
+
+	// InvertOffset inverts the semantics of all the Seek* methods,
+	// thus the default offset is the maximum offset.
+	InvertOffset bool
 }
 
 var _ Scrollable = (*Scroll)(nil)
@@ -478,47 +480,64 @@ func (s *Scroll) Resize(width, height int) {
 	// shouldn't do that on calls to Resize.
 }
 
-func (s *Scroll) getMaxXOffset() (x int) {
-	if s.Wrap {
-		return
-	}
-
-	columns := s.buf.MaxColumns()
-	if columns >= s.width {
-		x = columns - s.width
-	}
-	return
-}
-
 // RowsWithWraps returns the number of rows in this scroll,
 // including the chunks of rows that were wrapped around.
 func (s *Scroll) RowsWithWraps() int {
 	return s.buf.Rows() + s.wrapsLen
 }
 
-func (s *Scroll) getMaxYOffset() (y int) {
-	rows := s.RowsWithWraps()
-	if rows >= s.height {
-		y = rows - s.height
+// MaxOffset returns the max seek offset.
+func (s *Scroll) MaxOffset() term.Coordinates {
+	return term.Coordinates{
+		Y: s.getMaxYOffset(),
+		X: s.getMaxXOffset(),
 	}
+}
+
+func (s *Scroll) getMaxXOffset() (x int) {
+	if s.Wrap {
+		return
+	}
+
+	columns := s.buf.MaxColumns()
+	x = max(0, columns-s.width)
 	return
 }
 
-func (s *Scroll) rawCellsOffsetNoWrap(hiddenOffset int) [][]term.Cell {
+func (s *Scroll) getMaxYOffset() (y int) {
+	rows := s.RowsWithWraps()
+	y = max(0, rows-s.height-s.hidden)
+	return
+}
+
+func (s *Scroll) rawCellsOffsetNoWrap(hiddenOffset int) (offset int, ret [][]term.Cell) {
 	cells := s.buf.RawCells()
-	offset := s.offset.Y + hiddenOffset
+	if s.InvertOffset {
+		offset = max(0, s.getMaxYOffset()-s.offset.Y+hiddenOffset)
+	} else {
+		offset = s.offset.Y + hiddenOffset
+	}
 	if offset <= len(cells) {
-		return cells[offset:]
+		return offset, cells[offset:]
 	}
 	// this can happen in some cases when content is modified
 	// outside scroll and offset.Y is simply stale.
 	if len(cells) > 0 {
-		return cells[len(cells)-1:]
+		return offset, cells[len(cells)-1:]
 	}
-	return cells[:]
+	return offset, cells[:]
 }
 
 func (s *Scroll) hiddenOffset() (ret int) {
+	if s.InvertOffset {
+		maxOffset := s.getMaxYOffset()
+		for _, t := range s.hiddensorted {
+			if t.start < maxOffset-s.offset.Y+ret {
+				ret += t.end - t.start
+			}
+		}
+		return
+	}
 	for _, t := range s.hiddensorted {
 		if t.start < s.offset.Y+ret {
 			ret += t.end - t.start
@@ -534,11 +553,9 @@ type startEndBlock struct {
 
 func (s *Scroll) drawNoAttr(writer term.Writer) {
 	xwindow := s.offset.X + s.width
-	ywindow := s.height
-	for y, r := range s.rawCellsOffsetNoWrap(0) {
-		if y >= ywindow {
-			break
-		}
+	_, cells := s.rawCellsOffsetNoWrap(0)
+	ywindow := min(s.height, len(cells))
+	for y, r := range cells[:ywindow] {
 		var offset int
 		for x, c := range r {
 			if c.Ch == '\t' {
@@ -562,11 +579,9 @@ func (s *Scroll) drawNoAttr(writer term.Writer) {
 
 func (s *Scroll) draw(writer term.Writer) {
 	xwindow := s.offset.X + s.width
-	ywindow := s.height
-	for y, r := range s.rawCellsOffsetNoWrap(0) {
-		if y >= ywindow {
-			break
-		}
+	_, cells := s.rawCellsOffsetNoWrap(0)
+	ywindow := min(s.height, len(cells))
+	for y, r := range cells[:ywindow] {
 		var offset int
 		for x, c := range r {
 			if c.Ch == '\t' {
@@ -591,53 +606,6 @@ func (s *Scroll) draw(writer term.Writer) {
 			}
 			writer.SetCell(term.Coordinates{X: xi, Y: y}, c)
 		}
-	}
-}
-
-func (s *Scroll) drawDebug(writer term.Writer) {
-	xwindow := s.offset.X + s.width
-	ywindow := s.height
-	for y, r := range s.rawCellsOffsetNoWrap(0) {
-		if y >= ywindow {
-			break
-		}
-		var x int
-		var c term.Cell
-		var offset int
-		for x, c = range r {
-			if c.Ch == '\t' {
-				offset += s.tabspaces - 1
-			}
-			x += offset
-			if c.Width > 1 {
-				offset += int(c.Width) - 1
-			}
-			if x >= xwindow {
-				break
-			}
-			if c.Ch == 0 {
-				c.Ch = '░'
-			}
-			if x < s.offset.X {
-				continue
-			}
-			xi := x - s.offset.X
-			if c.Bg == 0 {
-				c.Bg = s.Attributes.Bg
-			}
-			if c.Fg == 0 {
-				c.Fg = s.Attributes.Fg
-			}
-			writer.SetCell(term.Coordinates{X: xi, Y: y}, c)
-		}
-		if x >= xwindow {
-			break
-		}
-		x = x - s.offset.X
-		if len(r) != 0 {
-			x++
-		}
-		writer.SetCell(term.Coordinates{X: x, Y: y}, term.Cell{Ch: '¬'})
 	}
 }
 
@@ -746,11 +714,6 @@ func (s *Scroll) Draw(writer term.Writer) {
 			return
 		}
 
-		if s.Debug {
-			s.drawDebug(writer)
-			return
-		}
-
 		if len(s.hiddenblocks) != 0 {
 			s.drawWithHidden(writer)
 			return
@@ -771,11 +734,6 @@ func (s *Scroll) Draw(writer term.Writer) {
 
 	if s.Wrap {
 		s.wrapdraw(writer)
-		return
-	}
-
-	if s.Debug {
-		s.drawDebug(writer)
 		return
 	}
 
@@ -1218,13 +1176,13 @@ func (s *Scroll) drawWithHidden(writer term.Writer) {
 	var targety, hideLineIconOffset int
 	endblock := -1
 	hiddenOffset := s.hiddenOffset()
-	cells := s.rawCellsOffsetNoWrap(hiddenOffset)
+	offset, cells := s.rawCellsOffsetNoWrap(hiddenOffset)
 	for y := 0; y < len(cells); y++ {
 		r := cells[y]
 		if targety >= ywindow {
 			break
 		}
-		scrollY := y + s.offset.Y + hiddenOffset
+		scrollY := y + offset
 		if scrollY < endblock {
 			continue
 		}
@@ -1312,6 +1270,7 @@ func (s *Scroll) drawWithHidden(writer term.Writer) {
 }
 
 func (s *Scroll) rebuildHiddenLines() {
+	s.hidden = 0
 	clear(s.hiddenlines)
 	for start, end := range s.hiddenblocks {
 		for i := start; i <= end; i++ {
@@ -1319,11 +1278,10 @@ func (s *Scroll) rebuildHiddenLines() {
 		}
 	}
 	s.hiddensorted = s.hiddensorted[:0]
-	var i int
 	for start, end := range s.hiddenblocks {
 		s.hiddensorted = append(s.hiddensorted, startEndBlock{start, end})
-		i++
 		s.hiddenmeta[start] = fmt.Sprintf(" [%d lines] ", end-start+1)
+		s.hidden += end - start
 	}
 	sort.Slice(s.hiddensorted, func(i, j int) bool {
 		return s.hiddensorted[i].start < s.hiddensorted[j].start

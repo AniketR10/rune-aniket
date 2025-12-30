@@ -383,7 +383,6 @@ func (e *Handler) initializeDoneHandler() {
 		main = vi.New(buf, uri,
 			vi.WithResAttr(e.cfg.SelectionAttributes),
 			vi.WithAttr(e.cfg.Attributes),
-			vi.WithDebug(false),
 			vi.WithWrap(false),
 			vi.WithClipboard(e.cfg.Clipboard),
 		)

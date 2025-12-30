@@ -155,7 +155,6 @@ func (h *workspaceManagerHandler) newBuiltinModalEditor(
 		vi.WithStatusBarConfig(cfg.statusBarEnabled(), statusBarConfig),
 		vi.WithGitBar(cfg.gitBarEnabled(), gitBarConfig),
 		vi.WithHideInitialFolds(cfg.initialFolds()),
-		vi.WithDebug(cfg.modalDebug()),
 		vi.WithClipboard(cfg.clipboard()),
 		vi.WithWorkspaceCommandRegistry(cwd, h),
 		vi.WithNotifications(h.notifications),

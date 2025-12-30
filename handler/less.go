@@ -35,8 +35,7 @@ import (
 
 // LessConfig holds configuration values for a Less instance.
 type LessConfig struct {
-	Debug bool
-	Wrap  bool
+	Wrap bool
 	// SuperimposeMessage changes the behaviour to instead of drawing
 	// a bottom bar permanently on which messages are written,
 	// messages are superimposed on the last row of the scroll content.
@@ -501,7 +500,6 @@ func (l *Less) resizeMoveMessage(cmdBarWidth, cmdBarHeight int) {
 func (l *Less) setupScroll(w *component.Scroll, attr term.Attributes) {
 	w.ResultsAttr = l.config.ResAttr
 	w.Wrap = l.config.Wrap
-	w.Debug = l.config.Debug
 	w.Attributes = attr
 }
 

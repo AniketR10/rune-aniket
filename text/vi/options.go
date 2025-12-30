@@ -43,7 +43,6 @@ type viConfig struct {
 	scheduleNextTick   func(func()) bool
 	defaultRegister    string
 	registry           text.WorkspaceCommandRegistry
-	debug              bool
 	wrap               bool
 	cursorCorrections  bool
 	autoCenter         bool
@@ -153,13 +152,6 @@ func WithAttr(attr term.Attributes) Option {
 func WithClipboard(clip clipboard.Register) Option {
 	return func(cfg *viConfig) {
 		cfg.clipboard = clip
-	}
-}
-
-// WithDebug disables cursor position correction to aid with cursor debugging.
-func WithDebug(debug bool) Option {
-	return func(cfg *viConfig) {
-		cfg.debug = debug
 	}
 }
 
