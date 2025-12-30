@@ -61,6 +61,7 @@ type Component struct {
 	pty       workspaceapi.Pty
 	shell     string
 	watcher   workspaceapi.ProcessWatcher
+	scroll    component.Scroll
 	ctx       context.Context
 	cancelCtx func()
 	uri       workspaceapi.URI
@@ -124,6 +125,9 @@ func (t *Component) Init(
 	if log.IsLevelEnabled(log.TraceLevel) {
 		h = vteparser.HandlerWithLogging("vte.parserHandler", h)
 	}
+	t.scroll.InitPerformance(&t.parserHandler.sync.primBuf.Cells)
+	t.scroll.InvertOffset = true
+	t.scroll.SetTabspaces(1)
 
 	t.remote = ptyWriterRemote(t, cfg.ScheduleNextTick)
 	t.waitParserHandler = newWaitParserHandler(t.ctx, h)
@@ -215,6 +219,7 @@ func (t *Component) Resize(width, height int) error {
 	t.height = height
 
 	t.parserHandler.Resize(width, height)
+	t.scroll.Resize(width, height)
 
 	return nil
 }
@@ -267,6 +272,7 @@ func (t *Component) CursorVisible() bool {
 	defer t.mu.Unlock()
 
 	return !t.parserHandler.cursorHidden &&
+		t.scroll.Offset().Y == 0 &&
 		t.parserHandler.modeShowCursor &&
 		t.parserHandler.sync.buf.CursorAtScreen().Y < t.height
 }
@@ -277,6 +283,9 @@ func (t *Component) CursorAtScreen() term.Coordinates {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
+	if t.scroll.Offset().Y != 0 {
+		return term.Coordinates{}
+	}
 	return t.parserHandler.sync.buf.CursorAtScreen()
 }
 
@@ -338,8 +347,18 @@ func (t *Component) ScrollDown(count int) (ok bool) {
 	if t.parserHandler.useAlt {
 		return
 	}
-	// vte scroll up/down has inverse semantics
-	return t.parserHandler.scrollUp(count, true)
+	offset := t.scroll.Offset().Y
+	// do not rely on primary buffer max offset, as it uses cursor
+	// or scroll max offset, as it doesn't allow for rows-1 full scroll,
+	// only rows-height-1 scroll.
+	maxOffset := t.scroll.MaxOffset().Y + t.height - 1
+	target := min(maxOffset, offset+count)
+
+	// scroll is configured with inverted seek semantics
+	for i := 0; i < target-offset && t.scroll.SeekUp(); i++ {
+		ok = true
+	}
+	return
 }
 
 // ScrollUp scrolls up the content of this terminal emulator.
@@ -349,22 +368,11 @@ func (t *Component) ScrollUp(count int) (ok bool) {
 	if t.parserHandler.useAlt {
 		return
 	}
-	// vte scroll up/down has inverse semantics
-	return t.parserHandler.scrollDown(count, true)
-}
-
-// ScrollTop scrolls up the content of this terminal emulator to the top.
-func (t *Component) ScrollTop() (ok bool) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	if t.parserHandler.useAlt {
-		return
+	// scroll is configured with inverted seek semantics
+	for i := 0; i < count && t.scroll.SeekDown(); i++ {
+		ok = true
 	}
-
-	// vte scroll up/down has inverse semantics
-	buffer := t.parserHandler.sync.primBuf
-	offset := buffer.Offset()
-	return t.parserHandler.scrollDown(offset.Y, true)
+	return
 }
 
 // ScrollOffset returns the current vertical scroll offset.
@@ -375,8 +383,7 @@ func (t *Component) ScrollOffset() int {
 		return 0
 	}
 
-	buffer := t.parserHandler.sync.primBuf
-	return buffer.Offset().Y
+	return t.scroll.MaxOffset().Y - t.scroll.Offset().Y
 }
 
 // MaxScrollOffset returns the current vertical scroll offset.
@@ -387,8 +394,7 @@ func (t *Component) MaxScrollOffset() int {
 		return 0
 	}
 
-	buffer := t.parserHandler.sync.primBuf
-	return buffer.MaxOffset()
+	return t.scroll.MaxOffset().Y
 }
 
 // ScrollBottom scrolls down the content of this terminal emulator to the bottom.
@@ -399,14 +405,7 @@ func (t *Component) ScrollBottom() (ok bool) {
 		return
 	}
 
-	buffer := t.parserHandler.sync.primBuf
-	offset := buffer.Offset()
-	max := buffer.MaxOffset()
-	// vte scroll up/down has inverse semantics
-	if offset.Y > max {
-		return t.parserHandler.scrollDown(offset.Y-max, true)
-	}
-	return t.parserHandler.scrollUp(max-offset.Y, true)
+	return t.scroll.SeekStartFile()
 }
 
 // SetDefaultAttributes updates the default attributes of this terminal emulator.
@@ -416,6 +415,7 @@ func (t *Component) SetDefaultAttributes(attrs term.Attributes) {
 
 	t.parserHandler.sync.primBuf.SetDefaultAttributes(attrs)
 	t.parserHandler.sync.altBuf.SetDefaultAttributes(attrs)
+	t.scroll.Attributes = attrs
 }
 
 // IsApplicationCursorKeysMode returns whether cursor keys mode is enabled.
@@ -451,8 +451,10 @@ func (t *Component) Draw(w term.Writer) {
 
 	if t.parserHandler.useAlt {
 		t.parserHandler.sync.altBuf.Draw(w)
-	} else {
+	} else if t.scroll.Offset().Y == 0 {
 		t.parserHandler.sync.primBuf.Draw(w)
+	} else {
+		t.scroll.Draw(w)
 	}
 
 	t.drawSelection(w)
@@ -486,7 +488,10 @@ func (t *Component) Select(pos term.Coordinates) {
 
 	if t.parserHandler.useAlt {
 		t.parserHandler.sync.altBuf.Select(pos)
+	} else if t.scroll.Offset().Y == 0 {
+		t.parserHandler.sync.primBuf.Select(pos)
 	} else {
+		pos.Y -= t.scroll.Offset().Y
 		t.parserHandler.sync.primBuf.Select(pos)
 	}
 }
@@ -498,7 +503,10 @@ func (t *Component) SelectEnd(pos term.Coordinates) {
 
 	if t.parserHandler.useAlt {
 		t.parserHandler.sync.altBuf.SelectEnd(pos)
+	} else if t.scroll.Offset().Y == 0 {
+		t.parserHandler.sync.primBuf.SelectEnd(pos)
 	} else {
+		pos.Y -= t.scroll.Offset().Y
 		t.parserHandler.sync.primBuf.SelectEnd(pos)
 	}
 }
@@ -510,7 +518,10 @@ func (t *Component) SelectWordAt(pos term.Coordinates) {
 
 	if t.parserHandler.useAlt {
 		t.parserHandler.sync.altBuf.SelectWordAt(pos)
+	} else if t.scroll.Offset().Y == 0 {
+		t.parserHandler.sync.primBuf.SelectWordAt(pos)
 	} else {
+		pos.Y -= t.scroll.Offset().Y
 		t.parserHandler.sync.primBuf.SelectWordAt(pos)
 	}
 }
@@ -523,7 +534,10 @@ func (t *Component) SelectLine(pos term.Coordinates) {
 
 	if t.parserHandler.useAlt {
 		t.parserHandler.sync.altBuf.SelectLine(pos)
+	} else if t.scroll.Offset().Y == 0 {
+		t.parserHandler.sync.primBuf.SelectLine(pos)
 	} else {
+		pos.Y -= t.scroll.Offset().Y
 		t.parserHandler.sync.primBuf.SelectLine(pos)
 	}
 }
@@ -682,9 +696,12 @@ func (t *Component) drawSelection(w term.Writer) {
 	var ok bool
 	if t.parserHandler.useAlt {
 		mode, from, to, ok = t.parserHandler.sync.altBuf.SelectionCoordinatesAtScroll()
-	} else {
+	} else if t.scroll.Offset().Y == 0 {
 		mode, from, to, ok = t.parserHandler.sync.primBuf.SelectionCoordinatesAtScroll()
 		offset = t.parserHandler.sync.primBuf.Offset()
+	} else {
+		mode, from, to, ok = t.parserHandler.sync.primBuf.SelectionCoordinatesAtScroll()
+		offset = term.Coordinates{Y: t.scroll.Buffer().Rows() - t.height - t.scroll.Offset().Y}
 	}
 	if !ok {
 		return

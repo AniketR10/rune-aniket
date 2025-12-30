@@ -517,15 +517,16 @@ func (s *Scroll) rawCellsOffsetNoWrap(hiddenOffset int) (offset int, ret [][]ter
 	} else {
 		offset = s.offset.Y + hiddenOffset
 	}
-	if offset <= len(cells) {
+	switch {
+	case offset <= len(cells):
 		return offset, cells[offset:]
-	}
 	// this can happen in some cases when content is modified
 	// outside scroll and offset.Y is simply stale.
-	if len(cells) > 0 {
+	case len(cells) > 0:
 		return offset, cells[len(cells)-1:]
+	default:
+		return offset, cells[:]
 	}
-	return offset, cells[:]
 }
 
 func (s *Scroll) hiddenOffset() (ret int) {

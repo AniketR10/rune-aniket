@@ -463,7 +463,7 @@ func (t *parserHandler) Linefeed() {
 	pos.Y++
 
 	if pos.Y >= buf.BottomScrollableRegion() {
-		t.scrollUp(1, false)
+		t.scrollUp(1)
 	} else if pos.Y < t.height {
 		t.setCursorAtScreen(pos, t.modeOrigin)
 	}
@@ -511,7 +511,7 @@ func (t *parserHandler) ScrollUp(rows int) {
 	t.sync.mu.Lock()
 	defer t.sync.mu.Unlock()
 
-	t.scrollUp(rows, false)
+	t.scrollUp(rows)
 }
 
 // Scroll down `rows` rows.
@@ -519,7 +519,7 @@ func (t *parserHandler) ScrollDown(rows int) {
 	t.sync.mu.Lock()
 	defer t.sync.mu.Unlock()
 
-	t.scrollDown(rows, false)
+	t.scrollDown(rows)
 }
 
 // Insert `count` blank lines.
@@ -709,7 +709,7 @@ func (t *parserHandler) ReverseIndex() {
 
 	pos := t.sync.buf.CursorAtScreen()
 	if pos.Y <= t.sync.buf.TopScrollableRegion() {
-		t.scrollDown(1, false)
+		t.scrollDown(1)
 	} else {
 		t.moveUp(1)
 	}
@@ -1255,23 +1255,13 @@ func (t *parserHandler) carriageReturn() {
 	}, false)
 }
 
-func (t *parserHandler) scrollDown(rows int, userScroll bool) bool {
+func (t *parserHandler) scrollDown(rows int) bool {
 	if t.useAlt {
 		return t.scrollDownAltRelative(t.sync.buf.TopScrollableRegion(), rows)
 	}
 
 	buf := t.sync.primBuf
-	offset := buf.Offset()
 	t.shouldWrap = false
-
-	if userScroll {
-		newOffset := max(offset.Y-rows, 0)
-		if offset.Y != newOffset {
-			buf.MoveToOffset(term.Coordinates{Y: newOffset})
-			return true
-		}
-		return false
-	}
 
 	// primary buffer includes history so we cannot simply
 	// use bottom and top of scrollable region.
@@ -1285,7 +1275,7 @@ func (t *parserHandler) scrollDown(rows int, userScroll bool) bool {
 	return false
 }
 
-func (t *parserHandler) scrollUp(rows int, userScroll bool) bool {
+func (t *parserHandler) scrollUp(rows int) bool {
 	if t.useAlt {
 		return t.scrollUpAltRelative(t.sync.buf.TopScrollableRegion(), rows)
 	}
@@ -1293,15 +1283,6 @@ func (t *parserHandler) scrollUp(rows int, userScroll bool) bool {
 	buf := t.sync.primBuf
 	offset := buf.Offset()
 	t.shouldWrap = false
-
-	if userScroll {
-		newOffset := min(offset.Y+rows, buf.MaxOffset())
-		if offset.Y != newOffset {
-			buf.MoveToOffset(term.Coordinates{Y: newOffset})
-			return true
-		}
-		return false
-	}
 
 	cursorAtScroll := buf.CursorAtScroll()
 	if cursorAtScroll.Y+rows >= t.maxScrollLength {
@@ -1420,7 +1401,7 @@ func (t *parserHandler) wrapLine() {
 	pos := buf.CursorAtScreen()
 	pos.X = 0
 	if pos.Y+1 >= buf.BottomScrollableRegion() {
-		t.scrollUp(1, false)
+		t.scrollUp(1)
 	} else {
 		pos.Y++
 	}

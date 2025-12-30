@@ -281,18 +281,17 @@ func (b *PrimaryBuffer) MoveToOffset(offset term.Coordinates) {
 // It also ensures that bottom lines grow if there's
 // not enough lines from offset to bottom of the screen.
 func (b *PrimaryBuffer) SetOffset(offset term.Coordinates) {
+	prev := b.AltBuffer.scroll.Offset()
 	orig := b.CursorAtScreen()
-	b.AltBuffer.scroll.SetOffset(offset)
-	b.SetCursorAtScreen(orig, false)
-	// do not violate all screen must be always filled invariant
-	// or else very nasty side-effects can occur, like
-	// scrollDown not using correct coordinates
-	if diff := b.Offset().Y - b.MaxOffset(); diff > 0 {
-		y := b.Rows() + diff - 1
-		x := b.Width() - 1
-		b.Cells.InsertContext(b.ctx,
-			term.Coordinates{Y: y, X: x}, b.defaultChar)
+	if !b.AltBuffer.scroll.SetOffset(offset) {
+		return
 	}
+	if offset.Y > prev.Y {
+		b.growLines(false /* no offset change */, b.width, offset.Y+b.height)
+	} else {
+		b.shrinkLines(false /* no offset change */, offset.Y+b.height)
+	}
+	b.SetCursorAtScreen(orig, false)
 }
 
 // Offset returns the scroll offset of this PrimaryBuffer.

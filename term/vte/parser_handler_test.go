@@ -67,26 +67,6 @@ func TestIntegrationParserHandler(t *testing.T) {
 			},
 		},
 		{
-			desc:      "primary input mixed with user scrolls",
-			altBuffer: false,
-			sut: func(t *testing.T, p *parserHandler, tm *mockTabManager, pty *workspacetest.File) {
-				p.Resize(5, 5)
-				for range 6 {
-					p.Input('a')
-					p.CarriageReturn()
-					p.Linefeed()
-				}
-				require.True(t, p.scrollDown(1, true))
-				p.Input('b')
-				require.True(t, p.scrollDown(1, true))
-				p.CarriageReturn()
-				p.Linefeed()
-				require.True(t, p.scrollDown(1, true))
-				p.scrollUp(3, true)
-				assertEqualBuf(t, p, "a    \na    \na    \nb    \n     ")
-			},
-		},
-		{
 			desc:      "alt input after carriage return and line feed",
 			altBuffer: true,
 			sut: func(t *testing.T, p *parserHandler, tm *mockTabManager, pty *workspacetest.File) {
@@ -216,36 +196,12 @@ func TestIntegrationParserHandler(t *testing.T) {
 			},
 		},
 		{
-			desc:      "primary scroll down 0 rows does nothing",
-			altBuffer: false,
-			sut: func(t *testing.T, p *parserHandler, tm *mockTabManager, pty *workspacetest.File) {
-				p.Resize(5, 5)
-				resetBuffer(t, p, "a    \nb    \nc    \nd    \ne    ")
-				p.ScrollDown(0)
-				assertEqualBuf(t, p, "a    \nb    \nc    \nd    \ne    ")
-				assert.False(t, p.scrollDown(0, true))
-				assertEqualBuf(t, p, "a    \nb    \nc    \nd    \ne    ")
-			},
-		},
-		{
 			desc:      "alternate scroll down 0 rows does nothing",
 			altBuffer: true,
 			sut: func(t *testing.T, p *parserHandler, tm *mockTabManager, pty *workspacetest.File) {
 				p.Resize(5, 5)
 				resetBuffer(t, p, "a    \nb    \nc    \nd    \ne    ")
 				p.ScrollDown(0)
-				assertEqualBuf(t, p, "a    \nb    \nc    \nd    \ne    ")
-			},
-		},
-		{
-			desc:      "primary scroll up 0 rows does nothing",
-			altBuffer: false,
-			sut: func(t *testing.T, p *parserHandler, tm *mockTabManager, pty *workspacetest.File) {
-				p.Resize(5, 5)
-				resetBuffer(t, p, "a    \nb    \nc    \nd    \ne    ")
-				p.ScrollUp(0)
-				assertEqualBuf(t, p, "a    \nb    \nc    \nd    \ne    ")
-				assert.False(t, p.scrollUp(0, true))
 				assertEqualBuf(t, p, "a    \nb    \nc    \nd    \ne    ")
 			},
 		},
@@ -257,36 +213,6 @@ func TestIntegrationParserHandler(t *testing.T) {
 				resetBuffer(t, p, "a    \nb    \nc    \nd    \ne    ")
 				p.ScrollUp(0)
 				assertEqualBuf(t, p, "a    \nb    \nc    \nd    \ne    ")
-			},
-		},
-		{
-			desc:      "primary scroll up/down with cap",
-			altBuffer: false,
-			sut: func(t *testing.T, p *parserHandler, tm *mockTabManager, pty *workspacetest.File) {
-				p.Resize(5, 5)
-				resetBuffer(t, p, "a    \nb    \nc    \nd    \ne    \nf    \ng    ")
-				assertEqualBuf(t, p, "c    \nd    \ne    \nf    \ng    ")
-
-				assert.False(t, p.scrollUp(1, true))
-				assertEqualBuf(t, p, "c    \nd    \ne    \nf    \ng    ")
-
-				assert.True(t, p.scrollDown(1, true))
-				assertEqualBuf(t, p, "b    \nc    \nd    \ne    \nf    ")
-
-				assert.True(t, p.scrollDown(1, true))
-				assertEqualBuf(t, p, "a    \nb    \nc    \nd    \ne    ")
-
-				assert.False(t, p.scrollDown(1, true))
-				assertEqualBuf(t, p, "a    \nb    \nc    \nd    \ne    ")
-
-				assert.True(t, p.scrollUp(1, true))
-				assertEqualBuf(t, p, "b    \nc    \nd    \ne    \nf    ")
-
-				assert.True(t, p.scrollUp(1, true))
-				assertEqualBuf(t, p, "c    \nd    \ne    \nf    \ng    ")
-
-				assert.False(t, p.scrollUp(1, true))
-				assertEqualBuf(t, p, "c    \nd    \ne    \nf    \ng    ")
 			},
 		},
 		{
@@ -339,37 +265,6 @@ func TestIntegrationParserHandler(t *testing.T) {
 				p.Input('$')
 				p.ClearLine(vteparser.LineClearModeRight)
 				assertEqualBuf(t, p, "$    \n     \n     \n     \n     ")
-			},
-		},
-		{
-			desc:      "shell cltr-l with scrollback history",
-			altBuffer: false,
-			sut: func(t *testing.T, p *parserHandler, tm *mockTabManager, pty *workspacetest.File) {
-				p.Resize(5, 5)
-				resetBuffer(t, p, "a    \nb    \nc    \nd    \ne    \n$ .  \nout  \n$    ")
-				assertEqualBuf(t, p, "d    \ne    \n$ .  \nout  \n$    ")
-				p.Goto(0, 0)
-				p.ClearScreen(vteparser.ClearModeAll)
-				p.ClearScreen(vteparser.ClearModeBelow)
-				p.Input('$')
-				p.ClearLine(vteparser.LineClearModeRight)
-				assertEqualBuf(t, p, "$    \n     \n     \n     \n     ")
-
-				// simulate user scrolling
-				assert.True(t, p.scrollDown(1, true))
-				assertEqualBuf(t, p, "$    \n$    \n     \n     \n     ")
-
-				assert.True(t, p.scrollDown(1, true))
-				assertEqualBuf(t, p, "out  \n$    \n$    \n     \n     ")
-
-				assert.True(t, p.scrollDown(2, true))
-				assertEqualBuf(t, p, "e    \n$ .  \nout  \n$    \n$    ")
-
-				assert.True(t, p.scrollDown(100, true))
-				assertEqualBuf(t, p, "a    \nb    \nc    \nd    \ne    ")
-
-				assert.True(t, p.scrollUp(100, true))
-				assertEqualBuf(t, p, "e    \n$ .  \nout  \n$    \n$    ")
 			},
 		},
 		{
@@ -465,24 +360,6 @@ func TestIntegrationParserHandler(t *testing.T) {
 			},
 		},
 		{
-			desc:      "primary clear mode saved",
-			altBuffer: false,
-			sut: func(t *testing.T, p *parserHandler, tm *mockTabManager, pty *workspacetest.File) {
-				p.Resize(5, 5)
-				resetBuffer(t, p, "a    \nb    \nc    \nd    \ne    \n$ .  \nout  \n$    ")
-				assertEqualBuf(t, p, "d    \ne    \n$ .  \nout  \n$    ")
-
-				p.ClearScreen(vteparser.ClearModeSaved)
-				assertEqualBuf(t, p, "d    \ne    \n$ .  \nout  \n$    ")
-
-				assert.False(t, p.scrollDown(1, true))
-				assertEqualBuf(t, p, "d    \ne    \n$ .  \nout  \n$    ")
-
-				assert.False(t, p.scrollUp(1, true))
-				assertEqualBuf(t, p, "d    \ne    \n$ .  \nout  \n$    ")
-			},
-		},
-		{
 			desc:      "primary clear mode saved with no history does nothing",
 			altBuffer: false,
 			sut: func(t *testing.T, p *parserHandler, tm *mockTabManager, pty *workspacetest.File) {
@@ -512,25 +389,6 @@ func TestIntegrationParserHandler(t *testing.T) {
 
 				p.ScrollDown(1)
 				assertEqualBuf(t, p, "     \na    \nb    \nc    \nd    ")
-			},
-		},
-		{
-			desc:      "primary clear mode saved with scroll offset oob",
-			altBuffer: false,
-			sut: func(t *testing.T, p *parserHandler, tm *mockTabManager, pty *workspacetest.File) {
-				p.Resize(5, 5)
-				resetBuffer(t, p, "a    \nb    \nc    \nd    \ne    \n$ .  \nout  \n$    ")
-				assertEqualBuf(t, p, "d    \ne    \n$ .  \nout  \n$    ")
-
-				p.sync.primBuf.SetOffset(term.Coordinates{Y: 999})
-				p.ClearScreen(vteparser.ClearModeSaved)
-				assertEqualBuf(t, p, "     \n     \n     \n     \n     ")
-
-				assert.False(t, p.scrollDown(1, true))
-				assertEqualBuf(t, p, "     \n     \n     \n     \n     ")
-
-				assert.False(t, p.scrollUp(2, true))
-				assertEqualBuf(t, p, "     \n     \n     \n     \n     ")
 			},
 		},
 		{
@@ -591,53 +449,6 @@ func TestIntegrationParserHandler(t *testing.T) {
 			},
 		},
 		{
-			desc:      "Input + Linefeed + CarriageReturn hit max scrollback history",
-			altBuffer: false,
-			sut: func(t *testing.T, p *parserHandler, tm *mockTabManager, pty *workspacetest.File) {
-				p.Resize(5, 5)
-				p.maxScrollLength = 6
-				p.Input('a')
-				p.Linefeed()
-				p.CarriageReturn()
-				p.Input('b')
-				p.Linefeed()
-				p.CarriageReturn()
-				p.Input('c')
-				p.Linefeed()
-				p.CarriageReturn()
-				p.Input('d')
-				p.Linefeed()
-				p.CarriageReturn()
-				p.Input('e')
-				assertEqualBuf(t, p, "a    \nb    \nc    \nd    \ne    ")
-
-				p.Linefeed()
-				p.CarriageReturn()
-				p.Input('f')
-				assertEqualBuf(t, p, "b    \nc    \nd    \ne    \nf    ")
-
-				p.CarriageReturn()
-				p.Linefeed()
-				p.Input('g')
-				assertEqualBuf(t, p, "c    \nd    \ne    \nf    \ng    ")
-
-				// simulate user scrolling
-				assert.True(t, p.scrollDown(1, true))
-				assertEqualBuf(t, p, "b    \nc    \nd    \ne    \nf    ")
-
-				assert.False(t, p.scrollDown(100, true))
-				assertEqualBuf(t, p, "b    \nc    \nd    \ne    \nf    ")
-
-				assert.True(t, p.scrollUp(100, true))
-				assertEqualBuf(t, p, "c    \nd    \ne    \nf    \ng    ")
-
-				assert.False(t, p.scrollUp(100, true))
-				assertEqualBuf(t, p, "c    \nd    \ne    \nf    \ng    ")
-
-				assert.Equal(t, p.maxScrollLength, p.sync.buf.Rows())
-			},
-		},
-		{
 			desc:      "reverse index usage of git log on primary buffer",
 			altBuffer: false,
 			sut: func(t *testing.T, p *parserHandler, tm *mockTabManager, pty *workspacetest.File) {
@@ -668,9 +479,7 @@ func TestIntegrationParserHandler(t *testing.T) {
 				p.CarriageReturn()
 				p.ClearLine(0)
 				p.Goto(0, 0)
-				require.True(t, p.scrollDown(1, true))
 				p.ReverseIndex()
-				require.True(t, p.scrollUp(1, true))
 				p.Input('X')
 				p.CarriageReturn()
 				p.Linefeed()
