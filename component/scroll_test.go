@@ -457,7 +457,7 @@ go 1.14 [4 lines] cloud.
 	assert.Equal(t, 2, calledOnVisible)
 }
 
-func TestScrollInverse(t *testing.T) {
+func TestScrollDrawInverseOffset(t *testing.T) {
 	scroll := newScroll(4, false, 24, 9)
 	_, err := scroll.Buffer().ReadFrom(strings.NewReader(hiddenCopy))
 	require.NoError(t, err)
@@ -468,20 +468,6 @@ func TestScrollInverse(t *testing.T) {
 	tests := []comptest.TestCase{
 		{
 			nil, `
-    github.com/ernestrc/
-    github.com/golang/mo
-    github.com/golang/pr
-    github.com/google/uu
-    github.com/jacobsa/g
-)                       
-                        
-replace this => that    
-                        `,
-		},
-		{
-			func() {
-				assert.True(t, scroll.MarkHidden(2, 4))
-			}, `
     github.com/ernestrc/
     github.com/golang/mo
     github.com/golang/pr
@@ -514,41 +500,72 @@ place this => that
 			}, `
 module github.com/unstab
                         
-go 1.14 [3 lines] requir
+go 1.14                 
+                        
+require (               
     cloud.google.com/go 
     cloud.google.com/go/
     github.com/adrianmo/
-    github.com/ernestrc/
-    github.com/ernestrc/
     github.com/ernestrc/`,
 		},
 		{
 			func() {
-				assert.True(t, scroll.MarkHidden(10, 18))
+				assert.True(t, scroll.SeekStartFile())
+			}, `
+    github.com/ernestrc/
+    github.com/golang/mo
+    github.com/golang/pr
+    github.com/google/uu
+    github.com/jacobsa/g
+)                       
+                        
+replace this => that    
+                        `,
+		},
+		{
+			func() {
+				scroll.InvertOffset = false
 			}, `
 module github.com/unstab
                         
-go 1.14 [3 lines] requir
+go 1.14                 
+                        
+require (               
     cloud.google.com/go 
     cloud.google.com/go/
     github.com/adrianmo/
-    github.com/ernestrc/
-    github.com/ernestrc/
     github.com/ernestrc/`,
 		},
 		{
 			func() {
-				assert.True(t, scroll.SeekEndFile())
+				scroll.InvertOffset = true
+				scroll.Buffer().Reset()
+				scroll.Buffer().ReadFrom(strings.NewReader("one liner"))
+				scroll.SetOffset(term.Coordinates{})
 			}, `
-module github.com/unstab
                         
-go 1.14 [3 lines] requir
-    cloud.google.com/go 
-    cloud.google.com/go/
-    github.com/adrianmo/
-    github.com/ernestrc/
-    github.com/ernestrc/
-    github.com/ernestrc/`,
+                        
+                        
+                        
+                        
+                        
+                        
+                        
+one liner               `,
+		},
+		{
+			func() {
+				scroll.InvertOffset = false
+			}, `
+one liner               
+                        
+                        
+                        
+                        
+                        
+                        
+                        
+                        `,
 		},
 	}
 	comptest.TestComponent(t, scroll, w, tests)
@@ -1337,6 +1354,63 @@ func TestWindowCoordinatesToScrollCoordinatesWrapLastLine(t *testing.T) {
 			scroll := makeScroll(true, 10, 3, test.yoffset, test.xoffset)(t)
 			actual := scroll.WindowToScrollCoordinates(test.wpos)
 			assert.Equal(t, test.spos, actual)
+		})
+	}
+}
+
+func TestScrollToWindowCoordinatesInverseOffset(t *testing.T) {
+	suite := []struct {
+		description string
+		inScroll    func(t *testing.T) *Scroll
+		scroll      term.Coordinates
+		window      term.Coordinates
+		expectOk    bool
+	}{
+		{"no wrap, no offset, within view bounds, start of file",
+			makeScroll(false, 100, 100, 0, 0), term.Coordinates{}, term.Coordinates{Y: 95}, true},
+		{"no wrap, no offset, within view bounds, end of file",
+			makeScroll(false, 100, 100, 0, 0), term.Coordinates{Y: 4, X: 13}, term.Coordinates{Y: 99, X: 13}, true},
+		{"no wrap, no offset, within view bounds, past end of file",
+			makeScroll(false, 100, 100, 0, 0), term.Coordinates{Y: 5, X: 1}, term.Coordinates{Y: 100, X: 1}, true},
+		{"no wrap, no offset, within view bounds, past end of one line",
+			makeScroll(false, 100, 100, 0, 0), term.Coordinates{Y: 0, X: 100}, term.Coordinates{Y: 95, X: 100}, true},
+		{"no wrap, no offset, outside view bounds, end of file",
+			makeScroll(false, 10, 3, 0, 0), term.Coordinates{Y: 4, X: 13}, term.Coordinates{Y: 2, X: 13}, true},
+		{"no wrap, no offset, outside view bounds, past end of file",
+			makeScroll(false, 10, 3, 0, 0), term.Coordinates{Y: 5, X: 1}, term.Coordinates{Y: 3, X: 1}, true},
+		{"no wrap, no offset, outside view bounds, past end of one line",
+			makeScroll(false, 10, 3, 0, 0), term.Coordinates{Y: 0, X: 100}, term.Coordinates{Y: -2, X: 100}, true},
+		{"no wrap, with offset, outside view bounds, end of file",
+			makeScroll(false, 10, 3, 1, 1), term.Coordinates{Y: 4, X: 13}, term.Coordinates{Y: 3, X: 12}, true},
+		{"no wrap, with offset, outside view bounds, past end of file",
+			makeScroll(false, 10, 3, 1, 1), term.Coordinates{Y: 5, X: 1}, term.Coordinates{Y: 4, X: 0}, true},
+		{"no wrap, with offset, outside view bounds, past end of one line",
+			makeScroll(false, 10, 3, 1, 1), term.Coordinates{Y: 0, X: 100}, term.Coordinates{Y: -1, X: 99}, true},
+		{"wrap is ignored",
+			makeScroll(true, 10, 3, 0, 0), term.Coordinates{Y: 4, X: 13}, term.Coordinates{Y: 5, X: 3}, true},
+		{"hidden lines are ignored",
+			func(t *testing.T) *Scroll {
+				fn := makeScrollWithHiddenLines(false, 10, 3, 0, 0, startEndBlock{4, 15})
+				scroll := fn(t)
+				scroll.Buffer().Insert(term.Coordinates{}, '\n')
+				return scroll
+			},
+			term.Coordinates{Y: 17, X: 5}, term.Coordinates{Y: -8, X: 5}, true,
+		},
+	}
+
+	for _, test := range suite {
+		t.Run(test.description, func(t *testing.T) {
+			scroll := test.inScroll(t)
+			scroll.InvertOffset = true
+			actual, actualOk := scroll.ScrollToWindowCoordinates(test.scroll)
+			require.Equal(t, test.expectOk, actualOk)
+			require.Equal(t, test.window, actual, "scroll to window")
+			if strings.Contains(test.description, "inside hidden block") {
+				return
+			}
+			assert.Equal(t, test.scroll,
+				scroll.WindowToScrollCoordinates(test.window), "window to scroll")
 		})
 	}
 }

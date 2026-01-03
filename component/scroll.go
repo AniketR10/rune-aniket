@@ -81,7 +81,8 @@ type Scroll struct {
 	HideAttr term.Attributes
 
 	// InvertOffset inverts the semantics of all the Seek* methods,
-	// thus the default offset is the maximum offset.
+	// thus the default offset is the maximum offset. This is incompatible
+	// with hidden lines, so calls to MarkHidden will panic.
 	InvertOffset bool
 }
 
@@ -404,6 +405,9 @@ func (s *Scroll) HiddenLineCount() int {
 // so next call to Draw will not display them, and instead display an icon to indicate
 // that there are hidden rows.
 func (s *Scroll) MarkHidden(start, end int) bool {
+	if s.InvertOffset {
+		panic("called MarkHidden but InvertOffset is enabled")
+	}
 	if start > end {
 		tmp := end
 		end = start
@@ -506,18 +510,24 @@ func (s *Scroll) getMaxXOffset() (x int) {
 
 func (s *Scroll) getMaxYOffset() (y int) {
 	rows := s.RowsWithWraps()
-	y = max(0, rows-s.height-s.hidden)
+	if s.InvertOffset {
+		// hidden lines are not enabled with InvertOffset
+		y = max(0, rows-s.height)
+	} else {
+		y = max(0, rows-s.height-s.hidden)
+	}
 	return
 }
 
-func (s *Scroll) rawCellsOffsetNoWrap(hiddenOffset int) (offset int, ret [][]term.Cell) {
+func (s *Scroll) rawCellsOffsetNoWrap(hiddenOffset int) (
+	offset int, ret [][]term.Cell,
+) {
 	cells := s.buf.RawCells()
-	if s.InvertOffset {
-		offset = max(0, s.getMaxYOffset()-s.offset.Y+hiddenOffset)
-	} else {
-		offset = s.offset.Y + hiddenOffset
-	}
+	offset = s.convertedOffset().Y + hiddenOffset
 	switch {
+	// negative offset means add negative space
+	case offset < 0 && len(cells) > 0:
+		return offset, cells[0:]
 	case offset <= len(cells):
 		return offset, cells[offset:]
 	// this can happen in some cases when content is modified
@@ -531,13 +541,7 @@ func (s *Scroll) rawCellsOffsetNoWrap(hiddenOffset int) (offset int, ret [][]ter
 
 func (s *Scroll) hiddenOffset() (ret int) {
 	if s.InvertOffset {
-		maxOffset := s.getMaxYOffset()
-		for _, t := range s.hiddensorted {
-			if t.start < maxOffset-s.offset.Y+ret {
-				ret += t.end - t.start
-			}
-		}
-		return
+		return 0
 	}
 	for _, t := range s.hiddensorted {
 		if t.start < s.offset.Y+ret {
@@ -554,17 +558,18 @@ type startEndBlock struct {
 
 func (s *Scroll) drawNoAttr(writer term.Writer) {
 	xwindow := s.offset.X + s.width
-	_, cells := s.rawCellsOffsetNoWrap(0)
-	ywindow := min(s.height, len(cells))
+	yoffset, cells := s.rawCellsOffsetNoWrap(0)
+	yoffset = -min(0, yoffset)
+	ywindow := max(0, min(s.height-yoffset, len(cells)))
 	for y, r := range cells[:ywindow] {
-		var offset int
+		var xoffset int
 		for x, c := range r {
 			if c.Ch == '\t' {
-				offset += s.tabspaces - 1
+				xoffset += s.tabspaces - 1
 			}
-			x += offset
+			x += xoffset
 			if c.Width > 1 {
-				offset += int(c.Width) - 1
+				xoffset += int(c.Width) - 1
 			}
 			if x >= xwindow {
 				break
@@ -573,24 +578,25 @@ func (s *Scroll) drawNoAttr(writer term.Writer) {
 				continue
 			}
 			xi := x - s.offset.X
-			writer.SetCell(term.Coordinates{X: xi, Y: y}, c)
+			writer.SetCell(term.Coordinates{X: xi, Y: y + yoffset}, c)
 		}
 	}
 }
 
 func (s *Scroll) draw(writer term.Writer) {
 	xwindow := s.offset.X + s.width
-	_, cells := s.rawCellsOffsetNoWrap(0)
-	ywindow := min(s.height, len(cells))
+	yoffset, cells := s.rawCellsOffsetNoWrap(0)
+	yoffset = -min(0, yoffset)
+	ywindow := max(0, min(s.height-yoffset, len(cells)))
 	for y, r := range cells[:ywindow] {
-		var offset int
+		var xoffset int
 		for x, c := range r {
 			if c.Ch == '\t' {
-				offset += s.tabspaces - 1
+				xoffset += s.tabspaces - 1
 			}
-			x += offset
+			x += xoffset
 			if c.Width > 1 {
-				offset += int(c.Width) - 1
+				xoffset += int(c.Width) - 1
 			}
 			if x >= xwindow {
 				break
@@ -605,7 +611,7 @@ func (s *Scroll) draw(writer term.Writer) {
 			if c.Fg == 0 {
 				c.Fg = s.Attributes.Fg
 			}
-			writer.SetCell(term.Coordinates{X: xi, Y: y}, c)
+			writer.SetCell(term.Coordinates{X: xi, Y: y + yoffset}, c)
 		}
 	}
 }
@@ -1003,7 +1009,7 @@ func FuncScrollSubscriber(fn func(from, to term.Coordinates)) ScrollSubscriber {
 // not hidden (true). A valid set of coordinates is returned in either case, but when the
 // coordinates would fall inside a hidden block, the start of the hidden block is returned.
 func (s *Scroll) ScrollToWindowCoordinates(pos term.Coordinates) (term.Coordinates, bool) {
-	offset := s.Offset()
+	offset := s.convertedOffset()
 	pos = s.expandCoordinatesWidth(pos)
 	ret := term.CoordinatesDiff(pos, offset)
 	if !s.Wrap {
@@ -1055,7 +1061,7 @@ func (s *Scroll) ScrollToWindowCoordinates(pos term.Coordinates) (term.Coordinat
 // WindowToScrollCoordinates translates window Coordinates to scroll content Coordinates,
 // taking into consideration scroll offsets and wrapped rows.
 func (s *Scroll) WindowToScrollCoordinates(pos term.Coordinates) term.Coordinates {
-	offset := s.Offset()
+	offset := s.convertedOffset()
 	ret := term.CoordinatesSum(pos, offset)
 	if !s.Wrap {
 		if len(s.hiddensorted) != 0 {
@@ -1177,13 +1183,15 @@ func (s *Scroll) drawWithHidden(writer term.Writer) {
 	var targety, hideLineIconOffset int
 	endblock := -1
 	hiddenOffset := s.hiddenOffset()
-	offset, cells := s.rawCellsOffsetNoWrap(hiddenOffset)
+	yoffset, cells := s.rawCellsOffsetNoWrap(hiddenOffset)
+	targety = -min(0, yoffset)
+	yoffset = max(0, yoffset)
 	for y := 0; y < len(cells); y++ {
-		r := cells[y]
 		if targety >= ywindow {
 			break
 		}
-		scrollY := y + offset
+		r := cells[y]
+		scrollY := y + yoffset
 		if scrollY < endblock {
 			continue
 		}
@@ -1349,4 +1357,19 @@ func (s *Scroll) contractCoordinatesWidth(pos term.Coordinates) (ret term.Coordi
 		ret.X = 0
 	}
 	return
+}
+
+// always returns a from the top offset. Some conversions
+// might yield negative results, and that's ok, it simply
+// means that the current scroll couldn't be drawn with
+// InvertOffset turned off, but it still can be used to translate
+// coordinates.
+func (s *Scroll) convertedOffset() term.Coordinates {
+	if !s.InvertOffset {
+		return s.offset
+	}
+	return term.Coordinates{
+		Y: s.buf.Rows() - s.height - s.offset.Y,
+		X: s.offset.X,
+	}
 }
