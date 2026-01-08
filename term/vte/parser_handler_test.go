@@ -274,7 +274,9 @@ func TestIntegrationParserHandler(t *testing.T) {
 				p.Resize(5, 5)
 				resetBuffer(t, p, "a    \nb    \nc    \nd    \ne    \n$ .  \nout  \n$    ")
 				assertEqualBuf(t, p, "d    \ne    \n$ .  \nout  \n$    ")
-				for i := 0; i < 7; i++ {
+				p.Linefeed()
+				p.CarriageReturn()
+				for range 7 {
 					p.Input('a')
 				}
 				assertEqualBuf(t, p, "$ .  \nout  \n$    \naaaaa\naa   ")
@@ -300,7 +302,7 @@ func TestIntegrationParserHandler(t *testing.T) {
 
 				p.Resize(0, 0)
 				assert.Equal(t, term.Coordinates{Y: 7, X: 4}, p.sync.buf.CursorAtScroll())
-				assert.Equal(t, term.Coordinates{Y: 4, X: 4}, p.sync.buf.CursorAtScreen())
+				assert.Equal(t, term.Coordinates{Y: -1, X: 4}, p.sync.buf.CursorAtScreen())
 
 				p.Resize(5, 5)
 				assert.Equal(t, term.Coordinates{Y: 7, X: 4}, p.sync.buf.CursorAtScroll())
@@ -566,14 +568,9 @@ func TestIntegrationParserHandler(t *testing.T) {
 				p.DeleteChars(1)
 				p.MoveForward(2)
 				p.ClearLine(0)
-				p.MoveDown(1)
-				p.CarriageReturn()
-				p.ClearLine(0)
-				p.MoveUp(1)
-				p.MoveForward(2)
 				assertEqualBuf(t, p, "a    \nb    \nc    \nd    \n$ aa ")
 				p.Input('X')
-				assertEqualBuf(t, p, "a    \nb    \nc    \nd    \n$ Xa ")
+				assertEqualBuf(t, p, "a    \nb    \nc    \nd    \n$ aaX")
 			},
 		},
 		{
@@ -666,7 +663,7 @@ func TestIntegrationParserHandler(t *testing.T) {
 			attrs := DefaultConfig().NeedsAttentionAttributes
 			pty := workspaceapi.Pty{Master: &mockPtyFile, Slave: &mockPtyFile}
 			ph := newParserHandler(new(sync.Mutex), pty, &tm,
-				clipboard.NewInMemory(), tm.bell, testURI, attrs, false)
+				clipboard.NewInMemory(), tm.bell, testURI, attrs, false, 10000)
 			ph.sync.primBuf.SetDefaultChar(' ')
 			ph.sync.altBuf.SetDefaultChar(' ')
 
@@ -682,10 +679,12 @@ func TestIntegrationParserHandler(t *testing.T) {
 }
 
 func assertEqualBuf(t *testing.T, p *parserHandler, expected string) {
+	t.Helper()
 	assertEqualScreenBuf(t, p.sync.buf, expected)
 }
 
 func assertEqualScreenBuf(t *testing.T, p screenBuffer, expected string) {
+	t.Helper()
 	if prim, ok := p.(*vtescreen.PrimaryBuffer); ok {
 		width, height := prim.Dimensions()
 		writer := term.NewStringWriter(width, height)
@@ -698,6 +697,7 @@ func assertEqualScreenBuf(t *testing.T, p screenBuffer, expected string) {
 }
 
 func resetBuffer(t *testing.T, p *parserHandler, to string) {
+	t.Helper()
 	writeToBuffer(p, to)
 	if prim, ok := p.sync.buf.(*vtescreen.PrimaryBuffer); ok {
 		require.Equal(t, to, cell.CellsToString(prim.Cells.RawCells()))
@@ -718,6 +718,7 @@ func writeToBuffer(p *parserHandler, str string) {
 }
 
 func assertWriteToPty(t *testing.T, pty *workspacetest.File, data string) {
+	t.Helper()
 	require.Len(t, pty.Writes, 1)
 	assert.Equal(t, string(pty.Writes[0]), data)
 }

@@ -70,7 +70,7 @@ type Component struct {
 	writeErr  atomic.Value
 
 	width, height     int
-	parserHandler     parserHandler
+	parserHandler     *parserHandler
 	waitParserHandler *waitParserHandler
 	parser            vteparser.Parser
 	complete          bool
@@ -116,12 +116,12 @@ func (t *Component) Init(
 		panic("nil schedule/bell function(s)")
 	}
 
-	t.parserHandler.init(
+	t.parserHandler = newParserHandler(
 		&t.mu, t.pty, tm, t.clipboard, cfg.scheduleBell, t.uri,
-		cfg.NeedsAttentionAttributes, cfg.DynamicTabName)
+		cfg.NeedsAttentionAttributes, cfg.DynamicTabName, cfg.MaxLines)
 
 	// start with pty slave file name as title
-	var h vteparser.Handler = &t.parserHandler
+	var h vteparser.Handler = t.parserHandler
 	if log.IsLevelEnabled(log.TraceLevel) {
 		h = vteparser.HandlerWithLogging("vte.parserHandler", h)
 	}
@@ -696,9 +696,6 @@ func (t *Component) drawSelection(w term.Writer) {
 	var ok bool
 	if t.parserHandler.useAlt {
 		mode, from, to, ok = t.parserHandler.sync.altBuf.SelectionCoordinatesAtScroll()
-	} else if t.scroll.Offset().Y == 0 {
-		mode, from, to, ok = t.parserHandler.sync.primBuf.SelectionCoordinatesAtScroll()
-		offset = t.parserHandler.sync.primBuf.Offset()
 	} else {
 		mode, from, to, ok = t.parserHandler.sync.primBuf.SelectionCoordinatesAtScroll()
 		offset = term.Coordinates{Y: t.scroll.Buffer().Rows() - t.height - t.scroll.Offset().Y}

@@ -40,6 +40,7 @@ func DefaultConfig() Config {
 		SelectionAttributes:      term.Attributes{Attrs: tcell.AttrReverse},
 		NeedsAttentionAttributes: term.Attributes{Attrs: tcell.AttrBlink},
 		DynamicTabName:           false,
+		MaxLines:                 10_000,
 	}
 }
 
@@ -66,6 +67,7 @@ type Config struct {
 	Attributes               term.Attributes
 	SelectionAttributes      term.Attributes
 	NeedsAttentionAttributes term.Attributes
+	MaxLines                 int
 
 	// Modal enables entering modal mode via Esc key.
 	// Changing mode to 'INSERT' mode switches back to

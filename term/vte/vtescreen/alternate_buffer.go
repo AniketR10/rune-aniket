@@ -43,7 +43,9 @@ const DefaultChar = '\x00'
 // immensely simpler. Implementations that need scroll-back should
 // use PrimaryAltBuffer instead.
 type AltBuffer struct {
-	Cells                  cell.Buffer
+	Cells cell.Buffer
+	// this scroll is used for drawing and converting coordinates,
+	// not for scrolling.
 	scroll                 component.Scroll
 	width                  int
 	height                 int
@@ -91,6 +93,8 @@ func (b *AltBuffer) Init() {
 	b.resetLinesTrim(0, b.height, true, b.defaultChar)
 	b.scroll.InitPerformance(&b.Cells)
 	b.scroll.SetTabspaces(1)
+	b.scroll.InvertOffset = true
+	b.scroll.Resize(1, 1)
 	b.ctx = NewContext(context.Background())
 }
 
@@ -108,12 +112,22 @@ func (b *AltBuffer) Resize(width, height int) {
 // in the buffer, as it should always be capped at exactly b.Width(), set by
 // the previous call to Resize.
 func (b *AltBuffer) Insert(c rune, width int, charset vteparser.CharsetIndex) {
-	b.Cells.InsertContext(b.ctx, b.cursor.position, b.defaultChar)
-	b.Write(c, width, charset)
-	columns := b.Cells.Columns(b.cursor.position.Y)
+	b.InsertAt(b.cursor.position, c, width, charset)
+}
+
+// InsertAt inserts a new character at the given position, shifting right
+// all the cells to the right of the position. It does not extend the number columns
+// in the buffer, as it should always be capped at exactly b.Width(), set by
+// the previous call to Resize.
+func (b *AltBuffer) InsertAt(
+	at term.Coordinates, c rune, width int, charset vteparser.CharsetIndex,
+) {
+	b.Cells.InsertContext(b.ctx, at, b.defaultChar)
+	b.WriteAt(at, c, width, charset)
+	columns := b.Cells.Columns(at.Y)
 	if columns > b.width {
-		from := term.Coordinates{Y: b.cursor.position.Y, X: b.width}
-		to := term.Coordinates{Y: b.cursor.position.Y, X: columns}
+		from := term.Coordinates{Y: at.Y, X: b.width}
+		to := term.Coordinates{Y: at.Y, X: columns}
 		b.Cells.DeleteContext(b.ctx, from, to)
 	}
 }
@@ -121,15 +135,23 @@ func (b *AltBuffer) Insert(c rune, width int, charset vteparser.CharsetIndex) {
 // Write writes the given character with the given width to the cell
 // at the current cursor position.
 func (b *AltBuffer) Write(c rune, width int, charset vteparser.CharsetIndex) {
+	b.WriteAt(b.cursor.position, c, width, charset)
+}
+
+// WriteAt writes the given character with the given width to the cell
+// at the current cursor position.
+func (b *AltBuffer) WriteAt(
+	at term.Coordinates, c rune, width int, charset vteparser.CharsetIndex,
+) {
 	if charset, ok := b.cursor.Charsets[charset]; ok {
 		c = charset.Map(c)
 	}
 	if b.cursor.hidden {
 		c = b.defaultChar
 	}
-	cell := b.CellAt(b.cursor.position)
+	cell := b.CellAt(at)
 	if cell == nil {
-		b.Insert(c, width, charset)
+		b.InsertAt(at, c, width, charset)
 		return
 	}
 	cell.Ch = c
@@ -163,10 +185,15 @@ func (b *AltBuffer) ResetLinesWith(start, end int, with rune) {
 // Delete deletes the the given number of cells, shifting left
 // all the cells to the right of the cursor.
 func (b *AltBuffer) Delete(count int) {
+	b.DeleteAt(b.cursor.position, count)
+}
+
+// DeleteAt deletes the the given number of cells, shifting left
+// all the cells to the right of given position.
+func (b *AltBuffer) DeleteAt(pos term.Coordinates, count int) {
 	if count <= 0 {
 		return
 	}
-	pos := b.cursor.position
 	columns := b.Cells.Columns(pos.Y)
 	count = int(math.Min(
 		float64(count),
@@ -190,14 +217,8 @@ func (b *AltBuffer) SetCursorAtScreen(c term.Coordinates, relative bool) {
 	} else {
 		yMax = b.height - 1
 	}
-	b.cursor.position.X = int(math.Max(float64(c.X), 0))
-	b.cursor.position.Y = int(math.Max(math.Min(float64(c.Y+yOffset), float64(yMax)), 0))
-}
-
-// SetCursorAtScroll for AltBuffer is equivalent to SetCursorAtScreen,
-// since the viewed screen matches exactly the content in the scroll.
-func (b *AltBuffer) SetCursorAtScroll(c term.Coordinates, relative bool) {
-	b.SetCursorAtScreen(c, relative)
+	b.cursor.position.X = max(0, min(c.X, b.width-1))
+	b.cursor.position.Y = max(0, min(c.Y+yOffset, yMax))
 }
 
 // ScrollUp scrolls up the scrollable region set by SetScrollableRegion by count of lines
@@ -403,7 +424,10 @@ func (b *AltBuffer) SetDefaultAttributes(attr term.Attributes) {
 
 // SelectWordAt selects the word at the given screen position.
 func (b *AltBuffer) SelectWordAt(pos term.Coordinates) {
-	pos = term.CoordinatesSum(pos, b.scroll.Offset())
+	pos = b.scroll.WindowToScrollCoordinates(pos)
+	if pos.Y < 0 {
+		return
+	}
 	b.selection.from, b.selection.to, _ = b.scroll.WordAt(pos)
 	b.selection.mode = text.StandardSelection
 }
@@ -416,7 +440,10 @@ func (b *AltBuffer) Unselect() {
 // Select anchors the given screen position as the start
 // and end of a text selection.
 func (b *AltBuffer) Select(pos term.Coordinates) {
-	pos = term.CoordinatesSum(pos, b.scroll.Offset())
+	pos = b.scroll.WindowToScrollCoordinates(pos)
+	if pos.Y < 0 {
+		return
+	}
 	b.selection.from = pos
 	pos.X++
 	b.selection.to = pos
@@ -428,7 +455,10 @@ func (b *AltBuffer) SelectEnd(pos term.Coordinates) {
 	if b.selection.mode == text.NoSelection {
 		return
 	}
-	pos = term.CoordinatesSum(pos, b.scroll.Offset())
+	pos = b.scroll.WindowToScrollCoordinates(pos)
+	if pos.Y < 0 {
+		return
+	}
 	// buffer selection has right exclusive semantics
 	pos.X++
 	b.selection.to = pos
@@ -437,7 +467,10 @@ func (b *AltBuffer) SelectEnd(pos term.Coordinates) {
 // SelectLine anchors the current screen position as the start and end line of
 // the text selection.
 func (b *AltBuffer) SelectLine(pos term.Coordinates) {
-	pos = term.CoordinatesSum(pos, b.scroll.Offset())
+	pos = b.scroll.WindowToScrollCoordinates(pos)
+	if pos.Y < 0 {
+		return
+	}
 	b.selection.from = pos
 	pos.X++
 	b.selection.to = pos
@@ -463,6 +496,8 @@ func (b *AltBuffer) Selection() (cells [][]term.Cell, ok bool) {
 // up to width and heighgt. This should be used for testing only.
 func (b *AltBuffer) SetDefaultChar(ch rune) {
 	b.defaultChar = ch
+	b.Cells.InitPerformance(120, 80, b.defaultChar)
+	b.resetLinesTrim(0, b.height, true, b.defaultChar)
 }
 
 // SelectionCoordinatesAtScroll returns the content/scroll coordinates of the selected text.
@@ -482,8 +517,8 @@ func (b *AltBuffer) SelectionCoordinatesAtScreen() (
 	mode text.SelectMode, from, to term.Coordinates, ok bool,
 ) {
 	mode, from, to, ok = b.SelectionCoordinatesAtScroll()
-	from = term.CoordinatesDiff(from, b.scroll.Offset())
-	to = term.CoordinatesDiff(to, b.scroll.Offset())
+	from, _ = b.scroll.ScrollToWindowCoordinates(from)
+	to, _ = b.scroll.ScrollToWindowCoordinates(to)
 	return
 }
 

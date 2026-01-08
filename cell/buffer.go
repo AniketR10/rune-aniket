@@ -408,12 +408,25 @@ func (b *Buffer) DeleteLineContext(
 	ctx context.Context, from, to term.Coordinates,
 ) (start term.Coordinates, str string) {
 	from, to = term.CoordinatesSort(from, to)
+	// special case: fromToInbounds trims y>=rows,
+	// and resets to max cols of last row, but a DeleteLineContext
+	// should always delete an entire line, including the newline character, if possible:
+	// The only instance where it's not possible and not expected is when rows <= 1.
+	lastRow := b.Rows() - 1
+	specialCase := from.Y == lastRow && to.Y >= lastRow && b.Rows() > 1
 	from, to, ok := fromToInBounds(b.view, from, to)
 	if !ok {
 		return
 	}
-	from.X, to.X = 0, 0
-	to.Y++
+	if specialCase {
+		to.Y = from.Y
+		to.X = b.Columns(to.Y)
+		from.Y--
+		from.X = b.Columns(from.Y)
+	} else {
+		from.X, to.X = 0, 0
+		to.Y++
+	}
 	start, _, str = b.editor.Edit(ctx, from, to, "")
 	return
 }

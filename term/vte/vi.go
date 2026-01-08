@@ -100,12 +100,13 @@ func (v *viHandler) doInit(comp parentComponent, config Config) {
 		vi.WithWrap(false),
 		vi.WithCursorCorrections(false),
 		vi.WithClipboard(config.Clipboard),
+		vi.WithTabspaces(1),
 	}
 	copyBuffer := new(cell.Buffer)
 	copyBuffer.InitPerformance(120, 80, vtescreen.DefaultChar)
 	copyScroll := new(component.Scroll)
 	copyScroll.InitPerformance(copyBuffer)
-	copyScroll.SetTabspaces(1)
+	copyScroll.InvertOffset = true
 	v.copy.vi = new(vi.Vi)
 	v.copy.vi.InitWithScroll(copyScroll, comp.URI(), opts...)
 	v.copy.editor = copyScroll.Buffer().WithEditor(copyEditor{v: v})
@@ -117,7 +118,7 @@ func (v *viHandler) doInit(comp parentComponent, config Config) {
 	v.sync.scroll = new(component.Scroll)
 	v.sync.vteScroll = comp.PrimaryScroll()
 	v.sync.scroll.InitPerformance(v.sync.vteScroll.Buffer())
-	v.sync.scroll.SetTabspaces(1)
+	v.sync.scroll.InvertOffset = true
 	vi.InitWithScroll(v.sync.scroll, comp.URI(), opts...)
 	v.sync.vi = vi
 	v.sync.selector = v.sync.scroll.Buffer()
@@ -165,7 +166,7 @@ func (v *viHandler) SeekDown() bool {
 	v.sync.mu.Lock()
 	defer v.sync.mu.Unlock()
 
-	return v.sync.vi.SeekUp()
+	return v.sync.vi.SeekDown()
 }
 
 // SeekOffset satisfies component.Scrollable.
@@ -173,7 +174,7 @@ func (v *viHandler) SeekOffset() int {
 	v.sync.mu.Lock()
 	defer v.sync.mu.Unlock()
 
-	return v.sync.vi.SeekOffset()
+	return max(0, v.sync.vi.MaxSeekOffset()-v.sync.vi.SeekOffset())
 }
 
 // MaxSeekOffset satisfies component.Scrollable.
@@ -359,10 +360,10 @@ func (v *viHandler) Edit(ctx context.Context, start, end term.Coordinates, str s
 				v.log(log.ErrorLevel, "copy data to clipboard: %v", err)
 			}
 		}
-		// v.log(log.TraceLevel, "edit: delete effective old %q", old)
+		//v.log(log.TraceLevel, "edit: delete effective old %q", old)
 	}
 
-	// v.log(log.TraceLevel, "edit: effective start %+v end %+v", start, end)
+	//v.log(log.TraceLevel, "edit: effective start %+v end %+v", start, end)
 	view := v.sync.vi.CellView()
 	rows := view.Rows()
 	rowsToDelete := end.Y - start.Y
@@ -403,17 +404,13 @@ func (v *viHandler) Edit(ctx context.Context, start, end term.Coordinates, str s
 	var prevWrapped bool
 	to.X = from.X
 	to.Y = from.Y
-	// Entire buffer replaces via undo/redo try to replace
-	// beyond last line by adding/removing newlines
-	// but that causes shell to add unecessary newlines.
-	str = strings.TrimRight(str, "\n")
 	for _, ch := range str {
 		// skip parts of str that were skipped before due to prompt start or not
 		// in allowed range
 		_, _, ok := term.CoordinatesIntersection(start, endForIntersection, oldStart,
 			term.Coordinates{Y: oldStart.Y, X: oldStart.X + 1})
 		/*v.log(log.TraceLevel, "edit: check if str ch (%c) is part of allowed coordinates: start=%+v, "+
-		"end=%+v, oldStart=%+v, ok=%t", ch, start, endForIntersection, oldStart, ok)*/
+		  "end=%+v, oldStart=%+v, ok=%t", ch, start, endForIntersection, oldStart, ok)*/
 		if !ok {
 			if ch == '\n' {
 				oldStart.Y++
@@ -429,13 +426,32 @@ func (v *viHandler) Edit(ctx context.Context, start, end term.Coordinates, str s
 			}
 		}
 		v.remote.insertChar(ch)
-		to.X++
-		if to.X == v.width {
-			prevWrapped = true
-			v.remote.wrapLine()
+		if ch == '\n' {
 			to.X = 0
-			to.Y++
-			continue
+			// see comment below
+			if to.Y < v.height-1 {
+				to.Y++
+			}
+		} else {
+			to.X++
+			if to.X == v.width {
+				prevWrapped = true
+				v.remote.wrapLine()
+				to.X = 0
+				// if we return the "correct" to.Y after wrapping the last line
+				// vi's text.Cursor sets the window coordinates at height, so then
+				// when parser handler scrolls up the content, since cursor uses
+				// window coordinates, the cursor stays there, preventing further updates.
+				// This doesn't happen on text files, because text.Cursor is initialized with Init
+				// rather than InitPerformance, and so it automatically seeks **and corrects
+				// coordinates**, if cursor is out of bounds.
+				// If this method doesn't work well, we can always subscribe to scroll
+				// and correct vi's cursor coordinates.
+				if to.Y < v.height-1 {
+					to.Y++
+				}
+				continue
+			}
 		}
 		prevWrapped = false
 	}
@@ -530,7 +546,6 @@ func (v *viHandler) handle(ev term.Event) (exit, handled bool) {
 		}
 	}
 
-	var oldOffset term.Coordinates
 	// use a copy of vi to know if event would be handled, and if it would be an edit
 	v.edited = false
 	v.copy.mu.Lock()
@@ -544,7 +559,6 @@ func (v *viHandler) handle(ev term.Event) (exit, handled bool) {
 	// the cursor logic heavily depends on the correct return values of Edit.
 	v.scheduleAfterBell(v.edited, func() {
 		v.vteParserEdited = false
-		oldOffset = v.sync.vteScroll.Offset()
 		v.sync.vi.Handle(ev)
 	})
 
@@ -563,16 +577,6 @@ func (v *viHandler) handle(ev term.Event) (exit, handled bool) {
 	// This might put a lot of pressure on the event loop's
 	// event processing, so let's keep an eye on it for now.
 	v.scheduleAfterBell(false, func() {
-		// vi doesn't know about offset changes driven by vte parser:
-		// synchronize offsets between vte scroll and vi scroll
-		// and since we're updating offset outside of cursor
-		// reset cursor position to the same content position as before
-		newOffset := v.sync.vteScroll.Offset()
-		if oldOffset != newOffset && v.vteParserEdited {
-			pos := v.sync.vi.CursorAtScroll()
-			v.sync.scroll.SetOffset(newOffset)
-			v.viSetCursorAtScroll(pos)
-		}
 		v.moveViToBounds()
 	})
 	return
@@ -581,7 +585,8 @@ func (v *viHandler) handle(ev term.Event) (exit, handled bool) {
 func (v *viHandler) enterViMode(pos term.Coordinates) {
 	pos.X = int(math.Max(float64(pos.X-1), float64(0)))
 
-	v.sync.scroll.SetOffset(v.sync.vteScroll.Offset())
+	// reset offset
+	v.sync.scroll.SetOffset(term.Coordinates{})
 	v.sync.scroll.Attributes = v.sync.vteScroll.Attributes
 	v.sync.mu.Lock()
 	v.viSetCursorAtScroll(pos)

@@ -150,6 +150,7 @@ func (vi *viHandlerImpl) initWithScroll(scroll *component.Scroll, opts ...Option
 		SuperimposeMessage: true,
 		Attributes:         vi.config.attr,
 	})
+	vi.less.Scroll().SetTabspaces(vi.config.tabspaces)
 	// do not initialize repeater, as we don't know if scroll
 	// was initialized with subscription functionality.
 	// vi.repeater.Init(&vi.cursor, scroll.Buffer())

@@ -156,6 +156,9 @@ func DrawLocations(locations []textapi.Location, scroll *component.Scroll, w ter
 	}
 
 	offset := scroll.Offset()
+	if scroll.InvertOffset {
+		offset.Y = max(0, scroll.MaxOffset().Y - offset.Y)
+	}
 	height := scroll.SizeHeight()
 	buffer := scroll.Buffer()
 

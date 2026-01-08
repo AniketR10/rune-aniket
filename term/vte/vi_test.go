@@ -278,7 +278,7 @@ $ ▐
                     
                     
                     `},
-			{"echo \"<0klllvk0yG0lllllpeeeea\"", // multiline paste
+			{"echo \"<k0llvk0yG0lllllpeeea\"", // multiline paste
 				`$ echo bla          
 bla                 
 $ echo "$ echo blabl
@@ -1071,7 +1071,7 @@ AAAAAAAAAAAAAAAAAA
 A`,
 		},
 		{
-			description: "entire content replace, replaces only prompt lines + newlines until height",
+			description: "entire content replace, replaces prompt lines + newlines until height",
 			initialContent: `
 ~/src/blue master
 $ 
@@ -1102,7 +1102,7 @@ $ ECHO AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
 `,
 			expectedRingBell: false,
 			expectedFrom:     term.Coordinates{Y: 4, X: 2},
-			expectedTo:       term.Coordinates{Y: 6, X: 1},
+			expectedTo:       term.Coordinates{Y: 17, X: 0},
 			expectedOld:      "echo aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 			expectedContent: `
 ~/src/blue master
@@ -1110,7 +1110,20 @@ $
 ~/src/blue master
 $ ECHO AAAAAAAAAAA
 AAAAAAAAAAAAAAAAAA
-A`,
+A
+
+
+
+
+
+
+
+
+
+
+
+
+`,
 		},
 		{
 			description: "paste at prompt, not last line",

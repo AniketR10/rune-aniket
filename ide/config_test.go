@@ -252,6 +252,7 @@ workspace:
 
 terminal:
     shell: sh
+    max_lines: 999
     modal: true
     dynamic_tab_name: true
     initial_reservoir: 0
@@ -333,6 +334,7 @@ func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
 		NeedsAttentionAttributes: term.Attributes{Attrs: tcell.AttrBlink},
 		Modal:                    false,
 		ClipboardRegister:        clipboard.DefaultRegisterID,
+		MaxLines:                 10_000,
 	}, vteConfig)
 	assert.Equal(t, command.DefaultConfig().ShowManualAfter, cfg.commandOverlayShowManualAfter())
 	assert.Equal(t, command.DefaultConfig().ManualAttr, cfg.commandOverlayManualAttr())
@@ -588,6 +590,7 @@ func TestConfigSetting(t *testing.T) {
 		NeedsAttentionAttributes: term.Attributes{Attrs: tcell.AttrBlink, Fg: tcell.ColorRed},
 		Modal:                    true,
 		DynamicTabName:           true,
+		MaxLines:                 999,
 	}
 	assert.Equal(t, expectedEmulatorConfig, vteConfig)
 

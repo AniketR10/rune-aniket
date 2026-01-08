@@ -86,6 +86,7 @@ func handleTestCase(
 	drawTimeout time.Duration,
 	interruptChan chan struct{},
 ) {
+	t.Helper()
 	err := w.Clear(term.Attributes{})
 	require.NoError(t, err)
 

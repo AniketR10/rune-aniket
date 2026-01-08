@@ -1813,6 +1813,21 @@ func (c ideConfig) terminalShell() (ret string) {
 	return ret
 }
 
+func (c ideConfig) terminalMaxLines() (ret int) {
+	ret = vte.DefaultConfig().MaxLines
+	cfg, ok := c.terminal()
+	if !ok {
+		return
+	}
+	ret, err := cfg.GetInt("max_lines")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["terminal.max_lines"] = err
+		}
+	}
+	return ret
+}
+
 func (c ideConfig) initialTerminalCapacity() (ret int) {
 	ret = 1
 	cfg, ok := c.terminal()
@@ -1873,6 +1888,7 @@ func (c ideConfig) terminalConfig() vte.Config {
 	ret.SelectionAttributes = c.terminalSelectionAttr()
 	ret.NeedsAttentionAttributes = c.terminalNeedsAttentionAttr()
 	ret.DynamicTabName = c.terminalDynamicTabName()
+	ret.MaxLines = c.terminalMaxLines()
 	ret.Modal = c.terminalModal()
 	ret.Debug = c.terminalDebug()
 	ret.Shell = c.terminalShell()

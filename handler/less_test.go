@@ -114,6 +114,58 @@ ss
                     
                     
                     `,
+		}, {
+			func() {
+				b.scroll.Wrap = false
+			}, `
+hello world. Let's t
+                    
+                    
+                    
+                    
+               P1Nav
+                    
+                    
+                    `,
+		}, {
+			func() {
+				b.SetMessage("")
+			}, `
+hello world. Let's t
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    `,
+		}, {
+			func() {
+				b.scroll.InvertOffset = true
+			}, `
+                    
+                    
+                    
+                    
+                    
+hello world. Let's t
+                    
+                    
+                    `,
+		}, {
+			func() {
+				b.SetMessage("remei")
+			}, `
+                    
+                    
+                    
+                    
+                    
+hello world. Leremei
+                    
+                    
+                    `,
 		},
 	}
 	comptest.TestComponent(t, b, w, tests)

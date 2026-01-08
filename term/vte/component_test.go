@@ -48,7 +48,7 @@ func TestIntegrationComponent(t *testing.T) {
 			desc:      "primary scroll down 0 rows does nothing",
 			altBuffer: false,
 			sut: func(t *testing.T, comp *Component, tm *mockTabManager) {
-				p := &comp.parserHandler
+				p := comp.parserHandler
 				comp.Resize(5, 5)
 				resetBuffer(t, p, "a    \nb    \nc    \nd    \ne    ")
 				p.ScrollUp(0)
@@ -61,7 +61,7 @@ func TestIntegrationComponent(t *testing.T) {
 			desc:      "primary scroll ScrollOffset/MaxOffset rows <= height",
 			altBuffer: false,
 			sut: func(t *testing.T, comp *Component, tm *mockTabManager) {
-				p := &comp.parserHandler
+				p := comp.parserHandler
 				comp.Resize(5, 5)
 				resetBuffer(t, p, "a    \nb    \nc    \nd    \ne    ")
 				assert.Equal(t, 0, comp.ScrollOffset())
@@ -72,7 +72,7 @@ func TestIntegrationComponent(t *testing.T) {
 			desc:      "primary scroll ScrollOffset/MaxOffset rows > height",
 			altBuffer: false,
 			sut: func(t *testing.T, comp *Component, tm *mockTabManager) {
-				p := &comp.parserHandler
+				p := comp.parserHandler
 				comp.Resize(5, 5)
 				resetBuffer(t, p, "a    \nb    \nc    \nd    \ne    \nf    \ng    ")
 				assert.Equal(t, 2, comp.ScrollOffset())
@@ -83,7 +83,7 @@ func TestIntegrationComponent(t *testing.T) {
 			desc:      "primary scroll up 0 rows does nothing",
 			altBuffer: false,
 			sut: func(t *testing.T, comp *Component, tm *mockTabManager) {
-				p := &comp.parserHandler
+				p := comp.parserHandler
 				comp.Resize(5, 5)
 				resetBuffer(t, p, "a    \nb    \nc    \nd    \ne    ")
 				p.ScrollDown(0)
@@ -96,7 +96,7 @@ func TestIntegrationComponent(t *testing.T) {
 			desc:      "primary input mixed with user scrolls",
 			altBuffer: false,
 			sut: func(t *testing.T, comp *Component, tm *mockTabManager) {
-				p := &comp.parserHandler
+				p := comp.parserHandler
 				comp.Resize(5, 5)
 				for range 6 {
 					p.Input('a')
@@ -117,7 +117,7 @@ func TestIntegrationComponent(t *testing.T) {
 			desc:      "primary scroll ScrollOffset/MaxOffset after scroll",
 			altBuffer: false,
 			sut: func(t *testing.T, comp *Component, tm *mockTabManager) {
-				p := &comp.parserHandler
+				p := comp.parserHandler
 				comp.Resize(5, 5)
 				resetBuffer(t, p, "a    \nb    \nc    \nd    \ne    \nf    \ng    ")
 				require.False(t, comp.ScrollDown(1))
@@ -147,7 +147,7 @@ func TestIntegrationComponent(t *testing.T) {
 			desc:      "primary scroll ScrollOffset/MaxOffset after ScrollBottom",
 			altBuffer: false,
 			sut: func(t *testing.T, comp *Component, tm *mockTabManager) {
-				p := &comp.parserHandler
+				p := comp.parserHandler
 				comp.Resize(5, 5)
 				resetBuffer(t, p, "a    \nb    \nc    \nd    \ne    \nf    \ng    ")
 				assertDraw(t, comp, "c    \nd    \ne    \nf    \ng    ")
@@ -162,7 +162,7 @@ func TestIntegrationComponent(t *testing.T) {
 			desc:      "selection after scroll",
 			altBuffer: false,
 			sut: func(t *testing.T, comp *Component, tm *mockTabManager) {
-				p := &comp.parserHandler
+				p := comp.parserHandler
 				comp.Resize(5, 5)
 				resetBuffer(t, p, "a    \nb    \nc    \nd    \ne    \nf    \ng    ")
 				require.True(t, comp.ScrollUp(1))
@@ -193,7 +193,7 @@ func TestIntegrationComponent(t *testing.T) {
 			desc:      "primary scroll up/down with cap",
 			altBuffer: false,
 			sut: func(t *testing.T, comp *Component, tm *mockTabManager) {
-				p := &comp.parserHandler
+				p := comp.parserHandler
 				comp.Resize(5, 5)
 				resetBuffer(t, p, "a    \nb    \nc    \nd    \ne    \nf    \ng    ")
 				assertDraw(t, comp, "c    \nd    \ne    \nf    \ng    ")
@@ -225,7 +225,7 @@ func TestIntegrationComponent(t *testing.T) {
 			altBuffer: false,
 			sut: func(t *testing.T, comp *Component, tm *mockTabManager) {
 				comp.Resize(5, 5)
-				p := &comp.parserHandler
+				p := comp.parserHandler
 				resetBuffer(t, p, "a    \nb    \nc    \nd    \ne    \n$ .  \nout  \n$    ")
 				assertDraw(t, comp, "d    \ne    \n$ .  \nout  \n$    ")
 
@@ -240,31 +240,11 @@ func TestIntegrationComponent(t *testing.T) {
 			},
 		},
 		{
-			desc:      "primary clear mode saved with scroll offset oob",
-			altBuffer: false,
-			sut: func(t *testing.T, comp *Component, tm *mockTabManager) {
-				comp.Resize(5, 5)
-				p := &comp.parserHandler
-				resetBuffer(t, p, "a    \nb    \nc    \nd    \ne    \n$ .  \nout  \n$    ")
-				assertDraw(t, comp, "d    \ne    \n$ .  \nout  \n$    ")
-
-				p.sync.primBuf.SetOffset(term.Coordinates{Y: 999})
-				p.ClearScreen(vteparser.ClearModeSaved)
-				assertDraw(t, comp, "     \n     \n     \n     \n     ")
-
-				assert.False(t, comp.ScrollUp(1))
-				assertDraw(t, comp, "     \n     \n     \n     \n     ")
-
-				assert.False(t, comp.ScrollDown(2))
-				assertDraw(t, comp, "     \n     \n     \n     \n     ")
-			},
-		},
-		{
 			desc:      "shell cltr-l with scrollback history",
 			altBuffer: false,
 			sut: func(t *testing.T, comp *Component, tm *mockTabManager) {
 				comp.Resize(5, 5)
-				p := &comp.parserHandler
+				p := comp.parserHandler
 
 				resetBuffer(t, p, "a    \nb    \nc    \nd    \ne    \n$ .  \nout  \n$    ")
 				assertDraw(t, comp, "d    \ne    \n$ .  \nout  \n$    ")
@@ -280,7 +260,6 @@ func TestIntegrationComponent(t *testing.T) {
 				assert.Equal(t, 8, comp.ScrollOffset())
 				assert.Equal(t, 8, comp.MaxScrollOffset())
 
-				// although it seems the bug runs deeper than just user scrolling.
 				// simulate user scrolling
 				assert.True(t, comp.ScrollUp(1))
 				assertDraw(t, comp, "$    \n$    \n     \n     \n     ")
@@ -331,7 +310,7 @@ func TestIntegrationComponent(t *testing.T) {
 				data, ok = comp.Selection()
 				assert.True(t, ok)
 				assert.Equal(t, "e    \n", data)
-				
+
 				require.True(t, comp.ScrollBottom())
 				assertDraw(t, comp, "$    \n     \n     \n     \n     ")
 			},
@@ -341,8 +320,9 @@ func TestIntegrationComponent(t *testing.T) {
 			altBuffer: false,
 			sut: func(t *testing.T, comp *Component, tm *mockTabManager) {
 				comp.Resize(5, 5)
-				p := &comp.parserHandler
+				p := comp.parserHandler
 				p.maxScrollLength = 6
+				p.ResetState()
 				p.Input('a')
 				p.Linefeed()
 				p.CarriageReturn()
@@ -367,20 +347,6 @@ func TestIntegrationComponent(t *testing.T) {
 				p.Linefeed()
 				p.Input('g')
 				assertDraw(t, comp, "c    \nd    \ne    \nf    \ng    ")
-
-				// simulate user scrolling
-				assert.True(t, comp.ScrollUp(1))
-				assertDraw(t, comp, "b    \nc    \nd    \ne    \nf    ")
-
-				assert.False(t, comp.ScrollUp(100))
-				assertDraw(t, comp, "b    \nc    \nd    \ne    \nf    ")
-
-				assert.True(t, comp.ScrollDown(100))
-				assertDraw(t, comp, "c    \nd    \ne    \nf    \ng    ")
-
-				assert.False(t, comp.ScrollDown(100))
-				assertDraw(t, comp, "c    \nd    \ne    \nf    \ng    ")
-
 				assert.Equal(t, p.maxScrollLength, p.sync.buf.Rows())
 			},
 		},

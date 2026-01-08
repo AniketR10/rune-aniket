@@ -237,13 +237,13 @@ func (c *Cursor) MoveToMark(mark CursorMark) (CursorMark, bool) {
 	// try to keep cursor at the same window position, if possible
 	if c.cursor.Y > mark.window.Y {
 		diff := c.cursor.Y - mark.window.Y
-		for diff > 0 && c.cursor.Y > 0 && c.scroll.SeekDown() {
+		for diff > 0 && c.cursor.Y > 0 && c.seekDown() {
 			c.cursor.Y--
 			diff--
 		}
 	} else if c.cursor.Y < mark.window.Y {
 		diff := mark.window.Y - c.cursor.Y
-		for diff > 0 && c.cursor.Y < c.scroll.SizeHeight() && c.scroll.SeekUp() {
+		for diff > 0 && c.cursor.Y < c.scroll.SizeHeight() && c.seekUp() {
 			c.cursor.Y++
 			diff--
 		}
@@ -321,14 +321,14 @@ func (c *Cursor) seekToScrollCoordinates() {
 	for !c.scroll.Wrap && pos.X < 0 && c.scroll.SeekLeft() {
 		pos.X++
 	}
-	for pos.Y < 0 && c.scroll.SeekUp() {
+	for pos.Y < 0 && c.seekUp() {
 		pos.Y++
 	}
 	for !c.scroll.Wrap && pos.X > 0 && pos.X >= c.scroll.Width() && c.scroll.SeekRight() {
 		pos.X--
 	}
 
-	for pos.Y > 0 && pos.Y >= c.scroll.SizeHeight() && c.scroll.SeekDown() {
+	for pos.Y > 0 && pos.Y >= c.scroll.SizeHeight() && c.seekDown() {
 		pos.Y--
 	}
 	c.cursor = pos
@@ -473,7 +473,7 @@ func (c *Cursor) MoveLastLine() (ok bool) {
 func (c *Cursor) MoveDown() (ok bool) {
 	atScroll := c.cursorAtScroll()
 	if atScroll.Y >= c.rows()-1 {
-		if c.scroll.Wrap && c.scroll.SeekDown() {
+		if c.scroll.Wrap && c.seekDown() {
 			// last line is longer than the entire height x width
 			// allow user to scroll down by moving up and down the window axis
 			return c.tryMoveDownWindowRow()
@@ -503,7 +503,7 @@ func (c *Cursor) MoveUp() (ok bool) {
 	if atScroll.Y <= 0 {
 		// first line is longer than the entire height x width
 		// allow user to scroll up by moving up and down the window axis
-		if c.scroll.Wrap && c.scroll.SeekUp() {
+		if c.scroll.Wrap && c.seekUp() {
 			var win term.Coordinates
 			win, ok = c.scroll.ScrollToWindowCoordinates(atScroll)
 			if !ok {
@@ -2379,6 +2379,20 @@ func (c *Cursor) setSearchLocationList(text string, word bool) int {
 
 	c.SetLocationList(internalLocationListPriority, searchLocationListID, LocationSlice(searchLoc))
 	return len(searchLoc)
+}
+
+func (c *Cursor) seekUp() bool {
+	if !c.scroll.InvertOffset {
+		return c.scroll.SeekUp()
+	}
+	return c.scroll.SeekDown()
+}
+
+func (c *Cursor) seekDown() bool {
+	if !c.scroll.InvertOffset {
+		return c.scroll.SeekDown()
+	}
+	return c.scroll.SeekUp()
 }
 
 func (c *Cursor) tryMoveDownWindowRow() bool {

@@ -25,38 +25,46 @@ package vtescreen
 
 import (
 	"fmt"
-	"math"
 	"sort"
 	"strings"
 
 	"github.com/ernestrc/logd-go/logging"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui/term"
+	"unstable.build/go-tui/term/vte/vteparser"
 )
 
 // PrimaryBuffer wraps a Buffer to provide scroll-back for a primary vte screen buffer.
+// This implementation doesn't provide methods to update the underlying offset
+// (it's always 0, with InvertOffset set to true), so callers must access the underlying
+// Cells and add scroll via an external component. This is important to keep
+// implementation simple, and avoid user scrolling interfering with standard vte processing.
 type PrimaryBuffer struct {
 	AltBuffer
-	wraps     int
-	wrapLines map[int]int
+	wraps      int
+	wrapLines  map[int]int
+	maxHistory int
 }
 
 // NewPrimaryBuffer allocates storage for a new PrimaryBuffer and initializes it.
-func NewPrimaryBuffer() *PrimaryBuffer {
+func NewPrimaryBuffer(maxHistory int) *PrimaryBuffer {
 	ret := new(PrimaryBuffer)
-	ret.Init()
+	ret.Init(maxHistory)
 	return ret
 }
 
 // Init initializes this PrimaryBuffer.
-func (b *PrimaryBuffer) Init() {
+func (b *PrimaryBuffer) Init(maxHistory int) {
 	b.AltBuffer.Init()
 	b.wrapLines = make(map[int]int)
+	b.maxHistory = maxHistory
 }
 
 // Resize resizes this Buffer and resets the vertical margins.
 func (b *PrimaryBuffer) Resize(width, height int) {
-	isMaxOffset := b.scroll.Offset().Y >= b.maxOffset(b.height)
+	cursor := b.CursorAtScroll()
+	savedCursor := b.scroll.WindowToScrollCoordinates(b.savedCursor.position)
+
 	var wraps int
 	if width != 0 && width > b.width {
 		wraps = b.growColumns(width, height)
@@ -64,19 +72,24 @@ func (b *PrimaryBuffer) Resize(width, height int) {
 		wraps = b.shrinkColumns(width)
 	}
 	if height != 0 && (height > b.height || wraps < b.wraps) {
-		b.growLines(isMaxOffset, width, height)
+		b.growLines(width, height)
 	}
 	if height != 0 && (height < b.height || wraps > b.wraps) {
-		b.shrinkLines(isMaxOffset, height)
+		b.shrinkLines(height)
 	}
 	b.wraps = wraps
 	b.width = width
 	b.height = height
 	b.scroll.Resize(width, height)
 	b.Cells.ResetCapacity(width)
+
+	cursor.Y = max(0, cursor.Y+wraps)
+	b.cursor.position, _ = b.scroll.ScrollToWindowCoordinates(cursor)
+	savedCursor.Y = max(0, b.savedCursor.position.Y+wraps)
+	b.savedCursor.position = savedCursor
 }
 
-func (b *PrimaryBuffer) growLines(isMaxOffset bool, width, height int) {
+func (b *PrimaryBuffer) growLines(width, height int) {
 	if b.Cells.Rows() < height {
 		pos := term.Coordinates{
 			Y: max(0, height-1),
@@ -84,38 +97,28 @@ func (b *PrimaryBuffer) growLines(isMaxOffset bool, width, height int) {
 		}
 		b.Cells.InsertContext(b.AltBuffer.ctx, pos, b.AltBuffer.defaultChar)
 	}
-	// do not do update offset to new max offset if not in max offset
-	if !isMaxOffset {
-		return
-	}
-	newMaxOffset := b.maxOffset(height)
-	b.MoveToOffset(term.Coordinates{Y: newMaxOffset})
 }
 
-func (b *PrimaryBuffer) shrinkLines(isMaxOffset bool, height int) {
+func (b *PrimaryBuffer) shrinkLines(height int) {
+	pos := b.CursorAtScroll()
 	for y := b.Cells.Rows() - 1; y > 0 && b.Cells.Rows() > height; y-- {
-		if y == b.cursor.position.Y {
+		if pos.Y >= y {
 			break
 		}
 		from := term.Coordinates{Y: y}
 		to := term.Coordinates{Y: y}
 		b.Cells.DeleteLineContext(b.AltBuffer.ctx, from, to)
 	}
-	// do not do update offset to new max offset if not in max offset
-	if !isMaxOffset {
-		return
-	}
-	newMaxOffset := b.maxOffset(height)
-	b.MoveToOffset(term.Coordinates{Y: newMaxOffset})
 }
 
 func (b *PrimaryBuffer) growColumns(width, height int) (wraps int) {
 	if width == 0 {
 		return
 	}
+	pos := b.CursorAtScroll()
 	var y int
 	for y = max(0, b.Cells.Rows()-1); y > 0; y-- {
-		if y == b.cursor.position.Y {
+		if y == pos.Y {
 			wraps = b.wrapTopLines(y, width)
 			break
 		}
@@ -125,19 +128,14 @@ func (b *PrimaryBuffer) growColumns(width, height int) (wraps int) {
 		}
 	}
 
-	b.cursor.position.Y = max(0, b.cursor.position.Y+wraps)
-	offset := b.AltBuffer.scroll.Offset()
-	offset.Y = max(0, offset.Y+wraps)
-	b.MoveToOffset(offset)
-	b.savedCursor.position.Y = max(0, b.savedCursor.position.Y+wraps)
-	b.savedCursor.position.X = min(b.savedCursor.position.X, width)
 	return
 }
 
 func (b *PrimaryBuffer) shrinkColumns(width int) (wraps int) {
+	pos := b.CursorAtScroll()
 	var y int
 	for y = max(0, b.Cells.Rows()-1); y > 0; y-- {
-		if y == b.cursor.position.Y {
+		if y == pos.Y {
 			wraps = b.wrapTopLines(y, width)
 			break
 		}
@@ -148,7 +146,8 @@ func (b *PrimaryBuffer) shrinkColumns(width int) (wraps int) {
 		}
 	}
 
-	for ; y > 0; y-- {
+	y += wraps
+	for ; y > 0 && y < b.Cells.Rows(); y-- {
 		if cols := b.Cells.Columns(y); cols > width {
 			from := term.Coordinates{Y: y, X: width}
 			to := term.Coordinates{Y: y, X: cols}
@@ -156,12 +155,14 @@ func (b *PrimaryBuffer) shrinkColumns(width int) (wraps int) {
 		}
 	}
 
-	b.cursor.position.Y = max(0, b.cursor.position.Y+wraps)
-	offset := b.AltBuffer.scroll.Offset()
-	offset.Y = max(0, offset.Y+wraps)
-	b.MoveToOffset(offset)
-	b.savedCursor.position.Y = max(0, b.savedCursor.position.Y+wraps)
-	b.savedCursor.position.X = min(b.savedCursor.position.X, width)
+	return
+}
+
+func (b *PrimaryBuffer) sortedWrapLines() (lines []int) {
+	for y := range b.wrapLines {
+		lines = append(lines, y)
+	}
+	sort.Ints(lines)
 	return
 }
 
@@ -170,12 +171,7 @@ func (b *PrimaryBuffer) wrapTopLines(at, width int) (n int) {
 		return
 	}
 	// unwrap previous wraps
-	var lines []int
-	for y := range b.wrapLines {
-		lines = append(lines, y)
-	}
-	sort.Ints(lines)
-	for _, y := range lines {
+	for _, y := range b.sortedWrapLines() {
 		count := b.wrapLines[y]
 		for range count {
 			if _, ok := b.Cells.ConflateRowContext(b.AltBuffer.ctx, y); ok {
@@ -244,6 +240,7 @@ func (b *PrimaryBuffer) wrapTopLines(at, width int) (n int) {
 			b.Cells.InsertContext(b.AltBuffer.ctx, at, b.AltBuffer.defaultChar)
 		}
 	}
+	b.log(log.TraceLevel, "wrapped back %d lines", wraps)
 	return
 }
 
@@ -252,51 +249,6 @@ func (b *PrimaryBuffer) Dimensions() (width, height int) {
 	width = b.width
 	height = b.height
 	return
-}
-
-// ScrollUp panics. Use MoveToOffset or SetOffset.
-func (b *PrimaryBuffer) ScrollUp(rows int) {
-	// this prevents calling AltBuffer's ScrollUp inadvertently
-	// and forces thinking about MoveToOffset vs SetOffset.
-	panic("ScrollUp not supported for primary buffer, use SetOffset or MoveToOffset instead")
-}
-
-// ScrollDown panics. Use MoveToOffset or SetOffset.
-func (b *PrimaryBuffer) ScrollDown(rows int) {
-	// this prevents calling AltBuffer's ScrollDown inadvertently
-	// and forces thinking about MoveToOffset vs SetOffset.
-	panic("ScrollDown not supported for primary buffer, use SetOffset or MoveToOffset instead")
-}
-
-// MoveToOffset moves to the new offset.
-// It does not change the cursor content/scroll position, thus
-// changes the screen cursor position.
-func (b *PrimaryBuffer) MoveToOffset(offset term.Coordinates) {
-	b.AltBuffer.scroll.SetOffset(offset)
-}
-
-// SetOffset sets the raw offset of the underlying scroll.
-// It does not change the screen cursor position, thus
-// changes the content/scroll position.
-// It also ensures that bottom lines grow if there's
-// not enough lines from offset to bottom of the screen.
-func (b *PrimaryBuffer) SetOffset(offset term.Coordinates) {
-	prev := b.AltBuffer.scroll.Offset()
-	orig := b.CursorAtScreen()
-	if !b.AltBuffer.scroll.SetOffset(offset) {
-		return
-	}
-	if offset.Y > prev.Y {
-		b.growLines(false /* no offset change */, b.width, offset.Y+b.height)
-	} else {
-		b.shrinkLines(false /* no offset change */, offset.Y+b.height)
-	}
-	b.SetCursorAtScreen(orig, false)
-}
-
-// Offset returns the scroll offset of this PrimaryBuffer.
-func (b *PrimaryBuffer) Offset() term.Coordinates {
-	return b.AltBuffer.scroll.Offset()
 }
 
 // TopScrollableRegion is always 0 for a PrimaryBuffer,
@@ -311,82 +263,110 @@ func (b *PrimaryBuffer) BottomScrollableRegion() int {
 	return b.height
 }
 
-// InsertLines inserts blank lines on the cursor's position.
-func (b *PrimaryBuffer) InsertLines(count int) {
-	var builder strings.Builder
-	for range count {
-		_ = builder.WriteByte('\n')
-	}
-	pos := b.cursor.position
+// InsertLinesCursor inserts blank lines on the cursor's position.
+func (b *PrimaryBuffer) InsertLinesCursor(count int) {
+	pos := b.CursorAtScroll()
 	pos.X = b.Cells.Columns(pos.Y)
-	b.Cells.Edit(b.ctx, pos, pos, builder.String())
+	b.InsertLines(count, pos)
 }
 
-// DeleteLinesCursor deletes lines on the cursor's position.
-func (b *PrimaryBuffer) DeleteLinesCursor(count int) {
-	from := b.cursor.position
-	to := from
-	to.Y += count
-	b.Cells.DeleteLineContext(b.ctx, from, to)
+// InsertLines inserts blank lines at the given position's line.
+func (b *PrimaryBuffer) InsertLines(count int, pos term.Coordinates) {
+	var builder strings.Builder
+	if pos.X == 0 {
+		for range count {
+			for range b.width {
+				_, _ = builder.WriteRune(b.defaultChar)
+			}
+			_ = builder.WriteByte('\n')
+		}
+	} else {
+		for range count {
+			_ = builder.WriteByte('\n')
+			for range b.width {
+				_, _ = builder.WriteRune(b.defaultChar)
+			}
+		}
+	}
+	b.Cells.Edit(b.ctx, pos, pos, builder.String())
+	if b.Cells.Rows() > b.maxHistory {
+		to := b.Cells.Rows() - b.maxHistory - 1
+		b.log(log.TraceLevel, "rows > max history: %d", to)
+		b.DeleteLines(0, to)
+	}
 }
 
 // DeleteLines deletes the lines from start to end, inclusively.
 func (b *PrimaryBuffer) DeleteLines(start, end int) {
-	if start >= end {
+	if start > end {
 		return
 	}
 	end = min(end, b.Cells.Rows()-1)
-	orig := b.CursorAtScreen()
 
 	from := term.Coordinates{Y: start}
 	to := term.Coordinates{Y: end}
 	b.Cells.DeleteLineContext(b.ctx, from, to)
-
-	diff := end - start
-	orig.Y = max(0, orig.Y-diff)
-	b.SetCursorAtScreen(orig, false)
 }
 
 // Reset clears the screen and removes history, effectively
 // leaving the content as blank and the cursor position at the top.
 func (b *PrimaryBuffer) Reset() {
 	b.resetLinesTrim(0, b.height, true, b.defaultChar)
-	b.scroll.SetOffset(term.Coordinates{})
-	b.SetCursorAtScroll(term.Coordinates{}, false)
+	b.SetCursorAtScreen(term.Coordinates{}, false)
 }
 
-// SetCursorAtScroll sets the cursor at the content/scroll position c.
-// The relative argument is ignored for PrimaryBuffer.
-func (b *PrimaryBuffer) SetCursorAtScroll(c term.Coordinates, relative bool) {
-	b.cursor.position.X = int(math.Max(float64(c.X), 0))
-	b.cursor.position.Y = int(math.Max(float64(c.Y), 0))
+// Clear clears the screen and moves the current view into history, effectively
+// leaving the content as blank and the cursor position at the top.
+func (b *PrimaryBuffer) Clear() bool {
+	// find the last row that's not a blank row; cursor cannot
+	// be used because some shell implementations move the cursor
+	// before sending the clear sequence. Cases:
+	//
+	//  X  X
+	//  ---- start view
+	//  XXXX
+	//    XX
+	//  ---- end view
+	//
+	//  1122 insert/count
+	cells := b.Cells.RawCells()
+	for y := b.Rows() - 1; y >= 0; y-- {
+		for x := 0; x < b.Columns(y); x++ {
+			c := cells[y][x]
+			if c.Ch == b.defaultChar {
+				continue
+			}
+			endWindowCoordinates, _ := b.scroll.ScrollToWindowCoordinates(term.Coordinates{Y: y})
+			count := endWindowCoordinates.Y + 1
+			if count <= 0 {
+				return false
+			}
+			b.InsertLines(count, term.Coordinates{Y: y, X: b.Columns(y)})
+			b.cursor.position = term.Coordinates{}
+			b.log(log.TraceLevel, "clear view, insert lines count %d, found non-blank at y:%d", count, y)
+			return true
+		}
+	}
+	return false
 }
 
-// SetCursorAtScreen sets the cursor at the screen position c.
-// The relative argument is ignored for PrimaryBuffer.
-func (b *PrimaryBuffer) SetCursorAtScreen(c term.Coordinates, relative bool) {
-	b.log(log.TraceLevel, "set cursor at screen %#v (relative: %t), prev: %#v",
-		c, relative, b.CursorAtScreen())
-	b.SetCursorAtScroll(term.CoordinatesSum(c, b.scroll.Offset()), false)
+// ClearHistory clears the scrollback history, leaving the current view as-is.
+func (b *PrimaryBuffer) ClearHistory() bool {
+	count := b.Cells.Rows() - b.height
+	if count <= 0 {
+		return false
+	}
+	b.DeleteLines(0, count-1)
+	return true
 }
 
 // CursorAtScroll returns the cursor position in relation to the underlying
 // content scroll.
 func (b *PrimaryBuffer) CursorAtScroll() term.Coordinates {
-	return b.cursor.position
-}
-
-// CursorAtScreen returns the current cursor position in relation to the
-// screen coordinates.
-func (b *PrimaryBuffer) CursorAtScreen() term.Coordinates {
-	return term.CoordinatesDiff(b.cursor.position, b.scroll.Offset())
-}
-
-// MaxOffset returns the max offset such that the last line is at its bottommost position.
-// If there's enough content to fill up the height of the screen, then that is height - 1,
-// otherwise it ensures that the view content start at position 0.
-func (b *PrimaryBuffer) MaxOffset() int {
-	return b.maxOffset(b.height)
+	pos := b.scroll.WindowToScrollCoordinates(b.cursor.position)
+	pos.X = max(0, pos.X)
+	pos.Y = max(0, pos.Y)
+	return pos
 }
 
 // ResetLines erases all the lines from start to end.
@@ -396,8 +376,34 @@ func (b *PrimaryBuffer) ResetLines(start, end int) {
 	b.AltBuffer.ResetLinesWith(start, end, b.defaultChar)
 }
 
-func (b *PrimaryBuffer) maxOffset(height int) int {
-	return int(math.Max(float64(b.cursor.position.Y+1-height), 0))
+// Insert inserts a new character at the cursor position, shifting right
+// all the cells to the right of the cursor. It does not extend the number columns
+// in the buffer, as it should always be capped at exactly b.Width(), set by
+// the previous call to Resize.
+func (b *PrimaryBuffer) Insert(c rune, width int, charset vteparser.CharsetIndex) {
+	pos := b.CursorAtScroll()
+	b.AltBuffer.InsertAt(pos, c, width, charset)
+}
+
+// Write writes the given character with the given width to the cell
+// at the current cursor position.
+func (b *PrimaryBuffer) Write(c rune, width int, charset vteparser.CharsetIndex) {
+	pos := b.CursorAtScroll()
+	b.AltBuffer.WriteAt(pos, c, width, charset)
+}
+
+// Delete deletes the the given number of cells, shifting left
+// all the cells to the right of the cursor.
+func (b *PrimaryBuffer) Delete(count int) {
+	pos := b.CursorAtScroll()
+	b.AltBuffer.DeleteAt(pos, count)
+}
+
+// ResetCells erases all the cells from start to end, on the current
+// cursor line. The start to end range is left inclusive, right exclusive.
+func (b *PrimaryBuffer) ResetCells(start, end int) {
+	pos := b.CursorAtScroll()
+	b.resetCellsAt(pos.Y, start, end, b.defaultChar)
 }
 
 func (t *PrimaryBuffer) log(level log.Level, line string, params ...interface{}) {

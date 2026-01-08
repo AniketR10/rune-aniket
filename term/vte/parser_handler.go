@@ -46,9 +46,8 @@ import (
 var _ vteparser.Handler = (*parserHandler)(nil)
 
 const (
-	pkgVersion             = 1
-	selectionRegisterID    = "srid"
-	defaultMaxScrollLength = 10_000
+	pkgVersion          = 1
+	selectionRegisterID = "srid"
 )
 
 type parserHandler struct {
@@ -103,7 +102,6 @@ type parserHandler struct {
 // used to simplify critical path calls and avoid extra branches
 type screenBuffer interface {
 	SetCursorAtScreen(c term.Coordinates, relative bool)
-	SetCursorAtScroll(c term.Coordinates, relative bool)
 	CursorAtScreen() term.Coordinates
 	CursorAtScroll() term.Coordinates
 	Insert(c rune, width int, charset vteparser.CharsetIndex)
@@ -129,10 +127,11 @@ func newParserHandler(
 	uri workspaceapi.URI,
 	needsAttentionAttr term.Attributes,
 	useTitleAsTabname bool,
+	maxScrollLength int,
 ) *parserHandler {
 	ret := new(parserHandler)
 	ret.init(mu, pty, tm, clipboard, bell, uri,
-		needsAttentionAttr, useTitleAsTabname)
+		needsAttentionAttr, useTitleAsTabname, maxScrollLength)
 	return ret
 }
 
@@ -144,9 +143,11 @@ func (t *parserHandler) init(
 	uri workspaceapi.URI,
 	needsAttentionAttr term.Attributes,
 	useTitleAsTabname bool,
+	maxScrollLength int,
 ) {
+	t.maxScrollLength = maxScrollLength
 	t.sync.altBuf = vtescreen.NewAltBuffer()
-	t.sync.primBuf = vtescreen.NewPrimaryBuffer()
+	t.sync.primBuf = vtescreen.NewPrimaryBuffer(maxScrollLength)
 	t.sync.buf = t.sync.primBuf
 	t.sync.mu = mu
 	t.pty = pty
@@ -154,7 +155,6 @@ func (t *parserHandler) init(
 	t.tm = tm
 	t.uri = uri
 	t.title = uri.Name()
-	t.maxScrollLength = defaultMaxScrollLength
 	t.bell = bell
 	t.needsAttentionAttr = needsAttentionAttr
 	t.useTitleAsTabname = useTitleAsTabname
@@ -532,7 +532,7 @@ func (t *parserHandler) InsertBlankLines(count int) {
 		if t.useAlt {
 			t.scrollDownAltRelative(start, count)
 		} else {
-			t.sync.primBuf.InsertLines(count)
+			t.sync.primBuf.InsertLinesCursor(count)
 		}
 	}
 }
@@ -668,14 +668,13 @@ func (t *parserHandler) ClearScreen(mode vteparser.ClearMode) {
 		if t.useAlt {
 			t.resetBufLines(t.sync.buf)
 		} else {
-			t.clearPrimaryView()
+			t.sync.primBuf.Clear()
 		}
 
 	case vteparser.ClearModeSaved:
-		if t.useAlt {
-			return
+		if !t.useAlt {
+			t.sync.primBuf.ClearHistory()
 		}
-		t.clearPrimaryViewHistory()
 	default:
 		t.log(log.WarnLevel, "unknown clear screen mode: %v", mode)
 	}
@@ -692,10 +691,21 @@ func (t *parserHandler) ResetState() {
 	uri := t.uri
 	needsAttentionAttr := t.needsAttentionAttr
 	bell := t.bell
+	useTitleAsTabname := t.useTitleAsTabname
+	maxScrollLength := t.maxScrollLength
 	mu := t.sync.mu
+	width := t.width
+	height := t.height
 	*t = parserHandler{}
 	t.init(mu, pty, tm, clipboard, bell, uri,
-		needsAttentionAttr, t.useTitleAsTabname)
+		needsAttentionAttr, useTitleAsTabname, maxScrollLength)
+
+	// resize
+	t.sync.altBuf.Resize(width, height)
+	t.sync.primBuf.Resize(width, height)
+	t.width = width
+	t.height = height
+	t.tabs.resize(width)
 }
 
 // Reverse Index.
@@ -1236,7 +1246,6 @@ func (t *parserHandler) deccolm() {
 	if t.useAlt {
 		t.setScrollingRegion(1, 0, true)
 	} else {
-		t.sync.primBuf.SetOffset(term.Coordinates{})
 		t.shouldWrap = false
 	}
 	t.resetBufLines(t.sync.buf)
@@ -1269,36 +1278,27 @@ func (t *parserHandler) scrollDown(rows int) bool {
 	end := buf.Rows()
 	count := max(0, min(rows, end-start))
 	if count > 0 {
-		buf.AltBuffer.ScrollDown(start, end, count)
+		buf.ScrollDown(start, end, count)
 		return true
 	}
 	return false
 }
 
-func (t *parserHandler) scrollUp(rows int) bool {
+func (t *parserHandler) scrollUp(count int) bool {
 	if t.useAlt {
-		return t.scrollUpAltRelative(t.sync.buf.TopScrollableRegion(), rows)
+		return t.scrollUpAltRelative(t.sync.buf.TopScrollableRegion(), count)
 	}
-
 	buf := t.sync.primBuf
-	offset := buf.Offset()
 	t.shouldWrap = false
 
-	cursorAtScroll := buf.CursorAtScroll()
-	if cursorAtScroll.Y+rows >= t.maxScrollLength {
-		buf.AltBuffer.ScrollUp(0, buf.Rows(), rows)
-	} else if cursorAtScroll.Y >= buf.Rows() {
-		offset.Y += rows
-		buf.SetOffset(offset)
-		// optimization for long streams of output so all columns are pre-allocated
-		// by using the underlying buffer's configured column capacity, thus
-		// reducing the number of allocations.
-		buf.ResetCells(0, t.width)
-	} else {
-		offset.Y += rows
-		buf.SetOffset(offset)
+	rows := buf.Rows()
+	count = max(0, min(count, rows))
+	if count > 0 {
+		y := rows - 1
+		buf.InsertLines(count, term.Coordinates{Y: y, X: buf.Columns(y)})
+		return true
 	}
-	return true
+	return false
 }
 
 func (t *parserHandler) scrollUpAltRelative(start int, count int) bool {
@@ -1414,36 +1414,6 @@ func (t *parserHandler) setCursorAtScreen(pos term.Coordinates, relative bool) {
 	t.sync.buf.SetCursorAtScreen(pos, relative)
 }
 
-func (t *parserHandler) clearPrimaryViewHistory() {
-	buf := t.sync.primBuf
-	pos := buf.Offset()
-	if pos.Y == 0 {
-		return
-	}
-	buf.DeleteLines(0, pos.Y-1)
-	buf.SetOffset(term.Coordinates{Y: 0})
-}
-
-func (t *parserHandler) clearPrimaryView() {
-	if t.sync.buf != t.sync.primBuf {
-		panic("called scroll up view on non primary buffer")
-	}
-
-	buf := t.sync.primBuf
-	cells := buf.Cells.RawCells()
-	for y := buf.Rows() - 1; y >= 0; y-- {
-		for x := 0; x < buf.Columns(y); x++ {
-			c := cells[y][x]
-			if c.Ch != vtescreen.DefaultChar {
-				newOffset := term.Coordinates{Y: y + 1}
-				t.log(log.TraceLevel, "new offset after clear view %+v", newOffset)
-				buf.SetOffset(newOffset)
-				return
-			}
-		}
-	}
-}
-
 func (t *parserHandler) endOfLine(y int) int {
 	return max(t.sync.buf.Columns(y), t.width)
 }
@@ -1510,7 +1480,7 @@ func (t *parserHandler) goTo(line int, col int) {
 		yoffset = t.sync.buf.TopScrollableRegion()
 		maxy = t.sync.buf.BottomScrollableRegion() - 1
 	} else {
-		maxy = t.maxRows() - 1
+		maxy = t.height - 1
 	}
 	pos := term.Coordinates{
 		Y: max(0, min(line+yoffset, maxy)),

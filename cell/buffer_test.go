@@ -566,6 +566,41 @@ func TestBufferDeleteLine(t *testing.T) {
 		start    term.Coordinates
 	}{
 		{
+			from:   term.Coordinates{},
+			to:     term.Coordinates{},
+			input:  "bla\nbleh",
+			output: "bla\n",
+			start:  term.Coordinates{},
+		},
+		{
+			from:   term.Coordinates{Y: 1},
+			to:     term.Coordinates{Y: 1},
+			input:  "bla\nbleh",
+			output: "\nbleh",
+			start:  term.Coordinates{X: 3},
+		},
+		{
+			from:   term.Coordinates{Y: 1},
+			to:     term.Coordinates{Y: 1},
+			input:  "bla\n",
+			output: "\n",
+			start:  term.Coordinates{X: 3},
+		},
+		{
+			from:   term.Coordinates{},
+			to:     term.Coordinates{Y: 1},
+			input:  "bla\nbleh",
+			output: "bla\nbleh",
+			start:  term.Coordinates{},
+		},
+		{
+			from:   term.Coordinates{},
+			to:     term.Coordinates{},
+			input:  "bla",
+			output: "bla",
+			start:  term.Coordinates{},
+		},
+		{
 			from:   term.Coordinates{X: 1},
 			to:     term.Coordinates{Y: 1, X: 2},
 			input:  "bla\nbleh",

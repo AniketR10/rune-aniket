@@ -56,7 +56,7 @@ func TestNewAltBuffer(t *testing.T) {
 
 	b.Resize(4, 4)
 	b.Insert('\t', 1, 0)
-	b.SetCursorAtScroll(term.Coordinates{X: 1}, false)
+	b.SetCursorAtScreen(term.Coordinates{X: 1}, false)
 	b.Insert('a', 1, 0)
 	w := term.NewStringWriter(4, 4)
 	b.Draw(w)
@@ -553,31 +553,31 @@ func TestWriteInsert(t *testing.T) {
 		assertEqualBuf(t, b, "`a\nbb\n  \n  \n  \n  \n  \n  \n  \n  ")
 	})
 
-	t.Run("does not write character if out of bounds", func(t *testing.T) {
+	t.Run("writes character at max column if if out of bounds (x)", func(t *testing.T) {
 		b := makeAltBufferForTesting(2, 10)
 		resetAltBuffer(t, b, "aa\nbb\n  \n  \n  \n  \n  \n  \n  \n  ")
 		b.SetCursorAtScreen(term.Coordinates{X: 4}, false)
 
 		b.Write('X', 1, 0)
-		assertEqualBuf(t, b, "aa\nbb\n  \n  \n  \n  \n  \n  \n  \n  ")
+		assertEqualBuf(t, b, "aX\nbb\n  \n  \n  \n  \n  \n  \n  \n  ")
 	})
 
-	t.Run("does not insert character if writing out of bounds (x)", func(t *testing.T) {
+	t.Run("inserts character at max column if writing out of bounds (x)", func(t *testing.T) {
 		b := makeAltBufferForTesting(2, 10)
 		resetAltBuffer(t, b, "aa\nbb\n  \n  \n  \n  \n  \n  \n  \n  ")
 		b.SetCursorAtScreen(term.Coordinates{X: 4}, false)
 
 		b.Write('X', 1, 0)
-		assertEqualBuf(t, b, "aa\nbb\n  \n  \n  \n  \n  \n  \n  \n  ")
+		assertEqualBuf(t, b, "aX\nbb\n  \n  \n  \n  \n  \n  \n  \n  ")
 	})
 
-	t.Run("inserts character if writing out of bounds (y)", func(t *testing.T) {
+	t.Run("inserts character at max line if writing out of bounds (y)", func(t *testing.T) {
 		b := makeAltBufferForTesting(2, 10)
 		resetAltBuffer(t, b, "aa\nbb\n  \n  \n  \n  \n  \n  \n  \n  ")
 		b.SetCursorAtScreen(term.Coordinates{Y: 12, X: 6}, false)
 
 		b.Write('X', 1, 0)
-		assertEqualBuf(t, b, "aa\nbb\n  \n  \n  \n  \n  \n  \n  \n  ")
+		assertEqualBuf(t, b, "aa\nbb\n  \n  \n  \n  \n  \n  \n  \n X")
 	})
 
 	t.Run("inserts character in bounds", func(t *testing.T) {

@@ -475,6 +475,12 @@ func (l *Less) cmdBarHeight() (cmdBarWidth, cmdBarHeight int) {
 func (l *Less) resize() {
 	cmdBarWidth, cmdBarHeight := l.cmdBarHeight()
 	contentHeight := l.height - cmdBarHeight
+	if l.config.SuperimposeMessage && l.scroll.InvertOffset {
+		// avoid content shifting up and down due to invert offset
+		// search needs to be refactored into a browser-wide component
+		// so although this is not ideal, it's fine for now.
+		contentHeight = l.height
+	}
 
 	// allow content to be superimposed on bar
 	if cmdBarWidth == 0 {
