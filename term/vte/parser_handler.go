@@ -1293,12 +1293,18 @@ func (t *parserHandler) scrollUp(count int) bool {
 
 	rows := buf.Rows()
 	count = max(0, min(count, rows))
-	if count > 0 {
+	if count <= 0 {
+		return false
+	}
+	if buf.Rows() < t.maxScrollLength {
 		y := rows - 1
 		buf.InsertLines(count, term.Coordinates{Y: y, X: buf.Columns(y)})
-		return true
+	} else {
+		// little optimization to avoid adding and removing rows due to
+		// reaching max lines.
+		buf.ScrollUp(0, buf.Rows(), count)
 	}
-	return false
+	return true
 }
 
 func (t *parserHandler) scrollUpAltRelative(start int, count int) bool {
