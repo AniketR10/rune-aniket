@@ -283,6 +283,81 @@ func TestIntegrationParserHandler(t *testing.T) {
 			},
 		},
 		{
+			desc:      "shell input un-wrap after resize",
+			altBuffer: false,
+			sut: func(t *testing.T, p *parserHandler, tm *mockTabManager, pty *workspacetest.File) {
+				p.Resize(5, 5)
+				resetBuffer(t, p, "a    \nb    \nc    \nd    \ne    \n$ .  \nout  \n$    ")
+				p.Linefeed()
+				p.CarriageReturn()
+				for range 7 {
+					p.Input('a')
+				}
+				assertEqualBuf(t, p, "$ .  \nout  \n$    \naaaaa\naa   ")
+				p.Resize(6, 5)
+				assertEqualBuf(t, p, "$ .   \nout   \n$     \naaaaaa\na     ")
+				p.Resize(4, 5)
+				assertEqualBuf(t, p, "$ . \nout \n$   \naaaa\naaa ")
+				p.Resize(9, 5)
+				assertEqualBuf(t, p, "e        \n$ .      \nout      \n$        \naaaaaaa  ")
+			},
+		},
+		{
+			desc:      "shell input un-wrap of multiple lines after resize",
+			altBuffer: false,
+			sut: func(t *testing.T, p *parserHandler, tm *mockTabManager, pty *workspacetest.File) {
+				p.Resize(5, 5)
+				resetBuffer(t, p, "a    \nb    \nc    \nd    \ne    \n$ .  \nout  \n$    ")
+				p.Linefeed()
+				p.CarriageReturn()
+				for range 7 {
+					p.Input('a')
+				}
+				p.Linefeed()
+				p.CarriageReturn()
+				for range 7 {
+					p.Input('b')
+				}
+				assertEqualBuf(t, p, "$    \naaaaa\naa   \nbbbbb\nbb   ")
+				p.Resize(6, 5)
+				assertEqualBuf(t, p, "$     \naaaaaa\na     \nbbbbbb\nb     ")
+				p.Resize(3, 5)
+				assertEqualBuf(t, p, "aaa\na  \nbbb\nbbb\nb  ")
+				p.Resize(9, 5)
+				assertEqualBuf(t, p, "$ .      \nout      \n$        \naaaaaaa  \nbbbbbbb  ")
+			},
+		},
+		{
+			desc:      "shell input un-wrap of multiple lines after resize, after hit max scroll length",
+			altBuffer: false,
+			sut: func(t *testing.T, p *parserHandler, tm *mockTabManager, pty *workspacetest.File) {
+				p.maxScrollLength = 6
+				p.ResetState()
+				p.Resize(5, 5)
+				resetBuffer(t, p, "c    \nd    \ne    \n$ .  \nout  \n$    ")
+
+				for range 6 {
+					p.Linefeed()
+					p.CarriageReturn()
+					for range 7 {
+						p.Input('a')
+					}
+					p.Linefeed()
+					p.CarriageReturn()
+					for range 7 {
+						p.Input('b')
+					}
+				}
+				assertEqualBuf(t, p, "bb   \naaaaa\naa   \nbbbbb\nbb   ")
+				p.Resize(6, 5)
+				assertEqualBuf(t, p, "b     \naaaaaa\na     \nbbbbbb\nb     ")
+				p.Resize(3, 5)
+				assertEqualBuf(t, p, "aaa\na  \nbbb\nbbb\nb  ")
+				p.Resize(9, 5)
+				assertEqualBuf(t, p, "bbbbbbb  \naaaaaaa  \nbbbbbbb  \n         \n         ")
+			},
+		},
+		{
 			desc:      "primary resize maintains cursor position at content",
 			altBuffer: false,
 			sut: func(t *testing.T, p *parserHandler, tm *mockTabManager, pty *workspacetest.File) {

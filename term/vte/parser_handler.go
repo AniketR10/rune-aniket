@@ -1403,6 +1403,10 @@ func (t *parserHandler) wrapLine() {
 		return
 	}
 
+	if !t.useAlt {
+		t.sync.primBuf.MarkWrapAtCursor()
+	}
+
 	buf := t.sync.buf
 	pos := buf.CursorAtScreen()
 	pos.X = 0

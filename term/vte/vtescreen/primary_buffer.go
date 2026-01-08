@@ -25,7 +25,6 @@ package vtescreen
 
 import (
 	"fmt"
-	"sort"
 	"strings"
 
 	"github.com/ernestrc/logd-go/logging"
@@ -42,7 +41,6 @@ import (
 type PrimaryBuffer struct {
 	AltBuffer
 	wraps      int
-	wrapLines  map[int]int
 	maxHistory int
 }
 
@@ -56,8 +54,21 @@ func NewPrimaryBuffer(maxHistory int) *PrimaryBuffer {
 // Init initializes this PrimaryBuffer.
 func (b *PrimaryBuffer) Init(maxHistory int) {
 	b.AltBuffer.Init()
-	b.wrapLines = make(map[int]int)
 	b.maxHistory = maxHistory
+}
+
+const wrapMarker uint8 = 1 << 7
+
+// MarkWrapAtCursor marks the current line/column of the cursor
+// as a wrapped line, so it can later be un-wrapped upon Resize.
+func (b *PrimaryBuffer) MarkWrapAtCursor() {
+	pos := b.CursorAtScroll()
+	c := b.CellAt(pos)
+	if c == nil {
+		return
+	}
+	// use unused field to mark that line is wrapped oob
+	c.Bytes = wrapMarker
 }
 
 // Resize resizes this Buffer and resets the vertical margins.
@@ -158,30 +169,29 @@ func (b *PrimaryBuffer) shrinkColumns(width int) (wraps int) {
 	return
 }
 
-func (b *PrimaryBuffer) sortedWrapLines() (lines []int) {
-	for y := range b.wrapLines {
-		lines = append(lines, y)
-	}
-	sort.Ints(lines)
-	return
-}
-
 func (b *PrimaryBuffer) wrapTopLines(at, width int) (n int) {
 	if width == 0 {
 		return
 	}
 	// unwrap previous wraps
-	for _, y := range b.sortedWrapLines() {
-		count := b.wrapLines[y]
-		for range count {
+	for y := 0; y <= at && y < b.Cells.Rows(); y++ {
+		for {
+			lastCol := b.Cells.Columns(y) - 1
+			if lastCol < 0 {
+				break
+			}
+			c := b.CellAt(term.Coordinates{Y: y, X: lastCol})
+			if c == nil || c.Bytes != wrapMarker {
+				break
+			}
+			c.Bytes = 0
 			if _, ok := b.Cells.ConflateRowContext(b.AltBuffer.ctx, y); ok {
 				at--
 				n--
 			}
 		}
 	}
-	b.log(log.TraceLevel, "un-wrapped %d lines: %#v", -n, b.wrapLines)
-	clear(b.wrapLines)
+	b.log(log.TraceLevel, "un-wrapped %d lines", -n)
 	if at < 0 {
 		return
 	}
@@ -190,7 +200,7 @@ func (b *PrimaryBuffer) wrapTopLines(at, width int) (n int) {
 	// wraps variation, so it can be negative if we unwrapped more
 	// lines that we wrapped.
 	var wraps int
-	for y := 0; y < at && y < b.Cells.Rows(); y++ {
+	for y := 0; y <= at && y < b.Cells.Rows(); y++ {
 		var x int
 		for x = b.Cells.Columns(y) - 1; x > 0; x-- {
 			cell, _ := b.Cells.Cell(term.Coordinates{Y: y, X: x})
@@ -215,16 +225,14 @@ func (b *PrimaryBuffer) wrapTopLines(at, width int) (n int) {
 			if remainder == 0 {
 				times--
 			}
-			// y represents current working row, like screen coordinates,
-			// whereas yi represents the original, pre-wrap row, like scroll coordinates.
-			yi := y - wraps
 			for i := times; i > 0 && b.Cells.WrapRowContext(b.AltBuffer.ctx, y, width*i); i-- {
-				b.wrapLines[yi] = b.wrapLines[yi] + 1
+				c := b.CellAt(term.Coordinates{Y: y, X: b.Cells.Columns(y) - 1})
+				c.Bytes = wrapMarker
 				n++
 				at++
 				wraps++
 			}
-			b.log(log.TraceLevel, "wrapped a new line line (%d): %#v", yi, b.wrapLines)
+			b.log(log.TraceLevel, "wrapped a new line line (%d), times: %d", y, times)
 		case x < width && width > cols:
 			at := term.Coordinates{Y: y, X: width - 1}
 			b.Cells.InsertContext(b.AltBuffer.ctx, at, b.AltBuffer.defaultChar)
