@@ -38,7 +38,6 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/logging"
 	"go.uber.org/multierr"
-	"golang.org/x/sys/unix"
 	"unstable.build/go-tui/api/schemeapi"
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/browser"
@@ -149,6 +148,36 @@ func (t *Component) triggerBell() {
 // Run must be called in a separate goroutine to start processing incoming
 // data from the pty master.
 func (t *Component) Run(updateChan chan struct{}) error {
+	// interrupt at most at a reasonable fps. This improves
+	// performance when program is dumping Kbs of content
+	// into the terminal scroll.
+	// buffer to 1, so we publish one last interrupt after
+	// maxInterruptPerSecond since last interrupt
+	ch := make(chan struct{}, 1)
+	go debug.CapturePanicReport(func() {
+		maxInterruptPerSecond := time.Duration(int(time.Second) / 30)
+		timer := time.NewTimer(maxInterruptPerSecond)
+		defer timer.Stop()
+		defer close(updateChan)
+		for {
+			select {
+			case <-ch:
+			case <-t.ctx.Done():
+				return
+			}
+			select {
+			case updateChan <- struct{}{}:
+			case <-t.ctx.Done():
+				return
+			}
+			timer.Reset(maxInterruptPerSecond)
+			select {
+			case <-timer.C:
+			case <-t.ctx.Done():
+				return
+			}
+		}
+	})
 	go debug.CapturePanicReport(func() {
 		for {
 			select {
@@ -165,7 +194,7 @@ func (t *Component) Run(updateChan chan struct{}) error {
 		}
 	})
 
-	return t.run(updateChan)
+	return t.run(ch)
 }
 
 // Title returns the Title of this Component.
@@ -779,61 +808,24 @@ func (t *Component) run(updateChan chan struct{}) error {
 		t.mu.Unlock()
 	}()
 
-	fd := t.pty.Master.Fd()
-	buf := make([]byte, 1024*1024)
-	//var m int
+	buf := make([]byte, os.Getpagesize())
 	for {
-		//m = 0
-		n, err := t.pty.Master.Read(buf)
+		n, err := t.pty.Master.Read(buf[:])
 		if err != nil {
 			return err
 		}
-		for _, b := range buf[:n] {
-			t.parser.Advance(b)
-			//m++
+		for i := 0; i < n; i++ {
+			t.parser.Advance(buf[i])
 		}
-
-		// greedily drain for up to 15ms
-		deadline := time.Now().Add(15 * time.Millisecond)
-		for remaining := time.Until(deadline); remaining > 0; {
-			ready := pollFd(fd, remaining)
-			if !ready {
-				break
-			}
-
-			n, err := t.pty.Master.Read(buf)
-			if err != nil {
-				break
-			}
-			for _, b := range buf[:n] {
-				t.parser.Advance(b)
-				// m++
-			}
-		}
-
 		select {
 		// Close was called, just return error
 		case <-t.ctx.Done():
 			return t.ctx.Err()
 		// no interrupts in the last maxInterruptPeriod
 		case updateChan <- struct{}{}:
-			//t.log(log.TraceLevel, "interrupted after parser advanced %d byte(s)", m)
+		// an interrupt was requested in the last maxInterruptPeriod
+		// don't request any further interrupts for now
 		default:
 		}
 	}
-}
-
-func pollFd(fd uintptr, timeout time.Duration) bool {
-	fds := []unix.PollFd{{
-		Fd:     int32(fd),
-		Events: unix.POLLIN,
-	}}
-	n, err := unix.Poll(fds, int(timeout.Milliseconds()))
-	if err == unix.EINTR {
-		return false
-	}
-	if err != nil {
-		return false
-	}
-	return n > 0 && (fds[0].Revents&(unix.POLLIN|unix.POLLHUP) != 0)
 }
