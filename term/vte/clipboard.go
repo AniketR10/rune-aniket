@@ -43,6 +43,9 @@ func (c stitchingClipboard) Paste(registerID string) (clipboard.Data, error) {
 	if !ok {
 		return data, err
 	}
+	// always return standard selection when pasting onto vte
+	// since we cannot do line or ctrl paste.
+	data.Metadata = text.StandardSelection
 	if mode != text.StandardSelection {
 		return data, err
 	}
