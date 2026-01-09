@@ -1882,6 +1882,9 @@ func (c ideConfig) tabNameSeparator() (ret string) {
 	return
 }
 
+// this is an internal optimization, no need to expose it
+const defaultMinWidth = 30
+
 func (c ideConfig) terminalConfig() vte.Config {
 	ret := vte.DefaultConfig()
 	ret.Attributes = c.terminalDefaultAttr()
@@ -1895,6 +1898,7 @@ func (c ideConfig) terminalConfig() vte.Config {
 	ret.Clipboard = c.clipboard()
 	ret.ScheduleNextTick = c.scheduleNextTick
 	ret.RingBell = c.ringBell
+	ret.MinWidth = defaultMinWidth
 	return ret
 }
 

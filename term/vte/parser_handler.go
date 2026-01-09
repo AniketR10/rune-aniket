@@ -63,6 +63,7 @@ type parserHandler struct {
 	}
 	tabs              tabstops
 	maxScrollLength   int
+	minWidth          int
 	useTitleAsTabname bool
 
 	needsAttentionAttr        term.Attributes
@@ -128,10 +129,11 @@ func newParserHandler(
 	needsAttentionAttr term.Attributes,
 	useTitleAsTabname bool,
 	maxScrollLength int,
+	minWidth int,
 ) *parserHandler {
 	ret := new(parserHandler)
 	ret.init(mu, pty, tm, clipboard, bell, uri,
-		needsAttentionAttr, useTitleAsTabname, maxScrollLength)
+		needsAttentionAttr, useTitleAsTabname, maxScrollLength, minWidth)
 	return ret
 }
 
@@ -144,10 +146,12 @@ func (t *parserHandler) init(
 	needsAttentionAttr term.Attributes,
 	useTitleAsTabname bool,
 	maxScrollLength int,
+	minWidth int,
 ) {
 	t.maxScrollLength = maxScrollLength
+	t.minWidth = minWidth
 	t.sync.altBuf = vtescreen.NewAltBuffer()
-	t.sync.primBuf = vtescreen.NewPrimaryBuffer(maxScrollLength)
+	t.sync.primBuf = vtescreen.NewPrimaryBuffer(minWidth, maxScrollLength)
 	t.sync.buf = t.sync.primBuf
 	t.sync.mu = mu
 	t.pty = pty
@@ -693,12 +697,13 @@ func (t *parserHandler) ResetState() {
 	bell := t.bell
 	useTitleAsTabname := t.useTitleAsTabname
 	maxScrollLength := t.maxScrollLength
+	minWidth := t.minWidth
 	mu := t.sync.mu
 	width := t.width
 	height := t.height
 	*t = parserHandler{}
 	t.init(mu, pty, tm, clipboard, bell, uri,
-		needsAttentionAttr, useTitleAsTabname, maxScrollLength)
+		needsAttentionAttr, useTitleAsTabname, maxScrollLength, minWidth)
 
 	// resize
 	t.sync.altBuf.Resize(width, height)

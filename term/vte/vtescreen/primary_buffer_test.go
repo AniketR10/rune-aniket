@@ -38,7 +38,7 @@ const testHistory = 1000
 
 func TestPrimaryReset(t *testing.T) {
 	t.Run("exactly screen height compared to amount of rows", func(t *testing.T) {
-		b := NewPrimaryBuffer(testHistory)
+		b := NewPrimaryBuffer(0, testHistory)
 		b.Resize(5, 5)
 		resetPrimaryBuffer(b, "0\n1\n2\n3\n4")
 
@@ -61,7 +61,7 @@ func TestPrimaryReset(t *testing.T) {
 	})
 
 	t.Run("smaller screen height compared to amount of rows", func(t *testing.T) {
-		b := NewPrimaryBuffer(testHistory)
+		b := NewPrimaryBuffer(0, testHistory)
 		b.Resize(5, 2)
 		assert.Equal(t, 2, b.Rows())
 		resetPrimaryBuffer(b, "0\n1\n2\n3\n4")
@@ -83,7 +83,7 @@ func TestPrimaryReset(t *testing.T) {
 }
 
 func TestPrimaryCoordinates(t *testing.T) {
-	b := NewPrimaryBuffer(testHistory)
+	b := NewPrimaryBuffer(0, testHistory)
 	assert.Equal(t, term.Coordinates{}, b.CursorAtScreen())
 	assert.Equal(t, term.Coordinates{}, b.CursorAtScroll())
 
@@ -369,7 +369,7 @@ func TestPrimaryResize(t *testing.T) {
 
 		for i, test := range suite {
 			t.Run(fmt.Sprintf("test case %d", i), func(t *testing.T) {
-				b := NewPrimaryBuffer(testHistory)
+				b := NewPrimaryBuffer(0, testHistory)
 				b.Resize(test.initialWidth, test.initialHeight)
 				writeToPrimaryBuffer(b, test.input)
 
@@ -398,7 +398,7 @@ func TestPrimaryResize(t *testing.T) {
 }
 
 func makePrimaryBufferForTesting(width, height int) *PrimaryBuffer {
-	ret := NewPrimaryBuffer(testHistory)
+	ret := NewPrimaryBuffer(0, testHistory)
 	ret.SetDefaultChar(' ')
 	ret.Resize(width, height)
 	return ret

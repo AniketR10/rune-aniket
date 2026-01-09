@@ -117,7 +117,7 @@ func (t *Component) Init(
 
 	t.parserHandler = newParserHandler(
 		&t.mu, t.pty, tm, t.clipboard, cfg.scheduleBell, t.uri,
-		cfg.NeedsAttentionAttributes, cfg.DynamicTabName, cfg.MaxLines)
+		cfg.NeedsAttentionAttributes, cfg.DynamicTabName, cfg.MaxLines, cfg.MinWidth)
 
 	// start with pty slave file name as title
 	var h vteparser.Handler = t.parserHandler

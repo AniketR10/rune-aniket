@@ -42,19 +42,21 @@ type PrimaryBuffer struct {
 	AltBuffer
 	wraps      int
 	maxHistory int
+	minWidth   int
 }
 
 // NewPrimaryBuffer allocates storage for a new PrimaryBuffer and initializes it.
-func NewPrimaryBuffer(maxHistory int) *PrimaryBuffer {
+func NewPrimaryBuffer(minWidth, maxHistory int) *PrimaryBuffer {
 	ret := new(PrimaryBuffer)
-	ret.Init(maxHistory)
+	ret.Init(minWidth, maxHistory)
 	return ret
 }
 
 // Init initializes this PrimaryBuffer.
-func (b *PrimaryBuffer) Init(maxHistory int) {
+func (b *PrimaryBuffer) Init(minWidth int, maxHistory int) {
 	b.AltBuffer.Init()
 	b.maxHistory = maxHistory
+	b.minWidth = minWidth
 }
 
 const wrapMarker uint8 = 1 << 7
@@ -76,6 +78,9 @@ func (b *PrimaryBuffer) Resize(width, height int) {
 	cursor := b.CursorAtScroll()
 	savedCursor := b.scroll.WindowToScrollCoordinates(b.savedCursor.position)
 
+	origWidth := width
+	width = max(b.minWidth, width)
+
 	var wraps int
 	if width != 0 && width > b.width {
 		wraps = b.growColumns(width, height)
@@ -91,7 +96,7 @@ func (b *PrimaryBuffer) Resize(width, height int) {
 	b.wraps = wraps
 	b.width = width
 	b.height = height
-	b.scroll.Resize(width, height)
+	b.scroll.Resize(origWidth, height)
 	b.Cells.ResetCapacity(width)
 
 	cursor.Y = max(0, cursor.Y+wraps)

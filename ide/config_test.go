@@ -335,6 +335,7 @@ func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
 		Modal:                    false,
 		ClipboardRegister:        clipboard.DefaultRegisterID,
 		MaxLines:                 10_000,
+		MinWidth:                 defaultMinWidth,
 	}, vteConfig)
 	assert.Equal(t, command.DefaultConfig().ShowManualAfter, cfg.commandOverlayShowManualAfter())
 	assert.Equal(t, command.DefaultConfig().ManualAttr, cfg.commandOverlayManualAttr())
@@ -591,6 +592,7 @@ func TestConfigSetting(t *testing.T) {
 		Modal:                    true,
 		DynamicTabName:           true,
 		MaxLines:                 999,
+		MinWidth:                 defaultMinWidth,
 	}
 	assert.Equal(t, expectedEmulatorConfig, vteConfig)
 

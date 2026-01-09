@@ -41,6 +41,7 @@ func DefaultConfig() Config {
 		NeedsAttentionAttributes: term.Attributes{Attrs: tcell.AttrBlink},
 		DynamicTabName:           false,
 		MaxLines:                 10_000,
+		MinWidth:                 0,
 	}
 }
 
@@ -68,6 +69,9 @@ type Config struct {
 	SelectionAttributes      term.Attributes
 	NeedsAttentionAttributes term.Attributes
 	MaxLines                 int
+
+	// MinWidth helps optimize growing and shrinking rows upon resize.
+	MinWidth int
 
 	// Modal enables entering modal mode via Esc key.
 	// Changing mode to 'INSERT' mode switches back to
