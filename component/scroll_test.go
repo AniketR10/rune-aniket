@@ -496,7 +496,7 @@ place this => that
 		{
 			func() {
 				assert.True(t, scroll.SeekStartLine())
-				assert.True(t, scroll.SeekEndFile())
+				assert.True(t, scroll.SeekStartFile())
 			}, `
 module github.com/unstab
                         
@@ -510,7 +510,7 @@ require (
 		},
 		{
 			func() {
-				assert.True(t, scroll.SeekStartFile())
+				assert.True(t, scroll.SeekEndFile())
 			}, `
     github.com/ernestrc/
     github.com/golang/mo
@@ -876,67 +876,6 @@ func TestScrollHeightWrap(t *testing.T) {
 	assert.Equal(t, 0, scroll.Height(0))
 	assert.Equal(t, 13, scroll.Height(10))
 	assert.Equal(t, 3, scroll.Height(100))
-}
-
-func TestScrollSeekTo(t *testing.T) {
-	t.Run("no subscribers", func(t *testing.T) {
-		scroll := newScroll(4, false, 20, 1)
-		_, err := scroll.Buffer().ReadFrom(strings.NewReader(fortune))
-		require.NoError(t, err)
-		assert.True(t, scroll.SeekTo(term.Coordinates{Y: 100}))
-		assert.Equal(t, term.Coordinates{Y: scroll.Buffer().Rows() - 1}, scroll.Offset())
-		assert.False(t, scroll.SeekTo(term.Coordinates{Y: 100}))
-	})
-
-	t.Run("dispatches OnWillSeek, OnDidSeek on Y changes", func(t *testing.T) {
-		for _, wrap := range []bool{true, false} {
-			t.Run(fmt.Sprintf("wrap: %v", wrap), func(t *testing.T) {
-				scroll := newScroll(4, wrap, 10, 1)
-				_, err := scroll.Buffer().ReadFrom(strings.NewReader(fortune))
-				require.NoError(t, err)
-
-				var calledWill, calledDid int
-				subs := subscriber{
-					expectWillSeek: func(from term.Coordinates) {
-						calledWill++
-						assert.Equal(t, term.Coordinates{}, from)
-					},
-					expectDidSeek: func(from, to term.Coordinates) {
-						calledDid++
-						assert.Equal(t, term.Coordinates{}, from)
-						assert.Equal(t, term.Coordinates{Y: 2}, to)
-					},
-				}
-				scroll.Subscribe(subs)
-				assert.True(t, scroll.SeekTo(term.Coordinates{Y: 100}))
-				assert.Equal(t, 1, calledWill)
-				assert.Equal(t, 1, calledDid)
-			})
-		}
-	})
-
-	t.Run("dispatches OnWillSeek, OnDidSeek on X changes", func(t *testing.T) {
-		scroll := newScroll(4, false, 20, 1)
-		_, err := scroll.Buffer().ReadFrom(strings.NewReader(fortune))
-		require.NoError(t, err)
-
-		var calledWill, calledDid int
-		subs := subscriber{
-			expectWillSeek: func(from term.Coordinates) {
-				calledWill++
-				assert.Equal(t, term.Coordinates{}, from)
-			},
-			expectDidSeek: func(from, to term.Coordinates) {
-				calledDid++
-				assert.Equal(t, term.Coordinates{}, from)
-				assert.Equal(t, term.Coordinates{X: 5}, to)
-			},
-		}
-		scroll.Subscribe(subs)
-		assert.True(t, scroll.SeekTo(term.Coordinates{X: 100}))
-		assert.Equal(t, 1, calledWill)
-		assert.Equal(t, 1, calledDid)
-	})
 }
 
 func TestScrollSetOffset(t *testing.T) {
@@ -1592,13 +1531,13 @@ func makeScrollContent(wrap bool, width, height, offsetY, offsetX int, content s
 		ret := NewScroll(buf)
 		ret.Wrap = wrap
 		ret.Resize(width, height)
-		// necessary for some wrap to work for SeekTo and scroll.Wraps usage
+		// necessary for some wrap to work for seekTo and scroll.Wraps usage
 		ret.Draw(term.NewStringWriter(width, height))
 		if offsetY != 0 {
-			require.True(t, ret.SeekVertical(offsetY))
+			require.True(t, ret.seekVertical(offsetY))
 		}
 		if offsetX != 0 {
-			require.True(t, ret.SeekHorizontal(offsetX))
+			require.True(t, ret.seekHorizontal(offsetX))
 		}
 		return ret
 	}

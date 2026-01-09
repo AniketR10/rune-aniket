@@ -383,8 +383,7 @@ func (t *Component) ScrollDown(count int) (ok bool) {
 	maxOffset := t.scroll.MaxOffset().Y + t.height - 1
 	target := min(maxOffset, offset+count)
 
-	// scroll is configured with inverted seek semantics
-	for i := 0; i < target-offset && t.scroll.SeekUp(); i++ {
+	for i := 0; i < target-offset && t.scroll.SeekDown(); i++ {
 		ok = true
 	}
 	return
@@ -397,8 +396,7 @@ func (t *Component) ScrollUp(count int) (ok bool) {
 	if t.parserHandler.useAlt {
 		return
 	}
-	// scroll is configured with inverted seek semantics
-	for i := 0; i < count && t.scroll.SeekDown(); i++ {
+	for i := 0; i < count && t.scroll.SeekUp(); i++ {
 		ok = true
 	}
 	return
@@ -434,7 +432,7 @@ func (t *Component) ScrollBottom() (ok bool) {
 		return
 	}
 
-	return t.scroll.SeekStartFile()
+	return t.scroll.SeekEndFile()
 }
 
 // SetDefaultAttributes updates the default attributes of this terminal emulator.

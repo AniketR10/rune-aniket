@@ -407,11 +407,61 @@ func TestCursorRepositionTop(t *testing.T) {
 	}
 
 	for i, test := range suite {
-		t.Run(fmt.Sprintf("test case %d", i), func(t *testing.T) {
+		t.Run(fmt.Sprintf("offset test case %d", i), func(t *testing.T) {
 			c := setupCursor(t, test.width, test.height, false)
 			sub := &testScrollSubscriber{}
 			c.scroll.Subscribe(sub)
 
+			c.MoveToScroll(test.setCursorAtScroll)
+			handled := c.RepositionTop()
+			require.Equal(t, test.expectedHandled, handled)
+
+			cursor := c.CursorAtScroll()
+			assert.Equal(t, test.setCursorAtScroll, cursor)
+			assert.Equal(t, test.expectedWindowCoordinates, c.Coordinates())
+			if test.expectedHandled {
+				assert.NotZero(t, sub.seek)
+			}
+		})
+	}
+}
+
+func TestCursorRepositionTopInverted(t *testing.T) {
+	suite := []struct {
+		width, height             int
+		setCursorAtScroll         term.Coordinates
+		expectedHandled           bool
+		expectedWindowCoordinates term.Coordinates
+	}{
+		{10, 10, term.Coordinates{Y: 0}, false, term.Coordinates{Y: 0}},
+		{10, 10, term.Coordinates{Y: 2}, true, term.Coordinates{Y: 0}},
+		{10, 10, term.Coordinates{Y: 5}, true, term.Coordinates{X: 3, Y: 0}},
+		{10, 10, term.Coordinates{Y: 6}, true, term.Coordinates{Y: 0}},
+		{10, 10, term.Coordinates{Y: 7}, true, term.Coordinates{Y: 0}},
+		{10, 10, term.Coordinates{Y: 8}, true, term.Coordinates{X: 3, Y: 0}},
+		{10, 10, term.Coordinates{Y: 9}, true, term.Coordinates{X: 3, Y: 0}},
+		{10, 10, term.Coordinates{Y: 10}, true, term.Coordinates{Y: 0}},
+		{10, 10, term.Coordinates{Y: 20}, true, term.Coordinates{X: 3, Y: 0}},
+		{10, 10, term.Coordinates{Y: 22}, true, term.Coordinates{X: 3, Y: 0}},
+		{10, 10, term.Coordinates{Y: 24}, true, term.Coordinates{X: 3, Y: 2}},
+		{10, 10, term.Coordinates{Y: 27}, true, term.Coordinates{X: 3, Y: 5}},
+		{10, 10, term.Coordinates{Y: 28}, true, term.Coordinates{X: 3, Y: 6}},
+		{10, 10, term.Coordinates{Y: 30}, true, term.Coordinates{X: 3, Y: 8}},
+		{10, 10, term.Coordinates{Y: 31}, false, term.Coordinates{Y: 9}},
+		{100, 100, term.Coordinates{Y: 0}, false, term.Coordinates{Y: 68}},
+		{100, 100, term.Coordinates{Y: 31}, false, term.Coordinates{Y: 99}},
+	}
+
+	for i, test := range suite {
+		t.Run(fmt.Sprintf("test case %d", i), func(t *testing.T) {
+			c := setupCursor(t, test.width, test.height, false)
+			c.scroll.InvertOffset = true
+			sub := &testScrollSubscriber{}
+			c.scroll.Subscribe(sub)
+
+			// otherwise it's already at the bottom after MoveToScroll
+			// since the cursor starts at the top after initializing it
+			c.MoveFirstLine()
 			c.MoveToScroll(test.setCursorAtScroll)
 			handled := c.RepositionTop()
 			require.Equal(t, test.expectedHandled, handled)
@@ -459,6 +509,51 @@ func TestCursorRepositionBottom(t *testing.T) {
 			// otherwise it's already at the bottom after MoveToScroll
 			// since the cursor starts at the top after initializing it
 			c.MoveLastLine()
+			c.MoveToScroll(test.setCursorAtScroll)
+			handled := c.RepositionBottom()
+			require.Equal(t, test.expectedHandled, handled)
+
+			cursor := c.CursorAtScroll()
+			assert.Equal(t, test.setCursorAtScroll, cursor)
+			assert.Equal(t, test.expectedWindowCoordinates, c.Coordinates())
+			if test.expectedHandled {
+				assert.NotZero(t, sub.seek)
+			}
+		})
+	}
+}
+
+func TestCursorRepositionBottomInverted(t *testing.T) {
+	suite := []struct {
+		width, height             int
+		setCursorAtScroll         term.Coordinates
+		expectedHandled           bool
+		expectedWindowCoordinates term.Coordinates
+	}{
+		{10, 10, term.Coordinates{Y: 0}, false, term.Coordinates{Y: 0}},
+		{10, 10, term.Coordinates{Y: 2}, true, term.Coordinates{Y: 2}},
+		{10, 10, term.Coordinates{Y: 5}, true, term.Coordinates{X: 3, Y: 5}},
+		{10, 10, term.Coordinates{Y: 6}, true, term.Coordinates{Y: 6}},
+		{10, 10, term.Coordinates{Y: 9}, true, term.Coordinates{X: 3, Y: 9}},
+		{10, 10, term.Coordinates{Y: 10}, true, term.Coordinates{Y: 9}},
+		{10, 10, term.Coordinates{Y: 11}, true, term.Coordinates{X: 3, Y: 9}},
+		{10, 10, term.Coordinates{Y: 20}, true, term.Coordinates{X: 3, Y: 9}},
+		{10, 10, term.Coordinates{Y: 22}, true, term.Coordinates{X: 3, Y: 9}},
+		{10, 10, term.Coordinates{Y: 27}, true, term.Coordinates{X: 3, Y: 9}},
+		{10, 10, term.Coordinates{Y: 28}, true, term.Coordinates{X: 3, Y: 9}},
+		{10, 10, term.Coordinates{Y: 30}, true, term.Coordinates{X: 3, Y: 9}},
+		{10, 10, term.Coordinates{Y: 31}, false, term.Coordinates{Y: 9}},
+		{100, 100, term.Coordinates{Y: 0}, false, term.Coordinates{Y: 68}},
+		{100, 100, term.Coordinates{Y: 31}, false, term.Coordinates{Y: 99}},
+	}
+
+	for i, test := range suite {
+		t.Run(fmt.Sprintf("test case %d", i), func(t *testing.T) {
+			c := setupCursor(t, test.width, test.height, false)
+			c.scroll.InvertOffset = true
+			sub := &testScrollSubscriber{}
+			c.scroll.Subscribe(sub)
+
 			c.MoveToScroll(test.setCursorAtScroll)
 			handled := c.RepositionBottom()
 			require.Equal(t, test.expectedHandled, handled)

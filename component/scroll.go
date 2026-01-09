@@ -172,11 +172,17 @@ func (s *Scroll) RepositionLineBottom(y int) (seek int) {
 
 // CanSeekUp returns true if SeekUp would seek one row up.
 func (s *Scroll) CanSeekUp() bool {
+	if s.InvertOffset {
+		return s.offset.Y < s.getMaxYOffset()
+	}
 	return s.offset.Y > 0
 }
 
 // CanSeekDown returns true if SeekDown would seek one row down.
 func (s *Scroll) CanSeekDown() bool {
+	if s.InvertOffset {
+		return s.offset.Y > 0
+	}
 	return s.offset.Y < s.getMaxYOffset()
 }
 
@@ -205,7 +211,11 @@ func (s *Scroll) SeekUp() (ok bool) {
 	if ok = s.CanSeekUp(); ok {
 		dispatch := s.dispatchSubscribers()
 		defer dispatch()
-		s.offset.Y--
+		if !s.InvertOffset {
+			s.offset.Y--
+		} else {
+			s.offset.Y++
+		}
 	}
 	return ok
 }
@@ -215,7 +225,11 @@ func (s *Scroll) SeekDown() (ok bool) {
 	if ok = s.CanSeekDown(); ok {
 		dispatch := s.dispatchSubscribers()
 		defer dispatch()
-		s.offset.Y++
+		if !s.InvertOffset {
+			s.offset.Y++
+		} else {
+			s.offset.Y--
+		}
 	}
 	return
 }
@@ -240,12 +254,8 @@ func (s *Scroll) SeekRight() (ok bool) {
 	return
 }
 
-// SeekVertical shifts the contents of this scroll such that
+// seekVertical shifts the contents of this scroll such that
 // the vertical offset is y.
-func (s *Scroll) SeekVertical(y int) (ok bool) {
-	return s.seekVertical(y)
-}
-
 func (s *Scroll) seekVertical(y int) (ok bool) {
 	if y < 0 {
 		y = 0
@@ -260,12 +270,8 @@ func (s *Scroll) seekVertical(y int) (ok bool) {
 	return
 }
 
-// SeekHorizontal shifts the contents of this scroll such that
+// seekHorizontal shifts the contents of this scroll such that
 // the horizontal offset is x.
-func (s *Scroll) SeekHorizontal(x int) (ok bool) {
-	return s.seekHorizontal(x)
-}
-
 func (s *Scroll) seekHorizontal(x int) (ok bool) {
 	if x < 0 {
 		x = 0
@@ -282,32 +288,44 @@ func (s *Scroll) seekHorizontal(x int) (ok bool) {
 
 // SeekEndLine shifts the contents of this scroll to the maximum x offset.
 func (s *Scroll) SeekEndLine() bool {
-	return s.SeekHorizontal(s.getMaxXOffset())
+	return s.seekHorizontal(s.getMaxXOffset())
 }
 
 // SeekStartLine shifts the contents of this scroll to the minimum x offset.
 func (s *Scroll) SeekStartLine() bool {
-	return s.SeekHorizontal(0)
+	return s.seekHorizontal(0)
 }
 
 // SeekEndFile shifts the contents of this scroll to the maximum y offset.
 func (s *Scroll) SeekEndFile() bool {
-	return s.SeekVertical(s.getMaxYOffset())
+	if s.InvertOffset {
+		return s.seekVertical(0)
+	}
+	return s.seekVertical(s.getMaxYOffset())
 }
 
 // SeekStartFile shifts the contents of this scroll to the minimum y offset.
 func (s *Scroll) SeekStartFile() bool {
-	return s.SeekVertical(0)
+	if s.InvertOffset {
+		return s.seekVertical(s.getMaxYOffset())
+	}
+	return s.seekVertical(0)
 }
 
 // SeekDownPage seeks down a full page worth of lines.
 func (s *Scroll) SeekDownPage() bool {
-	return s.SeekVertical(min(s.offset.Y+s.height, s.getMaxYOffset()))
+	if s.InvertOffset {
+		return s.seekVertical(max(s.offset.Y-s.height, 0))
+	}
+	return s.seekVertical(min(s.offset.Y+s.height, s.getMaxYOffset()))
 }
 
 // SeekUpPage seeks up a full page worth of lines.
 func (s *Scroll) SeekUpPage() bool {
-	return s.SeekVertical(max(s.offset.Y-s.height, 0))
+	if s.InvertOffset {
+		return s.seekVertical(min(s.offset.Y+s.height, s.getMaxYOffset()))
+	}
+	return s.seekVertical(max(s.offset.Y-s.height, 0))
 }
 
 func (s *Scroll) seekTo(pos term.Coordinates, xpadding, ypadding int) bool {
@@ -339,23 +357,6 @@ func (s *Scroll) seekTo(pos term.Coordinates, xpadding, ypadding int) bool {
 
 	ok := yok || xok
 	return ok
-}
-
-// SeekTo shifts the contents of this scroll to make sure that pos is in
-// range for the next call to Draw. If position is beyond
-// the last seekable content, the max seek position is used as the
-// new seek position.
-func (s *Scroll) SeekTo(pos term.Coordinates) bool {
-	if pos.X < 0 || pos.Y < 0 {
-		panic("invalid coordinates: negative")
-	}
-	if max := s.getMaxXOffset(); pos.X > max {
-		pos.X = max
-	}
-	if max := s.getMaxYOffset(); pos.Y > max {
-		pos.Y = max
-	}
-	return s.seekTo(pos, 1, 1)
 }
 
 // SetOffset force-sets the underlying offset of this scroll.
