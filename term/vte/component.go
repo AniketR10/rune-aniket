@@ -33,7 +33,6 @@ import (
 	"syscall"
 	"time"
 
-	"golang.org/x/sys/unix"
 	"mvdan.cc/sh/v3/shell"
 
 	log "github.com/sirupsen/logrus"
@@ -809,56 +808,24 @@ func (t *Component) run(updateChan chan struct{}) error {
 		t.mu.Unlock()
 	}()
 
-	type readData struct {
-		buf []byte
-		n   int
-	}
-	var pool sync.Pool
-	pool.New = func() any {
-		ret := new(readData)
-		ret.buf = make([]byte, 16*1024)
-		return ret
-	}
-	ch := make(chan *readData, 1024*1024)
-	defer close(ch)
-	go func() {
-		for {
-			data, ok := <-ch
-			if !ok {
-				return
-			}
-			for i := range data.n {
-				t.parser.Advance(data.buf[i])
-			}
-			pool.Put(data)
-			select {
-			case <-t.ctx.Done():
-				return
-			case updateChan <- struct{}{}:
-			default:
-			}
-		}
-	}()
-	var err error
+	buf := make([]byte, os.Getpagesize())
 	for {
-		data := pool.Get().(*readData)
-		data.n, err = t.pty.Master.Read(data.buf[:])
+		n, err := t.pty.Master.Read(buf[:])
 		if err != nil {
-			if isTemp(err) && data.n <= 0 {
-				continue
-			}
 			return err
 		}
+		for i := 0; i < n; i++ {
+			t.parser.Advance(buf[i])
+		}
 		select {
-		case ch <- data:
+		// Close was called, just return error
 		case <-t.ctx.Done():
 			return t.ctx.Err()
+		// no interrupts in the last maxInterruptPeriod
+		case updateChan <- struct{}{}:
+		// an interrupt was requested in the last maxInterruptPeriod
+		// don't request any further interrupts for now
+		default:
 		}
 	}
-}
-
-func isTemp(err error) bool {
-	return errors.Is(err, unix.EINTR) ||
-		errors.Is(err, unix.EAGAIN) ||
-		errors.Is(err, unix.EWOULDBLOCK)
 }
