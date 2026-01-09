@@ -796,12 +796,12 @@ func TestVidd(t *testing.T) {
 			},
 			content:          "0000\n1111\n2222\n3333\n4444\n5555\n",
 			events:           "3dd",
-			expectContent:    "0000\n1111\n2222\n3333\n4444\n5555\n",
-			expectCoords:     term.Coordinates{Y: 6},
-			expectCoordsWrap: term.Coordinates{Y: 8},
+			expectContent:    "0000\n1111\n2222\n3333\n4444\n5555",
+			expectCoords:     term.Coordinates{Y: 5, X: 3},
+			expectCoordsWrap: term.Coordinates{Y: 7, X: 1},
 		},
 		{
-			name: "4dd from second to last line",
+			name: "3dd from second to last line",
 			moveCursorFn: func(vi *viHandlerImpl) {
 				vi.cursor.MoveLastLine()
 				vi.cursor.MoveLineUp()
@@ -855,10 +855,7 @@ func TestVidd(t *testing.T) {
 				} else {
 					assert.Equal(t, tcase.expectCoords, vi.cursor.Coordinates())
 				}
-				vi.cursor.MoveFirstLine()
-				vi.cursor.Select()
-				vi.cursor.MoveLastLine()
-				assert.Equal(t, tcase.expectContent, vi.cursor.Selection())
+				assert.Equal(t, tcase.expectContent, vi.less.Buffer().String())
 			})
 		}
 	}
