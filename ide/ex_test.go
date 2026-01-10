@@ -2586,6 +2586,23 @@ func TestSwitchToTab(t *testing.T) {
 │bbbbbbbbbbbbbbbbbbbbbbbbbbbb│
 │bbbbbbbbbbbbbbbbbbbbbbbbbbbb│
 └────────────────────────────┘`},
+		// command prompt shouldn't complete with history
+		{":tabcloseall>:tabfocus ",
+			`┌──────────────┌─────────────┐
+│              │ the first   │
+├──────────────│ tab is 1    │
+│              └─────────────┘
+│                            │
+│                            │
+│                            │
+┌────────────────────────────┐
+│tabfocus ▐                  │
+│                            │
+│                            │
+└────────────────────────────┘
+│                            │
+│                            │
+└────────────────────────────┘`},
 	}
 
 	opts := []text.Option{

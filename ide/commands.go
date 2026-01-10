@@ -101,8 +101,8 @@ var (
 			handler: (*ex).tabfocus,
 			completer: func(e *ex, ctx context.Context, cmd textapi.Command,
 			) (iterator.Iterator[string], string, error) {
+				var tabNames []string
 				if len(cmd.Args) <= 1 {
-					var tabNames []string
 					for i, tab := range e.comp.Browser().Tabs() {
 						pretty := strconv.Itoa(i + 1)
 						name, _, ok := e.comp.Browser().TabName(tab.URI())
@@ -111,9 +111,13 @@ var (
 						}
 						tabNames = append(tabNames, pretty)
 					}
-					return iterator.FromSlice(tabNames), "", nil
 				}
-				return iterator.FromSlice[string](nil), "", nil
+				if len(tabNames) == 0 {
+					// return an iterator with an empty slice
+					// so command prompt won't use history as auto-complete.
+					return iterator.FromSlice([]string{""}), "", nil
+				}
+				return iterator.FromSlice(tabNames), "", nil
 			},
 		},
 		"tabcloseall": {
