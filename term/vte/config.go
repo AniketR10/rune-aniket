@@ -69,6 +69,10 @@ type Config struct {
 	SelectionAttributes      term.Attributes
 	NeedsAttentionAttributes term.Attributes
 	MaxLines                 int
+	// Bell overrides the default bell trigger. This is useful for non-standard
+	// shells like the fish shell, which don't trigger the bell with the standard
+	// escape sequence.
+	Bell []byte
 
 	// MinWidth helps optimize growing and shrinking rows upon resize.
 	MinWidth int

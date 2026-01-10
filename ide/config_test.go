@@ -253,6 +253,7 @@ workspace:
 terminal:
     shell: sh
     max_lines: 999
+    bell_trigger: "\x07"
     modal: true
     dynamic_tab_name: true
     initial_reservoir: 0
@@ -592,6 +593,7 @@ func TestConfigSetting(t *testing.T) {
 		Modal:                    true,
 		DynamicTabName:           true,
 		MaxLines:                 999,
+		Bell:                     []byte{0x07},
 		MinWidth:                 defaultMinWidth,
 	}
 	assert.Equal(t, expectedEmulatorConfig, vteConfig)

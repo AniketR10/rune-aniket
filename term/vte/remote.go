@@ -179,6 +179,11 @@ func (p *ptyWriter) triggerBell() error {
 			} else {
 				data = []byte{0x01, 0x1b, '[', 'D'}
 			}
+			if len(p.comp.cfg.Bell) != 0 {
+				// trigger clients still expect cursor to move left
+				// with the bell trigger
+				data = append(p.comp.cfg.Bell, data...)
+			}
 			scheduled := p.scheduleCallback(func() {
 				_ = p.comp.WriteToPty(data)
 			})

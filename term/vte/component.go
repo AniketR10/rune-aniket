@@ -138,6 +138,13 @@ func (t *Component) Init(
 	return err
 }
 
+// Shell returns the shell running the vte program, if currently
+// on the primary buffer, or false if running the program on the
+// secondary buffer.
+func (t *Component) Shell() (string, bool) {
+	return t.shell, !t.parserHandler.useAlt
+}
+
 func (t *Component) triggerBell() {
 	err := t.remote.triggerBell()
 	if err != nil {

@@ -1828,6 +1828,22 @@ func (c ideConfig) terminalMaxLines() (ret int) {
 	return ret
 }
 
+func (c ideConfig) terminalBellTrigger() (ret []byte) {
+	cfg, ok := c.terminal()
+	if !ok {
+		return
+	}
+	retStr, err := cfg.GetString("bell_trigger")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["terminal.bell_trigger"] = err
+		}
+	} else {
+		ret = []byte(retStr)
+	}
+	return
+}
+
 func (c ideConfig) initialTerminalCapacity() (ret int) {
 	ret = 1
 	cfg, ok := c.terminal()
@@ -1892,6 +1908,7 @@ func (c ideConfig) terminalConfig() vte.Config {
 	ret.NeedsAttentionAttributes = c.terminalNeedsAttentionAttr()
 	ret.DynamicTabName = c.terminalDynamicTabName()
 	ret.MaxLines = c.terminalMaxLines()
+	ret.Bell = c.terminalBellTrigger()
 	ret.Modal = c.terminalModal()
 	ret.Debug = c.terminalDebug()
 	ret.Shell = c.terminalShell()
