@@ -1195,13 +1195,7 @@ func TestNoBar(t *testing.T) {
 }
 
 func TestSwitchToWorkspaceComplete(t *testing.T) {
-	dir, err := os.MkdirTemp("", "")
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		os.RemoveAll(dir)
-	})
-
-	m := newTestWorkspaceManagerHandlerWithDir(t, defaultConfigWithWrap(false), nil, dir,
+	m := newTestWorkspaceManagerHandlerWithDir(t, defaultConfigWithWrap(false), nil, "/tmp",
 		nopShutdownShaderConfig())
 
 	cases := []handlertest.SequenceTestCase{
@@ -1216,7 +1210,7 @@ func TestSwitchToWorkspaceComplete(t *testing.T) {
 │                                      │
 ┌──────────────────────────────────────┐
 │workspacefocus ▐                      │
-│1                                     │
+│1 memory:///tmp                       │
 │2                                     │
 │3                                     │
 │4                                     │

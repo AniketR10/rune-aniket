@@ -1099,11 +1099,20 @@ func (h *workspaceManagerHandler) completeCommand(
 ) (iterator.Iterator[string], string, error) {
 	switch cmd.Name {
 	case cmdSwitchToWorkspace:
+		var tabNames []string
 		if len(cmd.Args) <= 1 {
-			nums := [10]string{"1", "2", "3", "4", "5", "6", "7", "8", "9", "10"}
-			return iterator.FromSlice(nums[:]), "", nil
+			for i, h := range h.workspaces {
+				if h == nil {
+					tabNames = append(tabNames, strconv.Itoa(i+1))
+					continue
+				}
+				pretty := strconv.Itoa(i + 1)
+				name := h.uri.String()
+				pretty += " " + name
+				tabNames = append(tabNames, pretty)
+			}
 		}
-		return iterator.FromSlice[string](nil), "", nil
+		return iterator.FromSlice(tabNames), "", nil
 	default:
 		return iterator.FromSlice[string](nil), "", nil
 	}
