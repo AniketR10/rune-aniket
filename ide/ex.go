@@ -66,7 +66,7 @@ const (
 var (
 	errInvalidSetCursor    = errors.New("cannot set cursor on this buffer")
 	errEventStreamNotReady = errors.New("event stream not ready to publish")
-	errInvalidTab          = errors.New("expected exactly one argument with the tab position")
+	errInvalidTab          = errors.New("expected exactly one argument with the position")
 )
 
 type pluginHandler interface {
@@ -754,7 +754,15 @@ func (e *ex) moveTab(args ...string) error {
 	case "left":
 		err = e.comp.Browser().MoveTabLeft(e.invokeWindow())
 	default:
-		err = fmt.Errorf("invalid argument %q", args[0])
+		var idx int
+		idx, err = strconv.Atoi(args[0])
+		if err != nil {
+			return errInvalidTab
+		}
+		if idx == 0 {
+			return errors.New("the first tab is 1")
+		}
+		err = e.comp.Browser().MoveTabTo(e.invokeWindow(), idx-1)
 	}
 	return err
 }
