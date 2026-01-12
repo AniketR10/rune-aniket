@@ -45,8 +45,14 @@ func SubscribeLocationCommands(
 		registry: registry,
 		Handler:  ed,
 	}
+	var retErr error
 	for _, cmd := range locationCommands {
-		_ = registry.SubscribeCommandForFile(file, cmd, ret)
+		if err := registry.SubscribeCommandForFile(file, cmd, ret); err != nil {
+			retErr = multierror.Append(retErr, err)
+		}
+	}
+	if retErr != nil {
+		return nil, retErr
 	}
 	return ret, nil
 }
@@ -82,6 +88,7 @@ type locationCommandHandler struct {
 }
 
 func (u locationCommandHandler) Close() (ret error) {
+	ret = u.Handler.Close()
 	for _, cmd := range locationCommands {
 		err := u.registry.UnsubscribeCommandForFile(u.file, cmd.Name)
 		if err != nil {

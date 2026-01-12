@@ -49,8 +49,14 @@ func SubscribeGitCommands(
 		Handler:  ed,
 		webLink:  newCopyRemoteURL(svc, clip, noti),
 	}
+	var retErr error
 	for _, cmd := range gitCommands {
-		_ = registry.SubscribeCommandForFile(file, cmd, ret)
+		if err := registry.SubscribeCommandForFile(file, cmd, ret); err != nil {
+			retErr = multierror.Append(retErr, err)
+		}
+	}
+	if retErr != nil {
+		return nil, retErr
 	}
 	return ret, nil
 }
@@ -99,6 +105,7 @@ func (u gitCommandHandler) Complete(ctx context.Context, cmd textapi.Command) (
 }
 
 func (g gitCommandHandler) Close() (ret error) {
+	ret = g.Handler.Close()
 	for _, cmd := range gitCommands {
 		err := g.registry.UnsubscribeCommandForFile(g.file, cmd.Name)
 		if err != nil {

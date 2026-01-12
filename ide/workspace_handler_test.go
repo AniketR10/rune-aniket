@@ -59,6 +59,70 @@ import (
 	"unstable.build/go-tui/workspace"
 )
 
+func TestFileCommandRegistryIntegration(t *testing.T) {
+	dir, err := os.MkdirTemp("", "")
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		os.RemoveAll(dir)
+	})
+
+	uri1, err := workspaceapi.ParseURI("memory://" + dir)
+	require.NoError(t, err)
+
+	m := newTestWorkspaceManagerHandlerWithDir(t, defaultConfigWithWrap(false), nil, dir,
+		nopShutdownShaderConfig())
+	require.NoError(t, m.addOrCreateWorkspace(uri1))
+
+	h := newSafeHandler(m)
+	// locationjump is registered on a per-file basis, so the following tests
+	// file-level subscriptions across a file's lifecycle.
+	cases := []handlertest.SequenceTestCase{
+		{":edit dakar.md>igentleman>driver>gentleman<:write>/gentleman>:locationjump next search>",
+			`┌────────────────────────────┐
+│o dakar.md                  │
+├────────────────────────────┤
+│gentleman                   │
+│driver                      │
+│▐entleman                   │
+│       searching 'gentleman'│
+│                      NORMAL│
+└────────────────────────────┘`},
+		{":locationjump next search>",
+			`┌────────────────────────────┐
+│o dakar.md                  │
+├────────────────────────────┤
+│▐entleman                   │
+│driver                      │
+│gentleman                   │
+│       searching 'gentleman'│
+│                      NORMAL│
+└────────────────────────────┘`},
+		{":tabclose>:edit dakar.md>/gentleman>",
+			`┌────────────────────────────┐
+│o dakar.md                  │
+├────────────────────────────┤
+│gentleman                   │
+│driver                      │
+│▐entleman                   │
+│       searching 'gentleman'│
+│                      NORMAL│
+└────────────────────────────┘`},
+		{":locationjump next search>",
+			`┌────────────────────────────┐
+│o dakar.md                  │
+├────────────────────────────┤
+│▐entleman                   │
+│driver                      │
+│gentleman                   │
+│       searching 'gentleman'│
+│                      NORMAL│
+└────────────────────────────┘`},
+	}
+	handlertest.TestHandlerSequence(t, h, 30, 9, cases)
+
+	require.NoError(t, m.Close())
+}
+
 func TestWorkspaceConfig(t *testing.T) {
 	mockConfig := map[string]interface{}{
 		"1": "2",
