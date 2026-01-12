@@ -65,10 +65,11 @@ import (
 
 const (
 	cmdSwitchToWorkspace = "workspacefocus"
+	cmdMoveWorkspace     = "workspacemove"
 	cmdCloseWorkspace    = "workspaceclose"
 	cmdReloadWorkspace   = "workspacereload"
 	cmdAddWorkspace      = "workspacenew"
-	workspaceSlots       = 10
+	workspaceSlots       = 9
 )
 
 var (
@@ -449,7 +450,7 @@ func (h *workspaceManagerHandler) switchToWorkspace(i int) bool {
 	}
 	h.focus = i
 	h.focusProxy.Target = h.focusHandler()
-	// resize so disappearing bar feature can be implemented
+	// resize for bottom workspace bar to disappear
 	h.Resize(h.width, h.height)
 	return true
 }
@@ -939,6 +940,47 @@ func (h *workspaceManagerHandler) commandSwitchToWorkspace(args ...string) error
 	return nil
 }
 
+func (h *workspaceManagerHandler) moveWorkspace(args ...string) error {
+	if len(args) == 0 {
+		return errors.New("command expects at least one argument")
+	}
+
+	var err error
+	var next int
+	curr := h.focus
+	switch args[0] {
+	case "right":
+		if curr+1 == workspaceSlots {
+			return errors.New("workspace is already at the last slot")
+		}
+		next = curr + 1
+	case "left":
+		if curr == 0 {
+			return errors.New("workspace is already at the first slot")
+		}
+		next = curr - 1
+	default:
+		next, err = strconv.Atoi(args[0])
+		if err != nil {
+			return errInvalidTab
+		}
+		// next is 1-indexed
+		if next == 0 {
+			return errors.New("the first worskpace slot is 1")
+		}
+		if next > len(h.workspaces) {
+			return fmt.Errorf("the last worskpace slot is %d", len(h.workspaces))
+		}
+		next--
+	}
+	temp := h.workspaces[curr]
+	h.workspaces[curr] = h.workspaces[next]
+	h.workspaces[next] = temp
+	h.focus = next
+	h.Resize(h.width, h.height)
+	return err
+}
+
 func (h *workspaceManagerHandler) Close() (ret error) {
 	for _, hm := range h.workspaces {
 		if hm == nil {
@@ -1067,6 +1109,14 @@ func (h *workspaceManagerHandler) subscribeActiveWorkspaceCommands(ex *ex) (ret 
 				Synopsis: "(1|2|3|4|5|6|7|8|9)",
 			},
 		},
+		cmdMoveWorkspace: {
+			man: textapi.CommandManual{
+				Summary: "Moves the workspace tab in focus in the given direction " +
+					"in the tabs list, or to the absolute position if a number is passed.",
+				Synopsis: "(right|left|1|2|3|4|5|6|7|8|9)",
+			},
+			handler: (*workspaceManagerHandler).moveWorkspace,
+		},
 	}
 	return h.subscribeInternalCommands(ex, workspaceActiveCommands)
 }
@@ -1098,6 +1148,13 @@ func (h *workspaceManagerHandler) completeCommand(
 	ctx context.Context, cmd textapi.Command,
 ) (iterator.Iterator[string], string, error) {
 	switch cmd.Name {
+	case cmdMoveWorkspace:
+		if len(cmd.Args) <= 1 {
+			options := []string{"left", "right", "1", "2",
+				"3", "4", "5", "6", "7", "8", "9"}
+			return iterator.FromSlice(options), "", nil
+		}
+		return iterator.FromSlice[string](nil), "", nil
 	case cmdSwitchToWorkspace:
 		var tabNames []string
 		if len(cmd.Args) <= 1 {

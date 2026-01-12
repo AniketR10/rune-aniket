@@ -1227,6 +1227,83 @@ func TestSwitchToWorkspaceComplete(t *testing.T) {
 	require.NoError(t, m.Close())
 }
 
+func TestMoveWorkspace(t *testing.T) {
+	m := newTestWorkspaceManagerHandlerWithDir(t, defaultConfigWithWrap(false), nil, "/tmp",
+		nopShutdownShaderConfig())
+
+	cases := []handlertest.SequenceTestCase{
+		{":womo ",
+			`┌──────────────────────────────────────┐
+│                                      │
+├──────────────────────────────────────┤
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+┌──────────────────────────────────────┐
+│workspacemove ▐                       │
+│left                                  │
+│right                                 │
+│1                                     │
+│2                                     │
+│3                                     │
+│4                                     │
+│5                                     │
+│6                                     │
+│7                                     │
+└──────────────────────────────────────┘`},
+	}
+	h := newSafeHandler(m)
+	handlertest.TestHandlerSequence(t, h, 40, 20, cases)
+
+	cases = []handlertest.SequenceTestCase{
+		{"right>",
+			`┌──────────────────────────────────────┐
+│                                      │
+├──────────────────────────────────────┤
+│                                      │
+│          workspaceWallpaper          │
+│                                      │
+└──────────────────────────────────────┘`},
+		{":wonew memory\\:///tmp2>",
+			`┌──────────────────────────────────────┐
+│                                      │
+├──────────────────────────────────────┤
+│          workspaceWallpaper          │
+├──────────────────────────────────────┤
+│2 2  3 3                              │
+└──────────────────────────────────────┘`},
+		{":womo 1>",
+			`┌──────────────────────────────────────┐
+│                                      │
+├──────────────────────────────────────┤
+│          workspaceWallpaper          │
+├──────────────────────────────────────┤
+│1 1  2 2                              │
+└──────────────────────────────────────┘`},
+		{":wofo 1>:womo left>",
+			`┌────────────────────────┌─────────────┐
+│                        │ workspace   │
+├────────────────────────│ is already  │
+│          workspaceWallp│ at the      │
+├────────────────────────│ first slot  │
+│1 1  2 2                └─────────────┘
+└──────────────────────────────────────┘`},
+		{":noticloseall>:womo 9>:womo right>",
+			`┌────────────────────────┌─────────────┐
+│                        │ workspace   │
+├────────────────────────│ is already  │
+│          workspaceWallp│ at the      │
+├────────────────────────│ last slot   │
+│2 2  9 9                └─────────────┘
+└──────────────────────────────────────┘`},
+	}
+	handlertest.TestHandlerSequence(t, h, 40, 7, cases)
+
+	require.NoError(t, m.Close())
+}
+
 func TestExternalCommands(t *testing.T) {
 	// FIXME: unblock CI, working on it here:
 	// https://git.unstable.build/unstablebuild/go-tui/pulls/107
