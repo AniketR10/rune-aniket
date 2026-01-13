@@ -491,4 +491,36 @@ func TestCursorDrawLocationListsIntegration(t *testing.T) {
 		DrawLocations(c.SortedLocations(), c.scroll, w)
 		assert.Equal(t, expected, w.RawCells())
 	})
+
+	t.Run("shows cue for messages hidden inside hidden lines", func(t *testing.T) {
+		c := setupCursorContent(t, 1, 5, "\na\nb\nc\n", false)
+
+		require.True(t, c.scroll.MarkHidden(1, 3))
+
+		locations := []textapi.Location{
+			{
+				From:    term.Coordinates{Y: 2},
+				To:      term.Coordinates{Y: 2, X: 1},
+				Attr:    term.Attributes{Bg: tcell.ColorGreen},
+				Message: "B HAS A MESSAGE FOR YOU",
+			},
+		}
+
+		abcList := LocationSlice(locations)
+
+		assert.Nil(t, c.SetLocationList(textapi.LocationPriorityInfo, locID, abcList))
+
+		expected := [][]term.Cell{
+			{{}, {}},
+			{{Attributes: term.Attributes{Bg: tcell.ColorGreen}},
+				{Attributes: term.Attributes{Bg: 0}}},
+			{{}, {}},
+			{{}, {}},
+			{{}, {}},
+		}
+
+		w := cell.NewBufferWriter(context.Background(), 2, 5)
+		DrawLocations(c.SortedLocations(), c.scroll, w)
+		assert.Equal(t, expected, w.RawCells())
+	})
 }

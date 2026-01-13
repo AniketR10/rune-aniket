@@ -28,6 +28,7 @@ import (
 	"sort"
 
 	"unstable.build/go-tui/api/textapi"
+	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/term"
 )
@@ -186,6 +187,9 @@ func DrawLocations(locations []textapi.Location, scroll *component.Scroll, w ter
 					break
 				}
 				if !ok || posAtScreen.X < 0 {
+					if !ok && loc.Message != "" {
+						drawHiddenMessage(w, buffer, scroll, posAtScreen, loc)
+					}
 					continue
 				}
 				w.UnionAttributes(posAtScreen, loc.Attr)
@@ -200,11 +204,26 @@ func DrawLocations(locations []textapi.Location, scroll *component.Scroll, w ter
 				break
 			}
 			if !ok || posAtScreen.X < 0 {
+				if !ok && loc.Message != "" {
+					drawHiddenMessage(w, buffer, scroll, posAtScreen, loc)
+				}
 				continue
 			}
 			w.UnionAttributes(posAtScreen, loc.Attr)
 		}
 	}
+}
+
+// show cue for messages that are hidden inside hidden lines;
+// this is a best effort and the last location scanned "wins".
+func drawHiddenMessage(
+	w term.Writer, buffer *cell.Buffer, scroll *component.Scroll,
+	posAtScreen term.Coordinates, loc textapi.Location,
+) {
+	hiddenLinesStartBlock := scroll.WindowToScrollCoordinates(posAtScreen)
+	cols := buffer.Columns(hiddenLinesStartBlock.Y)
+	posAtScreen.X = max(0, cols-1)
+	w.UnionAttributes(posAtScreen, loc.Attr)
 }
 
 // LocationSet is a static view over a textapi.LocationList.
