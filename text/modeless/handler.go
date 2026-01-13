@@ -59,6 +59,7 @@ type editorHandler struct {
 	clipboard        clipboard.Register
 	pendingSetCursor *term.Coordinates
 	lastIterateWord  term.Coordinates
+	setLocations     bool
 	metaK            bool
 }
 
@@ -89,7 +90,7 @@ func (h *editorHandler) Init(
 		ResAttr:            h.cfg.resAttr,
 		Attributes:         h.cfg.attr,
 	})
-	h.less.Scroll().SetTabspaces(h.cfg.tabspaces) 
+	h.less.Scroll().SetTabspaces(h.cfg.tabspaces)
 	h.cursor.Init(h.less.Scroll(), h.cfg.scheduleNextTick)
 	h.mouse = text.NewMouse(text.CursorMouseDelegate(&h.cursor))
 	h.clipboard = h.cfg.clipboard
@@ -110,13 +111,33 @@ func (h *editorHandler) Resize(width, height int) {
 	}
 }
 
+func (h *editorHandler) setActiveLocationListMessage(locs []textapi.Location) {
+	// NOTE: if there are multiple location lists with a message
+	// in current cursor position, then there's no guarantee of which one
+	// is going to be rendered.
+	for _, loc := range locs {
+		if loc.Message != "" {
+			h.less.SetMessage("%s", loc.Message)
+			return
+		}
+	}
+	h.less.SetMessage("")
+}
+
+func (h *editorHandler) drawLocationMessage() {
+	locs, ok := h.cursor.LocationsAtCursor()
+	if ok {
+		h.setActiveLocationListMessage(locs)
+		h.setLocations = true
+	} else if h.setLocations {
+		h.less.SetMessage("")
+		h.setLocations = false
+	}
+}
+
 // Draw satisfies tui.Component
 func (h *editorHandler) Draw(w term.Writer) {
-	locs, _ := h.cursor.LocationsAtCursor()
-	for _, loc := range locs {
-		h.less.SetMessage("%s", loc.Message)
-		break
-	}
+	h.drawLocationMessage()
 	h.less.Draw(w)
 	text.DrawLocations(h.cursor.SortedLocations(), h.less.Scroll(), w)
 }

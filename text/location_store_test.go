@@ -247,11 +247,11 @@ func TestLocationStoreCursorIntegrationSetLocationListMessages(t *testing.T) {
 	}
 
 	assertMessages := func(t *testing.T, c *Cursor) {
-		for i := 0; i < 3; i++ {
-			locsByID, ok := c.LocationsAtCursor()
+		for i := range 3 {
+			locs, ok := c.LocationsAtCursor()
 			require.True(t, ok)
-			require.Len(t, locsByID, 1)
-			assert.Equal(t, locsByID[locID].Message, strconv.Itoa(i+1))
+			require.Len(t, locs, 1)
+			assert.Equal(t, locs[0].Message, strconv.Itoa(i+1))
 			c.MoveDown()
 		}
 	}

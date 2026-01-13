@@ -35,11 +35,12 @@ import (
 // LocationStore manages LocationLists and priorities and provides
 // convenience methods to set, retrieve and sort locations.
 type LocationStore struct {
-	locs          map[string]LocationList // used by cursor moves
-	drawLocations map[string]*LocationSet // used to draw
-	locsSliceTemp []*LocationSet
-	locsSlice     []textapi.Location
-	messages      map[term.Coordinates][]message
+	locs             map[string]LocationList // used by cursor moves
+	drawLocations    map[string]*LocationSet // used to draw
+	locsSliceTemp    []*LocationSet
+	locsSlice        []textapi.Location
+	messages         map[term.Coordinates][]message
+	locsAtCoordsTemp []textapi.Location
 }
 
 // NewLocationStore allocates storage for a new LocationStore and initializes it.
@@ -130,9 +131,10 @@ func (c *LocationStore) SetLocationList(
 }
 
 // LocationsAtCoordinates returns the set of locations by location list ID set by SetLocationList,
-// at the given coordinates, if there's any.
+// at the given coordinates, if there's any. The returned slice is only valid until
+// this method is called again.
 func (c *LocationStore) LocationsAtCoordinates(pos term.Coordinates) (
-	map[string]textapi.Location, bool,
+	[]textapi.Location, bool,
 ) {
 	msgs, ok := c.messages[pos]
 	if !ok {
@@ -141,11 +143,11 @@ func (c *LocationStore) LocationsAtCoordinates(pos term.Coordinates) (
 	if len(msgs) == 0 {
 		return nil, false
 	}
-	ret := make(map[string]textapi.Location, len(msgs))
+	c.locsAtCoordsTemp = c.locsAtCoordsTemp[:0]
 	for _, msg := range msgs {
-		ret[msg.listID] = msg.location
+		c.locsAtCoordsTemp = append(c.locsAtCoordsTemp, msg.location)
 	}
-	return ret, true
+	return c.locsAtCoordsTemp, true
 }
 
 // DrawLocations draws the given locations using the given writer.
@@ -157,7 +159,7 @@ func DrawLocations(locations []textapi.Location, scroll *component.Scroll, w ter
 
 	offset := scroll.Offset()
 	if scroll.InvertOffset {
-		offset.Y = max(0, scroll.MaxOffset().Y - offset.Y)
+		offset.Y = max(0, scroll.MaxOffset().Y-offset.Y)
 	}
 	height := scroll.SizeHeight()
 	buffer := scroll.Buffer()

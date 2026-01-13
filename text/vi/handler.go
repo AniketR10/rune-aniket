@@ -176,29 +176,33 @@ func (vi *viHandlerImpl) Resize(width, height int) {
 	}
 }
 
-func (vi *viHandlerImpl) setActiveLocationListMessage(locs map[string]textapi.Location) {
+func (vi *viHandlerImpl) setActiveLocationListMessage(locs []textapi.Location) {
 	// NOTE: if therea re multiple location lists with a message
 	// in current cursor position, then there's no guarantee of which one
 	// is going to be rendered.
 	for _, loc := range locs {
 		if loc.Message != "" {
 			vi.less.SetMessage("%s", loc.Message)
+			return
 		}
-		return
 	}
 	vi.less.SetMessage("")
 }
 
-// Draw satisfies tui.Component
-func (vi *viHandlerImpl) Draw(w term.Writer) {
+func (vi *viHandlerImpl) drawLocationMessage() {
 	locs, ok := vi.cursor.LocationsAtCursor()
 	if ok {
 		vi.setActiveLocationListMessage(locs)
 		vi.setLocations = true
 	} else if vi.setLocations {
-		vi.setMode(vi.currMode)
+		vi.less.SetMessage("")
 		vi.setLocations = false
 	}
+}
+
+// Draw satisfies tui.Component
+func (vi *viHandlerImpl) Draw(w term.Writer) {
+	vi.drawLocationMessage()
 	vi.less.Draw(w)
 	locations := vi.cursor.SortedLocations()
 	text.DrawLocations(locations, vi.less.Scroll(), w)

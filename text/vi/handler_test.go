@@ -35,6 +35,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui"
+	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/handler"
@@ -859,6 +860,58 @@ func TestVidd(t *testing.T) {
 			})
 		}
 	}
+}
+
+func TestLocationMessage(t *testing.T) {
+	cases := []handlertest.SequenceTestCase{
+		{"j",
+			`                    
+▐*                  
+ * Check if the curr
+ * diff buffers.    
+ */                 
+  void              
+diff_buf_adjust(win_
+{                   
+  win_T  *wp;       
+            durrdurr`},
+		{"jj",
+			`                    
+/*                  
+▐* Check if the curr
+ * diff buffers.    
+ */                 
+  void              
+diff_buf_adjust(win_
+{                   
+  win_T  *wp;       
+  int        i;     `},
+		{"jjk",
+			`                    
+▐*                  
+ * Check if the curr
+ * diff buffers.    
+ */                 
+  void              
+diff_buf_adjust(win_
+{                   
+  win_T  *wp;       
+            durrdurr`},
+	}
+
+	newVi := func(t *testing.T) tui.Handler {
+		vi := setupVi(t, snippet, 2)
+		vi.setLocationList(textapi.LocationPriorityInfo, "id",
+			textapi.LocationSlice([]textapi.Location{
+				{
+					Message: "durrdurr",
+					From:    term.Coordinates{Y: 1},
+					To:      term.Coordinates{Y: 1, X: 5},
+				},
+			}))
+		return vi
+	}
+	handlertest.RunHandlerIsolated(t, newVi, 20, 10, cases)
 }
 
 func TestVidfd(t *testing.T) {

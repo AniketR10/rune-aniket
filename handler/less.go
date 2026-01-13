@@ -430,7 +430,7 @@ func (l *Less) normalHandleEvent(ev term.Event) (exit, handled bool) {
 	return
 }
 
-func (l *Less) setMessage(msg string) bool {
+func (l *Less) setMessage(msg string) {
 	// if bar is going to be limited to its strict width
 	// ensure the backgrounds blend. Use scroll Attributes
 	// so dynamically changed background attributes are captured.
@@ -445,14 +445,9 @@ func (l *Less) setMessage(msg string) bool {
 			BackgroundAttributes: attr,
 		},
 	})
-	shouldResize := l.msgVirt.C == nil ||
-		l.msgVirt.C.Height(l.width) != newMsg.Height(l.width) ||
-		l.usedMsgBarAttr != attr
-
 	l.usedMsgBarAttr = attr
 	l.msgVirt.C = newMsg
 	l.msgStr = msg
-	return shouldResize
 }
 
 func (l *Less) cmdBarHeight() (cmdBarWidth, cmdBarHeight int) {

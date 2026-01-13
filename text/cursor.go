@@ -1678,8 +1678,9 @@ func (c *Cursor) ShiftSelectionLeft() (ok bool) {
 }
 
 // LocationsAtCursor returns the set of locations by location list ID set by SetLocationList,
-// at the current cursor position, if there's any.
-func (c *Cursor) LocationsAtCursor() (map[string]textapi.Location, bool) {
+// at the current cursor position, if there's any. The returned slice is only valid
+// until this method is called again.
+func (c *Cursor) LocationsAtCursor() ([]textapi.Location, bool) {
 	return c.locationStore.LocationsAtCoordinates(c.cursorAtScroll())
 }
 

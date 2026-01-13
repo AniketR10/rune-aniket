@@ -29,11 +29,71 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"unstable.build/go-tui"
+	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/clipboard"
+	"unstable.build/go-tui/handler/handlertest"
 	"unstable.build/go-tui/term"
 )
+
+func TestLocationMessage(t *testing.T) {
+	cases := []handlertest.SequenceTestCase{
+		{"<down>",
+			`a                   
+▐                   
+c                   
+                    
+                    
+                    
+                    
+                    
+                    
+            durrdurr`},
+		{"<down><down>",
+			`a                   
+b                   
+▐                   
+                    
+                    
+                    
+                    
+                    
+                    
+                    `},
+		{"<down><down><up>",
+			`a                   
+▐                   
+c                   
+                    
+                    
+                    
+                    
+                    
+                    
+            durrdurr`},
+	}
+
+	newVi := func(t *testing.T) tui.Handler {
+		uri, err := workspaceapi.ParseURI("memory:///myfile")
+		require.NoError(t, err)
+		buf := cell.NewBuffer()
+		_, _ = buf.ReadFrom(strings.NewReader("a\nb\nc"))
+		handler := NewHandler(buf, uri)
+		handler.Resize(20, 10)
+		handler.SetLocationList(textapi.LocationPriorityInfo, "id",
+			textapi.LocationSlice([]textapi.Location{
+				{
+					Message: "durrdurr",
+					From:    term.Coordinates{Y: 1},
+					To:      term.Coordinates{Y: 1, X: 5},
+				},
+			}))
+		return handler
+	}
+	handlertest.RunHandlerIsolated(t, newVi, 20, 10, cases)
+}
 
 func TestSublimeKeyBindingsMacOS(t *testing.T) {
 	const snippet = "a\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"
