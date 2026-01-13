@@ -117,6 +117,7 @@ type workspaceManagerHandler struct {
 	workspaces       [workspaceSlots]*workspaceHandler
 	workspaceCount   int
 	focus            int
+	homeURI          workspaceapi.URI
 	homeWorkspace    workspace.Workspace
 	empty            *ex
 	homeRunner       atomic.Value
@@ -233,6 +234,7 @@ func (h *workspaceManagerHandler) init(
 		return fmt.Errorf("add home workspace: %v", err)
 	}
 
+	h.homeURI = homeDirUri
 	h.homeWorkspace = homeWorkspace
 	h.setReleaseManager(releaseManager)
 
@@ -1205,6 +1207,9 @@ func (h *workspaceManagerHandler) SubscribeCommandForWorkspace(
 	uri workspaceapi.URI, cmd textapi.CommandManual, handler text.CommandHandler,
 ) error {
 	extCmd := externalCommand{cmd: cmd, handler: handler}
+	if uri.String() == h.homeURI.String() {
+		return h.subscribeExternalCommands(h.empty, extCmd)
+	}
 	for _, w := range h.workspaces {
 		if w == nil || w.uri.String() != uri.String() {
 			continue
@@ -1217,6 +1222,9 @@ func (h *workspaceManagerHandler) SubscribeCommandForWorkspace(
 func (h *workspaceManagerHandler) UnsubscribeCommandForWorkspace(
 	uri workspaceapi.URI, name string,
 ) error {
+	if uri.String() == h.homeURI.String() {
+		return h.empty.comp.UnsubscribeCommand(name)
+	}
 	for _, w := range h.workspaces {
 		if w == nil || w.uri.String() != uri.String() {
 			continue

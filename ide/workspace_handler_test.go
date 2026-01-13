@@ -123,6 +123,38 @@ func TestFileCommandRegistryIntegration(t *testing.T) {
 	require.NoError(t, m.Close())
 }
 
+func TestOpenFilesinEmptyWorkspace(t *testing.T) {
+	m := newTestWorkspaceManagerHandlerWithDir(t, defaultConfigWithWrap(false), nil, "",
+		nopShutdownShaderConfig())
+
+	h := newSafeHandler(m)
+	cases := []handlertest.SequenceTestCase{
+		{"<c-\\\\>edit<space>dakar.md<enter>",
+			`┌────────────────────────────┐
+│o dakar.md                  │
+├────────────────────────────┤
+│▐                           │
+│                            │
+│                      NORMAL│
+├────────────────────────────┤
+│1                           │
+└────────────────────────────┘`},
+		{"<c-\\\\>tabclose<enter>",
+			`┌────────────────────────────┐
+│                            │
+├────────────────────────────┤
+│                            │
+│     workspaceWallpaper     │
+│                            │
+├────────────────────────────┤
+│1                           │
+└────────────────────────────┘`},
+	}
+	handlertest.RunHandlerSequence(t, h, 30, 9, cases)
+
+	require.NoError(t, m.Close())
+}
+
 func TestWorkspaceConfig(t *testing.T) {
 	mockConfig := map[string]interface{}{
 		"1": "2",
@@ -522,7 +554,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 │    │ invalid     │
 ├────│ workspace:  │
 │    │ there's     │
-│    │ only 10     │
+│    │ only 9      │
 │work│ workspaces  │
 │    └─────────────┘
 │                  │
@@ -539,7 +571,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 ├──────────────────┤
 │1 1  2 2          │
 └──────────────────┘`},
-		{"1234567890",
+		{"123456789",
 			`┌──────────────────┐
 │                  │
 ├──────────────────┤
@@ -548,7 +580,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 │                  │
 │                  │
 ├──────────────────┤
-│1 1  10           │
+│1 1  9            │
 └──────────────────┘`},
 		{"2:wonew>", // uses tmp dir as workspace in the absence of a uri
 			`┌──────────────────┐
