@@ -192,8 +192,7 @@ func (h *workspaceManagerHandler) init(
 	cwd *workspaceapi.URI, homeDirUri workspaceapi.URI,
 	manager workspace.WorkspaceManager,
 	notifications *notifications.Container,
-	cfg ideConfig, recfilename string, filenames []string,
-	sixDir string, publishEvent func(term.Event) bool,
+	cfg ideConfig, sixDir string, publishEvent func(term.Event) bool,
 	extensionRunner ExtensionsRunner, locker sync.Locker,
 	builtinExtensions map[string]Extension,
 	reloadConfig func() (ideConfig, error), workspaceConfigFilename string,
@@ -307,23 +306,7 @@ func (h *workspaceManagerHandler) init(
 		return nil
 	}
 
-	// AddWorkspace is idempotent, so it should be fine to here and later when
-	// actually creating the workspace handler.
-	tempcwd, err := h.workspace.AddWorkspace(ctx, *cwd)
-	if err != nil {
-		return fmt.Errorf("add new workspace for %q: %s", *cwd, err)
-	}
-	var uris []workspaceapi.URI
-	for _, filename := range filenames {
-		uri, err := tempcwd.URI(filename)
-		if err != nil {
-			return fmt.Errorf("make file %q uri: %w", filename, err)
-		}
-		uris = append(uris, uri)
-	}
-
-	shouldRestore := len(uris) == 0
-	err = h.addWorkspace(*cwd, recfilename, uris, shouldRestore, !cfg.autoRestore(), -1)
+	err = h.addWorkspace(*cwd, true, !cfg.autoRestore(), -1)
 	if err != nil {
 		return fmt.Errorf("add default workspace: %w", err)
 	}
@@ -591,8 +574,7 @@ func cleanedExtensionConfig(cfg map[string]interface{}) map[string]interface{} {
 }
 
 func (h *workspaceManagerHandler) addWorkspace(
-	uri workspaceapi.URI, recfilename string, filenames []workspaceapi.URI,
-	shouldRestore, promptRecommended bool, i int,
+	uri workspaceapi.URI, shouldRestore, promptRecommended bool, i int,
 ) error {
 	for i, w := range h.workspaces {
 		if w == nil {
@@ -617,19 +599,6 @@ func (h *workspaceManagerHandler) addWorkspace(
 	}
 
 	textOpts := h.textOpts(cfg)
-	if recfilename != "" {
-		recFile, err := cwd.URI(recfilename)
-		if err != nil {
-			cancel()
-			return fmt.Errorf("cwd make uri for recovery file: %w", err)
-		}
-		textOpts = append(textOpts, text.WithRecoveryFile(recFile))
-	}
-
-	for _, file := range filenames {
-		textOpts = append(textOpts, text.WithFile(file))
-	}
-
 	vctrlService := vctrl.NopService()
 	if cfg.auxiliaryBarGit() || cfg.gitBarEnabled() {
 		vctrlService, err = gogit.NewService(uri, cwd)
@@ -777,7 +746,7 @@ func (h *workspaceManagerHandler) buildExtensions(
 func (h *workspaceManagerHandler) addOrCreateWorkspace(
 	uri workspaceapi.URI,
 ) error {
-	err := h.addWorkspace(uri, "", nil, true, true, -1)
+	err := h.addWorkspace(uri, true, true, -1)
 	if err != nil && errors.Is(err, os.ErrNotExist) {
 		h.openCreateWorkspacePrompt(h.exHandler(h.focusHandler()), uri)
 		return nil
@@ -847,7 +816,7 @@ func (h *workspaceManagerHandler) commandReloadWorkspace(args ...string) error {
 	if err != nil {
 		return err
 	}
-	return h.addWorkspace(workspaceURI, "", nil, true, false, i)
+	return h.addWorkspace(workspaceURI, true, false, i)
 }
 
 func (h *workspaceManagerHandler) commandAddWorkspace(args ...string) error {
@@ -1367,4 +1336,27 @@ func (h *workspaceManagerHandler) setReleaseManager(releaseManager release.Manag
 	}
 	h.pkgmanager.init(h.notifications, releaseManager,
 		pkgStorage, h.homeWorkspace, h.sixDir, h, h)
+}
+
+func (h *workspaceManagerHandler) openURI(file workspaceapi.URI, focus bool) error {
+	ex := h.exHandler(h.focusHandler())
+	var err error
+	if focus {
+		_, err = ex.editFileURI(file, ex.invokeWindow(), false)
+	} else {
+		_, err = ex.comp.Open(file)
+	}
+	if err != nil {
+		return err
+	}
+	return err
+}
+
+func (h *workspaceManagerHandler) openFile(file string, focus bool) error {
+	ex := h.exHandler(h.focusHandler())
+	uri, err := ex.workspace.URI(file)
+	if err != nil {
+		return err
+	}
+	return h.openURI(uri, focus)
 }

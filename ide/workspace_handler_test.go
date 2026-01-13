@@ -69,7 +69,7 @@ func TestFileCommandRegistryIntegration(t *testing.T) {
 	uri1, err := workspaceapi.ParseURI("memory://" + dir)
 	require.NoError(t, err)
 
-	m := newTestWorkspaceManagerHandlerWithDir(t, defaultConfigWithWrap(false), nil, dir,
+	m := newTestWorkspaceManagerHandlerWithDir(t, defaultConfigWithWrap(false), dir,
 		nopShutdownShaderConfig())
 	require.NoError(t, m.addOrCreateWorkspace(uri1))
 
@@ -124,7 +124,7 @@ func TestFileCommandRegistryIntegration(t *testing.T) {
 }
 
 func TestOpenFilesinEmptyWorkspace(t *testing.T) {
-	m := newTestWorkspaceManagerHandlerWithDir(t, defaultConfigWithWrap(false), nil, "",
+	m := newTestWorkspaceManagerHandlerWithDir(t, defaultConfigWithWrap(false), "",
 		nopShutdownShaderConfig())
 
 	h := newSafeHandler(m)
@@ -183,7 +183,7 @@ func TestWorkspaceConfig(t *testing.T) {
 				return workspace.NewMemoryScheme(ctx, cfg, uri)
 			})
 
-		m := newTestWorkspaceManagerHandlerWithManager(t, manager, uri, cfg, nil)
+		m := newTestWorkspaceManagerHandlerWithManager(t, manager, uri, cfg)
 		defer m.Close()
 
 		assert.EqualValues(t, mockConfig, passed)
@@ -226,8 +226,8 @@ func TestWorkspaceConfig(t *testing.T) {
 		shRunner.init(
 			handler.Nop(component.Nop()), term.NopInterrupter(), term.Attributes{},
 			nopShutdownShaderConfig(), component.FrameCharSetDefault())
-		err = m.workspaceManagerHandler.init(&uri, homeURI, manager, n, cfg, "", nil,
-			dir, func(term.Event) bool {
+		err = m.workspaceManagerHandler.init(&uri, homeURI, manager, n, cfg, dir,
+			func(term.Event) bool {
 				return true
 			}, runner, new(sync.Mutex), nil,
 			func() (ideConfig, error) { return cfg, errors.New("boom") },
@@ -271,7 +271,7 @@ func TestWorkspaceConfig(t *testing.T) {
 				return workspace.NewMemoryScheme(ctx, cfg, uri)
 			})
 
-		m := newTestWorkspaceManagerHandlerWithManager(t, manager, uri, cfg, nil)
+		m := newTestWorkspaceManagerHandlerWithManager(t, manager, uri, cfg)
 		assert.EqualValues(t, mockConfig, passed)
 
 		m.reloadConfig = func() (ideConfig, error) {
@@ -336,7 +336,7 @@ func TestWorkspaceExtensions(t *testing.T) {
 		})
 		wg.Add(2)
 		m := newTestWorkspaceManagerHandlerWithManagerAndExtensions(t, manager,
-			&uri, cfg, runner, nil, nil, dir, nil, nopShutdownShaderConfig())
+			&uri, cfg, runner, nil, dir, nil, nopShutdownShaderConfig())
 		defer m.Close()
 
 		wg.Wait()
@@ -387,7 +387,7 @@ func TestWorkspaceExtensions(t *testing.T) {
 			})
 		wg.Add(2)
 		m := newTestWorkspaceManagerHandlerWithManagerAndExtensions(t, manager,
-			&uri, cfg, runner, extensions, nil, dir, nil, nopShutdownShaderConfig())
+			&uri, cfg, runner, extensions, dir, nil, nopShutdownShaderConfig())
 		defer m.Close()
 
 		wg.Wait()
@@ -753,9 +753,9 @@ func TestWorkspaceManagerClosePromptIntegration(t *testing.T) {
 		t.Cleanup(func() {
 			_ = os.RemoveAll(dir)
 		})
-		filenames := []string{"1234", "4567"}
-		m := newTestWorkspaceManagerHandlerWithDir(t, defaultCfg(), filenames, dir,
-			nopShutdownShaderConfig())
+		m := newTestWorkspaceManagerHandlerWithDir(t, defaultCfg(), dir, nopShutdownShaderConfig())
+		require.NoError(t, m.openFile("1234", true))
+		require.NoError(t, m.openFile("4567", false))
 
 		cases := []handlertest.SequenceTestCase{
 			{"ihola <",
@@ -799,9 +799,10 @@ func TestWorkspaceManagerClosePromptIntegration(t *testing.T) {
 		t.Cleanup(func() {
 			_ = os.RemoveAll(dir)
 		})
-		filenames := []string{"1234", "4567"}
-		m := newTestWorkspaceManagerHandlerWithDir(t, defaultCfg(), filenames, dir,
+		m := newTestWorkspaceManagerHandlerWithDir(t, defaultCfg(), dir,
 			nopShutdownShaderConfig())
+		require.NoError(t, m.openFile("1234", true))
+		require.NoError(t, m.openFile("4567", false))
 
 		cases := []handlertest.SequenceTestCase{
 			{"ihola <",
@@ -852,9 +853,10 @@ func TestWorkspaceManagerClosePromptIntegration(t *testing.T) {
 			t.Cleanup(func() {
 				_ = os.RemoveAll(dir)
 			})
-			filenames := []string{"1234", "4567"}
-			m := newTestWorkspaceManagerHandlerWithDir(t, defaultCfg(), filenames, dir,
+			m := newTestWorkspaceManagerHandlerWithDir(t, defaultCfg(), dir,
 				nopShutdownShaderConfig())
+			require.NoError(t, m.openFile("1234", true))
+			require.NoError(t, m.openFile("4567", false))
 
 			cases := []handlertest.SequenceTestCase{
 				{"ihola <",
@@ -972,10 +974,11 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 
 		t.Run(fmt.Sprintf("wrap=%v", wrap), func(t *testing.T) {
 
-			t.Run("initial files from arguments", func(t *testing.T) {
-				filenames := []string{"1234", "4567"}
+			t.Run("initial files via openFile", func(t *testing.T) {
 				m := newTestWorkspaceManagerHandlerWithDir(t, defaultConfigWithWrap(wrap),
-					filenames, dir, nopShutdownShaderConfig())
+					dir, nopShutdownShaderConfig())
+				require.NoError(t, m.openFile("1234", true))
+				require.NoError(t, m.openFile("4567", false))
 
 				cases := []handlertest.SequenceTestCase{
 					{"",
@@ -998,7 +1001,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 
 			t.Run("initial files from restore previous session prompt", func(t *testing.T) {
 				m := newTestWorkspaceManagerHandlerWithDir(t, defaultConfigWithWrap(wrap),
-					nil, dir, nopShutdownShaderConfig())
+					dir, nopShutdownShaderConfig())
 
 				cases := []handlertest.SequenceTestCase{
 					{"",
@@ -1032,7 +1035,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 			t.Run("initial files from auto restore", func(t *testing.T) {
 				cfg := defaultConfigWithWrap(wrap)
 				cfg.cfg["workspace"].(map[string]interface{})["auto_restore"] = true
-				m := newTestWorkspaceManagerHandlerWithDir(t, cfg, nil, dir, nopShutdownShaderConfig())
+				m := newTestWorkspaceManagerHandlerWithDir(t, cfg, dir, nopShutdownShaderConfig())
 
 				cases := []handlertest.SequenceTestCase{
 					{"",
@@ -1074,7 +1077,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 				runner := FuncExtensionsRunner(testRunnerFn)
 
 				m1 := newTestWorkspaceManagerHandlerWithManagerAndExtensions(t, manager,
-					&uri, newCfg(), runner, nil, nil, dir, nil, nopShutdownShaderConfig())
+					&uri, newCfg(), runner, nil, dir, nil, nopShutdownShaderConfig())
 
 				cases := []handlertest.SequenceTestCase{
 					{":edit 1234>ih3ll0\nw1rld <:write>:edit 4567>ihello\nworld <:write>:notificationcloseall>",
@@ -1094,7 +1097,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 				require.NoError(t, m1.Close())
 
 				m2 := newTestWorkspaceManagerHandlerWithManagerAndExtensions(t, manager,
-					&uri, newCfg(), runner, nil, nil, dir, nil, nopShutdownShaderConfig())
+					&uri, newCfg(), runner, nil, dir, nil, nopShutdownShaderConfig())
 
 				cases = []handlertest.SequenceTestCase{
 					{"",
@@ -1125,7 +1128,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 				require.NoError(t, m2.Close())
 
 				m3 := newTestWorkspaceManagerHandlerWithManagerAndExtensions(t, manager,
-					&uri, newCfg(), runner, nil, nil, dir, nil, nopShutdownShaderConfig())
+					&uri, newCfg(), runner, nil, dir, nil, nopShutdownShaderConfig())
 
 				cases = []handlertest.SequenceTestCase{
 					{"",
@@ -1151,7 +1154,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 				t.Cleanup(func() {
 					_ = os.RemoveAll(dir)
 				})
-				m := newTestWorkspaceManagerHandlerWithDir(t, defaultConfigWithWrap(wrap), nil, dir, nopShutdownShaderConfig())
+				m := newTestWorkspaceManagerHandlerWithDir(t, defaultConfigWithWrap(wrap), dir, nopShutdownShaderConfig())
 
 				cases := []handlertest.SequenceTestCase{
 					{":edit A>ih3ll0\nw1rld <:write>:edit B>ihello\nworld <:write>:notificationcloseall>",
@@ -1209,7 +1212,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 
 func TestInitializeNoCwd(t *testing.T) {
 	m := newTestWorkspaceManagerHandlerWithDir(t,
-		defaultConfigWithWrap(false), []string{"ignored"}, "", nopShutdownShaderConfig())
+		defaultConfigWithWrap(false), "", nopShutdownShaderConfig())
 
 	cases := []handlertest.SequenceTestCase{
 		{"",
@@ -1232,7 +1235,7 @@ func TestInitializeNoCwd(t *testing.T) {
 
 func TestInitializeNotifications(t *testing.T) {
 	m := newTestWorkspaceManagerHandlerWithDir(t,
-		defaultConfigWithWrap(false), []string{"ignored"}, "", nopShutdownShaderConfig())
+		defaultConfigWithWrap(false), "", nopShutdownShaderConfig())
 
 	cases := []handlertest.SequenceTestCase{
 		{"",
@@ -1258,7 +1261,7 @@ func TestNoBar(t *testing.T) {
 	cfg := defaultConfigWithWrap(false)
 	cfg.cfg["browser"] = map[string]any{"workspace_bar": false}
 	m := newTestWorkspaceManagerHandlerWithDir(t,
-		cfg, []string{"ignored"}, "", nopShutdownShaderConfig())
+		cfg, "", nopShutdownShaderConfig())
 
 	cases := []handlertest.SequenceTestCase{
 		{"",
@@ -1291,7 +1294,7 @@ func TestNoBar(t *testing.T) {
 }
 
 func TestSwitchToWorkspaceComplete(t *testing.T) {
-	m := newTestWorkspaceManagerHandlerWithDir(t, defaultConfigWithWrap(false), nil, "/tmp",
+	m := newTestWorkspaceManagerHandlerWithDir(t, defaultConfigWithWrap(false), "/tmp",
 		nopShutdownShaderConfig())
 
 	cases := []handlertest.SequenceTestCase{
@@ -1324,7 +1327,7 @@ func TestSwitchToWorkspaceComplete(t *testing.T) {
 }
 
 func TestMoveWorkspace(t *testing.T) {
-	m := newTestWorkspaceManagerHandlerWithDir(t, defaultConfigWithWrap(false), nil, "/tmp",
+	m := newTestWorkspaceManagerHandlerWithDir(t, defaultConfigWithWrap(false), "/tmp",
 		nopShutdownShaderConfig())
 
 	cases := []handlertest.SequenceTestCase{
@@ -1417,7 +1420,7 @@ func TestExternalCommands(t *testing.T) {
 			os.RemoveAll(dir2)
 		})
 
-		m := newTestWorkspaceManagerHandlerWithDir(t, defaultConfigWithWrap(false), nil, dir,
+		m := newTestWorkspaceManagerHandlerWithDir(t, defaultConfigWithWrap(false), dir,
 			nopShutdownShaderConfig())
 		err = m.subscribeCommand(textapi.CommandManual{Name: "ramon"},
 			text.FuncCommandHandler(func(context.Context, textapi.Command) error {
@@ -1497,7 +1500,7 @@ func TestExternalCommands(t *testing.T) {
 			os.RemoveAll(dir2)
 		})
 
-		m := newTestWorkspaceManagerHandlerWithDir(t, defaultConfigWithWrap(false), nil, dir,
+		m := newTestWorkspaceManagerHandlerWithDir(t, defaultConfigWithWrap(false), dir,
 			nopShutdownShaderConfig())
 
 		const n = 50
@@ -1566,7 +1569,7 @@ func TestExternalEvents(t *testing.T) {
 			textapi.EventTypeClose,
 		}
 		var open, flush, edit, close atomic.Int64
-		m := newTestWorkspaceManagerHandlerWithDir(t, defaultConfigWithWrap(false), nil, dir,
+		m := newTestWorkspaceManagerHandlerWithDir(t, defaultConfigWithWrap(false), dir,
 			nopShutdownShaderConfig())
 		sub := text.FuncEventHandler(func(_ context.Context, ev textapi.Event) bool {
 			switch ev.Type {
@@ -1943,7 +1946,7 @@ func TestWorkspaceCommands(t *testing.T) {
 	xyzCmd := textapi.CommandManual{Name: "xyz"}
 
 	var abc, xyz atomic.Int64
-	m := newTestWorkspaceManagerHandlerWithDir(t, defaultConfigWithWrap(false), nil, dir,
+	m := newTestWorkspaceManagerHandlerWithDir(t, defaultConfigWithWrap(false), dir,
 		nopShutdownShaderConfig())
 	sub := text.FuncCommandHandler(func(_ context.Context, cmd textapi.Command) error {
 		switch cmd.Name {
@@ -2177,7 +2180,7 @@ func TestComponentOnTabsClickIntegration(t *testing.T) {
 	cfg := defaultCfg()
 	var called int
 	m := newTestWorkspaceManagerHandlerWithManagerAndExtensions(t, manager,
-		uri, cfg, runner, nil, nil, dir,
+		uri, cfg, runner, nil, dir,
 		func(i int) bool {
 			called++
 			return true
@@ -2321,7 +2324,7 @@ func TestWorkspaceManagerCreateWorkspace(t *testing.T) {
 
 func newTestWorkspaceManagerHandlerWithManager(
 	t *testing.T, manager *workspace.Manager,
-	uri workspaceapi.URI, cfg ideConfig, filenames []string,
+	uri workspaceapi.URI, cfg ideConfig,
 ) *testWorkspaceManagerHandler {
 	dir, err := os.MkdirTemp("", "")
 	require.NoError(t, err)
@@ -2329,14 +2332,14 @@ func newTestWorkspaceManagerHandlerWithManager(
 		_ = os.RemoveAll(dir)
 	})
 	return newTestWorkspaceManagerHandlerWithManagerAndExtensions(t, manager,
-		&uri, cfg, FuncExtensionsRunner(testRunnerFn), nil, filenames, dir, nil,
+		&uri, cfg, FuncExtensionsRunner(testRunnerFn), nil, dir, nil,
 		nopShutdownShaderConfig())
 }
 
 func newTestWorkspaceManagerHandlerWithManagerAndExtensions(
 	t *testing.T, manager *workspace.Manager,
 	uri *workspaceapi.URI, cfg ideConfig, runner ExtensionsRunner,
-	extensions map[string]Extension, files []string, dir string,
+	extensions map[string]Extension, dir string,
 	onTabsClick func(int) bool,
 	shutdownShaderCfg shutdownShaderConfig,
 ) *testWorkspaceManagerHandler {
@@ -2354,10 +2357,9 @@ func newTestWorkspaceManagerHandlerWithManagerAndExtensions(
 		shutdownShaderCfg, component.FrameCharSetDefault())
 
 	releaseManager := docrelease.NewManager(document.NewInMemoryService())
-	err = m.workspaceManagerHandler.init(uri, homeURI, manager, n, cfg, "", files,
-		dir, func(term.Event) bool {
-			return true
-		}, runner, new(sync.Mutex), extensions,
+	err = m.workspaceManagerHandler.init(uri, homeURI, manager, n, cfg, dir, func(term.Event) bool {
+		return true
+	}, runner, new(sync.Mutex), extensions,
 		func() (ideConfig, error) { return cfg, nil },
 		".sixrc", 0, 0, '1', 0, 0, true, onTabsClick, releaseManager, shRunner, 0, nil)
 
@@ -2366,7 +2368,7 @@ func newTestWorkspaceManagerHandlerWithManagerAndExtensions(
 }
 
 func newTestWorkspaceManagerHandlerWithDir(
-	t *testing.T, cc ideConfig, filenames []string, dir string,
+	t *testing.T, cc ideConfig, dir string,
 	shutdownShaderCfg shutdownShaderConfig,
 ) *testWorkspaceManagerHandler {
 	manager := workspace.NewManager(config.NopConfig())
@@ -2393,7 +2395,7 @@ func newTestWorkspaceManagerHandlerWithDir(
 	}
 	runner := FuncExtensionsRunner(testRunnerFn)
 	return newTestWorkspaceManagerHandlerWithManagerAndExtensions(t, manager,
-		uri, cc, runner, nil, filenames, dataDir, nil, shutdownShaderCfg)
+		uri, cc, runner, nil, dataDir, nil, shutdownShaderCfg)
 }
 
 func newTestWorkspaceManagerHandler(
@@ -2405,7 +2407,7 @@ func newTestWorkspaceManagerHandler(
 	t.Cleanup(func() {
 		os.RemoveAll(dir)
 	})
-	return newTestWorkspaceManagerHandlerWithDir(t, cc, filenames, dir, shutdownShaderCfg)
+	return newTestWorkspaceManagerHandlerWithDir(t, cc, dir, shutdownShaderCfg)
 }
 
 // deterministic usage of search list

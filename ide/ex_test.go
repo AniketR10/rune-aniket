@@ -814,8 +814,6 @@ func TestMultipleFilesStartup(t *testing.T) {
 	file2, err := workspaceapi.ParseURI("file:///wi.go")
 	require.NoError(t, err)
 	opts := []text.Option{
-		text.WithFile(file1),
-		text.WithFile(file2),
 		text.WithCommandKey(testCommandKey),
 		text.WithCommandOverlayConfig(testCommandOverlayConfig()),
 	}
@@ -824,6 +822,10 @@ func TestMultipleFilesStartup(t *testing.T) {
 	b := newExForTestingWithWorkspace(t, &workspace, texttest.NopEditor(),
 		vte.DefaultConfig(), nopPublishEvent, clipboard.NewInMemory(), opts...)
 	defer b.Close()
+	_, err = b.editFileURI(file1, b.invokeWindow(), false)
+	require.NoError(t, err)
+	_, err = b.editFileURI(file2, b.invokeWindow(), false)
+	require.NoError(t, err)
 
 	handlertest.TestHandlerSequence(t, b, 20, 10, cases)
 
@@ -1089,8 +1091,6 @@ func TestExKeySequence(t *testing.T) {
 		file2, err := workspaceapi.ParseURI("file:///2")
 		require.NoError(t, err)
 		opts := []text.Option{
-			text.WithFile(file1),
-			text.WithFile(file2),
 			text.WithCommandKey(testCommandKey),
 			text.WithCommandSequenceBinding(handler.Sequence{
 				First: term.KeyComb{Ch: 'g'},
@@ -1125,6 +1125,10 @@ func TestExKeySequence(t *testing.T) {
 			defer mu.Unlock()
 			return b.Close()
 		})
+		_, err = b.editFileURI(file1, ex.invokeWindow(), false)
+		require.NoError(t, err)
+		_, err = b.editFileURI(file2, ex.invokeWindow(), false)
+		require.NoError(t, err)
 		return handler.Sync(&mu, b)
 	}
 	handlertest.TestHandlerIsolated(t, fn, 20, 10, cases)

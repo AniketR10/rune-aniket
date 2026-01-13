@@ -69,29 +69,10 @@ type EventPublisher func(term.Event) bool
 // at cfgfilename and filename. Note that if filename is empty, a default inmutable
 // buffer will be loaded.
 func New(
-	cwd, cfgfilename, dataDir string,
-	filenames []string,
-	opts ...Option,
+	cwd, cfgfilename, dataDir string, opts ...Option,
 ) (i *IDE, err error) {
 	i = new(IDE)
-	err = i.init(cwd, cfgfilename, "", dataDir, filenames, opts...)
-	return
-}
-
-// NewRecovery allocates storage for a new IDE and initializes in recovery mode.
-// The underlying editor will use recfilename to try to recover file at filename.
-// Note that this function panics if either filename or recfilename are empty.
-func NewRecovery(
-	cwd, cfgfilename, filename, recfilename, dataDir string,
-	opts ...Option,
-) (i *IDE, err error) {
-	if filename == "" || recfilename == "" {
-		panic(fmt.Sprintf("invalid input: filename='%s', recfilename='%s'",
-			filename, recfilename))
-	}
-	i = new(IDE)
-	err = i.init(cwd, cfgfilename, recfilename, dataDir,
-		[]string{filename}, opts...)
+	err = i.init(cwd, cfgfilename, dataDir, opts...)
 	return
 }
 
@@ -178,12 +159,7 @@ func (i *IDE) Size() (width, height int) {
 
 // Open opens the given file, in the currently active workspace.
 func (i *IDE) Open(file workspaceapi.URI) error {
-	ex := i.workspaceHandler.exHandler(i.workspaceHandler.focusHandler())
-	_, err := ex.editFileURI(file, ex.invokeWindow(), false)
-	if err != nil {
-		return err
-	}
-	return err
+	return i.workspaceHandler.openURI(file, true /* focus */)
 }
 
 // SetReleaseManager sets the release.Manager of the IDE.
@@ -224,9 +200,7 @@ func (i *IDE) closeResources() (ret error) {
 }
 
 func (i *IDE) init(
-	cwd, cfgfilename, recfilename string, dataDir string,
-	filenames []string,
-	opts ...Option,
+	cwd, cfgfilename, dataDir string, opts ...Option,
 ) error {
 	op := defaultOptions()
 	for _, o := range opts {
@@ -331,9 +305,8 @@ func (i *IDE) init(
 	notificationsCfg.Interrupter = interrupter
 	notifications := notifications.New(i.workspaceHandler, notificationsCfg)
 	err = i.workspaceHandler.init(cwdURI, homeDirURI, workspaceManager,
-		notifications, i.ideConfig, recfilename, filenames,
-		dataDir, i.publishEvent, op.extensionRunner, i.locker, op.extensions,
-		func() (ideConfig, error) {
+		notifications, i.ideConfig, dataDir, i.publishEvent,
+		op.extensionRunner, i.locker, op.extensions, func() (ideConfig, error) {
 			return reloadConfig(cfgfilename,
 				op.defaultWallpaper, op.defaultConfig, op.bell, op.scheduleFn)
 		}, op.workspaceConfig, op.tabBarOffset,

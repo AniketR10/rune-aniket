@@ -36,7 +36,6 @@ import (
 	"google.golang.org/grpc"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/api/browserapi"
-	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/browser/browserrpc"
 	"unstable.build/go-tui/browser/browsertest"
@@ -192,12 +191,10 @@ func TestIntegrationCopyToClipboard(t *testing.T) {
 }
 
 func TestRPCBrowserCloseLeak(t *testing.T) {
-	uri, err := workspaceapi.ParseURI("file:///a")
-	require.NoError(t, err)
 	var destructor func()
 	_, b, err := newTestRPCBrowser(t,
 		&destructor, clipboard.NewInMemory())(
-		texttest.NopEditor(), text.WithFile(uri))
+		texttest.NopEditor())
 	require.NoError(t, err)
 	defer destructor()
 

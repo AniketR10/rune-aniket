@@ -31,7 +31,6 @@ import (
 	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/tcell/v3"
-	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/handler"
@@ -53,8 +52,6 @@ type CommandOverlayConfig struct {
 // Config holds configuration for an editor.Component.
 type Config struct {
 	Tabspaces               int
-	Filepaths               []workspaceapi.URI
-	RecoveryFilepath        workspaceapi.URI
 	CommandEvent            term.KeyComb
 	CommandMaxHistory       int
 	CommandKeyBindings      map[term.KeyComb][][]string
@@ -101,8 +98,6 @@ func DefaultCommandOverlayConfig() (cfg CommandOverlayConfig) {
 func DefaultConfig() Config {
 	cfg := Config{
 		Tabspaces:               4,
-		Filepaths:               nil,
-		RecoveryFilepath:        workspaceapi.URI{},
 		CommandEvent:            term.KeyComb{Ch: ':'},
 		CommandMaxHistory:       2000,
 		Config:                  browser.DefaultConfig(),
@@ -131,23 +126,6 @@ type Option func(*Config)
 func WithTabspaces(tabspaces int) Option {
 	return func(cfg *Config) {
 		cfg.Tabspaces = tabspaces
-	}
-}
-
-// WithRecoveryFile indicates that an Editor is to be initialized
-// from recovery file swapFilePath. This option overrides WithSwapDir because
-// the swap directory of swapFilePath is used instead.
-func WithRecoveryFile(swapFilePath workspaceapi.URI) Option {
-	return func(cfg *Config) {
-		cfg.RecoveryFilepath = swapFilePath
-	}
-}
-
-// WithFile returns an Option that sets the filepath of the file to open with
-// a Editor handler.
-func WithFile(file workspaceapi.URI) Option {
-	return func(cfg *Config) {
-		cfg.Filepaths = append(cfg.Filepaths, file)
 	}
 }
 

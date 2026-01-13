@@ -193,32 +193,6 @@ func (c *Component) Init(
 
 	var first browserapi.Handler
 
-	if c.config.RecoveryFilepath != (workspaceapi.URI{}) {
-		if len(c.config.Filepaths) != 1 {
-			return errors.New("only one file expected if recovery file is passed")
-		}
-		h, err := c.recoverOpenFileTab(c.config.Filepaths[0],
-			c.config.RecoveryFilepath, false)
-		if err != nil {
-			return err
-		}
-		first = h
-	}
-
-	for _, filename := range c.config.Filepaths {
-		h, err := c.Open(filename)
-		if err == workspaceapi.ErrFileAlreadyOpen {
-			// handled via user Prompt
-			err = nil
-		}
-		if err != nil {
-			return fmt.Errorf("open %q: %w", filename, err)
-		}
-		if first == nil {
-			first = h
-		}
-	}
-
 	if first != nil {
 		return c.comp.Focus().SetContent(first)
 	}

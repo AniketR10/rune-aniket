@@ -212,7 +212,7 @@ func (h *createWorkspaceHandler) OnSelect(
 
 		log.Tracef("mkdirall %s: ok", path)
 
-		err = h.wm.addWorkspace(h.uri, "", nil, true, true, -1)
+		err = h.wm.addWorkspace(h.uri, true, true, -1)
 		if err != nil {
 			_, _ = h.ex.Browser().Notify(notifications.LevelError, err.Error())
 			log.Errorf("add workspace %s: %v", h.uri, err)

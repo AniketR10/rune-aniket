@@ -747,14 +747,16 @@ func newTestWorkspaceManagerHandlerWithReleaseManager(
 	shRunner.init(handler.Nop(component.Nop()), term.NopInterrupter(), term.Attributes{},
 		shutdownShaderCfg, component.FrameCharSetDefault())
 
-	err = m.workspaceManagerHandler.init(nil, homeURI, manager, n, cfg, "", files,
+	err = m.workspaceManagerHandler.init(nil, homeURI, manager, n, cfg,
 		dir, func(term.Event) bool {
 			return true
 		}, runner, new(sync.Mutex), extensions,
 		func() (ideConfig, error) { return cfg, nil },
 		".sixrc", 0, 0, '1', 0, 0, true, onTabsClick, releaseManager,
 		shRunner, 0, nil)
-
 	require.NoError(t, err)
+	for i, file := range files {
+		require.NoError(t, m.openFile(file, i == 0))
+	}
 	return m
 }

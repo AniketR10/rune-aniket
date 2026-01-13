@@ -48,12 +48,8 @@ import (
 
 func TestIDEInitializationIntegration(t *testing.T) {
 	t.Run("does not panic with sample config", func(t *testing.T) {
-		configFile, file1 := makeTestFiles(t)
-		file2, err := os.CreateTemp("", "six_ide_test")
-		require.NoError(t, err)
-		require.NoError(t, file2.Close())
-
-		err = os.WriteFile(configFile.Name(), []byte(sampleConfig), 0666)
+		configFile, _ := makeTestFiles(t)
+		err := os.WriteFile(configFile.Name(), []byte(sampleConfig), 0666)
 		require.NoError(t, err)
 
 		cwdURI, err := workspaceapi.CurrentUserHostURI(".")
@@ -67,8 +63,7 @@ func TestIDEInitializationIntegration(t *testing.T) {
 		})
 
 		i := new(IDE)
-		err = i.init(cwdURI.String(), configFile.Name(), "",
-			dir, []string{file1.Name(), file2.Name()},
+		err = i.init(cwdURI.String(), configFile.Name(), dir,
 			WithPublishEvent(nopPublishEvent),
 			WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
 			WithLocker(new(sync.Mutex)))
@@ -81,7 +76,7 @@ func TestIDEInitializationIntegration(t *testing.T) {
 	})
 
 	t.Run("does not panic with empty config", func(t *testing.T) {
-		configFile, file1 := makeTestFiles(t)
+		configFile, _ := makeTestFiles(t)
 
 		err := os.WriteFile(configFile.Name(), []byte("{}"), 0666)
 		require.NoError(t, err)
@@ -97,9 +92,8 @@ func TestIDEInitializationIntegration(t *testing.T) {
 		})
 
 		i := new(IDE)
-		err = i.init(cwdURI.String(), configFile.Name(), "",
-			dir, []string{file1.Name()},
-			WithPublishEvent(nopPublishEvent),
+		err = i.init(cwdURI.String(), configFile.Name(),
+			dir, WithPublishEvent(nopPublishEvent),
 			WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
 			WithLocker(new(sync.Mutex)))
 		require.NoError(t, err)
@@ -111,7 +105,7 @@ func TestIDEInitializationIntegration(t *testing.T) {
 	})
 
 	t.Run("takes a non-URI as a workspace", func(t *testing.T) {
-		configFile, file1 := makeTestFiles(t)
+		configFile, _ := makeTestFiles(t)
 
 		err := os.WriteFile(configFile.Name(), []byte("{}"), 0666)
 		require.NoError(t, err)
@@ -124,8 +118,7 @@ func TestIDEInitializationIntegration(t *testing.T) {
 		})
 
 		i := new(IDE)
-		err = i.init(".", configFile.Name(), "",
-			dir, []string{file1.Name()},
+		err = i.init(".", configFile.Name(), dir,
 			WithPublishEvent(nopPublishEvent),
 			WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
 			WithLocker(new(sync.Mutex)))
@@ -138,7 +131,7 @@ func TestIDEInitializationIntegration(t *testing.T) {
 	})
 
 	t.Run("creates non-existing directories for log file", func(t *testing.T) {
-		configFile, file1 := makeTestFiles(t)
+		configFile, _ := makeTestFiles(t)
 
 		dir, err := os.MkdirTemp("", "")
 		require.NoError(t, err)
@@ -152,8 +145,7 @@ func TestIDEInitializationIntegration(t *testing.T) {
 		require.NoError(t, err)
 
 		i := new(IDE)
-		err = i.init(".", configFile.Name(), "",
-			dir, []string{file1.Name()},
+		err = i.init(".", configFile.Name(), dir,
 			WithPublishEvent(nopPublishEvent),
 			WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
 			WithLocker(new(sync.Mutex)))
@@ -166,7 +158,7 @@ func TestIDEInitializationIntegration(t *testing.T) {
 	})
 
 	t.Run("is able to initialize without a cwd", func(t *testing.T) {
-		configFile, file1 := makeTestFiles(t)
+		configFile, _ := makeTestFiles(t)
 
 		dir, err := os.MkdirTemp("", "")
 		require.NoError(t, err)
@@ -176,8 +168,7 @@ func TestIDEInitializationIntegration(t *testing.T) {
 		})
 
 		i := new(IDE)
-		err = i.init("", configFile.Name(), "",
-			dir, []string{file1.Name()},
+		err = i.init("", configFile.Name(), dir,
 			WithPublishEvent(nopPublishEvent),
 			WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
 			WithLocker(new(sync.Mutex)))
@@ -191,7 +182,7 @@ func TestIDEInitializationIntegration(t *testing.T) {
 		_, config := makeTestFiles(t)
 		initShader := new(mockShader)
 		i := new(IDE)
-		err := i.init("", "", "", filepath.Dir(config.Name()), []string{""},
+		err := i.init("", "", filepath.Dir(config.Name()),
 			WithInitShader(
 				func(_ term.Attributes, _ component.FrameCharSet) shader.Shader {
 					return initShader
@@ -220,7 +211,7 @@ func TestOpen(t *testing.T) {
 	t.Run("empty workspace", func(t *testing.T) {
 		t.Parallel()
 		file, config := makeTestFiles(t)
-		i, err := New("", config.Name(), filepath.Dir(config.Name()), nil)
+		i, err := New("", config.Name(), filepath.Dir(config.Name()))
 		require.NoError(t, err)
 		uri, err := workspaceapi.CurrentUserHostURI(file.Name())
 		require.NoError(t, err)
@@ -235,7 +226,7 @@ func TestOpen(t *testing.T) {
 	t.Run("a workspace", func(t *testing.T) {
 		t.Parallel()
 		file, config := makeTestFiles(t)
-		i, err := New(os.TempDir(), config.Name(), filepath.Dir(config.Name()), nil)
+		i, err := New(os.TempDir(), config.Name(), filepath.Dir(config.Name()))
 		require.NoError(t, err)
 		uri, err := workspaceapi.CurrentUserHostURI(file.Name())
 		require.NoError(t, err)
@@ -259,7 +250,7 @@ func TestOpen(t *testing.T) {
 		)
 		file, config := makeTestFiles(t)
 		rm := idepkgtest.NewReleaseManager(pkgs, bundles)
-		i, err := New("", config.Name(), filepath.Dir(config.Name()), nil, WithReleaseManager(rm))
+		i, err := New("", config.Name(), filepath.Dir(config.Name()), WithReleaseManager(rm))
 		require.NoError(t, err)
 		uri, err := workspaceapi.CurrentUserHostURI(file.Name())
 		require.NoError(t, err)
