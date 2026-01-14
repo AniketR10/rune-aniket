@@ -550,8 +550,15 @@ func (s *ClientStream[T]) receiveMessages() (ret error) {
 					return
 
 				}
-				// do not return here, allow Close to be
-				// called and propagated to server
+				// shortcircuit calling Close so there aren't unintended
+				// side effects from returning exit=false in the call that
+				// originated this response. Publishing term.EventNone,
+				// might not be enough, if focus changed.
+				if s.closed.CompareAndSwap(false, true) {
+					var req CloseStreamRequest
+					msg := ServerMessage{Type: MessageType_Close, Close: &req}
+					ret = s.stream.SendMsg(&msg)
+				}
 			}
 		case MessageType_Resize:
 			/* nothing to do*/

@@ -157,7 +157,7 @@ AAAAAAAAAAAAAAAAAAAA
 		wg.Wait()
 	})
 
-	t.Run("handle propagates exit via triggering event none", func(t *testing.T) {
+	t.Run("handle short circuits exit by sending close request", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		mock := browserapitest.NewMockFloating(ctrl)
 		var wg sync.WaitGroup
@@ -173,6 +173,10 @@ AAAAAAAAAAAAAAAAAAAA
 			mock.EXPECT().Dimensions()
 			mock.EXPECT().Cursor()
 			mock.EXPECT().Draw(gomock.Any())
+			mock.EXPECT().Close().DoAndReturn(func() error {
+				wg.Done()
+				return nil
+			})
 		}, func(ev term.Event) error {
 			if ev.Type == term.EventNone {
 				wg.Done()
@@ -182,15 +186,10 @@ AAAAAAAAAAAAAAAAAAAA
 		defer closeFn()
 
 		// trigger handle
-		wg.Add(1)
+		wg.Add(2)
 		_, _ = client.Handle(expectedEv)
 		// wait for event none
 		wg.Wait()
-		// collect exit
-		actualExit, actualHandled := client.Handle(expectedEv)
-
-		assert.Equal(t, expectedHandled, actualHandled)
-		assert.Equal(t, expectedExit, actualExit)
 	})
 
 	t.Run("cursor returns nothing", func(t *testing.T) {
