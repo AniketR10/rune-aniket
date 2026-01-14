@@ -129,6 +129,15 @@ func TestEchoParse(t *testing.T) {
 				{KeyComb: term.KeyComb{Key: term.KeySpace}},
 			},
 		},
+		{
+			input: "{prompt}<space>{prompt}<space>",
+			expectedOutput: []echoKey{
+				{instructPrompt: true},
+				{KeyComb: term.KeyComb{Key: term.KeySpace}},
+				{instructPrompt: true},
+				{KeyComb: term.KeyComb{Key: term.KeySpace}},
+			},
+		},
 	}
 
 	for i, test := range suite {

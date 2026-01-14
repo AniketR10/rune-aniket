@@ -66,7 +66,8 @@ var (
 					"of the config. There's a special {wait} instruction that can be " +
 					"interleaved to deterministically wait for the command prompt " +
 					"auto-completer to finish populating the search list before " +
-					"processing the next key.",
+					"processing the next key. The {prompt} instruction can be used to " +
+					"open the command prompt in a content agnostic way.",
 				Synopsis: "sequence",
 			},
 			handler: (*ex).echo,

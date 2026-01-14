@@ -33,7 +33,8 @@ import (
 
 type echoKey struct {
 	term.KeyComb
-	instructWait bool
+	instructWait   bool
+	instructPrompt bool
 }
 
 // parseEchoKeys recursively parses key combinations combined with instructions,
@@ -70,6 +71,8 @@ func parseEchoKeys(sequence string) (ret []echoKey, err error) {
 	switch instruction {
 	case "{wait}":
 		ret = append(ret, echoKey{instructWait: true})
+	case "{prompt}":
+		ret = append(ret, echoKey{instructPrompt: true})
 	default:
 		err = fmt.Errorf("invalid instruction: %s", instruction)
 	}

@@ -1262,6 +1262,10 @@ func (e *ex) echo(args ...string) error {
 			})
 			continue
 		}
+		if keyComb.instructPrompt {
+			e.openCommandPrompt()
+			continue
+		}
 		ok = ok && e.publishEvent(term.Event{
 			Type: term.EventKey,
 			Ch:   keyComb.Ch,
