@@ -2890,8 +2890,8 @@ func TestRunStopTasks(t *testing.T) {
 		}
 
 		e, cleanup := newExForTestingTasks(t)
-		defer cleanup()
 		handlertest.TestHandlerSequence(t, e, 30, 15, cases)
+		cleanup()
 	})
 }
 
@@ -3578,6 +3578,7 @@ func (v *testVte) Title() string {
 }
 
 func newExForTestingTasks(t *testing.T) (testEx, func()) {
+	var mu sync.Mutex
 	opts := []text.Option{
 		text.WithCommandKey(testCommandKey),
 		text.WithFloatingNoMaxSize(false),
@@ -3594,9 +3595,18 @@ func newExForTestingTasks(t *testing.T) (testEx, func()) {
 	require.NoError(t, err)
 	defer fileScheme.Close()
 	workspace := workspace.NewSchemeWorkspace(uri, fileScheme)
+	vteConfig := vte.DefaultConfig()
+	vteConfig.ScheduleNextTick = func(fn func()) bool {
+		mu.Lock()
+		defer mu.Unlock()
+		fn()
+		return true
+	}
 	e := newExForTestingTerminal(t, workspace, texttest.NopEditor(),
-		vte.DefaultConfig(), nopPublishEvent, opts...)
+		vteConfig, nopPublishEvent, opts...)
 	return e, func() {
+		mu.Lock()
+		defer mu.Unlock()
 		require.NoError(t, e.Close())
 	}
 }

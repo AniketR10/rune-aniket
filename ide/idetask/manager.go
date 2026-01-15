@@ -45,30 +45,38 @@ import (
 // Manager runs and manages tasks, which are processes that
 // run in response to changes in the workspace. See Task for more details.
 type Manager struct {
-	b          browser.Browser
-	scheme     schemeapi.Scheme
-	pluginOpts []plugin.Option
-	ctx        context.Context
-	cancelCtx  func()
-	tasks      sync.Map
-	width      int
-	height     int
-	newPlugin  pluginBuilder
+	b                browser.Browser
+	scheme           schemeapi.Scheme
+	pluginOpts       []plugin.Option
+	ctx              context.Context
+	cancelCtx        func()
+	tasks            sync.Map
+	width            int
+	height           int
+	newPlugin        pluginBuilder
+	scheduleNextTick func(func()) bool
 }
 
 // NewManager allocates storage for a new Manager and initializes it.
 func NewManager(
-	b browser.Browser, scheme schemeapi.Scheme, opts ...plugin.Option,
+	b browser.Browser, scheme schemeapi.Scheme,
+	scheduleNextTick func(func()) bool,
+	opts ...plugin.Option,
 ) *Manager {
 	m := new(Manager)
-	m.Init(b, scheme, opts...)
+	m.Init(b, scheme, scheduleNextTick, opts...)
 	return m
 }
 
 // Init initializes this Manager with the given browser, scheme and options.
-func (m *Manager) Init(b browser.Browser, scheme schemeapi.Scheme, opts ...plugin.Option) {
+func (m *Manager) Init(
+	b browser.Browser, scheme schemeapi.Scheme,
+	scheduleNextTick func(func()) bool,
+	opts ...plugin.Option,
+) {
 	m.b = b
 	m.scheme = scheme
+	m.scheduleNextTick = scheduleNextTick
 	m.pluginOpts = opts
 	m.ctx, m.cancelCtx = context.WithCancel(context.Background())
 	m.newPlugin = func(
@@ -108,7 +116,7 @@ func (m *Manager) RunTask(t Task) error {
 	ctx, cancel, err := t.init(id, m.ctx, m.b, m.scheme,
 		m.newPlugin, m.width, m.height, func() {
 			m.tasks.Delete(t.Name)
-		}, m.pluginOpts...)
+		}, m.scheduleNextTick, m.pluginOpts...)
 	if err != nil {
 		_ = m.scheme.StopWatch(id)
 		m.tasks.Delete(t.Name)

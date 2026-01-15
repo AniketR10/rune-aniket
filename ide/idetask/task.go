@@ -78,19 +78,19 @@ type Task struct {
 	// Runs represents the number of times this task has been run.
 	runs int
 
-	watchID     int
-	ctx         context.Context
-	cancelCtx   func()
-	closeHook   func()
-	doneWaitCh  chan struct{}
-	mu          *sync.Mutex
-	win         browser.Window
-	tab         *browser.Tab
-	cmdAndArgs  string
-	pluginOpts  []plugin.Option
-	donech      chan error
-	interrupter term.Interrupter
-	newPlugin   pluginBuilder
+	watchID          int
+	ctx              context.Context
+	cancelCtx        func()
+	closeHook        func()
+	doneWaitCh       chan struct{}
+	mu               *sync.Mutex
+	win              browser.Window
+	tab              *browser.Tab
+	cmdAndArgs       string
+	pluginOpts       []plugin.Option
+	donech           chan error
+	newPlugin        pluginBuilder
+	scheduleNextTick func(fn func()) bool
 
 	bar             tui.Component
 	barColor        tcell.Color
@@ -264,14 +264,16 @@ func (t *Task) doClose() (ret error) {
 func (t *Task) init(
 	watchID int, ctx context.Context, b browser.Browser,
 	scheme schemeapi.Scheme, newPlugin pluginBuilder,
-	maxWidth, maxHeight int, closeHook func(), pluginOpts ...plugin.Option,
+	maxWidth, maxHeight int, closeHook func(),
+	scheduleNextTick func(func()) bool,
+	pluginOpts ...plugin.Option,
 ) (context.Context, func(), error) {
 	t.closeHook = closeHook
 	t.watchID = watchID
 	t.maxWidth = maxWidth
 	t.minWidth, t.minHeight = calcMinSize(maxWidth, maxHeight)
 	t.mu = new(sync.Mutex)
-	t.interrupter = browser.EventPublisherInterrupter(b)
+	t.scheduleNextTick = scheduleNextTick
 	t.newPlugin = newPlugin
 	t.pluginOpts = pluginOpts
 	t.donech = make(chan error)
@@ -392,11 +394,7 @@ func (t *Task) setRunning(h browser.ScrollableFloating) {
 	t.paused = false
 	t.handler = h
 	t.barColor = colorRunning
-	prev := t.setBarColor(t.barColor)
-	if isFirst {
-		t.defaultBarColor = prev
-	}
-	t.interrupt()
+	t.setBarColor(t.barColor, isFirst)
 }
 
 func (t *Task) setError(err error) {
@@ -411,7 +409,6 @@ func (t *Task) doSetError(err error) {
 	t.lastExit = err
 	t.running = false
 	t.barColor = colorError
-	t.setBarColor(t.barColor)
 
 	if _, ok := t.handler.(*plugin.Handler); !ok && err != nil {
 		t.handler = browser.NopScrollableFloatingHandler(
@@ -427,8 +424,7 @@ func (t *Task) doSetError(err error) {
 				),
 			))
 	}
-
-	t.interrupt()
+	t.setBarColor(t.barColor, false)
 }
 
 func (t *Task) setSuccess() {
@@ -439,8 +435,7 @@ func (t *Task) setSuccess() {
 	t.lastExit = nil
 	t.running = false
 	t.barColor = colorSuccess
-	t.setBarColor(t.barColor)
-	t.interrupt()
+	t.setBarColor(t.barColor, false)
 }
 
 func (t *Task) pause() {
@@ -456,26 +451,21 @@ func (t *Task) setPause() {
 	defer t.mu.Unlock()
 
 	t.barColor = colorPaused
-	t.setBarColor(t.barColor)
-	t.interrupt()
+	t.setBarColor(t.barColor, false)
 }
 
-func (t *Task) interrupt() {
-	err := t.interrupter.Interrupt(context.Background())
-	if err != nil {
-		log.Errorf("task: interrupt: %v", err)
-	}
-}
-
-func (t *Task) setBarColor(color tcell.Color) tcell.Color {
-	if _, is := t.win.IsMinimized(); is && !t.win.Closed() {
-		prev, _ := t.win.SetFrameAttr(term.Attributes{Bg: color})
-		return prev.Bg
-	}
-	if t.tab != nil {
-		t.tab.SetAttrs(t.Name, term.Attributes{Fg: color})
-	}
-	return 0
+func (t *Task) setBarColor(color tcell.Color, storeFirst bool) {
+	t.scheduleNextTick(func() {
+		if _, is := t.win.IsMinimized(); is && !t.win.Closed() {
+			prev, _ := t.win.SetFrameAttr(term.Attributes{Bg: color})
+			if storeFirst {
+				t.defaultBarColor = prev.Bg
+			}
+		}
+		if t.tab != nil {
+			t.tab.SetAttrs(t.Name, term.Attributes{Fg: color})
+		}
+	})
 }
 
 // OnFocus satisfies browser.TabSubscriber.
@@ -524,7 +514,7 @@ func (t *Task) unminimize() {
 		return
 	}
 	t.win.Unminimize()
-	t.setBarColor(t.defaultBarColor)
+	t.setBarColor(t.defaultBarColor, false)
 }
 
 func (t *Task) minimize() {
@@ -541,7 +531,7 @@ func (t *Task) minimize() {
 	default:
 		t.win.MinimizeRight(minimizePadding)
 	}
-	t.setBarColor(t.barColor)
+	t.setBarColor(t.barColor, false)
 }
 
 func (t *Task) log(level log.Level, msg string, args ...interface{}) {

@@ -187,7 +187,8 @@ func (e *ex) init(
 	}
 	e.dispatchOnPreview = dispatchOnPreview
 	e.filepathCompleter = command.FilePathCompleter(e.workspace)
-	e.tasks = idetask.NewManager(e.Browser(), m, pluginOpts...)
+	e.tasks = idetask.NewManager(e.Browser(), m,
+		emulatorConfig.ScheduleNextTick, pluginOpts...)
 	e.comp.SubscribeWindow(e.tasks)
 	return
 }
