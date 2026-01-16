@@ -28,6 +28,7 @@ import (
 	"os"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -54,9 +55,9 @@ func TestPackageManagerIntegration(t *testing.T) {
 	)
 	bundles := idepkgtest.MakeBundles(
 		[]release.Bundle{
-			{Package: "go", Version: "1"},
 			{Package: "go", Version: "2"},
 			{Package: "go", Version: "3"},
+			{Package: "go", Version: "1", CreatedAt: time.Now()},
 		},
 		[]release.Bundle{
 			{Package: "six", Version: "1"},
@@ -164,7 +165,7 @@ func TestPackageManagerIntegration(t *testing.T) {
 ├──────────────────────────────────────┤
 │1                                     │
 └──────────────────────────────────────┘`},
-		{":noticlose>:pkginstall go 1>:pkgwait go>",
+		{":noticlose>:pkginstall go>:pkgwait go>",
 			`┌────────────────────────┌─────────────┐
 │                        │ downloaded  │
 ├────────────────────────│ version 1   │
@@ -188,14 +189,14 @@ func TestPackageManagerIntegration(t *testing.T) {
 │                        │ six         │
 │                        └─────────────┘
 │                        ┌─────────────┐
-│          workspaceWallp│ 1 error     │
-│                        │ occurred:   │
-│                        │ cannot      │
-│                        │ upgrade     │
-│                        │ package     │
-├────────────────────────│ go: latest  │
-│1                       │ version is  │
-└────────────────────────│ not known   │`},
+│          workspaceWallp│ package go  │
+│                        │ already     │
+│                        │ upgraded    │
+│                        │ to the      │
+│                        │ latest      │
+├────────────────────────│ version (1) │
+│1                       └─────────────┘
+└──────────────────────────────────────┘`},
 		{":noticlose>:pkguse six 1>",
 			`┌────────────────────────┌─────────────┐
 │                        │ version 1   │
@@ -230,13 +231,13 @@ func TestPackageManagerIntegration(t *testing.T) {
 └──────────────────────────────────────┘`},
 		{":noticlose>:pkginstall go>",
 			`┌────────────────────────┌─────────────┐
-│                        │ install     │
-├────────────────────────│ package:    │
-│                        │ latest      │
-│                        │ version is  │
-│                        │ not known   │
-│                        └─────────────┘
-│          workspaceWallpaper          │
+│                        │ version 1   │
+├────────────────────────│ of package  │
+│                        │ go has      │
+│                        │ already     │
+│                        │ been        │
+│                        │ installed   │
+│          workspaceWallp└─────────────┘
 │                                      │
 │                                      │
 │                                      │

@@ -28,6 +28,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/ernestrc/go-multierror"
 	"github.com/unstablebuild/blue/document"
@@ -404,8 +405,32 @@ func (m *pkgManager) getLatestVersion(
 		return "", err
 	}
 	if p.Latest == "" {
-		return "", errors.New("latest version is not known")
-
+		iter, err := m.pkg.ListPackageVersions(ctx, pack, nil)
+		if err != nil {
+			return "", fmt.Errorf("list %q versions: %w", pack, err)
+		}
+		// this could be pretty slow, so hopefully either there's not many package
+		// versions or Latest is always populated
+		defer iter.Close()
+		var latest time.Time
+		var version release.Version
+		for {
+			bundle, ok := iter.Next(ctx)
+			if !ok {
+				break
+			}
+			if bundle.CreatedAt.After(latest) {
+				latest = bundle.CreatedAt
+				version = bundle.Version
+			}
+		}
+		if err := iter.Err(); err != nil {
+			return "", fmt.Errorf("iterate over versions of %q: %w", pack, err)
+		}
+		if version == "" {
+			return "", fmt.Errorf("package %q has no releases", pack)
+		}
+		return version, nil
 	}
 	return p.Latest, nil
 }
