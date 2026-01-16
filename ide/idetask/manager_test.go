@@ -399,6 +399,30 @@ func TestManager(t *testing.T) {
 			})
 	})
 
+	t.Run("ReplaceTask runs task with new command and arguments", func(t *testing.T) {
+		wm := newFakeBrowser()
+		exec := newFakeScheme()
+		m := newTestManager(wm, exec)
+
+		task := Task{Name: "task", Cmd: "runtask", Filter: "*.go,*.md"}
+		require.NoError(t, m.RunTask(task))
+		assertTaskRunsWithin(t, m, 1*time.Second, "task", nil,
+			func(info TaskInfo) bool {
+				if info.Running {
+					return false
+				}
+				assert.True(t, info.LastSuccess)
+				assert.NotZero(t, info.LastDuration)
+				return true
+			})
+
+		require.NoError(t, m.ReplaceTask(task.Name, "rumtask", "arg1"))
+		assertTaskWithin(t, m, 1*time.Second, "task",
+			func(info TaskInfo) bool {
+				return info.Runs == 2
+			})
+	})
+
 	t.Run("if ignored files change on workspace, task is not run", func(t *testing.T) {
 		wm := newFakeBrowser()
 		exec := newFakeScheme()

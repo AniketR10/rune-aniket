@@ -2775,7 +2775,7 @@ func TestRunStopTasks(t *testing.T) {
 ││     Yes          No      ││
 ││                          ││
 └└──────────────────────────┘┘`},
-			{"y",
+			{"y:windowfocus right>",
 				`┌────────────────────────────┐
 │                            │
 ├┌───────────────────────────┤
@@ -2970,18 +2970,18 @@ func TestRunStopTasks(t *testing.T) {
 			{"y",
 				`┌────────────────────────────┐
 │o abc  8 tests  8 build     │
-┌─────────────┐┌─────────────┤
-│             ││AAAAAAAAAAAAA│
-│             ││AAAAAAAAAAAAA│
-│             ││AAAAAAAAAAAAA│
-│  new vte:   ││AAAAAAAAAAAAA│
-│  start      ││AAAAAAAAAAAAA│
-│  command:   ││AAAAAAAAAAAAA│
-│  context    ││AAAAAAAAAAAAA│
-│  canceled   ││AAAAAAAAAAAAA│
-│             ││AAAAAAAAAAAAA│
-│             ││AAAAAAAAAAAAA│
-│             ││AAAAAAAAAAAAA│
+├─────────────┐┌─────────────┐
+│             ││             │
+│             ││             │
+│             ││             │
+│  new vte:   ││  new vte:   │
+│  start      ││  start      │
+│  command:   ││  command:   │
+│  context    ││  context    │
+│  canceled   ││  canceled   │
+│             ││             │
+│             ││             │
+│             ││             │
 └─────────────┘└─────────────┘`},
 		}
 

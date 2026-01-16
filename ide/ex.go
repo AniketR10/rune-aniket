@@ -1106,7 +1106,7 @@ func (e *ex) newTask(args ...string) error {
 
 	err := e.tasks.RunTask(t)
 	if errors.Is(err, idetask.ErrTaskExists) {
-		return e.openReplaceTaskPrompt(t, nil)
+		return e.openReplaceTaskPrompt(t)
 	}
 	return err
 }
@@ -1147,17 +1147,7 @@ func (e *ex) newTaskTab(args ...string) error {
 
 	err := e.tasks.RunTask(t)
 	if errors.Is(err, idetask.ErrTaskExists) {
-		return e.openReplaceTaskPrompt(t, func() {
-			ok := e.tasks.FocusTask(args[0])
-			if !ok {
-				e.notifications.Notify(notifications.LevelError,
-					"could not convert task to tab")
-				return
-			}
-			if err := e.convertTab(args[0]); err != nil {
-				e.notifications.Notify(notifications.LevelError, fmt.Sprintf("%v", err))
-			}
-		})
+		return e.openReplaceTaskPrompt(t)
 	}
 	if err != nil {
 		return err

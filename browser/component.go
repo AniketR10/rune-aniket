@@ -27,6 +27,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"slices"
 
 	"github.com/ernestrc/go-multierror"
@@ -164,7 +165,8 @@ func (c *Component) NewTabFromContent(
 		uri = urier.URI()
 	} else {
 		var err error
-		uri, err = workspaceapi.ParseURI(fmt.Sprintf("internal:///%p", content))
+		path := url.PathEscape(fmt.Sprintf("%p", content))
+		uri, err = workspaceapi.ParseURI(fmt.Sprintf("internal:///%s", path))
 		if err != nil {
 			panic("parse internal uri")
 		}

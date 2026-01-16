@@ -378,9 +378,8 @@ func (h *areYouSurePrompt) discard() {
 }
 
 type replaceTaskHandler struct {
-	ex       *ex
-	t        idetask.Task
-	callback func()
+	ex *ex
+	t  idetask.Task
 }
 
 func (h *replaceTaskHandler) OnSelect(
@@ -388,16 +387,9 @@ func (h *replaceTaskHandler) OnSelect(
 ) {
 	switch option {
 	case yesOpt:
-		if err := h.ex.tasks.StopTask(h.t.Name); err != nil {
-			_, _ = h.ex.comp.Notify(notifications.LevelError, "stop task: %v", err)
+		if err := h.ex.tasks.ReplaceTask(h.t.Name, h.t.Cmd, h.t.Args...); err != nil {
+			_, _ = h.ex.comp.Notify(notifications.LevelError, "replace task: %v", err)
 			return
-		}
-		if err := h.ex.tasks.RunTask(h.t); err != nil {
-			_, _ = h.ex.comp.Notify(notifications.LevelError, "run task: %v", err)
-			return
-		}
-		if h.callback != nil {
-			h.callback()
 		}
 	case noOpt:
 	}
@@ -407,11 +399,11 @@ func (h *replaceTaskHandler) OnClose() error {
 	return nil
 }
 
-func (e *ex) openReplaceTaskPrompt(t idetask.Task, callback func()) error {
+func (e *ex) openReplaceTaskPrompt(t idetask.Task) error {
 	promptText := fmt.Sprintf(
 		"A task with the name %q already exists. Do you want to replace it?", t.Name)
 
-	promptHandler := &replaceTaskHandler{ex: e, t: t, callback: callback}
+	promptHandler := &replaceTaskHandler{ex: e, t: t}
 	e.comp.Prompt(
 		promptText,
 		[]string{yesOpt, noOpt},

@@ -230,6 +230,21 @@ func (m *Manager) StopTask(name string) error {
 	return nil
 }
 
+// Replace task replaces the command of the given task
+func (m *Manager) ReplaceTask(name string, cmd string, args ...string) error {
+	info, ok := m.tasks.Load(name)
+	if !ok {
+		return errors.New("task with this name does not exist")
+	}
+	task := info.(*Task)
+	task.mu.Lock()
+	task.Cmd = cmd
+	task.Args = args
+	task.mu.Unlock()
+	task.tryRunning(m.b, m.scheme, "  task")
+	return nil
+}
+
 // OnFocus satisfies handler.WindowSubscriber.
 func (m *Manager) OnFocus(prevFocus, newFocus handler.Window) {
 	m.onFocus(prevFocus, newFocus)
