@@ -106,6 +106,25 @@ func (m *Manager) SetMaxWidthHeight(width, height int) {
 	})
 }
 
+// FocusTask switches the window manager's focus to the tasks window or tab.
+func (m *Manager) FocusTask(name string) bool {
+	taskIfc, loaded := m.tasks.Load(name)
+	if !loaded {
+		return false
+	}
+	t := taskIfc.(*Task)
+	win := t.win
+	if win.Closed() {
+		var ok bool
+		win, ok = t.tab.Window()
+		if !ok || win.Closed() {
+			return false
+		}
+	}
+	_, err := t.b.SetFocus(win)
+	return err == nil
+}
+
 // RunTask runs a task in the background and creates a minimized floating window
 // that displays the status of the task. When a Task's window is un-minimized,
 // the full stdout and stderr of the task can be visualized.

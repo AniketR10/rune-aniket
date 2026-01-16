@@ -768,6 +768,8 @@ func (e *ex) moveTab(args ...string) error {
 	return err
 }
 
+var defaultConvertTabIcon = ''
+
 func (e *ex) convertTab(args ...string) error {
 	if len(args) == 0 {
 		return errors.New("command expects at least one argument with tab name")
@@ -782,7 +784,7 @@ func (e *ex) convertTab(args ...string) error {
 		}
 	}
 	if icon == 0 {
-		icon = ''
+		icon = defaultConvertTabIcon
 	}
 	win := e.invokeWindow()
 	tab, ok := e.comp.Browser().NewTabFromContent(icon, name, win)
@@ -1063,7 +1065,7 @@ func (e *ex) executePlugin(args ...string) error {
 func (e *ex) newTask(args ...string) error {
 	const errExpect = "command expects at least four arguments: " +
 		"name, alignment, a separator '--' and the command to run"
-	if len(args) < 3 {
+	if len(args) < 4 {
 		return errors.New(errExpect)
 	}
 	sysArgs, cmdAndArgs, found := strings.Cut(strings.Join(args, " "), "--")
@@ -1104,9 +1106,68 @@ func (e *ex) newTask(args ...string) error {
 
 	err := e.tasks.RunTask(t)
 	if errors.Is(err, idetask.ErrTaskExists) {
-		return e.openReplaceTaskPrompt(t)
+		return e.openReplaceTaskPrompt(t, nil)
 	}
 	return err
+}
+
+func (e *ex) newTaskTab(args ...string) error {
+	const errExpect = "command expects at least three arguments: " +
+		"name, alignment, a separator '--' and the command to run"
+	if len(args) < 3 {
+		return errors.New(errExpect)
+	}
+	sysArgs, cmdAndArgs, found := strings.Cut(strings.Join(args, " "), "--")
+	if !found {
+		return errors.New(errExpect)
+	}
+
+	sysArgv := strings.Split(sysArgs, " ")
+	cmdAndArgv := strings.Split(cmdAndArgs, " ")
+
+	// cleanup splitting via --
+	cmdAndArgv = cmdAndArgv[1:]
+	sysArgv = sysArgv[:len(sysArgv)-1]
+
+	if len(sysArgv) < 1 || len(cmdAndArgv) == 0 {
+		return errors.New(errExpect)
+	}
+
+	e.log(log.DebugLevel, "newtasktab called with args %+v, sysArgs: %+v, cmdAndArgv: %+v",
+		args, sysArgv, cmdAndArgv)
+
+	t := idetask.Task{
+		Name: sysArgv[0],
+		Cmd:  cmdAndArgv[0],
+		Args: cmdAndArgv[1:],
+	}
+	if len(sysArgv) > 1 {
+		t.Filter = sysArgv[1]
+	}
+
+	err := e.tasks.RunTask(t)
+	if errors.Is(err, idetask.ErrTaskExists) {
+		return e.openReplaceTaskPrompt(t, func() {
+			ok := e.tasks.FocusTask(args[0])
+			if !ok {
+				e.notifications.Notify(notifications.LevelError,
+					"could not convert task to tab")
+				return
+			}
+			if err := e.convertTab(args[0]); err != nil {
+				e.notifications.Notify(notifications.LevelError, fmt.Sprintf("%v", err))
+			}
+		})
+	}
+	if err != nil {
+		return err
+	}
+
+	ok := e.tasks.FocusTask(args[0])
+	if !ok {
+		return errors.New("could not convert task to tab")
+	}
+	return e.convertTab(args[0])
 }
 
 func (e *ex) stopTask(args ...string) error {
@@ -1187,10 +1248,6 @@ func (e *ex) terminalnewtab(args ...string) error {
 	}
 
 	uri := h.URI()
-	if err != nil {
-		_ = h.Close()
-		return err
-	}
 	t, err := e.comp.Tab(uri, e.config.Icons.Terminal, h.Title(), h)
 	if err != nil {
 		_ = h.Close()

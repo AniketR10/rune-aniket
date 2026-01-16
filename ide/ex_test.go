@@ -2919,8 +2919,73 @@ func TestRunStopTasks(t *testing.T) {
 │             ││AAAAAAAAAAAAA│
 │             ││AAAAAAAAAAAAA│
 └─────────────┘└─────────────┘`},
+			{":windowfocus left>:tasknewtab tests -- go test ./...>",
+				`┌────────────────────────────┐
+│o abc  8 tests              │
+┌─────────────┐┌─────────────┤
+│             ││AAAAAAAAAAAAA│
+│             ││AAAAAAAAAAAAA│
+│             ││AAAAAAAAAAAAA│
+│  new vte:   ││AAAAAAAAAAAAA│
+│  start      ││AAAAAAAAAAAAA│
+│  command:   ││AAAAAAAAAAAAA│
+│  context    ││AAAAAAAAAAAAA│
+│  canceled   ││AAAAAAAAAAAAA│
+│             ││AAAAAAAAAAAAA│
+│             ││AAAAAAAAAAAAA│
+│             ││AAAAAAAAAAAAA│
+└─────────────┘└─────────────┘`},
+			{":windowfocus right>:tasknewtab build -- go build ./...>",
+				`┌────────────────────────────┐
+│o abc  8 tests  8 build     │
+├─────────────┐┌─────────────┐
+│             ││             │
+│             ││             │
+│             ││             │
+│  new vte:   ││  new vte:   │
+│  start      ││  start      │
+│  command:   ││  command:   │
+│  context    ││  context    │
+│  canceled   ││  canceled   │
+│             ││             │
+│             ││             │
+│             ││             │
+└─────────────┘└─────────────┘`},
+			{":tasknewtab build -- go build ./...>",
+				`┌────────────────────────────┐
+│o abc  8 tests  8 build     │
+┌────────────────────────────┐
+│                            │
+│                            │
+│  A task with the name      │
+│  "build" already exists.   │
+│  Do you want to replace    │
+│  it?                       │
+│                            │
+│                            │
+│     Yes            No      │
+│                            │
+└────────────────────────────┘
+└─────────────┘└─────────────┘`},
+			{"y",
+				`┌────────────────────────────┐
+│o abc  8 tests  8 build     │
+┌─────────────┐┌─────────────┤
+│             ││AAAAAAAAAAAAA│
+│             ││AAAAAAAAAAAAA│
+│             ││AAAAAAAAAAAAA│
+│  new vte:   ││AAAAAAAAAAAAA│
+│  start      ││AAAAAAAAAAAAA│
+│  command:   ││AAAAAAAAAAAAA│
+│  context    ││AAAAAAAAAAAAA│
+│  canceled   ││AAAAAAAAAAAAA│
+│             ││AAAAAAAAAAAAA│
+│             ││AAAAAAAAAAAAA│
+│             ││AAAAAAAAAAAAA│
+└─────────────┘└─────────────┘`},
 		}
 
+		defaultConvertTabIcon = '8'
 		e, cleanup := newExForTestingTasks(t)
 		handlertest.TestHandlerSequence(t, e, 30, 15, cases)
 		cleanup()

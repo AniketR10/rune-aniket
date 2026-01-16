@@ -506,6 +506,19 @@ var (
 				return iterator.FromSlice[string](nil), "", nil
 			},
 		},
+		"tasknewtab": {
+			man: textapi.CommandManual{
+				Summary: "Create a task like 'tasknew' but convert it into a durable tab. " +
+					"This is a shortcut for calling 'tasknew', focusing on the minimized " +
+					"task and then calling 'windowconverttab' to convert it into a tab.",
+				Synopsis: "<name> [filter] -- <cmd> [<args>]",
+			},
+			handler: (*ex).newTaskTab,
+			completer: func(e *ex, ctx context.Context, cmd textapi.Command,
+			) (iterator.Iterator[string], string, error) {
+				return iterator.FromSlice[string](nil), "", nil
+			},
+		},
 		"taskclose": {
 			man: textapi.CommandManual{
 				Summary:  "Stop a task previously created via tasknew.",

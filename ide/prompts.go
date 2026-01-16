@@ -378,8 +378,9 @@ func (h *areYouSurePrompt) discard() {
 }
 
 type replaceTaskHandler struct {
-	ex *ex
-	t  idetask.Task
+	ex       *ex
+	t        idetask.Task
+	callback func()
 }
 
 func (h *replaceTaskHandler) OnSelect(
@@ -395,6 +396,9 @@ func (h *replaceTaskHandler) OnSelect(
 			_, _ = h.ex.comp.Notify(notifications.LevelError, "run task: %v", err)
 			return
 		}
+		if h.callback != nil {
+			h.callback()
+		}
 	case noOpt:
 	}
 }
@@ -403,11 +407,11 @@ func (h *replaceTaskHandler) OnClose() error {
 	return nil
 }
 
-func (e *ex) openReplaceTaskPrompt(t idetask.Task) error {
+func (e *ex) openReplaceTaskPrompt(t idetask.Task, callback func()) error {
 	promptText := fmt.Sprintf(
 		"A task with the name %q already exists. Do you want to replace it?", t.Name)
 
-	promptHandler := &replaceTaskHandler{ex: e, t: t}
+	promptHandler := &replaceTaskHandler{ex: e, t: t, callback: callback}
 	e.comp.Prompt(
 		promptText,
 		[]string{yesOpt, noOpt},
