@@ -247,7 +247,7 @@ func (h *workspaceManagerHandler) init(
 	}
 
 	h.empty, err = newEx(ed, homeWorkspace, h.storage, notifications,
-		cfg.terminalConfig(), h.publishEvent, h.initialVTECapacity, cfg.clipboard(),
+		cfg.terminalConfig(), h.publishEvent, 0 /* vte capacity */, cfg.clipboard(),
 		h.dispatchOnPreview, globalOpts...)
 	if err != nil {
 		return fmt.Errorf("new ex: %w", err)
