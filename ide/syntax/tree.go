@@ -349,22 +349,26 @@ func (t *internalTree) LastFlush() time.Time {
 }
 
 type files struct {
-	ext    string
 	langID string
 	files  []string
 }
 
 func (t *Tree) downloadFiles(ctx context.Context) (files, error) {
-	ext := filepath.Ext(t.uri.String())
-	if ext == "" {
-		msg := "file does not have an extension"
-		t.log(log.DebugLevel, "aborting syntax parsing: %s", msg)
-		return files{}, errors.New(msg)
-	}
-	id, ok := extensionToLanguageID[ext]
+	filename := t.uri.Name()
+	id, ok := filenameToLanguageID[filename]
 	if !ok {
-		id = ext[1:]
+		ext := filepath.Ext(filename)
+		if ext == "" {
+			msg := "file does not have an extension"
+			t.log(log.DebugLevel, "aborting syntax parsing: %s", msg)
+			return files{}, errors.New(msg)
+		}
+		id, ok = extensionToLanguageID[ext]
+		if !ok {
+			id = ext[1:]
+		}
 	}
+	t.log(log.DebugLevel, "found language for file %s: %s", filename, id)
 	iter, err := t.pkg.LibDir(ctx, id)
 	if err != nil {
 		if errors.Is(err, document.ErrNotFound) {
@@ -374,7 +378,7 @@ func (t *Tree) downloadFiles(ctx context.Context) (files, error) {
 			return files{}, errors.New(msg)
 		}
 		t.log(log.ErrorLevel, "aborting syntax parsing: %v", err)
-		t.notifyNotAvail(ext)
+		t.notifyNotAvail(id)
 		return files{}, err
 	}
 	defer iter.Close()
@@ -382,10 +386,10 @@ func (t *Tree) downloadFiles(ctx context.Context) (files, error) {
 	if err != nil {
 		msg := fmt.Sprintf("fetch language %q package: %v", id, err)
 		t.log(log.ErrorLevel, "%s", msg)
-		t.notifyNotAvail(ext)
+		t.notifyNotAvail(id)
 		return files{}, errors.New(msg)
 	}
-	return files{files: allFiles, ext: ext, langID: id}, nil
+	return files{files: allFiles, langID: id}, nil
 }
 
 func (t *Tree) initParserFromFiles(ctx context.Context, f files) error {
@@ -405,14 +409,14 @@ func (t *Tree) initParserFromFiles(ctx context.Context, f files) error {
 	if langFile == "" {
 		msg := fmt.Sprintf("parser file not found in language %q package", f.langID)
 		t.log(log.InfoLevel, "language not available: %s", msg)
-		t.notifyNotAvail(f.ext)
+		t.notifyNotAvail(f.langID)
 		return errors.New(msg)
 	}
 	err := t.initParser(ctx, f.langID, langFile,
 		highlightsFile, indentsFile, foldsFile)
 	if err != nil {
 		t.log(log.ErrorLevel, "initialize language %s: %v", f.langID, err)
-		t.notifyNotAvail(f.ext)
+		t.notifyNotAvail(f.langID)
 		return err
 	}
 	t.log(log.DebugLevel, "successfully initialized parser")
@@ -467,12 +471,7 @@ func (t *Tree) initParser(
 
 	if indentsFile != "" {
 		if err := t.initIndents(language, indentsFile); err != nil {
-			_ = purego.Dlclose(t.lib)
-			t.parser.Close()
-			if t.highlights != nil {
-				t.highlights.Close()
-			}
-			return fmt.Errorf("initialize indents: %w", err)
+			t.log(log.ErrorLevel, "initialize indents: %v", err)
 		}
 	} else {
 		t.log(log.InfoLevel, "indents file not found, some features will be disabled")
@@ -480,15 +479,7 @@ func (t *Tree) initParser(
 
 	if foldsFile != "" {
 		if err := t.initFolds(language, foldsFile); err != nil {
-			_ = purego.Dlclose(t.lib)
-			t.parser.Close()
-			if t.highlights != nil {
-				t.highlights.Close()
-			}
-			if t.indents != nil {
-				t.indents.Close()
-			}
-			return fmt.Errorf("initialize folds: %w", err)
+			t.log(log.ErrorLevel, "initialize folds: %v", err)
 		}
 	} else {
 		t.log(log.InfoLevel, "folds file not found, some features will be disabled")
