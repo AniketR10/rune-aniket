@@ -2791,9 +2791,9 @@ func TestRunStopTasks(t *testing.T) {
 ││                  └────────┘
 ││                           │
 └└───────────────────────────┘`},
-			{":windowconverttab build x>",
+			{":windowconverttab asset x>",
 				`┌────────────────────────────┐
-│x build                     │
+│x asset                     │
 ├┌───────────────────────────┤
 ││                           │
 ││                           │
@@ -2809,7 +2809,7 @@ func TestRunStopTasks(t *testing.T) {
 └└───────────────────────────┘`},
 			{":edit abc>:write>",
 				`┌────────────────────────────┐
-│x build  o abc              │
+│x asset  o abc              │
 ├┌───────────────────────────┤
 ││AAAAAAAAAAAAAAAAAAAAAAAAAAA│
 ││AAAAAAAAAAAAAAAAAAAAAAAAAAA│
@@ -2825,7 +2825,7 @@ func TestRunStopTasks(t *testing.T) {
 └└───────────────────────────┘`},
 			{":tabprevious>",
 				`┌────────────────────────────┐
-│x build  o abc              │
+│x asset  o abc              │
 ├┌───────────────────────────┤
 ││                           │
 ││                           │
@@ -2839,9 +2839,9 @@ func TestRunStopTasks(t *testing.T) {
 ││                           │
 ││                           │
 └└───────────────────────────┘`},
-			{":windowfocus left>:windowconverttab tests>",
+			{":windowfocus left>:windowconverttab build X>",
 				`┌────────────────────────────┐
-│x build  o abc    tests    │
+│x asset  o abc  X build     │
 ├────────────────────────────┤
 │                            │
 │                            │
@@ -2857,7 +2857,7 @@ func TestRunStopTasks(t *testing.T) {
 └────────────────────────────┘`},
 			{":tabprevious>:tabprevious>:tabprevious>",
 				`┌────────────────────────────┐
-│x build  o abc    tests    │
+│x asset  o abc  X build     │
 ├────────────────────────────┤
 │                            │
 │                            │
@@ -2873,7 +2873,7 @@ func TestRunStopTasks(t *testing.T) {
 └────────────────────────────┘`},
 			{":windowsplit right>:tabnext>:tabnext>",
 				`┌────────────────────────────┐
-│x build  o abc    tests    │
+│x asset  o abc  X build     │
 ├─────────────┐┌─────────────┐
 │             ││AAAAAAAAAAAAA│
 │             ││AAAAAAAAAAAAA│
@@ -2883,6 +2883,38 @@ func TestRunStopTasks(t *testing.T) {
 │  command:   ││AAAAAAAAAAAAA│
 │  context    ││AAAAAAAAAAAAA│
 │  canceled   ││AAAAAAAAAAAAA│
+│             ││AAAAAAAAAAAAA│
+│             ││AAAAAAAAAAAAA│
+│             ││AAAAAAAAAAAAA│
+└─────────────┘└─────────────┘`},
+			{":taskclose validateAssets>",
+				`┌────────────────────────────┐
+│o abc  X build              │
+├─────────────┐┌─────────────┐
+│             ││AAAAAAAAAAAAA│
+│             ││AAAAAAAAAAAAA│
+│             ││AAAAAAAAAAAAA│
+│  new vte:   ││AAAAAAAAAAAAA│
+│  start      ││AAAAAAAAAAAAA│
+│  command:   ││AAAAAAAAAAAAA│
+│  context    ││AAAAAAAAAAAAA│
+│  canceled   ││AAAAAAAAAAAAA│
+│             ││AAAAAAAAAAAAA│
+│             ││AAAAAAAAAAAAA│
+│             ││AAAAAAAAAAAAA│
+└─────────────┘└─────────────┘`},
+			{":taskclose build>",
+				`┌────────────────────────────┐
+│o abc                       │
+├─────────────┐┌─────────────┐
+│             ││AAAAAAAAAAAAA│
+│             ││AAAAAAAAAAAAA│
+│             ││AAAAAAAAAAAAA│
+│             ││AAAAAAAAAAAAA│
+│             ││AAAAAAAAAAAAA│
+│             ││AAAAAAAAAAAAA│
+│             ││AAAAAAAAAAAAA│
+│             ││AAAAAAAAAAAAA│
 │             ││AAAAAAAAAAAAA│
 │             ││AAAAAAAAAAAAA│
 │             ││AAAAAAAAAAAAA│

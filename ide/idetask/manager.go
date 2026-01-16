@@ -34,6 +34,7 @@ import (
 	"github.com/go-git/go-git/v6/plumbing/format/gitignore"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
+	"unstable.build/go-tui/api/browserapi"
 	"unstable.build/go-tui/api/schemeapi"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/debug"
@@ -45,7 +46,7 @@ import (
 // Manager runs and manages tasks, which are processes that
 // run in response to changes in the workspace. See Task for more details.
 type Manager struct {
-	b                browser.Browser
+	b                Browser
 	scheme           schemeapi.Scheme
 	pluginOpts       []plugin.Option
 	ctx              context.Context
@@ -57,9 +58,15 @@ type Manager struct {
 	scheduleNextTick func(func()) bool
 }
 
+// Browser extends a browser.Browser with RemoveTab.
+type Browser interface {
+	browser.Browser
+	RemoveTab(h browserapi.Handler) error
+}
+
 // NewManager allocates storage for a new Manager and initializes it.
 func NewManager(
-	b browser.Browser, scheme schemeapi.Scheme,
+	b Browser, scheme schemeapi.Scheme,
 	scheduleNextTick func(func()) bool,
 	opts ...plugin.Option,
 ) *Manager {
@@ -70,7 +77,7 @@ func NewManager(
 
 // Init initializes this Manager with the given browser, scheme and options.
 func (m *Manager) Init(
-	b browser.Browser, scheme schemeapi.Scheme,
+	b Browser, scheme schemeapi.Scheme,
 	scheduleNextTick func(func()) bool,
 	opts ...plugin.Option,
 ) {

@@ -78,6 +78,7 @@ type Task struct {
 	// Runs represents the number of times this task has been run.
 	runs int
 
+	b                Browser
 	watchID          int
 	ctx              context.Context
 	cancelCtx        func()
@@ -253,6 +254,12 @@ func (t *Task) doClose() (ret error) {
 		ret = t.win.Close()
 	}
 	t.cancelCtx()
+	if t.tab != nil {
+		if err := t.b.RemoveTab(t.tab); err != nil {
+			ret = multierror.Append(ret, err)
+		}
+	}
+
 	if t.handler != nil {
 		if err := t.handler.Close(); err != nil {
 			ret = multierror.Append(ret, err)
@@ -262,13 +269,14 @@ func (t *Task) doClose() (ret error) {
 }
 
 func (t *Task) init(
-	watchID int, ctx context.Context, b browser.Browser,
+	watchID int, ctx context.Context, b Browser,
 	scheme schemeapi.Scheme, newPlugin pluginBuilder,
 	maxWidth, maxHeight int, closeHook func(),
 	scheduleNextTick func(func()) bool,
 	pluginOpts ...plugin.Option,
 ) (context.Context, func(), error) {
 	t.closeHook = closeHook
+	t.b = b
 	t.watchID = watchID
 	t.maxWidth = maxWidth
 	t.minWidth, t.minHeight = calcMinSize(maxWidth, maxHeight)

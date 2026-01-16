@@ -806,6 +806,10 @@ func (m *fakeBrowser) PublishEvent(ev term.Event) error {
 	return nil
 }
 
+func (m *fakeBrowser) RemoveTab(h browserapi.Handler) error {
+	return nil
+}
+
 func (m *fakeBrowser) Floating(h browser.Floating, cfg component.FloatingConfig) (
 	browser.Window, error,
 ) {
