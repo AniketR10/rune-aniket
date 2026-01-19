@@ -28,6 +28,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"unicode"
 
 	"unstable.build/go-tui/term"
 
@@ -46,6 +47,35 @@ func newBufferWithContent(t *testing.T, str string) *Buffer {
 	require.NoError(t, err)
 
 	return b
+}
+
+func TestBufferTokenAt(t *testing.T) {
+	wordMatcher := func(r rune) bool {
+		return unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_'
+	}
+	suite := []struct {
+		content       string
+		at            term.Coordinates
+		expectedStart term.Coordinates
+		expectedTo    term.Coordinates
+		expected      string
+	}{
+		{longStr, term.Coordinates{}, term.Coordinates{}, term.Coordinates{X: 4}, "Love"},
+		{longStr, term.Coordinates{X: 1}, term.Coordinates{}, term.Coordinates{X: 4}, "Love"},
+		{longStr, term.Coordinates{X: 4}, term.Coordinates{}, term.Coordinates{}, ""},
+		{longStr, term.Coordinates{X: 5}, term.Coordinates{X: 5}, term.Coordinates{X: 7}, "in"},
+		{longStr, term.Coordinates{X: 6}, term.Coordinates{X: 5}, term.Coordinates{X: 7}, "in"},
+		{longStr, term.Coordinates{X: 20}, term.Coordinates{X: 19}, term.Coordinates{X: 23}, "wasn"},
+	}
+
+	for i, test := range suite {
+		t.Run(fmt.Sprintf("test case %d", i), func(t *testing.T) {
+			buf := NewBuffer()
+			_, _ = buf.ReadFrom(strings.NewReader(test.content))
+			_, _, actual := buf.TokenAt(test.at, wordMatcher)
+			assert.Equal(t, test.expected, actual)
+		})
+	}
 }
 
 func TestBufferInitPerformance(t *testing.T) {

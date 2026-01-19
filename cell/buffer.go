@@ -586,6 +586,47 @@ func (b *Buffer) Select(from term.Coordinates, to term.Coordinates) (
 	return cell, sels, true
 }
 
+// TokenAt returns the token that satisfies the isAllowed function
+// and its start and end positions.
+//
+// It returns an empty string if the token at the given position does
+// not satisfy isAllowed.
+func (b *Buffer) TokenAt(pos term.Coordinates, isAllowed func(rune) bool) (
+	term.Coordinates, term.Coordinates, string,
+) {
+	var builder strings.Builder
+	cells := b.RawCells()
+	rows := b.Rows()
+
+	start := pos
+	for start.Y < rows && start.X < b.Columns(start.Y) && start.X >= 0 {
+		c := cells[start.Y][start.X]
+		if isAllowed(c.Ch) {
+			start.X--
+			continue
+		}
+		break
+	}
+
+	if start == pos {
+		return start, start, builder.String()
+	}
+
+	start.X++
+	end := start
+	for end.Y < rows && end.X < b.Columns(end.Y) && end.X >= 0 {
+		c := cells[end.Y][end.X]
+		if isAllowed(c.Ch) {
+			end.X++
+			builder.WriteRune(c.Ch)
+			continue
+		}
+		break
+	}
+
+	return start, end, builder.String()
+}
+
 // SelectLine returns the lines inside the given coordinates or nil if
 // coordinates are out of bounds.
 func (b *Buffer) SelectLine(from term.Coordinates, to term.Coordinates) (

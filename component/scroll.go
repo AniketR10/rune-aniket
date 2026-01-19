@@ -27,7 +27,6 @@ import (
 	"context"
 	"fmt"
 	"sort"
-	"strings"
 	"unicode"
 
 	"github.com/unstablebuild/tcell/v3"
@@ -760,48 +759,7 @@ func (s *Scroll) Draw(writer term.Writer) {
 func (s *Scroll) WordAt(pos term.Coordinates) (
 	term.Coordinates, term.Coordinates, string,
 ) {
-	return s.TokenAt(pos, wordMatcher)
-}
-
-// TokenAt returns the token that satisfies the isAllowed function
-// and its start and end positions.
-//
-// It returns an empty string if the token at the given position does
-// not satisfy isAllowed.
-func (s *Scroll) TokenAt(pos term.Coordinates, isAllowed func(rune) bool) (
-	term.Coordinates, term.Coordinates, string,
-) {
-	var b strings.Builder
-	cells := s.buf.RawCells()
-	rows := s.buf.Rows()
-
-	start := pos
-	for start.Y < rows && start.X < s.buf.Columns(start.Y) && start.X >= 0 {
-		c := cells[start.Y][start.X]
-		if isAllowed(c.Ch) {
-			start.X--
-			continue
-		}
-		break
-	}
-
-	if start == pos {
-		return start, start, b.String()
-	}
-
-	start.X++
-	end := start
-	for end.Y < rows && end.X < s.buf.Columns(end.Y) && end.X >= 0 {
-		c := cells[end.Y][end.X]
-		if isAllowed(c.Ch) {
-			end.X++
-			b.WriteRune(c.Ch)
-			continue
-		}
-		break
-	}
-
-	return start, end, b.String()
+	return s.buf.TokenAt(pos, wordMatcher)
 }
 
 // Search performs a text search of text in the internal cell buffer. It populates
