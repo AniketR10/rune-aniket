@@ -230,7 +230,8 @@ func (m *Manager) StopTask(name string) error {
 	return nil
 }
 
-// Replace task replaces the command of the given task
+// ReplaceTask replaces the command of the given task and attempts to
+// run the task.
 func (m *Manager) ReplaceTask(name string, cmd string, args ...string) error {
 	info, ok := m.tasks.Load(name)
 	if !ok {

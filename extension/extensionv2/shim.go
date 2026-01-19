@@ -88,7 +88,15 @@ func (g granteeShim) ExtendWorkspace(
 	ctx context.Context, w *extensionapi.Workspace, cfg config.Config,
 ) error {
 	broker := newBroker(w.RawConn())
-
+	m := make(map[string]any)
+	cfg.Iterate(func(k string, v any) {
+		m[k] = v
+	})
+	// allows legacy extensions to access data dir
+	// this should be deprecated as soon as legacy extensions
+	// are refactored.
+	m["datadir"] = w.DataDir(ctx)
+	cfg = config.MapConfig(m)
 	err := g.grantee.Connected(ctx, broker, cfg)
 	if err != nil {
 		return fmt.Errorf("connected legacy callback: %w", err)

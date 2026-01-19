@@ -51,10 +51,16 @@ import (
 
 // Workspace abstracts resources associated with a Workspace.
 type Workspace struct {
-	conn   grpc.ClientConnInterface
-	editor *textrpc.Client
-	config config.Config
-	meta   Metadata
+	dataDir string
+	conn    grpc.ClientConnInterface
+	editor  *textrpc.Client
+	config  config.Config
+	meta    Metadata
+}
+
+// DataDir returns the data directory to store data to re-use across sessions.
+func (w *Workspace) DataDir(ctx context.Context) string {
+	return w.dataDir
 }
 
 // WindowManager returns the workspace's window manager, which can be used
@@ -148,6 +154,7 @@ func (w *Workspace) RawConn() grpc.ClientConnInterface {
 // necessary to receive a valid Config.
 func NewWorkspace(req Config, meta Metadata) (*Workspace, error) {
 	ret := new(Workspace)
+	ret.dataDir = req.DataDir
 	opts := []grpc.DialOption{
 		grpc.WithContextDialer(
 			func(ctx context.Context, _ string) (net.Conn, error) {

@@ -23,6 +23,11 @@
 
 package syntax
 
+import (
+	"errors"
+	"path/filepath"
+)
+
 // this is for exceptions to the rule of languageID => file_extension[1:]
 var extensionToLanguageID = map[string]string{
 	// Ada
@@ -704,4 +709,23 @@ var filenameToLanguageID = map[string]string{
 	"nginx.conf":       "nginx",
 	"sxhkdrc":          "sxhkdrc",
 	".zathurarc":       "zathurarc",
+}
+
+// LanguageForFile returns the language id for the given file,
+// or an error if it couldn't be determined.
+func LanguageForFile(filename string) (string, error) {
+	id, ok := filenameToLanguageID[filename]
+	if ok {
+		return id, nil
+	}
+	ext := filepath.Ext(filename)
+	if ext == "" {
+		return "", errors.New("file does not have an extension " +
+			"and it's not a recognized file")
+	}
+	id, ok = extensionToLanguageID[ext]
+	if !ok {
+		id = ext[1:]
+	}
+	return id, nil
 }

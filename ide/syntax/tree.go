@@ -52,10 +52,21 @@ import (
 )
 
 const (
-	parserFilename     = "tree-sitter.so"
-	highlightsFilename = "highlights.scm"
-	indentsFilename    = "indents.scm"
-	foldsFilename      = "folds.scm"
+	// ParserFilename is the filename of the parser shared object.
+	ParserFilename = "tree-sitter.so"
+
+	// HighlightsFilename is the name given to the highlights query file
+	HighlightsFilename = "highlights.scm"
+
+	// IndentsFilename is the name given to the indents query file.
+	IndentsFilename = "indents.scm"
+
+	// FoldsFilename is the name given to the folds query file.
+	FoldsFilename = "folds.scm"
+
+	// LocalsFilename is the name given to the a query file
+	// used to define scopes, definitions and references.
+	LocalsFilename = "locals.scm"
 )
 
 // WithTree installs a tree parser into the given buffer via cell.Buffer.WithEditor,
@@ -355,18 +366,10 @@ type files struct {
 
 func (t *Tree) downloadFiles(ctx context.Context) (files, error) {
 	filename := t.uri.Name()
-	id, ok := filenameToLanguageID[filename]
-	if !ok {
-		ext := filepath.Ext(filename)
-		if ext == "" {
-			msg := "file does not have an extension"
-			t.log(log.DebugLevel, "aborting syntax parsing: %s", msg)
-			return files{}, errors.New(msg)
-		}
-		id, ok = extensionToLanguageID[ext]
-		if !ok {
-			id = ext[1:]
-		}
+	id, err := LanguageForFile(filename)
+	if err != nil {
+		t.log(log.DebugLevel, "aborting syntax parsing: %s", err)
+		return files{}, err
 	}
 	t.log(log.DebugLevel, "found language for file %s: %s", filename, id)
 	iter, err := t.pkg.LibDir(ctx, id)
@@ -396,13 +399,13 @@ func (t *Tree) initParserFromFiles(ctx context.Context, f files) error {
 	var langFile, highlightsFile, indentsFile, foldsFile string
 	for _, file := range f.files {
 		switch filepath.Base(file) {
-		case parserFilename:
+		case ParserFilename:
 			langFile = file
-		case highlightsFilename:
+		case HighlightsFilename:
 			highlightsFile = file
-		case indentsFilename:
+		case IndentsFilename:
 			indentsFile = file
-		case foldsFilename:
+		case FoldsFilename:
 			foldsFile = file
 		}
 	}
