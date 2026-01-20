@@ -34,19 +34,17 @@ import (
 type undoer struct {
 	version         int
 	w               Editor
-	undoTimeline    []op
-	redoTimeline    []op
+	undoTimeline    []edits
+	redoTimeline    []edits
 	mergeGroupStart int
 }
 
-type op struct {
-	from term.Coordinates
-	to   term.Coordinates
-	do   func()
-	undo func()
+type edits struct {
+	Version int
+	Edits   []edit
 }
 
-// Newundoer returns new instance of undoer to undo/redo operations of w.
+// newUndoer returns new instance of undoer to undo/redo operations of w.
 func newUndoer(w Editor) *undoer {
 	u := new(undoer)
 	u.init(w)
@@ -56,14 +54,14 @@ func newUndoer(w Editor) *undoer {
 // Init initializes this undoer to undo/redo operations of w.
 func (u *undoer) init(w Editor) {
 	u.w = w
-	u.undoTimeline = make([]op, 0)
-	u.redoTimeline = make([]op, 0)
+	u.undoTimeline = make([]edits, 0)
+	u.redoTimeline = make([]edits, 0)
 }
 
-func popLastOp(timeline []op) ([]op, op, bool) {
+func popLastOp(timeline []edits) ([]edits, edits, bool) {
 	lastCmd := len(timeline) - 1
 	if lastCmd < 0 {
-		return nil, op{}, false
+		return nil, edits{}, false
 	}
 	op := timeline[lastCmd]
 	return timeline[:lastCmd], op, true
@@ -78,24 +76,11 @@ func (u *undoer) endMergeUndo() bool {
 	if u.mergeGroupStart >= len(u.undoTimeline) {
 		return false
 	}
-	grouped := op{
-		from: u.undoTimeline[u.mergeGroupStart].from,
-		do:   func() {},
-		undo: func() {},
-	}
-	for i := u.mergeGroupStart; i < len(u.undoTimeline); i++ {
+	tail := u.undoTimeline[len(u.undoTimeline)-1]
+	grouped := edits{Version: tail.Version}
+	for i := len(u.undoTimeline) - 1; i >= u.mergeGroupStart; i-- {
 		op := u.undoTimeline[i]
-		do := grouped.do
-		undo := grouped.undo
-		grouped.do = func() {
-			do()
-			op.do()
-		}
-		grouped.undo = func() {
-			op.undo()
-			undo()
-		}
-		grouped.to = op.to
+		grouped.Edits = append(grouped.Edits, op.Edits...)
 	}
 
 	u.undoTimeline = u.undoTimeline[:u.mergeGroupStart]
@@ -105,34 +90,64 @@ func (u *undoer) endMergeUndo() bool {
 }
 
 func (u *undoer) redo() (bool, term.Coordinates) {
-	redoTimeline, op, ok := popLastOp(u.redoTimeline)
+	redoTimeline, ed, ok := popLastOp(u.redoTimeline)
 	if !ok {
 		return false, term.Coordinates{}
 	}
+	if ed.Version != u.version || len(ed.Edits) == 0 {
+		return false, term.Coordinates{}
+	}
 	u.redoTimeline = redoTimeline
-	op.do()
+	u.version += len(ed.Edits)
+
+	var op edits
+	op.Version = u.version
+	op.Edits = make([]edit, len(ed.Edits))
+	for i, ed := range ed.Edits {
+		from, to, old := u.w.Edit(context.Background(), ed.From, ed.To, ed.String)
+		ed.From = from
+		ed.To = to
+		ed.String = old
+		op.Edits[len(op.Edits)-i-1] = ed
+	}
+
 	u.pushUndo(op)
-	return ok, op.to
+	return ok, op.Edits[0].To
 }
 
 func (u *undoer) undo() (bool, term.Coordinates) {
 	if u.version == 0 {
 		return false, term.Coordinates{}
 	}
-	undoTimeline, op, ok := popLastOp(u.undoTimeline)
+	undoTimeline, ed, ok := popLastOp(u.undoTimeline)
 	if !ok {
 		return false, term.Coordinates{}
 	}
+	if ed.Version != u.version || len(ed.Edits) == 0 {
+		return false, term.Coordinates{}
+	}
 	u.undoTimeline = undoTimeline
-	op.undo()
+	u.version -= len(ed.Edits)
+
+	var op edits
+	op.Version = u.version
+	op.Edits = make([]edit, len(ed.Edits))
+	for i, ed := range ed.Edits {
+		from, to, old := u.w.Edit(context.Background(), ed.From, ed.To, ed.String)
+		ed.From = from
+		ed.To = to
+		ed.String = old
+		op.Edits[len(op.Edits)-i-1] = ed
+	}
 	u.pushRedo(op)
-	return ok, op.from
+
+	return ok, op.Edits[0].From
 }
 
-func (u *undoer) pushUndo(cmd op) {
+func (u *undoer) pushUndo(cmd edits) {
 	u.undoTimeline = append(u.undoTimeline, cmd)
 }
-func (u *undoer) pushRedo(cmd op) {
+func (u *undoer) pushRedo(cmd edits) {
 	u.redoTimeline = append(u.redoTimeline, cmd)
 }
 
@@ -140,25 +155,26 @@ func (u *undoer) resetRedoTimeline() {
 	u.redoTimeline = u.redoTimeline[:0]
 }
 
+// Edit is an edit operation on a Buffer.
+type edit struct {
+	From   term.Coordinates
+	To     term.Coordinates
+	String string
+}
+
 // update captures underlying writer update so it can be undone. See cell.writer.Edit
 func (u *undoer) Edit(ctx context.Context, start, end term.Coordinates, str string) (
 	from, to term.Coordinates, old string,
 ) {
-	op := op{
-		do: func() {
-			u.version++
-			from, to, old = u.w.Edit(ctx, start, end, str)
-		},
-		undo: func() {
-			u.version--
-			u.w.Edit(ctx, from, to, old)
-		},
-	}
+	u.version++
+	from, to, old = u.w.Edit(ctx, start, end, str)
 
-	op.do()
-	op.from = start
-	op.to = to
-	u.pushUndo(op)
+	var op edit
+	op.From = from
+	op.To = to
+	op.String = old
+
+	u.pushUndo(edits{Version: u.version, Edits: []edit{op}})
 	u.resetRedoTimeline()
 	return
 }
