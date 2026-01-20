@@ -411,8 +411,8 @@ func (s *burning) Shade(frame, total int, in [][]term.Cell) {
 		s.initialize()
 	}
 
-	s.rows = len(in[0])
-	s.cols = len(in)
+	s.rows = len(in)
+	s.cols = len(in[0])
 
 	if !s.HideLogo {
 		s.processLogoFromWallpaper(in)
@@ -441,7 +441,8 @@ func (s *burning) initialize() {
 		// would be " 0123".
 		s.asciiartConfig.DensityCharacters = invisibleChar + "123456789"
 
-		s.imgBuf = cell.NewBuffer()
+		s.imgBuf = new(cell.Buffer)
+		s.imgBuf.InitPerformance(s.rows, s.cols, ' ')
 		if !s.HideLogo && s.Logo.Image == nil {
 			panic("Logo.Image must be passed in BurningParams unless you s.HideLogo")
 		}
@@ -1031,7 +1032,6 @@ func (s *burning) processLogoFromWallpaper(in [][]term.Cell) {
 	wallpaperHeight := bounds.bottomRightY - bounds.topLeftY
 
 	// STEP 3: Encode wallpaper logo into the wallpaper bounds.
-	s.imgBuf.Reset()
 	asciiart.Encode(s.imgBuf, wallpaperWidth, wallpaperHeight, s.Logo.Image, s.asciiartConfig)
 
 	// STEP 4: Populate the "logo gradient" matrix used for the ember ripples
