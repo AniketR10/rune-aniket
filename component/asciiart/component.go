@@ -59,6 +59,7 @@ func (c *imgComp) Draw(w term.Writer) {
 	if c.dirty {
 		c.scroll.Buffer().Reset()
 		Encode(c.scroll.Buffer(), c.width, c.height, c.img, c.config)
+		c.dirty = false
 	}
 	c.scroll.Draw(w)
 }
