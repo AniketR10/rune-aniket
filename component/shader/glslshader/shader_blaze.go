@@ -107,11 +107,11 @@ func (s *blaze) runCell(
 	p := fragCoord.multSc(dist / iResolution.x)
 	p.x -= iTime / 1.1
 
-	q := s.fbm(p.add(vec2(1.0*sin(iTime)/10.0 - iTime*0.01)))
-	qb := s.fbm(p.add(vec2(0.1*cos(iTime)/5.0 + iTime*0.002)))
-	q2 := s.fbm(p.add(vec2(-iTime*0.44-5.0*cos(iTime)/7.0))) - 6.0
-	q3 := s.fbm(p.add(vec2(-iTime*0.9-10.0*cos(iTime)/30.0))) - 4.0
-	q4 := s.fbm(p.add(vec2(-iTime*2.0-20.0*sin(iTime)/20.0))) + 2.0
+	q := s.fbm(p.add(vec2FromScalar(1.0*sin(iTime)/10.0 - iTime*0.01)))
+	qb := s.fbm(p.add(vec2FromScalar(0.1*cos(iTime)/5.0 + iTime*0.002)))
+	q2 := s.fbm(p.add(vec2FromScalar(-iTime*0.44-5.0*cos(iTime)/7.0))) - 6.0
+	q3 := s.fbm(p.add(vec2FromScalar(-iTime*0.9-10.0*cos(iTime)/30.0))) - 4.0
+	q4 := s.fbm(p.add(vec2FromScalar(-iTime*2.0-20.0*sin(iTime)/20.0))) + 2.0
 
 	q = (q + qb - 0.4*q2 - 2.0*q3 + 0.6*q4) / 3.8
 
@@ -131,7 +131,7 @@ func (s *blaze) runCell(
 	hsv.z *= hsv.y * 1.13
 	hsv.y = (2.2 - hsv.z*.9) * 1.20
 	color = s.hsv2rgb(hsv)
-	color = clamp3D(color, vec3(0.0), vec3(1.0))
+	color = clamp3D(color, vec3FromScalar(0.0), vec3FromScalar(1.0))
 
 	if s.SwapRedBlue {
 		color = vec3(color.z, color.y, color.x) // blue flames insteead of red
@@ -157,7 +157,7 @@ func (s *blaze) hsv2rgb(c vec3D) vec3D {
 	p := abs3D(fract3D(c.xxx().add(s.k2.xyz())).multSc(6.0).sub(s.k2.www()))
 	ret := mix3D(
 		s.k2.xxx(),
-		clamp3D(p.sub(s.k2.xxx()), vec3(0.0), vec3(1.0)),
+		clamp3D(p.sub(s.k2.xxx()), vec3FromScalar(0.0), vec3FromScalar(1.0)),
 		c.y,
 	).multSc(c.z)
 	return ret
@@ -169,7 +169,7 @@ func (s *blaze) rand(n vec2D) float {
 
 func (s *blaze) noise(n vec2D) float {
 	b := n.floor()
-	f := smoothstep2D(vec2(0.0), vec2(1.0), fract2D(n))
+	f := smoothstep2D(vec2FromScalar(0.0), vec2FromScalar(1.0), fract2D(n))
 	return mix(
 		mix(s.rand(b), s.rand(b.add(s.noiseD.yx())), f.x),
 		mix(s.rand(b.add(s.noiseD.yx())), s.rand(b.add(s.noiseD.yy())), f.x),

@@ -586,7 +586,7 @@ func (s *burning) drawFlames(
 		16.0*math.Pow(
 			math.Max(
 				0,
-				length2D(vec2(s.Laterals).
+				length2D(vec2FromScalar(s.Laterals).
 					mult(q).
 					mult(vec2(q.y*s.sampleAnimatedParameter(progress, s.Wide), 0.35)))-
 					n*math.Max(0, q.y+0.27)),
@@ -638,7 +638,7 @@ func (s *burning) drawFlames(
 		alpha = c * (1.0 - math.Pow(uv.y, 1.0))
 	}
 
-	col = clamp3D(col.multSc(255.0), vec3(0.0), vec3(255.0))
+	col = clamp3D(col.multSc(255.0), vec3FromScalar(0.0), vec3FromScalar(255.0))
 
 	// Flames look bad on bright backgrounds, so darken them if it's the case.
 	originalBg := inBg
@@ -778,7 +778,7 @@ func (s *burning) drawLogoEffects(
 	)
 	temperature = clamp(temperature, 0.0, 1.0)
 	heatCol := vecToCol(clamp3D(
-		s.heatToCol(temperature), vec3(0.0), vec3(1.0),
+		s.heatToCol(temperature), vec3FromScalar(0.0), vec3FromScalar(1.0),
 	).multSc(255))
 	logoBg = shaderutils.InterpolateColor(temperature, logoBg, heatCol, s.defaultAttr.Bg)
 
@@ -935,18 +935,18 @@ func (s *burning) noise(p vec2D) float {
 	b := a.sub(o).addSc(k2)
 	c := a.subSc(1.0).addSc(2.0 * k2)
 
-	h := max3D(vec3(0.5).sub(vec3(
+	h := max3D(vec3FromScalar(0.5).sub(vec3(
 		dot2D(a, a),
 		dot2D(b, b),
 		dot2D(c, c),
-	)), vec3(0.0))
+	)), vec3FromScalar(0.0))
 	n := h.mult(h).mult(h).mult(h).mult(vec3(
 		dot2D(a, s.hash(i.addSc(0.0))),
 		dot2D(b, hash(i.add(o))),
 		dot2D(c, hash(i.addSc(1.0)))),
 	)
 
-	return dot3D(n, vec3(70.0))
+	return dot3D(n, vec3FromScalar(70.0))
 }
 
 func (s *burning) hash(p vec2D) vec2D {
@@ -954,7 +954,7 @@ func (s *burning) hash(p vec2D) vec2D {
 		dot2D(p, vec2(127.1, 311.7)),
 		dot2D(p, vec2(269.5, 183.3)),
 	)
-	return vec2(-1.0).add(vec2(2.0).mult(
+	return vec2FromScalar(-1.0).add(vec2FromScalar(2.0).mult(
 		fract2D(sin2D(p).multSc(43758.5453123)),
 	))
 }

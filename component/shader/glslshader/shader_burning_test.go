@@ -25,13 +25,16 @@ package glslshader
 
 import (
 	"bytes"
+	"context"
 	_ "embed"
 	"fmt"
 	"image"
 	"image/png"
 	"testing"
 
+	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/component/asciiart"
 	"unstable.build/go-tui/component/shader/shadertest"
 	"unstable.build/go-tui/term"
 )
@@ -46,6 +49,7 @@ func openTestLogo() image.Image {
 	}
 	return img
 }
+
 func TestBurning(t *testing.T) {
 	sh := Burning(
 		DefaultBurningParams(openTestLogo(), component.FrameCharSetDefault()),
@@ -53,4 +57,27 @@ func TestBurning(t *testing.T) {
 		4.0, 30,
 	)
 	shadertest.TestShader(t, sh)
+}
+
+func BenchmarkBurning(b *testing.B) {
+	sh := Burning(
+		DefaultBurningParams(openTestLogo(), component.FrameCharSetDefault()),
+		term.Attributes{},
+		4.0, 30,
+	)
+	width, height := 600, 400
+	cfg := asciiart.DefaultConfig()
+	cfg.Color = true
+	cfg.MaintainAspectRatio = true
+	cfg.DensityCharacters = "\u2009▓▓▓▓▓▓▓▓▓"
+	image := asciiart.NewComponent(openTestLogo(), cfg)
+	span := component.NewSpan(image, component.SpanConfig{
+		PadHorizontalPerc: 0.4,
+		PadVerticalPerc:   0.2,
+		ContentAlignment:  component.SpanAlignmentCentered,
+	})
+	writer := cell.NewBufferWriter(context.Background(), width, height)
+	span.Resize(width, height)
+	span.Draw(writer)
+	shadertest.BenchmarkShader(b, sh, width, height, writer.RawCells())
 }

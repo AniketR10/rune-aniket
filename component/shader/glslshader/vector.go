@@ -33,17 +33,15 @@ type vec2D struct {
 	x, y float
 }
 
-func vec2(vals ...float) (v vec2D) {
-	if len(vals) == 1 {
-		vals = append(vals, vals[0])
-	}
-	if len(vals) != 2 {
-		panic(fmt.Sprintf(
-			"incorrent number of components (%d) for 2D vector", len(vals),
-		))
-	}
-	v.x = vals[0]
-	v.y = vals[1]
+func vec2(val1, val2 float) (v vec2D) {
+	v.x = val1
+	v.y = val2
+	return
+}
+
+func vec2FromScalar(val1 float) (v vec2D) {
+	v.x = val1
+	v.y = val1
 	return
 }
 
@@ -105,19 +103,17 @@ type vec3D struct {
 	x, y, z float
 }
 
-func vec3(vals ...float) (v vec3D) {
-	if len(vals) == 1 {
-		vals = append(vals, vals[0])
-		vals = append(vals, vals[0])
-	}
-	if len(vals) != 3 {
-		panic(fmt.Sprintf(
-			"incorrent number of components (%d) for 3D vector", len(vals),
-		))
-	}
-	v.x = vals[0]
-	v.y = vals[1]
-	v.z = vals[2]
+func vec3(val1, val2, val3 float) (v vec3D) {
+	v.x = val1
+	v.y = val2
+	v.z = val3
+	return
+}
+
+func vec3FromScalar(val1 float) (v vec3D) {
+	v.x = val1
+	v.y = val1
+	v.z = val1
 	return
 }
 

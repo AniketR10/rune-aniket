@@ -346,7 +346,7 @@ func (s *embers) ashes(p vec2D) (fg vec3D, bg vec3D) {
 	af += kAmplitude3 * (-0.5 + clamp(noiseSimplex01(p.multSc(kScale3)), 0.0, 1.0))
 	af = clamp(af, 0.0, 1.0)
 
-	bg = mix3D(colToVec(s.Colors.Ashes, s.defaultAttr.Bg), vec3(0.0), af)
+	bg = mix3D(colToVec(s.Colors.Ashes, s.defaultAttr.Bg), vec3FromScalar(0.0), af)
 	fg = bg.addSc(kFgBase + kFgNoiseAmplitude*noiseSimplex(p.multSc(kFgNoiseScale)))
 
 	return fg, bg

@@ -86,15 +86,15 @@ func (s *trippy) runCell(
 	uv.y /= ar
 
 	// glsl: vec3 col = 0.5 + 0.5*cos(speed*iTime+uv.xyx+vec3(0,2,4));
-	col := vec3(0.5).add(cos3D(
-		vec3(s.Speed * iTime).add(uv.xyx()).add(vec3(0.0, 2.0, 4.0)),
+	col := vec3FromScalar(0.5).add(cos3D(
+		vec3FromScalar(s.Speed * iTime).add(uv.xyx()).add(vec3(0.0, 2.0, 4.0)),
 	).multSc(0.5))
 	// glsl: col *= noise(5.0*(0.5+0.5*sin(iTime))*uv/0.3);
 	col = col.multSc(
 		s.noise(
-			vec2(
+			vec2FromScalar(
 				5.0 * (0.5 + 0.5*sin(iTime)),
-			).mult(uv.div(vec2(0.3))),
+			).mult(uv.div(vec2FromScalar(0.3))),
 		),
 	)
 
@@ -110,7 +110,7 @@ func (s *trippy) rand(n vec2D) float {
 func (s *trippy) noise(n vec2D) float {
 	d := s.noiseD
 	b := n.floor()
-	f := smoothstep2D(vec2(0.0), vec2(1.0), fract2D(n))
+	f := smoothstep2D(vec2FromScalar(0.0), vec2FromScalar(1.0), fract2D(n))
 	return mix(
 		mix(s.rand(b), s.rand(b.add(d.yx())), f.x),
 		mix(s.rand(b.add(d.yx())), s.rand(b.add(d.yy())), f.x),

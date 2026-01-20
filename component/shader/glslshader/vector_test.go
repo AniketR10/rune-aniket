@@ -49,11 +49,11 @@ func TestVector(t *testing.T) {
 	})
 
 	t.Run("construct vector with one arg repeats it to all components", func(t *testing.T) {
-		v2 := vec2(2.2)
+		v2 := vec2FromScalar(2.2)
 		assert.Equal(t, 2.2, v2.x)
 		assert.Equal(t, 2.2, v2.y)
 
-		v3 := vec3(3.3)
+		v3 := vec3FromScalar(3.3)
 		assert.Equal(t, 3.3, v3.x)
 		assert.Equal(t, 3.3, v3.y)
 		assert.Equal(t, 3.3, v3.z)
@@ -63,34 +63,6 @@ func TestVector(t *testing.T) {
 		assert.Equal(t, 4.4, v4.y)
 		assert.Equal(t, 4.4, v4.z)
 		assert.Equal(t, 4.4, v4.w)
-	})
-
-	t.Run("construct vector not enough components panics", func(t *testing.T) {
-		assert.Panics(t, func() {
-			vec3(1.1, 2.2)
-		})
-
-		assert.Panics(t, func() {
-			vec4(1.1, 2.2, 3.3)
-		})
-
-		assert.Panics(t, func() {
-			vec4(1.1, 2.2)
-		})
-	})
-
-	t.Run("construct vector with more components than dimensions panics", func(t *testing.T) {
-		assert.Panics(t, func() {
-			vec2(1.1, 2.2, 3.3)
-		})
-
-		assert.Panics(t, func() {
-			vec3(1.1, 2.2, 3.3, 4.4)
-		})
-
-		assert.Panics(t, func() {
-			vec4(1.1, 2.2, 3.3, 4.4, 5.5)
-		})
 	})
 }
 
@@ -409,7 +381,7 @@ func TestVectorDiv(t *testing.T) {
 	})
 
 	t.Run("zero divided by zero is NaN", func(t *testing.T) {
-		v := vec2(0.0).divSc(0.0)
+		v := vec2(0.0, 0.0).divSc(0.0)
 
 		// cannot do v.x == math.NaN(), that's why it gets tested differenty
 		assert.True(t, math.IsNaN(v.x))

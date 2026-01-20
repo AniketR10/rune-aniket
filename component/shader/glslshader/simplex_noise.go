@@ -38,9 +38,9 @@ func noiseSimplex(p vec2D) float {
 	o := vec2(m, 1.0-m)
 	b := a.sub(o).addSc(k2)
 	c := a.subSc(1.0).addSc(2.0 * k2)
-	h := max3D(vec3(0.5).sub(vec3(dot2D(a, a), dot2D(b, b), dot2D(c, c))), vec3(0.0))
+	h := max3D(vec3FromScalar(0.5).sub(vec3(dot2D(a, a), dot2D(b, b), dot2D(c, c))), vec3FromScalar(0.0))
 	n := h.mult(h).mult(h).mult(h).mult(vec3(dot2D(a, hash(i.addSc(0.0))), dot2D(b, hash(i.add(o))), dot2D(c, hash(i.addSc(1.0)))))
-	return dot3D(n, vec3(k3))
+	return dot3D(n, vec3FromScalar(k3))
 }
 
 // noiseSimplex returns spatial noise that is between 0.0 and 1.0
@@ -59,5 +59,5 @@ func hash(p vec2D) vec2D {
 		k5 = 43758.5453123
 	)
 	p = vec2(dot2D(p, vec2(k1, k2)), dot2D(p, vec2(k3, k4)))
-	return vec2(-1.0).add(vec2(2.0).mult(fract2D(sin2D(p).multSc(k5))))
+	return vec2FromScalar(-1.0).add(vec2FromScalar(2.0).mult(fract2D(sin2D(p).multSc(k5))))
 }

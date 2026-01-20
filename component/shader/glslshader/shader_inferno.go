@@ -91,8 +91,8 @@ func (s *inferno) runCell(
 	q := s.fbm(p.subSc(iTime * 0.1))
 	r := vec2(s.fbm(p.addSc(q+iTime*s.Speed.x-p.x-p.y)), s.fbm(p.addSc(q-iTime*s.Speed.y)))
 	c := mix3D(s.c1, s.c2, s.fbm(p.add(r))).add(mix3D(s.c3, s.c4, r.x)).sub(mix3D(s.c5, s.c6, r.y))
-	col := c.mult(vec3(cos(shift * fragCoord.y / iResolution.y)))
-	col = clamp3D(col, vec3(0.0), vec3(1.0))
+	col := c.mult(vec3FromScalar(cos(shift * fragCoord.y / iResolution.y)))
+	col = clamp3D(col, vec3FromScalar(0.0), vec3FromScalar(1.0))
 	col = col.multSc(255.0)
 
 	if s.SwapRedBlue {
@@ -112,7 +112,7 @@ func (s *inferno) rand(n vec2D) float {
 func (s *inferno) noise(n vec2D) float {
 	d := vec2(0.0, 1.0)
 	b := n.floor()
-	f := smoothstep2D(vec2(0.0), vec2(1.0), fract2D(n))
+	f := smoothstep2D(vec2FromScalar(0.0), vec2FromScalar(1.0), fract2D(n))
 	return mix(
 		mix(s.rand(b), s.rand(b.add(d.yx())), f.x),
 		mix(s.rand(b.add(d.yx())), s.rand(b.add(d.yy())), f.x),

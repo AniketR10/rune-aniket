@@ -189,7 +189,7 @@ func (s *risingChars) processCell(
 			fg = vecToCol(
 				mix3D(
 					colToVec(fg, s.defaultAttr.Fg),
-					vec3(255.0*(0.5+0.5*n)),
+					vec3FromScalar(255.0*(0.5+0.5*n)),
 					0.5+0.5*sin(s.CharFgFlickerSpeed*math.Pi*(float(frame)/float(total))+
 						float(charTx.dest.X+charTx.dest.Y))),
 			)

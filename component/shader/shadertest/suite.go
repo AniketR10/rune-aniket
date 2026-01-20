@@ -29,6 +29,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/unstablebuild/tcell/v3"
+	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component/shader"
 	"unstable.build/go-tui/component/shader/timeshader"
 	"unstable.build/go-tui/term"
@@ -40,6 +41,22 @@ func TestShader(t *testing.T, sh shader.Shader) {
 	testFedIntoSingleTimeShader(t, sh)
 	testFedIntoMultipleTimeShaders(t, sh)
 	testCellMatrix(t, sh)
+}
+
+// BenchmarkShader runs a benchmark against shader.Shader.
+func BenchmarkShader(
+	b *testing.B, sh shader.Shader, width, height int, cells [][]term.Cell,
+) {
+	copy := MakeCellMatrix(width, height)
+
+	b.ResetTimer()
+	totalFrames := 30 * 5 // 5 seconds at 30fps
+	for i := 0; i < b.N; i++ {
+		for i := range totalFrames {
+			cell.CopyCells(copy, cells)
+			sh.Shade(i, totalFrames, copy)
+		}
+	}
 }
 
 func testFrameRanges(t *testing.T, sh shader.Shader) {
