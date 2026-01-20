@@ -35,10 +35,14 @@ import (
 // NewComponent returns a tui.Component that renders the given image
 // as ascii art.
 func NewComponent(img image.Image, config Config) tui.Component {
+	buf := new(cell.Buffer)
+	buf.InitPerformance(100, 200, ' ')
+	scroll := new(component.Scroll)
+	scroll.InitPerformance(buf)
 	return &imgComp{
 		img:    img,
 		config: config,
-		scroll: component.NewScroll(cell.NewBuffer()),
+		scroll: scroll,
 		dirty:  true,
 	}
 }
