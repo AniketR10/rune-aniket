@@ -960,9 +960,8 @@ func (h *Prompt) pushCompletionList(
 	}
 
 	h.mu.Lock()
-	defer h.mu.Unlock()
-
 	it, ok := h.commandArgsHistoryIterator(ctx, cmdAndArgs)
+	h.mu.Unlock()
 	if !ok {
 		return
 	}
