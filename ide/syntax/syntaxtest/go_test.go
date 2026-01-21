@@ -1330,7 +1330,8 @@ func TestTreeStateIntegration(t *testing.T) {
 		actual, ok := it.Next(context.Background())
 		require.True(t, ok)
 		defer it.Close()
-		assert.Equal(t, syntax.State{ParserError: "file does not have an extension"}, actual)
+		assert.Equal(t, syntax.State{ParserError: "file does not have an extension " +
+			"and it's not a recognized file"}, actual)
 
 		require.NoError(t, tree.Close())
 		cleanup()
@@ -1535,7 +1536,7 @@ func newTestCase(
 		return true
 	}
 	cfg.ReparseOnErrors = false
-	cfg.StrictErrors= true
+	cfg.StrictErrors = true
 
 	ed := vi.Editor(vi.WithStatusBarConfig(true, text.StatusBarConfig{
 		Publisher:        texttest.NopEditor(),
