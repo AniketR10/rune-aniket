@@ -50,9 +50,8 @@ type parser struct {
 func newParser(
 	ctx context.Context, langID string,
 	pkg *extension.PkgManager,
-	query string,
+	queryFile, query string,
 ) (ret *parser, err error) {
-
 	it, err := pkg.LibDir(ctx, langID)
 	if err != nil {
 		err = fmt.Errorf("scan language package installation: %w", err)
@@ -64,18 +63,19 @@ func newParser(
 		err = fmt.Errorf("list files: %w", err)
 		return
 	}
-	var langfile, localsFile string
+	var langfile string
 	logrus.Tracef("found files: %v", files)
 	for _, path := range files {
 		switch filepath.Base(path) {
 		case syntax.ParserFilename:
 			langfile = path
-		case syntax.LocalsFilename:
-			localsFile = path
+		case queryFile:
+			// override path with absolute path
+			queryFile = path
 		}
 	}
 
-	if langfile == "" || (localsFile == "" && query == "") {
+	if langfile == "" || (queryFile == "" && query == "") {
 		err = errors.New("could not find parser file or " +
 			"definitions in language installation")
 		return
@@ -114,7 +114,7 @@ func newParser(
 	if query != "" {
 		ret.query, err = sitter.NewQuery(ret.lang, query)
 	} else {
-		err = ret.initLocals(language, localsFile)
+		err = ret.initQueryFile(language, queryFile)
 	}
 	if err != nil {
 		_ = purego.Dlclose(ret.lib)
@@ -125,10 +125,10 @@ func newParser(
 	return
 }
 
-func (p *parser) initLocals(
-	language *sitter.Language, localsFile string,
+func (p *parser) initQueryFile(
+	language *sitter.Language, queryFile string,
 ) error {
-	data, err := os.ReadFile(localsFile)
+	data, err := os.ReadFile(queryFile)
 	if err != nil {
 		return fmt.Errorf("read locals file: %v", err)
 	}

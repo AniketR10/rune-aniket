@@ -27,6 +27,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -45,22 +47,19 @@ import (
 )
 
 var (
-	cmdSearchTypes = textapi.CommandManual{
-		Name:    "searchtypes",
-		Summary: "Fuzzy search 'definition.type' symbols in the workspace's AST, using the detected programming language's default AST queries.",
-	}
-	cmdSearchVariables = textapi.CommandManual{
-		Name:    "searchvar",
-		Summary: "Fuzzy search 'definition.var' symbols in the workspace's AST, using the detected programming language's default AST queries.",
-	}
-	cmdSearchFunctions = textapi.CommandManual{
-		Name:    "searchfunc",
-		Summary: "Fuzzy search 'definition.function' symbols in the workspace's AST, using the detected programming language's default AST queries.",
-	}
 	cmdSearchSyntax = textapi.CommandManual{
-		Name:     "searchsyntax",
-		Summary:  "Fuzzy search custom symbols in the workspace's AST, using the given query. Check tree-sitter's manual for more details https://tree-sitter.github.io/tree-sitter/using-parsers#query-syntax",
-		Synopsis: "query",
+		Name: "searchast",
+		Summary: "Fuzzy search AST nodes by running the given query against all the files in " +
+			"the workspace. The first argument is the name or path of the query file to run. " +
+			"The second argument is the match capture name(s), and the last argument " +
+			"is the name of the node in the file (i.e. function name, variable name, etc.). " +
+			"The second argument can be ORed by adding a `|` character between match names." +
+			"For example to match against functions and methods you can pass: " +
+			"locals.scm local.definition.method|local.definition.function. " +
+			"The query file should be a relative or absolute path and if not found, " +
+			"it will be searched in the file's language package installation " +
+			"folder.",
+		Synopsis: "query capture1[...|captureN]",
 	}
 )
 
@@ -69,69 +68,52 @@ func Grantee() (extension.Grantee, []extensionapi.Permission) {
 	perms := finder.Permissions()
 	perms = append(perms, extensionapi.PermissionConfig)
 
-	searchFunctions, finalPerms := extutil.NewCommandSplitHandler(extutil.CommandSplitHandlerConfig{
-		SplitOrientation: browserapi.OrientationBottom,
-		Handler:          newHandler,
-		Permissions:      perms,
-		Command:          cmdSearchFunctions,
-	})
-
-	searchVariables, _ := extutil.NewCommandSplitHandler(extutil.CommandSplitHandlerConfig{
-		SplitOrientation: browserapi.OrientationBottom,
-		Handler:          newHandler,
-		Permissions:      perms,
-		Command:          cmdSearchVariables,
-	})
-
-	searchTypes, _ := extutil.NewCommandSplitHandler(extutil.CommandSplitHandlerConfig{
-		SplitOrientation: browserapi.OrientationBottom,
-		Handler:          newHandler,
-		Permissions:      perms,
-		Command:          cmdSearchTypes,
-	})
-
-	/*searchSyntax, _ := extutil.NewCommandSplitHandler(extutil.CommandSplitHandlerConfig{
+	searchSyntax, mergedPerms := extutil.NewCommandSplitHandler(extutil.CommandSplitHandlerConfig{
 		SplitOrientation: browserapi.OrientationBottom,
 		Handler:          newHandler,
 		Permissions:      perms,
 		Command:          cmdSearchSyntax,
-	})*/
+	})
 
-	multi := extutil.MultiGrantee(
-		searchFunctions,
-		searchVariables,
-		searchTypes,
-		//searchSyntax,
-	)
-
-	return multi, finalPerms
+	return searchSyntax, mergedPerms
 }
 
-type queryType string
-
-const (
-	queryTypeCustom    queryType = ""
-	queryTypeFunctions queryType = "local.definition.function"
-	queryTypeVariables queryType = "local.definition.var"
-	queryTypeTypes     queryType = "local.definition.type"
-)
-
-func readSymbolsFunction(dataDir string, qtype queryType) func(
-	workspaceapi.FileSystem, context.Context) (iterator.Iterator[string], error) {
-	return func(cwd workspaceapi.FileSystem, ctx context.Context) (iterator.Iterator[string], error) {
+func readSymbolsFunction(dataDir string, queryFile string, captureNames []string) func(
+	workspaceapi.FileSystem, context.Context) (iterator.Iterator[string], error,
+) {
+	return func(cwd workspaceapi.FileSystem, ctx context.Context) (
+		iterator.Iterator[string], error,
+	) {
+		var q string
+		switch queryFile {
+		case "folds.scm", "indents.scm",
+			"highlights.scm", "locals.scm":
+			// empty query instructs readSymbols to find .scm file in lang lib
+		default:
+			data, err := os.ReadFile(queryFile)
+			if err != nil {
+				return nil, fmt.Errorf("read query file: %w", err)
+			}
+			q = string(data)
+		}
 		it, err := walkdir.ListFiles(ctx, cwd, ".")
 		if err != nil {
 			return nil, err
-		}
-		query, ok := queryFromContext(ctx)
-		if ok {
-			qtype = queryTypeCustom
 		}
 		uri, err := cwd.URI(".")
 		if err != nil {
 			return nil, err
 		}
-		return readSymbols(ctx, cwd, dataDir, uri, it, qtype, query)
+		sit, err := readSymbols(ctx, cwd, dataDir, uri, it, queryFile, q)
+		if err != nil {
+			return nil, err
+		}
+		if len(captureNames) != 0 {
+			sit = iterator.Filter(sit, func(m match) bool {
+				return slices.Contains(captureNames, m.CaptureName)
+			})
+		}
+		return iterator.Map(sit, func(m match) string { return m.LineString }), nil
 	}
 }
 
@@ -153,30 +135,18 @@ func newHandler(
 	grants []extension.Grant, broker rpc.MuxBroker,
 	invokeWindow browserapi.Window, c config.Config,
 ) (extutil.RedispatchHandler, error) {
+	if len(cmd.Args) < 2 {
+		return nil, errors.New("expected at least three arguments")
+	}
+	queryFile, captureNameString := cmd.Args[0], cmd.Args[1]
+	captureNames := strings.Split(captureNameString, "|")
 	noHistoryKey := term.KeyComb{}
 
-	var qtype queryType
-	switch cmd.Name {
-	case cmdSearchTypes.Name:
-		qtype = queryTypeTypes
-	case cmdSearchVariables.Name:
-		qtype = queryTypeVariables
-	case cmdSearchFunctions.Name:
-		qtype = queryTypeFunctions
-	case cmdSearchSyntax.Name:
-		if len(cmd.Args) == 0 {
-			return nil, errors.New("expected source code matching query as command arguments")
-		}
-		qtype = queryTypeCustom
-		ctx = contextWithQuery(ctx, strings.Join(cmd.Args, " "))
-	default:
-		panic("dispatched unknown command")
-	}
 	dataDir, err := c.GetString("datadir")
 	if err != nil {
 		return nil, fmt.Errorf("could not get data directory: %v", err)
 	}
 	return finder.New(ctx, grants, broker, invokeWindow,
 		c, noHistoryKey, "unused", "",
-		readSymbolsFunction(dataDir, qtype), parseLine)
+		readSymbolsFunction(dataDir, queryFile, captureNames), parseLine)
 }

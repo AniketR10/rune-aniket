@@ -41,6 +41,7 @@ import (
 	"github.com/unstablebuild/blue/iterator"
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/ide/syntax"
 	"unstable.build/go-tui/term"
@@ -51,13 +52,20 @@ var (
 	errInvalidQuery = errors.New("invalid query for language")
 )
 
+type match struct {
+	CaptureName string
+	LineString  string
+}
+
 func readSymbols(
 	ctx context.Context, w workspaceapi.FileSystem,
 	dataDir string, uri workspaceapi.URI, paths iterator.Iterator[string],
-	queryType queryType, query string,
-) (iterator.Iterator[string], error) {
+	queryFile string, query string,
+) (iterator.Iterator[match], error) {
 	files := make(chan string)
-	results := make(chan string)
+	results := make(chan match)
+	closeWaitCh := make(chan struct{})
+	ctx, cancel := context.WithCancel(ctx)
 
 	var wg sync.WaitGroup
 	wg.Add(defaultWorkers)
@@ -67,29 +75,35 @@ func readSymbols(
 		validErrors[i] = make(map[string]*expectedError)
 		go func(err *error, missingLanguage map[string]*expectedError) {
 			defer wg.Done()
-			readSymbolsWorker(ctx, w, dataDir, uri, queryType, results, files, err,
+			readSymbolsWorker(ctx, w, dataDir, uri, queryFile, results, files, err,
 				missingLanguage, query)
 		}(&errors[i], validErrors[i])
 	}
 
 	it := &listSymbolsIterator{ctx: ctx, ch: results}
-	ctx, it.cancel = context.WithCancel(ctx)
+	it.cancel = cancel
+	it.closeWaitCh = closeWaitCh
 
 	var itErr error
-	go func() {
+	go debug.CapturePanicReport(func() {
+		defer close(closeWaitCh)
+		defer close(results)
+		defer paths.Close()
+
+	loop:
 		for {
 			file, ok := paths.Next(ctx)
 			if !ok {
-				if err := paths.Err(); err != nil {
-					itErr = err
-				}
 				break
 			}
 			select {
 			case files <- file:
 			case <-ctx.Done():
-				return
+				break loop
 			}
+		}
+		if err := paths.Err(); err != nil {
+			itErr = err
 		}
 		close(files)
 		wg.Wait()
@@ -112,8 +126,7 @@ func readSymbols(
 			log.Debugf("Invalid query for the following file extensions: %#v",
 				invalidQuery)
 		}
-		close(results)
-	}()
+	})
 	return it, nil
 }
 
@@ -145,8 +158,8 @@ func mergeValidErrorsMap(m []map[string]*expectedError) (
 func readFileSymbols(
 	ctx context.Context,
 	parser *parser,
-	w workspaceapi.FileSystem, queryType queryType,
-	filename string, results chan string,
+	w workspaceapi.FileSystem,
+	filename string, results chan match,
 ) error {
 	file, err := w.OpenFile(filename, os.O_RDONLY, 0)
 	if err != nil {
@@ -184,22 +197,18 @@ func readFileSymbols(
 		}
 		for _, cap := range m.Captures {
 			name := captureNames[cap.Index]
-			// if query is not custom (function/var/etc.) filter them by capture name
-			if queryType != queryTypeCustom && name != string(queryType) {
-				continue
-			}
 			rng := cap.Node.Range()
 			from, to, err := convertRangeToCoordinates(buf.RawCells(), rng)
 			if err != nil {
-				log.Warnf("convert query: %v", err)
+				log.Tracef("convert query: %v", err)
 				continue
 			}
 			if int(cap.Index) >= len(captureNames) {
-				log.Warnf("index %d does not belong capture names %v",
+				log.Tracef("index %d does not belong capture names %v",
 					cap.Index, captureNames)
 				continue
 			}
-			result, err := makeSymbolItem(from, to, filename, buf)
+			result, err := makeSymbolItem(from, to, filename, buf, name)
 			if err != nil {
 				retErr = multierror.Append(retErr, err)
 				continue
@@ -236,17 +245,19 @@ func convertRangeToCoordinates(cells [][]term.Cell, n sitter.Range) (
 
 func makeSymbolItem(
 	from, to term.Coordinates, filename string, buf *cell.Buffer,
-) (string, error) {
+	captureName string,
+) (match, error) {
 	to.Y = from.Y
 	to.X = buf.Columns(from.Y)
 	cells, _, _ := buf.Select(from, to)
 	textToDisplay := cell.CellsToString(cells)
-	return fmt.Sprintf("%s:%d: %s", filename, from.Y+1, textToDisplay), nil
+	lineStr := fmt.Sprintf("%s:%d: %s", filename, from.Y+1, textToDisplay)
+	return match{CaptureName: captureName, LineString: lineStr}, nil
 }
 
 func readSymbolsWorker(
 	ctx context.Context, w workspaceapi.FileSystem, dataDir string,
-	uri workspaceapi.URI, queryType queryType, functions chan string, files chan string,
+	uri workspaceapi.URI, queryFile string, results chan match, files chan string,
 	err *error, expectedErrors map[string]*expectedError,
 	query string,
 ) {
@@ -262,12 +273,12 @@ func readSymbolsWorker(
 			}
 			langID, lerr := syntax.LanguageForFile(path)
 			if lerr != nil {
-				return
+				continue
 			}
 			parser, ok := parsers[langID]
 			if !ok {
 				var err error
-				parser, err = newParser(ctx, langID, pkg, query)
+				parser, err = newParser(ctx, langID, pkg, queryFile, query)
 				if err != nil {
 					if errors.Is(err, extension.ErrNotInstalled) {
 						ext := filepath.Ext(path)
@@ -289,7 +300,7 @@ func readSymbolsWorker(
 				parsers[langID] = parser
 			}
 
-			readErr := readFileSymbols(ctx, parser, w, queryType, path, functions)
+			readErr := readFileSymbols(ctx, parser, w, path, results)
 			if readErr != nil {
 				*err = multierror.Append(*err, readErr)
 			}
@@ -298,25 +309,26 @@ func readSymbolsWorker(
 }
 
 type listSymbolsIterator struct {
-	mu     sync.Mutex
-	err    error
-	ctx    context.Context
-	ch     chan string
-	cancel func()
+	mu          sync.Mutex
+	err         error
+	ctx         context.Context
+	ch          chan match
+	cancel      func()
+	closeWaitCh chan struct{}
 }
 
-func (l *listSymbolsIterator) Next(ctx context.Context) (string, bool) {
+func (l *listSymbolsIterator) Next(ctx context.Context) (match, bool) {
 	select {
 	case <-ctx.Done():
 		l.mu.Lock()
 		defer l.mu.Unlock()
 		l.err = multierror.Append(l.err, ctx.Err())
-		return "", false
+		return match{}, false
 	case <-l.ctx.Done():
 		l.mu.Lock()
 		defer l.mu.Unlock()
 		l.err = multierror.Append(l.err, l.ctx.Err())
-		return "", false
+		return match{}, false
 	case path, ok := <-l.ch:
 		return path, ok
 	}
@@ -340,6 +352,7 @@ func (l *listSymbolsIterator) Err() error {
 
 func (l *listSymbolsIterator) Close() error {
 	l.cancel()
+	<-l.closeWaitCh
 	return nil
 }
 
