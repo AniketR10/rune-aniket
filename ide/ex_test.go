@@ -2993,9 +2993,10 @@ func TestRunStopTasks(t *testing.T) {
 }
 
 func TestEcho(t *testing.T) {
-	cases := []handlertest.SequenceTestCase{
-		{`:edit hello.go>:echo 01234>`,
-			`┌────────────────────────────┐
+	t.Run("events get dispatched", func(t *testing.T) {
+		cases := []handlertest.SequenceTestCase{
+			{`:edit hello.go>:echo 01234>`,
+				`┌────────────────────────────┐
 │o hello.go                  │
 ├────────────────────────────┤
 │AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
@@ -3010,28 +3011,69 @@ func TestEcho(t *testing.T) {
 │AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
 │AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
 └────────────────────────────┘`},
-	}
+		}
 
-	opts := []text.Option{
-		text.WithCommandKey(testCommandKey),
-	}
-	var e testEx
-	var i int
-	publishEvent := func(ev term.Event) bool {
-		if ev.Type == term.EventInterrupt {
+		opts := []text.Option{
+			text.WithCommandKey(testCommandKey),
+		}
+		var e testEx
+		var i int
+		publishEvent := func(ev term.Event) bool {
+			if ev.Type == term.EventInterrupt {
+				return true
+			}
+			assert.Equal(t, string(ev.Ch), strconv.Itoa(i))
+			i++
 			return true
 		}
-		assert.Equal(t, string(ev.Ch), strconv.Itoa(i))
-		i++
-		return true
-	}
 
-	e = newExForTestingWithWorkspace(t, &testLoader{},
-		texttest.NopEditor(), vte.DefaultConfig(),
-		publishEvent, clipboard.NewInMemory(), opts...)
-	defer e.Close()
+		e = newExForTestingWithWorkspace(t, &testLoader{},
+			texttest.NopEditor(), vte.DefaultConfig(),
+			publishEvent, clipboard.NewInMemory(), opts...)
+		defer e.Close()
 
-	handlertest.TestHandlerSequence(t, e, 30, 15, cases)
+		handlertest.TestHandlerSequence(t, e, 30, 15, cases)
+	})
+
+	t.Run("{prompt} instruction", func(t *testing.T) {
+		cases := []handlertest.SequenceTestCase{
+			{`:echo {prompt}edit\<space\>hello.go\<enter\>>`,
+				`┌────────────────────────────┐
+│o hello.go                  │
+├────────────────────────────┤
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
+└────────────────────────────┘`},
+		}
+
+		opts := []text.Option{
+			text.WithCommandKey(testCommandKey),
+		}
+		var e testEx
+		publishEvent := func(ev term.Event) bool {
+			if ev.Type == term.EventInterrupt {
+				return true
+			}
+			e.Handle(ev)
+			return true
+		}
+
+		e = newExForTestingWithWorkspace(t, &testLoader{},
+			texttest.NopEditor(), vte.DefaultConfig(),
+			publishEvent, clipboard.NewInMemory(), opts...)
+		defer e.Close()
+
+		handlertest.TestHandlerSequence(t, e, 30, 15, cases)
+	})
 }
 
 func TestMoveTabs(t *testing.T) {

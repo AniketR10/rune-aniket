@@ -668,12 +668,6 @@ func (e *ex) windownewHandler(h browserapi.Handler, orientation browserapi.Orien
 	eb.Split(orientation, win, h)
 }
 
-func (e *ex) onCloseCommandPrompt() error {
-	err := e.cmd.Close()
-	e.cmd = nil
-	return err
-}
-
 func (e *ex) invokeWindow() browser.Window {
 	ret, _ := e.comp.Focus()
 	return ret
@@ -1558,7 +1552,13 @@ func (e *ex) openCommandPrompt() {
 						},
 					},
 				),
-			), e.onCloseCommandPrompt),
+			), func() error {
+				err := cmd.Close()
+				if cmd == e.cmd {
+					e.cmd = nil
+				}
+				return err
+			}),
 		cmd.Dimensions,
 	)
 	e.resetCommandList(cmd)
