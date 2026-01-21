@@ -50,7 +50,7 @@ func NewTermboxWriter() *TermboxWriter {
 func (w *TermboxWriter) SetCell(pos Coordinates, c Cell) {
 	termbox.Screen().SetContent(
 		pos.X, pos.Y, c.Ch, c.Combining,
-		int(c.Width), tcell.Style(c.Attributes),
+		c.Width, tcell.Style(c.Attributes),
 	)
 }
 
