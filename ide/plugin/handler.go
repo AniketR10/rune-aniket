@@ -384,6 +384,7 @@ func (e *Handler) initializeDoneHandler() {
 			vi.WithResAttr(e.cfg.SelectionAttributes),
 			vi.WithAttr(e.cfg.Attributes),
 			vi.WithWrap(false),
+			vi.WithTabspaces(1),
 			vi.WithClipboard(e.cfg.Clipboard),
 		)
 	} else {
@@ -391,6 +392,7 @@ func (e *Handler) initializeDoneHandler() {
 			modeless.WithResAttr(e.cfg.SelectionAttributes),
 			modeless.WithAttr(e.cfg.Attributes),
 			modeless.WithWrap(false),
+			modeless.WithTabspaces(1),
 			modeless.WithCommandBar(true),
 			modeless.WithClipboard(e.cfg.Clipboard),
 		)
