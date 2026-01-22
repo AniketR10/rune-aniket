@@ -239,6 +239,46 @@ func TestCustomLocations(t *testing.T) {
 │                            │
 │                      NORMAL│
 └────────────────────────────┘`},
+		{"k:locationtoggle mylist>j:locationtoggle mylist>:jumptolocation next mylist>",
+			`┌────────────────────────────┐
+│o dakar.md                  │
+├────────────────────────────┤
+│gentl▐man                   │
+│driver                      │
+│gentleman                   │
+│                            │
+│                      NORMAL│
+└────────────────────────────┘`},
+		{":jumptolocation next mylist>",
+			`┌────────────────────────────┐
+│o dakar.md                  │
+├────────────────────────────┤
+│gentleman                   │
+│drive▐                      │
+│gentleman                   │
+│                            │
+│                      NORMAL│
+└────────────────────────────┘`},
+		{":locationtoggle mylist>:jumptolocation next mylist>",
+			`┌────────────────────────────┐
+│o dakar.md                  │
+├────────────────────────────┤
+│gentl▐man                   │
+│driver                      │
+│gentleman                   │
+│                            │
+│                      NORMAL│
+└────────────────────────────┘`},
+		{":jumptolocation next mylist>",
+			`┌────────────────────────────┐
+│o dakar.md                  │
+├────────────────────────────┤
+│gentl▐man                   │
+│driver                      │
+│gentleman                   │
+│                            │
+│                      NORMAL│
+└────────────────────────────┘`},
 	}
 	handlertest.TestHandlerSequence(t, h, 30, 9, cases)
 
