@@ -27,6 +27,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 
@@ -125,7 +126,7 @@ func TestCommandsIntegration(t *testing.T) {
 		Window: c.Browser().Focus(),
 		URI:    uri,
 	})
-	require.EqualError(t, err, "read query file: open NONEXISTENT: no such file or directory")
+	require.True(t, strings.Contains(err.Error(), "NONEXISTENT"))
 
 	_, err = c.DispatchCommand(textapi.Command{
 		Name:   "jumptoast",

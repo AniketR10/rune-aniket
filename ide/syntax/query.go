@@ -27,6 +27,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"slices"
 
@@ -88,7 +89,17 @@ func (t *Tree) runQuery(queryFile string, expectedCaptureNames []string) ([]Matc
 	case "locals.scm":
 		query = t.locals
 	default:
-		data, err := os.ReadFile(queryFile)
+		// custom query files are expected to be relative to a workspace's path
+		// and in any case, in a workspace's host. For file:// workspaces,
+		// this makes no difference, but for remote workspaces, keeping the query files
+		// local to the repository makes more sense, allowing users to keep custom queries
+		// under source control.
+		file, err := t.opener.OpenFile(queryFile, os.O_RDONLY, 0)
+		if err != nil {
+			return nil, fmt.Errorf("open query file at workspace's host: %w", err)
+		}
+		defer file.Close()
+		data, err := io.ReadAll(file)
 		if err != nil {
 			return nil, fmt.Errorf("read query file: %w", err)
 		}

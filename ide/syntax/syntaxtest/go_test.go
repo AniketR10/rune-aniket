@@ -281,7 +281,7 @@ func TestTreeFoldsIntegration(t *testing.T) {
 			"go/highlights.scm",
 			"go/indents.scm",
 		)
-		_, tree, cleanup := newTreeWithPkgManager(t, pkgs)
+		_, _, tree, cleanup := newTreeWithPkgManager(t, pkgs)
 
 		_, ok := tree.Folds()
 		require.False(t, ok)
@@ -1343,7 +1343,7 @@ func TestTreeStateIntegration(t *testing.T) {
 			"go/indents.scm",
 			"go/folds.scm",
 		)
-		_, tree, cleanup := newTreeWithPkgManager(t, pkgs)
+		_, _, tree, cleanup := newTreeWithPkgManager(t, pkgs)
 
 		it := tree.State()
 		actual, ok := it.Next(context.Background())
@@ -1363,7 +1363,7 @@ func TestTreeStateIntegration(t *testing.T) {
 			"go/indents.scm",
 			"go/folds.scm",
 		)
-		_, tree, cleanup := newTreeWithPkgManager(t, pkgs)
+		_, _, tree, cleanup := newTreeWithPkgManager(t, pkgs)
 
 		ctx := context.Background()
 		prev := tree.State()
@@ -1412,7 +1412,7 @@ func TestTreeStateIntegration(t *testing.T) {
 			"go/indents.scm",
 			"go/folds.scm",
 		)
-		buffer, tree, cleanup := newTreeWithPkgManager(t, pkgs)
+		buffer, _, tree, cleanup := newTreeWithPkgManager(t, pkgs)
 
 		buffer.InsertString(term.Coordinates{}, "/* */")
 
@@ -1452,7 +1452,7 @@ func TestTreeQueryIntegration(t *testing.T) {
 			"go/highlights.scm",
 			"go/indents.scm",
 		)
-		_, tree, cleanup := newTreeWithPkgManager(t, pkgs)
+		_, _, tree, cleanup := newTreeWithPkgManager(t, pkgs)
 
 		_, err := tree.Query("locals.scm", "query")
 		require.Error(t, err)
@@ -1466,7 +1466,7 @@ func TestTreeQueryIntegration(t *testing.T) {
 			"go/tree-sitter.so",
 			"go/highlights.scm",
 		)
-		_, tree, cleanup := newTreeWithPkgManager(t, pkgs)
+		_, _, tree, cleanup := newTreeWithPkgManager(t, pkgs)
 
 		_, err := tree.Query("indents.scm", "query")
 		require.Error(t, err)
@@ -1479,7 +1479,7 @@ func TestTreeQueryIntegration(t *testing.T) {
 		pkgs := newInstalledPkgManagerWithFiles(t,
 			"go/tree-sitter.so",
 		)
-		_, tree, cleanup := newTreeWithPkgManager(t, pkgs)
+		_, _, tree, cleanup := newTreeWithPkgManager(t, pkgs)
 
 		_, err := tree.Query("highlights.scm", "query")
 		require.Error(t, err)
@@ -1492,7 +1492,7 @@ func TestTreeQueryIntegration(t *testing.T) {
 		pkgs := newInstalledPkgManagerWithFiles(t,
 			"go/tree-sitter.so",
 		)
-		_, tree, cleanup := newTreeWithPkgManager(t, pkgs)
+		_, _, tree, cleanup := newTreeWithPkgManager(t, pkgs)
 
 		_, err := tree.Query("nonexistent.scm", "local.reference")
 		require.Error(t, err)
@@ -1502,21 +1502,19 @@ func TestTreeQueryIntegration(t *testing.T) {
 	})
 
 	t.Run("if custom file is given Query uses it to run the query", func(t *testing.T) {
-		f, err := os.CreateTemp("", "")
-		require.NoError(t, err)
-		t.Cleanup(func() {
-			_ = os.Remove(f.Name())
-		})
-		_, err = f.WriteString(`((package_identifier) @local.reference
-  (#set! reference.kind "namespace"))`)
-		require.NoError(t, err)
-		require.NoError(t, f.Close())
-
 		pkgs := newInstalledPkgManagerWithFiles(t,
 			"go/tree-sitter.so",
-			f.Name(),
+			"abc.scm",
 		)
-		_, tree, cleanup := newTreeWithPkgManager(t, pkgs)
+		_, comp, tree, cleanup := newTreeWithPkgManager(t, pkgs)
+
+		w := comp.Workspace()
+		f, err := w.OpenFile("abc.scm", os.O_CREATE|os.O_WRONLY, 0666)
+		require.NoError(t, err)
+		_, err = f.Write([]byte(`((package_identifier) @local.reference
+  (#set! reference.kind "namespace"))`))
+		require.NoError(t, err)
+		require.NoError(t, f.Close())
 
 		it, err := tree.Query(f.Name(), "local.reference")
 		require.NoError(t, err)
@@ -1540,7 +1538,7 @@ func TestTreeQueryIntegration(t *testing.T) {
 			"go/tree-sitter.so",
 			"go/locals.scm",
 		)
-		_, tree, cleanup := newTreeWithPkgManager(t, pkgs)
+		_, _, tree, cleanup := newTreeWithPkgManager(t, pkgs)
 
 		it, err := tree.Query("locals.scm", "local.definition.namespace")
 		require.NoError(t, err)
@@ -1563,7 +1561,7 @@ func TestTreeQueryIntegration(t *testing.T) {
 		pkgs := newInstalledPkgManagerWithFiles(t,
 			"go/indents.scm",
 		)
-		_, tree, cleanup := newTreeWithPkgManager(t, pkgs)
+		_, _, tree, cleanup := newTreeWithPkgManager(t, pkgs)
 
 		it, err := tree.Query("indents.scm", "query")
 		require.NoError(t, err)
@@ -1729,19 +1727,19 @@ func (n nopNotifications) UpdateNotificationProgress(
 
 func newTree(t *testing.T) (*syntax.Tree, func()) {
 	pkgs := newInstalledPkgManager(t)
-	_, tree, cleanup := newTreeWithPkgManager(t, pkgs)
+	_, _, tree, cleanup := newTreeWithPkgManager(t, pkgs)
 	return tree, cleanup
 }
 
 func newTreeWithPkgManager(t *testing.T, pkgs syntax.PkgManager) (
-	*cell.Buffer, *syntax.Tree, func(),
+	*cell.Buffer, *text.Component, *syntax.Tree, func(),
 ) {
 	return newTreeWithPkgManagerContent(t, pkgs, fileContent)
 }
 
 func newTreeWithPkgManagerContent(
 	t *testing.T, pkgs syntax.PkgManager, content string,
-) (*cell.Buffer, *syntax.Tree, func()) {
+) (*cell.Buffer, *text.Component, *syntax.Tree, func()) {
 	var wg sync.WaitGroup
 	ready := func(context.Context) error {
 		wg.Done()
@@ -1761,7 +1759,7 @@ func newTreeWithPkgManagerContent(
 	tree, ok := cref.Buffer().View().(*syntax.Tree)
 	require.True(t, ok)
 
-	return cref.Buffer(), tree, cleanup
+	return cref.Buffer(), comp, tree, cleanup
 }
 
 const fileContent = `package main

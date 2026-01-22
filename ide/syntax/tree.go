@@ -69,6 +69,11 @@ const (
 	LocalsFilename = "locals.scm"
 )
 
+// Opener abstract reading files and it's required to open custom query files.
+type Opener interface {
+	OpenFile(path string, flag int, perm os.FileMode) (workspaceapi.File, error)
+}
+
 // WithTree installs a tree parser into the given buffer via cell.Buffer.WithEditor,
 // and wraps the given FlusherCloser to provide re-parse on reload and flush.
 // A cell.Buffer's View method can be used to retrieve this Tree in other contexts.
@@ -78,6 +83,7 @@ func WithTree(
 	pkg PkgManager, loc LocationSetter,
 	uri workspaceapi.URI, buf *cell.Buffer,
 	fc workspace.FlusherCloser,
+	opener Opener,
 	config Config,
 ) *Tree {
 	if config.ScheduleNextTick == nil {
@@ -87,6 +93,7 @@ func WithTree(
 	ret.config = config
 	ret.buf = buf
 	ret.uri = uri
+	ret.opener = opener
 	// NOTE: this shouldn't be removed as the buffer's view
 	// is how we share this tree's capabilities with
 	// other parts of the codebase via interface assertion.
@@ -143,6 +150,7 @@ type Tree struct {
 	config      Config
 	fc          workspace.FlusherCloser
 	uri         workspaceapi.URI
+	opener      Opener
 	buf         *cell.Buffer
 	cview       cell.View
 
@@ -529,6 +537,9 @@ func (t *Tree) initParser(
 func (t *Tree) initHighlights(
 	language *tree_sitter.Language, highlightsfile string,
 ) error {
+	// for files coming from LibDir, we can use
+	// os.ReadFile since packages are installed on the local fs
+	// and paths are always absolute.
 	data, err := os.ReadFile(highlightsfile)
 	if err != nil {
 		return fmt.Errorf("read highlights file: %v", err)

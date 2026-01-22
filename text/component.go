@@ -146,7 +146,7 @@ func (c *Component) newFileBuffer(
 	// its capabilities while initializing
 
 	tree := syntax.WithTree(c.ctx, c.config, interrupter,
-		c.config.PkgManager, locs, file, buf, fc, c.config.Syntax)
+		c.config.PkgManager, locs, file, buf, fc, c.workspace, c.config.Syntax)
 	fc = tree
 
 	handler, err = c.ed.Edit(file, buf, readOnly, recover)
