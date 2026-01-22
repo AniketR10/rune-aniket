@@ -158,6 +158,7 @@ type Tree struct {
 	highlights *tree_sitter.Query
 	indents    *tree_sitter.Query
 	folds      *tree_sitter.Query
+	locals     *tree_sitter.Query
 	statesubs  map[chan State]struct{}
 	currState  State
 
@@ -291,6 +292,9 @@ func (t *Tree) Close() (ret error) {
 	if t.folds != nil {
 		t.folds.Close()
 	}
+	if t.locals != nil {
+		t.locals.Close()
+	}
 	if t.indents != nil {
 		t.indents.Close()
 	}
@@ -396,7 +400,7 @@ func (t *Tree) downloadFiles(ctx context.Context) (files, error) {
 }
 
 func (t *Tree) initParserFromFiles(ctx context.Context, f files) error {
-	var langFile, highlightsFile, indentsFile, foldsFile string
+	var langFile, highlightsFile, indentsFile, foldsFile, localsFile string
 	for _, file := range f.files {
 		switch filepath.Base(file) {
 		case ParserFilename:
@@ -407,6 +411,8 @@ func (t *Tree) initParserFromFiles(ctx context.Context, f files) error {
 			indentsFile = file
 		case FoldsFilename:
 			foldsFile = file
+		case LocalsFilename:
+			localsFile = file
 		}
 	}
 	if langFile == "" {
@@ -416,7 +422,7 @@ func (t *Tree) initParserFromFiles(ctx context.Context, f files) error {
 		return errors.New(msg)
 	}
 	err := t.initParser(ctx, f.langID, langFile,
-		highlightsFile, indentsFile, foldsFile)
+		highlightsFile, indentsFile, foldsFile, localsFile)
 	if err != nil {
 		t.log(log.ErrorLevel, "initialize language %s: %v", f.langID, err)
 		t.notifyNotAvail(f.langID)
@@ -428,7 +434,7 @@ func (t *Tree) initParserFromFiles(ctx context.Context, f files) error {
 
 func (t *Tree) initParser(
 	ctx context.Context, langID,
-	langfile, highlightsfile, indentsFile, foldsFile string,
+	langfile, highlightsfile, indentsFile, foldsFile, localsFile string,
 ) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -486,6 +492,14 @@ func (t *Tree) initParser(
 		}
 	} else {
 		t.log(log.InfoLevel, "folds file not found, some features will be disabled")
+	}
+
+	if localsFile != "" {
+		if err := t.initLocals(language, localsFile); err != nil {
+			t.log(log.ErrorLevel, "initialize locals: %v", err)
+		}
+	} else {
+		t.log(log.InfoLevel, "locals file not found, some features will be disabled")
 	}
 
 	// build the syntax tree
@@ -563,6 +577,24 @@ func (t *Tree) initFolds(
 
 	t.folds = folds
 	t.log(log.DebugLevel, "folds initialized")
+	return nil
+}
+
+func (t *Tree) initLocals(
+	language *tree_sitter.Language, localsFile string,
+) error {
+	data, err := os.ReadFile(localsFile)
+	if err != nil {
+		return fmt.Errorf("read locals file: %v", err)
+	}
+
+	locals, qerr := tree_sitter.NewQuery(language, string(data))
+	if qerr != nil {
+		return fmt.Errorf("compile locals query: %v", qerr)
+	}
+
+	t.locals = locals
+	t.log(log.DebugLevel, "locals initialized")
 	return nil
 }
 
@@ -669,6 +701,30 @@ func (t *Tree) highlight() error {
 	t.log(log.TraceLevel, "set %d highlights", len(highlights))
 
 	return nil
+}
+
+func (t *Tree) query(queryFile string, captureNames ...string) (iterator.Iterator[Match], error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	if t.closed {
+		return nil, errors.New("tree is closed")
+	}
+
+	if !t.ready {
+		return newNodesIterator(t, t.waitingReady, queryFile, captureNames...), nil
+	}
+
+	if t.tree == nil {
+		return nil, errors.New("tree could not be parsed")
+	}
+
+	data, err := t.runQuery(queryFile, captureNames)
+	if err != nil {
+		return nil, err
+	}
+
+	return iterator.FromSlice(data), nil
 }
 
 func (t *Tree) getHighlights(cells [][]term.Cell, content []byte) []textapi.Location {

@@ -75,6 +75,7 @@ type Component struct {
 	edSubscribers  map[textapi.EventType][]EventHandler
 	cmdSubscribers map[string]commandAll
 	editors        map[string]Handler
+	fileRegistry   FileCommandRegistry
 }
 
 // NewComponent allocates storage for a new Component and initializes it.
@@ -143,12 +144,22 @@ func (c *Component) newFileBuffer(
 
 	// install tree in Buffer first so editor can use
 	// its capabilities while initializing
-	fc = syntax.WithTree(c.ctx, c.config, interrupter,
+
+	tree := syntax.WithTree(c.ctx, c.config, interrupter,
 		c.config.PkgManager, locs, file, buf, fc, c.config.Syntax)
+	fc = tree
 
 	handler, err = c.ed.Edit(file, buf, readOnly, recover)
 	if err != nil {
 		return nil, nil, err
+	}
+
+	commands, cmdHandler := syntax.Commands(handler, tree)
+	for _, cmd := range commands {
+		err := c.fileRegistry.SubscribeCommandForFile(file, cmd, cmdHandler)
+		if err != nil {
+			return nil, nil, err
+		}
 	}
 
 	efc := &editorFlusherCloser{
@@ -158,6 +169,7 @@ func (c *Component) newFileBuffer(
 		buf:       buf,
 		lastFlush: buf.Version(),
 		h:         handler,
+		commands:  commands,
 	}
 
 	// no need to unsubscribe upon Close since the assumption
@@ -178,18 +190,13 @@ func (c *Component) Init(
 
 	c.comp.Init(c.config.Config)
 	c.comp.Subscribe((*handlerWindowSubscriber)(c))
+	c.fileRegistry = newFileCommandRegistryFromComponent(c)
 
 	c.ed = ed
 	c.workspace = w
 	c.edSubscribers = make(map[textapi.EventType][]EventHandler)
 	c.cmdSubscribers = make(map[string]commandAll)
 	c.editors = make(map[string]Handler)
-
-	var first browserapi.Handler
-
-	if first != nil {
-		return c.comp.Focus().SetContent(first)
-	}
 
 	// validate that config aliases are not recursive
 	return ValidateCommandAliases(c.config.CommandAliases)
@@ -1152,6 +1159,7 @@ type editorFlusherCloser struct {
 	h         Handler
 	uri       workspaceapi.URI
 	buf       *cell.Buffer
+	commands  []textapi.CommandManual
 	lastFlush int
 }
 
@@ -1207,7 +1215,14 @@ func (e *editorFlusherCloser) Close() error {
 		Resource: e.h,
 	}
 	e.parent.DispatchEvent(ev)
-	return e.fc.Close()
+	ret := e.fc.Close()
+	for _, cmd := range e.commands {
+		err := e.parent.fileRegistry.UnsubscribeCommandForFile(e.uri, cmd.Name)
+		if err != nil {
+			ret = multierror.Append(ret, err)
+		}
+	}
+	return ret
 }
 
 type commandAll struct {

@@ -112,7 +112,11 @@ func newParser(
 	ret.parser = parser
 
 	if query != "" {
-		ret.query, err = sitter.NewQuery(ret.lang, query)
+		var qerr *sitter.QueryError
+		ret.query, qerr = sitter.NewQuery(ret.lang, query)
+		if qerr != nil {
+			err = qerr
+		}
 	} else {
 		err = ret.initQueryFile(language, queryFile)
 	}

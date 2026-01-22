@@ -1445,23 +1445,159 @@ func TestTreeStateIntegration(t *testing.T) {
 	})
 }
 
-func newInstalledPkgManager(t *testing.T) mockPkgManager {
+func TestTreeQueryIntegration(t *testing.T) {
+	t.Run("if locals.scm file is not found and tree is ready Query returns error", func(t *testing.T) {
+		pkgs := newInstalledPkgManagerWithFiles(t,
+			"go/tree-sitter.so",
+			"go/highlights.scm",
+			"go/indents.scm",
+		)
+		_, tree, cleanup := newTreeWithPkgManager(t, pkgs)
+
+		_, err := tree.Query("locals.scm", "query")
+		require.Error(t, err)
+
+		require.NoError(t, tree.Close())
+		cleanup()
+	})
+
+	t.Run("if indents.scm file is not found and tree is ready Query returns error", func(t *testing.T) {
+		pkgs := newInstalledPkgManagerWithFiles(t,
+			"go/tree-sitter.so",
+			"go/highlights.scm",
+		)
+		_, tree, cleanup := newTreeWithPkgManager(t, pkgs)
+
+		_, err := tree.Query("indents.scm", "query")
+		require.Error(t, err)
+
+		require.NoError(t, tree.Close())
+		cleanup()
+	})
+
+	t.Run("if highlights.scm file is not found and tree is ready Query returns error", func(t *testing.T) {
+		pkgs := newInstalledPkgManagerWithFiles(t,
+			"go/tree-sitter.so",
+		)
+		_, tree, cleanup := newTreeWithPkgManager(t, pkgs)
+
+		_, err := tree.Query("highlights.scm", "query")
+		require.Error(t, err)
+
+		require.NoError(t, tree.Close())
+		cleanup()
+	})
+
+	t.Run("if custom file is not found and tree is ready Query returns error", func(t *testing.T) {
+		pkgs := newInstalledPkgManagerWithFiles(t,
+			"go/tree-sitter.so",
+		)
+		_, tree, cleanup := newTreeWithPkgManager(t, pkgs)
+
+		_, err := tree.Query("nonexistent.scm", "local.reference")
+		require.Error(t, err)
+
+		require.NoError(t, tree.Close())
+		cleanup()
+	})
+
+	t.Run("if custom file is given Query uses it to run the query", func(t *testing.T) {
+		f, err := os.CreateTemp("", "")
+		require.NoError(t, err)
+		t.Cleanup(func() {
+			_ = os.Remove(f.Name())
+		})
+		_, err = f.WriteString(`((package_identifier) @local.reference
+  (#set! reference.kind "namespace"))`)
+		require.NoError(t, err)
+		require.NoError(t, f.Close())
+
+		pkgs := newInstalledPkgManagerWithFiles(t,
+			"go/tree-sitter.so",
+			f.Name(),
+		)
+		_, tree, cleanup := newTreeWithPkgManager(t, pkgs)
+
+		it, err := tree.Query(f.Name(), "local.reference")
+		require.NoError(t, err)
+
+		expected := []syntax.Match{
+			{
+				CaptureName: "local.reference",
+				LineString:  "package main",
+				Line:        0,
+			},
+		}
+		matches, err := iterator.ToSlice(context.Background(), it)
+		assert.Equal(t, expected, matches)
+
+		require.NoError(t, tree.Close())
+		cleanup()
+	})
+
+	t.Run("if locals.scm is given Query uses it to run the query", func(t *testing.T) {
+		pkgs := newInstalledPkgManagerWithFiles(t,
+			"go/tree-sitter.so",
+			"go/locals.scm",
+		)
+		_, tree, cleanup := newTreeWithPkgManager(t, pkgs)
+
+		it, err := tree.Query("locals.scm", "local.definition.namespace")
+		require.NoError(t, err)
+
+		expected := []syntax.Match{
+			{
+				CaptureName: "local.definition.namespace",
+				LineString:  "package main",
+				Line:        0,
+			},
+		}
+		matches, err := iterator.ToSlice(context.Background(), it)
+		assert.Equal(t, expected, matches)
+
+		require.NoError(t, tree.Close())
+		cleanup()
+	})
+
+	t.Run("if language parser is not found, Query iterator errors", func(t *testing.T) {
+		pkgs := newInstalledPkgManagerWithFiles(t,
+			"go/indents.scm",
+		)
+		_, tree, cleanup := newTreeWithPkgManager(t, pkgs)
+
+		it, err := tree.Query("indents.scm", "query")
+		require.NoError(t, err)
+		_, ok := it.Next(context.Background())
+		assert.False(t, ok)
+		require.Error(t, it.Err())
+
+		require.NoError(t, tree.Close())
+		cleanup()
+	})
+}
+
+func newInstalledPkgManager(t *testing.T) *mockPkgManager {
 	return newInstalledPkgManagerWithFiles(t,
 		"go/tree-sitter.so",
 		"go/highlights.scm",
 		"go/indents.scm",
 		"go/folds.scm",
+		"go/locals.scm",
 	)
 }
 
-func newInstalledPkgManagerWithFiles(t *testing.T, files ...string) mockPkgManager {
+func newInstalledPkgManagerWithFiles(t *testing.T, files ...string) *mockPkgManager {
 	wd, err := os.Getwd()
 	require.NoError(t, err)
 	var fullPathFiles []string
 	for _, file := range files {
-		fullPathFiles = append(fullPathFiles, filepath.Join(wd, file))
+		if !filepath.IsAbs(file) {
+			fullPathFiles = append(fullPathFiles, filepath.Join(wd, file))
+		} else {
+			fullPathFiles = append(fullPathFiles, file)
+		}
 	}
-	return mockPkgManager{
+	return &mockPkgManager{
 		ret: iterator.FromSlice(fullPathFiles),
 	}
 }

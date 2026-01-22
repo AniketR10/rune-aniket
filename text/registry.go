@@ -26,26 +26,44 @@ package text
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/unstablebuild/blue/iterator"
 	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/api/workspaceapi"
 )
 
-// NewFileCommandRegistry returns a command registry that satisfies FileCommandRegistry.
+// NewFileCommandRegistry returns a command registry that satisfies FileCommandRegistry,
+// by using the given workspace-wide registry to register commands.
 func NewFileCommandRegistry(
 	workspace workspaceapi.URI, registry WorkspaceCommandRegistry,
 ) FileCommandRegistry {
 	ret := new(fileCmdRegistry)
 	ret.cmds = make(map[string]map[string]commandAll)
-	ret.registry = registry
-	ret.workspace = workspace
+	ret.register = func(cmd textapi.CommandManual, c CommandHandler) error {
+		return registry.SubscribeCommandForWorkspace(workspace, cmd, c)
+	}
+	ret.unregister = func(name string) error {
+		return registry.UnsubscribeCommandForWorkspace(workspace, name)
+	}
+	return ret
+}
+
+func newFileCommandRegistryFromComponent(comp *Component) FileCommandRegistry {
+	ret := new(fileCmdRegistry)
+	ret.cmds = make(map[string]map[string]commandAll)
+	ret.register = func(cmd textapi.CommandManual, c CommandHandler) error {
+		return comp.SubscribeCommand(cmd, c)
+	}
+	ret.unregister = func(name string) error {
+		return comp.UnsubscribeCommand(name)
+	}
 	return ret
 }
 
 type fileCmdRegistry struct {
-	registry  WorkspaceCommandRegistry
-	workspace workspaceapi.URI
+	register   func(textapi.CommandManual, CommandHandler) error
+	unregister func(string) error
 	// keep track in adition to registry, so we can
 	// unsubscribe on Close
 	cmds map[string]map[string]commandAll
@@ -63,7 +81,7 @@ func (c *fileCmdRegistry) SubscribeCommandForFile(
 		c.cmds[cmd.Name] = map[string]commandAll{
 			file.String(): cc,
 		}
-		return c.registry.SubscribeCommandForWorkspace(c.workspace, cmd, c)
+		return c.register(cmd, c)
 	}
 	if _, ok := files[file.String()]; ok {
 		return errors.New("command already registered")
@@ -83,7 +101,7 @@ func (c *fileCmdRegistry) UnsubscribeCommandForFile(uri workspaceapi.URI, cmd st
 	}
 	if len(files) == 1 {
 		delete(c.cmds, cmd)
-		return c.registry.UnsubscribeCommandForWorkspace(c.workspace, cmd)
+		return c.unregister(cmd)
 	}
 	delete(files, uri.String())
 	return nil
@@ -99,9 +117,9 @@ func (c *fileCmdRegistry) HandleCommand(ctx context.Context, cmd textapi.Command
 	}
 	handler, ok := files[cmd.URI.String()]
 	if !ok {
-		// command is being dispatched on a file that doesn't hanve a handler for it
+		// command is being dispatched on a file that doesn't have a handler for it
 		// could be by user error so show a reassuring message.
-		ret = errors.New("nothing to do here")
+		ret = errors.New("this file doesn't support this command")
 		return
 	}
 	return handler.handler.HandleCommand(ctx, cmd)
@@ -118,7 +136,7 @@ func (c *fileCmdRegistry) Complete(ctx context.Context, cmd textapi.Command) (
 	}
 	handler, ok := files[cmd.URI.String()]
 	if !ok {
-		return iterator.Empty[string](), "", nil
+		return nil, "", fmt.Errorf("this file doesn't support this command")
 	}
 	return handler.handler.Complete(ctx, cmd)
 }
