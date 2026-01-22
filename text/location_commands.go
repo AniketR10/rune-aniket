@@ -58,7 +58,7 @@ func SubscribeLocationCommands(
 }
 
 const (
-	commandLocationJump = "locationjump"
+	commandLocationJump = "jumptolocation"
 )
 
 var locationCommands = []textapi.CommandManual{

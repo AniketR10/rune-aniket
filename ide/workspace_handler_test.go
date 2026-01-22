@@ -74,10 +74,10 @@ func TestFileCommandRegistryIntegration(t *testing.T) {
 	require.NoError(t, m.addOrCreateWorkspace(uri1))
 
 	h := newSafeHandler(m)
-	// locationjump is registered on a per-file basis, so the following tests
+	// jumptolocation is registered on a per-file basis, so the following tests
 	// file-level subscriptions across a file's lifecycle.
 	cases := []handlertest.SequenceTestCase{
-		{":edit dakar.md>igentleman>driver>gentleman<:write>/gentleman>:locationjump next search>",
+		{":edit dakar.md>igentleman>driver>gentleman<:write>/gentleman>:jumptolocation next search>",
 			`┌────────────────────────────┐
 │o dakar.md                  │
 ├────────────────────────────┤
@@ -87,7 +87,7 @@ func TestFileCommandRegistryIntegration(t *testing.T) {
 │       searching 'gentleman'│
 │                      NORMAL│
 └────────────────────────────┘`},
-		{":locationjump next search>",
+		{":jumptolocation next search>",
 			`┌────────────────────────────┐
 │o dakar.md                  │
 ├────────────────────────────┤
@@ -107,7 +107,7 @@ func TestFileCommandRegistryIntegration(t *testing.T) {
 │       searching 'gentleman'│
 │                      NORMAL│
 └────────────────────────────┘`},
-		{":locationjump next search>",
+		{":jumptolocation next search>",
 			`┌────────────────────────────┐
 │o dakar.md                  │
 ├────────────────────────────┤
