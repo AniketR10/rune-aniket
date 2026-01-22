@@ -123,6 +123,128 @@ func TestFileCommandRegistryIntegration(t *testing.T) {
 	require.NoError(t, m.Close())
 }
 
+func TestCustomLocations(t *testing.T) {
+	dir, err := os.MkdirTemp("", "")
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		os.RemoveAll(dir)
+	})
+
+	uri1, err := workspaceapi.ParseURI("memory://" + dir)
+	require.NoError(t, err)
+
+	m := newTestWorkspaceManagerHandlerWithDir(t, defaultConfigWithWrap(false), dir,
+		nopShutdownShaderConfig())
+	require.NoError(t, m.addOrCreateWorkspace(uri1))
+
+	h := newSafeHandler(m)
+	cases := []handlertest.SequenceTestCase{
+		{":edit dakar.md>igentleman<:locationcreate mylist>a>driver<:locationcreate mylist>a>gentleman<:write>:locationcreate mylist>",
+			`┌────────────────────────────┐
+│o dakar.md                  │
+├────────────────────────────┤
+│gentleman                   │
+│driver                      │
+│gentlema▐                   │
+│                            │
+│                      NORMAL│
+└────────────────────────────┘`},
+		{":jumptolocation previous mylist>",
+			`┌────────────────────────────┐
+│o dakar.md                  │
+├────────────────────────────┤
+│gentleman                   │
+│drive▐                      │
+│gentleman                   │
+│                            │
+│                      NORMAL│
+└────────────────────────────┘`},
+		{":jumptolocation previous mylist>",
+			`┌────────────────────────────┐
+│o dakar.md                  │
+├────────────────────────────┤
+│gentlema▐                   │
+│driver                      │
+│gentleman                   │
+│                            │
+│                      NORMAL│
+└────────────────────────────┘`},
+		{":locationdelete mork>",
+			`┌──────────────┌─────────────┐
+│o dakar.md    │ there's no  │
+├──────────────│ location    │
+│gentlema▐     │ at the      │
+│driver        │ given       │
+│gentleman     │ cursor      │
+│              │ position    │
+│              │ for given   │
+└──────────────│ location    │`},
+		{":noticloseall>:locationdelete mylist>",
+			`┌────────────────────────────┐
+│o dakar.md                  │
+├────────────────────────────┤
+│gentlema▐                   │
+│driver                      │
+│gentleman                   │
+│                            │
+│                      NORMAL│
+└────────────────────────────┘`},
+		{":jumptolocation next mylist>",
+			`┌────────────────────────────┐
+│o dakar.md                  │
+├────────────────────────────┤
+│gentleman                   │
+│drive▐                      │
+│gentleman                   │
+│                            │
+│                      NORMAL│
+└────────────────────────────┘`},
+		{":jumptolocation next mylist>",
+			`┌────────────────────────────┐
+│o dakar.md                  │
+├────────────────────────────┤
+│gentleman                   │
+│driver                      │
+│gentlema▐                   │
+│                            │
+│                      NORMAL│
+└────────────────────────────┘`},
+		{":jumptolocation next mylist>",
+			`┌────────────────────────────┐
+│o dakar.md                  │
+├────────────────────────────┤
+│gentleman                   │
+│drive▐                      │
+│gentleman                   │
+│                            │
+│                      NORMAL│
+└────────────────────────────┘`},
+		{":locationdeleteall mylist>",
+			`┌────────────────────────────┐
+│o dakar.md                  │
+├────────────────────────────┤
+│gentleman                   │
+│drive▐                      │
+│gentleman                   │
+│                            │
+│                      NORMAL│
+└────────────────────────────┘`},
+		{":jumptolocation next mylist>",
+			`┌────────────────────────────┐
+│o dakar.md                  │
+├────────────────────────────┤
+│gentleman                   │
+│drive▐                      │
+│gentleman                   │
+│                            │
+│                      NORMAL│
+└────────────────────────────┘`},
+	}
+	handlertest.TestHandlerSequence(t, h, 30, 9, cases)
+
+	require.NoError(t, m.Close())
+}
+
 func TestOpenFilesinEmptyWorkspace(t *testing.T) {
 	m := newTestWorkspaceManagerHandlerWithDir(t, defaultConfigWithWrap(false), "",
 		nopShutdownShaderConfig())

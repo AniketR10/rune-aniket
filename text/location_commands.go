@@ -26,13 +26,17 @@ package text
 import (
 	"context"
 	"errors"
+	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/iterator"
+	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/api/workspaceapi"
+	"unstable.build/go-tui/term"
 )
 
 // SubscribeLocationCommands returns a slice of location list related commands
@@ -41,9 +45,10 @@ func SubscribeLocationCommands(
 	file workspaceapi.URI, registry FileCommandRegistry, ed Handler,
 ) (Handler, error) {
 	ret := locationCommandHandler{
-		file:     file,
-		registry: registry,
-		Handler:  ed,
+		file:              file,
+		registry:          registry,
+		Handler:           ed,
+		userLocationLists: make(map[string]struct{}),
 	}
 	var retErr error
 	for _, cmd := range locationCommands {
@@ -58,7 +63,11 @@ func SubscribeLocationCommands(
 }
 
 const (
-	commandLocationJump = "jumptolocation"
+	commandLocationJump       = "jumptolocation"
+	commandCreateLocation     = "locationcreate"
+	commandDeleteLocation     = "locationdelete"
+	commandDeleteAllLocations = "locationdeleteall"
+	defaultUserLocationList   = "mark"
 )
 
 var locationCommands = []textapi.CommandManual{
@@ -79,12 +88,34 @@ var locationCommands = []textapi.CommandManual{
 			},
 		},
 	},
+	{
+		Name: commandCreateLocation,
+		Summary: fmt.Sprintf("Saves the current cursor location as a location that can be "+
+			"used to jump to via `locationjump %[1]s`. By default, the location list name is `%[1]s` "+
+			"but this can be overriden by passing a location list name.",
+			defaultUserLocationList),
+		Synopsis: "[location-list]",
+	},
+	{
+		Name: commandDeleteLocation,
+		Summary: fmt.Sprintf("Delete the current cursor location in the given location list. "+
+			"By default, the location list name is `%[1]s` "+
+			"but this can be overriden by passing a location list name.", defaultUserLocationList),
+		Synopsis: "[location-list]",
+	},
+	{
+		Name: commandDeleteAllLocations,
+		Summary: fmt.Sprintf("Removes all of the locations of the given location list. The default location"+
+			" list is `%s`.", defaultUserLocationList),
+		Synopsis: "[location-list]",
+	},
 }
 
 type locationCommandHandler struct {
 	file     workspaceapi.URI
 	registry FileCommandRegistry
 	Handler
+	userLocationLists map[string]struct{}
 }
 
 func (u locationCommandHandler) Close() (ret error) {
@@ -104,6 +135,12 @@ func (u locationCommandHandler) HandleCommand(
 	switch cmd.Name {
 	case commandLocationJump:
 		err = u.handleLocationJump(cmd)
+	case commandCreateLocation:
+		err = u.handleCreateLocation(cmd)
+	case commandDeleteLocation:
+		err = u.handleDeleteLocation(cmd)
+	case commandDeleteAllLocations:
+		err = u.handleDeleteAllLocations(cmd)
 	default:
 		err = errors.New("extraneous command")
 	}
@@ -116,6 +153,12 @@ func (u locationCommandHandler) Complete(ctx context.Context, cmd textapi.Comman
 	switch cmd.Name {
 	case commandLocationJump:
 		ret, err = u.completeLocationJump(cmd)
+	case commandCreateLocation:
+		ret, err = u.completeCreateLocation(cmd)
+	case commandDeleteLocation:
+		ret, err = u.completeDeleteLocation(cmd)
+	case commandDeleteAllLocations:
+		ret, err = u.completeCreateLocation(cmd)
 	default:
 		err = errors.New("extraneous command")
 	}
@@ -173,6 +216,122 @@ func (u locationCommandHandler) completeLocationJump(
 			ids = append(ids, list.ID)
 		}
 		ret = iterator.FromSlice(ids)
+		return
+	}
+	ret = iterator.Empty[string]()
+	return
+}
+
+func (u locationCommandHandler) getCursorMark() (term.Coordinates, term.Coordinates) {
+	cursor := u.CursorAtScroll()
+	return cursor, term.Coordinates{Y: cursor.Y, X: cursor.X + 1}
+}
+
+func (u locationCommandHandler) handleDeleteAllLocations(cmd textapi.Command) (err error) {
+	list := defaultUserLocationList
+	if len(cmd.Args) > 0 {
+		list = cmd.Args[0]
+	}
+	u.Handler.SetLocationList(textapi.LocationPriorityInfo, list, nil)
+	clear(u.userLocationLists)
+	return
+}
+
+func (u locationCommandHandler) handleDeleteLocation(cmd textapi.Command) (err error) {
+	list := defaultUserLocationList
+	if len(cmd.Args) > 0 {
+		list = cmd.Args[0]
+	}
+	var curr []textapi.Location
+	lists := u.Handler.LocationLists()
+	for _, l := range lists {
+		if l.ID == list {
+			curr = l.Locations
+		}
+	}
+	from, to := u.getCursorMark()
+	var success bool
+	for i, loc := range curr {
+		if loc.From == from && loc.To == to {
+			curr[i] = curr[len(curr)-1]
+			curr = curr[:len(curr)-1]
+			success = true
+			break
+		}
+	}
+	if !success {
+		return fmt.Errorf("there's no location at the given cursor position for given location list")
+	}
+	sort.Slice(curr, func(i, j int) bool {
+		res := term.CoordinatesDiff(curr[i].From, curr[j].From)
+		return res.Y < 0 || res.Y == 0 && res.X < 0
+	})
+	u.Handler.SetLocationList(textapi.LocationPriorityInfo, list, LocationSlice(curr))
+	if list != defaultUserLocationList && len(curr) == 0 {
+		delete(u.userLocationLists, list)
+	}
+	return
+}
+
+func (u locationCommandHandler) completeDeleteLocation(
+	cmd textapi.Command,
+) (ret iterator.Iterator[string], err error) {
+	if len(cmd.Args) == 1 {
+		lists := u.Handler.LocationLists()
+		from, to := u.getCursorMark()
+		for _, list := range lists {
+			_, isUser := u.userLocationLists[list.ID]
+			if !isUser && list.ID != defaultUserLocationList {
+				continue
+			}
+			for _, loc := range list.Locations {
+				if loc.From == from && loc.To == to {
+					return iterator.FromSlice([]string{list.ID}), nil
+				}
+			}
+		}
+	}
+	// avoid history completion
+	ret = iterator.FromSlice([]string{""})
+	return
+}
+
+func (u locationCommandHandler) handleCreateLocation(cmd textapi.Command) (err error) {
+	list := defaultUserLocationList
+	if len(cmd.Args) > 0 {
+		list = cmd.Args[0]
+	}
+	var curr []textapi.Location
+	lists := u.Handler.LocationLists()
+	for _, l := range lists {
+		if l.ID == list {
+			curr = l.Locations
+		}
+	}
+	from, to := u.getCursorMark()
+	curr = append(curr, textapi.Location{
+		From: from,
+		To:   to,
+		Attr: term.Attributes{
+			Bg: tcell.ColorGray,
+		},
+	})
+	u.Handler.SetLocationList(textapi.LocationPriorityInfo, list, LocationSlice(curr))
+	if list != defaultUserLocationList {
+		u.userLocationLists[list] = struct{}{}
+	}
+	return
+}
+
+func (u locationCommandHandler) completeCreateLocation(
+	cmd textapi.Command,
+) (ret iterator.Iterator[string], err error) {
+	if len(cmd.Args) == 1 {
+		locationLists := []string{defaultUserLocationList}
+		for id := range u.userLocationLists {
+			locationLists = append(locationLists, id)
+		}
+		ret = iterator.FromSlice(locationLists)
 		return
 	}
 	ret = iterator.Empty[string]()
