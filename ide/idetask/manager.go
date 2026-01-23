@@ -220,14 +220,18 @@ func (m *Manager) ListTasks() (ret []TaskInfo) {
 // StopTask stops the task with the given name or returns
 // an error if the task doesn't exist or there was an error stopping
 // it.
-func (m *Manager) StopTask(name string) error {
+func (m *Manager) StopTask(name string) (err error) {
 	info, ok := m.tasks.LoadAndDelete(name)
 	if !ok {
 		return errors.New("task with this name does not exist")
 	}
-	info.(*Task).doClose()
+	t := info.(*Task)
+	t.doClose()
 	<-info.(*Task).doneWaitCh
-	return nil
+	if t.tab != nil {
+		err = t.b.RemoveTab(t.tab)
+	}
+	return err
 }
 
 // ReplaceTask replaces the command of the given task and attempts to

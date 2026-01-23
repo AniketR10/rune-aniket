@@ -2621,8 +2621,11 @@ func TestSwitchToTab(t *testing.T) {
 
 func TestRunStopTasks(t *testing.T) {
 	t.Run("newtask is called with incorrect number of args returns error", func(t *testing.T) {
-		b, cleanup := newExForTestingTasks(t)
+		b, mu, cleanup := newExForTestingTasks(t)
 		defer cleanup()
+
+		mu.Lock()
+		defer mu.Unlock()
 
 		require.Error(t, b.newTask("up", "--", "make"))
 		require.Error(t, b.newTask("newTask", "left", "make"))
@@ -2631,8 +2634,11 @@ func TestRunStopTasks(t *testing.T) {
 	})
 
 	t.Run("newtask is called with correct number of args returns no error", func(t *testing.T) {
-		b, cleanup := newExForTestingTasks(t)
+		b, mu, cleanup := newExForTestingTasks(t)
 		defer cleanup()
+
+		mu.Lock()
+		defer mu.Unlock()
 
 		require.NoError(t, b.newTask("myTask", "left", "--", "make"))
 		require.NoError(t, b.newTask("myTask2", "right", "--", "make", "test", "things"))
@@ -2642,8 +2648,11 @@ func TestRunStopTasks(t *testing.T) {
 
 	// left/right alignment combined with up/down is ugly; stick to left/right only
 	t.Run("newtask is called with left or right alignment is error", func(t *testing.T) {
-		b, cleanup := newExForTestingTasks(t)
+		b, mu, cleanup := newExForTestingTasks(t)
 		defer cleanup()
+
+		mu.Lock()
+		defer mu.Unlock()
 
 		require.Error(t, b.newTask("myTask", "up", "--", "make"))
 		require.Error(t, b.newTask("myTask2", "down", "--", "make", "test", "things"))
@@ -2652,8 +2661,11 @@ func TestRunStopTasks(t *testing.T) {
 	})
 
 	t.Run("newtask called twice with same task name opens a prompt", func(t *testing.T) {
-		b, cleanup := newExForTestingTasks(t)
+		b, mu, cleanup := newExForTestingTasks(t)
 		defer cleanup()
+
+		mu.Lock()
+		defer mu.Unlock()
 
 		require.NoError(t, b.newTask("myTask", "left", "--", "make"))
 		require.NoError(t, b.newTask("myTask", "right", "--", "make", "test", "things"))
@@ -2983,11 +2995,43 @@ func TestRunStopTasks(t *testing.T) {
 │             ││             │
 │             ││             │
 └─────────────┘└─────────────┘`},
+			{":tabclose>",
+				`┌────────────────────────────┐
+│o abc  8 tests              │
+├─────────────┐┌─────────────┐
+│             ││AAAAAAAAAAAAA│
+│             ││AAAAAAAAAAAAA│
+│             ││AAAAAAAAAAAAA│
+│  new vte:   ││AAAAAAAAAAAAA│
+│  start      ││AAAAAAAAAAAAA│
+│  command:   ││AAAAAAAAAAAAA│
+│  context    ││AAAAAAAAAAAAA│
+│  canceled   ││AAAAAAAAAAAAA│
+│             ││AAAAAAAAAAAAA│
+│             ││AAAAAAAAAAAAA│
+│             ││AAAAAAAAAAAAA│
+└─────────────┘└─────────────┘`},
+			{":taskclose tests>",
+				`┌────────────────────────────┐
+│o abc                       │
+├─────────────┐┌─────────────┐
+│             ││AAAAAAAAAAAAA│
+│             ││AAAAAAAAAAAAA│
+│             ││AAAAAAAAAAAAA│
+│             ││AAAAAAAAAAAAA│
+│             ││AAAAAAAAAAAAA│
+│             ││AAAAAAAAAAAAA│
+│             ││AAAAAAAAAAAAA│
+│             ││AAAAAAAAAAAAA│
+│             ││AAAAAAAAAAAAA│
+│             ││AAAAAAAAAAAAA│
+│             ││AAAAAAAAAAAAA│
+└─────────────┘└─────────────┘`},
 		}
 
 		defaultConvertTabIcon = '8'
-		e, cleanup := newExForTestingTasks(t)
-		handlertest.TestHandlerSequence(t, e, 30, 15, cases)
+		e, mu, cleanup := newExForTestingTasks(t)
+		handlertest.TestHandlerSequence(t, handler.Sync(mu, e), 30, 15, cases)
 		cleanup()
 	})
 }
@@ -3716,8 +3760,8 @@ func (v *testVte) Title() string {
 	return v.title
 }
 
-func newExForTestingTasks(t *testing.T) (testEx, func()) {
-	var mu sync.Mutex
+func newExForTestingTasks(t *testing.T) (testEx, *sync.Mutex, func()) {
+	mu := new(sync.Mutex)
 	opts := []text.Option{
 		text.WithCommandKey(testCommandKey),
 		text.WithFloatingNoMaxSize(false),
@@ -3736,14 +3780,16 @@ func newExForTestingTasks(t *testing.T) (testEx, func()) {
 	workspace := workspace.NewSchemeWorkspace(uri, fileScheme)
 	vteConfig := vte.DefaultConfig()
 	vteConfig.ScheduleNextTick = func(fn func()) bool {
-		mu.Lock()
-		defer mu.Unlock()
-		fn()
+		go func() {
+			mu.Lock()
+			defer mu.Unlock()
+			fn()
+		}()
 		return true
 	}
 	e := newExForTestingTerminal(t, workspace, texttest.NopEditor(),
 		vteConfig, nopPublishEvent, opts...)
-	return e, func() {
+	return e, mu, func() {
 		mu.Lock()
 		defer mu.Unlock()
 		require.NoError(t, e.Close())

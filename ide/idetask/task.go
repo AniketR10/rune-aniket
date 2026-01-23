@@ -248,15 +248,10 @@ func (t *Task) doClose() (ret error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	if !t.win.Closed() {
+	if t.tab == nil && !t.win.Closed() {
 		ret = t.win.Close()
 	}
 	t.cancelCtx()
-	if t.tab != nil {
-		if err := t.b.RemoveTab(t.tab); err != nil {
-			ret = multierror.Append(ret, err)
-		}
-	}
 
 	if t.handler != nil {
 		if err := t.handler.Close(); err != nil {
