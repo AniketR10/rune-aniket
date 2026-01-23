@@ -67,8 +67,8 @@ Alias of the following sequence of commands:
 {{ end }}{{ end }}{{end}}
 {{ .Summary }}{{ with .Commands }}
 
-SUB-COMMANDS
-{{ range . }}- {{ .Name }}{{ end }}
+SUB-COMMANDS{{ range . }}
+    - {{ .Name }}{{ end }}
 {{ end }}`
 
 var tmpl *template.Template

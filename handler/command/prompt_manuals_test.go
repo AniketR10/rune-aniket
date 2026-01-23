@@ -40,7 +40,9 @@ var goodTestCommands = []Manual{
 		Commands: []Manual{
 			{Name: "GL", Summary: "GLs are 7 seater.", Synopsis: "[450]",
 				Commands: []Manual{
-					{Name: "450", Summary: "450 is middle tier", Synopsis: ""}},
+					{Name: "350", Summary: "i don't know", Synopsis: ""},
+					{Name: "450", Summary: "450 is middle tier", Synopsis: ""},
+				},
 			}},
 	},
 	{Name: "gladiator", AliasOf: []string{"jeep"}},
@@ -224,7 +226,7 @@ DESCRIPTION
 2014 old luxury car.                    
                                         
 SUB-COMMANDS                            
-- GL                                    
+    - GL                                
                                         
                                         `},
 		{"partially typed command with args no subcommand delete in the middle",
@@ -246,7 +248,7 @@ DESCRIPTION
 2014 old luxury car.                    
                                         
 SUB-COMMANDS                            
-- GL                                    
+    - GL                                
                                         
                                         `},
 		{"fully typed command with space, completed via manual",
@@ -268,7 +270,7 @@ DESCRIPTION
 2014 old luxury car.                    
                                         
 SUB-COMMANDS                            
-- GL                                    
+    - GL                                
                                         
                                         `},
 		{"fully typed command with partially typed subcommand, completed via manual",
@@ -290,7 +292,7 @@ DESCRIPTION
 2014 old luxury car.                    
                                         
 SUB-COMMANDS                            
-- GL                                    
+    - GL                                
                                         
                                         `},
 		{"fully typed command with fully typed 1st subcommand, completed via manual",
@@ -312,15 +314,14 @@ DESCRIPTION
 2014 old luxury car.                    
                                         
 SUB-COMMANDS                            
-- GL                                    
+    - GL                                
                                         
                                         `},
 		{"fully typed command with fully typed 1st subcommand, with space, completed via manual",
 			"mercedes GL ", goodTestCommands, `
 mercedes GL ▐                           
+350                                     
 450                                     
-                                        
-                                        
                                         
                                         
                                         
@@ -334,7 +335,8 @@ DESCRIPTION
 GLs are 7 seater.                       
                                         
 SUB-COMMANDS                            
-- 450                                   
+    - 350                               
+    - 450                               
                                         
                                         `},
 		{"fully typed command with partially typed 2nd subcommand, completed via manual",
@@ -346,7 +348,6 @@ mercedes GL 4▐
                                         
                                         
                                         
-                                        
 ────────────────────────────────────────
                                         
 USAGE                                   
@@ -356,7 +357,8 @@ DESCRIPTION
 GLs are 7 seater.                       
                                         
 SUB-COMMANDS                            
-- 450                                   
+    - 350                               
+    - 450                               
                                         
                                         `},
 		{"fully typed command with fully typed 2nd subcommand, completed via manual",
@@ -368,7 +370,6 @@ mercedes GL 450▐
                                         
                                         
                                         
-                                        
 ────────────────────────────────────────
                                         
 USAGE                                   
@@ -378,7 +379,8 @@ DESCRIPTION
 GLs are 7 seater.                       
                                         
 SUB-COMMANDS                            
-- 450                                   
+    - 350                               
+    - 450                               
                                         
                                         `},
 		{"fully typed command with fully typed 2nd subcommand, with space, completed via manual",
@@ -412,7 +414,6 @@ mercedes GL 450▐
                                         
                                         
                                         
-                                        
 ────────────────────────────────────────
                                         
 USAGE                                   
@@ -422,7 +423,8 @@ DESCRIPTION
 GLs are 7 seater.                       
                                         
 SUB-COMMANDS                            
-- 450                                   
+    - 350                               
+    - 450                               
                                         
                                         `},
 		{"fully typed command with fully typed 2nd subcommand, deleted space and , half arg, completed via manual",
@@ -434,7 +436,6 @@ mercedes GL 4▐
                                         
                                         
                                         
-                                        
 ────────────────────────────────────────
                                         
 USAGE                                   
@@ -444,15 +445,15 @@ DESCRIPTION
 GLs are 7 seater.                       
                                         
 SUB-COMMANDS                            
-- 450                                   
+    - 350                               
+    - 450                               
                                         
                                         `},
 		{"fully typed command with fully typed 2nd subcommand, deleted last arg, completed via manual",
 			"mercedes GL 450 ^^^^", goodTestCommands, `
 mercedes GL ▐                           
+350                                     
 450                                     
-                                        
-                                        
                                         
                                         
                                         
@@ -466,7 +467,8 @@ DESCRIPTION
 GLs are 7 seater.                       
                                         
 SUB-COMMANDS                            
-- 450                                   
+    - 350                               
+    - 450                               
                                         
                                         `},
 		{"fully typed command with fully typed 2nd subcommand, deleted last arg, completed via manual",
@@ -488,7 +490,7 @@ DESCRIPTION
 2014 old luxury car.                    
                                         
 SUB-COMMANDS                            
-- GL                                    
+    - GL                                
                                         
                                         `},
 		{"alias of multiple commands",
