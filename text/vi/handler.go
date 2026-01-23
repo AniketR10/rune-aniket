@@ -1142,6 +1142,7 @@ func (vi *viHandlerImpl) doneHandle(mode viMode) {
 
 func (vi *viHandlerImpl) moveToBounds() {
 	vi.doMoveToBounds()
+	vi.markMatchingBrace()
 }
 
 func (vi *viHandlerImpl) doMoveToBounds() {
@@ -1193,6 +1194,7 @@ func (vi *viHandlerImpl) OnVisible(start int) {
 func (vi *viHandlerImpl) moveToNextLocation(ID string) bool {
 	ok := vi.cursor.MoveToNextLocation(ID)
 	vi.anchor = vi.cursorAtScroll()
+	vi.markMatchingBrace()
 	return ok
 }
 
@@ -1201,6 +1203,7 @@ func (vi *viHandlerImpl) moveToNextLocation(ID string) bool {
 func (vi *viHandlerImpl) moveToPrevLocation(ID string) bool {
 	ok := vi.cursor.MoveToPrevLocation(ID)
 	vi.anchor = vi.cursorAtScroll()
+	vi.markMatchingBrace()
 	return ok
 }
 

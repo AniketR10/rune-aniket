@@ -116,27 +116,96 @@ func TestCellAtCursor(t *testing.T) {
 }
 
 func TestMatchingRuneHighlight(t *testing.T) {
-	width, height := 20, 10
+	t.Run("normal movement", func(t *testing.T) {
+		width, height := 20, 10
 
-	vi := setupVi(t, snippet, 2)
-	vi.Resize(width, height)
+		vi := setupVi(t, snippet, 2)
+		vi.Resize(width, height)
 
-	for _, r := range "jjjjjjj" {
-		_, handled := vi.Handle(term.Event{Type: term.EventKey, Ch: r})
-		require.True(t, handled)
-	}
+		for _, r := range "jjjjjjj" {
+			_, handled := vi.Handle(term.Event{Type: term.EventKey, Ch: r})
+			require.True(t, handled)
+		}
 
-	c, ok := vi.cursor.Cell()
-	assert.True(t, ok)
-	require.Equal(t, '{', c.Ch)
+		c, ok := vi.cursor.Cell()
+		assert.True(t, ok)
+		require.Equal(t, '{', c.Ch)
 
-	list, ok := vi.cursor.LocationList(matchingLocID)
-	require.True(t, ok)
-	loc, ok := list.Current()
-	require.True(t, ok)
-	assert.Equal(t, tcell.AttrReverse, loc.Attr.Attrs)
-	assert.Equal(t, term.Coordinates{Y: 31}, loc.From)
-	assert.Equal(t, term.Coordinates{Y: 31, X: 1}, loc.To)
+		list, ok := vi.cursor.LocationList(matchingLocID)
+		require.True(t, ok)
+		loc, ok := list.Current()
+		require.True(t, ok)
+		assert.Equal(t, tcell.AttrReverse, loc.Attr.Attrs)
+		assert.Equal(t, term.Coordinates{Y: 31}, loc.From)
+		assert.Equal(t, term.Coordinates{Y: 31, X: 1}, loc.To)
+	})
+
+	t.Run("SetCursorAtScroll", func(t *testing.T) {
+		width, height := 20, 10
+
+		vi := setupVi(t, snippet, 2)
+		vi.Resize(width, height)
+
+		vi.setCursorAtScroll(term.Coordinates{Y: 7})
+
+		c, ok := vi.cursor.Cell()
+		assert.True(t, ok)
+		require.Equal(t, '{', c.Ch)
+
+		list, ok := vi.cursor.LocationList(matchingLocID)
+		require.True(t, ok)
+		loc, ok := list.Current()
+		require.True(t, ok)
+		assert.Equal(t, tcell.AttrReverse, loc.Attr.Attrs)
+		assert.Equal(t, term.Coordinates{Y: 31}, loc.From)
+		assert.Equal(t, term.Coordinates{Y: 31, X: 1}, loc.To)
+	})
+
+	t.Run("MoveToNextLocation", func(t *testing.T) {
+		width, height := 20, 10
+
+		vi := setupVi(t, snippet, 2)
+		vi.Resize(width, height)
+
+		vi.cursor.SetLocationList(textapi.LocationPriorityInfo, "mylist",
+			textapi.LocationSlice([]textapi.Location{{From: term.Coordinates{Y: 7}}}))
+		vi.moveToNextLocation("mylist")
+
+		c, ok := vi.cursor.Cell()
+		assert.True(t, ok)
+		require.Equal(t, '{', c.Ch)
+
+		list, ok := vi.cursor.LocationList(matchingLocID)
+		require.True(t, ok)
+		loc, ok := list.Current()
+		require.True(t, ok)
+		assert.Equal(t, tcell.AttrReverse, loc.Attr.Attrs)
+		assert.Equal(t, term.Coordinates{Y: 31}, loc.From)
+		assert.Equal(t, term.Coordinates{Y: 31, X: 1}, loc.To)
+	})
+
+	t.Run("MoveToPrevLocation", func(t *testing.T) {
+		width, height := 20, 10
+
+		vi := setupVi(t, snippet, 2)
+		vi.Resize(width, height)
+
+		vi.cursor.SetLocationList(textapi.LocationPriorityInfo, "mylist",
+			textapi.LocationSlice([]textapi.Location{{From: term.Coordinates{Y: 7}}}))
+		vi.moveToPrevLocation("mylist")
+
+		c, ok := vi.cursor.Cell()
+		assert.True(t, ok)
+		require.Equal(t, '{', c.Ch)
+
+		list, ok := vi.cursor.LocationList(matchingLocID)
+		require.True(t, ok)
+		loc, ok := list.Current()
+		require.True(t, ok)
+		assert.Equal(t, tcell.AttrReverse, loc.Attr.Attrs)
+		assert.Equal(t, term.Coordinates{Y: 31}, loc.From)
+		assert.Equal(t, term.Coordinates{Y: 31, X: 1}, loc.To)
+	})
 }
 
 func TestViIntegrationSequence(t *testing.T) {
