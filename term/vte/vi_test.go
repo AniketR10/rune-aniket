@@ -138,7 +138,7 @@ $ ▐
 			{"k0veyj\\$iecho <p", // copy and paste
 				`$ echo bla          
 bla                 
-$ echo ▐la          
+$ echo bl▐          
                     
                     
                     
@@ -146,7 +146,7 @@ $ echo ▐la
                     
                     
                     `},
-			{"ved",
+			{"bved",
 				`$ echo bla          
 bla                 
 $ echo▐             
@@ -278,7 +278,7 @@ $ ▐
                     
                     
                     `},
-			{"echo \"<k0llvk0yG0lllllpeeea\"", // multiline paste
+			{"echo \"<k0llvk0yG0lllllpjla\"", // multiline paste
 				`$ echo bla          
 bla                 
 $ echo "$ echo blabl
@@ -545,7 +545,7 @@ bcde▐               `},
 			{"printf 'abc\\\\x00\\\\n'><k0velllyjj0iecho '<p",
 				`$ printf 'abc\x00\n'
 abc                 
-$ echo '▐bc         
+$ echo 'ab▐         
                     
                     
                     

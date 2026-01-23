@@ -379,7 +379,7 @@ func (h *editorHandler) Handle(ev term.Event) (exit, handled bool) {
 				} else {
 					str := paste.Text
 					mode, _ := paste.Metadata.(text.SelectMode)
-					h.cursor.Paste(str, mode, true)
+					h.cursor.Paste(str, mode, false)
 					handled = true
 				}
 			case 'z':
@@ -695,7 +695,12 @@ func (h *editorHandler) moveLine(up bool) (handled bool) {
 		h.log(log.ErrorLevel, "clipboard paste: %v", err)
 	} else {
 		str := paste.Text
+		curr := h.cursor.CursorAtScroll()
 		h.cursor.Paste(str, text.StandardSelection, false)
+		if up {
+			curr.Y--
+		}
+		h.cursor.MoveToScroll(curr)
 	}
 	return
 }
@@ -720,7 +725,9 @@ func (h *editorHandler) duplicateLine(up bool) (handled bool) {
 		h.log(log.ErrorLevel, "clipboard paste: %v", err)
 	} else {
 		str := paste.Text
+		curr := h.cursor.CursorAtScroll()
 		h.cursor.Paste(str, text.StandardSelection, false)
+		h.cursor.MoveToScroll(curr)
 	}
 	return
 }

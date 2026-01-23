@@ -1055,14 +1055,8 @@ func (c *Cursor) Paste(str string, mode SelectMode, after bool) {
 	case StandardSelection:
 		if after {
 			c.MoveRight()
-			cur := c.CursorAtScroll()
-			c.InsertString(str)
-			c.MoveToScroll(cur)
-		} else {
-			cur := c.CursorAtScroll()
-			c.InsertString(str)
-			c.MoveToScroll(cur)
 		}
+		c.InsertString(str)
 	case LineSelection:
 		if after {
 			movedDown := c.MoveLineDown()

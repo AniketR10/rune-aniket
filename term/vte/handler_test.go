@@ -213,7 +213,7 @@ $ ▐
 				`                    
 $ echo XXX          
 XXX                 
-$ ▐XX               
+$ XX▐               
                     
                     
                     

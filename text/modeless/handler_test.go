@@ -207,7 +207,7 @@ func TestSublimeKeyBindingsMacOS(t *testing.T) {
 		//{"Quick find (select word under cursor)", "<alt-meta-g>", nil, term.Coordinates{}},
 		//{"Quick find all (select all occurrences of word)", "<ctrl-meta-g>", nil, term.Coordinates{}},
 
-		// Bookmarks
+		// Bookmarks (done via command.key_bindings)
 		//{"Toggle bookmark on current line", "<meta-f2>", nil, term.Coordinates{}},
 		//{"Jump to next bookmark", "<meta-f2><f2>", nil, term.Coordinates{Y: 0, X: 0}},
 		//{"Jump to previous bookmark", "<meta-f2><shift-f2>", nil, term.Coordinates{Y: 0, X: 0}},

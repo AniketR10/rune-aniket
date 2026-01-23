@@ -266,7 +266,7 @@ diff_buf_adjust(win_
  }                  
               NORMAL`},
 		{"p",
-			`f (wp == NULL)▐ello 
+			`f (wp == NULL)hell▐ 
                     
  i = diff_buf_idx(wi
  if (i != DB_COUNT) 
@@ -2030,8 +2030,7 @@ func TestPasteVisualMode(t *testing.T) {
 
 			cell, ok := vi.cursor.Cell()
 			require.True(t, ok)
-			require.Equal(t, 'A', cell.Ch,
-				"current cell char is not 'A' but '%c'", cell.Ch)
+			require.Equal(t, '6', cell.Ch)
 		})
 	}
 
