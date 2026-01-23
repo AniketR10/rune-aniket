@@ -241,6 +241,7 @@ func (m *Manager) ReplaceTask(name string, cmd string, args ...string) error {
 	task.mu.Lock()
 	task.Cmd = cmd
 	task.Args = args
+	task.cmdAndArgs = strings.Join(append([]string{task.Cmd}, task.Args...), " ")
 	task.mu.Unlock()
 	task.tryRunning(m.b, m.scheme, "  task")
 	return nil

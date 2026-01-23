@@ -116,8 +116,7 @@ type Task struct {
 type TaskInfo struct {
 	Name        string
 	Filter      string
-	Cmd         string
-	Args        []string
+	CmdAndArgs  string
 	Running     bool
 	LastSuccess bool
 	// Runs represents the number of times this task has been run.
@@ -133,8 +132,7 @@ func (t *Task) Info() TaskInfo {
 	return TaskInfo{
 		Name:         t.Name,
 		Filter:       t.Filter,
-		Cmd:          t.Cmd,
-		Args:         t.Args,
+		CmdAndArgs:   t.cmdAndArgs,
 		Running:      t.running,
 		Runs:         t.runs,
 		LastSuccess:  t.lastExit == nil,

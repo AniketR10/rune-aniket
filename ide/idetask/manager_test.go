@@ -59,14 +59,14 @@ func TestManager(t *testing.T) {
 		m := newTestManager(wm, exec)
 
 		const N = 25
-		for i := 0; i < N; i++ {
+		for i := range N {
 			require.NoError(t, m.RunTask(Task{
 				Name: fmt.Sprintf("N%02d", i),
 				Cmd:  "run",
 				Args: []string{fmt.Sprint(i)},
 			}))
 		}
-		for i := 0; i < N; i++ {
+		for i := range N {
 			require.NoError(t, m.StopTask(fmt.Sprintf("N%02d", i)))
 		}
 		for i, w := range wm.Created() {
@@ -292,7 +292,7 @@ func TestManager(t *testing.T) {
 		exec := newFakeScheme()
 		m := newTestManager(wm, exec)
 
-		for i := 0; i < 10000; i++ {
+		for i := range 10000 {
 			name := fmt.Sprintf("task-%d", i)
 			require.NoError(t, m.RunTask(Task{Name: name, Cmd: "run"}))
 			require.NoError(t, m.StopTask(name))
@@ -419,6 +419,7 @@ func TestManager(t *testing.T) {
 		require.NoError(t, m.ReplaceTask(task.Name, "rumtask", "arg1"))
 		assertTaskWithin(t, m, 1*time.Second, "task",
 			func(info TaskInfo) bool {
+				assert.Equal(t, "rumtask arg1", info.CmdAndArgs)
 				return info.Runs == 2
 			})
 	})
