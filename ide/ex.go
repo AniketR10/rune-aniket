@@ -1412,6 +1412,18 @@ func (e *ex) handleEvent(ev term.Event) (
 
 	keyComb := ev.KeyComb()
 
+	if e.cancelPartialReissue == nil {
+		// allow handler to take precedence over key bindings (i.e. vi is in
+		// insert mode and some key bindings shouldn't apply)
+		// but only do it when the previous event didn't match (i.e. vi `ma`
+		// should bind to creating bookmark 'a', so 'a' shouldn't be
+		// delegated to handler, otherwise it'll handle it and switch to insert mode.
+		_, handled = e.comp.Browser().Handle(ev)
+		if handled {
+			return
+		}
+	}
+
 	var seq handler.Sequence
 	var match handler.SequenceMatchResult
 	// err nil indicates that match is still valid as timer hasn't expired
@@ -1454,7 +1466,11 @@ func (e *ex) handleEvent(ev term.Event) (
 			})
 			return
 		}
-		// this is a re-issue so continue processing
+		// this is a re-issue so process normally
+		_, handled = e.comp.Browser().Handle(ev)
+		if handled {
+			return
+		}
 	default:
 		if e.cancelPartialReissue != nil {
 			err := e.ctxPartialReissue.Err()
@@ -1466,6 +1482,10 @@ func (e *ex) handleEvent(ev term.Event) (
 				e.log(log.TraceLevel, "no sequence match: re-dispatching previous event %q",
 					e.reissueEvent.KeyComb())
 				_, _ = e.comp.Browser().Handle(e.reissueEvent)
+			}
+			_, handled = e.comp.Browser().Handle(ev)
+			if handled {
+				return
 			}
 		}
 		cmdsAndArgs, _ = e.comp.CommandKeyBinding(keyComb)
@@ -1486,19 +1506,6 @@ func (e *ex) handleEvent(ev term.Event) (
 		handled = true
 		if quit {
 			return quit, handled
-		}
-	}
-	if handled {
-		return false, handled
-	}
-
-	// if event is not bound to command, the finally dispatch to focus handler
-	if match != handler.SequenceMatch {
-		e.log(log.TraceLevel, "no sequence match: re-dispatching current event %q",
-			ev.KeyComb())
-		_, handled = e.comp.Browser().Handle(ev)
-		if handled {
-			return
 		}
 	}
 

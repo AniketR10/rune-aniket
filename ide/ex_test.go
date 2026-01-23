@@ -349,17 +349,6 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 			`┌──────────────────┐
 │o a.go  o o.go    │
 ├──────────────────┤
-│AAAAAAAAAAAAAAAAAA│
-│AAAAAAAAAAAAAAAAAA│
-│AAAAAAAAAAAAAAAAAA│
-│AAAAAAAAAAAAAAAAAA│
-│AAAAAAAAAAAAAAAAAA│
-│AAAAAAAAAAAAAAAAAA│
-└──────────────────┘`},
-		{"$", // simulates ctrl-l
-			`┌──────────────────┐
-│o a.go  o o.go    │
-├──────────────────┤
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBB│
@@ -371,45 +360,56 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 			`┌──────────────────┐
 │o a.go  o o.go    │
 ├──────────────────┤
-│AAAAAAAAAAAAAAAAAA│
-│AAAAAAAAAAAAAAAAAA│
-│AAAAAAAAAAAAAAAAAA│
-│AAAAAAAAAAAAAAAAAA│
-│AAAAAAAAAAAAAAAAAA│
-│AAAAAAAAAAAAAAAAAA│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+└──────────────────┘`},
+		{"$", // simulates ctrl-l
+			`┌──────────────────┐
+│o a.go  o o.go    │
+├──────────────────┤
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
 └──────────────────┘`},
 		{":tcl>",
 			`┌──────────────────┐
 │o a.go            │
 ├──────────────────┤
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
+│DDDDDDDDDDDDDDDDDD│
+│DDDDDDDDDDDDDDDDDD│
+│DDDDDDDDDDDDDDDDDD│
+│DDDDDDDDDDDDDDDDDD│
+│DDDDDDDDDDDDDDDDDD│
+│DDDDDDDDDDDDDDDDDD│
 └──────────────────┘`},
 		{":wq!^^^^^",
 			`┌──────────────────┐
 │o a.go            │
 ├──────────────────┤
-│CCCCCCCCCCCCCCCCCC│
-│CCCCCCCCCCCCCCCCCC│
-│CCCCCCCCCCCCCCCCCC│
-│CCCCCCCCCCCCCCCCCC│
-│CCCCCCCCCCCCCCCCCC│
-│CCCCCCCCCCCCCCCCCC│
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
 └──────────────────┘`},
 		{":<",
 			`┌──────────────────┐
 │o a.go            │
 ├──────────────────┤
-│CCCCCCCCCCCCCCCCCC│
-│CCCCCCCCCCCCCCCCCC│
-│CCCCCCCCCCCCCCCCCC│
-│CCCCCCCCCCCCCCCCCC│
-│CCCCCCCCCCCCCCCCCC│
-│CCCCCCCCCCCCCCCCCC│
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
+│EEEEEEEEEEEEEEEEEE│
 └──────────────────┘`},
 		{":edit o.go>1111",
 			`┌──────────────────┐
@@ -426,12 +426,12 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 			`┌──────────────────┐
 │o a.go  o o.go    │
 ├──────────────────┤
-│EEEEEEEEEEEEEEEEEE│
-│EEEEEEEEEEEEEEEEEE│
-│EEEEEEEEEEEEEEEEEE│
-│EEEEEEEEEEEEEEEEEE│
-│EEEEEEEEEEEEEEEEEE│
-│EEEEEEEEEEEEEEEEEE│
+│GGGGGGGGGGGGGGGGGG│
+│GGGGGGGGGGGGGGGGGG│
+│GGGGGGGGGGGGGGGGGG│
+│GGGGGGGGGGGGGGGGGG│
+│GGGGGGGGGGGGGGGGGG│
+│GGGGGGGGGGGGGGGGGG│
 └──────────────────┘`},
 	}
 	bh, b, err := constructor(texttest.NopEditor(),
@@ -461,23 +461,23 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 			`┌──────────────────┐
 │o a.go  o o.go    │
 ├────────┐┌────────┤
-│AAAAAAAA││EEEEEEEE│
-│AAAAAAAA││EEEEEEEE│
-└────────┘│EEEEEEEE│
-┌────────┐│EEEEEEEE│
-│ZZZZZZZZ││EEEEEEEE│
-│ZZZZZZZZ││EEEEEEEE│
+│AAAAAAAA││GGGGGGGG│
+│AAAAAAAA││GGGGGGGG│
+└────────┘│GGGGGGGG│
+┌────────┐│GGGGGGGG│
+│ZZZZZZZZ││GGGGGGGG│
+│ZZZZZZZZ││GGGGGGGG│
 └────────┘└────────┘`},
 		{":<111111111",
 			`┌──────────────────┐
 │o a.go  o o.go    │
 ├────────┐┌────────┤
-│AAAAAAAA││EEEEEEEE│
-│AAAAAAAA││EEEEEEEE│
-└────────┘│EEEEEEEE│
-┌────────┐│EEEEEEEE│
-│cccccccc││EEEEEEEE│
-│cccccccc││EEEEEEEE│
+│AAAAAAAA││GGGGGGGG│
+│AAAAAAAA││GGGGGGGG│
+└────────┘│GGGGGGGG│
+┌────────┐│GGGGGGGG│
+│cccccccc││GGGGGGGG│
+│cccccccc││GGGGGGGG│
 └────────┘└────────┘`},
 	}
 
@@ -494,12 +494,12 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 			`┌──────────────────┐
 │o a.go  o o.go    │
 ├────────┐┌────────┤
-│$$$$$$$$││EEEEEEEE│
-│$$$$$$$$││EEEEEEEE│
-└────────┘│EEEEEEEE│
-┌────────┐│EEEEEEEE│
-│cccccccc││EEEEEEEE│
-│cccccccc││EEEEEEEE│
+│$$$$$$$$││GGGGGGGG│
+│$$$$$$$$││GGGGGGGG│
+└────────┘│GGGGGGGG│
+┌────────┐│GGGGGGGG│
+│cccccccc││GGGGGGGG│
+│cccccccc││GGGGGGGG│
 └────────┘└────────┘`},
 	}
 
@@ -516,23 +516,23 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 			`┌──────────────────┐
 │o a.go  o o.go    │
 ├──────────────────┤
-│CCCCCCCCCCCCCCCCCC│
-│CCCCCCCCCCCCCCCCCC│
-│CCCCCCCCCCCCCCCCCC│
-│CCCCCCCCCCCCCCCCCC│
-│CCCCCCCCCCCCCCCCCC│
-│CCCCCCCCCCCCCCCCCC│
+│HHHHHHHHHHHHHHHHHH│
+│HHHHHHHHHHHHHHHHHH│
+│HHHHHHHHHHHHHHHHHH│
+│HHHHHHHHHHHHHHHHHH│
+│HHHHHHHHHHHHHHHHHH│
+│HHHHHHHHHHHHHHHHHH│
 └──────────────────┘`},
 		{":tcall>:edit o.go>bcde####",
 			`┌──────────────────┐
 │o o.go            │
 ├──────────────────┤
-│EEEEEEEEEEEEEEEEEE│
-│EEEEEEEEEEEEEEEEEE│
-│EEEEEEEEEEEEEEEEEE│
-│EEEEEEEEEEEEEEEEEE│
-│EEEEEEEEEEEEEEEEEE│
-│EEEEEEEEEEEEEEEEEE│
+│IIIIIIIIIIIIIIIIII│
+│IIIIIIIIIIIIIIIIII│
+│IIIIIIIIIIIIIIIIII│
+│IIIIIIIIIIIIIIIIII│
+│IIIIIIIIIIIIIIIIII│
+│IIIIIIIIIIIIIIIIII│
 └──────────────────┘`},
 	}
 	handlertest.TestHandlerSequence(t, bh, 20, 10, cases)
@@ -540,8 +540,8 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 	cases = []handlertest.SequenceTestCase{
 		{"", `┌──┐
 │..│
-├EE┤
-EEEE`},
+├II┤
+IIII`},
 	}
 	handlertest.TestHandlerSequence(t, bh, 4, 4, cases)
 
@@ -552,12 +552,12 @@ EEEE`},
 			`┌────┌─────────────┐
 │o o.│ wasup: Z    │
 ├────└─────────────┘
-│EEEEEEEEEEEEEEEEEE│
-│EEEEEEEEEEEEEEEEEE│
-│EEEEEEEEEEEEEEEEEE│
-│EEEEEEEEEEEEEEEEEE│
-│EEEEEEEEEEEEEEEEEE│
-│EEEEEEEEEEEEEEEEEE│
+│IIIIIIIIIIIIIIIIII│
+│IIIIIIIIIIIIIIIIII│
+│IIIIIIIIIIIIIIIIII│
+│IIIIIIIIIIIIIIIIII│
+│IIIIIIIIIIIIIIIIII│
+│IIIIIIIIIIIIIIIIII│
 └──────────────────┘`},
 	}
 	handlertest.TestHandlerSequence(t, bh, 20, 10, cases)
@@ -801,12 +801,12 @@ func TestMultipleFilesStartup(t *testing.T) {
 			`┌──────────────────┐
 │o a.go  o wi.go   │
 ├──────────────────┤
-│CCCCCCCCCCCCCCCCCC│
-│CCCCCCCCCCCCCCCCCC│
-│CCCCCCCCCCCCCCCCCC│
-│CCCCCCCCCCCCCCCCCC│
-│CCCCCCCCCCCCCCCCCC│
-│CCCCCCCCCCCCCCCCCC│
+│DDDDDDDDDDDDDDDDDD│
+│DDDDDDDDDDDDDDDDDD│
+│DDDDDDDDDDDDDDDDDD│
+│DDDDDDDDDDDDDDDDDD│
+│DDDDDDDDDDDDDDDDDD│
+│DDDDDDDDDDDDDDDDDD│
 └──────────────────┘`},
 	}
 
@@ -1040,23 +1040,23 @@ func TestExKeySequence(t *testing.T) {
 			`┌──────────────────┐
 │o 10k.go  o 2     │
 ├──────────────────┤
-│AAAAAAAAAAAAAAAAAA│
-│AAAAAAAAAAAAAAAAAA│
-│AAAAAAAAAAAAAAAAAA│
-│AAAAAAAAAAAAAAAAAA│
-│AAAAAAAAAAAAAAAAAA│
-│AAAAAAAAAAAAAAAAAA│
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
 └──────────────────┘`},
 		{"go",
 			`┌──────────────────┐
 │o 10k.go  o 2     │
 ├──────────────────┤
-│CCCCCCCCCCCCCCCCCC│
-│CCCCCCCCCCCCCCCCCC│
-│CCCCCCCCCCCCCCCCCC│
-│CCCCCCCCCCCCCCCCCC│
-│CCCCCCCCCCCCCCCCCC│
-│CCCCCCCCCCCCCCCCCC│
+│DDDDDDDDDDDDDDDDDD│
+│DDDDDDDDDDDDDDDDDD│
+│DDDDDDDDDDDDDDDDDD│
+│DDDDDDDDDDDDDDDDDD│
+│DDDDDDDDDDDDDDDDDD│
+│DDDDDDDDDDDDDDDDDD│
 └──────────────────┘`},
 		// 2 seconds of wait should be plenty for sequencer to deem 'g' sequence
 		// stale and re-issue event.
@@ -1064,12 +1064,12 @@ func TestExKeySequence(t *testing.T) {
 			`┌──────────────────┐
 │o 10k.go  o 2     │
 ├──────────────────┤
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBB│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
 └──────────────────┘`},
 		{"gg",
 			`┌──────────────────┐
