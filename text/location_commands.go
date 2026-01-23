@@ -63,17 +63,20 @@ func SubscribeLocationCommands(
 }
 
 const (
-	commandLocationJump       = "jumptolocation"
-	commandCreateLocation     = "locationcreate"
+	// CommandLocationJump is the command name for jumping to locations.
+	CommandLocationJump = "jumptolocation"
+	// CommandCreateLocation is the command name for creating locations.
+	CommandCreateLocation = "locationcreate"
+	// CommandDeleteAllLocations is the command name for deleting all locations on a list.
+	CommandDeleteAllLocations = "locationdeleteall"
 	commandToggleLocation     = "locationtoggle"
 	commandDeleteLocation     = "locationdelete"
-	commandDeleteAllLocations = "locationdeleteall"
 	defaultUserLocationList   = "mark"
 )
 
 var locationCommands = []textapi.CommandManual{
 	{
-		Name:     commandLocationJump,
+		Name:     CommandLocationJump,
 		Summary:  "Jumps to locations on the given location list.",
 		Synopsis: "(next|prev) <location-list>",
 		Commands: []textapi.CommandManual{
@@ -90,7 +93,7 @@ var locationCommands = []textapi.CommandManual{
 		},
 	},
 	{
-		Name: commandCreateLocation,
+		Name: CommandCreateLocation,
 		Summary: fmt.Sprintf("Saves the current cursor location as a location that can be "+
 			"used to jump to via `locationjump %[1]s`. By default, the location list name is `%[1]s` "+
 			"but this can be overriden by passing a location list name.",
@@ -113,7 +116,7 @@ var locationCommands = []textapi.CommandManual{
 		Synopsis: "[location-list]",
 	},
 	{
-		Name: commandDeleteAllLocations,
+		Name: CommandDeleteAllLocations,
 		Summary: fmt.Sprintf("Removes all of the locations of the given location list. The default location"+
 			" list is `%s`.", defaultUserLocationList),
 		Synopsis: "[location-list]",
@@ -142,9 +145,9 @@ func (u locationCommandHandler) HandleCommand(
 	ctx context.Context, cmd textapi.Command,
 ) (err error) {
 	switch cmd.Name {
-	case commandLocationJump:
+	case CommandLocationJump:
 		err = u.handleLocationJump(cmd)
-	case commandCreateLocation:
+	case CommandCreateLocation:
 		err = u.handleCreateLocation(cmd)
 	case commandDeleteLocation:
 		err = u.handleDeleteLocation(cmd)
@@ -153,7 +156,7 @@ func (u locationCommandHandler) HandleCommand(
 		if err != nil {
 			err = u.handleCreateLocation(cmd)
 		}
-	case commandDeleteAllLocations:
+	case CommandDeleteAllLocations:
 		err = u.handleDeleteAllLocations(cmd)
 	default:
 		err = errors.New("extraneous command")
@@ -165,13 +168,13 @@ func (u locationCommandHandler) Complete(ctx context.Context, cmd textapi.Comman
 	ret iterator.Iterator[string], _ string, err error,
 ) {
 	switch cmd.Name {
-	case commandLocationJump:
+	case CommandLocationJump:
 		ret, err = u.completeLocationJump(cmd)
-	case commandCreateLocation, commandToggleLocation:
+	case CommandCreateLocation, commandToggleLocation:
 		ret, err = u.completeCreateLocation(cmd)
 	case commandDeleteLocation:
 		ret, err = u.completeDeleteLocation(cmd)
-	case commandDeleteAllLocations:
+	case CommandDeleteAllLocations:
 		ret, err = u.completeCreateLocation(cmd)
 	default:
 		err = errors.New("extraneous command")

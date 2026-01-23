@@ -557,6 +557,16 @@ func (h *workspaceManagerHandler) textOpts(cfg ideConfig) []text.Option {
 		}
 	}
 
+	if cfg.editorMode() == editorModeModal {
+		for seq, cmd := range vi.KeyBindings() {
+			if seq.Last != (term.KeyComb{}) {
+				ret = append(ret, text.WithCommandSequenceBinding(seq, cmd))
+			} else {
+				ret = append(ret, text.WithCommandKeyBinding(seq.First, cmd))
+			}
+		}
+	}
+
 	return ret
 }
 
