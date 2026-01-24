@@ -85,6 +85,23 @@ func TestClientServerStreamIntegration(t *testing.T) {
 
 	})
 
+	t.Run("selection does not return non-utf8 selection", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		mock := browserapitest.NewMockFloating(ctrl)
+
+		expectedSelection := "\xF1\x01\x02"
+		client, closeFn := setupIntTest(t, mock, func() {
+			mock.EXPECT().Selection().Return(expectedSelection, true)
+			mock.EXPECT().Dimensions()
+			mock.EXPECT().Cursor()
+			mock.EXPECT().Draw(gomock.Any())
+		}, nil)
+		defer closeFn()
+
+		_, actualOk := client.Selection()
+		require.False(t, actualOk)
+	})
+
 	t.Run("selection returns nothing", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		mock := browserapitest.NewMockFloating(ctrl)

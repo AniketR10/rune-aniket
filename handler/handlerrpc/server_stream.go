@@ -30,6 +30,7 @@ import (
 	"io"
 	"strings"
 	"sync/atomic"
+	"unicode/utf8"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/logging"
@@ -145,6 +146,11 @@ func (c *ServerStream[T]) ReceiveMessages() {
 
 		case MessageType_Selection:
 			selection, ok := c.handler.Selection()
+			if !utf8.ValidString(selection) {
+				c.log(log.DebugLevel, "omit selection from response: not valid utf-8")
+				selection = ""
+				ok = false
+			}
 			var resp SelectionStreamResponse
 			resp.Text = selection
 			resp.Ok = ok
