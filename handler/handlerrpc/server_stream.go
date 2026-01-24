@@ -194,13 +194,17 @@ func (c *ServerStream[T]) ReceiveMessages() {
 			err = errors.New("stream received invalid message: req/resp")
 		}
 		if err != nil {
-			if !errors.Is(err, io.EOF) {
-				c.log(log.DebugLevel, "stream: %s", err.Error())
-			} else {
+			if !errors.Is(err, io.EOF) && !strings.Contains(err.Error(), "context canceled") {
+				c.log(log.ErrorLevel, "stream: %s", err.Error())
+			} else if errors.Is(err, io.EOF) {
 				// io.EOF indicates that stream status should be discovered
 				// through RecvMsg. See SendMsg documentation.
 				err = c.stream.RecvMsg(&recvMsg)
-				c.log(log.DebugLevel, "stream EOF: %v", err)
+				if !strings.Contains(err.Error(), "context canceled") {
+					c.log(log.ErrorLevel, "stream EOF: %v", err)
+				} else {
+					c.log(log.DebugLevel, "stream EOF: %v", err)
+				}
 			}
 			return
 		}

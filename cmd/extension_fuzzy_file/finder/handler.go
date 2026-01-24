@@ -349,8 +349,9 @@ func (h *fuzzyFinderHandler) doScanDataViaWorkspaceAPI(
 }
 
 func (h *fuzzyFinderHandler) scanDataViaWorkspaceAPI(
-	ctx context.Context, datachan chan<- []byte,
+	ctx context.Context, datachan chan<- []byte, cancelScan func(),
 ) {
+	defer cancelScan()
 	err := h.doScanDataViaWorkspaceAPI(ctx, datachan)
 	if err != nil && !errors.Is(err, context.Canceled) {
 		log.Errorf("scan data: %v", err)
@@ -379,7 +380,7 @@ func (h *fuzzyFinderHandler) scanData() {
 	h.mu.Unlock()
 
 	if h.useWorkspaceFallback {
-		h.scanDataViaWorkspaceAPI(ctx, datachan)
+		h.scanDataViaWorkspaceAPI(ctx, datachan, cancelScan)
 		return
 	}
 
@@ -388,7 +389,7 @@ func (h *fuzzyFinderHandler) scanData() {
 	stderr, stdout, exec, err := h.execCommand(ctx, h.cmdStr)
 	if err != nil {
 		log.Debugf("fallback to scan data via workspace API: %v", err)
-		h.scanDataViaWorkspaceAPI(ctx, datachan)
+		h.scanDataViaWorkspaceAPI(ctx, datachan, cancelScan)
 		return
 	}
 

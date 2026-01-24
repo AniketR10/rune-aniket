@@ -36,6 +36,8 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/logging"
 	grpc "google.golang.org/grpc"
+	codes "google.golang.org/grpc/codes"
+	status "google.golang.org/grpc/status"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/debug"
@@ -484,9 +486,7 @@ func (s *ClientStream[T]) processDraw(resp *DrawStreamResponse) {
 func (s *ClientStream[T]) receiveMessages() (ret error) {
 	defer func() {
 		s.cancel()
-		if ret != nil {
-			s.log(log.TraceLevel, "done receiving messages: error: %v", ret)
-		}
+		s.log(log.DebugLevel, "done receiving messages: %v", ret)
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		s.state = stateAsyncCircuitBreak
@@ -494,8 +494,15 @@ func (s *ClientStream[T]) receiveMessages() (ret error) {
 
 	for {
 		recvMsg := s.newT()
-		if err := s.stream.RecvMsg(recvMsg); err != nil {
-			ret = fmt.Errorf("stream receive message: %w", err)
+		err := s.stream.RecvMsg(recvMsg)
+		if err != nil {
+			if errors.Is(err, context.Canceled) {
+				ret = fmt.Errorf("context is canceled: %w", ret)
+			} else if s, ok := status.FromError(err); ok && s.Code() == codes.Canceled {
+				ret = fmt.Errorf("received status code: %v", s)
+			} else {
+				ret = err
+			}
 			return
 		}
 
