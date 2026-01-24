@@ -25,6 +25,7 @@ package walkdir
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -110,7 +111,11 @@ func readFile(w Reader, buffer []byte, file string, lines chan string) error {
 	var i int
 	for r.Scan() {
 		i++
-		lines <- fmt.Sprintf("%s:%d:%s", file, i, r.Text())
+		data := r.Bytes()
+		if bytes.IndexByte(data, 0) != -1 {
+			break
+		}
+		lines <- fmt.Sprintf("%s:%d:%s", file, i, data)
 	}
 	return r.Err()
 }

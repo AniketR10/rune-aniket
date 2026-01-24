@@ -67,6 +67,7 @@ func TestReadLines(t *testing.T) {
 		}},
 		{"invalid utf-8 character", []readLinesTestFile{{"a", "a\xc5z"}}, "",
 			[]string{"a:1:a\xc5z"}},
+		{"skips binary files", []readLinesTestFile{{"a", "\x00\x01..."}}, "", nil},
 	}
 
 	for _, tcase := range tsuite {
