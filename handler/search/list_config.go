@@ -34,7 +34,7 @@ import (
 const (
 	// interrupt periodically but not on every new chunk
 	defaultInterruptEvery    = 200 * time.Millisecond
-	defaultSetFileCountEvery = 256 // chunks
+	defaultSetFileCountEvery = 1024 // chunks
 )
 
 // AlgoConfig is the algoritum to use to search through the input data.

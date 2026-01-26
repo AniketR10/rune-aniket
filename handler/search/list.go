@@ -471,14 +471,22 @@ func (l *List) sortMatchesList() {
 }
 
 func (l *List) pushData(data [][]byte, slab *util.Slab, sortList bool) {
+	idx := len(l.input)
 	l.input = append(l.input, data...)
-	idx := len(l.input) - 1
 
 	searchInput := l.getSearchQuery()
 	if len(searchInput) == 0 {
-		for _, data := range data {
-			m := Match{data: data, idx: idx}
-			addMatch(&l.list.FocusList, m, l.cfg.textAttr, l.cfg.matchedTextAttr)
+		for i, data := range data {
+			match := Match{data: data, idx: idx + i}
+			b := component.LazyBytes{Data: match.data, Attributes: l.cfg.textAttr}
+			if match.tokens != nil {
+				b.Tokens = *match.tokens
+				b.TokenAttributes = l.cfg.matchedTextAttr
+			}
+			l.list.FocusList.PushBack(searchResultComponent{
+				LazyBytes: &b,
+				Match:     match,
+			})
 		}
 		if !sortList {
 			return
@@ -492,8 +500,16 @@ func (l *List) pushData(data [][]byte, slab *util.Slab, sortList bool) {
 
 	search(l.cfg.algo, data, searchInput, slab, l.cfg.caseSensitive,
 		func(match Match) {
-			match.idx = idx
-			addMatch(&l.list.FocusList, match, l.cfg.textAttr, l.cfg.matchedTextAttr)
+			match.idx += idx
+			b := component.LazyBytes{Data: match.data, Attributes: l.cfg.textAttr}
+			if match.tokens != nil {
+				b.Tokens = *match.tokens
+				b.TokenAttributes = l.cfg.matchedTextAttr
+			}
+			l.list.FocusList.PushBack(searchResultComponent{
+				LazyBytes: &b,
+				Match:     match,
+			})
 		})
 
 	if sortList {
@@ -605,7 +621,15 @@ func (l *List) handleSearch(
 	slab := makeSlab()
 	search(l.cfg.algo, input, searchInput, slab, l.cfg.caseSensitive,
 		func(match Match) {
-			addMatch(tempList, match, l.cfg.textAttr, l.cfg.matchedTextAttr)
+			b := component.LazyBytes{Data: match.data, Attributes: l.cfg.textAttr}
+			if match.tokens != nil {
+				b.Tokens = *match.tokens
+				b.TokenAttributes = l.cfg.matchedTextAttr
+			}
+			tempList.PushBack(searchResultComponent{
+				LazyBytes: &b,
+				Match:     match,
+			})
 		})
 	sortMatchesList(l.cfg.bottomSearchBar, tempList)
 
@@ -783,27 +807,6 @@ func resizeMatchCountBar(matchCountBar *matchCounter, y, lenFilesCounter, width 
 		X: width - lenFilesCounter,
 	})
 	matchCountBar.Virtual.Resize(lenFilesCounter, 1)
-}
-
-func addMatch(
-	list *component.FocusList, match Match,
-	textAttr, matchTextAttr term.Attributes,
-) {
-	// this is a very hot path, performance critical
-	// when loading large amounts of data into a search list.
-	// Use LazyBytes, which defers all allocations until the next
-	// call to Draw, this way all components that do not need to
-	// be drawn barely imply any allocations (list uses a *Virtual
-	// under the hood but that's about it).
-	b := component.LazyBytes{Data: match.data, Attributes: textAttr}
-	if match.tokens != nil {
-		b.Tokens = *match.tokens
-		b.TokenAttributes = matchTextAttr
-	}
-	list.PushBack(searchResultComponent{
-		LazyBytes: &b,
-		Match:     match,
-	})
 }
 
 func sortByResultScore(a, b component.WithAttributes) bool {
