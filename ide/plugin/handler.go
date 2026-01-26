@@ -378,6 +378,7 @@ func (e *Handler) initializeDoneHandler() {
 
 	uri := e.emulator.Component().URI()
 
+	clipboard := nullReplaceClipboard{root: e.cfg.Clipboard}
 	var main text.Handler
 	if e.cfg.Modal {
 		main = vi.New(buf, uri,
@@ -385,7 +386,7 @@ func (e *Handler) initializeDoneHandler() {
 			vi.WithAttr(e.cfg.Attributes),
 			vi.WithWrap(false),
 			vi.WithTabspaces(1),
-			vi.WithClipboard(e.cfg.Clipboard),
+			vi.WithClipboard(clipboard),
 		)
 	} else {
 		main = modeless.NewHandler(buf, uri,
@@ -394,7 +395,7 @@ func (e *Handler) initializeDoneHandler() {
 			modeless.WithWrap(false),
 			modeless.WithTabspaces(1),
 			modeless.WithCommandBar(true),
-			modeless.WithClipboard(e.cfg.Clipboard),
+			modeless.WithClipboard(clipboard),
 		)
 	}
 
