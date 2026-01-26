@@ -27,6 +27,7 @@ import (
 	"context"
 	"fmt"
 	"os/user"
+	"path/filepath"
 	"strings"
 
 	"github.com/unstablebuild/blue/iterator"
@@ -110,6 +111,17 @@ func FilePathCompleter(reader walkdir.Reader) Completer {
 			return nil, "", err
 		}
 
+		cwd, err := reader.URI(".")
+		if err != nil {
+			return nil, "", err
+		}
+
+		// if filter is absolute path and it happens to be the current working
+		// directory of the given reader, the iterator returned by walkdir.ListFiles
+		// will return paths relative to it, but filter will be absolute, machting
+		// no results.
+		needsExpand := workspaceapi.HasPrefix(uri, cwd) && filepath.IsAbs(last)
+
 		it, err := walkdir.ListFiles(ctx, reader, uri.Path())
 		if err != nil {
 			return nil, "", err
@@ -117,6 +129,11 @@ func FilePathCompleter(reader walkdir.Reader) Completer {
 		it = iterator.Filter(it, func(val string) bool {
 			return !strings.HasSuffix(val, ".swp")
 		})
+		if needsExpand {
+			it = iterator.Map(it, func(val string) string {
+				return workspaceapi.Join(cwd, val).Path()
+			})
+		}
 		return it, modifiedLast, nil
 	})
 }
