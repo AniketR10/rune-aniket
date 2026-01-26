@@ -204,8 +204,13 @@ func (l *List) Pause() {
 // PushSync pushes one element to this list and searches for a match on it.
 // If data matches the search input, this element is appended to the list and
 // this method returns true.
-func (l *List) PushSync(b []byte) bool {
-	return l.pushData(b, nil, true)
+func (l *List) PushSync(b []byte) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	data := [1][]byte{nil}
+	data[0] = b
+	l.pushData(data[:], nil, true)
 }
 
 // FocusUp moves the focus of the match list up.
@@ -465,20 +470,16 @@ func (l *List) sortMatchesList() {
 	sortMatchesList(l.cfg.bottomSearchBar, &l.list.FocusList)
 }
 
-func (l *List) pushData(data []byte, slab *util.Slab, sortList bool) (matched bool) {
-	linebuf := [1][]byte{nil}
-	linebuf[0] = data
-
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
-	l.input = append(l.input, data)
+func (l *List) pushData(data [][]byte, slab *util.Slab, sortList bool) {
+	l.input = append(l.input, data...)
+	idx := len(l.input) - 1
 
 	searchInput := l.getSearchQuery()
 	if len(searchInput) == 0 {
-		m := Match{data: data, idx: len(l.input) - 1}
-		matched = true
-		addMatch(&l.list.FocusList, m, l.cfg.textAttr, l.cfg.matchedTextAttr)
+		for _, data := range data {
+			m := Match{data: data, idx: idx}
+			addMatch(&l.list.FocusList, m, l.cfg.textAttr, l.cfg.matchedTextAttr)
+		}
 		if !sortList {
 			return
 		}
@@ -489,20 +490,16 @@ func (l *List) pushData(data []byte, slab *util.Slab, sortList bool) (matched bo
 		return
 	}
 
-	search(l.cfg.algo, linebuf[:], searchInput, slab, l.cfg.caseSensitive,
-		func(match Match) bool {
-			match.idx = len(l.input) - 1
-			matched = true
+	search(l.cfg.algo, data, searchInput, slab, l.cfg.caseSensitive,
+		func(match Match) {
+			match.idx = idx
 			addMatch(&l.list.FocusList, match, l.cfg.textAttr, l.cfg.matchedTextAttr)
-			return false
 		})
 
 	if sortList {
 		l.sortMatchesList()
 		l.setFilesCount()
 	}
-
-	return
 }
 
 func (l *List) consumeAsyncElements(
@@ -511,39 +508,48 @@ func (l *List) consumeAsyncElements(
 ) {
 	defer cancel()
 
-	t := time.NewTicker(l.cfg.interruptEvery)
+	t1 := time.NewTicker(l.cfg.interruptEvery)
+	defer t1.Stop()
+	t2 := time.NewTicker(l.cfg.interruptEvery)
+	defer t2.Stop()
 	tickerCh := make(chan struct{}) // need a way to signal from below
 	defer close(tickerCh)
-	defer func() {
+
+	var dirty bool
+	sort := func() {
 		l.mu.Lock()
-		if len(l.getSearchQuery()) != 0 {
+		if !dirty {
+			l.mu.Unlock()
+			return
+		}
+		interrupter := l.cfg.interrupter
+		if len(l.getSearchQuery()) != 0 || l.cfg.bottomSearchBar {
 			l.sortMatchesList()
 		}
 		l.setFilesCount()
-		interrupter := l.cfg.interrupter
+		dirty = false
 		l.mu.Unlock()
 		_ = interrupter.Interrupt(context.Background())
-	}()
+	}
 
-	var dirty bool
+	buf := make([][]byte, 0, l.cfg.setFileCountEvery)
+	slab := makeSlab()
+	pushData := func() {
+		if len(buf) > 0 {
+			l.mu.Lock()
+			l.pushData(buf, slab, false)
+			l.setFilesCount()
+			dirty = true
+			l.mu.Unlock()
+			buf = buf[:0]
+		}
+	}
+
 	go debug.CapturePanicReport(func() {
-		defer t.Stop()
 		for {
 			select {
-			case <-t.C:
-				l.mu.Lock()
-				if !dirty {
-					l.mu.Unlock()
-					continue
-				}
-				interrupter := l.cfg.interrupter
-				if len(l.getSearchQuery()) != 0 || l.cfg.bottomSearchBar {
-					l.sortMatchesList()
-				}
-				l.setFilesCount()
-				dirty = false
-				l.mu.Unlock()
-				_ = interrupter.Interrupt(context.Background())
+			case <-t1.C:
+				sort()
 			case <-ctx.Done():
 				return
 			case <-quitChan:
@@ -554,24 +560,25 @@ func (l *List) consumeAsyncElements(
 		}
 	})
 
-	slab := makeSlab()
+	defer sort()
+	defer pushData()
 	for i := 0; ; i++ {
 		select {
+		case <-t2.C:
+			pushData()
 		case <-ctx.Done():
 			return
 		case data, ok := <-datachan:
 			if !ok {
 				return
 			}
-			l.pushData(data, slab, false)
+			buf = append(buf, data)
 			if i%l.cfg.setFileCountEvery == 0 {
-				l.mu.Lock()
-				l.setFilesCount()
-				dirty = true
-				l.mu.Unlock()
+				pushData()
 			}
 		case <-quitChan:
 			l.DataReset()
+			buf = buf[:0] // avoid last push
 			return
 		}
 	}
@@ -597,9 +604,8 @@ func (l *List) handleSearch(
 	tempList := component.NewFocusList()
 	slab := makeSlab()
 	search(l.cfg.algo, input, searchInput, slab, l.cfg.caseSensitive,
-		func(match Match) bool {
+		func(match Match) {
 			addMatch(tempList, match, l.cfg.textAttr, l.cfg.matchedTextAttr)
-			return true
 		})
 	sortMatchesList(l.cfg.bottomSearchBar, tempList)
 
@@ -629,7 +635,6 @@ func (l *List) handleSearch(
 	}
 	l.setFilesCount()
 	l.mu.Unlock()
-
 }
 
 func (l *List) drawList(w term.Writer) {

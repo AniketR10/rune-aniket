@@ -55,7 +55,7 @@ type listIfc interface {
 	InputHeight() int
 	MatchCount() int
 	Push(context.Context) chan<- []byte
-	PushSync(b []byte) (matched bool)
+	PushSync(b []byte)
 	Resize(width, height int)
 	SetMinInputHeight(height int)
 	TotalCount() int

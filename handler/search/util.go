@@ -73,7 +73,7 @@ func makeSlab() *util.Slab {
 func search(
 	algo fzf.Algo, input [][]byte, searchQuery string,
 	slab *util.Slab, caseSensitive bool,
-	onMatch func(Match) bool,
+	onMatch func(Match),
 ) {
 	const (
 		forward   = false
@@ -96,9 +96,7 @@ func search(
 			continue
 		}
 		match := Match{data: data, res: res, tokens: tokens, idx: i}
-		if !onMatch(match) {
-			return
-		}
+		onMatch(match)
 	}
 }
 
@@ -108,9 +106,8 @@ func simpleSearch(
 	res := make([]Match, 0)
 	slab := makeSlab()
 	search(algo, input, query, slab, caseSensitive,
-		func(m Match) bool {
+		func(m Match) {
 			res = append(res, m)
-			return true
 		})
 	return res
 }

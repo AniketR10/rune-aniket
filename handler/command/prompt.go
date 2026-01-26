@@ -810,8 +810,10 @@ func (h *Prompt) setCompletionList(
 		h.list.DataReset()
 		h.pushCompletionListSync(ctx, cancel, cmdAndArgs, it)
 	} else {
-		ch := h.list.Push(ctx)
+		h.list.Cancel()
+		h.list.Wait()
 		h.list.DataReset()
+		ch := h.list.Push(ctx)
 		mode := h.mode
 		commandsBackup := h.commandsBackup
 		// IsEmpty could be performing I/O under the hood

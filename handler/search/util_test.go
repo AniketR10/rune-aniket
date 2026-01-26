@@ -135,8 +135,7 @@ func benchSearch(b *testing.B, n int) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		search(algo, in, searchQuery, slab, caseSensitive,
-			func(match Match) bool {
-				return true
+			func(match Match) {
 			})
 	}
 }
