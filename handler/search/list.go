@@ -32,6 +32,7 @@ import (
 	"time"
 
 	"github.com/junegunn/fzf/src/util"
+	"unstable.build/go-tui"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/debug"
@@ -249,8 +250,7 @@ func (l *List) Focus() (Match, bool) {
 	if !ok {
 		return Match{}, false
 	}
-	comp := node.Value().(component.WithAttributes)
-	return comp.(searchResultComponent).Match, true
+	return node.Value().(searchResultComponent).Match, true
 }
 
 // SetFocus sets the focus of this List to node.
@@ -272,7 +272,7 @@ func (l *List) SetFocus(node component.ListNode) {
 func (l *List) IterateVisible(fn func(Match)) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	l.list.IterateVisible(func(c component.WithAttributes) {
+	l.list.IterateVisible(func(c tui.Component) {
 		fn(c.(searchResultComponent).Match)
 	})
 }
@@ -476,15 +476,16 @@ func (l *List) pushData(data [][]byte, slab *util.Slab, sortList bool) {
 
 	searchInput := l.getSearchQuery()
 	if len(searchInput) == 0 {
+		template := component.LazyBytes{
+			Attributes:      l.cfg.textAttr,
+			TokenAttributes: l.cfg.matchedTextAttr,
+		}
 		for i, data := range data {
 			match := Match{data: data, idx: idx + i}
-			b := component.LazyBytes{Data: match.data, Attributes: l.cfg.textAttr}
-			if match.tokens != nil {
-				b.Tokens = *match.tokens
-				b.TokenAttributes = l.cfg.matchedTextAttr
-			}
+			template.Data = match.data
+			template.Tokens = match.tokens
 			l.list.FocusList.PushBack(searchResultComponent{
-				LazyBytes: &b,
+				LazyBytes: template,
 				Match:     match,
 			})
 		}
@@ -498,16 +499,17 @@ func (l *List) pushData(data [][]byte, slab *util.Slab, sortList bool) {
 		return
 	}
 
+	template := component.LazyBytes{
+		Attributes:      l.cfg.textAttr,
+		TokenAttributes: l.cfg.matchedTextAttr,
+	}
 	search(l.cfg.algo, data, searchInput, slab, l.cfg.caseSensitive,
 		func(match Match) {
 			match.idx += idx
-			b := component.LazyBytes{Data: match.data, Attributes: l.cfg.textAttr}
-			if match.tokens != nil {
-				b.Tokens = *match.tokens
-				b.TokenAttributes = l.cfg.matchedTextAttr
-			}
+			template.Data = match.data
+			template.Tokens = match.tokens
 			l.list.FocusList.PushBack(searchResultComponent{
-				LazyBytes: &b,
+				LazyBytes: template,
 				Match:     match,
 			})
 		})
@@ -619,15 +621,16 @@ func (l *List) handleSearch(
 	// which reduces contention.
 	tempList := component.NewFocusList()
 	slab := makeSlab()
+	template := component.LazyBytes{
+		Attributes:      l.cfg.textAttr,
+		TokenAttributes: l.cfg.matchedTextAttr,
+	}
 	search(l.cfg.algo, input, searchInput, slab, l.cfg.caseSensitive,
 		func(match Match) {
-			b := component.LazyBytes{Data: match.data, Attributes: l.cfg.textAttr}
-			if match.tokens != nil {
-				b.Tokens = *match.tokens
-				b.TokenAttributes = l.cfg.matchedTextAttr
-			}
+			template.Tokens = match.tokens
+			template.Data = match.data
 			tempList.PushBack(searchResultComponent{
-				LazyBytes: &b,
+				LazyBytes: template,
 				Match:     match,
 			})
 		})
@@ -655,7 +658,7 @@ func (l *List) handleSearch(
 	}
 
 	for node, ok := tempList.Front(); ok; node, ok = node.Next() {
-		l.list.PushBack(node.Value().(component.WithAttributes))
+		l.list.PushBack(node.Value())
 	}
 	l.setFilesCount()
 	l.mu.Unlock()
@@ -736,7 +739,7 @@ func (l *List) resize(width, height int) {
 }
 
 type searchResultComponent struct {
-	*component.LazyBytes
+	component.LazyBytes
 	Match
 }
 
@@ -809,7 +812,7 @@ func resizeMatchCountBar(matchCountBar *matchCounter, y, lenFilesCounter, width 
 	matchCountBar.Virtual.Resize(lenFilesCounter, 1)
 }
 
-func sortByResultScore(a, b component.WithAttributes) bool {
+func sortByResultScore(a, b tui.Component) bool {
 	ab := a.(searchResultComponent)
 	bb := b.(searchResultComponent)
 	if ab.Match.res.Score == bb.Match.res.Score {
@@ -818,7 +821,7 @@ func sortByResultScore(a, b component.WithAttributes) bool {
 	return ab.Match.res.Score > bb.Match.res.Score
 }
 
-func sortByResultScoreInverted(a, b component.WithAttributes) bool {
+func sortByResultScoreInverted(a, b tui.Component) bool {
 	ab := a.(searchResultComponent)
 	bb := b.(searchResultComponent)
 	if ab.Match.res.Score == bb.Match.res.Score {

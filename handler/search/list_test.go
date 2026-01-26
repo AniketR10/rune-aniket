@@ -36,8 +36,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
+	"unstable.build/go-tui"
 	"unstable.build/go-tui/cell"
-	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/term"
 )
 
@@ -607,7 +607,7 @@ func TestListRemoveFocus(t *testing.T) {
 		// assert continuity of indices and correspondance between components list
 		// and values list (`l.input`)
 		var expectedIdx int
-		l.list.Iterate(func(c component.WithAttributes) {
+		l.list.Iterate(func(c tui.Component) {
 			sr := c.(searchResultComponent)
 			assert.Equal(t, expectedIdx, sr.idx)
 			assert.Equal(t, sr.Match.Data(), l.input[expectedIdx])

@@ -38,7 +38,7 @@ var (
 	}
 )
 
-// FocusList wraps a List to provide an element Focus. It takes WithAttributes
+// FocusList wraps a List to provide an element Focus. It takes tui.Component
 // components.
 type FocusList struct {
 	Inverted      bool
@@ -72,18 +72,8 @@ func (l *FocusList) InitWithAttr(text, focus term.Attributes) {
 	l.focusAttr = focus
 }
 
-func setAttr(n ListNode, attr term.Attributes) {
-	n.Value().(WithAttributes).SetAttr(attr)
-}
-
 func (l *FocusList) switchFocus(newFocus ListNode) {
-	if l.focus.Value() != nil {
-		setAttr(l.focus, l.textAttr)
-	}
 	l.focus = newFocus
-	if l.focus.Value() != nil {
-		setAttr(l.focus, l.focusAttr)
-	}
 }
 
 func (l *FocusList) trySetFirstFocus(node ListNode) bool {
@@ -173,6 +163,14 @@ func (l *FocusList) Front() (ListNode, bool) {
 // Draw satisfies tui.Component
 func (l *FocusList) Draw(w term.Writer) {
 	l.list.Draw(w)
+	if l.focus.el != nil {
+		focus := l.focus.el.Value.(*Virtual[tui.Component])
+		at := focus.Position()
+		for x := range focus.Width() {
+			at.X = x
+			w.UnionAttributes(at, l.focusAttr)
+		}
+	}
 }
 
 // ElementAt returns the element at pos Coordinates or panics if
@@ -194,9 +192,8 @@ func (l *FocusList) Len() int {
 
 // PushBack inserts a new element c at the back of list l and
 // returns the linked node.
-func (l *FocusList) PushBack(c WithAttributes) ListNode {
+func (l *FocusList) PushBack(c tui.Component) ListNode {
 	n := l.list.PushBack(c)
-	setAttr(n, l.textAttr)
 	l.trySetFirstFocus(n)
 	return n
 }
@@ -204,20 +201,15 @@ func (l *FocusList) PushBack(c WithAttributes) ListNode {
 // PushBackList inserts a copy of an other list at the back of list l. The
 // lists l and other must NOT be the same or nil.
 func (l *FocusList) PushBackList(other *FocusList) {
-	focus, ok := other.Focus()
-	if ok {
-		setAttr(focus, l.textAttr)
-	}
-	other.Iterate(func(c WithAttributes) {
+	other.Iterate(func(c tui.Component) {
 		l.PushBack(c)
 	})
 }
 
 // PushFront inserts a new element c with value v at the front of list l and
 // returns e.
-func (l *FocusList) PushFront(c WithAttributes) ListNode {
+func (l *FocusList) PushFront(c tui.Component) ListNode {
 	n := l.list.PushFront(c)
-	setAttr(n, l.textAttr)
 	if !l.trySetFirstFocus(n) {
 		l.focusIdx++
 	}
@@ -227,17 +219,13 @@ func (l *FocusList) PushFront(c WithAttributes) ListNode {
 // PushFrontList inserts a copy of an other list at the front of list l. The
 // lists l and other must NOT be the same or nil.
 func (l *FocusList) PushFrontList(other *FocusList) {
-	focus, ok := other.Focus()
-	if ok {
-		setAttr(focus, l.textAttr)
-	}
 	for node, ok := other.Back(); ok; node, ok = node.Prev() {
-		l.PushFront(node.Value().(WithAttributes))
+		l.PushFront(node.Value())
 	}
 }
 
 // Remove removes a node.
-func (l *FocusList) Remove(n *ListNode) WithAttributes {
+func (l *FocusList) Remove(n *ListNode) tui.Component {
 	// if deleting what's under the cursor try shifting it.
 	if l.focus == *n {
 		if ok := l.FocusDown(); !ok {
@@ -251,23 +239,23 @@ func (l *FocusList) Remove(n *ListNode) WithAttributes {
 		}
 	}
 	ret := l.list.Remove(n)
-	return ret.(WithAttributes)
+	return ret
 }
 
 // Iterate iterates over all elements in l.
-func (l *FocusList) Iterate(fn func(WithAttributes)) {
+func (l *FocusList) Iterate(fn func(tui.Component)) {
 	for node, ok := l.list.Front(); ok; node, ok = node.Next() {
-		fn(node.Value().(WithAttributes))
+		fn(node.Value())
 	}
 }
 
 // IterateVisible iterates only the visible elements in l.
-func (l *FocusList) IterateVisible(fn func(WithAttributes)) {
+func (l *FocusList) IterateVisible(fn func(tui.Component)) {
 	offset := l.list.Offset()
 	lastVisible := l.height/l.list.ElementHeight() + offset
 	node, ok := l.list.Head()
 	for i := offset; ok && i < lastVisible; i++ {
-		fn(node.Value().(WithAttributes))
+		fn(node.Value())
 		node, ok = node.Next()
 	}
 }
@@ -370,9 +358,9 @@ func (l *FocusList) FocusOffset() int {
 // Sort sorts the elements of this list with the provided less function.
 // It also resets the current focus node, according to the Inverted
 // property in FocusList.
-func (l *FocusList) Sort(less func(a, b WithAttributes) bool) {
+func (l *FocusList) Sort(less func(a, b tui.Component) bool) {
 	l.list.Sort(func(a, b tui.Component) bool {
-		return less(a.(WithAttributes), b.(WithAttributes))
+		return less(a, b)
 	})
 
 	if l.Inverted {

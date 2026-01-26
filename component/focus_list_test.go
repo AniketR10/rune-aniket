@@ -29,7 +29,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/term"
 )
@@ -119,7 +118,7 @@ func (l *focusListTestList) Remove(e *ListNode) tui.Component {
 }
 
 func (l *focusListTestList) Sort(less func(a, b tui.Component) bool) {
-	l.FocusList.Sort(func(a, b WithAttributes) bool {
+	l.FocusList.Sort(func(a, b tui.Component) bool {
 		return less(a.(*compWithAttr).Component, b.(*compWithAttr).Component)
 	})
 }
@@ -274,45 +273,6 @@ func TestSetFocus(t *testing.T) {
 	}
 }
 
-func TestFocusAddAttr(t *testing.T) {
-	var (
-		redAttr   = term.Attributes{Fg: tcell.ColorRed}
-		greenAttr = term.Attributes{Fg: tcell.ColorGreen}
-	)
-
-	t.Run("first PushBack adds focus attr", func(t *testing.T) {
-		l := NewFocusList()
-		l.InitWithAttr(redAttr, greenAttr)
-		n := l.PushBack(newCompWithAttr(&TestComponent{}))
-		assert.Equal(t, greenAttr, n.Value().(*compWithAttr).attr)
-	})
-
-	t.Run("first PushFront adds focus attr", func(t *testing.T) {
-		l := NewFocusList()
-		l.InitWithAttr(redAttr, greenAttr)
-		n := l.PushFront(newCompWithAttr(&TestComponent{}))
-		assert.Equal(t, greenAttr, n.Value().(*compWithAttr).attr)
-	})
-
-	t.Run("PushBack adds default attr", func(t *testing.T) {
-		l := NewFocusList()
-		l.InitWithAttr(redAttr, greenAttr)
-		l.PushBack(newCompWithAttr(&TestComponent{}))
-
-		n := l.PushBack(newCompWithAttr(&TestComponent{}))
-		assert.Equal(t, redAttr, n.Value().(*compWithAttr).attr)
-	})
-
-	t.Run("PushFront adds default attr", func(t *testing.T) {
-		l := NewFocusList()
-		l.InitWithAttr(redAttr, greenAttr)
-		l.PushBack(newCompWithAttr(&TestComponent{}))
-
-		n := l.PushFront(newCompWithAttr(&TestComponent{}))
-		assert.Equal(t, redAttr, n.Value().(*compWithAttr).attr)
-	})
-}
-
 func TestFocusListDraw(t *testing.T) {
 	testListDraw(t, nil, newFocusTestList)
 }
@@ -330,7 +290,7 @@ func TestFocusListSort(t *testing.T) {
 		require.True(t, l.CanFocusUp())
 		require.False(t, l.CanFocusDown())
 
-		l.Sort(func(a, b WithAttributes) bool {
+		l.Sort(func(a, b tui.Component) bool {
 			return a.(*compWithAttr).Component.(*TestComponent).Ch <
 				b.(*compWithAttr).Component.(*TestComponent).Ch
 		})
@@ -366,7 +326,7 @@ func TestIterateVisible(t *testing.T) {
 			tcase.op(t, l)
 
 			var actualRunes []rune
-			l.IterateVisible(func(c WithAttributes) {
+			l.IterateVisible(func(c tui.Component) {
 				actualRunes = append(actualRunes, c.(*compWithAttr).Component.(*TestComponent).Ch)
 			})
 			assert.Equal(t, tcase.expected, string(actualRunes))

@@ -105,53 +105,28 @@ func (s String) Config() StringConfig {
 // Note that grapheme clusters are not supported by this component.
 type LazyBytes struct {
 	Data            []byte
-	Tokens          []int
+	Tokens          *[]int
 	Attributes      term.Attributes
 	TokenAttributes term.Attributes
-	cells           []term.Cell
 }
-
-var _ WithAttributes = (*LazyBytes)(nil)
 
 // Resize is ignored.
-func (l *LazyBytes) Resize(width, height int) {
-}
-
-// SetAttr sets the default attributes of the next call to Draw.
-// If Draw has already been called, then this method is force all
-// cells to be re-computed, so it should be used with care.
-func (l *LazyBytes) SetAttr(attr term.Attributes) (ret term.Attributes) {
-	ret = l.Attributes
-	l.Attributes = attr
-	if l.cells != nil {
-		l.build()
-	}
-	return ret
-}
-
-func (l *LazyBytes) build() {
-	l.cells = make([]term.Cell, len(l.Data))
-	for i, r := range l.Data {
-		l.cells[i] = term.Cell{
-			Ch:         rune(r),
-			Attributes: l.Attributes,
-			Width:      1, // only support width=1 graphemes
-		}
-	}
-	for _, t := range l.Tokens {
-		l.cells[t].Bg |= l.TokenAttributes.Bg
-		l.cells[t].Fg |= l.TokenAttributes.Fg
-		l.cells[t].Attrs |= l.TokenAttributes.Attrs
-	}
+func (l LazyBytes) Resize(width, height int) {
 }
 
 // Draw satisfies tui.Component.
-func (l *LazyBytes) Draw(w term.Writer) {
-	if l.cells == nil {
-		l.build()
+func (l LazyBytes) Draw(w term.Writer) {
+	for i, r := range l.Data {
+		w.SetCell(term.Coordinates{X: i, Y: 0}, term.Cell{
+			Ch:         rune(r),
+			Attributes: l.Attributes,
+			Width:      1, // only support width=1 graphemes
+		})
 	}
-	for x, c := range l.cells {
-		w.SetCell(term.Coordinates{X: x, Y: 0}, c)
+	if l.Tokens != nil {
+		for _, x := range *l.Tokens {
+			w.UnionAttributes(term.Coordinates{X: x}, l.TokenAttributes)
+		}
 	}
 }
 
