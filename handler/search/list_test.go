@@ -709,6 +709,55 @@ func BenchmarkHandleSearchBottomSearchBar1000000(b *testing.B) {
 	benchmarkHandleSearch(b, 1000000, true)
 }
 
+func BenchmarkHandlePush10(b *testing.B) {
+	benchmarkPush(b, 10, false)
+}
+func BenchmarkHandlePush100(b *testing.B) {
+	benchmarkPush(b, 100, false)
+}
+func BenchmarkHandlePush1000(b *testing.B) {
+	benchmarkPush(b, 1000, false)
+}
+func BenchmarkHandlePush1000000(b *testing.B) {
+	benchmarkPush(b, 1000000, false)
+}
+
+func benchmarkPush(b *testing.B, n int, bottomSearchBar bool) {
+	const sample = `2022-06-17 15:45:24.985	WARNING	[-]	-	msg: 3 errors occurred: Failed to load \"key_bindings.<m-k>\": invalid key: '<m-k>'; Failed to load \"key_bindings.<m-j>\": invalid key: '<m-j>'; Failed to load \"browser.frameunion_charset\": type is invalid
+2022-06-17 15:45:24.985	WARNING	[-]	-	msg: 3 errors occurred: Failed to load \"key_bindings.<m-k>\": invalid key: '<m-k>'; Failed to load \"key_bindings.<m-j>\": invalid key: '<m-j>'; Failed to load \"browser.frameunion_charset\": type is invalid
+2022-06-17 15:45:24.985	DEBUG	[-]	-	msg: starting extension
+2022-06-17 15:45:24.986	DEBUG	[-]	-	msg: extension started
+2022-06-17 15:45:24.986	DEBUG	[-]	-	msg: waiting for RPC address
+2022-06-17 15:45:25.003	DEBUG	[-]	extension_fuzzy_file	msg: extension address
+2022-06-17 15:45:25.003	DEBUG	[-]	-	msg: using extension
+2022-06-17 15:45:25.003	INFO	[-]	extension_fuzzy_file	msg: listen tcp 127.0.0.1:6061: bind: address already in use
+2022-06-17 15:45:25.004	TRACE	[-]	stdio	msg: waiting for stdio data
+2022-06-17 15:45:25.004	DEBUG	[-]	-	msg: starting extension`
+	lines := bytes.Split([]byte(sample), []byte{'\n'})
+	data := make([][]byte, n)
+	for i := 1; i < int(max(1, float64(n/len(lines)))); i++ {
+		for _, line := range lines {
+			data = append(data, line)
+		}
+	}
+
+	l := NewList(ListConfig{BottomSearchBar: bottomSearchBar})
+	l.Resize(300, 200)
+	l.cancelSearch = func() {}
+
+	ctx := context.Background()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		l.DataReset()
+		ch := l.Push(ctx)
+		for _, line := range data {
+			ch <- line
+		}
+		close(ch)
+		l.Wait()
+	}
+}
+
 func benchmarkHandleSearch(b *testing.B, n int, bottomSearchBar bool) {
 	const sample = `2022-06-17 15:45:24.985	WARNING	[-]	-	msg: 3 errors occurred: Failed to load \"key_bindings.<m-k>\": invalid key: '<m-k>'; Failed to load \"key_bindings.<m-j>\": invalid key: '<m-j>'; Failed to load \"browser.frameunion_charset\": type is invalid
 2022-06-17 15:45:24.985	WARNING	[-]	-	msg: 3 errors occurred: Failed to load \"key_bindings.<m-k>\": invalid key: '<m-k>'; Failed to load \"key_bindings.<m-j>\": invalid key: '<m-j>'; Failed to load \"browser.frameunion_charset\": type is invalid
@@ -731,6 +780,7 @@ func benchmarkHandleSearch(b *testing.B, n int, bottomSearchBar bool) {
 	l := NewList(ListConfig{BottomSearchBar: bottomSearchBar})
 	w := term.NoopWriter{}
 	l.Resize(300, 200)
+	l.cancelSearch = func() {}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -738,9 +788,7 @@ func benchmarkHandleSearch(b *testing.B, n int, bottomSearchBar bool) {
 		// in order to measure handleSearch perf, we need to
 		// run all the logic synchronously
 		l.mu.Lock()
-		if l.cancelSearch != nil {
-			l.cancelSearch()
-		}
+		l.cancelSearch()
 		ctx := context.Background()
 		l.waitSearchCtx, l.cancelSearch = context.WithCancel(ctx)
 		l.list.Reset()
