@@ -825,8 +825,11 @@ func (h *Prompt) setCompletionList(
 			defer func() {
 				_ = animation.Close()
 				h.mu.Lock()
-				h.animation.C = newNopAnimation(h.config)
+				if animation == h.animation.C {
+					h.animation.C = newNopAnimation(h.config)
+				}
 				h.mu.Unlock()
+				_ = h.interrupter.Interrupt(ctx)
 			}()
 
 			h.mu.Lock()
