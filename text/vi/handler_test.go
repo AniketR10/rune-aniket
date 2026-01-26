@@ -1038,6 +1038,20 @@ tuvxy
 	assert.Equal(t, "66666\n", vi.cursor.Selection())
 }
 
+func TestVisualMoveToChar(t *testing.T) {
+	sample := `abcde`
+	vi := setupVi(t, sample, 2, WithWrap(false))
+	vi.Resize(10, 20)
+	vi.Draw(term.NoopWriter{})
+
+	for _, eventChar := range "vfc" {
+		vi.Handle(term.Event{Type: term.EventKey, Ch: eventChar})
+	}
+	selection, ok := vi.Selection()
+	require.True(t, ok)
+	assert.Equal(t, "abc", selection)
+}
+
 func TestViDeleteAWord(t *testing.T) {
 	cases := []handlertest.SequenceTestCase{
 		{"jjjjjwdw",

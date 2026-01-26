@@ -845,6 +845,11 @@ func (vi *viHandlerImpl) handleVisual(ev term.Event) (quit, handled bool) {
 		return
 	}
 
+	quit, handled = vi.handleMoveToCharacter(vi.moveMode, ev)
+	if handled {
+		return
+	}
+
 	handled = true
 	switch ev.Mod {
 	case 0:
@@ -916,7 +921,7 @@ func (vi *viHandlerImpl) handleMoveToCharacter(mode moveMode, ev term.Event) (ex
 			vi.setNormalMode()
 			handled = true
 		default:
-			vi.setNormalMode()
+			vi.setMode(vi.mode())
 			handled = true
 		}
 	}
