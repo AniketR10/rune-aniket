@@ -440,8 +440,8 @@ func TestCommandHandlerDispatch(t *testing.T) {
 			"ro my#oro#>", []string{"lane", "lorelai", "rori"},
 			expectCompleteWith(
 				[][]string{
-					{""}, {"m"}, {"my"}, {"myArg", ""},
-					{"myArg", "o"}, {"myArg", "or"}, {"myArg", "oro"}, {"myArg", "oregano", ""},
+					{""}, {"m"}, {"myArg", ""}, {"myArg", "o"},
+					{"myArg", "oregano", ""},
 				},
 				[][]string{
 					{"myArg"}, {"myArg"}, {"myArg"}, {"oregano", "oregani"}, {"oregano", "oregani"},
@@ -860,8 +860,8 @@ lorelai /tmp/a▐
 			"ro my✌ oro", []string{"lane", "lorelai", "rori"},
 			expectCompleteWith(
 				[][]string{
-					{""}, {"m"}, {"my"}, {"myArg", ""}, {"myArg", ""},
-					{"myArg", "o"}, {"myArg", "or"}, {"myArg", "oro"},
+					{""}, {"m"}, {"myArg", ""}, {"myArg", ""},
+					{"myArg", "o"},
 				},
 				[][]string{
 					{"myArg"}, {"myArg"}, {"myArg"}, {"oregano", "oregani"}, {"oregano", "oregani"},
@@ -882,8 +882,7 @@ oregano
 			"ro myArg>ro my✌", []string{"lane", "lorelai", "rori"},
 			expectCompleteWith(
 				[][]string{
-					{""}, {"m"}, {"my"}, {"myA"}, {"myAr"}, {"myArg"},
-					{""}, {"m"}, {"my"}, {"myArg", ""},
+					{""}, {"m"}, {""}, {"m"}, {"myArg", ""},
 				},
 				[][]string{}),
 			expectDispatch("rori", "myArg"), `
@@ -901,8 +900,8 @@ rori myArg ▐
 			"ro myArg oro>ro myArg or", []string{"lane", "lorelai", "rori"},
 			expectCompleteWith(
 				[][]string{
-					{""}, {"m"}, {"my"}, {"myA"}, {"myAr"}, {"myArg"}, {"myArg", ""}, {"myArg", "o"}, {"myArg", "or"}, {"myArg", "oro"},
-					{""}, {"m"}, {"my"}, {"myA"}, {"myAr"}, {"myArg"}, {"myArg", ""}, {"myArg", "o"}, {"myArg", "or"},
+					{""}, {"m"}, {"myArg", ""}, {"myArg", "o"},
+					{""}, {"m"}, {"myArg", ""}, {"myArg", "o"},
 				},
 				[][]string{}),
 			expectDispatch("rori", "myArg", "oro"), `
@@ -920,8 +919,8 @@ oro
 			"ro myArg oro>ro myArg o✌", []string{"lane", "lorelai", "rori"},
 			expectCompleteWith(
 				[][]string{
-					{""}, {"m"}, {"my"}, {"myA"}, {"myAr"}, {"myArg"}, {"myArg", ""}, {"myArg", "o"}, {"myArg", "or"}, {"myArg", "oro"},
-					{""}, {"m"}, {"my"}, {"myA"}, {"myAr"}, {"myArg"}, {"myArg", ""}, {"myArg", "o"}, {"myArg", "oro", ""},
+					{""}, {"m"}, {"myArg", ""}, {"myArg", "o"},
+					{""}, {"m"}, {"myArg", ""}, {"myArg", "o"}, {"myArg", "oro", ""},
 				},
 				[][]string{}),
 			expectDispatch("rori", "myArg", "oro"), `
@@ -939,8 +938,8 @@ rori myArg oro ▐
 			"ro myArg oro>ro mo✌", []string{"lane", "lorelai", "rori"},
 			expectCompleteWith(
 				[][]string{
-					{""}, {"m"}, {"my"}, {"myA"}, {"myAr"}, {"myArg"}, {"myArg", ""}, {"myArg", "o"}, {"myArg", "or"}, {"myArg", "oro"},
-					{""}, {"m"}, {"mo"}, {"myArg", "oro", ""},
+					{""}, {"m"}, {"myArg", ""}, {"myArg", "o"},
+					{""}, {"m"}, {"myArg", "oro", ""},
 				},
 				[][]string{}),
 			expectDispatch("rori", "myArg", "oro"), `
@@ -989,8 +988,7 @@ rori m▐
 			"ro my✌ ore⬇^", []string{"lane", "lorelai", "rori"},
 			expectCompleteWith(
 				[][]string{
-					{""}, {"m"}, {"my"}, {"myArg", ""}, {"myArg", ""},
-					{"myArg", "o"}, {"myArg", "or"}, {"myArg", "ore"}, {"myArg", "or"},
+					{""}, {"m"}, {"myArg", ""}, {"myArg", ""}, {"myArg", "o"},
 				},
 				[][]string{
 					{"myArg"}, {"myArg"}, {"myArg"}, {"oregano", "oregani"}, {"oregano", "oregani"},

@@ -629,7 +629,6 @@ func (h *Prompt) handleCompleteArgs(ev term.Event, sync bool) (quit, handled boo
 			h.list.Buffer().DeleteCell(
 				term.Coordinates{X: h.list.Buffer().Columns(0) - 1},
 			)
-			h.setCompletionList(false, sync, h.commandAndArgs[0], h.completionArgs()...)
 			return
 		}
 		if !h.decArgsCompleteMode(sync) {
@@ -650,8 +649,11 @@ func (h *Prompt) handleCompleteArgs(ev term.Event, sync bool) (quit, handled boo
 		h.incArgsCompleteMode(false, sync)
 		return
 	}
+	isEmpty := h.list.Buffer().Size() == 0
 	h.list.Buffer().WriteString(string(ev.Ch))
-	h.setCompletionList(false, sync, h.commandAndArgs[0], h.completionArgs()...)
+	if isEmpty {
+		h.setCompletionList(false, sync, h.commandAndArgs[0], h.completionArgs()...)
+	}
 	return
 }
 
