@@ -282,6 +282,14 @@ func (e *Handler) Handle(ev term.Event) (exit, handled bool) {
 		})
 		return
 	}
+
+	switch ev.Mod {
+	case 0, term.ModCtrl, term.ModCtrlShift:
+	default:
+		// no other modifiers are handled by vte
+		return
+	}
+
 	var raw []byte
 	handled, raw = e.handleInput(ev)
 	if exit || handled || len(raw) == 0 {
