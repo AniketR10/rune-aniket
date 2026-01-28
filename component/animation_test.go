@@ -29,7 +29,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"unstable.build/go-tui"
 	"unstable.build/go-tui/term"
 )
 
@@ -64,7 +63,7 @@ func TestAnimation(t *testing.T) {
 			}},
 		{"non stringer encoded and decoded animation",
 			func(t *testing.T, interrupter term.Interrupter, frames []string, sequence []int, fps int) *Animation {
-				components := make([]tui.Component, len(frames))
+				components := make([]WithAttributes, len(frames))
 				for i, frame := range frames {
 					components[i] = noStringerString{NewStringWithConfig(frame, StringConfig{
 						Alignment: SpanAlignmentCentered,
@@ -180,6 +179,10 @@ type noStringerString struct {
 func (n noStringerString) Draw(w term.Writer) {
 	n.str.Draw(w)
 }
+func (n noStringerString) SetAttr(attr term.Attributes) term.Attributes {
+	return n.str.SetAttr(attr)
+}
+
 func (n noStringerString) Resize(width, height int) {
 	n.str.Resize(width, height)
 }

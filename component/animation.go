@@ -40,7 +40,8 @@ const (
 	lenPrefix  = 8
 )
 
-var _ (tui.Component) = (*Animation)(nil)
+var _ tui.Component = (*Animation)(nil)
+var _ WithAttributes = (*Animation)(nil)
 
 // ProgressAnimationFrames returns the frames and sequence numbers of the default
 // progress animation. It only needs 2 term.Cells in terms of width and 1 cell in height.
@@ -161,7 +162,7 @@ func EncodeAnimation(a *Animation, width, height int) []byte {
 // of frames on loop at the specified fps.
 type Animation struct {
 	interrupter   term.Interrupter
-	frames        []tui.Component
+	frames        []WithAttributes
 	sequence      []int
 	fps           int
 	i             int
@@ -191,7 +192,7 @@ func (a *Animation) Init(
 	interrupter term.Interrupter,
 	frames []string, sequence []int, fps int,
 ) {
-	components := make([]tui.Component, len(frames))
+	components := make([]WithAttributes, len(frames))
 	for i, frame := range frames {
 		components[i] = NewStringWithConfig(frame, StringConfig{
 			Alignment: SpanAlignmentCentered,
@@ -205,7 +206,7 @@ func (a *Animation) Init(
 // interrupter.Interrupt. See Init for more details.
 func (a *Animation) InitWithComponents(
 	ctx context.Context, interrupter term.Interrupter,
-	frames []tui.Component, sequence []int, fps int,
+	frames []WithAttributes, sequence []int, fps int,
 ) {
 	// assert frames and sequence are consistent with each other
 	// so we panic on Init to indicate programmer error
@@ -229,6 +230,14 @@ func (a *Animation) InitWithComponents(
 	go debug.CapturePanicReport(func() {
 		a.interrupt(ctx)
 	})
+}
+
+// SetAttr satisfies WithAttributes.
+func (a *Animation) SetAttr(attr term.Attributes) term.Attributes {
+	for _, frame := range a.frames {
+		frame.SetAttr(attr)
+	}
+	return term.Attributes{}
 }
 
 // Resize satisfies tui.Component.
