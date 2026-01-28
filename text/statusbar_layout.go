@@ -26,28 +26,11 @@ package text
 import (
 	"errors"
 	"fmt"
-	"strconv"
 	"strings"
 	"text/template/parse"
 
-	"github.com/unstablebuild/tcell/v3"
-	"unstable.build/go-tui/term"
+	"unstable.build/go-tui/component/template"
 )
-
-var errInvalidColor = errors.New("error is not a hex color starting with #, " +
-	"nor a known named W3C color in lowercase")
-
-var allowedFuncs = map[string]any{
-	"fg":            func(string) string { return "" },
-	"bg":            func(string) string { return "" },
-	"bold":          func() string { return "" },
-	"underline":     func() string { return "" },
-	"reverse":       func() string { return "" },
-	"blink":         func() string { return "" },
-	"dim":           func() string { return "" },
-	"italic":        func() string { return "" },
-	"strikethrough": func() string { return "" },
-}
 
 // ParseStatusBarLayout parses the given layout string into a set of
 // text.StatusBarComponent. The expected format is Go templates.
@@ -78,7 +61,8 @@ func ParseStatusBarLayout(layoutStr string) (
 	ret []StatusBarComponent, err error,
 ) {
 	ret = nil
-	tree, err := parse.Parse("status_bar.layout", layoutStr, "{{", "}}", allowedFuncs)
+	tree, err := parse.Parse("status_bar.layout", layoutStr, "{{", "}}",
+		template.AllowedFuncs())
 	if err != nil {
 		return
 	}
@@ -89,7 +73,7 @@ func ParseStatusBarLayout(layoutStr string) (
 		return
 	}
 
-	var template string
+	var tmpl string
 	var shiftRight bool
 	for _, node := range root.Nodes {
 		switch n := node.(type) {
@@ -103,24 +87,24 @@ func ParseStatusBarLayout(layoutStr string) (
 						ret[len(ret)-1].Template += "  "
 					}
 					for i, chunk := range all[1:] {
-						template += chunk
+						tmpl += chunk
 						if i < len(all[1:])-1 {
-							template += "  "
+							tmpl += "  "
 						}
 					}
 				} else {
 					ret[len(ret)-1].Template += all[0]
 					for _, chunk := range all[1:] {
-						template += "  "
-						template += chunk
+						tmpl += "  "
+						tmpl += chunk
 					}
 				}
 			} else {
-				template += string(n.Text)
+				tmpl += string(n.Text)
 			}
 
 		case *parse.ActionNode:
-			fieldName, attrs, err := parseAction(n)
+			fieldName, attrs, err := template.ParseAction(n)
 			if err != nil {
 				return nil, err
 			}
@@ -129,40 +113,40 @@ func ParseStatusBarLayout(layoutStr string) (
 			switch fieldName {
 			case "Status":
 				compType = StatusBarStatus
-				template += "%s"
+				tmpl += "%s"
 			case "Filepath":
 				compType = StatusBarFilePath
-				template += "%s"
+				tmpl += "%s"
 			case "GitShortRef":
 				compType = StatusBarGitShortRef
-				template += "%s"
+				tmpl += "%s"
 			case "GitDiffAdd":
 				compType = StatusBarGitDiffAdded
-				template += "%d"
+				tmpl += "%d"
 			case "GitDiffDel":
 				compType = StatusBarGitDiffDeleted
-				template += "%d"
+				tmpl += "%d"
 			case "DiagError":
 				compType = StatusBarDiagnosticsError
-				template += "%d"
+				tmpl += "%d"
 			case "DiagWarn":
 				compType = StatusBarDiagnosticsWarning
-				template += "%d"
+				tmpl += "%d"
 			case "DiagInfo":
 				compType = StatusBarDiagnosticsInfo
-				template += "%d"
+				tmpl += "%d"
 			case "Language":
 				compType = StatusBarLanguage
-				template += "%s"
+				tmpl += "%s"
 			case "CursorColumn":
 				compType = StatusBarCoordinatesCursorX
-				template += "%d"
+				tmpl += "%d"
 			case "CursorLine":
 				compType = StatusBarCoordinatesCursorY
-				template += "%d"
+				tmpl += "%d"
 			case "TotalLines":
 				compType = StatusBarTotalLines
-				template += "%d"
+				tmpl += "%d"
 			case "ShiftRight":
 				shiftRight = true
 				ret = append(ret, StatusBarComponent{
@@ -175,10 +159,10 @@ func ParseStatusBarLayout(layoutStr string) (
 			}
 			ret = append(ret, StatusBarComponent{
 				Type:       compType,
-				Template:   template,
+				Template:   tmpl,
 				Attributes: attrs,
 			})
-			template = ""
+			tmpl = ""
 
 		default:
 			err = fmt.Errorf("unsupported node type %T at position %d", n, node.Position())
@@ -188,108 +172,9 @@ func ParseStatusBarLayout(layoutStr string) (
 
 	// Trailing text after the last component - append to last component's template
 	// This handles cases like "{{ .Language }}  " where there's padding at the end
-	if template != "" && len(ret) > 0 {
-		ret[len(ret)-1].Template += template
+	if tmpl != "" && len(ret) > 0 {
+		ret[len(ret)-1].Template += tmpl
 	}
 
 	return
-}
-
-func parseAction(n *parse.ActionNode) (string, term.Attributes, error) {
-	if n.Pipe == nil || len(n.Pipe.Cmds) == 0 {
-		return "", term.Attributes{}, fmt.Errorf("empty pipeline at position %d", n.Pos)
-	}
-
-	// first command must be the field reference: {{ .Status }}
-	first := n.Pipe.Cmds[0]
-	if len(first.Args) != 1 {
-		return "", term.Attributes{}, fmt.Errorf("invalid field reference")
-	}
-
-	field, ok := first.Args[0].(*parse.FieldNode)
-	if !ok || len(field.Ident) != 1 {
-		return "", term.Attributes{}, fmt.Errorf("unsupported field expression")
-	}
-
-	fieldName := field.Ident[0]
-
-	// remaining commands are attribute filters: {{ .Status | attr "bold" "red" }}
-	var attrs term.Attributes
-	for _, cmd := range n.Pipe.Cmds[1:] {
-		if len(cmd.Args) == 0 {
-			return "", term.Attributes{}, fmt.Errorf("empty function call in pipeline")
-		}
-
-		ident, ok := cmd.Args[0].(*parse.IdentifierNode)
-		if !ok {
-			return "", term.Attributes{}, fmt.Errorf("expected identifier in pipeline")
-		}
-
-		switch ident.Ident {
-		case "bg":
-			for _, arg := range cmd.Args[1:] {
-				s, ok := arg.(*parse.StringNode)
-				if !ok {
-					return "", term.Attributes{}, fmt.Errorf("fg arguments must be a string")
-				}
-				var err error
-				attrs.Bg, err = getColor(s.Text)
-				if err != nil {
-					return "", term.Attributes{}, err
-				}
-			}
-			if len(cmd.Args[1:]) == 0 {
-				return "", term.Attributes{}, errors.New("bg requires a color argument")
-			}
-		case "fg":
-			for _, arg := range cmd.Args[1:] {
-				s, ok := arg.(*parse.StringNode)
-				if !ok {
-					return "", term.Attributes{}, fmt.Errorf("bg arguments must be a string")
-				}
-				var err error
-				attrs.Fg, err = getColor(s.Text)
-				if err != nil {
-					return "", term.Attributes{}, err
-				}
-			}
-			if len(cmd.Args[1:]) == 0 {
-				return "", term.Attributes{}, errors.New("fg requires a color argument")
-			}
-		case "bold":
-			attrs.Attrs |= tcell.AttrBold
-		case "underline":
-			attrs.Attrs |= tcell.AttrUnderline
-		case "reverse":
-			attrs.Attrs |= tcell.AttrReverse
-		case "blink":
-			attrs.Attrs |= tcell.AttrBlink
-		case "dim":
-			attrs.Attrs |= tcell.AttrDim
-		case "italic":
-			attrs.Attrs |= tcell.AttrItalic
-		case "strikethrough":
-			attrs.Attrs |= tcell.AttrStrikeThrough
-		default:
-			return "", term.Attributes{}, fmt.Errorf("unsupported pipeline command %q", ident.Ident)
-		}
-	}
-	return fieldName, attrs, nil
-}
-
-func getColor(name string) (tcell.Color, error) {
-	if name == "default" {
-		return tcell.ColorDefault, nil
-	}
-	if c, ok := tcell.ColorNames[name]; ok {
-		return c, nil
-	}
-	if len(name) == 7 && name[0] == '#' {
-		v, e := strconv.ParseInt(name[1:], 16, 32)
-		if e != nil {
-			return 0, errInvalidColor
-		}
-		return tcell.NewHexColor(int32(v)), nil
-	}
-	return 0, errInvalidColor
 }

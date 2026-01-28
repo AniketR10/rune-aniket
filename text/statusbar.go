@@ -27,7 +27,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
@@ -38,8 +37,8 @@ import (
 	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/cell"
-	"unstable.build/go-tui/cell/graphemecluster"
 	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/component/template"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/ide/syntax"
@@ -221,8 +220,8 @@ func (b *StatusBar) ShowCommandBar(show bool) {
 
 // SetStatus sets the status message.
 func (b *StatusBar) SetStatus(message string, attrs term.Attributes) {
-	components := b.processTemplate(b.statusTemplate.Template, message,
-		attrs, b.statusTemplate.Attributes)
+	components := template.Build(b.statusTemplate.Template, message,
+		attrs, b.statusTemplate.Attributes, b.config.BackgroundColor)
 	status := component.Inline(components, component.SpanAlignmentLeft)
 	b.status.Init(status)
 	b.doRebuildBar()
@@ -331,59 +330,6 @@ func (b *StatusBar) Handle(ev term.Event) (quit, handled bool) {
 	return
 }
 
-func (b *StatusBar) processTemplate(
-	template string, value any, attrs, defAttrs term.Attributes,
-) []component.Floating {
-	if attrs.Bg == 0 && attrs.Fg == 0 {
-		attrs = defAttrs
-	}
-	attrs.Attrs |= defAttrs.Attrs
-	cfg := component.StringConfig{
-		Alignment: component.SpanAlignmentCentered,
-	}
-	cfg.Attributes = attrs
-	if cfg.Attributes.Bg == 0 {
-		cfg.Attributes.Bg = b.config.BackgroundColor
-	}
-	cfg.BackgroundAttributes.Bg = cfg.Attributes.Bg
-	backgroundRunesCfg := cfg
-	backgroundRunesCfg.Fg = cfg.Attributes.Bg
-	backgroundRunesCfg.Bg = b.config.BackgroundColor
-
-	var components []component.Floating
-	var buf strings.Builder
-	var currentBackground bool
-	// invert background/foreground if template chunk has background runes
-	for i, r := range template {
-		isBackground := graphemecluster.IsBackground(r)
-		if i == 0 {
-			currentBackground = isBackground
-		}
-		switch {
-		case isBackground && currentBackground:
-			buf.WriteRune(r)
-		case !isBackground && !currentBackground:
-			buf.WriteRune(r)
-		case !isBackground && currentBackground:
-			components = appendComponent(components, &buf, value, backgroundRunesCfg)
-			currentBackground = isBackground
-			buf.Reset()
-			buf.WriteRune(r)
-		case isBackground && !currentBackground:
-			components = appendComponent(components, &buf, value, cfg)
-			currentBackground = isBackground
-			buf.Reset()
-			buf.WriteRune(r)
-		}
-	}
-	if currentBackground {
-		components = appendComponent(components, &buf, value, backgroundRunesCfg)
-	} else {
-		components = appendComponent(components, &buf, value, cfg)
-	}
-	return components
-}
-
 func (b *StatusBar) rebuildBarAll() {
 	b.rebuildBarEdit()
 	b.rebuildBarCursor()
@@ -405,16 +351,19 @@ func (b *StatusBar) rebuildBarCursor() {
 	totalRows := b.buf.Rows()
 	cursor := b.Handler.CursorAtScroll()
 
-	components := b.processTemplate(b.cursorXTemplate.Template,
-		cursor.X+1, term.Attributes{}, b.cursorXTemplate.Attributes)
+	components := template.Build(b.cursorXTemplate.Template,
+		cursor.X+1, term.Attributes{}, b.cursorXTemplate.Attributes,
+		b.config.BackgroundColor)
 	b.cursorX.Init(component.Inline(components, component.SpanAlignmentLeft))
 
-	components = b.processTemplate(b.cursorYTemplate.Template,
-		cursor.Y+1, term.Attributes{}, b.cursorYTemplate.Attributes)
+	components = template.Build(b.cursorYTemplate.Template,
+		cursor.Y+1, term.Attributes{}, b.cursorYTemplate.Attributes,
+		b.config.BackgroundColor)
 	b.cursorY.Init(component.Inline(components, component.SpanAlignmentLeft))
 
-	components = b.processTemplate(b.totalLinesTemplate.Template,
-		totalRows, term.Attributes{}, b.totalLinesTemplate.Attributes)
+	components = template.Build(b.totalLinesTemplate.Template,
+		totalRows, term.Attributes{}, b.totalLinesTemplate.Attributes,
+		b.config.BackgroundColor)
 	b.totalLines.Init(component.Inline(components, component.SpanAlignmentLeft))
 
 	b.doRebuildBar()
@@ -460,8 +409,9 @@ func (b *StatusBar) rebuildBarSyntax(state syntax.State) {
 			}
 		}
 	}
-	components := b.processTemplate(b.syntaxTemplate.Template, state.LangID,
-		attrs, b.syntaxTemplate.Attributes)
+	components := template.Build(b.syntaxTemplate.Template, state.LangID,
+		attrs, b.syntaxTemplate.Attributes,
+		b.config.BackgroundColor)
 	b.syntaxState.Init(component.Inline(components, component.SpanAlignmentLeft))
 	b.doRebuildBar()
 }
@@ -515,22 +465,26 @@ func (b *StatusBar) buildMessages(messages map[term.Attributes]int) {
 }
 
 func (b *StatusBar) buildGit(shortRef string, added, deleted int) {
-	components := b.processTemplate(b.gitShortRefTemplate.Template, shortRef,
-		term.Attributes{}, b.gitShortRefTemplate.Attributes)
+	components := template.Build(b.gitShortRefTemplate.Template, shortRef,
+		term.Attributes{}, b.gitShortRefTemplate.Attributes,
+		b.config.BackgroundColor)
 	b.gitShortRef.Init(component.Inline(components, component.SpanAlignmentLeft))
 
-	components = b.processTemplate(b.gitAddTemplate.Template, added,
-		term.Attributes{}, b.gitAddTemplate.Attributes)
+	components = template.Build(b.gitAddTemplate.Template, added,
+		term.Attributes{}, b.gitAddTemplate.Attributes,
+		b.config.BackgroundColor)
 	b.gitAdd.Init(component.Inline(components, component.SpanAlignmentLeft))
 
-	components = b.processTemplate(b.gitDelTemplate.Template, deleted,
-		term.Attributes{}, b.gitDelTemplate.Attributes)
+	components = template.Build(b.gitDelTemplate.Template, deleted,
+		term.Attributes{}, b.gitDelTemplate.Attributes,
+		b.config.BackgroundColor)
 	b.gitDel.Init(component.Inline(components, component.SpanAlignmentLeft))
 }
 
 func (b *StatusBar) buildGitError() {
-	components := b.processTemplate(b.gitShortRefTemplate.Template, "untracked",
-		term.Attributes{Fg: tcell.ColorYellow}, b.gitShortRefTemplate.Attributes)
+	components := template.Build(b.gitShortRefTemplate.Template, "untracked",
+		term.Attributes{Fg: tcell.ColorYellow},
+		b.gitShortRefTemplate.Attributes, b.config.BackgroundColor)
 	b.gitShortRef.Init(component.Inline(components, component.SpanAlignmentLeft))
 }
 
@@ -558,8 +512,8 @@ func (b *StatusBar) rebuildFilename(filename string) {
 			attrs.Fg = tcell.ColorOlive
 		}
 	}
-	components := b.processTemplate(b.relpathTemplate.Template,
-		path, attrs, b.relpathTemplate.Attributes)
+	components := template.Build(b.relpathTemplate.Template,
+		path, attrs, b.relpathTemplate.Attributes, b.config.BackgroundColor)
 	b.relpath.Init(component.Inline(components, component.SpanAlignmentLeft))
 }
 
@@ -733,20 +687,6 @@ func (b *StatusBar) initLayout(cfg StatusBarConfig) {
 
 	b.barLeft.C = component.Inline(barLeft, component.SpanAlignmentLeft)
 	b.barRight.C = component.Inline(barRight, component.SpanAlignmentRight)
-}
-
-func appendComponent(
-	components []component.Floating, buf *strings.Builder,
-	value any, cfg component.StringConfig,
-) []component.Floating {
-	str := buf.String()
-	if strings.Contains(str, "%s") || strings.Contains(str, "%d") {
-		str = fmt.Sprintf(str, value)
-	}
-	components = append(components,
-		component.NewStringWithConfig(str, cfg),
-	)
-	return components
 }
 
 func calculateGitStats(diff vctrl.FileDiff) (added, deleted int) {
