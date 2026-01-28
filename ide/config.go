@@ -51,6 +51,7 @@ import (
 	"unstable.build/go-tui/extension/extutil"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/command"
+	"unstable.build/go-tui/ide/plugin"
 	"unstable.build/go-tui/ide/syntax"
 	"unstable.build/go-tui/ide/vctrl"
 	"unstable.build/go-tui/term"
@@ -1916,6 +1917,125 @@ func (c ideConfig) terminalConfig() vte.Config {
 	ret.ScheduleNextTick = c.scheduleNextTick
 	ret.RingBell = c.ringBell
 	ret.MinWidth = defaultMinWidth
+	return ret
+}
+
+func (c ideConfig) pluginBarBackgroundColor(def tcell.Color) (bg tcell.Color) {
+	return c.pluginAttr(term.Attributes{Bg: def}, "bar_background_attr").Bg
+}
+
+func (c ideConfig) pluginStatusSuccessColor(def tcell.Color) (fg tcell.Color) {
+	return c.pluginAttr(term.Attributes{Fg: def}, "status_success_attr").Fg
+}
+
+func (c ideConfig) pluginStatusErrorColor(def tcell.Color) (fg tcell.Color) {
+	return c.pluginAttr(term.Attributes{Fg: def}, "status_error_attr").Fg
+}
+
+func (c ideConfig) pluginAttr(def term.Attributes, key string) (bg term.Attributes) {
+	bg = def
+	if c.cfg == nil {
+		return
+	}
+	cfg, ok := c.terminal()
+	if !ok {
+		return
+	}
+	cfg, ok = c.getConfig(cfg, "plugin")
+	if !ok {
+		return
+	}
+	cfgAttr, err := config.GetAttributes(cfg, key)
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors[fmt.Sprintf("terminal.plugin.%s", key)] = err
+		}
+		return
+	}
+	bg = cfgAttr
+	return
+}
+
+func (c ideConfig) pluginString(def, key string) (ret string) {
+	ret = def
+	if c.cfg == nil {
+		return
+	}
+	cfg, ok := c.terminal()
+	if !ok {
+		return
+	}
+	cfg, ok = c.getConfig(cfg, "plugin")
+	if !ok {
+		return
+	}
+	str, err := cfg.GetString(key)
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors[fmt.Sprintf("terminal.plugin.%s", key)] = err
+		}
+		return
+	}
+	ret = str
+	return
+}
+
+func (c ideConfig) pluginAnimationFrames(def []string) (ret []string) {
+	ret = def
+	str := c.pluginString("", "animation")
+	if str == "" {
+		return
+	}
+	ret = strings.Split(str, "")
+	return
+}
+
+func (c ideConfig) pluginStatusErrorIcon(def string) (ret string) {
+	ret = def
+	str := c.pluginString(def, "status_error_icon")
+	if str == "" {
+		return
+	}
+	ret = str
+	return
+}
+
+func (c ideConfig) pluginStatusSuccessIcon(def string) (ret string) {
+	ret = def
+	str := c.pluginString(def, "status_success_icon")
+	if str == "" {
+		return
+	}
+	ret = str
+	return
+}
+
+func (c ideConfig) pluginBarLayout(def []plugin.BarComponent) (ret []plugin.BarComponent) {
+	ret = def
+	layoutStr := c.pluginString("", "bar_layout")
+	if layoutStr == "" {
+		return
+	}
+	layout, err := plugin.ParseBarLayout(layoutStr)
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["terminal.plugin.bar_layout"] = err
+		}
+		return
+	}
+	ret = layout
+	return
+}
+
+func (c ideConfig) pluginBarConfig() plugin.BarConfig {
+	ret := plugin.DefaultBarConfig()
+	ret.BackgroundColor = c.pluginBarBackgroundColor(ret.BackgroundColor)
+	ret.StatusAnimationFrames = c.pluginAnimationFrames(ret.StatusAnimationFrames)
+	ret.StatusErrorIcon = c.pluginStatusErrorIcon(ret.StatusErrorIcon)
+	ret.StatusErrorColor = c.pluginStatusErrorColor(ret.StatusErrorColor)
+	ret.StatusSuccessIcon = c.pluginStatusSuccessIcon(ret.StatusSuccessIcon)
+	ret.StatusSuccessColor = c.pluginStatusSuccessColor(ret.StatusSuccessColor)
+	ret.Layout = c.pluginBarLayout(ret.Layout)
 	return ret
 }
 

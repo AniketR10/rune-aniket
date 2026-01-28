@@ -41,6 +41,7 @@ import (
 	"unstable.build/go-tui/browser/browsertest"
 	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/component/notifications"
+	"unstable.build/go-tui/ide/plugin"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/term/vte"
 	"unstable.build/go-tui/text"
@@ -136,7 +137,8 @@ func newTestRPCBrowser(t *testing.T,
 		opts = append(opts, otherOpts...)
 		ex.syncCommandPrompt = true
 		err := ex.init(ed, &testLoader{}, svc, container,
-			vte.DefaultConfig(), nopPublishEvent, 0, clip, nil, opts...)
+			vte.DefaultConfig(), plugin.DefaultBarConfig(),
+			nopPublishEvent, 0, clip, nil, opts...)
 		if err != nil {
 			return nil, nil, err
 		}

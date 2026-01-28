@@ -432,9 +432,9 @@ var (
 		},
 		"!": {
 			man: textapi.CommandManual{
-				Summary: "Opens a new terminal emulator with the given executable " +
+				Summary: "Opens a new plugin terminal with the given executable " +
 					"and arguments in a new floating window. " +
-					"The stdout and stderr of the execution " +
+					"The stdout and stderr of the program " +
 					"are printed on the window along with stats and a progress sign until " +
 					"user closes the window or hits the ESC key. \n\n" +
 					"If no executable is passed, this command opens the companion terminal emulator" +

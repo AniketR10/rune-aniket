@@ -247,7 +247,8 @@ func (h *workspaceManagerHandler) init(
 	}
 
 	h.empty, err = newEx(ed, homeWorkspace, h.storage, notifications,
-		cfg.terminalConfig(), h.publishEvent, 0 /* vte capacity */, cfg.clipboard(),
+		cfg.terminalConfig(), cfg.pluginBarConfig(),
+		h.publishEvent, 0 /* vte capacity */, cfg.clipboard(),
 		h.dispatchOnPreview, globalOpts...)
 	if err != nil {
 		return fmt.Errorf("new ex: %w", err)
@@ -630,7 +631,7 @@ func (h *workspaceManagerHandler) addWorkspace(
 	// workspace capable of opening URIs other than the workspaceapi.URI
 	multicwd := workspace.Multi(ctx, h.workspace, cwd, uri)
 	ex, err := newEx(ed, multicwd, h.storage, h.notifications.notifier,
-		cfg.terminalConfig(), h.publishEvent, h.initialVTECapacity,
+		cfg.terminalConfig(), cfg.pluginBarConfig(), h.publishEvent, h.initialVTECapacity,
 		cfg.clipboard(), h.dispatchOnPreview, textOpts...)
 	if err != nil {
 		cancel()

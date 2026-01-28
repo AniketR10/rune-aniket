@@ -61,9 +61,7 @@ func NewResponsiveString(str string, cfg StringResponsiveConfig) *ResponsiveStri
 // NewResponsiveStringFromCells returns a Responsive implementation for a matrix of cells.
 func NewResponsiveStringFromCells(cells [][]term.Cell, cfg StringResponsiveConfig) *ResponsiveString {
 	ret := new(ResponsiveString)
-	ret.cfg = cfg
-	ret.in = cells
-	ret.Resize(0, 0) // initialize ret.out
+	ret.Init(cells, cfg)
 	return ret
 }
 
@@ -121,6 +119,13 @@ var _ WithAttributes = (*respBuf)(nil)
 var _ Scrollable = (*respBuf)(nil)
 var _ Responsive = (*respBuf)(nil)
 var _ fmt.Stringer = (*respBuf)(nil)
+
+// Init initializes a ResponsiveString with the given cells and cfg.
+func (s *ResponsiveString) Init(cells [][]term.Cell, cfg StringResponsiveConfig) {
+	s.cfg = cfg
+	s.in = cells
+	s.Resize(0, 0) // initialize ret.out
+}
 
 // Height satisfies Responsive.
 func (s *ResponsiveString) Height(width int) int {

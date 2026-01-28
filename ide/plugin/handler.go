@@ -29,10 +29,8 @@ import (
 	"math"
 	"os"
 	"strings"
-	"sync"
 	"time"
 
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/api/schemeapi"
 	"unstable.build/go-tui/api/workspaceapi"
@@ -96,12 +94,13 @@ func (h *Handler) Init(
 	e schemeapi.Executor, t schemeapi.Terminal, tm browser.TabManager,
 	cmdAndArgs string, maxWidth int, opts ...Option,
 ) error {
-	config := defaultConfig()
-	for _, o := range opts {
-		o(&config)
+	err := h.init(publisher, notifications, e, t, tm,
+		cmdAndArgs, maxWidth, opts...)
+	if err != nil {
+		return err
 	}
-	ch, interrupter := h.initState(publisher, cmdAndArgs, maxWidth, config)
-	return h.initEmulator(publisher, notifications, e, t, tm, interrupter, ch)
+	go h.bar.initElapsedTicker()
+	return err
 }
 
 // Dimensions satisfies browser.Floating.
@@ -142,7 +141,6 @@ func (e *Handler) Draw(w term.Writer) {
 
 // Resize satisfies browser.Floating.
 func (e *Handler) Resize(width, height int) {
-	e.bar.width = width
 	e.width = width
 	e.height = height
 	// always resize live, so next call to Dimensions "adjusts" height of doneHandler
@@ -177,7 +175,7 @@ func (e *Handler) Man() tui.Manual {
 // Close satisfies browser.Floating.
 func (p *Handler) Close() error {
 	p.cancelCtx()
-	p.bar.animation.Close()
+	p.bar.Close()
 	return p.emulator.Close()
 }
 
@@ -207,6 +205,19 @@ func (e *Handler) MaxSeekOffset() int {
 	return e.emulator.MaxSeekOffset()
 }
 
+func (h *Handler) init(
+	publisher browser.EventPublisher, notifications browser.Notifications,
+	e schemeapi.Executor, t schemeapi.Terminal, tm browser.TabManager,
+	cmdAndArgs string, maxWidth int, opts ...Option,
+) error {
+	config := defaultConfig()
+	for _, o := range opts {
+		o(&config)
+	}
+	ch, interrupter := h.initState(publisher, cmdAndArgs, maxWidth, config)
+	return h.initEmulator(publisher, notifications, e, t, tm, interrupter, ch)
+}
+
 func (h *Handler) initState(
 	publisher browser.EventPublisher,
 	cmdAndArgs string, maxWidth int, config handlerConfig,
@@ -222,55 +233,26 @@ func (h *Handler) initState(
 	}
 
 	interrupter := browser.EventPublisherInterrupter(publisher)
-	interactiveWidth := int(float64(maxWidth) * 0.8)
-	interactiveHeight := interactiveWidth * 9 / 16
-	nonInteractiveMinWidth := int(math.Max(float64(maxWidth)*0.2, float64(len(cmdAndArgs)+4)*2))
-	nonInteractiveMinHeight := nonInteractiveMinWidth * 9 / 16
+	h.interactiveWidth = int(float64(maxWidth) * 0.8)
+	h.interactiveHeight = h.interactiveWidth * 9 / 16
+	h.nonInteractiveMinWidth = int(math.Max(float64(maxWidth)*0.2, float64(len(cmdAndArgs)+4)*2))
+	h.nonInteractiveMinHeight = h.nonInteractiveMinWidth * 9 / 16
 
 	ch := make(chan error)
 
-	templateCfg := component.StringConfig{
-		Alignment:            component.SpanAlignmentLeft,
-		Attributes:           config.barAttr,
-		BackgroundAttributes: config.barAttr,
-	}
-
-	errStrCfg := templateCfg
-	errStrCfg.Attributes.Fg = tcell.ColorRed
-	errStrCfg.Attributes.Attrs = tcell.AttrBold
-
-	successStrCfg := templateCfg
-	successStrCfg.Attributes.Fg = tcell.ColorGreen
-	successStrCfg.Attributes.Attrs = tcell.AttrBold
-
-	centerStrCfg := templateCfg
-	centerStrCfg.Alignment = component.SpanAlignmentHorizontallyCentered
-
-	topBar := new(pluginHandlerBar)
-	topBar.startTime = time.Now()
-	topBar.leftMsgRunning = component.NewStringWithConfig(" ", templateCfg)
-	topBar.leftMsgError = component.NewStringWithConfig(" ▀ ", errStrCfg)
-	topBar.leftMsgSuccess = component.NewStringWithConfig(" ▀ ", successStrCfg)
 	title := config.title
 	if config.title == "" {
 		title = cmdAndArgs
 	}
-	topBar.centerMsg = component.NewStringWithConfig(title, centerStrCfg)
-	topBar.frameAttr = config.frameAttr
-	topBar.attr = config.barAttr
-	frames, seq := component.SpinningSquareAnimationFrames()
-	topBar.animation = component.NewAnimation(interrupter, frames, seq, 10)
-	h.nonInteractiveMinWidth = nonInteractiveMinWidth
-	h.nonInteractiveMinHeight = nonInteractiveMinHeight
-	h.interactiveHeight = interactiveHeight
-	h.interactiveWidth = interactiveWidth
+	topBar := newPluginHandlerBar(title, interrupter, config.bar)
 	h.bar = topBar
+
 	h.frame = config.frame
 	h.frameCharSet = config.frameCharSet
 
 	config.cfg.Shell = cmdAndArgs
-	config.cfg.WidthHint = interactiveWidth
-	config.cfg.HeightHint = interactiveHeight
+	config.cfg.WidthHint = h.interactiveWidth
+	config.cfg.HeightHint = h.interactiveHeight
 	if config.cfg.Watcher != nil {
 		config.cfg.Watcher = workspaceapi.MultiProcessWatcher(
 			config.cfg.Watcher, workspaceapi.ChanProcessWatcher(ch))
@@ -311,12 +293,7 @@ func (e *Handler) initEmulator(
 		var err error
 
 		defer func() {
-			e.bar.mu.Lock()
-			defer e.bar.mu.Unlock()
-
-			e.bar.done = true
-			e.bar.doneErr = err
-			e.bar.doneTime = time.Now()
+			e.bar.setDone(err)
 			cancel()
 		}()
 
@@ -410,82 +387,6 @@ func (e *Handler) initializeDoneHandler() {
 func (e *Handler) newUnion(unionMain tui.Handler) tui.Handler {
 	union := handler.NewFrameUnion(unionMain)
 	union.Frame = false
-	union.UnionTop(handler.Nop(e.bar), 1)
-	if e.frame {
-		separator := handler.Nop(&component.TestComponent{
-			Ch:         e.frameCharSet.HorizontalBottom,
-			Attributes: e.bar.frameAttr,
-		})
-		union.UnionTop(separator, 1)
-	}
+	union.UnionTop(handler.Nop(e.bar), barHeight)
 	return union
-}
-
-type pluginHandlerBar struct {
-	mu        sync.Mutex
-	done      bool
-	doneErr   error
-	doneTime  time.Time
-	startTime time.Time
-	width     int
-	frameAttr term.Attributes
-	attr      term.Attributes
-
-	animation      *component.Animation
-	centerMsg      tui.Component
-	leftMsgError   tui.Component
-	leftMsgSuccess tui.Component
-	leftMsgRunning tui.Component
-}
-
-func (e *pluginHandlerBar) Draw(w term.Writer) {
-	e.mu.Lock()
-	done := e.done
-	doneErr := e.doneErr
-	doneTime := e.doneTime
-	startTime := e.startTime
-	e.mu.Unlock()
-
-	leftWidgetWidth := 3
-	const barHeight = 1
-
-	var left tui.Component
-	var rightMsg string
-	if done {
-		if doneErr != nil {
-			rightMsg = doneTime.Sub(startTime).Truncate(time.Millisecond).String()
-			left = e.leftMsgError
-		} else {
-			rightMsg = doneTime.Sub(startTime).Truncate(time.Millisecond).String()
-			left = e.leftMsgSuccess
-		}
-	} else {
-		leftWidgetWidth++
-		rightMsg = time.Since(startTime).Truncate(time.Second).String()
-		leftMsg := e.leftMsgRunning
-		var union component.FrameUnion
-		union.Init(leftMsg)
-		animationBackground := term.Cell{Ch: ' ', Attributes: e.attr}
-		union.UnionLeft(component.WithBackground(e.animation, animationBackground), 3)
-		union.Resize(leftWidgetWidth, barHeight)
-		left = &union
-	}
-
-	right := component.NewStringWithConfig(rightMsg, component.StringConfig{
-		Alignment:            component.SpanAlignmentRight,
-		Attributes:           e.attr,
-		BackgroundAttributes: e.attr,
-	})
-	var union component.FrameUnion
-	union.Init(e.centerMsg)
-	union.Frame = false
-
-	union.UnionLeft(left, leftWidgetWidth)
-	union.UnionRight(right, len(rightMsg))
-
-	union.Resize(e.width, barHeight)
-	union.Draw(w)
-}
-
-func (e *pluginHandlerBar) Resize(width, height int) {
 }

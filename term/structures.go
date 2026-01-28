@@ -47,6 +47,9 @@ const (
 	// AttrVerticalRenderOffset instructs the renderer to render
 	// the cell with an offset equal to half the height of the cell.
 	AttrVerticalRenderOffset tcell.AttrMask = tcell.AttrInvalid << 1
+	// AttrNegativeVerticalRenderOffset instructs the renderer to render
+	// the cell with an offset equal to minus half of the height of the cell.
+	AttrNegativeVerticalRenderOffset tcell.AttrMask = tcell.AttrInvalid << 2
 )
 
 // Cell represents a location with content on a terminal screen.

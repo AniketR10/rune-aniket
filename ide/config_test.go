@@ -42,6 +42,7 @@ import (
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/command"
+	"unstable.build/go-tui/ide/plugin"
 	"unstable.build/go-tui/ide/syntax"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/term/vte"
@@ -251,6 +252,17 @@ workspace:
         bg: white
 
 terminal:
+    plugin:
+        bar_layout: ' {{ .StatusIcon | bg "gray" | fg "white" }} █▓▒░{{ .AlignCenter}}{{ .Command | fg "white" | bold }}{{ .AlignRight }}  ░▒▓█ {{ .Elapsed | fg "white" | bg "gray" }} '
+        status_error_icon: "X"
+        status_error_attr:
+            fg: yellow
+        status_success_icon: "$"
+        status_success_attr:
+            fg: blue
+        animation: "ABC"
+        bar_background_attr:
+            bg: gray
     shell: sh
     max_lines: 999
     bell_trigger: "\x07"
@@ -323,6 +335,10 @@ func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
 
 	reservoir := cfg.initialTerminalCapacity()
 	assert.Equal(t, 1, reservoir)
+
+	barConfig := cfg.pluginBarConfig()
+	expectedBarConfig := plugin.DefaultBarConfig()
+	assert.Equal(t, expectedBarConfig, barConfig)
 
 	vteConfig := cfg.terminalConfig()
 	assert.NotNil(t, vteConfig.RingBell)
@@ -577,6 +593,50 @@ func TestConfigSetting(t *testing.T) {
 
 	reservoir := cfg.initialTerminalCapacity()
 	assert.Equal(t, 0, reservoir)
+
+	barConfig := cfg.pluginBarConfig()
+	expectedBarConfig := plugin.BarConfig{
+		StatusErrorIcon:       "X",
+		StatusSuccessIcon:     "$",
+		StatusErrorColor:      tcell.ColorYellow,
+		StatusSuccessColor:    tcell.ColorBlue,
+		StatusAnimationFrames: []string{"A", "B", "C"},
+		BackgroundColor:       tcell.ColorGray,
+		Layout: []plugin.BarComponent{
+			{
+				Type:     plugin.BarStatusIcon,
+				Template: " %s █▓▒░",
+				Attributes: term.Attributes{
+					Fg: tcell.ColorWhite,
+					Bg: tcell.ColorGray,
+				},
+			},
+			{
+				Type: plugin.BarAlignCenter,
+			},
+			{
+				Type:     plugin.BarCommand,
+				Template: "%s",
+				Attributes: term.Attributes{
+					Fg:    tcell.ColorWhite,
+					Attrs: tcell.AttrBold,
+				},
+			},
+			{
+				Type:     plugin.BarAlignRight,
+				Template: "  ",
+			},
+			{
+				Type:     plugin.BarElapsed,
+				Template: "░▒▓█ %s ",
+				Attributes: term.Attributes{
+					Fg: tcell.ColorWhite,
+					Bg: tcell.ColorGray,
+				},
+			},
+		},
+	}
+	assert.Equal(t, expectedBarConfig, barConfig)
 
 	vteConfig := cfg.terminalConfig()
 	assert.NotNil(t, vteConfig.ScheduleNextTick)

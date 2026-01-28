@@ -56,6 +56,7 @@ import (
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/handlertest"
+	"unstable.build/go-tui/ide/plugin"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/term/vte"
 	"unstable.build/go-tui/term/vte/vtereservoir"
@@ -1109,7 +1110,7 @@ func TestExKeySequence(t *testing.T) {
 		ex.syncCommandPrompt = true
 		require.NoError(t, ex.init(texttest.NopEditor(), &testLoader{},
 			document.NewInMemoryService(), n,
-			vte.DefaultConfig(), func(ev term.Event) bool {
+			vte.DefaultConfig(), plugin.DefaultBarConfig(), func(ev term.Event) bool {
 				// do not confuse interrupt from list with sequence re-issue commands
 				if ev.Type == term.EventInterrupt {
 					return true
@@ -1306,7 +1307,7 @@ func newExForTestingTerminal(
 	opts = append(opts, text.WithCommandOverlayConfig(testCommandOverlayConfig()))
 	opts = append(opts, defCommandKeyBindings()...)
 	require.NoError(t, ex.init(ed, workspace, svc,
-		container, emulatorCfg, publishEvent,
+		container, emulatorCfg, plugin.DefaultBarConfig(), publishEvent,
 		0, clipboard.NewInMemory(), nil, opts...))
 	ex.subscribeCommands()
 	return testEx{Component: container, ex: ex}
@@ -1334,7 +1335,8 @@ func newExForTestingWithWorkspace(
 	finalOpts = append(finalOpts, text.WithNotifications(notifications))
 
 	require.NoError(t, ex.init(ed, workspace, svc,
-		container, emulatorCfg, publishEvent, 0, clip, nil, finalOpts...))
+		container, emulatorCfg, plugin.DefaultBarConfig(),
+		publishEvent, 0, clip, nil, finalOpts...))
 	ex.subscribeCommands()
 	ex.newEmulatorHandler = func(initialCmd string) (vtereservoir.VTE, error) {
 		return newTestVteWithConfig(initialCmd), nil
@@ -1368,7 +1370,8 @@ func newExForTestingCommandsPreview(
 	finalOpts = append(finalOpts, text.WithNotifications(notifications))
 
 	require.NoError(t, ex.init(ed, workspace, svc,
-		container, emulatorCfg, publishEvent, 0, clip, previews, finalOpts...))
+		container, emulatorCfg, plugin.DefaultBarConfig(),
+		publishEvent, 0, clip, previews, finalOpts...))
 	ex.subscribeCommands()
 	ex.newEmulatorHandler = func(initialCmd string) (vtereservoir.VTE, error) {
 		return newTestVteWithConfig(initialCmd), nil
@@ -1554,9 +1557,9 @@ func TestIntegrationEphemeralTerminal(t *testing.T) {
 			`┌──────────────────────────────────────┐
 │                                      │
 ├──┌────────────────────────────────┐──┤
-│  │ ▀           sleep 20         0s│  │
-│  │────────────────────────────────│  │
+│  │ ▀          sleep 20          0s│  │
 │  │▐                               │  │
+│  │                                │  │
 │  │                                │  │
 │  │                                │  │
 │  │                                │  │
@@ -1578,9 +1581,9 @@ func TestIntegrationEphemeralTerminal(t *testing.T) {
 			`┌──────────────────────────────────────┐
 │                                      │
 ├──┌────────────────────────────────┐──┤
-│  │ ▀           sleep 20         0s│  │
-│  │────────────────────────────────│  │
+│  │ ▀          sleep 20          0s│  │
 │  │▐                               │  │
+│  │                                │  │
 │  │                                │  │
 │  │                                │  │
 │  │                                │  │
@@ -1602,9 +1605,9 @@ func TestIntegrationEphemeralTerminal(t *testing.T) {
 			`┌──────────────────────────────────────┐
 │                                      │
 ├──┌────────────────────────────────┐──┤
-│  │ ▀           sleep 20         0s│  │
-│  │────────────────────────────────│  │
+│  │ ▀          sleep 20          0s│  │
 │  │▐                               │  │
+│  │                                │  │
 │  │                                │  │
 │  │                                │  │
 │  │                                │  │
@@ -1614,9 +1617,9 @@ func TestIntegrationEphemeralTerminal(t *testing.T) {
 			`┌────────────────────────┌─────────────┐
 │                        │ cannot      │
 ├──┌─────────────────────│ close all   │
-│  │ ▐           sleep 20│ tiled       │
-│  │─────────────────────│ windows     │
-│  │▐                    └─────────────┘
+│  │ ▐          sleep 20 │ tiled       │
+│  │▐                    │ windows     │
+│  │                     └─────────────┘
 │  │                                │  │
 │  │                                │  │
 │  │                                │  │
@@ -1626,9 +1629,9 @@ func TestIntegrationEphemeralTerminal(t *testing.T) {
 			`┌──────────────────────────────────────┐
 │                                      │
 ├──┌────────────────────────────────┐──┤
-│  │ ▀  sh -c 'sleep 20 && echo % 0s│  │
-│  │────────────────────────────────│  │
+│  │ ▀                            0s│  │
 │  │▐                               │  │
+│  │                                │  │
 │  │                                │  │
 │  │                                │  │
 │  │                                │  │
@@ -1638,9 +1641,9 @@ func TestIntegrationEphemeralTerminal(t *testing.T) {
 			`┌──────────────────────────────────────┐
 │o a                                   │
 ├──┌────────────────────────────────┐──┤
-│  │ ▀  sh -c 'sleep 20 && echo /v0s│  │
-│  │────────────────────────────────│  │
+│  │ ▀                            0s│  │
 │  │▐                               │  │
+│  │                                │  │
 │  │                                │  │
 │  │                                │  │
 │  │                                │  │

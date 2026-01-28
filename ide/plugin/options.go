@@ -99,25 +99,26 @@ func WithFrameAttr(attr term.Attributes) Option {
 	}
 }
 
-// WithBarAttr returns an option that configures
-// the top bar attributes.
-func WithBarAttr(attr term.Attributes) Option {
+// WithBarConfig returns an option that configures
+// the top bar.
+func WithBarConfig(barConfig BarConfig) Option {
 	return func(cfg *handlerConfig) {
-		cfg.barAttr = attr
+		cfg.bar = barConfig
 	}
 }
 
 type handlerConfig struct {
+	bar          BarConfig
 	cfg          vte.Config
 	frame        bool
 	frameCharSet component.FrameCharSet
 	frameAttr    term.Attributes
-	barAttr      term.Attributes
 	title        string
 }
 
 func defaultConfig() handlerConfig {
 	return handlerConfig{
+		bar:          DefaultBarConfig(),
 		cfg:          vte.DefaultConfig(),
 		frame:        true,
 		frameCharSet: component.FrameCharSetDefault(),

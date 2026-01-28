@@ -87,7 +87,7 @@ func TestPluginHandler(t *testing.T) {
 			maxWidth:    4,
 			waitProcess: false,
 			drawnComponent: `
- ▀     sh   0s
+ ▀    sh    0s
 $             
               
               
@@ -100,7 +100,7 @@ $
 			maxWidth:    4,
 			waitProcess: true,
 			drawnComponent: `
- ▀  sleep 2 0s
+ ▀ sleep 2  0s
               
               
               
@@ -113,7 +113,7 @@ $
 			maxWidth:    0,
 			waitProcess: true,
 			drawnComponent: `
- ▀  sleep 2 0s
+ ▀ sleep 2  0s
               
               
               
@@ -130,6 +130,11 @@ $
 	ps1 := os.Getenv("PS1")
 	os.Setenv("PS1", "$ ")
 	defer os.Setenv("PS1", ps1)
+	
+	const (
+		width = 14
+		height = 6
+	)
 
 	for _, test := range suite {
 		t.Run(test.description, func(t *testing.T) {
@@ -154,7 +159,9 @@ $
 			})
 			vteCfg := vte.DefaultConfig()
 			vteCfg.Watcher = workspaceapi.ChanProcessWatcher(cherr2)
-			h, err := New(nopBrowser{interrupt: waitInterrupt}, nopBrowser{}, fileScheme,
+			h := new(Handler)
+			// do not call Init, which initializes ticker to rebuild elapsed time
+			err = h.init(nopBrowser{interrupt: waitInterrupt}, nopBrowser{}, fileScheme,
 				fileScheme, nopBrowser{}, test.cmdAndArgs, test.maxWidth,
 				WithFrame(false),
 				// test order of watchers
@@ -162,9 +169,10 @@ $
 				WithVTEConfig(vteCfg),
 				WithProcessWatcher(workspaceapi.ChanProcessWatcher(cherr3)),
 			)
-			h.Resize(14, 6)
+			require.NoError(t, err)
+			h.Resize(width, height)
 
-			w := term.NewStringWriter(14, 6)
+			w := term.NewStringWriter(width, height)
 
 			tests := []comptest.TestCase{
 				{Action: nil, Expected: test.drawnComponent},

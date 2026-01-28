@@ -118,6 +118,7 @@ func newEx(
 	storage document.Service,
 	notifications notifier,
 	emulatorConfig vte.Config,
+	pluginBarConfig plugin.BarConfig,
 	publishEvent func(term.Event) bool,
 	initialVTECapacity int,
 	clip clipboard.Register,
@@ -126,7 +127,7 @@ func newEx(
 ) (e *ex, err error) {
 	e = new(ex)
 	err = e.init(ed, m, storage, notifications,
-		emulatorConfig, publishEvent, initialVTECapacity, clip,
+		emulatorConfig, pluginBarConfig, publishEvent, initialVTECapacity, clip,
 		dispatchOnPreview, opts...)
 	if err != nil {
 		return
@@ -142,6 +143,7 @@ func (e *ex) init(
 	storage document.Service,
 	notifications notifier,
 	emulatorConfig vte.Config,
+	pluginBarConfig plugin.BarConfig,
 	publishEvent func(term.Event) bool,
 	initialVTECapacity int,
 	clip clipboard.Register,
@@ -179,7 +181,7 @@ func (e *ex) init(
 		plugin.WithFrame(e.config.Frame),
 		plugin.WithFrameCharSet(e.config.FocusFrameCharSet),
 		plugin.WithFrameAttr(e.config.FocusFrameAttr),
-		plugin.WithBarAttr(e.config.FocusFrameAttr),
+		plugin.WithBarConfig(pluginBarConfig),
 	}
 	e.newPluginHandler = func(args ...string) (pluginHandler, error) {
 		return plugin.New(e.Browser(), e.Browser(), e.workspace, e.workspace,
