@@ -387,6 +387,10 @@ func (e *Handler) initializeDoneHandler() {
 func (e *Handler) newUnion(unionMain tui.Handler) tui.Handler {
 	union := handler.NewFrameUnion(unionMain)
 	union.Frame = false
-	union.UnionTop(handler.Nop(e.bar), barHeight)
+	if e.bar.AlignBottom {
+		union.UnionBottom(handler.Nop(e.bar), barHeight)
+	} else {
+		union.UnionTop(handler.Nop(e.bar), barHeight)
+	}
 	return union
 }

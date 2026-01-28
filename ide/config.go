@@ -2027,6 +2027,30 @@ func (c ideConfig) pluginBarLayout(def []plugin.BarComponent) (ret []plugin.BarC
 	return
 }
 
+func (c ideConfig) pluginAlignBottom(def bool) (ret bool) {
+	ret = def
+	if c.cfg == nil {
+		return
+	}
+	cfg, ok := c.terminal()
+	if !ok {
+		return
+	}
+	cfg, ok = c.getConfig(cfg, "plugin")
+	if !ok {
+		return
+	}
+	do, err := cfg.GetBool("bar_align_bottom")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["terminal.plugin.bar_align_bottom"] = err
+		}
+		return
+	}
+	ret = do
+	return
+}
+
 func (c ideConfig) pluginBarConfig() plugin.BarConfig {
 	ret := plugin.DefaultBarConfig()
 	ret.BackgroundColor = c.pluginBarBackgroundColor(ret.BackgroundColor)
@@ -2035,6 +2059,7 @@ func (c ideConfig) pluginBarConfig() plugin.BarConfig {
 	ret.StatusErrorColor = c.pluginStatusErrorColor(ret.StatusErrorColor)
 	ret.StatusSuccessIcon = c.pluginStatusSuccessIcon(ret.StatusSuccessIcon)
 	ret.StatusSuccessColor = c.pluginStatusSuccessColor(ret.StatusSuccessColor)
+	ret.AlignBottom = c.pluginAlignBottom(ret.AlignBottom)
 	ret.Layout = c.pluginBarLayout(ret.Layout)
 	return ret
 }

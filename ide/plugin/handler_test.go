@@ -80,6 +80,7 @@ func TestPluginHandler(t *testing.T) {
 		maxWidth       int
 		drawnComponent string
 		waitProcess    bool
+		alignBottom    bool
 	}{
 		{
 			description: "no cmd and args runs a shell by default",
@@ -120,6 +121,20 @@ $
               
               `,
 		},
+		{
+			description: "bar at the bottom",
+			cmdAndArgs:  "sleep 2",
+			maxWidth:    4,
+			alignBottom: true,
+			waitProcess: true,
+			drawnComponent: `
+              
+              
+              
+              
+              
+ ▀ sleep 2  0s`,
+		},
 	}
 
 	// important so test correctness doesn't depend on host
@@ -130,9 +145,9 @@ $
 	ps1 := os.Getenv("PS1")
 	os.Setenv("PS1", "$ ")
 	defer os.Setenv("PS1", ps1)
-	
+
 	const (
-		width = 14
+		width  = 14
 		height = 6
 	)
 
@@ -160,6 +175,8 @@ $
 			vteCfg := vte.DefaultConfig()
 			vteCfg.Watcher = workspaceapi.ChanProcessWatcher(cherr2)
 			h := new(Handler)
+			barCfg := DefaultBarConfig()
+			barCfg.AlignBottom = test.alignBottom
 			// do not call Init, which initializes ticker to rebuild elapsed time
 			err = h.init(nopBrowser{interrupt: waitInterrupt}, nopBrowser{}, fileScheme,
 				fileScheme, nopBrowser{}, test.cmdAndArgs, test.maxWidth,
@@ -168,6 +185,7 @@ $
 				WithProcessWatcher(workspaceapi.ChanProcessWatcher(cherr1)),
 				WithVTEConfig(vteCfg),
 				WithProcessWatcher(workspaceapi.ChanProcessWatcher(cherr3)),
+				WithBarConfig(barCfg),
 			)
 			require.NoError(t, err)
 			h.Resize(width, height)

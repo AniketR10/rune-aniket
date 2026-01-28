@@ -253,6 +253,7 @@ workspace:
 
 terminal:
     plugin:
+        bar_align_bottom: true
         bar_layout: ' {{ .StatusIcon | bg "gray" | fg "white" }} █▓▒░{{ .AlignCenter}}{{ .Command | fg "white" | bold }}{{ .AlignRight }}  ░▒▓█ {{ .Elapsed | fg "white" | bg "gray" }} '
         status_error_icon: "X"
         status_error_attr:
@@ -602,6 +603,7 @@ func TestConfigSetting(t *testing.T) {
 		StatusSuccessColor:    tcell.ColorBlue,
 		StatusAnimationFrames: []string{"A", "B", "C"},
 		BackgroundColor:       tcell.ColorGray,
+		AlignBottom:           true,
 		Layout: []plugin.BarComponent{
 			{
 				Type:     plugin.BarStatusIcon,

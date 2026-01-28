@@ -73,6 +73,7 @@ type BarConfig struct {
 	StatusErrorColor      tcell.Color
 	StatusSuccessIcon     string
 	StatusSuccessColor    tcell.Color
+	AlignBottom           bool
 }
 
 // DefaultBarConfig returns the default plugin top bar configuration.
@@ -366,10 +367,15 @@ func (e *pluginHandlerBar) Draw(w term.Writer) {
 	e.barRight.Draw(w)
 	e.mu.Unlock()
 
+	attrs := term.Attributes{Attrs: term.AttrNegativeVerticalRenderOffset}
+	if e.AlignBottom {
+		attrs.Attrs =  term.AttrVerticalRenderOffset
+	}
+
 	for y := range barHeight {
 		for x := range e.width {
 			w.UnionAttributes(term.Coordinates{Y: y, X: x},
-				term.Attributes{Attrs: term.AttrNegativeVerticalRenderOffset})
+				attrs)
 		}
 	}
 }
@@ -377,7 +383,7 @@ func (e *pluginHandlerBar) Draw(w term.Writer) {
 func (e *pluginHandlerBar) Resize(width, height int) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	
+
 	e.width = width
 	e.height = height
 	e.resize()
