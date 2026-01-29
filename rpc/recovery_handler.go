@@ -25,7 +25,6 @@ package rpc
 
 import (
 	"context"
-	"fmt"
 
 	grpc "google.golang.org/grpc"
 	"unstable.build/go-tui/debug"
@@ -36,18 +35,10 @@ import (
 func UnaryReportRecoveryInterceptor() grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo,
 		handler grpc.UnaryHandler) (ret any, err error) {
-		panicValue, captureErr, ok := debug.CapturePanicReportWith(
-			debug.ReportsDir, debug.Package, debug.Tag, func() {
-				ret, err = handler(ctx, req)
-			})
-		if ok {
-			return ret, err
-		}
-		if captureErr != nil {
-			panic(fmt.Sprintf("capture panic report error: %v, "+
-				"original panic: %v", captureErr, panicValue))
-		}
-		panic(panicValue)
+		debug.CapturePanicReport(func() {
+			ret, err = handler(ctx, req)
+		})
+		return ret, err
 	}
 }
 
@@ -56,17 +47,9 @@ func UnaryReportRecoveryInterceptor() grpc.UnaryServerInterceptor {
 func StreamReportRecoveryInterceptor() grpc.StreamServerInterceptor {
 	return func(srv any, stream grpc.ServerStream,
 		info *grpc.StreamServerInfo, handler grpc.StreamHandler) (err error) {
-		panicValue, captureErr, ok := debug.CapturePanicReportWith(
-			debug.ReportsDir, debug.Package, debug.Tag, func() {
-				err = handler(srv, stream)
-			})
-		if ok {
-			return err
-		}
-		if captureErr != nil {
-			panic(fmt.Sprintf("capture panic report error: %v, "+
-				"original panic: %v", captureErr, panicValue))
-		}
-		panic(panicValue)
+		debug.CapturePanicReport(func() {
+			err = handler(srv, stream)
+		})
+		return err
 	}
 }

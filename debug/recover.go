@@ -29,7 +29,6 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/debug"
-	"github.com/unstablebuild/blue/issue"
 	"gopkg.in/yaml.v3"
 )
 
@@ -40,28 +39,34 @@ import (
 func CapturePanicReportWith(dir, pkg, version string, run func()) (
 	panicValue any, err error, ok bool,
 ) {
-	var report issue.Report
-	report, panicValue, ok = debug.CapturePanic(log.StandardLogger(), pkg, version, run)
-	if ok {
-		return
-	}
-	var data []byte
-	data, err = yaml.Marshal(report)
-	if err != nil {
-		err = fmt.Errorf("yaml %v: %w", report, err)
-		return
-	}
-	var f *os.File
-	f, err = os.CreateTemp(ReportsDir, fmt.Sprintf("%s_crash_report_", Package))
-	if err != nil {
-		err = fmt.Errorf("temp file: %w", err)
-		return
-	}
-	if _, err = f.Write(data); err != nil {
-		err = fmt.Errorf("write to report %q: %w", f.Name(), err)
-		return
-	}
-	log.Warnf("saved crash report file://%v", f.Name())
+	defer func() {
+		panicValue = recover()
+		if panicValue == nil {
+			return
+		}
+		report := debug.BuildCrashReport(pkg, version, panicValue)
+
+		var data []byte
+		data, err = yaml.Marshal(report)
+		if err != nil {
+			log.Errorf("yaml %v: %v", report, err)
+			return
+		}
+		var f *os.File
+		f, err = os.CreateTemp(ReportsDir, fmt.Sprintf("%s_crash_report_", Package))
+		if err != nil {
+			log.Errorf("temp file: %v", err)
+			return
+		}
+		if _, err = f.Write(data); err != nil {
+			log.Errorf("write to report %q: %v", f.Name(), err)
+			return
+		}
+		log.Warnf("saved crash report file://%v", f.Name())
+	}()
+
+	run()
+	ok = true
 	return
 }
 
@@ -70,12 +75,33 @@ func CapturePanicReportWith(dir, pkg, version string, run func()) (
 // the compile-time variables Tag, Package and ReportsDir, so make
 // sure they're injected at compile-time when using this helper.
 func CapturePanicReport(fn func()) {
-	panicValue, err, ok := CapturePanicReportWith(ReportsDir, Package, Tag, fn)
-	if ok {
-		return
-	}
-	if err != nil {
-		log.Errorf("failed to capture crash report: %v", err)
-	}
-	panic(panicValue)
+	defer func() {
+		panicValue := recover()
+		if panicValue == nil {
+			return
+		}
+		defer panic(panicValue)
+		report := debug.BuildCrashReport(Package, Tag, panicValue)
+
+		var data []byte
+		data, err := yaml.Marshal(report)
+		if err != nil {
+			log.Errorf("yaml %v: %v", report, err)
+			return
+		}
+		var f *os.File
+		f, err = os.CreateTemp(ReportsDir, fmt.Sprintf("%s_crash_report_", Package))
+		if err != nil {
+			log.Errorf("temp file: %v", err)
+			return
+		}
+		if _, err = f.Write(data); err != nil {
+			log.Errorf("write to report %q: %v", f.Name(), err)
+			return
+		}
+		log.Warnf("saved crash report file://%v", f.Name())
+
+	}()
+
+	fn()
 }
