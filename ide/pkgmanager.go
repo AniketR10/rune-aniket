@@ -93,11 +93,12 @@ var (
 )
 
 type pkgManager struct {
-	pkg     *idepkg.Manager
-	n       browserapi.Notifications
-	wh      *workspaceManagerHandler
-	storage document.Service
-	pending map[string]*sync.Mutex
+	pkg              *idepkg.Manager
+	n                browserapi.Notifications
+	wh               *workspaceManagerHandler
+	scheduleNextTick func(func()) bool
+	storage          document.Service
+	pending          map[string]*sync.Mutex
 }
 
 type installStorageValue struct {
@@ -108,8 +109,10 @@ func (m *pkgManager) init(
 	n browserapi.Notifications, rm release.Manager,
 	storage document.Service, scheme schemeapi.Scheme, dataDir string,
 	interrupt term.Interrupter, wh *workspaceManagerHandler,
+	scheduleNextTick func(func()) bool,
 ) {
 	m.pkg = idepkg.NewManager(n, rm, storage, scheme, dataDir, interrupt)
+	m.scheduleNextTick = scheduleNextTick
 	m.n = n
 	m.wh = wh
 	m.storage = storage
@@ -452,39 +455,41 @@ func (m *pkgManager) openInstallPrompt(pkgID string, version release.Version) (
 
 	ctx := context.Background()
 	ready.Lock()
-	m.wh.focusEx().comp.Prompt(msg, []string{yes, yesAlways, no, noNever},
-		[]term.KeyComb{{Ch: 'Y'}, {Ch: 'A'}, {Ch: 'N'}, {Ch: 'V'}},
-		handler.FuncPromptHandler(
-			func(i int, opt string) {
-				defer ready.Unlock()
-				var err error
-				switch opt {
-				case yesAlways:
-					_ = m.storage.Set(ctx, installStorageKey, installStorageValue{Value: true})
-					fallthrough
-				case yes:
-					err = m.pkg.InstallPackageVersion(ctx, pkgID, version)
-					if err == nil {
-						it.it, err = m.pkg.LibDir(ctx, pkgID)
+	m.scheduleNextTick(func() {
+		m.wh.focusEx().comp.Prompt(msg, []string{yes, yesAlways, no, noNever},
+			[]term.KeyComb{{Ch: 'Y'}, {Ch: 'A'}, {Ch: 'N'}, {Ch: 'V'}},
+			handler.FuncPromptHandler(
+				func(i int, opt string) {
+					defer ready.Unlock()
+					var err error
+					switch opt {
+					case yesAlways:
+						_ = m.storage.Set(ctx, installStorageKey, installStorageValue{Value: true})
+						fallthrough
+					case yes:
+						err = m.pkg.InstallPackageVersion(ctx, pkgID, version)
+						if err == nil {
+							it.it, err = m.pkg.LibDir(ctx, pkgID)
+						}
+					case noNever:
+						_ = m.storage.Set(ctx, installStorageKey, installStorageValue{Value: false})
+						fallthrough
+					case no:
+						err = document.ErrNotFound
 					}
-				case noNever:
-					_ = m.storage.Set(ctx, installStorageKey, installStorageValue{Value: false})
-					fallthrough
-				case no:
-					err = document.ErrNotFound
-				}
-				if err != nil {
-					it.err = err
-				}
-			},
-			func() error {
-				if it.it == nil && it.err == nil {
-					it.err = document.ErrNotFound
-					ready.Unlock()
-				}
-				delete(m.pending, pkgID)
-				return nil
-			}))
+					if err != nil {
+						it.err = err
+					}
+				},
+				func() error {
+					if it.it == nil && it.err == nil {
+						it.err = document.ErrNotFound
+						ready.Unlock()
+					}
+					delete(m.pending, pkgID)
+					return nil
+				}))
+	})
 
 	m.pending[pkgID] = ready
 	return it, nil

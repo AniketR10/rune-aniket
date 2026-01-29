@@ -83,6 +83,7 @@ type workspaceManagerHandler struct {
 	mu                 sync.Locker
 	pkgmanager         *pkgManager
 	exitPromptOpen     bool
+	scheduleNextTick   func(func()) bool
 	confirmedForceExit bool
 	notifications      *workspaceNotifications
 	storage            document.Service
@@ -213,6 +214,7 @@ func (h *workspaceManagerHandler) init(
 	h.mu = locker
 	h.externalCommands = make(map[string]externalCommand)
 	h.frame = cfg.frame()
+	h.scheduleNextTick = cfg.scheduleNextTick
 	h.reloadConfig = reloadConfig
 	h.workspaceConfigFilename = workspaceConfigFilename
 	h.tabsClickCallback = tabsClickCallback
@@ -1346,7 +1348,7 @@ func (h *workspaceManagerHandler) setReleaseManager(releaseManager release.Manag
 		h.pkgmanager = new(pkgManager)
 	}
 	h.pkgmanager.init(h.notifications, releaseManager,
-		pkgStorage, h.homeWorkspace, h.sixDir, h, h)
+		pkgStorage, h.homeWorkspace, h.sixDir, h, h, h.scheduleNextTick)
 }
 
 func (h *workspaceManagerHandler) openURI(file workspaceapi.URI, focus bool) error {
