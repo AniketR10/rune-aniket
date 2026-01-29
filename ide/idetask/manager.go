@@ -89,7 +89,7 @@ func (m *Manager) Init(
 	m.newPlugin = func(
 		publisher browser.EventPublisher, notifications browser.Notifications,
 		e schemeapi.Executor, t schemeapi.Terminal, tm browser.TabManager,
-		cmdAndArgs string, maxWidth int, opts ...plugin.Option,
+		cmdAndArgs []string, maxWidth int, opts ...plugin.Option,
 	) (browser.ScrollableFloating, error) {
 		return plugin.New(publisher, notifications, e, t, tm, cmdAndArgs, maxWidth, opts...)
 	}
@@ -245,7 +245,7 @@ func (m *Manager) ReplaceTask(name string, cmd string, args ...string) error {
 	task.mu.Lock()
 	task.Cmd = cmd
 	task.Args = args
-	task.cmdAndArgs = strings.Join(append([]string{task.Cmd}, task.Args...), " ")
+	task.cmdAndArgs = append([]string{task.Cmd}, task.Args...)
 	task.mu.Unlock()
 	task.tryRunning(m.b, m.scheme, "  task")
 	return nil

@@ -87,7 +87,7 @@ type Task struct {
 	mu               *sync.Mutex
 	win              browser.Window
 	tab              *browser.Tab
-	cmdAndArgs       string
+	cmdAndArgs       []string
 	pluginOpts       []plugin.Option
 	donech           chan error
 	newPlugin        pluginBuilder
@@ -116,7 +116,7 @@ type Task struct {
 type TaskInfo struct {
 	Name        string
 	Filter      string
-	CmdAndArgs  string
+	CmdAndArgs  []string
 	Running     bool
 	LastSuccess bool
 	// Runs represents the number of times this task has been run.
@@ -283,7 +283,7 @@ func (t *Task) init(
 	))
 	t.closed = new(atomic.Bool)
 	t.doneWaitCh = make(chan struct{})
-	t.cmdAndArgs = strings.Join(append([]string{t.Cmd}, t.Args...), " ")
+	t.cmdAndArgs = append([]string{t.Cmd}, t.Args...)
 	t.bar = component.WithAttrSetter(component.NewString(""))
 	// always have a valid handler so methods do not need to check for nil
 	t.handler = browser.NopScrollableFloatingHandler(
@@ -551,5 +551,5 @@ func (t *Task) log(level log.Level, msg string, args ...interface{}) {
 type pluginBuilder func(
 	publisher browser.EventPublisher, notifications browser.Notifications,
 	e schemeapi.Executor, t schemeapi.Terminal, tm browser.TabManager,
-	cmdAndArgs string, maxWidth int, opts ...plugin.Option,
+	cmdAndArgs []string, maxWidth int, opts ...plugin.Option,
 ) (browser.ScrollableFloating, error)

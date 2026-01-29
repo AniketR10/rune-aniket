@@ -81,7 +81,7 @@ const exitKeyRepeatTimeout = 400 * time.Millisecond
 func New(
 	publisher browser.EventPublisher, notifications browser.Notifications,
 	e schemeapi.Executor, t schemeapi.Terminal, tm browser.TabManager,
-	cmdAndArgs string, maxWidth int, opts ...Option,
+	cmdAndArgs []string, maxWidth int, opts ...Option,
 ) (*Handler, error) {
 	ret := new(Handler)
 	return ret, ret.Init(publisher, notifications, e, t, tm,
@@ -92,7 +92,7 @@ func New(
 func (h *Handler) Init(
 	publisher browser.EventPublisher, notifications browser.Notifications,
 	e schemeapi.Executor, t schemeapi.Terminal, tm browser.TabManager,
-	cmdAndArgs string, maxWidth int, opts ...Option,
+	cmdAndArgs []string, maxWidth int, opts ...Option,
 ) error {
 	err := h.init(publisher, notifications, e, t, tm,
 		cmdAndArgs, maxWidth, opts...)
@@ -208,7 +208,7 @@ func (e *Handler) MaxSeekOffset() int {
 func (h *Handler) init(
 	publisher browser.EventPublisher, notifications browser.Notifications,
 	e schemeapi.Executor, t schemeapi.Terminal, tm browser.TabManager,
-	cmdAndArgs string, maxWidth int, opts ...Option,
+	cmdAndArgs []string, maxWidth int, opts ...Option,
 ) error {
 	config := defaultConfig()
 	for _, o := range opts {
@@ -220,37 +220,39 @@ func (h *Handler) init(
 
 func (h *Handler) initState(
 	publisher browser.EventPublisher,
-	cmdAndArgs string, maxWidth int, config handlerConfig,
+	cmdAndArgs []string, maxWidth int, config handlerConfig,
 ) (chan error, term.Interrupter) {
 	if h.cancelCtx != nil {
 		panic("tried to initialize already initialized plugin.Handler")
 	}
-	if cmdAndArgs == "" {
-		cmdAndArgs = os.Getenv("SHELL")
+	if len(cmdAndArgs) == 0 {
+		sh := os.Getenv("SHELL")
+		if sh == "" {
+			sh = "sh"
+		}
+		cmdAndArgs = []string{sh}
 	}
-	if cmdAndArgs == "" {
-		cmdAndArgs = "sh"
+
+	title := config.title
+	if config.title == "" {
+		title = strings.Join(cmdAndArgs, " ")
 	}
 
 	interrupter := browser.EventPublisherInterrupter(publisher)
 	h.interactiveWidth = int(float64(maxWidth) * 0.8)
 	h.interactiveHeight = h.interactiveWidth * 9 / 16
-	h.nonInteractiveMinWidth = int(math.Max(float64(maxWidth)*0.2, float64(len(cmdAndArgs)+4)*2))
+	h.nonInteractiveMinWidth = int(math.Max(float64(maxWidth)*0.2, float64(len(title)+4)*2))
 	h.nonInteractiveMinHeight = h.nonInteractiveMinWidth * 9 / 16
 
 	ch := make(chan error)
 
-	title := config.title
-	if config.title == "" {
-		title = cmdAndArgs
-	}
 	topBar := newPluginHandlerBar(title, interrupter, config.bar)
 	h.bar = topBar
 
 	h.frame = config.frame
 	h.frameCharSet = config.frameCharSet
 
-	config.cfg.Shell = cmdAndArgs
+	config.cfg.CommandAndArgs = cmdAndArgs
 	config.cfg.WidthHint = h.interactiveWidth
 	config.cfg.HeightHint = h.interactiveHeight
 	if config.cfg.Watcher != nil {

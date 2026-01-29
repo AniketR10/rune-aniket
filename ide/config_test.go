@@ -646,7 +646,7 @@ func TestConfigSetting(t *testing.T) {
 	assert.NotNil(t, vteConfig.RingBell)
 	vteConfig.RingBell = nil
 	expectedEmulatorConfig := vte.Config{
-		Shell:                    "sh",
+		CommandAndArgs:           []string{"sh"},
 		Attributes:               term.Attributes{Fg: tcell.ColorWhite, Bg: tcell.ColorYellow},
 		Clipboard:                clipboard.NewInMemory(),
 		ClipboardRegister:        clipboard.DefaultRegisterID,

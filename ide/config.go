@@ -1800,18 +1800,18 @@ func (c ideConfig) terminal() (config.Config, bool) {
 	return cfg, ok
 }
 
-func (c ideConfig) terminalShell() (ret string) {
+func (c ideConfig) terminalShell() (ret []string) {
 	cfg, ok := c.terminal()
 	if !ok {
 		return
 	}
-	ret, err := cfg.GetString("shell")
+	str, err := cfg.GetString("shell")
 	if err != nil {
 		if err != config.ErrNotFound {
 			c.errors["terminal.shell"] = err
 		}
 	}
-	return ret
+	return strings.Split(str, " ")
 }
 
 func (c ideConfig) terminalMaxLines() (ret int) {
@@ -1912,7 +1912,7 @@ func (c ideConfig) terminalConfig() vte.Config {
 	ret.Bell = c.terminalBellTrigger()
 	ret.Modal = c.terminalModal()
 	ret.Debug = c.terminalDebug()
-	ret.Shell = c.terminalShell()
+	ret.CommandAndArgs = c.terminalShell()
 	ret.Clipboard = c.clipboard()
 	ret.ScheduleNextTick = c.scheduleNextTick
 	ret.RingBell = c.ringBell

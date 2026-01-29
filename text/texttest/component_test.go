@@ -1114,7 +1114,7 @@ func TestDispatchCommand(t *testing.T) {
 		config := text.DefaultConfig()
 		config.CommandAliases = map[string]text.CommandAlias{
 			"yeti": {
-				Commands: []string{"newWindow wasup $2 $name $$1", "edit $1 hellagood"},
+				Commands: []string{"newWindow wasup '$2' $name $$1", "edit $1 hellagood"},
 			},
 		}
 		c, _ := newTestComponentConfig(t, NopEditor(), config)
@@ -1122,13 +1122,15 @@ func TestDispatchCommand(t *testing.T) {
 
 		var newWindowCalled, editCalled int
 
+		// make sure that substitution doesn't replace original alias
+		// so we can replace it dynamically every time
 		const n = 100
 		for range n {
 			c.SubscribeCommand(testCommand("newWindow", "", ""),
 				text.FuncCommandHandler(func(ctx context.Context, cmd textapi.Command) error {
 					newWindowCalled++
 					assert.Equal(t, "newWindow", cmd.Name)
-					assert.Equal(t, []string{"wasup", "arg2", "$name", "$1"}, cmd.Args)
+					assert.Equal(t, []string{"wasup", "'arg2'", "$name", "$1"}, cmd.Args)
 					return nil
 				}, nil))
 
@@ -1154,6 +1156,41 @@ func TestDispatchCommand(t *testing.T) {
 
 		assert.Equal(t, n, newWindowCalled)
 		assert.Equal(t, n, editCalled)
+	})
+
+	t.Run("replaces commands % arg with current file", func(t *testing.T) {
+		config := text.DefaultConfig()
+		c, _ := newTestComponentConfig(t, NopEditor(), config)
+		win, _ := c.Focus()
+
+		var editCalled int
+
+		c.SubscribeCommand(testCommand("edit", "", ""),
+			text.FuncCommandHandler(func(ctx context.Context, cmd textapi.Command) error {
+				editCalled++
+				assert.Equal(t, "edit", cmd.Name)
+				assert.Equal(t, []string{"'/a'", "--all"}, cmd.Args)
+				return nil
+			}, nil))
+
+		resource1, err := workspaceapi.ParseURI("file:///a")
+		require.NoError(t, err)
+
+		h, err := c.Open(resource1)
+		require.NoError(t, err)
+		
+		c.Browser().Focus().SetContent(h)
+
+		cmd := textapi.Command{
+			Resource: NewTestHandler(),
+			URI:      uri,
+			Name:     "edit",
+			Args:     []string{"'%'", "--all"},
+			Window:   win,
+		}
+		ok, err := c.DispatchCommand(cmd)
+		assert.True(t, ok)
+		require.NoError(t, err)
 	})
 
 	t.Run("bubbles up HandleCommand errors", func(t *testing.T) {

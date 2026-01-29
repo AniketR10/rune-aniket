@@ -1625,11 +1625,11 @@ func TestIntegrationEphemeralTerminal(t *testing.T) {
 │  │                                │  │
 └──└────────────────────────────────┘──┘`,
 		},
-		{":noticloseall>:! sh -c 'sleep 20 && echo % '>",
+		{":noticloseall>:! sh -c 'sleep 20 && echo %'>",
 			`┌──────────────────────────────────────┐
 │                                      │
 ├──┌────────────────────────────────┐──┤
-│  │ ▀                            0s│  │
+│  │ ▀ sh -c 'sleep 20 && echo %' 0s│  │
 │  │▐                               │  │
 │  │                                │  │
 │  │                                │  │
@@ -1637,7 +1637,7 @@ func TestIntegrationEphemeralTerminal(t *testing.T) {
 │  │                                │  │
 └──└────────────────────────────────┘──┘`,
 		},
-		{":windowclose>:windowclose>:edit a>:! sh -c 'sleep 20 && echo % '>",
+		{":windowclose>:windowclose>:edit a>:! sh -c 'sleep 20 && echo %'>",
 			`┌──────────────────────────────────────┐
 │o a                                   │
 ├──┌────────────────────────────────┐──┤
@@ -1770,7 +1770,7 @@ func TestIntegrationCompanionTerminal(t *testing.T) {
 
 	// do not depend on host shell, which can vary across hosts
 	cfg := vte.DefaultConfig()
-	cfg.Shell = "sh"
+	cfg.CommandAndArgs = []string{"sh"}
 
 	// do not depend on default shell prompt, as it can change
 	// and it does change accross versions

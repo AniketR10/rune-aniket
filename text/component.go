@@ -28,7 +28,6 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -36,6 +35,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/logging"
+	shsyntax "mvdan.cc/sh/v3/syntax"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/api/browserapi"
 	"unstable.build/go-tui/api/textapi"
@@ -541,6 +541,10 @@ func (c *Component) CompleteCommand(ctx context.Context, cmd textapi.Command) (
 	return man.handler.Complete(ctx, cmd)
 }
 
+// handle escaped dollar signs by susbstituting for an extremely
+// rare string that couldn't possible be included in a command
+const impossibleMark = ""
+
 func (c *Component) replacePositionalArgs(
 	alias CommandAlias, dispatched textapi.Command,
 ) (CommandAlias, textapi.Command, error) {
@@ -548,48 +552,29 @@ func (c *Component) replacePositionalArgs(
 	cmds := alias.Commands
 	alias.Commands = make([]string, len(cmds))
 	copy(alias.Commands, cmds)
-	var replaced int
-	for i, cmd := range alias.Commands {
-		cmdAndArgs := strings.Split(cmd, " ")
-		var builder strings.Builder
-		builder.WriteString(cmdAndArgs[0])
-		cmdAndArgsReplaced := make(map[int]struct{})
-		for _, arg := range cmdAndArgs[1:] {
-			builder.WriteString(" ")
-			if len(arg) == 0 {
-				builder.WriteString(arg)
-				continue
-			}
-			if arg[0] != '$' {
-				builder.WriteString(arg)
-				continue
-			}
-			// escaped $
-			if arg[1] == '$' {
-				builder.WriteString(arg[1:])
-				continue
-			}
-			replace, _ := strconv.Atoi(arg[1:])
-			if replace <= 0 {
-				builder.WriteString(arg)
-				continue
-			}
-			replace-- // arg0 is command
+	argsReplaced := make(map[int]struct{})
+	for j, cmd := range alias.Commands {
+		cmd = strings.ReplaceAll(cmd, "$$", impossibleMark)
+		for i, arg := range []string{"$1", "$2", "$3", "$4", "$5", "$6", "$7", "$8", "$9"} {
+			replace := i
 			if replace >= len(dispatched.Args) {
-				return alias, dispatched, fmt.Errorf("alias expected argument at position %d", replace)
+				break
 			}
-			builder.WriteString(dispatched.Args[replace])
-			cmdAndArgsReplaced[replace] = struct{}{}
-			replaced++
+			old := cmd
+			cmd = strings.ReplaceAll(cmd, arg, dispatched.Args[replace])
+			if old != cmd {
+				argsReplaced[replace] = struct{}{}
+			}
 		}
 		reworked := make([]string, 0, len(dispatched.Args))
 		for i, arg := range dispatched.Args {
-			if _, ok := cmdAndArgsReplaced[i]; !ok {
+			if _, ok := argsReplaced[i]; !ok {
 				reworked = append(reworked, arg)
 			}
 		}
 		dispatched.Args = reworked
-		alias.Commands[i] = builder.String()
+		cmd = strings.ReplaceAll(cmd, impossibleMark, "$")
+		alias.Commands[j] = cmd
 	}
 	return alias, dispatched, nil
 }
@@ -600,6 +585,24 @@ func (c *Component) DispatchCommand(cmd textapi.Command) (handled bool, err erro
 	if cmd.Window == nil {
 		panic("invalid command: missing Window from which command was invoked")
 	}
+
+	// replace % with current open file, before shell expansion
+	content, _ := c.comp.Focus().Content()
+	th, ok := content.(*browser.Tab)
+	if ok {
+		for i, arg := range cmd.Args {
+			arg = strings.ReplaceAll(arg, "%%", impossibleMark)
+			arg = strings.ReplaceAll(arg, "%", th.URI().Path())
+			cmd.Args[i] = strings.ReplaceAll(arg, impossibleMark, "%")
+		}
+	}
+	// best effort attempt to group arguments in single/double quotes, etc.
+	args, err := regroupArgs(strings.Join(cmd.Args, " "))
+	if err != nil {
+		c.log(log.DebugLevel, "could not group command arguments: %v", err)
+		args = cmd.Args
+	}
+	cmd.Args = args
 	targets, ok := c.config.CommandAliases[cmd.Name]
 	if ok {
 		c.log(log.DebugLevel, "Dispatching alias %s: %#v", cmd.Name, targets)
@@ -618,6 +621,7 @@ func (c *Component) DispatchCommand(cmd textapi.Command) (handled bool, err erro
 				Window:   cmd.Window,
 				Cursor:   cmd.Cursor,
 			}
+			// re-use re-expansion logic or call to another alias
 			targetHandled, targetErr := c.DispatchCommand(targetCmd)
 			if targetErr != nil {
 				return targetHandled, fmt.Errorf("%s: %s", target, targetErr)
@@ -1147,6 +1151,25 @@ func (c *Component) newTab(
 	t := c.comp.NewTab(resource, icon, name, h, closer)
 	t.Subscribe(&compTabSubscriber{parent: c})
 	return t
+}
+
+func regroupArgs(s string) ([]string, error) {
+	p := shsyntax.NewParser()
+	printer := shsyntax.NewPrinter()
+	var words []string
+	for w, err := range p.WordsSeq(strings.NewReader(s)) {
+		if err != nil {
+			return nil, err
+		}
+		var builder strings.Builder
+		for _, node := range w.Parts {
+			if err := printer.Print(&builder, node); err != nil {
+				return nil, err
+			}
+		}
+		words = append(words, builder.String())
+	}
+	return words, nil
 }
 
 var _ workspace.FlusherCloser = (*editorFlusherCloser)(nil)

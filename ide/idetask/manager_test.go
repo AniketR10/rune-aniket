@@ -31,7 +31,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -145,7 +144,7 @@ func TestManager(t *testing.T) {
 		m.newPlugin = func(
 			publisher browser.EventPublisher, notifications browser.Notifications,
 			e schemeapi.Executor, t schemeapi.Terminal, tm browser.TabManager,
-			shell string, maxWidth int, opts ...plugin.Option,
+			cmdAndArgs []string, maxWidth int, opts ...plugin.Option,
 		) (browser.ScrollableFloating, error) {
 			actualMaxWidth = maxWidth
 			mu.Unlock()
@@ -419,7 +418,7 @@ func TestManager(t *testing.T) {
 		require.NoError(t, m.ReplaceTask(task.Name, "rumtask", "arg1"))
 		assertTaskWithin(t, m, 1*time.Second, "task",
 			func(info TaskInfo) bool {
-				assert.Equal(t, "rumtask arg1", info.CmdAndArgs)
+				assert.Equal(t, []string{"rumtask", "arg1"}, info.CmdAndArgs)
 				return info.Runs == 2
 			})
 	})
@@ -495,9 +494,8 @@ func newTestManager(b *fakeBrowser, scheme schemeapi.Scheme) *Manager {
 	m.newPlugin = func(
 		publisher browser.EventPublisher, notifications browser.Notifications,
 		e schemeapi.Executor, t schemeapi.Terminal, tm browser.TabManager,
-		shell string, maxWidth int, opts ...plugin.Option,
+		cmdAndArgs []string, maxWidth int, opts ...plugin.Option,
 	) (browser.ScrollableFloating, error) {
-		cmdAndArgs := strings.Split(shell, " ")
 		_, err := e.StartCommand(context.Background(), workspaceapi.Cmd{
 			Path: cmdAndArgs[0],
 			Args: cmdAndArgs[1:],

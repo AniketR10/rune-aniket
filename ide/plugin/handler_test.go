@@ -26,6 +26,7 @@ package plugin
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"os"
 	"path/filepath"
@@ -47,7 +48,7 @@ import (
 func TestPluginHandlerCursor(t *testing.T) {
 	makeHandler := func(mock *handler.TestHandler) *Handler {
 		h := new(Handler)
-		h.initState(nopBrowser{}, "cmd", 100 /* width */, defaultConfig())
+		h.initState(nopBrowser{}, []string{"cmd"}, 100 /* width */, defaultConfig())
 		h.liveHandler = mock
 		h.Resize(100, 100)
 		return h
@@ -82,19 +83,6 @@ func TestPluginHandler(t *testing.T) {
 		waitProcess    bool
 		alignBottom    bool
 	}{
-		{
-			description: "no cmd and args runs a shell by default",
-			cmdAndArgs:  "",
-			maxWidth:    4,
-			waitProcess: false,
-			drawnComponent: `
- ▀    sh    0s
-$             
-              
-              
-              
-              `,
-		},
 		{
 			description: "command with arg",
 			cmdAndArgs:  "sleep 2",
@@ -179,7 +167,7 @@ $
 			barCfg.AlignBottom = test.alignBottom
 			// do not call Init, which initializes ticker to rebuild elapsed time
 			err = h.init(nopBrowser{interrupt: waitInterrupt}, nopBrowser{}, fileScheme,
-				fileScheme, nopBrowser{}, test.cmdAndArgs, test.maxWidth,
+				fileScheme, nopBrowser{}, strings.Split(test.cmdAndArgs, " "), test.maxWidth,
 				WithFrame(false),
 				// test order of watchers
 				WithProcessWatcher(workspaceapi.ChanProcessWatcher(cherr1)),

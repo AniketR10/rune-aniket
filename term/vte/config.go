@@ -47,9 +47,9 @@ func DefaultConfig() Config {
 
 // Config configures Handler.
 type Config struct {
-	// Shell is the default shell to use. Otherwise whatever is set
+	// CommandAndArgs is the program to run. Otherwise whatever is set
 	// on the $SHELL environment variable is used.
-	Shell             string
+	CommandAndArgs    []string
 	Clipboard         clipboard.Register
 	ClipboardRegister string
 

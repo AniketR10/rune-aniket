@@ -304,7 +304,7 @@ func testSequenceShell(t *testing.T, cfg Config, timeout time.Duration, shell st
 	ch := make(chan struct{}, 50 /* big enough for the max length sequence of events */)
 	cfg.WidthHint = 20
 	cfg.HeightHint = 10
-	cfg.Shell = shell
+	cfg.CommandAndArgs = []string{shell}
 	handler, err := NewHandler(chanEventPublisher{ch}, nopNotifications{},
 		scheme, scheme, nopTabManager{}, cfg, "")
 	require.NoError(t, err)

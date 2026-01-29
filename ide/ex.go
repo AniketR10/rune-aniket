@@ -185,7 +185,7 @@ func (e *ex) init(
 	}
 	e.newPluginHandler = func(args ...string) (pluginHandler, error) {
 		return plugin.New(e.Browser(), e.Browser(), e.workspace, e.workspace,
-			e.Browser(), strings.Join(args, " "), e.width, pluginOpts...)
+			e.Browser(), args, e.width, pluginOpts...)
 	}
 	e.dispatchOnPreview = dispatchOnPreview
 	e.filepathCompleter = command.FilePathCompleter(e.workspace)
@@ -1023,17 +1023,6 @@ func (e *ex) readfile(args ...string) error {
 func (e *ex) executePlugin(args ...string) error {
 	if len(args) == 0 {
 		return e.toggleCompanionTerminal()
-	}
-	for i, arg := range args {
-		if arg != "%" {
-			continue
-		}
-		content, _ := e.invokeWindow().Content()
-		th, ok := content.(*browser.Tab)
-		if !ok {
-			continue
-		}
-		args[i] = th.URI().Path()
 	}
 	h, err := e.newPluginHandler(args...)
 	if err != nil {

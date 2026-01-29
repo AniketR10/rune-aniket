@@ -28,16 +28,16 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
 
-	"mvdan.cc/sh/v3/shell"
-
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/logging"
 	"go.uber.org/multierr"
+	"mvdan.cc/sh/v3/shell"
 	"unstable.build/go-tui/api/schemeapi"
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/browser"
@@ -52,21 +52,21 @@ import (
 
 // Component implements a vte terminal emulator tui.Component.
 type Component struct {
-	mu        sync.Mutex
-	terminal  schemeapi.Terminal
-	executor  schemeapi.Executor
-	clipboard clipboard.Register
-	cfg       Config
-	pty       workspaceapi.Pty
-	shell     string
-	watcher   workspaceapi.ProcessWatcher
-	scroll    component.Scroll
-	ctx       context.Context
-	cancelCtx func()
-	uri       workspaceapi.URI
-	remote    remote
-	writech   chan []byte
-	writeErr  atomic.Value
+	mu         sync.Mutex
+	terminal   schemeapi.Terminal
+	executor   schemeapi.Executor
+	clipboard  clipboard.Register
+	cfg        Config
+	pty        workspaceapi.Pty
+	cmdAndArgs []string
+	watcher    workspaceapi.ProcessWatcher
+	scroll     component.Scroll
+	ctx        context.Context
+	cancelCtx  func()
+	uri        workspaceapi.URI
+	remote     remote
+	writech    chan []byte
+	writeErr   atomic.Value
 
 	width, height     int
 	parserHandler     *parserHandler
@@ -96,7 +96,7 @@ func (t *Component) Init(
 	tm browser.TabManager, cfg Config,
 ) error {
 	t.clipboard = cfg.Clipboard
-	t.shell = cfg.Shell
+	t.cmdAndArgs = cfg.CommandAndArgs
 	t.watcher = cfg.Watcher
 	t.defAttr = cfg.Attributes
 	t.selectionAttr = cfg.SelectionAttributes
@@ -136,13 +136,6 @@ func (t *Component) Init(
 	t.parser.Init(h, new(vteparser.StdTimeout))
 	t.SetDefaultAttributes(t.defAttr)
 	return err
-}
-
-// Shell returns the shell running the vte program, if currently
-// on the primary buffer, or false if running the program on the
-// secondary buffer.
-func (t *Component) Shell() (string, bool) {
-	return t.shell, !t.parserHandler.useAlt
 }
 
 func (t *Component) triggerBell() {
@@ -669,31 +662,38 @@ func (t *Component) createPty() error {
 	if err != nil {
 		return fmt.Errorf("new pty: %v", err)
 	}
-	cmdAndArgsStr := t.shell
-	if cmdAndArgsStr == "" {
-		cmdAndArgsStr = os.Getenv("SHELL")
-	}
-	if cmdAndArgsStr == "" {
-		cmdAndArgsStr = "sh"
-	}
 
 	t.uri, err = workspaceapi.CurrentUserHostURI(pty.Slave.Name())
 	if err != nil {
 		return fmt.Errorf("pty URI: %v", err)
 	}
 
-	cmdAndArgs, err := shell.Fields(cmdAndArgsStr, nil)
+	cmdAndArgs := t.cmdAndArgs
+	cmdAndArgsStr := strings.Join(cmdAndArgs, " ")
+	// NOTE: this uses os.Getenv, but it should use the workspace's
+	// Getenv mechanism, which should be implemented at some point.
+	cmdAndArgs, err = shell.Fields(cmdAndArgsStr, nil)
 	if err != nil {
 		return fmt.Errorf("expand shell arguments: %w", err)
 	}
+	t.log(log.DebugLevel, "creating pty with cmdAndArgs: %#v", cmdAndArgs)
+	if len(cmdAndArgs) == 0 {
+		sh := os.Getenv("SHELL")
+		if sh == "" {
+			sh = "sh"
+		}
+		cmdAndArgs = []string{sh}
+	}
 	cmd := workspaceapi.Cmd{
 		Path: cmdAndArgs[0],
-		Args: cmdAndArgs[1:],
 		SysProcAttr: &syscall.SysProcAttr{
 			Setsid:  true,
 			Setctty: true,
 		},
 		Watcher: t.watcher,
+	}
+	if len(cmdAndArgs) > 1 {
+		cmd.Args = cmdAndArgs[1:]
 	}
 
 	cmd.Stdout = pty.Slave
