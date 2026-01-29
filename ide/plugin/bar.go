@@ -118,6 +118,9 @@ type pluginHandlerBar struct {
 	width     int
 	height    int
 
+	runningPrecision time.Duration
+	donePrecision    time.Duration
+
 	barLeft   component.Virtual[component.Floating]
 	barCenter component.Virtual[component.Floating]
 	barRight  component.Virtual[component.Floating]
@@ -147,8 +150,9 @@ func newPluginHandlerBar(
 	config BarConfig,
 ) *pluginHandlerBar {
 	ret := new(pluginHandlerBar)
-	ret.startTime = time.Now()
 	ret.BarConfig = config
+	ret.runningPrecision = time.Second
+	ret.donePrecision = time.Millisecond
 
 	ret.initLayout(interrupter)
 
@@ -157,6 +161,7 @@ func newPluginHandlerBar(
 
 	ret.buildCommandAndArgs(commandAndArgs)
 	ret.rebuildStatus()
+	ret.startTime = time.Now()
 	ret.rebuildElapsed()
 	ret.resize()
 	cadence := time.Duration(int(time.Second) / animationFPS)
@@ -178,10 +183,6 @@ func (e *pluginHandlerBar) initElapsedTicker() {
 }
 
 func (e *pluginHandlerBar) initLayout(interrupter term.Interrupter) {
-	if e.Layout == nil {
-		e.Layout = DefaultBarConfig().Layout
-	}
-
 	var barCenter []component.Floating
 	var barLeft []component.Floating
 	var barRight []component.Floating
@@ -201,7 +202,8 @@ func (e *pluginHandlerBar) initLayout(interrupter term.Interrupter) {
 				seq = append(seq, i)
 			}
 			e.statusTemplate = comp
-			e.animation = component.NewAnimation(interrupter, e.StatusAnimationFrames, seq, animationFPS)
+			e.animation = component.NewAnimation(interrupter, e.StatusAnimationFrames,
+				seq, animationFPS)
 			e.animation.SetAttr(e.statusTemplate.Attributes)
 			e.statusAlignment = alignment
 			e.status = component.NewFloatingReference(nil)
@@ -269,15 +271,61 @@ func (e *pluginHandlerBar) rebuildStatus() {
 			e.statusTemplate.Attributes, e.BackgroundColor)
 		e.status.Init(component.Inline(components, e.statusAlignment))
 	} else {
-		// use something that would have been parsed by template, so we know it won't conflict
+		// use something that would have been parsed by template,
+		// so we know it won't have conflicts
 		const knownId = "{{}}"
 		components := template.Build(e.statusTemplate.Template,
 			knownId, term.Attributes{}, e.statusTemplate.Attributes, e.BackgroundColor)
 		for i, comp := range components {
-			if str, ok := comp.(component.String); ok && strings.Contains(str.String(), knownId) {
-				components[i] = component.StaticFloating(e.animation, 4, 1)
+			str, ok := comp.(component.String)
+			if !ok {
+				continue
+			}
+			// insert animation where knownId would go
+			compstr := str.String()
+			strcfg := str.Config()
+			if !strings.Contains(compstr, knownId) {
+				continue
+			}
+
+			animation := component.StaticFloating(e.animation, 1, 1)
+			before, after, _ := strings.Cut(compstr, knownId)
+			if before == "" && after == "" {
+				components[i] = animation
 				break
 			}
+			if before == "" {
+				components = append(components, nil)
+				copy(components[i+1:], components[i:])
+				components[i] = animation
+				components[i+1] = component.NewStringWithConfig(after, strcfg)
+				break
+			}
+			if after == "" {
+				if i == len(components)-1 {
+					components[i] = component.NewStringWithConfig(before, strcfg)
+					components = append(components, animation)
+					break
+				}
+				components = append(components, nil)
+				copy(components[i+2:], components[i+1:])
+				components[i] = component.NewStringWithConfig(before, strcfg)
+				components[i+1] = animation
+				break
+			}
+			if i == len(components)-1 {
+				components[i] = component.NewStringWithConfig(before, strcfg)
+				components = append(components, animation,
+					component.NewStringWithConfig(after, strcfg))
+				break
+			}
+			// both have components
+			components = append(components, nil, nil)
+			copy(components[i+3:], components[i+1:])
+			components[i] = component.NewStringWithConfig(before, strcfg)
+			components[i+1] = animation
+			components[i+2] = component.NewStringWithConfig(after, strcfg)
+			break
 		}
 		e.status.Init(component.Inline(components, e.statusAlignment))
 	}
@@ -313,9 +361,9 @@ func (e *pluginHandlerBar) rebuildElapsed() {
 
 	var str string
 	if done {
-		str = doneTime.Sub(startTime).Truncate(time.Millisecond).String()
+		str = doneTime.Sub(startTime).Truncate(e.donePrecision).String()
 	} else {
-		str = time.Since(startTime).Truncate(time.Second).String()
+		str = time.Since(startTime).Truncate(e.runningPrecision).String()
 	}
 
 	components := template.Build(e.elapsedTemplate.Template,
@@ -369,7 +417,7 @@ func (e *pluginHandlerBar) Draw(w term.Writer) {
 
 	attrs := term.Attributes{Attrs: term.AttrNegativeVerticalRenderOffset}
 	if e.AlignBottom {
-		attrs.Attrs =  term.AttrVerticalRenderOffset
+		attrs.Attrs = term.AttrVerticalRenderOffset
 	}
 
 	for y := range barHeight {
@@ -413,5 +461,6 @@ func (e *pluginHandlerBar) setDone(err error) {
 
 	e.rebuildStatus()
 	e.rebuildExitCode(err)
+	e.rebuildElapsed()
 	e.resize()
 }
