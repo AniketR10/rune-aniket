@@ -1118,9 +1118,11 @@ func (s *scrollSubscriber) OnDidEdit(
 	removed := s.onWillEditTo.Y - s.onWillEditFrom.Y
 	added := end.Y - start.Y
 	for _, hidden := range s.hiddensorted {
-		// clear blocks that are partially deleted
+		// clear blocks that are partially deleted or fully deleted
 		if (s.onWillEditFrom.Y <= hidden.end && s.onWillEditFrom.Y >= hidden.start) ||
-			(s.onWillEditTo.Y >= hidden.start && s.onWillEditTo.Y <= hidden.end) {
+			(s.onWillEditTo.Y >= hidden.start && s.onWillEditTo.Y <= hidden.end) ||
+			(s.onWillEditFrom.Y < hidden.start && s.onWillEditTo.Y > hidden.end) {
+			(*Scroll)(s).dispatchVisibleToSubscribers(hidden.start)
 			continue
 		}
 		var delta int

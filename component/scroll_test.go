@@ -198,25 +198,26 @@ require (
 }
 
 func TestScrollDrawHidden(t *testing.T) {
-	scroll := newScroll(4, false, 24, 9)
-	_, err := scroll.Buffer().ReadFrom(strings.NewReader(hiddenCopy))
-	require.NoError(t, err)
+	t.Run("via Mark* methods", func(t *testing.T) {
+		scroll := newScroll(4, false, 24, 9)
+		_, err := scroll.Buffer().ReadFrom(strings.NewReader(hiddenCopy))
+		require.NoError(t, err)
 
-	var calledOnHide, calledOnVisible int
-	scroll.Subscribe(subscriber{
-		expectOnHide: func(start, end int) {
-			calledOnHide++
-		},
-		expectOnVisible: func(start int) {
-			calledOnVisible++
-		},
-	})
+		var calledOnHide, calledOnVisible int
+		scroll.Subscribe(subscriber{
+			expectOnHide: func(start, end int) {
+				calledOnHide++
+			},
+			expectOnVisible: func(start int) {
+				calledOnVisible++
+			},
+		})
 
-	w := term.NewStringWriter(24, 9)
+		w := term.NewStringWriter(24, 9)
 
-	tests := []comptest.TestCase{
-		{
-			nil, `
+		tests := []comptest.TestCase{
+			{
+				nil, `
 module github.com/unstab
                         
 go 1.14                 
@@ -226,11 +227,11 @@ require (
     cloud.google.com/go/
     github.com/adrianmo/
     github.com/ernestrc/`,
-		},
-		{
-			func() {
-				assert.False(t, scroll.MarkHidden(2, 2))
-			}, `
+			},
+			{
+				func() {
+					assert.False(t, scroll.MarkHidden(2, 2))
+				}, `
 module github.com/unstab
                         
 go 1.14                 
@@ -240,11 +241,11 @@ require (
     cloud.google.com/go/
     github.com/adrianmo/
     github.com/ernestrc/`,
-		},
-		{
-			func() {
-				assert.False(t, scroll.MarkVisible(2))
-			}, `
+			},
+			{
+				func() {
+					assert.False(t, scroll.MarkVisible(2))
+				}, `
 module github.com/unstab
                         
 go 1.14                 
@@ -254,11 +255,11 @@ require (
     cloud.google.com/go/
     github.com/adrianmo/
     github.com/ernestrc/`,
-		},
-		{
-			func() {
-				assert.True(t, scroll.MarkHidden(1, 2))
-			}, `
+			},
+			{
+				func() {
+					assert.True(t, scroll.MarkHidden(1, 2))
+				}, `
 module github.com/unstab
  [2 lines] go 1.14      
                         
@@ -268,12 +269,12 @@ require (
     github.com/adrianmo/
     github.com/ernestrc/
     github.com/ernestrc/`,
-		},
-		{
-			func() {
-				assert.True(t, scroll.MarkVisible(1))
-				assert.False(t, scroll.MarkVisible(1))
-			}, `
+			},
+			{
+				func() {
+					assert.True(t, scroll.MarkVisible(1))
+					assert.False(t, scroll.MarkVisible(1))
+				}, `
 module github.com/unstab
                         
 go 1.14                 
@@ -283,11 +284,11 @@ require (
     cloud.google.com/go/
     github.com/adrianmo/
     github.com/ernestrc/`,
-		},
-		{
-			func() {
-				assert.True(t, scroll.MarkHidden(4, 15))
-			}, `
+			},
+			{
+				func() {
+					assert.True(t, scroll.MarkHidden(4, 15))
+				}, `
 module github.com/unstab
                         
 go 1.14                 
@@ -297,12 +298,12 @@ require ( [12 lines] )
 replace this => that    
                         
                         `,
-		},
-		{
-			func() {
-				assert.True(t, scroll.SeekRight())
-				assert.True(t, scroll.SeekRight())
-			}, `
+			},
+			{
+				func() {
+					assert.True(t, scroll.SeekRight())
+					assert.True(t, scroll.SeekRight())
+				}, `
 dule github.com/unstable
                         
  1.14                   
@@ -312,13 +313,13 @@ quire ( [12 lines] )
 place this => that      
                         
                         `,
-		},
-		{
-			func() {
-				for range 8 {
-					assert.True(t, scroll.SeekRight())
-				}
-			}, `
+			},
+			{
+				func() {
+					for range 8 {
+						assert.True(t, scroll.SeekRight())
+					}
+				}, `
 hub.com/unstablebuild/bl
                         
                         
@@ -328,13 +329,13 @@ hub.com/unstablebuild/bl
 is => that              
                         
                         `,
-		},
-		{
-			func() {
-				for range 4 {
-					assert.True(t, scroll.SeekRight())
-				}
-			}, `
+			},
+			{
+				func() {
+					for range 4 {
+						assert.True(t, scroll.SeekRight())
+					}
+				}, `
 com/unstablebuild/blue  
                         
                         
@@ -344,13 +345,13 @@ lines] )
 > that                  
                         
                         `,
-		},
-		{
-			func() {
-				for range 10 {
-					assert.True(t, scroll.SeekRight())
-				}
-			}, `
+			},
+			{
+				func() {
+					for range 10 {
+						assert.True(t, scroll.SeekRight())
+					}
+				}, `
 lebuild/blue            
                         
                         
@@ -360,12 +361,12 @@ lebuild/blue
                         
                         
                         `,
-		},
-		{
-			func() {
-				for scroll.SeekRight() {
-				}
-			}, `
+			},
+			{
+				func() {
+					for scroll.SeekRight() {
+					}
+				}, `
                         
                         
                         
@@ -375,11 +376,11 @@ lebuild/blue
                         
                         
                         `,
-		},
-		{
-			func() {
-				require.True(t, scroll.SeekStartLine())
-			}, `
+			},
+			{
+				func() {
+					require.True(t, scroll.SeekStartLine())
+				}, `
 module github.com/unstab
                         
 go 1.14                 
@@ -389,11 +390,11 @@ require ( [12 lines] )
 replace this => that    
                         
                         `,
-		},
-		{
-			func() {
-				require.False(t, scroll.SeekDown())
-			}, `
+			},
+			{
+				func() {
+					require.False(t, scroll.SeekDown())
+				}, `
 module github.com/unstab
                         
 go 1.14                 
@@ -403,14 +404,14 @@ require ( [12 lines] )
 replace this => that    
                         
                         `,
-		},
-		{
-			/* trimming of start of line */
-			func() {
-				require.False(t, scroll.SeekStartFile())
-				require.True(t, scroll.MarkVisible(4))
-				require.True(t, scroll.MarkHidden(2, 5))
-			}, `
+			},
+			{
+				/* trimming of start of line */
+				func() {
+					require.False(t, scroll.SeekStartFile())
+					require.True(t, scroll.MarkVisible(4))
+					require.True(t, scroll.MarkHidden(2, 5))
+				}, `
 module github.com/unstab
                         
 go 1.14 [4 lines] cloud.
@@ -420,13 +421,13 @@ go 1.14 [4 lines] cloud.
     github.com/ernestrc/
     github.com/ernestrc/
     github.com/golang/mo`,
-		},
-		{
-			/* max offset is reduced while at max offset */
-			func() {
-				require.True(t, scroll.SeekEndFile())
-				require.True(t, scroll.MarkHidden(15, 18))
-			}, `
+			},
+			{
+				/* max offset is reduced while at max offset */
+				func() {
+					require.True(t, scroll.SeekEndFile())
+					require.True(t, scroll.MarkHidden(15, 18))
+				}, `
     github.com/ernestrc/
     github.com/golang/mo
     github.com/golang/pr
@@ -436,11 +437,11 @@ go 1.14 [4 lines] cloud.
                         
                         
                         `,
-		},
-		{
-			func() {
-				require.True(t, scroll.SeekEndFile())
-			}, `
+			},
+			{
+				func() {
+					require.True(t, scroll.SeekEndFile())
+				}, `
     github.com/adrianmo/
     github.com/ernestrc/
     github.com/ernestrc/
@@ -450,11 +451,199 @@ go 1.14 [4 lines] cloud.
     github.com/google/uu
     github.com/jacobsa/g
 ) [4 lines]             `,
-		},
-	}
-	comptest.TestComponent(t, scroll, w, tests)
-	assert.Equal(t, 4, calledOnHide)
-	assert.Equal(t, 2, calledOnVisible)
+			},
+		}
+		comptest.TestComponent(t, scroll, w, tests)
+		assert.Equal(t, 4, calledOnHide)
+		assert.Equal(t, 2, calledOnVisible)
+	})
+
+	t.Run("clear hidden via edit", func(t *testing.T) {
+		scroll := newScroll(4, false, 24, 9)
+		_, err := scroll.Buffer().ReadFrom(strings.NewReader(hiddenCopy))
+		require.NoError(t, err)
+
+		var calledOnHide, calledOnVisible int
+		scroll.Subscribe(subscriber{
+			expectOnHide: func(start, end int) {
+				calledOnHide++
+			},
+			expectOnVisible: func(start int) {
+				calledOnVisible++
+			},
+		})
+
+		w := term.NewStringWriter(24, 9)
+
+		tests := []comptest.TestCase{
+			{
+				nil, `
+module github.com/unstab
+                        
+go 1.14                 
+                        
+require (               
+    cloud.google.com/go 
+    cloud.google.com/go/
+    github.com/adrianmo/
+    github.com/ernestrc/`,
+			},
+			{
+				func() {
+					assert.True(t, scroll.MarkHidden(1, 2))
+				}, `
+module github.com/unstab
+ [2 lines] go 1.14      
+                        
+require (               
+    cloud.google.com/go 
+    cloud.google.com/go/
+    github.com/adrianmo/
+    github.com/ernestrc/
+    github.com/ernestrc/`,
+			},
+			{
+				func() {
+					// replace start line before, ends in the middle of hidden
+					scroll.Buffer().Edit(context.Background(),
+						term.Coordinates{Y: 0, X: 10},
+						term.Coordinates{Y: 1, X: 1},
+						"blabla\nhell",
+					)
+				}, `
+module gitblabla        
+hell                    
+go 1.14                 
+                        
+require (               
+    cloud.google.com/go 
+    cloud.google.com/go/
+    github.com/adrianmo/
+    github.com/ernestrc/`,
+			},
+			{
+				func() {
+					require.True(t, scroll.MarkHidden(1, 2))
+					// replace start line before, ends past it
+					scroll.Buffer().Edit(context.Background(),
+						term.Coordinates{Y: 0, X: 10},
+						term.Coordinates{Y: 4, X: 1},
+						"blabla\nhell",
+					)
+				}, `
+module gitblabla        
+hellequire (            
+    cloud.google.com/go 
+    cloud.google.com/go/
+    github.com/adrianmo/
+    github.com/ernestrc/
+    github.com/ernestrc/
+    github.com/ernestrc/
+    github.com/golang/mo`,
+			},
+			{
+				func() {
+					require.True(t, scroll.MarkHidden(1, 2))
+					// replace start line in the middle, ends past it
+					scroll.Buffer().Edit(context.Background(),
+						term.Coordinates{Y: 2, X: 0},
+						term.Coordinates{Y: 4, X: 1},
+						"blabla\nhell",
+					)
+				}, `
+module gitblabla        
+hellequire (            
+blabla                  
+hellgithub.com/adrianmo/
+    github.com/ernestrc/
+    github.com/ernestrc/
+    github.com/ernestrc/
+    github.com/golang/mo
+    github.com/golang/pr`,
+			},
+			{
+				func() {
+					require.True(t, scroll.MarkHidden(1, 2))
+					// replace start line before, ends past it
+					scroll.Buffer().Edit(context.Background(),
+						term.Coordinates{Y: 0, X: 0},
+						term.Coordinates{Y: 4, X: 1},
+						"blabla\nhell",
+					)
+				}, `
+blabla                  
+hellgithub.com/ernestrc/
+    github.com/ernestrc/
+    github.com/ernestrc/
+    github.com/golang/mo
+    github.com/golang/pr
+    github.com/google/uu
+    github.com/jacobsa/g
+)                       `,
+			},
+			{
+				func() {
+					require.True(t, scroll.MarkHidden(3, 5))
+					// insert before moves it
+					scroll.Buffer().Edit(context.Background(),
+						term.Coordinates{Y: 0, X: 0},
+						term.Coordinates{Y: 0, X: 0},
+						"X\n",
+					)
+				}, `
+X                       
+blabla                  
+hellgithub.com/ernestrc/
+    github.com/ernestrc/
+    github.com/ernestrc/
+    github.com/google/uu
+    github.com/jacobsa/g
+)                       
+                        `,
+			},
+			{
+				func() {
+					// delete before moves it
+					scroll.Buffer().Edit(context.Background(),
+						term.Coordinates{Y: 0, X: 0},
+						term.Coordinates{Y: 1, X: 0},
+						"",
+					)
+				}, `
+blabla                  
+hellgithub.com/ernestrc/
+    github.com/ernestrc/
+    github.com/ernestrc/
+    github.com/google/uu
+    github.com/jacobsa/g
+)                       
+                        
+replace this => that    `,
+			},
+			{
+				func() {
+					// insert in the middle clears it
+					scroll.Buffer().Edit(context.Background(),
+						term.Coordinates{Y: 3, X: 0},
+						term.Coordinates{Y: 3, X: 0},
+						"X\n",
+					)
+				}, `
+blabla                  
+hellgithub.com/ernestrc/
+    github.com/ernestrc/
+X                       
+    github.com/ernestrc/
+    github.com/golang/mo
+    github.com/golang/pr
+    github.com/google/uu
+    github.com/jacobsa/g`,
+			},
+		}
+		comptest.TestComponent(t, scroll, w, tests)
+		assert.Equal(t, 5, calledOnHide)
+		assert.Equal(t, 5, calledOnVisible)
+	})
 }
 
 func TestScrollDrawInverseOffset(t *testing.T) {
