@@ -105,7 +105,7 @@ type workspaceManagerHandler struct {
 	externalCommands        map[string]externalCommand
 	externalEvents          []externalEvents
 	initialVTECapacity      int
-	dispatchOnPreview       map[string]func() func()
+	dispatchOnPreview       map[string]PreviewFunc
 	// NOTE: if user changes frame config, then mouse calculations
 	// for resize might be off.
 	frame        bool
@@ -203,7 +203,7 @@ func (h *workspaceManagerHandler) init(
 	releaseManager release.Manager,
 	shaderRunner *shaderRunner,
 	initialVTECapacity int,
-	dispatchOnPreview map[string]func() func(),
+	dispatchOnPreview map[string]PreviewFunc,
 ) (err error) {
 	ctx := context.Background()
 
@@ -225,6 +225,9 @@ func (h *workspaceManagerHandler) init(
 	h.builtinExtensions = builtinExtensions
 	h.initialVTECapacity = initialVTECapacity
 	h.dispatchOnPreview = dispatchOnPreview
+	if h.dispatchOnPreview == nil {
+		h.dispatchOnPreview = make(map[string]PreviewFunc)
+	}
 
 	h.workspacesIcon = workspacesIcon
 	h.tabBarOffset = tabBarOffset
@@ -1336,7 +1339,8 @@ func (h *workspaceManagerHandler) exHandler(focus tui.Handler) *ex {
 
 func (h *workspaceManagerHandler) Interrupt(ctx context.Context) error {
 	payload, _ := term.PayloadFromContext(ctx)
-	if !h.publishEvent(term.Event{Type: term.EventInterrupt, Raw: payload}) {
+	ev := term.Event{Type: term.EventInterrupt, Raw: payload, Context: ctx}
+	if !h.publishEvent(ev) {
 		return errEventStreamNotReady
 	}
 	return nil
@@ -1349,6 +1353,7 @@ func (h *workspaceManagerHandler) setReleaseManager(releaseManager release.Manag
 	}
 	h.pkgmanager.init(h.notifications, releaseManager,
 		pkgStorage, h.homeWorkspace, h.sixDir, h, h, h.scheduleNextTick)
+	h.dispatchOnPreview[cmdPkgInstall] = h.pkgmanager.previewPkgInstall
 }
 
 func (h *workspaceManagerHandler) openURI(file workspaceapi.URI, focus bool) error {

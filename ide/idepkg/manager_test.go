@@ -183,6 +183,57 @@ func TestDescribePackage(t *testing.T) {
 	})
 }
 
+func TestDescribeRelease(t *testing.T) {
+	t.Parallel()
+	t.Run("no releases", func(t *testing.T) {
+		t.Parallel()
+		pkgs := idepkgtest.MakePackages()
+		versions := idepkgtest.MakeBundles()
+		m, _, _, _ := newTestManager(t, pkgs, versions)
+
+		_, err := m.DescribeRelease(context.Background(), "myPkg", "notFoundRelease")
+		assert.EqualError(t, err, "not found")
+	})
+	t.Run("returns error if package id is empty", func(t *testing.T) {
+		t.Parallel()
+		pkgs := idepkgtest.MakePackages(release.Package{Name: "go"})
+		versions := idepkgtest.MakeBundles([]release.Bundle{{Package: "", Version: "m"}})
+		m, _, _, _ := newTestManager(t, pkgs, versions)
+
+		_, err := m.DescribeRelease(context.Background(), "", "m")
+		require.Error(t, err)
+	})
+	t.Run("returns error if release id is empty", func(t *testing.T) {
+		t.Parallel()
+		pkgs := idepkgtest.MakePackages(release.Package{Name: "go"})
+		versions := idepkgtest.MakeBundles([]release.Bundle{{Package: "go", Version: ""}})
+		m, _, _, _ := newTestManager(t, pkgs, versions)
+
+		_, err := m.DescribeRelease(context.Background(), "go", "")
+		require.Error(t, err)
+	})
+	t.Run("returns release bundle", func(t *testing.T) {
+		t.Parallel()
+		pkgs := idepkgtest.MakePackages(release.Package{Name: "go"})
+		versions := idepkgtest.MakeBundles([]release.Bundle{{Package: "go", Version: "m"}})
+		m, _, _, _ := newTestManager(t, pkgs, versions)
+
+		pkg, err := m.DescribeRelease(context.Background(), "go", "m")
+		require.NoError(t, err)
+		assert.Equal(t, release.Bundle{Package: "go", Version: "m"}, pkg)
+	})
+	t.Run("bubbles up release manager error", func(t *testing.T) {
+		t.Parallel()
+		pkgs := idepkgtest.MakePackages(release.Package{Name: "go"})
+		versions := idepkgtest.MakeBundles([]release.Bundle{{Package: "go", Version: "m"}})
+		m, _, r, _ := newTestManager(t, pkgs, versions)
+
+		r.ExpectReturnErr(errors.New("boom"))
+		_, err := m.DescribeRelease(context.Background(), "go", "m")
+		assert.EqualError(t, err, "boom")
+	})
+}
+
 func TestListPackages(t *testing.T) {
 	t.Parallel()
 	t.Run("no packages", func(t *testing.T) {

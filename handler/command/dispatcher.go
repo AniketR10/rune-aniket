@@ -23,10 +23,19 @@
 
 package command
 
+import (
+	"unstable.build/go-tui/component"
+)
+
 // Dispatcher abstracts the ability to dispatch commands.
 type Dispatcher interface {
 	Dispatch(cmd string, args ...string) bool
-	Preview(cmd string, args ...string) (func(), bool)
+	// Preview allows implementations to provide a dynamic substitute
+	// for the command manual via the returned tui.Component, and
+	// if there are mutable effects, these can be reversed via the returned
+	// cancel function. The final boolean is to indicate that either
+	// tui.Component or the returned cancel function are non nil.
+	Preview(cmd string, args ...string) (component.Responsive, func(), bool)
 }
 
 // FuncDispatcher returns a Dispatcher that calls fn every time Dispatch is called.
@@ -39,23 +48,23 @@ func FuncDispatcher(fn func(string, ...string) bool) Dispatcher {
 // It ignores calls to Preview.
 func FuncDispatcherWithPreview(
 	fn func(string, ...string) bool,
-	preview func(string, ...string) (func(), bool),
+	preview func(string, ...string) (component.Responsive, func(), bool),
 ) Dispatcher {
 	return fnDispatcher{fn: fn, preview: preview}
 }
 
 type fnDispatcher struct {
 	fn      func(string, ...string) bool
-	preview func(string, ...string) (func(), bool)
+	preview func(string, ...string) (component.Responsive, func(), bool)
 }
 
 func (d fnDispatcher) Dispatch(cmd string, args ...string) bool {
 	return d.fn(cmd, args...)
 }
 
-func (d fnDispatcher) Preview(cmd string, args ...string) (func(), bool) {
+func (d fnDispatcher) Preview(cmd string, args ...string) (component.Responsive, func(), bool) {
 	if d.preview == nil {
-		return func() {}, false
+		return nil, nil, false
 	}
 	return d.preview(cmd, args...)
 }

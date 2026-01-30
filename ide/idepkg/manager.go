@@ -124,7 +124,25 @@ func (m *Manager) LibDir(ctx context.Context, pkgID string) (iterator.Iterator[s
 // DescribePackage fetches a Package manifest.
 func (m *Manager) DescribePackage(ctx context.Context, pkgID string) (release.Package, error) {
 	pkgID = escapeString(pkgID)
+	if pkgID == "" {
+		return release.Package{}, errors.New("package id must not be empty")
+	}
 	return m.m.GetPackage(ctx, pkgID)
+}
+
+// DescribeRelease fetches a release bundle manifest.
+func (m *Manager) DescribeRelease(ctx context.Context, pkgID string, version string) (
+	release.Bundle, error,
+) {
+	pkgID = escapeString(pkgID)
+	if pkgID == "" {
+		return release.Bundle{}, errors.New("package id must not be empty")
+	}
+	if version == "" {
+		return release.Bundle{}, errors.New("release version must not be empty")
+	}
+	return m.m.Get(ctx, pkgID, release.Version(version),
+		release.NopProgressWriter(io.Discard))
 }
 
 // ListPackages lists all packages.

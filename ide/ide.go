@@ -297,7 +297,7 @@ func (i *IDE) init(
 	notificationsCfg := i.ideConfig.notificationsConfig()
 	interrupter := term.FuncInterrupter(func(ctx context.Context) error {
 		payload, _ := term.PayloadFromContext(ctx)
-		if !i.publishEvent(term.Event{Type: term.EventInterrupt, Raw: payload}) {
+		if !i.publishEvent(term.Event{Type: term.EventInterrupt, Raw: payload, Context: ctx}) {
 			return errEventStreamNotReady
 		}
 		return nil

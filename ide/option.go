@@ -74,12 +74,12 @@ func WithLocker(locker sync.Locker) Option {
 
 // WithDispatchOnPreview determines a list of commands
 // that should be dispatched as user is scrolling down the list of completions.
-func WithDispatchOnPreview(cmd string, cancelPreview func() func()) Option {
+func WithDispatchOnPreview(cmd string, fn PreviewFunc) Option {
 	return func(opts *options) {
 		if opts.dispatchOnPreview == nil {
-			opts.dispatchOnPreview = make(map[string]func() func())
+			opts.dispatchOnPreview = make(map[string]PreviewFunc)
 		}
-		opts.dispatchOnPreview[cmd] = cancelPreview
+		opts.dispatchOnPreview[cmd] = fn
 	}
 }
 
@@ -270,7 +270,7 @@ type options struct {
 	workspacesIcon      rune
 	workspacesBarOffset int
 	locker              sync.Locker
-	dispatchOnPreview   map[string]func() func()
+	dispatchOnPreview   map[string]PreviewFunc
 	extensions          map[string]Extension
 	workspaceConfig     string
 	defaultWallpaper    browser.Wallpaper

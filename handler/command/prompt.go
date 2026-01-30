@@ -24,6 +24,7 @@
 package command
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -95,6 +96,8 @@ type Prompt struct {
 	shownWidth            int
 	manualComponent       component.Responsive
 	showManual            bool
+	previewComponent      component.Responsive
+	previewMatch          []byte
 	resetManualTimeout    chan struct{}
 	preview               func()
 	ctx                   context.Context
@@ -187,9 +190,9 @@ func (h *Prompt) doInit(
 }
 
 func (h *Prompt) getCommandOverlayHeight(width int) int {
-	leftWidgetWidth := h.width - animationWidth
+	leftWidgetWidth := width - animationWidth
 	if leftWidgetWidth <= 0 {
-		leftWidgetWidth = h.width
+		leftWidgetWidth = width
 	}
 	height := h.responsive.Height(leftWidgetWidth)
 	// set to min 1, as it's being used as input field
@@ -214,7 +217,11 @@ func (h *Prompt) calculateSplitHeights(width, height int) (int, int, int) {
 	separatorHeight := h.getSeparatorHeight()
 	manHeight := h.manualComponent.Height(width)
 	listHeight := height - manHeight - separatorHeight
-	if manHeight < 0 || listHeight < minListHeight {
+	if listHeight < minListHeight {
+		listHeight = minListHeight
+		manHeight = height - listHeight - separatorHeight
+	}
+	if manHeight < 0 {
 		return 0, 0, height
 	}
 	return manHeight, separatorHeight, listHeight
@@ -305,9 +312,7 @@ func (h *Prompt) handleLastCommand() {
 		h.handle(term.Event{Type: term.EventKey, Ch: ch}, true)
 	}
 	h.bracketedPaste = false
-	h.mu.Lock()
-	h.manualComponent = h.buildManualComponent(h.buf.String())
-	h.mu.Unlock()
+	h.setManualComponent(h.newManualComponent(h.buf.String()))
 	h.log(log.TraceLevel, "done pushing history events")
 }
 
@@ -323,6 +328,10 @@ func (h *Prompt) trimmedCommandAndArgs(cmd string, args ...string) []string {
 }
 
 func (h *Prompt) dispatchPreviewArgument() {
+	// clear previous preview components
+	h.previewComponent = nil
+	h.previewMatch = nil
+
 	match, ok := h.list.Focus()
 	if !ok {
 		return
@@ -340,19 +349,28 @@ func (h *Prompt) dispatchPreviewArgument() {
 	if len(cmdAndArgs) == 1 {
 		return
 	}
-	cancel, ok := h.dispatcher.Preview(cmdAndArgs[0], cmdAndArgs[1:]...)
+	h.log(log.DebugLevel, "previewing command %#v", cmdAndArgs)
+	comp, cancel, ok := h.dispatcher.Preview(cmdAndArgs[0], cmdAndArgs[1:]...)
 	if !ok {
 		return
 	}
-	h.log(log.DebugLevel, "previewing command %#v", cmdAndArgs)
-	if h.preview != nil {
-		prev := h.preview
-		h.preview = func() {
-			cancel()
-			prev()
+	if cancel != nil {
+		if h.preview != nil {
+			prev := h.preview
+			h.preview = func() {
+				cancel()
+				prev()
+			}
+		} else {
+			h.preview = cancel
 		}
-	} else {
-		h.preview = cancel
+	}
+	if comp != nil {
+		h.previewComponent = comp
+		h.previewMatch = match.Data()
+		if h.manualComponent != nil {
+			h.setManualComponent(h.previewComponent)
+		}
 	}
 }
 
@@ -421,9 +439,13 @@ func (h *Prompt) Handle(ev term.Event) (quit, handled bool) {
 	if handled {
 		bufString := h.buf.String()
 		h.inputString.Store(bufString)
-		h.mu.Lock()
-		h.manualComponent = h.buildManualComponent(bufString)
-		h.mu.Unlock()
+		f, ok := h.list.Focus()
+		// if we moved focus after showing preview, reset
+		if h.previewComponent != nil && h.previewComponent == h.manualComponent &&
+			(!ok || !bytes.Equal(f.Data(), h.previewMatch)) {
+			h.dispatchPreviewArgument()
+		}
+		h.setManualComponent(h.newManualComponent(bufString))
 	}
 	return
 }
@@ -479,6 +501,7 @@ func (h *Prompt) handleCommon(ev *term.Event, sync bool) (quit, handled bool) {
 			if !handled {
 				handled = h.setUserScrolling(false)
 				h.cancelPreview()
+				h.resetManualComponent()
 			} else {
 				h.dispatchPreviewArgument()
 			}
@@ -505,6 +528,7 @@ func (h *Prompt) handleCommon(ev *term.Event, sync bool) (quit, handled bool) {
 			if !ok {
 				handled = h.setUserScrolling(false)
 				h.cancelPreview()
+				h.resetManualComponent()
 			} else {
 				h.dispatchPreviewArgument()
 			}
@@ -688,6 +712,7 @@ func (h *Prompt) log(level log.Level, msg string, args ...interface{}) {
 }
 
 func (h *Prompt) incArgsCompleteMode(complete bool, sync bool) {
+	defer h.resetManualComponent()
 	if !complete || !h.completeTopList() {
 		h.commandAndArgs = append(h.commandAndArgs, h.list.Buffer().String())
 	}
@@ -707,6 +732,7 @@ func (h *Prompt) incArgsCompleteMode(complete bool, sync bool) {
 }
 
 func (h *Prompt) decArgsCompleteMode(sync bool) bool {
+	defer h.resetManualComponent()
 	if h.mode == 1 {
 		return false
 	}
@@ -1133,8 +1159,7 @@ func (h *Prompt) setUserScrolling(scrolling bool) bool {
 
 func (h *Prompt) startManualTimer() {
 	if h.config.ShowManualAfter == 0 {
-		h.manualComponent = h.buildManualComponent(h.buf.String())
-		h.showManual = true
+		h.showManualComponent()
 		return
 	}
 
@@ -1155,10 +1180,7 @@ func (h *Prompt) startManualTimer() {
 				h.log(log.TraceLevel, "reseting timeout for showing manual")
 			case <-timer.C:
 				h.log(log.DebugLevel, "showing manual for commands")
-				h.mu.Lock()
-				h.manualComponent = h.buildManualComponent(h.inputString.Load().(string))
-				h.showManual = true
-				h.mu.Unlock()
+				h.showManualComponent()
 				_ = h.interrupter.Interrupt(ctx)
 				return
 			case <-h.ctx.Done():
@@ -1166,6 +1188,17 @@ func (h *Prompt) startManualTimer() {
 			}
 		}
 	})
+}
+
+func (h *Prompt) newManualComponent(bufString string) component.Responsive {
+	focus, ok := h.list.Focus()
+	if ok && bytes.Equal(focus.Data(), h.previewMatch) && h.previewComponent != nil {
+		return h.previewComponent
+	}
+	if h.previewComponent != nil {
+		return h.previewComponent
+	}
+	return h.buildManualComponent(bufString)
 }
 
 func (h *Prompt) buildManualComponent(bufString string) component.Responsive {
@@ -1178,7 +1211,7 @@ func (h *Prompt) buildManualComponent(bufString string) component.Responsive {
 		// find the manual of the top match of the search list.
 		h.log(log.TraceLevel, "Length in words of input buffer is 0-1, "+
 			"using top of the search list as desired command.")
-		man, ok = h.getManualFromFocus()
+		man, ok = h.manualForCommandInFocus()
 	} else if len(cmdAndArgs) == 1 || (len(cmdAndArgs) == 2 && h.mode < 2) {
 		// if input is something like "edit " or "edit m" or "edit myFile " then
 		// find the manual of the first word in the input buffer
@@ -1216,7 +1249,7 @@ func (h *Prompt) buildManualComponent(bufString string) component.Responsive {
 	return nil
 }
 
-func (h *Prompt) getManualFromFocus() (man Manual, ok bool) {
+func (h *Prompt) manualForCommandInFocus() (man Manual, ok bool) {
 	// it's ok to wait here, since the list of
 	// commands is short and pre-determined
 	h.list.Wait()
@@ -1258,6 +1291,29 @@ func (h *Prompt) cancelPreview() {
 	h.preview = nil
 }
 
+func (h *Prompt) showManualComponent() {
+	h.dispatchPreviewArgument()
+	man := h.newManualComponent(h.inputString.Load().(string))
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.manualComponent = man
+	h.showManual = true
+}
+
+func (h *Prompt) setManualComponent(man component.Responsive) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.manualComponent = man
+}
+
+func (h *Prompt) resetManualComponent() {
+	h.previewComponent = nil
+	h.previewMatch = nil
+	if h.manualComponent != nil {
+		h.setManualComponent(h.newManualComponent(h.inputString.Load().(string)))
+	}
+}
+
 func newNopAnimation(cfg Config) tui.Component {
 	return component.WithBackground(component.Nop(),
 		term.Cell{Attributes: cfg.ElementAttr})
@@ -1275,7 +1331,7 @@ func getManualForCommand(cmd string, commandsBackup []Manual) (Manual, bool) {
 // keep Prompt state as arguments, so we can
 // better manage concurrent access to them
 func manualCompleter(
-	ctx context.Context, commandsBackup []Manual,
+	_ context.Context, commandsBackup []Manual,
 	mode commandPromptMode, cmd string, args ...string,
 ) iterator.Iterator[string] {
 	man, ok := getManualForCommand(cmd, commandsBackup)

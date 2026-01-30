@@ -40,6 +40,7 @@ type ReleaseManager struct {
 	err                  error
 	progressUnits        string
 	missProgressComplete bool
+	hook                 func()
 }
 
 // NewReleaseManager returns a new instance of ReleaseManager.
@@ -62,10 +63,19 @@ func (t *ReleaseManager) ExpectReturnErr(err error) {
 	t.err = err
 }
 
+// SetHook sets a hook to be called before any of the methods return
+func (t *ReleaseManager) SetHook(hook func()) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.hook = hook
+}
+
 // GetPackage satisfies release.Manager.
 func (t *ReleaseManager) GetPackage(
 	ctx context.Context, pkgID string,
 ) (release.Package, error) {
+	defer t.callHook()
+
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if t.err != nil {
@@ -115,6 +125,7 @@ func (t *ReleaseManager) Get(
 	ctx context.Context, pkgID string,
 	version release.Version, writer release.ProgressWriter,
 ) (release.Bundle, error) {
+	defer t.callHook()
 	t.mu.Lock()
 	if t.err != nil {
 		t.mu.Unlock()
@@ -212,4 +223,13 @@ func (t *ReleaseManager) SetMissProgressComplete(doIt bool) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.missProgressComplete = doIt
+}
+
+func (t *ReleaseManager) callHook() {
+	t.mu.Lock()
+	hook := t.hook
+	t.mu.Unlock()
+	if hook != nil {
+		hook()
+	}
 }

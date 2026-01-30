@@ -66,7 +66,7 @@ func TestPackageManagerIntegration(t *testing.T) {
 	)
 	rm := idepkgtest.NewReleaseManager(pkgs, bundles)
 	rm.SetMissProgressComplete(true)
-	m := newTestWorkspaceManagerHandlerForPkgManager(t, rm)
+	m := newTestWorkspaceManagerHandlerForPkgManager(t, rm, true)
 
 	cases := []handlertest.SequenceTestCase{
 		{":pkginstall ",
@@ -80,8 +80,8 @@ func TestPackageManagerIntegration(t *testing.T) {
 │pkginstall ▐                          │
 │go                                    │
 │six                                   │
-└──────────────────────────────────────┘
-│                                      │
+│──────────────────────────────────────│
+│USAGE                                 │
 ├──────────────────────────────────────┤
 │1                                     │
 └──────────────────────────────────────┘`},
@@ -96,8 +96,8 @@ func TestPackageManagerIntegration(t *testing.T) {
 │pkginstall six ▐                      │
 │1                                     │
 │2                                     │
-└──────────────────────────────────────┘
-│                                      │
+│──────────────────────────────────────│
+│USAGE                                 │
 ├──────────────────────────────────────┤
 │1                                     │
 └──────────────────────────────────────┘`},
@@ -128,8 +128,8 @@ func TestPackageManagerIntegration(t *testing.T) {
 │pkgcurrent ▐                          │
 │six                                   │
 │                                      │
-└──────────────────────────────────────┘
-│                                      │
+│──────────────────────────────────────│
+│USAGE                                 │
 ├──────────────────────────────────────┤
 │1                                     │
 └──────────────────────────────────────┘`},
@@ -381,6 +381,319 @@ func TestPackageManagerIntegration(t *testing.T) {
 	require.NoError(t, m.Close())
 }
 
+func TestPackageManagerPreviewIntegration(t *testing.T) {
+	createdAt := time.Unix(6666666666, 0)
+	t.Parallel()
+	pkgs := idepkgtest.MakePackages(
+		release.Package{Name: "go", CreatedAt: createdAt},
+		release.Package{
+			Name:      "six",
+			Latest:    "2",
+			Notes:     "blabla",
+			Metadata:  map[string]string{},
+			CreatedAt: createdAt,
+		},
+	)
+	bundles := idepkgtest.MakeBundles(
+		[]release.Bundle{
+			{Package: "go", Version: "2"},
+		},
+		[]release.Bundle{
+			{
+				Package: "six",
+				Version: "2",
+				Notes:   "yikes",
+				Metadata: map[string]string{
+					"git-author-email": "clawdbot@clawd.bot",
+					"git-log":          "Just messed up with the code a bit, you know\nthen something else\ndone",
+				},
+				CreatedAt: createdAt,
+			},
+		},
+	)
+	// used to ensure that animation is deterministically rendered:
+	// Interrupt is blocked until wg.Wait returns, so after we have verified
+	// Drawing animation.
+	var pkgsema, interruptsema sync.Mutex
+	rm := idepkgtest.NewReleaseManager(pkgs, bundles)
+	rm.SetMissProgressComplete(true)
+
+	rm.SetHook(func() {
+		pkgsema.Lock()
+		defer pkgsema.Unlock()
+	})
+
+	i := term.FuncInterrupter(func(ctx context.Context) error {
+		if component.IsAsyncContext(ctx) {
+			interruptsema.Unlock()
+		}
+		return nil
+	})
+
+	m := newTestWorkspaceManagerHandlerForPkgManagerWithInterrupter(t, rm, true, i)
+	h := newSafeHandler(m)
+
+	cases := []handlertest.SequenceTestCase{
+		{"<c-\\\\>pkginstall<space>",
+			`┌──────────────────────────────────────┐
+│                                      │
+├──────────────────────────────────────┤
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+┌──────────────────────────────────────┐
+│pkginstall ▐                          │
+│go                                    │
+│six                                   │
+│──────────────────────────────────────│
+│USAGE                                 │
+│pkginstall <package> [version]        │
+│                                      │
+│DESCRIPTION                           │
+│Installs a package from the           │
+│official distribution. If version     │
+│is omitted, the package is upgraded   │
+│to the latest version. If package     │
+│contains executables, then this       │
+└──────────────────────────────────────┘
+│                                      │
+│                                      │
+│                                      │
+├──────────────────────────────────────┤
+│1                                     │
+└──────────────────────────────────────┘`},
+		{"<down>",
+			`┌──────────────────────────────────────┐
+│                                      │
+├──────────────────────────────────────┤
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+┌──────────────────────────────────────┐
+│pkginstall ▐                          │
+│go                                    │
+│six                                   │
+│──────────────────────────────────────│
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│                  ⠃                   │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+├──────────────────────────────────────┤
+│1                                     │
+└──────────────────────────────────────┘`},
+	}
+
+	pkgsema.Lock()
+	handlertest.RunHandlerSequence(t, h, 40, 30, cases)
+
+	cases = []handlertest.SequenceTestCase{
+		{"",
+			`┌──────────────────────────────────────┐
+│                                      │
+├──────────────────────────────────────┤
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+┌──────────────────────────────────────┐
+│pkginstall ▐                          │
+│go                                    │
+│six                                   │
+│──────────────────────────────────────│
+│go                                    │
+│                                      │
+│NOTES                                 │
+│                                      │
+│                                      │
+│VERSION                               │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│CREATED AT                            │
+│Apr 4, 2181 1:51 PM                   │
+├──────────────────────────────────────┤
+│1                                     │
+└──────────────────────────────────────┘`},
+	}
+
+	interruptsema.Lock()
+	pkgsema.Unlock()
+	interruptsema.Lock()
+	handlertest.RunHandlerSequence(t, h, 40, 30, cases)
+	interruptsema.Unlock()
+
+	cases = []handlertest.SequenceTestCase{
+		{"<down>",
+			`┌──────────────────────────────────────┐
+│                                      │
+├──────────────────────────────────────┤
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+┌──────────────────────────────────────┐
+│pkginstall ▐                          │
+│go                                    │
+│six                                   │
+│──────────────────────────────────────│
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│                  ⠃                   │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+├──────────────────────────────────────┤
+│1                                     │
+└──────────────────────────────────────┘`},
+	}
+	pkgsema.Lock()
+	handlertest.RunHandlerSequence(t, h, 40, 30, cases)
+
+	cases = []handlertest.SequenceTestCase{
+		{"",
+			`┌──────────────────────────────────────┐
+│                                      │
+├──────────────────────────────────────┤
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+┌──────────────────────────────────────┐
+│pkginstall ▐                          │
+│go                                    │
+│six                                   │
+│──────────────────────────────────────│
+│six                                   │
+│                                      │
+│NOTES                                 │
+│blabla                                │
+│                                      │
+│VERSION                               │
+│2                                     │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│CREATED AT                            │
+│Apr 4, 2181 1:51 PM                   │
+├──────────────────────────────────────┤
+│1                                     │
+└──────────────────────────────────────┘`},
+	}
+	interruptsema.Lock()
+	pkgsema.Unlock()
+	interruptsema.Lock()
+	handlertest.RunHandlerSequence(t, h, 40, 30, cases)
+	interruptsema.Unlock()
+
+	cases = []handlertest.SequenceTestCase{
+		{"<tab><down>",
+			`┌──────────────────────────────────────┐
+│                                      │
+├──────────────────────────────────────┤
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+┌──────────────────────────────────────┐
+│pkginstall six ▐                      │
+│2                                     │
+│                                      │
+│──────────────────────────────────────│
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│                  ⠃                   │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+├──────────────────────────────────────┤
+│1                                     │
+└──────────────────────────────────────┘`},
+	}
+	pkgsema.Lock()
+	handlertest.RunHandlerSequence(t, h, 40, 30, cases)
+
+	cases = []handlertest.SequenceTestCase{
+		{"",
+			`┌──────────────────────────────────────┐
+│                                      │
+├──────────────────────────────────────┤
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+┌──────────────────────────────────────┐
+│pkginstall six ▐                      │
+│2                                     │
+│                                      │
+│──────────────────────────────────────│
+│six @ 2                               │
+│                                      │
+│CHANGE LOG                            │
+│Just messed up with the code a bit,   │
+│you know                              │
+│then something else                   │
+│done                                  │
+│                                      │
+│AUTHOR                                │
+│clawdbot@clawd.bot                    │
+│                                      │
+│CREATED AT                            │
+│Apr 4, 2181 1:51 PM                   │
+├──────────────────────────────────────┤
+│1                                     │
+└──────────────────────────────────────┘`},
+	}
+	interruptsema.Lock()
+	pkgsema.Unlock()
+	interruptsema.Lock()
+	handlertest.RunHandlerSequence(t, h, 40, 30, cases)
+	interruptsema.Unlock()
+
+	require.NoError(t, m.Close())
+}
+
 func TestPackageManagerLibDir(t *testing.T) {
 	t.Parallel()
 	pkgs := idepkgtest.MakePackages(
@@ -400,7 +713,7 @@ func TestPackageManagerLibDir(t *testing.T) {
 	)
 	t.Run("prompt, no install", func(t *testing.T) {
 		rm := idepkgtest.NewReleaseManager(pkgs, bundles)
-		m := newTestWorkspaceManagerHandlerForPkgManager(t, rm)
+		m := newTestWorkspaceManagerHandlerForPkgManager(t, rm, false)
 
 		it, err := m.pkgmanager.LibDir(context.Background(), "go")
 		require.NoError(t, err)
@@ -449,7 +762,7 @@ func TestPackageManagerLibDir(t *testing.T) {
 	})
 	t.Run("prompt, user key ESC", func(t *testing.T) {
 		rm := idepkgtest.NewReleaseManager(pkgs, bundles)
-		m := newTestWorkspaceManagerHandlerForPkgManager(t, rm)
+		m := newTestWorkspaceManagerHandlerForPkgManager(t, rm, false)
 
 		it, err := m.pkgmanager.LibDir(context.Background(), "go")
 		require.NoError(t, err)
@@ -483,7 +796,7 @@ func TestPackageManagerLibDir(t *testing.T) {
 
 	t.Run("prompt, yes install", func(t *testing.T) {
 		rm := idepkgtest.NewReleaseManager(pkgs, bundles)
-		m := newTestWorkspaceManagerHandlerForPkgManager(t, rm)
+		m := newTestWorkspaceManagerHandlerForPkgManager(t, rm, false)
 
 		it, err := m.pkgmanager.LibDir(context.Background(), "go")
 		require.NoError(t, err)
@@ -517,7 +830,7 @@ func TestPackageManagerLibDir(t *testing.T) {
 
 	t.Run("prompt, yes, always install", func(t *testing.T) {
 		rm := idepkgtest.NewReleaseManager(pkgs, bundles)
-		m := newTestWorkspaceManagerHandlerForPkgManager(t, rm)
+		m := newTestWorkspaceManagerHandlerForPkgManager(t, rm, false)
 
 		it, err := m.pkgmanager.LibDir(context.Background(), "go")
 		require.NoError(t, err)
@@ -559,7 +872,7 @@ func TestPackageManagerLibDir(t *testing.T) {
 
 	t.Run("prompt, no never install", func(t *testing.T) {
 		rm := idepkgtest.NewReleaseManager(pkgs, bundles)
-		m := newTestWorkspaceManagerHandlerForPkgManager(t, rm)
+		m := newTestWorkspaceManagerHandlerForPkgManager(t, rm, false)
 
 		it, err := m.pkgmanager.LibDir(context.Background(), "go")
 		require.NoError(t, err)
@@ -596,7 +909,7 @@ func TestPackageManagerLibDir(t *testing.T) {
 
 	t.Run("prompt, yes install, simultaneous calls to LibDir", func(t *testing.T) {
 		rm := idepkgtest.NewReleaseManager(pkgs, bundles)
-		m := newTestWorkspaceManagerHandlerForPkgManager(t, rm)
+		m := newTestWorkspaceManagerHandlerForPkgManager(t, rm, false)
 
 		it1, err := m.pkgmanager.LibDir(context.Background(), "go")
 		require.NoError(t, err)
@@ -640,7 +953,7 @@ func TestPackageManagerLibDir(t *testing.T) {
 func TestSetReleaseManager(t *testing.T) {
 	t.Parallel()
 	rm := idepkgtest.NewReleaseManager(idepkgtest.MakePackages(), idepkgtest.MakeBundles())
-	m := newTestWorkspaceManagerHandlerForPkgManager(t, rm)
+	m := newTestWorkspaceManagerHandlerForPkgManager(t, rm, false)
 
 	cases := []handlertest.SequenceTestCase{
 		{":pkginstall ",
@@ -699,7 +1012,15 @@ func TestSetReleaseManager(t *testing.T) {
 }
 
 func newTestWorkspaceManagerHandlerForPkgManager(
-	t *testing.T, releaseManager release.Manager,
+	t *testing.T, releaseManager release.Manager, showManual bool,
+) *testWorkspaceManagerHandler {
+	return newTestWorkspaceManagerHandlerForPkgManagerWithInterrupter(t, releaseManager,
+		showManual, term.NopInterrupter())
+}
+
+func newTestWorkspaceManagerHandlerForPkgManagerWithInterrupter(
+	t *testing.T, releaseManager release.Manager, showManual bool,
+	interrupter term.Interrupter,
 ) *testWorkspaceManagerHandler {
 	dir, err := os.MkdirTemp("", "")
 	require.NoError(t, err)
@@ -711,7 +1032,7 @@ func newTestWorkspaceManagerHandlerForPkgManager(
 	manager.RegisterScheme(workspace.FileScheme, workspace.NewFileScheme)
 	ret := newTestWorkspaceManagerHandlerWithReleaseManager(t, manager,
 		cfg, FuncExtensionsRunner(testRunnerFn), nil, nil, dir, nil,
-		nopShutdownShaderConfig(), releaseManager)
+		nopShutdownShaderConfig(), releaseManager, showManual, interrupter)
 	// only home workspace has a sync command prompt
 	ret.empty.syncCommandPrompt = true
 	// this allows blocking until packages are installed, for testing
@@ -734,6 +1055,8 @@ func newTestWorkspaceManagerHandlerWithReleaseManager(
 	onTabsClick func(int) bool,
 	shutdownShaderCfg shutdownShaderConfig,
 	releaseManager release.Manager,
+	showManual bool,
+	interrupter term.Interrupter,
 ) *testWorkspaceManagerHandler {
 	homeURI, err := workspaceapi.ParseURI("file:///tmp")
 	require.NoError(t, err)
@@ -741,15 +1064,22 @@ func newTestWorkspaceManagerHandlerWithReleaseManager(
 	m := new(testWorkspaceManagerHandler)
 	n := notifications.New(m, notificationsConfig())
 	m.workspaceManagerHandler = new(workspaceManagerHandler)
-	// ensure that command manual is never shown
-	cfg.cfg["command"] = defaultCfg().cfg["command"]
+	// ensure that command manual is always shown
+	updatedCfg := defaultCfg().cfg["command"].(map[string]any)
+	if showManual {
+		updatedCfg["show_manual_after"] = "0ms"
+	}
+	cfg.cfg["command"] = updatedCfg
 
 	shRunner := new(shaderRunner)
-	shRunner.init(handler.Nop(component.Nop()), term.NopInterrupter(), term.Attributes{},
+	shRunner.init(handler.Nop(component.Nop()), interrupter, term.Attributes{},
 		shutdownShaderCfg, component.FrameCharSetDefault())
 
 	err = m.workspaceManagerHandler.init(nil, homeURI, manager, n, cfg,
-		dir, func(term.Event) bool {
+		dir, func(ev term.Event) bool {
+			if ev.Type == term.EventInterrupt {
+				interrupter.Interrupt(ev.Context)
+			}
 			return true
 		}, runner, new(sync.Mutex), extensions,
 		func() (ideConfig, error) { return cfg, nil },

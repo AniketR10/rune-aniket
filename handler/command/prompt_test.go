@@ -33,7 +33,6 @@ import (
 	"testing"
 	"time"
 
-	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/blue/document"
@@ -83,37 +82,37 @@ a▐
 ▐                   
 subaru              
 jeep                
-mercedes            
-gladiator           
-current             
+────────────────────
+USAGE               
+subaru outback      
+touring xt          
                     
-                    
-                    
-                    `},
+DESCRIPTION         
+2021 top of the     `},
 		{"initializes with some commands search match", "e", goodTestCommands,
 			`
 e▐                  
 jeep                
 mercedes            
-current             
+────────────────────
+USAGE               
+jeep gladiator      
+sport s             
                     
-                    
-                    
-                    
-                    
-                    `},
+DESCRIPTION         
+2022 bottom of      `},
 		{"initializes with lots of commands", "", goodLotsTestCommands,
 			`
 ▐                   
 0                   
 1                   
-2                   
-3                   
-4                   
-5                   
-6                   
-7                   
-8                   `},
+────────────────────
+USAGE               
+0 <nothing>         
+                    
+DESCRIPTION         
+The void.           
+                    `},
 		{"draw command NOT in list with no args",
 			"1", nil, `
 1▐                  
@@ -131,18 +130,16 @@ current
 mercedes my▐        
                     
                     
+────────────────────
+USAGE               
+mercedes GL 450     
                     
-                    
-                    
-                    
-                    
-                    
-                    `},
+DESCRIPTION         
+2014 old luxury     
+car.                `},
 	}
 
-	log.SetLevel(log.InfoLevel)
 	for _, tcase := range tsuite {
-		tcase := tcase
 		t.Run(tcase.desc, func(t *testing.T) {
 			t.Parallel()
 			dispatchFn, cleanup := nopDispatch()
@@ -179,11 +176,11 @@ func TestCommandHandlerPreview(t *testing.T) {
 
 		var dispatches []string
 		var state string
-		previewFn := func(cmd string, args ...string) (func(), bool) {
+		previewFn := func(cmd string, args ...string) (component.Responsive, func(), bool) {
 			prevState := state
 			state = args[0]
 			dispatches = append(dispatches, strings.Join(append([]string{cmd}, args...), " "))
-			return func() {
+			return nil, func() {
 				state = prevState
 			}, true
 		}
@@ -282,13 +279,13 @@ arg2
 		}
 
 		var dispatches []string
-		previewFn := func(cmd string, args ...string) (func(), bool) {
+		previewFn := func(cmd string, args ...string) (component.Responsive, func(), bool) {
 			prevState := state
 			state = args[0]
 			dispatches = append(dispatches, strings.Join(append([]string{cmd}, args...), " "))
-			return func() {
+			return nil, func() {
 				state = prevState
-			}, false
+			}, true
 		}
 
 		completeFn, cleanupComplete := completeWith("arg1", "arg2")()
@@ -337,24 +334,25 @@ kotomichi
 		assert.Equal(t, []string{"kotomichi arg1", "kotomichi arg2", "kotomichi arg1"}, dispatches)
 	})
 
-	t.Run("dispatch at the end", func(t *testing.T) {
+	t.Run("preview returns manual", func(t *testing.T) {
 		storage := document.NewInMemoryService()
 		cfg := DefaultConfig()
-		cfg.ShowManualAfter = 1 * time.Hour
+		cfg.ShowManualAfter = 0
 		cfg.HistoryKey = term.KeyComb{Ch: '@'}
 		cfg.Sync = true
 
-		var called bool
 		dispatchFn := func(cmd string, args ...string) bool {
-			called = true
 			return true
 		}
 
-		previewFn := func(cmd string, args ...string) (func(), bool) {
-			return func() {}, false
+		previewFn := func(cmd string, args ...string) (component.Responsive, func(), bool) {
+			str := fmt.Sprintf("YAY %v", args)
+			comp := component.NewResponsiveString(str,
+				component.StringResponsiveConfig{})
+			return comp, nil, true
 		}
 
-		completeFn, cleanupComplete := completeWith()()
+		completeFn, cleanupComplete := completeWith("arg1", "arg2")()
 		defer cleanupComplete(t)
 
 		cmd := Manual{Name: "kotomichi"}
@@ -366,20 +364,88 @@ kotomichi
 		defer b.Close()
 
 		cases := []handlertest.SequenceTestCase{
-			{InputSequence: "⬇⬇", Expected: `▐                   
+			{InputSequence: "<tab><down>", Expected: `kotomichi ▐         
+arg1                
+arg2                
+                    
+                    
+                    
+                    
+                    
+                    
+YAY [arg1]          `},
+		}
+		handlertest.RunHandlerSequence(t, testCommandHandler{b}, 20, 10, cases)
+
+		cases = []handlertest.SequenceTestCase{
+			{InputSequence: "<up>", Expected: `kotomichi ▐         
+arg1                
+arg2                
+                    
+USAGE               
 kotomichi           
                     
-                    
-                    
-                    
-                    
-                    
+DESCRIPTION         
                     
                     `},
 		}
-		handlertest.TestHandlerSequence(t, testCommandHandler{b}, 20, 10, cases)
-		b.Wait()
-		assert.False(t, called)
+		handlertest.RunHandlerSequence(t, testCommandHandler{b}, 20, 10, cases)
+
+		cases = []handlertest.SequenceTestCase{
+			{InputSequence: "<down><down>", Expected: `kotomichi ▐         
+arg1                
+arg2                
+                    
+                    
+                    
+                    
+                    
+                    
+YAY [arg2]          `},
+		}
+		handlertest.RunHandlerSequence(t, testCommandHandler{b}, 20, 10, cases)
+
+		cases = []handlertest.SequenceTestCase{
+			{InputSequence: "<backspace>", Expected: `kotomichi▐          
+kotomichi           
+                    
+                    
+USAGE               
+kotomichi           
+                    
+DESCRIPTION         
+                    
+                    `},
+		}
+		handlertest.RunHandlerSequence(t, testCommandHandler{b}, 20, 10, cases)
+
+		cases = []handlertest.SequenceTestCase{
+			{InputSequence: "<space>a<down>2", Expected: `kotomichi a2▐       
+arg2                
+                    
+                    
+USAGE               
+kotomichi           
+                    
+DESCRIPTION         
+                    
+                    `},
+		}
+		handlertest.RunHandlerSequence(t, testCommandHandler{b}, 20, 10, cases)
+
+		cases = []handlertest.SequenceTestCase{
+			{InputSequence: "<down>", Expected: `kotomichi a2▐       
+arg2                
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+YAY [arg2]          `},
+		}
+		handlertest.RunHandlerSequence(t, testCommandHandler{b}, 20, 10, cases)
 	})
 }
 
@@ -475,7 +541,6 @@ func TestCommandHandlerDispatch(t *testing.T) {
 	}
 
 	for _, tcase := range tsuite {
-		log.SetLevel(log.InfoLevel)
 		tcase := tcase
 		t.Run(tcase.desc, func(t *testing.T) {
 			dispatchFn, cleanup := tcase.dispatchCmd()
@@ -1023,7 +1088,6 @@ myArg 5
                     `},
 	}
 
-	log.SetLevel(log.InfoLevel)
 	for _, tcase := range tsuite {
 		tcase := tcase
 		t.Run(tcase.desc, func(t *testing.T) {

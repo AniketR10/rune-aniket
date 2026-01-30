@@ -37,6 +37,7 @@ import (
 	"unstable.build/go-tui/api/browserapi"
 	"unstable.build/go-tui/api/schemeapi"
 	"unstable.build/go-tui/api/textapi"
+	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/handler"
@@ -96,8 +97,9 @@ type pkgManager struct {
 	pkg              *idepkg.Manager
 	n                browserapi.Notifications
 	wh               *workspaceManagerHandler
-	scheduleNextTick func(func()) bool
 	storage          document.Service
+	scheduleNextTick func(func()) bool
+	interrupter      term.Interrupter
 	pending          map[string]*sync.Mutex
 }
 
@@ -108,12 +110,13 @@ type installStorageValue struct {
 func (m *pkgManager) init(
 	n browserapi.Notifications, rm release.Manager,
 	storage document.Service, scheme schemeapi.Scheme, dataDir string,
-	interrupt term.Interrupter, wh *workspaceManagerHandler,
+	interrupter term.Interrupter, wh *workspaceManagerHandler,
 	scheduleNextTick func(func()) bool,
 ) {
-	m.pkg = idepkg.NewManager(n, rm, storage, scheme, dataDir, interrupt)
+	m.pkg = idepkg.NewManager(n, rm, storage, scheme, dataDir, interrupter)
 	m.scheduleNextTick = scheduleNextTick
 	m.n = n
+	m.interrupter = interrupter
 	m.wh = wh
 	m.storage = storage
 	m.pending = make(map[string]*sync.Mutex)
@@ -219,6 +222,57 @@ func (m *pkgManager) handlePkgInstall(ctx context.Context, cmd textapi.Command) 
 		}
 	}
 	return m.pkg.InstallPackageVersion(ctx, pkgID, version)
+}
+
+func (m *pkgManager) makeProgressAnimation() component.Responsive {
+	frames, seq := component.ProgressAnimationFrames()
+	animation := component.FuncResponsive(
+		component.NewAnimation(m.interrupter, frames, seq, 10),
+		func(width int) int { return 15 },
+	)
+	return animation
+}
+
+func (m *pkgManager) previewPkgInstall(cmd string, args ...string) (
+	comp component.Responsive, cancel func(), ok bool,
+) {
+	if len(args) == 0 || cmd != cmdPkgInstall || args[0] == "" {
+		return
+	}
+	pkgID := args[0]
+	if len(args) == 1 {
+		ok = true
+		var ctx context.Context
+		ctx, cancel = context.WithCancel(context.Background())
+		comp = component.Async(
+			m.interrupter, m.makeProgressAnimation(),
+			func() (component.Responsive, error) {
+				pkg, err := m.pkg.DescribePackage(ctx, pkgID)
+				if err != nil {
+					return nil, err
+				}
+				attrs := term.Attributes{}
+				comp = makePackagePreviewComponent(pkg, attrs)
+				return comp, nil
+			})
+	} else if len(args) > 1 && args[1] != "" {
+		ok = true
+		version := args[1]
+		var ctx context.Context
+		ctx, cancel = context.WithCancel(context.Background())
+		comp = component.Async(
+			m.interrupter, m.makeProgressAnimation(),
+			func() (component.Responsive, error) {
+				release, err := m.pkg.DescribeRelease(ctx, pkgID, version)
+				if err != nil {
+					return nil, err
+				}
+				attrs := term.Attributes{}
+				comp = makeReleasePreviewComponent(release, attrs)
+				return comp, nil
+			})
+	}
+	return
 }
 
 func (m *pkgManager) handlePkgRemove(ctx context.Context, cmd textapi.Command) error {

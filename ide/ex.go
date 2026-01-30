@@ -89,7 +89,7 @@ type ex struct {
 	newPluginHandler     func(...string) (pluginHandler, error)
 	workspace            workspace.Workspace
 	tasks                *idetask.Manager
-	dispatchOnPreview    map[string]func() func()
+	dispatchOnPreview    map[string]PreviewFunc
 	filepathCompleter    command.Completer
 	sequencer            handler.Sequencer
 	publishEvent         func(term.Event) bool
@@ -113,6 +113,11 @@ type ex struct {
 	companionTerminalWin browser.Window
 }
 
+// PreviewFunc is a function used to preview commands.
+// The first argument returns a component to render alongside the command
+// prompt and the function is used to cancel any mutable effects.
+type PreviewFunc = func(string, ...string) (component.Responsive, func(), bool)
+
 func newEx(
 	ed text.Editor, m workspace.Workspace,
 	storage document.Service,
@@ -122,7 +127,7 @@ func newEx(
 	publishEvent func(term.Event) bool,
 	initialVTECapacity int,
 	clip clipboard.Register,
-	dispatchOnPreview map[string]func() func(),
+	dispatchOnPreview map[string]PreviewFunc,
 	opts ...text.Option,
 ) (e *ex, err error) {
 	e = new(ex)
@@ -147,7 +152,7 @@ func (e *ex) init(
 	publishEvent func(term.Event) bool,
 	initialVTECapacity int,
 	clip clipboard.Register,
-	dispatchOnPreview map[string]func() func(),
+	dispatchOnPreview map[string]PreviewFunc,
 	opts ...text.Option,
 ) (err error) {
 	err = e.doInit(ed, m, storage, notifications,
@@ -236,7 +241,8 @@ func (e *ex) log(level log.Level, msg string, args ...interface{}) {
 
 func (e *ex) Interrupt(ctx context.Context) error {
 	payload, _ := term.PayloadFromContext(ctx)
-	if !e.publishEvent(term.Event{Type: term.EventInterrupt, Raw: payload}) {
+	ev := term.Event{Type: term.EventInterrupt, Raw: payload, Context: ctx}
+	if !e.publishEvent(ev) {
 		return errEventStreamNotReady
 	}
 	return nil
@@ -321,17 +327,15 @@ func (e *ex) Dispatch(command string, args ...string) bool {
 }
 
 // Preview satisfies command.Dispatcher for command.Handler.
-func (e *ex) Preview(command string, args ...string) (func(), bool) {
+func (e *ex) Preview(command string, args ...string) (component.Responsive, func(), bool) {
 	if e.dispatchOnPreview == nil {
-		return nil, false
+		return nil, nil, false
 	}
-	cancel, ok := e.dispatchOnPreview[command]
+	do, ok := e.dispatchOnPreview[command]
 	if !ok {
-		return nil, false
+		return nil, nil, false
 	}
-	cancelTrigger := cancel()
-	e.Dispatch(command, args...)
-	return cancelTrigger, true
+	return do(command, args...)
 }
 
 func (e *ex) handlerInFocus() (workspaceapi.URI, text.Handler, bool) {

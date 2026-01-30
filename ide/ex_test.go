@@ -868,12 +868,12 @@ func TestPreviewCommands(t *testing.T) {
 			text.WithCommandOverlayConfig(testCommandOverlayConfig()),
 		}
 		var called, reverted bool
-		previews := map[string]func() func(){
-			"setTheme": func() func() {
+		previews := map[string]PreviewFunc{
+			"setTheme": func(string, ...string) (component.Responsive, func(), bool) {
 				called = true
-				return func() {
+				return nil, func() {
 					reverted = true
-				}
+				}, true
 			},
 		}
 		mockBuf := testFileBuffer{}
@@ -882,7 +882,7 @@ func TestPreviewCommands(t *testing.T) {
 			vte.DefaultConfig(), nopPublishEvent, clipboard.NewInMemory(), previews, opts...)
 		defer b.Close()
 
-		cancel, ok := b.Preview("setTheme", "arg1")
+		_, cancel, ok := b.Preview("setTheme", "arg1")
 		require.True(t, ok)
 
 		assert.True(t, called)
@@ -899,12 +899,12 @@ func TestPreviewCommands(t *testing.T) {
 			text.WithCommandOverlayConfig(testCommandOverlayConfig()),
 		}
 		var called, reverted bool
-		previews := map[string]func() func(){
-			"setTheme": func() func() {
+		previews := map[string]PreviewFunc{
+			"setTheme": func(string, ...string) (component.Responsive, func(), bool) {
 				called = true
-				return func() {
+				return nil, func() {
 					reverted = true
-				}
+				}, true
 			},
 		}
 		mockBuf := testFileBuffer{}
@@ -913,7 +913,7 @@ func TestPreviewCommands(t *testing.T) {
 			vte.DefaultConfig(), nopPublishEvent, clipboard.NewInMemory(), previews, opts...)
 		defer b.Close()
 
-		_, ok := b.Preview("guiSetTheme", "arg1")
+		_, _, ok := b.Preview("guiSetTheme", "arg1")
 		require.False(t, ok)
 
 		assert.False(t, called)
@@ -933,7 +933,7 @@ func TestPreviewCommands(t *testing.T) {
 			nil /*previews*/, opts...)
 		defer b.Close()
 
-		_, ok := b.Preview("guiSetTheme", "arg1")
+		_, _, ok := b.Preview("guiSetTheme", "arg1")
 		require.False(t, ok)
 
 		assert.False(t, called)
@@ -989,10 +989,10 @@ edit
                     
 eeeeeeeeeeeeeeeee   
 eeeeeeeeeeeeeeeee   
-eeeeeeeeeeeeeeeee   
-eeeeeeeeeeeeeeeee   
-eeeeeeeeeeeeeeeee   
-eeeeeeeeeeeeeeee▐   `},
+eeeeeeeeeeeeeeee▐   
+                    
+                    
+                    `},
 		{":edit eeeeeeeeeeeeeeeeeeeeeeeee",
 			`                    
                     
@@ -1353,7 +1353,7 @@ func newExForTestingCommandsPreview(
 	emulatorCfg vte.Config,
 	publishEvent func(term.Event) bool,
 	clip clipboard.Register,
-	previews map[string]func() func(),
+	previews map[string]PreviewFunc,
 	opts ...text.Option,
 ) testEx {
 	ex := new(ex)
