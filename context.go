@@ -31,11 +31,15 @@ import (
 )
 
 // ContextWithIteration returns a new Context that holds locker.
+//
+// Deprecated: use term.Event.Context to propagate this.
 func ContextWithIteration(ctx context.Context, i int64) context.Context {
 	return term.ContextWithPayload(ctx, []byte(strconv.FormatInt(i, 10)))
 }
 
 // IterationFromContext returns the ID value stored in ctx, if any.
+//
+// Deprecated: use term.Event.Context to propagate this.
 func IterationFromContext(ctx context.Context) (int64, bool) {
 	payload, ok := term.PayloadFromContext(ctx)
 	if !ok {
@@ -46,6 +50,8 @@ func IterationFromContext(ctx context.Context) (int64, bool) {
 
 // IterationFromRawBytes parses the given payload into an iteration number,
 // as formatted by ContextWithIteration.
+//
+// Deprecated: use term.Event.Context to propagate this.
 func IterationFromRawBytes(payload []byte) (int64, bool) {
 	i, err := strconv.ParseInt(string(payload), 10, 64)
 	if err != nil {

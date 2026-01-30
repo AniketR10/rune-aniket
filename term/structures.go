@@ -86,6 +86,7 @@ type Event struct {
 	MouseY   int       // y coord of mouse
 	Raw      []byte
 	UserFunc func()
+	Context  context.Context
 }
 
 // KeyComb returns the KeyComb representation of this Event. If this

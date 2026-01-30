@@ -37,11 +37,15 @@ type ctxKey int
 var pKey ctxKey
 
 // ContextWithPayload returns a new Context that holds locker.
+//
+// Deprecated: use term.Event.Context to pass a context.
 func ContextWithPayload(ctx context.Context, payload []byte) context.Context {
 	return context.WithValue(ctx, pKey, payload)
 }
 
 // PayloadFromContext returns the payload value stored in ctx, if any.
+//
+// Deprecated: use term.Event.Context to pass a context.
 func PayloadFromContext(ctx context.Context) ([]byte, bool) {
 	locker, ok := ctx.Value(pKey).([]byte)
 	return locker, ok
