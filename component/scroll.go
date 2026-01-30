@@ -1138,6 +1138,18 @@ func (s *scrollSubscriber) OnDidEdit(
 	(*Scroll)(s).rebuildHiddenLines()
 }
 
+func (s *Scroll) viewColumns(y int) (ret int) {
+	cells := s.Buffer().RawCells()
+	for _, c := range cells[y] {
+		if c.Ch == '\t' {
+			ret += s.tabspaces
+		} else {
+			ret += int(c.Width)
+		}
+	}
+	return
+}
+
 func (s *Scroll) drawWithHidden(writer term.Writer) {
 	xwindow := s.offset.X + s.width
 	ywindow := s.height
@@ -1216,7 +1228,7 @@ func (s *Scroll) drawWithHidden(writer term.Writer) {
 			// save allocations during Draw by pre-computing this, which doesn't change
 			// unless hidden blocks are altered.
 			hideLineStr := s.hiddenmeta[scrollY]
-			hideLineIconOffset = s.Buffer().Columns(scrollY) - s.offset.X - 1
+			hideLineIconOffset = s.viewColumns(scrollY) - s.offset.X - 1
 			if hideLineIconOffset >= s.width {
 				continue
 			}

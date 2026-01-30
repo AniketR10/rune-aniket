@@ -457,6 +457,43 @@ go 1.14 [4 lines] cloud.
 		assert.Equal(t, 4, calledOnHide)
 		assert.Equal(t, 2, calledOnVisible)
 	})
+	t.Run("tabs are considered when placing [ Lines ]", func(t *testing.T) {
+		scroll := newScroll(4, false, 60, 9)
+		_, err := scroll.Buffer().ReadFrom(strings.NewReader(hiddenCopy))
+		require.NoError(t, err)
+
+		w := term.NewStringWriter(60, 9)
+
+		tests := []comptest.TestCase{
+			{
+				nil, `
+module github.com/unstablebuild/blue                        
+                                                            
+go 1.14                                                     
+                                                            
+require (                                                   
+    cloud.google.com/go v0.63.0 // indirect                 
+    cloud.google.com/go/firestore v1.2.0                    
+    github.com/adrianmo/go-nmea v1.2.0                      
+    github.com/ernestrc/go-multierror v1.1.2 // indirect    `,
+			},
+			{
+				func() {
+					assert.True(t, scroll.MarkHidden(5, 8))
+				}, `
+module github.com/unstablebuild/blue                        
+                                                            
+go 1.14                                                     
+                                                            
+require (                                                   
+    cloud.google.com/go v0.63.0 // indirect [4 lines] github
+    github.com/ernestrc/logd-go v0.0.0-20180509171507-65871c
+    github.com/ernestrc/sensible v0.0.0-20170704153812-102a9
+    github.com/golang/mock v1.4.4                           `,
+			},
+		}
+		comptest.TestComponent(t, scroll, w, tests)
+	})
 
 	t.Run("clear hidden via edit", func(t *testing.T) {
 		scroll := newScroll(4, false, 24, 9)
