@@ -100,7 +100,7 @@ func CapturePanicReport(fn func()) {
 			return
 		}
 		log.Warnf("saved crash report file://%v", f.Name())
-
+		fmt.Fprintf(os.Stderr, "saved crash report file://%v", f.Name())
 	}()
 
 	fn()
