@@ -1181,14 +1181,20 @@ func (vi *viHandlerImpl) OnWillSeek(from term.Coordinates) {}
 
 func (vi *viHandlerImpl) OnDidSeek(from, to term.Coordinates) {}
 
-func (vi *viHandlerImpl) OnHide(start, end int) {
+func (vi *viHandlerImpl) OnWillHide(start, end int) {
+}
+
+func (vi *viHandlerImpl) OnWillVisible(start int) {
+}
+
+func (vi *viHandlerImpl) OnDidHide(start, end int) {
 	// next tick because this callback is called before cursor calls MoveToScroll
 	vi.config.scheduleNextTick(func() {
 		vi.anchor = vi.cursorAtScroll()
 	})
 }
 
-func (vi *viHandlerImpl) OnVisible(start int) {
+func (vi *viHandlerImpl) OnDidVisible(start int) {
 	vi.config.scheduleNextTick(func() {
 		vi.anchor = vi.cursorAtScroll()
 	})

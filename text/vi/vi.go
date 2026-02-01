@@ -332,7 +332,7 @@ func (vi *Vi) CellView() cell.View {
 
 // CellEditor returns the underlying cell.Editor.
 func (vi *Vi) CellEditor() cell.Editor {
-	return vi.buf.Editor()
+	return text.ExternalEditor(vi.cursor, vi.buf.Editor())
 }
 
 // Resource satisfies editor.Handler.

@@ -330,7 +330,7 @@ func TestTreeIndentsIntegration(t *testing.T) {
 
 	sequenceCases := []handlertest.SequenceTestCase{
 		{
-			"i\n", `┌────────────────────────────┐
+			"ggi\n", `┌────────────────────────────┐
 │o #####                     │
 ├────────────────────────────┤
 │                            │
@@ -859,22 +859,24 @@ func TestTreeHighlightsIntegration(t *testing.T) {
 	mu.Unlock()
 	wg.Wait()
 
+	// content was added oob so cursor start at the bottom:
+	// gg to the top
 	cases := []handlertest.SingleTestCase{
 		{
-			term.Event{}, `
+			term.Event{Ch: 'g', Type: term.EventKey}, `
 ┌────────────────────────────┐
 │o ####                      │
 ├────────────────────────────┤
-│####### main                │
+│    }                       │
+│}                           │
 │                            │
-│###### (                    │
-│    #####                   │
-│                            │
+│##### fileContent = ########│
+│    ############+           │
+│    ###########+            │
+│    ####+                   │
 │    ########################│
-│)                           │
+│    ###                     │
 │                            │
-│#### main() {               │
-│    fmt.Println(#####, cli.N│
 │                      NORMAL│
 └────────────────────────────┘`,
 		},
@@ -887,7 +889,7 @@ func TestTreeHighlightsIntegration(t *testing.T) {
 
 	cases = []handlertest.SingleTestCase{
 		{
-			term.Event{}, `
+			term.Event{Ch: 'g', Type: term.EventKey}, `
 ┌────────────────────────────┐
 │o #####                     │
 ├────────────────────────────┤

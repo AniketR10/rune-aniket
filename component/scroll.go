@@ -431,16 +431,18 @@ func (s *Scroll) MarkHidden(start, end int) bool {
 	// this avoids problems calculating coordinates
 	for bstart, bend := range s.hiddenblocks {
 		if (bstart >= start && bstart <= end) || (bend <= end && bend >= start) {
+			dispatchDid := s.dispatchVisibleToSubscribers(bstart)
+			defer dispatchDid()
 			delete(s.hiddenblocks, bstart)
-			s.dispatchVisibleToSubscribers(bstart)
 		}
 	}
 
 	// update offset subscribers when there's a change in hidden lines
+	dispatchDid := s.dispatchHiddenToSubscribers(start, end)
+	defer dispatchDid()
 	s.hiddenblocks[start] = end
 	s.rebuildHiddenLines()
 
-	s.dispatchHiddenToSubscribers(start, end)
 	return true
 }
 
@@ -468,9 +470,10 @@ func (s *Scroll) MarkVisible(start int) bool {
 	}
 	_, ok := s.hiddenblocks[start]
 	if ok {
+		dispatchDid := s.dispatchVisibleToSubscribers(start)
 		delete(s.hiddenblocks, start)
 		s.rebuildHiddenLines()
-		s.dispatchVisibleToSubscribers(start)
+		dispatchDid()
 	}
 	return ok
 }
@@ -841,11 +844,17 @@ type ScrollSubscriber interface {
 	// OnDidSeek is dispatched after a scroll has changed its offset.
 	OnDidSeek(from, to term.Coordinates)
 
-	// OnHide is dispatched when a scroll has hidden a block of lines.
-	OnHide(start, end int)
+	// OnWillHide is dispatched before a scroll hides a block of lines.
+	OnWillHide(start, end int)
+	// OnWillVisible is dispatched before a scroll makes visible a block of lines,
+	// that was previously hidden.
+	OnWillVisible(start int)
+
+	// OnDidHide is dispatched when a scroll has hidden a block of lines.
+	OnDidHide(start, end int)
 	// OnVisible is dispatched when a scroll has made visible a block of lines,
 	// that was previously hidden.
-	OnVisible(start int)
+	OnDidVisible(start int)
 }
 
 type fnSubscriber func(term.Coordinates, term.Coordinates)
@@ -854,11 +863,19 @@ func (s fnSubscriber) OnWillSeek(from term.Coordinates) {
 	/* no-op */
 }
 
-func (s fnSubscriber) OnHide(start, end int) {
+func (s fnSubscriber) OnDidHide(start, end int) {
 	/* no-op */
 }
 
-func (s fnSubscriber) OnVisible(start int) {
+func (s fnSubscriber) OnDidVisible(start int) {
+	/* no-op */
+}
+
+func (s fnSubscriber) OnWillHide(start, end int) {
+	/* no-op */
+}
+
+func (s fnSubscriber) OnWillVisible(start int) {
 	/* no-op */
 }
 
@@ -890,21 +907,33 @@ func (s *Scroll) dispatchSubscribers() func() {
 	}
 }
 
-func (s *Scroll) dispatchVisibleToSubscribers(start int) {
+func (s *Scroll) dispatchVisibleToSubscribers(start int) func() {
 	if s.disablePublishing {
-		return
+		return func() {}
 	}
 	for _, sub := range s.subs {
-		sub.OnVisible(start)
+		sub.OnWillVisible(start)
+	}
+
+	return func() {
+		for _, sub := range s.subs {
+			sub.OnDidVisible(start)
+		}
 	}
 }
 
-func (s *Scroll) dispatchHiddenToSubscribers(start, end int) {
+func (s *Scroll) dispatchHiddenToSubscribers(start, end int) func() {
 	if s.disablePublishing {
-		return
+		return func() {}
 	}
 	for _, sub := range s.subs {
-		sub.OnHide(start, end)
+		sub.OnWillHide(start, end)
+	}
+
+	return func() {
+		for _, sub := range s.subs {
+			sub.OnDidHide(start, end)
+		}
 	}
 }
 
@@ -1112,17 +1141,22 @@ func (s *scrollSubscriber) OnDidEdit(
 		}
 	}
 
-	clear(s.hiddenblocks)
 	// if lines above hidden lines were either added or removed
 	// (or both) then update hidden locations
 	removed := s.onWillEditTo.Y - s.onWillEditFrom.Y
 	added := end.Y - start.Y
+	clear(s.hiddenblocks)
 	for _, hidden := range s.hiddensorted {
 		// clear blocks that are partially deleted or fully deleted
-		if (s.onWillEditFrom.Y <= hidden.end && s.onWillEditFrom.Y >= hidden.start) ||
+		clear := (s.onWillEditFrom.Y <= hidden.end && s.onWillEditFrom.Y >= hidden.start) ||
 			(s.onWillEditTo.Y >= hidden.start && s.onWillEditTo.Y <= hidden.end) ||
-			(s.onWillEditFrom.Y < hidden.start && s.onWillEditTo.Y > hidden.end) {
-			(*Scroll)(s).dispatchVisibleToSubscribers(hidden.start)
+			(s.onWillEditFrom.Y < hidden.start && s.onWillEditTo.Y > hidden.end)
+		if clear {
+			// NOTE: this might break subscribers if multiple blocks
+			// are cleared in one delete, and we call multiple OnWillVisible
+			// sequentially rathern than alternating with OnDidVisible.
+			dispatchDid := (*Scroll)(s).dispatchVisibleToSubscribers(hidden.start)
+			defer dispatchDid()
 			continue
 		}
 		var delta int
@@ -1252,15 +1286,14 @@ func (s *Scroll) drawWithHidden(writer term.Writer) {
 }
 
 func (s *Scroll) rebuildHiddenLines() {
-	s.hidden = 0
 	clear(s.hiddenlines)
+	clear(s.hiddenmeta)
+	s.hidden = 0
+	s.hiddensorted = s.hiddensorted[:0]
 	for start, end := range s.hiddenblocks {
 		for i := start; i <= end; i++ {
 			s.hiddenlines[i] = end
 		}
-	}
-	s.hiddensorted = s.hiddensorted[:0]
-	for start, end := range s.hiddenblocks {
 		s.hiddensorted = append(s.hiddensorted, startEndBlock{start, end})
 		s.hiddenmeta[start] = fmt.Sprintf(" [%d lines] ", end-start+1)
 		s.hidden += end - start

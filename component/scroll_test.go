@@ -1835,12 +1835,19 @@ func (s subscriber) OnWillSeek(from term.Coordinates) {
 		s.expectWillSeek(from)
 	}
 }
-func (s subscriber) OnHide(start, end int) {
+
+func (s subscriber) OnWillHide(start, end int) {
+}
+
+func (s subscriber) OnWillVisible(start int) {
+}
+
+func (s subscriber) OnDidHide(start, end int) {
 	if s.expectOnHide != nil {
 		s.expectOnHide(start, end)
 	}
 }
-func (s subscriber) OnVisible(start int) {
+func (s subscriber) OnDidVisible(start int) {
 	if s.expectOnVisible != nil {
 		s.expectOnVisible(start)
 	}

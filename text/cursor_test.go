@@ -3717,11 +3717,17 @@ func (s *testScrollSubscriber) OnWillSeek(from term.Coordinates) {
 	/* no op */
 }
 
-func (s *testScrollSubscriber) OnHide(start, end int) {
+func (s *testScrollSubscriber) OnWillHide(start, end int) {
+}
+
+func (s *testScrollSubscriber) OnWillVisible(start int) {
+}
+
+func (s *testScrollSubscriber) OnDidHide(start, end int) {
 	s.hide++
 }
 
-func (s *testScrollSubscriber) OnVisible(start int) {
+func (s *testScrollSubscriber) OnDidVisible(start int) {
 	s.visible++
 }
 

@@ -734,11 +734,17 @@ func (b *auxBar) OnDidSeek(from, to term.Coordinates) {
 func (b *auxBar) OnWillSeek(_ term.Coordinates) {
 }
 
-func (b *auxBar) OnHide(start, end int) {
+func (b *auxBar) OnWillHide(start, end int) {
+}
+
+func (b *auxBar) OnWillVisible(start int) {
+}
+
+func (b *auxBar) OnDidHide(start, end int) {
 	b.rebuildBar(context.Background())
 }
 
-func (b *auxBar) OnVisible(start int) {
+func (b *auxBar) OnDidVisible(start int) {
 	b.rebuildBar(context.Background())
 }
 

@@ -657,7 +657,7 @@ func (h *editorHandler) CellView() cell.View {
 }
 
 func (h *editorHandler) CellEditor() cell.Editor {
-	return h.buf.Editor()
+	return text.ExternalEditor(&h.cursor, h.buf.Editor())
 }
 
 func (e *editorHandler) SetDefaultAttributes(attr term.Attributes) {

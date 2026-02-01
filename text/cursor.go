@@ -78,7 +78,8 @@ const (
 
 // used to subscribe to buffer updates
 type curSubscriber struct {
-	c *Cursor
+	mark CursorMark
+	c    *Cursor
 }
 
 type message struct {
@@ -92,6 +93,7 @@ type Cursor struct {
 	// add the current cursor position to the selection.
 	RightInclusiveSemantics bool
 
+	ctx        context.Context
 	scroll     *component.Scroll
 	search     string
 	cursor     term.Coordinates
@@ -150,6 +152,7 @@ func (c *Cursor) RepositionBottom() (handled bool) {
 func (c *Cursor) Init(scroll *component.Scroll, scheduleNextTick func(func()) bool) {
 	c.InitPerformance(scroll)
 	c.scroll.Buffer().Subscribe(&c.subscriber)
+	c.scroll.Subscribe(&c.subscriber)
 	c.shouldSeek = true
 	c.scheduleNextTick = scheduleNextTick
 }
@@ -159,6 +162,7 @@ func (c *Cursor) Init(scroll *component.Scroll, scheduleNextTick func(func()) bo
 // disables automatic scrolling of content for the client.
 // It also disables all fold-related methods.
 func (c *Cursor) InitPerformance(scroll *component.Scroll) {
+	c.ctx = context.Background()
 	c.cursor = term.Coordinates{}
 	c.scroll = scroll
 	c.selection.mode = NoSelection
@@ -180,6 +184,28 @@ func (c *curSubscriber) OnDidEdit(
 	ctx context.Context, from, to term.Coordinates, old string,
 ) {
 	c.c.setSearchLocationList(c.c.search, false)
+}
+
+func (c *curSubscriber) OnWillSeek(from term.Coordinates) {
+}
+
+func (c *curSubscriber) OnDidSeek(from, to term.Coordinates) {
+}
+
+func (c *curSubscriber) OnWillHide(start, end int) {
+	c.mark = c.c.Mark()
+}
+
+func (c *curSubscriber) OnDidHide(start, end int) {
+	c.c.MoveToMark(c.mark)
+}
+
+func (c *curSubscriber) OnWillVisible(start int) {
+	c.mark = c.c.Mark()
+}
+
+func (c *curSubscriber) OnDidVisible(start int) {
+	c.c.MoveToMark(c.mark)
 }
 
 // Coordinates returns the current position of the cursor.
@@ -901,7 +927,6 @@ func (c *Cursor) MoveToMatchingRune() bool {
 
 // InsertLineAbove inserts a row above the current row and moves the cursor up.
 func (c *Cursor) InsertLineAbove() {
-	ctx := context.Background()
 	mode := c.selection.mode
 	c.selection.mode = NoSelection
 	c.setSelection()
@@ -909,8 +934,8 @@ func (c *Cursor) InsertLineAbove() {
 	cursorAtScroll := c.cursorAtScroll()
 	pos := cursorAtScroll
 	pos.X = 0
-	c.buffer().Edit(ctx, pos, pos, "\n")
-	pos, _ = c.tryIndent(ctx, pos)
+	c.buffer().Edit(c.ctx, pos, pos, "\n")
+	pos, _ = c.tryIndent(c.ctx, pos)
 	c.selection.mode = mode
 	c.setSelection()
 	c.setCursorAfterUpdate(pos)
@@ -926,7 +951,6 @@ func (c *Cursor) InsertLineBelow() {
 		c.MoveEndLine()
 		return
 	}
-	ctx := context.Background()
 	mode := c.selection.mode
 	c.selection.mode = NoSelection
 	c.setSelection()
@@ -934,8 +958,8 @@ func (c *Cursor) InsertLineBelow() {
 	buf := c.buffer()
 	pos := c.cursorAtScroll()
 	pos.X = buf.Columns(pos.Y)
-	_, to, _ := buf.Edit(ctx, pos, pos, "\n")
-	to, _ = c.tryIndent(ctx, to)
+	_, to, _ := buf.Edit(c.ctx, pos, pos, "\n")
+	to, _ = c.tryIndent(c.ctx, to)
 
 	c.selection.mode = mode
 	c.setSelection()
@@ -944,7 +968,7 @@ func (c *Cursor) InsertLineBelow() {
 
 // Insert is equivalent to InsertContext with context.Background.
 func (c *Cursor) Insert(r rune) {
-	c.InsertContext(context.Background(), r)
+	c.InsertContext(c.ctx, r)
 }
 
 // InsertContext inserts rune at the current cursor's position.
@@ -981,10 +1005,10 @@ func (c *Cursor) InsertWithAttr(r rune, attr term.Attributes) {
 	pos := c.buffer().InsertWithAttr(insertAt, r, attr)
 	switch r {
 	case '\n':
-		pos, _ = c.tryIndent(context.Background(), pos)
+		pos, _ = c.tryIndent(c.ctx, pos)
 	case '}', ']', ')':
 		var ok bool
-		pos, ok = c.tryDedent(context.Background(), pos)
+		pos, ok = c.tryDedent(c.ctx, pos)
 		if ok {
 			pos.X++
 		}
@@ -1096,7 +1120,7 @@ func (c *Cursor) Paste(str string, mode SelectMode, after bool) {
 // Replace is equivalent to ReplaceContext with context.Background. It returns the
 // position next to the replaced character for the caller to decide whether to move.
 func (c *Cursor) Replace(r rune) (next term.Coordinates) {
-	return c.ReplaceContext(context.Background(), r)
+	return c.ReplaceContext(c.ctx, r)
 }
 
 // ReplaceContext replaces the cell under the cursor with r. It returns the position
@@ -1117,7 +1141,7 @@ func (c *Cursor) ReplaceContext(ctx context.Context, r rune) (next term.Coordina
 
 // Delete is equivalent to DeleteContext with context.Background.
 func (c *Cursor) Delete() (ok bool) {
-	ok = c.DeleteContext(context.Background())
+	ok = c.DeleteContext(c.ctx)
 	return
 }
 
@@ -1148,7 +1172,7 @@ func (c *Cursor) Backspace() (ok bool) {
 
 // Conflate is equivalent to calling ConflateContext with context.Background.
 func (c *Cursor) Conflate() (ok bool) {
-	return c.ConflateContext(context.Background())
+	return c.ConflateContext(c.ctx)
 }
 
 // ConflateContext removes the new line character at the end of the current line.
@@ -1420,12 +1444,12 @@ func (c *Cursor) TryIndent() bool {
 	if !ok {
 		return false
 	}
-	after, ok := c.doTryIndent(context.Background(), pos, target)
+	after, ok := c.doTryIndent(c.ctx, pos, target)
 	if ok {
 		c.setCursorAfterUpdate(after)
 		return true
 	}
-	after, ok = c.doTryDedent(context.Background(), pos, target)
+	after, ok = c.doTryDedent(c.ctx, pos, target)
 	if ok {
 		c.setCursorAfterUpdate(after)
 		return true
@@ -1463,9 +1487,6 @@ func (c *Cursor) HideSelection() (ok bool) {
 		to.X++
 	}
 	ok = c.scroll.MarkHidden(from.Y, to.Y)
-	if ok {
-		c.setCursorAfterUpdate(from)
-	}
 	return
 }
 
@@ -1874,10 +1895,7 @@ func (c *Cursor) CollapseFold(ctx context.Context) bool {
 		if !ok {
 			return
 		}
-		mark := c.Mark()
-		if c.scroll.MarkHidden(fold.Start.Y, fold.End.Y) {
-			c.MoveToMark(mark)
-		}
+		c.scroll.MarkHidden(fold.Start.Y, fold.End.Y)
 	})
 }
 
@@ -1925,15 +1943,10 @@ func (c *Cursor) ToggleFold(ctx context.Context) bool {
 		if !ok {
 			return
 		}
-		mark := c.Mark()
-		var handled bool
 		if hidden, ok := c.isFoldHidden(fold.Start, fold.End); hidden || !ok {
-			handled = c.scroll.MarkVisible(fold.Start.Y)
+			c.scroll.MarkVisible(fold.Start.Y)
 		} else if ok {
-			handled = c.scroll.MarkHidden(fold.Start.Y, fold.End.Y)
-		}
-		if handled {
-			c.MoveToMark(mark)
+			c.scroll.MarkHidden(fold.Start.Y, fold.End.Y)
 		}
 	})
 }
@@ -1945,13 +1958,8 @@ func (c *Cursor) CollapseAllFolds(ctx context.Context) bool {
 		return false
 	}
 	return c.opFolds(ctx, func(folds []term.Range) {
-		mark := c.Mark()
-		var handled bool
 		for _, fold := range folds {
-			handled = c.scroll.MarkHidden(fold.Start.Y, fold.End.Y) || handled
-		}
-		if handled {
-			c.MoveToMark(mark)
+			c.scroll.MarkHidden(fold.Start.Y, fold.End.Y)
 		}
 	})
 }
@@ -1981,8 +1989,6 @@ func (c *Cursor) ToggleAllFolds(ctx context.Context) bool {
 		return false
 	}
 	return c.opFolds(ctx, func(folds []term.Range) {
-		mark := c.Mark()
-		var handled bool
 		// first determine if they're currently hidden or visible:
 		// if we start toggling as we're iterating, nested folds
 		// will be incorrectly categorized.
@@ -1995,13 +2001,10 @@ func (c *Cursor) ToggleAllFolds(ctx context.Context) bool {
 			}
 		}
 		for _, fold := range visible {
-			handled = c.scroll.MarkVisible(fold.Start.Y) || handled
+			c.scroll.MarkVisible(fold.Start.Y)
 		}
 		for _, fold := range hidden {
-			handled = c.scroll.MarkHidden(fold.Start.Y, fold.End.Y) || handled
-		}
-		if handled {
-			c.MoveToMark(mark)
+			c.scroll.MarkHidden(fold.Start.Y, fold.End.Y)
 		}
 	})
 }
@@ -2322,12 +2325,12 @@ func (c *Cursor) selectionOp(fn func(string) string) (ok bool) {
 		if ok {
 			str := cell.CellsToString(cells)
 			c.log(log.TraceLevel, "selectionOp: replace with cells: %#v, from: %v, to: %v", cells, from, to)
-			c.buffer().Edit(context.Background(), from, to, fn(str))
+			c.buffer().Edit(c.ctx, from, to, fn(str))
 		}
 	case LineSelection:
 		cells, _, ok = c.buffer().SelectLine(from, to)
 		if ok {
-			c.buffer().Edit(context.Background(), from, to, fn(cell.CellsToString(cells)))
+			c.buffer().Edit(c.ctx, from, to, fn(cell.CellsToString(cells)))
 		}
 	case BlockSelection:
 		ok = false

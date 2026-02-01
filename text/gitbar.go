@@ -306,11 +306,17 @@ func (b *gitBar) OnDidSeek(_, to term.Coordinates) {
 func (b *gitBar) OnWillSeek(_ term.Coordinates) {
 }
 
-func (b *gitBar) OnHide(start, end int) {
+func (b *gitBar) OnWillHide(start, end int) {
+}
+
+func (b *gitBar) OnWillVisible(start int) {
+}
+
+func (b *gitBar) OnDidHide(start, end int) {
 	b.rebuildBar(context.Background())
 }
 
-func (b *gitBar) OnVisible(start int) {
+func (b *gitBar) OnDidVisible(start int) {
 	b.rebuildBar(context.Background())
 }
 

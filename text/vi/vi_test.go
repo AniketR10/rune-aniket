@@ -54,6 +54,175 @@ func init() {
 	}
 }
 
+func TestCursorExternalEdit(t *testing.T) {
+	t.Run("if external insert above, moves cursor to keep cursor in current logical line", func(t *testing.T) {
+		width, height := 20, 10
+
+		buf := cell.NewBuffer()
+		buf.ReadFrom(strings.NewReader(snippet))
+		vi := New(buf, uri)
+		vi.Resize(width, height)
+
+		_, handled := vi.Handle(term.Event{Type: term.EventKey, Ch: 'j'})
+		require.True(t, handled)
+		_, handled = vi.Handle(term.Event{Type: term.EventKey, Ch: 'j'})
+		require.True(t, handled)
+
+		assert.Equal(t, term.Coordinates{Y: 2}, vi.CursorAtScroll())
+		at := term.Coordinates{}
+		vi.CellEditor().Edit(context.Background(), at, at, "a\nb")
+		assert.Equal(t, term.Coordinates{Y: 3}, vi.CursorAtScroll())
+	})
+
+	t.Run("if external insert below, it does nothing", func(t *testing.T) {
+		width, height := 20, 10
+
+		buf := cell.NewBuffer()
+		buf.ReadFrom(strings.NewReader(snippet))
+		vi := New(buf, uri)
+		vi.Resize(width, height)
+
+		_, handled := vi.Handle(term.Event{Type: term.EventKey, Ch: 'j'})
+		require.True(t, handled)
+		_, handled = vi.Handle(term.Event{Type: term.EventKey, Ch: 'j'})
+		require.True(t, handled)
+
+		assert.Equal(t, term.Coordinates{Y: 2}, vi.CursorAtScroll())
+		at := term.Coordinates{Y: 3}
+		vi.CellEditor().Edit(context.Background(), at, at, "a\nb")
+		assert.Equal(t, term.Coordinates{Y: 2}, vi.CursorAtScroll())
+	})
+
+	t.Run("if external delete below, it does nothing", func(t *testing.T) {
+		width, height := 20, 10
+
+		buf := cell.NewBuffer()
+		buf.ReadFrom(strings.NewReader(snippet))
+		vi := New(buf, uri)
+		vi.Resize(width, height)
+
+		_, handled := vi.Handle(term.Event{Type: term.EventKey, Ch: 'j'})
+		require.True(t, handled)
+		_, handled = vi.Handle(term.Event{Type: term.EventKey, Ch: 'j'})
+		require.True(t, handled)
+
+		assert.Equal(t, term.Coordinates{Y: 2}, vi.CursorAtScroll())
+		from := term.Coordinates{Y: 3}
+		to := term.Coordinates{Y: 4}
+		vi.CellEditor().Edit(context.Background(), from, to, "")
+		assert.Equal(t, term.Coordinates{Y: 2}, vi.CursorAtScroll())
+	})
+
+	t.Run("if external delete above, it keeps cursor at logical line", func(t *testing.T) {
+		width, height := 20, 10
+
+		buf := cell.NewBuffer()
+		buf.ReadFrom(strings.NewReader(snippet))
+		vi := New(buf, uri)
+		vi.Resize(width, height)
+
+		_, handled := vi.Handle(term.Event{Type: term.EventKey, Ch: 'j'})
+		require.True(t, handled)
+		_, handled = vi.Handle(term.Event{Type: term.EventKey, Ch: 'j'})
+		require.True(t, handled)
+
+		assert.Equal(t, term.Coordinates{Y: 2}, vi.CursorAtScroll())
+		from := term.Coordinates{Y: 0}
+		to := term.Coordinates{Y: 1}
+		vi.CellEditor().Edit(context.Background(), from, to, "")
+		assert.Equal(t, term.Coordinates{Y: 1}, vi.CursorAtScroll())
+	})
+
+	t.Run("if external delete to current line, it keeps cursor at logical line", func(t *testing.T) {
+		width, height := 20, 10
+
+		buf := cell.NewBuffer()
+		buf.ReadFrom(strings.NewReader(snippet))
+		vi := New(buf, uri)
+		vi.Resize(width, height)
+
+		_, handled := vi.Handle(term.Event{Type: term.EventKey, Ch: 'j'})
+		require.True(t, handled)
+		_, handled = vi.Handle(term.Event{Type: term.EventKey, Ch: 'j'})
+		require.True(t, handled)
+		_, handled = vi.Handle(term.Event{Type: term.EventKey, Ch: 'l'})
+		require.True(t, handled)
+
+		assert.Equal(t, term.Coordinates{Y: 2, X: 1}, vi.CursorAtScroll())
+		from := term.Coordinates{Y: 0}
+		to := term.Coordinates{Y: 2, X: 5}
+		vi.CellEditor().Edit(context.Background(), from, to, "")
+		assert.Equal(t, term.Coordinates{Y: 0, X: 0}, vi.CursorAtScroll())
+	})
+
+	t.Run("if external insert to current line, it keeps cursor at logical line", func(t *testing.T) {
+		width, height := 20, 10
+
+		buf := cell.NewBuffer()
+		buf.ReadFrom(strings.NewReader(snippet))
+		vi := New(buf, uri)
+		vi.Resize(width, height)
+
+		_, handled := vi.Handle(term.Event{Type: term.EventKey, Ch: 'j'})
+		require.True(t, handled)
+		_, handled = vi.Handle(term.Event{Type: term.EventKey, Ch: 'j'})
+		require.True(t, handled)
+		_, handled = vi.Handle(term.Event{Type: term.EventKey, Ch: 'l'})
+		require.True(t, handled)
+
+		assert.Equal(t, term.Coordinates{Y: 2, X: 1}, vi.CursorAtScroll())
+		at := term.Coordinates{Y: 2, X: 0}
+		vi.CellEditor().Edit(context.Background(), at, at, "a\nbbb")
+		assert.Equal(t, term.Coordinates{Y: 3, X: 3}, vi.CursorAtScroll())
+	})
+
+	t.Run("if external replace to current line, it keeps cursor at logical line", func(t *testing.T) {
+		width, height := 20, 10
+
+		buf := cell.NewBuffer()
+		buf.ReadFrom(strings.NewReader(snippet))
+		vi := New(buf, uri)
+		vi.Resize(width, height)
+
+		_, handled := vi.Handle(term.Event{Type: term.EventKey, Ch: 'j'})
+		require.True(t, handled)
+		_, handled = vi.Handle(term.Event{Type: term.EventKey, Ch: 'j'})
+		require.True(t, handled)
+		_, handled = vi.Handle(term.Event{Type: term.EventKey, Ch: 'l'})
+		require.True(t, handled)
+
+		assert.Equal(t, term.Coordinates{Y: 2, X: 1}, vi.CursorAtScroll())
+		start := term.Coordinates{Y: 1, X: 0}
+		end := term.Coordinates{Y: 2, X: 1}
+		vi.CellEditor().Edit(context.Background(), start, end, "a\nbbb")
+		assert.Equal(t, term.Coordinates{Y: 2, X: 3}, vi.CursorAtScroll())
+	})
+
+	t.Run("if external replace only cols to current line, it keeps cursor at logical position", func(t *testing.T) {
+		width, height := 20, 10
+
+		buf := cell.NewBuffer()
+		buf.ReadFrom(strings.NewReader(snippet))
+		vi := New(buf, uri)
+		vi.Resize(width, height)
+
+		_, handled := vi.Handle(term.Event{Type: term.EventKey, Ch: 'j'})
+		require.True(t, handled)
+		_, handled = vi.Handle(term.Event{Type: term.EventKey, Ch: 'j'})
+		require.True(t, handled)
+		for range 3 {
+			_, handled = vi.Handle(term.Event{Type: term.EventKey, Ch: 'l'})
+			require.True(t, handled)
+		}
+
+		assert.Equal(t, term.Coordinates{Y: 2, X: 3}, vi.CursorAtScroll())
+		start := term.Coordinates{Y: 2, X: 0}
+		end := term.Coordinates{Y: 2, X: 4}
+		vi.CellEditor().Edit(context.Background(), start, end, "bbb")
+		assert.Equal(t, term.Coordinates{Y: 2, X: 3}, vi.CursorAtScroll())
+	})
+}
+
 func TestFoldsIntegration(t *testing.T) {
 	t.Run("initial folds", func(t *testing.T) {
 		buf := cell.NewBuffer()
@@ -285,15 +454,15 @@ diff_buf_adjust(win_
 
 		tests := []comptest.TestCase{
 			{Expected: `
+                    
+/* [4 lines] */     
+    void            
 diff_buf_adjust(win_
 {                   
     win_T    *wp;   
     int             
                     
     if (!win->w_p_di
-    {               
-    /* When there is
-     * it from the d
                     `,
 			},
 		}

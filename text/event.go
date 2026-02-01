@@ -90,6 +90,12 @@ func (s scrollSubscriber) OnWillSeek(from term.Coordinates) {
 	/* no-op */
 }
 
+func (s scrollSubscriber) OnWillHide(start, end int) {
+}
+
+func (s scrollSubscriber) OnWillVisible(start int) {
+}
+
 func (s scrollSubscriber) OnDidSeek(from, to term.Coordinates) {
 	s.eh.Handle(context.Background(), textapi.Event{
 		Type:     textapi.EventTypeScroll,
@@ -100,7 +106,7 @@ func (s scrollSubscriber) OnDidSeek(from, to term.Coordinates) {
 	})
 }
 
-func (s scrollSubscriber) OnHide(
+func (s scrollSubscriber) OnDidHide(
 	start, end int,
 ) {
 	s.eh.Handle(context.Background(), textapi.Event{
@@ -112,7 +118,7 @@ func (s scrollSubscriber) OnHide(
 	})
 }
 
-func (s scrollSubscriber) OnVisible(
+func (s scrollSubscriber) OnDidVisible(
 	start int,
 ) {
 	s.eh.Handle(context.Background(), textapi.Event{
