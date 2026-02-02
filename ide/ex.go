@@ -791,6 +791,14 @@ func (e *ex) convertTab(args ...string) error {
 	if !ok {
 		return errors.New("window content is already a tab")
 	}
+
+	if win == e.companionTerminalWin {
+		_ = e.toggleCompanionTerminal()
+		e.companionTerminal = nil // force re-open next time
+		other, _ := e.comp.Focus()
+		return other.SetContent(tab)
+	}
+
 	if win.IsFloating() {
 		err := win.Close()
 		if err == nil {

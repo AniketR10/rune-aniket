@@ -1742,6 +1742,30 @@ func TestIntegrationCompanionTerminal(t *testing.T) {
 │                  │
 └──────────────────┘`,
 		},
+		{":!>:windowconverttab companion X>", // ` simulates ctrl-v
+			`┌──────────────────┐
+│X companion       │
+├──────────────────┤
+│sh ▐              │
+│                  │
+│                  │
+│                  │
+│                  │
+│                  │
+└──────────────────┘`,
+		},
+		{":!>:!>",
+			`┌──────────────────┐
+│X companion       │
+├──────────────────┤
+│sh ▐              │
+│                  │
+│                  │
+│                  │
+│                  │
+│                  │
+└──────────────────┘`,
+		},
 	}
 
 	opts := []text.Option{
