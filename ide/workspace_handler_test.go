@@ -117,6 +117,16 @@ func TestFileCommandRegistryIntegration(t *testing.T) {
 │       searching 'gentleman'│
 │                      NORMAL│
 └────────────────────────────┘`},
+		{":foldexpandall>", // this fails if not installed correctly
+			`┌────────────────────────────┐
+│o dakar.md                  │
+├────────────────────────────┤
+│▐entleman                   │
+│driver                      │
+│gentleman                   │
+│       searching 'gentleman'│
+│                      NORMAL│
+└────────────────────────────┘`},
 	}
 	handlertest.TestHandlerSequence(t, h, 30, 9, cases)
 

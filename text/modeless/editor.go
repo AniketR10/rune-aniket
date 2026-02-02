@@ -61,9 +61,14 @@ func (e *editor) Edit(
 ) (ret text.Handler, err error) {
 	handler := NewHandler(buf, file, e.opts...)
 	ret = handler
+	cursor := &handler.(*editorHandler).cursor
 	if e.fileRegistry != nil {
 		var err error
 		ret, err = text.SubscribeLocationCommands(file, e.fileRegistry, ret)
+		if err != nil {
+			return nil, err
+		}
+		ret, err = text.SubscribeFoldCommands(file, e.fileRegistry, cursor, ret)
 		if err != nil {
 			return nil, err
 		}
@@ -73,7 +78,6 @@ func (e *editor) Edit(
 			return nil, err
 		}
 	}
-	cursor := &handler.(*editorHandler).cursor
 	scroll := handler.(*editorHandler).less.Scroll()
 	ret = e.pub.PublishEdit(file, buf, ret, cursor)
 	auxBarConfig := e.auxBarConfig
