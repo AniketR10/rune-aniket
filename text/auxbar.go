@@ -144,7 +144,7 @@ func WithAuxBar(
 	scroll.Subscribe(ret)
 	buf.Subscribe(ret)
 
-	evs := []textapi.EventType{textapi.EventTypeFlush}
+	evs := []textapi.EventType{textapi.EventTypeFlush, textapi.EventTypeFocus}
 	if ret.linesEnabled && ret.gitEnabled {
 		_ = ret.pub.SubscribeEvents(evs, (*auxBarSubscriber)(ret))
 		for _, cmd := range gitCommands {
@@ -360,7 +360,8 @@ func (b *auxBar) MoveToPrevLocation(ID string) bool {
 type auxBarSubscriber auxBar
 
 func (b *auxBarSubscriber) Handle(ctx context.Context, ev textapi.Event) bool {
-	if !ev.URI.Equal(b.file) || ev.Type != textapi.EventTypeFlush {
+	if !ev.URI.Equal(b.file) || (ev.Type != textapi.EventTypeFlush &&
+		ev.Type != textapi.EventTypeFocus) {
 		return false
 	}
 	b.svc.Purge()

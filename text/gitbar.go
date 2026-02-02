@@ -101,7 +101,7 @@ func WithGitBar(
 
 	scroll.Subscribe(ret)
 	buf.Subscribe(ret)
-	evs := []textapi.EventType{textapi.EventTypeFlush}
+	evs := []textapi.EventType{textapi.EventTypeFlush, textapi.EventTypeFocus}
 	_ = ret.pub.SubscribeEvents(evs, (*gitBarSubscriber)(ret))
 	for _, cmd := range gitCommands {
 		// could return error if auxbar is enabled
@@ -291,7 +291,8 @@ func (b *gitBar) rebuildBar(ctx context.Context) {
 type gitBarSubscriber gitBar
 
 func (b *gitBarSubscriber) Handle(ctx context.Context, ev textapi.Event) bool {
-	if !ev.URI.Equal(b.file) || ev.Type != textapi.EventTypeFlush {
+	if !ev.URI.Equal(b.file) || (ev.Type != textapi.EventTypeFlush &&
+		ev.Type != textapi.EventTypeFocus) {
 		return false
 	}
 	(*gitBar)(b).log(log.TraceLevel, "received event: %s", ev.Type.String())

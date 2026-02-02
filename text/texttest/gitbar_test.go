@@ -109,6 +109,7 @@ func TestGitBarDraw(t *testing.T) {
 	require.NoError(t, bar.Close())
 
 	// unsubscribes
-	require.Equal(t, 1, len(ed.subs))
+	require.Equal(t, 2, len(ed.subs))
 	assert.Equal(t, 0, len(ed.subs[textapi.EventTypeFlush]))
+	assert.Equal(t, 0, len(ed.subs[textapi.EventTypeFocus]))
 }
