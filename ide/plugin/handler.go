@@ -25,9 +25,9 @@ package plugin
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
-	"os"
 	"strings"
 	"time"
 
@@ -214,6 +214,9 @@ func (h *Handler) init(
 	for _, o := range opts {
 		o(&config)
 	}
+	if len(cmdAndArgs) == 0 {
+		return errors.New("empty command and args")
+	}
 	ch, interrupter := h.initState(publisher, cmdAndArgs, maxWidth, config)
 	return h.initEmulator(publisher, notifications, e, t, tm, interrupter, ch)
 }
@@ -224,13 +227,6 @@ func (h *Handler) initState(
 ) (chan error, term.Interrupter) {
 	if h.cancelCtx != nil {
 		panic("tried to initialize already initialized plugin.Handler")
-	}
-	if len(cmdAndArgs) == 0 {
-		sh := os.Getenv("SHELL")
-		if sh == "" {
-			sh = "sh"
-		}
-		cmdAndArgs = []string{sh}
 	}
 
 	title := config.title

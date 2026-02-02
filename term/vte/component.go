@@ -682,7 +682,7 @@ func (t *Component) createPty() error {
 		if sh == "" {
 			sh = "sh"
 		}
-		cmdAndArgs = []string{sh}
+		cmdAndArgs = []string{sh, "--login", "-i"}
 	}
 	cmd := workspaceapi.Cmd{
 		Path: cmdAndArgs[0],
