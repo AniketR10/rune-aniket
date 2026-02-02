@@ -246,6 +246,8 @@ func (b *gitBar) rebuildBar(ctx context.Context) {
 	b.cancelBuild()
 	ctx, b.cancelBuild = context.WithCancel(ctx)
 	uri := b.Handler.Resource()
+	delLocAttr := b.delLocAttr
+	addLocAttr := b.addLocAttr
 	go debug.CapturePanicReport(func() {
 		filediff, err := b.svc.Diff(ctx, uri)
 		if err != nil {
@@ -256,7 +258,7 @@ func (b *gitBar) rebuildBar(ctx context.Context) {
 		}
 		b.log(log.TraceLevel, "computed diff: %v", filediff)
 
-		ll := filediff.LocationList(b.delLocAttr, b.addLocAttr)
+		ll := filediff.LocationList(delLocAttr, addLocAttr)
 		b.scheduleNextTick(func() {
 			select {
 			case <-ctx.Done():

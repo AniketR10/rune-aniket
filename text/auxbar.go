@@ -420,6 +420,7 @@ func (b *auxBar) rebuildBar(ctx context.Context) {
 	svc, ok := b.buf.View().(foldsService)
 	if b.foldsEnabled && ok {
 		wg.Add(1)
+		offset := b.scroll.Offset()
 		go debug.CapturePanicReport(func() {
 			defer wg.Done()
 			var folds iterator.Iterator[term.Range]
@@ -431,7 +432,7 @@ func (b *auxBar) rebuildBar(ctx context.Context) {
 				// and it ignores the folds below current view.
 				// This makes recalculating on every cursor change much
 				// more efficient.
-				folds, ok = svc.FoldsFrom(b.scroll.Offset())
+				folds, ok = svc.FoldsFrom(offset)
 			}
 			if !ok {
 				return

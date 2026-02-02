@@ -441,8 +441,8 @@ func (b *StatusBar) rebuildBarFlush(ctx context.Context) {
 			b.log(log.DebugLevel, "get short ref: %v", err)
 		}
 		added, deleted := calculateGitStats(diff)
-		messages := calculateMessagesStats(b.Handler.LocationLists())
 		b.scheduleNextTick(func() {
+			messages := calculateMessagesStats(b.Handler.LocationLists())
 			select {
 			case <-ctx.Done():
 				return
