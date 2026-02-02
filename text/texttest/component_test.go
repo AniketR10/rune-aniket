@@ -39,13 +39,13 @@ import (
 	gomock "go.uber.org/mock/gomock"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/api/browserapi"
+	"unstable.build/go-tui/api/extutil"
 	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/browser/browsertest"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component/comptest"
-	"unstable.build/go-tui/extension/extutil"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/command"
 	"unstable.build/go-tui/handler/handlertest"
@@ -1178,7 +1178,7 @@ func TestDispatchCommand(t *testing.T) {
 
 		h, err := c.Open(resource1)
 		require.NoError(t, err)
-		
+
 		c.Browser().Focus().SetContent(h)
 
 		cmd := textapi.Command{
