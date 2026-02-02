@@ -839,7 +839,6 @@ func (h *Prompt) setCompletionList(
 		h.pushCompletionListSync(ctx, cancel, cmdAndArgs, it)
 	} else {
 		h.list.Cancel()
-		h.list.Wait()
 		h.list.DataReset()
 		ch := h.list.Push(ctx)
 		mode := h.mode

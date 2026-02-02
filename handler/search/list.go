@@ -765,7 +765,6 @@ func (s syncBuffer) OnWillEdit(
 	ctx context.Context, start, end term.Coordinates, str string,
 ) {
 	s.parent.cancelSearch()
-	<-s.parent.waitSearchCtx.Done()
 
 	s.parent.mu.Lock()
 	defer s.parent.mu.Unlock()
