@@ -48,6 +48,13 @@ type commandAll struct {
 
 var (
 	exCommands = map[string]commandAll{
+		"keydump": {
+			man: textapi.CommandManual{
+				Summary:  "Print the format of key combinations.",
+				Synopsis: "",
+			},
+			handler: (*ex).keydump,
+		},
 		"tabrename": {
 			man: textapi.CommandManual{
 				Summary:  "Rename the current tab in focus. Optionally set the colors of the tab title.",

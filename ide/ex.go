@@ -1059,6 +1059,15 @@ func (e *ex) executePlugin(args ...string) error {
 	return nil
 }
 
+func (e *ex) keydump(_ ...string) error {
+	h := browser.Keydump(e.clip, &e.comp)
+	cfg := component.FloatingConfig{
+		Alignment: component.SpanAlignmentCentered,
+	}
+	_, err := e.comp.Floating(h, cfg)
+	return err
+}
+
 func (e *ex) newTask(args ...string) error {
 	const errExpect = "command expects at least four arguments: " +
 		"name, alignment, a separator '--' and the command to run"
