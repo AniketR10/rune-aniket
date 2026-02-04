@@ -554,7 +554,12 @@ func (t *parserHandler) DeleteLines(count int) {
 	if start >= t.sync.buf.TopScrollableRegion() &&
 		start < t.sync.buf.BottomScrollableRegion() {
 		count = min(count, t.height-start)
-		t.scrollUpAltRelative(start, count)
+		if t.useAlt {
+			t.scrollUpAltRelative(start, count)
+		} else {
+			end := start + count - 1
+			t.sync.primBuf.ScrollUp(start, end, count)
+		}
 	}
 }
 

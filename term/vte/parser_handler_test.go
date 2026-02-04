@@ -178,6 +178,42 @@ func TestIntegrationParserHandler(t *testing.T) {
 			},
 		},
 		{
+			desc:      "primary delete lines (ctrl-r on plain zsh)",
+			altBuffer: false,
+			sut: func(t *testing.T, p *parserHandler, tm *mockTabManager, pty *workspacetest.File) {
+				p.Resize(5, 5)
+				resetBuffer(t, p, "a    \nb    \nc    \nd    \ne    \nf    ")
+				assertEqualBuf(t, p, "b    \nc    \nd    \ne    \nf    ")
+				p.Backspace()
+				p.Input('X')
+				p.MoveDown(1)
+				p.CarriageReturn()
+				p.ClearLine(0)
+				p.MoveDown(1)
+				p.Input('Y')
+				p.ClearLine(0)
+				p.MoveUp(1)
+				p.MoveUp(1)
+				p.MoveForward(32)
+				p.MoveForward(3)
+				p.Input('Z')
+				p.MoveDown(2)
+				p.MoveBackward(38)
+				p.Input('1')
+				p.MoveUp(1)
+				p.MoveUp(1)
+				p.MoveForward(30)
+				// sut
+				p.MoveBackward(19)
+				p.Input('2')
+				p.MoveDown(1)
+				p.CarriageReturn()
+				p.DeleteLines(1)
+				
+				assertEqualBuf(t, p, "b    \nc    \n2   Z\ne    \n1    ")
+			},
+		},
+		{
 			desc:      "primary scroll up non-capped",
 			altBuffer: false,
 			sut: func(t *testing.T, p *parserHandler, tm *mockTabManager, pty *workspacetest.File) {
