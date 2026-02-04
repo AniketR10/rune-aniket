@@ -138,8 +138,7 @@ func (s *goSshSession) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (
 
 	// ensure that at least one of the ctxs passed to First
 	// is canceled after the command is done.
-	ctx, cancel := context.WithCancel(ctx)
-	ctx = bluectx.First(s.parentCtx, ctx)
+	ctx, cancel := bluectx.First(s.parentCtx, ctx)
 
 	// wait and dispatch error to watcher
 	go debug.CapturePanicReport(func() {

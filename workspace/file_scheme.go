@@ -347,8 +347,7 @@ func (p *fileScheme) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (
 	}
 	// ensure that if file scheme is closed, all commands are cleaned up
 	var cancelFn func()
-	ctx, cancelFn = context.WithCancel(ctx)
-	ctx = bluectx.First(p.ctx, ctx)
+	ctx, cancelFn = bluectx.First(p.ctx, ctx)
 	stdcmd := exec.CommandContext(ctx, path, cmd.Args...)
 
 	if cmd.Dir != "" {

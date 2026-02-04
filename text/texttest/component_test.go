@@ -48,7 +48,6 @@ import (
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/browser/browsertest"
 	"unstable.build/go-tui/cell"
-	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/handler/command"
 	"unstable.build/go-tui/handler/handlertest"
 	"unstable.build/go-tui/text"

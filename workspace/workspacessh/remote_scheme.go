@@ -321,8 +321,7 @@ func (s *remoteScheme) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (
 	if err != nil {
 		return 0, err
 	}
-	var cancelFn func()
-	ctx, cancelFn = context.WithCancel(ctx)
+	ctx, cancelFn := bluectx.First(s.ctx, ctx)
 	cmd.Watcher = newWrapWatcher(cmd.Watcher, cancelFn)
 	if remoteFile, ok := cmd.Stdin.(*remoteFile); ok {
 		cmd.Stdin, err = remoteFile.newFile()
@@ -342,7 +341,7 @@ func (s *remoteScheme) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (
 			return 0, fmt.Errorf("unwrap remote file: %v", err)
 		}
 	}
-	return scheme.StartCommand(bluectx.First(s.ctx, ctx), cmd)
+	return scheme.StartCommand(ctx, cmd)
 }
 
 func (s *remoteScheme) Signal(p workspaceapi.Pid, signal syscall.Signal) error {
@@ -363,7 +362,7 @@ func (s *remoteScheme) NewPty(ctx context.Context) (workspaceapi.Pty, error) {
 	// Since pty capability might be removed from a scheme, once sysprocattr
 	// is enabled or if we decide to just remove it, it's ok to leave it
 	// like this for now.
-	pty, err := scheme.NewPty(bluectx.First(s.ctx, ctx))
+	pty, err := scheme.NewPty(ctx)
 	if err == nil {
 		runtime.SetFinalizer(pty.Master, nil)
 		master := newRemoteFile(s, pty.Master.Fd(), pty.Master.Name())

@@ -105,24 +105,15 @@ type trackingWorkspace struct {
 func (w *trackingWorkspace) Command(ctx context.Context, cmd workspaceapi.Cmd) (
 	workspaceapi.Pid, error,
 ) {
-	var cancelFn func()
-	ctx, cancelFn = context.WithCancel(ctx)
+	ctx, cancelFn := bluectx.First(w.ctx, ctx)
 	cmd.Watcher = newWrapWatcher(cmd.Watcher, cancelFn)
-	ctx = bluectx.First(w.ctx, ctx)
 	return w.Workspace.StartCommand(ctx, cmd)
 }
 
 func (w *trackingWorkspace) NewPty(ctx context.Context) (
 	workspaceapi.Pty, error,
 ) {
-	// FIXME this temporarily leaks a goroutine, once session is closed
-	// but ctx or s.ctx have not been canceled yet (workspace is still active,
-	// or extension is still active).
-	// Since pty capability might be removed from a scheme, once sysprocattr
-	// is enabled or if we decide to just remove it, it's ok to leave it
-	// like this for now.
-	ctx = bluectx.First(w.ctx, ctx)
-	return w.Workspace.NewPty(ctx)
+	return w.Workspace.NewPty(w.ctx)
 }
 
 func (w *trackingWorkspace) Close() error {
