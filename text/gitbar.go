@@ -102,14 +102,17 @@ func WithGitBar(
 	scroll.Subscribe(ret)
 	buf.Subscribe(ret)
 	evs := []textapi.EventType{textapi.EventTypeFlush, textapi.EventTypeFocus}
+	ret.dirty = true
+	ret.cancelBuild = func() {}
 	_ = ret.pub.SubscribeEvents(evs, (*gitBarSubscriber)(ret))
 	for _, cmd := range gitCommands {
 		// could return error if auxbar is enabled
 		_ = ret.registry.SubscribeCommandForFile(ret.file, cmd, ret)
 	}
 
-	ret.cancelBuild = func() {}
-	ret.rebuildBar(context.Background())
+	if ret.dirty {
+		ret.rebuildBar(context.Background())
+	}
 	return ret
 }
 
@@ -145,6 +148,7 @@ type gitBar struct {
 	delAttr term.Attributes
 	addAttr term.Attributes
 
+	dirty       bool
 	cancelBuild func()
 	closed      bool
 	vhandler    handler.Virtual[Handler]
@@ -243,6 +247,7 @@ func (b *gitBar) Close() (ret error) {
 }
 
 func (b *gitBar) rebuildBar(ctx context.Context) {
+	b.dirty = false
 	b.cancelBuild()
 	ctx, b.cancelBuild = context.WithCancel(ctx)
 	uri := b.Handler.Resource()

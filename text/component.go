@@ -878,14 +878,13 @@ func (c *Component) dispatchFocusUponSubscribe(h EventHandler) bool {
 	if ok {
 		dimensions := c.getContentDimensions(c.focus)
 		resHandler, ok := t.Handler().(Handler)
-		cursor := resHandler.CursorAtScroll()
 		if ok {
 			ev := textapi.Event{
 				Type:     textapi.EventTypeFocus,
 				URI:      t.URI(),
 				Resource: resHandler,
 				Start:    dimensions,
-				From:     cursor,
+				From:     resHandler.CursorAtScroll(),
 			}
 			return h.Handle(ctx, ev)
 		}

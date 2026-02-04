@@ -144,6 +144,9 @@ func WithAuxBar(
 	scroll.Subscribe(ret)
 	buf.Subscribe(ret)
 
+	// set before in case SubsribeEvents calls Handle
+	ret.cancelBuild = func() {}
+	ret.dirty = true
 	evs := []textapi.EventType{textapi.EventTypeFlush, textapi.EventTypeFocus}
 	if ret.linesEnabled && ret.gitEnabled {
 		_ = ret.pub.SubscribeEvents(evs, (*auxBarSubscriber)(ret))
@@ -153,8 +156,9 @@ func WithAuxBar(
 		}
 	}
 
-	ret.cancelBuild = func() {}
-	ret.rebuildBar(context.Background())
+	if ret.dirty {
+		ret.rebuildBar(context.Background())
+	}
 	return ret
 }
 
@@ -182,6 +186,7 @@ type auxBar struct {
 	buf    *cell.Buffer
 	scroll *component.Scroll
 
+	dirty       bool
 	closed      bool
 	cancelBuild func()
 	vhandler    handler.Virtual[Handler]
@@ -397,6 +402,7 @@ func (b *auxBar) rebuildBar(ctx context.Context) {
 	b.cancelBuild()
 	ctx, b.cancelBuild = context.WithCancel(ctx)
 	uri := b.Handler.Resource()
+	b.dirty = false
 
 	var diff textapi.LocationList
 	var foldsIterator iterator.Iterator[term.Range]

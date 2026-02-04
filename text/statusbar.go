@@ -150,10 +150,13 @@ func WithStatusBar(
 
 	buf.Subscribe((*statusBarSubscriber)(ret))
 	evs := []textapi.EventType{textapi.EventTypeFlush}
+	ret.dirty = true
+	ret.lastFlush = buf.Version()
 	_ = ret.pub.SubscribeEvents(evs, (*statusBarSubscriber)(ret))
 
-	ret.lastFlush = buf.Version()
-	ret.rebuildBarAll()
+	if ret.dirty {
+		ret.rebuildBarAll()
+	}
 
 	return ret
 }
@@ -176,6 +179,7 @@ type StatusBar struct {
 	scroll      *component.Scroll
 	cancelBuild func()
 	closed      bool
+	dirty       bool
 	vhandler    handler.Virtual[Handler]
 
 	lastFlush                  int
@@ -331,6 +335,7 @@ func (b *StatusBar) Handle(ev term.Event) (quit, handled bool) {
 }
 
 func (b *StatusBar) rebuildBarAll() {
+	b.dirty = false
 	b.rebuildBarEdit()
 	b.rebuildBarCursor()
 	b.rebuildBarSyntax(syntax.State{})

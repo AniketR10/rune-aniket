@@ -45,6 +45,7 @@ import (
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/browser/browsertest"
 	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/comptest"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/command"
@@ -951,10 +952,10 @@ func TestEventTypeFocusIntegration(t *testing.T) {
 	c, _ := newTestComponent(t, &TestEditor{})
 	c.Resize(100, 100)
 
-	uri1, err := workspaceapi.ParseURI("file:///Elon.txt")
+	uri1, err := workspaceapi.ParseURI("file:///Bastardo.txt")
 	require.NoError(t, err)
 
-	uri2, err := workspaceapi.ParseURI("file:///Jeffrey.txt")
+	uri2, err := workspaceapi.ParseURI("file:///Bigotudo.txt")
 	require.NoError(t, err)
 
 	h1, err := c.OpenFileTab(uri1, false)
@@ -1028,8 +1029,6 @@ func TestEventTypeFocusIntegration(t *testing.T) {
 		require.NoError(t, w2.Close())
 	})
 
-	t.SkipNow()
-
 	t.Run("do not dispatch focus/unfocus events upon NextTab on window not in focus",
 		func(t *testing.T) {
 			ok := c.Browser().NextTab(w2)
@@ -1046,6 +1045,16 @@ func TestEventTypeFocusIntegration(t *testing.T) {
 	t.Run("dispatch focus event on resize", func(t *testing.T) {
 		expectFocusEvent(t, mock, uri1, 8-frameWidth, 8-frameWidth-tabBarWidth)
 		c.Resize(8, 8)
+	})
+
+	t.Run("dispatch focus event upon subscribe, non handler doesn't panic", func(t *testing.T) {
+		win, err := c.Focus()
+		require.NoError(t, err)
+		mock.EXPECT().Handle(gomock.Any(), gomock.Any()).Return(false).Times(1)
+		win.SetContent(browserapi.NopHandler(handler.Nop(component.Nop())))
+		_, ok := c.Browser().NewTabFromContent('a', "bla", win)
+		require.True(t, ok)
+		require.NoError(t, c.SubscribeEvents(evs, mock))
 	})
 }
 
@@ -1939,7 +1948,7 @@ func expectFocusEvents(
 			if textapi.EventTypeFocus == ev.Type {
 				assert.Equal(t, focus.String(), ev.URI.String())
 				assertFocusWidthHeight(t, expectedWidth, expectedHeight, ev)
-			} else if textapi.EventTypeFocus == ev.Type {
+			} else if textapi.EventTypeUnfocus == ev.Type {
 				assert.Equal(t, unfocus.String(), ev.URI.String())
 			}
 			return false
