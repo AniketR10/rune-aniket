@@ -39,7 +39,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	tcomponent "unstable.build/go-tui/component"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/ide/idepkg"
@@ -225,9 +224,9 @@ func (m *pkgManager) handlePkgInstall(ctx context.Context, cmd textapi.Command) 
 }
 
 func (m *pkgManager) makeProgressAnimation() component.Responsive {
-	frames, seq := tcomponent.ProgressAnimationFrames()
+	frames, seq := component.ProgressAnimationFrames()
 	animation := component.FuncResponsive(
-		tcomponent.NewAnimation(m.interrupter, frames, seq, 10),
+		component.NewAnimation(m.interrupter, frames, seq, 10),
 		func(width int) int { return 15 },
 	)
 	return animation

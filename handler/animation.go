@@ -26,10 +26,11 @@ package handler
 import (
 	"context"
 
+	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
 	"unstable.build/go-tui/cell"
-	"unstable.build/go-tui/component"
+	tcomponent "unstable.build/go-tui/component"
 )
 
 // AnimationPlayer returns a tui.Handler that wraps a component.Animation
@@ -78,7 +79,7 @@ func (p *player) cachePausedFrame(ctx context.Context) {
 	p.a.Draw(&bw)
 	bw.ToBuffer(&buf)
 
-	scroll := new(component.Scroll)
+	scroll := new(tcomponent.Scroll)
 	scroll.InitPerformance(&buf)
 	p.pausedFrame = scroll
 	p.pausedFrame.Resize(p.width, p.height)

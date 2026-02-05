@@ -29,9 +29,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"go.uber.org/goleak"
-	"unstable.build/go-tui/component"
 )
 
 func newTestInterrupter() (term.Interrupter, chan struct{}) {

@@ -33,7 +33,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/tcell/v3"
-	tcomponent "unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/template"
 )
 
@@ -79,7 +78,7 @@ type BarConfig struct {
 
 // DefaultBarConfig returns the default plugin top bar configuration.
 func DefaultBarConfig() BarConfig {
-	defaultAnimationFrames, _ := tcomponent.SpinningSquareAnimationFrames()
+	defaultAnimationFrames, _ := component.SpinningSquareAnimationFrames()
 	// this is backwards compatible with implementation before dynamic layout
 	// so we don't need to refactor tests.
 	return BarConfig{
@@ -126,7 +125,7 @@ type pluginHandlerBar struct {
 	barCenter component.Virtual[component.Floating]
 	barRight  component.Virtual[component.Floating]
 
-	animation         *tcomponent.Animation
+	animation         *component.Animation
 	status            *component.FloatingReference
 	statusTemplate    BarComponent
 	statusAlignment   component.Alignment
@@ -203,7 +202,7 @@ func (e *pluginHandlerBar) initLayout(interrupter term.Interrupter) {
 				seq = append(seq, i)
 			}
 			e.statusTemplate = comp
-			e.animation = tcomponent.NewAnimation(interrupter, e.StatusAnimationFrames,
+			e.animation = component.NewAnimation(interrupter, e.StatusAnimationFrames,
 				seq, animationFPS)
 			e.animation.SetAttr(e.statusTemplate.Attributes)
 			e.statusAlignment = alignment

@@ -30,9 +30,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/tcell/v3"
-	"unstable.build/go-tui/component"
 )
 
 func TestBarDraw(t *testing.T) {

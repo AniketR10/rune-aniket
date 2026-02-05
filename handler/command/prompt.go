@@ -850,8 +850,8 @@ func (h *Prompt) setCompletionList(
 		// via Next, so do not block
 		go debug.CapturePanicReport(func() {
 			// draw progress animation while iterator is still returning results
-			frames, seq := tcomponent.ProgressAnimationFrames()
-			animation := tcomponent.NewAnimation(h.interrupter, frames, seq, 10)
+			frames, seq := component.ProgressAnimationFrames()
+			animation := component.NewAnimation(h.interrupter, frames, seq, 10)
 			defer func() {
 				_ = animation.Close()
 				h.mu.Lock()
