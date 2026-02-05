@@ -25,8 +25,8 @@ package extutil
 
 import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
-	"unstable.build/go-tui/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/text"
 )
 

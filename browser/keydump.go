@@ -28,7 +28,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/clipboard"
-	tterm "unstable.build/go-tui/term"
 )
 
 // Keydump returns a Floating handler that prints the incoming events as rows.
@@ -88,7 +87,7 @@ func (k *keydump) Handle(ev term.Event) (exit, handled bool) {
 	if ev.Type != term.EventKey {
 		return
 	}
-	str := tterm.KeyCombString(ev.KeyComb())
+	str := ev.KeyComb().String()
 	cfg := component.StringResponsiveConfig{
 		NoSplitWords: true,
 		StringConfig: component.StringConfig{

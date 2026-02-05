@@ -26,10 +26,10 @@ package asciiart
 import (
 	"image"
 
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
-	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 // NewComponent returns a tui.Component that renders the given image

@@ -1572,7 +1572,7 @@ func TestSetFrameAttr(t *testing.T) {
 
 func assertEqualTile(t *testing.T, win Window, expected rune) {
 	t.Helper()
-	if f, ok := win.Content().(interface { Content() tui.Component }); ok {
+	if f, ok := win.Content().(interface{ Content() tui.Component }); ok {
 		assert.Equal(t, string(expected), string(f.Content().(*component.TestComponent).Ch))
 	} else {
 		assert.Equal(t, string(expected), string(win.Content().(*component.TestComponent).Ch))

@@ -29,8 +29,8 @@ import (
 	"strconv"
 	"text/template/parse"
 
-	"github.com/unstablebuild/tcell/v3"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/tcell/v3"
 )
 
 // AllowedFuncs returns a list of allowed functions to pass to parse.Parse

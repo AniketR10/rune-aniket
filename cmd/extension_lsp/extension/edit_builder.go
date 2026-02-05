@@ -32,8 +32,8 @@ import (
 	multierr "github.com/ernestrc/go-multierror"
 	"github.com/unstablebuild/golang-internal-tools/lsp/protocol"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
-	"unstable.build/go-tui/cell"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"unstable.build/go-tui/cell"
 )
 
 type editBuilder struct {

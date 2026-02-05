@@ -24,8 +24,8 @@
 package vi
 
 import (
-	"unstable.build/go-tui/handler"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/text"
 )
 

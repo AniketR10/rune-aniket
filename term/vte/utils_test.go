@@ -27,8 +27,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"unstable.build/go-tui/cell"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"unstable.build/go-tui/cell"
 )
 
 func TestLastPromptLine(t *testing.T) {

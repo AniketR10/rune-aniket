@@ -138,7 +138,7 @@ func (s *Server) URI(ctx context.Context, req *workspacerpc.URIRequest) (
 	*workspacerpc.URIResponse, error,
 ) {
 	root := req.GetRoot()
-	
+
 	s.locker.Lock()
 	defer s.locker.Unlock()
 

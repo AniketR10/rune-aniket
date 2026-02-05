@@ -29,8 +29,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/unstablebuild/tcell/v3"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/tcell/v3"
 )
 
 func TestTransitionCut(t *testing.T) {

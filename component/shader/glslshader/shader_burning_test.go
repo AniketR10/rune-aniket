@@ -32,8 +32,8 @@ import (
 	"image/png"
 	"testing"
 
-	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component/asciiart"
 	"unstable.build/go-tui/component/shader/shadertest"

@@ -26,8 +26,8 @@ package text
 import (
 	"context"
 
-	"unstable.build/go-tui/cell"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"unstable.build/go-tui/cell"
 )
 
 // Repeater is a helper structure to enable repeating the last

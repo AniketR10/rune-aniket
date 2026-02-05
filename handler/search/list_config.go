@@ -27,8 +27,8 @@ import (
 	"time"
 
 	fzf "github.com/junegunn/fzf/src/algo"
-	"github.com/unstablebuild/tcell/v3"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/tcell/v3"
 )
 
 const (

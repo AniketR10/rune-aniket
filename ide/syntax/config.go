@@ -27,9 +27,9 @@ import (
 	"context"
 
 	"github.com/unstablebuild/blue/iterator"
-	"github.com/unstablebuild/tcell/v3"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/tcell/v3"
 )
 
 // Config configures a tree parser.

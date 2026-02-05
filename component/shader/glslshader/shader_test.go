@@ -28,10 +28,10 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/component/asciiart"
 	"unstable.build/go-tui/component/shader/shadertest"
-	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 func TestShadeGLSL(t *testing.T) {

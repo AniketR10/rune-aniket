@@ -27,10 +27,10 @@ import (
 	"math"
 	"math/rand"
 
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/component/shader"
 	"unstable.build/go-tui/component/shader/shaderutils"
-	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 // Flames cross the screen from bottom to top.

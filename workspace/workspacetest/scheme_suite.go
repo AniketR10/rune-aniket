@@ -281,7 +281,7 @@ func TestWorkspaceSchemeFiles(
 			scheme, err = scheme.Chroot("./abc")
 			require.NoError(t, err)
 			assert.True(t, strings.Contains(scheme.Root(), "abc"))
-			
+
 			uri, err := scheme.URI(".")
 			require.NoError(t, err)
 			assert.Equal(t, scheme.Root(), uri.Path())

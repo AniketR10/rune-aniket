@@ -28,10 +28,10 @@ import (
 	"runtime"
 	"sync"
 
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/component/asciiart"
 	"unstable.build/go-tui/debug"
-	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 type cellRunner interface {

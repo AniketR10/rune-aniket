@@ -32,10 +32,10 @@ import (
 )
 
 type floatingNode struct {
-	desiredOffset               term.Coordinates // desired offset
-	alignment                   component.Alignment        // desired alignment
-	maxWidth, maxHeight         int              // window space size
-	desiredWidth, desiredHeight int              // content desired Dimensions size
+	desiredOffset               term.Coordinates    // desired offset
+	alignment                   component.Alignment // desired alignment
+	maxWidth, maxHeight         int                 // window space size
+	desiredWidth, desiredHeight int                 // content desired Dimensions size
 	userWidth, userHeight       int
 	minimized                   component.Alignment
 	minimizedPadding            int

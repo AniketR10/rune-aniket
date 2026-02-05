@@ -416,7 +416,7 @@ func (wm *WindowManager) calculateMinimizedOffsets() {
 			if wm.config.Frame {
 				width -= 2
 			}
-			width= max(0, width)
+			width = max(0, width)
 			fn.Content().Resize(width, fn.minimizedPadding)
 		case component.AlignmentLeft, component.AlignmentRight:
 			height := wm.minimizedHeight

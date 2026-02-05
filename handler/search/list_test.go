@@ -35,10 +35,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/goleak"
-	"github.com/unstablebuild/rune-go-sdk/tui"
-	"unstable.build/go-tui/cell"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
+	"go.uber.org/goleak"
+	"unstable.build/go-tui/cell"
 )
 
 type listConstructor func(ListConfig) (listIfc, *cell.Buffer)

@@ -24,8 +24,8 @@
 package search
 
 import (
-	"github.com/unstablebuild/rune-go-sdk/tui"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
 )
 
 // Handler wraps a List to satisfy tui.Handler.

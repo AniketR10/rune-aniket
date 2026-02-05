@@ -37,7 +37,6 @@ import (
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/handler/handlertest"
-	tterm "unstable.build/go-tui/term"
 )
 
 func TestCursorExternalEdit(t *testing.T) {
@@ -424,7 +423,7 @@ func TestSublimeKeyBindingsMacOS(t *testing.T) {
 
 	for _, test := range suite {
 		t.Run(test.description, func(t *testing.T) {
-			seq, err := tterm.ParseKeys(test.keycomb)
+			seq, err := term.ParseKeys(test.keycomb)
 			require.NoError(t, err)
 
 			clip := clipboard.NewInMemory()

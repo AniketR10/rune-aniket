@@ -26,8 +26,8 @@ package text
 import (
 	"context"
 
-	"unstable.build/go-tui/cell"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"unstable.build/go-tui/cell"
 )
 
 // ExternalEditor wraps a CellEditor to update cursor **line** upon external edits.

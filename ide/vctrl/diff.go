@@ -29,12 +29,12 @@ import (
 	"time"
 
 	"github.com/sergi/go-diff/diffmatchpatch"
-	"github.com/unstablebuild/tcell/v3"
-	"github.com/unstablebuild/rune-go-sdk/tui"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
+	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
-	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 // Diff computes the (line oriented) modifications needed to turn the src

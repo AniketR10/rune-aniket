@@ -57,7 +57,6 @@ import (
 	"unstable.build/go-tui/ide/plugin"
 	"unstable.build/go-tui/ide/syntax"
 	"unstable.build/go-tui/ide/vctrl"
-	tterm "unstable.build/go-tui/term"
 	"unstable.build/go-tui/term/vte"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/workspace"
@@ -162,7 +161,7 @@ func (c ideConfig) commandKeyMappings() map[handler.Sequence][][]string {
 	for k, v := range m {
 		seq, err := handler.ParseSequence(k)
 		if err != nil {
-			seq.First, err = tterm.ParseKey(k)
+			seq.First, err = term.ParseKey(k)
 			if err != nil {
 				c.errors["key_bindings."+k] = err
 				continue
@@ -219,7 +218,7 @@ func (c ideConfig) commandKey() (ret term.KeyComb) {
 		}
 		return
 	}
-	key, err := tterm.ParseKey(cfgKey)
+	key, err := term.ParseKey(cfgKey)
 	if err != nil {
 		if err != config.ErrNotFound {
 			c.errors[fmt.Sprintf("command.%s", keyCommandKey)] = err

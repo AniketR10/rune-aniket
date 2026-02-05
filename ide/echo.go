@@ -29,7 +29,6 @@ import (
 	"strings"
 
 	"github.com/unstablebuild/rune-go-sdk/term"
-	tterm "unstable.build/go-tui/term"
 )
 
 type echoKey struct {
@@ -48,7 +47,7 @@ func parseEchoKeys(sequence string) (ret []echoKey, err error) {
 
 	// parse up until first instruction
 	var keys []term.KeyComb
-	keys, err = tterm.ParseKeys(sequence[0:idxOpen])
+	keys, err = term.ParseKeys(sequence[0:idxOpen])
 	for _, key := range keys {
 		ret = append(ret, echoKey{KeyComb: key})
 	}

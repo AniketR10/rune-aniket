@@ -27,8 +27,8 @@ import (
 	"fmt"
 
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
-	"github.com/unstablebuild/rune-go-sdk/term/termrpc"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi/textrpc"
+	"github.com/unstablebuild/rune-go-sdk/term/termrpc"
 )
 
 func protoTypeToModel(protoType textrpc.EditorEvent_Type) (ev textapi.EventType, err error) {

@@ -24,10 +24,10 @@
 package handler
 
 import (
-	"github.com/unstablebuild/tcell/v3"
-	"github.com/unstablebuild/rune-go-sdk/tui"
-	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
+	"github.com/unstablebuild/tcell/v3"
 )
 
 // PromptHandler provides hooks to be called upon Prompt actions.

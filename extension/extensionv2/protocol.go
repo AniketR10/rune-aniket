@@ -33,9 +33,9 @@ import (
 	"time"
 
 	"github.com/unstablebuild/blue/auth"
-	"golang.org/x/oauth2"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
+	"golang.org/x/oauth2"
 	"unstable.build/go-tui/extension"
 )
 

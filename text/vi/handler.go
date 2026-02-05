@@ -33,13 +33,13 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/logging"
-	"github.com/unstablebuild/tcell/v3"
-	"github.com/unstablebuild/rune-go-sdk/tui"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
+	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/handler"
-	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/text"
 )
 

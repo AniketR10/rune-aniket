@@ -26,8 +26,8 @@ package glslshader
 import (
 	"testing"
 
-	"unstable.build/go-tui/component/shader/shadertest"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"unstable.build/go-tui/component/shader/shadertest"
 )
 
 func TestFlames(t *testing.T) {

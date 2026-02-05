@@ -35,11 +35,11 @@ import (
 	"time"
 
 	"github.com/unstablebuild/blue/bluectx"
+	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/knownhosts"
 	"golang.org/x/term"
-	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
-	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/workspace"
 )

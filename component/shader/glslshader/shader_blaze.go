@@ -29,9 +29,9 @@ package glslshader
 import (
 	"math"
 
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/component/shader"
-	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 // Blaze shader remixed from CaliCoastReplay's 301's Fire Shader - Remix 2

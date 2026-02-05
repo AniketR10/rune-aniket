@@ -26,10 +26,10 @@ package shader
 import (
 	"math"
 
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/component/asciiart"
 	"unstable.build/go-tui/component/shader/shaderutils"
-	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 // Bomb shows an expansive ring expanding from the center outwards displacing

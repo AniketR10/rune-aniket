@@ -17,7 +17,7 @@ require (
 	github.com/stretchr/testify v1.11.1
 	github.com/unstablebuild/blue v1.62.0
 	github.com/unstablebuild/golang-internal-tools v0.0.2
-	github.com/unstablebuild/rune-go-sdk v0.0.2
+	github.com/unstablebuild/rune-go-sdk v0.0.5
 	github.com/unstablebuild/tcell/v3 v3.6.1
 	go.uber.org/goleak v1.3.0
 	golang.org/x/crypto v0.46.0

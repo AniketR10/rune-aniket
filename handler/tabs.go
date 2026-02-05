@@ -24,9 +24,9 @@
 package handler
 
 import (
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
 	"unstable.build/go-tui/component"
-	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 var _ tui.Handler = (*Tabs)(nil)

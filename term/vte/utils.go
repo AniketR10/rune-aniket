@@ -24,8 +24,8 @@
 package vte
 
 import (
-	"unstable.build/go-tui/cell"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/term/vte/vtescreen"
 )
 

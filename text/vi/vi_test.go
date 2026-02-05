@@ -35,11 +35,11 @@ import (
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/component/comptest"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/clipboard"
-	"github.com/unstablebuild/rune-go-sdk/component/comptest"
 	"unstable.build/go-tui/handler/handlertest"
-	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/text/texttest"
 )

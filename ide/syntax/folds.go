@@ -29,8 +29,8 @@ import (
 	log "github.com/sirupsen/logrus"
 	tree_sitter "github.com/tree-sitter/go-tree-sitter"
 	"github.com/unstablebuild/blue/iterator"
-	"unstable.build/go-tui/cell"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"unstable.build/go-tui/cell"
 )
 
 const captureNameFoldsInitial = "initial_fold"

@@ -153,7 +153,7 @@ func TestWindowManagerHandleFrame(t *testing.T) {
 		},
 	}
 
-	handlertest.TestHandler(t, h , cases, writer)
+	handlertest.TestHandler(t, h, cases, writer)
 }
 
 func TestWindowFocusInitSplitVertical(t *testing.T) {

@@ -27,9 +27,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/unstablebuild/tcell/v3"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/tcell/v3"
 )
 
 func TestDiffToLocationList(t *testing.T) {

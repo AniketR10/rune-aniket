@@ -194,7 +194,7 @@ func TestFacility(t *testing.T) {
 
 		mu.Lock()
 		defer mu.Unlock()
-		
+
 		require.NotNil(t, 2, tvte)
 		assert.True(t, tvte.clearedPrimary)
 	})

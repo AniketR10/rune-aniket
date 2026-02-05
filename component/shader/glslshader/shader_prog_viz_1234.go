@@ -26,8 +26,8 @@ package glslshader
 import (
 	"math"
 
-	"unstable.build/go-tui/component/shader"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"unstable.build/go-tui/component/shader"
 )
 
 // ProgressViz1234 shows the process percentage as numbers 0-9, 0 being the

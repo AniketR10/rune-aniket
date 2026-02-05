@@ -38,9 +38,9 @@ import (
 	multierr "github.com/ernestrc/go-multierror"
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/debug"
-	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 const (

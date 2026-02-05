@@ -24,8 +24,8 @@
 package timeshader
 
 import (
-	"unstable.build/go-tui/component/shader"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"unstable.build/go-tui/component/shader"
 )
 
 var _ shader.Shader = (*timeShader)(nil)

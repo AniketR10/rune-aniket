@@ -24,9 +24,9 @@
 package shader
 
 import (
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/component/shader/shaderutils"
-	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 // Fade is a Shader that interpolates the foreground and background color

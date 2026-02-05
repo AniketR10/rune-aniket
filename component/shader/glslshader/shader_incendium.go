@@ -26,8 +26,8 @@ package glslshader
 import (
 	"math"
 
-	"unstable.build/go-tui/component/shader"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"unstable.build/go-tui/component/shader"
 )
 
 // Incendium creates flames that turn screen into embers and ashes while sparks

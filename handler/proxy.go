@@ -24,8 +24,8 @@
 package handler
 
 import (
-	"github.com/unstablebuild/rune-go-sdk/tui"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
 )
 
 var _ tui.Handler = (*Proxy)(nil)

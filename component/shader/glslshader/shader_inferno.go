@@ -24,9 +24,9 @@
 package glslshader
 
 import (
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/component/shader"
-	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 // Inferno shader remixed from codevinsky's Fire (https://www.shadertoy.com/view/XsXXRN)

@@ -209,7 +209,7 @@ func TestIntegrationParserHandler(t *testing.T) {
 				p.MoveDown(1)
 				p.CarriageReturn()
 				p.DeleteLines(1)
-				
+
 				assertEqualBuf(t, p, "b    \nc    \n2   Z\ne    \n1    ")
 			},
 		},

@@ -27,9 +27,9 @@ import (
 	"context"
 	"math"
 
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
-	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/term/vte/vteparser"
 	"unstable.build/go-tui/text"
 )

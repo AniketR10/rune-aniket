@@ -26,10 +26,10 @@ package handler
 import (
 	"context"
 
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
-	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 // AnimationPlayer returns a tui.Handler that wraps a component.Animation

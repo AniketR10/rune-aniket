@@ -33,8 +33,8 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/tcell/v3"
-	"unstable.build/go-tui/component/template"
 	tcomponent "unstable.build/go-tui/component"
+	"unstable.build/go-tui/component/template"
 )
 
 // BarComponentType is one of the many supported

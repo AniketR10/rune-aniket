@@ -27,7 +27,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	tterm "unstable.build/go-tui/term"
 )
 
 // GetFrameCharset is a helper which extracts and parses a component.FrameCharSet.
@@ -82,5 +81,5 @@ func GetKey(c config.Config, key string) (term.KeyComb, error) {
 	if err != nil {
 		return term.KeyComb{}, err
 	}
-	return tterm.ParseKey(s)
+	return term.ParseKey(s)
 }

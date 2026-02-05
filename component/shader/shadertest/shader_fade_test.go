@@ -26,8 +26,8 @@ package shadertest
 import (
 	"testing"
 
-	"unstable.build/go-tui/component/shader"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"unstable.build/go-tui/component/shader"
 )
 
 func TestFade(t *testing.T) {

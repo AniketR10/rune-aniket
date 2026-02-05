@@ -28,9 +28,9 @@ import (
 
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
-	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 // ScrollSubscriber returns a component.ScrollSubscriber which forwarsd Scroll events to evHandler

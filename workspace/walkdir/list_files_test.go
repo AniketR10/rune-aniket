@@ -36,9 +36,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/blue/iterator"
-	"go.uber.org/goleak"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"go.uber.org/goleak"
 	"unstable.build/go-tui/workspace"
 )
 

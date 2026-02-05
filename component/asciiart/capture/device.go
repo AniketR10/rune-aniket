@@ -36,8 +36,8 @@ import (
 	"github.com/pion/mediadevices/pkg/prop"
 	"github.com/pion/webrtc/v3"
 	log "github.com/sirupsen/logrus"
-	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
 	"unstable.build/go-tui/component/asciiart"
 )

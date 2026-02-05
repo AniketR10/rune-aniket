@@ -27,8 +27,8 @@ import (
 	"math"
 	"math/rand"
 
-	"unstable.build/go-tui/component/shader/shaderutils"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"unstable.build/go-tui/component/shader/shaderutils"
 )
 
 // TransitionCrossFade plays the first shader and before ending fades it

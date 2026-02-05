@@ -40,7 +40,7 @@ import (
 var _ textapi.EventHandler = (*eventStreamClient)(nil)
 
 const (
-	eventChanBuffer             = 100
+	eventChanBuffer = 100
 )
 
 type eventStreamClient struct {

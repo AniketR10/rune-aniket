@@ -31,9 +31,9 @@ import (
 	"golang.org/x/image/draw"
 
 	"github.com/disintegration/imaging"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/cell"
-	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 const (

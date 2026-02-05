@@ -25,12 +25,12 @@ package vi
 
 import (
 	"github.com/sirupsen/logrus"
-	"github.com/unstablebuild/tcell/v3"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/component"
-	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/text"
 )
 

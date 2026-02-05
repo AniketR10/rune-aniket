@@ -28,9 +28,9 @@ import (
 	"fmt"
 
 	log "github.com/sirupsen/logrus"
-	"google.golang.org/grpc"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
+	"google.golang.org/grpc"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/rpc"
 )

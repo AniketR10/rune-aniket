@@ -30,9 +30,9 @@ import (
 
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/browser/browsertest"
 	"unstable.build/go-tui/cell"
-	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/text"
 )
 

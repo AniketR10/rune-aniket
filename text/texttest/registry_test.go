@@ -80,13 +80,13 @@ func TestRegistry(t *testing.T) {
 	require.Error(t, handler1.HandleCommand(ctx, textapi.Command{URI: file3, Name: "xyz"}))
 	require.Error(t, handler2.HandleCommand(ctx, textapi.Command{URI: file3, Name: "abc"}))
 	require.Error(t, handler2.HandleCommand(ctx, textapi.Command{URI: file1, Name: "else"}))
-	
+
 	require.NoError(t, fr.UnsubscribeCommandForFile(file2, xyzman.Name))
 	require.NoError(t, fr.UnsubscribeCommandForFile(file1, abcman.Name))
 
 	assert.Equal(t, 2, xyz)
 	assert.Equal(t, 2, abc)
-	
+
 	require.NoError(t, handler1.HandleCommand(ctx, textapi.Command{URI: file1, Name: "xyz"}))
 	require.Error(t, handler2.HandleCommand(ctx, textapi.Command{URI: file1, Name: "abc"}))
 	require.Error(t, handler1.HandleCommand(ctx, textapi.Command{URI: file2, Name: "xyz"}))
@@ -97,10 +97,10 @@ func TestRegistry(t *testing.T) {
 
 	assert.Equal(t, 3, xyz)
 	assert.Equal(t, 3, abc)
-	
+
 	require.NoError(t, fr.UnsubscribeCommandForFile(file1, xyzman.Name))
 	require.NoError(t, fr.UnsubscribeCommandForFile(file2, abcman.Name))
-	
+
 	require.Error(t, handler1.HandleCommand(ctx, textapi.Command{URI: file1, Name: "xyz"}))
 	require.Error(t, handler2.HandleCommand(ctx, textapi.Command{URI: file1, Name: "abc"}))
 	require.Error(t, handler1.HandleCommand(ctx, textapi.Command{URI: file2, Name: "xyz"}))
@@ -108,7 +108,7 @@ func TestRegistry(t *testing.T) {
 	require.Error(t, handler1.HandleCommand(ctx, textapi.Command{URI: file3, Name: "xyz"}))
 	require.Error(t, handler2.HandleCommand(ctx, textapi.Command{URI: file3, Name: "abc"}))
 	require.Error(t, handler2.HandleCommand(ctx, textapi.Command{URI: file1, Name: "else"}))
-	
+
 	assert.Equal(t, 3, xyz)
 	assert.Equal(t, 3, abc)
 }

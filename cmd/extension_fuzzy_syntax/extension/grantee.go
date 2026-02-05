@@ -38,11 +38,11 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/cmd/extension_fuzzy_file/finder"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/extension/extutil"
 	"unstable.build/go-tui/rpc"
-	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/workspace/walkdir"
 )
 

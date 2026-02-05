@@ -27,8 +27,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/term/graphemecluster"
 	"github.com/unstablebuild/tcell/v3"
 )
