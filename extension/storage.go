@@ -31,8 +31,8 @@ import (
 
 	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi/docmarshal/doctoml"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagerpc/docpb"
-	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagerpc/doctoml"
 	"unstable.build/go-tui/localstorage"
 	"unstable.build/go-tui/localstorage/storagerpc"
 	"unstable.build/go-tui/rpc"

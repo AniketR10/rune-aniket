@@ -29,8 +29,8 @@ import (
 
 	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi/docmarshal/doctoml"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagerpc"
-	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagerpc/doctoml"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/localstorage/bluestore"
 	"unstable.build/go-tui/rpc"

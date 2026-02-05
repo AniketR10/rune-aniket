@@ -29,10 +29,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/unstablebuild/blue/document"
-	"github.com/unstablebuild/blue/retry"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
-	"unstable.build/go-tui/localstorage/bluestore"
+	"github.com/unstablebuild/rune-go-sdk/retry"
 )
 
 var retryStrategy = retry.SequentialStrategy(30 * time.Millisecond)
@@ -47,7 +45,7 @@ const (
 // when the number of stored queries is equal to the maximum allowed
 // will remove the oldest query.
 type History struct {
-	store   document.Service
+	store   storageapi.Service
 	timeout time.Duration
 	docID   string
 	idx     int
@@ -73,7 +71,7 @@ func (h *History) Init(
 			documentID, store, maxHistory)
 		panic(err)
 	}
-	h.store = bluestore.AdaptFrom(store)
+	h.store = store
 	h.docID = documentID
 	h.timeout = defaultStoreTimeout
 	h.max = maxHistory
@@ -87,7 +85,7 @@ func (h *History) Load() error {
 	defer cancel()
 
 	err := h.store.Get(ctx, h.docID, &h.doc)
-	if errors.Is(err, document.ErrNotFound) {
+	if errors.Is(err, storageapi.ErrNotFound) {
 		err = h.store.Create(ctx, h.docID, &h.doc)
 	}
 	if err != nil {
@@ -109,8 +107,8 @@ func (h *History) Add(query string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), defaultStoreTimeout)
 	defer cancel()
 
-	err := document.ConsistentUpdate(ctx, h.store, h.docID, &h.doc, retryStrategy,
-		func() ([]document.Update, []document.Precondition) {
+	err := storageapi.ConsistentUpdate(ctx, h.store, h.docID, &h.doc, retryStrategy,
+		func() ([]storageapi.Update, []storageapi.Precondition) {
 			h.doc.Queries = append(h.doc.Queries, "")
 			copy(h.doc.Queries[1:], h.doc.Queries)
 			h.doc.Queries[0] = query
@@ -119,10 +117,10 @@ func (h *History) Add(query string) error {
 				h.doc.Queries = h.doc.Queries[:h.max]
 			}
 
-			return []document.Update{
+			return []storageapi.Update{
 					{FieldPath: []string{"Queries"}, Value: h.doc.Queries},
 					{FieldPath: []string{"Version"}, Value: h.doc.Version + 1},
-				}, []document.Precondition{
+				}, []storageapi.Precondition{
 					{FieldPath: []string{"Version"}, Value: h.doc.Version},
 				}
 		})
@@ -141,8 +139,8 @@ func (h *History) Remove(cmd string) error {
 	// anticipate capacity, since the resulting list will be roughly of similar length
 	newQueries := make([]string, 0, len(h.doc.Queries))
 
-	err := document.ConsistentUpdate(ctx, h.store, h.docID, &h.doc, retryStrategy,
-		func() ([]document.Update, []document.Precondition) {
+	err := storageapi.ConsistentUpdate(ctx, h.store, h.docID, &h.doc, retryStrategy,
+		func() ([]storageapi.Update, []storageapi.Precondition) {
 			newQueries = newQueries[:0]
 
 			// this would be more efficient if the results were sorted but they are not
@@ -154,10 +152,10 @@ func (h *History) Remove(cmd string) error {
 
 			h.doc.Queries = newQueries
 
-			return []document.Update{
+			return []storageapi.Update{
 					{FieldPath: []string{"Queries"}, Value: h.doc.Queries},
 					{FieldPath: []string{"Version"}, Value: h.doc.Version + 1},
-				}, []document.Precondition{
+				}, []storageapi.Precondition{
 					{FieldPath: []string{"Version"}, Value: h.doc.Version},
 				}
 		})
