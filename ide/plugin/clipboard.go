@@ -26,7 +26,7 @@ package plugin
 import (
 	"strings"
 
-	"unstable.build/go-tui/clipboard"
+	"github.com/unstablebuild/rune-go-sdk/clipboard"
 )
 
 type nullReplaceClipboard struct {

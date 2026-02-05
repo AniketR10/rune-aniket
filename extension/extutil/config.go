@@ -28,9 +28,9 @@ import (
 	"fmt"
 
 	"github.com/unstablebuild/rune-go-sdk/api/config"
+	"github.com/unstablebuild/rune-go-sdk/clipboard"
+	"github.com/unstablebuild/rune-go-sdk/clipboard/sysclip"
 	"unstable.build/go-tui/browser"
-	"unstable.build/go-tui/clipboard"
-	"unstable.build/go-tui/clipboard/sysclip"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/text/modeless"

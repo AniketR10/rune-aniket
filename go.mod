@@ -3,7 +3,7 @@ module unstable.build/go-tui
 go 1.25.6
 
 require (
-	github.com/atotto/clipboard v0.1.2
+	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/disintegration/imaging v1.6.2
 	github.com/ernestrc/dom v0.2.5-0.20201125033726-789c946aa938
 	github.com/ernestrc/go-multierror v1.1.2
@@ -17,7 +17,7 @@ require (
 	github.com/stretchr/testify v1.11.1
 	github.com/unstablebuild/blue v1.62.0
 	github.com/unstablebuild/golang-internal-tools v0.0.2
-	github.com/unstablebuild/rune-go-sdk v0.0.5
+	github.com/unstablebuild/rune-go-sdk v0.0.6
 	github.com/unstablebuild/tcell/v3 v3.6.1
 	go.uber.org/goleak v1.3.0
 	golang.org/x/crypto v0.46.0

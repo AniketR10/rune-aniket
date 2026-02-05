@@ -40,8 +40,8 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/clipboard"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/ide/vctrl"
 	"unstable.build/go-tui/workspace"
 )

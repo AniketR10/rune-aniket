@@ -25,9 +25,9 @@ package browser
 
 import (
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/clipboard"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"unstable.build/go-tui/clipboard"
 )
 
 // Keydump returns a Floating handler that prints the incoming events as rows.

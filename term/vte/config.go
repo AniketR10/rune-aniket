@@ -25,9 +25,9 @@ package vte
 
 import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/clipboard"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/tcell/v3"
-	"unstable.build/go-tui/clipboard"
 )
 
 // DefaultConfig returns a sane default Config.

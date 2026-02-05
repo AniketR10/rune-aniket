@@ -35,7 +35,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
-	"unstable.build/go-tui/clipboard"
+	"github.com/unstablebuild/rune-go-sdk/clipboard"
 	"unstable.build/go-tui/ide/vctrl"
 )
 

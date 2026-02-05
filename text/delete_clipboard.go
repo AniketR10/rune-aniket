@@ -26,9 +26,9 @@ package text
 import (
 	"context"
 
+	"github.com/unstablebuild/rune-go-sdk/clipboard"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/cell"
-	"unstable.build/go-tui/clipboard"
 )
 
 type delClip struct {

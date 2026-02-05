@@ -26,7 +26,7 @@ package vte
 import (
 	"strings"
 
-	"unstable.build/go-tui/clipboard"
+	"github.com/unstablebuild/rune-go-sdk/clipboard"
 	"unstable.build/go-tui/text"
 )
 

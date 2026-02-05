@@ -28,8 +28,8 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/logging"
+	"github.com/unstablebuild/rune-go-sdk/clipboard"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/text"
 )
 
