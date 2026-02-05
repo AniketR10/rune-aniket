@@ -24,21 +24,22 @@
 package text
 
 import (
+	"github.com/unstablebuild/rune-go-sdk/mouse"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/component"
 )
 
-// CursorMouseDelegate satisfies MouseDelegate with a Cursor on a component.Scroll.
-func CursorMouseDelegate(c *Cursor) MouseDelegate {
+// CursorMouseDelegate satisfies mouse.Delegate with a Cursor on a component.Scroll.
+func CursorMouseDelegate(c *Cursor) mouse.Delegate {
 	return mouseDelegate{cursor: c}
 }
 
-// satisfies text.MouseDelegate
+// satisfies mouse.Delegate
 type mouseDelegate struct {
 	cursor *Cursor
 }
 
-func (d mouseDelegate) OnAction(ev term.Event, pos term.Coordinates, action MouseAction) bool {
+func (d mouseDelegate) OnAction(ev term.Event, pos term.Coordinates, action mouse.Action) bool {
 	return false
 }
 

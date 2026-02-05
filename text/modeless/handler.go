@@ -34,6 +34,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/clipboard"
 	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/mouse"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/debug"
@@ -54,7 +55,7 @@ type editorHandler struct {
 	resource         workspaceapi.URI
 	cursor           text.Cursor
 	height           int
-	mouse            *text.Mouse
+	mouse            *mouse.Mouse
 	clipboard        clipboard.Register
 	pendingSetCursor *term.Coordinates
 	lastIterateWord  term.Coordinates
@@ -91,7 +92,7 @@ func (h *editorHandler) Init(
 	})
 	h.less.Scroll().SetTabspaces(h.cfg.tabspaces)
 	h.cursor.Init(h.less.Scroll(), h.cfg.scheduleNextTick)
-	h.mouse = text.NewMouse(text.CursorMouseDelegate(&h.cursor))
+	h.mouse = mouse.New(text.CursorMouseDelegate(&h.cursor))
 	h.clipboard = h.cfg.clipboard
 	h.statusBar = nopBar{}
 	h.lastIterateWord.X = -1

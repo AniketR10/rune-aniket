@@ -24,22 +24,23 @@
 package vi
 
 import (
+	"github.com/unstablebuild/rune-go-sdk/mouse"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/text"
 )
 
-// wraps text.CursorMouseDelegate to set vi states
+// wraps text.CursorDelegate to set vi states
 type mouseDelegate struct {
-	text.MouseDelegate
+	mouse.Delegate
 	vi *viHandlerImpl
 }
 
-func newMouseDelegate(vi *viHandlerImpl) text.MouseDelegate {
-	return mouseDelegate{MouseDelegate: text.CursorMouseDelegate(&vi.cursor), vi: vi}
+func newDelegate(vi *viHandlerImpl) mouse.Delegate {
+	return mouseDelegate{Delegate: text.CursorMouseDelegate(&vi.cursor), vi: vi}
 }
 
 func (d mouseDelegate) SetSelectionStart(pos term.Coordinates) {
-	d.MouseDelegate.SetSelectionStart(pos)
+	d.Delegate.SetSelectionStart(pos)
 	d.vi.setVisualMode()
 	d.vi.anchor = d.vi.cursorAtScroll()
 	d.vi.markMatchingBrace()
@@ -47,5 +48,5 @@ func (d mouseDelegate) SetSelectionStart(pos term.Coordinates) {
 
 func (d mouseDelegate) ClearSelection() {
 	d.vi.setNormalMode()
-	d.MouseDelegate.ClearSelection()
+	d.Delegate.ClearSelection()
 }

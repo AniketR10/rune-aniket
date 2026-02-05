@@ -37,11 +37,11 @@ import (
 	"github.com/unstablebuild/blue/logging"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
+	"github.com/unstablebuild/rune-go-sdk/mouse"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/debug"
-	"unstable.build/go-tui/text"
 )
 
 var _ tui.Handler = (*Handler)(nil)
@@ -60,7 +60,7 @@ type Handler struct {
 
 	modalEnabled bool
 	viMode       bool
-	mouse        *text.Mouse
+	mouse        *mouse.Mouse
 	mouseDriver  *mouseDriver
 
 	bracketedPaste    bool
@@ -128,7 +128,7 @@ func (e *Handler) Init(
 		}
 	}
 	e.mouseDriver = &mouseDriver{t: e.comp, clipboard: config.Clipboard}
-	e.mouse = text.NewMouse(e.mouseDriver)
+	e.mouse = mouse.New(e.mouseDriver)
 	e.ctx, e.cancelCtx = context.WithCancel(context.Background())
 
 	e.updateCh = make(chan struct{}, 1)

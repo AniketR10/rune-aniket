@@ -29,8 +29,8 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/logging"
 	"github.com/unstablebuild/rune-go-sdk/clipboard"
+	"github.com/unstablebuild/rune-go-sdk/mouse"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"unstable.build/go-tui/text"
 )
 
 type mouseDriver struct {
@@ -41,13 +41,13 @@ type mouseDriver struct {
 }
 
 func (e *mouseDriver) OnAction(
-	ev term.Event, pos term.Coordinates, action text.MouseAction,
+	ev term.Event, pos term.Coordinates, action mouse.Action,
 ) bool {
 	if e.t.MouseModeReportMouseClicks() || e.t.MouseModeReportCellMouseMotion() {
 		return e.reportAction(ev, pos, action)
 	}
 	switch action {
-	case text.MouseMiddleClick:
+	case mouse.MiddleClick:
 		paste, _ := e.clipboard.Paste(clipboard.DefaultRegisterID)
 		e.hookRawBytes = []byte(paste.Text)
 		return true
@@ -57,28 +57,28 @@ func (e *mouseDriver) OnAction(
 }
 
 func (e *mouseDriver) reportAction(
-	ev term.Event, pos term.Coordinates, action text.MouseAction,
+	ev term.Event, pos term.Coordinates, action mouse.Action,
 ) bool {
 	tx, ty := pos.X, pos.Y
 	var button rune
 	switch action {
-	case text.MouseWheelUp:
+	case mouse.WheelUp:
 		// TODO use alternate scroll mode
 		// manage it here so we can delegate to
 		// underlying program if terminal
 		// could not handle scroll (i.e. alternate buffer)
 		e.hookRawBytes = ev.Raw
 		return true
-	case text.MouseWheelDown:
+	case mouse.WheelDown:
 		e.hookRawBytes = ev.Raw
 		return true
-	case text.MouseLeftClick:
+	case mouse.LeftClick:
 		button = 0
-	case text.MouseMiddleClick:
+	case mouse.MiddleClick:
 		button = 1
-	case text.MouseRightClick:
+	case mouse.RightClick:
 		button = 2
-	case text.MouseRelease:
+	case mouse.Release:
 		if !e.t.MouseModeSgrMouse() {
 			button = 3
 		}
@@ -92,7 +92,7 @@ func (e *mouseDriver) reportAction(
 
 	if e.t.MouseModeSgrMouse() {
 		final := 'M'
-		if action == text.MouseRelease {
+		if action == mouse.Release {
 			final = 'm'
 		}
 		e.hookRawBytes = []byte(fmt.Sprintf("\x1b[<%d;%d;%d%c", button, tx, ty, final))

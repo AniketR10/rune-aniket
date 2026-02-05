@@ -33,6 +33,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/clipboard"
+	"github.com/unstablebuild/rune-go-sdk/mouse"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
@@ -50,7 +51,7 @@ type Vi struct {
 	handler   viHandler
 	buf       *cell.Buffer
 	cursor    *text.Cursor
-	mouse     *text.Mouse
+	mouse     *mouse.Mouse
 	less      *handler.Less
 	clipboard clipboard.Register
 	config    viConfig
@@ -112,7 +113,7 @@ func (vi *Vi) init(
 	vi.buf = buf
 	vi.less = &viHandler.less
 	vi.cursor = &viHandler.cursor
-	vi.mouse = text.NewMouse(newMouseDelegate(viHandler))
+	vi.mouse = mouse.New(newDelegate(viHandler))
 	vi.clipboard = viHandler.config.clipboard
 	vi.scheduleNextTick = viHandler.config.scheduleNextTick
 

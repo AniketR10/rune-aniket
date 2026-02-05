@@ -17,7 +17,7 @@ require (
 	github.com/stretchr/testify v1.11.1
 	github.com/unstablebuild/blue v1.62.0
 	github.com/unstablebuild/golang-internal-tools v0.0.2
-	github.com/unstablebuild/rune-go-sdk v0.0.7
+	github.com/unstablebuild/rune-go-sdk v0.0.8
 	github.com/unstablebuild/tcell/v3 v3.6.1
 	go.uber.org/goleak v1.3.0
 	golang.org/x/crypto v0.46.0
@@ -31,7 +31,7 @@ require (
 require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/ernestrc/logd-go v0.0.0-20180509171507-65871c1d5504
-	github.com/google/uuid v1.6.0 // indirect
+	github.com/google/uuid v1.6.0
 	github.com/hashicorp/errwrap v1.0.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.3.0 // indirect
 	github.com/mattn/go-isatty v0.0.12 // indirect
