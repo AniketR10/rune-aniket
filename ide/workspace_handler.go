@@ -71,6 +71,7 @@ const (
 	cmdCloseWorkspace    = "workspaceclose"
 	cmdReloadWorkspace   = "workspacereload"
 	cmdAddWorkspace      = "workspacenew"
+	cmdRenameWorkspace   = "workspacerename"
 	workspaceSlots       = 9
 )
 
@@ -366,6 +367,9 @@ func (h *workspaceManagerHandler) barSize() int {
 func (h *workspaceManagerHandler) makeWorkspaceTabName(
 	i int, w *workspaceHandler,
 ) string {
+	if w != nil && w.tabname != "" {
+		return w.tabname
+	}
 	switch h.workspaceBarKind {
 	case workspaceBarKindDisabled:
 		return ""
@@ -495,7 +499,7 @@ func (h *workspaceManagerHandler) initExtensions(manager extension.Runner, cfg i
 	for id, p := range h.builtinExtensions {
 		pconfig := p.Config
 		if pconfig == nil {
-			pconfig = config.MapConfig(make(map[string]interface{}))
+			pconfig = config.MapConfig(make(map[string]any))
 		}
 		path := p.Path
 		id := id
@@ -512,7 +516,7 @@ func (h *workspaceManagerHandler) initExtensions(manager extension.Runner, cfg i
 		path, _ := p.path()
 		pconfig, ok := p.config()
 		if !ok {
-			pconfig = config.MapConfig(make(map[string]interface{}))
+			pconfig = config.MapConfig(make(map[string]any))
 		}
 		id := id
 		go debug.CapturePanicReport(func() {
@@ -577,8 +581,8 @@ func (h *workspaceManagerHandler) textOpts(cfg ideConfig) []text.Option {
 // we have no conrol over what extensions are defining in configuration;
 // it could be secret keys or anything worth stealing for a malicious extension
 // that gets granted extensionapi.PermissionConfig.
-func cleanedExtensionConfig(cfg map[string]interface{}) map[string]interface{} {
-	m := make(map[string]interface{}, len(cfg))
+func cleanedExtensionConfig(cfg map[string]any) map[string]any {
+	m := make(map[string]any, len(cfg))
 	for k, v := range cfg {
 		if k != "extensions" {
 			m[k] = v
@@ -859,6 +863,21 @@ func (h *workspaceManagerHandler) commandAddWorkspace(args ...string) error {
 	return h.addOrCreateWorkspace(uri)
 }
 
+func (h *workspaceManagerHandler) commandRenameWorkspace(args ...string) error {
+	if h.focusHandler() == h.empty {
+		return fmt.Errorf("there's no workspace to rename. " +
+			"First you must open one via `workspacenew`")
+	}
+	if len(args) == 0 {
+		return fmt.Errorf("expected one argument with the new name")
+	}
+	name := args[0]
+	handler := h.workspaces[h.focus]
+	handler.tabname = name
+	h.Resize(h.width, h.height)
+	return nil
+}
+
 func (h *workspaceManagerHandler) closeWorkspace() (workspaceapi.URI, []workspaceapi.URI, error) {
 	if h.focusHandler() == h.empty {
 		return workspaceapi.URI{}, nil, errors.New("workspace tab is empty")
@@ -994,6 +1013,7 @@ func (h *workspaceManagerHandler) Close() (ret error) {
 
 type workspaceHandler struct {
 	*ex
+	tabname      string
 	vctrlService vctrl.Service
 	cancelCtx    func()
 	uri          workspaceapi.URI
@@ -1074,6 +1094,14 @@ func (h *workspaceManagerHandler) subscribeActiveWorkspaceCommands(ex *ex) (ret 
 				Synopsis: "[scheme:][//[userinfo@]host][/]workspacepath",
 			},
 		},
+		cmdRenameWorkspace: {
+			handler: (*workspaceManagerHandler).commandRenameWorkspace,
+			man: textapi.CommandManual{
+				Summary: "Renames the workspace tab, usually displayed at the bottom, " +
+					"when there are multiple workspaces.",
+				Synopsis: "name",
+			},
+		},
 		cmdCloseWorkspace: {
 			handler: (*workspaceManagerHandler).commandCloseWorkspace,
 			man: textapi.CommandManual{
@@ -1111,8 +1139,6 @@ func (h *workspaceManagerHandler) subscribeInternalCommands(
 	commands map[string]commandAllWorkspace,
 ) (ret error) {
 	for cmd, man := range commands {
-		man := man
-		cmd := cmd
 		man.man.Name = cmd
 		err := ex.comp.SubscribeCommand(man.man, text.FuncCommandHandler(
 			func(ctx context.Context, cmd textapi.Command) error {

@@ -812,6 +812,17 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 ├──────────────────┤
 │1 1  4 4          │
 └──────────────────┘`},
+		{":workspacerename bla>:wofo 4>",
+			`┌──────────────────┐
+│                  │
+├──────────────────┤
+│                  │
+│workspaceWallpaper│
+│                  │
+│                  │
+├──────────────────┤
+│1 bla  4          │
+└──────────────────┘`},
 	}
 	handlertest.TestHandlerIsolated(t, fn, 20, 10, cases)
 }
