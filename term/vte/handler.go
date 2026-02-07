@@ -77,10 +77,10 @@ type Handler struct {
 func NewHandler(
 	publisher browser.EventPublisher, n browser.Notifications,
 	terminal schemeapi.Terminal, executor schemeapi.Executor,
-	tm browser.TabManager, config Config, initialCmd string,
+	tm browser.TabManager, config Config,
 ) (*Handler, error) {
 	ret := new(Handler)
-	err := ret.Init(publisher, n, terminal, executor, tm, config, initialCmd)
+	err := ret.Init(publisher, n, terminal, executor, tm, config)
 	if err != nil {
 		return nil, err
 	}
@@ -91,7 +91,7 @@ func NewHandler(
 func (e *Handler) Init(
 	publisher browser.EventPublisher, n browser.Notifications,
 	termapi schemeapi.Terminal, executor schemeapi.Executor,
-	tm browser.TabManager, config Config, initialCmd string,
+	tm browser.TabManager, config Config,
 ) error {
 	// wrap clipboard to provide stitch newlines on paste
 	// depending on the copy mode.
@@ -122,11 +122,7 @@ func (e *Handler) Init(
 			return fmt.Errorf("set initial pty size: %v", err)
 		}
 	}
-	if initialCmd != "" {
-		if err := e.comp.WriteToPty([]byte(initialCmd)); err != nil {
-			return fmt.Errorf("write to pty: %v", err)
-		}
-	}
+
 	e.mouseDriver = &mouseDriver{t: e.comp, clipboard: config.Clipboard}
 	e.mouse = mouse.New(e.mouseDriver)
 	e.ctx, e.cancelCtx = context.WithCancel(context.Background())

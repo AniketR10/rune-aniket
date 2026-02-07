@@ -262,16 +262,10 @@ func (e *Handler) initEmulator(
 	executor schemeapi.Executor, t schemeapi.Terminal, tm browser.TabManager,
 	interrupter term.Interrupter, ch chan error,
 ) error {
-	// we want shell to be a one-shot execution, so initialCmd must be empty
-	// and shell must execute the command. Under the hood file scheme
-	// allows for shell with command and arguments so it's fine to pass as-is.
-	initialCmd := ""
-
 	ctx, cancel := context.WithCancel(context.Background())
 	e.cancelCtx = cancel
 
-	vteh, err := vte.NewHandler(publisher, notifications, t, executor,
-		tm, e.cfg, initialCmd)
+	vteh, err := vte.NewHandler(publisher, notifications, t, executor, tm, e.cfg)
 	if err != nil {
 		cancel()
 		return fmt.Errorf("new vte: %w", err)

@@ -76,7 +76,7 @@ func New(
 	ret.new = func(initialAlloc bool) (VTE, error) {
 		ret.log(log.TraceLevel, "called pool.New, width hint: %d, height hint: %d",
 			config.WidthHint, config.HeightHint)
-		i, err := vte.NewHandler(publisher, n, terminal, executor, tm, config, "")
+		i, err := vte.NewHandler(publisher, n, terminal, executor, tm, config)
 		if err != nil {
 			return nil, err
 		}

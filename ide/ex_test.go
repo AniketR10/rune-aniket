@@ -73,6 +73,7 @@ import (
 // handlertest.TestHandlerSequence maps ':' characters to the following event
 // this is to work around ex's assumptions on underlying handler.
 var testCommandKey = term.KeyComb{Ch: '\\', Mod: term.ModCtrl}
+var bgctx = context.Background()
 
 type browserConstructor func(ed text.Editor, opts ...text.Option) (tui.Handler, browser.Browser, error)
 
@@ -1340,11 +1341,11 @@ func newExForTestingWithWorkspace(
 		container, emulatorCfg, plugin.DefaultBarConfig(),
 		publishEvent, 0, clip, nil, finalOpts...))
 	ex.subscribeCommands()
-	ex.newEmulatorHandler = func(initialCmd string) (vtereservoir.VTE, error) {
-		return newTestVteWithConfig(initialCmd), nil
+	ex.newEmulatorHandler = func(args []string, _ workspaceapi.ProcessWatcher) (vtereservoir.VTE, error) {
+		return newTestVteWithConfig(args), nil
 	}
 	ex.newPluginHandler = func(args ...string) (pluginHandler, error) {
-		return newTestVteWithConfig(strings.Join(args, " ")), nil
+		return newTestVteWithConfig(args), nil
 	}
 	return testEx{Component: container, ex: ex}
 }
@@ -1375,11 +1376,11 @@ func newExForTestingCommandsPreview(
 		container, emulatorCfg, plugin.DefaultBarConfig(),
 		publishEvent, 0, clip, previews, finalOpts...))
 	ex.subscribeCommands()
-	ex.newEmulatorHandler = func(initialCmd string) (vtereservoir.VTE, error) {
-		return newTestVteWithConfig(initialCmd), nil
+	ex.newEmulatorHandler = func(args []string, _ workspaceapi.ProcessWatcher) (vtereservoir.VTE, error) {
+		return newTestVteWithConfig(args), nil
 	}
 	ex.newPluginHandler = func(args ...string) (pluginHandler, error) {
-		return newTestVteWithConfig(strings.Join(args, " ")), nil
+		return newTestVteWithConfig(args), nil
 	}
 	return testEx{Component: container, ex: ex}
 }
@@ -2345,35 +2346,35 @@ func TestTerminalOnFocus(t *testing.T) {
 		ex := newExForTestingWithWorkspace(t, workspace.NewSchemeWorkspace(uri, scheme),
 			texttest.NopEditor(), testConfig, nopPublishEvent, clipboard.NewInMemory())
 		tvte := newTestVte()
-		ex.newEmulatorHandler = func(initialCmd string) (vtereservoir.VTE, error) {
-			assert.Equal(t, "echo bla", initialCmd)
+		ex.newEmulatorHandler = func(args []string, _ workspaceapi.ProcessWatcher) (vtereservoir.VTE, error) {
+			assert.Equal(t, "echo bla", strings.Join(args, " "))
 			return tvte, nil
 		}
 		t.Cleanup(func() { _ = ex.Close() })
 
-		ex.terminalnewtab("echo bla")
+		ex.terminalnewtab(context.Background(), "echo", "bla")
 
 		require.Len(t, tvte.onFocusChange, 2)
 		assert.False(t, tvte.onFocusChange[0])
 		assert.True(t, tvte.onFocusChange[1])
 
 		// switch to some other tab, same window
-		ex.editFiles("a")
+		ex.editFiles(context.Background(), "a")
 		require.Len(t, tvte.onFocusChange, 3)
 		assert.False(t, tvte.onFocusChange[2])
 
 		// switch back to terminal tab, same window
-		ex.tabprevious()
+		ex.tabprevious(context.Background())
 		require.Len(t, tvte.onFocusChange, 4)
 		assert.True(t, tvte.onFocusChange[3])
 
 		// new window, tab still in screen but not focused
-		ex.windownew()
+		ex.windownew(context.Background())
 		require.Len(t, tvte.onFocusChange, 5)
 		assert.False(t, tvte.onFocusChange[4])
 
 		// focus back to tab window
-		ex.windowfocus("left")
+		ex.windowfocus(context.Background(), "left")
 		require.Len(t, tvte.onFocusChange, 6)
 		assert.True(t, tvte.onFocusChange[5])
 
@@ -2387,7 +2388,7 @@ func TestTerminalOnFocus(t *testing.T) {
 		require.Len(t, tvte.onFocusChange, 8)
 		assert.True(t, tvte.onFocusChange[7])
 
-		ex.tabclose()
+		ex.tabclose(context.Background())
 		require.Len(t, tvte.onFocusChange, 9)
 		assert.False(t, tvte.onFocusChange[8])
 	})
@@ -2400,25 +2401,25 @@ func TestTerminalOnFocus(t *testing.T) {
 		ex := newExForTestingWithWorkspace(t, workspace.NewSchemeWorkspace(uri, scheme),
 			texttest.NopEditor(), testConfig, nopPublishEvent, clipboard.NewInMemory())
 		tvte := newTestVte()
-		ex.newEmulatorHandler = func(initialCmd string) (vtereservoir.VTE, error) {
+		ex.newEmulatorHandler = func([]string, workspaceapi.ProcessWatcher) (vtereservoir.VTE, error) {
 			return tvte, nil
 		}
 		t.Cleanup(func() { _ = ex.Close() })
 		ex.Resize(100, 100)
 
-		ex.executePlugin()
+		ex.executePlugin(context.Background())
 
 		require.Len(t, tvte.onFocusChange, 2)
 		assert.False(t, tvte.onFocusChange[0])
 		assert.True(t, tvte.onFocusChange[1])
 
 		// switching from floating to other window should trigger on focus change
-		ex.windowfocus("left")
+		ex.windowfocus(bgctx, "left")
 		require.Len(t, tvte.onFocusChange, 3)
 		assert.False(t, tvte.onFocusChange[2])
 
 		// switching back to floating should trigger again
-		ex.executePlugin()
+		ex.executePlugin(bgctx)
 		require.Len(t, tvte.onFocusChange, 4)
 		assert.True(t, tvte.onFocusChange[3])
 
@@ -2433,7 +2434,7 @@ func TestTerminalOnFocus(t *testing.T) {
 		assert.True(t, tvte.onFocusChange[5])
 
 		// indirectly toggle terminal companion
-		ex.editFiles("a")
+		ex.editFiles(bgctx, "a")
 		require.Len(t, tvte.onFocusChange, 7)
 		assert.False(t, tvte.onFocusChange[6])
 	})
@@ -2454,16 +2455,16 @@ func TestTerminalOnFocus(t *testing.T) {
 		}
 		t.Cleanup(func() { _ = ex.Close() })
 		ex.Resize(100, 100)
-		ex.editFiles("a", "b") // have tabs available for later
+		ex.editFiles(bgctx, "a", "b") // have tabs available for later
 
-		ex.executePlugin("echo", "bla")
+		ex.executePlugin(bgctx, "echo", "bla")
 
 		require.Len(t, tvte.onFocusChange, 2)
 		assert.False(t, tvte.onFocusChange[0])
 		assert.True(t, tvte.onFocusChange[1])
 
 		// switching from floating to other window should trigger on focus change
-		ex.windowfocus("left")
+		ex.windowfocus(bgctx, "left")
 		require.Len(t, tvte.onFocusChange, 3)
 		assert.False(t, tvte.onFocusChange[2])
 
@@ -2483,7 +2484,7 @@ func TestTerminalOnFocus(t *testing.T) {
 		assert.True(t, tvte.onFocusChange[5])
 
 		// ephemeral close should trigger another focus event
-		ex.tabnext()
+		ex.tabnext(context.Background())
 		require.Len(t, tvte.onFocusChange, 7)
 		assert.False(t, tvte.onFocusChange[6])
 	})
@@ -2656,10 +2657,10 @@ func TestRunStopTasks(t *testing.T) {
 		mu.Lock()
 		defer mu.Unlock()
 
-		require.Error(t, b.newTask("up", "--", "make"))
-		require.Error(t, b.newTask("newTask", "left", "make"))
-		require.Error(t, b.newTask("--", "make", "test", "things"))
-		require.Error(t, b.newTask("up", ".go,.md", "--", "make", "test"))
+		require.Error(t, b.newTask(bgctx, "up", "--", "make"))
+		require.Error(t, b.newTask(bgctx, "newTask", "left", "make"))
+		require.Error(t, b.newTask(bgctx, "--", "make", "test", "things"))
+		require.Error(t, b.newTask(bgctx, "up", ".go,.md", "--", "make", "test"))
 	})
 
 	t.Run("newtask is called with correct number of args returns no error", func(t *testing.T) {
@@ -2669,10 +2670,10 @@ func TestRunStopTasks(t *testing.T) {
 		mu.Lock()
 		defer mu.Unlock()
 
-		require.NoError(t, b.newTask("myTask", "left", "--", "make"))
-		require.NoError(t, b.newTask("myTask2", "right", "--", "make", "test", "things"))
-		require.NoError(t, b.newTask("myTask3", "left", ".go,.md", "--", "make", "test"))
-		require.NoError(t, b.newTask("myTask4", "right", ".go,.md", "--", "make", "test"))
+		require.NoError(t, b.newTask(bgctx, "myTask", "left", "--", "make"))
+		require.NoError(t, b.newTask(bgctx, "myTask2", "right", "--", "make", "test", "things"))
+		require.NoError(t, b.newTask(bgctx, "myTask3", "left", ".go,.md", "--", "make", "test"))
+		require.NoError(t, b.newTask(bgctx, "myTask4", "right", ".go,.md", "--", "make", "test"))
 	})
 
 	// left/right alignment combined with up/down is ugly; stick to left/right only
@@ -2683,10 +2684,10 @@ func TestRunStopTasks(t *testing.T) {
 		mu.Lock()
 		defer mu.Unlock()
 
-		require.Error(t, b.newTask("myTask", "up", "--", "make"))
-		require.Error(t, b.newTask("myTask2", "down", "--", "make", "test", "things"))
-		require.Error(t, b.newTask("myTask3", "up", ".go,.md", "--", "make", "test"))
-		require.Error(t, b.newTask("myTask4", "down", ".go,.md", "--", "make", "test"))
+		require.Error(t, b.newTask(bgctx, "myTask", "up", "--", "make"))
+		require.Error(t, b.newTask(bgctx, "myTask2", "down", "--", "make", "test", "things"))
+		require.Error(t, b.newTask(bgctx, "myTask3", "up", ".go,.md", "--", "make", "test"))
+		require.Error(t, b.newTask(bgctx, "myTask4", "down", ".go,.md", "--", "make", "test"))
 	})
 
 	t.Run("newtask called twice with same task name opens a prompt", func(t *testing.T) {
@@ -2696,8 +2697,8 @@ func TestRunStopTasks(t *testing.T) {
 		mu.Lock()
 		defer mu.Unlock()
 
-		require.NoError(t, b.newTask("myTask", "left", "--", "make"))
-		require.NoError(t, b.newTask("myTask", "right", "--", "make", "test", "things"))
+		require.NoError(t, b.newTask(bgctx, "myTask", "left", "--", "make"))
+		require.NoError(t, b.newTask(bgctx, "myTask", "right", "--", "make", "test", "things"))
 		_, handled := b.Handle(term.Event{Type: term.EventKey, Ch: 'y'})
 		assert.True(t, handled)
 	})
@@ -3693,8 +3694,8 @@ func testCommandOverlayConfig() text.CommandOverlayConfig {
 
 type testVte struct {
 	component.String
-	initialCmd string
 
+	initialCmd    string
 	calledClose   bool
 	defAttr       term.Attributes
 	onFocusChange []bool
@@ -3705,13 +3706,13 @@ type testVte struct {
 }
 
 func newTestVte() *testVte {
-	return newTestVteWithConfig("")
+	return newTestVteWithConfig(nil)
 }
 
-func newTestVteWithConfig(initialCmd string) *testVte {
+func newTestVteWithConfig(initialCmd []string) *testVte {
 	ret := new(testVte)
-	ret.initialCmd = initialCmd
-	ret.String = component.NewString(initialCmd)
+	ret.initialCmd = strings.Join(initialCmd, " ")
+	ret.String = component.NewString(ret.initialCmd)
 	return ret
 }
 

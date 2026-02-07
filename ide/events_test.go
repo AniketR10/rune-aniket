@@ -153,7 +153,7 @@ func TestEventDispatching(t *testing.T) {
 				testURI, err := x.workspace.URI("a")
 				require.NoError(t, err)
 
-				require.NoError(t, x.editFiles(testURI.Path()))
+				require.NoError(t, x.editFiles(bgctx, testURI.Path()))
 				ed, err := x.comp.Editor(testURI)
 				require.NoError(t, err)
 				// flush below clears dirty property but it's
@@ -376,7 +376,7 @@ func TestEventDispatching(t *testing.T) {
 		testURI, err := x.workspace.URI("a")
 		require.NoError(t, err)
 
-		require.NoError(t, x.editFiles(testURI.String()))
+		require.NoError(t, x.editFiles(bgctx, testURI.String()))
 
 		fsev := testEventInfo{e: schemeapi.Remove, u: testURI}
 		dispatchFilesystemEvent(x, &mu, ignores, fsev)
@@ -624,7 +624,7 @@ func (t testEventInfo) IsDir() (bool, error) {
 // changes the contents on disk to content.
 func createOpenWriteFile(t *testing.T, x *ex, file workspaceapi.URI, content string) {
 	require.NoError(t, os.WriteFile(file.Path(), []byte(""), 0666))
-	require.NoError(t, x.editFiles(file.String()))
+	require.NoError(t, x.editFiles(bgctx, file.String()))
 	require.NoError(t, os.WriteFile(file.Path(), []byte(content), 0666))
 }
 
@@ -632,14 +632,14 @@ func createOpenWriteFile(t *testing.T, x *ex, file workspaceapi.URI, content str
 // (non empty, with content), then removes it from disk.
 func createOpenRemoveFile(t *testing.T, x *ex, file workspaceapi.URI, content string) {
 	require.NoError(t, os.WriteFile(file.Path(), []byte(content), 0666))
-	require.NoError(t, x.editFiles(file.String()))
+	require.NoError(t, x.editFiles(bgctx, file.String()))
 	require.NoError(t, os.Remove(file.Path()))
 }
 
 // openWriteUncreatedFile open an empty, uncreated file for editing, then changes
 // the contents on disk to content.
 func openWriteUncreatedFile(t *testing.T, x *ex, file workspaceapi.URI, content string) {
-	require.NoError(t, x.editFiles(file.String()))
+	require.NoError(t, x.editFiles(bgctx, file.String()))
 	require.NoError(t, os.WriteFile(file.Path(), []byte("abc"), 0666))
 }
 

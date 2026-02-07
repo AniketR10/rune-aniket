@@ -45,6 +45,8 @@ import (
 	"unstable.build/go-tui/workspace"
 )
 
+var ctx = context.Background()
+
 func TestCommandsIntegration(t *testing.T) {
 	dir, err := os.MkdirTemp("/tmp", "")
 	require.NoError(t, err)
@@ -120,7 +122,7 @@ func TestCommandsIntegration(t *testing.T) {
 		"package main",
 	}, items)
 
-	_, err = c.DispatchCommand(textapi.Command{
+	_, err = c.DispatchCommand(ctx, textapi.Command{
 		Name:   "jumptoast",
 		Args:   []string{"NONEXISTENT", "local.definition.namespace", "package main"},
 		Window: c.Browser().Focus(),
@@ -128,7 +130,7 @@ func TestCommandsIntegration(t *testing.T) {
 	})
 	require.True(t, strings.Contains(err.Error(), "NONEXISTENT"))
 
-	_, err = c.DispatchCommand(textapi.Command{
+	_, err = c.DispatchCommand(ctx, textapi.Command{
 		Name:   "jumptoast",
 		Args:   []string{"locals.scm", "NONEXISTENT", "package main"},
 		Window: c.Browser().Focus(),
@@ -136,7 +138,7 @@ func TestCommandsIntegration(t *testing.T) {
 	})
 	require.EqualError(t, err, "1 error occurred: capture name 'NONEXISTENT' does not exist in query")
 
-	_, err = c.DispatchCommand(textapi.Command{
+	_, err = c.DispatchCommand(ctx, textapi.Command{
 		Name:   "jumptoast",
 		Args:   []string{"locals.scm", "local.definition.namespace", "NONEXISTENT"},
 		Window: c.Browser().Focus(),
@@ -147,7 +149,7 @@ func TestCommandsIntegration(t *testing.T) {
 	// test that we actually jump
 	tests := []comptest.TestCase{
 		{Action: func() {
-			handled, err := c.DispatchCommand(textapi.Command{
+			handled, err := c.DispatchCommand(ctx, textapi.Command{
 				Name:   "jumptoast",
 				Args:   []string{"locals.scm", "local.definition.var", "const fileContent = \"package main\\n\" +"},
 				Window: c.Browser().Focus(),
@@ -217,7 +219,7 @@ func TestCommandsIntegration(t *testing.T) {
 └────────────────────────────┘`,
 		},
 		{Action: func() {
-			handled, err := c.DispatchCommand(textapi.Command{
+			handled, err := c.DispatchCommand(ctx, textapi.Command{
 				Name:   "jumptoast",
 				Args:   []string{"locals.scm", "local.definition.var", "const fileContent = \"package main\\n\" +"},
 				Window: c.Browser().Focus(),

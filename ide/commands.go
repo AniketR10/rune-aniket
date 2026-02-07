@@ -41,7 +41,7 @@ const (
 
 type commandAll struct {
 	man       textapi.CommandManual
-	handler   func(*ex, ...string) error
+	handler   func(*ex, context.Context, ...string) error
 	completer func(e *ex, ctx context.Context, cmd textapi.Command,
 	) (iterator.Iterator[string], string, error)
 }
@@ -539,7 +539,7 @@ var (
 				Summary:  "Update the log level, overriding the level set in config.",
 				Synopsis: "<(info|debug|trace|warn|error|panic|fatal)>",
 			},
-			handler: func(e *ex, args ...string) error {
+			handler: func(e *ex, ctx context.Context, args ...string) error {
 				if len(args) != 1 {
 					return errors.New("expected exactly one argument with the log level")
 				}

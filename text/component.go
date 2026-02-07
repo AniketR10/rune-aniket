@@ -583,7 +583,9 @@ func (c *Component) replacePositionalArgs(
 
 // DispatchCommand dispatches a EventTypeCommand with cmd to subscribers
 // subscribed via SubscribeEvents.
-func (c *Component) DispatchCommand(cmd textapi.Command) (handled bool, err error) {
+func (c *Component) DispatchCommand(
+	ctx context.Context, cmd textapi.Command,
+) (handled bool, err error) {
 	if cmd.Window == nil {
 		panic("invalid command: missing Window from which command was invoked")
 	}
@@ -624,7 +626,8 @@ func (c *Component) DispatchCommand(cmd textapi.Command) (handled bool, err erro
 				Cursor:   cmd.Cursor,
 			}
 			// re-use re-expansion logic or call to another alias
-			targetHandled, targetErr := c.DispatchCommand(targetCmd)
+			targetHandled, targetErr := c.DispatchCommand(
+				contextWithAlias(ctx, cmd.Name), targetCmd)
 			if targetErr != nil {
 				return targetHandled, fmt.Errorf("%s: %s", target, targetErr)
 			}
@@ -638,7 +641,7 @@ func (c *Component) DispatchCommand(cmd textapi.Command) (handled bool, err erro
 		return false, nil
 	}
 	c.log(log.DebugLevel, "Dispatching command %q with args %v", cmd.Name, cmd.Args)
-	err = man.handler.HandleCommand(context.Background(), cmd)
+	err = man.handler.HandleCommand(ctx, cmd)
 	if err != nil {
 		return true, err
 	}

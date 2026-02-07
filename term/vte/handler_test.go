@@ -341,7 +341,7 @@ func testSequenceShell(t *testing.T, cfg Config, timeout time.Duration, shell st
 	cfg.HeightHint = 10
 	cfg.CommandAndArgs = []string{shell}
 	handler, err := NewHandler(chanEventPublisher{ch}, nopNotifications{},
-		scheme, scheme, nopTabManager{}, cfg, "")
+		scheme, scheme, nopTabManager{}, cfg)
 	require.NoError(t, err)
 
 	if ci := os.Getenv("CI"); ci == "true" {

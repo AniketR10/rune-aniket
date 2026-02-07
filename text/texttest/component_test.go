@@ -1070,7 +1070,7 @@ func TestDispatchCommand(t *testing.T) {
 			Name:     "SELL",
 			Window:   win,
 		}
-		ok, err := c.DispatchCommand(cmd)
+		ok, err := c.DispatchCommand(context.Background(), cmd)
 		require.NoError(t, err)
 		assert.False(t, ok)
 	})
@@ -1110,11 +1110,44 @@ func TestDispatchCommand(t *testing.T) {
 			Args:     []string{"newArgs"},
 			Window:   win,
 		}
-		ok, err := c.DispatchCommand(cmd)
+		ok, err := c.DispatchCommand(context.Background(), cmd)
 		assert.True(t, ok)
 		require.NoError(t, err)
 		assert.True(t, newWindowCalled)
 		assert.True(t, editCalled)
+	})
+
+	t.Run("commands dispatched via alias have ctx set", func(t *testing.T) {
+		config := text.DefaultConfig()
+		config.CommandAliases = map[string]text.CommandAlias{
+			"workstation_layout": text.CommandAlias{
+				Commands: []string{"newWindow"},
+			},
+		}
+		c, _ := newTestComponentConfig(t, NopEditor(), config)
+		win, _ := c.Focus()
+
+		var newWindowCalled bool
+		c.SubscribeCommand(testCommand("newWindow", "", ""),
+			text.FuncCommandHandler(func(ctx context.Context, cmd textapi.Command) error {
+				orig, ok := text.IsAliasContext(ctx)
+				assert.True(t, ok)
+				assert.Equal(t, orig, "workstation_layout")
+				newWindowCalled = true
+				return nil
+			}, nil))
+
+		cmd := textapi.Command{
+			Resource: NewTestHandler(),
+			URI:      uri,
+			Name:     "workstation_layout",
+			Args:     []string{"newArgs"},
+			Window:   win,
+		}
+		ok, err := c.DispatchCommand(context.Background(), cmd)
+		assert.True(t, ok)
+		require.NoError(t, err)
+		assert.True(t, newWindowCalled)
 	})
 
 	t.Run("replaces aliases positional commands with dispatched cmds", func(t *testing.T) {
@@ -1156,7 +1189,7 @@ func TestDispatchCommand(t *testing.T) {
 				Args:     []string{"arg1", "arg2"},
 				Window:   win,
 			}
-			ok, err := c.DispatchCommand(cmd)
+			ok, err := c.DispatchCommand(context.Background(), cmd)
 			assert.True(t, ok)
 			require.NoError(t, err)
 		}
@@ -1200,7 +1233,7 @@ func TestDispatchCommand(t *testing.T) {
 			Args:     []string{"arg1", "arg2"},
 			Window:   win,
 		}
-		ok, err := c.DispatchCommand(cmd)
+		ok, err := c.DispatchCommand(context.Background(), cmd)
 		assert.True(t, ok)
 		require.NoError(t, err)
 
@@ -1243,7 +1276,7 @@ func TestDispatchCommand(t *testing.T) {
 			Args:     []string{"arg1"},
 			Window:   win,
 		}
-		ok, err := c.DispatchCommand(cmd)
+		ok, err := c.DispatchCommand(context.Background(), cmd)
 		assert.False(t, ok)
 		require.EqualError(t, err, "alias expects an argument at position 2 ($2)")
 
@@ -1281,7 +1314,7 @@ func TestDispatchCommand(t *testing.T) {
 			Args:     []string{"'%'", "--all"},
 			Window:   win,
 		}
-		ok, err := c.DispatchCommand(cmd)
+		ok, err := c.DispatchCommand(context.Background(), cmd)
 		assert.True(t, ok)
 		require.NoError(t, err)
 	})
@@ -1300,7 +1333,7 @@ func TestDispatchCommand(t *testing.T) {
 			Name:     "bla",
 			Window:   win,
 		}
-		ok, err := c.DispatchCommand(cmd)
+		ok, err := c.DispatchCommand(context.Background(), cmd)
 		assert.True(t, ok)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "boom")
@@ -1323,7 +1356,7 @@ func TestDispatchCommand(t *testing.T) {
 				Name:     cmd,
 				Window:   win,
 			}
-			ok, err := c.DispatchCommand(cmd)
+			ok, err := c.DispatchCommand(context.Background(), cmd)
 			assert.False(t, ok)
 			require.NoError(t, err)
 		}
@@ -1341,7 +1374,7 @@ func TestDispatchCommand(t *testing.T) {
 			Name:     "kaboom",
 			Window:   win,
 		}
-		ok, err := c.DispatchCommand(cmd)
+		ok, err := c.DispatchCommand(context.Background(), cmd)
 		assert.False(t, ok)
 		require.NoError(t, err)
 	})
@@ -1603,7 +1636,7 @@ func testRegister(t *testing.T,
 		mu.Lock()
 		cmd := textapi.Command{Resource: h1, URI: resource1, Name: myCmd, Args: myArgs,
 			Window: win}
-		ok, err := c.DispatchCommand(cmd)
+		ok, err := c.DispatchCommand(context.Background(), cmd)
 		assert.True(t, ok)
 		require.NoError(t, err)
 		mu.Unlock()
@@ -1645,7 +1678,7 @@ func TestUnregisterCommand(t *testing.T) {
 		Args:     myArgs,
 		Window:   win,
 	}
-	ok, err := c.DispatchCommand(cmd)
+	ok, err := c.DispatchCommand(context.Background(), cmd)
 	assert.True(t, ok)
 	require.NoError(t, err)
 
@@ -1654,7 +1687,7 @@ func TestUnregisterCommand(t *testing.T) {
 	err = c.UnsubscribeCommand(myCmd)
 	require.NoError(t, err)
 
-	ok, err = c.DispatchCommand(cmd)
+	ok, err = c.DispatchCommand(context.Background(), cmd)
 	assert.False(t, ok)
 	require.NoError(t, err)
 	assert.Equal(t, 1, called)

@@ -88,7 +88,7 @@ type ex struct {
 	reservoir            *vtereservoir.Facility
 	notifications        notifier
 	emulatorConfig       vte.Config
-	newEmulatorHandler   func(string) (vtereservoir.VTE, error)
+	newEmulatorHandler   func([]string, workspaceapi.ProcessWatcher) (vtereservoir.VTE, error)
 	newPluginHandler     func(...string) (pluginHandler, error)
 	workspace            workspace.Workspace
 	tasks                *idetask.Manager
@@ -172,13 +172,20 @@ func (e *ex) init(
 		e.reservoir = vtereservoir.New(e.Browser(), e.Browser(),
 			e.workspace, e.workspace, e.Browser(), e.emulatorConfig, initialVTECapacity)
 	}
-	e.newEmulatorHandler = func(initialCmd string) (vtereservoir.VTE, error) {
-		if initialCmd == "" && e.reservoir != nil {
+	e.newEmulatorHandler = func(cmdAndArgs []string, watcher workspaceapi.ProcessWatcher) (
+		vtereservoir.VTE, error,
+	) {
+		if len(cmdAndArgs) == 0 && e.reservoir != nil {
 			e.log(log.TraceLevel, "getting vte instance from reservoir")
 			return e.reservoir.Get()
 		}
+		cfg := e.emulatorConfig
+		cfg.Watcher = watcher
+		if len(cmdAndArgs) != 0 {
+			cfg.CommandAndArgs = cmdAndArgs
+		}
 		v, err := vte.NewHandler(e.Browser(), e.Browser(),
-			e.workspace, e.workspace, e.Browser(), e.emulatorConfig, initialCmd)
+			e.workspace, e.workspace, e.Browser(), cfg)
 		if err != nil {
 			return nil, err
 		}
@@ -212,7 +219,7 @@ func (e *ex) subscribeCommands() error {
 		man.man.Name = name
 		err := e.comp.SubscribeCommand(man.man, text.FuncCommandHandler(
 			func(ctx context.Context, cmd textapi.Command) error {
-				return man.handler(e, cmd.Args...)
+				return man.handler(e, ctx, cmd.Args...)
 			}, func(ctx context.Context, cmd textapi.Command) (
 				iterator.Iterator[string], string, error,
 			) {
@@ -372,7 +379,7 @@ func (e *ex) moveFocusCursor(line int) error {
 	return nil
 }
 
-func (e *ex) tabrename(args ...string) error {
+func (e *ex) tabrename(_ context.Context, args ...string) error {
 	if len(args) == 0 {
 		return errors.New("expected at least one argument with new tab name")
 	}
@@ -396,7 +403,7 @@ func (e *ex) tabrename(args ...string) error {
 	return e.Browser().SetTabName(t.URI(), args[0], attrs)
 }
 
-func (e *ex) tabprevious(args ...string) error {
+func (e *ex) tabprevious(_ context.Context, args ...string) error {
 	b := e.comp.Browser()
 	if e.invokeWindow() == e.companionTerminalWin {
 		return e.toggleCompanionTerminal()
@@ -405,7 +412,7 @@ func (e *ex) tabprevious(args ...string) error {
 	return nil
 }
 
-func (e *ex) tabnext(args ...string) error {
+func (e *ex) tabnext(_ context.Context, args ...string) error {
 	b := e.comp.Browser()
 	if e.invokeWindow() == e.companionTerminalWin {
 		return e.toggleCompanionTerminal()
@@ -414,7 +421,7 @@ func (e *ex) tabnext(args ...string) error {
 	return nil
 }
 
-func (e *ex) tabfocus(args ...string) error {
+func (e *ex) tabfocus(_ context.Context, args ...string) error {
 	if len(args) < 1 {
 		return errInvalidTab
 	}
@@ -431,7 +438,7 @@ func (e *ex) tabfocus(args ...string) error {
 	return nil
 }
 
-func (e *ex) tabclose(args ...string) error {
+func (e *ex) tabclose(_ context.Context, args ...string) error {
 	b := e.comp.Browser()
 	win := e.invokeWindow()
 	if win == e.companionTerminalWin {
@@ -442,14 +449,14 @@ func (e *ex) tabclose(args ...string) error {
 	return nil
 }
 
-func (e *ex) tabcloseall(args ...string) error {
+func (e *ex) tabcloseall(_ context.Context, args ...string) error {
 	b := e.comp.Browser()
 	// on focus dispatch to vte.Handler via Close
 	b.RemoveAllTabs()
 	return nil
 }
 
-func (e *ex) tabcloseinactive(args ...string) error {
+func (e *ex) tabcloseinactive(_ context.Context, args ...string) error {
 	b := e.comp.Browser()
 	if removed := b.RemoveInactiveTabs(); !removed {
 		return errors.New("no inactive tabs left")
@@ -458,7 +465,7 @@ func (e *ex) tabcloseinactive(args ...string) error {
 	return nil
 }
 
-func (e *ex) closeFocusWindow(args ...string) error {
+func (e *ex) closeFocusWindow(_ context.Context, args ...string) error {
 	win := e.invokeWindow()
 	if win == e.companionTerminalWin {
 		return e.toggleCompanionTerminal()
@@ -467,31 +474,31 @@ func (e *ex) closeFocusWindow(args ...string) error {
 	return win.Close()
 }
 
-func (e *ex) windowcloseall(args ...string) error {
+func (e *ex) windowcloseall(_ context.Context, args ...string) error {
 	return e.comp.Browser().CloseOtherWindows(e.invokeWindow())
 }
 
-func (e *ex) flushCloseIgnoreNonFlushed(args ...string) error {
+func (e *ex) flushCloseIgnoreNonFlushed(_ context.Context, args ...string) error {
 	e.forceExit = true
 	e.exit = true
 	return e.comp.Flush(e.invokeWindow())
 }
 
-func (e *ex) flushClose(args ...string) error {
+func (e *ex) flushClose(_ context.Context, args ...string) error {
 	e.forceExit = false
 	e.exit = true
 	return e.comp.Flush(e.invokeWindow())
 }
 
-func (e *ex) flush(args ...string) error {
+func (e *ex) flush(_ context.Context, args ...string) error {
 	return e.comp.Flush(e.invokeWindow())
 }
 
-func (e *ex) forceFlush(args ...string) error {
+func (e *ex) forceFlush(_ context.Context, args ...string) error {
 	return e.comp.ForceFlush(e.invokeWindow())
 }
 
-func (e *ex) flushAll(args ...string) (ret error) {
+func (e *ex) flushAll(_ context.Context, args ...string) (ret error) {
 	for _, t := range e.comp.Tabs() {
 		if err := e.comp.FlushTab(t); err != nil {
 			ret = multierror.Append(ret, err)
@@ -500,7 +507,7 @@ func (e *ex) flushAll(args ...string) (ret error) {
 	return
 }
 
-func (e *ex) forceFlushAll(args ...string) (ret error) {
+func (e *ex) forceFlushAll(_ context.Context, args ...string) (ret error) {
 	for _, t := range e.comp.Tabs() {
 		if err := e.comp.ForceFlushTab(t); err != nil {
 			ret = multierror.Append(ret, err)
@@ -509,12 +516,12 @@ func (e *ex) forceFlushAll(args ...string) (ret error) {
 	return
 }
 
-func (e *ex) forcequit(args ...string) error {
+func (e *ex) forcequit(_ context.Context, args ...string) error {
 	e.forceExit = true
 	e.exit = true
 	return nil
 }
-func (e *ex) quit(args ...string) error {
+func (e *ex) quit(_ context.Context, args ...string) error {
 	e.forceExit = false
 	e.exit = true
 	return nil
@@ -534,7 +541,7 @@ func (e *ex) dispatchCommand(cmd string, args ...string) (err error) {
 		scmd.Cursor.Window, _, _ = h.Cursor()
 	}
 	var handled bool
-	handled, err = e.comp.DispatchCommand(scmd)
+	handled, err = e.comp.DispatchCommand(context.Background(), scmd)
 	if err != nil {
 		return
 	}
@@ -586,11 +593,11 @@ func (e *ex) parseURIOrWorkspaceURI(path string) (workspaceapi.URI, error) {
 	return uri, err
 }
 
-func (e *ex) editFiles(args ...string) error {
+func (e *ex) editFiles(_ context.Context, args ...string) error {
 	return e.editFilesReadOnly(false, args...)
 }
 
-func (e *ex) viewFiles(args ...string) error {
+func (e *ex) viewFiles(_ context.Context, args ...string) error {
 	return e.editFilesReadOnly(true, args...)
 }
 
@@ -620,7 +627,7 @@ func (e *ex) editFilesReadOnly(readOnly bool, args ...string) error {
 	return nil
 }
 
-func (e *ex) tabcopypath(args ...string) error {
+func (e *ex) tabcopypath(_ context.Context, args ...string) error {
 	absolute := len(args) > 0 && args[0] == "absolute"
 	t, ok := e.comp.FocusTab()
 	if !ok {
@@ -649,12 +656,12 @@ func (e *ex) tabcopypath(args ...string) error {
 	return nil
 }
 
-func (e *ex) reloadfile(args ...string) error {
+func (e *ex) reloadfile(_ context.Context, args ...string) error {
 	focus := e.invokeWindow()
 	return e.comp.Reload(focus)
 }
 
-func (e *ex) splitDirectionChange(args ...string) error {
+func (e *ex) splitDirectionChange(_ context.Context, args ...string) error {
 	if len(args) == 0 {
 		return errors.New("command expects argument 'horizontal', 'h', 'vertical', 'v'")
 	}
@@ -682,7 +689,7 @@ func (e *ex) invokeWindow() browser.Window {
 	return ret
 }
 
-func (e *ex) windowfocus(args ...string) error {
+func (e *ex) windowfocus(_ context.Context, args ...string) error {
 	if len(args) == 0 {
 		return errors.New("command expects at least one argument")
 	}
@@ -706,7 +713,7 @@ func (e *ex) windowfocus(args ...string) error {
 	return nil
 }
 
-func (e *ex) moveWindow(args ...string) error {
+func (e *ex) moveWindow(_ context.Context, args ...string) error {
 	if len(args) == 0 {
 		return errors.New("command expects at least one argument")
 	}
@@ -746,7 +753,7 @@ func (e *ex) moveWindow(args ...string) error {
 	return nil
 }
 
-func (e *ex) moveTab(args ...string) error {
+func (e *ex) moveTab(_ context.Context, args ...string) error {
 	if len(args) == 0 {
 		return errors.New("command expects at least one argument")
 	}
@@ -773,7 +780,7 @@ func (e *ex) moveTab(args ...string) error {
 
 var defaultConvertTabIcon = ''
 
-func (e *ex) convertTab(args ...string) error {
+func (e *ex) convertTab(ctx context.Context, args ...string) error {
 	if len(args) == 0 {
 		return errors.New("command expects at least one argument with tab name")
 	}
@@ -813,7 +820,7 @@ func (e *ex) convertTab(args ...string) error {
 	return nil
 }
 
-func (e *ex) windowresize(args ...string) error {
+func (e *ex) windowresize(_ context.Context, args ...string) error {
 	if (len(args) == 1 && args[0] != "reset") || len(args) == 0 {
 		return errors.New("invalid arguments")
 	}
@@ -867,7 +874,7 @@ func (e *ex) windowresize(args ...string) error {
 	return nil
 }
 
-func (e *ex) sendNotificationInfo(args ...string) error {
+func (e *ex) sendNotificationInfo(_ context.Context, args ...string) error {
 	if len(args) == 0 {
 		return errors.New("command expects at least one argument")
 	}
@@ -875,7 +882,7 @@ func (e *ex) sendNotificationInfo(args ...string) error {
 	return nil
 }
 
-func (e *ex) sendNotificationSuccess(args ...string) error {
+func (e *ex) sendNotificationSuccess(_ context.Context, args ...string) error {
 	if len(args) == 0 {
 		return errors.New("command expects at least one argument")
 	}
@@ -883,7 +890,7 @@ func (e *ex) sendNotificationSuccess(args ...string) error {
 	return nil
 }
 
-func (e *ex) sendNotificationWarning(args ...string) error {
+func (e *ex) sendNotificationWarning(_ context.Context, args ...string) error {
 	if len(args) == 0 {
 		return errors.New("command expects at least one argument")
 	}
@@ -891,7 +898,7 @@ func (e *ex) sendNotificationWarning(args ...string) error {
 	return nil
 }
 
-func (e *ex) sendNotificationError(args ...string) error {
+func (e *ex) sendNotificationError(_ context.Context, args ...string) error {
 	if len(args) == 0 {
 		return errors.New("command expects at least one argument")
 	}
@@ -899,7 +906,7 @@ func (e *ex) sendNotificationError(args ...string) error {
 	return nil
 }
 
-func (e *ex) windowtogglemaximize(args ...string) error {
+func (e *ex) windowtogglemaximize(_ context.Context, args ...string) error {
 	if e.fullscreenID != 0 {
 		e.comp.Browser().ResetWindowSize()
 		e.fullscreenID = 0
@@ -912,22 +919,22 @@ func (e *ex) windowtogglemaximize(args ...string) error {
 	return nil
 }
 
-func (e *ex) closeNotifications(args ...string) error {
+func (e *ex) closeNotifications(_ context.Context, args ...string) error {
 	e.notifications.CloseAll()
 	return nil
 }
 
-func (e *ex) pauseNotifications(args ...string) error {
+func (e *ex) pauseNotifications(_ context.Context, args ...string) error {
 	e.notifications.PauseAll()
 	return nil
 }
 
-func (e *ex) resumeNotifications(args ...string) error {
+func (e *ex) resumeNotifications(_ context.Context, args ...string) error {
 	e.notifications.ResumeAll()
 	return nil
 }
 
-func (e *ex) pasteFromClipboard(args ...string) error {
+func (e *ex) pasteFromClipboard(_ context.Context, args ...string) error {
 	handler := e.focusHandler()
 	data, err := e.clip.Paste(clipboard.DefaultRegisterID)
 	if err != nil {
@@ -955,7 +962,7 @@ func (e *ex) pasteFromClipboard(args ...string) error {
 	return nil
 }
 
-func (e *ex) copyToClipboard(args ...string) error {
+func (e *ex) copyToClipboard(_ context.Context, args ...string) error {
 	handler := e.focusHandler()
 	data, ok := handler.Selection()
 	if !ok {
@@ -973,7 +980,7 @@ func (e *ex) copyToClipboard(args ...string) error {
 	return nil
 }
 
-func (e *ex) defaultcolors(args ...string) error {
+func (e *ex) defaultcolors(_ context.Context, args ...string) error {
 	if len(args) == 0 {
 		return errors.New("command expects at least one argument 'background'")
 	}
@@ -1008,7 +1015,7 @@ func (e *ex) defaultcolors(args ...string) error {
 	return errors.New("cannot change colors of this window")
 }
 
-func (e *ex) readfile(args ...string) error {
+func (e *ex) readfile(_ context.Context, args ...string) error {
 	if len(args) != 1 {
 		return errors.New("expected one file name")
 	}
@@ -1035,7 +1042,7 @@ func (e *ex) readfile(args ...string) error {
 	return err
 }
 
-func (e *ex) executePlugin(args ...string) error {
+func (e *ex) executePlugin(_ context.Context, args ...string) error {
 	if len(args) == 0 {
 		return e.toggleCompanionTerminal()
 	}
@@ -1062,7 +1069,7 @@ func (e *ex) executePlugin(args ...string) error {
 	return nil
 }
 
-func (e *ex) keydump(_ ...string) error {
+func (e *ex) keydump(_ context.Context, _ ...string) error {
 	h := browser.Keydump(e.clip, &e.comp)
 	cfg := browserapi.FloatingConfig{
 		Alignment: component.AlignmentCentered,
@@ -1071,7 +1078,7 @@ func (e *ex) keydump(_ ...string) error {
 	return err
 }
 
-func (e *ex) newTask(args ...string) error {
+func (e *ex) newTask(_ context.Context, args ...string) error {
 	const errExpect = "command expects at least four arguments: " +
 		"name, alignment, a separator '--' and the command to run"
 	if len(args) < 4 {
@@ -1120,7 +1127,7 @@ func (e *ex) newTask(args ...string) error {
 	return err
 }
 
-func (e *ex) newTaskTab(args ...string) error {
+func (e *ex) newTaskTab(ctx context.Context, args ...string) error {
 	const errExpect = "command expects at least three arguments: " +
 		"name, alignment, a separator '--' and the command to run"
 	if len(args) < 3 {
@@ -1166,10 +1173,10 @@ func (e *ex) newTaskTab(args ...string) error {
 	if !ok {
 		return errors.New("could not convert task to tab")
 	}
-	return e.convertTab(args[0])
+	return e.convertTab(ctx, args[0])
 }
 
-func (e *ex) stopTask(args ...string) error {
+func (e *ex) stopTask(_ context.Context, args ...string) error {
 	if len(args) != 1 {
 		return errors.New("expected one argument with the name of the task to stop")
 	}
@@ -1215,7 +1222,7 @@ func (e *ex) toggleCompanionTerminal() error {
 			_ = e.companionTerminal.Close()
 		}
 		var err error
-		e.companionTerminal, err = e.newEmulatorHandler("")
+		e.companionTerminal, err = e.newEmulatorHandler(nil, nil)
 		if err != nil {
 			return err
 		}
@@ -1236,12 +1243,8 @@ func (e *ex) toggleCompanionTerminal() error {
 	return nil
 }
 
-func (e *ex) terminalnewtab(args ...string) error {
-	var initialCmd string
-	if len(args) > 0 {
-		initialCmd = args[0]
-	}
-	h, err := e.newEmulatorHandler(initialCmd)
+func (e *ex) terminalnewtab(_ context.Context, args ...string) error {
+	h, err := e.newEmulatorHandler(args, nil)
 	if err != nil {
 		return err
 	}
@@ -1264,12 +1267,8 @@ func (e *ex) terminalnewtab(args ...string) error {
 	return nil
 }
 
-func (e *ex) terminalnew(args ...string) error {
-	var initialCmd string
-	if len(args) > 0 {
-		initialCmd = args[0]
-	}
-	h, err := e.newEmulatorHandler(initialCmd)
+func (e *ex) terminalnew(_ context.Context, args ...string) error {
+	h, err := e.newEmulatorHandler(args, nil)
 	if err != nil {
 		return err
 	}
@@ -1282,12 +1281,8 @@ func (e *ex) terminalnew(args ...string) error {
 	return nil
 }
 
-func (e *ex) terminalneworsplit(args ...string) error {
-	var initialCmd string
-	if len(args) > 0 {
-		initialCmd = args[0]
-	}
-	t, err := e.newEmulatorHandler(initialCmd)
+func (e *ex) terminalneworsplit(_ context.Context, args ...string) error {
+	t, err := e.newEmulatorHandler(args, nil)
 	if err != nil {
 		return err
 	}
@@ -1307,11 +1302,11 @@ func (e *ex) terminalneworsplit(args ...string) error {
 	return nil
 }
 
-func (e *ex) panic(args ...string) error {
+func (e *ex) panic(_ context.Context, args ...string) error {
 	panic("this could be a panic")
 }
 
-func (e *ex) windownew(args ...string) error {
+func (e *ex) windownew(_ context.Context, args ...string) error {
 	orientation := browserapi.OrientationDefault
 	if len(args) != 0 {
 		switch args[0] {
@@ -1331,7 +1326,7 @@ func (e *ex) windownew(args ...string) error {
 	return nil
 }
 
-func (e *ex) echo(args ...string) error {
+func (e *ex) echo(_ context.Context, args ...string) error {
 	sequence := strings.Join(args, " ")
 	if sequence == "" {
 		return errors.New("expected one argument with the sequence of keys")
@@ -1604,7 +1599,7 @@ func (e *ex) handlePrompt(ev term.Event) (exit, handled bool) {
 
 	cmdsAndArgs, ok := e.comp.CommandKeyBinding(ev.KeyComb())
 	if ok && len(cmdsAndArgs[0]) == 1 && cmdsAndArgs[0][0] == cmdClipboardPaste {
-		err := e.pasteFromClipboard()
+		err := e.pasteFromClipboard(context.Background())
 		if err != nil {
 			_, _ = e.Browser().Notify(browserapi.LevelError, "%v", err)
 		}
@@ -1623,7 +1618,7 @@ func (e *ex) Handle(ev term.Event) (exit, handled bool) {
 		_, handled = e.handleEvent(ev)
 		currFocus, _ := e.comp.Focus()
 		if e.fullscreenID != 0 && currFocus.WindowID() != e.fullscreenID {
-			_ = e.windowtogglemaximize()
+			_ = e.windowtogglemaximize(context.Background())
 		}
 	}
 	return e.exit, handled
