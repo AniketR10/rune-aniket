@@ -568,16 +568,16 @@ func (c *Component) replacePositionalArgs(
 				argsReplaced[replace] = struct{}{}
 			}
 		}
-		reworked := make([]string, 0, len(dispatched.Args))
-		for i, arg := range dispatched.Args {
-			if _, ok := argsReplaced[i]; !ok {
-				reworked = append(reworked, arg)
-			}
-		}
-		dispatched.Args = reworked
 		cmd = strings.ReplaceAll(cmd, impossibleMark, "$")
 		alias.Commands[j] = cmd
 	}
+	reworked := make([]string, 0, len(dispatched.Args))
+	for i, arg := range dispatched.Args {
+		if _, ok := argsReplaced[i]; !ok {
+			reworked = append(reworked, arg)
+		}
+	}
+	dispatched.Args = reworked
 	return alias, dispatched, nil
 }
 
