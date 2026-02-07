@@ -284,7 +284,7 @@ func (e *Handler) Handle(ev term.Event) (exit, handled bool) {
 	}
 
 	switch ev.Mod {
-	case 0, term.ModCtrl, term.ModCtrlShift:
+	case 0, term.ModCtrl, term.ModCtrlShift, term.ModShift:
 	default:
 		// no other modifiers are handled by vte
 		return
