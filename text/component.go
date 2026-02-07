@@ -556,6 +556,10 @@ func (c *Component) replacePositionalArgs(
 		for i, arg := range []string{"$1", "$2", "$3", "$4", "$5", "$6", "$7", "$8", "$9"} {
 			replace := i
 			if replace >= len(dispatched.Args) {
+				if strings.Contains(cmd, arg) {
+					return alias, dispatched, fmt.Errorf("alias expects an argument "+
+						"at position %[1]d ($%[1]d)", replace+1)
+				}
 				break
 			}
 			old := cmd

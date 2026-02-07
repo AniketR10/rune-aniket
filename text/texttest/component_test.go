@@ -1165,6 +1165,49 @@ func TestDispatchCommand(t *testing.T) {
 		assert.Equal(t, n, editCalled)
 	})
 
+	t.Run("returns error if alias expects positional arg and it's not passed", func(t *testing.T) {
+		config := text.DefaultConfig()
+		config.CommandAliases = map[string]text.CommandAlias{
+			"yeti": {
+				Commands: []string{"newWindow wasup '$2' $name $$1", "edit $1 hellagood"},
+			},
+		}
+		c, _ := newTestComponentConfig(t, NopEditor(), config)
+		win, _ := c.Focus()
+
+		var newWindowCalled, editCalled int
+
+		c.SubscribeCommand(testCommand("newWindow", "", ""),
+			text.FuncCommandHandler(func(ctx context.Context, cmd textapi.Command) error {
+				newWindowCalled++
+				assert.Equal(t, "newWindow", cmd.Name)
+				assert.Equal(t, []string{"wasup", "'arg2'", "$name", "$1"}, cmd.Args)
+				return nil
+			}, nil))
+
+		c.SubscribeCommand(testCommand("edit", "", ""),
+			text.FuncCommandHandler(func(ctx context.Context, cmd textapi.Command) error {
+				editCalled++
+				assert.Equal(t, "edit", cmd.Name)
+				assert.Equal(t, []string{"arg1", "hellagood"}, cmd.Args)
+				return nil
+			}, nil))
+
+		cmd := textapi.Command{
+			Resource: NewTestHandler(),
+			URI:      uri,
+			Name:     "yeti",
+			Args:     []string{"arg1"},
+			Window:   win,
+		}
+		ok, err := c.DispatchCommand(cmd)
+		assert.False(t, ok)
+		require.EqualError(t, err, "alias expects an argument at position 2 ($2)")
+
+		assert.Equal(t, 0, newWindowCalled)
+		assert.Equal(t, 0, editCalled)
+	})
+
 	t.Run("replaces commands % arg with current file", func(t *testing.T) {
 		config := text.DefaultConfig()
 		c, _ := newTestComponentConfig(t, NopEditor(), config)
