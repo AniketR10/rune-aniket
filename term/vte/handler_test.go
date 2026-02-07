@@ -119,6 +119,41 @@ $ ▐
 	testSequence(t, cfg, waitForIdleVte, cases)
 }
 
+func TestHandlerEnvIntegration(t *testing.T) {
+	t.Parallel()
+	cases := []vtetest.Case{
+		{"",
+			`$ ▐                 
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    `},
+		{"echo \\$MYENV>",
+			`$ echo $MYENV       
+hello               
+$ ▐                 
+                    
+                    
+                    
+                    
+                    
+                    
+                    `},
+	}
+
+	os.Setenv("MYENV", "hello")
+	defer os.Setenv("MYENV", "")
+	cfg := DefaultConfig()
+
+	waitForIdleVte := defaultWaitForIdleVte * 4
+	testSequence(t, cfg, waitForIdleVte, cases)
+}
+
 func TestHandlerCloseExit(t *testing.T) {
 	t.Parallel()
 	cases := []vtetest.Case{

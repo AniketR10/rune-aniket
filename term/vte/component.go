@@ -672,7 +672,7 @@ func (t *Component) createPty() error {
 	cmdAndArgsStr := strings.Join(cmdAndArgs, " ")
 	// NOTE: this uses os.Getenv, but it should use the workspace's
 	// Getenv mechanism, which should be implemented at some point.
-	cmdAndArgs, err = shell.Fields(cmdAndArgsStr, nil)
+	cmdAndArgs, err = shell.Fields(cmdAndArgsStr, os.Getenv)
 	if err != nil {
 		return fmt.Errorf("expand shell arguments: %w", err)
 	}
