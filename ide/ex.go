@@ -101,6 +101,7 @@ type ex struct {
 	reissueEvent         term.Event
 	cmd                  *command.Prompt
 	syncCommandPrompt    bool
+	pluginWaitTimeout    time.Duration
 	// use floating windows functionality without having to work around focus commands
 	// and how to se cmd.Window correctly.
 	cmdV             handler.Virtual[*browser.Component]
@@ -267,6 +268,7 @@ func (e *ex) doInit(
 	clip clipboard.Register,
 	opts ...text.Option,
 ) (err error) {
+	e.pluginWaitTimeout = 3 * time.Second
 	e.clip = clip
 	e.workspace = m
 	e.notifications = n
@@ -1066,6 +1068,65 @@ func (e *ex) executePlugin(_ context.Context, args ...string) error {
 		return err
 	}
 	ph.win = win
+	return nil
+}
+
+func (e *ex) executePluginWait(ctx context.Context, args ...string) error {
+	if len(args) == 0 {
+		return errors.New("expected at least one argument")
+	}
+	ch := make(chan error)
+	watcher := workspaceapi.ChanProcessWatcher(ch)
+	start := time.Now()
+	e.log(log.DebugLevel, "starting command %v", args)
+	h, err := e.newEmulatorHandler(args, watcher)
+	if err != nil {
+		return err
+	}
+
+	handleError := func(err error) error {
+		if err == nil {
+			e.notifications.Notify(notifications.LevelSuccess,
+				fmt.Sprintf("%s: done in %s", args[0], time.Since(start).
+					Truncate(time.Millisecond)))
+			return err
+		}
+
+		// collect stdout/stderr from plugin handler
+		const width, height = 50, 8
+		var w term.StringWriter
+		w.Init(width, height)
+		h.Resize(width, height)
+		h.Draw(&w)
+		_ = w.Flush()
+		err = fmt.Errorf("%v: %s", err, w.String())
+		return err
+	}
+
+	// if command is part of an alias chain, then we want to wait for it
+	// to finish so we can use the return value of this command to short-circuit
+	// if there's an error.
+	_, isAliasCtx := text.IsAliasContext(ctx)
+	if isAliasCtx {
+		defer h.Close() //nolint:errcheck
+		select {
+		case err = <-ch:
+			err = handleError(err)
+			return err
+		case <-time.After(e.pluginWaitTimeout):
+			return errors.New("command was taking too long and so it was canceled")
+		}
+	}
+
+	go func() {
+		defer h.Close() //nolint:errcheck
+		err := <-ch
+		err = handleError(err)
+		if err != nil {
+			e.notifications.Notify(notifications.LevelError,
+				fmt.Sprintf("%s: %s", args[0], err))
+		}
+	}()
 	return nil
 }
 

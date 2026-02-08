@@ -383,12 +383,10 @@ func (p *fileScheme) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (
 			p.cmds.Delete(pid)
 		}()
 
-		start := time.Now()
 		p.log(log.TraceLevel, "exec.Command: Wait: pid=%d", stdcmd.Process.Pid)
 		err := stdcmd.Wait()
-		p.log(log.DebugLevel, "exec.Command: Wait returned: cmd=%v pid=%d, err=%v"+
-			", duration=%s",
-			stdcmd.Args, stdcmd.Process.Pid, err, time.Since(start).String())
+		p.log(log.DebugLevel, "exec.Command: Wait returned: cmd=%v pid=%d, err=%v",
+			stdcmd.Args, stdcmd.Process.Pid, err)
 
 		// set a timeout to how long we wait for a watcher
 		// to drain the error. This is just to avoid
@@ -396,8 +394,7 @@ func (p *fileScheme) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (
 		// so the timeout should be in the order of minutes.
 		// use a new context so the cancelation of the command doesn't
 		// prevent watcher from being called.
-		ctx, cancel := context.WithTimeout(p.ctx,
-			watcherWaitTimeout)
+		ctx, cancel := context.WithTimeout(p.ctx, watcherWaitTimeout)
 		defer cancel()
 
 		if cmd.Watcher != nil && cmd.Watcher.WatchProcess() != nil {

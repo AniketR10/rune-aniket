@@ -1347,6 +1347,7 @@ func newExForTestingWithWorkspace(
 	ex.newPluginHandler = func(args ...string) (pluginHandler, error) {
 		return newTestVteWithConfig(args), nil
 	}
+	ex.pluginWaitTimeout = 1 * time.Second
 	return testEx{Component: container, ex: ex}
 }
 
@@ -1552,6 +1553,70 @@ func TestCommandAliases(t *testing.T) {
 	defer b.Close()
 
 	handlertest.TestHandlerSequence(t, b, 20, 10, cases)
+}
+
+func TestCommandPluginWait(t *testing.T) {
+	t.Run("alias is missing arg", func(t *testing.T) {
+		cases := []handlertest.SequenceTestCase{
+			{"<c-\\\\>todo<enter>",
+				`┌────┌─────────────┐
+│    │ alias       │
+├────│ expects an  │
+│    │ argument    │
+│    │ at          │
+│    │ position 1  │
+│    │ ($1)        │
+│    └─────────────┘
+│                  │
+└──────────────────┘`},
+		}
+
+		opts := []text.Option{
+			text.WithCommandOverlayConfig(testCommandOverlayConfig()),
+			text.WithCommandKey(testCommandKey),
+			text.WithCommandAliases(map[string]text.CommandAlias{
+				"todo": {Commands: []string{
+					"!! echo '$1'",
+					"edit wi.go",
+				}},
+			}),
+		}
+		b := newExForTesting(t, texttest.NopEditor(), opts...)
+		defer b.Close()
+
+		handlertest.RunHandlerSequence(t, b, 20, 10, cases)
+	})
+
+	t.Run("command alias takes too long", func(t *testing.T) {
+		cases := []handlertest.SequenceTestCase{
+			{"<c-\\\\>todo<enter>",
+				`┌────┌─────────────┐
+│    │ !! sleep    │
+├────│ 10:         │
+│    │ command     │
+│    │ was taking  │
+│    │ too long    │
+│    │ and so it   │
+│    │ was         │
+│    │ canceled    │
+└────└─────────────┘`},
+		}
+
+		opts := []text.Option{
+			text.WithCommandOverlayConfig(testCommandOverlayConfig()),
+			text.WithCommandKey(testCommandKey),
+			text.WithCommandAliases(map[string]text.CommandAlias{
+				"todo": {Commands: []string{
+					"!! sleep 10",
+					"edit wi.go",
+				}},
+			}),
+		}
+		b := newExForTesting(t, texttest.NopEditor(), opts...)
+		defer b.Close()
+
+		handlertest.RunHandlerSequence(t, b, 20, 10, cases)
+	})
 }
 
 func TestIntegrationEphemeralTerminal(t *testing.T) {

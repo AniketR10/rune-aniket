@@ -453,6 +453,15 @@ var (
 			},
 			handler: (*ex).executePlugin,
 		},
+		"!!": {
+			man: textapi.CommandManual{
+				Summary: "Runs an executable like '!' but the stdout and stderr " +
+					"are not rendered on a floating window. This is useful for " +
+					"running programs that do not output useful data.",
+				Synopsis: "[executable [args]]",
+			},
+			handler: (*ex).executePluginWait,
+		},
 		"clipboardcopy": {
 			man: textapi.CommandManual{
 				Summary: "Copies the selected text into the configured clipboard. ",
