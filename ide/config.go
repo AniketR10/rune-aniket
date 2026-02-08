@@ -386,10 +386,16 @@ func (c ideConfig) commandAliases() (ret map[string]text.CommandAlias) {
 						case "history":
 							alias.Completer = nil // default is history
 						default:
-							err = multierr.Append(err,
-								fmt.Errorf("invalid value for command.%s.%s.completer: "+
-									"expected 'history', 'files' or list of completion options",
-									keyCommandAliases, k))
+							ttp := strings.Trim(ttp, " ")
+							if !strings.HasPrefix(ttp, "!") {
+								err = multierr.Append(err,
+									fmt.Errorf("invalid value for command.%s.%s.completer: "+
+										"expected 'history', 'files', a command starting with '!', "+
+										"or list of completion options",
+										keyCommandAliases, k))
+							} else {
+								alias.Completer = commandCompleter(strings.TrimPrefix(ttp, "!"))
+							}
 						}
 					case []any:
 						options := make([]string, 0)
@@ -2173,6 +2179,13 @@ func loadFileConfig(c *ideConfig, configpath string) (err error) {
 
 func filepathCompleter(c *text.Component) command.Completer {
 	return command.FilePathCompleter(c.Workspace())
+}
+
+func commandCompleter(cmdstr string) func(c *text.Component) command.Completer {
+	return func(c *text.Component) command.Completer {
+		cmdAndArgs := strings.Split(cmdstr, " ")
+		return command.OutputLinesCompleter(c.Workspace(), cmdAndArgs)
+	}
 }
 
 func defaultNotificationsConfig() notifications.Config {

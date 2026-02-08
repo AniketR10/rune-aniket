@@ -10,8 +10,10 @@
 package texttest
 
 import (
+	context "context"
 	os "os"
 	reflect "reflect"
+	syscall "syscall"
 
 	workspaceapi "github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	gomock "go.uber.org/mock/gomock"
@@ -40,6 +42,20 @@ func NewMockWorkspace(ctrl *gomock.Controller) *MockWorkspace {
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockWorkspace) EXPECT() *MockWorkspaceMockRecorder {
 	return m.recorder
+}
+
+// Close mocks base method.
+func (m *MockWorkspace) Close() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Close")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Close indicates an expected call of Close.
+func (mr *MockWorkspaceMockRecorder) Close() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockWorkspace)(nil).Close))
 }
 
 // Load mocks base method.
@@ -114,6 +130,35 @@ func (m *MockWorkspace) Remove(file string) error {
 func (mr *MockWorkspaceMockRecorder) Remove(file any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Remove", reflect.TypeOf((*MockWorkspace)(nil).Remove), file)
+}
+
+// Signal mocks base method.
+func (m *MockWorkspace) Signal(arg0 workspaceapi.Pid, arg1 syscall.Signal) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Signal", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Signal indicates an expected call of Signal.
+func (mr *MockWorkspaceMockRecorder) Signal(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Signal", reflect.TypeOf((*MockWorkspace)(nil).Signal), arg0, arg1)
+}
+
+// StartCommand mocks base method.
+func (m *MockWorkspace) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (workspaceapi.Pid, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "StartCommand", ctx, cmd)
+	ret0, _ := ret[0].(workspaceapi.Pid)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// StartCommand indicates an expected call of StartCommand.
+func (mr *MockWorkspaceMockRecorder) StartCommand(ctx, cmd any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartCommand", reflect.TypeOf((*MockWorkspace)(nil).StartCommand), ctx, cmd)
 }
 
 // Stat mocks base method.

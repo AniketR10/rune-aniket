@@ -1289,10 +1289,10 @@ func (h *Prompt) cancelPreview() {
 }
 
 func (h *Prompt) showManualComponent() {
-	h.dispatchPreviewArgument()
-	man := h.newManualComponent(h.inputString.Load().(string))
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	h.dispatchPreviewArgument()
+	man := h.newManualComponent(h.inputString.Load().(string))
 	h.manualComponent = man
 	h.showManual = true
 }

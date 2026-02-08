@@ -36,6 +36,7 @@ import (
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/logging"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
@@ -58,6 +59,7 @@ var _ Editor = (*Component)(nil)
 type Workspace interface {
 	workspace.Loader
 	walkdir.Reader
+	schemeapi.Executor
 }
 
 // Component is an implementation of browser.Browser for file editing.

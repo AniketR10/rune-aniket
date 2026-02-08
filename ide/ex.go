@@ -1093,7 +1093,7 @@ func (e *ex) executePluginWait(ctx context.Context, args ...string) error {
 		}
 
 		// collect stdout/stderr from plugin handler
-		const width, height = 50, 8
+		const width, height = 50, 6
 		var w term.StringWriter
 		w.Init(width, height)
 		h.Resize(width, height)

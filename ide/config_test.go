@@ -156,6 +156,9 @@ command:
       completer:
         - a
         - B
+    dtmf:
+      commands: ram
+      completer: '! hello'
   manual_attr:
     fg: black
     bg: yellow
@@ -472,6 +475,11 @@ func TestConfigSetting(t *testing.T) {
 			Commands:  []string{"ram"},
 			Completer: nil,
 		},
+		"dtmf": text.CommandAlias{
+			Name:      "dtmf",
+			Commands:  []string{"ram"},
+			Completer: nil,
+		},
 	}
 	actualCommandAliases := cfg.commandAliases()
 	parcelsAlias := actualCommandAliases["parcels"]
@@ -486,6 +494,11 @@ func TestConfigSetting(t *testing.T) {
 	require.NoError(t, err)
 	daynight.Completer = nil
 	actualCommandAliases["daynight"] = daynight
+
+	dtmf := actualCommandAliases["dtmf"]
+	require.NotNil(t, dtmf.Completer)
+	dtmf.Completer = nil
+	actualCommandAliases["dtmf"] = dtmf
 
 	actualOptions, err := iterator.ToSlice(context.Background(), it)
 	require.NoError(t, err)

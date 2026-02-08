@@ -26,4 +26,3 @@ package text
 //go:generate mockgen -destination=./texttest/event_handler_gomock.go -package texttest -self_package unstable.build/go-tui/text/texttest -source ./event_handler.go
 //go:generate mockgen -destination=./texttest/workspace_gomock.go -package texttest -self_package unstable.build/go-tui/text/texttest -source ./component.go
 //go:generate mockgen -destination=./texttest/event_handler_gomock.go -package texttest -self_package unstable.build/go-tui/text/texttest -source ./event_handler.go
-//go:generate mockgen -destination=./texttest/mouse_gomock.go -package texttest -self_package unstable.build/go-tui/text/texttest -source ./mouse.go

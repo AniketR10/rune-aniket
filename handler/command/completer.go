@@ -24,14 +24,21 @@
 package command
 
 import (
+	"bufio"
 	"context"
+	"errors"
 	"fmt"
+	"io"
+	"os"
 	"os/user"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"github.com/unstablebuild/blue/iterator"
+	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"mvdan.cc/sh/v3/shell"
 	"unstable.build/go-tui/workspace/walkdir"
 )
 
@@ -135,6 +142,66 @@ func FilePathCompleter(reader walkdir.Reader) Completer {
 			})
 		}
 		return it, modifiedLast, nil
+	})
+}
+
+// OutputLinesCompleter returns a files path completer with the given directory reader.
+func OutputLinesCompleter(w schemeapi.Executor, cmdAndArgs []string) Completer {
+	return FuncCompleter(func(
+		ctx context.Context, args []string,
+	) (iterator.Iterator[string], string, error) {
+		if len(cmdAndArgs) == 0 {
+			return nil, "", errors.New("expected at least one argument with the name " +
+				"of the executable to run")
+		}
+		ch := make(chan error)
+		cmdAndArgsStr := strings.Join(cmdAndArgs, " ")
+		// NOTE: this uses os.Getenv, but it should use the workspace's
+		// Getenv mechanism, which should be implemented at some point.
+		cmdAndArgs, err := shell.Fields(cmdAndArgsStr, os.Getenv)
+		if err != nil {
+			return nil, "", fmt.Errorf("expand shell arguments: %w", err)
+		}
+		cmd := workspaceapi.Cmd{
+			Path:    cmdAndArgs[0],
+			Watcher: workspaceapi.ChanProcessWatcher(ch),
+		}
+		if len(cmdAndArgs) > 1 {
+			cmd.Args = cmdAndArgs[1:]
+		}
+
+		pr, pw := io.Pipe()
+		cmd.Stdout = pw
+		scanner := bufio.NewScanner(pr)
+		pid, err := w.StartCommand(ctx, cmd)
+		if err != nil {
+			return nil, "", err
+		}
+
+		go func() {
+			select {
+			case <-ctx.Done():
+			case <-ch:
+			}
+			_ = pr.Close()
+		}()
+		return iterator.FromFunc(func(ctx context.Context) (string, bool, error) {
+			if scanner.Scan() {
+				return scanner.Text(), true, nil
+			}
+			if err := scanner.Err(); err != nil {
+				return "", false, err
+			}
+			return "", false, nil // EOF
+		}, func() (ret error) {
+			if err := w.Signal(pid, syscall.SIGINT); err != nil {
+				ret = errors.Join(ret, err)
+			}
+			if err := pr.Close(); err != nil {
+				ret = errors.Join(ret, err)
+			}
+			return ret
+		}), "", nil
 	})
 }
 

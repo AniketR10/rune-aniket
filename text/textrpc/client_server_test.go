@@ -31,6 +31,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -874,6 +875,19 @@ type testFlusherCloser struct {
 	flushFn   func() error
 	lastFlush time.Time
 }
+
+func (t *testLoader) StartCommand(context.Context, workspaceapi.Cmd) (workspaceapi.Pid, error) {
+	panic("unimplemented")
+}
+
+func (t *testLoader) Signal(workspaceapi.Pid, syscall.Signal) error {
+	panic("unimplemented")
+}
+
+func (t *testLoader) Close() error {
+	panic("unimplemented")
+}
+
 
 func (t *testFlusherCloser) Close() error {
 	if t.closeFn != nil {
