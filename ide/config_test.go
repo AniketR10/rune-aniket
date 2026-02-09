@@ -150,7 +150,7 @@ command:
         - Somethinggreater
         - NowIcaresomemore
         - Comingback
-      completer: filepath
+      completer: files
     daynight:
       commands: ram
       completer:

@@ -381,8 +381,10 @@ func (c ideConfig) commandAliases() (ret map[string]text.CommandAlias) {
 					switch ttp := vv.(type) {
 					case string:
 						switch ttp {
-						case "filepath":
+						case "files":
 							alias.Completer = filepathCompleter
+						case "dirs":
+							alias.Completer = dirCompleter
 						case "history":
 							alias.Completer = nil // default is history
 						default:
@@ -2179,6 +2181,10 @@ func loadFileConfig(c *ideConfig, configpath string) (err error) {
 
 func filepathCompleter(c *text.Component) command.Completer {
 	return command.FilePathCompleter(c.Workspace())
+}
+
+func dirCompleter(c *text.Component) command.Completer {
+	return command.DirsCompleter(c.Workspace())
 }
 
 func commandCompleter(cmdstr string) func(c *text.Component) command.Completer {

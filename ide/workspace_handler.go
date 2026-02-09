@@ -56,6 +56,7 @@ import (
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/handler"
+	"unstable.build/go-tui/handler/command"
 	"unstable.build/go-tui/ide/vctrl"
 	"unstable.build/go-tui/ide/vctrl/gogit"
 	"unstable.build/go-tui/localstorage"
@@ -1159,6 +1160,8 @@ func (h *workspaceManagerHandler) completeCommand(
 	ctx context.Context, cmd textapi.Command,
 ) (iterator.Iterator[string], string, error) {
 	switch cmd.Name {
+	case cmdAddWorkspace:
+		return command.DirsCompleter(h.empty.workspace).Complete(ctx, cmd.Args)
 	case cmdMoveWorkspace:
 		if len(cmd.Args) <= 1 {
 			options := []string{"left", "right", "1", "2",

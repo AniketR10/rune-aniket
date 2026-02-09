@@ -80,11 +80,41 @@ func (d fnCompleter) Complete(
 
 // FilePathCompleter returns a files path completer with the given directory reader.
 func FilePathCompleter(reader walkdir.Reader) Completer {
+	return walkDirCompleter(reader, false)
+}
+
+// DirsCompleter returns a files path completer with the given directory reader.
+func DirsCompleter(reader walkdir.Reader) Completer {
+	return walkDirCompleter(reader, true)
+}
+
+func walkDirCompleter(reader walkdir.Reader, dirOnly bool) Completer {
+	traverse := func(
+		ctx context.Context, w walkdir.Reader, root string,
+	) (iterator.Iterator[string], error) {
+		fn := walkdir.ListFiles
+		if dirOnly {
+			fn = walkdir.ListDirs
+		}
+		it, err := fn(ctx, w, root)
+		if err != nil {
+			return nil, err
+		}
+		it = iterator.Filter(it, func(val string) bool {
+			return !strings.HasSuffix(val, ".swp")
+		})
+		if dirOnly {
+			it = iterator.Filter(it, func(val string) bool {
+				return !strings.HasPrefix(val, ".")
+			})
+		}
+		return it, nil
+	}
 	return FuncCompleter(func(
 		ctx context.Context, args []string,
 	) (iterator.Iterator[string], string, error) {
 		if len(args) == 0 || args[len(args)-1] == "" {
-			it, err := walkdir.ListFiles(ctx, reader, ".")
+			it, err := traverse(ctx, reader, ".")
 			if err != nil {
 				return nil, "", err
 			}
@@ -129,13 +159,10 @@ func FilePathCompleter(reader walkdir.Reader) Completer {
 		// no results.
 		needsExpand := workspaceapi.HasPrefix(uri, cwd) && filepath.IsAbs(last)
 
-		it, err := walkdir.ListFiles(ctx, reader, uri.Path())
+		it, err := traverse(ctx, reader, uri.Path())
 		if err != nil {
 			return nil, "", err
 		}
-		it = iterator.Filter(it, func(val string) bool {
-			return !strings.HasSuffix(val, ".swp")
-		})
 		if needsExpand {
 			it = iterator.Map(it, func(val string) string {
 				return workspaceapi.Join(cwd, val).Path()
