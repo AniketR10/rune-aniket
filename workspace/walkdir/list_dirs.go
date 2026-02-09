@@ -29,7 +29,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"sync"
 
 	multierr "github.com/ernestrc/go-multierror"
@@ -38,21 +37,13 @@ import (
 	"unstable.build/go-tui/debug"
 )
 
-// Reader abstracts the ability to read directory contents.
-type Reader interface {
-	URI(string) (workspaceapi.URI, error)
-	OpenFile(path string, flag int, perm os.FileMode) (workspaceapi.File, error)
-	Stat(path string) (os.FileInfo, error)
-	ReadDir(name string) ([]os.DirEntry, error)
-}
-
-// ListFiles traverses the workspace directory and returns
-// an iterator that returns all file paths under root. If root is
+// ListDirs traverses the workspace directory and returns
+// an iterator that returns all directories under root. If root is
 // a partial or full file name, it will be ignored and its base
 // directory, will be used. If errors are encountered while reading
 // the contents of directories those errors will be aggregated and
 // reported by the iterator's Err method.
-func ListFiles(
+func ListDirs(
 	ctx context.Context, w Reader, root string,
 ) (iterator.Iterator[string], error) {
 	var wg sync.WaitGroup
@@ -82,7 +73,7 @@ func ListFiles(
 	for i := range defaultWorkers {
 		go debug.CapturePanicReport(func() {
 			traverseDirWorker(ctx, w, &wg, iterCh, workerCh,
-				workspaceURI.Path(), &iterator.mu, &allErrors[i], false)
+				workspaceURI.Path(), &iterator.mu, &allErrors[i], true)
 		})
 	}
 
@@ -116,135 +107,4 @@ func ListFiles(
 	})
 
 	return iterator, nil
-}
-
-var defaultWorkers = runtime.NumCPU() * 8
-
-func traverseDirWorker(
-	ctx context.Context, w Reader, wg *sync.WaitGroup,
-	iterCh, workerCh chan string, cwd string, mu *sync.Mutex, err *error,
-	dirOnly bool,
-) {
-	for {
-		// do not use ctx here, as we could endup with an outstanding
-		// counter on the wait group, which would leak a goroutine.
-		path, ok := <-workerCh
-		if !ok {
-			return
-		}
-		dirErr := dirTraversal(ctx, w, cwd, path, wg, iterCh, workerCh, dirOnly)
-		if dirErr != nil {
-			mu.Lock()
-			*err = multierr.Append(*err, dirErr)
-			mu.Unlock()
-		}
-	}
-}
-
-func dirTraversal(
-	ctx context.Context, w Reader, cwd, dirname string,
-	wg *sync.WaitGroup, iterCh, workerCh chan string,
-	dirOnly bool,
-) error {
-	defer wg.Done()
-	absPath := dirname
-	if !filepath.IsAbs(dirname) {
-		absPath = filepath.Join(cwd, dirname)
-	}
-
-	dirNames, err := w.ReadDir(absPath)
-	if err != nil {
-		return err
-	}
-
-	var ret error
-	for _, info := range dirNames {
-		path := filepath.Join(dirname, info.Name())
-		tpe := info.Type()
-		if tpe.IsRegular() && !dirOnly {
-			// ensure dirTraversal returns
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case iterCh <- path:
-				continue
-			}
-		}
-		if !tpe.IsDir() {
-			continue
-		}
-
-		// stream directories
-		if dirOnly {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case iterCh <- path:
-			}
-		}
-
-		wg.Add(1)
-		select {
-		// ensure dirTraversal returns
-		case <-ctx.Done():
-			wg.Done()
-			return ctx.Err()
-		case workerCh <- path:
-		default:
-			// the rest of workers are busy, keep going
-			err := dirTraversal(ctx, w, cwd, path, wg, iterCh, workerCh, dirOnly)
-			if err != nil {
-				ret = multierr.Append(ret, err)
-			}
-		}
-	}
-	return ret
-}
-
-type listFilesIterator struct {
-	mu          sync.Mutex
-	err         error
-	ctx         context.Context
-	dataCh      chan string
-	cancel      func()
-	closeWaitCh chan struct{}
-}
-
-func (l *listFilesIterator) Next(ctx context.Context) (string, bool) {
-	select {
-	case <-ctx.Done():
-		l.mu.Lock()
-		defer l.mu.Unlock()
-		l.err = multierr.Append(l.err, ctx.Err())
-		return "", false
-	case <-l.ctx.Done():
-		l.mu.Lock()
-		defer l.mu.Unlock()
-		l.err = multierr.Append(l.err, l.ctx.Err())
-		return "", false
-	case path, ok := <-l.dataCh:
-		return path, ok
-	}
-}
-
-func (l *listFilesIterator) Close() error {
-	l.cancel()
-	<-l.closeWaitCh
-	return nil
-}
-
-func (l *listFilesIterator) Err() error {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
-	if l.err == nil {
-		return l.ctx.Err()
-	}
-	// avoid data races onto l.err which is an instance of
-	// *multierr.Error by creating a new multierr.Error
-	err := multierr.Append(nil, l.err)
-	if l.ctx.Err() == nil {
-		return err
-	}
-	return multierr.Append(err, l.ctx.Err())
 }
