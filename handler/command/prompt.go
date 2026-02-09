@@ -331,18 +331,21 @@ func (h *Prompt) trimmedCommandAndArgs(cmd string, args ...string) []string {
 }
 
 func (h *Prompt) dispatchPreviewArgument() {
-	// clear previous preview components
-	h.previewComponent = nil
-	h.previewMatch = nil
+	comp, data, cancel := h.doDispatchPreviewArgument()
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.setPreview(comp, data, cancel)
+}
 
+func (h *Prompt) doDispatchPreviewArgument() (component.Responsive, []byte, func()) {
 	match, ok := h.list.Focus()
 	if !ok {
-		return
+		return nil, nil, nil
 	}
 	cmdAndArgsStr := h.buf.String()
 	cmdAndArgs := strings.Split(cmdAndArgsStr, " ")
 	if len(cmdAndArgs) == 0 {
-		return
+		return nil, nil, nil
 	}
 	// last argument is the one we want to preview
 	cmdAndArgs = cmdAndArgs[:len(cmdAndArgs)-1]
@@ -350,31 +353,14 @@ func (h *Prompt) dispatchPreviewArgument() {
 	cmdAndArgs = append(cmdAndArgs, previewArg)
 
 	if len(cmdAndArgs) == 1 {
-		return
+		return nil, nil, nil
 	}
 	h.log(log.DebugLevel, "previewing command %#v", cmdAndArgs)
 	comp, cancel, ok := h.dispatcher.Preview(cmdAndArgs[0], cmdAndArgs[1:]...)
 	if !ok {
-		return
+		return nil, nil, nil
 	}
-	if cancel != nil {
-		if h.preview != nil {
-			prev := h.preview
-			h.preview = func() {
-				cancel()
-				prev()
-			}
-		} else {
-			h.preview = cancel
-		}
-	}
-	if comp != nil {
-		h.previewComponent = comp
-		h.previewMatch = match.Data()
-		if h.manualComponent != nil {
-			h.setManualComponent(h.previewComponent)
-		}
-	}
+	return comp, match.Data(), cancel
 }
 
 func (h *Prompt) dispatchCommand() (
@@ -1289,12 +1275,33 @@ func (h *Prompt) cancelPreview() {
 }
 
 func (h *Prompt) showManualComponent() {
+	comp, data, cancel := h.doDispatchPreviewArgument()
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.dispatchPreviewArgument()
+	h.setPreview(comp, data, cancel)
 	man := h.newManualComponent(h.inputString.Load().(string))
 	h.manualComponent = man
 	h.showManual = true
+}
+
+func (h *Prompt) setPreview(comp component.Responsive, data []byte, cancel func()) {
+	h.previewComponent = comp
+	h.previewMatch = data
+	if comp != nil && h.manualComponent != nil {
+		h.manualComponent = h.previewComponent
+	}
+	if cancel == nil {
+		return
+	}
+	if h.preview != nil {
+		prev := h.preview
+		h.preview = func() {
+			cancel()
+			prev()
+		}
+	} else {
+		h.preview = cancel
+	}
 }
 
 func (h *Prompt) setManualComponent(man component.Responsive) {
