@@ -793,7 +793,9 @@ func (t *Component) systemCanDispatchBell(callback func(error)) {
 	t.waitParserHandler.scheduleBellCallback(func() {
 		if called.CompareAndSwap(false, true) {
 			cancel()
-			callback(nil)
+			t.cfg.ScheduleNextTick(func() {
+				callback(nil)
+			})
 		}
 	})
 
@@ -801,7 +803,9 @@ func (t *Component) systemCanDispatchBell(callback func(error)) {
 		defer cancel()
 		<-ctx.Done()
 		if called.CompareAndSwap(false, true) {
-			callback(fmt.Errorf("timeout waiting for bell: %w", ctx.Err()))
+			t.cfg.ScheduleNextTick(func() {
+				callback(fmt.Errorf("timeout waiting for bell: %w", ctx.Err()))
+			})
 		}
 	})
 }
