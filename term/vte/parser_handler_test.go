@@ -710,27 +710,27 @@ func TestIntegrationParserHandler(t *testing.T) {
 			},
 		},
 		{
-			desc:      "bell is not called if not in focus, but needs attention attrs are set if mode urgency hints is set",
+			desc:      "bell is called if not in focus, but needs attention attrs are set if mode urgency hints is set",
 			altBuffer: false,
 			sut: func(t *testing.T, p *parserHandler, tm *mockTabManager, pty *workspacetest.File) {
 				assert.False(t, tm.belled)
 				p.onFocusChange(false)
 				p.Bell()
-				assert.False(t, tm.belled)
+				assert.True(t, tm.belled)
 				assert.Equal(t, testURI, tm.toUri)
 				assert.Equal(t, "radical", tm.setName)
 				assert.Equal(t, term.Attributes{Attrs: tcell.AttrBlink}, tm.setAttr)
 			},
 		},
 		{
-			desc:      "bell is not called if not in focus, and needs attention attrs are not set if mode urgency hints is disabled",
+			desc:      "bell is called even if not in focus, and needs attention attrs are not set if mode urgency hints is disabled",
 			altBuffer: false,
 			sut: func(t *testing.T, p *parserHandler, tm *mockTabManager, pty *workspacetest.File) {
 				assert.False(t, tm.belled)
 				p.onFocusChange(false)
 				p.UnsetPrivateMode(vteparser.PrivateModeUrgencyHints)
 				p.Bell()
-				assert.False(t, tm.belled)
+				assert.True(t, tm.belled)
 				assert.Zero(t, tm.setName)
 				assert.Zero(t, tm.toUri)
 				assert.Zero(t, tm.setAttr)

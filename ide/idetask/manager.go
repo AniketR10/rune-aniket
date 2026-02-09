@@ -47,6 +47,7 @@ import (
 // run in response to changes in the workspace. See Task for more details.
 type Manager struct {
 	b                Browser
+	tm               browser.TabManager
 	scheme           schemeapi.Scheme
 	pluginOpts       []plugin.Option
 	ctx              context.Context
@@ -66,31 +67,34 @@ type Browser interface {
 
 // NewManager allocates storage for a new Manager and initializes it.
 func NewManager(
-	b Browser, scheme schemeapi.Scheme,
+	b Browser, tm browser.TabManager, scheme schemeapi.Scheme,
 	scheduleNextTick func(func()) bool,
 	opts ...plugin.Option,
 ) *Manager {
 	m := new(Manager)
-	m.Init(b, scheme, scheduleNextTick, opts...)
+	m.Init(b, tm, scheme, scheduleNextTick, opts...)
 	return m
 }
 
 // Init initializes this Manager with the given browser, scheme and options.
 func (m *Manager) Init(
-	b Browser, scheme schemeapi.Scheme,
+	b Browser, tm browser.TabManager, scheme schemeapi.Scheme,
 	scheduleNextTick func(func()) bool,
 	opts ...plugin.Option,
 ) {
 	m.b = b
+	m.tm = tm
 	m.scheme = scheme
 	m.scheduleNextTick = scheduleNextTick
 	m.pluginOpts = opts
 	m.ctx, m.cancelCtx = context.WithCancel(context.Background())
 	m.newPlugin = func(
 		publisher browser.EventPublisher, notifications browser.Notifications,
-		e schemeapi.Executor, t schemeapi.Terminal, tm browser.TabManager,
+		e schemeapi.Executor, t schemeapi.Terminal, _ browser.TabManager,
 		cmdAndArgs []string, maxWidth int, opts ...plugin.Option,
 	) (browser.ScrollableFloating, error) {
+		// use TabManager passed to this constructor, so we don't need to worry
+		// about synchronizing
 		return plugin.New(publisher, notifications, e, t, tm, cmdAndArgs, maxWidth, opts...)
 	}
 }

@@ -101,6 +101,7 @@ type workspaceManagerHandler struct {
 	builtinExtensions  map[string]Extension
 	// this is the name of of the file to be expected in workspace folders
 	workspaceConfigFilename string
+	tabAttentionNameSuffix  string
 	workspaceBarKind        workspaceBarKind
 	userHome                string
 	history                 *history
@@ -255,13 +256,16 @@ func (h *workspaceManagerHandler) init(
 		return fmt.Errorf("new editor: %v", err)
 	}
 
+	tm := new(workspaceTabManager)
+	tm.parent = h
 	h.empty, err = newEx(ed, homeWorkspace, h.storage, notifications,
 		cfg.terminalConfig(), cfg.pluginBarConfig(),
 		h.publishEvent, 0 /* vte capacity */, cfg.clipboard(),
-		h.dispatchOnPreview, globalOpts...)
+		h.dispatchOnPreview, tm, globalOpts...)
 	if err != nil {
 		return fmt.Errorf("new ex: %w", err)
 	}
+	tm.tm = h.empty.Browser()
 	if err = h.subscribeAllCommands(h.empty); err != nil {
 		return err
 	}
@@ -400,7 +404,12 @@ func (h *workspaceManagerHandler) Resize(width, height int) {
 	var barFocusIdx int
 	for i, w := range h.workspaces {
 		if w != nil {
-			idx := h.bar.Add(rune(int(h.workspacesIcon)+i), h.makeWorkspaceTabName(i, w))
+			name := h.makeWorkspaceTabName(i, w)
+			idx := h.bar.Add(rune(int(h.workspacesIcon)+i), name)
+			if w.attentionAttr != (term.Attributes{}) {
+				h.bar.SetTabAttr(idx, w.attentionAttr)
+				h.bar.SetTabName(idx, name+h.tabAttentionNameSuffix)
+			}
 			if i == h.focus {
 				barFocusIdx = idx
 				if !drawBar {
@@ -445,6 +454,16 @@ func (h *workspaceManagerHandler) Draw(w term.Writer) {
 func (h *workspaceManagerHandler) switchToWorkspace(i int) bool {
 	if i < 0 || i >= workspaceSlots {
 		return false
+	}
+	// clear attention attributes and propagate focus status
+	if i != h.focus {
+		if w := h.workspaces[h.focus]; w != nil {
+			w.ex.onFocusChange(false)
+		}
+		if w := h.workspaces[i]; w != nil {
+			w.attentionAttr = term.Attributes{}
+			w.ex.onFocusChange(true)
+		}
 	}
 	h.focus = i
 	h.focusProxy.Target = h.focusHandler()
@@ -638,13 +657,16 @@ func (h *workspaceManagerHandler) addWorkspace(
 
 	// workspace capable of opening URIs other than the workspaceapi.URI
 	multicwd := workspace.Multi(ctx, h.workspace, cwd, uri)
+	tm := new(workspaceTabManager)
+	tm.parent = h
 	ex, err := newEx(ed, multicwd, h.storage, h.notifications.notifier,
 		cfg.terminalConfig(), cfg.pluginBarConfig(), h.publishEvent, h.initialVTECapacity,
-		cfg.clipboard(), h.dispatchOnPreview, textOpts...)
+		cfg.clipboard(), h.dispatchOnPreview, tm, textOpts...)
 	if err != nil {
 		cancel()
 		return fmt.Errorf("new ex: %w", err)
 	}
+	tm.tm = ex.Browser()
 	if err := h.subscribeAllCommands(ex); err != nil {
 		cancel()
 		return err
@@ -653,6 +675,14 @@ func (h *workspaceManagerHandler) addWorkspace(
 		cancel()
 		return err
 	}
+
+	wh := &workspaceHandler{
+		vctrlService: vctrlService,
+		cancelCtx:    cancel,
+		uri:          uri,
+		ex:           ex,
+	}
+	tm.workspace = wh
 
 	go debug.CapturePanicReport(func() {
 		start := time.Now()
@@ -681,13 +711,6 @@ func (h *workspaceManagerHandler) addWorkspace(
 
 		dispatchFilesystemEvents(ctx, ex, h.mu, ch, ignores)
 	})
-
-	wh := &workspaceHandler{
-		vctrlService: vctrlService,
-		cancelCtx:    cancel,
-		uri:          uri,
-		ex:           ex,
-	}
 
 	// load async to speed up workspace initialization
 	go debug.CapturePanicReport(func() {
@@ -1014,11 +1037,12 @@ func (h *workspaceManagerHandler) Close() (ret error) {
 
 type workspaceHandler struct {
 	*ex
-	tabname      string
-	vctrlService vctrl.Service
-	cancelCtx    func()
-	uri          workspaceapi.URI
-	Extensions   atomic.Value
+	tabname       string
+	attentionAttr term.Attributes
+	vctrlService  vctrl.Service
+	cancelCtx     func()
+	uri           workspaceapi.URI
+	Extensions    atomic.Value
 }
 
 func (hm *workspaceHandler) Close() (ret error) {
@@ -1404,4 +1428,55 @@ func (h *workspaceManagerHandler) openFile(file string, focus bool) error {
 		return err
 	}
 	return h.openURI(uri, focus)
+}
+
+type workspaceTabManager struct {
+	workspace *workspaceHandler
+	parent    *workspaceManagerHandler
+	tm        browser.TabManager
+}
+
+func (f *workspaceTabManager) Tab(uri workspaceapi.URI, icon rune, name string, h browserapi.Handler) (
+	browserapi.Handler, error,
+) {
+	if f.tm == nil {
+		return nil, errors.New("tab manager is not initialized")
+	}
+	if uri == (workspaceapi.URI{}) {
+		panic("nil uri")
+	}
+	return f.tm.Tab(uri, icon, name, h)
+}
+
+func (f *workspaceTabManager) SetTabName(
+	uri workspaceapi.URI, name string, attr term.Attributes,
+) error {
+	if f.tm == nil {
+		return errors.New("tab manager is not initialized")
+	}
+	f.parent.scheduleNextTick(func() {
+		_ = f.tm.SetTabName(uri, name, attr)
+		if attr == (term.Attributes{}) {
+			log.Debugf("SetTabName called on workspace tab manager %p: "+
+				"empty attributes", f)
+			return
+		}
+		// home workspace: can't set workspace tab attributes
+		if f.workspace == nil {
+			log.Debugf("SetTabName called on workspace tab manager %p: "+
+				"home workspace", f)
+			return
+		}
+		// set workspace tab attr as well if workspace not in focus
+		if f.parent.focusHandler() != f.workspace {
+			log.Debugf("SetTabName called on workspace tab manager %p: "+
+				"setting attention attrs", f)
+			f.workspace.attentionAttr = attr
+			f.parent.Resize(f.parent.width, f.parent.height)
+			return
+		}
+		log.Debugf("SetTabName called on workspace tab manager %p: "+
+			"workspace in focus", f)
+	})
+	return nil
 }

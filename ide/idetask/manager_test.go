@@ -486,7 +486,7 @@ func sendEvent(t *testing.T, m *Manager, exec *fakeScheme, taskname, filename st
 }
 
 func newTestManager(b *fakeBrowser, scheme schemeapi.Scheme) *Manager {
-	m := NewManager(b, scheme, func(fn func()) bool {
+	m := NewManager(b, b, scheme, func(fn func()) bool {
 		fn()
 		return true
 	})

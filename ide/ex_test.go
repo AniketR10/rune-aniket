@@ -1122,7 +1122,7 @@ func TestExKeySequence(t *testing.T) {
 				defer mu.Unlock()
 				ex.Handle(ev)
 				return true
-			}, 0, clipboard.NewInMemory(), nil, opts...))
+			}, 0, clipboard.NewInMemory(), nil, nil, opts...))
 		ex.subscribeCommands()
 		b := testEx{Component: n, ex: ex}
 		closeFns = append(closeFns, func() error {
@@ -1311,7 +1311,7 @@ func newExForTestingTerminal(
 	opts = append(opts, defCommandKeyBindings()...)
 	require.NoError(t, ex.init(ed, workspace, svc,
 		container, emulatorCfg, plugin.DefaultBarConfig(), publishEvent,
-		0, clipboard.NewInMemory(), nil, opts...))
+		0, clipboard.NewInMemory(), nil, nil, opts...))
 	ex.subscribeCommands()
 	return testEx{Component: container, ex: ex}
 }
@@ -1339,7 +1339,7 @@ func newExForTestingWithWorkspace(
 
 	require.NoError(t, ex.init(ed, workspace, svc,
 		container, emulatorCfg, plugin.DefaultBarConfig(),
-		publishEvent, 0, clip, nil, finalOpts...))
+		publishEvent, 0, clip, nil, nil, finalOpts...))
 	ex.subscribeCommands()
 	ex.newEmulatorHandler = func(args []string, _ workspaceapi.ProcessWatcher) (vtereservoir.VTE, error) {
 		return newTestVteWithConfig(args), nil
@@ -1375,7 +1375,7 @@ func newExForTestingCommandsPreview(
 
 	require.NoError(t, ex.init(ed, workspace, svc,
 		container, emulatorCfg, plugin.DefaultBarConfig(),
-		publishEvent, 0, clip, previews, finalOpts...))
+		publishEvent, 0, clip, previews, nil, finalOpts...))
 	ex.subscribeCommands()
 	ex.newEmulatorHandler = func(args []string, _ workspaceapi.ProcessWatcher) (vtereservoir.VTE, error) {
 		return newTestVteWithConfig(args), nil

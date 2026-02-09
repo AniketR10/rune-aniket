@@ -477,9 +477,8 @@ func (t *parserHandler) Linefeed() {
 func (t *parserHandler) Bell() {
 	if !t.inFocus && t.modeUrgencyHints {
 		t.setNeedsAttention()
-	} else if t.inFocus {
-		t.bell()
 	}
+	t.bell()
 }
 
 // Substitute char under the cursor.

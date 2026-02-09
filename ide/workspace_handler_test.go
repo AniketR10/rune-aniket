@@ -134,6 +134,102 @@ func TestFileCommandRegistryIntegration(t *testing.T) {
 	require.NoError(t, m.Close())
 }
 
+func TestSetTabNameWithAttrIntegration(t *testing.T) {
+	dir, err := os.MkdirTemp("", "")
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_ = os.RemoveAll(dir)
+	})
+
+	uri1, err := workspaceapi.ParseURI("file://" + dir)
+	require.NoError(t, err)
+	cfg := defaultConfigWithWrap(false)
+	var mu sync.Mutex
+	cfg.scheduleNextTick = func(cb func()) bool {
+		mu.Lock()
+		defer mu.Unlock()
+		cb()
+		return true
+	}
+	var wg sync.WaitGroup
+	cfg.ringBell = func() {
+		wg.Done()
+	}
+	m := newTestWorkspaceManagerHandlerWithDir(t, cfg, dir,
+		nopShutdownShaderConfig())
+	require.NoError(t, m.addOrCreateWorkspace(uri1))
+	m.tabAttentionNameSuffix = "*"
+
+	h := newSafeHandler(m)
+	cases := []handlertest.SequenceTestCase{
+		{InputSequence: "<c-\\\\>terminalnewtab<enter>" +
+			"<c-\\\\>tabrename<space>terminal<enter>", // avoid dynamic tty name
+			Expected: `┌────────────────────────────┐
+│$ terminal                  │
+├────────────────────────────┤
+│▐                           │
+│                            │
+│                            │
+├────────────────────────────┤
+│1 1  2 2                    │
+└────────────────────────────┘`},
+	}
+	mu.Lock()
+	handlertest.RunHandlerSequence(t, h, 30, 9, cases)
+	mu.Unlock()
+	keys, err := term.ParseKeys("sleep<space>2<space>&&<space>printf<space>'\\\\a'<enter>")
+	require.NoError(t, err)
+	wg.Add(1)
+	for _, key := range keys {
+		ev := term.Event{
+			Type: term.EventKey,
+			Ch:   key.Ch,
+			Mod:  key.Mod,
+			Key:  key.Key,
+		}
+		if ev.Ch != 0 {
+			ev.Raw = []byte(string(ev.Ch))
+		} else if ev.Key == term.KeySpace {
+			ev.Raw = []byte(" ")
+		} else if ev.Key == term.KeyEnter {
+			ev.Raw = []byte{0x0d, 0x0a}
+		} else if ev.Mod == term.ModShift && ev.Ch == '7' {
+			ev.Raw = []byte("&")
+		}
+		_, handled := h.Handle(ev)
+		require.True(t, handled, "%s", ev.KeyComb().String())
+	}
+	keys, err = term.ParseKeys("<c-\\\\>workspacefocus<space>1<enter>")
+	require.NoError(t, err)
+	for _, key := range keys {
+		ev := term.Event{
+			Type: term.EventKey,
+			Ch:   key.Ch,
+			Mod:  key.Mod,
+			Key:  key.Key,
+		}
+		_, handled := h.Handle(ev)
+		require.True(t, handled, "%s", ev.KeyComb().String())
+	}
+	wg.Wait()
+	cases = []handlertest.SequenceTestCase{
+		{InputSequence: "",
+			Expected: `┌────────────────────────────┐
+│                            │
+├────────────────────────────┤
+│                            │
+│     workspaceWallpaper     │
+│                            │
+├────────────────────────────┤
+│1 1  2 2*                   │
+└────────────────────────────┘`},
+	}
+	mu.Lock()
+	handlertest.RunHandlerSequence(t, h, 30, 9, cases)
+	mu.Unlock()
+	require.NoError(t, m.Close())
+}
+
 func TestCustomLocations(t *testing.T) {
 	dir, err := os.MkdirTemp("", "")
 	require.NoError(t, err)

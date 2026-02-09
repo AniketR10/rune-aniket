@@ -132,12 +132,13 @@ func newEx(
 	initialVTECapacity int,
 	clip clipboard.Register,
 	dispatchOnPreview map[string]PreviewFunc,
+	tm browser.TabManager,
 	opts ...text.Option,
 ) (e *ex, err error) {
 	e = new(ex)
 	err = e.init(ed, m, storage, notifications,
 		emulatorConfig, pluginBarConfig, publishEvent, initialVTECapacity, clip,
-		dispatchOnPreview, opts...)
+		dispatchOnPreview, tm, opts...)
 	if err != nil {
 		return
 	}
@@ -157,6 +158,7 @@ func (e *ex) init(
 	initialVTECapacity int,
 	clip clipboard.Register,
 	dispatchOnPreview map[string]PreviewFunc,
+	tm browser.TabManager,
 	opts ...text.Option,
 ) (err error) {
 	err = e.doInit(ed, m, storage, notifications,
@@ -168,10 +170,13 @@ func (e *ex) init(
 	if err != nil {
 		return
 	}
+	if tm == nil {
+		tm = e.Browser()
+	}
 	e.comp.SubscribeWindow((*windowSubscriber)(e))
 	if initialVTECapacity != 0 {
 		e.reservoir = vtereservoir.New(e.Browser(), e.Browser(),
-			e.workspace, e.workspace, e.Browser(), e.emulatorConfig, initialVTECapacity)
+			e.workspace, e.workspace, tm, e.emulatorConfig, initialVTECapacity)
 	}
 	e.newEmulatorHandler = func(cmdAndArgs []string, watcher workspaceapi.ProcessWatcher) (
 		vtereservoir.VTE, error,
@@ -186,7 +191,7 @@ func (e *ex) init(
 			cfg.CommandAndArgs = cmdAndArgs
 		}
 		v, err := vte.NewHandler(e.Browser(), e.Browser(),
-			e.workspace, e.workspace, e.Browser(), cfg)
+			e.workspace, e.workspace, tm, cfg)
 		if err != nil {
 			return nil, err
 		}
@@ -201,11 +206,11 @@ func (e *ex) init(
 	}
 	e.newPluginHandler = func(args ...string) (pluginHandler, error) {
 		return plugin.New(e.Browser(), e.Browser(), e.workspace, e.workspace,
-			e.Browser(), args, e.width, pluginOpts...)
+			tm, args, e.width, pluginOpts...)
 	}
 	e.dispatchOnPreview = dispatchOnPreview
 	e.filepathCompleter = command.FilePathCompleter(e.workspace)
-	e.tasks = idetask.NewManager(&e.comp, m,
+	e.tasks = idetask.NewManager(&e.comp, tm, m,
 		emulatorConfig.ScheduleNextTick, pluginOpts...)
 	e.comp.SubscribeWindow(e.tasks)
 	return
@@ -1447,6 +1452,11 @@ func (e *ex) handleCommandEvent(ev term.Event) bool {
 		return true
 	}
 	return false
+}
+
+func (e *ex) onFocusChange(inFocus bool) {
+	handler, _ := e.comp.Browser().Focus().Content()
+	onFocusChangeHandler(handler, inFocus)
 }
 
 func (e *ex) handleEvent(ev term.Event) (
