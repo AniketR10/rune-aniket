@@ -15,8 +15,10 @@
 package syntaxrpc
 
 import (
+	"context"
 	"fmt"
 
+	"github.com/unstablebuild/blue/bluectx"
 	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
 	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi/syntaxrpc"
 	"github.com/unstablebuild/rune-go-sdk/term/termrpc"
@@ -26,12 +28,15 @@ import (
 // Server adapts a syntaxapi.Searcher to the generated SyntaxServer interface.
 type Server struct {
 	syntaxrpc.UnimplementedSyntaxServer
-	searcher syntaxapi.Searcher
+	ctx       context.Context
+	cancelCtx func()
+	searcher  syntaxapi.Searcher
 }
 
 // NewServer returns a new Server that delegates to s.
 func NewServer(s syntaxapi.Searcher) *Server {
-	return &Server{searcher: s}
+	ctx, cancelCtx := context.WithCancel(context.Background())
+	return &Server{searcher: s, ctx: ctx, cancelCtx: cancelCtx}
 }
 
 // RegisterServer registers a syntaxapi.Searcher as a gRPC service.
@@ -43,12 +48,13 @@ func RegisterServer(registrar grpc.ServiceRegistrar, s syntaxapi.Searcher) {
 func (s *Server) Search(
 	req *syntaxrpc.SearchRequest, stream grpc.ServerStreamingServer[syntaxrpc.SearchResponse],
 ) error {
-	ctx := stream.Context()
 	iter, err := s.searcher.Search(req.GetQuery(), req.GetCaptureNames())
 	if err != nil {
 		return fmt.Errorf("syntax search: %w", err)
 	}
 	defer iter.Close()
+	ctx, cancel := bluectx.First(stream.Context(), s.ctx)
+	defer cancel()
 
 	for {
 		result, ok := iter.Next(ctx)
@@ -56,13 +62,16 @@ func (s *Server) Search(
 			break
 		}
 
-		var pos termrpc.Coordinates
-		pos.FromModel(result.Position)
+		var from, to termrpc.Coordinates
+		from.FromModel(result.From)
+		to.FromModel(result.To)
 
 		resp := syntaxrpc.SearchResponse{
-			Uri:      result.File.String(),
-			Text:     result.Text,
-			Position: &pos,
+			Uri:         result.File.String(),
+			Text:        result.Text,
+			From:        &from,
+			To:          &to,
+			CaptureName: result.CaptureName,
 		}
 		if err := stream.Send(&resp); err != nil {
 			return fmt.Errorf("syntax search send: %w", err)
@@ -71,5 +80,11 @@ func (s *Server) Search(
 	if err := iter.Err(); err != nil {
 		return fmt.Errorf("syntax search next: %w", err)
 	}
+	return nil
+}
+
+// Close cancels all ongoing queries.
+func (s *Server) Close() error {
+	s.cancelCtx()
 	return nil
 }

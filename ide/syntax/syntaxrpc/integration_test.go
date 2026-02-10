@@ -110,13 +110,37 @@ func TestSearch(t *testing.T) {
 		{
 			name: "multiple results round-trip",
 			fake: fakeSearcher{results: []syntaxapi.Result{
-				{File: uri, Text: "func main()", Position: term.Coordinates{X: 0, Y: 10}},
-				{File: uri, Text: "func init()", Position: term.Coordinates{X: 0, Y: 1}},
+				{
+					File:        uri,
+					Text:        "func main()",
+					From:        term.Coordinates{X: 0, Y: 10},
+					To:          term.Coordinates{X: 11, Y: 10},
+					CaptureName: "function",
+				},
+				{
+					File:        uri,
+					Text:        "func init()",
+					From:        term.Coordinates{X: 0, Y: 1},
+					To:          term.Coordinates{X: 11, Y: 1},
+					CaptureName: "function",
+				},
 			}},
 			query: "main",
 			want: []syntaxapi.Result{
-				{File: uri, Text: "func main()", Position: term.Coordinates{X: 0, Y: 10}},
-				{File: uri, Text: "func init()", Position: term.Coordinates{X: 0, Y: 1}},
+				{
+					File:        uri,
+					Text:        "func main()",
+					From:        term.Coordinates{X: 0, Y: 10},
+					To:          term.Coordinates{X: 11, Y: 10},
+					CaptureName: "function",
+				},
+				{
+					File:        uri,
+					Text:        "func init()",
+					From:        term.Coordinates{X: 0, Y: 1},
+					To:          term.Coordinates{X: 11, Y: 1},
+					CaptureName: "function",
+				},
 			},
 		},
 		{
@@ -128,15 +152,45 @@ func TestSearch(t *testing.T) {
 		{
 			name: "capture names narrows results",
 			fake: fakeSearcher{results: []syntaxapi.Result{
-				{File: uri, Text: "match", Position: term.Coordinates{X: 5, Y: 3}},
-				{File: uri, Text: "skip", Position: term.Coordinates{X: 0, Y: 0}},
-				{File: uri, Text: "match", Position: term.Coordinates{X: 10, Y: 7}},
+				{
+					File:        uri,
+					Text:        "match",
+					From:        term.Coordinates{X: 5, Y: 3},
+					To:          term.Coordinates{X: 10, Y: 3},
+					CaptureName: "identifier",
+				},
+				{
+					File:        uri,
+					Text:        "skip",
+					From:        term.Coordinates{X: 0, Y: 0},
+					To:          term.Coordinates{X: 4, Y: 0},
+					CaptureName: "comment",
+				},
+				{
+					File:        uri,
+					Text:        "match",
+					From:        term.Coordinates{X: 10, Y: 7},
+					To:          term.Coordinates{X: 15, Y: 7},
+					CaptureName: "identifier",
+				},
 			}},
 			query:        "query",
 			captureNames: []string{"match"},
 			want: []syntaxapi.Result{
-				{File: uri, Text: "match", Position: term.Coordinates{X: 5, Y: 3}},
-				{File: uri, Text: "match", Position: term.Coordinates{X: 10, Y: 7}},
+				{
+					File:        uri,
+					Text:        "match",
+					From:        term.Coordinates{X: 5, Y: 3},
+					To:          term.Coordinates{X: 10, Y: 3},
+					CaptureName: "identifier",
+				},
+				{
+					File:        uri,
+					Text:        "match",
+					From:        term.Coordinates{X: 10, Y: 7},
+					To:          term.Coordinates{X: 15, Y: 7},
+					CaptureName: "identifier",
+				},
 			},
 		},
 		{
@@ -170,7 +224,10 @@ func TestSearch(t *testing.T) {
 			for i := range tt.want {
 				assert.Equal(t, tt.want[i].File.String(), got[i].File.String())
 				assert.Equal(t, tt.want[i].Text, got[i].Text)
-				assert.Equal(t, tt.want[i].Position, got[i].Position)
+
+				assert.Equal(t, tt.want[i].From, got[i].From)
+				assert.Equal(t, tt.want[i].To, got[i].To)
+				assert.Equal(t, tt.want[i].CaptureName, got[i].CaptureName)
 			}
 		})
 	}
