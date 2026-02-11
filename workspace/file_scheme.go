@@ -407,7 +407,7 @@ func (p *fileScheme) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (
 		}
 	})
 
-	p.log(log.DebugLevel, "exec.Command: (%#v, pid=%d)", cmd, stdcmd.Process.Pid)
+	p.log(log.DebugLevel, "exec.Command: (pid=%d)", stdcmd.Process.Pid)
 
 	p.cmds.Store(pid, struct{}{})
 
