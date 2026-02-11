@@ -1,6 +1,6 @@
 // Unstable Build LLC ("COMPANY") CONFIDENTIAL
 //
-// Unpublished Copyright (c) 2017-2024 Unstable Build, All Rights Reserved.
+// Unpublished Copyright (c) 2017-2026 Unstable Build, All Rights Reserved.
 //
 // NOTICE: All information contained herein is, and remains the property of COMPANY.
 // The intellectual and technical concepts contained herein are proprietary to
@@ -1603,10 +1603,14 @@ func newInstalledPkgManagerWithFiles(t *testing.T, files ...string) *mockPkgMana
 }
 
 type mockPkgManager struct {
-	ret iterator.Iterator[string]
+	ret           iterator.Iterator[string]
+	fullPathFiles []string
 }
 
 func (m mockPkgManager) LibDir(ctx context.Context, pkg string) (iterator.Iterator[string], error) {
+	if m.ret == nil {
+		return iterator.FromSlice(m.fullPathFiles), nil
+	}
 	return m.ret, nil
 }
 
@@ -1654,9 +1658,6 @@ func newTestCase(
 	pkgs syntax.PkgManager, width, height int,
 	interrupt func(context.Context) error,
 ) (*sync.Mutex, *text.Component, func()) {
-	tmpDir, err := os.MkdirTemp("", "")
-	require.NoError(t, err)
-
 	uri, err := workspaceapi.ParseURI("memory:///")
 	require.NoError(t, err)
 
@@ -1690,10 +1691,6 @@ func newTestCase(
 	require.NoError(t, err)
 
 	comp.Browser().Resize(width, height)
-
-	t.Cleanup(func() {
-		_ = os.RemoveAll(tmpDir)
-	})
 
 	return mu, comp, func() {
 		_ = comp.Close()

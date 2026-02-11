@@ -1,6 +1,6 @@
 // Unstable Build LLC ("COMPANY") CONFIDENTIAL
 //
-// Unpublished Copyright (c) 2017-2024 Unstable Build, All Rights Reserved.
+// Unpublished Copyright (c) 2017-2026 Unstable Build, All Rights Reserved.
 //
 // NOTICE: All information contained herein is, and remains the property of COMPANY.
 // The intellectual and technical concepts contained herein are proprietary to
@@ -57,6 +57,7 @@ import (
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/command"
+	"unstable.build/go-tui/ide/syntax"
 	"unstable.build/go-tui/ide/vctrl"
 	"unstable.build/go-tui/ide/vctrl/gogit"
 	"unstable.build/go-tui/localstorage"
@@ -791,6 +792,8 @@ func (h *workspaceManagerHandler) buildExtensions(
 		extension.StorageResources(h.sixDir))
 	res = extension.MergeResourceMap(res,
 		extension.ConfigResources(config.MapConfig(cleanedExtensionConfig(cfg.cfg))))
+	res = extension.MergeResourceMap(res,
+		extension.SyntaxResources(syntax.NewSearcher(ex.workspace, h.pkgmanager, uri)))
 
 	dataDir := h.sixDir
 	if err := os.MkdirAll(dataDir, 0777); err != nil {

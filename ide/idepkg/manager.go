@@ -178,7 +178,8 @@ func (m *Manager) InstallPackageVersion(
 
 	_, ok := m.iterators.m[pkgID]
 	if ok {
-		return errors.New("there's another version of this package being installed")
+		m.log(log.InfoLevel, "there's already an ongoing install of package: %s", pkgID)
+		return nil
 	}
 
 	tarfile, err := os.CreateTemp("", "")

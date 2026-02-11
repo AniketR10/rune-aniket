@@ -1,6 +1,6 @@
 // Unstable Build LLC ("COMPANY") CONFIDENTIAL
 //
-// Unpublished Copyright (c) 2017-2024 Unstable Build, All Rights Reserved.
+// Unpublished Copyright (c) 2017-2026 Unstable Build, All Rights Reserved.
 //
 // NOTICE: All information contained herein is, and remains the property of COMPANY.
 // The intellectual and technical concepts contained herein are proprietary to
@@ -21,7 +21,7 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package extension
+package syntax
 
 import (
 	"bufio"
@@ -33,51 +33,64 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sync"
+	"unsafe"
 
-	"github.com/ernestrc/go-multierror"
-	log "github.com/sirupsen/logrus"
+	"github.com/ebitengine/purego"
+	"github.com/sirupsen/logrus"
 	sitter "github.com/tree-sitter/go-tree-sitter"
-	"github.com/unstablebuild/blue/iterator"
+	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/debug"
-	"unstable.build/go-tui/extension"
-	"unstable.build/go-tui/ide/syntax"
+	"unstable.build/go-tui/workspace/walkdir"
 )
 
-var (
-	defaultWorkers  = runtime.NumCPU()
-	errInvalidQuery = errors.New("invalid query for language")
-)
-
-type match struct {
-	CaptureName string
-	LineString  string
+// NewSearcher returns a workspace-wide syntax searcher.
+func NewSearcher(
+	w workspaceapi.FileSystem, pkg PkgManager, uri workspaceapi.URI,
+) syntaxapi.Searcher {
+	return searcher{w: w, uri: uri, pkg: pkg}
 }
 
-func readSymbols(
-	ctx context.Context, w workspaceapi.FileSystem,
-	dataDir string, uri workspaceapi.URI, paths iterator.Iterator[string],
-	queryFile string, query string,
-) (iterator.Iterator[match], error) {
+var (
+	defaultWorkers = runtime.NumCPU()
+)
+
+type searcher struct {
+	w   workspaceapi.FileSystem
+	pkg PkgManager
+	uri workspaceapi.URI
+}
+
+func (s searcher) Search(query string, captureNames []string) (
+	iterator.Iterator[syntaxapi.Result], error,
+) {
+	ctx, cancel := context.WithCancel(context.Background())
+	paths, err := walkdir.ListFiles(ctx, s.w, ".")
+	if err != nil {
+		cancel()
+		return nil, err
+	}
+
 	files := make(chan string)
-	results := make(chan match)
+	results := make(chan syntaxapi.Result)
 	closeWaitCh := make(chan struct{})
-	ctx, cancel := context.WithCancel(ctx)
 
 	var wg sync.WaitGroup
 	wg.Add(defaultWorkers)
-	errors := make([]error, defaultWorkers)
+	errs := make([]error, defaultWorkers)
 	validErrors := make([]map[string]*expectedError, defaultWorkers)
 	for i := range defaultWorkers {
 		validErrors[i] = make(map[string]*expectedError)
-		go func(err *error, missingLanguage map[string]*expectedError) {
+		go func(err *error, expectedErrors map[string]*expectedError) {
 			defer wg.Done()
-			readSymbolsWorker(ctx, w, dataDir, uri, queryFile, results, files, err,
-				missingLanguage, query)
-		}(&errors[i], validErrors[i])
+			readSymbolsWorker(ctx, s.w, s.pkg, s.uri, query, results, files, err,
+				expectedErrors, captureNames)
+		}(&errs[i], validErrors[i])
 	}
 
 	it := &listSymbolsIterator{ctx: ctx, ch: results}
@@ -90,7 +103,6 @@ func readSymbols(
 		defer close(results)
 		defer paths.Close()
 
-	loop:
 		for {
 			file, ok := paths.Next(ctx)
 			if !ok {
@@ -98,9 +110,10 @@ func readSymbols(
 			}
 			select {
 			case files <- file:
+				continue
 			case <-ctx.Done():
-				break loop
 			}
+			break
 		}
 		if err := paths.Err(); err != nil {
 			itErr = err
@@ -112,19 +125,15 @@ func readSymbols(
 		defer it.mu.Unlock()
 
 		it.err = itErr
-		for _, err := range errors {
+		for _, err := range errs {
 			if err != nil {
-				it.err = multierror.Append(it.err, err)
+				it.err = errors.Join(it.err, err)
 			}
 		}
-		missingLanguage, invalidQuery := mergeValidErrorsMap(validErrors)
+		missingLanguage := mergeValidErrorsMap(validErrors)
 		if len(missingLanguage) != 0 {
-			log.Debugf("Missing language parser for the following file extensions: %#v",
+			logrus.Debugf("Missing language parser for the following file extensions: %#v",
 				missingLanguage)
-		}
-		if len(invalidQuery) != 0 {
-			log.Debugf("Invalid query for the following file extensions: %#v",
-				invalidQuery)
 		}
 	})
 	return it, nil
@@ -132,10 +141,8 @@ func readSymbols(
 
 func mergeValidErrorsMap(m []map[string]*expectedError) (
 	missingLanguage map[string]int,
-	invalidQuery map[string]int,
 ) {
 	missingLanguage = make(map[string]int)
-	invalidQuery = make(map[string]int)
 	for _, mm := range m {
 		for k, v := range mm {
 			if v.missingLanguage != 0 {
@@ -143,12 +150,6 @@ func mergeValidErrorsMap(m []map[string]*expectedError) (
 					missingLanguage[k] = 0
 				}
 				missingLanguage[k] += v.missingLanguage
-			}
-			if v.invalidQuery != 0 {
-				if _, ok := invalidQuery[k]; !ok {
-					invalidQuery[k] = 0
-				}
-				invalidQuery[k] += v.invalidQuery
 			}
 		}
 	}
@@ -158,8 +159,10 @@ func mergeValidErrorsMap(m []map[string]*expectedError) (
 func readFileSymbols(
 	ctx context.Context,
 	parser *parser,
+	uri workspaceapi.URI,
 	w workspaceapi.FileSystem,
-	filename string, results chan match,
+	filename string, results chan syntaxapi.Result,
+	captureNameFilters []string,
 ) error {
 	file, err := w.OpenFile(filename, os.O_RDONLY, 0)
 	if err != nil {
@@ -187,7 +190,7 @@ func readFileSymbols(
 
 	root := tree.RootNode()
 	captureNames := parser.query.CaptureNames()
-	content := []byte(buf.String())
+	content := data
 	matches := cur.Matches(parser.query, root, content)
 	var retErr error
 	for {
@@ -196,21 +199,17 @@ func readFileSymbols(
 			break
 		}
 		for _, cap := range m.Captures {
-			name := captureNames[cap.Index]
 			rng := cap.Node.Range()
 			from, to, err := convertRangeToCoordinates(buf.RawCells(), rng)
-			if err != nil {
-				log.Tracef("convert query: %v", err)
+			if err != nil || int(cap.Index) >= len(captureNames) ||
+				(len(captureNameFilters) != 0 &&
+					!slices.Contains(captureNameFilters, captureNames[cap.Index])) {
 				continue
 			}
-			if int(cap.Index) >= len(captureNames) {
-				log.Tracef("index %d does not belong capture names %v",
-					cap.Index, captureNames)
-				continue
-			}
-			result, err := makeSymbolItem(from, to, filename, buf, name)
+			fileURI := workspaceapi.Join(uri, filename)
+			result, err := makeSymbolItem(from, to, fileURI, buf, captureNames[cap.Index])
 			if err != nil {
-				retErr = multierror.Append(retErr, err)
+				retErr = errors.Join(retErr, err)
 				continue
 			}
 			select {
@@ -224,44 +223,28 @@ func readFileSymbols(
 	return retErr
 }
 
-func convertRangeToCoordinates(cells [][]term.Cell, n sitter.Range) (
-	from, to term.Coordinates, err error,
-) {
-	start, end := n.StartPoint, n.EndPoint
-	from, ok := cell.ConvertRunePosToCoordinates(cells, int(start.Row), int(start.Column))
-	if !ok {
-		err = fmt.Errorf("convert points: failed to convert sitter 'start point "+
-			" to term 'from' coordinates: point: %v", start)
-		return
-	}
-	to, ok = cell.ConvertRunePosToCoordinates(cells, int(end.Row), int(end.Column))
-	if !ok {
-		err = fmt.Errorf("convert points: failed to convert sitter 'end' point "+
-			" to term 'to' coordinates: point: %v", end)
-		return
-	}
-	return
-}
-
 func makeSymbolItem(
-	from, to term.Coordinates, filename string, buf *cell.Buffer,
+	from, to term.Coordinates, filename workspaceapi.URI, buf *cell.Buffer,
 	captureName string,
-) (match, error) {
-	to.Y = from.Y
-	to.X = buf.Columns(from.Y)
+) (syntaxapi.Result, error) {
 	cells, _, _ := buf.Select(from, to)
 	textToDisplay := term.CellsToString(cells)
-	lineStr := fmt.Sprintf("%s:%d: %s", filename, from.Y+1, textToDisplay)
-	return match{CaptureName: captureName, LineString: lineStr}, nil
+	return syntaxapi.Result{
+		CaptureName: captureName,
+		From:        from,
+		To:          to,
+		File:        filename,
+		Text:        textToDisplay,
+	}, nil
 }
 
 func readSymbolsWorker(
-	ctx context.Context, w workspaceapi.FileSystem, dataDir string,
-	uri workspaceapi.URI, queryFile string, results chan match, files chan string,
+	ctx context.Context, w workspaceapi.FileSystem, pkg PkgManager,
+	uri workspaceapi.URI, query string, results chan syntaxapi.Result,
+	files chan string,
 	err *error, expectedErrors map[string]*expectedError,
-	query string,
+	captureNameFilters []string,
 ) {
-	pkg := extension.NewPkgManager(dataDir, uri, w)
 	parsers := make(map[string]*parser)
 	for {
 		select {
@@ -271,39 +254,34 @@ func readSymbolsWorker(
 			if !ok {
 				return
 			}
-			langID, lerr := syntax.LanguageForFile(path)
+			langID, lerr := LanguageForFile(path)
 			if lerr != nil {
 				continue
 			}
 			parser, ok := parsers[langID]
 			if !ok {
-				var err error
-				parser, err = newParser(ctx, langID, pkg, queryFile, query)
-				if err != nil {
-					if errors.Is(err, extension.ErrNotInstalled) {
+				var perr error
+				parser, perr = newParser(ctx, langID, pkg, query)
+				if perr != nil {
+					if errors.Is(perr, errNotInstalled) {
 						ext := filepath.Ext(path)
 						if _, ok := expectedErrors[ext]; !ok {
 							expectedErrors[ext] = &expectedError{}
 						}
 						expectedErrors[ext].missingLanguage++
-					} else if errors.Is(err, errInvalidQuery) {
-						ext := filepath.Ext(path)
-						if _, ok := expectedErrors[ext]; !ok {
-							expectedErrors[ext] = &expectedError{}
-						}
-						expectedErrors[ext].invalidQuery++
-					} else {
-						log.Errorf("new parser for language %q: %v", langID, err)
+						continue
 					}
-					continue
+					perr = fmt.Errorf("new parser for language %q: %v", langID, perr)
+					*err = errors.Join(*err, perr)
+					return
 				}
 				defer parser.Close()
 				parsers[langID] = parser
 			}
 
-			readErr := readFileSymbols(ctx, parser, w, path, results)
+			readErr := readFileSymbols(ctx, parser, uri, w, path, results, captureNameFilters)
 			if readErr != nil {
-				*err = multierror.Append(*err, readErr)
+				*err = errors.Join(*err, readErr)
 			}
 		}
 	}
@@ -313,23 +291,23 @@ type listSymbolsIterator struct {
 	mu          sync.Mutex
 	err         error
 	ctx         context.Context
-	ch          chan match
+	ch          chan syntaxapi.Result
 	cancel      func()
 	closeWaitCh chan struct{}
 }
 
-func (l *listSymbolsIterator) Next(ctx context.Context) (match, bool) {
+func (l *listSymbolsIterator) Next(ctx context.Context) (syntaxapi.Result, bool) {
 	select {
 	case <-ctx.Done():
 		l.mu.Lock()
 		defer l.mu.Unlock()
-		l.err = multierror.Append(l.err, ctx.Err())
-		return match{}, false
+		l.err = errors.Join(l.err, ctx.Err())
+		return syntaxapi.Result{}, false
 	case <-l.ctx.Done():
 		l.mu.Lock()
 		defer l.mu.Unlock()
-		l.err = multierror.Append(l.err, l.ctx.Err())
-		return match{}, false
+		l.err = errors.Join(l.err, l.ctx.Err())
+		return syntaxapi.Result{}, false
 	case path, ok := <-l.ch:
 		return path, ok
 	}
@@ -344,11 +322,11 @@ func (l *listSymbolsIterator) Err() error {
 	}
 	// avoid data races onto l.err which is an instance of
 	// *multierr.Error by creating a new multierr.Error
-	err := multierror.Append(nil, l.err)
+	err := errors.Join(nil, l.err)
 	if l.ctx.Err() == nil {
 		return err
 	}
-	return multierror.Append(err, l.ctx.Err())
+	return errors.Join(err, l.ctx.Err())
 }
 
 func (l *listSymbolsIterator) Close() error {
@@ -357,7 +335,100 @@ func (l *listSymbolsIterator) Close() error {
 	return nil
 }
 
+var (
+	errNotInstalled = errors.New("parser not found: language package not installed")
+)
+
 type expectedError struct {
 	missingLanguage int
-	invalidQuery    int
+}
+
+type parser struct {
+	closed bool
+	parser *sitter.Parser
+	lang   *sitter.Language
+	query  *sitter.Query
+	lib    uintptr
+}
+
+func newParser(
+	ctx context.Context, langID string, pkg PkgManager, query string,
+) (ret *parser, err error) {
+	it, err := pkg.LibDir(ctx, langID)
+	if err != nil {
+		err = fmt.Errorf("scan language package installation: %w", err)
+		return
+	}
+	files, err := iterator.ToSlice(ctx, it)
+	_ = it.Close()
+	if err != nil {
+		err = fmt.Errorf("list files: %w", err)
+		return
+	}
+	var langfile string
+	for _, path := range files {
+		switch filepath.Base(path) {
+		case ParserFilename:
+			langfile = path
+		}
+	}
+
+	if langfile == "" {
+		err = errNotInstalled
+		return
+	}
+
+	ret = new(parser)
+	ret.lib, err = purego.Dlopen(langfile, purego.RTLD_NOW|purego.RTLD_GLOBAL)
+	if err != nil {
+		err = fmt.Errorf("dlopen %q: %w", langfile, err)
+		return
+	}
+
+	parserID := fmt.Sprintf("tree_sitter_%s", langID)
+
+	var lang func() uintptr
+	sym, err := purego.Dlsym(ret.lib, parserID)
+	if err != nil {
+		_ = purego.Dlclose(ret.lib)
+		err = fmt.Errorf("load symbol %q: %w", parserID, err)
+		return
+	}
+	purego.RegisterFunc(&lang, sym)
+
+	language := sitter.NewLanguage(unsafe.Pointer(lang()))
+	parser := sitter.NewParser()
+	err = parser.SetLanguage(language)
+	if err != nil {
+		_ = purego.Dlclose(ret.lib)
+		parser.Close()
+		err = fmt.Errorf("set parser language: %v", err)
+		return
+	}
+	ret.lang = language
+	ret.parser = parser
+
+	var qerr *sitter.QueryError
+	ret.query, qerr = sitter.NewQuery(ret.lang, query)
+	if qerr != nil {
+		err = qerr
+	}
+	if err != nil {
+		_ = purego.Dlclose(ret.lib)
+		parser.Close()
+		err = fmt.Errorf("invalid query: %w", err)
+		return
+	}
+	return
+}
+
+func (t *parser) Close() (ret error) {
+	if t.closed {
+		return nil
+	}
+	t.closed = true
+	t.parser.Close()
+	t.query.Close()
+	ret = purego.Dlclose(t.lib)
+	return
 }
