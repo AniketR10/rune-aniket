@@ -631,9 +631,9 @@ func TestWorkspaceExtensions(t *testing.T) {
 
 		extensions := map[string]Extension{
 			"myID": {
-				ID:     "myID",
-				Path:   "myPath2",
-				Config: config.MapConfig(map[string]interface{}{"a": "b"}),
+				ID:         "myID",
+				CmdAndArgs: "myPath2",
+				Config:     config.MapConfig(map[string]interface{}{"a": "b"}),
 			},
 		}
 

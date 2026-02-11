@@ -186,7 +186,7 @@ func (r *runner) WorkspaceExtensionsRunner(
 		_ = ret.srv.Serve(listener)
 	})
 
-	ret.Runner = newWorkspaceRunner(r.executor, r.grantor, uri,
+	ret.workspaceRunner = newWorkspaceRunner(r.executor, r.grantor, uri,
 		socket, r.dataDir, cert, r.keys, r.opts...)
 	if err != nil {
 		err = fmt.Errorf("new workspace runner: %w", err)
@@ -201,7 +201,11 @@ func (r *runner) WorkspaceExtensionsRunner(
 
 func (r *runner) newUnixListener(uri workspaceapi.URI) (ret net.Listener, err error) {
 	ctx := context.Background()
-	socket := path.Join(uri.Path(), fmt.Sprintf(".%s.sock", r.cfg.pkg))
+	sockname := r.cfg.pkg
+	if sockname == "" {
+		sockname = "ide"
+	}
+	socket := path.Join(uri.Path(), fmt.Sprintf(".%s.sock", sockname))
 	err = retry.Retry(ctx, retrySocketStrategy, func(context.Context) (bool, error) {
 		var cfg net.ListenConfig
 		ret, err = cfg.Listen(ctx, "unix", socket)
@@ -228,11 +232,23 @@ func (r *runner) newUnixListener(uri workspaceapi.URI) (ret net.Listener, err er
 	return
 }
 
+var _ schemeapi.Executor = wrapCloser{}
+
 type wrapCloser struct {
 	workspaceapi.URI
-	extension.Runner
+	*workspaceRunner
 	closers []io.Closer
 	srv     *grpc.Server
+}
+
+func (m wrapCloser) Signal(pid workspaceapi.Pid, sig syscall.Signal) error {
+	return m.workspaceRunner.Signal(pid, sig)
+}
+
+func (m wrapCloser) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (
+	workspaceapi.Pid, error,
+) {
+	return m.workspaceRunner.StartCommand(ctx, cmd)
 }
 
 func (w wrapCloser) Close() (ret error) {
@@ -242,8 +258,8 @@ func (w wrapCloser) Close() (ret error) {
 			ret = multierror.Append(ret, err)
 		}
 	}
-	if w.Runner != nil {
-		if err := w.Runner.Close(); err != nil {
+	if w.workspaceRunner != nil {
+		if err := w.workspaceRunner.Close(); err != nil {
 			ret = multierror.Append(ret, err)
 		}
 	}

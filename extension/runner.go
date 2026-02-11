@@ -32,5 +32,5 @@ import (
 // Runner abstracts the ability to run and stop extensions.
 type Runner interface {
 	io.Closer
-	Run(extensionID, path string, config config.Config) error
+	Run(id, cmdAndArgs string, config config.Config) error
 }

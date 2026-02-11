@@ -54,8 +54,8 @@ type Extension struct {
 	// extension.
 	ID string
 
-	// Path is the path to the executable.
-	Path string
+	// CmdAndArgs is the path to the executable.
+	CmdAndArgs string
 
 	// Config is the configuration for the extension.
 	Config config.Config
