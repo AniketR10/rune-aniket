@@ -92,6 +92,13 @@ func New(
 	return ret
 }
 
+// Capacity returns the current capacity.
+func (f *Facility) Capacity() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.pool)
+}
+
 // Get selects an arbitrary vte from the [Facility], removes it from the
 // Facility, and returns it to the caller.
 func (f *Facility) Get() (VTE, error) {

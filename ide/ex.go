@@ -246,6 +246,11 @@ func (e *ex) subscribeCommands() error {
 
 func (e *ex) setExecutor(exe schemeapi.Executor) {
 	e.executor = exe
+	if e.reservoir != nil {
+		_ = e.reservoir.Close()
+		e.reservoir = vtereservoir.New(e.Browser(), e.Browser(),
+			e.workspace, e.executor, e.tm, e.emulatorConfig, e.reservoir.Capacity())
+	}
 }
 
 func (e *ex) completeReadFile(
