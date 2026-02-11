@@ -63,10 +63,8 @@ func (s *Server) Search(
 	if err != nil {
 		return fmt.Errorf("syntax search: %w", err)
 	}
-	defer it.Close()
 	ctx, cancel := bluectx.First(stream.Context(), s.ctx)
 	defer cancel()
-
 	return streamResults(ctx, stream, it)
 }
 
@@ -79,7 +77,6 @@ func (s *Server) SearchNode(
 	if err != nil {
 		return err
 	}
-	defer it.Close()
 	ctx, cancel := bluectx.First(stream.Context(), s.ctx)
 	defer cancel()
 	return streamResults(ctx, stream, it)
@@ -98,7 +95,6 @@ func (s *Server) Query(
 	if err != nil {
 		return err
 	}
-	defer it.Close()
 	ctx, cancel := bluectx.First(stream.Context(), s.ctx)
 	defer cancel()
 	return streamResults(ctx, stream, it)
@@ -117,7 +113,6 @@ func (s *Server) QueryNode(
 	if err != nil {
 		return err
 	}
-	defer it.Close()
 	ctx, cancel := bluectx.First(stream.Context(), s.ctx)
 	defer cancel()
 	return streamResults(ctx, stream, it)

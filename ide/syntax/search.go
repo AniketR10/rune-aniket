@@ -162,11 +162,13 @@ func (s searcher) search(queryFile, query string, captureNames []string) (
 	validErrors := make([]map[string]*expectedError, defaultWorkers)
 	for i := range defaultWorkers {
 		validErrors[i] = make(map[string]*expectedError)
-		go func(err *error, expectedErrors map[string]*expectedError) {
+		var err = &errs[i]
+		var expectedErrors = validErrors[i]
+		go debug.CapturePanicReport(func() {
 			defer wg.Done()
 			readSymbolsWorker(ctx, s.w, s.pkg, s.uri, queryFile, query, results, files, err,
 				expectedErrors, captureNames)
-		}(&errs[i], validErrors[i])
+		})
 	}
 
 	it := &listSymbolsIterator{
@@ -352,7 +354,7 @@ func readSymbolsWorker(
 					}
 					perr = fmt.Errorf("new parser for language %q: %v", langID, perr)
 					*err = errors.Join(*err, perr)
-					return
+					continue
 				}
 				defer parser.Close()
 				parsers[langID] = parser
@@ -437,7 +439,7 @@ func newParser(
 ) (ret *parser, err error) {
 	it, err := pkg.LibDir(ctx, langID)
 	if err != nil {
-		err = fmt.Errorf("scan language package installation: %w", err)
+		err = errNotInstalled
 		return
 	}
 	files, err := iterator.ToSlice(ctx, it)
