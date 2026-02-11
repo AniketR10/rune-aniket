@@ -584,10 +584,10 @@ func (v *viHandler) enterViMode(pos term.Coordinates) {
 	// reset offset
 	v.sync.scroll.SetOffset(term.Coordinates{})
 	v.sync.scroll.Attributes = v.sync.vteScroll.Attributes
-	v.sync.mu.Lock()
-	v.viSetCursorAtScroll(pos)
-	v.sync.mu.Unlock()
 
+	v.sync.mu.Lock()
+	defer v.sync.mu.Unlock()
+	v.viSetCursorAtScroll(pos)
 	v.scheduleAfterBell(false, v.moveViToBounds)
 }
 
