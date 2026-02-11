@@ -24,6 +24,7 @@
 package storagerpc
 
 import (
+	"errors"
 	"strings"
 
 	"github.com/unstablebuild/blue/document"
@@ -102,7 +103,9 @@ func makeModelFilter(m docmarshal.Marshaler,
 			fieldPath[i] = strings.ToLower(comp)
 		}
 	}
-
+	if len(fieldPath) == 0 {
+		return document.Filter{}, errors.New("empty field path")
+	}
 	return document.Filter{
 		Field: document.Field{
 			FieldPath: fieldPath,
