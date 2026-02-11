@@ -47,6 +47,70 @@ import (
 	"unstable.build/go-tui/workspace"
 )
 
+func TestPackageManagerConcurrent(t *testing.T) {
+	t.Parallel()
+	pkgs := idepkgtest.MakePackages(
+		release.Package{Name: "go"},
+		release.Package{Name: "six", Latest: "2"},
+	)
+	bundles := idepkgtest.MakeBundles(
+		[]release.Bundle{
+			{Package: "go", Version: "2"},
+			{Package: "go", Version: "3"},
+			{Package: "go", Version: "1", CreatedAt: time.Now()},
+		},
+		[]release.Bundle{
+			{Package: "six", Version: "1"},
+			{Package: "six", Version: "2"},
+		},
+	)
+	rm := idepkgtest.NewReleaseManager(pkgs, bundles)
+	rm.SetMissProgressComplete(true)
+	cfg := defaultCfg()
+	var m *testWorkspaceManagerHandler
+	cfg.scheduleNextTick = func(fn func()) bool {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		fn()
+		return true
+	}
+	m = newTestWorkspaceManagerHandlerForPkgManagerWithInterrupterCfg(t, rm, true,
+		term.NopInterrupter(), cfg)
+	require.NoError(t, m.pkgmanager.setAutoInstall())
+
+	const n = 1000
+	var errs [n]error
+	var wg sync.WaitGroup
+	wg.Add(n)
+	for i := range n {
+		go func(i int) {
+			defer wg.Done()
+			it, err := m.pkgmanager.LibDir(context.Background(), "go")
+			if err != nil {
+				errs[i] = err
+				return
+			}
+			defer it.Close()
+			for {
+				_, ok := it.Next(context.Background())
+				if !ok {
+					break
+				}
+			}
+			if err := it.Err(); err != nil {
+				errs[i] = err
+			}
+		}(i)
+	}
+	wg.Wait()
+
+	for i, err := range errs {
+		if err != nil {
+			t.Errorf("LibDir %d returned error: %v", i, err)
+		}
+	}
+}
+
 func TestPackageManagerIntegration(t *testing.T) {
 	t.Parallel()
 	pkgs := idepkgtest.MakePackages(
@@ -1022,12 +1086,21 @@ func newTestWorkspaceManagerHandlerForPkgManagerWithInterrupter(
 	t *testing.T, releaseManager release.Manager, showManual bool,
 	interrupter term.Interrupter,
 ) *testWorkspaceManagerHandler {
+	cfg := defaultCfg()
+	return newTestWorkspaceManagerHandlerForPkgManagerWithInterrupterCfg(
+		t, releaseManager, showManual, interrupter, cfg,
+	)
+}
+func newTestWorkspaceManagerHandlerForPkgManagerWithInterrupterCfg(
+	t *testing.T, releaseManager release.Manager, showManual bool,
+	interrupter term.Interrupter,
+	cfg ideConfig,
+) *testWorkspaceManagerHandler {
 	dir, err := os.MkdirTemp("", "")
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		_ = os.RemoveAll(dir)
 	})
-	cfg := defaultCfg()
 	manager := workspace.NewManager(cfg.workspace())
 	manager.RegisterScheme(workspace.FileScheme, workspace.NewFileScheme)
 	ret := newTestWorkspaceManagerHandlerWithReleaseManager(t, manager,

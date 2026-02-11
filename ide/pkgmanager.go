@@ -99,7 +99,7 @@ type pkgManager struct {
 	storage          document.Service
 	scheduleNextTick func(func()) bool
 	interrupter      term.Interrupter
-	pending          map[string]*sync.Mutex
+	pending          sync.Map // map[string]*sync.Mutex
 }
 
 type installStorageValue struct {
@@ -118,7 +118,6 @@ func (m *pkgManager) init(
 	m.interrupter = interrupter
 	m.wh = wh
 	m.storage = storage
-	m.pending = make(map[string]*sync.Mutex)
 }
 
 // LibDir installs package via prompt if not installed yet
@@ -138,9 +137,9 @@ func (m *pkgManager) LibDir(ctx context.Context, pkgID string) (
 		return nil, fmt.Errorf("get latest version: %w", err)
 	}
 
-	ready, ok := m.pending[pkgID]
+	ready, ok := m.pending.Load(pkgID)
 	if ok {
-		return newPendingIterator(m.pkg, pkgID, ready), nil
+		return newPendingIterator(m.pkg, pkgID, ready.(*sync.Mutex)), nil
 	}
 
 	var val installStorageValue
@@ -491,6 +490,11 @@ func (m *pkgManager) getLatestVersion(
 	return p.Latest, nil
 }
 
+func (m *pkgManager) setAutoInstall() error {
+	return m.storage.Set(context.Background(),
+		installStorageKey, installStorageValue{Value: true})
+}
+
 func (m *pkgManager) openInstallPrompt(pkgID string, version release.Version) (
 	iterator.Iterator[string], error,
 ) {
@@ -539,12 +543,12 @@ func (m *pkgManager) openInstallPrompt(pkgID string, version release.Version) (
 						it.err = document.ErrNotFound
 						ready.Unlock()
 					}
-					delete(m.pending, pkgID)
+					m.pending.Delete(pkgID)
 					return nil
 				}))
 	})
 
-	m.pending[pkgID] = ready
+	m.pending.Store(pkgID, ready)
 	return it, nil
 }
 
