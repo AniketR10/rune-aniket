@@ -50,7 +50,13 @@ func (a authorizer) Authorize(
 ) (err error) {
 	var perm extensionapi.Permission
 	switch resource {
+	case "/syntax.Syntax/SearchNode":
+		perm = extensionapi.PermissionSyntaxTree
 	case "/syntax.Syntax/Search":
+		perm = extensionapi.PermissionSyntaxTree
+	case "/syntax.Syntax/Query":
+		perm = extensionapi.PermissionSyntaxTree
+	case "/syntax.Syntax/QueryNode":
 		perm = extensionapi.PermissionSyntaxTree
 	case "/workspace.Terminal/NewPty":
 		perm = extensionapi.PermissionTerminal
