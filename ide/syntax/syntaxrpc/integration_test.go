@@ -25,15 +25,14 @@ package syntaxrpc
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"net"
 	"os"
-	"sync/atomic"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
 	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
 	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi/syntaxrpc"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
@@ -43,201 +42,335 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-// fakeSearcher is a syntaxapi.Searcher backed by a slice of results.
-type fakeSearcher struct {
-	results []syntaxapi.Result
-	err     error
-}
-
-func (f *fakeSearcher) Search(query string, captureNames []string) (iterator.Iterator[syntaxapi.Result], error) {
-	if f.err != nil {
-		return nil, f.err
-	}
-	if len(captureNames) == 0 {
-		return iterator.FromSlice(f.results), nil
-	}
-	allow := make(map[string]struct{}, len(captureNames))
-	for _, n := range captureNames {
-		allow[n] = struct{}{}
-	}
-	var filtered []syntaxapi.Result
-	for _, r := range f.results {
-		if _, ok := allow[r.Text]; ok {
-			filtered = append(filtered, r)
-		}
-	}
-	return iterator.FromSlice(filtered), nil
-}
-
-func mustParseURI(t *testing.T, s string) workspaceapi.URI {
-	t.Helper()
-	u, err := workspaceapi.ParseURI(s)
+func TestServerClientIntegration(t *testing.T) {
+	testURI, err := workspaceapi.ParseURI("file:///tmp/test.go")
 	require.NoError(t, err)
-	return u
-}
-
-var sockSeq atomic.Int64
-
-// startServer creates a gRPC server on a unix socket and returns
-// a connected client. The server and connection are cleaned up
-// when the test finishes.
-func startServer(t *testing.T, s syntaxapi.Searcher) *syntaxrpc.Client {
-	t.Helper()
-
-	// Use a short path to stay under macOS 108-char unix socket limit.
-	sock := fmt.Sprintf("%s/syntaxrpc-%d.sock", os.TempDir(), sockSeq.Add(1))
-	t.Cleanup(func() { os.Remove(sock) })
-	lis, err := net.Listen("unix", sock)
+	testURI2, err := workspaceapi.ParseURI("file:///tmp/other.go")
 	require.NoError(t, err)
 
-	srv := grpc.NewServer()
-	syntaxrpc.RegisterSyntaxServer(srv, NewServer(s))
-	go srv.Serve(lis)
-	t.Cleanup(srv.GracefulStop)
+	tsuite := []struct {
+		name   string
+		setup  func(*mockSearcher)
+		action func(t *testing.T, client *syntaxrpc.Client)
+	}{
+		{
+			name: "Search returns results",
+			setup: func(m *mockSearcher) {
+				m.searchResults = []syntaxapi.Result{
+					{
+						File:        testURI,
+						Text:        "func main()",
+						From:        term.Coordinates{X: 0, Y: 10},
+						To:          term.Coordinates{X: 11, Y: 10},
+						CaptureName: "function.name",
+					},
+					{
+						File:        testURI2,
+						Text:        "func helper()",
+						From:        term.Coordinates{X: 0, Y: 5},
+						To:          term.Coordinates{X: 13, Y: 5},
+						CaptureName: "function.name",
+					},
+				}
+			},
+			action: func(t *testing.T, client *syntaxrpc.Client) {
+				it, err := client.Search("(function_declaration)", []string{"function.name"})
+				require.NoError(t, err)
+				results := collectResults(t, it)
+				assert.Len(t, results, 2)
+				assert.Equal(t, "func main()", results[0].Text)
+				assert.Equal(t, "func helper()", results[1].Text)
+			},
+		},
+		{
+			name: "Search returns empty results",
+			setup: func(m *mockSearcher) {
+				m.searchResults = nil
+			},
+			action: func(t *testing.T, client *syntaxrpc.Client) {
+				it, err := client.Search("(nonexistent)", nil)
+				require.NoError(t, err)
+				results := collectResults(t, it)
+				assert.Empty(t, results)
+			},
+		},
+		{
+			name: "Search returns error",
+			setup: func(m *mockSearcher) {
+				m.searchErr = errors.New("search failed")
+			},
+			action: func(t *testing.T, client *syntaxrpc.Client) {
+				it, err := client.Search("(function_declaration)", nil)
+				require.NoError(t, err)
+				defer func() { _ = it.Close() }()
+				ctx := context.Background()
+				_, ok := it.Next(ctx)
+				assert.False(t, ok)
+				assert.Error(t, it.Err())
+			},
+		},
+		{
+			name: "SearchNode with single node type",
+			setup: func(m *mockSearcher) {
+				m.searchNodeResults = []syntaxapi.Result{
+					{
+						File:        testURI,
+						Text:        "func TestFunc()",
+						From:        term.Coordinates{X: 0, Y: 20},
+						To:          term.Coordinates{X: 15, Y: 20},
+						CaptureName: "definition.function",
+					},
+				}
+			},
+			action: func(t *testing.T, client *syntaxrpc.Client) {
+				it, err := client.SearchNode(syntaxapi.NodeCaptureDefinitionFunc)
+				require.NoError(t, err)
+				results := collectResults(t, it)
+				assert.Len(t, results, 1)
+				assert.Equal(t, "func TestFunc()", results[0].Text)
+				assert.Equal(t, "definition.function", results[0].CaptureName)
+			},
+		},
+		{
+			name: "SearchNode with multiple node types (bitflag)",
+			setup: func(m *mockSearcher) {
+				m.searchNodeResults = []syntaxapi.Result{
+					{
+						File:        testURI,
+						Text:        "func TestFunc()",
+						From:        term.Coordinates{X: 0, Y: 20},
+						To:          term.Coordinates{X: 15, Y: 20},
+						CaptureName: "definition.function",
+					},
+					{
+						File:        testURI,
+						Text:        "var x int",
+						From:        term.Coordinates{X: 0, Y: 1},
+						To:          term.Coordinates{X: 9, Y: 1},
+						CaptureName: "definition.var",
+					},
+				}
+			},
+			action: func(t *testing.T, client *syntaxrpc.Client) {
+				nodeTypes := syntaxapi.NodeCaptureDefinitionFunc | syntaxapi.NodeCaptureDefinitionVar
+				it, err := client.SearchNode(nodeTypes)
+				require.NoError(t, err)
+				results := collectResults(t, it)
+				assert.Len(t, results, 2)
+			},
+		},
+		{
+			name: "Query specific file",
+			setup: func(m *mockSearcher) {
+				m.queryResults = []syntaxapi.Result{
+					{
+						File:        testURI,
+						Text:        "type MyStruct struct",
+						From:        term.Coordinates{X: 0, Y: 15},
+						To:          term.Coordinates{X: 20, Y: 15},
+						CaptureName: "type.definition",
+					},
+				}
+			},
+			action: func(t *testing.T, client *syntaxrpc.Client) {
+				it, err := client.Query(testURI, "(type_declaration)", []string{"type.definition"})
+				require.NoError(t, err)
+				results := collectResults(t, it)
+				assert.Len(t, results, 1)
+				assert.Equal(t, "type MyStruct struct", results[0].Text)
+			},
+		},
+		{
+			name: "QueryNode specific file",
+			setup: func(m *mockSearcher) {
+				m.queryNodeResults = []syntaxapi.Result{
+					{
+						File:        testURI,
+						Text:        "myPackage",
+						From:        term.Coordinates{X: 8, Y: 0},
+						To:          term.Coordinates{X: 17, Y: 0},
+						CaptureName: "definition.namespace",
+					},
+				}
+			},
+			action: func(t *testing.T, client *syntaxrpc.Client) {
+				it, err := client.QueryNode(testURI, syntaxapi.NodeCaptureDefinitionNamespace)
+				require.NoError(t, err)
+				results := collectResults(t, it)
+				assert.Len(t, results, 1)
+				assert.Equal(t, "myPackage", results[0].Text)
+			},
+		},
+		{
+			name: "coordinates are preserved",
+			setup: func(m *mockSearcher) {
+				m.searchResults = []syntaxapi.Result{
+					{
+						File:        testURI,
+						Text:        "test",
+						From:        term.Coordinates{X: 5, Y: 100},
+						To:          term.Coordinates{X: 50, Y: 100},
+						CaptureName: "test",
+					},
+				}
+			},
+			action: func(t *testing.T, client *syntaxrpc.Client) {
+				it, err := client.Search("test", nil)
+				require.NoError(t, err)
+				results := collectResults(t, it)
+				require.Len(t, results, 1)
+				assert.Equal(t, term.Coordinates{X: 5, Y: 100}, results[0].From)
+				assert.Equal(t, term.Coordinates{X: 50, Y: 100}, results[0].To)
+			},
+		},
+	}
 
+	for _, tcase := range tsuite {
+		t.Run(tcase.name, func(t *testing.T) {
+			mock := &mockSearcher{}
+			tcase.setup(mock)
+
+			server, client, cleanup := setupServerClient(t, mock)
+			defer cleanup()
+			_ = server
+
+			tcase.action(t, client)
+		})
+	}
+}
+
+func TestNodeCaptureBitflags(t *testing.T) {
+	tsuite := []struct {
+		name      string
+		nodeTypes syntaxapi.NodeCaptureName
+		wantValue uint32
+	}{
+		{"single scope", syntaxapi.NodeCaptureScope, 1},
+		{"single definition ns", syntaxapi.NodeCaptureDefinitionNamespace, 2},
+		{"single reference", syntaxapi.NodeCaptureReference, 4},
+		{"single definition func", syntaxapi.NodeCaptureDefinitionFunc, 8},
+		{"single definition var", syntaxapi.NodeCaptureDefinitionVar, 16},
+		{
+			"combined func and var",
+			syntaxapi.NodeCaptureDefinitionFunc | syntaxapi.NodeCaptureDefinitionVar,
+			24,
+		},
+		{
+			"combined all",
+			syntaxapi.NodeCaptureScope | syntaxapi.NodeCaptureDefinitionNamespace |
+				syntaxapi.NodeCaptureReference | syntaxapi.NodeCaptureDefinitionFunc |
+				syntaxapi.NodeCaptureDefinitionVar,
+			31,
+		},
+	}
+
+	for _, tcase := range tsuite {
+		t.Run(tcase.name, func(t *testing.T) {
+			assert.Equal(t, tcase.wantValue, uint32(tcase.nodeTypes))
+		})
+	}
+}
+
+type mockSearcher struct {
+	searchResults     []syntaxapi.Result
+	searchErr         error
+	searchNodeResults []syntaxapi.Result
+	searchNodeErr     error
+	queryResults      []syntaxapi.Result
+	queryErr          error
+	queryNodeResults  []syntaxapi.Result
+	queryNodeErr      error
+}
+
+func (m *mockSearcher) Search(
+	_ string,
+	_ []string,
+) (iterator.Iterator[syntaxapi.Result], error) {
+	if m.searchErr != nil {
+		return nil, m.searchErr
+	}
+	return iterator.FromSlice(m.searchResults), nil
+}
+
+func (m *mockSearcher) SearchNode(
+	_ syntaxapi.NodeCaptureName,
+) (iterator.Iterator[syntaxapi.Result], error) {
+	if m.searchNodeErr != nil {
+		return nil, m.searchNodeErr
+	}
+	return iterator.FromSlice(m.searchNodeResults), nil
+}
+
+func (m *mockSearcher) Query(
+	_ workspaceapi.URI,
+	_ string,
+	_ []string,
+) (iterator.Iterator[syntaxapi.Result], error) {
+	if m.queryErr != nil {
+		return nil, m.queryErr
+	}
+	return iterator.FromSlice(m.queryResults), nil
+}
+
+func (m *mockSearcher) QueryNode(
+	_ workspaceapi.URI,
+	_ syntaxapi.NodeCaptureName,
+) (iterator.Iterator[syntaxapi.Result], error) {
+	if m.queryNodeErr != nil {
+		return nil, m.queryNodeErr
+	}
+	return iterator.FromSlice(m.queryNodeResults), nil
+}
+
+func setupServerClient(t *testing.T, mock *mockSearcher) (*Server, *syntaxrpc.Client, func()) {
+	t.Helper()
+
+	tmpDir, err := os.MkdirTemp("", "syntaxrpc-test-*")
+	require.NoError(t, err)
+	socketPath := filepath.Join(tmpDir, "test.sock")
+
+	listener, err := net.Listen("unix", socketPath)
+	require.NoError(t, err)
+
+	server := NewServer(mock)
+	grpcServer := grpc.NewServer()
+	syntaxrpc.RegisterSyntaxServer(grpcServer, server)
+
+	go func() {
+		_ = grpcServer.Serve(listener)
+	}()
+
+	ctx := context.Background()
 	conn, err := grpc.NewClient(
-		"unix:"+sock,
+		"unix://"+socketPath,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	require.NoError(t, err)
-	t.Cleanup(func() { conn.Close() })
 
-	return syntaxrpc.NewClient(context.Background(), conn)
+	client := syntaxrpc.NewClient(ctx, conn)
+
+	cleanup := func() {
+		_ = conn.Close()
+		grpcServer.Stop()
+		_ = os.RemoveAll(tmpDir)
+	}
+
+	return server, client, cleanup
 }
 
-func TestSearch(t *testing.T) {
-	uri := mustParseURI(t, "file:///src/main.go")
+func collectResults(t *testing.T, it iterator.Iterator[syntaxapi.Result]) []syntaxapi.Result {
+	t.Helper()
+	defer func() { _ = it.Close() }()
 
-	tests := []struct {
-		name         string
-		fake         fakeSearcher
-		query        string
-		captureNames []string
-		want         []syntaxapi.Result
-		wantErr      bool
-	}{
-		{
-			name: "multiple results round-trip",
-			fake: fakeSearcher{results: []syntaxapi.Result{
-				{
-					File:        uri,
-					Text:        "func main()",
-					From:        term.Coordinates{X: 0, Y: 10},
-					To:          term.Coordinates{X: 11, Y: 10},
-					CaptureName: "function",
-				},
-				{
-					File:        uri,
-					Text:        "func init()",
-					From:        term.Coordinates{X: 0, Y: 1},
-					To:          term.Coordinates{X: 11, Y: 1},
-					CaptureName: "function",
-				},
-			}},
-			query: "main",
-			want: []syntaxapi.Result{
-				{
-					File:        uri,
-					Text:        "func main()",
-					From:        term.Coordinates{X: 0, Y: 10},
-					To:          term.Coordinates{X: 11, Y: 10},
-					CaptureName: "function",
-				},
-				{
-					File:        uri,
-					Text:        "func init()",
-					From:        term.Coordinates{X: 0, Y: 1},
-					To:          term.Coordinates{X: 11, Y: 1},
-					CaptureName: "function",
-				},
-			},
-		},
-		{
-			name:  "empty results",
-			fake:  fakeSearcher{},
-			query: "nothing",
-			want:  []syntaxapi.Result{},
-		},
-		{
-			name: "capture names narrows results",
-			fake: fakeSearcher{results: []syntaxapi.Result{
-				{
-					File:        uri,
-					Text:        "match",
-					From:        term.Coordinates{X: 5, Y: 3},
-					To:          term.Coordinates{X: 10, Y: 3},
-					CaptureName: "identifier",
-				},
-				{
-					File:        uri,
-					Text:        "skip",
-					From:        term.Coordinates{X: 0, Y: 0},
-					To:          term.Coordinates{X: 4, Y: 0},
-					CaptureName: "comment",
-				},
-				{
-					File:        uri,
-					Text:        "match",
-					From:        term.Coordinates{X: 10, Y: 7},
-					To:          term.Coordinates{X: 15, Y: 7},
-					CaptureName: "identifier",
-				},
-			}},
-			query:        "query",
-			captureNames: []string{"match"},
-			want: []syntaxapi.Result{
-				{
-					File:        uri,
-					Text:        "match",
-					From:        term.Coordinates{X: 5, Y: 3},
-					To:          term.Coordinates{X: 10, Y: 3},
-					CaptureName: "identifier",
-				},
-				{
-					File:        uri,
-					Text:        "match",
-					From:        term.Coordinates{X: 10, Y: 7},
-					To:          term.Coordinates{X: 15, Y: 7},
-					CaptureName: "identifier",
-				},
-			},
-		},
-		{
-			name:    "searcher error propagates",
-			fake:    fakeSearcher{err: net.UnknownNetworkError("test error")},
-			query:   "q",
-			wantErr: true,
-		},
+	var results []syntaxapi.Result
+	ctx := context.Background()
+	for {
+		result, ok := it.Next(ctx)
+		if !ok {
+			break
+		}
+		results = append(results, result)
 	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			client := startServer(t, &tt.fake)
-			ctx := context.Background()
-
-			iter, err := client.Search(tt.query, tt.captureNames)
-			if err != nil {
-				require.True(t, tt.wantErr, "unexpected Search error: %v", err)
-				return
-			}
-			defer iter.Close()
-
-			got, err := iterator.ToSlice(ctx, iter)
-			if tt.wantErr {
-				require.Error(t, err)
-				return
-			}
-			require.NoError(t, err)
-			require.Len(t, got, len(tt.want))
-
-			for i := range tt.want {
-				assert.Equal(t, tt.want[i].File.String(), got[i].File.String())
-				assert.Equal(t, tt.want[i].Text, got[i].Text)
-
-				assert.Equal(t, tt.want[i].From, got[i].From)
-				assert.Equal(t, tt.want[i].To, got[i].To)
-				assert.Equal(t, tt.want[i].CaptureName, got[i].CaptureName)
-			}
-		})
-	}
+	require.NoError(t, it.Err())
+	return results
 }

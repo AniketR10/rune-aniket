@@ -30,6 +30,8 @@ import (
 	"github.com/unstablebuild/blue/bluectx"
 	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
 	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi/syntaxrpc"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term/termrpc"
 	"google.golang.org/grpc"
 )
@@ -57,39 +59,96 @@ func RegisterServer(registrar grpc.ServiceRegistrar, s syntaxapi.Searcher) {
 func (s *Server) Search(
 	req *syntaxrpc.SearchRequest, stream grpc.ServerStreamingServer[syntaxrpc.SearchResponse],
 ) error {
-	iter, err := s.searcher.Search(req.GetQuery(), req.GetCaptureNames())
+	it, err := s.searcher.Search(req.GetQuery(), req.GetCaptureNames())
 	if err != nil {
 		return fmt.Errorf("syntax search: %w", err)
 	}
-	defer iter.Close()
+	defer it.Close()
 	ctx, cancel := bluectx.First(stream.Context(), s.ctx)
 	defer cancel()
 
+	return streamResults(ctx, stream, it)
+}
+
+// SearchNode implements SyntaxServer.
+func (s *Server) SearchNode(
+	req *syntaxrpc.SearchNodeRequest,
+	stream grpc.ServerStreamingServer[syntaxrpc.SearchResponse],
+) error {
+	it, err := s.searcher.SearchNode(syntaxapi.NodeCaptureName(req.GetNodeTypes()))
+	if err != nil {
+		return err
+	}
+	defer it.Close()
+	ctx, cancel := bluectx.First(stream.Context(), s.ctx)
+	defer cancel()
+	return streamResults(ctx, stream, it)
+}
+
+// Query implements SyntaxServer.
+func (s *Server) Query(
+	req *syntaxrpc.QueryRequest,
+	stream grpc.ServerStreamingServer[syntaxrpc.SearchResponse],
+) error {
+	uri, err := workspaceapi.ParseURI(req.GetUri())
+	if err != nil {
+		return err
+	}
+	it, err := s.searcher.Query(uri, req.GetQuery(), req.GetCaptureNames())
+	if err != nil {
+		return err
+	}
+	defer it.Close()
+	ctx, cancel := bluectx.First(stream.Context(), s.ctx)
+	defer cancel()
+	return streamResults(ctx, stream, it)
+}
+
+// QueryNode implements SyntaxServer.
+func (s *Server) QueryNode(
+	req *syntaxrpc.QueryNodeRequest,
+	stream grpc.ServerStreamingServer[syntaxrpc.SearchResponse],
+) error {
+	uri, err := workspaceapi.ParseURI(req.GetUri())
+	if err != nil {
+		return err
+	}
+	it, err := s.searcher.QueryNode(uri, syntaxapi.NodeCaptureName(req.GetNodeTypes()))
+	if err != nil {
+		return err
+	}
+	defer it.Close()
+	ctx, cancel := bluectx.First(stream.Context(), s.ctx)
+	defer cancel()
+	return streamResults(ctx, stream, it)
+}
+
+func streamResults(
+	ctx context.Context,
+	stream grpc.ServerStreamingServer[syntaxrpc.SearchResponse],
+	it iterator.Iterator[syntaxapi.Result],
+) error {
+	defer it.Close() //nolint:errcheck
 	for {
-		result, ok := iter.Next(ctx)
+		result, ok := it.Next(ctx)
 		if !ok {
 			break
 		}
-
 		var from, to termrpc.Coordinates
 		from.FromModel(result.From)
 		to.FromModel(result.To)
-
-		resp := syntaxrpc.SearchResponse{
+		resp := &syntaxrpc.SearchResponse{
 			Uri:         result.File.String(),
 			Text:        result.Text,
 			From:        &from,
 			To:          &to,
 			CaptureName: result.CaptureName,
 		}
-		if err := stream.Send(&resp); err != nil {
-			return fmt.Errorf("syntax search send: %w", err)
+		if err := stream.Send(resp); err != nil {
+			return err
 		}
 	}
-	if err := iter.Err(); err != nil {
-		return fmt.Errorf("syntax search next: %w", err)
-	}
-	return nil
+	return it.Err()
 }
 
 // Close cancels all ongoing queries.

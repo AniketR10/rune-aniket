@@ -112,6 +112,123 @@ func TestSearch(t *testing.T) {
 	})
 }
 
+func TestSearchNode(t *testing.T) {
+	t.Run("returns multiple node types", func(t *testing.T) {
+		searcher, uri1, uri2, uri3 := setupSearcherForTests(t,
+			"go/tree-sitter.so",
+			"go/locals.scm",
+		)
+		it, err := searcher.SearchNode(syntaxapi.NodeCaptureDefinitionFunc | syntaxapi.NodeCaptureDefinitionType)
+		require.NoError(t, err)
+		funcs, err := iterator.ToSlice(context.Background(), it)
+		require.NoError(t, err)
+		assert.ElementsMatch(t, []syntaxapi.Result{
+			{File: uri1, CaptureName: "local.definition.function",
+				From: term.Coordinates{X: 5, Y: 3},
+				To:   term.Coordinates{X: 13, Y: 3},
+				Text: "function",
+			},
+			{File: uri2, CaptureName: "local.definition.function",
+				From: term.Coordinates{X: 5, Y: 3},
+				To:   term.Coordinates{X: 13, Y: 3},
+				Text: "function",
+			},
+			{File: uri3, CaptureName: "local.definition.function",
+				From: term.Coordinates{X: 5, Y: 3},
+				To:   term.Coordinates{X: 13, Y: 3},
+				Text: "function",
+			},
+			{File: uri1, CaptureName: "local.definition.type",
+				From: term.Coordinates{X: 5, Y: 8},
+				To:   term.Coordinates{X: 11, Y: 8},
+				Text: "myType",
+			},
+			{File: uri2, CaptureName: "local.definition.type",
+				From: term.Coordinates{X: 5, Y: 8},
+				To:   term.Coordinates{X: 11, Y: 8},
+				Text: "myType",
+			},
+			{File: uri3, CaptureName: "local.definition.type",
+				From: term.Coordinates{X: 5, Y: 8},
+				To:   term.Coordinates{X: 11, Y: 8},
+				Text: "myType",
+			},
+		}, funcs)
+	})
+
+	t.Run("returns all captures if not capture names are passed", func(t *testing.T) {
+		searcher, _, _, _ := setupSearcherForTests(t,
+			"go/tree-sitter.so",
+			"go/locals.scm",
+		)
+		it, err := searcher.SearchNode(syntaxapi.NodeCaptureNameAll)
+		require.NoError(t, err)
+		allNodes, err := iterator.ToSlice(context.Background(), it)
+		require.NoError(t, err)
+
+		it2, err := searcher.Search(string(locals), []string{})
+		require.NoError(t, err)
+		all, err := iterator.ToSlice(context.Background(), it2)
+		require.NoError(t, err)
+		assert.ElementsMatch(t, allNodes, all)
+	})
+
+	t.Run("returns error if passed invalid capture name", func(t *testing.T) {
+		searcher, _, _, _ := setupSearcherForTests(t,
+			"go/tree-sitter.so",
+			"go/locals.scm",
+		)
+		_, err := searcher.SearchNode(syntaxapi.NodeCaptureName(0))
+		require.Error(t, err)
+	})
+}
+
+func TestQueryNode(t *testing.T) {
+	t.Run("returns functions", func(t *testing.T) {
+		searcher, uri1, _, _ := setupSearcherForTests(t,
+			"go/tree-sitter.so",
+			"go/locals.scm",
+		)
+		it, err := searcher.QueryNode(uri1, syntaxapi.NodeCaptureDefinitionFunc)
+		require.NoError(t, err)
+		funcs, err := iterator.ToSlice(context.Background(), it)
+		require.NoError(t, err)
+		assert.ElementsMatch(t, []syntaxapi.Result{
+			{File: uri1, CaptureName: "local.definition.function",
+				From: term.Coordinates{X: 5, Y: 3},
+				To:   term.Coordinates{X: 13, Y: 3},
+				Text: "function",
+			},
+		}, funcs)
+	})
+
+	t.Run("returns all captures if not capture names are passed", func(t *testing.T) {
+		searcher, uri1, _, _ := setupSearcherForTests(t,
+			"go/tree-sitter.so",
+			"go/locals.scm",
+		)
+		it, err := searcher.QueryNode(uri1, syntaxapi.NodeCaptureNameAll)
+		require.NoError(t, err)
+		allNodes, err := iterator.ToSlice(context.Background(), it)
+		require.NoError(t, err)
+
+		it2, err := searcher.Query(uri1, string(locals), []string{})
+		require.NoError(t, err)
+		all, err := iterator.ToSlice(context.Background(), it2)
+		require.NoError(t, err)
+		assert.ElementsMatch(t, allNodes, all)
+	})
+
+	t.Run("returns error if passed invalid capture name", func(t *testing.T) {
+		searcher, uri1, _, _ := setupSearcherForTests(t,
+			"go/tree-sitter.so",
+			"go/locals.scm",
+		)
+		_, err := searcher.QueryNode(uri1, syntaxapi.NodeCaptureName(0))
+		require.Error(t, err)
+	})
+}
+
 func createFile(t *testing.T, scheme schemeapi.Scheme, name string, content string) workspaceapi.URI {
 	f, err := scheme.Create(name)
 	require.NoError(t, err)

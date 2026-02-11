@@ -66,7 +66,83 @@ type searcher struct {
 	uri workspaceapi.URI
 }
 
+func (s searcher) Query(file workspaceapi.URI, query string, captureNames []string) (
+	iterator.Iterator[syntaxapi.Result], error,
+) {
+	return s.query(file, "", query, captureNames)
+}
+
+func (s searcher) QueryNode(file workspaceapi.URI, nodeTypes syntaxapi.NodeCaptureName) (
+	iterator.Iterator[syntaxapi.Result], error,
+) {
+	names, err := nodeTypesToCaptureNames(nodeTypes)
+	if err != nil {
+		return nil, err
+	}
+	return s.query(file, LocalsFilename, "", names)
+}
+
+func (s searcher) SearchNode(nodeTypes syntaxapi.NodeCaptureName) (
+	iterator.Iterator[syntaxapi.Result], error,
+) {
+	names, err := nodeTypesToCaptureNames(nodeTypes)
+	if err != nil {
+		return nil, err
+	}
+	return s.search(LocalsFilename, "", names)
+}
+
 func (s searcher) Search(query string, captureNames []string) (
+	iterator.Iterator[syntaxapi.Result], error,
+) {
+	return s.search("", query, captureNames)
+}
+
+func (s searcher) query(
+	file workspaceapi.URI, queryFile, query string, captureNameFilters []string,
+) (iterator.Iterator[syntaxapi.Result], error) {
+	path := file.Path()
+	langID, lerr := LanguageForFile(path)
+	if lerr != nil {
+		return nil, lerr
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	results := make(chan syntaxapi.Result)
+	closeWaitCh := make(chan struct{})
+	it := &listSymbolsIterator{
+		ctx:         ctx,
+		ch:          results,
+		cancel:      cancel,
+		closeWaitCh: closeWaitCh,
+	}
+
+	go debug.CapturePanicReport(func() {
+		defer close(closeWaitCh)
+		defer close(results)
+		parser, perr := newParser(ctx, langID, s.pkg, queryFile, query)
+		if perr != nil {
+			perr = fmt.Errorf("new parser for language %q: %v", langID, perr)
+			it.mu.Lock()
+			defer it.mu.Unlock()
+			it.err = perr
+			return
+		}
+		defer parser.Close()
+
+		readErr := readFileSymbols(ctx, parser, s.uri, s.w,
+			path, results, captureNameFilters)
+		if readErr != nil {
+			it.mu.Lock()
+			defer it.mu.Unlock()
+			it.err = readErr
+		}
+	})
+
+	return it, nil
+}
+
+func (s searcher) search(queryFile, query string, captureNames []string) (
 	iterator.Iterator[syntaxapi.Result], error,
 ) {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -88,14 +164,17 @@ func (s searcher) Search(query string, captureNames []string) (
 		validErrors[i] = make(map[string]*expectedError)
 		go func(err *error, expectedErrors map[string]*expectedError) {
 			defer wg.Done()
-			readSymbolsWorker(ctx, s.w, s.pkg, s.uri, query, results, files, err,
+			readSymbolsWorker(ctx, s.w, s.pkg, s.uri, queryFile, query, results, files, err,
 				expectedErrors, captureNames)
 		}(&errs[i], validErrors[i])
 	}
 
-	it := &listSymbolsIterator{ctx: ctx, ch: results}
-	it.cancel = cancel
-	it.closeWaitCh = closeWaitCh
+	it := &listSymbolsIterator{
+		ctx:         ctx,
+		ch:          results,
+		cancel:      cancel,
+		closeWaitCh: closeWaitCh,
+	}
 
 	var itErr error
 	go debug.CapturePanicReport(func() {
@@ -239,8 +318,8 @@ func makeSymbolItem(
 }
 
 func readSymbolsWorker(
-	ctx context.Context, w workspaceapi.FileSystem, pkg PkgManager,
-	uri workspaceapi.URI, query string, results chan syntaxapi.Result,
+	ctx context.Context, fs workspaceapi.FileSystem, pkg PkgManager,
+	uri workspaceapi.URI, queryFile, query string, results chan syntaxapi.Result,
 	files chan string,
 	err *error, expectedErrors map[string]*expectedError,
 	captureNameFilters []string,
@@ -261,7 +340,7 @@ func readSymbolsWorker(
 			parser, ok := parsers[langID]
 			if !ok {
 				var perr error
-				parser, perr = newParser(ctx, langID, pkg, query)
+				parser, perr = newParser(ctx, langID, pkg, queryFile, query)
 				if perr != nil {
 					if errors.Is(perr, errNotInstalled) {
 						ext := filepath.Ext(path)
@@ -279,7 +358,8 @@ func readSymbolsWorker(
 				parsers[langID] = parser
 			}
 
-			readErr := readFileSymbols(ctx, parser, uri, w, path, results, captureNameFilters)
+			readErr := readFileSymbols(ctx, parser, uri, fs,
+				path, results, captureNameFilters)
 			if readErr != nil {
 				*err = errors.Join(*err, readErr)
 			}
@@ -352,7 +432,8 @@ type parser struct {
 }
 
 func newParser(
-	ctx context.Context, langID string, pkg PkgManager, query string,
+	ctx context.Context, langID string,
+	pkg PkgManager, queryFile, query string,
 ) (ret *parser, err error) {
 	it, err := pkg.LibDir(ctx, langID)
 	if err != nil {
@@ -365,17 +446,35 @@ func newParser(
 		err = fmt.Errorf("list files: %w", err)
 		return
 	}
-	var langfile string
+	var langfile, queryFileAbsPath string
 	for _, path := range files {
 		switch filepath.Base(path) {
 		case ParserFilename:
 			langfile = path
+		case queryFile:
+			queryFileAbsPath = path
 		}
 	}
 
-	if langfile == "" {
+	if langfile == "" || (queryFile != "" && queryFileAbsPath == "") {
 		err = errNotInstalled
 		return
+	}
+
+	if queryFileAbsPath != "" && queryFile != "" {
+		var f workspaceapi.File
+		f, err = os.OpenFile(queryFileAbsPath, os.O_RDONLY, 0666)
+		if err != nil {
+			err = fmt.Errorf("open lib query file %s: %v", queryFile, err)
+			return
+		}
+		var data []byte
+		data, err = io.ReadAll(f)
+		if err != nil {
+			err = fmt.Errorf("read lib query file %s: %v", queryFile, err)
+			return
+		}
+		query = string(data)
 	}
 
 	ret = new(parser)
@@ -430,5 +529,33 @@ func (t *parser) Close() (ret error) {
 	t.parser.Close()
 	t.query.Close()
 	ret = purego.Dlclose(t.lib)
+	return
+}
+
+func nodeTypesToCaptureNames(nodeTypes syntaxapi.NodeCaptureName) (ret []string, err error) {
+	if nodeTypes&syntaxapi.NodeCaptureScope != 0 {
+		ret = append(ret, "local.scope")
+	}
+	if nodeTypes&syntaxapi.NodeCaptureDefinitionType != 0 {
+		ret = append(ret, "local.definition.type")
+	}
+	if nodeTypes&syntaxapi.NodeCaptureDefinitionNamespace != 0 {
+		ret = append(ret, "local.definition.namespace")
+	}
+	if nodeTypes&syntaxapi.NodeCaptureReference != 0 {
+		ret = append(ret, "local.reference")
+	}
+	if nodeTypes&syntaxapi.NodeCaptureDefinitionFunc != 0 {
+		ret = append(ret, "local.definition.function")
+	}
+	if nodeTypes&syntaxapi.NodeCaptureDefinitionMethod != 0 {
+		ret = append(ret, "local.definition.method")
+	}
+	if nodeTypes&syntaxapi.NodeCaptureDefinitionVar != 0 {
+		ret = append(ret, "local.definition.var")
+	}
+	if len(ret) == 0 {
+		err = errors.New("invalid node capture name")
+	}
 	return
 }
