@@ -588,6 +588,7 @@ func TestWorkspaceExtensions(t *testing.T) {
 			func(_uri workspaceapi.URI,
 				res map[extensionapi.Permission]extension.ResourceRegistrar,
 				s string, noti browser.Notifications,
+				exec schemeapi.Executor,
 			) (extension.Runner, error) {
 				defer wg.Done()
 				i := i.Add(1)
@@ -644,7 +645,8 @@ func TestWorkspaceExtensions(t *testing.T) {
 		runner := FuncExtensionsRunner(
 			func(_uri workspaceapi.URI,
 				res map[extensionapi.Permission]extension.ResourceRegistrar,
-				s string, noti browser.Notifications) (extension.Runner, error) {
+				s string, noti browser.Notifications,
+			executor schemeapi.Executor) (extension.Runner, error) {
 				defer wg.Done()
 				i := i.Add(1)
 				uris[i-1] = _uri.String()

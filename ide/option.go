@@ -35,6 +35,7 @@ import (
 	"github.com/unstablebuild/blue/release/docrelease"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
+	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
@@ -319,7 +320,8 @@ type nopExtensions struct {
 func (n nopExtensions) WorkspaceExtensionsRunner(
 	uri workspaceapi.URI,
 	res map[extensionapi.Permission]extension.ResourceRegistrar,
-	dataDir string, notifications browser.Notifications) (extension.Runner, error) {
+	dataDir string, notifications browser.Notifications,
+	exec schemeapi.Executor) (extension.Runner, error) {
 	return nopExtensionsRunner{}, nil
 }
 

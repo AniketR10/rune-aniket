@@ -25,6 +25,7 @@ package ide
 
 import (
 	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
+	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/extension"
@@ -34,14 +35,16 @@ import (
 type ExtensionsRunner interface {
 	WorkspaceExtensionsRunner(
 		uri workspaceapi.URI, res map[extensionapi.Permission]extension.ResourceRegistrar,
-		dataDir string, notifications browser.Notifications) (extension.Runner, error)
+		dataDir string, notifications browser.Notifications,
+		executor schemeapi.Executor,
+	) (extension.Runner, error)
 }
 
 // FuncExtensionsRunner wraps fn to satisfy Extensions by invoking in calls to Runner.
 func FuncExtensionsRunner(
 	fn func(workspaceapi.URI,
 		map[extensionapi.Permission]extension.ResourceRegistrar, string,
-		browser.Notifications) (extension.Runner, error),
+		browser.Notifications, schemeapi.Executor) (extension.Runner, error),
 ) ExtensionsRunner {
 	return fnExtensions{fn: fn}
 }
@@ -49,13 +52,13 @@ func FuncExtensionsRunner(
 type fnExtensions struct {
 	fn func(workspaceapi.URI,
 		map[extensionapi.Permission]extension.ResourceRegistrar, string,
-		browser.Notifications) (extension.Runner, error)
+		browser.Notifications, schemeapi.Executor) (extension.Runner, error)
 }
 
 func (f fnExtensions) WorkspaceExtensionsRunner(
 	uri workspaceapi.URI,
 	res map[extensionapi.Permission]extension.ResourceRegistrar,
-	dataDir string, n browser.Notifications,
+	dataDir string, n browser.Notifications, exec schemeapi.Executor,
 ) (extension.Runner, error) {
-	return f.fn(uri, res, dataDir, n)
+	return f.fn(uri, res, dataDir, n, exec)
 }

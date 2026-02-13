@@ -799,7 +799,8 @@ func (h *workspaceManagerHandler) buildExtensions(
 	if err := os.MkdirAll(dataDir, 0777); err != nil {
 		return nil, fmt.Errorf("mkdir %s: %v", dataDir, err)
 	}
-	runner, err := h.extensionRunner.WorkspaceExtensionsRunner(uri, res, dataDir, ex.Browser())
+	runner, err := h.extensionRunner.WorkspaceExtensionsRunner(uri, res,
+		dataDir, ex.Browser(), cwd)
 	if err != nil {
 		return nil, fmt.Errorf("new workspace extensions runner: %v", err)
 	}

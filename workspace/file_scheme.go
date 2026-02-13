@@ -366,9 +366,11 @@ func (p *fileScheme) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (
 	// routine should not close them. This is necessary
 	// to allow the standard library to run its ioctl checks
 	// correctly, for example when running a process over a pty/tty.
-	stdcmd.Stdout = tryUnwrapFileWriter(cmd.Stdout)
-	stdcmd.Stderr = tryUnwrapFileWriter(cmd.Stderr)
-	stdcmd.Stdin = tryUnwrapFileReader(cmd.Stdin)
+	// Also, for tty mode (setsid/setctty) the kernel requires real
+	// descriptors for controlling terminal setup
+	stdcmd.Stdout = p.tryUnwrapFileWriter(cmd.Stdout)
+	stdcmd.Stderr = p.tryUnwrapFileWriter(cmd.Stderr)
+	stdcmd.Stdin = p.tryUnwrapFileReader(cmd.Stdin)
 
 	err = stdcmd.Start()
 	if err != nil {
@@ -444,10 +446,10 @@ func (p *fileScheme) NewPty(ctx context.Context) (workspaceapi.Pty, error) {
 	}
 
 	master := &fileSchemeFile{File: pty, p: p, fd: pty.Fd()}
-	p.files.Store(pty.Fd(), master)
+	p.files.Store(master.fd, master)
 
 	slave := &fileSchemeFile{File: tty, p: p, fd: tty.Fd()}
-	p.files.Store(tty.Fd(), slave)
+	p.files.Store(slave.fd, slave)
 
 	return workspaceapi.Pty{
 		Master: master,
@@ -584,16 +586,22 @@ func makeLocalURI(path string) (workspaceapi.URI, error) {
 	return workspaceapi.ParseURI(uriStr)
 }
 
-func tryUnwrapFileWriter(f io.Writer) io.Writer {
-	if f, ok := f.(*fileSchemeFile); ok {
-		return f.File
+func (p *fileScheme) tryUnwrapFileWriter(f io.Writer) io.Writer {
+	if f, ok := f.(workspaceapi.File); ok {
+		v, ok := p.files.Load(f.Fd())
+		if ok {
+			return v.(*fileSchemeFile).File
+		}
 	}
 	return f
 }
 
-func tryUnwrapFileReader(f io.Reader) io.Reader {
-	if f, ok := f.(*fileSchemeFile); ok {
-		return f.File
+func (p *fileScheme) tryUnwrapFileReader(f io.Reader) io.Reader {
+	if f, ok := f.(workspaceapi.File); ok {
+		v, ok := p.files.Load(f.Fd())
+		if ok {
+			return v.(*fileSchemeFile).File
+		}
 	}
 	return f
 }

@@ -44,7 +44,6 @@ import (
 	"github.com/unstablebuild/blue/auth/grpcauth"
 	"github.com/unstablebuild/blue/logging"
 	"github.com/unstablebuild/blue/retry"
-	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
@@ -55,7 +54,6 @@ import (
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/ide"
 	"unstable.build/go-tui/rpc"
-	"unstable.build/go-tui/workspace"
 )
 
 // NewRunner returns an ide.ExtensionsRunner with a simple protocol that
@@ -65,23 +63,15 @@ func NewRunner(
 	ctx context.Context, locker sync.Locker,
 	grantor extension.Grantor, dataDir string, opts ...Option,
 ) (ide.ExtensionsRunner, error) {
-	dataDirURI, err := workspaceapi.CurrentUserHostURI(dataDir)
-	if err != nil {
-		return nil, fmt.Errorf("get data dir uri: %w", err)
-	}
-	executor, err := workspace.NewFileScheme(ctx, config.NopConfig(), dataDirURI)
-	if err != nil {
-		return nil, fmt.Errorf("new file scheme: %w", err)
-	}
 	authorizer := newAuthorizer()
 	ret := &runner{
 		authorizer: authorizer,
 		locker:     locker,
 		grantor:    grantor,
 		dataDir:    dataDir,
-		executor:   executor,
 		opts:       opts,
 	}
+	var err error
 	ret.keys, err = auth.GenerateKeys()
 	if err != nil {
 		return nil, fmt.Errorf("generate keys: %w", err)
@@ -102,12 +92,12 @@ type runner struct {
 	authorizer auth.Authorizer[Extension]
 	grantor    extension.Grantor
 	dataDir    string
-	executor   schemeapi.Executor
 }
 
 func (r *runner) WorkspaceExtensionsRunner(
 	uri workspaceapi.URI, res map[extensionapi.Permission]extension.ResourceRegistrar,
 	dataDir string, notifications browser.Notifications,
+	executor schemeapi.Executor,
 ) (extension.Runner, error) {
 	var ret wrapCloser
 	ret.URI = uri
@@ -186,7 +176,7 @@ func (r *runner) WorkspaceExtensionsRunner(
 		_ = ret.srv.Serve(listener)
 	})
 
-	ret.workspaceRunner = newWorkspaceRunner(r.executor, r.grantor, uri,
+	ret.workspaceRunner = newWorkspaceRunner(executor, r.grantor, uri,
 		socket, r.dataDir, cert, r.keys, r.opts...)
 	if err != nil {
 		err = fmt.Errorf("new workspace runner: %w", err)

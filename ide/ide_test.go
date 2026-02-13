@@ -37,6 +37,7 @@ import (
 	"github.com/unstablebuild/blue/release"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
+	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
@@ -302,7 +303,8 @@ func makeTestFiles(t *testing.T) (*os.File, *os.File) {
 func testRunnerFn(
 	uri workspaceapi.URI,
 	res map[extensionapi.Permission]extension.ResourceRegistrar,
-	dataDir string, n browser.Notifications) (extension.Runner, error) {
+	dataDir string, n browser.Notifications,
+	exec schemeapi.Executor) (extension.Runner, error) {
 	return testRunner{}, nil
 }
 
