@@ -29,6 +29,7 @@ import (
 
 	blueauth "github.com/unstablebuild/blue/auth"
 	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
+	"github.com/unstablebuild/rune-go-sdk/api/semanticapi/semanticrpc"
 )
 
 // Extension represents an authenticated extension which is
@@ -174,6 +175,27 @@ func (a authorizer) Authorize(
 		perm = extensionapi.PermissionStorage
 	case "/proto.DocumentStore/List":
 		perm = extensionapi.PermissionStorage
+	case semanticrpc.LSP_Hover_FullMethodName:
+		perm = extensionapi.PermissionLSP
+	case semanticrpc.LSP_Definition_FullMethodName:
+		perm = extensionapi.PermissionLSP
+	case semanticrpc.LSP_TypeDefinition_FullMethodName:
+		perm = extensionapi.PermissionLSP
+	case semanticrpc.LSP_References_FullMethodName:
+		perm = extensionapi.PermissionLSP
+	case semanticrpc.LSP_DocumentSymbol_FullMethodName:
+		perm = extensionapi.PermissionLSP
+	case semanticrpc.LSP_WorkspaceSymbol_FullMethodName:
+		perm = extensionapi.PermissionLSP
+	case semanticrpc.LSP_Diagnostic_FullMethodName:
+		perm = extensionapi.PermissionLSP
+	case semanticrpc.LSP_Rename_FullMethodName:
+		perm = extensionapi.PermissionLSP
+	case semanticrpc.LSP_PrepareRename_FullMethodName:
+		perm = extensionapi.PermissionLSP
+	case semanticrpc.LSP_CodeAction_FullMethodName:
+		perm = extensionapi.PermissionLSP
+	// the rest of LSP methods are not allowed for now
 	default:
 		err = fmt.Errorf("extraneous rpc resource %s: %w",
 			resource, blueauth.ErrForbidden)

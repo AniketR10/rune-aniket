@@ -557,6 +557,7 @@ var (
 					return fmt.Errorf("parse level: %w", err)
 				}
 				log.SetLevel(level)
+				// TODO change slog level
 				return nil
 			},
 			completer: func(e *ex, ctx context.Context, cmd textapi.Command,

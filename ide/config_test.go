@@ -25,6 +25,7 @@ package ide
 
 import (
 	"context"
+	"log/slog"
 	"os"
 	"strings"
 	"testing"
@@ -295,7 +296,9 @@ func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
 	defWmConfig.FocusFrameCharSet = defWmConfig.FrameCharSet
 	assert.Equal(t, defWmConfig, cfg.windowManagerConfig())
 	assert.Equal(t, "", cfg.logOutputPath())
-	assert.Equal(t, logrus.ErrorLevel, cfg.logLevel())
+	level, slogLevel := cfg.logLevel()
+	assert.Equal(t, logrus.ErrorLevel, level)
+	assert.Equal(t, slog.LevelError, slogLevel)
 	assert.Equal(t, term.InputCurrent, cfg.inputMode())
 	assert.Equal(t, component.DefaultFrameUnionCharSet(), cfg.frameUnionCharset())
 	assert.True(t, cfg.frameUnion())
@@ -425,7 +428,9 @@ func TestConfigSetting(t *testing.T) {
 	_, ok := cfg.wallpaper().NewComponent().(component.String)
 	assert.True(t, ok)
 	assert.Equal(t, "/tmp/debug.log", cfg.logOutputPath())
-	assert.Equal(t, logrus.TraceLevel, cfg.logLevel())
+	level, slogLevel := cfg.logLevel()
+	assert.Equal(t, logrus.TraceLevel, level)
+	assert.Equal(t, slog.LevelDebug, slogLevel)
 	assert.True(t, term.InputMouse&cfg.inputMode() != 0)
 	assert.True(t, term.InputEsc&cfg.inputMode() != 0)
 	assert.Equal(t, "XX", cfg.tabNameSeparator())

@@ -57,6 +57,7 @@ import (
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/command"
+	"unstable.build/go-tui/ide/idelsp"
 	"unstable.build/go-tui/ide/syntax"
 	"unstable.build/go-tui/ide/vctrl"
 	"unstable.build/go-tui/ide/vctrl/gogit"
@@ -784,8 +785,9 @@ func (h *workspaceManagerHandler) buildExtensions(
 	cwd workspace.Workspace, ex *ex,
 ) (extension.Runner, error) {
 	res := extension.BrowserResources(ex.Browser(), h.publishEvent)
+	ed := ex.Editor()
 	res = extension.MergeResourceMap(res,
-		extension.EditorResources(ex.Browser(), ex.Editor(), h.publishEvent))
+		extension.EditorResources(ex.Browser(), ed, h.publishEvent))
 	res = extension.MergeResourceMap(res,
 		extension.WorkspaceResources(cwd))
 	res = extension.MergeResourceMap(res,
@@ -794,6 +796,17 @@ func (h *workspaceManagerHandler) buildExtensions(
 		extension.ConfigResources(config.MapConfig(cleanedExtensionConfig(cfg.cfg))))
 	res = extension.MergeResourceMap(res,
 		extension.SyntaxResources(syntax.NewSearcher(ex.workspace, h.pkgmanager, uri)))
+	lspConfig := idelsp.Config{MaxRetries: 5}
+	lsp := idelsp.New(uri, ex.workspace,
+		ex.workspace, ex.Editor(), h.pkgmanager, h.notifications, ex.Browser(), lspConfig)
+	h.scheduleNextTick(func() {
+		err := ex.comp.SubscribeEvents(idelsp.EditorEvents(), lsp)
+		if err != nil {
+			log.Errorf("subscribe LSP manager: %v", err)
+		}
+	})
+	res = extension.MergeResourceMap(res,
+		extension.SemanticResources(lsp))
 
 	dataDir := h.sixDir
 	if err := os.MkdirAll(dataDir, 0777); err != nil {

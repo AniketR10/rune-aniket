@@ -35,6 +35,8 @@ linters:
       - third_party$
       - builtin$
       - examples$
+      - ide/idelsp/jsonrpc/*
+      - ide/idelsp/semanticrpc/server.go
 formatters:
   exclusions:
     generated: lax

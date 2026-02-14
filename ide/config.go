@@ -31,6 +31,7 @@ import (
 	"image"
 	"image/png"
 	"io"
+	"log/slog"
 	"os"
 	"strings"
 	"time"
@@ -1663,9 +1664,9 @@ func (c ideConfig) logOutputPath() string {
 	return path
 }
 
-func (c ideConfig) logLevel() log.Level {
+func (c ideConfig) logLevel() (log.Level, slog.Level) {
 	if c.cfg == nil {
-		return log.ErrorLevel
+		return log.ErrorLevel, slog.LevelError
 
 	}
 	levelStr, err := config.MapConfig(c.cfg).GetString("log_level")
@@ -1673,15 +1674,29 @@ func (c ideConfig) logLevel() log.Level {
 		if err != config.ErrNotFound {
 			c.errors["log_level"] = err
 		}
-		return log.ErrorLevel
+		return log.ErrorLevel, slog.LevelError
 	}
 
 	level, err := log.ParseLevel(levelStr)
 	if err != nil {
 		c.errors["log_level"] = err
-		return log.ErrorLevel
+		return log.ErrorLevel, slog.LevelError
 	}
-	return level
+	switch level {
+	case log.InfoLevel:
+		return level, slog.LevelInfo
+	case log.DebugLevel:
+		return level, slog.LevelDebug
+	case log.TraceLevel:
+		return level, slog.LevelDebug
+	case log.WarnLevel:
+		return level, slog.LevelWarn
+	default:
+		// log.ErrorLevel
+		// log.PanicLevel
+		// log.FatalLevel
+		return level, slog.LevelError
+	}
 }
 
 func (c ideConfig) inputMode() term.InputMode {

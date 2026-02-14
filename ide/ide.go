@@ -27,6 +27,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path"
 	"sync"
@@ -212,6 +213,7 @@ func (i *IDE) init(
 		op.defaultWallpaper, op.defaultConfig, op.bell,
 		op.scheduleFn, op.zdotDir)
 
+	var logger *slog.Logger
 	if logPath := i.ideConfig.logOutputPath(); logPath != "" {
 		f, err := workspace.OpenFile(logPath,
 			os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
@@ -238,17 +240,24 @@ func (i *IDE) init(
 			}
 		}
 
-		level := i.ideConfig.logLevel()
+		level, slogLevel := i.ideConfig.logLevel()
 
 		log.SetOutput(f)
 		log.SetLevel(level)
 		log.SetFormatter(logging.LogrusLogdFormatter{})
+		logger = slog.New(slog.NewTextHandler(f, &slog.HandlerOptions{
+			Level: slogLevel,
+		}))
+
 	} else {
 		log.SetOutput(io.Discard)
 		log.SetLevel(log.PanicLevel)
+		logger = slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{}))
 	}
+	slog.SetDefault(logger)
 
 	log.Tracef("logging configured and ready")
+	slog.Debug("structured logging configured and ready")
 
 	i.publishEventFn = op.publishEvent
 	i.locker = op.locker
