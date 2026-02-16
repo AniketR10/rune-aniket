@@ -490,6 +490,15 @@ func TestWorkspaceConfig(t *testing.T) {
 		m.workspaceManagerHandler = new(workspaceManagerHandler)
 		n := notifications.New(m, notificationsConfig())
 
+		mu := new(sync.Mutex)
+		if cfg.scheduleNextTick == nil {
+			cfg.scheduleNextTick = func(fn func()) bool {
+				mu.Lock()
+				defer mu.Unlock()
+				fn()
+				return true
+			}
+		}
 		releaseManager := docrelease.NewManager(document.NewInMemoryService())
 		shRunner := new(shaderRunner)
 		shRunner.init(
@@ -498,7 +507,7 @@ func TestWorkspaceConfig(t *testing.T) {
 		err = m.workspaceManagerHandler.init(&uri, homeURI, manager, n, cfg, dir,
 			func(term.Event) bool {
 				return true
-			}, runner, new(sync.Mutex), nil,
+			}, runner, mu, nil,
 			func() (ideConfig, error) { return cfg, errors.New("boom") },
 			".sixrc", 0, 0, '1', 0, 0, true, nil, releaseManager, shRunner, 0, nil)
 		require.NoError(t, err)
@@ -551,7 +560,9 @@ func TestWorkspaceConfig(t *testing.T) {
 
 		require.Equal(t, 0, m.height)
 		require.Equal(t, 0, m.width)
+		m.mu.Lock()
 		require.NoError(t, m.commandReloadWorkspace())
+		m.mu.Unlock()
 		assert.EqualValues(t, mockConfig, passed)
 
 		require.NoError(t, m.Close())
@@ -646,7 +657,7 @@ func TestWorkspaceExtensions(t *testing.T) {
 			func(_uri workspaceapi.URI,
 				res map[extensionapi.Permission]extension.ResourceRegistrar,
 				s string, noti browser.Notifications,
-			executor schemeapi.Executor) (extension.Runner, error) {
+				executor schemeapi.Executor) (extension.Runner, error) {
 				defer wg.Done()
 				i := i.Add(1)
 				uris[i-1] = _uri.String()
@@ -2640,10 +2651,20 @@ func newTestWorkspaceManagerHandlerWithManagerAndExtensions(
 	shRunner.init(handler.Nop(), term.NopInterrupter(), term.Attributes{},
 		shutdownShaderCfg, component.FrameCharSetDefault())
 
+	mu := new(sync.Mutex)
+	if cfg.scheduleNextTick == nil {
+		cfg.scheduleNextTick = func(fn func()) bool {
+			mu.Lock()
+			defer mu.Unlock()
+			fn()
+			return true
+		}
+	}
+
 	releaseManager := docrelease.NewManager(document.NewInMemoryService())
 	err = m.workspaceManagerHandler.init(uri, homeURI, manager, n, cfg, dir, func(term.Event) bool {
 		return true
-	}, runner, new(sync.Mutex), extensions,
+	}, runner, mu, extensions,
 		func() (ideConfig, error) { return cfg, nil },
 		".sixrc", 0, 0, '1', 0, 0, true, onTabsClick, releaseManager, shRunner, 0, nil)
 
@@ -2755,10 +2776,7 @@ func defaultCfg() ideConfig {
 			"progress_bar": false,
 		},
 	},
-		scheduleNextTick: func(fn func()) bool {
-			fn()
-			return true
-		},
+		scheduleNextTick: nil,
 	}
 }
 

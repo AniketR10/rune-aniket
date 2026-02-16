@@ -68,14 +68,15 @@ func TestPackageManagerConcurrent(t *testing.T) {
 	rm.SetMissProgressComplete(true)
 	cfg := defaultCfg()
 	var m *testWorkspaceManagerHandler
+	var mu sync.Mutex
 	cfg.scheduleNextTick = func(fn func()) bool {
-		m.mu.Lock()
-		defer m.mu.Unlock()
+		mu.Lock()
+		defer mu.Unlock()
 		fn()
 		return true
 	}
 	m = newTestWorkspaceManagerHandlerForPkgManagerWithInterrupterCfg(t, rm, true,
-		term.NopInterrupter(), cfg)
+		term.NopInterrupter(), cfg, &mu)
 	require.NoError(t, m.pkgmanager.setAutoInstall())
 
 	const n = 1000
@@ -1088,13 +1089,13 @@ func newTestWorkspaceManagerHandlerForPkgManagerWithInterrupter(
 ) *testWorkspaceManagerHandler {
 	cfg := defaultCfg()
 	return newTestWorkspaceManagerHandlerForPkgManagerWithInterrupterCfg(
-		t, releaseManager, showManual, interrupter, cfg,
+		t, releaseManager, showManual, interrupter, cfg, new(sync.Mutex),
 	)
 }
 func newTestWorkspaceManagerHandlerForPkgManagerWithInterrupterCfg(
 	t *testing.T, releaseManager release.Manager, showManual bool,
 	interrupter term.Interrupter,
-	cfg ideConfig,
+	cfg ideConfig, mu sync.Locker,
 ) *testWorkspaceManagerHandler {
 	dir, err := os.MkdirTemp("", "")
 	require.NoError(t, err)
@@ -1105,7 +1106,7 @@ func newTestWorkspaceManagerHandlerForPkgManagerWithInterrupterCfg(
 	manager.RegisterScheme(workspace.FileScheme, workspace.NewFileScheme)
 	ret := newTestWorkspaceManagerHandlerWithReleaseManager(t, manager,
 		cfg, FuncExtensionsRunner(testRunnerFn), nil, nil, dir, nil,
-		nopShutdownShaderConfig(), releaseManager, showManual, interrupter)
+		nopShutdownShaderConfig(), releaseManager, showManual, interrupter, mu)
 	// only home workspace has a sync command prompt
 	ret.empty.syncCommandPrompt = true
 	// this allows blocking until packages are installed, for testing
@@ -1130,6 +1131,7 @@ func newTestWorkspaceManagerHandlerWithReleaseManager(
 	releaseManager release.Manager,
 	showManual bool,
 	interrupter term.Interrupter,
+	mu sync.Locker,
 ) *testWorkspaceManagerHandler {
 	homeURI, err := workspaceapi.ParseURI("file:///tmp")
 	require.NoError(t, err)
@@ -1147,6 +1149,14 @@ func newTestWorkspaceManagerHandlerWithReleaseManager(
 	shRunner := new(shaderRunner)
 	shRunner.init(handler.Nop(), interrupter, term.Attributes{},
 		shutdownShaderCfg, component.FrameCharSetDefault())
+	if cfg.scheduleNextTick == nil {
+		cfg.scheduleNextTick = func(fn func()) bool {
+			mu.Lock()
+			defer mu.Unlock()
+			fn()
+			return true
+		}
+	}
 
 	err = m.workspaceManagerHandler.init(nil, homeURI, manager, n, cfg,
 		dir, func(ev term.Event) bool {
@@ -1154,7 +1164,7 @@ func newTestWorkspaceManagerHandlerWithReleaseManager(
 				interrupter.Interrupt(ev.Context)
 			}
 			return true
-		}, runner, new(sync.Mutex), extensions,
+		}, runner, mu, extensions,
 		func() (ideConfig, error) { return cfg, nil },
 		".sixrc", 0, 0, '1', 0, 0, true, onTabsClick, releaseManager,
 		shRunner, 0, nil)
