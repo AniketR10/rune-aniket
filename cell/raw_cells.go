@@ -447,20 +447,39 @@ func (c *rawCells) readFromWithView(r io.Reader, view View) (int64, error) {
 			// but it should be ok as it's done once per file, and because calculating the width
 			// is front loaded, it should amortize over long interactions on a particular file.
 			cluster, str, width, state = graphemecluster.StepString(str, state)
-			r := []rune(cluster)
-			byteCount = uint8(len([]byte(cluster)))
-			switch r[0] {
-			case '\n':
-				c.cells = append(c.cells, makeNewRow(0, c.columnCap))
-				rowY++
-			default:
-				cell := term.Cell{
-					Ch:        r[0],
-					Width:     width,
-					Combining: r[1:],
-					Bytes:     byteCount,
+			// most of the type we'll hit this branch, which performs no extra allocations
+			// in particular, the conversio from cluster string to []rune causes 1 slice
+			// per cell, in each file, which is quite bit of of overhead.
+			if len(cluster) == 1 && width <= 1 {
+				byteCount = 1
+				switch cluster[0] {
+				case '\n':
+					c.cells = append(c.cells, makeNewRow(0, c.columnCap))
+					rowY++
+				default:
+					cell := term.Cell{
+						Ch:    rune(cluster[0]),
+						Width: width,
+						Bytes: byteCount,
+					}
+					c.cells[rowY] = append(c.cells[rowY], cell)
 				}
-				c.cells[rowY] = append(c.cells[rowY], cell)
+			} else {
+				byteCount = uint8(len([]byte(cluster)))
+				r := []rune(cluster)
+				switch r[0] {
+				case '\n':
+					c.cells = append(c.cells, makeNewRow(0, c.columnCap))
+					rowY++
+				default:
+					cell := term.Cell{
+						Ch:        r[0],
+						Width:     width,
+						Combining: r[1:],
+						Bytes:     byteCount,
+					}
+					c.cells[rowY] = append(c.cells[rowY], cell)
+				}
 			}
 		}
 		if err != nil {

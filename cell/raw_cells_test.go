@@ -160,13 +160,13 @@ func TestRawCellsStringReadFrom(t *testing.T) {
 	}{
 		{"", [][]term.Cell{{}}},
 		{"\n", [][]term.Cell{{}, {}}},
-		{"\t\n", [][]term.Cell{{{Combining: []rune{}, Bytes: 1, Ch: '\t'}}, {}}},
-		{"\t", [][]term.Cell{{{Combining: []rune{}, Bytes: 1, Ch: '\t'}}}},
-		{"a", [][]term.Cell{{{Ch: 'a', Combining: []rune{}, Bytes: 1, Width: 1}}}},
-		{"\nb", [][]term.Cell{{}, {{Ch: 'b', Combining: []rune{}, Bytes: 1, Width: 1}}}},
-		{"c\n", [][]term.Cell{{{Ch: 'c', Combining: []rune{}, Bytes: 1, Width: 1}}, {}}},
+		{"\t\n", [][]term.Cell{{{Combining: nil, Bytes: 1, Ch: '\t'}}, {}}},
+		{"\t", [][]term.Cell{{{Combining: nil, Bytes: 1, Ch: '\t'}}}},
+		{"a", [][]term.Cell{{{Ch: 'a', Combining: nil, Bytes: 1, Width: 1}}}},
+		{"\nb", [][]term.Cell{{}, {{Ch: 'b', Combining: nil, Bytes: 1, Width: 1}}}},
+		{"c\n", [][]term.Cell{{{Ch: 'c', Combining: nil, Bytes: 1, Width: 1}}, {}}},
 		{"\n\n\n", [][]term.Cell{{}, {}, {}, {}}},
-		{"\n\n\na", [][]term.Cell{{}, {}, {}, {{Ch: 'a', Combining: []rune{}, Bytes: 1, Width: 1}}}},
+		{"\n\n\na", [][]term.Cell{{}, {}, {}, {{Ch: 'a', Combining: nil, Bytes: 1, Width: 1}}}},
 		{"💥", [][]term.Cell{{{Ch: '💥', Width: 2, Combining: []rune{}, Bytes: 4}}}},
 		{"👨‍👧‍👦", [][]term.Cell{{{Ch: '👨', Combining: []rune{
 			rune(8205),
@@ -760,7 +760,7 @@ func TestRawCellsCell(t *testing.T) {
 
 	cell, ok = c.Cell(term.Coordinates{Y: 1, X: 4})
 	assert.True(t, ok)
-	assert.Equal(t, term.Cell{Ch: 'L', Bytes: 1, Combining: []rune{}, Width: 1}, cell)
+	assert.Equal(t, term.Cell{Ch: 'L', Bytes: 1, Combining: nil, Width: 1}, cell)
 
 	cell, ok = c.Cell(term.Coordinates{Y: 3, X: 25})
 	assert.True(t, ok)
