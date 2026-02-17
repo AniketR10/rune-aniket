@@ -81,14 +81,17 @@ type pluginHandler interface {
 // ex implements a tui.Handler by wrapping an editor.Component and
 // providing an ex editor type of interface.
 type ex struct {
-	config               text.Config
-	comp                 text.Component
-	clip                 clipboard.Register
-	executor             schemeapi.Executor
-	ed                   text.Editor
-	storage              document.Service
-	reservoir            *vtereservoir.Facility
-	notifications        notifier
+	config    text.Config
+	comp      text.Component
+	clip      clipboard.Register
+	executor  schemeapi.Executor
+	ed        text.Editor
+	storage   document.Service
+	reservoir *vtereservoir.Facility
+	// do not use directly, use notifications below instead
+	// which is able to dispatch cross-workspace cues.
+	container            *notifications.Container
+	notifications        browserapi.Notifications
 	emulatorConfig       vte.Config
 	newEmulatorHandler   func([]string) (vtereservoir.VTE, error)
 	tm                   browser.TabManager
@@ -128,7 +131,8 @@ type PreviewFunc = func(string, ...string) (component.Responsive, func(), bool)
 func newEx(
 	ed text.Editor, m workspace.Workspace,
 	storage document.Service,
-	notifications notifier,
+	notifications *notisManager,
+	uri workspaceapi.URI,
 	emulatorConfig vte.Config,
 	pluginBarConfig plugin.BarConfig,
 	publishEvent func(term.Event) bool,
@@ -139,7 +143,7 @@ func newEx(
 	opts ...text.Option,
 ) (e *ex, err error) {
 	e = new(ex)
-	err = e.init(ed, m, storage, notifications,
+	err = e.init(ed, m, storage, notifications, uri,
 		emulatorConfig, pluginBarConfig, publishEvent, initialVTECapacity, clip,
 		dispatchOnPreview, tm, opts...)
 	if err != nil {
@@ -154,7 +158,8 @@ func newEx(
 func (e *ex) init(
 	ed text.Editor, m workspace.Workspace,
 	storage document.Service,
-	notifications notifier,
+	notifications *notisManager,
+	uri workspaceapi.URI,
 	emulatorConfig vte.Config,
 	pluginBarConfig plugin.BarConfig,
 	publishEvent func(term.Event) bool,
@@ -164,7 +169,7 @@ func (e *ex) init(
 	tm browser.TabManager,
 	opts ...text.Option,
 ) (err error) {
-	err = e.doInit(ed, m, storage, notifications,
+	err = e.doInit(ed, m, storage, notifications, uri,
 		emulatorConfig, publishEvent, clip, opts...)
 	if err != nil {
 		return
@@ -279,7 +284,8 @@ func (e *ex) Interrupt(ctx context.Context) error {
 func (e *ex) doInit(
 	ed text.Editor, m workspace.Workspace,
 	storage document.Service,
-	n notifier,
+	n *notisManager,
+	uri workspaceapi.URI,
 	emulatorConfig vte.Config,
 	publishEvent func(term.Event) bool,
 	clip clipboard.Register,
@@ -289,13 +295,15 @@ func (e *ex) doInit(
 	e.pluginWaitTimeout = 3 * time.Second
 	e.clip = clip
 	e.workspace = m
-	e.notifications = n
+	e.container = notifications.New(&e.comp, n.cfg)
+	e.notifications = n.new(uri, e.container)
 	e.publishEvent = publishEvent
 	e.storage = storage
 	e.emulatorConfig = emulatorConfig
 
 	e.config = text.DefaultConfig()
 
+	opts = append(opts, text.WithNotifications(e.notifications))
 	for _, o := range opts {
 		o(&e.config)
 	}
@@ -670,7 +678,7 @@ func (e *ex) tabcopypath(_ context.Context, args ...string) error {
 		return fmt.Errorf("clipboard copy: %v", err)
 	}
 
-	e.notifications.Notify(notifications.LevelSuccess,
+	_, _ = e.notifications.Notify(browserapi.LevelSuccess,
 		"file path copied to clipboard")
 
 	return nil
@@ -690,10 +698,10 @@ func (e *ex) splitDirectionChange(_ context.Context, args ...string) error {
 	switch args[0] {
 	case "horizontal", "h":
 		b.SetDefaultSplit(browserapi.OrientationBottom)
-		e.notifications.Notify(notifications.LevelInfo, "changed split direction to horizontal")
+		_, _ = e.notifications.Notify(browserapi.LevelInfo, "changed split direction to horizontal")
 	case "vertical", "v":
 		b.SetDefaultSplit(browserapi.OrientationRight)
-		e.notifications.Notify(notifications.LevelInfo, "changed split direction to vertical")
+		_, _ = e.notifications.Notify(browserapi.LevelInfo, "changed split direction to vertical")
 	}
 	return nil
 }
@@ -898,32 +906,32 @@ func (e *ex) sendNotificationInfo(_ context.Context, args ...string) error {
 	if len(args) == 0 {
 		return errors.New("command expects at least one argument")
 	}
-	e.notifications.Notify(notifications.LevelInfo, strings.Join(args, " "))
-	return nil
+	_, err := e.notifications.Notify(browserapi.LevelInfo, strings.Join(args, " "))
+	return err
 }
 
 func (e *ex) sendNotificationSuccess(_ context.Context, args ...string) error {
 	if len(args) == 0 {
 		return errors.New("command expects at least one argument")
 	}
-	e.notifications.Notify(notifications.LevelSuccess, strings.Join(args, " "))
-	return nil
+	_, err := e.notifications.Notify(browserapi.LevelSuccess, strings.Join(args, " "))
+	return err
 }
 
 func (e *ex) sendNotificationWarning(_ context.Context, args ...string) error {
 	if len(args) == 0 {
 		return errors.New("command expects at least one argument")
 	}
-	e.notifications.Notify(notifications.LevelWarn, strings.Join(args, " "))
-	return nil
+	_, err := e.notifications.Notify(browserapi.LevelWarn, strings.Join(args, " "))
+	return err
 }
 
 func (e *ex) sendNotificationError(_ context.Context, args ...string) error {
 	if len(args) == 0 {
 		return errors.New("command expects at least one argument")
 	}
-	e.notifications.Notify(notifications.LevelError, strings.Join(args, " "))
-	return nil
+	_, err := e.notifications.Notify(browserapi.LevelError, strings.Join(args, " "))
+	return err
 }
 
 func (e *ex) windowtogglemaximize(_ context.Context, args ...string) error {
@@ -940,17 +948,17 @@ func (e *ex) windowtogglemaximize(_ context.Context, args ...string) error {
 }
 
 func (e *ex) closeNotifications(_ context.Context, args ...string) error {
-	e.notifications.CloseAll()
+	e.container.CloseAll()
 	return nil
 }
 
 func (e *ex) pauseNotifications(_ context.Context, args ...string) error {
-	e.notifications.PauseAll()
+	e.container.PauseAll()
 	return nil
 }
 
 func (e *ex) resumeNotifications(_ context.Context, args ...string) error {
-	e.notifications.ResumeAll()
+	e.container.ResumeAll()
 	return nil
 }
 
@@ -1110,7 +1118,7 @@ func (e *ex) executePluginWait(ctx context.Context, args ...string) error {
 
 	handleError := func(err error) error {
 		if err == nil {
-			e.notifications.Notify(notifications.LevelSuccess,
+			_, _ = e.notifications.Notify(browserapi.LevelSuccess,
 				fmt.Sprintf("%s: done in %s", args[0], time.Since(start).
 					Truncate(time.Millisecond)))
 			return err
@@ -1147,7 +1155,7 @@ func (e *ex) executePluginWait(ctx context.Context, args ...string) error {
 		err := <-ch
 		err = handleError(err)
 		if err != nil {
-			e.notifications.Notify(notifications.LevelError,
+			_, _ = e.notifications.Notify(browserapi.LevelError,
 				fmt.Sprintf("%s: %s", args[0], err))
 		}
 	}()
@@ -1462,7 +1470,7 @@ func (e *ex) runCommand(cmd string, args []string) (quit bool, err error) {
 }
 
 func (e *ex) setError(err error) {
-	e.notifications.Notify(notifications.LevelError, fmt.Sprintf("%s", err))
+	_, _ = e.notifications.Notify(browserapi.LevelError, fmt.Sprintf("%s", err))
 }
 
 func (e *ex) handleCommandEvent(ev term.Event) bool {
@@ -1702,6 +1710,10 @@ func (e *ex) handlePrompt(ev term.Event) (exit, handled bool) {
 
 // Handle satisfies tui.Handler.
 func (e *ex) Handle(ev term.Event) (exit, handled bool) {
+	exit, handled = e.container.Handle(ev)
+	if handled {
+		return
+	}
 	if e.cmd != nil {
 		_, handled = e.handlePrompt(ev)
 	} else {
@@ -1734,7 +1746,7 @@ func (e *ex) Resize(width, height int) {
 	if e.reservoir != nil {
 		e.reservoir.Resize(width, height)
 	}
-	e.comp.Resize(width, height)
+	e.container.Resize(width, height)
 	// if a top bar is added we don't reposition
 	// command window until the next resize, but that's
 	// acceptable because bars are added once
@@ -1757,9 +1769,9 @@ func (e *ex) Draw(w term.Writer) {
 		defer e.comp.SetDim(prev)
 
 		if e.config.Config.Dim {
-			e.comp.Draw(tterm.DimWriter(w))
+			e.container.Draw(tterm.DimWriter(w))
 		} else {
-			e.comp.Draw(w)
+			e.container.Draw(w)
 		}
 		vw := component.VirtualWriter{
 			Writer: w,
@@ -1769,7 +1781,7 @@ func (e *ex) Draw(w term.Writer) {
 		}
 		e.cmdV.C.DrawWindow(e.cmdWin, &vw)
 	} else {
-		e.comp.Draw(w)
+		e.container.Draw(w)
 	}
 }
 
@@ -1807,6 +1819,9 @@ func (e *ex) Close() (ret error) {
 		if err := e.cmd.Close(); err != nil {
 			ret = multierror.Append(ret, err)
 		}
+	}
+	if err := e.container.Close(); err != nil {
+		ret = multierror.Append(ret, err)
 	}
 	return
 }

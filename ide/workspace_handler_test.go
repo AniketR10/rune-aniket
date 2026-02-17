@@ -52,7 +52,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
 	"unstable.build/go-tui/browser"
-	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/component/shader"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/handler/handlertest"
@@ -488,7 +487,6 @@ func TestWorkspaceConfig(t *testing.T) {
 
 		m := new(testWorkspaceManagerHandler)
 		m.workspaceManagerHandler = new(workspaceManagerHandler)
-		n := notifications.New(m, notificationsConfig())
 
 		mu := new(sync.Mutex)
 		if cfg.scheduleNextTick == nil {
@@ -504,7 +502,8 @@ func TestWorkspaceConfig(t *testing.T) {
 		shRunner.init(
 			handler.Nop(), term.NopInterrupter(), term.Attributes{},
 			nopShutdownShaderConfig(), component.FrameCharSetDefault())
-		err = m.workspaceManagerHandler.init(&uri, homeURI, manager, n, cfg, dir,
+		err = m.workspaceManagerHandler.init(&uri, homeURI, manager, 
+			notificationsConfig(), cfg, dir,
 			func(term.Event) bool {
 				return true
 			}, runner, mu, nil,
@@ -528,7 +527,7 @@ func TestWorkspaceConfig(t *testing.T) {
 │                  │
 └──────────────────┘`},
 		}
-		h := &safeHandler{Component: n, Handler: m, mu: m.mu}
+		h := &safeHandler{Component: m, Handler: m, mu: m.mu}
 		handlertest.TestHandlerSequence(t, h, 20, 10, cases)
 	})
 
@@ -885,8 +884,8 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 │work│ 1 argument  │
 │    │ with        │
 │    │ workspace   │
-├────│ number      │
-│1 1 └─────────────┘
+├────│ number      ┤
+│1 1  2            │
 └──────────────────┘`},
 		{":wofo 3>:addBlaBla>",
 			`┌──────────────────┐
@@ -1546,7 +1545,7 @@ func TestInitializeNotifications(t *testing.T) {
 └──────────────────┘`},
 	}
 	h := newSafeHandler(m)
-	m.notifications.NotifyOnce(browserapi.LevelWarn, "6:14am")
+	m.notifications.current().NotifyOnce(browserapi.LevelWarn, "6:14am")
 	handlertest.TestHandlerSequence(t, h, 20, 10, cases)
 
 	require.NoError(t, m.Close())
@@ -1681,16 +1680,16 @@ func TestMoveWorkspace(t *testing.T) {
 │                        │ workspace   │
 ├────────────────────────│ is already  │
 │          workspaceWallp│ at the      │
-├────────────────────────│ first slot  │
-│1 1  2 2                └─────────────┘
+├────────────────────────│ first slot  ┤
+│1 1  2 2                              │
 └──────────────────────────────────────┘`},
 		{":noticloseall>:womo 9>:womo right>",
 			`┌────────────────────────┌─────────────┐
 │                        │ workspace   │
 ├────────────────────────│ is already  │
 │          workspaceWallp│ at the      │
-├────────────────────────│ last slot   │
-│2 2  9 9                └─────────────┘
+├────────────────────────│ last slot   ┤
+│2 2  9 9                              │
 └──────────────────────────────────────┘`},
 	}
 	handlertest.TestHandlerSequence(t, h, 40, 7, cases)
@@ -2318,7 +2317,7 @@ func TestWorkspaceCommands(t *testing.T) {
 │              │ command     │
 │              │ alias       │
 │              │ "tttt"      │
-├──────────────└─────────────┘
+├──────────────└─────────────┤
 │1 1  2 2  3 3               │
 └────────────────────────────┘`},
 	}
@@ -2380,7 +2379,7 @@ func TestWorkspaceCommands(t *testing.T) {
 │              │ command     │
 │              │ alias       │
 │              │ "tttt"      │
-├──────────────└─────────────┘
+├──────────────└─────────────┤
 │1 1  2 2  3 3               │
 └────────────────────────────┘`},
 	}
@@ -2409,7 +2408,7 @@ func TestWorkspaceCommands(t *testing.T) {
 │              │ command or  │
 │              │ command     │
 │              │ alias "xyz" │
-├──────────────└─────────────┘
+├──────────────└─────────────┤
 │1 1  2 2  3 3               │
 └────────────────────────────┘`},
 		{":noticloseall>:workspacefocus 2>:tttt>:xyz>",
@@ -2425,7 +2424,7 @@ func TestWorkspaceCommands(t *testing.T) {
 │              │ command     │
 │              │ alias       │
 │              │ "tttt"      │
-├──────────────└─────────────┘
+├──────────────└─────────────┤
 │1 1  2 2  3 3               │
 └────────────────────────────┘`},
 		{":noticloseall>:workspacefocus 3>:tttt>:xyz>",
@@ -2441,7 +2440,7 @@ func TestWorkspaceCommands(t *testing.T) {
 │              │ command     │
 │              │ alias       │
 │              │ "tttt"      │
-├──────────────└─────────────┘
+├──────────────└─────────────┤
 │1 1  2 2  3 3               │
 └────────────────────────────┘`},
 	}
@@ -2642,7 +2641,6 @@ func newTestWorkspaceManagerHandlerWithManagerAndExtensions(
 	require.NoError(t, err)
 
 	m := new(testWorkspaceManagerHandler)
-	n := notifications.New(m, notificationsConfig())
 	m.workspaceManagerHandler = new(workspaceManagerHandler)
 	// ensure that command manual is never shown
 	cfg.cfg["command"] = defaultCfg().cfg["command"]
@@ -2661,8 +2659,10 @@ func newTestWorkspaceManagerHandlerWithManagerAndExtensions(
 		}
 	}
 
+	notiConfig := notificationsConfig()
 	releaseManager := docrelease.NewManager(document.NewInMemoryService())
-	err = m.workspaceManagerHandler.init(uri, homeURI, manager, n, cfg, dir, func(term.Event) bool {
+	err = m.workspaceManagerHandler.init(uri, homeURI, manager, 
+		notiConfig, cfg, dir, func(term.Event) bool {
 		return true
 	}, runner, mu, extensions,
 		func() (ideConfig, error) { return cfg, nil },
@@ -2804,7 +2804,7 @@ func (f fnRunner) Close() error {
 
 func newSafeHandler(m *testWorkspaceManagerHandler) *safeHandler {
 	return &safeHandler{
-		Component: m.notifications.notifier.(tui.Component),
+		Component: m,
 		Handler:   m, mu: m.mu,
 	}
 }

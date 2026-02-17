@@ -73,6 +73,7 @@ func defaultConfig() modelessConfig {
 			fn()
 			return true
 		},
+		notifications: nopNotifications{},
 	}
 }
 
@@ -195,4 +196,25 @@ func (n nopBar) SetStatus(status string, _ term.Attributes) {
 }
 
 func (n nopBar) ShowBar(bool) {
+}
+
+type nopNotifications struct {
+}
+
+func (nopNotifications) Notify(
+	level browserapi.NotificationLevel, msg string, args ...any,
+) (string, error) {
+	return "", nil
+}
+
+func (nopNotifications) NotifyOnce(
+	level browserapi.NotificationLevel, msg string, args ...any,
+) (string, error) {
+	return "", nil
+}
+
+func (n nopNotifications) UpdateNotificationProgress(
+	id, message string, progress, total int64,
+) error {
+	return nil
 }

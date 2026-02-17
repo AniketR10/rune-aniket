@@ -35,11 +35,11 @@ import (
 	"unstable.build/go-tui/component/notifications"
 )
 
-func newTestNotifications(t *testing.T) (*testNotifier, *workspaceNotifications) {
+func newTestNotifications(t *testing.T) (*testNotifier, *notis) {
 	mock := newTestNotify()
-	b := &workspaceNotifications{
-		notifier: mock,
-		storage:  document.NewInMemoryService(),
+	b := &notis{
+		root:    mock,
+		storage: document.NewInMemoryService(),
 	}
 	return mock, b
 }

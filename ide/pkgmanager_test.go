@@ -40,7 +40,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/handler/handlertest"
 	"unstable.build/go-tui/ide/idepkg/idepkgtest"
 	"unstable.build/go-tui/text"
@@ -131,7 +130,7 @@ func TestPackageManagerIntegration(t *testing.T) {
 	)
 	rm := idepkgtest.NewReleaseManager(pkgs, bundles)
 	rm.SetMissProgressComplete(true)
-	m := newTestWorkspaceManagerHandlerForPkgManager(t, rm, true)
+	m := newTestWorkspaceManagerHandlerForPkgManager(t, rm, true, 15)
 
 	cases := []handlertest.SequenceTestCase{
 		{":pkginstall ",
@@ -259,8 +258,8 @@ func TestPackageManagerIntegration(t *testing.T) {
 │                        │ upgraded    │
 │                        │ to the      │
 │                        │ latest      │
-├────────────────────────│ version (1) │
-│1                       └─────────────┘
+├────────────────────────│ version (1) ┤
+│1                                     │
 └──────────────────────────────────────┘`},
 		{":noticlose>:pkguse six 1>",
 			`┌────────────────────────┌─────────────┐
@@ -323,9 +322,9 @@ func TestPackageManagerIntegration(t *testing.T) {
 │                        │ other       │
 │                        │ version     │
 │                        │ first       │
-├────────────────────────│ before      │
-│1                       │ removing,   │
-└────────────────────────│ or pass no  │`},
+├────────────────────────│ before      ┤
+│1                                     │
+└──────────────────────────────────────┘`},
 		{":noticlose>:pkgremove six 2>",
 			`┌────────────────────────┌─────────────┐
 │                        │ version 2   │
@@ -778,7 +777,7 @@ func TestPackageManagerLibDir(t *testing.T) {
 	)
 	t.Run("prompt, no install", func(t *testing.T) {
 		rm := idepkgtest.NewReleaseManager(pkgs, bundles)
-		m := newTestWorkspaceManagerHandlerForPkgManager(t, rm, false)
+		m := newTestWorkspaceManagerHandlerForPkgManager(t, rm, false, 0)
 
 		it, err := m.pkgmanager.LibDir(context.Background(), "go")
 		require.NoError(t, err)
@@ -827,7 +826,7 @@ func TestPackageManagerLibDir(t *testing.T) {
 	})
 	t.Run("prompt, user key ESC", func(t *testing.T) {
 		rm := idepkgtest.NewReleaseManager(pkgs, bundles)
-		m := newTestWorkspaceManagerHandlerForPkgManager(t, rm, false)
+		m := newTestWorkspaceManagerHandlerForPkgManager(t, rm, false, 0)
 
 		it, err := m.pkgmanager.LibDir(context.Background(), "go")
 		require.NoError(t, err)
@@ -861,7 +860,7 @@ func TestPackageManagerLibDir(t *testing.T) {
 
 	t.Run("prompt, yes install", func(t *testing.T) {
 		rm := idepkgtest.NewReleaseManager(pkgs, bundles)
-		m := newTestWorkspaceManagerHandlerForPkgManager(t, rm, false)
+		m := newTestWorkspaceManagerHandlerForPkgManager(t, rm, false, 0)
 
 		it, err := m.pkgmanager.LibDir(context.Background(), "go")
 		require.NoError(t, err)
@@ -895,7 +894,7 @@ func TestPackageManagerLibDir(t *testing.T) {
 
 	t.Run("prompt, yes, always install", func(t *testing.T) {
 		rm := idepkgtest.NewReleaseManager(pkgs, bundles)
-		m := newTestWorkspaceManagerHandlerForPkgManager(t, rm, false)
+		m := newTestWorkspaceManagerHandlerForPkgManager(t, rm, false, 0)
 
 		it, err := m.pkgmanager.LibDir(context.Background(), "go")
 		require.NoError(t, err)
@@ -937,7 +936,7 @@ func TestPackageManagerLibDir(t *testing.T) {
 
 	t.Run("prompt, no never install", func(t *testing.T) {
 		rm := idepkgtest.NewReleaseManager(pkgs, bundles)
-		m := newTestWorkspaceManagerHandlerForPkgManager(t, rm, false)
+		m := newTestWorkspaceManagerHandlerForPkgManager(t, rm, false, 0)
 
 		it, err := m.pkgmanager.LibDir(context.Background(), "go")
 		require.NoError(t, err)
@@ -974,7 +973,7 @@ func TestPackageManagerLibDir(t *testing.T) {
 
 	t.Run("prompt, yes install, simultaneous calls to LibDir", func(t *testing.T) {
 		rm := idepkgtest.NewReleaseManager(pkgs, bundles)
-		m := newTestWorkspaceManagerHandlerForPkgManager(t, rm, false)
+		m := newTestWorkspaceManagerHandlerForPkgManager(t, rm, false, 0)
 
 		it1, err := m.pkgmanager.LibDir(context.Background(), "go")
 		require.NoError(t, err)
@@ -1018,7 +1017,7 @@ func TestPackageManagerLibDir(t *testing.T) {
 func TestSetReleaseManager(t *testing.T) {
 	t.Parallel()
 	rm := idepkgtest.NewReleaseManager(idepkgtest.MakePackages(), idepkgtest.MakeBundles())
-	m := newTestWorkspaceManagerHandlerForPkgManager(t, rm, false)
+	m := newTestWorkspaceManagerHandlerForPkgManager(t, rm, false, 0)
 
 	cases := []handlertest.SequenceTestCase{
 		{":pkginstall ",
@@ -1077,10 +1076,70 @@ func TestSetReleaseManager(t *testing.T) {
 }
 
 func newTestWorkspaceManagerHandlerForPkgManager(
-	t *testing.T, releaseManager release.Manager, showManual bool,
+	t *testing.T, releaseManager release.Manager,
+	showManual bool, notificationsWidth int,
 ) *testWorkspaceManagerHandler {
-	return newTestWorkspaceManagerHandlerForPkgManagerWithInterrupter(t, releaseManager,
-		showManual, term.NopInterrupter())
+	cfg := defaultCfg()
+	homeURI, err := workspaceapi.ParseURI("file:///tmp")
+	require.NoError(t, err)
+
+	m := new(testWorkspaceManagerHandler)
+	m.workspaceManagerHandler = new(workspaceManagerHandler)
+
+	// ensure that command manual is always shown
+	if showManual {
+		updatedCfg := defaultCfg().cfg["command"].(map[string]any)
+		updatedCfg["show_manual_after"] = "0ms"
+		cfg.cfg["command"] = updatedCfg
+	}
+	runner := FuncExtensionsRunner(testRunnerFn)
+	shutdownShaderCfg := nopShutdownShaderConfig()
+	mu := new(sync.Mutex)
+	interrupter := term.NopInterrupter()
+	shRunner := new(shaderRunner)
+	shRunner.init(handler.Nop(), interrupter, term.Attributes{},
+		shutdownShaderCfg, component.FrameCharSetDefault())
+	if cfg.scheduleNextTick == nil {
+		cfg.scheduleNextTick = func(fn func()) bool {
+			mu.Lock()
+			defer mu.Unlock()
+			fn()
+			return true
+		}
+	}
+
+	dir, err := os.MkdirTemp("", "")
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_ = os.RemoveAll(dir)
+	})
+	manager := workspace.NewManager(cfg.workspace())
+	manager.RegisterScheme(workspace.FileScheme, workspace.NewFileScheme)
+
+	notiCfg := notificationsConfig()
+	notiCfg.Width = notificationsWidth
+	err = m.workspaceManagerHandler.init(nil, homeURI, manager,
+		notiCfg, cfg,
+		dir, func(ev term.Event) bool {
+			if ev.Type == term.EventInterrupt {
+				interrupter.Interrupt(ev.Context)
+			}
+			return true
+		}, runner, mu, nil,
+		func() (ideConfig, error) { return cfg, nil },
+		".sixrc", 0, 0, '1', 0, 0, true, nil, releaseManager,
+		shRunner, 0, nil)
+	require.NoError(t, err)
+	m.subscribeCommand(textapi.CommandManual{Name: "pkgwait"}, text.FuncCommandHandler(
+		func(ctx context.Context, cmd textapi.Command) error {
+			require.Len(t, cmd.Args, 1)
+			it, err := m.pkgmanager.pkg.LibDir(ctx, cmd.Args[0])
+			require.NoError(t, err)
+			it.Next(ctx)
+			it.Close()
+			return nil
+		}, nil))
+	return m
 }
 
 func newTestWorkspaceManagerHandlerForPkgManagerWithInterrupter(
@@ -1137,7 +1196,6 @@ func newTestWorkspaceManagerHandlerWithReleaseManager(
 	require.NoError(t, err)
 
 	m := new(testWorkspaceManagerHandler)
-	n := notifications.New(m, notificationsConfig())
 	m.workspaceManagerHandler = new(workspaceManagerHandler)
 	// ensure that command manual is always shown
 	updatedCfg := defaultCfg().cfg["command"].(map[string]any)
@@ -1158,7 +1216,8 @@ func newTestWorkspaceManagerHandlerWithReleaseManager(
 		}
 	}
 
-	err = m.workspaceManagerHandler.init(nil, homeURI, manager, n, cfg,
+	err = m.workspaceManagerHandler.init(nil, homeURI, manager,
+		notificationsConfig(), cfg,
 		dir, func(ev term.Event) bool {
 			if ev.Type == term.EventInterrupt {
 				interrupter.Interrupt(ev.Context)

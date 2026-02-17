@@ -44,8 +44,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
 	"unstable.build/go-tui/browser"
-	"unstable.build/go-tui/component/notifications"
-	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/workspace"
 	"unstable.build/go-tui/workspace/workspacessh"
@@ -172,7 +170,7 @@ func (i *IDE) SetReleaseManager(m release.Manager) {
 // Notifications returns an cross-workspace, goroutine-safe implementation
 // of browserapi.Notifications.
 func (i *IDE) Notifications() browserapi.Notifications {
-	return i.workspaceHandler.notifications
+	return i.workspaceHandler.notifications.current()
 }
 
 // Close satisfies io.Closer by closing this all ide's resources, including
@@ -304,18 +302,8 @@ func (i *IDE) init(
 	}
 
 	i.workspaceHandler = new(workspaceManagerHandler)
-	notificationsCfg := i.ideConfig.notificationsConfig()
-	interrupter := term.FuncInterrupter(func(ctx context.Context) error {
-		payload, _ := term.PayloadFromContext(ctx)
-		if !i.publishEvent(term.Event{Type: term.EventInterrupt, Raw: payload, Context: ctx}) {
-			return errEventStreamNotReady
-		}
-		return nil
-	})
-	notificationsCfg.Interrupter = interrupter
-	notifications := notifications.New(i.workspaceHandler, notificationsCfg)
 	err = i.workspaceHandler.init(cwdURI, homeDirURI, workspaceManager,
-		notifications, i.ideConfig, dataDir, i.publishEvent,
+		i.ideConfig.notificationsConfig(), i.ideConfig, dataDir, i.publishEvent,
 		op.extensionRunner, i.locker, op.extensions, func() (ideConfig, error) {
 			return reloadConfig(cfgfilename,
 				op.defaultWallpaper, op.defaultConfig, op.bell, op.scheduleFn,
@@ -339,8 +327,7 @@ func (i *IDE) init(
 			duration: op.shutdownShaderDuration,
 		}
 	}
-	handler := handler.WithComponent(i.workspaceHandler, notifications)
-	i.root.init(handler, i, i.ideConfig.defaultAttr(), shutdownShaderCfg,
+	i.root.init(i.workspaceHandler, i, i.ideConfig.defaultAttr(), shutdownShaderCfg,
 		i.ideConfig.windowFrameCharset())
 	return i.workspaceHandler.subscribeCommand(runShaderCmdManual, &i.root)
 }

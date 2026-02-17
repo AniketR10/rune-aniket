@@ -27,34 +27,92 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 
 	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/tui"
 	"unstable.build/go-tui/component/notifications"
 )
+
+type notisManager struct {
+	storage document.Service
+	cfg     notifications.Config
+	parent  workspaceManager
+}
+
+func newWorkspaceNotifications(
+	storage document.Service,
+	cfg notifications.Config,
+	parent workspaceManager,
+) *notisManager {
+	return &notisManager{
+		storage: storage,
+		cfg:     cfg,
+		parent:  parent,
+	}
+}
+
+func (w *notisManager) new(
+	uri workspaceapi.URI, c *notifications.Container,
+) browserapi.Notifications {
+	return &notis{
+		storage: w.storage,
+		root:    c,
+		uri:     uri,
+	}
+}
+
+func (w *notisManager) current() browserapi.Notifications {
+	return &notisRouter{parent: w.parent}
+}
+
+type notisRouter struct {
+	parent workspaceManager
+}
+
+type workspaceManager interface {
+	focusHandler() tui.Handler
+}
+
+func (r *notisRouter) focusNotifications() browserapi.Notifications {
+	focus := r.parent.focusHandler()
+	if h, ok := focus.(*workspaceHandler); ok {
+		return h.ex.notifications
+	}
+	// empty workspace
+	return focus.(*ex).notifications
+}
+
+func (r *notisRouter) Notify(
+	level browserapi.NotificationLevel, msg string, args ...any,
+) (string, error) {
+	return r.focusNotifications().Notify(level, msg, args...)
+}
+
+func (r *notisRouter) NotifyOnce(
+	level browserapi.NotificationLevel, msg string, args ...any,
+) (string, error) {
+	return r.focusNotifications().NotifyOnce(level, msg, args...)
+}
+
+func (r *notisRouter) UpdateNotificationProgress(
+	id, message string, progress, total int64,
+) error {
+	return r.focusNotifications().
+		UpdateNotificationProgress(id, message, progress, total)
+}
 
 type notifier interface {
 	Notify(level notifications.Level, msg string) string
 	ID(level notifications.Level, msg string) string
 	UpdateProgress(id, message string, progress, total int64) bool
-	PauseAll()
-	ResumeAll()
-	CloseAll()
 }
 
-type workspaceNotifications struct {
-	notifier notifier
-	storage  document.Service
-}
-
-func newWorkspaceNotifications(
-	storage document.Service, notifier notifier,
-) *workspaceNotifications {
-	return &workspaceNotifications{
-		storage:  storage,
-		notifier: notifier,
-	}
+type notis struct {
+	root    notifier
+	storage document.Service
+	uri     workspaceapi.URI
 }
 
 // stand-in type for NotifyOnce
@@ -63,18 +121,18 @@ type storedNotification struct {
 }
 
 // Notify formats the given msg and args and displays it on next Draw.
-func (c *workspaceNotifications) Notify(
+func (c *notis) Notify(
 	level browserapi.NotificationLevel, msg string, args ...any,
 ) (string, error) {
-	return c.notifier.Notify(notifications.Level(level), fmt.Sprintf(msg, args...)), nil
+	return c.root.Notify(notifications.Level(level), fmt.Sprintf(msg, args...)), nil
 }
 
 // NotifyOnce behaves like Notify, but only sends this notification once.
-func (c *workspaceNotifications) NotifyOnce(
+func (c *notis) NotifyOnce(
 	level browserapi.NotificationLevel, msg string, args ...any,
 ) (string, error) {
 	ctx := context.Background()
-	id := c.notifier.ID(notifications.Level(level), fmt.Sprintf(msg, args...))
+	id := c.root.ID(notifications.Level(level), fmt.Sprintf(msg, args...))
 	var value storedNotification
 	value.ID = id
 	err := c.storage.Create(ctx, id, value)
@@ -84,24 +142,17 @@ func (c *workspaceNotifications) NotifyOnce(
 	if err != nil {
 		return "", fmt.Errorf("storage create: %v", err)
 	}
-	return c.notifier.Notify(notifications.Level(level), fmt.Sprintf(msg, args...)), nil
+	return c.root.Notify(notifications.Level(level), fmt.Sprintf(msg, args...)), nil
 }
 
 // UpdateNotificationProgress satisfies browser.Notifications.
-func (c *workspaceNotifications) UpdateNotificationProgress(
+func (c *notis) UpdateNotificationProgress(
 	id, message string, progress, total int64,
 ) error {
-	ok := c.notifier.UpdateProgress(id, message, progress, total)
+	ok := c.root.UpdateProgress(id, message, progress, total)
 	if !ok {
 		return errors.New("could not find notification with the " +
 			"given id, or it already expired")
-	}
-	return nil
-}
-
-func (c *workspaceNotifications) Close() error {
-	if closer, ok := c.notifier.(io.Closer); ok {
-		return closer.Close()
 	}
 	return nil
 }

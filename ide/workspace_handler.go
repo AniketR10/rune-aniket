@@ -91,7 +91,7 @@ type workspaceManagerHandler struct {
 	exitPromptOpen     bool
 	scheduleNextTick   func(func()) bool
 	confirmedForceExit bool
-	notifications      *workspaceNotifications
+	notifications      *notisManager
 	storage            document.Service
 	workspace          workspace.WorkspaceManager
 	publishEvent       func(term.Event) bool
@@ -167,7 +167,6 @@ func (h *workspaceManagerHandler) newBuiltinModalEditor(
 		vi.WithHideInitialFolds(cfg.initialFolds()),
 		vi.WithClipboard(cfg.clipboard()),
 		vi.WithWorkspaceCommandRegistry(cwd, h),
-		vi.WithNotifications(h.notifications),
 		vi.WithAutoCenter(true),
 	)
 	return vi.Editor(viOpts...)
@@ -191,7 +190,6 @@ func (h *workspaceManagerHandler) newBuiltinModelessEditor(
 		modeless.WithClipboard(cfg.clipboard()),
 		modeless.WithStatusBarConfig(cfg.statusBarEnabled(), statusBarConfig),
 		modeless.WithWorkspaceCommandRegistry(cwd, h),
-		modeless.WithNotifications(h.notifications),
 		modeless.WithAutoCenter(true),
 	)
 }
@@ -199,7 +197,7 @@ func (h *workspaceManagerHandler) newBuiltinModelessEditor(
 func (h *workspaceManagerHandler) init(
 	cwd *workspaceapi.URI, homeDirUri workspaceapi.URI,
 	manager workspace.WorkspaceManager,
-	notifications *notifications.Container,
+	notiConfig notifications.Config,
 	cfg ideConfig, sixDir string, publishEvent func(term.Event) bool,
 	extensionRunner ExtensionsRunner, locker sync.Locker,
 	builtinExtensions map[string]Extension,
@@ -216,7 +214,15 @@ func (h *workspaceManagerHandler) init(
 
 	h.storage = localstorage.New(ctx, sixDir, doctoml.Marshaler())
 	notiStorage := document.WithPartition(h.storage, "noti")
-	h.notifications = newWorkspaceNotifications(notiStorage, notifications)
+	interrupter := term.FuncInterrupter(func(ctx context.Context) error {
+		payload, _ := term.PayloadFromContext(ctx)
+		if !h.publishEvent(term.Event{Type: term.EventInterrupt, Raw: payload, Context: ctx}) {
+			return errEventStreamNotReady
+		}
+		return nil
+	})
+	notiConfig.Interrupter = interrupter
+	h.notifications = newWorkspaceNotifications(notiStorage, notiConfig, h)
 	h.shaderRunner = shaderRunner
 	h.mu = locker
 	h.externalCommands = make(map[string]externalCommand)
@@ -251,7 +257,7 @@ func (h *workspaceManagerHandler) init(
 
 	// don't install a fs watcher for the home workspace,
 	// to prevent unecessary resource consumption
-	globalOpts := h.textOpts(cfg)
+	globalOpts := h.textOpts(h.homeURI, cfg)
 	// do not pass a real version control for home workspace
 	ed, err := h.newEditor(homeDirUri, cfg, vctrl.NopService())
 	if err != nil {
@@ -260,7 +266,7 @@ func (h *workspaceManagerHandler) init(
 
 	tm := new(workspaceTabManager)
 	tm.parent = h
-	h.empty, err = newEx(ed, homeWorkspace, h.storage, notifications,
+	h.empty, err = newEx(ed, homeWorkspace, h.storage, h.notifications, h.homeURI,
 		cfg.terminalConfig(), cfg.pluginBarConfig(),
 		h.publishEvent, 0 /* vte capacity */, cfg.clipboard(),
 		h.dispatchOnPreview, tm, globalOpts...)
@@ -279,7 +285,7 @@ func (h *workspaceManagerHandler) init(
 	go debug.CapturePanicReport(func() {
 		runner, err := h.buildExtensions(cfg, homeDirUri, h.homeWorkspace, h.empty)
 		if err != nil {
-			_, _ = h.notifications.Notify(browserapi.LevelError,
+			_, _ = h.notifications.current().Notify(browserapi.LevelError,
 				"Error building channel for extensions and plugins: %v", err)
 			log.Errorf("build home workspace extensions: %v", err)
 			return
@@ -562,7 +568,9 @@ func (h *workspaceManagerHandler) initExtensions(manager extension.Runner, cfg i
 	wg.Wait()
 }
 
-func (h *workspaceManagerHandler) textOpts(cfg ideConfig) []text.Option {
+func (h *workspaceManagerHandler) textOpts(
+	uri workspaceapi.URI, cfg ideConfig,
+) []text.Option {
 	ret := []text.Option{
 		text.WithTabspaces(cfg.editorTabspaces()),
 		text.WithWindowManagerConfig(cfg.windowManagerConfig()),
@@ -571,7 +579,6 @@ func (h *workspaceManagerHandler) textOpts(cfg ideConfig) []text.Option {
 		text.WithTabsClickCallback(h.tabsClickCallback),
 		text.WithCommandKey(cfg.commandKey()),
 		text.WithCommandMaxHistory(cfg.commandMaxHistory()),
-		text.WithNotifications(h.notifications),
 		text.WithFocusTabAttr(cfg.focusTabAttr()),
 		text.WithNonFocusTabAttr(cfg.nonFocusTabAttr()),
 		text.WithWallpaper(cfg.wallpaper()),
@@ -647,7 +654,7 @@ func (h *workspaceManagerHandler) addWorkspace(
 		configErr = multierror.Append(configErr, fmt.Errorf("workspace config: %w", wConfigErr))
 	}
 
-	textOpts := h.textOpts(cfg)
+	textOpts := h.textOpts(uri, cfg)
 	vctrlService := vctrl.NopService()
 	if cfg.auxiliaryBarGit() || cfg.gitBarEnabled() {
 		vctrlService, err = gogit.NewService(uri, cwd)
@@ -670,7 +677,7 @@ func (h *workspaceManagerHandler) addWorkspace(
 	multicwd := workspace.Multi(ctx, h.workspace, cwd, uri)
 	tm := new(workspaceTabManager)
 	tm.parent = h
-	ex, err := newEx(ed, multicwd, h.storage, h.notifications.notifier,
+	ex, err := newEx(ed, multicwd, h.storage, h.notifications, uri,
 		cfg.terminalConfig(), cfg.pluginBarConfig(), h.publishEvent, h.initialVTECapacity,
 		cfg.clipboard(), h.dispatchOnPreview, tm, textOpts...)
 	if err != nil {
@@ -727,7 +734,7 @@ func (h *workspaceManagerHandler) addWorkspace(
 	go debug.CapturePanicReport(func() {
 		runner, err := h.buildExtensions(cfg, uri, cwd, ex)
 		if err != nil {
-			_, _ = h.notifications.Notify(browserapi.LevelError,
+			_, _ = h.notifications.current().Notify(browserapi.LevelError,
 				"Error building channel for extensions and plugins: %v", err)
 			log.Errorf("build extensions for workspace %s: %v", uri.String(), err)
 			return
@@ -798,7 +805,8 @@ func (h *workspaceManagerHandler) buildExtensions(
 		extension.SyntaxResources(syntax.NewSearcher(ex.workspace, h.pkgmanager, uri)))
 	lspConfig := idelsp.Config{MaxRetries: 5}
 	lsp := idelsp.New(uri, ex.workspace,
-		ex.workspace, ex.Editor(), h.pkgmanager, h.notifications, ex.Browser(), lspConfig)
+		ex.workspace, ex.Editor(), h.pkgmanager, h.notifications.new(uri, ex.container),
+		ex.Browser(), lspConfig)
 	h.scheduleNextTick(func() {
 		err := ex.comp.SubscribeEvents(idelsp.EditorEvents(), lsp)
 		if err != nil {
@@ -1054,9 +1062,6 @@ func (h *workspaceManagerHandler) Close() (ret error) {
 		}
 	}
 	if err := h.empty.Close(); err != nil {
-		ret = multierror.Append(ret, err)
-	}
-	if err := h.notifications.Close(); err != nil {
 		ret = multierror.Append(ret, err)
 	}
 	if runner := h.homeRunner.Load(); runner != nil {
@@ -1437,7 +1442,7 @@ func (h *workspaceManagerHandler) setReleaseManager(releaseManager release.Manag
 	if h.pkgmanager == nil {
 		h.pkgmanager = new(pkgManager)
 	}
-	h.pkgmanager.init(h.notifications, releaseManager,
+	h.pkgmanager.init(h.notifications.current(), releaseManager,
 		pkgStorage, h.homeWorkspace, h.sixDir, h, h, h.scheduleNextTick)
 	h.dispatchOnPreview[cmdPkgInstall] = h.pkgmanager.previewPkgInstall
 }

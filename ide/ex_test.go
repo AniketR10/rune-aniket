@@ -1108,11 +1108,14 @@ func TestExKeySequence(t *testing.T) {
 			text.WithSequencerTimeout(1 * time.Second),
 			text.WithCommandOverlayConfig(testCommandOverlayConfig()),
 		}
+
 		ex := new(ex)
-		n := notifications.New(ex, notificationsConfig())
+		notifications := newWorkspaceNotifications(
+			document.NewInMemoryService(), notificationsConfig(),
+			workspaceManagerMock{workspace: ex})
 		ex.syncCommandPrompt = true
 		require.NoError(t, ex.init(texttest.NopEditor(), &testLoader{},
-			document.NewInMemoryService(), n,
+			document.NewInMemoryService(), notifications, file2,
 			vte.DefaultConfig(), plugin.DefaultBarConfig(), func(ev term.Event) bool {
 				// do not confuse interrupt from list with sequence re-issue commands
 				if ev.Type == term.EventInterrupt {
@@ -1124,7 +1127,7 @@ func TestExKeySequence(t *testing.T) {
 				return true
 			}, 0, clipboard.NewInMemory(), nil, nil, opts...))
 		ex.subscribeCommands()
-		b := testEx{Component: n, ex: ex}
+		b := testEx{ex: ex}
 		closeFns = append(closeFns, func() error {
 			mu.Lock()
 			defer mu.Unlock()
@@ -1266,16 +1269,7 @@ func TestExExit(t *testing.T) {
 
 // remove non-determinism of search.List async search
 type testEx struct {
-	tui.Component
 	*ex
-}
-
-func (t testEx) Draw(w term.Writer) {
-	t.Component.Draw(w)
-}
-
-func (t testEx) Resize(width, height int) {
-	t.Component.Resize(width, height)
 }
 
 func (t testEx) Handle(ev term.Event) (bool, bool) {
@@ -1304,16 +1298,17 @@ func newExForTestingTerminal(
 	ex := new(ex)
 	ex.syncCommandPrompt = true
 	svc := document.NewInMemoryService()
-	container := notifications.New(ex, notificationsConfig())
-	notifications := newWorkspaceNotifications(svc, container)
-	opts = append(opts, text.WithNotifications(notifications))
+	notifications := newWorkspaceNotifications(svc, notificationsConfig(),
+		workspaceManagerMock{workspace: ex})
+	uri, err := workspace.URI(".")
+	require.NoError(t, err)
 	opts = append(opts, text.WithCommandOverlayConfig(testCommandOverlayConfig()))
 	opts = append(opts, defCommandKeyBindings()...)
 	require.NoError(t, ex.init(ed, workspace, svc,
-		container, emulatorCfg, plugin.DefaultBarConfig(), publishEvent,
+		notifications, uri, emulatorCfg, plugin.DefaultBarConfig(), publishEvent,
 		0, clipboard.NewInMemory(), nil, nil, opts...))
 	ex.subscribeCommands()
-	return testEx{Component: container, ex: ex}
+	return testEx{ex: ex}
 }
 
 func newExForTestingWithWorkspace(
@@ -1333,12 +1328,14 @@ func newExForTestingWithWorkspace(
 	finalOpts = append(finalOpts, opts...)
 
 	svc := document.NewInMemoryService()
-	container := notifications.New(ex, notificationsConfig())
-	notifications := newWorkspaceNotifications(svc, container)
-	finalOpts = append(finalOpts, text.WithNotifications(notifications))
+	notifications := newWorkspaceNotifications(svc, notificationsConfig(),
+		workspaceManagerMock{workspace: ex})
+
+	uri, err := workspace.URI(".")
+	require.NoError(t, err)
 
 	require.NoError(t, ex.init(ed, workspace, svc,
-		container, emulatorCfg, plugin.DefaultBarConfig(),
+		notifications, uri, emulatorCfg, plugin.DefaultBarConfig(),
 		publishEvent, 0, clip, nil, nil, finalOpts...))
 	ex.subscribeCommands()
 	ex.newEmulatorHandler = func(args []string) (vtereservoir.VTE, error) {
@@ -1348,7 +1345,7 @@ func newExForTestingWithWorkspace(
 		return newTestVteWithConfig(args), nil
 	}
 	ex.pluginWaitTimeout = 1 * time.Second
-	return testEx{Component: container, ex: ex}
+	return testEx{ex: ex}
 }
 
 func newExForTestingCommandsPreview(
@@ -1369,12 +1366,14 @@ func newExForTestingCommandsPreview(
 	finalOpts = append(finalOpts, opts...)
 
 	svc := document.NewInMemoryService()
-	container := notifications.New(ex, notificationsConfig())
-	notifications := newWorkspaceNotifications(svc, container)
-	finalOpts = append(finalOpts, text.WithNotifications(notifications))
+	notifications := newWorkspaceNotifications(svc, notificationsConfig(),
+		workspaceManagerMock{workspace: ex})
+
+	uri, err := workspace.URI(".")
+	require.NoError(t, err)
 
 	require.NoError(t, ex.init(ed, workspace, svc,
-		container, emulatorCfg, plugin.DefaultBarConfig(),
+		notifications, uri, emulatorCfg, plugin.DefaultBarConfig(),
 		publishEvent, 0, clip, previews, nil, finalOpts...))
 	ex.subscribeCommands()
 	ex.newEmulatorHandler = func(args []string) (vtereservoir.VTE, error) {
@@ -1383,7 +1382,7 @@ func newExForTestingCommandsPreview(
 	ex.newPluginHandler = func(args ...string) (pluginHandler, error) {
 		return newTestVteWithConfig(args), nil
 	}
-	return testEx{Component: container, ex: ex}
+	return testEx{ex: ex}
 }
 
 func newExForTesting(t *testing.T, ed text.Editor, opts ...text.Option) testEx {
@@ -3885,4 +3884,13 @@ func newExForTestingTasks(t *testing.T) (testEx, *sync.Mutex, func()) {
 		defer mu.Unlock()
 		require.NoError(t, e.Close())
 	}
+}
+
+// the calling workspace is always in focus
+type workspaceManagerMock struct {
+	workspace *ex
+}
+
+func (w workspaceManagerMock) focusHandler() tui.Handler {
+	return w.workspace
 }

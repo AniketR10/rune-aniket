@@ -35,6 +35,7 @@ import (
 	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi/browserrpc"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/clipboard"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
@@ -42,7 +43,6 @@ import (
 	"unstable.build/go-tui/browser"
 	tbrowserrpc "unstable.build/go-tui/browser/browserrpc"
 	"unstable.build/go-tui/browser/browsertest"
-	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/ide/plugin"
 	"unstable.build/go-tui/term/vte"
 	"unstable.build/go-tui/text"
@@ -118,10 +118,12 @@ func newTestRPCBrowser(t *testing.T,
 		tui.Handler, browser.Browser, error,
 	) {
 		ex := new(ex)
+		notifications := newWorkspaceNotifications(
+			document.NewInMemoryService(), notificationsConfig(),
+			workspaceManagerMock{workspace: ex})
+		uri, err := workspaceapi.ParseURI("memory:///")
+		require.NoError(t, err)
 		svc := document.NewInMemoryService()
-		container := notifications.New(ex, notificationsConfig())
-		notifications := newWorkspaceNotifications(svc, container)
-		opts = append(opts, text.WithNotifications(notifications))
 		opts = append(opts, text.WithCommandOverlayConfig(testCommandOverlayConfig()))
 		opts = append(opts, text.WithCommandKeyBinding(term.KeyComb{Ch: 'w', Mod: term.ModCtrl},
 			[][]string{{"tabclose"}}))
@@ -131,7 +133,7 @@ func newTestRPCBrowser(t *testing.T,
 			[][]string{{"tabprevious"}}))
 		opts = append(opts, otherOpts...)
 		ex.syncCommandPrompt = true
-		err := ex.init(ed, &testLoader{}, svc, container,
+		err = ex.init(ed, &testLoader{}, svc, notifications, uri,
 			vte.DefaultConfig(), plugin.DefaultBarConfig(),
 			nopPublishEvent, 0, clip, nil, nil, opts...)
 		if err != nil {
@@ -155,7 +157,7 @@ func newTestRPCBrowser(t *testing.T,
 		require.NoError(t, err)
 
 		bc := browserrpc.NewClient(context.Background(), conn)
-		h := &safeHandler{Component: container, Handler: ex, mu: &serverMutex}
+		h := &safeHandler{Component: ex, Handler: ex, mu: &serverMutex}
 		*destructor = func() {
 			serverMutex.Lock()
 			defer serverMutex.Unlock()
