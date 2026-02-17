@@ -229,6 +229,44 @@ func TestSetTabNameWithAttrIntegration(t *testing.T) {
 	require.NoError(t, m.Close())
 }
 
+func TestCrossWorkspaceNotifications(t *testing.T) {
+	dir, err := os.MkdirTemp("", "")
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		os.RemoveAll(dir)
+	})
+
+	uri1, err := workspaceapi.ParseURI("memory://" + dir)
+	require.NoError(t, err)
+	uri2, err := workspaceapi.ParseURI("memory:///b")
+	require.NoError(t, err)
+
+	m := newTestWorkspaceManagerHandlerWithDir(t, defaultConfigWithWrap(false), dir,
+		nopShutdownShaderConfig())
+	require.NoError(t, m.addOrCreateWorkspace(uri1))
+	require.NoError(t, m.addOrCreateWorkspace(uri2))
+
+	m.workspaces[0].notifications.Notify(browserapi.LevelError, "sh")
+
+	h := newSafeHandler(m)
+	cases := []handlertest.SequenceTestCase{
+		{"",
+			`┌────────────────────────────┐
+│                            │
+├────────────────────────────┤
+│                            │
+│     workspaceWallpaper     │
+│                            │
+├────────────────────────────┤
+│1 #  2 #                    │
+└────────────────────────────┘`},
+	}
+	handlertest.RunHandlerSequenceWriter(t, newWriterForAttrTesting(30, 9),
+		h, 30, 9, cases)
+
+	require.NoError(t, m.Close())
+}
+
 func TestCustomLocations(t *testing.T) {
 	dir, err := os.MkdirTemp("", "")
 	require.NoError(t, err)
@@ -502,7 +540,7 @@ func TestWorkspaceConfig(t *testing.T) {
 		shRunner.init(
 			handler.Nop(), term.NopInterrupter(), term.Attributes{},
 			nopShutdownShaderConfig(), component.FrameCharSetDefault())
-		err = m.workspaceManagerHandler.init(&uri, homeURI, manager, 
+		err = m.workspaceManagerHandler.init(&uri, homeURI, manager,
 			notificationsConfig(), cfg, dir,
 			func(term.Event) bool {
 				return true
@@ -2661,10 +2699,10 @@ func newTestWorkspaceManagerHandlerWithManagerAndExtensions(
 
 	notiConfig := notificationsConfig()
 	releaseManager := docrelease.NewManager(document.NewInMemoryService())
-	err = m.workspaceManagerHandler.init(uri, homeURI, manager, 
+	err = m.workspaceManagerHandler.init(uri, homeURI, manager,
 		notiConfig, cfg, dir, func(term.Event) bool {
-		return true
-	}, runner, mu, extensions,
+			return true
+		}, runner, mu, extensions,
 		func() (ideConfig, error) { return cfg, nil },
 		".sixrc", 0, 0, '1', 0, 0, true, onTabsClick, releaseManager, shRunner, 0, nil)
 
@@ -2807,4 +2845,10 @@ func newSafeHandler(m *testWorkspaceManagerHandler) *safeHandler {
 		Component: m,
 		Handler:   m, mu: m.mu,
 	}
+}
+
+func newWriterForAttrTesting(width, height int) *term.StringWriter {
+	writer := term.NewStringWriter(width, height)
+	writer.ForegroundCh = '#'
+	return writer
 }

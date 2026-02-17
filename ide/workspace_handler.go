@@ -356,6 +356,26 @@ func (h *workspaceManagerHandler) focusHandler() tui.Handler {
 	return h.empty
 }
 
+func (h *workspaceManagerHandler) focusURI() workspaceapi.URI {
+	if handler := h.workspaces[h.focus]; handler != nil {
+		return handler.uri
+	}
+	return h.homeURI
+}
+
+func (h *workspaceManagerHandler) setWorkspaceRequiresAttention(
+	uri workspaceapi.URI, attr term.Attributes,
+) {
+	for _, w := range h.workspaces {
+		if w == nil || w.uri.String() != uri.String() {
+			continue
+		}
+		w.attentionAttr = attr
+		h.Resize(h.width, h.height)
+		break
+	}
+}
+
 func (h *workspaceManagerHandler) focusBrowser() browser.Browser {
 	if handler := h.workspaces[h.focus]; handler != nil {
 		return handler.Browser()
@@ -475,11 +495,17 @@ func (h *workspaceManagerHandler) switchToWorkspace(i int) bool {
 	// clear attention attributes and propagate focus status
 	if i != h.focus {
 		if w := h.workspaces[h.focus]; w != nil {
+			w.ex.container.PauseAll()
 			w.ex.onFocusChange(false)
+		} else {
+			h.empty.container.PauseAll()
 		}
 		if w := h.workspaces[i]; w != nil {
 			w.attentionAttr = term.Attributes{}
 			w.ex.onFocusChange(true)
+			w.ex.container.ResumeAll()
+		} else {
+			h.empty.container.ResumeAll()
 		}
 	}
 	h.focus = i

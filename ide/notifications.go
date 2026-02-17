@@ -31,20 +31,22 @@ import (
 	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
+	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/component/notifications"
 )
 
 type notisManager struct {
 	storage document.Service
 	cfg     notifications.Config
-	parent  workspaceManager
+	parent  workspaceManagerIfc
 }
 
 func newWorkspaceNotifications(
 	storage document.Service,
 	cfg notifications.Config,
-	parent workspaceManager,
+	parent workspaceManagerIfc,
 ) *notisManager {
 	return &notisManager{
 		storage: storage,
@@ -57,6 +59,8 @@ func (w *notisManager) new(
 	uri workspaceapi.URI, c *notifications.Container,
 ) browserapi.Notifications {
 	return &notis{
+		cfg:     w.cfg,
+		parent:  w.parent,
 		storage: w.storage,
 		root:    c,
 		uri:     uri,
@@ -68,11 +72,13 @@ func (w *notisManager) current() browserapi.Notifications {
 }
 
 type notisRouter struct {
-	parent workspaceManager
+	parent workspaceManagerIfc
 }
 
-type workspaceManager interface {
+type workspaceManagerIfc interface {
 	focusHandler() tui.Handler
+	focusURI() workspaceapi.URI
+	setWorkspaceRequiresAttention(workspaceapi.URI, term.Attributes)
 }
 
 func (r *notisRouter) focusNotifications() browserapi.Notifications {
@@ -107,12 +113,15 @@ type notifier interface {
 	Notify(level notifications.Level, msg string) string
 	ID(level notifications.Level, msg string) string
 	UpdateProgress(id, message string, progress, total int64) bool
+	PauseAll()
 }
 
 type notis struct {
+	parent  workspaceManagerIfc
 	root    notifier
 	storage document.Service
 	uri     workspaceapi.URI
+	cfg     notifications.Config
 }
 
 // stand-in type for NotifyOnce
@@ -124,7 +133,12 @@ type storedNotification struct {
 func (c *notis) Notify(
 	level browserapi.NotificationLevel, msg string, args ...any,
 ) (string, error) {
-	return c.root.Notify(notifications.Level(level), fmt.Sprintf(msg, args...)), nil
+	id := c.root.Notify(notifications.Level(level), fmt.Sprintf(msg, args...))
+	if !c.inFocus() {
+		c.root.PauseAll()
+		c.setTabAttr(level)
+	}
+	return id, nil
 }
 
 // NotifyOnce behaves like Notify, but only sends this notification once.
@@ -142,7 +156,12 @@ func (c *notis) NotifyOnce(
 	if err != nil {
 		return "", fmt.Errorf("storage create: %v", err)
 	}
-	return c.root.Notify(notifications.Level(level), fmt.Sprintf(msg, args...)), nil
+	id = c.root.Notify(notifications.Level(level), fmt.Sprintf(msg, args...))
+	if !c.inFocus() {
+		c.root.PauseAll()
+		c.setTabAttr(level)
+	}
+	return id, nil
 }
 
 // UpdateNotificationProgress satisfies browser.Notifications.
@@ -154,5 +173,31 @@ func (c *notis) UpdateNotificationProgress(
 		return errors.New("could not find notification with the " +
 			"given id, or it already expired")
 	}
+	if !c.inFocus() {
+		c.root.PauseAll()
+	}
 	return nil
+}
+
+func (c *notis) inFocus() bool {
+	uri := c.parent.focusURI()
+	return uri.Equal(c.uri)
+}
+
+func (c *notis) setTabAttr(level browserapi.NotificationLevel) {
+	attentionAttr := term.Attributes{
+		Fg: tcell.ColorWhite,
+		Bg: c.cfg.BackgroundAttributes.Bg,
+	}
+	switch level {
+	case browserapi.LevelError:
+		attentionAttr.Fg = c.cfg.ColorError.Fg
+	case browserapi.LevelWarn:
+		attentionAttr.Fg = c.cfg.ColorWarning.Fg
+	case browserapi.LevelInfo:
+		attentionAttr.Fg = c.cfg.ColorInfo.Fg
+	case browserapi.LevelSuccess:
+		attentionAttr.Fg = c.cfg.ColorSuccess.Fg
+	}
+	c.parent.setWorkspaceRequiresAttention(c.uri, attentionAttr)
 }

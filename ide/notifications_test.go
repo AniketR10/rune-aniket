@@ -32,34 +32,63 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/component/notifications"
 )
 
-func newTestNotifications(t *testing.T) (*testNotifier, *notis) {
+func newTestNotifications(uri workspaceapi.URI, t *testing.T) (*testNotifier, *notis) {
 	mock := newTestNotify()
 	b := &notis{
 		root:    mock,
 		storage: document.NewInMemoryService(),
+		parent:  &workspaceManagerMock{workspace: new(ex), wantFocusURI: uri},
+		uri:     uri,
+		cfg: notifications.Config{
+			ColorError: term.Attributes{Fg: tcell.ColorRed},
+		},
 	}
 	return mock, b
 }
 
+func TestNotifyAcrossWorkspaces(t *testing.T) {
+	t.Run("notifications are paused and attention attrs set", func(t *testing.T) {
+		workspace, err := workspaceapi.ParseURI("file:///b")
+		require.NoError(t, err)
+		mock, b := newTestNotifications(workspace, t)
+		workspaceMock := b.parent.(*workspaceManagerMock)
+		workspaceMock.wantFocusURI, err = workspaceapi.ParseURI("file:///a")
+		require.NoError(t, err)
+
+		_, err = b.Notify(browserapi.LevelError, "abc")
+		require.NoError(t, err)
+
+		assert.Equal(t, 1, mock.messages["abc_paused"])
+		expectedAttrs := map[workspaceapi.URI]term.Attributes{
+			workspace: {Fg: tcell.ColorRed},
+		}
+		assert.Equal(t, expectedAttrs, workspaceMock.attrs)
+	})
+}
+
 func TestNotifyOnce(t *testing.T) {
+	uri, err := workspaceapi.ParseURI("file:///a")
+	require.NoError(t, err)
 	t.Run("delivers notifications only the first time it's invoked", func(t *testing.T) {
-		svc := document.NewInMemoryService()
-		mock, b := newTestNotifications(t)
+		mock, b := newTestNotifications(uri, t)
 
 		_, err := b.NotifyOnce(browserapi.LevelError, "a")
 		require.NoError(t, err)
 		assert.Equal(t, 1, mock.messages["a"])
 
-		_, err = b.NotifyOnce(browserapi.LevelError, "%v", svc)
+		_, err = b.NotifyOnce(browserapi.LevelError, "a")
 		require.NoError(t, err)
 		assert.Equal(t, 1, mock.messages["a"])
 	})
 
 	t.Run("delivers notifications with different args multiple times, if args are different", func(t *testing.T) {
-		mock, b := newTestNotifications(t)
+		mock, b := newTestNotifications(uri, t)
 
 		_, err := b.NotifyOnce(browserapi.LevelError, "a %d", 0)
 		require.NoError(t, err)
@@ -72,7 +101,7 @@ func TestNotifyOnce(t *testing.T) {
 	})
 
 	t.Run("delivers notifications with different args only once if args are the same", func(t *testing.T) {
-		mock, b := newTestNotifications(t)
+		mock, b := newTestNotifications(uri, t)
 
 		_, err := b.NotifyOnce(browserapi.LevelError, "a %d", 0)
 		require.NoError(t, err)
@@ -84,7 +113,7 @@ func TestNotifyOnce(t *testing.T) {
 	})
 
 	t.Run("delivers notifications multiple times if subsequent uses Notify rather than NotifyOnce", func(t *testing.T) {
-		mock, b := newTestNotifications(t)
+		mock, b := newTestNotifications(uri, t)
 
 		_, err := b.NotifyOnce(browserapi.LevelError, "a")
 		require.NoError(t, err)
@@ -130,9 +159,17 @@ func (t *testNotifier) UpdateProgress(
 	return false
 }
 
-func (t testNotifier) CloseAll() {
+func (t *testNotifier) CloseAll() {
+	clear(t.messages)
 }
-func (t testNotifier) ResumeAll() {
+
+func (t *testNotifier) ResumeAll() {
 }
-func (t testNotifier) PauseAll() {
+
+func (t *testNotifier) PauseAll() {
+	m := make(map[string]int)
+	for k, v := range t.messages {
+		m[k+"_paused"] = v
+	}
+	t.messages = m
 }

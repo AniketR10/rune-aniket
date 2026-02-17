@@ -740,7 +740,23 @@ func (c ideConfig) notificationsConfig() notifications.Config {
 	ret.AutoClose = c.notificationsDuration("auto_close", ret.AutoClose)
 	ret.ProgressRunes = c.notificationsProgressRunes(ret.ProgressRunes)
 	ret.Padding = c.notificationsPadding(ret.Padding)
+	setNotificationsColor(&ret)
 	return ret
+}
+
+func setNotificationsColor(ret *notifications.Config) {
+	ret.ColorInfo.Bg = ret.BackgroundAttributes.Bg
+	ret.ColorSuccess.Bg = ret.BackgroundAttributes.Bg
+	ret.ColorError.Bg = ret.BackgroundAttributes.Bg
+	ret.ColorWarning.Bg = ret.BackgroundAttributes.Bg
+	ret.ColorInfo.Fg = tcell.ColorSilver
+	ret.ColorSuccess.Fg = tcell.ColorGreen
+	ret.ColorError.Fg = tcell.ColorRed
+	ret.ColorWarning.Fg = tcell.ColorYellow
+	ret.ColorInfo.Attrs = ret.BackgroundAttributes.Attrs | tcell.AttrBold
+	ret.ColorSuccess.Attrs = ret.BackgroundAttributes.Attrs | tcell.AttrBold
+	ret.ColorError.Attrs = ret.BackgroundAttributes.Attrs | tcell.AttrBold
+	ret.ColorWarning.Attrs = ret.BackgroundAttributes.Attrs | tcell.AttrBold
 }
 
 func (c ideConfig) focusTabAttr() term.Attributes {

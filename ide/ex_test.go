@@ -1112,7 +1112,7 @@ func TestExKeySequence(t *testing.T) {
 		ex := new(ex)
 		notifications := newWorkspaceNotifications(
 			document.NewInMemoryService(), notificationsConfig(),
-			workspaceManagerMock{workspace: ex})
+			&workspaceManagerMock{workspace: ex})
 		ex.syncCommandPrompt = true
 		require.NoError(t, ex.init(texttest.NopEditor(), &testLoader{},
 			document.NewInMemoryService(), notifications, file2,
@@ -1299,7 +1299,7 @@ func newExForTestingTerminal(
 	ex.syncCommandPrompt = true
 	svc := document.NewInMemoryService()
 	notifications := newWorkspaceNotifications(svc, notificationsConfig(),
-		workspaceManagerMock{workspace: ex})
+		&workspaceManagerMock{workspace: ex})
 	uri, err := workspace.URI(".")
 	require.NoError(t, err)
 	opts = append(opts, text.WithCommandOverlayConfig(testCommandOverlayConfig()))
@@ -1329,7 +1329,7 @@ func newExForTestingWithWorkspace(
 
 	svc := document.NewInMemoryService()
 	notifications := newWorkspaceNotifications(svc, notificationsConfig(),
-		workspaceManagerMock{workspace: ex})
+		&workspaceManagerMock{workspace: ex})
 
 	uri, err := workspace.URI(".")
 	require.NoError(t, err)
@@ -1367,7 +1367,7 @@ func newExForTestingCommandsPreview(
 
 	svc := document.NewInMemoryService()
 	notifications := newWorkspaceNotifications(svc, notificationsConfig(),
-		workspaceManagerMock{workspace: ex})
+		&workspaceManagerMock{workspace: ex})
 
 	uri, err := workspace.URI(".")
 	require.NoError(t, err)
@@ -3888,9 +3888,28 @@ func newExForTestingTasks(t *testing.T) (testEx, *sync.Mutex, func()) {
 
 // the calling workspace is always in focus
 type workspaceManagerMock struct {
-	workspace *ex
+	workspace    *ex
+	attrs        map[workspaceapi.URI]term.Attributes
+	wantFocusURI workspaceapi.URI
 }
 
-func (w workspaceManagerMock) focusHandler() tui.Handler {
+func (w *workspaceManagerMock) focusHandler() tui.Handler {
 	return w.workspace
+}
+
+func (w *workspaceManagerMock) focusURI() workspaceapi.URI {
+	if w.workspace == nil || w.workspace.workspace == nil {
+		return w.wantFocusURI
+	}
+	uri, _ := w.workspace.workspace.URI(".")
+	return uri
+}
+
+func (w *workspaceManagerMock) setWorkspaceRequiresAttention(
+	uri workspaceapi.URI, attrs term.Attributes,
+) {
+	if w.attrs == nil {
+		w.attrs = make(map[workspaceapi.URI]term.Attributes)
+	}
+	w.attrs[uri] = attrs
 }

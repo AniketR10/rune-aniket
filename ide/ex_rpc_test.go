@@ -120,7 +120,7 @@ func newTestRPCBrowser(t *testing.T,
 		ex := new(ex)
 		notifications := newWorkspaceNotifications(
 			document.NewInMemoryService(), notificationsConfig(),
-			workspaceManagerMock{workspace: ex})
+			&workspaceManagerMock{workspace: ex})
 		uri, err := workspaceapi.ParseURI("memory:///")
 		require.NoError(t, err)
 		svc := document.NewInMemoryService()

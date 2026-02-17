@@ -330,6 +330,7 @@ func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
 
 	actualNotifications := cfg.notificationsConfig()
 	expectedNotifications := defaultNotificationsConfig()
+	setNotificationsColor(&expectedNotifications)
 	assert.NotNil(t, actualNotifications.Interrupter)
 	actualNotifications.Interrupter = nil
 	expectedNotifications.Interrupter = nil
