@@ -145,7 +145,7 @@ func TestPackageManagerIntegration(t *testing.T) {
 │go                                    │
 │six                                   │
 │──────────────────────────────────────│
-│USAGE                                 │
+│                                      │
 ├──────────────────────────────────────┤
 │1                                     │
 └──────────────────────────────────────┘`},
@@ -161,7 +161,7 @@ func TestPackageManagerIntegration(t *testing.T) {
 │1                                     │
 │2                                     │
 │──────────────────────────────────────│
-│USAGE                                 │
+│                                      │
 ├──────────────────────────────────────┤
 │1                                     │
 └──────────────────────────────────────┘`},
@@ -193,7 +193,7 @@ func TestPackageManagerIntegration(t *testing.T) {
 │six                                   │
 │                                      │
 │──────────────────────────────────────│
-│USAGE                                 │
+│                                      │
 ├──────────────────────────────────────┤
 │1                                     │
 └──────────────────────────────────────┘`},
@@ -513,17 +513,17 @@ func TestPackageManagerPreviewIntegration(t *testing.T) {
 │go                                    │
 │six                                   │
 │──────────────────────────────────────│
-│USAGE                                 │
-│pkginstall <package> [version]        │
 │                                      │
-│DESCRIPTION                           │
-│Installs a package from the           │
-│official distribution. If version     │
-│is omitted, the package is upgraded   │
-│to the latest version. If package     │
-│contains executables, then this       │
+│ Usage                                │
+│                                      │
+│ pkginstall <package> [version]       │
+│                                      │
+│                                      │
+│ Description                          │
+│                                      │
+│ Installs a package from the official │
+│ distribution. If version is omitted, │
 └──────────────────────────────────────┘
-│                                      │
 │                                      │
 │                                      │
 ├──────────────────────────────────────┤

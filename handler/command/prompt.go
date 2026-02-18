@@ -1227,7 +1227,7 @@ func (h *Prompt) buildManualComponent(bufString string) component.Responsive {
 	}
 
 	if ok {
-		return makeManualComponent(man, h.config.FrameCharSet, h.config.ElementAttr)
+		return h.makeManualComponent(man, h.config.FrameCharSet, h.config.ElementAttr)
 	}
 	return nil
 }

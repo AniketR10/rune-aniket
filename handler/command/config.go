@@ -56,12 +56,14 @@ type Config struct {
 	// FrameCharSet is used to determine if a frame is to be used to separate manual from search list.
 	FrameCharSet component.FrameCharSet
 	// FrameAttr if a frame is to be used to separate manual from search list.
-	FrameAttr term.Attributes
+	FrameAttr  term.Attributes
+	NoMarkdown bool
 }
 
 // DefaultConfig returns a sane configuration for initializing a Handler.
 func DefaultConfig() Config {
 	return Config{
+		NoMarkdown:       true,
 		MaxHistory:       100,
 		HistoryKey:       term.KeyComb{Ch: ':'},
 		MatchedTextAttr:  term.Attributes{Fg: tcell.ColorRed},

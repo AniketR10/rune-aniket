@@ -26,11 +26,14 @@ package command
 import (
 	"fmt"
 	"io"
+	"log/slog"
 	"strings"
 	"text/template"
 
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/tcell/v3"
+	"unstable.build/go-tui/component/markdown"
 )
 
 // Manual represents a command's manual and documentation.
@@ -56,7 +59,7 @@ type Manual struct {
 	AliasOf []string
 }
 
-const manualTemplate = `USAGE
+const manualStringTemplate = `USAGE
 {{ .Name }} {{ .Synopsis }}
 
 DESCRIPTION{{ with .AliasOf }}{{ $length := len . }} {{if eq $length 1 }}
@@ -71,46 +74,97 @@ SUB-COMMANDS{{ range . }}
     - {{ .Name }}{{ end }}
 {{ end }}`
 
-var tmpl *template.Template
+const manualMarkdownTemplate = "## Usage\n" +
+	"`{{ .Name }} {{ .Synopsis }}`\n" +
+	"## Description\n" +
+	"{{ with .AliasOf }}{{ $length := len . }} {{if eq $length 1 }}\n" +
+	"Alias of {{ index . 0 }}{{else}}\n" +
+	"Alias of the following sequence of commands:\n" +
+	"\n" +
+	"{{ range . }}- {{ . }}\n" +
+	"{{ end }}{{ end }}{{end}}\n" +
+	"{{ .Summary }}{{ with .Commands }}\n" +
+	"## Subcommands {{ range . }}\n" +
+	" - {{ .Name }}{{ end }}\n" +
+	"{{ end }}\n"
+
+var (
+	strTemplate      *template.Template
+	markdownTemplate *template.Template
+)
 
 func init() {
-	tmpl = template.Must(template.New("test").Parse(manualTemplate))
+	strTemplate = template.Must(template.New("command-str").
+		Parse(manualStringTemplate))
+	markdownTemplate = template.Must(template.New("command-md").
+		Parse(manualMarkdownTemplate))
 }
 
-func makeManualComponent(
+func (p *Prompt) makeManualComponent(
 	man Manual,
 	frameCharSet component.FrameCharSet,
 	attr term.Attributes,
-) component.Responsive {
+) (ret component.Responsive) {
 	var builder strings.Builder
 	var str string
-	err := writeTemplate(&builder, man)
+	var tmpl *template.Template
+	if p.config.NoMarkdown {
+		tmpl = strTemplate
+	} else {
+		tmpl = markdownTemplate
+	}
+	err := writeTemplate(&builder, man, tmpl)
 	if err != nil {
 		str = fmt.Sprintf("ERROR: build manual: %v", err)
 	} else {
 		str = builder.String()
 	}
 
-	minWidth := minWidthManualComponent
-	if frameCharSet != (component.FrameCharSet{}) {
-		minWidth -= 2
+	cfg := markdown.DefaultConfig()
+	cfg.HeaderPrefix = false
+	cfg.ParagraphSpacing = 0
+	cfg.InlineCode = term.Attributes{
+		Fg: tcell.ColorSilver,
+		Bg: tcell.ColorGray,
 	}
-
-	ret := component.NewResponsiveString(str, component.StringResponsiveConfig{
-		NoSplitWords: true,
-		StringConfig: component.StringConfig{
-			Alignment:            component.AlignmentCentered,
-			Attributes:           attr,
-			BackgroundAttributes: attr,
-			PaddingVertical:      2,
-			PaddingHorizontal:    2,
-			MinWidth:             minWidth,
-		},
-	})
+	markdown, err := markdown.NewWithConfig(str, cfg)
+	if err != nil || p.config.NoMarkdown {
+		// this could be either a programmer error or
+		// a third-party command that's injecting incorrect markdown into
+		// the command manual.
+		if err != nil {
+			slog.Error("parse manual markdown", "error", err)
+		}
+		minWidth := minWidthManualComponent
+		if frameCharSet != (component.FrameCharSet{}) {
+			minWidth -= 2
+		}
+		ret = component.NewResponsiveString(str, component.StringResponsiveConfig{
+			NoSplitWords: true,
+			StringConfig: component.StringConfig{
+				Alignment:            component.AlignmentCentered,
+				Attributes:           attr,
+				BackgroundAttributes: attr,
+				PaddingVertical:      2,
+				PaddingHorizontal:    2,
+				MinWidth:             minWidth,
+			},
+		})
+	} else {
+		ret = component.FuncResponsive(markdown, func(int) int {
+			// content won't wrap
+			_, height := markdown.Dimensions()
+			return height
+		})
+		ret = component.NewSpan(ret, component.SpanConfig{
+			ContentAlignment: component.AlignmentCentered,
+			PadHorizontal:    2,
+		})
+	}
 	return ret
 }
 
-func writeTemplate(w io.Writer, m Manual) error {
+func writeTemplate(w io.Writer, m Manual, tmpl *template.Template) error {
 	if err := tmpl.Execute(w, m); err != nil {
 		return fmt.Errorf("template execute: %v", err)
 	}

@@ -1642,6 +1642,7 @@ func (e *ex) resetCommandList(cmd *command.Prompt) {
 
 func (e *ex) openCommandPrompt() {
 	commandCfg := command.DefaultConfig()
+	commandCfg.NoMarkdown = false
 	commandCfg.MaxHistory = e.config.CommandMaxHistory
 	commandCfg.HistoryKey = e.config.CommandEvent
 	commandCfg.MatchedTextAttr = e.config.CommandOverlay.MatchedTextAttr
