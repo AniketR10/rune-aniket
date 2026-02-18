@@ -39,12 +39,13 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
 	shsyntax "mvdan.cc/sh/v3/syntax"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/cell"
-	"unstable.build/go-tui/handler"
+	thandler "unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/command"
 	"unstable.build/go-tui/ide/syntax"
 	"unstable.build/go-tui/workspace"
@@ -71,7 +72,7 @@ type Component struct {
 	workspace      Workspace
 	ed             Editor
 	config         Config
-	focus          handler.Window
+	focus          thandler.Window
 	edSubscribers  map[textapi.EventType][]EventHandler
 	cmdSubscribers map[string]commandAll
 	editors        map[string]Handler
@@ -202,7 +203,7 @@ func (c *Component) Init(
 	return ValidateCommandAliases(c.config.CommandAliases)
 }
 
-func (c *Component) tryDispatchEventFocus(win handler.Window) {
+func (c *Component) tryDispatchEventFocus(win thandler.Window) {
 	content := win.Content()
 	t, ok := content.(*browser.Tab)
 	if !ok {
@@ -222,7 +223,7 @@ func (c *Component) tryDispatchEventFocus(win handler.Window) {
 	})
 }
 
-func (c *Component) getContentDimensions(win handler.Window) term.Coordinates {
+func (c *Component) getContentDimensions(win thandler.Window) term.Coordinates {
 	width := win.Width()
 	height := win.Height()
 	if c.config.WindowManagerConfig.Frame {
@@ -232,7 +233,7 @@ func (c *Component) getContentDimensions(win handler.Window) term.Coordinates {
 	return term.Coordinates{X: width, Y: height}
 }
 
-func (c *Component) tryDispatchEvent(win handler.Window, evType textapi.EventType) {
+func (c *Component) tryDispatchEvent(win thandler.Window, evType textapi.EventType) {
 	content := win.Content()
 	t, ok := content.(*browser.Tab)
 	if !ok {
@@ -1016,7 +1017,7 @@ func (c *Component) Browser() *browser.Component {
 // Resize satisfies tui.Component.
 func (c *Component) Resize(width, height int) {
 	c.comp.Resize(width, height)
-	if c.focus != (handler.Window{}) {
+	if c.focus != (thandler.Window{}) {
 		c.tryDispatchEventFocus(c.focus)
 	}
 }
@@ -1127,7 +1128,7 @@ func (c *Component) Prompt(
 }
 
 // SubscribeWindow subscribes sub to changes in focus due to changing the window in focus.
-func (c *Component) SubscribeWindow(sub handler.WindowSubscriber) {
+func (c *Component) SubscribeWindow(sub thandler.WindowSubscriber) {
 	c.comp.Subscribe(sub)
 }
 
@@ -1281,8 +1282,8 @@ func (w wrapEditor) Handle(ev term.Event) (exit, handled bool) {
 
 type handlerWindowSubscriber = Component
 
-func (c *handlerWindowSubscriber) OnFocus(old, focus handler.Window) {
-	if old != (handler.Window{}) {
+func (c *handlerWindowSubscriber) OnFocus(old, focus thandler.Window) {
+	if old != (thandler.Window{}) {
 		c.tryDispatchEvent(old, textapi.EventTypeUnfocus)
 	}
 	c.tryDispatchEventFocus(focus)

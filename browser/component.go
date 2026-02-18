@@ -786,7 +786,7 @@ func (c *Component) Selection() (string, bool) {
 func (c *Component) Prompt(
 	message string, options []string,
 	bindings []term.KeyComb,
-	promptHandler thandler.PromptHandler,
+	promptHandler handler.PromptHandler,
 ) Window {
 	if len(options) == 0 || (len(bindings) != 0 && len(options) != len(bindings)) {
 		panic("Prompt given invalid options and/or bindings")
@@ -799,7 +799,7 @@ func (c *Component) Prompt(
 		c:       c,
 		message: message,
 	}
-	promptConfig := thandler.PromptConfig{
+	promptConfig := handler.PromptConfig{
 		PromptConfig: component.PromptConfig{
 			Message:              message,
 			Options:              options,
@@ -816,7 +816,7 @@ func (c *Component) Prompt(
 		promptConfig.Frame = component.FrameCharSetDefault()
 	}
 
-	prompt := thandler.NewPrompt(promptConfig)
+	prompt := handler.NewPrompt(promptConfig)
 	floatingConfig := browserapi.FloatingConfig{
 		Alignment: component.AlignmentCentered,
 	}
@@ -1304,7 +1304,7 @@ func (c *Component) unwrapContent(content browserapi.Handler) browserapi.Handler
 type clearOnClosePromptHandler struct {
 	c       *Component
 	message string
-	root    thandler.PromptHandler
+	root    handler.PromptHandler
 }
 
 func (c clearOnClosePromptHandler) OnSelect(idx int, option string) {

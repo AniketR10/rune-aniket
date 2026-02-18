@@ -36,7 +36,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
 	"unstable.build/go-tui/browser"
-	thandler "unstable.build/go-tui/handler"
 )
 
 func splitVerticalLeft(c *browser.Component, h browserapi.Handler) (browser.Window, bool) {
@@ -564,7 +563,7 @@ func TestComponentPrompt(t *testing.T) {
 		c.Resize(20, 12)
 		closeCalled := false
 		c.Prompt("Albert Pla?", []string{"Buah!", "Hmm"}, nil,
-			thandler.FuncPromptHandler(
+			handler.FuncPromptHandler(
 				func(idx int, option string) {},
 				func() error {
 					closeCalled = true
@@ -604,7 +603,7 @@ func TestComponentPrompt(t *testing.T) {
 │888888888888888888│    
 └──────────────────┘    `,
 			}, {func() {
-				c.Prompt("Virgen Maria?", []string{"Boh", "Meh"}, nil, thandler.NopPromptHandler())
+				c.Prompt("Virgen Maria?", []string{"Boh", "Meh"}, nil, handler.NopPromptHandler())
 			}, `
 ┌──────────────────┐    
 │x music           │    
@@ -635,13 +634,13 @@ func TestComponentPrompt(t *testing.T) {
 └──────────────────┘    `,
 			}, {func() {
 				c.Prompt("Tokischa?", []string{"Yay", "Nay"}, nil,
-					thandler.FuncPromptHandler(
+					handler.FuncPromptHandler(
 						func(idx int, option string) {
 							c.Prompt("Robert Love", []string{"YAS!"}, nil,
-								thandler.NopPromptHandler())
+								handler.NopPromptHandler())
 						},
 						func() error { return nil }))
-				c.Prompt("Rosalia?", []string{"Yay", "Nay"}, nil, thandler.NopPromptHandler())
+				c.Prompt("Rosalia?", []string{"Yay", "Nay"}, nil, handler.NopPromptHandler())
 			}, `
 ┌──────────────────┐    
 │x music           │    
@@ -783,11 +782,11 @@ func TestComponentPrompt(t *testing.T) {
 └──────────────────┘    `,
 			}, {func() {
 				c.Prompt("Twitch Streaming?", []string{"Yes", "No"}, nil,
-					thandler.NopPromptHandler())
+					handler.NopPromptHandler())
 				c.Prompt("Twitch Streaming?", []string{"Yes", "No"}, nil,
-					thandler.NopPromptHandler())
+					handler.NopPromptHandler())
 				c.Prompt("Twitch Streaming?", []string{"Yes", "No"}, nil,
-					thandler.NopPromptHandler())
+					handler.NopPromptHandler())
 			}, `
 ┌──────────────────┐    
 │x music           │    
@@ -817,9 +816,9 @@ func TestComponentPrompt(t *testing.T) {
 │888888888888888888│    
 └──────────────────┘    `,
 			}, {func() {
-				c.Prompt("Twitch Streaming?", []string{"Yes", "No"}, nil, thandler.NopPromptHandler())
-				c.Prompt("Twitch Streaming?", []string{"Yes", "No"}, nil, thandler.NopPromptHandler())
-				c.Prompt("Twitch Streaming?", []string{"Yes", "No"}, nil, thandler.NopPromptHandler())
+				c.Prompt("Twitch Streaming?", []string{"Yes", "No"}, nil, handler.NopPromptHandler())
+				c.Prompt("Twitch Streaming?", []string{"Yes", "No"}, nil, handler.NopPromptHandler())
+				c.Prompt("Twitch Streaming?", []string{"Yes", "No"}, nil, handler.NopPromptHandler())
 			}, `
 ┌──────────────────┐    
 │x music           │    

@@ -32,9 +32,9 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/browser"
-	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/ide/idetask"
 	"unstable.build/go-tui/workspace"
 )
