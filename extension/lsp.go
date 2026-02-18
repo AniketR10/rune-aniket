@@ -40,7 +40,7 @@ import (
 func SemanticResources(b semanticapi.LSP) map[extensionapi.Permission]ResourceRegistrar {
 	s := newSemanticTreeResourceServer(b)
 	return map[extensionapi.Permission]ResourceRegistrar{
-		extensionapi.PermissionSyntaxTree: s.forPermission(
+		extensionapi.PermissionLSP: s.forPermission(
 			extensionapi.PermissionLSP),
 	}
 }
