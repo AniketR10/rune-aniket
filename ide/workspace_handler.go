@@ -1179,8 +1179,8 @@ func (h *workspaceManagerHandler) subscribeActiveWorkspaceCommands(ex *ex) (ret 
 		cmdAddWorkspace: {
 			handler: (*workspaceManagerHandler).commandAddWorkspace,
 			man: textapi.CommandManual{
-				Summary: "Opens a new workspace as defined by the given URI, in the current " +
-					"workspace slot if its empty, or in the next available slot if it's not. " +
+				Summary: "Opens the workspace at the given URI in the current " +
+					"workspace slot if it's empty, or in the next available slot if it's not. " +
 					"If no scheme is present in the URI, file:// is assumed.",
 				Synopsis: "[scheme:][//[userinfo@]host][/]workspacepath",
 			},
@@ -1188,22 +1188,22 @@ func (h *workspaceManagerHandler) subscribeActiveWorkspaceCommands(ex *ex) (ret 
 		cmdRenameWorkspace: {
 			handler: (*workspaceManagerHandler).commandRenameWorkspace,
 			man: textapi.CommandManual{
-				Summary: "Renames the workspace tab, usually displayed at the bottom, " +
-					"when there are multiple workspaces.",
+				Summary: "Renames the workspace tab. The tab is displayed at the " +
+					"bottom of the screen when multiple workspaces are open.",
 				Synopsis: "name",
 			},
 		},
 		cmdCloseWorkspace: {
 			handler: (*workspaceManagerHandler).commandCloseWorkspace,
 			man: textapi.CommandManual{
-				Summary: "Closes the current active workspace and switches " +
-					"the focus to the previous workspace.",
+				Summary: "Closes the current active workspace and switches focus " +
+					"to the previous workspace.",
 			},
 		},
 		cmdReloadWorkspace: {
 			handler: (*workspaceManagerHandler).commandReloadWorkspace,
 			man: textapi.CommandManual{
-				Summary: "Reloads the current active workspace, along with all the extensions.",
+				Summary: "Reloads the current active workspace, along with all extensions.",
 			},
 		},
 		cmdSwitchToWorkspace: {
@@ -1216,7 +1216,7 @@ func (h *workspaceManagerHandler) subscribeActiveWorkspaceCommands(ex *ex) (ret 
 		cmdMoveWorkspace: {
 			man: textapi.CommandManual{
 				Summary: "Moves the workspace tab in focus in the given direction " +
-					"in the tabs list, or to the absolute position if a number is passed.",
+					"within the tabs list, or to an absolute position if a number is passed.",
 				Synopsis: "(right|left|1|2|3|4|5|6|7|8|9)",
 			},
 			handler: (*workspaceManagerHandler).moveWorkspace,

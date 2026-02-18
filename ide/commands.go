@@ -67,14 +67,14 @@ var (
 				Summary: "Replay the given sequence of keys back into the event loop " +
 					"as if the user had dispatched them. This allows for building macros that " +
 					"perform tasks that couldn't be accomplished with " +
-					"combinations of commands alone. For instance `echo :edit` opens " +
+					"combinations of commands alone. For instance, `echo :edit` opens " +
 					"the command prompt with a pre-populated command. The syntax of " +
-					"non-character keys is the same used in the `key_bindings` section " +
-					"of the config. There's a special {wait} instruction that can be " +
+					"non-character keys is the same as in the `key_bindings` section " +
+					"of the config. There is a special {wait} instruction that can be " +
 					"interleaved to deterministically wait for the command prompt " +
 					"auto-completer to finish populating the search list before " +
-					"processing the next key. The {prompt} instruction can be used to " +
-					"open the command prompt in a content agnostic way.",
+					"processing the next key. The `{prompt}` instruction can be used to " +
+					"open the command prompt in a content-agnostic way.",
 				Synopsis: "sequence",
 			},
 			handler: (*ex).echo,
@@ -82,20 +82,20 @@ var (
 		"tabprevious": {
 			man: textapi.CommandManual{
 				Summary: "Set the content of the current active window to the previous tab in the tabs list. " +
-					"Wraps around the start of the tabs list.",
+					"Wraps around to the end of the tabs list.",
 			},
 			handler: (*ex).tabprevious,
 		},
 		"tabnext": {
 			man: textapi.CommandManual{
 				Summary: "Set the content of the current active window to the next tab in the tabs list. " +
-					"Wraps around the end of the tabs list.",
+					"Wraps around to the start of the tabs list.",
 			},
 			handler: (*ex).tabnext,
 		},
 		"tabclose": {
 			man: textapi.CommandManual{
-				Summary: "Close the current active window's tab. It automatically replaces it " +
+				Summary: "Close the current active window's tab. It is automatically replaced " +
 					"with the next available tab in the tabs list.",
 			},
 			handler: (*ex).tabclose,
@@ -130,20 +130,20 @@ var (
 		},
 		"tabcloseall": {
 			man: textapi.CommandManual{
-				Summary: "Closes all tabs in the tabs list.",
+				Summary: "Close all tabs in the tabs list.",
 			},
 			handler: (*ex).tabcloseall,
 		},
 		"tabcloseinactive": {
 			man: textapi.CommandManual{
-				Summary: "Closes all tabs that aren't used by any window.",
+				Summary: "Close all tabs that are not currently displayed by any window.",
 			},
 			handler: (*ex).tabcloseinactive,
 		},
 		"tabmove": {
 			man: textapi.CommandManual{
-				Summary: "Moves the tab in focus in the given direction in the tabs list," +
-					" or to the absolute position if a number is passed.",
+				Summary: "Move the tab in focus in the given direction within the tabs list, " +
+					"or to an absolute position if a number is passed.",
 				Synopsis: "(right|left|1|2|3|4|5|6|7|8|9...)",
 			},
 			handler: (*ex).moveTab,
@@ -162,7 +162,7 @@ var (
 		},
 		"windowconverttab": {
 			man: textapi.CommandManual{
-				Summary: "Converts the content of the window in focus into a tab. " +
+				Summary: "Convert the content of the window in focus into a tab. " +
 					"If the current window is a floating window, it is closed.",
 				Synopsis: "name [icon]",
 			},
@@ -170,57 +170,57 @@ var (
 		},
 		"windowclose": {
 			man: textapi.CommandManual{
-				Summary: "Closes the current active window and switches focus " +
-					"to the next available window. This command fails if there's only one " +
+				Summary: "Close the current active window and switch focus " +
+					"to the next available window. This command fails if there is only one " +
 					"window remaining.",
 			},
 			handler: (*ex).closeFocusWindow,
 		},
 		"windowcloseall": {
 			man: textapi.CommandManual{
-				Summary: "Closes all the windows except the current active window. " +
-					"This command fails if there's only one window remaining.",
+				Summary: "Close all windows except the current active window. " +
+					"This command fails if there is only one window remaining.",
 			},
 			handler: (*ex).windowcloseall,
 		},
 		"writequit": {
 			man: textapi.CommandManual{
-				Summary: "Write the current file to disk and exits if and only if " +
-					"there are no files with changes pending to be written to disk.",
+				Summary: "Write the current file to disk and exit, but only if " +
+					"there are no files with unsaved changes pending to be written to disk.",
 			},
 			handler: (*ex).flushClose,
 		},
 		"writeforcequit!": {
 			man: textapi.CommandManual{
-				Summary: "Write the current file to disk and exits. If there are files with " +
-					"pending changes, these are ignored and stashed away.",
+				Summary: "Write the current file to disk and exit. If there are other files with " +
+					"unsaved changes, those changes are ignored and stashed away.",
 			},
 			handler: (*ex).flushCloseIgnoreNonFlushed,
 		},
 		"write": {
 			man: textapi.CommandManual{
-				Summary: "Write the current file to disk with any pending changes along with it. " +
-					"This is the standard way to save changes to a file. It fails if file was " +
-					"open read-only or when there is another reason why the file can't be written.",
+				Summary: "Write the current file to disk, including any pending changes. " +
+					"This is the standard way to save changes to a file. It fails if the file was " +
+					"opened read-only or if there is another reason the file cannot be written.",
 			},
 			handler: (*ex).flush,
 		},
 		"writeall": {
 			man: textapi.CommandManual{
-				Summary: "Like 'write' but applies to all open tabs",
+				Summary: "Like `write` but applies to all open tabs.",
 			},
 			handler: (*ex).flushAll,
 		},
 		"write!": {
 			man: textapi.CommandManual{
-				Summary: "Like 'write' but forcefully write when a file is open in read-only mode, " +
-					"or there's another reason why the file can't be written.",
+				Summary: "Like `write` but forcefully writes even when a file is opened in read-only mode " +
+					"or there is another reason the file cannot be written.",
 			},
 			handler: (*ex).forceFlush,
 		},
 		"writeall!": {
 			man: textapi.CommandManual{
-				Summary: "Like 'write!' but applies to all open tabs",
+				Summary: "Like `write!` but applies to all open tabs.",
 			},
 			handler: (*ex).forceFlushAll,
 		},
@@ -232,23 +232,23 @@ var (
 		},
 		"quit": {
 			man: textapi.CommandManual{
-				Summary: "Exit if and only if there are no files with changes pending to be " +
+				Summary: "Exit, but only if there are no files with unsaved changes pending to be " +
 					"written to disk.",
 			},
 			handler: (*ex).quit,
 		},
 		"reloadfile!": {
 			man: textapi.CommandManual{
-				Summary: "Reloads the file in the current active window, if it is a workspace file.",
+				Summary: "Reload the file in the current active window from disk, if it is a workspace file.",
 			},
 			handler: (*ex).reloadfile,
 		},
 		"windowdefaultsplit": {
 			man: textapi.CommandManual{
-				Summary: "Toggle the next window split orientation or change it to the " +
-					"given orientation if passed via arguments. The options are 'horizontal' which " +
-					"sets the next split to be below the current active window or 'vertical' which " +
-					"sets the next split to be right of the current active window.",
+				Summary: "Toggle the default split orientation, or set it to the " +
+					"given orientation if passed via arguments. The options are `horizontal`, which " +
+					"places the next split below the current active window, or `vertical`, which " +
+					"places the next split to the right of the current active window.",
 				Synopsis: "(horizontal|vertical)",
 			},
 			handler: (*ex).splitDirectionChange,
@@ -264,7 +264,7 @@ var (
 		"windownew":   manSplitWindow,
 		"windowfocus": {
 			man: textapi.CommandManual{
-				Summary:  "Switches the window focus to the window on the given side of the current active window.",
+				Summary:  "Switch focus to the window on the given side of the current active window.",
 				Synopsis: "(right|left|up|down)",
 			},
 			handler:   (*ex).windowfocus,
@@ -272,7 +272,7 @@ var (
 		},
 		"windowmove": {
 			man: textapi.CommandManual{
-				Summary:  "Moves the content of the window in focus to the window in the given direction.",
+				Summary:  "Move the content of the window in focus to the window in the given direction.",
 				Synopsis: "(right|left|up|down)",
 			},
 			handler:   (*ex).moveWindow,
@@ -280,7 +280,7 @@ var (
 		},
 		"windowresize": {
 			man: textapi.CommandManual{
-				Summary:  "Resizes the window by increasing or decreasing its width or height.",
+				Summary:  "Resize the current window by increasing or decreasing its width or height.",
 				Synopsis: "(increase|decrease|max|min|reset) (height|width)",
 			},
 			handler: (*ex).windowresize,
@@ -297,109 +297,109 @@ var (
 		},
 		"windowtogglemaximize": {
 			man: textapi.CommandManual{
-				Summary: "This is a toggle version of 'windowresize max height+width'." +
-					"A subsequent invocation of this command will effectively reset the " +
-					"window size via 'windowresize reset'. Shifting the focus to another " +
-					"window also resets the size of the current window in fullscreen.",
+				Summary: "Toggle version of `windowresize max height+width`. " +
+					"A subsequent invocation of this command will reset the " +
+					"window size via `windowresize reset`. Shifting focus to another " +
+					"window also resets the size of the maximized window.",
 			},
 			handler: (*ex).windowtogglemaximize,
 		},
 		"notificationinfo": {
 			man: textapi.CommandManual{
-				Summary:  "Sends an info-level notification.",
+				Summary:  "Send an info-level notification.",
 				Synopsis: "message",
 			},
 			handler: (*ex).sendNotificationInfo,
 		},
 		"notificationsuccess": {
 			man: textapi.CommandManual{
-				Summary:  "Sends a success-level notification.",
+				Summary:  "Send a success-level notification.",
 				Synopsis: "message",
 			},
 			handler: (*ex).sendNotificationSuccess,
 		},
 		"notificationwarning": {
 			man: textapi.CommandManual{
-				Summary:  "Sends a warning-level notification.",
+				Summary:  "Send a warning-level notification.",
 				Synopsis: "message",
 			},
 			handler: (*ex).sendNotificationWarning,
 		},
 		"notificationerror": {
 			man: textapi.CommandManual{
-				Summary:  "Sends an error-level notification.",
+				Summary:  "Send an error-level notification.",
 				Synopsis: "message",
 			},
 			handler: (*ex).sendNotificationError,
 		},
 		"notificationcloseall": {
 			man: textapi.CommandManual{
-				Summary: "Closes all active notifications rendered by the browser.",
+				Summary: "Close all active notifications rendered by the browser.",
 			},
 			handler: (*ex).closeNotifications,
 		},
 		"notificationpauseall": {
 			man: textapi.CommandManual{
-				Summary: "Pauses automatic closure of all active notifications rendered by the browser.",
+				Summary: "Pause automatic closure of all active notifications rendered by the browser.",
 			},
 			handler: (*ex).pauseNotifications,
 		},
 		"notificationresumeall": {
 			man: textapi.CommandManual{
-				Summary: "Resumes automatic closure of all previously paused notifications rendered by the browser.",
+				Summary: "Resume automatic closure of all previously paused notifications rendered by the browser.",
 			},
 			handler: (*ex).resumeNotifications,
 		},
 		"panic": {
 			man: textapi.CommandManual{
-				Summary: "Causes the editor to panic. This is internal and for debugging purposes only.",
+				Summary: "Cause the editor to panic. This is for internal debugging purposes only.",
 			},
 			handler: (*ex).panic,
 		},
 		"terminalnewtab": {
 			man: textapi.CommandManual{
-				Summary: "Opens a new terminal emulator in a new tab and attaches it to the current " +
-					"active window. If 'shell' is not set in " +
-					"terminal config, then the default system shell defined via SHELL " +
+				Summary: "Open a new terminal emulator in a new tab and attach it to the current " +
+					"active window. If `shell` is not set in the " +
+					"terminal config, the default system shell defined via the SHELL " +
 					"environment variable is used.",
 			},
 			handler: (*ex).terminalnewtab,
 		},
 		"terminalnew": {
 			man: textapi.CommandManual{
-				Summary: "Opens a new terminal emulator and attaches it to the current " +
+				Summary: "Open a new terminal emulator and attach it to the current " +
 					"active window. The terminal created by this command is automatically " +
-					"closed when the content of the window is updated for example by " +
-					"'tabnext' or 'tabprevious'. If 'shell' is not set in " +
-					"terminal config, then the default system shell defined via SHELL " +
+					"closed when the content of the window is replaced, for example by " +
+					"`tabnext` or `tabprevious`. If `shell` is not set in the " +
+					"terminal config, the default system shell defined via the SHELL " +
 					"environment variable is used.",
 			},
 			handler: (*ex).terminalnew,
 		},
 		"terminalneworsplit": {
 			man: textapi.CommandManual{
-				Summary: "Opens a new terminal emulator and attaches it to the " +
-					"current active window if empty, or creates a new split window if " +
+				Summary: "Open a new terminal emulator and attach it to the " +
+					"current active window if it is empty, or create a new split window if " +
 					"the window is not empty. The terminal created by this " +
 					"command is automatically closed when the content of the " +
-					"window is updated for example by " +
-					"'tabnext' or 'tabprevious'. If 'shell' is not set in " +
-					"terminal config, then the default system shell defined via SHELL " +
+					"window is replaced, for example by " +
+					"`tabnext` or `tabprevious`. If `shell` is not set in the " +
+					"terminal config, the default system shell defined via the SHELL " +
 					"environment variable is used.",
 			},
 			handler: (*ex).terminalneworsplit,
 		},
 		"edit": {
 			man: textapi.CommandManual{
-				Summary: "Opens the file at the given URI for editing on the current active " +
+				Summary: "Open the file at the given URI for editing in the current active " +
 					"window, replacing its contents. If no scheme is provided, file:// " +
-					"is used by default. This allows a user opening files in " +
-					"workspaces outside the current workspace or host. " +
-					"A .swp file is created in the same folder to prevent multiple sessions " +
-					"from overriding each others changes. " +
-					"If file has any pending changes that were lost due to a crash or " +
-					"there's another session currently editing the file, a prompt is opened " +
-					"to come to a decision.",
+					"is used by default. This allows opening files in " +
+					"workspaces outside the current workspace or on a different host. " +
+					"A .swp file is created in the same directory to prevent multiple sessions " +
+					"from overwriting each other's changes. " +
+					"If the file has any pending changes that were lost due to a crash, or " +
+					"another session is currently editing the file, a prompt is shown " +
+					"to resolve the conflict.",
 				Synopsis: "[scheme:][//[userinfo@]host][/]filepath",
 			},
 			handler: (*ex).editFiles,
@@ -412,7 +412,7 @@ var (
 		},
 		"view": {
 			man: textapi.CommandManual{
-				Summary:  "Like 'edit' but opens the file in read-only mode.",
+				Summary:  "Like `edit` but opens the file in read-only mode.",
 				Synopsis: "[scheme:][//[userinfo@]host][/]filepath",
 			},
 			handler: (*ex).viewFiles,
@@ -424,7 +424,7 @@ var (
 		},
 		"tabcopypath": {
 			man: textapi.CommandManual{
-				Summary:  "Copies the path of the file in focus.",
+				Summary:  "Copy the path of the file in focus to the clipboard.",
 				Synopsis: "[absolute]",
 			},
 			handler: (*ex).tabcopypath,
@@ -439,46 +439,46 @@ var (
 		},
 		"!": {
 			man: textapi.CommandManual{
-				Summary: "Opens a new plugin terminal with the given executable " +
+				Summary: "Open a new plugin terminal with the given executable " +
 					"and arguments in a new floating window. " +
 					"The stdout and stderr of the program " +
-					"are printed on the window along with stats and a progress sign until " +
-					"user closes the window or hits the ESC key. \n\n" +
-					"If no executable is passed, this command opens the companion terminal emulator" +
-					"The companion terminal emulator is different " +
-					"than a terminal emulator created by newTerminalTab in that it preserves " +
-					"the session output accross invocations. The floating window created as a " +
-					"result of this command can be closed via standard window or tab close commands.",
+					"are printed in the window along with stats and a progress indicator until " +
+					"the user closes the window or presses the ESC key. \n\n" +
+					"If no executable is passed, this command opens the companion terminal emulator. " +
+					"The companion terminal emulator differs " +
+					"from a terminal emulator created by `terminalnewtab` in that it preserves " +
+					"the session output across invocations. The floating window created by " +
+					"this command can be closed via standard window or tab close commands.",
 				Synopsis: "[executable [args]]",
 			},
 			handler: (*ex).executePlugin,
 		},
 		"!!": {
 			man: textapi.CommandManual{
-				Summary: "Runs an executable like '!' but the stdout and stderr " +
-					"are not rendered on a floating window. This is useful for " +
-					"running programs that do not output useful data.",
+				Summary: "Run an executable like `!` but the stdout and stderr " +
+					"are not rendered in a floating window. This is useful for " +
+					"running programs that do not produce useful output.",
 				Synopsis: "[executable [args]]",
 			},
 			handler: (*ex).executePluginWait,
 		},
 		"clipboardcopy": {
 			man: textapi.CommandManual{
-				Summary: "Copies the selected text into the configured clipboard. ",
+				Summary: "Copy the selected text into the configured clipboard.",
 			},
 			handler: (*ex).copyToClipboard,
 		},
 		cmdClipboardPaste: {
 			man: textapi.CommandManual{
-				Summary: "Paste the last text copied into the configured clipboard. ",
+				Summary: "Paste the last text copied from the configured clipboard.",
 			},
 			handler: (*ex).pasteFromClipboard,
 		},
 		"setcolor": {
 			man: textapi.CommandManual{
-				Summary: "Changes the default background and optionally foreground colors of " +
+				Summary: "Change the default background and optionally foreground colors of " +
 					"the content in focus. The color can be a named color or an RGB value " +
-					"in hexadecimal notation (i.e. #FFFFFF).",
+					"in hexadecimal notation (e.g. #FFFFFF).",
 				Synopsis: "background [foreground]",
 			},
 			handler: (*ex).defaultcolors,
@@ -493,8 +493,8 @@ var (
 		},
 		"readfile": {
 			man: textapi.CommandManual{
-				Summary: "Insert the contents of the passed file name below the cursor. Takes in " +
-					"a uri with a scheme as an argument. If no scheme is passed `file://` is assumed",
+				Summary: "Insert the contents of the given file below the cursor. Takes a " +
+					"URI with a scheme as an argument. If no scheme is provided, file:// is assumed.",
 				Synopsis: "[scheme:][//[userinfo@]host][/]filepath",
 			},
 			handler: (*ex).readfile,
@@ -505,12 +505,12 @@ var (
 		},
 		"tasknew": {
 			man: textapi.CommandManual{
-				Summary: "Create a task which runs the given command in response to changes " +
-					"in the workspce. The filter argument can be used to " +
-					"pass a glob pattern used to watch the matching files only. " +
-					"A task can be minimized by pressinc <esc>, 'alignment' determines " +
-					"the side used to visualize the minized task." +
-					"The name argument will appear in 'tasklist' to manage the running tasks.",
+				Summary: "Create a task that runs the given command in response to changes " +
+					"in the workspace. The filter argument can be used to " +
+					"pass a glob pattern that watches only matching files. " +
+					"A task can be minimized by pressing <esc>; `alignment` determines " +
+					"which side is used to display the minimized task. " +
+					"The name argument will appear in `tasklist` to help manage running tasks.",
 				Synopsis: "<name> <alignment> [filter] -- <cmd> [<args>]",
 			},
 			handler: (*ex).newTask,
@@ -524,9 +524,9 @@ var (
 		},
 		"tasknewtab": {
 			man: textapi.CommandManual{
-				Summary: "Create a task like 'tasknew' but convert it into a durable tab. " +
-					"This is a shortcut for calling 'tasknew', focusing on the minimized " +
-					"task and then calling 'windowconverttab' to convert it into a tab.",
+				Summary: "Create a task like `tasknew` but convert it into a durable tab. " +
+					"This is a shortcut for calling `tasknew`, focusing on the minimized " +
+					"task, and then calling `windowconverttab` to convert it into a tab.",
 				Synopsis: "<name> [filter] -- <cmd> [<args>]",
 			},
 			handler: (*ex).newTaskTab,
@@ -537,7 +537,7 @@ var (
 		},
 		"taskclose": {
 			man: textapi.CommandManual{
-				Summary:  "Stop a task previously created via tasknew.",
+				Summary:  "Stop a task previously created via `tasknew`.",
 				Synopsis: "<name>",
 			},
 			handler:   (*ex).stopTask,
@@ -545,7 +545,7 @@ var (
 		},
 		"loglevel": {
 			man: textapi.CommandManual{
-				Summary:  "Update the log level, overriding the level set in config.",
+				Summary:  "Update the log level, overriding the level set in the config.",
 				Synopsis: "<(info|debug|trace|warn|error|panic|fatal)>",
 			},
 			handler: func(e *ex, ctx context.Context, args ...string) error {
@@ -574,10 +574,10 @@ var (
 
 	manSplitWindow = commandAll{
 		man: textapi.CommandManual{
-			Summary: "Splits the current active window vertically or horizontally in two, " +
-				"changing the window focus to it. " +
+			Summary: "Split the current active window vertically or horizontally in two, " +
+				"moving focus to the new window. " +
 				"If no orientation is passed, the default split orientation is used. " +
-				"See 'windowdefaultsplit' for more details on how changing the " +
+				"See `windowdefaultsplit` for more details on how the " +
 				"default orientation works.",
 			Synopsis: "[right|left|up|down]",
 		},
@@ -588,7 +588,7 @@ var (
 	runShaderCmdManual = textapi.CommandManual{
 		Name: "shaderrun",
 		Summary: "Run a shader from the library of shaders. " +
-			"By default duration is 1s and fps is 30.",
+			"The default duration is 1s and the default FPS is 30.",
 		Synopsis: "name [duration] [fps]",
 	}
 )
