@@ -212,6 +212,8 @@ github.com/unstablebuild/go-tree-sitter v0.25.0-ub.1 h1:rItCdzfbMxnE5Y00pXNS41sZ
 github.com/unstablebuild/go-tree-sitter v0.25.0-ub.1/go.mod h1:r77ig7BikoZhHrrsjAnv8RqGti5rtSyvDHPzgTPsUuU=
 github.com/unstablebuild/golang-internal-tools v0.0.2 h1:U7JqKgxiIWZa3oxmaxSolzQBUKfUC8bnCAeu2kqwCZQ=
 github.com/unstablebuild/golang-internal-tools v0.0.2/go.mod h1:Aad9p5ILvoHIAyskcA4cve2E0GIjQMBytCJvpotJRLE=
+github.com/unstablebuild/idelsp v0.0.2 h1:DSNS+I7Yox9lqMGCB/l0OazqILfB5/Bs/pMp+I/1hZs=
+github.com/unstablebuild/idelsp v0.0.2/go.mod h1:hkDA+9gRdZP5NSgu1gyofp7DvxvPBkarZzetOvHVPaQ=
 github.com/unstablebuild/notify v0.10.2 h1:x4ChU2wWbvUkpOs7tqpKJMGxkljy+Ye56LYjH4u4LaA=
 github.com/unstablebuild/notify v0.10.2/go.mod h1:Q1U21KXundJt7qEvc4z4fFtzuDTZOTrhvCIJDZp5SBk=
 github.com/unstablebuild/pty v1.3.1 h1:GQSjqGKSOkOCu+X/F5yFUSuwp7Fi08xXn28DcuXhu/k=
@@ -220,6 +222,7 @@ github.com/unstablebuild/rune-go-sdk v0.0.16 h1:WlJiyZXj7WIgXL06ZaV6gOatWXOoQImG
 github.com/unstablebuild/rune-go-sdk v0.0.16/go.mod h1:4jvHyJe/ep7BmUr6KxL5jKWSHTQ65vt5Of+EjzFhp3s=
 github.com/unstablebuild/tcell/v3 v3.6.2 h1:lkG8yxJo5vmSweId+wTmLIB8LtDxybQ+RYuUthewwKU=
 github.com/unstablebuild/tcell/v3 v3.6.2/go.mod h1:nfcmtlSfOVfBq07+ZeP4vcEmBRMDgYnPV1Yo67gORvw=
+github.com/yuin/goldmark v1.4.13 h1:fVcFKWvrslecOb/tg+Cc05dkeYx540o0FuFt3nUVDoE=
 github.com/yuin/goldmark v1.4.13/go.mod h1:6yULJ656Px+3vBD8DxQVa3kxgyrAnzto9xy5taEt/CY=
 go.opentelemetry.io/auto/sdk v1.2.1 h1:jXsnJ4Lmnqd11kwkBV2LgLoFMZKizbCi5fNZ/ipaZ64=
 go.opentelemetry.io/auto/sdk v1.2.1/go.mod h1:KRTj+aOaElaLi+wW1kO/DZRXwkF4C5xPbEe3ZiIhN7Y=

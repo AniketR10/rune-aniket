@@ -40,6 +40,7 @@ import (
 	"github.com/ebitengine/purego"
 	"github.com/sirupsen/logrus"
 	sitter "github.com/tree-sitter/go-tree-sitter"
+	"github.com/unstablebuild/idelsp/languages"
 	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
@@ -102,7 +103,7 @@ func (s searcher) query(
 	file workspaceapi.URI, queryFile, query string, captureNameFilters []string,
 ) (iterator.Iterator[syntaxapi.Result], error) {
 	path := file.Path()
-	langID, lerr := LanguageForFile(path)
+	langID, lerr := languages.LanguageForFile(path)
 	if lerr != nil {
 		return nil, lerr
 	}
@@ -335,7 +336,7 @@ func readSymbolsWorker(
 			if !ok {
 				return
 			}
-			langID, lerr := LanguageForFile(path)
+			langID, lerr := languages.LanguageForFile(path)
 			if lerr != nil {
 				continue
 			}

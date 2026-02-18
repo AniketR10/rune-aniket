@@ -39,12 +39,12 @@ import (
 	log "github.com/sirupsen/logrus"
 	sitter "github.com/tree-sitter/go-tree-sitter"
 	"github.com/unstablebuild/blue/iterator"
+	"github.com/unstablebuild/idelsp/languages"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/extension"
-	"unstable.build/go-tui/ide/syntax"
 )
 
 var (
@@ -271,7 +271,7 @@ func readSymbolsWorker(
 			if !ok {
 				return
 			}
-			langID, lerr := syntax.LanguageForFile(path)
+			langID, lerr := languages.LanguageForFile(path)
 			if lerr != nil {
 				continue
 			}

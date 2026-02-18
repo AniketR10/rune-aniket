@@ -28,10 +28,10 @@ import (
 	"io"
 	"sync"
 
+	tsemanticrpc "github.com/unstablebuild/idelsp/semanticrpc"
 	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi/semanticrpc"
-	tsemanticrpc "unstable.build/go-tui/ide/idelsp/semanticrpc"
 	"unstable.build/go-tui/rpc"
 )
 

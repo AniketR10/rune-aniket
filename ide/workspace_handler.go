@@ -43,6 +43,7 @@ import (
 	"github.com/unstablebuild/blue/document/docmarshal/doctoml"
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/release"
+	"github.com/unstablebuild/idelsp"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
@@ -57,7 +58,6 @@ import (
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/command"
-	"unstable.build/go-tui/ide/idelsp"
 	"unstable.build/go-tui/ide/syntax"
 	"unstable.build/go-tui/ide/vctrl"
 	"unstable.build/go-tui/ide/vctrl/gogit"
@@ -831,7 +831,7 @@ func (h *workspaceManagerHandler) buildExtensions(
 		extension.SyntaxResources(syntax.NewSearcher(ex.workspace, h.pkgmanager, uri)))
 	lspConfig := idelsp.Config{MaxRetries: 5}
 	lsp := idelsp.New(uri, ex.workspace,
-		ex.workspace, ex.Editor(), h.pkgmanager, h.notifications.new(uri, ex.container),
+		ex.workspace, h.pkgmanager, h.notifications.new(uri, ex.container),
 		ex.Browser(), lspConfig)
 	h.scheduleNextTick(func() {
 		err := ex.comp.SubscribeEvents(idelsp.EditorEvents(), lsp)

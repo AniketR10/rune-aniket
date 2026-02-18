@@ -29,8 +29,8 @@ import (
 	"time"
 
 	"github.com/unstablebuild/blue/document"
-	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/browser"
@@ -371,6 +371,8 @@ func exploreAlias(
 type nopPkgManager struct {
 }
 
-func (t nopPkgManager) LibDir(ctx context.Context, id string) (iterator.Iterator[string], error) {
+func (t nopPkgManager) LibDir(ctx context.Context, id string) (
+	iterator.Iterator[string], error,
+) {
 	return nil, document.ErrNotFound
 }

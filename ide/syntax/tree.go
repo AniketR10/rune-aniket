@@ -41,6 +41,7 @@ import (
 	tree_sitter "github.com/tree-sitter/go-tree-sitter"
 	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/iterator"
+	"github.com/unstablebuild/idelsp/languages"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
@@ -377,7 +378,7 @@ type files struct {
 
 func (t *Tree) downloadFiles(ctx context.Context) (files, error) {
 	filename := t.uri.Name()
-	id, err := LanguageForFile(filename)
+	id, err := languages.LanguageForFile(filename)
 	if err != nil {
 		t.log(log.DebugLevel, "aborting syntax parsing: %s", err)
 		return files{}, err

@@ -38,6 +38,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
+	sdkiterator "github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/handler"
@@ -122,7 +123,7 @@ func (m *pkgManager) init(
 
 // LibDir installs package via prompt if not installed yet
 func (m *pkgManager) LibDir(ctx context.Context, pkgID string) (
-	iterator.Iterator[string], error,
+	sdkiterator.Iterator[string], error,
 ) {
 	it, err := m.pkg.LibDir(ctx, pkgID)
 	if err == nil || !errors.Is(err, idepkg.ErrNotInstalled) {
