@@ -28,6 +28,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -813,10 +814,27 @@ func (h *workspaceManagerHandler) addWorkspace(
 	return h.openPrevSessionFiles(ex, prevSessionFiles, ex.invokeWindow())
 }
 
+func lspConfig(cfg ideConfig) config.Config {
+	ret := make(map[string]any)
+	lspAny, ok := cfg.cfg["lsp"]
+	if !ok {
+		return config.MapConfig(ret)
+	}
+	lsp, ok := lspAny.(map[string]any)
+	if !ok {
+		return config.MapConfig(ret)
+	}
+	lspCfg := make(map[string]any)
+	maps.Copy(lspCfg, lsp)
+	ret["lsp"] = lspCfg
+	return config.MapConfig(ret)
+}
+
 func (h *workspaceManagerHandler) buildExtensions(
 	cfg ideConfig, uri workspaceapi.URI,
 	cwd workspace.Workspace, ex *ex,
 ) (extension.Runner, error) {
+	notifications := h.notifications.new(uri, ex.container)
 	res := extension.BrowserResources(ex.Browser(), h.publishEvent)
 	ed := ex.Editor()
 	res = extension.MergeResourceMap(res,
@@ -829,9 +847,18 @@ func (h *workspaceManagerHandler) buildExtensions(
 		extension.ConfigResources(config.MapConfig(cleanedExtensionConfig(cfg.cfg))))
 	res = extension.MergeResourceMap(res,
 		extension.SyntaxResources(syntax.NewSearcher(ex.workspace, h.pkgmanager, uri)))
-	lspConfig := idelsp.Config{MaxRetries: 5}
+	browserapiBrowser := newBrowserAdapter(ex.Browser())
+	textapiEditor := newEditorAdapter(ed)
+
+	lspCallbackCfg := idelsp.CallbackHandlerConfig{
+		Config:           lspConfig(cfg),
+		ScheduleNextTick: cfg.scheduleNextTick,
+	}
+	callbacks := idelsp.NewCallbackHandler(notifications, browserapiBrowser, ex.Browser(),
+		textapiEditor, cwd, uri.String(), lspCallbackCfg)
+	lspConfig := idelsp.Config{Callback: callbacks, MaxRetries: 5}
 	lsp := idelsp.New(uri, ex.workspace,
-		ex.workspace, h.pkgmanager, h.notifications.new(uri, ex.container),
+		ex.workspace, h.pkgmanager, notifications,
 		ex.Browser(), lspConfig)
 	h.scheduleNextTick(func() {
 		err := ex.comp.SubscribeEvents(idelsp.EditorEvents(), lsp)
@@ -839,8 +866,7 @@ func (h *workspaceManagerHandler) buildExtensions(
 			log.Errorf("subscribe LSP manager: %v", err)
 		}
 	})
-	res = extension.MergeResourceMap(res,
-		extension.SemanticResources(lsp))
+	res = extension.MergeResourceMap(res, extension.SemanticResources(lsp))
 
 	dataDir := h.sixDir
 	if err := os.MkdirAll(dataDir, 0777); err != nil {
