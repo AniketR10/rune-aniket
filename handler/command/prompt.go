@@ -107,7 +107,7 @@ type Prompt struct {
 	cancelCtx             func()
 	completionCtx         context.Context // children of ctx
 	completionCancel      func()
-	completingWithHistory bool
+	completingWithHistory atomic.Bool
 }
 
 var _ component.Floating = (*Prompt)(nil)
@@ -624,7 +624,7 @@ func (h *Prompt) handleCompleteArgs(ev term.Event, sync bool) (quit, handled boo
 
 	switch ev.Key {
 	case term.KeyBackspace:
-		if h.userScrolling && h.completingWithHistory {
+		if h.userScrolling && h.completingWithHistory.Load() {
 			if err := h.deleteFocusFromHistory(); err != nil {
 				h.log(log.ErrorLevel, "delete focus from history: %v", err)
 			}
@@ -753,7 +753,7 @@ func (h *Prompt) setCommandMode() {
 func (h *Prompt) setCompletionList(
 	persistLastArgUpdates, sync bool, cmd string, args ...string,
 ) {
-	h.completingWithHistory = false
+	h.completingWithHistory.Store(false)
 	// in bracketed paste we trust the cancel completion
 	// will do its job, and only the last pushed completer will
 	// remain.
@@ -935,7 +935,7 @@ func (h *Prompt) commandArgsHistoryIterator(
 	it, isEmpty := iterator.IsEmpty(ctx, uniqueArgs)
 
 	if !isEmpty {
-		h.completingWithHistory = true
+		h.completingWithHistory.Store(true)
 	}
 
 	return it, !isEmpty

@@ -1214,7 +1214,7 @@ func TestCommandHandlerHistory(t *testing.T) {
 		defer b.Close()
 
 		// only historical items can be removed
-		b.completingWithHistory = true
+		b.completingWithHistory.Store(true)
 
 		// mock an async iterator we can feed elements to using a channel
 		var slice []string
@@ -1298,7 +1298,7 @@ func TestCommandHandlerHistory(t *testing.T) {
 		defer b.Close()
 
 		// only historical items can be removed
-		b.completingWithHistory = true
+		b.completingWithHistory.Store(true)
 
 		// mock an async iterator we can feed elements to using a channel
 		it := testFeederIterator{feeder: make(chan string)}
