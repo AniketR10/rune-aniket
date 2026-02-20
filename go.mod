@@ -54,7 +54,7 @@ require (
 	github.com/go-git/go-git/v6 v6.0.0-20250819122726-39261590f7f3
 	github.com/sergi/go-diff v1.4.0
 	github.com/tree-sitter/go-tree-sitter v0.25.0
-	github.com/unstablebuild/idelsp v0.0.3
+	github.com/unstablebuild/idelsp v0.0.5
 	github.com/unstablebuild/notify v0.10.2
 	github.com/unstablebuild/pty v1.3.1
 	github.com/yuin/goldmark v1.4.13

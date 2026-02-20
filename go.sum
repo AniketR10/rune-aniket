@@ -212,8 +212,8 @@ github.com/unstablebuild/go-tree-sitter v0.25.0-ub.1 h1:rItCdzfbMxnE5Y00pXNS41sZ
 github.com/unstablebuild/go-tree-sitter v0.25.0-ub.1/go.mod h1:r77ig7BikoZhHrrsjAnv8RqGti5rtSyvDHPzgTPsUuU=
 github.com/unstablebuild/golang-internal-tools v0.0.2 h1:U7JqKgxiIWZa3oxmaxSolzQBUKfUC8bnCAeu2kqwCZQ=
 github.com/unstablebuild/golang-internal-tools v0.0.2/go.mod h1:Aad9p5ILvoHIAyskcA4cve2E0GIjQMBytCJvpotJRLE=
-github.com/unstablebuild/idelsp v0.0.3 h1:IFv3NiGiimKFdVHAsWTH8vEo4f522j9m0AV0Iq2qeu0=
-github.com/unstablebuild/idelsp v0.0.3/go.mod h1:r4YWTYqgeW+uDNu/4GziwURZMvKJkCeRQo/z3/azdHk=
+github.com/unstablebuild/idelsp v0.0.5 h1:FW0PPFAyshU2pdDLTKJGry2VOwd8EIlCo0RWsCttMZY=
+github.com/unstablebuild/idelsp v0.0.5/go.mod h1:r4YWTYqgeW+uDNu/4GziwURZMvKJkCeRQo/z3/azdHk=
 github.com/unstablebuild/notify v0.10.2 h1:x4ChU2wWbvUkpOs7tqpKJMGxkljy+Ye56LYjH4u4LaA=
 github.com/unstablebuild/notify v0.10.2/go.mod h1:Q1U21KXundJt7qEvc4z4fFtzuDTZOTrhvCIJDZp5SBk=
 github.com/unstablebuild/pty v1.3.1 h1:GQSjqGKSOkOCu+X/F5yFUSuwp7Fi08xXn28DcuXhu/k=
