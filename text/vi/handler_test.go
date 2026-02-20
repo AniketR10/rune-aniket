@@ -2264,13 +2264,13 @@ func TestNormalPageScrolls(t *testing.T) {
 			name:          "ctrl-b move screen up one page, cursor to last line",
 			setCursor:     term.Coordinates{Y: 7},
 			inputSequence: term.Event{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'b'},
-			expect:        "a\nb\nc\nX",
+			expect:        "c\nd\ne\nX",
 		},
 		{
 			name:          "ctrl-f move screen down one page, cursor to first line",
 			setCursor:     term.Coordinates{Y: 1},
 			inputSequence: term.Event{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'f'},
-			expect:        "X\ng\nh\ni",
+			expect:        "X\ne\nf\ng",
 		},
 		{
 			name:          "ctrl-u move screen up half page, cursor to last line",

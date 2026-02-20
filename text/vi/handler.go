@@ -452,6 +452,8 @@ func (vi *viHandlerImpl) markMatchingBraceViaCursor(target, match rune, end bool
 		}))
 }
 
+const pagePadding = 2 // similar to neovim
+
 func (vi *viHandlerImpl) handleNormal(ev term.Event) (quit, handled bool) {
 	doResetCount := true
 	defer func() {
@@ -485,12 +487,14 @@ func (vi *viHandlerImpl) handleNormal(ev term.Event) (quit, handled bool) {
 				}
 			}
 		case 'f':
-			handled = vi.cursor.MoveDownLines(vi.less.Scroll().SizeHeight())
+			by := vi.less.Scroll().SizeHeight() - pagePadding
+			handled = vi.cursor.MoveDownLines(by)
 			if handled {
 				vi.cursor.RepositionTop()
 			}
 		case 'b':
-			handled = vi.cursor.MoveUpLines(vi.less.Scroll().SizeHeight())
+			by := vi.less.Scroll().SizeHeight() - pagePadding
+			handled = vi.cursor.MoveUpLines(by)
 			if handled {
 				vi.cursor.RepositionBottom()
 			}
