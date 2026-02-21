@@ -17,7 +17,7 @@ require (
 	github.com/stretchr/testify v1.11.1
 	github.com/unstablebuild/blue v1.62.0
 	github.com/unstablebuild/golang-internal-tools v0.0.2
-	github.com/unstablebuild/rune-go-sdk v0.0.18
+	github.com/unstablebuild/rune-go-sdk v0.0.20
 	github.com/unstablebuild/tcell/v3 v3.6.2
 	go.uber.org/goleak v1.3.0
 	golang.org/x/crypto v0.46.0
@@ -54,7 +54,7 @@ require (
 	github.com/go-git/go-git/v6 v6.0.0-20250819122726-39261590f7f3
 	github.com/sergi/go-diff v1.4.0
 	github.com/tree-sitter/go-tree-sitter v0.25.0
-	github.com/unstablebuild/idelsp v0.0.6
+	github.com/unstablebuild/idelsp v0.0.7
 	github.com/unstablebuild/notify v0.10.2
 	github.com/unstablebuild/pty v1.3.1
 	github.com/yuin/goldmark v1.4.13
