@@ -29,6 +29,7 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"net/url"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -51,15 +52,19 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/clipboard"
+	"github.com/unstablebuild/rune-go-sdk/component"
 	handlerapi "github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
 	"unstable.build/go-tui/browser"
+	"unstable.build/go-tui/component/markdown"
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/command"
+	handlermarkdown "unstable.build/go-tui/handler/markdown"
 	"unstable.build/go-tui/ide/syntax"
 	"unstable.build/go-tui/ide/vctrl"
 	"unstable.build/go-tui/ide/vctrl/gogit"
@@ -866,7 +871,9 @@ func (h *workspaceManagerHandler) buildExtensions(
 		if err != nil {
 			log.Errorf("subscribe LSP manager: %v", err)
 		}
-		apiHandler, err := lspcmd.AllHandler(lsp, apieditor, apibrowser, apibrowser)
+		cmdcfg := lspCommandsConfig(cfg, notifications)
+		apiHandler, err := lspcmd.AllHandler(
+			lsp, apieditor, apibrowser, apibrowser, cmdcfg)
 		if err != nil {
 			log.Errorf("new lsp command handler: %v", err)
 			return
@@ -1586,4 +1593,44 @@ func (f *workspaceTabManager) SetTabName(
 			"workspace in focus", f)
 	})
 	return nil
+}
+
+func lspCommandsConfig(
+	cfg ideConfig, notifications browserapi.Notifications,
+) lspcmd.AllConfig {
+	cmdcfg := lspcmd.DefaultConfig()
+	cmdcfg.Hover.NewFloating = func(str string) browserapi.Floating {
+		mcfg := markdown.DefaultConfig()
+		md, err := markdown.NewWithConfig(str, mcfg)
+		if err != nil {
+			strcomp := component.NewString(str)
+			return browserapi.FuncFloating(
+				browserapi.NopHandler(handlerapi.NopFromComponent(strcomp)),
+				strcomp.Dimensions,
+			)
+		}
+		mdhandler := handlermarkdown.New(md,
+			handlermarkdown.WithOnLinkClick(func(link *url.URL) bool {
+				if link.Scheme != "http" && link.Scheme != "https" {
+					return false
+				}
+				linkstr := link.String()
+				meta := clipboard.Data{Text: linkstr}
+				err := cfg.clipboard().Copy(clipboard.DefaultRegisterID, meta)
+				if err != nil {
+					_, _ = notifications.Notify(browserapi.LevelError,
+						"copy URL to clipboard: %v", err)
+				} else {
+					_, _ = notifications.Notify(browserapi.LevelSuccess,
+						"copied URL %s to clipboard", linkstr)
+				}
+				return true
+			}),
+		)
+		return browserapi.FuncFloating(
+			browserapi.NopHandler(mdhandler),
+			mdhandler.Dimensions,
+		)
+	}
+	return cmdcfg
 }
