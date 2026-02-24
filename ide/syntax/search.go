@@ -40,7 +40,7 @@ import (
 	"github.com/ebitengine/purego"
 	"github.com/sirupsen/logrus"
 	sitter "github.com/tree-sitter/go-tree-sitter"
-	"github.com/unstablebuild/idelsp/languages"
+	"github.com/unstablebuild/blue/ide/idelsp/languages"
 	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"

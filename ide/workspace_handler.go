@@ -43,10 +43,11 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/document/docmarshal/doctoml"
+	"github.com/unstablebuild/blue/ide/idedebug"
+	"github.com/unstablebuild/blue/ide/idelsp"
+	"github.com/unstablebuild/blue/ide/idelsp/lspcmd"
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/release"
-	"github.com/unstablebuild/idelsp"
-	"github.com/unstablebuild/idelsp/lspcmd"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
@@ -866,6 +867,7 @@ func (h *workspaceManagerHandler) buildExtensions(
 	lsp := idelsp.New(uri, ex.workspace,
 		ex.workspace, h.pkgmanager, notifications,
 		ex.Browser(), lspConfig)
+	dap := idedebug.New(uri, ex.workspace, h.pkgmanager, idedebug.Config{MaxRetries: 5})
 	h.scheduleNextTick(func() {
 		err := ex.comp.SubscribeEvents(idelsp.EditorEvents(), lsp)
 		if err != nil {
@@ -873,7 +875,7 @@ func (h *workspaceManagerHandler) buildExtensions(
 		}
 		cmdcfg := lspCommandsConfig(cfg, notifications)
 		apiHandler, err := lspcmd.AllHandler(
-			lsp, apieditor, apibrowser, apibrowser, cmdcfg)
+			lsp, apieditor, apibrowser, apibrowser, apibrowser, ex.workspace, cmdcfg)
 		if err != nil {
 			log.Errorf("new lsp command handler: %v", err)
 			return
@@ -889,6 +891,7 @@ func (h *workspaceManagerHandler) buildExtensions(
 		}
 	})
 	res = extension.MergeResourceMap(res, extension.SemanticResources(lsp))
+	res = extension.MergeResourceMap(res, extension.DebugResources(dap))
 
 	dataDir := h.sixDir
 	if err := os.MkdirAll(dataDir, 0777); err != nil {

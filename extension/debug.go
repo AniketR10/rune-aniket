@@ -28,51 +28,50 @@ import (
 	"io"
 	"sync"
 
-	tsemanticrpc "github.com/unstablebuild/blue/ide/idelsp/semanticrpc"
+	tdebugrpc "github.com/unstablebuild/blue/ide/idedebug/debugrpc"
+	"github.com/unstablebuild/rune-go-sdk/api/debugapi"
+	"github.com/unstablebuild/rune-go-sdk/api/debugapi/debugrpc"
 	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
-	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
-	"github.com/unstablebuild/rune-go-sdk/api/semanticapi/semanticrpc"
 	"unstable.build/go-tui/rpc"
 )
 
-// SemanticResources returns a map of Permission to a ResourceServer
-// capable of serving each of the b SemanticTree's resources.
-func SemanticResources(b semanticapi.LSP) map[extensionapi.Permission]ResourceRegistrar {
-	s := newSemanticTreeResourceServer(b)
+// DebugResources returns a map of Permission to a ResourceServer
+// capable of serving each of the b DebugTree's resources.
+func DebugResources(b debugapi.Debugger) map[extensionapi.Permission]ResourceRegistrar {
+	s := newDebugTreeResourceServer(b)
 	return map[extensionapi.Permission]ResourceRegistrar{
-		extensionapi.PermissionLSP: s.forPermission(
-			extensionapi.PermissionLSP),
+		extensionapi.PermissionDebugger: s.forPermission(extensionapi.PermissionDebugger),
 	}
 }
 
-type semanticResourceServer struct {
-	b semanticapi.LSP
+type debugResourceServer struct {
+	b debugapi.Debugger
 }
 
-type semanticResourcePermissionServer struct {
+type debugResourcePermissionServer struct {
 	p extensionapi.Permission
-	*semanticResourceServer
+	*debugResourceServer
 }
 
-func newSemanticTreeResourceServer(b semanticapi.LSP) *semanticResourceServer {
-	ret := new(semanticResourceServer)
+func newDebugTreeResourceServer(b debugapi.Debugger) *debugResourceServer {
+	ret := new(debugResourceServer)
 	ret.b = b
 	return ret
 }
 
-func (s *semanticResourceServer) forPermission(p extensionapi.Permission) ResourceRegistrar {
-	return semanticResourcePermissionServer{p: p, semanticResourceServer: s}
+func (s *debugResourceServer) forPermission(p extensionapi.Permission) ResourceRegistrar {
+	return debugResourcePermissionServer{p: p, debugResourceServer: s}
 }
 
-func (s semanticResourcePermissionServer) Register(
+func (s debugResourcePermissionServer) Register(
 	registrar rpc.ServiceRegistrar, lock sync.Locker,
 ) (io.Closer, error) {
-	server := tsemanticrpc.NewServer(s.b)
+	server := tdebugrpc.NewServer(s.b)
 	switch s.p {
-	case extensionapi.PermissionLSP:
-		semanticrpc.RegisterLSPServer(registrar, server)
+	case extensionapi.PermissionDebugger:
+		debugrpc.RegisterDebugServiceServer(registrar, server)
 	default:
-		return nil, errors.New("unknown permission for semantic server")
+		return nil, errors.New("unknown permission for debug server")
 	}
 	return server, nil
 }

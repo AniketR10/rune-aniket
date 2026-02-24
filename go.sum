@@ -67,6 +67,8 @@ github.com/golang/protobuf v1.5.4/go.mod h1:lnTiLA8Wa4RWRcIUkrtSVa5nRhsEGBg48fD6
 github.com/google/go-cmp v0.5.2/go.mod h1:v8dTdLbMG2kIc/vJvl+f65V22dbkXbowE6jgT/gNBxE=
 github.com/google/go-cmp v0.7.0 h1:wk8382ETsv4JYUZwIsn6YpYiWiBsYLSJiTsyBybVuN8=
 github.com/google/go-cmp v0.7.0/go.mod h1:pXiqmnSA92OHEEa9HXL2W4E7lf9JzCmGVUdgjX3N/iU=
+github.com/google/go-dap v0.12.0 h1:rVcjv3SyMIrpaOoTAdFDyHs99CwVOItIJGKLQFQhNeM=
+github.com/google/go-dap v0.12.0/go.mod h1:tNjCASCm5cqePi/RVXXWEVqtnNLV1KTWtYOqu6rZNzc=
 github.com/google/renameio v0.1.0/go.mod h1:KWCgfxg9yswjAJkECMjeO8J8rahYeXnNhOm40UhjYkI=
 github.com/google/uuid v1.3.1/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
 github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
@@ -202,8 +204,8 @@ github.com/tree-sitter/tree-sitter-ruby v0.23.1 h1:T/NKHUA+iVbHM440hFx+lzVOzS4dV
 github.com/tree-sitter/tree-sitter-ruby v0.23.1/go.mod h1:kUS4kCCQloFcdX6sdpr8p6r2rogbM6ZjTox5ZOQy8cA=
 github.com/tree-sitter/tree-sitter-rust v0.23.2 h1:6AtoooCW5GqNrRpfnvl0iUhxTAZEovEmLKDbyHlfw90=
 github.com/tree-sitter/tree-sitter-rust v0.23.2/go.mod h1:hfeGWic9BAfgTrc7Xf6FaOAguCFJRo3RBbs7QJ6D7MI=
-github.com/unstablebuild/blue v1.62.0 h1:Lj1q7Ncmw9XppVsqLFfVjZKN5pLF/dN+1AFMC2naBIg=
-github.com/unstablebuild/blue v1.62.0/go.mod h1:H35qBy1ZHcvXY18pKEKfOlqWkzJOTFG7D9cmSL+lpSs=
+github.com/unstablebuild/blue v1.64.0 h1:1oUsJvbCCHEBAE+31ib2+x3BYn9lBaDYumoLGQfCllA=
+github.com/unstablebuild/blue v1.64.0/go.mod h1:cQ8c3PzTSt6nbZTUbx+QyssOuAEoT1/kCS4YWEHgiXk=
 github.com/unstablebuild/go-billy/v6 v6.0.0-ub.1 h1:pPmxLsBLNuZv+LWeytIcvwzxeUAMYzeY2MDKmSWXMTA=
 github.com/unstablebuild/go-billy/v6 v6.0.0-ub.1/go.mod h1:E3VhlS+AKkrq6ZNn1axE2/nDRJ87l1FJk9r5HT2vPX0=
 github.com/unstablebuild/go-git/v6 v6.0.1-ub.1 h1:xBomYWGQkSIm023lhJxu+F1uU4YjZlIZaKpnm+7nIak=
@@ -212,14 +214,12 @@ github.com/unstablebuild/go-tree-sitter v0.25.0-ub.1 h1:rItCdzfbMxnE5Y00pXNS41sZ
 github.com/unstablebuild/go-tree-sitter v0.25.0-ub.1/go.mod h1:r77ig7BikoZhHrrsjAnv8RqGti5rtSyvDHPzgTPsUuU=
 github.com/unstablebuild/golang-internal-tools v0.0.2 h1:U7JqKgxiIWZa3oxmaxSolzQBUKfUC8bnCAeu2kqwCZQ=
 github.com/unstablebuild/golang-internal-tools v0.0.2/go.mod h1:Aad9p5ILvoHIAyskcA4cve2E0GIjQMBytCJvpotJRLE=
-github.com/unstablebuild/idelsp v0.0.9 h1:H+E8kOyqDIMCuYEAYX53T2OoP++U9pCqhzN9Uevsfhg=
-github.com/unstablebuild/idelsp v0.0.9/go.mod h1:98C3/si/PWNH1pIvR+/rlJR9yxlcibZoMcTRGL+tKfI=
 github.com/unstablebuild/notify v0.10.2 h1:x4ChU2wWbvUkpOs7tqpKJMGxkljy+Ye56LYjH4u4LaA=
 github.com/unstablebuild/notify v0.10.2/go.mod h1:Q1U21KXundJt7qEvc4z4fFtzuDTZOTrhvCIJDZp5SBk=
 github.com/unstablebuild/pty v1.3.1 h1:GQSjqGKSOkOCu+X/F5yFUSuwp7Fi08xXn28DcuXhu/k=
 github.com/unstablebuild/pty v1.3.1/go.mod h1:BpzWw5G39oyDqoJhusXyOiTk9/bsAblSD4Js9K462Pw=
-github.com/unstablebuild/rune-go-sdk v0.0.20 h1:03iFVX67mI2kCH+G/Hbz8pItcHiqWW8K3H6Ra1wTXWA=
-github.com/unstablebuild/rune-go-sdk v0.0.20/go.mod h1:g6m3ju+tzDRj+Ikzf5YwRkiI1EvwtdVb++P17Nn+gaE=
+github.com/unstablebuild/rune-go-sdk v0.0.23 h1:b4QaRBxsYleJ3avFe7wrwpuQWiLOAUgi0BWu9I3ZYg4=
+github.com/unstablebuild/rune-go-sdk v0.0.23/go.mod h1:GZK3+EAAia/pmX1/nd40BssDxGpCVarJf3QP13YgCFU=
 github.com/unstablebuild/tcell/v3 v3.6.2 h1:lkG8yxJo5vmSweId+wTmLIB8LtDxybQ+RYuUthewwKU=
 github.com/unstablebuild/tcell/v3 v3.6.2/go.mod h1:nfcmtlSfOVfBq07+ZeP4vcEmBRMDgYnPV1Yo67gORvw=
 github.com/yuin/goldmark v1.4.13 h1:fVcFKWvrslecOb/tg+Cc05dkeYx540o0FuFt3nUVDoE=
