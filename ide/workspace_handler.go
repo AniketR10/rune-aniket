@@ -853,7 +853,7 @@ func (h *workspaceManagerHandler) buildExtensions(
 	res = extension.MergeResourceMap(res,
 		extension.ConfigResources(config.MapConfig(cleanedExtensionConfig(cfg.cfg))))
 	res = extension.MergeResourceMap(res,
-		extension.SyntaxResources(syntax.NewSearcher(ex.workspace, h.pkgmanager, uri)))
+		extension.SyntaxResources(syntax.NewParser(ex.workspace, h.pkgmanager, uri)))
 	apibrowser := newBrowserAdapter(ex.Browser())
 	apieditor := newEditorAdapter(ed)
 

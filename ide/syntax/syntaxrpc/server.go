@@ -36,22 +36,22 @@ import (
 	"google.golang.org/grpc"
 )
 
-// Server adapts a syntaxapi.Searcher to the generated SyntaxServer interface.
+// Server adapts a syntaxapi.Parser to the generated SyntaxServer interface.
 type Server struct {
 	syntaxrpc.UnimplementedSyntaxServer
 	ctx       context.Context
 	cancelCtx func()
-	searcher  syntaxapi.Searcher
+	parser  syntaxapi.Parser
 }
 
 // NewServer returns a new Server that delegates to s.
-func NewServer(s syntaxapi.Searcher) *Server {
+func NewServer(s syntaxapi.Parser) *Server {
 	ctx, cancelCtx := context.WithCancel(context.Background())
-	return &Server{searcher: s, ctx: ctx, cancelCtx: cancelCtx}
+	return &Server{parser: s, ctx: ctx, cancelCtx: cancelCtx}
 }
 
-// RegisterServer registers a syntaxapi.Searcher as a gRPC service.
-func RegisterServer(registrar grpc.ServiceRegistrar, s syntaxapi.Searcher) {
+// RegisterServer registers a syntaxapi.Parser as a gRPC service.
+func RegisterServer(registrar grpc.ServiceRegistrar, s syntaxapi.Parser) {
 	syntaxrpc.RegisterSyntaxServer(registrar, NewServer(s))
 }
 
@@ -59,7 +59,7 @@ func RegisterServer(registrar grpc.ServiceRegistrar, s syntaxapi.Searcher) {
 func (s *Server) Search(
 	req *syntaxrpc.SearchRequest, stream grpc.ServerStreamingServer[syntaxrpc.SearchResponse],
 ) error {
-	it, err := s.searcher.Search(req.GetQuery(), req.GetCaptureNames())
+	it, err := s.parser.Search(req.GetQuery(), req.GetCaptureNames())
 	if err != nil {
 		return fmt.Errorf("syntax search: %w", err)
 	}
@@ -73,7 +73,7 @@ func (s *Server) SearchNode(
 	req *syntaxrpc.SearchNodeRequest,
 	stream grpc.ServerStreamingServer[syntaxrpc.SearchResponse],
 ) error {
-	it, err := s.searcher.SearchNode(syntaxapi.NodeCaptureName(req.GetNodeTypes()))
+	it, err := s.parser.SearchNode(syntaxapi.NodeCaptureName(req.GetNodeTypes()))
 	if err != nil {
 		return err
 	}
@@ -91,7 +91,7 @@ func (s *Server) Query(
 	if err != nil {
 		return err
 	}
-	it, err := s.searcher.Query(uri, req.GetQuery(), req.GetCaptureNames())
+	it, err := s.parser.Query(uri, req.GetQuery(), req.GetCaptureNames())
 	if err != nil {
 		return err
 	}
@@ -109,13 +109,49 @@ func (s *Server) QueryNode(
 	if err != nil {
 		return err
 	}
-	it, err := s.searcher.QueryNode(uri, syntaxapi.NodeCaptureName(req.GetNodeTypes()))
+	it, err := s.parser.QueryNode(uri, syntaxapi.NodeCaptureName(req.GetNodeTypes()))
 	if err != nil {
 		return err
 	}
 	ctx, cancel := bluectx.First(stream.Context(), s.ctx)
 	defer cancel()
 	return streamResults(ctx, stream, it)
+}
+
+// Highlight implements SyntaxServer.
+func (s *Server) Highlight(
+	req *syntaxrpc.HighlightRequest,
+	stream grpc.ServerStreamingServer[syntaxrpc.HighlightResponse],
+) error {
+	uri, err := workspaceapi.ParseURI(req.GetUri())
+	if err != nil {
+		return err
+	}
+	it, err := s.parser.Highlight(uri, req.GetContent())
+	if err != nil {
+		return err
+	}
+	defer func() { _ = it.Close() }()
+	for {
+		loc, ok := it.Next(context.Background())
+		if !ok {
+			return it.Err()
+		}
+		var from, to termrpc.Coordinates
+		from.FromModel(loc.From)
+		to.FromModel(loc.To)
+		var attr termrpc.Attributes
+		attr.FromModel(loc.Attr)
+		resp := syntaxrpc.HighlightResponse{
+			From:    &from,
+			To:      &to,
+			Attr:    &attr,
+			Message: loc.Message,
+		}
+		if err := stream.Send(&resp); err != nil {
+			return err
+		}
+	}
 }
 
 func streamResults(

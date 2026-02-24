@@ -26,6 +26,7 @@ package syntaxrpc
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"os"
 	"path/filepath"
@@ -35,9 +36,11 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
 	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi/syntaxrpc"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/tcell/v3"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -50,12 +53,12 @@ func TestServerClientIntegration(t *testing.T) {
 
 	tsuite := []struct {
 		name   string
-		setup  func(*mockSearcher)
+		setup  func(*mockParser)
 		action func(t *testing.T, client *syntaxrpc.Client)
 	}{
 		{
 			name: "Search returns results",
-			setup: func(m *mockSearcher) {
+			setup: func(m *mockParser) {
 				m.searchResults = []syntaxapi.Result{
 					{
 						File:        testURI,
@@ -84,7 +87,7 @@ func TestServerClientIntegration(t *testing.T) {
 		},
 		{
 			name: "Search returns empty results",
-			setup: func(m *mockSearcher) {
+			setup: func(m *mockParser) {
 				m.searchResults = nil
 			},
 			action: func(t *testing.T, client *syntaxrpc.Client) {
@@ -96,7 +99,7 @@ func TestServerClientIntegration(t *testing.T) {
 		},
 		{
 			name: "Search returns error",
-			setup: func(m *mockSearcher) {
+			setup: func(m *mockParser) {
 				m.searchErr = errors.New("search failed")
 			},
 			action: func(t *testing.T, client *syntaxrpc.Client) {
@@ -111,7 +114,7 @@ func TestServerClientIntegration(t *testing.T) {
 		},
 		{
 			name: "SearchNode with single node type",
-			setup: func(m *mockSearcher) {
+			setup: func(m *mockParser) {
 				m.searchNodeResults = []syntaxapi.Result{
 					{
 						File:        testURI,
@@ -133,7 +136,7 @@ func TestServerClientIntegration(t *testing.T) {
 		},
 		{
 			name: "SearchNode with multiple node types (bitflag)",
-			setup: func(m *mockSearcher) {
+			setup: func(m *mockParser) {
 				m.searchNodeResults = []syntaxapi.Result{
 					{
 						File:        testURI,
@@ -161,7 +164,7 @@ func TestServerClientIntegration(t *testing.T) {
 		},
 		{
 			name: "Query specific file",
-			setup: func(m *mockSearcher) {
+			setup: func(m *mockParser) {
 				m.queryResults = []syntaxapi.Result{
 					{
 						File:        testURI,
@@ -182,7 +185,7 @@ func TestServerClientIntegration(t *testing.T) {
 		},
 		{
 			name: "QueryNode specific file",
-			setup: func(m *mockSearcher) {
+			setup: func(m *mockParser) {
 				m.queryNodeResults = []syntaxapi.Result{
 					{
 						File:        testURI,
@@ -203,7 +206,7 @@ func TestServerClientIntegration(t *testing.T) {
 		},
 		{
 			name: "coordinates are preserved",
-			setup: func(m *mockSearcher) {
+			setup: func(m *mockParser) {
 				m.searchResults = []syntaxapi.Result{
 					{
 						File:        testURI,
@@ -227,7 +230,7 @@ func TestServerClientIntegration(t *testing.T) {
 
 	for _, tcase := range tsuite {
 		t.Run(tcase.name, func(t *testing.T) {
-			mock := &mockSearcher{}
+			mock := &mockParser{}
 			tcase.setup(mock)
 
 			server, client, cleanup := setupServerClient(t, mock)
@@ -271,7 +274,97 @@ func TestNodeCaptureBitflags(t *testing.T) {
 	}
 }
 
-type mockSearcher struct {
+func TestHighlight(t *testing.T) {
+	tests := []struct {
+		name      string
+		uri       string
+		content   string
+		locations []textapi.Location
+	}{
+		{
+			name:    "single location",
+			uri:     "file:///tmp/test.go",
+			content: "package main",
+			locations: []textapi.Location{
+				{
+					From:    term.Coordinates{X: 0, Y: 0},
+					To:      term.Coordinates{X: 7, Y: 0},
+					Attr:    term.Attributes(tcell.Style{Fg: tcell.ColorBlue}),
+					Message: "keyword",
+				},
+			},
+		},
+		{
+			name:    "multiple locations",
+			uri:     "file:///workspace/main.rs",
+			content: "fn main() {}",
+			locations: []textapi.Location{
+				{
+					From:    term.Coordinates{X: 0, Y: 0},
+					To:      term.Coordinates{X: 2, Y: 0},
+					Attr:    term.Attributes(tcell.Style{Fg: tcell.ColorRed}),
+					Message: "keyword",
+				},
+				{
+					From:    term.Coordinates{X: 3, Y: 0},
+					To:      term.Coordinates{X: 7, Y: 0},
+					Attr:    term.Attributes(tcell.Style{Fg: tcell.ColorGreen, Attrs: tcell.AttrBold}),
+					Message: "function",
+				},
+			},
+		},
+		{
+			name:      "empty locations",
+			uri:       "file:///tmp/empty.txt",
+			content:   "",
+			locations: []textapi.Location{},
+		},
+	}
+
+	for i, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stub := &mockParser{locations: tt.locations}
+			srv := grpc.NewServer()
+			syntaxrpc.RegisterSyntaxServer(srv, NewServer(stub))
+
+			// Use a short path to avoid unix socket path length limits.
+			tmpDir, err := os.MkdirTemp("", "syn")
+			require.NoError(t, err)
+			t.Cleanup(func() { _ = os.RemoveAll(tmpDir) })
+			sockPath := filepath.Join(tmpDir, fmt.Sprintf("%d.sock", i))
+			lis, err := net.Listen("unix", sockPath)
+			require.NoError(t, err)
+			go func() { _ = srv.Serve(lis) }()
+			t.Cleanup(srv.Stop)
+
+			conn, err := grpc.NewClient(
+				"unix:"+sockPath,
+				grpc.WithTransportCredentials(insecure.NewCredentials()),
+			)
+			require.NoError(t, err)
+			t.Cleanup(func() { _ = conn.Close() })
+
+			ctx := context.Background()
+			client := syntaxrpc.NewClient(ctx, conn)
+
+			uri, err := workspaceapi.ParseURI(tt.uri)
+			require.NoError(t, err)
+
+			it, err := client.Highlight(uri, tt.content)
+			require.NoError(t, err)
+
+			got, err := iterator.ToSlice(ctx, it)
+			require.NoError(t, err)
+
+			require.Equal(t, tt.uri, stub.lastURI.String())
+			require.Equal(t, tt.content, stub.lastContent)
+			require.Equal(t, tt.locations, got)
+		})
+	}
+}
+
+type mockParser struct {
+	locations         []textapi.Location
 	searchResults     []syntaxapi.Result
 	searchErr         error
 	searchNodeResults []syntaxapi.Result
@@ -280,19 +373,28 @@ type mockSearcher struct {
 	queryErr          error
 	queryNodeResults  []syntaxapi.Result
 	queryNodeErr      error
+	lastContent       string
+	lastURI           workspaceapi.URI
 }
 
-func (m *mockSearcher) Search(
-	_ string,
-	_ []string,
-) (iterator.Iterator[syntaxapi.Result], error) {
+func (m *mockParser) Highlight(uri workspaceapi.URI, content string) (
+	iterator.Iterator[textapi.Location], error,
+) {
+	m.lastURI = uri
+	m.lastContent = content
+	return iterator.FromSlice(m.locations), nil
+}
+
+func (m *mockParser) Search(_ string, _ []string) (
+	iterator.Iterator[syntaxapi.Result], error,
+) {
 	if m.searchErr != nil {
 		return nil, m.searchErr
 	}
 	return iterator.FromSlice(m.searchResults), nil
 }
 
-func (m *mockSearcher) SearchNode(
+func (m *mockParser) SearchNode(
 	_ syntaxapi.NodeCaptureName,
 ) (iterator.Iterator[syntaxapi.Result], error) {
 	if m.searchNodeErr != nil {
@@ -301,28 +403,25 @@ func (m *mockSearcher) SearchNode(
 	return iterator.FromSlice(m.searchNodeResults), nil
 }
 
-func (m *mockSearcher) Query(
-	_ workspaceapi.URI,
-	_ string,
-	_ []string,
-) (iterator.Iterator[syntaxapi.Result], error) {
+func (m *mockParser) Query(_ workspaceapi.URI, _ string, _ []string) (
+	iterator.Iterator[syntaxapi.Result], error,
+) {
 	if m.queryErr != nil {
 		return nil, m.queryErr
 	}
 	return iterator.FromSlice(m.queryResults), nil
 }
 
-func (m *mockSearcher) QueryNode(
-	_ workspaceapi.URI,
-	_ syntaxapi.NodeCaptureName,
-) (iterator.Iterator[syntaxapi.Result], error) {
+func (m *mockParser) QueryNode(_ workspaceapi.URI, _ syntaxapi.NodeCaptureName) (
+	iterator.Iterator[syntaxapi.Result], error,
+) {
 	if m.queryNodeErr != nil {
 		return nil, m.queryNodeErr
 	}
 	return iterator.FromSlice(m.queryNodeResults), nil
 }
 
-func setupServerClient(t *testing.T, mock *mockSearcher) (*Server, *syntaxrpc.Client, func()) {
+func setupServerClient(t *testing.T, mock *mockParser) (*Server, *syntaxrpc.Client, func()) {
 	t.Helper()
 
 	tmpDir, err := os.MkdirTemp("", "syntaxrpc-test-*")

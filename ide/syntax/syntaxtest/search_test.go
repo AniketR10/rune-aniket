@@ -36,14 +36,60 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/ide/syntax"
 	"unstable.build/go-tui/workspace"
 )
 
 //go:embed go/locals.scm
 var locals []byte
+
+func TestParserHighlights(t *testing.T) {
+	wuri, err := workspaceapi.ParseURI("memory:///")
+	require.NoError(t, err)
+
+	pkgs := newInstalledPkgManager(t)
+	parser := syntax.NewParser(nil /* fs not needed for highlights */, pkgs, wuri)
+	uri, err := workspaceapi.ParseURI("memory:///file.go")
+	require.NoError(t, err)
+
+	it, err := parser.Highlight(uri, "package main\nfunc main() {}")
+	require.NoError(t, err)
+
+	locations, err := iterator.ToSlice(context.Background(), it)
+	require.NoError(t, err)
+
+	expected := []textapi.Location{
+		{
+			From: term.Coordinates{X: 0, Y: 0},
+			To:   term.Coordinates{X: 7, Y: 0},
+			Attr: term.Attributes{
+				Fg: tcell.ColorYellow,
+			},
+		},
+		{
+			From: term.Coordinates{X: 0, Y: 1},
+			To:   term.Coordinates{X: 4, Y: 1},
+			Attr: term.Attributes{
+				Fg: tcell.ColorYellow,
+			},
+		},
+		{
+			From: term.Coordinates{X: 5, Y: 1},
+			To:   term.Coordinates{X: 9, Y: 1},
+			Attr: term.Attributes{},
+		},
+		{
+			From: term.Coordinates{X: 5, Y: 1},
+			To:   term.Coordinates{X: 9, Y: 1},
+			Attr: term.Attributes{},
+		},
+	}
+	assert.Equal(t, expected, locations)
+}
 
 func TestSearch(t *testing.T) {
 	t.Run("returns functions", func(t *testing.T) {
@@ -243,7 +289,7 @@ func createFile(t *testing.T, scheme schemeapi.Scheme, name string, content stri
 }
 
 func setupSearcherForTests(t *testing.T, filesAvail ...string) (
-	searcher syntaxapi.Searcher, uri1, uri2, uri3 workspaceapi.URI,
+	searcher syntaxapi.Parser, uri1, uri2, uri3 workspaceapi.URI,
 ) {
 	logrus.SetLevel(logrus.TraceLevel)
 	uri, err := workspaceapi.ParseURI("memory:///")
@@ -268,7 +314,7 @@ func setupSearcherForTests(t *testing.T, filesAvail ...string) (
 	uri1 = createFile(t, scheme, "a.go", searchFileContent)
 	uri2 = createFile(t, scheme, "b.go", searchFileContent)
 	uri3 = createFile(t, scheme, "c.go", searchFileContent)
-	searcher = syntax.NewSearcher(scheme, pkgs, uri)
+	searcher = syntax.NewParser(scheme, pkgs, uri)
 	return
 }
 

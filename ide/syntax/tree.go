@@ -739,13 +739,21 @@ func (t *Tree) query(queryFile string, captureNames ...string) (iterator.Iterato
 }
 
 func (t *Tree) getHighlights(cells [][]term.Cell, content []byte) []textapi.Location {
-	root := t.tree.RootNode()
+	return getHighlights(cells, content, t.tree,
+		t.highlights, t.config.CaptureNamesAttributes)
+}
+
+func getHighlights(
+	cells [][]term.Cell, content []byte, tree *tree_sitter.Tree, highlights *tree_sitter.Query,
+	captureNamesAttributes map[string]term.Attributes,
+) []textapi.Location {
+	root := tree.RootNode()
 
 	cur := tree_sitter.NewQueryCursor()
 	defer cur.Close()
 
-	captureNames := t.highlights.CaptureNames()
-	matches := cur.Matches(t.highlights, root, content)
+	captureNames := highlights.CaptureNames()
+	matches := cur.Matches(highlights, root, content)
 	var locations []textapi.Location
 	for {
 		m, ok := matches.Next()
@@ -756,17 +764,15 @@ func (t *Tree) getHighlights(cells [][]term.Cell, content []byte) []textapi.Loca
 			rng := cap.Node.Range()
 			from, to, err := convertRangeToCoordinates(cells, rng)
 			if err != nil {
-				t.log(log.WarnLevel, "get highlights: %v", err)
 				continue
 			}
 			/*t.log(log.TraceLevel, "mapped range %v into coords: %v, %v", rng, from, to)*/
 			if int(cap.Index) >= len(captureNames) {
-				t.log(log.WarnLevel, "index %d does not belong capture names %v",
-					cap.Index, captureNames)
+				log.Warnf("index %d does not belong capture names %v", cap.Index, captureNames)
 				continue
 			}
 			name := captureNames[cap.Index]
-			attr, ok := t.config.CaptureNamesAttributes[name]
+			attr, ok := captureNamesAttributes[name]
 			if !ok {
 				attr = defaultCaptureNamesAttributes[name]
 			} // if not ok, zero value attr works
@@ -822,6 +828,7 @@ func (t *Tree) log(level log.Level, msg string, args ...any) {
 	}).Logf(level, msg, args...)
 }
 
+// this is needed to handle multi width characters
 func convertRangeToCoordinates(cells [][]term.Cell, n tree_sitter.Range) (
 	from, to term.Coordinates, err error,
 ) {

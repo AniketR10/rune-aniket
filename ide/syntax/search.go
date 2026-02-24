@@ -42,6 +42,7 @@ import (
 	sitter "github.com/tree-sitter/go-tree-sitter"
 	"github.com/unstablebuild/blue/ide/idelsp/languages"
 	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
@@ -50,56 +51,116 @@ import (
 	"unstable.build/go-tui/workspace/walkdir"
 )
 
-// NewSearcher returns a workspace-wide syntax searcher.
-func NewSearcher(
+// NewParser returns a workspace-wide syntaxapi.Parser.
+func NewParser(
 	w workspaceapi.FileSystem, pkg PkgManager, uri workspaceapi.URI,
-) syntaxapi.Searcher {
-	return searcher{w: w, uri: uri, pkg: pkg}
+) syntaxapi.Parser {
+	return parserSearcher{w: w, uri: uri, pkg: pkg}
 }
 
-var (
-	defaultWorkers = runtime.NumCPU()
-)
+var defaultWorkers = runtime.NumCPU()
 
-type searcher struct {
+type parserSearcher struct {
 	w   workspaceapi.FileSystem
 	pkg PkgManager
 	uri workspaceapi.URI
 }
 
-func (s searcher) Query(file workspaceapi.URI, query string, captureNames []string) (
-	iterator.Iterator[syntaxapi.Result], error,
+func (p parserSearcher) Highlight(file workspaceapi.URI, content string) (
+	iterator.Iterator[textapi.Location], error,
 ) {
-	return s.query(file, "", query, captureNames)
+	const qfile = "highlights.scm"
+
+	path := file.Path()
+	langID, lerr := languages.LanguageForFile(path)
+	if lerr != nil {
+		return nil, lerr
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	results := make(chan textapi.Location)
+	closeWaitCh := make(chan struct{})
+	it := &locationsIterator{
+		ctx:         ctx,
+		ch:          results,
+		cancel:      cancel,
+		closeWaitCh: closeWaitCh,
+	}
+
+	data := []byte(content)
+
+	var buf cell.Buffer
+	buf.Init()
+	_, _ = buf.ReadFrom(bytes.NewReader(data))
+	cells := buf.RawCells()
+
+	go debug.CapturePanicReport(func() {
+		defer close(closeWaitCh)
+		defer close(results)
+		parser, perr := newParser(ctx, langID, p.pkg, qfile, "")
+		if perr != nil {
+			perr = fmt.Errorf("new parser for language %q: %v", langID, perr)
+			it.mu.Lock()
+			defer it.mu.Unlock()
+			it.err = perr
+			return
+		}
+		defer parser.Close()
+
+		tree := parser.parser.Parse(data, nil)
+		if tree == nil {
+			perr = fmt.Errorf("failed to parse data: empty tree")
+			it.mu.Lock()
+			defer it.mu.Unlock()
+			it.err = perr
+		}
+		defer tree.Close()
+
+		locations := getHighlights(cells, data, tree, parser.query, nil)
+		for _, location := range locations {
+			select {
+			case results <- location:
+			case <-ctx.Done():
+				return
+			}
+		}
+	})
+	return it, nil
 }
 
-func (s searcher) QueryNode(file workspaceapi.URI, nodeTypes syntaxapi.NodeCaptureName) (
+func (p parserSearcher) Query(file workspaceapi.URI, query string, captureNames []string) (
+	iterator.Iterator[syntaxapi.Result], error,
+) {
+	return p.query(file, "", query, captureNames)
+}
+
+func (p parserSearcher) QueryNode(file workspaceapi.URI, nodeTypes syntaxapi.NodeCaptureName) (
 	iterator.Iterator[syntaxapi.Result], error,
 ) {
 	names, err := nodeTypesToCaptureNames(nodeTypes)
 	if err != nil {
 		return nil, err
 	}
-	return s.query(file, LocalsFilename, "", names)
+	return p.query(file, LocalsFilename, "", names)
 }
 
-func (s searcher) SearchNode(nodeTypes syntaxapi.NodeCaptureName) (
+func (p parserSearcher) SearchNode(nodeTypes syntaxapi.NodeCaptureName) (
 	iterator.Iterator[syntaxapi.Result], error,
 ) {
 	names, err := nodeTypesToCaptureNames(nodeTypes)
 	if err != nil {
 		return nil, err
 	}
-	return s.search(LocalsFilename, "", names)
+	return p.search(LocalsFilename, "", names)
 }
 
-func (s searcher) Search(query string, captureNames []string) (
+func (p parserSearcher) Search(query string, captureNames []string) (
 	iterator.Iterator[syntaxapi.Result], error,
 ) {
-	return s.search("", query, captureNames)
+	return p.search("", query, captureNames)
 }
 
-func (s searcher) query(
+func (p parserSearcher) query(
 	file workspaceapi.URI, queryFile, query string, captureNameFilters []string,
 ) (iterator.Iterator[syntaxapi.Result], error) {
 	path := file.Path()
@@ -121,7 +182,7 @@ func (s searcher) query(
 	go debug.CapturePanicReport(func() {
 		defer close(closeWaitCh)
 		defer close(results)
-		parser, perr := newParser(ctx, langID, s.pkg, queryFile, query)
+		parser, perr := newParser(ctx, langID, p.pkg, queryFile, query)
 		if perr != nil {
 			perr = fmt.Errorf("new parser for language %q: %v", langID, perr)
 			it.mu.Lock()
@@ -131,7 +192,7 @@ func (s searcher) query(
 		}
 		defer parser.Close()
 
-		readErr := readFileSymbols(ctx, parser, s.uri, s.w,
+		readErr := readFileSymbols(ctx, parser, p.uri, p.w,
 			path, results, captureNameFilters)
 		if readErr != nil {
 			it.mu.Lock()
@@ -143,11 +204,11 @@ func (s searcher) query(
 	return it, nil
 }
 
-func (s searcher) search(queryFile, query string, captureNames []string) (
+func (p parserSearcher) search(queryFile, query string, captureNames []string) (
 	iterator.Iterator[syntaxapi.Result], error,
 ) {
 	ctx, cancel := context.WithCancel(context.Background())
-	paths, err := walkdir.ListFiles(ctx, s.w, ".")
+	paths, err := walkdir.ListFiles(ctx, p.w, ".")
 	if err != nil {
 		cancel()
 		return nil, err
@@ -167,7 +228,7 @@ func (s searcher) search(queryFile, query string, captureNames []string) (
 		var expectedErrors = validErrors[i]
 		go debug.CapturePanicReport(func() {
 			defer wg.Done()
-			readSymbolsWorker(ctx, s.w, s.pkg, s.uri, queryFile, query, results, files, err,
+			readSymbolsWorker(ctx, p.w, p.pkg, p.uri, queryFile, query, results, files, err,
 				expectedErrors, captureNames)
 		})
 	}
@@ -239,12 +300,9 @@ func mergeValidErrorsMap(m []map[string]*expectedError) (
 }
 
 func readFileSymbols(
-	ctx context.Context,
-	parser *parser,
-	uri workspaceapi.URI,
-	w workspaceapi.FileSystem,
-	filename string, results chan syntaxapi.Result,
-	captureNameFilters []string,
+	ctx context.Context, parser *parser, uri workspaceapi.URI,
+	w workspaceapi.FileSystem, filename string,
+	results chan syntaxapi.Result, captureNameFilters []string,
 ) error {
 	file, err := w.OpenFile(filename, os.O_RDONLY, 0)
 	if err != nil {
@@ -257,7 +315,7 @@ func readFileSymbols(
 		return err
 	}
 
-	buf := new(cell.Buffer)
+	var buf cell.Buffer
 	buf.Init()
 	_, _ = buf.ReadFrom(bytes.NewReader(data))
 
@@ -289,7 +347,7 @@ func readFileSymbols(
 				continue
 			}
 			fileURI := workspaceapi.Join(uri, filename)
-			result, err := makeSymbolItem(from, to, fileURI, buf, captureNames[cap.Index])
+			result, err := makeSymbolItem(from, to, fileURI, &buf, captureNames[cap.Index])
 			if err != nil {
 				retErr = errors.Join(retErr, err)
 				continue
@@ -413,6 +471,54 @@ func (l *listSymbolsIterator) Err() error {
 }
 
 func (l *listSymbolsIterator) Close() error {
+	l.cancel()
+	<-l.closeWaitCh
+	return nil
+}
+
+type locationsIterator struct {
+	mu          sync.Mutex
+	err         error
+	ctx         context.Context
+	ch          chan textapi.Location
+	cancel      func()
+	closeWaitCh chan struct{}
+}
+
+func (l *locationsIterator) Next(ctx context.Context) (textapi.Location, bool) {
+	select {
+	case <-ctx.Done():
+		l.mu.Lock()
+		defer l.mu.Unlock()
+		l.err = errors.Join(l.err, ctx.Err())
+		return textapi.Location{}, false
+	case <-l.ctx.Done():
+		l.mu.Lock()
+		defer l.mu.Unlock()
+		l.err = errors.Join(l.err, l.ctx.Err())
+		return textapi.Location{}, false
+	case path, ok := <-l.ch:
+		return path, ok
+	}
+}
+
+func (l *locationsIterator) Err() error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	if l.err == nil {
+		return l.ctx.Err()
+	}
+	// avoid data races onto l.err which is an instance of
+	// *multierr.Error by creating a new multierr.Error
+	err := errors.Join(nil, l.err)
+	if l.ctx.Err() == nil {
+		return err
+	}
+	return errors.Join(err, l.ctx.Err())
+}
+
+func (l *locationsIterator) Close() error {
 	l.cancel()
 	<-l.closeWaitCh
 	return nil

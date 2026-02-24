@@ -37,7 +37,7 @@ import (
 
 // SyntaxResources returns a map of Permission to a ResourceServer
 // capable of serving each of the b SyntaxTree's resources.
-func SyntaxResources(b syntaxapi.Searcher) map[extensionapi.Permission]ResourceRegistrar {
+func SyntaxResources(b syntaxapi.Parser) map[extensionapi.Permission]ResourceRegistrar {
 	s := newSyntaxTreeResourceServer(b)
 	return map[extensionapi.Permission]ResourceRegistrar{
 		extensionapi.PermissionSyntaxTree: s.forPermission(
@@ -46,7 +46,7 @@ func SyntaxResources(b syntaxapi.Searcher) map[extensionapi.Permission]ResourceR
 }
 
 type syntaxResourceServer struct {
-	b syntaxapi.Searcher
+	b syntaxapi.Parser
 }
 
 type syntaxResourcePermissionServer struct {
@@ -54,7 +54,7 @@ type syntaxResourcePermissionServer struct {
 	*syntaxResourceServer
 }
 
-func newSyntaxTreeResourceServer(b syntaxapi.Searcher) *syntaxResourceServer {
+func newSyntaxTreeResourceServer(b syntaxapi.Parser) *syntaxResourceServer {
 	ret := new(syntaxResourceServer)
 	ret.b = b
 	return ret
