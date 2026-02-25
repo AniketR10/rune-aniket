@@ -15,7 +15,7 @@ require (
 	github.com/sirupsen/logrus v1.9.3
 	github.com/sourcegraph/go-diff v0.6.1
 	github.com/stretchr/testify v1.11.1
-	github.com/unstablebuild/blue v1.64.0
+	github.com/unstablebuild/blue v1.64.1
 	github.com/unstablebuild/golang-internal-tools v0.0.2
 	github.com/unstablebuild/rune-go-sdk v0.0.24
 	github.com/unstablebuild/tcell/v3 v3.6.2
@@ -56,7 +56,6 @@ require (
 	github.com/tree-sitter/go-tree-sitter v0.25.0
 	github.com/unstablebuild/notify v0.10.2
 	github.com/unstablebuild/pty v1.3.1
-	github.com/yuin/goldmark v1.4.13
 	go.uber.org/mock v0.4.0
 	go.uber.org/multierr v1.4.0
 	golang.org/x/oauth2 v0.34.0
@@ -98,6 +97,7 @@ require (
 	github.com/pion/transport/v2 v2.2.4 // indirect
 	github.com/pion/turn/v2 v2.1.5 // indirect
 	github.com/pjbgf/sha1cd v0.5.0 // indirect
+	github.com/yuin/goldmark v1.4.13 // indirect
 	go.uber.org/atomic v1.5.0 // indirect
 	go.uber.org/tools v0.0.0-20190618225709-2cfd321de3ee // indirect
 	golang.org/x/exp/typeparams v0.0.0-20220722155223-a9213eeb770e // indirect
