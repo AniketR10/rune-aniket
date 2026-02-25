@@ -265,7 +265,7 @@ func (h *workspaceManagerHandler) init(
 
 	// don't install a fs watcher for the home workspace,
 	// to prevent unecessary resource consumption
-	globalOpts := h.textOpts(h.homeURI, cfg)
+	globalOpts := h.textOpts(h.homeURI, cfg, h.homeWorkspace)
 	// do not pass a real version control for home workspace
 	ed, err := h.newEditor(homeDirUri, cfg, vctrl.NopService())
 	if err != nil {
@@ -603,8 +603,11 @@ func (h *workspaceManagerHandler) initExtensions(manager extension.Runner, cfg i
 }
 
 func (h *workspaceManagerHandler) textOpts(
-	uri workspaceapi.URI, cfg ideConfig,
+	uri workspaceapi.URI, cfg ideConfig, workspace workspace.Workspace,
 ) []text.Option {
+	markdownConfig := markdown.DefaultConfig()
+	markdownConfig.Parser = syntax.NewParser(workspace, h.pkgmanager, uri)
+	markdownConfig.ScheduleNextTick = cfg.scheduleNextTick
 	ret := []text.Option{
 		text.WithTabspaces(cfg.editorTabspaces()),
 		text.WithWindowManagerConfig(cfg.windowManagerConfig()),
@@ -627,6 +630,8 @@ func (h *workspaceManagerHandler) textOpts(
 		text.WithTabNameSeparator(cfg.tabNameSeparator()),
 		text.WithPackageManager(h.pkgmanager),
 		text.WithSyntaxConfig(cfg.syntaxConfig()),
+		text.WithMarkdownConfig(markdownConfig),
+		text.WithClipboard(cfg.clipboard()),
 	}
 
 	for seq, cmd := range cfg.commandKeyMappings() {
@@ -688,7 +693,7 @@ func (h *workspaceManagerHandler) addWorkspace(
 		configErr = multierror.Append(configErr, fmt.Errorf("workspace config: %w", wConfigErr))
 	}
 
-	textOpts := h.textOpts(uri, cfg)
+	textOpts := h.textOpts(uri, cfg, cwd)
 	vctrlService := vctrl.NopService()
 	if cfg.auxiliaryBarGit() || cfg.gitBarEnabled() {
 		vctrlService, err = gogit.NewService(uri, cwd)

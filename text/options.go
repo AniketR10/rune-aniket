@@ -29,6 +29,8 @@ import (
 	"time"
 
 	"github.com/unstablebuild/blue/document"
+	"github.com/unstablebuild/blue/tui/component/markdown"
+	"github.com/unstablebuild/rune-go-sdk/clipboard"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
@@ -62,6 +64,8 @@ type Config struct {
 	Icons                   IconSet
 	Syntax                  syntax.Config
 	PkgManager              syntax.PkgManager
+	Markdown                markdown.Config
+	Clipboard               clipboard.Register
 
 	EventPublisher func(term.Event) bool
 
@@ -110,6 +114,8 @@ func DefaultConfig() Config {
 		EventPublisher:          func(term.Event) bool { return false },
 		Syntax:                  syntax.DefaultConfig(),
 		PkgManager:              nopPkgManager{},
+		Markdown:                markdown.DefaultConfig(),
+		Clipboard:               clipboard.NewInMemory(),
 		Icons: IconSet{
 			Extensions: map[string]rune{},
 			Default:    'o',
@@ -133,6 +139,20 @@ func WithTabspaces(tabspaces int) Option {
 func WithSyntaxConfig(syntax syntax.Config) Option {
 	return func(cfg *Config) {
 		cfg.Syntax = syntax
+	}
+}
+
+// WithMarkdownConfig returns an Option that sets markdown configuration.
+func WithMarkdownConfig(markdown markdown.Config) Option {
+	return func(cfg *Config) {
+		cfg.Markdown = markdown
+	}
+}
+
+// WithClipboard returns an Option that sets the clipboard.
+func WithClipboard(clip clipboard.Register) Option {
+	return func(cfg *Config) {
+		cfg.Clipboard = clip
 	}
 }
 

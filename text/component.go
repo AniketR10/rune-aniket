@@ -27,18 +27,25 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"net/url"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
+	"github.com/unstablebuild/blue/ide/idelsp/languages"
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/logging"
+	"github.com/unstablebuild/blue/tui/component/markdown"
+	hmarkdown "github.com/unstablebuild/blue/tui/handler/markdown"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/clipboard"
 	"github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
@@ -421,7 +428,18 @@ func (c *Component) openFileTab(
 	}
 
 	buf := cell.NewBuffer()
-	handler, fc, err := c.newFileBuffer(file, recoveryFilename, buf, readOnly, forceRecover)
+	var handler browserapi.Handler
+	var fc workspace.FlusherCloser
+	var err error
+	if readOnly {
+		handler, ok, err = c.loadView(file)
+		if !ok {
+			handler, fc, err = c.newFileBuffer(file, recoveryFilename,
+				buf, readOnly, forceRecover)
+		}
+	} else {
+		handler, fc, err = c.newFileBuffer(file, recoveryFilename, buf, readOnly, forceRecover)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -1158,6 +1176,52 @@ func (c *Component) newTab(
 	t := c.comp.NewTab(resource, icon, name, h, closer)
 	t.Subscribe(&compTabSubscriber{parent: c})
 	return t
+}
+
+func (c *Component) loadView(file workspaceapi.URI) (
+	handler browserapi.Handler, ok bool, err error,
+) {
+	lang, _ := languages.LanguageForFile(filepath.Base(file.Path()))
+	switch lang {
+	case "markdown":
+		ok = true
+		handler, err = c.loadMarkdown(file)
+	default:
+	}
+	return
+}
+
+func (c *Component) loadMarkdown(uri workspaceapi.URI) (browserapi.Handler, error) {
+	f, err := c.workspace.OpenFile(uri.Path(), os.O_RDONLY, 0)
+	if err != nil {
+		return nil, err
+	}
+	data, err := io.ReadAll(f)
+	if err != nil {
+		return nil, fmt.Errorf("read file: %w", err)
+	}
+	_ = f.Close()
+	markdown, err := markdown.NewWithConfig(string(data), c.config.Markdown)
+	if err != nil {
+		return nil, fmt.Errorf("new markdown component: %w", err)
+	}
+	handler := hmarkdown.New(markdown, hmarkdown.WithOnLinkClick(func(link *url.URL) bool {
+		if link.Scheme != "http" && link.Scheme != "https" {
+			return false
+		}
+		linkstr := link.String()
+		meta := clipboard.Data{Text: linkstr}
+		err := c.config.Clipboard.Copy(clipboard.DefaultRegisterID, meta)
+		if err != nil {
+			_, _ = c.config.Notifications.Notify(browserapi.LevelError,
+				"copy URL to clipboard: %v", err)
+		} else {
+			_, _ = c.config.Notifications.Notify(browserapi.LevelSuccess,
+				"copied URL %s to clipboard", linkstr)
+		}
+		return true
+	}))
+	return handler, nil
 }
 
 func regroupArgs(s string) ([]string, error) {
