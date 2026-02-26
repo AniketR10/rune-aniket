@@ -136,7 +136,7 @@ type workspaceManagerHandler struct {
 	homeURI          workspaceapi.URI
 	homeWorkspace    workspace.Workspace
 	empty            *ex
-	homeRunner       atomic.Value
+	homeRunner       extension.Runner
 	openPrevFiles    []file
 	openPrevFilesEx  *ex
 	openPrevFilesWin browser.Window
@@ -289,25 +289,20 @@ func (h *workspaceManagerHandler) init(
 		return err
 	}
 
-	// speed up initialization
-	go debug.CapturePanicReport(func() {
-		runner, err := h.buildExtensions(cfg, homeDirUri, h.homeWorkspace, h.empty)
-		if err != nil {
-			_, _ = h.notifications.current().Notify(browserapi.LevelError,
-				"Error building channel for extensions and plugins: %v", err)
-			log.Errorf("build home workspace extensions: %v", err)
-			return
-		}
-		h.initExtensions(runner, cfg)
-		h.homeRunner.Store(runner)
+	runner, err := h.buildExtensions(cfg, homeDirUri, h.homeWorkspace, h.empty)
+	if err != nil {
+		_, _ = h.notifications.current().Notify(browserapi.LevelError,
+			"Error building channel for extensions and plugins: %v", err)
+		log.Errorf("build home workspace extensions: %v", err)
+	} else {
 		exec, isExecutor := runner.(schemeapi.Executor)
-		if !isExecutor {
-			return
+		if isExecutor {
+			h.empty.setExecutor(exec)
 		}
-		h.mu.Lock()
-		defer h.mu.Unlock()
-		h.empty.setExecutor(exec)
-	})
+		h.homeRunner = runner
+		// speed up initialization by initializing extensions asynchronously
+		go debug.CapturePanicReport(func() { h.initExtensions(runner, cfg) })
+	}
 
 	h.bar.Init()
 	h.bar.OnClick = h.switchToWorkspace
@@ -769,25 +764,22 @@ func (h *workspaceManagerHandler) addWorkspace(
 		dispatchFilesystemEvents(ctx, ex, h.mu, ch, ignores)
 	})
 
-	// load async to speed up workspace initialization
-	go debug.CapturePanicReport(func() {
-		runner, err := h.buildExtensions(cfg, uri, cwd, ex)
-		if err != nil {
-			_, _ = h.notifications.current().Notify(browserapi.LevelError,
-				"Error building channel for extensions and plugins: %v", err)
-			log.Errorf("build extensions for workspace %s: %v", uri.String(), err)
-			return
+	runner, err := h.buildExtensions(cfg, uri, cwd, ex)
+	if err != nil {
+		_, _ = h.notifications.current().Notify(browserapi.LevelError,
+			"Error building channel for extensions and plugins: %v", err)
+		log.Errorf("build extensions for workspace %s: %v", uri.String(), err)
+	} else {
+		exec, isExecutor := runner.(schemeapi.Executor)
+		if isExecutor {
+			ex.setExecutor(exec)
 		}
 		wh.Extensions.Store(runner)
-		h.initExtensions(runner, cfg)
-		exec, isExecutor := runner.(schemeapi.Executor)
-		if !isExecutor {
-			return
-		}
-		h.mu.Lock()
-		defer h.mu.Unlock()
-		ex.setExecutor(exec)
-	})
+		// load async to speed up workspace initialization
+		go debug.CapturePanicReport(func() {
+			h.initExtensions(runner, cfg)
+		})
+	}
 
 	if i == -1 {
 		var ok bool
@@ -874,28 +866,25 @@ func (h *workspaceManagerHandler) buildExtensions(
 		ex.workspace, h.pkgmanager, notifications,
 		ex.Browser(), lspConfig)
 	dap := idedebug.New(uri, ex.workspace, h.pkgmanager, idedebug.Config{MaxRetries: 5})
-	h.scheduleNextTick(func() {
-		err := ex.comp.SubscribeEvents(idelsp.EditorEvents(), lsp)
-		if err != nil {
-			log.Errorf("subscribe LSP manager: %v", err)
-		}
-		cmdcfg := lspCommandsConfig(uri, cfg, notifications, h, parser)
-		apiHandler, err := lspcmd.AllHandler(
-			lsp, apieditor, apibrowser, apibrowser, apibrowser, ex.workspace, cmdcfg)
-		if err != nil {
-			log.Errorf("new lsp command handler: %v", err)
-			return
-		}
-		handler := text.FuncCommandHandler(apiHandler.HandleCommand,
-			func(ctx context.Context, cmd textapi.Command) (iterator.Iterator[string], string, error) {
-				ret, err := apiHandler.Complete(ctx, cmd.Name, cmd.Args)
-				return ret, "", err
-			})
-		err = ex.comp.SubscribeCommand(lspcmd.Manual(), handler)
-		if err != nil {
-			log.Errorf("subscribe LSP manager: %v", err)
-		}
-	})
+	err := ex.comp.SubscribeEvents(idelsp.EditorEvents(), lsp)
+	if err != nil {
+		log.Errorf("subscribe LSP manager: %v", err)
+	}
+	cmdcfg := lspCommandsConfig(uri, cfg, notifications, h, parser)
+	apiHandler, err := lspcmd.AllHandler(
+		lsp, apieditor, apibrowser, apibrowser, apibrowser, ex.workspace, cmdcfg)
+	if err != nil {
+		return nil, fmt.Errorf("new lsp command handler: %v", err)
+	}
+	handler := text.FuncCommandHandler(apiHandler.HandleCommand,
+		func(ctx context.Context, cmd textapi.Command) (iterator.Iterator[string], string, error) {
+			ret, err := apiHandler.Complete(ctx, cmd.Name, cmd.Args)
+			return ret, "", err
+		})
+	err = ex.comp.SubscribeCommand(lspcmd.Manual(), handler)
+	if err != nil {
+		log.Errorf("subscribe LSP manager: %v", err)
+	}
 	res = extension.MergeResourceMap(res, extension.SemanticResources(lsp))
 	res = extension.MergeResourceMap(res, extension.DebugResources(dap))
 
@@ -1147,8 +1136,8 @@ func (h *workspaceManagerHandler) Close() (ret error) {
 	if err := h.empty.Close(); err != nil {
 		ret = multierror.Append(ret, err)
 	}
-	if runner := h.homeRunner.Load(); runner != nil {
-		if err := runner.(io.Closer).Close(); err != nil {
+	if h.homeRunner != nil {
+		if err := h.homeRunner.(io.Closer).Close(); err != nil {
 			ret = multierror.Append(ret, err)
 		}
 	}
