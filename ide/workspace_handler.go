@@ -60,6 +60,7 @@ import (
 	handlerapi "github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
+	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/debug"
@@ -1601,6 +1602,11 @@ func lspCommandsConfig(
 	cmdcfg.RootURI = uri
 	cmdcfg.Parser = parser
 	cmdcfg.ScheduleNextTick = cfg.scheduleNextTick
+	cmdcfg.Highlight.Delay = 50 * time.Millisecond
+	cmdcfg.Highlight.WriteAttr = term.Attributes{Attrs: tcell.AttrBold | tcell.AttrUnderline}
+	cmdcfg.Highlight.ReadAttr = term.Attributes{Attrs: tcell.AttrUnderline}
+	cmdcfg.SignatureHelp.TriggerCharacters = []string{"(", ","}
+	cmdcfg.SignatureHelp.AutoTrigger = true
 	cmdcfg.Interrupter = interrupter
 	cmdcfg.Hover.MarkdownConfig = markdown.DefaultConfig()
 	cmdcfg.Hover.MarkdownConfig.Parser = parser

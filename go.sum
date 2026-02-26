@@ -206,8 +206,8 @@ github.com/tree-sitter/tree-sitter-ruby v0.23.1 h1:T/NKHUA+iVbHM440hFx+lzVOzS4dV
 github.com/tree-sitter/tree-sitter-ruby v0.23.1/go.mod h1:kUS4kCCQloFcdX6sdpr8p6r2rogbM6ZjTox5ZOQy8cA=
 github.com/tree-sitter/tree-sitter-rust v0.23.2 h1:6AtoooCW5GqNrRpfnvl0iUhxTAZEovEmLKDbyHlfw90=
 github.com/tree-sitter/tree-sitter-rust v0.23.2/go.mod h1:hfeGWic9BAfgTrc7Xf6FaOAguCFJRo3RBbs7QJ6D7MI=
-github.com/unstablebuild/blue v1.66.1 h1:hQIsdr78ySyKP83sbQt/91xnHlckHcaYYxJYYP0MMLc=
-github.com/unstablebuild/blue v1.66.1/go.mod h1:aCTQzKRpYy58+TP2AitJVk/WiFeqIDf6F8lXCA8WW0k=
+github.com/unstablebuild/blue v1.67.0 h1:IYuQah1CQz27V5qsT1BQwMO7QpVqDLyrPoE0mwgjmgw=
+github.com/unstablebuild/blue v1.67.0/go.mod h1:NzSYJw5P/EOkp1NDbfchBoH+ZzTzxTNB2zTuwORSraw=
 github.com/unstablebuild/go-billy/v6 v6.0.0-ub.1 h1:pPmxLsBLNuZv+LWeytIcvwzxeUAMYzeY2MDKmSWXMTA=
 github.com/unstablebuild/go-billy/v6 v6.0.0-ub.1/go.mod h1:E3VhlS+AKkrq6ZNn1axE2/nDRJ87l1FJk9r5HT2vPX0=
 github.com/unstablebuild/go-git/v6 v6.0.1-ub.1 h1:xBomYWGQkSIm023lhJxu+F1uU4YjZlIZaKpnm+7nIak=
@@ -220,8 +220,8 @@ github.com/unstablebuild/notify v0.10.2 h1:x4ChU2wWbvUkpOs7tqpKJMGxkljy+Ye56LYjH
 github.com/unstablebuild/notify v0.10.2/go.mod h1:Q1U21KXundJt7qEvc4z4fFtzuDTZOTrhvCIJDZp5SBk=
 github.com/unstablebuild/pty v1.3.1 h1:GQSjqGKSOkOCu+X/F5yFUSuwp7Fi08xXn28DcuXhu/k=
 github.com/unstablebuild/pty v1.3.1/go.mod h1:BpzWw5G39oyDqoJhusXyOiTk9/bsAblSD4Js9K462Pw=
-github.com/unstablebuild/rune-go-sdk v0.0.30 h1:71Ti1fvOnsS0zf4PiLxYlD00HFX91ECWHX7VTENCxHQ=
-github.com/unstablebuild/rune-go-sdk v0.0.30/go.mod h1:GZK3+EAAia/pmX1/nd40BssDxGpCVarJf3QP13YgCFU=
+github.com/unstablebuild/rune-go-sdk v0.0.31 h1:Q4YRPEKzCctHXnnjgoZxjrPVlHWo8lefQwV8Di/SNs8=
+github.com/unstablebuild/rune-go-sdk v0.0.31/go.mod h1:GZK3+EAAia/pmX1/nd40BssDxGpCVarJf3QP13YgCFU=
 github.com/unstablebuild/tcell/v3 v3.6.2 h1:lkG8yxJo5vmSweId+wTmLIB8LtDxybQ+RYuUthewwKU=
 github.com/unstablebuild/tcell/v3 v3.6.2/go.mod h1:nfcmtlSfOVfBq07+ZeP4vcEmBRMDgYnPV1Yo67gORvw=
 github.com/yuin/goldmark v1.4.13 h1:fVcFKWvrslecOb/tg+Cc05dkeYx540o0FuFt3nUVDoE=
