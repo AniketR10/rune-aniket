@@ -15,9 +15,9 @@ require (
 	github.com/sirupsen/logrus v1.9.3
 	github.com/sourcegraph/go-diff v0.6.1
 	github.com/stretchr/testify v1.11.1
-	github.com/unstablebuild/blue v1.65.6
+	github.com/unstablebuild/blue v1.66.1
 	github.com/unstablebuild/golang-internal-tools v0.0.2
-	github.com/unstablebuild/rune-go-sdk v0.0.29
+	github.com/unstablebuild/rune-go-sdk v0.0.30
 	github.com/unstablebuild/tcell/v3 v3.6.2
 	go.uber.org/goleak v1.3.0
 	golang.org/x/crypto v0.46.0
@@ -76,6 +76,7 @@ require (
 	github.com/gen2brain/malgo v0.11.21 // indirect
 	github.com/go-git/gcfg/v2 v2.0.2 // indirect
 	github.com/go-jose/go-jose/v4 v4.1.3 // indirect
+	github.com/gobwas/glob v0.2.3 // indirect
 	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
 	github.com/google/go-dap v0.12.0 // indirect
 	github.com/kevinburke/ssh_config v1.4.0 // indirect
