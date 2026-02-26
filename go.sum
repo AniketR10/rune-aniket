@@ -218,8 +218,8 @@ github.com/unstablebuild/notify v0.10.2 h1:x4ChU2wWbvUkpOs7tqpKJMGxkljy+Ye56LYjH
 github.com/unstablebuild/notify v0.10.2/go.mod h1:Q1U21KXundJt7qEvc4z4fFtzuDTZOTrhvCIJDZp5SBk=
 github.com/unstablebuild/pty v1.3.1 h1:GQSjqGKSOkOCu+X/F5yFUSuwp7Fi08xXn28DcuXhu/k=
 github.com/unstablebuild/pty v1.3.1/go.mod h1:BpzWw5G39oyDqoJhusXyOiTk9/bsAblSD4Js9K462Pw=
-github.com/unstablebuild/rune-go-sdk v0.0.27 h1:mFuD8lA7WN0yDqsJzxRiXQX98+s491OosqK79KSIwgg=
-github.com/unstablebuild/rune-go-sdk v0.0.27/go.mod h1:GZK3+EAAia/pmX1/nd40BssDxGpCVarJf3QP13YgCFU=
+github.com/unstablebuild/rune-go-sdk v0.0.29 h1:lBEWfXrkQvyk1AOcdj1MpHT7QPyEmyVWbhjJTGof7IM=
+github.com/unstablebuild/rune-go-sdk v0.0.29/go.mod h1:GZK3+EAAia/pmX1/nd40BssDxGpCVarJf3QP13YgCFU=
 github.com/unstablebuild/tcell/v3 v3.6.2 h1:lkG8yxJo5vmSweId+wTmLIB8LtDxybQ+RYuUthewwKU=
 github.com/unstablebuild/tcell/v3 v3.6.2/go.mod h1:nfcmtlSfOVfBq07+ZeP4vcEmBRMDgYnPV1Yo67gORvw=
 github.com/yuin/goldmark v1.4.13 h1:fVcFKWvrslecOb/tg+Cc05dkeYx540o0FuFt3nUVDoE=
