@@ -69,7 +69,7 @@ func (s debugResourcePermissionServer) Register(
 	server := tdebugrpc.NewServer(s.b)
 	switch s.p {
 	case extensionapi.PermissionDebugger:
-		debugrpc.RegisterDebugServiceServer(registrar, server)
+		debugrpc.RegisterDebuggerServer(registrar, server)
 	default:
 		return nil, errors.New("unknown permission for debug server")
 	}

@@ -53,10 +53,10 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
+	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/clipboard"
-	"github.com/unstablebuild/rune-go-sdk/component"
 	handlerapi "github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
@@ -857,8 +857,9 @@ func (h *workspaceManagerHandler) buildExtensions(
 		extension.StorageResources(h.sixDir))
 	res = extension.MergeResourceMap(res,
 		extension.ConfigResources(config.MapConfig(cleanedExtensionConfig(cfg.cfg))))
+	parser := syntax.NewParser(ex.workspace, h.pkgmanager, uri)
 	res = extension.MergeResourceMap(res,
-		extension.SyntaxResources(syntax.NewParser(ex.workspace, h.pkgmanager, uri)))
+		extension.SyntaxResources(parser))
 	apibrowser := newBrowserAdapter(ex.Browser())
 	apieditor := newEditorAdapter(ed)
 
@@ -878,7 +879,7 @@ func (h *workspaceManagerHandler) buildExtensions(
 		if err != nil {
 			log.Errorf("subscribe LSP manager: %v", err)
 		}
-		cmdcfg := lspCommandsConfig(cfg, notifications)
+		cmdcfg := lspCommandsConfig(cfg, notifications, h, parser)
 		apiHandler, err := lspcmd.AllHandler(
 			lsp, apieditor, apibrowser, apibrowser, apibrowser, ex.workspace, cmdcfg)
 		if err != nil {
@@ -1605,40 +1606,30 @@ func (f *workspaceTabManager) SetTabName(
 
 func lspCommandsConfig(
 	cfg ideConfig, notifications browserapi.Notifications,
+	interrupter term.Interrupter, parser syntaxapi.Parser,
 ) lspcmd.AllConfig {
 	cmdcfg := lspcmd.DefaultConfig()
-	cmdcfg.Hover.NewFloating = func(str string) browserapi.Floating {
-		mcfg := markdown.DefaultConfig()
-		md, err := markdown.NewWithConfig(str, mcfg)
-		if err != nil {
-			strcomp := component.NewString(str)
-			return browserapi.FuncFloating(
-				browserapi.NopHandler(handlerapi.NopFromComponent(strcomp)),
-				strcomp.Dimensions,
-			)
-		}
-		mdhandler := handlermarkdown.New(md,
-			handlermarkdown.WithOnLinkClick(func(link *url.URL) bool {
-				if link.Scheme != "http" && link.Scheme != "https" {
-					return false
-				}
-				linkstr := link.String()
-				meta := clipboard.Data{Text: linkstr}
-				err := cfg.clipboard().Copy(clipboard.DefaultRegisterID, meta)
-				if err != nil {
-					_, _ = notifications.Notify(browserapi.LevelError,
-						"copy URL to clipboard: %v", err)
-				} else {
-					_, _ = notifications.Notify(browserapi.LevelSuccess,
-						"copied URL %s to clipboard", linkstr)
-				}
-				return true
-			}),
-		)
-		return browserapi.FuncFloating(
-			browserapi.NopHandler(mdhandler),
-			mdhandler.Dimensions,
-		)
+	cmdcfg.Hover.MarkdownConfig = markdown.DefaultConfig()
+	cmdcfg.Hover.MarkdownConfig.Parser = parser
+	cmdcfg.Hover.MarkdownConfig.ScheduleNextTick = cfg.scheduleNextTick
+	cmdcfg.Hover.MarkdownHandlerOptions = []handlermarkdown.Option{
+		handlermarkdown.WithOnLinkClick(func(link *url.URL) bool {
+			if link.Scheme != "http" && link.Scheme != "https" {
+				return false
+			}
+			linkstr := link.String()
+			meta := clipboard.Data{Text: linkstr}
+			err := cfg.clipboard().Copy(clipboard.DefaultRegisterID, meta)
+			if err != nil {
+				_, _ = notifications.Notify(browserapi.LevelError,
+					"copy URL to clipboard: %v", err)
+			} else {
+				_, _ = notifications.Notify(browserapi.LevelSuccess,
+					"copied URL %s to clipboard", linkstr)
+			}
+			return true
+		}),
 	}
+	cmdcfg.Interrupter = interrupter
 	return cmdcfg
 }
