@@ -879,7 +879,7 @@ func (h *workspaceManagerHandler) buildExtensions(
 		if err != nil {
 			log.Errorf("subscribe LSP manager: %v", err)
 		}
-		cmdcfg := lspCommandsConfig(cfg, notifications, h, parser)
+		cmdcfg := lspCommandsConfig(uri, cfg, notifications, h, parser)
 		apiHandler, err := lspcmd.AllHandler(
 			lsp, apieditor, apibrowser, apibrowser, apibrowser, ex.workspace, cmdcfg)
 		if err != nil {
@@ -1605,10 +1605,14 @@ func (f *workspaceTabManager) SetTabName(
 }
 
 func lspCommandsConfig(
-	cfg ideConfig, notifications browserapi.Notifications,
+	uri workspaceapi.URI, cfg ideConfig, notifications browserapi.Notifications,
 	interrupter term.Interrupter, parser syntaxapi.Parser,
-) lspcmd.AllConfig {
+) lspcmd.Config {
 	cmdcfg := lspcmd.DefaultConfig()
+	cmdcfg.RootURI = uri
+	cmdcfg.Parser = parser
+	cmdcfg.ScheduleNextTick = cfg.scheduleNextTick
+	cmdcfg.Interrupter = interrupter
 	cmdcfg.Hover.MarkdownConfig = markdown.DefaultConfig()
 	cmdcfg.Hover.MarkdownConfig.Parser = parser
 	cmdcfg.Hover.MarkdownConfig.ScheduleNextTick = cfg.scheduleNextTick
@@ -1630,6 +1634,5 @@ func lspCommandsConfig(
 			return true
 		}),
 	}
-	cmdcfg.Interrupter = interrupter
 	return cmdcfg
 }
