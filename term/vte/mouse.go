@@ -38,6 +38,7 @@ type mouseDriver struct {
 	selectionStart term.Coordinates
 	hookRawBytes   []byte
 	clipboard      clipboard.Register
+	lastButton     rune // last pressed button (0=left, 1=middle, 2=right)
 }
 
 func (e *mouseDriver) OnAction(
@@ -63,10 +64,6 @@ func (e *mouseDriver) reportAction(
 	var button rune
 	switch action {
 	case mouse.WheelUp:
-		// TODO use alternate scroll mode
-		// manage it here so we can delegate to
-		// underlying program if terminal
-		// could not handle scroll (i.e. alternate buffer)
 		e.hookRawBytes = ev.Raw
 		return true
 	case mouse.WheelDown:
@@ -74,20 +71,21 @@ func (e *mouseDriver) reportAction(
 		return true
 	case mouse.LeftClick:
 		button = 0
+		e.lastButton = 0
 	case mouse.MiddleClick:
 		button = 1
+		e.lastButton = 1
 	case mouse.RightClick:
 		button = 2
+		e.lastButton = 2
 	case mouse.Release:
-		if !e.t.MouseModeSgrMouse() {
+		if e.t.MouseModeSgrMouse() {
+			button = e.lastButton
+		} else {
 			button = 3
 		}
 	default:
 		return false
-	}
-
-	if /* moved && */ e.t.MouseModeReportCellMouseMotion() {
-		button |= 32
 	}
 
 	if e.t.MouseModeSgrMouse() {
@@ -95,9 +93,9 @@ func (e *mouseDriver) reportAction(
 		if action == mouse.Release {
 			final = 'm'
 		}
-		e.hookRawBytes = []byte(fmt.Sprintf("\x1b[<%d;%d;%d%c", button, tx, ty, final))
+		e.hookRawBytes = []byte(fmt.Sprintf("\x1b[<%d;%d;%d%c", button, tx+1, ty+1, final))
 	} else {
-		e.hookRawBytes = []byte(fmt.Sprintf("\x1b[M%c%c%c", button+32, tx+32, ty+32))
+		e.hookRawBytes = []byte(fmt.Sprintf("\x1b[M%c%c%c", button+32, tx+33, ty+33))
 	}
 	return true
 }
