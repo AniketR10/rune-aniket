@@ -361,6 +361,6 @@ func (s *SyncClientStream[T]) closeStream(err error) {
 	}
 }
 
-func (s *SyncClientStream[T]) log(level log.Level, msg string, args ...interface{}) {
+func (s *SyncClientStream[T]) log(level log.Level, msg string, args ...any) {
 	log.WithField(logging.KeyClass, "handlerrpc.SyncClientStream").Logf(level, msg, args...)
 }

@@ -119,7 +119,7 @@ func (s *incendium) Shade(frame, total int, cells [][]term.Cell) {
 
 	s.shaderRisingChars.computeTranslations(frame, total, cells)
 
-	for y := 0; y < len(cells); y++ {
+	for y := range cells {
 		for x := 0; x < len(cells[0]); x++ {
 			// Don't bother rendering Flames shader if no cells would be changed.
 			if !wouldRenderNoFlames {

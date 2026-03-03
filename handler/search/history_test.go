@@ -24,6 +24,7 @@
 package search
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -85,12 +86,6 @@ func TestHistory(t *testing.T) {
 	require.NoError(t, history.Add("ToRemove"))
 	assert.Equal(t, "ToRemove", history.Next())
 	require.NoError(t, history.Remove("ToRemove"))
-	found := false
-	for _, v := range history.Slice() {
-		if v == "ToRemove" {
-			found = true
-			break
-		}
-	}
+	found := slices.Contains(history.Slice(), "ToRemove")
 	assert.False(t, found)
 }

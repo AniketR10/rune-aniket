@@ -151,7 +151,7 @@ func newServerCommandStreamer(
 	return ret, nil
 }
 
-func (s *serverCommandStreamer) log(level log.Level, msg string, args ...interface{}) {
+func (s *serverCommandStreamer) log(level log.Level, msg string, args ...any) {
 	if !log.IsLevelEnabled(level) {
 		return
 	}

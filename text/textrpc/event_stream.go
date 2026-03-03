@@ -124,7 +124,7 @@ func (e *eventStreamClient) waitForUnsubscribe() error {
 	return nil
 }
 
-func (e *eventStreamClient) log(level log.Level, msg string, args ...interface{}) {
+func (e *eventStreamClient) log(level log.Level, msg string, args ...any) {
 	if !log.IsLevelEnabled(level) {
 		return
 	}

@@ -25,6 +25,7 @@ package vtescreen
 
 import (
 	"context"
+	"maps"
 	"math"
 
 	"github.com/unstablebuild/rune-go-sdk/term"
@@ -339,9 +340,7 @@ func (b *AltBuffer) CloneCursor() (ret CursorState) {
 	ret.attr = b.cursor.attr
 	ret.position = b.cursor.position
 	ret.Charsets = make(map[vteparser.CharsetIndex]vteparser.StandardCharset)
-	for k, v := range b.cursor.Charsets {
-		ret.Charsets[k] = v
-	}
+	maps.Copy(ret.Charsets, b.cursor.Charsets)
 	return ret
 }
 

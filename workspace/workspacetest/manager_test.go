@@ -180,11 +180,11 @@ func TestManager(t *testing.T) {
 	})
 
 	t.Run("passes scheme config to scheme constructor", func(*testing.T) {
-		m := workspace.NewManager(config.MapConfig(map[string]interface{}{
-			"test": map[string]interface{}{
+		m := workspace.NewManager(config.MapConfig(map[string]any{
+			"test": map[string]any{
 				"key": "value",
 			},
-			"file": map[string]interface{}{
+			"file": map[string]any{
 				"kk": "vv",
 			},
 		}))

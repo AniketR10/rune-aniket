@@ -32,6 +32,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/blue/walkdir"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"go.uber.org/goleak"
@@ -65,7 +66,7 @@ func TestListDirs(t *testing.T) {
 				scheme, err := workspace.NewFileScheme(context.Background(), config.NopConfig(), uri)
 				require.NoError(t, err)
 
-				it, err := ListDirs(context.Background(), scheme, path)
+				it, err := walkdir.ListDirs(context.Background(), scheme, path)
 				assertIteratorEqual(t, []string{"a", "b"}, it)
 
 				require.NoError(t, scheme.Close())
@@ -95,7 +96,7 @@ func TestListDirs(t *testing.T) {
 		scheme, err := workspace.NewFileScheme(context.Background(), config.NopConfig(), uri)
 		require.NoError(t, err)
 
-		it, err := ListDirs(context.Background(), scheme, dir)
+		it, err := walkdir.ListDirs(context.Background(), scheme, dir)
 		assertIteratorEqual(t, []string{"a/b/c", "a", "a/b"}, it)
 
 		require.NoError(t, scheme.Close())
@@ -123,7 +124,7 @@ func TestListDirs(t *testing.T) {
 		scheme, err := workspace.NewFileScheme(context.Background(), config.NopConfig(), uri)
 		require.NoError(t, err)
 
-		it, err := ListDirs(context.Background(), scheme, dir)
+		it, err := walkdir.ListDirs(context.Background(), scheme, dir)
 		require.NoError(t, it.Close())
 
 		require.NoError(t, scheme.Close())
@@ -155,7 +156,7 @@ func TestListDirs(t *testing.T) {
 		scheme, err := workspace.NewFileScheme(context.Background(), config.NopConfig(), uri)
 		require.NoError(t, err)
 
-		it, err := ListDirs(context.Background(), scheme, dir)
+		it, err := walkdir.ListDirs(context.Background(), scheme, dir)
 		assertIteratorEqual(t, []string{dir1, dir2}, it)
 		require.NoError(t, scheme.Close())
 	})

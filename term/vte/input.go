@@ -48,22 +48,22 @@ func mapKeyToEscapeSequence(comp *Component, ev term.Event) ([]byte, bool) {
 			if comp.IsApplicationCursorKeysMode() {
 				return []byte{0x1b, 'O', 'A'}, true
 			}
-			return []byte(fmt.Sprintf("\x1b[%sA", getModifierStr(ev))), true
+			return fmt.Appendf(nil, "\x1b[%sA", getModifierStr(ev)), true
 		case term.KeyArrowDown:
 			if comp.IsApplicationCursorKeysMode() {
 				return []byte{0x1b, 'O', 'B'}, true
 			}
-			return []byte(fmt.Sprintf("\x1b[%sB", getModifierStr(ev))), true
+			return fmt.Appendf(nil, "\x1b[%sB", getModifierStr(ev)), true
 		case term.KeyArrowRight:
 			if comp.IsApplicationCursorKeysMode() {
 				return []byte{0x1b, 'O', 'C'}, true
 			}
-			return []byte(fmt.Sprintf("\x1b[%sC", getModifierStr(ev))), true
+			return fmt.Appendf(nil, "\x1b[%sC", getModifierStr(ev)), true
 		case term.KeyArrowLeft:
 			if comp.IsApplicationCursorKeysMode() {
 				return []byte{0x1b, 'O', 'D'}, true
 			}
-			return []byte(fmt.Sprintf("\x1b[%sD", getModifierStr(ev))), true
+			return fmt.Appendf(nil, "\x1b[%sD", getModifierStr(ev)), true
 		case term.KeyEnter:
 			if ev.Mod == 0 {
 				if comp.IsNewLineMode() {
@@ -74,7 +74,7 @@ func mapKeyToEscapeSequence(comp *Component, ev term.Event) ([]byte, bool) {
 			return nil, false
 		case term.KeyHome:
 			if comp.IsApplicationCursorKeysMode() {
-				return []byte(fmt.Sprintf("\x1b[1%s~", getModifierStr(ev))), true
+				return fmt.Appendf(nil, "\x1b[1%s~", getModifierStr(ev)), true
 			}
 			return []byte("\x1b[H"), true
 		default:

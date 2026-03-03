@@ -43,8 +43,8 @@ func (s *progressVizABCD) Shade(frame, total int, cells [][]term.Cell) {
 
 	progress := float(frame) / float(total) // 0.0..1.0
 
-	for y := 0; y < h; y++ {
-		for x := 0; x < w; x++ {
+	for y := range h {
+		for x := range w {
 			if cells[y] == nil || x >= len(cells[y]) {
 				continue
 			}

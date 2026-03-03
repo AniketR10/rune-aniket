@@ -29,7 +29,7 @@ import "github.com/unstablebuild/rune-go-sdk/term"
 // representing a grid of w rows and h cols.
 func MakeCellMatrix(w int, h int) [][]term.Cell {
 	cells := make([][]term.Cell, h)
-	for y := 0; y < h; y++ {
+	for y := range h {
 		cells[y] = make([]term.Cell, w)
 	}
 	return cells

@@ -25,6 +25,7 @@ package extutil
 
 import (
 	"context"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -227,10 +228,5 @@ func makeURI(t *testing.T, uriStr string) workspaceapi.URI {
 }
 
 func setHasType(t textapi.EventType, evs []textapi.EventType) bool {
-	for _, ev := range evs {
-		if ev == t {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(evs, t)
 }

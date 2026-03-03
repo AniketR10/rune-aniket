@@ -542,7 +542,7 @@ func TestBufferReset(t *testing.T) {
 		_, err := b.ReadFrom(strings.NewReader(content))
 		require.NoError(t, err)
 
-		for i := 0; i < 2; i++ {
+		for range 2 {
 			b.Reset()
 			_, err = b.ReadFrom(strings.NewReader(content))
 			require.NoError(t, err)
@@ -558,7 +558,7 @@ func TestBufferReset(t *testing.T) {
 		_, err := b.ReadFrom(strings.NewReader(content))
 		require.NoError(t, err)
 
-		for i := 0; i < 2; i++ {
+		for range 2 {
 			b.Reset()
 			b.InsertString(term.Coordinates{}, content)
 			require.NoError(t, err)
@@ -977,7 +977,7 @@ func TestBufferVersion(t *testing.T) {
 	b.Undo()
 	assert.Equal(t, 0, b.Version())
 
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		b.Redo()
 	}
 	assert.Equal(t, 2, b.Version())

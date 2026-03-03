@@ -126,7 +126,7 @@ func benchSearch(b *testing.B, n int) {
 	searchQuery := "au"
 	var in [][]byte
 	template := []string{"caliu.go", "claudi.go"}
-	for i := 0; i < n; i++ {
+	for range n {
 		for _, f := range template {
 			in = append(in, []byte(f))
 		}

@@ -151,8 +151,8 @@ type TabManager interface {
 // Notifications is the interface that wraps methods to display
 // messages to the user.
 type Notifications interface {
-	Notify(level browserapi.NotificationLevel, msg string, args ...interface{}) (string, error)
-	NotifyOnce(level browserapi.NotificationLevel, msg string, args ...interface{}) (string, error)
+	Notify(level browserapi.NotificationLevel, msg string, args ...any) (string, error)
+	NotifyOnce(level browserapi.NotificationLevel, msg string, args ...any) (string, error)
 	UpdateNotificationProgress(id, message string, progress, total int64) error
 }
 

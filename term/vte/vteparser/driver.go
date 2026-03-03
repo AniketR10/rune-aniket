@@ -170,7 +170,7 @@ func (p *driver) OSCDispatch(params [][]byte, bellTerminated bool) {
 			}
 
 			var id string
-			for _, kv := range bytes.Split(linkParams, []byte(":")) {
+			for kv := range bytes.SplitSeq(linkParams, []byte(":")) {
 				if bytes.HasPrefix(kv, []byte("id=")) {
 					id = string(kv[3:])
 					break
@@ -263,7 +263,7 @@ func (p *driver) CSIDispatch(
 	case 'b':
 		if c := p.state.precedingChar; c != 0 {
 			count := nextParamOr(1)
-			for i := 0; i < count; i++ {
+			for range count {
 				handler.Input(c)
 			}
 		} else {

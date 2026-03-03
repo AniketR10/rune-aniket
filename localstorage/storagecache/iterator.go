@@ -34,7 +34,7 @@ func (i *cacheIterator[T]) HasNext() bool {
 	return i.idx < len(i.docs)
 }
 
-func (i *cacheIterator[T]) NextTo(doc interface{}) error {
+func (i *cacheIterator[T]) NextTo(doc any) error {
 	*doc.(*T) = i.docs[i.idx]
 	i.idx++
 	return nil

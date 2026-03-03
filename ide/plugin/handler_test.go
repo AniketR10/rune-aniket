@@ -208,11 +208,11 @@ func (n nopBrowser) PublishEvent(ev term.Event) error {
 	return nil
 }
 
-func (n nopBrowser) Notify(browserapi.NotificationLevel, string, ...interface{}) (string, error) {
+func (n nopBrowser) Notify(browserapi.NotificationLevel, string, ...any) (string, error) {
 	return "", nil
 }
 
-func (n nopBrowser) NotifyOnce(browserapi.NotificationLevel, string, ...interface{}) (string, error) {
+func (n nopBrowser) NotifyOnce(browserapi.NotificationLevel, string, ...any) (string, error) {
 	return "", nil
 }
 

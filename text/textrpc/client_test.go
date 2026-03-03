@@ -168,7 +168,7 @@ func TestSetLocationListRequest(t *testing.T) {
 
 func benchmarkSetLocationListRequest(b *testing.B, n int) {
 	l := make([]textapi.Location, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		l[i] = textapi.Location{
 			From: term.Coordinates{X: i, Y: n},
 			To:   term.Coordinates{X: n, Y: n},
@@ -230,8 +230,8 @@ func expectClientEdit(
 			gomock.Any(),
 			gomock.Any(), gomock.Any()).
 		DoAndReturn(func(
-			ctx context.Context, method string, args interface{},
-			reply interface{}, opts ...grpc.CallOption) error {
+			ctx context.Context, method string, args any,
+			reply any, opts ...grpc.CallOption) error {
 			editReq, ok := args.(*textrpc.EditRequest)
 			require.True(t, ok)
 

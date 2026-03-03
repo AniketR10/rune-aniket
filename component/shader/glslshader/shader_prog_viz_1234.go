@@ -45,8 +45,8 @@ func (s *progressViz1234) Shade(frame, total int, cells [][]term.Cell) {
 
 	progress := int(math.Round(9.0 * float(frame) / float(total))) // 0..9
 
-	for y := 0; y < h; y++ {
-		for x := 0; x < w; x++ {
+	for y := range h {
+		for x := range w {
 			if cells[y] == nil || x >= len(cells[y]) {
 				continue
 			}

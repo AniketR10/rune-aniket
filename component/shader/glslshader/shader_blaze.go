@@ -180,7 +180,7 @@ func (s *blaze) noise(n vec2D) float {
 func (s *blaze) fbm(n vec2D) float {
 	total := 0.0
 	amplitude := 1.0
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		total += s.noise(n) * amplitude
 		n = n.add(n.multSc(1.7))
 		amplitude *= 0.47

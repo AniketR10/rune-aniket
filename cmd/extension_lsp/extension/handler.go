@@ -30,6 +30,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -244,7 +245,7 @@ type lspEditorHandler struct {
 	files             map[string]*file
 	pendingDiagnostic map[string][]protocol.Diagnostic
 	pendingGoTo       map[string]protocol.Range
-	serversCfg        map[string]interface{}
+	serversCfg        map[string]any
 	servers           map[string]execServer
 	cancelTokensReq   func()
 }
@@ -293,7 +294,7 @@ func sendInitializeRequest(
 	params.Capabilities.TextDocument.SemanticTokens.TokenModifiers = lsp.SemanticModifiers()
 	params.Capabilities.TextDocument.PublishDiagnostics.TagSupport.ValueSet = []protocol.DiagnosticTag{protocol.Unnecessary}
 	params.Capabilities.TextDocument.PublishDiagnostics.VersionSupport = true
-	params.InitializationOptions = map[string]interface{}{
+	params.InitializationOptions = map[string]any{
 		"symbolMatcher":  matcherString[opts.SymbolMatcher],
 		"semanticTokens": true,
 	}
@@ -339,7 +340,7 @@ func initializeConnection(
 	return server
 }
 
-func (h *lspEditorHandler) parseCmd(arg interface{}) (workspaceapi.Cmd, error) {
+func (h *lspEditorHandler) parseCmd(arg any) (workspaceapi.Cmd, error) {
 	str, ok := arg.(string)
 	cmd := strings.Split(str, " ")
 	if !ok || len(cmd) == 0 {
@@ -414,7 +415,7 @@ func (h *lspEditorHandler) setPipes(
 }
 
 func (h *lspEditorHandler) startLanguageServer(
-	langID string, cmdAndArgs interface{},
+	langID string, cmdAndArgs any,
 ) (execServer, error) {
 	ctx := context.Background()
 	ctx, cancelFn := context.WithTimeout(ctx, h.connectTimeout)
@@ -479,9 +480,7 @@ func (h *lspEditorHandler) initLanguageServers(pconfig config.Config) error {
 
 func getSemanticTypesAttr(pconfig config.Config) (map[string]tcell.Color, error) {
 	ret := make(map[string]tcell.Color, len(defaultSemanticTypeAttr))
-	for k, v := range defaultSemanticTypeAttr {
-		ret[k] = v
-	}
+	maps.Copy(ret, defaultSemanticTypeAttr)
 
 	colors, err := pconfig.GetConfig("syntax_highlighting")
 	if err != nil {
@@ -527,9 +526,7 @@ func getDiagnosticAttr(pconfig config.Config) (
 	map[protocol.DiagnosticSeverity]term.Attributes, error,
 ) {
 	ret := make(map[protocol.DiagnosticSeverity]term.Attributes, len(defaultDiagnosticAttr))
-	for k, v := range defaultDiagnosticAttr {
-		ret[k] = v
-	}
+	maps.Copy(ret, defaultDiagnosticAttr)
 
 	colors, err := pconfig.GetConfig("diagnostics")
 	if err != nil {
@@ -633,7 +630,7 @@ func newLspHandler(
 	// default is disabled for all
 	ret.enableSemanticTokens = make(map[string]bool)
 
-	var enableSemanticTokensIfc map[string]interface{}
+	var enableSemanticTokensIfc map[string]any
 	enableSemanticTokensIfc, err = pconfig.GetMap("enable_semantic_tokens")
 	if err != nil {
 		if err != config.ErrNotFound {

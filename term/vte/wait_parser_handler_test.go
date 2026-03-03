@@ -24,7 +24,6 @@
 package vte
 
 import (
-	"context"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -38,8 +37,7 @@ func TestWaitParserHandler(t *testing.T) {
 	t.Run("schedules a callback", func(t *testing.T) {
 		t.Parallel()
 		mock := newMockBellHandler()
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
+		ctx := t.Context()
 		ph := newWaitParserHandler(ctx, mock)
 
 		var callbackCalled, triggerCalled bool
@@ -58,8 +56,7 @@ func TestWaitParserHandler(t *testing.T) {
 	t.Run("schedules multiple callbacks, preserving order", func(t *testing.T) {
 		t.Parallel()
 		mock := newMockBellHandler()
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
+		ctx := t.Context()
 		ph := newWaitParserHandler(ctx, mock)
 
 		n := 10
@@ -73,7 +70,7 @@ func TestWaitParserHandler(t *testing.T) {
 			ch <- struct{}{}
 		})
 
-		for i := 0; i < n; i++ {
+		for i := range n {
 			i := i
 			ph.scheduleBellCallback(func() {
 				defer wg.Done()
@@ -97,8 +94,7 @@ func TestWaitParserHandler(t *testing.T) {
 	t.Run("is goroutine safe", func(t *testing.T) {
 		t.Parallel()
 		mock := newMockBellHandler()
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
+		ctx := t.Context()
 		ph := newWaitParserHandler(ctx, mock)
 
 		n := 10000
@@ -112,7 +108,7 @@ func TestWaitParserHandler(t *testing.T) {
 		var wg sync.WaitGroup
 		wg.Add(n)
 		go func() {
-			for i := 0; i < n; i++ {
+			for i := range n {
 				i := i
 				ph.scheduleBellCallback(func() {
 					defer wg.Done()

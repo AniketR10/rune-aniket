@@ -95,7 +95,7 @@ func (t testFileInfo) IsDir() bool {
 	return !strings.Contains(t.name, ".")
 }
 
-func (t testFileInfo) Sys() interface{} {
+func (t testFileInfo) Sys() any {
 	return nil
 }
 

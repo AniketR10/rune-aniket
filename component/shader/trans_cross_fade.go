@@ -198,7 +198,7 @@ func (t *transCrossFade) interpolateBuffer(
 	// the previous frames
 	rng := rand.New(rand.NewSource(0))
 	for f := 0; f < int(math.Round((float64(frame) - transStartFrame))); f++ {
-		for i := 0; i < maxCharRevealPerFrame; i++ {
+		for range maxCharRevealPerFrame {
 			rowIdx := rng.Intn(len(t.activations))
 			row := t.activations[rowIdx]
 			colIdx := rng.Intn(len(row))

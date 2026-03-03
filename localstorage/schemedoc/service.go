@@ -69,11 +69,11 @@ type service struct {
 	wg closeGroup
 }
 
-func (s *service) Create(ctx context.Context, ID string, doc interface{}) error {
+func (s *service) Create(ctx context.Context, ID string, doc any) error {
 	return s.create(ctx, ID, doc, os.O_CREATE|os.O_EXCL|os.O_WRONLY)
 }
 
-func (s *service) Set(ctx context.Context, ID string, doc interface{}) error {
+func (s *service) Set(ctx context.Context, ID string, doc any) error {
 	return s.create(ctx, ID, doc, os.O_CREATE|os.O_WRONLY|os.O_TRUNC)
 }
 
@@ -99,7 +99,7 @@ func (s *service) Update(
 		return fmt.Errorf("scheme open: %w", err)
 	}
 
-	proto := make(map[string]interface{})
+	proto := make(map[string]any)
 	err = s.read(orig, &proto)
 	if cerr := orig.Close(); cerr != nil {
 		err = multierr.Append(err, cerr)
@@ -146,7 +146,7 @@ func (s *service) Update(
 	return nil
 }
 
-func (s *service) Get(ctx context.Context, ID string, doc interface{}) error {
+func (s *service) Get(ctx context.Context, ID string, doc any) error {
 	if ID == "" {
 		return errors.New("invalid ID: empty")
 	}
@@ -217,7 +217,7 @@ func (s *service) Close() (ret error) {
 	return ret
 }
 
-func (s *service) read(f workspaceapi.File, doc interface{}) error {
+func (s *service) read(f workspaceapi.File, doc any) error {
 	data, err := io.ReadAll(f)
 	if err != nil {
 		return fmt.Errorf("file read all: %v", err)
@@ -234,7 +234,7 @@ func (s *service) getFileName(id string) string {
 	return url.PathEscape(id)
 }
 
-func (s *service) create(ctx context.Context, ID string, doc interface{}, openFlags int) error {
+func (s *service) create(ctx context.Context, ID string, doc any, openFlags int) error {
 	if doc == nil {
 		panic("invalid nil data argument to Create/Set")
 	}
@@ -268,7 +268,7 @@ func (s *service) create(ctx context.Context, ID string, doc interface{}, openFl
 	return ret
 }
 
-func (s *service) write(f workspaceapi.File, doc interface{}) error {
+func (s *service) write(f workspaceapi.File, doc any) error {
 	data, err := s.marshaler.Marshal(doc)
 	if err != nil {
 		return fmt.Errorf("marshal: %v", err)
@@ -319,7 +319,7 @@ func (d *docIter) HasNext() (ok bool) {
 			return true
 		}
 
-		proto := make(map[string]interface{})
+		proto := make(map[string]any)
 		err = d.svc.read(f, &proto)
 		if err != nil {
 			if cerr := f.Close(); cerr != nil {
@@ -346,7 +346,7 @@ func (d *docIter) HasNext() (ok bool) {
 	return d.doneErr == nil
 }
 
-func (d *docIter) NextTo(doc interface{}) error {
+func (d *docIter) NextTo(doc any) error {
 	if !document.IsEncodeable(doc) {
 		return errors.New("receiver is not a pointer and not a map or is nil")
 	}

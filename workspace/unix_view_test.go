@@ -66,7 +66,7 @@ func init() {
 	}
 	defer f.Close()
 
-	for i := 0; i < testFilesLines; i++ {
+	for range testFilesLines {
 		_, err := f.WriteString("LINE\n")
 		if err != nil {
 			return
@@ -159,7 +159,7 @@ func TestBufferViewIntegration(t *testing.T) {
 			}
 			require.Equal(t, snippet, b.String())
 
-			for i := 0; i < 2; i++ {
+			for i := range 2 {
 				b.Reset()
 				_, err = b.ReadFrom(strings.NewReader(test.content))
 				require.NoError(t, err)

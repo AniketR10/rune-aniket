@@ -555,7 +555,7 @@ func (c *Component) Bar(cfg browserapi.BarConfig, h tui.Handler) {
 	}
 }
 
-func (c *Component) notify(level browserapi.NotificationLevel, msg string, args ...interface{}) {
+func (c *Component) notify(level browserapi.NotificationLevel, msg string, args ...any) {
 	_, _ = c.config.Notifications.Notify(level, fmt.Sprintf(msg, args...))
 }
 
@@ -884,7 +884,7 @@ func (c *Component) Close() (ret error) {
 	return ret
 }
 
-func (c *Component) log(level log.Level, msg string, args ...interface{}) {
+func (c *Component) log(level log.Level, msg string, args ...any) {
 	if !log.IsLevelEnabled(level) {
 		return
 	}

@@ -222,7 +222,6 @@ func TestWindowDraw(t *testing.T) {
 	}
 
 	for _, cfg := range suite {
-		cfg := cfg
 		t.Run(fmt.Sprintf("%#v", cfg), func(t *testing.T) {
 			// create a decent mix of components and UI elements
 			b := NewComponent(cfg)

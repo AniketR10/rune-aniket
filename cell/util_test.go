@@ -269,7 +269,7 @@ public class Rotor {
 
 func benchmarkCellToBuffer(b *testing.B, n int) {
 	c := make([][]term.Cell, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		c[i] = make([]term.Cell, n)
 	}
 

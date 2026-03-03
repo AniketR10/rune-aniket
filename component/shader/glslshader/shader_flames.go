@@ -236,7 +236,7 @@ func (s *flames) Shade(frame, total int, cells [][]term.Cell) {
 	s.ensureSliceFieldsCap(frame, total, cells)
 	s.jitterActivations(frame, total, cells)
 
-	for y := 0; y < len(cells); y++ {
+	for y := range cells {
 		for x := 0; x < len(cells[0]); x++ {
 			s.processCell(x, y, frame, total, cells)
 		}
@@ -486,7 +486,7 @@ func (s *flames) jitterActivations(frame, total int, in [][]term.Cell) {
 	// the previous frames.
 	s.activations = make(map[int][]int) // reset
 	rng := rand.New(rand.NewSource(0))
-	for f := 0; f < frame; f++ {
+	for f := range frame {
 		for i := 0; i < int(s.Fuel*float(w)); i++ {
 			randCol := rng.Intn(w + 1)
 			if len(s.activations[randCol]) <= h {

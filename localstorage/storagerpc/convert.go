@@ -65,7 +65,7 @@ func makeModelPreconds(m docmarshal.Marshaler, preconds []*docpb.UpdateDocumentR
 func makeModelFields(m docmarshal.Marshaler, fields []*docpb.UpdateDocumentRequest_Field) (
 	ret []document.Field, err error,
 ) {
-	var slab map[string]interface{}
+	var slab map[string]any
 	var f document.Filter
 
 	for _, u := range fields {
@@ -87,7 +87,7 @@ func makeModelFields(m docmarshal.Marshaler, fields []*docpb.UpdateDocumentReque
 }
 
 func makeModelFilter(m docmarshal.Marshaler,
-	slab map[string]interface{}, pf *docpb.ListDocumentRequest_Filter,
+	slab map[string]any, pf *docpb.ListDocumentRequest_Filter,
 ) (document.Filter, error) {
 	err := storageapi.SafeDecode(m, &slab, pf.Data)
 	if err != nil {
@@ -118,7 +118,7 @@ func makeModelFilter(m docmarshal.Marshaler,
 func makeModelFilters(m docmarshal.Marshaler, filters []*docpb.ListDocumentRequest_Filter) (
 	ret []document.Filter, err error,
 ) {
-	var slab map[string]interface{}
+	var slab map[string]any
 	for _, pf := range filters {
 		var f document.Filter
 		f, err = makeModelFilter(m, slab, pf)

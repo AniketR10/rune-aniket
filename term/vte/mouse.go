@@ -93,9 +93,9 @@ func (e *mouseDriver) reportAction(
 		if action == mouse.Release {
 			final = 'm'
 		}
-		e.hookRawBytes = []byte(fmt.Sprintf("\x1b[<%d;%d;%d%c", button, tx+1, ty+1, final))
+		e.hookRawBytes = fmt.Appendf(nil, "\x1b[<%d;%d;%d%c", button, tx+1, ty+1, final)
 	} else {
-		e.hookRawBytes = []byte(fmt.Sprintf("\x1b[M%c%c%c", button+32, tx+33, ty+33))
+		e.hookRawBytes = fmt.Appendf(nil, "\x1b[M%c%c%c", button+32, tx+33, ty+33)
 	}
 	return true
 }

@@ -1238,7 +1238,7 @@ func TestIntegrationMoveWordSpecialChars(t *testing.T) {
 		}
 
 		// forward
-		for i := 0; i < len(jumps); i++ {
+		for i := range jumps {
 			_, ok := vi.Handle(term.Event{Type: term.EventKey, Ch: 'e'})
 			require.True(t, ok)
 			cell, ok := vi.cursor.Cell()
@@ -1276,7 +1276,7 @@ pqr@st`
 		}
 
 		// forward
-		for i := 0; i < len(jumps); i++ {
+		for i := range jumps {
 			_, ok := vi.Handle(term.Event{Type: term.EventKey, Ch: 'e'})
 			require.True(t, ok)
 			cell, ok := vi.cursor.Cell()
@@ -1292,7 +1292,7 @@ pqr@st`
 		}
 
 		// backwards
-		for i := 0; i < len(revJumps); i++ {
+		for i := range revJumps {
 			_, ok := vi.Handle(term.Event{Type: term.EventKey, Ch: 'b'})
 			require.True(t, ok)
 			cell, ok := vi.cursor.Cell()
@@ -1579,7 +1579,7 @@ func TestVigg(t *testing.T) {
    4444444444444444
 `
 	codeLong := code
-	for i := 0; i < 200; i++ {
+	for range 200 {
 		codeLong += code
 	}
 
@@ -1773,12 +1773,12 @@ func TestSetCursorAtScrollBounds(t *testing.T) {
 
 func TestResetCount(t *testing.T) {
 	t.Run("numbers are accumulated into vi counter", func(t *testing.T) {
-		code := ""
-		for i := 0; i < 45; i++ {
-			code += fmt.Sprintf("%v\n", i)
+		var code strings.Builder
+		for i := range 45 {
+			code.WriteString(fmt.Sprintf("%v\n", i))
 		}
 
-		vi := setupVi(t, code, 2)
+		vi := setupVi(t, code.String(), 2)
 		vi.Resize(5, 50)
 
 		vi.Handle(term.Event{Type: term.EventKey, Ch: '1'})

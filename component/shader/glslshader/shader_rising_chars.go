@@ -97,7 +97,7 @@ type risingChars struct {
 
 func (s *risingChars) Shade(frame, total int, cells [][]term.Cell) {
 	s.computeTranslations(frame, total, cells)
-	for y := 0; y < len(cells); y++ {
+	for y := range cells {
 		for x := 0; x < len(cells[0]); x++ {
 			s.processCell(x, y, frame, total, cells)
 		}

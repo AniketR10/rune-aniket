@@ -380,7 +380,7 @@ func (s *Server) unsubscribeClient(handler *eventStreamClient) {
 	}
 }
 
-func (s *Server) log(level log.Level, msg string, args ...interface{}) {
+func (s *Server) log(level log.Level, msg string, args ...any) {
 	if !log.IsLevelEnabled(level) {
 		return
 	}

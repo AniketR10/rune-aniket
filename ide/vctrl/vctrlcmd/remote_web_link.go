@@ -190,7 +190,7 @@ func (c *copyRemoteURL) clipboardCopy(text string) error {
 }
 
 func (c *copyRemoteURL) notify(
-	level browserapi.NotificationLevel, msg string, args ...interface{},
+	level browserapi.NotificationLevel, msg string, args ...any,
 ) error {
 	_, err := c.noti.Notify(level, msg, args...)
 	return err

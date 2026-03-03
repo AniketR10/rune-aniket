@@ -26,6 +26,7 @@ package glslshader
 import (
 	"math"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -269,17 +270,18 @@ func TestNoise(t *testing.T) {
 
 			sh.Shade(30, 100, cells)
 
-			grid := "\n"
+			var grid strings.Builder
+			grid.WriteString("\n")
 			for _, row := range cells {
 				for _, cell := range row {
-					grid += strconv.Itoa(int(math.Round(
+					grid.WriteString(strconv.Itoa(int(math.Round(
 						shaderutils.ColorBrightness(cell.Bg, tcell.ColorDefault) * 9,
-					)))
+					))))
 				}
-				grid += "\n"
+				grid.WriteString("\n")
 			}
 
-			assert.Equal(t, tcase.expect, grid)
+			assert.Equal(t, tcase.expect, grid.String())
 		})
 	}
 }

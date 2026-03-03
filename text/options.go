@@ -26,6 +26,7 @@ package text
 import (
 	"context"
 	"fmt"
+	"maps"
 	"time"
 
 	"github.com/unstablebuild/blue/document"
@@ -378,9 +379,7 @@ func exploreAlias(
 			continue
 		}
 		copyOrigins := make(map[string]struct{}, len(origins)+1)
-		for k, v := range origins {
-			copyOrigins[k] = v
-		}
+		maps.Copy(copyOrigins, origins)
 		if isErr := exploreAlias(aliases, target, copyOrigins); isErr {
 			return true
 		}

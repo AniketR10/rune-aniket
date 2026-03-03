@@ -822,7 +822,7 @@ func (s *Server) Join(ctx context.Context, req *workspacerpc.JoinRequest) (*work
 }
 
 func (s *Server) log(
-	level log.Level, msg string, args ...interface{},
+	level log.Level, msg string, args ...any,
 ) {
 	if !log.IsLevelEnabled(level) {
 		return

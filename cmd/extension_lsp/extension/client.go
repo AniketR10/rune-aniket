@@ -61,7 +61,7 @@ func (h *lspClientHandler) LogMessage(
 }
 
 func (h *lspClientHandler) Event(
-	ctx context.Context, ev *interface{},
+	ctx context.Context, ev *any,
 ) error {
 	log.Tracef("lspClientHandler.Event: %#v", ev)
 	return nil
@@ -90,15 +90,15 @@ func (h *lspClientHandler) WorkspaceFolders(
 
 func (h *lspClientHandler) Configuration(
 	ctx context.Context, p *protocol.ParamConfiguration,
-) ([]interface{}, error) {
+) ([]any, error) {
 	log.Tracef("lspClientHandler.Configuration: %#v", p)
 
-	results := make([]interface{}, len(p.Items))
+	results := make([]any, len(p.Items))
 	for i, item := range p.Items {
 		if item.Section != "gopls" {
 			continue
 		}
-		env := map[string]interface{}{}
+		env := map[string]any{}
 		// for _, value := range c.app.env {
 		// 	l := strings.SplitN(value, "=", 2)
 		// 	if len(l) != 2 {
@@ -106,7 +106,7 @@ func (h *lspClientHandler) Configuration(
 		// 	}
 		// 	env[l[0]] = l[1]
 		// }
-		m := map[string]interface{}{
+		m := map[string]any{
 			"env": env,
 			"analyses": map[string]bool{
 				"fillreturns":    true,

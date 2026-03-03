@@ -1206,7 +1206,7 @@ func (t *parserHandler) ReportModifyOtherKeys() {
 	t.log(log.WarnLevel, "unsupported call to ReportModifyOtherKeys")
 }
 
-func (t *parserHandler) log(level log.Level, line string, params ...interface{}) {
+func (t *parserHandler) log(level log.Level, line string, params ...any) {
 	if !log.IsLevelEnabled(level) {
 		return
 	}

@@ -301,7 +301,7 @@ func TestComponentEditWindowTab(t *testing.T) {
 			assertFreeTab(t, goog, false)
 			assertFreeTab(t, &googSubs.t, false)
 
-			for i := 0; i < 3; i++ {
+			for range 3 {
 				assert.True(t, c.NextTab(win))
 			}
 
@@ -310,7 +310,7 @@ func TestComponentEditWindowTab(t *testing.T) {
 			assertFreeTab(t, goog, true)
 			assertFreeTab(t, &googSubs.t, true)
 
-			for i := 0; i < 3; i++ {
+			for range 3 {
 				assert.True(t, c.PreviousTab(win0))
 			}
 

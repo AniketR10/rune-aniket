@@ -75,7 +75,7 @@ func (s *stdConn) RemoteAddr() net.Addr {
 	return s.conn.RemoteAddr()
 }
 
-func (s *stdConn) log(level log.Level, msg string, args ...interface{}) {
+func (s *stdConn) log(level log.Level, msg string, args ...any) {
 	s.logger.
 		WithFields(log.Fields{logging.KeyClass: "stdConn"}).
 		Logf(level, msg, args...)

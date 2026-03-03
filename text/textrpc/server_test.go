@@ -206,7 +206,7 @@ func TestServerSetLocationList(t *testing.T) {
 		var wg sync.WaitGroup
 		n := 100
 		wg.Add(n)
-		for i := 0; i < n; i++ {
+		for range n {
 			go func() {
 				defer wg.Done()
 				l := text.LocationSlice(locs)

@@ -419,7 +419,7 @@ func (b *PrimaryBuffer) ResetCells(start, end int) {
 	b.resetCellsAt(pos.Y, start, end, b.defaultChar)
 }
 
-func (t *PrimaryBuffer) log(level log.Level, line string, params ...interface{}) {
+func (t *PrimaryBuffer) log(level log.Level, line string, params ...any) {
 	if !log.IsLevelEnabled(level) {
 		return
 	}

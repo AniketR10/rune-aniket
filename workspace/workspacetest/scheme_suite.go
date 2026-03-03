@@ -41,11 +41,11 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/blue/walkdir"
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/workspace"
-	"unstable.build/go-tui/workspace/walkdir"
 )
 
 func TestWorkspaceSchemeExecutor(
@@ -1085,7 +1085,7 @@ func TestWorkspaceSchemeListFilesIntegration(
 			cwd, err := scheme.URI(".")
 			require.NoError(t, err)
 
-			for i := 0; i < totalFiles; i++ {
+			for i := range totalFiles {
 				_, cleanup := createTestFile(t, scheme, "file"+strconv.Itoa(i), strconv.Itoa(i))
 				defer cleanup()
 			}
@@ -1093,7 +1093,7 @@ func TestWorkspaceSchemeListFilesIntegration(
 			it, err := walkdir.ListFiles(context.Background(), scheme, path)
 			require.NoError(t, err)
 
-			for i := 0; i < totalFiles; i++ {
+			for i := range totalFiles {
 				path, ok := it.Next(context.Background())
 				require.True(t, ok, i)
 				require.NoError(t, it.Err())
@@ -1117,7 +1117,7 @@ func TestWorkspaceSchemeListFilesIntegration(
 		cwd, err := scheme.URI(".")
 		require.NoError(t, err)
 
-		for i := 0; i < totalFiles; i++ {
+		for i := range totalFiles {
 			_, cleanup := createTestFile(t, scheme, "file"+strconv.Itoa(i), strconv.Itoa(i))
 			defer cleanup()
 		}
@@ -1125,7 +1125,7 @@ func TestWorkspaceSchemeListFilesIntegration(
 		it, err := walkdir.ListFiles(context.Background(), scheme, "./subfolder")
 		require.NoError(t, err)
 
-		for i := 0; i < totalFiles; i++ {
+		for i := range totalFiles {
 			path, ok := it.Next(context.Background())
 			require.True(t, ok, i)
 			require.NoError(t, it.Err())
@@ -1148,7 +1148,7 @@ func TestWorkspaceSchemeListFilesIntegration(
 		cwd, err := scheme.URI(".")
 		require.NoError(t, err)
 
-		for i := 0; i < totalFiles; i++ {
+		for i := range totalFiles {
 			_, cleanup := createTestFile(t, scheme, "file"+strconv.Itoa(i), strconv.Itoa(i))
 			defer cleanup()
 		}
@@ -1156,7 +1156,7 @@ func TestWorkspaceSchemeListFilesIntegration(
 		it, err := walkdir.ListFiles(context.Background(), scheme, "./file1")
 		require.NoError(t, err)
 
-		for i := 0; i < totalFiles; i++ {
+		for i := range totalFiles {
 			path, ok := it.Next(context.Background())
 			require.True(t, ok, i)
 			require.NoError(t, it.Err())
@@ -1176,7 +1176,7 @@ func TestWorkspaceSchemeListFilesIntegration(
 		defer scheme.Close()
 		totalFiles := 10
 
-		for i := 0; i < totalFiles; i++ {
+		for i := range totalFiles {
 			_, cleanup := createTestFile(t, scheme, "file"+strconv.Itoa(i), strconv.Itoa(i))
 			defer cleanup()
 		}
@@ -1204,7 +1204,7 @@ func TestWorkspaceSchemeListFilesIntegration(
 		cwd, err := scheme.URI(".")
 		require.NoError(t, err)
 
-		for i := 0; i < totalFiles; i++ {
+		for i := range totalFiles {
 			_, cleanup := createTestFile(t, scheme, "file"+strconv.Itoa(i), strconv.Itoa(i))
 			defer cleanup()
 		}
@@ -1212,7 +1212,7 @@ func TestWorkspaceSchemeListFilesIntegration(
 		it, err := walkdir.ListFiles(context.Background(), scheme, "fi/fi/fi/fi")
 		require.NoError(t, err)
 
-		for i := 0; i < totalFiles; i++ {
+		for i := range totalFiles {
 			path, ok := it.Next(context.Background())
 			require.True(t, ok, i)
 			require.NoError(t, it.Err())
@@ -1397,7 +1397,7 @@ func TestWorkspaceSchemeWatch(
 
 		// order is not guaranteed
 		var files []string
-		for i := 0; i < 2; i++ {
+		for range 2 {
 			timer := time.NewTimer(1 * time.Second)
 			select {
 			case ei := <-ch:

@@ -87,26 +87,26 @@ type extensionConfig struct {
 type ideConfig struct {
 	defaultWallpaper browser.Wallpaper
 
-	cfg              map[string]interface{}
+	cfg              map[string]any
 	errors           map[string]error
 	ringBell         func()
 	scheduleNextTick func(func()) bool
 	zdotDir          string
 }
 
-func overrideConfig(ideConfig, cfg map[string]interface{}) {
+func overrideConfig(ideConfig, cfg map[string]any) {
 	for key, new := range cfg {
 		prev, ok := ideConfig[key]
 		if !ok {
 			ideConfig[key] = new
 			continue
 		}
-		prevMap, ok := prev.(map[string]interface{})
+		prevMap, ok := prev.(map[string]any)
 		if !ok {
 			ideConfig[key] = new
 			continue
 		}
-		newMap, ok := new.(map[string]interface{})
+		newMap, ok := new.(map[string]any)
 		if !ok {
 			ideConfig[key] = new
 			continue
@@ -116,7 +116,7 @@ func overrideConfig(ideConfig, cfg map[string]interface{}) {
 }
 
 func initConfig(
-	c *ideConfig, cfg map[string]interface{}, defaultWallpaper browser.Wallpaper,
+	c *ideConfig, cfg map[string]any, defaultWallpaper browser.Wallpaper,
 	ringBell func(), scheduleNextTick func(func()) bool,
 	zdotDir string,
 ) {
@@ -133,7 +133,7 @@ func initDefaultConfig(
 	ringBell func(), scheduleNextTick func(func()) bool,
 	zdotDir string,
 ) {
-	cfg := make(map[string]interface{})
+	cfg := make(map[string]any)
 	initConfig(c, cfg, defaultWallpaper, ringBell,
 		scheduleNextTick, zdotDir)
 }
@@ -168,7 +168,7 @@ func (c ideConfig) commandKeyMappings() map[handler.Sequence][][]string {
 				continue
 			}
 		}
-		cmdsAndArgsSliceIfc, ok := v.([]interface{})
+		cmdsAndArgsSliceIfc, ok := v.([]any)
 		if ok {
 			var cmdsAndArgs [][]string
 			for _, ifc := range cmdsAndArgsSliceIfc {
@@ -1721,7 +1721,7 @@ func (c ideConfig) inputMode() term.InputMode {
 		return term.InputCurrent
 	}
 
-	inputModeSlice, ok := inputModeIfc.([]interface{})
+	inputModeSlice, ok := inputModeIfc.([]any)
 	if !ok {
 		inputModeStr, ok := inputModeIfc.(string)
 		if !ok {
@@ -1729,7 +1729,7 @@ func (c ideConfig) inputMode() term.InputMode {
 			return term.InputCurrent
 		}
 
-		inputModeSlice = []interface{}{inputModeStr}
+		inputModeSlice = []any{inputModeStr}
 	}
 
 	var ret term.InputMode
@@ -1756,7 +1756,7 @@ func (c ideConfig) extensions() map[string]extensionConfig {
 	if !ok {
 		return nil
 	}
-	pConfigMap, ok := pConfigIfc.(map[string]interface{})
+	pConfigMap, ok := pConfigIfc.(map[string]any)
 	if !ok {
 		c.errors["extensions"] = errors.New("invalid type")
 		return nil
@@ -1764,7 +1764,7 @@ func (c ideConfig) extensions() map[string]extensionConfig {
 
 	ret := make(map[string]extensionConfig)
 	for id, pConfig := range pConfigMap {
-		pcfg, ok := pConfig.(map[string]interface{})
+		pcfg, ok := pConfig.(map[string]any)
 		if !ok {
 			c.errors["extensions."+id] = errors.New("invalid type")
 			continue
@@ -2111,10 +2111,10 @@ func (c ideConfig) pluginBarConfig() plugin.BarConfig {
 	return ret
 }
 
-func decodeConfig(r io.Reader) (cfg map[string]interface{}, err error) {
+func decodeConfig(r io.Reader) (cfg map[string]any, err error) {
 	d := yaml.NewDecoder(r)
 
-	cfg = make(map[string]interface{})
+	cfg = make(map[string]any)
 	err = d.Decode(&cfg)
 	return
 }

@@ -542,7 +542,6 @@ Alias of jeep
 
 	log.SetLevel(log.InfoLevel)
 	for _, tcase := range tsuite {
-		tcase := tcase
 		t.Run(tcase.desc, func(t *testing.T) {
 			t.Parallel()
 			dispatchFn, cleanup := nopDispatch()

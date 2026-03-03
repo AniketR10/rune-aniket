@@ -111,6 +111,6 @@ func (t FileInfo) IsDir() bool {
 	return t.FileIsDir
 }
 
-func (t FileInfo) Sys() interface{} {
+func (t FileInfo) Sys() any {
 	return nil
 }

@@ -59,7 +59,7 @@ func TestAnimationPlayer(t *testing.T) {
 	h := AnimationPlayer(c)
 	h.Resize(8, 4)
 
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		w := term.NewStringWriter(8, 4)
 		<-ch
 		h.Draw(w)
@@ -84,7 +84,7 @@ func TestAnimationPlayer(t *testing.T) {
 	assert.True(t, handled)
 	assert.False(t, exit)
 
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		w := term.NewStringWriter(8, 4)
 		<-ch
 		h.Draw(w)
@@ -98,7 +98,7 @@ func TestAnimationPlayer(t *testing.T) {
 	assert.True(t, handled)
 	assert.False(t, exit)
 
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		w := term.NewStringWriter(8, 4)
 		<-ch
 		h.Draw(w)
@@ -125,7 +125,7 @@ func TestAnimationPlayer(t *testing.T) {
 	goleak.VerifyNone(t)
 
 	// after close animation should be paused and cause no panics
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		w := term.NewStringWriter(8, 4)
 		h.Draw(w)
 		expected := "0000    \n0000    \n    0000\n    0000"

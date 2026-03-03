@@ -26,6 +26,7 @@ package idepkgtest
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"strconv"
 	"sync"
 	"testing"
@@ -68,7 +69,7 @@ func (n *Notifications) ExpectReturnErr(err error) {
 
 // Notify satisfies browserapi.Notifications.
 func (n *Notifications) Notify(
-	level browserapi.NotificationLevel, msg string, args ...interface{},
+	level browserapi.NotificationLevel, msg string, args ...any,
 ) (string, error) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
@@ -93,7 +94,7 @@ func (n *Notifications) Notify(
 
 // NotifyOnce satisfies browserapi.Notifications.
 func (n *Notifications) NotifyOnce(
-	level browserapi.NotificationLevel, msg string, args ...interface{},
+	level browserapi.NotificationLevel, msg string, args ...any,
 ) (string, error) {
 	panic("unimplemented")
 }
@@ -129,9 +130,7 @@ func (n *Notifications) Active() (ret map[string]Noti) {
 	defer n.mu.Unlock()
 
 	ret = make(map[string]Noti)
-	for k, v := range n.active {
-		ret[k] = v
-	}
+	maps.Copy(ret, n.active)
 	return
 }
 

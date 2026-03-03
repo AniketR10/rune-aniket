@@ -210,7 +210,7 @@ func pushTestData(l listIfc, n int) chan<- []byte {
 	ctx := context.Background()
 
 	ch := l.Push(ctx)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		ch <- []byte(strconv.Itoa(i))
 	}
 	return ch
@@ -308,7 +308,7 @@ func testListAsyncPush(t *testing.T, constructor listConstructor) {
 		ch := l.Push(context.Background())
 		go func() {
 			defer close(ch)
-			for i := 0; i < n; i++ {
+			for i := range n {
 				ch <- []byte(strconv.Itoa(i))
 			}
 		}()
@@ -352,7 +352,7 @@ Safe Cha
         `,
 	}, {
 		func() {
-			for i := 0; i < 19; i++ {
+			for range 19 {
 				l.PushSync([]byte("For the Time Being - Phonique"))
 			}
 		}, `
@@ -380,7 +380,7 @@ For the `,
 	}, {
 		func() {
 			l.SetMinInputHeight(1)
-			for i := 0; i < 8; i++ {
+			for range 8 {
 				buf.WriteString("P")
 			}
 			l.Wait()
@@ -441,7 +441,7 @@ Safe Cha
      1/1`,
 	}, {
 		func() {
-			for i := 0; i < 19; i++ {
+			for range 19 {
 				l.PushSync([]byte("For the Time Being - Phonique"))
 			}
 		}, `
@@ -469,7 +469,7 @@ P
 	}, {
 		func() {
 			l.SetMinInputHeight(1)
-			for i := 0; i < 8; i++ {
+			for range 8 {
 				buf.WriteString("P")
 			}
 			l.Wait()
@@ -660,7 +660,7 @@ func TestListRemoveFocus(t *testing.T) {
 		l.PushSync([]byte("echo 2"))
 
 		l.FocusStart() // echo 2
-		for i := 0; i < 3; i++ {
+		for range 3 {
 			ok := l.RemoveFocus()
 			require.True(t, ok)
 		}

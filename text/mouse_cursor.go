@@ -44,7 +44,7 @@ func (d mouseDelegate) OnAction(ev term.Event, pos term.Coordinates, action mous
 }
 
 func (d mouseDelegate) ScrollUp(n int) (ok bool) {
-	for i := 0; i < n; i++ {
+	for range n {
 		ok = d.scroll().SeekUp()
 		if !ok {
 			return
@@ -54,7 +54,7 @@ func (d mouseDelegate) ScrollUp(n int) (ok bool) {
 }
 
 func (d mouseDelegate) ScrollDown(n int) (ok bool) {
-	for i := 0; i < n; i++ {
+	for range n {
 		ok = d.scroll().SeekDown()
 		if !ok {
 			return

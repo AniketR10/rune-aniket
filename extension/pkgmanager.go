@@ -32,7 +32,7 @@ import (
 
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
-	"unstable.build/go-tui/workspace/walkdir"
+	"github.com/unstablebuild/blue/walkdir"
 )
 
 // ErrNotInstalled is returned when a package is not installed.

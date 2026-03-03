@@ -200,13 +200,13 @@ func TestEventDispatching(t *testing.T) {
 		n := 1000
 		var wg sync.WaitGroup
 		wg.Add(n)
-		for i := 0; i < n; i++ {
+		for range n {
 			go func() {
 				defer wg.Done()
 				dispatchFilesystemEvent(x, &mu, ignores, fsev)
 			}()
 		}
-		for i := 0; i < n; i++ {
+		for i := range n {
 			_ = os.WriteFile(testURI.Path(), []byte(strconv.Itoa(i)), 0666)
 			mu.Lock()
 			_, ok := x.comp.Resource(testURI)

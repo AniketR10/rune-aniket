@@ -542,7 +542,6 @@ func TestCommandHandlerDispatch(t *testing.T) {
 	}
 
 	for _, tcase := range tsuite {
-		tcase := tcase
 		t.Run(tcase.desc, func(t *testing.T) {
 			dispatchFn, cleanup := tcase.dispatchCmd()
 			defer cleanup(t)
@@ -1090,7 +1089,6 @@ myArg 5
 	}
 
 	for _, tcase := range tsuite {
-		tcase := tcase
 		t.Run(tcase.desc, func(t *testing.T) {
 			dispatchFn, cleanup := tcase.dispatchCmd()
 			defer cleanup(t)
@@ -1219,7 +1217,7 @@ func TestCommandHandlerHistory(t *testing.T) {
 		// mock an async iterator we can feed elements to using a channel
 		var slice []string
 		ctx, cancel := context.WithCancel(b.ctx)
-		for i := 0; i < 10; i++ {
+		for i := range 10 {
 			slice = append(slice, fmt.Sprintf("! echo xyz_%d", i))
 		}
 		it := iterator.FromSlice(slice)
@@ -1321,7 +1319,7 @@ func TestCommandHandlerHistory(t *testing.T) {
 			<-startingPistol
 
 			defer close(it.feeder)
-			for i := 0; i < numAdditions; i++ {
+			for i := range numAdditions {
 				it.feeder <- fmt.Sprintf("abc_%d", i)
 			}
 		}()
@@ -1337,7 +1335,7 @@ func TestCommandHandlerHistory(t *testing.T) {
 			// that's used in the for loop iteration scope
 			nr := numRemovals
 
-			for i := 0; i < numRemovals; i++ {
+			for range numRemovals {
 				b.list.FocusDown()
 				if ok := b.list.RemoveFocus(); !ok {
 					nr--
@@ -1366,7 +1364,7 @@ var (
 )
 
 func init() {
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		lotsOfCommands = append(lotsOfCommands, strconv.Itoa(i))
 	}
 }

@@ -64,8 +64,8 @@ func newProtocol(
 	extensionID, socket, dataDir string,
 	cert []byte, insecureAuth bool, cfg config.Config, keys auth.Keys,
 ) *protocol {
-	mapCfg := make(map[string]interface{})
-	cfg.Iterate(func(k string, v interface{}) {
+	mapCfg := make(map[string]any)
+	cfg.Iterate(func(k string, v any) {
 		mapCfg[k] = v
 	})
 	return &protocol{

@@ -227,8 +227,6 @@ func (e *ex) init(
 func (e *ex) subscribeCommands() error {
 	var ret error
 	for name, man := range exCommands {
-		name := name
-		man := man
 		// Name is only defined as a key to exCommands
 		man.man.Name = name
 		err := e.comp.SubscribeCommand(man.man, text.FuncCommandHandler(
@@ -265,7 +263,7 @@ func (e *ex) completeReadFile(
 	return e.filepathCompleter.Complete(ctx, args)
 }
 
-func (e *ex) log(level log.Level, msg string, args ...interface{}) {
+func (e *ex) log(level log.Level, msg string, args ...any) {
 	if !log.IsLevelEnabled(level) {
 		return
 	}

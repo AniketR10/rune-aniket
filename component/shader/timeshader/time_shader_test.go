@@ -183,8 +183,8 @@ func genPlot(ts *timeShader, scaleY float64, offsetYPerc float64) string {
 	h := 35
 
 	plot := make([]string, w*h)
-	for col := 0; col < w; col++ {
-		for row := 0; row < h; row++ {
+	for col := range w {
+		for row := range h {
 			plot[row*w+col] = "·"
 			if row == h-1-int(math.Round(float64(h)*offsetYPerc)) {
 				plot[row*w+col] = "+"
@@ -192,7 +192,7 @@ func genPlot(ts *timeShader, scaleY float64, offsetYPerc float64) string {
 		}
 	}
 
-	for col := 0; col < w; col++ {
+	for col := range w {
 		ts.Shade(int(math.Round(float64(col)*100.0/float64(w))), 100, [][]term.Cell{})
 		y := sh.frame
 		yy := int(math.Max(0.0, float64(h)-1.0-math.Round(

@@ -1497,7 +1497,7 @@ func TestCursorMove(t *testing.T) {
 				e.scroll.SeekEndLine()
 				assert.NotZero(t, e.scroll.Offset().X)
 
-				for i := 0; i < 100; i++ {
+				for range 100 {
 					e.MoveLeft()
 				}
 				assert.Zero(t, e.scroll.Offset().X)
@@ -1626,7 +1626,7 @@ func TestCursorMove(t *testing.T) {
 				e.cursor.X = 5
 				e.scroll.SeekStartLine()
 
-				for i := 0; i < 100; i++ {
+				for range 100 {
 					e.MoveRight()
 				}
 			},
@@ -2203,7 +2203,7 @@ func TestCursorInsertDeleteFirstEmptyLineEdgeCase(t *testing.T) {
 			e.Insert('X')
 			require.Equal(t, "packXXX\n22222", e.scroll.Buffer().String())
 
-			for i := 0; i < 7; i++ {
+			for i := range 7 {
 				require.True(t, e.MoveLeft(), i)
 				e.Delete()
 			}
@@ -2225,7 +2225,7 @@ func TestCursorInsertDeleteFirstEmptyLineEdgeCase(t *testing.T) {
 
 			e.MoveFirstLine()
 			e.MoveStartLine()
-			for i := 0; i < 7; i++ {
+			for range 7 {
 				e.Delete()
 			}
 
@@ -2292,7 +2292,7 @@ func TestCursorConflate(t *testing.T) {
 		rows := c.scroll.Buffer().Rows()
 		require.Equal(t, n+1, rows)
 
-		for i := 0; i < n; i++ {
+		for i := range n {
 			require.True(t, c.Conflate(), i) //, "cursor: %+v, %s", c.Coordinates(), c.scroll.Buffer().String())
 		}
 		require.Equal(t, 1, c.scroll.Buffer().Rows())
@@ -2718,7 +2718,7 @@ func testCursorDeleteSelection(t *testing.T, width, height int, typeSelect Selec
 		{
 			initialBuf: "a\nb",
 			initialPos: func(c *Cursor) {
-				for i := 0; i < 100; i++ {
+				for range 100 {
 					c.MoveDown()
 				}
 			},
@@ -3791,7 +3791,7 @@ func (f testFoldsService) Folds() (iterator.Iterator[term.Range], bool) {
 
 func newBenchmarkScroll(width, height int, fortunes int) (scroll *component.Scroll) {
 	scroll = component.NewScroll(cell.NewBuffer())
-	for i := 0; i < fortunes; i++ {
+	for range fortunes {
 		_, _ = scroll.Buffer().ReadFrom(strings.NewReader(sampleSnippet))
 	}
 	scroll.Resize(width, height)

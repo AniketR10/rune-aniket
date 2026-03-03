@@ -152,8 +152,8 @@ func TestCoordinateSpaceTransform(t *testing.T) {
 			rows := 30
 			cols := 100
 			inaccurate := false
-			for y := 0; y < rows; y++ {
-				for x := 0; x < cols; x++ {
+			for y := range rows {
+				for x := range cols {
 					fragX, fragY, resX, resY := cellCoordToFragCoords(x, y, cols, rows)
 					outX, outY, outCols, outRows := fragCoordsToCellCoords(fragX, fragY, resX, resY)
 					if x != outX || y != outY || cols != outCols || rows != outRows {

@@ -137,7 +137,6 @@ func TestHistory(t *testing.T) {
 	}
 
 	for _, test := range suite {
-		test := test
 		t.Run(test.description, func(t *testing.T) {
 			svc := test.svc
 			if svc == nil {
@@ -195,13 +194,13 @@ type mockService struct {
 	svc document.Service
 }
 
-func (s *mockService) Create(ctx context.Context, ID string, doc interface{}) error {
+func (s *mockService) Create(ctx context.Context, ID string, doc any) error {
 	if s.err != nil {
 		return s.err
 	}
 	return s.svc.Create(ctx, ID, doc)
 }
-func (s *mockService) Set(ctx context.Context, ID string, doc interface{}) error {
+func (s *mockService) Set(ctx context.Context, ID string, doc any) error {
 	if s.err != nil {
 		return s.err
 	}
@@ -214,7 +213,7 @@ func (s *mockService) Update(ctx context.Context, ID string,
 	}
 	return s.svc.Update(ctx, ID, updates, precond...)
 }
-func (s *mockService) Get(ctx context.Context, ID string, doc interface{}) error {
+func (s *mockService) Get(ctx context.Context, ID string, doc any) error {
 	if s.err != nil {
 		return s.err
 	}

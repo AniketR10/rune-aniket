@@ -61,7 +61,7 @@ type loggingScheme struct {
 	other  schemeapi.Scheme
 }
 
-func (t loggingScheme) trace(msg string, args ...interface{}) {
+func (t loggingScheme) trace(msg string, args ...any) {
 	log.
 		WithField(logging.KeyClass, "LoggingScheme").
 		WithField("URI", t.uri.String()).

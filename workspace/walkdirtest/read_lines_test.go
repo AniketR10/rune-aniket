@@ -32,6 +32,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
+	"github.com/unstablebuild/blue/walkdir"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/workspace"
 )
@@ -86,11 +87,11 @@ func TestReadLines(t *testing.T) {
 				require.NoError(t, f.Sync())
 				require.NoError(t, f.Close())
 			}
-			itIn, err := ListFiles(context.Background(), scheme, "")
+			itIn, err := walkdir.ListFiles(context.Background(), scheme, "")
 			require.NoError(t, err)
 
 			// sut
-			itOut, err := ReadLines(context.Background(), workspace, itIn)
+			itOut, err := walkdir.ReadLines(context.Background(), workspace, itIn)
 			if tcase.wantErr != "" {
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), tcase.wantErr)

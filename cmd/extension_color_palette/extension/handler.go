@@ -77,9 +77,9 @@ func (h *colorPaletteHandler) Resize(width, height int) {
 func makeColorGrid(dim bool) tui.Component {
 	ret := make([][]tui.Component, 16)
 	var nameNum int
-	for y := 0; y < 16; y++ {
+	for y := range 16 {
 		ret[y] = make([]tui.Component, 16)
-		for x := 0; x < 16; x++ {
+		for x := range 16 {
 			var attrs tcell.AttrMask
 			color := tcell.PaletteColor(nameNum)
 			name := color.Name(true)

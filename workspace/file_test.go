@@ -1500,7 +1500,7 @@ func TestFileMissingLastCopySwap(t *testing.T) {
 	var builder strings.Builder
 	builder.Write([]byte(sampleSnippet))
 
-	for i := 0; i < 1000; i++ {
+	for range 1000 {
 		buf.WriteString("a")
 		builder.WriteString("a")
 	}

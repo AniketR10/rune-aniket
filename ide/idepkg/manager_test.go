@@ -42,7 +42,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/ide/idepkg/idepkgtest"
 	"unstable.build/go-tui/workspace"
-	"unstable.build/go-tui/workspace/walkdir"
+	"github.com/unstablebuild/blue/walkdir"
 )
 
 func TestLibDir(t *testing.T) {

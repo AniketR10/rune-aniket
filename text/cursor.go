@@ -625,7 +625,7 @@ func (c *Cursor) MoveRightWrap() bool {
 func (c *Cursor) multiplyMove(n int, move func() bool) (ok bool) {
 	enable := c.disablePublishing()
 	defer enable()
-	for i := 0; i < n; i++ {
+	for range n {
 		mOk := move()
 		// If it was moving ok and now it stopped, we're done.
 		if ok && !mOk {
@@ -1605,7 +1605,7 @@ func (c *Cursor) moveToChar(
 func (c *Cursor) MoveToNextChar(ch rune) bool {
 	cursor := c.cursorAtScroll()
 	return c.moveToChar(ch, func(n int, searcher cell.Searcher) (term.Coordinates, bool) {
-		for i := 0; i < n; i++ {
+		for range n {
 			result, _ := searcher.NextResult()
 			if result.X > cursor.X {
 				return result, true
@@ -1620,7 +1620,7 @@ func (c *Cursor) MoveToNextChar(ch rune) bool {
 func (c *Cursor) MoveToPrevChar(ch rune) bool {
 	cursor := c.cursorAtScroll()
 	return c.moveToChar(ch, func(n int, searcher cell.Searcher) (term.Coordinates, bool) {
-		for i := 0; i < n; i++ {
+		for range n {
 			result, _ := searcher.PrevResult()
 			if result.X < cursor.X {
 				return result, true

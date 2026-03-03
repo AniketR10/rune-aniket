@@ -108,7 +108,7 @@ func (s *Service[T]) evictAll(
 }
 
 // Create satisfies document.Service.
-func (s *Service[T]) Create(ctx context.Context, ID string, doc interface{}) error {
+func (s *Service[T]) Create(ctx context.Context, ID string, doc any) error {
 	err := s.svc.Create(ctx, ID, doc)
 	if err == nil && s.cached.Load() {
 		if serr := s.cache.Create(ctx, ID, doc); serr != nil {
@@ -119,7 +119,7 @@ func (s *Service[T]) Create(ctx context.Context, ID string, doc interface{}) err
 }
 
 // Set satisfies document.Service.
-func (s *Service[T]) Set(ctx context.Context, ID string, doc interface{}) error {
+func (s *Service[T]) Set(ctx context.Context, ID string, doc any) error {
 	err := s.svc.Set(ctx, ID, doc)
 	if err == nil && s.cached.Load() {
 		if serr := s.cache.Set(ctx, ID, doc); serr != nil {
@@ -143,7 +143,7 @@ func (s *Service[T]) Update(ctx context.Context, ID string,
 
 // Get satisfies document.Service. Note that doc should be a pointer to T and
 // any other type will cause this function to panic.
-func (s *Service[T]) Get(ctx context.Context, ID string, doc interface{}) error {
+func (s *Service[T]) Get(ctx context.Context, ID string, doc any) error {
 	err := s.cache.Get(ctx, ID, doc)
 	if err == nil {
 		return nil

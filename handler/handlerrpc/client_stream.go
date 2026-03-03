@@ -579,7 +579,7 @@ func (s *ClientStream[T]) drawReady(w term.Writer) {
 	doDraw(w, s.resp.DrawStreamResponse.GetRows())
 }
 
-func (s *ClientStream[T]) log(level log.Level, msg string, args ...interface{}) {
+func (s *ClientStream[T]) log(level log.Level, msg string, args ...any) {
 	if !log.IsLevelEnabled(level) {
 		return
 	}

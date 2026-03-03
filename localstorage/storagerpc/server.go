@@ -66,7 +66,7 @@ func (s *Server) Create(
 	id := req.GetId()
 	data := req.GetData()
 
-	var pr map[string]interface{}
+	var pr map[string]any
 	err = storageapi.SafeDecode(s.marshaler, &pr, data)
 	if err != nil {
 		return
@@ -97,7 +97,7 @@ func (s *Server) Set(
 	id := req.GetId()
 	data := req.GetData()
 
-	var pr map[string]interface{}
+	var pr map[string]any
 	err = storageapi.SafeDecode(s.marshaler, &pr, data)
 	if err != nil {
 		return
@@ -150,7 +150,7 @@ func (s *Server) Get(
 ) (res *docpb.GetDocumentResponse, err error) {
 	id := req.GetId()
 
-	var pr map[string]interface{}
+	var pr map[string]any
 	err = s.other.Get(ctx, id, &pr)
 	if err != nil {
 		if errors.Is(err, document.ErrNotFound) {
@@ -185,7 +185,7 @@ func (s *Server) Delete(
 
 func (s *Server) streamList(list docpb.DocumentStore_ListServer, it storageapi.Iterator) (err error) {
 	for it.HasNext() {
-		var pr map[string]interface{}
+		var pr map[string]any
 		err = it.NextTo(&pr)
 		res := docpb.ListDocumentResponse{}
 		if err != nil {

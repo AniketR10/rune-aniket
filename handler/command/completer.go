@@ -39,7 +39,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"mvdan.cc/sh/v3/shell"
-	"unstable.build/go-tui/workspace/walkdir"
+	"github.com/unstablebuild/blue/walkdir"
 )
 
 // Completer abstracts the ability to complete command arguments.

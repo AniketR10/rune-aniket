@@ -531,7 +531,7 @@ func (t *Task) minimize() {
 	t.setBarColor(t.barColor, false)
 }
 
-func (t *Task) log(level log.Level, msg string, args ...interface{}) {
+func (t *Task) log(level log.Level, msg string, args ...any) {
 	if !log.IsLevelEnabled(level) {
 		return
 	}

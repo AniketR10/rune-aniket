@@ -613,7 +613,7 @@ func TestIntegrationParserHandler(t *testing.T) {
 
 				// scroll down with git log
 				p.Goto(4, 0)
-				for i := 0; i < 3; i++ {
+				for i := range 3 {
 					p.CarriageReturn()
 					p.ClearLine(0)
 					p.Input([]rune(strconv.Itoa(i))[0])
@@ -624,7 +624,7 @@ func TestIntegrationParserHandler(t *testing.T) {
 				}
 				assertEqualBuf(t, p, "d    \n0    \n1    \n2    \n:    ")
 
-				for i := 0; i < 3; i++ {
+				for i := range 3 {
 					p.CarriageReturn()
 					p.ClearLine(0)
 					p.Goto(0, 0)

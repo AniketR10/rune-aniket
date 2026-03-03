@@ -186,7 +186,7 @@ func (m *Manager) Close() error {
 	return ret
 }
 
-func (m *Manager) log(level log.Level, msg string, args ...interface{}) {
+func (m *Manager) log(level log.Level, msg string, args ...any) {
 	if !log.IsLevelEnabled(level) {
 		return
 	}

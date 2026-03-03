@@ -223,7 +223,7 @@ func (t memFileInfo) IsDir() bool {
 }
 
 // Sys satisfies os.FileInfo.
-func (t memFileInfo) Sys() interface{} {
+func (t memFileInfo) Sys() any {
 	return MemoryFileSys{Offset: t.offset}
 }
 

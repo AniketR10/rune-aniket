@@ -24,6 +24,7 @@
 package textrpc
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -72,13 +73,13 @@ func TestBufferEditRequest(t *testing.T) {
 }
 
 func benchmarkEditRequest(b *testing.B, width, height int) {
-	var str string
-	for i := 0; i < width; i++ {
-		str += "fjkelwjflk\njflw\njfklewfkjlkew\n"
+	var str strings.Builder
+	for range width {
+		str.WriteString("fjkelwjflk\njflw\njfklewfkjlkew\n")
 	}
 
 	buf := cell.NewBuffer()
-	buf.WriteString(str)
+	buf.WriteString(str.String())
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {

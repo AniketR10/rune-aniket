@@ -692,7 +692,7 @@ func (h *Prompt) completeTopList() bool {
 	return true
 }
 
-func (h *Prompt) log(level log.Level, msg string, args ...interface{}) {
+func (h *Prompt) log(level log.Level, msg string, args ...any) {
 	if !log.IsLevelEnabled(level) {
 		return
 	}

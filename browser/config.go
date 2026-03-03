@@ -101,7 +101,7 @@ type logNotifications struct {
 }
 
 func (n logNotifications) Notify(
-	level browserapi.NotificationLevel, msg string, args ...interface{},
+	level browserapi.NotificationLevel, msg string, args ...any,
 ) (string, error) {
 	var l log.Level
 	switch level {
@@ -119,7 +119,7 @@ func (n logNotifications) Notify(
 }
 
 func (n logNotifications) NotifyOnce(
-	level browserapi.NotificationLevel, msg string, args ...interface{},
+	level browserapi.NotificationLevel, msg string, args ...any,
 ) (string, error) {
 	return n.Notify(level, msg, args...)
 }

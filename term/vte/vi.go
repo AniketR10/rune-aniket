@@ -591,7 +591,7 @@ func (v *viHandler) enterViMode(pos term.Coordinates) {
 	v.scheduleAfterBell(false, v.moveViToBounds)
 }
 
-func (v *viHandler) log(level log.Level, line string, params ...interface{}) {
+func (v *viHandler) log(level log.Level, line string, params ...any) {
 	if !log.IsLevelEnabled(level) {
 		return
 	}

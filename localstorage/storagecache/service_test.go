@@ -252,14 +252,14 @@ func prepareServiceForListTest(
 	a := testStruct{Content: "bob"}
 	b := testStruct{Content: "alice"}
 	ctx := context.Background()
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		myID := fmt.Sprintf("%s_list_bob_%d", name, i)
 		a.Id = myID
 		err := s.Create(ctx, myID, a)
 		require.NoError(t, err)
 	}
 
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		myID := fmt.Sprintf("%s_list_alice_%d", name, i)
 		b.Id = myID
 		err := s.Create(ctx, myID, b)

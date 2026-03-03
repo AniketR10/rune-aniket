@@ -41,6 +41,7 @@ import (
 	"github.com/unstablebuild/blue/logging"
 	"github.com/unstablebuild/blue/tui/component/markdown"
 	hmarkdown "github.com/unstablebuild/blue/tui/handler/markdown"
+	"github.com/unstablebuild/blue/walkdir"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
@@ -56,7 +57,6 @@ import (
 	"unstable.build/go-tui/handler/command"
 	"unstable.build/go-tui/ide/syntax"
 	"unstable.build/go-tui/workspace"
-	"unstable.build/go-tui/workspace/walkdir"
 )
 
 var _ tui.Component = (*Component)(nil)
@@ -98,7 +98,7 @@ func NewComponent(ed Editor, w Workspace, config Config) (
 	return
 }
 
-func (c *Component) log(level log.Level, msg string, args ...interface{}) {
+func (c *Component) log(level log.Level, msg string, args ...any) {
 	if !log.IsLevelEnabled(level) {
 		return
 	}
@@ -706,14 +706,14 @@ func (c *Component) DispatchEvent(ev textapi.Event) (handled bool) {
 
 // Notify satisfies browser.Browser.
 func (c *Component) Notify(
-	level browserapi.NotificationLevel, msg string, args ...interface{},
+	level browserapi.NotificationLevel, msg string, args ...any,
 ) (string, error) {
 	return c.config.Notify(level, fmt.Sprintf(msg, args...))
 }
 
 // NotifyOnce satisfies browser.Browser.
 func (c *Component) NotifyOnce(
-	level browserapi.NotificationLevel, msg string, args ...interface{},
+	level browserapi.NotificationLevel, msg string, args ...any,
 ) (string, error) {
 	return c.config.NotifyOnce(level, msg, args...)
 }

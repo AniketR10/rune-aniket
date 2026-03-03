@@ -282,7 +282,7 @@ func (h *fuzzyFinderHandler) setContent(
 	return h.ed.SetCursor(hed, pos)
 }
 
-func (h *fuzzyFinderHandler) notifyError(msg string, args ...interface{}) error {
+func (h *fuzzyFinderHandler) notifyError(msg string, args ...any) error {
 	// allow browser messenger permission to be denied
 	if h.m == nil {
 		return nil

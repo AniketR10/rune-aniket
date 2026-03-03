@@ -755,7 +755,7 @@ Love isn't love 'til you give it away.
 			vi := New(buf, uri)
 			vi.Resize(width, height)
 
-			for i := 0; i < 5; i++ {
+			for range 5 {
 				for _, ch := range tcase.cmd {
 					ev := term.Event{Type: term.EventKey, Ch: ch}
 					vi.Handle(ev)
@@ -785,19 +785,19 @@ Love isn't love 'til you give it away.
 			}
 		}
 		assert.NotEqual(t, undoFortune, buf.String())
-		for i := 0; i < 3; i++ {
+		for i := range 3 {
 			quit, handled := vi.Handle(term.Event{Type: term.EventKey, Ch: 'u'})
 			assert.False(t, quit, i)
 			assert.True(t, handled, i)
 		}
 		assert.Equal(t, undoFortune, buf.String())
-		for i := 0; i < 3; i++ {
+		for i := range 3 {
 			quit, handled := vi.Handle(term.Event{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'r'})
 			assert.False(t, quit, i)
 			assert.True(t, handled, i)
 		}
 		assert.NotEqual(t, undoFortune, buf.String())
-		for i := 0; i < 3; i++ {
+		for i := range 3 {
 			quit, handled := vi.Handle(term.Event{Type: term.EventKey, Ch: 'u'})
 			assert.False(t, quit, i)
 			assert.True(t, handled, i)
@@ -847,21 +847,21 @@ Love isn't love 'til you give it away.
 		}
 		assert.Equal(t, "asdfghabc"+undoFortune, buf.String())
 
-		for i := 0; i < 2; i++ {
+		for range 2 {
 			quit, handled := vi.Handle(term.Event{Type: term.EventKey, Ch: 'u'})
 			assert.False(t, quit)
 			assert.True(t, handled)
 		}
 		assert.Equal(t, undoFortune, buf.String())
 
-		for i := 0; i < 2; i++ {
+		for range 2 {
 			quit, handled := vi.Handle(term.Event{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'r'})
 			assert.False(t, quit)
 			assert.True(t, handled)
 		}
 		assert.Equal(t, "asdfghabc"+undoFortune, buf.String())
 
-		for i := 0; i < 2; i++ {
+		for range 2 {
 			quit, handled := vi.Handle(term.Event{Type: term.EventKey, Ch: 'u'})
 			assert.False(t, quit)
 			assert.True(t, handled)

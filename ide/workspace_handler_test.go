@@ -462,9 +462,9 @@ func TestOpenFilesinEmptyWorkspace(t *testing.T) {
 }
 
 func TestWorkspaceConfig(t *testing.T) {
-	mockConfig := map[string]interface{}{
+	mockConfig := map[string]any{
 		"1": "2",
-		"2": map[string]interface{}{
+		"2": map[string]any{
 			"dos": "2",
 			"two": "2",
 		},
@@ -475,15 +475,15 @@ func TestWorkspaceConfig(t *testing.T) {
 	t.Run("passes default scheme config to SchemeFunc", func(t *testing.T) {
 		cfg := defaultCfg()
 		manager := workspace.NewManager(cfg.workspace())
-		workspaceConfig := cfg.cfg["workspace"].(map[string]interface{})
+		workspaceConfig := cfg.cfg["workspace"].(map[string]any)
 		workspaceConfig[workspace.MemoryScheme] = mockConfig
 
-		passed := make(map[string]interface{})
+		passed := make(map[string]any)
 		manager.RegisterScheme(workspace.MemoryScheme,
 			func(ctx context.Context, cfg config.Config, uri workspaceapi.URI) (
 				schemeapi.Scheme, error,
 			) {
-				cfg.Iterate(func(k string, v interface{}) {
+				cfg.Iterate(func(k string, v any) {
 					passed[k] = v
 				})
 				return workspace.NewMemoryScheme(ctx, cfg, uri)
@@ -498,15 +498,15 @@ func TestWorkspaceConfig(t *testing.T) {
 	t.Run("notifies user if config decode fails but does not hard error", func(t *testing.T) {
 		cfg := defaultCfg()
 		manager := workspace.NewManager(cfg.workspace())
-		workspaceConfig := cfg.cfg["workspace"].(map[string]interface{})
+		workspaceConfig := cfg.cfg["workspace"].(map[string]any)
 		workspaceConfig[workspace.MemoryScheme] = mockConfig
 
-		passed := make(map[string]interface{})
+		passed := make(map[string]any)
 		manager.RegisterScheme(workspace.MemoryScheme,
 			func(ctx context.Context, cfg config.Config, uri workspaceapi.URI) (
 				schemeapi.Scheme, error,
 			) {
-				cfg.Iterate(func(k string, v interface{}) {
+				cfg.Iterate(func(k string, v any) {
 					passed[k] = v
 				})
 				return workspace.NewMemoryScheme(ctx, cfg, uri)
@@ -572,15 +572,15 @@ func TestWorkspaceConfig(t *testing.T) {
 	t.Run("does not reload workspace config", func(t *testing.T) {
 		cfg := defaultCfg()
 		manager := workspace.NewManager(cfg.workspace())
-		workspaceConfig := cfg.cfg["workspace"].(map[string]interface{})
+		workspaceConfig := cfg.cfg["workspace"].(map[string]any)
 		workspaceConfig[workspace.MemoryScheme] = mockConfig
 
-		passed := make(map[string]interface{})
+		passed := make(map[string]any)
 		manager.RegisterScheme(workspace.MemoryScheme,
 			func(ctx context.Context, cfg config.Config, uri workspaceapi.URI) (
 				schemeapi.Scheme, error,
 			) {
-				cfg.Iterate(func(k string, v interface{}) {
+				cfg.Iterate(func(k string, v any) {
 					passed[k] = v
 				})
 				return workspace.NewMemoryScheme(ctx, cfg, uri)
@@ -591,7 +591,7 @@ func TestWorkspaceConfig(t *testing.T) {
 
 		m.reloadConfig = func() (ideConfig, error) {
 			cfg := defaultCfg()
-			cfg.cfg["workspace"].(map[string]interface{})["1"] = "!!!!"
+			cfg.cfg["workspace"].(map[string]any)["1"] = "!!!!"
 			return cfg, nil
 		}
 
@@ -609,13 +609,13 @@ func TestWorkspaceConfig(t *testing.T) {
 func TestWorkspaceExtensions(t *testing.T) {
 	t.Run("calls extension runner with user extensions", func(t *testing.T) {
 		cfg := defaultCfg()
-		cfg.cfg = map[string]interface{}{
-			"command":           map[string]interface{}{},
+		cfg.cfg = map[string]any{
+			"command":           map[string]any{},
 			"show_manual_after": "1h",
-			"extensions": map[string]interface{}{
-				"git": map[string]interface{}{
+			"extensions": map[string]any{
+				"git": map[string]any{
 					"path": "myPath",
-					"config": map[string]interface{}{
+					"config": map[string]any{
 						"a": "b",
 					},
 				},
@@ -644,7 +644,7 @@ func TestWorkspaceExtensions(t *testing.T) {
 				return fnRunner{fn: func(extensionID, path string, cfg config.Config) error {
 					assert.Equal(t, "myPath", path)
 					assert.Equal(t, "git", extensionID)
-					assert.Equal(t, config.MapConfig(map[string]interface{}{"a": "b"}), cfg)
+					assert.Equal(t, config.MapConfig(map[string]any{"a": "b"}), cfg)
 					return nil
 				},
 				}, nil
@@ -670,7 +670,7 @@ func TestWorkspaceExtensions(t *testing.T) {
 			_ = os.RemoveAll(dir)
 		})
 		cfg := defaultCfg()
-		cfg.cfg = map[string]interface{}{}
+		cfg.cfg = map[string]any{}
 		manager := workspace.NewManager(cfg.workspace())
 
 		manager.RegisterScheme(workspace.MemoryScheme, workspace.NewMemoryScheme)
@@ -682,7 +682,7 @@ func TestWorkspaceExtensions(t *testing.T) {
 			"myID": {
 				ID:         "myID",
 				CmdAndArgs: "myPath2",
-				Config:     config.MapConfig(map[string]interface{}{"a": "b"}),
+				Config:     config.MapConfig(map[string]any{"a": "b"}),
 			},
 		}
 
@@ -701,7 +701,7 @@ func TestWorkspaceExtensions(t *testing.T) {
 				return fnRunner{fn: func(extensionID, path string, cfg config.Config) error {
 					assert.Equal(t, "myID", extensionID)
 					assert.Equal(t, "myPath2", path)
-					assert.Equal(t, config.MapConfig(map[string]interface{}{"a": "b"}), cfg)
+					assert.Equal(t, config.MapConfig(map[string]any{"a": "b"}), cfg)
 					return nil
 				},
 				}, nil
@@ -1366,7 +1366,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 
 			t.Run("initial files from auto restore", func(t *testing.T) {
 				cfg := defaultConfigWithWrap(wrap)
-				cfg.cfg["workspace"].(map[string]interface{})["auto_restore"] = true
+				cfg.cfg["workspace"].(map[string]any)["auto_restore"] = true
 				m := newTestWorkspaceManagerHandlerWithDir(t, cfg, dir, nopShutdownShaderConfig())
 
 				cases := []handlertest.SequenceTestCase{
@@ -1391,7 +1391,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 			// as they're loaded async and causes a data race
 			newCfg := func() ideConfig {
 				cfg := defaultConfigWithWrap(wrap)
-				cfg.cfg["workspace"].(map[string]interface{})["auto_restore"] = true
+				cfg.cfg["workspace"].(map[string]any)["auto_restore"] = true
 				return cfg
 			}
 
@@ -1840,7 +1840,7 @@ func TestExternalCommands(t *testing.T) {
 		var errs [n]error
 
 		wg.Add(n)
-		for i := 0; i < n; i++ {
+		for i := range n {
 			go func(i int) {
 				defer wg.Done()
 				errs[i] = m.subscribeCommand(textapi.CommandManual{Name: "cmd" + strconv.Itoa(i)},
@@ -2780,12 +2780,12 @@ func (t *testWorkspaceManagerHandler) Handle(ev term.Event) (bool, bool) {
 }
 
 func defaultCfg() ideConfig {
-	return ideConfig{cfg: map[string]interface{}{
+	return ideConfig{cfg: map[string]any{
 		"clipboard": "memory",
-		"command": map[string]interface{}{
+		"command": map[string]any{
 			"show_manual_after": "1h",
 			"key":               "<c-\\\\>", // see handlertest.TestHandlerIsolated
-			"key_bindings": map[string]interface{}{
+			"key_bindings": map[string]any{
 				"1": "workspacefocus 1",
 				"2": "workspacefocus 2",
 				"3": "workspacefocus 3",
@@ -2797,22 +2797,22 @@ func defaultCfg() ideConfig {
 				"9": "workspacefocus 9",
 				"0": "workspacefocus 10",
 			},
-			"aliases": map[string]interface{}{
+			"aliases": map[string]any{
 				"addBlaBla": "workspacenew memory:///blabla",
 				"w":         "write!",
 			},
 		},
-		"workspace": map[string]interface{}{
+		"workspace": map[string]any{
 			"wallpaper":    "workspaceWallpaper",
 			"auto_restore": false,
 		},
-		"browser": map[string]interface{}{
+		"browser": map[string]any{
 			"workspace_bar": "number",
-			"window_manager": map[string]interface{}{
+			"window_manager": map[string]any{
 				"no_max_size": false,
 			},
 		},
-		"notifications": map[string]interface{}{
+		"notifications": map[string]any{
 			"progress_bar": false,
 		},
 	},
@@ -2822,8 +2822,8 @@ func defaultCfg() ideConfig {
 
 func defaultConfigWithWrap(wrap bool) ideConfig {
 	ret := defaultCfg()
-	ret.cfg["editor"] = map[string]interface{}{
-		"modal": map[string]interface{}{
+	ret.cfg["editor"] = map[string]any{
+		"modal": map[string]any{
 			"wrap": wrap,
 		},
 	}

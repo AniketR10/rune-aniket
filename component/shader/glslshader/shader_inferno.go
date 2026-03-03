@@ -123,7 +123,7 @@ func (s *inferno) noise(n vec2D) float {
 func (s *inferno) fbm(n vec2D) float {
 	total := 0.0
 	amplitude := 1.0
-	for i := 0; i < 4; i++ {
+	for range 4 {
 		total += s.noise(n) * amplitude
 		n = n.add(n)
 		amplitude *= 0.5

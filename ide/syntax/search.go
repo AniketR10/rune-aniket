@@ -48,7 +48,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/debug"
-	"unstable.build/go-tui/workspace/walkdir"
+	"github.com/unstablebuild/blue/walkdir"
 )
 
 // NewParser returns a workspace-wide syntaxapi.Parser.

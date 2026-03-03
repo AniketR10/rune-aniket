@@ -291,7 +291,7 @@ func (p loggingRemote) triggerBell() error {
 	return p.r.triggerBell()
 }
 
-func (t loggingRemote) log(line string, params ...interface{}) {
+func (t loggingRemote) log(line string, params ...any) {
 	if !log.IsLevelEnabled(log.TraceLevel) {
 		return
 	}

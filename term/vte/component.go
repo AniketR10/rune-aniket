@@ -591,7 +591,7 @@ func (t *Component) OnFocusChange(inFocus bool) error {
 	if !ok {
 		return nil
 	}
-	err := t.WriteToPty([]byte(fmt.Sprintf("\x1b[%s", cmd)))
+	err := t.WriteToPty(fmt.Appendf(nil, "\x1b[%s", cmd))
 	if err != nil {
 		return fmt.Errorf("write to pty: %w", err)
 	}
@@ -649,7 +649,7 @@ func (t *Component) Close() (ret error) {
 }
 
 //nolint:unused
-func (t *Component) log(level log.Level, line string, params ...interface{}) {
+func (t *Component) log(level log.Level, line string, params ...any) {
 	if !log.IsLevelEnabled(level) {
 		return
 	}
@@ -834,7 +834,7 @@ func (t *Component) run(updateChan chan struct{}) error {
 		if err != nil {
 			return err
 		}
-		for i := 0; i < n; i++ {
+		for i := range n {
 			t.parser.Advance(buf[i])
 		}
 		select {

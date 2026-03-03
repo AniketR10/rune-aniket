@@ -101,14 +101,14 @@ func (b toBrowser) Window(id uint64) (browser.Window, bool) {
 	return NopWindow(), true
 }
 
-func (b toBrowser) Notify(level browserapi.NotificationLevel, msg string, args ...interface{}) (
+func (b toBrowser) Notify(level browserapi.NotificationLevel, msg string, args ...any) (
 	string, error,
 ) {
 	return b.b.Notify(level, msg, args...)
 }
 
 func (b toBrowser) NotifyOnce(
-	level browserapi.NotificationLevel, msg string, args ...interface{},
+	level browserapi.NotificationLevel, msg string, args ...any,
 ) (string, error) {
 	return b.b.NotifyOnce(level, msg, args...)
 }

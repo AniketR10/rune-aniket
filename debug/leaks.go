@@ -40,7 +40,7 @@ func WriteTagsFile(tags ...string) func() {
 	filename := "DEBUG" + strings.Join(append(tags, strconv.Itoa(rand.Int())), "_")
 	filename = strings.ReplaceAll(filename, "/", "_")
 	tempfile := filepath.Join(dir, filename)
-	err := os.WriteFile(tempfile, []byte(fmt.Sprintf("%#v", tags)), 0777)
+	err := os.WriteFile(tempfile, fmt.Appendf(nil, "%#v", tags), 0777)
 	if err != nil {
 		panic(err)
 	}

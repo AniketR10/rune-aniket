@@ -1037,9 +1037,9 @@ func (s *burning) processLogoFromWallpaper(in [][]term.Cell) {
 	// STEP 4: Populate the "logo gradient" matrix used for the ember ripples
 	// effect (read [Burning] docstring for more information).
 	s.logo = make([][]rune, wallpaperHeight)
-	for y := 0; y < wallpaperHeight; y++ {
+	for y := range wallpaperHeight {
 		s.logo[y] = make([]rune, wallpaperWidth)
-		for x := 0; x < wallpaperWidth; x++ {
+		for x := range wallpaperWidth {
 			cell, ok := s.imgBuf.Cell(term.Coordinates{X: x, Y: y})
 			if !ok {
 				continue
@@ -1119,8 +1119,8 @@ func (s *burning) findWallpaperBounds(in [][]term.Cell) (
 	found = false
 
 FirstCornerLoop:
-	for y := 0; y < h; y++ {
-		for x := 0; x < w; x++ {
+	for y := range h {
+		for x := range w {
 			if in[y][x].Ch == s.Logo.WallpaperInvisibleChar {
 				found = true
 				foundTopLeftX = x

@@ -1771,7 +1771,7 @@ func makeScrollContent(wrap bool, width, height, offsetY, offsetX int, content s
 
 func newBigScroll(fortunes int) (scroll *Scroll) {
 	scroll = NewScroll(cell.NewBuffer())
-	for i := 0; i < fortunes; i++ {
+	for range fortunes {
 		_, _ = scroll.Buffer().ReadFrom(strings.NewReader(fortune))
 	}
 	// assume big screen
@@ -1806,7 +1806,7 @@ func benchmarkScrollHiddenDraw(b *testing.B, fortunes int, offset float32, hidde
 
 func seekPercRows(scroll *Scroll, offset float32) {
 	offsetRows := int(float32(scroll.Buffer().Rows()) * offset)
-	for i := 0; i < offsetRows; i++ {
+	for range offsetRows {
 		scroll.SeekDown()
 	}
 }

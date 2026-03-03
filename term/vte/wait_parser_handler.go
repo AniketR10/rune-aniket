@@ -125,7 +125,7 @@ func (w *waitParserHandler) Bell() {
 	}
 }
 
-func (v *waitParserHandler) log(level log.Level, line string, params ...interface{}) {
+func (v *waitParserHandler) log(level log.Level, line string, params ...any) {
 	if !log.IsLevelEnabled(level) {
 		return
 	}

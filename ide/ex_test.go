@@ -688,7 +688,7 @@ IIII`},
 	handlertest.TestHandlerSequence(t, bh, 20, 10, cases)
 
 	o := browserapi.BarConfig{Size: 1, Orientation: browserapi.OrientationTop}
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		b1 := browsertest.NewTestHandler()
 		b1.Ch = rune(strconv.Itoa(i)[0])
 		err = b.Bar(o, b1)

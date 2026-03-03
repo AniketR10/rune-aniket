@@ -34,10 +34,10 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/blue/walkdir"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
-	"unstable.build/go-tui/workspace/walkdir"
 	"unstable.build/go-tui/workspace/workspacessh"
 	"unstable.build/go-tui/workspace/workspacetest"
 )
@@ -52,18 +52,17 @@ func TestIntegrationScheme(t *testing.T) {
 	t.Cleanup(func() { teardown() })
 
 	cfgs := map[string]config.Config{
-		"openssh_proc_remote": config.MapConfig(map[string]interface{}{
+		"openssh_proc_remote": config.MapConfig(map[string]any{
 			"command": "ssh -o StrictHostKeyChecking=no -i ./id_ed25519 %h -p %p",
 			"timeout": "20s",
 		}),
-		"go_stdlib_remote": config.MapConfig(map[string]interface{}{
-			"private_keys": []interface{}{"./id_ed25519"},
+		"go_stdlib_remote": config.MapConfig(map[string]any{
+			"private_keys": []any{"./id_ed25519"},
 			"timeout":      "20s",
 			"insecure":     true,
 		}),
 	}
 	for desc, cfg := range cfgs {
-		cfg := cfg
 		t.Run(desc, func(t *testing.T) {
 			workspacetest.TestWorkspaceSchemeFiles(t, func(t *testing.T) schemeapi.Scheme {
 				return newSchemeIntegration(t, hostname, cfg)

@@ -56,7 +56,7 @@ type testNotifications struct {
 }
 
 func (n *testNotifications) Notify(
-	level browserapi.NotificationLevel, msg string, args ...interface{},
+	level browserapi.NotificationLevel, msg string, args ...any,
 ) (string, error) {
 	n.msg = append(n.msg, notiRecord{
 		level: level,
@@ -66,7 +66,7 @@ func (n *testNotifications) Notify(
 }
 
 func (n *testNotifications) NotifyOnce(
-	level browserapi.NotificationLevel, msg string, args ...interface{},
+	level browserapi.NotificationLevel, msg string, args ...any,
 ) (string, error) {
 	return n.Notify(level, msg, args...)
 }

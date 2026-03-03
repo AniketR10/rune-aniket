@@ -71,7 +71,7 @@ func newHistory(storage document.Service) *history {
 	return ret
 }
 
-func (h *history) log(level log.Level, msg string, args ...interface{}) {
+func (h *history) log(level log.Level, msg string, args ...any) {
 	if !log.IsLevelEnabled(level) {
 		return
 	}

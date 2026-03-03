@@ -130,7 +130,7 @@ func testFedIntoSingleTimeShader(t *testing.T, sh shader.Shader) {
 		t.Run("when fed into "+timeShaderName+" time shader doesn't panic", func(t *testing.T) {
 			tsh := timeShaderFn.fn(sh)
 			cells := MakeCellMatrix(7, 4)
-			for frame := 0; frame < 10; frame++ {
+			for frame := range 10 {
 				assert.NotPanics(t, func() {
 					tsh.Shade(frame, 10, cells)
 				})
@@ -145,7 +145,7 @@ func testFedIntoMultipleTimeShaders(t *testing.T, sh shader.Shader) {
 		for _, timeShaderFn := range timeShaderFns {
 			tsh = timeShaderFn.fn(tsh)
 		}
-		for frame := 0; frame < 10; frame++ {
+		for frame := range 10 {
 			assert.NotPanics(t, func() {
 				tsh.Shade(frame, 10, cells)
 			})
@@ -550,7 +550,7 @@ func testCellMatrix(t *testing.T, sh shader.Shader) {
 	t.Run("cell matrix sizes, resizes, malformed shape and empty cells", func(t *testing.T) {
 		for _, tcase := range tsuite {
 			total := 20
-			for frame := 0; frame < 20; frame++ {
+			for frame := range 20 {
 				assert.NotPanics(t, func() {
 					sh.Shade(frame, total, tcase.cells)
 				}, tcase.name+" frame "+strconv.Itoa(frame))

@@ -190,7 +190,7 @@ func (c *Component) consumeFrame(width, height int) (
 	return
 }
 
-func (c *Component) log(level log.Level, msg string, args ...interface{}) {
+func (c *Component) log(level log.Level, msg string, args ...any) {
 	log.WithFields(log.Fields{
 		"trackID":  c.trackID,
 		"streamID": c.streamID,

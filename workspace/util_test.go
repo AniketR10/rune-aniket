@@ -132,7 +132,7 @@ func (t testFileInfo) IsDir() bool {
 	return t.isDir
 }
 
-func (t testFileInfo) Sys() interface{} {
+func (t testFileInfo) Sys() any {
 	return nil
 }
 

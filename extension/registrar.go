@@ -25,6 +25,7 @@ package extension
 
 import (
 	"io"
+	"maps"
 	"sync"
 
 	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
@@ -45,13 +46,9 @@ func MergeResourceMap(
 	mn ...map[extensionapi.Permission]ResourceRegistrar,
 ) map[extensionapi.Permission]ResourceRegistrar {
 	ret := make(map[extensionapi.Permission]ResourceRegistrar)
-	for k, v := range m1 {
-		ret[k] = v
-	}
+	maps.Copy(ret, m1)
 	for _, m := range mn {
-		for k, v := range m {
-			ret[k] = v
-		}
+		maps.Copy(ret, m)
 	}
 	return ret
 }

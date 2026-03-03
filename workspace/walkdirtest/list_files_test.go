@@ -36,6 +36,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/blue/iterator"
+	"github.com/unstablebuild/blue/walkdir"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"go.uber.org/goleak"
@@ -85,7 +86,7 @@ func TestListFiles(t *testing.T) {
 				scheme, err := workspace.NewFileScheme(context.Background(), config.NopConfig(), uri)
 				require.NoError(t, err)
 
-				it, err := ListFiles(context.Background(), scheme, path)
+				it, err := walkdir.ListFiles(context.Background(), scheme, path)
 				assertIteratorEqual(t, []string{"a", "b"}, it)
 
 				require.NoError(t, scheme.Close())
@@ -116,7 +117,7 @@ func TestListFiles(t *testing.T) {
 				scheme, err := workspace.NewFileScheme(context.Background(), config.NopConfig(), uri)
 				require.NoError(t, err)
 
-				it, err := ListFiles(context.Background(), scheme, path)
+				it, err := walkdir.ListFiles(context.Background(), scheme, path)
 				assertIteratorEqual(t, []string{"a"}, it)
 
 				require.NoError(t, scheme.Close())
@@ -136,7 +137,7 @@ func TestListFiles(t *testing.T) {
 		require.NoError(t, err)
 
 		const n = 1000
-		for i := 0; i < n; i++ {
+		for i := range n {
 			subdir := filepath.Join(dir, strconv.Itoa(i))
 			require.NoError(t, os.MkdirAll(subdir, 0777))
 			_, err = os.OpenFile(filepath.Join(subdir, "a"), os.O_CREATE, 0666)
@@ -146,7 +147,7 @@ func TestListFiles(t *testing.T) {
 		scheme, err := workspace.NewFileScheme(context.Background(), config.NopConfig(), uri)
 		require.NoError(t, err)
 
-		it, err := ListFiles(context.Background(), scheme, dir)
+		it, err := walkdir.ListFiles(context.Background(), scheme, dir)
 		require.NoError(t, it.Close())
 
 		require.NoError(t, scheme.Close())
@@ -176,7 +177,7 @@ func TestListFiles(t *testing.T) {
 		scheme, err := workspace.NewFileScheme(context.Background(), config.NopConfig(), uri)
 		require.NoError(t, err)
 
-		it, err := ListFiles(context.Background(), scheme, dir)
+		it, err := walkdir.ListFiles(context.Background(), scheme, dir)
 		assertIteratorEqual(t, []string{f1.Name(), f2.Name()}, it)
 		require.NoError(t, scheme.Close())
 	})
@@ -194,10 +195,10 @@ func TestFileSchemeListFilesLarge(t *testing.T) {
 		config.NopConfig(), workspaceURI)
 	require.NoError(t, err)
 
-	it, err := ListFiles(context.Background(), scheme, "")
+	it, err := walkdir.ListFiles(context.Background(), scheme, "")
 	require.NoError(t, err)
 
-	for i := 0; i < n; i++ {
+	for range n {
 		path, ok := it.Next(context.Background())
 		require.True(t, ok)
 		require.NoError(t, it.Err())
@@ -258,7 +259,7 @@ func benchListFiles(b *testing.B, totalFiles, nestEvery, emptyDirsPerFile int) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		it, _ := ListFiles(context.Background(), scheme, "")
+		it, _ := walkdir.ListFiles(context.Background(), scheme, "")
 
 		// consume iterator
 		ok := true
@@ -285,7 +286,7 @@ func setupTestDirectory(
 
 	var closeFns []func()
 	// write test files
-	for i := 0; i < totalFiles; i++ {
+	for i := range totalFiles {
 		f, err := os.CreateTemp(dir, strconv.Itoa(i))
 		require.NoError(t, err)
 
@@ -295,7 +296,7 @@ func setupTestDirectory(
 		err = f.Close()
 		require.NoError(t, err)
 
-		for i := 0; i < emptyDirsPerFile; i++ {
+		for range emptyDirsPerFile {
 			// create more dirs than workers
 			d, err := os.MkdirTemp(dir, "emptydir")
 			require.NoError(t, err)

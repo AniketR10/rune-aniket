@@ -302,7 +302,7 @@ func TestClientServerIntegration(t *testing.T) {
 
 		// proceed to trigger, should not deadlock
 		mu.Lock() // try to deadlock
-		for i := 0; i < 10000; i++ {
+		for i := range 10000 {
 			tpe := textapi.EventType(i % 9)
 			handler.Handle(context.Background(), textapi.Event{URI: uri, Type: tpe})
 		}
@@ -888,7 +888,6 @@ func (t *testLoader) Close() error {
 	panic("unimplemented")
 }
 
-
 func (t *testFlusherCloser) Close() error {
 	if t.closeFn != nil {
 		return t.closeFn()
@@ -1015,12 +1014,12 @@ func setupWmIntTest(
 type nopNotifications struct{}
 
 func (n nopNotifications) Notify(
-	level browserapi.NotificationLevel, msg string, args ...interface{},
+	level browserapi.NotificationLevel, msg string, args ...any,
 ) (string, error) {
 	return "", nil
 }
 func (n nopNotifications) NotifyOnce(
-	level browserapi.NotificationLevel, msg string, args ...interface{},
+	level browserapi.NotificationLevel, msg string, args ...any,
 ) (string, error) {
 	return "", nil
 }

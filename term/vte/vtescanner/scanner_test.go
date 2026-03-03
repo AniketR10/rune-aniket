@@ -148,7 +148,7 @@ func TestScanner(t *testing.T) {
 		var buf bytes.Buffer
 
 		buf.WriteString("\x1b]")
-		for i := 0; i < MaxOSCParams+1; i++ {
+		for range MaxOSCParams + 1 {
 			buf.WriteByte(';')
 		}
 		buf.WriteString("\x1b")
@@ -241,7 +241,7 @@ func TestScanner(t *testing.T) {
 			scanner.Advance(b)
 		}
 
-		for i := 0; i < NUM_BYTES; i++ {
+		for range NUM_BYTES {
 			scanner.Advance('a')
 		}
 
@@ -279,7 +279,7 @@ func TestScanner(t *testing.T) {
 
 	t.Run("parse CSI params ignore long params", func(t *testing.T) {
 		params := strings.Repeat("1;", MaxParams)
-		input := []byte(fmt.Sprintf("\x1b[%vp", params))
+		input := fmt.Appendf(nil, "\x1b[%vp", params)
 
 		var d testDispatcher
 		scanner := NewScanner(&d)

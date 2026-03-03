@@ -158,7 +158,7 @@ func (t *ReleaseManager) Get(
 			return
 		}
 		const n = 100
-		for i := int64(0); i < n-1; i++ {
+		for i := range int64(n - 1) {
 			t.mu.Lock()
 			writer.Progress(i, n, t.progressUnits)
 			t.mu.Unlock()

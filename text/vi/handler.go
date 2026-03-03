@@ -819,7 +819,7 @@ func (vi *viHandlerImpl) copySelection() {
 func (vi *viHandlerImpl) repeatInsertStart() {
 	from, to := term.CoordinatesSort(vi.blockRepeat.From, vi.blockRepeat.To)
 	n := to.Y - from.Y
-	for i := 0; i < n; i++ {
+	for range n {
 		vi.blockRepeat.From.Y++
 		vi.cursor.MoveToScroll(vi.blockRepeat.From)
 		vi.repeater.Repeat()

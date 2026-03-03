@@ -84,13 +84,13 @@ type delayedLoadingService struct {
 	mu      sync.RWMutex
 }
 
-func (d *delayedLoadingService) Create(ctx context.Context, ID string, doc interface{}) error {
+func (d *delayedLoadingService) Create(ctx context.Context, ID string, doc any) error {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
 	return d.service.Create(ctx, ID, doc)
 }
 
-func (d *delayedLoadingService) Set(ctx context.Context, ID string, doc interface{}) error {
+func (d *delayedLoadingService) Set(ctx context.Context, ID string, doc any) error {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
 	return d.service.Set(ctx, ID, doc)
@@ -103,7 +103,7 @@ func (d *delayedLoadingService) Update(ctx context.Context, ID string,
 	return d.service.Update(ctx, ID, updates, precond...)
 }
 
-func (d *delayedLoadingService) Get(ctx context.Context, ID string, doc interface{}) error {
+func (d *delayedLoadingService) Get(ctx context.Context, ID string, doc any) error {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
 	return d.service.Get(ctx, ID, doc)

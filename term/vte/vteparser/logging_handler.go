@@ -417,7 +417,7 @@ func (h loggingHandler) ReportModifyOtherKeys() {
 	h.h.ReportModifyOtherKeys()
 }
 
-func (h loggingHandler) log(line string, params ...interface{}) {
+func (h loggingHandler) log(line string, params ...any) {
 	log.WithField(logging.KeyClass, h.keyClass).
 		Tracef(line, params...)
 }

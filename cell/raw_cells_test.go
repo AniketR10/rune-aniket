@@ -796,7 +796,7 @@ Love isn't love 'til you give it away.
 func TestRawCellsFillBufferNoLine(t *testing.T) {
 	const N = 4096 * 256
 	var builder strings.Builder
-	for i := 0; i < N; i++ {
+	for i := range N {
 		builder.WriteByte(byte(i))
 	}
 	str := builder.String()
@@ -813,7 +813,7 @@ func newBenchmarkRawCells(fortunes int) (*rawCells, string) {
 	cells := new(rawCells)
 	cells.init()
 	payload := ""
-	for i := 0; i < fortunes; i++ {
+	for range fortunes {
 		payload = payload + benchmarkFortune
 	}
 	return cells, payload

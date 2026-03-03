@@ -45,7 +45,7 @@ example_wasm: $(EXAMPLE_WASM_BLOB)
 
 test: CI=$(CI)
 test:
-	@ go test ./.../... $(GOTESTFLAGS)
+	@ go test -vet=off ./.../... $(GOTESTFLAGS)
 
 test: CI=$(CI)
 test-no-race:

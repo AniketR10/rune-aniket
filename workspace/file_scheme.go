@@ -322,7 +322,7 @@ func (p *fileScheme) URI(path string) (workspaceapi.URI, error) {
 	return makeLocalURI(absPath)
 }
 
-func (p *fileScheme) log(level log.Level, msg string, args ...interface{}) {
+func (p *fileScheme) log(level log.Level, msg string, args ...any) {
 	if !log.IsLevelEnabled(level) {
 		return
 	}

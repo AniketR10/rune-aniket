@@ -67,7 +67,7 @@ func testTransitionFrames(
 		"illegal test: to watch %d shaders %d elements must be passed to shaderTotals, not %d",
 		len(transitionShaders), len(transitionShaders), len(shaderTotals),
 	)
-	for i := 0; i < len(transitionShaders); i++ {
+	for i := range transitionShaders {
 		require.Equal(t,
 			len(globalFrames), len(shaderFrames[i]),
 			"illegal test: globalFrames and shaderFrames[%d] must equal in length", i,
@@ -82,13 +82,13 @@ func testTransitionFrames(
 
 		for frIdx, globalFr := range globalFrames {
 			expectShaderCalled := make([]bool, len(transitionShaders))
-			for i := 0; i < len(transitionShaders); i++ {
+			for i := range transitionShaders {
 				expectShaderCalled[i] = shaderFrames[i][frIdx] != noFrame
 			}
 
 			transition.Shade(globalFr, total, cells)
 
-			for i := 0; i < len(transitionShaders); i++ {
+			for i := range transitionShaders {
 				sh := transitionShaders[i]
 
 				if expectShaderCalled[i] {
@@ -167,7 +167,7 @@ func (s *constantShader) Shade(frame, total int, in [][]term.Cell) {
 // NOTE: copy-pasted from shadertest.MakeCellMatrix
 func makeCellMatrix(w int, h int) [][]term.Cell {
 	cells := make([][]term.Cell, h)
-	for y := 0; y < h; y++ {
+	for y := range h {
 		cells[y] = make([]term.Cell, w)
 	}
 	return cells

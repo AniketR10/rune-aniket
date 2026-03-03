@@ -121,7 +121,7 @@ func (h *chaosCommandHandler) Handle(ctx context.Context, ev textapi.Event) bool
 	return false
 }
 
-func (s *chaosCommandHandler) log(level log.Level, msg string, args ...interface{}) {
+func (s *chaosCommandHandler) log(level log.Level, msg string, args ...any) {
 	log.WithField(logging.KeyClass, "extchaos.chaosCommandHandler").
 		Logf(level, msg, args...)
 }
