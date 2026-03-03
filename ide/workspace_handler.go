@@ -935,14 +935,14 @@ func (h *workspaceManagerHandler) openPrevSessionFiles(
 }
 
 func (h *workspaceManagerHandler) nextAvailableWorkspace() (idx int, ok bool) {
-	for i := h.focus; i >= 0; i++ {
+	for i := h.focus; i >= 0 && i < len(h.workspaces); i++ {
 		if h.workspaces[i] == nil {
 			ok = true
 			idx = i
 			return
 		}
 	}
-	for i := 0; i < h.focus; i++ {
+	for i := 0; i < h.focus && i < len(h.workspaces); i++ {
 		if h.workspaces[i] == nil {
 			ok = true
 			idx = i
