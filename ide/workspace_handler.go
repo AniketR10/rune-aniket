@@ -862,7 +862,10 @@ func (h *workspaceManagerHandler) buildExtensions(
 	}
 	callbacks := idelsp.NewCallbackHandler(notifications, apibrowser, ex.Browser(),
 		apieditor, cwd, uri.String(), lspCallbackCfg)
-	lspConfig := idelsp.Config{Callback: callbacks, MaxRetries: 5}
+	lspConfig := idelsp.Config{
+		NoInitializeServer: true,
+		Callback:           callbacks, MaxRetries: 5,
+	}
 	lsp := idelsp.New(uri, ex.workspace,
 		ex.workspace, h.pkgmanager, notifications,
 		ex.Browser(), lspConfig)
