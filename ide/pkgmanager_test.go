@@ -41,7 +41,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/handler/handlertest"
-	"unstable.build/go-tui/ide/idepkg/idepkgtest"
+	"github.com/unstablebuild/blue/ide/idepkg/idepkgtest"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/workspace"
 )

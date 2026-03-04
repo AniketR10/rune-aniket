@@ -31,7 +31,9 @@ import (
 	"time"
 
 	"github.com/ernestrc/go-multierror"
+	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/document"
+	"github.com/unstablebuild/blue/ide/idepkg"
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/release"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
@@ -39,11 +41,9 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/handler"
-	log "github.com/sirupsen/logrus"
 	sdkiterator "github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/debug"
-	"unstable.build/go-tui/ide/idepkg"
 )
 
 const (
@@ -114,7 +114,10 @@ func (m *pkgManager) init(
 	interrupter term.Interrupter, wh *workspaceManagerHandler,
 	scheduleNextTick func(func()) bool,
 ) {
-	m.pkg = idepkg.NewManager(n, rm, storage, scheme, dataDir, interrupter)
+	m.pkg = idepkg.NewManager(n, rm, storage, scheme, dataDir,
+		interrupter, idepkg.WithCrashReportPackage(debug.Package),
+		idepkg.WithCrashReportVersion(debug.Tag),
+	)
 	m.scheduleNextTick = scheduleNextTick
 	m.n = n
 	m.interrupter = interrupter
