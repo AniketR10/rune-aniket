@@ -2692,9 +2692,11 @@ func newTestWorkspaceManagerHandlerWithManagerAndExtensions(
 	mu := new(sync.Mutex)
 	if cfg.scheduleNextTick == nil {
 		cfg.scheduleNextTick = func(fn func()) bool {
-			mu.Lock()
-			defer mu.Unlock()
-			fn()
+			go func() {
+				mu.Lock()
+				defer mu.Unlock()
+				fn()
+			}()
 			return true
 		}
 	}
