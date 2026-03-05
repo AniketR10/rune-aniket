@@ -120,6 +120,7 @@ func (m *pkgManager) init(
 	wm browserapi.WindowManager,
 	storage document.Service, scheme schemeapi.Scheme,
 	dataDir, configPath string,
+	fcs component.FrameCharSet,
 	interrupter term.Interrupter, wh *workspaceManagerHandler,
 	scheduleNextTick func(func()) bool,
 ) {
@@ -127,6 +128,7 @@ func (m *pkgManager) init(
 		configPath, wm, scheduleNextTick, interrupter,
 		idepkg.WithCrashReportPackage(debug.Package),
 		idepkg.WithCrashReportVersion(debug.Tag),
+		idepkg.WithFrameCharSet(fcs),
 	)
 	m.uc = idepkg.NewUpdateChecker(m.pkg)
 	m.scheduleNextTick = scheduleNextTick

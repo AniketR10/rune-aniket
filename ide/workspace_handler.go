@@ -57,6 +57,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/clipboard"
+	"github.com/unstablebuild/rune-go-sdk/component"
 	handlerapi "github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
@@ -108,6 +109,7 @@ type workspaceManagerHandler struct {
 	extensionRunner    ExtensionsRunner
 	sixDir             string
 	configPath         string
+	frameCharSet       component.FrameCharSet
 	tabBarOffset       int
 	tabBarHeight       int
 	builtinExtensions  map[string]Extension
@@ -231,6 +233,7 @@ func (h *workspaceManagerHandler) init(
 		}
 		return nil
 	})
+	h.frameCharSet = cfg.windowFrameCharset()
 	notiConfig.Interrupter = interrupter
 	h.notifications = newWorkspaceNotifications(notiStorage, notiConfig, h)
 	h.shaderRunner = shaderRunner
@@ -1524,7 +1527,8 @@ func (h *workspaceManagerHandler) setReleaseManager(releaseManager release.Manag
 	}
 	wm := currentWorkspaceWindowManager{root: h}
 	h.pkgmanager.init(h.notifications.current(), releaseManager, wm,
-		pkgStorage, h.homeWorkspace, h.sixDir, h.configPath, h, h, h.scheduleNextTick)
+		pkgStorage, h.homeWorkspace, h.sixDir, h.configPath, h.frameCharSet,
+		h, h, h.scheduleNextTick)
 	h.dispatchOnPreview[cmdPkgInstall] = h.pkgmanager.previewPkgInstall
 }
 
