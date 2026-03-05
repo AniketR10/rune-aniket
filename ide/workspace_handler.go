@@ -107,6 +107,7 @@ type workspaceManagerHandler struct {
 	tabsClickCallback  func(int) bool
 	extensionRunner    ExtensionsRunner
 	sixDir             string
+	configPath         string
 	tabBarOffset       int
 	tabBarHeight       int
 	builtinExtensions  map[string]Extension
@@ -237,6 +238,7 @@ func (h *workspaceManagerHandler) init(
 	h.externalCommands = make(map[string]externalCommand)
 	h.frame = cfg.frame()
 	h.scheduleNextTick = cfg.scheduleNextTick
+	h.configPath = cfg.configPath
 	h.reloadConfig = reloadConfig
 	h.workspaceConfigFilename = workspaceConfigFilename
 	h.tabsClickCallback = tabsClickCallback
@@ -1517,9 +1519,12 @@ func (h *workspaceManagerHandler) setReleaseManager(releaseManager release.Manag
 	pkgStorage := document.WithPartition(h.storage, "idepkg")
 	if h.pkgmanager == nil {
 		h.pkgmanager = new(pkgManager)
+	} else {
+		h.pkgmanager.Close()
 	}
-	h.pkgmanager.init(h.notifications.current(), releaseManager,
-		pkgStorage, h.homeWorkspace, h.sixDir, h, h, h.scheduleNextTick)
+	wm := currentWorkspaceWindowManager{root: h}
+	h.pkgmanager.init(h.notifications.current(), releaseManager, wm,
+		pkgStorage, h.homeWorkspace, h.sixDir, h.configPath, h, h, h.scheduleNextTick)
 	h.dispatchOnPreview[cmdPkgInstall] = h.pkgmanager.previewPkgInstall
 }
 

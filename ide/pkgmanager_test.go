@@ -245,7 +245,7 @@ func TestPackageManagerIntegration(t *testing.T) {
 ├──────────────────────────────────────┤
 │1                                     │
 └──────────────────────────────────────┘`},
-		{":noticlose>:pkgupgradeall>:pkgwait six>",
+		{":noticlose>:pkgupdateall>:pkgwait six>",
 			`┌────────────────────────┌─────────────┐
 │                        │ downloaded  │
 ├────────────────────────│ version 2   │
@@ -255,10 +255,10 @@ func TestPackageManagerIntegration(t *testing.T) {
 │                        ┌─────────────┐
 │          workspaceWallp│ package go  │
 │                        │ already     │
-│                        │ upgraded    │
-│                        │ to the      │
-│                        │ latest      │
-├────────────────────────│ version (1) ┤
+│                        │ updated to  │
+│                        │ the latest  │
+│                        │ version (1) │
+├────────────────────────└─────────────┤
 │1                                     │
 └──────────────────────────────────────┘`},
 		{":noticlose>:pkguse six 1>",

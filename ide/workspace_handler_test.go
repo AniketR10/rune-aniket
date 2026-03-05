@@ -2819,6 +2819,7 @@ func defaultCfg() ideConfig {
 		},
 	},
 		scheduleNextTick: nil,
+		configPath:       "not-empty",
 	}
 }
 

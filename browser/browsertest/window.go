@@ -37,6 +37,8 @@ type WindowToAPIWindow struct {
 	Win browser.Window
 }
 
+var _ browserapi.Window = WindowToAPIWindow{}
+
 func (a WindowToAPIWindow) SetContent(h browserapi.Handler) error {
 	return a.Win.SetContent(h)
 }

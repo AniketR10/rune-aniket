@@ -183,7 +183,7 @@ func TestIDEInitializationIntegration(t *testing.T) {
 		_, config := makeTestFiles(t)
 		initShader := new(mockShader)
 		i := new(IDE)
-		err := i.init("", "", filepath.Dir(config.Name()),
+		err := i.init("", "not-empty", filepath.Dir(config.Name()),
 			WithInitShader(
 				func(_ term.Attributes, _ component.FrameCharSet) shader.Shader {
 					return initShader

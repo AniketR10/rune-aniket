@@ -51,7 +51,8 @@ const (
 	cmdPkgRemove     = "pkgremove"
 	cmdPkgUse        = "pkguse"
 	cmdPkgCurrent    = "pkgcurrent"
-	cmdPkgUpgradeAll = "pkgupgradeall"
+	cmdPkgUpgradeAll = "pkgupdateall"
+	cmdCheckUpdates  = "pkgupdatecheck"
 
 	installStorageKey = "autoInstallPrompt"
 )
@@ -61,11 +62,16 @@ var (
 		{
 			Name: cmdPkgInstall,
 			Summary: "Installs a package from the official distribution. " +
-				"If version is omitted, the package is upgraded to the latest version. " +
+				"If version is omitted, the package is updated to the latest version. " +
 				"If package contains executables, then this " +
 				"will be made available to terminal sessions via PATH env variable." +
 				cmdPkgUse + " is not necessary after running this command.",
 			Synopsis: "<package> [version]",
+		},
+		{
+			Name:     cmdCheckUpdates,
+			Summary:  "Check for package updates for all installed packages.",
+			Synopsis: "",
 		},
 		{
 			Name:     cmdPkgUpgradeAll,
@@ -102,6 +108,7 @@ type pkgManager struct {
 	scheduleNextTick func(func()) bool
 	interrupter      term.Interrupter
 	pending          sync.Map // map[string]*sync.Mutex
+	uc               *idepkg.UpdateChecker
 }
 
 type installStorageValue struct {
@@ -110,14 +117,18 @@ type installStorageValue struct {
 
 func (m *pkgManager) init(
 	n browserapi.Notifications, rm release.Manager,
-	storage document.Service, scheme schemeapi.Scheme, dataDir string,
+	wm browserapi.WindowManager,
+	storage document.Service, scheme schemeapi.Scheme,
+	dataDir, configPath string,
 	interrupter term.Interrupter, wh *workspaceManagerHandler,
 	scheduleNextTick func(func()) bool,
 ) {
 	m.pkg = idepkg.NewManager(n, rm, storage, scheme, dataDir,
-		interrupter, idepkg.WithCrashReportPackage(debug.Package),
+		configPath, wm, scheduleNextTick, interrupter,
+		idepkg.WithCrashReportPackage(debug.Package),
 		idepkg.WithCrashReportVersion(debug.Tag),
 	)
+	m.uc = idepkg.NewUpdateChecker(m.pkg)
 	m.scheduleNextTick = scheduleNextTick
 	m.n = n
 	m.interrupter = interrupter
@@ -129,6 +140,8 @@ func (m *pkgManager) init(
 	} else {
 		log.Debugf("processed all installed settings")
 	}
+
+	m.uc.Start(context.Background())
 }
 
 // LibDir installs package via prompt if not installed yet
@@ -177,9 +190,11 @@ func (m *pkgManager) HandleCommand(ctx context.Context, cmd textapi.Command) err
 	case cmdPkgUse:
 		return m.handlePkgUse(ctx, cmd)
 	case cmdPkgUpgradeAll:
-		return m.handlePkgUpgradeAll(ctx, cmd)
+		return m.handlePkgUpgradeAll(ctx)
 	case cmdPkgCurrent:
 		return m.handlePkgCurrent(ctx, cmd)
+	case cmdCheckUpdates:
+		return m.handleCheckUpdates(ctx)
 	default:
 		return fmt.Errorf("unknown command: %v", cmd.Name)
 	}
@@ -197,8 +212,7 @@ func (m *pkgManager) Complete(
 		return m.completePkgInstalled(ctx, cmd.Name, cmd.Args, true)
 	case cmdPkgCurrent:
 		return m.completePkgInstalled(ctx, cmd.Name, cmd.Args, false)
-	case cmdPkgUpgradeAll:
-		return iterator.FromSlice[string](nil), "", nil
+	// case cmdPkgUpgradeAll, cmdCheckUpdates:
 	default:
 		return iterator.FromSlice[string](nil), "", nil
 	}
@@ -338,7 +352,7 @@ func (m *pkgManager) handlePkgUse(ctx context.Context, cmd textapi.Command) erro
 	return err
 }
 
-func (m *pkgManager) handlePkgUpgradeAll(ctx context.Context, cmd textapi.Command) error {
+func (m *pkgManager) handlePkgUpgradeAll(ctx context.Context) error {
 	pkgs, err := m.pkg.ListInstalledPackages(ctx)
 	if err != nil {
 		return err
@@ -376,18 +390,18 @@ func (m *pkgManager) handlePkgUpgradeAll(ctx context.Context, cmd textapi.Comman
 			}
 			latest, err := m.getLatestVersion(ctx, pkgID)
 			if err != nil {
-				errors[i] = fmt.Errorf("cannot upgrade package %s: %w", pkgID, err)
+				errors[i] = fmt.Errorf("cannot update package %s: %w", pkgID, err)
 				return
 			}
 			if latest == inUse {
 				_, errors[i] = m.n.Notify(browserapi.LevelInfo,
-					"package %s already upgraded to the latest version (%s)",
+					"package %s already updated to the latest version (%s)",
 					pkgID, latest)
 				return
 			}
 
 			if err := m.pkg.InstallPackageVersion(ctx, pkgID, latest); err != nil {
-				errors[i] = fmt.Errorf("upgrade package version: %w", err)
+				errors[i] = fmt.Errorf("update package version: %w", err)
 			}
 		})
 	}
@@ -417,8 +431,23 @@ func (m *pkgManager) handlePkgCurrent(ctx context.Context, cmd textapi.Command) 
 	return err
 }
 
+func (m *pkgManager) handleCheckUpdates(ctx context.Context) error {
+	updates, err := m.uc.CheckForUpdates(ctx)
+	if err != nil {
+		return err
+	}
+
+	for _, update := range updates {
+		_, err = m.n.Notify(browserapi.LevelInfo,
+			"version %s of package %s can be update to %s",
+			update.Current, update.Package, update.Latest)
+	}
+
+	return err
+}
+
 func (m *pkgManager) completePkgInstall(
-	ctx context.Context, cmd string, args []string,
+	ctx context.Context, _ string, args []string,
 ) (iterator.Iterator[string], string, error) {
 	if len(args) <= 1 {
 		it, err := m.pkg.ListPackages(ctx, nil)
@@ -442,7 +471,7 @@ func (m *pkgManager) completePkgInstall(
 }
 
 func (m *pkgManager) completePkgInstalled(
-	ctx context.Context, cmd string, args []string, showVersions bool,
+	ctx context.Context, _ string, args []string, showVersions bool,
 ) (iterator.Iterator[string], string, error) {
 	if len(args) <= 1 {
 		it, err := m.pkg.ListInstalledPackages(ctx)
@@ -460,7 +489,7 @@ func (m *pkgManager) completePkgInstalled(
 			return string(in)
 		}), "", nil
 	}
-	return iterator.FromSlice[string](nil), "", nil
+	return iterator.FromSlice([]string{""}), "", nil
 }
 
 func (m *pkgManager) getLatestVersion(
@@ -561,6 +590,10 @@ func (m *pkgManager) openInstallPrompt(pkgID string, version release.Version) (
 
 	m.pending.Store(pkgID, ready)
 	return it, nil
+}
+
+func (m *pkgManager) Close() error {
+	return m.uc.Close()
 }
 
 type pkgManagerIterator struct {

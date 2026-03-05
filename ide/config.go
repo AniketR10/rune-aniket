@@ -87,6 +87,7 @@ type extensionConfig struct {
 type ideConfig struct {
 	defaultWallpaper browser.Wallpaper
 
+	configPath       string
 	cfg              map[string]any
 	errors           map[string]error
 	ringBell         func()
@@ -118,9 +119,10 @@ func overrideConfig(ideConfig, cfg map[string]any) {
 func initConfig(
 	c *ideConfig, cfg map[string]any, defaultWallpaper browser.Wallpaper,
 	ringBell func(), scheduleNextTick func(func()) bool,
-	zdotDir string,
+	zdotDir string, configPath string,
 ) {
 	c.cfg = cfg
+	c.configPath = configPath
 	c.ringBell = ringBell
 	c.scheduleNextTick = scheduleNextTick
 	c.zdotDir = zdotDir
@@ -131,11 +133,11 @@ func initConfig(
 func initDefaultConfig(
 	c *ideConfig, defaultWallpaper browser.Wallpaper,
 	ringBell func(), scheduleNextTick func(func()) bool,
-	zdotDir string,
+	zdotDir, configPath string,
 ) {
 	cfg := make(map[string]any)
 	initConfig(c, cfg, defaultWallpaper, ringBell,
-		scheduleNextTick, zdotDir)
+		scheduleNextTick, zdotDir, configPath)
 }
 
 func (c ideConfig) command() (config.Config, bool) {
@@ -2162,14 +2164,14 @@ func loadWorkspaceConfig(
 // NOTE: it's imperative that this function populates c with sane defaults even in the event
 // of an error.
 func loadConfig(
-	c *ideConfig, configpath string,
+	c *ideConfig, configPath string,
 	defaultWallpaper browser.Wallpaper,
 	defaultConfig string,
 	ringBell func(), scheduleNextTick func(func()) bool,
 	zdotDir string,
 ) (err error) {
 	initDefaultConfig(c, defaultWallpaper, ringBell, scheduleNextTick,
-		zdotDir)
+		zdotDir, configPath)
 
 	cfg, err := decodeConfig(strings.NewReader(defaultConfig))
 	if err != nil {
@@ -2177,9 +2179,9 @@ func loadConfig(
 	}
 
 	initConfig(c, cfg, defaultWallpaper, ringBell,
-		scheduleNextTick, zdotDir)
+		scheduleNextTick, zdotDir, configPath)
 
-	if err := loadFileConfig(c, configpath); err != nil {
+	if err := loadFileConfig(c, configPath); err != nil {
 		return err
 	}
 
@@ -2190,8 +2192,8 @@ func loadConfig(
 	return nil
 }
 
-func loadFileConfig(c *ideConfig, configpath string) (err error) {
-	f, err := workspace.OpenFile(configpath, os.O_RDONLY, 0)
+func loadFileConfig(c *ideConfig, configPath string) (err error) {
+	f, err := workspace.OpenFile(configPath, os.O_RDONLY, 0)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil

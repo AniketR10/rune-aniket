@@ -393,7 +393,7 @@ func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
 func TestConfigDefault(t *testing.T) {
 	ret := new(ideConfig)
 	initDefaultConfig(ret, browser.NopWallpaper(),
-		term.RingBell, term.ScheduleNextTick, "")
+		term.RingBell, term.ScheduleNextTick, "", "")
 	assertDefaultConfig(t, ret)
 }
 
@@ -423,7 +423,7 @@ func TestConfigSetting(t *testing.T) {
 
 	var cfg ideConfig
 	initConfig(&cfg, m, browser.NopWallpaper(),
-		term.RingBell, term.ScheduleNextTick, "")
+		term.RingBell, term.ScheduleNextTick, "", "")
 
 	assert.Equal(t, 4, cfg.editorTabspaces())
 	_, ok := cfg.wallpaper().NewComponent().(component.String)
