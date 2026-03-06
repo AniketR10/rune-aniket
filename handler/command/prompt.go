@@ -126,6 +126,7 @@ const (
 	defaultSeparatorHeight  = 1
 	minWidthManualComponent = 100
 	minListHeight           = 3
+	maxManualHeight         = 20
 )
 
 // Init initializes this handler with the given storage, completer,
@@ -218,7 +219,7 @@ func (h *Prompt) Resize(width, height int) {
 
 func (h *Prompt) calculateSplitHeights(width, height int) (int, int, int) {
 	separatorHeight := h.getSeparatorHeight()
-	manHeight := h.manualComponent.Height(width)
+	manHeight := min(maxManualHeight, h.manualComponent.Height(width))
 	listHeight := height - manHeight - separatorHeight
 	if listHeight < minListHeight {
 		listHeight = minListHeight
