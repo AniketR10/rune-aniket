@@ -41,6 +41,7 @@ import (
 	"github.com/sirupsen/logrus"
 	sitter "github.com/tree-sitter/go-tree-sitter"
 	"github.com/unstablebuild/blue/ide/idelsp/languages"
+	"github.com/unstablebuild/blue/walkdir"
 	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
@@ -48,7 +49,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/debug"
-	"github.com/unstablebuild/blue/walkdir"
 )
 
 // NewParser returns a workspace-wide syntaxapi.Parser.
@@ -154,10 +154,10 @@ func (p parserSearcher) SearchNode(nodeTypes syntaxapi.NodeCaptureName) (
 	return p.search(LocalsFilename, "", names)
 }
 
-func (p parserSearcher) Search(query string, captureNames []string) (
+func (p parserSearcher) Search(query string, captureNames []string, langs ...string) (
 	iterator.Iterator[syntaxapi.Result], error,
 ) {
-	return p.search("", query, captureNames)
+	return p.search("", query, captureNames, langs...)
 }
 
 func (p parserSearcher) query(
@@ -204,9 +204,9 @@ func (p parserSearcher) query(
 	return it, nil
 }
 
-func (p parserSearcher) search(queryFile, query string, captureNames []string) (
-	iterator.Iterator[syntaxapi.Result], error,
-) {
+func (p parserSearcher) search(
+	queryFile, query string, captureNames []string, langs ...string,
+) (iterator.Iterator[syntaxapi.Result], error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	paths, err := walkdir.ListFiles(ctx, p.w, ".")
 	if err != nil {
@@ -229,7 +229,7 @@ func (p parserSearcher) search(queryFile, query string, captureNames []string) (
 		go debug.CapturePanicReport(func() {
 			defer wg.Done()
 			readSymbolsWorker(ctx, p.w, p.pkg, p.uri, queryFile, query, results, files, err,
-				expectedErrors, captureNames)
+				expectedErrors, captureNames, langs)
 		})
 	}
 
@@ -383,7 +383,7 @@ func readSymbolsWorker(
 	uri workspaceapi.URI, queryFile, query string, results chan syntaxapi.Result,
 	files chan string,
 	err *error, expectedErrors map[string]*expectedError,
-	captureNameFilters []string,
+	captureNameFilters, langs []string,
 ) {
 	parsers := make(map[string]*parser)
 	for {
@@ -396,6 +396,9 @@ func readSymbolsWorker(
 			}
 			langID, lerr := languages.LanguageForFile(path)
 			if lerr != nil {
+				continue
+			}
+			if len(langs) != 0 && !slices.Contains(langs, langID) {
 				continue
 			}
 			parser, ok := parsers[langID]

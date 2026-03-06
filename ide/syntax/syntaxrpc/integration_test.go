@@ -385,7 +385,7 @@ func (m *mockParser) Highlight(uri workspaceapi.URI, content string) (
 	return iterator.FromSlice(m.locations), nil
 }
 
-func (m *mockParser) Search(_ string, _ []string) (
+func (m *mockParser) Search(_ string, _ []string, _ ...string) (
 	iterator.Iterator[syntaxapi.Result], error,
 ) {
 	if m.searchErr != nil {

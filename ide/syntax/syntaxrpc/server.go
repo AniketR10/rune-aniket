@@ -41,7 +41,7 @@ type Server struct {
 	syntaxrpc.UnimplementedSyntaxServer
 	ctx       context.Context
 	cancelCtx func()
-	parser  syntaxapi.Parser
+	parser    syntaxapi.Parser
 }
 
 // NewServer returns a new Server that delegates to s.
@@ -59,7 +59,14 @@ func RegisterServer(registrar grpc.ServiceRegistrar, s syntaxapi.Parser) {
 func (s *Server) Search(
 	req *syntaxrpc.SearchRequest, stream grpc.ServerStreamingServer[syntaxrpc.SearchResponse],
 ) error {
-	it, err := s.parser.Search(req.GetQuery(), req.GetCaptureNames())
+	langs := req.GetLanguages()
+	var it iterator.Iterator[syntaxapi.Result]
+	var err error
+	if langs == nil {
+		it, err = s.parser.Search(req.GetQuery(), req.GetCaptureNames())
+	} else {
+		it, err = s.parser.Search(req.GetQuery(), req.GetCaptureNames(), req.GetLanguages()...)
+	}
 	if err != nil {
 		return fmt.Errorf("syntax search: %w", err)
 	}
