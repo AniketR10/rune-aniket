@@ -33,6 +33,7 @@ import (
 	"github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/logging"
+	"github.com/unstablebuild/blue/tui/component/markdown"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
@@ -803,17 +804,38 @@ func (c *Component) Prompt(
 		PromptConfig: component.PromptConfig{
 			Message:              message,
 			Options:              options,
-			Frame:                c.config.FrameCharSet,
 			BackgroundAttributes: c.config.PromptConfig.BackgroundAttr,
 			MinWidth:             c.config.PromptConfig.MinWidth,
+			NewMessage: func(str string) component.Floating {
+				mcfg := markdown.DefaultConfig()
+				mcfg.HeaderPrefix = false
+				mkd, err := markdown.NewWithConfig(str, mcfg)
+				if err == nil {
+					return component.NewAspectRatioFloatingResponsive(
+						component.NewSpan(mkd, component.SpanConfig{
+							PadHorizontal:    4,
+							PadVertical:      2,
+							ContentAlignment: component.AlignmentCentered,
+						}), component.DefaultAspectRatio)
+				}
+				cfg := component.StringResponsiveConfig{
+					NoSplitWords: true,
+					StringConfig: component.StringConfig{
+						PaddingVertical:   4,
+						PaddingHorizontal: 4,
+						Alignment:         component.AlignmentCentered,
+					},
+				}
+				messageResponsive := component.NewResponsiveString(str, cfg)
+
+				return component.NewAspectRatioFloatingResponsive(
+					messageResponsive, component.DefaultAspectRatio)
+			},
 		},
 		PromptHandler:  promptHandler,
 		OptionBindings: bindings,
 		OptionAttr:     c.config.PromptConfig.TextAttr,
 		HighlightAttr:  c.config.PromptConfig.HighlightAttr,
-	}
-	if c.config.Frame {
-		promptConfig.Frame = component.FrameCharSetDefault()
 	}
 
 	prompt := handler.NewPrompt(promptConfig)

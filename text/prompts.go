@@ -36,8 +36,8 @@ import (
 
 func (c *Component) openAreYouSurePrompt(file workspaceapi.URI) {
 	const (
-		yesOpt = "Yes"
-		noOpt  = "No"
+		yesOpt = "    Yes    "
+		noOpt  = "    No    "
 	)
 
 	msg := fmt.Sprintf(`File %s
@@ -79,10 +79,10 @@ and lose all the new updates?`, file)
 
 func (c *Component) openRecoveryPrompt(file workspaceapi.URI) {
 	const (
-		recoverOpt  = "Recover"
-		readOnlyOpt = "Open rdonly"
-		editOpt     = "force Edit"
-		skipOpt     = "Skip"
+		recoverOpt  = "   Recover   "
+		readOnlyOpt = "   Open rdonly   "
+		editOpt     = "   Force Edit   "
+		skipOpt     = "   Skip   "
 	)
 
 	msg := fmt.Sprintf("File %s is already open by another process "+

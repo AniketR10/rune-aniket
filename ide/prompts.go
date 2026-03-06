@@ -40,8 +40,8 @@ import (
 )
 
 const (
-	yesOpt = "Yes"
-	noOpt  = "No"
+	yesOpt = "    Yes    "
+	noOpt  = "    No    "
 )
 
 var yesNoKeyCombs = []term.KeyComb{{Ch: 'y'}, {Ch: 'n'}}
@@ -58,7 +58,7 @@ func (h *workspaceManagerHandler) openRestorePrompt(
 		h, ex, workspaceURI, invokeWindow, cache, yesOpt, noOpt,
 	).(*openRestorePromptHandler)
 	promptWindow := ex.comp.Prompt(
-		"Do you want to restore the previous session?",
+		"Do you want to **restore** the previous session?",
 		[]string{yesOpt, noOpt},
 		yesNoKeyCombs,
 		promptHandler,
@@ -123,7 +123,7 @@ func (h *openRestorePromptHandler) OnClose() error {
 
 func (h *workspaceManagerHandler) openConfirmExitPrompt(ex *ex, hasDirtyFilesOpen bool) {
 
-	promptText := "Are you sure you want to exit?"
+	promptText := "Are you sure you want to **exit**?"
 
 	if hasDirtyFilesOpen {
 		promptText = "There are open files with changes pending to be written. " +
@@ -142,7 +142,7 @@ func (h *workspaceManagerHandler) openConfirmExitPrompt(ex *ex, hasDirtyFilesOpe
 
 func (h *workspaceManagerHandler) openCreateWorkspacePrompt(ex *ex, uri workspaceapi.URI) {
 	promptText := fmt.Sprintf(
-		"workspace with URI %s does not exist. Do you want to create it?",
+		"workspace with URI %s does not exist. Do you want to **create** it?",
 		uri.String())
 
 	promptHandler := &createWorkspaceHandler{ex: ex, uri: uri, wm: h}
@@ -242,8 +242,8 @@ func (h *createWorkspaceHandler) createParentWorkspace(
 }
 
 const (
-	overwrite = "Overwrite file"
-	discard   = "Discard your changes"
+	overwrite = "   Discard external changes   "
+	discard   = "   Discard your changes   "
 )
 
 var (
@@ -281,7 +281,7 @@ func (ex *ex) openSurePrompt(
 		reload: reload,
 	}
 	_ = ex.comp.Prompt(
-		fmt.Sprintf("Are you sure you want to discard your changes to %s?", file.Name()),
+		fmt.Sprintf("Are you sure you want to **discard** your changes to %s?", file.Name()),
 		[]string{yesOpt, noOpt},
 		yesNoKeyCombs,
 		promptHandler,
@@ -400,7 +400,7 @@ func (h *replaceTaskHandler) OnClose() error {
 
 func (e *ex) openReplaceTaskPrompt(t idetask.Task) error {
 	promptText := fmt.Sprintf(
-		"A task with the name %q already exists. Do you want to replace it?", t.Name)
+		"A task with the name %q already exists. Do you want to **replace** it?", t.Name)
 
 	promptHandler := &replaceTaskHandler{ex: e, t: t}
 	e.comp.Prompt(
