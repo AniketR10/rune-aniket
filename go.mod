@@ -15,7 +15,7 @@ require (
 	github.com/sirupsen/logrus v1.9.3
 	github.com/sourcegraph/go-diff v0.6.1
 	github.com/stretchr/testify v1.11.1
-	github.com/unstablebuild/blue v1.75.7
+	github.com/unstablebuild/blue v1.76.7
 	github.com/unstablebuild/golang-internal-tools v0.0.2
 	github.com/unstablebuild/rune-go-sdk v0.0.47
 	github.com/unstablebuild/tcell/v3 v3.6.3
@@ -73,7 +73,7 @@ require (
 	github.com/blackjack/webcam v0.5.0 // indirect
 	github.com/clipperhouse/stringish v0.1.1 // indirect
 	github.com/clipperhouse/uax29/v2 v2.3.0 // indirect
-	github.com/cloudflare/circl v1.6.1 // indirect
+	github.com/cloudflare/circl v1.6.3 // indirect
 	github.com/cyphar/filepath-securejoin v0.6.0 // indirect
 	github.com/emirpasic/gods v1.18.1 // indirect
 	github.com/gen2brain/malgo v0.11.21 // indirect

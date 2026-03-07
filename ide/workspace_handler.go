@@ -881,7 +881,8 @@ func (h *workspaceManagerHandler) buildExtensions(
 	}
 	cmdcfg := lspCommandsConfig(uri, cfg, notifications, h, parser)
 	apiHandler, err := lspcmd.AllHandler(
-		lsp, apieditor, apibrowser, apibrowser, apibrowser, ex.workspace, cmdcfg)
+		lsp, apieditor, apibrowser, apibrowser, apibrowser,
+		ex.workspace, parser, cmdcfg)
 	if err != nil {
 		return nil, fmt.Errorf("new lsp command handler: %v", err)
 	}
