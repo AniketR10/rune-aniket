@@ -31,7 +31,6 @@ import (
 	"time"
 
 	"github.com/ernestrc/go-multierror"
-	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/ide/idepkg"
 	"github.com/unstablebuild/blue/iterator"
@@ -139,13 +138,6 @@ func (m *pkgManager) init(
 	m.interrupter = interrupter
 	m.wh = wh
 	m.storage = storage
-	err := m.pkg.ProcessInstalledSettings(context.Background())
-	if err != nil {
-		log.Errorf("process installed settings: %v", err)
-	} else {
-		log.Debugf("processed all installed settings")
-	}
-
 	m.uc.Start(context.Background())
 }
 

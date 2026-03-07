@@ -1520,15 +1520,34 @@ func (h *workspaceManagerHandler) Interrupt(ctx context.Context) error {
 }
 
 func (h *workspaceManagerHandler) setReleaseManager(releaseManager release.Manager) {
+	notifications := h.notifications.current()
 	pkgStorage := document.WithPartition(h.storage, "idepkg")
 	if h.pkgmanager == nil {
 		h.pkgmanager = new(pkgManager)
+		// do this once only when initializing pgmanager for the first time
+		// these don't require release.Manager so it's ok to do it
+		// with the initial release.Manager.
+		defer func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			if err := h.pkgmanager.pkg.Reconcile(ctx); err != nil {
+				_, _ = notifications.Notify(browserapi.LevelError,
+					"package manager: clean up: %v", err)
+			}
+			err := h.pkgmanager.pkg.ProcessInstalledSettings(ctx)
+			if err != nil {
+				_, _ = notifications.Notify(browserapi.LevelError,
+					"package manager: process installed settings: %v", err)
+			} else {
+				log.Debugf("processed all installed settings")
+			}
+		}()
 	} else {
 		h.pkgmanager.Close()
 	}
 	wm := currentWorkspaceWindowManager{root: h}
 	parser := &lazyParser{root: h}
-	h.pkgmanager.init(h.notifications.current(), releaseManager, wm,
+	h.pkgmanager.init(notifications, releaseManager, wm,
 		pkgStorage, h.homeWorkspace, h.sixDir, h.configPath, h.frameCharSet,
 		h, h, h.scheduleNextTick, parser)
 	h.dispatchOnPreview[cmdPkgInstall] = h.pkgmanager.previewPkgInstall
