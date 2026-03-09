@@ -15,7 +15,7 @@ require (
 	github.com/sirupsen/logrus v1.9.3
 	github.com/sourcegraph/go-diff v0.6.1
 	github.com/stretchr/testify v1.11.1
-	github.com/unstablebuild/blue v1.76.8
+	github.com/unstablebuild/blue v1.76.10
 	github.com/unstablebuild/golang-internal-tools v0.0.2
 	github.com/unstablebuild/rune-go-sdk v0.0.47
 	github.com/unstablebuild/tcell/v3 v3.6.3
