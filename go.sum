@@ -215,8 +215,8 @@ github.com/tree-sitter/tree-sitter-ruby v0.23.1 h1:T/NKHUA+iVbHM440hFx+lzVOzS4dV
 github.com/tree-sitter/tree-sitter-ruby v0.23.1/go.mod h1:kUS4kCCQloFcdX6sdpr8p6r2rogbM6ZjTox5ZOQy8cA=
 github.com/tree-sitter/tree-sitter-rust v0.23.2 h1:6AtoooCW5GqNrRpfnvl0iUhxTAZEovEmLKDbyHlfw90=
 github.com/tree-sitter/tree-sitter-rust v0.23.2/go.mod h1:hfeGWic9BAfgTrc7Xf6FaOAguCFJRo3RBbs7QJ6D7MI=
-github.com/unstablebuild/blue v1.76.10 h1:iyE631eeTnyWNWfQkI5OmcYr3g7rVwCkQyBlQtjBx4o=
-github.com/unstablebuild/blue v1.76.10/go.mod h1:jdbEWKydgud4iSRp9Wlga3Dn/dwAQrhJTvVMsyBuVFI=
+github.com/unstablebuild/blue v1.76.11 h1:kP7R73HKan2I6UqlewiE+1INk4ngiVluSX+j6JYHskE=
+github.com/unstablebuild/blue v1.76.11/go.mod h1:jdbEWKydgud4iSRp9Wlga3Dn/dwAQrhJTvVMsyBuVFI=
 github.com/unstablebuild/go-billy/v6 v6.0.0-ub.1 h1:pPmxLsBLNuZv+LWeytIcvwzxeUAMYzeY2MDKmSWXMTA=
 github.com/unstablebuild/go-billy/v6 v6.0.0-ub.1/go.mod h1:E3VhlS+AKkrq6ZNn1axE2/nDRJ87l1FJk9r5HT2vPX0=
 github.com/unstablebuild/go-git/v6 v6.0.1-ub.1 h1:xBomYWGQkSIm023lhJxu+F1uU4YjZlIZaKpnm+7nIak=
