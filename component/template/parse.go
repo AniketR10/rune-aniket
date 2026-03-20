@@ -138,7 +138,7 @@ func getColor(name string) (tcell.Color, error) {
 	if name == "default" {
 		return tcell.ColorDefault, nil
 	}
-	if c, ok := tcell.ColorNames[name]; ok {
+	if c := tcell.GetColor(name); c != tcell.ColorDefault {
 		return c, nil
 	}
 	if len(name) == 7 && name[0] == '#' {

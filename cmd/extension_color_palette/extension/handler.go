@@ -100,7 +100,7 @@ func makeColorGrid(dim bool) tui.Component {
 	nextGrid := make([][]tui.Component, 0, nextGridOf)
 	var i, x int
 	y := -1
-	for name := range tcell.ColorNames {
+	for name := range tcell.GetColorNames() {
 		if i%nextGridOf == 0 {
 			y++
 			x = 0

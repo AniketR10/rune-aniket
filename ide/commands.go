@@ -485,7 +485,7 @@ var (
 			completer: func(e *ex, ctx context.Context, cmd textapi.Command,
 			) (iterator.Iterator[string], string, error) {
 				var colorNames []string
-				for name := range tcell.ColorNames {
+				for name := range tcell.GetColorNames() {
 					colorNames = append(colorNames, name)
 				}
 				return iterator.FromSlice(colorNames), "", nil
