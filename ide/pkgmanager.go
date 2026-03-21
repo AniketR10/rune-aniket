@@ -549,12 +549,13 @@ func (m *pkgManager) openInstallPrompt(pkgID string, version release.Version) (
 
 	ctx := context.Background()
 	ready.Lock()
+	unlocked := false
 	m.scheduleNextTick(func() {
 		m.wh.focusEx().comp.Prompt(msg, []string{yes, yesAlways, no, noNever},
 			[]term.KeyComb{{Ch: 'Y'}, {Ch: 'A'}, {Ch: 'N'}, {Ch: 'V'}},
 			handler.FuncPromptHandler(
 				func(i int, opt string) {
-					defer ready.Unlock()
+					defer func() { unlocked = true; ready.Unlock() }()
 					var err error
 					switch opt {
 					case yesAlways:
@@ -578,6 +579,9 @@ func (m *pkgManager) openInstallPrompt(pkgID string, version release.Version) (
 				func() error {
 					if it.it == nil && it.err == nil {
 						it.err = document.ErrNotFound
+					}
+					if !unlocked {
+						unlocked = true
 						ready.Unlock()
 					}
 					m.pending.Delete(pkgID)
