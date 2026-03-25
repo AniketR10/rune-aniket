@@ -30,13 +30,16 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/ernestrc/logd-go/logging"
+	"github.com/go-git/go-billy/v6"
 	"github.com/go-git/go-git/v6"
 	"github.com/go-git/go-git/v6/plumbing/cache"
 	"github.com/go-git/go-git/v6/storage/filesystem"
+	"github.com/go-git/go-git/v6/storage/filesystem/dotgit"
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
@@ -56,15 +59,10 @@ func NewService(
 		return NewServiceWithStorage(workspace, "", nil, scheme), nil
 	}
 	shim := billyScheme{Scheme: scheme}
-	rootfs, err := shim.Chroot(root)
+	storage, err := resolveGitStorage(shim, root)
 	if err != nil {
-		return nil, fmt.Errorf("chroot %s: %v", root, err)
+		return nil, err
 	}
-	dotfs, err := rootfs.Chroot(".git")
-	if err != nil {
-		return nil, fmt.Errorf("chroot .git: %v", err)
-	}
-	storage := filesystem.NewStorage(dotfs, cache.NewObjectLRUDefault())
 	repo, err := git.Open(storage, shim)
 	if err != nil {
 		return nil, fmt.Errorf("open repository at %s: %w", root, err)
@@ -296,15 +294,15 @@ func (s svc) getRepo(file workspaceapi.URI) (*git.Repository, error) {
 	if err != nil {
 		return nil, err
 	}
-	rootfs, err := billyScheme{Scheme: s.scheme}.Chroot(root)
+	shim := billyScheme{Scheme: s.scheme}
+	storage, err := resolveGitStorage(shim, root)
 	if err != nil {
 		return nil, err
 	}
-	dotfs, err := rootfs.Chroot(".git")
+	rootfs, err := shim.Chroot(root)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("chroot %s: %w", root, err)
 	}
-	storage := filesystem.NewStorage(dotfs, cache.NewObjectLRUDefault())
 	repo, err := git.Open(storage, rootfs)
 	if err != nil {
 		return nil, fmt.Errorf("open repository: %w", err)
@@ -327,9 +325,8 @@ func getRoot(scheme schemeapi.Scheme, path string) (string, error) {
 		// this could cause an ENOTDIR; handled below
 		info, err := scheme.Stat(filepath.Join(path, ".git"))
 		if err == nil {
-			if !info.IsDir() {
-				return "", fmt.Errorf("invalid .git directory")
-			}
+			// Accept both directories (regular repos) and files (worktrees)
+			_ = info
 			return path, nil
 		}
 		if !os.IsNotExist(err) && !errors.Is(err, syscall.ENOTDIR) {
@@ -337,4 +334,120 @@ func getRoot(scheme schemeapi.Scheme, path string) (string, error) {
 		}
 		path = filepath.Dir(path)
 	}
+}
+
+// resolveGitStorage returns the filesystem.Storage for the git repository
+// at the given root path. It handles both regular repos (.git directory)
+// and git worktrees (.git file with gitdir pointer).
+func resolveGitStorage(bs billyScheme, rootPath string) (*filesystem.Storage, error) {
+	rootfs, err := bs.Chroot(rootPath)
+	if err != nil {
+		return nil, fmt.Errorf("chroot %s: %w", rootPath, err)
+	}
+
+	info, err := rootfs.Stat(".git")
+	if err != nil {
+		return nil, fmt.Errorf("stat .git: %w", err)
+	}
+
+	if info.IsDir() {
+		// Regular repo: .git is a directory
+		dotfs, err := rootfs.Chroot(".git")
+		if err != nil {
+			return nil, fmt.Errorf("chroot .git: %w", err)
+		}
+		return filesystem.NewStorage(dotfs, cache.NewObjectLRUDefault()), nil
+	}
+
+	// Worktree: .git is a file containing "gitdir: <path>"
+	dotfs, err := dotGitFileToFilesystem(bs, rootfs, rootPath)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check for commondir (shared objects/refs with main repo)
+	commonDir, err := resolveCommonDir(bs, dotfs)
+	if err != nil {
+		return nil, err
+	}
+	if commonDir != nil {
+		repoFs := dotgit.NewRepositoryFilesystem(dotfs, commonDir)
+		return filesystem.NewStorage(repoFs, cache.NewObjectLRUDefault()), nil
+	}
+
+	return filesystem.NewStorage(dotfs, cache.NewObjectLRUDefault()), nil
+}
+
+// dotGitFileToFilesystem reads a .git file (as used by worktrees) and returns
+// the billy.Filesystem for the gitdir it points to.
+func dotGitFileToFilesystem(bs billyScheme, rootfs billy.Filesystem, rootPath string) (billy.Filesystem, error) {
+	f, err := rootfs.Open(".git")
+	if err != nil {
+		return nil, fmt.Errorf("open .git file: %w", err)
+	}
+	defer f.Close()
+
+	b, err := io.ReadAll(f)
+	if err != nil {
+		return nil, fmt.Errorf("read .git file: %w", err)
+	}
+
+	line := string(b)
+	const prefix = "gitdir: "
+	if !strings.HasPrefix(line, prefix) {
+		return nil, fmt.Errorf(".git file has no %q prefix", prefix)
+	}
+
+	gitdir := strings.SplitN(line[len(prefix):], "\n", 2)[0]
+	gitdir = strings.TrimSpace(gitdir)
+
+	// Resolve relative gitdir paths relative to the worktree root
+	if !filepath.IsAbs(gitdir) {
+		gitdir = filepath.Join(rootPath, gitdir)
+	}
+	gitdir = filepath.Clean(gitdir)
+
+	dotfs, err := bs.Chroot(gitdir)
+	if err != nil {
+		return nil, fmt.Errorf("chroot gitdir %s: %w", gitdir, err)
+	}
+
+	return dotfs, nil
+}
+
+// resolveCommonDir reads the "commondir" file from a worktree git dir
+// and returns the billy.Filesystem for the shared (common) git directory.
+// Returns nil if no commondir file exists.
+func resolveCommonDir(bs billyScheme, dotfs billy.Filesystem) (billy.Filesystem, error) {
+	f, err := dotfs.Open("commondir")
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("open commondir: %w", err)
+	}
+	defer f.Close()
+
+	b, err := io.ReadAll(f)
+	if err != nil {
+		return nil, fmt.Errorf("read commondir: %w", err)
+	}
+
+	path := strings.TrimSpace(string(b))
+	if path == "" {
+		return nil, nil
+	}
+
+	// commondir is relative to the worktree gitdir
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(dotfs.Root(), path)
+	}
+	path = filepath.Clean(path)
+
+	commonFs, err := bs.Chroot(path)
+	if err != nil {
+		return nil, fmt.Errorf("chroot commondir %s: %w", path, err)
+	}
+
+	return commonFs, nil
 }

@@ -25,8 +25,12 @@ package vctrltest
 
 import (
 	"context"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
@@ -53,6 +57,45 @@ func TestGogitGitRemoteURL(t *testing.T) {
 
 func TestGogitRelPath(t *testing.T) {
 	testRelPath(t, setupGogitService)
+}
+
+func TestGogitDiffWorktree(t *testing.T) {
+	reposPath := setupGitRepos(t)
+
+	// Use gitproj2_one-file-diff as the main repo — it has a known diff
+	// in recipes/baba-ganoush.md
+	mainRepoPath := filepath.Join(reposPath, "gitproj2_one-file-diff")
+
+	// Create a worktree from the main repo
+	worktreePath := filepath.Join(reposPath, "worktree1")
+	cmd := exec.Command("git", "worktree", "add", worktreePath, "HEAD")
+	cmd.Dir = mainRepoPath
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "git worktree add: %s", out)
+
+	// Verify .git is a file (not a directory) in the worktree
+	info, err := os.Stat(filepath.Join(worktreePath, ".git"))
+	require.NoError(t, err)
+	require.False(t, info.IsDir(), ".git in worktree should be a file, not a directory")
+
+	// Modify a file in the worktree to create a diff
+	targetFile := filepath.Join(worktreePath, "recipes", "baba-ganoush.md")
+	original, err := os.ReadFile(targetFile)
+	require.NoError(t, err)
+	err = os.WriteFile(targetFile, append(original, []byte("\n// worktree modification\n")...), 0644)
+	require.NoError(t, err)
+
+	// Setup the gogit service pointing at the worktree
+	worktreeCwdURI, err := workspaceapi.ParseURI("file://" + worktreePath)
+	require.NoError(t, err)
+	svc := setupGogitService(t, worktreeCwdURI)
+
+	// Diff should work on the worktree file
+	uri, err := workspaceapi.ParseURI("file://" + targetFile)
+	require.NoError(t, err)
+	res, err := svc.Diff(context.Background(), uri)
+	require.NoError(t, err, "Diff should work on files in a git worktree")
+	assert.NotZero(t, res.Hunks, "should have detected the worktree modification")
 }
 
 func setupGogitService(t *testing.T, cwd workspaceapi.URI) vctrl.Service {
