@@ -183,7 +183,15 @@ func (s *Server) Delete(
 	return
 }
 
-func (s *Server) streamList(list docpb.DocumentStore_ListServer, it storageapi.Iterator) (err error) {
+func (s *Server) streamList(list docpb.DocumentStore_ListServer, it storageapi.Iterator, fields []string) (err error) {
+	var fieldSet map[string]struct{}
+	if len(fields) > 0 {
+		fieldSet = make(map[string]struct{}, len(fields))
+		for _, field := range fields {
+			fieldSet[field] = struct{}{}
+		}
+	}
+
 	for it.HasNext() {
 		var pr map[string]any
 		err = it.NextTo(&pr)
@@ -191,6 +199,13 @@ func (s *Server) streamList(list docpb.DocumentStore_ListServer, it storageapi.I
 		if err != nil {
 			res.Error = err.Error()
 		} else {
+			if fieldSet != nil {
+				for key := range pr {
+					if _, ok := fieldSet[key]; !ok {
+						delete(pr, key)
+					}
+				}
+			}
 			res.Data = storageapi.Encode(s.marshaler, pr, false)
 		}
 		err = list.SendMsg(&res)
@@ -225,5 +240,5 @@ func (s *Server) List(
 		return err
 	}
 
-	return s.streamList(list, it)
+	return s.streamList(list, it, req.GetFields())
 }

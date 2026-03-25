@@ -35,6 +35,7 @@ import (
 	"github.com/unstablebuild/blue/document/docmarshal/docjson"
 	"github.com/unstablebuild/blue/document/docmarshal/doctoml"
 	"github.com/unstablebuild/blue/document/doctest"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/docmarshal"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagerpc"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagerpc/docpb"
@@ -141,6 +142,58 @@ func TestRPC(t *testing.T) {
 	t.Run("over Unix domain sockets", func(t *testing.T) {
 		testRPCDatastoreOverListener(t, tempUnixListener, docbson.Marshaler())
 	})
+}
+
+func TestListWithFieldProjection(t *testing.T) {
+	for name, marshaler := range map[string]docmarshal.Marshaler{
+		"bson": docbson.Marshaler(),
+		"toml": doctoml.Marshaler(),
+		"json": docjson.Marshaler(),
+	} {
+		t.Run(name, func(t *testing.T) {
+			cache := document.NewInMemoryServiceWithMarshaler(marshaler)
+			addr, teardown := runDatastoreServer(t, cache, marshaler)
+			defer teardown()
+
+			store, err := storagerpc.NewClient(addr, marshaler,
+				grpc.WithTransportCredentials(insecure.NewCredentials()))
+			require.NoError(t, err)
+			defer store.Close()
+
+			err = store.Create(context.Background(), "doc-1", map[string]any{
+				"name":   "Ada",
+				"role":   "admin",
+				"secret": "hidden",
+			})
+			require.NoError(t, err)
+
+			ctx := storagerpc.WithFields(context.Background(), "name", "role")
+			it, err := store.List(ctx, nil)
+			require.NoError(t, err)
+			defer it.Close()
+
+			require.True(t, it.HasNext())
+
+			var got map[string]any
+			err = it.NextTo(&got)
+			require.NoError(t, err)
+			require.Equal(t, "Ada", got["name"])
+			require.Equal(t, "admin", got["role"])
+			require.NotContains(t, got, "secret")
+			require.NotContains(t, got, storageapi.DefaultCreatedAtField)
+			require.NotContains(t, got, storageapi.LowerCreatedAtField)
+
+			for key := range got {
+				require.Contains(t, []string{
+					"name",
+					"role",
+					storageapi.DefaultUpdatedAtField,
+					storageapi.LowerUpdatedAtField,
+				}, key)
+			}
+			require.False(t, it.HasNext())
+		})
+	}
 }
 
 type interopHelper struct {
