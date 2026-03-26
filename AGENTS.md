@@ -153,6 +153,9 @@ When creating commit messages for this repository, match the existing subject st
 - Prefer short, imperative, sentence-style subjects
 - Usually start with a capitalized verb such as `Add`, `Update`, `Fix`, `Remove`, `Display`, `Sort`, `Generate`, `Upgrade`, `Reverse`, or `Revert`
 - Keep the subject focused on the user-visible or code-level change
+- Wrap commit subjects and body lines to a maximum of 90 columns
+- Do not include routine validation command lists in commit messages unless explicitly requested
+- For performance-oriented commits, include measured before/after timings or percentages when available
 
 Good examples:
 

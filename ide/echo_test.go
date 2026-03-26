@@ -142,6 +142,8 @@ func TestEchoParse(t *testing.T) {
 
 	for i, test := range suite {
 		t.Run(fmt.Sprintf("test case %d", i), func(t *testing.T) {
+			t.Parallel()
+
 			actualOutput, actualErr := parseEchoKeys(test.input)
 			assert.Equal(t, test.expectedOutput, actualOutput)
 			assert.Equal(t, test.expectedErr, actualErr)

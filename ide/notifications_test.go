@@ -76,6 +76,8 @@ func TestNotifyOnce(t *testing.T) {
 	uri, err := workspaceapi.ParseURI("file:///a")
 	require.NoError(t, err)
 	t.Run("delivers notifications only the first time it's invoked", func(t *testing.T) {
+		t.Parallel()
+
 		mock, b := newTestNotifications(uri, t)
 
 		_, err := b.NotifyOnce(browserapi.LevelError, "a")
@@ -88,6 +90,8 @@ func TestNotifyOnce(t *testing.T) {
 	})
 
 	t.Run("delivers notifications with different args multiple times, if args are different", func(t *testing.T) {
+		t.Parallel()
+
 		mock, b := newTestNotifications(uri, t)
 
 		_, err := b.NotifyOnce(browserapi.LevelError, "a %d", 0)
@@ -101,6 +105,8 @@ func TestNotifyOnce(t *testing.T) {
 	})
 
 	t.Run("delivers notifications with different args only once if args are the same", func(t *testing.T) {
+		t.Parallel()
+
 		mock, b := newTestNotifications(uri, t)
 
 		_, err := b.NotifyOnce(browserapi.LevelError, "a %d", 0)
@@ -113,6 +119,8 @@ func TestNotifyOnce(t *testing.T) {
 	})
 
 	t.Run("delivers notifications multiple times if subsequent uses Notify rather than NotifyOnce", func(t *testing.T) {
+		t.Parallel()
+
 		mock, b := newTestNotifications(uri, t)
 
 		_, err := b.NotifyOnce(browserapi.LevelError, "a")

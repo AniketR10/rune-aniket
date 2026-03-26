@@ -125,8 +125,12 @@ func TestLastEOLUndoFileIntegration(t *testing.T) {
 
 func TestViIntegration(t *testing.T) {
 	t.Run("last EOL", func(t *testing.T) {
+		t.Parallel()
+
 		for _, content := range []string{"hello", "hello\n"} {
 			t.Run(fmt.Sprintf("insert word below last line: %q", content), func(t *testing.T) {
+				t.Parallel()
+
 				buf, vi, cleanup := newViIntegrationTestCase(t, content, 4, 4)
 				defer cleanup()
 
@@ -149,6 +153,8 @@ func TestViIntegration(t *testing.T) {
 			})
 
 			t.Run(fmt.Sprintf("insert a newline last line: %q", content), func(t *testing.T) {
+				t.Parallel()
+
 				buf, vi, clean := newViIntegrationTestCase(t, content, 4, 4)
 				defer clean()
 
@@ -173,6 +179,8 @@ func TestViIntegration(t *testing.T) {
 	})
 
 	t.Run("line select paste on last EOL", func(t *testing.T) {
+		t.Parallel()
+
 		buf, vi, clean := newViIntegrationTestCase(t, "a\nb\nc\nd\n", 4, 4)
 		defer clean()
 
@@ -185,6 +193,8 @@ func TestViIntegration(t *testing.T) {
 	})
 
 	t.Run("line select copy last line after", func(t *testing.T) {
+		t.Parallel()
+
 		buf, vi, clean := newViIntegrationTestCase(t, "a\nb\nc\nd\n", 4, 4)
 		defer clean()
 
@@ -197,6 +207,8 @@ func TestViIntegration(t *testing.T) {
 	})
 
 	t.Run("paste line after last line", func(t *testing.T) {
+		t.Parallel()
+
 		buf, vi, clean := newViIntegrationTestCase(t, "a\nb\nc\nd\n", 2, 2)
 		defer clean()
 
@@ -209,6 +221,8 @@ func TestViIntegration(t *testing.T) {
 	})
 
 	t.Run("delete last empty line", func(t *testing.T) {
+		t.Parallel()
+
 		buf, vi, clean := newViIntegrationTestCase(t, "a\nb\nc\nd\n\n", 4, 4)
 		defer clean()
 
@@ -221,6 +235,8 @@ func TestViIntegration(t *testing.T) {
 	})
 
 	t.Run("delete last empty line and second to last", func(t *testing.T) {
+		t.Parallel()
+
 		buf, vi, clean := newViIntegrationTestCase(t, "a\nb\nc\nd\n\n", 4, 4)
 		defer clean()
 
@@ -233,6 +249,8 @@ func TestViIntegration(t *testing.T) {
 	})
 
 	t.Run("delete any empty line", func(t *testing.T) {
+		t.Parallel()
+
 		buf, vi, clean := newViIntegrationTestCase(t, "a\n\nc", 4, 4)
 		defer clean()
 
@@ -245,6 +263,8 @@ func TestViIntegration(t *testing.T) {
 	})
 
 	t.Run("delete only newline in visual mode", func(t *testing.T) {
+		t.Parallel()
+
 		buf, vi, clean := newViIntegrationTestCase(t, "a\n\nc", 4, 4)
 		defer clean()
 

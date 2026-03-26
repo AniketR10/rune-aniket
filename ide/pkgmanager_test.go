@@ -777,6 +777,8 @@ func TestPackageManagerLibDir(t *testing.T) {
 		},
 	)
 	t.Run("prompt, no install", func(t *testing.T) {
+		t.Parallel()
+
 		rm := idepkgtest.NewReleaseManager(pkgs, bundles)
 		m := newTestWorkspaceManagerHandlerForPkgManager(t, rm, false, 0)
 
@@ -826,6 +828,8 @@ func TestPackageManagerLibDir(t *testing.T) {
 		require.NoError(t, m.Close())
 	})
 	t.Run("prompt, user key ESC", func(t *testing.T) {
+		t.Parallel()
+
 		rm := idepkgtest.NewReleaseManager(pkgs, bundles)
 		m := newTestWorkspaceManagerHandlerForPkgManager(t, rm, false, 0)
 
@@ -860,6 +864,8 @@ func TestPackageManagerLibDir(t *testing.T) {
 	})
 
 	t.Run("prompt, yes install", func(t *testing.T) {
+		t.Parallel()
+
 		rm := idepkgtest.NewReleaseManager(pkgs, bundles)
 		m := newTestWorkspaceManagerHandlerForPkgManager(t, rm, false, 0)
 
@@ -894,6 +900,8 @@ func TestPackageManagerLibDir(t *testing.T) {
 	})
 
 	t.Run("prompt, yes, always install", func(t *testing.T) {
+		t.Parallel()
+
 		rm := idepkgtest.NewReleaseManager(pkgs, bundles)
 		m := newTestWorkspaceManagerHandlerForPkgManager(t, rm, false, 0)
 
@@ -936,6 +944,8 @@ func TestPackageManagerLibDir(t *testing.T) {
 	})
 
 	t.Run("prompt, no never install", func(t *testing.T) {
+		t.Parallel()
+
 		rm := idepkgtest.NewReleaseManager(pkgs, bundles)
 		m := newTestWorkspaceManagerHandlerForPkgManager(t, rm, false, 0)
 
@@ -973,6 +983,8 @@ func TestPackageManagerLibDir(t *testing.T) {
 	})
 
 	t.Run("prompt, yes install, simultaneous calls to LibDir", func(t *testing.T) {
+		t.Parallel()
+
 		rm := idepkgtest.NewReleaseManager(pkgs, bundles)
 		m := newTestWorkspaceManagerHandlerForPkgManager(t, rm, false, 0)
 

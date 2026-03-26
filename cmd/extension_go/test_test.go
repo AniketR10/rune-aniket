@@ -39,6 +39,8 @@ import (
 )
 
 func TestIsTestFunc(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name string
 		want bool
@@ -61,12 +63,16 @@ func TestIsTestFunc(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			assert.Equal(t, tt.want, isTestFunc(tt.name))
 		})
 	}
 }
 
 func TestCompleteTestFuncs(t *testing.T) {
+	t.Parallel()
+
 	results := []syntaxapi.Result{
 		{Text: "TestAdd"},
 		{Text: "main"},
@@ -106,7 +112,11 @@ func (p *stubParser) Search(
 }
 
 func TestProcessTestOutput(t *testing.T) {
+	t.Parallel()
+
 	t.Run("all pass", func(t *testing.T) {
+		t.Parallel()
+
 		mn := &mockNotifications{}
 		h := &testCmd{notify: mn}
 
@@ -143,6 +153,8 @@ func TestProcessTestOutput(t *testing.T) {
 	})
 
 	t.Run("some fail", func(t *testing.T) {
+		t.Parallel()
+
 		mn := &mockNotifications{}
 		h := &testCmd{notify: mn}
 
@@ -172,6 +184,8 @@ func TestProcessTestOutput(t *testing.T) {
 	})
 
 	t.Run("build error", func(t *testing.T) {
+		t.Parallel()
+
 		mn := &mockNotifications{}
 		h := &testCmd{notify: mn}
 
@@ -195,6 +209,8 @@ func TestProcessTestOutput(t *testing.T) {
 	})
 
 	t.Run("no tests found", func(t *testing.T) {
+		t.Parallel()
+
 		mn := &mockNotifications{}
 		h := &testCmd{notify: mn}
 

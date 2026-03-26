@@ -1864,12 +1864,16 @@ func TestFindGoModURI(t *testing.T) {
 	})
 
 	t.Run("FileInRoot", func(t *testing.T) {
+		t.Parallel()
+
 		fileURI := "file://" + tmpDir + "/main.go"
 		result := findGoModURI(fileURI)
 		assert.Equal(t, "file://"+tmpDir+"/go.mod", result)
 	})
 
 	t.Run("FileInSubdirectory", func(t *testing.T) {
+		t.Parallel()
+
 		fileURI := "file://" + tmpDir + "/pkg/foo/bar.go"
 		result := findGoModURI(fileURI)
 		assert.Equal(t, "file://"+tmpDir+"/go.mod", result)
@@ -1880,6 +1884,8 @@ func TestGoRouter(t *testing.T) {
 	t.Parallel()
 
 	t.Run("MissingSubcommand", func(t *testing.T) {
+		t.Parallel()
+
 		router := &goRouter{handlers: map[string]textapi.CommandHandler{}}
 		err := router.HandleCommand(t.Context(), textapi.Command{
 			Name:     "go",
@@ -1890,6 +1896,8 @@ func TestGoRouter(t *testing.T) {
 	})
 
 	t.Run("UnknownSubcommand", func(t *testing.T) {
+		t.Parallel()
+
 		router := &goRouter{handlers: map[string]textapi.CommandHandler{}}
 		err := router.HandleCommand(t.Context(), textapi.Command{
 			Name:     "go",
@@ -1901,6 +1909,8 @@ func TestGoRouter(t *testing.T) {
 	})
 
 	t.Run("NilResource", func(t *testing.T) {
+		t.Parallel()
+
 		router := &goRouter{handlers: map[string]textapi.CommandHandler{}}
 		err := router.HandleCommand(t.Context(), textapi.Command{
 			Name: "go",

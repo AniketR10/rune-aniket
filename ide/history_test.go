@@ -138,6 +138,8 @@ func TestHistory(t *testing.T) {
 
 	for _, test := range suite {
 		t.Run(test.description, func(t *testing.T) {
+			t.Parallel()
+
 			svc := test.svc
 			if svc == nil {
 				svc = document.NewInMemoryService()
@@ -148,6 +150,8 @@ func TestHistory(t *testing.T) {
 	}
 
 	t.Run("does not panic if storage is corrupted", func(t *testing.T) {
+		t.Parallel()
+
 		uri, err := workspaceapi.ParseURI("memory:///tmp")
 		require.NoError(t, err)
 		svc := document.NewInMemoryService()
@@ -163,6 +167,8 @@ func TestHistory(t *testing.T) {
 	})
 
 	t.Run("does not assume file is open when EventTypeFlush is received", func(t *testing.T) {
+		t.Parallel()
+
 		uri, err := workspaceapi.ParseURI("memory:///tmp")
 		require.NoError(t, err)
 		svc := document.NewInMemoryService()
