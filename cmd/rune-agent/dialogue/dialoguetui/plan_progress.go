@@ -121,14 +121,14 @@ func (p *PlanProgress) Draw(w term.Writer) {
 		var x int
 		switch task.Status {
 		case "completed":
-			x = writeRuneLineAttr(w, 0, y, "󰄳 ", p.width, successAttr)
+			x = writeRuneLineAttr(w, 0, y, "󰗠 ", p.width, successAttr)
 			writeRuneLineAttr(w, x, y, task.Subject, p.width, term.Attributes{})
 		case "in_progress":
-			x = writeRuneLineAttr(w, 0, y, "󱡓 ", p.width, inProgressAttr)
+			x = writeRuneLineAttr(w, 0, y, "󰐌 ", p.width, inProgressAttr)
 			writeRuneLineAttr(w, x, y, task.Subject, p.width, term.Attributes{Attrs: tcell.AttrBold})
 		default: // pending
-			x = writeRuneLineAttr(w, 0, y, " ", p.width, pendingAttr)
-			writeRuneLineAttr(w, x, y, task.Subject, p.width, pendingAttr)
+			x = writeRuneLineAttr(w, 0, y, "󰏥 ", p.width, pendingAttr)
+			writeRuneLineAttr(w, x, y, task.Subject, p.width, term.Attributes{})
 		}
 		y++
 

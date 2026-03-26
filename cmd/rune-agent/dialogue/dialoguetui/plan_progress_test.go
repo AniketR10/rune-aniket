@@ -123,9 +123,9 @@ func TestPlanProgressRenderMixedStatuses(t *testing.T) {
 					ID: "3", Subject: "Write tests", Status: "pending",
 				})
 			},
-			Expected: "󰄳 Create store                 \n" +
-				"󱡓 Add tools                    \n" +
-				" Write tests                  \n" +
+			Expected: "󰗠 Create store                 \n" +
+				"󰐌 Add tools                    \n" +
+				"󰏥 Write tests                  \n" +
 				"                               \n" +
 				"                               \n" +
 				"                               \n" +
@@ -144,9 +144,9 @@ func TestPlanProgressRenderMixedStatuses(t *testing.T) {
 					ID: "3", Subject: "Write tests", ActiveForm: "Writing tests", Status: "in_progress",
 				})
 			},
-			Expected: "󰄳 Create store                 \n" +
-				"󰄳 Add tools                    \n" +
-				"󱡓 Write tests                  \n" +
+			Expected: "󰗠 Create store                 \n" +
+				"󰗠 Add tools                    \n" +
+				"󰐌 Write tests                  \n" +
 				"                               \n" +
 				"                               \n" +
 				"                               \n" +
@@ -175,8 +175,8 @@ func TestPlanProgressRenderAllCompleted(t *testing.T) {
 					ID: "2", Subject: "Second", Status: "completed",
 				})
 			},
-			Expected: "󰄳 First                        \n" +
-				"󰄳 Second                       \n" +
+			Expected: "󰗠 First                        \n" +
+				"󰗠 Second                       \n" +
 				"                               \n" +
 				"                               \n" +
 				"                               \n" +
@@ -203,7 +203,7 @@ func TestPlanProgressRenderInProgressUsesSubjectWhenNoActiveForm(t *testing.T) {
 					ID: "1", Subject: "My task", Status: "in_progress",
 				})
 			},
-			Expected: "󱡓 My task                      \n" +
+			Expected: "󰐌 My task                      \n" +
 				"                               \n" +
 				"                               \n" +
 				"                               \n" +
@@ -234,8 +234,8 @@ func TestPlanProgressClearedOnSendMessage(t *testing.T) {
 					ID: "2", Subject: "Second", Status: "pending",
 				})
 			},
-			Expected: "󰄳 First                        \n" +
-				" Second                       \n" +
+			Expected: "󰗠 First                        \n" +
+				"󰏥 Second                       \n" +
 				"                               \n" +
 				"                               \n" +
 				"                               \n" +
@@ -281,8 +281,8 @@ func TestPlanProgressLateTerminalEventsAfterClear(t *testing.T) {
 					ID: "2", Subject: "Test", Status: "pending",
 				})
 			},
-			Expected: "󱡓 Build                        \n" +
-				" Test                         \n" +
+			Expected: "󰐌 Build                        \n" +
+				"󰏥 Test                         \n" +
 				"                               \n" +
 				"                               \n" +
 				"                               \n" +
@@ -319,7 +319,7 @@ func TestPlanProgressLateTerminalEventsAfterClear(t *testing.T) {
 				})
 			},
 			Expected: "next question                  \n" +
-				"󰄳 Build                        \n" +
+				"󰗠 Build                        \n" +
 				"                               \n" +
 				"                               \n" +
 				"                               \n" +
@@ -339,7 +339,7 @@ func TestPlanProgressLateTerminalEventsAfterClear(t *testing.T) {
 				})
 			},
 			Expected: "next question                  \n" +
-				"󰄳 Build                        \n" +
+				"󰗠 Build                        \n" +
 				"                               \n" +
 				"                               \n" +
 				"                               \n" +
@@ -381,9 +381,9 @@ func TestPlanProgressRenderDescription(t *testing.T) {
 					ID: "2", Subject: "Second", Status: "pending",
 				})
 			},
-			Expected: "󰄳 First                        \n" +
+			Expected: "󰗠 First                        \n" +
 				"  Do the first thing           \n" +
-				" Second                       \n" +
+				"󰏥 Second                       \n" +
 				"                               \n" +
 				"                               \n" +
 				"                               \n" +
@@ -412,8 +412,8 @@ func TestPlanProgressDeletedTaskRemovedFromDisplay(t *testing.T) {
 					ID: "2", Subject: "Remove", Status: "pending",
 				})
 			},
-			Expected: "󰄳 Keep                         \n" +
-				" Remove                       \n" +
+			Expected: "󰗠 Keep                         \n" +
+				"󰏥 Remove                       \n" +
 				"                               \n" +
 				"                               \n" +
 				"                               \n" +
@@ -430,7 +430,7 @@ func TestPlanProgressDeletedTaskRemovedFromDisplay(t *testing.T) {
 					ID: "2", Subject: "Remove", Status: "deleted",
 				})
 			},
-			Expected: "󰄳 Keep                         \n" +
+			Expected: "󰗠 Keep                         \n" +
 				"                               \n" +
 				"                               \n" +
 				"                               \n" +
