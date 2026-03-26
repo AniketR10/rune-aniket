@@ -57,6 +57,14 @@ func TestE2E(t *testing.T) {
 	mainPath := filepath.Join(tmpDir, "main.go")
 	mainContent, err := os.ReadFile(mainPath)
 	require.NoError(t, err)
+	mainText := string(mainContent)
+	formattingMainText := strings.Replace(
+		mainText,
+		"\treturn fmt.Sprintf(\"Beep boop, I am robot %d\", r.ID)\n",
+		"    return fmt.Sprintf(\"Beep boop, I am robot %d\", r.ID)\n",
+		1,
+	)
+	require.NotEqual(t, mainText, formattingMainText)
 
 	mainTestPath := filepath.Join(tmpDir, "main_test.go")
 	mainTestContent, err := os.ReadFile(mainTestPath)
@@ -76,6 +84,13 @@ func TestE2E(t *testing.T) {
 	require.NoError(t, err)
 	testWSURI, err := workspaceapi.ParseURI(testURI)
 	require.NoError(t, err)
+
+	mainTextForTest := func(name string) string {
+		if name == "Formatting" {
+			return formattingMainText
+		}
+		return mainText
+	}
 
 	scheme := newTestScheme()
 	var textcomp browserapi.ResourceOpener
@@ -294,10 +309,13 @@ func TestE2E(t *testing.T) {
 					},
 				)
 				require.NoError(t, err)
-				assert.Equal(t, []semanticapi.TextEdit{{Range: semanticapi.Range{
-					Start: semanticapi.Position{Line: 62, Character: 0},
-					End:   semanticapi.Position{Line: 62, Character: 1},
-				}}}, edits)
+				assert.Equal(t, []semanticapi.TextEdit{{
+					Range: semanticapi.Range{
+						Start: semanticapi.Position{Line: 61, Character: 0},
+						End:   semanticapi.Position{Line: 61, Character: 4},
+					},
+					NewText: "\t",
+				}}, edits)
 			},
 		},
 		{
@@ -624,7 +642,7 @@ func TestE2E(t *testing.T) {
 				mgr.Handle(ctx, textapi.Event{
 					Type:    textapi.EventTypeOpen,
 					URI:     mainWSURI,
-					Content: string(mainContent),
+					Content: mainTextForTest(tt.name),
 				})
 				mgr.Handle(ctx, textapi.Event{
 					Type:    textapi.EventTypeOpen,
@@ -1448,7 +1466,7 @@ func Broken() {
 						URI:        mainURI,
 						LanguageID: "go",
 						Version:    0,
-						Text:       string(mainContent),
+						Text:       mainTextForTest(tt.name),
 					},
 				}))
 				require.NoError(t, mgr.DidOpen(ctx, semanticapi.DidOpenTextDocumentParams{

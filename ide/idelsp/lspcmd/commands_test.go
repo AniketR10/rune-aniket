@@ -271,6 +271,13 @@ func TestE2ECommands(t *testing.T) {
 	mainPath := filepath.Join(tmpDir, "main.go")
 	mainContent, err := os.ReadFile(mainPath)
 	require.NoError(t, err)
+	mainText := strings.Replace(
+		string(mainContent),
+		"\treturn fmt.Sprintf(\"Beep boop, I am robot %d\", r.ID)\n",
+		"    return fmt.Sprintf(\"Beep boop, I am robot %d\", r.ID)\n",
+		1,
+	)
+	require.NotEqual(t, string(mainContent), mainText)
 
 	utilPath := filepath.Join(tmpDir, "util.go")
 	utilContent, err := os.ReadFile(utilPath)
@@ -310,7 +317,7 @@ func TestE2ECommands(t *testing.T) {
 	ev := textapi.Event{
 		Type:    textapi.EventTypeOpen,
 		URI:     mainWSURI,
-		Content: string(mainContent),
+		Content: mainText,
 	}
 	assert.False(t, mgr.Handle(ctx, ev))
 
@@ -462,9 +469,9 @@ func TestE2ECommands(t *testing.T) {
 		assert.True(t, cellEditorCalled, "CellEditor must be called")
 		assert.Equal(t, cmd.Resource, cellEditorH, "CellEditor called with wrong handler")
 		assert.True(t, editCalled, "Edit must be called")
-		assert.Equal(t, term.Coordinates{X: 0, Y: 62}, editStart)
-		assert.Equal(t, term.Coordinates{X: 1, Y: 62}, editEnd)
-		assert.Empty(t, editText)
+		assert.Equal(t, term.Coordinates{X: 0, Y: 61}, editStart)
+		assert.Equal(t, term.Coordinates{X: 4, Y: 61}, editEnd)
+		assert.Equal(t, "\t", editText)
 	})
 
 	// Hover tests use line 33, col 20 of testdata/main.go which
