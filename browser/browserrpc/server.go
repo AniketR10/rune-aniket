@@ -556,9 +556,9 @@ func (s *Server) setBrowserMessage(
 	defer s.browser.Unlock()
 
 	if !once {
-		return s.browser.Notify(level, msg)
+		return s.browser.Notify(level, "%s", msg)
 	}
-	return s.browser.NotifyOnce(level, msg)
+	return s.browser.NotifyOnce(level, "%s", msg)
 }
 
 func (s *Server) notify(

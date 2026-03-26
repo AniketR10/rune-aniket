@@ -113,7 +113,7 @@ func (h *openRestorePromptHandler) OnSelect(idx int, option string) {
 	}
 
 	if err != nil {
-		_, _ = h.wm.empty.Browser().Notify(browserapi.LevelError, err.Error())
+		_, _ = h.wm.empty.Browser().Notify(browserapi.LevelError, "%s", err.Error())
 	}
 }
 

@@ -33,7 +33,6 @@ import (
 	"github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/logging"
-	"github.com/unstablebuild/blue/tui/component/markdown"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
@@ -41,6 +40,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
 	tcomponent "unstable.build/go-tui/component"
+	"unstable.build/go-tui/component/markdown"
 	thandler "unstable.build/go-tui/handler"
 )
 
@@ -557,7 +557,7 @@ func (c *Component) Bar(cfg browserapi.BarConfig, h tui.Handler) {
 }
 
 func (c *Component) notify(level browserapi.NotificationLevel, msg string, args ...any) {
-	_, _ = c.config.Notifications.Notify(level, fmt.Sprintf(msg, args...))
+	_, _ = c.config.Notifications.Notify(level, msg, args...)
 }
 
 // Resize satisfies tui.Component

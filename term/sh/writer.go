@@ -1,0 +1,76 @@
+// Copyright 2026 Unstable Build, LLC.
+//
+// This program is free software: you can redistribute it and/or modify it
+// under the terms of the GNU General Public License as published by the
+// Free Software Foundation, either version 3 of the License, or (at your
+// option) any later version.
+//
+// This program is distributed in the hope that it will be useful, but
+// WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+// General Public License for more details.
+//
+// See <https://www.gnu.org/licenses/> for a copy of the license.
+
+package sh
+
+import (
+	"bytes"
+	"context"
+
+	"github.com/unstablebuild/rune-go-sdk/component"
+)
+
+// lineWriter is an io.Writer that buffers bytes, splits on
+// newlines, and sends each complete line to a channel as a
+// component.Responsive. All output uses default attributes.
+type lineWriter struct {
+	ch  chan<- component.Responsive
+	ctx context.Context
+	buf bytes.Buffer
+}
+
+// Write appends p to the internal buffer, extracts complete
+// lines (up to each '\n'), and sends each as a
+// ResponsiveString to the channel. It returns the context
+// error when the context is done so that callers (e.g.
+// io.Copy inside mvdan/sh) stop writing promptly.
+func (w *lineWriter) Write(p []byte) (int, error) {
+	if err := w.ctx.Err(); err != nil {
+		return 0, err
+	}
+	n := len(p)
+	w.buf.Write(p)
+	for {
+		line, err := w.buf.ReadBytes('\n')
+		if err != nil {
+			// No more complete lines; put the partial
+			// data back into the buffer.
+			w.buf.Write(line)
+			break
+		}
+		// Trim the trailing newline.
+		text := string(bytes.TrimRight(line, "\n"))
+		w.send(text)
+	}
+	return n, nil
+}
+
+// flush sends any remaining partial line in the buffer.
+func (w *lineWriter) flush() {
+	if w.buf.Len() == 0 {
+		return
+	}
+	w.send(w.buf.String())
+	w.buf.Reset()
+}
+
+func (w *lineWriter) send(text string) {
+	item := component.NewResponsiveString(
+		text, component.StringResponsiveConfig{},
+	)
+	select {
+	case w.ch <- item:
+	case <-w.ctx.Done():
+	}
+}

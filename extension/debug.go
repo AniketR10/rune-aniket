@@ -28,10 +28,10 @@ import (
 	"io"
 	"sync"
 
-	tdebugrpc "github.com/unstablebuild/blue/ide/idedebug/debugrpc"
 	"github.com/unstablebuild/rune-go-sdk/api/debugapi"
 	"github.com/unstablebuild/rune-go-sdk/api/debugapi/debugrpc"
 	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
+	tdebugrpc "unstable.build/go-tui/ide/idedebug/debugrpc"
 	"unstable.build/go-tui/rpc"
 )
 

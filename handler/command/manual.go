@@ -30,10 +30,10 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/unstablebuild/blue/tui/component/markdown"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/tcell/v3"
+	"unstable.build/go-tui/component/markdown"
 )
 
 // Manual represents a command's manual and documentation.

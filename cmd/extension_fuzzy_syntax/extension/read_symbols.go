@@ -38,13 +38,13 @@ import (
 	"github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	sitter "github.com/tree-sitter/go-tree-sitter"
-	"github.com/unstablebuild/blue/ide/idelsp/languages"
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/extension"
+	"unstable.build/go-tui/ide/idelsp/languages"
 )
 
 var (

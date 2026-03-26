@@ -28,7 +28,7 @@ import (
 	"os"
 
 	log "github.com/sirupsen/logrus"
-	"github.com/unstablebuild/blue/debug"
+	sdkdebug "github.com/unstablebuild/rune-go-sdk/debug"
 	"gopkg.in/yaml.v3"
 )
 
@@ -44,7 +44,7 @@ func CapturePanicReportWith(dir, pkg, version string, run func()) (
 		if panicValue == nil {
 			return
 		}
-		report := debug.BuildCrashReport(pkg, version, panicValue)
+		report := sdkdebug.BuildCrashReport(pkg, version, panicValue)
 
 		var data []byte
 		data, err = yaml.Marshal(report)
@@ -81,7 +81,7 @@ func CapturePanicReport(fn func()) {
 			return
 		}
 		defer panic(panicValue)
-		report := debug.BuildCrashReport(Package, Tag, panicValue)
+		report := sdkdebug.BuildCrashReport(Package, Tag, panicValue)
 
 		var data []byte
 		data, err := yaml.Marshal(report)

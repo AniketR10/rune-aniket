@@ -19,6 +19,8 @@ EXECSRC=$(wildcard cmd/**/*.go) $(wildcard cmd/**/**/*.go)
 EXECMAIN=$(wildcard cmd/*/main.go)
 EXECDIRS=$(sort $(dir $(EXECMAIN)))
 EXECS=$(patsubst cmd/%/,$(BIN)/%,$(EXECDIRS))
+SPECIAL_EXECS=$(BIN)/rune $(BIN)/ox-api
+GENERIC_EXECS=$(filter-out $(SPECIAL_EXECS),$(EXECS))
 EXEC_PKGS=$(patsubst $(BIN)/%,./cmd/%,$(EXECS))
 GOMOCKS=$(wildcard **/**/*_gomock.go) $(wildcard **/*_gomock.go)
 RELEASE_FILES=$(wildcard release/*)
@@ -114,7 +116,7 @@ $(BIN)/rune: $(EXECSRC) $(LIBSRC) $(BIN)
 $(BIN)/ox-api: $(EXECSRC) $(LIBSRC) $(BIN)
 	@cd cmd/ox-api && $(CGO_ENABLED) $(GO) build $(OXAPI_GOFLAGS) -o ../../$@
 
-$(EXECS): $(EXECSRC) $(LIBSRC) $(BIN)
+$(GENERIC_EXECS): $(EXECSRC) $(LIBSRC) $(BIN)
 	cd $(patsubst bin/%,cmd/%,$@) && $(CGO_ENABLED) $(GO) build $(GOFLAGS) -o ../../$@
 
 make_release: CGO_ENABLED=CGO_ENABLED=1

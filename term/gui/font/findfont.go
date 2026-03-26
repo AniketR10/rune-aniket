@@ -36,8 +36,8 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/logging"
-	"github.com/unstablebuild/blue/walkdir"
 	"golang.org/x/image/font/sfnt"
+	"unstable.build/go-tui/workspace/walkdir"
 )
 
 type findFont interface {

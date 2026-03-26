@@ -41,7 +41,7 @@ import (
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/extension/extutil"
 	"unstable.build/go-tui/rpc"
-	"github.com/unstablebuild/blue/walkdir"
+	"unstable.build/go-tui/workspace/walkdir"
 )
 
 const (

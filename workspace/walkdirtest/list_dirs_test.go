@@ -32,11 +32,11 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"github.com/unstablebuild/blue/walkdir"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"go.uber.org/goleak"
 	"unstable.build/go-tui/workspace"
+	"unstable.build/go-tui/workspace/walkdir"
 )
 
 func TestListDirs(t *testing.T) {

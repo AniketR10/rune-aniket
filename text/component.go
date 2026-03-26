@@ -36,12 +36,8 @@ import (
 
 	"github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
-	"github.com/unstablebuild/blue/ide/idelsp/languages"
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/logging"
-	"github.com/unstablebuild/blue/tui/component/markdown"
-	hmarkdown "github.com/unstablebuild/blue/tui/handler/markdown"
-	"github.com/unstablebuild/blue/walkdir"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
@@ -53,10 +49,14 @@ import (
 	shsyntax "mvdan.cc/sh/v3/syntax"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/component/markdown"
 	thandler "unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/command"
+	hmarkdown "unstable.build/go-tui/handler/markdown"
+	"unstable.build/go-tui/ide/idelsp/languages"
 	"unstable.build/go-tui/ide/syntax"
 	"unstable.build/go-tui/workspace"
+	"unstable.build/go-tui/workspace/walkdir"
 )
 
 var _ tui.Component = (*Component)(nil)
@@ -553,7 +553,7 @@ func (c *Component) CompleteCommand(ctx context.Context, cmd textapi.Command) (
 
 	man, ok := c.cmdSubscribers[cmd.Name]
 	if !ok {
-		c.log(log.DebugLevel, "complete command %q: no subscribers", cmd)
+		c.log(log.DebugLevel, "complete command %q: no subscribers", cmd.Name)
 		return iterator.FromSlice[string](nil), "", nil
 	}
 

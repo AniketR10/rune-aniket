@@ -34,7 +34,6 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/unstablebuild/blue/ide/idepkg/idepkgtest"
 	"github.com/unstablebuild/blue/release"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
@@ -45,6 +44,7 @@ import (
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component/shader"
 	"unstable.build/go-tui/extension"
+	"unstable.build/go-tui/ide/idepkg/idepkgtest"
 )
 
 func TestIDEInitializationIntegration(t *testing.T) {

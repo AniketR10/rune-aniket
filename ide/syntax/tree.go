@@ -40,7 +40,6 @@ import (
 	log "github.com/sirupsen/logrus"
 	tree_sitter "github.com/tree-sitter/go-tree-sitter"
 	"github.com/unstablebuild/blue/document"
-	"github.com/unstablebuild/blue/ide/idelsp/languages"
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
@@ -48,6 +47,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/debug"
+	"unstable.build/go-tui/ide/idelsp/languages"
 	"unstable.build/go-tui/workspace"
 )
 

@@ -272,7 +272,7 @@ func (e *Handler) Handle(ev term.Event) (exit, handled bool) {
 				"Ensure that the shell's audible bell is configured and " +
 				"working correctly. You can test it in your terminal with `printf '\\a'`."
 			e.log(log.WarnLevel, "%s: %v", msg, err)
-			if _, err := e.notifications.NotifyOnce(browserapi.LevelWarn, msg); err != nil {
+			if _, err := e.notifications.NotifyOnce(browserapi.LevelWarn, "%s", msg); err != nil {
 				e.log(log.ErrorLevel, "notify: %v", err)
 			}
 		})
