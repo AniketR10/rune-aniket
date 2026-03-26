@@ -99,6 +99,7 @@ var (
 		extensionapi.PermissionConfig,
 		extensionapi.PermissionFileSystem,
 		extensionapi.PermissionExecute,
+		extensionapi.PermissionTerminal,
 		extensionapi.PermissionSyntaxTree,
 		extensionapi.PermissionLSP,
 	}
