@@ -1,0 +1,60 @@
+extensions:
+  rune-agent:
+    path: '$RUNE_DATADIR/bin/rune-agent'
+    config:
+      # Per-provider API keys.
+      # openai:
+      #   api_key: 'sk-...'
+      # anthropic:
+      #   api_key: 'sk-ant-...'
+      # gemini:
+      #   api_key: 'AIza...'
+      #
+      # Custom OpenAI-compatible provider. Use this to connect to any
+      # provider that exposes an OpenAI-compatible API (e.g. vLLM,
+      # LiteLLM, Together, Groq, a local proxy, etc.).
+      # custom_provider:
+      #   url: 'https://my-provider.example.com/v1/'
+      #   api_key: 'sk-...'
+      #   available_models:
+      #     my-model-name: 128000      # model id → context window (tokens)
+      #     another-model: 32000
+      # Name of the project instructions file to discover. The agent
+      # walks up from the workspace root looking for files with this
+      # name and injects their contents into the system prompt.
+      agents_file: AGENTS.md
+      # Model used for chat sessions (aichat command).
+      default_model: gpt-5.4
+      # Model used for quick queries (? command).
+      query_default_model: gpt-5.4
+      # Model used for conversation compaction/summarization.
+      # When empty, the chat model is used.
+      # compact_model: ''
+      skills:
+        - .rune/skills
+        - ~/.rune/skills
+        - .agents/skills
+        - ~/.agents/skills
+      background_attr:
+        bg: default
+      user_msg_attr:
+        fg: default
+        bg: default
+        flags: dim
+      user_msg_background_attr:
+        bg: gray
+      assistant_msg_attr:
+        fg: default
+        bg: default
+        flags: italic
+      input_box_attr:
+        fg: default
+        bg: default
+      input_box_placeholder_attr:
+        fg: red
+        bg: default
+      input_box_frame_attr:
+        fg: default
+        bg: default
+      context_hint_attr:
+        fg: red

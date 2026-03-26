@@ -38,6 +38,10 @@ RUNE_APP_ICON=$(RUNE_APP_EXTRAS_DIR)/rune.icns
 RUNE_APP_CLAUDEIMPORT=$(RUNE_APP_EXTRAS_DIR)/claudeimport
 RUNE_DMG_NAME=Rune.dmg
 RUNE_DMG_DIR=$(RUNE_RELEASE_DIR)
+RUNE_AGENT_PKG=pkg/rune-agent
+RUNE_AGENT_TAR=rune-agent.tar.gz
+RUNE_AGENT_NOTARIZE_ZIP=rune-agent-notarize.zip
+RUNE_AGENT_DIST_SH=cmd/rune-agent/dist.sh
 SED_INPLACE = ''
 
 ifeq ($(OS),Darwin)
@@ -49,7 +53,9 @@ endif
 	rune-release rune-release-amd64 rune-release-arm64 rune-make-release \
 	rune-docker-build rune-docker-run rune-docker-build-gcp rune-docker-push-gcp \
 	rune-docker-build-ci-gcp rune-docker-push-ci-gcp rune-app-amd64 rune-app-arm64 \
-	rune-dmg rune-dmg-notarize rune-release-all
+	rune-dmg rune-dmg-notarize rune-release-all \
+	rune-agent-pkg rune-agent-sign rune-agent-notarize rune-agent-dist rune-agent-dist-notarized \
+	notary-credentials
 
 default: CGO_ENABLED=CGO_ENABLED=1
 default: GOPRIVATE=github.com/unstablebuild,unstable.build/*
@@ -116,7 +122,7 @@ lint:
 	@ golangci-lint run --timeout=600s
 
 clean:
-	@rm -rf $(BIN) $(TARGET)
+	@rm -rf $(BIN) $(TARGET) $(RUNE_AGENT_PKG) $(RUNE_AGENT_TAR) $(RUNE_AGENT_NOTARIZE_ZIP)
 
 $(BIN):
 	@mkdir $(BIN)
@@ -129,6 +135,9 @@ $(BIN)/ox-api: $(EXECSRC) $(LIBSRC) $(BIN)
 
 $(BIN)/claudeimport: $(EXECSRC) $(LIBSRC) $(BIN)
 	@cd cmd/claudeimport && $(CGO_ENABLED) $(GO) build $(GOFLAGS) -o ../../$@
+
+$(BIN)/rune-agent: $(EXECSRC) $(LIBSRC) $(BIN)
+	@cd cmd/rune-agent && $(CGO_ENABLED) $(GO) build $(GOFLAGS) -o ../../$@
 
 $(GENERIC_EXECS): $(EXECSRC) $(LIBSRC) $(BIN)
 	cd $(patsubst bin/%,cmd/%,$@) && $(CGO_ENABLED) $(GO) build $(GOFLAGS) -o ../../$@
@@ -294,6 +303,31 @@ rune-dmg-notarize: rune-dmg
 	@ echo "Notarization completed: $(RUNE_DMG_DIR)/$(RUNE_DMG_NAME)"
 
 rune-release-all: rune-dmg-notarize
+
+rune-agent-pkg: $(BIN)/rune-agent
+	@mkdir -p $(RUNE_AGENT_PKG)/bin
+	@cp $(BIN)/rune-agent $(RUNE_AGENT_PKG)/bin/
+	@cp cmd/rune-agent/config.yaml $(RUNE_AGENT_PKG)/
+	@cp -r cmd/rune-agent/skills $(RUNE_AGENT_PKG)/skills
+
+rune-agent-sign: rune-agent-pkg
+	codesign --force --options runtime --sign "$(CODESIGN_IDENTITY)" $(RUNE_AGENT_PKG)/bin/rune-agent
+
+$(RUNE_AGENT_NOTARIZE_ZIP): rune-agent-sign
+	zip $(RUNE_AGENT_NOTARIZE_ZIP) $(RUNE_AGENT_PKG)/bin/rune-agent
+
+rune-agent-notarize: $(RUNE_AGENT_NOTARIZE_ZIP)
+	xcrun notarytool submit $(RUNE_AGENT_NOTARIZE_ZIP) --keychain-profile "$(NOTARY_PROFILE)"
+
+$(RUNE_AGENT_TAR): rune-agent-sign
+	cd $(RUNE_AGENT_PKG) && tar -czvf ../../$(RUNE_AGENT_TAR) .
+
+rune-agent-dist: clean $(RUNE_AGENT_TAR)
+	@ ./$(RUNE_AGENT_DIST_SH)
+
+rune-agent-dist-notarized: clean rune-agent-notarize $(RUNE_AGENT_TAR)
+	@ ./$(RUNE_AGENT_DIST_SH)
+
 else
 rune-dmg:
 	@ echo "Skipping DMG packaging (not macOS)"
@@ -303,4 +337,29 @@ rune-dmg-notarize: rune-dmg
 
 rune-release-all:
 	@ echo "Skipping rune-release-all (not macOS)"
+
+rune-agent-pkg: $(BIN)/rune-agent
+	@mkdir -p $(RUNE_AGENT_PKG)/bin
+	@cp $(BIN)/rune-agent $(RUNE_AGENT_PKG)/bin/
+	@cp cmd/rune-agent/config.yaml $(RUNE_AGENT_PKG)/
+	@cp -r cmd/rune-agent/skills $(RUNE_AGENT_PKG)/skills
+
+rune-agent-sign: rune-agent-pkg
+	@echo "Skipping codesign (not on macOS)"
+
+rune-agent-notarize: rune-agent-sign
+	@echo "Skipping notarization (not on macOS)"
+
+$(RUNE_AGENT_TAR): rune-agent-pkg
+	cd $(RUNE_AGENT_PKG) && tar -czvf ../../$(RUNE_AGENT_TAR) .
+
+rune-agent-dist: clean $(RUNE_AGENT_TAR)
+	@ ./$(RUNE_AGENT_DIST_SH)
+
+rune-agent-dist-notarized: rune-agent-dist
+	@echo "Skipping notarized dist (not on macOS)"
+
 endif
+
+notary-credentials:
+	xcrun notarytool store-credentials "$(NOTARY_PROFILE)" --team-id "YYZRWD888J"
