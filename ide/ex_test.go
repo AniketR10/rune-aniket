@@ -2869,16 +2869,16 @@ func TestRunStopTasks(t *testing.T) {
 				`┌────────────────────────────┐
 │                            │
 ├┌──────────────────────────┐┤
-││                          ││
+│┌──────────────────────────┐│
 ││                          ││
 ││  A task with the name    ││
 ││  "validateAssets"        ││
-││  already exists. Do      ││
-││  you want to replace     ││
-││  it?                     ││
+││  already exists. Do you  ││
+││  want to replace it?     ││
 ││                          ││
 ││                          ││
 ││     Yes          No      ││
+│└──────────────────────────┘│
 ││                          ││
 └└──────────────────────────┘┘`},
 			{"y:windowfocus right>",
@@ -3060,8 +3060,8 @@ func TestRunStopTasks(t *testing.T) {
 			{":tasknewtab build -- go build ./...>",
 				`┌────────────────────────────┐
 │o abc  8 tests  8 build     │
+├─────────────┐┌─────────────┤
 ┌────────────────────────────┐
-│                            │
 │                            │
 │  A task with the name      │
 │  "build" already exists.   │
@@ -3069,9 +3069,9 @@ func TestRunStopTasks(t *testing.T) {
 │  it?                       │
 │                            │
 │                            │
-│     Yes            No      │
-│                            │
+│      Yes          No       │
 └────────────────────────────┘
+│             ││             │
 └─────────────┘└─────────────┘`},
 			{"y",
 				`┌────────────────────────────┐

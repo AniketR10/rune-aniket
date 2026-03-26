@@ -213,7 +213,7 @@ func (h *createWorkspaceHandler) OnSelect(
 
 		err = h.wm.addWorkspace(h.uri, true, true, -1)
 		if err != nil {
-			_, _ = h.ex.Browser().Notify(browserapi.LevelError, err.Error())
+			_, _ = h.ex.Browser().Notify(browserapi.LevelError, "%s", err.Error())
 			log.Errorf("add workspace %s: %v", h.uri, err)
 			return
 		}

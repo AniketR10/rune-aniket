@@ -796,11 +796,11 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 │                  │
 ├──────────────────┤
 │                  │
-│  Do you want     │
-│  to restore      │
-│  the previous    │
-│  session?        │
+│  Do you want to  │
+│  restore the     │
+│  previous        │
 │                  │
+│  Yes        No   │
 └──────────────────┘`},
 		// prompt resets cache (use file scheme to avoid needing
 		// to use ':' to indicate memory scheme)
@@ -987,7 +987,7 @@ func TestWorkspaceManagerClosePromptIntegration(t *testing.T) {
 │  you want to     │
 │  exit?           │
 │                  │
-│                  │
+│  Yes        No   │
 └──────────────────┘`},
 		}
 		h := newSafeHandler(m)
@@ -1015,7 +1015,7 @@ func TestWorkspaceManagerClosePromptIntegration(t *testing.T) {
 │  you want to     │
 │  exit?           │
 │                  │
-│                  │
+│  Yes        No   │
 └──────────────────┘`},
 			{":quit>",
 				`┌──────────────────┐
@@ -1026,7 +1026,7 @@ func TestWorkspaceManagerClosePromptIntegration(t *testing.T) {
 │  you want to     │
 │  exit?           │
 │                  │
-│                  │
+│  Yes        No   │
 └──────────────────┘`},
 		}
 		h := newSafeHandler(m)
@@ -1049,7 +1049,7 @@ func TestWorkspaceManagerClosePromptIntegration(t *testing.T) {
 │  you want to     │
 │  exit?           │
 │                  │
-│                  │
+│  Yes        No   │
 └──────────────────┘`},
 			{"n",
 				`┌──────────────────┐
@@ -1071,7 +1071,7 @@ func TestWorkspaceManagerClosePromptIntegration(t *testing.T) {
 │  you want to     │
 │  exit?           │
 │                  │
-│                  │
+│  Yes        No   │
 └──────────────────┘`},
 		}
 		h := newSafeHandler(m)
@@ -1105,12 +1105,12 @@ func TestWorkspaceManagerClosePromptIntegration(t *testing.T) {
 				`┌──────────────────┐
 │o 1234*  o 4567   │
 ├──────────────────┤
-│  There are       │
-│  open files      │
-│  with changes    │
-│  pending to be   │
-│  written. Are    │
-│  you sure you    │
+│                  │
+│  There are open  │
+│  files with      │
+│  changes         │
+│                  │
+│  Yes        No   │
 └──────────────────┘`},
 		}
 		h := newSafeHandler(m)
@@ -1152,12 +1152,12 @@ func TestWorkspaceManagerClosePromptIntegration(t *testing.T) {
 				`┌──────────────────┐
 │o 1234*  o 4567   │
 ├──────────────────┤
-│  There are       │
-│  open files      │
-│  with changes    │
-│  pending to be   │
-│  written. Are    │
-│  you sure you    │
+│                  │
+│  There are open  │
+│  files with      │
+│  changes         │
+│                  │
+│  Yes        No   │
 └──────────────────┘`},
 		}
 		h := newSafeHandler(m)
@@ -1264,7 +1264,7 @@ func TestWorkspaceManagerClosePromptIntegration(t *testing.T) {
 │  you want to     │
 │  exit?           │
 │                  │
-│                  │
+│  Yes        No   │
 └──────────────────┘`},
 			}
 
@@ -1341,11 +1341,11 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 │                  │
 ├──────────────────┤
 │                  │
-│  Do you want     │
-│  to restore      │
-│  the previous    │
-│  session?        │
+│  Do you want to  │
+│  restore the     │
+│  previous        │
 │                  │
+│  Yes        No   │
 └──────────────────┘`},
 					{"y",
 						`┌──────────────────┐
@@ -1754,6 +1754,7 @@ func TestExternalCommands(t *testing.T) {
 
 		m := newTestWorkspaceManagerHandlerWithDir(t, defaultConfigWithWrap(false), dir,
 			nopShutdownShaderConfig())
+		m.forceSyncCommandPrompt = true
 		err = m.subscribeCommand(textapi.CommandManual{Name: "ramon"},
 			text.FuncCommandHandler(func(context.Context, textapi.Command) error {
 				return nil
@@ -1777,8 +1778,8 @@ func TestExternalCommands(t *testing.T) {
 │                            │
 ┌────────────────────────────┐
 │ramon w▐                    │
-│wasup                       │
 │wasep                       │
+│wasup                       │
 └────────────────────────────┘
 │                            │
 │                            │
@@ -1793,8 +1794,8 @@ func TestExternalCommands(t *testing.T) {
 │                            │
 ┌────────────────────────────┐
 │ramon w▐                    │
-│wasup                       │
 │wasep                       │
+│wasup                       │
 └────────────────────────────┘
 │                            │
 │                            │
@@ -1809,8 +1810,8 @@ func TestExternalCommands(t *testing.T) {
 │                            │
 ┌────────────────────────────┐
 │ramon w▐                    │
-│wasup                       │
 │wasep                       │
+│wasup                       │
 └────────────────────────────┘
 │                            │
 │                            │
@@ -1834,6 +1835,7 @@ func TestExternalCommands(t *testing.T) {
 
 		m := newTestWorkspaceManagerHandlerWithDir(t, defaultConfigWithWrap(false), dir,
 			nopShutdownShaderConfig())
+		m.forceSyncCommandPrompt = true
 
 		const n = 50
 		var wg sync.WaitGroup
@@ -2564,8 +2566,8 @@ func TestWorkspaceManagerCreateWorkspace(t *testing.T) {
 │                            │
 ├────────────────────────────┤
 │                            │
-┌────────────────────────────┐
 │                            │
+┌────────────────────────────┐
 │                            │
 │  workspace with URI        │
 │  file:///tmp/TestWorkspac  │
@@ -2574,9 +2576,9 @@ func TestWorkspaceManagerCreateWorkspace(t *testing.T) {
 │  want to create it?        │
 │                            │
 │                            │
-│     Yes            No      │
-│                            │
+│      Yes          No       │
 └────────────────────────────┘
+│                            │
 │                            │
 │                            │
 └────────────────────────────┘`},
@@ -2605,19 +2607,19 @@ func TestWorkspaceManagerCreateWorkspace(t *testing.T) {
 			`┌────────────────────────────┐
 │                            │
 ├────────────────────────────┤
-┌────────────────────────────┐
 │                            │
+┌────────────────────────────┐
 │                            │
 │  workspace with URI        │
 │  file:///tmp/TestWorkspac  │
 │  eManagerCreateWorkspace2  │
-│   does not exist. Do you   │
+│  does not exist. Do you    │
 │  want to create it?        │
 │                            │
 │                            │
-│     Yes            No      │
-│                            │
+│      Yes          No       │
 └────────────────────────────┘
+│                            │
 │                            │
 ├────────────────────────────┤
 │1 1  2 2                    │
@@ -2760,6 +2762,29 @@ func newTestWorkspaceManagerHandler(
 // deterministic usage of search list
 type testWorkspaceManagerHandler struct {
 	*workspaceManagerHandler
+	forceSyncCommandPrompt bool
+}
+
+func (t *testWorkspaceManagerHandler) enableSyncCommandPrompt() {
+	if t == nil || t.workspaceManagerHandler == nil {
+		return
+	}
+	if t.empty != nil {
+		t.empty.syncCommandPrompt = true
+	}
+	for _, w := range t.workspaces {
+		if w != nil && w.ex != nil {
+			w.ex.syncCommandPrompt = true
+		}
+	}
+	if h := t.focusHandler(); h != nil {
+		if ex, ok := h.(*ex); ok {
+			ex.syncCommandPrompt = true
+		}
+		if wh, ok := h.(*workspaceHandler); ok && wh.ex != nil {
+			wh.ex.syncCommandPrompt = true
+		}
+	}
 }
 
 // mimic ide.IDE
@@ -2771,7 +2796,13 @@ func (t *testWorkspaceManagerHandler) Close() error {
 }
 
 func (t *testWorkspaceManagerHandler) Handle(ev term.Event) (bool, bool) {
+	if t.forceSyncCommandPrompt {
+		t.enableSyncCommandPrompt()
+	}
 	quit, handle := t.workspaceManagerHandler.Handle(ev)
+	if t.forceSyncCommandPrompt {
+		t.enableSyncCommandPrompt()
+	}
 	handler := t.workspaceManagerHandler.focusHandler()
 	ex, ok := handler.(*ex)
 	if !ok {

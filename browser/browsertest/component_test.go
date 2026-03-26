@@ -608,14 +608,14 @@ func TestComponentPrompt(t *testing.T) {
 ┌──────────────────┐    
 │x music           │    
 ├──────────────────┤    
-│                  │    
+┌──────────────────┐    
 │                  │    
 │  Virgen Maria?   │    
 │                  │    
 │                  │    
-│ ┌─────┐  ┌─────┐ │    
-│ │ Boh │  │ Meh │ │    
-│ └─────┘  └─────┘ │    
+│    Boh    Meh    │    
+└──────────────────┘    
+│888888888888888888│    
 └──────────────────┘    `,
 			}, {func() {
 				c.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
@@ -645,14 +645,14 @@ func TestComponentPrompt(t *testing.T) {
 ┌──────────────────┐    
 │x music           │    
 ├──────────────────┤    
+┌──────────────────┐    
+│                  │    
+│  Rosalia?        │    
 │                  │    
 │                  │    
-│     Rosalia?     │    
-│                  │    
-│                  │    
-│ ┌─────┐  ┌─────┐ │    
-│ │ Yay │  │ Nay │ │    
-│ └─────┘  └─────┘ │    
+│    Yay    Nay    │    
+└──────────────────┘    
+│888888888888888888│    
 └──────────────────┘    `,
 			}, {func() {
 				c.Resize(10, 6)
@@ -661,7 +661,7 @@ func TestComponentPrompt(t *testing.T) {
 │x music │              
 ├────────┤              
 │  Rosa  │              
-│  lia?  │              
+│ YayNay │              
 └────────┘              
                         
                         
@@ -676,9 +676,9 @@ func TestComponentPrompt(t *testing.T) {
 │x music               │
 ├──────────────────────┤
 │                      │
-│       Rosalia?       │
+│  Rosalia?            │
 │                      │
-│                      │
+│     Yay      Nay     │
 └──────────────────────┘
                         
                         
@@ -690,14 +690,14 @@ func TestComponentPrompt(t *testing.T) {
 ┌──────────────────┐    
 │x music           │    
 ├──────────────────┤    
+┌──────────────────┐    
+│                  │    
+│  Rosalia?        │    
 │                  │    
 │                  │    
-│     Rosalia?     │    
-│                  │    
-│                  │    
-│ ┌─────┐  ┌─────┐ │    
-│ │ Yay │  │ Nay │ │    
-│ └─────┘  └─────┘ │    
+│    Yay    Nay    │    
+└──────────────────┘    
+│888888888888888888│    
 └──────────────────┘    `,
 			}, {func() {
 				c.Handle(term.Event{Type: term.EventKey, Key: term.KeyEsc})
@@ -705,14 +705,14 @@ func TestComponentPrompt(t *testing.T) {
 ┌──────────────────┐    
 │x music           │    
 ├──────────────────┤    
+┌──────────────────┐    
+│                  │    
+│  Tokischa?       │    
 │                  │    
 │                  │    
-│    Tokischa?     │    
-│                  │    
-│                  │    
-│ ┌─────┐  ┌─────┐ │    
-│ │ Yay │  │ Nay │ │    
-│ └─────┘  └─────┘ │    
+│    Yay    Nay    │    
+└──────────────────┘    
+│888888888888888888│    
 └──────────────────┘    `,
 			}, {func() {
 				c.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
@@ -720,14 +720,14 @@ func TestComponentPrompt(t *testing.T) {
 ┌──────────────────┐    
 │x music           │    
 ├──────────────────┤    
+┌──────────────────┐    
+│                  │    
+│  Robert Love     │    
 │                  │    
 │                  │    
-│   Robert Love    │    
-│                  │    
-│                  │    
-│     ┌──────┐     │    
-│     │ YAS! │     │    
-│     └──────┘     │    
+│       YAS!       │    
+└──────────────────┘    
+│888888888888888888│    
 └──────────────────┘    `,
 			}, {func() {
 				c.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
@@ -791,14 +791,14 @@ func TestComponentPrompt(t *testing.T) {
 ┌──────────────────┐    
 │x music           │    
 ├──────────────────┤    
+┌──────────────────┐    
+│                  │    
+│  Twitch          │    
+│  Streaming?      │    
 │                  │    
 │                  │    
-│    Twitch        │    
-│    Streaming?    │    
-│                  │    
-│                  │    
-│   Yes      No    │    
-│                  │    
+│    Yes    No     │    
+└──────────────────┘    
 └──────────────────┘    `,
 			}, {func() {
 				c.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
@@ -823,14 +823,14 @@ func TestComponentPrompt(t *testing.T) {
 ┌──────────────────┐    
 │x music           │    
 ├──────────────────┤    
+┌──────────────────┐    
+│                  │    
+│  Twitch          │    
+│  Streaming?      │    
 │                  │    
 │                  │    
-│    Twitch        │    
-│    Streaming?    │    
-│                  │    
-│                  │    
-│   Yes      No    │    
-│                  │    
+│    Yes    No     │    
+└──────────────────┘    
 └──────────────────┘    `,
 			}, {func() {
 				c.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})

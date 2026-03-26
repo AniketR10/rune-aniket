@@ -71,7 +71,7 @@ func TestServerNotify(t *testing.T) {
 		s, mock := newServerWithNoBroker(ctrl)
 
 		mock.EXPECT().
-			Notify(gomock.Eq(browserapi.LevelSuccess), gomock.Eq("blah")).
+			Notify(gomock.Eq(browserapi.LevelSuccess), gomock.Eq("%s"), gomock.Eq("blah")).
 			Return("1234", nil)
 
 		req := browserrpc.NotifyRequest{Level: uint32(browserapi.LevelSuccess), Msg: "blah"}
@@ -86,7 +86,7 @@ func TestServerNotify(t *testing.T) {
 		defer ctrl.Finish()
 		s, mock := newServerWithNoBroker(ctrl)
 
-		mock.EXPECT().Notify(gomock.Any(), gomock.Any()).Return("", errors.New("oopsie daisy"))
+		mock.EXPECT().Notify(gomock.Any(), gomock.Any(), gomock.Any()).Return("", errors.New("oopsie daisy"))
 
 		_, err := s.Notify(ctx, new(browserrpc.NotifyRequest))
 		require.Error(t, err)
