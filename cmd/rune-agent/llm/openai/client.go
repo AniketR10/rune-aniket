@@ -1,0 +1,1114 @@
+// Unstable Build LLC ("COMPANY") CONFIDENTIAL
+//
+// Unpublished Copyright (c) 2018-2024 Unstable Build, All Rights Reserved.
+//
+// NOTICE: All information contained herein is, and remains the property of COMPANY.
+// The intellectual and technical concepts contained herein are proprietary to
+// COMPANY and may be covered by U.S. and Foreign Patents, patents in process,
+// and are protected by trade secret or copyright law. Dissemination of this information
+// or reproduction of this material is strictly forbidden unless prior written permission
+// is obtained from COMPANY. Access to the source code contained herein is hereby
+// forbidden to anyone except current COMPANY employees, managers or contractors who
+// have executed Confidentiality and Non-disclosure agreements explicitly covering such access.
+//
+// The copyright notice above does not evidence any actual or intended publication or
+// disclosure of this source code, which includes information that is confidential and/or
+// proprietary, and is a trade secret, of COMPANY. ANY REPRODUCTION, MODIFICATION,
+// DISTRIBUTION, PUBLIC  PERFORMANCE, OR PUBLIC DISPLAY OF OR THROUGH USE OF THIS SOURCE CODE
+// WITHOUT  THE EXPRESS WRITTEN CONSENT OF COMPANY IS STRICTLY PROHIBITED, AND IN
+// VIOLATION OF APPLICABLE LAWS AND INTERNATIONAL TREATIES. THE RECEIPT OR POSSESSION OF
+// THIS SOURCE CODE AND/OR RELATED INFORMATION DOES NOT CONVEY OR IMPLY ANY RIGHTS TO
+// REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
+// ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
+
+package openai
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"log/slog"
+	"net/http"
+	"strings"
+	"time"
+
+	"github.com/openai/openai-go/v2"
+	"github.com/openai/openai-go/v2/option"
+	"github.com/openai/openai-go/v2/packages/param"
+	"github.com/openai/openai-go/v2/packages/ssestream"
+	"github.com/openai/openai-go/v2/responses"
+	"github.com/openai/openai-go/v2/shared"
+	"github.com/pkoukk/tiktoken-go"
+	tiktokenLoader "github.com/pkoukk/tiktoken-go-loader"
+	"unstable.build/go-tui/cmd/rune-agent/llm"
+	"github.com/unstablebuild/rune-go-sdk/iterator"
+	"github.com/unstablebuild/rune-go-sdk/retry"
+)
+
+// Config represents the default parameters used for chat completions
+// along with the configuration passed to the openai client.
+type Config struct {
+	// ID of the model to use. If this is not set NewClient panics.
+	Model string
+	// Number between -2.0 and 2.0. Positive values penalize new tokens based
+	// on their existing frequency in the text so far, decreasing the model's likelihood
+	// to repeat the same line verbatim.
+	FrequencyPenalty float64
+	// Modify the likelihood of specified tokens appearing in the completion.
+	LogitBias map[string]int
+	// The maximum number of tokens to generate in the chat completion.
+	MaxTokens int
+	// Number between -2.0 and 2.0. Positive values penalize new tokens based on whether they
+	// appear in the text so far, increasing the model's likelihood to talk about new topics.
+	PresencePenalty float64
+	// What sampling temperature to use, between 0 and 2.
+	Temperature float64
+	// An alternative to sampling with temperature, called nucleus sampling.
+	TopP float64
+
+	// ReasoningEffort controls reasoning effort for reasoning models.
+	ReasoningEffort string
+	// ReasoningSummary controls the level of reasoning summary output
+	// for models using the Responses API (e.g. "auto", "concise", "detailed").
+	ReasoningSummary string
+	// MaxCompletionTokens is an upper bound for generated tokens including
+	// reasoning tokens. Used instead of MaxTokens for reasoning models.
+	MaxCompletionTokens int
+
+	// A list of tools the model may call.
+	Tools []llm.Tool
+	// BaseURL for of the http service.
+	BaseURL string
+
+	// ResponseFormat ensures responses always follow a specific format.
+	ResponseFormat *llm.ResponseFormat
+
+	// ForceResponsesAPI forces the client to use the /v1/responses
+	// endpoint even for models that support /v1/chat/completions.
+	ForceResponsesAPI bool
+
+	// DebugHTTP enables debug logging of HTTP request and response
+	// byte lengths and selected headers.
+	DebugHTTP bool
+}
+
+// NewClient returns an llm.Service backed by OpenAI's chat completion API.
+func NewClient(token string, config Config, availableModels map[string]int) llm.Service {
+	return NewClientWithHTTP(token, config, availableModels, nil)
+}
+
+// NewClientWithHTTP returns an llm.Service backed by OpenAI's chat completion
+// API using the supplied HTTP client. Pass nil to use the default transport.
+// Intended for tests and benchmarks that need an in-process transport without
+// starting a real server.
+func NewClientWithHTTP(token string, config Config, availableModels map[string]int, httpClient *http.Client) llm.Service {
+	if config.Model == "" {
+		panic("Config.Model cannot be empty")
+	}
+
+	if _, ok := availableModels[config.Model]; !ok {
+		panic(fmt.Errorf("model not in available models: %s vs %+v", config.Model, availableModels))
+	}
+
+	tools := openAIToolsFromModel(config.Tools)
+
+	tkm, err := tiktoken.EncodingForModel(config.Model)
+	if err != nil {
+		slog.Warn("token counting might be off: encoding error",
+			"model", config.Model, "error", err)
+		tkm, err = tiktoken.EncodingForModel(GPT4)
+		if err != nil {
+			panic(fmt.Errorf("fallback encoding for model "+
+				"from %s to %s failed: %v", config.Model, GPT4, err))
+		}
+	}
+
+	var tokensPerMessage, tokensPerName int
+	switch config.Model {
+	case "gpt-3.5-turbo-0301":
+		tokensPerMessage = 4 // every message follows <|start|>{role/name}\n{content}<|end|>\n
+		tokensPerName = -1   // if there's a name, the role is omitted
+	default:
+		tokensPerMessage = 3
+		tokensPerName = 1
+	}
+
+	opts := []option.RequestOption{option.WithAPIKey(token)}
+	if httpClient != nil {
+		opts = append(opts, option.WithHTTPClient(httpClient))
+	}
+	if config.BaseURL != "" {
+		opts = append(opts, option.WithBaseURL(config.BaseURL))
+	}
+	if config.DebugHTTP {
+		opts = append(opts, option.WithMiddleware(
+			newDebugHTTPMiddleware(isAnthropicURL(config.BaseURL)),
+		))
+	}
+	c := openai.NewClient(opts...)
+
+	return client{
+		tools:              tools,
+		responseFormat:     openAIResponseFormatFromModel(config.ResponseFormat),
+		config:             config,
+		client:             c,
+		counter:            tkm,
+		tokensPerMessage:   tokensPerMessage,
+		tokensPerName:      tokensPerName,
+		modelContextWindow: availableModels,
+	}
+}
+
+func init() {
+	tiktoken.SetBpeLoader(tiktokenLoader.NewOfflineLoader())
+}
+
+// Headers logged regardless of provider.
+var commonHeaders = []string{
+	"Retry-After",
+	"Cf-Ray",
+}
+
+// Headers logged for OpenAI (and OpenAI-compatible) endpoints.
+var openaiHeaders = []string{
+	// Request tracking.
+	"X-Request-Id",
+	"Openai-Organization",
+	"Openai-Processing-Ms",
+	"Openai-Model",
+	"Openai-Version",
+	// Rate limits.
+	"X-Ratelimit-Limit-Requests",
+	"X-Ratelimit-Limit-Tokens",
+	"X-Ratelimit-Remaining-Requests",
+	"X-Ratelimit-Remaining-Tokens",
+	"X-Ratelimit-Reset-Requests",
+	"X-Ratelimit-Reset-Tokens",
+}
+
+// Headers logged for Anthropic endpoints.
+var anthropicHeaders = []string{
+	// Request tracking.
+	"Request-Id",
+	"Anthropic-Organization-Id",
+	// Rate limits — requests.
+	"Anthropic-Ratelimit-Requests-Limit",
+	"Anthropic-Ratelimit-Requests-Remaining",
+	"Anthropic-Ratelimit-Requests-Reset",
+	// Rate limits — input tokens.
+	"Anthropic-Ratelimit-Input-Tokens-Limit",
+	"Anthropic-Ratelimit-Input-Tokens-Remaining",
+	"Anthropic-Ratelimit-Input-Tokens-Reset",
+	// Rate limits — output tokens.
+	"Anthropic-Ratelimit-Output-Tokens-Limit",
+	"Anthropic-Ratelimit-Output-Tokens-Remaining",
+	"Anthropic-Ratelimit-Output-Tokens-Reset",
+	// Rate limits — combined tokens.
+	"Anthropic-Ratelimit-Tokens-Limit",
+	"Anthropic-Ratelimit-Tokens-Remaining",
+	"Anthropic-Ratelimit-Tokens-Reset",
+}
+
+// newDebugHTTPMiddleware returns a middleware that logs request and response
+// details at Debug level, selecting provider-specific headers based on
+// whether the endpoint is Anthropic.
+func newDebugHTTPMiddleware(isAnthropic bool) func(
+	*http.Request, option.MiddlewareNext,
+) (*http.Response, error) {
+	providerHeaders := openaiHeaders
+	if isAnthropic {
+		providerHeaders = anthropicHeaders
+	}
+
+	return func(req *http.Request, next option.MiddlewareNext) (*http.Response, error) {
+		reqLen := int64(-1)
+		if req.ContentLength > 0 {
+			reqLen = req.ContentLength
+		}
+		slog.Debug("HTTP request",
+			"method", req.Method,
+			"url", req.URL.String(),
+			"content_length", reqLen,
+		)
+
+		resp, err := next(req)
+		if resp != nil {
+			attrs := []any{
+				"status", resp.StatusCode,
+				"content_length", resp.ContentLength,
+				"content_type", resp.Header.Get("Content-Type"),
+			}
+			for _, h := range commonHeaders {
+				if v := resp.Header.Get(h); v != "" {
+					attrs = append(attrs, h, v)
+				}
+			}
+			for _, h := range providerHeaders {
+				if v := resp.Header.Get(h); v != "" {
+					attrs = append(attrs, h, v)
+				}
+			}
+			slog.Debug("HTTP response", attrs...)
+		}
+		if err != nil {
+			slog.Debug("HTTP error", "error", err)
+		}
+		return resp, err
+	}
+}
+
+type client struct {
+	tools              []openai.ChatCompletionToolUnionParam
+	responseFormat     *openai.ChatCompletionNewParamsResponseFormatUnion
+	config             Config
+	client             openai.Client
+	counter            *tiktoken.Tiktoken
+	tokensPerMessage   int
+	tokensPerName      int
+	modelContextWindow map[string]int
+}
+
+func (a client) CreateCompletion(
+	ctx context.Context, request llm.Request,
+) (iterator.Iterator[llm.Event], error) {
+	// Use the caller-supplied token count when available (the agent loop
+	// pre-computes this from provider-reported usage). This avoids a
+	// redundant tiktoken encode of the entire conversation on every turn.
+	count := request.TokenCount
+	if count == 0 {
+		count, _ = a.CountTokens(request.Messages)
+	}
+	max := a.modelContextWindow[a.config.Model]
+	// Apply a 5% safety margin to account for token count estimation drift.
+	safeMax := max * 95 / 100
+	if count > safeMax {
+		return nil, &llm.ErrContextWindowExceeded{Count: count, Max: max}
+	}
+
+	// Resolve effective effort: request-level takes precedence over config-level.
+	effort := string(request.ReasoningEffort)
+	if effort == "" {
+		effort = a.config.ReasoningEffort
+	}
+
+	// Normalize effort against model capabilities. Unsupported levels are
+	// dropped (empty string) so the provider default applies.
+	var effortWarning *llm.Event
+	normalized, warning := NormalizeEffort(a.config.Model, effort)
+	request.ReasoningEffort = llm.ReasoningEffort(normalized)
+	if warning != "" {
+		effortWarning = &llm.Event{
+			Type: llm.EventRateLimitWarning,
+			RateLimit: &llm.RateLimitInfo{
+				Message: warning,
+			},
+		}
+	}
+
+	var it iterator.Iterator[llm.Event]
+	var err error
+	if a.config.ForceResponsesAPI || IsResponsesOnlyModel(a.config.Model) {
+		it, err = a.createResponsesCompletion(ctx, request)
+	} else {
+		it, err = a.createChatCompletion(ctx, request)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if effortWarning != nil {
+		it = &prefixWarningIterator{warning: effortWarning, inner: it}
+	}
+	return it, nil
+}
+
+// prefixWarningIterator emits a single warning event before delegating
+// to the wrapped iterator.
+type prefixWarningIterator struct {
+	warning *llm.Event
+	inner   iterator.Iterator[llm.Event]
+}
+
+func (p *prefixWarningIterator) Next(ctx context.Context) (llm.Event, bool) {
+	if p.warning != nil {
+		ev := *p.warning
+		p.warning = nil
+		return ev, true
+	}
+	return p.inner.Next(ctx)
+}
+
+func (p *prefixWarningIterator) Err() error  { return p.inner.Err() }
+func (p *prefixWarningIterator) Close() error { return p.inner.Close() }
+
+// createResponsesCompletion uses the /v1/responses endpoint for models
+// that don't support /v1/chat/completions.
+func (a client) createResponsesCompletion(
+	ctx context.Context, request llm.Request,
+) (iterator.Iterator[llm.Event], error) {
+	input, instructions := responsesInputFromMessages(request.Messages)
+
+	// Use per-request tools if provided, otherwise fall back to client-level tools.
+	var tools []responses.ToolUnionParam
+	if len(request.Tools) > 0 {
+		tools = responsesToolsFromModel(request.Tools)
+	} else if len(a.config.Tools) > 0 {
+		tools = responsesToolsFromModel(a.config.Tools)
+	}
+
+	params := responses.ResponseNewParams{
+		Model: shared.ResponsesModel(a.config.Model),
+		Input: responses.ResponseNewParamsInputUnion{
+			OfInputItemList: input,
+		},
+		Tools: tools,
+	}
+
+	// Set prompt_cache_key so the provider can cache the tokenized
+	// prefix across requests sharing the same conversation. This
+	// gives a ~90% discount on repeated input tokens without
+	// requiring server-side response storage (ZDR-compatible).
+	if request.PromptCacheKey != "" {
+		params.PromptCacheKey = param.NewOpt(request.PromptCacheKey)
+	}
+
+	if instructions != "" {
+		params.Instructions = param.NewOpt(instructions)
+	}
+
+	// Reasoning parameters — effort is already normalized by CreateCompletion.
+	if SupportsReasoning(a.config.Model) {
+		effort := string(request.ReasoningEffort)
+		if effort != "" {
+			params.Reasoning.Effort = shared.ReasoningEffort(effort)
+		}
+		summary := string(request.ReasoningSummary)
+		if summary == "" {
+			summary = a.config.ReasoningSummary
+		}
+		if summary == "" {
+			summary = string(llm.ReasoningSummaryAuto)
+		}
+		if summary != "" {
+			params.Reasoning.Summary = shared.ReasoningSummary(summary)
+		}
+	}
+
+	if request.MaxOutputTokens > 0 {
+		params.MaxOutputTokens = param.NewOpt(int64(request.MaxOutputTokens))
+	} else if a.config.MaxCompletionTokens > 0 {
+		params.MaxOutputTokens = param.NewOpt(int64(a.config.MaxCompletionTokens))
+	}
+
+	if a.config.Temperature != 0 {
+		params.Temperature = param.NewOpt(a.config.Temperature)
+	}
+	if a.config.TopP != 0 {
+		params.TopP = param.NewOpt(a.config.TopP)
+	}
+
+	stream := a.client.Responses.NewStreaming(ctx, params)
+
+	newStream := func() *ssestream.Stream[responses.ResponseStreamEventUnion] {
+		return a.client.Responses.NewStreaming(ctx, params)
+	}
+
+	return &responsesStreamIterator{
+		stream:           stream,
+		newStream:        newStream,
+		midStreamRetries: maxMidStreamRetries,
+	}, nil
+}
+
+// createChatCompletion uses the /v1/chat/completions endpoint.
+func (a client) createChatCompletion(
+	ctx context.Context, request llm.Request,
+) (iterator.Iterator[llm.Event], error) {
+	messages := make([]openai.ChatCompletionMessageParamUnion, len(request.Messages))
+	for i, msg := range request.Messages {
+		var err error
+		messages[i], err = openAIMessageFromModel(msg)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// Use per-request tools if provided, otherwise fall back to client-level tools.
+	tools := a.tools
+	if len(request.Tools) > 0 {
+		tools = openAIToolsFromModel(request.Tools)
+	}
+
+	// Use per-request response format if provided, otherwise fall back to client-level.
+	responseFormat := a.responseFormat
+	if request.ResponseFormat != nil {
+		responseFormat = openAIResponseFormatFromModel(request.ResponseFormat)
+	}
+
+	params := openai.ChatCompletionNewParams{
+		Messages: messages,
+		Model:    shared.ChatModel(a.config.Model),
+		Tools:    tools,
+		StreamOptions: openai.ChatCompletionStreamOptionsParam{
+			IncludeUsage: param.NewOpt(true),
+		},
+	}
+
+	if request.PromptCacheKey != "" {
+		params.PromptCacheKey = param.NewOpt(request.PromptCacheKey)
+	}
+
+	if responseFormat != nil {
+		params.ResponseFormat = *responseFormat
+	}
+
+	if SupportsReasoning(a.config.Model) {
+		if request.MaxOutputTokens > 0 {
+			params.MaxCompletionTokens = param.NewOpt(int64(request.MaxOutputTokens))
+		} else if a.config.MaxCompletionTokens > 0 {
+			params.MaxCompletionTokens = param.NewOpt(int64(a.config.MaxCompletionTokens))
+		}
+		// Effort is already normalized by CreateCompletion.
+		effort := string(request.ReasoningEffort)
+		if effort != "" {
+			params.ReasoningEffort = shared.ReasoningEffort(effort)
+		}
+	} else {
+		if a.config.MaxTokens > 0 {
+			params.MaxTokens = param.NewOpt(int64(a.config.MaxTokens))
+		}
+	}
+
+	// O-series reasoning models don't support temperature or penalty parameters.
+	if !IsReasoningModel(a.config.Model) {
+		if a.config.FrequencyPenalty != 0 {
+			params.FrequencyPenalty = param.NewOpt(a.config.FrequencyPenalty)
+		}
+		if a.config.PresencePenalty != 0 {
+			params.PresencePenalty = param.NewOpt(a.config.PresencePenalty)
+		}
+		if a.config.Temperature != 0 {
+			params.Temperature = param.NewOpt(a.config.Temperature)
+		}
+		if a.config.TopP != 0 {
+			params.TopP = param.NewOpt(a.config.TopP)
+		}
+	}
+
+	// Capture response headers via middleware for rate limit inspection.
+	var capturedHeaders http.Header
+	headerMiddleware := option.WithMiddleware(
+		func(req *http.Request, next option.MiddlewareNext) (*http.Response, error) {
+			resp, err := next(req)
+			if resp != nil {
+				capturedHeaders = resp.Header.Clone()
+				slog.Debug("completion HTTP response",
+					"status", resp.StatusCode,
+					"content_type", resp.Header.Get("Content-Type"),
+				)
+			}
+			return resp, err
+		},
+	)
+
+	isAnthropic := isAnthropicURL(a.config.BaseURL)
+
+	// Retry on transient errors (408, 409, 429, 5xx) using the SDK retry
+	// package. Warnings are buffered and emitted through the iterator so
+	// the UI can display them while the client waits.
+	var warnings []llm.Event
+	var stream *ssestream.Stream[openai.ChatCompletionChunk]
+
+	retryStrategy := retry.CombinedStrategy(
+		// LimitStrategy must be first so CombinedStrategy short-circuits
+		// before the backoff strategy appends a warning on the final attempt.
+		// +1 because LimitStrategy counts total fn calls, not retries.
+		retry.LimitStrategy(maxStreamRetries+1),
+		retryAfterOrBackoffStrategy(&capturedHeaders, &warnings),
+	)
+
+	retryErr := retry.Retry(ctx, retryStrategy, func(_ context.Context) (bool, error) {
+		capturedHeaders = nil
+		// Disable the SDK's built-in retry so our strategy controls
+		// backoff timing and can emit warning events between attempts.
+		stream = a.client.Chat.Completions.NewStreaming(ctx, params,
+			headerMiddleware, option.WithMaxRetries(0))
+
+		// The SDK stores initial HTTP errors (e.g. 429) in the stream
+		// immediately — Err() is available without calling Next().
+		err := stream.Err()
+		if err == nil {
+			return false, nil
+		}
+		if !isRetryableError(err) {
+			return false, err
+		}
+		_ = stream.Close()
+		return true, err
+	})
+	if retryErr != nil {
+		if len(warnings) == 0 {
+			// Non-retryable error — no warnings to emit, return directly.
+			if stream != nil {
+				_ = stream.Close()
+			}
+			if isToolCallParseError(retryErr) {
+				return nil, &ToolCallParseError{Cause: retryErr}
+			}
+			return nil, retryErr
+		}
+		// Retries exhausted — return the broken stream so buffered retry
+		// warnings are emitted to the caller before the error surfaces.
+	}
+
+	// Build stream factory for mid-stream retries.
+	newStream := func() *ssestream.Stream[openai.ChatCompletionChunk] {
+		capturedHeaders = nil
+		return a.client.Chat.Completions.NewStreaming(ctx, params,
+			headerMiddleware, option.WithMaxRetries(0))
+	}
+
+	return &completionStreamIterator{
+		stream:           stream,
+		pendingWarnings:  warnings,
+		capturedHeaders:  capturedHeaders,
+		isAnthropic:      isAnthropic,
+		newStream:        newStream,
+		midStreamRetries: maxMidStreamRetries,
+	}, nil
+}
+
+func (a client) CountTokens(msgs []llm.Message) (int, error) {
+	var ret int
+	for _, message := range msgs {
+		ret += a.tokensPerMessage
+		ret += len(a.counter.Encode(message.Content, nil, nil))
+		ret += len(a.counter.Encode(message.ReasoningContent, nil, nil))
+		ret += len(a.counter.Encode(string(message.Role), nil, nil))
+		ret += len(a.counter.Encode(message.Name, nil, nil))
+		if message.Name != "" {
+			ret += a.tokensPerName
+		}
+		// Count tool calls in assistant messages (function name, arguments, ID).
+		for _, tc := range message.ToolCalls {
+			ret += len(a.counter.Encode(tc.Function.Name, nil, nil))
+			ret += len(a.counter.Encode(tc.Function.Arguments, nil, nil))
+			ret += len(a.counter.Encode(tc.ID, nil, nil))
+			ret += 3 // per-tool-call structural overhead
+		}
+		// Count tool call ID in tool result messages.
+		if message.ToolCallID != "" {
+			ret += len(a.counter.Encode(message.ToolCallID, nil, nil))
+		}
+	}
+	ret += 3
+	return ret, nil
+}
+
+func (a client) ContextWindow() int {
+	return a.modelContextWindow[a.config.Model]
+}
+
+// streamState tracks the streaming state machine.
+type streamState int
+
+const (
+	streamStateStreaming streamState = iota
+	streamStateEmitDone
+	streamStateCheckHeaders
+	streamStateDone
+)
+
+// maxMidStreamRetries is the maximum number of retry attempts when a
+// transient network error occurs after the stream has already started
+// delivering events.
+const maxMidStreamRetries = 3
+
+// completionStreamIterator wraps the official SDK's SSE stream and emits
+// typed llm.Event values. It uses ChatCompletionAccumulator to track state.
+type completionStreamIterator struct {
+	stream *ssestream.Stream[openai.ChatCompletionChunk]
+	acc    openai.ChatCompletionAccumulator
+	state  streamState
+
+	// Track reasoning content ourselves since the SDK doesn't accumulate it.
+	reasoningContent strings.Builder
+	err              error
+
+	// Rate limit support.
+	pendingWarnings []llm.Event   // warnings buffered during retries
+	warningIdx      int           // index into pendingWarnings
+	capturedHeaders http.Header   // response headers from the last HTTP response
+	isAnthropic     bool          // true when base URL contains "anthropic.com"
+
+	// Mid-stream retry support.
+	newStream       func() *ssestream.Stream[openai.ChatCompletionChunk] // factory to recreate stream
+	midStreamRetries int          // remaining mid-stream retry attempts
+	retryEvents      []llm.Event // buffered events emitted during a mid-stream retry
+	retryEventIdx    int         // index into retryEvents
+}
+
+func (s *completionStreamIterator) Next(ctx context.Context) (llm.Event, bool) {
+	// Emit buffered warnings from retries before yielding stream events.
+	if s.warningIdx < len(s.pendingWarnings) {
+		ev := s.pendingWarnings[s.warningIdx]
+		s.warningIdx++
+		return ev, true
+	}
+
+	// Emit buffered mid-stream retry events.
+	if s.retryEventIdx < len(s.retryEvents) {
+		ev := s.retryEvents[s.retryEventIdx]
+		s.retryEventIdx++
+		return ev, true
+	}
+
+	for {
+		switch s.state {
+		case streamStateDone:
+			return llm.Event{}, false
+
+		case streamStateCheckHeaders:
+			s.state = streamStateDone
+			if s.capturedHeaders != nil {
+				if s.isAnthropic {
+					if warning, ok := checkAnthropicRateLimitHeaders(s.capturedHeaders); ok {
+						return warning, true
+					}
+				} else {
+					if warning, ok := checkStandardRateLimitHeaders(s.capturedHeaders); ok {
+						return warning, true
+					}
+				}
+			}
+			return llm.Event{}, false
+
+		case streamStateEmitDone:
+			s.state = streamStateCheckHeaders
+			return s.buildDoneEvent(), true
+
+		case streamStateStreaming:
+			if !s.stream.Next() {
+				if err := s.stream.Err(); err != nil {
+					// Attempt mid-stream retry on transient network or stream errors.
+					retryable := isTransientNetworkError(err) || isRetryableStreamError(err)
+					if s.newStream != nil && s.midStreamRetries > 0 && retryable {
+						s.midStreamRetries--
+						_ = s.stream.Close()
+
+						attempt := maxMidStreamRetries - s.midStreamRetries
+						wait := retryWait(nil, attempt-1)
+						slog.Warn("mid-stream retryable error, retrying",
+							"error", err, "attempt", attempt, "wait", wait)
+
+						time.Sleep(wait)
+						s.stream = s.newStream()
+
+						// Reset accumulator state.
+						s.acc = openai.ChatCompletionAccumulator{}
+						s.reasoningContent.Reset()
+
+						// Buffer reset + warning events.
+						var msg string
+						if isTransientNetworkError(err) {
+							msg = retryNetworkMessage(err, wait, attempt, maxMidStreamRetries)
+						} else {
+							msg = retryStreamMessage(err, wait, attempt, maxMidStreamRetries)
+						}
+						s.retryEvents = []llm.Event{
+							{Type: llm.EventStreamReset},
+							{Type: llm.EventRateLimitWarning, RateLimit: &llm.RateLimitInfo{
+								WaitDuration: wait,
+								Message:      msg,
+							}},
+						}
+						s.retryEventIdx = 1
+						return s.retryEvents[0], true
+					}
+
+					s.state = streamStateDone
+					if isToolCallParseError(err) {
+						err = &ToolCallParseError{Cause: err}
+					}
+					s.err = err
+					var textLen, toolCalls int
+					if len(s.acc.Choices) > 0 {
+						textLen = len(s.acc.Choices[0].Message.Content)
+						toolCalls = len(s.acc.Choices[0].Message.ToolCalls)
+					}
+					slog.Warn("completion stream error",
+						"error", err,
+						"accumulated_text_len", textLen,
+						"accumulated_reasoning_len", s.reasoningContent.Len(),
+						"accumulated_tool_calls", toolCalls,
+						"prompt_tokens", s.acc.Usage.PromptTokens,
+						"completion_tokens", s.acc.Usage.CompletionTokens,
+					)
+					return llm.Event{Type: llm.EventStreamError, Error: err}, true
+				}
+				// Stream exhausted normally — emit done, then check headers.
+				s.state = streamStateCheckHeaders
+				return s.buildDoneEvent(), true
+			}
+
+			chunk := s.stream.Current()
+			s.acc.AddChunk(chunk)
+
+			// Check for reasoning content in ExtraFields.
+			if len(chunk.Choices) > 0 {
+				if rc, ok := chunk.Choices[0].Delta.JSON.ExtraFields["reasoning_content"]; ok && rc.Valid() {
+					raw := rc.Raw()
+					// Strip JSON string quotes.
+					var text string
+					if err := json.Unmarshal([]byte(raw), &text); err == nil && text != "" {
+						s.reasoningContent.WriteString(text)
+						return llm.Event{Type: llm.EventReasoningDelta, Reasoning: text}, true
+					}
+				}
+			}
+
+			// Check for text content delta.
+			if len(chunk.Choices) > 0 && chunk.Choices[0].Delta.Content != "" {
+				return llm.Event{
+					Type: llm.EventTextDelta,
+					Text: chunk.Choices[0].Delta.Content,
+				}, true
+			}
+
+			// Check for just-finished tool call.
+			if tc, ok := s.acc.JustFinishedToolCall(); ok {
+				return llm.Event{
+					Type: llm.EventToolCallDone,
+					ToolCall: &llm.ToolCall{
+						ID:   tc.ID,
+						Type: llm.ToolTypeFunction,
+						Function: llm.FunctionCall{
+							Name:      tc.Name,
+							Arguments: tc.Arguments,
+						},
+					},
+				}, true
+			}
+
+			// Chunk had no actionable content — continue reading.
+			continue
+		}
+	}
+}
+
+func (s *completionStreamIterator) buildDoneEvent() llm.Event {
+	msg := llm.Message{
+		Role:             llm.RoleAssistant,
+		ReasoningContent: s.reasoningContent.String(),
+	}
+
+	if len(s.acc.Choices) > 0 {
+		msg.Content = s.acc.Choices[0].Message.Content
+
+		// Extract accumulated reasoning from the final message's ExtraFields.
+		if msg.ReasoningContent == "" {
+			if rc, ok := s.acc.Choices[0].Message.JSON.ExtraFields["reasoning_content"]; ok && rc.Valid() {
+				var text string
+				if json.Unmarshal([]byte(rc.Raw()), &text) == nil {
+					msg.ReasoningContent = text
+				}
+			}
+		}
+
+		// Build tool calls from the accumulated message (source of truth).
+		for _, tc := range s.acc.Choices[0].Message.ToolCalls {
+			if tc.Type != "function" {
+				continue
+			}
+			msg.ToolCalls = append(msg.ToolCalls, llm.ToolCall{
+				ID:   tc.ID,
+				Type: llm.ToolTypeFunction,
+				Function: llm.FunctionCall{
+					Name:      tc.Function.Name,
+					Arguments: tc.Function.Arguments,
+				},
+			})
+		}
+	}
+
+	var finishReason llm.FinishReason
+	if len(s.acc.Choices) > 0 {
+		finishReason = llm.FinishReason(s.acc.Choices[0].FinishReason)
+	}
+
+	usage := llm.Usage{
+		TokensSent:     int(s.acc.Usage.PromptTokens),
+		TokensReceived: int(s.acc.Usage.CompletionTokens),
+	}
+	// Extract detailed token info from ExtraFields if available.
+	if ctd, ok := s.acc.Usage.JSON.ExtraFields["completion_tokens_details"]; ok && ctd.Valid() {
+		var details struct {
+			ReasoningTokens int `json:"reasoning_tokens"`
+		}
+		if json.Unmarshal([]byte(ctd.Raw()), &details) == nil {
+			usage.TokensReasoned = details.ReasoningTokens
+		}
+	}
+	if ptd, ok := s.acc.Usage.JSON.ExtraFields["prompt_tokens_details"]; ok && ptd.Valid() {
+		var details struct {
+			CachedTokens int `json:"cached_tokens"`
+		}
+		if json.Unmarshal([]byte(ptd.Raw()), &details) == nil {
+			usage.TokensCached = details.CachedTokens
+		}
+	}
+
+	return llm.Event{
+		Type: llm.EventStreamDone,
+		DoneData: &llm.DoneData{
+			Message:      msg,
+			FinishReason: finishReason,
+			Usage:        usage,
+		},
+	}
+}
+
+func (s *completionStreamIterator) Err() error {
+	return s.err
+}
+
+func (s *completionStreamIterator) Close() error {
+	return s.stream.Close()
+}
+
+// responsesStreamIterator wraps the Responses API SSE stream and emits
+// typed llm.Event values.
+type responsesStreamIterator struct {
+	stream *ssestream.Stream[responses.ResponseStreamEventUnion]
+	state  streamState
+
+	// Accumulate content and tool calls across streaming events.
+	textContent      strings.Builder
+	reasoningContent strings.Builder
+	toolCalls        []llm.ToolCall
+	// Track in-flight function call arguments by output_index.
+	pendingCalls map[int64]*llm.ToolCall
+	// Final response (set by response.completed event).
+	finalResponse *responses.Response
+	err           error
+
+	// Mid-stream retry support.
+	newStream        func() *ssestream.Stream[responses.ResponseStreamEventUnion]
+	midStreamRetries int
+	retryEvents      []llm.Event
+	retryEventIdx    int
+}
+
+func (s *responsesStreamIterator) Next(ctx context.Context) (llm.Event, bool) {
+	// Emit buffered mid-stream retry events.
+	if s.retryEventIdx < len(s.retryEvents) {
+		ev := s.retryEvents[s.retryEventIdx]
+		s.retryEventIdx++
+		return ev, true
+	}
+
+	for {
+		switch s.state {
+		case streamStateDone:
+			return llm.Event{}, false
+
+		case streamStateEmitDone:
+			s.state = streamStateDone
+			return s.buildDoneEvent(), true
+
+		case streamStateStreaming:
+			if !s.stream.Next() {
+				if err := s.stream.Err(); err != nil {
+					// Attempt mid-stream retry on transient network errors.
+					if s.newStream != nil && s.midStreamRetries > 0 && isTransientNetworkError(err) {
+						s.midStreamRetries--
+						_ = s.stream.Close()
+
+						attempt := maxMidStreamRetries - s.midStreamRetries
+						wait := retryWait(nil, attempt-1)
+						slog.Warn("mid-stream transient error (responses), retrying",
+							"error", err, "attempt", attempt, "wait", wait)
+
+						time.Sleep(wait)
+						s.stream = s.newStream()
+
+						// Reset accumulator state.
+						s.textContent.Reset()
+						s.reasoningContent.Reset()
+						s.toolCalls = nil
+						s.pendingCalls = nil
+						s.finalResponse = nil
+
+						// Buffer reset + warning events.
+						msg := retryNetworkMessage(err, wait, attempt, maxMidStreamRetries)
+						s.retryEvents = []llm.Event{
+							{Type: llm.EventStreamReset},
+							{Type: llm.EventRateLimitWarning, RateLimit: &llm.RateLimitInfo{
+								WaitDuration: wait,
+								Message:      msg,
+							}},
+						}
+						s.retryEventIdx = 1
+						return s.retryEvents[0], true
+					}
+
+					s.state = streamStateDone
+					s.err = err
+					slog.Warn("responses stream error",
+						"error", err,
+						"accumulated_text_len", s.textContent.Len(),
+						"accumulated_reasoning_len", s.reasoningContent.Len(),
+						"accumulated_tool_calls", len(s.toolCalls),
+					)
+					return llm.Event{Type: llm.EventStreamError, Error: err}, true
+				}
+				// Stream ended without a completed event — emit done with
+				// whatever we've accumulated.
+				s.state = streamStateDone
+				return s.buildDoneEvent(), true
+			}
+
+			event := s.stream.Current()
+
+			switch event.Type {
+			case "response.output_text.delta":
+				s.textContent.WriteString(event.Delta)
+				return llm.Event{Type: llm.EventTextDelta, Text: event.Delta}, true
+
+			case "response.reasoning_text.delta",
+				"response.reasoning_summary_text.delta":
+				s.reasoningContent.WriteString(event.Delta)
+				return llm.Event{Type: llm.EventReasoningDelta, Reasoning: event.Delta}, true
+
+			case "response.function_call_arguments.delta":
+				// Accumulate arguments for an in-flight function call.
+				if s.pendingCalls == nil {
+					s.pendingCalls = make(map[int64]*llm.ToolCall)
+				}
+				tc, ok := s.pendingCalls[event.OutputIndex]
+				if !ok {
+					tc = &llm.ToolCall{
+						ID:   event.ItemID,
+						Type: llm.ToolTypeFunction,
+					}
+					s.pendingCalls[event.OutputIndex] = tc
+				}
+				tc.Function.Arguments += event.Delta
+
+			case "response.function_call_arguments.done":
+				// Function call is complete.
+				if s.pendingCalls != nil {
+					if tc, ok := s.pendingCalls[event.OutputIndex]; ok {
+						tc.Function.Arguments = event.Arguments
+						delete(s.pendingCalls, event.OutputIndex)
+					}
+				}
+
+			case "response.output_item.done":
+				// An output item is complete. Check if it's a function call.
+				item := event.Item
+				if item.Type == "function_call" {
+					tc := llm.ToolCall{
+						ID:   item.CallID,
+						Type: llm.ToolTypeFunction,
+						Function: llm.FunctionCall{
+							Name:      item.Name,
+							Arguments: item.Arguments,
+						},
+					}
+					s.toolCalls = append(s.toolCalls, tc)
+					return llm.Event{Type: llm.EventToolCallDone, ToolCall: &tc}, true
+				}
+
+			case "response.completed":
+				s.finalResponse = &event.Response
+				s.state = streamStateDone
+				return s.buildDoneEvent(), true
+
+			case "error":
+				s.state = streamStateDone
+				s.err = fmt.Errorf("openai responses API error: %s", event.Message)
+				return llm.Event{
+					Type:  llm.EventStreamError,
+					Error: s.err,
+				}, true
+
+			case "response.failed":
+				s.state = streamStateDone
+				errMsg := "response failed"
+				if event.Response.Error.Message != "" {
+					errMsg = event.Response.Error.Message
+				}
+				s.err = fmt.Errorf("openai responses API: %s", errMsg)
+				return llm.Event{
+					Type:  llm.EventStreamError,
+					Error: s.err,
+				}, true
+			}
+			continue
+		}
+	}
+}
+
+func (s *responsesStreamIterator) buildDoneEvent() llm.Event {
+	msg := llm.Message{
+		Role:             llm.RoleAssistant,
+		Content:          s.textContent.String(),
+		ReasoningContent: s.reasoningContent.String(),
+		ToolCalls:        s.toolCalls,
+	}
+
+	var finishReason llm.FinishReason
+	if len(s.toolCalls) > 0 {
+		finishReason = llm.FinishReasonToolCall
+	} else {
+		finishReason = llm.FinishReasonStop
+	}
+
+	var usage llm.Usage
+	if s.finalResponse != nil {
+		// Check status for incomplete finish.
+		switch s.finalResponse.Status {
+		case "incomplete":
+			finishReason = llm.FinishReasonLength
+		case "failed":
+			finishReason = llm.FinishReasonContentFilter
+		}
+
+		usage = llm.Usage{
+			TokensSent:     int(s.finalResponse.Usage.InputTokens),
+			TokensReceived: int(s.finalResponse.Usage.OutputTokens),
+			TokensReasoned: int(s.finalResponse.Usage.OutputTokensDetails.ReasoningTokens),
+			TokensCached:   int(s.finalResponse.Usage.InputTokensDetails.CachedTokens),
+		}
+
+		// If we didn't accumulate text from deltas, extract from the final response.
+		if msg.Content == "" {
+			for _, item := range s.finalResponse.Output {
+				if item.Type == "message" {
+					for _, content := range item.Content {
+						if content.Type == "output_text" {
+							msg.Content += content.Text
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return llm.Event{
+		Type: llm.EventStreamDone,
+		DoneData: &llm.DoneData{
+			Message:      msg,
+			FinishReason: finishReason,
+			Usage:        usage,
+		},
+	}
+}
+
+func (s *responsesStreamIterator) Err() error {
+	return s.err
+}
+
+func (s *responsesStreamIterator) Close() error {
+	return s.stream.Close()
+}

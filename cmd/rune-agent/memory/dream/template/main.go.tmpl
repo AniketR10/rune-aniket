@@ -1,0 +1,295 @@
+package main
+
+import (
+	"context"
+	"flag"
+	"fmt"
+	"math"
+	"os"
+	"strings"
+	"time"
+)
+
+var registry []Memory
+
+// Register adds a memory to the global registry.
+// Call this from init() functions in memory files.
+func Register(m Memory) {
+	registry = append(registry, m)
+}
+
+func main() {
+	var (
+		files          string
+		errs           string
+		task           string
+		budget         int
+		listCategories bool
+		conversation   string
+	)
+
+	flag.StringVar(&files, "files", "", "comma-separated list of current file paths")
+	flag.StringVar(&errs, "errors", "", "comma-separated list of current error messages")
+	flag.StringVar(&task, "task", "", "description of current task")
+	flag.IntVar(&budget, "budget", 10, "maximum number of memories to surface")
+	flag.BoolVar(&listCategories, "list-categories", false, "list all memories with their categories")
+	flag.StringVar(&conversation, "conversation", "", "memory ID whose source conversation to fetch and print")
+	flag.Parse()
+
+	if conversation != "" {
+		m := findByID(conversation)
+		if m == nil {
+			fmt.Fprintf(os.Stderr, "memory not found: %s\n", conversation)
+			os.Exit(1)
+		}
+		d, err := m.FetchConversation(context.Background())
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "fetch conversation: %v\n", err)
+			os.Exit(1)
+		}
+		for _, msg := range d.Messages {
+			if msg.Role == "system" {
+				continue
+			}
+			fmt.Printf("### %s\n\n%s\n\n", msg.Role, msg.Content)
+		}
+		return
+	}
+
+	if listCategories {
+		for _, m := range registry {
+			fmt.Printf("%s: (%s) %s\n", m.ID(), strings.Join(categories(m), ", "), m.Content())
+		}
+		return
+	}
+
+	filesList := splitCSV(files)
+	errorsList := splitCSV(errs)
+
+	// Build supersession set: IDs that have been superseded.
+	superseded := make(map[string]bool)
+	for _, m := range registry {
+		if s, ok := m.(Supersedes); ok {
+			for _, id := range s.Supersedes() {
+				superseded[id] = true
+			}
+		}
+	}
+
+	// Score memories, skipping superseded ones.
+	type scored struct {
+		memory Memory
+		score  float64
+	}
+
+	var results []scored
+	for _, m := range registry {
+		if superseded[m.ID()] {
+			continue
+		}
+		s := score(m, filesList, errorsList, task)
+		if s > 0 {
+			results = append(results, scored{memory: m, score: s})
+		}
+	}
+
+	// Sort by score descending (simple insertion sort).
+	for i := 1; i < len(results); i++ {
+		for j := i; j > 0 && results[j].score > results[j-1].score; j-- {
+			results[j], results[j-1] = results[j-1], results[j]
+		}
+	}
+
+	if len(results) > budget {
+		results = results[:budget]
+	}
+
+	// Expand dependencies: if a selected memory depends on others, include them.
+	selected := make(map[string]bool)
+	for _, r := range results {
+		selected[r.memory.ID()] = true
+	}
+
+	byID := make(map[string]Memory)
+	for _, m := range registry {
+		byID[m.ID()] = m
+	}
+
+	for _, r := range results {
+		dep, ok := r.memory.(DependsOn)
+		if !ok {
+			continue
+		}
+		for _, id := range dep.DependsOn() {
+			if selected[id] || superseded[id] {
+				continue
+			}
+			if m, found := byID[id]; found {
+				results = append(results, scored{memory: m, score: 0})
+				selected[id] = true
+			}
+		}
+	}
+
+	if len(results) == 0 {
+		os.Exit(0)
+	}
+
+	for _, r := range results {
+		cats := categories(r.memory)
+		fmt.Printf("[%s] (%s) %s\n", r.memory.ID(), strings.Join(cats, ", "), r.memory.Content())
+	}
+}
+
+// score computes a relevance score for a memory against the current context.
+// File matches score highest (3), error matches next (2), action and
+// anticipatory matches score 1 each. The raw score is multiplied by
+// temporal relevance so older episodic memories fade.
+func score(m Memory, files, errors []string, task string) float64 {
+	s := 0.0
+
+	if ep, ok := m.(EpisodicMemory); ok {
+		trigger := ep.TriggerOn()
+
+		for _, f := range trigger.Files {
+			for _, cf := range files {
+				if containsFold(cf, f) || containsFold(f, cf) {
+					s += 3
+				}
+			}
+		}
+
+		for _, e := range trigger.Errors {
+			for _, ce := range errors {
+				if containsFold(ce, e) {
+					s += 2
+				}
+			}
+		}
+
+		for _, a := range trigger.Actions {
+			if containsFold(task, a) {
+				s++
+			}
+		}
+
+		for _, before := range ep.SurfaceBefore() {
+			if containsFold(task, before) {
+				s++
+			}
+		}
+	}
+
+	// ID word matching against full context.
+	context := strings.ToLower(strings.Join(append(append(files, errors...), task), " "))
+	idWords := strings.FieldsFunc(m.ID(), func(r rune) bool {
+		return r == '-' || r == '_'
+	})
+	for _, w := range idWords {
+		if strings.Contains(context, strings.ToLower(w)) {
+			s++
+		}
+	}
+
+	s *= relevance(m)
+
+	return s
+}
+
+// relevance computes temporal decay. Semantic memories don't decay.
+// Episodic memories decay with half-lives based on confidence:
+// Tentative = 90 days, Confirmed = 180 days, Certain = no decay.
+func relevance(m Memory) float64 {
+	ep, ok := m.(EpisodicMemory)
+	if !ok {
+		return 1.0
+	}
+
+	conf := Tentative
+	if c, ok := m.(Confident); ok {
+		conf = c.Confidence()
+	}
+
+	if conf == Certain {
+		return 1.0
+	}
+
+	age := time.Since(ep.OccurredAt()).Hours()
+	halfLife := 90 * 24.0
+	if conf == Confirmed {
+		halfLife = 180 * 24.0
+	}
+
+	return math.Exp(-0.693 * age / halfLife)
+}
+
+// containsFold reports whether s contains substr, case-insensitive.
+func containsFold(s, substr string) bool {
+	return strings.Contains(strings.ToLower(s), strings.ToLower(substr))
+}
+
+// splitCSV splits a comma-separated string, trimming whitespace and
+// dropping empty entries.
+func splitCSV(s string) []string {
+	if s == "" {
+		return nil
+	}
+	parts := strings.Split(s, ",")
+	var result []string
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			result = append(result, p)
+		}
+	}
+	return result
+}
+
+// findByID returns the memory with the given ID, or nil if not found.
+func findByID(id string) Memory {
+	for _, m := range registry {
+		if m.ID() == id {
+			return m
+		}
+	}
+	return nil
+}
+
+// categories returns the category tags for a memory.
+func categories(m Memory) []string {
+	var cats []string
+	if _, ok := m.(GoIdiomMemory); ok {
+		cats = append(cats, "go-idiom")
+	}
+	if _, ok := m.(TestingPatternMemory); ok {
+		cats = append(cats, "testing-pattern")
+	}
+	if _, ok := m.(ArchitectureMemory); ok {
+		cats = append(cats, "architecture")
+	}
+	if _, ok := m.(DebugStrategyMemory); ok {
+		cats = append(cats, "debug-strategy")
+	}
+	if _, ok := m.(APIDesignMemory); ok {
+		cats = append(cats, "api-design")
+	}
+	if _, ok := m.(PerformanceMemory); ok {
+		cats = append(cats, "performance")
+	}
+	if _, ok := m.(UserPreferenceMemory); ok {
+		cats = append(cats, "user-preference")
+	}
+	if _, ok := m.(EpisodicMemory); ok {
+		cats = append(cats, "episodic")
+	}
+	if _, ok := m.(BugFixMemory); ok {
+		cats = append(cats, "bug-fix")
+	}
+	if _, ok := m.(RefactorMemory); ok {
+		cats = append(cats, "refactor")
+	}
+	if _, ok := m.(DesignDecisionMemory); ok {
+		cats = append(cats, "design-decision")
+	}
+	return cats
+}

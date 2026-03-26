@@ -1,0 +1,75 @@
+package main
+
+import (
+	"context"
+	"encoding/base64"
+	"fmt"
+	"os"
+	"sync"
+
+	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
+	"golang.org/x/oauth2"
+)
+
+var (
+	storageOnce sync.Once
+	storageSvc  storageapi.Service
+	storageErr  error
+)
+
+// GetStorage lazily initializes a storageapi.Service from RUNE_ environment
+// variables. It uses the "rune-agent" extension ID so that the storage
+// partition matches the one used by rune-agent.
+func GetStorage(ctx context.Context) (storageapi.Service, error) {
+	storageOnce.Do(func() {
+		socket := os.Getenv("RUNE_SOCKET")
+		if socket == "" {
+			storageErr = fmt.Errorf("RUNE_SOCKET not set: must be invoked from a Rune workspace")
+			return
+		}
+		datadir := os.Getenv("RUNE_DATADIR")
+		if datadir == "" {
+			storageErr = fmt.Errorf("RUNE_DATADIR not set: must be invoked from a Rune workspace")
+			return
+		}
+		cfg := extensionapi.Config{
+			Socket:  socket,
+			DataDir: datadir,
+		}
+		if tok := os.Getenv("RUNE_TOKEN"); tok != "" {
+			cfg.Token = &oauth2.Token{AccessToken: tok}
+		}
+		if cert := os.Getenv("RUNE_CERT"); cert != "" {
+			data, err := base64.StdEncoding.DecodeString(cert)
+			if err != nil {
+				storageErr = fmt.Errorf("decode RUNE_CERT: %w", err)
+				return
+			}
+			cfg.Certificate = data
+		}
+		meta := extensionapi.Metadata{
+			ExtensionID: "rune-agent",
+		}
+		w, err := extensionapi.NewWorkspace(cfg, meta)
+		if err != nil {
+			storageErr = fmt.Errorf("create workspace: %w", err)
+			return
+		}
+		storageSvc = w.Storage(ctx)
+	})
+	return storageSvc, storageErr
+}
+
+// FetchDialogue retrieves a dialogue from storageapi by its ID.
+func FetchDialogue(ctx context.Context, dialogueID string) (Dialogue, error) {
+	storage, err := GetStorage(ctx)
+	if err != nil {
+		return Dialogue{}, err
+	}
+	var d Dialogue
+	if err := storage.Get(ctx, dialogueID, &d); err != nil {
+		return Dialogue{}, fmt.Errorf("get dialogue %s: %w", dialogueID, err)
+	}
+	return d, nil
+}

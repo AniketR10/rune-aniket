@@ -19,9 +19,11 @@ EXECSRC=$(wildcard cmd/**/*.go) $(wildcard cmd/**/**/*.go)
 EXECMAIN=$(wildcard cmd/*/main.go)
 EXECDIRS=$(sort $(dir $(EXECMAIN)))
 EXECS=$(patsubst cmd/%/,$(BIN)/%,$(EXECDIRS))
-SPECIAL_EXECS=$(BIN)/rune $(BIN)/ox-api
+CLAUDEIMPORT=$(BIN)/claudeimport
+SPECIAL_EXECS=$(BIN)/rune $(BIN)/ox-api $(BIN)/rune-agent $(CLAUDEIMPORT)
 GENERIC_EXECS=$(filter-out $(SPECIAL_EXECS),$(EXECS))
 EXEC_PKGS=$(patsubst $(BIN)/%,./cmd/%,$(EXECS))
+RELEASE_EXEC_PKGS=$(EXEC_PKGS)
 GOMOCKS=$(wildcard **/**/*_gomock.go) $(wildcard **/*_gomock.go)
 RELEASE_FILES=$(wildcard release/*)
 RUNE_RELEASE_DIR=$(TARGET)/rune_darwin_app
@@ -33,6 +35,7 @@ RUNE_APP_BINARY_DIR=$(RUNE_APP_DIR)/$(RUNE_APP_NAME)/Contents/MacOS
 RUNE_APP_EXTRAS_DIR=$(RUNE_APP_DIR)/$(RUNE_APP_NAME)/Contents/Resources
 RUNE_APP_PLIST=$(RUNE_APP_DIR)/$(RUNE_APP_NAME)/Contents/Info.plist
 RUNE_APP_ICON=$(RUNE_APP_EXTRAS_DIR)/rune.icns
+RUNE_APP_CLAUDEIMPORT=$(RUNE_APP_EXTRAS_DIR)/claudeimport
 RUNE_DMG_NAME=Rune.dmg
 RUNE_DMG_DIR=$(RUNE_RELEASE_DIR)
 SED_INPLACE = ''
@@ -41,7 +44,7 @@ ifeq ($(OS),Darwin)
 SED_INPLACE = ''
 endif
 
-.PHONY: debug clean test coverage generate sixdev rune ox-api \
+.PHONY: debug clean test coverage generate sixdev rune rune-agent ox-api claudeimport \
 	format docker-build-ci-gcp docker-push-ci-gcp cross-compile lint license assert_license \
 	rune-release rune-release-amd64 rune-release-arm64 rune-make-release \
 	rune-docker-build rune-docker-run rune-docker-build-gcp rune-docker-push-gcp \
@@ -50,12 +53,12 @@ endif
 
 default: CGO_ENABLED=CGO_ENABLED=1
 default: GOPRIVATE=github.com/unstablebuild,unstable.build/*
-default: .git/hooks/pre-commit $(EXECS)
+default: .git/hooks/pre-commit $(EXECS) $(CLAUDEIMPORT)
 
 debug: GOFLAGS=-race
 debug: CGO_ENABLED=CGO_ENABLED=1
 debug: GOPRIVATE=github.com/unstablebuild,unstable.build/*
-debug: $(EXECS)
+debug: $(EXECS) $(CLAUDEIMPORT)
 
 sixdev: GOFLAGS=-race
 sixdev: CGO_ENABLED=CGO_ENABLED=1
@@ -65,9 +68,17 @@ rune: CGO_ENABLED=CGO_ENABLED=1
 rune: GOPRIVATE=github.com/unstablebuild,unstable.build/*
 rune: $(BIN)/rune
 
+rune-agent: CGO_ENABLED=CGO_ENABLED=1
+rune-agent: GOPRIVATE=github.com/unstablebuild,unstable.build/*
+rune-agent: $(BIN)/rune-agent
+
 ox-api: CGO_ENABLED=CGO_ENABLED=1
 ox-api: GOPRIVATE=github.com/unstablebuild,unstable.build/*
 ox-api: $(BIN)/ox-api
+
+claudeimport: CGO_ENABLED=CGO_ENABLED=1
+claudeimport: GOPRIVATE=github.com/unstablebuild,unstable.build/*
+claudeimport: $(CLAUDEIMPORT)
 
 .git/hooks/pre-commit: .pre-commit-config.yaml
 	@ pre-commit install
@@ -116,6 +127,9 @@ $(BIN)/rune: $(EXECSRC) $(LIBSRC) $(BIN)
 $(BIN)/ox-api: $(EXECSRC) $(LIBSRC) $(BIN)
 	@cd cmd/ox-api && $(CGO_ENABLED) $(GO) build $(OXAPI_GOFLAGS) -o ../../$@
 
+$(BIN)/claudeimport: $(EXECSRC) $(LIBSRC) $(BIN)
+	@cd cmd/claudeimport && $(CGO_ENABLED) $(GO) build $(GOFLAGS) -o ../../$@
+
 $(GENERIC_EXECS): $(EXECSRC) $(LIBSRC) $(BIN)
 	cd $(patsubst bin/%,cmd/%,$@) && $(CGO_ENABLED) $(GO) build $(GOFLAGS) -o ../../$@
 
@@ -123,7 +137,7 @@ make_release: CGO_ENABLED=CGO_ENABLED=1
 make_release:
 	@ mkdir -p $(TARGET)/$(TARGET_OS)_$(TARGET_ARCH)
 	@ cp $(RELEASE_FILES) $(TARGET)
-	@ $(CGO_ENABLED) GOARCH=$(TARGET_ARCH) $(TARGET_ARCH_FLAGS) GOOS=$(TARGET_OS) $(GO) build -o `pwd`/$(TARGET)/$(TARGET_OS)_$(TARGET_ARCH) $(GOFLAGS) $(EXEC_PKGS)
+	@ $(CGO_ENABLED) GOARCH=$(TARGET_ARCH) $(TARGET_ARCH_FLAGS) GOOS=$(TARGET_OS) $(GO) build -o `pwd`/$(TARGET)/$(TARGET_OS)_$(TARGET_ARCH) $(GOFLAGS) $(RELEASE_EXEC_PKGS)
 
 ifeq ($(UNAME), Linux)
 release: default
@@ -154,6 +168,7 @@ rune-make-release:
 	@ mkdir -p $(TARGET)/rune_$(TARGET_OS)_$(TARGET_ARCH)
 	@ $(CGO_ENABLED) GOARCH=$(TARGET_ARCH) $(TARGET_ARCH_FLAGS) GOOS=$(TARGET_OS) $(GO) build $(RUNE_GOFLAGS) -o `pwd`/$(TARGET)/rune_$(TARGET_OS)_$(TARGET_ARCH)/rune ./cmd/rune
 	@ CGO_ENABLED=0 GOARCH=$(TARGET_ARCH) $(TARGET_ARCH_FLAGS) GOOS=$(TARGET_OS) $(GO) build $(OXAPI_GOFLAGS) -o `pwd`/$(TARGET)/rune_$(TARGET_OS)_$(TARGET_ARCH)/ox-api ./cmd/ox-api
+	@ CGO_ENABLED=0 GOARCH=$(TARGET_ARCH) $(TARGET_ARCH_FLAGS) GOOS=$(TARGET_OS) $(GO) build $(GOFLAGS) -o `pwd`/$(TARGET)/rune_$(TARGET_OS)_$(TARGET_ARCH)/claudeimport ./cmd/rune/claudeimport
 
 ifeq ($(UNAME), Linux)
 rune-release: rune ox-api
@@ -206,6 +221,7 @@ rune-app-amd64: rune-release-amd64
 	@ mkdir -p $(RUNE_APP_BINARY_DIR) $(RUNE_APP_EXTRAS_DIR)
 	@ cp -fRp $(RUNE_APP_TEMPLATE) $(RUNE_APP_DIR)
 	@ cp -fp $(RUNE_APP_BINARY) $(RUNE_APP_BINARY_DIR)
+	@ cp -fp $(TARGET)/rune_darwin_amd64/claudeimport $(RUNE_APP_CLAUDEIMPORT)
 	@ ibtool --compile $(RUNE_APP_EXTRAS_DIR)/MainMenu.nib $(RUNE_APP_TEMPLATE)/Contents/Resources/MainMenu.xib
 	@ echo "injecting version $(VERSION) ($(COMMIT))"
 	@ sed -i $(SED_INPLACE) -e 's/{{VERSION}}/$(VERSION)/g' -e 's/{{COMMIT}}/$(COMMIT)/g' $(RUNE_APP_PLIST)
@@ -215,6 +231,7 @@ rune-app-amd64: rune-release-amd64
 	@ mv extra/icon.icns $(RUNE_APP_ICON)
 	@ touch -r "$(RUNE_APP_BINARY)" "$(RUNE_APP_DIR)/$(RUNE_APP_NAME)"
 	@ rm -f $(RUNE_APP_BINARY)
+	@ codesign --force --options runtime --sign "$(CODESIGN_IDENTITY)" "$(RUNE_APP_CLAUDEIMPORT)"
 	@ codesign --force --options runtime --sign "$(CODESIGN_IDENTITY)" "$(RUNE_APP_EXTRAS_DIR)/rune-extension"
 	@ codesign --force --options runtime --sign "$(CODESIGN_IDENTITY)" "$(RUNE_APP_EXTRAS_DIR)/runectl"
 	@ codesign --force --deep --options runtime --sign "$(CODESIGN_IDENTITY)" "$(RUNE_APP_DIR)/$(RUNE_APP_NAME)"
@@ -227,6 +244,7 @@ rune-app-arm64: rune-release-arm64
 	@ mkdir -p $(RUNE_APP_BINARY_DIR) $(RUNE_APP_EXTRAS_DIR)
 	@ cp -fRp $(RUNE_APP_TEMPLATE) $(RUNE_APP_DIR)
 	@ cp -fp $(RUNE_APP_BINARY) $(RUNE_APP_BINARY_DIR)
+	@ cp -fp $(TARGET)/rune_darwin_arm64/claudeimport $(RUNE_APP_CLAUDEIMPORT)
 	@ ibtool --compile $(RUNE_APP_EXTRAS_DIR)/MainMenu.nib $(RUNE_APP_TEMPLATE)/Contents/Resources/MainMenu.xib
 	@ echo "injecting version $(VERSION) ($(COMMIT))"
 	@ sed -i $(SED_INPLACE) -e 's/{{VERSION}}/$(VERSION)/g' -e 's/{{COMMIT}}/$(COMMIT)/g' $(RUNE_APP_PLIST)
@@ -236,6 +254,7 @@ rune-app-arm64: rune-release-arm64
 	@ mv extra/icon.icns $(RUNE_APP_ICON)
 	@ touch -r "$(RUNE_APP_BINARY)" "$(RUNE_APP_DIR)/$(RUNE_APP_NAME)"
 	@ rm -f $(RUNE_APP_BINARY)
+	@ codesign --force --options runtime --sign "$(CODESIGN_IDENTITY)" "$(RUNE_APP_CLAUDEIMPORT)"
 	@ codesign --force --options runtime --sign "$(CODESIGN_IDENTITY)" "$(RUNE_APP_EXTRAS_DIR)/rune-extension"
 	@ codesign --force --options runtime --sign "$(CODESIGN_IDENTITY)" "$(RUNE_APP_EXTRAS_DIR)/runectl"
 	@ codesign --force --deep --options runtime --sign "$(CODESIGN_IDENTITY)" "$(RUNE_APP_DIR)/$(RUNE_APP_NAME)"

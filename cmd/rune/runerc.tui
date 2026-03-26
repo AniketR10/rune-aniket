@@ -140,28 +140,6 @@ editor:
       bg: gray
 
 extensions:
-  ai:
-    config:
-      background_attr:
-        bg: *background
-      user_msg_attr:
-        fg: *default
-        bg: *background
-        flags: dim
-      assistant_msg_attr:
-        fg: *default
-        bg: *background
-        flags: italic
-      input_brune_attr:
-        fg: *default
-        bg: *background
-      input_placeholder_attr:
-        fg: *highlight
-        bg: *background
-      input_brune_frame_attr:
-        fg: *default
-        bg: *background
-
   fuzzy_file:
     config:
       history_key: <c-p>
@@ -201,63 +179,6 @@ extensions:
         bg: *background
         flags:
           - bold
-  lsp:
-    config:
-      hover_window_attr:
-        fg: *default
-        bg: *background
-      references:
-        window_attr:
-          fg: *default
-          bg: *background
-        element_attr:
-          fg: *default
-          bg: *background
-        matched_text_attr:
-          fg: *highlight2
-          bg: *background
-          flags:
-            - bold
-            - italic
-        count_attr:
-          fg: *default
-          bg: *background
-        focus_element_attr:
-          fg: *highlight
-          bg: *background
-          flags:
-            - bold
-      diagnostics:
-        error:
-          fg: white
-          bg: red
-        warning:
-          fg: black
-          bg: yellow
-        info:
-          fg: white
-          bg: blue
-        hint:
-          fg: white
-          bg: green
-      syntax_highlighting:
-        interface: yellow
-        struct: default
-        typeParameter: default
-        parameter: default
-        variable:  default
-        property: default
-        enumMember: default
-        event: default
-        method: default
-        function: default
-        member: default
-        macro: default
-        keyword: yellow
-        modifier: yellow
-        comment: blue
-        string: magenta
-        number: red
 
 command:
   key_bindings:

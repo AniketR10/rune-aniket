@@ -1,0 +1,145 @@
+package main
+
+import (
+	"context"
+	"time"
+)
+
+// Memory is the base interface for all memories.
+// Every memory must have a unique, stable identifier and
+// return its knowledge as human-readable text via Content.
+// FetchConversation retrieves the source dialogue from storage.
+type Memory interface {
+	ID() string
+	Content() string
+	FetchConversation(ctx context.Context) (Dialogue, error)
+}
+
+// Dialogue holds a conversation retrieved from storage.
+type Dialogue struct {
+	ID       string
+	Messages []Message
+}
+
+// Message is a single message in a conversation.
+type Message struct {
+	Role    string
+	Content string
+}
+
+// --- Semantic memory categories ---
+
+// GoIdiomMemory captures Go language idioms and best practices.
+type GoIdiomMemory interface {
+	Memory
+	goIdiom()
+}
+
+// TestingPatternMemory captures testing patterns and strategies.
+type TestingPatternMemory interface {
+	Memory
+	testingPattern()
+}
+
+// ArchitectureMemory captures architectural decisions and patterns.
+type ArchitectureMemory interface {
+	Memory
+	architecture()
+}
+
+// DebugStrategyMemory captures debugging strategies and techniques.
+type DebugStrategyMemory interface {
+	Memory
+	debugStrategy()
+}
+
+// APIDesignMemory captures API design patterns and conventions.
+type APIDesignMemory interface {
+	Memory
+	apiDesign()
+}
+
+// PerformanceMemory captures performance optimization knowledge.
+type PerformanceMemory interface {
+	Memory
+	performance()
+}
+
+// UserPreferenceMemory captures explicit user directives about how they
+// want to work — e.g., "always add tests", "fix root causes not symptoms".
+type UserPreferenceMemory interface {
+	Memory
+	userPreference()
+}
+
+// --- Episodic memory categories ---
+
+// Trigger holds structured activation conditions for episodic memories.
+type Trigger struct {
+	Files   []string // surface when touching these files
+	Errors  []string // surface when seeing these errors
+	Actions []string // surface when doing these activities
+}
+
+// EpisodicMemory extends Memory with temporal context and triggers.
+// OccurredAt returns when the episode happened.
+// TriggerOn returns structured conditions that surface this memory.
+// SurfaceBefore returns activity descriptions for anticipatory recall.
+type EpisodicMemory interface {
+	Memory
+	OccurredAt() time.Time
+	TriggerOn() Trigger
+	SurfaceBefore() []string
+}
+
+// BugFixMemory captures knowledge from fixing a specific bug.
+type BugFixMemory interface {
+	Memory
+	bugFix()
+}
+
+// RefactorMemory captures knowledge from a refactoring effort.
+type RefactorMemory interface {
+	Memory
+	refactor()
+}
+
+// DesignDecisionMemory captures a deliberate design choice and its rationale.
+type DesignDecisionMemory interface {
+	Memory
+	designDecision()
+}
+
+// --- Confidence ---
+
+// Confidence represents the certainty level of a memory.
+type Confidence int
+
+const (
+	Tentative Confidence = iota // observed once
+	Confirmed                   // observed multiple times
+	Certain                     // user explicitly confirmed
+)
+
+// Confident is implemented by memories that declare their certainty level.
+// Memories that do not implement this default to Tentative.
+type Confident interface {
+	Confidence() Confidence
+}
+
+// --- Relationship interfaces ---
+
+// DependsOn indicates this memory depends on other memories by ID.
+type DependsOn interface {
+	DependsOn() []string
+}
+
+// Supersedes indicates this memory replaces older memories by ID.
+type Supersedes interface {
+	Supersedes() []string
+}
+
+// ConsolidatedFrom indicates this memory was merged from multiple memories by ID.
+type ConsolidatedFrom interface {
+	ConsolidatedFrom() []string
+}

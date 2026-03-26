@@ -1,0 +1,1644 @@
+// Unstable Build LLC ("COMPANY") CONFIDENTIAL
+//
+// Unpublished Copyright (c) 2024-2026 Unstable Build, All Rights Reserved.
+//
+// NOTICE: All information contained herein is, and remains the property of COMPANY.
+// The intellectual and technical concepts contained herein are proprietary to
+// COMPANY and may be covered by U.S. and Foreign Patents, patents in process,
+// and are protected by trade secret or copyright law. Dissemination of this information
+// or reproduction of this material is strictly forbidden unless prior written permission
+// is obtained from COMPANY. Access to the source code contained herein is hereby
+// forbidden to anyone except current COMPANY employees, managers or contractors who
+// have executed Confidentiality and Non-disclosure agreements explicitly covering such access.
+//
+// The copyright notice above does not evidence any actual or intended publication or
+// disclosure of this source code, which includes information that is confidential and/or
+// proprietary, and is a trade secret, of COMPANY. ANY REPRODUCTION, MODIFICATION,
+// DISTRIBUTION, PUBLIC  PERFORMANCE, OR PUBLIC DISPLAY OF OR THROUGH USE OF THIS SOURCE CODE
+// WITHOUT  THE EXPRESS WRITTEN CONSENT OF COMPANY IS STRICTLY PROHIBITED, AND IN
+// VIOLATION OF APPLICABLE LAWS AND INTERNATIONAL TREATIES. THE RECEIPT OR POSSESSION OF
+// THIS SOURCE CODE AND/OR RELATED INFORMATION DOES NOT CONVEY OR IMPLY ANY RIGHTS TO
+// REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
+// ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
+
+package agentshell
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"os"
+	"slices"
+	"strconv"
+	"strings"
+	"time"
+	"unicode/utf8"
+
+	"github.com/unstablebuild/blue/tui/component/markdown"
+	mdhandler "github.com/unstablebuild/blue/tui/handler/markdown"
+	"github.com/unstablebuild/blue/walkdir"
+	"unstable.build/go-tui/cmd/rune-agent/agent"
+	"unstable.build/go-tui/cmd/rune-agent/agent/skills"
+	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
+	"unstable.build/go-tui/cmd/rune-agent/llm"
+	"unstable.build/go-tui/cmd/rune-agent/llm/llmregistry"
+	"unstable.build/go-tui/cmd/rune-agent/mcp"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/config"
+	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
+	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/handler/repl"
+	"github.com/unstablebuild/rune-go-sdk/iterator"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/tcell/v3"
+)
+
+// ErrExit is a sentinel error returned by the exit command.
+// Pass it to repl.WithExitError so the REPL exits on this error.
+var ErrExit = errors.New("exit")
+
+// MCPInfo provides a snapshot of MCP server state.
+type MCPInfo interface {
+	Servers() []*mcp.ServerInfo
+}
+
+// Option configures the shell.
+type Option func(*shell)
+
+// WithMCPInfo sets the MCP info provider for the mcp command.
+func WithMCPInfo(info MCPInfo) Option {
+	return func(s *shell) { s.mcpInfo = info }
+}
+
+// WithHistorySystemPrompt controls whether the history command includes
+// system messages. When false (default), system messages are omitted.
+func WithHistorySystemPrompt(show bool) Option {
+	return func(s *shell) { s.historySystemPrompt = show }
+}
+
+// WithAuditStore sets the audit store for the audit command.
+func WithAuditStore(store *llm.AuditStore) Option {
+	return func(s *shell) { s.auditStore = store }
+}
+
+// WithEffort wires the effort command to a getter/setter pair so that
+// the agentshell can display and modify the global default reasoning
+// effort that applies to all new chats.
+func WithEffort(get func() llm.ReasoningEffort, set func(llm.ReasoningEffort)) Option {
+	return func(s *shell) {
+		s.getEffort = get
+		s.setEffort = set
+	}
+}
+
+// New returns a repl.CommandHandler backed by the agent shell.
+// It panics if wm, svc, skillRegistry, or fs is nil.
+func New(
+	wm browserapi.WindowManager,
+	svc llm.Service,
+	modelRegistry llmregistry.Registry,
+	defaultModel string,
+	store dialoguemanager.Store,
+	registry *agent.Registry,
+	agentsConfig *agent.Cfg,
+	cfg config.Config,
+	skillRegistry *skills.SkillRegistry,
+	cwd workspaceapi.URI,
+	fs workspaceapi.FileSystem,
+	storage storageapi.Service,
+	exec workspaceapi.Executor,
+	lsp semanticapi.LSP,
+	parser syntaxapi.Parser,
+	notifications browserapi.Notifications,
+	dataPath string,
+	opts ...Option,
+) repl.CommandHandler {
+	if wm == nil {
+		panic("agentshell: WindowManager must not be nil")
+	}
+	if svc == nil {
+		panic("agentshell: llm.Service must not be nil")
+	}
+	if skillRegistry == nil {
+		panic("agentshell: SkillRegistry must not be nil")
+	}
+	if fs == nil {
+		panic("agentshell: FileSystem must not be nil")
+	}
+	s := &shell{
+		wm:            wm,
+		svc:           svc,
+		modelRegistry: modelRegistry,
+		defaultModel:  defaultModel,
+		store:         store,
+		registry:      registry,
+		agentsConfig:  agentsConfig,
+		cfg:           cfg,
+		skillRegistry: skillRegistry,
+		cwd:           cwd,
+		fs:            fs,
+		storage:       storage,
+		exec:          exec,
+		lsp:           lsp,
+		parser:        parser,
+		notifications: notifications,
+		dataPath:      dataPath,
+	}
+	for _, o := range opts {
+		o(s)
+	}
+	return s
+}
+
+type shell struct {
+	modelRegistry       llmregistry.Registry
+	defaultModel        string
+	store               dialoguemanager.Store
+	registry            *agent.Registry
+	agentsConfig        *agent.Cfg
+	cfg                 config.Config
+	mcpInfo             MCPInfo
+	wm                  browserapi.WindowManager
+	svc                 llm.Service
+	historySystemPrompt bool
+	auditStore          *llm.AuditStore
+	skillRegistry       *skills.SkillRegistry
+	cwd                 workspaceapi.URI
+	fs                  workspaceapi.FileSystem
+	storage             storageapi.Service
+	exec                workspaceapi.Executor
+	lsp                 semanticapi.LSP
+	parser              syntaxapi.Parser
+	notifications       browserapi.Notifications
+	dataPath            string
+	getEffort           func() llm.ReasoningEffort
+	setEffort           func(llm.ReasoningEffort)
+}
+
+var commandNames = []string{
+	"agents",
+	"chats",
+	"config",
+	"dream",
+	"effort",
+	"exit",
+	"help",
+	"mcp",
+	"model",
+	"models",
+	"skills",
+	"system-prompt",
+	"tools",
+}
+
+// HandleCommand dispatches the given command.
+func (s *shell) HandleCommand(
+	ctx context.Context, cmd repl.Command,
+) (iterator.Iterator[component.Responsive], error) {
+	// Re-scan skill directories so out-of-band changes are picked up,
+	// mirroring the agent loop's per-turn Reload in agent.go.
+	s.skillRegistry.Reload()
+
+	switch cmd.Name {
+	case "help":
+		return s.help(), nil
+	case "chats":
+		return s.handleChats(ctx, cmd.Args)
+	case "models":
+		return s.listModels(), nil
+	case "model":
+		return s.model(ctx, cmd.Args)
+	case "tools":
+		return s.listTools(), nil
+	case "agents":
+		return s.listAgents(), nil
+	case "mcp":
+		return s.listMCPServers(), nil
+	case "system-prompt":
+		return s.showSystemPrompt(cmd.Args), nil
+	case "skills":
+		return s.handleSkills(cmd.Args)
+	case "config":
+		return s.showConfig(), nil
+	case "dream":
+		return s.handleDream(ctx, cmd.Args)
+	case "effort":
+		return s.handleEffort(cmd.Args)
+	case "exit":
+		return s.exit()
+	default:
+		return nil, fmt.Errorf("unknown command: %s", cmd.Name)
+	}
+}
+
+func (s *shell) handleChats(
+	ctx context.Context, args []string,
+) (iterator.Iterator[component.Responsive], error) {
+	if len(args) == 0 {
+		return nil, errors.New("usage: chats <list|show|log|export|clear|compact|fork> [id]")
+	}
+	switch args[0] {
+	case "list":
+		return s.listConversations(ctx)
+	case "show":
+		if len(args) < 2 {
+			return nil, errors.New("usage: chats show <id>")
+		}
+		return s.showHistory(ctx, args[1])
+	case "log":
+		if s.auditStore == nil {
+			return nil, errors.New("audit log is disabled; set audit_enabled = true in config")
+		}
+		if len(args) < 2 {
+			return nil, errors.New("usage: chats log <id>")
+		}
+		return s.showAudit(ctx, args[1])
+	case "export":
+		var audit bool
+		var id string
+		for _, a := range args[1:] {
+			switch a {
+			case "--audit":
+				audit = true
+			default:
+				id = a
+			}
+		}
+		if id == "" {
+			return nil, errors.New("usage: chats export [--audit] <id>")
+		}
+		if audit {
+			if s.auditStore == nil {
+				return nil, errors.New("audit log is disabled; set audit_enabled = true in config")
+			}
+			return s.exportAudit(ctx, id)
+		}
+		return s.exportConversation(ctx, id)
+	case "clear":
+		if len(args) < 2 {
+			return nil, errors.New("usage: chats clear <id>")
+		}
+		return s.clearConversation(ctx, args[1])
+	case "compact":
+		if len(args) < 2 {
+			return nil, errors.New("usage: chats compact <id>")
+		}
+		return s.compactConversation(ctx, args[1])
+	case "fork":
+		if len(args) < 2 {
+			return nil, errors.New("usage: chats fork <id>")
+		}
+		if len(args) > 2 {
+			return nil, errors.New("usage: chats fork <id>")
+		}
+		return s.forkConversation(ctx, args[1])
+	default:
+		return nil, fmt.Errorf("unknown chats subcommand: %s", args[0])
+	}
+}
+
+// Complete provides tab-completion candidates.
+func (s *shell) Complete(
+	ctx context.Context, cmd string, args []string,
+) (iterator.Iterator[string], error) {
+	if len(args) == 0 {
+		// Complete command name and skill names.
+		var matches []string
+		for _, name := range commandNames {
+			if strings.HasPrefix(name, cmd) {
+				matches = append(matches, name)
+			}
+		}
+		for _, sk := range s.skillRegistry.List() {
+			if strings.HasPrefix(sk.Name, cmd) {
+				matches = append(matches, sk.Name)
+			}
+		}
+		return iterator.FromSlice(matches), nil
+	}
+
+	switch cmd {
+	case "skills":
+		return s.completeSkills(ctx, args)
+	case "chats":
+		return s.completeChats(ctx, args)
+	}
+
+	if len(args) > 1 {
+		return iterator.FromSlice[string](nil), nil
+	}
+
+	switch cmd {
+	case "effort":
+		return iterator.FromSlice([]string{"none", "minimal", "low", "medium", "high", "xhigh", "max"}), nil
+	case "model":
+		return s.completeModelAndDialogueIDs(ctx)
+	case "system-prompt":
+		return s.completeAgentIDs(), nil
+	default:
+		return iterator.FromSlice[string](nil), nil
+	}
+}
+
+// --- command implementations ---
+
+func (s *shell) help() iterator.Iterator[component.Responsive] {
+	logLine := ""
+	if s.auditStore != nil {
+		logLine = "- **chats log** *\\<id\\>* — Show the LLM token audit log for a conversation\n" +
+			"- **chats export** *\\<id\\>* — Export audit log as JSONL to a temp file\n"
+	}
+	return markdownOutput(
+		"## Commands\n\n" +
+			"- **help** — List all available commands\n" +
+			"- **chats list** — List saved conversations\n" +
+			"- **chats show** *\\<id\\>* — Show message history for a conversation\n" +
+			logLine +
+			"- **chats clear** *\\<id\\>* — Clear a conversation (archives old messages)\n" +
+			"- **chats compact** *\\<id\\>* — Compact a conversation into a summarized copy\n" +
+			"- **models** — List available models with context window sizes\n" +
+			"- **model** *[name|session]* — Show or switch the current model\n" +
+			"- **tools** — List registered agent tools\n" +
+			"- **agents** — List configured agent definitions\n" +
+			"- **mcp** — Show MCP server status and tool stats\n" +
+			"- **skills list** — List discovered skills\n" +
+			"- **skills show** *\\<name\\>* — Show a skill's full instructions\n" +
+			"- **skills list-dirs** — List configured skill directories\n" +
+			"- **skills add-dir** *\\<dir\\>* — Add a skill directory to config\n" +
+			"- **skills remove-dir** *\\<dir\\>* — Remove a skill directory from config\n" +
+			"- **system-prompt** *[agent]* — Show the system prompt for an agent\n" +
+			"- **config** — Show current LLM config parameters\n" +
+			"- **dream** *[--model MODEL]* — Run memory consolidation on unprocessed dialogues\n" +
+			"- **effort** *[level]* — Show or set default reasoning effort (none, minimal, low, medium, high, xhigh, max)\n" +
+			"- **chats fork** *\\<id\\>* — Open a picker to fork a conversation at a selected message\n" +
+			"- **exit** — Close the shell tab\n",
+	)
+}
+
+func (s *shell) listModels() iterator.Iterator[component.Responsive] {
+	type entry struct {
+		name     string
+		ctx      int
+		provider string
+	}
+	it := s.modelRegistry.Models()
+	defer func() { _ = it.Close() }()
+	var entries []entry
+	for {
+		m, ok := it.Next(context.Background())
+		if !ok {
+			break
+		}
+		entries = append(entries, entry{m.Name, m.ContextWindow, m.Provider})
+	}
+	slices.SortFunc(entries, func(a, b entry) int {
+		return strings.Compare(a.name, b.name)
+	})
+
+	var b strings.Builder
+	b.WriteString("## Models\n\n")
+	for _, e := range entries {
+		marker := ""
+		if e.name == s.defaultModel {
+			marker = " *(default)*"
+		}
+		fmt.Fprintf(&b, "- **%s** — %s, %d tokens%s\n", e.name, e.provider, e.ctx, marker)
+	}
+	return markdownOutput(b.String())
+}
+
+func (s *shell) model(
+	ctx context.Context, args []string,
+) (iterator.Iterator[component.Responsive], error) {
+	if len(args) == 0 {
+		return markdownOutput(s.defaultModel), nil
+	}
+	d, err := s.store.Get(ctx, args[0])
+	if err != nil {
+		return nil, fmt.Errorf("get session %q: %w", args[0], err)
+	}
+	model := d.Model
+	if model == "" {
+		model = "(not set)"
+	}
+	return markdownOutput(model), nil
+}
+
+func (s *shell) listTools() iterator.Iterator[component.Responsive] {
+	tools := s.registry.AllTools()
+	slices.SortFunc(tools, func(a, b llm.Tool) int {
+		return strings.Compare(a.Function.Name, b.Function.Name)
+	})
+	if len(tools) == 0 {
+		return markdownOutput("*(no tools registered)*")
+	}
+	var b strings.Builder
+	b.WriteString("## Tools\n\n")
+	for _, t := range tools {
+		fmt.Fprintf(&b, "- **%s** — %s\n", t.Function.Name, t.Function.Description)
+	}
+	return markdownOutput(b.String())
+}
+
+func (s *shell) listAgents() iterator.Iterator[component.Responsive] {
+	agents := s.agentsConfig.AllowedAgents("default")
+	if len(agents) == 0 {
+		return markdownOutput("*(no agents configured)*")
+	}
+	var b strings.Builder
+	b.WriteString("## Agents\n\n")
+	for _, a := range agents {
+		fmt.Fprintf(&b, "- **%s** — %s, model: %s\n", a.ID, a.Name, a.Model)
+	}
+	return markdownOutput(b.String())
+}
+
+func (s *shell) listMCPServers() iterator.Iterator[component.Responsive] {
+	if s.mcpInfo == nil {
+		return markdownOutput("*(no MCP servers configured)*")
+	}
+
+	servers := s.mcpInfo.Servers()
+	if len(servers) == 0 {
+		return markdownOutput("*(no MCP servers configured)*")
+	}
+
+	var b strings.Builder
+	b.WriteString("## MCP Servers\n\n")
+	for _, srv := range servers {
+		status := string(srv.Status)
+		if srv.Status == mcp.StatusError && srv.Error != "" {
+			status = "error: " + srv.Error
+		}
+
+		var callCount, errorCount int64
+		for _, name := range srv.ToolNames {
+			if ts := srv.ToolStats(name); ts != nil {
+				callCount += ts.CallCount()
+				errorCount += ts.ErrorCount()
+			}
+		}
+
+		fmt.Fprintf(&b, "### %s\n\n", srv.Name)
+		fmt.Fprintf(&b, "- Status: %s\n", status)
+		fmt.Fprintf(&b, "- Command: `%s`\n", srv.Command)
+		fmt.Fprintf(&b, "- Tools: %d\n", srv.ToolCount)
+		fmt.Fprintf(&b, "- Calls: %d, Errors: %d\n", callCount, errorCount)
+
+		if srv.Status == mcp.StatusConnected && !srv.ConnectedAt.IsZero() {
+			fmt.Fprintf(&b, "- Uptime: %s\n", formatDuration(time.Since(srv.ConnectedAt)))
+		}
+		b.WriteByte('\n')
+	}
+	return markdownOutput(b.String())
+}
+
+func (s *shell) listConversations(
+	ctx context.Context,
+) (iterator.Iterator[component.Responsive], error) {
+	it, err := s.store.List(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list conversations: %w", err)
+	}
+	defer it.Close() //nolint:errcheck
+
+	var b strings.Builder
+	b.WriteString("## Conversations\n\n")
+	var count int
+	for {
+		d, ok := it.Next(ctx)
+		if !ok {
+			break
+		}
+		count++
+		fmt.Fprintf(&b, "- **%s** — %d messages, updated %s\n",
+			d.ID, d.MessageCount, d.UpdatedAt.Format("2006-01-02 15:04"))
+	}
+	if it.Err() != nil {
+		return nil, it.Err()
+	}
+	if count == 0 {
+		return markdownOutput("*(no conversations)*"), nil
+	}
+	return markdownOutput(b.String()), nil
+}
+
+func (s *shell) showHistory(
+	ctx context.Context, id string,
+) (iterator.Iterator[component.Responsive], error) {
+	d, err := s.store.Get(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("get conversation %q: %w", id, err)
+	}
+
+	content := formatHistoryMarkdown(d.Messages, s.historySystemPrompt)
+	if content == "" {
+		return markdownOutput("*(no messages)*"), nil
+	}
+
+	cfg := mdConfig()
+	md, err := markdown.NewWithConfig(content, cfg)
+	if err != nil {
+		return nil, fmt.Errorf("create markdown: %w", err)
+	}
+	mdh := mdhandler.New(md)
+
+	var win browserapi.Window
+	bhandler := browserapi.FuncHandler(mdh, func() error {
+		return s.wm.CloseWindow(win)
+	})
+	floating := browserapi.FuncFloating(bhandler, mdh.Dimensions)
+
+	win, err = s.wm.Floating(floating, browserapi.FloatingConfig{
+		Alignment: component.AlignmentCentered,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("open floating window: %w", err)
+	}
+
+	return iterator.Empty[component.Responsive](), nil
+}
+
+func formatHistoryMarkdown(msgs []llm.Message, includeSystem bool) string {
+	if len(msgs) == 0 {
+		return ""
+	}
+
+	// Build an index of tool call ID → tool name from assistant messages,
+	// since tool result messages don't carry the tool name.
+	toolNames := make(map[string]string)
+	for _, msg := range msgs {
+		for _, tc := range msg.ToolCalls {
+			toolNames[tc.ID] = tc.Function.Name
+		}
+	}
+
+	var parts []string
+	for _, msg := range msgs {
+		var section strings.Builder
+
+		switch msg.Role {
+		case llm.RoleSystem:
+			if !includeSystem {
+				continue
+			}
+			fmt.Fprintf(&section, "> **system:** %s", msg.Content)
+
+		case llm.RoleUser:
+			section.WriteString("# User\n\n")
+			section.WriteString(msg.Content)
+
+		case llm.RoleAssistant:
+			section.WriteString("# Assistant\n\n")
+			if msg.ReasoningContent != "" {
+				fmt.Fprintf(&section, "> %s\n\n", msg.ReasoningContent)
+			}
+			if msg.Content != "" {
+				section.WriteString(msg.Content)
+			}
+			for _, tc := range msg.ToolCalls {
+				if section.Len() > 0 && section.String()[section.Len()-1] != '\n' {
+					section.WriteByte('\n')
+				}
+				fmt.Fprintf(&section, "\n**Tool Call:** %s\n```\n%s\n```", tc.Function.Name, tc.Function.Arguments)
+			}
+
+		case llm.RoleTool:
+			name := msg.Name
+			if name == "" {
+				name = toolNames[msg.ToolCallID]
+			}
+			if name == "" {
+				name = "unknown"
+			}
+			fmt.Fprintf(&section, "**Tool Result** (%s):\n```\n%s\n```", name, msg.Content)
+		}
+
+		if section.Len() > 0 {
+			parts = append(parts, section.String())
+		}
+	}
+
+	return strings.Join(parts, "\n\n---\n\n")
+}
+
+func (s *shell) showAudit(
+	ctx context.Context, id string,
+) (iterator.Iterator[component.Responsive], error) {
+	if s.auditStore == nil {
+		return markdownOutput("*(no audit store configured)*"), nil
+	}
+	entries, err := s.auditStore.Get(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("get audit log %q: %w", id, err)
+	}
+	if len(entries) == 0 {
+		return markdownOutput("*(no completions recorded)*"), nil
+	}
+
+	content := formatAuditMarkdown(entries)
+	cfg := mdConfig()
+	md, err := markdown.NewWithConfig(content, cfg)
+	if err != nil {
+		return nil, fmt.Errorf("create markdown: %w", err)
+	}
+	mdh := mdhandler.New(md)
+
+	var win browserapi.Window
+	bhandler := browserapi.FuncHandler(mdh, func() error {
+		return s.wm.CloseWindow(win)
+	})
+	floating := browserapi.FuncFloating(bhandler, mdh.Dimensions)
+
+	win, err = s.wm.Floating(floating, browserapi.FloatingConfig{
+		Alignment: component.AlignmentCentered,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("open floating window: %w", err)
+	}
+	return iterator.Empty[component.Responsive](), nil
+}
+
+func formatAuditMarkdown(entries []llm.AuditEntry) string {
+	var b strings.Builder
+
+	for i, e := range entries {
+		if i > 0 {
+			b.WriteString("\n\n---\n\n")
+		}
+
+		// Turn header.
+		fmt.Fprintf(&b, "## Turn %d", i+1)
+		if e.Model != "" {
+			fmt.Fprintf(&b, " — %s", e.Model)
+		}
+		if e.Duration > 0 {
+			fmt.Fprintf(&b, " (%s)", formatDuration(e.Duration))
+		}
+		b.WriteByte('\n')
+
+		// Token stats.
+		if e.Err != "" {
+			fmt.Fprintf(&b, "\n> **error:** %s\n", e.Err)
+		} else {
+			fmt.Fprintf(&b, "\n> %d estimated input ∙ %d sent ∙ %d received",
+				e.EstimatedTokens, e.Usage.TokensSent, e.Usage.TokensReceived)
+			if e.Usage.TokensReasoned > 0 {
+				fmt.Fprintf(&b, " ∙ %d reasoning", e.Usage.TokensReasoned)
+			}
+			if e.Usage.TokensCached > 0 {
+				fmt.Fprintf(&b, " ∙ %d cached", e.Usage.TokensCached)
+			}
+			fmt.Fprintf(&b, " ∙ %s\n", e.FinishReason)
+		}
+
+		// Request messages.
+		fmt.Fprintf(&b, "\n### Request (%d messages, %d tools)\n", len(e.Messages), e.Tools)
+
+		for _, msg := range e.Messages {
+			b.WriteByte('\n')
+			formatAuditMessage(&b, msg)
+		}
+
+		// Response.
+		if e.Response != nil {
+			b.WriteString("\n### Response\n\n")
+			formatAuditMessage(&b, *e.Response)
+		}
+	}
+
+	return b.String()
+}
+
+func formatAuditMessage(b *strings.Builder, msg llm.Message) {
+	switch msg.Role {
+	case llm.RoleSystem:
+		fmt.Fprintf(b, "> **system:** %s\n", msg.Content)
+	case llm.RoleUser:
+		fmt.Fprintf(b, "**user:** %s\n", msg.Content)
+	case llm.RoleAssistant:
+		if msg.ReasoningContent != "" {
+			fmt.Fprintf(b, "> *reasoning:* %s\n\n", msg.ReasoningContent)
+		}
+		if msg.Content != "" {
+			fmt.Fprintf(b, "**assistant:** %s\n", msg.Content)
+		}
+		for _, tc := range msg.ToolCalls {
+			fmt.Fprintf(b, "\n**tool call** %s (`%s`):\n```\n%s\n```\n",
+				tc.ID, tc.Function.Name, tc.Function.Arguments)
+		}
+	case llm.RoleTool:
+		name := msg.Name
+		if name == "" {
+			name = msg.ToolCallID
+		}
+		fmt.Fprintf(b, "**tool result** (%s):\n```\n%s\n```\n", name, msg.Content)
+	}
+}
+
+func (s *shell) exportConversation(
+	ctx context.Context, id string,
+) (iterator.Iterator[component.Responsive], error) {
+	d, err := s.store.Get(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("get conversation %q: %w", id, err)
+	}
+	if len(d.Messages) == 0 {
+		return markdownOutput("*(no messages)*"), nil
+	}
+
+	f, err := os.CreateTemp("", fmt.Sprintf("conversation-%s-*.md", id))
+	if err != nil {
+		return nil, fmt.Errorf("create temp file: %w", err)
+	}
+	defer func() { _ = f.Close() }()
+
+	var count int
+	for _, msg := range d.Messages {
+		switch msg.Role {
+		case llm.RoleUser:
+			if count > 0 {
+				_, _ = fmt.Fprintln(f)
+			}
+			_, _ = fmt.Fprintln(f, "## User")
+			_, _ = fmt.Fprintln(f)
+			_, _ = fmt.Fprintln(f, msg.Content)
+			count++
+		case llm.RoleAssistant:
+			if msg.Content == "" {
+				continue
+			}
+			if count > 0 {
+				_, _ = fmt.Fprintln(f)
+			}
+			_, _ = fmt.Fprintln(f, "## Assistant")
+			_, _ = fmt.Fprintln(f)
+			_, _ = fmt.Fprintln(f, msg.Content)
+			count++
+		}
+	}
+
+	if count == 0 {
+		_ = os.Remove(f.Name())
+		return markdownOutput("*(no messages)*"), nil
+	}
+
+	return markdownOutput(fmt.Sprintf(
+		"Exported conversation to `%s`", f.Name(),
+	)), nil
+}
+
+// auditExportEntry is the per-line JSONL structure for audit export.
+// It embeds AuditEntry and adds the dialogue ID and turn number for
+// easier correlation when debugging.
+type auditExportEntry struct {
+	DialogueID string `json:"DialogueID"`
+	Turn       int    `json:"Turn"`
+	llm.AuditEntry
+}
+
+func (s *shell) exportAudit(
+	ctx context.Context, id string,
+) (iterator.Iterator[component.Responsive], error) {
+	entries, err := s.auditStore.Get(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("get audit log %q: %w", id, err)
+	}
+	if len(entries) == 0 {
+		return markdownOutput("*(no completions recorded)*"), nil
+	}
+
+	f, err := os.CreateTemp("", fmt.Sprintf("audit-%s-*.jsonl", id))
+	if err != nil {
+		return nil, fmt.Errorf("create temp file: %w", err)
+	}
+	defer func() { _ = f.Close() }()
+
+	enc := json.NewEncoder(f)
+	for i, e := range entries {
+		if err := enc.Encode(auditExportEntry{
+			DialogueID: id,
+			Turn:       i + 1,
+			AuditEntry: e,
+		}); err != nil {
+			return nil, fmt.Errorf("write entry %d: %w", i+1, err)
+		}
+	}
+
+	return markdownOutput(fmt.Sprintf(
+		"Exported %d audit entries to `%s`", len(entries), f.Name(),
+	)), nil
+}
+
+func (s *shell) compactConversation(
+	ctx context.Context, id string,
+) (iterator.Iterator[component.Responsive], error) {
+	d, err := s.store.Get(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("get conversation %q: %w", id, err)
+	}
+
+	_, _, err = agent.CompactDialogue(ctx, s.svc, s.store, d)
+	if err != nil {
+		return nil, fmt.Errorf("compact conversation %q: %w", id, err)
+	}
+	return iterator.Empty[component.Responsive](), nil
+}
+
+func (s *shell) clearConversation(
+	ctx context.Context, id string,
+) (iterator.Iterator[component.Responsive], error) {
+	d, err := s.store.Get(ctx, id)
+	if errors.Is(err, storageapi.ErrNotFound) {
+		return iterator.Empty[component.Responsive](), nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get conversation %q: %w", id, err)
+	}
+	archivedID, err := agent.NextArchivedID(ctx, s.store, id)
+	if err != nil {
+		return nil, fmt.Errorf("archive conversation %q: %w", id, err)
+	}
+	// Keep the system prompt so the conversation remains usable.
+	var clearedMsgs []llm.Message
+	if len(d.Messages) > 0 && d.Messages[0].Role == llm.RoleSystem {
+		clearedMsgs = []llm.Message{d.Messages[0]}
+	}
+	if err := s.store.ArchiveAndReplace(ctx, dialoguemanager.ArchiveAndReplaceParams{
+		Dialogue:           d,
+		ArchivedDialogueID: archivedID,
+		Messages:           clearedMsgs,
+	}); err != nil {
+		return nil, fmt.Errorf("clear conversation %q: %w", id, err)
+	}
+	return markdownOutput(fmt.Sprintf("Cleared **%s** (archived as **%s**)", id, archivedID)), nil
+}
+
+func (s *shell) showSystemPrompt(args []string) iterator.Iterator[component.Responsive] {
+	agentID := "default"
+	if len(args) > 0 {
+		agentID = args[0]
+	}
+	def, ok := s.agentsConfig.Get(agentID)
+	if !ok {
+		return markdownOutput(fmt.Sprintf("Agent **%s** not found", agentID))
+	}
+	return markdownOutput(def.SystemPrompt)
+}
+
+func (s *shell) showConfig() iterator.Iterator[component.Responsive] {
+	keys := []string{
+		"base_url", "default_model",
+		"temperature", "top_p", "frequency_penalty",
+		"presence_penalty", "max_tokens", "max_completion_tokens",
+		"reasoning_effort",
+	}
+	var b strings.Builder
+	b.WriteString("## Configuration\n\n")
+
+	// Show per-provider API keys (masked).
+	for _, provider := range []string{"openai", "anthropic", "gemini"} {
+		val := ""
+		if pcfg, err := s.cfg.GetConfig(provider); err == nil {
+			if key, err := pcfg.GetString("api_key"); err == nil {
+				val = key
+			}
+		}
+		if val != "" {
+			if len(val) > 4 {
+				val = strings.Repeat("*", len(val)-4) + val[len(val)-4:]
+			} else {
+				val = "****"
+			}
+		}
+		fmt.Fprintf(&b, "- **%s.api_key**: %s\n", provider, val)
+	}
+
+	for _, k := range keys {
+		val := configValue(s.cfg, k)
+		fmt.Fprintf(&b, "- **%s**: %s\n", k, val)
+	}
+	return markdownOutput(b.String())
+}
+
+// validEffortLevels lists the allowed reasoning effort values.
+var validEffortLevels = []llm.ReasoningEffort{
+	llm.ReasoningEffortNone,
+	llm.ReasoningEffortMinimal,
+	llm.ReasoningEffortLow,
+	llm.ReasoningEffortMedium,
+	llm.ReasoningEffortHigh,
+	llm.ReasoningEffortXHigh,
+	llm.ReasoningEffortMax,
+}
+
+func (s *shell) handleEffort(args []string) (iterator.Iterator[component.Responsive], error) {
+	if s.getEffort == nil {
+		return nil, errors.New("effort command not available")
+	}
+	if len(args) == 0 {
+		current := s.getEffort()
+		if current == "" {
+			current = llm.ReasoningEffortHigh
+		}
+		return markdownOutput(fmt.Sprintf("Current effort level: **%s**", current)), nil
+	}
+
+	level := llm.ReasoningEffort(args[0])
+	valid := false
+	for _, v := range validEffortLevels {
+		if level == v {
+			valid = true
+			break
+		}
+	}
+	if !valid {
+		return nil, fmt.Errorf(
+			"invalid effort level %q: must be none, minimal, low, medium, high, xhigh, or max", args[0])
+	}
+
+	s.setEffort(level)
+	return markdownOutput(fmt.Sprintf("Set effort level to **%s**", level)), nil
+}
+
+func (s *shell) handleSkills(args []string) (iterator.Iterator[component.Responsive], error) {
+	if len(args) == 0 {
+		return nil, errors.New("usage: skills <list|show|list-dirs|add-dir|remove-dir> [args]")
+	}
+	switch args[0] {
+	case "list":
+		return s.listSkills(), nil
+	case "show":
+		if len(args) < 2 {
+			return nil, errors.New("usage: skills show <name>")
+		}
+		return s.showSkill(args[1])
+	case "list-dirs":
+		return s.listSkillDirs(), nil
+	case "add-dir":
+		if len(args) < 2 {
+			return nil, errors.New("usage: skills add-dir <directory>")
+		}
+		return s.addSkillDir(args[1])
+	case "remove-dir":
+		if len(args) < 2 {
+			return nil, errors.New("usage: skills remove-dir <directory>")
+		}
+		return s.removeSkillDir(args[1])
+	default:
+		return nil, fmt.Errorf("unknown skills subcommand: %s", args[0])
+	}
+}
+
+func (s *shell) listSkills() iterator.Iterator[component.Responsive] {
+	all := s.skillRegistry.List()
+	if len(all) == 0 {
+		return markdownOutput("*(no skills discovered)*")
+	}
+	var b strings.Builder
+	b.WriteString("## Skills\n\n")
+	for _, sk := range all {
+		desc := sk.Description
+		if len(desc) > 42 {
+			desc = desc[:39] + "..."
+		}
+		fmt.Fprintf(&b, "- **%s** — %s\n", sk.Name, desc)
+	}
+	return markdownOutput(b.String())
+}
+
+func (s *shell) showSkill(name string) (iterator.Iterator[component.Responsive], error) {
+	skill, ok := s.skillRegistry.Get(name)
+	if !ok {
+		all := s.skillRegistry.List()
+		names := make([]string, len(all))
+		for i, sk := range all {
+			names[i] = sk.Name
+		}
+		return nil, fmt.Errorf("skill %q not found. Available: %s", name, strings.Join(names, ", "))
+	}
+
+	cfg := mdConfig()
+	md, err := markdown.NewWithConfig(skill.Body, cfg)
+	if err != nil {
+		return nil, fmt.Errorf("create markdown: %w", err)
+	}
+	mdh := mdhandler.New(md)
+
+	var win browserapi.Window
+	bhandler := browserapi.FuncHandler(mdh, func() error {
+		return s.wm.CloseWindow(win)
+	})
+	floating := browserapi.FuncFloating(bhandler, mdh.Dimensions)
+
+	win, err = s.wm.Floating(floating, browserapi.FloatingConfig{
+		Alignment: component.AlignmentCentered,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("open floating window: %w", err)
+	}
+
+	return iterator.FromSlice[component.Responsive](nil), nil
+}
+
+func (s *shell) listSkillDirs() iterator.Iterator[component.Responsive] {
+	dirs := s.skillRegistry.Dirs()
+	if len(dirs) == 0 {
+		return markdownOutput("*(no skill directories configured)*")
+	}
+	var b strings.Builder
+	b.WriteString("## Skill Directories\n\n")
+	for _, d := range dirs {
+		fmt.Fprintf(&b, "- `%s`\n", d)
+	}
+	return markdownOutput(b.String())
+}
+
+func (s *shell) addSkillDir(dir string) (iterator.Iterator[component.Responsive], error) {
+	if err := AddSkillDir(s.fs, s.cwd, dir); err != nil {
+		return nil, fmt.Errorf("update config: %w", err)
+	}
+	added, err := s.skillRegistry.AddDir(dir)
+	if err != nil {
+		return markdownOutput(fmt.Sprintf("Added directory `%s` to config *(registry: %v)*", dir, err)), nil
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "Added directory `%s` to config\n", dir)
+	if len(added) > 0 {
+		fmt.Fprintf(&b, "\nDiscovered %d skill(s):\n\n", len(added))
+		for _, sk := range added {
+			fmt.Fprintf(&b, "- **%s** — %s\n", sk.Name, sk.Description)
+		}
+	}
+	return markdownOutput(b.String()), nil
+}
+
+func (s *shell) removeSkillDir(dir string) (iterator.Iterator[component.Responsive], error) {
+	if err := RemoveSkillDir(s.fs, s.cwd, dir); err != nil {
+		return nil, fmt.Errorf("update config: %w", err)
+	}
+	s.skillRegistry.RemoveDir(dir) //nolint:errcheck
+	return markdownOutput(fmt.Sprintf("Removed directory `%s` from config", dir)), nil
+}
+
+func (s *shell) exit() (iterator.Iterator[component.Responsive], error) {
+	return nil, ErrExit
+}
+
+// --- tab completion helpers ---
+
+func (s *shell) completeChats(ctx context.Context, args []string) (iterator.Iterator[string], error) {
+	if len(args) == 1 {
+		subcmds := []string{"clear", "compact", "export", "fork", "list", "log", "show"}
+		prefix := args[0]
+		var matches []string
+		for _, sc := range subcmds {
+			if strings.HasPrefix(sc, prefix) {
+				matches = append(matches, sc)
+			}
+		}
+		return iterator.FromSlice(matches), nil
+	}
+	if len(args) == 2 {
+		switch args[0] {
+		case "show", "log", "export", "clear", "compact":
+			return s.completeDialogueIDs(ctx)
+		case "fork":
+			return s.completeDialogueIDs(ctx)
+		}
+	}
+	return iterator.FromSlice[string](nil), nil
+}
+
+func (s *shell) completeDialogueIDs(ctx context.Context) (iterator.Iterator[string], error) {
+	it, err := s.store.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	filtered := iterator.Filter(it, func(d dialoguemanager.DialogueHeader) bool {
+		return d.ID != ""
+	})
+	return iterator.Map(filtered, func(d dialoguemanager.DialogueHeader) string {
+		return d.ID
+	}), nil
+}
+
+func (s *shell) completeModelAndDialogueIDs(ctx context.Context) (iterator.Iterator[string], error) {
+	modelNames := iterator.Map(s.modelRegistry.Models(), func(e llmregistry.ModelEntry) string {
+		return e.Name
+	})
+	dialogueIDs, err := s.completeDialogueIDs(ctx)
+	if err != nil {
+		return modelNames, nil
+	}
+	return iterator.Aggregate(modelNames, dialogueIDs), nil
+}
+
+func (s *shell) completeAgentIDs() iterator.Iterator[string] {
+	agents := s.agentsConfig.AllowedAgents("default")
+	ids := make([]string, len(agents))
+	for i, a := range agents {
+		ids[i] = a.ID
+	}
+	return iterator.FromSlice(ids)
+}
+
+// --- skills tab completion ---
+
+func (s *shell) completeSkills(ctx context.Context, args []string) (iterator.Iterator[string], error) {
+	if len(args) == 1 {
+		subcmds := []string{"add-dir", "list", "list-dirs", "remove-dir", "show"}
+		prefix := args[0]
+		var matches []string
+		for _, sc := range subcmds {
+			if strings.HasPrefix(sc, prefix) {
+				matches = append(matches, sc)
+			}
+		}
+		return iterator.FromSlice(matches), nil
+	}
+	if len(args) == 2 {
+		switch args[0] {
+		case "show":
+			return s.completeSkillNames(args[1]), nil
+		case "add-dir":
+			return s.completeDirs(ctx, args[1])
+		case "remove-dir":
+			return s.completeSkillDirs(args[1]), nil
+		}
+	}
+	return iterator.FromSlice[string](nil), nil
+}
+
+func (s *shell) completeSkillNames(prefix string) iterator.Iterator[string] {
+	all := s.skillRegistry.List()
+	var matches []string
+	for _, sk := range all {
+		if strings.HasPrefix(sk.Name, prefix) {
+			matches = append(matches, sk.Name)
+		}
+	}
+	return iterator.FromSlice(matches)
+}
+
+func (s *shell) completeSkillDirs(prefix string) iterator.Iterator[string] {
+	dirs := s.skillRegistry.Dirs()
+	var matches []string
+	for _, d := range dirs {
+		if strings.HasPrefix(d, prefix) {
+			matches = append(matches, d)
+		}
+	}
+	return iterator.FromSlice(matches)
+}
+
+func (s *shell) completeDirs(ctx context.Context, prefix string) (iterator.Iterator[string], error) {
+	root := prefix
+	if root == "" {
+		root = "."
+	}
+	return walkdir.ListDirs(ctx, s.fs, root)
+}
+
+// --- helpers ---
+
+// --- fork conversation ---
+
+const (
+	forkPreviewHeight   = 15
+	forkMaxListHeight   = 15
+	forkSeparatorHeight = 1
+	forkMinWidth        = 80
+	forkSpanHPad        = 2
+	forkSpanVPad        = 0
+)
+
+// forkCandidate describes a selectable message for the fork picker.
+type forkCandidate struct {
+	messageIndex int
+	label        string
+	preview      string
+}
+
+type forkPickerHandler struct {
+	list        *component.FocusList
+	candidates  []forkCandidate
+	preview     *markdown.Component
+	span        *component.Span
+	innerW      int
+	innerH      int
+	previewH    int
+	listH       int
+	maxEntryW   int
+	closeWindow func() error
+	onSelect    func(forkCandidate) error
+}
+
+type forkPickerInner struct {
+	h *forkPickerHandler
+}
+
+func (i *forkPickerInner) Dimensions() (int, int) {
+	return forkPickerDimensions(len(i.h.candidates), i.h.maxEntryW, forkMinWidth)
+}
+
+func (i *forkPickerInner) Resize(w, h int) {
+	i.h.innerW = w
+	i.h.innerH = h
+	i.h.previewH = forkPreviewHeight
+	if i.h.previewH > h-1-forkSeparatorHeight {
+		i.h.previewH = h - 1 - forkSeparatorHeight
+	}
+	if i.h.previewH < 0 {
+		i.h.previewH = 0
+	}
+	i.h.listH = h - i.h.previewH - forkSeparatorHeight
+	if i.h.listH < 1 {
+		i.h.listH = 1
+	}
+	i.h.preview.Resize(w, i.h.previewH)
+	i.h.list.Resize(w, i.h.listH)
+}
+
+func (i *forkPickerInner) Draw(w term.Writer) {
+	i.h.preview.Draw(w)
+	i.h.drawSeparator(w)
+	vw := &component.VirtualWriter{
+		Writer: w,
+		Offset: term.Coordinates{Y: i.h.previewH + forkSeparatorHeight},
+		Width:  i.h.innerW,
+		Height: i.h.listH,
+	}
+	i.h.list.Draw(vw)
+}
+
+func newForkPickerHandler(
+	candidates []forkCandidate,
+	onSelect func(forkCandidate) error,
+	closeWindow func() error,
+) *forkPickerHandler {
+	list := &component.FocusList{}
+	list.InitWithAttr(
+		term.Attributes{Fg: tcell.ColorDefault},
+		term.Attributes{Fg: tcell.ColorRed, Attrs: tcell.AttrBold},
+	)
+	maxEntryW := 0
+	for _, c := range candidates {
+		list.PushBack(component.NewResponsiveString(c.label, component.StringResponsiveConfig{
+			NoSplitWords: true,
+			StringConfig: component.StringConfig{},
+		}))
+		if w := utf8.RuneCountInString(c.label); w > maxEntryW {
+			maxEntryW = w
+		}
+	}
+	if len(candidates) == 0 {
+		empty := "(no user or assistant messages to fork from)"
+		list.PushBack(component.NewResponsiveString(empty, component.StringResponsiveConfig{
+			NoSplitWords: true,
+			StringConfig: component.StringConfig{},
+		}))
+		maxEntryW = max(maxEntryW, utf8.RuneCountInString(empty))
+	}
+	preview := forkPreviewComponent(candidates, 0)
+	h := &forkPickerHandler{
+		list:        list,
+		candidates:  candidates,
+		preview:     preview,
+		maxEntryW:   maxEntryW,
+		closeWindow: closeWindow,
+		onSelect:    onSelect,
+	}
+	h.span = component.NewSpan(&forkPickerInner{h: h}, component.SpanConfig{
+		PadHorizontal:    forkSpanHPad,
+		PadVertical:      forkSpanVPad,
+		ContentAlignment: component.AlignmentCentered,
+	})
+	return h
+}
+
+func (h *forkPickerHandler) Handle(ev term.Event) (exit, handled bool) {
+	if ev.Type != term.EventKey {
+		return false, false
+	}
+	switch ev.Key {
+	case term.KeyEsc:
+		return true, true
+	case term.KeyEnter:
+		if len(h.candidates) == 0 {
+			return true, true
+		}
+		if h.onSelect != nil {
+			if err := h.onSelect(h.candidates[h.list.FocusOffset()]); err != nil {
+				return true, true
+			}
+		}
+		return true, true
+	case term.KeyArrowUp:
+		h.list.FocusUp()
+		h.updatePreview()
+		return false, true
+	case term.KeyArrowDown:
+		h.list.FocusDown()
+		h.updatePreview()
+		return false, true
+	}
+	if ev.Mod == term.ModCtrl {
+		switch ev.Ch {
+		case 'k':
+			h.list.FocusUp()
+			h.updatePreview()
+			return false, true
+		case 'j':
+			h.list.FocusDown()
+			h.updatePreview()
+			return false, true
+		}
+	}
+	return false, false
+}
+
+func (h *forkPickerHandler) Draw(w term.Writer) {
+	h.span.Draw(w)
+}
+
+func (h *forkPickerHandler) Resize(w, hgt int) {
+	h.span.Resize(w, hgt)
+}
+
+func (h *forkPickerHandler) Cursor() (term.Coordinates, term.CursorStyle, bool) {
+	return term.Coordinates{}, term.CursorStyleDefault, false
+}
+
+func (h *forkPickerHandler) Selection() (string, bool) {
+	idx := h.list.FocusOffset()
+	if idx >= len(h.candidates) {
+		return "", false
+	}
+	return h.candidates[idx].label, true
+}
+
+func (h *forkPickerHandler) Close() error {
+	if h.closeWindow != nil {
+		return h.closeWindow()
+	}
+	return nil
+}
+
+func (h *forkPickerHandler) Dimensions() (int, int) {
+	return h.span.Dimensions()
+}
+
+func (h *forkPickerHandler) updatePreview() {
+	h.preview = forkPreviewComponent(h.candidates, h.list.FocusOffset())
+	if h.innerW > 0 || h.innerH > 0 {
+		h.preview.Resize(h.innerW, h.previewH)
+	}
+}
+
+func (h *forkPickerHandler) drawSeparator(w term.Writer) {
+	ch := component.FrameCharSetDefault().HorizontalTop
+	attr := term.Attributes{Fg: tcell.ColorGray}
+	y := h.previewH
+	for x := range h.innerW {
+		w.SetCell(term.Coordinates{X: x, Y: y}, term.Cell{Ch: ch, Width: 1, Attributes: attr})
+	}
+}
+
+func forkPreviewMarkdown(msg llm.Message) string {
+	preview := strings.TrimSpace(msg.Content)
+	if preview != "" {
+		return preview
+	}
+	if len(msg.ToolCalls) > 0 {
+		var b strings.Builder
+		for i, tc := range msg.ToolCalls {
+			if i > 0 {
+				b.WriteString("\n\n")
+			}
+			fmt.Fprintf(&b, "**Tool Call:** %s\n```\n%s\n```", tc.Function.Name, tc.Function.Arguments)
+		}
+		return b.String()
+	}
+	return "*(empty)*"
+}
+
+func forkPreviewComponent(candidates []forkCandidate, focus int) *markdown.Component {
+	content := "*(no message selected)*"
+	if focus >= 0 && focus < len(candidates) {
+		content = candidates[focus].preview
+	}
+	md, err := markdown.NewWithConfig(content, mdConfig())
+	if err != nil {
+		md, _ = markdown.NewWithConfig("*(preview unavailable)*", mdConfig())
+	}
+	return md
+}
+
+func forkPickerDimensions(count, entryWidth, minWidth int) (int, int) {
+	width := max(minWidth, max(entryWidth, forkMinWidth))
+	listHeight := count
+	if listHeight == 0 {
+		listHeight = 1
+	}
+	listHeight = min(listHeight, forkMaxListHeight)
+	return width, forkPreviewHeight + forkSeparatorHeight + listHeight
+}
+
+func forkID(dialogueID string) string {
+	dialogueID = strings.TrimSuffix(dialogueID, "-fork")
+	return dialogueID + "-fork"
+}
+
+func nextForkID(ctx context.Context, store dialoguemanager.Store, dialogueID string) (string, error) {
+	base := forkID(dialogueID)
+	if _, err := store.Get(ctx, base); errors.Is(err, storageapi.ErrNotFound) {
+		return base, nil
+	} else if err != nil {
+		return "", err
+	}
+	for i := 2; ; i++ {
+		candidate := base + "-" + strconv.Itoa(i)
+		if _, err := store.Get(ctx, candidate); errors.Is(err, storageapi.ErrNotFound) {
+			return candidate, nil
+		} else if err != nil {
+			return "", err
+		}
+	}
+}
+
+// forkCandidates returns the user/assistant messages from msgs as labelled
+// candidates for the fork picker.
+func forkCandidates(messages []llm.Message) []forkCandidate {
+	candidates := make([]forkCandidate, 0, len(messages))
+	for i, msg := range messages {
+		switch msg.Role {
+		case llm.RoleUser:
+			icon := ""
+			candidates = append(candidates, forkCandidate{
+				messageIndex: i,
+				label:        fmt.Sprintf("%s %s", icon, truncatePreview(messagePreview(msg), 80)),
+				preview:      forkPreviewMarkdown(msg),
+			})
+		case llm.RoleAssistant:
+			if strings.TrimSpace(msg.Content) == "" {
+				continue
+			}
+			candidates = append(candidates, forkCandidate{
+				messageIndex: i,
+				label:        fmt.Sprintf("󰚩 %s", truncatePreview(messagePreview(msg), 80)),
+				preview:      forkPreviewMarkdown(msg),
+			})
+		}
+	}
+	return candidates
+}
+
+// messagePreview returns a single-line preview of a message's content.
+func messagePreview(msg llm.Message) string {
+	preview := strings.TrimSpace(msg.Content)
+	if preview == "" && len(msg.ToolCalls) > 0 {
+		preview = fmt.Sprintf("(%s tool call)", msg.ToolCalls[0].Function.Name)
+	}
+	if preview == "" {
+		preview = "(empty)"
+	}
+	preview = strings.ReplaceAll(preview, "\n", " ")
+	preview = strings.ReplaceAll(preview, "\t", " ")
+	return strings.Join(strings.Fields(preview), " ")
+}
+
+// truncatePreview truncates s to max runes, appending "…" if needed.
+func truncatePreview(s string, max int) string {
+	if max <= 0 || len(s) <= max {
+		return s
+	}
+	if max == 1 {
+		return "…"
+	}
+	return s[:max-1] + "…"
+}
+
+// notify sends a notification if the notifications service is available.
+func (s *shell) notify(level browserapi.NotificationLevel, msg string, args ...any) {
+	if s.notifications == nil {
+		return
+	}
+	_, _ = s.notifications.Notify(level, msg, args...)
+}
+
+// forkConversation opens an interactive floating picker showing the
+// user/assistant messages of the dialogue. The user can select one
+// with Up/Down and press Enter to fork the conversation at that point.
+func (s *shell) forkConversation(
+	ctx context.Context, id string,
+) (iterator.Iterator[component.Responsive], error) {
+	d, err := s.store.Get(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("get conversation %q: %w", id, err)
+	}
+
+	candidates := forkCandidates(d.Messages)
+
+	var win browserapi.Window
+	picker := newForkPickerHandler(candidates, func(candidate forkCandidate) error {
+		forkedID, err := s.forkDialogue(context.Background(), d, candidate.messageIndex)
+		if err != nil {
+			s.notify(browserapi.LevelError, "Fork conversation %s: %v", id, err)
+			return err
+		}
+		s.notify(browserapi.LevelSuccess, "Cloned conversation at the selected message. Open %s to resume it.", forkedID)
+		return nil
+	}, func() error {
+		return s.wm.CloseWindow(win)
+	})
+
+	win, err = s.wm.Floating(picker, browserapi.FloatingConfig{
+		Alignment: component.AlignmentCentered,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("open floating window: %w", err)
+	}
+
+	return iterator.Empty[component.Responsive](), nil
+}
+
+// forkDialogue creates a new dialogue that is a copy of the given dialogue
+// up to and including the message at messageIndex, plus any trailing tool
+// result messages.
+func (s *shell) forkDialogue(ctx context.Context, d dialoguemanager.Dialogue, messageIndex int) (string, error) {
+	if messageIndex < 0 || messageIndex >= len(d.Messages) {
+		return "", fmt.Errorf("message index %d out of range [0, %d)", messageIndex, len(d.Messages))
+	}
+
+	end := messageIndex + 1
+	for end < len(d.Messages) && d.Messages[end].Role == llm.RoleTool {
+		end++
+	}
+
+	newID, err := nextForkID(ctx, s.store, d.ID)
+	if err != nil {
+		return "", fmt.Errorf("next fork ID for %q: %w", d.ID, err)
+	}
+	forked := dialoguemanager.Dialogue{
+		ID:           newID,
+		AgentID:      d.AgentID,
+		Model:        d.Model,
+		WorkspaceURI: d.WorkspaceURI,
+		SubAgent:     d.SubAgent,
+		Messages:     slices.Clone(d.Messages[:end]),
+	}
+	if err := s.store.Create(ctx, forked); err != nil {
+		return "", fmt.Errorf("create forked dialogue: %w", err)
+	}
+	return newID, nil
+}
+
+// mdConfig returns a markdown.Config with HeaderPrefix disabled.
+func mdConfig() markdown.Config {
+	cfg := markdown.DefaultConfig()
+	cfg.HeaderPrefix = false
+	return cfg
+}
+
+func markdownOutput(content string) iterator.Iterator[component.Responsive] {
+	cfg := mdConfig()
+	md, err := markdown.NewWithConfig(content, cfg)
+	if err != nil {
+		r := component.NewResponsiveString(content, component.StringResponsiveConfig{})
+		return iterator.FromSlice([]component.Responsive{r})
+	}
+	return iterator.FromSlice([]component.Responsive{md})
+}
+
+func configValue(cfg config.Config, key string) string {
+	if v, err := cfg.GetString(key); err == nil {
+		return v
+	}
+	if v, err := cfg.GetFloat(key); err == nil {
+		return fmt.Sprintf("%g", v)
+	}
+	if v, err := cfg.GetInt(key); err == nil {
+		return fmt.Sprintf("%d", v)
+	}
+	return ""
+}
+
+func formatDuration(d time.Duration) string {
+	if d < time.Minute {
+		return fmt.Sprintf("%ds", int(d.Seconds()))
+	}
+	if d < time.Hour {
+		return fmt.Sprintf("%dm", int(d.Minutes()))
+	}
+	h := int(d.Hours())
+	m := int(d.Minutes()) % 60
+	if m == 0 {
+		return fmt.Sprintf("%dh", h)
+	}
+	return fmt.Sprintf("%dh%dm", h, m)
+}

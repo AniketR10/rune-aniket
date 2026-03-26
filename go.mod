@@ -3,9 +3,12 @@ module unstable.build/go-tui
 go 1.26.0
 
 require (
+	codeberg.org/readeck/go-readability/v2 v2.1.1
 	github.com/Xuanwo/go-locale v1.1.0
+	github.com/anthropics/anthropic-sdk-go v1.26.0
 	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/disintegration/imaging v1.6.2
+	github.com/dustinkirkland/golang-petname v0.0.0-20260215035315-f0c533e9ce9b
 	github.com/ernestrc/dom v0.2.5-0.20201125033726-789c946aa938
 	github.com/ernestrc/go-multierror v1.1.2
 	github.com/ernestrc/sensible v0.3.1
@@ -13,14 +16,18 @@ require (
 	github.com/julienschmidt/httprouter v1.3.0
 	github.com/junegunn/fzf v0.0.0-20201216124428-ab3937ee5a62
 	github.com/mattn/go-runewidth v0.0.19 // indirect
+	github.com/modelcontextprotocol/go-sdk v1.4.0
+	github.com/openai/openai-go/v2 v2.7.1
 	github.com/pion/mediadevices v0.6.2
 	github.com/pion/webrtc/v3 v3.2.37
+	github.com/pkoukk/tiktoken-go v0.1.7
+	github.com/pkoukk/tiktoken-go-loader v0.0.1
+	github.com/schollz/progressbar/v3 v3.19.0
 	github.com/sirupsen/logrus v1.9.3
 	github.com/sourcegraph/go-diff v0.6.1
 	github.com/spf13/pflag v1.0.9
 	github.com/stretchr/testify v1.11.1
 	github.com/unstablebuild/blue v1.77.3
-	github.com/unstablebuild/golang-internal-tools v0.0.2
 	github.com/unstablebuild/rune-go-sdk v0.0.56
 	github.com/unstablebuild/tcell/v3 v3.6.4
 	go.uber.org/goleak v1.3.0
@@ -43,12 +50,11 @@ require (
 	github.com/rivo/uniseg v0.4.7
 	golang.org/x/lint v0.0.0-20210508222113-6edffad5e616 // indirect
 	golang.org/x/mod v0.32.0 // indirect
-	golang.org/x/net v0.49.0 // indirect
+	golang.org/x/net v0.49.0
 	golang.org/x/sync v0.19.0 // indirect
 	golang.org/x/sys v0.42.0
 	golang.org/x/text v0.34.0
 	golang.org/x/tools v0.41.0 // indirect
-	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2 // indirect
 	gopkg.in/mgo.v2 v2.0.0-20190816093944-a6b53ec6cb22 // indirect
 )
 
@@ -61,7 +67,9 @@ require (
 	github.com/go-jose/go-jose/v4 v4.1.3
 	github.com/google/go-dap v0.12.0
 	github.com/sergi/go-diff v1.4.0
+	github.com/spf13/cobra v1.10.2
 	github.com/tree-sitter/go-tree-sitter v0.25.0
+	github.com/unstablebuild/golang-internal-tools v0.0.2
 	github.com/unstablebuild/notify v0.10.2
 	github.com/unstablebuild/pty v1.3.1
 	github.com/yuin/goldmark v1.7.1
@@ -84,7 +92,8 @@ require (
 	github.com/BurntSushi/toml v1.6.0 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/ProtonMail/go-crypto v1.3.0 // indirect
-	github.com/andybalholm/cascadia v1.3.2 // indirect
+	github.com/andybalholm/cascadia v1.3.3 // indirect
+	github.com/araddon/dateparse v0.0.0-20210429162001-6b43995a97de // indirect
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/blackjack/webcam v0.5.0 // indirect
 	github.com/buger/jsonparser v1.1.1 // indirect
@@ -93,6 +102,7 @@ require (
 	github.com/clipperhouse/uax29/v2 v2.3.0 // indirect
 	github.com/cloudflare/circl v1.6.3 // indirect
 	github.com/cyphar/filepath-securejoin v0.6.0 // indirect
+	github.com/dlclark/regexp2 v1.10.0 // indirect
 	github.com/ebitengine/gomobile v0.0.0-20240518074828-e86332849895 // indirect
 	github.com/ebitengine/hideconsole v1.0.0 // indirect
 	github.com/emirpasic/gods v1.18.1 // indirect
@@ -102,7 +112,10 @@ require (
 	github.com/go-git/gcfg/v2 v2.0.2 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
+	github.com/go-shiori/dom v0.0.0-20230515143342-73569d674e1c // indirect
+	github.com/gogs/chardet v0.0.0-20211120154057-b7413eaefb8f // indirect
 	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
+	github.com/google/jsonschema-go v0.4.2 // indirect
 	github.com/google/s2a-go v0.1.9 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.6 // indirect
 	github.com/googleapis/gax-go/v2 v2.15.0 // indirect
@@ -115,6 +128,7 @@ require (
 	github.com/mark3labs/mcp-go v0.44.0 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-pointer v0.0.1 // indirect
+	github.com/mitchellh/colorstring v0.0.0-20190213212951-d06e56a500db // indirect
 	github.com/olekukonko/cat v0.0.0-20250911104152-50322a0618f6 // indirect
 	github.com/olekukonko/errors v1.1.0 // indirect
 	github.com/olekukonko/ll v0.1.4-0.20260115111900-9e59c2286df0 // indirect
@@ -135,8 +149,13 @@ require (
 	github.com/pion/transport/v2 v2.2.4 // indirect
 	github.com/pion/turn/v2 v2.1.5 // indirect
 	github.com/pjbgf/sha1cd v0.5.0 // indirect
+	github.com/segmentio/asm v1.1.3 // indirect
+	github.com/segmentio/encoding v0.5.3 // indirect
 	github.com/spf13/cast v1.7.1 // indirect
-	github.com/spf13/cobra v1.10.2 // indirect
+	github.com/tidwall/gjson v1.18.0 // indirect
+	github.com/tidwall/match v1.1.1 // indirect
+	github.com/tidwall/pretty v1.2.1 // indirect
+	github.com/tidwall/sjson v1.2.5 // indirect
 	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
@@ -149,6 +168,7 @@ require (
 	golang.org/x/exp/typeparams v0.0.0-20220722155223-a9213eeb770e // indirect
 	golang.org/x/time v0.12.0 // indirect
 	golang.org/x/tools/go/packages/packagestest v0.1.1-deprecated // indirect
+	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
 	google.golang.org/api v0.244.0 // indirect
 	google.golang.org/genproto v0.0.0-20250811230008-5f3141c8851a // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20251029180050-ab9386a59fda // indirect

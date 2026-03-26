@@ -1,0 +1,197 @@
+// Unstable Build LLC ("COMPANY") CONFIDENTIAL
+//
+// Unpublished Copyright (c) 2024-2026 Unstable Build, All Rights Reserved.
+//
+// NOTICE: All information contained herein is, and remains the property of COMPANY.
+// The intellectual and technical concepts contained herein are proprietary to
+// COMPANY and may be covered by U.S. and Foreign Patents, patents in process,
+// and are protected by trade secret or copyright law. Dissemination of this information
+// or reproduction of this material is strictly forbidden unless prior written permission
+// is obtained from COMPANY. Access to the source code contained herein is hereby
+// forbidden to anyone except current COMPANY employees, managers or contractors who
+// have executed Confidentiality and Non-disclosure agreements explicitly covering such access.
+//
+// The copyright notice above does not evidence any actual or intended publication or
+// disclosure of this source code, which includes information that is confidential and/or
+// proprietary, and is a trade secret, of COMPANY. ANY REPRODUCTION, MODIFICATION,
+// DISTRIBUTION, PUBLIC  PERFORMANCE, OR PUBLIC DISPLAY OF OR THROUGH USE OF THIS SOURCE CODE
+// WITHOUT  THE EXPRESS WRITTEN CONSENT OF COMPANY IS STRICTLY PROHIBITED, AND IN
+// VIOLATION OF APPLICABLE LAWS AND INTERNATIONAL TREATIES. THE RECEIPT OR POSSESSION OF
+// THIS SOURCE CODE AND/OR RELATED INFORMATION DOES NOT CONVEY OR IMPLY ANY RIGHTS TO
+// REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
+// ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
+
+package agentools
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"time"
+
+	"unstable.build/go-tui/cmd/rune-agent/agent"
+	"unstable.build/go-tui/cmd/rune-agent/llm"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+)
+
+const (
+	defaultYieldTimeMs = 10000
+	minYieldTimeMs     = 250
+	maxYieldTimeMs     = 30000
+)
+
+type execCommandTool struct {
+	mgr *SessionManager
+	cwd workspaceapi.URI
+}
+
+type execCommandArgs struct {
+	Cmd         string `json:"cmd"`
+	WorkDir     string `json:"workdir"`
+	Shell       string `json:"shell"`
+	TTY         *bool  `json:"tty"`
+	YieldTimeMs *int   `json:"yield_time_ms"`
+}
+
+type execCommandOutput struct {
+	SessionID       int     `json:"session_id,omitempty"`
+	ExitCode        *int    `json:"exit_code,omitempty"`
+	Output          string  `json:"output"`
+	WallTimeSeconds float64 `json:"wall_time_seconds"`
+}
+
+// NewExecCommand creates an exec_command tool backed by the given
+// SessionManager. It is intended as an OpenAI-specific override that
+// replaces the stateless bash tool with persistent sessions.
+func NewExecCommand(mgr *SessionManager, cwd workspaceapi.URI) agent.Tool {
+	return &execCommandTool{mgr: mgr, cwd: cwd}
+}
+
+func (t *execCommandTool) Definition() llm.Tool {
+	return llm.Tool{
+		Type: llm.ToolTypeFunction,
+		Function: llm.FunctionDefinition{
+			Name: "exec_command",
+			Description: `Runs a command in a PTY, returning output or a session ID for ongoing interaction.
+
+Do NOT use this tool for tasks that have a dedicated tool:
+• grep/rg/ag → use grep_files or search_symbols
+• cat/head/tail → use read_file
+• gofmt/goimports → use format_file
+• find → use find_files
+• Symbol search → use search_symbols or find_definition
+
+Use exec_command only for running tests, build commands, git, or other
+tasks with no dedicated tool.`,
+			Parameters: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"cmd": map[string]any{
+						"type":        "string",
+						"description": "Shell command to execute.",
+					},
+					"workdir": map[string]any{
+						"type":        []string{"string", "null"},
+						"description": "Optional working directory to run the command in; defaults to the workspace root.",
+					},
+					"shell": map[string]any{
+						"type":        []string{"string", "null"},
+						"description": "Shell binary to launch. Defaults to the user's default shell.",
+					},
+					"tty": map[string]any{
+						"type":        []string{"boolean", "null"},
+						"description": "Whether to allocate a TTY for the command. Defaults to false (plain pipes); set to true to open a PTY and access TTY process.",
+					},
+					"yield_time_ms": map[string]any{
+						"type":        []string{"number", "null"},
+						"description": "How long to wait (in milliseconds) for output before yielding.",
+					},
+				},
+				"required":             []string{"cmd"},
+				"additionalProperties": false,
+			},
+		},
+	}
+}
+
+func (t *execCommandTool) Summary(arguments string) string {
+	var args execCommandArgs
+	if err := json.Unmarshal([]byte(arguments), &args); err != nil {
+		return ""
+	}
+	return args.Cmd
+}
+
+func (t *execCommandTool) Execute(_ context.Context, arguments string) agent.ToolResult {
+	var args execCommandArgs
+	if err := json.Unmarshal([]byte(arguments), &args); err != nil {
+		return agent.ToolResult{Content: fmt.Sprintf("error: invalid arguments: %v", err), IsError: true}
+	}
+
+	if args.Cmd == "" {
+		return agent.ToolResult{Content: "error: cmd must not be empty", IsError: true}
+	}
+
+	workDir := t.cwd.Path()
+	if args.WorkDir != "" {
+		workDir = resolvePath(t.cwd, args.WorkDir)
+	}
+
+	tty := false
+	if args.TTY != nil {
+		tty = *args.TTY
+	}
+
+	yieldMs := defaultYieldTimeMs
+	if args.YieldTimeMs != nil {
+		yieldMs = *args.YieldTimeMs
+	}
+	yieldMs = clamp(yieldMs, minYieldTimeMs, maxYieldTimeMs)
+
+	sess, err := t.mgr.Create(args.Cmd, workDir, args.Shell, tty, nil)
+	if err != nil {
+		return agent.ToolResult{Content: fmt.Sprintf("error: %v", err), IsError: true}
+	}
+
+	// Wait for process exit or yield timeout.
+	yieldDuration := time.Duration(yieldMs) * time.Millisecond
+	exited := sess.Wait(yieldDuration)
+
+	// If not exited, wait a bit more for output to settle.
+	if !exited {
+		sess.buf.WaitForData(time.Now().Add(50 * time.Millisecond))
+	}
+
+	return t.buildResult(sess)
+}
+
+func (t *execCommandTool) buildResult(sess *Session) agent.ToolResult {
+	out := execCommandOutput{
+		Output:          sess.Output(),
+		WallTimeSeconds: sess.WallTime(),
+	}
+	if sess.Exited() {
+		code := sess.ExitCode()
+		out.ExitCode = &code
+	} else {
+		out.SessionID = sess.ID
+	}
+
+	data, err := json.Marshal(out)
+	if err != nil {
+		return agent.ToolResult{Content: fmt.Sprintf("error: marshal output: %v", err), IsError: true}
+	}
+
+	isError := out.ExitCode != nil && *out.ExitCode != 0
+	return agent.ToolResult{Content: string(data), IsError: isError}
+}
+
+func clamp(v, lo, hi int) int {
+	if v < lo {
+		return lo
+	}
+	if v > hi {
+		return hi
+	}
+	return v
+}

@@ -1,0 +1,359 @@
+// Unstable Build LLC ("COMPANY") CONFIDENTIAL
+//
+// Unpublished Copyright (c) 2024-2026 Unstable Build, All Rights Reserved.
+//
+// NOTICE: All information contained herein is, and remains the property of COMPANY.
+// The intellectual and technical concepts contained herein are proprietary to
+// COMPANY and may be covered by U.S. and Foreign Patents, patents in process,
+// and are protected by trade secret or copyright law. Dissemination of this information
+// or reproduction of this material is strictly forbidden unless prior written permission
+// is obtained from COMPANY. Access to the source code contained herein is hereby
+// forbidden to anyone except current COMPANY employees, managers or contractors who
+// have executed Confidentiality and Non-disclosure agreements explicitly covering such access.
+//
+// The copyright notice above does not evidence any actual or intended publication or
+// disclosure of this source code, which includes information that is confidential and/or
+// proprietary, and is a trade secret, of COMPANY. ANY REPRODUCTION, MODIFICATION,
+// DISTRIBUTION, PUBLIC  PERFORMANCE, OR PUBLIC DISPLAY OF OR THROUGH USE OF THIS SOURCE CODE
+// WITHOUT  THE EXPRESS WRITTEN CONSENT OF COMPANY IS STRICTLY PROHIBITED, AND IN
+// VIOLATION OF APPLICABLE LAWS AND INTERNATIONAL TREATIES. THE RECEIPT OR POSSESSION OF
+// THIS SOURCE CODE AND/OR RELATED INFORMATION DOES NOT CONVEY OR IMPLY ANY RIGHTS TO
+// REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
+// ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
+
+package agentools
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"unstable.build/go-tui/cmd/rune-agent/agent"
+	"unstable.build/go-tui/cmd/rune-agent/agent/skills"
+	"unstable.build/go-tui/cmd/rune-agent/llm"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+)
+
+type osFileSystem struct{}
+
+func (osFileSystem) URI(path string) (workspaceapi.URI, error) {
+	return workspaceapi.CurrentUserHostURI(path)
+}
+func (osFileSystem) OpenFile(path string, flag int, mode os.FileMode) (workspaceapi.File, error) {
+	return os.OpenFile(path, flag, mode)
+}
+func (osFileSystem) Remove(path string) error                   { return os.Remove(path) }
+func (osFileSystem) Stat(path string) (os.FileInfo, error)      { return os.Stat(path) }
+func (osFileSystem) ReadDir(name string) ([]os.DirEntry, error) { return os.ReadDir(name) }
+func (osFileSystem) MkdirAll(path string, perm os.FileMode) error {
+	return os.MkdirAll(path, perm)
+}
+
+func writeTestSkill(t *testing.T, dir, name, content string) {
+	t.Helper()
+	skillDir := filepath.Join(dir, name)
+	require.NoError(t, os.MkdirAll(skillDir, 0o755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(skillDir, "SKILL.md"),
+		[]byte(content), 0o644,
+	))
+}
+
+func TestSkillTool(t *testing.T) {
+	dir := t.TempDir()
+	writeTestSkill(t, dir, "debug", `---
+name: debug
+description: Debug issues
+---
+## Debug
+
+1. Check logs
+2. Fix`)
+	writeTestSkill(t, dir, "test-repo", `---
+name: test-repo
+description: Test strategy
+---
+Run the test suite`)
+
+	registry := skills.NewRegistry(osFileSystem{}, dirURI(""), []string{dir}, nil)
+
+	t.Run("valid name returns structured content", func(t *testing.T) {
+		tool := NewSkillTool(registry, nil, nil)
+		result := tool.Execute(
+			context.Background(), `{"name":"debug"}`,
+		)
+		assert.False(t, result.IsError)
+		skillDir := filepath.Join(dir, "debug")
+		expected := fmt.Sprintf(`<skill_content name="debug">
+## Debug
+
+1. Check logs
+2. Fix
+
+Skill directory: %s
+Relative paths in this skill are relative to the skill directory.
+</skill_content>`, skillDir)
+		assert.Equal(t, expected, result.Content)
+	})
+
+	t.Run("unknown name returns error with available names", func(t *testing.T) {
+		tool := NewSkillTool(registry, nil, nil)
+		result := tool.Execute(
+			context.Background(), `{"name":"nonexistent"}`,
+		)
+		assert.True(t, result.IsError)
+		assert.Contains(t, result.Content, "unknown skill")
+		assert.Contains(t, result.Content, "debug")
+		assert.Contains(t, result.Content, "test-repo")
+	})
+
+	t.Run("invalid JSON returns error", func(t *testing.T) {
+		tool := NewSkillTool(registry, nil, nil)
+		result := tool.Execute(
+			context.Background(), `bad json`,
+		)
+		assert.True(t, result.IsError)
+		assert.Contains(t, result.Content, "invalid arguments")
+	})
+
+	t.Run("definition has correct schema", func(t *testing.T) {
+		tool := NewSkillTool(registry, nil, nil)
+		def := tool.Definition()
+
+		assert.Equal(t, llm.ToolTypeFunction, def.Type)
+		assert.Equal(t, "skill", def.Function.Name)
+		assert.NotEmpty(t, def.Function.Description)
+		assert.NotNil(t, def.Function.Parameters)
+	})
+
+	t.Run("summary returns skill name", func(t *testing.T) {
+		tool := NewSkillTool(registry, nil, nil)
+		assert.Equal(t, "debug", tool.Summary(`{"name":"debug"}`))
+		assert.Equal(t, "", tool.Summary(`bad json`))
+	})
+
+	t.Run("summary includes args when present", func(t *testing.T) {
+		tool := NewSkillTool(registry, nil, nil)
+		assert.Equal(t, "debug --verbose",
+			tool.Summary(`{"name":"debug","args":"--verbose"}`))
+	})
+
+	t.Run("duplicate activation returns short message", func(t *testing.T) {
+		tool := NewSkillTool(registry, nil, nil)
+		ctx := agent.WithActivatedSkills(context.Background())
+
+		first := tool.Execute(ctx, `{"name":"debug"}`)
+		assert.False(t, first.IsError)
+		assert.Contains(t, first.Content, "<skill_content")
+
+		second := tool.Execute(ctx, `{"name":"debug"}`)
+		assert.False(t, second.IsError)
+		assert.Contains(t, second.Content, "already loaded")
+		assert.NotContains(t, second.Content, "<skill_content")
+	})
+
+	t.Run("different skills are not deduped", func(t *testing.T) {
+		tool := NewSkillTool(registry, nil, nil)
+		ctx := agent.WithActivatedSkills(context.Background())
+
+		first := tool.Execute(ctx, `{"name":"debug"}`)
+		assert.Contains(t, first.Content, "<skill_content")
+
+		second := tool.Execute(ctx, `{"name":"test-repo"}`)
+		assert.Contains(t, second.Content, "<skill_content")
+	})
+
+	t.Run("dedup is scoped per run context", func(t *testing.T) {
+		tool := NewSkillTool(registry, nil, nil)
+
+		ctx1 := agent.WithActivatedSkills(context.Background())
+		r1 := tool.Execute(ctx1, `{"name":"debug"}`)
+		assert.Contains(t, r1.Content, "<skill_content")
+
+		// New context = new run = skill can be loaded again.
+		ctx2 := agent.WithActivatedSkills(context.Background())
+		r2 := tool.Execute(ctx2, `{"name":"debug"}`)
+		assert.Contains(t, r2.Content, "<skill_content")
+	})
+}
+
+func TestSkillToolWithResources(t *testing.T) {
+	dir := t.TempDir()
+	writeTestSkill(t, dir, "my-skill", `---
+name: my-skill
+description: A skill with resources
+---
+Do stuff`)
+
+	// Create resource files in scripts/ and assets/ subdirs.
+	skillDir := filepath.Join(dir, "my-skill")
+	require.NoError(t, os.MkdirAll(filepath.Join(skillDir, "scripts"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(skillDir, "assets"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(skillDir, "references"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(skillDir, "scripts", "run.sh"), []byte("#!/bin/sh"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(skillDir, "assets", "data.json"), []byte("{}"), 0o644))
+	// Subdirectories inside resource dirs should be skipped.
+	require.NoError(t, os.MkdirAll(filepath.Join(skillDir, "scripts", "subdir"), 0o755))
+
+	registry := skills.NewRegistry(osFileSystem{}, dirURI(""), []string{dir}, nil)
+	tool := NewSkillTool(registry, nil, nil)
+	ctx := agent.WithActivatedSkills(context.Background())
+	result := tool.Execute(ctx, `{"name":"my-skill"}`)
+
+	assert.False(t, result.IsError)
+	assert.Contains(t, result.Content, `<skill_content name="my-skill">`)
+	assert.Contains(t, result.Content, "<skill_resources>")
+	assert.Contains(t, result.Content, fmt.Sprintf("<file>%s</file>", filepath.Join("assets", "data.json")))
+	assert.Contains(t, result.Content, fmt.Sprintf("<file>%s</file>", filepath.Join("scripts", "run.sh")))
+	assert.NotContains(t, result.Content, "subdir")
+}
+
+func TestSkillToolWithoutResources(t *testing.T) {
+	dir := t.TempDir()
+	writeTestSkill(t, dir, "bare", `---
+name: bare
+description: No resources
+---
+Just instructions`)
+
+	registry := skills.NewRegistry(osFileSystem{}, dirURI(""), []string{dir}, nil)
+	tool := NewSkillTool(registry, nil, nil)
+	ctx := agent.WithActivatedSkills(context.Background())
+	result := tool.Execute(ctx, `{"name":"bare"}`)
+
+	assert.False(t, result.IsError)
+	assert.NotContains(t, result.Content, "<skill_resources>")
+	assert.Contains(t, result.Content, "</skill_content>")
+}
+
+func TestSkillToolAgentType(t *testing.T) {
+	dir := t.TempDir()
+	writeTestSkill(t, dir, "research", `---
+name: research
+description: Research agent
+type: agent
+allowed-tools: read_file search_content
+---
+You are a researcher.`)
+	writeTestSkill(t, dir, "prompt", `---
+name: prompt
+description: A prompt skill
+---
+Prompt content`)
+
+	registry := skills.NewRegistry(osFileSystem{}, dirURI(""), []string{dir}, nil)
+
+	t.Run("agent skill delegates to spawner", func(t *testing.T) {
+		spawner := &mockSpawner{
+			handle: agent.RunHandle{
+				Events: newMockEventIterator(
+					agent.Event{Type: agent.EventText, Text: "research findings here"},
+				),
+			},
+		}
+		tool := NewSkillTool(registry, spawner, nil)
+		result := tool.Execute(
+			context.Background(),
+			`{"name":"research","args":"find all tests"}`,
+		)
+
+		assert.False(t, result.IsError)
+		assert.Equal(t, "research findings here", result.Content)
+		assert.Equal(t, "research", spawner.lastRunReq.Label)
+		assert.Equal(t, "find all tests", spawner.lastRunReq.Message)
+		assert.Equal(t, []string{"read_file", "search_content"}, spawner.lastRunReq.AllowedTools)
+		assert.Equal(t, "You are a researcher.", spawner.lastRunReq.SystemPrompt)
+		assert.Equal(t, 0, spawner.lastRunReq.TimeoutSeconds)
+	})
+
+	t.Run("agent skill uses body as task when no args", func(t *testing.T) {
+		spawner := &mockSpawner{
+			handle: agent.RunHandle{
+				Events: newMockEventIterator(
+					agent.Event{Type: agent.EventText, Text: "done"},
+				),
+			},
+		}
+		tool := NewSkillTool(registry, spawner, nil)
+		result := tool.Execute(
+			context.Background(),
+			`{"name":"research"}`,
+		)
+
+		assert.False(t, result.IsError)
+		assert.Equal(t, "You are a researcher.", spawner.lastRunReq.Message)
+	})
+
+	t.Run("agent skill returns error on spawner failure", func(t *testing.T) {
+		spawner := &mockSpawner{
+			runErr: fmt.Errorf("service unavailable"),
+		}
+		tool := NewSkillTool(registry, spawner, nil)
+		result := tool.Execute(
+			context.Background(),
+			`{"name":"research","args":"test"}`,
+		)
+
+		assert.True(t, result.IsError)
+		assert.Contains(t, result.Content, "service unavailable")
+	})
+
+	t.Run("agent skill returns error when no spawner", func(t *testing.T) {
+		tool := NewSkillTool(registry, nil, nil)
+		result := tool.Execute(
+			context.Background(),
+			`{"name":"research","args":"test"}`,
+		)
+
+		assert.True(t, result.IsError)
+		assert.Contains(t, result.Content, "no spawner")
+	})
+
+	t.Run("prompt skill ignores spawner", func(t *testing.T) {
+		spawner := &mockSpawner{}
+		tool := NewSkillTool(registry, spawner, nil)
+		ctx := agent.WithActivatedSkills(context.Background())
+		result := tool.Execute(ctx, `{"name":"prompt"}`)
+
+		assert.False(t, result.IsError)
+		assert.Contains(t, result.Content, "<skill_content")
+		assert.Contains(t, result.Content, "Prompt content")
+		// Spawner should not have been called.
+		assert.Empty(t, spawner.lastRunReq.Message)
+	})
+
+	t.Run("agent skill is not deduplicated", func(t *testing.T) {
+		spawner := &mockSpawner{
+			handle: agent.RunHandle{
+				Events: newMockEventIterator(
+					agent.Event{Type: agent.EventText, Text: "result"},
+				),
+			},
+		}
+		tool := NewSkillTool(registry, spawner, nil)
+		ctx := agent.WithActivatedSkills(context.Background())
+
+		first := tool.Execute(ctx, `{"name":"research","args":"first"}`)
+		assert.False(t, first.IsError)
+		assert.Equal(t, "result", first.Content)
+
+		// Reset events for second call.
+		spawner.handle = agent.RunHandle{
+			Events: newMockEventIterator(
+				agent.Event{Type: agent.EventText, Text: "result"},
+			),
+		}
+
+		// Agent skills should run each time, not be deduped.
+		second := tool.Execute(ctx, `{"name":"research","args":"second"}`)
+		assert.False(t, second.IsError)
+		assert.Equal(t, "result", second.Content)
+		assert.Equal(t, "second", spawner.lastRunReq.Message)
+	})
+}
+
+var _ agent.Tool = (*skillTool)(nil)

@@ -1,0 +1,590 @@
+// Unstable Build LLC ("COMPANY") CONFIDENTIAL
+//
+// Unpublished Copyright (c) 2024-2026 Unstable Build, All Rights Reserved.
+//
+// NOTICE: All information contained herein is, and remains the property of COMPANY.
+// The intellectual and technical concepts contained herein are proprietary to
+// COMPANY and may be covered by U.S. and Foreign Patents, patents in process,
+// and are protected by trade secret or copyright law. Dissemination of this information
+// or reproduction of this material is strictly forbidden unless prior written permission
+// is obtained from COMPANY. Access to the source code contained herein is hereby
+// forbidden to anyone except current COMPANY employees, managers or contractors who
+// have executed Confidentiality and Non-disclosure agreements explicitly covering such access.
+//
+// The copyright notice above does not evidence any actual or intended publication or
+// disclosure of this source code, which includes information that is confidential and/or
+// proprietary, and is a trade secret, of COMPANY. ANY REPRODUCTION, MODIFICATION,
+// DISTRIBUTION, PUBLIC  PERFORMANCE, OR PUBLIC DISPLAY OF OR THROUGH USE OF THIS SOURCE CODE
+// WITHOUT  THE EXPRESS WRITTEN CONSENT OF COMPANY IS STRICTLY PROHIBITED, AND IN
+// VIOLATION OF APPLICABLE LAWS AND INTERNATIONAL TREATIES. THE RECEIPT OR POSSESSION OF
+// THIS SOURCE CODE AND/OR RELATED INFORMATION DOES NOT CONVEY OR IMPLY ANY RIGHTS TO
+// REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
+// ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
+
+package agent
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"strings"
+	"sync"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"unstable.build/go-tui/cmd/rune-agent/agent/skills"
+	"unstable.build/go-tui/cmd/rune-agent/llm"
+)
+
+// nopFileSystem and osFileSystem are defined in agent_test.go (same package).
+
+func TestGoroutineSpawner_Run(t *testing.T) {
+	tests := []struct {
+		name     string
+		defs     []Definition
+		agentID  string
+		req      RunRequest
+		wantErr  string
+		assertFn func(t *testing.T, handle RunHandle)
+	}{
+		{
+			name: "run returns handle with events",
+			defs: []Definition{
+				{
+					ID:       "agent",
+					Name:     "Agent",
+					Model:    "test-model",
+					AllowAny: true,
+				},
+			},
+			agentID: "agent",
+			req: RunRequest{
+				AgentID:        "agent",
+				Message:        "hello",
+				TimeoutSeconds: 5,
+			},
+			assertFn: func(t *testing.T, handle RunHandle) {
+				assert.NotEmpty(t, handle.SessionKey)
+				reply := consumeReply(t, handle)
+				assert.Equal(t, "reply text", reply)
+			},
+		},
+		{
+			name: "run unknown agent returns error",
+			defs: []Definition{
+				{
+					ID:    "agent",
+					Name:  "Agent",
+					Model: "test-model",
+				},
+			},
+			agentID: "agent",
+			req: RunRequest{
+				AgentID:        "unknown",
+				Message:        "hello",
+				TimeoutSeconds: 5,
+			},
+			wantErr: "no agent or agent skill",
+		},
+		{
+			name: "run disallowed agent returns error",
+			defs: []Definition{
+				{
+					ID:         "parent",
+					Name:       "Parent",
+					Model:      "test-model",
+					AllowSpawn: []string{"allowed"},
+				},
+				{
+					ID:    "forbidden",
+					Name:  "Forbidden",
+					Model: "test-model",
+				},
+			},
+			agentID: "parent",
+			req: RunRequest{
+				AgentID:        "forbidden",
+				Message:        "hello",
+				TimeoutSeconds: 5,
+			},
+			wantErr: "no agent or agent skill",
+		},
+		{
+			name: "run with invalid cleanup returns error",
+			defs: []Definition{
+				{
+					ID:       "agent",
+					Name:     "Agent",
+					Model:    "test-model",
+					AllowAny: true,
+				},
+			},
+			agentID: "agent",
+			req: RunRequest{
+				Message: "hello",
+				Cleanup: "invalid",
+			},
+			wantErr: "invalid cleanup value",
+		},
+		{
+			name: "zero timeout means no timeout (cancel-only)",
+			defs: []Definition{
+				{
+					ID:       "agent",
+					Name:     "Agent",
+					Model:    "test-model",
+					AllowAny: true,
+				},
+			},
+			agentID: "agent",
+			req: RunRequest{
+				AgentID:        "agent",
+				Message:        "hello",
+				TimeoutSeconds: 0,
+			},
+			assertFn: func(t *testing.T, handle RunHandle) {
+				reply := consumeReply(t, handle)
+				assert.Equal(t, "reply text", reply)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := NewConfig(tt.defs)
+			svc := &mockService{
+				responses: []mockResponse{
+					stopResponse("reply text"),
+				},
+			}
+			factory := func(model string) (llm.Service, string, error) {
+				return svc, "test", nil
+			}
+			spawner := NewGoroutineSpawner(
+				newMockStore(), factory, cfg,
+				skills.NewRegistry(nopFileSystem{}, dirURI(""), nil, nil),
+				NoMemory(), "",
+				"session-1", tt.agentID,
+			)
+
+			handle, err := spawner.Run(
+				context.Background(), tt.req,
+			)
+			if tt.wantErr != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			if tt.assertFn != nil {
+				tt.assertFn(t, handle)
+			}
+		})
+	}
+}
+
+func TestGoroutineSpawner_Run_uses_request_model(t *testing.T) {
+	cfg := NewConfig([]Definition{
+		{
+			ID:       "agent",
+			Name:     "Agent",
+			Model:    "default-model",
+			AllowAny: true,
+		},
+	})
+
+	var mu sync.Mutex
+	var requestedModels []string
+	factory := func(model string) (llm.Service, string, error) {
+		mu.Lock()
+		requestedModels = append(requestedModels, model)
+		mu.Unlock()
+		return &mockService{
+			responses: []mockResponse{stopResponse("ok")},
+		}, "openai", nil
+	}
+	spawner := NewGoroutineSpawner(
+		newMockStore(), factory, cfg,
+		skills.NewRegistry(nopFileSystem{}, dirURI(""), nil, nil),
+		NoMemory(), "",
+		"session-1", "agent",
+	)
+
+	// Run without Model: should use the agent definition's model.
+	handle, err := spawner.Run(context.Background(), RunRequest{
+		AgentID:        "agent",
+		Message:        "hello",
+		TimeoutSeconds: 5,
+	})
+	require.NoError(t, err)
+	consumeReply(t, handle)
+
+	// Run with Model override: should use the requested model.
+	handle, err = spawner.Run(context.Background(), RunRequest{
+		AgentID:        "agent",
+		Message:        "hello",
+		Model:          "claude-3-haiku",
+		TimeoutSeconds: 5,
+	})
+	require.NoError(t, err)
+	consumeReply(t, handle)
+
+	mu.Lock()
+	defer mu.Unlock()
+	require.Len(t, requestedModels, 2)
+	assert.Equal(t, "default-model", requestedModels[0],
+		"should use agent definition model when RunRequest.Model is empty")
+	assert.Equal(t, "claude-3-haiku", requestedModels[1],
+		"should use RunRequest.Model when set")
+}
+
+func TestGoroutineSpawner_RunWithCleanup(t *testing.T) {
+	cfg := NewConfig([]Definition{
+		{
+			ID:       "agent",
+			Name:     "Agent",
+			Model:    "m",
+			AllowAny: true,
+		},
+	})
+	svc := &mockService{
+		responses: []mockResponse{stopResponse("ok")},
+	}
+	store := newMockStore()
+	spawner := NewGoroutineSpawner(
+		store,
+		func(string) (llm.Service, string, error) {
+			return svc, "test", nil
+		},
+		cfg,
+		skills.NewRegistry(nopFileSystem{}, dirURI(""), nil, nil),
+		NoMemory(), "",
+		"psession",
+		"agent",
+	)
+	spawner.GenerateDialogueID = func(_ context.Context, _ string) string {
+		return "sub-agent-agent-fixed-id"
+	}
+
+	handle, err := spawner.Run(context.Background(), RunRequest{
+		Message: "task",
+		Cleanup: "delete",
+	})
+	require.NoError(t, err)
+	consumeReply(t, handle)
+
+	// Dialogue should have been deleted by Close().
+	_, dialogueExists := store.getDialogue("sub-agent-agent-fixed-id")
+	assert.False(t, dialogueExists,
+		"dialogue should be deleted after cleanup")
+}
+
+func TestGoroutineSpawner_RunWithAllowedTools(t *testing.T) {
+	cfg := NewConfig([]Definition{
+		{
+			ID:       "agent",
+			Name:     "Agent",
+			Model:    "m",
+			AllowAny: true,
+		},
+	})
+
+	svc := &mockService{
+		responses: []mockResponse{
+			toolCallResponse("read_file", `{"path":"a.go"}`, "tc1"),
+			stopResponse("done reading"),
+		},
+	}
+	readTool := &mockTool{name: "read_file", result: ToolResult{Content: "contents"}}
+	bashTool := &mockTool{name: "bash", result: ToolResult{Content: "cmd"}}
+
+	spawner := NewGoroutineSpawner(
+		newMockStore(),
+		func(string) (llm.Service, string, error) { return svc, "test", nil },
+		cfg,
+		skills.NewRegistry(nopFileSystem{}, dirURI(""), nil, nil),
+		NoMemory(), "",
+		"session", "agent",
+	)
+	spawner.SetRegistry(NewRegistry(readTool, bashTool))
+
+	handle, err := spawner.Run(context.Background(), RunRequest{
+		AgentID:        "agent",
+		Message:        "read a file",
+		TimeoutSeconds: 5,
+		AllowedTools:   []string{"read_file"},
+		SystemPrompt:   "You are a reader.",
+	})
+	require.NoError(t, err)
+	reply := consumeReply(t, handle)
+	assert.Equal(t, "done reading", reply)
+	assert.Equal(t, int32(1), readTool.execCount.Load())
+	assert.Equal(t, int32(0), bashTool.execCount.Load())
+}
+
+func TestGoroutineSpawner_Run_streams_events(t *testing.T) {
+	cfg := NewConfig([]Definition{
+		{
+			ID:       "agent",
+			Name:     "Agent",
+			Model:    "test-model",
+			AllowAny: true,
+		},
+	})
+
+	// Sub-agent does: tool_call → tool_result → text → done
+	svc := &mockService{
+		responses: []mockResponse{
+			toolCallResponse("read_file", `{"path":"a.go"}`, "tc1"),
+			stopResponse("done reading"),
+		},
+	}
+	readTool := &mockTool{
+		name:   "read_file",
+		result: ToolResult{Content: "file contents"},
+	}
+	spawner := NewGoroutineSpawner(
+		newMockStore(),
+		func(string) (llm.Service, string, error) { return svc, "openai", nil },
+		cfg,
+		skills.NewRegistry(nopFileSystem{}, dirURI(""), nil, nil),
+		NoMemory(), "",
+		"session", "agent",
+	)
+	spawner.SetRegistry(NewRegistry(readTool))
+
+	handle, err := spawner.Run(context.Background(), RunRequest{
+		AgentID:        "agent",
+		Message:        "read a file",
+		TimeoutSeconds: 5,
+	})
+	require.NoError(t, err)
+	defer handle.Events.Close() //nolint:errcheck
+
+	var events []Event
+	for {
+		ev, ok := handle.Events.Next(context.Background())
+		if !ok {
+			break
+		}
+		events = append(events, ev)
+	}
+
+	// Should include tool call, tool result, text, and done events.
+	var hasToolCall, hasToolResult, hasText, hasDone bool
+	for _, ev := range events {
+		switch ev.Type {
+		case EventToolCall:
+			hasToolCall = true
+			assert.Equal(t, "read_file", ev.ToolName)
+		case EventToolResult:
+			hasToolResult = true
+		case EventText:
+			hasText = true
+		case EventDone:
+			hasDone = true
+		}
+	}
+	assert.True(t, hasToolCall, "should stream EventToolCall")
+	assert.True(t, hasToolResult, "should stream EventToolResult")
+	assert.True(t, hasText, "should stream EventText")
+	assert.True(t, hasDone, "should stream EventDone")
+}
+
+func TestGoroutineSpawner_RunWithLabel(t *testing.T) {
+	cfg := NewConfig([]Definition{
+		{
+			ID:       "agent",
+			Name:     "Agent",
+			Model:    "test-model",
+			AllowAny: true,
+		},
+	})
+
+	var idCounter int
+	svc := &mockService{
+		responses: []mockResponse{stopResponse("done")},
+	}
+	spawner := NewGoroutineSpawner(
+		newMockStore(),
+		func(string) (llm.Service, string, error) { return svc, "test", nil },
+		cfg,
+		skills.NewRegistry(nopFileSystem{}, dirURI(""), nil, nil),
+		NoMemory(), "",
+		"parent-session", "agent",
+	)
+	spawner.GenerateDialogueID = func(_ context.Context, _ string) string {
+		idCounter++
+		return fmt.Sprintf("sub-agent-agent-test-id-%d", idCounter)
+	}
+
+	// With label
+	handle, err := spawner.Run(context.Background(), RunRequest{
+		Message: "task",
+		Label:   "my-label",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "my-label", handle.Label)
+	consumeReply(t, handle)
+
+	// Without label — uses dialogue ID
+	svc.responses = []mockResponse{stopResponse("done")}
+	handle, err = spawner.Run(context.Background(), RunRequest{
+		Message: "task",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, handle.SessionKey, handle.Label)
+	consumeReply(t, handle)
+}
+
+func TestGoroutineSpawner_Run_skill_fallback(t *testing.T) {
+	// Helper to write a SKILL.md into a temp dir.
+	writeSkill := func(t *testing.T, dir, name, content string) {
+		t.Helper()
+		skillDir := dir + "/" + name
+		require.NoError(t, os.MkdirAll(skillDir, 0o755))
+		require.NoError(t, os.WriteFile(skillDir+"/SKILL.md", []byte(content), 0o644))
+	}
+
+	makeRegistry := func(t *testing.T, content string) *skills.SkillRegistry {
+		t.Helper()
+		dir := t.TempDir()
+		writeSkill(t, dir, "planner", content)
+		return skills.NewRegistry(osFileSystem{}, dirURI(""), []string{dir}, nil)
+	}
+
+	agentSkill := `---
+name: planner
+description: Plans things
+type: agent
+allowed-tools: read_file bash
+---
+You are a planner.`
+
+	promptSkill := `---
+name: planner
+description: Plans things
+---
+You are a planner.`
+
+	baseCfg := NewConfig([]Definition{
+		{ID: "agent", Name: "Agent", Model: "test-model", AllowAny: true},
+	})
+
+	newSpawner := func(t *testing.T, reg *skills.SkillRegistry) *GoroutineSpawner {
+		t.Helper()
+		svc := &mockService{responses: []mockResponse{stopResponse("ok")}}
+		return NewGoroutineSpawner(
+			newMockStore(),
+			func(string) (llm.Service, string, error) { return svc, "test", nil },
+			baseCfg, reg, NoMemory(), "", "s1", "agent",
+		)
+	}
+
+	t.Run("agent-type skill resolved by name", func(t *testing.T) {
+		reg := makeRegistry(t, agentSkill)
+		spawner := newSpawner(t, reg)
+		handle, err := spawner.Run(context.Background(), RunRequest{
+			AgentID: "planner",
+			Message: "plan something",
+		})
+		require.NoError(t, err)
+		reply := consumeReply(t, handle)
+		assert.Equal(t, "ok", reply)
+	})
+
+	t.Run("case-insensitive match", func(t *testing.T) {
+		reg := makeRegistry(t, agentSkill)
+		spawner := newSpawner(t, reg)
+		handle, err := spawner.Run(context.Background(), RunRequest{
+			AgentID: "Planner",
+			Message: "plan something",
+		})
+		require.NoError(t, err)
+		reply := consumeReply(t, handle)
+		assert.Equal(t, "ok", reply)
+	})
+
+	t.Run("non-agent skill is not matched", func(t *testing.T) {
+		reg := makeRegistry(t, promptSkill)
+		spawner := newSpawner(t, reg)
+		_, err := spawner.Run(context.Background(), RunRequest{
+			AgentID: "planner",
+			Message: "plan something",
+		})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "no agent or agent skill")
+	})
+
+	t.Run("unknown agent and no matching skill returns error", func(t *testing.T) {
+		reg := skills.NewRegistry(nopFileSystem{}, dirURI(""), nil, nil)
+		spawner := newSpawner(t, reg)
+		_, err := spawner.Run(context.Background(), RunRequest{
+			AgentID: "nonexistent",
+			Message: "hello",
+		})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "no agent or agent skill")
+	})
+
+	t.Run("skill-based agent skips isAllowed check", func(t *testing.T) {
+		// Use a restricted parent (no AllowAny, no AllowSpawn).
+		restrictedCfg := NewConfig([]Definition{
+			{ID: "parent", Name: "Parent", Model: "test-model"},
+		})
+		reg := makeRegistry(t, agentSkill)
+		svc := &mockService{responses: []mockResponse{stopResponse("ok")}}
+		spawner := NewGoroutineSpawner(
+			newMockStore(),
+			func(string) (llm.Service, string, error) { return svc, "test", nil },
+			restrictedCfg, reg, NoMemory(), "", "s1", "parent",
+		)
+		handle, err := spawner.Run(context.Background(), RunRequest{
+			AgentID: "planner",
+			Message: "plan",
+		})
+		require.NoError(t, err, "skill-based agents must bypass isAllowed")
+		consumeReply(t, handle)
+	})
+
+	t.Run("config-defined agent takes precedence over skill", func(t *testing.T) {
+		// Register a config agent with same ID.
+		cfgWithPlanner := NewConfig([]Definition{
+			{ID: "agent", Name: "Agent", Model: "test-model", AllowAny: true},
+			{ID: "planner", Name: "Config Planner", Model: "test-model"},
+		})
+		reg := makeRegistry(t, agentSkill)
+		svc := &mockService{responses: []mockResponse{stopResponse("config-reply")}}
+		spawner := NewGoroutineSpawner(
+			newMockStore(),
+			func(string) (llm.Service, string, error) { return svc, "test", nil },
+			cfgWithPlanner, reg, NoMemory(), "", "s1", "agent",
+		)
+		handle, err := spawner.Run(context.Background(), RunRequest{
+			AgentID: "planner",
+			Message: "plan",
+		})
+		require.NoError(t, err)
+		reply := consumeReply(t, handle)
+		assert.Equal(t, "config-reply", reply)
+	})
+}
+
+// consumeReply drains the handle's events, collects EventText into
+// a reply string, and closes the iterator.
+func consumeReply(t *testing.T, handle RunHandle) string {
+	t.Helper()
+	defer handle.Events.Close() //nolint:errcheck
+	var sb strings.Builder
+	for {
+		ev, ok := handle.Events.Next(context.Background())
+		if !ok {
+			break
+		}
+		if ev.Type == EventText {
+			sb.WriteString(ev.Text)
+		}
+	}
+	return sb.String()
+}

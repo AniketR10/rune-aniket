@@ -1,0 +1,282 @@
+package main
+
+import (
+	"context"
+	"testing"
+	"time"
+)
+
+func TestRegister(t *testing.T) {
+	orig := registry
+	defer func() { registry = orig }()
+
+	registry = nil
+
+	m := testMemory{}
+	Register(m)
+
+	if len(registry) != 1 {
+		t.Fatalf("expected 1 memory in registry, got %d", len(registry))
+	}
+	if registry[0].ID() != "test-memory" {
+		t.Fatalf("expected ID 'test-memory', got %q", registry[0].ID())
+	}
+}
+
+func TestCategories(t *testing.T) {
+	m := testMemory{}
+	cats := categories(m)
+	if len(cats) == 0 {
+		t.Fatal("expected at least one category")
+	}
+
+	found := false
+	for _, c := range cats {
+		if c == "go-idiom" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("expected 'go-idiom' category")
+	}
+}
+
+func TestScore_FileTrigger(t *testing.T) {
+	m := testEpisodicMemory{}
+	s := score(m, []string{"iterator.go"}, nil, "")
+	if s == 0 {
+		t.Fatal("expected positive score for matching file trigger")
+	}
+}
+
+func TestScore_ErrorTrigger(t *testing.T) {
+	m := testEpisodicMemory{}
+	s := score(m, nil, []string{"deadlock in goroutine"}, "")
+	if s == 0 {
+		t.Fatal("expected positive score for matching error trigger")
+	}
+}
+
+func TestScore_ActionTrigger(t *testing.T) {
+	m := testEpisodicMemory{}
+	s := score(m, nil, nil, "refactoring iterators")
+	if s == 0 {
+		t.Fatal("expected positive score for matching action trigger")
+	}
+}
+
+func TestScore_SurfaceBefore(t *testing.T) {
+	m := testEpisodicMemory{}
+	s := score(m, nil, nil, "creating iterators")
+	if s == 0 {
+		t.Fatal("expected positive score for matching surface-before")
+	}
+}
+
+func TestScore_FileWeighedHigherThanAction(t *testing.T) {
+	m := testEpisodicMemory{}
+	fileScore := score(m, []string{"iterator.go"}, nil, "")
+	actionScore := score(m, nil, nil, "refactoring iterators")
+	if fileScore <= actionScore {
+		t.Fatalf("file score (%f) should be higher than action score (%f)", fileScore, actionScore)
+	}
+}
+
+func TestScore_NoMatch(t *testing.T) {
+	m := testMemory{}
+	s := score(m, []string{"completely_unrelated.xyz"}, nil, "")
+	if s != 0 {
+		t.Fatalf("expected 0 score for no match, got %f", s)
+	}
+}
+
+func TestRelevance_SemanticNeverDecays(t *testing.T) {
+	m := testMemory{}
+	r := relevance(m)
+	if r != 1.0 {
+		t.Fatalf("expected 1.0 relevance for semantic memory, got %f", r)
+	}
+}
+
+func TestRelevance_RecentEpisodic(t *testing.T) {
+	m := testEpisodicMemory{}
+	r := relevance(m)
+	if r < 0.9 {
+		t.Fatalf("expected high relevance for recent episodic memory, got %f", r)
+	}
+}
+
+func TestRelevance_CertainNeverDecays(t *testing.T) {
+	m := testCertainMemory{}
+	r := relevance(m)
+	if r != 1.0 {
+		t.Fatalf("expected 1.0 relevance for Certain memory, got %f", r)
+	}
+}
+
+func TestRelevance_OldTentativeDecays(t *testing.T) {
+	m := testOldTentativeMemory{}
+	r := relevance(m)
+	if r >= 0.5 {
+		t.Fatalf("expected low relevance for old tentative memory, got %f", r)
+	}
+}
+
+func TestSupersededMemoriesSkipped(t *testing.T) {
+	orig := registry
+	defer func() { registry = orig }()
+
+	old := testEpisodicMemory{}         // id: "test-episodic"
+	replacement := testSupersedingMemory{} // supersedes "test-episodic"
+	registry = []Memory{old, replacement}
+
+	superseded := make(map[string]bool)
+	for _, m := range registry {
+		if s, ok := m.(Supersedes); ok {
+			for _, id := range s.Supersedes() {
+				superseded[id] = true
+			}
+		}
+	}
+
+	if !superseded["test-episodic"] {
+		t.Fatal("expected test-episodic to be superseded")
+	}
+	if superseded["test-superseding"] {
+		t.Fatal("the superseding memory should not be superseded itself")
+	}
+}
+
+func TestDependencyExpansion(t *testing.T) {
+	orig := registry
+	defer func() { registry = orig }()
+
+	dep := testMemory{}                 // id: "test-memory"
+	parent := testDependentMemory{}     // depends on "test-memory"
+	registry = []Memory{dep, parent}
+
+	byID := make(map[string]Memory)
+	for _, m := range registry {
+		byID[m.ID()] = m
+	}
+
+	// parent depends on dep
+	var dm interface{} = parent
+	d, ok := dm.(DependsOn)
+	if !ok {
+		t.Fatal("testDependentMemory should implement DependsOn")
+	}
+	for _, id := range d.DependsOn() {
+		if _, found := byID[id]; !found {
+			t.Fatalf("dependency %q not found in registry", id)
+		}
+	}
+}
+
+func TestSplitCSV(t *testing.T) {
+	tests := []struct {
+		input string
+		want  int
+	}{
+		{"", 0},
+		{"a,b,c", 3},
+		{" a , b ", 2},
+		{"a,,b", 2},
+	}
+	for _, tt := range tests {
+		got := splitCSV(tt.input)
+		if len(got) != tt.want {
+			t.Errorf("splitCSV(%q) = %d items, want %d", tt.input, len(got), tt.want)
+		}
+	}
+}
+
+func TestContainsFold(t *testing.T) {
+	if !containsFold("Handler.go", "handler") {
+		t.Fatal("expected case-insensitive match")
+	}
+	if containsFold("foo", "bar") {
+		t.Fatal("expected no match")
+	}
+}
+
+func TestFetchConversation_InterfaceCompliance(t *testing.T) {
+	var m testMemory
+	d, err := m.FetchConversation(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if d.ID != "" {
+		t.Fatalf("expected empty dialogue ID, got %q", d.ID)
+	}
+}
+
+// --- Test types ---
+
+type testMemory struct{}
+
+func (testMemory) ID() string      { return "test-memory" }
+func (testMemory) Content() string { return "test memory content" }
+func (testMemory) goIdiom()        {}
+func (testMemory) FetchConversation(context.Context) (Dialogue, error) { return Dialogue{}, nil }
+
+type testEpisodicMemory struct{}
+
+func (testEpisodicMemory) ID() string      { return "test-episodic" }
+func (testEpisodicMemory) Content() string { return "test episodic memory content" }
+func (testEpisodicMemory) bugFix()         {}
+func (testEpisodicMemory) FetchConversation(context.Context) (Dialogue, error) {
+	return Dialogue{}, nil
+}
+func (testEpisodicMemory) OccurredAt() time.Time {
+	return time.Now().Add(-24 * time.Hour) // yesterday
+}
+func (testEpisodicMemory) TriggerOn() Trigger {
+	return Trigger{
+		Files:   []string{"iterator.go"},
+		Errors:  []string{"deadlock", "goroutine leak"},
+		Actions: []string{"refactoring iterators"},
+	}
+}
+func (testEpisodicMemory) SurfaceBefore() []string { return []string{"creating iterators", "streaming"} }
+
+type testCertainMemory struct{}
+
+func (testCertainMemory) ID() string            { return "test-certain" }
+func (testCertainMemory) Content() string       { return "certain memory content" }
+func (testCertainMemory) OccurredAt() time.Time { return time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC) }
+func (testCertainMemory) TriggerOn() Trigger    { return Trigger{} }
+func (testCertainMemory) SurfaceBefore() []string { return nil }
+func (testCertainMemory) Confidence() Confidence { return Certain }
+func (testCertainMemory) FetchConversation(context.Context) (Dialogue, error) {
+	return Dialogue{}, nil
+}
+
+type testOldTentativeMemory struct{}
+
+func (testOldTentativeMemory) ID() string            { return "test-old-tentative" }
+func (testOldTentativeMemory) Content() string       { return "old tentative content" }
+func (testOldTentativeMemory) OccurredAt() time.Time { return time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC) }
+func (testOldTentativeMemory) TriggerOn() Trigger    { return Trigger{} }
+func (testOldTentativeMemory) SurfaceBefore() []string { return nil }
+func (testOldTentativeMemory) FetchConversation(context.Context) (Dialogue, error) {
+	return Dialogue{}, nil
+}
+
+type testSupersedingMemory struct{}
+
+func (testSupersedingMemory) ID() string         { return "test-superseding" }
+func (testSupersedingMemory) Content() string    { return "superseding memory content" }
+func (testSupersedingMemory) Supersedes() []string { return []string{"test-episodic"} }
+func (testSupersedingMemory) FetchConversation(context.Context) (Dialogue, error) {
+	return Dialogue{}, nil
+}
+
+type testDependentMemory struct{}
+
+func (testDependentMemory) ID() string         { return "test-dependent" }
+func (testDependentMemory) Content() string    { return "dependent memory content" }
+func (testDependentMemory) DependsOn() []string { return []string{"test-memory"} }
+func (testDependentMemory) FetchConversation(context.Context) (Dialogue, error) {
+	return Dialogue{}, nil
+}

@@ -585,24 +585,6 @@ focus_frame_attr_theme: &focus_frame_attr
 # path and configuration for each of the extensions
 # that are to be run alongside the editor.
 extensions:
-  # This extension adds AI assistant commands to the editor. Open a new
-  # dialogue with 'assistantChat' command or run a query through it directly
-  # with '?' command.
-#  rtc:
-#    config:
-#      # Whether to maintain the aspect ratio of the
-#      # captured frames.
-#      maintain_aspect_ratio: true
-#      # Whether to capture and send ascii images in color
-#      color: true
-#      # Frames per second for capture
-#      fps: 30
-#      # Ranges from -100 to 100, it indicates whether
-#      # contrast should be increased to provide clearer frames.
-#      contrast: 30
-#      # Density Characters is used to encode the density of a pixel. It is
-#      # assumed that it's sorted by density in ascending order.
-#      #density_characters: '   `_.,-*=+:;cba!?0123456789$W#@'
   # This extension adds a command colorPalette which opens a new window
   # and shows all the colors available to configure in the various
   # styles thorought this configuration.
@@ -671,104 +653,6 @@ extensions:
       focus_element_attr:
         fg: purple
         bg: default
-  # This extension adds a workspace-wide fuzzy AST search command `searchast`,
-  # which powers the following aliases: `searchtype`, `searchvar` and `searchfunc`,
-  # and can be used to pass custom tree-sitter queries and match against the captured nodes.
-  fuzzy_syntax: {}
-  # This extension adds LSP functionality (Language Server Protocol).
-  # This adds formatting, go to definition, search references, get
-  # symbol documentation, and diagnostics in the form of errors and warnings.
-  # Only go and C/C++ is supported for now, but you're welcome to try
-  # LSP servers by adding new rows below in `exec`.
-  lsp:
-    config:
-      # Hover window colors
-      hover_window_attr:
-        fg: default
-        bg: default
-      # Search references window colors
-      references:
-        window_attr:
-          fg: default
-          bg: default
-        element_attr:
-          fg: default
-          bg: default
-          flags:
-            - dim
-        matched_text_attr:
-          fg: blue
-          bg: default
-          flags:
-            - bold
-            - italic
-        count_attr:
-          fg: default
-          bg: default
-        focus_element_attr:
-          fg: purple
-          bg: default
-          flags:
-            - bold
-
-      # timeout to connect to LSP server.
-      connect_timeout: 10s
-
-      # Timeout to run individual RPCs against LSP server.
-      # This should be large for large workspaces.
-      rpc_timeout: 30s
-      disconnect_timeout: 300ms
-
-      # configure the colors of the diagnostics provided by the LSP server.
-      diagnostics:
-        error:
-          fg: white
-          bg: red
-        warning:
-          fg: black
-          bg: yellow
-        info:
-          fg: white
-          bg: blue
-        hint:
-          fg: white
-          bg: green
-
-      # configure syntax highlighting colors
-      syntax_highlighting:
-        interface: yellow
-        struct: default
-        typeParameter: default
-        parameter: default
-        variable:  default
-        property: default
-        enumMember: default
-        event: default
-        method: default
-        function: default
-        member: default
-        macro: default
-        keyword: yellow
-        modifier: yellow
-        comment: blue
-        string: magenta
-        number: red
-      # Enable/disable syntax highlighting by file extension.
-      # By default it's disabled.
-      enable_semantic_tokens:
-        # .go: false
-        .rb: true
-      # Enable a LSP server for a file extension. The format is
-      # <.extension>: <path to lsp executable> <args>
-      exec:
-        .go: gopls -mode stdio
-        .c: clangd
-        .h: clangd
-        .ts: typescript-language-server --stdio
-        .js: typescript-language-server --stdio
-        .tsx: typescript-language-server --stdio
-        .json: typescript-language-server --stdio
-
 # Configuration for the command prompt.
 command:
   # Key to open the command prompt.

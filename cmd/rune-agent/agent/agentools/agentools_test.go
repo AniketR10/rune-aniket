@@ -1,0 +1,1237 @@
+// Unstable Build LLC ("COMPANY") CONFIDENTIAL
+//
+// Unpublished Copyright (c) 2024-2026 Unstable Build, All Rights Reserved.
+//
+// NOTICE: All information contained herein is, and remains the property of COMPANY.
+// The intellectual and technical concepts contained herein are proprietary to
+// COMPANY and may be covered by U.S. and Foreign Patents, patents in process,
+// and are protected by trade secret or copyright law. Dissemination of this information
+// or reproduction of this material is strictly forbidden unless prior written permission
+// is obtained from COMPANY. Access to the source code contained herein is hereby
+// forbidden to anyone except current COMPANY employees, managers or contractors who
+// have executed Confidentiality and Non-disclosure agreements explicitly covering such access.
+//
+// The copyright notice above does not evidence any actual or intended publication or
+// disclosure of this source code, which includes information that is confidential and/or
+// proprietary, and is a trade secret, of COMPANY. ANY REPRODUCTION, MODIFICATION,
+// DISTRIBUTION, PUBLIC  PERFORMANCE, OR PUBLIC DISPLAY OF OR THROUGH USE OF THIS SOURCE CODE
+// WITHOUT  THE EXPRESS WRITTEN CONSENT OF COMPANY IS STRICTLY PROHIBITED, AND IN
+// VIOLATION OF APPLICABLE LAWS AND INTERNATIONAL TREATIES. THE RECEIPT OR POSSESSION OF
+// THIS SOURCE CODE AND/OR RELATED INFORMATION DOES NOT CONVEY OR IMPLY ANY RIGHTS TO
+// REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
+// ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
+
+package agentools
+
+import (
+	"bytes"
+	"context"
+	"image"
+	"image/color"
+	"image/png"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"syscall"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"unstable.build/go-tui/cmd/rune-agent/agent"
+	"unstable.build/go-tui/cmd/rune-agent/llm"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+)
+
+// localFS implements workspaceapi.FileSystem using local OS calls for testing.
+// When root is set, relative paths are resolved against it; otherwise they are
+// resolved against the process working directory (via filepath.Abs).
+type localFS struct {
+	root string
+}
+
+func (f localFS) resolve(path string) string {
+	if filepath.IsAbs(path) {
+		return path
+	}
+	if f.root != "" {
+		return filepath.Join(f.root, path)
+	}
+	abs, _ := filepath.Abs(path)
+	return abs
+}
+
+func (f localFS) URI(path string) (workspaceapi.URI, error) {
+	return workspaceapi.ParseURI("file://" + f.resolve(path))
+}
+
+func (f localFS) OpenFile(path string, flag int, mode os.FileMode) (workspaceapi.File, error) {
+	return os.OpenFile(f.resolve(path), flag, mode)
+}
+
+func (f localFS) Remove(path string) error {
+	return os.Remove(f.resolve(path))
+}
+
+func (f localFS) Stat(path string) (os.FileInfo, error) {
+	return os.Stat(f.resolve(path))
+}
+
+func (f localFS) ReadDir(name string) ([]os.DirEntry, error) {
+	return os.ReadDir(f.resolve(name))
+}
+
+func (f localFS) MkdirAll(path string, perm os.FileMode) error {
+	return os.MkdirAll(f.resolve(path), perm)
+}
+
+// localExec implements workspaceapi.Executor using os/exec for testing.
+type localExec struct{}
+
+func (localExec) Start(ctx context.Context, cmd workspaceapi.Cmd) (workspaceapi.Pid, error) {
+	c := exec.CommandContext(ctx, cmd.Path, cmd.Args...)
+	c.Dir = cmd.Dir
+	c.Stdin = cmd.Stdin
+	c.Stdout = cmd.Stdout
+	c.Stderr = cmd.Stderr
+	c.Env = cmd.Env
+
+	if err := c.Start(); err != nil {
+		return 0, err
+	}
+
+	pid := workspaceapi.Pid(c.Process.Pid)
+
+	// Send result to watcher when process exits.
+	go func() {
+		err := c.Wait()
+		if cmd.Watcher != nil {
+			cmd.Watcher.WatchProcess() <- err
+		}
+	}()
+
+	return pid, nil
+}
+
+func (localExec) Signal(pid workspaceapi.Pid, sig syscall.Signal) error {
+	proc, err := os.FindProcess(int(pid))
+	if err != nil {
+		return err
+	}
+	return proc.Signal(sig)
+}
+
+func (localExec) Close() error { return nil }
+
+// recordingExec captures the Cmd passed to Start for inspection in tests.
+type recordingExec struct {
+	startFn func(context.Context, workspaceapi.Cmd) (workspaceapi.Pid, error)
+}
+
+func (r *recordingExec) Start(ctx context.Context, cmd workspaceapi.Cmd) (workspaceapi.Pid, error) {
+	return r.startFn(ctx, cmd)
+}
+
+func (r *recordingExec) Signal(_ workspaceapi.Pid, _ syscall.Signal) error { return nil }
+func (r *recordingExec) Close() error                                      { return nil }
+
+func dirURI(dir string) workspaceapi.URI {
+	u, _ := workspaceapi.ParseURI("file://" + dir)
+	return u
+}
+
+func TestDefaultTools(t *testing.T) {
+	tools, tracker := DefaultTools(localFS{}, localExec{}, dirURI("/workspace"), Config{})
+	require.Len(t, tools, 6)
+	require.NotNil(t, tracker)
+
+	expectedNames := map[string]bool{
+		"read_file":      false,
+		"apply_patch":    false,
+		"search_content": false,
+		"find_files":     false,
+		"bash":           false,
+		"compact":        false,
+	}
+	for _, tool := range tools {
+		def := tool.Definition()
+		assert.Equal(t, llm.ToolTypeFunction, def.Type)
+		name := def.Function.Name
+		_, ok := expectedNames[name]
+		assert.True(t, ok, "unexpected tool name: %s", name)
+		expectedNames[name] = true
+	}
+	for name, found := range expectedNames {
+		assert.True(t, found, "tool %q not returned by DefaultTools", name)
+	}
+}
+
+func TestSessionTools(t *testing.T) {
+	spawner := &mockSpawner{}
+	tools := SessionTools(spawner, nil, nil, nil)
+	require.Len(t, tools, 1)
+
+	def := tools[0].Definition()
+	assert.Equal(t, llm.ToolTypeFunction, def.Type)
+	assert.Equal(t, "agent", def.Function.Name)
+}
+
+func TestDefinitions(t *testing.T) {
+	dir := t.TempDir()
+	fs := localFS{}
+	ex := localExec{}
+	tests := []struct {
+		name     string
+		tool     agent.Tool
+		wantName string
+	}{
+		{"read_file", newReadFile(fs, dirURI(dir), NewFileTracker(), 0), "read_file"},
+		{"apply_patch", newApplyPatch(fs, dirURI(dir), NewFileTracker()), "apply_patch"},
+		{"search_content", newSearch(fs, dirURI(dir), NewFileTracker()), "search_content"},
+		{"find_files", newFindFiles(fs, dirURI(dir), NewFileTracker()), "find_files"},
+		{"list_dir", NewListDir(fs, dirURI(dir)), "list_dir"},
+		{"bash", newBash(ex, dirURI(dir)), "bash"},
+		{"compact", newCompact(), "compact"},
+		{"exec_command", NewExecCommand(NewSessionManager(context.Background(), ex, nil), dirURI(dir)), "exec_command"},
+		{"write_stdin", NewWriteStdin(NewSessionManager(context.Background(), ex, nil)), "write_stdin"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			def := tt.tool.Definition()
+			assert.Equal(t, llm.ToolTypeFunction, def.Type)
+			assert.Equal(t, tt.wantName, def.Function.Name)
+			assert.NotEmpty(t, def.Function.Description)
+			assert.NotNil(t, def.Function.Parameters)
+		})
+	}
+}
+
+func TestToolDescriptionsCrossReferenceSemanticSkills(t *testing.T) {
+	dir := t.TempDir()
+	fs := localFS{}
+
+	tests := []struct {
+		name     string
+		tool     agent.Tool
+		contains []string
+	}{
+		{
+			"read_file mentions outline_file and describe_symbol tools",
+			newReadFile(fs, dirURI(dir), NewFileTracker(), 0),
+			[]string{"outline_file tool", "describe_symbol tool"},
+		},
+		{
+			"search_content mentions search_symbols and find_definition tools",
+			newSearch(fs, dirURI(dir), NewFileTracker()),
+			[]string{"search_symbols", "find_definition"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			desc := tt.tool.Definition().Function.Description
+			for _, want := range tt.contains {
+				assert.Contains(t, desc, want)
+			}
+		})
+	}
+}
+
+func TestSummary(t *testing.T) {
+	dir := t.TempDir()
+	fs := localFS{}
+	ex := localExec{}
+	spawner := &mockSpawner{}
+
+	tests := []struct {
+		name     string
+		tool     agent.Tool
+		args     string
+		expected string
+	}{
+		// read_file
+		{"read_file path only", newReadFile(fs, dirURI(dir), NewFileTracker(), 0), `{"path":"src/main.go"}`, "src/main.go"},
+		{"read_file with offset and limit", newReadFile(fs, dirURI(dir), NewFileTracker(), 0), `{"path":"src/main.go","offset":10,"limit":20}`, "src/main.go:10-29"},
+		{"read_file with offset no limit", newReadFile(fs, dirURI(dir), NewFileTracker(), 0), `{"path":"src/main.go","offset":10}`, "src/main.go:10-"},
+		{"read_file invalid json", newReadFile(fs, dirURI(dir), NewFileTracker(), 0), `bad`, ""},
+		// apply_patch
+		{"apply_patch single file", newApplyPatch(fs, dirURI(dir), NewFileTracker()), `{"patch":"*** Begin Patch\n*** Update File: main.go\n@@ \n-old\n+new\n*** End Patch"}`, "main.go"},
+		{"apply_patch multi file", newApplyPatch(fs, dirURI(dir), NewFileTracker()), `{"patch":"*** Begin Patch\n*** Add File: a.go\n+pkg\n*** Delete File: b.go\n*** End Patch"}`, "a.go, b.go"},
+		{"apply_patch invalid json", newApplyPatch(fs, dirURI(dir), NewFileTracker()), `bad`, ""},
+		// search_content
+		{"search pattern only", newSearch(fs, dirURI(dir), NewFileTracker()), `{"pattern":"TODO"}`, `"TODO"`},
+		{"search with path", newSearch(fs, dirURI(dir), NewFileTracker()), `{"pattern":"TODO","path":"src"}`, `"TODO" in src`},
+		{"search invalid json", newSearch(fs, dirURI(dir), NewFileTracker()), `bad`, ""},
+		// find_files
+		{"find pattern only", newFindFiles(fs, dirURI(dir), NewFileTracker()), `{"pattern":"*.go"}`, `"*.go"`},
+		{"find with path", newFindFiles(fs, dirURI(dir), NewFileTracker()), `{"pattern":"*.go","path":"lib"}`, `"*.go" in lib`},
+		{"find invalid json", newFindFiles(fs, dirURI(dir), NewFileTracker()), `bad`, ""},
+		// bash — Summary always returns the command (not description).
+		{"bash with description returns command", newBash(ex, dirURI(dir)), `{"command":"go test ./...","description":"Run all tests"}`, "go test ./..."},
+		{"bash empty description returns command", newBash(ex, dirURI(dir)), `{"command":"go test ./...","description":""}`, "go test ./..."},
+		{"bash no description returns command", newBash(ex, dirURI(dir)), `{"command":"go test ./..."}`, "go test ./..."},
+		{"bash invalid json", newBash(ex, dirURI(dir)), `bad`, ""},
+		// web_fetch
+		{"web_fetch", NewWebFetch(&stubFetcher{}), `{"url":"https://example.com"}`, "https://example.com"},
+		{"web_fetch invalid json", NewWebFetch(&stubFetcher{}), `bad`, ""},
+		// agent
+		{"agent with description", NewAgentTool(spawner, nil, nil, nil), `{"description":"search code","prompt":"find tests"}`, "search code"},
+		{"agent without description short prompt", NewAgentTool(spawner, nil, nil, nil), `{"prompt":"short task"}`, "short task"},
+		{"agent without description long prompt", NewAgentTool(spawner, nil, nil, nil), `{"prompt":"` + strings.Repeat("a", 80) + `"}`, strings.Repeat("a", 60) + "..."},
+		{"agent invalid json", NewAgentTool(spawner, nil, nil, nil), `bad`, ""},
+		// list_dir
+		{"list_dir", NewListDir(fs, dirURI(dir)), `{"dir_path":"/tmp/project"}`, ".../tmp/project"},
+		{"list_dir invalid json", NewListDir(fs, dirURI(dir)), `bad`, ""},
+		// exec_command
+		{"exec_command", NewExecCommand(NewSessionManager(context.Background(), ex, nil), dirURI(dir)), `{"cmd":"echo hello"}`, "echo hello"},
+		{"exec_command invalid json", NewExecCommand(NewSessionManager(context.Background(), ex, nil), dirURI(dir)), `bad`, ""},
+		// write_stdin
+		{"write_stdin with chars", NewWriteStdin(NewSessionManager(context.Background(), ex, nil)), `{"session_id":1000,"chars":"hello\n"}`, "session 1000: hello\n"},
+		{"write_stdin poll", NewWriteStdin(NewSessionManager(context.Background(), ex, nil)), `{"session_id":1000,"chars":""}`, "poll session 1000"},
+		{"write_stdin invalid json", NewWriteStdin(NewSessionManager(context.Background(), ex, nil)), `bad`, ""},
+		// request_skill
+		{"request_skill", NewRequestSkill(&mockPrompter{}), `{"skill":"web_search","description":"Search the web"}`, "web_search"},
+		{"request_skill invalid json", NewRequestSkill(&mockPrompter{}), `bad`, ""},
+		// compact
+		{"compact", newCompact(), `{}`, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, tt.tool.Summary(tt.args))
+		})
+	}
+}
+
+func TestResolvePath(t *testing.T) {
+	tests := []struct {
+		name     string
+		root     string
+		path     string
+		wantPath string
+	}{
+		{
+			name:     "relative path is joined with root",
+			root:     "/workspace",
+			path:     "src/main.go",
+			wantPath: "/workspace/src/main.go",
+		},
+		{
+			name:     "absolute path is returned as-is",
+			root:     "/workspace",
+			path:     "/tmp/file.txt",
+			wantPath: "/tmp/file.txt",
+		},
+		{
+			name:     "dot path resolves to root",
+			root:     "/workspace",
+			path:     ".",
+			wantPath: "/workspace",
+		},
+		{
+			name:     "absolute path with spaces is returned as-is",
+			root:     "/workspace",
+			path:     "/tmp/file with spaces.txt",
+			wantPath: "/tmp/file with spaces.txt",
+		},
+		{
+			name:     "relative path with spaces is joined with root",
+			root:     "/workspace root",
+			path:     "sub dir/file with spaces.txt",
+			wantPath: "/workspace root/sub dir/file with spaces.txt",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := resolvePath(dirURI(tt.root), tt.path)
+			assert.Equal(t, tt.wantPath, got)
+		})
+	}
+}
+
+func TestReadFile(t *testing.T) {
+	tests := []struct {
+		name     string
+		args     string
+		setup    func(t *testing.T, dir string)
+		assertFn func(t *testing.T, result agent.ToolResult)
+	}{
+		{
+			name: "happy path reads full file with line numbers",
+			args: `{"path": "hello.txt"}`,
+			assertFn: func(t *testing.T, result agent.ToolResult) {
+				assert.False(t, result.IsError)
+				assert.Contains(t, result.Content, "L1: hello world")
+				assert.Contains(t, result.Content, "L2: second line")
+				assert.Contains(t, result.Content, "L3: third line")
+			},
+		},
+		{
+			name: "file not found returns error",
+			args: `{"path": "nonexistent.txt"}`,
+			assertFn: func(t *testing.T, result agent.ToolResult) {
+				assert.True(t, result.IsError)
+				assert.Contains(t, result.Content, "error:")
+			},
+		},
+		{
+			name: "offset and limit select line range",
+			args: `{"path": "hello.txt", "offset": 2, "limit": 1}`,
+			assertFn: func(t *testing.T, result agent.ToolResult) {
+				assert.False(t, result.IsError)
+				assert.Contains(t, result.Content, "L2: second line")
+				assert.NotContains(t, result.Content, "L1: hello world")
+				assert.NotContains(t, result.Content, "L3: third line")
+			},
+		},
+		{
+			name: "offset beyond file length returns empty content",
+			args: `{"path": "hello.txt", "offset": 999}`,
+			assertFn: func(t *testing.T, result agent.ToolResult) {
+				assert.False(t, result.IsError)
+				assert.Empty(t, strings.TrimSpace(result.Content))
+			},
+		},
+		{
+			name: "invalid JSON returns error",
+			args: `not json`,
+			assertFn: func(t *testing.T, result agent.ToolResult) {
+				assert.True(t, result.IsError)
+				assert.Contains(t, result.Content, "invalid arguments")
+			},
+		},
+		{
+			name: "absolute path reads file directly",
+			args: "", // set in setup
+			setup: func(t *testing.T, dir string) {
+				// create file and set args with absolute path
+				absPath := filepath.Join(dir, "abs_test.txt")
+				require.NoError(t, os.WriteFile(absPath, []byte("absolute content"), 0o644))
+				t.Setenv("ABS_PATH", absPath)
+			},
+			assertFn: func(t *testing.T, result agent.ToolResult) {
+				assert.False(t, result.IsError)
+				assert.Contains(t, result.Content, "absolute content")
+			},
+		},
+		{
+			name: "absolute path with spaces reads file directly",
+			args: "", // set in setup
+			setup: func(t *testing.T, dir string) {
+				absPath := filepath.Join(dir, "file with spaces.txt")
+				require.NoError(t, os.WriteFile(absPath, []byte("content with spaces path"), 0o644))
+				t.Setenv("ABS_PATH_WITH_SPACES", absPath)
+			},
+			assertFn: func(t *testing.T, result agent.ToolResult) {
+				assert.False(t, result.IsError)
+				assert.Contains(t, result.Content, "content with spaces path")
+			},
+		},
+		{
+			name: "relative path with spaces reads file",
+			args: `{"path": "sub dir/file with spaces.txt"}`,
+			setup: func(t *testing.T, dir string) {
+				require.NoError(t, os.MkdirAll(filepath.Join(dir, "sub dir"), 0o755))
+				require.NoError(t, os.WriteFile(filepath.Join(dir, "sub dir", "file with spaces.txt"), []byte("spaced relative path"), 0o644))
+			},
+			assertFn: func(t *testing.T, result agent.ToolResult) {
+				assert.False(t, result.IsError)
+				assert.Contains(t, result.Content, "spaced relative path")
+			},
+		},
+		{
+			name: "nested file via relative path",
+			args: `{"path": "sub/nested.go"}`,
+			assertFn: func(t *testing.T, result agent.ToolResult) {
+				assert.False(t, result.IsError)
+				assert.Contains(t, result.Content, "package sub")
+				assert.Contains(t, result.Content, "func Foo()")
+			},
+		},
+		{
+			name: "empty file returns empty content",
+			args: `{"path": "empty.txt"}`,
+			setup: func(t *testing.T, dir string) {
+				require.NoError(t, os.WriteFile(filepath.Join(dir, "empty.txt"), []byte(""), 0o644))
+			},
+			assertFn: func(t *testing.T, result agent.ToolResult) {
+				assert.False(t, result.IsError)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := setupWorkspace(t)
+			tool := newReadFile(localFS{}, dirURI(dir), NewFileTracker(), 0)
+
+			if tt.setup != nil {
+				tt.setup(t, dir)
+			}
+
+			args := tt.args
+			// Special case for absolute path test
+			if tt.name == "absolute path reads file directly" {
+				absPath := os.Getenv("ABS_PATH")
+				args = `{"path": "` + absPath + `"}`
+			}
+			if tt.name == "absolute path with spaces reads file directly" {
+				absPath := os.Getenv("ABS_PATH_WITH_SPACES")
+				args = `{"path": "` + absPath + `"}`
+			}
+
+			result := tool.Execute(context.Background(), args)
+			tt.assertFn(t, result)
+		})
+	}
+}
+
+func TestImageMediaType(t *testing.T) {
+	tests := []struct {
+		path     string
+		wantMIME string
+		wantOK   bool
+	}{
+		{"photo.png", "image/png", true},
+		{"photo.jpg", "image/jpeg", true},
+		{"photo.jpeg", "image/jpeg", true},
+		{"anim.gif", "image/gif", true},
+		{"photo.webp", "image/webp", true},
+		{"icon.svg", "", false},
+		{"readme.txt", "", false},
+		{"PHOTO.PNG", "image/png", true}, // case-insensitive via strings.ToLower
+		{"noext", "", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.path, func(t *testing.T) {
+			mime, ok := imageMediaType(tt.path)
+			assert.Equal(t, tt.wantOK, ok)
+			assert.Equal(t, tt.wantMIME, mime)
+		})
+	}
+}
+
+func TestReadFile_image(t *testing.T) {
+	// Create a minimal valid PNG (1x1 pixel).
+	makePNG := func(t *testing.T) []byte {
+		t.Helper()
+		img := image.NewRGBA(image.Rect(0, 0, 1, 1))
+		img.Set(0, 0, color.RGBA{R: 255, A: 255})
+		var buf bytes.Buffer
+		require.NoError(t, png.Encode(&buf, img))
+		return buf.Bytes()
+	}
+
+	t.Run("image returns MultiContent", func(t *testing.T) {
+		dir := t.TempDir()
+		pngData := makePNG(t)
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "test.png"), pngData, 0o644))
+
+		tool := newReadFile(localFS{}, dirURI(dir), NewFileTracker(), 0)
+		result := tool.Execute(context.Background(), `{"path":"test.png"}`)
+
+		assert.False(t, result.IsError)
+		assert.Contains(t, result.Content, "Read image file: test.png")
+		assert.Contains(t, result.Content, "image/png")
+		require.Len(t, result.MultiContent, 2)
+		assert.Equal(t, llm.ContentPartTypeText, result.MultiContent[0].Type)
+		assert.Equal(t, llm.ContentPartTypeImageURL, result.MultiContent[1].Type)
+		assert.True(t, strings.HasPrefix(result.MultiContent[1].ImageURL, "data:image/png;base64,"))
+	})
+
+	t.Run("image too large", func(t *testing.T) {
+		dir := t.TempDir()
+		// Write a file with .png extension but over 20 MB.
+		bigData := make([]byte, maxImageBytes+1)
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "big.png"), bigData, 0o644))
+
+		tool := newReadFile(localFS{}, dirURI(dir), NewFileTracker(), 0)
+		result := tool.Execute(context.Background(), `{"path":"big.png"}`)
+
+		assert.True(t, result.IsError)
+		assert.Contains(t, result.Content, "too large")
+	})
+
+	t.Run("image ignores offset and limit", func(t *testing.T) {
+		dir := t.TempDir()
+		pngData := makePNG(t)
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "test.png"), pngData, 0o644))
+
+		tool := newReadFile(localFS{}, dirURI(dir), NewFileTracker(), 0)
+		result := tool.Execute(context.Background(), `{"path":"test.png","offset":5,"limit":10}`)
+
+		assert.False(t, result.IsError)
+		require.Len(t, result.MultiContent, 2)
+		// Full image is returned despite offset/limit.
+		assert.True(t, strings.HasPrefix(result.MultiContent[1].ImageURL, "data:image/png;base64,"))
+	})
+
+	t.Run("text file unaffected", func(t *testing.T) {
+		dir := setupWorkspace(t)
+		tool := newReadFile(localFS{}, dirURI(dir), NewFileTracker(), 0)
+		result := tool.Execute(context.Background(), `{"path":"hello.txt"}`)
+
+		assert.False(t, result.IsError)
+		assert.Nil(t, result.MultiContent)
+		assert.Contains(t, result.Content, "L1: hello world")
+	})
+}
+
+func TestReadFile_imagePathWithSpaces(t *testing.T) {
+	dir := t.TempDir()
+	imgPath := filepath.Join(dir, "Screenshot 2026-03-25 at 6.55.08 AM.png")
+
+	var buf bytes.Buffer
+	img := image.NewRGBA(image.Rect(0, 0, 1, 1))
+	img.Set(0, 0, color.RGBA{R: 255, A: 255})
+	require.NoError(t, png.Encode(&buf, img))
+	require.NoError(t, os.WriteFile(imgPath, buf.Bytes(), 0o644))
+
+	tool := newReadFile(localFS{}, dirURI(dir), NewFileTracker(), 0)
+	result := tool.Execute(context.Background(), `{"path": "`+imgPath+`"}`)
+
+	assert.False(t, result.IsError)
+	assert.Equal(t, "Read image file: Screenshot 2026-03-25 at 6.55.08 AM.png (73 bytes, image/png)", result.Content)
+	require.Len(t, result.MultiContent, 2)
+	assert.Equal(t, llm.ContentPartTypeText, result.MultiContent[0].Type)
+	assert.Equal(t, llm.ContentPartTypeImageURL, result.MultiContent[1].Type)
+	assert.Contains(t, result.MultiContent[1].ImageURL, "data:image/png;base64,")
+}
+
+func TestReadFile_lineTruncation(t *testing.T) {
+	dir := t.TempDir()
+
+	// Write a file with a very long line.
+	longLine := strings.Repeat("x", 800)
+	content := "short line\n" + longLine + "\nlast line\n"
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "long.txt"), []byte(content), 0o644))
+
+	t.Run("default limit truncates long lines", func(t *testing.T) {
+		tool := newReadFile(localFS{}, dirURI(dir), NewFileTracker(), 0)
+		result := tool.Execute(context.Background(), `{"path":"long.txt"}`)
+		require.False(t, result.IsError)
+		// Short lines should be intact.
+		assert.Contains(t, result.Content, "L1: short line")
+		assert.Contains(t, result.Content, "L3: last line")
+		// Long line should be truncated with marker.
+		assert.Contains(t, result.Content, "[truncated line]")
+		assert.NotContains(t, result.Content, longLine)
+	})
+
+	t.Run("custom limit truncates at configured size", func(t *testing.T) {
+		tool := newReadFile(localFS{}, dirURI(dir), NewFileTracker(), 50)
+		result := tool.Execute(context.Background(), `{"path":"long.txt"}`)
+		require.False(t, result.IsError)
+		// The long line (line 2) should be truncated.
+		assert.Contains(t, result.Content, "[truncated line]")
+		// Extract line 2 content (after "L2: " prefix).
+		for _, line := range strings.Split(result.Content, "\n") {
+			after, ok := strings.CutPrefix(line, "L2: ")
+			if ok {
+				assert.LessOrEqual(t, len(after), 50)
+				break
+			}
+		}
+	})
+
+	t.Run("lines within limit are not truncated", func(t *testing.T) {
+		tool := newReadFile(localFS{}, dirURI(dir), NewFileTracker(), 1000)
+		result := tool.Execute(context.Background(), `{"path":"long.txt"}`)
+		require.False(t, result.IsError)
+		// All lines fit within 1000 bytes, so no truncation.
+		assert.Contains(t, result.Content, longLine)
+		assert.NotContains(t, result.Content, "[truncated line]")
+	})
+}
+
+func TestSearch(t *testing.T) {
+	tests := []struct {
+		name     string
+		args     string
+		setup    func(t *testing.T, dir string)
+		assertFn func(t *testing.T, result agent.ToolResult)
+	}{
+		{
+			name: "regex match returns file:line:content",
+			args: `{"pattern": "hello"}`,
+			assertFn: func(t *testing.T, result agent.ToolResult) {
+				assert.False(t, result.IsError)
+				assert.Contains(t, result.Content, "hello.txt:1:hello world")
+			},
+		},
+		{
+			name: "directory scoping restricts search",
+			args: `{"pattern": "Foo", "path": "sub"}`,
+			assertFn: func(t *testing.T, result agent.ToolResult) {
+				assert.False(t, result.IsError)
+				assert.Contains(t, result.Content, "nested.go")
+			},
+		},
+		{
+			name: "glob filter restricts to matching files",
+			args: `{"pattern": ".*", "include": "*.go"}`,
+			assertFn: func(t *testing.T, result agent.ToolResult) {
+				assert.False(t, result.IsError)
+				assert.Contains(t, result.Content, "nested.go")
+				assert.NotContains(t, result.Content, "hello.txt")
+			},
+		},
+		{
+			name: "no matches returns no matches message",
+			args: `{"pattern": "zzzznotfound"}`,
+			assertFn: func(t *testing.T, result agent.ToolResult) {
+				assert.False(t, result.IsError)
+				assert.Contains(t, result.Content, "no matches found")
+			},
+		},
+		{
+			name: "invalid regex returns error",
+			args: `{"pattern": "[invalid"}`,
+			assertFn: func(t *testing.T, result agent.ToolResult) {
+				assert.True(t, result.IsError)
+				assert.Contains(t, result.Content, "invalid regex")
+			},
+		},
+		{
+			name: "invalid JSON returns error",
+			args: `{broken`,
+			assertFn: func(t *testing.T, result agent.ToolResult) {
+				assert.True(t, result.IsError)
+				assert.Contains(t, result.Content, "invalid arguments")
+			},
+		},
+		{
+			name: "skips .git directory",
+			args: `{"pattern": "gitfile"}`,
+			setup: func(t *testing.T, dir string) {
+				require.NoError(t, os.MkdirAll(filepath.Join(dir, ".git"), 0o755))
+				require.NoError(t, os.WriteFile(filepath.Join(dir, ".git", "config"),
+					[]byte("gitfile content"), 0o644))
+			},
+			assertFn: func(t *testing.T, result agent.ToolResult) {
+				assert.Contains(t, result.Content, "no matches found")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := setupWorkspace(t)
+			tool := newSearch(localFS{root: dir}, dirURI(dir), NewFileTracker())
+
+			if tt.setup != nil {
+				tt.setup(t, dir)
+			}
+
+			result := tool.Execute(context.Background(), tt.args)
+			tt.assertFn(t, result)
+		})
+	}
+}
+
+func TestFindFiles(t *testing.T) {
+	tests := []struct {
+		name     string
+		args     string
+		setup    func(t *testing.T, dir string)
+		assertFn func(t *testing.T, result agent.ToolResult)
+	}{
+		{
+			name: "regex pattern matches files",
+			args: `{"pattern": "\\.go$"}`,
+			assertFn: func(t *testing.T, result agent.ToolResult) {
+				assert.False(t, result.IsError)
+				assert.Contains(t, result.Content, "nested.go")
+			},
+		},
+		{
+			name: "no matches returns message",
+			args: `{"pattern": "\\.xyz$"}`,
+			assertFn: func(t *testing.T, result agent.ToolResult) {
+				assert.False(t, result.IsError)
+				assert.Contains(t, result.Content, "no files found")
+			},
+		},
+		{
+			name: "invalid JSON returns error",
+			args: `invalid`,
+			assertFn: func(t *testing.T, result agent.ToolResult) {
+				assert.True(t, result.IsError)
+				assert.Contains(t, result.Content, "invalid arguments")
+			},
+		},
+		{
+			name: "invalid regex returns error",
+			args: `{"pattern": "[invalid"}`,
+			assertFn: func(t *testing.T, result agent.ToolResult) {
+				assert.True(t, result.IsError)
+				assert.Contains(t, result.Content, "invalid regex")
+			},
+		},
+		{
+			name: "path parameter scopes search",
+			args: `{"pattern": "\\.go$", "path": "sub"}`,
+			assertFn: func(t *testing.T, result agent.ToolResult) {
+				assert.False(t, result.IsError)
+				assert.Contains(t, result.Content, "nested.go")
+			},
+		},
+		{
+			name: "wildcard matches all files",
+			args: `{"pattern": ".*"}`,
+			assertFn: func(t *testing.T, result agent.ToolResult) {
+				assert.False(t, result.IsError)
+				assert.Contains(t, result.Content, "hello.txt")
+				assert.Contains(t, result.Content, "nested.go")
+			},
+		},
+		{
+			name: "partial match on directory component",
+			args: `{"pattern": "nested"}`,
+			assertFn: func(t *testing.T, result agent.ToolResult) {
+				assert.False(t, result.IsError)
+				assert.Contains(t, result.Content, "nested.go")
+			},
+		},
+		{
+			name: "skips .git directory",
+			args: `{"pattern": ".*"}`,
+			setup: func(t *testing.T, dir string) {
+				require.NoError(t, os.MkdirAll(filepath.Join(dir, ".git"), 0o755))
+				require.NoError(t, os.WriteFile(filepath.Join(dir, ".git", "HEAD"),
+					[]byte("ref: refs/heads/main"), 0o644))
+			},
+			assertFn: func(t *testing.T, result agent.ToolResult) {
+				assert.False(t, result.IsError)
+				assert.NotContains(t, result.Content, ".git")
+				assert.NotContains(t, result.Content, "HEAD")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := setupWorkspace(t)
+			tool := newFindFiles(localFS{root: dir}, dirURI(dir), NewFileTracker())
+
+			if tt.setup != nil {
+				tt.setup(t, dir)
+			}
+
+			result := tool.Execute(context.Background(), tt.args)
+			tt.assertFn(t, result)
+		})
+	}
+}
+
+func TestBash_args_do_not_include_program_name(t *testing.T) {
+	var recorded workspaceapi.Cmd
+	rec := &recordingExec{startFn: func(_ context.Context, cmd workspaceapi.Cmd) (workspaceapi.Pid, error) {
+		recorded = cmd
+		if cmd.Watcher != nil {
+			cmd.Watcher.WatchProcess() <- nil
+		}
+		return 1, nil
+	}}
+	tool := newBash(rec, dirURI("/workspace"))
+	tool.Execute(context.Background(), `{"command": "ls -R .", "description": "List files recursively"}`)
+
+	assert.Equal(t, "bash", recorded.Path)
+	// Args must NOT include the program name — the executor prepends it.
+	assert.Equal(t, []string{"-c", "ls -R ."}, recorded.Args,
+		"Args must not include the program name; the executor adds it from Path")
+}
+
+func TestBash(t *testing.T) {
+	tests := []struct {
+		name     string
+		args     string
+		ctx      func() context.Context
+		assertFn func(t *testing.T, result agent.ToolResult)
+	}{
+		{
+			name: "success returns stdout",
+			args: `{"command": "echo hello", "description": "Print hello"}`,
+			assertFn: func(t *testing.T, result agent.ToolResult) {
+				assert.False(t, result.IsError)
+				assert.Contains(t, result.Content, "hello")
+			},
+		},
+		{
+			name: "captures stderr",
+			args: `{"command": "echo stderr >&2", "description": "Print to stderr"}`,
+			assertFn: func(t *testing.T, result agent.ToolResult) {
+				assert.False(t, result.IsError)
+				assert.Contains(t, result.Content, "stderr")
+			},
+		},
+		{
+			name: "nonzero exit returns error",
+			args: `{"command": "exit 1", "description": "Exit with error"}`,
+			assertFn: func(t *testing.T, result agent.ToolResult) {
+				assert.True(t, result.IsError)
+				assert.Contains(t, result.Content, "error:")
+			},
+		},
+		{
+			name: "timeout returns error",
+			args: `{"command": "sleep 10", "description": "Sleep"}`,
+			ctx: func() context.Context {
+				ctx, cancel := context.WithTimeout(context.Background(), 0)
+				_ = cancel
+				return ctx
+			},
+			assertFn: func(t *testing.T, result agent.ToolResult) {
+				assert.True(t, result.IsError)
+			},
+		},
+		{
+			name: "invalid JSON returns error",
+			args: `garbage`,
+			assertFn: func(t *testing.T, result agent.ToolResult) {
+				assert.True(t, result.IsError)
+				assert.Contains(t, result.Content, "invalid arguments")
+			},
+		},
+		{
+			name: "working_dir parameter changes directory",
+			args: `{"command": "pwd", "description": "Print working dir", "working_dir": "sub"}`,
+			assertFn: func(t *testing.T, result agent.ToolResult) {
+				assert.False(t, result.IsError)
+				assert.Contains(t, result.Content, "sub")
+			},
+		},
+		{
+			name: "command not found returns error",
+			args: `{"command": "nonexistent_command_xyz_123", "description": "Run missing command"}`,
+			assertFn: func(t *testing.T, result agent.ToolResult) {
+				assert.True(t, result.IsError)
+				assert.Contains(t, result.Content, "error:")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := setupWorkspace(t)
+			tool := newBash(localExec{}, dirURI(dir))
+
+			ctx := context.Background()
+			if tt.ctx != nil {
+				ctx = tt.ctx()
+			}
+
+			result := tool.Execute(ctx, tt.args)
+			tt.assertFn(t, result)
+		})
+	}
+}
+
+func TestBash_timeout_applied_to_context(t *testing.T) {
+	tests := []struct {
+		name        string
+		args        string
+		wantTimeout time.Duration
+	}{
+		{
+			name:        "default timeout when omitted",
+			args:        `{"command": "echo hi", "description": "test"}`,
+			wantTimeout: 120 * time.Second,
+		},
+		{
+			name:        "custom timeout 5s",
+			args:        `{"command": "echo hi", "description": "test", "timeout": 5000}`,
+			wantTimeout: 5 * time.Second,
+		},
+		{
+			name:        "clamped to max 600s",
+			args:        `{"command": "echo hi", "description": "test", "timeout": 999999}`,
+			wantTimeout: 600 * time.Second,
+		},
+		{
+			name:        "zero uses default",
+			args:        `{"command": "echo hi", "description": "test", "timeout": 0}`,
+			wantTimeout: 120 * time.Second,
+		},
+		{
+			name:        "negative uses default",
+			args:        `{"command": "echo hi", "description": "test", "timeout": -1000}`,
+			wantTimeout: 120 * time.Second,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var capturedCtx context.Context
+			rec := &recordingExec{startFn: func(ctx context.Context, cmd workspaceapi.Cmd) (workspaceapi.Pid, error) {
+				capturedCtx = ctx
+				if cmd.Watcher != nil {
+					cmd.Watcher.WatchProcess() <- nil
+				}
+				return 1, nil
+			}}
+			tool := newBash(rec, dirURI("/workspace"))
+			tool.Execute(context.Background(), tt.args)
+
+			deadline, ok := capturedCtx.Deadline()
+			require.True(t, ok, "context must have a deadline")
+			remaining := time.Until(deadline)
+			// Allow 2 seconds of slack for test execution time.
+			assert.InDelta(t, tt.wantTimeout.Seconds(), remaining.Seconds(), 2,
+				"timeout should be ~%v, got ~%v", tt.wantTimeout, remaining.Round(time.Millisecond))
+		})
+	}
+}
+
+func TestApplyPatch(t *testing.T) {
+	tests := []struct {
+		name     string
+		args     string
+		setup    func(t *testing.T, dir string)
+		assertFn func(t *testing.T, result agent.ToolResult, dir string)
+	}{
+		{
+			name: "create new file via patch",
+			args: `{"patch": "*** Begin Patch\n*** Add File: created.txt\n+hello world\n*** End Patch"}`,
+			assertFn: func(t *testing.T, result agent.ToolResult, dir string) {
+				assert.False(t, result.IsError)
+				assert.Contains(t, result.Content, "1/1")
+
+				data, err := os.ReadFile(filepath.Join(dir, "created.txt"))
+				require.NoError(t, err)
+				assert.Equal(t, "hello world", string(data))
+			},
+		},
+		{
+			name: "delete file via patch",
+			setup: func(t *testing.T, dir string) {
+				require.NoError(t, os.WriteFile(filepath.Join(dir, "doomed.txt"), []byte("bye"), 0o644))
+			},
+			args: `{"patch": "*** Begin Patch\n*** Delete File: doomed.txt\n*** End Patch"}`,
+			assertFn: func(t *testing.T, result agent.ToolResult, dir string) {
+				assert.False(t, result.IsError)
+				_, err := os.Stat(filepath.Join(dir, "doomed.txt"))
+				assert.True(t, os.IsNotExist(err))
+			},
+		},
+		{
+			name: "update file via patch",
+			args: `{"patch": "*** Begin Patch\n*** Update File: hello.txt\n@@\n hello world\n-second line\n+SECOND LINE\n*** End Patch"}`,
+			assertFn: func(t *testing.T, result agent.ToolResult, dir string) {
+				assert.False(t, result.IsError)
+
+				data, err := os.ReadFile(filepath.Join(dir, "hello.txt"))
+				require.NoError(t, err)
+				assert.Contains(t, string(data), "SECOND LINE")
+				assert.NotContains(t, string(data), "second line")
+			},
+		},
+		{
+			name: "parse error returns error",
+			args: `{"patch": "not a valid patch"}`,
+			assertFn: func(t *testing.T, result agent.ToolResult, dir string) {
+				assert.True(t, result.IsError)
+				assert.Contains(t, result.Content, "parse patch")
+			},
+		},
+		{
+			name: "invalid JSON returns error",
+			args: `bad json`,
+			assertFn: func(t *testing.T, result agent.ToolResult, dir string) {
+				assert.True(t, result.IsError)
+				assert.Contains(t, result.Content, "invalid arguments")
+			},
+		},
+		{
+			name: "hunk mismatch returns error",
+			args: `{"patch": "*** Begin Patch\n*** Update File: hello.txt\n@@\n nonexistent context\n-nope\n+yep\n*** End Patch"}`,
+			assertFn: func(t *testing.T, result agent.ToolResult, dir string) {
+				assert.True(t, result.IsError)
+				assert.Contains(t, result.Content, "errors")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := setupWorkspace(t)
+			tool := newApplyPatch(localFS{}, dirURI(dir), NewFileTracker())
+
+			if tt.setup != nil {
+				tt.setup(t, dir)
+			}
+
+			result := tool.Execute(context.Background(), tt.args)
+			tt.assertFn(t, result, dir)
+		})
+	}
+}
+
+func TestFileTracker(t *testing.T) {
+	t.Run("verify returns nil when no hash recorded", func(t *testing.T) {
+		ft := NewFileTracker()
+		err := ft.Verify("/some/path", []byte("content"))
+		assert.NoError(t, err)
+	})
+
+	t.Run("verify returns nil when content matches", func(t *testing.T) {
+		ft := NewFileTracker()
+		data := []byte("hello world")
+		ft.Record("/some/path", data)
+		assert.NoError(t, ft.Verify("/some/path", data))
+	})
+
+	t.Run("verify returns error when content changed", func(t *testing.T) {
+		ft := NewFileTracker()
+		ft.Record("/some/path", []byte("original"))
+		err := ft.Verify("/some/path", []byte("modified"))
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "has changed since it was last read")
+	})
+
+	t.Run("forget removes tracking", func(t *testing.T) {
+		ft := NewFileTracker()
+		ft.Record("/some/path", []byte("content"))
+		ft.Forget("/some/path")
+		assert.NoError(t, ft.Verify("/some/path", []byte("different")))
+	})
+
+	t.Run("record updates existing hash", func(t *testing.T) {
+		ft := NewFileTracker()
+		ft.Record("/some/path", []byte("v1"))
+		ft.Record("/some/path", []byte("v2"))
+		assert.NoError(t, ft.Verify("/some/path", []byte("v2")))
+		assert.Error(t, ft.Verify("/some/path", []byte("v1")))
+	})
+}
+
+func TestApplyPatch_stale_file(t *testing.T) {
+	dir := setupWorkspace(t)
+	tracker := NewFileTracker()
+	readTool := newReadFile(localFS{}, dirURI(dir), tracker, 0)
+	patchTool := newApplyPatch(localFS{}, dirURI(dir), tracker)
+
+	// Read the file (records hash).
+	result := readTool.Execute(context.Background(), `{"path": "hello.txt"}`)
+	require.False(t, result.IsError)
+
+	// Modify the file externally.
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "hello.txt"),
+		[]byte("externally modified\n"), 0o644))
+
+	// Patch should fail: file has changed.
+	result = patchTool.Execute(context.Background(),
+		`{"patch": "*** Begin Patch\n*** Update File: hello.txt\n@@\n hello world\n-second line\n+SECOND LINE\n*** End Patch"}`)
+	assert.True(t, result.IsError)
+	assert.Contains(t, result.Content, "has changed since it was last read")
+}
+
+func TestApplyPatch_touchedFiles(t *testing.T) {
+	tests := []struct {
+		name         string
+		args         string
+		setup        func(t *testing.T, dir string)
+		wantTouched  int
+		wantError    bool
+		wantContains string // substring expected in first TouchedFiles entry
+	}{
+		{
+			name:         "single add populates touched files",
+			args:         `{"patch": "*** Begin Patch\n*** Add File: new.txt\n+content\n*** End Patch"}`,
+			wantTouched:  1,
+			wantContains: "new.txt",
+		},
+		{
+			name:         "single update populates touched files",
+			args:         `{"patch": "*** Begin Patch\n*** Update File: hello.txt\n@@\n hello world\n-second line\n+SECOND LINE\n*** End Patch"}`,
+			wantTouched:  1,
+			wantContains: "hello.txt",
+		},
+		{
+			name: "delete-only yields no touched files",
+			setup: func(t *testing.T, dir string) {
+				require.NoError(t, os.WriteFile(filepath.Join(dir, "doomed.txt"), []byte("bye"), 0o644))
+			},
+			args:        `{"patch": "*** Begin Patch\n*** Delete File: doomed.txt\n*** End Patch"}`,
+			wantTouched: 0,
+		},
+		{
+			name:        "multi-file patch populates multiple touched files",
+			args:        `{"patch": "*** Begin Patch\n*** Add File: a.txt\n+a\n*** Add File: b.txt\n+b\n*** End Patch"}`,
+			wantTouched: 2,
+		},
+		{
+			name: "mixed add and delete only counts non-delete",
+			setup: func(t *testing.T, dir string) {
+				require.NoError(t, os.WriteFile(filepath.Join(dir, "old.txt"), []byte("old"), 0o644))
+			},
+			args:         `{"patch": "*** Begin Patch\n*** Delete File: old.txt\n*** Add File: new2.txt\n+new\n*** End Patch"}`,
+			wantTouched:  1,
+			wantContains: "new2.txt",
+		},
+		{
+			name:        "error result has no touched files",
+			args:        `{"patch": "not a valid patch"}`,
+			wantError:   true,
+			wantTouched: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := setupWorkspace(t)
+			tool := newApplyPatch(localFS{}, dirURI(dir), NewFileTracker())
+
+			if tt.setup != nil {
+				tt.setup(t, dir)
+			}
+
+			result := tool.Execute(context.Background(), tt.args)
+
+			if tt.wantError {
+				assert.True(t, result.IsError)
+				assert.Empty(t, result.TouchedFiles)
+				return
+			}
+
+			assert.False(t, result.IsError)
+			assert.Len(t, result.TouchedFiles, tt.wantTouched)
+			if tt.wantContains != "" && len(result.TouchedFiles) > 0 {
+				assert.Contains(t, result.TouchedFiles[0], tt.wantContains)
+			}
+		})
+	}
+}
+
+func TestApplyPatch_forgets_hash_after_apply(t *testing.T) {
+	dir := setupWorkspace(t)
+	tracker := NewFileTracker()
+	readTool := newReadFile(localFS{}, dirURI(dir), tracker, 0)
+	patchTool := newApplyPatch(localFS{}, dirURI(dir), tracker)
+
+	// Read and patch.
+	result := readTool.Execute(context.Background(), `{"path": "hello.txt"}`)
+	require.False(t, result.IsError)
+
+	result = patchTool.Execute(context.Background(),
+		`{"patch": "*** Begin Patch\n*** Update File: hello.txt\n@@\n hello world\n-second line\n+SECOND LINE\n*** End Patch"}`)
+	require.False(t, result.IsError)
+
+	// Hash was forgotten, so a second patch without re-reading
+	// should proceed (no hash to verify against).
+	result = patchTool.Execute(context.Background(),
+		`{"patch": "*** Begin Patch\n*** Update File: hello.txt\n@@\n hello world\n-SECOND LINE\n+final line\n*** End Patch"}`)
+	assert.False(t, result.IsError)
+}
+
+func setupWorkspace(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "hello.txt"),
+		[]byte("hello world\nsecond line\nthird line\n"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "sub"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "sub", "nested.go"),
+		[]byte("package sub\n\nfunc Foo() {}\n"), 0o644))
+
+	return dir
+}

@@ -1,0 +1,191 @@
+// Unstable Build LLC ("COMPANY") CONFIDENTIAL
+//
+// Unpublished Copyright (c) 2024-2026 Unstable Build, All Rights Reserved.
+//
+// NOTICE: All information contained herein is, and remains the property of COMPANY.
+// The intellectual and technical concepts contained herein are proprietary to
+// COMPANY and may be covered by U.S. and Foreign Patents, patents in process,
+// and are protected by trade secret or copyright law. Dissemination of this information
+// or reproduction of this material is strictly forbidden unless prior written permission
+// is obtained from COMPANY. Access to the source code contained herein is hereby
+// forbidden to anyone except current COMPANY employees, managers or contractors who
+// have executed Confidentiality and Non-disclosure agreements explicitly covering such access.
+//
+// The copyright notice above does not evidence any actual or intended publication or
+// disclosure of this source code, which includes information that is confidential and/or
+// proprietary, and is a trade secret, of COMPANY. ANY REPRODUCTION, MODIFICATION,
+// DISTRIBUTION, PUBLIC  PERFORMANCE, OR PUBLIC DISPLAY OF OR THROUGH USE OF THIS SOURCE CODE
+// WITHOUT  THE EXPRESS WRITTEN CONSENT OF COMPANY IS STRICTLY PROHIBITED, AND IN
+// VIOLATION OF APPLICABLE LAWS AND INTERNATIONAL TREATIES. THE RECEIPT OR POSSESSION OF
+// THIS SOURCE CODE AND/OR RELATED INFORMATION DOES NOT CONVEY OR IMPLY ANY RIGHTS TO
+// REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
+// ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
+
+package agent
+
+import (
+	"fmt"
+	"strings"
+	"testing"
+	"unicode/utf8"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestTruncateMiddle(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		maxBytes int
+		check    func(t *testing.T, result string)
+	}{
+		{
+			name:     "short content passes through unchanged",
+			input:    "hello world",
+			maxBytes: 100,
+			check: func(t *testing.T, result string) {
+				assert.Equal(t, "hello world", result)
+			},
+		},
+		{
+			name:     "exact limit passes through unchanged",
+			input:    "hello",
+			maxBytes: 5,
+			check: func(t *testing.T, result string) {
+				assert.Equal(t, "hello", result)
+			},
+		},
+		{
+			name:     "long content is truncated to within limit",
+			input:    strings.Repeat("x", 1000),
+			maxBytes: 200,
+			check: func(t *testing.T, result string) {
+				assert.LessOrEqual(t, len(result), 200+100, "result should be near the configured limit")
+				assert.Contains(t, result, "bytes truncated")
+				assert.True(t, strings.HasPrefix(result, "Total output lines:"))
+			},
+		},
+		{
+			name:     "marker includes correct byte count",
+			input:    strings.Repeat("a", 500),
+			maxBytes: 200,
+			check: func(t *testing.T, result string) {
+				// Extract the truncated byte count from the marker.
+				idx := strings.Index(result, "…[")
+				require.NotEqual(t, -1, idx)
+				end := strings.Index(result[idx:], " bytes truncated]")
+				require.NotEqual(t, -1, end)
+				countStr := result[idx+len("…[") : idx+end]
+				// The truncated bytes + kept bytes should equal original length.
+				var truncated int
+				_, err := fmt.Sscanf(countStr, "%d", &truncated)
+				require.NoError(t, err)
+				assert.Greater(t, truncated, 0)
+			},
+		},
+		{
+			name:     "UTF-8 multibyte characters are not split",
+			input:    strings.Repeat("日本語テスト", 100), // 6 chars × 3 bytes each × 100 = 1800 bytes
+			maxBytes: 200,
+			check: func(t *testing.T, result string) {
+				assert.True(t, utf8.ValidString(result), "result must be valid UTF-8")
+				assert.Contains(t, result, "bytes truncated")
+			},
+		},
+		{
+			name:     "preserves prefix and suffix content",
+			input:    "START" + strings.Repeat("m", 1000) + "END",
+			maxBytes: 200,
+			check: func(t *testing.T, result string) {
+				// After the header, the prefix should start with "START".
+				lines := strings.SplitN(result, "\n\n", 2)
+				require.Len(t, lines, 2)
+				body := lines[1]
+				assert.True(t, strings.HasPrefix(body, "START"), "should preserve prefix")
+				assert.True(t, strings.HasSuffix(body, "END"), "should preserve suffix")
+			},
+		},
+		{
+			name:     "includes total output lines header",
+			input:    "line1\nline2\nline3\n" + strings.Repeat("x", 1000),
+			maxBytes: 200,
+			check: func(t *testing.T, result string) {
+				assert.True(t, strings.HasPrefix(result, "Total output lines:"))
+			},
+		},
+		{
+			name:     "very small maxBytes still produces valid output",
+			input:    strings.Repeat("x", 100),
+			maxBytes: 10,
+			check: func(t *testing.T, result string) {
+				assert.True(t, utf8.ValidString(result))
+				assert.Contains(t, result, "truncated")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := truncateMiddle(tt.input, tt.maxBytes)
+			tt.check(t, result)
+		})
+	}
+}
+
+func TestTruncateLine(t *testing.T) {
+	marker := truncatedLineMarker // " [truncated line]"
+
+	tests := []struct {
+		name     string
+		input    string
+		max      int
+		expected string
+	}{
+		{
+			name:     "short line passes through unchanged",
+			input:    "hello world",
+			max:      100,
+			expected: "hello world",
+		},
+		{
+			name:     "exact limit passes through unchanged",
+			input:    "hello",
+			max:      5,
+			expected: "hello",
+		},
+		{
+			name:     "long line is truncated with marker",
+			input:    strings.Repeat("x", 600),
+			max:      500,
+			expected: strings.Repeat("x", 500-len(marker)) + marker,
+		},
+		{
+			name:  "multibyte characters are not split",
+			input: strings.Repeat("日", 200), // 3 bytes each = 600 bytes
+			max:   500,
+			// (500-17)=483 bytes budget; 483/3=161 full runes = 483 bytes + 17 marker = 500
+			expected: strings.Repeat("日", 161) + marker,
+		},
+		{
+			name:     "very small max still produces valid output",
+			input:    strings.Repeat("x", 100),
+			max:      20,
+			expected: strings.Repeat("x", 20-len(marker)) + marker, // 3 bytes + marker
+		},
+		{
+			name:     "empty string passes through",
+			input:    "",
+			max:      500,
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := TruncateLine(tt.input, tt.max)
+			assert.True(t, utf8.ValidString(result), "result must be valid UTF-8")
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}

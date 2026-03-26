@@ -1,0 +1,1081 @@
+// Unstable Build LLC ("COMPANY") CONFIDENTIAL
+//
+// Unpublished Copyright (c) 2024-2026 Unstable Build, All Rights Reserved.
+//
+// NOTICE: All information contained herein is, and remains the property of COMPANY.
+// The intellectual and technical concepts contained herein are proprietary to
+// COMPANY and may be covered by U.S. and Foreign Patents, patents in process,
+// and are protected by trade secret or copyright law. Dissemination of this information
+// or reproduction of this material is strictly forbidden unless prior written permission
+// is obtained from COMPANY. Access to the source code contained herein is hereby
+// forbidden to anyone except current COMPANY employees, managers or contractors who
+// have executed Confidentiality and Non-disclosure agreements explicitly covering such access.
+//
+// The copyright notice above does not evidence any actual or intended publication or
+// disclosure of this source code, which includes information that is confidential and/or
+// proprietary, and is a trade secret, of COMPANY. ANY REPRODUCTION, MODIFICATION,
+// DISTRIBUTION, PUBLIC  PERFORMANCE, OR PUBLIC DISPLAY OF OR THROUGH USE OF THIS SOURCE CODE
+// WITHOUT  THE EXPRESS WRITTEN CONSENT OF COMPANY IS STRICTLY PROHIBITED, AND IN
+// VIOLATION OF APPLICABLE LAWS AND INTERNATIONAL TREATIES. THE RECEIPT OR POSSESSION OF
+// THIS SOURCE CODE AND/OR RELATED INFORMATION DOES NOT CONVEY OR IMPLY ANY RIGHTS TO
+// REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
+// ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
+
+package dream
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"sync"
+	"syscall"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
+	"unstable.build/go-tui/cmd/rune-agent/llm"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/iterator"
+)
+
+func TestDream(t *testing.T) {
+	t.Run("empty store produces done", func(t *testing.T) {
+		dir := t.TempDir()
+		deps := validDeps(t, dir)
+		deps.Store = &mockDialogueStore{}
+
+		it, err := Dream(context.Background(), deps)
+		require.NoError(t, err)
+
+		progress := collectProgress(t, it)
+		require.NotEmpty(t, progress)
+		assert.True(t, hasProgressType(progress, ProgressDone))
+		assert.NoError(t, it.Err())
+	})
+
+	t.Run("single dialogue is processed", func(t *testing.T) {
+		dir := t.TempDir()
+		deps := validDeps(t, dir)
+		deps.Store = &mockDialogueStore{
+			dialogues: []dialoguemanager.Dialogue{
+				{
+					ID:      "d1",
+					Version: 1,
+					Messages: []llm.Message{
+						{Role: llm.RoleUser, Content: "How do I write tests?"},
+						{Role: llm.RoleAssistant, Content: "Use table-driven tests."},
+					},
+				},
+			},
+		}
+		deps.LLM = &mockLLMService{responses: []mockLLMResponse{
+			stopLLMResponse("I've analyzed the conversation and written memories."),
+		}}
+
+		it, err := Dream(context.Background(), deps)
+		require.NoError(t, err)
+
+		progress := collectProgress(t, it)
+		assert.NoError(t, it.Err())
+		assert.True(t, hasProgressType(progress, ProgressAnalyzing))
+		assert.True(t, hasProgressType(progress, ProgressDone))
+
+		// Verify progress tracking.
+		for _, p := range progress {
+			if p.Type == ProgressAnalyzing {
+				assert.Equal(t, 0, p.Progress)
+				assert.Equal(t, "conversations", p.Units)
+			}
+		}
+
+		// Verify state was saved.
+		var state DreamState
+		require.NoError(t, deps.Storage.Get(context.Background(), dreamStateID, &state))
+		assert.Equal(t, 1, state.Dreamed["d1"])
+	})
+
+	t.Run("already dreamed dialogue is skipped", func(t *testing.T) {
+		dir := t.TempDir()
+		deps := validDeps(t, dir)
+		deps.Store = &mockDialogueStore{
+			dialogues: []dialoguemanager.Dialogue{
+				{ID: "d1", Version: 1, Messages: []llm.Message{
+					{Role: llm.RoleUser, Content: "hi"},
+				}},
+			},
+		}
+		// Pre-populate dream state.
+		storage := deps.Storage.(*mockStorage)
+		storage.data[dreamStateID] = &DreamState{
+			SchemaVersion: templateVersion,
+			Dreamed:       map[string]int{"d1": 1},
+		}
+
+		svc := &mockLLMService{}
+		deps.LLM = svc
+
+		it, err := Dream(context.Background(), deps)
+		require.NoError(t, err)
+
+		progress := collectProgress(t, it)
+		assert.NoError(t, it.Err())
+		assert.True(t, hasProgressType(progress, ProgressDone))
+		assert.False(t, hasProgressType(progress, ProgressAnalyzing))
+		assert.Equal(t, 0, svc.getCallCount())
+	})
+
+	t.Run("updated dialogue is re-dreamed", func(t *testing.T) {
+		dir := t.TempDir()
+		deps := validDeps(t, dir)
+		deps.Store = &mockDialogueStore{
+			dialogues: []dialoguemanager.Dialogue{
+				{ID: "d1", Version: 3, Messages: []llm.Message{
+					{Role: llm.RoleUser, Content: "updated content"},
+				}},
+			},
+		}
+		// Version 1 was dreamed, but dialogue is now at version 3.
+		storage := deps.Storage.(*mockStorage)
+		storage.data[dreamStateID] = &DreamState{
+			SchemaVersion: templateVersion,
+			Dreamed:       map[string]int{"d1": 1},
+		}
+
+		deps.LLM = &mockLLMService{responses: []mockLLMResponse{
+			stopLLMResponse("done"),
+		}}
+
+		it, err := Dream(context.Background(), deps)
+		require.NoError(t, err)
+
+		progress := collectProgress(t, it)
+		assert.NoError(t, it.Err())
+		assert.True(t, hasProgressType(progress, ProgressAnalyzing))
+
+		// State should now reflect version 3.
+		var state DreamState
+		require.NoError(t, deps.Storage.Get(context.Background(), dreamStateID, &state))
+		assert.Equal(t, 3, state.Dreamed["d1"])
+	})
+
+	t.Run("agent error skips dialogue continues", func(t *testing.T) {
+		dir := t.TempDir()
+		deps := validDeps(t, dir)
+		deps.Store = &mockDialogueStore{
+			dialogues: []dialoguemanager.Dialogue{
+				{ID: "d1", Version: 1, Messages: []llm.Message{
+					{Role: llm.RoleUser, Content: "first"},
+				}},
+				{ID: "d2", Version: 1, Messages: []llm.Message{
+					{Role: llm.RoleUser, Content: "second"},
+				}},
+			},
+		}
+		// First call fails, second succeeds.
+		deps.LLM = &mockLLMService{responses: []mockLLMResponse{
+			{err: errors.New("api error")},
+			stopLLMResponse("done"),
+		}}
+
+		it, err := Dream(context.Background(), deps)
+		require.NoError(t, err)
+
+		progress := collectProgress(t, it)
+		assert.NoError(t, it.Err())
+		assert.True(t, hasProgressType(progress, ProgressError))
+		assert.True(t, hasProgressType(progress, ProgressDone))
+
+		// Verify the error event carries the dialogue ID and message.
+		for _, p := range progress {
+			if p.Type == ProgressError {
+				assert.Equal(t, "d1", p.DialogueID)
+				assert.Contains(t, p.Message, "api error")
+			}
+		}
+
+		// Only d2 should be marked as dreamed.
+		var state DreamState
+		require.NoError(t, deps.Storage.Get(context.Background(), dreamStateID, &state))
+		assert.NotContains(t, state.Dreamed, "d1")
+		assert.Equal(t, 1, state.Dreamed["d2"])
+	})
+
+	t.Run("context cancellation stops processing", func(t *testing.T) {
+		dir := t.TempDir()
+		deps := validDeps(t, dir)
+		deps.Store = &mockDialogueStore{
+			dialogues: []dialoguemanager.Dialogue{
+				{ID: "d1", Version: 1, Messages: []llm.Message{
+					{Role: llm.RoleUser, Content: "hi"},
+				}},
+			},
+		}
+		// LLM blocks until cancelled.
+		deps.LLM = &mockLLMService{responses: []mockLLMResponse{
+			{err: context.Canceled},
+		}}
+
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+
+		it, err := Dream(ctx, deps)
+		require.NoError(t, err)
+
+		_ = collectProgress(t, it)
+		assert.Error(t, it.Err())
+	})
+
+	t.Run("schema upgrade triggers re-processing", func(t *testing.T) {
+		dir := t.TempDir()
+		deps := validDeps(t, dir)
+
+		d1 := dialoguemanager.Dialogue{
+			ID:      "d1",
+			Version: 1,
+			Messages: []llm.Message{
+				{Role: llm.RoleUser, Content: "old convo"},
+				{Role: llm.RoleAssistant, Content: "old response"},
+			},
+		}
+		deps.Store = &mockDialogueStore{
+			dialogues: []dialoguemanager.Dialogue{d1},
+		}
+
+		storage := deps.Storage.(*mockStorage)
+		storage.data[dreamStateID] = &DreamState{
+			SchemaVersion: 1,
+			Dreamed:       map[string]int{"d1": 1},
+		}
+
+		svc := &mockLLMService{responses: []mockLLMResponse{
+			stopLLMResponse("re-processed memories"),
+		}}
+		deps.LLM = svc
+
+		it, err := Dream(context.Background(), deps)
+		require.NoError(t, err)
+
+		_ = collectProgress(t, it)
+		assert.NoError(t, it.Err())
+		assert.Greater(t, svc.getCallCount(), 0)
+
+		var state DreamState
+		require.NoError(t, deps.Storage.Get(context.Background(), dreamStateID, &state))
+		assert.Equal(t, templateVersion, state.SchemaVersion)
+	})
+
+	t.Run("re-processing skips missing dialogues", func(t *testing.T) {
+		dir := t.TempDir()
+		deps := validDeps(t, dir)
+		deps.Store = &mockDialogueStore{} // Get returns ErrNotFound
+
+		storage := deps.Storage.(*mockStorage)
+		storage.data[dreamStateID] = &DreamState{
+			SchemaVersion: 1,
+			Dreamed:       map[string]int{"d1": 1},
+		}
+
+		svc := &mockLLMService{}
+		deps.LLM = svc
+
+		it, err := Dream(context.Background(), deps)
+		require.NoError(t, err)
+
+		_ = collectProgress(t, it)
+		assert.NoError(t, it.Err())
+		assert.Equal(t, 0, svc.getCallCount())
+
+		var state DreamState
+		require.NoError(t, deps.Storage.Get(context.Background(), dreamStateID, &state))
+		assert.Equal(t, templateVersion, state.SchemaVersion)
+	})
+
+	t.Run("no re-processing when schema current", func(t *testing.T) {
+		dir := t.TempDir()
+		deps := validDeps(t, dir)
+		deps.Store = &mockDialogueStore{}
+
+		storage := deps.Storage.(*mockStorage)
+		storage.data[dreamStateID] = &DreamState{
+			SchemaVersion: templateVersion,
+			Dreamed:       map[string]int{"d1": 1},
+		}
+
+		svc := &mockLLMService{}
+		deps.LLM = svc
+
+		it, err := Dream(context.Background(), deps)
+		require.NoError(t, err)
+
+		_ = collectProgress(t, it)
+		assert.NoError(t, it.Err())
+		assert.Equal(t, 0, svc.getCallCount())
+	})
+
+	t.Run("re-processing emits ProgressReprocessing", func(t *testing.T) {
+		dir := t.TempDir()
+		deps := validDeps(t, dir)
+
+		d1 := dialoguemanager.Dialogue{
+			ID:      "d1",
+			Version: 1,
+			Messages: []llm.Message{
+				{Role: llm.RoleUser, Content: "old convo"},
+			},
+		}
+		deps.Store = &mockDialogueStore{
+			dialogues: []dialoguemanager.Dialogue{d1},
+		}
+
+		storage := deps.Storage.(*mockStorage)
+		storage.data[dreamStateID] = &DreamState{
+			SchemaVersion: 1,
+			Dreamed:       map[string]int{"d1": 1},
+		}
+
+		deps.LLM = &mockLLMService{responses: []mockLLMResponse{
+			stopLLMResponse("re-processed"),
+		}}
+
+		it, err := Dream(context.Background(), deps)
+		require.NoError(t, err)
+
+		progress := collectProgress(t, it)
+		assert.NoError(t, it.Err())
+		assert.True(t, hasProgressType(progress, ProgressReprocessing))
+	})
+
+	t.Run("re-processing integration with real workspace", func(t *testing.T) {
+		if testing.Short() {
+			t.Skip("skipping integration test in short mode")
+		}
+
+		dir := t.TempDir()
+		fsys := newOSFileSystem()
+
+		// Bootstrap real workspace and tidy deps.
+		_, err := bootstrap(fsys, dir)
+		require.NoError(t, err)
+		assertGoCommand(t, dir, "mod", "tidy")
+
+		// Write a real memory Go file.
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "mem_table_tests.go"), []byte(
+			"package main\n\n"+
+				"import \"context\"\n\n"+
+				"type tableTestPatterns struct{}\n\n"+
+				"func init() { Register(tableTestPatterns{}) }\n\n"+
+				"func (tableTestPatterns) ID() string      { return \"table-test-patterns\" }\n"+
+				"func (tableTestPatterns) Content() string { return \"Use table-driven tests.\" }\n"+
+				"func (tableTestPatterns) FetchConversation(_ context.Context) (Dialogue, error) {\n"+
+				"\treturn Dialogue{}, nil\n"+
+				"}\n"+
+				"func (tableTestPatterns) testingPattern() {}\n",
+		), 0o644))
+
+		// Verify workspace compiles with the memory file.
+		assertGoCommand(t, dir, "test", "./...")
+
+		// Set up deps: real FS + Exec, mock LLM + storage.
+		storage := &mockStorage{data: make(map[string]any)}
+		storage.data[dreamStateID] = &DreamState{
+			SchemaVersion: 1,
+			Dreamed:       map[string]int{"d1": 1},
+		}
+
+		d1 := dialoguemanager.Dialogue{
+			ID:      "d1",
+			Version: 1,
+			Messages: []llm.Message{
+				{Role: llm.RoleUser, Content: "How should I write tests?"},
+				{Role: llm.RoleAssistant, Content: "Use table-driven tests."},
+			},
+		}
+		store := &mockDialogueStore{
+			dialogues: []dialoguemanager.Dialogue{d1},
+		}
+
+		svc := &mockLLMService{responses: []mockLLMResponse{
+			stopLLMResponse("I've reviewed the memories and they look good."),
+		}}
+
+		deps := Deps{
+			LLM:      svc,
+			Store:    store,
+			Storage:  storage,
+			FS:       fsys,
+			Exec:     osExec{},
+			DataPath: dir,
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+		defer cancel()
+
+		it, err := Dream(ctx, deps)
+		require.NoError(t, err)
+
+		var progress []Progress
+		for {
+			p, ok := it.Next(ctx)
+			if !ok {
+				break
+			}
+			progress = append(progress, p)
+		}
+		require.NoError(t, it.Err())
+
+		// Re-processing should have been triggered.
+		assert.True(t, hasProgressType(progress, ProgressReprocessing))
+		assert.Greater(t, svc.getCallCount(), 0)
+
+		// SchemaVersion should be updated.
+		var state DreamState
+		require.NoError(t, storage.Get(context.Background(), dreamStateID, &state))
+		assert.Equal(t, templateVersion, state.SchemaVersion)
+
+		// Workspace should still compile after re-processing.
+		assertGoCommand(t, dir, "test", "./...")
+	})
+
+	t.Run("bootstrap failure stops iterator", func(t *testing.T) {
+		deps := validDeps(t, t.TempDir())
+		deps.FS = &failingFS{statErr: errors.New("permission denied")}
+
+		it, err := Dream(context.Background(), deps)
+		require.NoError(t, err)
+
+		_ = collectProgress(t, it)
+		assert.Error(t, it.Err())
+		assert.Contains(t, it.Err().Error(), "bootstrap")
+	})
+
+}
+
+func TestValidateDeps(t *testing.T) {
+	tests := []struct {
+		name    string
+		modify  func(*Deps)
+		wantErr string
+	}{
+		{"missing LLM", func(d *Deps) { d.LLM = nil }, "LLM"},
+		{"missing Store", func(d *Deps) { d.Store = nil }, "Store"},
+		{"missing Storage", func(d *Deps) { d.Storage = nil }, "Storage"},
+		{"missing FS", func(d *Deps) { d.FS = nil }, "FS"},
+		{"missing Exec", func(d *Deps) { d.Exec = nil }, "Exec"},
+		{"missing DataPath", func(d *Deps) { d.DataPath = "" }, "DataPath"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			deps := validDeps(t, t.TempDir())
+			tt.modify(&deps)
+			_, err := Dream(context.Background(), deps)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.wantErr)
+		})
+	}
+}
+
+func TestFormatTranscript(t *testing.T) {
+	t.Run("formats user and assistant messages", func(t *testing.T) {
+		d := dialoguemanager.Dialogue{
+			Messages: []llm.Message{
+				{Role: llm.RoleUser, Content: "hello"},
+				{Role: llm.RoleAssistant, Content: "world"},
+			},
+		}
+		result := formatTranscript(d)
+		assert.Contains(t, result, "### user")
+		assert.Contains(t, result, "hello")
+		assert.Contains(t, result, "### assistant")
+		assert.Contains(t, result, "world")
+	})
+
+	t.Run("skips system messages", func(t *testing.T) {
+		d := dialoguemanager.Dialogue{
+			Messages: []llm.Message{
+				{Role: llm.RoleSystem, Content: "secret"},
+				{Role: llm.RoleUser, Content: "hello"},
+			},
+		}
+		result := formatTranscript(d)
+		assert.NotContains(t, result, "secret")
+		assert.Contains(t, result, "hello")
+	})
+
+	t.Run("empty dialogue produces empty string", func(t *testing.T) {
+		d := dialoguemanager.Dialogue{}
+		assert.Empty(t, formatTranscript(d))
+	})
+}
+
+func TestRunPhases(t *testing.T) {
+	t.Run("skips when already run", func(t *testing.T) {
+		dir := t.TempDir()
+		deps := validDeps(t, dir)
+		deps.Store = &mockDialogueStore{}
+
+		storage := deps.Storage.(*mockStorage)
+		storage.data[dreamStateID] = &DreamState{
+			SchemaVersion: templateVersion,
+			Dreamed:       map[string]int{},
+			LastExtract:   5,
+			PhasesRun:     map[string]int64{"custom": 5},
+		}
+
+		origPhases := append([]Phase(nil), phases...)
+		defer func() { phases = origPhases }()
+
+		called := false
+		phases = append(phases, Phase{
+			Name:        "custom",
+			Description: "Custom test phase",
+			Run: func(_ context.Context, _ chan<- Progress, _ Deps,
+				_ *DreamState, _ *dreamStateStore) error {
+				called = true
+				return nil
+			},
+		})
+
+		it, err := Dream(context.Background(), deps)
+		require.NoError(t, err)
+
+		_ = collectProgress(t, it)
+		assert.NoError(t, it.Err())
+		assert.False(t, called, "phase should be skipped when PhasesRun >= LastExtract")
+	})
+
+	t.Run("runs after new extract", func(t *testing.T) {
+		dir := t.TempDir()
+		deps := validDeps(t, dir)
+		deps.Store = &mockDialogueStore{
+			dialogues: []dialoguemanager.Dialogue{
+				{ID: "d1", Version: 1, Messages: []llm.Message{
+					{Role: llm.RoleUser, Content: "hello"},
+				}},
+			},
+		}
+		deps.LLM = &mockLLMService{responses: []mockLLMResponse{
+			stopLLMResponse("done"), // for extract phase
+		}}
+
+		origPhases := append([]Phase(nil), phases...)
+		defer func() { phases = origPhases }()
+
+		called := false
+		phases = append(phases, Phase{
+			Name:        "custom",
+			Description: "Custom test phase",
+			Run: func(_ context.Context, _ chan<- Progress, _ Deps,
+				state *DreamState, stateStore *dreamStateStore) error {
+				called = true
+				return nil
+			},
+		})
+
+		it, err := Dream(context.Background(), deps)
+		require.NoError(t, err)
+
+		_ = collectProgress(t, it)
+		assert.NoError(t, it.Err())
+		assert.True(t, called, "phase should run after extract processes a dialogue")
+
+		// Verify PhasesRun was updated.
+		var state DreamState
+		require.NoError(t, deps.Storage.Get(context.Background(), dreamStateID, &state))
+		assert.Equal(t, state.LastExtract, state.PhasesRun["custom"])
+	})
+
+	t.Run("skips when user prompt empty", func(t *testing.T) {
+		dir := t.TempDir()
+		deps := validDeps(t, dir)
+		deps.Store = &mockDialogueStore{}
+
+		storage := deps.Storage.(*mockStorage)
+		storage.data[dreamStateID] = &DreamState{
+			SchemaVersion: templateVersion,
+			Dreamed:       map[string]int{},
+			LastExtract:   5,
+			PhasesRun:     map[string]int64{},
+		}
+
+		svc := &mockLLMService{}
+		deps.LLM = svc
+
+		origPhases := append([]Phase(nil), phases...)
+		defer func() { phases = origPhases }()
+
+		phases = append(phases, NewAgentPhase(
+			"empty-prompt", "Phase with empty prompt", "system prompt",
+			func(_ context.Context, _ Deps) (string, error) {
+				return "", nil
+			},
+		))
+
+		it, err := Dream(context.Background(), deps)
+		require.NoError(t, err)
+
+		_ = collectProgress(t, it)
+		assert.NoError(t, it.Err())
+		assert.Equal(t, 0, svc.getCallCount(), "no LLM call when user prompt is empty")
+	})
+
+	t.Run("phase verify failure retries", func(t *testing.T) {
+		dir := t.TempDir()
+		mockEx := &mockExec{failVerify: 1}
+		deps := validDeps(t, dir)
+		deps.Exec = mockEx
+		deps.MaxFixAttempts = 1
+		deps.Store = &mockDialogueStore{}
+
+		storage := deps.Storage.(*mockStorage)
+		storage.data[dreamStateID] = &DreamState{
+			SchemaVersion: templateVersion,
+			Dreamed:       map[string]int{},
+			LastExtract:   5,
+			PhasesRun:     map[string]int64{},
+		}
+
+		svc := &mockLLMService{responses: []mockLLMResponse{
+			stopLLMResponse("initial analysis"),
+			stopLLMResponse("fixed the code"),
+		}}
+		deps.LLM = svc
+
+		origPhases := append([]Phase(nil), phases...)
+		defer func() { phases = origPhases }()
+
+		phases = append(phases, NewAgentPhase(
+			"verify-retry", "Phase that retries on verify failure",
+			"fix system prompt",
+			func(_ context.Context, _ Deps) (string, error) {
+				return "run quality check", nil
+			},
+		))
+
+		it, err := Dream(context.Background(), deps)
+		require.NoError(t, err)
+
+		_ = collectProgress(t, it)
+		assert.NoError(t, it.Err())
+		assert.Equal(t, 2, svc.getCallCount(), "initial + fix = 2 LLM calls")
+	})
+
+	t.Run("emits progress events", func(t *testing.T) {
+		dir := t.TempDir()
+		deps := validDeps(t, dir)
+		deps.Store = &mockDialogueStore{
+			dialogues: []dialoguemanager.Dialogue{
+				{ID: "d1", Version: 1, Messages: []llm.Message{
+					{Role: llm.RoleUser, Content: "hi"},
+				}},
+			},
+		}
+		deps.LLM = &mockLLMService{responses: []mockLLMResponse{
+			stopLLMResponse("done"),
+		}}
+
+		origPhases := append([]Phase(nil), phases...)
+		defer func() { phases = origPhases }()
+
+		phases = append(phases, Phase{
+			Name:        "custom",
+			Description: "Custom test phase",
+			Run: func(_ context.Context, _ chan<- Progress, _ Deps,
+				_ *DreamState, _ *dreamStateStore) error {
+				return nil
+			},
+		})
+
+		it, err := Dream(context.Background(), deps)
+		require.NoError(t, err)
+
+		progress := collectProgress(t, it)
+		assert.NoError(t, it.Err())
+
+		// Both extract and custom phases should emit start/finish.
+		var customStart, customFinish bool
+		for _, p := range progress {
+			if p.Type == ProgressPhaseStart && strings.Contains(p.Message, "Custom test phase") {
+				customStart = true
+			}
+			if p.Type == ProgressPhaseFinish && strings.Contains(p.Message, "Custom test phase") {
+				customFinish = true
+			}
+		}
+		assert.True(t, customStart, "expected ProgressPhaseStart for custom phase")
+		assert.True(t, customFinish, "expected ProgressPhaseFinish for custom phase")
+	})
+}
+
+func TestDreamPipelineGitIntegration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available on PATH")
+	}
+
+	dir := t.TempDir()
+	fsys := newOSFileSystem()
+
+	// Bootstrap real workspace and tidy deps.
+	_, err := bootstrap(fsys, dir)
+	require.NoError(t, err)
+	assertGoCommand(t, dir, "mod", "tidy")
+
+	d1 := dialoguemanager.Dialogue{
+		ID:      "d1",
+		Version: 1,
+		Messages: []llm.Message{
+			{Role: llm.RoleUser, Content: "How should I write tests?"},
+			{Role: llm.RoleAssistant, Content: "Use table-driven tests."},
+		},
+	}
+
+	svc := &mockLLMService{responses: []mockLLMResponse{
+		stopLLMResponse("I've analyzed the conversation and written memories."),
+	}}
+
+	deps := Deps{
+		LLM:      svc,
+		Store:    &mockDialogueStore{dialogues: []dialoguemanager.Dialogue{d1}},
+		Storage:  &mockStorage{data: make(map[string]any)},
+		FS:       fsys,
+		Exec:     osExec{},
+		DataPath: dir,
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+
+	it, err := Dream(ctx, deps)
+	require.NoError(t, err)
+
+	var progress []Progress
+	for {
+		p, ok := it.Next(ctx)
+		if !ok {
+			break
+		}
+		progress = append(progress, p)
+	}
+	require.NoError(t, it.Err())
+
+	// Pipeline should have completed successfully.
+	assert.True(t, hasProgressType(progress, ProgressPhaseStart))
+	assert.True(t, hasProgressType(progress, ProgressPhaseFinish))
+	assert.True(t, hasProgressType(progress, ProgressDone))
+
+	// Memory workspace should be a git repository.
+	_, statErr := os.Stat(filepath.Join(dir, ".git"))
+	require.NoError(t, statErr, "memory workspace should be a git repo")
+
+	// Verify the expected commits exist. The bootstrap commit includes all
+	// workspace files. The "dream: update memories" commit only appears if
+	// the agent actually writes files (here the mock LLM returns text only,
+	// so there is nothing new to commit).
+	out, err := exec.Command("git", "-C", dir, "log", "--format=%s", "--reverse").CombinedOutput()
+	require.NoError(t, err, "git log: %s", out)
+	commits := strings.Split(strings.TrimSpace(string(out)), "\n")
+
+	require.GreaterOrEqual(t, len(commits), 1, "at least the bootstrap commit")
+	assert.Equal(t, "initialize memory module", commits[0])
+
+	// State should reflect the processed dialogue.
+	var state DreamState
+	require.NoError(t, deps.Storage.Get(ctx, dreamStateID, &state))
+	assert.Equal(t, 1, state.Dreamed["d1"])
+	assert.Equal(t, int64(1), state.LastExtract)
+}
+
+// --- Test helpers ---
+
+func validDeps(t *testing.T, dir string) Deps {
+	t.Helper()
+	return Deps{
+		LLM:      &mockLLMService{},
+		Store:    &mockDialogueStore{},
+		Storage:  &mockStorage{data: make(map[string]any)},
+		FS:       newOSFileSystem(),
+		Exec:     &mockExec{},
+		DataPath: dir,
+	}
+}
+
+func collectProgress(t *testing.T, it iterator.Iterator[Progress]) []Progress {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	defer func() { _ = it.Close() }()
+	var progress []Progress
+	for {
+		p, ok := it.Next(ctx)
+		if !ok {
+			break
+		}
+		progress = append(progress, p)
+	}
+	return progress
+}
+
+func hasProgressType(progress []Progress, typ ProgressType) bool {
+	for _, p := range progress {
+		if p.Type == typ {
+			return true
+		}
+	}
+	return false
+}
+
+// --- Mocks ---
+
+// mockLLMService implements llm.Service for testing.
+type mockLLMService struct {
+	mu        sync.Mutex
+	callCount int
+	responses []mockLLMResponse
+	requests  []llm.Request
+}
+
+type mockLLMResponse struct {
+	text         string
+	finishReason llm.FinishReason
+	err          error
+}
+
+func (m *mockLLMService) CreateCompletion(
+	ctx context.Context, req llm.Request,
+) (iterator.Iterator[llm.Event], error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	m.mu.Lock()
+	idx := m.callCount
+	m.callCount++
+	m.requests = append(m.requests, req)
+	m.mu.Unlock()
+
+	if idx >= len(m.responses) {
+		return nil, errors.New("no more mock responses")
+	}
+
+	resp := m.responses[idx]
+	if resp.err != nil {
+		return nil, resp.err
+	}
+
+	events := []llm.Event{
+		{Type: llm.EventTextDelta, Text: resp.text},
+		{Type: llm.EventStreamDone, DoneData: &llm.DoneData{
+			Message: llm.Message{
+				Role:    llm.RoleAssistant,
+				Content: resp.text,
+			},
+			FinishReason: resp.finishReason,
+		}},
+	}
+	return iterator.FromSlice(events), nil
+}
+
+func (m *mockLLMService) CountTokens(_ []llm.Message) (int, error) {
+	return 0, nil
+}
+
+func (m *mockLLMService) ContextWindow() int {
+	return 100000
+}
+
+func (m *mockLLMService) getCallCount() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.callCount
+}
+
+func stopLLMResponse(text string) mockLLMResponse {
+	return mockLLMResponse{
+		text:         text,
+		finishReason: llm.FinishReasonStop,
+	}
+}
+
+// mockDialogueStore implements dialoguemanager.Store for testing.
+type mockDialogueStore struct {
+	mu        sync.Mutex
+	dialogues []dialoguemanager.Dialogue
+	data      map[string]dialoguemanager.Dialogue
+}
+
+func (s *mockDialogueStore) Health(_ context.Context) error { return nil }
+
+func (s *mockDialogueStore) Create(
+	_ context.Context, d dialoguemanager.Dialogue,
+) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.data == nil {
+		s.data = make(map[string]dialoguemanager.Dialogue)
+	}
+	if _, ok := s.data[d.ID]; ok {
+		return storageapi.ErrAlreadyExists
+	}
+	s.data[d.ID] = d
+	return nil
+}
+
+func (s *mockDialogueStore) Get(
+	_ context.Context, id string,
+) (dialoguemanager.Dialogue, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.data != nil {
+		if d, ok := s.data[id]; ok {
+			return d, nil
+		}
+	}
+	for _, d := range s.dialogues {
+		if d.ID == id {
+			return d, nil
+		}
+	}
+	return dialoguemanager.Dialogue{}, storageapi.ErrNotFound
+}
+
+func (s *mockDialogueStore) Delete(
+	_ context.Context, id string,
+) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.data != nil {
+		delete(s.data, id)
+	}
+	return nil
+}
+
+func (s *mockDialogueStore) AppendMessages(
+	_ context.Context, d dialoguemanager.Dialogue,
+	msgs []llm.Message, _ llm.DialogueUsage,
+) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.data == nil {
+		s.data = make(map[string]dialoguemanager.Dialogue)
+	}
+	existing := s.data[d.ID]
+	existing.Messages = append(existing.Messages, msgs...)
+	s.data[d.ID] = existing
+	return nil
+}
+
+func (s *mockDialogueStore) List(
+	_ context.Context,
+) (iterator.Iterator[dialoguemanager.DialogueHeader], error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	headers := make([]dialoguemanager.DialogueHeader, len(s.dialogues))
+	for i, d := range s.dialogues {
+		headers[i] = d.Header()
+	}
+	return iterator.FromSlice(headers), nil
+}
+
+func (s *mockDialogueStore) ArchiveAndReplace(_ context.Context, p dialoguemanager.ArchiveAndReplaceParams) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.data == nil {
+		s.data = make(map[string]dialoguemanager.Dialogue)
+	}
+	archived := p.Dialogue
+	archived.ID = p.ArchivedDialogueID
+	s.data[p.ArchivedDialogueID] = archived
+	replaced := p.Dialogue
+	replaced.Messages = p.Messages
+	replaced.MessageCount = len(p.Messages)
+	s.data[p.Dialogue.ID] = replaced
+	return nil
+}
+
+// mockExec implements workspaceapi.Executor for testing.
+// Set failVerify > 0 to make the first N `go test` invocations fail.
+type mockExec struct {
+	mu          sync.Mutex
+	failVerify  int // number of verify (go test) calls to fail
+	verifyCalls int
+}
+
+func (m *mockExec) Start(_ context.Context, cmd workspaceapi.Cmd) (workspaceapi.Pid, error) {
+	var procErr error
+	if cmd.Path == "go" && len(cmd.Args) > 0 && cmd.Args[0] == "test" {
+		m.mu.Lock()
+		m.verifyCalls++
+		if m.failVerify > 0 && m.verifyCalls <= m.failVerify {
+			procErr = errors.New("test failure")
+		}
+		m.mu.Unlock()
+	}
+	if cmd.Watcher != nil {
+		go func() {
+			if procErr != nil {
+				if w := cmd.Stderr; w != nil {
+					_, _ = fmt.Fprint(w, "FAIL: test failure")
+				}
+			}
+			cmd.Watcher.WatchProcess() <- procErr
+		}()
+	}
+	return 0, nil
+}
+
+func (*mockExec) Signal(_ workspaceapi.Pid, _ syscall.Signal) error {
+	return nil
+}
+
+func (*mockExec) Close() error { return nil }
+
+// osExec implements workspaceapi.Executor using real processes.
+type osExec struct{}
+
+func (osExec) Start(ctx context.Context, cmd workspaceapi.Cmd) (workspaceapi.Pid, error) {
+	c := exec.CommandContext(ctx, cmd.Path, cmd.Args...)
+	c.Dir = cmd.Dir
+	c.Env = cmd.Env
+	c.Stdout = cmd.Stdout
+	c.Stderr = cmd.Stderr
+
+	if err := c.Start(); err != nil {
+		return 0, err
+	}
+
+	if cmd.Watcher != nil {
+		go func() { cmd.Watcher.WatchProcess() <- c.Wait() }()
+	}
+
+	return workspaceapi.Pid(c.Process.Pid), nil
+}
+
+func (osExec) Signal(_ workspaceapi.Pid, _ syscall.Signal) error { return nil }
+func (osExec) Close() error                                      { return nil }
+
+// failingFS is a FileSystem that returns errors.
+type failingFS struct {
+	statErr error
+}
+
+func (f *failingFS) URI(_ string) (workspaceapi.URI, error) {
+	return workspaceapi.URI{}, nil
+}
+
+func (f *failingFS) OpenFile(_ string, _ int, _ os.FileMode) (workspaceapi.File, error) {
+	return nil, errors.New("failingFS: open not supported")
+}
+
+func (f *failingFS) Remove(_ string) error                       { return nil }
+func (f *failingFS) Stat(_ string) (os.FileInfo, error)          { return nil, f.statErr }
+func (f *failingFS) ReadDir(_ string) ([]os.DirEntry, error)     { return nil, nil }
+func (f *failingFS) MkdirAll(_ string, _ os.FileMode) error { return nil }
