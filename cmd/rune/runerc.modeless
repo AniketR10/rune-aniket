@@ -1,0 +1,117 @@
+editor:
+  mode: modeless
+  modeless:
+    # default text attributes
+    attr:
+      fg: default
+      bg: default
+    # search and message bar attributes
+    bar_attr:
+      fg: default
+      bg: default
+    # search results attributes
+    search_attr:
+      fg: grey
+      bg: yellow
+  status_bar:
+    layout: '██▓▒░  {{ .Filepath }}  {{ .GitShortRef }}   {{ .GitDiffAdd | fg "green" }}   {{ .GitDiffDel | fg "red" }} {{ .ShiftRight }} {{ .CursorColumn }}:{{ .CursorLine }}  {{ .TotalLines }} lines  {{ .Language | bold }}  ░▒▓██'
+
+command:
+  key: <s-m-p>
+  key_bindings:
+    <m-n>: tabnew
+    <m-o>: tabnew
+    <m-s>: write
+    <a-m-s>: writeall
+    <m-w> tabclose
+    <m-q>: quit
+    <m-s-n>: windownew
+    <m-s-w>: windowclose
+    <m-p>: searchfile
+    <a-g>: searchtext
+    <m-r>: echo {prompt}jumptoast<space>locals.scm<space>local.definition.type<space>
+    <s-m-r>: searchtype
+    <m-;>: searchtext
+    <c-m-p>: echo <s-m-p>workspacefocus{wait}<space>
+    <m-f2>: locationtoggle bookmark
+    <f2>: jumptolocation next bookmark
+    <s-f2>: jumptolocation prev bookmark
+    <s-m-f2>: locationdeleteall bookmark
+    <a-m-right>: tabnext
+    <a-m-left>: tabprevious
+    <m-f>: searchtext
+    <m-g>: jumptolocation next search
+    <s-m-g>: jumptolocation prev search
+    <m-,>: config
+    <a-m-h>: windowcloseall
+    <s-m-]>: tabnext
+    <s-m-[>: tabprevious
+    <c-g>: echo <esc>:
+    <ctrl-meta-p>: echo <esc>:workspacefocus<space>
+    <alt-meta-down>: lspgotodef
+    <f12>: lspgotodef
+    <alt-shift-meta-down>: lspref
+    <m-j>: ""
+    <m-k>: ""
+    <m-l>: ""
+    <m-h>: ""
+
+    <m-=>: guifontsize increase
+    <m-->: guifontsize decrease
+    <m-t>: tabnew
+    <m-w>: tabclose
+    <m-l>: ""
+    <m-h>: ""
+    <a-m-l>: tabmove right
+    <a-m-h>: tabmove left
+    <m-n>: windownew
+    <m-c>: clipboardcopy
+    <m-v>: clipboardpaste
+    <m-y>: echolastcmd
+    #<c-_>: jumpback
+    #<c-_>: jumpforward
+    <s-m-h>: windowfocus left
+    <s-m-l>: windowfocus right
+    <s-m-j>: windowfocus down
+    <s-m-k>: windowfocus up
+    <a-s-m-h>: windowmove left
+    <a-s-m-l>: windowmove right
+    <a-s-m-j>: windowmove down
+    <a-s-m-k>: windowmove up
+    <s-m-backspace>: windowresize reset
+    <s-m-+>:
+      - windowresize max width
+      - windowresize max height
+    <s-m-->:
+      - windowresize min width
+      - windowresize min height
+    <s-m-up>: windowresize increase height
+    <s-m-down>: windowresize decrease height
+    <s-m-left>: windowresize decrease width
+    <s-m-right>: windowresize increase width
+    <s-m-w>: windowclose
+    <c-m-h>: windowdefaultsplit h
+    <c-m-v>: windowdefaultsplit v
+    <s-m-f>: windowtogglemaximize
+    <m-o>: lsphover
+    <m-b>: lspformat
+    <m-m>: lspformatimports
+    <a-j>: gitnextchange
+    <a-k>: gitprevchange
+    <m-p>: searchfile
+    <m-\\>: searchtext
+    <m-enter>: terminalneworsplit
+    <s-m-enter>: "!"
+    gf: editfileoncursor
+    <m-1>: workspacefocus 1
+    <m-2>: workspacefocus 2
+    <m-3>: workspacefocus 3
+    <m-4>: workspacefocus 4
+    <m-5>: workspacefocus 5
+    <m-6>: workspacefocus 6
+    <m-7>: workspacefocus 7
+    <m-8>: workspacefocus 8
+    <m-9>: workspacefocus 9
+
+terminal:
+  modal: false

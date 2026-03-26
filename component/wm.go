@@ -400,8 +400,8 @@ func (wm *WindowManager) calculateMinimizedOffsets() {
 		}
 	}
 	wm.minimizedOffset = term.Coordinates{Y: offsetTop, X: offsetLeft}
-	wm.minimizedHeight = max(0, wm.height - offsetBottom - offsetTop)
-	wm.minimizedWidth = max(0, wm.width - offsetRight - offsetLeft)
+	wm.minimizedHeight = max(0, wm.height-offsetBottom-offsetTop)
+	wm.minimizedWidth = max(0, wm.width-offsetRight-offsetLeft)
 
 	// now that we know where everything is positioned,
 	// resize floating nodes with padding, aka that will

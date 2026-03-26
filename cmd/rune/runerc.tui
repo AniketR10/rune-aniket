@@ -1,0 +1,379 @@
+# These are variables referenced thorought this file.
+# Colors can be either a W3C color name, a hex string value (i.e. #ffffff),
+# or the string "default", which indicates that the default terminal
+# text color should be used.
+
+# If your terminal doesn't support RGB colors, you can
+# see the full list of traditional colors and its values
+# by invoking the colorPalette command, provided by the 'colors'
+# extension below (extension_color_palette).
+color_theme_1: &default default
+color_theme_2: &highlight '#c6c6c6'
+color_theme_3: &background '#1e1e1e'
+color_theme_4: &highlight2 '#D34728'
+color_theme_5: &framecolor '#3a3a3a'
+color_theme_6: &background2 '#1e1e1e'
+color_theme_7: &background3 '#1e1e1e'
+color_theme_8: &default_dim gray
+
+# If your terminal supports RGB colors, then you might enjoy
+# one of the two following themes:
+#
+# Unstable Build RGB theme
+# color_theme_1: &default default
+# color_theme_2: &highlight '#ef85d7'
+# color_theme_3: &background '#231b2e'
+# color_theme_4: &highlight2 '#D34728'
+# color_theme_5: &framecolor '#541862'
+# color_theme_6: &background2 '#231b2e'
+# color_theme_7: &background3 '#231b2e'
+# color_theme_8: &default_dim gray
+
+# Go RGB theme
+# color_theme_1: &default default
+# color_theme_2: &highlight '#4badb5'
+# color_theme_3: &background '#030F1B'
+# color_theme_4: &highlight2 '#BE3f63'
+# color_theme_5: &framecolor '#4badb5'
+# color_theme_6: &background2 '#030F1B'
+# color_theme_7: &background3 '#030F1B'
+# color_theme_8: &default_dim gray
+
+default_attr:
+  fg: default
+  bg: *background
+
+frame_theme: &frame true
+focus_frame_charset_theme: &focus_frame_charset
+  horizontaltop: '─'
+  horizontalbottom: '─'
+  verticalright: '│'
+  verticalleft: '│'
+  topleft: '┌'
+  topright: '┐'
+  bottomleft: '└'
+  bottomright: '┘'
+frame_charset_theme: &frame_charset
+  horizontaltop: '─'
+  horizontalbottom: '─'
+  verticalright: '│'
+  verticalleft: '│'
+  topleft: '┌'
+  topright: '┐'
+  bottomleft: '└'
+  bottomright: '┘'
+frameunion_charset_theme: &frameunion_charset
+  left: '├'
+  right: '┤'
+  top: '┬'
+  bottom: '┴'
+frame_attr_theme: &frame_attr
+  fg: *framecolor
+  bg: *background
+  #flags: dim
+focus_frame_attr_theme: &focus_frame_attr
+  fg: *highlight
+  bg: *background
+  flags: bold
+
+# file to log to. This property is not reloaded on reloadWorkspace.
+log_path: ~/.rune/debug.log
+# log level. This property is not reloaded on reloadWorkspace.
+log_level: info # error, debug, trace
+# input mode list. Options are 'esc', 'mouse' and 'alt'.
+# Reference termbrune input modes for more details.
+input_mode:
+  - esc
+  - mouse
+
+editor:
+  modal:
+    # default text attributes
+    attr:
+      fg: *default
+      bg: *background2
+    # search and message bar attributes
+    bar_attr:
+      fg: *default
+      bg: *background3
+    # search results attributes
+    search_attr:
+      fg: *default
+      bg: *background2
+      flags: reverse
+  modeless:
+    # default text attributes
+    attr:
+      fg: *default
+      bg: *background3
+    # search and message bar attributes
+    bar_attr:
+      fg: *default
+      bg: *background
+    # search results attributes
+    search_attr:
+      fg: *default
+      bg: *background2
+      flags: reverse
+  aux_bar:
+    git_del_inline_attr:
+      fg: maroon
+      flags: bold
+    git_add_inline_attr:
+      fg: green
+      flags: bold
+    git_del_locations_attr:
+      bg: maroon
+      flags: dim
+    git_add_locations_attr:
+      bg: green
+      flags: dim
+    line_number_attr:
+      fg: gray
+      bg: default
+    highlight_cursor_attr:
+      fg: white
+      bg: gray
+      flags: bold
+  status_bar:
+    background_attr:
+      bg: gray
+
+extensions:
+  ai:
+    config:
+      background_attr:
+        bg: *background
+      user_msg_attr:
+        fg: *default
+        bg: *background
+        flags: dim
+      assistant_msg_attr:
+        fg: *default
+        bg: *background
+        flags: italic
+      input_brune_attr:
+        fg: *default
+        bg: *background
+      input_placeholder_attr:
+        fg: *highlight
+        bg: *background
+      input_brune_frame_attr:
+        fg: *default
+        bg: *background
+
+  fuzzy_file:
+    config:
+      history_key: <c-p>
+      element_attr:
+        fg: *default
+        bg: *background
+      matched_text_attr:
+        fg: *highlight2
+        bg: *background
+        flags:
+          - bold
+      count_attr:
+        fg: *default
+        bg: *background
+      focus_element_attr:
+        fg: *highlight
+        bg: *background
+        flags:
+          - bold
+  fuzzy_line:
+    config:
+      history_key: <c-\\>
+      element_attr:
+        fg: *default
+        bg: *background
+      matched_text_attr:
+        fg: *highlight2
+        bg: *background
+        flags:
+          - bold
+          - italic
+      count_attr:
+        fg: *default
+        bg: *background
+      focus_element_attr:
+        fg: *highlight
+        bg: *background
+        flags:
+          - bold
+  lsp:
+    config:
+      hover_window_attr:
+        fg: *default
+        bg: *background
+      references:
+        window_attr:
+          fg: *default
+          bg: *background
+        element_attr:
+          fg: *default
+          bg: *background
+        matched_text_attr:
+          fg: *highlight2
+          bg: *background
+          flags:
+            - bold
+            - italic
+        count_attr:
+          fg: *default
+          bg: *background
+        focus_element_attr:
+          fg: *highlight
+          bg: *background
+          flags:
+            - bold
+      diagnostics:
+        error:
+          fg: white
+          bg: red
+        warning:
+          fg: black
+          bg: yellow
+        info:
+          fg: white
+          bg: blue
+        hint:
+          fg: white
+          bg: green
+      syntax_highlighting:
+        interface: yellow
+        struct: default
+        typeParameter: default
+        parameter: default
+        variable:  default
+        property: default
+        enumMember: default
+        event: default
+        method: default
+        function: default
+        member: default
+        macro: default
+        keyword: yellow
+        modifier: yellow
+        comment: blue
+        string: magenta
+        number: red
+
+command:
+  key_bindings:
+    <c-w>: tabclose
+    <c-l>: tabnext
+    <c-h>: tabprevious
+    <c-x><c-v>: clipboardpaste
+    <c-x><c-c>: clipboardcopy
+    <c-x><c-h>: windowfocus left
+    <c-x><c-l>: windowfocus right
+    <c-x><c-j>: windowfocus down
+    <c-x><c-k>: windowfocus up
+    <c-x><c-w>: windowclose
+    <c-x>h: windowdefaultsplit h
+    <c-x>v: windowdefaultsplit v
+    <c-j>: lspnextdiagnostic
+    <c-k>: lspprefdiagnostic
+    <c-x><c-f>: windowtogglemaximize
+    <c-x><c-t>: lsphover
+    <c-x><c-e>: lspref
+    <c-x><c-g>: lspgotodef
+    <c-x><c-b>: lspformat
+    <c-x><c-p>: searchfile
+    <c-x><c-\\>: searchtext
+    # Aliases can also be mapped to key sequences
+    <c-x><enter>: terminalneworsplit
+    gf: editfileoncursor
+    <c-x>1: workspacefocus 1
+    <c-x>2: workspacefocus 2
+    <c-x>3: workspacefocus 3
+    <c-x>4: workspacefocus 4
+    <c-x>5: workspacefocus 5
+    <c-x>6: workspacefocus 6
+    <c-x>7: workspacefocus 7
+    <c-x>8: workspacefocus 8
+    <c-x>9: workspacefocus 9
+  element_attr:
+    fg: *default
+    bg: *background
+  manual_attr:
+    fg: *default
+    bg: *background
+  matched_text_attr:
+    fg: *highlight2
+    bg: *background
+    flags:
+      - bold
+      - italic
+  focus_element_attr:
+    fg: *highlight
+    bg: *background
+    flags:
+      - bold
+
+browser:
+  window_manager:
+    dim: true
+    frame: *frame
+    frame_attr: *frame_attr
+    focus_frame_attr: *focus_frame_attr
+    frame_charset: *frame_charset
+    focus_frame_charset: *focus_frame_charset
+    scroll_bar_attr:
+      fg: *highlight
+      bg: *background
+    scroll_bar_char: '┃'
+    scroll_bar_hover_char: '║'
+  tab_name_separator: "  "
+  frameunion_charset: *frameunion_charset
+  focus_tab_attr:
+    fg: *highlight
+    bg: *background
+    flags:
+      - bold
+  dirty_tab_attr:
+    fg: *highlight2
+    bg: *background
+    flags:
+      - italic
+  non_focus_tab_attr:
+    fg: *default_dim
+    bg: *background
+  prompt:
+    text_attr:
+      fg: *default
+      bg: *background
+    highlight_attr:
+      fg: *highlight
+      bg: *default
+      flag: reverse
+    background_attr:
+      fg: *default
+      bg: *background
+
+workspace:
+  wallpaper_attr:
+    fg: *highlight2
+    bg: *background2
+  wallpaper_background_attr:
+    bg: *background2
+
+notifications:
+  attr:
+    fg: *default
+    bg: *background
+  background_attr:
+    fg: *default
+    bg: *background
+  frame_charset: *frame_charset
+
+terminal:
+  attr:
+    fg: *default
+    bg: *background
+  selection_attr:
+    flags: reverse
+  needs_attention_attr:
+    fg: red
+    flags: blink
