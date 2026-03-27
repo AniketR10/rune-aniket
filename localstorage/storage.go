@@ -36,6 +36,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/debug"
+	"unstable.build/go-tui/localstorage/firstmover"
 	"unstable.build/go-tui/localstorage/schemedoc"
 	"unstable.build/go-tui/workspace"
 )
@@ -74,8 +75,11 @@ func New(ctx context.Context, dir string, marshaler docmarshal.Marshaler) storag
 			ret.service = storagestub.NewInMemoryService()
 			return
 		}
+		cfg := firstmover.DefaultConfig()
+		cfg.Marshaler = marshaler
+		cfg.CloseError = schemedoc.ErrClosing
 
-		ret.service = storage
+		ret.service = firstmover.New(storage, filepath.Join(dir, ".dblock"), cfg)
 	})
 	return ret
 }
