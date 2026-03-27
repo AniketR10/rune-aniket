@@ -506,6 +506,31 @@ func TestListWait(t *testing.T) {
 	testListWait(t, newSimpleList)
 }
 
+func TestListSyncSearch(t *testing.T) {
+	t.Run("buffer edits update matches synchronously", func(t *testing.T) {
+		l := NewList(ListConfig{SyncSearch: true})
+		defer l.Close()
+
+		l.PushSync([]byte("wasup"))
+		l.PushSync([]byte("wasep"))
+		l.PushSync([]byte("hello"))
+
+		buf := l.Buffer()
+		buf.WriteString("w")
+		assert.Equal(t, 2, l.MatchCount())
+
+		buf.WriteString("a")
+		assert.Equal(t, 2, l.MatchCount())
+
+		buf.WriteString("s")
+		assert.Equal(t, 2, l.MatchCount())
+
+		buf.WriteString("u")
+		assert.Equal(t, 1, l.MatchCount())
+		assertFocusEqual(t, l, []byte("wasup"))
+	})
+}
+
 func testListWait(t *testing.T, constructor listConstructor) {
 	t.Run("does not panic a new list", func(t *testing.T) {
 		l, _ := constructor(ListConfig{})

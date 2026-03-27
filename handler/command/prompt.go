@@ -140,6 +140,7 @@ func (h *Prompt) Init(
 		Algo:             search.FuzzyMatch,
 		Interrupter:      interrupter,
 		CaseSensitive:    false,
+		SyncSearch:       config.Sync,
 		MatchedTextAttr:  &config.MatchedTextAttr,
 		FocusElementAttr: &config.FocusElementAttr,
 		ElementAttr:      &config.ElementAttr,

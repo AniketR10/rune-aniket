@@ -54,6 +54,10 @@ type ListConfig struct {
 	// Algorithm to use. See AlgoConfig.
 	Algo AlgoConfig
 
+	// SyncSearch makes buffer-driven searches deterministic.
+	// It should only be used in tests.
+	SyncSearch bool
+
 	// function to use to force a redraw of the list.
 	Interrupter term.Interrupter
 
@@ -136,6 +140,7 @@ func (c ListConfig) toInternal() listConfig {
 		textAttr:          textAttr,
 		focusAttr:         focusAttr,
 		interrupter:       interrupter,
+		syncSearch:        c.SyncSearch,
 		caseSensitive:     c.CaseSensitive,
 		bottomSearchBar:   c.BottomSearchBar,
 		interruptEvery:    c.interruptEvery,
@@ -152,6 +157,7 @@ type listConfig struct {
 	focusAttr         term.Attributes
 	algo              fzf.Algo
 	interrupter       term.Interrupter
+	syncSearch        bool
 	caseSensitive     bool
 	bottomSearchBar   bool
 	interruptEvery    time.Duration

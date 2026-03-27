@@ -133,7 +133,7 @@ func (l *List) ToggleCaseSensitivity() bool {
 	defer l.mu.Unlock()
 	ret := l.cfg.caseSensitive
 	l.cfg.caseSensitive = !l.cfg.caseSensitive
-	l.asyncSearch(context.Background())
+	l.startSearchLocked(context.Background())
 	return ret
 }
 
@@ -684,7 +684,7 @@ func (l *List) drawMatchCounts(w term.Writer) {
 	l.matchCountBar.Virtual.Draw(w)
 }
 
-func (l *List) asyncSearch(ctx context.Context) {
+func (l *List) asyncSearchLocked(ctx context.Context) {
 	// we want the cancel from outside to not cancel waitSearchCtx
 	// because we use that for ensuring that no more data will be pushed
 	var cancelWait func()
@@ -703,6 +703,29 @@ func (l *List) asyncSearch(ctx context.Context) {
 	go debug.CapturePanicReport(func() {
 		l.handleSearch(ctx, cancelWait, input, searchInput)
 	})
+}
+
+func (l *List) syncSearchLocked(ctx context.Context) {
+	var cancelWait func()
+	l.waitSearchCtx, cancelWait = context.WithCancel(ctx)
+
+	ctx, l.cancelSearch = context.WithCancel(l.waitSearchCtx)
+
+	input := make([][]byte, len(l.input))
+	copy(input, l.input)
+	searchInput := l.getSearchQuery()
+	l.list.Reset()
+	l.mu.Unlock()
+	defer l.mu.Lock()
+	l.handleSearch(ctx, cancelWait, input, searchInput)
+}
+
+func (l *List) startSearchLocked(ctx context.Context) {
+	if l.cfg.syncSearch {
+		l.syncSearchLocked(ctx)
+		return
+	}
+	l.asyncSearchLocked(ctx)
 }
 
 func (l *List) resize(width, height int) {
@@ -771,7 +794,7 @@ func (s syncBuffer) OnWillEdit(
 	defer s.parent.mu.Unlock()
 	s.buf.Edit(ctx, start, end, str)
 	s.parent.searchBar.dirty = true
-	s.parent.asyncSearch(ctx)
+	s.parent.startSearchLocked(ctx)
 }
 
 func (s syncBuffer) OnDidEdit(
