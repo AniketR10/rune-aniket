@@ -151,8 +151,9 @@ Do not mark a task complete without validating the fix.
 When creating commit messages for this repository, match the existing subject style in recent history.
 
 - Prefer short, imperative, sentence-style subjects
-- Usually start with a capitalized verb such as `Add`, `Update`, `Fix`, `Remove`, `Display`, `Sort`, `Generate`, `Upgrade`, `Reverse`, or `Revert`
-- Keep the subject focused on the user-visible or code-level change
+- Usually start with a capitalized verb such as `Add`, `Update`, `Fix`, `Remove`, `Display`, `Sort`, `Generate`, `Upgrade`, or `Revert`
+- Keep the subject focused on the user-visible or code-level change (the "what").
+- Add a short description on the reason why the change is being introduced (the "why").
 - Wrap commit subjects and body lines to a maximum of 90 columns
 - Do not include routine validation command lists in commit messages unless explicitly requested
 - For performance-oriented commits, include measured before/after timings or percentages when available
@@ -164,24 +165,11 @@ Good examples:
 - `Fix userMsgIdx after compaction to prevent index out of range panic`
 - `Display /clear confirmation inline instead of floating window`
 
-## Semantic Tooling Guidance
-
-Prefer Rune's semantic tooling over text-based approaches whenever possible.
-
-- **`code-navigation`** — jump to definitions, references, implementations, declarations
-- **`code-structure`** — inspect file/workspace symbol structure
-- **`code-search`** — structural tree-sitter search
-- **`code-understanding`** — hover docs, signatures, symbol info
-- **`code-diagnostics`** — compiler/linter diagnostics
-- **`code-refactoring`** — rename, code actions, formatting
-
-Prefer these over grep/find-and-replace/manual scanning when applicable.
-
 ## Review checklist
 
 Before considering a task done, verify:
 
 - code compiles
-- relevant tests pass
+- relevant tests pass, whole suite via `make test` passes.
 - formatting/linting expectations are satisfied
 - any new behavior is covered by tests when practical
