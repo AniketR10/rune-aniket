@@ -60,6 +60,9 @@ func NewRegistry(fs workspaceapi.FileSystem, cwd workspaceapi.URI, dirs []string
 	}
 	for _, dir := range dirs {
 		abs := r.resolve(dir)
+		if slices.Contains(r.dirs, abs) {
+			continue
+		}
 		r.dirs = append(r.dirs, abs)
 		for _, s := range r.loadDir(abs) {
 			r.warnDescription(s)

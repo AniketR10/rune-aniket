@@ -24,6 +24,7 @@
 package skills
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -32,6 +33,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 )
 
@@ -41,6 +43,48 @@ func dirURI(dir string) workspaceapi.URI {
 }
 
 type osFileSystem struct{}
+
+type recordedNotification struct {
+	level browserapi.NotificationLevel
+	msg   string
+}
+
+type recordingNotifications struct {
+	mu       sync.Mutex
+	messages []recordedNotification
+}
+
+func (n *recordingNotifications) Notify(
+	level browserapi.NotificationLevel, msg string, args ...any,
+) (string, error) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+
+	n.messages = append(n.messages, recordedNotification{
+		level: level,
+		msg:   fmt.Sprintf(msg, args...),
+	})
+	return "", nil
+}
+
+func (n *recordingNotifications) NotifyOnce(
+	level browserapi.NotificationLevel, msg string, args ...any,
+) (string, error) {
+	return n.Notify(level, msg, args...)
+}
+
+func (*recordingNotifications) UpdateNotificationProgress(
+	id, message string, progress, total int64,
+) error {
+	return nil
+}
+
+func (n *recordingNotifications) notifications() []recordedNotification {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+
+	return append([]recordedNotification(nil), n.messages...)
+}
 
 func (osFileSystem) URI(path string) (workspaceapi.URI, error) {
 	return workspaceapi.CurrentUserHostURI(path)
@@ -98,6 +142,25 @@ dir2 body`)
 		s, ok := r.Get("shared")
 		require.True(t, ok)
 		assert.Equal(t, "From dir1", s.Description, "first dir wins")
+	})
+
+	t.Run("skips duplicate resolved directories", func(t *testing.T) {
+		workspace := t.TempDir()
+		dir := filepath.Join(workspace, "skills")
+		writeSkill(t, dir, "shared", `---
+name: shared
+description: Shared skill
+---
+body`)
+
+		notifications := &recordingNotifications{}
+		r := NewRegistry(osFileSystem{}, dirURI(workspace), []string{dir, "./skills"}, notifications)
+
+		s, ok := r.Get("shared")
+		require.True(t, ok)
+		assert.Equal(t, "Shared skill", s.Description)
+		assert.Equal(t, []string{dir}, r.Dirs(), "resolved dirs should be tracked once")
+		assert.Empty(t, notifications.notifications(), "duplicate resolved dirs should not warn")
 	})
 }
 
