@@ -29,12 +29,14 @@ import (
 	"slices"
 	"time"
 
-	"unstable.build/go-tui/cmd/rune-agent/llm"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/retry"
+	"unstable.build/go-tui/cmd/rune-agent/llm"
 )
+
+const storeIndexRecordID = "dialogue-index"
 
 var retryStrategy = retry.CombinedStrategy(
 	retry.ExponentialStrategy(10*time.Millisecond, 500*time.Millisecond),
@@ -89,6 +91,16 @@ type DialogueHeader struct {
 	MessageCount int
 	Usage        llm.DialogueUsage
 	UpdatedAt    time.Time
+}
+
+type dialogueIndex struct {
+	Headers map[string]DialogueHeader
+	Version int
+	Bootstrapped bool
+}
+
+func newDialogueIndex() dialogueIndex {
+	return dialogueIndex{Headers: make(map[string]DialogueHeader), Version: 1}
 }
 
 // Workspace parses WorkspaceURI and returns the resulting URI.
@@ -156,6 +168,143 @@ func (s store) Health(ctx context.Context) error {
 	return nil
 }
 
+func (s store) getIndex(ctx context.Context) (dialogueIndex, bool, error) {
+	var idx dialogueIndex
+	err := s.backend.Get(ctx, storeIndexRecordID, &idx)
+	if err == nil {
+		if idx.Headers == nil {
+			idx.Headers = make(map[string]DialogueHeader)
+		}
+		if idx.Version == 0 {
+			idx.Version = 1
+		}
+		return idx, true, nil
+	}
+	if err != storageapi.ErrNotFound {
+		return dialogueIndex{}, false, fmt.Errorf("document service get index: %w", err)
+	}
+	return newDialogueIndex(), false, nil
+}
+
+func (s store) loadLegacyHeaders(ctx context.Context) (map[string]DialogueHeader, error) {
+	it, err := s.backend.List(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("document service list legacy dialogues: %w", err)
+	}
+	all, err := iterator.ToSlice(ctx, iterator.FromDocumentIterator[Dialogue](it))
+	if err != nil {
+		return nil, fmt.Errorf("collect legacy dialogues: %w", err)
+	}
+	headers := make(map[string]DialogueHeader)
+	for _, d := range all {
+		if !isLegacyDialogue(d) || d.ID == storeIndexRecordID {
+			continue
+		}
+		headers[d.ID] = d.Header()
+	}
+	return headers, nil
+}
+
+func (s store) ensureIndex(ctx context.Context) (dialogueIndex, error) {
+	return s.ensureIndexMode(ctx, true)
+}
+
+func (s store) ensureIndexWithoutBootstrap(ctx context.Context) (dialogueIndex, error) {
+	return s.ensureIndexMode(ctx, false)
+}
+
+func (s store) ensureIndexMode(ctx context.Context, bootstrap bool) (dialogueIndex, error) {
+	idx, exists, err := s.getIndex(ctx)
+	if err != nil {
+		return dialogueIndex{}, err
+	}
+	if exists && idx.Bootstrapped {
+		return idx, nil
+	}
+	if !bootstrap {
+		if !exists {
+			idx = newDialogueIndex()
+			if err := s.backend.Create(ctx, storeIndexRecordID, &idx); err == nil {
+				return idx, nil
+			} else if err != storageapi.ErrAlreadyExists {
+				return dialogueIndex{}, fmt.Errorf("document service create index: %w", err)
+			}
+			idx, _, err = s.getIndex(ctx)
+			if err != nil {
+				return dialogueIndex{}, err
+			}
+		}
+		return idx, nil
+	}
+
+	legacyHeaders, err := s.loadLegacyHeaders(ctx)
+	if err != nil {
+		return dialogueIndex{}, err
+	}
+
+	if !exists {
+		idx = newDialogueIndex()
+		idx.Bootstrapped = true
+		for id, header := range legacyHeaders {
+			idx.Headers[id] = header
+		}
+		if err := s.backend.Create(ctx, storeIndexRecordID, &idx); err == nil {
+			return idx, nil
+		} else if err != storageapi.ErrAlreadyExists {
+			return dialogueIndex{}, fmt.Errorf("document service create index: %w", err)
+		}
+	}
+
+	err = storageapi.ConsistentUpdate(ctx, s.backend, storeIndexRecordID, &idx, retryStrategy,
+		func() ([]storageapi.Update, []storageapi.Precondition) {
+			if idx.Headers == nil {
+				idx.Headers = make(map[string]DialogueHeader)
+			}
+			for id, header := range legacyHeaders {
+				if _, ok := idx.Headers[id]; !ok {
+					idx.Headers[id] = header
+				}
+			}
+			return []storageapi.Update{
+				{FieldPath: []string{"Headers"}, Value: idx.Headers},
+				{FieldPath: []string{"Bootstrapped"}, Value: true},
+				{FieldPath: []string{"Version"}, Value: idx.Version + 1},
+			}, []storageapi.Precondition{
+				{FieldPath: []string{"Version"}, Value: idx.Version},
+			}
+		})
+	if err != nil {
+		return dialogueIndex{}, fmt.Errorf("document service bootstrap index: %w", err)
+	}
+	idx, _, err = s.getIndex(ctx)
+	if err != nil {
+		return dialogueIndex{}, err
+	}
+	return idx, nil
+}
+
+func (s store) updateIndex(ctx context.Context, fn func(dialogueIndex) dialogueIndex) error {
+	idx, err := s.ensureIndexWithoutBootstrap(ctx)
+	if err != nil {
+		return err
+	}
+	return storageapi.ConsistentUpdate(ctx, s.backend, storeIndexRecordID, &idx, retryStrategy,
+		func() ([]storageapi.Update, []storageapi.Precondition) {
+			idx = fn(idx)
+			return []storageapi.Update{
+				{FieldPath: []string{"Headers"}, Value: idx.Headers},
+				{FieldPath: []string{"Bootstrapped"}, Value: idx.Bootstrapped},
+				{FieldPath: []string{"Version"}, Value: idx.Version + 1},
+			}, []storageapi.Precondition{
+				{FieldPath: []string{"Version"}, Value: idx.Version},
+			}
+		})
+}
+
+func isLegacyDialogue(d Dialogue) bool {
+	return d.ID != "" && !d.UpdatedAt.IsZero()
+}
+
 func (s store) Create(ctx context.Context, d Dialogue) error {
 	if d.Version == 0 {
 		d.Version = 1
@@ -168,7 +317,15 @@ func (s store) Create(ctx context.Context, d Dialogue) error {
 	if err != nil {
 		return fmt.Errorf("document service create: %w", err)
 	}
-	return err
+	err = s.updateIndex(ctx, func(idx dialogueIndex) dialogueIndex {
+		idx.Headers[d.ID] = d.Header()
+		return idx
+	})
+	if err != nil {
+		_ = s.backend.Delete(ctx, d.ID)
+		return err
+	}
+	return nil
 }
 
 func (s store) set(ctx context.Context, d Dialogue) error {
@@ -181,6 +338,13 @@ func (s store) set(ctx context.Context, d Dialogue) error {
 	err := s.backend.Set(ctx, d.ID, &d)
 	if err != nil {
 		return fmt.Errorf("document service set: %w", err)
+	}
+	err = s.updateIndex(ctx, func(idx dialogueIndex) dialogueIndex {
+		idx.Headers[d.ID] = d.Header()
+		return idx
+	})
+	if err != nil {
+		return err
 	}
 	return nil
 }
@@ -221,6 +385,13 @@ func (s store) Delete(
 	if err != nil {
 		return fmt.Errorf("document service delete: %w", err)
 	}
+	err = s.updateIndex(ctx, func(idx dialogueIndex) dialogueIndex {
+		delete(idx.Headers, ID)
+		return idx
+	})
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -257,17 +428,24 @@ func (s store) AppendMessages(
 	if err != nil {
 		return fmt.Errorf("consistent update : %w", err)
 	}
+	err = s.updateIndex(ctx, func(idx dialogueIndex) dialogueIndex {
+		idx.Headers[d.ID] = d.Header()
+		return idx
+	})
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
 func (s store) List(ctx context.Context) (iterator.Iterator[DialogueHeader], error) {
-	it, err := s.backend.List(ctx, nil)
+	idx, err := s.ensureIndex(ctx)
 	if err != nil {
 		return nil, err
 	}
-	all, err := iterator.ToSlice(ctx, iterator.FromDocumentIterator[DialogueHeader](it))
-	if err != nil {
-		return nil, fmt.Errorf("collect dialogues: %w", err)
+	all := make([]DialogueHeader, 0, len(idx.Headers))
+	for _, header := range idx.Headers {
+		all = append(all, header)
 	}
 	// Sort by UpdatedAt descending (most recently updated first / LIFO).
 	slices.SortFunc(all, func(a, b DialogueHeader) int {

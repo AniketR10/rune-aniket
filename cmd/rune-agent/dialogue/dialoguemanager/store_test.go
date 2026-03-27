@@ -32,11 +32,21 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"unstable.build/go-tui/cmd/rune-agent/llm"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
+	"unstable.build/go-tui/cmd/rune-agent/llm"
 )
+
+type listFailingBackend struct {
+	storageapi.Service
+	listCalls int
+}
+
+func (b *listFailingBackend) List(ctx context.Context, filters []storageapi.Filter) (storageapi.Iterator, error) {
+	b.listCalls++
+	return nil, fmt.Errorf("backend List should not be called")
+}
 
 func TestStoreAppendMessagesAccumulatesUsage(t *testing.T) {
 	ctx := context.Background()
@@ -298,6 +308,246 @@ func TestStoreListConsistency(t *testing.T) {
 			assert.Equal(t, 1, h.MessageCount, "AppendMessages should be visible in List")
 		}
 	}
+}
+
+func TestStoreListReadsHeaderRecordsOnly(t *testing.T) {
+	ctx := context.Background()
+	backend := storagestub.NewInMemoryService()
+	s := NewStore(backend)
+
+	require.NoError(t, s.Create(ctx, Dialogue{
+		ID:      "chat-1",
+		AgentID: "agent-1",
+		Model:   "gpt-4o",
+		Messages: []llm.Message{
+			{Role: llm.RoleUser, Content: "hello"},
+		},
+		Usage: llm.DialogueUsage{TokensSent: 10},
+	}))
+
+	// Corrupt only the full dialogue record in a way that would break List if it
+	// still enumerated full dialogue documents. Header records must remain enough.
+	require.NoError(t, backend.Set(ctx, "chat-1", map[string]any{
+		"ID":        "chat-1",
+		"UpdatedAt": time.Now(),
+		"Messages":  "not-a-message-slice",
+	}))
+
+	it, err := s.List(ctx)
+	require.NoError(t, err)
+	all, err := iterator.ToSlice(ctx, it)
+	require.NoError(t, err)
+	require.Len(t, all, 1)
+
+	assert.Equal(t, "chat-1", all[0].ID)
+	assert.Equal(t, "agent-1", all[0].AgentID)
+	assert.Equal(t, "gpt-4o", all[0].Model)
+	assert.Equal(t, 1, all[0].MessageCount)
+	assert.Equal(t, 10, all[0].Usage.TokensSent)
+}
+
+func TestStoreListDoesNotCallBackendList(t *testing.T) {
+	ctx := context.Background()
+	backend := storagestub.NewInMemoryService()
+	s := NewStore(backend)
+
+	require.NoError(t, s.Create(ctx, Dialogue{
+		ID:      "chat-1",
+		AgentID: "agent-1",
+		Model:   "gpt-4o",
+		Messages: []llm.Message{
+			{Role: llm.RoleUser, Content: "hello"},
+		},
+	}))
+
+	// First list may provision/bootstrap the index. The steady-state fast path is
+	// what must avoid backend.List.
+	it, err := s.List(ctx)
+	require.NoError(t, err)
+	_, err = iterator.ToSlice(ctx, it)
+	require.NoError(t, err)
+
+	wrapped := &listFailingBackend{Service: backend}
+	s = NewStore(wrapped)
+	it, err = s.List(ctx)
+	require.NoError(t, err)
+	all, err := iterator.ToSlice(ctx, it)
+	require.NoError(t, err)
+	require.Len(t, all, 1)
+	assert.Zero(t, wrapped.listCalls)
+	assert.Equal(t, "chat-1", all[0].ID)
+}
+
+func TestStoreListBootstrapsLegacyRawDialogueRecords(t *testing.T) {
+	ctx := context.Background()
+	backend := storagestub.NewInMemoryService()
+	s := NewStore(backend)
+
+	legacy := Dialogue{
+		ID:           "legacy-chat",
+		AgentID:      "agent-1",
+		Model:        "gpt-4o",
+		WorkspaceURI: "file:///tmp/project",
+		Version:      2,
+		MessageCount: 1,
+		Messages: []llm.Message{
+			{Role: llm.RoleUser, Content: "hello"},
+		},
+		Usage:     llm.DialogueUsage{TokensSent: 12},
+		UpdatedAt: time.Now(),
+	}
+
+	// Simulate pre-index storage: raw dialogue at the legacy unprefixed ID and
+	// no dialogue-index document yet.
+	require.NoError(t, backend.Set(ctx, legacy.ID, &legacy))
+
+	it, err := s.List(ctx)
+	require.NoError(t, err)
+	all, err := iterator.ToSlice(ctx, it)
+	require.NoError(t, err)
+	require.Len(t, all, 1)
+	assert.Equal(t, legacy.ID, all[0].ID)
+	assert.Equal(t, legacy.AgentID, all[0].AgentID)
+	assert.Equal(t, legacy.Model, all[0].Model)
+	assert.Equal(t, legacy.MessageCount, all[0].MessageCount)
+
+	// After bootstrapping once, the fast path should no longer need backend.List.
+	wrapped := &listFailingBackend{Service: backend}
+	s = NewStore(wrapped)
+	it, err = s.List(ctx)
+	require.NoError(t, err)
+	all, err = iterator.ToSlice(ctx, it)
+	require.NoError(t, err)
+	require.Len(t, all, 1)
+	assert.Zero(t, wrapped.listCalls)
+}
+
+func TestStoreConcurrentCreatesDoNotLoseIndexEntries(t *testing.T) {
+	ctx := context.Background()
+	backend := storagestub.NewInMemoryService()
+
+	const workers = 16
+	stores := make([]Store, workers)
+	for i := range workers {
+		stores[i] = NewStore(backend)
+	}
+
+	start := make(chan struct{})
+	errCh := make(chan error, workers)
+	var wg sync.WaitGroup
+
+	for i := range workers {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			<-start
+			id := fmt.Sprintf("c-%d", i)
+			errCh <- stores[i].Create(ctx, Dialogue{
+				ID:      id,
+				AgentID: "agent",
+				Model:   "gpt-4o",
+				Messages: []llm.Message{
+					{Role: llm.RoleUser, Content: id},
+				},
+			})
+		}(i)
+	}
+
+	close(start)
+	wg.Wait()
+	close(errCh)
+	for err := range errCh {
+		require.NoError(t, err)
+	}
+
+	it, err := stores[0].List(ctx)
+	require.NoError(t, err)
+	all, err := iterator.ToSlice(ctx, it)
+	require.NoError(t, err)
+	require.Len(t, all, workers)
+
+	seen := make(map[string]bool, len(all))
+	for _, h := range all {
+		seen[h.ID] = true
+	}
+	for i := range workers {
+		assert.True(t, seen[fmt.Sprintf("c-%d", i)])
+	}
+}
+
+func TestStoreBootstrapMergesConcurrentCreate(t *testing.T) {
+	ctx := context.Background()
+	backend := storagestub.NewInMemoryService()
+
+	legacy := Dialogue{
+		ID:           "legacy-chat",
+		AgentID:      "agent-legacy",
+		Model:        "gpt-4o",
+		MessageCount: 1,
+		Messages: []llm.Message{
+			{Role: llm.RoleUser, Content: "hello"},
+		},
+		UpdatedAt: time.Now().Add(-time.Minute),
+	}
+	require.NoError(t, backend.Set(ctx, legacy.ID, &legacy))
+
+	storeA := NewStore(backend)
+	storeB := NewStore(backend)
+
+	start := make(chan struct{})
+	errCh := make(chan error, 2)
+	var wg sync.WaitGroup
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		<-start
+		it, err := storeA.List(ctx)
+		if err != nil {
+			errCh <- err
+			return
+		}
+		_, err = iterator.ToSlice(ctx, it)
+		if err != nil {
+			errCh <- err
+			return
+		}
+		errCh <- nil
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		<-start
+		errCh <- storeB.Create(ctx, Dialogue{
+			ID:      "new-chat",
+			AgentID: "agent-new",
+			Model:   "gpt-4o",
+			Messages: []llm.Message{
+				{Role: llm.RoleUser, Content: "hi"},
+			},
+		})
+	}()
+
+	close(start)
+	wg.Wait()
+	close(errCh)
+	for err := range errCh {
+		require.NoError(t, err)
+	}
+
+	it, err := storeA.List(ctx)
+	require.NoError(t, err)
+	all, err := iterator.ToSlice(ctx, it)
+	require.NoError(t, err)
+	require.Len(t, all, 2)
+
+	seen := make(map[string]bool, 2)
+	for _, h := range all {
+		seen[h.ID] = true
+	}
+	assert.True(t, seen[legacy.ID])
+	assert.True(t, seen["new-chat"])
 }
 
 func TestStoreArchiveAndReplacePreservesMetadata(t *testing.T) {
