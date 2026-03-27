@@ -41,6 +41,8 @@ import (
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/release"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
@@ -50,6 +52,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/tui"
 	"gopkg.in/yaml.v3"
 	"unstable.build/go-tui/ide/idepkg/idepkgtest"
+	"unstable.build/go-tui/localstorage/bluestore"
 	"unstable.build/go-tui/workspace/walkdir"
 )
 
@@ -150,18 +153,18 @@ func TestLibDir(t *testing.T) {
 		t.Parallel()
 		type storageFactory struct {
 			name string
-			make func() document.Service
+			make func() storageapi.Service
 		}
 		factories := []storageFactory{
-			{"bson", func() document.Service {
-				return document.NewInMemoryServiceWithMarshaler(docbson.Marshaler())
+			{"bson", func() storageapi.Service {
+				return storagestub.NewInMemoryServiceWithMarshaler(docbson.Marshaler())
 			}},
-			{"toml", func() document.Service {
-				return document.NewInMemoryServiceWithMarshaler(doctoml.Marshaler())
+			{"toml", func() storageapi.Service {
+				return storagestub.NewInMemoryServiceWithMarshaler(doctoml.Marshaler())
 			}},
-			{"toml_partitioned", func() document.Service {
-				return document.WithPartition(
-					document.NewInMemoryServiceWithMarshaler(doctoml.Marshaler()), "idepkg")
+			{"toml_partitioned", func() storageapi.Service {
+				return storageapi.WithPartition(
+					storagestub.NewInMemoryServiceWithMarshaler(doctoml.Marshaler()), "idepkg")
 			}},
 		}
 		for _, sf := range factories {
@@ -1033,7 +1036,7 @@ func newTestManager(
 			return &mockWindow{}, nil
 		},
 	}
-	manager := NewManager(n, m, document.NewInMemoryService(),
+	manager := NewManager(n, m, storagestub.NewInMemoryService(),
 		fileScheme, temp, configPath, wm, syncTick, term.NopInterrupter())
 	return manager, n, m, temp
 }
@@ -1558,7 +1561,7 @@ func newTestManagerWithStorage(
 		},
 	}
 	storage := document.NewInMemoryService()
-	manager := NewManager(n, m, storage,
+	manager := NewManager(n, m, bluestore.AdaptTo(storage),
 		fileScheme, temp, configPath, wm, syncTick, term.NopInterrupter())
 	return manager, n, m, temp, storage
 }

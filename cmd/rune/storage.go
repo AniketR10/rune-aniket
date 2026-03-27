@@ -27,7 +27,7 @@ import (
 	"context"
 
 	log "github.com/sirupsen/logrus"
-	"github.com/unstablebuild/blue/document"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"unstable.build/go-tui/term/gui"
 )
 
@@ -46,10 +46,10 @@ type position struct {
 	Y int
 }
 
-func getLastSize(storage document.Service) (width, height int, ok bool) {
+func getLastSize(storage storageapi.Service) (width, height int, ok bool) {
 	var s size
 	err := storage.Get(context.Background(), sizeKey, &s)
-	if err != nil && err != document.ErrNotFound {
+	if err != nil && err != storageapi.ErrNotFound {
 		log.Errorf("get last size: %v", err)
 	}
 	// less than a minimum would be hard to operate
@@ -62,10 +62,10 @@ func getLastSize(storage document.Service) (width, height int, ok bool) {
 	return
 }
 
-func getLastPosition(storage document.Service) (x, y int, ok bool) {
+func getLastPosition(storage storageapi.Service) (x, y int, ok bool) {
 	var s position
 	err := storage.Get(context.Background(), positionKey, &s)
-	if err != nil && err != document.ErrNotFound {
+	if err != nil && err != storageapi.ErrNotFound {
 		log.Errorf("get last position: %v", err)
 	}
 	// less than a minimum would be hard to operate
@@ -78,7 +78,7 @@ func getLastPosition(storage document.Service) (x, y int, ok bool) {
 	return
 }
 
-func saveLastSize(storage document.Service, g *gui.GUI) {
+func saveLastSize(storage storageapi.Service, g *gui.GUI) {
 	width, height := g.Size()
 	log.Debugf("saving last size of %d %d", width, height)
 	err := storage.Set(context.Background(), sizeKey, size{Width: width, Height: height})
@@ -87,7 +87,7 @@ func saveLastSize(storage document.Service, g *gui.GUI) {
 	}
 }
 
-func saveLastPosition(storage document.Service, g *gui.GUI) {
+func saveLastPosition(storage storageapi.Service, g *gui.GUI) {
 	x, y := g.LastPosition()
 	log.Debugf("saving last position of %d %d", x, y)
 	err := storage.Set(context.Background(), positionKey, position{X: x, Y: y})

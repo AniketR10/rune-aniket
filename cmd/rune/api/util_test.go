@@ -36,8 +36,8 @@ import (
 	"github.com/julienschmidt/httprouter"
 	"github.com/stretchr/testify/assert"
 	blueauth "github.com/unstablebuild/blue/auth"
-	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/iterator"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"unstable.build/go-tui/cmd/rune/api/account"
 	"unstable.build/go-tui/cmd/rune/api/user"
 	"unstable.build/go-tui/cmd/rune/auth"
@@ -120,7 +120,7 @@ func errorAccountStore(t *testing.T) account.Store {
 }
 
 func notFoundAccountStore(t *testing.T) account.Store {
-	return &mockAccountStore{t: t, returnErr: document.ErrNotFound}
+	return &mockAccountStore{t: t, returnErr: storageapi.ErrNotFound}
 }
 
 func goodAccountStoreGetByUserID(

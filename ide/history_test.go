@@ -30,7 +30,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/unstablebuild/blue/document"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"go.uber.org/mock/gomock"
@@ -45,25 +46,25 @@ func TestHistory(t *testing.T) {
 
 	suite := []struct {
 		description string
-		sut         func(*testing.T, document.Service, *history)
-		svc         document.Service // optional, default is fresh in memory service
+		sut         func(*testing.T, storageapi.Service, *history)
+		svc         storageapi.Service // optional, default is fresh in memory service
 	}{
 		{
 			description: "data is not nil after loading from cold cache",
-			sut: func(t *testing.T, svc document.Service, h *history) {
+			sut: func(t *testing.T, svc storageapi.Service, h *history) {
 				require.NotNil(t, h.cache)
 			},
 		},
 		{
 			description: "data is not nil even after error loading from storage",
-			sut: func(t *testing.T, svc document.Service, h *history) {
+			sut: func(t *testing.T, svc storageapi.Service, h *history) {
 				require.NotNil(t, h.cache)
 			},
 			svc: &mockService{err: errors.New("boom")},
 		},
 		{
 			description: "subscribes to editor events",
-			sut: func(t *testing.T, svc document.Service, h *history) {
+			sut: func(t *testing.T, svc storageapi.Service, h *history) {
 				uri1, err := workspaceapi.ParseURI("memory:///tmp")
 				require.NoError(t, err)
 
@@ -77,7 +78,7 @@ func TestHistory(t *testing.T) {
 		},
 		{
 			description: "recordAddWorkspace clears cache if restore is set to false",
-			sut: func(t *testing.T, svc document.Service, h *history) {
+			sut: func(t *testing.T, svc storageapi.Service, h *history) {
 				uri1, err := workspaceapi.ParseURI("memory:///tmp")
 				require.NoError(t, err)
 
@@ -92,7 +93,7 @@ func TestHistory(t *testing.T) {
 		},
 		{
 			description: "handles open file events even with errors in cache",
-			sut: func(t *testing.T, svc document.Service, h *history) {
+			sut: func(t *testing.T, svc storageapi.Service, h *history) {
 				uri1, err := workspaceapi.ParseURI("memory:///tmp")
 				require.NoError(t, err)
 
@@ -107,7 +108,7 @@ func TestHistory(t *testing.T) {
 		},
 		{
 			description: "cleans cache when closing events",
-			sut: func(t *testing.T, svc document.Service, h *history) {
+			sut: func(t *testing.T, svc storageapi.Service, h *history) {
 				uri1, err := workspaceapi.ParseURI("memory:///tmp")
 				require.NoError(t, err)
 
@@ -123,7 +124,7 @@ func TestHistory(t *testing.T) {
 		},
 		{
 			description: "recordAddWorkspace returns the previous session's open files",
-			sut: func(t *testing.T, svc document.Service, h *history) {
+			sut: func(t *testing.T, svc storageapi.Service, h *history) {
 				uri1, err := workspaceapi.ParseURI("memory:///tmp")
 				require.NoError(t, err)
 				ed := texttest.NopEditor()
@@ -142,7 +143,7 @@ func TestHistory(t *testing.T) {
 
 			svc := test.svc
 			if svc == nil {
-				svc = document.NewInMemoryService()
+				svc = storagestub.NewInMemoryService()
 			}
 			h := newHistory(svc)
 			test.sut(t, svc, h)
@@ -154,7 +155,7 @@ func TestHistory(t *testing.T) {
 
 		uri, err := workspaceapi.ParseURI("memory:///tmp")
 		require.NoError(t, err)
-		svc := document.NewInMemoryService()
+		svc := storagestub.NewInMemoryService()
 		require.NoError(t, svc.Set(context.Background(), uri.String(),
 			map[string]any{"Files": "yikes"}))
 
@@ -171,7 +172,7 @@ func TestHistory(t *testing.T) {
 
 		uri, err := workspaceapi.ParseURI("memory:///tmp")
 		require.NoError(t, err)
-		svc := document.NewInMemoryService()
+		svc := storagestub.NewInMemoryService()
 
 		ctrl := gomock.NewController(t)
 		ed := texttest.NewMockEditor(ctrl)
@@ -197,7 +198,7 @@ func TestHistory(t *testing.T) {
 
 type mockService struct {
 	err error
-	svc document.Service
+	svc storageapi.Service
 }
 
 func (s *mockService) Create(ctx context.Context, ID string, doc any) error {
@@ -213,7 +214,7 @@ func (s *mockService) Set(ctx context.Context, ID string, doc any) error {
 	return s.svc.Set(ctx, ID, doc)
 }
 func (s *mockService) Update(ctx context.Context, ID string,
-	updates []document.Update, precond ...document.Precondition) error {
+	updates []storageapi.Update, precond ...storageapi.Precondition) error {
 	if s.err != nil {
 		return s.err
 	}
@@ -231,8 +232,8 @@ func (s *mockService) Delete(ctx context.Context, ID string) error {
 	}
 	return s.svc.Delete(ctx, ID)
 }
-func (s *mockService) List(ctx context.Context, filters []document.Filter) (
-	document.Iterator, error,
+func (s *mockService) List(ctx context.Context, filters []storageapi.Filter) (
+	storageapi.Iterator, error,
 ) {
 	if s.err != nil {
 		return nil, s.err

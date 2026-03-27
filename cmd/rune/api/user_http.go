@@ -33,8 +33,8 @@ import (
 	"time"
 
 	"github.com/julienschmidt/httprouter"
-	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/logging/trace"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"unstable.build/go-tui/cmd/rune/api/account"
 	"unstable.build/go-tui/cmd/rune/api/user"
 )
@@ -79,7 +79,7 @@ func (a userHandler) getUserAccount(
 	}
 	acc, err := a.accStore.GetByUserID(ctx, decodedUserID)
 	if err != nil {
-		if errors.Is(err, document.ErrNotFound) {
+		if errors.Is(err, storageapi.ErrNotFound) {
 			w.WriteHeader(http.StatusNotFound)
 		} else {
 			w.WriteHeader(http.StatusBadGateway)

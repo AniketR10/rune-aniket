@@ -34,11 +34,11 @@ import (
 
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
-	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/logging"
 	"github.com/unstablebuild/blue/release"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
@@ -147,7 +147,7 @@ func (i *IDE) Browser() browser.Browser {
 
 // Storage returns persistent storage acrosss IDE instances, given
 // the same data dir passed in ide.New, or ide.NewRecovery.
-func (i *IDE) Storage() document.Service {
+func (i *IDE) Storage() storageapi.Service {
 	return i.workspaceHandler.storage
 }
 

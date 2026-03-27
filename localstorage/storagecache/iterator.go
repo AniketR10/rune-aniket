@@ -23,7 +23,9 @@
 
 package storagecache
 
-import "unstable.build/go-tui/localstorage"
+import (
+	"unstable.build/go-tui/localstorage"
+)
 
 type cacheIterator[T localstorage.Document[T]] struct {
 	docs []T

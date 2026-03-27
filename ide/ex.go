@@ -34,11 +34,11 @@ import (
 
 	"github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
-	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/logging"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/clipboard"
@@ -54,7 +54,6 @@ import (
 	"unstable.build/go-tui/handler/command"
 	"unstable.build/go-tui/ide/idetask"
 	"unstable.build/go-tui/ide/plugin"
-	"unstable.build/go-tui/localstorage/bluestore"
 	tterm "unstable.build/go-tui/term"
 	"unstable.build/go-tui/term/vte"
 	"unstable.build/go-tui/term/vte/vtereservoir"
@@ -86,7 +85,7 @@ type ex struct {
 	clip      clipboard.Register
 	executor  schemeapi.Executor
 	ed        text.Editor
-	storage   document.Service
+	storage   storageapi.Service
 	reservoir *vtereservoir.Facility
 	// do not use directly, use notifications below instead
 	// which is able to dispatch cross-workspace cues.
@@ -130,7 +129,7 @@ type PreviewFunc = func(string, ...string) (component.Responsive, func(), bool)
 
 func newEx(
 	ed text.Editor, m workspace.Workspace,
-	storage document.Service,
+	storage storageapi.Service,
 	notifications *notisManager,
 	uri workspaceapi.URI,
 	emulatorConfig vte.Config,
@@ -157,7 +156,7 @@ func newEx(
 // and the file failed to be opened.
 func (e *ex) init(
 	ed text.Editor, m workspace.Workspace,
-	storage document.Service,
+	storage storageapi.Service,
 	notifications *notisManager,
 	uri workspaceapi.URI,
 	emulatorConfig vte.Config,
@@ -281,7 +280,7 @@ func (e *ex) Interrupt(ctx context.Context) error {
 
 func (e *ex) doInit(
 	ed text.Editor, m workspace.Workspace,
-	storage document.Service,
+	storage storageapi.Service,
 	n *notisManager,
 	uri workspaceapi.URI,
 	emulatorConfig vte.Config,
@@ -1653,7 +1652,7 @@ func (e *ex) openCommandPrompt() {
 	commandCfg.ShowManualAfter = e.config.CommandOverlay.ShowManualAfter
 	commandCfg.ShowProgressHint = e.config.CommandOverlay.ShowProgressHint
 	commandCfg.Sync = e.syncCommandPrompt
-	promptStorage := bluestore.AdaptTo(document.WithPartition(e.storage, "cprompt"))
+	promptStorage := storageapi.WithPartition(e.storage, "cprompt")
 	cmd := command.NewPrompt(promptStorage, e, e, e, []command.Manual{}, commandCfg)
 
 	commandHandler := browser.FuncFloating(

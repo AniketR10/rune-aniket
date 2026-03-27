@@ -29,8 +29,8 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/docmarshal/doctoml"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagerpc/docpb"
 	"unstable.build/go-tui/localstorage"
@@ -48,7 +48,7 @@ func newStorageResourceServer(storageDir string) *storageResourceServer {
 	return ret
 }
 
-func (s *storageResourceServer) setupStorage(lock sync.Locker) document.Service {
+func (s *storageResourceServer) setupStorage(lock sync.Locker) storageapi.Service {
 	path := filepath.Join(s.storageDir, ".dbextension")
 	svc := localstorage.New(context.Background(), path, doctoml.Marshaler())
 	return svc

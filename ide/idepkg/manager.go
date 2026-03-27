@@ -42,11 +42,11 @@ import (
 	"github.com/ernestrc/logd-go/logging"
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/debug"
-	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/release"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
@@ -62,7 +62,7 @@ import (
 // and manage executables.
 func NewManager(
 	n browserapi.Notifications, m release.Manager,
-	storage document.Service, scheme schemeapi.Scheme, dataDir string,
+	storage storageapi.Service, scheme schemeapi.Scheme, dataDir string,
 	configPath string, wm browserapi.WindowManager,
 	scheduleNextTick func(func()) bool,
 	interrupter term.Interrupter, opts ...Option,
@@ -109,7 +109,7 @@ type Manager struct {
 	parser           syntaxapi.Parser
 	frameCharSet     component.FrameCharSet
 	scheduleNextTick func(func()) bool
-	storage          document.Service
+	storage          storageapi.Service
 	dataDir          string
 	configPath       string
 	scheme           schemeapi.Scheme
@@ -219,7 +219,7 @@ func (m *Manager) InstallPackageVersion(
 	key := m.makeDownloadKey(pkgID, version)
 	err = m.storage.Create(ctx, key, pkgVersionValue{Package: pkgID, Version: version})
 	if err != nil {
-		if errors.Is(err, document.ErrAlreadyExists) {
+		if errors.Is(err, storageapi.ErrAlreadyExists) {
 			var existing pkgVersionValue
 			if getErr := m.storage.Get(ctx, key, &existing); getErr == nil && !existing.Complete {
 				_ = m.storage.Delete(ctx, key)
@@ -270,7 +270,7 @@ func (m *Manager) DeletePackageVersion(
 	key := m.makeDownloadKey(pkgID, version)
 	var val pkgVersionValue
 	if err := m.storage.Get(ctx, key, &val); err != nil {
-		if errors.Is(err, document.ErrNotFound) {
+		if errors.Is(err, storageapi.ErrNotFound) {
 			return ErrNotInstalled
 		}
 		return err
@@ -432,13 +432,13 @@ func (m *Manager) ListInstalledPackageVersions(ctx context.Context, pkgID string
 		return nil, errors.New("package must not be empty")
 	}
 	pkgID = escapeString(pkgID)
-	dit, err := m.storage.List(ctx, []document.Filter{
+	dit, err := m.storage.List(ctx, []storageapi.Filter{
 		{
-			Field: document.Field{
+			Field: storageapi.Field{
 				FieldPath: []string{"Package"},
 				Value:     pkgID,
 			},
-			Op: document.OpEqual,
+			Op: storageapi.OpEqual,
 		},
 	})
 	if err != nil {
@@ -464,7 +464,7 @@ func (m *Manager) UsePackageVersion(
 	key := m.makeDownloadKey(pkgID, version)
 	var val pkgVersionValue
 	if err := m.storage.Get(ctx, key, &val); err != nil {
-		if errors.Is(err, document.ErrNotFound) {
+		if errors.Is(err, storageapi.ErrNotFound) {
 			return ErrNotInstalled
 		}
 		return err
@@ -643,7 +643,7 @@ func (m *Manager) download(
 		return
 	}
 
-	updates := []document.Update{
+	updates := []storageapi.Update{
 		{FieldPath: []string{"Executables"}, Value: executables},
 		{FieldPath: []string{"Complete"}, Value: true},
 	}

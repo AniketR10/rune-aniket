@@ -108,40 +108,10 @@ func (m *workspaceRunner) init(
 func (m *workspaceRunner) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (
 	workspaceapi.Pid, error,
 ) {
-	// TODO expire token manually when program finishes
-	const (
-		tokenExpiresIn = 24 * 365 * time.Hour
-	)
-	cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", m.cfg.socketEnv, m.socket))
-	cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", m.cfg.dataDirEnv, m.dataDir))
-	cert := base64.StdEncoding.EncodeToString(m.tlsCert)
-	cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", m.cfg.authCertEnv, cert))
-	if !m.cfg.insecureAuth {
-		signKey, err := m.keys.Sign(ctx)
-		if err != nil {
-			return 0, fmt.Errorf("get sign key: %w", err)
-		}
-		name := fmt.Sprintf("%s_%s", cmd.Path, strings.Join(cmd.Args, "_"))
-		id := uuid.New()
-		// TODO refactor authorizer to prompt user rather than hardcoding permissions
-		// on client
-		permissions := extensionapi.AllPermissions()
-		m.log(log.DebugLevel, "creating one shot authentication for "+
-			"command %s, id: %d, permissions: %v", name, id, permissions)
-		claimsExtra := Extension{Metadata: extensionapi.Metadata{
-			DeveloperID:   "you",
-			DeveloperKey:  "",
-			ExtensionID:   id.String(),
-			ExtensionName: name,
-			Permissions:   permissions,
-		}}
-		accessToken, err := auth.SignToken(signKey,
-			claimsExtra.DeveloperID, claimsExtra.DeveloperEmail, claimsExtra,
-			tokenExpiresIn)
-		if err != nil {
-			return 0, fmt.Errorf("sign token: %w", err)
-		}
-		cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", m.cfg.authTokenEnv, accessToken))
+	var err error
+	cmd.Env, err = m.commandEnvs(ctx, cmd.Path, cmd.Args)
+	if err != nil {
+		return 0, err
 	}
 	// emulate the same logic as file scheme
 	dir, err := workspaceapi.ExpandPathWithURI(m.workspace.Path(), m.workspace)
@@ -235,9 +205,53 @@ func (m *workspaceRunner) makeCommand(
 		}
 	}
 
-	ret.Env = append(ret.Env, makeLogLevelEnv(log.GetLevel()))
+	ret.Env, err = m.commandEnvs(ctx, ret.Path, ret.Args)
+	if err != nil {
+		return workspaceapi.Cmd{}, err
+	}
 	ret.Stdin, ret.Stdout, ret.Stderr = m.makeProtocolExchange(extensionID, config)
 	return
+}
+
+func (m *workspaceRunner) commandEnvs(ctx context.Context, path string, args []string) ([]string, error) {
+	// TODO expire token manually when program finishes
+	const tokenExpiresIn = 24 * 365 * time.Hour
+
+	env := []string{makeLogLevelEnv(log.GetLevel())}
+	env = append(env, fmt.Sprintf("%s=%s", m.cfg.socketEnv, m.socket))
+	env = append(env, fmt.Sprintf("%s=%s", m.cfg.dataDirEnv, m.dataDir))
+	cert := base64.StdEncoding.EncodeToString(m.tlsCert)
+	env = append(env, fmt.Sprintf("%s=%s", m.cfg.authCertEnv, cert))
+	if m.cfg.insecureAuth {
+		return env, nil
+	}
+
+	signKey, err := m.keys.Sign(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("get sign key: %w", err)
+	}
+	name := fmt.Sprintf("%s_%s", path, strings.Join(args, "_"))
+	id := uuid.New()
+	// TODO refactor authorizer to prompt user rather than hardcoding permissions
+	// on client
+	permissions := extensionapi.AllPermissions()
+	m.log(log.DebugLevel, "creating one shot authentication for "+
+		"command %s, id: %d, permissions: %v", name, id, permissions)
+	claimsExtra := Extension{Metadata: extensionapi.Metadata{
+		DeveloperID:   "you",
+		DeveloperKey:  "",
+		ExtensionID:   id.String(),
+		ExtensionName: name,
+		Permissions:   permissions,
+	}}
+	accessToken, err := auth.SignToken(signKey,
+		claimsExtra.DeveloperID, claimsExtra.DeveloperEmail, claimsExtra,
+		tokenExpiresIn)
+	if err != nil {
+		return nil, fmt.Errorf("sign token: %w", err)
+	}
+	env = append(env, fmt.Sprintf("%s=%s", m.cfg.authTokenEnv, accessToken))
+	return env, nil
 }
 
 func (m *workspaceRunner) makeProtocolExchange(extensionID string, cfg config.Config) (

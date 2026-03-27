@@ -42,10 +42,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/clipboard"
 	"github.com/unstablebuild/rune-go-sdk/component"
@@ -1111,11 +1111,11 @@ func TestExKeySequence(t *testing.T) {
 
 		ex := new(ex)
 		notifications := newWorkspaceNotifications(
-			document.NewInMemoryService(), notificationsConfig(),
+			storagestub.NewInMemoryService(), notificationsConfig(),
 			&workspaceManagerMock{workspace: ex})
 		ex.syncCommandPrompt = true
 		require.NoError(t, ex.init(texttest.NopEditor(), &testLoader{},
-			document.NewInMemoryService(), notifications, file2,
+			storagestub.NewInMemoryService(), notifications, file2,
 			vte.DefaultConfig(), plugin.DefaultBarConfig(), func(ev term.Event) bool {
 				// do not confuse interrupt from list with sequence re-issue commands
 				if ev.Type == term.EventInterrupt {
@@ -1297,7 +1297,7 @@ func newExForTestingTerminal(
 ) testEx {
 	ex := new(ex)
 	ex.syncCommandPrompt = true
-	svc := document.NewInMemoryService()
+	svc := storagestub.NewInMemoryService()
 	notifications := newWorkspaceNotifications(svc, notificationsConfig(),
 		&workspaceManagerMock{workspace: ex})
 	uri, err := workspace.URI(".")
@@ -1327,7 +1327,7 @@ func newExForTestingWithWorkspace(
 	finalOpts = append(finalOpts, text.WithFloatingNoMaxSize(false))
 	finalOpts = append(finalOpts, opts...)
 
-	svc := document.NewInMemoryService()
+	svc := storagestub.NewInMemoryService()
 	notifications := newWorkspaceNotifications(svc, notificationsConfig(),
 		&workspaceManagerMock{workspace: ex})
 
@@ -1365,7 +1365,7 @@ func newExForTestingCommandsPreview(
 	finalOpts = append(finalOpts, text.WithFloatingNoMaxSize(false))
 	finalOpts = append(finalOpts, opts...)
 
-	svc := document.NewInMemoryService()
+	svc := storagestub.NewInMemoryService()
 	notifications := newWorkspaceNotifications(svc, notificationsConfig(),
 		&workspaceManagerMock{workspace: ex})
 

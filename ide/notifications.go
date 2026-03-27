@@ -28,8 +28,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
@@ -38,13 +38,13 @@ import (
 )
 
 type notisManager struct {
-	storage document.Service
+	storage storageapi.Service
 	cfg     notifications.Config
 	parent  workspaceManagerIfc
 }
 
 func newWorkspaceNotifications(
-	storage document.Service,
+	storage storageapi.Service,
 	cfg notifications.Config,
 	parent workspaceManagerIfc,
 ) *notisManager {
@@ -119,7 +119,7 @@ type notifier interface {
 type notis struct {
 	parent  workspaceManagerIfc
 	root    notifier
-	storage document.Service
+	storage storageapi.Service
 	uri     workspaceapi.URI
 	cfg     notifications.Config
 }
@@ -150,7 +150,7 @@ func (c *notis) NotifyOnce(
 	var value storedNotification
 	value.ID = id
 	err := c.storage.Create(ctx, id, value)
-	if err == document.ErrAlreadyExists {
+	if err == storageapi.ErrAlreadyExists {
 		return "", nil
 	}
 	if err != nil {

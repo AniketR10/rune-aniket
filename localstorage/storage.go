@@ -30,19 +30,20 @@ import (
 	"sync"
 
 	log "github.com/sirupsen/logrus"
-	"github.com/unstablebuild/blue/document"
-	"github.com/unstablebuild/blue/document/docmarshal"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi/docmarshal"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/localstorage/schemedoc"
 	"unstable.build/go-tui/workspace"
 )
 
-// New returns a document.Service storage service that
+// New returns a storageapi.Service storage service that
 // uses the local directory dir to setup a local filesystem-based
-// multi-process safe, goroutine-safe document.Service.
-func New(ctx context.Context, dir string, marshaler docmarshal.Marshaler) document.Service {
+// multi-process safe, goroutine-safe storageapi.Service.
+func New(ctx context.Context, dir string, marshaler docmarshal.Marshaler) storageapi.Service {
 	ret := new(delayedLoadingService)
 	ret.mu.Lock()
 	go debug.CapturePanicReport(func() {
@@ -52,25 +53,25 @@ func New(ctx context.Context, dir string, marshaler docmarshal.Marshaler) docume
 		err := os.MkdirAll(storageDir, 0777)
 		if err != nil {
 			log.Errorf("new storage: mkdir: %v", err)
-			ret.service = document.NewInMemoryService()
+			ret.service = storagestub.NewInMemoryService()
 			return
 		}
 		storageDirURI, err := workspaceapi.CurrentUserHostURI(storageDir)
 		if err != nil {
 			log.Errorf("new storage: URI: %v", err)
-			ret.service = document.NewInMemoryService()
+			ret.service = storagestub.NewInMemoryService()
 			return
 		}
 		scheme, err := workspace.NewFileScheme(ctx, config.NopConfig(), storageDirURI)
 		if err != nil {
 			log.Errorf("new storage: %v", err)
-			ret.service = document.NewInMemoryService()
+			ret.service = storagestub.NewInMemoryService()
 			return
 		}
 		storage, err := schemedoc.NewDocumentService(scheme, marshaler)
 		if err != nil {
 			log.Errorf("new storage: %v", err)
-			ret.service = document.NewInMemoryService()
+			ret.service = storagestub.NewInMemoryService()
 			return
 		}
 
@@ -80,7 +81,7 @@ func New(ctx context.Context, dir string, marshaler docmarshal.Marshaler) docume
 }
 
 type delayedLoadingService struct {
-	service document.Service
+	service storageapi.Service
 	mu      sync.RWMutex
 }
 
@@ -97,7 +98,7 @@ func (d *delayedLoadingService) Set(ctx context.Context, ID string, doc any) err
 }
 
 func (d *delayedLoadingService) Update(ctx context.Context, ID string,
-	updates []document.Update, precond ...document.Precondition) error {
+	updates []storageapi.Update, precond ...storageapi.Precondition) error {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
 	return d.service.Update(ctx, ID, updates, precond...)
@@ -115,8 +116,8 @@ func (d *delayedLoadingService) Delete(ctx context.Context, ID string) error {
 	return d.service.Delete(ctx, ID)
 }
 
-func (d *delayedLoadingService) List(ctx context.Context, filters []document.Filter) (
-	document.Iterator, error,
+func (d *delayedLoadingService) List(ctx context.Context, filters []storageapi.Filter) (
+	storageapi.Iterator, error,
 ) {
 	d.mu.RLock()
 	defer d.mu.RUnlock()

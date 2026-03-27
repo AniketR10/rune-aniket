@@ -49,7 +49,7 @@ func tcpListener() (net.Listener, error) {
 }
 
 func runDatastoreServerOverListener(
-	t *testing.T, other document.Service,
+	t *testing.T, other storageapi.Service,
 	listener func() (net.Listener, error),
 	marshaler docmarshal.Marshaler,
 	register func(grpc.ServiceRegistrar, docpb.DocumentStoreServer),
@@ -78,7 +78,7 @@ func runDatastoreServerOverListener(
 }
 
 func runDatastoreServer(
-	t *testing.T, other document.Service, marshaler docmarshal.Marshaler,
+	t *testing.T, other storageapi.Service, marshaler docmarshal.Marshaler,
 ) (net.Addr, func()) {
 	return runDatastoreServerOverListener(t, other, tcpListener, marshaler,
 		docpb.RegisterDocumentStoreServer)
@@ -92,7 +92,7 @@ func testRPCDatastoreOverListener(
 
 	doctest.TestDocumentService(t, func(t *testing.T) document.Service {
 		cache := document.NewInMemoryServiceWithMarshaler(marshaler)
-		addr, teardown := runDatastoreServerOverListener(t, cache,
+		addr, teardown := runDatastoreServerOverListener(t, bluestore.AdaptTo(cache),
 			listener, marshaler, docpb.RegisterDocumentStoreServer)
 		teardowns = append(teardowns, teardown)
 
@@ -152,7 +152,7 @@ func TestListWithFieldProjection(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			cache := document.NewInMemoryServiceWithMarshaler(marshaler)
-			addr, teardown := runDatastoreServer(t, cache, marshaler)
+			addr, teardown := runDatastoreServer(t, bluestore.AdaptTo(cache), marshaler)
 			defer teardown()
 
 			store, err := storagerpc.NewClient(addr, marshaler,
@@ -257,7 +257,7 @@ func TestRPCInterop(t *testing.T) {
 			t.Run("writes by client/server are readable by underlying service", func(t *testing.T) {
 				doctest.TestDocumentService(t, func(t *testing.T) document.Service {
 					cache := document.NewInMemoryServiceWithMarshaler(marshaler)
-					addr, teardown := runDatastoreServer(t, cache, marshaler)
+					addr, teardown := runDatastoreServer(t, bluestore.AdaptTo(cache), marshaler)
 					teardowns = append(teardowns, teardown)
 
 					store, err := storagerpc.NewClient(addr, marshaler,
@@ -271,7 +271,7 @@ func TestRPCInterop(t *testing.T) {
 			t.Run("writes by underlying service are readable by client/server", func(t *testing.T) {
 				doctest.TestDocumentService(t, func(t *testing.T) document.Service {
 					cache := document.NewInMemoryServiceWithMarshaler(marshaler)
-					addr, teardown := runDatastoreServer(t, cache, marshaler)
+					addr, teardown := runDatastoreServer(t, bluestore.AdaptTo(cache), marshaler)
 					teardowns = append(teardowns, teardown)
 
 					store, err := storagerpc.NewClient(addr, marshaler,
@@ -285,7 +285,7 @@ func TestRPCInterop(t *testing.T) {
 			t.Run("single instance preconditions", func(t *testing.T) {
 				doctest.TestDocumentServicePreconditions(t, func(t *testing.T) document.Service {
 					cache := document.NewInMemoryServiceWithMarshaler(marshaler)
-					addr, teardown := runDatastoreServer(t, cache, marshaler)
+					addr, teardown := runDatastoreServer(t, bluestore.AdaptTo(cache), marshaler)
 					teardowns = append(teardowns, teardown)
 
 					store, err := storagerpc.NewClient(addr, marshaler,

@@ -32,9 +32,9 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
-	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/release"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/handler"
@@ -440,7 +440,7 @@ func (uc *UpdateChecker) SkipVersion(ctx context.Context, pkgID string, version 
 	var val updateAvailableValue
 	err := uc.m.storage.Get(ctx, key, &val)
 	if err != nil {
-		if errors.Is(err, document.ErrNotFound) {
+		if errors.Is(err, storageapi.ErrNotFound) {
 			val = updateAvailableValue{
 				Package:   pkgID,
 				Latest:    version,

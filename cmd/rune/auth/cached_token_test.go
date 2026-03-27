@@ -34,14 +34,15 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
 	"golang.org/x/oauth2"
 )
 
 func TestCachedTokenToken(t *testing.T) {
 	t.Run("uses sourcer if no token is cached", func(t *testing.T) {
-		svc := document.NewInMemoryService()
+		svc := storagestub.NewInMemoryService()
 		sourcer, token := goodSourcer()
 		source := NewCachedTokenSource(sourcer, svc, nopNotifications{})
 		actualToken, err := source.Token()
@@ -50,7 +51,7 @@ func TestCachedTokenToken(t *testing.T) {
 	})
 
 	t.Run("reuses token from cache if called again, within same session", func(t *testing.T) {
-		svc := document.NewInMemoryService()
+		svc := storagestub.NewInMemoryService()
 		sourcer, token := goodSourcer()
 		source := NewCachedTokenSource(sourcer, svc, nopNotifications{})
 
@@ -64,7 +65,7 @@ func TestCachedTokenToken(t *testing.T) {
 	})
 
 	t.Run("reuses token from cache if called again, accross sessions", func(t *testing.T) {
-		svc := document.NewInMemoryService()
+		svc := storagestub.NewInMemoryService()
 
 		for i := 0; i < 2; i++ {
 			sourcer, token := goodSourcer()
@@ -84,7 +85,7 @@ func TestCachedTokenToken(t *testing.T) {
 	})
 
 	t.Run("acquires new token if token from cache is expired", func(t *testing.T) {
-		svc := document.NewInMemoryService()
+		svc := storagestub.NewInMemoryService()
 
 		for i := 0; i < 2; i++ {
 			sourcer, token := goodSourcerWithExpiry(0)
@@ -102,7 +103,7 @@ func TestCachedTokenToken(t *testing.T) {
 
 	// use-case: two concurrent CachedTokenSource using the same underlying storage
 	t.Run("before acquiring new token, it checks storage if token from inmemory cache is expired", func(t *testing.T) {
-		svc := document.NewInMemoryService()
+		svc := storagestub.NewInMemoryService()
 
 		badSourcer, expiredToken := goodSourcerWithExpiry(-1)
 		source := NewCachedTokenSource(badSourcer, svc, nopNotifications{})
@@ -129,7 +130,7 @@ func TestCachedTokenToken(t *testing.T) {
 	})
 
 	t.Run("is goroutine safe", func(t *testing.T) {
-		svc := document.NewInMemoryService()
+		svc := storagestub.NewInMemoryService()
 		// token Valid returns false if we are within 10 seconds of
 		// expiry, and this cannot be changed.
 		sourcer, _ := goodSourcerWithExpiry(1 * time.Minute)
@@ -179,7 +180,7 @@ func TestCachedTokenToken(t *testing.T) {
 	})
 
 	t.Run("bubbles up Sourcer errors", func(t *testing.T) {
-		svc := document.NewInMemoryService()
+		svc := storagestub.NewInMemoryService()
 		sourcer, _ := badSourcer()
 		source := NewCachedTokenSource(sourcer, svc, nopNotifications{})
 		_, actualErr := source.Token()
@@ -187,7 +188,7 @@ func TestCachedTokenToken(t *testing.T) {
 	})
 
 	t.Run("bubbles up oauth2.TokenSource errors", func(t *testing.T) {
-		svc := document.NewInMemoryService()
+		svc := storagestub.NewInMemoryService()
 		sourcer, _ := badSourceSourcer()
 		source := NewCachedTokenSource(sourcer, svc, nopNotifications{})
 		_, actualErr := source.Token()
@@ -195,7 +196,7 @@ func TestCachedTokenToken(t *testing.T) {
 	})
 
 	t.Run("retries without refresh token if cached refresh token fails to acquire a token", func(t *testing.T) {
-		svc := document.NewInMemoryService()
+		svc := storagestub.NewInMemoryService()
 		cachedToken := new(oauth2.Token)
 		cachedToken.Expiry = time.Now().Add(-24 * time.Hour)
 		cachedToken.AccessToken = "1234"
@@ -294,7 +295,7 @@ func (failingDocumentService) Set(ctx context.Context, ID string, doc interface{
 	return errors.New("oopsie")
 }
 func (failingDocumentService) Update(ctx context.Context, ID string,
-	updates []document.Update, precond ...document.Precondition) error {
+	updates []storageapi.Update, precond ...storageapi.Precondition) error {
 	return errors.New("oopsie")
 }
 func (failingDocumentService) Get(ctx context.Context, ID string, doc interface{}) error {
@@ -303,7 +304,7 @@ func (failingDocumentService) Get(ctx context.Context, ID string, doc interface{
 func (failingDocumentService) Delete(ctx context.Context, ID string) error {
 	return errors.New("oopsie")
 }
-func (failingDocumentService) List(ctx context.Context, filters []document.Filter) (document.Iterator, error) {
+func (failingDocumentService) List(ctx context.Context, filters []storageapi.Filter) (storageapi.Iterator, error) {
 	return nil, errors.New("oopsie")
 }
 

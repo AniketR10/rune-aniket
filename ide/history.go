@@ -29,8 +29,8 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
-	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/logging"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
@@ -59,11 +59,11 @@ type cache struct {
 }
 
 type history struct {
-	svc   document.Service
+	svc   storageapi.Service
 	cache map[string]cache
 }
 
-func newHistory(storage document.Service) *history {
+func newHistory(storage storageapi.Service) *history {
 	ret := &history{
 		svc:   storage,
 		cache: make(map[string]cache),
@@ -88,7 +88,7 @@ func (h *history) loadWorkspaceData(uri workspaceapi.URI, restore bool) {
 
 	var workspace cache
 	err := h.svc.Get(ctx, uriStr, &workspace)
-	if err != nil && err != document.ErrNotFound {
+	if err != nil && err != storageapi.ErrNotFound {
 		log.WithFields(log.Fields{logging.KeyClass: "ide.history"}).
 			Warnf("could not persist updated cache to durable storage: %v", err)
 	}
@@ -169,7 +169,7 @@ func (h *history) resetWorkspaceCache(uri workspaceapi.URI) {
 type workspaceHistory struct {
 	uri   string
 	cache map[string]cache
-	svc   document.Service
+	svc   storageapi.Service
 }
 
 func (h *workspaceHistory) Handle(ctx context.Context, ev textapi.Event) bool {
@@ -226,7 +226,7 @@ func makeFile(uri string, cursor term.Coordinates, dirty bool, updated time.Time
 	}
 }
 
-func persistUpdateCache(svc document.Service, uri string, cache cache) {
+func persistUpdateCache(svc storageapi.Service, uri string, cache cache) {
 	const cacheSetTimeout = 1 * time.Second
 	ctx, cancel := context.WithTimeout(context.Background(), cacheSetTimeout)
 	defer cancel()

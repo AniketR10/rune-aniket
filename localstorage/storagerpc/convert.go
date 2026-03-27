@@ -27,7 +27,6 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/docmarshal"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagerpc/docpb"
@@ -37,36 +36,36 @@ import (
 const protoFieldKey = "X"
 
 func makeModelUpdates(m docmarshal.Marshaler, updates []*docpb.UpdateDocumentRequest_Field) (
-	ret []document.Update, err error,
+	ret []storageapi.Update, err error,
 ) {
 	fields, err := makeModelFields(m, updates)
 	if err != nil {
 		return nil, err
 	}
 	for _, field := range fields {
-		ret = append(ret, document.Update(field))
+		ret = append(ret, storageapi.Update(field))
 	}
 	return
 }
 
 func makeModelPreconds(m docmarshal.Marshaler, preconds []*docpb.UpdateDocumentRequest_Field) (
-	ret []document.Precondition, err error,
+	ret []storageapi.Precondition, err error,
 ) {
 	fields, err := makeModelFields(m, preconds)
 	if err != nil {
 		return nil, err
 	}
 	for _, field := range fields {
-		ret = append(ret, document.Precondition(field))
+		ret = append(ret, storageapi.Precondition(field))
 	}
 	return
 }
 
 func makeModelFields(m docmarshal.Marshaler, fields []*docpb.UpdateDocumentRequest_Field) (
-	ret []document.Field, err error,
+	ret []storageapi.Field, err error,
 ) {
 	var slab map[string]any
-	var f document.Filter
+	var f storageapi.Filter
 
 	for _, u := range fields {
 		// re-use make filter logic
@@ -78,7 +77,7 @@ func makeModelFields(m docmarshal.Marshaler, fields []*docpb.UpdateDocumentReque
 		if err != nil {
 			return
 		}
-		ret = append(ret, document.Field{
+		ret = append(ret, storageapi.Field{
 			FieldPath: f.FieldPath,
 			Value:     f.Value,
 		})
@@ -88,10 +87,10 @@ func makeModelFields(m docmarshal.Marshaler, fields []*docpb.UpdateDocumentReque
 
 func makeModelFilter(m docmarshal.Marshaler,
 	slab map[string]any, pf *docpb.ListDocumentRequest_Filter,
-) (document.Filter, error) {
+) (storageapi.Filter, error) {
 	err := storageapi.SafeDecode(m, &slab, pf.Data)
 	if err != nil {
-		return document.Filter{}, err
+		return storageapi.Filter{}, err
 	}
 
 	lowerCase := m.DefaultLowerCase()
@@ -104,23 +103,23 @@ func makeModelFilter(m docmarshal.Marshaler,
 		}
 	}
 	if len(fieldPath) == 0 {
-		return document.Filter{}, errors.New("empty field path")
+		return storageapi.Filter{}, errors.New("empty field path")
 	}
-	return document.Filter{
-		Field: document.Field{
+	return storageapi.Filter{
+		Field: storageapi.Field{
 			FieldPath: fieldPath,
 			Value:     slab[protoFieldKey],
 		},
-		Op: document.Op(pf.Operation),
+		Op: storageapi.Op(pf.Operation),
 	}, nil
 }
 
 func makeModelFilters(m docmarshal.Marshaler, filters []*docpb.ListDocumentRequest_Filter) (
-	ret []document.Filter, err error,
+	ret []storageapi.Filter, err error,
 ) {
 	var slab map[string]any
 	for _, pf := range filters {
-		var f document.Filter
+		var f storageapi.Filter
 		f, err = makeModelFilter(m, slab, pf)
 		if err != nil {
 			return

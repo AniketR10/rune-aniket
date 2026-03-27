@@ -27,7 +27,6 @@ import (
 	"context"
 	"errors"
 
-	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/docmarshal"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagerpc/docpb"
@@ -38,23 +37,20 @@ import (
 // Server wraps another storageapi.Service and exposes it through a grpc interface.
 type Server struct {
 	marshaler docmarshal.Marshaler
-	// Use document.Service ifc so we can use all of the implmenetations
-	// at github.com/unstablebuild/blue, as well as re-use testing suite.
-	// The client converts all of the pb's to storageapi.Service structures.
-	other document.Service
+	other     storageapi.Service
 	docpb.UnimplementedDocumentStoreServer
 }
 
 // NewServer allocates storage for a new Server and initializes it.
-func NewServer(other document.Service, m docmarshal.Marshaler) *Server {
+func NewServer(other storageapi.Service, m docmarshal.Marshaler) *Server {
 	ret := new(Server)
 	ret.Init(other, m)
 	return ret
 }
 
-// Init initializes this server with the given underlying document.Service
+// Init initializes this server with the given underlying storageapi.Service
 // and marshaler.
-func (s *Server) Init(other document.Service, m docmarshal.Marshaler) {
+func (s *Server) Init(other storageapi.Service, m docmarshal.Marshaler) {
 	s.other = other
 	s.marshaler = m
 }
@@ -74,13 +70,13 @@ func (s *Server) Create(
 
 	err = s.other.Create(ctx, id, pr)
 	if err != nil {
-		if errors.Is(err, document.ErrAlreadyExists) {
+		if errors.Is(err, storageapi.ErrAlreadyExists) {
 			err = nil
 			res = &docpb.CreateDocumentResponse{
 				AlreadyExists: true,
 			}
 		}
-		if errors.Is(err, document.ErrPermissionDenied) {
+		if errors.Is(err, storageapi.ErrPermissionDenied) {
 			err = status.Error(codes.PermissionDenied, "")
 		}
 		return
@@ -104,7 +100,7 @@ func (s *Server) Set(
 	}
 
 	err = s.other.Set(ctx, id, &pr)
-	if errors.Is(err, document.ErrPermissionDenied) {
+	if errors.Is(err, storageapi.ErrPermissionDenied) {
 		err = status.Error(codes.PermissionDenied, "")
 	}
 	res = new(docpb.DocumentResponse)
@@ -132,11 +128,11 @@ func (s *Server) Update(
 	err = s.other.Update(ctx, req.GetId(), updates, preconds...)
 	if err != nil {
 		switch err {
-		case document.ErrNotFound:
+		case storageapi.ErrNotFound:
 			return &docpb.UpdateDocumentResponse{NotFound: true}, nil
-		case document.ErrPreconditionFailed:
+		case storageapi.ErrPreconditionFailed:
 			return &docpb.UpdateDocumentResponse{PreconditionFailed: true}, nil
-		case document.ErrPermissionDenied:
+		case storageapi.ErrPermissionDenied:
 			return nil, status.Error(codes.PermissionDenied, "")
 		}
 		return nil, err
@@ -153,11 +149,11 @@ func (s *Server) Get(
 	var pr map[string]any
 	err = s.other.Get(ctx, id, &pr)
 	if err != nil {
-		if errors.Is(err, document.ErrNotFound) {
+		if errors.Is(err, storageapi.ErrNotFound) {
 			res = &docpb.GetDocumentResponse{NotFound: true}
 			err = nil
 		}
-		if errors.Is(err, document.ErrPermissionDenied) {
+		if errors.Is(err, storageapi.ErrPermissionDenied) {
 			err = status.Error(codes.PermissionDenied, "")
 		}
 		return
@@ -176,7 +172,7 @@ func (s *Server) Delete(
 	id := req.GetId()
 
 	err = s.other.Delete(ctx, id)
-	if errors.Is(err, document.ErrPermissionDenied) {
+	if errors.Is(err, storageapi.ErrPermissionDenied) {
 		err = status.Error(codes.PermissionDenied, "")
 	}
 	res = new(docpb.DocumentResponse)
@@ -234,7 +230,7 @@ func (s *Server) List(
 
 	it, err := s.other.List(ctx, filters)
 	if err != nil {
-		if errors.Is(err, document.ErrPermissionDenied) {
+		if errors.Is(err, storageapi.ErrPermissionDenied) {
 			err = status.Error(codes.PermissionDenied, "")
 		}
 		return err

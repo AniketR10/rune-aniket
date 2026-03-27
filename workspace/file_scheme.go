@@ -547,7 +547,7 @@ func (p *fileScheme) Watch(
 func (p *fileScheme) StopWatch(ID int) error {
 	w, ok := p.watchpoints.LoadAndDelete(ID)
 	if !ok {
-		return errors.New("watchpoint not found")
+		return nil
 	}
 	closer := w.(io.Closer)
 	return closer.Close()

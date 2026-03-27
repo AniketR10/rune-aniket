@@ -31,35 +31,35 @@ import (
 
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
-	"github.com/unstablebuild/blue/document"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"unstable.build/go-tui/localstorage"
 )
 
-// Service implements a simple caching document.Service for instances
+// Service implements a simple caching storageapi.Service for instances
 // that should not perform operations out-of-band. If you know that
 // an out-of-band operation has ocurred, you can force refresh the cache
 // by calling EvictAll. Callers must employ the List method to internally
 // populate the cache otherwise all Get operations will be cache misses.
 // Any write evicts all the records in the cache.
 type Service[T localstorage.Document[T]] struct {
-	cache  document.Service
-	svc    document.Service
+	cache  storageapi.Service
+	svc    storageapi.Service
 	cached atomic.Bool
 }
 
 // New allocates storage and initializes a new cache.Service. See Init for more details.
-func New[T localstorage.Document[T]](svc, cache document.Service) *Service[T] {
+func New[T localstorage.Document[T]](svc, cache storageapi.Service) *Service[T] {
 	ret := new(Service[T])
 	ret.Init(svc, cache)
 	// perform the ifc satisfaction compile time check here
 	// where we have an actual type T that does satisfy Document[T]
-	var _ document.Service = ret
+	var _ storageapi.Service = ret
 	return ret
 }
 
 // Init initializes this cache.Service with svc as the underlying service and
 // cache as the caching layer.
-func (s *Service[T]) Init(svc, cache document.Service) {
+func (s *Service[T]) Init(svc, cache storageapi.Service) {
 	s.svc = svc
 	s.cache = cache
 }
@@ -79,7 +79,7 @@ func (s *Service[T]) EvictAll(ctx context.Context) error {
 }
 
 func (s *Service[T]) evictAll(
-	ctx context.Context, listSvc document.Service, listSvcName string,
+	ctx context.Context, listSvc storageapi.Service, listSvcName string,
 ) error {
 	it, err := listSvc.List(ctx, nil)
 	if err != nil {
@@ -107,7 +107,7 @@ func (s *Service[T]) evictAll(
 	return ret
 }
 
-// Create satisfies document.Service.
+// Create satisfies storageapi.Service.
 func (s *Service[T]) Create(ctx context.Context, ID string, doc any) error {
 	err := s.svc.Create(ctx, ID, doc)
 	if err == nil && s.cached.Load() {
@@ -118,7 +118,7 @@ func (s *Service[T]) Create(ctx context.Context, ID string, doc any) error {
 	return err
 }
 
-// Set satisfies document.Service.
+// Set satisfies storageapi.Service.
 func (s *Service[T]) Set(ctx context.Context, ID string, doc any) error {
 	err := s.svc.Set(ctx, ID, doc)
 	if err == nil && s.cached.Load() {
@@ -129,9 +129,9 @@ func (s *Service[T]) Set(ctx context.Context, ID string, doc any) error {
 	return err
 }
 
-// Update satisfies document.Service.
+// Update satisfies storageapi.Service.
 func (s *Service[T]) Update(ctx context.Context, ID string,
-	updates []document.Update, precond ...document.Precondition) error {
+	updates []storageapi.Update, precond ...storageapi.Precondition) error {
 	err := s.svc.Update(ctx, ID, updates, precond...)
 	if err == nil && s.cached.Load() {
 		if uerr := s.cache.Update(ctx, ID, updates, precond...); uerr != nil {
@@ -141,14 +141,14 @@ func (s *Service[T]) Update(ctx context.Context, ID string,
 	return err
 }
 
-// Get satisfies document.Service. Note that doc should be a pointer to T and
+// Get satisfies storageapi.Service. Note that doc should be a pointer to T and
 // any other type will cause this function to panic.
 func (s *Service[T]) Get(ctx context.Context, ID string, doc any) error {
 	err := s.cache.Get(ctx, ID, doc)
 	if err == nil {
 		return nil
 	}
-	if errors.Is(err, document.ErrNotFound) {
+	if errors.Is(err, storageapi.ErrNotFound) {
 		err = nil
 	}
 	if err != nil {
@@ -157,7 +157,7 @@ func (s *Service[T]) Get(ctx context.Context, ID string, doc any) error {
 	return s.svc.Get(ctx, ID, doc)
 }
 
-// Delete satisfies document.Service.
+// Delete satisfies storageapi.Service.
 func (s *Service[T]) Delete(ctx context.Context, ID string) error {
 	err := s.svc.Delete(ctx, ID)
 	if err == nil && s.cached.Load() {
@@ -168,9 +168,9 @@ func (s *Service[T]) Delete(ctx context.Context, ID string) error {
 	return err
 }
 
-// List satisfies document.Service.
-func (s *Service[T]) List(ctx context.Context, filters []document.Filter) (
-	document.Iterator, error,
+// List satisfies storageapi.Service.
+func (s *Service[T]) List(ctx context.Context, filters []storageapi.Filter) (
+	storageapi.Iterator, error,
 ) {
 	if s.cached.Load() {
 		it, err := s.cache.List(ctx, filters)
@@ -234,7 +234,7 @@ func (s *Service[T]) List(ctx context.Context, filters []document.Filter) (
 	return &cacheIterator[T]{docs: docs}, nil
 }
 
-// Close satisfies document.Service.
+// Close satisfies storageapi.Service.
 func (s *Service[T]) Close() (ret error) {
 	if err := s.cache.Close(); err != nil {
 		ret = multierr.Append(ret, err)

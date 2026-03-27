@@ -31,11 +31,11 @@ import (
 	"time"
 
 	"github.com/ernestrc/go-multierror"
-	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/release"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
@@ -104,7 +104,7 @@ type pkgManager struct {
 	pkg              *idepkg.Manager
 	n                browserapi.Notifications
 	wh               *workspaceManagerHandler
-	storage          document.Service
+	storage          storageapi.Service
 	scheduleNextTick func(func()) bool
 	interrupter      term.Interrupter
 	pending          sync.Map // map[string]*sync.Mutex
@@ -118,7 +118,7 @@ type installStorageValue struct {
 func (m *pkgManager) init(
 	n browserapi.Notifications, rm release.Manager,
 	wm browserapi.WindowManager,
-	storage document.Service, scheme schemeapi.Scheme,
+	storage storageapi.Service, scheme schemeapi.Scheme,
 	dataDir, configPath string,
 	fcs component.FrameCharSet,
 	interrupter term.Interrupter, wh *workspaceManagerHandler,
@@ -152,8 +152,8 @@ func (m *pkgManager) LibDir(ctx context.Context, pkgID string) (
 
 	version, err := m.getLatestVersion(ctx, pkgID)
 	if err != nil {
-		if errors.Is(err, document.ErrNotFound) {
-			return nil, document.ErrNotFound
+		if errors.Is(err, storageapi.ErrNotFound) {
+			return nil, storageapi.ErrNotFound
 		}
 		return nil, fmt.Errorf("get latest version: %w", err)
 	}
@@ -170,7 +170,7 @@ func (m *pkgManager) LibDir(ctx context.Context, pkgID string) (
 	if !val.Value {
 		// signals that package does not exist, which
 		// should prevent further attempts or errors being logged.
-		return nil, document.ErrNotFound
+		return nil, storageapi.ErrNotFound
 	}
 	if err := m.pkg.InstallPackageVersion(ctx, pkgID, version); err != nil {
 		return nil, fmt.Errorf("install latest version: %w", err)
@@ -570,7 +570,7 @@ func (m *pkgManager) openInstallPrompt(pkgID string, version release.Version) (
 						_ = m.storage.Set(ctx, installStorageKey, installStorageValue{Value: false})
 						fallthrough
 					case no:
-						err = document.ErrNotFound
+						err = storageapi.ErrNotFound
 					}
 					if err != nil {
 						it.err = err
@@ -578,7 +578,7 @@ func (m *pkgManager) openInstallPrompt(pkgID string, version release.Version) (
 				},
 				func() error {
 					if it.it == nil && it.err == nil {
-						it.err = document.ErrNotFound
+						it.err = storageapi.ErrNotFound
 					}
 					if !unlocked {
 						unlocked = true

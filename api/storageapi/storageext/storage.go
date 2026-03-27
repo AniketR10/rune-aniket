@@ -27,12 +27,10 @@ import (
 	"context"
 	"os"
 
-	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/docmarshal/doctoml"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagerpc"
 	"unstable.build/go-tui/extension"
-	"unstable.build/go-tui/localstorage/bluestore"
 	"unstable.build/go-tui/rpc"
 )
 
@@ -53,8 +51,7 @@ func dialStorage(ctx context.Context, grant extension.Grant, broker rpc.MuxBroke
 	}
 	c := new(storagerpc.Client)
 	c.Init(conn, doctoml.Marshaler())
-	return bluestore.AdaptTo(
-		document.WithPartition(bluestore.AdaptFrom(c), partition)), nil
+	return storageapi.WithPartition(c, partition), nil
 }
 
 // Storage acquires a client to persistent storage with

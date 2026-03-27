@@ -41,6 +41,7 @@ import (
 	"github.com/unstablebuild/blue/document/doctest"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"unstable.build/go-tui/localstorage/bluestore"
 	"unstable.build/go-tui/workspace"
 )
 
@@ -52,7 +53,7 @@ func testMemoryWorkspaceServiceWithMarshaler(t *testing.T, m docmarshal.Marshale
 		require.NoError(t, err)
 		svc, err := NewDocumentService(scheme, m)
 		require.NoError(t, err)
-		return svc
+		return bluestore.AdaptFrom(svc)
 	})
 }
 
@@ -70,7 +71,7 @@ func testFileWorkspaceServiceWithMarshaler(t *testing.T, m docmarshal.Marshaler)
 			_ = svc.Close()
 			_ = os.RemoveAll(name)
 		})
-		return svc
+		return bluestore.AdaptFrom(svc)
 	})
 }
 
@@ -103,7 +104,7 @@ func TestFileWorkspaceServiceBSON(t *testing.T) {
 				_ = svc.Close()
 				_ = os.RemoveAll(name)
 			})
-			return svc
+			return bluestore.AdaptFrom(svc)
 		})
 	})
 	t.Run("backed by MemoryScheme", func(t *testing.T) {
@@ -117,7 +118,7 @@ func TestFileWorkspaceServiceBSON(t *testing.T) {
 			require.NoError(t, err)
 			svc, err := NewDocumentService(scheme, docbson.Marshaler())
 			require.NoError(t, err)
-			return svc
+			return bluestore.AdaptFrom(svc)
 		})
 	})
 

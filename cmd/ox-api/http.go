@@ -40,6 +40,7 @@ import (
 	"unstable.build/go-tui/cmd/rune/api/account"
 	"unstable.build/go-tui/cmd/rune/api/user"
 	"unstable.build/go-tui/cmd/rune/auth"
+	"unstable.build/go-tui/localstorage/bluestore"
 )
 
 type httpAPI struct {
@@ -122,7 +123,7 @@ func newHTTPApi(
 
 	ret.HandleFunc("/health", ret.serveHealth)
 
-	accStore := account.NewDocumentStore(accDB, userStore)
+	accStore := account.NewDocumentStore(bluestore.AdaptTo(accDB), userStore)
 	// There are two different authorizers, and so two different oauth2 tokens used
 	// by the rune infrastructure: one authorizer for the http api, which uses the data
 	// extracted from an oauth2 provider signed token, to grant access to the web api,

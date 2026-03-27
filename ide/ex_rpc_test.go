@@ -32,9 +32,9 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi/browserrpc"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/clipboard"
 	"github.com/unstablebuild/rune-go-sdk/term"
@@ -119,11 +119,11 @@ func newTestRPCBrowser(t *testing.T,
 	) {
 		ex := new(ex)
 		notifications := newWorkspaceNotifications(
-			document.NewInMemoryService(), notificationsConfig(),
+			storagestub.NewInMemoryService(), notificationsConfig(),
 			&workspaceManagerMock{workspace: ex})
 		uri, err := workspaceapi.ParseURI("memory:///")
 		require.NoError(t, err)
-		svc := document.NewInMemoryService()
+		svc := storagestub.NewInMemoryService()
 		opts = append(opts, text.WithCommandOverlayConfig(testCommandOverlayConfig()))
 		opts = append(opts, text.WithCommandKeyBinding(term.KeyComb{Ch: 'w', Mod: term.ModCtrl},
 			[][]string{{"tabclose"}}))

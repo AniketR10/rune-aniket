@@ -34,10 +34,10 @@ import (
 	"github.com/ernestrc/sensible/browser"
 	log "github.com/sirupsen/logrus"
 	blueauth "github.com/unstablebuild/blue/auth"
-	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/logging"
 	"github.com/unstablebuild/blue/logging/trace"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"golang.org/x/oauth2"
 	"google.golang.org/grpc"
@@ -75,7 +75,7 @@ type Client struct {
 
 // New returns allocates storage for a new Client and initializes it.
 func New(
-	n browserapi.Notifications, storage document.Service,
+	n browserapi.Notifications, storage storageapi.Service,
 	config Config, dataDir string,
 ) (*Client, error) {
 	httpEndpointURL, err := url.Parse(config.HTTPEndpointAddress)
@@ -88,7 +88,7 @@ func New(
 		httpEndpointURL: httpEndpointURL,
 		notifications:   n,
 	}
-	storage = document.WithPartition(storage, "auth")
+	storage = storageapi.WithPartition(storage, "auth")
 	ret.tokenSource = auth.NewCachedTokenSource(ret, storage, n)
 	// for telemetry we only want to use the cached token, if there's any
 	// or refresh token

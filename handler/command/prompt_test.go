@@ -35,12 +35,11 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/iterator"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/handler/handlertest"
-	"unstable.build/go-tui/localstorage/bluestore"
 )
 
 func TestCommandHandlerManualsDrawTooSmallForManual(t *testing.T) {
@@ -149,7 +148,7 @@ car.                `},
 			completeFn, cleanupComplete := nopComplete()
 			defer cleanupComplete(t)
 
-			storage := bluestore.AdaptTo(document.NewInMemoryService())
+			storage := storagestub.NewInMemoryService()
 			b := NewPrompt(
 				storage, FuncCompleter(completeFn), FuncDispatcher(dispatchFn),
 				term.NopInterrupter(), tcase.commands, cfg,
@@ -165,7 +164,7 @@ car.                `},
 
 func TestCommandHandlerPreview(t *testing.T) {
 	t.Run("esc at the end", func(t *testing.T) {
-		storage := bluestore.AdaptTo(document.NewInMemoryService())
+		storage := storagestub.NewInMemoryService()
 		cfg := DefaultConfig()
 		cfg.ShowManualAfter = 1 * time.Hour
 		cfg.HistoryKey = term.KeyComb{Ch: '@'}
@@ -267,7 +266,7 @@ arg2
 	})
 
 	t.Run("dispatch at the end", func(t *testing.T) {
-		storage := bluestore.AdaptTo(document.NewInMemoryService())
+		storage := storagestub.NewInMemoryService()
 		cfg := DefaultConfig()
 		cfg.ShowManualAfter = 1 * time.Hour
 		cfg.HistoryKey = term.KeyComb{Ch: '@'}
@@ -336,7 +335,7 @@ kotomichi
 	})
 
 	t.Run("preview returns manual", func(t *testing.T) {
-		storage := bluestore.AdaptTo(document.NewInMemoryService())
+		storage := storagestub.NewInMemoryService()
 		cfg := DefaultConfig()
 		cfg.ShowManualAfter = 0
 		cfg.HistoryKey = term.KeyComb{Ch: '@'}
@@ -451,7 +450,7 @@ YAY [arg2]          `},
 }
 
 func TestCommandHandlerDispatch(t *testing.T) {
-	storage := bluestore.AdaptTo(document.NewInMemoryService())
+	storage := storagestub.NewInMemoryService()
 	cfg := DefaultConfig()
 	cfg.ShowManualAfter = 1 * time.Hour
 	cfg.HistoryKey = term.KeyComb{Ch: '@'}
@@ -1096,7 +1095,7 @@ myArg 5
 			completeFn, cleanupComplete := tcase.completeCmd()
 			defer cleanupComplete(t)
 
-			storage := bluestore.AdaptTo(document.NewInMemoryService())
+			storage := storagestub.NewInMemoryService()
 			b := NewPrompt(
 				storage, FuncCompleter(completeFn), FuncDispatcher(dispatchFn),
 				term.NopInterrupter(), testNoManualCommands(tcase.commands), cfg,
@@ -1134,7 +1133,7 @@ func neverEndingComplete() (func(context.Context, []string) (iterator.Iterator[s
 }
 
 func TestCommandHandlerCancel(t *testing.T) {
-	storage := bluestore.AdaptTo(document.NewInMemoryService())
+	storage := storagestub.NewInMemoryService()
 	t.Run("ctrl-c once cancels search; twice closes window", func(t *testing.T) {
 		dispatchFn, cleanup := nopDispatch()
 		defer cleanup(t)
@@ -1186,7 +1185,7 @@ func TestCommandHandlerHideProgressHint(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.ShowProgressHint = false
 	b := NewPrompt(
-		bluestore.AdaptTo(document.NewInMemoryService()),
+		storagestub.NewInMemoryService(),
 		FuncCompleter(completeFn),
 		FuncDispatcher(dispatchFn),
 		term.NopInterrupter(),
@@ -1235,7 +1234,7 @@ func TestCommandHandlerHistory(t *testing.T) {
 		defer cleanupComplete(t)
 
 		b := NewPrompt(
-			bluestore.AdaptTo(document.NewInMemoryService()),
+			storagestub.NewInMemoryService(),
 			FuncCompleter(completeFn),
 			FuncDispatcher(dispatchFn),
 			term.NopInterrupter(),
@@ -1319,7 +1318,7 @@ func TestCommandHandlerHistory(t *testing.T) {
 		defer cleanupComplete(t)
 
 		b := NewPrompt(
-			bluestore.AdaptTo(document.NewInMemoryService()),
+			storagestub.NewInMemoryService(),
 			FuncCompleter(completeFn),
 			FuncDispatcher(dispatchFn),
 			term.NopInterrupter(),

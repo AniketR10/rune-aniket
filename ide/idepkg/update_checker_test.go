@@ -30,9 +30,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/release"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/ide/idepkg/idepkgtest"
 )
@@ -310,7 +310,7 @@ func TestStart(t *testing.T) {
 
 		// Record should be cleaned up
 		err = storage.Get(context.Background(), "update-available:go", &val)
-		assert.ErrorIs(t, err, document.ErrNotFound, "expected stale record to be cleaned up")
+		assert.ErrorIs(t, err, storageapi.ErrNotFound, "expected stale record to be cleaned up")
 	})
 }
 

@@ -39,9 +39,9 @@ import (
 	"github.com/ernestrc/logd-go/logging"
 	log "github.com/sirupsen/logrus"
 	tree_sitter "github.com/tree-sitter/go-tree-sitter"
-	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
@@ -386,11 +386,12 @@ func (t *Tree) downloadFiles(ctx context.Context) (files, error) {
 	t.log(log.DebugLevel, "found language for file %s: %s", filename, id)
 	iter, err := t.pkg.LibDir(ctx, id)
 	if err != nil {
-		if errors.Is(err, document.ErrNotFound) {
-			msg := fmt.Sprintf("package for language "+
-				"%q does not exist or it's not installed.", id)
-			t.log(log.DebugLevel, "aborting syntax parsing: %s", msg)
-			return files{}, errors.New(msg)
+		if errors.Is(err, storageapi.ErrNotFound) {
+			t.log(log.DebugLevel,
+				"aborting syntax parsing: package for language %q does not exist or it's not installed",
+				id)
+			t.notifyNotAvail(id)
+			return files{}, nil
 		}
 		t.log(log.ErrorLevel, "aborting syntax parsing: %v", err)
 		t.notifyNotAvail(id)

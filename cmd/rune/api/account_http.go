@@ -34,9 +34,9 @@ import (
 
 	"github.com/julienschmidt/httprouter"
 	blueauth "github.com/unstablebuild/blue/auth"
-	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/logging"
 	"github.com/unstablebuild/blue/logging/trace"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"unstable.build/go-tui/cmd/rune/api/account"
 	"unstable.build/go-tui/cmd/rune/api/user"
 	"unstable.build/go-tui/cmd/rune/auth"
@@ -75,7 +75,7 @@ func (a accountHandler) getAccount(
 
 	acc, err := a.store.GetByAccountID(ctx, account.ID(id))
 	if err != nil {
-		if errors.Is(err, document.ErrNotFound) {
+		if errors.Is(err, storageapi.ErrNotFound) {
 			w.WriteHeader(http.StatusNotFound)
 		} else {
 			w.WriteHeader(http.StatusBadGateway)
@@ -130,7 +130,7 @@ func (a accountHandler) createAccount(
 	admin := req.Admin
 	id, err := a.store.Create(ctx, admin, acc)
 	if err != nil {
-		if errors.Is(err, document.ErrAlreadyExists) {
+		if errors.Is(err, storageapi.ErrAlreadyExists) {
 			w.WriteHeader(http.StatusConflict)
 		} else {
 			w.WriteHeader(http.StatusBadGateway)

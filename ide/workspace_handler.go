@@ -41,13 +41,13 @@ import (
 
 	"github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
-	"github.com/unstablebuild/blue/document"
-	"github.com/unstablebuild/blue/document/docmarshal/doctoml"
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/release"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi/docmarshal/doctoml"
 	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
@@ -102,7 +102,7 @@ type workspaceManagerHandler struct {
 	scheduleNextTick   func(func()) bool
 	confirmedForceExit bool
 	notifications      *notisManager
-	storage            document.Service
+	storage            storageapi.Service
 	workspace          workspace.WorkspaceManager
 	publishEvent       func(term.Event) bool
 	tabsClickCallback  func(int) bool
@@ -225,7 +225,7 @@ func (h *workspaceManagerHandler) init(
 	ctx := context.Background()
 
 	h.storage = localstorage.New(ctx, sixDir, doctoml.Marshaler())
-	notiStorage := document.WithPartition(h.storage, "noti")
+	notiStorage := storageapi.WithPartition(h.storage, "noti")
 	interrupter := term.FuncInterrupter(func(ctx context.Context) error {
 		payload, _ := term.PayloadFromContext(ctx)
 		if !h.publishEvent(term.Event{Type: term.EventInterrupt, Raw: payload, Context: ctx}) {
@@ -327,7 +327,7 @@ func (h *workspaceManagerHandler) init(
 	h.union.Top = charset.Top
 	h.union.Bottom = charset.Bottom
 	h.workspaceBarKind = cfg.workspaceBarKind()
-	historyStorge := document.WithPartition(h.storage, "history")
+	historyStorge := storageapi.WithPartition(h.storage, "history")
 	h.history = newHistory(historyStorge)
 
 	// best effort
@@ -1521,7 +1521,7 @@ func (h *workspaceManagerHandler) Interrupt(ctx context.Context) error {
 
 func (h *workspaceManagerHandler) setReleaseManager(releaseManager release.Manager) {
 	notifications := h.notifications.current()
-	pkgStorage := document.WithPartition(h.storage, "idepkg")
+	pkgStorage := storageapi.WithPartition(h.storage, "idepkg")
 	if h.pkgmanager == nil {
 		h.pkgmanager = new(pkgManager)
 		// do this once only when initializing pgmanager for the first time

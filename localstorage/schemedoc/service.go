@@ -33,10 +33,10 @@ import (
 	"reflect"
 
 	multierr "github.com/ernestrc/go-multierror"
-	"github.com/unstablebuild/blue/document"
-	"github.com/unstablebuild/blue/document/docmarshal"
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi/docmarshal"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 )
 
@@ -45,18 +45,18 @@ import (
 // is currently closing.
 var ErrClosing = errors.New("service is closing")
 
-// NewDocumentService returns a document.Service backed by a schemeapi.Scheme.
+// NewDocumentService returns a storageapi.Service backed by a schemeapi.Scheme.
 // It its goroutine-safe but only one instance can be operating at a time
 // on a given workspace.
 func NewDocumentService(scheme schemeapi.Scheme, marshaler docmarshal.Marshaler) (
-	document.Service, error,
+	storageapi.Service, error,
 ) {
 	svc := service{
 		scheme:    scheme,
 		marshaler: marshaler,
 	}
 	// make it goroutine-safe
-	return document.Sync(&svc), nil
+	return Sync(&svc), nil
 }
 
 type service struct {
@@ -78,8 +78,8 @@ func (s *service) Set(ctx context.Context, ID string, doc any) error {
 }
 
 func (s *service) Update(
-	ctx context.Context, ID string, updates []document.Update,
-	preconds ...document.Precondition,
+	ctx context.Context, ID string, updates []storageapi.Update,
+	preconds ...storageapi.Precondition,
 ) error {
 	if len(updates) == 0 {
 		panic("Update: no paths to update")
@@ -91,10 +91,10 @@ func (s *service) Update(
 	orig, err := s.scheme.OpenFile(origFileName, os.O_RDONLY, 0)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return document.ErrNotFound
+			return storageapi.ErrNotFound
 		}
 		if errors.Is(err, os.ErrPermission) {
-			return document.ErrPermissionDenied
+			return storageapi.ErrPermissionDenied
 		}
 		return fmt.Errorf("scheme open: %w", err)
 	}
@@ -109,10 +109,10 @@ func (s *service) Update(
 	}
 
 	// order of operations (open .swp, update proto, etc) doesn't matter
-	// because all methods are serialized via document.Sync, and
-	// there can only be one instance of this document.Service operating
+	// because all methods are serialized via Sync, and
+	// there can only be one instance of this storageapi.Service operating
 	// at a given workspace at a time.
-	err = document.UpdateProto(s.marshaler, updates, proto, preconds...)
+	err = storageapi.UpdateProto(s.marshaler, updates, proto, preconds...)
 	if err != nil {
 		return err
 	}
@@ -122,7 +122,7 @@ func (s *service) Update(
 	target, err := s.scheme.OpenFile(targetFileName, flag, 0666)
 	if err != nil {
 		if errors.Is(err, os.ErrPermission) {
-			return document.ErrPermissionDenied
+			return storageapi.ErrPermissionDenied
 		}
 		return fmt.Errorf("scheme open: %w", err)
 	}
@@ -138,7 +138,7 @@ func (s *service) Update(
 	err = s.scheme.Rename(targetFileName, origFileName)
 	if err != nil {
 		if errors.Is(err, os.ErrPermission) {
-			return document.ErrPermissionDenied
+			return storageapi.ErrPermissionDenied
 		}
 		return fmt.Errorf("scheme rename: %v", err)
 	}
@@ -150,16 +150,16 @@ func (s *service) Get(ctx context.Context, ID string, doc any) error {
 	if ID == "" {
 		return errors.New("invalid ID: empty")
 	}
-	if !document.IsEncodeable(doc) {
+	if !storageapi.IsEncodeable(doc) {
 		return errors.New("invalid document argument")
 	}
 	f, err := s.scheme.OpenFile(s.getFileName(ID), os.O_RDONLY, 0)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return document.ErrNotFound
+			return storageapi.ErrNotFound
 		}
 		if errors.Is(err, os.ErrPermission) {
-			return document.ErrPermissionDenied
+			return storageapi.ErrPermissionDenied
 		}
 		return fmt.Errorf("scheme open: %w", err)
 	}
@@ -178,14 +178,14 @@ func (s *service) Delete(ctx context.Context, ID string) error {
 		return nil
 	}
 	if errors.Is(err, os.ErrPermission) {
-		return document.ErrPermissionDenied
+		return storageapi.ErrPermissionDenied
 	}
 	return err
 }
 
 func (s *service) List(
-	ctx context.Context, filters []document.Filter,
-) (document.Iterator, error) {
+	ctx context.Context, filters []storageapi.Filter,
+) (storageapi.Iterator, error) {
 	for _, f := range filters {
 		if len(f.FieldPath) == 0 || f.Op == "" {
 			panic("invalid filter")
@@ -194,7 +194,7 @@ func (s *service) List(
 	entries, err := s.scheme.ReadDir(".")
 	if err != nil {
 		if errors.Is(err, os.ErrPermission) {
-			return nil, document.ErrPermissionDenied
+			return nil, storageapi.ErrPermissionDenied
 		}
 		return nil, fmt.Errorf("scheme list files: %v", err)
 	}
@@ -241,22 +241,22 @@ func (s *service) create(ctx context.Context, ID string, doc any, openFlags int)
 	if ID == "" {
 		return errors.New("invalid ID: empty")
 	}
-	doc, err := document.DerefCreateValue(reflect.ValueOf(doc))
+	doc, err := storageapi.DerefCreateValue(reflect.ValueOf(doc))
 	if err != nil {
 		return err
 	}
 	f, err := s.scheme.OpenFile(s.getFileName(ID), openFlags, 0666)
 	if err != nil {
 		if errors.Is(err, os.ErrExist) {
-			return document.ErrAlreadyExists
+			return storageapi.ErrAlreadyExists
 		}
 		if errors.Is(err, os.ErrPermission) {
-			return document.ErrPermissionDenied
+			return storageapi.ErrPermissionDenied
 		}
 		return fmt.Errorf("scheme open: %w", err)
 	}
 
-	doc = document.UpdateCreatedAtField(s.marshaler, doc)
+	doc = storageapi.UpdateCreatedAtField(s.marshaler, doc)
 
 	var ret error
 	if err := s.write(f, doc); err != nil {
@@ -291,7 +291,7 @@ func (s *service) write(f workspaceapi.File, doc any) error {
 
 type docIter struct {
 	ctx     context.Context
-	filters []document.Filter
+	filters []storageapi.Filter
 	svc     *service
 	it      iterator.Iterator[string]
 
@@ -312,7 +312,7 @@ func (d *docIter) HasNext() (ok bool) {
 				continue // should not happend but let's be resilient
 			}
 			if errors.Is(err, os.ErrPermission) {
-				d.doneErr = document.ErrPermissionDenied
+				d.doneErr = storageapi.ErrPermissionDenied
 				return true
 			}
 			d.doneErr = err
@@ -330,7 +330,7 @@ func (d *docIter) HasNext() (ok bool) {
 			return true
 		}
 
-		if document.MatchesAllFilters(d.svc.marshaler, proto, d.filters) {
+		if storageapi.MatchesAllFilters(d.svc.marshaler, proto, d.filters) {
 			d.nextMatchFile = f
 			return true
 		}
@@ -347,7 +347,7 @@ func (d *docIter) HasNext() (ok bool) {
 }
 
 func (d *docIter) NextTo(doc any) error {
-	if !document.IsEncodeable(doc) {
+	if !storageapi.IsEncodeable(doc) {
 		return errors.New("receiver is not a pointer and not a map or is nil")
 	}
 	if d.doneErr != nil {

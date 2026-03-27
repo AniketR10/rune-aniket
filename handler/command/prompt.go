@@ -37,10 +37,10 @@ import (
 
 	"github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
-	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/logging"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/term"
@@ -49,7 +49,6 @@ import (
 	tcomponent "unstable.build/go-tui/component"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/handler/search"
-	"unstable.build/go-tui/localstorage/bluestore"
 )
 
 // NewPrompt allocates storage for a new Prompt and initializes it.
@@ -181,7 +180,7 @@ func (h *Prompt) doInit(
 			break
 		}
 		h.log(log.ErrorLevel, "load history: %v", err)
-		storage = bluestore.AdaptTo(document.NewInMemoryService())
+		storage = storagestub.NewInMemoryService()
 	}
 
 	// add a canceled cancelCtx so Wait never needs to check if cancelFn is nil
@@ -656,6 +655,7 @@ func (h *Prompt) handleCompleteArgs(ev term.Event, sync bool) (quit, handled boo
 		return
 	}
 
+	h.cancelPreview()
 	handled = true
 	h.buf.WriteString(string(ev.Ch))
 	if ev.Ch == ' ' {
@@ -1278,11 +1278,12 @@ func (h *Prompt) getSeparatorHeight() int {
 }
 
 func (h *Prompt) cancelPreview() {
-	if h.preview == nil {
-		return
+	if h.preview != nil {
+		h.preview()
+		h.preview = nil
 	}
-	h.preview()
-	h.preview = nil
+	h.previewComponent = nil
+	h.previewMatch = nil
 }
 
 func (h *Prompt) showManualComponent() {

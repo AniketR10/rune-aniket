@@ -32,10 +32,10 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
-	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/logging"
 	"github.com/unstablebuild/blue/logging/trace"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"golang.org/x/oauth2"
 )
 
@@ -51,7 +51,7 @@ const (
 // NewCachedTokenSource allocates storage for a new CachedTokenSource
 // and initializes it with sourcer and storage.
 func NewCachedTokenSource(
-	sourcer TokenSourcer, storage document.Service,
+	sourcer TokenSourcer, storage storageapi.Service,
 	notifications browserapi.Notifications,
 ) *CachedTokenSource {
 	return &CachedTokenSource{sourcer: sourcer, storage: storage, notifications: notifications}
@@ -61,7 +61,7 @@ func NewCachedTokenSource(
 // tokens in a document.Service to persist across sessions.
 type CachedTokenSource struct {
 	sourcer       TokenSourcer
-	storage       document.Service
+	storage       storageapi.Service
 	notifications browserapi.Notifications
 
 	mu    sync.RWMutex

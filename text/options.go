@@ -29,7 +29,6 @@ import (
 	"maps"
 	"time"
 
-	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/rune-go-sdk/clipboard"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
@@ -395,5 +394,5 @@ type nopPkgManager struct {
 func (t nopPkgManager) LibDir(ctx context.Context, id string) (
 	iterator.Iterator[string], error,
 ) {
-	return nil, document.ErrNotFound
+	return iterator.FromSlice[string](nil), nil
 }

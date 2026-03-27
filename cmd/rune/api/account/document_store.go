@@ -30,10 +30,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/logging"
 	"github.com/unstablebuild/blue/logging/trace"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"unstable.build/go-tui/cmd/rune/api/user"
 	"unstable.build/go-tui/cmd/rune/auth"
 )
@@ -47,16 +47,16 @@ const (
 )
 
 // NewDocumentStore allocates storage for a new Store and
-// initializes it with the given account document.Service,
+// initializes it with the given account storageapi.Service,
 // and user.Store.
-func NewDocumentStore(accSvc document.Service, userStore user.Store) Store {
+func NewDocumentStore(accSvc storageapi.Service, userStore user.Store) Store {
 	return store{accSvc: accSvc, userStore: userStore}
 }
 
 var _ Store = store{}
 
 type store struct {
-	accSvc    document.Service
+	accSvc    storageapi.Service
 	userStore user.Store
 }
 
@@ -97,11 +97,11 @@ func (s store) Create(
 	if alreadyExists, ok := err.(*user.ErrAlreadyExists); ok {
 		var createdAcc Account
 		gerr := s.accSvc.Get(ctx, alreadyExists.Account, &createdAcc)
-		if gerr != nil && !errors.Is(gerr, document.ErrNotFound) {
+		if gerr != nil && !errors.Is(gerr, storageapi.ErrNotFound) {
 			return "", fmt.Errorf("user was already created but get account returned: %w", gerr)
 		}
 		if gerr == nil {
-			return "", document.ErrAlreadyExists
+			return "", storageapi.ErrAlreadyExists
 		}
 		// re-use id of previously created user
 		// if multiple goroutines reach this point at the same time,
@@ -142,7 +142,7 @@ func (s store) GetByUserID(
 		return Account{}, fmt.Errorf("document account get: %w", err)
 	}
 	if ret.Deactivated {
-		return Account{}, document.ErrNotFound
+		return Account{}, storageapi.ErrNotFound
 	}
 	return ret, nil
 }
@@ -161,7 +161,7 @@ func (s store) GetByAccountID(
 		return Account{}, fmt.Errorf("document service get: %w", err)
 	}
 	if doc.Deactivated {
-		return Account{}, document.ErrNotFound
+		return Account{}, storageapi.ErrNotFound
 	}
 	return doc, nil
 }
@@ -175,8 +175,8 @@ func (s store) Delete(
 
 	acc, err := s.GetByAccountID(ctx, id)
 	if err != nil {
-		if errors.Is(err, document.ErrNotFound) {
-			return document.ErrNotFound
+		if errors.Is(err, storageapi.ErrNotFound) {
+			return storageapi.ErrNotFound
 		} else {
 			return fmt.Errorf("get account by id: %w", err)
 		}
@@ -198,8 +198,8 @@ func (s store) Delete(
 }
 
 func (s store) List(ctx context.Context) (iterator.Iterator[Account], error) {
-	it, err := s.accSvc.List(ctx, []document.Filter{
-		{Field: document.Field{FieldPath: []string{"Deactivated"}, Value: false}},
+	it, err := s.accSvc.List(ctx, []storageapi.Filter{
+		{Field: storageapi.Field{FieldPath: []string{"Deactivated"}, Value: false}},
 	})
 	if err != nil {
 		return nil, err

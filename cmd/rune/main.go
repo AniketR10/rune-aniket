@@ -43,12 +43,12 @@ import (
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	flag "github.com/spf13/pflag"
-	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/logging"
 	"github.com/unstablebuild/blue/release/docrelease"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/docmarshal/doctoml"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagerpc"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
@@ -677,7 +677,7 @@ func renderOffset() (x int, y int) {
 	return 0, 10
 }
 
-func setupReleaseManager(i *ide.IDE, storage document.Service) (
+func setupReleaseManager(i *ide.IDE, storage storageapi.Service) (
 	*grpc.ClientConn, *apiclient.Client, error,
 ) {
 	apicfg := apiclient.DefaultConfig()

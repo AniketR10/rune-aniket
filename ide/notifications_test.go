@@ -30,8 +30,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/tcell/v3"
@@ -42,7 +42,7 @@ func newTestNotifications(uri workspaceapi.URI, t *testing.T) (*testNotifier, *n
 	mock := newTestNotify()
 	b := &notis{
 		root:    mock,
-		storage: document.NewInMemoryService(),
+		storage: storagestub.NewInMemoryService(),
 		parent:  &workspaceManagerMock{workspace: new(ex), wantFocusURI: uri},
 		uri:     uri,
 		cfg: notifications.Config{

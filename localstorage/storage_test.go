@@ -32,6 +32,7 @@ import (
 	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/document/docmarshal/doctoml"
 	"github.com/unstablebuild/blue/document/doctest"
+	"unstable.build/go-tui/localstorage/bluestore"
 )
 
 func TestStorageConcurrentInstances(t *testing.T) {
@@ -42,6 +43,6 @@ func TestStorageConcurrentInstances(t *testing.T) {
 		})
 		require.NoError(t, err)
 		instance := New(context.Background(), name, doctoml.Marshaler())
-		return instance
+		return bluestore.AdaptFrom(instance)
 	})
 }
