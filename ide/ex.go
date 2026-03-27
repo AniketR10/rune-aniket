@@ -1651,6 +1651,7 @@ func (e *ex) openCommandPrompt() {
 	commandCfg.FrameCharSet = e.config.FrameCharSet
 	commandCfg.FrameAttr = e.config.FrameAttr
 	commandCfg.ShowManualAfter = e.config.CommandOverlay.ShowManualAfter
+	commandCfg.ShowProgressHint = e.config.CommandOverlay.ShowProgressHint
 	commandCfg.Sync = e.syncCommandPrompt
 	promptStorage := bluestore.AdaptTo(document.WithPartition(e.storage, "cprompt"))
 	cmd := command.NewPrompt(promptStorage, e, e, e, []command.Manual{}, commandCfg)

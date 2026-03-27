@@ -342,6 +342,24 @@ func (c ideConfig) commandOverlayShowManualAfter() (ret time.Duration) {
 	return
 }
 
+func (c ideConfig) commandOverlayShowProgressHint() (ret bool) {
+	ret = text.DefaultCommandOverlayConfig().ShowProgressHint
+	cfg, ok := c.command()
+	if !ok {
+		return
+	}
+	key := "show_progress_hint"
+	v, err := cfg.GetBool(key)
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors[fmt.Sprintf("command.%s", key)] = err
+		}
+		return
+	}
+	ret = v
+	return
+}
+
 func (c ideConfig) commandAliases() (ret map[string]text.CommandAlias) {
 	ret = make(map[string]text.CommandAlias)
 	cfg, ok := c.command()
@@ -457,6 +475,7 @@ func (c ideConfig) commandOverlayConfig() text.CommandOverlayConfig {
 		ElementAttr:      c.commandOverlayElementAttr(),
 		ManualAttr:       c.commandOverlayManualAttr(),
 		ShowManualAfter:  c.commandOverlayShowManualAfter(),
+		ShowProgressHint: c.commandOverlayShowProgressHint(),
 	}
 	return cfg
 }

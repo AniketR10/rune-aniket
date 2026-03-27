@@ -837,22 +837,31 @@ func (h *Prompt) setCompletionList(
 		// IsEmpty could be performing I/O under the hood
 		// via Next, so do not block
 		go debug.CapturePanicReport(func() {
-			// draw progress animation while iterator is still returning results
-			frames, seq := component.ProgressAnimationFrames()
-			animation := component.NewAnimation(h.interrupter, frames, seq, 10)
-			defer func() {
-				_ = animation.Close()
+			var animation tui.Component
+			var animationCloser interface{ Close() error }
+			if h.config.ShowProgressHint {
+				// draw progress animation while iterator is still returning results
+				frames, seq := component.ProgressAnimationFrames()
+				anim := component.NewAnimation(h.interrupter, frames, seq, 10)
+				animation = anim
+				animationCloser = anim
 				h.mu.Lock()
-				if animation == h.animation.C {
-					h.animation.C = newNopAnimation(h.config)
-				}
+				h.animation.C = animation
 				h.mu.Unlock()
+			}
+			defer func() {
+				if animation != nil {
+					if animationCloser != nil {
+						_ = animationCloser.Close()
+					}
+					h.mu.Lock()
+					if animation == h.animation.C {
+						h.animation.C = newNopAnimation(h.config)
+					}
+					h.mu.Unlock()
+				}
 				_ = h.interrupter.Interrupt(ctx)
 			}()
-
-			h.mu.Lock()
-			h.animation.C = animation
-			h.mu.Unlock()
 
 			it, isEmpty := iterator.IsEmpty(ctx, it)
 			if isEmpty {

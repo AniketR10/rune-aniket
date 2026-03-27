@@ -50,6 +50,7 @@ type CommandOverlayConfig struct {
 	ElementAttr      term.Attributes
 	ManualAttr       term.Attributes
 	ShowManualAfter  time.Duration
+	ShowProgressHint bool
 }
 
 // Config holds configuration for an editor.Component.
@@ -96,6 +97,7 @@ func DefaultCommandOverlayConfig() (cfg CommandOverlayConfig) {
 	cfg.ElementAttr = term.Attributes{}
 	cfg.ManualAttr = term.Attributes{}
 	cfg.ShowManualAfter = 1 * time.Second
+	cfg.ShowProgressHint = true
 	return
 }
 

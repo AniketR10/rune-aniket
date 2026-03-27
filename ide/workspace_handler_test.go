@@ -612,6 +612,7 @@ func TestWorkspaceExtensions(t *testing.T) {
 		cfg.cfg = map[string]any{
 			"command":           map[string]any{},
 			"show_manual_after": "1h",
+			"show_progress_hint": false,
 			"extensions": map[string]any{
 				"git": map[string]any{
 					"path": "myPath",

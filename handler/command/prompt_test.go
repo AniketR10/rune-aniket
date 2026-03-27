@@ -1176,6 +1176,39 @@ func TestCommandHandlerCancel(t *testing.T) {
 	})
 }
 
+func TestCommandHandlerHideProgressHint(t *testing.T) {
+	dispatchFn, cleanup := nopDispatch()
+	defer cleanup(t)
+
+	completeFn, cleanupComplete := neverEndingComplete()
+	defer cleanupComplete(t)
+
+	cfg := DefaultConfig()
+	cfg.ShowProgressHint = false
+	b := NewPrompt(
+		bluestore.AdaptTo(document.NewInMemoryService()),
+		FuncCompleter(completeFn),
+		FuncDispatcher(dispatchFn),
+		term.NopInterrupter(),
+		nil,
+		cfg,
+	)
+	defer b.Close()
+
+	for _, runeValue := range "hello " {
+		quit, handled := b.handle(term.Event{Type: term.EventKey, Ch: runeValue}, false)
+		require.False(t, quit)
+		require.True(t, handled)
+	}
+
+	w := term.NewStringWriter(20, 3)
+	b.Resize(20, 3)
+	b.Draw(w)
+	assert.NotContains(t, w.String(), "⠃")
+	assert.NotContains(t, w.String(), "⠋")
+	assert.NotContains(t, w.String(), "⠙")
+}
+
 type testFeederIterator struct {
 	feeder chan string
 }

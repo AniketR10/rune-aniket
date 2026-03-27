@@ -50,6 +50,10 @@ type Config struct {
 	// command manual is displayed.
 	ShowManualAfter time.Duration
 
+	// ShowProgressHint controls whether an asynchronous completion in progress
+	// renders a transient animation in the prompt.
+	ShowProgressHint bool
+
 	// ManualAttr is used to configure the style of the alternate manual window.
 	ManualAttr term.Attributes
 
@@ -71,5 +75,6 @@ func DefaultConfig() Config {
 		ElementAttr:      term.Attributes{},
 		DocumentID:       "command-history",
 		ShowManualAfter:  1 * time.Second,
+		ShowProgressHint: true,
 	}
 }
