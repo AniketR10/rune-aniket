@@ -2412,6 +2412,55 @@ func TestAIEditorHandler_chat_persists_multiple_turns_and_replays_full_history(t
 	})
 }
 
+func TestAIEditorHandler_chat_arrowUpRecallsSentUserMessageHistory(t *testing.T) {
+	t.Parallel()
+
+	svc := &agentMockService{
+		responses: []agentMockResponse{
+			{chunks: []string{"alpha"}, finishReason: llm.FinishReasonStop},
+			{chunks: []string{"beta"}, finishReason: llm.FinishReasonStop},
+		},
+	}
+	deps := newTestAIEditorHandler(t, svc)
+	flusher := openChatAndGetTab(t, deps)
+
+	sendKeysToFlusher(t, flusher, "one<enter>")
+	sendKeysToFlusher(t, flusher, "two<enter>")
+
+	handlertest.RunHandlerSequence(t, flusher, e2eWidth, e2eHeight, []handlertest.SequenceTestCase{
+		{
+			InputSequence: "<up>",
+			Expected: e2eExpected(0,
+				"one",
+				"alpha",
+				"",
+				"two",
+				"beta",
+				"",
+				"",
+				"   ┌───────────────────────────────┐",
+				"   │two▐                           │",
+				"   └───────────────────────────────┘",
+			),
+		},
+		{
+			InputSequence: "<up>",
+			Expected: e2eExpected(0,
+				"one",
+				"alpha",
+				"",
+				"two",
+				"beta",
+				"",
+				"",
+				"   ┌───────────────────────────────┐",
+				"   │one▐                           │",
+				"   └───────────────────────────────┘",
+			),
+		},
+	})
+}
+
 // --- shell tests ---
 
 func TestAIEditorHandler_shell_creates_tab(t *testing.T) {
@@ -10897,7 +10946,7 @@ func TestAIEditorHandler_chat_queue_two_then_delete_both(t *testing.T) {
 				"⠧ sending (0s)",
 				"", "", "", "", "",
 				"   ┌───────────────────────────────┐",
-				"   │▐                              │",
+				"   │second▐                        │",
 				"   └───────────────────────────────┘",
 			),
 		},

@@ -730,6 +730,86 @@ func TestHandlerArrowUpRecallsNewestQueuedMessage(t *testing.T) {
 	mu.Unlock()
 }
 
+func TestHandlerArrowUpRecallsLastSentUserMessage(t *testing.T) {
+	h, tx, rx := Handler(context.Background(), new(sync.Mutex),
+		NewComponent(ComponentConfig{}), term.FuncInterrupter(func(context.Context) error {
+			return nil
+		}))
+	defer close(tx)
+	h.Resize(30, 10)
+
+	got := make(chan SubmitMessage, 2)
+	go func() { got <- <-rx }()
+	typeText(h, "first")
+	_, handled := h.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+	assert.True(t, handled)
+	assert.Equal(t, "first", (<-got).Text)
+
+	go func() { got <- <-rx }()
+	typeText(h, "second")
+	_, handled = h.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+	assert.True(t, handled)
+	assert.Equal(t, "second", (<-got).Text)
+
+	_, handled = h.Handle(term.Event{Type: term.EventKey, Key: term.KeyArrowUp})
+	assert.True(t, handled)
+
+	w := term.NewStringWriter(30, 10)
+	h.Draw(w)
+	require.NoError(t, w.Flush())
+	assert.Contains(t, w.String(), "second")
+	assert.Contains(t, w.String(), "│second")
+	assert.NotContains(t, w.String(), "│first")
+
+	_, handled = h.Handle(term.Event{Type: term.EventKey, Key: term.KeyArrowUp})
+	assert.True(t, handled)
+
+	w = term.NewStringWriter(30, 10)
+	h.Draw(w)
+	require.NoError(t, w.Flush())
+	assert.Contains(t, w.String(), "│first")
+	assert.NotContains(t, w.String(), "│second")
+}
+
+func TestHandlerArrowUpWhileBusyRecallsSentHistoryAfterQueueExhausted(t *testing.T) {
+	mu := new(sync.Mutex)
+	comp := NewComponent(ComponentConfig{})
+	interrupt := make(chan struct{}, 10)
+	h, tx, rx := Handler(context.Background(), mu, comp,
+		term.FuncInterrupter(func(context.Context) error {
+			interrupt <- struct{}{}
+			return nil
+		}))
+	defer close(tx)
+	h.Resize(30, 10)
+
+	got := make(chan SubmitMessage, 1)
+	go func() { got <- <-rx }()
+	typeText(h, "hello")
+	_, handled := h.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+	assert.True(t, handled)
+	assert.Equal(t, "hello", (<-got).Text)
+
+	tx <- MessageEvent{Type: MessageEventBusy, Busy: true}
+	<-interrupt
+
+	typeText(h, "queued")
+	_, handled = h.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+	assert.True(t, handled)
+
+	_, handled = h.Handle(term.Event{Type: term.EventKey, Key: term.KeyArrowUp})
+	assert.True(t, handled)
+	_, handled = h.Handle(term.Event{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'c'})
+	assert.True(t, handled)
+	_, handled = h.Handle(term.Event{Type: term.EventKey, Key: term.KeyArrowUp})
+	assert.True(t, handled)
+
+	mu.Lock()
+	assert.Equal(t, "queued", comp.Input().Text())
+	assert.Equal(t, 0, comp.QueueLen())
+	mu.Unlock()
+}
+
 func TestHandlerArrowUpAfterDiscardRecallsPreviousQueuedMessage(t *testing.T) {
 	mu := new(sync.Mutex)
 	comp := NewComponent(ComponentConfig{})

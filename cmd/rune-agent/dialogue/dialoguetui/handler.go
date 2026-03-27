@@ -306,6 +306,7 @@ func (s *dialogueHandler) Handle(ev term.Event) (exit, handled bool) {
 			if s.commands != nil && isCommand(text) {
 				item, ok := s.comp.InputSubmit()
 				if ok {
+					s.comp.Input().AppendHistory(item)
 					handled = true
 					name, args := parseCommand(item)
 					go s.executeCommand(name, args)
@@ -316,6 +317,7 @@ func (s *dialogueHandler) Handle(ev term.Event) (exit, handled bool) {
 					break
 				}
 				handled = true
+				s.comp.Input().AppendHistory(text)
 				s.comp.Input().Clear()
 				s.submitMessage(SubmitMessage{Text: text}, text, true)
 			}
@@ -382,7 +384,6 @@ func (s *dialogueHandler) Selection() (string, bool) {
 	}
 	return s.mouseDelegate.Selection()
 }
-
 
 func (s *dialogueHandler) Cursor() (
 	cursor term.Coordinates, style term.CursorStyle, ok bool,
