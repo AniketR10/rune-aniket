@@ -580,7 +580,9 @@ func (t *Component) Selection() (data string, ok bool) {
 	if !ok {
 		return
 	}
-	return term.CellsToString(cells), ok
+	data = term.CellsToString(cells)
+	data = strings.ReplaceAll(data, "\x00", "")
+	return data, ok
 }
 
 // OnFocusChange allows clients to report whether this vte.Component is on focus or not.

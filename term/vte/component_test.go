@@ -190,6 +190,24 @@ func TestIntegrationComponent(t *testing.T) {
 			},
 		},
 		{
+			desc:      "selection strips null characters",
+			altBuffer: false,
+			sut: func(t *testing.T, comp *Component, tm *mockTabManager) {
+				p := comp.parserHandler
+				comp.Resize(5, 5)
+				p.Input('a')
+				p.Input('b')
+				p.Input('c')
+				p.Input('\x00')
+
+				comp.Select(term.Coordinates{})
+				comp.SelectEnd(term.Coordinates{X: 4})
+				data, ok := comp.Selection()
+				assert.True(t, ok)
+				assert.Equal(t, "abc", data)
+			},
+		},
+		{
 			desc:      "primary scroll up/down with cap",
 			altBuffer: false,
 			sut: func(t *testing.T, comp *Component, tm *mockTabManager) {
