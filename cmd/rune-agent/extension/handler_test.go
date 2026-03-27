@@ -628,6 +628,20 @@ func (m *agentMockService) getRequests() []llm.Request {
 	return append([]llm.Request(nil), m.requests...)
 }
 
+func agentToolCallResponse(toolName, args, callID string) agentMockResponse {
+	return agentMockResponse{
+		finishReason: llm.FinishReasonToolCall,
+		toolCalls: []llm.ToolCall{{
+			ID:   callID,
+			Type: llm.ToolTypeFunction,
+			Function: llm.FunctionCall{
+				Name:      toolName,
+				Arguments: args,
+			},
+		}},
+	}
+}
+
 // newTestDialogueStore returns a real dialoguemanager.Store backed by an
 // in-memory storageapi.Service. This lets e2e tests exercise the actual
 // persistence path (indexing, versioning, serialization) instead of a mock.
@@ -2327,6 +2341,77 @@ func TestAIEditorHandler_chat_replays_history(t *testing.T) {
 	})
 }
 
+func TestAIEditorHandler_chat_persists_multiple_turns_and_replays_full_history(t *testing.T) {
+	t.Parallel()
+
+	svc := &agentMockService{
+		responses: []agentMockResponse{
+			{chunks: []string{"alpha"}, finishReason: llm.FinishReasonStop},
+			{chunks: []string{"beta"}, finishReason: llm.FinishReasonStop},
+			{chunks: []string{"gamma"}, finishReason: llm.FinishReasonStop},
+		},
+	}
+	deps := newTestAIEditorHandler(t, svc)
+	flusher := openChatAndGetTab(t, deps)
+
+	const dialogueID = "default"
+
+	sendKeysToFlusher(t, flusher, "one<enter>")
+	assertStoredDialogueMessages(t, deps.store, dialogueID, []llm.Message{
+		{Role: llm.RoleSystem, Content: testSystemPromptWithAddendum},
+		{Role: llm.RoleUser, Content: "one"},
+		{Role: llm.RoleAssistant, Content: "alpha"},
+	})
+
+	sendKeysToFlusher(t, flusher, "two<enter>")
+	assertStoredDialogueMessages(t, deps.store, dialogueID, []llm.Message{
+		{Role: llm.RoleSystem, Content: testSystemPromptWithAddendum},
+		{Role: llm.RoleUser, Content: "one"},
+		{Role: llm.RoleAssistant, Content: "alpha"},
+		{Role: llm.RoleUser, Content: "two"},
+		{Role: llm.RoleAssistant, Content: "beta"},
+	})
+
+	sendKeysToFlusher(t, flusher, "three<enter>")
+	assertStoredDialogueMessages(t, deps.store, dialogueID, []llm.Message{
+		{Role: llm.RoleSystem, Content: testSystemPromptWithAddendum},
+		{Role: llm.RoleUser, Content: "one"},
+		{Role: llm.RoleAssistant, Content: "alpha"},
+		{Role: llm.RoleUser, Content: "two"},
+		{Role: llm.RoleAssistant, Content: "beta"},
+		{Role: llm.RoleUser, Content: "three"},
+		{Role: llm.RoleAssistant, Content: "gamma"},
+	})
+
+	deps.wm.mu.Lock()
+	tab := deps.wm.lastTab
+	deps.wm.mu.Unlock()
+	require.NotNil(t, tab)
+	require.NoError(t, tab.Close())
+
+	replay := openChatAndGetTab(t, deps)
+	const replayHeight = 12
+	handlertest.RunHandlerSequence(t, replay, e2eWidth, replayHeight, []handlertest.SequenceTestCase{
+		{
+			InputSequence: "",
+			Expected: e2eExpected(0,
+				"one",
+				"alpha",
+				"",
+				"two",
+				"beta",
+				"",
+				"three",
+				"gamma",
+				"",
+				"   ┌───────────────────────────────┐",
+				"   │▐                              │",
+				"   └───────────────────────────────┘",
+			),
+		},
+	})
+}
+
 // --- shell tests ---
 
 func TestAIEditorHandler_shell_creates_tab(t *testing.T) {
@@ -3042,6 +3127,156 @@ func TestAIEditorHandler_chat_save_on_close(t *testing.T) {
 	assert.Contains(t, d.Messages[1].Content, "save me")
 }
 
+func TestAIEditorHandler_chat_checkpoints_between_tool_iterations(t *testing.T) {
+	t.Parallel()
+
+	gateSecondIteration := make(chan struct{})
+	gateFinalIteration := make(chan struct{})
+	t.Cleanup(func() {
+		select {
+		case <-gateSecondIteration:
+		default:
+			close(gateSecondIteration)
+		}
+		select {
+		case <-gateFinalIteration:
+		default:
+			close(gateFinalIteration)
+		}
+	})
+
+	secondIteration := agentToolCallResponse("checkpoint_tool", `{"step":2}`, "c2")
+	secondIteration.gate = gateSecondIteration
+	finalIteration := agentMockResponse{
+		chunks:       []string{"tool turn done"},
+		finishReason: llm.FinishReasonStop,
+		gate:         gateFinalIteration,
+	}
+
+	svc := &agentMockService{
+		responses: []agentMockResponse{
+			{chunks: []string{"ready"}, finishReason: llm.FinishReasonStop},
+			agentToolCallResponse("checkpoint_tool", `{"step":1}`, "c1"),
+			secondIteration,
+			finalIteration,
+			{chunks: []string{"welcome"}, finishReason: llm.FinishReasonStop},
+		},
+	}
+
+	var toolExecs atomic.Int32
+	tool := &agentMockTool{
+		name: "checkpoint_tool",
+		executeFn: func(context.Context, string) agent.ToolResult {
+			n := toolExecs.Add(1)
+			return agent.ToolResult{Content: fmt.Sprintf("tool output %d", n)}
+		},
+	}
+
+	deps := newTestAIEditorHandler(t, svc)
+	deps.handler.baseTools = []agent.Tool{tool}
+	deps.handler.toolRegistry = agent.NewRegistry(tool)
+
+	flusher := openChatAndGetTab(t, deps)
+	flusher.idleTimeout = 100 * time.Millisecond
+	flusher.maxWait = 500 * time.Millisecond
+
+	const dialogueID = "default"
+
+	sendKeysToFlusher(t, flusher, "hello<enter>")
+	assertStoredDialogueMessages(t, deps.store, dialogueID, []llm.Message{
+		{Role: llm.RoleSystem, Content: testSystemPromptWithAddendum},
+		{Role: llm.RoleUser, Content: "hello"},
+		{Role: llm.RoleAssistant, Content: "ready"},
+	})
+
+	sendKeysToFlusher(t, flusher, "run<space>tools<enter>")
+
+	require.Eventually(t, func() bool {
+		return len(svc.getRequests()) >= 3
+	}, 5*time.Second, 20*time.Millisecond, "timed out waiting for second tool iteration to start")
+	assertStoredDialogueMessages(t, deps.store, dialogueID, []llm.Message{
+		{Role: llm.RoleSystem, Content: testSystemPromptWithAddendum},
+		{Role: llm.RoleUser, Content: "hello"},
+		{Role: llm.RoleAssistant, Content: "ready"},
+		{Role: llm.RoleUser, Content: "run tools"},
+		{Role: llm.RoleAssistant, ToolCalls: []llm.ToolCall{{
+			ID:       "c1",
+			Type:     llm.ToolTypeFunction,
+			Function: llm.FunctionCall{Name: "checkpoint_tool", Arguments: `{"step":1}`},
+		}}},
+		{Role: llm.RoleTool, Content: "tool output 1", ToolCallID: "c1"},
+	})
+
+	close(gateSecondIteration)
+	require.Eventually(t, func() bool {
+		return len(svc.getRequests()) >= 4
+	}, 5*time.Second, 20*time.Millisecond, "timed out waiting for final tool iteration to start")
+	assertStoredDialogueMessages(t, deps.store, dialogueID, []llm.Message{
+		{Role: llm.RoleSystem, Content: testSystemPromptWithAddendum},
+		{Role: llm.RoleUser, Content: "hello"},
+		{Role: llm.RoleAssistant, Content: "ready"},
+		{Role: llm.RoleUser, Content: "run tools"},
+		{Role: llm.RoleAssistant, ToolCalls: []llm.ToolCall{{
+			ID:       "c1",
+			Type:     llm.ToolTypeFunction,
+			Function: llm.FunctionCall{Name: "checkpoint_tool", Arguments: `{"step":1}`},
+		}}},
+		{Role: llm.RoleTool, Content: "tool output 1", ToolCallID: "c1"},
+		{Role: llm.RoleAssistant, ToolCalls: []llm.ToolCall{{
+			ID:       "c2",
+			Type:     llm.ToolTypeFunction,
+			Function: llm.FunctionCall{Name: "checkpoint_tool", Arguments: `{"step":2}`},
+		}}},
+		{Role: llm.RoleTool, Content: "tool output 2", ToolCallID: "c2"},
+	})
+
+	close(gateFinalIteration)
+	assertStoredDialogueMessages(t, deps.store, dialogueID, []llm.Message{
+		{Role: llm.RoleSystem, Content: testSystemPromptWithAddendum},
+		{Role: llm.RoleUser, Content: "hello"},
+		{Role: llm.RoleAssistant, Content: "ready"},
+		{Role: llm.RoleUser, Content: "run tools"},
+		{Role: llm.RoleAssistant, ToolCalls: []llm.ToolCall{{
+			ID:       "c1",
+			Type:     llm.ToolTypeFunction,
+			Function: llm.FunctionCall{Name: "checkpoint_tool", Arguments: `{"step":1}`},
+		}}},
+		{Role: llm.RoleTool, Content: "tool output 1", ToolCallID: "c1"},
+		{Role: llm.RoleAssistant, ToolCalls: []llm.ToolCall{{
+			ID:       "c2",
+			Type:     llm.ToolTypeFunction,
+			Function: llm.FunctionCall{Name: "checkpoint_tool", Arguments: `{"step":2}`},
+		}}},
+		{Role: llm.RoleTool, Content: "tool output 2", ToolCallID: "c2"},
+		{Role: llm.RoleAssistant, Content: "tool turn done"},
+	})
+
+	sendKeysToFlusher(t, flusher, "thanks<enter>")
+	assertStoredDialogueMessages(t, deps.store, dialogueID, []llm.Message{
+		{Role: llm.RoleSystem, Content: testSystemPromptWithAddendum},
+		{Role: llm.RoleUser, Content: "hello"},
+		{Role: llm.RoleAssistant, Content: "ready"},
+		{Role: llm.RoleUser, Content: "run tools"},
+		{Role: llm.RoleAssistant, ToolCalls: []llm.ToolCall{{
+			ID:       "c1",
+			Type:     llm.ToolTypeFunction,
+			Function: llm.FunctionCall{Name: "checkpoint_tool", Arguments: `{"step":1}`},
+		}}},
+		{Role: llm.RoleTool, Content: "tool output 1", ToolCallID: "c1"},
+		{Role: llm.RoleAssistant, ToolCalls: []llm.ToolCall{{
+			ID:       "c2",
+			Type:     llm.ToolTypeFunction,
+			Function: llm.FunctionCall{Name: "checkpoint_tool", Arguments: `{"step":2}`},
+		}}},
+		{Role: llm.RoleTool, Content: "tool output 2", ToolCallID: "c2"},
+		{Role: llm.RoleAssistant, Content: "tool turn done"},
+		{Role: llm.RoleUser, Content: "thanks"},
+		{Role: llm.RoleAssistant, Content: "welcome"},
+	})
+
+	assert.Equal(t, int32(2), toolExecs.Load())
+}
+
 func TestAIEditorHandler_mcp_tool_no_redundant_summary(t *testing.T) {
 	t.Parallel()
 
@@ -3176,6 +3411,30 @@ func openChatAndGetTab(t *testing.T, deps testAIEditorDeps) *asyncFlusher {
 		interruptCh: deps.interruptCh,
 		idleTimeout: 50 * time.Millisecond,
 	}
+}
+
+func sendKeysToFlusher(t *testing.T, flusher *asyncFlusher, seq string) {
+	t.Helper()
+	keys, err := term.ParseKeys(seq)
+	require.NoError(t, err)
+	for _, k := range keys {
+		flusher.Handle(term.Event{Ch: k.Ch, Mod: k.Mod, Key: k.Key, Type: term.EventKey})
+	}
+}
+
+func assertStoredDialogueMessages(t *testing.T, store dialoguemanager.Store, dialogueID string, expected []llm.Message) {
+	t.Helper()
+	require.Eventually(t, func() bool {
+		d, err := store.Get(context.Background(), dialogueID)
+		if err != nil {
+			return false
+		}
+		return assert.ObjectsAreEqual(normalizeMessages(expected), normalizeMessages(d.Messages))
+	}, 5*time.Second, 20*time.Millisecond, "dialogue %q did not match expected messages", dialogueID)
+
+	d, err := store.Get(context.Background(), dialogueID)
+	require.NoError(t, err)
+	assert.Equal(t, normalizeMessages(expected), normalizeMessages(d.Messages))
 }
 
 func latestFloatingAndGetHandler(t *testing.T, deps testAIEditorDeps) browserapi.Floating {

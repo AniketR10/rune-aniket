@@ -36,12 +36,12 @@ import (
 	"sync"
 	"time"
 
-	"unstable.build/go-tui/cmd/rune-agent/agent/skills"
-	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
-	"unstable.build/go-tui/cmd/rune-agent/llm"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
+	"unstable.build/go-tui/cmd/rune-agent/agent/skills"
+	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
+	"unstable.build/go-tui/cmd/rune-agent/llm"
 )
 
 // Config holds agent configuration.
@@ -317,6 +317,7 @@ func (a *Agent) run(
 			"messages", len(dialogue.Messages), "version", dialogue.Version,
 			"ID", dialogue.ID, "updated", dialogue.UpdatedAt)
 	}
+	hasPersistedDialogue := !isNew
 
 	// Gather context resources in deterministic order. sync.Map.Range
 	// iterates non-deterministically; sorting by URI string ensures the
@@ -383,9 +384,12 @@ func (a *Agent) run(
 		autoCompactRatio = defaultAutoCompactRatio
 	}
 
-	// Track usage across the entire Run invocation.
+	// Track usage across the entire Run invocation, plus the portion not yet
+	// checkpointed to durable storage.
 	var usage llm.DialogueUsage
+	var pendingUsage llm.DialogueUsage
 	runStart := time.Now()
+	checkpointStart := runStart
 
 	contextWindow := a.svc.ContextWindow()
 
@@ -440,6 +444,25 @@ func (a *Agent) run(
 	var infos []toolCallInfo
 	var toolMsgs []llm.Message
 	var imageContentParts []llm.ContentPart
+	persistPending := func() bool {
+		if len(newMessages) == 0 {
+			return false
+		}
+		pendingUsage.TotalDuration = time.Since(checkpointStart)
+		if !a.persistMessages(ctx, dialogueID, dialogue, newMessages, pendingUsage) {
+			return false
+		}
+		if hasPersistedDialogue {
+			dialogue.Messages = append(dialogue.Messages, newMessages...)
+		} else {
+			dialogue.Messages = append([]llm.Message(nil), newMessages...)
+			hasPersistedDialogue = true
+		}
+		newMessages = nil
+		pendingUsage = llm.DialogueUsage{}
+		checkpointStart = time.Now()
+		return true
+	}
 	for i := range a.config.MaxIterations {
 		log.Debug("agent loop iteration",
 			"iteration", i, "messages", len(messages))
@@ -527,6 +550,7 @@ func (a *Agent) run(
 				log.Warn("auto-compact failed, continuing without compaction", "error", compactErr)
 			} else {
 				dialogue = dialoguemanager.Dialogue{ID: dialogueID, Messages: compactedMsgs, WorkspaceURI: dialogue.WorkspaceURI, Version: 1}
+				hasPersistedDialogue = true
 				newMessages = nil
 				messages = append(compactedMsgs[:len(compactedMsgs):len(compactedMsgs)], resourceMsgs...)
 				userMsgIdx = len(compactedMsgs) - 1
@@ -552,7 +576,7 @@ func (a *Agent) run(
 		if err != nil {
 			emit(ctx, ch, Event{Type: EventError, Error: fmt.Errorf("create completion: %w", err)})
 			usage.TotalDuration = time.Since(runStart)
-			a.persistMessages(ctx, dialogueID, dialogue, newMessages, usage)
+			persistPending()
 			return
 		}
 		emit(ctx, ch, Event{Type: EventInferenceReady})
@@ -606,7 +630,7 @@ func (a *Agent) run(
 				)
 				emit(ctx, ch, Event{Type: EventError, Error: fmt.Errorf("stream: %w", ev.Error)})
 				usage.TotalDuration = time.Since(runStart)
-				a.persistMessages(ctx, dialogueID, dialogue, newMessages, usage)
+				persistPending()
 				_ = it.Close()
 				return
 			}
@@ -618,7 +642,7 @@ func (a *Agent) run(
 		if err != nil {
 			emit(ctx, ch, Event{Type: EventError, Error: fmt.Errorf("stream: %w", err)})
 			usage.TotalDuration = time.Since(runStart)
-			a.persistMessages(ctx, dialogueID, dialogue, newMessages, usage)
+			persistPending()
 			return
 		}
 		_ = it.Close()
@@ -671,14 +695,16 @@ func (a *Agent) run(
 			// so the user can continue the conversation.
 			usage.Add(completionUsage, 0, inferenceDuration, 0)
 			usage.TotalDuration = time.Since(runStart)
-			a.persistMessages(ctx, dialogueID, dialogue, newMessages, usage)
+			pendingUsage.Add(completionUsage, 0, inferenceDuration, 0)
+			persistPending()
 			log.Debug("agent loop done: output truncated", "reason", finishReason)
 			return
 
 		case llm.FinishReasonStop:
 			usage.Add(completionUsage, 0, inferenceDuration, 0)
 			usage.TotalDuration = time.Since(runStart)
-			a.persistMessages(ctx, dialogueID, dialogue, newMessages, usage)
+			pendingUsage.Add(completionUsage, 0, inferenceDuration, 0)
+			persistPending()
 			emit(ctx, ch, Event{
 				Type: EventDone,
 				Context: ContextSnapshot{
@@ -697,7 +723,8 @@ func (a *Agent) run(
 					Error: errors.New("tool_calls finish reason but no tool calls in message")})
 				usage.Add(completionUsage, 0, inferenceDuration, 0)
 				usage.TotalDuration = time.Since(runStart)
-				a.persistMessages(ctx, dialogueID, dialogue, newMessages, usage)
+				pendingUsage.Add(completionUsage, 0, inferenceDuration, 0)
+				persistPending()
 				log.Warn("agent loop done: no tool calls in response", "reason", finishReason)
 				return
 			}
@@ -804,6 +831,7 @@ func (a *Agent) run(
 							}
 						} else {
 							dialogue = dialoguemanager.Dialogue{ID: dialogueID, Messages: compactedMsgs, WorkspaceURI: dialogue.WorkspaceURI, Version: 1}
+							hasPersistedDialogue = true
 							newMessages = nil
 							messages = append(compactedMsgs[:len(compactedMsgs):len(compactedMsgs)], resourceMsgs...)
 							userMsgIdx = len(compactedMsgs) - 1
@@ -830,6 +858,7 @@ func (a *Agent) run(
 							}
 						} else {
 							dialogue = dialoguemanager.Dialogue{ID: dialogueID, Messages: clearedMsgs, WorkspaceURI: dialogue.WorkspaceURI, Version: 1}
+							hasPersistedDialogue = true
 							newMessages = nil
 							messages = append(clearedMsgs[:len(clearedMsgs):len(clearedMsgs)], resourceMsgs...)
 							userMsgIdx = len(clearedMsgs) - 1
@@ -862,6 +891,7 @@ func (a *Agent) run(
 
 			toolCallDuration := time.Since(toolsStart)
 			usage.Add(completionUsage, len(infos), inferenceDuration, toolCallDuration)
+			pendingUsage.Add(completionUsage, len(infos), inferenceDuration, toolCallDuration)
 			log.Debug("executed all tools: continuing loop",
 				"duration", toolCallDuration)
 			if compacted {
@@ -887,6 +917,8 @@ func (a *Agent) run(
 				messages = append(messages, imgMsg)
 				newMessages = append(newMessages, imgMsg)
 			}
+
+			persistPending()
 			// Continue loop — next iteration feeds tool results to LLM
 
 		default:
@@ -895,7 +927,8 @@ func (a *Agent) run(
 				Error: fmt.Errorf("unexpected finish reason: %s", finishReason)})
 			usage.Add(completionUsage, 0, inferenceDuration, 0)
 			usage.TotalDuration = time.Since(runStart)
-			a.persistMessages(ctx, dialogueID, dialogue, newMessages, usage)
+			pendingUsage.Add(completionUsage, 0, inferenceDuration, 0)
+			persistPending()
 			log.Warn("agent loop done: unexpected finish reason", "reason", finishReason)
 			return
 		}
@@ -905,7 +938,7 @@ func (a *Agent) run(
 	emit(ctx, ch, Event{Type: EventError,
 		Error: fmt.Errorf("max iterations (%d) reached", a.config.MaxIterations)})
 	usage.TotalDuration = time.Since(runStart)
-	a.persistMessages(ctx, dialogueID, dialogue, newMessages, usage)
+	persistPending()
 	log.Warn("agent loop done: reached max iterations", "max", a.config.MaxIterations)
 }
 
@@ -1085,9 +1118,9 @@ func (a *Agent) persistMessages(
 	ctx context.Context, dialogueID string,
 	dialogue dialoguemanager.Dialogue, newMessages []llm.Message,
 	usage llm.DialogueUsage,
-) {
+) bool {
 	if len(newMessages) == 0 {
-		return
+		return false
 	}
 	// If the caller's context is already cancelled (e.g. tab closed or
 	// request cancelled), use a background context with a timeout so
@@ -1100,20 +1133,22 @@ func (a *Agent) persistMessages(
 		slog.Debug("agent: persisting messages with background context", "dialogueID", dialogueID, "messages", len(newMessages))
 	}
 	err := a.store.Create(ctx, dialoguemanager.Dialogue{
-		ID:        dialogueID,
-		AgentID:   a.config.AgentID,
-		Model:     a.config.Model,
+		ID:           dialogueID,
+		AgentID:      a.config.AgentID,
+		Model:        a.config.Model,
 		WorkspaceURI: a.config.Workspace.String(),
-		SubAgent:  a.config.SubAgent,
-		Messages:  newMessages,
-		Usage:     usage,
+		SubAgent:     a.config.SubAgent,
+		Messages:     newMessages,
+		Usage:        usage,
 	})
 	if errors.Is(err, storageapi.ErrAlreadyExists) {
 		err = a.store.AppendMessages(ctx, dialogue, newMessages, usage)
 	}
 	if err != nil {
 		slog.Error("agent: persist messages", "error", err, "dialogueID", dialogueID)
+		return false
 	}
+	return true
 }
 
 // compact summarizes the conversation, persists the compacted messages,

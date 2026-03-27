@@ -38,12 +38,12 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"unstable.build/go-tui/cmd/rune-agent/agent/skills"
-	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
-	"unstable.build/go-tui/cmd/rune-agent/llm"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
+	"unstable.build/go-tui/cmd/rune-agent/agent/skills"
+	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
+	"unstable.build/go-tui/cmd/rune-agent/llm"
 )
 
 func TestAgentRun(t *testing.T) {
@@ -2483,6 +2483,52 @@ func TestPersistMessages_SaveOnCancelledContext(t *testing.T) {
 		assert.Contains(t, store.appended, "d", "should have used AppendMessages for existing dialogue")
 		store.mu.Unlock()
 	})
+}
+
+func TestAgentRun_CheckpointsAfterToolIteration(t *testing.T) {
+	store := newMockStore()
+	secondCallStarted := make(chan struct{})
+	allowSecondCall := make(chan struct{})
+
+	svc := &mockService{
+		responses: []mockResponse{
+			toolCallResponse("my_tool", `{"arg":"val"}`, "c1"),
+			stopResponse("all done"),
+		},
+	}
+	svc.beforeCompletion = func() {
+		if svc.getCallCount() != 1 {
+			return
+		}
+		close(secondCallStarted)
+		<-allowSecondCall
+	}
+
+	tool := &mockTool{name: "my_tool", result: ToolResult{Content: "tool output"}}
+	ag := NewAgent(svc, NewRegistry(tool), noSkills(), store, NoMemory(), Config{SystemPrompt: "test"})
+
+	it := ag.Run(context.Background(), "d", "use the tool")
+
+	select {
+	case <-secondCallStarted:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for second completion to start")
+	}
+
+	d, ok := store.getDialogue("d")
+	require.True(t, ok, "dialogue should be checkpointed before the next completion starts")
+	require.Len(t, d.Messages, 4)
+	assert.Equal(t, llm.RoleSystem, d.Messages[0].Role)
+	assert.Equal(t, llm.RoleUser, d.Messages[1].Role)
+	assert.Equal(t, llm.RoleAssistant, d.Messages[2].Role)
+	require.Len(t, d.Messages[2].ToolCalls, 1)
+	assert.Equal(t, "c1", d.Messages[2].ToolCalls[0].ID)
+	assert.Equal(t, llm.RoleTool, d.Messages[3].Role)
+	assert.Equal(t, "c1", d.Messages[3].ToolCallID)
+	assert.Equal(t, "tool output", d.Messages[3].Content)
+
+	close(allowSecondCall)
+	_ = collectEventsWithTimeout(t, it, 5*time.Second)
 }
 
 func TestRegistry(t *testing.T) {
