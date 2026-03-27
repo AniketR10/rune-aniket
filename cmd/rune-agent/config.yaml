@@ -5,8 +5,10 @@ extensions:
       # Per-provider API keys.
       # openai:
       #   api_key: 'sk-...'
+      #   reasoning_effort: 'xhigh'
       # anthropic:
       #   api_key: 'sk-ant-...'
+      #   reasoning_effort: 'max'
       # gemini:
       #   api_key: 'AIza...'
       #

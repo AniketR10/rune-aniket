@@ -48,16 +48,6 @@ import (
 	"unstable.build/go-tui/cmd/rune-agent/agent/agentools/webfetch"
 	"unstable.build/go-tui/cmd/rune-agent/agent/taskstore"
 
-	"unstable.build/go-tui/cmd/rune-agent/agent/skills"
-	"unstable.build/go-tui/cmd/rune-agent/agentshell"
-	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
-	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguetui"
-	"unstable.build/go-tui/cmd/rune-agent/llm"
-	"unstable.build/go-tui/cmd/rune-agent/llm/anthropic"
-	"unstable.build/go-tui/cmd/rune-agent/llm/llmregistry"
-	"unstable.build/go-tui/cmd/rune-agent/llm/openai"
-	runemcp "unstable.build/go-tui/cmd/rune-agent/mcp"
-	"unstable.build/go-tui/cmd/rune-agent/memory"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
@@ -76,6 +66,16 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
 	"github.com/unstablebuild/tcell/v3"
+	"unstable.build/go-tui/cmd/rune-agent/agent/skills"
+	"unstable.build/go-tui/cmd/rune-agent/agentshell"
+	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
+	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguetui"
+	"unstable.build/go-tui/cmd/rune-agent/llm"
+	"unstable.build/go-tui/cmd/rune-agent/llm/anthropic"
+	"unstable.build/go-tui/cmd/rune-agent/llm/llmregistry"
+	"unstable.build/go-tui/cmd/rune-agent/llm/openai"
+	runemcp "unstable.build/go-tui/cmd/rune-agent/mcp"
+	"unstable.build/go-tui/cmd/rune-agent/memory"
 )
 
 const (
@@ -313,11 +313,18 @@ func newLLMService(
 			} else if err != nil && !errors.Is(err, config.ErrNotFound) {
 				return nil, fmt.Errorf("get %q cache_control from config: %w", entry.Provider, err)
 			}
-		}
-		if v, err := cfg.GetString("reasoning_effort"); err == nil && v != "" {
-			acfg.ReasoningEffort = v
-		} else if err != nil && !errors.Is(err, config.ErrNotFound) {
-			return nil, fmt.Errorf("get 'reasoning_effort' from config: %w", err)
+			if v, err := pcfg.GetString("reasoning_effort"); err == nil && v != "" {
+				switch llm.ReasoningEffort(v) {
+				case llm.ReasoningEffortLow, llm.ReasoningEffortMedium,
+					llm.ReasoningEffortHigh, llm.ReasoningEffortMax:
+					acfg.ReasoningEffort = v
+				default:
+					return nil, fmt.Errorf("invalid %q reasoning_effort value %q: "+
+						"must be low, medium, high, or max", entry.Provider, v)
+				}
+			} else if err != nil && !errors.Is(err, config.ErrNotFound) {
+				return nil, fmt.Errorf("get %q reasoning_effort from config: %w", entry.Provider, err)
+			}
 		}
 		// Enable adaptive thinking for models that support it (4.6+).
 		acfg.EnableThinking = anthropic.SupportsAdaptiveThinking(model)
@@ -343,6 +350,19 @@ func newLLMService(
 		} else if !errors.Is(err, config.ErrNotFound) {
 			return nil, fmt.Errorf("get %q force_responses_api from config: %w", entry.Provider, err)
 		}
+		if v, err := pcfg.GetString("reasoning_effort"); err == nil && v != "" {
+			switch llm.ReasoningEffort(v) {
+			case llm.ReasoningEffortNone, llm.ReasoningEffortMinimal,
+				llm.ReasoningEffortLow, llm.ReasoningEffortMedium,
+				llm.ReasoningEffortHigh, llm.ReasoningEffortXHigh:
+				c.ReasoningEffort = v
+			default:
+				return nil, fmt.Errorf("invalid %q reasoning_effort value %q: "+
+					"must be none, minimal, low, medium, high or xhigh", entry.Provider, v)
+			}
+		} else if err != nil && !errors.Is(err, config.ErrNotFound) {
+			return nil, fmt.Errorf("get %q reasoning_effort from config: %w", entry.Provider, err)
+		}
 	} else if !errors.Is(err, config.ErrNotFound) {
 		return nil, fmt.Errorf("get %q config section: %w", entry.Provider, err)
 	}
@@ -356,20 +376,6 @@ func newLLMService(
 		c.PresencePenalty = v
 	} else if !errors.Is(err, config.ErrNotFound) {
 		return nil, fmt.Errorf("get 'presence_penalty' from config: %w", err)
-	}
-	if v, err := cfg.GetString("reasoning_effort"); err == nil && v != "" {
-		switch llm.ReasoningEffort(v) {
-		case llm.ReasoningEffortNone, llm.ReasoningEffortMinimal,
-			llm.ReasoningEffortLow, llm.ReasoningEffortMedium,
-			llm.ReasoningEffortHigh, llm.ReasoningEffortXHigh,
-			llm.ReasoningEffortMax:
-			c.ReasoningEffort = v
-		default:
-			return nil, fmt.Errorf("invalid 'reasoning_effort' value %q: "+
-				"must be none, minimal, low, medium, high, xhigh, or max", v)
-		}
-	} else if err != nil && !errors.Is(err, config.ErrNotFound) {
-		return nil, fmt.Errorf("get 'reasoning_effort' from config: %w", err)
 	}
 	if v, err := cfg.GetString("reasoning_summary"); err == nil && v != "" {
 		switch llm.ReasoningSummary(v) {

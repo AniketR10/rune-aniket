@@ -1140,6 +1140,140 @@ func TestNewLLMService_config_change_applies_to_next_call(t *testing.T) {
 		"second request should use the updated API key")
 }
 
+func TestNewLLMService_openai_reasoning_effort_from_provider_config(t *testing.T) {
+	t.Parallel()
+	reg := llmregistry.NewStatic()
+	reg.Register(llmregistry.ModelEntry{
+		Name:          "gpt-test",
+		Provider:      "openai",
+		ContextWindow: 8192,
+	})
+
+	var got llmopenai.Config
+	cfg := stubConfig{
+		strings: map[string]string{
+			"reasoning_effort": "bogus",
+		},
+		configs: map[string]config.Config{
+			"openai": stubConfig{
+				strings: map[string]string{
+					"api_key":          "sk-test-key",
+					"reasoning_effort": string(llm.ReasoningEffortMedium),
+				},
+			},
+		},
+	}
+
+	svc, err := newLLMService(cfg, reg, "gpt-test",
+		func(_ string, c llmopenai.Config, models map[string]int) llm.Service {
+			got = c
+			return &agentMockService{contextWindow: models[c.Model]}
+		}, nil)
+	require.NoError(t, err)
+	assert.NotNil(t, svc)
+	assert.Equal(t, string(llm.ReasoningEffortMedium), got.ReasoningEffort)
+}
+
+func TestNewLLMService_openai_global_reasoning_effort_ignored(t *testing.T) {
+	t.Parallel()
+	reg := llmregistry.NewStatic()
+	reg.Register(llmregistry.ModelEntry{
+		Name:          "gpt-test",
+		Provider:      "openai",
+		ContextWindow: 8192,
+	})
+
+	var got llmopenai.Config
+	cfg := stubConfig{
+		strings: map[string]string{
+			"reasoning_effort": string(llm.ReasoningEffortXHigh),
+		},
+		configs: map[string]config.Config{
+			"openai": stubConfig{
+				strings: map[string]string{
+					"api_key": "sk-test-key",
+				},
+			},
+		},
+	}
+
+	svc, err := newLLMService(cfg, reg, "gpt-test",
+		func(_ string, c llmopenai.Config, models map[string]int) llm.Service {
+			got = c
+			return &agentMockService{contextWindow: models[c.Model]}
+		}, nil)
+	require.NoError(t, err)
+	assert.NotNil(t, svc)
+	assert.Empty(t, got.ReasoningEffort)
+}
+
+func TestNewLLMService_anthropic_reasoning_effort_from_provider_config(t *testing.T) {
+	t.Parallel()
+	reg := llmregistry.NewStatic()
+	reg.Register(llmregistry.ModelEntry{
+		Name:          "claude-test",
+		Provider:      "anthropic",
+		ContextWindow: 200000,
+	})
+
+	var got anthropic.Config
+	cfg := stubConfig{
+		strings: map[string]string{
+			"reasoning_effort": "bogus",
+		},
+		configs: map[string]config.Config{
+			"anthropic": stubConfig{
+				strings: map[string]string{
+					"api_key":          "sk-ant-test",
+					"reasoning_effort": string(llm.ReasoningEffortMax),
+				},
+			},
+		},
+	}
+
+	svc, err := newLLMService(cfg, reg, "claude-test", nil,
+		func(_ string, c anthropic.Config, models map[string]int) llm.Service {
+			got = c
+			return &agentMockService{contextWindow: models[c.Model]}
+		})
+	require.NoError(t, err)
+	assert.NotNil(t, svc)
+	assert.Equal(t, string(llm.ReasoningEffortMax), got.ReasoningEffort)
+}
+
+func TestNewLLMService_anthropic_global_reasoning_effort_ignored(t *testing.T) {
+	t.Parallel()
+	reg := llmregistry.NewStatic()
+	reg.Register(llmregistry.ModelEntry{
+		Name:          "claude-test",
+		Provider:      "anthropic",
+		ContextWindow: 200000,
+	})
+
+	var got anthropic.Config
+	cfg := stubConfig{
+		strings: map[string]string{
+			"reasoning_effort": string(llm.ReasoningEffortMax),
+		},
+		configs: map[string]config.Config{
+			"anthropic": stubConfig{
+				strings: map[string]string{
+					"api_key": "sk-ant-test",
+				},
+			},
+		},
+	}
+
+	svc, err := newLLMService(cfg, reg, "claude-test", nil,
+		func(_ string, c anthropic.Config, models map[string]int) llm.Service {
+			got = c
+			return &agentMockService{contextWindow: models[c.Model]}
+		})
+	require.NoError(t, err)
+	assert.NotNil(t, svc)
+	assert.Empty(t, got.ReasoningEffort)
+}
+
 func TestNewLLMService_anthropic_base_url_from_registry(t *testing.T) {
 	t.Parallel()
 	var receivedURL string
