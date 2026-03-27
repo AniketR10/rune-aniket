@@ -68,7 +68,7 @@ func TestComponentDraw(t *testing.T) {
 			w := term.NewStringWriter(21, 11)
 			tests := []comptest.TestCase{
 				{
-					Action: func() {},
+					Action:   func() {},
 					Expected: "wasup bro            \nI am a AI assistant  \nblabla.              \n                     \nSpeak in bro.        \nYo, wa'tup.          \n                     \n ┌──────────────┐    \n │              │    \n └──────────────┘    \n                     ",
 				},
 				{
@@ -194,11 +194,11 @@ $
  └──────────────┘    
                      `,
 				},
-			{
-				Action: func() {
-					comp.AddSendMessage("1234")
-				},
-				Expected: `1234                 
+				{
+					Action: func() {
+						comp.AddSendMessage("1234")
+					},
+					Expected: `1234                 
 $                    
                      
                      
@@ -209,8 +209,8 @@ $
  │              │    
  └──────────────┘    
                      `,
-			},
-		}
+				},
+			}
 			comptest.TestComponent(t, comp, w, tests)
 		})
 	}
@@ -4139,7 +4139,6 @@ func TestComponentNewToolWhileCollapsed(t *testing.T) {
 	comptest.TestComponent(t, comp, w, tests)
 }
 
-
 // TestComponentMessageSpacing verifies the vertical spacing between
 // different message types when ReceiveMessageBottomPad and
 // SendMessageBottomPad are configured (matching the real extension).
@@ -4160,6 +4159,7 @@ func TestComponentNewToolWhileCollapsed(t *testing.T) {
 //	Row 10: "How about tests?"         (user message)
 //	Row 11: (spacer — SendMessageBottomPad)
 //	Row 12: "Sure."                    (assistant text)
+//
 // TestComponentMessageSpacing verifies the vertical spacing between
 // different message types when ReceiveMessageBottomPad and
 // SendMessageBottomPad are configured (matching the real extension).
@@ -4483,4 +4483,20 @@ func TestComponentHintRestoredAfterPromptDismiss(t *testing.T) {
 		},
 	}
 	comptest.TestComponent(t, comp, w, tests)
+}
+
+func TestComponentTaskActiveFormSuppressesVisibleProgress(t *testing.T) {
+	comp := NewComponent(ComponentConfig{})
+
+	assert.Equal(t, "", comp.TaskActiveForm())
+
+	comp.UpdateTaskProgress(ProgressTaskEntry{
+		ID:         "1",
+		Subject:    "Write tests",
+		ActiveForm: "Writing tests",
+		Status:     "in_progress",
+	})
+
+	assert.Equal(t, "Writing tests", comp.progress.ActiveForm())
+	assert.Equal(t, "", comp.TaskActiveForm())
 }

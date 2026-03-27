@@ -651,14 +651,15 @@ func (c *Component) UpdateTaskProgress(entry ProgressTaskEntry) {
 	c.moveHintToBack()
 }
 
-// TaskActiveForm returns the ActiveForm of the first in-progress task,
-// or the task's subject if ActiveForm is empty, or "" if no task is
-// in progress. It is safe to call even when no progress widget exists.
+// TaskActiveForm returns the active task text to use in the status hint.
+// When the progress checklist is visible, it returns an empty string so
+// the hint falls back to the current phase label instead of duplicating
+// the task subject already shown in the checklist.
 func (c *Component) TaskActiveForm() string {
 	if c.progress == nil {
 		return ""
 	}
-	return c.progress.ActiveForm()
+	return ""
 }
 
 // AddToolCall adds a tool invocation indicator to the message list.

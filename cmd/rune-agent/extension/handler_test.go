@@ -54,17 +54,6 @@ import (
 	gomcp "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"unstable.build/go-tui/cmd/rune-agent/agent"
-	"unstable.build/go-tui/cmd/rune-agent/agent/agentools"
-	"unstable.build/go-tui/cmd/rune-agent/agent/skills"
-	"unstable.build/go-tui/cmd/rune-agent/agent/taskstore"
-	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
-	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguetui"
-	"unstable.build/go-tui/cmd/rune-agent/llm"
-	"unstable.build/go-tui/cmd/rune-agent/llm/anthropic"
-	"unstable.build/go-tui/cmd/rune-agent/llm/llmregistry"
-	llmopenai "unstable.build/go-tui/cmd/rune-agent/llm/openai"
-	runemcp "unstable.build/go-tui/cmd/rune-agent/mcp"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
@@ -84,6 +73,17 @@ import (
 	"github.com/unstablebuild/tcell/v3"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"unstable.build/go-tui/cmd/rune-agent/agent"
+	"unstable.build/go-tui/cmd/rune-agent/agent/agentools"
+	"unstable.build/go-tui/cmd/rune-agent/agent/skills"
+	"unstable.build/go-tui/cmd/rune-agent/agent/taskstore"
+	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
+	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguetui"
+	"unstable.build/go-tui/cmd/rune-agent/llm"
+	"unstable.build/go-tui/cmd/rune-agent/llm/anthropic"
+	"unstable.build/go-tui/cmd/rune-agent/llm/llmregistry"
+	llmopenai "unstable.build/go-tui/cmd/rune-agent/llm/openai"
+	runemcp "unstable.build/go-tui/cmd/rune-agent/mcp"
 )
 
 // builtinSkillsSystemMsg is the system message injected by the agent loop
@@ -6152,6 +6152,32 @@ func TestStatusHint_DrawUsesActiveFormFn(t *testing.T) {
 	got = strings.TrimRight(w.String(), " \n")
 	assert.Contains(t, got, "Writing tests")
 	assert.NotContains(t, got, "tool calling")
+}
+
+func TestStatusHint_DrawUsesPhaseWhenTaskListVisible(t *testing.T) {
+	t.Parallel()
+
+	comp := dialoguetui.NewComponent(dialoguetui.ComponentConfig{})
+	comp.UpdateTaskProgress(dialoguetui.ProgressTaskEntry{
+		ID:         "1",
+		Subject:    "Write tests",
+		ActiveForm: "Writing tests",
+		Status:     "in_progress",
+	})
+
+	hint := newStatusHint(term.NopInterrupter(), term.Attributes{}, 0, comp.TaskActiveForm)
+	defer func() { _ = hint.Close() }()
+
+	hint.setPhase(phaseToolCalling)
+	hint.Resize(80, 1)
+
+	w := term.NewStringWriter(80, 1)
+	hint.Draw(w)
+	_ = w.Flush()
+	got := strings.TrimRight(w.String(), " \n")
+
+	assert.Contains(t, got, "tool calling")
+	assert.NotContains(t, got, "Writing tests")
 }
 
 func TestAIEditorHandler_chat_hint_visible_during_inference(t *testing.T) {
