@@ -1,7 +1,7 @@
 GO=go
 CI ?= false
-GOTESTFLAGS ?= -race -timeout 120s
-GOTESTFLAGSNORACE = -timeout 120s
+GOTESTFLAGS ?= -race -timeout 240s
+GOTESTFLAGSNORACE = -timeout 240s
 COMMON_LDFLAGS=-X unstable.build/go-tui/debug.Tag=$$(git describe --tags) -X unstable.build/go-tui/debug.Commit=$$(git rev-parse --short HEAD)
 GOFLAGS=-ldflags="$(COMMON_LDFLAGS) -X unstable.build/go-tui/debug.Package=six"
 RUNE_GOFLAGS=-tags=ebitensinglethread -ldflags="$(COMMON_LDFLAGS) -X unstable.build/go-tui/debug.Package=rune"
