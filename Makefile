@@ -177,7 +177,7 @@ rune-make-release:
 	@ mkdir -p $(TARGET)/rune_$(TARGET_OS)_$(TARGET_ARCH)
 	@ $(CGO_ENABLED) GOARCH=$(TARGET_ARCH) $(TARGET_ARCH_FLAGS) GOOS=$(TARGET_OS) $(GO) build $(RUNE_GOFLAGS) -o `pwd`/$(TARGET)/rune_$(TARGET_OS)_$(TARGET_ARCH)/rune ./cmd/rune
 	@ CGO_ENABLED=0 GOARCH=$(TARGET_ARCH) $(TARGET_ARCH_FLAGS) GOOS=$(TARGET_OS) $(GO) build $(OXAPI_GOFLAGS) -o `pwd`/$(TARGET)/rune_$(TARGET_OS)_$(TARGET_ARCH)/ox-api ./cmd/ox-api
-	@ CGO_ENABLED=0 GOARCH=$(TARGET_ARCH) $(TARGET_ARCH_FLAGS) GOOS=$(TARGET_OS) $(GO) build $(GOFLAGS) -o `pwd`/$(TARGET)/rune_$(TARGET_OS)_$(TARGET_ARCH)/claudeimport ./cmd/rune/claudeimport
+	@ CGO_ENABLED=0 GOARCH=$(TARGET_ARCH) $(TARGET_ARCH_FLAGS) GOOS=$(TARGET_OS) $(GO) build $(GOFLAGS) -o `pwd`/$(TARGET)/rune_$(TARGET_OS)_$(TARGET_ARCH)/claudeimport ./cmd/claudeimport
 
 ifeq ($(UNAME), Linux)
 rune-release: rune ox-api
