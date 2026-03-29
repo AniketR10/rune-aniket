@@ -75,6 +75,31 @@ func TestHandleCommand(t *testing.T) {
 			},
 		},
 		{
+			name: "agent parent help lists nested commands",
+			cmd:  repl.Command{Name: CommandName},
+			assertOut: func(t *testing.T, text string) {
+				for _, cmd := range commandNames {
+					if !strings.Contains(text, cmd) {
+						t.Errorf("parent help output missing command %q", cmd)
+					}
+				}
+				if strings.Contains(text, "agent chats <") ||
+					strings.Contains(text, "agent tools —") ||
+					strings.Contains(text, "agent skills <") {
+					t.Errorf("parent help should not prefix subcommands with agent: %q", text)
+				}
+			},
+		},
+		{
+			name: "agent parent dispatches subcommands",
+			cmd:  repl.Command{Name: CommandName, Args: []string{"models"}},
+			assertOut: func(t *testing.T, text string) {
+				if !strings.Contains(text, "gpt-4") {
+					t.Error("expected gpt-4 in models output")
+				}
+			},
+		},
+		{
 			name: "models lists available models",
 			cmd:  repl.Command{Name: "models"},
 			assertOut: func(t *testing.T, text string) {
@@ -789,6 +814,18 @@ func TestComplete(t *testing.T) {
 			wantAny: commandNames,
 		},
 		{
+			name:    "agent parent completes subcommands",
+			cmd:     CommandName,
+			args:    []string{""},
+			wantAny: commandNames,
+		},
+		{
+			name:    "agent parent forwards nested completion",
+			cmd:     CommandName,
+			args:    []string{"chats", ""},
+			wantAny: []string{"clear", "compact", "export", "list", "log", "show"},
+		},
+		{
 			name:     "prefix filters commands",
 			cmd:      "mo",
 			wantAny:  []string{"model", "models"},
@@ -950,6 +987,40 @@ func TestComplete(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestHelp(t *testing.T) {
+	deps := newTestDeps()
+	sh := New(
+		deps.wm,
+		deps.svc,
+		deps.modelRegistry,
+		deps.defaultModel,
+		deps.store,
+		deps.registry,
+		deps.agentsConfig,
+		deps.cfg,
+		deps.skillRegistry,
+		deps.workspaceRoot,
+		deps.fs,
+		deps.storage, nil, nil, nil,
+		deps.notifications,
+		deps.dataPath,
+		deps.opts...,
+	)
+
+	ctx := context.Background()
+	it, err := sh.Help(ctx, []string{"chats"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	text := renderOutput(t, ctx, it)
+	if !strings.Contains(text, "list") || !strings.Contains(text, "show <id>") {
+		t.Fatalf("expected nested command name in help output, got %q", text)
+	}
+	if !strings.Contains(text, "show") || !strings.Contains(text, "export") {
+		t.Fatalf("expected chats subcommands in help output, got %q", text)
 	}
 }
 

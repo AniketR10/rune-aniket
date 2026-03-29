@@ -27,10 +27,10 @@ import (
 	"context"
 	"fmt"
 
-	"unstable.build/go-tui/cmd/rune-agent/memory/dream"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
+	"unstable.build/go-tui/cmd/rune-agent/memory/dream"
 )
 
 func (s *shell) handleDream(
@@ -56,8 +56,13 @@ func (s *shell) handleDream(
 		return nil, fmt.Errorf("model %q not found in registry", model)
 	}
 
+	svc, err := s.serviceForModel(model)
+	if err != nil {
+		return nil, fmt.Errorf("create llm service: %w", err)
+	}
+
 	deps := dream.Deps{
-		LLM:           s.svc,
+		LLM:           svc,
 		Store:         s.store,
 		Storage:       s.storage,
 		FS:            s.fs,

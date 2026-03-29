@@ -43,6 +43,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/handler/repl"
@@ -95,8 +96,18 @@ func WithEffort(get func() llm.ReasoningEffort, set func(llm.ReasoningEffort)) O
 	}
 }
 
-// New returns a repl.CommandHandler backed by the agent shell.
-// It panics if wm, svc, skillRegistry, or fs is nil.
+// WithServiceFactory configures lazy llm.Service construction by model name.
+// This is primarily used by the subscribed REPL command so startup does not
+// depend on eagerly creating a default model client.
+func WithServiceFactory(fn func(string) (llm.Service, error)) Option {
+	return func(s *shell) { s.serviceFactory = fn }
+}
+
+// CommandName is the parent REPL command exposed by the agent shell.
+const CommandName = "agent"
+
+// New returns a REPL handler backed by the agent shell.
+// It panics if wm, skillRegistry, or fs is nil.
 func New(
 	wm browserapi.WindowManager,
 	svc llm.Service,
@@ -116,12 +127,9 @@ func New(
 	notifications browserapi.Notifications,
 	dataPath string,
 	opts ...Option,
-) repl.CommandHandler {
+) textapi.REPLHandler {
 	if wm == nil {
 		panic("agentshell: WindowManager must not be nil")
-	}
-	if svc == nil {
-		panic("agentshell: llm.Service must not be nil")
 	}
 	if skillRegistry == nil {
 		panic("agentshell: SkillRegistry must not be nil")
@@ -154,6 +162,8 @@ func New(
 	return s
 }
 
+var _ textapi.REPLHandler = (*shell)(nil)
+
 type shell struct {
 	modelRegistry       llmregistry.Registry
 	defaultModel        string
@@ -177,6 +187,7 @@ type shell struct {
 	dataPath            string
 	getEffort           func() llm.ReasoningEffort
 	setEffort           func(llm.ReasoningEffort)
+	serviceFactory      func(string) (llm.Service, error)
 }
 
 var commandNames = []string{
@@ -195,17 +206,177 @@ var commandNames = []string{
 	"tools",
 }
 
-// HandleCommand dispatches the given command.
-func (s *shell) HandleCommand(
-	ctx context.Context, cmd repl.Command, _ repl.ProgressWriter,
-) (iterator.Iterator[component.Responsive], error) {
-	// Re-scan skill directories so out-of-band changes are picked up,
-	// mirroring the agent loop's per-turn Reload in agent.go.
-	s.skillRegistry.Reload()
+var commandManual = textapi.CommandManual{
+	Name:     CommandName,
+	Summary:  "Inspect and manage Rune Agent models, chats, tools, skills, and configuration.",
+	Synopsis: "<command> [args]",
+	Commands: []textapi.CommandManual{
+		{Name: "agents", Summary: "List configured agent definitions."},
+		{
+			Name:     "chats",
+			Summary:  "Inspect, export, compact, clear, and fork saved conversations.",
+			Synopsis: "<list|show|log|export|clear|compact|fork> [args]",
+			Commands: []textapi.CommandManual{
+				{Name: "list", Summary: "List saved conversations."},
+				{Name: "show", Summary: "Show message history for a conversation.", Synopsis: "<id>"},
+				{Name: "log", Summary: "Show the LLM token audit log for a conversation.", Synopsis: "<id>"},
+				{Name: "export", Summary: "Export a conversation or audit log to a temp file.", Synopsis: "[--audit] <id>"},
+				{Name: "clear", Summary: "Clear a conversation and archive its previous contents.", Synopsis: "<id>"},
+				{Name: "compact", Summary: "Compact a conversation into a summarized copy.", Synopsis: "<id>"},
+				{Name: "fork", Summary: "Open a picker to fork a conversation at a selected message.", Synopsis: "<id>"},
+			},
+		},
+		{Name: "config", Summary: "Show current LLM config parameters."},
+		{Name: "dream", Summary: "Run memory consolidation on unprocessed dialogues.", Synopsis: "[--model MODEL]"},
+		{Name: "effort", Summary: "Show or set default reasoning effort.", Synopsis: "[none|minimal|low|medium|high|xhigh|max]"},
+		{Name: "exit", Summary: "Exit the shell."},
+		{Name: "help", Summary: "Show usage for agent commands.", Synopsis: "[command ...]"},
+		{Name: "mcp", Summary: "Show MCP server status and tool stats."},
+		{Name: "model", Summary: "Show the default model or a conversation's assigned model.", Synopsis: "[dialogue_id]"},
+		{Name: "models", Summary: "List available models with context window sizes."},
+		{
+			Name:     "skills",
+			Summary:  "Inspect discovered skills and configured skill directories.",
+			Synopsis: "<list|show|list-dirs|add-dir|remove-dir> [args]",
+			Commands: []textapi.CommandManual{
+				{Name: "list", Summary: "List discovered skills."},
+				{Name: "show", Summary: "Show a skill's full instructions.", Synopsis: "<name>"},
+				{Name: "list-dirs", Summary: "List configured skill directories."},
+				{Name: "add-dir", Summary: "Add a skill directory to config.", Synopsis: "<dir>"},
+				{Name: "remove-dir", Summary: "Remove a skill directory from config.", Synopsis: "<dir>"},
+			},
+		},
+		{Name: "system-prompt", Summary: "Show the system prompt for an agent.", Synopsis: "[agent]"},
+		{Name: "tools", Summary: "List registered agent tools."},
+	},
+}
 
+// Manual returns the parent REPL command manual for the agent shell.
+func Manual() textapi.CommandManual {
+	return commandManual
+}
+
+func (s *shell) serviceForModel(model string) (llm.Service, error) {
+	if s.serviceFactory != nil {
+		return s.serviceFactory(model)
+	}
+	if s.svc == nil {
+		return nil, errors.New("llm service not available")
+	}
+	return s.svc, nil
+}
+
+func subcommandManual(path []string) (textapi.CommandManual, string, bool) {
+	man := Manual()
+	fullName := man.Name
+	for _, name := range path {
+		found := false
+		for _, child := range man.Commands {
+			if child.Name == name {
+				man = child
+				fullName += " " + child.Name
+				found = true
+				break
+			}
+		}
+		if !found {
+			return textapi.CommandManual{}, "", false
+		}
+	}
+	return man, fullName, true
+}
+
+func manualOutput(man textapi.CommandManual, fullName string) iterator.Iterator[component.Responsive] {
+	var b strings.Builder
+	b.WriteString("## Usage\n\n`")
+	b.WriteString(fullName)
+	if man.Synopsis != "" {
+		b.WriteByte(' ')
+		b.WriteString(man.Synopsis)
+	}
+	b.WriteString("`\n")
+	if man.Summary != "" {
+		b.WriteString("\n## Description\n\n")
+		b.WriteString(man.Summary)
+		b.WriteByte('\n')
+	}
+	if len(man.Commands) > 0 {
+		b.WriteString("\n## Subcommands\n\n")
+		for _, child := range man.Commands {
+			fmt.Fprintf(&b, "- **%s**", child.Name)
+			if child.Summary != "" {
+				fmt.Fprintf(&b, " — %s", child.Summary)
+			}
+			b.WriteByte('\n')
+		}
+	}
+	return markdownOutput(b.String())
+}
+
+func commandListOutput(man textapi.CommandManual) iterator.Iterator[component.Responsive] {
+	items := make([]component.Responsive, 0, len(man.Commands))
+	for _, child := range man.Commands {
+		line := child.Name
+		if child.Synopsis != "" {
+			line += " " + child.Synopsis
+		}
+		if child.Summary != "" {
+			line += " — " + child.Summary
+		}
+		items = append(items, component.NewResponsiveString(
+			line,
+			component.StringResponsiveConfig{},
+		))
+	}
+	return iterator.FromSlice(items)
+}
+
+func filterNames(names []string, prefix string) []string {
+	var matches []string
+	for _, name := range names {
+		if strings.HasPrefix(name, prefix) {
+			matches = append(matches, name)
+		}
+	}
+	return matches
+}
+
+func (s *shell) completeManualPath(args []string) iterator.Iterator[string] {
+	man := Manual()
+	if len(args) == 0 {
+		return iterator.FromSlice(commandNames)
+	}
+	for i, arg := range args {
+		if i == len(args)-1 {
+			var names []string
+			for _, child := range man.Commands {
+				if strings.HasPrefix(child.Name, arg) {
+					names = append(names, child.Name)
+				}
+			}
+			return iterator.FromSlice(names)
+		}
+		found := false
+		for _, child := range man.Commands {
+			if child.Name == arg {
+				man = child
+				found = true
+				break
+			}
+		}
+		if !found {
+			return iterator.FromSlice[string](nil)
+		}
+	}
+	return iterator.FromSlice[string](nil)
+}
+
+func (s *shell) handleCommand(
+	ctx context.Context, cmd repl.Command,
+) (iterator.Iterator[component.Responsive], error) {
 	switch cmd.Name {
 	case "help":
-		return s.help(), nil
+		return s.Help(ctx, cmd.Args)
 	case "chats":
 		return s.handleChats(ctx, cmd.Args)
 	case "models":
@@ -233,6 +404,24 @@ func (s *shell) HandleCommand(
 	default:
 		return nil, fmt.Errorf("unknown command: %s", cmd.Name)
 	}
+}
+
+// HandleCommand dispatches the given command.
+func (s *shell) HandleCommand(
+	ctx context.Context, cmd repl.Command, _ repl.ProgressWriter,
+) (iterator.Iterator[component.Responsive], error) {
+	// Re-scan skill directories so out-of-band changes are picked up,
+	// mirroring the agent loop's per-turn Reload in agent.go.
+	s.skillRegistry.Reload()
+
+	if cmd.Name == CommandName {
+		if len(cmd.Args) == 0 {
+			return s.Help(ctx, nil)
+		}
+		cmd = repl.Command{Name: cmd.Args[0], Args: cmd.Args[1:]}
+	}
+
+	return s.handleCommand(ctx, cmd)
 }
 
 func (s *shell) handleChats(
@@ -305,6 +494,16 @@ func (s *shell) handleChats(
 func (s *shell) Complete(
 	ctx context.Context, cmd string, args []string,
 ) (iterator.Iterator[string], error) {
+	if cmd == CommandName {
+		if len(args) == 0 {
+			return iterator.FromSlice[string](nil), nil
+		}
+		if len(args) == 1 {
+			return iterator.FromSlice(filterNames(commandNames, args[0])), nil
+		}
+		return s.Complete(ctx, args[0], args[1:])
+	}
+
 	if len(args) == 0 {
 		// Complete command name and skill names.
 		var matches []string
@@ -322,6 +521,8 @@ func (s *shell) Complete(
 	}
 
 	switch cmd {
+	case "help":
+		return s.completeManualPath(args), nil
 	case "skills":
 		return s.completeSkills(ctx, args)
 	case "chats":
@@ -344,40 +545,21 @@ func (s *shell) Complete(
 	}
 }
 
-// --- command implementations ---
-
-func (s *shell) help() iterator.Iterator[component.Responsive] {
-	logLine := ""
-	if s.auditStore != nil {
-		logLine = "- **chats log** *\\<id\\>* — Show the LLM token audit log for a conversation\n" +
-			"- **chats export** *\\<id\\>* — Export audit log as JSONL to a temp file\n"
+// Help returns manual-style help for the agent REPL command hierarchy.
+func (s *shell) Help(
+	_ context.Context, args []string,
+) (iterator.Iterator[component.Responsive], error) {
+	man, fullName, ok := subcommandManual(args)
+	if !ok {
+		return nil, fmt.Errorf("unknown command: %s", strings.Join(args, " "))
 	}
-	return markdownOutput(
-		"## Commands\n\n" +
-			"- **help** — List all available commands\n" +
-			"- **chats list** — List saved conversations\n" +
-			"- **chats show** *\\<id\\>* — Show message history for a conversation\n" +
-			logLine +
-			"- **chats clear** *\\<id\\>* — Clear a conversation (archives old messages)\n" +
-			"- **chats compact** *\\<id\\>* — Compact a conversation into a summarized copy\n" +
-			"- **models** — List available models with context window sizes\n" +
-			"- **model** *[name|session]* — Show or switch the current model\n" +
-			"- **tools** — List registered agent tools\n" +
-			"- **agents** — List configured agent definitions\n" +
-			"- **mcp** — Show MCP server status and tool stats\n" +
-			"- **skills list** — List discovered skills\n" +
-			"- **skills show** *\\<name\\>* — Show a skill's full instructions\n" +
-			"- **skills list-dirs** — List configured skill directories\n" +
-			"- **skills add-dir** *\\<dir\\>* — Add a skill directory to config\n" +
-			"- **skills remove-dir** *\\<dir\\>* — Remove a skill directory from config\n" +
-			"- **system-prompt** *[agent]* — Show the system prompt for an agent\n" +
-			"- **config** — Show current LLM config parameters\n" +
-			"- **dream** *[--model MODEL]* — Run memory consolidation on unprocessed dialogues\n" +
-			"- **effort** *[level]* — Show or set default reasoning effort (none, minimal, low, medium, high, xhigh, max)\n" +
-			"- **chats fork** *\\<id\\>* — Open a picker to fork a conversation at a selected message\n" +
-			"- **exit** — Close the shell tab\n",
-	)
+	if len(man.Commands) > 0 {
+		return commandListOutput(man), nil
+	}
+	return manualOutput(man, fullName), nil
 }
+
+// --- command implementations ---
 
 func (s *shell) listModels() iterator.Iterator[component.Responsive] {
 	type entry struct {
@@ -842,7 +1024,12 @@ func (s *shell) compactConversation(
 		return nil, fmt.Errorf("get conversation %q: %w", id, err)
 	}
 
-	_, _, err = agent.CompactDialogue(ctx, s.svc, s.store, d)
+	svc, err := s.serviceForModel(s.defaultModel)
+	if err != nil {
+		return nil, fmt.Errorf("create llm service: %w", err)
+	}
+
+	_, _, err = agent.CompactDialogue(ctx, svc, s.store, d)
 	if err != nil {
 		return nil, fmt.Errorf("compact conversation %q: %w", id, err)
 	}

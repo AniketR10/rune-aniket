@@ -27,10 +27,11 @@ import (
 	"context"
 	"fmt"
 
-	"unstable.build/go-tui/cmd/rune-agent/llm/llmregistry"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"unstable.build/go-tui/cmd/rune-agent/agentshell"
+	"unstable.build/go-tui/cmd/rune-agent/llm/llmregistry"
 	"unstable.build/go-tui/debug"
 )
 
@@ -75,13 +76,6 @@ var (
 			Name: commandResetChat, Summary: "Clear all current chat's history.",
 			Synopsis: "[dialogue_id]",
 		},
-		{
-			Name: commandShell,
-			Summary: "Open an interactive shell for inspecting and managing the agent extension internals. " +
-				"Browse available models, registered tools, agent definitions, and LLM configuration. " +
-				"List, inspect, and delete saved conversation sessions. " +
-				"View system prompts and per-session model assignments.",
-		},
 	}
 	events = []textapi.EventType{
 		textapi.EventTypeOpen, textapi.EventTypeFocus,
@@ -124,6 +118,10 @@ func (e *workspaceExtension) ExtendWorkspace(
 		if err != nil {
 			return fmt.Errorf("register command %q: %w", cmd.Name, err)
 		}
+	}
+
+	if err := w.RegisterREPLCommand(agentshell.Manual(), h.newAgentShell()); err != nil {
+		return fmt.Errorf("register repl command %q: %w", agentshell.CommandName, err)
 	}
 
 	ed := w.Editor(ctx)

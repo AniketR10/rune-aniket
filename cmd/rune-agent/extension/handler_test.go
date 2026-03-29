@@ -77,6 +77,7 @@ import (
 	"unstable.build/go-tui/cmd/rune-agent/agent/agentools"
 	"unstable.build/go-tui/cmd/rune-agent/agent/skills"
 	"unstable.build/go-tui/cmd/rune-agent/agent/taskstore"
+	"unstable.build/go-tui/cmd/rune-agent/agentshell"
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguetui"
 	"unstable.build/go-tui/cmd/rune-agent/llm"
@@ -1803,6 +1804,57 @@ func (f *asyncFlusher) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 }
 func (f *asyncFlusher) Selection() (string, bool) { return f.inner.Selection() }
 
+type syncScheduler struct {
+	pending []func()
+}
+
+func (s *syncScheduler) schedule(fn func()) bool {
+	s.pending = append(s.pending, fn)
+	return true
+}
+
+func (s *syncScheduler) flush() {
+	for len(s.pending) > 0 {
+		batch := s.pending
+		s.pending = nil
+		for _, fn := range batch {
+			fn()
+		}
+	}
+}
+
+type replFlusher struct {
+	h     *repl.Handler
+	sched *syncScheduler
+}
+
+func (f *replFlusher) Handle(ev term.Event) (exit, handled bool) {
+	exit, handled = f.h.Handle(ev)
+	f.h.Wait()
+	f.sched.flush()
+	return
+}
+
+func (f *replFlusher) Resize(w, h int)    { f.h.Resize(w, h) }
+func (f *replFlusher) Draw(w term.Writer) { f.h.Draw(w) }
+func (f *replFlusher) Cursor() (term.Coordinates, term.CursorStyle, bool) {
+	return f.h.Cursor()
+}
+func (f *replFlusher) Selection() (string, bool) { return f.h.Selection() }
+
+func openAgentShell(t *testing.T, deps testAIEditorDeps) *replFlusher {
+	t.Helper()
+	sched := &syncScheduler{}
+	replHandler := repl.New(
+		deps.handler.newAgentShell(),
+		sched.schedule,
+		term.NopInterrupter(),
+		repl.WithPrompt("agent> "),
+		repl.WithExitError(agentshell.ErrExit),
+	)
+	return &replFlusher{h: replHandler, sched: sched}
+}
+
 // newTestAIEditorHandlerWithServer is like newTestAIEditorHandler but
 // wires the handler through the real newService → newLLMService path
 // using a config and model registry that point at the given httptest
@@ -2461,29 +2513,6 @@ func TestAIEditorHandler_chat_arrowUpRecallsSentUserMessageHistory(t *testing.T)
 	})
 }
 
-// --- shell tests ---
-
-func TestAIEditorHandler_shell_creates_tab(t *testing.T) {
-	t.Parallel()
-	svc := &agentMockService{
-		responses: []agentMockResponse{
-			{chunks: []string{"hi"}, finishReason: llm.FinishReasonStop},
-		},
-	}
-	deps := newTestAIEditorHandler(t, svc)
-	cmd := textapi.Command{
-		Name:   commandShell,
-		Window: e2eWindow(0),
-	}
-
-	err := deps.handler.HandleCommand(context.Background(), cmd)
-	require.NoError(t, err)
-
-	deps.wm.mu.Lock()
-	assert.Equal(t, 1, deps.wm.tabCalls)
-	deps.wm.mu.Unlock()
-}
-
 func TestAIEditorHandler_shell_shows_prompt(t *testing.T) {
 	t.Parallel()
 	svc := &agentMockService{
@@ -2492,18 +2521,7 @@ func TestAIEditorHandler_shell_shows_prompt(t *testing.T) {
 		},
 	}
 	deps := newTestAIEditorHandler(t, svc)
-	cmd := textapi.Command{
-		Name:   commandShell,
-		Window: e2eWindow(0),
-	}
-
-	err := deps.handler.HandleCommand(context.Background(), cmd)
-	require.NoError(t, err)
-
-	deps.wm.mu.Lock()
-	tab := deps.wm.lastTab
-	deps.wm.mu.Unlock()
-	require.NotNil(t, tab)
+	tab := openAgentShell(t, deps)
 
 	handlertest.RunHandlerSequence(t, tab, e2eWidth, e2eHeight, []handlertest.SequenceTestCase{
 		{
@@ -2588,22 +2606,7 @@ func TestAIEditorHandler_dream_via_shell(t *testing.T) {
 	deps.handler.fs = testLocalFS{}
 	deps.handler.memoryDataPath = memPath
 
-	// Open the agent shell tab.
-	cmd := textapi.Command{Name: commandShell, Window: e2eWindow(0)}
-	err := deps.handler.HandleCommand(context.Background(), cmd)
-	require.NoError(t, err)
-
-	deps.wm.mu.Lock()
-	tab := deps.wm.lastTab
-	deps.wm.mu.Unlock()
-	require.NotNil(t, tab)
-
-	f := &asyncFlusher{
-		inner:       tab,
-		interruptCh: deps.interruptCh,
-		idleTimeout: 500 * time.Millisecond,
-		maxWait:     5 * time.Second,
-	}
+	f := openAgentShell(t, deps)
 
 	handlertest.RunHandlerSequence(t, f, e2eWidth, e2eHeight, []handlertest.SequenceTestCase{
 		{
@@ -2642,21 +2645,7 @@ func TestAIEditorHandler_dream_unknown_model_via_shell(t *testing.T) {
 	}
 	deps := newTestAIEditorHandler(t, svc)
 
-	// Open the agent shell tab.
-	cmd := textapi.Command{Name: commandShell, Window: e2eWindow(0)}
-	err := deps.handler.HandleCommand(context.Background(), cmd)
-	require.NoError(t, err)
-
-	deps.wm.mu.Lock()
-	tab := deps.wm.lastTab
-	deps.wm.mu.Unlock()
-	require.NotNil(t, tab)
-
-	f := &asyncFlusher{
-		inner:       tab,
-		interruptCh: deps.interruptCh,
-		idleTimeout: 200 * time.Millisecond,
-	}
+	f := openAgentShell(t, deps)
 
 	// The error "model \"nonexistent\" not found in registry" is 41 chars,
 	// which wraps at e2eWidth=40: "...registr" on line 1, "y" on line 2.
@@ -10202,21 +10191,7 @@ func TestAIEditorHandler_shell_skills_list_dynamic(t *testing.T) {
 		testLocalFS{}, cwd, []string{skillsDir}, nil,
 	)
 
-	// Open the agent shell tab.
-	cmd := textapi.Command{Name: commandShell, Window: e2eWindow(0)}
-	err = deps.handler.HandleCommand(context.Background(), cmd)
-	require.NoError(t, err)
-
-	deps.wm.mu.Lock()
-	tab := deps.wm.lastTab
-	deps.wm.mu.Unlock()
-	require.NotNil(t, tab)
-
-	flusher := &asyncFlusher{
-		inner:       tab,
-		interruptCh: deps.interruptCh,
-		idleTimeout: 50 * time.Millisecond,
-	}
+	flusher := openAgentShell(t, deps)
 
 	const pw, ph = 60, 30
 

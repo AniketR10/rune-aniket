@@ -82,7 +82,6 @@ const (
 	commandQuery     = "?"
 	commandChat      = "aichat"
 	commandResetChat = "airesetchat"
-	commandShell     = "agentshell"
 )
 
 var (
@@ -938,8 +937,6 @@ func (h *aiEditorHandler) HandleCommand(
 		return h.handleChat(cmd)
 	case commandResetChat:
 		return h.handleResetChat(cmd)
-	case commandShell:
-		return h.handleShell(cmd)
 	}
 
 	return nil
@@ -997,6 +994,29 @@ func (h *aiEditorHandler) newDialogueComponent() *dialoguetui.Component {
 	return dialoguetui.NewComponent(h.cfg)
 }
 
+func (h *aiEditorHandler) newAgentShell() textapi.REPLHandler {
+	opts := []agentshell.Option{
+		agentshell.WithMCPInfo(h.mcpManager),
+		agentshell.WithHistorySystemPrompt(true),
+		agentshell.WithEffort(h.getDefaultEffort, h.setDefaultEffort),
+		agentshell.WithServiceFactory(h.newService),
+	}
+	if h.auditStore != nil {
+		opts = append(opts, agentshell.WithAuditStore(h.auditStore))
+	}
+	return agentshell.New(
+		h.wm,
+		nil,
+		h.modelRegistry, h.defaultModel,
+		h.dialogueStore, h.toolRegistry, h.agentsConfig,
+		h.config,
+		h.skillRegistry, h.cwd, h.fs,
+		h.db, h.exec, h.lsp, h.parser, h.n,
+		h.memoryDataPath,
+		opts...,
+	)
+}
+
 func (h *aiEditorHandler) handleChat(cmd textapi.Command) error {
 	cmd.Args = filterAllFlag(cmd.Args)
 	if len(cmd.Args) > 0 {
@@ -1049,6 +1069,7 @@ func (h *aiEditorHandler) handleChat(cmd textapi.Command) error {
 	cmdRegistry := agent.NewRegistry(h.baseTools...)
 	cmdShellOpts := []agentshell.Option{
 		agentshell.WithMCPInfo(h.mcpManager),
+		agentshell.WithServiceFactory(h.newService),
 	}
 	if h.auditStore != nil {
 		cmdShellOpts = append(cmdShellOpts, agentshell.WithAuditStore(h.auditStore))
@@ -1353,56 +1374,6 @@ func (h *aiEditorHandler) handleResetChat(cmd textapi.Command) error {
 	syncComp.mu.Unlock()
 	return nil
 }
-
-func (h *aiEditorHandler) handleShell(cmd textapi.Command) error {
-	svc, err := h.newService(h.defaultModel)
-	if err != nil {
-		return fmt.Errorf("create LLM service: %w", err)
-	}
-	opts := []agentshell.Option{
-		agentshell.WithMCPInfo(h.mcpManager),
-		agentshell.WithHistorySystemPrompt(true),
-		agentshell.WithEffort(h.getDefaultEffort, h.setDefaultEffort),
-	}
-	if h.auditStore != nil {
-		opts = append(opts, agentshell.WithAuditStore(h.auditStore))
-	}
-	cmdHandler := agentshell.New(
-		h.wm,
-		svc,
-		h.modelRegistry, h.defaultModel,
-		h.dialogueStore, h.toolRegistry, h.agentsConfig,
-		h.config,
-		h.skillRegistry, h.cwd, h.fs,
-		h.db, h.exec, h.lsp, h.parser, h.n,
-		h.memoryDataPath,
-		opts...,
-	)
-
-	sh := &schedulingHandler{interrupter: h.p, ctx: h.ctx}
-	replHandler := repl.New(cmdHandler, sh.schedule, h.p,
-		repl.WithPrompt("agent> "),
-		repl.WithStorage("agentshell-history", h.db),
-		repl.WithExitError(agentshell.ErrExit),
-	)
-	sh.inner = replHandler
-
-	bhandler := browserapi.FuncHandler(sh, func() error {
-		return nil
-	})
-
-	uri, err := workspaceapi.ParseURI("rune-agent://shell")
-	if err != nil {
-		return fmt.Errorf("parse shell uri: %w", err)
-	}
-	const icon = ''
-	tab, err := h.wm.Tab(uri, icon, "Agent Shell", bhandler)
-	if err != nil {
-		return fmt.Errorf("create shell tab: %w", err)
-	}
-	return h.wm.SetWindowContent(cmd.Window, tab)
-}
-
 func (h *aiEditorHandler) completeWithDialoguesIterator(ctx context.Context, showAll bool) (
 	iterator.Iterator[string], error,
 ) {

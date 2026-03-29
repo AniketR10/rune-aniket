@@ -29,14 +29,14 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/unstablebuild/rune-go-sdk/handler/handlertest"
+	"github.com/unstablebuild/rune-go-sdk/handler/repl"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/cmd/rune-agent/agent"
 	"unstable.build/go-tui/cmd/rune-agent/agent/skills"
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
 	"unstable.build/go-tui/cmd/rune-agent/llm"
 	"unstable.build/go-tui/cmd/rune-agent/mcp"
-	"github.com/unstablebuild/rune-go-sdk/handler/handlertest"
-	"github.com/unstablebuild/rune-go-sdk/handler/repl"
-	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 // syncScheduler collects callbacks scheduled via
@@ -80,7 +80,7 @@ func (f *flusher) Handle(ev term.Event) (exit, handled bool) {
 	return
 }
 
-func (f *flusher) Resize(w, h int)   { f.h.Resize(w, h) }
+func (f *flusher) Resize(w, h int)    { f.h.Resize(w, h) }
 func (f *flusher) Draw(w term.Writer) { f.h.Draw(w) }
 func (f *flusher) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 	return f.h.Cursor()
@@ -156,37 +156,62 @@ func TestIntegrationHelp(t *testing.T) {
 	handlertest.RunHandlerSequence(t, f, testWidth, testHeight, []handlertest.SequenceTestCase{
 		{
 			InputSequence: "help<enter>",
-			Expected: mkExpected(0,
-				"• chats list — List saved conversations",
-				"• chats show \\<id\\> — Show message history for a",
-				"  conversation",
-				"• chats clear \\<id\\> — Clear a conversation (archives old",
-				"  messages)",
-				"• chats compact \\<id\\> — Compact a conversation into a",
-				"  summarized copy",
-				"• models — List available models with context window sizes",
-				"• model [name|session] — Show or switch the current model",
-				"• tools — List registered agent tools",
-				"• agents — List configured agent definitions",
-				"• mcp — Show MCP server status and tool stats",
-				"• skills list — List discovered skills",
-				"• skills show \\<name\\> — Show a skill's full instructions",
-				"• skills list-dirs — List configured skill directories",
-				"• skills add-dir \\<dir\\> — Add a skill directory to config",
-				"• skills remove-dir \\<dir\\> — Remove a skill directory",
-				"  from config",
-				"• system-prompt [agent] — Show the system prompt for an",
-				"  agent",
-				"• config — Show current LLM config parameters",
-				"• dream [--model MODEL] — Run memory consolidation on",
-				"  unprocessed dialogues",
-				"• effort [level] — Show or set default reasoning effort",
-				"  (none, minimal, low, medium, high, xhigh, max)",
-				"• chats fork \\<id\\> — Open a picker to fork a conversation",
-				"  at a selected message",
-				"• exit — Close the shell tab",
-				"",
+			Expected: mkExpected(10,
+				"agent> help",
+				"agents — List configured agent definitions.",
+				"chats <list|show|log|export|clear|compact|fork> [args] — Ins",
+				"pect, export, compact, clear, and fork saved conversations.",
+				"config — Show current LLM config parameters.",
+				"dream [--model MODEL] — Run memory consolidation on unproces",
+				"sed dialogues.",
+				"effort [none|minimal|low|medium|high|xhigh|max] — Show or se",
+				"t default reasoning effort.",
+				"exit — Exit the shell.",
+				"help [command ...] — Show usage for agent commands.",
+				"mcp — Show MCP server status and tool stats.",
+				"model [dialogue_id] — Show the default model or a conversati",
+				"on's assigned model.",
+				"models — List available models with context window sizes.",
+				"skills <list|show|list-dirs|add-dir|remove-dir> [args] — Ins",
+				"pect discovered skills and configured skill directories.",
+				"system-prompt [agent] — Show the system prompt for an agent.",
+				"tools — List registered agent tools.",
 				"agent> \u2590",
+			),
+		},
+		{
+			InputSequence: "agent<enter>",
+			Expected: mkExpected(0,
+				"exit — Exit the shell.",
+				"help [command ...] — Show usage for agent commands.",
+				"mcp — Show MCP server status and tool stats.",
+				"model [dialogue_id] — Show the default model or a conversati",
+				"on's assigned model.",
+				"models — List available models with context window sizes.",
+				"skills <list|show|list-dirs|add-dir|remove-dir> [args] — Ins",
+				"pect discovered skills and configured skill directories.",
+				"system-prompt [agent] — Show the system prompt for an agent.",
+				"tools — List registered agent tools.",
+				"agent> agent",
+				"agents — List configured agent definitions.",
+				"chats <list|show|log|export|clear|compact|fork> [args] — Ins",
+				"pect, export, compact, clear, and fork saved conversations.",
+				"config — Show current LLM config parameters.",
+				"dream [--model MODEL] — Run memory consolidation on unproces",
+				"sed dialogues.",
+				"effort [none|minimal|low|medium|high|xhigh|max] — Show or se",
+				"t default reasoning effort.",
+				"exit — Exit the shell.",
+				"help [command ...] — Show usage for agent commands.",
+				"mcp — Show MCP server status and tool stats.",
+				"model [dialogue_id] — Show the default model or a conversati",
+				"on's assigned model.",
+				"models — List available models with context window sizes.",
+				"skills <list|show|list-dirs|add-dir|remove-dir> [args] — Ins",
+				"pect discovered skills and configured skill directories.",
+				"system-prompt [agent] — Show the system prompt for an agent.",
+				"tools — List registered agent tools.",
+				"agent> ▐",
 			),
 		},
 	})
