@@ -118,21 +118,34 @@ func (p *parser) done() bool {
 }
 
 func (p *parser) parse() (Patch, error) {
-	// Skip leading blank lines, find "*** Begin Patch"
+	// Skip leading blank lines and preamble text, find "*** Begin Patch"
+	// or a file directive. Models sometimes omit delimiters or emit
+	// commentary before the patch.
 	for !p.done() {
 		if strings.TrimSpace(p.peek()) == prefixBegin {
 			break
 		}
-		if strings.TrimSpace(p.peek()) == "" {
+		trimmed := strings.TrimSpace(p.peek())
+		if trimmed == "" {
 			p.pos++
 			continue
 		}
-		return Patch{}, fmt.Errorf("expected %q, got %q at line %d", prefixBegin, p.peek(), p.pos+1)
+		// If we hit a file directive before *** Begin Patch, treat it
+		// as an implicit start — the model omitted the begin marker.
+		if isFileDirective(trimmed) {
+			break
+		}
+		// Otherwise skip preamble text (model commentary).
+		p.pos++
 	}
 	if p.done() {
-		return Patch{}, fmt.Errorf("missing %q", prefixBegin)
+		return Patch{}, fmt.Errorf("empty patch: no file operations found")
 	}
-	p.pos++ // consume Begin Patch
+	// Consume *** Begin Patch if present; otherwise we're already on
+	// a file directive.
+	if strings.TrimSpace(p.peek()) == prefixBegin {
+		p.pos++
+	}
 
 	var patch Patch
 	for !p.done() {
@@ -140,6 +153,7 @@ func (p *parser) parse() (Patch, error) {
 		switch {
 		case line == prefixEnd:
 			p.pos++
+			// Ignore any trailing text after *** End Patch.
 			return patch, nil
 		case strings.HasPrefix(line, prefixAdd):
 			op, err := p.parseAdd()
@@ -161,7 +175,12 @@ func (p *parser) parse() (Patch, error) {
 		}
 	}
 
-	return Patch{}, fmt.Errorf("missing %q", prefixEnd)
+	// All lines consumed without *** End Patch. If we parsed at least
+	// one operation, treat as valid — the model omitted the end marker.
+	if len(patch.Ops) > 0 {
+		return patch, nil
+	}
+	return Patch{}, fmt.Errorf("empty patch: no file operations found")
 }
 
 func (p *parser) parseAdd() (FileOp, error) {

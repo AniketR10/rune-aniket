@@ -74,6 +74,7 @@ Format:
 ` + "```" + `
 
 Rules:
+- The patch MUST start with '*** Begin Patch' and end with '*** End Patch'
 - Every line in an Add block must start with '+'
 - In Update hunks: ' ' = context (unchanged), '-' = remove, '+' = add
 - Context lines must match the existing file (fuzzy whitespace matching is supported)

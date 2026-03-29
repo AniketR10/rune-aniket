@@ -198,18 +198,6 @@ func TestParse(t *testing.T) {
 			}},
 		},
 		{
-			name:    "missing begin marker",
-			input:   `*** Add File: foo.txt`,
-			wantErr: `expected "*** Begin Patch"`,
-		},
-		{
-			name: "missing end marker",
-			input: `*** Begin Patch
-*** Add File: foo.txt
-+content`,
-			wantErr: `missing "*** End Patch"`,
-		},
-		{
 			name: "leading blank lines tolerated",
 			input: `
 *** Begin Patch
