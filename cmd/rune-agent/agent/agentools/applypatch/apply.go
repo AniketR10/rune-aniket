@@ -127,7 +127,7 @@ func applyUpdate(fs workspaceapi.FileSystem, cwd workspaceapi.URI, op FileOp) er
 		pattern := hunkPattern(hunk)
 		pos := seekSequence(fileLines, pattern, searchStart)
 		if pos < 0 {
-			return fmt.Errorf("hunk %d: no match found", i+1)
+			return hunkMatchError(i+1, fileLines, pattern, searchStart, hunk.ContextHint)
 		}
 		resolved = append(resolved, resolvedHunk{pos: pos, hunk: hunk})
 		searchStart = pos + len(pattern)
@@ -169,6 +169,41 @@ func hunkPattern(h Hunk) []string {
 		}
 	}
 	return pat
+}
+
+// hunkMatchError produces a detailed error when a hunk fails to match.
+// It finds the best partial match and reports the first diverging line
+// so the caller can understand why matching failed.
+func hunkMatchError(hunkNum int, fileLines, pattern []string, searchStart int, contextHint string) error {
+	bm := bestPartialMatch(fileLines, pattern, searchStart)
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "hunk %d: no match found", hunkNum)
+	if contextHint != "" {
+		fmt.Fprintf(&b, " (near %q)", contextHint)
+	}
+
+	if bm.Matched == 0 && len(pattern) > 0 {
+		fmt.Fprintf(&b, "\n  could not match any context lines")
+		fmt.Fprintf(&b, "\n  first expected line: %q", pattern[0])
+		if searchStart < len(fileLines) {
+			fmt.Fprintf(&b, "\n  search started at line %d: %q", searchStart+1, fileLines[searchStart])
+		}
+		return fmt.Errorf("%s", b.String())
+	}
+
+	fmt.Fprintf(&b, "\n  best partial match at line %d: %d/%d lines matched",
+		bm.Pos+1, bm.Matched, bm.Total)
+	if bm.PastEOF {
+		fmt.Fprintf(&b, "\n  line %d: expected %q but reached end of file",
+			bm.Pos+bm.Matched+1, bm.ExpectedLine)
+	} else {
+		fmt.Fprintf(&b, "\n  line %d: expected %q",
+			bm.Pos+bm.Matched+1, bm.ExpectedLine)
+		fmt.Fprintf(&b, "\n  line %d:      got %q",
+			bm.Pos+bm.Matched+1, bm.ActualLine)
+	}
+	return fmt.Errorf("%s", b.String())
 }
 
 // spliceHunk replaces the matched region at pos with the hunk's

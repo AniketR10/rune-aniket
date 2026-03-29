@@ -62,6 +62,70 @@ func seekSequence(fileLines, pattern []string, start int) int {
 	return -1
 }
 
+// BestMatch describes the best partial match found when a full match fails.
+type BestMatch struct {
+	// Pos is the file line index (0-based) where the best partial match starts.
+	Pos int
+	// Matched is how many consecutive pattern lines matched at Pos.
+	Matched int
+	// Total is the total number of pattern lines.
+	Total int
+	// ExpectedLine is the pattern line that first failed to match.
+	ExpectedLine string
+	// ActualLine is the corresponding file line at the point of divergence.
+	// Empty if the divergence is past end-of-file.
+	ActualLine string
+	// PastEOF is true when the pattern extends beyond the end of the file.
+	PastEOF bool
+}
+
+// bestPartialMatch scans fileLines from start for the position where the
+// most consecutive pattern lines match. It uses the same three-tier
+// matching cascade as seekSequence. The result helps produce actionable
+// error messages when a full match is not found.
+func bestPartialMatch(fileLines, pattern []string, start int) BestMatch {
+	if len(pattern) == 0 {
+		return BestMatch{Pos: start, Matched: 0, Total: 0}
+	}
+
+	best := BestMatch{Pos: start, Matched: 0, Total: len(pattern)}
+
+	for _, level := range []matchLevel{matchExact, matchTrimEnd, matchTrimAll} {
+		limit := max(len(fileLines), 1)
+		for i := start; i < limit; i++ {
+			matched := 0
+			for j := range len(pattern) {
+				fi := i + j
+				if fi >= len(fileLines) {
+					break
+				}
+				if !linesEqual(fileLines[fi], pattern[j], level) {
+					break
+				}
+				matched++
+			}
+			if matched > best.Matched {
+				best.Pos = i
+				best.Matched = matched
+				if matched == len(pattern) {
+					return best // full match; shouldn't happen but be safe
+				}
+			}
+		}
+	}
+
+	// Fill in the divergence details.
+	divergeIdx := best.Pos + best.Matched
+	best.ExpectedLine = pattern[best.Matched]
+	if divergeIdx < len(fileLines) {
+		best.ActualLine = fileLines[divergeIdx]
+	} else {
+		best.PastEOF = true
+	}
+
+	return best
+}
+
 func seekAt(fileLines, pattern []string, start int, level matchLevel) int {
 	limit := len(fileLines) - len(pattern) + 1
 	for i := start; i < limit; i++ {

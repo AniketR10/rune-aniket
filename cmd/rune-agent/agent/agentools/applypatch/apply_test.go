@@ -281,6 +281,58 @@ func TestApply(t *testing.T) {
 			}},
 			wantApply: 0,
 			wantErrs:  1,
+			verify: func(t *testing.T, dir string) {},
+		},
+		{
+			name: "hunk not found error includes divergence details",
+			setup: func(t *testing.T, dir string) {
+				require.NoError(t, os.WriteFile(filepath.Join(dir, "diverge.go"),
+					[]byte("package main\n\nfunc main() {\n\tfmt.Println(\"hello\")\n}\n"), 0o644))
+			},
+			patch: Patch{Ops: []FileOp{
+				{
+					Type: OpUpdate,
+					Path: "diverge.go",
+					Hunks: []Hunk{
+						{
+							Lines: []Line{
+								{Kind: LineContext, Content: "func main() {"},
+								{Kind: LineRemove, Content: "\tlog.Println(\"hello\")"},
+								{Kind: LineContext, Content: "}"},
+							},
+						},
+					},
+				},
+			}},
+			wantApply: 0,
+			wantErrs:  1,
+			verify: func(t *testing.T, dir string) {},
+		},
+		{
+			name: "hunk not found error includes context hint",
+			setup: func(t *testing.T, dir string) {
+				require.NoError(t, os.WriteFile(filepath.Join(dir, "hint.go"),
+					[]byte("package main\n\nfunc main() {\n}\n"), 0o644))
+			},
+			patch: Patch{Ops: []FileOp{
+				{
+					Type: OpUpdate,
+					Path: "hint.go",
+					Hunks: []Hunk{
+						{
+							ContextHint: "func helper",
+							Lines: []Line{
+								{Kind: LineContext, Content: "func helper() {"},
+								{Kind: LineRemove, Content: "\treturn nil"},
+								{Kind: LineContext, Content: "}"},
+							},
+						},
+					},
+				},
+			}},
+			wantApply: 0,
+			wantErrs:  1,
+			verify: func(t *testing.T, dir string) {},
 		},
 		{
 			name: "update with move to",
@@ -397,6 +449,106 @@ func TestSplitJoinRoundTrip(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			lines := splitLines(tt.input)
 			assert.Equal(t, tt.input, joinLines(lines))
+		})
+	}
+}
+
+func TestHunkMatchError(t *testing.T) {
+	tests := []struct {
+		name     string
+		file     string
+		hunks    []Hunk
+		wantMsgs []string
+	}{
+		{
+			name: "partial match shows expected vs got",
+			file: "package main\n\nfunc main() {\n\tfmt.Println(\"hello\")\n}\n",
+			hunks: []Hunk{
+				{
+					Lines: []Line{
+						{Kind: LineContext, Content: "func main() {"},
+						{Kind: LineRemove, Content: "\tlog.Println(\"hello\")"},
+						{Kind: LineContext, Content: "}"},
+					},
+				},
+			},
+			wantMsgs: []string{
+				"hunk 1: no match found",
+				"best partial match",
+				"1/3 lines matched",
+				"expected",
+				"got",
+			},
+		},
+		{
+			name: "no match at all shows first expected line",
+			file: "package main\n",
+			hunks: []Hunk{
+				{
+					Lines: []Line{
+						{Kind: LineContext, Content: "does not exist anywhere"},
+						{Kind: LineRemove, Content: "nope"},
+					},
+				},
+			},
+			wantMsgs: []string{
+				"hunk 1: no match found",
+				"could not match any context lines",
+				"first expected line",
+			},
+		},
+		{
+			name: "context hint is included",
+			file: "package main\n\nfunc main() {\n}\n",
+			hunks: []Hunk{
+				{
+					ContextHint: "func helper",
+					Lines: []Line{
+						{Kind: LineContext, Content: "func helper() {"},
+						{Kind: LineRemove, Content: "\treturn nil"},
+						{Kind: LineContext, Content: "}"},
+					},
+				},
+			},
+			wantMsgs: []string{
+				"hunk 1: no match found",
+				"near \"func helper\"",
+			},
+		},
+		{
+			name: "past eof indicated",
+			file: "alpha\nbeta",
+			hunks: []Hunk{
+				{
+					Lines: []Line{
+						{Kind: LineContext, Content: "alpha"},
+						{Kind: LineContext, Content: "beta"},
+						{Kind: LineRemove, Content: "gamma"},
+					},
+				},
+			},
+			wantMsgs: []string{
+				"hunk 1: no match found",
+				"2/3 lines matched",
+				"reached end of file",
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			fs := osFS{root: dir}
+
+			require.NoError(t, os.WriteFile(filepath.Join(dir, "test.go"),
+				[]byte(tt.file), 0o644))
+
+			result := Apply(fs, dirURI(dir), Patch{Ops: []FileOp{
+				{Type: OpUpdate, Path: "test.go", Hunks: tt.hunks},
+			}})
+			require.Equal(t, 1, len(result.Errors), "expected exactly 1 error")
+			for _, msg := range tt.wantMsgs {
+				assert.Contains(t, result.Errors[0], msg)
+			}
 		})
 	}
 }

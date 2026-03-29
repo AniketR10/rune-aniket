@@ -128,3 +128,87 @@ func TestLinesEqual(t *testing.T) {
 		})
 	}
 }
+
+func TestBestPartialMatch(t *testing.T) {
+	tests := []struct {
+		name      string
+		fileLines []string
+		pattern   []string
+		start     int
+		want      BestMatch
+	}{
+		{
+			name:      "no lines match at all",
+			fileLines: []string{"alpha", "beta", "gamma"},
+			pattern:   []string{"delta", "epsilon"},
+			want: BestMatch{
+				Pos: 0, Matched: 0, Total: 2,
+				ExpectedLine: "delta",
+				ActualLine:   "alpha",
+			},
+		},
+		{
+			name:      "partial match first line only",
+			fileLines: []string{"alpha", "beta", "gamma"},
+			pattern:   []string{"alpha", "WRONG"},
+			want: BestMatch{
+				Pos: 0, Matched: 1, Total: 2,
+				ExpectedLine: "WRONG",
+				ActualLine:   "beta",
+			},
+		},
+		{
+			name:      "partial match two of three",
+			fileLines: []string{"alpha", "beta", "gamma", "delta"},
+			pattern:   []string{"beta", "gamma", "WRONG"},
+			want: BestMatch{
+				Pos: 1, Matched: 2, Total: 3,
+				ExpectedLine: "WRONG",
+				ActualLine:   "delta",
+			},
+		},
+		{
+			name:      "partial match extends past eof",
+			fileLines: []string{"alpha", "beta"},
+			pattern:   []string{"alpha", "beta", "gamma"},
+			want: BestMatch{
+				Pos: 0, Matched: 2, Total: 3,
+				ExpectedLine: "gamma",
+				PastEOF:      true,
+			},
+		},
+		{
+			name:      "empty pattern",
+			fileLines: []string{"alpha"},
+			pattern:   []string{},
+			want:      BestMatch{Pos: 0, Matched: 0, Total: 0},
+		},
+		{
+			name:      "fuzzy whitespace helps partial match",
+			fileLines: []string{"  alpha  ", "beta", "gamma"},
+			pattern:   []string{"alpha", "WRONG"},
+			want: BestMatch{
+				Pos: 0, Matched: 1, Total: 2,
+				ExpectedLine: "WRONG",
+				ActualLine:   "beta",
+			},
+		},
+		{
+			name:      "start offset respected",
+			fileLines: []string{"alpha", "beta", "alpha", "WRONG"},
+			pattern:   []string{"alpha", "beta"},
+			start:     2,
+			want: BestMatch{
+				Pos: 2, Matched: 1, Total: 2,
+				ExpectedLine: "beta",
+				ActualLine:   "WRONG",
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := bestPartialMatch(tt.fileLines, tt.pattern, tt.start)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
