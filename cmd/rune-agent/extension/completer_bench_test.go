@@ -200,7 +200,7 @@ func BenchmarkMakeCommandCompleter(b *testing.B) {
 
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				head, comps, tail := completer("/aichat ", 8)
+				head, comps, tail := completer("/agent ", 7)
 				if len(comps) != numDialogues {
 					b.Fatalf("expected %d completions, got %d (head=%q tail=%q)", numDialogues, len(comps), head, tail)
 				}
@@ -217,7 +217,7 @@ func BenchmarkMakeCommandCompleter(b *testing.B) {
 
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				head, comps, tail := completer("/aichat ", 8)
+				head, comps, tail := completer("/agent ", 7)
 				if len(comps) != numDialogues {
 					b.Fatalf("expected %d completions, got %d (head=%q tail=%q)", numDialogues, len(comps), head, tail)
 				}
@@ -243,7 +243,7 @@ func BenchmarkMakeCommandCompleter_WithPrefix(b *testing.B) {
 			// Only ~2% of dialogues will match "dialogue-00" prefix.
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				_, comps, _ := completer("/aichat dialogue-00", 19)
+				_, comps, _ := completer("/agent dialogue-00", 18)
 				_ = comps
 			}
 		})

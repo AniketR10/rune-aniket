@@ -80,8 +80,7 @@ import (
 
 const (
 	commandQuery     = "?"
-	commandChat      = "aichat"
-	commandResetChat = "airesetchat"
+	commandChat      = "agent"
 )
 
 var (
@@ -935,8 +934,6 @@ func (h *aiEditorHandler) HandleCommand(
 		return h.handleQuery(cmd)
 	case commandChat:
 		return h.handleChat(cmd)
-	case commandResetChat:
-		return h.handleResetChat(cmd)
 	}
 
 	return nil
@@ -968,11 +965,6 @@ func (h *aiEditorHandler) Complete(ctx context.Context, name string, args []stri
 		default:
 			return iterator.FromSlice[string](nil), nil
 		}
-	case commandResetChat:
-		if len(filtered) <= 1 {
-			return h.completeWithDialoguesIterator(ctx, showAll)
-		}
-		return iterator.FromSlice[string](nil), nil
 	default:
 		return iterator.FromSlice[string](nil), nil
 	}
@@ -1354,26 +1346,6 @@ func (h *aiEditorHandler) getDialogue(
 	return d, nil
 }
 
-func (h *aiEditorHandler) handleResetChat(cmd textapi.Command) error {
-	cmd.Args = filterAllFlag(cmd.Args)
-	dialogueID := parseDialogueID(cmd)
-	if dialogueID == "" {
-		return fmt.Errorf("dialogue ID is required")
-	}
-	err := h.dialogueStore.Delete(h.ctx, dialogueID)
-	if err != nil {
-		return fmt.Errorf("remove dialogue store: %w", err)
-	}
-	comp, ok := h.openChats.Load(dialogueID)
-	if !ok {
-		return fmt.Errorf("dialogue %q does not exist", dialogueID)
-	}
-	syncComp := comp.(syncComponent)
-	syncComp.mu.Lock()
-	syncComp.comp.Reset()
-	syncComp.mu.Unlock()
-	return nil
-}
 func (h *aiEditorHandler) completeWithDialoguesIterator(ctx context.Context, showAll bool) (
 	iterator.Iterator[string], error,
 ) {

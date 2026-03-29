@@ -25,7 +25,7 @@ extensions:
       # walks up from the workspace root looking for files with this
       # name and injects their contents into the system prompt.
       agents_file: AGENTS.md
-      # Model used for chat sessions (aichat command).
+      # Model used for chat sessions (agent command).
       default_model: gpt-5.4
       # Model used for quick queries (? command).
       query_default_model: gpt-5.4

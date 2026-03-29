@@ -72,10 +72,6 @@ var (
 				"If not passed, the default model used is configured via extension configuration. ",
 			Synopsis: "[dialogue_id [model]]",
 		},
-		{
-			Name: commandResetChat, Summary: "Clear all current chat's history.",
-			Synopsis: "[dialogue_id]",
-		},
 	}
 	events = []textapi.EventType{
 		textapi.EventTypeOpen, textapi.EventTypeFocus,

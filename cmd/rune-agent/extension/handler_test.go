@@ -2662,53 +2662,6 @@ func TestAIEditorHandler_dream_unknown_model_via_shell(t *testing.T) {
 	})
 }
 
-// --- reset tests ---
-
-func TestAIEditorHandler_reset_resets_open_chat(t *testing.T) {
-	t.Parallel()
-	svc := &agentMockService{
-		responses: []agentMockResponse{
-			{chunks: []string{"hi"}, finishReason: llm.FinishReasonStop},
-		},
-	}
-	deps := newTestAIEditorHandler(t, svc)
-
-	// Open a chat first.
-	openCmd := textapi.Command{
-		Name:   commandChat,
-		Args:   []string{"resettable"},
-		Window: e2eWindow(0),
-	}
-	err := deps.handler.HandleCommand(context.Background(), openCmd)
-	require.NoError(t, err)
-
-	// Verify it's stored in openChats.
-	_, ok := deps.handler.openChats.Load("resettable")
-	require.True(t, ok, "chat should be in openChats")
-
-	// Reset it.
-	resetCmd := textapi.Command{
-		Name: commandResetChat,
-		Args: []string{"resettable"},
-	}
-	err = deps.handler.HandleCommand(context.Background(), resetCmd)
-	require.NoError(t, err)
-}
-
-func TestAIEditorHandler_reset_nonexistent_returns_error(t *testing.T) {
-	t.Parallel()
-	svc := &agentMockService{}
-	deps := newTestAIEditorHandler(t, svc)
-
-	resetCmd := textapi.Command{
-		Name: commandResetChat,
-		Args: []string{"nonexistent"},
-	}
-	err := deps.handler.HandleCommand(context.Background(), resetCmd)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "nonexistent")
-}
-
 // --- editor event tests ---
 
 func TestAIEditorHandler_events(t *testing.T) {
@@ -2770,7 +2723,7 @@ func TestAIEditorHandler_complete(t *testing.T) {
 	deps := newTestAIEditorHandler(t, svc)
 	h := deps.handler
 
-	t.Run("aichat returns dialogue IDs", func(t *testing.T) {
+	t.Run("agent returns dialogue IDs", func(t *testing.T) {
 		it, err := h.Complete(context.Background(), commandChat, nil)
 		require.NoError(t, err)
 		items, err := iterator.ToSlice(context.Background(), it)
@@ -2778,7 +2731,7 @@ func TestAIEditorHandler_complete(t *testing.T) {
 		assert.Empty(t, items)
 	})
 
-	t.Run("aichat arg2 returns models", func(t *testing.T) {
+	t.Run("agent arg2 returns models", func(t *testing.T) {
 		it, err := h.Complete(context.Background(), commandChat, []string{"sess", ""})
 		require.NoError(t, err)
 		items, err := iterator.ToSlice(context.Background(), it)
@@ -2789,14 +2742,6 @@ func TestAIEditorHandler_complete(t *testing.T) {
 		assert.Equal(t, "test-model-2", items[1])
 	})
 
-	t.Run("airesetchat returns dialogue IDs", func(t *testing.T) {
-		it, err := h.Complete(context.Background(), commandResetChat, nil)
-		require.NoError(t, err)
-		items, err := iterator.ToSlice(context.Background(), it)
-		require.NoError(t, err)
-		assert.Empty(t, items)
-	})
-
 	t.Run("unknown command returns empty", func(t *testing.T) {
 		it, err := h.Complete(context.Background(), commandQuery, nil)
 		require.NoError(t, err)
@@ -2805,7 +2750,7 @@ func TestAIEditorHandler_complete(t *testing.T) {
 		assert.Empty(t, items)
 	})
 
-	t.Run("aichat excess args returns empty", func(t *testing.T) {
+	t.Run("agent excess args returns empty", func(t *testing.T) {
 		it, err := h.Complete(context.Background(), commandChat, []string{"a", "b", "c"})
 		require.NoError(t, err)
 		items, err := iterator.ToSlice(context.Background(), it)
@@ -10567,7 +10512,7 @@ func TestAIEditorHandler_model_switch_no_empty_text_blocks(t *testing.T) {
 // inputbox or the messages area was last interacted with via mouse.
 //
 // Flow:
-//  1. Open aichat, send "hi", receive "Hello!" from the agent.
+//  1. Open agent, send "hi", receive "Hello!" from the agent.
 //  2. Type "world" in the inputbox, select "wor" with Shift+Right.
 //     → Selection() returns "wor".
 //  3. Triple-click on "Hello!" in the messages area.
