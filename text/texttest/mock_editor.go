@@ -198,6 +198,16 @@ func (e *TestEditor) SubscribeCommand(cmd textapi.CommandManual, h text.CommandH
 	return nil
 }
 
+func (e *TestEditor) RegisterREPLCommand(
+	cmd textapi.CommandManual, h textapi.REPLHandler,
+) error {
+	return nil
+}
+
+func (e *TestEditor) REPLCommands() []textapi.CommandManual {
+	return nil
+}
+
 func (e *TestEditor) UnsubscribeCommand(cmd string) error {
 	return nil
 }

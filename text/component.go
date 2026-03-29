@@ -73,17 +73,18 @@ type Workspace interface {
 // Component is an implementation of browser.Browser for file editing.
 // It also satisfies tui.Component, and text.Editor.
 type Component struct {
-	ctx            context.Context
-	cancelCtx      func()
-	comp           browser.Component
-	workspace      Workspace
-	ed             Editor
-	config         Config
-	focus          thandler.Window
-	edSubscribers  map[textapi.EventType][]EventHandler
-	cmdSubscribers map[string]commandAll
-	editors        map[string]Handler
-	fileRegistry   FileCommandRegistry
+	ctx             context.Context
+	cancelCtx       func()
+	comp            browser.Component
+	workspace       Workspace
+	ed              Editor
+	config          Config
+	focus           thandler.Window
+	edSubscribers   map[textapi.EventType][]EventHandler
+	cmdSubscribers  map[string]commandAll
+	replSubscribers map[string]replCommandAll
+	editors         map[string]Handler
+	fileRegistry    FileCommandRegistry
 }
 
 // NewComponent allocates storage for a new Component and initializes it.
@@ -204,6 +205,7 @@ func (c *Component) Init(
 	c.workspace = w
 	c.edSubscribers = make(map[textapi.EventType][]EventHandler)
 	c.cmdSubscribers = make(map[string]commandAll)
+	c.replSubscribers = make(map[string]replCommandAll)
 	c.editors = make(map[string]Handler)
 
 	// validate that config aliases are not recursive
@@ -1028,6 +1030,33 @@ func (c *Component) SubscribeCommand(cmd textapi.CommandManual, cm CommandHandle
 	return nil
 }
 
+// RegisterREPLCommand registers a REPL command to be dispatched to a
+// textapi.REPLHandler.
+func (c *Component) RegisterREPLCommand(
+	cmd textapi.CommandManual, h textapi.REPLHandler,
+) error {
+	if _, ok := c.replSubscribers[cmd.Name]; ok {
+		return errors.New("command already registered")
+	}
+	c.replSubscribers[cmd.Name] = replCommandAll{man: cmd, handler: h}
+	return nil
+}
+
+// REPLCommand returns the REPL handler registered for cmd.
+func (c *Component) REPLCommand(cmd string) (textapi.REPLHandler, bool) {
+	h, ok := c.replSubscribers[cmd]
+	return h.handler, ok
+}
+
+// REPLCommands returns registered REPL command manuals.
+func (c *Component) REPLCommands() (ret []textapi.CommandManual) {
+	ret = make([]textapi.CommandManual, 0, len(c.replSubscribers))
+	for _, cmd := range c.replSubscribers {
+		ret = append(ret, cmd.man)
+	}
+	return ret
+}
+
 // UnsubscribeCommand un-registers command.
 func (c *Component) UnsubscribeCommand(cmd string) error {
 	if _, ok := c.cmdSubscribers[cmd]; !ok {
@@ -1332,6 +1361,11 @@ func (e *editorFlusherCloser) Close() error {
 type commandAll struct {
 	handler CommandHandler
 	man     command.Manual
+}
+
+type replCommandAll struct {
+	handler textapi.REPLHandler
+	man     textapi.CommandManual
 }
 
 // wraps Editor returned in calls to Edit

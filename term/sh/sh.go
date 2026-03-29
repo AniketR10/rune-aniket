@@ -52,7 +52,7 @@ type commandHandler struct {
 // commands to the underlying handler. Output is streamed
 // via a channel-backed iterator.
 func (h *commandHandler) HandleCommand(
-	ctx context.Context, cmd repl.Command,
+	ctx context.Context, cmd repl.Command, _ repl.ProgressWriter,
 ) (iterator.Iterator[component.Responsive], error) {
 	line := reconstructLine(cmd)
 	if line == "" {
@@ -153,7 +153,9 @@ func (h *commandHandler) execMiddleware(
 			Name: args[0],
 			Args: args[1:],
 		}
-		iter, err := h.underlying.HandleCommand(ctx, cmd)
+		iter, err := h.underlying.HandleCommand(
+			ctx, cmd, repl.NopProgressWriter(),
+		)
 		if errors.Is(err, repl.ErrNotFound) {
 			return next(ctx, args)
 		}

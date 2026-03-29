@@ -63,3 +63,25 @@ func (c *Client) Edit(
 
 	return textrpc.Token{URI: file}, nil
 }
+
+// SubscribeCommand registers a command handler over the underlying RPC client.
+// This compatibility wrapper preserves Rune's older local client API.
+func (c *Client) SubscribeCommand(
+	man textapi.CommandManual, h textapi.CommandHandler,
+) error {
+	return c.RegisterCommand(man, h)
+}
+
+// RegisterCommand registers a command handler over the underlying RPC client.
+func (c *Client) RegisterCommand(
+	man textapi.CommandManual, h textapi.CommandHandler,
+) error {
+	return c.Client.RegisterCommand(man, h)
+}
+
+// RegisterREPLCommand registers a REPL command handler over the underlying RPC client.
+func (c *Client) RegisterREPLCommand(
+	man textapi.CommandManual, h textapi.REPLHandler,
+) error {
+	return c.Client.RegisterREPLCommand(man, h)
+}

@@ -38,12 +38,6 @@ import (
 	"github.com/unstablebuild/blue/tui/component/markdown"
 	mdhandler "github.com/unstablebuild/blue/tui/handler/markdown"
 	"github.com/unstablebuild/blue/walkdir"
-	"unstable.build/go-tui/cmd/rune-agent/agent"
-	"unstable.build/go-tui/cmd/rune-agent/agent/skills"
-	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
-	"unstable.build/go-tui/cmd/rune-agent/llm"
-	"unstable.build/go-tui/cmd/rune-agent/llm/llmregistry"
-	"unstable.build/go-tui/cmd/rune-agent/mcp"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
@@ -55,6 +49,12 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/tcell/v3"
+	"unstable.build/go-tui/cmd/rune-agent/agent"
+	"unstable.build/go-tui/cmd/rune-agent/agent/skills"
+	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
+	"unstable.build/go-tui/cmd/rune-agent/llm"
+	"unstable.build/go-tui/cmd/rune-agent/llm/llmregistry"
+	"unstable.build/go-tui/cmd/rune-agent/mcp"
 )
 
 // ErrExit is a sentinel error returned by the exit command.
@@ -197,7 +197,7 @@ var commandNames = []string{
 
 // HandleCommand dispatches the given command.
 func (s *shell) HandleCommand(
-	ctx context.Context, cmd repl.Command,
+	ctx context.Context, cmd repl.Command, _ repl.ProgressWriter,
 ) (iterator.Iterator[component.Responsive], error) {
 	// Re-scan skill directories so out-of-band changes are picked up,
 	// mirroring the agent loop's per-turn Reload in agent.go.

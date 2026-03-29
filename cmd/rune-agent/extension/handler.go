@@ -2254,7 +2254,9 @@ func (a *commandAdapter) HandleCommand(
 		name = "chats"
 		args = append([]string{"fork"}, args...)
 	}
-	it, err := a.handler.HandleCommand(ctx, repl.Command{Name: name, Args: args})
+	it, err := a.handler.HandleCommand(
+		ctx, repl.Command{Name: name, Args: args}, repl.NopProgressWriter(),
+	)
 	if errors.Is(err, agentshell.ErrExit) {
 		return dialoguetui.CommandResult{Exit: true}, nil
 	}
@@ -2379,7 +2381,7 @@ func (a *commandAdapter) handleClear(ctx context.Context) (dialoguetui.CommandRe
 	}
 	it, err := a.handler.HandleCommand(ctx, repl.Command{
 		Name: "chats", Args: []string{"clear", a.dialogueID},
-	})
+	}, repl.NopProgressWriter())
 	if err != nil {
 		return dialoguetui.CommandResult{}, err
 	}
@@ -2444,7 +2446,7 @@ func (c *compactIterator) Next(ctx context.Context) (component.Responsive, bool)
 	// This call blocks while the LLM summarises the conversation.
 	it, err := c.handler.HandleCommand(ctx, repl.Command{
 		Name: "chats", Args: append([]string{"compact"}, c.args...),
-	})
+	}, repl.NopProgressWriter())
 	if err != nil {
 		c.err = err
 		return nil, false

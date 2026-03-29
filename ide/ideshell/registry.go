@@ -19,11 +19,13 @@ package ideshell
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
 	"sync"
 
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/handler/repl"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
@@ -64,12 +66,49 @@ func (r *CommandRegistry) Register(
 	r.mu.Unlock()
 }
 
+// RegisterREPLCommand registers an extension-provided REPL
+// command with the registry.
+func (r *CommandRegistry) RegisterREPLCommand(
+	man textapi.CommandManual, h textapi.REPLHandler,
+) error {
+	if man.Name == "" {
+		return errors.New("command name is required")
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if _, ok := r.commands[man.Name]; ok {
+		return errors.New("command already registered")
+	}
+
+	r.commands[man.Name] = entry{
+		summary: man.Summary,
+		handler: h,
+	}
+	return nil
+}
+
+// UnregisterREPLCommand removes an extension-provided REPL
+// command from the registry.
+func (r *CommandRegistry) UnregisterREPLCommand(name string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if _, ok := r.commands[name]; !ok {
+		return errors.New("command not registered")
+	}
+
+	delete(r.commands, name)
+	return nil
+}
+
 // HandleCommand looks up cmd.Name in the registry and
 // delegates to the matching handler. Returns
 // repl.ErrNotFound for unknown commands so the sh layer
 // can fall back to PATH executables.
 func (r *CommandRegistry) HandleCommand(
-	ctx context.Context, cmd repl.Command,
+	ctx context.Context, cmd repl.Command, pw repl.ProgressWriter,
 ) (iterator.Iterator[component.Responsive], error) {
 	r.mu.RLock()
 	e, ok := r.commands[cmd.Name]
@@ -77,7 +116,7 @@ func (r *CommandRegistry) HandleCommand(
 	if !ok {
 		return nil, repl.ErrNotFound
 	}
-	return e.handler.HandleCommand(ctx, cmd)
+	return e.handler.HandleCommand(ctx, cmd, pw)
 }
 
 // Complete returns command name completions when args is

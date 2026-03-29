@@ -333,7 +333,7 @@ type recordingHandler struct {
 	response string // if empty, returns empty iterator
 }
 
-func (r *recordingHandler) HandleCommand(_ context.Context, cmd repl.Command) (
+func (r *recordingHandler) HandleCommand(_ context.Context, cmd repl.Command, _ repl.ProgressWriter) (
 	iterator.Iterator[component.Responsive], error,
 ) {
 	r.lastCmd = cmd

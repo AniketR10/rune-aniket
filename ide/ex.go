@@ -44,6 +44,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/clipboard"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/handler"
+	"github.com/unstablebuild/rune-go-sdk/handler/repl"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
 	"github.com/unstablebuild/tcell/v3"
@@ -52,6 +53,7 @@ import (
 	"unstable.build/go-tui/debug"
 	thandler "unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/command"
+	"unstable.build/go-tui/ide/ideshell"
 	"unstable.build/go-tui/ide/idetask"
 	"unstable.build/go-tui/ide/plugin"
 	tterm "unstable.build/go-tui/term"
@@ -120,6 +122,8 @@ type ex struct {
 
 	companionTerminal    vtereservoir.VTE
 	companionTerminalWin browser.Window
+	companionShell       *repl.Handler
+	companionShellURI    workspaceapi.URI
 }
 
 // PreviewFunc is a function used to preview commands.
@@ -1363,6 +1367,61 @@ func (e *ex) terminalnewtab(_ context.Context, args ...string) error {
 	return nil
 }
 
+func (e *ex) shellnewtab(_ context.Context, _ ...string) error {
+	if e.companionShell == nil {
+		h, registry := ideshell.New(e.emulatorConfig.ScheduleNextTick, e)
+		router := text.NewREPLHandler(&e.comp)
+		for _, cmd := range e.comp.REPLCommands() {
+			if err := registry.RegisterREPLCommand(cmd, router); err != nil {
+				_ = h.Close()
+				return fmt.Errorf("register repl command %q: %w", cmd.Name, err)
+			}
+		}
+
+		workspaceURI, err := e.workspace.URI(".")
+		if err != nil {
+			_ = h.Close()
+			return fmt.Errorf("workspace uri: %w", err)
+		}
+
+		uri, err := workspaceapi.ParseURI("shell:///")
+		if err == nil {
+			uri, err = workspaceapi.WithPath(uri, workspaceURI.Path())
+			if workspaceURI.Host() != "" {
+				uri, err = workspaceapi.ParseURI(
+					fmt.Sprintf("shell://%s%s", workspaceURI.Host(), workspaceURI.Path()),
+				)
+			}
+		}
+		if err != nil {
+			_ = h.Close()
+			return fmt.Errorf("parse shell uri: %w", err)
+		}
+		e.companionShell = h
+		e.companionShellURI = uri
+	}
+
+	t, err := e.comp.Tab(e.companionShellURI, e.config.Icons.Shell, "shell", e.companionShell)
+	if err != nil {
+		return fmt.Errorf("wm.Tab: %s", err)
+	}
+
+	tab := t.(*browser.Tab)
+
+	win := e.invokeWindow()
+	if err := win.SetContent(tab); err != nil {
+		content, cerr := win.Content()
+		if cerr == nil {
+			if curr, ok := content.(*browser.Tab); ok && curr == tab {
+				return nil
+			}
+		}
+		return err
+	}
+	tab.Subscribe((*tabSubscriber)(e))
+	return nil
+}
+
 func (e *ex) terminalnew(_ context.Context, args ...string) error {
 	h, err := e.newEmulatorHandler(args)
 	if err != nil {
@@ -1820,6 +1879,11 @@ func (e *ex) Close() (ret error) {
 		_ = e.companionTerminal.Close()
 		e.companionTerminal = nil
 	}
+	if e.companionShell != nil {
+		_ = e.companionShell.Close()
+		e.companionShell = nil
+		e.companionShellURI = workspaceapi.URI{}
+	}
 	if e.cmd != nil {
 		if err := e.cmd.Close(); err != nil {
 			ret = multierror.Append(ret, err)
@@ -1868,6 +1932,10 @@ func (e *tabSubscriber) OnFocus(t *browser.Tab) {
 }
 
 func (e *tabSubscriber) OnFree(t *browser.Tab) {
+	if e.companionShell != nil && t.URI().String() == e.companionShellURI.String() {
+		e.companionShell = nil
+		e.companionShellURI = workspaceapi.URI{}
+	}
 	onFocusChangeTab(t, false)
 }
 

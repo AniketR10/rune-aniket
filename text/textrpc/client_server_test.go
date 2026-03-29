@@ -42,7 +42,9 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi/textrpc"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/handler"
+	"github.com/unstablebuild/rune-go-sdk/handler/repl"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
@@ -749,6 +751,233 @@ func TestClientServerIntegration(t *testing.T) {
 		var wg sync.WaitGroup
 		waitForReplaceCommand(t, &wg, ed, client, "bla")
 	})
+
+	t.Run("dispatches repl commands to subscribed repl handler", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		ed := texttest.NewMockEditor(ctrl)
+		s := NewServer(nopNotifications{}, ed, new(sync.Mutex))
+
+		client, closeFn := setupIntTest(t, s)
+		defer closeFn()
+
+		var (
+			subscribed     textapi.CommandManual
+			subscribedRepl textapi.REPLHandler
+		)
+		ed.EXPECT().RegisterREPLCommand(gomock.Any(), gomock.Any()).DoAndReturn(
+			func(man textapi.CommandManual, h textapi.REPLHandler) error {
+				subscribed = man
+				subscribedRepl = h
+				return nil
+			})
+
+		var wg sync.WaitGroup
+		handler := &testREPLHandler{
+			handleFn: func(_ context.Context, cmd repl.Command, _ repl.ProgressWriter) (
+				iterator.Iterator[component.Responsive], error,
+			) {
+				defer wg.Done()
+				assert.Equal(t, "status", cmd.Name)
+				assert.Equal(t, []string{"--all"}, cmd.Args)
+				return iterator.FromSlice([]component.Responsive{
+					component.NewResponsiveString("ok", component.StringResponsiveConfig{}),
+				}), nil
+			},
+			completeFn: func(context.Context, string, []string) (iterator.Iterator[string], error) {
+				return iterator.FromSlice[string](nil), nil
+			},
+			helpFn: func(context.Context, []string) (iterator.Iterator[component.Responsive], error) {
+				return iterator.FromSlice[component.Responsive](nil), nil
+			},
+		}
+
+		man := textapi.CommandManual{
+			Name:     "status",
+			Summary:  "show status",
+			Synopsis: "status [--all]",
+		}
+		err := client.RegisterREPLCommand(man, handler)
+		require.NoError(t, err)
+
+		assert.Equal(t, man.Name, subscribed.Name)
+		assert.Equal(t, man.Summary, subscribed.Summary)
+		assert.Equal(t, man.Synopsis, subscribed.Synopsis)
+		require.NotNil(t, subscribedRepl)
+
+		wg.Add(1)
+		it, err := subscribedRepl.HandleCommand(
+			context.Background(),
+			repl.Command{Name: "status", Args: []string{"--all"}},
+			repl.NopProgressWriter(),
+		)
+		require.NoError(t, err)
+
+		out, err := iterator.ToSlice(context.Background(), it)
+		require.NoError(t, err)
+		wg.Wait()
+		require.Len(t, out, 1)
+		assert.Equal(t, "ok", renderResponsiveString(out[0], 80))
+	})
+
+	t.Run("completes repl commands", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		ed := texttest.NewMockEditor(ctrl)
+		s := NewServer(nopNotifications{}, ed, new(sync.Mutex))
+
+		client, closeFn := setupIntTest(t, s)
+		defer closeFn()
+
+		var subscribedRepl textapi.REPLHandler
+		ed.EXPECT().RegisterREPLCommand(gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ textapi.CommandManual, h textapi.REPLHandler) error {
+				subscribedRepl = h
+				return nil
+			})
+
+		var wg sync.WaitGroup
+		handler := &testREPLHandler{
+			handleFn: func(context.Context, repl.Command, repl.ProgressWriter) (
+				iterator.Iterator[component.Responsive], error,
+			) {
+				return iterator.FromSlice[component.Responsive](nil), nil
+			},
+			completeFn: func(_ context.Context, cmd string, args []string) (iterator.Iterator[string], error) {
+				defer wg.Done()
+				assert.Equal(t, "status", cmd)
+				assert.Equal(t, []string{"-"}, args)
+				return iterator.FromSlice([]string{"--all", "--json"}), nil
+			},
+			helpFn: func(context.Context, []string) (iterator.Iterator[component.Responsive], error) {
+				return iterator.FromSlice[component.Responsive](nil), nil
+			},
+		}
+
+		err := client.RegisterREPLCommand(textapi.CommandManual{Name: "status"}, handler)
+		require.NoError(t, err)
+		require.NotNil(t, subscribedRepl)
+
+		wg.Add(1)
+		it, err := subscribedRepl.Complete(context.Background(), "status", []string{"-"})
+		require.NoError(t, err)
+		out, err := iterator.ToSlice(context.Background(), it)
+		require.NoError(t, err)
+		wg.Wait()
+		assert.Equal(t, []string{"--all", "--json"}, out)
+	})
+
+	t.Run("returns repl help output", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		ed := texttest.NewMockEditor(ctrl)
+		s := NewServer(nopNotifications{}, ed, new(sync.Mutex))
+
+		client, closeFn := setupIntTest(t, s)
+		defer closeFn()
+
+		var subscribedRepl textapi.REPLHandler
+		ed.EXPECT().RegisterREPLCommand(gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ textapi.CommandManual, h textapi.REPLHandler) error {
+				subscribedRepl = h
+				return nil
+			})
+
+		var wg sync.WaitGroup
+		handler := &testREPLHandler{
+			handleFn: func(context.Context, repl.Command, repl.ProgressWriter) (
+				iterator.Iterator[component.Responsive], error,
+			) {
+				return iterator.FromSlice[component.Responsive](nil), nil
+			},
+			completeFn: func(context.Context, string, []string) (iterator.Iterator[string], error) {
+				return iterator.FromSlice[string](nil), nil
+			},
+			helpFn: func(_ context.Context, args []string) (iterator.Iterator[component.Responsive], error) {
+				defer wg.Done()
+				assert.Equal(t, []string{"sub"}, args)
+				return iterator.FromSlice([]component.Responsive{
+					component.NewResponsiveString("usage: status sub", component.StringResponsiveConfig{}),
+				}), nil
+			},
+		}
+
+		err := client.RegisterREPLCommand(textapi.CommandManual{Name: "status"}, handler)
+		require.NoError(t, err)
+		require.NotNil(t, subscribedRepl)
+
+		wg.Add(1)
+		it, err := subscribedRepl.Help(context.Background(), []string{"sub"})
+		require.NoError(t, err)
+		out, err := iterator.ToSlice(context.Background(), it)
+		require.NoError(t, err)
+		wg.Wait()
+		require.Len(t, out, 1)
+		assert.Equal(t, "usage: status sub", renderResponsiveString(out[0], 80))
+	})
+
+	t.Run("returns repl registration error", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		ed := texttest.NewMockEditor(ctrl)
+		s := NewServer(nopNotifications{}, ed, new(sync.Mutex))
+
+		client, closeFn := setupIntTest(t, s)
+		defer closeFn()
+
+		ed.EXPECT().RegisterREPLCommand(gomock.Any(), gomock.Any()).Return(errors.New("boom"))
+
+		handler := &testREPLHandler{
+			handleFn: func(context.Context, repl.Command, repl.ProgressWriter) (
+				iterator.Iterator[component.Responsive], error,
+			) {
+				return iterator.FromSlice[component.Responsive](nil), nil
+			},
+			completeFn: func(context.Context, string, []string) (iterator.Iterator[string], error) {
+				return iterator.FromSlice[string](nil), nil
+			},
+			helpFn: func(context.Context, []string) (iterator.Iterator[component.Responsive], error) {
+				return iterator.FromSlice[component.Responsive](nil), nil
+			},
+		}
+
+		err := client.RegisterREPLCommand(textapi.CommandManual{Name: "status"}, handler)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "boom")
+	})
+}
+
+type testREPLHandler struct {
+	handleFn   func(context.Context, repl.Command, repl.ProgressWriter) (iterator.Iterator[component.Responsive], error)
+	completeFn func(context.Context, string, []string) (iterator.Iterator[string], error)
+	helpFn     func(context.Context, []string) (iterator.Iterator[component.Responsive], error)
+}
+
+func (h *testREPLHandler) HandleCommand(
+	ctx context.Context, cmd repl.Command, pw repl.ProgressWriter,
+) (iterator.Iterator[component.Responsive], error) {
+	return h.handleFn(ctx, cmd, pw)
+}
+
+func (h *testREPLHandler) Complete(
+	ctx context.Context, cmd string, args []string,
+) (iterator.Iterator[string], error) {
+	return h.completeFn(ctx, cmd, args)
+}
+
+func (h *testREPLHandler) Help(
+	ctx context.Context, args []string,
+) (iterator.Iterator[component.Responsive], error) {
+	return h.helpFn(ctx, args)
+}
+
+func renderResponsiveString(r component.Responsive, width int) string {
+	height := r.Height(width)
+	w := term.NewStringWriter(width, height)
+	r.Resize(width, height)
+	r.Draw(w)
+	_ = w.Flush()
+	return strings.TrimSpace(w.String())
 }
 
 func waitForReplaceCommand(

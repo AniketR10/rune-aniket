@@ -24,10 +24,14 @@
 package text
 
 import (
+	"context"
+
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/handler/repl"
+	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/cell"
 )
@@ -115,6 +119,56 @@ type Editor interface {
 	// SubscribeCommand registers command to be dispatched to CommandHandler.
 	SubscribeCommand(textapi.CommandManual, CommandHandler) error
 
+	// RegisterREPLCommand registers a REPL command to be dispatched to a
+	// textapi.REPLHandler.
+	RegisterREPLCommand(textapi.CommandManual, textapi.REPLHandler) error
+
 	// UnsubscribeCommand un-registers command.
 	UnsubscribeCommand(string) error
+}
+
+// NewREPLHandler returns a REPL handler backed by router.
+func NewREPLHandler(comp *Component) textapi.REPLHandler {
+	return replHandler{router: comp}
+}
+
+// replHandler routes REPL commands through a text.Component.
+type replHandler struct {
+	router *Component
+}
+
+// HandleCommand dispatches cmd to a registered REPL handler.
+func (h replHandler) HandleCommand(
+	ctx context.Context, cmd repl.Command, pw repl.ProgressWriter,
+) (iterator.Iterator[component.Responsive], error) {
+	handler, ok := h.router.REPLCommand(cmd.Name)
+	if !ok {
+		return nil, repl.ErrNotFound
+	}
+	return handler.HandleCommand(ctx, cmd, pw)
+}
+
+// Complete dispatches shell completion to a registered REPL handler.
+func (h replHandler) Complete(
+	ctx context.Context, cmd string, args []string,
+) (iterator.Iterator[string], error) {
+	handler, ok := h.router.REPLCommand(cmd)
+	if !ok {
+		return iterator.Empty[string](), nil
+	}
+	return handler.Complete(ctx, cmd, args)
+}
+
+// Help dispatches shell help requests to a registered REPL handler.
+func (h replHandler) Help(
+	ctx context.Context, args []string,
+) (iterator.Iterator[component.Responsive], error) {
+	if len(args) == 0 {
+		return iterator.Empty[component.Responsive](), nil
+	}
+	handler, ok := h.router.REPLCommand(args[0])
+	if !ok {
+		return nil, repl.ErrNotFound
+	}
+	return handler.Help(ctx, args[1:])
 }

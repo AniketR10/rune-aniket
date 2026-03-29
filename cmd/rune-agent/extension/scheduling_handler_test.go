@@ -31,12 +31,12 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguetui"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/handler/handlertest"
 	"github.com/unstablebuild/rune-go-sdk/handler/repl"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguetui"
 )
 
 var _ dialoguetui.CommandHandler = (*commandAdapter)(nil)
@@ -57,7 +57,7 @@ func (c *countingInterrupter) Interrupt(context.Context) error {
 // schedule→drain→draw path without needing the real agentshell.
 type echoHandler struct{}
 
-func (echoHandler) HandleCommand(_ context.Context, cmd repl.Command) (
+func (echoHandler) HandleCommand(_ context.Context, cmd repl.Command, _ repl.ProgressWriter) (
 	iterator.Iterator[component.Responsive], error,
 ) {
 	r := component.NewResponsiveString(cmd.Name, component.StringResponsiveConfig{})
@@ -84,7 +84,7 @@ func (f *schedulingFlusher) Handle(ev term.Event) (exit, handled bool) {
 	return
 }
 
-func (f *schedulingFlusher) Resize(w, h int)   { f.sh.Resize(w, h) }
+func (f *schedulingFlusher) Resize(w, h int)    { f.sh.Resize(w, h) }
 func (f *schedulingFlusher) Draw(w term.Writer) { f.sh.Draw(w) }
 func (f *schedulingFlusher) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 	return f.sh.Cursor()

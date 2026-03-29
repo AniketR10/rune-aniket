@@ -35,12 +35,6 @@ import (
 	"testing"
 	"time"
 
-	"unstable.build/go-tui/cmd/rune-agent/agent"
-	"unstable.build/go-tui/cmd/rune-agent/agent/skills"
-	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
-	"unstable.build/go-tui/cmd/rune-agent/llm"
-	"unstable.build/go-tui/cmd/rune-agent/llm/llmregistry"
-	"unstable.build/go-tui/cmd/rune-agent/mcp"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
@@ -52,6 +46,12 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
 	"github.com/unstablebuild/tcell/v3"
+	"unstable.build/go-tui/cmd/rune-agent/agent"
+	"unstable.build/go-tui/cmd/rune-agent/agent/skills"
+	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
+	"unstable.build/go-tui/cmd/rune-agent/llm"
+	"unstable.build/go-tui/cmd/rune-agent/llm/llmregistry"
+	"unstable.build/go-tui/cmd/rune-agent/mcp"
 )
 
 func TestHandleCommand(t *testing.T) {
@@ -472,8 +472,8 @@ func TestHandleCommand(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name:    "chats export --audit without ID returns error",
-			cmd:     repl.Command{Name: "chats", Args: []string{"export", "--audit"}},
+			name: "chats export --audit without ID returns error",
+			cmd:  repl.Command{Name: "chats", Args: []string{"export", "--audit"}},
 			setup: func(d *testDeps) {
 				d.opts = append(d.opts, WithAuditStore(llm.NewAuditStore(
 					storagestub.NewInMemoryService(),
@@ -745,7 +745,7 @@ func TestHandleCommand(t *testing.T) {
 			)
 
 			ctx := context.Background()
-			it, err := sh.HandleCommand(ctx, tt.cmd)
+			it, err := sh.HandleCommand(ctx, tt.cmd, repl.NopProgressWriter())
 			if tt.wantErr {
 				if err == nil {
 					t.Fatal("expected error, got nil")
@@ -959,19 +959,19 @@ type testDeps struct {
 	svc           llm.Service
 	modelRegistry llmregistry.Registry
 	defaultModel  string
-	store           *memStore
-	registry        *agent.Registry
-	agentsConfig    *agent.Cfg
-	cfg             config.Config
-	opts            []Option
-	wm              *stubWindowManager
-	skillRegistry   *skills.SkillRegistry
-	workspaceRoot   workspaceapi.URI
-	fs              workspaceapi.FileSystem
-	skillDir        string
-	storage         storageapi.Service
-	notifications   browserapi.Notifications
-	dataPath        string
+	store         *memStore
+	registry      *agent.Registry
+	agentsConfig  *agent.Cfg
+	cfg           config.Config
+	opts          []Option
+	wm            *stubWindowManager
+	skillRegistry *skills.SkillRegistry
+	workspaceRoot workspaceapi.URI
+	fs            workspaceapi.FileSystem
+	skillDir      string
+	storage       storageapi.Service
+	notifications browserapi.Notifications
+	dataPath      string
 }
 
 func newTestDeps() *testDeps {
@@ -1197,7 +1197,7 @@ func (c stubConfig) GetInt(key string) (int, error) {
 	return v, nil
 }
 
-func (c stubConfig) GetBool(string) (bool, error)                  { return false, config.ErrNotFound }
+func (c stubConfig) GetBool(string) (bool, error) { return false, config.ErrNotFound }
 func (c stubConfig) GetConfig(key string) (config.Config, error) {
 	v, ok := c.configs[key]
 	if !ok {
@@ -1259,13 +1259,17 @@ func (s *stubMCPInfo) Servers() []*mcp.ServerInfo { return s.servers }
 
 type stubStorage struct{}
 
-func (stubStorage) Create(context.Context, string, any) error                                        { return nil }
-func (stubStorage) Set(context.Context, string, any) error                                           { return nil }
-func (stubStorage) Update(context.Context, string, []storageapi.Update, ...storageapi.Precondition) error { return nil }
-func (stubStorage) Get(context.Context, string, any) error                                           { return storageapi.ErrNotFound }
-func (stubStorage) Delete(context.Context, string) error                                             { return nil }
-func (stubStorage) List(context.Context, []storageapi.Filter) (storageapi.Iterator, error)           { return nil, nil }
-func (stubStorage) Close() error                                                                     { return nil }
+func (stubStorage) Create(context.Context, string, any) error { return nil }
+func (stubStorage) Set(context.Context, string, any) error    { return nil }
+func (stubStorage) Update(context.Context, string, []storageapi.Update, ...storageapi.Precondition) error {
+	return nil
+}
+func (stubStorage) Get(context.Context, string, any) error { return storageapi.ErrNotFound }
+func (stubStorage) Delete(context.Context, string) error   { return nil }
+func (stubStorage) List(context.Context, []storageapi.Filter) (storageapi.Iterator, error) {
+	return nil, nil
+}
+func (stubStorage) Close() error { return nil }
 
 // --- stub filesystem ---
 
@@ -1279,9 +1283,9 @@ func (stubFS) OpenFile(path string, flag int, mode os.FileMode) (workspaceapi.Fi
 	return os.OpenFile(path, flag, mode)
 }
 
-func (stubFS) Remove(path string) error              { return os.Remove(path) }
-func (stubFS) Stat(path string) (os.FileInfo, error)  { return os.Stat(path) }
-func (stubFS) ReadDir(name string) ([]os.DirEntry, error) { return os.ReadDir(name) }
+func (stubFS) Remove(path string) error                     { return os.Remove(path) }
+func (stubFS) Stat(path string) (os.FileInfo, error)        { return os.Stat(path) }
+func (stubFS) ReadDir(name string) ([]os.DirEntry, error)   { return os.ReadDir(name) }
 func (stubFS) MkdirAll(path string, perm os.FileMode) error { return os.MkdirAll(path, perm) }
 
 // --- nop filesystem (for nil dirs) ---
@@ -1292,10 +1296,10 @@ func (nopFileSystem) URI(path string) (workspaceapi.URI, error) { return workspa
 func (nopFileSystem) OpenFile(string, int, os.FileMode) (workspaceapi.File, error) {
 	return nil, os.ErrNotExist
 }
-func (nopFileSystem) Remove(string) error                      { return nil }
-func (nopFileSystem) Stat(string) (os.FileInfo, error)         { return nil, os.ErrNotExist }
-func (nopFileSystem) ReadDir(string) ([]os.DirEntry, error)    { return nil, nil }
-func (nopFileSystem) MkdirAll(string, os.FileMode) error       { return nil }
+func (nopFileSystem) Remove(string) error                   { return nil }
+func (nopFileSystem) Stat(string) (os.FileInfo, error)      { return nil, os.ErrNotExist }
+func (nopFileSystem) ReadDir(string) ([]os.DirEntry, error) { return nil, nil }
+func (nopFileSystem) MkdirAll(string, os.FileMode) error    { return nil }
 
 // --- os filesystem (for real dirs) ---
 
@@ -1307,10 +1311,10 @@ func (osFileSystem) URI(path string) (workspaceapi.URI, error) {
 func (osFileSystem) OpenFile(path string, flag int, mode os.FileMode) (workspaceapi.File, error) {
 	return os.OpenFile(path, flag, mode)
 }
-func (osFileSystem) Remove(path string) error                      { return os.Remove(path) }
-func (osFileSystem) Stat(path string) (os.FileInfo, error)         { return os.Stat(path) }
-func (osFileSystem) ReadDir(name string) ([]os.DirEntry, error)    { return os.ReadDir(name) }
-func (osFileSystem) MkdirAll(path string, perm os.FileMode) error  { return os.MkdirAll(path, perm) }
+func (osFileSystem) Remove(path string) error                     { return os.Remove(path) }
+func (osFileSystem) Stat(path string) (os.FileInfo, error)        { return os.Stat(path) }
+func (osFileSystem) ReadDir(name string) ([]os.DirEntry, error)   { return os.ReadDir(name) }
+func (osFileSystem) MkdirAll(path string, perm os.FileMode) error { return os.MkdirAll(path, perm) }
 
 func TestFormatHistoryMarkdown(t *testing.T) {
 	tests := []struct {
@@ -1530,7 +1534,7 @@ func TestExportAuditJSONLContent(t *testing.T) {
 	it, err := sh.HandleCommand(ctx, repl.Command{
 		Name: "chats",
 		Args: []string{"export", "--audit", "d1"},
-	})
+	}, repl.NopProgressWriter())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1637,7 +1641,7 @@ func TestExportConversationContent(t *testing.T) {
 	it, err := sh.HandleCommand(ctx, repl.Command{
 		Name: "chats",
 		Args: []string{"export", "d1"},
-	})
+	}, repl.NopProgressWriter())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1692,9 +1696,9 @@ func TestForkDialogueStore(t *testing.T) {
 		ctx := context.Background()
 		deps := newTestDeps()
 		_ = deps.store.Create(ctx, dialoguemanager.Dialogue{
-			ID:      "conv-1",
-			AgentID: "default",
-			Model:   "gpt-4",
+			ID:           "conv-1",
+			AgentID:      "default",
+			Model:        "gpt-4",
 			WorkspaceURI: "file:///workspace",
 			Messages: []llm.Message{
 				{Role: llm.RoleSystem, Content: "You are helpful"},
@@ -1755,9 +1759,9 @@ func TestForkDialogueStore(t *testing.T) {
 		ctx := context.Background()
 		deps := newTestDeps()
 		_ = deps.store.Create(ctx, dialoguemanager.Dialogue{
-			ID:      "conv-2",
-			AgentID: "default",
-			Model:   "gpt-4",
+			ID:           "conv-2",
+			AgentID:      "default",
+			Model:        "gpt-4",
 			WorkspaceURI: "file:///workspace-two",
 			Messages: []llm.Message{
 				{Role: llm.RoleSystem, Content: "You are helpful"},

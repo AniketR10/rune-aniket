@@ -810,8 +810,15 @@ func (c ideConfig) icons() (ret text.IconSet) {
 		return
 	}
 
-	ret.Default = c.getSpecialIcon(m, "default")
-	ret.Terminal = c.getSpecialIcon(m, "terminal")
+	if _, ok := m["default"]; ok {
+		ret.Default = c.getSpecialIcon(m, "default")
+	}
+	if _, ok := m["terminal"]; ok {
+		ret.Terminal = c.getSpecialIcon(m, "terminal")
+	}
+	if _, ok := m["shell"]; ok {
+		ret.Shell = c.getSpecialIcon(m, "shell")
+	}
 
 	for k, v := range m {
 		vstr, ok := v.(string)

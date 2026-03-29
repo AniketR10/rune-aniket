@@ -131,6 +131,7 @@ editor:
     icons:
         default: x
         terminal: '&'
+        shell: '8'
         .go: $
         .py: 1 # ignored
 
@@ -456,6 +457,7 @@ func TestConfigSetting(t *testing.T) {
 	expectedIcons := text.IconSet{
 		Default:    'x',
 		Terminal:   '&',
+		Shell:      '8',
 		Extensions: map[string]rune{".go": '$'},
 	}
 	actualIcons := cfg.icons()

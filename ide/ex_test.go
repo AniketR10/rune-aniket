@@ -46,10 +46,13 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/clipboard"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/handler"
+	"github.com/unstablebuild/rune-go-sdk/handler/repl"
+	sdkiterator "github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
 	"unstable.build/go-tui/browser"
@@ -717,6 +720,52 @@ IIII`},
 	assert.Equal(t, 1, closed)
 }
 
+func TestShellCommandOpensTab(t *testing.T) {
+	workspaceURI, err := workspaceapi.ParseURI("file:///tmp/my-workspace")
+	require.NoError(t, err)
+	w := testWorkspaceWithURI{testLoader: &testLoader{}, uri: workspaceURI}
+	cfg := vte.DefaultConfig()
+	scheduler := newQueuedScheduler()
+	cfg.ScheduleNextTick = scheduler.ScheduleNextTick
+	b := newExForTestingWithWorkspace(t, w, texttest.NopEditor(),
+		cfg, nopPublishEvent, clipboard.NewInMemory(),
+		text.WithCommandKey(testCommandKey),
+	)
+	b.mu = &sync.Mutex{}
+	b.scheduler = scheduler
+	defer b.Close()
+
+	require.NoError(t, b.comp.RegisterREPLCommand(
+		textapi.CommandManual{Name: "status", Summary: "show status"},
+		&testShellREPLHandler{},
+	))
+
+	cases := []handlertest.SequenceTestCase{
+		{
+			InputSequence: "<c-\\\\>shell<enter>help<enter>",
+			Expected: "┌──────────────────┐\n" +
+				"│ shell           │\n" +
+				"├──────────────────┤\n" +
+				"│  help         Sho│\n" +
+				"│w available comman│\n" +
+				"│ds                │\n" +
+				"│  status       sho│\n" +
+				"│w status          │\n" +
+				"│> ▐               │\n" +
+				"└──────────────────┘",
+		},
+	}
+
+	handlertest.RunHandlerSequence(t, b, 20, 10, cases)
+
+	tabs := b.comp.Tabs()
+	require.Len(t, tabs, 1)
+	_, ok := tabs[0].Handler().(*repl.Handler)
+	assert.True(t, ok)
+	assert.Equal(t, text.DefaultConfig().Icons.Shell, b.config.Icons.Shell)
+	assert.Equal(t, "shell:///tmp/my-workspace", tabs[0].URI().String())
+}
+
 func assertHandled(
 	t *testing.T, h *browsertest.TestHandler, startingRune rune, exit, handled bool,
 ) {
@@ -1270,12 +1319,105 @@ func TestExExit(t *testing.T) {
 // remove non-determinism of search.List async search
 type testEx struct {
 	*ex
+	mu        sync.Locker
+	scheduler *queuedScheduler
 }
 
 func (t testEx) Handle(ev term.Event) (bool, bool) {
+	unlock := t.lock()
 	quit, handle := t.ex.Handle(ev)
+	unlock()
+	if t.ex.companionShell != nil {
+		t.ex.companionShell.Wait()
+	}
 	t.ex.Wait()
+	t.flushScheduled()
 	return quit, handle
+}
+
+func (t testEx) Draw(w term.Writer) {
+	t.flushScheduled()
+	unlock := t.lock()
+	defer unlock()
+	t.ex.Draw(w)
+}
+
+func (t testEx) Resize(width, height int) {
+	unlock := t.lock()
+	defer unlock()
+	t.ex.Resize(width, height)
+}
+
+func (t testEx) Cursor() (term.Coordinates, term.CursorStyle, bool) {
+	unlock := t.lock()
+	defer unlock()
+	return t.ex.Cursor()
+}
+
+func (t testEx) Selection() (string, bool) {
+	unlock := t.lock()
+	defer unlock()
+	return t.ex.Selection()
+}
+
+func (t testEx) lock() func() {
+	if t.mu == nil {
+		return func() {}
+	}
+	t.mu.Lock()
+	return t.mu.Unlock
+}
+
+func (t testEx) flushScheduled() {
+	if t.scheduler == nil {
+		return
+	}
+	t.scheduler.Flush(t.mu)
+}
+
+type queuedScheduler struct {
+	mu      sync.Mutex
+	pending []func()
+}
+
+func newQueuedScheduler() *queuedScheduler {
+	return &queuedScheduler{}
+}
+
+func (s *queuedScheduler) ScheduleNextTick(fn func()) bool {
+	s.mu.Lock()
+	s.pending = append(s.pending, fn)
+	s.mu.Unlock()
+	return true
+}
+
+func (s *queuedScheduler) Flush(lock sync.Locker) {
+	for {
+		s.mu.Lock()
+		if len(s.pending) == 0 {
+			s.mu.Unlock()
+			return
+		}
+		fn := s.pending[0]
+		s.pending = s.pending[1:]
+		s.mu.Unlock()
+		if lock != nil {
+			lock.Lock()
+			fn()
+			lock.Unlock()
+			continue
+		}
+		fn()
+	}
+}
+
+type testWorkspaceWithURI struct {
+	*testLoader
+	uri workspaceapi.URI
+}
+
+func (w testWorkspaceWithURI) URI(path string) (workspaceapi.URI, error) {
+	return workspace.NewWorkspaceURI(w.uri, path)
 }
 
 func defCommandKeyBindings() (opts []text.Option) {
@@ -1430,6 +1572,26 @@ func TestNewWindow(t *testing.T) {
 	defer b.Close()
 
 	handlertest.TestHandlerSequence(t, b, 20, 10, cases)
+}
+
+type testShellREPLHandler struct{}
+
+func (*testShellREPLHandler) HandleCommand(
+	context.Context, repl.Command, repl.ProgressWriter,
+) (sdkiterator.Iterator[component.Responsive], error) {
+	return sdkiterator.Empty[component.Responsive](), nil
+}
+
+func (*testShellREPLHandler) Complete(
+	context.Context, string, []string,
+) (sdkiterator.Iterator[string], error) {
+	return sdkiterator.Empty[string](), nil
+}
+
+func (*testShellREPLHandler) Help(
+	context.Context, []string,
+) (sdkiterator.Iterator[component.Responsive], error) {
+	return sdkiterator.Empty[component.Responsive](), nil
 }
 
 func TestCommandHistory(t *testing.T) {

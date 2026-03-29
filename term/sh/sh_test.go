@@ -33,7 +33,7 @@ import (
 type mockHandler struct {
 	mu       sync.Mutex
 	calls    []repl.Command
-	handleFn func(context.Context, repl.Command) (
+	handleFn func(context.Context, repl.Command, repl.ProgressWriter) (
 		iterator.Iterator[component.Responsive], error,
 	)
 	completeFn func(
@@ -42,13 +42,13 @@ type mockHandler struct {
 }
 
 func (m *mockHandler) HandleCommand(
-	ctx context.Context, cmd repl.Command,
+	ctx context.Context, cmd repl.Command, pw repl.ProgressWriter,
 ) (iterator.Iterator[component.Responsive], error) {
 	m.mu.Lock()
 	m.calls = append(m.calls, cmd)
 	m.mu.Unlock()
 	if m.handleFn != nil {
-		return m.handleFn(ctx, cmd)
+		return m.handleFn(ctx, cmd, pw)
 	}
 	return iterator.FromSlice[component.Responsive](nil), nil
 }
@@ -92,7 +92,7 @@ func TestHandleCommand(t *testing.T) {
 	cases := []struct {
 		name               string
 		cmd                repl.Command
-		handleFn           func(context.Context, repl.Command) (iterator.Iterator[component.Responsive], error)
+		handleFn           func(context.Context, repl.Command, repl.ProgressWriter) (iterator.Iterator[component.Responsive], error)
 		wantCalls          []repl.Command
 		wantCallsUnordered []repl.Command
 		wantOut            []string
@@ -114,7 +114,7 @@ func TestHandleCommand(t *testing.T) {
 		{
 			name: "pipeline",
 			cmd:  repl.Command{Name: "mycmd", Args: []string{"|", "mycmd2"}},
-			handleFn: func(_ context.Context, cmd repl.Command) (
+			handleFn: func(_ context.Context, cmd repl.Command, _ repl.ProgressWriter) (
 				iterator.Iterator[component.Responsive], error,
 			) {
 				if cmd.Name == "mycmd" {
@@ -155,7 +155,7 @@ func TestHandleCommand(t *testing.T) {
 		{
 			name: "command error",
 			cmd:  repl.Command{Name: "mycmd"},
-			handleFn: func(_ context.Context, _ repl.Command) (
+			handleFn: func(_ context.Context, _ repl.Command, _ repl.ProgressWriter) (
 				iterator.Iterator[component.Responsive], error,
 			) {
 				return nil, errors.New("boom")
@@ -166,7 +166,7 @@ func TestHandleCommand(t *testing.T) {
 		{
 			name: "fallback to next",
 			cmd:  repl.Command{Name: "echo", Args: []string{"hello"}},
-			handleFn: func(_ context.Context, _ repl.Command) (
+			handleFn: func(_ context.Context, _ repl.Command, _ repl.ProgressWriter) (
 				iterator.Iterator[component.Responsive], error,
 			) {
 				return nil, repl.ErrNotFound
@@ -195,7 +195,7 @@ func TestHandleCommand(t *testing.T) {
 		{
 			name: "multi-line output",
 			cmd:  repl.Command{Name: "mycmd"},
-			handleFn: func(_ context.Context, _ repl.Command) (
+			handleFn: func(_ context.Context, _ repl.Command, _ repl.ProgressWriter) (
 				iterator.Iterator[component.Responsive], error,
 			) {
 				return iterator.FromSlice([]component.Responsive{
@@ -227,7 +227,7 @@ func TestHandleCommand(t *testing.T) {
 			mock := &mockHandler{handleFn: tc.handleFn}
 			h := New(mock)
 			ctx := context.Background()
-			iter, err := h.HandleCommand(ctx, tc.cmd)
+			iter, err := h.HandleCommand(ctx, tc.cmd, repl.NopProgressWriter())
 			if tc.wantErr {
 				assert.Error(t, err)
 				return
@@ -259,7 +259,7 @@ func TestHandleCommand(t *testing.T) {
 
 func TestCancelStopsCommand(t *testing.T) {
 	mock := &mockHandler{
-		handleFn: func(_ context.Context, _ repl.Command) (
+		handleFn: func(_ context.Context, _ repl.Command, _ repl.ProgressWriter) (
 			iterator.Iterator[component.Responsive], error,
 		) {
 			return nil, repl.ErrNotFound
@@ -272,7 +272,7 @@ func TestCancelStopsCommand(t *testing.T) {
 	// stop promptly once the context is cancelled.
 	iter, err := h.HandleCommand(ctx, repl.Command{
 		Name: "yes",
-	})
+	}, repl.NopProgressWriter())
 	require.NoError(t, err)
 	defer func() { _ = iter.Close() }()
 
@@ -329,7 +329,7 @@ func TestExitStatusError(t *testing.T) {
 	ctx := context.Background()
 	iter, err := h.HandleCommand(ctx, repl.Command{
 		Name: "false",
-	})
+	}, repl.NopProgressWriter())
 	require.NoError(t, err)
 	defer func() { _ = iter.Close() }()
 

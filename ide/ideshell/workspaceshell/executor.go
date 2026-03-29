@@ -164,7 +164,7 @@ func (e *Executor) RegisterCommands(r *ideshell.CommandRegistry) {
 
 // HandleCommand dispatches "ps" and "kill" commands.
 func (e *Executor) HandleCommand(
-	ctx context.Context, cmd repl.Command,
+	ctx context.Context, cmd repl.Command, _ repl.ProgressWriter,
 ) (iterator.Iterator[component.Responsive], error) {
 	switch cmd.Name {
 	case "ps":

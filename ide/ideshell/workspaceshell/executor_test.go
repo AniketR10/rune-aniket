@@ -239,7 +239,7 @@ func TestHandleCommandPS(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	iter, err := exec.HandleCommand(ctx, repl.Command{Name: "ps"})
+	iter, err := exec.HandleCommand(ctx, repl.Command{Name: "ps"}, repl.NopProgressWriter())
 	require.NoError(t, err)
 	defer func() { _ = iter.Close() }()
 
@@ -264,7 +264,7 @@ func TestHandleCommandKill(t *testing.T) {
 	iter, err := exec.HandleCommand(ctx, repl.Command{
 		Name: "kill",
 		Args: []string{strconv.Itoa(int(pid))},
-	})
+	}, repl.NopProgressWriter())
 	require.NoError(t, err)
 	defer func() { _ = iter.Close() }()
 
@@ -286,7 +286,7 @@ func TestHandleCommandKillWithSignal(t *testing.T) {
 	iter, err := exec.HandleCommand(ctx, repl.Command{
 		Name: "kill",
 		Args: []string{"-9", strconv.Itoa(int(pid))},
-	})
+	}, repl.NopProgressWriter())
 	require.NoError(t, err)
 	defer func() { _ = iter.Close() }()
 
@@ -302,7 +302,7 @@ func TestHandleCommandKillNoArgs(t *testing.T) {
 	ctx := context.Background()
 	_, err := exec.HandleCommand(ctx, repl.Command{
 		Name: "kill",
-	})
+	}, repl.NopProgressWriter())
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "usage")
 }
@@ -313,7 +313,7 @@ func TestHandleCommandKillInvalidPid(t *testing.T) {
 	_, err := exec.HandleCommand(ctx, repl.Command{
 		Name: "kill",
 		Args: []string{"abc"},
-	})
+	}, repl.NopProgressWriter())
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid pid")
 }
@@ -324,7 +324,7 @@ func TestHandleCommandKillInvalidSignal(t *testing.T) {
 	_, err := exec.HandleCommand(ctx, repl.Command{
 		Name: "kill",
 		Args: []string{"-xyz", "1"},
-	})
+	}, repl.NopProgressWriter())
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid signal")
 }
@@ -332,7 +332,7 @@ func TestHandleCommandKillInvalidSignal(t *testing.T) {
 func TestHandleCommandUnknown(t *testing.T) {
 	exec := NewExecutor(newMockExecutor())
 	ctx := context.Background()
-	_, err := exec.HandleCommand(ctx, repl.Command{Name: "nope"})
+	_, err := exec.HandleCommand(ctx, repl.Command{Name: "nope"}, repl.NopProgressWriter())
 	assert.True(t, errors.Is(err, repl.ErrNotFound))
 }
 

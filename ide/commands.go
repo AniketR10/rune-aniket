@@ -365,6 +365,12 @@ var (
 			},
 			handler: (*ex).terminalnewtab,
 		},
+		"shell": {
+			man: textapi.CommandManual{
+				Summary: "Open a new IDE shell in a durable tab and route commands through registered REPL handlers.",
+			},
+			handler: (*ex).shellnewtab,
+		},
 		"terminalnew": {
 			man: textapi.CommandManual{
 				Summary: "Open a new terminal emulator and attach it to the current " +

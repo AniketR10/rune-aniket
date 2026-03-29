@@ -30,7 +30,7 @@ import (
 const testWidth = 200
 
 type mockCmdHandler struct {
-	handleFn func(context.Context, repl.Command) (
+	handleFn func(context.Context, repl.Command, repl.ProgressWriter) (
 		iterator.Iterator[component.Responsive], error,
 	)
 	completeFn func(context.Context, string, []string) (
@@ -42,10 +42,10 @@ type mockCmdHandler struct {
 }
 
 func (m *mockCmdHandler) HandleCommand(
-	ctx context.Context, cmd repl.Command,
+	ctx context.Context, cmd repl.Command, pw repl.ProgressWriter,
 ) (iterator.Iterator[component.Responsive], error) {
 	if m.handleFn != nil {
-		return m.handleFn(ctx, cmd)
+		return m.handleFn(ctx, cmd, pw)
 	}
 	return iterator.FromSlice[component.Responsive](nil), nil
 }
@@ -98,7 +98,7 @@ func TestHandleCommandDispatches(t *testing.T) {
 	r := NewRegistry()
 	called := false
 	r.Register("foo", "do foo", &mockCmdHandler{
-		handleFn: func(_ context.Context, cmd repl.Command) (
+		handleFn: func(_ context.Context, cmd repl.Command, _ repl.ProgressWriter) (
 			iterator.Iterator[component.Responsive], error,
 		) {
 			called = true
@@ -113,7 +113,7 @@ func TestHandleCommandDispatches(t *testing.T) {
 	ctx := context.Background()
 	iter, err := r.HandleCommand(ctx, repl.Command{
 		Name: "foo", Args: []string{"bar"},
-	})
+	}, repl.NopProgressWriter())
 	require.NoError(t, err)
 	defer func() { _ = iter.Close() }()
 
@@ -125,7 +125,7 @@ func TestHandleCommandDispatches(t *testing.T) {
 func TestHandleCommandUnknown(t *testing.T) {
 	r := NewRegistry()
 	ctx := context.Background()
-	_, err := r.HandleCommand(ctx, repl.Command{Name: "nope"})
+	_, err := r.HandleCommand(ctx, repl.Command{Name: "nope"}, repl.NopProgressWriter())
 	assert.True(t, errors.Is(err, repl.ErrNotFound))
 }
 
@@ -268,7 +268,7 @@ func TestHelpCommandOutput(t *testing.T) {
 	// "help" with no args lists all commands.
 	iter, err := r.HandleCommand(ctx, repl.Command{
 		Name: "help",
-	})
+	}, repl.NopProgressWriter())
 	require.NoError(t, err)
 	defer func() { _ = iter.Close() }()
 	out := collectText(t, iter)
@@ -292,7 +292,7 @@ func TestHelpCommandDelegates(t *testing.T) {
 	ctx := context.Background()
 	iter, err := r.HandleCommand(ctx, repl.Command{
 		Name: "help", Args: []string{"foo"},
-	})
+	}, repl.NopProgressWriter())
 	require.NoError(t, err)
 	defer func() { _ = iter.Close() }()
 

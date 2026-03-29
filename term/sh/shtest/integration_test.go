@@ -30,7 +30,7 @@ import (
 
 type testHandler struct {
 	handleFn func(
-		context.Context, repl.Command,
+		context.Context, repl.Command, repl.ProgressWriter,
 	) (iterator.Iterator[component.Responsive], error)
 	completeFn func(
 		context.Context, string, []string,
@@ -38,10 +38,10 @@ type testHandler struct {
 }
 
 func (t *testHandler) HandleCommand(
-	ctx context.Context, cmd repl.Command,
+	ctx context.Context, cmd repl.Command, pw repl.ProgressWriter,
 ) (iterator.Iterator[component.Responsive], error) {
 	if t.handleFn != nil {
-		return t.handleFn(ctx, cmd)
+		return t.handleFn(ctx, cmd, pw)
 	}
 	return iterator.FromSlice[component.Responsive](nil), nil
 }

@@ -229,6 +229,40 @@ func (s *Server) SubscribeCommand(srv textrpc.Editor_SubscribeCommandServer) err
 	return err
 }
 
+// SubscribeREPLCommand satisfies EditorServer.
+func (s *Server) SubscribeREPLCommand(srv textrpc.Editor_SubscribeREPLCommandServer) error {
+	var msg textrpc.ClientREPLCommandMessage
+	err := srv.RecvMsg(&msg)
+	if err != nil {
+		return fmt.Errorf("receive subscribe repl command request: %w", err)
+	}
+	req := msg.GetRequest()
+	if msg.GetType() != textrpc.ClientREPLCommandMessage_Request || req == nil {
+		return errors.New("receive subscribe repl command request: missing request")
+	}
+
+	clientStream := newREPLCommandClientStream(s.ctx, srv)
+	man := makeStdMan(req.GetCommand())
+
+	s.editor.Lock()
+	err = s.editor.RegisterREPLCommand(man, clientStream)
+	s.editor.Unlock()
+	if err != nil {
+		return err
+	}
+
+	resp := textrpc.SubscribeREPLCommandResponse{}
+	respMsg := textrpc.ServerREPLCommandMessage{
+		Type:     textrpc.ServerREPLCommandMessage_Response,
+		Response: &resp,
+	}
+	if err := srv.SendMsg(&respMsg); err != nil {
+		return fmt.Errorf("send repl install response: %w", err)
+	}
+
+	return clientStream.receiveMessages()
+}
+
 // SetLocationList satisfies EditorServer
 func (s *Server) SetLocationList(ctx context.Context, in *textrpc.SetLocationListRequest) (
 	*textrpc.SetLocationListResponse, error,

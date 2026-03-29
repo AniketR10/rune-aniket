@@ -106,6 +106,16 @@ func (e *editor) SubscribeCommand(cmd textapi.CommandManual, h text.CommandHandl
 	return errors.New("not supported")
 }
 
+func (e *editor) RegisterREPLCommand(
+	cmd textapi.CommandManual, h textapi.REPLHandler,
+) error {
+	return errors.New("not supported")
+}
+
+func (e *editor) REPLCommands() []textapi.CommandManual {
+	return nil
+}
+
 func (c *editor) UnsubscribeCommand(cmd string) error {
 	return errors.New("not supported")
 }

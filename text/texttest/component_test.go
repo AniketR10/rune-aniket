@@ -40,8 +40,11 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/component/comptest"
 	"github.com/unstablebuild/rune-go-sdk/handler"
+	"github.com/unstablebuild/rune-go-sdk/handler/repl"
+	sdkiterator "github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
 	gomock "go.uber.org/mock/gomock"
@@ -1810,6 +1813,45 @@ func TestComponentRegister(t *testing.T) {
 		c, _, err := newTestComponentErr(ed, text.DefaultConfig())
 		return c, c, err
 	})
+}
+
+func TestComponentRegisterREPLCommand(t *testing.T) {
+	c, err := text.NewComponent(NopEditor(), &testLoader{}, text.DefaultConfig())
+	require.NoError(t, err)
+
+	h := &testREPLHandler{}
+	man := textapi.CommandManual{Name: "status", Summary: "show status"}
+
+	require.NoError(t, c.RegisterREPLCommand(man, h))
+
+	actual, ok := c.REPLCommand("status")
+	require.True(t, ok)
+	assert.Same(t, h, actual)
+	assert.Equal(t, []textapi.CommandManual{man}, c.REPLCommands())
+
+	err = c.RegisterREPLCommand(man, h)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "already registered")
+}
+
+type testREPLHandler struct{}
+
+func (*testREPLHandler) HandleCommand(
+	context.Context, repl.Command, repl.ProgressWriter,
+) (sdkiterator.Iterator[component.Responsive], error) {
+	return sdkiterator.Empty[component.Responsive](), nil
+}
+
+func (*testREPLHandler) Complete(
+	context.Context, string, []string,
+) (sdkiterator.Iterator[string], error) {
+	return sdkiterator.Empty[string](), nil
+}
+
+func (*testREPLHandler) Help(
+	context.Context, []string,
+) (sdkiterator.Iterator[component.Responsive], error) {
+	return sdkiterator.Empty[component.Responsive](), nil
 }
 func TestUnregisterCommand(t *testing.T) {
 	resource1, err := workspaceapi.ParseURI("file:///HERS")

@@ -462,6 +462,20 @@ func (mr *MockEditorMockRecorder) SubscribeCommand(arg0, arg1 any) *gomock.Call 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubscribeCommand", reflect.TypeOf((*MockEditor)(nil).SubscribeCommand), arg0, arg1)
 }
 
+// RegisterREPLCommand mocks base method.
+func (m *MockEditor) RegisterREPLCommand(arg0 textapi.CommandManual, arg1 textapi.REPLHandler) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RegisterREPLCommand", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RegisterREPLCommand indicates an expected call of RegisterREPLCommand.
+func (mr *MockEditorMockRecorder) RegisterREPLCommand(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterREPLCommand", reflect.TypeOf((*MockEditor)(nil).RegisterREPLCommand), arg0, arg1)
+}
+
 // SubscribeEvents mocks base method.
 func (m *MockEditor) SubscribeEvents(arg0 []textapi.EventType, arg1 text.EventHandler) error {
 	m.ctrl.T.Helper()

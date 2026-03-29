@@ -47,7 +47,7 @@ type helpHandler struct {
 }
 
 func (h *helpHandler) HandleCommand(
-	ctx context.Context, cmd repl.Command,
+	ctx context.Context, cmd repl.Command, _ repl.ProgressWriter,
 ) (iterator.Iterator[component.Responsive], error) {
 	return h.r.Help(ctx, cmd.Args)
 }
