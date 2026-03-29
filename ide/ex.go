@@ -589,6 +589,12 @@ func (e *ex) dispatchCommand(cmd string, args ...string) (err error) {
 func (e *ex) editFileURI(uri workspaceapi.URI, win browser.Window, readOnly bool) (
 	*browser.Tab, error,
 ) {
+	return e.editFileURILocal(uri, win, readOnly)
+}
+
+func (e *ex) editFileURILocal(uri workspaceapi.URI, win browser.Window, readOnly bool) (
+	*browser.Tab, error,
+) {
 	var h browserapi.Handler
 	var err error
 	if readOnly {

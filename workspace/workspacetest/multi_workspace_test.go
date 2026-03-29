@@ -48,20 +48,23 @@ func TestMultiWorkspace(t *testing.T) {
 		fileURI            workspaceapi.URI
 		recover            bool
 		wantError          bool
+		wantOtherWorkspace bool
 		expectAddWorkspace workspaceapi.URI
 	}{
 		{"should load files in the default workspace",
-			parseURI(t, "memory:///"), parseURI(t, "memory:///file.txt"), false, false, workspaceapi.URI{}},
+			parseURI(t, "memory:///"), parseURI(t, "memory:///file.txt"), false, false, false, workspaceapi.URI{}},
 		{"should recover files in the default workspace",
-			parseURI(t, "memory:///"), parseURI(t, "memory:///file.txt"), true, false, workspaceapi.URI{}},
+			parseURI(t, "memory:///"), parseURI(t, "memory:///file.txt"), true, false, false, workspaceapi.URI{}},
 		{"should load files in a registered non-default workspace and should call AddWorkspace with dir URI",
-			parseURI(t, "memory:///"), parseURI(t, "test:///file.txt"), false, false, parseURI(t, "test:///")},
+			parseURI(t, "memory:///"), parseURI(t, "test:///file.txt"), false, false, false, parseURI(t, "test:///")},
 		{"should recover files in a registered non-default workspace and should call AddWorkspace with dir URI",
-			parseURI(t, "memory:///"), parseURI(t, "test:///file.txt"), true, false, parseURI(t, "test:///")},
+			parseURI(t, "memory:///"), parseURI(t, "test:///file.txt"), true, false, false, parseURI(t, "test:///")},
+		{"should return other workspace error when file belongs to already open workspace",
+			parseURI(t, "memory:///"), parseURI(t, "test:///file.txt"), false, true, true, workspaceapi.URI{}},
 		{"should not load files in a non-registered non-default workspace",
-			parseURI(t, "memory:///"), parseURI(t, "nagging:///file.txt"), false, true, workspaceapi.URI{}},
+			parseURI(t, "memory:///"), parseURI(t, "nagging:///file.txt"), false, true, false, workspaceapi.URI{}},
 		{"should not recover files in a non-registered non-default workspace",
-			parseURI(t, "memory:///"), parseURI(t, "nagging:///file.txt"), true, true, workspaceapi.URI{}},
+			parseURI(t, "memory:///"), parseURI(t, "nagging:///file.txt"), true, true, false, workspaceapi.URI{}},
 	}
 
 	for _, tcase := range tsuite {
@@ -70,6 +73,12 @@ func TestMultiWorkspace(t *testing.T) {
 			require.NoError(t, err)
 			cwd := workspace.NewSchemeWorkspace(tcase.defURI, memScheme)
 			mockManager := &mockManager{}
+			if tcase.wantOtherWorkspace {
+				uri := parseURI(t, "test:///")
+				scheme, err := NewNopScheme(uri.Scheme())(ctx, config.NopConfig(), uri)
+				require.NoError(t, err)
+				mockManager.workspace = workspace.NewSchemeWorkspace(uri, scheme)
+			}
 			cwd = workspace.Multi(ctx, mockManager, cwd, tcase.defURI)
 
 			if tcase.recover {
@@ -81,7 +90,9 @@ func TestMultiWorkspace(t *testing.T) {
 			} else {
 				_, err = cwd.Load(tcase.fileURI, cell.NewBuffer(), workspaceapi.Dir(tcase.fileURI), false)
 			}
-			if tcase.wantError {
+			if tcase.wantOtherWorkspace {
+				assert.ErrorIs(t, err, workspace.ErrOpenInOtherWorkspace)
+			} else if tcase.wantError {
 				assert.Error(t, err)
 			} else {
 				assert.NoError(t, err)
@@ -97,6 +108,7 @@ func TestMultiWorkspace(t *testing.T) {
 
 type mockManager struct {
 	addWorkspace []workspaceapi.URI
+	workspace    workspace.Workspace
 }
 
 func (m *mockManager) RegisterScheme(string, schemeapi.SchemeFunc) error {
@@ -117,4 +129,18 @@ func (m *mockManager) AddWorkspace(ctx context.Context, uri workspaceapi.URI) (
 		return nil, err
 	}
 	return workspace.NewSchemeWorkspace(uri, scheme), nil
+}
+
+func (m *mockManager) Workspace(file workspaceapi.URI) (workspace.Workspace, bool, error) {
+	if m.workspace == nil {
+		return nil, false, nil
+	}
+	is, err := workspace.IsWorkspaceURI(m.workspace, file)
+	if err != nil {
+		return nil, false, err
+	}
+	if !is {
+		return nil, false, nil
+	}
+	return m.workspace, true, nil
 }

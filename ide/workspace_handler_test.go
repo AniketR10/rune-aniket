@@ -27,7 +27,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
+	"path/filepath"
 	"strconv"
 	"sync/atomic"
 	"time"
@@ -461,6 +463,333 @@ func TestOpenFilesinEmptyWorkspace(t *testing.T) {
 	require.NoError(t, m.Close())
 }
 
+func TestEditFileURIRedirectsToWorkspaceWithOpenFile(t *testing.T) {
+	tmp1 := t.TempDir()
+	tmp2 := t.TempDir()
+	sharedDir := t.TempDir()
+	sharedPath := filepath.Join(sharedDir, "shared.txt")
+	require.NoError(t, os.WriteFile(sharedPath, []byte("shared"), 0o666))
+
+	cfg := defaultConfigWithWrap(false)
+	cfg.scheduleNextTick = func(fn func()) bool {
+		fn()
+		return true
+	}
+	m := newTestWorkspaceManagerHandlerWithDir(t, cfg, tmp1, nopShutdownShaderConfig())
+	defer func() {
+		require.NoError(t, m.Close())
+	}()
+
+	uri2, err := workspaceapi.ParseURI("file://" + tmp2)
+	require.NoError(t, err)
+	require.NoError(t, m.addOrCreateWorkspace(uri2))
+
+	sharedURI, err := workspaceapi.ParseURI("file://" + sharedPath)
+	require.NoError(t, err)
+
+	openTab, err := m.workspaces[1].ex.editFileURI(
+		sharedURI, m.workspaces[1].ex.invokeWindow(), false)
+	require.NoError(t, err)
+	m.workspaces[1].ex.Wait()
+
+	require.True(t, m.switchToWorkspace(0))
+	redirectedTab, err := m.workspaces[0].ex.editFileURI(
+		sharedURI, m.workspaces[0].ex.invokeWindow(), false)
+	require.NoError(t, err)
+	m.workspaces[0].ex.Wait()
+	m.workspaces[1].ex.Wait()
+
+	assert.Equal(t, 1, m.focus)
+	assert.Same(t, openTab, redirectedTab)
+	assert.Empty(t, m.workspaces[0].ex.comp.Tabs())
+
+	focusTab, ok := m.workspaces[1].ex.comp.FocusTab()
+	require.True(t, ok)
+	assert.Same(t, openTab, focusTab)
+	assert.True(t, focusTab.URI().Equal(sharedURI))
+	assert.Len(t, m.workspaces[1].ex.comp.Tabs(), 1)
+	_, ok = redirectedTab.Window()
+	assert.True(t, ok)
+}
+
+func TestCrossWorkspaceOpenRoutingIntegration(t *testing.T) {
+	type integrationCase struct {
+		name           string
+		startWorkspace int
+		setup          func(t *testing.T, m *testWorkspaceManagerHandler, tmp1, tmp2 string)
+		sequences      []handlertest.SequenceTestCase
+	}
+
+	newManager := func(t *testing.T, tmp1, tmp2 string) *testWorkspaceManagerHandler {
+		cfg := defaultConfigWithWrap(false)
+		cfg.cfg["browser"] = map[string]any{
+			"workspace_bar":      "number",
+			"focus_tab_attr":     map[string]any{"bg": "blue"},
+			"non_focus_tab_attr": map[string]any{"bg": "default"},
+			"window_manager": map[string]any{
+				"no_max_size": false,
+			},
+		}
+		cfg.scheduleNextTick = func(fn func()) bool {
+			fn()
+			return true
+		}
+		m := newTestWorkspaceManagerHandlerWithDir(t, cfg, "", nopShutdownShaderConfig())
+		m.forceSyncCommandPrompt = true
+
+		uri1, err := workspaceapi.ParseURI("file://" + tmp1)
+		require.NoError(t, err)
+		require.NoError(t, m.addOrCreateWorkspace(uri1))
+
+		uri2, err := workspaceapi.ParseURI("file://" + tmp2)
+		require.NoError(t, err)
+		require.NoError(t, m.addOrCreateWorkspace(uri2))
+
+		return m
+	}
+
+	setAliases := func(m *testWorkspaceManagerHandler, aliases map[string]text.CommandAlias) {
+		for _, wh := range m.workspaces {
+			if wh == nil || wh.ex == nil {
+				continue
+			}
+			if wh.ex.config.CommandAliases == nil {
+				wh.ex.config.CommandAliases = make(map[string]text.CommandAlias)
+			}
+			maps.Copy(wh.ex.config.CommandAliases, aliases)
+		}
+	}
+
+	tests := []integrationCase{
+		{
+			name:           "local file stays in current workspace",
+			startWorkspace: 0,
+			setup: func(t *testing.T, m *testWorkspaceManagerHandler, tmp1, tmp2 string) {
+				require.NoError(t, os.WriteFile(filepath.Join(tmp1, "local.go"), []byte("package main\n"), 0o666))
+				setAliases(m, map[string]text.CommandAlias{
+					"openCase": {Commands: []string{"edit local.go"}},
+					"to1":      {Commands: []string{"workspacefocus 1"}},
+					"to2":      {Commands: []string{"workspacefocus 2"}},
+				})
+			},
+			sequences: []handlertest.SequenceTestCase{
+				{
+					InputSequence: "<c-\\\\>openCase<enter>",
+					Expected: `┌──────────────┌─────────────┐
+│o ········    │ syntax      │
+├──────────────│ tree        │
+│▐ackage main  │ parser for  │
+│              │ language    │
+│              │ ("go") is   │
+├──────────────│ not         ┤
+│1 ·  2 2                    │
+└────────────────────────────┘`,
+				},
+				{
+					InputSequence: "<c-\\\\>to2<enter>",
+					Expected: `┌────────────────────────────┐
+│                            │
+├────────────────────────────┤
+│                            │
+│     workspaceWallpaper     │
+│                            │
+├────────────────────────────┤
+│1 1  2 ·                    │
+└────────────────────────────┘`,
+				},
+				{
+					InputSequence: "<c-\\\\>to1<enter>",
+					Expected: `┌──────────────┌─────────────┐
+│o ········    │ syntax      │
+├──────────────│ tree        │
+│▐ackage main  │ parser for  │
+│              │ language    │
+│              │ ("go") is   │
+├──────────────│ not         ┤
+│1 ·  2 2                    │
+└────────────────────────────┘`,
+				},
+			},
+		},
+		{
+			name:           "unopened foreign file switches to owning workspace",
+			startWorkspace: 0,
+			setup: func(t *testing.T, m *testWorkspaceManagerHandler, tmp1, tmp2 string) {
+				ownedPath := filepath.Join(tmp2, "owned.go")
+				require.NoError(t, os.WriteFile(ownedPath, []byte("package main\n"), 0o666))
+				setAliases(m, map[string]text.CommandAlias{
+					"openCase": {Commands: []string{fmt.Sprintf("edit file://%s", ownedPath)}},
+					"to1":      {Commands: []string{"workspacefocus 1"}},
+					"to2":      {Commands: []string{"workspacefocus 2"}},
+				})
+			},
+			sequences: []handlertest.SequenceTestCase{
+				{
+					InputSequence: "<c-\\\\>openCase<enter>",
+					Expected: `┌──────────────┌─────────────┐
+│o ········    │ syntax      │
+├──────────────│ tree        │
+│▐ackage main  │ parser for  │
+│              │ language    │
+│              │ ("go") is   │
+├──────────────│ not         ┤
+│1 1  2 ·                    │
+└────────────────────────────┘`,
+				},
+				{
+					InputSequence: "<c-\\\\>to1<enter>",
+					Expected: `┌────────────────────────────┐
+│                            │
+├────────────────────────────┤
+│                            │
+│     workspaceWallpaper     │
+│                            │
+├────────────────────────────┤
+│1 ·  2 2                    │
+└────────────────────────────┘`,
+				},
+				{
+					InputSequence: "<c-\\\\>to2<enter>",
+					Expected: `┌──────────────┌─────────────┐
+│o ········    │ syntax      │
+├──────────────│ tree        │
+│▐ackage main  │ parser for  │
+│              │ language    │
+│              │ ("go") is   │
+├──────────────│ not         ┤
+│1 1  2 ·                    │
+└────────────────────────────┘`,
+				},
+			},
+		},
+		{
+			name:           "existing foreign tab is focused in owning workspace",
+			startWorkspace: 0,
+			setup: func(t *testing.T, m *testWorkspaceManagerHandler, tmp1, tmp2 string) {
+				sharedPath := filepath.Join(t.TempDir(), "shared.go")
+				require.NoError(t, os.WriteFile(sharedPath, []byte("package main\n"), 0o666))
+				sharedURI, err := workspaceapi.ParseURI("file://" + sharedPath)
+				require.NoError(t, err)
+				_, err = m.workspaces[1].ex.editFileURI(sharedURI, m.workspaces[1].ex.invokeWindow(), false)
+				require.NoError(t, err)
+				m.workspaces[1].ex.Wait()
+				setAliases(m, map[string]text.CommandAlias{
+					"openCase": {Commands: []string{fmt.Sprintf("edit file://%s", sharedPath)}},
+					"to1":      {Commands: []string{"workspacefocus 1"}},
+					"to2":      {Commands: []string{"workspacefocus 2"}},
+				})
+			},
+			sequences: []handlertest.SequenceTestCase{
+				{
+					InputSequence: "<c-\\\\>openCase<enter>",
+					Expected: `┌──────────────┌─────────────┐
+│o ·········   │ syntax      │
+├──────────────│ tree        │
+│▐ackage main  │ parser for  │
+│              │ language    │
+│              │ ("go") is   │
+├──────────────│ not         ┤
+│1 1  2 ·                    │
+└────────────────────────────┘`,
+				},
+				{
+					InputSequence: "<c-\\\\>to1<enter>",
+					Expected: `┌────────────────────────────┐
+│                            │
+├────────────────────────────┤
+│                            │
+│     workspaceWallpaper     │
+│                            │
+├────────────────────────────┤
+│1 ·  2 2                    │
+└────────────────────────────┘`,
+				},
+				{
+					InputSequence: "<c-\\\\>to2<enter>",
+					Expected: `┌──────────────┌─────────────┐
+│o ·········   │ syntax      │
+├──────────────│ tree        │
+│▐ackage main  │ parser for  │
+│              │ language    │
+│              │ ("go") is   │
+├──────────────│ not         ┤
+│1 1  2 ·                    │
+└────────────────────────────┘`,
+				},
+			},
+		},
+		{
+			name:           "focused owner opens locally without reroute",
+			startWorkspace: 1,
+			setup: func(t *testing.T, m *testWorkspaceManagerHandler, tmp1, tmp2 string) {
+				ownedPath := filepath.Join(tmp2, "self.go")
+				require.NoError(t, os.WriteFile(ownedPath, []byte("package main\n"), 0o666))
+				setAliases(m, map[string]text.CommandAlias{
+					"openCase": {Commands: []string{fmt.Sprintf("edit file://%s", ownedPath)}},
+					"to1":      {Commands: []string{"workspacefocus 1"}},
+					"to2":      {Commands: []string{"workspacefocus 2"}},
+				})
+			},
+			sequences: []handlertest.SequenceTestCase{
+				{
+					InputSequence: "<c-\\\\>openCase<enter>",
+					Expected: `┌──────────────┌─────────────┐
+│o ·······     │ syntax      │
+├──────────────│ tree        │
+│▐ackage main  │ parser for  │
+│              │ language    │
+│              │ ("go") is   │
+├──────────────│ not         ┤
+│1 1  2 ·                    │
+└────────────────────────────┘`,
+				},
+				{
+					InputSequence: "<c-\\\\>to1<enter>",
+					Expected: `┌────────────────────────────┐
+│                            │
+├────────────────────────────┤
+│                            │
+│     workspaceWallpaper     │
+│                            │
+├────────────────────────────┤
+│1 ·  2 2                    │
+└────────────────────────────┘`,
+				},
+				{
+					InputSequence: "<c-\\\\>to2<enter>",
+					Expected: `┌──────────────┌─────────────┐
+│o ·······     │ syntax      │
+├──────────────│ tree        │
+│▐ackage main  │ parser for  │
+│              │ language    │
+│              │ ("go") is   │
+├──────────────│ not         ┤
+│1 1  2 ·                    │
+└────────────────────────────┘`,
+				},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tmp1 := t.TempDir()
+			tmp2 := t.TempDir()
+			m := newManager(t, tmp1, tmp2)
+			t.Cleanup(func() {
+				require.NoError(t, m.Close())
+			})
+			tc.setup(t, m, tmp1, tmp2)
+			require.True(t, m.switchToWorkspace(tc.startWorkspace))
+
+			h := newSafeHandler(m)
+			writer := term.NewStringWriter(30, 9)
+			writer.BackgroundCh = '·'
+			handlertest.RunHandlerSequenceWriter(t, writer, h, 30, 9, tc.sequences)
+		})
+	}
+}
+
 func TestWorkspaceConfig(t *testing.T) {
 	mockConfig := map[string]any{
 		"1": "2",
@@ -610,8 +939,8 @@ func TestWorkspaceExtensions(t *testing.T) {
 	t.Run("calls extension runner with user extensions", func(t *testing.T) {
 		cfg := defaultCfg()
 		cfg.cfg = map[string]any{
-			"command":           map[string]any{},
-			"show_manual_after": "1h",
+			"command":            map[string]any{},
+			"show_manual_after":  "1h",
 			"show_progress_hint": false,
 			"extensions": map[string]any{
 				"git": map[string]any{

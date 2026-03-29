@@ -147,6 +147,12 @@ type workspaceManagerHandler struct {
 	shaderRunner     *shaderRunner
 }
 
+type openFileTarget struct {
+	workspaceIdx int
+	workspace    *workspaceHandler
+	tab          *browser.Tab
+}
+
 func (h *workspaceManagerHandler) newEditor(
 	cwd workspaceapi.URI, cfg ideConfig, svc vctrl.Service,
 ) (
@@ -392,6 +398,75 @@ func (h *workspaceManagerHandler) focusBrowser() browser.Browser {
 	return h.empty.Browser()
 }
 
+func (h *workspaceManagerHandler) workspaceForFile(file workspaceapi.URI) (*openFileTarget, bool) {
+	for i, wh := range h.workspaces {
+		if wh == nil {
+			continue
+		}
+		is, err := workspace.IsWorkspaceURI(wh.workspace, file)
+		if err != nil || !is {
+			continue
+		}
+		return &openFileTarget{workspaceIdx: i, workspace: wh}, true
+	}
+	return nil, false
+}
+
+func (h *workspaceManagerHandler) openFileTarget(file workspaceapi.URI) (*openFileTarget, bool) {
+	for i, wh := range h.workspaces {
+		if wh == nil {
+			continue
+		}
+		for _, tab := range wh.ex.comp.Tabs() {
+			if tab.URI().Equal(file) {
+				return &openFileTarget{workspaceIdx: i, workspace: wh, tab: tab}, true
+			}
+		}
+	}
+	return h.workspaceForFile(file)
+}
+
+func (h *workspaceManagerHandler) focusOpenFileTarget(
+	target *openFileTarget, file workspaceapi.URI, readOnly bool,
+) (*browser.Tab, error) {
+	if target == nil || target.workspace == nil {
+		return nil, errors.New("workspace target not found")
+	}
+	h.switchToWorkspace(target.workspaceIdx)
+	if target.tab != nil {
+		if win, ok := target.tab.Window(); ok {
+			_, err := target.workspace.ex.comp.SetFocus(win)
+			return target.tab, err
+		}
+		win := target.workspace.ex.invokeWindow()
+		if win.Closed() {
+			win, _ = target.workspace.ex.comp.Focus()
+		}
+		if err := win.SetContent(target.tab); err != nil && err != browserapi.ErrTabNotFree {
+			return nil, err
+		}
+		return target.tab, nil
+	}
+	return target.workspace.ex.editFileURILocal(file, target.workspace.ex.invokeWindow(), readOnly)
+}
+
+func (h *workspaceManagerHandler) RouteOpen(
+	file workspaceapi.URI, readOnly bool,
+) (browserapi.Handler, bool, error) {
+	target, ok := h.openFileTarget(file)
+	if !ok || target == nil || target.workspace == nil {
+		return nil, false, nil
+	}
+	if target.tab == nil {
+		focus := h.focusHandler()
+		if focus == target.workspace {
+			return nil, false, nil
+		}
+	}
+	tab, err := h.focusOpenFileTarget(target, file, readOnly)
+	return tab, true, err
+}
+
 func (h *workspaceManagerHandler) focusEx() *ex {
 	if handler := h.workspaces[h.focus]; handler != nil {
 		return handler.ex
@@ -633,6 +708,7 @@ func (h *workspaceManagerHandler) textOpts(
 		text.WithSyntaxConfig(cfg.syntaxConfig()),
 		text.WithMarkdownConfig(markdownConfig),
 		text.WithClipboard(cfg.clipboard()),
+		text.WithOpenRouter(h),
 	}
 
 	for seq, cmd := range cfg.commandKeyMappings() {

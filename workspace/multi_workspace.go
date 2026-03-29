@@ -84,11 +84,18 @@ func (m multi) Recover(
 func (m multi) loadExtraneous(
 	file workspaceapi.URI, buf *cell.Buffer, swapDir workspaceapi.URI, readOnly bool,
 ) (FlusherCloser, error) {
-	workspace, err := m.manager.AddWorkspace(m.parentCtx, workspaceapi.Dir(file))
+	_, ok, err := m.manager.Workspace(file)
 	if err != nil {
 		return nil, err
 	}
-	return workspace.Load(file, buf, swapDir, readOnly)
+	if ok {
+		return nil, ErrOpenInOtherWorkspace
+	}
+	w, err := m.manager.AddWorkspace(m.parentCtx, workspaceapi.Dir(file))
+	if err != nil {
+		return nil, err
+	}
+	return w.Load(file, buf, swapDir, readOnly)
 }
 
 func (m multi) recoverExtraneous(

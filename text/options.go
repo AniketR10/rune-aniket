@@ -29,6 +29,8 @@ import (
 	"maps"
 	"time"
 
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/clipboard"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
@@ -52,6 +54,21 @@ type CommandOverlayConfig struct {
 	ShowProgressHint bool
 }
 
+// OpenRouter abstracts rerouting file opens to another editor/browser context.
+// It is consulted when an open fails with workspaceapi.ErrFileAlreadyOpen,
+// before the recovery prompt is shown.
+type OpenRouter interface {
+	RouteOpen(uri workspaceapi.URI, readOnly bool) (browserapi.Handler, bool, error)
+}
+
+type nopOpenRouter struct{}
+
+func (nopOpenRouter) RouteOpen(
+	workspaceapi.URI, bool,
+) (browserapi.Handler, bool, error) {
+	return nil, false, nil
+}
+
 // Config holds configuration for an editor.Component.
 type Config struct {
 	Tabspaces               int
@@ -67,6 +84,7 @@ type Config struct {
 	PkgManager              syntax.PkgManager
 	Markdown                markdown.Config
 	Clipboard               clipboard.Register
+	OpenRouter              OpenRouter
 
 	EventPublisher func(term.Event) bool
 
@@ -118,6 +136,7 @@ func DefaultConfig() Config {
 		PkgManager:              nopPkgManager{},
 		Markdown:                markdown.DefaultConfig(),
 		Clipboard:               clipboard.NewInMemory(),
+		OpenRouter:              nopOpenRouter{},
 		Icons: IconSet{
 			Extensions: map[string]rune{},
 			Default:    'o',
@@ -353,6 +372,13 @@ func WithIconSet(icons IconSet) Option {
 func WithEventPublisher(f func(term.Event) bool) Option {
 	return func(cfg *Config) {
 		cfg.EventPublisher = f
+	}
+}
+
+// WithOpenRouter sets the Component's open router.
+func WithOpenRouter(r OpenRouter) Option {
+	return func(cfg *Config) {
+		cfg.OpenRouter = r
 	}
 }
 

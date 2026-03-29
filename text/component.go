@@ -458,7 +458,12 @@ func (c *Component) openFileTab(
 // will create a prompt for the user to decide what to do.
 func (c *Component) Open(file workspaceapi.URI) (browserapi.Handler, error) {
 	h, err := c.OpenFileTab(file, false)
-	if err != nil && err == workspaceapi.ErrFileAlreadyOpen {
+	if err != nil &&
+		(err == workspaceapi.ErrFileAlreadyOpen || errors.Is(err, workspace.ErrOpenInOtherWorkspace)) {
+		routed, handled, routeErr := c.config.OpenRouter.RouteOpen(file, false)
+		if handled || routeErr != nil {
+			return routed, routeErr
+		}
 		c.openRecoveryPrompt(file)
 	}
 	return h, err
@@ -467,7 +472,12 @@ func (c *Component) Open(file workspaceapi.URI) (browserapi.Handler, error) {
 // OpenReadOnly is like Open but opens the file in read-only mode (cannot be saved).
 func (c *Component) OpenReadOnly(file workspaceapi.URI) (browserapi.Handler, error) {
 	h, err := c.OpenFileTab(file, true)
-	if err != nil && err == workspaceapi.ErrFileAlreadyOpen {
+	if err != nil &&
+		(err == workspaceapi.ErrFileAlreadyOpen || errors.Is(err, workspace.ErrOpenInOtherWorkspace)) {
+		routed, handled, routeErr := c.config.OpenRouter.RouteOpen(file, true)
+		if handled || routeErr != nil {
+			return routed, routeErr
+		}
 		c.openRecoveryPrompt(file)
 	}
 	return h, err
@@ -708,7 +718,7 @@ func (c *Component) DispatchEvent(ev textapi.Event) (handled bool) {
 func (c *Component) Notify(
 	level browserapi.NotificationLevel, msg string, args ...any,
 ) (string, error) {
-	return c.config.Notify(level, fmt.Sprintf(msg, args...))
+	return c.config.Notify(level, "%s", fmt.Sprintf(msg, args...))
 }
 
 // NotifyOnce satisfies browser.Browser.

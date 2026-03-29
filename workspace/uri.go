@@ -26,6 +26,7 @@ package workspace
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 )
@@ -77,10 +78,20 @@ func IsWorkspaceURI(workspace Workspace, uri workspaceapi.URI) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return uri.Scheme() == uriAtWorkspace.Scheme() &&
+	if !(uri.Scheme() == uriAtWorkspace.Scheme() &&
 		uri.Hostname() == uriAtWorkspace.Hostname() &&
 		uri.Port() == uriAtWorkspace.Port() &&
-		uri.User() == uriAtWorkspace.User(), nil
+		uri.User() == uriAtWorkspace.User()) {
+		return false, nil
+	}
+	if uri.Scheme() != FileScheme {
+		return true, nil
+	}
+	workspaceURI, err := workspace.URI(".")
+	if err != nil {
+		return false, err
+	}
+	return strings.HasPrefix(uri.Path(), workspaceURI.Path()), nil
 }
 
 // NewWorkspaceURI expands the given path with the given workspaceapi.URI

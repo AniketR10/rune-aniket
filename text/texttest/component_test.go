@@ -110,6 +110,24 @@ type testLoader struct {
 	expectError   error
 }
 
+type testOpenRouter struct {
+	h        browserapi.Handler
+	handled  bool
+	err      error
+	called   int
+	uri      workspaceapi.URI
+	readOnly bool
+}
+
+func (t *testOpenRouter) RouteOpen(
+	uri workspaceapi.URI, readOnly bool,
+) (browserapi.Handler, bool, error) {
+	t.called++
+	t.uri = uri
+	t.readOnly = readOnly
+	return t.h, t.handled, t.err
+}
+
 func (t *testLoader) Remove(string) error {
 	return nil
 }
@@ -493,6 +511,92 @@ func TestComponentOpen(t *testing.T) {
 		w := term.NewStringWriter(30, 20)
 		comptest.TestComponent(t, c, w, tests)
 
+	})
+
+	t.Run("routes before opening recovery prompt if err == workspaceapi.ErrFileAlreadyOpen", func(t *testing.T) {
+		cfg := text.DefaultConfig()
+		router := new(testOpenRouter)
+		cfg.OpenRouter = router
+		c, loader := newTestComponentConfig(t, NopEditor(), cfg)
+		c.Resize(30, 20)
+
+		busy, err := workspaceapi.ParseURI("file:///tmp/busy")
+		require.NoError(t, err)
+		routed := browser.NopHandler(handler.Nop())
+		router.h = routed
+		router.handled = true
+
+		loader.expectError = workspaceapi.ErrFileAlreadyOpen
+		h, err := c.Open(busy)
+		require.NoError(t, err)
+		assert.Equal(t, routed, h)
+		assert.Equal(t, 1, router.called)
+		assert.True(t, router.uri.Equal(busy))
+		assert.False(t, router.readOnly)
+		w := term.NewStringWriter(30, 20)
+		c.Draw(w)
+		require.NoError(t, w.Flush())
+		assert.NotContains(t, w.String(), "already open by another")
+	})
+
+	t.Run("falls back to recovery prompt when router does not handle open", func(t *testing.T) {
+		cfg := text.DefaultConfig()
+		router := new(testOpenRouter)
+		cfg.OpenRouter = router
+		c, loader := newTestComponentConfig(t, NopEditor(), cfg)
+		c.Resize(30, 20)
+
+		busy, err := workspaceapi.ParseURI("file:///tmp/busy")
+		require.NoError(t, err)
+		loader.expectError = workspaceapi.ErrFileAlreadyOpen
+		_, err = c.Open(busy)
+		require.Equal(t, workspaceapi.ErrFileAlreadyOpen, err)
+		assert.Equal(t, 1, router.called)
+
+		tests := []comptest.TestCase{
+			{nil, `
+┌────────────────────────────┐
+│                            │
+├────────────────────────────┤
+│                            │
+│                            │
+│                            │
+┌────────────────────────────┐
+│                            │
+│  File file:///tmp/busy is  │
+│  already open by another   │
+│  process or an edit        │
+│  session for this file     │
+│  crashed.                  │
+│                            │
+│Open rdonly      Force Edit │
+└────────────────────────────┘
+│                            │
+│                            │
+│                            │
+└────────────────────────────┘`},
+		}
+
+		w := term.NewStringWriter(30, 20)
+		comptest.TestComponent(t, c, w, tests)
+	})
+
+	t.Run("routes before opening recovery prompt if err == workspace.OpenInOtherWorkspaceError", func(t *testing.T) {
+		cfg := text.DefaultConfig()
+		router := new(testOpenRouter)
+		cfg.OpenRouter = router
+		c, loader := newTestComponentConfig(t, NopEditor(), cfg)
+		busy, err := workspaceapi.ParseURI("file:///tmp/busy")
+		require.NoError(t, err)
+		router.h = browser.NopHandler(handler.Nop())
+		router.handled = true
+		loader.expectError = workspace.ErrOpenInOtherWorkspace
+
+		h, err := c.Open(busy)
+		require.NoError(t, err)
+		assert.Equal(t, router.h, h)
+		assert.Equal(t, 1, router.called)
+		assert.True(t, router.uri.Equal(busy))
 	})
 
 	t.Run("sets a tab name", func(t *testing.T) {

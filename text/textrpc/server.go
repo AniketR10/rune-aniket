@@ -190,7 +190,7 @@ func (s *Server) SubscribeCommand(srv textrpc.Editor_SubscribeCommandServer) err
 			case errMsg := <-clientStream.handleCommand:
 				if errMsg != "" {
 					s.editor.Lock()
-					_, err := s.editor.Notify(browserapi.LevelError, errMsg)
+					_, err := s.editor.Notify(browserapi.LevelError, "%s", errMsg)
 					if err != nil {
 						s.log(log.ErrorLevel, "%s", errMsg)
 						s.log(log.WarnLevel, "notify: %v", err)

@@ -26,6 +26,7 @@ package workspace
 
 import (
 	"context"
+	"errors"
 	"io"
 	"time"
 
@@ -60,7 +61,10 @@ type SchemeManager interface {
 type WorkspaceManager interface {
 	SchemeManager
 	AddWorkspace(context.Context, workspaceapi.URI) (Workspace, error)
+	Workspace(workspaceapi.URI) (Workspace, bool, error)
 }
+
+var ErrOpenInOtherWorkspace = errors.New("file should be opened in another workspace")
 
 // FlusherCloser wraps methods to manipulate a cell.Buffer's persistence.
 type FlusherCloser interface {

@@ -590,6 +590,22 @@ func (mr *MockWorkspaceManagerMockRecorder) AddWorkspace(arg0, arg1 any) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddWorkspace", reflect.TypeOf((*MockWorkspaceManager)(nil).AddWorkspace), arg0, arg1)
 }
 
+// Workspace mocks base method.
+func (m *MockWorkspaceManager) Workspace(arg0 workspaceapi.URI) (workspace.Workspace, bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Workspace", arg0)
+	ret0, _ := ret[0].(workspace.Workspace)
+	ret1, _ := ret[1].(bool)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// Workspace indicates an expected call of Workspace.
+func (mr *MockWorkspaceManagerMockRecorder) Workspace(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Workspace", reflect.TypeOf((*MockWorkspaceManager)(nil).Workspace), arg0)
+}
+
 // RegisterScheme mocks base method.
 func (m *MockWorkspaceManager) RegisterScheme(arg0 string, arg1 schemeapi.SchemeFunc) error {
 	m.ctrl.T.Helper()
