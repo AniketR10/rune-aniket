@@ -79,8 +79,8 @@ import (
 )
 
 const (
-	commandQuery     = "?"
-	commandChat      = "agent"
+	commandQuery = "?"
+	commandChat  = "agent"
 )
 
 var (
@@ -730,7 +730,7 @@ func newCommandEventHandler(
 	ret.n = w.Notifications(ctx)
 	ret.resources = make(map[string]string)
 
-	ret.dialogueStore = dialoguemanager.NewStore(ret.db)
+	ret.dialogueStore = dialoguemanager.NewStore(ret.db, filepath.Join(w.DataDir(ctx), "sessions"))
 
 	if ret.compactModel != "" {
 		ret.compactSvc, err = ret.newService(ret.compactModel)

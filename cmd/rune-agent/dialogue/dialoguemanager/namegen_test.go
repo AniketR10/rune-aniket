@@ -37,13 +37,13 @@ func TestGenerateUniqueID(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("generates ID with prefix", func(t *testing.T) {
-		store := NewStore(storagestub.NewInMemoryService())
+		store := NewStore(storagestub.NewInMemoryService(), t.TempDir())
 		id := GenerateUniqueID(ctx, store, "sub-agent-plan-")
 		assert.True(t, strings.HasPrefix(id, "sub-agent-plan-"))
 	})
 
 	t.Run("generates ID without prefix", func(t *testing.T) {
-		store := NewStore(storagestub.NewInMemoryService())
+		store := NewStore(storagestub.NewInMemoryService(), t.TempDir())
 		id := GenerateUniqueID(ctx, store, "")
 		assert.NotEmpty(t, id)
 		// Petname format: word-word
@@ -51,7 +51,7 @@ func TestGenerateUniqueID(t *testing.T) {
 	})
 
 	t.Run("retries on collision", func(t *testing.T) {
-		store := NewStore(storagestub.NewInMemoryService())
+		store := NewStore(storagestub.NewInMemoryService(), t.TempDir())
 
 		// Generate first ID, then pre-create a dialogue with
 		// the same ID to force a collision on next call.
@@ -65,7 +65,7 @@ func TestGenerateUniqueID(t *testing.T) {
 	})
 
 	t.Run("unique across multiple calls", func(t *testing.T) {
-		store := NewStore(storagestub.NewInMemoryService())
+		store := NewStore(storagestub.NewInMemoryService(), t.TempDir())
 		seen := make(map[string]bool)
 		for range 20 {
 			id := GenerateUniqueID(ctx, store, "")

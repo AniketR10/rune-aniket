@@ -646,8 +646,9 @@ func agentToolCallResponse(toolName, args, callID string) agentMockResponse {
 // newTestDialogueStore returns a real dialoguemanager.Store backed by an
 // in-memory storageapi.Service. This lets e2e tests exercise the actual
 // persistence path (indexing, versioning, serialization) instead of a mock.
-func newTestDialogueStore() dialoguemanager.Store {
-	return dialoguemanager.NewStore(storagestub.NewInMemoryService())
+func newTestDialogueStore(t *testing.T) dialoguemanager.Store {
+	t.Helper()
+	return dialoguemanager.NewStore(storagestub.NewInMemoryService(), t.TempDir())
 }
 
 // normalizeMessages zeroes out empty-but-non-nil slices that result from
@@ -746,7 +747,7 @@ func TestCreateAgentCompletions_SendsBreakOnCancel(t *testing.T) {
 		},
 	}
 
-	store := newTestDialogueStore()
+	store := newTestDialogueStore(t)
 	registry := agent.NewRegistry(blockingTool)
 	skillReg := skills.NewRegistry(nopFileSystem{}, workspaceapi.URI{}, nil, nil)
 	ag := agent.NewAgent(svc, registry, skillReg, store, agent.NoMemory(), agent.Config{SystemPrompt: "test"})
@@ -825,7 +826,7 @@ func TestCreateAgentCompletions_NormalFlowSendsBreak(t *testing.T) {
 		},
 	}
 
-	store := newTestDialogueStore()
+	store := newTestDialogueStore(t)
 	registry := agent.NewRegistry()
 	skillReg := skills.NewRegistry(nopFileSystem{}, workspaceapi.URI{}, nil, nil)
 	ag := agent.NewAgent(svc, registry, skillReg, store, agent.NoMemory(), agent.Config{SystemPrompt: "test"})
@@ -1672,7 +1673,7 @@ func waitUntilIdle(ch <-chan struct{}, idleTimeout, maxWait time.Duration) {
 func newTestAIEditorHandler(t *testing.T, svc *agentMockService) testAIEditorDeps {
 	t.Helper()
 
-	store := newTestDialogueStore()
+	store := newTestDialogueStore(t)
 	wm := &capturingWindowManager{}
 	reg := llmregistry.NewStatic()
 	reg.Register(llmregistry.ModelEntry{
@@ -1862,7 +1863,7 @@ func openAgentShell(t *testing.T, deps testAIEditorDeps) *replFlusher {
 func newTestAIEditorHandlerWithServer(t *testing.T, serverURL string) testAIEditorDeps {
 	t.Helper()
 
-	store := newTestDialogueStore()
+	store := newTestDialogueStore(t)
 	wm := &capturingWindowManager{}
 	reg := llmregistry.NewStatic()
 	reg.Register(llmregistry.ModelEntry{
@@ -1950,7 +1951,7 @@ func newTestAIEditorHandlerWithServer(t *testing.T, serverURL string) testAIEdit
 func newTestAIEditorHandlerWithServerAndRealStore(t *testing.T, serverURL string) testAIEditorDeps {
 	t.Helper()
 
-	store := dialoguemanager.NewStore(storagestub.NewInMemoryService())
+	store := dialoguemanager.NewStore(storagestub.NewInMemoryService(), t.TempDir())
 	wm := &capturingWindowManager{}
 	reg := llmregistry.NewStatic()
 	reg.Register(llmregistry.ModelEntry{
@@ -2058,7 +2059,7 @@ func newTestAIEditorHandlerWithServerAndRPCStore(t *testing.T, serverURL string)
 
 	rpcBackend := new(storagerpc.Client)
 	rpcBackend.InitWithCollection(conn, marshaler, "dialogues")
-	store := dialoguemanager.NewStore(rpcBackend)
+	store := dialoguemanager.NewStore(rpcBackend, t.TempDir())
 
 	wm := &capturingWindowManager{}
 	reg := llmregistry.NewStatic()
@@ -3817,7 +3818,7 @@ func TestAIEditorHandler_model_switch_propagates_to_agent_skill(t *testing.T) {
 		},
 	}
 
-	store := newTestDialogueStore()
+	store := newTestDialogueStore(t)
 	wm := &capturingWindowManager{}
 	reg := llmregistry.NewStatic()
 	reg.Register(llmregistry.ModelEntry{
@@ -5154,7 +5155,7 @@ func TestAIEditorHandler_chat_compact_normalizes_stored_history_before_summarize
 		},
 	}
 
-	store := newTestDialogueStore()
+	store := newTestDialogueStore(t)
 	wm := &capturingWindowManager{}
 	reg := llmregistry.NewStatic()
 	reg.Register(llmregistry.ModelEntry{
@@ -7623,7 +7624,7 @@ func TestAIEditorHandler_chat_model_switch_uses_provider_tools(t *testing.T) {
 		},
 	}
 
-	store := newTestDialogueStore()
+	store := newTestDialogueStore(t)
 	wm := &capturingWindowManager{}
 	reg := llmregistry.NewStatic()
 	reg.Register(llmregistry.ModelEntry{
@@ -7850,7 +7851,7 @@ func TestAIEditorHandler_exec_command_and_write_stdin_integration(t *testing.T) 
 	}
 
 	// Build handler with real SessionManager and real exec_command/write_stdin tools.
-	store := newTestDialogueStore()
+	store := newTestDialogueStore(t)
 	wm := &capturingWindowManager{}
 	reg := llmregistry.NewStatic()
 	reg.Register(llmregistry.ModelEntry{
@@ -8957,7 +8958,7 @@ func TestAgent_MemoryInjectedOncePerRun(t *testing.T) {
 		},
 	}
 
-	store := newTestDialogueStore()
+	store := newTestDialogueStore(t)
 	registry := agent.NewRegistry(echoTool)
 	skillReg := skills.NewRegistry(nopFileSystem{}, workspaceapi.URI{}, nil, nil)
 	memRecaller := &mockMemoryRecaller{memories: []agent.Memory{
@@ -9048,7 +9049,7 @@ func TestAgent_MemoryRecallRenderedInTree(t *testing.T) {
 		},
 	}
 
-	store := newTestDialogueStore()
+	store := newTestDialogueStore(t)
 	registry := agent.NewRegistry()
 	skillReg := skills.NewRegistry(nopFileSystem{}, workspaceapi.URI{}, nil, nil)
 	memRecaller := &mockMemoryRecaller{memories: memories}
@@ -9189,7 +9190,7 @@ func TestCreateAgentCompletions_NotifiesTurnCompleted(t *testing.T) {
 		},
 	}
 
-	store := newTestDialogueStore()
+	store := newTestDialogueStore(t)
 	registry := agent.NewRegistry()
 	skillReg := skills.NewRegistry(nopFileSystem{}, workspaceapi.URI{}, nil, nil)
 	ag := agent.NewAgent(svc, registry, skillReg, store, agent.NoMemory(), agent.Config{SystemPrompt: "test"})
@@ -9269,7 +9270,7 @@ func TestCreateAgentCompletions_NoNotificationOnCancel(t *testing.T) {
 		},
 	}
 
-	store := newTestDialogueStore()
+	store := newTestDialogueStore(t)
 	registry := agent.NewRegistry(blockingTool)
 	skillReg := skills.NewRegistry(nopFileSystem{}, workspaceapi.URI{}, nil, nil)
 	ag := agent.NewAgent(svc, registry, skillReg, store, agent.NoMemory(), agent.Config{SystemPrompt: "test"})
@@ -9332,7 +9333,7 @@ func TestCreateAgentCompletions_NotifiesOnError(t *testing.T) {
 		},
 	}
 
-	store := newTestDialogueStore()
+	store := newTestDialogueStore(t)
 	registry := agent.NewRegistry()
 	skillReg := skills.NewRegistry(nopFileSystem{}, workspaceapi.URI{}, nil, nil)
 	ag := agent.NewAgent(svc, registry, skillReg, store, agent.NoMemory(), agent.Config{SystemPrompt: "test"})
@@ -9580,7 +9581,7 @@ func TestAgent_PartialReasoningPreservedOnContinue(t *testing.T) {
 		},
 	}
 
-	store := newTestDialogueStore()
+	store := newTestDialogueStore(t)
 	registry := agent.NewRegistry()
 	skillReg := skills.NewRegistry(nopFileSystem{}, workspaceapi.URI{}, nil, nil)
 	ag := agent.NewAgent(svc, registry, skillReg, store, agent.NoMemory(), agent.Config{SystemPrompt: "test"})
@@ -9744,7 +9745,7 @@ func TestAgent_NormalizeStoredDialogueBeforeLLMCall(t *testing.T) {
 				validateRequest: rejectMalformed,
 			}
 
-			store := newTestDialogueStore()
+			store := newTestDialogueStore(t)
 			require.NoError(t, store.Create(context.Background(), dialoguemanager.Dialogue{
 				ID:       "d",
 				Messages: tt.stored,
@@ -10489,7 +10490,7 @@ func TestAIEditorHandler_model_switch_no_empty_text_blocks(t *testing.T) {
 				},
 			}
 
-			store := newTestDialogueStore()
+			store := newTestDialogueStore(t)
 			wm := &capturingWindowManager{}
 			reg := llmregistry.NewStatic()
 			reg.Register(llmregistry.ModelEntry{

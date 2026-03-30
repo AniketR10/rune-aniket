@@ -25,7 +25,12 @@ package dialoguemanager
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"slices"
 	"time"
 
@@ -54,14 +59,15 @@ type Store interface {
 	List(context.Context) (iterator.Iterator[DialogueHeader], error)
 }
 
-// NewStore allocates storage for a new Store and
-// initializes it with the given llm.
-func NewStore(backend storageapi.Service) Store {
-	return store{backend: backend}
+// NewStore allocates storage for a new Store using the given backend for
+// dialogue metadata and the given directory for dialogue message bodies.
+func NewStore(backend storageapi.Service, messagesDir string) Store {
+	return store{backend: backend, messagesDir: messagesDir}
 }
 
 type store struct {
-	backend storageapi.Service
+	backend     storageapi.Service
+	messagesDir string
 }
 
 // Dialogue holds a dialogue's data as stored in durable storage.
@@ -73,7 +79,21 @@ type Dialogue struct {
 	SubAgent     bool
 	Version      int
 	MessageCount int
+	MessagesPath string
 	Messages     []llm.Message
+	Usage        llm.DialogueUsage
+	UpdatedAt    time.Time
+}
+
+type storedDialogue struct {
+	ID           string
+	AgentID      string
+	Model        string
+	WorkspaceURI string
+	SubAgent     bool
+	Version      int
+	MessageCount int
+	MessagesPath string
 	Usage        llm.DialogueUsage
 	UpdatedAt    time.Time
 }
@@ -94,8 +114,8 @@ type DialogueHeader struct {
 }
 
 type dialogueIndex struct {
-	Headers map[string]DialogueHeader
-	Version int
+	Headers      map[string]DialogueHeader
+	Version      int
 	Bootstrapped bool
 }
 
@@ -133,6 +153,10 @@ func (d DialogueHeader) Workspace() (workspaceapi.URI, bool) {
 
 // Header returns a DialogueHeader from this Dialogue.
 func (d Dialogue) Header() DialogueHeader {
+	messageCount := d.MessageCount
+	if messageCount == 0 {
+		messageCount = len(d.Messages)
+	}
 	return DialogueHeader{
 		ID:           d.ID,
 		AgentID:      d.AgentID,
@@ -140,10 +164,122 @@ func (d Dialogue) Header() DialogueHeader {
 		WorkspaceURI: d.WorkspaceURI,
 		SubAgent:     d.SubAgent,
 		Version:      d.Version,
-		MessageCount: d.MessageCount,
+		MessageCount: messageCount,
 		Usage:        d.Usage,
 		UpdatedAt:    d.UpdatedAt,
 	}
+}
+
+func storedDialogueFromDialogue(d Dialogue) storedDialogue {
+	return storedDialogue{
+		ID:           d.ID,
+		AgentID:      d.AgentID,
+		Model:        d.Model,
+		WorkspaceURI: d.WorkspaceURI,
+		SubAgent:     d.SubAgent,
+		Version:      d.Version,
+		MessageCount: d.MessageCount,
+		MessagesPath: d.MessagesPath,
+		Usage:        d.Usage,
+		UpdatedAt:    d.UpdatedAt,
+	}
+}
+
+func encodedDialogueID(id string) string {
+	return base64.RawURLEncoding.EncodeToString([]byte(id))
+}
+
+func (s store) messagesPathForID(id string) string {
+	return filepath.Join(s.messagesDir, encodedDialogueID(id)+".json")
+}
+
+func (s store) ensureMessagesDir() error {
+	if s.messagesDir == "" {
+		return fmt.Errorf("messages dir is empty")
+	}
+	return os.MkdirAll(s.messagesDir, 0o700)
+}
+
+func (s store) readMessages(path string) ([]llm.Message, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("open dialogue messages %q: %w", path, err)
+	}
+	defer func() { _ = f.Close() }()
+	var msgs []llm.Message
+	if err := json.NewDecoder(f).Decode(&msgs); err != nil {
+		return nil, fmt.Errorf("decode dialogue messages %q: %w", path, err)
+	}
+	if len(msgs) == 0 {
+		return nil, nil
+	}
+	return msgs, nil
+}
+
+func (s store) writeMessages(path string, msgs []llm.Message) error {
+	if path == "" {
+		return fmt.Errorf("messages path is empty")
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return fmt.Errorf("create dialogue messages dir: %w", err)
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".tmp-*")
+	if err != nil {
+		return fmt.Errorf("create temp messages file: %w", err)
+	}
+	tmpPath := tmp.Name()
+	if err := json.NewEncoder(tmp).Encode(msgs); err != nil {
+		_ = tmp.Close()
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("encode dialogue messages: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("close temp messages file: %w", err)
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("rename temp messages file: %w", err)
+	}
+	return nil
+}
+
+func (s store) getStoredDialogue(
+	ctx context.Context, id string,
+) (Dialogue, error) {
+	var doc Dialogue
+	err := s.backend.Get(ctx, id, &doc)
+	if err != nil {
+		return Dialogue{}, fmt.Errorf("document service get: %w", err)
+	}
+	if doc.Version == 0 {
+		doc.Version = 1
+	}
+	if doc.MessageCount == 0 {
+		doc.MessageCount = len(doc.Messages)
+	}
+	return doc, nil
+}
+
+func (s store) loadDialogueMessages(d Dialogue) ([]llm.Message, error) {
+	if d.MessagesPath == "" {
+		if len(d.Messages) == 0 {
+			return nil, nil
+		}
+		return append([]llm.Message(nil), d.Messages...), nil
+	}
+	return s.readMessages(d.MessagesPath)
+}
+
+func (s store) rollbackMessages(path string, msgs []llm.Message) {
+	if path == "" {
+		return
+	}
+	if len(msgs) == 0 {
+		_ = os.Remove(path)
+		return
+	}
+	_ = s.writeMessages(path, msgs)
 }
 
 // ArchiveAndReplaceParams holds the parameters for an ArchiveAndReplace
@@ -161,6 +297,9 @@ type ArchiveAndReplaceParams struct {
 }
 
 func (s store) Health(ctx context.Context) error {
+	if err := s.ensureMessagesDir(); err != nil {
+		return fmt.Errorf("messages dir: %w", err)
+	}
 	err := s.backend.Delete(ctx, "IDThatWillNeverExist")
 	if err != nil {
 		return fmt.Errorf("backend: %w", err)
@@ -266,12 +405,12 @@ func (s store) ensureIndexMode(ctx context.Context, bootstrap bool) (dialogueInd
 				}
 			}
 			return []storageapi.Update{
-				{FieldPath: []string{"Headers"}, Value: idx.Headers},
-				{FieldPath: []string{"Bootstrapped"}, Value: true},
-				{FieldPath: []string{"Version"}, Value: idx.Version + 1},
-			}, []storageapi.Precondition{
-				{FieldPath: []string{"Version"}, Value: idx.Version},
-			}
+					{FieldPath: []string{"Headers"}, Value: idx.Headers},
+					{FieldPath: []string{"Bootstrapped"}, Value: true},
+					{FieldPath: []string{"Version"}, Value: idx.Version + 1},
+				}, []storageapi.Precondition{
+					{FieldPath: []string{"Version"}, Value: idx.Version},
+				}
 		})
 	if err != nil {
 		return dialogueIndex{}, fmt.Errorf("document service bootstrap index: %w", err)
@@ -292,12 +431,12 @@ func (s store) updateIndex(ctx context.Context, fn func(dialogueIndex) dialogueI
 		func() ([]storageapi.Update, []storageapi.Precondition) {
 			idx = fn(idx)
 			return []storageapi.Update{
-				{FieldPath: []string{"Headers"}, Value: idx.Headers},
-				{FieldPath: []string{"Bootstrapped"}, Value: idx.Bootstrapped},
-				{FieldPath: []string{"Version"}, Value: idx.Version + 1},
-			}, []storageapi.Precondition{
-				{FieldPath: []string{"Version"}, Value: idx.Version},
-			}
+					{FieldPath: []string{"Headers"}, Value: idx.Headers},
+					{FieldPath: []string{"Bootstrapped"}, Value: idx.Bootstrapped},
+					{FieldPath: []string{"Version"}, Value: idx.Version + 1},
+				}, []storageapi.Precondition{
+					{FieldPath: []string{"Version"}, Value: idx.Version},
+				}
 		})
 }
 
@@ -313,9 +452,18 @@ func (s store) Create(ctx context.Context, d Dialogue) error {
 		d.UpdatedAt = time.Now()
 	}
 	d.MessageCount = len(d.Messages)
-	err := s.backend.Create(ctx, d.ID, &d)
+	if d.MessagesPath == "" {
+		d.MessagesPath = s.messagesPathForID(d.ID)
+	}
+	stored := storedDialogueFromDialogue(d)
+	err := s.backend.Create(ctx, d.ID, &stored)
 	if err != nil {
 		return fmt.Errorf("document service create: %w", err)
+	}
+	if err := s.writeMessages(d.MessagesPath, d.Messages); err != nil {
+		_ = s.backend.Delete(ctx, d.ID)
+		_ = os.Remove(d.MessagesPath)
+		return err
 	}
 	err = s.updateIndex(ctx, func(idx dialogueIndex) dialogueIndex {
 		idx.Headers[d.ID] = d.Header()
@@ -323,27 +471,7 @@ func (s store) Create(ctx context.Context, d Dialogue) error {
 	})
 	if err != nil {
 		_ = s.backend.Delete(ctx, d.ID)
-		return err
-	}
-	return nil
-}
-
-func (s store) set(ctx context.Context, d Dialogue) error {
-	if d.UpdatedAt.IsZero() {
-		d.UpdatedAt = time.Now()
-	}
-	d.Version = 1
-	d.MessageCount = len(d.Messages)
-
-	err := s.backend.Set(ctx, d.ID, &d)
-	if err != nil {
-		return fmt.Errorf("document service set: %w", err)
-	}
-	err = s.updateIndex(ctx, func(idx dialogueIndex) dialogueIndex {
-		idx.Headers[d.ID] = d.Header()
-		return idx
-	})
-	if err != nil {
+		_ = os.Remove(d.MessagesPath)
 		return err
 	}
 	return nil
@@ -352,28 +480,65 @@ func (s store) set(ctx context.Context, d Dialogue) error {
 func (s store) ArchiveAndReplace(ctx context.Context, p ArchiveAndReplaceParams) error {
 	archived := p.Dialogue
 	archived.ID = p.ArchivedDialogueID
-	if err := s.Create(ctx, archived); err != nil {
-		return fmt.Errorf("archive-and-replace archive: %w", err)
+	replaced := p.Dialogue
+	archived.MessageCount = len(archived.Messages)
+	if archived.MessagesPath == "" || archived.MessagesPath == replaced.MessagesPath {
+		archived.MessagesPath = s.messagesPathForID(archived.ID)
 	}
 
-	replaced := p.Dialogue
-	replaced.Messages = p.Messages
-	replaced.MessageCount = len(p.Messages)
+	replaced.Messages = append([]llm.Message(nil), p.Messages...)
+	replaced.MessageCount = len(replaced.Messages)
 	replaced.Version = 1
 	replaced.UpdatedAt = time.Now()
-	if err := s.set(ctx, replaced); err != nil {
-		return fmt.Errorf("archive-and-replace replace: %w", err)
+	if replaced.MessagesPath == "" {
+		replaced.MessagesPath = s.messagesPathForID(replaced.ID)
 	}
-	return nil
+
+	if err := s.writeMessages(archived.MessagesPath, archived.Messages); err != nil {
+		return fmt.Errorf("archive-and-replace archive write: %w", err)
+	}
+	storedArchived := storedDialogueFromDialogue(archived)
+	err := s.backend.Create(ctx, archived.ID, &storedArchived)
+	if err != nil {
+		_ = os.Remove(archived.MessagesPath)
+		return fmt.Errorf("archive-and-replace archive: document service create: %w", err)
+	}
+	if err := s.writeMessages(replaced.MessagesPath, replaced.Messages); err != nil {
+		_ = s.backend.Delete(ctx, archived.ID)
+		_ = os.Remove(archived.MessagesPath)
+		return fmt.Errorf("archive-and-replace replace write: %w", err)
+	}
+	storedReplaced := storedDialogueFromDialogue(replaced)
+	if err := s.backend.Set(ctx, replaced.ID, &storedReplaced); err != nil {
+		s.rollbackMessages(replaced.MessagesPath, p.Dialogue.Messages)
+		_ = s.backend.Delete(ctx, archived.ID)
+		_ = os.Remove(archived.MessagesPath)
+		return fmt.Errorf("archive-and-replace replace: document service set: %w", err)
+	}
+	if err != nil {
+		return err
+	}
+	return s.updateIndex(ctx, func(idx dialogueIndex) dialogueIndex {
+		idx.Headers[archived.ID] = archived.Header()
+		idx.Headers[replaced.ID] = replaced.Header()
+		return idx
+	})
 }
 
 func (s store) Get(
 	ctx context.Context, ID string,
 ) (Dialogue, error) {
-	var doc Dialogue
-	err := s.backend.Get(ctx, ID, &doc)
+	doc, err := s.getStoredDialogue(ctx, ID)
 	if err != nil {
-		return Dialogue{}, fmt.Errorf("document service get: %w", err)
+		return Dialogue{}, err
+	}
+	msgs, err := s.loadDialogueMessages(doc)
+	if err != nil {
+		return Dialogue{}, fmt.Errorf("load dialogue messages: %w", err)
+	}
+	doc.Messages = msgs
+	if doc.MessagesPath != "" {
+		doc.MessageCount = len(msgs)
 	}
 	return doc, nil
 }
@@ -381,10 +546,18 @@ func (s store) Get(
 func (s store) Delete(
 	ctx context.Context, ID string,
 ) error {
-	err := s.backend.Delete(ctx, ID)
+	d, err := s.getStoredDialogue(ctx, ID)
+	if err != nil && !errors.Is(err, storageapi.ErrNotFound) {
+		return err
+	}
+	err = s.backend.Delete(ctx, ID)
 	if err != nil {
 		return fmt.Errorf("document service delete: %w", err)
 	}
+	if d.MessagesPath != "" {
+		_ = os.Remove(d.MessagesPath)
+	}
+	_ = os.Remove(s.messagesPathForID(ID))
 	err = s.updateIndex(ctx, func(idx dialogueIndex) dialogueIndex {
 		delete(idx.Headers, ID)
 		return idx
@@ -398,38 +571,46 @@ func (s store) Delete(
 func (s store) AppendMessages(
 	ctx context.Context, d Dialogue, msgs []llm.Message, usage llm.DialogueUsage,
 ) error {
-	err := storageapi.ConsistentUpdate(ctx, s.backend, d.ID, &d, retryStrategy,
-		func() ([]storageapi.Update, []storageapi.Precondition) {
-			d.Messages = append(d.Messages, msgs...)
-			messageCount := len(d.Messages)
-
-			accumulated := d.Usage
-			accumulated.TokensSent += usage.TokensSent
-			accumulated.TokensReceived += usage.TokensReceived
-			accumulated.TokensReasoned += usage.TokensReasoned
-			accumulated.TokensCached += usage.TokensCached
-			accumulated.Completions += usage.Completions
-			accumulated.ToolCalls += usage.ToolCalls
-			accumulated.TotalDuration += usage.TotalDuration
-			accumulated.InferenceDuration += usage.InferenceDuration
-			accumulated.ToolCallDuration += usage.ToolCallDuration
-
-			updatedAt := time.Now()
-			return []storageapi.Update{
-					{FieldPath: []string{"Messages"}, Value: d.Messages},
-					{FieldPath: []string{"MessageCount"}, Value: messageCount},
-					{FieldPath: []string{"Usage"}, Value: accumulated},
-					{FieldPath: []string{"UpdatedAt"}, Value: updatedAt},
-					{FieldPath: []string{"Version"}, Value: d.Version + 1},
-				}, []storageapi.Precondition{
-					{FieldPath: []string{"Version"}, Value: d.Version},
-				}
-		})
+	updated := Dialogue{}
+	current, err := s.getStoredDialogue(ctx, d.ID)
 	if err != nil {
-		return fmt.Errorf("consistent update : %w", err)
+		return fmt.Errorf("append messages: %w", err)
+	}
+	currentMessages, err := s.loadDialogueMessages(current)
+	if err != nil {
+		return fmt.Errorf("append messages: load existing dialogue messages: %w", err)
+	}
+	updated = current
+	updated.Messages = append(append([]llm.Message(nil), currentMessages...), msgs...)
+	updated.MessageCount = len(updated.Messages)
+	updated.UpdatedAt = time.Now()
+	updated.Version = current.Version + 1
+	if updated.MessagesPath == "" {
+		updated.MessagesPath = s.messagesPathForID(updated.ID)
+	}
+	updated.Usage = current.Usage
+	updated.Usage.TokensSent += usage.TokensSent
+	updated.Usage.TokensReceived += usage.TokensReceived
+	updated.Usage.TokensReasoned += usage.TokensReasoned
+	updated.Usage.TokensCached += usage.TokensCached
+	updated.Usage.TokensCacheCreated += usage.TokensCacheCreated
+	updated.Usage.Completions += usage.Completions
+	updated.Usage.ToolCalls += usage.ToolCalls
+	updated.Usage.TotalDuration += usage.TotalDuration
+	updated.Usage.InferenceDuration += usage.InferenceDuration
+	updated.Usage.ToolCallDuration += usage.ToolCallDuration
+
+	if err := s.writeMessages(updated.MessagesPath, updated.Messages); err != nil {
+		return fmt.Errorf("append messages: write dialogue messages: %w", err)
+	}
+	stored := storedDialogueFromDialogue(updated)
+	err = s.backend.Set(ctx, updated.ID, &stored)
+	if err != nil {
+		s.rollbackMessages(updated.MessagesPath, currentMessages)
+		return fmt.Errorf("append messages: document service set: %w", err)
 	}
 	err = s.updateIndex(ctx, func(idx dialogueIndex) dialogueIndex {
-		idx.Headers[d.ID] = d.Header()
+		idx.Headers[updated.ID] = updated.Header()
 		return idx
 	})
 	if err != nil {

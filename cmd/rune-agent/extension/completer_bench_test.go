@@ -29,12 +29,12 @@ import (
 	"testing"
 	"time"
 
-	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
-	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguetui"
-	"unstable.build/go-tui/cmd/rune-agent/llm"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
+	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
+	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguetui"
+	"unstable.build/go-tui/cmd/rune-agent/llm"
 )
 
 // benchDialogueStore creates a dialoguemanager.Store backed by an in-memory
@@ -43,7 +43,7 @@ import (
 func benchDialogueStore(b *testing.B, n, numMessages int, wsURI string) dialoguemanager.Store {
 	b.Helper()
 	backend := storagestub.NewInMemoryService()
-	store := dialoguemanager.NewStore(backend)
+	store := dialoguemanager.NewStore(backend, b.TempDir())
 
 	msgs := make([]llm.Message, numMessages)
 	for i := range msgs {
@@ -60,11 +60,11 @@ func benchDialogueStore(b *testing.B, n, numMessages int, wsURI string) dialogue
 	ctx := context.Background()
 	for i := 0; i < n; i++ {
 		d := dialoguemanager.Dialogue{
-			ID:        fmt.Sprintf("dialogue-%04d", i),
-			Model:     "test-model",
+			ID:           fmt.Sprintf("dialogue-%04d", i),
+			Model:        "test-model",
 			WorkspaceURI: wsURI,
-			Messages:  msgs,
-			UpdatedAt: time.Now().Add(-time.Duration(i) * time.Minute),
+			Messages:     msgs,
+			UpdatedAt:    time.Now().Add(-time.Duration(i) * time.Minute),
 		}
 		if err := store.Create(ctx, d); err != nil {
 			b.Fatal(err)
@@ -80,10 +80,10 @@ func benchMockListStore(n int, wsURI string) *fakeListStore {
 	dialogues := make([]dialoguemanager.DialogueHeader, n)
 	for i := range dialogues {
 		dialogues[i] = dialoguemanager.DialogueHeader{
-			ID:        fmt.Sprintf("dialogue-%04d", i),
-			Model:     "test-model",
+			ID:           fmt.Sprintf("dialogue-%04d", i),
+			Model:        "test-model",
 			WorkspaceURI: wsURI,
-			UpdatedAt: time.Now().Add(-time.Duration(i) * time.Minute),
+			UpdatedAt:    time.Now().Add(-time.Duration(i) * time.Minute),
 		}
 	}
 	return &fakeListStore{dialogues: dialogues}

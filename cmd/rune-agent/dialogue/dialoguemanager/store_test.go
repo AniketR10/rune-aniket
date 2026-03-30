@@ -26,6 +26,8 @@ package dialoguemanager
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -48,10 +50,48 @@ func (b *listFailingBackend) List(ctx context.Context, filters []storageapi.Filt
 	return nil, fmt.Errorf("backend List should not be called")
 }
 
+func newTempStore(t *testing.T, backend storageapi.Service) Store {
+	t.Helper()
+	return NewStore(backend, t.TempDir())
+}
+
+func TestStoreCreateStoresMessagesOutsideBackendDocument(t *testing.T) {
+	ctx := context.Background()
+	backend := storagestub.NewInMemoryService()
+	messagesDir := t.TempDir()
+	s := NewStore(backend, messagesDir)
+
+	msgs := []llm.Message{
+		{Role: llm.RoleSystem, Content: "system"},
+		{Role: llm.RoleUser, Content: "hello"},
+	}
+	require.NoError(t, s.Create(ctx, Dialogue{ID: "d1", Messages: msgs}))
+
+	var raw map[string]any
+	require.NoError(t, backend.Get(ctx, "d1", &raw))
+
+	messagesPath, ok := raw["messagespath"].(string)
+	require.True(t, ok, "stored dialogue should include MessagesPath")
+	assert.NotEmpty(t, messagesPath)
+	assert.Equal(t, messagesDir, filepath.Dir(messagesPath))
+
+	storedMessages, hasMessages := raw["messages"]
+	if hasMessages {
+		assert.Empty(t, storedMessages, "stored dialogue should not embed full Messages")
+	}
+
+	d, err := s.Get(ctx, "d1")
+	require.NoError(t, err)
+	assert.Equal(t, msgs, d.Messages)
+	assert.Equal(t, messagesPath, d.MessagesPath)
+	_, err = os.Stat(messagesPath)
+	assert.NoError(t, err)
+}
+
 func TestStoreAppendMessagesAccumulatesUsage(t *testing.T) {
 	ctx := context.Background()
 	backend := storagestub.NewInMemoryService()
-	s := NewStore(backend)
+	s := newTempStore(t, backend)
 
 	// Create initial dialogue.
 	err := s.Create(ctx, Dialogue{
@@ -130,7 +170,7 @@ func TestStoreAppendMessagesAccumulatesUsage(t *testing.T) {
 func TestStoreAppendMessagesRetryAccumulatesUsageCorrectly(t *testing.T) {
 	ctx := context.Background()
 	backend := storagestub.NewInMemoryService()
-	s := NewStore(backend)
+	s := newTempStore(t, backend)
 
 	// Create initial dialogue with some existing usage.
 	err := s.Create(ctx, Dialogue{
@@ -190,7 +230,7 @@ func TestStoreAppendMessagesRetryAccumulatesUsageCorrectly(t *testing.T) {
 func TestStoreListReturnsSortedByUpdatedAtDescending(t *testing.T) {
 	ctx := context.Background()
 	backend := storagestub.NewInMemoryService()
-	s := NewStore(backend)
+	s := newTempStore(t, backend)
 
 	// Create dialogues in order: oldest first, newest last.
 	// The in-memory stub auto-sets UpdatedAt to time.Now() on create,
@@ -218,7 +258,7 @@ func TestStoreListReturnsSortedByUpdatedAtDescending(t *testing.T) {
 
 func TestStoreMessageCountAccuracy(t *testing.T) {
 	ctx := context.Background()
-	s := NewStore(storagestub.NewInMemoryService())
+	s := newTempStore(t, storagestub.NewInMemoryService())
 
 	// Create sets MessageCount.
 	err := s.Create(ctx, Dialogue{
@@ -255,7 +295,7 @@ func TestStoreMessageCountAccuracy(t *testing.T) {
 
 func TestStoreListConsistency(t *testing.T) {
 	ctx := context.Background()
-	s := NewStore(storagestub.NewInMemoryService())
+	s := newTempStore(t, storagestub.NewInMemoryService())
 
 	// Populate store.
 	require.NoError(t, s.Create(ctx, Dialogue{ID: "a"}))
@@ -313,7 +353,7 @@ func TestStoreListConsistency(t *testing.T) {
 func TestStoreListReadsHeaderRecordsOnly(t *testing.T) {
 	ctx := context.Background()
 	backend := storagestub.NewInMemoryService()
-	s := NewStore(backend)
+	s := newTempStore(t, backend)
 
 	require.NoError(t, s.Create(ctx, Dialogue{
 		ID:      "chat-1",
@@ -349,7 +389,7 @@ func TestStoreListReadsHeaderRecordsOnly(t *testing.T) {
 func TestStoreListDoesNotCallBackendList(t *testing.T) {
 	ctx := context.Background()
 	backend := storagestub.NewInMemoryService()
-	s := NewStore(backend)
+	s := newTempStore(t, backend)
 
 	require.NoError(t, s.Create(ctx, Dialogue{
 		ID:      "chat-1",
@@ -368,7 +408,7 @@ func TestStoreListDoesNotCallBackendList(t *testing.T) {
 	require.NoError(t, err)
 
 	wrapped := &listFailingBackend{Service: backend}
-	s = NewStore(wrapped)
+	s = newTempStore(t, wrapped)
 	it, err = s.List(ctx)
 	require.NoError(t, err)
 	all, err := iterator.ToSlice(ctx, it)
@@ -381,7 +421,7 @@ func TestStoreListDoesNotCallBackendList(t *testing.T) {
 func TestStoreListBootstrapsLegacyRawDialogueRecords(t *testing.T) {
 	ctx := context.Background()
 	backend := storagestub.NewInMemoryService()
-	s := NewStore(backend)
+	s := newTempStore(t, backend)
 
 	legacy := Dialogue{
 		ID:           "legacy-chat",
@@ -413,7 +453,7 @@ func TestStoreListBootstrapsLegacyRawDialogueRecords(t *testing.T) {
 
 	// After bootstrapping once, the fast path should no longer need backend.List.
 	wrapped := &listFailingBackend{Service: backend}
-	s = NewStore(wrapped)
+	s = newTempStore(t, wrapped)
 	it, err = s.List(ctx)
 	require.NoError(t, err)
 	all, err = iterator.ToSlice(ctx, it)
@@ -429,7 +469,7 @@ func TestStoreConcurrentCreatesDoNotLoseIndexEntries(t *testing.T) {
 	const workers = 16
 	stores := make([]Store, workers)
 	for i := range workers {
-		stores[i] = NewStore(backend)
+		stores[i] = newTempStore(t, backend)
 	}
 
 	start := make(chan struct{})
@@ -491,8 +531,8 @@ func TestStoreBootstrapMergesConcurrentCreate(t *testing.T) {
 	}
 	require.NoError(t, backend.Set(ctx, legacy.ID, &legacy))
 
-	storeA := NewStore(backend)
-	storeB := NewStore(backend)
+	storeA := newTempStore(t, backend)
+	storeB := newTempStore(t, backend)
 
 	start := make(chan struct{})
 	errCh := make(chan error, 2)
@@ -552,7 +592,7 @@ func TestStoreBootstrapMergesConcurrentCreate(t *testing.T) {
 
 func TestStoreArchiveAndReplacePreservesMetadata(t *testing.T) {
 	ctx := context.Background()
-	s := NewStore(storagestub.NewInMemoryService())
+	s := newTempStore(t, storagestub.NewInMemoryService())
 
 	// Seed a dialogue with rich metadata.
 	original := Dialogue{
@@ -670,7 +710,7 @@ func TestStoreArchiveAndReplacePreservesMetadata(t *testing.T) {
 func TestStoreSharedInstanceConcurrentUpserts(t *testing.T) {
 	ctx := context.Background()
 	backend := storagestub.NewInMemoryService()
-	s := NewStore(backend)
+	s := newTempStore(t, backend)
 
 	const workers = 20
 
@@ -737,7 +777,7 @@ func TestStoreArchiveAndReplaceConcurrentContention(t *testing.T) {
 	const workers = 8
 	stores := make([]Store, workers)
 	for i := range workers {
-		stores[i] = NewStore(backend)
+		stores[i] = newTempStore(t, backend)
 	}
 
 	// Seed one dialogue per worker.
@@ -806,7 +846,7 @@ func TestStoreArchiveAndReplaceConcurrentContention(t *testing.T) {
 
 func TestStoreArchiveAndReplaceFailsForMissingDialogue(t *testing.T) {
 	ctx := context.Background()
-	s := NewStore(storagestub.NewInMemoryService())
+	s := newTempStore(t, storagestub.NewInMemoryService())
 
 	err := s.ArchiveAndReplace(ctx, ArchiveAndReplaceParams{
 		Dialogue:           Dialogue{ID: "nonexistent"},
@@ -818,7 +858,7 @@ func TestStoreArchiveAndReplaceFailsForMissingDialogue(t *testing.T) {
 
 func TestStoreListEmptyStoreReturnsEmptyIterator(t *testing.T) {
 	ctx := context.Background()
-	s := NewStore(storagestub.NewInMemoryService())
+	s := newTempStore(t, storagestub.NewInMemoryService())
 
 	it, err := s.List(ctx)
 	require.NoError(t, err)
@@ -830,7 +870,7 @@ func TestStoreListEmptyStoreReturnsEmptyIterator(t *testing.T) {
 
 func TestStoreCreateDeleteRecreateCycle(t *testing.T) {
 	ctx := context.Background()
-	s := NewStore(storagestub.NewInMemoryService())
+	s := newTempStore(t, storagestub.NewInMemoryService())
 
 	listHeaders := func() []DialogueHeader {
 		t.Helper()
@@ -885,7 +925,7 @@ func TestStoreCreateDeleteRecreateCycle(t *testing.T) {
 
 func TestStoreMultipleRapidMutations(t *testing.T) {
 	ctx := context.Background()
-	s := NewStore(storagestub.NewInMemoryService())
+	s := newTempStore(t, storagestub.NewInMemoryService())
 
 	listHeaders := func() []DialogueHeader {
 		t.Helper()
@@ -959,7 +999,7 @@ func TestStoreMultipleRapidMutations(t *testing.T) {
 
 func TestStoreDeleteNonExistent(t *testing.T) {
 	ctx := context.Background()
-	s := NewStore(storagestub.NewInMemoryService())
+	s := newTempStore(t, storagestub.NewInMemoryService())
 
 	require.NoError(t, s.Create(ctx, Dialogue{ID: "keep"}))
 
@@ -976,7 +1016,7 @@ func TestStoreDeleteNonExistent(t *testing.T) {
 
 func TestStoreCreateWithEmptyMessages(t *testing.T) {
 	ctx := context.Background()
-	s := NewStore(storagestub.NewInMemoryService())
+	s := newTempStore(t, storagestub.NewInMemoryService())
 
 	require.NoError(t, s.Create(ctx, Dialogue{
 		ID:       "empty-msgs",
