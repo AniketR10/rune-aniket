@@ -478,6 +478,20 @@ func runGUI(
 	mu *sync.Mutex,
 ) int {
 	setEnvForGUI(*flagDataPath)
+
+	// Capture the launch command for guiwindownew.
+	// Use flagExtensionRunner as the executable: it resolves to
+	// os.Args[0] normally, or to the rune-extension binary inside
+	// a macOS app bundle (avoids spawning a second Dock icon).
+	// Visit iterates only over flags that were explicitly set
+	// (including macOS-injected defaults after the second
+	// flag.Parse), so positional filename args are naturally excluded.
+	var launchArgs []string
+	flag.CommandLine.Visit(func(f *flag.Flag) {
+		launchArgs = append(launchArgs, fmt.Sprintf("--%s=%s", f.Name, f.Value.String()))
+	})
+	launchCmd := append([]string{*flagExtensionRunner}, launchArgs...)
+
 	chdirerr := os.Chdir(home)
 	if chdirerr != nil {
 		chdirerr = fmt.Errorf("cd %s: %w", home, chdirerr)
@@ -643,7 +657,7 @@ func runGUI(
 		g.SetOpacity(bg, fg)
 	}
 
-	err = subscribeCommands(g, client, cerr, i, transparentWindow, *flagConfigPath)
+	err = subscribeCommands(g, client, cerr, i, transparentWindow, *flagConfigPath, launchCmd)
 	if err != nil {
 		log.Errorf("subscribe to GUI commands: %v", err)
 	}

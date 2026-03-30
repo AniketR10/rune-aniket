@@ -30,6 +30,7 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 	"os"
+	"os/exec"
 	"runtime"
 	"sort"
 	"strconv"
@@ -59,8 +60,9 @@ var fullscreen bool
 func subscribeCommands(
 	g *gui.GUI, c *apiclient.Client, cerr error,
 	i *ide.IDE, transparentEnabled bool, configPath string,
+	launchCmd []string,
 ) (ret error) {
-	if err := subscribeGUICommands(g, i, transparentEnabled); err != nil {
+	if err := subscribeGUICommands(g, i, transparentEnabled, launchCmd); err != nil {
 		ret = multierror.Append(ret, err)
 	}
 	if err := subscribeOtherCommands(i, c, cerr, configPath); err != nil {
@@ -176,6 +178,7 @@ func subscribeOtherCommands(
 
 func subscribeGUICommands(
 	g *gui.GUI, i *ide.IDE, transparentEnabled bool,
+	launchCmd []string,
 ) (ret error) {
 	var commands = []struct {
 		cmd           textapi.CommandManual
@@ -445,6 +448,24 @@ func subscribeGUICommands(
 				iterator.Iterator[string], string, error,
 			) {
 				return iterator.FromSlice([]string{"increase", "decrease"}), "", nil
+			},
+		},
+		{
+			cmd: textapi.CommandManual{
+				Name:    "guiwindownew",
+				Summary: "Opens a new OS-level window by spawning a new Rune process.",
+			},
+			handleCommand: func(ctx context.Context, cmd textapi.Command) (err error) {
+				if len(launchCmd) == 0 {
+					return errors.New("unable to spawn new window: launch command not captured")
+				}
+			c := exec.Command(launchCmd[0], launchCmd[1:]...)
+				c.Env = append(os.Environ(), "EBITENGINE_COCOA_HIDE_DOCK=1")
+				if err := c.Start(); err != nil {
+					return fmt.Errorf("spawn new window: %w", err)
+				}
+				go func() { _ = c.Wait() }()
+				return nil
 			},
 		},
 	}
