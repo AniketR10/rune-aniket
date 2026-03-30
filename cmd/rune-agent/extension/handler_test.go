@@ -7516,6 +7516,32 @@ func TestAIEditorHandler_audit_log_with_tool_drops_and_plan_mode(t *testing.T) {
 	// (only system prompt + compact summary or minimal messages).
 	assert.Less(t, len(subEntries[3].Messages), len(subEntries[2].Messages),
 		"messages after ClearContext should be fewer than before")
+
+	// Verify the cleared context has the correct structure:
+	// [0] system prompt (plan skill body), [1] user message with approved plan.
+	postClearMsgs := subEntries[3].Messages
+	require.GreaterOrEqual(t, len(postClearMsgs), 2,
+		"cleared context must have at least system + user messages")
+	assert.Equal(t, llm.RoleSystem, postClearMsgs[0].Role)
+	assert.Contains(t, postClearMsgs[0].Content, "read-only software architect",
+		"system prompt must be the plan skill body")
+
+	// The user message must contain the approved preamble and the plan.
+	var planUserMsg *llm.Message
+	for i := range postClearMsgs {
+		if postClearMsgs[i].Role == llm.RoleUser && agent.ContainsPlan(postClearMsgs[i].Content) {
+			planUserMsg = &postClearMsgs[i]
+			break
+		}
+	}
+	require.NotNil(t, planUserMsg, "cleared context must contain an approved-plan user message")
+	assert.True(t, strings.HasPrefix(planUserMsg.Content, agent.PlanApprovedPreamble),
+		"plan user message must start with the approved preamble")
+	assert.Contains(t, planUserMsg.Content, "Do NOT ask for approval",
+		"preamble must instruct the agent not to re-approve")
+	planBody := agent.ExtractPlanBody(planUserMsg.Content)
+	assert.Contains(t, planBody, "Plan",
+		"plan body must contain the plan text")
 }
 
 func TestCommandAdapterModelSwitchPreservesAudit(t *testing.T) {

@@ -1532,9 +1532,8 @@ func addMessage(c *dialoguetui.Component, msg llm.Message, pendingTools map[stri
 			}
 		}
 	case llm.RoleUser:
-		if strings.HasPrefix(msg.Content, agent.PlanContentPrefix) {
-			plan := strings.TrimPrefix(msg.Content, agent.PlanContentPrefix)
-			plan = strings.TrimSuffix(plan, agent.PlanContentSuffix)
+		if agent.ContainsPlan(msg.Content) {
+			plan := agent.ExtractPlanBody(msg.Content)
 			c.AddSendMessageMarkdown(plan)
 		} else if strings.HasPrefix(msg.Content, agent.CompactSummaryPrefix) {
 			c.AddSendMessageMarkdown(msg.Content)
@@ -1542,9 +1541,8 @@ func addMessage(c *dialoguetui.Component, msg llm.Message, pendingTools map[stri
 			c.AddSendMessage(msg.Content)
 		}
 	case llm.RoleSystem:
-		if strings.HasPrefix(msg.Content, agent.PlanContentPrefix) {
-			plan := strings.TrimPrefix(msg.Content, agent.PlanContentPrefix)
-			plan = strings.TrimSuffix(plan, agent.PlanContentSuffix)
+		if agent.ContainsPlan(msg.Content) {
+			plan := agent.ExtractPlanBody(msg.Content)
 			c.AddSendMessageMarkdown(plan)
 		}
 	case llm.RoleTool:

@@ -637,7 +637,7 @@ func TestAgentRun(t *testing.T) {
 }
 
 func TestCompactDialoguePreservesPlanContent(t *testing.T) {
-	planContent := PlanContentPrefix + "Plan approved.\n\n## Step 1\nDo X" + PlanContentSuffix
+	planContent := PlanApprovedPreamble + PlanContentPrefix + "Plan approved.\n\n## Step 1\nDo X" + PlanContentSuffix
 
 	svc := &mockService{
 		responses: []mockResponse{
@@ -668,7 +668,7 @@ func TestCompactDialoguePreservesPlanContent(t *testing.T) {
 	// Plan content must be preserved as a system message.
 	var planMsg *llm.Message
 	for i := range compactedMsgs {
-		if strings.HasPrefix(compactedMsgs[i].Content, PlanContentPrefix) {
+		if ContainsPlan(compactedMsgs[i].Content) {
 			planMsg = &compactedMsgs[i]
 			break
 		}
@@ -1840,6 +1840,26 @@ func TestAgentCompact(t *testing.T) {
 	})
 }
 
+func TestExtractPlanBody(t *testing.T) {
+	body := "Plan approved. Saved to /tmp/plan.md\n\n## Step 1\nDo something"
+
+	t.Run("with preamble", func(t *testing.T) {
+		msg := PlanApprovedPreamble + PlanContentPrefix + body + PlanContentSuffix
+		assert.True(t, ContainsPlan(msg))
+		assert.Equal(t, body, ExtractPlanBody(msg))
+	})
+	t.Run("without preamble (legacy)", func(t *testing.T) {
+		msg := PlanContentPrefix + body + PlanContentSuffix
+		assert.True(t, ContainsPlan(msg))
+		assert.Equal(t, body, ExtractPlanBody(msg))
+	})
+	t.Run("no markers", func(t *testing.T) {
+		msg := "just some text"
+		assert.False(t, ContainsPlan(msg))
+		assert.Equal(t, "", ExtractPlanBody(msg))
+	})
+}
+
 func TestClearContext(t *testing.T) {
 	t.Run("wraps plan with markers and emits EventCompacted", func(t *testing.T) {
 		planContent := "Plan approved. Saved to /tmp/plan.md\n\n## Step 1\nDo something"
@@ -1871,7 +1891,7 @@ func TestClearContext(t *testing.T) {
 		var planMsg *llm.Message
 		for i := range d.Messages {
 			if d.Messages[i].Role == llm.RoleUser &&
-				strings.HasPrefix(d.Messages[i].Content, PlanContentPrefix) {
+				ContainsPlan(d.Messages[i].Content) {
 				planMsg = &d.Messages[i]
 				break
 			}
@@ -1879,6 +1899,8 @@ func TestClearContext(t *testing.T) {
 		require.NotNil(t, planMsg, "stored dialogue should contain plan-marked user message")
 		assert.Contains(t, planMsg.Content, planContent)
 		assert.True(t, strings.HasSuffix(planMsg.Content, PlanContentSuffix))
+		assert.True(t, strings.HasPrefix(planMsg.Content, PlanApprovedPreamble),
+			"plan message must start with the approved preamble")
 	})
 
 	t.Run("plan survives auto-compaction with file path", func(t *testing.T) {
@@ -1911,7 +1933,7 @@ func TestClearContext(t *testing.T) {
 			ID: "d",
 			Messages: []llm.Message{
 				{Role: llm.RoleSystem, Content: "sys"},
-				{Role: llm.RoleUser, Content: PlanContentPrefix + planContent + PlanContentSuffix},
+				{Role: llm.RoleUser, Content: PlanApprovedPreamble + PlanContentPrefix + planContent + PlanContentSuffix},
 				{Role: llm.RoleAssistant, Content: "I'll start working on step 1..."},
 			},
 			Version: 1,
@@ -1974,7 +1996,7 @@ func TestClearContext(t *testing.T) {
 			ID: "d",
 			Messages: []llm.Message{
 				{Role: llm.RoleSystem, Content: "sys"},
-				{Role: llm.RoleSystem, Content: PlanContentPrefix + planContent + PlanContentSuffix},
+				{Role: llm.RoleSystem, Content: PlanApprovedPreamble + PlanContentPrefix + planContent + PlanContentSuffix},
 				{Role: llm.RoleUser, Content: CompactSummaryPrefix + "Prior summary"},
 				{Role: llm.RoleAssistant, Content: "Working on it..."},
 			},

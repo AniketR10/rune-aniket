@@ -1202,7 +1202,7 @@ func extractSkillContent(messages []llm.Message) []llm.Message {
 func extractPlanContent(messages []llm.Message) []llm.Message {
 	var result []llm.Message
 	for _, m := range messages {
-		if !strings.HasPrefix(m.Content, PlanContentPrefix) {
+		if !ContainsPlan(m.Content) {
 			continue
 		}
 		if m.Role != llm.RoleUser && m.Role != llm.RoleSystem {
@@ -1231,15 +1231,11 @@ func (a *Agent) clearContext(
 		return nil, err
 	}
 
-	// Re-inject the system prompt from the original messages.
-	var systemPrompt string
-	if len(d.Messages) > 0 && d.Messages[0].Role == llm.RoleSystem {
-		systemPrompt = d.Messages[0].Content
-	}
-
+	// Start fresh with the canonical system prompt, same as a new
+	// conversation, so we don't carry stale or duplicated prompts.
 	clearedMsgs := []llm.Message{
-		{Role: llm.RoleSystem, Content: systemPrompt},
-		{Role: llm.RoleUser, Content: PlanContentPrefix + content + PlanContentSuffix},
+		{Role: llm.RoleSystem, Content: a.config.SystemPrompt},
+		{Role: llm.RoleUser, Content: PlanApprovedPreamble + PlanContentPrefix + content + PlanContentSuffix},
 	}
 
 	if err := a.store.ArchiveAndReplace(ctx, dialoguemanager.ArchiveAndReplaceParams{
@@ -1263,13 +1259,41 @@ func (a *Agent) clearContext(
 const CompactSummaryPrefix = "This session is being continued from a previous conversation that ran out of context. " +
 	"The summary below covers the earlier portion of the conversation.\n\n"
 
-// PlanContentPrefix marks a user message as an approved plan that must
-// survive compaction. clearContext wraps the plan with this prefix so
-// that extractPlanContent can recognise and re-inject it.
+// PlanApprovedPreamble is prepended to the cleared-context user message
+// so the agent knows the plan was already approved and should be
+// executed immediately rather than re-submitted for approval.
+const PlanApprovedPreamble = "The following plan was approved by the user. " +
+	"The conversation was cleared to free up context for execution.\n" +
+	"Execute this plan immediately. Do NOT ask for approval or " +
+	"confirmation — it has already been approved.\n\n"
+
+// PlanContentPrefix marks a user message as containing an approved plan
+// that must survive compaction. clearContext wraps the plan with this
+// prefix so that extractPlanContent can recognise and re-inject it.
 const PlanContentPrefix = "<approved_plan>\n"
 
 // PlanContentSuffix closes the approved plan marker.
 const PlanContentSuffix = "\n</approved_plan>"
+
+// ContainsPlan reports whether a message contains an approved plan.
+func ContainsPlan(content string) bool {
+	return strings.HasPrefix(content, PlanApprovedPreamble) ||
+		strings.HasPrefix(content, PlanContentPrefix)
+}
+
+// ExtractPlanBody returns the plan text between the approved_plan
+// markers, or the empty string when no markers are present.
+func ExtractPlanBody(content string) string {
+	_, after, ok := strings.Cut(content, PlanContentPrefix)
+	if !ok {
+		return ""
+	}
+	body := after
+	if j := strings.Index(body, PlanContentSuffix); j >= 0 {
+		body = body[:j]
+	}
+	return body
+}
 
 // ArchivedID returns the base archive dialogue ID for the given dialogue.
 // It strips any existing "-archived" (with optional numeric suffix) to avoid accumulation.
