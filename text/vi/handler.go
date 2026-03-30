@@ -88,18 +88,20 @@ type viHandler interface {
 // viHandlerImpl implements a basic vi-like text editor which satisfies tui.Handler
 // and tui.Component.
 type viHandlerImpl struct {
-	config       viConfig
-	less         handler.Less // used for search capabilities
-	statusBar    statusBar
-	anchor       term.Coordinates
-	cursor       text.Cursor
-	repeater     text.Repeater // used for block repeat only
-	currMode     viMode
-	moveMode     moveMode
-	searchMode   moveMode
-	moveChar     rune
-	deleteInsert bool
-	blockRepeat  struct {
+	config            viConfig
+	less              handler.Less // used for search capabilities
+	statusBar         statusBar
+	anchor            term.Coordinates
+	cursor            text.Cursor
+	repeater          text.Repeater // used for block repeat only
+	currMode          viMode
+	moveMode          moveMode
+	searchMode        moveMode
+	moveChar          rune
+	textObjectPending bool
+	textObjectAround  bool
+	deleteInsert      bool
+	blockRepeat       struct {
 		From term.Coordinates
 		To   term.Coordinates
 	}
@@ -271,6 +273,7 @@ func (vi *viHandlerImpl) setNormalMode() bool {
 	vi.resetCount()
 	vi.setMode(normalMode)
 	vi.moveMode = moveNone
+	vi.textObjectPending = false
 	return true
 }
 
@@ -278,6 +281,7 @@ func (vi *viHandlerImpl) setInsertMode() {
 	vi.repeater.Clear()
 	vi.blockRepeat.From = term.Coordinates{}
 	vi.blockRepeat.To = term.Coordinates{}
+	vi.textObjectPending = false
 	vi.setMode(insertMode)
 	vi.less.SetMessage("")
 	vi.resetCount()
@@ -286,6 +290,7 @@ func (vi *viHandlerImpl) setInsertMode() {
 func (vi *viHandlerImpl) setDeleteMode(thenInsert bool) {
 	vi.setMode(deleteMode)
 	vi.deleteInsert = thenInsert
+	vi.textObjectPending = false
 	vi.less.SetMessage("")
 }
 
@@ -311,24 +316,93 @@ func (vi *viHandlerImpl) setZMode() {
 }
 
 func (vi *viHandlerImpl) setYankMode() {
+	vi.textObjectPending = false
 	vi.setMode(yankMode)
 }
 
 func (vi *viHandlerImpl) setVisualMode() {
 	if vi.cursor.Select() {
+		vi.textObjectPending = false
 		vi.setMode(visualMode)
 	}
 }
 
 func (vi *viHandlerImpl) setVisualLineMode() {
 	if vi.cursor.SelectLine() {
+		vi.textObjectPending = false
 		vi.setMode(visualLineMode)
 	}
 }
 
 func (vi *viHandlerImpl) setVisualBlockMode() {
 	if vi.cursor.SelectBlock() {
+		vi.textObjectPending = false
 		vi.setMode(visualBlockMode)
+	}
+}
+
+func (vi *viHandlerImpl) setTextObjectPending(around bool) {
+	vi.textObjectPending = true
+	vi.textObjectAround = around
+}
+
+func (vi *viHandlerImpl) clearTextObjectPending() {
+	vi.textObjectPending = false
+	vi.textObjectAround = false
+}
+
+func (vi *viHandlerImpl) selectTextObject(ch rune) bool {
+	around := vi.textObjectAround
+	vi.clearTextObjectPending()
+
+	switch ch {
+	case 'w':
+		if around {
+			return vi.cursor.SelectAWords(vi.count)
+		}
+		return vi.cursor.SelectInnerWords(vi.count)
+	case 'W':
+		if around {
+			return vi.cursor.SelectAWordGroups(vi.count)
+		}
+		return vi.cursor.SelectInnerWordGroups(vi.count)
+	case 's':
+		if around {
+			return vi.cursor.SelectASentence()
+		}
+		return vi.cursor.SelectInnerSentence()
+	case 'p':
+		if around {
+			return vi.cursor.SelectAParagraph()
+		}
+		return vi.cursor.SelectInnerParagraph()
+	case '"', '\'', '`':
+		if around {
+			return vi.cursor.SelectAQuote(ch)
+		}
+		return vi.cursor.SelectInnerQuote(ch)
+	case '(', ')', 'b':
+		if around {
+			return vi.cursor.SelectABlock('(', ')')
+		}
+		return vi.cursor.SelectInnerBlock('(', ')')
+	case '{', '}', 'B':
+		if around {
+			return vi.cursor.SelectABlock('{', '}')
+		}
+		return vi.cursor.SelectInnerBlock('{', '}')
+	case '[', ']':
+		if around {
+			return vi.cursor.SelectABlock('[', ']')
+		}
+		return vi.cursor.SelectInnerBlock('[', ']')
+	case '<', '>', 't':
+		if around {
+			return vi.cursor.SelectABlock('<', '>')
+		}
+		return vi.cursor.SelectInnerBlock('<', '>')
+	default:
+		return false
 	}
 }
 
@@ -544,8 +618,10 @@ func (vi *viHandlerImpl) handleNormal(ev term.Event) (quit, handled bool) {
 			doResetCount = false
 		case 'c':
 			vi.setDeleteMode(true)
+			doResetCount = false
 		case 'y':
 			vi.setYankMode()
+			doResetCount = false
 		case 'N':
 			switch vi.searchMode {
 			case moveToNext:
@@ -849,6 +925,28 @@ func (vi *viHandlerImpl) handleVisual(ev term.Event) (quit, handled bool) {
 		return
 	}
 
+	if ev.Mod == 0 {
+		hadPending := vi.textObjectPending
+		if vi.textObjectPending {
+			handled = vi.selectTextObject(ev.Ch)
+			if handled {
+				return
+			}
+		}
+		switch ev.Ch {
+		case 'i':
+			vi.setTextObjectPending(false)
+			return false, true
+		case 'a':
+			vi.setTextObjectPending(true)
+			return false, true
+		default:
+			if hadPending {
+				return false, true
+			}
+		}
+	}
+
 	handled = true
 	switch ev.Mod {
 	case 0:
@@ -1017,6 +1115,34 @@ func (vi *viHandlerImpl) handleYank(ev term.Event) (quit, handled bool) {
 		return
 	}
 
+	if vi.moveMode == moveNone && ev.Mod == 0 {
+		if vi.textObjectPending {
+			if ev.Ch == 'i' {
+				vi.setTextObjectPending(false)
+				return false, true
+			}
+			if ev.Ch == 'a' {
+				vi.setTextObjectPending(true)
+				return false, true
+			}
+			if !vi.selectTextObject(ev.Ch) {
+				vi.setNormalMode()
+				return false, true
+			}
+			vi.copySelection()
+			vi.setNormalMode()
+			return false, true
+		}
+		switch ev.Ch {
+		case 'i':
+			vi.setTextObjectPending(false)
+			return false, true
+		case 'a':
+			vi.setTextObjectPending(true)
+			return false, true
+		}
+	}
+
 	var done bool
 	quit, handled, done = vi.handleMetaNormal(ev)
 	if !done {
@@ -1053,6 +1179,38 @@ func (vi *viHandlerImpl) handleDelete(ev term.Event) (quit, handled bool) {
 		vi.setInsertMode()
 		handled = true
 		return
+	}
+
+	if vi.moveMode == moveNone && ev.Mod == 0 {
+		if vi.textObjectPending {
+			if ev.Ch == 'i' {
+				vi.setTextObjectPending(false)
+				return false, true
+			}
+			if ev.Ch == 'a' {
+				vi.setTextObjectPending(true)
+				return false, true
+			}
+			if !vi.selectTextObject(ev.Ch) {
+				vi.setNormalMode()
+				return false, true
+			}
+			vi.cursor.DeleteSelection()
+			if vi.deleteInsert {
+				vi.setInsertMode()
+			} else {
+				vi.setNormalMode()
+			}
+			return false, true
+		}
+		switch ev.Ch {
+		case 'i':
+			vi.setTextObjectPending(false)
+			return false, true
+		case 'a':
+			vi.setTextObjectPending(true)
+			return false, true
+		}
 	}
 
 	var done bool

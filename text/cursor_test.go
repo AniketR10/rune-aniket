@@ -124,6 +124,500 @@ func TestCursorStartEndWord(t *testing.T) {
 	}
 }
 
+type cursorTextObjectCase struct {
+	name     string
+	content  string
+	at       term.Coordinates
+	selectFn func(*Cursor) bool
+	wantOK   bool
+	want     string
+}
+
+func runCursorTextObjectCases(t *testing.T, cases []cursorTextObjectCase) {
+	t.Helper()
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := setupCursorContent(t, 80, 10, tc.content, false)
+			_, _ = c.MoveToScroll(tc.at)
+
+			ok := tc.selectFn(c)
+			assert.Equal(t, tc.wantOK, ok)
+			if tc.wantOK {
+				assert.Equal(t, tc.want, c.Selection())
+			}
+		})
+	}
+}
+
+func TestCursorTextObjects(t *testing.T) {
+	runCursorTextObjectCases(t, []cursorTextObjectCase{
+		{
+			name:     "iw inside word",
+			content:  "one two three",
+			at:       term.Coordinates{X: 5},
+			selectFn: func(c *Cursor) bool { return c.SelectInnerWord() },
+			wantOK:   true,
+			want:     "two",
+		},
+		{
+			name:     "iw at word start",
+			content:  "one two",
+			at:       term.Coordinates{X: 4},
+			selectFn: func(c *Cursor) bool { return c.SelectInnerWord() },
+			wantOK:   true,
+			want:     "two",
+		},
+		{
+			name:     "iw at word end",
+			content:  "one two",
+			at:       term.Coordinates{X: 6},
+			selectFn: func(c *Cursor) bool { return c.SelectInnerWord() },
+			wantOK:   true,
+			want:     "two",
+		},
+		{
+			name:     "iw on leading whitespace prefers next word",
+			content:  "one  two",
+			at:       term.Coordinates{X: 3},
+			selectFn: func(c *Cursor) bool { return c.SelectInnerWord() },
+			wantOK:   true,
+			want:     "two",
+		},
+		{
+			name:     "iw on trailing whitespace prefers previous word same line",
+			content:  "one two  ",
+			at:       term.Coordinates{X: 8},
+			selectFn: func(c *Cursor) bool { return c.SelectInnerWord() },
+			wantOK:   true,
+			want:     "two",
+		},
+		{
+			name:     "aw prefers trailing whitespace",
+			content:  "one two three",
+			at:       term.Coordinates{X: 5},
+			selectFn: func(c *Cursor) bool { return c.SelectAWord() },
+			wantOK:   true,
+			want:     "two ",
+		},
+		{
+			name:     "aw at last word uses leading whitespace",
+			content:  "one two",
+			at:       term.Coordinates{X: 6},
+			selectFn: func(c *Cursor) bool { return c.SelectAWord() },
+			wantOK:   true,
+			want:     " two",
+		},
+		{
+			name:     "iw on punctuation selects punctuation object",
+			content:  "foo...bar",
+			at:       term.Coordinates{X: 4},
+			selectFn: func(c *Cursor) bool { return c.SelectInnerWord() },
+			wantOK:   true,
+			want:     "...",
+		},
+		{
+			name:     "iW groups punctuation with non blanks",
+			content:  "one two-three",
+			at:       term.Coordinates{X: 8},
+			selectFn: func(c *Cursor) bool { return c.SelectInnerWordGroup() },
+			wantOK:   true,
+			want:     "two-three",
+		},
+		{
+			name:     "aW at end of line uses leading whitespace",
+			content:  "one two-three",
+			at:       term.Coordinates{X: len("one two-three")},
+			selectFn: func(c *Cursor) bool { return c.SelectAWordGroup() },
+			wantOK:   true,
+			want:     " two-three",
+		},
+		{
+			name:     "2iw spans two words from first word",
+			content:  "one two three",
+			at:       term.Coordinates{X: 0},
+			selectFn: func(c *Cursor) bool { return c.SelectInnerWords(2) },
+			wantOK:   true,
+			want:     "one two",
+		},
+		{
+			name:     "2aw spans two a-word objects",
+			content:  "one two three",
+			at:       term.Coordinates{X: 0},
+			selectFn: func(c *Cursor) bool { return c.SelectAWords(2) },
+			wantOK:   true,
+			want:     "one two ",
+		},
+		{
+			name:     "2iW spans two WORD objects",
+			content:  "one two-three four",
+			at:       term.Coordinates{X: 0},
+			selectFn: func(c *Cursor) bool { return c.SelectInnerWordGroups(2) },
+			wantOK:   true,
+			want:     "one two-three",
+		},
+		{
+			name:     "2iw from whitespace chooses next two words",
+			content:  "  one two three",
+			at:       term.Coordinates{X: 0},
+			selectFn: func(c *Cursor) bool { return c.SelectInnerWords(2) },
+			wantOK:   true,
+			want:     "one two",
+		},
+		{
+			name:     "2aw from end of line uses previous then next objects not available",
+			content:  "one two",
+			at:       term.Coordinates{X: len("one two")},
+			selectFn: func(c *Cursor) bool { return c.SelectAWords(2) },
+			wantOK:   true,
+			want:     " two",
+		},
+		{
+			name:     "iw on spaces only line fails",
+			content:  "   ",
+			at:       term.Coordinates{X: 1},
+			selectFn: func(c *Cursor) bool { return c.SelectInnerWord() },
+			wantOK:   false,
+		},
+		{
+			name:     "i quote inside text",
+			content:  `say "hello world" now`,
+			at:       term.Coordinates{X: 7},
+			selectFn: func(c *Cursor) bool { return c.SelectInnerQuote('"') },
+			wantOK:   true,
+			want:     "hello world",
+		},
+		{
+			name:     "a quote on opening delimiter",
+			content:  `say "hello" now`,
+			at:       term.Coordinates{X: 4},
+			selectFn: func(c *Cursor) bool { return c.SelectAQuote('"') },
+			wantOK:   true,
+			want:     `"hello"`,
+		},
+		{
+			name:     "a quote on closing delimiter",
+			content:  `say "hello" now`,
+			at:       term.Coordinates{X: 10},
+			selectFn: func(c *Cursor) bool { return c.SelectAQuote('"') },
+			wantOK:   true,
+			want:     `"hello"`,
+		},
+		{
+			name:     "quote ignores escaped delimiters",
+			content:  `say "he\"llo" now`,
+			at:       term.Coordinates{X: 8},
+			selectFn: func(c *Cursor) bool { return c.SelectInnerQuote('"') },
+			wantOK:   true,
+			want:     `he\"llo`,
+		},
+		{
+			name:     "single quote works",
+			content:  "say 'hello' now",
+			at:       term.Coordinates{X: 6},
+			selectFn: func(c *Cursor) bool { return c.SelectInnerQuote('\'') },
+			wantOK:   true,
+			want:     "hello",
+		},
+		{
+			name:     "backtick quote works",
+			content:  "say `hello` now",
+			at:       term.Coordinates{X: 6},
+			selectFn: func(c *Cursor) bool { return c.SelectInnerQuote('`') },
+			wantOK:   true,
+			want:     "hello",
+		},
+		{
+			name:     "empty inner quote is valid empty selection",
+			content:  `say "" now`,
+			at:       term.Coordinates{X: 5},
+			selectFn: func(c *Cursor) bool { return c.SelectInnerQuote('"') },
+			wantOK:   true,
+			want:     "",
+		},
+		{
+			name:     "unmatched quote fails",
+			content:  `say "hello now`,
+			at:       term.Coordinates{X: 6},
+			selectFn: func(c *Cursor) bool { return c.SelectInnerQuote('"') },
+			wantOK:   false,
+		},
+		{
+			name:     "multiline quote is not matched",
+			content:  "say \"hello\nworld\" now",
+			at:       term.Coordinates{X: 6, Y: 0},
+			selectFn: func(c *Cursor) bool { return c.SelectInnerQuote('"') },
+			wantOK:   false,
+		},
+		{
+			name:     "inner parens basic",
+			content:  "call(one, two)",
+			at:       term.Coordinates{X: 6},
+			selectFn: func(c *Cursor) bool { return c.SelectInnerBlock('(', ')') },
+			wantOK:   true,
+			want:     "one, two",
+		},
+		{
+			name:     "around parens basic",
+			content:  "call(one, two)",
+			at:       term.Coordinates{X: 6},
+			selectFn: func(c *Cursor) bool { return c.SelectABlock('(', ')') },
+			wantOK:   true,
+			want:     "(one, two)",
+		},
+		{
+			name:     "block chooses nearest nested pair",
+			content:  "((a)(b))",
+			at:       term.Coordinates{X: 5},
+			selectFn: func(c *Cursor) bool { return c.SelectABlock('(', ')') },
+			wantOK:   true,
+			want:     "(b)",
+		},
+		{
+			name:     "block works from closing delimiter",
+			content:  "call(one)",
+			at:       term.Coordinates{X: 8},
+			selectFn: func(c *Cursor) bool { return c.SelectABlock('(', ')') },
+			wantOK:   true,
+			want:     "(one)",
+		},
+		{
+			name:     "empty inner block is valid empty selection",
+			content:  "call()",
+			at:       term.Coordinates{X: 4},
+			selectFn: func(c *Cursor) bool { return c.SelectInnerBlock('(', ')') },
+			wantOK:   true,
+			want:     "",
+		},
+		{
+			name:     "unmatched block fails",
+			content:  "call(one",
+			at:       term.Coordinates{X: 6},
+			selectFn: func(c *Cursor) bool { return c.SelectABlock('(', ')') },
+			wantOK:   false,
+		},
+		{
+			name:     "multiline block selects across lines",
+			content:  "call(\none,\ntwo\n)",
+			at:       term.Coordinates{X: 2, Y: 1},
+			selectFn: func(c *Cursor) bool { return c.SelectABlock('(', ')') },
+			wantOK:   true,
+			want:     "(\none,\ntwo\n)",
+		},
+		{
+			name:     "multiline nested block selects nearest pair",
+			content:  "(a\n(b)\nc)",
+			at:       term.Coordinates{X: 1, Y: 1},
+			selectFn: func(c *Cursor) bool { return c.SelectABlock('(', ')') },
+			wantOK:   true,
+			want:     "(b)",
+		},
+		{
+			name:     "nested mixed delimiters select bracket pair",
+			content:  "fn({[abc]})",
+			at:       term.Coordinates{X: 5},
+			selectFn: func(c *Cursor) bool { return c.SelectABlock('[', ']') },
+			wantOK:   true,
+			want:     "[abc]",
+		},
+		{
+			name:     "3aw from middle word consumes three objects",
+			content:  "zero one two three",
+			at:       term.Coordinates{X: 6},
+			selectFn: func(c *Cursor) bool { return c.SelectAWords(3) },
+			wantOK:   true,
+			want:     "one two three",
+		},
+		{
+			name:     "3iw from middle word consumes current and next two words",
+			content:  "zero one two three",
+			at:       term.Coordinates{X: 6},
+			selectFn: func(c *Cursor) bool { return c.SelectInnerWords(3) },
+			wantOK:   true,
+			want:     "one two three",
+		},
+		{
+			name:     "inner paragraph basic",
+			content:  "one\ntwo\n\nthree\nfour\n",
+			at:       term.Coordinates{Y: 3},
+			selectFn: func(c *Cursor) bool { return c.SelectInnerParagraph() },
+			wantOK:   true,
+			want:     "three\nfour\n",
+		},
+		{
+			name:     "around paragraph includes surrounding blanks",
+			content:  "one\ntwo\n\nthree\nfour\n\n\n",
+			at:       term.Coordinates{Y: 3},
+			selectFn: func(c *Cursor) bool { return c.SelectAParagraph() },
+			wantOK:   true,
+			want:     "\nthree\nfour\n\n\n",
+		},
+		{
+			name:     "paragraph from blank separator chooses next paragraph",
+			content:  "one\n\n two\nthree",
+			at:       term.Coordinates{Y: 1},
+			selectFn: func(c *Cursor) bool { return c.SelectInnerParagraph() },
+			wantOK:   true,
+			want:     " two\nthree",
+		},
+		{
+			name:     "paragraph from trailing blank lines chooses previous paragraph",
+			content:  "one\ntwo\n\n\n",
+			at:       term.Coordinates{Y: 3},
+			selectFn: func(c *Cursor) bool { return c.SelectInnerParagraph() },
+			wantOK:   true,
+			want:     "one\ntwo\n",
+		},
+		{
+			name:     "paragraph spaces only content fails",
+			content:  " \n\t\n",
+			at:       term.Coordinates{Y: 0},
+			selectFn: func(c *Cursor) bool { return c.SelectInnerParagraph() },
+			wantOK:   false,
+		},
+		{
+			name:     "inner sentence basic",
+			content:  "One. Two! Three?",
+			at:       term.Coordinates{X: 6},
+			selectFn: func(c *Cursor) bool { return c.SelectInnerSentence() },
+			wantOK:   true,
+			want:     "Two!",
+		},
+		{
+			name:     "around sentence includes trailing separator spaces",
+			content:  "One. Two!  Three?",
+			at:       term.Coordinates{X: 6},
+			selectFn: func(c *Cursor) bool { return c.SelectASentence() },
+			wantOK:   true,
+			want:     "Two!  ",
+		},
+		{
+			name:     "around last sentence uses leading spaces",
+			content:  "One. Two!",
+			at:       term.Coordinates{X: 8},
+			selectFn: func(c *Cursor) bool { return c.SelectASentence() },
+			wantOK:   true,
+			want:     " Two!",
+		},
+		{
+			name:     "sentence from inter sentence whitespace chooses next sentence",
+			content:  "One.  Two!",
+			at:       term.Coordinates{X: 4},
+			selectFn: func(c *Cursor) bool { return c.SelectInnerSentence() },
+			wantOK:   true,
+			want:     "Two!",
+		},
+		{
+			name:     "sentence punctuation without following whitespace does not split",
+			content:  "e.g.test",
+			at:       term.Coordinates{X: 3},
+			selectFn: func(c *Cursor) bool { return c.SelectInnerSentence() },
+			wantOK:   true,
+			want:     "e.g.test",
+		},
+		{
+			name:     "sentence without punctuation selects whole line",
+			content:  "just words here",
+			at:       term.Coordinates{X: 5},
+			selectFn: func(c *Cursor) bool { return c.SelectInnerSentence() },
+			wantOK:   true,
+			want:     "just words here",
+		},
+		{
+			name:     "sentence blank line fails",
+			content:  "",
+			at:       term.Coordinates{},
+			selectFn: func(c *Cursor) bool { return c.SelectInnerSentence() },
+			wantOK:   false,
+		},
+	})
+}
+
+func TestCursorTextObjectDeleteSelection(t *testing.T) {
+	type deleteCase struct {
+		name       string
+		content    string
+		at         term.Coordinates
+		selectFn   func(*Cursor) bool
+		wantBuffer string
+		wantOK     bool
+	}
+
+	for _, tc := range []deleteCase{
+		{
+			name:       "delete inner word from trailing spaces",
+			content:    "one two  ",
+			at:         term.Coordinates{X: 8},
+			selectFn:   func(c *Cursor) bool { return c.SelectInnerWord() },
+			wantBuffer: "one   ",
+			wantOK:     true,
+		},
+		{
+			name:       "delete around last word removes leading separator",
+			content:    "one two",
+			at:         term.Coordinates{X: 6},
+			selectFn:   func(c *Cursor) bool { return c.SelectAWord() },
+			wantBuffer: "one",
+			wantOK:     true,
+		},
+		{
+			name:       "delete two inner words",
+			content:    "one two three",
+			at:         term.Coordinates{X: 0},
+			selectFn:   func(c *Cursor) bool { return c.SelectInnerWords(2) },
+			wantBuffer: " three",
+			wantOK:     true,
+		},
+		{
+			name:       "delete two a-words",
+			content:    "one two three",
+			at:         term.Coordinates{X: 0},
+			selectFn:   func(c *Cursor) bool { return c.SelectAWords(2) },
+			wantBuffer: "three",
+			wantOK:     true,
+		},
+		{
+			name:       "delete inner empty quote keeps delimiters",
+			content:    `say "" now`,
+			at:         term.Coordinates{X: 5},
+			selectFn:   func(c *Cursor) bool { return c.SelectInnerQuote('"') },
+			wantBuffer: `say "" now`,
+			wantOK:     false,
+		},
+		{
+			name:       "delete around empty quote removes delimiters",
+			content:    `say "" now`,
+			at:         term.Coordinates{X: 5},
+			selectFn:   func(c *Cursor) bool { return c.SelectAQuote('"') },
+			wantBuffer: "say  now",
+			wantOK:     true,
+		},
+		{
+			name:       "delete inner empty block keeps delimiters",
+			content:    "call()",
+			at:         term.Coordinates{X: 4},
+			selectFn:   func(c *Cursor) bool { return c.SelectInnerBlock('(', ')') },
+			wantBuffer: "call()",
+			wantOK:     false,
+		},
+		{
+			name:       "delete around empty block removes delimiters",
+			content:    "call()",
+			at:         term.Coordinates{X: 4},
+			selectFn:   func(c *Cursor) bool { return c.SelectABlock('(', ')') },
+			wantBuffer: "call",
+			wantOK:     true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := setupCursorContent(t, 80, 10, tc.content, false)
+			_, _ = c.MoveToScroll(tc.at)
+			require.True(t, tc.selectFn(c))
+			assert.Equal(t, tc.wantOK, c.DeleteSelection())
+			assert.Equal(t, tc.wantBuffer, c.buffer().String())
+		})
+	}
+}
+
 func TestCursorUpperLowercase(t *testing.T) {
 	suite := []struct {
 		from, to     term.Coordinates

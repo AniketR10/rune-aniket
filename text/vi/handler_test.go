@@ -1129,6 +1129,368 @@ diff_buf_adjust(win_
 	handlertest.TestHandlerIsolated(t, newVi, 20, 10, cases)
 }
 
+func TestViTextObjects(t *testing.T) {
+	type viTextObjectCase struct {
+		name          string
+		content       string
+		at            *term.Coordinates
+		seq           string
+		wantBuffer    string
+		wantMode      viMode
+		wantCursor    *term.Coordinates
+		wantSelection string
+		wantClipboard string
+	}
+
+	run := func(t *testing.T, tc viTextObjectCase) {
+		t.Helper()
+		vi := setupVi(t, tc.content, 2)
+		vi.Resize(80, 10)
+		if tc.at != nil {
+			vi.setCursorAtScroll(*tc.at)
+		}
+		for _, event := range tc.seq {
+			_, handled := vi.Handle(term.Event{Type: term.EventKey, Ch: event})
+			require.True(t, handled, "sequence %q failed on %q", tc.seq, string(event))
+		}
+		if tc.wantBuffer != "" || tc.content == "" {
+			assert.Equal(t, tc.wantBuffer, vi.less.Buffer().String())
+		}
+		assert.Equal(t, tc.wantMode, vi.mode())
+		if tc.wantCursor != nil {
+			assert.Equal(t, *tc.wantCursor, vi.cursor.CursorAtScroll())
+		}
+		if tc.wantSelection != "" {
+			selection, ok := vi.Selection()
+			require.True(t, ok)
+			assert.Equal(t, tc.wantSelection, selection)
+		}
+		if tc.wantClipboard != "" {
+			paste, err := vi.config.clipboard.Paste(vi.config.defaultRegister)
+			require.NoError(t, err)
+			assert.Equal(t, tc.wantClipboard, paste.Text)
+		}
+	}
+
+	for _, tc := range []viTextObjectCase{
+		{
+			name:       "delete inner word",
+			content:    "one two three",
+			seq:        "wdiw",
+			wantBuffer: "one  three",
+			wantMode:   normalMode,
+			wantCursor: &term.Coordinates{X: 4, Y: 0},
+		},
+		{
+			name:       "change a word enters insert mode",
+			content:    "one two three",
+			seq:        "wcaw",
+			wantBuffer: "one three",
+			wantMode:   insertMode,
+			wantCursor: &term.Coordinates{X: 4, Y: 0},
+		},
+		{
+			name:          "yank inner quotes",
+			content:       `say "hello world" now`,
+			seq:           "fhyi\"",
+			wantBuffer:    `say "hello world" now`,
+			wantMode:      normalMode,
+			wantClipboard: "hello world",
+		},
+		{
+			name:       "delete around parens",
+			content:    "call(one, two)",
+			seq:        "f(dab",
+			wantBuffer: "call",
+			wantMode:   normalMode,
+			wantCursor: &term.Coordinates{X: 3, Y: 0},
+		},
+		{
+			name:       "delete around parens alias",
+			content:    "call(one, two)",
+			seq:        "f(da)",
+			wantBuffer: "call",
+			wantMode:   normalMode,
+			wantCursor: &term.Coordinates{X: 3, Y: 0},
+		},
+		{
+			name:       "delete around braces alias",
+			content:    "call{one}",
+			seq:        "f{daB",
+			wantBuffer: "call",
+			wantMode:   normalMode,
+			wantCursor: &term.Coordinates{X: 3, Y: 0},
+		},
+		{
+			name:       "delete around angle alias",
+			content:    "a <b> c",
+			seq:        "f<dat",
+			wantBuffer: "a  c",
+			wantMode:   normalMode,
+			wantCursor: &term.Coordinates{X: 2, Y: 0},
+		},
+		{
+			name:       "delete inner paragraph",
+			content:    "one\ntwo\n\nthree\nfour\n",
+			at:         &term.Coordinates{Y: 3},
+			seq:        "dip",
+			wantBuffer: "one\ntwo\n\n",
+			wantMode:   normalMode,
+		},
+		{
+			name:       "delete inner sentence",
+			content:    "One. Two! Three?",
+			at:         &term.Coordinates{X: 6},
+			seq:        "dis",
+			wantBuffer: "One.  Three?",
+			wantMode:   normalMode,
+		},
+		{
+			name:          "visual inner word",
+			content:       "one two three",
+			seq:           "vwiw",
+			wantBuffer:    "one two three",
+			wantMode:      visualMode,
+			wantSelection: "two",
+		},
+		{
+			name:          "visual invalid text object key keeps prior selection and stays visual",
+			content:       "one two three",
+			seq:           "vwiq",
+			wantBuffer:    "one two three",
+			wantMode:      visualMode,
+			wantSelection: "one t",
+		},
+		{
+			name:       "delete invalid text object exits operator mode without mutating",
+			content:    "one two",
+			seq:        "diq",
+			wantBuffer: "one two",
+			wantMode:   normalMode,
+			wantCursor: &term.Coordinates{X: 0, Y: 0},
+		},
+		{
+			name:       "operator can retarget from inner to around",
+			content:    "one two",
+			seq:        "daiw",
+			wantBuffer: " two",
+			wantMode:   normalMode,
+			wantCursor: &term.Coordinates{X: 0, Y: 0},
+		},
+		{
+			name:       "operator can retarget from around to inner",
+			content:    "one two",
+			seq:        "diiw",
+			wantBuffer: " two",
+			wantMode:   normalMode,
+			wantCursor: &term.Coordinates{X: 0, Y: 0},
+		},
+		{
+			name:       "change inner empty quote enters insert mode without mutation",
+			content:    `say "" now`,
+			seq:        `f"ci"`,
+			wantBuffer: `say "" now`,
+			wantMode:   insertMode,
+			wantCursor: &term.Coordinates{X: 5, Y: 0},
+		},
+		{
+			name:       "change around empty quote removes delimiters and enters insert",
+			content:    `say "" now`,
+			seq:        `f"ca"`,
+			wantBuffer: "say  now",
+			wantMode:   insertMode,
+			wantCursor: &term.Coordinates{X: 4, Y: 0},
+		},
+		{
+			name:       "change inner empty block enters insert without mutation",
+			content:    "call()",
+			seq:        "f(cib",
+			wantBuffer: "call()",
+			wantMode:   insertMode,
+			wantCursor: &term.Coordinates{X: 5, Y: 0},
+		},
+		{
+			name:       "change around empty block removes delimiters and enters insert",
+			content:    "call()",
+			seq:        "f(cab",
+			wantBuffer: "call",
+			wantMode:   insertMode,
+			wantCursor: &term.Coordinates{X: 4, Y: 0},
+		},
+		{
+			name:       "delete inner word from end of line trailing spaces",
+			content:    "one two  ",
+			at:         &term.Coordinates{X: len("one two  ")},
+			seq:        "diw",
+			wantBuffer: "one   ",
+			wantMode:   normalMode,
+			wantCursor: &term.Coordinates{X: 4, Y: 0},
+		},
+		{
+			name:       "delete around last word removes leading whitespace",
+			content:    "one two",
+			at:         &term.Coordinates{X: len("one two")},
+			seq:        "daw",
+			wantBuffer: "one",
+			wantMode:   normalMode,
+			wantCursor: &term.Coordinates{X: 2, Y: 0},
+		},
+		{
+			name:       "count delete two around words",
+			content:    "one two three",
+			seq:        "2daw",
+			wantBuffer: "three",
+			wantMode:   normalMode,
+			wantCursor: &term.Coordinates{X: 0, Y: 0},
+		},
+		{
+			name:       "count delete two inner words",
+			content:    "one two three",
+			seq:        "2diw",
+			wantBuffer: " three",
+			wantMode:   normalMode,
+			wantCursor: &term.Coordinates{X: 0, Y: 0},
+		},
+		{
+			name:       "count change two inner words enters insert",
+			content:    "one two three",
+			seq:        "2ciw",
+			wantBuffer: " three",
+			wantMode:   insertMode,
+			wantCursor: &term.Coordinates{X: 0, Y: 0},
+		},
+		{
+			name:          "count yank two inner words",
+			content:       "one two three",
+			seq:           "2yiw",
+			wantBuffer:    "one two three",
+			wantMode:      normalMode,
+			wantClipboard: "one two",
+		},
+		{
+			name:          "yank a word stores standard selection metadata",
+			content:       "one two",
+			seq:           "yaw",
+			wantBuffer:    "one two",
+			wantMode:      normalMode,
+			wantClipboard: "one ",
+		},
+		{
+			name:       "count delete three around words",
+			content:    "one two three four",
+			seq:        "3daw",
+			wantBuffer: "four",
+			wantMode:   normalMode,
+			wantCursor: &term.Coordinates{X: 0, Y: 0},
+		},
+		{
+			name:          "count yank three inner WORDs",
+			content:       "one two-three four five",
+			seq:           "3yiW",
+			wantBuffer:    "one two-three four five",
+			wantMode:      normalMode,
+			wantClipboard: "one two-three four",
+		},
+		{
+			name:       "count change two around words from leading whitespace",
+			content:    "  one two three",
+			at:         &term.Coordinates{X: 0, Y: 0},
+			seq:        "2caw",
+			wantBuffer: "  three",
+			wantMode:   insertMode,
+			wantCursor: &term.Coordinates{X: 2, Y: 0},
+		},
+		{
+			name:       "count delete two inner words from end of line",
+			content:    "one two three",
+			at:         &term.Coordinates{X: len("one two three"), Y: 0},
+			seq:        "2diw",
+			wantBuffer: "one two ",
+			wantMode:   normalMode,
+			wantCursor: &term.Coordinates{X: 7, Y: 0},
+		},
+		{
+			name:          "visual around word from end of line",
+			content:       "one two",
+			at:            &term.Coordinates{X: len("one two"), Y: 0},
+			seq:           "vaw",
+			wantBuffer:    "one two",
+			wantMode:      visualMode,
+			wantSelection: " two",
+		},
+		{
+			name:       "delete multiline block",
+			content:    "call(\none,\ntwo\n)",
+			at:         &term.Coordinates{X: 2, Y: 1},
+			seq:        "dab",
+			wantBuffer: "call",
+			wantMode:   normalMode,
+			wantCursor: &term.Coordinates{X: 3, Y: 0},
+		},
+		{
+			name:       "inner quote does not cross lines and invalid sequence is harmless",
+			content:    "say \"hello\nworld\" now",
+			seq:        "f\"di\"",
+			wantBuffer: "say \"hello\nworld\" now",
+			wantMode:   normalMode,
+			wantCursor: &term.Coordinates{X: 4, Y: 0},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			run(t, tc)
+		})
+	}
+}
+
+func TestViTextObjectYankMetadata(t *testing.T) {
+	vi := setupVi(t, "one two", 2)
+	vi.Resize(40, 5)
+	for _, event := range "yaw" {
+		_, handled := vi.Handle(term.Event{Type: term.EventKey, Ch: event})
+		require.True(t, handled)
+	}
+	paste, err := vi.config.clipboard.Paste(vi.config.defaultRegister)
+	require.NoError(t, err)
+	assert.Equal(t, "one ", paste.Text)
+	assert.Equal(t, text.StandardSelection, paste.Metadata)
+}
+
+func TestViTextObjectSnapshots(t *testing.T) {
+	cases := []handlertest.SequenceTestCase{
+		{
+			InputSequence: "vwiwd",
+			Expected: `one ▐three          
+call()              
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+              NORMAL`,
+		},
+		{
+			InputSequence: "j0f(cab",
+			Expected: `one two three       
+call▐               
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+              INSERT`,
+		},
+	}
+
+	newVi := func(t *testing.T) tui.Handler {
+		return setupViIntegration(t, "one two three\ncall()", 2)
+	}
+	handlertest.RunHandlerIsolated(t, newVi, 20, 10, cases)
+}
+
 func TestViCursorIsolated(t *testing.T) {
 	cases := []handlertest.SequenceTestCase{
 		{"jjddp",

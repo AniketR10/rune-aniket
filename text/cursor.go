@@ -27,8 +27,10 @@ import (
 	"bufio"
 	"context"
 	"maps"
+	"math"
 	"sort"
 	"strings"
+	"unicode"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/iterator"
@@ -107,6 +109,8 @@ type Cursor struct {
 	selection struct {
 		mode       SelectMode
 		scrollFrom term.Coordinates
+		scrollTo   term.Coordinates
+		explicit   bool
 		cells      [][]term.Cell
 	}
 	subscriber curSubscriber
@@ -897,6 +901,612 @@ func (c *Cursor) IsEndWord() bool {
 	return word != "" && end == pos
 }
 
+func isWordObjectBlank(r rune) bool {
+	return r == '\x00' || r == ' ' || r == '\t'
+}
+
+func isWordObjectRune(r rune) bool {
+	return unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_'
+}
+
+func isSentenceRune(r rune) bool {
+	switch r {
+	case '.', '!', '?':
+		return true
+	default:
+		return false
+	}
+}
+
+func (c *Cursor) cellAtScrollCoordinates(pos term.Coordinates) (term.Cell, bool) {
+	cells := c.view().RawCells()
+	if pos.Y < 0 || pos.Y >= len(cells) {
+		return term.Cell{}, false
+	}
+	if pos.X < 0 || pos.X >= len(cells[pos.Y]) {
+		return term.Cell{}, false
+	}
+	return cells[pos.Y][pos.X], true
+}
+
+func (c *Cursor) firstCellInOrAfter(pos term.Coordinates) (term.Coordinates, bool) {
+	rows := c.rows()
+	if rows == 0 {
+		return term.Coordinates{}, false
+	}
+	if pos.Y < 0 {
+		pos = term.Coordinates{}
+	}
+	for y := pos.Y; y < rows; y++ {
+		startX := 0
+		if y == pos.Y {
+			startX = max(0, pos.X)
+		}
+		if startX < c.view().Columns(y) {
+			return term.Coordinates{Y: y, X: startX}, true
+		}
+	}
+	return term.Coordinates{}, false
+}
+
+func (c *Cursor) lastCellInOrBefore(pos term.Coordinates) (term.Coordinates, bool) {
+	rows := c.rows()
+	if rows == 0 {
+		return term.Coordinates{}, false
+	}
+	if pos.Y >= rows {
+		pos.Y = rows - 1
+		pos.X = c.view().Columns(pos.Y)
+	}
+	for y := pos.Y; y >= 0; y-- {
+		endX := c.view().Columns(y) - 1
+		if y == pos.Y {
+			endX = min(endX, pos.X)
+		}
+		if endX >= 0 {
+			return term.Coordinates{Y: y, X: endX}, true
+		}
+	}
+	return term.Coordinates{}, false
+}
+
+func (c *Cursor) nextCellPosition(pos term.Coordinates) (term.Coordinates, bool) {
+	return c.firstCellInOrAfter(term.Coordinates{Y: pos.Y, X: pos.X + 1})
+}
+
+func (c *Cursor) previousCellPosition(pos term.Coordinates) (term.Coordinates, bool) {
+	if pos.X > 0 {
+		return c.lastCellInOrBefore(term.Coordinates{Y: pos.Y, X: pos.X - 1})
+	}
+	return c.lastCellInOrBefore(term.Coordinates{Y: pos.Y - 1, X: math.MaxInt})
+}
+
+func (c *Cursor) currentTextObjectCell() (term.Coordinates, bool) {
+	if cell, ok := c.cellAtCursor(); ok && cell.Ch != '\x00' {
+		return c.cursorAtScroll(), true
+	}
+	pos := c.cursorAtScroll()
+	if pos.Y >= 0 && pos.Y < c.rows() {
+		cols := c.view().Columns(pos.Y)
+		if cols > 0 && pos.X >= cols {
+			return term.Coordinates{Y: pos.Y, X: cols - 1}, true
+		}
+	}
+	if next, ok := c.firstCellInOrAfter(pos); ok && next.Y == pos.Y {
+		return next, true
+	}
+	if prev, ok := c.lastCellInOrBefore(pos); ok && prev.Y == pos.Y {
+		return prev, true
+	}
+	return term.Coordinates{}, false
+}
+
+func (c *Cursor) selectRange(start, end term.Coordinates) bool {
+	return c.setExplicitSelection(StandardSelection, start, end, start)
+}
+
+// SelectRange selects the explicit right-exclusive range [start, end).
+func (c *Cursor) SelectRange(start, end term.Coordinates) bool {
+	return c.selectRange(start, end)
+}
+
+func (c *Cursor) wordClass(r rune, group bool) int {
+	if isWordObjectBlank(r) {
+		return 0
+	}
+	if group {
+		return 1
+	}
+	if isWordObjectRune(r) {
+		return 1
+	}
+	return 2
+}
+
+func (c *Cursor) wordObjectStart(pos term.Coordinates, allowPrevFallback bool) (term.Coordinates, bool) {
+	if cell, ok := c.cellAtScrollCoordinates(pos); ok && !isWordObjectBlank(cell.Ch) {
+		return pos, true
+	}
+
+	if allowPrevFallback {
+		for next, ok := c.firstCellInOrAfter(pos); ok && next.Y == pos.Y; next, ok = c.nextCellPosition(next) {
+			cell, ok := c.cellAtScrollCoordinates(next)
+			if ok && !isWordObjectBlank(cell.Ch) {
+				return next, true
+			}
+		}
+		for prev, ok := c.lastCellInOrBefore(pos); ok && prev.Y == pos.Y; prev, ok = c.previousCellPosition(prev) {
+			cell, ok := c.cellAtScrollCoordinates(prev)
+			if ok && !isWordObjectBlank(cell.Ch) {
+				return prev, true
+			}
+		}
+		return term.Coordinates{}, false
+	}
+
+	for next, ok := c.firstCellInOrAfter(pos); ok; next, ok = c.nextCellPosition(next) {
+		cell, ok := c.cellAtScrollCoordinates(next)
+		if ok && !isWordObjectBlank(cell.Ch) {
+			return next, true
+		}
+	}
+	return term.Coordinates{}, false
+}
+
+func (c *Cursor) wordObjectBounds(
+	pos term.Coordinates, group, around, allowPrevFallback bool,
+) (startCoord, endCoord term.Coordinates, ok bool) {
+	pos, ok = c.wordObjectStart(pos, allowPrevFallback)
+	if !ok {
+		return term.Coordinates{}, term.Coordinates{}, false
+	}
+
+	cell, ok := c.cellAtScrollCoordinates(pos)
+	if !ok || isWordObjectBlank(cell.Ch) {
+		return term.Coordinates{}, term.Coordinates{}, false
+	}
+
+	class := c.wordClass(cell.Ch, group)
+	start, end := pos, pos
+	for prev, ok := c.previousCellPosition(start); ok && prev.Y == pos.Y; prev, ok = c.previousCellPosition(prev) {
+		prevCell, ok := c.cellAtScrollCoordinates(prev)
+		if !ok || c.wordClass(prevCell.Ch, group) != class {
+			break
+		}
+		start = prev
+	}
+	for next, ok := c.nextCellPosition(end); ok && next.Y == pos.Y; next, ok = c.nextCellPosition(next) {
+		nextCell, ok := c.cellAtScrollCoordinates(next)
+		if !ok || c.wordClass(nextCell.Ch, group) != class {
+			break
+		}
+		end = next
+	}
+
+	startCoord = start
+	endCoord = term.Coordinates{Y: end.Y, X: end.X + 1}
+	if around {
+		right := endCoord
+		for right.X < c.view().Columns(pos.Y) {
+			rightCell, ok := c.cellAtScrollCoordinates(right)
+			if !ok || !isWordObjectBlank(rightCell.Ch) {
+				break
+			}
+			right.X++
+		}
+		if right != endCoord {
+			endCoord = right
+		} else {
+			for startCoord.X > 0 {
+				left := term.Coordinates{Y: startCoord.Y, X: startCoord.X - 1}
+				leftCell, ok := c.cellAtScrollCoordinates(left)
+				if !ok || !isWordObjectBlank(leftCell.Ch) {
+					break
+				}
+				startCoord = left
+			}
+		}
+	}
+	return startCoord, endCoord, true
+}
+
+func (c *Cursor) selectWordObjectCount(group, around bool, count int) bool {
+	count = max(1, count)
+	start, end, ok := c.wordObjectBounds(c.cursorAtScroll(), group, around, true)
+	if !ok {
+		return false
+	}
+	for i := 1; i < count; i++ {
+		_, nextEnd, nextOK := c.wordObjectBounds(end, group, around, false)
+		if !nextOK {
+			break
+		}
+		end = nextEnd
+	}
+	return c.selectRange(start, end)
+}
+
+func (c *Cursor) selectWordObject(group, around bool) bool {
+	return c.selectWordObjectCount(group, around, 1)
+}
+
+// SelectInnerWord selects the inner word at cursor.
+func (c *Cursor) SelectInnerWord() bool {
+	return c.selectWordObject(false, false)
+}
+
+// SelectInnerWords selects count inner words starting at cursor.
+func (c *Cursor) SelectInnerWords(count int) bool {
+	return c.selectWordObjectCount(false, false, count)
+}
+
+// SelectAWord selects the word at cursor, plus surrounding whitespace when present.
+func (c *Cursor) SelectAWord() bool {
+	return c.selectWordObject(false, true)
+}
+
+// SelectAWords selects count a-word objects starting at cursor.
+func (c *Cursor) SelectAWords(count int) bool {
+	return c.selectWordObjectCount(false, true, count)
+}
+
+// SelectInnerWordGroup selects the inner WORD at cursor.
+func (c *Cursor) SelectInnerWordGroup() bool {
+	return c.selectWordObject(true, false)
+}
+
+// SelectInnerWordGroups selects count inner WORD objects starting at cursor.
+func (c *Cursor) SelectInnerWordGroups(count int) bool {
+	return c.selectWordObjectCount(true, false, count)
+}
+
+// SelectAWordGroup selects the WORD at cursor, plus surrounding whitespace when present.
+func (c *Cursor) SelectAWordGroup() bool {
+	return c.selectWordObject(true, true)
+}
+
+// SelectAWordGroups selects count a-WORD objects starting at cursor.
+func (c *Cursor) SelectAWordGroups(count int) bool {
+	return c.selectWordObjectCount(true, true, count)
+}
+
+func (c *Cursor) quoteEscapedAt(y, x int) bool {
+	escaped := false
+	for bx := x - 1; bx >= 0; bx-- {
+		prev, ok := c.cellAtScrollCoordinates(term.Coordinates{Y: y, X: bx})
+		if !ok || prev.Ch != '\\' {
+			break
+		}
+		escaped = !escaped
+	}
+	return escaped
+}
+
+func (c *Cursor) quoteIndexRight(y, from int, quote rune) int {
+	for x := from; x < c.view().Columns(y); x++ {
+		cell, ok := c.cellAtScrollCoordinates(term.Coordinates{Y: y, X: x})
+		if !ok || cell.Ch != quote {
+			continue
+		}
+		if !c.quoteEscapedAt(y, x) {
+			return x
+		}
+	}
+	return -1
+}
+
+func (c *Cursor) quoteBounds(quote rune) (start, end term.Coordinates, ok bool) {
+	pos, ok := c.currentTextObjectCell()
+	if !ok {
+		return term.Coordinates{}, term.Coordinates{}, false
+	}
+	y := pos.Y
+	for openX := min(pos.X, c.view().Columns(y)-1); openX >= 0; openX-- {
+		cell, ok := c.cellAtScrollCoordinates(term.Coordinates{Y: y, X: openX})
+		if !ok || cell.Ch != quote || c.quoteEscapedAt(y, openX) {
+			continue
+		}
+		closeX := c.quoteIndexRight(y, openX+1, quote)
+		if closeX >= 0 && pos.X <= closeX {
+			return term.Coordinates{Y: y, X: openX}, term.Coordinates{Y: y, X: closeX}, true
+		}
+	}
+	return term.Coordinates{}, term.Coordinates{}, false
+}
+
+// SelectInnerQuote selects the contents of the surrounding quote pair.
+func (c *Cursor) SelectInnerQuote(quote rune) bool {
+	start, end, ok := c.quoteBounds(quote)
+	if !ok {
+		return false
+	}
+	start.X++
+	return c.selectRange(start, end)
+}
+
+// SelectAQuote selects the surrounding quote pair including delimiters.
+func (c *Cursor) SelectAQuote(quote rune) bool {
+	start, end, ok := c.quoteBounds(quote)
+	if !ok {
+		return false
+	}
+	end.X++
+	return c.selectRange(start, end)
+}
+
+func coordinatesGTE(a, b term.Coordinates) bool {
+	return a.Y > b.Y || (a.Y == b.Y && a.X >= b.X)
+}
+
+func (c *Cursor) findMatchingRuneFrom(start term.Coordinates, open, close rune) (term.Coordinates, bool) {
+	depth := 1
+	for pos, ok := c.nextCellPosition(start); ok; pos, ok = c.nextCellPosition(pos) {
+		cell, ok := c.cellAtScrollCoordinates(pos)
+		if !ok {
+			continue
+		}
+		switch cell.Ch {
+		case open:
+			depth++
+		case close:
+			depth--
+			if depth == 0 {
+				return pos, true
+			}
+		}
+	}
+	return term.Coordinates{}, false
+}
+
+func (c *Cursor) blockBounds(open, close rune) (start, end term.Coordinates, ok bool) {
+	pos, ok := c.currentTextObjectCell()
+	if !ok {
+		return term.Coordinates{}, term.Coordinates{}, false
+	}
+	if cell, ok := c.cellAtScrollCoordinates(pos); ok && cell.Ch == close {
+		if prev, ok := c.previousCellPosition(pos); ok {
+			pos = prev
+		}
+	}
+
+	depth := 0
+	for scan, ok := c.lastCellInOrBefore(pos); ok; scan, ok = c.previousCellPosition(scan) {
+		cell, ok := c.cellAtScrollCoordinates(scan)
+		if !ok {
+			continue
+		}
+		switch cell.Ch {
+		case close:
+			depth++
+		case open:
+			if depth == 0 {
+				match, ok := c.findMatchingRuneFrom(scan, open, close)
+				if ok && coordinatesGTE(match, pos) {
+					return scan, match, true
+				}
+			} else {
+				depth--
+			}
+		}
+	}
+	return term.Coordinates{}, term.Coordinates{}, false
+}
+
+// SelectInnerBlock selects the contents of the surrounding paired block.
+func (c *Cursor) SelectInnerBlock(open, close rune) bool {
+	start, end, ok := c.blockBounds(open, close)
+	if !ok {
+		return false
+	}
+	start.X++
+	return c.selectRange(start, end)
+}
+
+// SelectABlock selects the surrounding paired block including delimiters.
+func (c *Cursor) SelectABlock(open, close rune) bool {
+	start, end, ok := c.blockBounds(open, close)
+	if !ok {
+		return false
+	}
+	end.X++
+	return c.selectRange(start, end)
+}
+
+func (c *Cursor) isBlankLine(y int) bool {
+	if y < 0 || y >= c.rows() {
+		return true
+	}
+	cols := c.view().Columns(y)
+	if cols == 0 {
+		return true
+	}
+	for x := range cols {
+		cell, ok := c.cellAtScrollCoordinates(term.Coordinates{Y: y, X: x})
+		if ok && !isWordObjectBlank(cell.Ch) {
+			return false
+		}
+	}
+	return true
+}
+
+func (c *Cursor) lineEndCoordinate(y int) term.Coordinates {
+	if y+1 < c.rows() {
+		return term.Coordinates{Y: y + 1, X: 0}
+	}
+	return term.Coordinates{Y: y, X: c.view().Columns(y)}
+}
+
+func (c *Cursor) paragraphLines(around bool) (startLine, endLine int, ok bool) {
+	if c.rows() == 0 {
+		return 0, 0, false
+	}
+	line := min(c.cursorAtScroll().Y, c.rows()-1)
+	if c.isBlankLine(line) {
+		for next := line; next < c.rows(); next++ {
+			if !c.isBlankLine(next) {
+				line = next
+				goto found
+			}
+		}
+		for prev := line - 1; prev >= 0; prev-- {
+			if !c.isBlankLine(prev) {
+				line = prev
+				goto found
+			}
+		}
+		return 0, 0, false
+	}
+
+found:
+	startLine, endLine = line, line
+	for startLine > 0 && !c.isBlankLine(startLine-1) {
+		startLine--
+	}
+	for endLine+1 < c.rows() && !c.isBlankLine(endLine+1) {
+		endLine++
+	}
+	if around {
+		for startLine > 0 && c.isBlankLine(startLine-1) {
+			startLine--
+		}
+		for endLine+1 < c.rows() && c.isBlankLine(endLine+1) {
+			endLine++
+		}
+	}
+	return startLine, endLine, true
+}
+
+// SelectInnerParagraph selects the current paragraph without surrounding blank lines.
+func (c *Cursor) SelectInnerParagraph() bool {
+	startLine, endLine, ok := c.paragraphLines(false)
+	if !ok {
+		return false
+	}
+	return c.selectRange(term.Coordinates{Y: startLine}, c.lineEndCoordinate(endLine))
+}
+
+// SelectAParagraph selects the current paragraph including surrounding blank lines.
+func (c *Cursor) SelectAParagraph() bool {
+	startLine, endLine, ok := c.paragraphLines(true)
+	if !ok {
+		return false
+	}
+	return c.selectRange(term.Coordinates{Y: startLine}, c.lineEndCoordinate(endLine))
+}
+
+func (c *Cursor) sentenceBounds(around bool) (start, end term.Coordinates, ok bool) {
+	pos, ok := c.currentTextObjectCell()
+	if !ok {
+		return term.Coordinates{}, term.Coordinates{}, false
+	}
+	y := pos.Y
+	cols := c.view().Columns(y)
+	if cols == 0 {
+		return term.Coordinates{}, term.Coordinates{}, false
+	}
+	x := min(pos.X, cols-1)
+	for x < cols {
+		cell, ok := c.cellAtScrollCoordinates(term.Coordinates{Y: y, X: x})
+		if ok && !unicode.IsSpace(cell.Ch) {
+			break
+		}
+		x++
+	}
+	if x >= cols {
+		for x = min(pos.X, cols-1); x >= 0; x-- {
+			cell, ok := c.cellAtScrollCoordinates(term.Coordinates{Y: y, X: x})
+			if ok && !unicode.IsSpace(cell.Ch) {
+				break
+			}
+		}
+		if x < 0 {
+			return term.Coordinates{}, term.Coordinates{}, false
+		}
+	}
+
+	startX := 0
+	for i := x - 1; i >= 0; i-- {
+		cell, _ := c.cellAtScrollCoordinates(term.Coordinates{Y: y, X: i})
+		if isSentenceRune(cell.Ch) {
+			if i+1 >= cols {
+				startX = cols
+				break
+			}
+			next, _ := c.cellAtScrollCoordinates(term.Coordinates{Y: y, X: i + 1})
+			if unicode.IsSpace(next.Ch) {
+				startX = i + 1
+				break
+			}
+		}
+	}
+	for startX < cols {
+		cell, _ := c.cellAtScrollCoordinates(term.Coordinates{Y: y, X: startX})
+		if !unicode.IsSpace(cell.Ch) {
+			break
+		}
+		startX++
+	}
+
+	endX := cols
+	for i := x; i < cols; i++ {
+		cell, _ := c.cellAtScrollCoordinates(term.Coordinates{Y: y, X: i})
+		if !isSentenceRune(cell.Ch) {
+			continue
+		}
+		if i+1 >= cols {
+			endX = i + 1
+			break
+		}
+		next, _ := c.cellAtScrollCoordinates(term.Coordinates{Y: y, X: i + 1})
+		if unicode.IsSpace(next.Ch) {
+			endX = i + 1
+			break
+		}
+	}
+
+	if around {
+		trail := endX
+		for trail < cols {
+			cell, _ := c.cellAtScrollCoordinates(term.Coordinates{Y: y, X: trail})
+			if !unicode.IsSpace(cell.Ch) {
+				break
+			}
+			trail++
+		}
+		if trail > endX {
+			endX = trail
+		} else {
+			for startX > 0 {
+				cell, _ := c.cellAtScrollCoordinates(term.Coordinates{Y: y, X: startX - 1})
+				if !unicode.IsSpace(cell.Ch) {
+					break
+				}
+				startX--
+			}
+		}
+	}
+
+	return term.Coordinates{Y: y, X: startX}, term.Coordinates{Y: y, X: endX}, true
+}
+
+// SelectInnerSentence selects the current sentence without surrounding whitespace.
+func (c *Cursor) SelectInnerSentence() bool {
+	start, end, ok := c.sentenceBounds(false)
+	if !ok {
+		return false
+	}
+	return c.selectRange(start, end)
+}
+
+// SelectASentence selects the current sentence including adjacent separating whitespace.
+func (c *Cursor) SelectASentence() bool {
+	start, end, ok := c.sentenceBounds(true)
+	if !ok {
+		return false
+	}
+	return c.selectRange(start, end)
+}
+
 // MoveToMatchingRune moves the cursor to the balanced matching rune of the rune at
 // the current cursor's cell.
 func (c *Cursor) MoveToMatchingRune() bool {
@@ -1198,11 +1808,19 @@ func (c *Cursor) ConflateContext(ctx context.Context) (ok bool) {
 }
 
 func (c *Cursor) setSelection() (ok bool) {
-	from := c.selection.scrollFrom
-	to := c.cursorAtScroll()
+	from, to, ok := c.selectionBounds()
+	if !ok {
+		c.selection.cells = nil
+		c.SetLocationList(internalLocationListPriority, selectionLocationListID, nil)
+		return false
+	}
 
-	from, to = term.CoordinatesSort(from, to)
-	if c.RightInclusiveSemantics {
+	if c.selection.mode == BlockSelection {
+		from, to = term.CoordinatesBlockSort(from, to)
+	} else {
+		from, to = term.CoordinatesSort(from, to)
+	}
+	if !c.selection.explicit && c.RightInclusiveSemantics {
 		to.X++
 	}
 
@@ -1231,6 +1849,68 @@ func (c *Cursor) setSelection() (ok bool) {
 	c.SetLocationList(internalLocationListPriority, selectionLocationListID, LocationSlice(locs))
 
 	return
+}
+
+func (c *Cursor) selectionBounds() (from, to term.Coordinates, ok bool) {
+	if c.selection.mode == NoSelection {
+		return
+	}
+
+	from, ok = c.clampSelectionCoordinates(c.selection.scrollFrom)
+	if !ok {
+		return
+	}
+
+	if c.selection.explicit {
+		to, ok = c.clampSelectionCoordinates(c.selection.scrollTo)
+		return
+	}
+
+	to, ok = c.cursorAtScrollBounds()
+	return
+}
+
+func (c *Cursor) clampSelectionCoordinates(pos term.Coordinates) (term.Coordinates, bool) {
+	rows := c.rows()
+	if rows == 0 || pos.Y < 0 || pos.Y >= rows {
+		return term.Coordinates{}, false
+	}
+	pos.X = max(0, min(pos.X, c.view().Columns(pos.Y)))
+	return pos, true
+}
+
+func (c *Cursor) setExplicitSelection(
+	mode SelectMode,
+	from, to, cursorPos term.Coordinates,
+) (ok bool) {
+	from, ok = c.clampSelectionCoordinates(from)
+	if !ok {
+		return false
+	}
+	to, ok = c.clampSelectionCoordinates(to)
+	if !ok {
+		return false
+	}
+	cursorPos, ok = c.clampSelectionCoordinates(cursorPos)
+	if !ok {
+		return false
+	}
+
+	prevMode := c.selection.mode
+	c.selection.mode = NoSelection
+	c.setSelection()
+	c.moveToScroll(cursorPos)
+
+	c.selection.mode = mode
+	c.selection.scrollFrom = from
+	c.selection.scrollTo = to
+	c.selection.explicit = true
+	ok = c.setSelection()
+	if !ok {
+		c.selection.mode = prevMode
+		c.selection.explicit = false
+	}
+	return ok
 }
 
 // returns ok=false if there's no content to select in buffer
@@ -1268,6 +1948,7 @@ func (c *Cursor) SelectionMode() (mode SelectMode, ok bool) {
 func (c *Cursor) Select() (ok bool) {
 	mode := c.selection.mode
 	c.selection.mode = StandardSelection
+	c.selection.explicit = false
 	if mode != NoSelection {
 		ok = c.setSelection()
 		return
@@ -1287,6 +1968,7 @@ func (c *Cursor) Select() (ok bool) {
 func (c *Cursor) SelectLine() (ok bool) {
 	mode := c.selection.mode
 	c.selection.mode = LineSelection
+	c.selection.explicit = false
 	if mode != NoSelection {
 		ok = c.setSelection()
 		return
@@ -1306,6 +1988,7 @@ func (c *Cursor) SelectLine() (ok bool) {
 func (c *Cursor) SelectBlock() (ok bool) {
 	mode := c.selection.mode
 	c.selection.mode = BlockSelection
+	c.selection.explicit = false
 	if mode != NoSelection {
 		ok = c.setSelection()
 		return
@@ -1324,6 +2007,7 @@ func (c *Cursor) Unselect() bool {
 		return false
 	}
 	c.selection.mode = NoSelection
+	c.selection.explicit = false
 	c.selection.cells = nil
 	c.SetLocationList(internalLocationListPriority, selectionLocationListID, nil)
 	return true
@@ -1384,8 +2068,8 @@ func (c *Cursor) DeleteSelection() (ok bool) {
 	}
 
 	mode := c.selection.mode
-	from := c.selection.scrollFrom
-	to, ok := c.cursorAtScrollBounds()
+	explicit := c.selection.explicit
+	from, to, ok := c.selectionBounds()
 	c.Unselect()
 
 	// allow for subscribers of buffer to intercept via OnWillDelete
@@ -1399,8 +2083,12 @@ func (c *Cursor) DeleteSelection() (ok bool) {
 	}
 
 	// buffer delete uses right exclusive semantics
-	from, to = term.CoordinatesSort(from, to)
-	if c.RightInclusiveSemantics {
+	if mode == BlockSelection {
+		from, to = term.CoordinatesBlockSort(from, to)
+	} else {
+		from, to = term.CoordinatesSort(from, to)
+	}
+	if !explicit && c.RightInclusiveSemantics {
 		to.X++
 	}
 
@@ -1473,8 +2161,8 @@ func (c *Cursor) HideSelection() (ok bool) {
 		return
 	}
 
-	from := c.selection.scrollFrom
-	to, ok := c.cursorAtScrollBounds()
+	explicit := c.selection.explicit
+	from, to, ok := c.selectionBounds()
 	c.Unselect()
 	// this means that content was modified after Select started
 	// and now there's no content to select, so we are done.
@@ -1483,7 +2171,7 @@ func (c *Cursor) HideSelection() (ok bool) {
 	}
 
 	from, to = term.CoordinatesSort(from, to)
-	if c.RightInclusiveSemantics {
+	if !explicit && c.RightInclusiveSemantics {
 		to.X++
 	}
 	ok = c.scroll.MarkHidden(from.Y, to.Y)
@@ -1655,7 +2343,7 @@ func (c *Cursor) ShiftLineLeft() bool {
 }
 
 func (c *Cursor) getShiftSelection() (from, to term.Coordinates) {
-	from, to = c.selection.scrollFrom, c.cursorAtScroll()
+	from, to, _ = c.selectionBounds()
 	switch c.selection.mode {
 	case BlockSelection:
 		from, to = term.CoordinatesBlockSort(from, to)
@@ -2304,8 +2992,8 @@ func (c *Cursor) selectionOp(fn func(string) string) (ok bool) {
 	}
 
 	mode := c.selection.mode
-	from := c.selection.scrollFrom
-	to, ok := c.cursorAtScrollBounds()
+	explicit := c.selection.explicit
+	from, to, ok := c.selectionBounds()
 	c.Unselect()
 	c.selection.mode = mode
 	if !ok {
@@ -2313,8 +3001,12 @@ func (c *Cursor) selectionOp(fn func(string) string) (ok bool) {
 	}
 
 	// buffer delete uses right exclusive semantics
-	from, to = term.CoordinatesSort(from, to)
-	if c.RightInclusiveSemantics {
+	if mode == BlockSelection {
+		from, to = term.CoordinatesBlockSort(from, to)
+	} else {
+		from, to = term.CoordinatesSort(from, to)
+	}
+	if !explicit && c.RightInclusiveSemantics {
 		to.X++
 	}
 
