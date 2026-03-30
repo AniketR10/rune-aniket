@@ -620,7 +620,7 @@ func TestHandlerBusyQueuesUserMessageUntilIdle(t *testing.T) {
 	h.Draw(w)
 	_ = w.Flush()
 	assert.Contains(t, w.String(), "hello")
-	assert.Contains(t, w.String(), "⏳")
+	assert.Contains(t, w.String(), "󰄝")
 
 	go func() {
 		tx <- MessageEvent{Type: MessageEventBusy, Busy: false}
@@ -637,7 +637,7 @@ func TestHandlerBusyQueuesUserMessageUntilIdle(t *testing.T) {
 	w = term.NewStringWriter(20, 9)
 	h.Draw(w)
 	_ = w.Flush()
-	assert.NotContains(t, w.String(), "⏳ hello")
+	assert.NotContains(t, w.String(), "󰄝 hello")
 	assert.Contains(t, w.String(), "hello")
 
 	mu.Lock()

@@ -60,7 +60,7 @@ type ComponentConfig struct {
 	// messages and control their alignment.
 	QueuedMessageSpanConfig component.SpanConfig
 	// QueuedMessagePrefix is the prefix shown before each queued message.
-	// Defaults to "⏳ " when empty.
+	// Defaults to "󰄝 " when empty.
 	QueuedMessagePrefix string
 
 	// ReceiveMessageStringConfig determines the StringConfig of the received

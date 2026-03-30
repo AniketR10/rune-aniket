@@ -10754,7 +10754,7 @@ func TestAIEditorHandler_chat_selection_focus_transition(t *testing.T) {
 //
 // Flow:
 //  1. Send "hello" → agent starts processing (stays busy; gate blocks completion).
-//  2. While busy, type "msg1" + Enter → queued with ⏳ indicator.
+//  2. While busy, type "msg1" + Enter → queued with 󰄝 indicator.
 //  3. Type "msg2" + Enter → second queued message.
 //  4. Arrow-Up on empty input → recalls "msg2" into the inputbox.
 //  5. Ctrl-U clears input, Arrow-Up → recalls "msg1".
@@ -10798,7 +10798,7 @@ func TestAIEditorHandler_chat_queue_while_busy(t *testing.T) {
 			InputSequence: "msg1<enter>",
 			Expected: e2eExpected(0,
 				"hello",
-				"⏳  msg1",
+				"󰄝 msg1",
 				"⠙ sending (0s)",
 				"", "", "", "",
 				"   ┌───────────────────────────────┐",
@@ -10811,8 +10811,8 @@ func TestAIEditorHandler_chat_queue_while_busy(t *testing.T) {
 			InputSequence: "msg2<enter>",
 			Expected: e2eExpected(0,
 				"hello",
-				"⏳  msg1",
-				"⏳  msg2",
+				"󰄝 msg1",
+				"󰄝 msg2",
 				"⠹ sending (0s)",
 				"", "", "",
 				"   ┌───────────────────────────────┐",
@@ -10825,7 +10825,7 @@ func TestAIEditorHandler_chat_queue_while_busy(t *testing.T) {
 			InputSequence: "<up>",
 			Expected: e2eExpected(0,
 				"hello",
-				"⏳  msg1",
+				"󰄝 msg1",
 				"⠸ sending (0s)",
 				"", "", "", "",
 				"   ┌───────────────────────────────┐",
@@ -10917,7 +10917,7 @@ func TestAIEditorHandler_chat_queue_two_then_delete_both(t *testing.T) {
 			InputSequence: "first<enter>",
 			Expected: e2eExpected(0,
 				"hello",
-				"⏳  first",
+				"󰄝 first",
 				"⠙ sending (0s)",
 				"", "", "", "",
 				"   ┌───────────────────────────────┐",
@@ -10930,8 +10930,8 @@ func TestAIEditorHandler_chat_queue_two_then_delete_both(t *testing.T) {
 			InputSequence: "second<enter>",
 			Expected: e2eExpected(0,
 				"hello",
-				"⏳  first",
-				"⏳  second",
+				"󰄝 first",
+				"󰄝 second",
 				"⠹ sending (0s)",
 				"", "", "",
 				"   ┌───────────────────────────────┐",
@@ -10944,7 +10944,7 @@ func TestAIEditorHandler_chat_queue_two_then_delete_both(t *testing.T) {
 			InputSequence: "<up>",
 			Expected: e2eExpected(0,
 				"hello",
-				"⏳  first",
+				"󰄝 first",
 				"⠸ sending (0s)",
 				"", "", "", "",
 				"   ┌───────────────────────────────┐",
@@ -10957,7 +10957,7 @@ func TestAIEditorHandler_chat_queue_two_then_delete_both(t *testing.T) {
 			InputSequence: "<c-u>",
 			Expected: e2eExpected(0,
 				"hello",
-				"⏳  first",
+				"󰄝 first",
 				"⠼ sending (0s)",
 				"", "", "", "",
 				"   ┌───────────────────────────────┐",

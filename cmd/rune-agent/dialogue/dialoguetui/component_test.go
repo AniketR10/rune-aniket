@@ -433,8 +433,8 @@ func TestComponentQueuedMessagesRenderAndRemove(t *testing.T) {
 				comp.AddQueuedMessage("first")
 				comp.AddQueuedMessage("second")
 			},
-			Expected: "⏳  first             \n" +
-				"⏳  second            \n" +
+			Expected: "󰄝 first              \n" +
+				"󰄝 second             \n" +
 				"                     \n" +
 				"                     \n" +
 				"                     \n" +
@@ -449,7 +449,7 @@ func TestComponentQueuedMessagesRenderAndRemove(t *testing.T) {
 			Action: func() {
 				comp.RemoveLastQueuedMessage()
 			},
-			Expected: "⏳  first             \n" +
+			Expected: "󰄝 first              \n" +
 				"                     \n" +
 				"                     \n" +
 				"                     \n" +
@@ -481,7 +481,7 @@ func TestComponentQueuedMessagesStayAtBottom(t *testing.T) {
 			},
 			Expected: "hello world          \n" +
 				"                     \n" +
-				"⏳  follow up         \n" +
+				"󰄝 follow up          \n" +
 				"                     \n" +
 				"                     \n" +
 				"                     \n" +
@@ -500,7 +500,7 @@ func TestComponentQueuedMessagesStayAtBottom(t *testing.T) {
 			Expected: "hello world          \n" +
 				"                     \n" +
 				"⚙ read_file Reading  \n" +
-				"⏳  follow up         \n" +
+				"󰄝 follow up          \n" +
 				"                     \n" +
 				"                     \n" +
 				"                     \n" +

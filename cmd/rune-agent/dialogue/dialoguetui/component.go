@@ -244,7 +244,7 @@ func (c *Component) queuedPrefix() string {
 	if c.cfg.QueuedMessagePrefix != "" {
 		return c.cfg.QueuedMessagePrefix
 	}
-	return "⏳ "
+	return "󰄝 "
 }
 
 // AddQueuedMessage adds msg to the message list with a pending indicator.
