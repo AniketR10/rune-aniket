@@ -164,9 +164,9 @@ func (m *Manager) AddWorkspace(
 // or false if there's currently no Workspace initialized.
 func (m *Manager) Workspace(file workspaceapi.URI) (Workspace, bool, error) {
 	for _, workspace := range m.workspaces {
-		is, err := IsWorkspaceURI(workspace, file)
+		is, err := CanWorkspaceURI(workspace, file)
 		if err != nil {
-			return nil, false, fmt.Errorf("IsWorkspaceURI: %s", err)
+			return nil, false, fmt.Errorf("CanWorkspaceURI: %s", err)
 		}
 		if is {
 			return workspace, true, nil

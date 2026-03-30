@@ -102,7 +102,7 @@ func TestDefaultSwapFile(t *testing.T) {
 	}
 }
 
-func TestIsWorkspaceURI(t *testing.T) {
+func TestCanWorkspaceURI(t *testing.T) {
 	tsuite := []struct {
 		workspaceURI string
 		uri          string
@@ -130,9 +130,52 @@ func TestIsWorkspaceURI(t *testing.T) {
 			inWorkspace := NewSchemeWorkspace(inWorkspaceURI, fileScheme)
 
 			// sut
-			actualOut, err := IsWorkspaceURI(inWorkspace, inURI)
+			actualOut, err := CanWorkspaceURI(inWorkspace, inURI)
 			require.NoError(t, err)
 			assert.Equal(t, tcase.expectedOut, actualOut)
 		})
 	}
+}
+
+func TestCanWorkspaceURIFileSchemeCanManageOutOfTreeFile(t *testing.T) {
+	workspaceURI, err := workspaceapi.ParseURI("file:///project")
+	require.NoError(t, err)
+
+	uri, err := workspaceapi.ParseURI("file:///Users/example/go/pkg/mod/dep/file.go")
+	require.NoError(t, err)
+
+	fileScheme, err := newTestFileScheme(workspaceURI)
+	require.NoError(t, err)
+	inWorkspace := NewSchemeWorkspace(workspaceURI, fileScheme)
+
+	actualOut, err := CanWorkspaceURI(inWorkspace, uri)
+	require.NoError(t, err)
+	assert.True(t, actualOut)
+}
+
+func TestIsWorkspaceURI(t *testing.T) {
+	workspaceURI, err := workspaceapi.ParseURI("file:///project")
+	require.NoError(t, err)
+
+	fileScheme, err := newTestFileScheme(workspaceURI)
+	require.NoError(t, err)
+	inWorkspace := NewSchemeWorkspace(workspaceURI, fileScheme)
+
+	t.Run("in tree", func(t *testing.T) {
+		uri, err := workspaceapi.ParseURI("file:///project/pkg/file.go")
+		require.NoError(t, err)
+
+		actualOut, err := IsWorkspaceURI(inWorkspace, uri)
+		require.NoError(t, err)
+		assert.True(t, actualOut)
+	})
+
+	t.Run("out of tree", func(t *testing.T) {
+		uri, err := workspaceapi.ParseURI("file:///Users/example/go/pkg/mod/dep/file.go")
+		require.NoError(t, err)
+
+		actualOut, err := IsWorkspaceURI(inWorkspace, uri)
+		require.NoError(t, err)
+		assert.False(t, actualOut)
+	})
 }

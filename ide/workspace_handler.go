@@ -153,6 +153,37 @@ type openFileTarget struct {
 	tab          *browser.Tab
 }
 
+type visibleWorkspaceManager struct {
+	parent  *workspaceManagerHandler
+	manager workspace.WorkspaceManager
+}
+
+func (m visibleWorkspaceManager) AddWorkspace(
+	ctx context.Context, uri workspaceapi.URI,
+) (workspace.Workspace, error) {
+	return m.manager.AddWorkspace(ctx, uri)
+}
+
+func (m visibleWorkspaceManager) Workspace(
+	file workspaceapi.URI,
+) (workspace.Workspace, bool, error) {
+	target, ok := m.parent.workspaceForFile(file)
+	if !ok || target == nil || target.workspace == nil || target.workspace.ex == nil {
+		return nil, false, nil
+	}
+	return target.workspace.ex.workspace, true, nil
+}
+
+func (m visibleWorkspaceManager) RegisterScheme(
+	scheme string, fn schemeapi.SchemeFunc,
+) error {
+	return m.manager.RegisterScheme(scheme, fn)
+}
+
+func (m visibleWorkspaceManager) UnregisterScheme(scheme string) error {
+	return m.manager.UnregisterScheme(scheme)
+}
+
 func (h *workspaceManagerHandler) newEditor(
 	cwd workspaceapi.URI, cfg ideConfig, svc vctrl.Service,
 ) (
@@ -790,7 +821,9 @@ func (h *workspaceManagerHandler) addWorkspace(
 	}
 
 	// workspace capable of opening URIs other than the workspaceapi.URI
-	multicwd := workspace.Multi(ctx, h.workspace, cwd, uri)
+	// while only routing to other currently visible IDE workspaces.
+	visibleManager := visibleWorkspaceManager{parent: h, manager: h.workspace}
+	multicwd := workspace.Multi(ctx, visibleManager, cwd, uri)
 	tm := new(workspaceTabManager)
 	tm.parent = h
 	ex, err := newEx(ed, multicwd, h.storage, h.notifications, uri,

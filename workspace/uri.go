@@ -68,21 +68,28 @@ func DefaultSwapDirectory(file workspaceapi.URI) (workspaceapi.URI, error) {
 	return workspaceapi.WithPath(file, swapDir)
 }
 
-// IsWorkspaceURI returns whether this uri can be managed by
+// CanWorkspaceURI returns whether this uri can be managed by
 // the given workspace. For Scheme implementations that
 // do not support user and host/port, this method returns
 // true if the URI schemes of the workspace and the supplied uri
 // are the same.
-func IsWorkspaceURI(workspace Workspace, uri workspaceapi.URI) (bool, error) {
+func CanWorkspaceURI(workspace Workspace, uri workspaceapi.URI) (bool, error) {
 	uriAtWorkspace, err := workspace.URI(uri.Path())
 	if err != nil {
 		return false, err
 	}
-	if !(uri.Scheme() == uriAtWorkspace.Scheme() &&
+	return uri.Scheme() == uriAtWorkspace.Scheme() &&
 		uri.Hostname() == uriAtWorkspace.Hostname() &&
 		uri.Port() == uriAtWorkspace.Port() &&
-		uri.User() == uriAtWorkspace.User()) {
-		return false, nil
+		uri.User() == uriAtWorkspace.User(), nil
+}
+
+// IsWorkspaceURI returns whether uri belongs under the given workspace root.
+// For non-file schemes, capability and containment are equivalent.
+func IsWorkspaceURI(workspace Workspace, uri workspaceapi.URI) (bool, error) {
+	is, err := CanWorkspaceURI(workspace, uri)
+	if err != nil || !is {
+		return is, err
 	}
 	if uri.Scheme() != FileScheme {
 		return true, nil

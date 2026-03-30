@@ -243,7 +243,7 @@ func TestURI(t *testing.T) {
 	}
 }
 
-func TestIntegrationIsWorkspaceURI(t *testing.T) {
+func TestIntegrationCanWorkspaceURI(t *testing.T) {
 	tsuite := []struct {
 		workspaceURI string
 		uri          string

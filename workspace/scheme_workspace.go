@@ -57,18 +57,18 @@ func (w *schemeWorkspace) Recover(
 ) (ret FlusherCloser, err error) {
 	// force cleanup and expansion of URI paths
 	// but first check if it's from this workspace
-	is, err := IsWorkspaceURI(w, uri)
+	is, err := CanWorkspaceURI(w, uri)
 	if err != nil {
-		err = fmt.Errorf("IsWorkspaceURI: %s", err)
+		err = fmt.Errorf("CanWorkspaceURI: %s", err)
 		return
 	}
 	if !is {
 		err = fmt.Errorf("invalid URI %q for workspace with URI %q", uri, w.w)
 		return
 	}
-	is, err = IsWorkspaceURI(w, swapURI)
+	is, err = CanWorkspaceURI(w, swapURI)
 	if err != nil {
-		err = fmt.Errorf("IsWorkspaceURI: %s", err)
+		err = fmt.Errorf("CanWorkspaceURI: %s", err)
 		return
 	}
 	if !is {
@@ -89,18 +89,18 @@ func (w *schemeWorkspace) Load(
 ) (ret FlusherCloser, err error) {
 	// force cleanup and expansion of URI paths
 	// but first check if it's from this workspace
-	is, err := IsWorkspaceURI(w, uri)
+	is, err := CanWorkspaceURI(w, uri)
 	if err != nil {
-		err = fmt.Errorf("IsWorkspaceURI: %s", err)
+		err = fmt.Errorf("CanWorkspaceURI: %s", err)
 		return
 	}
 	if !is {
 		err = fmt.Errorf("invalid file URI %q for workspace with URI %q", uri, w.w)
 		return
 	}
-	is, err = IsWorkspaceURI(w, swapDir)
+	is, err = CanWorkspaceURI(w, swapDir)
 	if err != nil {
-		err = fmt.Errorf("IsWorkspaceURI: %s", err)
+		err = fmt.Errorf("CanWorkspaceURI: %s", err)
 		return
 	}
 	if !is {

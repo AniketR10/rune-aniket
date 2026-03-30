@@ -135,7 +135,7 @@ func (m *mockManager) Workspace(file workspaceapi.URI) (workspace.Workspace, boo
 	if m.workspace == nil {
 		return nil, false, nil
 	}
-	is, err := workspace.IsWorkspaceURI(m.workspace, file)
+	is, err := workspace.CanWorkspaceURI(m.workspace, file)
 	if err != nil {
 		return nil, false, err
 	}
