@@ -16,7 +16,7 @@ require (
 	github.com/julienschmidt/httprouter v1.3.0
 	github.com/junegunn/fzf v0.0.0-20201216124428-ab3937ee5a62
 	github.com/mattn/go-runewidth v0.0.19 // indirect
-	github.com/modelcontextprotocol/go-sdk v1.4.0
+	github.com/modelcontextprotocol/go-sdk v1.4.1
 	github.com/openai/openai-go/v2 v2.7.1
 	github.com/pion/mediadevices v0.6.2
 	github.com/pion/webrtc/v3 v3.2.37
@@ -31,10 +31,10 @@ require (
 	github.com/unstablebuild/rune-go-sdk v0.0.58
 	github.com/unstablebuild/tcell/v3 v3.6.4
 	go.uber.org/goleak v1.3.0
-	golang.org/x/crypto v0.47.0
-	golang.org/x/image v0.16.0
+	golang.org/x/crypto v0.48.0
+	golang.org/x/image v0.38.0
 	golang.org/x/term v0.40.0
-	google.golang.org/grpc v1.78.0
+	google.golang.org/grpc v1.79.3
 	google.golang.org/protobuf v1.36.11
 	gopkg.in/yaml.v3 v3.0.1
 )
@@ -49,12 +49,12 @@ require (
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/rivo/uniseg v0.4.7
 	golang.org/x/lint v0.0.0-20210508222113-6edffad5e616 // indirect
-	golang.org/x/mod v0.32.0 // indirect
-	golang.org/x/net v0.49.0
-	golang.org/x/sync v0.19.0 // indirect
+	golang.org/x/mod v0.33.0 // indirect
+	golang.org/x/net v0.50.0
+	golang.org/x/sync v0.20.0 // indirect
 	golang.org/x/sys v0.42.0
-	golang.org/x/text v0.34.0
-	golang.org/x/tools v0.41.0 // indirect
+	golang.org/x/text v0.35.0
+	golang.org/x/tools v0.42.0 // indirect
 	gopkg.in/mgo.v2 v2.0.0-20190816093944-a6b53ec6cb22 // indirect
 )
 
@@ -96,6 +96,7 @@ require (
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/blackjack/webcam v0.5.0 // indirect
 	github.com/buger/jsonparser v1.1.1 // indirect
+	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/clipperhouse/displaywidth v0.6.2 // indirect
 	github.com/clipperhouse/stringish v0.1.1 // indirect
 	github.com/clipperhouse/uax29/v2 v2.3.0 // indirect
@@ -133,7 +134,7 @@ require (
 	github.com/olekukonko/ll v0.1.4-0.20260115111900-9e59c2286df0 // indirect
 	github.com/olekukonko/tablewriter v1.1.3 // indirect
 	github.com/pion/datachannel v1.5.6 // indirect
-	github.com/pion/dtls/v2 v2.2.10 // indirect
+	github.com/pion/dtls/v2 v2.2.12 // indirect
 	github.com/pion/ice/v2 v2.3.14 // indirect
 	github.com/pion/interceptor v0.1.28 // indirect
 	github.com/pion/logging v0.2.2 // indirect
@@ -149,7 +150,7 @@ require (
 	github.com/pion/turn/v2 v2.1.5 // indirect
 	github.com/pjbgf/sha1cd v0.5.0 // indirect
 	github.com/segmentio/asm v1.1.3 // indirect
-	github.com/segmentio/encoding v0.5.3 // indirect
+	github.com/segmentio/encoding v0.5.4 // indirect
 	github.com/spf13/cast v1.7.1 // indirect
 	github.com/tidwall/gjson v1.18.0 // indirect
 	github.com/tidwall/match v1.1.1 // indirect
@@ -160,16 +161,16 @@ require (
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.61.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.61.0 // indirect
-	go.opentelemetry.io/otel v1.38.0 // indirect
-	go.opentelemetry.io/otel/metric v1.38.0 // indirect
-	go.opentelemetry.io/otel/trace v1.38.0 // indirect
+	go.opentelemetry.io/otel v1.39.0 // indirect
+	go.opentelemetry.io/otel/metric v1.39.0 // indirect
+	go.opentelemetry.io/otel/trace v1.39.0 // indirect
 	go.uber.org/tools v0.0.0-20190618225709-2cfd321de3ee // indirect
 	golang.org/x/exp/typeparams v0.0.0-20220722155223-a9213eeb770e // indirect
 	golang.org/x/time v0.12.0 // indirect
 	google.golang.org/api v0.244.0 // indirect
 	google.golang.org/genproto v0.0.0-20250811230008-5f3141c8851a // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20251029180050-ab9386a59fda // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20251029180050-ab9386a59fda // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20251202230838-ff82c1b0f217 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20251202230838-ff82c1b0f217 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	honnef.co/go/tools v0.3.2 // indirect
 )
