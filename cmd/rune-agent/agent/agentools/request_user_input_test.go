@@ -73,6 +73,8 @@ func TestRequestUserInput_SingleQuestion(t *testing.T) {
 	// "Other" is auto-appended.
 	require.Len(t, mp.calls[0].Options, 3)
 	assert.Equal(t, "Other", mp.calls[0].Options[2].Label)
+	assert.True(t, mp.calls[0].Options[2].RequiresInput)
+	assert.Equal(t, "Type a custom answer", mp.calls[0].Options[2].Description)
 }
 
 func TestRequestUserInput_MultipleQuestions(t *testing.T) {
@@ -101,7 +103,7 @@ func TestRequestUserInput_MultipleQuestions(t *testing.T) {
 func TestRequestUserInput_OtherSelected(t *testing.T) {
 	mp := &mockPrompter{
 		responses: []agent.PromptResponse{
-			{Values: []string{"Other"}},
+			{Values: []string{"Other"}, TextInput: "MongoDB"},
 		},
 	}
 	tool := NewRequestUserInput(mp)
@@ -120,7 +122,42 @@ func TestRequestUserInput_OtherSelected(t *testing.T) {
 
 	var res requestUserInputResult
 	require.NoError(t, json.Unmarshal([]byte(result.Content), &res))
-	assert.Equal(t, []string{"Other"}, res.Answers["db"].Answers)
+	assert.Equal(t, []string{"MongoDB"}, res.Answers["db"].Answers)
+}
+
+func TestRequestUserInput_OtherSelectedWithoutTextReprompts(t *testing.T) {
+	mp := &mockPrompter{
+		responses: []agent.PromptResponse{
+			{Values: []string{"Other"}},
+			{TextInput: "MongoDB"},
+		},
+	}
+	tool := NewRequestUserInput(mp)
+	result := tool.Execute(context.Background(), `{
+		"questions": [{
+			"id": "db",
+			"header": "Database",
+			"question": "Which database?",
+			"options": [
+				{"label": "PostgreSQL", "description": "Mature"},
+				{"label": "SQLite", "description": "Lightweight"}
+			]
+		}]
+	}`)
+
+	require.False(t, result.IsError, result.Content)
+
+	var res requestUserInputResult
+	require.NoError(t, json.Unmarshal([]byte(result.Content), &res))
+	assert.Equal(t, []string{"MongoDB"}, res.Answers["db"].Answers)
+	require.Len(t, mp.calls, 2)
+	require.Len(t, mp.calls[0].Options, 3)
+	assert.Equal(t, "Other", mp.calls[0].Options[2].Label)
+	assert.True(t, mp.calls[0].Options[2].RequiresInput)
+	assert.Equal(t, "Type a custom answer", mp.calls[0].Options[2].Description)
+	assert.Equal(t, "Which database?", mp.calls[1].Title)
+	assert.Equal(t, "Database", mp.calls[1].Header)
+	assert.Empty(t, mp.calls[1].Options)
 }
 
 func TestRequestUserInput_PrompterError(t *testing.T) {
@@ -223,5 +260,5 @@ func TestRequestUserInput_Definition(t *testing.T) {
 	tool := NewRequestUserInput(mp)
 	def := tool.Definition()
 	assert.Equal(t, "request_user_input", def.Function.Name)
-	assert.Equal(t, "Request user input for one to three short questions and wait for the response. When options is empty, the user types a free-form text answer.", def.Function.Description)
+	assert.Equal(t, "Request user input for one to three short questions and wait for the response. When options is empty, the user types a free-form text answer. If the user needs a custom answer, the client automatically adds an Other option and collects free-form text before returning.", def.Function.Description)
 }

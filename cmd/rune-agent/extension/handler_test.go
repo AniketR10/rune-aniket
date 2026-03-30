@@ -8139,7 +8139,7 @@ func TestAIEditorHandler_chat_request_user_input_renders_prompt(t *testing.T) {
 				"  SQLite                                                    \n" +
 				"      Light                                                 \n" +
 				"  Other                                                     \n" +
-				"      None of the above                                     \n" +
+				"      Type a custom answer                                  \n" +
 				"                                                            \n" +
 				"     ┌────────────────────────────────────────────────┐     \n" +
 				"     │                                                │     \n" +
@@ -8155,6 +8155,111 @@ func TestAIEditorHandler_chat_request_user_input_renders_prompt(t *testing.T) {
 				"✓ request_user_input Which DB?                              \n" +
 				"{\"answers\":{\"db\":{\"answers\":[\"Postgres\"]}}}                 \n" +
 				"You picked Postgres.                                        \n" +
+				"                                                            \n" +
+				"                                                            \n" +
+				"                                                            \n" +
+				"                                                            \n" +
+				"                                                            \n" +
+				"                                                            \n" +
+				"                                                            \n" +
+				"                                                            \n" +
+				"                                                            \n" +
+				"     ┌────────────────────────────────────────────────┐     \n" +
+				"     │▐                                               │     \n" +
+				"     └────────────────────────────────────────────────┘     ",
+		},
+	})
+}
+
+func TestAIEditorHandler_chat_request_user_input_other_collects_context(t *testing.T) {
+	t.Parallel()
+	// Exercises the request_user_input Other path end-to-end:
+	//
+	//   1. User sends a message → agent calls request_user_input with options
+	//   2. User moves to the auto-added Other option and presses Enter
+	//   3. Prompt switches to text input mode and collects custom context
+	//   4. Tool completes with the typed text, not the literal "Other"
+	//   5. Agent receives the custom answer and produces a final response
+
+	const requestUserInputArgs = `{"questions":[{"id":"db","header":"DB","question":"Which DB?","options":[{"label":"Postgres","description":"Mature"},{"label":"SQLite","description":"Light"}]}]}`
+
+	svc := &agentMockService{
+		responses: []agentMockResponse{
+			{
+				finishReason: llm.FinishReasonToolCall,
+				toolCalls: []llm.ToolCall{{
+					ID:   "c-rui-other",
+					Type: llm.ToolTypeFunction,
+					Function: llm.FunctionCall{
+						Name:      "request_user_input",
+						Arguments: requestUserInputArgs,
+					},
+				}},
+			},
+			{
+				chunks:       []string{"You picked MongoDB."},
+				finishReason: llm.FinishReasonStop,
+			},
+		},
+	}
+
+	deps := newTestAIEditorHandler(t, svc)
+	deps.handler.plansDir = t.TempDir()
+
+	flusher := openChatAndGetTab(t, deps)
+	flusher.idleTimeout = 200 * time.Millisecond
+	flusher.maxWait = 1 * time.Second
+
+	const pw, ph = 60, 16
+
+	handlertest.RunHandlerSequence(t, flusher, pw, ph, []handlertest.SequenceTestCase{
+		{
+			InputSequence: "choose<space>a<space>db<enter>",
+			Expected: "" +
+				"choose a db                                                 \n" +
+				"? request_user_input Which DB?                              \n" +
+				"questions=[{\"header\":\"DB\",\"id\":\"db\",\"options\":[{\"description\n" +
+				"\":\"Mature\",\"label\":\"Postgres\"},{\"descrip...                 \n" +
+				"Which DB?                                               [DB]\n" +
+				"                                                            \n" +
+				"> Postgres                                                  \n" +
+				"      Mature                                                \n" +
+				"  SQLite                                                    \n" +
+				"      Light                                                 \n" +
+				"  Other                                                     \n" +
+				"      Type a custom answer                                  \n" +
+				"                                                            \n" +
+				"     ┌────────────────────────────────────────────────┐     \n" +
+				"     │                                                │     \n" +
+				"     └────────────────────────────────────────────────┘     ",
+		},
+		{
+			InputSequence: "<down><down><enter>",
+			Expected: "" +
+				"choose a db                                                 \n" +
+				"? request_user_input Which DB?                              \n" +
+				"questions=[{\"header\":\"DB\",\"id\":\"db\",\"options\":[{\"description\n" +
+				"\":\"Mature\",\"label\":\"Postgres\"},{\"descrip...                 \n" +
+				"▐ype your feedback and press Enter to submit (Esc to go     \n" +
+				"                                                            \n" +
+				"                                                            \n" +
+				"                                                            \n" +
+				"                                                            \n" +
+				"                                                            \n" +
+				"                                                            \n" +
+				"                                                            \n" +
+				"                                                            \n" +
+				"     ┌────────────────────────────────────────────────┐     \n" +
+				"     │                                                │     \n" +
+				"     └────────────────────────────────────────────────┘     ",
+		},
+		{
+			InputSequence: "MongoDB<enter>",
+			Expected: "" +
+				"choose a db                                                 \n" +
+				"✓ request_user_input Which DB?                              \n" +
+				"{\"answers\":{\"db\":{\"answers\":[\"MongoDB\"]}}}                  \n" +
+				"You picked MongoDB.                                         \n" +
 				"                                                            \n" +
 				"                                                            \n" +
 				"                                                            \n" +
@@ -8435,9 +8540,9 @@ func TestAIEditorHandler_chat_ask_user_question_hint_survives(t *testing.T) {
 				"      Warm                                                                                          \n" +
 				"  Blue                                                                                              \n" +
 				"      Cool                                                                                          \n" +
-				"  Other                                                                                             \n" +
-				"      None of the above                                                                             \n" +
-				"        ┌─────────────────────────────────────────────────────────────────────────────────┐         \n" +
+			"  Other                                                                                             \n" +
+			"      Type a custom answer                                                                          \n" +
+			"        ┌─────────────────────────────────────────────────────────────────────────────────┐         \n" +
 				"        │                                                                                 │         \n" +
 				"        └─────────────────────────────────────────────────────────────────────────────────┘         ",
 		},

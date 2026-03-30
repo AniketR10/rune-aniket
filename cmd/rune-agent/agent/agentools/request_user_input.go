@@ -27,6 +27,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"unstable.build/go-tui/cmd/rune-agent/agent"
 	"unstable.build/go-tui/cmd/rune-agent/llm"
@@ -41,10 +42,10 @@ type requestUserInputArgs struct {
 }
 
 type requestUserInputQuestion struct {
-	ID       string                    `json:"id"`
-	Header   string                    `json:"header"`
-	Question string                    `json:"question"`
-	Options  []requestUserInputOption  `json:"options"`
+	ID       string                   `json:"id"`
+	Header   string                   `json:"header"`
+	Question string                   `json:"question"`
+	Options  []requestUserInputOption `json:"options"`
 }
 
 type requestUserInputOption struct {
@@ -64,7 +65,7 @@ func (t *requestUserInputTool) Definition() llm.Tool {
 		Type: llm.ToolTypeFunction,
 		Function: llm.FunctionDefinition{
 			Name:        "request_user_input",
-			Description: "Request user input for one to three short questions and wait for the response. When options is empty, the user types a free-form text answer.",
+			Description: "Request user input for one to three short questions and wait for the response. When options is empty, the user types a free-form text answer. If the user needs a custom answer, the client automatically adds an Other option and collects free-form text before returning.",
 			Parameters: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
@@ -88,7 +89,7 @@ func (t *requestUserInputTool) Definition() llm.Tool {
 								},
 								"options": map[string]any{
 									"type":        "array",
-									"description": "Provide 0-3 mutually exclusive choices. Pass an empty array for free-form text input. Put the recommended option first and suffix its label with \"(Recommended)\". Do not include an \"Other\" option in this list; the client will add a free-form \"Other\" option automatically.",
+									"description": "Provide 0-3 mutually exclusive choices. Pass an empty array for free-form text input. Put the recommended option first and suffix its label with \"(Recommended)\". Do not include an \"Other\" option in this list; the client will add an \"Other\" option automatically and collect typed context before returning.",
 									"items": map[string]any{
 										"type": "object",
 										"properties": map[string]any{
@@ -181,9 +182,10 @@ func (t *requestUserInputTool) Execute(ctx context.Context, arguments string) ag
 				}
 			}
 			opts[len(q.Options)] = agent.PromptOption{
-				Label:       otherOptionLabel,
-				Description: "None of the above",
-				Value:       otherOptionLabel,
+				Label:         otherOptionLabel,
+				Description:   "Type a custom answer",
+				Value:         otherOptionLabel,
+				RequiresInput: true,
 			}
 
 			resp, err := t.prompter.Prompt(ctx, agent.PromptRequest{
@@ -198,9 +200,17 @@ func (t *requestUserInputTool) Execute(ctx context.Context, arguments string) ag
 				}
 			}
 
+			selected, err := selectedAnswersForPrompt(ctx, t.prompter, q, resp)
+			if err != nil {
+				return agent.ToolResult{
+					Content: fmt.Sprintf("custom answer required: %v", err),
+					IsError: true,
+				}
+			}
+
 			answers = append(answers, answer{
 				ID:       q.ID,
-				Selected: resp.Values,
+				Selected: selected,
 			})
 		}
 	}
@@ -225,4 +235,32 @@ func (t *requestUserInputTool) Execute(ctx context.Context, arguments string) ag
 		}
 	}
 	return agent.ToolResult{Content: string(data)}
+}
+
+func selectedAnswersForPrompt(
+	ctx context.Context,
+	prompter agent.Prompter,
+	q requestUserInputQuestion,
+	resp agent.PromptResponse,
+) ([]string, error) {
+	if len(resp.Values) != 1 || resp.Values[0] != otherOptionLabel {
+		return resp.Values, nil
+	}
+	if text := strings.TrimSpace(resp.TextInput); text != "" {
+		return []string{text}, nil
+	}
+
+	// Fallback for prompters that don't yet surface RequiresInput text inline:
+	// immediately collect the custom answer before returning to the model.
+	followUp, err := prompter.Prompt(ctx, agent.PromptRequest{
+		Title:  q.Question,
+		Header: q.Header,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if text := strings.TrimSpace(followUp.TextInput); text != "" {
+		return []string{text}, nil
+	}
+	return nil, fmt.Errorf("selected %q but did not provide custom text", otherOptionLabel)
 }
