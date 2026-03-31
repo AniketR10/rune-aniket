@@ -723,7 +723,6 @@ func (noopPrompter) Prompt(context.Context, agent.PromptRequest) (agent.PromptRe
 }
 
 func TestCreateAgentCompletions_SendsBreakOnCancel(t *testing.T) {
-	t.Parallel()
 	// A tool that blocks until its context is cancelled.
 	blockingTool := &agentMockTool{
 		name: "slow_tool",
@@ -747,7 +746,8 @@ func TestCreateAgentCompletions_SendsBreakOnCancel(t *testing.T) {
 		},
 	}
 
-	store := newTestDialogueStore(t)
+	storeRoot := t.TempDir()
+	store := dialoguemanager.NewStore(storagestub.NewInMemoryService(), storeRoot)
 	registry := agent.NewRegistry(blockingTool)
 	skillReg := skills.NewRegistry(nopFileSystem{}, workspaceapi.URI{}, nil, nil)
 	ag := agent.NewAgent(svc, registry, skillReg, store, agent.NoMemory(), agent.Config{SystemPrompt: "test"})
@@ -4919,8 +4919,8 @@ func TestAIEditorHandler_chat_agent_error_is_visible(t *testing.T) {
 			Expected: e2eExpected(0,
 				"hello",
 				"✗ agent do research",
-				"sub-agent error: create completion:",
-				"create completion: connection refused",
+				"create completion: create completion:",
+				"connection refused",
 				"The sub-agent failed. Let me try",
 				"directly.",
 				"",
@@ -5004,6 +5004,148 @@ func TestAIEditorHandler_chat_agent_reasoning_only_is_visible(t *testing.T) {
 				"Analysis: factory pattern found.",
 				"",
 				"",
+				"",
+				"   ┌───────────────────────────────┐",
+				"   │▐                              │",
+				"   └───────────────────────────────┘",
+			),
+		},
+	})
+}
+
+func TestAIEditorHandler_chat_agent_result_collapsed(t *testing.T) {
+	t.Parallel()
+	// Exercises the collapsed-mode rendering of a successful sub-agent
+	// result leaf node:
+	//
+	//   1. User sends a message → main agent calls agent tool
+	//   2. Sub-agent replies with text (no tool calls)
+	//   3. consumeSubAgent forwards an EventDone carrying the result
+	//   4. The child result leaf node (󰆈) appears in the collapsed tree
+	//
+	// We verify:
+	//   - The collapsed tree shows a result leaf with the 󰆈 icon
+
+	svc := &agentMockService{
+		responses: []agentMockResponse{
+			// 0: main agent → calls agent tool
+			{
+				finishReason: llm.FinishReasonToolCall,
+				toolCalls: []llm.ToolCall{{
+					ID:   "c-agent",
+					Type: llm.ToolTypeFunction,
+					Function: llm.FunctionCall{
+						Name:      "agent",
+						Arguments: `{"description":"do research","prompt":"look into the codebase"}`,
+					},
+				}},
+			},
+			// 1: sub-agent → replies immediately
+			{
+				chunks:       []string{"Found it"},
+				finishReason: llm.FinishReasonStop,
+			},
+			// 2: main agent → final response
+			{
+				chunks:       []string{"Done."},
+				finishReason: llm.FinishReasonStop,
+			},
+		},
+	}
+
+	deps := newTestAIEditorHandler(t, svc)
+	deps.handler.agentsConfig = agent.NewConfig([]agent.Definition{{
+		ID:       "default",
+		Name:     "default",
+		Model:    "test-model",
+		AllowAny: true,
+	}})
+	deps.handler.cfg.StartCollapsed = true
+	deps.handler.cfg.DurationPrecision = time.Hour
+	flusher := openChatAndGetTab(t, deps)
+	flusher.idleTimeout = 200 * time.Millisecond
+	flusher.maxWait = 1 * time.Second
+
+	handlertest.RunHandlerSequence(t, flusher, e2eWidth, e2eHeight, []handlertest.SequenceTestCase{
+		{
+			InputSequence: "hello<enter>",
+			Expected: e2eExpected(0,
+				"hello",
+				"└─ ✓ agent 0s do research",
+				"   └─ 󰆈 Found it",
+				"Press <ctrl-o> to expand",
+				"",
+				"Done.",
+				"",
+				"   ┌───────────────────────────────┐",
+				"   │▐                              │",
+				"   └───────────────────────────────┘",
+			),
+		},
+	})
+}
+
+func TestAIEditorHandler_chat_agent_error_result_collapsed(t *testing.T) {
+	t.Parallel()
+	// Exercises the collapsed-mode rendering when a sub-agent fails:
+	//
+	//   1. User sends a message → main agent calls agent tool
+	//   2. Sub-agent's CreateCompletion returns an error
+	//   3. consumeSubAgent forwards an EventDone with the error
+	//   4. The child result leaf node (󰅽) appears in the collapsed tree
+	//
+	// We verify:
+	//   - The collapsed tree shows the error result icon 󰅽
+
+	svc := &agentMockService{
+		responses: []agentMockResponse{
+			// 0: main agent → calls agent tool
+			{
+				finishReason: llm.FinishReasonToolCall,
+				toolCalls: []llm.ToolCall{{
+					ID:   "c-agent",
+					Type: llm.ToolTypeFunction,
+					Function: llm.FunctionCall{
+						Name:      "agent",
+						Arguments: `{"description":"do research","prompt":"research the codebase"}`,
+					},
+				}},
+			},
+			// 1: sub-agent → CreateCompletion fails
+			{
+				err: fmt.Errorf("create completion: connection refused"),
+			},
+			// 2: main agent → sees error, responds
+			{
+				chunks:       []string{"Failed."},
+				finishReason: llm.FinishReasonStop,
+			},
+		},
+	}
+
+	deps := newTestAIEditorHandler(t, svc)
+	deps.handler.agentsConfig = agent.NewConfig([]agent.Definition{{
+		ID:       "default",
+		Name:     "default",
+		Model:    "test-model",
+		AllowAny: true,
+	}})
+	deps.handler.cfg.StartCollapsed = true
+	deps.handler.cfg.DurationPrecision = time.Hour
+	flusher := openChatAndGetTab(t, deps)
+	flusher.idleTimeout = 200 * time.Millisecond
+	flusher.maxWait = 1 * time.Second
+
+	handlertest.RunHandlerSequence(t, flusher, e2eWidth, e2eHeight, []handlertest.SequenceTestCase{
+		{
+			InputSequence: "hello<enter>",
+			Expected: e2eExpected(0,
+				"hello",
+				"└─ ✗ agent 0s do research",
+				"   └─ 󰅽 create completion: create comple",
+				"Press <ctrl-o> to expand",
+				"",
+				"Failed.",
 				"",
 				"   ┌───────────────────────────────┐",
 				"   │▐                              │",
@@ -6638,7 +6780,6 @@ func TestAIEditorHandler_chat_hint_visible_during_inference(t *testing.T) {
 }
 
 func TestAIEditorHandler_chat_hint_shows_tool_calling_phase(t *testing.T) {
-	t.Parallel()
 	blockingTool := &agentMockTool{
 		name: "slow_tool",
 		executeFn: func(ctx context.Context, _ string) agent.ToolResult {
@@ -6659,6 +6800,10 @@ func TestAIEditorHandler_chat_hint_shows_tool_calling_phase(t *testing.T) {
 		},
 	}
 	deps := newTestAIEditorHandler(t, svc)
+	storeRoot, err := os.MkdirTemp("", "rune-agent-hint-store-*")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.RemoveAll(storeRoot) })
+	deps.handler.dialogueStore = dialoguemanager.NewStore(storagestub.NewInMemoryService(), storeRoot)
 	deps.handler.baseTools = []agent.Tool{blockingTool}
 	flusher := openChatAndGetTab(t, deps)
 
@@ -8686,7 +8831,6 @@ func TestAIEditorHandler_chat_request_skill_install(t *testing.T) {
 
 	handlertest.RunHandlerSequence(t, flusher, pw, ph, []handlertest.SequenceTestCase{
 		// Step 1: Send message → request_skill prompt appears.
-		// Verify: "?" prefix, prompt body, Done/Won't do options.
 		{
 			InputSequence: "need<space>web_search<enter>",
 			Expected: "" +

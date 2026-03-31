@@ -1697,6 +1697,13 @@ func createAgentCompletions(
 						onCompacted(dialogueID)
 					}
 					continue
+				case agent.EventDone:
+					msg = dialoguetui.MessageEvent{
+						Type:             dialoguetui.MessageEventChildResult,
+						ParentToolCallID: cev.ParentToolCallID,
+						ToolOutput:       cev.Event.Text,
+						IsError:          cev.Event.IsError,
+					}
 				default:
 					continue
 				}

@@ -445,6 +445,8 @@ func (s *dialogueHandler) consumeIncoming() {
 			} else {
 				s.comp.CompleteToolCall(ev.ToolCallID, ev.ToolName, ev.ToolArgs, ev.ToolSummary, ev.ToolOutput, ev.IsError)
 			}
+		case MessageEventChildResult:
+			s.comp.AddChildResult(ev.ParentToolCallID, ev.ToolOutput, ev.IsError)
 		case MessageEventError:
 			s.comp.AddErrorMessage(ev.Text)
 		case MessageEventWarning:

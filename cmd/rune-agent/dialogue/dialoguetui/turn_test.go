@@ -784,3 +784,117 @@ func TestTurnMarkDroppedExpandedHeader(t *testing.T) {
 	// After marking, header has dropped attr (gray).
 	assert.Equal(t, defaultDroppedAttr, turn.tools["c1"].header.prefixAttr)
 }
+
+func TestTurnAddChildResult(t *testing.T) {
+	turn := newTestTurn()
+	turn.AddToolCall("parent", "agent", `{}`, "explore")
+	turn.AddChildToolCall("parent", "ch1", "read_file", `{}`, "a.go")
+	turn.CompleteChildToolCall("parent", "ch1", "read_file", `{}`, "a.go", "data", false)
+
+	turn.AddChildResult("parent", "The exploration is complete.", false)
+
+	parent := turn.tools["parent"]
+	assert.NotNil(t, parent.childTurn)
+	resultNode := parent.childTurn.tools["parent:result"]
+	assert.NotNil(t, resultNode)
+	assert.True(t, resultNode.done)
+	assert.True(t, resultNode.isResult)
+	assert.False(t, resultNode.isError)
+	assert.Equal(t, "The exploration is complete.", resultNode.name)
+}
+
+func TestTurnAddChildResultError(t *testing.T) {
+	turn := newTestTurn()
+	turn.AddToolCall("parent", "agent", `{}`, "explore")
+
+	turn.AddChildResult("parent", "sub-agent error: timeout", true)
+
+	parent := turn.tools["parent"]
+	assert.NotNil(t, parent.childTurn)
+	resultNode := parent.childTurn.tools["parent:result"]
+	assert.NotNil(t, resultNode)
+	assert.True(t, resultNode.done)
+	assert.True(t, resultNode.isResult)
+	assert.True(t, resultNode.isError)
+}
+
+func TestTurnAddChildResultNoParent(t *testing.T) {
+	turn := newTestTurn()
+
+	// No parent — should be a no-op.
+	turn.AddChildResult("nonexistent", "some output", false)
+
+	assert.Empty(t, turn.tools)
+}
+
+func TestTurnAddChildResultCollapsed(t *testing.T) {
+	turn := newTestTurn()
+	turn.AddToolCall("p1", "agent", `{}`, "explore")
+	turn.AddChildToolCall("p1", "ch1", "read_file", `{}`, "a.go")
+	turn.CompleteChildToolCall("p1", "ch1", "read_file", `{}`, "a.go", "", false)
+	turn.AddChildResult("p1", "Done exploring the code.", false)
+	turn.CompleteToolCall("p1", "agent", `{}`, "explore", "Done exploring the code.", false)
+
+	turn.SetCollapseMode(collapseModeCollapsed)
+	turn.Resize(60, 10)
+
+	w := term.NewStringWriter(60, 10)
+	turn.Draw(w)
+	_ = w.Flush()
+
+	got := w.String()
+	// Parent tool
+	assert.Contains(t, got, "└─ ✓ agent explore")
+	// Child tool
+	assert.Contains(t, got, "├─ ✓ read_file a.go")
+	// Result leaf node with success icon
+	assert.Contains(t, got, "└─ 󰆈 Done exploring the code.")
+}
+
+func TestTurnAddChildResultCollapsedError(t *testing.T) {
+	turn := newTestTurn()
+	turn.AddToolCall("p1", "agent", `{}`, "explore")
+	turn.AddChildResult("p1", "something failed", true)
+	turn.CompleteToolCall("p1", "agent", `{}`, "explore", "", true)
+
+	turn.SetCollapseMode(collapseModeCollapsed)
+	turn.Resize(60, 10)
+
+	w := term.NewStringWriter(60, 10)
+	turn.Draw(w)
+	_ = w.Flush()
+
+	got := w.String()
+	// Result leaf node with error icon
+	assert.Contains(t, got, "└─ 󰅽 something failed")
+}
+
+func TestTurnCollapsedHeightWithChildResult(t *testing.T) {
+	turn := newTestTurn()
+	turn.AddToolCall("p1", "agent", `{}`, "explore")
+	turn.AddChildToolCall("p1", "ch1", "read_file", `{}`, "a.go")
+	turn.CompleteChildToolCall("p1", "ch1", "read_file", `{}`, "a.go", "", false)
+	turn.AddChildResult("p1", "done", false)
+
+	// 1 parent + 2 children (ch1 + result)
+	assert.Equal(t, 3, turn.collapsedHeight())
+}
+
+func TestTruncateFirstLine(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{"single line", "hello world", "hello world"},
+		{"multi line", "first line\nsecond line\nthird", "first line"},
+		{"empty", "", ""},
+		{"long line", string(make([]rune, 100)), string(make([]rune, 60)) + "..."},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := truncateFirstLine(tt.input)
+			assert.Equal(t, tt.expected, got)
+		})
+	}
+}

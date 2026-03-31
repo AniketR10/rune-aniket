@@ -715,6 +715,18 @@ func (c *Component) CompleteChildToolCall(parentID, id, name, args, summary, out
 	c.moveHintToBack()
 }
 
+// AddChildResult adds a sub-agent result leaf node under a parent
+// tool call in the current turn.
+func (c *Component) AddChildResult(parentID, output string, isError bool) {
+	maxOff, scrolled := c.scrollState()
+	defer c.restoreScroll(maxOff, scrolled)
+	if c.currentTurn == nil {
+		return
+	}
+	c.currentTurn.AddChildResult(parentID, output, isError)
+	c.moveHintToBack()
+}
+
 // SetToolStartTime sets the start time for a tool call, used for live
 // elapsed display in collapsed mode.
 func (c *Component) SetToolStartTime(id string, t time.Time) {

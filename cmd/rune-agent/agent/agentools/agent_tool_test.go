@@ -198,9 +198,11 @@ func TestAgentTool(t *testing.T) {
 				Events: newMockEventIterator(),
 			},
 		}
-		tool := NewAgentTool(spawner, nil, nil, nil)
+		childEvents := make(chan agent.ChildEvent, 64)
+		tool := NewAgentTool(spawner, nil, childEvents, nil)
+		ctx := agent.WithParentToolCallID(context.Background(), "parent-params")
 		tool.Execute(
-			context.Background(),
+			ctx,
 			`{
 				"description":"search code",
 				"prompt":"find all tests",
@@ -228,9 +230,11 @@ func TestAgentTool(t *testing.T) {
 				),
 			},
 		}
-		tool := NewAgentTool(spawner, nil, nil, nil)
+		childEvents := make(chan agent.ChildEvent, 64)
+		tool := NewAgentTool(spawner, nil, childEvents, nil)
+		ctx := agent.WithParentToolCallID(context.Background(), "parent-reason")
 		result := tool.Execute(
-			context.Background(),
+			ctx,
 			`{"description":"think","prompt":"what is the answer?"}`,
 		)
 
@@ -248,9 +252,11 @@ func TestAgentTool(t *testing.T) {
 				),
 			},
 		}
-		tool := NewAgentTool(spawner, nil, nil, nil)
+		childEvents := make(chan agent.ChildEvent, 64)
+		tool := NewAgentTool(spawner, nil, childEvents, nil)
+		ctx := agent.WithParentToolCallID(context.Background(), "parent-text")
 		result := tool.Execute(
-			context.Background(),
+			ctx,
 			`{"description":"think","prompt":"what is the answer?"}`,
 		)
 
@@ -270,9 +276,11 @@ func TestAgentTool(t *testing.T) {
 				),
 			},
 		}
-		tool := NewAgentTool(spawner, nil, nil, nil)
+		childEvents := make(chan agent.ChildEvent, 64)
+		tool := NewAgentTool(spawner, nil, childEvents, nil)
+		ctx := agent.WithParentToolCallID(context.Background(), "parent-err")
 		result := tool.Execute(
-			context.Background(),
+			ctx,
 			`{"description":"research","prompt":"do research"}`,
 		)
 

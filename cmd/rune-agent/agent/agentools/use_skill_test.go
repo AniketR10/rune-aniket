@@ -255,9 +255,11 @@ Prompt content`)
 				),
 			},
 		}
-		tool := NewSkillTool(registry, spawner, nil)
+		childEvents := make(chan agent.ChildEvent, 64)
+		tool := NewSkillTool(registry, spawner, childEvents)
+		ctx := agent.WithParentToolCallID(context.Background(), "parent-skill")
 		result := tool.Execute(
-			context.Background(),
+			ctx,
 			`{"name":"research","args":"find all tests"}`,
 		)
 
@@ -278,9 +280,11 @@ Prompt content`)
 				),
 			},
 		}
-		tool := NewSkillTool(registry, spawner, nil)
+		childEvents := make(chan agent.ChildEvent, 64)
+		tool := NewSkillTool(registry, spawner, childEvents)
+		ctx := agent.WithParentToolCallID(context.Background(), "parent-skill-noargs")
 		result := tool.Execute(
-			context.Background(),
+			ctx,
 			`{"name":"research"}`,
 		)
 
@@ -334,8 +338,10 @@ Prompt content`)
 				),
 			},
 		}
-		tool := NewSkillTool(registry, spawner, nil)
-		ctx := agent.WithActivatedSkills(context.Background())
+		childEvents := make(chan agent.ChildEvent, 64)
+		tool := NewSkillTool(registry, spawner, childEvents)
+		ctx := agent.WithParentToolCallID(
+			agent.WithActivatedSkills(context.Background()), "parent-dedup")
 
 		first := tool.Execute(ctx, `{"name":"research","args":"first"}`)
 		assert.False(t, first.IsError)

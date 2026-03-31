@@ -57,6 +57,10 @@ const (
 	// an active agent completion. The dialogue handler uses this to decide
 	// whether to queue follow-up messages or send them directly.
 	MessageEventBusy
+	// MessageEventChildResult signals that a sub-agent finished and its
+	// final result should be displayed as a child leaf node under the
+	// parent tool call.
+	MessageEventChildResult
 )
 
 // MessageEvent is a structured event sent through the display channel.

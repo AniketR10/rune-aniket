@@ -27,13 +27,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"strings"
 
+	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"unstable.build/go-tui/cmd/rune-agent/agent"
 	"unstable.build/go-tui/cmd/rune-agent/agent/skills"
 	"unstable.build/go-tui/cmd/rune-agent/llm"
-	"github.com/unstablebuild/rune-go-sdk/iterator"
 )
 
 // NewAgentTool creates an "agent" tool backed by the given
@@ -224,10 +223,11 @@ func consumeSubAgent(
 
 	parentCallID := agent.ParentToolCallID(ctx)
 	if parentCallID == "" {
-		slog.Warn("consumeSubAgent called without ParentToolCallID; events will not be forwarded")
+		panic("consumeSubAgent called without ParentToolCallID")
 	}
-
-	canForward := parentCallID != "" && childEvents != nil
+	if childEvents == nil {
+		panic("child events is nil")
+	}
 
 	var reply strings.Builder
 	var reasoning strings.Builder
@@ -247,10 +247,6 @@ func consumeSubAgent(
 			if ev.Error != nil {
 				lastErr = ev.Error
 			}
-		}
-
-		if !canForward {
-			continue
 		}
 
 		switch ev.Type {
@@ -275,10 +271,9 @@ func consumeSubAgent(
 	}
 
 	if ctx.Err() != nil {
-		return agent.ToolResult{
-			Content: "sub-agent timed out or was cancelled",
-			IsError: true,
-		}
+		tr := agent.ToolResult{Content: "sub-agent timed out or was cancelled", IsError: true}
+		forwardResult(ctx, childEvents, parentCallID, tr)
+		return tr
 	}
 
 	// Prefer text output; fall back to reasoning (extended thinking
@@ -293,18 +288,37 @@ func consumeSubAgent(
 	// see an empty tool result with no indication of failure).
 	if result == "" {
 		if lastErr != nil {
-			return agent.ToolResult{
-				Content: fmt.Sprintf("sub-agent error: %v", lastErr),
-				IsError: true,
-			}
+			tr := agent.ToolResult{Content: lastErr.Error(), IsError: true}
+			forwardResult(ctx, childEvents, parentCallID, tr)
+			return tr
 		}
 		if err := it.Err(); err != nil {
-			return agent.ToolResult{
-				Content: fmt.Sprintf("sub-agent error: %v", err),
-				IsError: true,
-			}
+			tr := agent.ToolResult{Content: err.Error(), IsError: true}
+			forwardResult(ctx, childEvents, parentCallID, tr)
+			return tr
 		}
 	}
 
-	return agent.ToolResult{Content: result}
+	tr := agent.ToolResult{Content: result}
+	forwardResult(ctx, childEvents, parentCallID, tr)
+	return tr
+}
+
+// forwardResult sends an EventDone child event carrying the sub-agent's
+// final result so the TUI can display a result leaf node.
+func forwardResult(
+	ctx context.Context, childEvents chan<- agent.ChildEvent,
+	parentCallID string, tr agent.ToolResult,
+) {
+	select {
+	case childEvents <- agent.ChildEvent{
+		ParentToolCallID: parentCallID,
+		Event: agent.Event{
+			Type:    agent.EventDone,
+			Text:    tr.Content,
+			IsError: tr.IsError,
+		},
+	}:
+	case <-ctx.Done():
+	}
 }

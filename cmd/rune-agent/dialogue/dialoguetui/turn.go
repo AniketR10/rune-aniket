@@ -91,6 +91,7 @@ type toolNode struct {
 	header        *toolCallHeader   // non-nil after CompleteToolCall (for dropped-attr updates)
 	prompt        bool              // true for ask_user_question (different icon/no animation)
 	isMemory      bool              // true for memory recall entries (different icon/no animation)
+	isResult      bool              // true for sub-agent result leaf nodes (different icon)
 	startTime     time.Time         // when the tool call was announced (for live elapsed display)
 	duration      time.Duration     // final execution duration (set on completion)
 	childTurn     *Turn             // non-nil for sub-agent tool calls with children
@@ -332,6 +333,39 @@ func (t *Turn) CompleteChildToolCall(parentID, id, name, args, summary, output s
 	parent.childTurn.CompleteToolCall(id, name, args, summary, output, isError)
 }
 
+// AddChildResult registers a sub-agent result leaf node under a parent
+// tool call for collapsed-mode rendering. In collapsed mode the node is
+// shown with a dedicated icon (󰆈 success / 󰅽 error). In expanded mode
+// the parent tool call already displays the full output, so no extra
+// list entry is inserted.
+func (t *Turn) AddChildResult(parentID, output string, isError bool) {
+	parent, ok := t.tools[parentID]
+	if !ok {
+		return
+	}
+
+	if parent.childTurn == nil {
+		parent.childTurn = NewTurn(t.cfg, nil)
+	}
+
+	// Use a synthetic tool ID that won't collide with real tool calls.
+	resultID := parentID + ":result"
+
+	summary := truncateFirstLine(output)
+
+	// Register in child turn only — collapsed rendering picks it up.
+	// No expanded-mode list entry is created because the parent tool
+	// call already shows the full sub-agent output.
+	tn := &toolNode{
+		name:     summary,
+		done:     true,
+		isError:  isError,
+		isResult: true,
+	}
+	parent.childTurn.tools[resultID] = tn
+	parent.childTurn.toolOrder = append(parent.childTurn.toolOrder, resultID)
+}
+
 // SetToolStartTime sets the start time for a tool call, used for live
 // elapsed display in collapsed mode. It searches recursively into child turns.
 func (t *Turn) SetToolStartTime(id string, ts time.Time) {
@@ -522,6 +556,8 @@ var (
 	defaultPromptAttr   = term.Attributes{Fg: tcell.ColorAqua}
 	defaultDroppedAttr  = term.Attributes{Fg: tcell.ColorGray}
 	defaultMemoryAttr   = term.Attributes{Fg: tcell.ColorPurple}
+	defaultResultAttr   = term.Attributes{Fg: tcell.ColorGreen}
+	defaultResultErrAttr = term.Attributes{Fg: tcell.ColorRed}
 )
 
 func (t *Turn) treeAttr() term.Attributes {
@@ -584,6 +620,20 @@ func (t *Turn) memoryIDAttr() term.Attributes {
 	return t.cfg.MemoryIDStringConfig.Attributes
 }
 
+func (t *Turn) resultAttr() term.Attributes {
+	if t.cfg.CollapsedResultAttr != (term.Attributes{}) {
+		return t.cfg.CollapsedResultAttr
+	}
+	return defaultResultAttr
+}
+
+func (t *Turn) resultErrorAttr() term.Attributes {
+	if t.cfg.CollapsedResultErrorAttr != (term.Attributes{}) {
+		return t.cfg.CollapsedResultErrorAttr
+	}
+	return defaultResultErrAttr
+}
+
 // drawCollapsedAt renders the box-drawing tree view within the given width.
 func (t *Turn) drawCollapsedAt(w term.Writer, width int) {
 	frame := t.drawCount
@@ -606,6 +656,8 @@ func (t *Turn) drawCollapsedAt(w term.Writer, width int) {
 		if tn.isMemory {
 			x = writeRuneLineAttr(w, x, y, tn.name, width, t.memoryIDAttr())
 			t.writeCollapsedDuration(w, x, y, tn, width)
+		} else if tn.isResult {
+			writeRuneLineAttr(w, x, y, tn.name, width, argsAttr)
 		} else {
 			x = writeRuneLineAttr(w, x, y, tn.name, width, nameAttr)
 			x = t.writeCollapsedDuration(w, x, y, tn, width)
@@ -667,6 +719,12 @@ func (t *Turn) writeCollapsedStatus(w term.Writer, x, y int, tn *toolNode, frame
 			return writeRuneLineAttr(w, x, y, errorPrefix, maxWidth, t.droppedAttr())
 		}
 		return writeRuneLineAttr(w, x, y, donePrefix, maxWidth, t.droppedAttr())
+	}
+	if tn.isResult {
+		if tn.isError {
+			return writeRuneLineAttr(w, x, y, resultErrPrefix, maxWidth, t.resultErrorAttr())
+		}
+		return writeRuneLineAttr(w, x, y, resultPrefix, maxWidth, t.resultAttr())
 	}
 	if tn.isError {
 		return writeRuneLineAttr(w, x, y, errorPrefix, maxWidth, t.errorAttr())
@@ -748,6 +806,8 @@ const (
 	errorPrefix    = "✗ "
 	promptPrefix   = "? "
 	memoryPrefix   = "󰍛 "
+	resultPrefix    = "󰆈 "
+	resultErrPrefix = "󰅽 "
 	expandHintText = "Press <ctrl-o> to expand"
 )
 
@@ -774,6 +834,18 @@ var (
 // and should not be rendered as tool call entries.
 func IsTaskTool(name string) bool {
 	return taskToolNames[name]
+}
+
+// truncateFirstLine returns the first line of s, truncated to 60 runes.
+// Used for generating short display names from sub-agent result text.
+func truncateFirstLine(s string) string {
+	const maxLen = 60
+	line, _, _ := strings.Cut(s, "\n")
+	runes := []rune(line)
+	if len(runes) > maxLen {
+		return string(runes[:maxLen]) + "..."
+	}
+	return line
 }
 
 func truncateToolOutput(cfg *ComponentConfig, output string) string {
