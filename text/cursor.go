@@ -148,6 +148,51 @@ func (c *Cursor) RepositionBottom() (handled bool) {
 	return seeked != 0
 }
 
+// MoveToWindow moves the cursor to the given visible window coordinates in the
+// current viewport. The target is clamped to the current viewport bounds. If the
+// requested position falls below the last visible content row, the cursor moves
+// to the last visible content row instead.
+func (c *Cursor) MoveToWindow(pos term.Coordinates) (ok bool) {
+	height := c.scroll.SizeHeight()
+	width := c.scroll.Width()
+	if height == 0 || width == 0 {
+		return false
+	}
+	pos.Y = max(0, min(pos.Y, height-1))
+	pos.X = max(0, min(pos.X, width-1))
+	atScroll := c.scroll.WindowToScrollCoordinates(pos)
+	for atScroll.Y >= c.rows() && pos.Y > 0 {
+		pos.Y--
+		atScroll = c.scroll.WindowToScrollCoordinates(pos)
+	}
+	if atScroll.Y >= c.rows() {
+		return false
+	}
+	_, ok = c.MoveToScroll(atScroll)
+	return ok
+}
+
+// MoveToWindowTop moves the cursor to the first visible window row.
+func (c *Cursor) MoveToWindowTop() bool {
+	pos := c.cursor
+	pos.Y = 0
+	return c.MoveToWindow(pos)
+}
+
+// MoveToWindowMiddle moves the cursor to the middle visible window row.
+func (c *Cursor) MoveToWindowMiddle() bool {
+	pos := c.cursor
+	pos.Y = c.scroll.SizeHeight() / 2
+	return c.MoveToWindow(pos)
+}
+
+// MoveToWindowBottom moves the cursor to the last visible window row.
+func (c *Cursor) MoveToWindowBottom() bool {
+	pos := c.cursor
+	pos.Y = c.scroll.SizeHeight() - 1
+	return c.MoveToWindow(pos)
+}
+
 // Init initializes this cursor with the given scroll and subscribes
 // to changes to the scroll's buffer. If buffer is swapped
 // via Scroll.SetBuffer, consider re-initializing this cursor with the

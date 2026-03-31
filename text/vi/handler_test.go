@@ -1111,7 +1111,7 @@ func TestTillCharacterMotion(t *testing.T) {
 		// t: till next character, cursor lands one before target
 		{"t forward", "tc", 1},   // first 'c' at 2, land at 1
 		{"t forward 2", "td", 2}, // first 'd' at 3, land at 2
-		{"t no match", "tz", 0},       // not found, stay at 0
+		{"t no match", "tz", 0},  // not found, stay at 0
 		{"t after moving right", "lltd", 2},
 
 		// T: till prev character, cursor lands one after target
@@ -1133,7 +1133,7 @@ func TestTillCharacterMotion(t *testing.T) {
 		{"T then comma", "llllllllTa,", 7},
 
 		// f then ; still works (regression)
-		{"f then semicolon", "fc;", 6}, // fc->2, ;->next 'c' at 6
+		{"f then semicolon", "fc;", 6},   // fc->2, ;->next 'c' at 6
 		{"f then comma", "llllllfc,", 6}, // at 6, fc->10, ,->prev 'c' at 6
 	}
 
@@ -2835,6 +2835,91 @@ func TestCentering(t *testing.T) {
 			w.Flush()
 			assert.Equal(t, tcase.expect, w.String())
 
+		})
+	}
+}
+
+func TestScreenRelativeMotions(t *testing.T) {
+	fileContent := "a\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"
+
+	suite := []struct {
+		name          string
+		inputSequence string
+		expected      string
+	}{
+		{
+			name:          "H moves cursor to top visible line",
+			inputSequence: "H",
+			expected:      "▐\ne\nf\ng",
+		},
+		{
+			name:          "M moves cursor to middle visible line",
+			inputSequence: "M",
+			expected:      "d\ne\n▐\ng",
+		},
+		{
+			name:          "L moves cursor to bottom visible line",
+			inputSequence: "L",
+			expected:      "d\ne\nf\n▐",
+		},
+		{
+			name:          "count H moves cursor to nth visible line from top",
+			inputSequence: "3H",
+			expected:      "d\ne\n▐\ng",
+		},
+		{
+			name:          "count L moves cursor to nth visible line from bottom",
+			inputSequence: "2L",
+			expected:      "d\ne\n▐\ng",
+		},
+	}
+
+	for _, tcase := range suite {
+		t.Run(tcase.name, func(t *testing.T) {
+			vi := setupVi(t, fileContent, 2)
+			vi.Resize(1, 4)
+			ok := vi.less.Scroll().SetOffset(term.Coordinates{Y: 3})
+			require.True(t, ok)
+			vi.setCursorAtScroll(term.Coordinates{Y: 5})
+
+			handlertest.RunHandlerSequence(t, vi, 1, 4, []handlertest.SequenceTestCase{{
+				InputSequence: tcase.inputSequence,
+				Expected:      tcase.expected,
+			}})
+		})
+	}
+}
+
+func TestScreenRelativeMotionsWrap(t *testing.T) {
+	fileContent := "123456789\nab\nc"
+
+	suite := []struct {
+		name          string
+		inputSequence string
+		expected      string
+	}{
+		{
+			name:          "count H uses wrapped screen rows",
+			inputSequence: "2H",
+			expected:      "123\n4▐6\n789\nab ",
+		},
+		{
+			name:          "count L uses wrapped screen rows",
+			inputSequence: "2L",
+			expected:      "123\n456\n▐89\nab ",
+		},
+	}
+
+	for _, tcase := range suite {
+		t.Run(tcase.name, func(t *testing.T) {
+			vi := setupVi(t, fileContent, 2, WithWrap(true))
+			vi.Resize(3, 4)
+			vi.setCursorAtScroll(term.Coordinates{X: 1, Y: 1})
+
+			handlertest.RunHandlerSequence(t, vi, 3, 4, []handlertest.SequenceTestCase{{
+				InputSequence: tcase.inputSequence,
+				Expected:      tcase.expected,
+			}})
 		})
 	}
 }

@@ -692,6 +692,12 @@ func (vi *viHandlerImpl) handleNormal(ev term.Event) (quit, handled bool) {
 			vi.cursor.MoveStartLineNonBlank()
 		case '$':
 			vi.cursor.MoveEndLine()
+		case 'H':
+			vi.cursor.MoveToWindow(term.Coordinates{X: vi.cursor.Coordinates().X, Y: vi.count - 1})
+		case 'M':
+			vi.cursor.MoveToWindowMiddle()
+		case 'L':
+			vi.cursor.MoveToWindow(term.Coordinates{X: vi.cursor.Coordinates().X, Y: vi.less.Scroll().SizeHeight() - vi.count})
 		case 'G':
 			vi.cursor.MoveLastLine()
 		case 'j':
