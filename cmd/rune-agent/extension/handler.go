@@ -464,6 +464,11 @@ func newCommandEventHandler(
 	memoryPath := filepath.Join(w.DataDir(ctx), "memory")
 	tools = append(tools, agentools.MemoryTools(executor, memoryPath)...)
 
+	db := w.Storage(ctx)
+	sessionsDir := filepath.Join(w.DataDir(ctx), "sessions")
+	dialogueStore := dialoguemanager.NewStore(db, sessionsDir)
+	tools = append(tools, agentools.ConversationTools(dialogueStore, fs, sessionsDir)...)
+
 	ret = new(aiEditorHandler)
 	ret.defaultEffort = llm.ReasoningEffortHigh
 	ret.ctx, ret.cancelCtx = context.WithCancel(context.Background())
@@ -720,7 +725,7 @@ func newCommandEventHandler(
 		ret.clip = clipboard.NewInMemory()
 	}
 
-	ret.db = w.Storage(ctx)
+	ret.db = db
 	if auditEnabled, _ := pconfig.GetBool("audit_enabled"); auditEnabled {
 		ret.auditStore = llm.NewAuditStore(ret.db)
 	}
@@ -730,7 +735,7 @@ func newCommandEventHandler(
 	ret.n = w.Notifications(ctx)
 	ret.resources = make(map[string]string)
 
-	ret.dialogueStore = dialoguemanager.NewStore(ret.db, filepath.Join(w.DataDir(ctx), "sessions"))
+	ret.dialogueStore = dialogueStore
 
 	if ret.compactModel != "" {
 		ret.compactSvc, err = ret.newService(ret.compactModel)

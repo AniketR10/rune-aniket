@@ -24,9 +24,11 @@
 package agentools
 
 import (
+	"github.com/unstablebuild/blue/walkdir"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/cmd/rune-agent/agent"
 	"unstable.build/go-tui/cmd/rune-agent/agent/skills"
-	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
 )
 
 // Config holds optional configuration for the default tool set.
@@ -76,4 +78,13 @@ func SessionTools(
 // Only registered when the memory workspace is available.
 func MemoryTools(exec workspaceapi.Executor, memoryPath string) []agent.Tool {
 	return []agent.Tool{NewRecallConversation(exec, memoryPath)}
+}
+
+// ConversationTools returns tools for introspecting stored conversations.
+// Always registered; tools fail gracefully if the store is empty.
+func ConversationTools(store dialoguemanager.Store, fs walkdir.Reader, sessionsDir string) []agent.Tool {
+	return []agent.Tool{
+		&listConversationsTool{store: store, sessionsDir: sessionsDir},
+		&searchConversationsTool{fs: fs, sessionsDir: sessionsDir},
+	}
 }

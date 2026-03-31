@@ -1,0 +1,256 @@
+// Unstable Build LLC ("COMPANY") CONFIDENTIAL
+//
+// Unpublished Copyright (c) 2024-2026 Unstable Build, All Rights Reserved.
+//
+// NOTICE: All information contained herein is, and remains the property of COMPANY.
+// The intellectual and technical concepts contained herein are proprietary to
+// COMPANY and may be covered by U.S. and Foreign Patents, patents in process,
+// and are protected by trade secret or copyright law. Dissemination of this information
+// or reproduction of this material is strictly forbidden unless prior written permission
+// is obtained from COMPANY. Access to the source code contained herein is hereby
+// forbidden to anyone except current COMPANY employees, managers or contractors who
+// have executed Confidentiality and Non-disclosure agreements explicitly covering such access.
+//
+// The copyright notice above does not evidence any actual or intended publication or
+// disclosure of this source code, which includes information that is confidential and/or
+// proprietary, and is a trade secret, of COMPANY. ANY REPRODUCTION, MODIFICATION,
+// DISTRIBUTION, PUBLIC  PERFORMANCE, OR PUBLIC DISPLAY OF OR THROUGH USE OF THIS SOURCE CODE
+// WITHOUT  THE EXPRESS WRITTEN CONSENT OF COMPANY IS STRICTLY PROHIBITED, AND IN
+// VIOLATION OF APPLICABLE LAWS AND INTERNATIONAL TREATIES. THE RECEIPT OR POSSESSION OF
+// THIS SOURCE CODE AND/OR RELATED INFORMATION DOES NOT CONVEY OR IMPLY ANY RIGHTS TO
+// REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
+// ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
+
+package agentools
+
+import (
+	"context"
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
+	"path/filepath"
+	"regexp"
+	"strings"
+
+	"github.com/unstablebuild/blue/iterator"
+	"github.com/unstablebuild/blue/walkdir"
+	sdkiterator "github.com/unstablebuild/rune-go-sdk/iterator"
+	"unstable.build/go-tui/cmd/rune-agent/agent"
+	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
+	"unstable.build/go-tui/cmd/rune-agent/llm"
+)
+
+// conversationAuditPrefix is the key prefix used for audit entries in
+// the dialogue store. Duplicated here because llm.auditKeyPrefix is
+// unexported.
+const conversationAuditPrefix = "audit:"
+
+type listConversationsTool struct {
+	store       dialoguemanager.Store
+	sessionsDir string
+}
+
+func (t *listConversationsTool) Definition() llm.Tool {
+	return llm.Tool{
+		Type: llm.ToolTypeFunction,
+		Function: llm.FunctionDefinition{
+			Name: "list_conversations",
+			Description: `List past user to agent conversation sessions.
+
+Returns a table with conversation ID, workspace, session file path, and last
+updated time for each stored dialogue session. Each session is a JSON file
+containing messages from a prior interaction between the user and an agent.
+
+Use read_file on the returned file path to read the raw conversation JSON.
+Prefer search_conversations when looking for a specific topic across all
+sessions.`,
+			Parameters: map[string]any{
+				"type":                 "object",
+				"properties":           map[string]any{},
+				"additionalProperties": false,
+			},
+		},
+	}
+}
+
+func (t *listConversationsTool) Summary(_ string) string {
+	return ""
+}
+
+func (t *listConversationsTool) Execute(ctx context.Context, _ string) agent.ToolResult {
+	it, err := t.store.List(ctx)
+	if err != nil {
+		return agent.ToolResult{
+			Content: fmt.Sprintf("error: %v", err),
+			IsError: true,
+		}
+	}
+	headers, err := sdkiterator.ToSlice(ctx, it)
+	_ = it.Close()
+	if err != nil {
+		return agent.ToolResult{
+			Content: fmt.Sprintf("error: %v", err),
+			IsError: true,
+		}
+	}
+
+	var sb strings.Builder
+	count := 0
+	for _, h := range headers {
+		if strings.HasPrefix(h.ID, conversationAuditPrefix) {
+			continue
+		}
+		if count > 0 {
+			sb.WriteByte('\n')
+		}
+		messagesPath := filepath.Join(t.sessionsDir,
+			base64.RawURLEncoding.EncodeToString([]byte(h.ID))+".json")
+		fmt.Fprintf(&sb, "%s  workspace=%s  path=%s  updated=%s",
+			h.ID, h.WorkspaceURI, messagesPath,
+			h.UpdatedAt.Format("2006-01-02T15:04:05Z"))
+		count++
+	}
+
+	if count == 0 {
+		return agent.ToolResult{Content: "No conversations found."}
+	}
+	return agent.ToolResult{Content: sb.String()}
+}
+
+type searchConversationsTool struct {
+	fs          walkdir.Reader
+	sessionsDir string
+}
+
+type searchConversationsArgs struct {
+	Pattern string `json:"pattern"`
+}
+
+func (t *searchConversationsTool) Definition() llm.Tool {
+	return llm.Tool{
+		Type: llm.ToolTypeFunction,
+		Function: llm.FunctionDefinition{
+			Name: "search_conversations",
+			Description: `Search across all past conversation sessions for a regex pattern.
+
+Returns matching lines formatted as "filename:line:content", capped at 200
+results. The pattern uses Go regex (RE2) syntax.
+
+Use to find where a topic, file, function, or error was previously discussed
+— without reading every conversation. More efficient than list_conversations
++ read_file when you know what to search for but not which session
+contains it.`,
+			Parameters: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"pattern": map[string]any{
+						"type":        "string",
+						"description": "Go regex (RE2) pattern to search for.",
+					},
+				},
+				"required":             []string{"pattern"},
+				"additionalProperties": false,
+			},
+		},
+	}
+}
+
+func (t *searchConversationsTool) Summary(arguments string) string {
+	var args searchConversationsArgs
+	if err := json.Unmarshal([]byte(arguments), &args); err != nil {
+		return ""
+	}
+	return args.Pattern
+}
+
+func (t *searchConversationsTool) Execute(ctx context.Context, arguments string) agent.ToolResult {
+	var args searchConversationsArgs
+	if err := json.Unmarshal([]byte(arguments), &args); err != nil {
+		return agent.ToolResult{
+			Content: fmt.Sprintf("error: invalid arguments: %v", err),
+			IsError: true,
+		}
+	}
+	if args.Pattern == "" {
+		return agent.ToolResult{
+			Content: "error: pattern is required",
+			IsError: true,
+		}
+	}
+
+	re, err := regexp.Compile(args.Pattern)
+	if err != nil {
+		return agent.ToolResult{
+			Content: fmt.Sprintf("error: invalid regex: %v", err),
+			IsError: true,
+		}
+	}
+
+	paths, err := walkdir.ListFiles(ctx, t.fs, t.sessionsDir)
+	if err != nil {
+		return agent.ToolResult{
+			Content: fmt.Sprintf("error: listing files: %v", err),
+			IsError: true,
+		}
+	}
+
+	// Only include *.json files and skip audit sessions.
+	filtered := iterator.Filter(paths, func(path string) bool {
+		if filepath.Ext(path) != ".json" {
+			return false
+		}
+		base := strings.TrimSuffix(filepath.Base(path), ".json")
+		if id, err := decodeSessionFilename(base); err == nil {
+			if strings.HasPrefix(id, conversationAuditPrefix) {
+				return false
+			}
+		}
+		return true
+	})
+
+	lines, err := walkdir.ReadLines(ctx, t.fs, filtered)
+	if err != nil {
+		return agent.ToolResult{
+			Content: fmt.Sprintf("error: reading files: %v", err),
+			IsError: true,
+		}
+	}
+	defer func() { _ = lines.Close() }()
+
+	var results []string
+	truncated := false
+	for {
+		line, ok := lines.Next(ctx)
+		if !ok {
+			break
+		}
+		content := contentAfterLineNum(line)
+		if re.MatchString(content) {
+			results = append(results, line)
+			if len(results) >= maxSearchResults {
+				truncated = true
+				break
+			}
+		}
+	}
+
+	if len(results) == 0 {
+		return agent.ToolResult{Content: "No matches found."}
+	}
+
+	output := strings.Join(results, "\n")
+	if truncated {
+		output += fmt.Sprintf("\n\n(results capped at %d matches)", maxSearchResults)
+	}
+	return agent.ToolResult{Content: output}
+}
+
+// decodeSessionFilename decodes a base64url-encoded session filename
+// back to the original dialogue ID.
+func decodeSessionFilename(encoded string) (string, error) {
+	b, err := base64.RawURLEncoding.DecodeString(encoded)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
