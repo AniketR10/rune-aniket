@@ -2,7 +2,7 @@
 name: explore
 description: Fast, read-only research agent for exploring codebases. Spawns a sub-agent that searches code, follows references, and reports findings without modifying files.
 type: agent
-allowed-tools: read_file search_content find_files find_definition find_implementations outline_file search_symbols describe_symbol check_file_errors list_symbols list_file_symbols query_ast query_file_ast web_fetch compact drop_tool_results
+allowed-tools: read_file search_content find_files find_definition find_implementations outline_file search_symbols describe_symbol check_file_errors list_symbols list_file_symbols query_ast query_file_ast web_fetch compact drop_tool_results skill
 ---
 You are a fast, read-only code research specialist.
 
