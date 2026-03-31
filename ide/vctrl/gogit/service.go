@@ -130,13 +130,7 @@ func (s svc) Diff(ctx context.Context, file workspaceapi.URI) (
 			len(diff.Hunks), file, time.Since(start))
 	}()
 
-	if s.repo != nil {
-		diff, err = s.diff(ctx, file, s.repo)
-		if err == nil {
-			return diff, err
-		}
-	}
-	repo, err := s.getRepo(file)
+	repo, err := s.resolveRepo(file)
 	if err != nil {
 		return
 	}
@@ -287,8 +281,20 @@ func (s svc) getRoot(file string) (string, error) {
 	return getRoot(s.scheme, file)
 }
 
-// use pre-loaded repo if workspace is within a repository, or at the same
-// level as the repository. Otherwise, look for the given file's repo.
+// resolveRepo returns the pre-loaded workspace repo when the file belongs
+// to it (verified by comparing git roots), otherwise opens the file's own
+// repository via getRepo.
+func (s svc) resolveRepo(file workspaceapi.URI) (*git.Repository, error) {
+	if s.repo != nil {
+		root, err := s.getRoot(file.Path())
+		if err == nil && root == s.root {
+			return s.repo, nil
+		}
+	}
+	return s.getRepo(file)
+}
+
+// getRepo opens the git repository that contains the given file.
 func (s svc) getRepo(file workspaceapi.URI) (*git.Repository, error) {
 	root, err := s.getRoot(file.Path())
 	if err != nil {

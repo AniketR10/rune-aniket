@@ -28,6 +28,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -96,6 +97,112 @@ func TestGogitDiffWorktree(t *testing.T) {
 	res, err := svc.Diff(context.Background(), uri)
 	require.NoError(t, err, "Diff should work on files in a git worktree")
 	assert.NotZero(t, res.Hunks, "should have detected the worktree modification")
+}
+
+func TestGogitDiffCrossWorkspace(t *testing.T) {
+	// Regression test for RUNE-8: opening a file from a different workspace
+	// must not diff it against the current workspace repository when the
+	// files share the same repo-relative path.
+	tmpDir, err := os.MkdirTemp("", "cross-workspace-*")
+	require.NoError(t, err)
+	tmpDir, err = filepath.EvalSymlinks(tmpDir)
+	require.NoError(t, err)
+	t.Cleanup(func() { os.RemoveAll(tmpDir) })
+
+	repoA := filepath.Join(tmpDir, "repoA")
+	repoB := filepath.Join(tmpDir, "repoB")
+	sharedRelPath := filepath.Join("src", "main.txt")
+
+	// Initialize repo A with src/main.txt containing "alpha"
+	initGitRepo(t, repoA, sharedRelPath, "alpha\n")
+	// Initialize repo B with src/main.txt containing "beta"
+	initGitRepo(t, repoB, sharedRelPath, "beta\n")
+
+	// Modify the working copy in repo B so there is a diff against B's HEAD
+	modifiedContent := "beta\nmodified in workspace B\n"
+	err = os.WriteFile(filepath.Join(repoB, sharedRelPath), []byte(modifiedContent), 0644)
+	require.NoError(t, err)
+
+	// Set up the service with repo A as the workspace
+	workspaceURI, err := workspaceapi.ParseURI("file://" + repoA)
+	require.NoError(t, err)
+	svc := setupGogitService(t, workspaceURI)
+
+	// Diff a file from repo B while the workspace is repo A
+	fileURI, err := workspaceapi.ParseURI("file://" + filepath.Join(repoB, sharedRelPath))
+	require.NoError(t, err)
+
+	res, err := svc.Diff(context.Background(), fileURI)
+	require.NoError(t, err, "Diff should succeed for a file in a different workspace repo")
+
+	// The diff must reflect changes relative to repo B's HEAD ("beta\n"),
+	// NOT repo A's HEAD ("alpha\n"). If the service incorrectly uses
+	// repo A's committed content, the diff would show removal of "alpha"
+	// and addition of the modified content, which is wrong.
+	require.NotZero(t, len(res.Hunks), "should detect changes in the file")
+
+	// Collect all inserted/deleted lines from the hunk bodies.
+	// Each body line is prefixed with '+' (added), '-' (removed), or ' ' (context).
+	var addedLines, removedLines string
+	for _, hunk := range res.Hunks {
+		for _, line := range strings.Split(hunk.Body, "\n") {
+			if strings.HasPrefix(line, "+") {
+				addedLines += line[1:] + "\n"
+			} else if strings.HasPrefix(line, "-") {
+				removedLines += line[1:] + "\n"
+			}
+		}
+	}
+
+	// Correct diff (against repo B HEAD "beta\n") should add the
+	// modification line, and should NOT remove "alpha" (which only exists
+	// in repo A).
+	assert.NotContains(t, removedLines, "alpha",
+		"diff must not reference repo A content; should diff against repo B's HEAD")
+	assert.Contains(t, addedLines, "modified in workspace B",
+		"diff should show the working copy change relative to repo B HEAD")
+}
+
+func TestGogitDiffSameWorkspace(t *testing.T) {
+	// Ensure the fast path for files in the active workspace repo still works.
+	reposPath := setupGitRepos(t)
+
+	workspaceCwd := reposPath + "/gitproj2_one-file-diff"
+	workspaceCwdURI, err := workspaceapi.ParseURI("file://" + workspaceCwd)
+	require.NoError(t, err)
+	svc := setupGogitService(t, workspaceCwdURI)
+
+	filePath := workspaceCwd + "/recipes/baba-ganoush.md"
+	uri, err := workspaceapi.ParseURI("file://" + filePath)
+	require.NoError(t, err)
+	res, err := svc.Diff(context.Background(), uri)
+	require.NoError(t, err)
+	assert.NotZero(t, res.Hunks, "should detect changes in the workspace file")
+	assert.Equal(t, "baba-ganoush.md", filepath.Base(res.OrigName))
+}
+
+// initGitRepo creates a git repo at root with a single committed file.
+func initGitRepo(t *testing.T, root, relPath, content string) {
+	t.Helper()
+	require.NoError(t, os.MkdirAll(filepath.Join(root, filepath.Dir(relPath)), 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, relPath), []byte(content), 0644))
+
+	for _, args := range [][]string{
+		{"init", "-b", "main"},
+		{"add", "."},
+		{"commit", "-m", "initial"},
+	} {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = root
+		cmd.Env = append(os.Environ(),
+			"GIT_AUTHOR_NAME=test",
+			"GIT_AUTHOR_EMAIL=test@test.com",
+			"GIT_COMMITTER_NAME=test",
+			"GIT_COMMITTER_EMAIL=test@test.com",
+		)
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, out)
+	}
 }
 
 func setupGogitService(t *testing.T, cwd workspaceapi.URI) vctrl.Service {
