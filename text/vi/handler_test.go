@@ -310,18 +310,7 @@ diff_buf_adjust(win_
  diff_redraw(TRUE); 
  }                  
               NORMAL`},
-		{",",
-			`f (wp ▐= NULL)hello 
-                    
- i = diff_buf_idx(wi
- if (i != DB_COUNT) 
- {                  
- curtab->tp_diffbuf[
- curtab->tp_diff_inv
- diff_redraw(TRUE); 
- }                  
-              NORMAL`},
-		{";",
+		{",", // , after F= reverses direction: searches forward, no = found, cursor stays
 			`f (wp =▐ NULL)hello 
                     
  i = diff_buf_idx(wi
@@ -332,8 +321,19 @@ diff_buf_adjust(win_
  diff_redraw(TRUE); 
  }                  
               NORMAL`},
+		{";", // ; after F= repeats backward: finds = at col 6
+			`f (wp ▐= NULL)hello 
+                    
+ i = diff_buf_idx(wi
+ if (i != DB_COUNT) 
+ {                  
+ curtab->tp_diffbuf[
+ curtab->tp_diff_inv
+ diff_redraw(TRUE); 
+ }                  
+              NORMAL`},
 		{"D",
-			`f (wp ▐             
+			`f (wp▐              
                     
  i = diff_buf_idx(wi
  if (i != DB_COUNT) 
@@ -344,7 +344,7 @@ diff_buf_adjust(win_
  }                  
               NORMAL`},
 		{"sbrillo",
-			`f (wp brillo▐       
+			`f (wpbrillo▐        
                     
  i = diff_buf_idx(wi
  if (i != DB_COUNT) 
@@ -355,7 +355,7 @@ diff_buf_adjust(win_
  }                  
               INSERT`},
 		{"<hhhhhhR == NULL)",
-			`f (wp == NULL)▐     
+			`f (w == NULL)▐      
                     
  i = diff_buf_idx(wi
  if (i != DB_COUNT) 
@@ -366,7 +366,7 @@ diff_buf_adjust(win_
  }                  
              REPLACE`},
 		{"<r]h",
-			`f (wp == NUL▐]      
+			`f (w == NUL▐]       
                     
  i = diff_buf_idx(wi
  if (i != DB_COUNT) 
@@ -377,8 +377,8 @@ diff_buf_adjust(win_
  }                  
               NORMAL`},
 		{"Vypzhzh",
-			`  if (wp == NULL]   
- ▐if (wp == NULL]   
+			`  if (w == NULL]    
+ ▐if (w == NULL]    
   {                 
     i = diff_buf_idx
     if (i != DB_COUN
@@ -388,8 +388,8 @@ diff_buf_adjust(win_
     diff_redraw(TRUE
               NORMAL`},
 		{"/i =>",
-			`  if (wp == NULL]   
-  if (wp == NULL]   
+			`  if (w == NULL]    
+  if (w == NULL]    
   {                 
     ▐ = diff_buf_idx
     if (i != DB_COUN
@@ -399,8 +399,8 @@ diff_buf_adjust(win_
      searching 'i ='
               NORMAL`},
 		{"dd",
-			`  if (wp == NULL]   
-  if (wp == NULL]   
+			`  if (w == NULL]    
+  if (w == NULL]    
   {                 
  ▐  if (i != DB_COUN
     {               
@@ -410,8 +410,8 @@ diff_buf_adjust(win_
     }               
               NORMAL`},
 		{"h",
-			`  if (wp == NULL]   
-  if (wp == NULL]   
+			`  if (w == NULL]    
+  if (w == NULL]    
   {                 
  ▐  if (i != DB_COUN
     {               
@@ -421,8 +421,8 @@ diff_buf_adjust(win_
     }               
               NORMAL`},
 		{"h",
-			`  if (wp == NULL]   
-  if (wp == NULL]   
+			`  if (w == NULL]    
+  if (w == NULL]    
   {                 
  ▐  if (i != DB_COUN
     {               
@@ -432,8 +432,8 @@ diff_buf_adjust(win_
     }               
               NORMAL`},
 		{"df=",
-			`  if (wp == NULL]   
-  if (wp == NULL]   
+			`  if (w == NULL]    
+  if (w == NULL]    
   {                 
 ▐DB_COUNT)          
     {               
@@ -443,8 +443,8 @@ diff_buf_adjust(win_
     }               
               NORMAL`},
 		{"/i>kkFDcndi<ldw",
-			`  if (wp == NULL]   
-  if (wp == NULL]   
+			`  if (w == NULL]    
+  if (w == NULL]    
   {                 
 di▐urtab->tp_diff_in
     diff_redraw(TRUE
@@ -806,6 +806,50 @@ pabcdeff_add(win->w_
                     
     searching 'diff'
               NORMAL`},
+		{"j0tf",
+			` {                  
+icurtab->tp_diff_inv
+   diff_redraw(TRUE)
+ pabcd▐ff_add(win->w
+                    
+                    
+                    
+                    
+    searching 'diff'
+              NORMAL`},
+		{";",
+			` {                  
+icurtab->tp_diff_inv
+   diff_redraw(TRUE)
+ pabcde▐f_add(win->w
+                    
+                    
+                    
+                    
+    searching 'diff'
+              NORMAL`},
+		{"hTa",
+			` {                  
+icurtab->tp_diff_inv
+   diff_redraw(TRUE)
+ pa▐cdeff_add(win->w
+                    
+                    
+                    
+                    
+    searching 'diff'
+              NORMAL`},
+		{",",
+			` {                  
+icurtab->tp_diff_inv
+   diff_redraw(TRUE)
+ pabcdeff▐add(win->w
+                    
+                    
+                    
+                    
+    searching 'diff'
+              NORMAL`},
 	}
 
 	vi := setupViIntegration(t, snippet, 2)
@@ -1051,6 +1095,63 @@ func TestVisualMoveToChar(t *testing.T) {
 	selection, ok := vi.Selection()
 	require.True(t, ok)
 	assert.Equal(t, "abc", selection)
+}
+
+func TestTillCharacterMotion(t *testing.T) {
+	sample := `abcdabcdabcd`
+	// Positions: a=0, b=1, c=2, d=3, a=4, b=5, c=6, d=7, a=8, b=9, c=10, d=11
+
+	type testCase struct {
+		name    string
+		input   string
+		expectX int
+	}
+
+	cases := []testCase{
+		// t: till next character, cursor lands one before target
+		{"t forward", "tc", 1},   // first 'c' at 2, land at 1
+		{"t forward 2", "td", 2}, // first 'd' at 3, land at 2
+		{"t no match", "tz", 0},       // not found, stay at 0
+		{"t after moving right", "lltd", 2},
+
+		// T: till prev character, cursor lands one after target
+		{"T backward", "lllllllTa", 5},    // at col 7, prev 'a' at 4, land at 5
+		{"T backward 2", "llllllllTb", 6}, // at col 8, prev 'b' at 5, land at 6
+		{"T no match", "llTz", 2},         // not found, stays at 2
+		{"T from end to c", "llllllllllTc", 7},
+
+		// ; repeats t in same direction (till)
+		{"t then semicolon", "tc;", 5}, // tc->1, ;->till next 'c' at 6, land at 5
+		{"t then double semicolon", "tc;;", 9},
+
+		// , repeats t in opposite direction (till)
+		{"t then comma", "lllltc,", 3}, // at 4, tc->5 (before 'c' at 6), ,->till prev 'c' at 2, land at 3
+		{"t then semicolon then comma", "tc;,", 3},
+
+		// ; repeats T in same direction (backward till)
+		{"T then semicolon", "llllllllTa;", 1}, // at 8, Ta->5, ;->till prev 'a' at 0, land at 1
+		{"T then comma", "llllllllTa,", 7},
+
+		// f then ; still works (regression)
+		{"f then semicolon", "fc;", 6}, // fc->2, ;->next 'c' at 6
+		{"f then comma", "llllllfc,", 6}, // at 6, fc->10, ,->prev 'c' at 6
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			vi := setupVi(t, sample, 2, WithWrap(false))
+			vi.Resize(20, 20)
+			vi.Draw(term.NoopWriter{})
+
+			for _, ch := range tc.input {
+				vi.Handle(term.Event{Type: term.EventKey, Ch: ch})
+			}
+			vi.Draw(term.NoopWriter{})
+
+			coords := vi.cursor.Coordinates()
+			assert.Equal(t, tc.expectX, coords.X, "cursor X position")
+		})
+	}
 }
 
 func TestViDeleteAWord(t *testing.T) {

@@ -65,6 +65,8 @@ const (
 	moveNone moveMode = iota
 	moveToNext
 	moveToPrev
+	moveTillNext
+	moveTillPrev
 )
 
 var _ viHandler = (*viHandlerImpl)(nil)
@@ -96,6 +98,7 @@ type viHandlerImpl struct {
 	repeater          text.Repeater // used for block repeat only
 	currMode          viMode
 	moveMode          moveMode
+	lastMoveMode      moveMode // stores the mode of the last f/F/t/T for ;/, repeat
 	searchMode        moveMode
 	moveChar          rune
 	textObjectPending bool
@@ -408,6 +411,37 @@ func (vi *viHandlerImpl) selectTextObject(ch rune) bool {
 
 func (vi *viHandlerImpl) setMoveToCharacterMode(mode moveMode) {
 	vi.moveMode = mode
+	vi.lastMoveMode = mode
+}
+
+// nudgeCursorForTillRepeat moves the cursor one position in the search
+// direction before repeating a till motion with ; or ,. This prevents
+// the repeat from finding the same character the cursor is sitting next
+// to and making no progress.
+func (vi *viHandlerImpl) nudgeCursorForTillRepeat(mode moveMode) {
+	switch mode {
+	case moveTillNext:
+		vi.cursor.MoveRight()
+	case moveTillPrev:
+		vi.cursor.MoveLeft()
+	}
+}
+
+// reverseDirection returns the opposite direction for a moveMode,
+// preserving whether it is a find or till motion.
+func reverseDirection(mode moveMode) moveMode {
+	switch mode {
+	case moveToNext:
+		return moveToPrev
+	case moveToPrev:
+		return moveToNext
+	case moveTillNext:
+		return moveTillPrev
+	case moveTillPrev:
+		return moveTillNext
+	default:
+		return moveNone
+	}
 }
 
 func (vi *viHandlerImpl) setReplaceMode() {
@@ -599,14 +633,21 @@ func (vi *viHandlerImpl) handleNormal(ev term.Event) (quit, handled bool) {
 			vi.cursor.ShiftLineLeft()
 		case ',':
 			event := term.Event{Type: term.EventKey, Ch: vi.moveChar}
-			vi.handleMoveToCharacter(moveToPrev, event)
+			mode := reverseDirection(vi.lastMoveMode)
+			vi.nudgeCursorForTillRepeat(mode)
+			vi.handleMoveToCharacter(mode, event)
 		case ';':
 			event := term.Event{Type: term.EventKey, Ch: vi.moveChar}
-			vi.handleMoveToCharacter(moveToNext, event)
+			vi.nudgeCursorForTillRepeat(vi.lastMoveMode)
+			vi.handleMoveToCharacter(vi.lastMoveMode, event)
 		case 'f':
 			vi.setMoveToCharacterMode(moveToNext)
 		case 'F':
 			vi.setMoveToCharacterMode(moveToPrev)
+		case 't':
+			vi.setMoveToCharacterMode(moveTillNext)
+		case 'T':
+			vi.setMoveToCharacterMode(moveTillPrev)
 		case 'g':
 			vi.setGMode()
 			doResetCount = false
@@ -1011,6 +1052,14 @@ func (vi *viHandlerImpl) handleMoveToCharacter(mode moveMode, ev term.Event) (ex
 				vi.cursor.MoveToNextChar(ev.Ch)
 			case moveToPrev:
 				vi.cursor.MoveToPrevChar(ev.Ch)
+			case moveTillNext:
+				if vi.cursor.MoveToNextChar(ev.Ch) {
+					vi.cursor.MoveLeft()
+				}
+			case moveTillPrev:
+				if vi.cursor.MoveToPrevChar(ev.Ch) {
+					vi.cursor.MoveRight()
+				}
 			case moveNone:
 				return
 			}
