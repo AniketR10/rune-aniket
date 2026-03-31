@@ -884,6 +884,189 @@ func TestCreateAgentCompletions_NormalFlowSendsBreak(t *testing.T) {
 	<-done
 }
 
+func TestCreateAgentCompletions_TruncatedTurnShowsGuidance(t *testing.T) {
+	t.Parallel()
+	svc := &agentMockService{
+		responses: []agentMockResponse{
+			{chunks: []string{"partial answer"}, finishReason: llm.FinishReasonLength},
+		},
+	}
+
+	store := newTestDialogueStore(t)
+	registry := agent.NewRegistry()
+	skillReg := skills.NewRegistry(nopFileSystem{}, workspaceapi.URI{}, nil, nil)
+	ag := agent.NewAgent(svc, registry, skillReg, store, agent.NoMemory(), agent.Config{SystemPrompt: "test"})
+
+	spawner := agent.NewGoroutineSpawner(
+		store, func(string) (llm.Service, string, error) { return svc, "test", nil },
+		agent.NewConfig(nil), skillReg,
+		nil, "", "test", "test",
+	)
+	childEvents := make(chan agent.ChildEvent, 64)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	tx := make(chan dialoguetui.MessageEvent)
+	reqRx := make(chan completionRequest)
+
+	mu := &sync.Mutex{}
+	comp := dialoguetui.NewComponent(dialoguetui.ComponentConfig{})
+	comp.Resize(80, 24)
+	h := &aiEditorHandler{p: term.NopInterrupter()}
+	sc := syncComponent{mu: mu, comp: comp, h: h, hintSlot: &hintSlot{}}
+	noti := &capturingNotifications{}
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		createAgentCompletions(ctx, cancel, tx, reqRx, ag, spawner, childEvents, skillReg, "d", sc, noti, nil)
+	}()
+
+	reqRx <- completionRequest{msg: "hello", ctx: ctx}
+
+	var sawText, sawWarning, sawBreak bool
+	timeout := time.After(5 * time.Second)
+	for !sawBreak {
+		select {
+		case ev := <-tx:
+			switch ev.Type {
+			case dialoguetui.MessageEventText:
+				if ev.Text == "partial answer" {
+					sawText = true
+				}
+			case dialoguetui.MessageEventWarning:
+				if strings.Contains(ev.Text, "At high and max/xhigh effort levels") {
+					sawWarning = true
+					assert.Contains(t, ev.Text, "/max_tokens 64000")
+					assert.Contains(t, ev.Text, "/effort medium")
+				}
+			case dialoguetui.MessageEventBreak:
+				sawBreak = true
+			}
+		case <-timeout:
+			t.Fatal("timed out waiting for truncated-turn events")
+		}
+	}
+
+	assert.True(t, sawText, "should have received partial text event")
+	assert.True(t, sawWarning, "should have shown truncated-turn guidance")
+
+	cancel()
+	<-done
+
+	noti.mu.Lock()
+	defer noti.mu.Unlock()
+	for i, level := range noti.levels {
+		assert.NotEqual(t, browserapi.LevelSuccess, level,
+			"unexpected success notification at index %d: %s", i, noti.notified[i])
+	}
+}
+
+func TestNotifyTurnOutcome(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name      string
+		outcome   turnOutcome
+		reason    string
+		wantMsg   string
+		wantLevel browserapi.NotificationLevel
+		wantCount int
+	}{
+		{
+			name:      "completed",
+			outcome:   turnOutcomeCompleted,
+			reason:    "",
+			wantMsg:   "Turn completed",
+			wantLevel: browserapi.LevelSuccess,
+			wantCount: 1,
+		},
+		{
+			name:      "truncated",
+			outcome:   turnOutcomeTruncated,
+			reason:    "",
+			wantMsg:   "Turn stopped after reaching the token limit",
+			wantLevel: browserapi.LevelWarn,
+			wantCount: 1,
+		},
+		{
+			name:      "error",
+			outcome:   turnOutcomeError,
+			reason:    "boom",
+			wantMsg:   "Turn failed: boom",
+			wantLevel: browserapi.LevelError,
+			wantCount: 1,
+		},
+		{
+			name:      "canceled",
+			outcome:   turnOutcomeCanceled,
+			reason:    "",
+			wantCount: 0,
+		},
+		{
+			name:      "none",
+			outcome:   turnOutcomeNone,
+			reason:    "",
+			wantCount: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			noti := &capturingNotifications{}
+			notifyTurnOutcome(noti, tt.outcome, tt.reason)
+
+			noti.mu.Lock()
+			defer noti.mu.Unlock()
+			require.Len(t, noti.notified, tt.wantCount)
+			if tt.wantCount == 0 {
+				return
+			}
+			assert.Equal(t, tt.wantMsg, noti.notified[0])
+			assert.Equal(t, tt.wantLevel, noti.levels[0])
+		})
+	}
+}
+
+func TestNotifyTurnOutcome_NotifyErrorIgnored(t *testing.T) {
+	t.Parallel()
+	noti := &failingNotifications{}
+	assert.NotPanics(t, func() {
+		notifyTurnOutcome(noti, turnOutcomeCompleted, "")
+	})
+
+	noti.mu.Lock()
+	defer noti.mu.Unlock()
+	require.Len(t, noti.msgs, 1)
+	assert.Equal(t, "Turn completed", noti.msgs[0])
+	assert.Equal(t, browserapi.LevelSuccess, noti.levels[0])
+}
+
+func TestOutcomeAndReasonForFinishReason_UserFriendly(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name       string
+		reason     llm.FinishReason
+		outcome    turnOutcome
+		wantReason string
+	}{
+		{name: "stop", reason: llm.FinishReasonStop, outcome: turnOutcomeCompleted, wantReason: ""},
+		{name: "length", reason: llm.FinishReasonLength, outcome: turnOutcomeTruncated, wantReason: ""},
+		{name: "tool calls", reason: llm.FinishReasonToolCall, outcome: turnOutcomeError, wantReason: "the model stopped while requesting tool calls"},
+		{name: "content filter", reason: llm.FinishReasonContentFilter, outcome: turnOutcomeError, wantReason: "the response was blocked by a content filter"},
+		{name: "null", reason: llm.FinishReasonNull, outcome: turnOutcomeError, wantReason: "the response ended unexpectedly"},
+		{name: "unknown", reason: llm.FinishReason("weird"), outcome: turnOutcomeError, wantReason: "unexpected finish reason: weird"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotOutcome, gotReason := outcomeAndReasonForFinishReason(tt.reason)
+			assert.Equal(t, tt.outcome, gotOutcome)
+			assert.Equal(t, tt.wantReason, gotReason)
+		})
+	}
+}
+
 // --- stubConfig for newLLMService tests ---
 
 type stubConfig struct {
@@ -2542,6 +2725,13 @@ type capturingNotifications struct {
 	progress []capturedProgress
 }
 
+type failingNotifications struct {
+	mu     sync.Mutex
+	levels []browserapi.NotificationLevel
+	msgs   []string
+	err    error
+}
+
 type capturedProgress struct {
 	id       string
 	message  string
@@ -2566,6 +2756,25 @@ func (c *capturingNotifications) UpdateNotificationProgress(id, message string, 
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.progress = append(c.progress, capturedProgress{id, message, progress, total})
+	return nil
+}
+
+func (f *failingNotifications) Notify(level browserapi.NotificationLevel, msg string, args ...any) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.levels = append(f.levels, level)
+	f.msgs = append(f.msgs, fmt.Sprintf(msg, args...))
+	if f.err == nil {
+		f.err = errors.New("notify failed")
+	}
+	return "", f.err
+}
+
+func (f *failingNotifications) NotifyOnce(level browserapi.NotificationLevel, msg string, args ...any) (string, error) {
+	return f.Notify(level, msg, args...)
+}
+
+func (f *failingNotifications) UpdateNotificationProgress(string, string, int64, int64) error {
 	return nil
 }
 
@@ -5062,6 +5271,7 @@ func TestAIEditorHandler_chat_agent_result_collapsed(t *testing.T) {
 	}})
 	deps.handler.cfg.StartCollapsed = true
 	deps.handler.cfg.DurationPrecision = time.Hour
+
 	flusher := openChatAndGetTab(t, deps)
 	flusher.idleTimeout = 200 * time.Millisecond
 	flusher.maxWait = 1 * time.Second
@@ -5083,6 +5293,120 @@ func TestAIEditorHandler_chat_agent_result_collapsed(t *testing.T) {
 			),
 		},
 	})
+}
+
+func TestAIEditorHandler_chat_truncated_turn_shows_guidance_and_warning_notification(t *testing.T) {
+	t.Parallel()
+	svc := &agentMockService{
+		responses: []agentMockResponse{{chunks: []string{"partial answer"}, finishReason: llm.FinishReasonLength}},
+	}
+
+	deps := newTestAIEditorHandler(t, svc)
+	noti := &capturingNotifications{}
+	deps.handler.n = noti
+	flusher := openChatAndGetTab(t, deps)
+	flusher.idleTimeout = 200 * time.Millisecond
+	flusher.maxWait = 1 * time.Second
+
+	handlertest.RunHandlerSequence(t, flusher, e2eWidth, e2eHeight, []handlertest.SequenceTestCase{
+		{
+			InputSequence: "hello<enter>",
+			Expected: e2eExpected(0,
+				"At high and max/xhigh effort levels,",
+				"models may think more extensively and",
+				"can be more likely to exhaust the",
+				"max_tokens budget. Consider increasing",
+				"max_tokens to give the model more room",
+				"(/max_tokens 64000), or lowering the",
+				"effort level (/effort medium).",
+				"   ┌───────────────────────────────┐",
+				"   │▐                              │",
+				"   └───────────────────────────────┘",
+			),
+		},
+	})
+
+	noti.mu.Lock()
+	defer noti.mu.Unlock()
+	require.Len(t, noti.notified, 1)
+	assert.Equal(t, "Turn stopped after reaching the token limit", noti.notified[0])
+	assert.Equal(t, browserapi.LevelWarn, noti.levels[0])
+}
+
+func TestAIEditorHandler_chat_success_turn_sends_success_notification(t *testing.T) {
+	t.Parallel()
+	svc := &agentMockService{
+		responses: []agentMockResponse{{chunks: []string{"done"}, finishReason: llm.FinishReasonStop}},
+	}
+
+	deps := newTestAIEditorHandler(t, svc)
+	noti := &capturingNotifications{}
+	deps.handler.n = noti
+	flusher := openChatAndGetTab(t, deps)
+	flusher.idleTimeout = 200 * time.Millisecond
+	flusher.maxWait = 1 * time.Second
+
+	handlertest.RunHandlerSequence(t, flusher, e2eWidth, e2eHeight, []handlertest.SequenceTestCase{
+		{
+			InputSequence: "hello<enter>",
+			Expected: e2eExpected(0,
+				"hello",
+				"done",
+				"",
+				"",
+				"",
+				"",
+				"",
+				"   ┌───────────────────────────────┐",
+				"   │▐                              │",
+				"   └───────────────────────────────┘",
+			),
+		},
+	})
+
+	noti.mu.Lock()
+	defer noti.mu.Unlock()
+	require.Len(t, noti.notified, 1)
+	assert.Equal(t, "Turn completed", noti.notified[0])
+	assert.Equal(t, browserapi.LevelSuccess, noti.levels[0])
+}
+
+func TestAIEditorHandler_chat_completion_error_sends_error_notification(t *testing.T) {
+	t.Parallel()
+	svc := &agentMockService{
+		responses: []agentMockResponse{{err: fmt.Errorf("connection refused")}},
+	}
+
+	deps := newTestAIEditorHandler(t, svc)
+	noti := &capturingNotifications{}
+	deps.handler.n = noti
+	flusher := openChatAndGetTab(t, deps)
+	flusher.idleTimeout = 200 * time.Millisecond
+	flusher.maxWait = 1 * time.Second
+
+	handlertest.RunHandlerSequence(t, flusher, e2eWidth, e2eHeight, []handlertest.SequenceTestCase{
+		{
+			InputSequence: "hello<enter>",
+			Expected: e2eExpected(0,
+				"hello",
+				"! agent: create completion: connection",
+				"refused",
+				"! agent stream: create completion:",
+				"connection refused",
+				"",
+				"",
+				"   ┌───────────────────────────────┐",
+				"   │▐                              │",
+				"   └───────────────────────────────┘",
+			),
+		},
+	})
+
+	noti.mu.Lock()
+	defer noti.mu.Unlock()
+	require.Len(t, noti.notified, 1)
+	assert.Equal(t, "Turn failed: create completion: connection refused", noti.notified[0])
+	assert.Equal(t, browserapi.LevelError, noti.levels[0])
 }
 
 func TestAIEditorHandler_chat_agent_error_result_collapsed(t *testing.T) {
@@ -8686,9 +9010,9 @@ func TestAIEditorHandler_chat_ask_user_question_hint_survives(t *testing.T) {
 				"      Warm                                                                                          \n" +
 				"  Blue                                                                                              \n" +
 				"      Cool                                                                                          \n" +
-			"  Other                                                                                             \n" +
-			"      Type a custom answer                                                                          \n" +
-			"        ┌─────────────────────────────────────────────────────────────────────────────────┐         \n" +
+				"  Other                                                                                             \n" +
+				"      Type a custom answer                                                                          \n" +
+				"        ┌─────────────────────────────────────────────────────────────────────────────────┐         \n" +
 				"        │                                                                                 │         \n" +
 				"        └─────────────────────────────────────────────────────────────────────────────────┘         ",
 		},
@@ -9324,215 +9648,6 @@ func TestTuiPrompter_cancel_dismisses_prompt(t *testing.T) {
 
 	err := <-errCh
 	assert.ErrorIs(t, err, context.Canceled)
-}
-
-func TestCreateAgentCompletions_NotifiesTurnCompleted(t *testing.T) {
-	t.Parallel()
-	svc := &agentMockService{
-		responses: []agentMockResponse{
-			{chunks: []string{"Hello!"}, finishReason: llm.FinishReasonStop},
-		},
-	}
-
-	store := newTestDialogueStore(t)
-	registry := agent.NewRegistry()
-	skillReg := skills.NewRegistry(nopFileSystem{}, workspaceapi.URI{}, nil, nil)
-	ag := agent.NewAgent(svc, registry, skillReg, store, agent.NoMemory(), agent.Config{SystemPrompt: "test"})
-
-	spawner := agent.NewGoroutineSpawner(
-		store, func(string) (llm.Service, string, error) { return svc, "test", nil },
-		agent.NewConfig(nil), skillReg,
-		nil, "", "test", "test",
-	)
-	childEvents := make(chan agent.ChildEvent, 64)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	tx := make(chan dialoguetui.MessageEvent)
-	reqRx := make(chan completionRequest)
-
-	mu := &sync.Mutex{}
-	comp := dialoguetui.NewComponent(dialoguetui.ComponentConfig{})
-	comp.Resize(80, 24)
-	h := &aiEditorHandler{p: term.NopInterrupter()}
-	sc := syncComponent{mu: mu, comp: comp, h: h, hintSlot: &hintSlot{}}
-	noti := &capturingNotifications{}
-
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		createAgentCompletions(ctx, cancel, tx, reqRx, ag, spawner, childEvents, skillReg, "d", sc, noti, nil)
-	}()
-
-	// Drain tx concurrently to prevent blocking on the deferred break.
-	go func() {
-		for range tx {
-		}
-	}()
-
-	reqRx <- completionRequest{msg: "hello", ctx: ctx}
-
-	// The notification fires synchronously after the iterator is exhausted,
-	// before the deferred break. Wait for it, then shut down.
-	require.Eventually(t, func() bool {
-		noti.mu.Lock()
-		defer noti.mu.Unlock()
-		return len(noti.notified) > 0
-	}, 5*time.Second, 10*time.Millisecond)
-
-	cancel()
-	<-done
-
-	noti.mu.Lock()
-	defer noti.mu.Unlock()
-	require.Len(t, noti.notified, 1)
-	assert.Equal(t, "Turn completed", noti.notified[0])
-	assert.Equal(t, browserapi.LevelSuccess, noti.levels[0])
-}
-
-func TestCreateAgentCompletions_NoNotificationOnCancel(t *testing.T) {
-	t.Parallel()
-	blockingTool := &agentMockTool{
-		name: "slow_tool",
-		executeFn: func(ctx context.Context, _ string) agent.ToolResult {
-			<-ctx.Done()
-			return agent.ToolResult{Content: "cancelled"}
-		},
-	}
-
-	svc := &agentMockService{
-		responses: []agentMockResponse{
-			{
-				chunks:       []string{""},
-				finishReason: llm.FinishReasonToolCall,
-				toolCalls: []llm.ToolCall{
-					{ID: "c1", Type: llm.ToolTypeFunction, Function: llm.FunctionCall{Name: "slow_tool", Arguments: "{}"}},
-				},
-			},
-			{chunks: []string{"done"}, finishReason: llm.FinishReasonStop},
-		},
-	}
-
-	store := newTestDialogueStore(t)
-	registry := agent.NewRegistry(blockingTool)
-	skillReg := skills.NewRegistry(nopFileSystem{}, workspaceapi.URI{}, nil, nil)
-	ag := agent.NewAgent(svc, registry, skillReg, store, agent.NoMemory(), agent.Config{SystemPrompt: "test"})
-
-	spawner := agent.NewGoroutineSpawner(
-		store, func(string) (llm.Service, string, error) { return svc, "test", nil },
-		agent.NewConfig(nil), skillReg,
-		nil, "", "test", "test",
-	)
-	childEvents := make(chan agent.ChildEvent, 64)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	tx := make(chan dialoguetui.MessageEvent)
-	reqRx := make(chan completionRequest)
-
-	mu := &sync.Mutex{}
-	comp := dialoguetui.NewComponent(dialoguetui.ComponentConfig{})
-	comp.Resize(80, 24)
-	h := &aiEditorHandler{p: term.NopInterrupter()}
-	sc := syncComponent{mu: mu, comp: comp, h: h, hintSlot: &hintSlot{}}
-	noti := &capturingNotifications{}
-
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		createAgentCompletions(ctx, cancel, tx, reqRx, ag, spawner, childEvents, skillReg, "d", sc, noti, nil)
-	}()
-
-	reqCtx, reqCancel := context.WithCancel(ctx)
-	reqRx <- completionRequest{msg: "hello", ctx: reqCtx}
-
-	// Wait for tool call, then cancel the request (simulates Ctrl-C).
-	for ev := range tx {
-		if ev.Type == dialoguetui.MessageEventToolCall {
-			break
-		}
-	}
-	reqCancel()
-
-	// Drain remaining events, then shut down.
-	go func() {
-		for range tx {
-		}
-	}()
-	cancel()
-	<-done
-
-	noti.mu.Lock()
-	defer noti.mu.Unlock()
-	assert.Empty(t, noti.notified, "no turn-done notification should be sent on cancellation")
-}
-
-func TestCreateAgentCompletions_NotifiesOnError(t *testing.T) {
-	t.Parallel()
-	svc := &agentMockService{
-		responses: []agentMockResponse{
-			{err: fmt.Errorf("connection refused")},
-		},
-	}
-
-	store := newTestDialogueStore(t)
-	registry := agent.NewRegistry()
-	skillReg := skills.NewRegistry(nopFileSystem{}, workspaceapi.URI{}, nil, nil)
-	ag := agent.NewAgent(svc, registry, skillReg, store, agent.NoMemory(), agent.Config{SystemPrompt: "test"})
-
-	spawner := agent.NewGoroutineSpawner(
-		store, func(string) (llm.Service, string, error) { return svc, "test", nil },
-		agent.NewConfig(nil), skillReg,
-		nil, "", "test", "test",
-	)
-	childEvents := make(chan agent.ChildEvent, 64)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	tx := make(chan dialoguetui.MessageEvent)
-	reqRx := make(chan completionRequest)
-
-	mu := &sync.Mutex{}
-	comp := dialoguetui.NewComponent(dialoguetui.ComponentConfig{})
-	comp.Resize(80, 24)
-	h := &aiEditorHandler{p: term.NopInterrupter()}
-	sc := syncComponent{mu: mu, comp: comp, h: h, hintSlot: &hintSlot{}}
-	noti := &capturingNotifications{}
-
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		createAgentCompletions(ctx, cancel, tx, reqRx, ag, spawner, childEvents, skillReg, "d", sc, noti, nil)
-	}()
-
-	go func() {
-		for range tx {
-		}
-	}()
-
-	reqRx <- completionRequest{msg: "hello", ctx: ctx}
-
-	require.Eventually(t, func() bool {
-		noti.mu.Lock()
-		defer noti.mu.Unlock()
-		return len(noti.notified) > 0
-	}, 5*time.Second, 10*time.Millisecond)
-
-	cancel()
-	<-done
-
-	noti.mu.Lock()
-	defer noti.mu.Unlock()
-	require.NotEmpty(t, noti.notified)
-	assert.Contains(t, noti.notified[0], "connection refused")
-	assert.Equal(t, browserapi.LevelError, noti.levels[0])
-	// No success notification should follow an error.
-	for i, level := range noti.levels {
-		assert.NotEqual(t, browserapi.LevelSuccess, level, "unexpected success notification at index %d: %s", i, noti.notified[i])
-	}
 }
 
 func TestTuiPrompter_NotifiesInputRequired(t *testing.T) {

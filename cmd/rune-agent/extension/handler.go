@@ -857,7 +857,6 @@ type aiEditorHandler struct {
 	generateDialogueID func(ctx context.Context, agentID string) string
 	// generatePlanPath overrides the plan path generator. Testing only.
 	generatePlanPath func(title string) string
-
 	effortMu      sync.Mutex
 	defaultEffort llm.ReasoningEffort // global default applied to new chats/queries
 
@@ -1621,6 +1620,62 @@ type completionRequest struct {
 	ctx       context.Context
 }
 
+const truncatedTurnHint = "At high and max/xhigh effort levels, models may think more extensively and can be more likely to exhaust the max_tokens budget. Consider increasing max_tokens to give the model more room (/max_tokens 64000), or lowering the effort level (/effort medium)."
+
+type turnOutcome uint8
+
+const (
+	turnOutcomeNone turnOutcome = iota
+	turnOutcomeCompleted
+	turnOutcomeTruncated
+	turnOutcomeCanceled
+	turnOutcomeError
+)
+
+func notifyTurnOutcome(noti browserapi.Notifications, outcome turnOutcome, reason string) {
+	var level browserapi.NotificationLevel
+	var msg string
+	switch outcome {
+	case turnOutcomeCompleted:
+		level = browserapi.LevelSuccess
+		msg = "Turn completed"
+	case turnOutcomeTruncated:
+		level = browserapi.LevelWarn
+		msg = "Turn stopped after reaching the token limit"
+	case turnOutcomeCanceled:
+		return
+	case turnOutcomeError:
+		level = browserapi.LevelError
+		if reason == "" {
+			msg = "Turn failed"
+		} else {
+			msg = fmt.Sprintf("Turn failed: %s", reason)
+		}
+	default:
+		return
+	}
+	if _, err := noti.Notify(level, "%s", msg); err != nil {
+		slog.Error("notify", "error", err)
+	}
+}
+
+func outcomeAndReasonForFinishReason(reason llm.FinishReason) (turnOutcome, string) {
+	switch reason {
+	case llm.FinishReasonStop:
+		return turnOutcomeCompleted, ""
+	case llm.FinishReasonLength:
+		return turnOutcomeTruncated, ""
+	case llm.FinishReasonToolCall:
+		return turnOutcomeError, "the model stopped while requesting tool calls"
+	case llm.FinishReasonContentFilter:
+		return turnOutcomeError, "the response was blocked by a content filter"
+	case llm.FinishReasonNull:
+		return turnOutcomeError, "the response ended unexpectedly"
+	default:
+		return turnOutcomeError, fmt.Sprintf("unexpected finish reason: %s", reason)
+	}
+}
+
 // makeOnCompacted returns a callback that fetches the compacted dialogue
 // from the store and replays it in the TUI via compactFn. It is used by
 // createAgentCompletions to handle EventCompacted from both the main
@@ -1792,7 +1847,18 @@ func createAgentCompletions(
 				case <-ctx.Done():
 				}
 			}()
-			var agentErrHandled bool
+			outcome := turnOutcomeNone
+			outcomeReason := ""
+			defer func() {
+				if outcome == turnOutcomeNone {
+					switch {
+					case errors.Is(ctx.Err(), context.Canceled), errors.Is(req.ctx.Err(), context.Canceled):
+						outcome = turnOutcomeCanceled
+						outcomeReason = string(llm.FinishReasonNull)
+					}
+				}
+				notifyTurnOutcome(noti, outcome, outcomeReason)
+			}()
 			for {
 				ev, ok := it.Next(req.ctx)
 				if !ok {
@@ -1909,6 +1975,17 @@ func createAgentCompletions(
 						}
 					}
 				case agent.EventDone:
+					outcome, outcomeReason = outcomeAndReasonForFinishReason(ev.FinishReason)
+					if ev.FinishReason == llm.FinishReasonLength {
+						select {
+						case tx <- dialoguetui.MessageEvent{
+							Type: dialoguetui.MessageEventWarning,
+							Text: truncatedTurnHint,
+						}:
+						case <-ctx.Done():
+							return
+						}
+					}
 					select {
 					case tx <- dialoguetui.MessageEvent{
 						Type: dialoguetui.MessageEventBreak,
@@ -1918,37 +1995,43 @@ func createAgentCompletions(
 					}
 				case agent.EventError:
 					if ev.Error != nil && !errors.Is(ev.Error, context.Canceled) {
-						agentErrHandled = true
+						outcome = turnOutcomeError
+						outcomeReason = ev.Error.Error()
 						errMsg := fmt.Sprintf("agent: %v", ev.Error)
 						select {
 						case tx <- dialoguetui.MessageEvent{Type: dialoguetui.MessageEventError, Text: errMsg}:
 						case <-ctx.Done():
 							return
 						}
-						_, err := noti.Notify(browserapi.LevelError, "%s", errMsg)
-						if err != nil {
-							slog.Error("notify", "error", err)
-						}
 					}
 				}
 			}
 			if err := it.Err(); err != nil {
-				if !agentErrHandled && !errors.Is(err, context.Canceled) {
-					agentErrHandled = true
+				if !errors.Is(err, context.Canceled) {
+					if outcome == turnOutcomeNone || outcome == turnOutcomeCompleted {
+						outcome = turnOutcomeError
+						outcomeReason = err.Error()
+					}
 					errMsg := fmt.Sprintf("agent stream: %v", err)
 					select {
 					case tx <- dialoguetui.MessageEvent{Type: dialoguetui.MessageEventError, Text: errMsg}:
 					case <-ctx.Done():
 						return
 					}
-					_, notifyErr := noti.Notify(browserapi.LevelError, "%s", errMsg)
-					if notifyErr != nil {
-						slog.Error("notify", "error", notifyErr)
-					}
+				} else if outcome == turnOutcomeNone {
+					outcome = turnOutcomeCanceled
+					outcomeReason = string(llm.FinishReasonNull)
 				}
 			}
-			if !agentErrHandled && ctx.Err() == nil && req.ctx.Err() == nil {
-				_, _ = noti.Notify(browserapi.LevelSuccess, "Turn completed")
+			if outcome == turnOutcomeNone {
+				switch {
+				case errors.Is(ctx.Err(), context.Canceled), errors.Is(req.ctx.Err(), context.Canceled):
+					outcome = turnOutcomeCanceled
+					outcomeReason = ""
+				default:
+					outcome = turnOutcomeError
+					outcomeReason = "the response ended unexpectedly"
+				}
 			}
 		}()
 		syncComp.removeStatusHint(hint)

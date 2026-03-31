@@ -216,37 +216,37 @@ type EventType int
 
 const (
 	// EventText is a streamed text chunk from the assistant.
-	EventText             EventType = iota // Streamed text chunk from assistant
+	EventText EventType = iota // Streamed text chunk from assistant
 	// EventToolCall reports that the agent is invoking a tool.
-	EventToolCall                          // Agent is invoking a tool
+	EventToolCall // Agent is invoking a tool
 	// EventToolResult reports that a tool finished executing.
-	EventToolResult                        // Tool finished executing
+	EventToolResult // Tool finished executing
 	// EventDone reports that the agent finished.
-	EventDone                              // Agent finished (final response complete)
+	EventDone // Agent finished (final response complete)
 	// EventError reports that an error occurred.
-	EventError                             // Error occurred
+	EventError // Error occurred
 	// EventReasoning is a streamed reasoning chunk from reasoning models.
-	EventReasoning                         // Streamed reasoning chunk from reasoning models
+	EventReasoning // Streamed reasoning chunk from reasoning models
 	// EventCompacting indicates compaction is in progress.
-	EventCompacting                        // Compaction in progress (animation hint)
+	EventCompacting // Compaction in progress (animation hint)
 	// EventCompacted reports that compaction finished and a new dialogue was created.
-	EventCompacted                         // Compaction done, new dialogue created
+	EventCompacted // Compaction done, new dialogue created
 	// EventRateLimitWarning reports a provider rate limit warning.
-	EventRateLimitWarning                  // Rate limit warning from provider
+	EventRateLimitWarning // Rate limit warning from provider
 	// EventUsageUpdate reports cumulative token usage after a completion.
-	EventUsageUpdate                       // Cumulative token usage update after each completion
+	EventUsageUpdate // Cumulative token usage update after each completion
 	// EventInferenceStart reports that an inference request is about to be sent.
-	EventInferenceStart                    // Inference request about to be sent to LLM
+	EventInferenceStart // Inference request about to be sent to LLM
 	// EventInferenceReady reports that the inference stream is ready.
-	EventInferenceReady                    // Inference stream created, waiting for first token
+	EventInferenceReady // Inference stream created, waiting for first token
 	// EventFirstContent reports receipt of the first content token.
-	EventFirstContent                      // First content token received from LLM
+	EventFirstContent // First content token received from LLM
 	// EventToolsStart reports that tool execution is beginning.
-	EventToolsStart                        // Tool execution phase beginning
+	EventToolsStart // Tool execution phase beginning
 	// EventToolsDropped reports that tool results were dropped from history.
-	EventToolsDropped                      // Tool results were dropped from history
+	EventToolsDropped // Tool results were dropped from history
 	// EventMemoryRecall reports that memory recall completed for the conversation.
-	EventMemoryRecall                      // A memory was recalled for this conversation
+	EventMemoryRecall // A memory was recalled for this conversation
 )
 
 // Event is emitted by the agent loop to drive the TUI.
@@ -254,6 +254,7 @@ type Event struct {
 	Type               EventType
 	Text               string             // For EventText: the text chunk
 	Reasoning          string             // For EventReasoning: reasoning chunk
+	FinishReason       llm.FinishReason   // For EventDone: why the turn ended
 	ToolCallID         string             // For EventToolCall/EventToolResult: unique call identifier
 	ToolName           string             // For EventToolCall/EventToolResult
 	ToolArgs           string             // For EventToolCall: JSON arguments
@@ -268,8 +269,8 @@ type Event struct {
 	DroppedToolCallIDs []string           // For EventToolsDropped: tool call IDs removed from history
 	ArchivedDialogueID string             // For EventCompacted: ID under which old messages were archived
 	Context            ContextSnapshot    // For EventUsageUpdate/EventDone: point-in-time context state
-	Memories           []Memory          // For EventMemoryRecall: recalled memories
-	MemoryDuration     time.Duration     // For EventMemoryRecall: how long recall took
+	Memories           []Memory           // For EventMemoryRecall: recalled memories
+	MemoryDuration     time.Duration      // For EventMemoryRecall: how long recall took
 }
 
 // ContextSnapshot captures the point-in-time state of the conversation

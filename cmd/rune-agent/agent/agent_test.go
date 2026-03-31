@@ -315,6 +315,9 @@ func TestAgentRun(t *testing.T) {
 				// message should be persisted so the user can continue.
 				assert.Empty(t, eventsByType(events, EventError),
 					"FinishReasonLength must not emit an error")
+				doneEvents := eventsByType(events, EventDone)
+				require.Len(t, doneEvents, 1)
+				assert.Equal(t, llm.FinishReasonLength, doneEvents[0].FinishReason)
 				d, err := store.Get(context.Background(), "d")
 				require.NoError(t, err)
 				var found bool

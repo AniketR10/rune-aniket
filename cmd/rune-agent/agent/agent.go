@@ -697,6 +697,16 @@ func (a *Agent) run(
 			usage.TotalDuration = time.Since(runStart)
 			pendingUsage.Add(completionUsage, 0, inferenceDuration, 0)
 			persistPending()
+			emit(ctx, ch, Event{
+				Type:         EventDone,
+				FinishReason: finishReason,
+				Context: ContextSnapshot{
+					TokensSent:     completionUsage.TokensSent,
+					TokensReceived: completionUsage.TokensReceived,
+					Window:         contextWindow,
+					AutoCompactAt:  int(float64(contextWindow) * autoCompactRatio),
+				},
+			})
 			log.Debug("agent loop done: output truncated", "reason", finishReason)
 			return
 
@@ -706,7 +716,8 @@ func (a *Agent) run(
 			pendingUsage.Add(completionUsage, 0, inferenceDuration, 0)
 			persistPending()
 			emit(ctx, ch, Event{
-				Type: EventDone,
+				Type:         EventDone,
+				FinishReason: finishReason,
 				Context: ContextSnapshot{
 					TokensSent:     completionUsage.TokensSent,
 					TokensReceived: completionUsage.TokensReceived,
@@ -756,7 +767,6 @@ func (a *Agent) run(
 			}
 
 			// 2. Fan out: launch all tool executions in parallel.
-			// TODO candidate
 			results := make(chan executedToolCall, len(infos))
 			var wg sync.WaitGroup
 			for i, info := range infos {
