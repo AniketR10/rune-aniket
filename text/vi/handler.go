@@ -101,6 +101,7 @@ type viHandlerImpl struct {
 	lastMoveMode      moveMode // stores the mode of the last f/F/t/T for ;/, repeat
 	searchMode        moveMode
 	moveChar          rune
+	pendingGoMotion   bool
 	textObjectPending bool
 	textObjectAround  bool
 	deleteInsert      bool
@@ -276,6 +277,7 @@ func (vi *viHandlerImpl) setNormalMode() bool {
 	vi.resetCount()
 	vi.setMode(normalMode)
 	vi.moveMode = moveNone
+	vi.pendingGoMotion = false
 	vi.textObjectPending = false
 	return true
 }
@@ -293,6 +295,7 @@ func (vi *viHandlerImpl) setInsertMode() {
 func (vi *viHandlerImpl) setDeleteMode(thenInsert bool) {
 	vi.setMode(deleteMode)
 	vi.deleteInsert = thenInsert
+	vi.pendingGoMotion = false
 	vi.textObjectPending = false
 	vi.less.SetMessage("")
 }
@@ -319,6 +322,7 @@ func (vi *viHandlerImpl) setZMode() {
 }
 
 func (vi *viHandlerImpl) setYankMode() {
+	vi.pendingGoMotion = false
 	vi.textObjectPending = false
 	vi.setMode(yankMode)
 }
@@ -705,26 +709,46 @@ func (vi *viHandlerImpl) handleNormal(ev term.Event) (quit, handled bool) {
 			if vi.count == 1 {
 				vi.cursor.MoveDown()
 			} else {
-				vi.cursor.MoveDownLines(vi.count)
+				pos := vi.cursor.CursorAtScroll()
+				maxY := vi.less.Buffer().Rows() - 1
+				if vi.count > maxY-pos.Y {
+					pos.Y = maxY
+				} else {
+					pos.Y += vi.count
+				}
+				vi.setCursorAtScroll(pos)
 			}
 		case 'k':
 			vi.cursor.MoveToScroll(vi.anchor)
 			if vi.count == 1 {
 				vi.cursor.MoveUp()
 			} else {
-				vi.cursor.MoveUpLines(vi.count)
+				pos := vi.cursor.CursorAtScroll()
+				pos.Y = max(0, pos.Y-vi.count)
+				vi.setCursorAtScroll(pos)
 			}
 		case 'h':
 			if vi.count == 1 {
 				vi.cursor.MoveLeft()
 			} else {
-				vi.cursor.MoveLeftColumns(vi.count)
+				pos := vi.cursor.CursorAtScroll()
+				pos.X = max(0, pos.X-vi.count)
+				vi.cursor.MoveToScroll(pos)
 			}
 		case 'l':
 			if vi.count == 1 {
 				vi.cursor.MoveRight()
 			} else {
-				vi.cursor.MoveRightColumns(vi.count)
+				pos := vi.cursor.CursorAtScroll()
+				if pos.Y < vi.less.Buffer().Rows() {
+					maxX := vi.less.Buffer().Columns(pos.Y)
+					if vi.count > maxX-pos.X {
+						pos.X = maxX
+					} else {
+						pos.X += vi.count
+					}
+				}
+				vi.cursor.MoveToScroll(pos)
 			}
 		case 'O':
 			vi.setInsertMode()
@@ -1160,6 +1184,34 @@ func (vi *viHandlerImpl) handleMetaNormal(ev term.Event) (quit, handled, done bo
 	return
 }
 
+func (vi *viHandlerImpl) handleMetaGo(ev term.Event) (quit, handled, done bool) {
+	before := vi.cursor.Coordinates()
+	vi.cursor.Select()
+
+	switch ev.Mod {
+	case 0:
+		switch ev.Ch {
+		case 'e':
+			vi.cursor.MoveLeftEndWord()
+			handled = true
+		case 'E':
+			vi.cursor.MoveLeftEndWordGroup()
+			handled = true
+		}
+	}
+
+	after := vi.cursor.Coordinates()
+	if before == after {
+		vi.cursor.Unselect()
+		handled = false
+		vi.setNormalMode()
+		return
+	}
+
+	done = true
+	return
+}
+
 func (vi *viHandlerImpl) handleYank(ev term.Event) (quit, handled bool) {
 	if ev.Ch == 'y' && ev.Mod == 0 {
 		if vi.cursor.SelectLine() {
@@ -1171,6 +1223,31 @@ func (vi *viHandlerImpl) handleYank(ev term.Event) (quit, handled bool) {
 	}
 
 	if vi.moveMode == moveNone && ev.Mod == 0 {
+		if vi.pendingGoMotion {
+			vi.pendingGoMotion = false
+			switch ev.Ch {
+			case 'e':
+				quit, handled, done := vi.handleMetaGo(term.Event{Type: ev.Type, Mod: ev.Mod, Ch: 'e'})
+				if !done {
+					return quit, handled
+				}
+				vi.copySelection()
+				vi.setNormalMode()
+				return quit, true
+			case 'E':
+				quit, handled, done := vi.handleMetaGo(term.Event{Type: ev.Type, Mod: ev.Mod, Ch: 'E'})
+				if !done {
+					return quit, handled
+				}
+				vi.copySelection()
+				vi.setNormalMode()
+				return quit, true
+			default:
+				vi.setNormalMode()
+				return false, true
+			}
+		}
+
 		if vi.textObjectPending {
 			if ev.Ch == 'i' {
 				vi.setTextObjectPending(false)
@@ -1189,6 +1266,9 @@ func (vi *viHandlerImpl) handleYank(ev term.Event) (quit, handled bool) {
 			return false, true
 		}
 		switch ev.Ch {
+		case 'g':
+			vi.pendingGoMotion = true
+			return false, true
 		case 'i':
 			vi.setTextObjectPending(false)
 			return false, true
@@ -1237,6 +1317,39 @@ func (vi *viHandlerImpl) handleDelete(ev term.Event) (quit, handled bool) {
 	}
 
 	if vi.moveMode == moveNone && ev.Mod == 0 {
+		if vi.pendingGoMotion {
+			vi.pendingGoMotion = false
+			switch ev.Ch {
+			case 'e':
+				quit, handled, done := vi.handleMetaGo(term.Event{Type: ev.Type, Mod: ev.Mod, Ch: 'e'})
+				if !done {
+					return quit, handled
+				}
+				vi.cursor.DeleteSelection()
+				if vi.deleteInsert {
+					vi.setInsertMode()
+				} else {
+					vi.setNormalMode()
+				}
+				return quit, true
+			case 'E':
+				quit, handled, done := vi.handleMetaGo(term.Event{Type: ev.Type, Mod: ev.Mod, Ch: 'E'})
+				if !done {
+					return quit, handled
+				}
+				vi.cursor.DeleteSelection()
+				if vi.deleteInsert {
+					vi.setInsertMode()
+				} else {
+					vi.setNormalMode()
+				}
+				return quit, true
+			default:
+				vi.setNormalMode()
+				return false, true
+			}
+		}
+
 		if vi.textObjectPending {
 			if ev.Ch == 'i' {
 				vi.setTextObjectPending(false)
@@ -1259,6 +1372,9 @@ func (vi *viHandlerImpl) handleDelete(ev term.Event) (quit, handled bool) {
 			return false, true
 		}
 		switch ev.Ch {
+		case 'g':
+			vi.pendingGoMotion = true
+			return false, true
 		case 'i':
 			vi.setTextObjectPending(false)
 			return false, true
@@ -1291,6 +1407,12 @@ func (vi *viHandlerImpl) handleGo(ev term.Event) (quit, handled bool) {
 		switch ev.Ch {
 		// lowercase case 'u':
 		// uppercase case 'U':
+		case 'e':
+			vi.cursor.MoveLeftEndWord()
+			handled = true
+		case 'E':
+			vi.cursor.MoveLeftEndWordGroup()
+			handled = true
 		case 'g':
 			vi.cursor.MoveToScroll(vi.anchor)
 			if vi.count == 1 {

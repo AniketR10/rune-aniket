@@ -644,7 +644,7 @@ diff_buf_adjust(win_
 		{"jj",
 			`                    
 /*                  
- *▐Check if the curr
+▐* Check if the curr
  *                  
  * potatodiff buffer
  */                 
@@ -1228,6 +1228,352 @@ diff_buf_adjust(win_
 		return setupViIntegration(t, snippet, 2)
 	}
 	handlertest.TestHandlerIsolated(t, newVi, 20, 10, cases)
+}
+
+func TestViGoLeftEndWordMotions(t *testing.T) {
+	const content = "one two-three, four"
+	at := term.Coordinates{X: strings.Index(content, "four") + len("four") - 1, Y: 0}
+
+	newVi := func(t *testing.T) *viHandlerImpl {
+		t.Helper()
+		vi := setupVi(t, content, 2)
+		vi.Resize(80, 10)
+		vi.setCursorAtScroll(at)
+		vi.Draw(term.NoopWriter{})
+		return vi
+	}
+
+	for _, tc := range []struct {
+		name   string
+		seq    string
+		motion func(*viHandlerImpl) bool
+	}{
+		{
+			name:   "ge moves to previous word end",
+			seq:    "ge",
+			motion: func(vi *viHandlerImpl) bool { return vi.cursor.MoveLeftEndWord() },
+		},
+		{
+			name:   "gE moves to previous WORD end",
+			seq:    "gE",
+			motion: func(vi *viHandlerImpl) bool { return vi.cursor.MoveLeftEndWordGroup() },
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			expected := newVi(t)
+			tc.motion(expected)
+			require.NotEqual(t, at, expected.cursor.Coordinates())
+
+			actual := newVi(t)
+			for _, event := range tc.seq {
+				_, handled := actual.Handle(term.Event{Type: term.EventKey, Ch: event})
+				require.True(t, handled, "sequence %q failed on %q", tc.seq, string(event))
+			}
+
+			assert.Equal(t, expected.cursor.Coordinates(), actual.cursor.Coordinates())
+			assert.Equal(t, normalMode, actual.mode())
+		})
+	}
+}
+
+func TestViOperatorGoLeftEndWordMotions(t *testing.T) {
+	const content = "one two-three, four"
+	at := term.Coordinates{X: strings.Index(content, "four") + len("four") - 1, Y: 0}
+
+	newVi := func(t *testing.T) *viHandlerImpl {
+		t.Helper()
+		vi := setupVi(t, content, 2)
+		vi.Resize(80, 10)
+		vi.setCursorAtScroll(at)
+		vi.Draw(term.NoopWriter{})
+		return vi
+	}
+
+	for _, tc := range []struct {
+		name          string
+		seq           string
+		motion        func(*viHandlerImpl) bool
+		wantMode      viMode
+		wantClipboard bool
+	}{
+		{
+			name:     "delete ge",
+			seq:      "dge",
+			motion:   func(vi *viHandlerImpl) bool { return vi.cursor.MoveLeftEndWord() },
+			wantMode: normalMode,
+		},
+		{
+			name:     "delete gE",
+			seq:      "dgE",
+			motion:   func(vi *viHandlerImpl) bool { return vi.cursor.MoveLeftEndWordGroup() },
+			wantMode: normalMode,
+		},
+		{
+			name:     "change ge enters insert mode",
+			seq:      "cge",
+			motion:   func(vi *viHandlerImpl) bool { return vi.cursor.MoveLeftEndWord() },
+			wantMode: insertMode,
+		},
+		{
+			name:          "yank ge",
+			seq:           "yge",
+			motion:        func(vi *viHandlerImpl) bool { return vi.cursor.MoveLeftEndWord() },
+			wantMode:      normalMode,
+			wantClipboard: true,
+		},
+		{
+			name:          "yank gE",
+			seq:           "ygE",
+			motion:        func(vi *viHandlerImpl) bool { return vi.cursor.MoveLeftEndWordGroup() },
+			wantMode:      normalMode,
+			wantClipboard: true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			expected := newVi(t)
+			require.True(t, expected.cursor.Select())
+			tc.motion(expected)
+			require.NotEqual(t, at, expected.cursor.Coordinates())
+
+			switch tc.seq[0] {
+			case 'd', 'c':
+				expected.cursor.DeleteSelection()
+			case 'y':
+				expected.copySelection()
+			}
+
+			switch tc.wantMode {
+			case insertMode:
+				expected.setInsertMode()
+			default:
+				expected.setNormalMode()
+			}
+			expected.doMoveToBounds()
+
+			actual := newVi(t)
+			for i, event := range tc.seq {
+				_, handled := actual.Handle(term.Event{Type: term.EventKey, Ch: event})
+				require.True(t, handled, "sequence %q failed on %q", tc.seq, string(event))
+				if i == 1 {
+					switch tc.seq[0] {
+					case 'd', 'c':
+						assert.Equal(t, deleteMode, actual.mode())
+					case 'y':
+						assert.Equal(t, yankMode, actual.mode())
+					}
+				}
+			}
+
+			assert.Equal(t, tc.wantMode, actual.mode())
+			assert.Equal(t, expected.less.Buffer().String(), actual.less.Buffer().String())
+			assert.Equal(t, expected.cursor.Coordinates(), actual.cursor.Coordinates())
+
+			if tc.wantClipboard {
+				expectedPaste, err := expected.config.clipboard.Paste(expected.config.defaultRegister)
+				require.NoError(t, err)
+				actualPaste, err := actual.config.clipboard.Paste(actual.config.defaultRegister)
+				require.NoError(t, err)
+				assert.Equal(t, expectedPaste.Text, actualPaste.Text)
+			}
+		})
+	}
+}
+
+func TestViGoLeftEndWordMotionsAcrossLines(t *testing.T) {
+	const content = "one\ntwo-three\nfour"
+	at := term.Coordinates{X: len("four") - 1, Y: 2}
+
+	newVi := func(t *testing.T) *viHandlerImpl {
+		t.Helper()
+		vi := setupVi(t, content, 2)
+		vi.Resize(80, 10)
+		vi.setCursorAtScroll(at)
+		vi.Draw(term.NoopWriter{})
+		return vi
+	}
+
+	for _, tc := range []struct {
+		name   string
+		seq    string
+		motion func(*viHandlerImpl) bool
+	}{
+		{
+			name:   "ge crosses to prior line word end",
+			seq:    "ge",
+			motion: func(vi *viHandlerImpl) bool { return vi.cursor.MoveLeftEndWord() },
+		},
+		{
+			name:   "gE crosses to prior line WORD end",
+			seq:    "gE",
+			motion: func(vi *viHandlerImpl) bool { return vi.cursor.MoveLeftEndWordGroup() },
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			expected := newVi(t)
+			tc.motion(expected)
+			require.NotEqual(t, at, expected.cursor.Coordinates())
+
+			actual := newVi(t)
+			for _, event := range tc.seq {
+				_, handled := actual.Handle(term.Event{Type: term.EventKey, Ch: event})
+				require.True(t, handled, "sequence %q failed on %q", tc.seq, string(event))
+			}
+
+			assert.Equal(t, expected.cursor.Coordinates(), actual.cursor.Coordinates())
+			assert.Equal(t, normalMode, actual.mode())
+		})
+	}
+}
+
+func TestViOperatorGoLeftEndWordMotionsAcrossLines(t *testing.T) {
+	const content = "one\ntwo-three\nfour"
+	at := term.Coordinates{X: len("four") - 1, Y: 2}
+
+	newVi := func(t *testing.T) *viHandlerImpl {
+		t.Helper()
+		vi := setupVi(t, content, 2)
+		vi.Resize(80, 10)
+		vi.setCursorAtScroll(at)
+		vi.Draw(term.NoopWriter{})
+		return vi
+	}
+
+	for _, tc := range []struct {
+		name     string
+		seq      string
+		motion   func(*viHandlerImpl) bool
+		wantMode viMode
+	}{
+		{
+			name:     "delete ge across lines",
+			seq:      "dge",
+			motion:   func(vi *viHandlerImpl) bool { return vi.cursor.MoveLeftEndWord() },
+			wantMode: normalMode,
+		},
+		{
+			name:     "change gE across lines",
+			seq:      "cgE",
+			motion:   func(vi *viHandlerImpl) bool { return vi.cursor.MoveLeftEndWordGroup() },
+			wantMode: insertMode,
+		},
+		{
+			name:     "yank ge across lines",
+			seq:      "yge",
+			motion:   func(vi *viHandlerImpl) bool { return vi.cursor.MoveLeftEndWord() },
+			wantMode: normalMode,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			expected := newVi(t)
+			require.True(t, expected.cursor.Select())
+			tc.motion(expected)
+			require.NotEqual(t, at, expected.cursor.Coordinates())
+
+			switch tc.seq[0] {
+			case 'd', 'c':
+				expected.cursor.DeleteSelection()
+			case 'y':
+				expected.copySelection()
+			}
+
+			if tc.wantMode == insertMode {
+				expected.setInsertMode()
+			} else {
+				expected.setNormalMode()
+			}
+			expected.doMoveToBounds()
+
+			actual := newVi(t)
+			for _, event := range tc.seq {
+				_, handled := actual.Handle(term.Event{Type: term.EventKey, Ch: event})
+				require.True(t, handled, "sequence %q failed on %q", tc.seq, string(event))
+			}
+
+			assert.Equal(t, tc.wantMode, actual.mode())
+			assert.Equal(t, expected.less.Buffer().String(), actual.less.Buffer().String())
+			assert.Equal(t, expected.cursor.Coordinates(), actual.cursor.Coordinates())
+
+			if tc.seq[0] == 'y' {
+				expectedPaste, err := expected.config.clipboard.Paste(expected.config.defaultRegister)
+				require.NoError(t, err)
+				actualPaste, err := actual.config.clipboard.Paste(actual.config.defaultRegister)
+				require.NoError(t, err)
+				assert.Equal(t, expectedPaste.Text, actualPaste.Text)
+			}
+		})
+	}
+}
+
+func TestViGoLeftEndWordSnapshots(t *testing.T) {
+	const (
+		content = "one two-three,four"
+		width   = 24
+		height  = 5
+	)
+
+	newVi := func(t *testing.T) tui.Handler {
+		t.Helper()
+		return setupViIntegration(t, content, 2)
+	}
+
+	t.Run("motions", func(t *testing.T) {
+		cases := []handlertest.SequenceTestCase{
+			{InputSequence: "$", Expected: "one two-three,fou▐      \n                        \n                        \n                        \n                  NORMAL"},
+			{InputSequence: "ge", Expected: "one two-three▐four      \n                        \n                        \n                        \n                  NORMAL"},
+			{InputSequence: "gE", Expected: "on▐ two-three,four      \n                        \n                        \n                        \n                  NORMAL"},
+		}
+		handlertest.RunHandlerSequence(t, newVi(t), width, height, cases)
+	})
+
+	t.Run("delete word motion", func(t *testing.T) {
+		cases := []handlertest.SequenceTestCase{
+			{InputSequence: "$", Expected: "one two-three,fou▐      \n                        \n                        \n                        \n                  NORMAL"},
+			{InputSequence: "dge", Expected: "one two-thre▐           \n                        \n                        \n                        \n                  NORMAL"},
+		}
+		handlertest.RunHandlerSequence(t, newVi(t), width, height, cases)
+	})
+
+	t.Run("delete WORD motion", func(t *testing.T) {
+		cases := []handlertest.SequenceTestCase{
+			{InputSequence: "$", Expected: "one two-three,fou▐      \n                        \n                        \n                        \n                  NORMAL"},
+			{InputSequence: "dgE", Expected: "o▐                      \n                        \n                        \n                        \n                  NORMAL"},
+		}
+		handlertest.RunHandlerSequence(t, newVi(t), width, height, cases)
+	})
+
+	t.Run("change word motion", func(t *testing.T) {
+		cases := []handlertest.SequenceTestCase{
+			{InputSequence: "$", Expected: "one two-three,fou▐      \n                        \n                        \n                        \n                  NORMAL"},
+			{InputSequence: "cge", Expected: "one two-three▐          \n                        \n                        \n                        \n                  INSERT"},
+		}
+		handlertest.RunHandlerSequence(t, newVi(t), width, height, cases)
+	})
+
+	t.Run("change WORD motion", func(t *testing.T) {
+		cases := []handlertest.SequenceTestCase{
+			{InputSequence: "$", Expected: "one two-three,fou▐      \n                        \n                        \n                        \n                  NORMAL"},
+			{InputSequence: "cgE", Expected: "on▐                     \n                        \n                        \n                        \n                  INSERT"},
+		}
+		handlertest.RunHandlerSequence(t, newVi(t), width, height, cases)
+	})
+
+	t.Run("yank paste word motion", func(t *testing.T) {
+		cases := []handlertest.SequenceTestCase{
+			{InputSequence: "$", Expected: "one two-three,fou▐      \n                        \n                        \n                        \n                  NORMAL"},
+			{InputSequence: "yge", Expected: "one two-three,fou▐      \n                        \n                        \n                        \n                  NORMAL"},
+			{InputSequence: "P", Expected: "one two-three,fou,four▐ \n                        \n                        \n                        \n                  NORMAL"},
+		}
+		handlertest.RunHandlerSequence(t, newVi(t), width, height, cases)
+	})
+
+	t.Run("yank paste WORD motion", func(t *testing.T) {
+		cases := []handlertest.SequenceTestCase{
+			{InputSequence: "$", Expected: "one two-three,fou▐      \n                        \n                        \n                        \n                  NORMAL"},
+			{InputSequence: "ygE", Expected: "one two-three,fou▐      \n                        \n                        \n                        \n                  NORMAL"},
+			{InputSequence: "P", Expected: "ree,foue two-three,four▐\n                        \n                        \n                        \n                  NORMAL"},
+		}
+		handlertest.RunHandlerSequence(t, newVi(t), width, height, cases)
+	})
 }
 
 func TestViTextObjects(t *testing.T) {
@@ -2270,6 +2616,68 @@ func TestResetCount(t *testing.T) {
 		vi.Resize(10, 10)
 		vi.Handle(term.Event{Type: term.EventKey, Ch: 'j'})
 		assert.Equal(t, 1, vi.cursor.Coordinates().Y)
+	})
+
+	t.Run("huge horizontal counts clamp to line bounds", func(t *testing.T) {
+		vi := setupVi(t, "abcdef", 2)
+		vi.Resize(20, 5)
+		vi.setCursorAtScroll(term.Coordinates{X: 3, Y: 0}) // 'd'
+
+		maxIntStr := strconv.Itoa(math.MaxInt)
+		for _, ch := range maxIntStr {
+			_, handled := vi.Handle(term.Event{Type: term.EventKey, Ch: ch})
+			require.True(t, handled)
+		}
+
+		_, handled := vi.Handle(term.Event{Type: term.EventKey, Ch: 'h'})
+		require.True(t, handled)
+		assert.Equal(t, term.Coordinates{X: 0, Y: 0}, vi.cursor.Coordinates())
+
+		for _, ch := range maxIntStr {
+			_, handled = vi.Handle(term.Event{Type: term.EventKey, Ch: ch})
+			require.True(t, handled)
+		}
+
+		_, handled = vi.Handle(term.Event{Type: term.EventKey, Ch: 'l'})
+		require.True(t, handled)
+		assert.Equal(t, term.Coordinates{X: len("abcdef") - 1, Y: 0}, vi.cursor.Coordinates())
+
+		vi = setupVi(t, "abcdef", 2)
+		vi.Resize(20, 5)
+		vi.setCursorAtScroll(term.Coordinates{X: 0, Y: 0})
+		for _, ch := range maxIntStr {
+			_, handled = vi.Handle(term.Event{Type: term.EventKey, Ch: ch})
+			require.True(t, handled)
+		}
+
+		_, handled = vi.Handle(term.Event{Type: term.EventKey, Ch: 'l'})
+		require.True(t, handled)
+		assert.Equal(t, term.Coordinates{X: len("abcdef") - 1, Y: 0}, vi.cursor.Coordinates())
+	})
+
+	t.Run("huge vertical counts clamp to file bounds", func(t *testing.T) {
+		vi := setupVi(t, "aaa\nbbb\nccc\nddd", 2)
+		vi.Resize(20, 5)
+		vi.setCursorAtScroll(term.Coordinates{X: 1, Y: 2})
+
+		maxIntStr := strconv.Itoa(math.MaxInt)
+		for _, ch := range maxIntStr {
+			_, handled := vi.Handle(term.Event{Type: term.EventKey, Ch: ch})
+			require.True(t, handled)
+		}
+
+		_, handled := vi.Handle(term.Event{Type: term.EventKey, Ch: 'k'})
+		require.True(t, handled)
+		assert.Equal(t, term.Coordinates{X: 1, Y: 0}, vi.cursor.Coordinates())
+
+		for _, ch := range maxIntStr {
+			_, handled = vi.Handle(term.Event{Type: term.EventKey, Ch: ch})
+			require.True(t, handled)
+		}
+
+		_, handled = vi.Handle(term.Event{Type: term.EventKey, Ch: 'j'})
+		require.True(t, handled)
+		assert.Equal(t, term.Coordinates{X: 1, Y: 3}, vi.cursor.Coordinates())
 	})
 }
 
