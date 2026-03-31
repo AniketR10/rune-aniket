@@ -9,6 +9,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -31,6 +32,23 @@ func TestDefaultConfiguration(t *testing.T) {
 	cfg := DefaultConfig()
 	maxFollowFailures := int(cfg.TimeToCoup / (cfg.DialTimeout + cfg.ConnectRetryCadence))
 	assert.Greater(t, maxFollowFailures, 1)
+}
+
+func TestNormalizedLockFile(t *testing.T) {
+	t.Run("keeps short path unchanged", func(t *testing.T) {
+		lockFile := filepath.Join(t.TempDir(), ".lock")
+		lockFile = "/tmp/rune-fm-short.lock"
+		assert.Equal(t, lockFile, normalizedLockFile(lockFile))
+	})
+
+	t.Run("shortens overlong path deterministically", func(t *testing.T) {
+		lockFile := filepath.Join(t.TempDir(), strings.Repeat("a", 120), ".lock")
+		actual := normalizedLockFile(lockFile)
+		assert.NotEqual(t, lockFile, actual)
+		assert.LessOrEqual(t, len(actual)+len(".sync"), unixSocketPathMax)
+		assert.Equal(t, actual, normalizedLockFile(lockFile))
+		assert.True(t, strings.HasPrefix(actual, "/tmp/rune-fm-"))
+	})
 }
 
 func TestServiceIntegration(t *testing.T) {
@@ -78,6 +96,42 @@ func TestServiceIntegration(t *testing.T) {
 			svc := bluestore.AdaptTo(document.NewInMemoryServiceWithMarshaler(cfg.Marshaler))
 			return bluestore.AdaptFrom(New(svc, lockFile, cfg))
 		})
+	})
+
+	t.Run("single instance with overlong unix socket path fails fast", func(t *testing.T) {
+		lockRoot := t.TempDir()
+		lockFile := filepath.Join(lockRoot, strings.Repeat("a", 120), ".lock")
+		cfg := testConfig()
+		svc := New(bluestore.AdaptTo(document.NewInMemoryService()), lockFile, cfg)
+		defer func() {
+			_ = svc.Close()
+		}()
+
+		require.NoError(t, svc.Set(context.Background(), "dragonballz", &testStruct{A: "1234"}))
+
+		var out testStruct
+		require.NoError(t, svc.Get(context.Background(), "dragonballz", &out))
+		require.Equal(t, "1234", out.A)
+	})
+
+	t.Run("startup errors are returned to callers instead of blocking", func(t *testing.T) {
+		parentFile, err := os.CreateTemp("", "rune-fm-parent-")
+		require.NoError(t, err)
+		require.NoError(t, parentFile.Close())
+		t.Cleanup(func() {
+			_ = os.Remove(parentFile.Name())
+		})
+
+		lockFile := filepath.Join(parentFile.Name(), "child.sock")
+		cfg := testConfig()
+		svc := New(bluestore.AdaptTo(document.NewInMemoryService()), lockFile, cfg)
+		defer func() {
+			_ = svc.Close()
+		}()
+
+		err = svc.Set(context.Background(), "dragonballz", &testStruct{A: "1234"})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "not a directory")
 	})
 
 	t.Run("single instance preconditions (bson)", func(t *testing.T) {

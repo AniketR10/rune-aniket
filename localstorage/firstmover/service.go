@@ -25,6 +25,8 @@ package firstmover
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"net"
@@ -89,6 +91,7 @@ type Service struct {
 	pid                string
 	readyCtx           context.Context
 	ready              func()
+	readyErr           error
 
 	cfg                  Config
 	maxFollowFailures    int
@@ -105,6 +108,8 @@ type Service struct {
 	active         storageapi.Service
 }
 
+const unixSocketPathMax = 103
+
 // New allocates storage for a new Service and initializes it.
 func New(svc storageapi.Service, lockFile string, cfg Config) *Service {
 	ret := new(Service)
@@ -120,6 +125,8 @@ func (s *Service) Init(svc storageapi.Service, lockFile string, cfg Config) {
 	if cfg.Marshaler == nil {
 		panic("empty Marshaler in config")
 	}
+
+	lockFile = normalizedLockFile(lockFile)
 
 	s.svc = svc
 	if s.lockFileListen == "" {
@@ -150,9 +157,30 @@ func (s *Service) Init(svc storageapi.Service, lockFile string, cfg Config) {
 	go s.leadOrFollow()
 }
 
+func normalizedLockFile(lockFile string) string {
+	if len(lockFile)+len(".sync") <= unixSocketPathMax {
+		return lockFile
+	}
+	sum := sha256.Sum256([]byte(lockFile))
+	return filepath.Join("/tmp", "rune-fm-"+hex.EncodeToString(sum[:16]))
+}
+
+func (s *Service) waitReady(ctx context.Context) error {
+	select {
+	case <-s.readyCtx.Done():
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		return s.readyErr
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
 // Create satisfies storageapi.Service.
 func (s *Service) Create(ctx context.Context, ID string, doc interface{}) error {
-	<-s.readyCtx.Done()
+	if err := s.waitReady(ctx); err != nil {
+		return err
+	}
 	return s.retryHandleDocErrs(ctx, func(ctx context.Context) (bool, error) {
 		s.mu.Lock()
 		active := s.active
@@ -164,7 +192,9 @@ func (s *Service) Create(ctx context.Context, ID string, doc interface{}) error 
 
 // Set satisfies storageapi.Service.
 func (s *Service) Set(ctx context.Context, ID string, doc interface{}) error {
-	<-s.readyCtx.Done()
+	if err := s.waitReady(ctx); err != nil {
+		return err
+	}
 	return s.retryHandleDocErrs(ctx, func(ctx context.Context) (bool, error) {
 		s.mu.Lock()
 		active := s.active
@@ -179,7 +209,9 @@ func (s *Service) Update(
 	ctx context.Context, ID string, updates []storageapi.Update,
 	preconds ...storageapi.Precondition,
 ) error {
-	<-s.readyCtx.Done()
+	if err := s.waitReady(ctx); err != nil {
+		return err
+	}
 	return s.retryHandleDocErrs(ctx, func(ctx context.Context) (bool, error) {
 		s.mu.Lock()
 		active := s.active
@@ -191,7 +223,9 @@ func (s *Service) Update(
 
 // Get satisfies storageapi.Service.
 func (s *Service) Get(ctx context.Context, ID string, doc interface{}) error {
-	<-s.readyCtx.Done()
+	if err := s.waitReady(ctx); err != nil {
+		return err
+	}
 	return s.retryHandleDocErrs(ctx, func(ctx context.Context) (bool, error) {
 		s.mu.Lock()
 		active := s.active
@@ -203,7 +237,9 @@ func (s *Service) Get(ctx context.Context, ID string, doc interface{}) error {
 
 // Delete satisfies storageapi.Service.
 func (s *Service) Delete(ctx context.Context, ID string) error {
-	<-s.readyCtx.Done()
+	if err := s.waitReady(ctx); err != nil {
+		return err
+	}
 	return s.retryHandleDocErrs(ctx, func(ctx context.Context) (bool, error) {
 		s.mu.Lock()
 		active := s.active
@@ -217,7 +253,9 @@ func (s *Service) Delete(ctx context.Context, ID string) error {
 func (s *Service) List(ctx context.Context, filters []storageapi.Filter) (
 	it storageapi.Iterator, err error,
 ) {
-	<-s.readyCtx.Done()
+	if err = s.waitReady(ctx); err != nil {
+		return nil, err
+	}
 	// ignore the retry context here as the context semantics
 	// are different for List: it's the iterator's of the subscription
 	// rather than the call to List.
@@ -242,7 +280,9 @@ func (s *Service) Publish(
 	if len(msg) > s.cfg.MaxMessageSize {
 		return ErrMessageTooLarge
 	}
-	<-s.readyCtx.Done()
+	if err := s.waitReady(ctx); err != nil {
+		return err
+	}
 	return s.retryHandleDocErrs(ctx, func(ctx context.Context) (bool, error) {
 		err := s.pubsub.publish(ctx, topic, msg)
 		return s.isRetriableError(err), err
@@ -255,7 +295,9 @@ func (s *Service) Publish(
 func (s *Service) Subscribe(
 	ctx context.Context, topic string,
 ) error {
-	<-s.readyCtx.Done()
+	if err := s.waitReady(ctx); err != nil {
+		return err
+	}
 	var i int
 	// ignore the retry context here as the context semantics
 	// are different for subscribe: it's the context of the subscription
@@ -281,7 +323,9 @@ func (s *Service) Subscribe(
 func (s *Service) Receive(
 	ctx context.Context, topic string,
 ) (data []byte, err error) {
-	<-s.readyCtx.Done()
+	if err = s.waitReady(ctx); err != nil {
+		return nil, err
+	}
 	err = s.retryHandleDocErrsWithStrategy(ctx, func(ctx context.Context) (bool, error) {
 		s.mu.Lock()
 		pending := s.subscriptions[topic]
@@ -339,7 +383,9 @@ func (s *Service) Close() (ret error) {
 
 // IsLeader returns whether this instance is the leader of the system.
 func (s *Service) IsLeader() bool {
-	<-s.readyCtx.Done()
+	if err := s.waitReady(context.Background()); err != nil {
+		return false
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.svc == s.active
@@ -640,8 +686,7 @@ func (s *Service) leadOrFollow() {
 		// wrap syscall errors and their os counterparts
 		if !errors.Is(err, syscall.EADDRINUSE) && // address already in use
 			!errors.Is(err, os.ErrExist) && // file already exists
-			!errors.Is(err, os.ErrInvalid) && // socket already bound to an address
-			!errors.Is(err, syscall.EINVAL) { // socket already bound to an address
+			!errors.Is(err, os.ErrInvalid) { // socket already bound to an address
 			s.log(log.WarnLevel, "Unexpected error while trying to "+
 				"acquire lock %q: %v", s.lockFileListen, err)
 			return false, err
@@ -715,6 +760,10 @@ func (s *Service) leadOrFollow() {
 	select {
 	case <-quitCh:
 	default:
+		s.mu.Lock()
+		s.readyErr = err
+		s.mu.Unlock()
+		s.ready()
 		s.log(log.ErrorLevel, "Unexpectedly stopped retrying: %v", err)
 	}
 }
