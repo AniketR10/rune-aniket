@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"github.com/ernestrc/go-multierror"
+	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/release"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
@@ -152,7 +153,7 @@ func (m *pkgManager) LibDir(ctx context.Context, pkgID string) (
 
 	version, err := m.getLatestVersion(ctx, pkgID)
 	if err != nil {
-		if errors.Is(err, storageapi.ErrNotFound) {
+		if errors.Is(err, storageapi.ErrNotFound) || errors.Is(err, document.ErrNotFound) {
 			return nil, storageapi.ErrNotFound
 		}
 		return nil, fmt.Errorf("get latest version: %w", err)
@@ -494,6 +495,9 @@ func (m *pkgManager) getLatestVersion(
 ) (release.Version, error) {
 	p, err := m.pkg.DescribePackage(ctx, pack)
 	if err != nil {
+		if err.Error() == "not found" {
+			return "", storageapi.ErrNotFound
+		}
 		return "", err
 	}
 	if p.Latest == "" {

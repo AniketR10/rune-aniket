@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/clipboard"
 	"github.com/unstablebuild/rune-go-sdk/component"
@@ -422,5 +423,5 @@ type nopPkgManager struct {
 func (t nopPkgManager) LibDir(ctx context.Context, id string) (
 	iterator.Iterator[string], error,
 ) {
-	return iterator.FromSlice[string](nil), nil
+	return nil, storageapi.ErrNotFound
 }

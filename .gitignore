@@ -17,7 +17,6 @@ cmd/less/*
 !cmd/less/*.go
 bin
 target
-*.tar.gz
 
 # fractal swap files
 *.swp
@@ -31,5 +30,7 @@ go.work.sum
 # crash files
 six_crash_report_*
 *.db
+*.tar.gz
+!**/testdata/**/*.tar.gz
 # packages
 pkg/

@@ -575,13 +575,13 @@ func TestCrossWorkspaceOpenRoutingIntegration(t *testing.T) {
 			sequences: []handlertest.SequenceTestCase{
 				{
 					InputSequence: "<c-\\\\>openCase<enter>",
-					Expected: `┌──────────────┌─────────────┐
-│o ········    │ syntax      │
-├──────────────│ tree        │
-│▐ackage main  │ parser for  │
-│              │ language    │
-│              │ ("go") is   │
-├──────────────│ not         ┤
+					Expected: `┌────────────────────────────┐
+│o ········                  │
+├────────────────────────────┤
+│▐ackage main                │
+│                            │
+│                      NORMAL│
+├────────────────────────────┤
 │1 ·  2 2                    │
 └────────────────────────────┘`,
 				},
@@ -599,13 +599,13 @@ func TestCrossWorkspaceOpenRoutingIntegration(t *testing.T) {
 				},
 				{
 					InputSequence: "<c-\\\\>to1<enter>",
-					Expected: `┌──────────────┌─────────────┐
-│o ········    │ syntax      │
-├──────────────│ tree        │
-│▐ackage main  │ parser for  │
-│              │ language    │
-│              │ ("go") is   │
-├──────────────│ not         ┤
+					Expected: `┌────────────────────────────┐
+│o ········                  │
+├────────────────────────────┤
+│▐ackage main                │
+│                            │
+│                      NORMAL│
+├────────────────────────────┤
 │1 ·  2 2                    │
 └────────────────────────────┘`,
 				},
@@ -626,13 +626,13 @@ func TestCrossWorkspaceOpenRoutingIntegration(t *testing.T) {
 			sequences: []handlertest.SequenceTestCase{
 				{
 					InputSequence: "<c-\\\\>openCase<enter>",
-					Expected: `┌──────────────┌─────────────┐
-│o ········    │ syntax      │
-├──────────────│ tree        │
-│▐ackage main  │ parser for  │
-│              │ language    │
-│              │ ("go") is   │
-├──────────────│ not         ┤
+					Expected: `┌────────────────────────────┐
+│o ········                  │
+├────────────────────────────┤
+│▐ackage main                │
+│                            │
+│                      NORMAL│
+├────────────────────────────┤
 │1 1  2 ·                    │
 └────────────────────────────┘`,
 				},
@@ -650,13 +650,13 @@ func TestCrossWorkspaceOpenRoutingIntegration(t *testing.T) {
 				},
 				{
 					InputSequence: "<c-\\\\>to2<enter>",
-					Expected: `┌──────────────┌─────────────┐
-│o ········    │ syntax      │
-├──────────────│ tree        │
-│▐ackage main  │ parser for  │
-│              │ language    │
-│              │ ("go") is   │
-├──────────────│ not         ┤
+					Expected: `┌────────────────────────────┐
+│o ········                  │
+├────────────────────────────┤
+│▐ackage main                │
+│                            │
+│                      NORMAL│
+├────────────────────────────┤
 │1 1  2 ·                    │
 └────────────────────────────┘`,
 				},
@@ -682,13 +682,13 @@ func TestCrossWorkspaceOpenRoutingIntegration(t *testing.T) {
 			sequences: []handlertest.SequenceTestCase{
 				{
 					InputSequence: "<c-\\\\>openCase<enter>",
-					Expected: `┌──────────────┌─────────────┐
-│o ·········   │ syntax      │
-├──────────────│ tree        │
-│▐ackage main  │ parser for  │
-│              │ language    │
-│              │ ("go") is   │
-├──────────────│ not         ┤
+					Expected: `┌────────────────────────────┐
+│o ·········                 │
+├────────────────────────────┤
+│▐ackage main                │
+│                            │
+│                      NORMAL│
+├────────────────────────────┤
 │1 1  2 ·                    │
 └────────────────────────────┘`,
 				},
@@ -706,13 +706,13 @@ func TestCrossWorkspaceOpenRoutingIntegration(t *testing.T) {
 				},
 				{
 					InputSequence: "<c-\\\\>to2<enter>",
-					Expected: `┌──────────────┌─────────────┐
-│o ·········   │ syntax      │
-├──────────────│ tree        │
-│▐ackage main  │ parser for  │
-│              │ language    │
-│              │ ("go") is   │
-├──────────────│ not         ┤
+					Expected: `┌────────────────────────────┐
+│o ·········                 │
+├────────────────────────────┤
+│▐ackage main                │
+│                            │
+│                      NORMAL│
+├────────────────────────────┤
 │1 1  2 ·                    │
 └────────────────────────────┘`,
 				},
@@ -733,13 +733,13 @@ func TestCrossWorkspaceOpenRoutingIntegration(t *testing.T) {
 			sequences: []handlertest.SequenceTestCase{
 				{
 					InputSequence: "<c-\\\\>openCase<enter>",
-					Expected: `┌──────────────┌─────────────┐
-│o ·······     │ syntax      │
-├──────────────│ tree        │
-│▐ackage main  │ parser for  │
-│              │ language    │
-│              │ ("go") is   │
-├──────────────│ not         ┤
+					Expected: `┌────────────────────────────┐
+│o ·······                   │
+├────────────────────────────┤
+│▐ackage main                │
+│                            │
+│                      NORMAL│
+├────────────────────────────┤
 │1 1  2 ·                    │
 └────────────────────────────┘`,
 				},
@@ -757,13 +757,13 @@ func TestCrossWorkspaceOpenRoutingIntegration(t *testing.T) {
 				},
 				{
 					InputSequence: "<c-\\\\>to2<enter>",
-					Expected: `┌──────────────┌─────────────┐
-│o ·······     │ syntax      │
-├──────────────│ tree        │
-│▐ackage main  │ parser for  │
-│              │ language    │
-│              │ ("go") is   │
-├──────────────│ not         ┤
+					Expected: `┌────────────────────────────┐
+│o ·······                   │
+├────────────────────────────┤
+│▐ackage main                │
+│                            │
+│                      NORMAL│
+├────────────────────────────┤
 │1 1  2 ·                    │
 └────────────────────────────┘`,
 				},

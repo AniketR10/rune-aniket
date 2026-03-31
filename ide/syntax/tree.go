@@ -372,8 +372,9 @@ func (t *internalTree) LastFlush() time.Time {
 }
 
 type files struct {
-	langID string
-	files  []string
+	langID       string
+	files        []string
+	packageFound bool
 }
 
 func (t *Tree) downloadFiles(ctx context.Context) (files, error) {
@@ -390,8 +391,7 @@ func (t *Tree) downloadFiles(ctx context.Context) (files, error) {
 			t.log(log.DebugLevel,
 				"aborting syntax parsing: package for language %q does not exist or it's not installed",
 				id)
-			t.notifyNotAvail(id)
-			return files{}, nil
+			return files{langID: id}, nil
 		}
 		t.log(log.ErrorLevel, "aborting syntax parsing: %v", err)
 		t.notifyNotAvail(id)
@@ -405,10 +405,14 @@ func (t *Tree) downloadFiles(ctx context.Context) (files, error) {
 		t.notifyNotAvail(id)
 		return files{}, errors.New(msg)
 	}
-	return files{files: allFiles, langID: id}, nil
+	return files{files: allFiles, langID: id, packageFound: true}, nil
 }
 
 func (t *Tree) initParserFromFiles(ctx context.Context, f files) error {
+	if !f.packageFound {
+		return nil
+	}
+
 	var langFile, highlightsFile, indentsFile, foldsFile, localsFile string
 	for _, file := range f.files {
 		switch filepath.Base(file) {
