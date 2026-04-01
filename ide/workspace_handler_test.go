@@ -530,10 +530,6 @@ func TestCrossWorkspaceOpenRoutingIntegration(t *testing.T) {
 				"no_max_size": false,
 			},
 		}
-		cfg.scheduleNextTick = func(fn func()) bool {
-			fn()
-			return true
-		}
 		m := newTestWorkspaceManagerHandlerWithDir(t, cfg, "", nopShutdownShaderConfig())
 		m.forceSyncCommandPrompt = true
 

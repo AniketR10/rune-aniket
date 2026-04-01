@@ -362,9 +362,9 @@ func TestPackageManagerIntegration(t *testing.T) {
 			`┌────────────────────────┌─────────────┐
 │                        │ install     │
 ├────────────────────────│ package:    │
+│                        │ document    │
 │                        │ not found   │
 │                        └─────────────┘
-│                                      │
 │                                      │
 │          workspaceWallpaper          │
 │                                      │
