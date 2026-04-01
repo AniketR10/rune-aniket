@@ -29,6 +29,7 @@ import (
 	"fmt"
 	"math"
 	"strconv"
+	"strings"
 	"unicode"
 
 	log "github.com/sirupsen/logrus"
@@ -113,6 +114,9 @@ type viHandlerImpl struct {
 	setLocations     bool
 	countDigits      string
 	count            int
+
+	pasteBuf     strings.Builder
+	pasteStarted bool
 }
 
 type statusBar interface {
@@ -1443,6 +1447,30 @@ func (vi *viHandlerImpl) Selection() (string, bool) {
 func (vi *viHandlerImpl) Handle(ev term.Event) (quit, handled bool) {
 	// only a user event clears a pending set cursor
 	vi.pendingSetCursor = nil
+
+	switch ev.Type {
+	case term.EventPasteStart:
+		vi.pasteBuf.Reset()
+		vi.pasteStarted = true
+		handled = true
+		return
+	case term.EventPasteEnd:
+		str := vi.pasteBuf.String()
+		vi.pasteStarted = false
+		if vi.mode() == insertMode && len(str) > 0 {
+			vi.cursor.InsertString(str)
+		}
+		handled = true
+		return
+	}
+
+	if vi.pasteStarted {
+		if ev.Ch != 0 {
+			vi.pasteBuf.WriteRune(ev.Ch)
+		}
+		handled = true
+		return
+	}
 
 	mode := vi.mode()
 	defer vi.doneHandle(mode)

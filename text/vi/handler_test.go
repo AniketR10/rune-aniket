@@ -24,6 +24,7 @@
 package vi
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"strconv"
@@ -3458,6 +3459,90 @@ func TestScreenRelativeMotions(t *testing.T) {
 			}})
 		})
 	}
+}
+
+func TestPasteBatching(t *testing.T) {
+	t.Run("insert mode batches paste into single edit", func(t *testing.T) {
+		vi := setupVi(t, "hello\nworld", 2)
+		vi.Resize(40, 10)
+
+		// Enter insert mode
+		vi.Handle(term.Event{Type: term.EventKey, Ch: 'i'})
+		require.Equal(t, insertMode, vi.mode())
+
+		// Track edits via a subscriber
+		editCount := 0
+		vi.less.Buffer().Subscribe(&editCounter{count: &editCount})
+
+		// Send paste sequence: PasteStart → characters → PasteEnd
+		_, handled := vi.Handle(term.Event{Type: term.EventPasteStart})
+		assert.True(t, handled, "PasteStart should be handled")
+
+		pasteText := "PASTED"
+		for _, ch := range pasteText {
+			_, handled = vi.Handle(term.Event{Type: term.EventKey, Ch: ch})
+			assert.True(t, handled, "characters during paste should be handled")
+		}
+
+		// No edits should have happened yet (characters are buffered)
+		assert.Equal(t, 0, editCount, "no edits should happen during paste buffering")
+
+		_, handled = vi.Handle(term.Event{Type: term.EventPasteEnd})
+		assert.True(t, handled, "PasteEnd should be handled")
+
+		// Exactly one edit should have happened
+		assert.Equal(t, 1, editCount, "paste should result in exactly one edit")
+
+		// Verify the buffer content
+		assert.Equal(t, "PASTEDhello\nworld", vi.less.Buffer().String())
+	})
+
+	t.Run("normal mode paste is consumed without inserting", func(t *testing.T) {
+		vi := setupVi(t, "hello\nworld", 2)
+		vi.Resize(40, 10)
+
+		require.Equal(t, normalMode, vi.mode())
+
+		_, handled := vi.Handle(term.Event{Type: term.EventPasteStart})
+		assert.True(t, handled)
+
+		for _, ch := range "PASTED" {
+			_, handled = vi.Handle(term.Event{Type: term.EventKey, Ch: ch})
+			assert.True(t, handled)
+		}
+
+		_, handled = vi.Handle(term.Event{Type: term.EventPasteEnd})
+		assert.True(t, handled)
+
+		// Buffer should be unchanged (paste in normal mode does not insert)
+		assert.Equal(t, "hello\nworld", vi.less.Buffer().String())
+	})
+
+	t.Run("paste with newlines", func(t *testing.T) {
+		vi := setupVi(t, "AB", 2)
+		vi.Resize(40, 10)
+
+		// Enter insert mode
+		vi.Handle(term.Event{Type: term.EventKey, Ch: 'i'})
+
+		vi.Handle(term.Event{Type: term.EventPasteStart})
+		for _, ch := range "line1\nline2\n" {
+			vi.Handle(term.Event{Type: term.EventKey, Ch: ch})
+		}
+		vi.Handle(term.Event{Type: term.EventPasteEnd})
+
+		assert.Equal(t, "line1\nline2\nAB", vi.less.Buffer().String())
+	})
+}
+
+// editCounter counts the number of OnDidEdit calls.
+type editCounter struct {
+	count *int
+}
+
+func (c *editCounter) OnWillEdit(_ context.Context, _, _ term.Coordinates, _ string) {}
+func (c *editCounter) OnDidEdit(_ context.Context, _, _ term.Coordinates, _ string) {
+	*c.count++
 }
 
 func TestScreenRelativeMotionsWrap(t *testing.T) {
