@@ -485,6 +485,11 @@ func (b *AltBuffer) Selection() (cells [][]term.Cell, ok bool) {
 		cells, _, ok = b.Cells.Select(from, to)
 	case text.LineSelection:
 		cells, _, ok = b.Cells.SelectLine(from, to)
+		if ok {
+			// Append an empty row so CellsToString produces a trailing
+			// newline, matching line-selection copy/paste semantics.
+			cells = append(cells, []term.Cell{})
+		}
 	default:
 	}
 

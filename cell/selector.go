@@ -91,8 +91,6 @@ func (s *selector) selectLine(from term.Coordinates, to term.Coordinates) (
 		res = append(res, cells)
 		sels = append(sels, Selection{From: from, To: to})
 	})
-	// NOTE: adding a line at the end should be moved to paste line
-	res = append(res, make([]term.Cell, 0))
 	return
 }
 

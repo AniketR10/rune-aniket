@@ -908,6 +908,487 @@ func TestViToggleCase(t *testing.T) {
 	})
 }
 
+func TestViCaseChangeOperators(t *testing.T) {
+	type testCase struct {
+		name          string
+		content       string
+		events        string
+		expectContent string
+		expectMode    viMode
+	}
+
+	suite := []testCase{
+		// ===== gu (lowercase) with motions =====
+		{"guw lowercases a word", "Hello World", "guw", "hello World", normalMode},
+		{"gu$ lowercases to end of line", "Hello WORLD", "gu$", "hello world", normalMode},
+		{"gue lowercases to end of word", "HELLO World", "gue", "hello World", normalMode},
+		{"guu lowercases whole line", "HELLO WORLD", "guu", "hello world", normalMode},
+		{"gub lowercases backward word", "Hello WORLD", "Wgub", "hello wORLD", normalMode},
+		{"guB lowercases backward WORD", "Hello-Two WORLD", "WguB", "hello-two wORLD", normalMode},
+		{"guW lowercases forward WORD", "Hello-World test", "guW", "hello-world test", normalMode},
+		{"guE lowercases to end of WORD", "Hello-World test", "guE", "hello-world test", normalMode},
+		{"gu^ lowercases to first non-blank", "  Hello WORLD", "Wgu^", "  hello WORLD", normalMode},
+		{"gu0 lowercases to start of line", "  Hello WORLD", "Wgu0", "  hello WORLD", normalMode},
+		{"gul lowercases single char", "Hello World", "gul", "hello World", normalMode},
+		{"guh lowercases backward single char (no-op at col 0)", "Hello World", "guh", "Hello World", normalMode},
+		{"guh lowercases backward char from col 1", "HEllo", "lguh", "hello", normalMode},
+		{"guf lowercases to char", "HELLO World", "gufo", "hello world", normalMode},
+
+		// ===== gU (uppercase) with motions =====
+		{"gUw uppercases a word", "hello world", "gUw", "HELLO world", normalMode},
+		{"gU$ uppercases to end of line", "hello world", "gU$", "HELLO WORLD", normalMode},
+		{"gUe uppercases to end of word", "hello world", "gUe", "HELLO world", normalMode},
+		{"gUU uppercases whole line", "hello world", "gUU", "HELLO WORLD", normalMode},
+		{"gUb uppercases backward word", "hello world", "WgUb", "HELLO World", normalMode},
+		{"gUB uppercases backward WORD", "hello-two world", "WgUB", "HELLO-TWO World", normalMode},
+		{"gUW uppercases forward WORD", "hello-world test", "gUW", "HELLO-WORLD test", normalMode},
+		{"gUE uppercases to end of WORD", "hello-world test", "gUE", "HELLO-WORLD test", normalMode},
+		{"gU^ uppercases to first non-blank", "  hello world", "fogU^", "  HELLO world", normalMode},
+		{"gU0 uppercases to start of line", "  hello world", "fogU0", "  HELLO world", normalMode},
+		{"gUl uppercases single char", "hello world", "gUl", "HEllo world", normalMode},
+		{"gUh uppercases backward single char (no-op at col 0)", "hello world", "gUh", "hello world", normalMode},
+		{"gUh uppercases backward char from col 1", "hello", "lgUh", "HEllo", normalMode},
+		{"gUf uppercases to char", "hello world", "gUfo", "HELLO world", normalMode},
+
+		// ===== g~ (toggle case) with motions =====
+		{"g~w toggles case of a word", "Hello World", "g~w", "hELLO World", normalMode},
+		{"g~$ toggles case to end of line", "Hello World", "g~$", "hELLO wORLD", normalMode},
+		{"g~e toggles case to end of word", "Hello World", "g~e", "hELLO World", normalMode},
+		{"g~~ toggles case of whole line", "Hello World", "g~~", "hELLO wORLD", normalMode},
+		{"g~b toggles backward word", "Hello World", "Wg~b", "hELLO world", normalMode},
+		{"g~W toggles forward WORD", "Hello-World Test", "g~W", "hELLO-wORLD Test", normalMode},
+		{"g~E toggles to end of WORD", "Hello-World Test", "g~E", "hELLO-wORLD Test", normalMode},
+		{"g~l toggles single char", "Hello World", "g~l", "hEllo World", normalMode},
+		{"g~h toggles backward single char (no-op at col 0)", "Hello World", "g~h", "Hello World", normalMode},
+		{"g~h toggles backward char from col 1", "Hello", "lg~h", "hEllo", normalMode},
+
+		// ===== Text objects — inner/around word =====
+		{"guiw lowercases inner word", "Hello WORLD Test", "guiw", "hello WORLD Test", normalMode},
+		{"gUiw uppercases inner word", "hello world test", "gUiw", "HELLO world test", normalMode},
+		{"g~iw toggles case of inner word", "Hello WORLD Test", "g~iw", "hELLO WORLD Test", normalMode},
+		{"guaw lowercases around word", "Hello WORLD Test", "guaw", "hello WORLD Test", normalMode},
+		{"gUaw uppercases around word", "hello world test", "gUaw", "HELLO world test", normalMode},
+		{"g~aw toggles around word", "Hello WORLD Test", "g~aw", "hELLO WORLD Test", normalMode},
+
+		// ===== Text objects — inner/around WORD =====
+		{"guiW lowercases inner WORD", "Hello-World Test", "guiW", "hello-world Test", normalMode},
+		{"gUiW uppercases inner WORD", "hello-world test", "gUiW", "HELLO-WORLD test", normalMode},
+		{"g~iW toggles inner WORD", "Hello-World Test", "g~iW", "hELLO-wORLD Test", normalMode},
+		{"guaW lowercases around WORD", "Hello-World Test", "guaW", "hello-world Test", normalMode},
+
+		// ===== Text objects — quotes =====
+		{"gui\" lowercases inner double quotes", `say "HELLO WORLD" now`, "fHgui\"", `say "hello world" now`, normalMode},
+		{"gUi\" uppercases inner double quotes", `say "hello world" now`, "fhgUi\"", `say "HELLO WORLD" now`, normalMode},
+		{"g~i\" toggles inner double quotes", `say "Hello World" now`, "fHg~i\"", `say "hELLO wORLD" now`, normalMode},
+		{"gua\" lowercases around double quotes", `say "HELLO WORLD" now`, "fHgua\"", `say "hello world" now`, normalMode},
+		{"gui' lowercases inner single quotes", "say 'HELLO' now", "fHgui'", "say 'hello' now", normalMode},
+		{"gui` lowercases inner backtick", "say `HELLO` now", "fHgui`", "say `hello` now", normalMode},
+
+		// ===== Text objects — parentheses/blocks =====
+		{"guib lowercases inner parens", "call(HELLO, WORLD)", "f(guib", "call(hello, world)", normalMode},
+		{"gUib uppercases inner parens", "call(hello, world)", "f(gUib", "call(HELLO, WORLD)", normalMode},
+		{"guab lowercases around parens", "call(HELLO, WORLD)", "f(guab", "call(hello, world)", normalMode},
+		{"gui) lowercases inner parens alias", "call(HELLO, WORLD)", "f(gui)", "call(hello, world)", normalMode},
+		{"gui( lowercases inner parens alias 2", "call(HELLO, WORLD)", "f(gui(", "call(hello, world)", normalMode},
+
+		// ===== Text objects — braces =====
+		{"guiB lowercases inner braces", "fn{HELLO WORLD}", "f{guiB", "fn{hello world}", normalMode},
+		{"gUiB uppercases inner braces", "fn{hello world}", "f{gUiB", "fn{HELLO WORLD}", normalMode},
+		{"guaB lowercases around braces", "fn{HELLO WORLD}", "f{guaB", "fn{hello world}", normalMode},
+
+		// ===== Text objects — brackets =====
+		{"gui[ lowercases inner brackets", "arr[HELLO]", "f[gui[", "arr[hello]", normalMode},
+		{"gUi[ uppercases inner brackets", "arr[hello]", "f[gUi[", "arr[HELLO]", normalMode},
+
+		// ===== Text objects — angle brackets =====
+		{"guit lowercases inner angle", "a <HELLO> b", "f<guit", "a <hello> b", normalMode},
+		{"gUit uppercases inner angle", "a <hello> b", "f<gUit", "a <HELLO> b", normalMode},
+
+		// ===== g-sub motions (ge, gE) =====
+		{"guge lowercases from cursor to end of previous word", "HELLO WORLD", "Wguge", "HELLo wORLD", normalMode},
+		{"gUge uppercases from cursor to end of previous word", "hello world", "WgUge", "hellO World", normalMode},
+		{"g~ge toggles from cursor to end of previous word", "Hello World", "Wg~ge", "HellO world", normalMode},
+		{"gugE lowercases from cursor to end of previous WORD", "HELLO-TWO WORLD", "WgugE", "HELLO-TWo wORLD", normalMode},
+		{"gUgE uppercases from cursor to end of previous WORD", "hello-two world", "WgUgE", "hello-twO World", normalMode},
+		{"g~gE toggles from cursor to end of previous WORD", "Hello-Two World", "Wg~gE", "Hello-TwO world", normalMode},
+
+		// ===== Whole-line double forms =====
+		{"guu on already lowercase line is no-op", "hello world", "guu", "hello world", normalMode},
+		{"gUU on already uppercase line is no-op", "HELLO WORLD", "gUU", "HELLO WORLD", normalMode},
+		{"g~~ on single char line", "A", "g~~", "a", normalMode},
+		{"guu on single char line", "A", "guu", "a", normalMode},
+		{"gUU on single char line", "a", "gUU", "A", normalMode},
+
+		// ===== Cursor positioning before operator =====
+		{"guw from middle of word lowercases from cursor forward", "HELLO", "llguw", "HEllO", normalMode},
+		{"gUw from middle of word uppercases from cursor forward", "hello", "llgUw", "heLLo", normalMode},
+		{"g~w from middle of word toggles from cursor forward", "Hello", "llg~w", "HeLLo", normalMode},
+		{"gue from middle of word lowercases to end of word", "HELLO WORLD", "llgue", "HEllo WORLD", normalMode},
+		{"gu$ from middle of line lowercases to end", "HELLO WORLD", "llgu$", "HEllo world", normalMode},
+		{"gU$ from middle of line uppercases to end", "hello world", "llgU$", "heLLO WORLD", normalMode},
+
+		// ===== Multiline =====
+		{"guj lowercases two lines", "HELLO\nWORLD", "guj", "hello\nworld", normalMode},
+		{"gUj uppercases two lines", "hello\nworld", "gUj", "HELLO\nWORLD", normalMode},
+		{"g~j toggles two lines", "Hello\nWorld", "g~j", "hELLO\nwORLD", normalMode},
+		{"guk lowercases upward to previous line", "HELLO\nWORLD", "jguk", "hello\nworld", normalMode},
+		{"gUk uppercases upward to previous line", "hello\nworld", "jgUk", "HELLO\nWORLD", normalMode},
+		{"guu on first line of multiline only affects first line", "HELLO\nWORLD", "guu", "hello\nWORLD", normalMode},
+		{"gUU on second line of multiline only affects that line", "hello\nworld", "jgUU", "hello\nWORLD", normalMode},
+
+		// ===== Empty / whitespace content =====
+		{"guw on whitespace only", "   ", "guw", "   ", normalMode},
+		{"gUU on empty buffer", "", "gUU", "", normalMode},
+		{"guu on empty buffer", "", "guu", "", normalMode},
+		{"g~~ on empty buffer", "", "g~~", "", normalMode},
+
+		// ===== Punctuation / non-alpha characters =====
+		{"guw on punctuation does not change it", "!@#$%^&*", "guw", "!@#$%^&*", normalMode},
+		{"gUw on digits does not change them", "abc123def", "gUw", "ABC123DEf", normalMode},
+		{"guw on mixed alpha-punct word", "Hello!", "guw", "hello!", normalMode},
+		{"g~w on digits mixed", "a1B2c3", "g~w", "A1b2C3", normalMode},
+
+		// ===== Count + operator =====
+		{"2guw lowercases 2 words", "HELLO WORLD TEST", "2guw", "hello WORLD TEST", normalMode},
+		{"2gUw uppercases 2 words", "hello world test", "2gUw", "HELLO world test", normalMode},
+		{"3guw lowercases 3 words (count does not propagate to motion)", "ONE TWO THREE FOUR", "3guw", "one TWO THREE FOUR", normalMode},
+		{"2gUe uppercases word end (count does not propagate)", "hello world test", "2gUe", "HELLO world test", normalMode},
+		{"guj lowercases 2 lines from first line", "HELLO\nWORLD\nTEST", "guj", "hello\nworld\nTEST", normalMode},
+
+		// ===== Visual mode case change =====
+		{"vu then selection lowercases visual", "HELLO WORLD", "vevu", "hello WORLD", normalMode},
+		{"vU then selection uppercases visual", "hello world", "vevU", "HELLO world", normalMode},
+		{"v~ toggles case in visual mode", "Hello World", "vev~", "hELLO World", normalMode},
+		{"V line visual then u lowercases entire line", "HELLO WORLD", "Vu", "hello world", normalMode},
+		{"V line visual then U uppercases entire line", "hello world", "VU", "HELLO WORLD", normalMode},
+
+		// ===== Sentence / paragraph text objects =====
+		{"guis lowercases inner sentence", "HELLO WORLD. BYE NOW.", "guis", "hello world. BYE NOW.", normalMode},
+		{"guip lowercases inner paragraph", "HELLO WORLD", "guip", "hello world", normalMode},
+		{"gUip uppercases inner paragraph", "hello world", "gUip", "HELLO WORLD", normalMode},
+
+		// ===== Edge: line boundaries =====
+		{"gu$ at end of line is single char", "HELLO", "$gu$", "HELLo", normalMode},
+		{"gU$ at end of line is single char", "hello", "$gU$", "hellO", normalMode},
+
+		// ===== Invalid sequences return to normal mode =====
+		{"gu followed by invalid key returns to normal", "HELLO", "guZ", "HELLO", normalMode},
+		{"gU followed by invalid key returns to normal", "hello", "gUZ", "hello", normalMode},
+		{"g~ followed by invalid key returns to normal", "Hello", "g~Z", "Hello", normalMode},
+	}
+
+	for _, tcase := range suite {
+		t.Run(tcase.name, func(t *testing.T) {
+			vi := setupVi(t, tcase.content, 2)
+			vi.Resize(40, 10)
+
+			for _, ch := range tcase.events {
+				vi.Handle(term.Event{Type: term.EventKey, Ch: ch})
+			}
+
+			assert.Equal(t, tcase.expectContent, vi.less.Buffer().String())
+			assert.Equal(t, tcase.expectMode, vi.mode())
+		})
+	}
+}
+
+func TestViCaseChangeTextObjects(t *testing.T) {
+	type caseChangeTextObjectCase struct {
+		name       string
+		content    string
+		at         *term.Coordinates
+		seq        string
+		wantBuffer string
+		wantMode   viMode
+		wantCursor *term.Coordinates
+	}
+
+	run := func(t *testing.T, tc caseChangeTextObjectCase) {
+		t.Helper()
+		vi := setupVi(t, tc.content, 2)
+		vi.Resize(80, 10)
+		if tc.at != nil {
+			vi.setCursorAtScroll(*tc.at)
+		}
+		for _, event := range tc.seq {
+			vi.Handle(term.Event{Type: term.EventKey, Ch: event})
+		}
+		if tc.wantBuffer != "" || tc.content == "" {
+			assert.Equal(t, tc.wantBuffer, vi.less.Buffer().String())
+		}
+		assert.Equal(t, tc.wantMode, vi.mode())
+		if tc.wantCursor != nil {
+			assert.Equal(t, *tc.wantCursor, vi.cursor.CursorAtScroll())
+		}
+	}
+
+	for _, tc := range []caseChangeTextObjectCase{
+		// inner word
+		{
+			name:       "guiw lowercases inner word at start",
+			content:    "HELLO world",
+			seq:        "guiw",
+			wantBuffer: "hello world",
+			wantMode:   normalMode,
+			wantCursor: &term.Coordinates{X: 0, Y: 0},
+		},
+		{
+			name:       "gUiw uppercases inner word in middle",
+			content:    "one two three",
+			at:         &term.Coordinates{X: 4, Y: 0},
+			seq:        "gUiw",
+			wantBuffer: "one TWO three",
+			wantMode:   normalMode,
+			wantCursor: &term.Coordinates{X: 4, Y: 0},
+		},
+		{
+			name:       "g~iw toggles inner word at end",
+			content:    "one two Three",
+			at:         &term.Coordinates{X: 10, Y: 0},
+			seq:        "g~iw",
+			wantBuffer: "one two tHREE",
+			wantMode:   normalMode,
+			wantCursor: &term.Coordinates{X: 8, Y: 0},
+		},
+		// around word
+		{
+			name:       "guaw lowercases around word",
+			content:    "ONE TWO THREE",
+			at:         &term.Coordinates{X: 4, Y: 0},
+			seq:        "guaw",
+			wantBuffer: "ONE two THREE",
+			wantMode:   normalMode,
+			wantCursor: &term.Coordinates{X: 4, Y: 0},
+		},
+		// inner quotes
+		{
+			name:       "gui\" lowercases content inside double quotes",
+			content:    `say "HELLO WORLD" now`,
+			at:         &term.Coordinates{X: 5, Y: 0},
+			seq:        "gui\"",
+			wantBuffer: `say "hello world" now`,
+			wantMode:   normalMode,
+		},
+		{
+			name:       "gUi' uppercases content inside single quotes",
+			content:    "say 'hello world' now",
+			at:         &term.Coordinates{X: 5, Y: 0},
+			seq:        "gUi'",
+			wantBuffer: "say 'HELLO WORLD' now",
+			wantMode:   normalMode,
+		},
+		// inner parens
+		{
+			name:       "guib lowercases inside parentheses",
+			content:    "fn(ABC, DEF)",
+			at:         &term.Coordinates{X: 3, Y: 0},
+			seq:        "guib",
+			wantBuffer: "fn(abc, def)",
+			wantMode:   normalMode,
+		},
+		{
+			name:       "gUi) uppercases inside parentheses",
+			content:    "fn(abc, def)",
+			at:         &term.Coordinates{X: 3, Y: 0},
+			seq:        "gUi)",
+			wantBuffer: "fn(ABC, DEF)",
+			wantMode:   normalMode,
+		},
+		// inner braces
+		{
+			name:       "guiB lowercases inside braces",
+			content:    "fn{ABC DEF}",
+			at:         &term.Coordinates{X: 3, Y: 0},
+			seq:        "guiB",
+			wantBuffer: "fn{abc def}",
+			wantMode:   normalMode,
+		},
+		// inner brackets
+		{
+			name:       "gui[ lowercases inside brackets",
+			content:    "arr[ABC]",
+			at:         &term.Coordinates{X: 4, Y: 0},
+			seq:        "gui[",
+			wantBuffer: "arr[abc]",
+			wantMode:   normalMode,
+		},
+		// inner angle brackets
+		{
+			name:       "guit lowercases inside angle brackets",
+			content:    "tag <ABC> end",
+			at:         &term.Coordinates{X: 5, Y: 0},
+			seq:        "guit",
+			wantBuffer: "tag <abc> end",
+			wantMode:   normalMode,
+		},
+		// around quotes
+		{
+			name:       "gua\" lowercases around double quotes",
+			content:    `say "HELLO" now`,
+			at:         &term.Coordinates{X: 5, Y: 0},
+			seq:        "gua\"",
+			wantBuffer: `say "hello" now`,
+			wantMode:   normalMode,
+		},
+		// around parens
+		{
+			name:       "guab lowercases around parens",
+			content:    "fn(ABC, DEF)",
+			at:         &term.Coordinates{X: 3, Y: 0},
+			seq:        "guab",
+			wantBuffer: "fn(abc, def)",
+			wantMode:   normalMode,
+		},
+		// empty quotes - no change
+		{
+			name:       "gui\" on empty quotes is no-op",
+			content:    `say "" now`,
+			at:         &term.Coordinates{X: 4, Y: 0},
+			seq:        "gui\"",
+			wantBuffer: `say "" now`,
+			wantMode:   normalMode,
+		},
+		// empty parens - no change
+		{
+			name:       "guib on empty parens is no-op",
+			content:    "fn()",
+			at:         &term.Coordinates{X: 2, Y: 0},
+			seq:        "guib",
+			wantBuffer: "fn()",
+			wantMode:   normalMode,
+		},
+		// inner WORD
+		{
+			name:       "guiW lowercases inner WORD including punctuation",
+			content:    "ONE-TWO three",
+			seq:        "guiW",
+			wantBuffer: "one-two three",
+			wantMode:   normalMode,
+			wantCursor: &term.Coordinates{X: 0, Y: 0},
+		},
+		// cursor on second line
+		{
+			name:       "gUiw on second line uppercases word there",
+			content:    "hello\nworld",
+			at:         &term.Coordinates{X: 0, Y: 1},
+			seq:        "gUiw",
+			wantBuffer: "hello\nWORLD",
+			wantMode:   normalMode,
+			wantCursor: &term.Coordinates{X: 0, Y: 1},
+		},
+		// invalid text object key returns to normal mode
+		{
+			name:       "guiz invalid text object returns normal mode",
+			content:    "HELLO WORLD",
+			seq:        "guiz",
+			wantBuffer: "HELLO WORLD",
+			wantMode:   normalMode,
+		},
+		// retarget: i then a
+		{
+			name:       "guia retargets from inner to around",
+			content:    "ONE TWO THREE",
+			at:         &term.Coordinates{X: 4, Y: 0},
+			seq:        "guiaw",
+			wantBuffer: "ONE two THREE",
+			wantMode:   normalMode,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			run(t, tc)
+		})
+	}
+}
+
+func TestViCaseChangeSnapshots(t *testing.T) {
+	const (
+		width  = 30
+		height = 5
+	)
+
+	newVi := func(t *testing.T, content string) tui.Handler {
+		t.Helper()
+		return setupViIntegration(t, content, 2)
+	}
+
+	t.Run("gu motions sequential", func(t *testing.T) {
+		cases := []handlertest.SequenceTestCase{
+			{InputSequence: "guw", Expected: "hello▐World                   \n                              \n                              \n                              \n                        NORMAL"},
+			{InputSequence: "Wgue", Expected: "hello worl▐                   \n                              \n                              \n                              \n                        NORMAL"},
+		}
+		handlertest.RunHandlerSequence(t, newVi(t, "Hello World"), width, height, cases)
+	})
+
+	t.Run("gU motions sequential", func(t *testing.T) {
+		cases := []handlertest.SequenceTestCase{
+			{InputSequence: "gUw", Expected: "HELLO▐world                   \n                              \n                              \n                              \n                        NORMAL"},
+			{InputSequence: "WgUe", Expected: "HELLO WORL▐                   \n                              \n                              \n                              \n                        NORMAL"},
+		}
+		handlertest.RunHandlerSequence(t, newVi(t, "hello world"), width, height, cases)
+	})
+
+	t.Run("g~ motions sequential", func(t *testing.T) {
+		cases := []handlertest.SequenceTestCase{
+			{InputSequence: "g~w", Expected: "hELLO▐World                   \n                              \n                              \n                              \n                        NORMAL"},
+			{InputSequence: "Wg~$", Expected: "hELLO wORL▐                   \n                              \n                              \n                              \n                        NORMAL"},
+		}
+		handlertest.RunHandlerSequence(t, newVi(t, "Hello World"), width, height, cases)
+	})
+
+	t.Run("whole line operators", func(t *testing.T) {
+		fn := func(t *testing.T) tui.Handler {
+			return newVi(t, "Hello World")
+		}
+		cases := []handlertest.SequenceTestCase{
+			{InputSequence: "guu", Expected: "hello worl▐                   \n                              \n                              \n                              \n                        NORMAL"},
+			{InputSequence: "gUU", Expected: "HELLO WORL▐                   \n                              \n                              \n                              \n                        NORMAL"},
+			{InputSequence: "g~~", Expected: "hELLO wORL▐                   \n                              \n                              \n                              \n                        NORMAL"},
+		}
+		handlertest.RunHandlerIsolated(t, fn, width, height, cases)
+	})
+
+	t.Run("case change with text objects", func(t *testing.T) {
+		fn := func(t *testing.T) tui.Handler {
+			return newVi(t, `say "HELLO WORLD" now`)
+		}
+		cases := []handlertest.SequenceTestCase{
+			{InputSequence: "fHgui\"", Expected: "say \"▐ello world\" now         \n                              \n                              \n                              \n                        NORMAL"},
+			{InputSequence: "fhg~i\"", Expected: "▐ay \"HELLO WORLD\" now         \n                              \n                              \n                              \n                        NORMAL"},
+		}
+		handlertest.RunHandlerIsolated(t, fn, width, height, cases)
+	})
+
+	t.Run("case change with ge motion", func(t *testing.T) {
+		cases := []handlertest.SequenceTestCase{
+			{InputSequence: "$", Expected: "ONE TWO-THREE,FOU▐            \n                              \n                              \n                              \n                        NORMAL"},
+			{InputSequence: "guge", Expected: "ONE TWO-THREE▐four            \n                              \n                              \n                              \n                        NORMAL"},
+		}
+		handlertest.RunHandlerSequence(t, newVi(t, "ONE TWO-THREE,FOUR"), width, height, cases)
+	})
+
+	t.Run("case change multiline", func(t *testing.T) {
+		fn := func(t *testing.T) tui.Handler {
+			return newVi(t, "Hello\nWorld")
+		}
+		cases := []handlertest.SequenceTestCase{
+			{InputSequence: "guj", Expected: "hello                         \n▐orld                         \n                              \n                              \n                        NORMAL"},
+		}
+		handlertest.RunHandlerIsolated(t, fn, width, height, cases)
+	})
+
+	t.Run("visual mode case change", func(t *testing.T) {
+		fn := func(t *testing.T) tui.Handler {
+			return newVi(t, "Hello World")
+		}
+		cases := []handlertest.SequenceTestCase{
+			{InputSequence: "veu", Expected: "hell▐ World                   \n                              \n                              \n                              \n                        NORMAL"},
+			{InputSequence: "veU", Expected: "HELL▐ World                   \n                              \n                              \n                              \n                        NORMAL"},
+			{InputSequence: "ve~", Expected: "hELL▐ World                   \n                              \n                              \n                              \n                        NORMAL"},
+		}
+		handlertest.RunHandlerIsolated(t, fn, width, height, cases)
+	})
+}
+
 func TestViCount(t *testing.T) {
 	motions := []rune{'h', 'j', 'k', 'l'}
 	for _, motion := range motions {

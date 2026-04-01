@@ -154,7 +154,7 @@ itsme`
 				}
 			}
 			require.Equal(t, term.CellsToString(tcase.expected), term.CellsToString(selection))
-			assertReturnedCoordinatesSelectSame(t, selector, coords, tcase.expected, false)
+			assertReturnedCoordinatesSelectSame(t, selector, coords, tcase.expected)
 		})
 	}
 }
@@ -169,7 +169,6 @@ func TestSelectLine(t *testing.T) {
 			to:   term.Coordinates{X: 1, Y: 0},
 			expected: [][]term.Cell{
 				{{Ch: 'h'}, {Ch: 'e'}, {Ch: 'l'}, {Ch: 'l'}, {Ch: 'o'}},
-				{},
 			},
 		},
 		{
@@ -177,7 +176,6 @@ func TestSelectLine(t *testing.T) {
 			to:   term.Coordinates{X: 4, Y: 0},
 			expected: [][]term.Cell{
 				{{Ch: 'h'}, {Ch: 'e'}, {Ch: 'l'}, {Ch: 'l'}, {Ch: 'o'}},
-				{},
 			},
 		},
 		{
@@ -186,7 +184,6 @@ func TestSelectLine(t *testing.T) {
 			expected: [][]term.Cell{
 				{{Ch: 'h'}, {Ch: 'e'}, {Ch: 'l'}, {Ch: 'l'}, {Ch: 'o'}},
 				{{Ch: '\t'}, {Ch: 'w'}, {Ch: 'o'}, {Ch: 'r'}, {Ch: 'l'}, {Ch: 'd'}},
-				{},
 			},
 		},
 		{
@@ -196,7 +193,6 @@ func TestSelectLine(t *testing.T) {
 				{{Ch: 'h'}, {Ch: 'e'}, {Ch: 'l'}, {Ch: 'l'}, {Ch: 'o'}},
 				{{Ch: '\t'}, {Ch: 'w'}, {Ch: 'o'}, {Ch: 'r'}, {Ch: 'l'}, {Ch: 'd'}},
 				{},
-				{},
 			},
 		},
 		{
@@ -205,7 +201,6 @@ func TestSelectLine(t *testing.T) {
 			expected: [][]term.Cell{
 				{{Ch: 'h'}, {Ch: 'e'}, {Ch: 'l'}, {Ch: 'l'}, {Ch: 'o'}},
 				{{Ch: '\t'}, {Ch: 'w'}, {Ch: 'o'}, {Ch: 'r'}, {Ch: 'l'}, {Ch: 'd'}},
-				{},
 				{},
 			},
 		},
@@ -217,7 +212,6 @@ func TestSelectLine(t *testing.T) {
 				{{Ch: '\t'}, {Ch: 'w'}, {Ch: 'o'}, {Ch: 'r'}, {Ch: 'l'}, {Ch: 'd'}},
 				{},
 				{{Ch: 'i'}, {Ch: 't'}, {Ch: 's'}, {Ch: 'm'}, {Ch: 'e'}},
-				{},
 			},
 		},
 		{
@@ -225,7 +219,6 @@ func TestSelectLine(t *testing.T) {
 			to:   term.Coordinates{X: 0, Y: 1},
 			expected: [][]term.Cell{
 				{{Ch: '\t'}, {Ch: 'w'}, {Ch: 'o'}, {Ch: 'r'}, {Ch: 'l'}, {Ch: 'd'}},
-				{},
 			},
 		},
 		{
@@ -233,14 +226,12 @@ func TestSelectLine(t *testing.T) {
 			to:   term.Coordinates{X: 0, Y: 3},
 			expected: [][]term.Cell{
 				{{Ch: 'i'}, {Ch: 't'}, {Ch: 's'}, {Ch: 'm'}, {Ch: 'e'}},
-				{},
 			},
 		},
 		{
 			from: term.Coordinates{X: 0, Y: 2},
 			to:   term.Coordinates{X: 0, Y: 2},
 			expected: [][]term.Cell{
-				{},
 				{},
 			},
 		},
@@ -257,7 +248,7 @@ func TestSelectLine(t *testing.T) {
 				}
 			}
 			require.Equal(t, term.CellsToString(tcase.expected), term.CellsToString(selection))
-			assertReturnedCoordinatesSelectSame(t, selector, coords, tcase.expected, true)
+			assertReturnedCoordinatesSelectSame(t, selector, coords, tcase.expected)
 		})
 	}
 }
@@ -326,7 +317,7 @@ func TestSelectBlock(t *testing.T) {
 				}
 			}
 			require.Equal(t, term.CellsToString(tcase.expected), term.CellsToString(selection), i)
-			assertReturnedCoordinatesSelectSame(t, selector, coords, tcase.expected, false)
+			assertReturnedCoordinatesSelectSame(t, selector, coords, tcase.expected)
 		})
 	}
 }
@@ -334,7 +325,6 @@ func TestSelectBlock(t *testing.T) {
 func assertReturnedCoordinatesSelectSame(
 	t *testing.T, selector selector,
 	coords []Selection, expected [][]term.Cell,
-	isLine bool,
 ) {
 	t.Helper()
 	var selectedSelection [][]term.Cell
@@ -345,12 +335,5 @@ func assertReturnedCoordinatesSelectSame(
 		assert.Equal(t, coords, actualCoords[0])
 		selectedSelection = append(selectedSelection, cells...)
 	}
-	expect := term.CellsToString(expected)
-	// line selection always appends a newline at the end
-	// it should be the line paste that adds it, rather than the selection
-	// but for now this is needed for this assertion
-	if isLine {
-		expect = string(expect[:len(expect)-1])
-	}
-	assert.Equal(t, expect, term.CellsToString(selectedSelection))
+	assert.Equal(t, term.CellsToString(expected), term.CellsToString(selectedSelection))
 }

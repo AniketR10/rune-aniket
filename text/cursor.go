@@ -2115,7 +2115,11 @@ func (c *Cursor) Unselect() bool {
 
 // Selection returns the current text under either text, line or block selection.
 func (c *Cursor) Selection() string {
-	return term.CellsToString(c.selection.cells)
+	s := term.CellsToString(c.selection.cells)
+	if c.selection.mode == LineSelection && len(s) > 0 {
+		s += "\n"
+	}
+	return s
 }
 
 // Redo reverses the previously reversed update to the underlying buffer.
@@ -3163,9 +3167,11 @@ func (c *Cursor) selectionOp(fn func(string) string) (ok bool) {
 			c.buffer().Edit(c.ctx, from, to, fn(str))
 		}
 	case LineSelection:
-		cells, _, ok = c.buffer().SelectLine(from, to)
+		cells, sels, ok := c.buffer().SelectLine(from, to)
 		if ok {
-			c.buffer().Edit(c.ctx, from, to, fn(term.CellsToString(cells)))
+			lineFrom := sels[0].From
+			lineTo := sels[len(sels)-1].To
+			c.buffer().Edit(c.ctx, lineFrom, lineTo, fn(term.CellsToString(cells)))
 		}
 	case BlockSelection:
 		ok = false
