@@ -33,11 +33,11 @@ import (
 	"strings"
 
 	"github.com/unstablebuild/blue/iterator"
-	"github.com/unstablebuild/blue/walkdir"
 	sdkiterator "github.com/unstablebuild/rune-go-sdk/iterator"
 	"unstable.build/go-tui/cmd/rune-agent/agent"
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
 	"unstable.build/go-tui/cmd/rune-agent/llm"
+	"unstable.build/go-tui/workspace/walkdir"
 )
 
 // conversationAuditPrefix is the key prefix used for audit entries in

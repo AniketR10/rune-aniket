@@ -24,11 +24,11 @@
 package agentools
 
 import (
-	"github.com/unstablebuild/blue/walkdir"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/cmd/rune-agent/agent"
 	"unstable.build/go-tui/cmd/rune-agent/agent/skills"
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
+	"unstable.build/go-tui/workspace/walkdir"
 )
 
 // Config holds optional configuration for the default tool set.

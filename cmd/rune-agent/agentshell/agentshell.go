@@ -37,7 +37,6 @@ import (
 
 	"github.com/unstablebuild/blue/tui/component/markdown"
 	mdhandler "github.com/unstablebuild/blue/tui/handler/markdown"
-	"github.com/unstablebuild/blue/walkdir"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
@@ -56,6 +55,7 @@ import (
 	"unstable.build/go-tui/cmd/rune-agent/llm"
 	"unstable.build/go-tui/cmd/rune-agent/llm/llmregistry"
 	"unstable.build/go-tui/cmd/rune-agent/mcp"
+	"unstable.build/go-tui/workspace/walkdir"
 )
 
 // ErrExit is a sentinel error returned by the exit command.

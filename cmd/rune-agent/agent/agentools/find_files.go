@@ -32,10 +32,10 @@ import (
 	"strings"
 
 	"github.com/unstablebuild/blue/iterator"
-	"github.com/unstablebuild/blue/walkdir"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/cmd/rune-agent/agent"
 	"unstable.build/go-tui/cmd/rune-agent/llm"
-	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"unstable.build/go-tui/workspace/walkdir"
 )
 
 const maxFindResults = 500
