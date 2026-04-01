@@ -109,10 +109,11 @@ func (m *workspaceRunner) StartCommand(ctx context.Context, cmd workspaceapi.Cmd
 	workspaceapi.Pid, error,
 ) {
 	var err error
-	cmd.Env, err = m.commandEnvs(ctx, cmd.Path, cmd.Args)
+	env, err := m.commandEnvs(ctx, cmd.Path, cmd.Args)
 	if err != nil {
 		return 0, err
 	}
+	cmd.Env = append(cmd.Env, env...)
 	// emulate the same logic as file scheme
 	dir, err := workspaceapi.ExpandPathWithURI(m.workspace.Path(), m.workspace)
 	if err == nil {
