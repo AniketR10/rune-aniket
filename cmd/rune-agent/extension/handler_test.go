@@ -5222,6 +5222,94 @@ func TestAIEditorHandler_chat_agent_reasoning_only_is_visible(t *testing.T) {
 	})
 }
 
+func TestAIEditorHandler_chat_continue_after_truncated_reasoning_only_turn(t *testing.T) {
+	t.Parallel()
+	const partialReasoning = "Let me analyze this step by step..."
+
+	svc := &agentMockService{
+		responses: []agentMockResponse{
+			{
+				reasoningChunks: []string{partialReasoning},
+				finishReason:    llm.FinishReasonLength,
+			},
+			{
+				chunks:       []string{"...doing X and Y."},
+				finishReason: llm.FinishReasonStop,
+			},
+		},
+		validateRequest: func(req llm.Request) error {
+			for _, msg := range req.Messages {
+				if msg.Role == llm.RoleAssistant && msg.Content == "" {
+					return fmt.Errorf(
+						"400: Bad Request: type: invalid_request_error, " +
+							"message: text content blocks must be non-empty")
+				}
+			}
+			return nil
+		},
+	}
+
+	deps := newTestAIEditorHandler(t, svc)
+	flusher := openChatAndGetTab(t, deps)
+	flusher.idleTimeout = 200 * time.Millisecond
+	flusher.maxWait = 1 * time.Second
+
+	handlertest.RunHandlerSequence(t, flusher, e2eWidth, e2eHeight, []handlertest.SequenceTestCase{
+		{
+			InputSequence: "explain<space>this<enter>",
+			Expected: e2eExpected(0,
+				"At high and max/xhigh effort levels,",
+				"models may think more extensively and",
+				"can be more likely to exhaust the",
+				"max_tokens budget. Consider increasing",
+				"max_tokens to give the model more room",
+				"(/max_tokens 64000), or lowering the",
+				"effort level (/effort medium).",
+				"   ┌───────────────────────────────┐",
+				"   │▐                              │",
+				"   └───────────────────────────────┘",
+			),
+		},
+		{
+			InputSequence: "please<space>continue<enter>",
+			Expected: e2eExpected(0,
+				"max_tokens budget. Consider increasing",
+				"max_tokens to give the model more room",
+				"(/max_tokens 64000), or lowering the",
+				"effort level (/effort medium).",
+				"please continue",
+				"...doing X and Y.",
+				"",
+				"   ┌───────────────────────────────┐",
+				"   │▐                              │",
+				"   └───────────────────────────────┘",
+			),
+		},
+	})
+
+	const dialogueID = "default"
+	assertStoredDialogueMessages(t, deps.store, dialogueID, []llm.Message{
+		{Role: llm.RoleSystem, Content: testSystemPromptWithAddendum},
+		{Role: llm.RoleUser, Content: "explain this"},
+		{Role: llm.RoleAssistant, ReasoningContent: partialReasoning},
+		{Role: llm.RoleUser, Content: "please continue"},
+		{Role: llm.RoleAssistant, Content: "...doing X and Y."},
+	})
+
+	reqs := svc.getRequests()
+	require.Len(t, reqs, 2, "expected 2 LLM requests (truncated + continue)")
+
+	var foundPartialAssistant bool
+	for _, msg := range reqs[1].Messages {
+		if msg.Role == llm.RoleAssistant && msg.Content == partialReasoning {
+			foundPartialAssistant = true
+			break
+		}
+	}
+	assert.True(t, foundPartialAssistant,
+		"second LLM request must contain the partial assistant message with reasoning as content")
+}
+
 func TestAIEditorHandler_chat_agent_result_collapsed(t *testing.T) {
 	t.Parallel()
 	// Exercises the collapsed-mode rendering of a successful sub-agent
@@ -9801,123 +9889,6 @@ func TestAIEditorHandler_agent_tool_resolves_skill(t *testing.T) {
 	// body in its system message.
 	assert.Contains(t, reqs[1].Messages[0].Content,
 		"You are a fast, read-only code research specialist.")
-}
-
-// TestAgent_PartialReasoningPreservedOnContinue verifies that when the
-// first LLM response finishes with FinishReasonLength (output truncated)
-// and the assistant message contains only reasoning (no text content),
-// the conversation can still continue. The partial reasoning must be
-// carried forward so the LLM can resume, and the message must not
-// trigger an API rejection for empty text content blocks.
-func TestAgent_PartialReasoningPreservedOnContinue(t *testing.T) {
-	t.Parallel()
-	const partialReasoning = "Let me analyze this step by step..."
-
-	svc := &agentMockService{
-		responses: []agentMockResponse{
-			{
-				reasoningChunks: []string{partialReasoning},
-				// No text chunks — only reasoning was produced before
-				// the output was truncated by FinishReasonLength.
-				finishReason: llm.FinishReasonLength,
-			},
-			{
-				chunks:       []string{"...doing X and Y."},
-				finishReason: llm.FinishReasonStop,
-			},
-		},
-		// Simulate the real API: reject requests that contain
-		// assistant messages with empty text content blocks.
-		validateRequest: func(req llm.Request) error {
-			for _, msg := range req.Messages {
-				if msg.Role == llm.RoleAssistant && msg.Content == "" {
-					return fmt.Errorf(
-						"400: Bad Request: type: invalid_request_error, " +
-							"message: text content blocks must be non-empty")
-				}
-			}
-			return nil
-		},
-	}
-
-	store := newTestDialogueStore(t)
-	registry := agent.NewRegistry()
-	skillReg := skills.NewRegistry(nopFileSystem{}, workspaceapi.URI{}, nil, nil)
-	ag := agent.NewAgent(svc, registry, skillReg, store, agent.NoMemory(), agent.Config{SystemPrompt: "test"})
-
-	spawner := agent.NewGoroutineSpawner(
-		store, func(string) (llm.Service, string, error) { return svc, "test", nil },
-		agent.NewConfig(nil), skillReg,
-		agent.NoMemory(), "", "test", "test",
-	)
-	childEvents := make(chan agent.ChildEvent, 64)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	tx := make(chan dialoguetui.MessageEvent, 50)
-	reqRx := make(chan completionRequest)
-
-	mu := &sync.Mutex{}
-	comp := dialoguetui.NewComponent(dialoguetui.ComponentConfig{})
-	comp.Resize(80, 24)
-	h := &aiEditorHandler{p: term.NopInterrupter()}
-	sc := syncComponent{mu: mu, comp: comp, h: h, hintSlot: &hintSlot{}}
-
-	doneCh := make(chan struct{})
-	go func() {
-		defer close(doneCh)
-		createAgentCompletions(ctx, cancel, tx, reqRx, ag, spawner, childEvents, skillReg, "d", sc, nopNotifications{}, nil)
-	}()
-
-	reqRx <- completionRequest{msg: "explain this", ctx: ctx}
-
-	timeout := time.After(10 * time.Second)
-	sawBreak := false
-	for !sawBreak {
-		select {
-		case ev := <-tx:
-			if ev.Type == dialoguetui.MessageEventBreak {
-				sawBreak = true
-			}
-		case <-timeout:
-			t.Fatal("timed out waiting for first turn completion")
-		}
-	}
-
-	reqRx <- completionRequest{msg: "please continue", ctx: ctx}
-
-	sawBreak = false
-	for !sawBreak {
-		select {
-		case ev := <-tx:
-			if ev.Type == dialoguetui.MessageEventBreak {
-				sawBreak = true
-			}
-		case <-timeout:
-			t.Fatal("timed out waiting for second turn completion")
-		}
-	}
-
-	cancel()
-	<-doneCh
-
-	reqs := svc.getRequests()
-	require.Len(t, reqs, 2, "expected 2 LLM requests (truncated + continue)")
-
-	// The second request must include the partial assistant message with
-	// the reasoning carried forward as non-empty content (since a bare
-	// empty-content assistant message would be rejected by the API).
-	secondReq := reqs[1]
-	var foundPartialAssistant bool
-	for _, msg := range secondReq.Messages {
-		if msg.Role == llm.RoleAssistant && msg.Content == partialReasoning {
-			foundPartialAssistant = true
-			break
-		}
-	}
-	assert.True(t, foundPartialAssistant,
-		"second LLM request must contain the partial assistant message with reasoning as content")
 }
 
 // TestAgent_NormalizeStoredDialogueBeforeLLMCall stores one dialogue per
