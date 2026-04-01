@@ -2811,6 +2811,168 @@ func TestSetNormalModeClearing(t *testing.T) {
 	assert.Equal(t, thandler.LessNormalMode, vi.less.Mode())
 }
 
+func TestViParagraphMotions(t *testing.T) {
+	type paragraphCase struct {
+		name          string
+		content       string
+		at            *term.Coordinates
+		seq           string
+		wantBuffer    string
+		wantMode      viMode
+		wantCursor    *term.Coordinates
+		wantClipboard string
+	}
+
+	run := func(t *testing.T, tc paragraphCase) {
+		t.Helper()
+		vi := setupVi(t, tc.content, 2)
+		vi.Resize(80, 24)
+		if tc.at != nil {
+			vi.setCursorAtScroll(*tc.at)
+		}
+		for _, event := range tc.seq {
+			_, handled := vi.Handle(term.Event{Type: term.EventKey, Ch: event})
+			require.True(t, handled, "sequence %q failed on %q", tc.seq, string(event))
+		}
+		if tc.wantBuffer != "" || tc.content == "" {
+			assert.Equal(t, tc.wantBuffer, vi.less.Buffer().String())
+		}
+		assert.Equal(t, tc.wantMode, vi.mode())
+		if tc.wantCursor != nil {
+			assert.Equal(t, *tc.wantCursor, vi.cursor.CursorAtScroll())
+		}
+		if tc.wantClipboard != "" {
+			paste, err := vi.config.clipboard.Paste(vi.config.defaultRegister)
+			require.NoError(t, err)
+			assert.Equal(t, tc.wantClipboard, paste.Text)
+		}
+	}
+
+	content := "aaa\nbbb\n\nccc\nddd\neee\n\nfff\nggg"
+	// Line layout:
+	//   0: aaa
+	//   1: bbb
+	//   2: (empty)
+	//   3: ccc
+	//   4: ddd
+	//   5: eee
+	//   6: (empty)
+	//   7: fff
+	//   8: ggg
+
+	for _, tc := range []paragraphCase{
+		// --- basic } motion ---
+		{
+			name:       "} from first line moves to first blank line",
+			content:    content,
+			seq:        "}",
+			wantMode:   normalMode,
+			wantCursor: &term.Coordinates{X: 0, Y: 2},
+		},
+		{
+			name:       "} from blank line skips to next blank line",
+			content:    content,
+			at:         &term.Coordinates{Y: 2},
+			seq:        "}",
+			wantMode:   normalMode,
+			wantCursor: &term.Coordinates{X: 0, Y: 6},
+		},
+		{
+			name:       "} from last paragraph goes to last line",
+			content:    content,
+			at:         &term.Coordinates{Y: 7},
+			seq:        "}",
+			wantMode:   normalMode,
+			wantCursor: &term.Coordinates{X: 0, Y: 8},
+		},
+		{
+			name:       "} from last line stays",
+			content:    content,
+			at:         &term.Coordinates{Y: 8},
+			seq:        "}",
+			wantMode:   normalMode,
+			wantCursor: &term.Coordinates{X: 0, Y: 8},
+		},
+		// --- basic { motion ---
+		{
+			name:       "{ from last line moves to last blank line",
+			content:    content,
+			at:         &term.Coordinates{Y: 8},
+			seq:        "{",
+			wantMode:   normalMode,
+			wantCursor: &term.Coordinates{X: 0, Y: 6},
+		},
+		{
+			name:       "{ from blank line skips to prev blank line",
+			content:    content,
+			at:         &term.Coordinates{Y: 6},
+			seq:        "{",
+			wantMode:   normalMode,
+			wantCursor: &term.Coordinates{X: 0, Y: 2},
+		},
+		{
+			name:       "{ from first paragraph goes to first line",
+			content:    content,
+			at:         &term.Coordinates{Y: 1},
+			seq:        "{",
+			wantMode:   normalMode,
+			wantCursor: &term.Coordinates{X: 0, Y: 0},
+		},
+		{
+			name:       "{ from first line stays",
+			content:    content,
+			seq:        "{",
+			wantMode:   normalMode,
+			wantCursor: &term.Coordinates{X: 0, Y: 0},
+		},
+		// --- count support ---
+		{
+			name:       "2} jumps two paragraphs forward",
+			content:    content,
+			seq:        "2}",
+			wantMode:   normalMode,
+			wantCursor: &term.Coordinates{X: 0, Y: 6},
+		},
+		{
+			name:       "2{ jumps two paragraphs backward",
+			content:    content,
+			at:         &term.Coordinates{Y: 8},
+			seq:        "2{",
+			wantMode:   normalMode,
+			wantCursor: &term.Coordinates{X: 0, Y: 2},
+		},
+		// --- operator combos ---
+		{
+			name:          "d} deletes to next paragraph boundary",
+			content:       content,
+			seq:           "d}",
+			wantBuffer:    "ccc\nddd\neee\n\nfff\nggg",
+			wantMode:      normalMode,
+			wantCursor:    &term.Coordinates{X: 0, Y: 0},
+		},
+		{
+			name:          "d{ deletes backward to paragraph boundary",
+			content:       content,
+			at:            &term.Coordinates{Y: 4},
+			seq:           "d{",
+			wantBuffer:    "aaa\nbbb\neee\n\nfff\nggg",
+			wantMode:      normalMode,
+			wantCursor:    &term.Coordinates{X: 0, Y: 2},
+		},
+		{
+			name:          "y} yanks to next paragraph boundary",
+			content:       content,
+			seq:           "y}",
+			wantMode:      normalMode,
+			wantClipboard: "aaa\nbbb\n\n",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			run(t, tc)
+		})
+	}
+}
+
 func setupVi(
 	t *testing.T, text string, tabspaces int, opts ...Option,
 ) *viHandlerImpl {

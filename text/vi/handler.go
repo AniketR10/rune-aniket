@@ -808,6 +808,10 @@ func (vi *viHandlerImpl) handleNormal(ev term.Event) (quit, handled bool) {
 			vi.cursor.MoveLeftStartWord()
 		case 'B':
 			vi.cursor.MoveLeftStartWordGroup()
+		case '{':
+			vi.cursor.MovePrevParagraphs(vi.count)
+		case '}':
+			vi.cursor.MoveNextParagraphs(vi.count)
 		case '?':
 			vi.searchMode = moveToPrev
 			vi.less.Handle(ev)

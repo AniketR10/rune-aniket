@@ -1439,6 +1439,61 @@ func (c *Cursor) SelectAParagraph() bool {
 	return c.selectRange(term.Coordinates{Y: startLine}, c.lineEndCoordinate(endLine))
 }
 
+// MoveNextParagraph moves the cursor forward to the next blank line
+// after a non-blank line (i.e. the next paragraph boundary). Returns
+// true when the cursor actually moved.
+func (c *Cursor) MoveNextParagraph() bool {
+	rows := c.rows()
+	if rows == 0 {
+		return false
+	}
+	y := c.cursorAtScroll().Y
+	// Skip blank lines at the current position.
+	for y < rows && c.isBlankLine(y) {
+		y++
+	}
+	// Skip non-blank lines.
+	for y < rows && !c.isBlankLine(y) {
+		y++
+	}
+	if y >= rows {
+		y = rows - 1
+	}
+	_, ok := c.MoveToScroll(term.Coordinates{Y: y})
+	return ok
+}
+
+// MoveNextParagraphs repeats MoveNextParagraph n times.
+func (c *Cursor) MoveNextParagraphs(n int) bool {
+	return c.multiplyMove(n, c.MoveNextParagraph)
+}
+
+// MovePrevParagraph moves the cursor backward to the blank line before
+// the previous paragraph (i.e. the previous paragraph boundary). Returns
+// true when the cursor actually moved.
+func (c *Cursor) MovePrevParagraph() bool {
+	rows := c.rows()
+	if rows == 0 {
+		return false
+	}
+	y := c.cursorAtScroll().Y
+	// Skip blank lines at the current position.
+	for y > 0 && c.isBlankLine(y) {
+		y--
+	}
+	// Skip non-blank lines.
+	for y > 0 && !c.isBlankLine(y) {
+		y--
+	}
+	_, ok := c.MoveToScroll(term.Coordinates{Y: y})
+	return ok
+}
+
+// MovePrevParagraphs repeats MovePrevParagraph n times.
+func (c *Cursor) MovePrevParagraphs(n int) bool {
+	return c.multiplyMove(n, c.MovePrevParagraph)
+}
+
 func (c *Cursor) sentenceBounds(around bool) (start, end term.Coordinates, ok bool) {
 	pos, ok := c.currentTextObjectCell()
 	if !ok {
