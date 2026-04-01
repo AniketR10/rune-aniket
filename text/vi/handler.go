@@ -792,6 +792,14 @@ func (vi *viHandlerImpl) handleNormal(ev term.Event) (quit, handled bool) {
 		case 's':
 			vi.cursor.Delete()
 			vi.setInsertMode()
+		case 'S':
+			vi.cursor.MoveStartLine()
+			if vi.cursor.Select() {
+				vi.cursor.MoveEndLine()
+				vi.cursor.DeleteSelection()
+				vi.cursor.TryIndent()
+			}
+			vi.setInsertMode()
 		case 'v':
 			vi.setVisualMode()
 			if vi.count > 1 {

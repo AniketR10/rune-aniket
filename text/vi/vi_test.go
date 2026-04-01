@@ -998,6 +998,7 @@ func TestCopyDelete(t *testing.T) {
 		{"does copy text deleted through C", "x", "Ca#", "x"},
 		{"does copy text deleted through c", "x", "cla#", "x"},
 		{"does copy text deleted through cc", "x\ny", "ccz#", "x"},
+		{"does copy text deleted through S", "x\ny", "Sz#", "x"},
 	}
 
 	for _, tcase := range tsuite {

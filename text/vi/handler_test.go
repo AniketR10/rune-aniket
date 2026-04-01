@@ -1028,6 +1028,61 @@ func TestVidd(t *testing.T) {
 	}
 }
 
+func TestViSubstituteLine(t *testing.T) {
+	suite := []struct {
+		name          string
+		content       string
+		events        string
+		expectContent string
+	}{
+		{
+			name:          "S on single line clears and enters insert",
+			content:       "hello world",
+			events:        "S",
+			expectContent: "",
+		},
+		{
+			name:          "S on indented line clears content",
+			content:       "    indented line",
+			events:        "S",
+			expectContent: "",
+		},
+		{
+			name:          "S on middle line only affects current line",
+			content:       "aaa\nbbb\nccc",
+			events:        "jS",
+			expectContent: "aaa\n\nccc",
+		},
+		{
+			name:          "S then type replacement text",
+			content:       "old text\nsecond line",
+			events:        "Snew text",
+			expectContent: "new text\nsecond line",
+		},
+		{
+			name:          "S behaves same as cc",
+			content:       "hello world\nsecond line",
+			events:        "Sreplaced",
+			expectContent: "replaced\nsecond line",
+		},
+	}
+
+	for _, tcase := range suite {
+		t.Run(tcase.name, func(t *testing.T) {
+			vi := setupVi(t, tcase.content, 2)
+			vi.Resize(20, 9)
+			vi.Draw(term.NoopWriter{})
+
+			for _, eventChar := range tcase.events {
+				vi.Handle(term.Event{Type: term.EventKey, Ch: eventChar})
+			}
+
+			assert.Equal(t, tcase.expectContent, vi.less.Buffer().String())
+			assert.Equal(t, insertMode, vi.mode())
+		})
+	}
+}
+
 func TestLocationMessage(t *testing.T) {
 	cases := []handlertest.SequenceTestCase{
 		{"j",
