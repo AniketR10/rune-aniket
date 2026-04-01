@@ -31,9 +31,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/unstablebuild/blue/tui/component/markdown"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"unstable.build/go-tui/component/markdown"
 )
 
 // mouseEv builds a mouse term.Event for the given position and key.
@@ -777,6 +777,7 @@ func TestHandlerMouseSelectionFullConfigScrolled(t *testing.T) {
 //	Screen Y=5, X=20: "alpha"
 //	Screen Y=7, X=20: "bravo"
 //	Screen Y=9, X=20: "charlie"
+//
 // TestHandlerInputBoxSelection verifies that Selection() returns the
 // inputbox's selected text when the inputbox has an active selection,
 // and that focus transitions between the inputbox and messages area

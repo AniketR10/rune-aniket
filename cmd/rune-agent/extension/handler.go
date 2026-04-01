@@ -41,8 +41,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/unstablebuild/blue/tui/component/markdown"
-	mdhandler "github.com/unstablebuild/blue/tui/handler/markdown"
 	"unstable.build/go-tui/cmd/rune-agent/agent"
 	"unstable.build/go-tui/cmd/rune-agent/agent/agentools"
 	"unstable.build/go-tui/cmd/rune-agent/agent/agentools/webfetch"
@@ -76,6 +74,8 @@ import (
 	"unstable.build/go-tui/cmd/rune-agent/llm/openai"
 	runemcp "unstable.build/go-tui/cmd/rune-agent/mcp"
 	"unstable.build/go-tui/cmd/rune-agent/memory"
+	"unstable.build/go-tui/component/markdown"
+	mdhandler "unstable.build/go-tui/handler/markdown"
 )
 
 const (
@@ -857,8 +857,8 @@ type aiEditorHandler struct {
 	generateDialogueID func(ctx context.Context, agentID string) string
 	// generatePlanPath overrides the plan path generator. Testing only.
 	generatePlanPath func(title string) string
-	effortMu      sync.Mutex
-	defaultEffort llm.ReasoningEffort // global default applied to new chats/queries
+	effortMu         sync.Mutex
+	defaultEffort    llm.ReasoningEffort // global default applied to new chats/queries
 
 	openChats sync.Map
 	ctx       context.Context

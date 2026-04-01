@@ -35,8 +35,6 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/unstablebuild/blue/tui/component/markdown"
-	mdhandler "github.com/unstablebuild/blue/tui/handler/markdown"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
@@ -55,6 +53,8 @@ import (
 	"unstable.build/go-tui/cmd/rune-agent/llm"
 	"unstable.build/go-tui/cmd/rune-agent/llm/llmregistry"
 	"unstable.build/go-tui/cmd/rune-agent/mcp"
+	"unstable.build/go-tui/component/markdown"
+	mdhandler "unstable.build/go-tui/handler/markdown"
 	"unstable.build/go-tui/workspace/walkdir"
 )
 

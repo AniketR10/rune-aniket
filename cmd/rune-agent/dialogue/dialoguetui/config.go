@@ -26,11 +26,11 @@ package dialoguetui
 import (
 	"time"
 
-	"github.com/unstablebuild/blue/tui/component/markdown"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/handler/inputbox"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/tcell/v3"
+	"unstable.build/go-tui/component/markdown"
 )
 
 // ComponentConfig holds configuration options for dialogue.Component.

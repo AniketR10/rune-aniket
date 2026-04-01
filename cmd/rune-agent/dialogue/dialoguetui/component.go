@@ -34,14 +34,14 @@ import (
 	"sync"
 	"time"
 
-	"github.com/unstablebuild/blue/tui/component/markdown"
-	mdhandler "github.com/unstablebuild/blue/tui/handler/markdown"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/handler/inputbox"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
+	"unstable.build/go-tui/component/markdown"
+	mdhandler "unstable.build/go-tui/handler/markdown"
 )
 
 // reasoningEntry tracks a finalized reasoning node for toggling visibility.
