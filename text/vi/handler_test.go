@@ -2960,6 +2960,96 @@ func TestViCountChangeToLineVisualMode(t *testing.T) {
 	}
 }
 
+func TestViJoinNoSpace(t *testing.T) {
+	newVi := func(t *testing.T, content string, opts ...Option) *viHandlerImpl {
+		t.Helper()
+		vi := setupVi(t, content, 2, opts...)
+		vi.Resize(40, 10)
+		vi.Draw(term.NoopWriter{})
+		return vi
+	}
+
+	runEvents := func(t *testing.T, vi *viHandlerImpl, seq string) {
+		t.Helper()
+		for _, ch := range seq {
+			_, handled := vi.Handle(term.Event{Type: term.EventKey, Ch: ch})
+			require.True(t, handled, "sequence %q failed on %q", seq, string(ch))
+		}
+	}
+
+	t.Run("joins current line with next without adding a space", func(t *testing.T) {
+		vi := newVi(t, "hello\nworld\nfoo")
+
+		runEvents(t, vi, "gJ")
+
+		assert.Equal(t, "helloworld\nfoo", vi.less.Buffer().String())
+		assert.Equal(t, term.Coordinates{X: len("hello"), Y: 0}, vi.cursor.Coordinates())
+		assert.Equal(t, normalMode, vi.mode())
+		assert.Equal(t, 1, vi.count)
+		assert.Empty(t, vi.countDigits)
+	})
+
+	t.Run("joins blank line without inserting padding", func(t *testing.T) {
+		vi := newVi(t, "hello\n\nworld")
+
+		runEvents(t, vi, "gJ")
+
+		assert.Equal(t, "hello\nworld", vi.less.Buffer().String())
+		assert.Equal(t, term.Coordinates{X: len("hello") - 1, Y: 0}, vi.cursor.Coordinates())
+		assert.Equal(t, normalMode, vi.mode())
+	})
+
+	t.Run("from last line gJ is a no-op and exits g mode", func(t *testing.T) {
+		vi := newVi(t, "hello\nworld\nfoo")
+		vi.cursor.MoveLastLine()
+		vi.Draw(term.NoopWriter{})
+
+		before := vi.less.Buffer().String()
+		beforeCoord := vi.cursor.Coordinates()
+
+		runEvents(t, vi, "gJ")
+
+		assert.Equal(t, before, vi.less.Buffer().String())
+		assert.Equal(t, beforeCoord, vi.cursor.Coordinates())
+		assert.Equal(t, normalMode, vi.mode())
+	})
+
+	t.Run("repeated gJ can join multiple lines", func(t *testing.T) {
+		vi := newVi(t, "a\nb\nc\nd")
+
+		runEvents(t, vi, "gJgJ")
+
+		assert.Equal(t, "abc\nd", vi.less.Buffer().String())
+		assert.Equal(t, term.Coordinates{X: 2, Y: 0}, vi.cursor.Coordinates())
+		assert.Equal(t, normalMode, vi.mode())
+	})
+
+	t.Run("count before gJ is reset after command", func(t *testing.T) {
+		vi := newVi(t, "abc\ndef\nghi")
+
+		runEvents(t, vi, "2gJ")
+
+		assert.Equal(t, "abcdef\nghi", vi.less.Buffer().String())
+		assert.Equal(t, term.Coordinates{X: len("abc"), Y: 0}, vi.cursor.Coordinates())
+		assert.Equal(t, normalMode, vi.mode())
+		assert.Equal(t, 1, vi.count)
+		assert.Empty(t, vi.countDigits)
+	})
+
+	t.Run("unsupported g sequence returns to normal mode", func(t *testing.T) {
+		vi := newVi(t, "abc\ndef")
+
+		_, handled := vi.Handle(term.Event{Type: term.EventKey, Ch: 'g'})
+		require.True(t, handled)
+		assert.Equal(t, gMode, vi.mode())
+
+		_, handled = vi.Handle(term.Event{Type: term.EventKey, Ch: 'x'})
+		assert.False(t, handled)
+		assert.Equal(t, normalMode, vi.mode())
+		assert.Equal(t, "abc\ndef", vi.less.Buffer().String())
+	})
+}
+
 func TestVigg(t *testing.T) {
 	code := `11111111111
 222222

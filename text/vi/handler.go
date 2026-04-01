@@ -1539,6 +1539,9 @@ func (vi *viHandlerImpl) handleGo(ev term.Event) (quit, handled bool) {
 		case 'E':
 			vi.cursor.MoveLeftEndWordGroup()
 			handled = true
+		case 'J':
+			vi.cursor.Conflate()
+			handled = true
 		case 'g':
 			vi.cursor.MoveToScroll(vi.anchor)
 			if vi.count == 1 {
