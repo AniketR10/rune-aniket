@@ -696,7 +696,34 @@ func TestCursorUpperLowercase(t *testing.T) {
 			op: func(t *testing.T, c *Cursor) {
 				assert.True(t, c.UppercaseSelection())
 				assert.True(t, c.Undo())
-				assert.True(t, c.Redo())
+			assert.True(t, c.Redo())
+			},
+		},
+		{
+			from:         term.Coordinates{},
+			to:           term.Coordinates{X: 2},
+			inputBuffer:  "aBc",
+			outputBuffer: "AbC",
+			op: func(t *testing.T, c *Cursor) {
+				assert.True(t, c.ToggleCaseSelection())
+			},
+		},
+		{
+			from:         term.Coordinates{},
+			to:           term.Coordinates{Y: 1, X: 4},
+			inputBuffer:  "Hello\nWorld",
+			outputBuffer: "hELLO\nwORLD",
+			op: func(t *testing.T, c *Cursor) {
+				assert.True(t, c.ToggleCaseSelection())
+			},
+		},
+		{
+			from:         term.Coordinates{X: 1},
+			to:           term.Coordinates{X: 3},
+			inputBuffer:  "a123b",
+			outputBuffer: "a123b",
+			op: func(t *testing.T, c *Cursor) {
+				assert.True(t, c.ToggleCaseSelection())
 			},
 		},
 	}

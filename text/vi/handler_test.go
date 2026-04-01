@@ -857,6 +857,57 @@ icurtab->tp_diff_inv
 	handlertest.TestHandlerSequence(t, vi, 20, 10, cases)
 }
 
+func TestViToggleCase(t *testing.T) {
+	t.Run("normal mode toggles char and advances", func(t *testing.T) {
+		vi := setupVi(t, "Hello", 2)
+		vi.Resize(20, 5)
+
+		// cursor is at 'H', toggle it
+		vi.Handle(term.Event{Type: term.EventKey, Ch: '~'})
+		assert.Equal(t, "hello", vi.less.Buffer().String())
+		assert.Equal(t, term.Coordinates{X: 1}, vi.cursor.Coordinates())
+
+		// toggle 'e' -> 'E'
+		vi.Handle(term.Event{Type: term.EventKey, Ch: '~'})
+		assert.Equal(t, "hEllo", vi.less.Buffer().String())
+		assert.Equal(t, term.Coordinates{X: 2}, vi.cursor.Coordinates())
+
+		// toggle 'l' -> 'L'
+		vi.Handle(term.Event{Type: term.EventKey, Ch: '~'})
+		assert.Equal(t, "hELlo", vi.less.Buffer().String())
+		assert.Equal(t, term.Coordinates{X: 3}, vi.cursor.Coordinates())
+	})
+
+	t.Run("normal mode at end of line stays put", func(t *testing.T) {
+		vi := setupVi(t, "Ab", 2)
+		vi.Resize(20, 5)
+
+		// move to last char 'b'
+		vi.Handle(term.Event{Type: term.EventKey, Ch: '$'})
+		assert.Equal(t, term.Coordinates{X: 1}, vi.cursor.Coordinates())
+
+		// toggle 'b' -> 'B', cursor cannot advance further
+		vi.Handle(term.Event{Type: term.EventKey, Ch: '~'})
+		assert.Equal(t, "AB", vi.less.Buffer().String())
+	})
+
+	t.Run("visual mode toggles selection", func(t *testing.T) {
+		vi := setupVi(t, "Hello World", 2)
+		vi.Resize(20, 5)
+
+		// select "Hello" (v then 4l to extend selection through 'o')
+		vi.Handle(term.Event{Type: term.EventKey, Ch: 'v'})
+		for i := 0; i < 4; i++ {
+			vi.Handle(term.Event{Type: term.EventKey, Ch: 'l'})
+		}
+
+		// toggle case of selection
+		vi.Handle(term.Event{Type: term.EventKey, Ch: '~'})
+		assert.Equal(t, "hELLO World", vi.less.Buffer().String())
+		assert.Equal(t, normalMode, vi.mode())
+	})
+}
+
 func TestViCount(t *testing.T) {
 	motions := []rune{'h', 'j', 'k', 'l'}
 	for _, motion := range motions {

@@ -2224,6 +2224,49 @@ func (c *Cursor) LowercaseSelection() (ok bool) {
 	})
 }
 
+// ToggleCaseSelection toggles the case of each character in the current
+// selection (upper → lower, lower → upper) and returns true, or does nothing
+// and returns false when there is no selection.
+func (c *Cursor) ToggleCaseSelection() (ok bool) {
+	return c.selectionOp(func(cells string) string {
+		return toggleCaseString(cells)
+	})
+}
+
+// ToggleCase toggles the case of the character under the cursor and advances
+// the cursor one position to the right, mimicking vim's ~ in normal mode.
+func (c *Cursor) ToggleCase() (ok bool) {
+	cell, has := c.cellAtCursor()
+	if !has {
+		return
+	}
+	ch := cell.Ch
+	var toggled rune
+	if unicode.IsUpper(ch) {
+		toggled = unicode.ToLower(ch)
+	} else {
+		toggled = unicode.ToUpper(ch)
+	}
+	if toggled != ch {
+		c.Replace(toggled)
+	}
+	c.MoveRight()
+	ok = true
+	return
+}
+
+func toggleCaseString(s string) string {
+	runes := []rune(s)
+	for i, r := range runes {
+		if unicode.IsUpper(r) {
+			runes[i] = unicode.ToLower(r)
+		} else if unicode.IsLower(r) {
+			runes[i] = unicode.ToUpper(r)
+		}
+	}
+	return string(runes)
+}
+
 // TryIndent attempts to indent the cursor if an indent service is available.
 func (c *Cursor) TryIndent() bool {
 	pos := c.cursorAtScroll()

@@ -787,6 +787,8 @@ func (vi *viHandlerImpl) handleNormal(ev term.Event) (quit, handled bool) {
 			}
 		case 'x':
 			vi.cursor.Delete()
+		case '~':
+			vi.cursor.ToggleCase()
 		case 's':
 			vi.cursor.Delete()
 			vi.setInsertMode()
@@ -1048,8 +1050,13 @@ func (vi *viHandlerImpl) handleVisual(ev term.Event) (quit, handled bool) {
 			vi.setInsertMode()
 		case 'u':
 			vi.cursor.LowercaseSelection()
+			vi.setNormalMode()
 		case 'U':
 			vi.cursor.UppercaseSelection()
+			vi.setNormalMode()
+		case '~':
+			vi.cursor.ToggleCaseSelection()
+			vi.setNormalMode()
 		case 'I':
 			switch vi.mode() {
 			case visualBlockMode:
