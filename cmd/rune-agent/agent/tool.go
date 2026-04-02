@@ -29,6 +29,7 @@ import (
 	"strings"
 	"time"
 
+	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
 	"unstable.build/go-tui/cmd/rune-agent/llm"
 )
 
@@ -37,8 +38,9 @@ type ToolResult struct {
 	Content           string
 	MultiContent      []llm.ContentPart // Image/multi-modal content for user-message injection.
 	IsError           bool
-	Compact           bool     // Signals that the agent should compact the conversation.
-	ClearContext      bool     // Signals that the agent should clear the conversation context.
+	Compact           bool // Signals that the agent should compact the conversation.
+	ClearContext      bool // Signals that the agent should clear the conversation context.
+	ApprovedPlan      *dialoguemanager.ApprovedPlan
 	DropToolResultIDs []string // Tool call IDs whose results should be truncated in history.
 	TouchedFiles      []string // Files that were created or modified (not deleted) by this tool.
 }

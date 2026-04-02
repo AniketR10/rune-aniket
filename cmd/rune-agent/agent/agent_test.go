@@ -39,6 +39,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"unstable.build/go-tui/cmd/rune-agent/agent/skills"
@@ -640,7 +641,7 @@ func TestAgentRun(t *testing.T) {
 }
 
 func TestCompactDialoguePreservesPlanContent(t *testing.T) {
-	planContent := PlanApprovedPreamble + PlanContentPrefix + "Plan approved.\n\n## Step 1\nDo X" + PlanContentSuffix
+	plan := &dialoguemanager.ApprovedPlan{Path: "/tmp/plan.md", Body: "Plan approved.\n\n## Step 1\nDo X"}
 
 	svc := &mockService{
 		responses: []mockResponse{
@@ -650,10 +651,10 @@ func TestCompactDialoguePreservesPlanContent(t *testing.T) {
 	store := newMockStore()
 
 	d := dialoguemanager.Dialogue{
-		ID: "d",
+		ID:           "d",
+		ApprovedPlan: plan,
 		Messages: []llm.Message{
 			{Role: llm.RoleSystem, Content: "sys prompt"},
-			{Role: llm.RoleUser, Content: planContent},
 			{Role: llm.RoleAssistant, Content: "Working on step 1..."},
 			{Role: llm.RoleUser, Content: "continue"},
 			{Role: llm.RoleAssistant, Content: "Done with step 1"},
@@ -668,17 +669,51 @@ func TestCompactDialoguePreservesPlanContent(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEmpty(t, archivedID)
 
-	// Plan content must be preserved as a system message.
-	var planMsg *llm.Message
-	for i := range compactedMsgs {
-		if ContainsPlan(compactedMsgs[i].Content) {
-			planMsg = &compactedMsgs[i]
-			break
-		}
+	require.Len(t, compactedMsgs, 3)
+	assert.Equal(t, llm.RoleSystem, compactedMsgs[1].Role)
+	assert.Contains(t, compactedMsgs[1].Content, "/tmp/plan.md")
+	assert.Contains(t, compactedMsgs[1].Content, "Do X")
+}
+
+func TestCompactDialogueWithApprovedPlanUsesResumeProgressMessage(t *testing.T) {
+	planContent := "Plan approved. Saved to /tmp/plan.md\n\n## Step 1\nDo X\n## Step 2\nDo Y"
+
+	svc := &mockService{
+		responses: []mockResponse{
+			stopResponse("Current progress: Step 1 is complete. Step 2 is next."),
+		},
 	}
-	require.NotNil(t, planMsg, "plan must survive CompactDialogue")
-	assert.Equal(t, llm.RoleSystem, planMsg.Role)
-	assert.Contains(t, planMsg.Content, "Do X")
+	store := newMockStore()
+
+	d := dialoguemanager.Dialogue{
+		ID:           "d",
+		ApprovedPlan: &dialoguemanager.ApprovedPlan{Path: "/tmp/plan.md", Body: planContent},
+		Messages: []llm.Message{
+			{Role: llm.RoleSystem, Content: "sys prompt"},
+			{Role: llm.RoleAssistant, Content: "Finished step 1 and preparing step 2."},
+			{Role: llm.RoleUser, Content: "continue implementing"},
+		},
+		Version: 1,
+	}
+	store.mu.Lock()
+	store.data["d"] = d
+	store.mu.Unlock()
+
+	compactedMsgs, archivedID, err := CompactDialogue(context.Background(), svc, store, d)
+	require.NoError(t, err)
+	assert.NotEmpty(t, archivedID)
+
+	require.Len(t, compactedMsgs, 3)
+	assert.Equal(t, llm.RoleSystem, compactedMsgs[0].Role)
+	assert.Equal(t, llm.RoleSystem, compactedMsgs[1].Role)
+	assert.Contains(t, compactedMsgs[1].Content, "/tmp/plan.md")
+	assert.Equal(t, llm.RoleUser, compactedMsgs[2].Role)
+	assert.Contains(t, compactedMsgs[2].Content, "Continue executing the approved plan immediately")
+	assert.Contains(t, compactedMsgs[2].Content, "Do NOT create a new plan")
+	assert.Contains(t, compactedMsgs[2].Content, "Current progress: Step 1 is complete. Step 2 is next.")
+	assert.NotContains(t, compactedMsgs[2].Content, CompactSummaryPrefix)
+
+	assert.Contains(t, compactedMsgs[2].Content, "Keep implementing")
 }
 
 func TestCompactDialoguePreservesSkillContent(t *testing.T) {
@@ -1843,26 +1878,6 @@ func TestAgentCompact(t *testing.T) {
 	})
 }
 
-func TestExtractPlanBody(t *testing.T) {
-	body := "Plan approved. Saved to /tmp/plan.md\n\n## Step 1\nDo something"
-
-	t.Run("with preamble", func(t *testing.T) {
-		msg := PlanApprovedPreamble + PlanContentPrefix + body + PlanContentSuffix
-		assert.True(t, ContainsPlan(msg))
-		assert.Equal(t, body, ExtractPlanBody(msg))
-	})
-	t.Run("without preamble (legacy)", func(t *testing.T) {
-		msg := PlanContentPrefix + body + PlanContentSuffix
-		assert.True(t, ContainsPlan(msg))
-		assert.Equal(t, body, ExtractPlanBody(msg))
-	})
-	t.Run("no markers", func(t *testing.T) {
-		msg := "just some text"
-		assert.False(t, ContainsPlan(msg))
-		assert.Equal(t, "", ExtractPlanBody(msg))
-	})
-}
-
 func TestClearContext(t *testing.T) {
 	t.Run("wraps plan with markers and emits EventCompacted", func(t *testing.T) {
 		planContent := "Plan approved. Saved to /tmp/plan.md\n\n## Step 1\nDo something"
@@ -1876,7 +1891,7 @@ func TestClearContext(t *testing.T) {
 		store := newMockStore()
 		tool := &mockTool{
 			name:   "exit_plan",
-			result: ToolResult{Content: planContent, ClearContext: true},
+			result: ToolResult{Content: planContent, ApprovedPlan: &dialoguemanager.ApprovedPlan{Path: "/tmp/plan.md", Body: planContent}, ClearContext: true},
 		}
 		ag := NewAgent(svc, NewRegistry(tool), noSkills(), store, NoMemory(),
 			Config{SystemPrompt: "sys"})
@@ -1888,22 +1903,12 @@ func TestClearContext(t *testing.T) {
 		require.Len(t, compactedEvents, 1)
 		assert.Equal(t, "d-archived", compactedEvents[0].ArchivedDialogueID)
 
-		// The stored dialogue must wrap the plan in markers.
+		// The stored dialogue must persist the approved plan as first-class state.
 		d, ok := store.getDialogue("d")
 		require.True(t, ok)
-		var planMsg *llm.Message
-		for i := range d.Messages {
-			if d.Messages[i].Role == llm.RoleUser &&
-				ContainsPlan(d.Messages[i].Content) {
-				planMsg = &d.Messages[i]
-				break
-			}
-		}
-		require.NotNil(t, planMsg, "stored dialogue should contain plan-marked user message")
-		assert.Contains(t, planMsg.Content, planContent)
-		assert.True(t, strings.HasSuffix(planMsg.Content, PlanContentSuffix))
-		assert.True(t, strings.HasPrefix(planMsg.Content, PlanApprovedPreamble),
-			"plan message must start with the approved preamble")
+		require.NotNil(t, d.ApprovedPlan, "stored dialogue should contain approved plan metadata")
+		assert.Equal(t, "/tmp/plan.md", d.ApprovedPlan.Path)
+		assert.Equal(t, planContent, d.ApprovedPlan.Body)
 	})
 
 	t.Run("plan survives auto-compaction with file path", func(t *testing.T) {
@@ -1929,14 +1934,13 @@ func TestClearContext(t *testing.T) {
 		}
 		store := newMockStore()
 
-		// Pre-seed the store with a dialogue that has a plan-marked
-		// user message (as if clearContext already ran) plus some work.
+		// Pre-seed the store with approved-plan metadata plus some work.
 		store.mu.Lock()
 		store.data["d"] = dialoguemanager.Dialogue{
-			ID: "d",
+			ID:           "d",
+			ApprovedPlan: &dialoguemanager.ApprovedPlan{Path: planPath, Body: planContent},
 			Messages: []llm.Message{
 				{Role: llm.RoleSystem, Content: "sys"},
-				{Role: llm.RoleUser, Content: PlanApprovedPreamble + PlanContentPrefix + planContent + PlanContentSuffix},
 				{Role: llm.RoleAssistant, Content: "I'll start working on step 1..."},
 			},
 			Version: 1,
@@ -1955,17 +1959,10 @@ func TestClearContext(t *testing.T) {
 		// After compaction, the plan (including file path) must be in the stored dialogue.
 		d, ok := store.getDialogue("d")
 		require.True(t, ok)
-		var planMsg *llm.Message
-		for i := range d.Messages {
-			if strings.Contains(d.Messages[i].Content, PlanContentPrefix) {
-				planMsg = &d.Messages[i]
-				break
-			}
-		}
-		require.NotNil(t, planMsg, "plan message must survive auto-compaction")
-		assert.Contains(t, planMsg.Content, planPath,
+		require.NotNil(t, d.ApprovedPlan, "approved plan metadata must survive auto-compaction")
+		assert.Contains(t, d.ApprovedPlan.Path, planPath,
 			"plan file path must be preserved after compaction")
-		assert.Contains(t, planMsg.Content, planBody,
+		assert.Contains(t, d.ApprovedPlan.Body, planBody,
 			"plan body must be preserved after compaction")
 	})
 
@@ -1992,14 +1989,13 @@ func TestClearContext(t *testing.T) {
 		}
 		store := newMockStore()
 
-		// Pre-seed with plan as a system message (as if one
-		// compaction already happened).
+		// Pre-seed with approved-plan metadata (as if one compaction already happened).
 		store.mu.Lock()
 		store.data["d"] = dialoguemanager.Dialogue{
-			ID: "d",
+			ID:           "d",
+			ApprovedPlan: &dialoguemanager.ApprovedPlan{Body: planContent},
 			Messages: []llm.Message{
 				{Role: llm.RoleSystem, Content: "sys"},
-				{Role: llm.RoleSystem, Content: PlanApprovedPreamble + PlanContentPrefix + planContent + PlanContentSuffix},
 				{Role: llm.RoleUser, Content: CompactSummaryPrefix + "Prior summary"},
 				{Role: llm.RoleAssistant, Content: "Working on it..."},
 			},
@@ -2020,15 +2016,58 @@ func TestClearContext(t *testing.T) {
 		// After repeated compaction, the plan must still be present.
 		d, ok := store.getDialogue("d")
 		require.True(t, ok)
-		var foundPlan bool
-		for _, msg := range d.Messages {
-			if strings.Contains(msg.Content, planContent) {
-				foundPlan = true
-				break
-			}
-		}
-		assert.True(t, foundPlan,
+		require.NotNil(t, d.ApprovedPlan)
+		assert.Contains(t, d.ApprovedPlan.Body, planContent,
 			"approved plan must survive repeated compactions")
+	})
+
+	t.Run("approved plan compaction keeps resume instructions across repeats", func(t *testing.T) {
+		planContent := "Plan approved. Saved to /tmp/plan.md\n\n## The Plan\nStep 1: Do X"
+		countCalls := 0
+		svc := &mockService{
+			responses: []mockResponse{
+				stopResponse("Progress after compact 1"),
+				stopResponse("Progress after compact 2"),
+				stopResponse("Done"),
+			},
+			contextWindowN: 1000,
+			countTokensFn: func(msgs []llm.Message) (int, error) {
+				countCalls++
+				if countCalls <= 2 {
+					return 900, nil
+				}
+				return 100, nil
+			},
+		}
+		store := newMockStore()
+
+		store.mu.Lock()
+		store.data["d"] = dialoguemanager.Dialogue{
+			ID:           "d",
+			ApprovedPlan: &dialoguemanager.ApprovedPlan{Path: "/tmp/plan.md", Body: planContent},
+			Messages: []llm.Message{
+				{Role: llm.RoleSystem, Content: "sys"},
+				{Role: llm.RoleAssistant, Content: "Working on it..."},
+			},
+			Version: 1,
+		}
+		store.mu.Unlock()
+
+		ag := NewAgent(svc, NewRegistry(), noSkills(), store, NoMemory(),
+			Config{SystemPrompt: "sys"})
+
+		it := ag.Run(context.Background(), "d", "keep going")
+		events := collectEvents(t, it)
+		assert.True(t, hasEventType(events, EventCompacted))
+
+		stored, ok := store.getDialogue("d")
+		require.True(t, ok)
+		require.GreaterOrEqual(t, len(stored.Messages), 3)
+		require.NotNil(t, stored.ApprovedPlan)
+		assert.Equal(t, planContent, stored.ApprovedPlan.Body)
+		assert.Equal(t, llm.RoleUser, stored.Messages[2].Role)
+		assert.Contains(t, stored.Messages[2].Content, "Continue executing the approved plan immediately")
+		assert.Contains(t, stored.Messages[2].Content, "Do NOT create a new plan")
 	})
 }
 
@@ -2815,6 +2854,9 @@ func (s *mockStore) AppendMessages(ctx context.Context, d dialoguemanager.Dialog
 		return s.appendErr
 	}
 	existing := s.data[d.ID]
+	if existing.ApprovedPlan == nil {
+		existing.ApprovedPlan = d.ApprovedPlan
+	}
 	existing.Messages = append(existing.Messages, msgs...)
 	existing.Usage.TokensSent += usage.TokensSent
 	existing.Usage.TokensReceived += usage.TokensReceived
@@ -2842,6 +2884,7 @@ func (s *mockStore) ArchiveAndReplace(_ context.Context, p dialoguemanager.Archi
 	s.data[p.ArchivedDialogueID] = archived
 	replaced := p.Dialogue
 	replaced.Messages = p.Messages
+	replaced.ApprovedPlan = p.ApprovedPlan
 	replaced.MessageCount = len(p.Messages)
 	s.data[p.Dialogue.ID] = replaced
 	return nil
@@ -3679,4 +3722,37 @@ func TestNormalizeMessages(t *testing.T) {
 		assert.Equal(t, "Sure, let me check.", msgs[1].Content)
 		assert.Empty(t, msgs[1].ToolCalls)
 	})
+}
+
+func TestAgentRun_ContinueAfterReasoningOnlyTruncatedTurnWithRealStore(t *testing.T) {
+	t.Parallel()
+	const partialReasoning = "Let me analyze this step by step..."
+
+	svc := &mockService{
+		responses: []mockResponse{
+			{
+				reasoningChunks: []string{partialReasoning},
+				finishReason:    llm.FinishReasonLength,
+			},
+			stopResponse("...doing X and Y."),
+		},
+	}
+
+	store := dialoguemanager.NewStore(storagestub.NewInMemoryService(), t.TempDir())
+	ag := NewAgent(svc, NewRegistry(), noSkills(), store, NoMemory(), Config{SystemPrompt: "test"})
+
+	_ = collectEventsWithTimeout(t, ag.Run(context.Background(), "d", "explain this"), 5*time.Second)
+	_ = collectEventsWithTimeout(t, ag.Run(context.Background(), "d", "please continue"), 5*time.Second)
+
+	require.Equal(t, 2, svc.getCallCount(), "expected 2 LLM requests across both turns")
+	secondReq := svc.requests[1]
+	var foundPartialAssistant bool
+	for _, msg := range secondReq.Messages {
+		if msg.Role == llm.RoleAssistant && msg.Content == partialReasoning {
+			foundPartialAssistant = true
+			break
+		}
+	}
+	assert.True(t, foundPartialAssistant,
+		"second LLM request must contain the partial assistant message with reasoning as content")
 }

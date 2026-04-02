@@ -545,15 +545,15 @@ func (a *Agent) run(
 			)
 			emit(ctx, ch, Event{Type: EventCompacting})
 			dialogue.Messages = messages
-			compactedMsgs, compactErr := a.compact(ctx, ch, dialogue)
+			compactedDialogue, compactErr := a.compact(ctx, ch, dialogue)
 			if compactErr != nil {
 				log.Warn("auto-compact failed, continuing without compaction", "error", compactErr)
 			} else {
-				dialogue = dialoguemanager.Dialogue{ID: dialogueID, Messages: compactedMsgs, WorkspaceURI: dialogue.WorkspaceURI, Version: 1}
+				dialogue = compactedDialogue
 				hasPersistedDialogue = true
 				newMessages = nil
-				messages = append(compactedMsgs[:len(compactedMsgs):len(compactedMsgs)], resourceMsgs...)
-				userMsgIdx = len(compactedMsgs) - 1
+				messages = append(dialogue.Messages[:len(dialogue.Messages):len(dialogue.Messages)], resourceMsgs...)
+				userMsgIdx = len(dialogue.Messages) - 1
 				lastAPITokensSent = 0
 				emit(ctx, ch, Event{Type: EventDone})
 				continue
@@ -833,18 +833,18 @@ func (a *Agent) run(
 						// would cause an API error during summarization.
 						compactD := dialogue
 						compactD.Messages = messages[:len(messages)-1]
-						compactedMsgs, compactErr := a.compact(ctx, ch, compactD)
+						compactedDialogue, compactErr := a.compact(ctx, ch, compactD)
 						if compactErr != nil {
 							result = ToolResult{
 								Content: fmt.Sprintf("Compaction failed: %v. Continue without compacting.", compactErr),
 								IsError: true,
 							}
 						} else {
-							dialogue = dialoguemanager.Dialogue{ID: dialogueID, Messages: compactedMsgs, WorkspaceURI: dialogue.WorkspaceURI, Version: 1}
+							dialogue = compactedDialogue
 							hasPersistedDialogue = true
 							newMessages = nil
-							messages = append(compactedMsgs[:len(compactedMsgs):len(compactedMsgs)], resourceMsgs...)
-							userMsgIdx = len(compactedMsgs) - 1
+							messages = append(dialogue.Messages[:len(dialogue.Messages):len(dialogue.Messages)], resourceMsgs...)
+							userMsgIdx = len(dialogue.Messages) - 1
 							lastAPITokensSent = 0 // force re-count with compacted messages
 							compacted = true
 						}
@@ -860,14 +860,16 @@ func (a *Agent) run(
 							IsError: true,
 						}
 					} else {
-						clearedMsgs, clearErr := a.clearContext(ctx, ch, result.Content, dialogue)
+						clearedMsgs, clearErr := a.clearContext(ctx, ch, result.ApprovedPlan, dialogue)
 						if clearErr != nil {
 							result = ToolResult{
 								Content: fmt.Sprintf("Clear context failed: %v. Continue without clearing.", clearErr),
 								IsError: true,
 							}
 						} else {
-							dialogue = dialoguemanager.Dialogue{ID: dialogueID, Messages: clearedMsgs, WorkspaceURI: dialogue.WorkspaceURI, Version: 1}
+							dialogue.Messages = clearedMsgs
+							dialogue.ApprovedPlan = result.ApprovedPlan
+							dialogue.Version = 1
 							hasPersistedDialogue = true
 							newMessages = nil
 							messages = append(clearedMsgs[:len(clearedMsgs):len(clearedMsgs)], resourceMsgs...)
@@ -1167,7 +1169,7 @@ func (a *Agent) persistMessages(
 func (a *Agent) compact(
 	ctx context.Context, ch chan<- Event,
 	d dialoguemanager.Dialogue,
-) ([]llm.Message, error) {
+) (dialoguemanager.Dialogue, error) {
 	summarizeSvc := a.svc
 	if a.config.CompactSvc != nil {
 		summarizeSvc = a.config.CompactSvc
@@ -1176,11 +1178,13 @@ func (a *Agent) compact(
 	compactedMsgs, archivedID, err := CompactDialogue(ctx, summarizeSvc, a.store, d)
 	if err != nil {
 		emit(ctx, ch, Event{Type: EventError, Error: fmt.Errorf("compact: %v", err)})
-		return nil, err
+		return dialoguemanager.Dialogue{}, err
 	}
 
 	emit(ctx, ch, Event{Type: EventCompacted, ArchivedDialogueID: archivedID})
-	return compactedMsgs, nil
+	d.Messages = compactedMsgs
+	d.Version = 1
+	return d, nil
 }
 
 // extractSkillContent finds tool results containing activated skill content
@@ -1204,35 +1208,22 @@ func extractSkillContent(messages []llm.Message) []llm.Message {
 	return result
 }
 
-// extractPlanContent finds messages containing an approved plan
-// (wrapped in PlanContentPrefix/Suffix by clearContext) and returns them
-// as system messages for re-injection after compaction. It checks both
-// user messages (first compaction) and system messages (subsequent
-// compactions) so the plan survives repeated summarisation.
-func extractPlanContent(messages []llm.Message) []llm.Message {
-	var result []llm.Message
-	for _, m := range messages {
-		if !ContainsPlan(m.Content) {
-			continue
-		}
-		if m.Role != llm.RoleUser && m.Role != llm.RoleSystem {
-			continue
-		}
-		result = append(result, llm.Message{
-			Role:    llm.RoleSystem,
-			Content: m.Content,
-		})
-		break // only one plan per conversation
+func approvedPlanMessages(plan *dialoguemanager.ApprovedPlan) []llm.Message {
+	if plan == nil {
+		return nil
 	}
-	return result
+	return []llm.Message{{
+		Role:    llm.RoleSystem,
+		Content: fmt.Sprintf("Plan approved. Saved to %s\n\n%s", plan.Path, plan.Body),
+	}}
 }
 
 // clearContext replaces the conversation with just a system prompt and
-// a user message (typically the approved plan), archives the old messages,
-// and overwrites the current dialogue in-place. The dialogue ID never changes.
+// approved-plan metadata, archives the old messages, and overwrites the
+// current dialogue in-place. The dialogue ID never changes.
 func (a *Agent) clearContext(
 	ctx context.Context, ch chan<- Event,
-	content string,
+	approvedPlan *dialoguemanager.ApprovedPlan,
 	d dialoguemanager.Dialogue,
 ) ([]llm.Message, error) {
 	archivedID, err := NextArchivedID(ctx, a.store, d.ID)
@@ -1241,69 +1232,41 @@ func (a *Agent) clearContext(
 		return nil, err
 	}
 
-	// Start fresh with the canonical system prompt, same as a new
-	// conversation, so we don't carry stale or duplicated prompts.
-	clearedMsgs := []llm.Message{
-		{Role: llm.RoleSystem, Content: a.config.SystemPrompt},
-		{Role: llm.RoleUser, Content: PlanApprovedPreamble + PlanContentPrefix + content + PlanContentSuffix},
-	}
+	clearedMsgs := []llm.Message{{Role: llm.RoleSystem, Content: a.config.SystemPrompt}}
 
 	if err := a.store.ArchiveAndReplace(ctx, dialoguemanager.ArchiveAndReplaceParams{
 		Dialogue:           d,
 		ArchivedDialogueID: archivedID,
 		Messages:           clearedMsgs,
+		ApprovedPlan:       approvedPlan,
 	}); err != nil {
 		emit(ctx, ch, Event{Type: EventError, Error: fmt.Errorf("clear context: %v", err)})
 		return nil, err
 	}
 
 	emit(ctx, ch, Event{Type: EventCompacted, ArchivedDialogueID: archivedID})
-	return clearedMsgs, nil
+	return append(clearedMsgs, approvedPlanMessages(approvedPlan)...), nil
 }
 
 // CompactSummaryPrefix is prepended to the LLM-generated summary when
-// building the compacted user message. It frames the summary as a
-// continuation from a prior context window so the model can resume
-// seamlessly. Placing the summary in a user message (rather than
-// assistant) avoids assistant prefill, which some providers reject.
-const CompactSummaryPrefix = "This session is being continued from a previous conversation that ran out of context. " +
-	"The summary below covers the earlier portion of the conversation.\n\n"
+// building the compacted user message for conversations without an approved
+// plan. It explicitly tells the model to resume execution from the summary
+// instead of drifting into re-planning. Placing the summary in a user message
+// (rather than assistant) avoids assistant prefill, which some providers reject.
+const CompactSummaryPrefix = "Resume from the compacted context below and continue the user's current task immediately. " +
+	"Do NOT restart the task, create a new plan, or ask for approval unless the user explicitly requests that. " +
+	"The summary below captures the earlier portion of the conversation and the current state of work.\n\n"
 
-// PlanApprovedPreamble is prepended to the cleared-context user message
-// so the agent knows the plan was already approved and should be
-// executed immediately rather than re-submitted for approval.
-const PlanApprovedPreamble = "The following plan was approved by the user. " +
-	"The conversation was cleared to free up context for execution.\n" +
-	"Execute this plan immediately. Do NOT ask for approval or " +
-	"confirmation — it has already been approved.\n\n"
+// CompactResumePrefix is used when a conversation already contains an approved
+// plan. In that case we preserve the plan separately and compact only the
+// current progress/state into a resume message that tells the model to keep
+// implementing rather than re-plan.
+const CompactResumePrefix = "Continue executing the approved plan immediately. " +
+	"Do NOT create a new plan, ask for plan approval, or re-plan work that is already specified. " +
+	"Keep implementing.\n\nCurrent state and progress from before compaction:\n\n"
 
-// PlanContentPrefix marks a user message as containing an approved plan
-// that must survive compaction. clearContext wraps the plan with this
-// prefix so that extractPlanContent can recognise and re-inject it.
-const PlanContentPrefix = "<approved_plan>\n"
-
-// PlanContentSuffix closes the approved plan marker.
-const PlanContentSuffix = "\n</approved_plan>"
-
-// ContainsPlan reports whether a message contains an approved plan.
-func ContainsPlan(content string) bool {
-	return strings.HasPrefix(content, PlanApprovedPreamble) ||
-		strings.HasPrefix(content, PlanContentPrefix)
-}
-
-// ExtractPlanBody returns the plan text between the approved_plan
-// markers, or the empty string when no markers are present.
-func ExtractPlanBody(content string) string {
-	_, after, ok := strings.Cut(content, PlanContentPrefix)
-	if !ok {
-		return ""
-	}
-	body := after
-	if j := strings.Index(body, PlanContentSuffix); j >= 0 {
-		body = body[:j]
-	}
-	return body
-}
+// CompactResumeSuffix appends an explicit encouragement to continue execution.
+const CompactResumeSuffix = "\n\nKeep implementing from this state."
 
 // ArchivedID returns the base archive dialogue ID for the given dialogue.
 // It strips any existing "-archived" (with optional numeric suffix) to avoid accumulation.
@@ -1463,23 +1426,33 @@ func CompactDialogue(
 		systemPrompt = d.Messages[0].Content
 	}
 
-	compactedMsgs = []llm.Message{
-		{Role: llm.RoleSystem, Content: systemPrompt},
-		{Role: llm.RoleUser, Content: CompactSummaryPrefix + summaryText},
-	}
+	compactedMsgs = []llm.Message{{Role: llm.RoleSystem, Content: systemPrompt}}
 
-	// Preserve plan and skill content from the old messages.
+	// Preserve approved-plan metadata and activated skills from the old dialogue.
 	var preserved []llm.Message
-	preserved = append(preserved, extractPlanContent(d.Messages)...)
+	preserved = append(preserved, approvedPlanMessages(d.ApprovedPlan)...)
 	preserved = append(preserved, extractSkillContent(d.Messages)...)
 	if len(preserved) > 0 {
-		compactedMsgs = slices.Insert(compactedMsgs, 1, preserved...)
+		compactedMsgs = append(compactedMsgs, preserved...)
+	}
+
+	if d.ApprovedPlan != nil {
+		compactedMsgs = append(compactedMsgs, llm.Message{
+			Role:    llm.RoleUser,
+			Content: CompactResumePrefix + summaryText + CompactResumeSuffix,
+		})
+	} else {
+		compactedMsgs = append(compactedMsgs, llm.Message{
+			Role:    llm.RoleUser,
+			Content: CompactSummaryPrefix + summaryText,
+		})
 	}
 
 	if err := store.ArchiveAndReplace(ctx, dialoguemanager.ArchiveAndReplaceParams{
 		Dialogue:           d,
 		ArchivedDialogueID: archivedID,
 		Messages:           compactedMsgs,
+		ApprovedPlan:       d.ApprovedPlan,
 	}); err != nil {
 		return nil, "", fmt.Errorf("persist: %w", err)
 	}

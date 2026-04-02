@@ -59,6 +59,14 @@ type Store interface {
 	List(context.Context) (iterator.Iterator[DialogueHeader], error)
 }
 
+// ApprovedPlan holds the durable, first-class state for a user-approved plan.
+// It is stored separately from the dialogue transcript so compaction and resume
+// do not need to recover plan state from message text.
+type ApprovedPlan struct {
+	Path string
+	Body string
+}
+
 // NewStore allocates storage for a new Store using the given backend for
 // dialogue metadata and the given directory for dialogue message bodies.
 func NewStore(backend storageapi.Service, messagesDir string) Store {
@@ -76,6 +84,7 @@ type Dialogue struct {
 	AgentID      string
 	Model        string
 	WorkspaceURI string
+	ApprovedPlan *ApprovedPlan
 	SubAgent     bool
 	Version      int
 	MessageCount int
@@ -90,6 +99,7 @@ type storedDialogue struct {
 	AgentID      string
 	Model        string
 	WorkspaceURI string
+	ApprovedPlan *ApprovedPlan
 	SubAgent     bool
 	Version      int
 	MessageCount int
@@ -102,15 +112,16 @@ type storedDialogue struct {
 // history. Use this for listing/filtering dialogues without paying the
 // deserialization cost of Messages.
 type DialogueHeader struct {
-	ID           string
-	AgentID      string
-	Model        string
-	WorkspaceURI string
-	SubAgent     bool
-	Version      int
-	MessageCount int
-	Usage        llm.DialogueUsage
-	UpdatedAt    time.Time
+	ID              string
+	AgentID         string
+	Model           string
+	WorkspaceURI    string
+	HasApprovedPlan bool
+	SubAgent        bool
+	Version         int
+	MessageCount    int
+	Usage           llm.DialogueUsage
+	UpdatedAt       time.Time
 }
 
 type dialogueIndex struct {
@@ -158,15 +169,16 @@ func (d Dialogue) Header() DialogueHeader {
 		messageCount = len(d.Messages)
 	}
 	return DialogueHeader{
-		ID:           d.ID,
-		AgentID:      d.AgentID,
-		Model:        d.Model,
-		WorkspaceURI: d.WorkspaceURI,
-		SubAgent:     d.SubAgent,
-		Version:      d.Version,
-		MessageCount: messageCount,
-		Usage:        d.Usage,
-		UpdatedAt:    d.UpdatedAt,
+		ID:              d.ID,
+		AgentID:         d.AgentID,
+		Model:           d.Model,
+		WorkspaceURI:    d.WorkspaceURI,
+		HasApprovedPlan: d.ApprovedPlan != nil,
+		SubAgent:        d.SubAgent,
+		Version:         d.Version,
+		MessageCount:    messageCount,
+		Usage:           d.Usage,
+		UpdatedAt:       d.UpdatedAt,
 	}
 }
 
@@ -176,6 +188,7 @@ func storedDialogueFromDialogue(d Dialogue) storedDialogue {
 		AgentID:      d.AgentID,
 		Model:        d.Model,
 		WorkspaceURI: d.WorkspaceURI,
+		ApprovedPlan: d.ApprovedPlan,
 		SubAgent:     d.SubAgent,
 		Version:      d.Version,
 		MessageCount: d.MessageCount,
@@ -294,6 +307,9 @@ type ArchiveAndReplaceParams struct {
 	ArchivedDialogueID string
 	// Messages is the replacement message slice for the active dialogue.
 	Messages []llm.Message
+	// ApprovedPlan is the replacement approved-plan state for the active dialogue.
+	// When nil, the active dialogue will have no approved plan metadata.
+	ApprovedPlan *ApprovedPlan
 }
 
 func (s store) Health(ctx context.Context) error {
@@ -487,6 +503,7 @@ func (s store) ArchiveAndReplace(ctx context.Context, p ArchiveAndReplaceParams)
 	}
 
 	replaced.Messages = append([]llm.Message(nil), p.Messages...)
+	replaced.ApprovedPlan = p.ApprovedPlan
 	replaced.MessageCount = len(replaced.Messages)
 	replaced.Version = 1
 	replaced.UpdatedAt = time.Now()
@@ -578,7 +595,11 @@ func (s store) AppendMessages(
 	}
 	currentMessages, err := s.loadDialogueMessages(current)
 	if err != nil {
-		return fmt.Errorf("append messages: load existing dialogue messages: %w", err)
+		if current.MessagesPath != "" && errors.Is(err, os.ErrNotExist) {
+			currentMessages = nil
+		} else {
+			return fmt.Errorf("append messages: load existing dialogue messages: %w", err)
+		}
 	}
 	updated = current
 	updated.Messages = append(append([]llm.Message(nil), currentMessages...), msgs...)

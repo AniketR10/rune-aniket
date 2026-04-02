@@ -34,6 +34,7 @@ import (
 	"time"
 
 	"unstable.build/go-tui/cmd/rune-agent/agent"
+	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
 	"unstable.build/go-tui/cmd/rune-agent/llm"
 )
 
@@ -184,7 +185,11 @@ func (t *ExitPlanTool) execute(ctx context.Context, title, plan string) agent.To
 
 	if len(resp.Values) > 0 && resp.Values[0] == approveValue {
 		return agent.ToolResult{
-			Content:      fmt.Sprintf("Plan approved. Saved to %s\n\n%s", path, plan),
+			Content: fmt.Sprintf("Plan approved. Saved to %s\n\n%s", path, plan),
+			ApprovedPlan: &dialoguemanager.ApprovedPlan{
+				Path: path,
+				Body: plan,
+			},
 			ClearContext: true,
 		}
 	}

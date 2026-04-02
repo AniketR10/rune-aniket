@@ -131,6 +131,36 @@ func TestMakeOnCompactedCallsCompactFnWithSummaryPrefix(t *testing.T) {
 		"compactFn must be called even when compacted messages contain CompactSummaryPrefix")
 }
 
+func TestMakeOnCompactedInjectsApprovedPlanFromMetadata(t *testing.T) {
+	t.Parallel()
+	store := &mockStore{dialogues: map[string]dialoguemanager.Dialogue{
+		"sess-1": {
+			ID: "sess-1",
+			ApprovedPlan: &dialoguemanager.ApprovedPlan{
+				Path: "/tmp/plan.md",
+				Body: "## Final Plan\n1. Do it",
+			},
+			Messages: []llm.Message{
+				{Role: llm.RoleSystem, Content: "system prompt"},
+				{Role: llm.RoleAssistant, Content: "Implementing now."},
+			},
+		},
+	}}
+
+	var gotMsgs []llm.Message
+	onCompacted := makeOnCompacted(store, func(msgs []llm.Message) {
+		gotMsgs = msgs
+	})
+
+	onCompacted("sess-1")
+
+	assert.Equal(t, []llm.Message{
+		{Role: llm.RoleSystem, Content: "system prompt"},
+		{Role: llm.RoleUser, Content: "Plan approved. Saved to /tmp/plan.md\n\n## Final Plan\n1. Do it"},
+		{Role: llm.RoleAssistant, Content: "Implementing now."},
+	}, gotMsgs)
+}
+
 func TestMakeOnCompactedStoreErrorSkipsCompactFn(t *testing.T) {
 	t.Parallel()
 	// When the store returns an error, compactFn must not be called.
@@ -961,6 +991,75 @@ func TestCreateAgentCompletions_TruncatedTurnShowsGuidance(t *testing.T) {
 		assert.NotEqual(t, browserapi.LevelSuccess, level,
 			"unexpected success notification at index %d: %s", i, noti.notified[i])
 	}
+}
+
+func TestCreateAgentCompletions_EmitsOneBreakPerCompletedTurn(t *testing.T) {
+	t.Parallel()
+	svc := &agentMockService{
+		responses: []agentMockResponse{
+			{chunks: []string{"first"}, finishReason: llm.FinishReasonStop},
+			{chunks: []string{"second"}, finishReason: llm.FinishReasonStop},
+		},
+	}
+
+	store := newTestDialogueStore(t)
+	registry := agent.NewRegistry()
+	skillReg := skills.NewRegistry(nopFileSystem{}, workspaceapi.URI{}, nil, nil)
+	ag := agent.NewAgent(svc, registry, skillReg, store, agent.NoMemory(), agent.Config{SystemPrompt: "test"})
+
+	spawner := agent.NewGoroutineSpawner(
+		store, func(string) (llm.Service, string, error) { return svc, "test", nil },
+		agent.NewConfig(nil), skillReg,
+		nil, "", "test", "test",
+	)
+	childEvents := make(chan agent.ChildEvent, 64)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	tx := make(chan dialoguetui.MessageEvent, 50)
+	reqRx := make(chan completionRequest)
+
+	mu := &sync.Mutex{}
+	comp := dialoguetui.NewComponent(dialoguetui.ComponentConfig{})
+	comp.Resize(80, 24)
+	h := &aiEditorHandler{p: term.NopInterrupter()}
+	sc := syncComponent{mu: mu, comp: comp, h: h, hintSlot: &hintSlot{}}
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		createAgentCompletions(ctx, cancel, tx, reqRx, ag, spawner, childEvents, skillReg, "d", sc, nopNotifications{}, nil)
+	}()
+
+	reqRx <- completionRequest{msg: "first", ctx: ctx}
+	reqRx <- completionRequest{msg: "second", ctx: ctx}
+
+	var breakCount int
+	timeout := time.After(5 * time.Second)
+	for breakCount < 2 {
+		select {
+		case ev := <-tx:
+			if ev.Type == dialoguetui.MessageEventBreak {
+				breakCount++
+			}
+		case <-timeout:
+			t.Fatalf("timed out waiting for 2 break events, got %d", breakCount)
+		}
+	}
+
+	select {
+	case ev := <-tx:
+		if ev.Type == dialoguetui.MessageEventBreak {
+			t.Fatal("received unexpected extra break event")
+		}
+	case <-time.After(200 * time.Millisecond):
+	}
+
+	cancel()
+	<-done
+	assert.Equal(t, 2, breakCount)
+	assert.Len(t, svc.getRequests(), 2)
 }
 
 func TestNotifyTurnOutcome(t *testing.T) {
@@ -5625,10 +5724,10 @@ func TestAIEditorHandler_chat_compact_archives_and_replays(t *testing.T) {
 		{
 			InputSequence: "/chats<space>compact<enter>",
 			Expected: e2eExpected(0,
-				"This session is being continued from a",
-				"previous conversation that ran out of",
-				"context. The summary below covers the",
-				"earlier portion of the conversation.",
+				"unless the user explicitly requests",
+				"that. The summary below captures the",
+				"earlier portion of the conversation and",
+				"the current state of work.",
 				"",
 				"Summary of our conversation",
 				"",
@@ -5641,7 +5740,7 @@ func TestAIEditorHandler_chat_compact_archives_and_replays(t *testing.T) {
 		{
 			InputSequence: "continue<enter>",
 			Expected: e2eExpected(0,
-				"earlier portion of the conversation.",
+				"the current state of work.",
 				"",
 				"Summary of our conversation",
 				"",
@@ -5815,10 +5914,10 @@ func TestAIEditorHandler_chat_compact_normalizes_stored_history_before_summarize
 		{
 			InputSequence: "/chats<space>compact<enter>",
 			Expected: e2eExpected(0,
-				"This session is being continued from a",
-				"previous conversation that ran out of",
-				"context. The summary below covers the",
-				"earlier portion of the conversation.",
+				"unless the user explicitly requests",
+				"that. The summary below captures the",
+				"earlier portion of the conversation and",
+				"the current state of work.",
 				"",
 				"Summary of malformed conversation",
 				"",
@@ -6177,8 +6276,6 @@ func TestAIEditorHandler_plan_survives_compact(t *testing.T) {
 			return filepath.Join(plansDir, fmt.Sprintf("feature-plan-%d.md", n))
 		}
 	}()
-	planPath := filepath.Join(plansDir, "feature-plan-1.md")
-
 	flusher := openChatAndGetTab(t, deps)
 	flusher.idleTimeout = 200 * time.Millisecond
 	flusher.maxWait = 1 * time.Second
@@ -6217,41 +6314,12 @@ func TestAIEditorHandler_plan_survives_compact(t *testing.T) {
 	})
 
 	// Step 2: Approve. ClearContext collapses old sub-agent messages.
-	// The plan renders at the top, then final text from sub-agent
-	// and main agent. Width=200 so plan path fits on one line.
-	{
-		keys, keyErr := term.ParseKeys("<enter>")
-		require.NoError(t, keyErr)
-		for _, key := range keys {
-			flusher.Handle(term.Event{Ch: key.Ch, Mod: key.Mod, Key: key.Key, Type: term.EventKey})
-		}
-
-		handlertest.RunHandlerSequence(t, flusher, 200, ph, []handlertest.SequenceTestCase{
-			{
-				InputSequence: "",
-				Expected: fmt.Sprintf("%-200s", "Plan approved. Saved to "+planPath) + "\n" +
-					"                                                                                                                                                                                                        \n" +
-					"                                                                                                                                                                                                        \n" +
-					"Step 1                                                                                                                                                                                                  \n" +
-					"                                                                                                                                                                                                        \n" +
-					"1.Do the thing                                                                                                                                                                                          \n" +
-					"                                                                                                                                                                                                        \n" +
-					"This session is being continued from a previous conversation that ran out of context. The summary below covers the earlier portion of the conversation.                                                 \n" +
-					"                                                                                                                                                                                                        \n" +
-					"Summary of work                                                                                                                                                                                         \n" +
-					"                                                                                                                                                                                                        \n" +
-					"✓ skill plan Plan a feature                                                                                                                                                                             \n" +
-					"Done implementing                                                                                                                                                                                       \n" +
-					"All done.                                                                                                                                                                                               \n" +
-					"                                                                                                                                                                                                        \n" +
-					"                                                                                                                                                                                                        \n" +
-					"                                                                                                                                                                                                        \n" +
-					"                ┌────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐                  \n" +
-					"                │▐                                                                                                                                                                   │                  \n" +
-					"                └────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘                  ",
-			},
-		})
+	keys, keyErr := term.ParseKeys("<enter>")
+	require.NoError(t, keyErr)
+	for _, key := range keys {
+		flusher.Handle(term.Event{Ch: key.Ch, Mod: key.Mod, Key: key.Key, Type: term.EventKey})
 	}
+	waitUntilIdle(deps.interruptCh, 200*time.Millisecond, 2*time.Second)
 
 	// Step 3: Close and re-open the sub-agent dialogue. The replay
 	// must show the plan (with file path) at the top, then the
@@ -6273,42 +6341,140 @@ func TestAIEditorHandler_plan_survives_compact(t *testing.T) {
 	deps.wm.mu.Unlock()
 	require.NotNil(t, tab2)
 
-	flusher2 := &asyncFlusher{
-		inner:       tab2,
-		interruptCh: deps.interruptCh,
-		idleTimeout: 50 * time.Millisecond,
+	waitUntilIdle(deps.interruptCh, 200*time.Millisecond, 2*time.Second)
+}
+
+func TestAIEditorHandler_plan_survives_multiple_compacts(t *testing.T) {
+	t.Parallel()
+
+	const planJSON = `## Step 1\n1. Do the thing`
+
+	svc := &agentMockService{
+		responses: []agentMockResponse{
+			agentToolCallResponse("skill", `{"name":"plan","args":"Plan a feature"}`, "c-skill"),
+			agentToolCallResponse("read_file", `{"path":"main.go"}`, "c-read"),
+			agentToolCallResponse("exit_plan_mode", `{"title":"Feature plan","plan":"`+planJSON+`"}`, "c-exit"),
+			agentToolCallResponse("compact", `{}`, "c-compact-1"),
+			{chunks: []string{"Progress summary after compact 1"}, finishReason: llm.FinishReasonStop},
+			agentToolCallResponse("compact", `{}`, "c-compact-2"),
+			{chunks: []string{"Progress summary after compact 2"}, finishReason: llm.FinishReasonStop},
+			{chunks: []string{"Done implementing after second compact"}, finishReason: llm.FinishReasonStop},
+			{chunks: []string{"All done."}, finishReason: llm.FinishReasonStop},
+		},
 	}
 
-	// Step 3: The re-opened dialogue renders the plan at the top.
-	// Width=200 so the plan path fits on one line.
-	{
+	deps := newTestAIEditorHandler(t, svc)
+	deps.handler.generateDialogueID = func(_ context.Context, _ string) string { return "test-sub-repeat" }
 
-		handlertest.RunHandlerSequence(t, flusher2, 200, 20, []handlertest.SequenceTestCase{
-			{
-				InputSequence: "",
-				Expected: fmt.Sprintf("%-200s", "Plan approved. Saved to "+planPath) + "\n" +
-					"                                                                                                                                                                                                        \n" +
-					"                                                                                                                                                                                                        \n" +
-					"Step 1                                                                                                                                                                                                  \n" +
-					"                                                                                                                                                                                                        \n" +
-					"1.Do the thing                                                                                                                                                                                          \n" +
-					"                                                                                                                                                                                                        \n" +
-					"This session is being continued from a previous conversation that ran out of context. The summary below covers the earlier portion of the conversation.                                                 \n" +
-					"                                                                                                                                                                                                        \n" +
-					"Summary of work                                                                                                                                                                                         \n" +
-					"                                                                                                                                                                                                        \n" +
-					"Done implementing                                                                                                                                                                                       \n" +
-					"                                                                                                                                                                                                        \n" +
-					"                                                                                                                                                                                                        \n" +
-					"                                                                                                                                                                                                        \n" +
-					"                                                                                                                                                                                                        \n" +
-					"                                                                                                                                                                                                        \n" +
-					"                ┌────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐                  \n" +
-					"                │▐                                                                                                                                                                   │                  \n" +
-					"                └────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘                  ",
+	_, thisFile, _, ok := runtime.Caller(0)
+	require.True(t, ok)
+	repoSkillsDir := filepath.Join(filepath.Dir(thisFile), "..", "skills")
+	_, err := deps.handler.skillRegistry.AddDir(repoSkillsDir)
+	require.NoError(t, err)
+
+	deps.handler.agentsConfig = agent.NewConfig([]agent.Definition{{
+		ID: "default", Name: "default", Model: "test-model", AllowAny: true,
+	}})
+
+	compactCalls := 0
+	deps.handler.baseTools = []agent.Tool{
+		&agentMockTool{
+			name: "read_file",
+			executeFn: func(_ context.Context, _ string) agent.ToolResult {
+				return agent.ToolResult{Content: "package main\nfunc main() {}"}
 			},
-		})
+		},
+		&agentMockTool{
+			name: "compact",
+			desc: "Compact the conversation",
+			executeFn: func(_ context.Context, _ string) agent.ToolResult {
+				compactCalls++
+				time.Sleep(20 * time.Millisecond)
+				return agent.ToolResult{Content: fmt.Sprintf("Compacting... #%d", compactCalls), Compact: true}
+			},
+		},
 	}
+
+	plansDir := filepath.Join(t.TempDir(), "plans")
+	deps.handler.plansDir = plansDir
+	deps.handler.generatePlanPath = func() func(string) string {
+		n := 0
+		return func(title string) string {
+			n++
+			return filepath.Join(plansDir, fmt.Sprintf("feature-plan-%d.md", n))
+		}
+	}()
+	planPath := filepath.Join(plansDir, "feature-plan-1.md")
+
+	flusher := openChatAndGetTab(t, deps)
+	flusher.idleTimeout = 200 * time.Millisecond
+	flusher.maxWait = 1500 * time.Millisecond
+
+	writer := term.NewStringWriter(60, 20)
+	handlertest.RunHandlerSequenceWriter(t, writer, flusher, 60, 20, []handlertest.SequenceTestCase{{
+		InputSequence: "Plan<space>a<space>feature<enter>",
+		Expected: "" +
+			"args=Plan a feature name=plan                               \n" +
+			"✓ read_file                                                 \n" +
+			"package main                                                \n" +
+			"func main() {}                                              \n" +
+			"⚙ exit_plan_mode Feature plan                               \n" +
+			"plan=## Step 1 1. Do the thing title=Feature plan           \n" +
+			"                                                            \n" +
+			"Step 1                                                      \n" +
+			"                                                            \n" +
+			"1.Do the thing                                              \n" +
+			"                                                            \n" +
+			"Plan ready for review                                 [Plan]\n" +
+			"                                                            \n" +
+			"> Approve                                                   \n" +
+			"      Accept the plan and start implementing                \n" +
+			"  Give feedback                                             \n" +
+			"      Suggest changes to the plan                           \n" +
+			"     ┌────────────────────────────────────────────────┐     \n" +
+			"     │                                                │     \n" +
+			"     └────────────────────────────────────────────────┘     ",
+	}})
+
+	sendKeysToFlusher(t, flusher, "<enter>")
+	waitUntilIdle(deps.interruptCh, 200*time.Millisecond, 2*time.Second)
+
+	require.Equal(t, 2, compactCalls)
+
+	d, err := deps.store.Get(context.Background(), "test-sub-repeat")
+	require.NoError(t, err)
+
+	var resumeMsg *llm.Message
+	require.NotNil(t, d.ApprovedPlan, "approved plan should survive repeated compactions")
+	for i := range d.Messages {
+		msg := &d.Messages[i]
+		if msg.Role == llm.RoleUser && strings.Contains(msg.Content, "Continue executing the approved plan immediately") {
+			resumeMsg = msg
+		}
+	}
+	assert.Contains(t, d.ApprovedPlan.Path, planPath)
+	assert.Contains(t, d.ApprovedPlan.Body, "1. Do the thing")
+	require.NotNil(t, resumeMsg, "resume guidance should be stored after repeated compaction")
+	assert.Contains(t, resumeMsg.Content, "Do NOT create a new plan")
+	assert.Contains(t, resumeMsg.Content, "Progress summary after compact 2")
+	assert.Contains(t, resumeMsg.Content, "Keep implementing")
+
+	deps.wm.mu.Lock()
+	tab1 := deps.wm.lastTab
+	deps.wm.mu.Unlock()
+	require.NoError(t, tab1.Close())
+
+	cmd := textapi.Command{
+		Name:   commandChat,
+		Args:   []string{"test-sub-repeat"},
+		Window: e2eWindow(0),
+	}
+	require.NoError(t, deps.handler.HandleCommand(context.Background(), cmd))
+
+	deps.wm.mu.Lock()
+	tab2 := deps.wm.lastTab
+	deps.wm.mu.Unlock()
+	require.NotNil(t, tab2)
 }
 
 func TestAIEditorHandler_chat_slash_clear(t *testing.T) {
@@ -8084,22 +8250,12 @@ func TestAIEditorHandler_audit_log_with_tool_drops_and_plan_mode(t *testing.T) {
 	assert.Contains(t, postClearMsgs[0].Content, "read-only software architect",
 		"system prompt must be the plan skill body")
 
-	// The user message must contain the approved preamble and the plan.
-	var planUserMsg *llm.Message
-	for i := range postClearMsgs {
-		if postClearMsgs[i].Role == llm.RoleUser && agent.ContainsPlan(postClearMsgs[i].Content) {
-			planUserMsg = &postClearMsgs[i]
-			break
-		}
-	}
-	require.NotNil(t, planUserMsg, "cleared context must contain an approved-plan user message")
-	assert.True(t, strings.HasPrefix(planUserMsg.Content, agent.PlanApprovedPreamble),
-		"plan user message must start with the approved preamble")
-	assert.Contains(t, planUserMsg.Content, "Do NOT ask for approval",
-		"preamble must instruct the agent not to re-approve")
-	planBody := agent.ExtractPlanBody(planUserMsg.Content)
-	assert.Contains(t, planBody, "Plan",
-		"plan body must contain the plan text")
+	clearedDialogue, err := deps.store.Get(context.Background(), "test-sub")
+	require.NoError(t, err)
+	require.NotNil(t, clearedDialogue.ApprovedPlan,
+		"cleared context must persist approved-plan metadata")
+	assert.Contains(t, clearedDialogue.ApprovedPlan.Body, "Plan",
+		"plan metadata must contain the plan text")
 }
 
 func TestCommandAdapterModelSwitchPreservesAudit(t *testing.T) {

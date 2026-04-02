@@ -1520,6 +1520,23 @@ func baseDialogueID(archivedID string) string {
 	return archivedID
 }
 
+func replayMessages(d dialoguemanager.Dialogue) []llm.Message {
+	msgs := make([]llm.Message, 0, len(d.Messages)+1)
+	if len(d.Messages) > 0 {
+		msgs = append(msgs, d.Messages[0])
+	}
+	if d.ApprovedPlan != nil {
+		msgs = append(msgs, llm.Message{
+			Role:    llm.RoleUser,
+			Content: fmt.Sprintf("Plan approved. Saved to %s\n\n%s", d.ApprovedPlan.Path, d.ApprovedPlan.Body),
+		})
+	}
+	if len(d.Messages) > 1 {
+		msgs = append(msgs, d.Messages[1:]...)
+	}
+	return msgs
+}
+
 func addMessage(c *dialoguetui.Component, msg llm.Message, pendingTools map[string]llm.ToolCall) {
 	switch msg.Role {
 	case llm.RoleAssistant:
@@ -1536,19 +1553,13 @@ func addMessage(c *dialoguetui.Component, msg llm.Message, pendingTools map[stri
 			}
 		}
 	case llm.RoleUser:
-		if agent.ContainsPlan(msg.Content) {
-			plan := agent.ExtractPlanBody(msg.Content)
-			c.AddSendMessageMarkdown(plan)
-		} else if strings.HasPrefix(msg.Content, agent.CompactSummaryPrefix) {
+		if strings.HasPrefix(msg.Content, agent.CompactSummaryPrefix) ||
+			strings.HasPrefix(msg.Content, "Plan approved. Saved to ") {
 			c.AddSendMessageMarkdown(msg.Content)
 		} else {
 			c.AddSendMessage(msg.Content)
 		}
 	case llm.RoleSystem:
-		if agent.ContainsPlan(msg.Content) {
-			plan := agent.ExtractPlanBody(msg.Content)
-			c.AddSendMessageMarkdown(plan)
-		}
 	case llm.RoleTool:
 		id := msg.ToolCallID
 		name := "tool"
@@ -1687,7 +1698,7 @@ func makeOnCompacted(store dialoguemanager.Store, compactFn func([]llm.Message))
 			slog.Error("compacted: fetch dialogue", "id", dialogueID, "error", err)
 			return
 		}
-		compactFn(compacted.Messages)
+		compactFn(replayMessages(compacted))
 	}
 }
 
@@ -1835,6 +1846,7 @@ func createAgentCompletions(
 		var lastUsage agent.Event // track last usage event for post-turn hint
 		func() {
 			defer it.Close() //nolint:errcheck
+			breakSent := false
 			// Always signal turn completion to the TUI when we
 			// exit, even on context cancellation or abnormal agent
 			// exit. AddReceiveMessageBreak is idempotent; a
@@ -1842,6 +1854,9 @@ func createAgentCompletions(
 			// the turn's spinner animation stops and any dropped
 			// tool-result events are cleaned up by completeRunning.
 			defer func() {
+				if breakSent {
+					return
+				}
 				select {
 				case tx <- dialoguetui.MessageEvent{Type: dialoguetui.MessageEventBreak}:
 				case <-ctx.Done():
@@ -1990,6 +2005,7 @@ func createAgentCompletions(
 					case tx <- dialoguetui.MessageEvent{
 						Type: dialoguetui.MessageEventBreak,
 					}:
+						breakSent = true
 					case <-ctx.Done():
 						return
 					}

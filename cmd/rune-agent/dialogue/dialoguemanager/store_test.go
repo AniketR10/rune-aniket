@@ -227,6 +227,38 @@ func TestStoreAppendMessagesRetryAccumulatesUsageCorrectly(t *testing.T) {
 	assert.Equal(t, 3, d.Usage.Completions)     // 2 (concurrent) + 1 (ours)
 }
 
+func TestStoreAppendMessagesRecoversWhenMessagesFileIsMissing(t *testing.T) {
+	ctx := context.Background()
+	backend := storagestub.NewInMemoryService()
+	s := newTempStore(t, backend)
+
+	missingPath := filepath.Join(t.TempDir(), "missing.json")
+	stored := storedDialogue{
+		ID:           "d1",
+		Version:      1,
+		MessageCount: 0,
+		MessagesPath: missingPath,
+	}
+	require.NoError(t, backend.Create(ctx, "d1", &stored))
+
+	d := Dialogue{ID: "d1"}
+	err := s.AppendMessages(ctx, d, []llm.Message{
+		{Role: llm.RoleUser, Content: "hello"},
+		{Role: llm.RoleAssistant, Content: "world"},
+	}, llm.DialogueUsage{Completions: 1})
+	require.NoError(t, err)
+
+	got, err := s.Get(ctx, "d1")
+	require.NoError(t, err)
+	assert.Equal(t, []llm.Message{
+		{Role: llm.RoleUser, Content: "hello"},
+		{Role: llm.RoleAssistant, Content: "world"},
+	}, got.Messages)
+	assert.Equal(t, 1, got.Usage.Completions)
+	_, err = os.Stat(missingPath)
+	assert.NoError(t, err)
+}
+
 func TestStoreListReturnsSortedByUpdatedAtDescending(t *testing.T) {
 	ctx := context.Background()
 	backend := storagestub.NewInMemoryService()
@@ -703,6 +735,28 @@ func TestStoreArchiveAndReplacePreservesMetadata(t *testing.T) {
 			}
 		}
 	})
+}
+
+func TestStoreCreateRoundTripsApprovedPlan(t *testing.T) {
+	ctx := context.Background()
+	s := newTempStore(t, storagestub.NewInMemoryService())
+
+	d := Dialogue{
+		ID: "chat-plan",
+		ApprovedPlan: &ApprovedPlan{
+			Path: "/tmp/plan.md",
+			Body: "## Step 1\nDo something",
+		},
+		Messages: []llm.Message{{Role: llm.RoleSystem, Content: "sys"}},
+	}
+	require.NoError(t, s.Create(ctx, d))
+
+	got, err := s.Get(ctx, "chat-plan")
+	require.NoError(t, err)
+	require.NotNil(t, got.ApprovedPlan)
+	assert.Equal(t, d.ApprovedPlan.Path, got.ApprovedPlan.Path)
+	assert.Equal(t, d.ApprovedPlan.Body, got.ApprovedPlan.Body)
+	assert.Len(t, got.Messages, 1)
 }
 
 // TestStoreSharedInstanceConcurrentUpserts verifies that many goroutines
