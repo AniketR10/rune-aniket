@@ -4109,6 +4109,7 @@ func TestVisualBlockInsert(t *testing.T) {
 	suite := []struct {
 		name          string
 		moveCursorFn  func(*viHandlerImpl)
+		selectKeys    string // keys after Ctrl-V to define block; default "jj"
 		inputSequence string
 		expect        string
 	}{
@@ -4142,20 +4143,61 @@ func TestVisualBlockInsert(t *testing.T) {
 			inputSequence: "^^^",
 			expect:        "aaaaaa\nbbbbbb\ncccccc\ndddddd",
 		},
+		{
+			name: "wider block",
+			moveCursorFn: func(vi *viHandlerImpl) {
+				// move cursor to column 2
+				vi.Handle(term.Event{Type: term.EventKey, Ch: 'l'})
+				vi.Handle(term.Event{Type: term.EventKey, Ch: 'l'})
+			},
+			selectKeys:    "lljj", // select cols 2-4, rows 0-2
+			inputSequence: "XY",
+			expect:        "aaXYaaaa\nbbXYbbbb\nccXYcccc\ndddddd",
+		},
+		{
+			name: "reversed horizontal selection",
+			moveCursorFn: func(vi *viHandlerImpl) {
+				// start at column 3
+				vi.Handle(term.Event{Type: term.EventKey, Ch: 'l'})
+				vi.Handle(term.Event{Type: term.EventKey, Ch: 'l'})
+				vi.Handle(term.Event{Type: term.EventKey, Ch: 'l'})
+			},
+			selectKeys:    "hhjj", // select leftward from col 3 to col 1, rows 0-2
+			inputSequence: "XY",
+			// I inserts at left edge (col 1)
+			expect: "aXYaaaaa\nbXYbbbbb\ncXYccccc\ndddddd",
+		},
+		{
+			name:          "reversed vertical selection",
+			selectKeys:    "kk", // select upward: start at row 2, go to row 0
+			inputSequence: "XY",
+			moveCursorFn: func(vi *viHandlerImpl) {
+				// start at row 2
+				vi.Handle(term.Event{Type: term.EventKey, Ch: 'j'})
+				vi.Handle(term.Event{Type: term.EventKey, Ch: 'j'})
+			},
+			expect: "XYaaaaaa\nXYbbbbbb\nXYcccccc\ndddddd",
+		},
 	}
 
 	for _, tcase := range suite {
 		t.Run(tcase.name, func(t *testing.T) {
 			vi := setupVi(t, fileContent, 2)
-			vi.Resize(4, 4)
+			vi.Resize(20, 10)
 
 			if tcase.moveCursorFn != nil {
 				tcase.moveCursorFn(vi)
 			}
 
+			selectKeys := tcase.selectKeys
+			if selectKeys == "" {
+				selectKeys = "jj"
+			}
+
 			vi.Handle(term.Event{Type: term.EventKey, Ch: 'v', Mod: term.ModCtrl})
-			vi.Handle(term.Event{Type: term.EventKey, Ch: 'j'})
-			vi.Handle(term.Event{Type: term.EventKey, Ch: 'j'})
+			for _, ch := range selectKeys {
+				vi.Handle(term.Event{Type: term.EventKey, Ch: ch})
+			}
 			vi.Handle(term.Event{Type: term.EventKey, Ch: 'I'})
 
 			for _, ch := range tcase.inputSequence {
@@ -4172,6 +4214,205 @@ func TestVisualBlockInsert(t *testing.T) {
 			assert.Equal(t, tcase.expect,
 				vi.less.Buffer().String())
 
+		})
+	}
+}
+
+func TestVisualBlockAppend(t *testing.T) {
+	fileContent := "aaaaaa\nbbbbbb\ncccccc\ndddddd"
+
+	suite := []struct {
+		name          string
+		moveCursorFn  func(*viHandlerImpl)
+		selectKeys    string // keys after Ctrl-V; default "jj"
+		inputSequence string
+		expect        string
+	}{
+		{
+			name:          "no backspace",
+			inputSequence: "01234",
+			// block is col 0 only, rows 0-2; A appends at col 1
+			expect: "a01234aaaaa\nb01234bbbbb\nc01234ccccc\ndddddd",
+		},
+		{
+			name:          "backspace",
+			inputSequence: "01234^xy",
+			expect:        "a0123xyaaaaa\nb0123xybbbbb\nc0123xyccccc\ndddddd",
+		},
+		{
+			name:          "many backspace",
+			inputSequence: "01234^^^xy",
+			expect:        "a01xyaaaaa\nb01xybbbbb\nc01xyccccc\ndddddd",
+		},
+		{
+			name:          "more backspaces than characters",
+			inputSequence: "ABC^^^^^^^",
+			// backspacing past insertion deletes existing chars at append position
+			expect: "aaaaa\nbbbbb\nccccc\ndddddd",
+		},
+		{
+			name:          "backspace only",
+			inputSequence: "^",
+			// single backspace from append position deletes char at col 0
+			expect: "aaaaa\nbbbbb\nccccc\ndddddd",
+		},
+		{
+			name: "wider block",
+			moveCursorFn: func(vi *viHandlerImpl) {
+				vi.Handle(term.Event{Type: term.EventKey, Ch: 'l'})
+				vi.Handle(term.Event{Type: term.EventKey, Ch: 'l'})
+			},
+			selectKeys:    "lljj", // cols 2-4, rows 0-2; A appends at col 5
+			inputSequence: "XY",
+			expect:        "aaaaaXYa\nbbbbbXYb\ncccccXYc\ndddddd",
+		},
+		{
+			name: "reversed horizontal selection",
+			moveCursorFn: func(vi *viHandlerImpl) {
+				vi.Handle(term.Event{Type: term.EventKey, Ch: 'l'})
+				vi.Handle(term.Event{Type: term.EventKey, Ch: 'l'})
+				vi.Handle(term.Event{Type: term.EventKey, Ch: 'l'})
+			},
+			selectKeys:    "hhjj", // anchor col 3, cursor col 1; block cols 1-3, A at col 4
+			inputSequence: "XY",
+			expect:        "aaaaXYaa\nbbbbXYbb\nccccXYcc\ndddddd",
+		},
+		{
+			name:          "reversed vertical selection",
+			selectKeys:    "kk",
+			inputSequence: "XY",
+			moveCursorFn: func(vi *viHandlerImpl) {
+				vi.Handle(term.Event{Type: term.EventKey, Ch: 'j'})
+				vi.Handle(term.Event{Type: term.EventKey, Ch: 'j'})
+			},
+			expect: "aXYaaaaa\nbXYbbbbb\ncXYccccc\ndddddd",
+		},
+	}
+
+	for _, tcase := range suite {
+		t.Run(tcase.name, func(t *testing.T) {
+			vi := setupVi(t, fileContent, 2)
+			vi.Resize(20, 10)
+
+			if tcase.moveCursorFn != nil {
+				tcase.moveCursorFn(vi)
+			}
+
+			selectKeys := tcase.selectKeys
+			if selectKeys == "" {
+				selectKeys = "jj"
+			}
+
+			vi.Handle(term.Event{Type: term.EventKey, Ch: 'v', Mod: term.ModCtrl})
+			for _, ch := range selectKeys {
+				vi.Handle(term.Event{Type: term.EventKey, Ch: ch})
+			}
+			vi.Handle(term.Event{Type: term.EventKey, Ch: 'A'})
+
+			for _, ch := range tcase.inputSequence {
+				if ch == '^' {
+					vi.Handle(term.Event{Type: term.EventKey, Key: term.KeyBackspace})
+				} else {
+					vi.Handle(term.Event{Type: term.EventKey, Ch: ch})
+				}
+			}
+
+			vi.Handle(term.Event{Type: term.EventKey, Key: term.KeyEsc})
+			assert.Equal(t, tcase.expect,
+				vi.less.Buffer().String())
+		})
+	}
+}
+
+func TestVisualBlockChange(t *testing.T) {
+	fileContent := "aaaaaa\nbbbbbb\ncccccc\ndddddd"
+
+	suite := []struct {
+		name          string
+		moveCursorFn  func(*viHandlerImpl)
+		selectKeys    string // keys after Ctrl-V; default "jj"
+		changeKey     rune   // 'c' or 's'; default 'c'
+		inputSequence string
+		expect        string
+	}{
+		{
+			name:          "single column change",
+			inputSequence: "X",
+			// block is col 0, rows 0-2; delete col 0, insert "X"
+			expect: "Xaaaaa\nXbbbbb\nXccccc\ndddddd",
+		},
+		{
+			name: "wider block change",
+			moveCursorFn: func(vi *viHandlerImpl) {
+				vi.Handle(term.Event{Type: term.EventKey, Ch: 'l'})
+				vi.Handle(term.Event{Type: term.EventKey, Ch: 'l'})
+			},
+			selectKeys:    "lljj", // cols 2-4, rows 0-2
+			inputSequence: "XY",
+			expect:        "aaXYa\nbbXYb\nccXYc\ndddddd",
+		},
+		{
+			name:          "change with backspace",
+			selectKeys:    "lljj",
+			inputSequence: "ABCD^xy",
+			// block is cols 0-2, rows 0-2; delete 3 cols, type ABCDxy with 1 BS
+			expect: "ABCxyaaa\nABCxybbb\nABCxyccc\ndddddd",
+		},
+		{
+			name:      "substitute single column",
+			changeKey: 's',
+			// block is col 0, rows 0-2; delete col 0, insert "Z"
+			inputSequence: "Z",
+			expect:        "Zaaaaa\nZbbbbb\nZccccc\ndddddd",
+		},
+		{
+			name: "reversed horizontal change",
+			moveCursorFn: func(vi *viHandlerImpl) {
+				vi.Handle(term.Event{Type: term.EventKey, Ch: 'l'})
+				vi.Handle(term.Event{Type: term.EventKey, Ch: 'l'})
+				vi.Handle(term.Event{Type: term.EventKey, Ch: 'l'})
+			},
+			selectKeys:    "hhjj", // anchor col 3, cursor col 1; block cols 1-3
+			inputSequence: "XY",
+			expect:        "aXYaa\nbXYbb\ncXYcc\ndddddd",
+		},
+	}
+
+	for _, tcase := range suite {
+		t.Run(tcase.name, func(t *testing.T) {
+			vi := setupVi(t, fileContent, 2)
+			vi.Resize(20, 10)
+
+			if tcase.moveCursorFn != nil {
+				tcase.moveCursorFn(vi)
+			}
+
+			selectKeys := tcase.selectKeys
+			if selectKeys == "" {
+				selectKeys = "jj"
+			}
+			changeKey := tcase.changeKey
+			if changeKey == 0 {
+				changeKey = 'c'
+			}
+
+			vi.Handle(term.Event{Type: term.EventKey, Ch: 'v', Mod: term.ModCtrl})
+			for _, ch := range selectKeys {
+				vi.Handle(term.Event{Type: term.EventKey, Ch: ch})
+			}
+			vi.Handle(term.Event{Type: term.EventKey, Ch: changeKey})
+
+			for _, ch := range tcase.inputSequence {
+				if ch == '^' {
+					vi.Handle(term.Event{Type: term.EventKey, Key: term.KeyBackspace})
+				} else {
+					vi.Handle(term.Event{Type: term.EventKey, Ch: ch})
+				}
+			}
+
+			vi.Handle(term.Event{Type: term.EventKey, Key: term.KeyEsc})
+			assert.Equal(t, tcase.expect,
+				vi.less.Buffer().String())
 		})
 	}
 }

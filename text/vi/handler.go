@@ -1007,10 +1007,37 @@ func (vi *viHandlerImpl) repeatInsertStart() {
 }
 
 func (vi *viHandlerImpl) handleVisualBlockInsertStart() {
+	anchor, _ := vi.cursor.SelectionFrom()
+	cursor := vi.cursor.CursorAtScroll()
+	blockFrom, blockTo := term.CoordinatesBlockSort(anchor, cursor)
 	vi.setInsertMode()
-	vi.blockRepeat.From, _ = vi.cursor.SelectionFrom()
-	vi.blockRepeat.To = vi.cursor.CursorAtScroll()
+	vi.blockRepeat.From = blockFrom
+	vi.blockRepeat.To = blockTo
+	vi.setCursorAtScroll(blockFrom)
+}
+
+func (vi *viHandlerImpl) handleVisualBlockAppendStart() {
+	anchor, _ := vi.cursor.SelectionFrom()
+	cursor := vi.cursor.CursorAtScroll()
+	blockFrom, blockTo := term.CoordinatesBlockSort(anchor, cursor)
+	// append position is one column past the right edge of the block
+	appendCol := blockTo.X + 1
+	vi.setInsertMode()
+	vi.blockRepeat.From = term.Coordinates{X: appendCol, Y: blockFrom.Y}
+	vi.blockRepeat.To = term.Coordinates{X: appendCol, Y: blockTo.Y}
 	vi.setCursorAtScroll(vi.blockRepeat.From)
+}
+
+func (vi *viHandlerImpl) handleVisualBlockChangeStart() {
+	anchor, _ := vi.cursor.SelectionFrom()
+	cursor := vi.cursor.CursorAtScroll()
+	blockFrom, blockTo := term.CoordinatesBlockSort(anchor, cursor)
+	// delete the block first, then enter insert at the left edge
+	vi.cursor.DeleteSelection()
+	vi.setInsertMode()
+	vi.blockRepeat.From = term.Coordinates{X: blockFrom.X, Y: blockFrom.Y}
+	vi.blockRepeat.To = term.Coordinates{X: blockFrom.X, Y: blockTo.Y}
+	vi.setCursorAtScroll(blockFrom)
 }
 
 func (vi *viHandlerImpl) handleVisual(ev term.Event) (quit, handled bool) {
@@ -1079,8 +1106,13 @@ func (vi *viHandlerImpl) handleVisual(ev term.Event) (quit, handled bool) {
 			vi.cursor.DeleteSelection()
 			vi.setNormalMode()
 		case 's', 'c':
-			vi.cursor.DeleteSelection()
-			vi.setInsertMode()
+			switch vi.mode() {
+			case visualBlockMode:
+				vi.handleVisualBlockChangeStart()
+			default:
+				vi.cursor.DeleteSelection()
+				vi.setInsertMode()
+			}
 		case 'u':
 			vi.cursor.LowercaseSelection()
 			vi.setNormalMode()
@@ -1094,6 +1126,13 @@ func (vi *viHandlerImpl) handleVisual(ev term.Event) (quit, handled bool) {
 			switch vi.mode() {
 			case visualBlockMode:
 				vi.handleVisualBlockInsertStart()
+			default:
+				handled = false
+			}
+		case 'A':
+			switch vi.mode() {
+			case visualBlockMode:
+				vi.handleVisualBlockAppendStart()
 			default:
 				handled = false
 			}
