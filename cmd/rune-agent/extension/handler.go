@@ -1553,7 +1553,9 @@ func addMessage(c *dialoguetui.Component, msg llm.Message, pendingTools map[stri
 			}
 		}
 	case llm.RoleUser:
-		if strings.HasPrefix(msg.Content, agent.CompactSummaryPrefix) ||
+		if replayed, ok := parseStoredCommandMessage(msg.Content); ok {
+			c.AddSendMessage(replayed)
+		} else if strings.HasPrefix(msg.Content, agent.CompactSummaryPrefix) ||
 			strings.HasPrefix(msg.Content, "Plan approved. Saved to ") {
 			c.AddSendMessageMarkdown(msg.Content)
 		} else {
@@ -2342,6 +2344,57 @@ func formatSkillMessage(skill skills.Skill, args string) string {
 		b.WriteString(args)
 	}
 	return b.String()
+}
+
+func parseStoredCommandMessage(content string) (string, bool) {
+	const (
+		messageOpen  = "<command-message>"
+		messageClose = "</command-message>"
+		nameOpen     = "<command-name>"
+		nameClose    = "</command-name>"
+	)
+
+	if !strings.HasPrefix(content, messageOpen) {
+		return "", false
+	}
+	rest := strings.TrimPrefix(content, messageOpen)
+	messageEnd := strings.Index(rest, messageClose)
+	if messageEnd < 0 {
+		return "", false
+	}
+	messageName := rest[:messageEnd]
+	rest = rest[messageEnd+len(messageClose):]
+	if !strings.HasPrefix(rest, "\n"+nameOpen) {
+		return "", false
+	}
+	rest = strings.TrimPrefix(rest, "\n"+nameOpen)
+	nameEnd := strings.Index(rest, nameClose)
+	if nameEnd < 0 {
+		return "", false
+	}
+	commandName := rest[:nameEnd]
+	rest = rest[nameEnd+len(nameClose):]
+
+	if messageName == "" || commandName == "" || !strings.HasPrefix(commandName, "/") {
+		return "", false
+	}
+	if strings.TrimPrefix(commandName, "/") != messageName {
+		return "", false
+	}
+	if rest == "" {
+		return commandName, true
+	}
+	if !strings.HasPrefix(rest, "\n") {
+		return "", false
+	}
+	args := strings.TrimPrefix(rest, "\n")
+	if args == "" {
+		return commandName, true
+	}
+	if strings.Contains(args, "\n") {
+		return commandName + "\n" + args, true
+	}
+	return commandName + " " + args, true
 }
 
 // handleModel shows the current model or switches to a new one.

@@ -358,6 +358,69 @@ func TestAddMessage_JSONDeserializedMetadata(t *testing.T) {
 	assert.Equal(t, "read_file", call.Function.Name)
 }
 
+func TestAddMessage_ReplaysStoredCommandEnvelopeWithArgs(t *testing.T) {
+	t.Parallel()
+	comp := dialoguetui.NewComponent(dialoguetui.ComponentConfig{})
+	comp.Resize(40, 10)
+
+	addMessage(comp, llm.Message{
+		Role:    llm.RoleUser,
+		Content: formatSkillMessage(skills.Skill{Name: "issue-implement"}, "RUNE-21"),
+	}, nil)
+
+	w := term.NewStringWriter(41, 11)
+	err := w.Flush()
+	require.NoError(t, err)
+	comp.Draw(w)
+	err = w.Flush()
+	require.NoError(t, err)
+
+	out := w.String()
+	assert.Contains(t, out, "/issue-implement RUNE-21")
+	assert.NotContains(t, out, "<command-message>")
+	assert.NotContains(t, out, "<command-name>")
+}
+
+func TestAddMessage_ReplaysStoredCommandEnvelopeWithoutArgs(t *testing.T) {
+	t.Parallel()
+	comp := dialoguetui.NewComponent(dialoguetui.ComponentConfig{})
+	comp.Resize(40, 10)
+
+	addMessage(comp, llm.Message{
+		Role:    llm.RoleUser,
+		Content: formatSkillMessage(skills.Skill{Name: "issue-implement"}, ""),
+	}, nil)
+
+	w := term.NewStringWriter(41, 11)
+	comp.Draw(w)
+	err := w.Flush()
+	require.NoError(t, err)
+
+	out := w.String()
+	assert.Contains(t, out, "/issue-implement")
+	assert.NotContains(t, out, "<command-message>")
+	assert.NotContains(t, out, "<command-name>")
+}
+
+func TestAddMessage_InvalidStoredCommandEnvelopeFallsBackToPlainText(t *testing.T) {
+	t.Parallel()
+	comp := dialoguetui.NewComponent(dialoguetui.ComponentConfig{})
+	comp.Resize(40, 10)
+
+	content := "<command-message>issue-implement</command-message>\nRUNE-21"
+	addMessage(comp, llm.Message{Role: llm.RoleUser, Content: content}, nil)
+
+	w := term.NewStringWriter(41, 11)
+	comp.Draw(w)
+	err := w.Flush()
+	require.NoError(t, err)
+
+	out := w.String()
+	assert.Contains(t, out, "<command-message>")
+	assert.Contains(t, out, "RUNE-21")
+	assert.NotContains(t, out, "/issue-implement RUNE-21")
+}
+
 // recordingHandler records the last HandleCommand call for assertion.
 type recordingHandler struct {
 	lastCmd  repl.Command
@@ -2663,6 +2726,61 @@ func TestAIEditorHandler_chat_replays_history(t *testing.T) {
 			Expected: e2eExpected(0,
 				"previous question",
 				"previous answer",
+				"",
+				"",
+				"",
+				"",
+				"",
+				"   ┌───────────────────────────────┐",
+				"   │▐                              │",
+				"   └───────────────────────────────┘",
+			),
+		},
+	})
+}
+
+func TestAIEditorHandler_chat_replaysStoredCommandEnvelopeAsSlashCommand(t *testing.T) {
+	t.Parallel()
+
+	svc := &agentMockService{}
+	deps := newTestAIEditorHandler(t, svc)
+
+	err := deps.store.Create(context.Background(), dialoguemanager.Dialogue{
+		ID: "mysess",
+		Messages: []llm.Message{
+			{Role: llm.RoleSystem, Content: testSystemPromptWithAddendum},
+			{Role: llm.RoleUser, Content: formatSkillMessage(skills.Skill{Name: "issue-implement"}, "RUNE-21")},
+		},
+	})
+	require.NoError(t, err)
+
+	cmd := textapi.Command{
+		Name:   commandChat,
+		Args:   []string{"mysess"},
+		Window: e2eWindow(0),
+	}
+	err = deps.handler.HandleCommand(context.Background(), cmd)
+	require.NoError(t, err)
+
+	waitUntilIdle(deps.interruptCh, 100*time.Millisecond, 0)
+
+	deps.wm.mu.Lock()
+	tab := deps.wm.lastTab
+	deps.wm.mu.Unlock()
+	require.NotNil(t, tab)
+
+	flusher := &asyncFlusher{
+		inner:       tab,
+		interruptCh: deps.interruptCh,
+		idleTimeout: 50 * time.Millisecond,
+	}
+
+	handlertest.RunHandlerSequence(t, flusher, e2eWidth, e2eHeight, []handlertest.SequenceTestCase{
+		{
+			InputSequence: "",
+			Expected: e2eExpected(0,
+				"/issue-implement RUNE-21",
+				"",
 				"",
 				"",
 				"",
