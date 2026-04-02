@@ -33,12 +33,22 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/api/semanticapi/semanticrpc"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"go.uber.org/mock/gomock"
+	"unstable.build/go-tui/rpc/rpctest"
 	"unstable.build/go-tui/cmd/rune-agent/agent"
 	"unstable.build/go-tui/cmd/rune-agent/agent/agentools"
 	"unstable.build/go-tui/cmd/rune-agent/llm"
 	"unstable.build/go-tui/cmd/rune-agent/llm/anthropic"
-	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 )
+
+func disconnectedTestLSP(t *testing.T) *semanticrpc.Client {
+	t.Helper()
+	ctrl := gomock.NewController(t)
+	cc := rpctest.NewMockClientConnInterface(ctrl)
+	return semanticrpc.NewClient(context.Background(), cc)
+}
 
 const (
 	testModel = anthropic.ClaudeSonnet4Dot6
@@ -135,7 +145,7 @@ func TestAnthropicE2E_ToolUse(t *testing.T) {
 	c, _ := testClient(t)
 	ctx := context.Background()
 
-	agentTools, _ := agentools.DefaultTools(nil, nil, workspaceapi.URI{}, agentools.Config{})
+	agentTools, _ := agentools.DefaultTools(nil, nil, workspaceapi.URI{}, disconnectedTestLSP(t), agentools.Config{})
 	registry := agent.NewRegistry(agentTools...)
 	tools := registry.Tools("")
 	require.NotEmpty(t, tools)
@@ -176,7 +186,7 @@ func TestAnthropicE2E_MultiTurn(t *testing.T) {
 	c, _ := testClient(t)
 	ctx := context.Background()
 
-	agentTools, _ := agentools.DefaultTools(nil, nil, workspaceapi.URI{}, agentools.Config{})
+	agentTools, _ := agentools.DefaultTools(nil, nil, workspaceapi.URI{}, disconnectedTestLSP(t), agentools.Config{})
 	registry := agent.NewRegistry(agentTools...)
 	tools := registry.Tools("")
 
@@ -234,7 +244,7 @@ func TestAnthropicE2E_PromptCaching(t *testing.T) {
 	c, _ := testClient(t)
 	ctx := context.Background()
 
-	agentTools, _ := agentools.DefaultTools(nil, nil, workspaceapi.URI{}, agentools.Config{})
+	agentTools, _ := agentools.DefaultTools(nil, nil, workspaceapi.URI{}, disconnectedTestLSP(t), agentools.Config{})
 	registry := agent.NewRegistry(agentTools...)
 	tools := registry.Tools("")
 

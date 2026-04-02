@@ -39,9 +39,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/cmd/rune-agent/agent"
 	"unstable.build/go-tui/cmd/rune-agent/llm"
-	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 )
 
 // localFS implements workspaceapi.FileSystem using local OS calls for testing.
@@ -142,7 +143,7 @@ func dirURI(dir string) workspaceapi.URI {
 }
 
 func TestDefaultTools(t *testing.T) {
-	tools, tracker := DefaultTools(localFS{}, localExec{}, dirURI("/workspace"), Config{})
+	tools, tracker := DefaultTools(localFS{}, localExec{}, dirURI("/workspace"), nil, Config{})
 	require.Len(t, tools, 6)
 	require.NotNil(t, tracker)
 
@@ -187,7 +188,7 @@ func TestDefinitions(t *testing.T) {
 		wantName string
 	}{
 		{"read_file", newReadFile(fs, dirURI(dir), NewFileTracker(), 0), "read_file"},
-		{"apply_patch", newApplyPatch(fs, dirURI(dir), NewFileTracker()), "apply_patch"},
+		{"apply_patch", newApplyPatch(fs, dirURI(dir), NewFileTracker(), &stubLSP{}), "apply_patch"},
 		{"search_content", newSearch(fs, dirURI(dir), NewFileTracker()), "search_content"},
 		{"find_files", newFindFiles(fs, dirURI(dir), NewFileTracker()), "find_files"},
 		{"list_dir", NewListDir(fs, dirURI(dir)), "list_dir"},
@@ -255,9 +256,9 @@ func TestSummary(t *testing.T) {
 		{"read_file with offset no limit", newReadFile(fs, dirURI(dir), NewFileTracker(), 0), `{"path":"src/main.go","offset":10}`, "src/main.go:10-"},
 		{"read_file invalid json", newReadFile(fs, dirURI(dir), NewFileTracker(), 0), `bad`, ""},
 		// apply_patch
-		{"apply_patch single file", newApplyPatch(fs, dirURI(dir), NewFileTracker()), `{"patch":"*** Begin Patch\n*** Update File: main.go\n@@ \n-old\n+new\n*** End Patch"}`, "main.go"},
-		{"apply_patch multi file", newApplyPatch(fs, dirURI(dir), NewFileTracker()), `{"patch":"*** Begin Patch\n*** Add File: a.go\n+pkg\n*** Delete File: b.go\n*** End Patch"}`, "a.go, b.go"},
-		{"apply_patch invalid json", newApplyPatch(fs, dirURI(dir), NewFileTracker()), `bad`, ""},
+		{"apply_patch single file", newApplyPatch(fs, dirURI(dir), NewFileTracker(), &stubLSP{}), `{"patch":"*** Begin Patch\n*** Update File: main.go\n@@ \n-old\n+new\n*** End Patch"}`, "main.go"},
+		{"apply_patch multi file", newApplyPatch(fs, dirURI(dir), NewFileTracker(), &stubLSP{}), `{"patch":"*** Begin Patch\n*** Add File: a.go\n+pkg\n*** Delete File: b.go\n*** End Patch"}`, "a.go, b.go"},
+		{"apply_patch invalid json", newApplyPatch(fs, dirURI(dir), NewFileTracker(), &stubLSP{}), `bad`, ""},
 		// search_content
 		{"search pattern only", newSearch(fs, dirURI(dir), NewFileTracker()), `{"pattern":"TODO"}`, `"TODO"`},
 		{"search with path", newSearch(fs, dirURI(dir), NewFileTracker()), `{"pattern":"TODO","path":"src"}`, `"TODO" in src`},
@@ -1054,7 +1055,7 @@ func TestApplyPatch(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			dir := setupWorkspace(t)
-			tool := newApplyPatch(localFS{}, dirURI(dir), NewFileTracker())
+			tool := newApplyPatch(localFS{}, dirURI(dir), NewFileTracker(), &stubLSP{})
 
 			if tt.setup != nil {
 				tt.setup(t, dir)
@@ -1108,7 +1109,7 @@ func TestApplyPatch_stale_file(t *testing.T) {
 	dir := setupWorkspace(t)
 	tracker := NewFileTracker()
 	readTool := newReadFile(localFS{}, dirURI(dir), tracker, 0)
-	patchTool := newApplyPatch(localFS{}, dirURI(dir), tracker)
+	patchTool := newApplyPatch(localFS{}, dirURI(dir), tracker, &stubLSP{})
 
 	// Read the file (records hash).
 	result := readTool.Execute(context.Background(), `{"path": "hello.txt"}`)
@@ -1179,7 +1180,7 @@ func TestApplyPatch_touchedFiles(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			dir := setupWorkspace(t)
-			tool := newApplyPatch(localFS{}, dirURI(dir), NewFileTracker())
+			tool := newApplyPatch(localFS{}, dirURI(dir), NewFileTracker(), &stubLSP{})
 
 			if tt.setup != nil {
 				tt.setup(t, dir)
@@ -1206,7 +1207,7 @@ func TestApplyPatch_forgets_hash_after_apply(t *testing.T) {
 	dir := setupWorkspace(t)
 	tracker := NewFileTracker()
 	readTool := newReadFile(localFS{}, dirURI(dir), tracker, 0)
-	patchTool := newApplyPatch(localFS{}, dirURI(dir), tracker)
+	patchTool := newApplyPatch(localFS{}, dirURI(dir), tracker, &stubLSP{})
 
 	// Read and patch.
 	result := readTool.Execute(context.Background(), `{"path": "hello.txt"}`)
@@ -1234,4 +1235,75 @@ func setupWorkspace(t *testing.T) string {
 		[]byte("package sub\n\nfunc Foo() {}\n"), 0o644))
 
 	return dir
+}
+
+func TestDefaultTools_wiresApplyPatchLSP(t *testing.T) {
+	lsp := &stubLSP{}
+	tools, _ := DefaultTools(localFS{}, localExec{}, dirURI("/workspace"), lsp, Config{})
+
+	// Verify the apply_patch tool got the lsp reference.
+	var found bool
+	for _, tool := range tools {
+		if ap, ok := tool.(*applyPatchTool); ok {
+			assert.Equal(t, lsp, ap.lsp)
+			found = true
+		}
+	}
+	assert.True(t, found, "apply_patch tool not found in DefaultTools")
+}
+
+func TestApplyPatch_notifiesLSP(t *testing.T) {
+	dir := setupWorkspace(t)
+
+	var received []semanticapi.FileEvent
+	lsp := &stubLSP{
+		didChangeWatchedFilesFn: func(p semanticapi.DidChangeWatchedFilesParams) error {
+			received = append(received, p.Changes...)
+			return nil
+		},
+	}
+
+	tool := newApplyPatch(localFS{}, dirURI(dir), NewFileTracker(), lsp)
+
+	// Successful patch should notify LSP.
+	result := tool.Execute(context.Background(),
+		`{"patch": "*** Begin Patch\n*** Update File: hello.txt\n@@\n hello world\n-second line\n+SECOND LINE\n*** End Patch"}`)
+	require.False(t, result.IsError, result.Content)
+
+	require.Len(t, received, 1)
+	assert.Equal(t, semanticapi.FileChangeTypeChanged, received[0].Type)
+	assert.Contains(t, received[0].URI, "hello.txt")
+}
+
+func TestApplyPatch_notifiesLSP_addAndDelete(t *testing.T) {
+	dir := setupWorkspace(t)
+
+	var received []semanticapi.FileEvent
+	lsp := &stubLSP{
+		didChangeWatchedFilesFn: func(p semanticapi.DidChangeWatchedFilesParams) error {
+			received = append(received, p.Changes...)
+			return nil
+		},
+	}
+
+	tool := newApplyPatch(localFS{}, dirURI(dir), NewFileTracker(), lsp)
+
+	result := tool.Execute(context.Background(),
+		`{"patch": "*** Begin Patch\n*** Add File: new.go\n+package main\n*** Delete File: hello.txt\n*** End Patch"}`)
+	require.False(t, result.IsError, result.Content)
+
+	require.Len(t, received, 2)
+
+	// Find add and delete events.
+	var addEvent, deleteEvent semanticapi.FileEvent
+	for _, e := range received {
+		switch e.Type {
+		case semanticapi.FileChangeTypeCreated:
+			addEvent = e
+		case semanticapi.FileChangeTypeDeleted:
+			deleteEvent = e
+		}
+	}
+	assert.Contains(t, addEvent.URI, "new.go")
+	assert.Contains(t, deleteEvent.URI, "hello.txt")
 }

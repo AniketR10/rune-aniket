@@ -32,12 +32,22 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/api/semanticapi/semanticrpc"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"go.uber.org/mock/gomock"
+	"unstable.build/go-tui/rpc/rpctest"
 	"unstable.build/go-tui/cmd/rune-agent/agent"
 	"unstable.build/go-tui/cmd/rune-agent/agent/agentools"
 	"unstable.build/go-tui/cmd/rune-agent/llm"
 	"unstable.build/go-tui/cmd/rune-agent/llm/openai"
-	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 )
+
+func disconnectedTestLSP(t *testing.T) *semanticrpc.Client {
+	t.Helper()
+	ctrl := gomock.NewController(t)
+	cc := rpctest.NewMockClientConnInterface(ctrl)
+	return semanticrpc.NewClient(context.Background(), cc)
+}
 
 // TestResponsesE2E is a table-driven end-to-end test that sends real requests
 // to the OpenAI Responses API using our actual agent tool schemas.
@@ -59,7 +69,7 @@ func TestResponsesE2E(t *testing.T) {
 	require.True(t, openai.IsResponsesOnlyModel(model), "test model must be responses-only")
 
 	// Collect real tool definitions from agent/agentools.
-	agentTools, _ := agentools.DefaultTools(nil, nil, workspaceapi.URI{}, agentools.Config{})
+	agentTools, _ := agentools.DefaultTools(nil, nil, workspaceapi.URI{}, disconnectedTestLSP(t), agentools.Config{})
 	registry := agent.NewRegistry(agentTools...)
 	tools := registry.AllTools()
 	require.NotEmpty(t, tools, "expected at least one tool definition")
@@ -175,7 +185,7 @@ func TestResponsesE2E_MultiTurn(t *testing.T) {
 
 	model := openai.GPT5Dot3Codex
 
-	agentTools, _ := agentools.DefaultTools(nil, nil, workspaceapi.URI{}, agentools.Config{})
+	agentTools, _ := agentools.DefaultTools(nil, nil, workspaceapi.URI{}, disconnectedTestLSP(t), agentools.Config{})
 	registry := agent.NewRegistry(agentTools...)
 	tools := registry.AllTools()
 

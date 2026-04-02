@@ -2885,6 +2885,12 @@ func (c *testCallback) DiagnosticRefresh(_ context.Context) error {
 	return nil
 }
 
+func (c *testCallback) FileDidChange(_ string, _ int32) {}
+
+func (c *testCallback) WaitFileProcessed(_ context.Context, _ string) error {
+	return nil
+}
+
 // localScheme implements schemeapi.FileSystem and schemeapi.Executor
 // using the local OS for e2e testing.
 type localScheme struct {

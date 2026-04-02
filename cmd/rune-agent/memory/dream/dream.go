@@ -39,17 +39,17 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"unstable.build/go-tui/cmd/rune-agent/agent"
-	"unstable.build/go-tui/cmd/rune-agent/agent/agentools"
-	"unstable.build/go-tui/cmd/rune-agent/agent/skills"
-	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
-	"unstable.build/go-tui/cmd/rune-agent/llm"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
+	"unstable.build/go-tui/cmd/rune-agent/agent"
+	"unstable.build/go-tui/cmd/rune-agent/agent/agentools"
+	"unstable.build/go-tui/cmd/rune-agent/agent/skills"
+	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
+	"unstable.build/go-tui/cmd/rune-agent/llm"
 )
 
 // ProgressType describes the kind of progress being reported.
@@ -57,31 +57,31 @@ type ProgressType int
 
 const (
 	// ProgressBootstrap reports initialization of the memory workspace.
-	ProgressBootstrap    ProgressType = iota + 1 // Initializing memory workspace
+	ProgressBootstrap ProgressType = iota + 1 // Initializing memory workspace
 	// ProgressAnalyzing reports analysis of a conversation.
-	ProgressAnalyzing                            // Analyzing a conversation
+	ProgressAnalyzing // Analyzing a conversation
 	// ProgressWriting reports writing memory files.
-	ProgressWriting                              // Writing memory files
+	ProgressWriting // Writing memory files
 	// ProgressVerifying reports verification steps such as go build/test.
-	ProgressVerifying                            // Running go build/test
+	ProgressVerifying // Running go build/test
 	// ProgressFixing reports automated fix attempts.
-	ProgressFixing                               // Re-running agent to fix failed tests
+	ProgressFixing // Re-running agent to fix failed tests
 	// ProgressMigrating reports migration after schema upgrades.
-	ProgressMigrating                            // Fixing compilation after schema upgrade
+	ProgressMigrating // Fixing compilation after schema upgrade
 	// ProgressReprocessing reports re-dreaming old dialogues after schema changes.
-	ProgressReprocessing                         // Re-dreaming old dialogues for new schema
+	ProgressReprocessing // Re-dreaming old dialogues for new schema
 	// ProgressToolCall reports an agent tool invocation.
-	ProgressToolCall                             // Agent invoked a tool
+	ProgressToolCall // Agent invoked a tool
 	// ProgressToolResult reports completion of an agent tool.
-	ProgressToolResult                           // Tool finished executing
+	ProgressToolResult // Tool finished executing
 	// ProgressError reports a non-fatal error while processing a dialogue.
-	ProgressError                                // Non-fatal error processing a dialogue
+	ProgressError // Non-fatal error processing a dialogue
 	// ProgressPhaseStart reports the start of a post-dream phase.
-	ProgressPhaseStart                           // Starting a post-dream phase
+	ProgressPhaseStart // Starting a post-dream phase
 	// ProgressPhaseFinish reports successful completion of a phase.
-	ProgressPhaseFinish                          // Phase completed successfully
+	ProgressPhaseFinish // Phase completed successfully
 	// ProgressDone reports completion of all dialogue processing.
-	ProgressDone                                 // Finished all dialogues
+	ProgressDone // Finished all dialogues
 )
 
 // Progress reports forward movement of the dream process.
@@ -170,7 +170,7 @@ func NewAgentPhase(name, description, systemPrompt string,
 			if err != nil {
 				return fmt.Errorf("resolve cwd URI: %w", err)
 			}
-			tools, _ := agentools.DefaultTools(deps.FS, deps.Exec, cwd, agentools.Config{})
+			tools, _ := agentools.DefaultTools(deps.FS, deps.Exec, cwd, deps.LSP, agentools.Config{})
 			registry := agent.NewRegistry(tools...)
 			skillRegistry := skills.NewRegistry(deps.FS, cwd, nil, deps.Notifications)
 			store := newEphemeralStore()
@@ -253,6 +253,8 @@ func validateDeps(deps Deps) error {
 		return fmt.Errorf("dream: FS is required")
 	case deps.Exec == nil:
 		return fmt.Errorf("dream: Exec is required")
+	case deps.LSP == nil:
+		return fmt.Errorf("dream: LSP is required")
 	case deps.DataPath == "":
 		return fmt.Errorf("dream: DataPath is required")
 	}
@@ -533,7 +535,7 @@ func dreamDialogue(
 	if err != nil {
 		return fmt.Errorf("resolve cwd URI: %w", err)
 	}
-	tools, _ := agentools.DefaultTools(deps.FS, deps.Exec, cwd, agentools.Config{})
+	tools, _ := agentools.DefaultTools(deps.FS, deps.Exec, cwd, deps.LSP, agentools.Config{})
 	registry := agent.NewRegistry(tools...)
 	skillRegistry := skills.NewRegistry(deps.FS, cwd, nil, deps.Notifications)
 	store := newEphemeralStore()
@@ -814,7 +816,7 @@ func fixUpgradeCompat(ctx context.Context, ch chan<- Progress, deps Deps, fromVe
 		if err != nil {
 			return fmt.Errorf("resolve cwd URI: %w", err)
 		}
-		tools, _ := agentools.DefaultTools(deps.FS, deps.Exec, cwd, agentools.Config{})
+		tools, _ := agentools.DefaultTools(deps.FS, deps.Exec, cwd, deps.LSP, agentools.Config{})
 		reg := agent.NewRegistry(tools...)
 		skillReg := skills.NewRegistry(deps.FS, cwd, nil, deps.Notifications)
 		store := newEphemeralStore()

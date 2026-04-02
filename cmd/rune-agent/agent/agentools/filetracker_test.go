@@ -282,7 +282,7 @@ func TestApplyPatch_consumesDiscoveries(t *testing.T) {
 	assert.Equal(t, []string{"search_1"}, r.DropToolResultIDs)
 
 	// Apply a patch — should still drop the read.
-	patchTool := newApplyPatch(localFS{}, dirURI(dir), tracker)
+	patchTool := newApplyPatch(localFS{}, dirURI(dir), tracker, &stubLSP{})
 	patchResult := patchTool.Execute(t.Context(),
 		`{"patch":"*** Begin Patch\n*** Update File: a.txt\n@@\n hello\n-second line\n+SECOND LINE\n*** End Patch"}`)
 	require.False(t, patchResult.IsError)
@@ -372,7 +372,7 @@ func TestApplyPatch_dropsStaleReads(t *testing.T) {
 
 	tracker := NewFileTracker()
 	readTool := newReadFile(localFS{}, dirURI(dir), tracker, 0)
-	patchTool := newApplyPatch(localFS{}, dirURI(dir), tracker)
+	patchTool := newApplyPatch(localFS{}, dirURI(dir), tracker, &stubLSP{})
 
 	// Read the file first.
 	ctx := agent.WithParentToolCallID(t.Context(), "read_1")
@@ -393,7 +393,7 @@ func TestApplyPatch_dropsAllToolReads(t *testing.T) {
 
 	tracker := NewFileTracker()
 	readTool := newReadFile(localFS{}, dirURI(dir), tracker, 0)
-	patchTool := newApplyPatch(localFS{}, dirURI(dir), tracker)
+	patchTool := newApplyPatch(localFS{}, dirURI(dir), tracker, &stubLSP{})
 
 	// read_file then simulate an outline_file read.
 	ctx := agent.WithParentToolCallID(t.Context(), "read_1")

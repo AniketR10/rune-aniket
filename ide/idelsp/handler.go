@@ -35,6 +35,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
@@ -101,11 +102,21 @@ type CallbackHandler struct {
 	scheduleNextTick func(fn func()) bool
 	log              *slog.Logger
 
-	mu       sync.Mutex
-	progress map[string]string
+	mu           sync.Mutex
+	progress     map[string]string
+	fileVersions map[string]*fileVersionState
+	versionCond  *sync.Cond
 }
 
-var _ semanticapi.LSPCallback = (*CallbackHandler)(nil)
+// fileVersionState tracks the latest sent and processed
+// document versions for a single URI.
+type fileVersionState struct {
+	sent               int32
+	processed          int32
+	pendingUnversioned bool
+}
+
+var _ Callback = (*CallbackHandler)(nil)
 
 // NewCallbackHandler creates a new CallbackHandler.
 func NewCallbackHandler(
@@ -132,7 +143,7 @@ func NewCallbackHandler(
 			return true
 		}
 	}
-	return &CallbackHandler{
+	h := &CallbackHandler{
 		notifications:    notifications,
 		windowManager:    windowManager,
 		resourceOpener:   resourceOpener,
@@ -145,7 +156,10 @@ func NewCallbackHandler(
 		scheduleNextTick: sched,
 		log:              slog.With("struct", "idelsp.CallbackHandler", "workspace", rootURI),
 		progress:         make(map[string]string),
+		fileVersions:     make(map[string]*fileVersionState),
 	}
+	h.versionCond = sync.NewCond(&h.mu)
+	return h
 }
 
 // ShowMessage displays a message notification.
@@ -182,6 +196,9 @@ func (h *CallbackHandler) PublishDiagnostics(
 	_ context.Context,
 	params semanticapi.PublishDiagnosticsParams,
 ) error {
+	// Signal that the server has processed this document version.
+	h.fileDidProcess(params.URI, params.Version)
+
 	uri, err := workspaceapi.ParseURI(params.URI)
 	if err != nil {
 		return fmt.Errorf("parse URI: %w", err)
@@ -600,6 +617,104 @@ func (h *CallbackHandler) DiagnosticRefresh(
 	ctx context.Context,
 ) error {
 	return h.refresher.RefreshDiagnostics(ctx)
+}
+
+// FileDidChange records that a new document version has been
+// sent to the LSP server for the given URI. A version of 0
+// indicates an unversioned change (e.g. file watcher event)
+// that requires waiting for the next publishDiagnostics push.
+func (h *CallbackHandler) FileDidChange(uri string, version int32) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	state, ok := h.fileVersions[uri]
+	if !ok {
+		state = &fileVersionState{}
+		h.fileVersions[uri] = state
+	}
+	if version == 0 {
+		state.pendingUnversioned = true
+	} else if version > state.sent {
+		state.sent = version
+	}
+}
+
+// WaitFileProcessed blocks until the LSP server has processed
+// the latest known version for the given URI, or until the
+// context is cancelled. A fallback timeout of 5s is applied
+// when the caller's context has no deadline, in case the LSP
+// server never sends a publishDiagnostics for the file.
+func (h *CallbackHandler) WaitFileProcessed(ctx context.Context, uri string) error {
+	// Apply a fallback timeout so we never block forever if the
+	// server does not send publishDiagnostics for this URI.
+	if _, ok := ctx.Deadline(); !ok {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+	}
+
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	state, ok := h.fileVersions[uri]
+	if !ok {
+		return nil
+	}
+
+	// Determine what we're waiting for: either a specific
+	// version or just the next diagnostics push.
+	waitUnversioned := state.pendingUnversioned
+	targetVersion := int32(0)
+	if !waitUnversioned {
+		targetVersion = state.sent
+		if state.processed >= targetVersion {
+			return nil
+		}
+	}
+
+	done := make(chan struct{})
+	go func() {
+		select {
+		case <-ctx.Done():
+			h.versionCond.Broadcast()
+		case <-done:
+		}
+	}()
+	defer close(done)
+
+	for {
+		if waitUnversioned {
+			if !state.pendingUnversioned {
+				return nil
+			}
+		} else if state.processed >= targetVersion {
+			return nil
+		}
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		h.versionCond.Wait()
+	}
+}
+
+// fileDidProcess records that the LSP server has processed
+// the given document version for the URI. Any push clears
+// the pendingUnversioned flag since it proves the server
+// has processed at least one round of changes.
+func (h *CallbackHandler) fileDidProcess(uri string, version int32) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	state, ok := h.fileVersions[uri]
+	if !ok {
+		return
+	}
+	// Any diagnostics push for this URI clears the unversioned flag.
+	state.pendingUnversioned = false
+	if version > 0 && version > state.processed {
+		state.processed = version
+	}
+	h.versionCond.Broadcast()
 }
 
 type nopRefresher struct{}

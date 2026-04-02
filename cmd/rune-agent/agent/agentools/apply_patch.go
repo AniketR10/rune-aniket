@@ -27,26 +27,34 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strings"
 
+	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/cmd/rune-agent/agent"
 	"unstable.build/go-tui/cmd/rune-agent/agent/agentools/applypatch"
 	"unstable.build/go-tui/cmd/rune-agent/llm"
-	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 )
 
 type applyPatchTool struct {
 	fs      workspaceapi.FileSystem
 	cwd     workspaceapi.URI
 	tracker *FileTracker
+	lsp     semanticapi.LSP
 }
 
 type applyPatchArgs struct {
 	Patch string `json:"patch"`
 }
 
-func newApplyPatch(fs workspaceapi.FileSystem, cwd workspaceapi.URI, tracker *FileTracker) agent.Tool {
-	return &applyPatchTool{fs: fs, cwd: cwd, tracker: tracker}
+func newApplyPatch(
+	fs workspaceapi.FileSystem,
+	cwd workspaceapi.URI,
+	tracker *FileTracker,
+	lsp semanticapi.LSP,
+) agent.Tool {
+	return &applyPatchTool{fs: fs, cwd: cwd, tracker: tracker, lsp: lsp}
 }
 
 func (t *applyPatchTool) Definition() llm.Tool {
@@ -113,7 +121,7 @@ func (t *applyPatchTool) Summary(arguments string) string {
 	return strings.Join(paths, ", ")
 }
 
-func (t *applyPatchTool) Execute(_ context.Context, arguments string) agent.ToolResult {
+func (t *applyPatchTool) Execute(ctx context.Context, arguments string) agent.ToolResult {
 	var args applyPatchArgs
 	if err := json.Unmarshal([]byte(arguments), &args); err != nil {
 		return agent.ToolResult{Content: fmt.Sprintf("error: invalid arguments: %v", err), IsError: true}
@@ -182,9 +190,66 @@ func (t *applyPatchTool) Execute(_ context.Context, arguments string) agent.Tool
 		}
 	}
 
+	// Notify the LSP subsystem that files changed on disk so the
+	// callback marks them as pending before auto-diagnostics run.
+	t.notifyFileChanges(ctx, patch)
+
 	return agent.ToolResult{
 		Content:           fmt.Sprintf("applied %d/%d operations successfully", result.Applied, result.Total),
 		DropToolResultIDs: staleIDs,
 		TouchedFiles:      touchedFiles,
+	}
+}
+
+// notifyFileChanges sends workspace/didChangeWatchedFiles for each
+// operation in the patch. This is a synchronous gRPC call that ensures
+// the Manager records pending state before any subsequent Diagnostic
+// call.
+func (t *applyPatchTool) notifyFileChanges(ctx context.Context, patch applypatch.Patch) {
+	var events []semanticapi.FileEvent
+	for _, op := range patch.Ops {
+		uri, err := fileURI(t.fs, t.cwd, op.Path)
+		if err != nil {
+			continue
+		}
+		switch op.Type {
+		case applypatch.OpAdd:
+			events = append(events, semanticapi.FileEvent{
+				URI:  uri.String(),
+				Type: semanticapi.FileChangeTypeCreated,
+			})
+		case applypatch.OpUpdate:
+			events = append(events, semanticapi.FileEvent{
+				URI:  uri.String(),
+				Type: semanticapi.FileChangeTypeChanged,
+			})
+			if op.MoveTo != "" {
+				// Rename = delete old + create new.
+				events = append(events, semanticapi.FileEvent{
+					URI:  uri.String(),
+					Type: semanticapi.FileChangeTypeDeleted,
+				})
+				newURI, err := fileURI(t.fs, t.cwd, op.MoveTo)
+				if err == nil {
+					events = append(events, semanticapi.FileEvent{
+						URI:  newURI.String(),
+						Type: semanticapi.FileChangeTypeCreated,
+					})
+				}
+			}
+		case applypatch.OpDelete:
+			events = append(events, semanticapi.FileEvent{
+				URI:  uri.String(),
+				Type: semanticapi.FileChangeTypeDeleted,
+			})
+		}
+	}
+	if len(events) == 0 {
+		return
+	}
+	if err := t.lsp.DidChangeWatchedFiles(ctx, semanticapi.DidChangeWatchedFilesParams{
+		Changes: events,
+	}); err != nil {
+		slog.Warn("apply_patch: notify file changes", "error", err)
 	}
 }

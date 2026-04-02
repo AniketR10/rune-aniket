@@ -38,11 +38,12 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
-	"unstable.build/go-tui/cmd/rune-agent/llm"
+	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
+	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
+	"unstable.build/go-tui/cmd/rune-agent/llm"
 )
 
 func TestDream(t *testing.T) {
@@ -468,6 +469,7 @@ func TestValidateDeps(t *testing.T) {
 		{"missing Storage", func(d *Deps) { d.Storage = nil }, "Storage"},
 		{"missing FS", func(d *Deps) { d.FS = nil }, "FS"},
 		{"missing Exec", func(d *Deps) { d.Exec = nil }, "Exec"},
+		{"missing LSP", func(d *Deps) { d.LSP = nil }, "LSP"},
 		{"missing DataPath", func(d *Deps) { d.DataPath = "" }, "DataPath"},
 	}
 	for _, tt := range tests {
@@ -804,9 +806,199 @@ func validDeps(t *testing.T, dir string) Deps {
 		Storage:  &mockStorage{data: make(map[string]any)},
 		FS:       newOSFileSystem(),
 		Exec:     &mockExec{},
+		LSP:      &stubDreamLSP{},
 		DataPath: dir,
 	}
 }
+
+type stubDreamLSP struct{}
+
+func (s *stubDreamLSP) Initialize(context.Context, semanticapi.InitializeParams) (semanticapi.InitializeResult, error) {
+	return semanticapi.InitializeResult{}, nil
+}
+func (s *stubDreamLSP) Initialized(context.Context) error { return nil }
+func (s *stubDreamLSP) Shutdown(context.Context) error    { return nil }
+func (s *stubDreamLSP) Exit(context.Context) error        { return nil }
+func (s *stubDreamLSP) DidOpen(context.Context, semanticapi.DidOpenTextDocumentParams) error {
+	return nil
+}
+func (s *stubDreamLSP) DidChange(context.Context, semanticapi.DidChangeTextDocumentParams) error {
+	return nil
+}
+func (s *stubDreamLSP) DidClose(context.Context, semanticapi.DidCloseTextDocumentParams) error {
+	return nil
+}
+func (s *stubDreamLSP) DidSave(context.Context, semanticapi.DidSaveTextDocumentParams) error {
+	return nil
+}
+func (s *stubDreamLSP) Completion(context.Context, semanticapi.CompletionParams) (semanticapi.CompletionResult, error) {
+	return semanticapi.CompletionResult{}, nil
+}
+func (s *stubDreamLSP) Hover(context.Context, semanticapi.HoverParams) (*semanticapi.Hover, error) {
+	return nil, nil
+}
+func (s *stubDreamLSP) SignatureHelp(context.Context, semanticapi.SignatureHelpParams) (*semanticapi.SignatureHelp, error) {
+	return nil, nil
+}
+func (s *stubDreamLSP) Definition(context.Context, semanticapi.DefinitionParams) (semanticapi.LocationResult, error) {
+	return semanticapi.LocationResult{}, nil
+}
+func (s *stubDreamLSP) Declaration(context.Context, semanticapi.DeclarationParams) (semanticapi.LocationResult, error) {
+	return semanticapi.LocationResult{}, nil
+}
+func (s *stubDreamLSP) TypeDefinition(context.Context, semanticapi.TypeDefinitionParams) (semanticapi.LocationResult, error) {
+	return semanticapi.LocationResult{}, nil
+}
+func (s *stubDreamLSP) Implementation(context.Context, semanticapi.ImplementationParams) (semanticapi.LocationResult, error) {
+	return semanticapi.LocationResult{}, nil
+}
+func (s *stubDreamLSP) References(context.Context, semanticapi.ReferenceParams) ([]semanticapi.Location, error) {
+	return nil, nil
+}
+func (s *stubDreamLSP) DocumentHighlight(context.Context, semanticapi.DocumentHighlightParams) ([]semanticapi.DocumentHighlight, error) {
+	return nil, nil
+}
+func (s *stubDreamLSP) DocumentSymbol(context.Context, semanticapi.DocumentSymbolParams) (semanticapi.DocumentSymbolResult, error) {
+	return semanticapi.DocumentSymbolResult{}, nil
+}
+func (s *stubDreamLSP) CodeAction(context.Context, semanticapi.CodeActionParams) ([]semanticapi.CodeActionResult, error) {
+	return nil, nil
+}
+func (s *stubDreamLSP) CodeLens(context.Context, semanticapi.CodeLensParams) ([]semanticapi.CodeLens, error) {
+	return nil, nil
+}
+func (s *stubDreamLSP) Formatting(context.Context, semanticapi.DocumentFormattingParams) ([]semanticapi.TextEdit, error) {
+	return nil, nil
+}
+func (s *stubDreamLSP) RangeFormatting(context.Context, semanticapi.DocumentRangeFormattingParams) ([]semanticapi.TextEdit, error) {
+	return nil, nil
+}
+func (s *stubDreamLSP) Rename(context.Context, semanticapi.RenameParams) (*semanticapi.WorkspaceEdit, error) {
+	return nil, nil
+}
+func (s *stubDreamLSP) PrepareRename(context.Context, semanticapi.PrepareRenameParams) (*semanticapi.PrepareRenameResult, error) {
+	return nil, nil
+}
+func (s *stubDreamLSP) FoldingRange(context.Context, semanticapi.FoldingRangeParams) ([]semanticapi.FoldingRange, error) {
+	return nil, nil
+}
+func (s *stubDreamLSP) SelectionRange(context.Context, semanticapi.SelectionRangeParams) ([]semanticapi.SelectionRange, error) {
+	return nil, nil
+}
+func (s *stubDreamLSP) SemanticTokensFull(context.Context, semanticapi.SemanticTokensParams) (*semanticapi.SemanticTokens, error) {
+	return nil, nil
+}
+func (s *stubDreamLSP) SemanticTokensRange(context.Context, semanticapi.SemanticTokensRangeParams) (*semanticapi.SemanticTokens, error) {
+	return nil, nil
+}
+func (s *stubDreamLSP) Diagnostic(context.Context, semanticapi.DocumentDiagnosticParams) (semanticapi.DocumentDiagnosticReport, error) {
+	return semanticapi.DocumentDiagnosticReport{}, nil
+}
+func (s *stubDreamLSP) WorkspaceDiagnostic(context.Context, semanticapi.WorkspaceDiagnosticParams) (semanticapi.WorkspaceDiagnosticReport, error) {
+	return semanticapi.WorkspaceDiagnosticReport{}, nil
+}
+func (s *stubDreamLSP) WorkspaceSymbol(context.Context, semanticapi.WorkspaceSymbolParams) ([]semanticapi.SymbolInformation, error) {
+	return nil, nil
+}
+func (s *stubDreamLSP) ExecuteCommand(context.Context, semanticapi.ExecuteCommandParams) (string, error) {
+	return "", nil
+}
+func (s *stubDreamLSP) PrepareCallHierarchy(context.Context, semanticapi.CallHierarchyPrepareParams) ([]semanticapi.CallHierarchyItem, error) {
+	return nil, nil
+}
+func (s *stubDreamLSP) CallHierarchyIncomingCalls(context.Context, semanticapi.CallHierarchyIncomingCallsParams) ([]semanticapi.CallHierarchyIncomingCall, error) {
+	return nil, nil
+}
+func (s *stubDreamLSP) CallHierarchyOutgoingCalls(context.Context, semanticapi.CallHierarchyOutgoingCallsParams) ([]semanticapi.CallHierarchyOutgoingCall, error) {
+	return nil, nil
+}
+func (s *stubDreamLSP) CompletionResolve(context.Context, semanticapi.CompletionItem) (semanticapi.CompletionItem, error) {
+	return semanticapi.CompletionItem{}, nil
+}
+func (s *stubDreamLSP) CodeLensResolve(context.Context, semanticapi.CodeLens) (semanticapi.CodeLens, error) {
+	return semanticapi.CodeLens{}, nil
+}
+func (s *stubDreamLSP) DocumentColor(context.Context, semanticapi.DocumentColorParams) ([]semanticapi.ColorInformation, error) {
+	return nil, nil
+}
+func (s *stubDreamLSP) ColorPresentation(context.Context, semanticapi.ColorPresentationParams) ([]semanticapi.ColorPresentation, error) {
+	return nil, nil
+}
+func (s *stubDreamLSP) DocumentLink(context.Context, semanticapi.DocumentLinkParams) ([]semanticapi.DocumentLink, error) {
+	return nil, nil
+}
+func (s *stubDreamLSP) DocumentLinkResolve(context.Context, semanticapi.DocumentLink) (semanticapi.DocumentLink, error) {
+	return semanticapi.DocumentLink{}, nil
+}
+func (s *stubDreamLSP) OnTypeFormatting(context.Context, semanticapi.DocumentOnTypeFormattingParams) ([]semanticapi.TextEdit, error) {
+	return nil, nil
+}
+func (s *stubDreamLSP) LinkedEditingRange(context.Context, semanticapi.LinkedEditingRangeParams) (*semanticapi.LinkedEditingRanges, error) {
+	return nil, nil
+}
+func (s *stubDreamLSP) Moniker(context.Context, semanticapi.MonikerParams) ([]semanticapi.Moniker, error) {
+	return nil, nil
+}
+func (s *stubDreamLSP) WillSaveWaitUntil(context.Context, semanticapi.WillSaveTextDocumentParams) ([]semanticapi.TextEdit, error) {
+	return nil, nil
+}
+func (s *stubDreamLSP) SemanticTokensFullDelta(context.Context, semanticapi.SemanticTokensDeltaParams) (*semanticapi.SemanticTokensDelta, error) {
+	return nil, nil
+}
+func (s *stubDreamLSP) PrepareTypeHierarchy(context.Context, semanticapi.TypeHierarchyPrepareParams) ([]semanticapi.TypeHierarchyItem, error) {
+	return nil, nil
+}
+func (s *stubDreamLSP) TypeHierarchySupertypes(context.Context, semanticapi.TypeHierarchySupertypesParams) ([]semanticapi.TypeHierarchyItem, error) {
+	return nil, nil
+}
+func (s *stubDreamLSP) TypeHierarchySubtypes(context.Context, semanticapi.TypeHierarchySubtypesParams) ([]semanticapi.TypeHierarchyItem, error) {
+	return nil, nil
+}
+func (s *stubDreamLSP) InlayHint(context.Context, semanticapi.InlayHintParams) ([]semanticapi.InlayHint, error) {
+	return nil, nil
+}
+func (s *stubDreamLSP) InlayHintResolve(context.Context, semanticapi.InlayHint) (semanticapi.InlayHint, error) {
+	return semanticapi.InlayHint{}, nil
+}
+func (s *stubDreamLSP) InlineValue(context.Context, semanticapi.InlineValueParams) ([]semanticapi.InlineValue, error) {
+	return nil, nil
+}
+func (s *stubDreamLSP) WillCreateFiles(context.Context, semanticapi.CreateFilesParams) (*semanticapi.WorkspaceEdit, error) {
+	return nil, nil
+}
+func (s *stubDreamLSP) WillRenameFiles(context.Context, semanticapi.RenameFilesParams) (*semanticapi.WorkspaceEdit, error) {
+	return nil, nil
+}
+func (s *stubDreamLSP) WillDeleteFiles(context.Context, semanticapi.DeleteFilesParams) (*semanticapi.WorkspaceEdit, error) {
+	return nil, nil
+}
+func (s *stubDreamLSP) WillSave(context.Context, semanticapi.WillSaveTextDocumentParams) error {
+	return nil
+}
+func (s *stubDreamLSP) DidChangeConfiguration(context.Context, semanticapi.DidChangeConfigurationParams) error {
+	return nil
+}
+func (s *stubDreamLSP) DidChangeWatchedFiles(context.Context, semanticapi.DidChangeWatchedFilesParams) error {
+	return nil
+}
+func (s *stubDreamLSP) DidChangeWorkspaceFolders(context.Context, semanticapi.DidChangeWorkspaceFoldersParams) error {
+	return nil
+}
+func (s *stubDreamLSP) WorkDoneProgressCancel(context.Context, semanticapi.WorkDoneProgressCancelParams) error {
+	return nil
+}
+func (s *stubDreamLSP) SetTrace(context.Context, semanticapi.SetTraceParams) error { return nil }
+func (s *stubDreamLSP) DidCreateFiles(context.Context, semanticapi.CreateFilesParams) error {
+	return nil
+}
+func (s *stubDreamLSP) DidRenameFiles(context.Context, semanticapi.RenameFilesParams) error {
+	return nil
+}
+func (s *stubDreamLSP) DidDeleteFiles(context.Context, semanticapi.DeleteFilesParams) error {
+	return nil
+}
+
+var _ semanticapi.LSP = (*stubDreamLSP)(nil)
 
 func collectProgress(t *testing.T, it iterator.Iterator[Progress]) []Progress {
 	t.Helper()
@@ -1075,7 +1267,7 @@ func (f *failingFS) OpenFile(_ string, _ int, _ os.FileMode) (workspaceapi.File,
 	return nil, errors.New("failingFS: open not supported")
 }
 
-func (f *failingFS) Remove(_ string) error                       { return nil }
-func (f *failingFS) Stat(_ string) (os.FileInfo, error)          { return nil, f.statErr }
-func (f *failingFS) ReadDir(_ string) ([]os.DirEntry, error)     { return nil, nil }
-func (f *failingFS) MkdirAll(_ string, _ os.FileMode) error { return nil }
+func (f *failingFS) Remove(_ string) error                   { return nil }
+func (f *failingFS) Stat(_ string) (os.FileInfo, error)      { return nil, f.statErr }
+func (f *failingFS) ReadDir(_ string) ([]os.DirEntry, error) { return nil, nil }
+func (f *failingFS) MkdirAll(_ string, _ os.FileMode) error  { return nil }

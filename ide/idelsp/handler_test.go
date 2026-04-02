@@ -31,6 +31,7 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -381,6 +382,202 @@ func TestCallbackHandler_PublishDiagnostics(t *testing.T) {
 			assert.Equal(t, tt.expectedLocations, ed.locations)
 		})
 	}
+}
+
+func TestCallbackHandler_WaitFileProcessed(t *testing.T) {
+	t.Parallel()
+
+	newHandler := func() *CallbackHandler {
+		return NewCallbackHandler(
+			nil, nil, nil, nil, nil,
+			"",
+			CallbackHandlerConfig{
+				ScheduleNextTick: func(func()) bool {
+					return true
+				},
+			},
+		)
+	}
+
+	t.Run("no pending changes returns immediately", func(t *testing.T) {
+		t.Parallel()
+		h := newHandler()
+		require.NoError(t, h.WaitFileProcessed(t.Context(), "file:///tmp/test.go"))
+	})
+
+	t.Run("matching version unblocks wait", func(t *testing.T) {
+		t.Parallel()
+		h := newHandler()
+		uri := "file:///tmp/test.go"
+		h.FileDidChange(uri, 2)
+
+		done := make(chan error, 1)
+		go func() {
+			done <- h.WaitFileProcessed(context.Background(), uri)
+		}()
+
+		select {
+		case err := <-done:
+			t.Fatalf("wait returned too early: %v", err)
+		case <-time.After(20 * time.Millisecond):
+		}
+
+		err := h.PublishDiagnostics(t.Context(), semanticapi.PublishDiagnosticsParams{
+			URI:     uri,
+			Version: 2,
+		})
+		require.NoError(t, err)
+
+		select {
+		case err := <-done:
+			require.NoError(t, err)
+		case <-time.After(time.Second):
+			t.Fatal("timed out waiting for matching diagnostics version")
+		}
+	})
+
+	t.Run("stale version does not unblock newer wait", func(t *testing.T) {
+		t.Parallel()
+		h := newHandler()
+		uri := "file:///tmp/test.go"
+		h.FileDidChange(uri, 2)
+
+		done := make(chan error, 1)
+		go func() {
+			done <- h.WaitFileProcessed(context.Background(), uri)
+		}()
+
+		err := h.PublishDiagnostics(t.Context(), semanticapi.PublishDiagnosticsParams{
+			URI:     uri,
+			Version: 1,
+		})
+		require.NoError(t, err)
+
+		select {
+		case err := <-done:
+			t.Fatalf("wait returned on stale version: %v", err)
+		case <-time.After(20 * time.Millisecond):
+		}
+
+		err = h.PublishDiagnostics(t.Context(), semanticapi.PublishDiagnosticsParams{
+			URI:     uri,
+			Version: 2,
+		})
+		require.NoError(t, err)
+
+		select {
+		case err := <-done:
+			require.NoError(t, err)
+		case <-time.After(time.Second):
+			t.Fatal("timed out waiting for current diagnostics version")
+		}
+	})
+
+	t.Run("context cancellation stops wait", func(t *testing.T) {
+		t.Parallel()
+		h := newHandler()
+		uri := "file:///tmp/test.go"
+		h.FileDidChange(uri, 2)
+
+		ctx, cancel := context.WithCancel(context.Background())
+		done := make(chan error, 1)
+		go func() {
+			done <- h.WaitFileProcessed(ctx, uri)
+		}()
+
+		cancel()
+
+		select {
+		case err := <-done:
+			require.ErrorIs(t, err, context.Canceled)
+		case <-time.After(time.Second):
+			t.Fatal("timed out waiting for cancellation")
+		}
+	})
+
+	t.Run("unversioned change waits for any diagnostics push", func(t *testing.T) {
+		t.Parallel()
+		h := newHandler()
+		uri := "file:///tmp/test.go"
+		h.FileDidChange(uri, 0)
+
+		done := make(chan error, 1)
+		go func() {
+			done <- h.WaitFileProcessed(context.Background(), uri)
+		}()
+
+		select {
+		case err := <-done:
+			t.Fatalf("wait returned too early: %v", err)
+		case <-time.After(20 * time.Millisecond):
+		}
+
+		// A diagnostics push with version 0 should unblock.
+		err := h.PublishDiagnostics(t.Context(), semanticapi.PublishDiagnosticsParams{
+			URI:     uri,
+			Version: 0,
+		})
+		require.NoError(t, err)
+
+		select {
+		case err := <-done:
+			require.NoError(t, err)
+		case <-time.After(time.Second):
+			t.Fatal("timed out waiting for unversioned diagnostics")
+		}
+	})
+
+	t.Run("unversioned change unblocked by versioned diagnostics", func(t *testing.T) {
+		t.Parallel()
+		h := newHandler()
+		uri := "file:///tmp/test.go"
+		h.FileDidChange(uri, 0)
+
+		done := make(chan error, 1)
+		go func() {
+			done <- h.WaitFileProcessed(context.Background(), uri)
+		}()
+
+		select {
+		case err := <-done:
+			t.Fatalf("wait returned too early: %v", err)
+		case <-time.After(20 * time.Millisecond):
+		}
+
+		// A versioned diagnostics push should also clear unversioned.
+		err := h.PublishDiagnostics(t.Context(), semanticapi.PublishDiagnosticsParams{
+			URI:     uri,
+			Version: 5,
+		})
+		require.NoError(t, err)
+
+		select {
+		case err := <-done:
+			require.NoError(t, err)
+		case <-time.After(time.Second):
+			t.Fatal("timed out waiting for diagnostics")
+		}
+	})
+
+	t.Run("fallback timeout expires when no diagnostics arrive", func(t *testing.T) {
+		t.Parallel()
+		h := newHandler()
+		uri := "file:///tmp/test.go"
+		h.FileDidChange(uri, 0)
+
+		// Use a context without a deadline to exercise the fallback.
+		start := time.Now()
+		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		defer cancel()
+
+		err := h.WaitFileProcessed(ctx, uri)
+		elapsed := time.Since(start)
+
+		require.ErrorIs(t, err, context.DeadlineExceeded)
+		// Should have respected the caller's shorter timeout,
+		// not the 5s fallback.
+		require.Less(t, elapsed, 500*time.Millisecond)
+	})
 }
 
 func TestClassifyCompilerDiagnostic(t *testing.T) {

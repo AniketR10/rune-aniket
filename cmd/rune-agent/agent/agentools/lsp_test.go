@@ -33,9 +33,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
 	"unstable.build/go-tui/cmd/rune-agent/agent"
 	"unstable.build/go-tui/cmd/rune-agent/llm"
-	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
 )
 
 // --- mock LSP ---
@@ -51,6 +51,8 @@ type stubLSP struct {
 	hoverFn           func(semanticapi.HoverParams) (*semanticapi.Hover, error)
 	diagnosticFn      func(semanticapi.DocumentDiagnosticParams) (semanticapi.DocumentDiagnosticReport, error)
 	formattingFn      func(semanticapi.DocumentFormattingParams) ([]semanticapi.TextEdit, error)
+
+	didChangeWatchedFilesFn func(semanticapi.DidChangeWatchedFilesParams) error
 }
 
 func (s *stubLSP) WorkspaceSymbol(_ context.Context, p semanticapi.WorkspaceSymbolParams) ([]semanticapi.SymbolInformation, error) {
@@ -108,8 +110,8 @@ func (s *stubLSP) Initialize(context.Context, semanticapi.InitializeParams) (sem
 	return semanticapi.InitializeResult{}, nil
 }
 func (s *stubLSP) Initialized(context.Context) error { return nil }
-func (s *stubLSP) Shutdown(context.Context) error     { return nil }
-func (s *stubLSP) Exit(context.Context) error          { return nil }
+func (s *stubLSP) Shutdown(context.Context) error    { return nil }
+func (s *stubLSP) Exit(context.Context) error        { return nil }
 func (s *stubLSP) DidOpen(context.Context, semanticapi.DidOpenTextDocumentParams) error {
 	return nil
 }
@@ -251,7 +253,10 @@ func (s *stubLSP) WillSave(context.Context, semanticapi.WillSaveTextDocumentPara
 func (s *stubLSP) DidChangeConfiguration(context.Context, semanticapi.DidChangeConfigurationParams) error {
 	return nil
 }
-func (s *stubLSP) DidChangeWatchedFiles(context.Context, semanticapi.DidChangeWatchedFilesParams) error {
+func (s *stubLSP) DidChangeWatchedFiles(_ context.Context, p semanticapi.DidChangeWatchedFilesParams) error {
+	if s.didChangeWatchedFilesFn != nil {
+		return s.didChangeWatchedFilesFn(p)
+	}
 	return nil
 }
 func (s *stubLSP) DidChangeWorkspaceFolders(context.Context, semanticapi.DidChangeWorkspaceFoldersParams) error {
@@ -298,14 +303,14 @@ func TestLSPTools(t *testing.T) {
 	require.Len(t, tools, 8)
 
 	expectedNames := map[string]bool{
-		"find_definition":    false,
+		"find_definition":      false,
 		"find_implementations": false,
-		"find_references":    false,
-		"outline_file":       false,
-		"search_symbols":     false,
-		"describe_symbol":    false,
-		"check_file_errors":  false,
-		"format_file":        false,
+		"find_references":      false,
+		"outline_file":         false,
+		"search_symbols":       false,
+		"describe_symbol":      false,
+		"check_file_errors":    false,
+		"format_file":          false,
 	}
 	for _, tool := range tools {
 		def := tool.Definition()

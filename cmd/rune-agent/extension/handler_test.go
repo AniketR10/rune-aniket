@@ -7729,7 +7729,7 @@ func TestAIEditorHandler_chat_read_file_image(t *testing.T) {
 	deps.handler.cwd = cwd
 
 	// Wire real tools via DefaultTools so the real read_file processes images.
-	tools, _ := agentools.DefaultTools(testLocalFS{}, nopExecutor{}, cwd, agentools.Config{})
+	tools, _ := agentools.DefaultTools(testLocalFS{}, nopExecutor{}, cwd, deps.handler.lsp, agentools.Config{})
 	deps.handler.baseTools = tools
 
 	flusher := openChatAndGetTab(t, deps)
@@ -7813,7 +7813,7 @@ func TestAIEditorHandler_chat_read_file_with_spaces_renders_success(t *testing.T
 	require.NoError(t, err)
 	deps.handler.cwd = cwd
 
-	tools, _ := agentools.DefaultTools(fs, nopExecutor{}, cwd, agentools.Config{})
+	tools, _ := agentools.DefaultTools(fs, nopExecutor{}, cwd, deps.handler.lsp, agentools.Config{})
 	deps.handler.baseTools = tools
 	deps.handler.toolRegistry = agent.NewRegistry(tools...)
 	deps.handler.queryAgent = agent.NewAgent(

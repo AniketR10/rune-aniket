@@ -24,6 +24,7 @@
 package agentools
 
 import (
+	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/cmd/rune-agent/agent"
 	"unstable.build/go-tui/cmd/rune-agent/agent/skills"
@@ -45,12 +46,13 @@ func DefaultTools(
 	fs workspaceapi.FileSystem,
 	exec workspaceapi.Executor,
 	cwd workspaceapi.URI,
+	lsp semanticapi.LSP,
 	cfg Config,
 ) ([]agent.Tool, *FileTracker) {
 	tracker := NewFileTracker()
 	return []agent.Tool{
 		newReadFile(fs, cwd, tracker, cfg.MaxLineBytes),
-		newApplyPatch(fs, cwd, tracker),
+		newApplyPatch(fs, cwd, tracker, lsp),
 		newSearch(fs, cwd, tracker),
 		newFindFiles(fs, cwd, tracker),
 		newBash(exec, cwd),

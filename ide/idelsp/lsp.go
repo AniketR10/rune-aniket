@@ -186,9 +186,13 @@ func (m *Manager) DidChange(
 	if err != nil {
 		return err
 	}
-	return srv.notify(
+	err = srv.notify(
 		ctx, "textDocument/didChange", params,
 	)
+	if err == nil {
+		m.callback.FileDidChange(params.TextDocument.URI, params.TextDocument.Version)
+	}
+	return err
 }
 
 // DidClose forwards the notification to the owning server.
@@ -710,18 +714,20 @@ func (m *Manager) Diagnostic(
 	params semanticapi.DocumentDiagnosticParams,
 ) (semanticapi.DocumentDiagnosticReport, error) {
 	params.WorkDoneToken = m.tokenFor(params.WorkDoneToken)
+
+	err := m.callback.WaitFileProcessed(ctx, params.TextDocument.URI)
+	if err != nil {
+		return semanticapi.DocumentDiagnosticReport{}, err
+	}
+
 	srv, err := m.serverForURI(params.TextDocument.URI)
 	if err != nil {
-		return semanticapi.DocumentDiagnosticReport{
-			Kind: "full",
-		}, nil
+		return semanticapi.DocumentDiagnosticReport{}, err
 	}
 	var result semanticapi.DocumentDiagnosticReport
 	err = srv.call(ctx, "textDocument/diagnostic", params, &result)
 	if err != nil {
-		return semanticapi.DocumentDiagnosticReport{
-			Kind: "full",
-		}, nil
+		return semanticapi.DocumentDiagnosticReport{}, err
 	}
 	return result, nil
 }
@@ -1186,6 +1192,9 @@ func (m *Manager) DidChangeWatchedFiles(
 	ctx context.Context,
 	params semanticapi.DidChangeWatchedFilesParams,
 ) error {
+	for _, change := range params.Changes {
+		m.fileDidChangeOOB(change.URI)
+	}
 	return m.broadcastNotify(
 		ctx, workspaceapi.URI{},
 		"workspace/didChangeWatchedFiles", params,

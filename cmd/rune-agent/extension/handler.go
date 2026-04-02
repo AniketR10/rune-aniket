@@ -420,12 +420,12 @@ func newCommandEventHandler(
 		slog.Warn("get 'max_line_bytes' from config", "error", err)
 	}
 
-	tools, tracker := agentools.DefaultTools(fs, executor, cwd, toolsCfg)
+	lsp := w.LSP(ctx)
+	tools, tracker := agentools.DefaultTools(fs, executor, cwd, lsp, toolsCfg)
 
 	fetcher := webfetch.NewHTTPFetcher(webfetch.DefaultConfig())
 	tools = append(tools, agentools.NewWebFetch(fetcher))
 
-	lsp := w.LSP(ctx)
 	parser := w.Parser(ctx)
 	tools = append(tools, agentools.LSPTools(lsp, fs, cwd, tracker)...)
 	tools = append(tools, agentools.SyntaxTools(parser, fs, cwd, tracker)...)

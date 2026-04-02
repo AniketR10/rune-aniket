@@ -50,9 +50,19 @@ import (
 // available for the requested file.
 var ErrNoServer = errors.New("no language server")
 
+// Callback extends the SDK's LSPCallback with methods for tracking
+// document version changes and waiting for the server to process them.
+// This allows pull-diagnostics to wait until the server has processed
+// a recently sent didChange before issuing the request.
+type Callback interface {
+	semanticapi.LSPCallback
+	FileDidChange(uri string, version int32)
+	WaitFileProcessed(ctx context.Context, uri string) error
+}
+
 // Config provides optional configuration for a Manager.
 type Config struct {
-	Callback           semanticapi.LSPCallback
+	Callback           Callback
 	MaxRetries         uint
 	InitializeTimeout  time.Duration
 	CloseTimeout       time.Duration
@@ -73,7 +83,7 @@ type Manager struct {
 	executor      schemeapi.Executor
 	notifications browserapi.Notifications
 	pkgManager    PkgManager
-	callback      semanticapi.LSPCallback
+	callback      Callback
 	maxRetries    uint
 	servers       map[string]*langServer
 	files         map[string]*file
@@ -272,11 +282,12 @@ func (m *Manager) handle(ev textapi.Event) error {
 		}
 		m.mu.Lock()
 		m.files[f.docID.URI].version++
+		version := m.files[f.docID.URI].version
 		m.mu.Unlock()
-		return srv.notify(ctx, "textDocument/didChange",
+		err = srv.notify(ctx, "textDocument/didChange",
 			semanticapi.DidChangeTextDocumentParams{
 				TextDocument: semanticapi.VersionedTextDocumentIdentifier{
-					Version: f.version,
+					Version: version,
 					URI:     uri,
 				},
 				ContentChanges: []semanticapi.TextDocumentContentChangeEvent{
@@ -295,6 +306,10 @@ func (m *Manager) handle(ev textapi.Event) error {
 					},
 				},
 			})
+		if err == nil {
+			m.callback.FileDidChange(uri, version)
+		}
+		return err
 
 	case textapi.EventTypeFlush:
 		srv, err := m.serverForURI(uri)
@@ -314,6 +329,7 @@ func (m *Manager) handle(ev textapi.Event) error {
 			})
 
 	case textapi.EventTypeCreate:
+		m.fileDidChangeOOB(uri)
 		return m.broadcastNotify(ctx,
 			workspaceapi.URI{}, "workspace/didChangeWatchedFiles",
 			semanticapi.DidChangeWatchedFilesParams{
@@ -326,6 +342,7 @@ func (m *Manager) handle(ev textapi.Event) error {
 			})
 
 	case textapi.EventTypeChange:
+		m.fileDidChangeOOB(uri)
 		return m.broadcastNotify(ctx,
 			workspaceapi.URI{}, "workspace/didChangeWatchedFiles",
 			semanticapi.DidChangeWatchedFilesParams{
@@ -338,6 +355,7 @@ func (m *Manager) handle(ev textapi.Event) error {
 			})
 
 	case textapi.EventTypeRemove:
+		m.fileDidChangeOOB(uri)
 		return m.broadcastNotify(ctx,
 			workspaceapi.URI{}, "workspace/didChangeWatchedFiles",
 			semanticapi.DidChangeWatchedFilesParams{
@@ -354,6 +372,7 @@ func (m *Manager) handle(ev textapi.Event) error {
 		// so we simply tell the LSP server that the file has changed
 		// in which case it will try to read it and succeed (rename target)
 		// or fail (rename source), and apply the right changes internally.
+		m.fileDidChangeOOB(uri)
 		return m.broadcastNotify(ctx,
 			workspaceapi.URI{}, "workspace/didChangeWatchedFiles",
 			semanticapi.DidChangeWatchedFilesParams{
@@ -367,6 +386,19 @@ func (m *Manager) handle(ev textapi.Event) error {
 	default:
 		return fmt.Errorf("extraneous event %v", ev.Type)
 	}
+}
+
+// fileDidChangeOOB notifies the callback about an out-of-band file
+// change (file watcher event). If the file is already open and has
+// a tracked version, we skip the notification because the versioned
+// edit path (EventTypeEdit → didChange) already handles tracking.
+// For files not open in the editor we signal an unversioned change
+// so WaitFileProcessed knows there is a pending change.
+func (m *Manager) fileDidChangeOOB(uri string) {
+	if _, ok := m.getFile(uri); ok {
+		return
+	}
+	m.callback.FileDidChange(uri, 0)
 }
 
 func (m *Manager) getFile(uriStr string) (*file, bool) {
