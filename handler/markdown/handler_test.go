@@ -21,11 +21,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/handler"
-	"github.com/unstablebuild/rune-go-sdk/handler/handlertest"
 	"github.com/unstablebuild/rune-go-sdk/mouse"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/component/markdown"
+	"unstable.build/go-tui/handler/handlertest"
 )
 
 func TestNew(t *testing.T) {
@@ -518,6 +518,61 @@ func TestKeyboardPageScrolling(t *testing.T) {
 
 		assert.Greater(t, offsetAfter, offsetBefore)
 	})
+}
+
+func TestWrappedCodeBlockRendering(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+		width   int
+		height  int
+		cases   []handlertest.SequenceTestCase
+	}{
+		{
+			name:    "single wrapped code block vertical scroll",
+			content: "```\n0123456789\nabcdefghij\n```",
+			width:   5,
+			height:  3,
+			cases: []handlertest.SequenceTestCase{
+				{InputSequence: "", Expected: ".....\n.....\n....."},
+				{InputSequence: "<down>", Expected: ".....\n.....\n....."},
+				{InputSequence: "<down>", Expected: ".....\n.....\n     "},
+			},
+		},
+		{
+			name:    "wrapped code block after paragraph spacing",
+			content: "Intro\n\n```\nabcdef\n```",
+			width:   3,
+			height:  4,
+			cases: []handlertest.SequenceTestCase{
+				{InputSequence: "", Expected: "Int\nro \n   \n..."},
+				{InputSequence: "<down><down>", Expected: "   \n...\n...\n   "},
+			},
+		},
+		{
+			name:    "wrapped partial code row shows background fill",
+			content: "```\nabcd\n```",
+			width:   3,
+			height:  3,
+			cases: []handlertest.SequenceTestCase{
+				{InputSequence: "", Expected: "...\n...\n   "},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			comp, err := markdown.New(tt.content)
+			require.NoError(t, err)
+
+			h := New(comp)
+			h.Resize(tt.width, tt.height)
+
+			writer := term.NewStringWriter(tt.width, tt.height)
+			writer.BackgroundCh = '.'
+			handlertest.RunHandlerSequenceWriter(t, writer, h, tt.width, tt.height, tt.cases)
+		})
+	}
 }
 
 func TestKeyboardExit(t *testing.T) {

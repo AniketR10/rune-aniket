@@ -182,6 +182,68 @@ func TestCodeBlockDrawWithoutParser(t *testing.T) {
 	}
 }
 
+func TestCodeBlockDrawTableDriven(t *testing.T) {
+	tests := []struct {
+		name     string
+		code     string
+		width    int
+		height   int
+		expected string
+	}{
+		{
+			name:     "short line no wrap",
+			code:     "hello\n",
+			width:    10,
+			height:   2,
+			expected: "hello     \n          ",
+		},
+		{
+			name:     "exact width fit",
+			code:     "12345\n",
+			width:    5,
+			height:   2,
+			expected: "12345\n     ",
+		},
+		{
+			name:     "single line wraps once",
+			code:     "abcdef\n",
+			width:    3,
+			height:   3,
+			expected: "abc\ndef\n   ",
+		},
+		{
+			name:     "multiple lines wrap independently",
+			code:     "0123456789\nabcdefghij\n",
+			width:    5,
+			height:   5,
+			expected: "01234\n56789\nabcde\nfghij\n     ",
+		},
+		{
+			name:     "empty source line is preserved",
+			code:     "ab\n\ncdef\n",
+			width:    2,
+			height:   5,
+			expected: "ab\n  \ncd\nef\n  ",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := DefaultConfig()
+			cb := newCodeBlock("", tt.code, &cfg)
+
+			w := term.NewStringWriter(tt.width, tt.height)
+			require.NoError(t, w.Clear(term.Attributes{}))
+
+			cb.w = tt.width
+			cb.Draw(w)
+			require.NoError(t, w.Flush())
+
+			assert.Equal(t, tt.expected, w.String())
+		})
+	}
+}
+
 func TestCodeBlockDrawEmptyLanguage(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.Parser = &mockParser{}
@@ -193,44 +255,301 @@ func TestCodeBlockDrawEmptyLanguage(t *testing.T) {
 	}
 }
 
-func TestCodeBlockSpanAt(t *testing.T) {
-	cfg := DefaultConfig()
-	cb := newCodeBlock("", "hello world\n", &cfg)
-	cb.w = 20
+func TestCodeBlockSpanAtTableDriven(t *testing.T) {
+	tests := []struct {
+		name         string
+		code         string
+		width        int
+		x            int
+		y            int
+		expectedText string
+		expectedOK   bool
+	}{
+		{
+			name:         "first row returns full line",
+			code:         "hello world\n",
+			width:        20,
+			x:            3,
+			y:            0,
+			expectedText: "hello world",
+			expectedOK:   true,
+		},
+		{
+			name:         "wrapped continuation returns full original line",
+			code:         "abcdef\n",
+			width:        3,
+			x:            1,
+			y:            1,
+			expectedText: "abcdef",
+			expectedOK:   true,
+		},
+		{
+			name:       "x past visible width fails",
+			code:       "abcdef\n",
+			width:      3,
+			x:          3,
+			y:          0,
+			expectedOK: false,
+		},
+		{
+			name:       "blank area on short wrapped row fails",
+			code:       "abcd\n",
+			width:      3,
+			x:          2,
+			y:          1,
+			expectedOK: false,
+		},
+		{
+			name:       "y out of range fails",
+			code:       "abc\n",
+			width:      3,
+			x:          0,
+			y:          5,
+			expectedOK: false,
+		},
+		{
+			name:       "empty source line has no span",
+			code:       "\n",
+			width:      4,
+			x:          0,
+			y:          0,
+			expectedOK: false,
+		},
+	}
 
-	text, url, ok := cb.SpanAt(3, 0)
-	assert.True(t, ok)
-	assert.Equal(t, "hello world", text)
-	assert.Empty(t, url)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := DefaultConfig()
+			cb := newCodeBlock("", tt.code, &cfg)
+			cb.w = tt.width
 
-	_, _, ok = cb.SpanAt(0, 5)
-	assert.False(t, ok)
+			text, url, ok := cb.SpanAt(tt.x, tt.y)
+			assert.Equal(t, tt.expectedOK, ok)
+			assert.Equal(t, tt.expectedText, text)
+			assert.Empty(t, url)
+		})
+	}
 }
 
-func TestCodeBlockCharAt(t *testing.T) {
-	cfg := DefaultConfig()
-	cb := newCodeBlock("", "abc\n", &cfg)
-	cb.w = 10
+func TestCodeBlockCharAtTableDriven(t *testing.T) {
+	tests := []struct {
+		name       string
+		code       string
+		width      int
+		x          int
+		y          int
+		expected   rune
+		expectedOK bool
+	}{
+		{
+			name:       "simple first cell",
+			code:       "abc\n",
+			width:      10,
+			x:          0,
+			y:          0,
+			expected:   'a',
+			expectedOK: true,
+		},
+		{
+			name:       "simple last cell",
+			code:       "abc\n",
+			width:      10,
+			x:          2,
+			y:          0,
+			expected:   'c',
+			expectedOK: true,
+		},
+		{
+			name:       "wrapped row start",
+			code:       "abcdef\n",
+			width:      3,
+			x:          0,
+			y:          1,
+			expected:   'd',
+			expectedOK: true,
+		},
+		{
+			name:       "wrapped row end",
+			code:       "abcdef\n",
+			width:      3,
+			x:          2,
+			y:          1,
+			expected:   'f',
+			expectedOK: true,
+		},
+		{
+			name:       "partial wrapped row blank cell",
+			code:       "abcd\n",
+			width:      3,
+			x:          2,
+			y:          1,
+			expectedOK: false,
+		},
+		{
+			name:       "x past visible width fails",
+			code:       "abcdef\n",
+			width:      3,
+			x:          3,
+			y:          0,
+			expectedOK: false,
+		},
+		{
+			name:       "negative x fails",
+			code:       "abc\n",
+			width:      3,
+			x:          -1,
+			y:          0,
+			expectedOK: false,
+		},
+		{
+			name:       "negative y fails",
+			code:       "abc\n",
+			width:      3,
+			x:          0,
+			y:          -1,
+			expectedOK: false,
+		},
+		{
+			name:       "y out of range fails",
+			code:       "abc\n",
+			width:      3,
+			x:          0,
+			y:          4,
+			expectedOK: false,
+		},
+		{
+			name:       "empty line has no character",
+			code:       "\n",
+			width:      4,
+			x:          0,
+			y:          0,
+			expectedOK: false,
+		},
+	}
 
-	ch, ok := cb.CharAt(0, 0)
-	assert.True(t, ok)
-	assert.Equal(t, 'a', ch)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := DefaultConfig()
+			cb := newCodeBlock("", tt.code, &cfg)
+			cb.w = tt.width
 
-	ch, ok = cb.CharAt(2, 0)
-	assert.True(t, ok)
-	assert.Equal(t, 'c', ch)
-
-	_, ok = cb.CharAt(5, 0)
-	assert.False(t, ok)
+			ch, ok := cb.CharAt(tt.x, tt.y)
+			assert.Equal(t, tt.expectedOK, ok)
+			assert.Equal(t, tt.expected, ch)
+		})
+	}
 }
 
-func TestCodeBlockDimensions(t *testing.T) {
+func TestCodeBlockMaxLineWidth(t *testing.T) {
 	cfg := DefaultConfig()
-	cb := newCodeBlock("", "hello\nworld\n", &cfg)
+	cb := newCodeBlock("", "a\nlonger\nmid\n", &cfg)
 
-	w, h := cb.Dimensions()
-	assert.Equal(t, 5, w)
-	assert.Equal(t, 3, h)
+	assert.Equal(t, 6, cb.maxLineWidth())
+}
+
+func TestCodeBlockHeightTableDriven(t *testing.T) {
+	tests := []struct {
+		name     string
+		code     string
+		width    int
+		expected int
+	}{
+		{name: "zero width returns zero", code: "abc\n", width: 0, expected: 0},
+		{name: "negative width returns zero", code: "abc\n", width: -1, expected: 0},
+		{name: "empty code block keeps empty row and spacing", code: "\n", width: 4, expected: 2},
+		{name: "short lines no wrap", code: "a\nb\nc\n", width: 20, expected: 4},
+		{name: "exact width fit", code: "123\nabc\n", width: 3, expected: 3},
+		{name: "single line wraps to two rows", code: "123456\n", width: 3, expected: 3},
+		{name: "mixed lines wrap independently", code: "123456\nabc\n", width: 3, expected: 4},
+		{name: "empty source line counts as one row", code: "ab\n\ncd\n", width: 2, expected: 4},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := DefaultConfig()
+			cb := newCodeBlock("", tt.code, &cfg)
+			assert.Equal(t, tt.expected, cb.Height(tt.width))
+		})
+	}
+}
+
+func TestCodeBlockWrappedLineCountTableDriven(t *testing.T) {
+	tests := []struct {
+		name     string
+		row      string
+		width    int
+		expected int
+	}{
+		{name: "zero width", row: "abc", width: 0, expected: 0},
+		{name: "empty row", row: "", width: 4, expected: 1},
+		{name: "short row", row: "abc", width: 5, expected: 1},
+		{name: "exact fit", row: "abc", width: 3, expected: 1},
+		{name: "one overflow chunk", row: "abcd", width: 3, expected: 2},
+		{name: "multiple chunks", row: "abcdefg", width: 3, expected: 3},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := DefaultConfig()
+			cb := newCodeBlock("", tt.row+"\n", &cfg)
+			var row []term.Cell
+			if len(cb.cells) > 0 {
+				row = cb.cells[0]
+			}
+			assert.Equal(t, tt.expected, cb.wrappedLineCount(row, tt.width))
+		})
+	}
+}
+
+func TestCodeBlockDimensionsTableDriven(t *testing.T) {
+	tests := []struct {
+		name           string
+		code           string
+		resizeWidth    int
+		expectedWidth  int
+		expectedHeight int
+	}{
+		{
+			name:           "short lines use longest source line",
+			code:           "hello\nworld\n",
+			expectedWidth:  5,
+			expectedHeight: 3,
+		},
+		{
+			name:           "wrapped rendering does not change ideal dimensions",
+			code:           "123456\nab\n",
+			resizeWidth:    3,
+			expectedWidth:  6,
+			expectedHeight: 3,
+		},
+		{
+			name:           "empty source line contributes height but not width",
+			code:           "\n",
+			expectedWidth:  0,
+			expectedHeight: 2,
+		},
+		{
+			name:           "mixed line lengths keep maximum width",
+			code:           "a\nlonger-line\nmid\n",
+			resizeWidth:    4,
+			expectedWidth:  11,
+			expectedHeight: 4,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := DefaultConfig()
+			cb := newCodeBlock("", tt.code, &cfg)
+			if tt.resizeWidth != 0 {
+				cb.Resize(tt.resizeWidth, cb.Height(tt.resizeWidth))
+			}
+
+			w, h := cb.Dimensions()
+			assert.Equal(t, tt.expectedWidth, w)
+			assert.Equal(t, tt.expectedHeight, h)
+		})
+	}
 }
 
 func TestCodeBlockHighlightsAsync(t *testing.T) {

@@ -134,7 +134,11 @@ func (c *codeBlock) Height(width int) int {
 	if width <= 0 {
 		return 0
 	}
-	return len(c.cells) + 1
+	lines := 0
+	for _, row := range c.cells {
+		lines += c.wrappedLineCount(row, width)
+	}
+	return lines + 1
 }
 
 func (c *codeBlock) Resize(width, _ int) {
@@ -148,60 +152,96 @@ func (c *codeBlock) Draw(w term.Writer) {
 
 	if c.cfg.CodeBlock.Bg != tcell.ColorDefault {
 		bgAttr := term.Attributes{Bg: c.cfg.CodeBlock.Bg}
-		for y := range len(c.cells) {
+		for y := range c.Height(c.w) - 1 {
 			for x := range c.w {
 				w.UnionAttributes(term.Coordinates{X: x, Y: y}, bgAttr)
 			}
 		}
 	}
 
-	for y, row := range c.cells {
-		for x, cell := range row {
-			if x >= c.w {
+	drawY := 0
+	for _, row := range c.cells {
+		for start := 0; start < len(row) || (len(row) == 0 && start == 0); start += c.w {
+			for x := 0; x < c.w; x++ {
+				srcX := start + x
+				if srcX >= len(row) {
+					break
+				}
+				w.SetCell(term.Coordinates{X: x, Y: drawY}, row[srcX])
+			}
+			drawY++
+			if len(row) == 0 {
 				break
 			}
-			w.SetCell(term.Coordinates{X: x, Y: y}, cell)
 		}
 	}
 }
 
 func (c *codeBlock) Dimensions() (width, height int) {
-	maxWidth := 0
-	for _, row := range c.cells {
-		if len(row) > maxWidth {
-			maxWidth = len(row)
-		}
-	}
-	return maxWidth, len(c.cells) + 1
+	return c.maxLineWidth(), len(c.cells) + 1
 }
 
 func (c *codeBlock) SpanAt(x, y int) (text, url string, ok bool) {
 	if c.w <= 0 {
 		return
 	}
-	if y < 0 || y >= len(c.cells) {
+	row, _, ok := c.cellAt(x, y)
+	if !ok {
 		return
 	}
-	row := c.cells[y]
-	if x >= 0 && x < len(row) {
-		// Return the full line text as the span.
-		return cellsToString(row), "", true
-	}
-	return
+	return cellsToString(row), "", true
 }
 
 func (c *codeBlock) CharAt(x, y int) (rune, bool) {
 	if c.w <= 0 {
 		return 0, false
 	}
-	if y < 0 || y >= len(c.cells) {
-		return 0, false
-	}
-	row := c.cells[y]
-	if x >= 0 && x < len(row) {
-		return row[x].Ch, true
+	_, cell, ok := c.cellAt(x, y)
+	if ok {
+		return cell.Ch, true
 	}
 	return 0, false
+}
+
+func (c *codeBlock) maxLineWidth() int {
+	maxWidth := 0
+	for _, row := range c.cells {
+		if len(row) > maxWidth {
+			maxWidth = len(row)
+		}
+	}
+	return maxWidth
+}
+
+func (c *codeBlock) wrappedLineCount(row []term.Cell, width int) int {
+	if width <= 0 {
+		return 0
+	}
+	if len(row) == 0 {
+		return 1
+	}
+	return (len(row)-1)/width + 1
+}
+
+func (c *codeBlock) cellAt(x, y int) ([]term.Cell, term.Cell, bool) {
+	if x < 0 || x >= c.w || y < 0 {
+		return nil, term.Cell{}, false
+	}
+
+	rowY := 0
+	for _, row := range c.cells {
+		wrapped := c.wrappedLineCount(row, c.w)
+		if y < rowY+wrapped {
+			srcX := (y-rowY)*c.w + x
+			if srcX < 0 || srcX >= len(row) {
+				return nil, term.Cell{}, false
+			}
+			return row, row[srcX], true
+		}
+		rowY += wrapped
+	}
+
+	return nil, term.Cell{}, false
 }
 
 func cellsToString(row []term.Cell) string {

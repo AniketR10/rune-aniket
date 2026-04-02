@@ -75,6 +75,52 @@ func TestComponentDimensions(t *testing.T) {
 	assert.Equal(t, 7, height)
 }
 
+func TestComponentDimensionsWithWrappedCodeBlocks(t *testing.T) {
+	tests := []struct {
+		name           string
+		content        string
+		resizeWidth    int
+		expectedWidth  int
+		expectedHeight int
+	}{
+		{
+			name:           "code block ideal size stays unwrapped",
+			content:        "```\n123456\nab\n```",
+			resizeWidth:    3,
+			expectedWidth:  6,
+			expectedHeight: 3,
+		},
+		{
+			name:           "mixed content uses widest ideal block",
+			content:        "# Hi\n\n```\n123456\nab\n```\n\nend",
+			resizeWidth:    3,
+			expectedWidth:  6,
+			expectedHeight: 8,
+		},
+		{
+			name:           "wrapped paragraph can exceed narrow resize but dimensions stay ideal",
+			content:        "```\nabc\n```\n\nlong paragraph",
+			resizeWidth:    4,
+			expectedWidth:  14,
+			expectedHeight: 4,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			md, err := New(tt.content)
+			require.NoError(t, err)
+			if tt.resizeWidth != 0 {
+				md.Resize(tt.resizeWidth, 10)
+			}
+
+			width, height := md.Dimensions()
+			assert.Equal(t, tt.expectedWidth, width)
+			assert.Equal(t, tt.expectedHeight, height)
+		})
+	}
+}
+
 func TestComponentScrolling(t *testing.T) {
 	md, err := New("# H1\n\n# H2\n\n# H3\n\n# H4\n\n# H5")
 	require.NoError(t, err)
