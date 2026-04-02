@@ -36,39 +36,42 @@ import (
 )
 
 // RPCAuthorizer returns an auth.Authorizer of an rpc User.
-func RPCAuthorizer(issuesCollection, releaseCollection string) blueauth.Authorizer[auth.RPCUser] {
-	return authorizer{
-		paths: map[string]func(blueauth.UserClaims[auth.RPCUser]) bool{
-			"/api/health": func(u blueauth.UserClaims[auth.RPCUser]) bool { return true },
-			fmt.Sprintf("/proto.DocumentStore.%s/Create", issuesCollection): roleGreaterBasic,
-			fmt.Sprintf("/proto.DocumentStore.%s/Update", issuesCollection): roleGreaterBasic,
-			fmt.Sprintf("/proto.DocumentStore.%s/Set", issuesCollection):    roleGreaterBasic,
-			fmt.Sprintf("/proto.DocumentStore.%s/Get", issuesCollection):    roleGreaterBasic,
-			fmt.Sprintf("/proto.DocumentStore.%s/List", issuesCollection):   roleGreaterBasic,
-			// needed for .swp file manipulation
-			fmt.Sprintf("/proto.DocumentStore.%s/Delete", issuesCollection): roleGreaterBasic,
+func RPCAuthorizer(issuesCollection string, releaseCollections []string) blueauth.Authorizer[auth.RPCUser] {
+	paths := map[string]func(blueauth.UserClaims[auth.RPCUser]) bool{
+		"/api/health": func(u blueauth.UserClaims[auth.RPCUser]) bool { return true },
+		fmt.Sprintf("/proto.DocumentStore.%s/Create", issuesCollection): roleGreaterBasic,
+		fmt.Sprintf("/proto.DocumentStore.%s/Update", issuesCollection): roleGreaterBasic,
+		fmt.Sprintf("/proto.DocumentStore.%s/Set", issuesCollection):    roleGreaterBasic,
+		fmt.Sprintf("/proto.DocumentStore.%s/Get", issuesCollection):    roleGreaterBasic,
+		fmt.Sprintf("/proto.DocumentStore.%s/List", issuesCollection):   roleGreaterBasic,
+		// needed for .swp file manipulation
+		fmt.Sprintf("/proto.DocumentStore.%s/Delete", issuesCollection): roleGreaterBasic,
 
-			fmt.Sprintf("/proto.DocumentStore.%s/Create", releaseCollection): roleIsAdmin,
-			fmt.Sprintf("/proto.DocumentStore.%s/Update", releaseCollection): roleIsAdmin,
-			fmt.Sprintf("/proto.DocumentStore.%s/Set", releaseCollection):    roleIsAdmin,
-			fmt.Sprintf("/proto.DocumentStore.%s/Get", releaseCollection):    roleGreaterBasic,
-			fmt.Sprintf("/proto.DocumentStore.%s/List", releaseCollection):   roleGreaterBasic,
-			fmt.Sprintf("/proto.DocumentStore.%s/Delete", releaseCollection): roleIsAdmin,
-			"/workspace.Scheme/URI":      roleGreaterBasic,
-			"/workspace.Scheme/Open":     roleGreaterBasic,
-			"/workspace.Scheme/OpenFile": roleGreaterBasic,
-			"/workspace.Scheme/Create":   roleGreaterBasic,
-			"/workspace.Scheme/Remove":   roleGreaterBasic,
-			"/workspace.Scheme/Rename":   roleGreaterBasic,
-			"/workspace.Scheme/Stat":     roleGreaterBasic,
-			"/workspace.Scheme/ReadLink": roleGreaterBasic,
-			"/workspace.Scheme/ReadDir":  roleGreaterBasic,
-			"/workspace.Scheme/Root":     roleGreaterBasic,
-			"/workspace.Scheme/Join":     roleGreaterBasic,
-			"/workspace.Scheme/TempFile": roleGreaterBasic,
-			"/workspace.Scheme/Symlink":  roleGreaterBasic,
-			"/workspace.Scheme/Chroot":   roleGreaterBasic,
-		},
+		"/workspace.Scheme/URI":      roleGreaterBasic,
+		"/workspace.Scheme/Open":     roleGreaterBasic,
+		"/workspace.Scheme/OpenFile": roleGreaterBasic,
+		"/workspace.Scheme/Create":   roleGreaterBasic,
+		"/workspace.Scheme/Remove":   roleGreaterBasic,
+		"/workspace.Scheme/Rename":   roleGreaterBasic,
+		"/workspace.Scheme/Stat":     roleGreaterBasic,
+		"/workspace.Scheme/ReadLink": roleGreaterBasic,
+		"/workspace.Scheme/ReadDir":  roleGreaterBasic,
+		"/workspace.Scheme/Root":     roleGreaterBasic,
+		"/workspace.Scheme/Join":     roleGreaterBasic,
+		"/workspace.Scheme/TempFile": roleGreaterBasic,
+		"/workspace.Scheme/Symlink":  roleGreaterBasic,
+		"/workspace.Scheme/Chroot":   roleGreaterBasic,
+	}
+	for _, rc := range releaseCollections {
+		paths[fmt.Sprintf("/proto.DocumentStore.%s/Create", rc)] = roleIsAdmin
+		paths[fmt.Sprintf("/proto.DocumentStore.%s/Update", rc)] = roleIsAdmin
+		paths[fmt.Sprintf("/proto.DocumentStore.%s/Set", rc)] = roleIsAdmin
+		paths[fmt.Sprintf("/proto.DocumentStore.%s/Get", rc)] = roleGreaterBasic
+		paths[fmt.Sprintf("/proto.DocumentStore.%s/List", rc)] = roleGreaterBasic
+		paths[fmt.Sprintf("/proto.DocumentStore.%s/Delete", rc)] = roleIsAdmin
+	}
+	return authorizer{
+		paths: paths,
 		prefixes: map[string]func(blueauth.UserClaims[auth.RPCUser]) bool{
 			"/api/releases/": roleGreaterBasic,
 		},

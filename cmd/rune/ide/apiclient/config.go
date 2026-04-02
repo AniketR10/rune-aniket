@@ -23,17 +23,25 @@
 
 package apiclient
 
-import "time"
+import (
+	"fmt"
+	"runtime"
+	"time"
+)
 
 const (
-	defaultReleaseCollection = "blue-release-v2"
-
 	defaultGRPCEndpointAddress = "rpc.unstable.build:443"
 
 	defaultHTTPEndpointAddress = "https://api.unstable.build"
 
 	defaultTelemetryPeriod = 30 * time.Second
 )
+
+// defaultReleaseCollection returns the Firestore collection name for
+// the current platform, e.g. "rune-release-darwin-arm64".
+func defaultReleaseCollection() string {
+	return fmt.Sprintf("rune-release-%s-%s", runtime.GOOS, runtime.GOARCH)
+}
 
 // DefaultConfig returns the default configuration for the Grantee
 // returned by NewAPI.
@@ -43,7 +51,7 @@ func DefaultConfig() Config {
 		GRPCEndpointAddress: defaultGRPCEndpointAddress,
 		InsecureTransport:   false,
 		TelemetryPeriod:     defaultTelemetryPeriod,
-		ReleaseCollection:   defaultReleaseCollection,
+		ReleaseCollection:   defaultReleaseCollection(),
 	}
 }
 

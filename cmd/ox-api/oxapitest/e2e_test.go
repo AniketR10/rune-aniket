@@ -33,6 +33,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -135,9 +136,12 @@ func TestReleaseInstallE2E(t *testing.T) {
 		signupURL,
 		apiURL,
 		authCfg,
-		releaseManager,
-		releaseManager,
-		oxapi.RPCAuthorizer("issues", "releases"),
+		[]oxapi.ArchRelease{{
+			Arch:    fmt.Sprintf("%s-%s", runtime.GOOS, runtime.GOARCH),
+			Manager: releaseManager,
+			Signer:  releaseManager,
+		}},
+		oxapi.RPCAuthorizer("issues", []string{"releases"}),
 	)
 	require.NoError(t, err)
 
@@ -163,7 +167,8 @@ func TestReleaseInstallE2E(t *testing.T) {
 	httpClient := oauth2.NewClient(context.Background(), oauth2.StaticTokenSource(
 		&oauth2.Token{AccessToken: rpcToken, TokenType: "Bearer"},
 	))
-	clientReleaseManager := cdnrelease.NewManager(httpClient, baseURL+"/api/releases")
+	arch := fmt.Sprintf("%s-%s", runtime.GOOS, runtime.GOARCH)
+	clientReleaseManager := cdnrelease.NewManager(httpClient, baseURL+"/api/releases/"+arch)
 
 	dataDir := t.TempDir()
 	configFile, err := os.CreateTemp(dataDir, "iderc-*.yaml")

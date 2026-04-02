@@ -55,13 +55,15 @@ func registerDocumentService(
 func registerGRPCApi(
 	projectID, credsFile string,
 	srv *grpc.Server,
-	issuesCollection, releasesCollection string,
+	issuesCollection string, releaseCollections []string,
 ) (ret error) {
 	if err := registerDocumentService(projectID, credsFile, srv, issuesCollection); err != nil {
 		ret = multierror.Append(ret, err)
 	}
-	if err := registerDocumentService(projectID, credsFile, srv, releasesCollection); err != nil {
-		ret = multierror.Append(ret, err)
+	for _, rc := range releaseCollections {
+		if err := registerDocumentService(projectID, credsFile, srv, rc); err != nil {
+			ret = multierror.Append(ret, err)
+		}
 	}
 	return
 }

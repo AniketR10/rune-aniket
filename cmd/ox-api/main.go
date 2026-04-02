@@ -88,10 +88,10 @@ var (
 			"employed in case the google certs endpoint is hard down and we are unable to boot an ox-api service "+
 			"and so it's the only way to keep the rune rpc users online. Website will not be functional.")
 
-	issueCollection   = flag.String("i", "blue-issues-beta", "Firestore collection for managing issues")
-	releaseCollection = flag.String("r", "blue-release-v2", "Firestore collection for managing packages")
-	accountCollection = flag.String("a", "rune-account", "Firestore collection for managing account")
-	gcsBucket         = flag.String("b", "blue-release", "GCS bucket for release binary storage")
+	issueCollection       = flag.String("i", "blue-issues-beta", "Firestore collection for managing issues")
+	accountCollection     = flag.String("a", "rune-account", "Firestore collection for managing account")
+	releaseCollectionBase = flag.String("r", "rune-release", "Firestore base collection for managing packages; the runtime architecture suffix is appended automatically")
+	gcsBucketBase         = flag.String("b", "rune-release", "GCS base bucket for release binary storage; the runtime architecture suffix is appended automatically")
 
 	// refreshCredsEvery = flag.Duration("R", time.Hour, "Cadence at which to refresh GRPC transport credentials")
 	tlsCert     = flag.String("C", "", "TLS certificate used for grpc credentials.")
@@ -176,27 +176,45 @@ func main() {
 	signKeys = auth.KeysCache(signKeys)
 	verifyKeys = auth.KeysCache(verifyKeys)
 
-	rpcApiAuthorizer := oxapi.RPCAuthorizer(*issueCollection, *releaseCollection)
-
-	// Setup release manager (Firestore metadata + GCS binary storage).
-	releaseDB, err := firestore.New(*gcProjectID, *releaseCollection, *gcCredsFile)
-	if err != nil {
-		log.Fatalf("release firestore new: %v", err)
+	// Build per-architecture release collection names from the configurable base.
+	releaseCollections := make([]string, len(oxapi.SupportedArchitectures))
+	for i, arch := range oxapi.SupportedArchitectures {
+		releaseCollections[i] = fmt.Sprintf("%s-%s", *releaseCollectionBase, arch)
 	}
-	innerRelease := docrelease.NewManager(releaseDB)
 
+	rpcApiAuthorizer := oxapi.RPCAuthorizer(*issueCollection, releaseCollections)
+
+	// Setup per-architecture release managers (Firestore metadata + GCS binary storage).
 	gcsClient, err := storage.NewClient(context.Background())
 	if err != nil {
 		log.Fatalf("gcs client: %v", err)
 	}
-	bucket := gcsClient.Bucket(*gcsBucket)
-	gcsManager := gcsrelease.NewManager(innerRelease, gcsrelease.NewBucket(bucket))
-	var releaseManager release.Manager = gcsManager
-	var releaseSigner gcsrelease.Signer = gcsManager
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	if err := validateReleaseSigning(ctx, releaseSigner); err != nil {
-		log.Fatalf("release signing: %v", err)
+
+	archReleases := make([]oxapi.ArchRelease, len(oxapi.SupportedArchitectures))
+	for i, arch := range oxapi.SupportedArchitectures {
+		collection := releaseCollections[i]
+		bucketName := fmt.Sprintf("%s-%s", *gcsBucketBase, arch)
+
+		releaseDB, err := firestore.New(*gcProjectID, collection, *gcCredsFile)
+		if err != nil {
+			log.Fatalf("release firestore new (%s): %v", arch, err)
+		}
+		inner := docrelease.NewManager(releaseDB)
+		bucket := gcsClient.Bucket(bucketName)
+		mgr := gcsrelease.NewManager(inner, gcsrelease.NewBucket(bucket))
+
+		if err := validateReleaseSigning(ctx, mgr); err != nil {
+			log.Fatalf("release signing (%s): %v", arch, err)
+		}
+
+		archReleases[i] = oxapi.ArchRelease{
+			Arch:    arch,
+			Manager: mgr,
+			Signer:  mgr,
+		}
 	}
 
 	secretStore, err := secretmanager.SecretStore(*gcProjectID, *gcCredsFile)
@@ -226,7 +244,7 @@ func main() {
 	}
 	srv := grpc.NewServer(opts...)
 	if err := registerGRPCApi(*gcProjectID, *gcCredsFile,
-		srv, *issueCollection, *releaseCollection); err != nil {
+		srv, *issueCollection, releaseCollections); err != nil {
 		log.Fatalf("grpc register: %v", err)
 	}
 
@@ -254,7 +272,7 @@ func main() {
 	var httpHandler http.Handler
 	httpHandler, err = oxapi.NewHTTPApi(accountDB, signKeys, verifyKeys,
 		secretStore, *tokenExpiry, signupURL, apiURL, authConfig,
-		releaseManager, releaseSigner, rpcApiAuthorizer)
+		archReleases, rpcApiAuthorizer)
 	if err != nil {
 		log.Fatalf("http api: %v", err)
 	}

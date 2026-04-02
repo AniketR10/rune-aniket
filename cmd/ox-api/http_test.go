@@ -226,7 +226,11 @@ func TestAuth(t *testing.T) {
 			mockWriter := httptest.NewRecorder()
 			handler, err := oxapi.NewHTTPApi(accDB, multiKeys,
 				multiKeys, secretStore, 10*time.Hour, signupURL, apiURL, testAuthConfig,
-				stubReleaseManager{}, stubSigner{}, oxapi.RPCAuthorizer("issues", "releases"))
+				[]oxapi.ArchRelease{{
+					Arch:    "darwin-arm64",
+					Manager: stubReleaseManager{},
+					Signer:  stubSigner{},
+				}}, oxapi.RPCAuthorizer("issues", []string{"releases"}))
 			require.NoError(t, err)
 
 			if test.url != "/api/account" {

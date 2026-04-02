@@ -45,6 +45,24 @@ import (
 	"unstable.build/go-tui/localstorage/bluestore"
 )
 
+// SupportedArchitectures lists all OS-architecture combinations that the
+// release system supports.
+var SupportedArchitectures = []string{
+	"darwin-arm64",
+	"darwin-amd64",
+	"linux-amd64",
+	"linux-arm64",
+}
+
+// ArchRelease bundles a release.Manager and gcsrelease.Signer for a
+// specific OS-architecture combination (e.g. "darwin-arm64").
+type ArchRelease struct {
+	// Arch is the "<os>-<arch>" identifier, e.g. "darwin-arm64".
+	Arch    string
+	Manager release.Manager
+	Signer  gcsrelease.Signer
+}
+
 // HTTPAPI serves the ox-api HTTP surface, including website and release routes.
 type HTTPAPI struct {
 	*http.ServeMux
@@ -108,15 +126,11 @@ func NewHTTPApi(
 	signupURL *url.URL,
 	apiURL *url.URL,
 	authConfig auth.Config,
-	releaseManager release.Manager,
-	releaseSigner gcsrelease.Signer,
+	archReleases []ArchRelease,
 	rpcAuthorizer blueauth.Authorizer[auth.RPCUser],
 ) (HTTPAPI, error) {
-	if releaseManager == nil {
-		panic("oxapi.NewHTTPApi: releaseManager must not be nil")
-	}
-	if releaseSigner == nil {
-		panic("oxapi.NewHTTPApi: releaseSigner must not be nil")
+	if len(archReleases) == 0 {
+		panic("oxapi.NewHTTPApi: archReleases must not be empty")
 	}
 	ret := HTTPAPI{
 		ServeMux: http.NewServeMux(),
@@ -172,14 +186,23 @@ func NewHTTPApi(
 	ret.accStore = accStore
 
 	// Mount release HTTP API with RPC-style auth (for rune clients).
-	releaseHandler := gcsrelease.NewHandler(releaseManager, releaseSigner)
 	rpcMiddlewareConfig := blueauth.MiddlewareConfig[auth.RPCUser]{
 		VerifyKeys: verifyKeys,
 		Authorizer: rpcAuthorizer,
 	}
-	var securedReleaseHandler = http.StripPrefix("/api/releases", releaseHandler)
-	securedReleaseHandler = blueauth.WithMiddleware(securedReleaseHandler, rpcMiddlewareConfig)
-	ret.Handle("/api/releases/", securedReleaseHandler)
+	for _, ar := range archReleases {
+		if ar.Manager == nil {
+			panic(fmt.Sprintf("oxapi.NewHTTPApi: release manager for %s must not be nil", ar.Arch))
+		}
+		if ar.Signer == nil {
+			panic(fmt.Sprintf("oxapi.NewHTTPApi: release signer for %s must not be nil", ar.Arch))
+		}
+		prefix := "/api/releases/" + ar.Arch
+		handler := gcsrelease.NewHandler(ar.Manager, ar.Signer)
+		var secured = http.StripPrefix(prefix, handler)
+		secured = blueauth.WithMiddleware(secured, rpcMiddlewareConfig)
+		ret.Handle(prefix+"/", secured)
+	}
 
 	return ret, nil
 }

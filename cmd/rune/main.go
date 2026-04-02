@@ -710,7 +710,8 @@ func setupReleaseManager(i *ide.IDE, storage storageapi.Service) (
 		return nil, nil, fmt.Errorf("dial to api: %v", err)
 	}
 	httpClient := oauth2.NewClient(context.Background(), client.OAuthTokenSource())
-	releaseManager := cdnrelease.NewManager(httpClient, *flagHTTPAddress+"/api/releases")
+	arch := fmt.Sprintf("%s-%s", runtime.GOOS, runtime.GOARCH)
+	releaseManager := cdnrelease.NewManager(httpClient, *flagHTTPAddress+"/api/releases/"+arch)
 	i.SetReleaseManager(releaseManager)
 	return conn, client, nil
 }
