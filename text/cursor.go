@@ -355,6 +355,73 @@ func (c *Cursor) SelectionFrom() (pos term.Coordinates, ok bool) {
 	return
 }
 
+// SwapSelectionEnd swaps the current cursor position with the selection anchor.
+// It only applies to non-explicit selections.
+func (c *Cursor) SwapSelectionEnd() bool {
+	if c.selection.mode == NoSelection || c.selection.explicit {
+		return false
+	}
+
+	enable := c.disablePublishing()
+	defer enable()
+
+	anchor, ok := c.clampSelectionCoordinates(c.selection.scrollFrom)
+	if !ok {
+		return false
+	}
+	current, ok := c.cursorAtScrollBounds()
+	if !ok {
+		return false
+	}
+
+	if anchor == current {
+		return false
+	}
+
+	c.selection.scrollFrom = current
+	c.moveToScroll(anchor)
+	c.setSelection()
+	return true
+}
+
+// SwapSelectionCorner swaps the horizontal block corner on the current row.
+// It only applies to non-explicit block selections.
+func (c *Cursor) SwapSelectionCorner() bool {
+	if c.selection.mode != BlockSelection || c.selection.explicit {
+		return false
+	}
+
+	enable := c.disablePublishing()
+	defer enable()
+
+	anchor, ok := c.clampSelectionCoordinates(c.selection.scrollFrom)
+	if !ok {
+		return false
+	}
+	current, ok := c.cursorAtScrollBounds()
+	if !ok {
+		return false
+	}
+
+	target, ok := c.clampSelectionCoordinates(term.Coordinates{X: anchor.X, Y: current.Y})
+	if !ok {
+		return false
+	}
+	newAnchor, ok := c.clampSelectionCoordinates(term.Coordinates{X: current.X, Y: anchor.Y})
+	if !ok {
+		return false
+	}
+
+	if target == current && newAnchor == anchor {
+		return false
+	}
+
+	c.selection.scrollFrom = newAnchor
+	c.moveToScroll(target)
+	c.setSelection()
+	return true
+}
+
 // MoveToScroll moves the cursor to pos in scroll.
 func (c *Cursor) MoveToScroll(pos term.Coordinates) (
 	ret term.Coordinates, ok bool,

@@ -1685,6 +1685,238 @@ func TestVisualMoveToChar(t *testing.T) {
 	assert.Equal(t, "abc", selection)
 }
 
+func handleViEvents(vi *viHandlerImpl, events []term.Event) {
+	for _, ev := range events {
+		vi.Handle(ev)
+	}
+}
+
+func viPositionVisible(vi *viHandlerImpl, pos term.Coordinates) bool {
+	win, ok := vi.cursor.WindowCoordinates(pos)
+	if !ok {
+		return false
+	}
+	return win.X >= 0 && win.Y >= 0 &&
+		win.X < vi.less.Scroll().Width() &&
+		win.Y < vi.less.Scroll().SizeHeight()
+}
+
+func swappedVisualEnds(anchor, cursor term.Coordinates) (term.Coordinates, term.Coordinates) {
+	return anchor, cursor
+}
+
+func swappedBlockCorners(anchor, cursor term.Coordinates) (term.Coordinates, term.Coordinates) {
+	if anchor.X == cursor.X || anchor.Y == cursor.Y {
+		// Same column or same row: O acts like o (full end swap).
+		return anchor, cursor // wantAfterCursor=anchor, wantAfterAnchor=cursor
+	}
+	return term.Coordinates{X: anchor.X, Y: cursor.Y},
+		term.Coordinates{X: cursor.X, Y: anchor.Y}
+}
+
+func TestVisualSwapSelectionEnd(t *testing.T) {
+	type testCase struct {
+		name                    string
+		content                 string
+		width                   int
+		height                  int
+		before                  []term.Event
+		wantMode                viMode
+		wantBeforeCursor        term.Coordinates
+		wantBeforeAnchor        term.Coordinates
+		wantBeforeCursorVisible bool
+		wantBeforeAnchorVisible bool
+		wantAfterCursorVisible  bool
+		wantAfterAnchorVisible  bool
+	}
+
+	key := func(ch rune) term.Event {
+		return term.Event{Type: term.EventKey, Ch: ch}
+	}
+
+	suite := []testCase{
+		{
+			name:                    "same line middle",
+			content:                 "abcd",
+			width:                   10,
+			height:                  20,
+			before:                  []term.Event{key('v'), key('l'), key('l')},
+			wantMode:                visualMode,
+			wantBeforeCursor:        term.Coordinates{X: 2},
+			wantBeforeAnchor:        term.Coordinates{},
+			wantBeforeCursorVisible: true,
+			wantBeforeAnchorVisible: true,
+			wantAfterCursorVisible:  true,
+			wantAfterAnchorVisible:  true,
+		},
+		{
+			name:                    "same line beginning to end of line",
+			content:                 "abcd",
+			width:                   10,
+			height:                  20,
+			before:                  []term.Event{key('v'), key('$')},
+			wantMode:                visualMode,
+			wantBeforeCursor:        term.Coordinates{X: 4},
+			wantBeforeAnchor:        term.Coordinates{},
+			wantBeforeCursorVisible: true,
+			wantBeforeAnchorVisible: true,
+			wantAfterCursorVisible:  true,
+			wantAfterAnchorVisible:  true,
+		},
+		{
+			name:                    "same line end of line to middle",
+			content:                 "abcd",
+			width:                   10,
+			height:                  20,
+			before:                  []term.Event{key('$'), key('v'), key('h'), key('h')},
+			wantMode:                visualMode,
+			wantBeforeCursor:        term.Coordinates{X: 1},
+			wantBeforeAnchor:        term.Coordinates{X: 3},
+			wantBeforeCursorVisible: true,
+			wantBeforeAnchorVisible: true,
+			wantAfterCursorVisible:  true,
+			wantAfterAnchorVisible:  true,
+		},
+		{
+			name:                    "different lines middle of line",
+			content:                 "abcd\nefgh\nijkl",
+			width:                   10,
+			height:                  20,
+			before:                  []term.Event{key('l'), key('v'), key('j'), key('l')},
+			wantMode:                visualMode,
+			wantBeforeCursor:        term.Coordinates{X: 2, Y: 1},
+			wantBeforeAnchor:        term.Coordinates{X: 1},
+			wantBeforeCursorVisible: true,
+			wantBeforeAnchorVisible: true,
+			wantAfterCursorVisible:  true,
+			wantAfterAnchorVisible:  true,
+		},
+		{
+			name:                    "start of file",
+			content:                 "abcd\nefgh\nijkl",
+			width:                   10,
+			height:                  20,
+			before:                  []term.Event{key('v'), key('j'), key('j'), key('l')},
+			wantMode:                visualMode,
+			wantBeforeCursor:        term.Coordinates{X: 1, Y: 2},
+			wantBeforeAnchor:        term.Coordinates{},
+			wantBeforeCursorVisible: true,
+			wantBeforeAnchorVisible: true,
+			wantAfterCursorVisible:  true,
+			wantAfterAnchorVisible:  true,
+		},
+		{
+			name:                    "end of file",
+			content:                 "abcd\nefgh\nijkl",
+			width:                   10,
+			height:                  20,
+			before:                  []term.Event{key('G'), key('$'), key('v'), key('h'), key('h')},
+			wantMode:                visualMode,
+			wantBeforeCursor:        term.Coordinates{X: 1, Y: 2},
+			wantBeforeAnchor:        term.Coordinates{X: 3, Y: 2},
+			wantBeforeCursorVisible: true,
+			wantBeforeAnchorVisible: true,
+			wantAfterCursorVisible:  true,
+			wantAfterAnchorVisible:  true,
+		},
+		{
+			name:                    "selection start outside rendered view vertically",
+			content:                 "line0\nline1\nline2\nline3\nline4\nline5",
+			width:                   10,
+			height:                  3,
+			before:                  []term.Event{key('v'), key('j'), key('j'), key('j'), key('j')},
+			wantMode:                visualMode,
+			wantBeforeCursor:        term.Coordinates{Y: 4},
+			wantBeforeAnchor:        term.Coordinates{},
+			wantBeforeCursorVisible: true,
+			wantBeforeAnchorVisible: false,
+			wantAfterCursorVisible:  true,
+			wantAfterAnchorVisible:  false,
+		},
+		{
+			name:                    "selection start outside rendered view horizontally",
+			content:                 "0123456789abcdef",
+			width:                   4,
+			height:                  2,
+			before:                  []term.Event{key('v'), key('$')},
+			wantMode:                visualMode,
+			wantBeforeCursor:        term.Coordinates{X: 16},
+			wantBeforeAnchor:        term.Coordinates{},
+			wantBeforeCursorVisible: false,
+			wantBeforeAnchorVisible: false,
+			wantAfterCursorVisible:  true,
+			wantAfterAnchorVisible:  false,
+		},
+		{
+			name:                    "visual line mode different lines",
+			content:                 "alpha\nbeta\ngamma\ndelta",
+			width:                   10,
+			height:                  20,
+			before:                  []term.Event{key('V'), key('j'), key('j')},
+			wantMode:                visualLineMode,
+			wantBeforeCursor:        term.Coordinates{Y: 2},
+			wantBeforeAnchor:        term.Coordinates{},
+			wantBeforeCursorVisible: true,
+			wantBeforeAnchorVisible: true,
+			wantAfterCursorVisible:  true,
+			wantAfterAnchorVisible:  true,
+		},
+		{
+			name:                    "visual line mode selection start outside rendered view vertically",
+			content:                 "alpha\nbeta\ngamma\ndelta\nepsilon\nzeta",
+			width:                   10,
+			height:                  3,
+			before:                  []term.Event{key('V'), key('j'), key('j'), key('j'), key('j')},
+			wantMode:                visualLineMode,
+			wantBeforeCursor:        term.Coordinates{Y: 4},
+			wantBeforeAnchor:        term.Coordinates{},
+			wantBeforeCursorVisible: true,
+			wantBeforeAnchorVisible: false,
+			wantAfterCursorVisible:  true,
+			wantAfterAnchorVisible:  false,
+		},
+	}
+
+	for _, tc := range suite {
+		t.Run(tc.name, func(t *testing.T) {
+			vi := setupVi(t, tc.content, 2, WithWrap(false))
+			vi.Resize(tc.width, tc.height)
+			vi.Draw(term.NoopWriter{})
+
+			handleViEvents(vi, tc.before)
+
+			require.Equal(t, tc.wantMode, vi.mode())
+
+			beforeCursor := vi.cursor.CursorAtScroll()
+			require.Equal(t, tc.wantBeforeCursor, beforeCursor)
+
+			beforeAnchor, ok := vi.cursor.SelectionFrom()
+			require.True(t, ok)
+			require.Equal(t, tc.wantBeforeAnchor, beforeAnchor)
+			assert.Equal(t, tc.wantBeforeCursorVisible, viPositionVisible(vi, beforeCursor))
+			assert.Equal(t, tc.wantBeforeAnchorVisible, viPositionVisible(vi, beforeAnchor))
+
+			selectionBefore := vi.cursor.Selection()
+			require.NotEmpty(t, selectionBefore)
+			bufferBefore := vi.less.Buffer().String()
+			wantAfterCursor, wantAfterAnchor := swappedVisualEnds(beforeAnchor, beforeCursor)
+
+			vi.Handle(key('o'))
+
+			assert.Equal(t, tc.wantMode, vi.mode())
+			assert.Equal(t, bufferBefore, vi.less.Buffer().String())
+			assert.Equal(t, wantAfterCursor, vi.cursor.CursorAtScroll())
+			assert.Equal(t, selectionBefore, vi.cursor.Selection())
+
+			afterAnchor, ok := vi.cursor.SelectionFrom()
+			require.True(t, ok)
+			assert.Equal(t, wantAfterAnchor, afterAnchor)
+			assert.Equal(t, tc.wantAfterCursorVisible, viPositionVisible(vi, wantAfterCursor))
+			assert.Equal(t, tc.wantAfterAnchorVisible, viPositionVisible(vi, afterAnchor))
+		})
+	}
+}
+
 func TestTillCharacterMotion(t *testing.T) {
 	sample := `abcdabcdabcd`
 	// Positions: a=0, b=1, c=2, d=3, a=4, b=5, c=6, d=7, a=8, b=9, c=10, d=11
@@ -3621,21 +3853,21 @@ func TestViParagraphMotions(t *testing.T) {
 		},
 		// --- operator combos ---
 		{
-			name:          "d} deletes to next paragraph boundary",
-			content:       content,
-			seq:           "d}",
-			wantBuffer:    "ccc\nddd\neee\n\nfff\nggg",
-			wantMode:      normalMode,
-			wantCursor:    &term.Coordinates{X: 0, Y: 0},
+			name:       "d} deletes to next paragraph boundary",
+			content:    content,
+			seq:        "d}",
+			wantBuffer: "ccc\nddd\neee\n\nfff\nggg",
+			wantMode:   normalMode,
+			wantCursor: &term.Coordinates{X: 0, Y: 0},
 		},
 		{
-			name:          "d{ deletes backward to paragraph boundary",
-			content:       content,
-			at:            &term.Coordinates{Y: 4},
-			seq:           "d{",
-			wantBuffer:    "aaa\nbbb\neee\n\nfff\nggg",
-			wantMode:      normalMode,
-			wantCursor:    &term.Coordinates{X: 0, Y: 2},
+			name:       "d{ deletes backward to paragraph boundary",
+			content:    content,
+			at:         &term.Coordinates{Y: 4},
+			seq:        "d{",
+			wantBuffer: "aaa\nbbb\neee\n\nfff\nggg",
+			wantMode:   normalMode,
+			wantCursor: &term.Coordinates{X: 0, Y: 2},
 		},
 		{
 			name:          "y} yanks to next paragraph boundary",
@@ -3940,6 +4172,214 @@ func TestVisualBlockInsert(t *testing.T) {
 			assert.Equal(t, tcase.expect,
 				vi.less.Buffer().String())
 
+		})
+	}
+}
+
+func TestVisualBlockSwapCorner(t *testing.T) {
+	type testCase struct {
+		name                    string
+		content                 string
+		width                   int
+		height                  int
+		before                  []term.Event
+		wantBeforeCursor        term.Coordinates
+		wantBeforeAnchor        term.Coordinates
+		wantBeforeCursorVisible bool
+		wantBeforeAnchorVisible bool
+		wantAfterCursorVisible  bool
+		wantAfterAnchorVisible  bool
+	}
+
+	key := func(ch rune) term.Event {
+		return term.Event{Type: term.EventKey, Ch: ch}
+	}
+	ctrl := func(ch rune) term.Event {
+		return term.Event{Type: term.EventKey, Mod: term.ModCtrl, Ch: ch}
+	}
+
+	suite := []testCase{
+		{
+			name:                    "different lines middle columns swaps opposite corner",
+			content:                 "abcd\nefgh\nijkl",
+			width:                   10,
+			height:                  20,
+			before:                  []term.Event{key('l'), ctrl('v'), key('j'), key('l')},
+			wantBeforeCursor:        term.Coordinates{X: 2, Y: 1},
+			wantBeforeAnchor:        term.Coordinates{X: 1},
+			wantBeforeCursorVisible: true,
+			wantBeforeAnchorVisible: true,
+			wantAfterCursorVisible:  true,
+			wantAfterAnchorVisible:  true,
+		},
+		{
+			name:                    "same line block selection behaves like end swap",
+			content:                 "abcdef",
+			width:                   10,
+			height:                  20,
+			before:                  []term.Event{key('l'), ctrl('v'), key('l'), key('l')},
+			wantBeforeCursor:        term.Coordinates{X: 3},
+			wantBeforeAnchor:        term.Coordinates{X: 1},
+			wantBeforeCursorVisible: true,
+			wantBeforeAnchorVisible: true,
+			wantAfterCursorVisible:  true,
+			wantAfterAnchorVisible:  true,
+		},
+		{
+			name:                    "same column block selection behaves like end swap",
+			content:                 "abcd\nefgh\nijkl",
+			width:                   10,
+			height:                  20,
+			before:                  []term.Event{key('l'), ctrl('v'), key('j'), key('j')},
+			wantBeforeCursor:        term.Coordinates{X: 1, Y: 2},
+			wantBeforeAnchor:        term.Coordinates{X: 1},
+			wantBeforeCursorVisible: true,
+			wantBeforeAnchorVisible: true,
+			wantAfterCursorVisible:  true,
+			wantAfterAnchorVisible:  true,
+		},
+		{
+			name:                    "beginning of line to end of line across rows",
+			content:                 "abcd\nefgh",
+			width:                   10,
+			height:                  20,
+			before:                  []term.Event{ctrl('v'), key('j'), key('$')},
+			wantBeforeCursor:        term.Coordinates{X: 4, Y: 1},
+			wantBeforeAnchor:        term.Coordinates{},
+			wantBeforeCursorVisible: true,
+			wantBeforeAnchorVisible: true,
+			wantAfterCursorVisible:  true,
+			wantAfterAnchorVisible:  true,
+		},
+		{
+			name:                    "start of file block selection",
+			content:                 "abcd\nefgh\nijkl",
+			width:                   10,
+			height:                  20,
+			before:                  []term.Event{ctrl('v'), key('j'), key('l')},
+			wantBeforeCursor:        term.Coordinates{X: 1, Y: 1},
+			wantBeforeAnchor:        term.Coordinates{},
+			wantBeforeCursorVisible: true,
+			wantBeforeAnchorVisible: true,
+			wantAfterCursorVisible:  true,
+			wantAfterAnchorVisible:  true,
+		},
+		{
+			name:                    "end of file block selection",
+			content:                 "abcd\nefgh\nijkl",
+			width:                   10,
+			height:                  20,
+			before:                  []term.Event{key('G'), key('$'), ctrl('v'), key('k'), key('h')},
+			wantBeforeCursor:        term.Coordinates{X: 2, Y: 1},
+			wantBeforeAnchor:        term.Coordinates{X: 3, Y: 2},
+			wantBeforeCursorVisible: true,
+			wantBeforeAnchorVisible: true,
+			wantAfterCursorVisible:  true,
+			wantAfterAnchorVisible:  true,
+		},
+		{
+			name:                    "selection start is above rendered view after swap",
+			content:                 "aaaa\nbbbb\ncccc\ndddd\neeee\nffff",
+			width:                   10,
+			height:                  3,
+			before:                  []term.Event{key('G'), key('l'), ctrl('v'), key('k'), key('k'), key('k')},
+			wantBeforeCursor:        term.Coordinates{X: 1, Y: 2},
+			wantBeforeAnchor:        term.Coordinates{X: 1, Y: 5},
+			wantBeforeCursorVisible: true,
+			wantBeforeAnchorVisible: false,
+			wantAfterCursorVisible:  true,
+			wantAfterAnchorVisible:  false,
+		},
+		{
+			name:                    "selection end is below rendered view before swap and anchor becomes offscreen after swap",
+			content:                 "aaaa\nbbbb\ncccc\ndddd\neeee\nffff",
+			width:                   10,
+			height:                  3,
+			before:                  []term.Event{key('l'), ctrl('v'), key('j'), key('j'), key('j')},
+			wantBeforeCursor:        term.Coordinates{X: 1, Y: 3},
+			wantBeforeAnchor:        term.Coordinates{X: 1},
+			wantBeforeCursorVisible: true,
+			wantBeforeAnchorVisible: false,
+			wantAfterCursorVisible:  true,
+			wantAfterAnchorVisible:  false,
+		},
+		{
+			name:                    "selection start is left of rendered view after horizontal scroll swap",
+			content:                 "0123456789abcdef\n0123456789abcdef",
+			width:                   4,
+			height:                  2,
+			before:                  []term.Event{key('$'), ctrl('v'), key('k'), key('k')},
+			wantBeforeCursor:        term.Coordinates{X: 15},
+			wantBeforeAnchor:        term.Coordinates{X: 15},
+			wantBeforeCursorVisible: true,
+			wantBeforeAnchorVisible: true,
+			wantAfterCursorVisible:  true,
+			wantAfterAnchorVisible:  true,
+		},
+		{
+			name:                    "selection start left of rendered view in wide block after swap",
+			content:                 "0123456789abcdef\n0123456789abcdef",
+			width:                   4,
+			height:                  2,
+			before:                  []term.Event{key('$'), ctrl('v'), key('j'), key('h'), key('h')},
+			wantBeforeCursor:        term.Coordinates{X: 13, Y: 1},
+			wantBeforeAnchor:        term.Coordinates{X: 15},
+			wantBeforeCursorVisible: true,
+			wantBeforeAnchorVisible: true,
+			wantAfterCursorVisible:  true,
+			wantAfterAnchorVisible:  true,
+		},
+		{
+			name:                    "selection end is right of rendered view before swap and anchor becomes offscreen after swap",
+			content:                 "0123456789abcdef\n0123456789abcdef",
+			width:                   4,
+			height:                  2,
+			before:                  []term.Event{ctrl('v'), key('j'), key('$')},
+			wantBeforeCursor:        term.Coordinates{X: 16, Y: 1},
+			wantBeforeAnchor:        term.Coordinates{},
+			wantBeforeCursorVisible: false,
+			wantBeforeAnchorVisible: false,
+			wantAfterCursorVisible:  true,
+			wantAfterAnchorVisible:  false,
+		},
+	}
+
+	for _, tc := range suite {
+		t.Run(tc.name, func(t *testing.T) {
+			vi := setupVi(t, tc.content, 2, WithWrap(false))
+			vi.Resize(tc.width, tc.height)
+			vi.Draw(term.NoopWriter{})
+
+			handleViEvents(vi, tc.before)
+
+			require.Equal(t, visualBlockMode, vi.mode())
+
+			beforeCursor := vi.cursor.CursorAtScroll()
+			require.Equal(t, tc.wantBeforeCursor, beforeCursor)
+
+			beforeAnchor, ok := vi.cursor.SelectionFrom()
+			require.True(t, ok)
+			require.Equal(t, tc.wantBeforeAnchor, beforeAnchor)
+			assert.Equal(t, tc.wantBeforeCursorVisible, viPositionVisible(vi, beforeCursor))
+			assert.Equal(t, tc.wantBeforeAnchorVisible, viPositionVisible(vi, beforeAnchor))
+
+			selectionBefore := vi.cursor.Selection()
+			require.NotEmpty(t, selectionBefore)
+			bufferBefore := vi.less.Buffer().String()
+			wantAfterCursor, wantAfterAnchor := swappedBlockCorners(beforeAnchor, beforeCursor)
+
+			vi.Handle(key('O'))
+
+			assert.Equal(t, visualBlockMode, vi.mode())
+			assert.Equal(t, bufferBefore, vi.less.Buffer().String())
+			assert.Equal(t, wantAfterCursor, vi.cursor.CursorAtScroll())
+			assert.Equal(t, selectionBefore, vi.cursor.Selection())
+
+			afterAnchor, ok := vi.cursor.SelectionFrom()
+			require.True(t, ok)
+			assert.Equal(t, wantAfterAnchor, afterAnchor)
+			assert.Equal(t, tc.wantAfterCursorVisible, viPositionVisible(vi, wantAfterCursor))
+			assert.Equal(t, tc.wantAfterAnchorVisible, viPositionVisible(vi, afterAnchor))
 		})
 	}
 }

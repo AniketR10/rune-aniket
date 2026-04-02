@@ -1058,6 +1058,16 @@ func (vi *viHandlerImpl) handleVisual(ev term.Event) (quit, handled bool) {
 		case 'z':
 			vi.cursor.HideSelection()
 			vi.setNormalMode()
+		case 'o':
+			vi.cursor.SwapSelectionEnd()
+		case 'O':
+			if vi.mode() == visualBlockMode {
+				if !vi.cursor.SwapSelectionCorner() {
+					vi.cursor.SwapSelectionEnd()
+				}
+			} else {
+				vi.cursor.SwapSelectionEnd()
+			}
 		case '>':
 			vi.cursor.ShiftSelectionRight()
 		case '<':
