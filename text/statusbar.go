@@ -214,6 +214,14 @@ type StatusBar struct {
 	cursorYTemplate            StatusBarComponent
 	totalLines                 *component.FloatingReference
 	totalLinesTemplate         StatusBarComponent
+
+	// Built state of hideable components, used by doRebuildBar
+	// to restore components before re-evaluating overflow.
+	gitShortRefBuilt component.Floating
+	gitAddBuilt      component.Floating
+	gitDelBuilt      component.Floating
+	syntaxStateBuilt component.Floating
+	totalLinesBuilt  component.Floating
 }
 
 // ShowCommandBar satisfies text.Handler.
@@ -364,7 +372,8 @@ func (b *StatusBar) rebuildBarCursor() {
 	components = template.Build(b.totalLinesTemplate.Template,
 		totalRows, term.Attributes{}, b.totalLinesTemplate.Attributes,
 		b.config.BackgroundColor)
-	b.totalLines.Init(component.Inline(components, component.AlignmentLeft))
+	b.totalLinesBuilt = component.Inline(components, component.AlignmentLeft)
+	b.totalLines.Init(b.totalLinesBuilt)
 
 	b.doRebuildBar()
 }
@@ -378,12 +387,7 @@ func (b *StatusBar) diagnosticsEnabled() bool {
 func (b *StatusBar) rebuildBarEdit() {
 	b.rebuildFilename(workspaceapi.RelPath(b.config.Workspace, b.file))
 	if !b.diagnosticsEnabled() {
-		barLeftWidth, _ := b.barLeft.C.Dimensions()
-		barRightWidth, _ := b.barRight.C.Dimensions()
-		if barLeftWidth+barRightWidth > b.width && b.width > 10 {
-			// force rebuild with shorter filename
-			b.doRebuildBar()
-		}
+		b.doRebuildBar()
 		return
 	}
 	go debug.CapturePanicReport(func() {
@@ -412,7 +416,8 @@ func (b *StatusBar) rebuildBarSyntax(state syntax.State) {
 	components := template.Build(b.syntaxTemplate.Template, state.LangID,
 		attrs, b.syntaxTemplate.Attributes,
 		b.config.BackgroundColor)
-	b.syntaxState.Init(component.Inline(components, component.AlignmentLeft))
+	b.syntaxStateBuilt = component.Inline(components, component.AlignmentLeft)
+	b.syntaxState.Init(b.syntaxStateBuilt)
 	b.doRebuildBar()
 }
 
@@ -468,24 +473,32 @@ func (b *StatusBar) buildGit(shortRef string, added, deleted int) {
 	components := template.Build(b.gitShortRefTemplate.Template, shortRef,
 		term.Attributes{}, b.gitShortRefTemplate.Attributes,
 		b.config.BackgroundColor)
-	b.gitShortRef.Init(component.Inline(components, component.AlignmentLeft))
+	b.gitShortRefBuilt = component.Inline(components, component.AlignmentLeft)
+	b.gitShortRef.Init(b.gitShortRefBuilt)
 
 	components = template.Build(b.gitAddTemplate.Template, added,
 		term.Attributes{}, b.gitAddTemplate.Attributes,
 		b.config.BackgroundColor)
-	b.gitAdd.Init(component.Inline(components, component.AlignmentLeft))
+	b.gitAddBuilt = component.Inline(components, component.AlignmentLeft)
+	b.gitAdd.Init(b.gitAddBuilt)
 
 	components = template.Build(b.gitDelTemplate.Template, deleted,
 		term.Attributes{}, b.gitDelTemplate.Attributes,
 		b.config.BackgroundColor)
-	b.gitDel.Init(component.Inline(components, component.AlignmentLeft))
+	b.gitDelBuilt = component.Inline(components, component.AlignmentLeft)
+	b.gitDel.Init(b.gitDelBuilt)
 }
 
 func (b *StatusBar) buildGitError() {
 	components := template.Build(b.gitShortRefTemplate.Template, "untracked",
 		term.Attributes{Fg: tcell.ColorYellow},
 		b.gitShortRefTemplate.Attributes, b.config.BackgroundColor)
-	b.gitShortRef.Init(component.Inline(components, component.AlignmentLeft))
+	b.gitShortRefBuilt = component.Inline(components, component.AlignmentLeft)
+	b.gitShortRef.Init(b.gitShortRefBuilt)
+	b.gitAddBuilt = nil
+	b.gitAdd.Init(nil)
+	b.gitDelBuilt = nil
+	b.gitDel.Init(nil)
 }
 
 func (b *StatusBar) rebuildFilename(filename string) {
@@ -522,25 +535,52 @@ func (b *StatusBar) doRebuildBar() int {
 	if b.height < 1 || b.hidden {
 		barHeight = 0
 	}
+
+	// When the file path is in the layout, progressively hide
+	// other components instead of truncating the path.
+	// Priority: git branch → git stats → language → total lines.
+	if b.relpathTemplate.Type != 0 {
+		// Restore all hideable components from their built state so we
+		// re-evaluate what needs to be hidden at the current width.
+		b.gitShortRef.Init(b.gitShortRefBuilt)
+		b.gitAdd.Init(b.gitAddBuilt)
+		b.gitDel.Init(b.gitDelBuilt)
+		b.syntaxState.Init(b.syntaxStateBuilt)
+		b.totalLines.Init(b.totalLinesBuilt)
+	}
+
 	barLeftWidth, _ := b.barLeft.C.Dimensions()
 	barRightWidth, _ := b.barRight.C.Dimensions()
-	/* not when initializing */
-	if barLeftWidth+barRightWidth > b.width && b.width > 10 {
-		// NOTE: if we have trouble with space, we shorten once
-		// and never do full path again.
-		b.rebuildFilename(b.file.Name())
-		barLeftWidth, _ = b.barLeft.C.Dimensions()
-		barRightWidth, _ = b.barRight.C.Dimensions()
-		// if we still don't have enough space
-		// left bar takes preference.
+
+	if b.relpathTemplate.Type != 0 && barLeftWidth+barRightWidth > b.width && b.width > 0 {
 		if barLeftWidth+barRightWidth > b.width {
-			barRightWidth = b.width - barLeftWidth
+			b.gitShortRef.Init(nil)
+			barLeftWidth, _ = b.barLeft.C.Dimensions()
+			barRightWidth, _ = b.barRight.C.Dimensions()
+		}
+		if barLeftWidth+barRightWidth > b.width {
+			b.gitAdd.Init(nil)
+			b.gitDel.Init(nil)
+			barLeftWidth, _ = b.barLeft.C.Dimensions()
+			barRightWidth, _ = b.barRight.C.Dimensions()
+		}
+		if barLeftWidth+barRightWidth > b.width {
+			b.syntaxState.Init(nil)
+			barLeftWidth, _ = b.barLeft.C.Dimensions()
+			barRightWidth, _ = b.barRight.C.Dimensions()
+		}
+		if barLeftWidth+barRightWidth > b.width {
+			b.totalLines.Init(nil)
+			barLeftWidth, _ = b.barLeft.C.Dimensions()
+			barRightWidth, _ = b.barRight.C.Dimensions()
 		}
 	}
 
 	if barLeftWidth > b.width {
 		barLeftWidth = b.width
 		barRightWidth = 0
+	} else if barLeftWidth+barRightWidth > b.width {
+		barRightWidth = b.width - barLeftWidth
 	}
 
 	offset := term.Coordinates{Y: b.height - barHeight}

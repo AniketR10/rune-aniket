@@ -624,6 +624,216 @@ func (s testSyntax) String() string {
 	return s.view.String()
 }
 
+func TestStatusBarProgressiveHiding(t *testing.T) {
+	testURI, err := workspaceapi.ParseURI("memory:///workspace")
+	require.NoError(t, err)
+	mockGit := &differ{}
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	cb := func(fn func()) bool {
+		defer wg.Done()
+		mu.Lock()
+		defer mu.Unlock()
+		fn()
+		return true
+	}
+	ed := TestEditor{}
+
+	// Layout: filepath + git branch + git add/del on left,
+	// total lines + language on right.
+	cfg := text.StatusBarConfig{
+		ScheduleNextTick: cb,
+		Workspace:        testURI,
+		Publisher:        &ed,
+		GitService:       mockGit,
+		Layout: []text.StatusBarComponent{
+			{Template: " %s", Type: text.StatusBarFilePath},
+			{Template: "  %s", Type: text.StatusBarGitShortRef},
+			{Template: " +%d", Type: text.StatusBarGitDiffAdded},
+			{Template: " -%d", Type: text.StatusBarGitDiffDeleted},
+			{Type: text.StatusBarVoid},
+			{Template: "%d lines ", Type: text.StatusBarTotalLines},
+			{Template: "%s ", Type: text.StatusBarLanguage},
+		},
+	}
+	buf := cell.NewBuffer()
+	buf.WriteString(copy)
+	fs := &testFoldsService{}
+	fs.view = buf.WithView(fs)
+
+	state := make(chan syntax.State)
+	mockSyntax := &testSyntax{ch: state}
+	view := buf.WithView(mockSyntax)
+	mockSyntax.view = view
+
+	scroll := component.NewScroll(buf)
+	h := newTestHandler(scroll)
+	h.URI, err = workspaceapi.ParseURI("memory:///workspace/main.go")
+	require.NoError(t, err)
+
+	go func() {
+		state <- syntax.State{LangID: "go"}
+	}()
+	wg.Add(2)
+	mu.Lock()
+	bar := text.WithStatusBar(h, buf, scroll, false, false, cfg)
+	mu.Unlock()
+	wg.Wait()
+
+	// Component widths:
+	// filepath " main.go   " = 11 (template " %s", flushed suffix "   ")
+	// branch   "  main"     = 6  (template "  %s")
+	// git add  " +2"        = 3  (template " +%d")
+	// git del  " -2"        = 3  (template " -%d")
+	// Left total (all): 11 + 6 + 3 + 3 = 23
+	// total lines "22 lines " = 9  (template "%d lines ")
+	// language    "go "       = 3  (template "%s ")
+	// Right total: 9 + 3 = 12
+	// Grand total: 23 + 12 = 35
+
+	// At 60 columns, everything fits with a 25-column gap.
+	mu.Lock()
+	bar.Resize(60, 10)
+	w := term.NewStringWriter(60, 10)
+	tests := []comptest.TestCase{
+		{Expected: `
+package main                                                
+                                                            
+import (                                                    
+    "fmt"                                                   
+                                                            
+    "github.com/unstablebuild/blue/cli"                     
+)                                                           
+                                                            
+func main() {                                               
+ main.go     main +2 -2                         22 lines go `},
+	}
+	comptest.TestComponent(t, bar, w, tests)
+	mu.Unlock()
+
+	// At 35 columns, everything fits exactly (23 + 12 = 35), no gap.
+	mu.Lock()
+	bar.Resize(35, 10)
+	w = term.NewStringWriter(35, 10)
+	tests = []comptest.TestCase{
+		{Expected: `
+package main                       
+                                   
+import (                           
+    "fmt"                          
+                                   
+    "github.com/unstablebuild/blue/
+)                                  
+                                   
+func main() {                      
+ main.go     main +2 -222 lines go `},
+	}
+	comptest.TestComponent(t, bar, w, tests)
+	mu.Unlock()
+
+	// At 29 columns, only branch is hidden (17 + 12 = 29), no gap.
+	mu.Lock()
+	bar.Resize(29, 10)
+	w = term.NewStringWriter(29, 10)
+	tests = []comptest.TestCase{
+		{Expected: `
+package main                 
+                             
+import (                     
+    "fmt"                    
+                             
+    "github.com/unstablebuild
+)                            
+                             
+func main() {                
+ main.go    +2 -222 lines go `},
+	}
+	comptest.TestComponent(t, bar, w, tests)
+	mu.Unlock()
+
+	// At 28 columns, branch + stats hidden (11 + 12 = 23 <= 28), 5-col gap.
+	mu.Lock()
+	bar.Resize(28, 10)
+	w = term.NewStringWriter(28, 10)
+	tests = []comptest.TestCase{
+		{Expected: `
+package main                
+                            
+import (                    
+    "fmt"                   
+                            
+    "github.com/unstablebuil
+)                           
+                            
+func main() {               
+ main.go        22 lines go `},
+	}
+	comptest.TestComponent(t, bar, w, tests)
+	mu.Unlock()
+
+	// At 20 columns, branch + stats + language hidden (11 + 9 = 20), no gap.
+	mu.Lock()
+	bar.Resize(20, 10)
+	w = term.NewStringWriter(20, 10)
+	tests = []comptest.TestCase{
+		{Expected: `
+package main        
+                    
+import (            
+    "fmt"           
+                    
+    "github.com/unst
+)                   
+                    
+func main() {       
+ main.go   22 lines `},
+	}
+	comptest.TestComponent(t, bar, w, tests)
+	mu.Unlock()
+
+	// At 15 columns, all components hidden except filepath.
+	mu.Lock()
+	bar.Resize(15, 10)
+	w = term.NewStringWriter(15, 10)
+	tests = []comptest.TestCase{
+		{Expected: `
+package main   
+               
+import (       
+    "fmt"      
+               
+    "github.com
+)              
+               
+func main() {  
+ main.go       `},
+	}
+	comptest.TestComponent(t, bar, w, tests)
+	mu.Unlock()
+
+	// Resize back to full width: everything should be restored.
+	mu.Lock()
+	bar.Resize(60, 10)
+	w = term.NewStringWriter(60, 10)
+	tests = []comptest.TestCase{
+		{Expected: `
+package main                                                
+                                                            
+import (                                                    
+    "fmt"                                                   
+                                                            
+    "github.com/unstablebuild/blue/cli"                     
+)                                                           
+                                                            
+func main() {                                               
+ main.go     main +2 -2                         22 lines go `},
+	}
+	comptest.TestComponent(t, bar, w, tests)
+	mu.Unlock()
+
+	require.NoError(t, bar.Close())
+}
+
 func BenchmarkStatusBarMoveCursorSmall(b *testing.B) {
 	benchmarkStatusBar(b, 10, 10, true)
 }
