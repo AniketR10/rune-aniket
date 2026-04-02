@@ -2959,6 +2959,79 @@ func TestExitInsertMode(t *testing.T) {
 	})
 }
 
+func TestInsertModeCtrlShortcuts(t *testing.T) {
+	type testCase struct {
+		name       string
+		content    string
+		cursor     term.Coordinates
+		key        rune
+		want       string
+		wantCursor term.Coordinates
+	}
+
+	suite := []testCase{
+		{
+			name:       "ctrl+h deletes character before cursor",
+			content:    "abc",
+			cursor:     term.Coordinates{X: 3, Y: 0},
+			key:        'h',
+			want:       "ab",
+			wantCursor: term.Coordinates{X: 2, Y: 0},
+		},
+		{
+			name:       "ctrl+w deletes previous word",
+			content:    "one two",
+			cursor:     term.Coordinates{X: 7, Y: 0},
+			key:        'w',
+			want:       "one ",
+			wantCursor: term.Coordinates{X: 4, Y: 0},
+		},
+		{
+			name:       "ctrl+j inserts newline at cursor",
+			content:    "ab",
+			cursor:     term.Coordinates{X: 1, Y: 0},
+			key:        'j',
+			want:       "a\nb",
+			wantCursor: term.Coordinates{X: 0, Y: 1},
+		},
+		{
+			name:       "ctrl+t indents current line",
+			content:    "abc",
+			cursor:     term.Coordinates{X: 1, Y: 0},
+			key:        't',
+			want:       "\tabc",
+			wantCursor: term.Coordinates{X: 2, Y: 0},
+		},
+		{
+			name:       "ctrl+d deindents current line",
+			content:    "\tabc",
+			cursor:     term.Coordinates{X: 1, Y: 0},
+			key:        'd',
+			want:       "abc",
+			wantCursor: term.Coordinates{X: 0, Y: 0},
+		},
+	}
+
+	for _, tc := range suite {
+		t.Run(tc.name, func(t *testing.T) {
+			vi := setupVi(t, tc.content, 2)
+			vi.Resize(10, 10)
+
+			require.True(t, vi.setCursorAtScroll(tc.cursor))
+			vi.setInsertMode()
+
+			exit, handled := vi.Handle(term.Event{Type: term.EventKey, Ch: tc.key, Mod: term.ModCtrl})
+			require.False(t, exit)
+			require.True(t, handled)
+			assert.Equal(t, insertMode, vi.mode())
+			assert.Equal(t, tc.want, vi.less.Buffer().String())
+
+			scroll := vi.cursor.ScrollCoordinates(vi.cursor.Coordinates())
+			assert.Equal(t, tc.wantCursor, scroll)
+		})
+	}
+}
+
 func TestExitVisualMode(t *testing.T) {
 	t.Run("escape and control-c exit visual mode into normal", func(t *testing.T) {
 		vi := setupVi(t, "aaaa\nbbbb\ncccc\ndddd", 2)

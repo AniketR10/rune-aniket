@@ -1947,6 +1947,70 @@ func (c *Cursor) Backspace() (ok bool) {
 	return
 }
 
+// BackspaceWord deletes from the current cursor position back to the start of
+// the previous word, using the cursor's existing word-motion semantics.
+func (c *Cursor) BackspaceWord() (ok bool) {
+	end := c.CursorAtScroll()
+	start, ok := c.previousCellPosition(end)
+	if !ok {
+		return false
+	}
+
+	cell, ok := c.cellAtScrollCoordinates(start)
+	if !ok {
+		return false
+	}
+	class := c.wordClass(cell.Ch, false)
+
+	if class == 0 {
+		for {
+			prev, ok := c.previousCellPosition(start)
+			if !ok {
+				break
+			}
+			prevCell, ok := c.cellAtScrollCoordinates(prev)
+			if !ok || c.wordClass(prevCell.Ch, false) != 0 {
+				break
+			}
+			start = prev
+		}
+
+		prev, ok := c.previousCellPosition(start)
+		if !ok {
+			if !c.SelectRange(start, end) {
+				return false
+			}
+			return c.DeleteSelection()
+		}
+		prevCell, ok := c.cellAtScrollCoordinates(prev)
+		if !ok {
+			if !c.SelectRange(start, end) {
+				return false
+			}
+			return c.DeleteSelection()
+		}
+		start = prev
+		class = c.wordClass(prevCell.Ch, false)
+	}
+
+	for {
+		prev, ok := c.previousCellPosition(start)
+		if !ok {
+			break
+		}
+		prevCell, ok := c.cellAtScrollCoordinates(prev)
+		if !ok || c.wordClass(prevCell.Ch, false) != class {
+			break
+		}
+		start = prev
+	}
+
+	if !c.SelectRange(start, end) {
+		return false
+	}
+	return c.DeleteSelection()
+}
+
 // Conflate is equivalent to calling ConflateContext with context.Background.
 func (c *Cursor) Conflate() (ok bool) {
 	return c.ConflateContext(c.ctx)

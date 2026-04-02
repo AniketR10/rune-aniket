@@ -696,7 +696,7 @@ func TestCursorUpperLowercase(t *testing.T) {
 			op: func(t *testing.T, c *Cursor) {
 				assert.True(t, c.UppercaseSelection())
 				assert.True(t, c.Undo())
-			assert.True(t, c.Redo())
+				assert.True(t, c.Redo())
 			},
 		},
 		{
@@ -2803,6 +2803,122 @@ func TestCursorBackspace(t *testing.T) {
 			}
 
 			assert.Equal(t, "", e.scroll.Buffer().String())
+		})
+	}
+}
+
+func TestCursorBackspaceWord(t *testing.T) {
+	suite := []struct {
+		name       string
+		content    string
+		at         term.Coordinates
+		wantOK     bool
+		want       string
+		wantCursor term.Coordinates
+	}{
+		{
+			name:       "empty buffer",
+			content:    "",
+			at:         term.Coordinates{},
+			wantOK:     false,
+			want:       "",
+			wantCursor: term.Coordinates{},
+		},
+		{
+			name:       "buffer start",
+			content:    "word",
+			at:         term.Coordinates{},
+			wantOK:     false,
+			want:       "word",
+			wantCursor: term.Coordinates{},
+		},
+		{
+			name:       "at first word end deletes first word",
+			content:    "word",
+			at:         term.Coordinates{X: 4, Y: 0},
+			wantOK:     true,
+			want:       "",
+			wantCursor: term.Coordinates{},
+		},
+		{
+			name:       "deletes previous word and separating spaces",
+			content:    "one  two",
+			at:         term.Coordinates{X: 8, Y: 0},
+			wantOK:     true,
+			want:       "one  ",
+			wantCursor: term.Coordinates{X: 5, Y: 0},
+		},
+		{
+			name:       "at start of word deletes previous word and spaces",
+			content:    "one  two",
+			at:         term.Coordinates{X: 5, Y: 0},
+			wantOK:     true,
+			want:       "two",
+			wantCursor: term.Coordinates{},
+		},
+		{
+			name:       "inside word deletes word prefix",
+			content:    "word",
+			at:         term.Coordinates{X: 2, Y: 0},
+			wantOK:     true,
+			want:       "rd",
+			wantCursor: term.Coordinates{},
+		},
+		{
+			name:       "whitespace only deletes to line start",
+			content:    "   ",
+			at:         term.Coordinates{X: 3, Y: 0},
+			wantOK:     true,
+			want:       "",
+			wantCursor: term.Coordinates{},
+		},
+		{
+			name:       "punctuation treated as word group",
+			content:    "foo.bar",
+			at:         term.Coordinates{X: 7, Y: 0},
+			wantOK:     true,
+			want:       "foo.",
+			wantCursor: term.Coordinates{X: 4, Y: 0},
+		},
+		{
+			name:       "punctuation suffix deletes punctuation group only",
+			content:    "foo...",
+			at:         term.Coordinates{X: 6, Y: 0},
+			wantOK:     true,
+			want:       "foo",
+			wantCursor: term.Coordinates{X: 3, Y: 0},
+		},
+		{
+			name:       "crosses line boundary when at line start",
+			content:    "one\ntwo",
+			at:         term.Coordinates{X: 0, Y: 1},
+			wantOK:     true,
+			want:       "two",
+			wantCursor: term.Coordinates{},
+		},
+		{
+			name:       "crosses line boundary with trailing spaces",
+			content:    "one  \ntwo",
+			at:         term.Coordinates{X: 0, Y: 1},
+			wantOK:     true,
+			want:       "two",
+			wantCursor: term.Coordinates{},
+		},
+	}
+
+	for _, tc := range suite {
+		t.Run(tc.name, func(t *testing.T) {
+			c := setupCursorContent(t, 20, 10, tc.content, false)
+			c.RightInclusiveSemantics = true
+			c.SetCursorAtScroll(tc.at)
+
+			ok := c.BackspaceWord()
+			mode, hasSelection := c.SelectionMode()
+			assert.Equal(t, tc.wantOK, ok)
+			assert.Equal(t, tc.want, c.buffer().String())
+			assert.Equal(t, tc.wantCursor, c.CursorAtScroll())
+			assert.Equal(t, NoSelection, mode)
+			assert.False(t, hasSelection)
 		})
 	}
 }

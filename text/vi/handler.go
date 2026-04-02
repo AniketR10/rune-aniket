@@ -984,6 +984,21 @@ func (vi *viHandlerImpl) handleInsert(ev term.Event) (quit, handled bool) {
 		case 'c':
 			vi.exitInsert()
 			handled = true
+		case 'h':
+			vi.cursor.Backspace()
+			handled = true
+		case 'w':
+			vi.cursor.BackspaceWord()
+			handled = true
+		case 'j':
+			vi.cursor.Insert('\n')
+			handled = true
+		case 't':
+			vi.cursor.ShiftLineRight()
+			handled = true
+		case 'd':
+			vi.cursor.ShiftLineLeft()
+			handled = true
 		}
 	}
 	return
