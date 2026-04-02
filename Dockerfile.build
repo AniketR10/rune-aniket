@@ -1,6 +1,6 @@
 # This image is used to run builds with pre-downloaded dependencies
 # syntax=docker/dockerfile:1
-FROM --platform=linux/amd64 golang:alpine as build
+FROM --platform=linux/amd64 golang:1.26-alpine as build
 
 RUN apk add --no-cache make git openssh gcc g++ musl-dev linux-headers
 
@@ -30,7 +30,7 @@ RUN go install github.com/unstablebuild/blue/cmd/bluectl@latest
 RUN go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.60.3
 
 # use clean image with no source code! 
-FROM --platform=linux/amd64 golang:alpine
+FROM --platform=linux/amd64 golang:1.26-alpine
 COPY --from=build /go /go
 RUN apk add --no-cache make git openssh gcc g++ musl-dev linux-headers bash
 RUN apk add --no-cache glfw-dev alsa-lib-dev libx11-dev libxrandr-dev \

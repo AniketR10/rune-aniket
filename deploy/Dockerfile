@@ -1,26 +1,28 @@
 # syntax=docker/dockerfile:1
-FROM --platform=linux/amd64 golang:alpine as build
+FROM --platform=$BUILDPLATFORM golang:1.26.0 as build
 
 # git and openssh needed to go get private repos
-RUN apk add --no-cache make git openssh build-base libx11-dev libxrandr-dev libva-glx-dev libxcursor-dev libxinerama-dev libxi-dev
+RUN apt-get update && apt-get install -y --no-install-recommends git openssh-client ca-certificates && rm -rf /var/lib/apt/lists/*
 
 ARG GIT_SSH_KEY
 ARG GCP_PROJECT "unstable-build-blue-dev"
+ARG TARGETOS
+ARG TARGETARCH
 
 WORKDIR /src
 
 COPY . .
 
-RUN git config --global url.ssh://git@github.com/.insteadOf https://github.com/
-RUN mkdir -p ~/.ssh && \
-	echo "$GIT_SSH_KEY" > ~/.ssh/id_rsa && \
-	chmod 600 ~/.ssh/id_rsa && \
-	chmod 700 ~/.ssh
+RUN if [ -n "$GIT_SSH_KEY" ]; then git config --global url.ssh://git@github.com/.insteadOf https://github.com/; fi
+RUN mkdir -p ~/.ssh && chmod 700 ~/.ssh && \
+	if [ -n "$GIT_SSH_KEY" ]; then \
+		printf '%s\n' "$GIT_SSH_KEY" | tr -d '\r' > ~/.ssh/id_rsa && \
+		chmod 600 ~/.ssh/id_rsa; \
+	fi
 RUN ssh-keyscan -t rsa git.unstable.build >> ~/.ssh/known_hosts
 RUN ssh-keyscan -t rsa github.com >> ~/.ssh/known_hosts
 RUN go env -w GOPRIVATE="github.com/unstablebuild,unstable.build/*"
-
-RUN make release && cp target/linux_amd64/ox-api /bin/ox-api
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -o /bin/ox-api ./cmd/ox-api
 
 # use clean image with no deps or install
 FROM --platform=linux/amd64 alpine:latest
