@@ -1416,6 +1416,77 @@ func TestViCount(t *testing.T) {
 	}
 }
 
+func TestViX(t *testing.T) {
+	suite := []struct {
+		name          string
+		moveCursorFn  func(*viHandlerImpl)
+		content       string
+		events        string
+		expectContent string
+		expectCoords  *term.Coordinates
+	}{
+		{
+			name:          "X deletes character before cursor",
+			content:       "abcd",
+			events:        "llX",
+			expectContent: "acd",
+			expectCoords:  &term.Coordinates{X: 1, Y: 0},
+		},
+		{
+			name:          "counted X deletes multiple previous characters",
+			content:       "abcd",
+			events:        "lll3X",
+			expectContent: "d",
+			expectCoords:  &term.Coordinates{X: 0, Y: 0},
+		},
+		{
+			name:          "X at start of line conflates with previous line",
+			content:       "ab\ncd",
+			events:        "jX",
+			expectContent: "abcd",
+			expectCoords:  &term.Coordinates{X: 2, Y: 0},
+		},
+		{
+			name:          "X at start of buffer is a no-op",
+			content:       "abcd",
+			events:        "X",
+			expectContent: "abcd",
+			expectCoords:  &term.Coordinates{X: 0, Y: 0},
+		},
+		{
+			name: "10000000000000000000000000000X deletes up to buffer start",
+			moveCursorFn: func(vi *viHandlerImpl) {
+				vi.cursor.MoveEndLine()
+			},
+			content:       "abcd",
+			events:        "10000000000000000000000000000X",
+			expectContent: "d",
+			expectCoords:  &term.Coordinates{X: 0, Y: 0},
+		},
+	}
+
+	for _, tcase := range suite {
+		t.Run(tcase.name, func(t *testing.T) {
+			vi := setupVi(t, tcase.content, 2)
+			vi.Resize(20, 9)
+			vi.Draw(term.NoopWriter{})
+			if tcase.moveCursorFn != nil {
+				tcase.moveCursorFn(vi)
+			}
+
+			for _, eventChar := range tcase.events {
+				vi.Handle(term.Event{Type: term.EventKey, Ch: eventChar})
+			}
+
+			assert.Equal(t, tcase.expectContent, vi.less.Buffer().String())
+			if tcase.expectCoords != nil {
+				assert.Equal(t, *tcase.expectCoords, vi.cursor.Coordinates())
+			}
+			assert.Equal(t, normalMode, vi.mode())
+		})
+	}
+}
+
 func TestVidd(t *testing.T) {
 	suite := []struct {
 		name             string

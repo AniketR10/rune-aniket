@@ -800,6 +800,12 @@ func (vi *viHandlerImpl) handleNormal(ev term.Event) (quit, handled bool) {
 				vi.cursor.MoveEndLine()
 				vi.cursor.DeleteSelection()
 			}
+		case 'X':
+			for range vi.count {
+				if !vi.cursor.Backspace() {
+					break
+				}
+			}
 		case 'x':
 			vi.cursor.Delete()
 		case '~':
