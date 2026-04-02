@@ -524,6 +524,53 @@ func (vi *viHandlerImpl) pasteClipboard(registerID string, after bool) bool {
 	return true
 }
 
+func (vi *viHandlerImpl) pasteClipboardLeaveCursorAfter(registerID string, after bool) bool {
+	paste, err := vi.config.clipboard.Paste(registerID)
+	if err != nil {
+		vi.logError(fmt.Errorf("clipboard.Get: %s", err))
+		return false
+	}
+
+	str := paste.Text
+	mode, _ := paste.Metadata.(text.SelectMode)
+	if mode == text.NoSelection {
+		if strings.HasSuffix(str, "\n") {
+			mode = text.LineSelection
+		} else {
+			mode = text.StandardSelection
+		}
+	}
+
+	count := max(1, vi.count)
+	orig := vi.cursorAtScroll()
+	origLastRow := vi.less.Buffer().Rows() - 1
+
+	for range count {
+		vi.cursor.Paste(str, mode, after)
+	}
+
+	pos := vi.cursorAtScroll()
+	if mode == text.LineSelection {
+		insertedRows := strings.Count(str, "\n")
+		if insertedRows == 0 {
+			insertedRows = 1
+		}
+		targetY := orig.Y + insertedRows*count
+		if after && orig.Y < origLastRow {
+			targetY++
+		}
+		pos = term.Coordinates{Y: targetY}
+	}
+
+	if mode == text.BlockSelection {
+		pos = vi.cursorAtScroll()
+	}
+
+	vi.setNormalMode()
+	vi.setCursorAtScroll(pos)
+	return true
+}
+
 const matchingLocID = "_matchingMark"
 
 func (vi *viHandlerImpl) markMatchingBrace() {
@@ -1622,6 +1669,10 @@ func (vi *viHandlerImpl) handleGo(ev term.Event) (quit, handled bool) {
 			}
 			vi.resetCount()
 			handled = true
+		case 'p':
+			handled = vi.pasteClipboardLeaveCursorAfter(vi.config.defaultRegister, true)
+		case 'P':
+			handled = vi.pasteClipboardLeaveCursorAfter(vi.config.defaultRegister, false)
 		default:
 		}
 	}

@@ -32,6 +32,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/unstablebuild/rune-go-sdk/clipboard"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
@@ -4243,6 +4244,168 @@ func TestPasteVisualMode(t *testing.T) {
 			require.True(t, ok)
 			require.Equal(t, 'A', cell.Ch,
 				"current cell char is not 'A' but '%c'", cell.Ch)
+		})
+	}
+}
+
+func TestViGoPasteLeavesCursorAfterText(t *testing.T) {
+	tests := []struct {
+		name          string
+		content       string
+		cursorAt      term.Coordinates
+		clipboardText string
+		clipboardMode text.SelectMode
+		input         string
+		wantBuffer    string
+		wantPosition  term.Coordinates
+		wantCell      rune
+		wantCount     int
+		wantCountText string
+	}{
+		{
+			name:          "gp pastes characterwise text after cursor",
+			content:       "abc\ndef\nxyz",
+			cursorAt:      term.Coordinates{X: 0, Y: 0},
+			clipboardText: "a",
+			clipboardMode: text.StandardSelection,
+			input:         "gp",
+			wantBuffer:    "aabc\ndef\nxyz",
+			wantPosition:  term.Coordinates{X: 2, Y: 0},
+			wantCell:      'b',
+			wantCount:     1,
+			wantCountText: "",
+		},
+		{
+			name:          "gP pastes characterwise text before cursor",
+			content:       "abc\ndef\nxyz",
+			cursorAt:      term.Coordinates{X: 1, Y: 0},
+			clipboardText: "a",
+			clipboardMode: text.StandardSelection,
+			input:         "gP",
+			wantBuffer:    "aabc\ndef\nxyz",
+			wantPosition:  term.Coordinates{X: 2, Y: 0},
+			wantCell:      'b',
+			wantCount:     1,
+			wantCountText: "",
+		},
+		{
+			name:          "gp pastes multiline characterwise text after cursor",
+			content:       "abc\ndef\nxyz",
+			cursorAt:      term.Coordinates{X: 0, Y: 0},
+			clipboardText: "abc",
+			clipboardMode: text.StandardSelection,
+			input:         "gp",
+			wantBuffer:    "aabcbc\ndef\nxyz",
+			wantPosition:  term.Coordinates{X: 4, Y: 0},
+			wantCell:      'b',
+			wantCount:     1,
+			wantCountText: "",
+		},
+		{
+			name:          "gP pastes multiline characterwise text before cursor",
+			content:       "abc\ndef\nxyz",
+			cursorAt:      term.Coordinates{X: 3, Y: 0},
+			clipboardText: "abc",
+			clipboardMode: text.StandardSelection,
+			input:         "gP",
+			wantBuffer:    "ababcc\ndef\nxyz",
+			wantPosition:  term.Coordinates{X: 5, Y: 0},
+			wantCell:      'c',
+			wantCount:     1,
+			wantCountText: "",
+		},
+		{
+			name:          "gp pastes line after cursor line",
+			content:       "abc\ndef\nxyz",
+			cursorAt:      term.Coordinates{X: 0, Y: 1},
+			clipboardText: "abc\n",
+			clipboardMode: text.LineSelection,
+			input:         "gp",
+			wantBuffer:    "abc\ndef\nabc\nxyz",
+			wantPosition:  term.Coordinates{X: 0, Y: 3},
+			wantCell:      'x',
+			wantCount:     1,
+			wantCountText: "",
+		},
+		{
+			name:          "gP pastes line before cursor line",
+			content:       "abc\ndef\nxyz",
+			cursorAt:      term.Coordinates{X: 0, Y: 1},
+			clipboardText: "abc\n",
+			clipboardMode: text.LineSelection,
+			input:         "gP",
+			wantBuffer:    "abc\nabc\ndef\nxyz",
+			wantPosition:  term.Coordinates{X: 0, Y: 2},
+			wantCell:      'd',
+			wantCount:     1,
+			wantCountText: "",
+		},
+		{
+			name:          "gp on last line appends linewise paste after buffer end",
+			content:       "abc\ndef\nxyz",
+			cursorAt:      term.Coordinates{X: 0, Y: 2},
+			clipboardText: "abc\n",
+			clipboardMode: text.LineSelection,
+			input:         "gp",
+			wantBuffer:    "abc\ndef\nxyz\nabc\n",
+			wantPosition:  term.Coordinates{X: 0, Y: 3},
+			wantCell:      'a',
+			wantCount:     1,
+			wantCountText: "",
+		},
+		{
+			name:          "gP on last line inserts linewise paste before current line",
+			content:       "abc\ndef\nxyz",
+			cursorAt:      term.Coordinates{X: 0, Y: 2},
+			clipboardText: "abc\n",
+			clipboardMode: text.LineSelection,
+			input:         "gP",
+			wantBuffer:    "abc\ndef\nabc\nxyz",
+			wantPosition:  term.Coordinates{X: 0, Y: 3},
+			wantCell:      'x',
+			wantCount:     1,
+			wantCountText: "",
+		},
+		{
+			name:          "count before gp is reset after command",
+			content:       "abc\ndef\nxyz",
+			cursorAt:      term.Coordinates{X: 0, Y: 1},
+			clipboardText: "abc\n",
+			clipboardMode: text.LineSelection,
+			input:         "2gp",
+			wantBuffer:    "abc\ndef\nabc\nabc\nxyz",
+			wantPosition:  term.Coordinates{X: 0, Y: 4},
+			wantCell:      'x',
+			wantCount:     1,
+			wantCountText: "",
+		},
+	}
+
+	for _, tcase := range tests {
+			t.Run(tcase.name, func(t *testing.T) {
+				vi := setupVi(t, tcase.content, 2)
+				vi.Resize(20, 10)
+				vi.setCursorAtScroll(tcase.cursorAt)
+				err := vi.config.clipboard.Copy(vi.config.defaultRegister, clipboard.Data{
+					Text:     tcase.clipboardText,
+					Metadata: tcase.clipboardMode,
+				})
+				require.NoError(t, err)
+
+				for _, event := range tcase.input {
+					_, handled := vi.Handle(term.Event{Type: term.EventKey, Ch: event})
+				require.True(t, handled, "sequence %q failed on %q", tcase.input, string(event))
+			}
+
+			assert.Equal(t, tcase.wantBuffer, vi.less.Buffer().String())
+			assert.Equal(t, normalMode, vi.mode())
+			assert.Equal(t, tcase.wantPosition, vi.cursorAtScroll())
+			assert.Equal(t, tcase.wantCount, vi.count)
+			assert.Equal(t, tcase.wantCountText, vi.countDigits)
+
+			cell, ok := vi.cursor.Cell()
+			require.True(t, ok)
+			assert.Equal(t, tcase.wantCell, cell.Ch)
 		})
 	}
 }
