@@ -35,6 +35,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	blueauth "github.com/unstablebuild/blue/auth"
+	"unstable.build/go-tui/cmd/ox-api/oxapi"
 	"unstable.build/go-tui/cmd/rune/auth"
 )
 
@@ -80,7 +81,7 @@ func TestTelemetryHandler(t *testing.T) {
 			}
 
 			w := httptest.NewRecorder()
-			sut := newTelemetryHandler(logger, testSignKeys)
+			sut := oxapi.NewTelemetryHandler(logger, testSignKeys)
 			sut.ServeHTTP(w, req)
 
 			resp := w.Result()

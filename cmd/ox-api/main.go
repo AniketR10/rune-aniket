@@ -24,6 +24,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"net"
@@ -32,6 +33,7 @@ import (
 	"os"
 	"time"
 
+	"cloud.google.com/go/storage"
 	log "github.com/sirupsen/logrus"
 	blueauth "github.com/unstablebuild/blue/auth"
 	"github.com/unstablebuild/blue/auth/grpcauth"
@@ -39,8 +41,12 @@ import (
 	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/document/firestore"
 	"github.com/unstablebuild/blue/logging"
+	"github.com/unstablebuild/blue/release"
+	"github.com/unstablebuild/blue/release/docrelease"
+	"github.com/unstablebuild/blue/release/gcsrelease"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"unstable.build/go-tui/cmd/ox-api/oxapi"
 	"unstable.build/go-tui/cmd/rune/api"
 	"unstable.build/go-tui/cmd/rune/auth"
 )
@@ -83,8 +89,9 @@ var (
 			"and so it's the only way to keep the rune rpc users online. Website will not be functional.")
 
 	issueCollection   = flag.String("i", "blue-issues-beta", "Firestore collection for managing issues")
-	releaseCollection = flag.String("r", "blue-release-bundles", "Firestore collection for managing packages")
+	releaseCollection = flag.String("r", "blue-release-v2", "Firestore collection for managing packages")
 	accountCollection = flag.String("a", "rune-account", "Firestore collection for managing account")
+	gcsBucket         = flag.String("b", "blue-release", "GCS bucket for release binary storage")
 
 	// refreshCredsEvery = flag.Duration("R", time.Hour, "Cadence at which to refresh GRPC transport credentials")
 	tlsCert     = flag.String("C", "", "TLS certificate used for grpc credentials.")
@@ -121,6 +128,14 @@ func parseFlags() {
 	if *tlsKey == "" && !*tlsInsecure {
 		log.Fatal("Must pass -C and -K, or -I flag")
 	}
+}
+
+func validateReleaseSigning(ctx context.Context, signer gcsrelease.Signer) error {
+	_, err := signer.SignedDownloadURL(ctx, "signing-probe", release.Version("0"))
+	if err != nil {
+		return fmt.Errorf("validate release signing: %w", err)
+	}
+	return nil
 }
 
 func main() {
@@ -161,7 +176,29 @@ func main() {
 	signKeys = auth.KeysCache(signKeys)
 	verifyKeys = auth.KeysCache(verifyKeys)
 
-	rpcApiAuthorizer := RPCAuthorizer(*issueCollection, *releaseCollection)
+	rpcApiAuthorizer := oxapi.RPCAuthorizer(*issueCollection, *releaseCollection)
+
+	// Setup release manager (Firestore metadata + GCS binary storage).
+	releaseDB, err := firestore.New(*gcProjectID, *releaseCollection, *gcCredsFile)
+	if err != nil {
+		log.Fatalf("release firestore new: %v", err)
+	}
+	innerRelease := docrelease.NewManager(releaseDB)
+
+	gcsClient, err := storage.NewClient(context.Background())
+	if err != nil {
+		log.Fatalf("gcs client: %v", err)
+	}
+	bucket := gcsClient.Bucket(*gcsBucket)
+	gcsManager := gcsrelease.NewManager(innerRelease, gcsrelease.NewBucket(bucket))
+	var releaseManager release.Manager = gcsManager
+	var releaseSigner gcsrelease.Signer = gcsManager
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := validateReleaseSigning(ctx, releaseSigner); err != nil {
+		log.Fatalf("release signing: %v", err)
+	}
+
 	secretStore, err := secretmanager.SecretStore(*gcProjectID, *gcCredsFile)
 	if err != nil {
 		log.Fatalf("secretmanager secret store: %v", err)
@@ -215,8 +252,9 @@ func main() {
 	}
 	authConfig.SignupURL = *signupURLStr
 	var httpHandler http.Handler
-	httpHandler, err = newHTTPApi(accountDB, signKeys, verifyKeys,
-		secretStore, *tokenExpiry, signupURL, apiURL, authConfig)
+	httpHandler, err = oxapi.NewHTTPApi(accountDB, signKeys, verifyKeys,
+		secretStore, *tokenExpiry, signupURL, apiURL, authConfig,
+		releaseManager, releaseSigner, rpcApiAuthorizer)
 	if err != nil {
 		log.Fatalf("http api: %v", err)
 	}

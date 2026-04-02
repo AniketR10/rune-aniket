@@ -117,6 +117,13 @@ func (a *Client) TokenSource(ctx context.Context, token *oauth2.Token) (
 	return a.tokenSourceRefresh(ctx, token, false)
 }
 
+// OAuthTokenSource returns the underlying oauth2.TokenSource used for
+// authenticated requests. This can be used to build an *http.Client via
+// oauth2.NewClient for HTTP-based APIs such as cdnrelease.
+func (a *Client) OAuthTokenSource() oauth2.TokenSource {
+	return a.tokenSource
+}
+
 // Logout purges the user's underlying authentication credentials,
 // so next requests sent to the server via the connections created via NewConn
 // will be un-authenticated.

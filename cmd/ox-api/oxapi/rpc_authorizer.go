@@ -21,11 +21,12 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package main
+package oxapi
 
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	log "github.com/sirupsen/logrus"
 	blueauth "github.com/unstablebuild/blue/auth"
@@ -68,11 +69,15 @@ func RPCAuthorizer(issuesCollection, releaseCollection string) blueauth.Authoriz
 			"/workspace.Scheme/Symlink":  roleGreaterBasic,
 			"/workspace.Scheme/Chroot":   roleGreaterBasic,
 		},
+		prefixes: map[string]func(blueauth.UserClaims[auth.RPCUser]) bool{
+			"/api/releases/": roleGreaterBasic,
+		},
 	}
 }
 
 type authorizer struct {
-	paths map[string]func(blueauth.UserClaims[auth.RPCUser]) bool
+	paths    map[string]func(blueauth.UserClaims[auth.RPCUser]) bool
+	prefixes map[string]func(blueauth.UserClaims[auth.RPCUser]) bool
 }
 
 func (a authorizer) Authorize(
@@ -90,6 +95,15 @@ func (a authorizer) Authorize(
 			traceID, authorizeCallType, fields...)
 	}()
 	authFn, ok := a.paths[resource]
+	if !ok {
+		for prefix, fn := range a.prefixes {
+			if strings.HasPrefix(resource, prefix) {
+				authFn = fn
+				ok = true
+				break
+			}
+		}
+	}
 	if !ok || !authFn(claims) {
 		err = blueauth.ErrForbidden
 		return err

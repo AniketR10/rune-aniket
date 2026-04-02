@@ -26,7 +26,7 @@ package apiclient
 import "time"
 
 const (
-	defaultReleaseCollection = "blue-release-bundles"
+	defaultReleaseCollection = "blue-release-v2"
 
 	defaultGRPCEndpointAddress = "rpc.unstable.build:443"
 

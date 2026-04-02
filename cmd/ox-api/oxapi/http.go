@@ -21,7 +21,7 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package main
+package oxapi
 
 import (
 	"fmt"
@@ -36,6 +36,8 @@ import (
 	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/logging"
 	"github.com/unstablebuild/blue/logging/trace"
+	"github.com/unstablebuild/blue/release"
+	"github.com/unstablebuild/blue/release/gcsrelease"
 	"unstable.build/go-tui/cmd/rune/api"
 	"unstable.build/go-tui/cmd/rune/api/account"
 	"unstable.build/go-tui/cmd/rune/api/user"
@@ -43,7 +45,8 @@ import (
 	"unstable.build/go-tui/localstorage/bluestore"
 )
 
-type httpAPI struct {
+// HTTPAPI serves the ox-api HTTP surface, including website and release routes.
+type HTTPAPI struct {
 	*http.ServeMux
 	accStore account.Store
 
@@ -52,7 +55,12 @@ type httpAPI struct {
 	svc  document.Service
 }
 
-func (a httpAPI) serveHealth(
+// AccountStore returns the account store used by the HTTP API.
+func (a HTTPAPI) AccountStore() account.Store {
+	return a.accStore
+}
+
+func (a HTTPAPI) serveHealth(
 	w http.ResponseWriter, r *http.Request,
 ) {
 	const healthCallType = "health"
@@ -82,13 +90,17 @@ func (a httpAPI) serveHealth(
 	}
 }
 
-func (a httpAPI) serveHealthRouter(
+func (a HTTPAPI) serveHealthRouter(
 	w http.ResponseWriter, r *http.Request, params httprouter.Params,
 ) {
 	a.serveHealth(w, r)
 }
 
-func newHTTPApi(
+// Auth0SecretID is the secret identifier used to initialize the Auth0 store.
+const Auth0SecretID = "auth0-ox-api-prod"
+
+// NewHTTPApi constructs the ox-api HTTP handler stack.
+func NewHTTPApi(
 	accDB document.Service,
 	signKeys, verifyKeys blueauth.Keys,
 	secretStore blueauth.SecretStore,
@@ -96,8 +108,17 @@ func newHTTPApi(
 	signupURL *url.URL,
 	apiURL *url.URL,
 	authConfig auth.Config,
-) (httpAPI, error) {
-	ret := httpAPI{
+	releaseManager release.Manager,
+	releaseSigner gcsrelease.Signer,
+	rpcAuthorizer blueauth.Authorizer[auth.RPCUser],
+) (HTTPAPI, error) {
+	if releaseManager == nil {
+		panic("oxapi.NewHTTPApi: releaseManager must not be nil")
+	}
+	if releaseSigner == nil {
+		panic("oxapi.NewHTTPApi: releaseSigner must not be nil")
+	}
+	ret := HTTPAPI{
 		ServeMux: http.NewServeMux(),
 		svc:      accDB,
 		keys:     verifyKeys,
@@ -106,20 +127,20 @@ func newHTTPApi(
 
 	cfgHandler, err := auth.ServeNativeConfig(logger, apiURL)
 	if err != nil {
-		return httpAPI{}, fmt.Errorf("serve config: %v", err)
+		return HTTPAPI{}, fmt.Errorf("serve config: %v", err)
 	}
 	ret.Handle(auth.ServeConfigPath, cfgHandler)
 
-	userStore, err := user.NewAuth0Store(secretStore, auth0SecretID, authConfig)
+	userStore, err := user.NewAuth0Store(secretStore, Auth0SecretID, authConfig)
 	if err != nil {
-		return httpAPI{}, fmt.Errorf("new auth0 service: %v", err)
+		return HTTPAPI{}, fmt.Errorf("new auth0 service: %v", err)
 	}
 
 	rpcGranter := newGranter(userStore, signupURL.String())
 	tokenHandler := blueauth.TokenHTTPHandler(signKeys, secretStore, rpcGranter, tokenExpiry)
 	ret.Handle(auth.ServeTokenPath, tokenHandler)
 
-	ret.Handle("/telemetry", newTelemetryHandler(logger, verifyKeys))
+	ret.Handle("/telemetry", NewTelemetryHandler(logger, verifyKeys))
 
 	ret.HandleFunc("/health", ret.serveHealth)
 
@@ -149,6 +170,16 @@ func newHTTPApi(
 	securedHandler = withCORS(securedHandler)
 	ret.Handle("/api/", securedHandler)
 	ret.accStore = accStore
+
+	// Mount release HTTP API with RPC-style auth (for rune clients).
+	releaseHandler := gcsrelease.NewHandler(releaseManager, releaseSigner)
+	rpcMiddlewareConfig := blueauth.MiddlewareConfig[auth.RPCUser]{
+		VerifyKeys: verifyKeys,
+		Authorizer: rpcAuthorizer,
+	}
+	var securedReleaseHandler = http.StripPrefix("/api/releases", releaseHandler)
+	securedReleaseHandler = blueauth.WithMiddleware(securedReleaseHandler, rpcMiddlewareConfig)
+	ret.Handle("/api/releases/", securedReleaseHandler)
 
 	return ret, nil
 }

@@ -44,17 +44,16 @@ import (
 	log "github.com/sirupsen/logrus"
 	flag "github.com/spf13/pflag"
 	"github.com/unstablebuild/blue/logging"
-	"github.com/unstablebuild/blue/release/docrelease"
+	"github.com/unstablebuild/blue/release/cdnrelease"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
-	"github.com/unstablebuild/rune-go-sdk/api/storageapi/docmarshal/doctoml"
-	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagerpc"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
+	"golang.org/x/oauth2"
 	"google.golang.org/grpc"
 	"unstable.build/go-tui/cmd/rune/ide/apiclient"
 	"unstable.build/go-tui/cmd/rune/ide/extension"
@@ -62,7 +61,6 @@ import (
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/ide"
 	"unstable.build/go-tui/ide/idepkg"
-	"unstable.build/go-tui/localstorage/bluestore"
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term/gui"
 	"unstable.build/go-tui/workspace"
@@ -711,9 +709,8 @@ func setupReleaseManager(i *ide.IDE, storage storageapi.Service) (
 	if err != nil {
 		return nil, nil, fmt.Errorf("dial to api: %v", err)
 	}
-	doclient := new(storagerpc.Client)
-	doclient.InitWithCollection(conn, doctoml.Marshaler(), *flagReleaseCollection)
-	releaseManager := docrelease.NewManager(bluestore.AdaptFrom(doclient))
+	httpClient := oauth2.NewClient(context.Background(), client.OAuthTokenSource())
+	releaseManager := cdnrelease.NewManager(httpClient, *flagHTTPAddress+"/api/releases")
 	i.SetReleaseManager(releaseManager)
 	return conn, client, nil
 }

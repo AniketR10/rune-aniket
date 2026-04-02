@@ -40,7 +40,10 @@ import (
 	"github.com/stretchr/testify/require"
 	blueauth "github.com/unstablebuild/blue/auth"
 	"github.com/unstablebuild/blue/document"
+	"github.com/unstablebuild/blue/iterator"
+	"github.com/unstablebuild/blue/release"
 	"go.uber.org/atomic"
+	"unstable.build/go-tui/cmd/ox-api/oxapi"
 	"unstable.build/go-tui/cmd/rune/api/account"
 	"unstable.build/go-tui/cmd/rune/api/user"
 	"unstable.build/go-tui/cmd/rune/auth"
@@ -221,13 +224,14 @@ func TestAuth(t *testing.T) {
 			testAuthConfig.JWKSURL = "http://" + addr + "/o/oauth2/jwk"
 
 			mockWriter := httptest.NewRecorder()
-			handler, err := newHTTPApi(accDB, multiKeys,
-				multiKeys, secretStore, 10*time.Hour, signupURL, apiURL, testAuthConfig)
+			handler, err := oxapi.NewHTTPApi(accDB, multiKeys,
+				multiKeys, secretStore, 10*time.Hour, signupURL, apiURL, testAuthConfig,
+				stubReleaseManager{}, stubSigner{}, oxapi.RPCAuthorizer("issues", "releases"))
 			require.NoError(t, err)
 
 			if test.url != "/api/account" {
 				// setup an account for tests, except for create account test
-				actualAccountID, err := handler.accStore.Create(context.Background(), testUser, testAccount)
+				actualAccountID, err := handler.AccountStore().Create(context.Background(), testUser, testAccount)
 				require.NoError(t, err)
 				accountID.Store(string(actualAccountID))
 
@@ -249,6 +253,33 @@ func TestAuth(t *testing.T) {
 		})
 	}
 
+}
+
+type stubReleaseManager struct{}
+
+func (stubReleaseManager) Create(context.Context, release.Package) error { return nil }
+func (stubReleaseManager) DeletePackage(context.Context, string) error   { return nil }
+func (stubReleaseManager) GetPackage(context.Context, string) (release.Package, error) {
+	return release.Package{}, nil
+}
+func (stubReleaseManager) ListPackages(context.Context, map[string]string) (iterator.Iterator[release.Package], error) {
+	return iterator.FromSlice([]release.Package{}), nil
+}
+func (stubReleaseManager) Upload(context.Context, release.Bundle, release.ProgressReader) error {
+	return nil
+}
+func (stubReleaseManager) Get(context.Context, string, release.Version, release.ProgressWriter) (release.Bundle, error) {
+	return release.Bundle{}, nil
+}
+func (stubReleaseManager) Delete(context.Context, string, release.Version) error { return nil }
+func (stubReleaseManager) List(context.Context, string, map[string]string) (iterator.Iterator[release.Bundle], error) {
+	return iterator.FromSlice([]release.Bundle{}), nil
+}
+
+type stubSigner struct{}
+
+func (stubSigner) SignedDownloadURL(context.Context, string, release.Version) (string, error) {
+	return "http://localhost/unused", nil
 }
 
 func loadKey(t *testing.T, filename string) blueauth.Key {

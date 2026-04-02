@@ -21,7 +21,7 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package main
+package oxapi
 
 import (
 	"bytes"
@@ -43,7 +43,8 @@ const (
 	dateTimeFormat    = time.RFC3339
 )
 
-func newTelemetryHandler(
+// NewTelemetryHandler returns the telemetry endpoint handler with optional auth enrichment.
+func NewTelemetryHandler(
 	logger *log.Logger,
 	keys blueauth.Keys,
 ) http.Handler {
