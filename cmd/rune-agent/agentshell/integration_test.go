@@ -156,7 +156,7 @@ func TestIntegrationHelp(t *testing.T) {
 	handlertest.RunHandlerSequence(t, f, testWidth, testHeight, []handlertest.SequenceTestCase{
 		{
 			InputSequence: "help<enter>",
-			Expected: mkExpected(10,
+			Expected: mkExpected(8,
 				"agent> help",
 				"agents — List configured agent definitions.",
 				"chats <list|show|log|export|clear|compact|fork> [args] — Ins",
@@ -169,6 +169,8 @@ func TestIntegrationHelp(t *testing.T) {
 				"exit — Exit the shell.",
 				"help [command ...] — Show usage for agent commands.",
 				"mcp — Show MCP server status and tool stats.",
+				"max_tokens [tokens] — Show or set the global max output toke",
+				"ns config value.",
 				"model [dialogue_id] — Show the default model or a conversati",
 				"on's assigned model.",
 				"models — List available models with context window sizes.",
@@ -182,9 +184,7 @@ func TestIntegrationHelp(t *testing.T) {
 		{
 			InputSequence: "agent<enter>",
 			Expected: mkExpected(0,
-				"exit — Exit the shell.",
-				"help [command ...] — Show usage for agent commands.",
-				"mcp — Show MCP server status and tool stats.",
+				"ns config value.",
 				"model [dialogue_id] — Show the default model or a conversati",
 				"on's assigned model.",
 				"models — List available models with context window sizes.",
@@ -204,6 +204,8 @@ func TestIntegrationHelp(t *testing.T) {
 				"exit — Exit the shell.",
 				"help [command ...] — Show usage for agent commands.",
 				"mcp — Show MCP server status and tool stats.",
+				"max_tokens [tokens] — Show or set the global max output toke",
+				"ns config value.",
 				"model [dialogue_id] — Show the default model or a conversati",
 				"on's assigned model.",
 				"models — List available models with context window sizes.",
@@ -445,6 +447,22 @@ func TestIntegrationConfig(t *testing.T) {
 				"• reasoning_effort:",
 				"",
 				"agent> \u2590",
+			),
+		},
+	})
+}
+
+func TestIntegrationMaxTokens(t *testing.T) {
+	deps := newTestDeps()
+	f := newTestFlusher(deps)
+	handlertest.RunHandlerSequence(t, f, testWidth, testHeight, []handlertest.SequenceTestCase{
+		{
+			InputSequence: "max_tokens<space>4096<enter>",
+			Expected: mkExpected(26,
+				"agent> max_tokens 4096",
+				"Set global max_tokens to 4096.",
+				"",
+				"agent> ▐",
 			),
 		},
 	})

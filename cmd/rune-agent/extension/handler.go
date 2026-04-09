@@ -857,12 +857,14 @@ type aiEditorHandler struct {
 	generateDialogueID func(ctx context.Context, agentID string) string
 	// generatePlanPath overrides the plan path generator. Testing only.
 	generatePlanPath func(title string) string
-	effortMu         sync.Mutex
+	defaultsMu       sync.Mutex
 	defaultEffort    llm.ReasoningEffort // global default applied to new chats/queries
+	defaultMaxTokens int                 // global default applied to new chats/queries
 
-	openChats sync.Map
-	ctx       context.Context
-	cancelCtx func()
+	openChats      sync.Map
+	openChatAgents sync.Map
+	ctx            context.Context
+	cancelCtx      func()
 }
 
 func (h *aiEditorHandler) newService(model string) (llm.Service, error) {
@@ -881,16 +883,35 @@ func (h *aiEditorHandler) newService(model string) (llm.Service, error) {
 }
 
 func (h *aiEditorHandler) getDefaultEffort() llm.ReasoningEffort {
-	h.effortMu.Lock()
-	defer h.effortMu.Unlock()
+	h.defaultsMu.Lock()
+	defer h.defaultsMu.Unlock()
 	return h.defaultEffort
 }
 
 func (h *aiEditorHandler) setDefaultEffort(e llm.ReasoningEffort) {
-	h.effortMu.Lock()
+	h.defaultsMu.Lock()
 	h.defaultEffort = e
-	h.effortMu.Unlock()
+	h.defaultsMu.Unlock()
 	h.queryAgent.SetEffort(e)
+}
+
+func (h *aiEditorHandler) getDefaultMaxTokens() int {
+	h.defaultsMu.Lock()
+	defer h.defaultsMu.Unlock()
+	return h.defaultMaxTokens
+}
+
+func (h *aiEditorHandler) setDefaultMaxTokens(n int) {
+	h.defaultsMu.Lock()
+	h.defaultMaxTokens = n
+	h.defaultsMu.Unlock()
+	h.queryAgent.SetMaxOutputTokens(n)
+	h.openChatAgents.Range(func(_, v any) bool {
+		if ag, ok := v.(*agent.Agent); ok {
+			ag.SetMaxOutputTokens(n)
+		}
+		return true
+	})
 }
 
 func (h *aiEditorHandler) Handle(ctx context.Context, ev textapi.Event) (exit bool) {
@@ -995,6 +1016,7 @@ func (h *aiEditorHandler) newAgentShell() textapi.REPLHandler {
 		agentshell.WithMCPInfo(h.mcpManager),
 		agentshell.WithHistorySystemPrompt(true),
 		agentshell.WithEffort(h.getDefaultEffort, h.setDefaultEffort),
+		agentshell.WithMaxTokens(h.getDefaultMaxTokens, h.setDefaultMaxTokens),
 		agentshell.WithServiceFactory(h.newService),
 	}
 	if h.auditStore != nil {
@@ -1202,7 +1224,11 @@ func (h *aiEditorHandler) handleChat(cmd textapi.Command) error {
 	if effort := h.getDefaultEffort(); effort != "" {
 		chatAgent.SetEffort(effort)
 	}
+	if maxTokens := h.getDefaultMaxTokens(); maxTokens > 0 {
+		chatAgent.SetMaxOutputTokens(maxTokens)
+	}
 	adapter.agent = chatAgent
+	h.openChatAgents.Store(d.ID, chatAgent)
 
 	handler, msgRx := h.wrapDialogueHandler(ctx, syncComp, dhandler, rx)
 	go createAgentCompletions(ctx, cancel, tx, msgRx, chatAgent, spawner, childEvents, h.skillRegistry, d.ID, syncComp, h.n,
@@ -1211,6 +1237,7 @@ func (h *aiEditorHandler) handleChat(cmd textapi.Command) error {
 	bhandler := browserapi.FuncHandler(handler, func() error {
 		cancel()
 		h.openChats.Delete(d.ID)
+		h.openChatAgents.Delete(d.ID)
 		return nil
 	})
 	uri, err := getModelUri(d.ID, model)

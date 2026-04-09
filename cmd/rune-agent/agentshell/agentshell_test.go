@@ -294,6 +294,32 @@ func TestHandleCommand(t *testing.T) {
 			},
 		},
 		{
+			name: "max_tokens writes global config",
+			cmd:  repl.Command{Name: "max_tokens", Args: []string{"4096"}},
+			assertOut: func(t *testing.T, text string) {
+				if !strings.Contains(text, "4096") {
+					t.Fatalf("expected new max_tokens in output, got %q", text)
+				}
+			},
+		},
+		{
+			name: "max_tokens without value shows global config",
+			cmd:     repl.Command{Name: "max_tokens"},
+			setup: func(d *testDeps) {
+				d.cfg = stubConfig{ints: map[string]int{"max_tokens": 8192}}
+			},
+			assertOut: func(t *testing.T, text string) {
+				if !strings.Contains(text, "8192") {
+					t.Fatalf("expected current max_tokens in output, got %q", text)
+				}
+			},
+		},
+		{
+			name:    "max_tokens with invalid value returns error",
+			cmd:     repl.Command{Name: "max_tokens", Args: []string{"nope"}},
+			wantErr: true,
+		},
+		{
 			name: "mcp with nil mcpInfo shows no servers",
 			cmd:  repl.Command{Name: "mcp"},
 			assertOut: func(t *testing.T, text string) {

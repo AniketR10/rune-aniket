@@ -98,6 +98,20 @@ func RemoveSkillDir(fs ConfigFS, cwd workspaceapi.URI, dir string) error {
 	return writeConfigNode(fs, path, root)
 }
 
+// SetMaxTokens writes the global max_tokens setting in .rune/config.yaml.
+// If the config file doesn't exist, it creates the directory and file.
+func SetMaxTokens(fs ConfigFS, cwd workspaceapi.URI, n int) error {
+	path := configFilePath(cwd)
+	root, err := readConfigNode(fs, path)
+	if err != nil {
+		return err
+	}
+
+	cfg := findOrCreateRuneAgentConfig(root)
+	setScalarKey(cfg, "max_tokens", fmt.Sprint(n), "!!int")
+	return writeConfigNode(fs, path, root)
+}
+
 func readConfigNode(fs ConfigFS, path string) (*yaml.Node, error) {
 	f, err := fs.OpenFile(path, os.O_RDONLY, 0)
 	if err != nil {
@@ -167,11 +181,15 @@ func writeConfigNode(fs ConfigFS, path string, doc *yaml.Node) error {
 // in the YAML node tree, creating missing intermediate nodes as needed.
 // Returns the SequenceNode for skills.
 func findOrCreateSkillsSeq(doc *yaml.Node) *yaml.Node {
+	cfg := findOrCreateRuneAgentConfig(doc)
+	return findOrCreateSeqKey(cfg, "skills")
+}
+
+func findOrCreateRuneAgentConfig(doc *yaml.Node) *yaml.Node {
 	root := doc.Content[0] // document root mapping
 	extensions := findOrCreateMapKey(root, "extensions")
 	runeAgent := findOrCreateMapKey(extensions, "rune-agent")
-	cfg := findOrCreateMapKey(runeAgent, "config")
-	return findOrCreateSeqKey(cfg, "skills")
+	return findOrCreateMapKey(runeAgent, "config")
 }
 
 // findOrCreateMapKey finds or creates a mapping value for the given key
@@ -201,4 +219,16 @@ func findOrCreateSeqKey(parent *yaml.Node, key string) *yaml.Node {
 	valNode := &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
 	parent.Content = append(parent.Content, keyNode, valNode)
 	return valNode
+}
+
+func setScalarKey(parent *yaml.Node, key, value, tag string) {
+	for i := 0; i < len(parent.Content)-1; i += 2 {
+		if parent.Content[i].Value == key {
+			parent.Content[i+1] = &yaml.Node{Kind: yaml.ScalarNode, Tag: tag, Value: value}
+			return
+		}
+	}
+	keyNode := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: key}
+	valNode := &yaml.Node{Kind: yaml.ScalarNode, Tag: tag, Value: value}
+	parent.Content = append(parent.Content, keyNode, valNode)
 }

@@ -212,3 +212,45 @@ func TestRemoveSkillDir(t *testing.T) {
 		}
 	})
 }
+
+func TestSetMaxTokens(t *testing.T) {
+	t.Run("no config file creates it", func(t *testing.T) {
+		root := t.TempDir()
+		err := SetMaxTokens(osFS{}, dirURI(root), 1234)
+		require.NoError(t, err)
+
+		content := readConfig(t, root)
+		assert.Contains(t, content, "extensions")
+		assert.Contains(t, content, "rune-agent")
+		assert.Contains(t, content, "max_tokens: 1234")
+	})
+
+	t.Run("existing value is updated", func(t *testing.T) {
+		root := t.TempDir()
+		writeConfig(t, root, `extensions:
+  rune-agent:
+    config:
+      max_tokens: 1000
+      skills:
+        - .rune/skills
+`)
+		err := SetMaxTokens(osFS{}, dirURI(root), 2000)
+		require.NoError(t, err)
+
+		content := readConfig(t, root)
+		assert.NotContains(t, content, "max_tokens: 1000")
+		assert.Contains(t, content, "max_tokens: 2000")
+		assert.Contains(t, content, ".rune/skills")
+	})
+
+	t.Run("empty config creates structure", func(t *testing.T) {
+		root := t.TempDir()
+		writeConfig(t, root, "")
+
+		err := SetMaxTokens(osFS{}, dirURI(root), 3000)
+		require.NoError(t, err)
+
+		content := readConfig(t, root)
+		assert.Contains(t, content, "max_tokens: 3000")
+	})
+}

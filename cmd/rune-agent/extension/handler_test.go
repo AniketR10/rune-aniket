@@ -3803,9 +3803,14 @@ func (s *stubCommandHandler) Complete(context.Context, string, []string) (iterat
 // openChatAndGetTab opens a chat tab and returns an asyncFlusher wrapping it.
 func openChatAndGetTab(t *testing.T, deps testAIEditorDeps) *asyncFlusher {
 	t.Helper()
+	return openChatAndGetTabWithArgs(t, deps, []string{"default"})
+}
+
+func openChatAndGetTabWithArgs(t *testing.T, deps testAIEditorDeps, args []string) *asyncFlusher {
+	t.Helper()
 	cmd := textapi.Command{
 		Name:   commandChat,
-		Args:   []string{"default"},
+		Args:   args,
 		Window: e2eWindow(0),
 	}
 	err := deps.handler.HandleCommand(context.Background(), cmd)
@@ -4580,6 +4585,124 @@ func TestAIEditorHandler_chat_default_effort_propagated(t *testing.T) {
 		"first request should use propagated default effort")
 	assert.Equal(t, llm.ReasoningEffortHigh, reqs[1].ReasoningEffort,
 		"second request should use overridden effort")
+}
+
+func TestAIEditorHandler_shell_max_tokens_updates_open_chat(t *testing.T) {
+	t.Parallel()
+	svc := &agentMockService{
+		responses: []agentMockResponse{
+			{chunks: []string{"done"}, finishReason: llm.FinishReasonStop},
+			{chunks: []string{"done2"}, finishReason: llm.FinishReasonStop},
+			{chunks: []string{"done3"}, finishReason: llm.FinishReasonStop},
+		},
+	}
+	deps := newTestAIEditorHandler(t, svc)
+	deps.handler.fs = testLocalFS{}
+	root := t.TempDir()
+	cwd, err := workspaceapi.ParseURI("file://" + root)
+	require.NoError(t, err)
+	deps.handler.cwd = cwd
+
+	chat := openChatAndGetTab(t, deps)
+	chat.idleTimeout = 200 * time.Millisecond
+	chat.maxWait = time.Second
+
+	shell := openAgentShell(t, deps)
+	handlertest.RunHandlerSequence(t, shell, e2eWidth, e2eHeight, []handlertest.SequenceTestCase{
+		{
+			InputSequence: "max_tokens<space>4096<enter>",
+			Expected: e2eExpected(6,
+				"agent> max_tokens 4096",
+				"Set global max_tokens to 4096.",
+				"",
+				"agent> ▐",
+			),
+		},
+	})
+
+	handlertest.RunHandlerSequence(t, chat, e2eWidth, e2eHeight, []handlertest.SequenceTestCase{
+		{
+			InputSequence: "hello<enter>",
+			Expected: e2eExpected(0,
+				"hello",
+				"done",
+				"",
+				"",
+				"",
+				"",
+				"",
+				"   ┌───────────────────────────────┐",
+				"   │▐                              │",
+				"   └───────────────────────────────┘",
+			),
+		},
+	})
+
+	reqs := svc.getRequests()
+	require.Len(t, reqs, 1, "expected one LLM request from the already-open chat")
+	assert.Equal(t, 4096, reqs[0].MaxOutputTokens)
+
+	newChat := openChatAndGetTabWithArgs(t, deps, []string{"after-global-max-tokens"})
+	newChat.idleTimeout = 200 * time.Millisecond
+	newChat.maxWait = time.Second
+	handlertest.RunHandlerSequence(t, newChat, e2eWidth, e2eHeight, []handlertest.SequenceTestCase{
+		{
+			InputSequence: "hi<enter>",
+			Expected: e2eExpected(0,
+				"hi",
+				"done2",
+				"",
+				"",
+				"",
+				"",
+				"",
+				"   ┌───────────────────────────────┐",
+				"   │▐                              │",
+				"   └───────────────────────────────┘",
+			),
+		},
+	})
+
+	reqs = svc.getRequests()
+	require.Len(t, reqs, 2, "expected requests from open and newly-opened chats")
+	assert.Equal(t, 4096, reqs[0].MaxOutputTokens)
+	assert.Equal(t, 4096, reqs[1].MaxOutputTokens)
+
+	handlertest.RunHandlerSequence(t, newChat, e2eWidth, e2eHeight, []handlertest.SequenceTestCase{
+		{
+			InputSequence: "/max_tokens<space>1234<enter>",
+			Expected: e2eExpected(0,
+				"hi",
+				"done2",
+				"",
+				"/max_tokens 1234",
+				"Set max output tokens to 1234",
+				"",
+				"",
+				"   ┌───────────────────────────────┐",
+				"   │▐                              │",
+				"   └───────────────────────────────┘",
+			),
+		},
+		{
+			InputSequence: "again<enter>",
+			Expected: e2eExpected(1,
+				"/max_tokens 1234",
+				"Set max output tokens to 1234",
+				"",
+				"again",
+				"done3",
+				"",
+				"   ┌───────────────────────────────┐",
+				"   │▐                              │",
+				"   └───────────────────────────────┘",
+			),
+		},
+	})
+
+	reqs = svc.getRequests()
+	require.Len(t, reqs, 3, "expected requests after the chat-local override")
+	assert.Equal(t, 1234, reqs[len(reqs)-1].MaxOutputTokens)
 }
 
 func TestAIEditorHandler_chat_slash_max_tokens_sets_and_propagates(t *testing.T) {

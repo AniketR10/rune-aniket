@@ -96,6 +96,15 @@ func WithEffort(get func() llm.ReasoningEffort, set func(llm.ReasoningEffort)) O
 	}
 }
 
+// WithMaxTokens wires the max_tokens command to a getter/setter pair so the
+// embedding extension can apply global config changes to live chats.
+func WithMaxTokens(get func() int, set func(int)) Option {
+	return func(s *shell) {
+		s.getMaxTokens = get
+		s.setMaxTokens = set
+	}
+}
+
 // WithServiceFactory configures lazy llm.Service construction by model name.
 // This is primarily used by the subscribed REPL command so startup does not
 // depend on eagerly creating a default model client.
@@ -187,6 +196,8 @@ type shell struct {
 	dataPath            string
 	getEffort           func() llm.ReasoningEffort
 	setEffort           func(llm.ReasoningEffort)
+	getMaxTokens        func() int
+	setMaxTokens        func(int)
 	serviceFactory      func(string) (llm.Service, error)
 }
 
@@ -233,6 +244,7 @@ var commandManual = textapi.CommandManual{
 		{Name: "exit", Summary: "Exit the shell."},
 		{Name: "help", Summary: "Show usage for agent commands.", Synopsis: "[command ...]"},
 		{Name: "mcp", Summary: "Show MCP server status and tool stats."},
+		{Name: "max_tokens", Summary: "Show or set the global max output tokens config value.", Synopsis: "[tokens]"},
 		{Name: "model", Summary: "Show the default model or a conversation's assigned model.", Synopsis: "[dialogue_id]"},
 		{Name: "models", Summary: "List available models with context window sizes."},
 		{
@@ -390,6 +402,8 @@ func (s *shell) handleCommand(
 		return s.listAgents(), nil
 	case "mcp":
 		return s.listMCPServers(), nil
+	case "max_tokens":
+		return s.handleMaxTokens(cmd.Args)
 	case "system-prompt":
 		return s.showSystemPrompt(cmd.Args), nil
 	case "skills":
@@ -1111,6 +1125,31 @@ func (s *shell) showConfig() iterator.Iterator[component.Responsive] {
 		fmt.Fprintf(&b, "- **%s**: %s\n", k, val)
 	}
 	return markdownOutput(b.String())
+}
+
+func (s *shell) handleMaxTokens(args []string) (iterator.Iterator[component.Responsive], error) {
+	if len(args) == 0 {
+		if s.getMaxTokens != nil {
+			if n := s.getMaxTokens(); n > 0 {
+				return markdownOutput(fmt.Sprintf("Global **max_tokens**: %d", n)), nil
+			}
+		}
+		return markdownOutput(fmt.Sprintf("Global **max_tokens**: %s", configValue(s.cfg, "max_tokens"))), nil
+	}
+	if len(args) > 1 {
+		return nil, errors.New("usage: max_tokens [positive-integer]")
+	}
+	n, err := strconv.Atoi(args[0])
+	if err != nil || n <= 0 {
+		return nil, fmt.Errorf("invalid max_tokens value %q: must be a positive integer", args[0])
+	}
+	if err := SetMaxTokens(s.fs, s.cwd, n); err != nil {
+		return nil, fmt.Errorf("set max_tokens: %w", err)
+	}
+	if s.setMaxTokens != nil {
+		s.setMaxTokens(n)
+	}
+	return markdownOutput(fmt.Sprintf("Set global **max_tokens** to **%d**.", n)), nil
 }
 
 // validEffortLevels lists the allowed reasoning effort values.
