@@ -117,6 +117,27 @@ func TestWithHistoryIntegration(t *testing.T) {
 			},
 		},
 		{
+			name: "records the cursor location before a cross file open without destination motion",
+			run: func(t *testing.T, f *fixture) {
+				a := f.writeFile(t, "open-a.txt", lines(30))
+				b := f.writeFile(t, "open-b.txt", lines(30))
+
+				ha := f.open(t, a)
+				handleKeys(t, ha, "jjjjjjj")
+				assert.Equal(t, term.Coordinates{Y: 7, X: 0}, ha.CursorAtScroll())
+
+				_ = f.open(t, b)
+
+				assert.Equal(t, []string{"open-a.txt:8:1"}, f.complete(t, "prev"))
+				f.dispatch(t, "prev")
+				f.assertCursor(t, a, term.Coordinates{Y: 7, X: 0})
+
+				assert.Equal(t, []string{"open-b.txt:1:1"}, f.complete(t, "next"))
+				f.dispatch(t, "next")
+				f.assertCursor(t, b, term.Coordinates{})
+			},
+		},
+		{
 			name: "records definition jump from workspace file to external dependency",
 			run: func(t *testing.T, f *fixture) {
 				workspaceFile := f.writeFile(t, "callback.go", longLines(60))

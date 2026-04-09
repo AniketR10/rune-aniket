@@ -75,7 +75,7 @@ func WithHistory(
 	if err := h.load(context.Background()); err != nil {
 		return err
 	}
-	if err := ed.SubscribeEvents([]textapi.EventType{textapi.EventTypeCursor}, h); err != nil {
+	if err := ed.SubscribeEvents([]textapi.EventType{textapi.EventTypeOpen, textapi.EventTypeCursor}, h); err != nil {
 		return err
 	}
 	return ed.SubscribeCommand(manual(), h)
@@ -92,11 +92,12 @@ type handler struct {
 	workspaceURI     workspaceapi.URI
 	scheduleNextTick func(func()) bool
 
-	docID      string
-	doc        historyDocument
-	suppress   bool
-	lastCursor location
-	hasLast    bool
+	docID       string
+	doc         historyDocument
+	suppress    bool
+	lastCursor  location
+	hasLast     bool
+	lastWasOpen bool
 }
 
 func manual() textapi.CommandManual {
@@ -113,7 +114,12 @@ func manual() textapi.CommandManual {
 }
 
 func (h *handler) Handle(ctx context.Context, ev textapi.Event) bool {
-	if ev.Type != textapi.EventTypeCursor || h.suppress {
+	if h.suppress {
+		return false
+	}
+	switch ev.Type {
+	case textapi.EventTypeOpen, textapi.EventTypeCursor:
+	default:
 		return false
 	}
 	next := location{
@@ -125,14 +131,27 @@ func (h *handler) Handle(ctx context.Context, ev textapi.Event) bool {
 	if !h.hasLast {
 		h.lastCursor = next
 		h.hasLast = true
+		h.lastWasOpen = ev.Type == textapi.EventTypeOpen
+		return false
+	}
+	if ev.Type == textapi.EventTypeOpen && h.lastCursor.URI == next.URI {
+		if sameLocation(h.lastCursor, next) {
+			h.lastWasOpen = true
+		}
+		return false
+	}
+	if ev.Type == textapi.EventTypeCursor && h.lastWasOpen && h.lastCursor.URI == next.URI {
+		h.amendLastOpen(ctx, next)
 		return false
 	}
 	if !shouldRecord(h.lastCursor, next) {
 		h.lastCursor = next
+		h.lastWasOpen = ev.Type == textapi.EventTypeOpen
 		return false
 	}
 	from := h.lastCursor
 	h.lastCursor = next
+	h.lastWasOpen = ev.Type == textapi.EventTypeOpen
 	if !h.doc.recordJump(from, next) {
 		return false
 	}
@@ -141,6 +160,22 @@ func (h *handler) Handle(ctx context.Context, ev textapi.Event) bool {
 		logrus.Errorf("could not persist state: %v", err)
 	}
 	return false
+}
+
+func (h *handler) amendLastOpen(ctx context.Context, loc location) {
+	amended := false
+	if current, ok := h.doc.current(); ok && sameLocation(current, h.lastCursor) {
+		h.doc.Entries[h.doc.Index] = loc
+		amended = true
+	}
+	h.lastCursor = loc
+	h.lastWasOpen = false
+	if !amended {
+		return
+	}
+	if err := h.persistState(ctx); err != nil {
+		logrus.Errorf("could not persist state: %v", err)
+	}
 }
 
 func (h *handler) HandleCommand(ctx context.Context, cmd textapi.Command) error {
