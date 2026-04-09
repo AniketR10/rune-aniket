@@ -31,7 +31,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/clipboard"
 )
 
-var _ clipboard.Register = (*RegisterSet)(nil)
+var _ clipboard.Register = (*registerSet)(nil)
 
 const (
 	// UnnamedRegisterID identifies the Vim-compatible unnamed register.
@@ -44,47 +44,44 @@ const (
 	BlackHoleRegisterID = "_"
 )
 
-// RegisterSet stores independent clipboard data for each register ID.
-type RegisterSet struct {
-	mu        sync.RWMutex
-	clipboard clipboard.Register
-	data      map[string]clipboard.Data
-}
-
 // New returns a register-aware clipboard backed by clip.
 func New(clip clipboard.Register) clipboard.Register {
-	if registers, ok := clip.(*RegisterSet); ok {
+	if registers, ok := clip.(*registerSet); ok {
 		return registers
 	}
-	return &RegisterSet{
+	return &registerSet{
 		clipboard: clip,
 		data:      make(map[string]clipboard.Data),
 	}
 }
 
+// registerSet stores independent clipboard data for each register ID.
+type registerSet struct {
+	mu        sync.RWMutex
+	clipboard clipboard.Register
+	data      map[string]clipboard.Data
+}
+
 // Copy satisfies clipboard.Register.
-func (r *RegisterSet) Copy(registerID string, data clipboard.Data) error {
+func (r *registerSet) Copy(registerID string, data clipboard.Data) error {
 	registerID = Normalize(registerID)
 	switch registerID {
 	case BlackHoleRegisterID:
 		return nil
-	case ClipboardRegisterID:
+	case clipboard.DefaultRegisterID, ClipboardRegisterID:
 		return r.clipboard.Copy(clipboard.DefaultRegisterID, data)
 	}
 
 	r.mu.Lock()
 	r.data[registerID] = data
 	r.mu.Unlock()
-	if registerID == clipboard.DefaultRegisterID {
-		return r.clipboard.Copy(clipboard.DefaultRegisterID, data)
-	}
 	return nil
 }
 
 // Paste satisfies clipboard.Register.
-func (r *RegisterSet) Paste(registerID string) (clipboard.Data, error) {
+func (r *registerSet) Paste(registerID string) (clipboard.Data, error) {
 	registerID = Normalize(registerID)
-	if registerID == ClipboardRegisterID {
+	if registerID == clipboard.DefaultRegisterID || registerID == ClipboardRegisterID {
 		return r.clipboard.Paste(clipboard.DefaultRegisterID)
 	}
 

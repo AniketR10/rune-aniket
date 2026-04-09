@@ -50,11 +50,11 @@ func TestRegisterSet(t *testing.T) {
 
 	data, err = registers.Paste(clipboard.DefaultRegisterID)
 	require.NoError(t, err)
-	assert.Equal(t, "unnamed", data.Text)
+	assert.Equal(t, "system", data.Text)
 
 	data, err = registers.Paste(UnnamedRegisterID)
 	require.NoError(t, err)
-	assert.Equal(t, "unnamed", data.Text)
+	assert.Equal(t, "system", data.Text)
 
 	data, err = root.Paste(clipboard.DefaultRegisterID)
 	require.NoError(t, err)
@@ -67,4 +67,25 @@ func TestRegisterSet(t *testing.T) {
 	data, err = registers.Paste(BlackHoleRegisterID)
 	require.NoError(t, err)
 	assert.Empty(t, data.Text)
+}
+
+func TestRegisterSetDefaultRegisterIsSystemClipboard(t *testing.T) {
+	root := clipboard.NewInMemory()
+	registers := New(root)
+
+	require.NoError(t, registers.Copy(clipboard.DefaultRegisterID, clipboard.Data{Text: "from vi"}))
+
+	data, err := root.Paste(clipboard.DefaultRegisterID)
+	require.NoError(t, err)
+	assert.Equal(t, "from vi", data.Text)
+
+	require.NoError(t, root.Copy(clipboard.DefaultRegisterID, clipboard.Data{Text: "from system"}))
+
+	data, err = registers.Paste(clipboard.DefaultRegisterID)
+	require.NoError(t, err)
+	assert.Equal(t, "from system", data.Text)
+
+	data, err = registers.Paste(UnnamedRegisterID)
+	require.NoError(t, err)
+	assert.Equal(t, "from system", data.Text)
 }
