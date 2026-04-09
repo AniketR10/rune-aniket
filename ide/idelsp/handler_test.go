@@ -215,6 +215,7 @@ func TestCallbackHandler_PublishDiagnostics(t *testing.T) {
 					Attr: term.Attributes(tcell.Style{
 						Bg: tcell.ColorRed,
 					}),
+					Icon: "✖",
 				},
 			},
 			expectedPriority: textapi.LocationPriorityError,
@@ -255,6 +256,7 @@ func TestCallbackHandler_PublishDiagnostics(t *testing.T) {
 					Attr: term.Attributes(tcell.Style{
 						Bg: tcell.ColorYellow,
 					}),
+					Icon: "▲",
 				},
 				{
 					From:    term.Coordinates{X: 0, Y: 3},
@@ -263,6 +265,7 @@ func TestCallbackHandler_PublishDiagnostics(t *testing.T) {
 					Attr: term.Attributes(tcell.Style{
 						Bg: tcell.ColorRed,
 					}),
+					Icon: "✖",
 				},
 			},
 			expectedPriority: textapi.LocationPriorityError,
@@ -289,7 +292,7 @@ func TestCallbackHandler_PublishDiagnostics(t *testing.T) {
 					From:    term.Coordinates{X: 0, Y: 10},
 					To:      term.Coordinates{X: 3, Y: 10},
 					Message: "Inline: can inline Add",
-					Icon:    "⇒",
+					Icon:    "󰁔",
 					Attr: term.Attributes(tcell.Style{
 						Bg: tcell.ColorIndigo,
 					}),
@@ -319,7 +322,7 @@ func TestCallbackHandler_PublishDiagnostics(t *testing.T) {
 					From:    term.Coordinates{X: 2, Y: 5},
 					To:      term.Coordinates{X: 8, Y: 5},
 					Message: "Escape: a escapes to heap",
-					Icon:    "↗",
+					Icon:    "󰁝",
 					Attr: term.Attributes(tcell.Style{
 						Bg: tcell.ColorDarkMagenta,
 					}),
@@ -352,6 +355,7 @@ func TestCallbackHandler_PublishDiagnostics(t *testing.T) {
 					Attr: term.Attributes(tcell.Style{
 						Bg: tcell.ColorRed,
 					}),
+					Icon: "✖",
 				},
 			},
 			expectedPriority: textapi.LocationPriorityError,
@@ -382,6 +386,76 @@ func TestCallbackHandler_PublishDiagnostics(t *testing.T) {
 			assert.Equal(t, tt.expectedLocations, ed.locations)
 		})
 	}
+}
+
+func TestCallbackHandler_PublishDiagnostics_IconConfig(t *testing.T) {
+	t.Parallel()
+	uri, err := workspaceapi.ParseURI("file:///tmp/test.go")
+	require.NoError(t, err)
+	ed := &mockEditor{
+		handler: &mockEditorHandler{uri: uri},
+	}
+	h := NewCallbackHandler(
+		nil, nil, nil, ed, nil,
+		"",
+		CallbackHandlerConfig{
+			Icons: IconSet{
+				IconDiagnosticError:       "E",
+				IconDiagnosticWarning:     "W",
+				IconDiagnosticInformation: "I",
+				IconDiagnosticHint:        "H",
+				IconCompilerInline:        ">",
+			},
+		},
+	)
+	err = h.PublishDiagnostics(t.Context(), semanticapi.PublishDiagnosticsParams{
+		URI: "file:///tmp/test.go",
+		Diagnostics: []semanticapi.Diagnostic{
+			{
+				Range: semanticapi.Range{
+					End: semanticapi.Position{Character: 1},
+				},
+				Severity: semanticapi.DiagnosticSeverityError,
+				Message:  "error",
+			},
+			{
+				Range: semanticapi.Range{
+					End: semanticapi.Position{Character: 1},
+				},
+				Severity: semanticapi.DiagnosticSeverityWarning,
+				Message:  "warning",
+			},
+			{
+				Range: semanticapi.Range{
+					End: semanticapi.Position{Character: 1},
+				},
+				Severity: semanticapi.DiagnosticSeverityInformation,
+				Message:  "info",
+			},
+			{
+				Range: semanticapi.Range{
+					End: semanticapi.Position{Character: 1},
+				},
+				Severity: semanticapi.DiagnosticSeverityHint,
+				Message:  "hint",
+			},
+			{
+				Range: semanticapi.Range{
+					End: semanticapi.Position{Character: 1},
+				},
+				Severity: semanticapi.DiagnosticSeverityInformation,
+				Source:   "compiler",
+				Message:  "can inline Add",
+			},
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, ed.locations, 5)
+	assert.Equal(t, "E", ed.locations[0].Icon)
+	assert.Equal(t, "W", ed.locations[1].Icon)
+	assert.Equal(t, "I", ed.locations[2].Icon)
+	assert.Equal(t, "H", ed.locations[3].Icon)
+	assert.Equal(t, ">", ed.locations[4].Icon)
 }
 
 func TestCallbackHandler_WaitFileProcessed(t *testing.T) {
@@ -589,42 +663,42 @@ func TestClassifyCompilerDiagnostic(t *testing.T) {
 		wantAttr term.Attributes
 	}{
 		{
-			msg: "can inline Add", wantIcon: "⇒",
+			msg: "can inline Add", wantIcon: "󰁔",
 			wantMsg:  "Inline: can inline Add",
 			wantAttr: term.Attributes(tcell.Style{Bg: tcell.ColorIndigo}),
 		},
 		{
-			msg: "inlining call to Add", wantIcon: "⇒",
+			msg: "inlining call to Add", wantIcon: "󰁔",
 			wantMsg:  "Inline: inlining call to Add",
 			wantAttr: term.Attributes(tcell.Style{Bg: tcell.ColorIndigo}),
 		},
 		{
-			msg: "a escapes to heap", wantIcon: "↗",
+			msg: "a escapes to heap", wantIcon: "󰁝",
 			wantMsg:  "Escape: a escapes to heap",
 			wantAttr: term.Attributes(tcell.Style{Bg: tcell.ColorDarkMagenta}),
 		},
 		{
-			msg: "moved to heap: x", wantIcon: "↗",
+			msg: "moved to heap: x", wantIcon: "󰁝",
 			wantMsg:  "Escape: moved to heap: x",
 			wantAttr: term.Attributes(tcell.Style{Bg: tcell.ColorDarkMagenta}),
 		},
 		{
-			msg: "leaking param: x", wantIcon: "↗",
+			msg: "leaking param: x", wantIcon: "󰁝",
 			wantMsg:  "Escape: leaking param: x",
 			wantAttr: term.Attributes(tcell.Style{Bg: tcell.ColorDarkMagenta}),
 		},
 		{
-			msg: "a does not escape", wantIcon: "↗",
+			msg: "a does not escape", wantIcon: "󰁝",
 			wantMsg:  "Escape: a does not escape",
 			wantAttr: term.Attributes(tcell.Style{Bg: tcell.ColorDarkMagenta}),
 		},
 		{
-			msg: "Found IsInBounds", wantIcon: "⊞",
+			msg: "Found IsInBounds", wantIcon: "󰅪",
 			wantMsg:  "Bounds: Found IsInBounds",
 			wantAttr: term.Attributes(tcell.Style{Bg: tcell.ColorRebeccaPurple}),
 		},
 		{
-			msg: "isInBounds", wantIcon: "⊞",
+			msg: "isInBounds", wantIcon: "󰅪",
 			wantMsg:  "Bounds: isInBounds",
 			wantAttr: term.Attributes(tcell.Style{Bg: tcell.ColorRebeccaPurple}),
 		},
@@ -642,7 +716,7 @@ func TestClassifyCompilerDiagnostic(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.msg, func(t *testing.T) {
 			t.Parallel()
-			icon, msg, attr := classifyCompilerDiagnostic(tt.msg)
+			icon, msg, attr := classifyCompilerDiagnostic(tt.msg, DefaultIconSet())
 			assert.Equal(t, tt.wantIcon, icon)
 			assert.Equal(t, tt.wantMsg, msg)
 			assert.Equal(t, tt.wantAttr, attr)
@@ -1659,34 +1733,69 @@ func TestDiagnosticSeverityToAttr(t *testing.T) {
 		name     string
 		severity semanticapi.DiagnosticSeverity
 		wantBg   tcell.Color
+		wantIcon string
 	}{
 		{
 			name:     "error is red",
 			severity: semanticapi.DiagnosticSeverityError,
 			wantBg:   tcell.ColorRed,
+			wantIcon: "✖",
 		},
 		{
 			name:     "warning is yellow",
 			severity: semanticapi.DiagnosticSeverityWarning,
 			wantBg:   tcell.ColorYellow,
+			wantIcon: "▲",
 		},
 		{
 			name:     "info is blue",
 			severity: semanticapi.DiagnosticSeverityInformation,
 			wantBg:   tcell.ColorBlue,
+			wantIcon: "◉",
 		},
 		{
 			name:     "hint is gray",
 			severity: semanticapi.DiagnosticSeverityHint,
 			wantBg:   tcell.ColorGray,
+			wantIcon: "󰌵",
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			attr := diagnosticSeverityToAttr(tt.severity)
+			attr, icon := diagnosticSeverityToAttr(tt.severity, DefaultIconSet())
 			style := tcell.Style(attr)
 			assert.Equal(t, tt.wantBg, style.Bg)
+			assert.Equal(t, tt.wantIcon, icon)
+		})
+	}
+}
+
+func TestClassifyCompilerDiagnostic_Icons(t *testing.T) {
+	t.Parallel()
+	icons := IconSet{
+		IconCompilerInline:   "I",
+		IconCompilerEscape:   "E",
+		IconCompilerBounds:   "B",
+		IconCompilerNilcheck: "N",
+		IconCompilerDefault:  "C",
+	}
+	tests := []struct {
+		name string
+		msg  string
+		icon string
+	}{
+		{name: "inline", msg: "can inline Add", icon: "I"},
+		{name: "escape", msg: "a escapes to heap", icon: "E"},
+		{name: "bounds", msg: "Found IsInBounds", icon: "B"},
+		{name: "nilcheck", msg: "removed nilcheck", icon: "N"},
+		{name: "default", msg: "optimized something", icon: "C"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			icon, _, _ := classifyCompilerDiagnostic(tt.msg, icons)
+			assert.Equal(t, tt.icon, icon)
 		})
 	}
 }

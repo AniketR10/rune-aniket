@@ -55,6 +55,7 @@ import (
 	"unstable.build/go-tui/extension/extutil"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/command"
+	"unstable.build/go-tui/ide/idelsp"
 	"unstable.build/go-tui/ide/plugin"
 	"unstable.build/go-tui/ide/syntax"
 	"unstable.build/go-tui/ide/vctrl"
@@ -622,6 +623,62 @@ func (c ideConfig) getBrowserAttr(
 	key string, def term.Attributes,
 ) (attr term.Attributes) {
 	return c.getConfigAttr("browser", key, def)
+}
+
+func (c ideConfig) lsp() (config.Config, bool) {
+	if c.cfg == nil {
+		return nil, false
+	}
+	return c.getConfig(config.MapConfig(c.cfg), "lsp")
+}
+
+func (c ideConfig) lspIcons() idelsp.IconSet {
+	ret := idelsp.DefaultIconSet()
+	lsp, ok := c.lsp()
+	if !ok {
+		return ret
+	}
+	icons, err := lsp.GetMap("icons")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["lsp.icons"] = err
+		}
+		return ret
+	}
+
+	iconKeys := []idelsp.IconKey{
+		idelsp.IconDiagnosticError,
+		idelsp.IconDiagnosticWarning,
+		idelsp.IconDiagnosticInformation,
+		idelsp.IconDiagnosticHint,
+		idelsp.IconCompilerInline,
+		idelsp.IconCompilerEscape,
+		idelsp.IconCompilerBounds,
+		idelsp.IconCompilerNilcheck,
+		idelsp.IconCompilerDefault,
+	}
+	for _, key := range iconKeys {
+		name := string(key)
+		icon, ok := icons[name]
+		if !ok {
+			continue
+		}
+		iconStr, ok := icon.(string)
+		if !ok {
+			c.errors[fmt.Sprintf("lsp.icons.%s", name)] = errors.New("expected a string")
+			continue
+		}
+		ret[key] = iconStr
+	}
+	if icon, ok := icons["info"]; ok {
+		iconStr, ok := icon.(string)
+		if !ok {
+			c.errors["lsp.icons.info"] = errors.New("expected a string")
+		} else {
+			ret[idelsp.IconDiagnosticInformation] = iconStr
+		}
+	}
+	return ret
 }
 
 func (c ideConfig) notifications() (config.Config, bool) {

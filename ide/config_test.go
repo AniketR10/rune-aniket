@@ -45,6 +45,7 @@ import (
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/command"
+	"unstable.build/go-tui/ide/idelsp"
 	"unstable.build/go-tui/ide/plugin"
 	"unstable.build/go-tui/ide/syntax"
 	"unstable.build/go-tui/term/vte"
@@ -139,6 +140,18 @@ editor:
 input_mode:
   - mouse
   - esc
+
+lsp:
+    icons:
+        error: E
+        warning: W
+        information: I
+        hint: H
+        inline: '>'
+        escape: '^'
+        bounds: B
+        nilcheck: '0'
+        compiler: C
 
 command:
   show_manual_after: 2s
@@ -305,6 +318,7 @@ func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
 	assert.Equal(t, component.DefaultFrameUnionCharSet(), cfg.frameUnionCharset())
 	assert.True(t, cfg.frameUnion())
 	assert.Equal(t, text.DefaultConfig().Icons, cfg.icons())
+	assert.Equal(t, idelsp.DefaultIconSet(), cfg.lspIcons())
 
 	assert.Equal(t, workspaceBarKindNumbers, cfg.workspaceBarKind())
 
@@ -466,6 +480,18 @@ func TestConfigSetting(t *testing.T) {
 	}
 	actualIcons := cfg.icons()
 	assert.Equal(t, expectedIcons, actualIcons)
+	expectedLSPIcons := idelsp.IconSet{
+		idelsp.IconDiagnosticError:       "E",
+		idelsp.IconDiagnosticWarning:     "W",
+		idelsp.IconDiagnosticInformation: "I",
+		idelsp.IconDiagnosticHint:        "H",
+		idelsp.IconCompilerInline:        ">",
+		idelsp.IconCompilerEscape:        "^",
+		idelsp.IconCompilerBounds:        "B",
+		idelsp.IconCompilerNilcheck:      "0",
+		idelsp.IconCompilerDefault:       "C",
+	}
+	assert.Equal(t, expectedLSPIcons, cfg.lspIcons())
 
 	assert.Equal(t, workspaceBarKindDisabled, cfg.workspaceBarKind())
 

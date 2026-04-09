@@ -3,6 +3,17 @@ log_path: ~/.rune/debug.log
 # log level. This property is not reloaded on reloadWorkspace.
 log_level: info # error, debug, trace
 
+# LSP configuration
+lsp:
+  # Determine the icons used on the auxiliary bar, when rendering LSP diagnostics,
+  # if 'editor.aux_bar.icons' is set to true and so displaying icons on the
+  # side bar is enabled.
+  icons:
+    error: "✖"
+    warning: "▲"
+    information: "◉"
+    hint: "󰌵"
+
 gui:
   # Set the font family. If set to empty, a builtin font is loaded.
   # Use the builtin guifont command to browse the fonts installed

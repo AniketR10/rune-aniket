@@ -29,6 +29,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -85,7 +86,35 @@ type CallbackHandlerConfig struct {
 	Refresher        Refresher
 	Interrupter      term.Interrupter
 	ScheduleNextTick func(fn func()) bool
+	Icons            IconSet
 }
+
+// IconKey identifies a configurable CallbackHandler icon.
+type IconKey string
+
+const (
+	// IconDiagnosticError is the icon for LSP error diagnostics.
+	IconDiagnosticError       IconKey = "error"
+	// IconDiagnosticWarning is the icon for LSP warning diagnostics.
+	IconDiagnosticWarning     IconKey = "warning"
+	// IconDiagnosticInformation is the icon for LSP information diagnostics.
+	IconDiagnosticInformation IconKey = "information"
+	// IconDiagnosticHint is the icon for LSP hint diagnostics.
+	IconDiagnosticHint        IconKey = "hint"
+	// IconCompilerInline is the icon for compiler inlining diagnostics.
+	IconCompilerInline        IconKey = "inline"
+	// IconCompilerEscape is the icon for compiler escape diagnostics.
+	IconCompilerEscape        IconKey = "escape"
+	// IconCompilerBounds is the icon for compiler bounds diagnostics.
+	IconCompilerBounds        IconKey = "bounds"
+	// IconCompilerNilcheck is the icon for compiler nilcheck diagnostics.
+	IconCompilerNilcheck      IconKey = "nilcheck"
+	// IconCompilerDefault is the icon for unclassified compiler diagnostics.
+	IconCompilerDefault       IconKey = "compiler"
+)
+
+// IconSet configures the icons used by CallbackHandler.
+type IconSet map[IconKey]string
 
 // CallbackHandler implements semanticapi.LSPCallback by
 // wiring LSP server-to-client callbacks to the Rune IDE.
@@ -100,6 +129,7 @@ type CallbackHandler struct {
 	refresher        Refresher
 	interrupter      term.Interrupter
 	scheduleNextTick func(fn func()) bool
+	icons            IconSet
 	log              *slog.Logger
 
 	mu           sync.Mutex
@@ -114,6 +144,27 @@ type fileVersionState struct {
 	sent               int32
 	processed          int32
 	pendingUnversioned bool
+}
+
+// DefaultIconSet returns the default LSP callback icons.
+func DefaultIconSet() IconSet {
+	return IconSet{
+		IconDiagnosticError:       "✖",
+		IconDiagnosticWarning:     "▲",
+		IconDiagnosticInformation: "◉",
+		IconDiagnosticHint:        "󰌵",
+		IconCompilerInline:        "󰁔",
+		IconCompilerEscape:        "󰁝",
+		IconCompilerBounds:        "󰅪",
+		IconCompilerNilcheck:      "∅",
+		IconCompilerDefault:       "⚙",
+	}
+}
+
+func iconSetWithDefaults(icons IconSet) IconSet {
+	ret := DefaultIconSet()
+	maps.Copy(ret, icons)
+	return ret
 }
 
 var _ Callback = (*CallbackHandler)(nil)
@@ -154,6 +205,7 @@ func NewCallbackHandler(
 		refresher:        r,
 		interrupter:      interrupter,
 		scheduleNextTick: sched,
+		icons:            iconSetWithDefaults(cfg.Icons),
 		log:              slog.With("struct", "idelsp.CallbackHandler", "workspace", rootURI),
 		progress:         make(map[string]string),
 		fileVersions:     make(map[string]*fileVersionState),
@@ -213,12 +265,11 @@ func (h *CallbackHandler) PublishDiagnostics(
 		}
 
 		msg := diag.Message
-		attr := diagnosticSeverityToAttr(diag.Severity)
-		icon := ""
+		attr, icon := diagnosticSeverityToAttr(diag.Severity, h.icons)
 		if (diag.Source == "compiler" || diag.Source == "optimizer details") &&
 			diag.Severity != semanticapi.DiagnosticSeverityError &&
 			diag.Severity != semanticapi.DiagnosticSeverityWarning {
-			icon, msg, attr = classifyCompilerDiagnostic(diag.Message)
+			icon, msg, attr = classifyCompilerDiagnostic(diag.Message, h.icons)
 		}
 
 		locs = append(locs, textapi.Location{
@@ -795,53 +846,73 @@ func diagnosticSeverityToLocationPriority(
 
 func diagnosticSeverityToAttr(
 	s semanticapi.DiagnosticSeverity,
-) term.Attributes {
+	icons IconSet,
+) (term.Attributes, string) {
+	key := diagnosticSeverityIconKey(s)
 	switch s {
 	case semanticapi.DiagnosticSeverityError:
 		return term.Attributes(tcell.Style{
 			Bg: tcell.ColorRed,
-		})
+		}), icons[key]
 	case semanticapi.DiagnosticSeverityWarning:
 		return term.Attributes(tcell.Style{
 			Bg: tcell.ColorYellow,
-		})
+		}), icons[key]
 	case semanticapi.DiagnosticSeverityInformation:
 		return term.Attributes(tcell.Style{
 			Bg: tcell.ColorBlue,
-		})
+		}), icons[key]
 	default:
 		return term.Attributes(tcell.Style{
 			Bg: tcell.ColorGray,
-		})
+		}), icons[key]
+	}
+}
+
+func diagnosticSeverityIconKey(s semanticapi.DiagnosticSeverity) IconKey {
+	switch s {
+	case semanticapi.DiagnosticSeverityError:
+		return IconDiagnosticError
+	case semanticapi.DiagnosticSeverityWarning:
+		return IconDiagnosticWarning
+	case semanticapi.DiagnosticSeverityInformation:
+		return IconDiagnosticInformation
+	case semanticapi.DiagnosticSeverityHint:
+		return IconDiagnosticHint
+	default:
+		return ""
 	}
 }
 
 // classifyCompilerDiagnostic categorizes a compiler optimization
 // diagnostic (gc_details) by its message content and returns a
 // descriptive icon, a prefixed message, and a category-specific color.
-func classifyCompilerDiagnostic(msg string) (icon, enhanced string, attr term.Attributes) {
+func classifyCompilerDiagnostic(
+	msg string,
+	icons IconSet,
+) (icon, enhanced string, attr term.Attributes) {
 	switch {
 	case strings.Contains(msg, "inline") || strings.Contains(msg, "inlining"):
-		return "⇒", "Inline: " + msg, term.Attributes(tcell.Style{
+		return icons[IconCompilerInline], "Inline: " + msg, term.Attributes(tcell.Style{
 			Bg: tcell.ColorIndigo,
 		})
 	case strings.Contains(msg, "escape") ||
 		strings.Contains(msg, "heap") ||
 		strings.Contains(msg, "leaking"):
-		return "↗", "Escape: " + msg, term.Attributes(tcell.Style{
+		return icons[IconCompilerEscape], "Escape: " + msg, term.Attributes(tcell.Style{
 			Bg: tcell.ColorDarkMagenta,
 		})
 	case strings.Contains(msg, "Bounds"):
-		return "⊞", "Bounds: " + msg, term.Attributes(tcell.Style{
+		return icons[IconCompilerBounds], "Bounds: " + msg, term.Attributes(tcell.Style{
 			Bg: tcell.ColorRebeccaPurple,
 		})
 	case strings.Contains(msg, "nilcheck") ||
 		strings.Contains(msg, "nil check"):
-		return "∅", "Nilcheck: " + msg, term.Attributes(tcell.Style{
+		return icons[IconCompilerNilcheck], "Nilcheck: " + msg, term.Attributes(tcell.Style{
 			Bg: tcell.ColorBlueViolet,
 		})
 	default:
-		return "⚙", msg, term.Attributes(tcell.Style{
+		return icons[IconCompilerDefault], msg, term.Attributes(tcell.Style{
 			Bg: tcell.ColorDarkSlateBlue,
 		})
 	}
