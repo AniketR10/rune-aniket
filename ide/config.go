@@ -60,6 +60,7 @@ import (
 	"unstable.build/go-tui/ide/vctrl"
 	"unstable.build/go-tui/term/vte"
 	"unstable.build/go-tui/text"
+	"unstable.build/go-tui/text/registerset"
 	"unstable.build/go-tui/workspace"
 )
 
@@ -1477,7 +1478,7 @@ func (c ideConfig) clipboard() clipboard.Register {
 		}
 		ret = clipboard.NewInMemory()
 	}
-	return ret
+	return registerset.New(ret)
 }
 
 func (c ideConfig) modelessResultAttr() (attr term.Attributes) {

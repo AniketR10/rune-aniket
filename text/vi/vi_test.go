@@ -41,6 +41,7 @@ import (
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/handler/handlertest"
 	"unstable.build/go-tui/text"
+	"unstable.build/go-tui/text/registerset"
 	"unstable.build/go-tui/text/texttest"
 )
 
@@ -1007,7 +1008,7 @@ func TestCopyDelete(t *testing.T) {
 			buf.ReadFrom(strings.NewReader(tcase.content))
 
 			mock := new(mockClip)
-			vi := New(buf, uri, WithClipboard(mock))
+			vi := New(buf, uri, WithClipboard(registerset.New(mock)))
 			vi.Resize(10, 10)
 
 			for _, ch := range tcase.in {

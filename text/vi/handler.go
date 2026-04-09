@@ -104,7 +104,6 @@ type viHandlerImpl struct {
 	lastMoveMode      moveMode // stores the mode of the last f/F/t/T for ;/, repeat
 	searchMode        moveMode
 	moveChar          rune
-	registers         *registerSet
 	pendingRegister   bool
 	selectedRegister  rune
 	pendingGoMotion   bool
@@ -133,8 +132,6 @@ type statusBar interface {
 
 func (vi *viHandlerImpl) init(buf *cell.Buffer, cfg viConfig) {
 	vi.config = cfg
-	vi.registers = newRegisterSet(cfg.clipboard)
-	vi.config.clipboard = vi.registers
 	vi.statusBar = nopBar{}
 	vi.less.InitWithBuffer(buf, handler.LessConfig{
 		Wrap:               vi.config.wrap,
@@ -162,9 +159,6 @@ func (vi *viHandlerImpl) initWithScroll(scroll *component.Scroll, opts ...Option
 	for _, o := range opts {
 		o(&vi.config)
 	}
-	vi.registers = newRegisterSet(vi.config.clipboard)
-	vi.config.clipboard = vi.registers
-
 	vi.statusBar = nopBar{}
 	vi.less.InitWithScroll(scroll, handler.LessConfig{
 		Wrap:               vi.config.wrap,
@@ -526,11 +520,11 @@ func (vi *viHandlerImpl) consumeActiveRegister() rune {
 }
 
 func (vi *viHandlerImpl) readRegister(name rune) (clipboard.Data, error) {
-	return vi.registers.paste(name)
+	return vi.config.clipboard.Paste(registerNameToID(name))
 }
 
 func (vi *viHandlerImpl) writeRegister(name rune, data clipboard.Data) error {
-	return vi.registers.copy(name, data)
+	return vi.config.clipboard.Copy(registerNameToID(name), data)
 }
 
 func (vi *viHandlerImpl) pasteClipboard(after bool) bool {
@@ -682,7 +676,7 @@ func (vi *viHandlerImpl) handleNormal(ev term.Event) (quit, handled bool) {
 
 	if vi.pendingRegister {
 		if ev.Mod == 0 && validRegisterName(ev.Ch) {
-			vi.selectedRegister = normalRegisterName(ev.Ch)
+			vi.selectedRegister = normalizedRegisterName(ev.Ch)
 			vi.pendingRegister = false
 			doResetCount = false
 			return false, true
@@ -1223,7 +1217,7 @@ func (vi *viHandlerImpl) handleVisual(ev term.Event) (quit, handled bool) {
 	}
 	if vi.pendingRegister {
 		if ev.Mod == 0 && validRegisterName(ev.Ch) {
-			vi.selectedRegister = normalRegisterName(ev.Ch)
+			vi.selectedRegister = normalizedRegisterName(ev.Ch)
 		}
 		vi.pendingRegister = false
 		handled = true

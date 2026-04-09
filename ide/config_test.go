@@ -356,7 +356,7 @@ func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
 	vteConfig.ScheduleNextTick = nil
 	vteConfig.RingBell = nil
 	assert.Equal(t, vte.Config{
-		Clipboard:                clipboard.NewInMemory(),
+		Clipboard:                cfg.clipboard(),
 		SelectionAttributes:      selectAttr,
 		NeedsAttentionAttributes: term.Attributes{Attrs: tcell.AttrBlink},
 		Modal:                    false,
@@ -672,7 +672,7 @@ func TestConfigSetting(t *testing.T) {
 	expectedEmulatorConfig := vte.Config{
 		CommandAndArgs:           []string{"sh"},
 		Attributes:               term.Attributes{Fg: tcell.ColorWhite, Bg: tcell.ColorYellow},
-		Clipboard:                clipboard.NewInMemory(),
+		Clipboard:                cfg.clipboard(),
 		ClipboardRegister:        clipboard.DefaultRegisterID,
 		SelectionAttributes:      term.Attributes{Fg: tcell.ColorGreen, Bg: tcell.ColorTeal},
 		NeedsAttentionAttributes: term.Attributes{Attrs: tcell.AttrBlink, Fg: tcell.ColorRed},

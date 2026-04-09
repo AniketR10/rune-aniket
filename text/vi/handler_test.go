@@ -45,6 +45,7 @@ import (
 	thandler "unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/handlertest"
 	"unstable.build/go-tui/text"
+	"unstable.build/go-tui/text/registerset"
 	"unstable.build/go-tui/text/texttest"
 )
 
@@ -4059,7 +4060,7 @@ func TestViRegisters(t *testing.T) {
 				clip.data = *tc.externalClipboard
 			}
 
-			vi := setupVi(t, tc.content, 2, WithClipboard(clip))
+			vi := setupVi(t, tc.content, 2, WithClipboard(registerset.New(clip)))
 			vi.Resize(80, 24)
 			run(t, vi, tc.seq)
 

@@ -21,43 +21,50 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package vi
+package registerset
 
 import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/clipboard"
-	"unstable.build/go-tui/text/registerset"
 )
 
-const (
-	unnamedRegister   = '"'
-	lastYankRegister  = '0'
-	clipboardRegister = '+'
-	blackHoleRegister = '_'
-)
+func TestRegisterSet(t *testing.T) {
+	root := clipboard.NewInMemory()
+	registers := New(root)
 
-func validRegisterName(name rune) bool {
-	return name == unnamedRegister || name == lastYankRegister ||
-		name == clipboardRegister || name == blackHoleRegister ||
-		name == '/' || name == '.' || name == '-' ||
-		('a' <= name && name <= 'z') ||
-		('A' <= name && name <= 'Z')
-}
+	require.NoError(t, registers.Copy("a", clipboard.Data{Text: "named"}))
+	require.NoError(t, registers.Copy(clipboard.DefaultRegisterID, clipboard.Data{Text: "unnamed"}))
+	require.NoError(t, registers.Copy(ClipboardRegisterID, clipboard.Data{Text: "system"}))
+	require.NoError(t, registers.Copy(BlackHoleRegisterID, clipboard.Data{Text: "ignored"}))
 
-func registerNameToID(name rune) string {
-	if name == 0 || name == unnamedRegister {
-		return clipboard.DefaultRegisterID
-	}
-	return registerset.Normalize(string(name))
-}
+	data, err := registers.Paste("a")
+	require.NoError(t, err)
+	assert.Equal(t, "named", data.Text)
 
-func normalizedRegisterName(name rune) rune {
-	registerID := registerNameToID(name)
-	if registerID == clipboard.DefaultRegisterID {
-		return unnamedRegister
-	}
-	names := []rune(registerID)
-	if len(names) > 0 {
-		return names[0]
-	}
-	return unnamedRegister
+	data, err = registers.Paste("A")
+	require.NoError(t, err)
+	assert.Equal(t, "named", data.Text)
+
+	data, err = registers.Paste(clipboard.DefaultRegisterID)
+	require.NoError(t, err)
+	assert.Equal(t, "unnamed", data.Text)
+
+	data, err = registers.Paste(UnnamedRegisterID)
+	require.NoError(t, err)
+	assert.Equal(t, "unnamed", data.Text)
+
+	data, err = root.Paste(clipboard.DefaultRegisterID)
+	require.NoError(t, err)
+	assert.Equal(t, "system", data.Text)
+
+	data, err = registers.Paste(ClipboardRegisterID)
+	require.NoError(t, err)
+	assert.Equal(t, "system", data.Text)
+
+	data, err = registers.Paste(BlackHoleRegisterID)
+	require.NoError(t, err)
+	assert.Empty(t, data.Text)
 }
