@@ -228,7 +228,7 @@ func (h *editorHandler) Handle(ev term.Event) (exit, handled bool) {
 	}
 
 	var shift bool
-	if ev.Mod&term.ModShift != 0 {
+	if ev.Mod&term.ModShift != 0 && ev.Mod == term.ModShift {
 		if _, ok := h.cursor.SelectionMode(); !ok {
 			h.cursor.Select()
 		}
@@ -530,6 +530,13 @@ func (h *editorHandler) Handle(ev term.Event) (exit, handled bool) {
 			if h.cursor.SelectLine() {
 				handled = h.cursor.DeleteSelection()
 			}
+		case 'w':
+			handled = h.cursor.ExpandSelection(ctx)
+		}
+	case term.ModCtrlShift:
+		switch ev.Ch {
+		case 'W':
+			handled = h.cursor.ShrinkSelection()
 		}
 	case term.ModCtrlAlt:
 		switch ev.Key {

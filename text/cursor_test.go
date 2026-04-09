@@ -4571,6 +4571,117 @@ func setupCursor(t *testing.T, width, height int, wrap bool) *Cursor {
 	return setupCursorContent(t, width, height, sampleSnippet, wrap)
 }
 
+type testSelectionService struct {
+	view    cell.View
+	expand  map[term.Range]term.Range
+	shrink  map[term.Range]term.Range
+	shrinks []term.Range
+}
+
+func (s testSelectionService) Rows() int {
+	return s.view.Rows()
+}
+
+func (s testSelectionService) Columns(row int) int {
+	return s.view.Columns(row)
+}
+
+func (s testSelectionService) Cell(at term.Coordinates) (term.Cell, bool) {
+	return s.view.Cell(at)
+}
+
+func (s testSelectionService) RawCells() [][]term.Cell {
+	return s.view.RawCells()
+}
+
+func (s testSelectionService) String() string {
+	return s.view.String()
+}
+
+func (s testSelectionService) SelectionExpand(rng term.Range) (term.Range, bool) {
+	next, ok := s.expand[rng]
+	return next, ok
+}
+
+func (s *testSelectionService) SelectionShrink(rng term.Range, caret term.Coordinates) (term.Range, bool) {
+	s.shrinks = append(s.shrinks, rng)
+	next, ok := s.shrink[rng]
+	return next, ok
+}
+
+func TestCursorSelectionExpandShrink(t *testing.T) {
+	content := "alpha beta gamma"
+	c := setupCursorContent(t, 80, 10, content, false)
+
+	svc := &testSelectionService{
+		view: c.buffer().View(),
+		expand: map[term.Range]term.Range{
+			{Start: term.Coordinates{X: 6}, End: term.Coordinates{X: 6}}:  {Start: term.Coordinates{X: 6}, End: term.Coordinates{X: 10}},
+			{Start: term.Coordinates{X: 7}, End: term.Coordinates{X: 10}}: {Start: term.Coordinates{X: 6}, End: term.Coordinates{X: 10}},
+			{Start: term.Coordinates{X: 6}, End: term.Coordinates{X: 10}}: {Start: term.Coordinates{}, End: term.Coordinates{X: 10}},
+			{Start: term.Coordinates{}, End: term.Coordinates{X: 10}}:     {Start: term.Coordinates{}, End: term.Coordinates{X: len(content)}},
+		},
+		shrink: map[term.Range]term.Range{
+			{Start: term.Coordinates{}, End: term.Coordinates{X: len(content)}}: {Start: term.Coordinates{}, End: term.Coordinates{X: 10}},
+			{Start: term.Coordinates{}, End: term.Coordinates{X: 10}}:           {Start: term.Coordinates{X: 6}, End: term.Coordinates{X: 10}},
+			{Start: term.Coordinates{X: 6}, End: term.Coordinates{X: 10}}:       {Start: term.Coordinates{X: 6}, End: term.Coordinates{X: 6}},
+		},
+	}
+	c.buffer().WithView(svc)
+
+	_, ok := c.MoveToScroll(term.Coordinates{X: 6})
+	require.True(t, ok)
+
+	require.True(t, c.ExpandSelection(context.Background()))
+	assert.Equal(t, "beta", c.Selection())
+
+	require.True(t, c.ExpandSelection(context.Background()))
+	assert.Equal(t, "alpha beta", c.Selection())
+
+	require.True(t, c.ExpandSelection(context.Background()))
+	assert.Equal(t, content, c.Selection())
+
+	require.True(t, c.ShrinkSelection())
+	assert.Equal(t, "alpha beta", c.Selection())
+
+	require.True(t, c.ShrinkSelection())
+	assert.Equal(t, "beta", c.Selection())
+
+	require.True(t, c.ShrinkSelection())
+	mode, ok := c.SelectionMode()
+	assert.False(t, ok)
+	assert.Equal(t, NoSelection, mode)
+	assert.Equal(t, term.Coordinates{X: 6}, c.CursorAtScroll())
+
+	assert.False(t, c.ShrinkSelection())
+}
+
+func TestCursorSelectionShrinkUsesCurrentSelection(t *testing.T) {
+	content := "alpha beta gamma"
+	c := setupCursorContent(t, 80, 10, content, false)
+
+	svc := &testSelectionService{
+		view: c.buffer().View(),
+		expand: map[term.Range]term.Range{
+			{Start: term.Coordinates{X: 6}, End: term.Coordinates{X: 6}}:  {Start: term.Coordinates{X: 6}, End: term.Coordinates{X: 10}},
+			{Start: term.Coordinates{X: 6}, End: term.Coordinates{X: 10}}: {Start: term.Coordinates{}, End: term.Coordinates{X: 10}},
+		},
+		shrink: map[term.Range]term.Range{
+			{Start: term.Coordinates{}, End: term.Coordinates{X: 10}}: {Start: term.Coordinates{X: 6}, End: term.Coordinates{X: 10}},
+		},
+	}
+	c.buffer().WithView(svc)
+
+	_, ok := c.MoveToScroll(term.Coordinates{X: 6})
+	require.True(t, ok)
+	require.True(t, c.ExpandSelection(context.Background()))
+	require.True(t, c.ExpandSelection(context.Background()))
+
+	require.True(t, c.ShrinkSelection())
+	assert.Equal(t, "beta", c.Selection())
+	assert.Equal(t, []term.Range{{Start: term.Coordinates{}, End: term.Coordinates{X: 10}}}, svc.shrinks)
+}
+
 func setupCursorForFolds(t *testing.T, width, height int, wg *sync.WaitGroup) (e *Cursor) {
 	buf := cell.NewBuffer()
 	fs := &testFoldsService{}

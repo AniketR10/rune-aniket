@@ -121,9 +121,10 @@ type viHandlerImpl struct {
 	countDigits      string
 	count            int
 	insertRegister   strings.Builder
-
-	pasteBuf     strings.Builder
-	pasteStarted bool
+	zRange           term.Range
+	zRangeOK         bool
+	pasteBuf         strings.Builder
+	pasteStarted     bool
 }
 
 type statusBar interface {
@@ -324,17 +325,46 @@ const foldHighlightLocationListID = "_foldHighlightID"
 
 func (vi *viHandlerImpl) setZMode() {
 	vi.setMode(zMode)
+	pos := vi.cursor.CursorAtScroll()
+	vi.zRange = term.Range{Start: pos, End: pos}
+	vi.zRangeOK = true
+	vi.highlightZRange()
 	vi.cursor.FoldAt(context.Background(), func(fold term.Range, ok bool) {
-		foldHighlightAttr := term.Attributes{Bg: tcell.ColorGray}
 		if !ok {
 			return
 		}
-		vi.cursor.SetLocationList(
-			textapi.LocationPriorityInfo, foldHighlightLocationListID,
-			text.LocationSlice([]textapi.Location{
-				{From: fold.Start, To: fold.End, Attr: foldHighlightAttr},
-			}))
+		vi.zRange = fold
+		vi.zRangeOK = true
+		vi.highlightZRange()
 	})
+}
+
+func (vi *viHandlerImpl) highlightZRange() {
+	if !vi.zRangeOK || vi.zRange.Start == vi.zRange.End {
+		vi.clearZRangeHighlight()
+		return
+	}
+	foldHighlightAttr := term.Attributes{Bg: tcell.ColorGray}
+	vi.cursor.SetLocationList(
+		textapi.LocationPriorityInfo, foldHighlightLocationListID,
+		text.LocationSlice([]textapi.Location{
+			{From: vi.zRange.Start, To: vi.zRange.End, Attr: foldHighlightAttr},
+		}))
+}
+
+func (vi *viHandlerImpl) clearZRangeHighlight() {
+	vi.cursor.SetLocationList(textapi.LocationPriorityInfo, foldHighlightLocationListID, nil)
+}
+
+func (vi *viHandlerImpl) selectZRange() bool {
+	if !vi.zRangeOK || vi.zRange.Start == vi.zRange.End {
+		return false
+	}
+	if !vi.cursor.SelectRange(vi.zRange.Start, vi.zRange.End) {
+		return false
+	}
+	vi.setMode(visualMode)
+	return true
 }
 
 func (vi *viHandlerImpl) setYankMode() {
@@ -1986,11 +2016,8 @@ func (vi *viHandlerImpl) unselect() bool {
 }
 
 func (vi *viHandlerImpl) handleZ(ev term.Event) (quit, handled bool) {
-	defer vi.cursor.SetLocationList(
-		textapi.LocationPriorityInfo, foldHighlightLocationListID, nil)
-
 	ctx := context.Background()
-	var visual bool
+	var visual, stayZMode bool
 	switch ev.Mod {
 	case 0:
 		switch ev.Ch {
@@ -2002,25 +2029,28 @@ func (vi *viHandlerImpl) handleZ(ev term.Event) (quit, handled bool) {
 		case 'z':
 			handled = vi.cursor.Center()
 		case 'v', 'V':
-			handled = vi.cursor.SelectFold(ctx)
-			visual = true
-			vi.setVisualMode()
-		case 'h':
-			pos := vi.cursor.CursorAtScroll()
-			if handled = vi.less.Scroll().SeekLeft(); handled {
-				win, _ := vi.cursor.WindowCoordinates(pos)
-				if win.X >= 0 {
-					vi.cursor.SetCursorAtScroll(pos)
+			handled = vi.selectZRange()
+			visual = handled
+		case 'h', 'k':
+			if vi.zRangeOK {
+				next, ok := vi.cursor.ExpandRange(ctx, vi.zRange)
+				handled = ok
+				if handled {
+					vi.zRange = next
+					vi.highlightZRange()
 				}
 			}
-		case 'l':
-			pos := vi.cursor.CursorAtScroll()
-			if handled = vi.less.Scroll().SeekRight(); handled {
-				win, _ := vi.cursor.WindowCoordinates(pos)
-				if win.X < vi.less.Scroll().Width() {
-					vi.cursor.SetCursorAtScroll(pos)
+			stayZMode = true
+		case 'l', 'j':
+			if vi.zRangeOK {
+				next, ok := vi.cursor.ShrinkRange(ctx, vi.zRange, vi.cursor.CursorAtScroll())
+				handled = ok
+				if handled {
+					vi.zRange = next
+					vi.highlightZRange()
 				}
 			}
+			stayZMode = true
 		case 'H':
 			pos := vi.cursor.CursorAtScroll()
 			for range vi.less.Scroll().Width() / 2 {
@@ -2063,8 +2093,13 @@ func (vi *viHandlerImpl) handleZ(ev term.Event) (quit, handled bool) {
 		default:
 		}
 	}
-	if !visual {
+	if stayZMode {
+		vi.setMode(zMode)
+	} else if !visual {
+		vi.clearZRangeHighlight()
 		vi.setNormalMode()
+	} else {
+		vi.clearZRangeHighlight()
 	}
 	return
 }

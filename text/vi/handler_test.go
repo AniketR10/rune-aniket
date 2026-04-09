@@ -82,6 +82,99 @@ diff_buf_adjust(win_T *win)
 	diff_buf_add(win->w_buffer);
 }`
 
+type testSelectionService struct {
+	view   cell.View
+	expand map[term.Range]term.Range
+	shrink map[term.Range]term.Range
+}
+
+func (s testSelectionService) Rows() int { return s.view.Rows() }
+
+func (s testSelectionService) Columns(row int) int { return s.view.Columns(row) }
+
+func (s testSelectionService) Cell(at term.Coordinates) (term.Cell, bool) {
+	return s.view.Cell(at)
+}
+
+func (s testSelectionService) RawCells() [][]term.Cell { return s.view.RawCells() }
+
+func (s testSelectionService) String() string { return s.view.String() }
+
+func (s testSelectionService) SelectionExpand(rng term.Range) (term.Range, bool) {
+	next, ok := s.expand[rng]
+	return next, ok
+}
+
+func (s testSelectionService) SelectionShrink(rng term.Range, caret term.Coordinates) (term.Range, bool) {
+	next, ok := s.shrink[rng]
+	return next, ok
+}
+
+func TestZModeSyntacticSelection(t *testing.T) {
+	buf := cell.NewBuffer()
+	buf.Init()
+	_, err := buf.ReadFrom(strings.NewReader("alpha beta gamma"))
+	require.NoError(t, err)
+
+	svc := testSelectionService{
+		view: buf.View(),
+		expand: map[term.Range]term.Range{
+			{Start: term.Coordinates{X: 6}, End: term.Coordinates{X: 6}}:  {Start: term.Coordinates{X: 6}, End: term.Coordinates{X: 10}},
+			{Start: term.Coordinates{X: 6}, End: term.Coordinates{X: 10}}: {Start: term.Coordinates{}, End: term.Coordinates{X: 10}},
+		},
+		shrink: map[term.Range]term.Range{
+			{Start: term.Coordinates{}, End: term.Coordinates{X: 10}}:     {Start: term.Coordinates{X: 6}, End: term.Coordinates{X: 10}},
+			{Start: term.Coordinates{X: 6}, End: term.Coordinates{X: 10}}: {Start: term.Coordinates{X: 6}, End: term.Coordinates{X: 6}},
+		},
+	}
+	buf.WithView(svc)
+
+	vi := new(viHandlerImpl)
+	vi.init(buf, defaultviHandlerImplConfig())
+	vi.Resize(80, 10)
+	require.True(t, vi.setCursorAtScroll(term.Coordinates{X: 6}))
+	assertZRange := func(t *testing.T, want term.Range) {
+		t.Helper()
+		list, ok := vi.cursor.LocationList(foldHighlightLocationListID)
+		require.True(t, ok)
+		loc, ok := list.Current()
+		require.True(t, ok)
+		assert.Equal(t, want.Start, loc.From)
+		assert.Equal(t, want.End, loc.To)
+	}
+
+	_, handled := vi.Handle(term.Event{Type: term.EventKey, Ch: 'z'})
+	require.True(t, handled)
+	_, handled = vi.Handle(term.Event{Type: term.EventKey, Ch: 'h'})
+	require.True(t, handled)
+	_, ok := vi.Selection()
+	assert.False(t, ok)
+	assertZRange(t, term.Range{Start: term.Coordinates{X: 6}, End: term.Coordinates{X: 10}})
+	assert.Equal(t, zMode, vi.mode())
+
+	_, handled = vi.Handle(term.Event{Type: term.EventKey, Ch: 'h'})
+	require.True(t, handled)
+	_, ok = vi.Selection()
+	assert.False(t, ok)
+	assertZRange(t, term.Range{Start: term.Coordinates{}, End: term.Coordinates{X: 10}})
+	assert.Equal(t, zMode, vi.mode())
+
+	_, handled = vi.Handle(term.Event{Type: term.EventKey, Ch: 'l'})
+	require.True(t, handled)
+	_, ok = vi.Selection()
+	assert.False(t, ok)
+	assertZRange(t, term.Range{Start: term.Coordinates{X: 6}, End: term.Coordinates{X: 10}})
+	assert.Equal(t, zMode, vi.mode())
+
+	_, handled = vi.Handle(term.Event{Type: term.EventKey, Ch: 'v'})
+	require.True(t, handled)
+	selection, ok := vi.Selection()
+	require.True(t, ok)
+	assert.Equal(t, "beta", selection)
+	assert.Equal(t, visualMode, vi.mode())
+	assert.Equal(t, term.Coordinates{X: 6}, vi.cursorAtScroll())
+}
+
 func TestCellAtCursor(t *testing.T) {
 	cases := []struct {
 		input string
@@ -379,7 +472,7 @@ diff_buf_adjust(win_
  diff_redraw(TRUE); 
  }                  
               NORMAL`},
-		{"Vypzhzh",
+		{"VypzH",
 			`  if (w == NULL]    
  ▐if (w == NULL]    
   {                 
@@ -732,7 +825,7 @@ dicurtab->tp_diff_in
                     
                     
               NORMAL`},
-		{"\\$zh",
+		{"\\$zH",
 			`                    
 tp_diff_invalid = TR
 edraw(TRUE);        

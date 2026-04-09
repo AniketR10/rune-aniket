@@ -39,6 +39,34 @@ import (
 	"unstable.build/go-tui/handler/handlertest"
 )
 
+type testSelectionService struct {
+	view   cell.View
+	expand map[term.Range]term.Range
+	shrink map[term.Range]term.Range
+}
+
+func (s testSelectionService) Rows() int { return s.view.Rows() }
+
+func (s testSelectionService) Columns(row int) int { return s.view.Columns(row) }
+
+func (s testSelectionService) Cell(at term.Coordinates) (term.Cell, bool) {
+	return s.view.Cell(at)
+}
+
+func (s testSelectionService) RawCells() [][]term.Cell { return s.view.RawCells() }
+
+func (s testSelectionService) String() string { return s.view.String() }
+
+func (s testSelectionService) SelectionExpand(rng term.Range) (term.Range, bool) {
+	next, ok := s.expand[rng]
+	return next, ok
+}
+
+func (s testSelectionService) SelectionShrink(rng term.Range, caret term.Coordinates) (term.Range, bool) {
+	next, ok := s.shrink[rng]
+	return next, ok
+}
+
 func TestCursorExternalEdit(t *testing.T) {
 	uri, err := workspaceapi.ParseURI("test:///")
 	require.NoError(t, err)
@@ -266,6 +294,59 @@ c
 		return handler
 	}
 	handlertest.RunHandlerIsolated(t, newVi, 20, 10, cases)
+}
+
+func TestSyntacticSelectionKeyBindings(t *testing.T) {
+	uri, err := workspaceapi.ParseURI("memory:///selection.go")
+	require.NoError(t, err)
+
+	buf := cell.NewBuffer()
+	_, _ = buf.ReadFrom(strings.NewReader("alpha beta gamma"))
+
+	view := testSelectionService{
+		view: buf.View(),
+		expand: map[term.Range]term.Range{
+			{Start: term.Coordinates{X: 6}, End: term.Coordinates{X: 6}}:  {Start: term.Coordinates{X: 6}, End: term.Coordinates{X: 10}},
+			{Start: term.Coordinates{X: 6}, End: term.Coordinates{X: 10}}: {Start: term.Coordinates{}, End: term.Coordinates{X: 10}},
+		},
+		shrink: map[term.Range]term.Range{
+			{Start: term.Coordinates{}, End: term.Coordinates{X: 10}}:     {Start: term.Coordinates{X: 6}, End: term.Coordinates{X: 10}},
+			{Start: term.Coordinates{X: 6}, End: term.Coordinates{X: 10}}: {Start: term.Coordinates{X: 6}, End: term.Coordinates{X: 6}},
+		},
+	}
+	buf.WithView(view)
+
+	h := NewHandler(buf, uri)
+	h.Resize(80, 10)
+	require.True(t, h.SetCursorAtScroll(term.Coordinates{X: 6}))
+
+	_, handled := h.Handle(term.Event{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'w'})
+	require.True(t, handled)
+	selection, ok := h.Selection()
+	require.True(t, ok)
+	assert.Equal(t, "beta", selection)
+
+	_, handled = h.Handle(term.Event{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'w'})
+	require.True(t, handled)
+	selection, ok = h.Selection()
+	require.True(t, ok)
+	assert.Equal(t, "alpha beta", selection)
+
+	_, handled = h.Handle(term.Event{Type: term.EventKey, Mod: term.ModCtrl | term.ModShift, Ch: 'W'})
+	require.True(t, handled)
+	selection, ok = h.Selection()
+	require.True(t, ok)
+	assert.Equal(t, "beta", selection)
+
+	_, handled = h.Handle(term.Event{Type: term.EventKey, Mod: term.ModCtrl | term.ModShift, Ch: 'W'})
+	require.True(t, handled)
+	selection, ok = h.Selection()
+	assert.False(t, ok)
+	assert.Equal(t, "", selection)
+	assert.Equal(t, term.Coordinates{X: 6}, h.CursorAtScroll())
+
+	_, handled = h.Handle(term.Event{Type: term.EventKey, Mod: term.ModCtrl | term.ModShift, Ch: 'W'})
+	assert.False(t, handled)
 }
 
 func TestSublimeKeyBindingsMacOS(t *testing.T) {

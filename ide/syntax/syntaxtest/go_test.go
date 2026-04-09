@@ -1208,6 +1208,252 @@ func TestTreeHighlightsIntegration(t *testing.T) {
 	goleak.VerifyNone(t)
 }
 
+func TestTreeSelectionIntegration(t *testing.T) {
+	const content = `package main
+
+type person struct {
+	Name string
+}
+
+func greet(p person) string {
+	values := []string{
+		p.Name,
+		format("hello", p.Name),
+	}
+	if len(values) > 0 {
+		for _, value := range values {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
+}
+`
+
+	_, _, tree, cleanup := newTreeWithPkgManagerContent(t, newInstalledPkgManager(t), content)
+	defer cleanup()
+	defer func() { require.NoError(t, tree.Close()) }()
+
+	t.Run("expand cases", func(t *testing.T) {
+		cases := []struct {
+			name string
+			from term.Range
+			want []term.Range
+		}{
+			{
+				name: "caret in selector expression climbs to statement then function",
+				from: term.Range{Start: term.Coordinates{Y: 8, X: 4}, End: term.Coordinates{Y: 8, X: 4}},
+				want: []term.Range{
+					{Start: term.Coordinates{Y: 8, X: 4}, End: term.Coordinates{Y: 8, X: 8}},
+					{Start: term.Coordinates{Y: 8, X: 2}, End: term.Coordinates{Y: 8, X: 8}},
+					{Start: term.Coordinates{Y: 7, X: 19}, End: term.Coordinates{Y: 10, X: 2}},
+					{Start: term.Coordinates{Y: 7, X: 11}, End: term.Coordinates{Y: 10, X: 2}},
+					{Start: term.Coordinates{Y: 7, X: 1}, End: term.Coordinates{Y: 10, X: 2}},
+					{Start: term.Coordinates{Y: 7, X: 1}, End: term.Coordinates{Y: 17, X: 0}},
+				},
+			},
+			{
+				name: "existing call argument selection expands to call and literal element",
+				from: term.Range{Start: term.Coordinates{Y: 9, X: 9}, End: term.Coordinates{Y: 9, X: 16}},
+				want: []term.Range{
+					{Start: term.Coordinates{Y: 9, X: 8}, End: term.Coordinates{Y: 9, X: 25}},
+					{Start: term.Coordinates{Y: 9, X: 2}, End: term.Coordinates{Y: 9, X: 25}},
+				},
+			},
+			{
+				name: "condition expands through if statement",
+				from: term.Range{Start: term.Coordinates{Y: 11, X: 8}, End: term.Coordinates{Y: 11, X: 14}},
+				want: []term.Range{
+					{Start: term.Coordinates{Y: 11, X: 7}, End: term.Coordinates{Y: 11, X: 15}},
+					{Start: term.Coordinates{Y: 11, X: 4}, End: term.Coordinates{Y: 11, X: 15}},
+					{Start: term.Coordinates{Y: 11, X: 4}, End: term.Coordinates{Y: 11, X: 19}},
+				},
+			},
+			{
+				name: "return expression expands to return statement and for statement",
+				from: term.Range{Start: term.Coordinates{Y: 13, X: 10}, End: term.Coordinates{Y: 13, X: 17}},
+				want: []term.Range{
+					{Start: term.Coordinates{Y: 13, X: 10}, End: term.Coordinates{Y: 13, X: 27}},
+					{Start: term.Coordinates{Y: 13, X: 10}, End: term.Coordinates{Y: 13, X: 34}},
+					{Start: term.Coordinates{Y: 13, X: 3}, End: term.Coordinates{Y: 13, X: 34}},
+				},
+			},
+		}
+
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				current := tc.from
+				for _, want := range tc.want {
+					next, ok := tree.SelectionExpand(current)
+					require.True(t, ok, "from: %#v", current)
+					assert.Equal(t, want, next)
+					current = next
+				}
+			})
+		}
+	})
+
+	t.Run("shrink cases", func(t *testing.T) {
+		cases := []struct {
+			name  string
+			from  term.Range
+			caret term.Coordinates
+			want  term.Range
+		}{
+			{
+				name:  "function body shrinks toward selector at caret",
+				from:  term.Range{Start: term.Coordinates{Y: 6, X: 28}, End: term.Coordinates{Y: 17, X: 1}},
+				caret: term.Coordinates{Y: 9, X: 18},
+				want:  term.Range{Start: term.Coordinates{Y: 7, X: 1}, End: term.Coordinates{Y: 17, X: 0}},
+			},
+			{
+				name:  "literal value shrinks to element nearest caret",
+				from:  term.Range{Start: term.Coordinates{Y: 7, X: 19}, End: term.Coordinates{Y: 10, X: 2}},
+				caret: term.Coordinates{Y: 8, X: 4},
+				want:  term.Range{Start: term.Coordinates{Y: 8, X: 2}, End: term.Coordinates{Y: 8, X: 8}},
+			},
+			{
+				name:  "if block shrinks to for statement around caret",
+				from:  term.Range{Start: term.Coordinates{Y: 11, X: 20}, End: term.Coordinates{Y: 15, X: 2}},
+				caret: term.Coordinates{Y: 13, X: 18},
+				want:  term.Range{Start: term.Coordinates{Y: 12, X: 2}, End: term.Coordinates{Y: 15, X: 0}},
+			},
+			{
+				name:  "file shrinks to type declaration around type caret",
+				from:  term.Range{Start: term.Coordinates{}, End: term.Coordinates{Y: 18}},
+				caret: term.Coordinates{Y: 2, X: 6},
+				want:  term.Range{Start: term.Coordinates{Y: 2, X: 0}, End: term.Coordinates{Y: 4, X: 1}},
+			},
+		}
+
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				got, ok := tree.SelectionShrink(tc.from, tc.caret)
+				require.True(t, ok)
+				assert.Equal(t, tc.want, got)
+			})
+		}
+	})
+
+	t.Run("returns false when syntax tree is unavailable", func(t *testing.T) {
+		pkgs := newInstalledPkgManagerWithFiles(t,
+			"go/highlights.scm",
+			"go/indents.scm",
+			"go/folds.scm",
+		)
+		_, _, tree, cleanup := newTreeWithPkgManager(t, pkgs)
+		defer cleanup()
+		defer func() { require.NoError(t, tree.Close()) }()
+
+		_, ok := tree.SelectionExpand(term.Range{
+			Start: term.Coordinates{Y: 2, X: 15},
+			End:   term.Coordinates{Y: 2, X: 18},
+		})
+		assert.False(t, ok)
+	})
+}
+
+func TestViZModeSelectionRangeExpandShrinkIntegration(t *testing.T) {
+	const content = `package main
+
+func greet(value string) string {
+	if value != "" {
+		return strings.TrimSpace(value)
+	}
+	return ""
+}
+`
+
+	buf, _, tree, cleanup := newTreeWithPkgManagerContent(t, newInstalledPkgManager(t), content)
+	defer cleanup()
+	defer func() { require.NoError(t, tree.Close()) }()
+
+	uri, err := workspaceapi.ParseURI("memory:///zselect.go")
+	require.NoError(t, err)
+
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	scheduleNextTick := func(fn func()) bool {
+		go func() {
+			defer wg.Done()
+			mu.Lock()
+			defer mu.Unlock()
+			fn()
+		}()
+		return true
+	}
+	h := vi.New(buf, uri, vi.WithScheduleNextTick(scheduleNextTick))
+	mu.Lock()
+	h.Resize(80, 12)
+	require.True(t, h.SetCursorAtScroll(term.Coordinates{Y: 4, X: 17}))
+	mu.Unlock()
+
+	rangeFromZHighlight := func(t *testing.T) (term.Range, bool) {
+		t.Helper()
+		mu.Lock()
+		defer mu.Unlock()
+		for _, set := range h.LocationLists() {
+			if set.ID != "_foldHighlightID" || len(set.Locations) == 0 {
+				continue
+			}
+			loc := set.Locations[0]
+			return term.Range{Start: loc.From, End: loc.To}, true
+		}
+		return term.Range{}, false
+	}
+
+	handleRune := func(t *testing.T, ch rune) bool {
+		t.Helper()
+		mu.Lock()
+		defer mu.Unlock()
+		_, handled := h.Handle(term.Event{Type: term.EventKey, Ch: ch})
+		return handled
+	}
+
+	wg.Add(1)
+	require.True(t, handleRune(t, 'z'))
+	wg.Wait()
+	var widest term.Range
+	for range 32 {
+		handled := handleRune(t, 'h')
+		if !handled {
+			break
+		}
+		var ok bool
+		widest, ok = rangeFromZHighlight(t)
+		require.True(t, ok)
+		require.NotEqual(t, term.Range{}, widest)
+	}
+	require.NotEqual(t, term.Range{}, widest)
+
+	previous, ok := rangeFromZHighlight(t)
+	require.True(t, ok)
+	var narrowest term.Range
+	for range 32 {
+		handled := handleRune(t, 'l')
+		current, currentOK := rangeFromZHighlight(t)
+		if !handled {
+			require.True(t, currentOK, "failed shrink should keep previous z-mode range highlighted")
+			assert.Equal(t, previous, current)
+			assert.NotEqual(t, term.Range{}, current)
+			assert.NotEqual(t, term.Coordinates{}, current.End)
+			narrowest = current
+			break
+		}
+		require.True(t, currentOK)
+		require.NotEqual(t, term.Range{}, current)
+		previous = current
+		narrowest = current
+	}
+	require.NotEqual(t, term.Range{}, narrowest)
+
+	require.True(t, handleRune(t, 'v'))
+	mu.Lock()
+	selection, ok := h.Selection()
+	mu.Unlock()
+	require.True(t, ok)
+	require.NotEmpty(t, selection)
+}
+
 func TestTreeStateIntegration(t *testing.T) {
 	t.Run("first call to State waits for language and parser to be initialized", func(t *testing.T) {
 		tree, cleanup := newTree(t)

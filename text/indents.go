@@ -23,9 +23,19 @@
 
 package text
 
-import "unstable.build/go-tui/ide/syntax"
+import (
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"unstable.build/go-tui/ide/syntax"
+)
 
 var _ indentService = (*syntax.Tree)(nil)
+
+type selectionService interface {
+	SelectionExpand(rng term.Range) (term.Range, bool)
+	SelectionShrink(rng term.Range, caret term.Coordinates) (term.Range, bool)
+}
+
+var _ selectionService = (*syntax.Tree)(nil)
 
 type indentService interface {
 	IndentationAt(line int) (int, bool)

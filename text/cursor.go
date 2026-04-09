@@ -227,6 +227,7 @@ func (c *Cursor) InitPerformance(scroll *component.Scroll) {
 func (c *curSubscriber) OnWillEdit(
 	ctx context.Context, start, end term.Coordinates, str string,
 ) {
+	c.c.Unselect()
 }
 
 func (c *curSubscriber) OnDidEdit(
@@ -1117,6 +1118,75 @@ func (c *Cursor) selectRange(start, end term.Coordinates) bool {
 // SelectRange selects the explicit right-exclusive range [start, end).
 func (c *Cursor) SelectRange(start, end term.Coordinates) bool {
 	return c.selectRange(start, end)
+}
+
+// ExpandSelection expands the current caret or explicit selection to the next
+// larger syntactic range.
+func (c *Cursor) ExpandSelection(ctx context.Context) bool {
+	svc := c.getSelectionService()
+	if svc == nil {
+		return false
+	}
+
+	current, cursorPos, ok := c.currentSelectionRange()
+	if !ok {
+		return false
+	}
+	next, ok := svc.SelectionExpand(current)
+	if !ok || !validSelectionRange(next) || next == current {
+		return false
+	}
+
+	return c.setExplicitSelection(StandardSelection, next.Start, next.End, cursorPos)
+}
+
+// ShrinkSelection contracts an expanded syntactic selection through prior steps.
+func (c *Cursor) ShrinkSelection() bool {
+	svc := c.getSelectionService()
+	if svc == nil {
+		return false
+	}
+	current, caret, ok := c.currentSelectionRange()
+	if !ok || current.Start == current.End {
+		return false
+	}
+	prev, ok := svc.SelectionShrink(current, caret)
+	if !ok || (!validSelectionRange(prev) && prev.Start != caret) {
+		return false
+	}
+
+	if prev.Start == prev.End {
+		c.Unselect()
+		c.moveToScroll(prev.Start)
+		return true
+	}
+	return c.setExplicitSelection(StandardSelection, prev.Start, prev.End, prev.Start)
+}
+
+// ExpandRange expands rng to the next larger syntactic range without selecting it.
+func (c *Cursor) ExpandRange(ctx context.Context, rng term.Range) (term.Range, bool) {
+	_ = ctx
+	svc := c.getSelectionService()
+	if svc == nil {
+		return term.Range{}, false
+	}
+	next, ok := svc.SelectionExpand(rng)
+	return next, ok && validSelectionRange(next) && next != rng
+}
+
+// ShrinkRange shrinks rng toward caret without selecting it.
+func (c *Cursor) ShrinkRange(ctx context.Context, rng term.Range, caret term.Coordinates) (term.Range, bool) {
+	_ = ctx
+	svc := c.getSelectionService()
+	if svc == nil {
+		return term.Range{}, false
+	}
+	next, ok := svc.SelectionShrink(rng, caret)
+	return next, ok && validSelectionRange(next) && next != rng
+}
+
+func validSelectionRange(rng term.Range) bool {
+	return rng.Start != rng.End
 }
 
 func (c *Cursor) wordClass(r rune, group bool) int {
@@ -3172,6 +3242,30 @@ func (c *Cursor) getIndentService() indentService {
 		return svc
 	}
 	return nopIndentService{}
+}
+
+func (c *Cursor) getSelectionService() selectionService {
+	svc, ok := c.buffer().View().(selectionService)
+	if ok {
+		return svc
+	}
+	return nil
+}
+
+func (c *Cursor) currentSelectionRange() (term.Range, term.Coordinates, bool) {
+	if c.selection.explicit {
+		from, to, ok := c.selectionBounds()
+		if !ok {
+			return term.Range{}, term.Coordinates{}, false
+		}
+		from, to = term.CoordinatesSort(from, to)
+		return term.Range{Start: from, End: to}, from, true
+	}
+	pos, ok := c.cursorAtScrollBounds()
+	if !ok {
+		return term.Range{}, term.Coordinates{}, false
+	}
+	return term.Range{Start: pos, End: pos}, pos, true
 }
 
 // either op is invoked or this function returns false
