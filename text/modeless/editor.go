@@ -56,6 +56,17 @@ type editor struct {
 	opts         []Option
 }
 
+type publisherEventsAdapter struct{ pub *text.Publisher }
+
+func (a publisherEventsAdapter) SubscribeEvents(evs []textapi.EventType, sub text.EventHandler) error {
+	a.pub.SubscribeEvents(evs, sub)
+	return nil
+}
+
+func (a publisherEventsAdapter) UnsubscribeEvents(sub text.EventHandler) (bool, error) {
+	return a.pub.UnsubscribeEvents(sub), nil
+}
+
 func (e *editor) Edit(
 	file workspaceapi.URI, buf *cell.Buffer, readOnly, recovered bool,
 ) (ret text.Handler, err error) {
@@ -82,14 +93,15 @@ func (e *editor) Edit(
 	ret = e.pub.PublishEdit(file, buf, ret, cursor)
 	auxBarConfig := e.auxBarConfig
 	auxBarConfig.CommandRegistry = e.fileRegistry
-	gitBarConfig := e.gitBarConfig
-	gitBarConfig.CommandRegistry = e.fileRegistry
+	iconsBarConfig := e.iconsBarConfig
+	iconsBarConfig.CommandRegistry = e.fileRegistry
+	iconsBarConfig.Publisher = publisherEventsAdapter{pub: &e.pub}
 	if e.enableAuxBar {
 		ret = text.WithAuxBar(ret, buf, scroll, auxBarConfig)
-		if e.enableGitBar {
-			ret = text.WithGitBar(e.auxBarConfig.Service, ret, buf,
-				scroll, gitBarConfig)
-		}
+	}
+	if e.enableIconsBar {
+		ret = text.WithIconsBar(e.auxBarConfig.Service, e.enableGitIcons, ret, buf,
+			scroll, iconsBarConfig)
 	}
 	if !e.statusBarEnabled {
 		return ret, nil

@@ -494,6 +494,7 @@ func getLocations(locs []*textrpc.SetLocationListRequest_Location) (ret []textap
 			From:    loc.GetFrom().ToModel(),
 			To:      loc.GetTo().ToModel(),
 			Message: loc.GetMsg(),
+			Icon:    loc.GetIcon(),
 		})
 	}
 	return

@@ -511,6 +511,7 @@ editor:
     # - all: combine 'inline' with 'bar'
     # - disabled: no git information is displayed
     git: inline
+    icons: true
     # lines enables or disables rendering the line number.
     # options are 'disabled', 'absolute' and 'relative'.
     lines: absolute

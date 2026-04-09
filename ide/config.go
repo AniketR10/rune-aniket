@@ -1302,8 +1302,8 @@ func (c ideConfig) auxiliaryBarConfig(
 	}
 }
 
-func (c ideConfig) gitBarConfig(pub text.EventPublisher) text.GitBarConfig {
-	return text.GitBarConfig{
+func (c ideConfig) iconsBarConfig(pub text.EventPublisher) text.IconsBarConfig {
+	return text.IconsBarConfig{
 		ScheduleNextTick: c.scheduleNextTick,
 		Publisher:        pub,
 		DelAttr:          c.auxiliaryBarAttr("git_del_inline_attr"),
@@ -1409,7 +1409,7 @@ func (c ideConfig) auxiliaryBarGit() bool {
 	return enabled == "all" || enabled == "inline"
 }
 
-func (c ideConfig) gitBarEnabled() bool {
+func (c ideConfig) gitIconsEnabled() bool {
 	cfg, ok := c.auxiliaryBar()
 	if !ok {
 		return false
@@ -1421,6 +1421,20 @@ func (c ideConfig) gitBarEnabled() bool {
 		}
 	}
 	return enabled == "all" || enabled == "bar"
+}
+
+func (c ideConfig) iconsBarEnabled() bool {
+	cfg, ok := c.auxiliaryBar()
+	if !ok {
+		return false
+	}
+	enabled, err := cfg.GetBool("icons")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["editor.aux_bar.icons"] = err
+		}
+	}
+	return enabled
 }
 
 func (c ideConfig) auxiliaryBarHighlightCursor() (ret bool) {

@@ -73,6 +73,7 @@ editor:
         layout: '█{{ .Status | bg "red" | fg "black" | bold }}█▓▒░  {{ .Filepath }}   {{ .GitShortRef }}   {{ .GitDiffAdd | fg "green" }}   {{ .GitDiffDel | fg "red" }} {{ .ShiftRight }}{{ .CursorColumn }}:{{ .CursorLine }}  {{ .TotalLines }} lines  {{ .Language | bold }}  '
     aux_bar:
         enabled: true
+        icons: true
         folds: true
         lines: relative
         highlight_cursor: false
@@ -316,8 +317,11 @@ func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
 	git := cfg.auxiliaryBarGit()
 	assert.False(t, git)
 
-	gitBar := cfg.gitBarEnabled()
-	assert.False(t, gitBar)
+	gitIcons := cfg.gitIconsEnabled()
+	assert.False(t, gitIcons)
+
+	iconsBar := cfg.iconsBarEnabled()
+	assert.False(t, iconsBar)
 
 	statusBar := cfg.statusBarEnabled()
 	assert.True(t, statusBar)
@@ -584,8 +588,11 @@ func TestConfigSetting(t *testing.T) {
 	git := cfg.auxiliaryBarGit()
 	assert.True(t, git)
 
-	gitBar := cfg.gitBarEnabled()
-	assert.True(t, gitBar)
+	gitIcons := cfg.gitIconsEnabled()
+	assert.True(t, gitIcons)
+
+	iconsBar := cfg.iconsBarEnabled()
+	assert.True(t, iconsBar)
 
 	cursor := cfg.auxiliaryBarHighlightCursor()
 	assert.False(t, cursor)

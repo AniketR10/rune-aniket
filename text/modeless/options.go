@@ -44,9 +44,10 @@ type modelessConfig struct {
 	enableInitialFolds bool
 	enableAuxBar       bool
 	auxBarConfig       text.AuxBarConfig
-	enableGitBar       bool
+	enableIconsBar     bool
+	enableGitIcons     bool
 	commandBar         bool
-	gitBarConfig       text.GitBarConfig
+	iconsBarConfig     text.IconsBarConfig
 	workspace          workspaceapi.URI
 	clipboard          clipboard.Register
 	notifications      browserapi.Notifications
@@ -135,12 +136,28 @@ func WithAuxiliaryBar(enabled bool, config text.AuxBarConfig) Option {
 	}
 }
 
-// WithGitBar determines whether to render the changes between the
-// open file's worktree and HEAD.
-func WithGitBar(enabled bool, config text.GitBarConfig) Option {
+// WithIconsBar determines whether to install the icons bar.
+func WithIconsBar(enabled bool, config text.IconsBarConfig) Option {
 	return func(cfg *modelessConfig) {
-		cfg.enableGitBar = enabled
-		cfg.gitBarConfig = config
+		cfg.enableIconsBar = enabled
+		cfg.iconsBarConfig = config
+	}
+}
+
+// WithGitIcons determines whether the icons bar should populate git diff icons.
+func WithGitIcons(enabled bool) Option {
+	return func(cfg *modelessConfig) {
+		cfg.enableGitIcons = enabled
+	}
+}
+
+// WithGitBar determines whether to install a git-backed icons bar.
+// Deprecated: use WithIconsBar + WithGitIcons.
+func WithGitBar(enabled bool, config text.IconsBarConfig) Option {
+	return func(cfg *modelessConfig) {
+		cfg.enableIconsBar = enabled
+		cfg.enableGitIcons = enabled
+		cfg.iconsBarConfig = config
 	}
 }
 

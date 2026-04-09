@@ -76,6 +76,7 @@ func (d FileDiff) LocationList(
 				From: from,
 				To:   term.Coordinates{Y: from.Y, X: 1},
 				Attr: delLocAttr,
+				Icon: delIcon,
 			})
 			continue
 		}
@@ -85,10 +86,16 @@ func (d FileDiff) LocationList(
 			From: term.Coordinates{Y: from.Y},
 			To:   term.Coordinates{Y: to.Y},
 			Attr: addLocAttr,
+			Icon: addIcon,
 		})
 	}
 	return textapi.LocationSlice(locs)
 }
+
+const (
+	addIcon = "+"
+	delIcon = "-"
+)
 
 // A Hunk represents a series of changes (additions or deletions) in a file's
 // unified diff.

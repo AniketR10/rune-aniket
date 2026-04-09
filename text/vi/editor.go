@@ -40,6 +40,17 @@ type viEditor struct {
 	opts     []Option
 }
 
+type publisherEventsAdapter struct{ pub *text.Publisher }
+
+func (a publisherEventsAdapter) SubscribeEvents(evs []textapi.EventType, sub text.EventHandler) error {
+	a.pub.SubscribeEvents(evs, sub)
+	return nil
+}
+
+func (a publisherEventsAdapter) UnsubscribeEvents(sub text.EventHandler) (bool, error) {
+	return a.pub.UnsubscribeEvents(sub), nil
+}
+
 // Editor returns a Vi text.Editor.
 func Editor(opts ...Option) text.Editor {
 	ret := &viEditor{opts: opts}
@@ -81,14 +92,15 @@ func (e *viEditor) Edit(
 	ret = e.Publisher.PublishEdit(file, buf, ret, cursor)
 	auxBarConfig := e.config.auxBarConfig
 	auxBarConfig.CommandRegistry = e.registry
-	gitBarConfig := e.config.gitBarConfig
-	gitBarConfig.CommandRegistry = e.registry
+	iconsBarConfig := e.config.iconsBarConfig
+	iconsBarConfig.CommandRegistry = e.registry
+	iconsBarConfig.Publisher = publisherEventsAdapter{pub: &e.Publisher}
 	if e.config.enableAuxBar {
 		ret = text.WithAuxBar(ret, buf, scroll, auxBarConfig)
-		if e.config.enableGitBar {
-			ret = text.WithGitBar(e.config.auxBarConfig.Service, ret, buf,
-				scroll, gitBarConfig)
-		}
+	}
+	if e.config.enableIconsBar {
+		ret = text.WithIconsBar(e.config.auxBarConfig.Service, e.config.enableGitIcons, ret, buf,
+			scroll, iconsBarConfig)
 	}
 	if !e.config.statusBarEnabled {
 		return ret, nil

@@ -26,6 +26,7 @@ package text
 import (
 	"context"
 	"errors"
+	"sort"
 
 	"github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
@@ -35,6 +36,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/term/graphemecluster"
 	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
@@ -42,9 +44,9 @@ import (
 	"unstable.build/go-tui/ide/vctrl"
 )
 
-// GitBarConfig holds configuration for the auxiliary bar created
-// by WithGitBar.
-type GitBarConfig struct {
+// IconsBarConfig holds configuration for the icons bar created
+// by WithIconsBar.
+type IconsBarConfig struct {
 	ScheduleNextTick func(func()) bool
 	DelAttr          term.Attributes
 	AddAttr          term.Attributes
@@ -54,23 +56,27 @@ type GitBarConfig struct {
 	CommandRegistry  FileCommandRegistry
 }
 
-// WithGitBar wraps the given editor with an git bar. The given buffer,
+// WithIconsBar wraps the given editor with an icons bar. The given buffer,
 // and scroll should correspond to the buffer and scroll used by the given editor.
-func WithGitBar(
-	svc vctrl.Service, handler Handler,
+func WithIconsBar(
+	svc vctrl.Service, gitEnabled bool, handler Handler,
 	buf *cell.Buffer, scroll *component.Scroll,
-	cfg GitBarConfig,
+	cfg IconsBarConfig,
 ) Handler {
-	if cfg.CommandRegistry == nil || cfg.Publisher == nil || cfg.ScheduleNextTick == nil {
-		panic("gitbar configuration is missing key dependencies")
+	if cfg.ScheduleNextTick == nil {
+		panic("icons bar configuration is missing key dependencies")
 	}
-	ret := new(gitBar)
+	if gitEnabled && (cfg.CommandRegistry == nil || cfg.Publisher == nil) {
+		panic("icons bar configuration is missing git dependencies")
+	}
+	ret := new(iconsBar)
 	ret.buf = buf
 	ret.scroll = scroll
 	ret.Handler = handler
 	ret.vhandler.C = handler
 	ret.scheduleNextTick = cfg.ScheduleNextTick
 	ret.svc = svc
+	ret.gitEnabled = gitEnabled
 
 	if cfg.DelAttr == (term.Attributes{}) {
 		cfg.DelAttr = term.Attributes{Fg: tcell.ColorWhite, Bg: tcell.ColorRed}
@@ -88,7 +94,7 @@ func WithGitBar(
 	ret.addAttr = cfg.AddAttr
 
 	b := new(cell.Buffer)
-	b.InitPerformance(buf.Rows(), 1, ' ')
+	b.InitPerformance(buf.Rows(), 3, ' ')
 
 	ret.bar = new(component.Scroll)
 	ret.bar.InitPerformance(b)
@@ -97,22 +103,36 @@ func WithGitBar(
 	ret.pub = cfg.Publisher
 	ret.registry = cfg.CommandRegistry
 	ret.config = cfg
+	ret.iconColumns = 0
+	ret.iconsByID = make(map[string][]iconsBarLineIcon)
 
 	scroll.Subscribe(ret)
 	buf.Subscribe(ret)
-	evs := []textapi.EventType{textapi.EventTypeFlush, textapi.EventTypeFocus}
 	ret.dirty = true
 	ret.cancelBuild = func() {}
-	_ = ret.pub.SubscribeEvents(evs, (*gitBarSubscriber)(ret))
-	for _, cmd := range gitCommands {
-		// could return error if auxbar is enabled
-		_ = ret.registry.SubscribeCommandForFile(ret.file, cmd, ret)
+	if ret.gitEnabled {
+		evs := []textapi.EventType{textapi.EventTypeFlush, textapi.EventTypeFocus}
+		_ = ret.pub.SubscribeEvents(evs, (*iconsBarSubscriber)(ret))
+		for _, cmd := range gitCommands {
+			// could return error if auxbar is enabled
+			_ = ret.registry.SubscribeCommandForFile(ret.file, cmd, ret)
+		}
 	}
 
 	if ret.dirty {
 		ret.rebuildBar(context.Background())
 	}
 	return ret
+}
+
+// WithGitBar wraps the given editor with a git-backed icons bar.
+// Deprecated: use WithIconsBar.
+func WithGitBar(
+	svc vctrl.Service, handler Handler,
+	buf *cell.Buffer, scroll *component.Scroll,
+	cfg IconsBarConfig,
+) Handler {
+	return WithIconsBar(svc, true, handler, buf, scroll, cfg)
 }
 
 const (
@@ -133,13 +153,14 @@ var (
 	}
 )
 
-type gitBar struct {
+type iconsBar struct {
 	Handler
 	svc              vctrl.Service
+	gitEnabled       bool
 	scheduleNextTick func(func()) bool
 	pub              EventPublisher
 	registry         FileCommandRegistry
-	config           GitBarConfig
+	config           IconsBarConfig
 
 	file    workspaceapi.URI
 	buf     *cell.Buffer
@@ -154,38 +175,45 @@ type gitBar struct {
 	bar         *component.Scroll
 	addLocAttr  term.Attributes
 	delLocAttr  term.Attributes
+	width       int
+	height      int
+	iconColumns int
+	iconsByID   map[string][]iconsBarLineIcon
 }
 
-func (b *gitBar) Selection() (string, bool) {
+func (b *iconsBar) Selection() (string, bool) {
 	return b.vhandler.Selection()
 }
 
-func (b *gitBar) Cursor() (term.Coordinates, term.CursorStyle, bool) {
+func (b *iconsBar) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 	return b.vhandler.Cursor()
 }
 
-func (b *gitBar) Draw(w term.Writer) {
+func (b *iconsBar) Draw(w term.Writer) {
 	b.vhandler.Draw(w)
 	b.bar.Draw(w)
 	if b.bar.Width() != 0 {
 		bg := term.Attributes{Bg: b.scroll.Attributes.Bg}
 		for y := range b.bar.SizeHeight() {
-			w.UnionAttributes(term.Coordinates{Y: y, X: 0}, bg)
-			w.UnionAttributes(term.Coordinates{Y: y, X: 1}, bg)
+			for x := range b.bar.Width() {
+				w.UnionAttributes(term.Coordinates{Y: y, X: x}, bg)
+			}
 		}
 	}
 }
 
-func (b *gitBar) Handle(ev term.Event) (quit, handled bool) {
+func (b *iconsBar) Handle(ev term.Event) (quit, handled bool) {
 	// TODO handle mouse events
 	//fold := ev.Type == term.EventMouse && ev.Key == term.MouseLeft &&
 	//	ev.MouseX >= 0 && ev.MouseX < 1
 	return b.vhandler.Handle(ev)
 }
 
-func (b *gitBar) Resize(width, height int) {
+func (b *iconsBar) Resize(width, height int) {
 	const minSpaceForMain = 4
-	barWidth := 2
+	b.width = width
+	b.height = height
+	barWidth := b.barWidth()
 	if width < minSpaceForMain+barWidth {
 		barWidth = 0
 	}
@@ -194,7 +222,14 @@ func (b *gitBar) Resize(width, height int) {
 	b.vhandler.Resize(width-barWidth, height)
 }
 
-func (b *gitBar) HandleCommand(ctx context.Context, cmd textapi.Command) error {
+func (b *iconsBar) barWidth() int {
+	if b.iconColumns == 0 {
+		return 0
+	}
+	return b.iconColumns + 1
+}
+
+func (b *iconsBar) HandleCommand(ctx context.Context, cmd textapi.Command) error {
 	switch cmd.Name {
 	case commandToggleOverlay:
 		if b.addLocAttr == (term.Attributes{}) {
@@ -214,26 +249,28 @@ func (b *gitBar) HandleCommand(ctx context.Context, cmd textapi.Command) error {
 	}
 }
 
-func (b *gitBar) Complete(ctx context.Context, cmd textapi.Command) (
+func (b *iconsBar) Complete(ctx context.Context, cmd textapi.Command) (
 	iterator.Iterator[string], string, error,
 ) {
 	return iterator.Empty[string](), "", nil
 }
 
-func (b *gitBar) Close() (ret error) {
+func (b *iconsBar) Close() (ret error) {
 	if b.closed {
 		return nil
 	}
 	b.closed = true
-	ok, err := b.pub.UnsubscribeEvents((*gitBarSubscriber)(b))
-	if err != nil {
-		ret = multierror.Append(ret, err)
-	} else if !ok {
-		ret = multierror.Append(ret, errors.New("could not unsubscribe auxiliary bar"))
-	}
-	for _, cmd := range gitCommands {
-		// could return error if auxbar is enabled
-		_ = b.registry.UnsubscribeCommandForFile(b.file, cmd.Name)
+	if b.gitEnabled {
+		ok, err := b.pub.UnsubscribeEvents((*iconsBarSubscriber)(b))
+		if err != nil {
+			ret = multierror.Append(ret, err)
+		} else if !ok {
+			ret = multierror.Append(ret, errors.New("could not unsubscribe icons bar"))
+		}
+		for _, cmd := range gitCommands {
+			// could return error if auxbar is enabled
+			_ = b.registry.UnsubscribeCommandForFile(b.file, cmd.Name)
+		}
 	}
 	if err := b.vhandler.C.Close(); err != nil {
 		ret = multierror.Append(ret, err)
@@ -241,10 +278,14 @@ func (b *gitBar) Close() (ret error) {
 	return
 }
 
-func (b *gitBar) rebuildBar(ctx context.Context) {
+func (b *iconsBar) rebuildBar(ctx context.Context) {
 	b.dirty = false
 	b.cancelBuild()
 	ctx, b.cancelBuild = context.WithCancel(ctx)
+	b.renderIcons()
+	if !b.gitEnabled {
+		return
+	}
 	uri := b.Handler.Resource()
 	delLocAttr := b.delLocAttr
 	addLocAttr := b.addLocAttr
@@ -265,75 +306,216 @@ func (b *gitBar) rebuildBar(ctx context.Context) {
 				return
 			default:
 			}
-			b.bar.Buffer().ResetPerformance()
-			for loc, ok := ll.Current(); ok; loc, ok = ll.Next() {
-				from := term.Coordinates{Y: loc.From.Y}
-				to := term.Coordinates{Y: loc.To.Y}
-				if from == to {
-					at, _ := b.scrollToBarCoordinates(from)
-					at.X = 0
-					b.bar.Buffer().DeleteCell(at)
-					b.bar.Buffer().InsertStringWithAttr(at, delIcon, b.delAttr)
-					continue
-				}
-
-				for y := from.Y; y < to.Y; y++ {
-					at, _ := b.scrollToBarCoordinates(term.Coordinates{Y: y})
-					at.X = 0
-					icon := addIcon
-					b.bar.Buffer().DeleteCell(at)
-					b.bar.Buffer().InsertStringWithAttr(at, icon, b.addAttr)
-				}
-			}
-			b.Handler.SetLocationList(textapi.LocationPriorityInfo, gitLocationsID, ll)
+			b.setLocationList(textapi.LocationPriorityInfo, gitLocationsID, ll)
+			b.renderIcons()
 		})
 	})
 }
 
-type gitBarSubscriber gitBar
+type iconsBarLineIcon struct {
+	icon     string
+	width    int
+	attr     term.Attributes
+	priority textapi.LocationPriority
+	id       string
+	line     int
+}
 
-func (b *gitBarSubscriber) Handle(ctx context.Context, ev textapi.Event) bool {
+func (b *iconsBar) SetLocationList(pri textapi.LocationPriority, ID string, loc LocationList) {
+	b.setLocationList(pri, ID, loc)
+	b.renderIcons()
+}
+
+func (b *iconsBar) setLocationList(pri textapi.LocationPriority, ID string, loc LocationList) {
+	locations := materializeLocationList(loc)
+	var forward LocationList
+	if locations != nil {
+		forward = LocationSlice(locations)
+	}
+	b.storeLocationListIcons(pri, ID, locations)
+	b.Handler.SetLocationList(pri, ID, forward)
+}
+
+func (b *iconsBar) renderIcons() {
+	lineIcons, iconColumns := b.mergeLocationIcons()
+	if iconColumns != b.iconColumns {
+		b.iconColumns = iconColumns
+		b.Resize(b.width, b.height)
+	}
+	b.bar.Buffer().ResetPerformance()
+	b.drawLocationIcons(lineIcons)
+}
+
+func (b *iconsBar) mergeLocationIcons() (map[int][]iconsBarLineIcon, int) {
+	lineIcons := make(map[int][]iconsBarLineIcon)
+	iconColumns := 0
+	for _, icons := range b.iconsByID {
+		for _, icon := range icons {
+			iconColumns = max(iconColumns, 1, icon.width)
+			lineIcons[icon.line] = append(lineIcons[icon.line], icon)
+		}
+	}
+	for y, icons := range lineIcons {
+		sort.SliceStable(icons, func(i, j int) bool {
+			if icons[i].priority != icons[j].priority {
+				return icons[i].priority > icons[j].priority
+			}
+			return icons[i].id < icons[j].id
+		})
+		if len(icons) > 1 {
+			icons = icons[:1]
+		}
+		lineIcons[y] = icons
+	}
+	return lineIcons, iconColumns
+}
+
+func materializeLocationList(loc LocationList) []textapi.Location {
+	if loc == nil {
+		return nil
+	}
+	scrollStartList(loc)
+	var ret []textapi.Location
+	for curr, ok := loc.Current(); ok; curr, ok = loc.Next() {
+		ret = append(ret, curr)
+	}
+	return ret
+}
+
+func (b *iconsBar) storeLocationListIcons(
+	pri textapi.LocationPriority, ID string, locations []textapi.Location,
+) {
+	icons := b.locationListIcons(locations, pri, ID)
+	if len(icons) == 0 {
+		delete(b.iconsByID, ID)
+		return
+	}
+	b.iconsByID[ID] = icons
+}
+
+func (b *iconsBar) locationListIcons(
+	locations []textapi.Location, pri textapi.LocationPriority, ID string,
+) []iconsBarLineIcon {
+	if locations == nil {
+		return nil
+	}
+	var ret []iconsBarLineIcon
+	for _, curr := range locations {
+		if curr.Icon == "" {
+			continue
+		}
+		for _, y := range locationLines(curr) {
+			width := graphemecluster.StringWidth(curr.Icon)
+			if width == 0 {
+				continue
+			}
+			ret = append(ret, iconsBarLineIcon{
+				icon:     curr.Icon,
+				width:    width,
+				attr:     b.iconAttr(ID, curr),
+				priority: pri,
+				id:       ID,
+				line:     y,
+			})
+		}
+	}
+	return ret
+}
+
+func (b *iconsBar) drawLocationIcons(lineIcons map[int][]iconsBarLineIcon) {
+	for y, icons := range lineIcons {
+		at, _ := b.scrollToBarCoordinates(term.Coordinates{Y: y})
+		if at.Y < 0 {
+			continue
+		}
+		x := b.iconColumns
+		for _, icon := range icons {
+			x -= icon.width
+			if x < 0 || x >= b.bar.Width() {
+				continue
+			}
+			cellAt := at
+			cellAt.X = x
+			b.bar.Buffer().DeleteCell(cellAt)
+			b.bar.Buffer().InsertStringWithAttr(cellAt, icon.icon, icon.attr)
+		}
+	}
+}
+
+func (b *iconsBar) iconAttr(id string, loc textapi.Location) term.Attributes {
+	attr := loc.Attr
+	if id == gitLocationsID {
+		switch loc.Icon {
+		case addIcon:
+			attr = b.addAttr
+		case delIcon:
+			attr = b.delAttr
+		}
+	}
+	fg := attr.Fg
+	if attr.Bg != tcell.ColorDefault {
+		fg = attr.Bg
+	}
+	return term.Attributes{Fg: fg, Attrs: attr.Attrs}
+}
+
+func locationLines(loc textapi.Location) []int {
+	fromY := loc.From.Y
+	toY := loc.To.Y
+	if fromY == toY {
+		return []int{fromY}
+	}
+	ret := make([]int, 0, max(0, toY-fromY))
+	for y := fromY; y < toY; y++ {
+		ret = append(ret, y)
+	}
+	return ret
+}
+
+type iconsBarSubscriber iconsBar
+
+func (b *iconsBarSubscriber) Handle(ctx context.Context, ev textapi.Event) bool {
 	if !ev.URI.Equal(b.file) || (ev.Type != textapi.EventTypeFlush &&
 		ev.Type != textapi.EventTypeFocus) {
 		return false
 	}
-	(*gitBar)(b).log(log.TraceLevel, "received event: %s", ev.Type.String())
-	(*gitBar)(b).rebuildBar(ctx)
+	(*iconsBar)(b).log(log.TraceLevel, "received event: %s", ev.Type.String())
+	(*iconsBar)(b).rebuildBar(ctx)
 	return false
 }
 
-func (b *gitBar) OnDidSeek(_, to term.Coordinates) {
+func (b *iconsBar) OnDidSeek(_, to term.Coordinates) {
 	b.bar.SetOffset(term.Coordinates{Y: to.Y})
 }
 
-func (b *gitBar) OnWillSeek(_ term.Coordinates) {
+func (b *iconsBar) OnWillSeek(_ term.Coordinates) {
 }
 
-func (b *gitBar) OnWillHide(start, end int) {
+func (b *iconsBar) OnWillHide(start, end int) {
 }
 
-func (b *gitBar) OnWillVisible(start int) {
+func (b *iconsBar) OnWillVisible(start int) {
 }
 
-func (b *gitBar) OnDidHide(start, end int) {
+func (b *iconsBar) OnDidHide(start, end int) {
 	b.rebuildBar(context.Background())
 }
 
-func (b *gitBar) OnDidVisible(start int) {
+func (b *iconsBar) OnDidVisible(start int) {
 	b.rebuildBar(context.Background())
 }
 
-func (b *gitBar) OnWillEdit(
+func (b *iconsBar) OnWillEdit(
 	ctx context.Context, from, to term.Coordinates, str string,
 ) {
 }
 
-func (b *gitBar) OnDidEdit(
+func (b *iconsBar) OnDidEdit(
 	ctx context.Context, start, end term.Coordinates, old string,
 ) {
 }
 
-func (b *gitBar) scrollToBarCoordinates(pos term.Coordinates) (ret term.Coordinates, ok bool) {
+func (b *iconsBar) scrollToBarCoordinates(pos term.Coordinates) (ret term.Coordinates, ok bool) {
 	pos, ok = b.scroll.ScrollToWindowCoordinates(pos)
 	ret = pos
 	ret.Y += b.scroll.Offset().Y
@@ -341,9 +523,9 @@ func (b *gitBar) scrollToBarCoordinates(pos term.Coordinates) (ret term.Coordina
 	return
 }
 
-func (b *gitBar) log(level log.Level, msg string, args ...any) {
+func (b *iconsBar) log(level log.Level, msg string, args ...any) {
 	if !log.IsLevelEnabled(level) {
 		return
 	}
-	log.WithField(logging.KeyClass, "text.gitBar").Logf(level, msg, args...)
+	log.WithField(logging.KeyClass, "text.iconsBar").Logf(level, msg, args...)
 }

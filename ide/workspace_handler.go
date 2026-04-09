@@ -204,7 +204,7 @@ func (h *workspaceManagerHandler) newBuiltinModalEditor(
 	cwd workspaceapi.URI, cfg ideConfig, svc vctrl.Service,
 ) text.Editor {
 	auxBarConfig := cfg.auxiliaryBarConfig(h, svc)
-	gitBarConfig := cfg.gitBarConfig(h)
+	iconsBarConfig := cfg.iconsBarConfig(h)
 	statusBarConfig := cfg.statusBarConfig(cwd, h, svc)
 	viOpts := append([]vi.Option{},
 		vi.WithResAttr(cfg.modalResultAttr()),
@@ -212,8 +212,9 @@ func (h *workspaceManagerHandler) newBuiltinModalEditor(
 		vi.WithScheduleNextTick(cfg.scheduleNextTick),
 		vi.WithAttr(cfg.modalAttr()),
 		vi.WithAuxiliaryBar(cfg.auxiliaryBarEnabled(), auxBarConfig),
+		vi.WithIconsBar(cfg.iconsBarEnabled(), iconsBarConfig),
+		vi.WithGitIcons(cfg.gitIconsEnabled()),
 		vi.WithStatusBarConfig(cfg.statusBarEnabled(), statusBarConfig),
-		vi.WithGitBar(cfg.gitBarEnabled(), gitBarConfig),
 		vi.WithHideInitialFolds(cfg.initialFolds()),
 		vi.WithClipboard(cfg.clipboard()),
 		vi.WithWorkspaceCommandRegistry(cwd, h),
@@ -226,7 +227,7 @@ func (h *workspaceManagerHandler) newBuiltinModelessEditor(
 	cwd workspaceapi.URI, cfg ideConfig, svc vctrl.Service,
 ) text.Editor {
 	auxBarConfig := cfg.auxiliaryBarConfig(h, svc)
-	gitBarConfig := cfg.gitBarConfig(h)
+	iconsBarConfig := cfg.iconsBarConfig(h)
 	statusBarConfig := cfg.statusBarConfig(cwd, h, svc)
 	return modeless.Editor(
 		modeless.WithCommandBar(true),
@@ -235,7 +236,8 @@ func (h *workspaceManagerHandler) newBuiltinModelessEditor(
 		modeless.WithScheduleNextTick(cfg.scheduleNextTick),
 		modeless.WithAttr(cfg.modelessAttr()),
 		modeless.WithAuxiliaryBar(cfg.auxiliaryBarEnabled(), auxBarConfig),
-		modeless.WithGitBar(cfg.gitBarEnabled(), gitBarConfig),
+		modeless.WithIconsBar(cfg.iconsBarEnabled(), iconsBarConfig),
+		modeless.WithGitIcons(cfg.gitIconsEnabled()),
 		modeless.WithHideInitialFolds(cfg.initialFolds()),
 		modeless.WithClipboard(cfg.clipboard()),
 		modeless.WithStatusBarConfig(cfg.statusBarEnabled(), statusBarConfig),
@@ -804,7 +806,7 @@ func (h *workspaceManagerHandler) addWorkspace(
 
 	textOpts := h.textOpts(uri, cfg, cwd)
 	vctrlService := vctrl.NopService()
-	if cfg.auxiliaryBarGit() || cfg.gitBarEnabled() {
+	if cfg.auxiliaryBarGit() || cfg.gitIconsEnabled() {
 		vctrlService, err = gogit.NewService(uri, cwd)
 		if err != nil {
 			h.empty.log(log.ErrorLevel, "new git service for workspace %q: %v",

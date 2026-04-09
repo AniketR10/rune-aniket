@@ -51,9 +51,10 @@ type viConfig struct {
 	auxBarConfig       text.AuxBarConfig
 	statusBarConfig    text.StatusBarConfig
 	statusBarEnabled   bool
-	gitBarConfig       text.GitBarConfig
+	iconsBarConfig     text.IconsBarConfig
 	workspace          workspaceapi.URI
-	enableGitBar       bool
+	enableIconsBar     bool
+	enableGitIcons     bool
 	notifications      browserapi.Notifications
 }
 
@@ -133,12 +134,28 @@ func WithStatusBarConfig(enabled bool, config text.StatusBarConfig) Option {
 	}
 }
 
-// WithGitBar determines whether to render the changes between the
-// open file's worktree and HEAD.
-func WithGitBar(enabled bool, config text.GitBarConfig) Option {
+// WithIconsBar determines whether to install the icons bar.
+func WithIconsBar(enabled bool, config text.IconsBarConfig) Option {
 	return func(cfg *viConfig) {
-		cfg.enableGitBar = enabled
-		cfg.gitBarConfig = config
+		cfg.enableIconsBar = enabled
+		cfg.iconsBarConfig = config
+	}
+}
+
+// WithGitIcons determines whether the icons bar should populate git diff icons.
+func WithGitIcons(enabled bool) Option {
+	return func(cfg *viConfig) {
+		cfg.enableGitIcons = enabled
+	}
+}
+
+// WithGitBar determines whether to install a git-backed icons bar.
+// Deprecated: use WithIconsBar + WithGitIcons.
+func WithGitBar(enabled bool, config text.IconsBarConfig) Option {
+	return func(cfg *viConfig) {
+		cfg.enableIconsBar = enabled
+		cfg.enableGitIcons = enabled
+		cfg.iconsBarConfig = config
 	}
 }
 

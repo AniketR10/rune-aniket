@@ -46,6 +46,7 @@ func TestDiffToLocationList(t *testing.T) {
 				From: term.Coordinates{},
 				To:   term.Coordinates{Y: 1},
 				Attr: term.Attributes{Fg: tcell.ColorGreen},
+				Icon: "+",
 			},
 		}},
 		{"converts a delete operation", FileDiff{Hunks: []Hunk{
@@ -55,6 +56,7 @@ func TestDiffToLocationList(t *testing.T) {
 				From: term.Coordinates{},
 				To:   term.Coordinates{Y: 0, X: 1},
 				Attr: term.Attributes{Fg: tcell.ColorRed},
+				Icon: "-",
 			},
 		}},
 		{"converts a replace operation into an add", FileDiff{Hunks: []Hunk{
@@ -64,6 +66,7 @@ func TestDiffToLocationList(t *testing.T) {
 				From: term.Coordinates{},
 				To:   term.Coordinates{Y: 1},
 				Attr: term.Attributes{Fg: tcell.ColorGreen},
+				Icon: "+",
 			},
 		}},
 	}

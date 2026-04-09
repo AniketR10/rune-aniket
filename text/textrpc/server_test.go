@@ -165,13 +165,18 @@ func TestServerSetLocationList(t *testing.T) {
 		expectEdit(t, mock, resource, content, false, false)
 		callServerEdit(t, ctx, s, resource, content, false, false)
 
-		locs := text.LocationSlice([]textapi.Location{{Message: "wsb: hold AMC", To: term.Coordinates{X: 3}}})
+		locs := text.LocationSlice([]textapi.Location{{
+			Message: "wsb: hold AMC",
+			To:      term.Coordinates{X: 3},
+			Icon:    "!",
+		}})
 		h := expectEditor(t, ctrl, mock, resource)
 		h.EXPECT().SetLocationList(gomock.Any(), gomock.Any(), gomock.Any()).
 			Times(1).
 			DoAndReturn(func(pri textapi.LocationPriority, ID string, l text.LocationList) {
 				assert.Equal(t, textapi.LocationPriorityInfo, pri)
 				assert.Equal(t, locID, ID)
+				assertEqualLocations(t, l, locs)
 			})
 
 		req := makeLocationListRequest(resource, textapi.LocationPriorityInfo, locID, locs)
