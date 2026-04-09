@@ -804,6 +804,8 @@ command:
     <a-s-g>: echo {prompt}lsp<space>definition<space>
     <a-i>: lsp implementation
     <a-s-i>: echo {prompt}lsp<space>implementation<space>
+    <c-o>: cursorhistory prev
+    <c-i>: cursorhistory next
     <a-b>: lsp format
     <c-space>: lsp complete
     <a-m>: go organize-imports

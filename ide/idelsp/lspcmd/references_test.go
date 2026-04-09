@@ -34,6 +34,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"unstable.build/go-tui/handler/locationpicker"
 )
 
 var _ textapi.CommandHandler = (*referencesHandler)(nil)
@@ -88,8 +89,8 @@ func TestReferencesEnrichedDisplay(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, fh)
 
-	lh := fh.(*locationsFloatingHandler)
-	assert.Equal(t, "a.go:1", lh.entries[0].display)
+	lh := fh.(*locationpicker.Picker)
+	assert.Equal(t, "a.go:1", lh.Entries()[0].Display)
 }
 
 func TestReferencesRelativePaths(t *testing.T) {
@@ -138,7 +139,7 @@ func TestReferencesRelativePaths(t *testing.T) {
 	}
 	h := ReferencesHandler(
 		lsp, editor, wm, &mockResourceOpener{}, &mockNotifications{}, &mockFileSystem{},
-		rootURI, syncTick, nil, ReferencesConfig{ListConfig: DefaultLocationsConfig()}, nil,
+		rootURI, syncTick, nil, ReferencesConfig{ListConfig: locationpicker.DefaultConfig()}, nil,
 	)
 
 	uri, _ := workspaceapi.ParseURI("file:///workspace/src/pkg/handler.go")
@@ -149,11 +150,11 @@ func TestReferencesRelativePaths(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, fh)
 
-	lh := fh.(*locationsFloatingHandler)
-	require.Len(t, lh.entries, 3)
-	assert.Equal(t, "src/pkg/handler.go:11", lh.entries[0].display, "workspace nested path should be relative")
-	assert.Equal(t, "cmd/main.go:4", lh.entries[1].display, "workspace path should be relative")
-	assert.Equal(t, "/other/lib/ext.go:1", lh.entries[2].display, "out-of-workspace path should be absolute")
+	lh := fh.(*locationpicker.Picker)
+	require.Len(t, lh.Entries(), 3)
+	assert.Equal(t, "src/pkg/handler.go:11", lh.Entries()[0].Display, "workspace nested path should be relative")
+	assert.Equal(t, "cmd/main.go:4", lh.Entries()[1].Display, "workspace path should be relative")
+	assert.Equal(t, "/other/lib/ext.go:1", lh.Entries()[2].Display, "out-of-workspace path should be absolute")
 }
 
 func TestReferencesZeroRootURI(t *testing.T) {
@@ -204,10 +205,10 @@ func TestReferencesZeroRootURI(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, fh)
 
-	lh := fh.(*locationsFloatingHandler)
-	require.Len(t, lh.entries, 2)
-	assert.Equal(t, "/workspace/pkg/foo.go:6", lh.entries[0].display, "zero RootURI should produce absolute path")
-	assert.Equal(t, "/workspace/pkg/bar.go:11", lh.entries[1].display, "zero RootURI should produce absolute path")
+	lh := fh.(*locationpicker.Picker)
+	require.Len(t, lh.Entries(), 2)
+	assert.Equal(t, "/workspace/pkg/foo.go:6", lh.Entries()[0].Display, "zero RootURI should produce absolute path")
+	assert.Equal(t, "/workspace/pkg/bar.go:11", lh.Entries()[1].Display, "zero RootURI should produce absolute path")
 }
 
 func TestReferencesHandler(t *testing.T) {
@@ -305,8 +306,8 @@ func TestReferencesHandler(t *testing.T) {
 			assert.Equal(t, tt.wantFloat, fh != nil)
 			assert.Equal(t, tt.wantNavigate, navigated)
 			if tt.wantEntries > 0 {
-				lh := fh.(*locationsFloatingHandler)
-				assert.Equal(t, tt.wantEntries, len(lh.entries))
+				lh := fh.(*locationpicker.Picker)
+				assert.Equal(t, tt.wantEntries, len(lh.Entries()))
 			}
 		})
 	}

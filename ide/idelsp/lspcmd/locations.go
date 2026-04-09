@@ -32,6 +32,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"unstable.build/go-tui/handler/locationpicker"
 )
 
 type locationEntry struct {
@@ -103,6 +104,22 @@ func locationsFromResult(r semanticapi.LocationResult) []locationEntry {
 		})
 	}
 	return entries
+}
+
+func pickerEntries(entries []locationEntry) []locationpicker.Entry {
+	ret := make([]locationpicker.Entry, len(entries))
+	for i, e := range entries {
+		uri, err := LspToURI(e.uri)
+		if err != nil {
+			continue
+		}
+		ret[i] = locationpicker.Entry{
+			URI:     uri,
+			Range:   e.rng,
+			Display: e.display,
+		}
+	}
+	return ret
 }
 
 func locationFromLoc(loc semanticapi.Location) locationEntry {

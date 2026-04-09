@@ -1,0 +1,132 @@
+// Unstable Build LLC ("COMPANY") CONFIDENTIAL
+//
+// Unpublished Copyright (c) 2017-2026 Unstable Build, All Rights Reserved.
+//
+// NOTICE: All information contained herein is, and remains the property of COMPANY.
+// The intellectual and technical concepts contained herein are proprietary to
+// COMPANY and may be covered by U.S. and Foreign Patents, patents in process,
+// and are protected by trade secret or copyright law. Dissemination of this information
+// or reproduction of this material is strictly forbidden unless prior written permission
+// is obtained from COMPANY. Access to the source code contained herein is hereby
+// forbidden to anyone except current COMPANY employees, managers or contractors who
+// have executed Confidentiality and Non-disclosure agreements explicitly covering such access.
+//
+// The copyright notice above does not evidence any actual or intended publication or
+// disclosure of this source code, which includes information that is confidential and/or
+// proprietary, and is a trade secret, of COMPANY. ANY REPRODUCTION, MODIFICATION,
+// DISTRIBUTION, PUBLIC  PERFORMANCE, OR PUBLIC DISPLAY OF OR THROUGH USE OF THIS SOURCE CODE
+// WITHOUT  THE EXPRESS WRITTEN CONSENT OF COMPANY IS STRICTLY PROHIBITED, AND IN
+// VIOLATION OF APPLICABLE LAWS AND INTERNATIONAL TREATIES. THE RECEIPT OR POSSESSION OF
+// THIS SOURCE CODE AND/OR RELATED INFORMATION DOES NOT CONVEY OR IMPLY ANY RIGHTS TO
+// REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
+// ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
+
+package idecursor
+
+import (
+	"context"
+	"os"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
+	"unstable.build/go-tui/text/texttest"
+	"unstable.build/go-tui/workspace"
+)
+
+type stubWorkspaceManager struct{}
+
+func (stubWorkspaceManager) AddWorkspace(context.Context, workspaceapi.URI) (workspace.Workspace, error) {
+	return nil, nil
+}
+func (stubWorkspaceManager) Workspace(workspaceapi.URI) (workspace.Workspace, bool, error) {
+	return nil, true, nil
+}
+func (stubWorkspaceManager) RegisterScheme(string, schemeapi.SchemeFunc) error {
+	return nil
+}
+func (stubWorkspaceManager) UnregisterScheme(string) error { return nil }
+
+type stubOpener struct{ opened []workspaceapi.URI }
+
+func (s *stubOpener) Open(uri workspaceapi.URI) (browserapi.Handler, error) {
+	s.opened = append(s.opened, uri)
+	return texttest.NewTestHandler(), nil
+}
+
+type stubWM struct{ set bool }
+
+func (stubWM) Focus() (browserapi.Window, error)                          { return stubWindow(1), nil }
+func (stubWM) Split(browserapi.Orientation, browserapi.Window, browserapi.Handler) (browserapi.Window, error) {
+	return nil, nil
+}
+func (stubWM) Floating(browserapi.Floating, browserapi.FloatingConfig) (browserapi.Window, error) {
+	return stubWindow(2), nil
+}
+func (stubWM) Bar(browserapi.BarConfig, tui.Handler) error { return nil }
+func (stubWM) Tab(workspaceapi.URI, rune, string, browserapi.Handler) (browserapi.Handler, error) {
+	return nil, nil
+}
+func (s *stubWM) SetWindowContent(browserapi.Window, browserapi.Handler) error { s.set = true; return nil }
+func (stubWM) CloseWindow(browserapi.Window) error                              { return nil }
+
+type stubWindow uint64
+
+func (s stubWindow) WindowID() uint64 { return uint64(s) }
+
+type stubFS struct{}
+
+func (stubFS) URI(path string) (workspaceapi.URI, error) { return workspaceapi.ParseURI("file://" + path) }
+func (stubFS) OpenFile(string, int, os.FileMode) (workspaceapi.File, error) {
+	return nil, assert.AnError
+}
+func (stubFS) Remove(string) error                        { return nil }
+func (stubFS) Stat(string) (os.FileInfo, error)           { return nil, nil }
+func (stubFS) ReadDir(string) ([]os.DirEntry, error)      { return nil, nil }
+func (stubFS) MkdirAll(string, os.FileMode) error         { return nil }
+
+func TestWithHistorySubscribes(t *testing.T) {
+	var subscribed bool
+	ed := texttest.NopEditorWithCallback(func() { subscribed = true })
+	ws, err := workspaceapi.ParseURI("file:///workspace")
+	require.NoError(t, err)
+	err = WithHistory(ed, storagestub.NewInMemoryService(), &stubOpener{}, &stubWM{}, stubFS{}, nil, stubWorkspaceManager{}, ws, func(fn func()) bool { fn(); return true })
+	require.NoError(t, err)
+	assert.True(t, subscribed)
+}
+
+func TestHandlerCompleteOrdersEntries(t *testing.T) {
+	ws, err := workspaceapi.ParseURI("file:///workspace")
+	require.NoError(t, err)
+	h := &handler{workspaceURI: ws}
+	h.doc = historyDocument{WorkspaceURI: ws.String(), Entries: []location{
+		{URI: "file:///workspace/a.go", Cursor: term.Coordinates{Y: 1, X: 1}},
+		{URI: "file:///workspace/b.go", Cursor: term.Coordinates{Y: 2, X: 2}},
+		{URI: "file:///workspace/c.go", Cursor: term.Coordinates{Y: 3, X: 3}},
+	}, Index: 1}
+
+	// Top-level complete returns empty (framework auto-appends subcommands).
+	iter, _, err := h.Complete(context.Background(), textapi.Command{Name: commandName, Args: nil})
+	require.NoError(t, err)
+	var topLevel []string
+	for v, ok := iter.Next(context.Background()); ok; v, ok = iter.Next(context.Background()) {
+		topLevel = append(topLevel, v)
+	}
+	assert.Empty(t, topLevel, "top-level complete should be empty")
+
+	// Subcommand "prev" returns locations in prev-first order.
+	iter, _, err = h.Complete(context.Background(), textapi.Command{Name: commandName, Args: []string{"prev"}})
+	require.NoError(t, err)
+	vals := []string{}
+	for v, ok := iter.Next(context.Background()); ok; v, ok = iter.Next(context.Background()) {
+		vals = append(vals, v)
+	}
+	assert.Equal(t, []string{"a.go:2:2", "c.go:4:4"}, vals)
+}

@@ -65,6 +65,7 @@ import (
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/command"
 	handlermarkdown "unstable.build/go-tui/handler/markdown"
+	"unstable.build/go-tui/ide/idecursor"
 	"unstable.build/go-tui/ide/idedebug"
 	"unstable.build/go-tui/ide/idelsp"
 	"unstable.build/go-tui/ide/idelsp/lspcmd"
@@ -832,6 +833,15 @@ func (h *workspaceManagerHandler) addWorkspace(
 	if err != nil {
 		cancel()
 		return fmt.Errorf("new ex: %w", err)
+	}
+	apibrowser := newBrowserAdapter(ex.Browser())
+	if err := idecursor.WithHistory(
+		ex.Editor(), h.storage, apibrowser, apibrowser, ex.workspace,
+		syntax.NewParser(ex.workspace, h.pkgmanager, uri), visibleManager, uri,
+		h.scheduleNextTick,
+	); err != nil {
+		cancel()
+		return fmt.Errorf("install cursor history: %w", err)
 	}
 	tm.tm = ex.Browser()
 	if err := h.subscribeAllCommands(ex); err != nil {

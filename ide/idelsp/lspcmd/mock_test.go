@@ -26,13 +26,17 @@ package lspcmd
 import (
 	"context"
 	"os"
+	"strings"
 
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
+
+	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
 )
 
 // mockEditor implements textapi.Editor for testing.
@@ -83,6 +87,69 @@ func (m *mockEditor) Editor(uri workspaceapi.URI) (textapi.Handler, error) {
 		return m.editorFn(uri)
 	}
 	return nil, nil
+}
+
+// syncTick executes the function synchronously and returns true.
+var syncTick = func(fn func()) bool { fn(); return true }
+
+// mockParser implements syntaxapi.Parser for testing.
+type mockParser struct {
+	highlightFn func(workspaceapi.URI, string) (iterator.Iterator[textapi.Location], error)
+	searchFn    func(string, []string) (iterator.Iterator[syntaxapi.Result], error)
+}
+
+func (m *mockParser) Search(query string, captures []string, langs ...string) (iterator.Iterator[syntaxapi.Result], error) {
+	if m.searchFn != nil {
+		return m.searchFn(query, captures)
+	}
+	return iterator.Empty[syntaxapi.Result](), nil
+}
+func (m *mockParser) SearchNode(_ syntaxapi.NodeCaptureName) (iterator.Iterator[syntaxapi.Result], error) {
+	return iterator.Empty[syntaxapi.Result](), nil
+}
+func (m *mockParser) Query(_ workspaceapi.URI, _ string, _ []string) (iterator.Iterator[syntaxapi.Result], error) {
+	return iterator.Empty[syntaxapi.Result](), nil
+}
+func (m *mockParser) QueryNode(_ workspaceapi.URI, _ syntaxapi.NodeCaptureName) (iterator.Iterator[syntaxapi.Result], error) {
+	return iterator.Empty[syntaxapi.Result](), nil
+}
+func (m *mockParser) Highlight(uri workspaceapi.URI, content string) (iterator.Iterator[textapi.Location], error) {
+	if m.highlightFn != nil {
+		return m.highlightFn(uri, content)
+	}
+	return iterator.Empty[textapi.Location](), nil
+}
+
+// fileContent maps file paths to their text content for the mock FS.
+type fileContent map[string]string
+
+func testFS(content fileContent) *mockFileSystem {
+	return &mockFileSystem{
+		openFileFn: func(path string, _ int, _ os.FileMode) (workspaceapi.File, error) {
+			text, ok := content[path]
+			if !ok {
+				return nil, os.ErrNotExist
+			}
+			return newStringFile(text), nil
+		},
+	}
+}
+
+// stringFile implements workspaceapi.File backed by an in-memory string.
+type stringFile struct{ *strings.Reader }
+
+func newStringFile(s string) *stringFile         { return &stringFile{strings.NewReader(s)} }
+func (f *stringFile) Close() error               { return nil }
+func (f *stringFile) Name() string               { return "" }
+func (f *stringFile) Stat() (os.FileInfo, error) { return nil, nil }
+func (f *stringFile) Sync() error                { return nil }
+func (f *stringFile) Truncate(_ int64) error     { return nil }
+func (f *stringFile) Fd() uintptr                { return 0 }
+func (f *stringFile) Write(_ []byte) (int, error) {
+	return 0, os.ErrPermission
+}
+func (f *stringFile) WriteAt(_ []byte, _ int64) (int, error) {
+	return 0, os.ErrPermission
 }
 
 func (m *mockEditor) MoveToNextLocation(_ textapi.Handler, _ string) error {

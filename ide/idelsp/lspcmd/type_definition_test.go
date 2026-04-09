@@ -34,6 +34,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"unstable.build/go-tui/handler/locationpicker"
 )
 
 var _ textapi.CommandHandler = (*typeDefinitionHandler)(nil)
@@ -123,8 +124,8 @@ func TestTypeDefinitionHandler(t *testing.T) {
 			assert.Equal(t, tt.wantFloat, fh != nil)
 			assert.Equal(t, tt.wantNavigate, navigated)
 			if tt.wantEntries > 0 {
-				lh := fh.(*locationsFloatingHandler)
-				assert.Equal(t, tt.wantEntries, len(lh.entries))
+				lh := fh.(*locationpicker.Picker)
+				assert.Equal(t, tt.wantEntries, len(lh.Entries()))
 			}
 		})
 	}

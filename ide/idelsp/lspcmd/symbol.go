@@ -37,6 +37,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/debug"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
+	"unstable.build/go-tui/handler/locationpicker"
 )
 
 // symbolMatch represents a resolved workspace symbol candidate.
@@ -351,20 +352,28 @@ func showSymbolPicker(
 			display: m.Display,
 		}
 	}
-	handler := newLocationsFloatingHandler(
-		entries, nil, wm, nil, nil,
-		fs, scheduleNextTick, parser, DefaultLocationsConfig(), nil,
-	)
-	handler.onSelect = func(idx int) {
-		onPick(matches[idx])
+	pickerEntries := make([]locationpicker.Entry, len(entries))
+	for i, e := range entries {
+		uri, err := LspToURI(e.uri)
+		if err != nil {
+			return err
+		}
+		pickerEntries[i] = locationpicker.Entry{URI: uri, Range: e.rng, Display: e.display}
 	}
-	win, err := wm.Floating(handler, browserapi.FloatingConfig{
+	picker := locationpicker.New(
+		pickerEntries, wm, fs, scheduleNextTick, parser,
+		locationpicker.DefaultConfig(), nil,
+	)
+	picker.SetOnSelect(func(idx int) {
+		onPick(matches[idx])
+	})
+	win, err := wm.Floating(picker, browserapi.FloatingConfig{
 		Alignment: component.AlignmentCentered,
 	})
 	if err != nil {
 		return err
 	}
-	handler.win = win
+	picker.SetWindow(win)
 	return nil
 }
 

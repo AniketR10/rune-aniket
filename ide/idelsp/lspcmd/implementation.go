@@ -34,17 +34,18 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
+	"unstable.build/go-tui/handler/locationpicker"
 )
 
 // ImplementationConfig configures the "implementation" subcommand.
 type ImplementationConfig struct {
-	ListConfig LocationsConfig
+	ListConfig locationpicker.Config
 }
 
 // DefaultImplementationConfig returns an ImplementationConfig with sensible defaults.
 func DefaultImplementationConfig() ImplementationConfig {
 	return ImplementationConfig{
-		ListConfig: DefaultLocationsConfig(),
+		ListConfig: locationpicker.DefaultConfig(),
 	}
 }
 
@@ -120,15 +121,19 @@ func (h *implementationHandler) execute(
 		navigateTo(entries[0], h.opener, h.wm, h.editor, h.notify, h.scheduleNextTick)
 		return nil
 	}
-	handler := newLocationsFloatingHandler(
-		entries, h.opener, h.wm, h.editor, h.notify, h.fs,
-		h.scheduleNextTick, h.parser, h.cfg.ListConfig, h.log,
+	picker := locationpicker.New(
+		pickerEntries(entries), h.wm, h.fs,
+		h.scheduleNextTick, h.parser,
+		h.cfg.ListConfig, h.log,
 	)
-	win, err := h.wm.Floating(handler, browserapi.FloatingConfig{Alignment: component.AlignmentCentered})
+	picker.SetOnSelect(func(idx int) {
+		navigateTo(entries[idx], h.opener, h.wm, h.editor, h.notify, h.scheduleNextTick)
+	})
+	win, err := h.wm.Floating(picker, browserapi.FloatingConfig{Alignment: component.AlignmentCentered})
 	if err != nil {
 		return err
 	}
-	handler.win = win
+	picker.SetWindow(win)
 	return nil
 }
 

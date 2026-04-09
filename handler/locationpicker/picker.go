@@ -21,7 +21,7 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package lspcmd
+package locationpicker
 
 import (
 	"context"
@@ -31,52 +31,48 @@ import (
 	"unicode/utf8"
 
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
 	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
-	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/tcell/v3"
 )
 
-const (
-	previewContextLines = 21 // +/- 10 lines around the reference
-	minPreviewWidth     = 80
-	maxListHeight       = 15
-	separatorHeight     = 1
-	spanHPad            = 2
-	spanVPad            = 0
-)
+// Entry is a single row in the location picker.
+type Entry struct {
+	URI     workspaceapi.URI
+	Range   semanticapi.Range
+	Display string
+}
 
-// LocationsConfig configures the appearance of a locations floating handler.
-type LocationsConfig struct {
+// Config configures the appearance of a picker.
+type Config struct {
 	ListTextAttr  term.Attributes
 	ListFocusAttr term.Attributes
 	PreviewAttr   term.Attributes
 }
 
-// DefaultLocationsConfig returns a LocationsConfig with sensible defaults.
-func DefaultLocationsConfig() LocationsConfig {
-	return LocationsConfig{
+// DefaultConfig returns a Config with sensible defaults.
+func DefaultConfig() Config {
+	return Config{
 		ListFocusAttr: term.Attributes{Fg: tcell.ColorPurple, Attrs: tcell.AttrBold},
 	}
 }
 
-type locationsFloatingHandler struct {
-	entries          []locationEntry
+// Picker is a floating list + preview UI for code locations.
+type Picker struct {
+	entries          []Entry
 	list             *component.FocusList
-	editor           textapi.Editor
-	opener           browserapi.ResourceOpener
 	wm               browserapi.WindowManager
 	win              browserapi.Window
-	notify           browserapi.Notifications
 	fs               workspaceapi.FileSystem
 	scheduleNextTick func(func()) bool
 	parser           syntaxapi.Parser
 	log              *slog.Logger
 
 	// onSelect, when set, is called with the focused entry index on
-	// Enter instead of the default navigateTo behaviour.
+	// Enter.
 	onSelect func(int)
 
 	previewCells [][]term.Cell // cell matrix for the currently previewed file
@@ -92,88 +88,28 @@ type locationsFloatingHandler struct {
 	previewAttr term.Attributes
 }
 
-// locationsInner adapts the handler's inner drawing logic (preview + separator + list)
-// as a tui.Component so that component.Span can manage padding and alignment.
-type locationsInner struct {
-	handler *locationsFloatingHandler
-}
-
-func (li *locationsInner) Dimensions() (int, int) {
-	h := li.handler
-	idealW := h.maxEntryW
-	for _, cells := range h.previewCells {
-		if l := len(cells); l > idealW {
-			idealW = l
-		}
-	}
-	if idealW < minPreviewWidth {
-		idealW = minPreviewWidth
-	}
-	listH := len(h.entries)
-	if listH > maxListHeight {
-		listH = maxListHeight
-	}
-	return idealW, listH + previewContextLines + separatorHeight
-}
-
-func (li *locationsInner) Resize(w, h int) {
-	handler := li.handler
-	handler.innerW = w
-	handler.innerH = h
-	handler.previewH = previewContextLines
-	if handler.previewH > h-1-separatorHeight {
-		handler.previewH = h - 1 - separatorHeight
-	}
-	if handler.previewH < 0 {
-		handler.previewH = 0
-	}
-	handler.listH = h - handler.previewH - separatorHeight
-	if handler.listH < 1 {
-		handler.listH = 1
-	}
-	handler.list.Resize(w, handler.listH)
-}
-
-func (li *locationsInner) Draw(w term.Writer) {
-	h := li.handler
-	h.drawPreview(w)
-	h.drawSeparator(w)
-	vw := &component.VirtualWriter{
-		Writer: w,
-		Offset: term.Coordinates{Y: h.previewH + separatorHeight},
-		Width:  h.innerW,
-		Height: h.listH,
-	}
-	h.list.Draw(vw)
-}
-
-func newLocationsFloatingHandler(
-	entries []locationEntry,
-	opener browserapi.ResourceOpener, wm browserapi.WindowManager,
-	editor textapi.Editor, notify browserapi.Notifications,
+// New allocates a new location picker.
+func New(
+	entries []Entry, wm browserapi.WindowManager,
 	fs workspaceapi.FileSystem, scheduleNextTick func(func()) bool,
-	parser syntaxapi.Parser, cfg LocationsConfig,
-	log *slog.Logger,
-) *locationsFloatingHandler {
+	parser syntaxapi.Parser, cfg Config, log *slog.Logger,
+) *Picker {
 	list := &component.FocusList{}
 	list.InitWithAttr(cfg.ListTextAttr, cfg.ListFocusAttr)
 	maxEntryW := 0
 	for _, e := range entries {
-		list.PushBack(component.NewResponsiveString(e.display, component.StringResponsiveConfig{}))
-		if w := utf8.RuneCountInString(e.display); w > maxEntryW {
+		list.PushBack(component.NewResponsiveString(e.Display, component.StringResponsiveConfig{}))
+		if w := utf8.RuneCountInString(e.Display); w > maxEntryW {
 			maxEntryW = w
 		}
 	}
 	if log == nil {
 		log = slog.Default()
 	}
-	handler := &locationsFloatingHandler{
+	handler := &Picker{
 		entries:          entries,
 		list:             list,
-		editor:           editor,
-		opener:           opener,
 		wm:               wm,
-		notify:           notify,
 		fs:               fs,
 		scheduleNextTick: scheduleNextTick,
 		parser:           parser,
@@ -181,7 +117,7 @@ func newLocationsFloatingHandler(
 		maxEntryW:        maxEntryW,
 		previewAttr:      cfg.PreviewAttr,
 	}
-	handler.span = component.NewSpan(&locationsInner{handler}, component.SpanConfig{
+	handler.span = component.NewSpan(&pickerInner{handler}, component.SpanConfig{
 		PadHorizontal:    spanHPad,
 		PadVertical:      spanVPad,
 		ContentAlignment: component.AlignmentCentered,
@@ -190,7 +126,23 @@ func newLocationsFloatingHandler(
 	return handler
 }
 
-func (l *locationsFloatingHandler) Handle(ev term.Event) (exit, handled bool) {
+// SetWindow configures the floating window handle associated with this picker.
+func (l *Picker) SetWindow(win browserapi.Window) {
+	l.win = win
+}
+
+// SetOnSelect configures the callback invoked when Enter is pressed.
+func (l *Picker) SetOnSelect(fn func(int)) {
+	l.onSelect = fn
+}
+
+// Entries returns the picker entries.
+func (l *Picker) Entries() []Entry {
+	return l.entries
+}
+
+// Handle processes keyboard navigation and selection events.
+func (l *Picker) Handle(ev term.Event) (exit, handled bool) {
 	if ev.Type != term.EventKey {
 		return false, false
 	}
@@ -199,12 +151,8 @@ func (l *locationsFloatingHandler) Handle(ev term.Event) (exit, handled bool) {
 		return true, true
 	case term.KeyEnter:
 		idx := l.list.FocusOffset()
-		if idx < len(l.entries) {
-			if l.onSelect != nil {
-				l.onSelect(idx)
-			} else {
-				navigateTo(l.entries[idx], l.opener, l.wm, l.editor, l.notify, l.scheduleNextTick)
-			}
+		if idx < len(l.entries) && l.onSelect != nil {
+			l.onSelect(idx)
 		}
 		return true, true
 	case term.KeyArrowUp:
@@ -231,17 +179,59 @@ func (l *locationsFloatingHandler) Handle(ev term.Event) (exit, handled bool) {
 	return false, false
 }
 
-func (l *locationsFloatingHandler) Draw(w term.Writer) {
+// Draw renders the picker list and preview.
+func (l *Picker) Draw(w term.Writer) {
 	l.span.Draw(w)
 }
 
-func (l *locationsFloatingHandler) drawPreview(w term.Writer) {
+// Dimensions returns the picker's preferred floating-window size.
+func (l *Picker) Dimensions() (int, int) {
+	return l.span.Dimensions()
+}
+
+// Cursor returns the picker cursor state.
+func (l *Picker) Cursor() (term.Coordinates, term.CursorStyle, bool) {
+	return term.Coordinates{}, term.CursorStyleDefault, false
+}
+
+// Selection returns the display string of the focused entry.
+func (l *Picker) Selection() (string, bool) {
+	idx := l.list.FocusOffset()
+	if idx >= len(l.entries) {
+		return "", false
+	}
+	return l.entries[idx].Display, true
+}
+
+// Resize resizes the picker to the given dimensions.
+func (l *Picker) Resize(w, h int) {
+	l.span.Resize(w, h)
+}
+
+// Close closes the associated floating window, if any.
+func (l *Picker) Close() error {
+	if l.win != nil {
+		return l.wm.CloseWindow(l.win)
+	}
+	return nil
+}
+
+const (
+	previewContextLines = 21 // +/- 10 lines around the reference
+	minPreviewWidth     = 80
+	maxListHeight       = 15
+	separatorHeight     = 1
+	spanHPad            = 2
+	spanVPad            = 0
+)
+
+func (l *Picker) drawPreview(w term.Writer) {
 	idx := l.list.FocusOffset()
 	if idx >= len(l.entries) || l.previewCells == nil {
 		return
 	}
 	entry := l.entries[idx]
-	targetLine := int(entry.rng.Start.Line)
+	targetLine := int(entry.Range.Start.Line)
 	if targetLine >= len(l.previewCells) {
 		targetLine = len(l.previewCells) - 1
 		if targetLine < 0 {
@@ -258,8 +248,8 @@ func (l *locationsFloatingHandler) drawPreview(w term.Writer) {
 			startLine = 0
 		}
 	}
-	startChar := int(entry.rng.Start.Character)
-	endChar := int(entry.rng.End.Character)
+	startChar := int(entry.Range.Start.Character)
+	endChar := int(entry.Range.End.Character)
 	for row := range l.previewH {
 		srcLine := startLine + row
 		if srcLine >= len(l.previewCells) {
@@ -285,7 +275,7 @@ func (l *locationsFloatingHandler) drawPreview(w term.Writer) {
 	}
 }
 
-func (l *locationsFloatingHandler) drawSeparator(w term.Writer) {
+func (l *Picker) drawSeparator(w term.Writer) {
 	ch := component.FrameCharSetDefault().HorizontalTop
 	attr := term.Attributes{Fg: tcell.ColorGray}
 	y := l.previewH
@@ -294,49 +284,16 @@ func (l *locationsFloatingHandler) drawSeparator(w term.Writer) {
 	}
 }
 
-func (l *locationsFloatingHandler) Dimensions() (int, int) {
-	return l.span.Dimensions()
-}
-
-func (l *locationsFloatingHandler) Cursor() (term.Coordinates, term.CursorStyle, bool) {
-	return term.Coordinates{}, term.CursorStyleDefault, false
-}
-
-func (l *locationsFloatingHandler) Selection() (string, bool) {
-	idx := l.list.FocusOffset()
-	if idx >= len(l.entries) {
-		return "", false
-	}
-	return l.entries[idx].display, true
-}
-
-func (l *locationsFloatingHandler) Resize(w, h int) {
-	l.span.Resize(w, h)
-}
-
-func (l *locationsFloatingHandler) Close() error {
-	if l.win != nil {
-		return l.wm.CloseWindow(l.win)
-	}
-	return nil
-}
-
-func (l *locationsFloatingHandler) loadPreview() {
+func (l *Picker) loadPreview() {
 	idx := l.list.FocusOffset()
 	if idx >= len(l.entries) {
 		return
 	}
 	entry := l.entries[idx]
-	if entry.uri == l.prevURI {
+	if entry.URI.String() == l.prevURI {
 		return
 	}
-	uri, err := LspToURI(entry.uri)
-	if err != nil {
-		l.previewCells = nil
-		l.prevURI = ""
-		return
-	}
-	f, err := l.fs.OpenFile(uri.Path(), os.O_RDONLY, 0)
+	f, err := l.fs.OpenFile(entry.URI.Path(), os.O_RDONLY, 0)
 	if err != nil {
 		l.previewCells = nil
 		l.prevURI = ""
@@ -351,15 +308,15 @@ func (l *locationsFloatingHandler) loadPreview() {
 	}
 	content := string(data)
 	l.previewCells = term.StringToCells(content)
-	l.prevURI = entry.uri
+	l.prevURI = entry.URI.String()
 	if l.parser != nil {
 		baseCells := term.CloneCells(l.previewCells)
-		fileURI := uri
+		fileURI := entry.URI
 		go l.loadHighlights(fileURI, content, baseCells)
 	}
 }
 
-func (l *locationsFloatingHandler) loadHighlights(
+func (l *Picker) loadHighlights(
 	uri workspaceapi.URI, content string, baseCells [][]term.Cell,
 ) {
 	iter, err := l.parser.Highlight(uri, content)

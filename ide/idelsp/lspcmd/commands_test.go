@@ -43,6 +43,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	idelsp "unstable.build/go-tui/ide/idelsp"
+	"unstable.build/go-tui/handler/locationpicker"
 )
 
 // collectIter drains an iterator into a string slice.
@@ -405,10 +406,10 @@ func TestE2ECommands(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, floatingHandler)
 
-		lh, ok := floatingHandler.(*locationsFloatingHandler)
+		lh, ok := floatingHandler.(*locationpicker.Picker)
 		require.True(t, ok)
 		assert.GreaterOrEqual(
-			t, len(lh.entries), 3,
+			t, len(lh.Entries()), 3,
 			"expected at least 3 references to Add",
 		)
 	})
