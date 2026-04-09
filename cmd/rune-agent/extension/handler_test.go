@@ -4582,6 +4582,96 @@ func TestAIEditorHandler_chat_default_effort_propagated(t *testing.T) {
 		"second request should use overridden effort")
 }
 
+func TestAIEditorHandler_chat_slash_max_tokens_sets_and_propagates(t *testing.T) {
+	t.Parallel()
+	svc := &agentMockService{
+		responses: []agentMockResponse{
+			{chunks: []string{"done"}, finishReason: llm.FinishReasonStop},
+		},
+	}
+	deps := newTestAIEditorHandler(t, svc)
+	flusher := openChatAndGetTab(t, deps)
+	flusher.idleTimeout = 200 * time.Millisecond
+	flusher.maxWait = 1 * time.Second
+
+	handlertest.RunHandlerSequence(t, flusher, e2eWidth, e2eHeight, []handlertest.SequenceTestCase{
+		{
+			InputSequence: "/max_tokens<enter>",
+			Expected: e2eExpected(0,
+				"/max_tokens",
+				"Current max output tokens:",
+				"provider/config default",
+				"",
+				"",
+				"",
+				"",
+				"   ┌───────────────────────────────┐",
+				"   │▐                              │",
+				"   └───────────────────────────────┘",
+			),
+		},
+		{
+			InputSequence: "/max_tokens<space>8192<enter>",
+			Expected: e2eExpected(0,
+				"/max_tokens",
+				"Current max output tokens:",
+				"provider/config default",
+				"",
+				"/max_tokens 8192",
+				"Set max output tokens to 8192",
+				"",
+				"   ┌───────────────────────────────┐",
+				"   │▐                              │",
+				"   └───────────────────────────────┘",
+			),
+		},
+		{
+			InputSequence: "hello<enter>",
+			Expected: e2eExpected(0,
+				"",
+				"/max_tokens 8192",
+				"Set max output tokens to 8192",
+				"",
+				"hello",
+				"done",
+				"",
+				"   ┌───────────────────────────────┐",
+				"   │▐                              │",
+				"   └───────────────────────────────┘",
+			),
+		},
+	})
+
+	reqs := svc.getRequests()
+	require.NotEmpty(t, reqs, "expected at least one LLM request")
+	assert.Equal(t, 8192, reqs[0].MaxOutputTokens)
+}
+
+func TestAIEditorHandler_chat_slash_max_tokens_invalid(t *testing.T) {
+	t.Parallel()
+	svc := &agentMockService{}
+	deps := newTestAIEditorHandler(t, svc)
+	flusher := openChatAndGetTab(t, deps)
+
+	handlertest.RunHandlerSequence(t, flusher, e2eWidth, e2eHeight, []handlertest.SequenceTestCase{
+		{
+			InputSequence: "/max_tokens<space>zero<enter>",
+			Expected: e2eExpected(0,
+				"/max_tokens zero",
+				"! invalid max_tokens value \"zero\": must",
+				"be a positive integer",
+				"",
+				"",
+				"",
+				"",
+				"   ┌───────────────────────────────┐",
+				"   │▐                              │",
+				"   └───────────────────────────────┘",
+			),
+		},
+	})
+}
+
 // --- plan skill integration test ---
 
 func TestAIEditorHandler_plan_skill_feedback_then_approve(t *testing.T) {

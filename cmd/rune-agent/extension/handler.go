@@ -2290,16 +2290,11 @@ func (a *commandAdapter) HandleCommand(
 		name = "chats"
 		args = append([]string{"log"}, args...)
 	case "model":
-		if a.agent != nil {
-			return a.handleModel(ctx, args)
-		}
-		if len(args) == 0 && a.dialogueID != "" {
-			args = []string{a.dialogueID}
-		}
+		return a.handleModel(ctx, args)
 	case "effort":
-		if a.agent != nil {
-			return a.handleEffort(args)
-		}
+		return a.handleEffort(args)
+	case "max_tokens":
+		return a.handleMaxTokens(args)
 	case "fork":
 		// /fork [id] → chats fork <dialogueID>
 		if len(args) == 0 && a.dialogueID != "" {
@@ -2470,6 +2465,39 @@ func (a *commandAdapter) handleEffort(args []string) (dialoguetui.CommandResult,
 
 	a.agent.SetEffort(level)
 	md, err := markdown.New(fmt.Sprintf("Set effort level to **%s**", level))
+	if err != nil {
+		return dialoguetui.CommandResult{}, err
+	}
+	return dialoguetui.CommandResult{
+		Display: iterator.FromSlice([]component.Responsive{md}),
+	}, nil
+}
+
+// handleMaxTokens shows or sets the per-session max-output-token override.
+func (a *commandAdapter) handleMaxTokens(args []string) (dialoguetui.CommandResult, error) {
+	if len(args) == 0 {
+		current := a.agent.MaxOutputTokens()
+		text := "Current max output tokens: provider/config default"
+		if current > 0 {
+			text = fmt.Sprintf("Current max output tokens: **%d**", current)
+		}
+		md, err := markdown.New(text)
+		if err != nil {
+			return dialoguetui.CommandResult{}, err
+		}
+		return dialoguetui.CommandResult{
+			Display: iterator.FromSlice([]component.Responsive{md}),
+		}, nil
+	}
+
+	n, err := strconv.Atoi(args[0])
+	if err != nil || n <= 0 {
+		return dialoguetui.CommandResult{}, fmt.Errorf(
+			"invalid max_tokens value %q: must be a positive integer", args[0])
+	}
+
+	a.agent.SetMaxOutputTokens(n)
+	md, err := markdown.New(fmt.Sprintf("Set max output tokens to **%d**", n))
 	if err != nil {
 		return dialoguetui.CommandResult{}, err
 	}
@@ -2654,12 +2682,12 @@ func (a *commandAdapter) openMarkdownFloating(md *markdown.Component) {
 func (a *commandAdapter) Complete(
 	ctx context.Context, name string, args []string,
 ) (iterator.Iterator[string], error) {
-	if name == "model" && a.agent != nil && a.modelRegistry != nil {
+	if name == "model" && a.modelRegistry != nil {
 		return iterator.Map(a.modelRegistry.Models(), func(e llmregistry.ModelEntry) string {
 			return e.Name
 		}), nil
 	}
-	if name == "effort" && a.agent != nil {
+	if name == "effort" {
 		levels := make([]string, len(validEffortLevels))
 		for i, l := range validEffortLevels {
 			levels[i] = string(l)

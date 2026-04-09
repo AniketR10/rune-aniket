@@ -99,9 +99,46 @@ type messageJSON struct {
 // requestBody is a minimal subset of the Anthropic request for assertions.
 type requestBody struct {
 	CacheControl *cacheControlJSON `json:"cache_control"`
+	MaxTokens    int64             `json:"max_tokens"`
 	System       []systemBlockJSON `json:"system"`
 	Tools        []toolBlockJSON   `json:"tools"`
 	Messages     []messageJSON     `json:"messages"`
+}
+
+func TestMaxOutputTokensOverridesConfig(t *testing.T) {
+	var captured requestBody
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		require.NoError(t, err)
+		require.NoError(t, json.Unmarshal(body, &captured))
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = fmt.Fprint(w, minimalSSEResponse("ok"))
+	}))
+	defer srv.Close()
+
+	c := NewClient("test-key", Config{
+		Model:     "claude-test",
+		BaseURL:   srv.URL,
+		MaxTokens: 1024,
+	}, nil)
+
+	it, err := c.CreateCompletion(context.Background(), llm.Request{
+		Messages:        []llm.Message{{Role: llm.RoleUser, Content: "Hello"}},
+		MaxOutputTokens: 8192,
+	})
+	require.NoError(t, err)
+	for {
+		_, ok := it.Next(context.Background())
+		if !ok {
+			break
+		}
+	}
+	require.NoError(t, it.Err())
+	require.NoError(t, it.Close())
+
+	assert.Equal(t, int64(8192), captured.MaxTokens)
 }
 
 func TestCacheBreakpoints(t *testing.T) {

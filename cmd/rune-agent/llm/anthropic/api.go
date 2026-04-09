@@ -48,6 +48,8 @@ func anthropicParamsFromRequest(request llm.Request, config Config) ant.MessageN
 	}
 
 	switch {
+	case request.MaxOutputTokens > 0:
+		params.MaxTokens = int64(request.MaxOutputTokens)
 	case config.MaxTokens > 0:
 		params.MaxTokens = int64(config.MaxTokens)
 	case config.EnableThinking:

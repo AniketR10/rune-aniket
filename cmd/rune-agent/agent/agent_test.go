@@ -2431,6 +2431,22 @@ func TestNewAgent_DefaultMaxIterations(t *testing.T) {
 	assert.Equal(t, 10, ag3.config.MaxIterations)
 }
 
+func TestAgentMaxOutputTokens(t *testing.T) {
+	svc := &mockService{responses: []mockResponse{stopResponse("hi")}}
+	ag := NewAgent(svc, NewRegistry(), noSkills(), newMockStore(), NoMemory(), Config{SystemPrompt: "test"})
+
+	assert.Zero(t, ag.MaxOutputTokens())
+	ag.SetMaxOutputTokens(8192)
+	assert.Equal(t, 8192, ag.MaxOutputTokens())
+
+	it := ag.Run(context.Background(), "d", "hello")
+	_ = collectEvents(t, it)
+
+	require.Equal(t, 1, svc.getCallCount())
+	require.Len(t, svc.requests, 1)
+	assert.Equal(t, 8192, svc.requests[0].MaxOutputTokens)
+}
+
 func TestPersistMessages_AppendFallback(t *testing.T) {
 	// Test that when Create returns ErrAlreadyExists, AppendMessages is called
 	store := newMockStore()

@@ -199,6 +199,7 @@ var commandNames = []string{
 	"exit",
 	"help",
 	"mcp",
+	"max_tokens",
 	"model",
 	"models",
 	"skills",

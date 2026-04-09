@@ -93,15 +93,16 @@ func (noMemory) Recall(_ context.Context, _ []string, _ string) ([]Memory, error
 
 // Agent orchestrates the agentic loop: LLM → tool call → result → repeat.
 type Agent struct {
-	mu            sync.Mutex // protects svc, config.Model, and effort
-	svc           llm.Service
-	registry      *Registry
-	skillRegistry *skills.SkillRegistry
-	store         dialoguemanager.Store
-	resources     sync.Map
-	config        Config
-	effort        llm.ReasoningEffort // session-level effort override
-	memory        MemoryRecaller
+	mu              sync.Mutex // protects svc, config.Model, effort, and maxOutputTokens
+	svc             llm.Service
+	registry        *Registry
+	skillRegistry   *skills.SkillRegistry
+	store           dialoguemanager.Store
+	resources       sync.Map
+	config          Config
+	effort          llm.ReasoningEffort // session-level effort override
+	maxOutputTokens int                 // session-level max-output-token override
+	memory          MemoryRecaller
 }
 
 // SwapService replaces the LLM service, model, and provider used by the agent.
@@ -141,6 +142,21 @@ func (a *Agent) Effort() llm.ReasoningEffort {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return a.effort
+}
+
+// SetMaxOutputTokens sets the session-level max-output-token override.
+// A non-positive value means use the provider/config default.
+func (a *Agent) SetMaxOutputTokens(n int) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.maxOutputTokens = n
+}
+
+// MaxOutputTokens returns the current session-level max-output-token override.
+func (a *Agent) MaxOutputTokens() int {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.maxOutputTokens
 }
 
 // NewAgent creates a new Agent. Panics if skillRegistry is nil.
@@ -565,6 +581,7 @@ func (a *Agent) run(
 			PromptCacheKey:  dialogueID,
 			Tools:           tools,
 			ReasoningEffort: a.Effort(),
+			MaxOutputTokens: a.MaxOutputTokens(),
 			TokenCount:      lastAPITokensSent,
 		}
 
