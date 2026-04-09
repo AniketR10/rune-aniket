@@ -551,32 +551,29 @@ func (c *Cursor) MoveStartLineNonBlank() bool {
 	defer enable()
 
 	initialScrollPos := c.cursorAtScroll()
-	pos, _ := c.scroll.ScrollToWindowCoordinates(
-		term.Coordinates{X: 0, Y: initialScrollPos.Y})
-	c.setCursor(pos, false)
 	cells := c.view().RawCells()
+	if initialScrollPos.Y < 0 || initialScrollPos.Y >= len(cells) {
+		return false
+	}
+	line := cells[initialScrollPos.Y]
 
-	x := 0
-	isBlank := true
-	for isBlank {
-		if x >= len(cells) {
+	for x := 0; ; x++ {
+		if x >= len(line) {
 			return false
 		}
+
+		pos, _ := c.scroll.ScrollToWindowCoordinates(
+			term.Coordinates{X: x, Y: initialScrollPos.Y})
+		c.setCursor(pos, false)
+
 		cell, ok := c.cellAtCursor()
 		if !ok {
 			return false
 		}
-		isBlank = isOneOf(cell, blankCharacters)
-		if !isBlank {
+		if !isOneOf(cell, blankCharacters) {
 			return true
 		}
-		at, _ := c.scroll.ScrollToWindowCoordinates(
-			term.Coordinates{X: x, Y: initialScrollPos.Y})
-		c.setCursor(at, false)
-		x++
 	}
-
-	return true
 }
 
 // MoveEndLine moves the cursor at the end of the current line, scrolling

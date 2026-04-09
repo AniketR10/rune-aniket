@@ -825,7 +825,7 @@ func (vi *viHandlerImpl) handleNormal(ev term.Event) (quit, handled bool) {
 		case 'i':
 			vi.setInsertMode()
 		case 'I':
-			vi.cursor.MoveStartLine()
+			vi.cursor.MoveStartLineNonBlank()
 			vi.setInsertMode()
 		case 'J':
 			vi.cursor.Conflate()

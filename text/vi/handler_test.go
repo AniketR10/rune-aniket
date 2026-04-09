@@ -32,10 +32,10 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/unstablebuild/rune-go-sdk/clipboard"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/clipboard"
 	"github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
@@ -928,7 +928,7 @@ func TestViCaseChangeOperators(t *testing.T) {
 		{"guB lowercases backward WORD", "Hello-Two WORLD", "WguB", "hello-two wORLD", normalMode},
 		{"guW lowercases forward WORD", "Hello-World test", "guW", "hello-world test", normalMode},
 		{"guE lowercases to end of WORD", "Hello-World test", "guE", "hello-world test", normalMode},
-		{"gu^ lowercases to first non-blank", "  Hello WORLD", "Wgu^", "  hello WORLD", normalMode},
+		{"gu^ lowercases to first non-blank", "  Hello WORLD", "WWgu^", "  hello wORLD", normalMode},
 		{"gu0 lowercases to start of line", "  Hello WORLD", "Wgu0", "  hello WORLD", normalMode},
 		{"gul lowercases single char", "Hello World", "gul", "hello World", normalMode},
 		{"guh lowercases backward single char (no-op at col 0)", "Hello World", "guh", "Hello World", normalMode},
@@ -3031,6 +3031,26 @@ func TestExitInsertMode(t *testing.T) {
 	})
 }
 
+func TestNormalModeIMovesToFirstNonBlank(t *testing.T) {
+	vi := setupVi(t, "    abc", 2)
+	vi.Resize(10, 10)
+
+	require.True(t, vi.setCursorAtScroll(term.Coordinates{X: 6, Y: 0}))
+
+	exit, handled := vi.Handle(term.Event{Type: term.EventKey, Ch: 'I'})
+	require.False(t, exit)
+	require.True(t, handled)
+	assert.Equal(t, insertMode, vi.mode())
+
+	scroll := vi.cursor.ScrollCoordinates(vi.cursor.Coordinates())
+	assert.Equal(t, term.Coordinates{X: 4, Y: 0}, scroll)
+
+	exit, handled = vi.Handle(term.Event{Type: term.EventKey, Ch: 'X'})
+	require.False(t, exit)
+	require.True(t, handled)
+	assert.Equal(t, "    Xabc", vi.less.Buffer().String())
+}
+
 func TestInsertModeCtrlShortcuts(t *testing.T) {
 	type testCase struct {
 		name       string
@@ -4382,18 +4402,18 @@ func TestViGoPasteLeavesCursorAfterText(t *testing.T) {
 	}
 
 	for _, tcase := range tests {
-			t.Run(tcase.name, func(t *testing.T) {
-				vi := setupVi(t, tcase.content, 2)
-				vi.Resize(20, 10)
-				vi.setCursorAtScroll(tcase.cursorAt)
-				err := vi.config.clipboard.Copy(vi.config.defaultRegister, clipboard.Data{
-					Text:     tcase.clipboardText,
-					Metadata: tcase.clipboardMode,
-				})
-				require.NoError(t, err)
+		t.Run(tcase.name, func(t *testing.T) {
+			vi := setupVi(t, tcase.content, 2)
+			vi.Resize(20, 10)
+			vi.setCursorAtScroll(tcase.cursorAt)
+			err := vi.config.clipboard.Copy(vi.config.defaultRegister, clipboard.Data{
+				Text:     tcase.clipboardText,
+				Metadata: tcase.clipboardMode,
+			})
+			require.NoError(t, err)
 
-				for _, event := range tcase.input {
-					_, handled := vi.Handle(term.Event{Type: term.EventKey, Ch: event})
+			for _, event := range tcase.input {
+				_, handled := vi.Handle(term.Event{Type: term.EventKey, Ch: event})
 				require.True(t, handled, "sequence %q failed on %q", tcase.input, string(event))
 			}
 
