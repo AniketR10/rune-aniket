@@ -3886,6 +3886,198 @@ func TestSetNormalModeClearing(t *testing.T) {
 	assert.Equal(t, thandler.LessNormalMode, vi.less.Mode())
 }
 
+func TestViRegisters(t *testing.T) {
+	strPtr := func(s string) *string { return &s }
+
+	type registerCase struct {
+		name              string
+		content           string
+		seq               string
+		externalClipboard *clipboard.Data
+		wantBuffer        *string
+		wantExternal      *string
+		wantRegisters     map[rune]string
+	}
+
+	run := func(t *testing.T, vi *viHandlerImpl, seq string) {
+		t.Helper()
+		for _, event := range seq {
+			ev := term.Event{Type: term.EventKey, Ch: event}
+			switch event {
+			case '#':
+				ev = term.Event{Type: term.EventKey, Key: term.KeyEsc}
+			case '>':
+				ev = term.Event{Type: term.EventKey, Key: term.KeyEnter}
+			}
+			_, handled := vi.Handle(ev)
+			require.True(t, handled, "sequence %q failed on %q", seq, string(event))
+		}
+	}
+
+	for _, tc := range []registerCase{
+		{
+			name:    "default yank populates unnamed and last-yank registers",
+			content: "one\ntwo\n",
+			seq:     "yy",
+			wantRegisters: map[rune]string{
+				unnamedRegister:  "one\n",
+				lastYankRegister: "one\n",
+			},
+		},
+		{
+			name:    "named yank populates named unnamed and last-yank registers",
+			content: "one\ntwo\n",
+			seq:     "\"ayy",
+			wantRegisters: map[rune]string{
+				'a':              "one\n",
+				unnamedRegister:  "one\n",
+				lastYankRegister: "one\n",
+			},
+		},
+		{
+			name:       "named register paste uses named text and preserves unnamed paste source",
+			content:    "one\ntwo\n",
+			seq:        "\"ayyjyy\"ap",
+			wantBuffer: strPtr("one\ntwo\none\n"),
+			wantRegisters: map[rune]string{
+				'a':              "one\n",
+				unnamedRegister:  "two\n",
+				lastYankRegister: "two\n",
+			},
+		},
+		{
+			name:       "named delete populates named and unnamed but does not replace last-yank",
+			content:    "one\ntwo\nthree\n",
+			seq:        "yyj\"bdd",
+			wantBuffer: strPtr("one\nthree\n"),
+			wantRegisters: map[rune]string{
+				'b':              "two\n",
+				unnamedRegister:  "two\n",
+				lastYankRegister: "one\n",
+			},
+		},
+		{
+			name:       "deletes into named register and pastes it later",
+			content:    "one\ntwo\nthree\n",
+			seq:        "\"add\"ap",
+			wantBuffer: strPtr("two\none\nthree\n"),
+			wantRegisters: map[rune]string{
+				'a':             "one\n",
+				unnamedRegister: "one\n",
+			},
+		},
+		{
+			name:       "black-hole operator delete preserves unnamed and last-yank registers",
+			content:    "one\ntwo\nthree\n",
+			seq:        "yyj\"_ddp",
+			wantBuffer: strPtr("one\nthree\none\n"),
+			wantRegisters: map[rune]string{
+				unnamedRegister:   "one\n",
+				lastYankRegister:  "one\n",
+				blackHoleRegister: "",
+			},
+		},
+		{
+			name:       "last-yank register survives delete and can be pasted explicitly",
+			content:    "one\ntwo\nthree\n",
+			seq:        "yyjdd\"0p",
+			wantBuffer: strPtr("one\nthree\none\n"),
+			wantRegisters: map[rune]string{
+				unnamedRegister:  "two\n",
+				lastYankRegister: "one\n",
+			},
+		},
+		{
+			name:    "visual named yank populates named unnamed and last-yank registers",
+			content: "abcdef\n",
+			seq:     "vll\"ay",
+			wantRegisters: map[rune]string{
+				'a':              "abc",
+				unnamedRegister:  "abc",
+				lastYankRegister: "abc",
+			},
+		},
+		{
+			name:       "visual named delete populates named unnamed and small-delete registers",
+			content:    "abcdef\n",
+			seq:        "vll\"ad",
+			wantBuffer: strPtr("def\n"),
+			wantRegisters: map[rune]string{
+				'a':             "abc",
+				unnamedRegister: "abc",
+				'-':             "abc",
+			},
+		},
+		{
+			name:    "search register stores last slash search",
+			content: "one\ntwo\n",
+			seq:     "/two>",
+			wantRegisters: map[rune]string{
+				'/': "two",
+			},
+		},
+		{
+			name:    "dot register stores last inserted text",
+			content: "one\n",
+			seq:     "iXYZ#",
+			wantRegisters: map[rune]string{
+				'.': "XYZ",
+			},
+		},
+		{
+			name:       "small-delete register can be pasted explicitly",
+			content:    "abcdef\n",
+			seq:        "vllx\"-P",
+			wantBuffer: strPtr("abcdef\n"),
+			wantRegisters: map[rune]string{
+				'-':             "abc",
+				unnamedRegister: "abc",
+			},
+		},
+		{
+			name:              "clipboard register pastes from configured clipboard",
+			content:           "one\n",
+			externalClipboard: &clipboard.Data{Text: "clip\n", Metadata: text.LineSelection},
+			seq:               "\"+p",
+			wantBuffer:        strPtr("one\nclip\n"),
+		},
+		{
+			name:              "clipboard register yanks to configured clipboard",
+			content:           "one\ntwo\n",
+			externalClipboard: &clipboard.Data{Text: "clip\n", Metadata: text.LineSelection},
+			seq:               "\"+yy",
+			wantExternal:      strPtr("one\n"),
+			wantRegisters: map[rune]string{
+				unnamedRegister:  "one\n",
+				lastYankRegister: "one\n",
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			clip := new(mockClip)
+			if tc.externalClipboard != nil {
+				clip.data = *tc.externalClipboard
+			}
+
+			vi := setupVi(t, tc.content, 2, WithClipboard(clip))
+			vi.Resize(80, 24)
+			run(t, vi, tc.seq)
+
+			if tc.wantBuffer != nil {
+				assert.Equal(t, *tc.wantBuffer, vi.less.Buffer().String())
+			}
+			if tc.wantExternal != nil {
+				assert.Equal(t, *tc.wantExternal, clip.data.Text)
+			}
+			for name, want := range tc.wantRegisters {
+				data, err := vi.readRegister(name)
+				require.NoError(t, err)
+				assert.Equalf(t, want, data.Text, "register %q", string(name))
+			}
+		})
+	}
+}
+
 func TestViParagraphMotions(t *testing.T) {
 	type paragraphCase struct {
 		name          string
@@ -4233,7 +4425,7 @@ func TestPasteVisualMode(t *testing.T) {
 			}
 
 			vi.Handle(term.Event{Type: term.EventKey, Ch: 'v', Mod: term.ModCtrl})
-			for _, event := range "lljyVjd" {
+			for _, event := range "lljyVj\"_d" {
 				vi.Handle(term.Event{Type: term.EventKey, Ch: event})
 			}
 

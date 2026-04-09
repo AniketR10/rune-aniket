@@ -35,6 +35,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/logging"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/clipboard"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
 	"github.com/unstablebuild/tcell/v3"
@@ -103,6 +104,9 @@ type viHandlerImpl struct {
 	lastMoveMode      moveMode // stores the mode of the last f/F/t/T for ;/, repeat
 	searchMode        moveMode
 	moveChar          rune
+	registers         *registerSet
+	pendingRegister   bool
+	selectedRegister  rune
 	pendingGoMotion   bool
 	textObjectPending bool
 	textObjectAround  bool
@@ -117,6 +121,7 @@ type viHandlerImpl struct {
 	setLocations     bool
 	countDigits      string
 	count            int
+	insertRegister   strings.Builder
 
 	pasteBuf     strings.Builder
 	pasteStarted bool
@@ -128,6 +133,8 @@ type statusBar interface {
 
 func (vi *viHandlerImpl) init(buf *cell.Buffer, cfg viConfig) {
 	vi.config = cfg
+	vi.registers = newRegisterSet(cfg.clipboard)
+	vi.config.clipboard = vi.registers
 	vi.statusBar = nopBar{}
 	vi.less.InitWithBuffer(buf, handler.LessConfig{
 		Wrap:               vi.config.wrap,
@@ -155,6 +162,8 @@ func (vi *viHandlerImpl) initWithScroll(scroll *component.Scroll, opts ...Option
 	for _, o := range opts {
 		o(&vi.config)
 	}
+	vi.registers = newRegisterSet(vi.config.clipboard)
+	vi.config.clipboard = vi.registers
 
 	vi.statusBar = nopBar{}
 	vi.less.InitWithScroll(scroll, handler.LessConfig{
@@ -288,6 +297,7 @@ func (vi *viHandlerImpl) setNormalMode() bool {
 	vi.resetCount()
 	vi.setMode(normalMode)
 	vi.moveMode = moveNone
+	vi.pendingRegister = false
 	vi.pendingGoMotion = false
 	vi.textObjectPending = false
 	return true
@@ -295,6 +305,7 @@ func (vi *viHandlerImpl) setNormalMode() bool {
 
 func (vi *viHandlerImpl) setInsertMode() {
 	vi.repeater.Clear()
+	vi.insertRegister.Reset()
 	vi.blockRepeat.From = term.Coordinates{}
 	vi.blockRepeat.To = term.Coordinates{}
 	vi.textObjectPending = false
@@ -488,6 +499,9 @@ func (vi *viHandlerImpl) handleSearch(ev term.Event) (bool, bool) {
 				vi.less.SetMessage("searching '%s'", text)
 			}
 			vi.search(text)
+			if err := vi.writeRegister('/', clipboard.Data{Text: text}); err != nil {
+				vi.logError(err)
+			}
 			return false, true
 		}
 	}
@@ -498,8 +512,29 @@ func (vi *viHandlerImpl) logError(err error) {
 	log.WithField(logging.KeyClass, "vi.handler").Error(err)
 }
 
-func (vi *viHandlerImpl) pasteClipboard(registerID string, after bool) bool {
-	paste, err := vi.config.clipboard.Paste(registerID)
+func (vi *viHandlerImpl) activeRegister() rune {
+	if vi.selectedRegister != 0 {
+		return vi.selectedRegister
+	}
+	return unnamedRegister
+}
+
+func (vi *viHandlerImpl) consumeActiveRegister() rune {
+	name := vi.activeRegister()
+	vi.selectedRegister = 0
+	return name
+}
+
+func (vi *viHandlerImpl) readRegister(name rune) (clipboard.Data, error) {
+	return vi.registers.paste(name)
+}
+
+func (vi *viHandlerImpl) writeRegister(name rune, data clipboard.Data) error {
+	return vi.registers.copy(name, data)
+}
+
+func (vi *viHandlerImpl) pasteClipboard(after bool) bool {
+	paste, err := vi.readRegister(vi.consumeActiveRegister())
 	if err != nil {
 		vi.logError(fmt.Errorf("clipboard.Get: %s", err))
 		return false
@@ -524,8 +559,8 @@ func (vi *viHandlerImpl) pasteClipboard(registerID string, after bool) bool {
 	return true
 }
 
-func (vi *viHandlerImpl) pasteClipboardLeaveCursorAfter(registerID string, after bool) bool {
-	paste, err := vi.config.clipboard.Paste(registerID)
+func (vi *viHandlerImpl) pasteClipboardLeaveCursorAfter(after bool) bool {
+	paste, err := vi.readRegister(vi.consumeActiveRegister())
 	if err != nil {
 		vi.logError(fmt.Errorf("clipboard.Get: %s", err))
 		return false
@@ -645,6 +680,19 @@ func (vi *viHandlerImpl) handleNormal(ev term.Event) (quit, handled bool) {
 		return
 	}
 
+	if vi.pendingRegister {
+		if ev.Mod == 0 && validRegisterName(ev.Ch) {
+			vi.selectedRegister = normalRegisterName(ev.Ch)
+			vi.pendingRegister = false
+			doResetCount = false
+			return false, true
+		}
+
+		vi.selectedRegister = 0
+		vi.pendingRegister = false
+		return false, true
+	}
+
 	switch ev.Mod {
 	case term.ModCtrl:
 		switch ev.Ch {
@@ -693,6 +741,9 @@ func (vi *viHandlerImpl) handleNormal(ev term.Event) (quit, handled bool) {
 	case 0:
 		handled = true
 		switch ev.Ch {
+		case '"':
+			vi.pendingRegister = true
+			doResetCount = false
 		case 'R':
 			vi.setReplaceMode()
 		case 'r':
@@ -755,9 +806,9 @@ func (vi *viHandlerImpl) handleNormal(ev term.Event) (quit, handled bool) {
 			case visualMode, visualLineMode, visualBlockMode:
 				pasteAfter = false
 			}
-			vi.pasteClipboard(vi.config.defaultRegister, pasteAfter)
+			vi.pasteClipboard(pasteAfter)
 		case 'P':
-			vi.pasteClipboard(vi.config.defaultRegister, false)
+			vi.pasteClipboard(false)
 		case '^':
 			vi.cursor.MoveStartLineNonBlank()
 		case '$':
@@ -986,9 +1037,20 @@ func (vi *viHandlerImpl) searchWord(text string) {
 }
 
 func (vi *viHandlerImpl) exitInsert() {
+	vi.writeDotRegister()
 	vi.cursor.MoveLeft()
 	vi.repeatInsertStart()
 	vi.setNormalMode()
+}
+
+func (vi *viHandlerImpl) writeDotRegister() {
+	str := vi.insertRegister.String()
+	if str == "" {
+		return
+	}
+	if err := vi.writeRegister('.', clipboard.Data{Text: str, Metadata: text.NoSelection}); err != nil {
+		vi.logError(err)
+	}
 }
 
 func (vi *viHandlerImpl) handleInsert(ev term.Event) (quit, handled bool) {
@@ -997,12 +1059,15 @@ func (vi *viHandlerImpl) handleInsert(ev term.Event) (quit, handled bool) {
 		switch ev.Key {
 		case term.KeyEnter:
 			vi.cursor.Insert('\n')
+			vi.insertRegister.WriteRune('\n')
 			handled = true
 		case term.KeySpace:
 			vi.cursor.Insert(' ')
+			vi.insertRegister.WriteRune(' ')
 			handled = true
 		case term.KeyTab:
 			vi.cursor.Insert('\t')
+			vi.insertRegister.WriteRune('\t')
 			handled = true
 		case term.KeyBackspace:
 			vi.cursor.Backspace()
@@ -1029,6 +1094,7 @@ func (vi *viHandlerImpl) handleInsert(ev term.Event) (quit, handled bool) {
 		default:
 			if ev.Ch != 0 {
 				vi.cursor.Insert(ev.Ch)
+				vi.insertRegister.WriteRune(ev.Ch)
 				handled = true
 			}
 		}
@@ -1045,6 +1111,7 @@ func (vi *viHandlerImpl) handleInsert(ev term.Event) (quit, handled bool) {
 			handled = true
 		case 'j':
 			vi.cursor.Insert('\n')
+			vi.insertRegister.WriteRune('\n')
 			handled = true
 		case 't':
 			vi.cursor.ShiftLineRight()
@@ -1058,9 +1125,45 @@ func (vi *viHandlerImpl) handleInsert(ev term.Event) (quit, handled bool) {
 }
 
 func (vi *viHandlerImpl) copySelection() {
-	_, err := vi.cursor.CopySelection(vi.config.defaultRegister, vi.config.clipboard)
+	mode, _ := vi.cursor.SelectionMode()
+	data := clipboard.Data{Text: vi.cursor.Selection(), Metadata: mode}
+	reg := vi.consumeActiveRegister()
+	_, err := vi.cursor.CopySelection(registerNameToID(reg), vi.config.clipboard)
 	if err != nil {
 		vi.logError(err)
+	}
+	if reg != unnamedRegister {
+		if err := vi.writeRegister(unnamedRegister, data); err != nil {
+			vi.logError(err)
+		}
+	}
+	if reg != lastYankRegister {
+		if err := vi.writeRegister(lastYankRegister, data); err != nil {
+			vi.logError(err)
+		}
+	}
+}
+
+func (vi *viHandlerImpl) copySelectionForDelete() {
+	reg := vi.consumeActiveRegister()
+	if reg == blackHoleRegister {
+		return
+	}
+
+	mode, _ := vi.cursor.SelectionMode()
+	data := clipboard.Data{Text: vi.cursor.Selection(), Metadata: mode}
+	if reg != unnamedRegister {
+		if err := vi.writeRegister(reg, data); err != nil {
+			vi.logError(err)
+		}
+	}
+	if err := vi.writeRegister(unnamedRegister, data); err != nil {
+		vi.logError(err)
+	}
+	if mode != text.LineSelection {
+		if err := vi.writeRegister('-', data); err != nil {
+			vi.logError(err)
+		}
 	}
 }
 
@@ -1118,6 +1221,14 @@ func (vi *viHandlerImpl) handleVisual(ev term.Event) (quit, handled bool) {
 		handled = true
 		return
 	}
+	if vi.pendingRegister {
+		if ev.Mod == 0 && validRegisterName(ev.Ch) {
+			vi.selectedRegister = normalRegisterName(ev.Ch)
+		}
+		vi.pendingRegister = false
+		handled = true
+		return
+	}
 
 	quit, handled = vi.handleMoveToCharacter(vi.moveMode, ev)
 	if handled {
@@ -1150,6 +1261,8 @@ func (vi *viHandlerImpl) handleVisual(ev term.Event) (quit, handled bool) {
 	switch ev.Mod {
 	case 0:
 		switch ev.Ch {
+		case '"':
+			vi.pendingRegister = true
 		case 'z':
 			vi.cursor.HideSelection()
 			vi.setNormalMode()
@@ -1171,6 +1284,7 @@ func (vi *viHandlerImpl) handleVisual(ev term.Event) (quit, handled bool) {
 			vi.copySelection()
 			vi.setNormalMode()
 		case 'd', 'x':
+			vi.copySelectionForDelete()
 			vi.cursor.DeleteSelection()
 			vi.setNormalMode()
 		case 's', 'c':
@@ -1178,6 +1292,7 @@ func (vi *viHandlerImpl) handleVisual(ev term.Event) (quit, handled bool) {
 			case visualBlockMode:
 				vi.handleVisualBlockChangeStart()
 			default:
+				vi.copySelectionForDelete()
 				vi.cursor.DeleteSelection()
 				vi.setInsertMode()
 			}
@@ -1533,6 +1648,7 @@ func (vi *viHandlerImpl) handleDelete(ev term.Event) (quit, handled bool) {
 			for i := 0; i < vi.count && vi.cursor.MoveLineDown(); i++ {
 			}
 		}
+		vi.copySelectionForDelete()
 		vi.cursor.DeleteSelection()
 		vi.setNormalMode()
 		handled = true
@@ -1543,6 +1659,7 @@ func (vi *viHandlerImpl) handleDelete(ev term.Event) (quit, handled bool) {
 		vi.cursor.MoveStartLine()
 		if vi.cursor.Select() {
 			vi.cursor.MoveEndLine()
+			vi.copySelectionForDelete()
 			vi.cursor.DeleteSelection()
 			vi.cursor.TryIndent()
 		}
@@ -1560,6 +1677,7 @@ func (vi *viHandlerImpl) handleDelete(ev term.Event) (quit, handled bool) {
 				if !done {
 					return quit, handled
 				}
+				vi.copySelectionForDelete()
 				vi.cursor.DeleteSelection()
 				if vi.deleteInsert {
 					vi.setInsertMode()
@@ -1572,6 +1690,7 @@ func (vi *viHandlerImpl) handleDelete(ev term.Event) (quit, handled bool) {
 				if !done {
 					return quit, handled
 				}
+				vi.copySelectionForDelete()
 				vi.cursor.DeleteSelection()
 				if vi.deleteInsert {
 					vi.setInsertMode()
@@ -1598,6 +1717,7 @@ func (vi *viHandlerImpl) handleDelete(ev term.Event) (quit, handled bool) {
 				vi.setNormalMode()
 				return false, true
 			}
+			vi.copySelectionForDelete()
 			vi.cursor.DeleteSelection()
 			if vi.deleteInsert {
 				vi.setInsertMode()
@@ -1625,6 +1745,7 @@ func (vi *viHandlerImpl) handleDelete(ev term.Event) (quit, handled bool) {
 		return
 	}
 
+	vi.copySelectionForDelete()
 	vi.cursor.DeleteSelection()
 	if vi.deleteInsert {
 		vi.setInsertMode()
@@ -1670,9 +1791,9 @@ func (vi *viHandlerImpl) handleGo(ev term.Event) (quit, handled bool) {
 			vi.resetCount()
 			handled = true
 		case 'p':
-			handled = vi.pasteClipboardLeaveCursorAfter(vi.config.defaultRegister, true)
+			handled = vi.pasteClipboardLeaveCursorAfter(true)
 		case 'P':
-			handled = vi.pasteClipboardLeaveCursorAfter(vi.config.defaultRegister, false)
+			handled = vi.pasteClipboardLeaveCursorAfter(false)
 		default:
 		}
 	}
