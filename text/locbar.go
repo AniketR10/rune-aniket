@@ -223,10 +223,7 @@ func (b *iconsBar) Resize(width, height int) {
 }
 
 func (b *iconsBar) barWidth() int {
-	if b.iconColumns == 0 {
-		return 0
-	}
-	return b.iconColumns + 1
+	return max(1, b.iconColumns) + 1
 }
 
 func (b *iconsBar) HandleCommand(ctx context.Context, cmd textapi.Command) error {

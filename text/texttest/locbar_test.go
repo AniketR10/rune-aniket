@@ -57,19 +57,19 @@ func TestIconsBarSetLocationListDrivesWidth(t *testing.T) {
 	w := term.NewStringWriter(7, 3)
 
 	comptest.TestComponent(t, bar, w, []comptest.TestCase{{Expected: `
-a      
-b      
-c      `}})
+  a    
+  b    
+  c    `}})
 
 	bar.SetLocationList(textapi.LocationPriorityInfo, "marks", text.LocationSlice([]textapi.Location{{
 		From: term.Coordinates{Y: 1},
 		To:   term.Coordinates{Y: 2},
-		Icon: "!",
+		Icon: "!!",
 	}}))
 	comptest.TestComponent(t, bar, w, []comptest.TestCase{{Expected: `
-  a    
-! b    
-  c    `}})
+   a   
+!! b   
+   c   `}})
 
 	bar.SetLocationList(textapi.LocationPriorityWarning, "breakpoints", text.LocationSlice([]textapi.Location{{
 		From: term.Coordinates{Y: 1},
@@ -77,16 +77,21 @@ c      `}})
 		Icon: "+",
 	}}))
 	comptest.TestComponent(t, bar, w, []comptest.TestCase{{Expected: `
+   a   
+ + b   
+   c   `}})
+
+	bar.SetLocationList(textapi.LocationPriorityInfo, "marks", nil)
+	comptest.TestComponent(t, bar, w, []comptest.TestCase{{Expected: `
   a    
 + b    
   c    `}})
 
-	bar.SetLocationList(textapi.LocationPriorityInfo, "marks", nil)
 	bar.SetLocationList(textapi.LocationPriorityWarning, "breakpoints", nil)
 	comptest.TestComponent(t, bar, w, []comptest.TestCase{{Expected: `
-a      
-b      
-c      `}})
+  a    
+  b    
+  c    `}})
 }
 
 func TestIconsBarUsesIconWidthAndForegroundAttr(t *testing.T) {
