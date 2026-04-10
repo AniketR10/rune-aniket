@@ -26,13 +26,15 @@ package drawrect
 import (
 	"image"
 	"image/color"
+	"sync"
 
 	"github.com/hajimehoshi/ebiten/v2"
 )
 
 var (
-	whiteImage    = ebiten.NewImage(3, 3)
-	whiteSubImage = whiteImage.SubImage(image.Rect(1, 1, 2, 2)).(*ebiten.Image)
+	whiteImage        = ebiten.NewImage(3, 3)
+	whiteSubImage     = whiteImage.SubImage(image.Rect(1, 1, 2, 2)).(*ebiten.Image)
+	whiteSubImageOnce sync.Once
 )
 
 var defaultDrawTrianglesOptions = ebiten.DrawTrianglesOptions{
@@ -49,14 +51,18 @@ var defaultDrawTrianglesOptions = ebiten.DrawTrianglesOptions{
 	AntiAlias: false,
 }
 
-func init() {
-	b := whiteImage.Bounds()
-	pix := make([]byte, 4*b.Dx()*b.Dy())
-	for i := range pix {
-		pix[i] = 0xff
-	}
-	// This is hacky, but WritePixels is better than Fill in term of automatic texture packing.
-	whiteImage.WritePixels(pix)
+// Init initializes this package. This function must be called before
+// any of the other functions in this package
+func Init() {
+	whiteSubImageOnce.Do(func() {
+		b := whiteImage.Bounds()
+		pix := make([]byte, 4*b.Dx()*b.Dy())
+		for i := range pix {
+			pix[i] = 0xff
+		}
+		// This is hacky, but WritePixels is better than Fill in term of automatic texture packing.
+		whiteImage.WritePixels(pix)
+	})
 }
 
 func drawVerticesForUtil(

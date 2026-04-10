@@ -39,6 +39,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/tui"
 	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/term/gui/drawrect"
 	"unstable.build/go-tui/term/gui/font"
 )
 
@@ -110,6 +111,7 @@ type GUI struct {
 // New allocates storage for a new GUI and initializes it with the given
 // tui.Handler and options.
 func New(handler tui.Handler, options ...Option) (*GUI, error) {
+	drawrect.Init()
 	const (
 		cellOverlapX = 0
 		cellOverlapY = 0
