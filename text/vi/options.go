@@ -56,6 +56,15 @@ type viConfig struct {
 	enableIconsBar     bool
 	enableGitIcons     bool
 	notifications      browserapi.Notifications
+	macroRecorder      MacroRecorder
+}
+
+// MacroRecorder is a cross-editor recorder used to expose Vim-style macro
+// controls in vi without owning the underlying recording implementation.
+type MacroRecorder interface {
+	Start(registerID string)
+	Stop()
+	IsRecording() bool
 }
 
 // defaultviHandlerImplConfig is a sane configuration defaults for viHandlerImpl.
@@ -97,6 +106,13 @@ func WithResAttr(attr term.Attributes) Option {
 func WithNotifications(noti browserapi.Notifications) Option {
 	return func(cfg *viConfig) {
 		cfg.notifications = noti
+	}
+}
+
+// WithMacroRecorder installs a cross-editor macro recorder for Vim-like q flows.
+func WithMacroRecorder(recorder MacroRecorder) Option {
+	return func(cfg *viConfig) {
+		cfg.macroRecorder = recorder
 	}
 }
 

@@ -46,7 +46,8 @@ func TestHandlerRecordsKeysIntoRegister(t *testing.T) {
 		Name: "record",
 		Args: []string{"a"},
 	}))
-	h.Handle(term.Event{Type: term.EventMouse, Key: term.MouseLeft})
+	h.BeginEvent(term.Event{Type: term.EventMouse, Key: term.MouseLeft})
+	h.EndEvent()
 	handleKeys(t, h, "i<space>:stop-recording<space>a<enter>")
 	require.NoError(t, h.HandleCommand(ctx, textapi.Command{
 		Name: "stop-recording",
@@ -181,12 +182,13 @@ func handleKeys(t *testing.T, h *Recorder, seq string) {
 	keys, err := term.ParseKeys(seq)
 	require.NoError(t, err)
 	for _, key := range keys {
-		h.Handle(term.Event{
+		h.BeginEvent(term.Event{
 			Type: term.EventKey,
 			Ch:   key.Ch,
 			Mod:  key.Mod,
 			Key:  key.Key,
 		})
+		h.EndEvent()
 	}
 }
 

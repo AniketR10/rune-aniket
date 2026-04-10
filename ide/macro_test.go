@@ -71,9 +71,9 @@ func TestMacroRecordAndEchoIntegration(t *testing.T) {
 			},
 		},
 		{
-			name: "key binding stop is not recorded into replayed register",
+			name: "vim style qq q atq workflow works",
 			run: func(t *testing.T, tc *macroIntegrationHarness) {
-				handleKeys(t, tc.mu, tc.h, "<f6><f6>abound<esc><f5><f7><f7>")
+				handleKeys(t, tc.mu, tc.h, "qqabound<esc>q@q")
 				tc.drainPublishedEvents(t)
 
 				require.Equal(t, "boundbound", editorString(t, tc.ide))
@@ -163,6 +163,47 @@ func TestMacroRecordAndEchoIntegration(t *testing.T) {
 				require.Equal(t, "xy\nxy", editorString(t, tc.ide))
 			},
 		},
+		{
+			name: "prompt-open replay can be recorded without recording the stop command",
+			run: func(t *testing.T, tc *macroIntegrationHarness) {
+				handleKeys(t, tc.mu, tc.h, ":record<space>a<enter>:tabrename<space>macroed<enter>:record<space>a<enter>")
+				handleKeys(t, tc.mu, tc.h, ":tabrename<space>reset<enter>:notificationcloseall<enter>")
+
+				handleKeys(t, tc.mu, tc.h, ":record<space>b<enter>:echo<space>{register}a<enter>")
+				tc.drainPublishedEvents(t)
+				handleKeys(t, tc.mu, tc.h, ":record<space>b<enter>:notificationcloseall<enter>")
+
+				require.Equal(t, `┌──────────────────────────────────────┐
+│o macroed                             │
+├──────────────────────────────────────┤
+│▐                                     │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│                                NORMAL│
+└──────────────────────────────────────┘`, drawIDE(t, tc))
+
+				handleKeys(t, tc.mu, tc.h, ":tabrename<space>reset<enter>:echo<space>{register}b<enter>")
+				tc.drainPublishedEvents(t)
+				handleKeys(t, tc.mu, tc.h, ":notificationcloseall<enter>")
+
+				require.Equal(t, `┌──────────────────────────────────────┐
+│o macroed                             │
+├──────────────────────────────────────┤
+│▐                                     │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│                                NORMAL│
+└──────────────────────────────────────┘`, drawIDE(t, tc))
+			},
+		},
 	}
 
 	for _, test := range tests {
@@ -239,10 +280,7 @@ editor:
 command:
   key: ":"
   key_bindings:
-    <f5>: record
-    <f6><f6>: record q
-    <f7><f7>: echo {register}q
-    q: record
+    qq: record q
     '@q': echo {register}q
 `), 0666))
 	return name

@@ -221,6 +221,7 @@ func (h *workspaceManagerHandler) newBuiltinModalEditor(
 		vi.WithStatusBarConfig(cfg.statusBarEnabled(), statusBarConfig),
 		vi.WithHideInitialFolds(cfg.initialFolds()),
 		vi.WithClipboard(h.clip),
+		vi.WithMacroRecorder(h.macro),
 		vi.WithWorkspaceCommandRegistry(cwd, h),
 		vi.WithAutoCenter(true),
 	)

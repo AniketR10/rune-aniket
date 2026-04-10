@@ -67,6 +67,7 @@ import (
 	"unstable.build/go-tui/term/vte/vtereservoir"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/text/modeless"
+	"unstable.build/go-tui/text/registerset"
 	"unstable.build/go-tui/text/texttest"
 	"unstable.build/go-tui/text/vi"
 	"unstable.build/go-tui/workspace"
@@ -3400,6 +3401,47 @@ func TestEcho(t *testing.T) {
 		defer e.Close()
 
 		handlertest.TestHandlerSequence(t, e, 30, 15, cases)
+	})
+
+	t.Run("recursive register expansion returns error before publishing events", func(t *testing.T) {
+		clip := registerset.New(clipboard.NewInMemory())
+		require.NoError(t, clip.Copy("a", clipboard.Data{Text: "{register}a"}))
+
+		published := 0
+		e := newExForTestingWithWorkspace(t, &testLoader{},
+			texttest.NopEditor(), vte.DefaultConfig(),
+			func(ev term.Event) bool {
+				published++
+				return true
+			}, clip,
+			text.WithCommandKey(testCommandKey),
+		)
+		defer e.Close()
+
+		err := e.echo(context.Background(), "{register}a")
+		require.EqualError(t, err, `expand register "a": recursive register expansion detected: a -> a`)
+		require.Zero(t, published)
+	})
+
+	t.Run("mutually recursive register expansion returns error before publishing events", func(t *testing.T) {
+		clip := registerset.New(clipboard.NewInMemory())
+		require.NoError(t, clip.Copy("a", clipboard.Data{Text: "{register}b"}))
+		require.NoError(t, clip.Copy("b", clipboard.Data{Text: "{register}a"}))
+
+		published := 0
+		e := newExForTestingWithWorkspace(t, &testLoader{},
+			texttest.NopEditor(), vte.DefaultConfig(),
+			func(ev term.Event) bool {
+				published++
+				return true
+			}, clip,
+			text.WithCommandKey(testCommandKey),
+		)
+		defer e.Close()
+
+		err := e.echo(context.Background(), "{register}a")
+		require.EqualError(t, err, `expand register "a": expand register "b": recursive register expansion detected: a -> b -> a`)
+		require.Zero(t, published)
 	})
 
 	t.Run("{prompt} instruction", func(t *testing.T) {

@@ -105,6 +105,7 @@ type viHandlerImpl struct {
 	searchMode        moveMode
 	moveChar          rune
 	pendingRegister   bool
+	pendingMacro      bool
 	selectedRegister  rune
 	pendingGoMotion   bool
 	textObjectPending bool
@@ -717,6 +718,15 @@ func (vi *viHandlerImpl) handleNormal(ev term.Event) (quit, handled bool) {
 		return false, true
 	}
 
+	if vi.pendingMacro {
+		vi.pendingMacro = false
+		if ev.Mod == 0 && validRegisterName(ev.Ch) && vi.config.macroRecorder != nil {
+			vi.config.macroRecorder.Start(registerNameToID(normalizedRegisterName(ev.Ch)))
+			return false, true
+		}
+		return false, true
+	}
+
 	switch ev.Mod {
 	case term.ModCtrl:
 		switch ev.Ch {
@@ -767,6 +777,16 @@ func (vi *viHandlerImpl) handleNormal(ev term.Event) (quit, handled bool) {
 		switch ev.Ch {
 		case '"':
 			vi.pendingRegister = true
+			doResetCount = false
+		case 'q':
+			if vi.config.macroRecorder == nil {
+				return false, false
+			}
+			if vi.config.macroRecorder.IsRecording() {
+				vi.config.macroRecorder.Stop()
+				return false, true
+			}
+			vi.pendingMacro = true
 			doResetCount = false
 		case 'R':
 			vi.setReplaceMode()

@@ -35,11 +35,9 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/clipboard"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/rune-go-sdk/tui"
 	"unstable.build/go-tui/text"
 )
 
-var _ tui.Handler = (*Recorder)(nil)
 var _ text.CommandHandler = (*Recorder)(nil)
 
 // New returns a handler that records all key events passed to Handle into the
@@ -69,20 +67,23 @@ type Recorder struct {
 	commandPromptKey string
 }
 
-// Resize implements tui.Handler.
-func (h *Recorder) Resize(width, height int) {}
-
-// Draw implements tui.Handler.
-func (h *Recorder) Draw(w term.Writer) {}
-
-// Handle records key events while macro recording is active.
-func (h *Recorder) Handle(ev term.Event) (exit, handled bool) {
-	if !h.recording || ev.Type != term.EventKey {
-		return false, false
+// Start begins recording into the given register ID and reports errors via notifications.
+func (h *Recorder) Start(registerID string) {
+	if err := h.start(registerID); err != nil {
+		h.notify(browserapi.LevelError, "%v", err)
 	}
-	key := ev.KeyComb()
-	h.keys = append(h.keys, key.String())
-	return false, false
+}
+
+// Stop ends the current recording and reports errors via notifications.
+func (h *Recorder) Stop() {
+	if err := h.finish(); err != nil {
+		h.notify(browserapi.LevelError, "%v", err)
+	}
+}
+
+// IsRecording reports whether a recording is currently active.
+func (h *Recorder) IsRecording() bool {
+	return h.recording
 }
 
 // BeginEvent records ev and marks it as the event currently being dispatched.
@@ -98,7 +99,7 @@ func (h *Recorder) BeginEvent(ev term.Event) {
 		return
 	}
 	h.currentKey = len(h.keys)
-	h.Handle(ev)
+	h.handle(ev)
 }
 
 // EndEvent clears the event currently being dispatched.
@@ -106,16 +107,6 @@ func (h *Recorder) EndEvent() {
 	h.inEvent = false
 	h.currentKey = -1
 	h.currentKeyStr = ""
-}
-
-// Cursor implements tui.Handler.
-func (h *Recorder) Cursor() (pos term.Coordinates, style term.CursorStyle, show bool) {
-	return term.Coordinates{}, term.CursorStyleDefault, false
-}
-
-// Selection implements tui.Handler.
-func (h *Recorder) Selection() (string, bool) {
-	return "", false
 }
 
 // HandleCommand starts or stops macro recording for the requested register.
@@ -130,21 +121,17 @@ func (h *Recorder) HandleCommand(ctx context.Context, cmd textapi.Command) error
 			h.discardLastKey(triggerKey)
 		}
 		if len(cmd.Args) == 0 {
-			return h.stop()
+			return h.finish()
 		}
 		if cmd.Args[0] != h.registerID {
 			return fmt.Errorf("already recording register %q", h.registerID)
 		}
-		return h.stop()
+		return h.finish()
 	}
 	if len(cmd.Args) == 0 {
 		return errors.New("expected one argument with the register ID")
 	}
-	h.recording = true
-	h.registerID = cmd.Args[0]
-	h.keys = h.keys[:0]
-	h.notify(browserapi.LevelInfo, "Started recording macro into register %q", h.registerID)
-	return nil
+	return h.start(cmd.Args[0])
 }
 
 // Complete implements text.CommandHandler.
@@ -223,7 +210,19 @@ func commandKeys(cmd textapi.Command, includeEnter bool) ([]string, error) {
 	return ret, nil
 }
 
+func (h *Recorder) handle(ev term.Event) (exit, handled bool) {
+	if !h.recording || ev.Type != term.EventKey {
+		return false, false
+	}
+	key := ev.KeyComb()
+	h.keys = append(h.keys, key.String())
+	return false, false
+}
+
 func (h *Recorder) stop() error {
+	if !h.recording {
+		return errors.New("not currently recording")
+	}
 	h.recording = false
 	text := strings.Join(h.keys, "")
 	h.keys = h.keys[:0]
@@ -233,6 +232,24 @@ func (h *Recorder) stop() error {
 	h.notify(browserapi.LevelSuccess,
 		"Recorded macro into register %q: %s", h.registerID, text)
 	return nil
+}
+
+func (h *Recorder) start(registerID string) error {
+	if registerID == "" {
+		return errors.New("expected one argument with the register ID")
+	}
+	if h.recording {
+		return fmt.Errorf("already recording register %q", h.registerID)
+	}
+	h.recording = true
+	h.registerID = registerID
+	h.keys = h.keys[:0]
+	h.notify(browserapi.LevelInfo, "Started recording macro into register %q", h.registerID)
+	return nil
+}
+
+func (h *Recorder) finish() error {
+	return h.stop()
 }
 
 func (h *Recorder) notify(level browserapi.NotificationLevel, msg string, args ...any) {

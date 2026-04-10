@@ -212,6 +212,52 @@ func TestCellAtCursor(t *testing.T) {
 	}
 }
 
+func TestNormalModeMacroRecorderStartAndStop(t *testing.T) {
+	recorder := new(testMacroRecorder)
+	vi := setupVi(t, "", 2, WithMacroRecorder(recorder))
+
+	_, handled := vi.Handle(term.Event{Type: term.EventKey, Ch: 'q'})
+	require.True(t, handled)
+	_, handled = vi.Handle(term.Event{Type: term.EventKey, Ch: 'q'})
+	require.True(t, handled)
+	require.Equal(t, []string{"q"}, recorder.started)
+	require.True(t, recorder.recording)
+
+	_, handled = vi.Handle(term.Event{Type: term.EventKey, Ch: 'q'})
+	require.True(t, handled)
+	require.Equal(t, 1, recorder.stopped)
+	require.False(t, recorder.recording)
+}
+
+func TestNormalModeQIsNoopWithoutMacroRecorder(t *testing.T) {
+	vi := setupVi(t, "", 2)
+	before := vi.cursorAtScroll()
+
+	_, handled := vi.Handle(term.Event{Type: term.EventKey, Ch: 'q'})
+	require.False(t, handled)
+	require.Equal(t, before, vi.cursorAtScroll())
+}
+
+type testMacroRecorder struct {
+	started   []string
+	stopped   int
+	recording bool
+}
+
+func (r *testMacroRecorder) Start(registerID string) {
+	r.started = append(r.started, registerID)
+	r.recording = true
+}
+
+func (r *testMacroRecorder) Stop() {
+	r.stopped++
+	r.recording = false
+}
+
+func (r *testMacroRecorder) IsRecording() bool {
+	return r.recording
+}
+
 func TestMatchingRuneHighlight(t *testing.T) {
 	t.Run("normal movement", func(t *testing.T) {
 		width, height := 20, 10

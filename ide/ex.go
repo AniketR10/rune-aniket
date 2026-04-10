@@ -1490,6 +1490,10 @@ func (e *ex) echo(_ context.Context, args ...string) error {
 	if err != nil {
 		return fmt.Errorf("invalid syntax: %v", err)
 	}
+	keys, err = e.expandEchoRegisters(keys, nil)
+	if err != nil {
+		return err
+	}
 	ok := true
 	for i := 0; i < len(keys); i++ {
 		keyComb := keys[i]
@@ -1506,18 +1510,6 @@ func (e *ex) echo(_ context.Context, args ...string) error {
 			e.openCommandPrompt()
 			continue
 		}
-		if keyComb.instructReg != "" {
-			data, err := e.clip.Paste(keyComb.instructReg)
-			if err != nil {
-				return fmt.Errorf("paste register %q: %w", keyComb.instructReg, err)
-			}
-			regKeys, err := parseEchoKeys(data.Text)
-			if err != nil {
-				return fmt.Errorf("parse register %q: %w", keyComb.instructReg, err)
-			}
-			keys = append(keys[:i+1], append(regKeys, keys[i+1:]...)...)
-			continue
-		}
 		ok = ok && e.publishEvent(term.Event{
 			Type: term.EventKey,
 			Ch:   keyComb.Ch,
@@ -1529,6 +1521,36 @@ func (e *ex) echo(_ context.Context, args ...string) error {
 		return errors.New("could not publish all events to the event loop")
 	}
 	return nil
+}
+
+func (e *ex) expandEchoRegisters(keys []echoKey, stack []string) ([]echoKey, error) {
+	ret := make([]echoKey, 0, len(keys))
+	for _, key := range keys {
+		if key.instructReg == "" {
+			ret = append(ret, key)
+			continue
+		}
+		for _, seen := range stack {
+			if seen == key.instructReg {
+				cycle := append(append([]string{}, stack...), key.instructReg)
+				return nil, fmt.Errorf("recursive register expansion detected: %s", strings.Join(cycle, " -> "))
+			}
+		}
+		data, err := e.clip.Paste(key.instructReg)
+		if err != nil {
+			return nil, fmt.Errorf("expand register %q: paste register %q: %w", key.instructReg, key.instructReg, err)
+		}
+		regKeys, err := parseEchoKeys(data.Text)
+		if err != nil {
+			return nil, fmt.Errorf("expand register %q: parse register %q: %w", key.instructReg, key.instructReg, err)
+		}
+		expanded, err := e.expandEchoRegisters(regKeys, append(stack, key.instructReg))
+		if err != nil {
+			return nil, fmt.Errorf("expand register %q: %w", key.instructReg, err)
+		}
+		ret = append(ret, expanded...)
+	}
+	return ret, nil
 }
 
 func (e *ex) runCommand(cmd string, args []string) (quit bool, err error) {
