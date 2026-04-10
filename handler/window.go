@@ -177,6 +177,11 @@ func (w Window) Close() error {
 	if isFocus && w.wm.prevFocus != (Window{}) {
 		ok = true
 		tile = w.wm.prevFocus
+	} else if isFocus {
+		if floating, floatingOK := w.wm.findOtherFloatingWindow(w); floatingOK {
+			ok = true
+			tile = floating
+		}
 	}
 
 	// then close the window, so parent's other
@@ -194,12 +199,18 @@ func (w Window) Close() error {
 		w.wm.prevFocus = Window{}
 	} else if isFocus && !ok {
 		// this could be a floating window and width/height might be 0 so Shiftable
-		// might not yield the correct results. Just pick any window to focus to.
-		var focus *Window
-		w.wm.Iterate(func(w Window) {
-			focus = &w
-		})
-		if focus == nil {
+		// might not yield the correct results. Prefer any remaining floating window,
+		// otherwise just pick any window to focus to.
+		focus, floatingOK := w.wm.findOtherFloatingWindow(w)
+		if !floatingOK {
+			w.wm.Iterate(func(candidate Window) {
+				if focus != (Window{}) {
+					return
+				}
+				focus = candidate
+			})
+		}
+		if focus == (Window{}) {
 			panic("cannot find window to focus to, but this is not last window")
 		}
 		w.wm.SetFocus(w.wm.newNode(focus.Window))
@@ -222,4 +233,15 @@ func (w Window) Closed() bool {
 // which sets the default attributes for all windows.
 func (w Window) SetFrameAttr(attr term.Attributes) (term.Attributes, bool) {
 	return w.Window.SetFrameAttr(attr)
+}
+
+func (wm *WindowManager) findOtherFloatingWindow(w Window) (Window, bool) {
+	var focus Window
+	wm.Iterate(func(candidate Window) {
+		if focus != (Window{}) || !candidate.IsFloating() || candidate.ID() == w.ID() {
+			return
+		}
+		focus = candidate
+	})
+	return focus, focus != (Window{})
 }

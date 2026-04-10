@@ -1574,6 +1574,73 @@ func TestNewWindow(t *testing.T) {
 	handlertest.TestHandlerSequence(t, b, 20, 10, cases)
 }
 
+func TestFloatingPromptClosePrefersFloatingFocus(t *testing.T) {
+	b := newExForTesting(t, texttest.NopEditor(), text.WithCommandKey(testCommandKey))
+	defer b.Close()
+
+	b.Resize(40, 12)
+	browserComp := b.ex.comp.Browser()
+	mainFocus, err := b.ex.Browser().Focus()
+	require.NoError(t, err)
+	require.False(t, mainFocus.IsFloating())
+
+	var prompts []browser.Window
+	for _, message := range []string{
+		"first prompt",
+		"second prompt",
+		"third prompt",
+		"fourth prompt",
+		"fifth prompt",
+	} {
+		prompts = append(prompts, browserComp.Prompt(
+			message,
+			[]string{yesOpt, noOpt},
+			yesNoKeyCombs,
+			handler.NopPromptHandler(),
+		))
+	}
+
+	require.Equal(t, len(prompts), browserComp.FloatingWindows())
+
+	closed := make(map[uint64]bool, len(prompts))
+	for i := len(prompts) - 1; i >= 0; i-- {
+		focus, err := b.ex.Browser().Focus()
+		require.NoError(t, err)
+		require.True(t, focus.IsFloating())
+		require.False(t, closed[focus.WindowID()])
+
+		content, err := focus.Content()
+		require.NoError(t, err)
+		_, ok := content.(*handler.Prompt)
+		require.True(t, ok)
+
+		closedID := focus.WindowID()
+		_, handled := b.Handle(term.Event{Type: term.EventKey, Ch: 'y'})
+		require.True(t, handled)
+		closed[closedID] = true
+		assert.Equal(t, i, browserComp.FloatingWindows())
+
+		if i == 0 {
+			break
+		}
+
+		nextFocus, err := b.ex.Browser().Focus()
+		require.NoError(t, err)
+		assert.True(t, nextFocus.IsFloating())
+		assert.False(t, closed[nextFocus.WindowID()])
+		assert.NotEqual(t, closedID, nextFocus.WindowID())
+	}
+
+	for _, prompt := range prompts {
+		assert.True(t, prompt.Closed())
+	}
+
+	focus, err := b.ex.Browser().Focus()
+	require.NoError(t, err)
+	assert.Equal(t, mainFocus.WindowID(), focus.WindowID())
+	assert.False(t, focus.IsFloating())
+}
+
 type testShellREPLHandler struct{}
 
 func (*testShellREPLHandler) HandleCommand(
