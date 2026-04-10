@@ -846,6 +846,9 @@ command:
     <s-m-7>: workspacemove 7
     <s-m-8>: workspacemove 8
     <s-m-9>: workspacemove 9
+    qq: record q
+    q: record
+    '@q': echo {register}q
   # Colors
   element_attr:
     fg: default

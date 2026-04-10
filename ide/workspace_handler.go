@@ -69,6 +69,7 @@ import (
 	"unstable.build/go-tui/ide/idedebug"
 	"unstable.build/go-tui/ide/idelsp"
 	"unstable.build/go-tui/ide/idelsp/lspcmd"
+	"unstable.build/go-tui/ide/idemacro"
 	"unstable.build/go-tui/ide/syntax"
 	"unstable.build/go-tui/ide/vctrl"
 	"unstable.build/go-tui/ide/vctrl/gogit"
@@ -86,6 +87,7 @@ const (
 	cmdReloadWorkspace   = "workspacereload"
 	cmdAddWorkspace      = "workspacenew"
 	cmdRenameWorkspace   = "workspacerename"
+	cmdMacroRecord       = "record"
 	workspaceSlots       = 9
 )
 
@@ -105,6 +107,8 @@ type workspaceManagerHandler struct {
 	notifications      *notisManager
 	storage            storageapi.Service
 	workspace          workspace.WorkspaceManager
+	clip               clipboard.Register
+	macro              *idemacro.Recorder
 	publishEvent       func(term.Event) bool
 	tabsClickCallback  func(int) bool
 	extensionRunner    ExtensionsRunner
@@ -216,7 +220,7 @@ func (h *workspaceManagerHandler) newBuiltinModalEditor(
 		vi.WithGitIcons(cfg.gitIconsEnabled()),
 		vi.WithStatusBarConfig(cfg.statusBarEnabled(), statusBarConfig),
 		vi.WithHideInitialFolds(cfg.initialFolds()),
-		vi.WithClipboard(cfg.clipboard()),
+		vi.WithClipboard(h.clip),
 		vi.WithWorkspaceCommandRegistry(cwd, h),
 		vi.WithAutoCenter(true),
 	)
@@ -239,7 +243,7 @@ func (h *workspaceManagerHandler) newBuiltinModelessEditor(
 		modeless.WithIconsBar(cfg.iconsBarEnabled(), iconsBarConfig),
 		modeless.WithGitIcons(cfg.gitIconsEnabled()),
 		modeless.WithHideInitialFolds(cfg.initialFolds()),
-		modeless.WithClipboard(cfg.clipboard()),
+		modeless.WithClipboard(h.clip),
 		modeless.WithStatusBarConfig(cfg.statusBarEnabled(), statusBarConfig),
 		modeless.WithWorkspaceCommandRegistry(cwd, h),
 		modeless.WithAutoCenter(true),
@@ -287,6 +291,8 @@ func (h *workspaceManagerHandler) init(
 	h.tabsClickCallback = tabsClickCallback
 	h.publishEvent = publishEvent
 	h.workspace = manager
+	h.clip = cfg.clipboard()
+	h.macro = idemacro.New(h.clip, h.notifications.current(), cfg.commandKey())
 	h.sixDir = sixDir
 	h.extensionRunner = extensionRunner
 	h.builtinExtensions = builtinExtensions
@@ -322,7 +328,7 @@ func (h *workspaceManagerHandler) init(
 	tm.parent = h
 	h.empty, err = newEx(ed, homeWorkspace, h.storage, h.notifications, h.homeURI,
 		cfg.terminalConfig(), cfg.pluginBarConfig(),
-		h.publishEvent, 0 /* vte capacity */, cfg.clipboard(),
+		h.publishEvent, 0 /* vte capacity */, h.clip,
 		h.dispatchOnPreview, tm, globalOpts...)
 	if err != nil {
 		return fmt.Errorf("new ex: %w", err)
@@ -634,6 +640,8 @@ func (h *workspaceManagerHandler) switchToWorkspace(i int) bool {
 }
 
 func (h *workspaceManagerHandler) Handle(ev term.Event) (exit, handled bool) {
+	h.macro.BeginEvent(ev)
+	defer h.macro.EndEvent()
 	if ev.Type == term.EventMouse && h.drawBar() && ev.MouseY >= h.height-h.barSize() {
 		_, handled = h.union.Handle(ev)
 		return
@@ -741,7 +749,7 @@ func (h *workspaceManagerHandler) textOpts(
 		text.WithPackageManager(h.pkgmanager),
 		text.WithSyntaxConfig(cfg.syntaxConfig()),
 		text.WithMarkdownConfig(markdownConfig),
-		text.WithClipboard(cfg.clipboard()),
+		text.WithClipboard(h.clip),
 		text.WithOpenRouter(h),
 	}
 
@@ -831,7 +839,7 @@ func (h *workspaceManagerHandler) addWorkspace(
 	tm.parent = h
 	ex, err := newEx(ed, multicwd, h.storage, h.notifications, uri,
 		cfg.terminalConfig(), cfg.pluginBarConfig(), h.publishEvent, h.initialVTECapacity,
-		cfg.clipboard(), h.dispatchOnPreview, tm, textOpts...)
+		h.clip, h.dispatchOnPreview, tm, textOpts...)
 	if err != nil {
 		cancel()
 		return fmt.Errorf("new ex: %w", err)
@@ -1341,6 +1349,22 @@ func (h *workspaceManagerHandler) subscribeAllCommands(ex *ex) error {
 	err = h.subscribeAllExternalCommands(ex)
 	if err != nil {
 		return fmt.Errorf("subscribe external commands: %w", err)
+	}
+	err = ex.comp.SubscribeCommand(textapi.CommandManual{
+		Name: cmdMacroRecord,
+		Summary: "Toggle recording all user key events into the given clipboard register. " +
+			"Run `record a` to start capturing keys into register `a`, then run `record a` " +
+			"again to stop recording and save the key sequence. Recorded macros share the " +
+			"same register namespace as editor copy/paste, so different register IDs can hold " +
+			"different macros (`record a`, `record b`, `record +`, etc.). Replay a recorded " +
+			"macro by pairing this command with echo's register instruction: " +
+			"`echo {register}a` reads register `a`, parses the recorded keys, and sends them " +
+			"back through the IDE event loop. Echo sequences can also combine literal keys, " +
+			"instructions, and registers, for example `echo i{register}a<esc>{register}b`.",
+		Synopsis: "[register]",
+	}, h.macro)
+	if err != nil {
+		return fmt.Errorf("subscribe macro commands: %w", err)
 	}
 	err = h.pkgmanager.subscribeCommands(ex)
 	if err != nil {

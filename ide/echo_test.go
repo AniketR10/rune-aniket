@@ -138,6 +138,18 @@ func TestEchoParse(t *testing.T) {
 				{KeyComb: term.KeyComb{Key: term.KeySpace}},
 			},
 		},
+		{
+			input:       "{register}",
+			expectedErr: errors.New("missing register ID after {register}"),
+		},
+		{
+			input: "a{register}b<space>",
+			expectedOutput: []echoKey{
+				{KeyComb: term.KeyComb{Ch: 'a'}},
+				{instructReg: "b"},
+				{KeyComb: term.KeyComb{Key: term.KeySpace}},
+			},
+		},
 	}
 
 	for i, test := range suite {

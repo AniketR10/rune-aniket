@@ -35,6 +35,7 @@ type echoKey struct {
 	term.KeyComb
 	instructWait   bool
 	instructPrompt bool
+	instructReg    string
 }
 
 // parseEchoKeys recursively parses key combinations combined with instructions,
@@ -73,6 +74,16 @@ func parseEchoKeys(sequence string) (ret []echoKey, err error) {
 		ret = append(ret, echoKey{instructWait: true})
 	case "{prompt}":
 		ret = append(ret, echoKey{instructPrompt: true})
+	case "{register}":
+		remainder = remainder[idxClose+1:]
+		if remainder == "" {
+			err = errors.New("missing register ID after {register}")
+			break
+		}
+		registerID := remainder[:1]
+		ret = append(ret, echoKey{instructReg: registerID})
+		remainder = remainder[1:]
+		idxClose = -1
 	default:
 		err = fmt.Errorf("invalid instruction: %s", instruction)
 	}

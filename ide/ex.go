@@ -1491,7 +1491,8 @@ func (e *ex) echo(_ context.Context, args ...string) error {
 		return fmt.Errorf("invalid syntax: %v", err)
 	}
 	ok := true
-	for _, keyComb := range keys {
+	for i := 0; i < len(keys); i++ {
+		keyComb := keys[i]
 		if keyComb.instructWait {
 			ok = ok && e.publishEvent(term.Event{
 				Type: term.EventInterrupt,
@@ -1503,6 +1504,18 @@ func (e *ex) echo(_ context.Context, args ...string) error {
 		}
 		if keyComb.instructPrompt {
 			e.openCommandPrompt()
+			continue
+		}
+		if keyComb.instructReg != "" {
+			data, err := e.clip.Paste(keyComb.instructReg)
+			if err != nil {
+				return fmt.Errorf("paste register %q: %w", keyComb.instructReg, err)
+			}
+			regKeys, err := parseEchoKeys(data.Text)
+			if err != nil {
+				return fmt.Errorf("parse register %q: %w", keyComb.instructReg, err)
+			}
+			keys = append(keys[:i+1], append(regKeys, keys[i+1:]...)...)
 			continue
 		}
 		ok = ok && e.publishEvent(term.Event{
