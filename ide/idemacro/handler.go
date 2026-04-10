@@ -86,6 +86,14 @@ func (h *Recorder) IsRecording() bool {
 	return h.recording
 }
 
+// RegisterID reports the active recording register, or an empty string if idle.
+func (h *Recorder) RegisterID() string {
+	if !h.recording {
+		return ""
+	}
+	return h.registerID
+}
+
 // BeginEvent records ev and marks it as the event currently being dispatched.
 func (h *Recorder) BeginEvent(ev term.Event) {
 	h.inEvent = true

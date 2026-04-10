@@ -329,7 +329,7 @@ func (h *workspaceManagerHandler) init(
 	tm.parent = h
 	h.empty, err = newEx(ed, homeWorkspace, h.storage, h.notifications, h.homeURI,
 		cfg.terminalConfig(), cfg.pluginBarConfig(),
-		h.publishEvent, 0 /* vte capacity */, h.clip,
+		h.publishEvent, 0 /* vte capacity */, h.clip, h.macro,
 		h.dispatchOnPreview, tm, globalOpts...)
 	if err != nil {
 		return fmt.Errorf("new ex: %w", err)
@@ -840,7 +840,7 @@ func (h *workspaceManagerHandler) addWorkspace(
 	tm.parent = h
 	ex, err := newEx(ed, multicwd, h.storage, h.notifications, uri,
 		cfg.terminalConfig(), cfg.pluginBarConfig(), h.publishEvent, h.initialVTECapacity,
-		h.clip, h.dispatchOnPreview, tm, textOpts...)
+		h.clip, h.macro, h.dispatchOnPreview, tm, textOpts...)
 	if err != nil {
 		cancel()
 		return fmt.Errorf("new ex: %w", err)

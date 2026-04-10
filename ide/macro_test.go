@@ -21,7 +21,7 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package ide_test
+package ide
 
 import (
 	"os"
@@ -32,10 +32,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/rune-go-sdk/tui"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/handler/handlertest"
-	"unstable.build/go-tui/ide"
 	"unstable.build/go-tui/text"
 )
 
@@ -47,10 +45,10 @@ func TestMacroRecordAndEchoIntegration(t *testing.T) {
 		{
 			name: "recorded insert keys echo back through event loop",
 			run: func(t *testing.T, tc *macroIntegrationHarness) {
-				handleKeys(t, tc.mu, tc.h, ":record<space>a<enter>ione<esc>:record<space>a<enter>")
+				handleKeys(t, tc, ":record<space>a<enter>ione<esc>:record<space>a<enter>")
 				require.Equal(t, "one", editorString(t, tc.ide))
 
-				handleKeys(t, tc.mu, tc.h, "Go<esc>:echo<space>{register}a<enter>")
+				handleKeys(t, tc, "Go<esc>:echo<space>{register}a<enter>")
 				tc.drainPublishedEvents(t)
 				require.Equal(t, "one\none", editorString(t, tc.ide))
 			},
@@ -58,13 +56,13 @@ func TestMacroRecordAndEchoIntegration(t *testing.T) {
 		{
 			name: "different registers hold different key sequences",
 			run: func(t *testing.T, tc *macroIntegrationHarness) {
-				handleKeys(t, tc.mu, tc.h, ":record<space>a<enter>ia<esc>:record<space>a<enter>")
-				handleKeys(t, tc.mu, tc.h, "Go<esc>:record<space>b<enter>ib<esc>:record<space>b<enter>")
+				handleKeys(t, tc, ":record<space>a<enter>ia<esc>:record<space>a<enter>")
+				handleKeys(t, tc, "Go<esc>:record<space>b<enter>ib<esc>:record<space>b<enter>")
 				require.Equal(t, "a\nb", editorString(t, tc.ide))
 
-				handleKeys(t, tc.mu, tc.h, "Go<esc>:echo<space>{register}a<enter>")
+				handleKeys(t, tc, "Go<esc>:echo<space>{register}a<enter>")
 				tc.drainPublishedEvents(t)
-				handleKeys(t, tc.mu, tc.h, "Go<esc>:echo<space>{register}b<enter>")
+				handleKeys(t, tc, "Go<esc>:echo<space>{register}b<enter>")
 				tc.drainPublishedEvents(t)
 
 				require.Equal(t, "a\nb\na\nb", editorString(t, tc.ide))
@@ -73,7 +71,7 @@ func TestMacroRecordAndEchoIntegration(t *testing.T) {
 		{
 			name: "vim style qq q atq workflow works",
 			run: func(t *testing.T, tc *macroIntegrationHarness) {
-				handleKeys(t, tc.mu, tc.h, "qqabound<esc>q@q")
+				handleKeys(t, tc, "qqabound<esc>q@q")
 				tc.drainPublishedEvents(t)
 
 				require.Equal(t, "boundbound", editorString(t, tc.ide))
@@ -82,8 +80,8 @@ func TestMacroRecordAndEchoIntegration(t *testing.T) {
 		{
 			name: "recorded command prompt command replays via echo",
 			run: func(t *testing.T, tc *macroIntegrationHarness) {
-				handleKeys(t, tc.mu, tc.h, ":record<space>a<enter>:tabrename<space>macroed<enter>:record<space>a<enter>")
-				handleKeys(t, tc.mu, tc.h, ":notificationcloseall<enter>")
+				handleKeys(t, tc, ":record<space>a<enter>:tabrename<space>macroed<enter>:record<space>a<enter>")
+				handleKeys(t, tc, ":notificationcloseall<enter>")
 				require.Equal(t, `┌──────────────────────────────────────┐
 │o macroed                             │
 ├──────────────────────────────────────┤
@@ -96,8 +94,8 @@ func TestMacroRecordAndEchoIntegration(t *testing.T) {
 │                                      │
 │                                NORMAL│
 └──────────────────────────────────────┘`, drawIDE(t, tc))
-				handleKeys(t, tc.mu, tc.h, ":tabrename<space>reset<enter>")
-				handleKeys(t, tc.mu, tc.h, ":notificationcloseall<enter>")
+				handleKeys(t, tc, ":tabrename<space>reset<enter>")
+				handleKeys(t, tc, ":notificationcloseall<enter>")
 				require.Equal(t, `┌──────────────────────────────────────┐
 │o reset                               │
 ├──────────────────────────────────────┤
@@ -111,9 +109,9 @@ func TestMacroRecordAndEchoIntegration(t *testing.T) {
 │                                NORMAL│
 └──────────────────────────────────────┘`, drawIDE(t, tc))
 
-				handleKeys(t, tc.mu, tc.h, ":echo<space>{register}a<enter>")
+				handleKeys(t, tc, ":echo<space>{register}a<enter>")
 				tc.drainPublishedEvents(t)
-				handleKeys(t, tc.mu, tc.h, ":notificationcloseall<enter>")
+				handleKeys(t, tc, ":notificationcloseall<enter>")
 
 				require.Equal(t, `┌──────────────────────────────────────┐
 │o macroed                             │
@@ -132,7 +130,7 @@ func TestMacroRecordAndEchoIntegration(t *testing.T) {
 		{
 			name: "record in one workspace and replay in another workspace",
 			run: func(t *testing.T, tc *macroIntegrationHarness) {
-				handleKeys(t, tc.mu, tc.h, ":record<space>a<enter>iws<esc>:record<space>a<enter>")
+				handleKeys(t, tc, ":record<space>a<enter>iws<esc>:record<space>a<enter>")
 				require.Equal(t, "ws", editorString(t, tc.ide))
 
 				secondWorkspace := t.TempDir()
@@ -140,12 +138,12 @@ func TestMacroRecordAndEchoIntegration(t *testing.T) {
 				require.NoError(t, os.WriteFile(secondFile, nil, 0666))
 				secondURI, err := workspaceapi.CurrentUserHostURI(secondFile)
 				require.NoError(t, err)
-				handleKeys(t, tc.mu, tc.h, ":workspacenew<space>"+secondWorkspace+"<enter>")
+				handleKeys(t, tc, ":workspacenew<space>"+secondWorkspace+"<enter>")
 				withLockedIDE(t, tc.mu, func() {
 					require.NoError(t, tc.ide.Open(secondURI))
 				})
 
-				handleKeys(t, tc.mu, tc.h, ":echo<space>{register}a<enter>")
+				handleKeys(t, tc, ":echo<space>{register}a<enter>")
 				tc.drainPublishedEvents(t)
 
 				require.Equal(t, "ws", editorString(t, tc.ide))
@@ -154,10 +152,10 @@ func TestMacroRecordAndEchoIntegration(t *testing.T) {
 		{
 			name: "nested record command is rejected and not recorded",
 			run: func(t *testing.T, tc *macroIntegrationHarness) {
-				handleKeys(t, tc.mu, tc.h, ":record<space>a<enter>ix<esc>:record<space>b<enter>ay<esc>:record<space>a<enter>")
+				handleKeys(t, tc, ":record<space>a<enter>ix<esc>:record<space>b<enter>ay<esc>:record<space>a<enter>")
 				require.Equal(t, "xy", editorString(t, tc.ide))
 
-				handleKeys(t, tc.mu, tc.h, "Go<esc>:echo<space>{register}a<enter>")
+				handleKeys(t, tc, "Go<esc>:echo<space>{register}a<enter>")
 				tc.drainPublishedEvents(t)
 
 				require.Equal(t, "xy\nxy", editorString(t, tc.ide))
@@ -166,12 +164,12 @@ func TestMacroRecordAndEchoIntegration(t *testing.T) {
 		{
 			name: "prompt-open replay can be recorded without recording the stop command",
 			run: func(t *testing.T, tc *macroIntegrationHarness) {
-				handleKeys(t, tc.mu, tc.h, ":record<space>a<enter>:tabrename<space>macroed<enter>:record<space>a<enter>")
-				handleKeys(t, tc.mu, tc.h, ":tabrename<space>reset<enter>:notificationcloseall<enter>")
+				handleKeys(t, tc, ":record<space>a<enter>:tabrename<space>macroed<enter>:record<space>a<enter>")
+				handleKeys(t, tc, ":tabrename<space>reset<enter>:notificationcloseall<enter>")
 
-				handleKeys(t, tc.mu, tc.h, ":record<space>b<enter>:echo<space>{register}a<enter>")
+				handleKeys(t, tc, ":record<space>b<enter>:echo<space>{register}a<enter>")
 				tc.drainPublishedEvents(t)
-				handleKeys(t, tc.mu, tc.h, ":record<space>b<enter>:notificationcloseall<enter>")
+				handleKeys(t, tc, ":record<space>b<enter>:notificationcloseall<enter>")
 
 				require.Equal(t, `┌──────────────────────────────────────┐
 │o macroed                             │
@@ -186,9 +184,9 @@ func TestMacroRecordAndEchoIntegration(t *testing.T) {
 │                                NORMAL│
 └──────────────────────────────────────┘`, drawIDE(t, tc))
 
-				handleKeys(t, tc.mu, tc.h, ":tabrename<space>reset<enter>:echo<space>{register}b<enter>")
+				handleKeys(t, tc, ":tabrename<space>reset<enter>:echo<space>{register}b<enter>")
 				tc.drainPublishedEvents(t)
-				handleKeys(t, tc.mu, tc.h, ":notificationcloseall<enter>")
+				handleKeys(t, tc, ":notificationcloseall<enter>")
 
 				require.Equal(t, `┌──────────────────────────────────────┐
 │o macroed                             │
@@ -202,6 +200,17 @@ func TestMacroRecordAndEchoIntegration(t *testing.T) {
 │                                      │
 │                                NORMAL│
 └──────────────────────────────────────┘`, drawIDE(t, tc))
+			},
+		},
+		{
+			name: "echoing the active recording register fails fast instead of looping",
+			run: func(t *testing.T, tc *macroIntegrationHarness) {
+				handleKeys(t, tc, ":record<space>q<enter>iok<esc>:echo<space>{register}q<enter>:notificationcloseall<enter>")
+				tc.drainPublishedEvents(t)
+
+				require.Equal(t, "ok", editorString(t, tc.ide))
+
+				handleKeys(t, tc, ":record<space>q<enter>")
 			},
 		},
 	}
@@ -215,10 +224,48 @@ func TestMacroRecordAndEchoIntegration(t *testing.T) {
 }
 
 type macroIntegrationHarness struct {
-	mu     *sync.Mutex
-	events chan term.Event
-	ide    *ide.IDE
-	h      tui.Handler
+	mu        *sync.Mutex
+	events    chan term.Event
+	ide       *IDE
+	h         *macroTestHandler
+	scheduler *queuedScheduler
+}
+
+type macroTestHandler struct {
+	tc *macroIntegrationHarness
+}
+
+func (h *macroTestHandler) Handle(ev term.Event) (bool, bool) {
+	h.tc.mu.Lock()
+	quit, handled := h.tc.ide.root.Handle(ev)
+	h.tc.mu.Unlock()
+	flushMacroHarness(h.tc)
+	return quit, handled
+}
+
+func (h *macroTestHandler) Draw(w term.Writer) {
+	flushMacroHarness(h.tc)
+	h.tc.mu.Lock()
+	defer h.tc.mu.Unlock()
+	h.tc.ide.root.Draw(w)
+}
+
+func (h *macroTestHandler) Resize(width, height int) {
+	h.tc.mu.Lock()
+	defer h.tc.mu.Unlock()
+	h.tc.ide.root.Resize(width, height)
+}
+
+func (h *macroTestHandler) Cursor() (term.Coordinates, term.CursorStyle, bool) {
+	h.tc.mu.Lock()
+	defer h.tc.mu.Unlock()
+	return h.tc.ide.root.Cursor()
+}
+
+func (h *macroTestHandler) Selection() (string, bool) {
+	h.tc.mu.Lock()
+	defer h.tc.mu.Unlock()
+	return h.tc.ide.root.Selection()
 }
 
 func newMacroIntegrationHarness(t *testing.T) *macroIntegrationHarness {
@@ -232,9 +279,11 @@ func newMacroIntegrationHarness(t *testing.T) *macroIntegrationHarness {
 
 	mu := new(sync.Mutex)
 	events := make(chan term.Event, 4096)
-	i, err := ide.New(dir, cfgName, dir,
-		ide.WithLocker(mu),
-		ide.WithPublishEvent(func(ev term.Event) bool {
+	scheduler := newQueuedScheduler()
+	i, err := New(dir, cfgName, dir,
+		WithLocker(mu),
+		WithScheduleNextTick(scheduler.ScheduleNextTick),
+		WithPublishEvent(func(ev term.Event) bool {
 			if ev.Type == term.EventInterrupt {
 				return true
 			}
@@ -248,27 +297,25 @@ func newMacroIntegrationHarness(t *testing.T) *macroIntegrationHarness {
 	)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, i.Close()) })
-	h := i.Ready()
+	_ = i.Ready()
+	tc := &macroIntegrationHarness{mu: mu, events: events, ide: i, scheduler: scheduler}
+	tc.h = &macroTestHandler{tc: tc}
 
 	withLockedIDE(t, mu, func() {
 		require.NoError(t, i.Open(uri))
-		h.Resize(40, 12)
+		i.root.Resize(40, 12)
 	})
-	return &macroIntegrationHarness{mu: mu, events: events, ide: i, h: h}
+	return tc
 }
 
 func (h *macroIntegrationHarness) drainPublishedEvents(t *testing.T) {
 	t.Helper()
-	drainPublishedEvents(t, h.mu, h.h, h.events)
+	drainPublishedEvents(t, h, h.events)
 }
 
 func drawIDE(t *testing.T, tc *macroIntegrationHarness) string {
 	t.Helper()
-	var ret string
-	withLockedIDE(t, tc.mu, func() {
-		ret = handlertest.DrawHandler(tc.h, 40, 12)
-	})
-	return ret
+	return handlertest.DrawHandler(tc.h, 40, 12)
 }
 
 func macroTestConfig(t *testing.T, dir string) string {
@@ -278,6 +325,7 @@ func macroTestConfig(t *testing.T, dir string) string {
 editor:
   mode: modal
 command:
+  show_manual_after: 1h
   key: ":"
   key_bindings:
     qq: record q
@@ -286,34 +334,34 @@ command:
 	return name
 }
 
-func handleKeys(t *testing.T, mu *sync.Mutex, h tui.Handler, seq string) {
+func handleKeys(t *testing.T, tc *macroIntegrationHarness, seq string) {
 	t.Helper()
 	keys, err := term.ParseKeys(seq)
 	require.NoError(t, err)
-	withLockedIDE(t, mu, func() {
-		for _, key := range keys {
-			h.Handle(term.Event{
-				Type: term.EventKey,
-				Ch:   key.Ch,
-				Mod:  key.Mod,
-				Key:  key.Key,
-			})
-		}
-	})
+	for _, key := range keys {
+		tc.h.Handle(term.Event{
+			Type: term.EventKey,
+			Ch:   key.Ch,
+			Mod:  key.Mod,
+			Key:  key.Key,
+		})
+		flushMacroHarness(tc)
+	}
 }
 
-func drainPublishedEvents(t *testing.T, mu *sync.Mutex, h tui.Handler, events <-chan term.Event) {
+func drainPublishedEvents(t *testing.T, tc *macroIntegrationHarness, events <-chan term.Event) {
 	t.Helper()
 	for range 4096 {
 		select {
 		case ev := <-events:
-			withLockedIDE(t, mu, func() {
-				if ev.UserFunc != nil {
+			if ev.UserFunc != nil {
+				withLockedIDE(t, tc.mu, func() {
 					ev.UserFunc()
-					return
-				}
-				h.Handle(ev)
-			})
+				})
+			} else {
+				tc.h.Handle(ev)
+			}
+			flushMacroHarness(tc)
 		default:
 			return
 		}
@@ -321,7 +369,7 @@ func drainPublishedEvents(t *testing.T, mu *sync.Mutex, h tui.Handler, events <-
 	t.Fatalf("published event drain limit exceeded")
 }
 
-func editorString(t *testing.T, i *ide.IDE) string {
+func editorString(t *testing.T, i *IDE) string {
 	t.Helper()
 	win, err := i.Browser().Focus()
 	require.NoError(t, err)
@@ -340,4 +388,24 @@ func withLockedIDE(t *testing.T, mu *sync.Mutex, fn func()) {
 	mu.Lock()
 	defer mu.Unlock()
 	fn()
+}
+func flushMacroHarness(tc *macroIntegrationHarness) {
+	if tc == nil {
+		return
+	}
+	if tc.scheduler != nil {
+		tc.scheduler.Flush(tc.mu)
+	}
+	tc.mu.Lock()
+	handler := tc.ide.workspaceHandler.focusHandler()
+	ex, ok := handler.(*ex)
+	if !ok {
+		ex = handler.(*workspaceHandler).ex
+	}
+	cmd := ex.cmd
+	tc.mu.Unlock()
+	if cmd != nil {
+		cmd.Cancel()
+	}
+	ex.Wait()
 }

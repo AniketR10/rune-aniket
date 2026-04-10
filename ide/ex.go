@@ -79,6 +79,11 @@ type pluginHandler interface {
 	OnFocusChange(bool)
 }
 
+type macroRecorder interface {
+	IsRecording() bool
+	RegisterID() string
+}
+
 // ex implements a tui.Handler by wrapping an editor.Component and
 // providing an ex editor type of interface.
 type ex struct {
@@ -119,6 +124,7 @@ type ex struct {
 	height           int
 	width            int
 	isPromptDispatch bool
+	macro            macroRecorder
 
 	companionTerminal    vtereservoir.VTE
 	companionTerminalWin browser.Window
@@ -141,13 +147,14 @@ func newEx(
 	publishEvent func(term.Event) bool,
 	initialVTECapacity int,
 	clip clipboard.Register,
+	macro macroRecorder,
 	dispatchOnPreview map[string]PreviewFunc,
 	tm browser.TabManager,
 	opts ...text.Option,
 ) (e *ex, err error) {
 	e = new(ex)
 	err = e.init(ed, m, storage, notifications, uri,
-		emulatorConfig, pluginBarConfig, publishEvent, initialVTECapacity, clip,
+		emulatorConfig, pluginBarConfig, publishEvent, initialVTECapacity, clip, macro,
 		dispatchOnPreview, tm, opts...)
 	if err != nil {
 		return
@@ -168,6 +175,7 @@ func (e *ex) init(
 	publishEvent func(term.Event) bool,
 	initialVTECapacity int,
 	clip clipboard.Register,
+	macro macroRecorder,
 	dispatchOnPreview map[string]PreviewFunc,
 	tm browser.TabManager,
 	opts ...text.Option,
@@ -220,6 +228,7 @@ func (e *ex) init(
 			e.tm, args, e.width, pluginOpts...)
 	}
 	e.dispatchOnPreview = dispatchOnPreview
+	e.macro = macro
 	e.filepathCompleter = command.FilePathCompleter(e.workspace)
 	e.tasks = idetask.NewManager(&e.comp, tm, m,
 		emulatorConfig.ScheduleNextTick, pluginOpts...)
@@ -1529,6 +1538,9 @@ func (e *ex) expandEchoRegisters(keys []echoKey, stack []string) ([]echoKey, err
 		if key.instructReg == "" {
 			ret = append(ret, key)
 			continue
+		}
+		if e.macro != nil && e.macro.IsRecording() && e.macro.RegisterID() == key.instructReg {
+			return nil, fmt.Errorf("cannot echo register %q while it is actively being recorded", key.instructReg)
 		}
 		for _, seen := range stack {
 			if seen == key.instructReg {
