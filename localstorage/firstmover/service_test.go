@@ -402,6 +402,14 @@ func (t *testService) List(ctx context.Context, filters []storageapi.Filter) (st
 	panic("unimplemented")
 }
 
+func (t *testService) Partition(name string) (storageapi.Service, error) {
+	partitioned, err := t.svc.Partition(name)
+	if err != nil {
+		return nil, err
+	}
+	return &testService{err: t.err, svc: partitioned}, nil
+}
+
 func (t *testService) Close() error {
 	return nil
 }

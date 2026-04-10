@@ -45,6 +45,10 @@ import (
 	"unstable.build/go-tui/workspace"
 )
 
+type partitionDoc struct {
+	Name string
+}
+
 func testMemoryWorkspaceServiceWithMarshaler(t *testing.T, m docmarshal.Marshaler) {
 	doctest.TestDocumentService(t, func(t *testing.T) document.Service {
 		uri, err := workspaceapi.ParseURI("memory:///")
@@ -214,4 +218,80 @@ func TestEscapeBoundaries(t *testing.T) {
 
 	require.NoError(t, svcB.Get(context.Background(), "../a/1234", &temp))
 	assert.Equal(t, []string{"OH BOY"}, temp.Content)
+}
+
+func TestPartitionIsolation(t *testing.T) {
+	name, err := os.MkdirTemp("", "workspace_document_partition_test")
+	require.NoError(t, err)
+	defer os.RemoveAll(name)
+
+	uri, err := workspaceapi.ParseURI("file://" + name)
+	require.NoError(t, err)
+	scheme, err := workspace.NewFileScheme(context.Background(), config.NopConfig(), uri)
+	require.NoError(t, err)
+	svc, err := NewDocumentService(scheme, doctoml.Marshaler())
+	require.NoError(t, err)
+	defer svc.Close()
+
+	partA, err := svc.Partition("a")
+	require.NoError(t, err)
+	partB, err := svc.Partition("b")
+	require.NoError(t, err)
+
+	require.NoError(t, partA.Set(context.Background(), "doc-a", &partitionDoc{Name: "A"}))
+	require.NoError(t, partB.Set(context.Background(), "doc-b", &partitionDoc{Name: "B"}))
+
+	itA, err := partA.List(context.Background(), nil)
+	require.NoError(t, err)
+	defer itA.Close()
+	require.True(t, itA.HasNext())
+	var gotA partitionDoc
+	require.NoError(t, itA.NextTo(&gotA))
+	assert.Equal(t, "A", gotA.Name)
+	assert.False(t, itA.HasNext())
+
+	itB, err := partB.List(context.Background(), nil)
+	require.NoError(t, err)
+	defer itB.Close()
+	require.True(t, itB.HasNext())
+	var gotB partitionDoc
+	require.NoError(t, itB.NextTo(&gotB))
+	assert.Equal(t, "B", gotB.Name)
+	assert.False(t, itB.HasNext())
+
+	rootEntries, err := os.ReadDir(name)
+	require.NoError(t, err)
+	entryNames := make([]string, 0, len(rootEntries))
+	for _, entry := range rootEntries {
+		entryNames = append(entryNames, entry.Name())
+	}
+	assert.Contains(t, entryNames, "a")
+	assert.Contains(t, entryNames, "b")
+	assert.NotContains(t, entryNames, "a.doc-a")
+	assert.NotContains(t, entryNames, "b.doc-b")
+
+	_, err = os.Stat(filepath.Join(name, "a", "doc-a"))
+	assert.NoError(t, err)
+	_, err = os.Stat(filepath.Join(name, "b", "doc-b"))
+	assert.NoError(t, err)
+}
+
+func TestPartitionedServiceSuite(t *testing.T) {
+	doctest.TestDocumentService(t, func(t *testing.T) document.Service {
+		name, err := os.MkdirTemp("", "workspace_partitioned_document_service_test")
+		require.NoError(t, err)
+		uri, err := workspaceapi.ParseURI("file://" + name)
+		require.NoError(t, err)
+		scheme, err := workspace.NewFileScheme(context.Background(), config.NopConfig(), uri)
+		require.NoError(t, err)
+		svc, err := NewDocumentService(scheme, doctoml.Marshaler())
+		require.NoError(t, err)
+		part, err := svc.Partition("suite")
+		require.NoError(t, err)
+		t.Cleanup(func() {
+			_ = part.Close()
+			_ = os.RemoveAll(name)
+		})
+		return bluestore.AdaptFrom(part)
+	})
 }

@@ -128,6 +128,12 @@ func (d *delayedLoadingService) List(ctx context.Context, filters []storageapi.F
 	return d.service.List(ctx, filters)
 }
 
+func (d *delayedLoadingService) Partition(name string) (storageapi.Service, error) {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	return d.service.Partition(name)
+}
+
 func (d *delayedLoadingService) Close() error {
 	d.mu.RLock()
 	defer d.mu.RUnlock()

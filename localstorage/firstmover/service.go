@@ -30,6 +30,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -267,6 +268,17 @@ func (s *Service) List(ctx context.Context, filters []storageapi.Filter) (
 		return s.isRetriableError(err), err
 	})
 	return
+}
+
+// Partition returns a partitioned peer service over the same firstmover backend.
+func (s *Service) Partition(name string) (storageapi.Service, error) {
+	partitioned, err := s.svc.Partition(name)
+	if err != nil {
+		return nil, err
+	}
+	ret := new(Service)
+	ret.Init(partitioned, s.lockFileListen+"."+url.PathEscape(name), s.cfg)
+	return ret, nil
 }
 
 // Publish publishes an arbitrary message to the given topic.

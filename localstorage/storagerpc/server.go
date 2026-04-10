@@ -29,6 +29,7 @@ import (
 
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/docmarshal"
+	sdkstoragerpc "github.com/unstablebuild/rune-go-sdk/api/storageapi/storagerpc"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagerpc/docpb"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -55,6 +56,18 @@ func (s *Server) Init(other storageapi.Service, m docmarshal.Marshaler) {
 	s.marshaler = m
 }
 
+func (s *Server) serviceForContext(ctx context.Context) (storageapi.Service, error) {
+	svc := s.other
+	for _, partition := range sdkstoragerpc.PartitionsFromIncomingContext(ctx) {
+		var err error
+		svc, err = svc.Partition(partition)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return svc, nil
+}
+
 // Create satisfies proto.DocumentStoreServer
 func (s *Server) Create(
 	ctx context.Context, req *docpb.CreateDocumentRequest,
@@ -68,7 +81,11 @@ func (s *Server) Create(
 		return
 	}
 
-	err = s.other.Create(ctx, id, pr)
+	svc, err := s.serviceForContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	err = svc.Create(ctx, id, pr)
 	if err != nil {
 		if errors.Is(err, storageapi.ErrAlreadyExists) {
 			err = nil
@@ -99,7 +116,11 @@ func (s *Server) Set(
 		return
 	}
 
-	err = s.other.Set(ctx, id, &pr)
+	svc, err := s.serviceForContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	err = svc.Set(ctx, id, &pr)
 	if errors.Is(err, storageapi.ErrPermissionDenied) {
 		err = status.Error(codes.PermissionDenied, "")
 	}
@@ -125,7 +146,11 @@ func (s *Server) Update(
 		err = errors.New("invalid request: no paths to update")
 		return nil, err
 	}
-	err = s.other.Update(ctx, req.GetId(), updates, preconds...)
+	svc, err := s.serviceForContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	err = svc.Update(ctx, req.GetId(), updates, preconds...)
 	if err != nil {
 		switch err {
 		case storageapi.ErrNotFound:
@@ -147,7 +172,11 @@ func (s *Server) Get(
 	id := req.GetId()
 
 	var pr map[string]any
-	err = s.other.Get(ctx, id, &pr)
+	svc, err := s.serviceForContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	err = svc.Get(ctx, id, &pr)
 	if err != nil {
 		if errors.Is(err, storageapi.ErrNotFound) {
 			res = &docpb.GetDocumentResponse{NotFound: true}
@@ -171,7 +200,11 @@ func (s *Server) Delete(
 ) (res *docpb.DocumentResponse, err error) {
 	id := req.GetId()
 
-	err = s.other.Delete(ctx, id)
+	svc, err := s.serviceForContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	err = svc.Delete(ctx, id)
 	if errors.Is(err, storageapi.ErrPermissionDenied) {
 		err = status.Error(codes.PermissionDenied, "")
 	}
@@ -219,16 +252,16 @@ func (s *Server) streamList(list docpb.DocumentStore_ListServer, it storageapi.I
 func (s *Server) List(
 	req *docpb.ListDocumentRequest, list docpb.DocumentStore_ListServer,
 ) error {
-	ctx := context.Background()
+	ctx := list.Context()
 	filters, err := makeModelFilters(s.marshaler, req.GetFilters())
 	if err != nil {
 		return err
 	}
-
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	it, err := s.other.List(ctx, filters)
+	svc, err := s.serviceForContext(ctx)
+	if err != nil {
+		return err
+	}
+	it, err := svc.List(ctx, filters)
 	if err != nil {
 		if errors.Is(err, storageapi.ErrPermissionDenied) {
 			err = status.Error(codes.PermissionDenied, "")

@@ -1406,6 +1406,7 @@ func (stubStorage) Delete(context.Context, string) error   { return nil }
 func (stubStorage) List(context.Context, []storageapi.Filter) (storageapi.Iterator, error) {
 	return nil, nil
 }
+func (stubStorage) Partition(string) (storageapi.Service, error) { return stubStorage{}, nil }
 func (stubStorage) Close() error { return nil }
 
 type stubNotifications struct{}

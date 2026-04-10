@@ -51,7 +51,7 @@ func dialStorage(ctx context.Context, grant extension.Grant, broker rpc.MuxBroke
 	}
 	c := new(storagerpc.Client)
 	c.Init(conn, doctoml.Marshaler())
-	return storageapi.WithPartition(c, partition), nil
+	return c.Partition(partition)
 }
 
 // Storage acquires a client to persistent storage with

@@ -29,6 +29,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/document/docmarshal/docbson"
@@ -39,6 +40,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/docmarshal"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagerpc"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagerpc/docpb"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"unstable.build/go-tui/localstorage/bluestore"
@@ -108,6 +110,33 @@ func testRPCDatastoreOverListener(
 	}
 }
 
+func testRPCPartitionedDatastoreOverListener(
+	t *testing.T, listener func() (net.Listener, error),
+	marshaler docmarshal.Marshaler,
+) {
+	teardowns := []func(){}
+
+	doctest.TestDocumentService(t, func(t *testing.T) document.Service {
+		cache := storagestub.NewInMemoryServiceWithMarshaler(marshaler)
+		addr, teardown := runDatastoreServerOverListener(t, cache,
+			listener, marshaler, docpb.RegisterDocumentStoreServer)
+		teardowns = append(teardowns, teardown)
+
+		store, err := storagerpc.NewClient(addr, marshaler,
+			grpc.WithTransportCredentials(insecure.NewCredentials()))
+		require.NoError(t, err)
+
+		part, err := store.Partition("suite")
+		require.NoError(t, err)
+
+		return bluestore.AdaptFrom(part)
+	})
+
+	for _, fn := range teardowns {
+		fn()
+	}
+}
+
 // tempUnixListener creates a temp file and exposes it
 // as a unix domain sockets net.Listener.
 func tempUnixListener() (net.Listener, error) {
@@ -141,6 +170,16 @@ func TestRPC(t *testing.T) {
 
 	t.Run("over Unix domain sockets", func(t *testing.T) {
 		testRPCDatastoreOverListener(t, tempUnixListener, docbson.Marshaler())
+	})
+}
+
+func TestRPCPartitioned(t *testing.T) {
+	t.Run("over TCP", func(t *testing.T) {
+		testRPCPartitionedDatastoreOverListener(t, tcpListener, docbson.Marshaler())
+	})
+
+	t.Run("over Unix domain sockets", func(t *testing.T) {
+		testRPCPartitionedDatastoreOverListener(t, tempUnixListener, docbson.Marshaler())
 	})
 }
 
@@ -282,6 +321,44 @@ func TestRPCInterop(t *testing.T) {
 				})
 			})
 
+			t.Run("partitioned writes by client/server are readable by underlying service", func(t *testing.T) {
+				doctest.TestDocumentService(t, func(t *testing.T) document.Service {
+					cache := storagestub.NewInMemoryServiceWithMarshaler(marshaler)
+					addr, teardown := runDatastoreServer(t, cache, marshaler)
+					teardowns = append(teardowns, teardown)
+
+					store, err := storagerpc.NewClient(addr, marshaler,
+						grpc.WithTransportCredentials(insecure.NewCredentials()))
+					require.NoError(t, err)
+
+					storePart, err := store.Partition("suite")
+					require.NoError(t, err)
+					cachePart, err := cache.Partition("suite")
+					require.NoError(t, err)
+
+					return interopHelper{read: bluestore.AdaptFrom(cachePart), write: bluestore.AdaptFrom(storePart)}
+				})
+			})
+
+			t.Run("partitioned writes by underlying service are readable by client/server", func(t *testing.T) {
+				doctest.TestDocumentService(t, func(t *testing.T) document.Service {
+					cache := storagestub.NewInMemoryServiceWithMarshaler(marshaler)
+					addr, teardown := runDatastoreServer(t, cache, marshaler)
+					teardowns = append(teardowns, teardown)
+
+					store, err := storagerpc.NewClient(addr, marshaler,
+						grpc.WithTransportCredentials(insecure.NewCredentials()))
+					require.NoError(t, err)
+
+					storePart, err := store.Partition("suite")
+					require.NoError(t, err)
+					cachePart, err := cache.Partition("suite")
+					require.NoError(t, err)
+
+					return interopHelper{read: bluestore.AdaptFrom(storePart), write: bluestore.AdaptFrom(cachePart)}
+				})
+			})
+
 			t.Run("single instance preconditions", func(t *testing.T) {
 				doctest.TestDocumentServicePreconditions(t, func(t *testing.T) document.Service {
 					cache := document.NewInMemoryServiceWithMarshaler(marshaler)
@@ -295,6 +372,70 @@ func TestRPCInterop(t *testing.T) {
 					return interopHelper{read: cache, write: bluestore.AdaptFrom(store)}
 				})
 			})
+
+			t.Run("partitioned single instance preconditions", func(t *testing.T) {
+				doctest.TestDocumentServicePreconditions(t, func(t *testing.T) document.Service {
+					cache := storagestub.NewInMemoryServiceWithMarshaler(marshaler)
+					addr, teardown := runDatastoreServer(t, cache, marshaler)
+					teardowns = append(teardowns, teardown)
+
+					store, err := storagerpc.NewClient(addr, marshaler,
+						grpc.WithTransportCredentials(insecure.NewCredentials()))
+					require.NoError(t, err)
+
+					storePart, err := store.Partition("suite")
+					require.NoError(t, err)
+					cachePart, err := cache.Partition("suite")
+					require.NoError(t, err)
+
+					return interopHelper{read: bluestore.AdaptFrom(cachePart), write: bluestore.AdaptFrom(storePart)}
+				})
+			})
 		})
 	}
+}
+
+func TestRPCPartitionIsolation(t *testing.T) {
+	cache := storagestub.NewInMemoryServiceWithMarshaler(doctoml.Marshaler())
+	addr, teardown := runDatastoreServer(t, cache, doctoml.Marshaler())
+	defer teardown()
+
+	store, err := storagerpc.NewClient(addr, doctoml.Marshaler(),
+		grpc.WithTransportCredentials(insecure.NewCredentials()))
+	require.NoError(t, err)
+	defer store.Close()
+
+	partA, err := store.Partition("a")
+	require.NoError(t, err)
+	partB, err := store.Partition("b")
+	require.NoError(t, err)
+
+	require.NoError(t, partA.Set(context.Background(), "doc", map[string]any{"name": "A"}))
+	require.NoError(t, partB.Set(context.Background(), "doc", map[string]any{"name": "B"}))
+
+	var gotA map[string]any
+	require.NoError(t, partA.Get(context.Background(), "doc", &gotA))
+	assert.Equal(t, "A", gotA["name"])
+
+	var gotB map[string]any
+	require.NoError(t, partB.Get(context.Background(), "doc", &gotB))
+	assert.Equal(t, "B", gotB["name"])
+
+	itA, err := partA.List(context.Background(), nil)
+	require.NoError(t, err)
+	defer itA.Close()
+	require.True(t, itA.HasNext())
+	var listedA map[string]any
+	require.NoError(t, itA.NextTo(&listedA))
+	assert.Equal(t, "A", listedA["name"])
+	assert.False(t, itA.HasNext())
+
+	itB, err := partB.List(context.Background(), nil)
+	require.NoError(t, err)
+	defer itB.Close()
+	require.True(t, itB.HasNext())
+	var listedB map[string]any
+	require.NoError(t, itB.NextTo(&listedB))
+	assert.Equal(t, "B", listedB["name"])
+	assert.False(t, itB.HasNext())
 }

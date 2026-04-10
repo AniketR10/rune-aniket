@@ -240,6 +240,16 @@ func (s *mockService) List(ctx context.Context, filters []storageapi.Filter) (
 	}
 	return s.svc.List(ctx, filters)
 }
+func (s *mockService) Partition(name string) (storageapi.Service, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+	partitioned, err := s.svc.Partition(name)
+	if err != nil {
+		return nil, err
+	}
+	return &mockService{svc: partitioned}, nil
+}
 func (s *mockService) Close() error {
 	if s.err != nil {
 		return s.err

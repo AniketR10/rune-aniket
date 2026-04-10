@@ -308,6 +308,10 @@ func (failingDocumentService) List(ctx context.Context, filters []storageapi.Fil
 	return nil, errors.New("oopsie")
 }
 
+func (failingDocumentService) Partition(name string) (storageapi.Service, error) {
+	return failingDocumentService{}, errors.New("oopsie")
+}
+
 func (failingDocumentService) Close() error {
 	return nil
 }

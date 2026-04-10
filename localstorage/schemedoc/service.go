@@ -204,6 +204,24 @@ func (s *service) List(
 	return &docIter{ctx: ctx, filters: filters, svc: s, it: it}, nil
 }
 
+func (s *service) Partition(name string) (storageapi.Service, error) {
+	if name == "" {
+		return nil, errors.New("invalid partition: empty")
+	}
+	partitionDir := partitionDirName(name)
+	if err := s.scheme.MkdirAll(partitionDir, 0777); err != nil {
+		if errors.Is(err, os.ErrPermission) {
+			return nil, storageapi.ErrPermissionDenied
+		}
+		return nil, fmt.Errorf("mkdir partition %q: %w", name, err)
+	}
+	partitionScheme, err := s.scheme.Chroot(partitionDir)
+	if err != nil {
+		return nil, fmt.Errorf("chroot partition %q: %w", name, err)
+	}
+	return Sync(&service{scheme: partitionScheme, marshaler: s.marshaler}), nil
+}
+
 func (s *service) Close() (ret error) {
 	// wait on writes to finish and prevent any new
 	// writes from making progress
@@ -232,6 +250,10 @@ func (s *service) read(f workspaceapi.File, doc any) error {
 
 func (s *service) getFileName(id string) string {
 	return url.PathEscape(id)
+}
+
+func partitionDirName(name string) string {
+	return url.PathEscape(name)
 }
 
 func (s *service) create(ctx context.Context, ID string, doc any, openFlags int) error {

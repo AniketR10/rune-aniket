@@ -139,6 +139,19 @@ func (a adapter) Update(
 	return err
 }
 
+func (a adapter) Partition(name string) (storageapi.Service, error) {
+	if partitionable, ok := a.Service.(interface {
+		Partition(string) (document.Service, error)
+	}); ok {
+		svc, err := partitionable.Partition(name)
+		if err != nil {
+			return nil, err
+		}
+		return AdaptTo(svc), nil
+	}
+	return nil, errors.New("document service does not support partitioning")
+}
+
 type wrap struct {
 	storageapi.Service
 }

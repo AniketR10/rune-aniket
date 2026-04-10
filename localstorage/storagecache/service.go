@@ -234,6 +234,19 @@ func (s *Service[T]) List(ctx context.Context, filters []storageapi.Filter) (
 	return &cacheIterator[T]{docs: docs}, nil
 }
 
+// Partition returns a partitioned cache service over matching underlying partitions.
+func (s *Service[T]) Partition(name string) (storageapi.Service, error) {
+	svc, err := s.svc.Partition(name)
+	if err != nil {
+		return nil, err
+	}
+	cache, err := s.cache.Partition(name)
+	if err != nil {
+		return nil, err
+	}
+	return New[T](svc, cache), nil
+}
+
 // Close satisfies storageapi.Service.
 func (s *Service[T]) Close() (ret error) {
 	if err := s.cache.Close(); err != nil {

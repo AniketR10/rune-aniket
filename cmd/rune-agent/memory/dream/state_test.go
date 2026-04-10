@@ -177,6 +177,7 @@ type mockStorage struct {
 	getErr    error
 	setErr    error
 	createErr error
+	parts     map[string]*mockStorage
 }
 
 func (m *mockStorage) Create(_ context.Context, id string, doc any) error {
@@ -237,6 +238,23 @@ func (m *mockStorage) Delete(_ context.Context, id string) error {
 
 func (m *mockStorage) List(_ context.Context, _ []storageapi.Filter) (storageapi.Iterator, error) {
 	return nil, nil
+}
+
+func (m *mockStorage) Partition(name string) (storageapi.Service, error) {
+	if m.parts == nil {
+		m.parts = make(map[string]*mockStorage)
+	}
+	if part, ok := m.parts[name]; ok {
+		return part, nil
+	}
+	part := &mockStorage{
+		data:      make(map[string]any),
+		getErr:    m.getErr,
+		setErr:    m.setErr,
+		createErr: m.createErr,
+	}
+	m.parts[name] = part
+	return part, nil
 }
 
 func (m *mockStorage) Close() error { return nil }

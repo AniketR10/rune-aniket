@@ -87,6 +87,16 @@ func (s *syncService) List(ctx context.Context, filters []storageapi.Filter) (st
 	return s.svc.List(ctx, filters)
 }
 
+func (s *syncService) Partition(name string) (storageapi.Service, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	partitioned, err := s.svc.Partition(name)
+	if err != nil {
+		return nil, err
+	}
+	return SyncWithLocker(partitioned, s.mu), nil
+}
+
 func (s *syncService) Close() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
