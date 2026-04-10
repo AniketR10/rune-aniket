@@ -1,10 +1,13 @@
-ROOT_DIR ?= ../..
+ROOT_DIR ?= $(abspath ../..)
 GO ?= go
 UNAME := $(shell uname)
 VERSION=$(shell git describe --tags)
 COMMIT=$(shell git rev-parse --short HEAD)
 CODESIGN_IDENTITY ?= Developer ID Application: Unstable Build, LLC. (YYZRWD888J)
 NOTARY_PROFILE ?= notary-profile
+RUNE_LINUX_TARGET_OS ?= linux
+RUNE_LINUX_TARGET_ARCH ?= amd64
+RUNE_LINUX_OUTPUT_DIR ?= $(TARGET)/rune_$(RUNE_LINUX_TARGET_OS)_$(RUNE_LINUX_TARGET_ARCH)
 
 COMMON_LDFLAGS=-X unstable.build/go-tui/debug.Tag=$$(git describe --tags) -X unstable.build/go-tui/debug.Commit=$$(git rev-parse --short HEAD)
 GOFLAGS=-ldflags="$(COMMON_LDFLAGS) -X unstable.build/go-tui/debug.Package=six"
@@ -31,7 +34,7 @@ SED_INPLACE = ''
 endif
 
 .PHONY: clean make-release release release-amd64 release-arm64 app-amd64 app-arm64 dmg dmg-notarize release-all \
-	docker-build docker-run docker-build-gcp docker-push-gcp docker-build-ci-gcp docker-push-ci-gcp
+	docker-build docker-run docker-build-gcp docker-push-gcp linux-cross-compile
 
 make-release: CGO_ENABLED=CGO_ENABLED=1
 make-release:
@@ -158,22 +161,26 @@ release-all: dmg-notarize
 endif
 
 docker-build:
-	@cd $(ROOT_DIR) && docker build -f deploy/Dockerfile -t unstable.build/ox-api:$(VERSION) --build-arg GIT_SSH_KEY="$$GIT_SSH_KEY" .
+	@cd $(ROOT_DIR) && docker build -f deploy/ox-api/Dockerfile -t unstable.build/ox-api:$(VERSION) --build-arg GIT_SSH_KEY="$$GIT_SSH_KEY" .
 
 docker-run:
 	@docker run -ti --rm -e PORT=80 -p 8080:80 unstable.build/ox-api:$(VERSION)
 
 docker-build-gcp:
-	@cd $(ROOT_DIR) && docker buildx build -f deploy/Dockerfile --platform linux/amd64 -t us-central1-docker.pkg.dev/unstable-build-blue-dev/docker/ox-api:$(VERSION) --build-arg GIT_SSH_KEY="$$GIT_SSH_KEY" .
+	@cd $(ROOT_DIR) && docker buildx build -f deploy/ox-api/Dockerfile --platform linux/amd64 -t us-central1-docker.pkg.dev/unstable-build-blue-dev/docker/ox-api:$(VERSION) --build-arg GIT_SSH_KEY="$$GIT_SSH_KEY" .
 
 docker-push-gcp:
 	@docker push us-central1-docker.pkg.dev/unstable-build-blue-dev/docker/ox-api:$(VERSION)
 
-docker-build-ci-gcp:
-	@cd $(ROOT_DIR) && docker buildx build -f deploy/Dockerfile.build --platform linux/amd64 -t us-central1-docker.pkg.dev/unstable-build-blue-dev/docker/rune-ci:latest --build-arg GIT_SSH_KEY="$$GIT_SSH_KEY" .
-
-docker-push-ci-gcp:
-	@docker push us-central1-docker.pkg.dev/unstable-build-blue-dev/docker/rune-ci:latest
+linux-cross-compile:
+	@rm -rf $(RUNE_LINUX_OUTPUT_DIR)
+	@mkdir -p $(RUNE_LINUX_OUTPUT_DIR)
+	@cd $(ROOT_DIR) && docker buildx build \
+		-f deploy/rune-linux/Dockerfile \
+		--platform $(RUNE_LINUX_TARGET_OS)/$(RUNE_LINUX_TARGET_ARCH) \
+		--build-arg GIT_SSH_KEY="$$GIT_SSH_KEY" \
+		--output type=local,dest=$(RUNE_LINUX_OUTPUT_DIR) \
+		.
 
 clean:
 	@rm -rf $(RUNE_RELEASE_DIR)

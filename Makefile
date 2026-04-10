@@ -30,7 +30,7 @@ RELEASE_FILES=$(wildcard release/*)
 	format docker-build-ci-gcp docker-push-ci-gcp cross-compile lint license assert_license \
 	rune-release rune-release-amd64 rune-release-arm64 rune-make-release \
 	rune-docker-build rune-docker-run rune-docker-build-gcp rune-docker-push-gcp \
-	rune-docker-build-ci-gcp rune-docker-push-ci-gcp rune-app-amd64 rune-app-arm64 \
+	rune-linux-cross-compile rune-app-amd64 rune-app-arm64 \
 	rune-dmg rune-dmg-notarize rune-release-all \
 	rune-agent-pkg rune-agent-sign rune-agent-notarize rune-agent-dist rune-agent-dist-notarized \
 	runectl-pkg runectl-sign runectl-notarize runectl-dist runectl-dist-notarized \
@@ -152,7 +152,7 @@ dist: release
 	@ ./dist.sh
 
 docker-build-ci-gcp:
-	@ docker buildx build -f Dockerfile.build --platform linux/amd64 -t us-central1-docker.pkg.dev/unstable-build-blue-dev/docker/go-tui-ci:latest --build-arg GIT_SSH_KEY="$$GIT_SSH_KEY" .
+	@ docker buildx build -f deploy/build/Dockerfile --platform linux/amd64 -t us-central1-docker.pkg.dev/unstable-build-blue-dev/docker/go-tui-ci:latest --build-arg GIT_SSH_KEY="$$GIT_SSH_KEY" .
 
 docker-push-ci-gcp:
 	@ docker push us-central1-docker.pkg.dev/unstable-build-blue-dev/docker/go-tui-ci:latest
@@ -181,11 +181,8 @@ rune-docker-build-gcp:
 rune-docker-push-gcp:
 	@$(MAKE) -C cmd/rune docker-push-gcp
 
-rune-docker-build-ci-gcp:
-	@$(MAKE) -C cmd/rune docker-build-ci-gcp
-
-rune-docker-push-ci-gcp:
-	@$(MAKE) -C cmd/rune docker-push-ci-gcp
+rune-linux-cross-compile:
+	@$(MAKE) -C cmd/rune linux-cross-compile
 
 rune-app-amd64:
 	@$(MAKE) -C cmd/rune app-amd64

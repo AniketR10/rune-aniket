@@ -101,7 +101,7 @@ steps:
     tags:
       - latest
     repo: us-central1-docker.pkg.dev/unstable-build-blue-dev/docker/go-tui-ci
-    dockerfile: Dockerfile.build
+    dockerfile: deploy/build/Dockerfile
     build_args_from_env: [ GIT_SSH_KEY ]
 
 trigger:
