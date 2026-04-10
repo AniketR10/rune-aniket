@@ -29,14 +29,19 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
+	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
@@ -678,15 +683,31 @@ func TestHandleCommand(t *testing.T) {
 		},
 		// --- dream command tests ---
 		{
-			name:    "dream with no storage returns error",
-			cmd:     repl.Command{Name: "dream"},
-			wantErr: true,
+			name: "dream runs when required deps are provided",
+			cmd:  repl.Command{Name: "dream"},
+			setup: func(d *testDeps) {
+				d.storage = storagestub.NewInMemoryService()
+				d.fs = osFileSystem{}
+				d.notifications = stubNotifications{}
+				d.opts = append(d.opts, withExecutor(testShellExec{}), withLSP(&stubTestLSP{}))
+
+				memPath := t.TempDir()
+				require.NoError(t, os.WriteFile(filepath.Join(memPath, "go.mod"), []byte("module memories\n"), 0o644))
+				require.NoError(t, os.WriteFile(filepath.Join(memPath, "version"), []byte("3\n"), 0o644))
+				d.dataPath = memPath
+			},
+			assertOut: func(t *testing.T, text string) {
+				if !strings.Contains(text, "Done: Dream complete") {
+					t.Errorf("expected dream success output, got %q", text)
+				}
+			},
 		},
 		{
 			name: "dream with no data path returns error",
 			cmd:  repl.Command{Name: "dream"},
 			setup: func(d *testDeps) {
 				d.storage = &stubStorage{}
+				d.opts = append(d.opts, withExecutor(testShellExec{}), withLSP(&stubTestLSP{}))
 			},
 			wantErr: true,
 		},
@@ -796,7 +817,17 @@ func TestHandleCommand(t *testing.T) {
 			)
 
 			ctx := context.Background()
-			it, err := sh.HandleCommand(ctx, tt.cmd, repl.NopProgressWriter())
+			var (
+				it  iterator.Iterator[component.Responsive]
+				err error
+			)
+			if tt.name == "dream with no data path returns error" {
+				assert.PanicsWithValue(t, "dream: DataPath is required", func() {
+					it, err = sh.HandleCommand(ctx, tt.cmd, repl.NopProgressWriter())
+				})
+				return
+			}
+			it, err = sh.HandleCommand(ctx, tt.cmd, repl.NopProgressWriter())
 			if tt.wantErr {
 				if err == nil {
 					t.Fatal("expected error, got nil")
@@ -1071,6 +1102,14 @@ type testDeps struct {
 	dataPath      string
 }
 
+func withExecutor(exec workspaceapi.Executor) Option {
+	return func(s *shell) { s.exec = exec }
+}
+
+func withLSP(lsp semanticapi.LSP) Option {
+	return func(s *shell) { s.lsp = lsp }
+}
+
 func newTestDeps() *testDeps {
 	// Create a temp skill dir with skills for tests that need them.
 	skillDir, err := os.MkdirTemp("", "skills-test-*")
@@ -1135,6 +1174,7 @@ func newTestDeps() *testDeps {
 				},
 			},
 		},
+		notifications: stubNotifications{},
 	}
 }
 
@@ -1368,6 +1408,20 @@ func (stubStorage) List(context.Context, []storageapi.Filter) (storageapi.Iterat
 }
 func (stubStorage) Close() error { return nil }
 
+type stubNotifications struct{}
+
+func (stubNotifications) Notify(browserapi.NotificationLevel, string, ...any) (string, error) {
+	return "notif-1", nil
+}
+
+func (stubNotifications) NotifyOnce(level browserapi.NotificationLevel, msg string, args ...any) (string, error) {
+	return stubNotifications{}.Notify(level, msg, args...)
+}
+
+func (stubNotifications) UpdateNotificationProgress(string, string, int64, int64) error {
+	return nil
+}
+
 // --- stub filesystem ---
 
 type stubFS struct{}
@@ -1412,6 +1466,228 @@ func (osFileSystem) Remove(path string) error                     { return os.Re
 func (osFileSystem) Stat(path string) (os.FileInfo, error)        { return os.Stat(path) }
 func (osFileSystem) ReadDir(name string) ([]os.DirEntry, error)   { return os.ReadDir(name) }
 func (osFileSystem) MkdirAll(path string, perm os.FileMode) error { return os.MkdirAll(path, perm) }
+
+type testShellExec struct{}
+
+func (testShellExec) Start(ctx context.Context, cmd workspaceapi.Cmd) (workspaceapi.Pid, error) {
+	c := exec.CommandContext(ctx, cmd.Path, cmd.Args...)
+	c.Dir = cmd.Dir
+	c.Stdin = cmd.Stdin
+	c.Stdout = cmd.Stdout
+	c.Stderr = cmd.Stderr
+	c.Env = cmd.Env
+
+	if err := c.Start(); err != nil {
+		return 0, err
+	}
+	pid := workspaceapi.Pid(c.Process.Pid)
+	go func() {
+		err := c.Wait()
+		if cmd.Watcher != nil {
+			cmd.Watcher.WatchProcess() <- err
+		}
+	}()
+	return pid, nil
+}
+
+func (testShellExec) Signal(pid workspaceapi.Pid, sig syscall.Signal) error {
+	proc, err := os.FindProcess(int(pid))
+	if err != nil {
+		return err
+	}
+	return proc.Signal(sig)
+}
+
+func (testShellExec) Close() error { return nil }
+
+type stubTestLSP struct{}
+
+func (s *stubTestLSP) Initialize(context.Context, semanticapi.InitializeParams) (semanticapi.InitializeResult, error) {
+	return semanticapi.InitializeResult{}, nil
+}
+func (s *stubTestLSP) Initialized(context.Context) error { return nil }
+func (s *stubTestLSP) Shutdown(context.Context) error    { return nil }
+func (s *stubTestLSP) Exit(context.Context) error        { return nil }
+func (s *stubTestLSP) DidOpen(context.Context, semanticapi.DidOpenTextDocumentParams) error {
+	return nil
+}
+func (s *stubTestLSP) DidChange(context.Context, semanticapi.DidChangeTextDocumentParams) error {
+	return nil
+}
+func (s *stubTestLSP) DidClose(context.Context, semanticapi.DidCloseTextDocumentParams) error {
+	return nil
+}
+func (s *stubTestLSP) DidSave(context.Context, semanticapi.DidSaveTextDocumentParams) error {
+	return nil
+}
+func (s *stubTestLSP) Completion(context.Context, semanticapi.CompletionParams) (semanticapi.CompletionResult, error) {
+	return semanticapi.CompletionResult{}, nil
+}
+func (s *stubTestLSP) Hover(context.Context, semanticapi.HoverParams) (*semanticapi.Hover, error) {
+	return nil, nil
+}
+func (s *stubTestLSP) SignatureHelp(context.Context, semanticapi.SignatureHelpParams) (*semanticapi.SignatureHelp, error) {
+	return nil, nil
+}
+func (s *stubTestLSP) Definition(context.Context, semanticapi.DefinitionParams) (semanticapi.LocationResult, error) {
+	return semanticapi.LocationResult{}, nil
+}
+func (s *stubTestLSP) Declaration(context.Context, semanticapi.DeclarationParams) (semanticapi.LocationResult, error) {
+	return semanticapi.LocationResult{}, nil
+}
+func (s *stubTestLSP) TypeDefinition(context.Context, semanticapi.TypeDefinitionParams) (semanticapi.LocationResult, error) {
+	return semanticapi.LocationResult{}, nil
+}
+func (s *stubTestLSP) Implementation(context.Context, semanticapi.ImplementationParams) (semanticapi.LocationResult, error) {
+	return semanticapi.LocationResult{}, nil
+}
+func (s *stubTestLSP) References(context.Context, semanticapi.ReferenceParams) ([]semanticapi.Location, error) {
+	return nil, nil
+}
+func (s *stubTestLSP) DocumentHighlight(context.Context, semanticapi.DocumentHighlightParams) ([]semanticapi.DocumentHighlight, error) {
+	return nil, nil
+}
+func (s *stubTestLSP) DocumentSymbol(context.Context, semanticapi.DocumentSymbolParams) (semanticapi.DocumentSymbolResult, error) {
+	return semanticapi.DocumentSymbolResult{}, nil
+}
+func (s *stubTestLSP) CodeAction(context.Context, semanticapi.CodeActionParams) ([]semanticapi.CodeActionResult, error) {
+	return nil, nil
+}
+func (s *stubTestLSP) CodeLens(context.Context, semanticapi.CodeLensParams) ([]semanticapi.CodeLens, error) {
+	return nil, nil
+}
+func (s *stubTestLSP) Formatting(context.Context, semanticapi.DocumentFormattingParams) ([]semanticapi.TextEdit, error) {
+	return nil, nil
+}
+func (s *stubTestLSP) RangeFormatting(context.Context, semanticapi.DocumentRangeFormattingParams) ([]semanticapi.TextEdit, error) {
+	return nil, nil
+}
+func (s *stubTestLSP) Rename(context.Context, semanticapi.RenameParams) (*semanticapi.WorkspaceEdit, error) {
+	return nil, nil
+}
+func (s *stubTestLSP) PrepareRename(context.Context, semanticapi.PrepareRenameParams) (*semanticapi.PrepareRenameResult, error) {
+	return nil, nil
+}
+func (s *stubTestLSP) FoldingRange(context.Context, semanticapi.FoldingRangeParams) ([]semanticapi.FoldingRange, error) {
+	return nil, nil
+}
+func (s *stubTestLSP) SelectionRange(context.Context, semanticapi.SelectionRangeParams) ([]semanticapi.SelectionRange, error) {
+	return nil, nil
+}
+func (s *stubTestLSP) SemanticTokensFull(context.Context, semanticapi.SemanticTokensParams) (*semanticapi.SemanticTokens, error) {
+	return nil, nil
+}
+func (s *stubTestLSP) SemanticTokensRange(context.Context, semanticapi.SemanticTokensRangeParams) (*semanticapi.SemanticTokens, error) {
+	return nil, nil
+}
+func (s *stubTestLSP) Diagnostic(context.Context, semanticapi.DocumentDiagnosticParams) (semanticapi.DocumentDiagnosticReport, error) {
+	return semanticapi.DocumentDiagnosticReport{}, nil
+}
+func (s *stubTestLSP) WorkspaceDiagnostic(context.Context, semanticapi.WorkspaceDiagnosticParams) (semanticapi.WorkspaceDiagnosticReport, error) {
+	return semanticapi.WorkspaceDiagnosticReport{}, nil
+}
+func (s *stubTestLSP) WorkspaceSymbol(context.Context, semanticapi.WorkspaceSymbolParams) ([]semanticapi.SymbolInformation, error) {
+	return nil, nil
+}
+func (s *stubTestLSP) ExecuteCommand(context.Context, semanticapi.ExecuteCommandParams) (string, error) {
+	return "", nil
+}
+func (s *stubTestLSP) PrepareCallHierarchy(context.Context, semanticapi.CallHierarchyPrepareParams) ([]semanticapi.CallHierarchyItem, error) {
+	return nil, nil
+}
+func (s *stubTestLSP) CallHierarchyIncomingCalls(context.Context, semanticapi.CallHierarchyIncomingCallsParams) ([]semanticapi.CallHierarchyIncomingCall, error) {
+	return nil, nil
+}
+func (s *stubTestLSP) CallHierarchyOutgoingCalls(context.Context, semanticapi.CallHierarchyOutgoingCallsParams) ([]semanticapi.CallHierarchyOutgoingCall, error) {
+	return nil, nil
+}
+func (s *stubTestLSP) CompletionResolve(context.Context, semanticapi.CompletionItem) (semanticapi.CompletionItem, error) {
+	return semanticapi.CompletionItem{}, nil
+}
+func (s *stubTestLSP) CodeLensResolve(context.Context, semanticapi.CodeLens) (semanticapi.CodeLens, error) {
+	return semanticapi.CodeLens{}, nil
+}
+func (s *stubTestLSP) DocumentColor(context.Context, semanticapi.DocumentColorParams) ([]semanticapi.ColorInformation, error) {
+	return nil, nil
+}
+func (s *stubTestLSP) ColorPresentation(context.Context, semanticapi.ColorPresentationParams) ([]semanticapi.ColorPresentation, error) {
+	return nil, nil
+}
+func (s *stubTestLSP) DocumentLink(context.Context, semanticapi.DocumentLinkParams) ([]semanticapi.DocumentLink, error) {
+	return nil, nil
+}
+func (s *stubTestLSP) DocumentLinkResolve(context.Context, semanticapi.DocumentLink) (semanticapi.DocumentLink, error) {
+	return semanticapi.DocumentLink{}, nil
+}
+func (s *stubTestLSP) OnTypeFormatting(context.Context, semanticapi.DocumentOnTypeFormattingParams) ([]semanticapi.TextEdit, error) {
+	return nil, nil
+}
+func (s *stubTestLSP) LinkedEditingRange(context.Context, semanticapi.LinkedEditingRangeParams) (*semanticapi.LinkedEditingRanges, error) {
+	return nil, nil
+}
+func (s *stubTestLSP) Moniker(context.Context, semanticapi.MonikerParams) ([]semanticapi.Moniker, error) {
+	return nil, nil
+}
+func (s *stubTestLSP) WillSaveWaitUntil(context.Context, semanticapi.WillSaveTextDocumentParams) ([]semanticapi.TextEdit, error) {
+	return nil, nil
+}
+func (s *stubTestLSP) SemanticTokensFullDelta(context.Context, semanticapi.SemanticTokensDeltaParams) (*semanticapi.SemanticTokensDelta, error) {
+	return nil, nil
+}
+func (s *stubTestLSP) PrepareTypeHierarchy(context.Context, semanticapi.TypeHierarchyPrepareParams) ([]semanticapi.TypeHierarchyItem, error) {
+	return nil, nil
+}
+func (s *stubTestLSP) TypeHierarchySupertypes(context.Context, semanticapi.TypeHierarchySupertypesParams) ([]semanticapi.TypeHierarchyItem, error) {
+	return nil, nil
+}
+func (s *stubTestLSP) TypeHierarchySubtypes(context.Context, semanticapi.TypeHierarchySubtypesParams) ([]semanticapi.TypeHierarchyItem, error) {
+	return nil, nil
+}
+func (s *stubTestLSP) InlayHint(context.Context, semanticapi.InlayHintParams) ([]semanticapi.InlayHint, error) {
+	return nil, nil
+}
+func (s *stubTestLSP) InlayHintResolve(context.Context, semanticapi.InlayHint) (semanticapi.InlayHint, error) {
+	return semanticapi.InlayHint{}, nil
+}
+func (s *stubTestLSP) InlineValue(context.Context, semanticapi.InlineValueParams) ([]semanticapi.InlineValue, error) {
+	return nil, nil
+}
+func (s *stubTestLSP) WillCreateFiles(context.Context, semanticapi.CreateFilesParams) (*semanticapi.WorkspaceEdit, error) {
+	return nil, nil
+}
+func (s *stubTestLSP) WillRenameFiles(context.Context, semanticapi.RenameFilesParams) (*semanticapi.WorkspaceEdit, error) {
+	return nil, nil
+}
+func (s *stubTestLSP) WillDeleteFiles(context.Context, semanticapi.DeleteFilesParams) (*semanticapi.WorkspaceEdit, error) {
+	return nil, nil
+}
+func (s *stubTestLSP) WillSave(context.Context, semanticapi.WillSaveTextDocumentParams) error {
+	return nil
+}
+func (s *stubTestLSP) DidChangeConfiguration(context.Context, semanticapi.DidChangeConfigurationParams) error {
+	return nil
+}
+func (s *stubTestLSP) DidChangeWatchedFiles(context.Context, semanticapi.DidChangeWatchedFilesParams) error {
+	return nil
+}
+func (s *stubTestLSP) DidChangeWorkspaceFolders(context.Context, semanticapi.DidChangeWorkspaceFoldersParams) error {
+	return nil
+}
+func (s *stubTestLSP) WorkDoneProgressCancel(context.Context, semanticapi.WorkDoneProgressCancelParams) error {
+	return nil
+}
+func (s *stubTestLSP) SetTrace(context.Context, semanticapi.SetTraceParams) error { return nil }
+func (s *stubTestLSP) DidCreateFiles(context.Context, semanticapi.CreateFilesParams) error {
+	return nil
+}
+func (s *stubTestLSP) DidRenameFiles(context.Context, semanticapi.RenameFilesParams) error {
+	return nil
+}
+func (s *stubTestLSP) DidDeleteFiles(context.Context, semanticapi.DeleteFilesParams) error {
+	return nil
+}
+
+var _ semanticapi.LSP = (*stubTestLSP)(nil)
 
 func TestFormatHistoryMarkdown(t *testing.T) {
 	tests := []struct {
