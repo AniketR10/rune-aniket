@@ -69,6 +69,85 @@ func TestPixelAndCellCalculation(t *testing.T) {
 	})
 }
 
+// TestSetOffsetXYMixup is a regression test for RUNE-51. Manager.SetOffset
+// previously forwarded the y argument to setOffsetX, silently corrupting the
+// horizontal offset whenever SetOffset was called.
+func TestSetOffsetXYMixup(t *testing.T) {
+	m, err := NewManager(0, 0)
+	require.NoError(t, err)
+	// ensure font is loaded so SetOffset's ReloadFont path is exercised.
+	require.NotNil(t, m.RegularFontFace())
+
+	const wantX = 3.0
+	const wantY = 7.0
+	require.NoError(t, m.SetOffset(wantX, wantY))
+
+	assert.Equal(t, wantX, fixedToFloat64(m.offset.X),
+		"SetOffset must store the x argument in offset.X, not the y argument")
+	assert.Equal(t, wantY, fixedToFloat64(m.offset.Y),
+		"SetOffset must store the y argument in offset.Y")
+}
+
+// TestSetOffsetInvalidMetricsRollsBack is a regression test for RUNE-51.
+// When the new offset produces degenerate glyph metrics (charSize.X <= 0),
+// SetOffset must return an error and restore the previous offset by
+// reloading the font normally, leaving the manager in a consistent state.
+func TestSetOffsetInvalidMetricsRollsBack(t *testing.T) {
+	m, err := NewManager(0, 0)
+	require.NoError(t, err)
+	require.NotNil(t, m.RegularFontFace())
+
+	goodCharSize := m.CharSize()
+	prevOffsetX := fixedToFloat64(m.offset.X)
+	prevOffsetY := fixedToFloat64(m.offset.Y)
+
+	// An offset more negative than the widest glyph advance collapses
+	// charSize.X to zero, which is rejected by setFaceMetrics.
+	err = m.SetOffset(-1000, 0)
+	require.Error(t, err,
+		"SetOffset must surface the invalid-metrics error instead of panicking")
+	assert.Contains(t, err.Error(), "invalid font metrics")
+
+	// Offset must be rolled back to the previous value.
+	assert.Equal(t, prevOffsetX, fixedToFloat64(m.offset.X),
+		"offset.X must be restored after rollback")
+	assert.Equal(t, prevOffsetY, fixedToFloat64(m.offset.Y),
+		"offset.Y must be restored after rollback")
+
+	// Metrics must be restored to the previously-known-good values, so
+	// subsequent CellsWidth/Height calls are safe.
+	assert.Equal(t, goodCharSize, m.CharSize(),
+		"charSize must be restored after rollback")
+	assert.NotPanics(t, func() {
+		_ = m.CellsWidth(1200)
+		_ = m.CellsHeight(900)
+	})
+}
+
+// TestSetFontByFamilyNameRestoresOnError is a regression test for
+// RUNE-51. When loading a font by name fails (e.g. an unknown family),
+// the manager must restore the previously configured font by running
+// the normal load path, not leave itself in a half-initialized state.
+func TestSetFontByFamilyNameRestoresOnError(t *testing.T) {
+	m, err := NewManager(0, 0)
+	require.NoError(t, err)
+	require.NotNil(t, m.RegularFontFace())
+	goodCharSize := m.CharSize()
+
+	err = m.SetFontByFamilyName("this-font-family-does-not-exist-RUNE-51")
+	require.Error(t, err)
+
+	// Manager must remain usable with the previous (builtin) font.
+	assert.Equal(t, "", m.FontFamily(),
+		"family must be rolled back to builtin fallback")
+	assert.Equal(t, goodCharSize, m.CharSize(),
+		"charSize must be the builtin fallback's metrics after rollback")
+	assert.NotPanics(t, func() {
+		_ = m.CellsWidth(1200)
+		_ = m.CellsHeight(900)
+	})
+}
+
 func setTestCharSize(m *Manager, x, y float64) {
 	m.ensureFontLoaded()
 	m.charSize.X = x

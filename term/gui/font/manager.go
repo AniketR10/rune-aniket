@@ -161,20 +161,47 @@ func (m *Manager) SetSize(size float64) error {
 	if m.size == size {
 		return nil
 	}
+	prev := m.size
 	m.size = size
-	return m.ReloadFont()
+	if err := m.ReloadFont(); err != nil {
+		// Reloading at the new size produced invalid metrics (or I/O
+		// failure). Revert the input and reload the previous size
+		// normally so the manager stays in a consistent state.
+		m.size = prev
+		if rbErr := m.ReloadFont(); rbErr != nil {
+			return fmt.Errorf("set font size %v: %w; "+
+				"rollback to %v also failed: %v",
+				size, err, prev, rbErr)
+		}
+		return fmt.Errorf("set font size %v: %w", size, err)
+	}
+	return nil
 }
 
 // SetOffset sets the x and y offset of the configured font.
 // It will reload the font with the new DPI and return
 // an error if there was a problem reloading the font.
 func (m *Manager) SetOffset(x, y float64) error {
-	xok := m.setOffsetX(y)
+	prevX := fixedToFloat64(m.offset.X)
+	prevY := fixedToFloat64(m.offset.Y)
+	xok := m.setOffsetX(x)
 	yok := m.setOffsetY(y)
 	if !xok && !yok {
 		return nil
 	}
-	return m.ReloadFont()
+	if err := m.ReloadFont(); err != nil {
+		// Reloading at the new offset produced invalid metrics. Revert
+		// the input and reload the previous offset normally.
+		m.setOffsetX(prevX)
+		m.setOffsetY(prevY)
+		if rbErr := m.ReloadFont(); rbErr != nil {
+			return fmt.Errorf("set font offset (%v,%v): %w; "+
+				"rollback to (%v,%v) also failed: %v",
+				x, y, err, prevX, prevY, rbErr)
+		}
+		return fmt.Errorf("set font offset (%v,%v): %w", x, y, err)
+	}
+	return nil
 }
 
 // IncreaseLineHeight increases the line height of the font by 1 pixel.
@@ -208,17 +235,69 @@ func (m *Manager) SetFontByFamilyName(name string) error {
 	if name == m.family {
 		return nil
 	}
+	prevFamily := m.family
+	prevPreloaded := m.preloaded
 	m.resetFonts()
 	if name == "" {
-		return m.loadFallbackFont()
+		if err := m.loadFallbackFont(); err != nil {
+			return m.rollbackFont(prevFamily, prevPreloaded,
+				fmt.Errorf("load fallback font: %w", err))
+		}
+		m.family = ""
+		m.preloaded = nil
+		return nil
 	}
 
 	fonts, err := m.findAndLoadFont(name)
-	if err == nil {
-		m.preloaded = fonts
-		m.family = name
+	if err != nil {
+		return m.rollbackFont(prevFamily, prevPreloaded,
+			fmt.Errorf("set font family %q: %w", name, err))
 	}
-	return err
+	m.preloaded = fonts
+	m.family = name
+	return nil
+}
+
+// rollbackFont restores the previously configured font family after a
+// failed font switch by running the normal load path for that family.
+// loadErr is the original error that triggered the rollback and is
+// always returned to the caller, wrapped with additional context if
+// the rollback itself also fails.
+func (m *Manager) rollbackFont(
+	prevFamily string, prevPreloaded []*sfnt.Font, loadErr error,
+) error {
+	m.resetFonts()
+	if len(prevPreloaded) == 0 {
+		if rbErr := m.loadFallbackFont(); rbErr != nil {
+			return fmt.Errorf("%w; rollback to builtin font also failed: %v",
+				loadErr, rbErr)
+		}
+		m.family = ""
+		m.preloaded = nil
+		return loadErr
+	}
+	if rbErr := m.setPreloaded(prevPreloaded); rbErr != nil {
+		// Last-ditch: drop back to the builtin fallback.
+		m.resetFonts()
+		if fbErr := m.loadFallbackFont(); fbErr != nil {
+			return fmt.Errorf("%w; rollback to %q failed: %v; "+
+				"builtin fallback also failed: %v",
+				loadErr, prevFamily, rbErr, fbErr)
+		}
+		m.family = ""
+		m.preloaded = nil
+		return fmt.Errorf("%w; rollback to %q failed: %v",
+			loadErr, prevFamily, rbErr)
+	}
+	m.preloaded = prevPreloaded
+	m.family = prevFamily
+	return loadErr
+}
+
+// FontFamily returns the currently configured font family name, or the
+// empty string when the builtin fallback font is in use.
+func (m *Manager) FontFamily() string {
+	return m.family
 }
 
 // SetDeviceScale forces the device scale to the given value.
@@ -371,6 +450,24 @@ func (m *Manager) cellsWidth(width int) float64 {
 
 func (m *Manager) cellsHeight(height int) float64 {
 	return float64(height) * m.DeviceScale() / (m.charSize.Y - float64(m.cellOverlapY))
+}
+
+// metricsSafeForAllocation reports whether the current charSize is safe
+// to use as a denominator when computing cell counts from pixel
+// dimensions. Metrics become unsafe when a freshly loaded font reports
+// degenerate glyph bounds (e.g. NaN, Inf, or a value at or below the
+// cell overlap, which would make the effective cell size non-positive).
+// See RUNE-51.
+func (m *Manager) metricsSafeForAllocation() bool {
+	return isSafeCellDenominator(m.charSize.X-float64(m.cellOverlapX)) &&
+		isSafeCellDenominator(m.charSize.Y-float64(m.cellOverlapY))
+}
+
+func isSafeCellDenominator(v float64) bool {
+	if math.IsNaN(v) || math.IsInf(v, 0) {
+		return false
+	}
+	return v > 0
 }
 
 func (m *Manager) loadFallbackFont() error {
@@ -585,6 +682,17 @@ func (m *Manager) setFaceMetrics() error {
 	m.charSize.X, m.charSize.Y, m.cellOffsetY = m.calcFaceMetrics(faceForMetrics)
 	m.log(log.DebugLevel, "calculated font char size: %+v and offset: %f",
 		m.charSize, m.cellOffsetY)
+	// Reject degenerate glyph metrics. Some fonts on some platforms
+	// produce glyph bounds that collapse charSize to 0, negative, NaN
+	// or Inf. Accepting those here would propagate into
+	// cell.NewBufferWriter and crash the process (RUNE-51). Returning
+	// an error here lets the load path roll back to the previous font
+	// by running the normal reload flow.
+	if !m.metricsSafeForAllocation() {
+		return fmt.Errorf(
+			"invalid font metrics: char size %+v with cell overlap (%d,%d)",
+			m.charSize, m.cellOverlapX, m.cellOverlapY)
+	}
 	return nil
 }
 

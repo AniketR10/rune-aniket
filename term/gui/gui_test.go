@@ -390,6 +390,33 @@ func TestLayout(t *testing.T) {
 	})
 }
 
+// TestSetFontUnknownFamilyDoesNotPanic is a regression test for
+// RUNE-51. Attempting to switch to a font family that either does not
+// exist on the system or produces degenerate metrics must surface an
+// error through SetFont instead of crashing the process in
+// cell.NewBufferWriter, and must leave the GUI in a usable state so
+// subsequent draws still work.
+func TestSetFontUnknownFamilyDoesNotPanic(t *testing.T) {
+	mock := mockHandler{}
+	gui, _ := newTestGUI(t, &mock)
+
+	previousWriter := gui.writer
+	require.NotNil(t, previousWriter)
+
+	var err error
+	assert.NotPanics(t, func() {
+		err = gui.SetFont("this-font-family-does-not-exist-RUNE-51")
+	})
+	assert.Error(t, err,
+		"SetFont must return an error for an unknown family")
+
+	// The GUI must stay functional: subsequent resizes and draws must
+	// not panic, which means the font manager was restored to a
+	// known-good state by the normal reload path.
+	assert.NotPanics(t, func() {
+		gui.resize(1200, 900, gui.fontManager.DeviceScale())
+	})
+}
 func newTestGUI(t *testing.T, mock *mockHandler) (*GUI, *mockInputManager) {
 	gui, err := New(mock)
 	require.NoError(t, err)
