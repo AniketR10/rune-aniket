@@ -85,6 +85,9 @@ type Component struct {
 
 	// collapse mode for tool turns
 	collapseMode collapseMode
+	toggleAnchor       component.ListNode
+	toggleAnchorOffset int
+	toggleAnchorValid  bool
 
 	// prompt state
 	activePrompt     *Selection
@@ -422,11 +425,38 @@ func (c *Component) ToggleReasoningVisible() bool {
 // collapsed → expanded → collapsed.
 // Reasoning is hidden in collapsed mode and visible when expanded.
 func (c *Component) ToggleContracted() {
+	anchor := component.ListNode{}
+	anchorOffset := 0
+	shouldPreserve := false
+	if c.toggleAnchorValid {
+		anchor = c.toggleAnchor
+		anchorOffset = c.toggleAnchorOffset
+		shouldPreserve = true
+		c.toggleAnchorValid = false
+	} else if c.messages.CanSeekUp() {
+		var hasAnchor bool
+		anchor, hasAnchor = c.topVisibleMessage()
+		if hasAnchor {
+			anchorOffset = c.messagesOffset(anchor)
+			shouldPreserve = true
+		}
+	}
 	c.collapseMode = c.collapseMode.next()
 	c.setCollapseMode(c.collapseMode)
 	c.setReasoningVisible(!c.collapseMode.isCollapsed())
 	if c.reasoningAnnotation != nil {
 		c.ensureReasoningAnnotation()
+	}
+	c.refreshMessagesLayout()
+	if shouldPreserve {
+		c.alignVisibleAnchorTop(anchor, anchorOffset)
+		if c.collapseMode.isCollapsed() {
+			c.toggleAnchor = anchor
+			c.toggleAnchorOffset = anchorOffset
+			c.toggleAnchorValid = true
+		}
+	} else {
+		c.toggleAnchorValid = false
 	}
 }
 
@@ -761,12 +791,84 @@ func (c *Component) MarkToolsDropped(ids []string) {
 
 // SeekDown seeks the history panel down.
 func (c *Component) SeekDown() bool {
+	c.toggleAnchorValid = false
 	return c.messages.SeekDown()
 }
 
 // SeekUp seeks the history panel up.
 func (c *Component) SeekUp() bool {
+	c.toggleAnchorValid = false
 	return c.messages.SeekUp()
+}
+
+func (c *Component) refreshMessagesLayout() {
+	width, height := c.messages.SizeWidth(), c.messages.SizeHeight()
+	if width <= 0 || height <= 0 {
+		return
+	}
+	c.messages.Resize(width, height)
+}
+
+func (c *Component) topVisibleMessage() (component.ListNode, bool) {
+	c.refreshMessagesLayout()
+	width, height := c.messages.SizeWidth(), c.messages.SizeHeight()
+	for node, ok := c.messages.Front(); ok; node, ok = node.Next() {
+		resp, ok := node.Value().(component.Responsive)
+		if !ok {
+			continue
+		}
+		top := node.Position().Y
+		bottom := top + resp.Height(width)
+		if bottom > 0 && top < height {
+			return node, true
+		}
+	}
+	return component.ListNode{}, false
+}
+
+func (c *Component) nodeTop(target component.ListNode) (int, bool) {
+	width := c.messages.SizeWidth()
+	top := 0
+	for node, ok := c.messages.Front(); ok; node, ok = node.Next() {
+		if node == target {
+			return top, true
+		}
+		resp, ok := node.Value().(component.Responsive)
+		if !ok {
+			continue
+		}
+		top += resp.Height(width)
+	}
+	return 0, false
+}
+
+func (c *Component) messagesOffset(anchor component.ListNode) int {
+	top, ok := c.nodeTop(anchor)
+	if !ok {
+		return 0
+	}
+	return anchor.Position().Y - top + c.messages.MaxOffset()
+}
+
+func (c *Component) alignVisibleAnchorTop(anchor component.ListNode, offset int) {
+	top, ok := c.nodeTop(anchor)
+	if !ok {
+		return
+	}
+	currentTop := top - c.messages.MaxOffset() + offset
+	if currentTop > 0 {
+		for range currentTop {
+			if !c.messages.SeekDown() {
+				return
+			}
+		}
+		return
+	}
+	for range -currentTop {
+		if !c.messages.SeekUp() {
+			return
+		}
+	}
 }
 
 // scrollState captures the current scroll position for later restoration.

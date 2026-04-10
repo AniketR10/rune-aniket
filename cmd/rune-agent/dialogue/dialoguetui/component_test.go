@@ -25,6 +25,7 @@ package dialoguetui
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -464,6 +465,91 @@ func TestComponentQueuedMessagesRenderAndRemove(t *testing.T) {
 	}
 	comptest.TestComponent(t, comp, w, tests)
 	assert.Equal(t, 1, comp.QueueLen())
+}
+
+func TestComponentToggleContractedPreservesVisibleAnchor(t *testing.T) {
+	comp := NewComponent(ComponentConfig{})
+	comp.Resize(40, 12)
+	for _, id := range []string{"c1", "c2", "c3"} {
+		comp.AddToolCall(id, "read_file", `{}`, id+".go")
+		comp.CompleteToolCall(id, "read_file", `{}`, id+".go", strings.Repeat("file data\n", 20), false)
+	}
+
+	w := term.NewStringWriter(41, 13)
+	comptest.TestComponent(t, comp, w, []comptest.TestCase{
+		{
+			Action:   func() {},
+			Expected: "file data                                \n" +
+				"...                                      \n" +
+				"✓ read_file c3.go                        \n" +
+				"file data                                \n" +
+				"file data                                \n" +
+				"file data                                \n" +
+				"file data                                \n" +
+				"file data                                \n" +
+				"...                                      \n" +
+				"   ┌───────────────────────────────┐     \n" +
+				"   │                               │     \n" +
+				"   └───────────────────────────────┘     \n" +
+				"                                         ",
+		},
+		{
+			Action: func() {
+				for range 6 {
+					assert.True(t, comp.SeekUp())
+				}
+			},
+			Expected: "...                                      \n" +
+				"✓ read_file c2.go                        \n" +
+				"file data                                \n" +
+				"file data                                \n" +
+				"file data                                \n" +
+				"file data                                \n" +
+				"file data                                \n" +
+				"...                                      \n" +
+				"✓ read_file c3.go                        \n" +
+				"   ┌───────────────────────────────┐     \n" +
+				"   │                               │     \n" +
+				"   └───────────────────────────────┘     \n" +
+				"                                         ",
+		},
+		{
+			Action: func() {
+				comp.ToggleContracted()
+			},
+			Expected: "├─ ✓ read_file c1.go                     \n" +
+				"├─ ✓ read_file c2.go                     \n" +
+				"└─ ✓ read_file c3.go                     \n" +
+				"Press <ctrl-o> to expand                 \n" +
+				"                                         \n" +
+				"                                         \n" +
+				"                                         \n" +
+				"                                         \n" +
+				"                                         \n" +
+				"   ┌───────────────────────────────┐     \n" +
+				"   │                               │     \n" +
+				"   └───────────────────────────────┘     \n" +
+				"                                         ",
+		},
+		{
+			Action: func() {
+				comp.ToggleContracted()
+			},
+			Expected: "...                                      \n" +
+				"✓ read_file c2.go                        \n" +
+				"file data                                \n" +
+				"file data                                \n" +
+				"file data                                \n" +
+				"file data                                \n" +
+				"file data                                \n" +
+				"...                                      \n" +
+				"✓ read_file c3.go                        \n" +
+				"   ┌───────────────────────────────┐     \n" +
+				"   │                               │     \n" +
+				"   └───────────────────────────────┘     \n" +
+				"                                         ",
+		},
+	})
 }
 
 func TestComponentQueuedMessagesStayAtBottom(t *testing.T) {
