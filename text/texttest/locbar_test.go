@@ -152,6 +152,60 @@ func TestIconsBarDrawsAllIconsWhenWrappedHandlerConsumesList(t *testing.T) {
 	assert.Equal(t, 3, h.consumed)
 }
 
+func TestIconsBarRendersOneIconForMultilineLocation(t *testing.T) {
+	buf := cell.NewBuffer()
+	buf.WriteString("a\nb\nc\nd")
+	scroll := component.NewScroll(buf)
+	h := &interceptOnlyLocationListsHandler{testHandler: newTestHandler(scroll)}
+
+	bar := text.WithIconsBar(vctrl.NopService(), false, h, buf, scroll, text.IconsBarConfig{
+		ScheduleNextTick: func(fn func()) bool {
+			fn()
+			return true
+		},
+	})
+	bar.Resize(7, 4)
+	bar.SetLocationList(textapi.LocationPriorityInfo, "diagnostics", text.LocationSlice([]textapi.Location{{
+		From: term.Coordinates{Y: 0},
+		To:   term.Coordinates{Y: 3},
+		Icon: "!",
+	}}))
+
+	w := term.NewStringWriter(7, 4)
+	comptest.TestComponent(t, bar, w, []comptest.TestCase{{Expected: `
+! a    
+  b    
+  c    
+  d    `}})
+}
+
+func TestIconsBarNormalizesReversedLocationCoordinates(t *testing.T) {
+	buf := cell.NewBuffer()
+	buf.WriteString("a\nb\nc\nd")
+	scroll := component.NewScroll(buf)
+	h := &interceptOnlyLocationListsHandler{testHandler: newTestHandler(scroll)}
+
+	bar := text.WithIconsBar(vctrl.NopService(), false, h, buf, scroll, text.IconsBarConfig{
+		ScheduleNextTick: func(fn func()) bool {
+			fn()
+			return true
+		},
+	})
+	bar.Resize(7, 4)
+	bar.SetLocationList(textapi.LocationPriorityInfo, "diagnostics", text.LocationSlice([]textapi.Location{{
+		From: term.Coordinates{Y: 3},
+		To:   term.Coordinates{Y: 1},
+		Icon: "!",
+	}}))
+
+	w := term.NewStringWriter(7, 4)
+	comptest.TestComponent(t, bar, w, []comptest.TestCase{{Expected: `
+  a    
+! b    
+  c    
+  d    `}})
+}
+
 func TestGitBarDraw(t *testing.T) {
 	buf := cell.NewBuffer()
 	buf.WriteString(copy)
@@ -189,7 +243,7 @@ func TestGitBarDraw(t *testing.T) {
   import (     
       "fmt"    
 +              
-+     "github.c
+      "github.c
   )            
                
   func main() {
@@ -208,7 +262,7 @@ func TestGitBarDraw(t *testing.T) {
   import (     
       "fmt"    
 +              
-+     "github.c
+      "github.c
   )            
                
   func main() {

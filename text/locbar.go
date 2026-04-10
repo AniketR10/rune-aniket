@@ -404,20 +404,22 @@ func (b *iconsBar) locationListIcons(
 		if curr.Icon == "" {
 			continue
 		}
-		for _, y := range locationLines(curr) {
-			width := graphemecluster.StringWidth(curr.Icon)
-			if width == 0 {
-				continue
-			}
-			ret = append(ret, iconsBarLineIcon{
-				icon:     curr.Icon,
-				width:    width,
-				attr:     b.iconAttr(ID, curr),
-				priority: pri,
-				id:       ID,
-				line:     y,
-			})
+		y, ok := locationLine(curr)
+		if !ok {
+			continue
 		}
+		width := graphemecluster.StringWidth(curr.Icon)
+		if width == 0 {
+			continue
+		}
+		ret = append(ret, iconsBarLineIcon{
+			icon:     curr.Icon,
+			width:    width,
+			attr:     b.iconAttr(ID, curr),
+			priority: pri,
+			id:       ID,
+			line:     y,
+		})
 	}
 	return ret
 }
@@ -459,17 +461,9 @@ func (b *iconsBar) iconAttr(id string, loc textapi.Location) term.Attributes {
 	return term.Attributes{Fg: fg, Attrs: attr.Attrs}
 }
 
-func locationLines(loc textapi.Location) []int {
-	fromY := loc.From.Y
-	toY := loc.To.Y
-	if fromY == toY {
-		return []int{fromY}
-	}
-	ret := make([]int, 0, max(0, toY-fromY))
-	for y := fromY; y < toY; y++ {
-		ret = append(ret, y)
-	}
-	return ret
+func locationLine(loc textapi.Location) (int, bool) {
+	from, _ := term.CoordinatesSort(loc.From, loc.To)
+	return from.Y, true
 }
 
 type iconsBarSubscriber iconsBar
