@@ -29,6 +29,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/handler/repl"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
+	"unstable.build/go-tui/component/markdown"
 )
 
 // CommandHandler extends repl.CommandHandler with recursive
@@ -83,8 +84,9 @@ func (r *CommandRegistry) RegisterREPLCommand(
 	}
 
 	r.commands[man.Name] = entry{
-		summary: man.Summary,
-		handler: h,
+		summary:  man.Summary,
+		synopsis: man.Synopsis,
+		handler:  h,
 	}
 	return nil
 }
@@ -168,28 +170,50 @@ func (r *CommandRegistry) Help(
 func (r *CommandRegistry) listCommands() iterator.Iterator[component.Responsive] {
 	r.mu.RLock()
 	type cmd struct {
-		name    string
-		summary string
+		name     string
+		synopsis string
+		summary  string
 	}
 	cmds := make([]cmd, 0, len(r.commands))
 	for name, e := range r.commands {
-		cmds = append(cmds, cmd{name: name, summary: e.summary})
+		cmds = append(cmds, cmd{
+			name:     name,
+			synopsis: e.synopsis,
+			summary:  e.summary,
+		})
 	}
 	r.mu.RUnlock()
 	sort.Slice(cmds, func(i, j int) bool {
 		return cmds[i].name < cmds[j].name
 	})
-	lines := make([]component.Responsive, len(cmds))
-	for i, c := range cmds {
-		lines[i] = component.NewResponsiveString(
-			fmt.Sprintf("  %-12s %s", c.name, c.summary),
-			component.StringResponsiveConfig{},
-		)
+	var b strings.Builder
+	for _, c := range cmds {
+		fmt.Fprintf(&b, "- **%s**", c.name)
+		if c.synopsis != "" {
+			b.WriteString(" `")
+			b.WriteString(c.synopsis)
+			b.WriteByte('`')
+		}
+		if c.summary != "" {
+			b.WriteString(" — ")
+			b.WriteString(c.summary)
+		}
+		b.WriteByte('\n')
 	}
-	return iterator.FromSlice(lines)
+	return markdownList(b.String())
+}
+
+func markdownList(content string) iterator.Iterator[component.Responsive] {
+	md, err := markdown.New(content)
+	if err != nil {
+		r := component.NewResponsiveString(content, component.StringResponsiveConfig{})
+		return iterator.FromSlice([]component.Responsive{r})
+	}
+	return iterator.FromSlice([]component.Responsive{md})
 }
 
 type entry struct {
-	summary string
-	handler CommandHandler
+	summary  string
+	synopsis string
+	handler  CommandHandler
 }

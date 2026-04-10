@@ -327,21 +327,23 @@ func manualOutput(man textapi.CommandManual, fullName string) iterator.Iterator[
 }
 
 func commandListOutput(man textapi.CommandManual) iterator.Iterator[component.Responsive] {
-	items := make([]component.Responsive, 0, len(man.Commands))
+	var b strings.Builder
 	for _, child := range man.Commands {
-		line := child.Name
+		b.WriteString("- **")
+		b.WriteString(child.Name)
+		b.WriteString("**")
 		if child.Synopsis != "" {
-			line += " " + child.Synopsis
+			b.WriteString(" `")
+			b.WriteString(child.Synopsis)
+			b.WriteByte('`')
 		}
 		if child.Summary != "" {
-			line += " — " + child.Summary
+			b.WriteString(" — ")
+			b.WriteString(child.Summary)
 		}
-		items = append(items, component.NewResponsiveString(
-			line,
-			component.StringResponsiveConfig{},
-		))
+		b.WriteByte('\n')
 	}
-	return iterator.FromSlice(items)
+	return markdownOutput(b.String())
 }
 
 func filterNames(names []string, prefix string) []string {

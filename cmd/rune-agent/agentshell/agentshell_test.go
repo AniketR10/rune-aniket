@@ -309,7 +309,7 @@ func TestHandleCommand(t *testing.T) {
 		},
 		{
 			name: "max_tokens without value shows global config",
-			cmd:     repl.Command{Name: "max_tokens"},
+			cmd:  repl.Command{Name: "max_tokens"},
 			setup: func(d *testDeps) {
 				d.cfg = stubConfig{ints: map[string]int{"max_tokens": 8192}}
 			},

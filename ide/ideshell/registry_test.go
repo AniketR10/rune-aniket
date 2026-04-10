@@ -21,6 +21,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/handler/repl"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
@@ -197,7 +198,11 @@ func TestCompleteUnknownCommandReturnsEmpty(t *testing.T) {
 func TestHelpListsCommands(t *testing.T) {
 	r := NewRegistry()
 	r.Register("alpha", "does alpha", &mockCmdHandler{})
-	r.Register("beta", "does beta", &mockCmdHandler{})
+	require.NoError(t, r.RegisterREPLCommand(textapi.CommandManual{
+		Name:     "beta",
+		Synopsis: "[path]",
+		Summary:  "does beta",
+	}, &mockCmdHandler{}))
 
 	ctx := context.Background()
 	iter, err := r.Help(ctx, nil)
@@ -205,11 +210,11 @@ func TestHelpListsCommands(t *testing.T) {
 	defer func() { _ = iter.Close() }()
 
 	out := collectText(t, iter)
-	require.Len(t, out, 2)
+	require.Len(t, out, 1)
 	assert.Contains(t, out[0], "alpha")
 	assert.Contains(t, out[0], "does alpha")
-	assert.Contains(t, out[1], "beta")
-	assert.Contains(t, out[1], "does beta")
+	assert.Contains(t, out[0], "beta [path]")
+	assert.Contains(t, out[0], "does beta")
 }
 
 func TestHelpDelegatesToHandler(t *testing.T) {
@@ -272,9 +277,9 @@ func TestHelpCommandOutput(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { _ = iter.Close() }()
 	out := collectText(t, iter)
-	assert.Len(t, out, 2)
+	require.Len(t, out, 1)
 	assert.Contains(t, out[0], "foo")
-	assert.Contains(t, out[1], "help")
+	assert.Contains(t, out[0], "help")
 }
 
 func TestHelpCommandDelegates(t *testing.T) {

@@ -156,65 +156,96 @@ func TestIntegrationHelp(t *testing.T) {
 	handlertest.RunHandlerSequence(t, f, testWidth, testHeight, []handlertest.SequenceTestCase{
 		{
 			InputSequence: "help<enter>",
-			Expected: mkExpected(8,
+			Expected: mkExpected(3,
 				"agent> help",
-				"agents — List configured agent definitions.",
-				"chats <list|show|log|export|clear|compact|fork> [args] — Ins",
-				"pect, export, compact, clear, and fork saved conversations.",
-				"config — Show current LLM config parameters.",
-				"dream [--model MODEL] — Run memory consolidation on unproces",
-				"sed dialogues.",
-				"effort [none|minimal|low|medium|high|xhigh|max] — Show or se",
-				"t default reasoning effort.",
-				"exit — Exit the shell.",
-				"help [command ...] — Show usage for agent commands.",
-				"mcp — Show MCP server status and tool stats.",
-				"max_tokens [tokens] — Show or set the global max output toke",
-				"ns config value.",
-				"model [dialogue_id] — Show the default model or a conversati",
-				"on's assigned model.",
-				"models — List available models with context window sizes.",
-				"skills <list|show|list-dirs|add-dir|remove-dir> [args] — Ins",
-				"pect discovered skills and configured skill directories.",
-				"system-prompt [agent] — Show the system prompt for an agent.",
-				"tools — List registered agent tools.",
+				"• agents — List configured agent definitions.",
+				"• chats <list|show|log|export|clear|compact|fork> [args] — ",
+				"  Inspect, export, compact, clear, and fork saved",
+				"  conversations.",
+				"• config — Show current LLM config parameters.",
+				"• dream [--model MODEL] — Run memory consolidation on",
+				"  unprocessed dialogues.",
+				"• effort [none|minimal|low|medium|high|xhigh|max] — Show",
+				"  or set default reasoning effort.",
+				"• exit — Exit the shell.",
+				"• help [command ...] — Show usage for agent commands.",
+				"• mcp — Show MCP server status and tool stats.",
+				"• max_tokens [tokens] — Show or set the global max output",
+				"  tokens config value.",
+				"• model [dialogue_id] — Show the default model or a",
+				"  conversation's assigned model.",
+				"• models — List available models with context window",
+				"  sizes.",
+				"• skills <list|show|list-dirs|add-dir|remove-dir> [args] — ",
+				"  Inspect discovered skills and configured skill",
+				"  directories.",
+				"• system-prompt [agent] — Show the system prompt for an",
+				"  agent.",
+				"• tools — List registered agent tools.",
+				"",
 				"agent> \u2590",
 			),
 		},
 		{
 			InputSequence: "agent<enter>",
 			Expected: mkExpected(0,
-				"ns config value.",
-				"model [dialogue_id] — Show the default model or a conversati",
-				"on's assigned model.",
-				"models — List available models with context window sizes.",
-				"skills <list|show|list-dirs|add-dir|remove-dir> [args] — Ins",
-				"pect discovered skills and configured skill directories.",
-				"system-prompt [agent] — Show the system prompt for an agent.",
-				"tools — List registered agent tools.",
+				"  agent.",
+				"• tools — List registered agent tools.",
+				"",
 				"agent> agent",
-				"agents — List configured agent definitions.",
-				"chats <list|show|log|export|clear|compact|fork> [args] — Ins",
-				"pect, export, compact, clear, and fork saved conversations.",
-				"config — Show current LLM config parameters.",
-				"dream [--model MODEL] — Run memory consolidation on unproces",
-				"sed dialogues.",
-				"effort [none|minimal|low|medium|high|xhigh|max] — Show or se",
-				"t default reasoning effort.",
-				"exit — Exit the shell.",
-				"help [command ...] — Show usage for agent commands.",
-				"mcp — Show MCP server status and tool stats.",
-				"max_tokens [tokens] — Show or set the global max output toke",
-				"ns config value.",
-				"model [dialogue_id] — Show the default model or a conversati",
-				"on's assigned model.",
-				"models — List available models with context window sizes.",
-				"skills <list|show|list-dirs|add-dir|remove-dir> [args] — Ins",
-				"pect discovered skills and configured skill directories.",
-				"system-prompt [agent] — Show the system prompt for an agent.",
-				"tools — List registered agent tools.",
+				"• agents — List configured agent definitions.",
+				"• chats <list|show|log|export|clear|compact|fork> [args] — ",
+				"  Inspect, export, compact, clear, and fork saved",
+				"  conversations.",
+				"• config — Show current LLM config parameters.",
+				"• dream [--model MODEL] — Run memory consolidation on",
+				"  unprocessed dialogues.",
+				"• effort [none|minimal|low|medium|high|xhigh|max] — Show",
+				"  or set default reasoning effort.",
+				"• exit — Exit the shell.",
+				"• help [command ...] — Show usage for agent commands.",
+				"• mcp — Show MCP server status and tool stats.",
+				"• max_tokens [tokens] — Show or set the global max output",
+				"  tokens config value.",
+				"• model [dialogue_id] — Show the default model or a",
+				"  conversation's assigned model.",
+				"• models — List available models with context window",
+				"  sizes.",
+				"• skills <list|show|list-dirs|add-dir|remove-dir> [args] — ",
+				"  Inspect discovered skills and configured skill",
+				"  directories.",
+				"• system-prompt [agent] — Show the system prompt for an",
+				"  agent.",
+				"• tools — List registered agent tools.",
+				"",
 				"agent> ▐",
 			),
+		},
+	})
+}
+
+func TestIntegrationHelpNarrowWidth(t *testing.T) {
+	f := newTestFlusher(newTestDeps())
+	handlertest.RunHandlerSequence(t, f, 42, 17, []handlertest.SequenceTestCase{
+		{
+			InputSequence: "help<space>chats<enter>",
+			Expected: "agent> help chats                         \n" +
+				"• list — List saved conversations.        \n" +
+				"• show <id> — Show message history for a  \n" +
+				"  conversation.                           \n" +
+				"• log <id> — Show the LLM token audit     \n" +
+				"  log for a conversation.                 \n" +
+				"• export [--audit] <id> — Export a        \n" +
+				"  conversation or audit log to a temp     \n" +
+				"  file.                                   \n" +
+				"• clear <id> — Clear a conversation and   \n" +
+				"  archive its previous contents.          \n" +
+				"• compact <id> — Compact a conversation   \n" +
+				"  into a summarized copy.                 \n" +
+				"• fork <id> — Open a picker to fork a     \n" +
+				"  conversation at a selected message.     \n" +
+				"                                          \n" +
+				"agent> ▐                                  ",
 		},
 	})
 }
