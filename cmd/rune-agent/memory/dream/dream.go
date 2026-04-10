@@ -244,19 +244,19 @@ func Dream(ctx context.Context, deps Deps) (iterator.Iterator[Progress], error) 
 func validateDeps(deps Deps) error {
 	switch {
 	case deps.LLM == nil:
-		return fmt.Errorf("dream: LLM is required")
+		panic("dream: LLM is required")
 	case deps.Store == nil:
-		return fmt.Errorf("dream: Store is required")
+		panic("dream: Store is required")
 	case deps.Storage == nil:
-		return fmt.Errorf("dream: Storage is required")
+		panic("dream: Storage is required")
 	case deps.FS == nil:
-		return fmt.Errorf("dream: FS is required")
+		panic("dream: FS is required")
 	case deps.Exec == nil:
-		return fmt.Errorf("dream: Exec is required")
+		panic("dream: Exec is required")
 	case deps.LSP == nil:
-		return fmt.Errorf("dream: LSP is required")
+		panic("dream: LSP is required")
 	case deps.DataPath == "":
-		return fmt.Errorf("dream: DataPath is required")
+		panic("dream: DataPath is required")
 	}
 	return nil
 }

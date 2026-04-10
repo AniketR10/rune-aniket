@@ -412,6 +412,7 @@ func TestDream(t *testing.T) {
 			Storage:  storage,
 			FS:       fsys,
 			Exec:     osExec{},
+			LSP:      &stubDreamLSP{},
 			DataPath: dir,
 		}
 
@@ -476,9 +477,9 @@ func TestValidateDeps(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			deps := validDeps(t, t.TempDir())
 			tt.modify(&deps)
-			_, err := Dream(context.Background(), deps)
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), tt.wantErr)
+			assert.PanicsWithValue(t, fmt.Sprintf("dream: %s is required", tt.wantErr), func() {
+				_, _ = Dream(context.Background(), deps)
+			})
 		})
 	}
 }
@@ -750,6 +751,7 @@ func TestDreamPipelineGitIntegration(t *testing.T) {
 		Storage:  &mockStorage{data: make(map[string]any)},
 		FS:       fsys,
 		Exec:     osExec{},
+		LSP:      &stubDreamLSP{},
 		DataPath: dir,
 	}
 
